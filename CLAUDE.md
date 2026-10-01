@@ -2,6 +2,13 @@
 
 Home folder for STOBE / KenshiFP work. The code lives elsewhere; this folder holds the notes, the test plan, pending fixes and tools.
 
+## Git (since 2026-09-30): the repos are the source of truth
+- **Server repo** `https://github.com/shaylanger/StobeServer`, committed directly in the live tree `/var/www/html/StobeServer`. `origin` = Shay's fork, `upstream` = `Dwemer-Dynamics/StobeServer` (keep separate; never overwrite custom work when pulling upstream). Working branch is `stobe` per Shay; the live tree is currently checked out on `integrate-custom` (same commit as `origin/stobe`, `5d33923`); the local `stobe` branch is stale. Don't switch branches in the live tree without asking (it changes the running server). `CUSTOM_CHANGES.md` = differences from upstream; safety tag `custom-baseline-2026-09-30`.
+- **Native repo** `https://github.com/shaylanger/Kenshi-Stobe-Custom` = this folder (`C:\KenshiModding`, branch `main`). `components/STOBE` and `components/KenshiFP` are source snapshots; `build-support/StobeDLL` = build scripts; `CUSTOM_CHANGES.md` = native differences from baseline.
+- Live native sources stay in WSL (`/root/STOBE-src`, `/root/KenshiFP`). After changing them, copy the changed files into `components/…` (check with `diff -rq`) before committing here.
+- Workflow: `git status` + branch check before changes; one fix/feature per commit; commit regularly; messages say what and why, with the bug number/test (e.g. `fix(kenshifp): … (bug 48)`); push after a tested/stable checkpoint. Never commit logs, DLLs, build outputs, models, backups, toolchains, secrets or runtime state. Don't reset/revert unrelated changes.
+- Server patches: still back up, stage, `php -l`, deploy to live (+ ss-merge), then commit in `/var/www/html/StobeServer`.
+
 ## Machine setup (decided 2026-09-30)
 - **This PC** (`DESKTOP-JFLPK99`, RTX 5090, `172.16.1.147`) runs Kenshi and the `DwemerAI4Skyrim3` distro: STOBE, Postgres, STT, Python PocketTTS and the background processor.
 - **Server PC** (`DESKTOP-NQQPA73`, RTX 4080, `172.16.1.100`) will run a local LLM only, for background jobs (diary, relationships and the like). The model isn't chosen yet. Reach it with `ssh 4080` (key login).
