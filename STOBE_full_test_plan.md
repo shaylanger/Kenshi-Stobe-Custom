@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `8B231133…`, KenshiFP `639DAD65…`, server round 19). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
+Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `C3B41182…`, KenshiFP `96B4750B…`, server round 19). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 

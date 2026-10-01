@@ -85,8 +85,8 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 77 | "Put them back" stored only the Mead | server r19: them/those/both → every item of the last FETCH batch | passed run 6 |
 | 78 | Long idles between goal steps at high game speed | KFP r19: goal clock = real time x game speed; ticks/waits/stalls in game time | partly passed run 6 (patrol at 50x) |
 | 79 | FP look-at click on a squad member takes control of them | open (next round): show details only; portrait click still switches | open |
-| 80 | Work goals blocked "production stalled" after ~3 game min (budgets 10x short on the goal clock) | KFP r19b: game-time budgets x10 | built, not installed |
-| 81 | Meals never started; prompts said "Well fed" while starving (hunger read as hungriness) | KFP r19b + Stobe r19b: level = hunger + fed; eat <150, stop 250; eating detected by a rise | built, not installed |
+| 80 | Work goals blocked "production stalled" after ~3 game min (budgets 10x short on the goal clock) | KFP r19b: game-time budgets x10 | installed, not retested |
+| 81 | Meals never started; prompts said "Well fed" while starving (hunger read as hungriness) | KFP r19b + Stobe r19b: level = hunger + fed; eat <150, stop 250; eating detected by a rise | installed, not retested |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.
