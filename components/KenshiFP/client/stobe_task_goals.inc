@@ -1762,6 +1762,15 @@ static int sgm_meal_tick(void *gw,uint32_t serial,const char *name,char *step,si
     }
     void *actor=wgp_find_squad_actor(gw,serial,name);
     float lvl=0;if(!actor||!sgm_food_level(actor,&lvl))return 0;
+    {   /* bug 81: calibrate -- raw values once per ~10 game min per actor */
+        static uint32_t diag_serial[SGM_MAX];static DWORD diag_ms[SGM_MAX];
+        int k=(int)(serial%SGM_MAX);DWORD t=stobe_game_ms();
+        if(diag_serial[k]!=serial||(LONG)(t-diag_ms[k])>600000){
+            unsigned char *md=(unsigned char *)actor+CHAR_MEDICAL;
+            logline("[stobe] GOAL_MEAL diag actor=%s hunger=%.1f fed=%.1f level=%.0f",name,*(float *)(md+MED_HUNGER),*(float *)(md+MED_FED),lvl);
+            diag_serial[k]=serial;diag_ms[k]=t;
+        }
+    }
     int pr=char_prone_state(actor);if(pr==2||pr==3||pr==4)return 0;
     SgmMeal *m=sgm_slot(serial);if(!m)return 0;
     if(!m->eating){
