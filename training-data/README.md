@@ -35,3 +35,21 @@ Useful labels include:
 - latency and token cost
 
 Known bugs are especially valuable negative examples. Corrected behavior and passing regression runs are preferred positive examples.
+
+## Shadow mode
+
+The current shadow model is Qwen3.5-9B Q4_K_M running through the existing 5090 llama.cpp build.
+
+- Local API: `http://127.0.0.1:8091/v1`
+- Context: 16K
+- Thinking/reasoning: off
+- Quantized model weights: about 5.78 GB
+- DeepSeek remains authoritative for all NPC speech/actions.
+- Shadow inference never dispatches actions or TTS.
+
+Use the desktop shortcuts:
+- `Start STOBE Shadow Mode.cmd`
+- `Stop STOBE Shadow Mode.cmd`
+- `STOBE Shadow Report.cmd`
+
+Each shadow turn records local TTFT, total generation time, queue delay, token usage, structured-output validity, response text, and GPU/VRAM telemetry. The matching authoritative `llm_exchange` records DeepSeek TTFT and total request time. `tts_output` records PocketTTS synthesis time and whether shadow mode was enabled.

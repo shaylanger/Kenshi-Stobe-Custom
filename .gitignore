@@ -28,6 +28,8 @@ test_outbox.txt
 
 # Persistent raw training capture grows indefinitely; historical curated data is tracked.
 training-data/live/
+training-data/shadow-queue/
+training-data/shadow-enabled.flag
 
 # Personal Claude Code settings
 .claude/settings.local.json
