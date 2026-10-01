@@ -13045,6 +13045,17 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
                             : ResolveTestInboxTarget(world, sel, speaker, f[2]);
     if (!narratorMode && !target)
       return "target not found: " + f[2];
+    if (target && target == speaker && world && world->player) {
+      for (size_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+        Character *pc = world->player->playerCharacters[i];
+        if (pc && pc != target) {
+          speaker = pc;
+          break;
+        }
+      }
+      if (speaker == target)
+        return "speaker and target are the same character";
+    }
     std::string speakerName, speakerSerial, targetName, targetSerial;
     try {
       speakerName = speaker->getName();
