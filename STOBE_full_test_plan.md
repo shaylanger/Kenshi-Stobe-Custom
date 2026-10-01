@@ -5,7 +5,7 @@ Last updated 2026-10-01 (after run 4 and round 18; Stobe.dll `3F967C4E…`, Kens
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
 ## Before you start
-- Use the **clean save** (Malzin, Outlaw Tavern, The Hub). Test one step at a time; if something goes wrong, stop and tell me.
+- Goal/round 18 rows: the save at Shay's outpost **Home** (wheat farms S + XL, grain silo, well, bread oven, stone mine, manual stone processor, 4 General Camp Storage Chests, generators; Malzin in the squad, faction "Nameless"). Bread needs the well powered and the farm watered (it ran dry in run 4). Negotiation rows: the clean save (Malzin, Outlaw Tavern, The Hub). Test one step at a time; if something goes wrong, stop and tell me.
 - Say the NPC's name in your first line to them.
 - **Malzin's relationship to Shay is currently +60 Fond** (set for the bug 41 test). Run `stobe-reset-npc Malzin` first unless a test needs trust (I13).
 - **Fights only with the fight setup:** Shay on pause duty, a watcher armed in the background **before** the attack, fight started with `stobe-force-attack Malzin [help]` (voice alone can't start one). Watchers: `DELAY=2 stobe-fight-watch "<pay line>"` pays by itself; `stobe-fight-offer "<offer line>"` only sends an offer (then Claude checks the ledger and pays). Her gang stands down when she stops (DLL round 15).
@@ -72,6 +72,12 @@ Last updated 2026-10-01 (after run 4 and round 18; Stobe.dll `3F967C4E…`, Kens
 | D7b (bug 23) | "Here, take this bread" while carrying Poppyseed Bread | You hand it over (distinctive-word match, round 9d) |
 
 **Work and task goals** (run 4 at Home passed B4, B5, B6, C3, C4, C6, C7, C8, walk-back; see `archive/test-run-2026-09-30-r4.md`). Automated with `stobe-say` (+ `speed`) unless marked Shay.
+
+What rounds 17–18 added (what these rows check):
+- **Planner (KenshiFP):** walks back to the selected player when a goal ends; hauls inputs only from storage/mines/machine outputs; clears old orders when switching machines; power gate ("X has no power" after 30 s, only once she operates a machine with inputs loaded); "Waiting for <farm> to grow"; dry farm blocks after 60 s; goal machines mirrored as real Kenshi jobs (`GOAL_JOB added/removed`, switched off on an unexpected removal); label "StobeGoalLabel" (top centre) for the selected squad member.
+- **Goal reports:** KenshiFP writes `stobe_goal_report.request` + `lifelike_initiative.flag` when she's back within 70; Stobe.dll consumes the flag; server `bored.php` queues a `goal_report` directive (no director mode).
+- **Server:** store-not-give for "put back in storage"; "resume/try again" resumes the existing goal; "keep N stocked" → STOCK goal; item lists read from the player's line; PATROL → managed patrol goal; LOOT_TARGET with a category or an unreachable body → LOOT_AREA; stored-serial fallback outside the people list; `<player_base>` for faction members.
+- **18c:** non-faction NPCs refuse work orders; follow/guard/wait/come/go only at trust ≥ `MINOR_ORDER_TRUST_MIN` (56) or an open deal. **18a/b:** TTS at 1x at any game speed; Volume 0–200 %, Fade 25–400 %.
 | # | Say / do | Expect |
 |---|---|---|
 | B1 | "Make 2 bread" with the well powered and the farm watered (run at 50x, auto-pause on combat) | Water→farm only from the well (never out of the oven), wheat→silo, flour→oven; COMPLETE 2/2; status "Waiting for Wheat Farm … to grow" while growing (bugs 47, 58, 61, 69, 70) |
@@ -130,8 +136,6 @@ Last updated 2026-10-01 (after run 4 and round 18; Stobe.dll `3F967C4E…`, Kens
 
 ## 5. Design work (Shay's notes, not started)
 - **Relationship should shape everything she does:** deal pricing and willingness by tier; hard rules like no pay-after deals and no favours below some tier. (Already seen: at Resentful she refused credit; at Fond she accepted it.)
-- Built in round 18 (see "Round 18 features" above): faction-only orders, TTS volume/fade, TTS speed, job list + goal label.
-
 ## Automated runs (stobe-say)
 Claude can run alone, once Shay has loaded the save near the NPC and unpaused: section 1 (fight rows with Shay on pause), section 2 rows L9, L10, E5, E8, pay-first refused, L3, and A6, A7, K11, F8, I13, D7b; goal rows R1, R2, B1, B1c, F1, P1, P1b, C1, C2; round 18 rows N1–N5, V1, V2, S1, J1, J2. Rows marked Shay need his eyes/ears/hands. Use `stobe-say speed` (≤50) for slow goals and pause on any combat toward Shay/Malzin.
 
