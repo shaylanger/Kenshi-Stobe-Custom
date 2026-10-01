@@ -495,8 +495,9 @@ static void wgp_job_ui_refresh(void *gw)
     unsigned char *sel = (unsigned char *)pi + PI_SELECTED_CHAR;
     uint32_t *ah = (uint32_t *)((uintptr_t)actor + CHAR_HANDLE + HAND_IDS);
     if (!readable(sel, HAND_IDS + 20) || !readable(ah, 20)) return;
-    if (memcmp(sel + HAND_IDS, ah, 20) != 0) return; /* she isn't the selected one: panel shows someone else */
-    unsigned char none[HAND_IDS + 20];
+    if (memcmp(sel + HAND_IDS, ah, 20) != 0) { logline("[stobe] GOAL_JOB ui refresh skipped: not the selected character"); return; }
+    unsigned char cur[HAND_IDS + 20], none[HAND_IDS + 20];
+    memcpy(cur, sel, sizeof(cur)); /* sel is live: keep a copy across the two calls */
     memcpy(none, sel, sizeof(none));
     ((uint32_t *)(none + HAND_IDS))[0] = 0xb; /* null hand: "nothing was selected" */
     if (setjmp(g_guard_jb)) {
@@ -505,8 +506,10 @@ static void wgp_job_ui_refresh(void *gw)
         return;
     }
     guard_arm();
-    fn(pi, none, sel);
+    fn(pi, cur, none); /* bug 74: click away ... */
+    fn(pi, none, cur); /* ... and back, like the manual workaround */
     g_guard_armed = 0;
+    logline("[stobe] GOAL_JOB ui refresh replayed selection");
 }
 
 /* Remove the job this goal added (matched by Tasker pointer). */
