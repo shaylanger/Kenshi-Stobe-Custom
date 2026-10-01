@@ -10,10 +10,12 @@
 #define WGP_MAX_CRAFTS 128
 #define WGP_MAX_MISSING 32
 #define WGP_TICK_MS 1000
-#define WGP_STALL_MS 180000
-#define WGP_DEP_STALL_MS 900000
-#define WGP_POWER_WAIT_MS 30000
-#define WGP_TRAVEL_STALL_MS 240000
+/* Game-time budgets (bug 80): these were real-time values tuned while testing
+ * at 10x; on the goal clock (bug 78) they must be 10x larger in game ms. */
+#define WGP_STALL_MS 1800000
+#define WGP_DEP_STALL_MS 9000000
+#define WGP_POWER_WAIT_MS 300000
+#define WGP_TRAVEL_STALL_MS 2400000
 #define WGP_ARRIVE_DIST 65.0f
 #define WGP_SCAN_RADIUS 1400.0f
 
