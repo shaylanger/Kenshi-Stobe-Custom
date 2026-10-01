@@ -91,6 +91,9 @@ typedef struct StgGoal {
     int rt_seen_active;     /* runtime only: was ACTIVE this session */
     int rt_return_started;  /* runtime only: walk-back already requested */
     float walk_last_dist;   /* runtime only: walking to a storage building */
+    Vec3 patrol_center;     /* runtime only: custom patrol loop */
+    int patrol_init;
+    int patrol_idx;
     int walk_still;
     DWORD walk_next_ms;
 } StgGoal;
@@ -512,6 +515,8 @@ static int stg_actor_item_count(void *actor,const char *query)
     return stg_count_matching(g_stobe_getinv(actor),query);
 }
 
+static int stg_walk_to_pos(void *actor,StgGoal *g,Vec3 t,float d);
+
 static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
 {
     if(g->quantity>0&&g->completed>=g->quantity){
@@ -530,6 +535,17 @@ static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
         void *c=chars[i];uint32_t ser=stg_serial(c);
         if(!ser||stg_seen(g,ser)||!stg_valid_downed(actor,c,g->target))continue;
         void *src=g_stobe_getinv(c); if(!src){stg_mark_seen(g,ser);continue;}
+        {
+            Vec3 a={0,0,0},cp={0,0,0};
+            if(char_position(actor,&a)&&char_position(c,&cp)){
+                float d=wgp_distance(a,cp);
+                if(!stg_walk_to_pos(actor,g,cp,d)){
+                    char cn[128]={0};stg_char_name(c,cn,sizeof(cn));
+                    snprintf(g->current_step,sizeof(g->current_step),"Walking to %s to loot %s (%.0f)",cn[0]?cn:"the body",g->item[0]?g->item:"items",d);
+                    return;
+                }
+            }
+        }
         int want=g->quantity>0?g->quantity-g->completed:100000;
         int before=stg_actor_item_count(actor,g->item);
         int moved=stg_loot_from_character(c,actor,g->item,want);
@@ -572,6 +588,18 @@ static void *stg_nearest_storage(void *gw,void *actor,const char *query,float *d
         if(name&&namesz){name[0]='\0';wgp_name(*(void **)((uintptr_t)best+0x40),name,namesz);}
     }
     return best;
+}
+
+/* 1 = at the position (or as close as pathing gets), 0 = walking */
+static int stg_walk_to_pos(void *actor,StgGoal *g,Vec3 t,float d)
+{
+    DWORD now=GetTickCount();
+    if(d<=WGP_HAUL_REACH){g->walk_still=0;g->walk_last_dist=0;return 1;}
+    if(g->walk_last_dist<=0||d<g->walk_last_dist-3.0f){g->walk_last_dist=d;g->walk_still=0;g->last_progress_ms=now;}
+    else g->walk_still++;
+    if(d<=WGP_HAUL_NEAR&&g->walk_still>=4){g->walk_still=0;g->walk_last_dist=0;return 1;}
+    if((LONG)(now-g->walk_next_ms)>=0){try_move_to_pos(actor,&t);g->walk_next_ms=now+3000;}
+    return 0;
 }
 
 /* 1 = at the storage (or as close as pathing gets), 0 = walking */
@@ -1070,13 +1098,48 @@ static void stg_tick_release_all(void *gw,void *actor,StgGoal *g)
     stg_finish(g,STG_STATE_COMPLETE,"finished checking nearby humanoids for releasable prisoners");
 }
 
+/* Patrol loop between the player's own buildings near the start point (bug 62).
+ * Kenshi's PATROL order without waypoints wanders the whole region. */
+#define STG_PATROL_RADIUS 700.0f
 static void stg_tick_patrol(void *gw,void *actor,StgGoal *g)
 {
-    if((LONG)(GetTickCount()-g->last_action_ms)>8000){
-        stobe_issue_order(actor,STG_TASK_PATROL,NULL);
-        g->last_action_ms=GetTickCount();
+    Vec3 a={0,0,0};if(!char_position(actor,&a))return;
+    if(!g->patrol_init){g->patrol_center=g->has_dest?g->dest:a;g->patrol_init=1;g->patrol_idx=0;}
+    Vec3 pts[12];int np=0;
+    void *b[WGP_MAX_BUILDINGS]={0};
+    int n=wgp_scan_buildings(gw,actor,b,WGP_MAX_BUILDINGS);
+    for(int i=0;i<n&&np<12;i++){
+        void *x=b[i];if(!x||!readable(x,0x80)||!g_wgp_isplayer_building(x))continue;
+        Vec3 bp=*(Vec3 *)((uintptr_t)x+0x48);
+        if(wgp_distance(bp,g->patrol_center)>STG_PATROL_RADIUS)continue;
+        int dup=0;for(int k=0;k<np;k++)if(wgp_distance(pts[k],bp)<60.0f){dup=1;break;}
+        if(!dup)pts[np++]=bp;
     }
-    snprintf(g->current_step,sizeof(g->current_step),"Patrolling until cancelled or paused");
+    if(np<2){
+        static const float off[4][2]={{150,0},{0,150},{-150,0},{0,-150}};
+        np=0;for(int k=0;k<4;k++){pts[np]=g->patrol_center;pts[np].x+=off[k][0];pts[np].z+=off[k][1];np++;}
+    }
+    if(g->patrol_idx>=np)g->patrol_idx=0;
+    Vec3 t=pts[g->patrol_idx];
+    float d=wgp_distance(a,t);
+    if(stg_walk_to_pos(actor,g,t,d)){
+        g->patrol_idx=(g->patrol_idx+1)%np;
+        g->last_progress_ms=GetTickCount();
+    }
+    snprintf(g->current_step,sizeof(g->current_step),"Patrolling (%d/%d waypoints) until cancelled or paused",g->patrol_idx+1,np);
+}
+
+/* A direct standing order (hold, come here, guard, patrol) ends patrol/guard goals (bug 63). */
+static void stg_cancel_standing_goals(uint32_t actor_serial)
+{
+    for(int i=0;i<STG_MAX_GOALS;i++){
+        StgGoal *g=&g_stg_goals[i];
+        if(!g->used||g->actor_serial!=actor_serial)continue;
+        if(g->state!=STG_STATE_ACTIVE&&g->state!=STG_STATE_PAUSED)continue;
+        if(strcmp(g->kind,"PATROL")&&strcmp(g->kind,"GUARD"))continue;
+        g->rt_return_started=1; /* replaced by a new order: no walk-back */
+        stg_finish(g,STG_STATE_CANCELLED,"replaced by a new order");
+    }
 }
 
 

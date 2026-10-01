@@ -2611,6 +2611,8 @@ static void *stobe_find_inventory_item(void *npc, const char *query,
     return partial;
 }
 
+static void stg_cancel_standing_goals(uint32_t actor_serial); /* stobe_task_goals.inc */
+
 static int stobe_issue_order(void *actor, int task_type, void *subject)
 {
     if (!actor || !stobe_resolve_action_exports()) return 0;
@@ -2882,6 +2884,15 @@ static int stobe_handle_general_action(void *gw, uint32_t actor_serial,
     else if (!strcmp(command, "IMPRISON")) task = STOBE_TASK_FIND_CAGE_PUT_IN;
     else if (!strcmp(command, "RELEASE_PRISONER")) task = STOBE_TASK_RELEASE_PRISONER;
 
+    if (task == STOBE_TASK_PATROL || task == STOBE_TASK_HOLD_POSITION ||
+        task == STOBE_TASK_GET_NEAR_TO || task == STOBE_TASK_BODYGUARD) {
+        /* A new standing order replaces patrols/guard duty and old orders (bug 63). */
+        stg_cancel_standing_goals(actor_serial);
+        if (stobe_resolve_fight_exports()) {
+            void *o = g_stobe_getorders(actor);
+            if (o && readable(o, 8)) g_stobe_clear_orders(o);
+        }
+    }
     if (task >= 0) {
         if ((task == STOBE_TASK_PATROL || task == STOBE_TASK_HOLD_POSITION) && !target)
             return stobe_issue_order(actor, task, NULL);

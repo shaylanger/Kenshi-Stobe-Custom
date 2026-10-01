@@ -438,6 +438,13 @@ static int wgp_icontains(const char *hay, const char *needle)
 static int wgp_power_gate(WgpGoal *g, WgpProducer *p, char *reason, size_t reason_sz)
 {
     if (!p || !p->building) return 0;
+    /* Idle machines read as out of power: judge power only once she has been
+     * ordered onto this machine and its inputs are loaded (bug 61). */
+    if (g->rt_task_building!=p->building) return 0;
+    {
+        void *m[WGP_MAX_MISSING]={0};
+        if (p->production && wgp_missing(p->production,m,WGP_MAX_MISSING)>0) return 0;
+    }
     DWORD now=GetTickCount();
     if (!wgp_building_unpowered(p->building)) {
         if (g->power_wait_building==p->building) { g->power_wait_building=NULL; g->power_wait_ms=0; }
