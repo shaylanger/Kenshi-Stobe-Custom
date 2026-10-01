@@ -1733,8 +1733,10 @@ static int sgm_food_level(void *actor,float *out)
     unsigned char *m=(unsigned char *)actor+CHAR_MEDICAL;
     if(!readable(m+MED_HUNGER,8))return 0;
     float h=*(float *)(m+MED_HUNGER),f=*(float *)(m+MED_FED);
-    float lvl=h+f; /* hunger is fullness (73 = starving), not hungriness (bug 81) */
-    if(!(lvl>-200.0f&&lvl<2000.0f))return 0;
+    /* hunger is fullness on a 0..3 scale; the game UI shows it x100 (216 = 2.16,
+     * max 300, KO ~76-87). fed = food still digesting, same scale (bug 81). */
+    float lvl=(h+f)*100.0f;
+    if(!(lvl>-50.0f&&lvl<1000.0f))return 0;
     *out=lvl;return 1;
 }
 

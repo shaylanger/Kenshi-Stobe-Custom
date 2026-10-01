@@ -2062,7 +2062,8 @@ std::string BuildMedicalPayload(Character *character) {
 
   // hunger is fullness (0..300, falls as she gets hungry); fed is food still
   // digesting. The old 300 - hunger read a starving NPC as well fed (bug 81).
-  float hungerVal = med->hunger + med->fed;
+  // Stored on a 0..3 scale; the game UI shows x100 (216 = 2.16, max 300).
+  float hungerVal = (med->hunger + med->fed) * 100.0f;
   if (hungerVal > 300)
     hungerVal = 300;
   if (hungerVal < 0)

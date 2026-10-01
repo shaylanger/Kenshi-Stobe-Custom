@@ -90,6 +90,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 82 | Game crash on loading Home (14:18): meal step called a NULL inventory function (Malzin starving, patrol goal still active) | KFP r19c: resolve getinv in stg_exports; meals skip anyone down/dead/not loaded; whole meal step under the crash guard | installed, not retested |
 | 83 | Goals given after a save came back when that save was loaded (goals live in our own files, not the save) | KFP r19d: goals stamped with in-game time (getTimeStamp_inGameHours); goals newer than the loaded world dropped silently | installed, not retested |
 | 84 | STOBE hotkeys (chat box, push-to-talk, settings menu) fired while typing in other apps | Stobe r19e: hotkeys need the Kenshi window focused (foreground window in our process) | built 49B87D03, not installed |
+| 85 | Hunger read 100x too low: raw MedicalSystem::hunger is 0..3, the UI shows x100 (Malzin raw 2.16 = UI 216); meals thought she starved, prompt said Starving | KFP + Stobe r19f: level = (hunger + fed) x 100; eating detection on raw rises >= 0.01 | built, not installed |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.
