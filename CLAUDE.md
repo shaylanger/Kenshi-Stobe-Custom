@@ -70,8 +70,7 @@ How it works: the DLL polls `RE_Kenshi\mods\Stobe\test_inbox.txt` every 500 ms w
 Backups are in `/root/stobe-backups/` (no DB backups: Shay doesn't want them).
 
 ## Current state (2026-09-30, run 4 in progress: work/task goals at Home)
-- **Installed:** Stobe.dll `449990F1…` (17–17c), KenshiFP.dll `DF10C0F4…` (17–17e). Previous copies `.prev_*` in `C:\StobeBuild\out` and next to the Vortex target.
-- **Built, NOT installed** (install when Kenshi is closed, then check hashes + loaded modules): Stobe.dll `A58F4030…` (17d, `C:\StobeBuild\out\Stobe.dll`), KenshiFP `C9194879…` (17f+17g, `/root/KenshiFP/re_plugin/KenshiFP.dll`).
+- **Installed:** Stobe.dll `A58F4030…` (17–17d), KenshiFP.dll `C9194879…` (17–17g). Previous copies `.prev_*` in `C:\StobeBuild\out` and next to the Vortex target.
 - `stobe-say speed <x>` sets game speed (0 = pause, 0.5–50). Use 5x for slow goals; drop to 1x (or pause) before anything risky.
 - **Malzin's relationship to Shay is +60 Fond/friend** (set by hand for the bug 41 test). Run `stobe-reset-npc Malzin` before tests that need her neutral.
 - **Next:** install the two pending DLLs, then rerun the open goal rows in `STOBE_full_test_plan.md` (B1 bread at 50x, R1 report, F1/P1/G1 with Shay watching, C2 loot); run log `test-run-2026-09-30-r4.md` (archive it when the goal rows are done). Then section 1 and Shay's design notes.
