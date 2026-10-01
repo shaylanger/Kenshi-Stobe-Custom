@@ -551,7 +551,7 @@ void LoadStobeRuntimeConfig() {
       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings",
                         "EnableDialogueMenuTTS", 1) != 0;
   g_speedDialogue = ReadLayeredIniInt(baseIniPath, customIniPath, "Settings",
-                                      "Speed Dialogue", 1) != 0;
+                                      "Speed Dialogue", 0) != 0;
   g_enableRegularDialogueCapture =
       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings",
                         "EnableRegularDialogueCapture", 1) != 0;
