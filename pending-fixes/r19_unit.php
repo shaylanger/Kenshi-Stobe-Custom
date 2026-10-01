@@ -62,3 +62,17 @@ t("88 deal STOP_ATTACK kept", stripos($r, 'STOP_ATTACK') === 0, $r);
 $r = normalizeActionTagToken('STOP_ATTACK@Shay', ['enabled'=>true,'disallow_stop_attack'=>true]);
 t("88 no deal: still dropped", $r === '', $r);
 echo "ok=$ok bad=$bad\n";
+// 91 (run after patch_r19_bug91_offer_caps)
+if (function_exists('stobeNegOfferCap')) {
+    [$c,$m,$tier] = stobeNegOfferCap('Grevik [Dust Bandit]', ['metadata'=>['money'=>9000]]);
+    t("91 common bandit 9000 -> 300", $c === 300 && $tier === 'common', [$c,$tier]);
+    [$c] = stobeNegOfferCap('Grevik [Dust Bandit]', ['metadata'=>['money'=>400]]);
+    t("91 common bandit 400 -> 140 (35%)", $c === 140, $c);
+    [$c,,$tier] = stobeNegOfferCap('Dust King', ['metadata'=>['money'=>9000]]);
+    t("91 leader -> 1000", $c === 1000 && $tier === 'leader', [$c,$tier]);
+    [$c,,$tier] = stobeNegOfferCap('Dezerka', ['faction'=>'Free Traders','metadata'=>['money'=>10000]]);
+    t("91 trader -> 3500", $c === 3500 && $tier === 'wealthy', [$c,$tier]);
+    [$c] = stobeNegOfferCap('Pax [Hungry Bandit]', ['metadata'=>['money'=>0]]);
+    t("91 broke -> 0", $c === 0, $c);
+    echo "ok=$ok bad=$bad\n";
+}
