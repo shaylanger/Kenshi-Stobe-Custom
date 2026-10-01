@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `261C7AF3…`, KenshiFP `BC284585…`, server round 19g). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
+Last updated 2026-10-01 (after runs 5–7 and round 19g; Stobe.dll `261C7AF3…`, KenshiFP `BC284585…`, server round 19g). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–91 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `archive/test-run-2026-10-01-r5-r7.md` (runs 5–7).
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -98,7 +98,7 @@ What rounds 17–18 added (what these rows check):
 | C10 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
 | C11b | "Wait here for Wendy" (needs a 2nd squad member) | Holds until Wendy is near |
 
-**Round 19 retest** (run 5 passed J1, J2, N4, F1 fetch, P1, P1b, B1c; see `test-run-2026-10-01.md`). At Home with Malzin in the squad; automate unless marked.
+**Round 19 retest** (passed so far: J1, J2, N4, F1 fetch, F1b, P1, P1b, B1c, R1/R2 walk-back + report, R2 inferred goal, attack order; see `archive/test-run-2026-10-01-r5-r7.md`. Still open: R1 to COMPLETE, H1, M1, M2, L83, G1b, FS1–FS3, C1, C2, D1, J1b, S1). At Home with Malzin in the squad; automate unless marked.
 | # | Say / do | Expect |
 |---|---|---|
 | R1 | "Make 1 building material", **Malzin selected** (worst case), then again with Shay selected | `GOAL_RETURN walking actor=Malzin to=Shay`, then `arrived`; report spoken (server `Goal report queued`, no `Director scene failed`, a Malzin line) (bugs 72, 75) |

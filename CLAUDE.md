@@ -2,12 +2,24 @@
 
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
-## Current state (2026-10-01, after run 5 + round 19) — start here
-- **Installed:** Stobe.dll `261C7AF3…`, KenshiFP.dll `BC284585…` (bugs 80–91 installed); server through round 19g (live + ss-merge, pushed). stobe-tests baseline 51 pass / 7 known + negotiation_engine "unpaid -> BREACHED_PLAYER" (pre-existing, fails on pre-r19 code too) (negotiation_engine flakes; rerun).
-- **Next job:** test plan "Round 19 retest" (R1, R2, C1, C2, F1b, D1, H1, M1, M2, S1) plus the untested round 18 rows (N1–N3, N5, V1–V2, S1). Log in a new `test-run-<date>.md`; next bug is **92** (79 is open in test plan section 4) (79 is logged in the test plan, section 4, to fix next round). Run 5 log: `test-run-2026-10-01.md`.
+## Current state (2026-10-01 evening, after runs 5–7 + round 19g) — start here
+- **Installed:** Stobe.dll `261C7AF3…`, KenshiFP.dll `BC284585…` (all fixes through bug 91); server through round 19g (live + ss-merge, pushed). stobe-tests baseline: 51 pass / 7 known / 1 pre-existing fail (`negotiation_engine` "unpaid -> BREACHED_PLAYER", fails on pre-r19 code too: not ours, investigate some day).
+- **Next job:** test plan section "Round 19 retest". Still to verify in game: R1 to COMPLETE at 50x (bug 80), H1 (work goal at 50x), M1/M2 meals (bugs 81/85: needs food in a chest; diag line `GOAL_MEAL diag … hunger=` should match the game's Hunger ÷ 100), L83 (goal given after a save is dropped on load), G1b guard/follow (86/87), FS1–FS3 fight deals (88–91), C1/C2/D1 loot + dead roster (71/73: need a body), J1b job-list refresh (74, Shay looks), S1, hotkeys only when Kenshi focused (84, Shay checks). Then the untested round 18 rows (N1–N3, N5, V1–V3) and the Shay rows (L1–L3, J3, B7). Log in a new `test-run-<date>.md`; **next bug is 92**.
+- **Passed in runs 5–7:** J1, J2, N4, F1 fetch, F1b, P1, P1b, B1c, R1/R2 walk-back + spoken report (72, 75, 76), attack order in a fight, bought ceasefire (stand-down part).
+- **Open (not fixed):** bug 79 (FP look-at click on a squad member takes control; should only show details; test plan section 4).
 - **No manual validation:** run only rows Claude can verify from logs/state/goal status; list the "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. DLL fixes: build during the run, install only when Shay says Kenshi is closed.
 - **Test location:** Shay's outpost "Home" (layout in the test plan). Malzin is in Shay's squad (faction "Nameless"), Fond (+60). Keep food in a chest for long goals.
-- History: `STOBE_bug_history.md` (bugs 1–81), `PATCH_HISTORY.md`, run logs in `archive/`.
+- History: `STOBE_bug_history.md` (bugs 1–91), `PATCH_HISTORY.md`, run logs in `archive/` (runs 5–7: `archive/test-run-2026-10-01-r5-r7.md`).
+
+## Gotchas learned (runs 5–7)
+- **Goals live outside the Kenshi save** (`RE_Kenshi\mods\Stobe\stobe_work_goals.tsv`, `stobe_task_goals.tsv` + server DB). Since bug 83 new goals carry the in-game time and are dropped when an older save is loaded; older unstamped goals are not. Clear leftovers before testing: write `<id>\tCANCEL` lines to `stobe_work_goal.control` / `stobe_task_goal.control`.
+- **Goals run on game time** (bug 78): nothing advances while paused (requests aren't even picked up); at 50x everything is 50x faster, incl. stall/give-up timers.
+- **Hunger:** `MedicalSystem::hunger` is fullness on a 0–3 scale; the game UI shows ×100 (216 = 2.16, max 300, KO ~76–87). Long 50x runs starve NPCs: keep food in a chest; the watch script must pause on `[EVENT] knockout: Shay|Malzin` as well as combat.
+- **Walk-back/report target** is the selected squad member unless that's the worker herself, then the nearest other squad member (bug 75).
+- **`stobe-say give_cats <n>` gives Shay cats** (test helper); it's not a payment. Shay pays by voice ("Here are your cats").
+- **Squad members can't use Stobe's FOLLOW** (blocked for player faction); follow/guard go through KenshiFP BODYGUARD → FOLLOW_PLAYER_ORDER.
+- **Crash dumps:** `D:\…\Kenshi\crashDump1.0.65_x64.zip`; parse the .dmp exception + stack (scratch script `md.py` approach) and map KenshiFP RVAs with `x86_64-w64-mingw32-nm -n` (ImageBase from `objdump -p`).
+- Git Bash mangles `/mnt/...` paths and nested quotes: use `wsl.exe … bash -s <<'EOF'` heredocs, `MSYS_NO_PATHCONV=1`, or write patch scripts with the Write tool. Edits to WSL files via `//wsl.localhost/DwemerAI4Skyrim3/...` with Read/Edit work.
 
 ## Git: the repos are the source of truth
 - **Server** `github.com/shaylanger/StobeServer`, committed in the live tree `/var/www/html/StobeServer` (on `integrate-custom` = `origin/stobe`; `git push origin HEAD:stobe`; don't switch branches there without asking). `upstream` = Dwemer-Dynamics, keep separate.
@@ -25,6 +37,7 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 ## Tools (WSL `/usr/local/bin`; sources in `tools/`)
 - `stobe-say on|off|ping|state <npc> [--json]|speed <0|0.5..50>|give_cats <n>|say <npc> <text…> [--wait S]` (drives the game via the DLL test inbox).
 - `stobe-reset-npc <npc>`, `stobe-session HH:MM HH:MM|now [npc]` (for Shay's time + NPC reports), `stobe-tests [tree] [pattern]` (once at the end), `stobe-rotate-logs` (after every server deploy), `negotiation_admin.php deals N`.
+- `tools/stobe-goal-watch.sh <goal_id> <max_s>` (Git Bash): goal status + auto-pause on combat/knockout toward Shay/Malzin.
 - Fights: Shay on pause duty; arm `stobe-fight-offer`/`stobe-fight-watch` before `stobe-force-attack`.
 
 ## Automated testing
