@@ -1,4 +1,4 @@
-# STOBE bug history (bugs 1–64, 2026-09-30)
+# STOBE bug history (bugs 1–70, 2026-09-30)
 
 One line per bug found in the automated Malzin runs: what went wrong → fix round → status. Open work lives in `STOBE_full_test_plan.md`. The full run logs (exact lines, timestamps, deal ids) are in `archive/test-run-2026-09-30*.md`.
 
@@ -64,12 +64,18 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 56 | Direct actions (BODYGUARD) skipped `actor serial unavailable` when away | r17g | ✅ (order reached her) |
 | 57 | Base block lost when the selected character stood at outer base buildings | r17h | ✅ standalone |
 | 58 | Unpowered well: dead "operate" order, NPC idle | KFP r17e | superseded by 61 |
-| 59 | NPC never reported a finished/blocked goal (`lifelike_initiative.flag` unread in 1.3.1) | DLL r17d + KFP r17f + r17i | built, not installed |
-| 60 | "Fetch the vodka and the mead" only fetched one item | r17j | live, not retested |
-| 61 | Power gate blocked an idle machine (silo) before it was used | KFP r17g | built, not installed |
-| 62 | PATROL wandered the whole region (no waypoints) | KFP r17g + r17j | built, not installed |
-| 63 | "Wait here"/"come here" left the patrol running | KFP r17g | built, not installed |
+| 59 | NPC never reported a finished/blocked goal (`lifelike_initiative.flag` unread in 1.3.1) | DLL r17d + KFP r17f + r17i | installed, not retested |
+| 60 | "Fetch the vodka and the mead" only fetched one item | r17j + r17k | live, not retested |
+| 61 | Power gate blocked an idle machine (silo) before it was used | KFP r17g | installed, not retested |
+| 62 | PATROL wandered the whole region (no waypoints) | KFP r17g + r17j | installed, not retested |
+| 63 | "Wait here"/"come here" left the patrol running | KFP r17g | installed, not retested |
 | 64 | "Loot the food off the dead bonedog": corpse not targetable, silent | r17j (+KFP r17g walking) | live, not retested |
+| 65 | Goal-report initiative turn skipped "no eligible NPC listener" (only Malzin + player) | DLL r17e + KFP r17h (report within 70) | installed, not retested |
+| 66 | goal_report directive forced director mode → "No eligible Director cast", report lost | r17k | live, not retested |
+| 67 | Patrol waypoints at building centres → path_failed, patrol never advanced | KFP r17h | installed, not retested |
+| 68 | LOOT found no dead body (Sorth died at Home) | KFP r17h (scan merge + diag log) | installed, not retested |
+| 69 | Hauling took water out of the Bread Oven's input to water the farm | KFP r17h | installed, not retested |
+| 70 | Farm wait hidden by "Obtaining …"; dry farm waited forever | KFP r17h | installed, not retested |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.
