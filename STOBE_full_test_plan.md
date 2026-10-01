@@ -135,6 +135,7 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 | L3 (Shay looks) | Select Shay (no goal), first-person and third-person view | Label hidden for Shay; shows in both camera modes for Malzin. Log `GOAL_LABEL widget created`; no `GOAL_LABEL faulted` |
 
 ## 4. Known not working / open issues
+- **Bug 83 (open):** goals live outside the Kenshi save (`stobe_work_goals.tsv`, `stobe_task_goals.tsv` in the mod folder + server DB), so a goal given after a save comes back when an older save is loaded (run 6 patrol → starving Malzin → crash 82). Plan: store the in-game time a goal was given; on load, drop goals newer than the loaded world (silently, no walk-back/report); goals given before the save keep running.
 - **Bug 79 (next round of fixes, KenshiFP first-person):** in FP mode, looking at a squad member and clicking them switches control to that character (breaks Shay out of FP). Wanted: look-at + click on a squad member acts like it does for a normal NPC (show their details) without taking control. Controlling a squad member stays possible via their portrait in the squad list. Only change the look-at click path.
 - **Hand-overs land on the floor.** Her GIVE_ITEM to Shay often logs `dropped_at_feet=1` (tobacco, twice in run 3), even when Shay's pack may have room. Check Shay's free space; if it has room, it's a DLL bug.
 - **Refund queued outside a chat turn** waits for her next reply (4 min once in a fight). Round 15 only fixed this for settles after a voice payment.
