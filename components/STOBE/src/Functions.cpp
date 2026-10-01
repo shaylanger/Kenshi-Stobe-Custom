@@ -1047,8 +1047,8 @@ int ClampTtsVolumePercent(int volumePercent) {
   if (volumePercent < 0) {
     return 0;
   }
-  if (volumePercent > 100) {
-    return 100;
+  if (volumePercent > 200) { // 0-200 %: above 100 boosts (round 18b)
+    return 200;
   }
   return volumePercent;
 }
@@ -1121,6 +1121,10 @@ int ResolveTtsPlaybackVolumePercent(GameWorld *world, Character *speaker,
     farDistanceUnits = 1200.0f;
   }
   farDistanceUnits *= kPlaybackRangeMultiplier;
+  {
+    int fadePercent = g_ttsFadePercent < 25 ? 25 : (g_ttsFadePercent > 400 ? 400 : g_ttsFadePercent);
+    farDistanceUnits *= static_cast<float>(fadePercent) / 100.0f; // round 18b
+  }
 
   if (cameraDistanceOut <= kNearDistanceUnits) {
     return baseVolumePercent;

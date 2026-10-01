@@ -541,8 +541,15 @@ void LoadStobeRuntimeConfig() {
       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings", "TTSVolume", 100);
   if (g_ttsVolumePercent < 0) {
     g_ttsVolumePercent = 0;
-  } else if (g_ttsVolumePercent > 100) {
-    g_ttsVolumePercent = 100;
+  } else if (g_ttsVolumePercent > 200) {
+    g_ttsVolumePercent = 200;
+  }
+  g_ttsFadePercent =
+      ReadLayeredIniInt(baseIniPath, customIniPath, "Settings", "TTSFadePercent", 100);
+  if (g_ttsFadePercent < 25) {
+    g_ttsFadePercent = 25;
+  } else if (g_ttsFadePercent > 400) {
+    g_ttsFadePercent = 400;
   }
   g_ttsEnabled =
       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings", "TtsEnabled", 1) !=
@@ -603,6 +610,7 @@ void LoadStobeRuntimeConfig() {
   Log("CONFIG: Loaded ProximityRadius=" + ToString(g_proximityRadius) +
       ", BoredEventRange=" + ToString(g_boredEventRange) +
       ", TTSVolume=" + ToString(g_ttsVolumePercent) +
+      ", TTSFadePercent=" + ToString(g_ttsFadePercent) +
       ", ServerHost=" + g_serverHost +
       ", ServerPort=" + ToString(g_serverPort) +
        ", TtsEnabled=" + (g_ttsEnabled ? "true" : "false") +
@@ -659,6 +667,9 @@ void SaveStobeRuntimeConfig() {
                              iniPath.c_str());
   WritePrivateProfileStringA("Settings", "TTSVolume",
                              ToString(g_ttsVolumePercent).c_str(),
+                             iniPath.c_str());
+  WritePrivateProfileStringA("Settings", "TTSFadePercent",
+                             ToString(g_ttsFadePercent).c_str(),
                              iniPath.c_str());
   WritePrivateProfileStringA("Settings", "TtsEnabled",
                               g_ttsEnabled ? "1" : "0", iniPath.c_str());

@@ -83,8 +83,8 @@ int ClampVolumePercent(int volumePercent) {
   if (volumePercent < 0) {
     return 0;
   }
-  if (volumePercent > 100) {
-    return 100;
+  if (volumePercent > 200) {
+    return 200;
   }
   return volumePercent;
 }
@@ -217,7 +217,7 @@ void ApplyWavVolumeInPlace(std::string &wavData, int volumePercent) {
       wavData.compare(8, 4, "WAVE") != 0) {
     return;
   }
-  if (volumePercent >= 100) {
+  if (volumePercent == 100) {
     return;
   }
   if (volumePercent < 0) {
@@ -530,7 +530,7 @@ DWORD WINAPI PlaybackThreadProc(LPVOID lpParam) {
   int volumePercent = (volumePercentOverride >= 0)
                           ? ClampVolumePercent(volumePercentOverride)
                           : ClampVolumePercent(g_ttsVolumePercent);
-  if (volumePercent < 100) {
+  if (volumePercent != 100) {
     ApplyWavVolumeInPlace(wavData, volumePercent);
   }
 

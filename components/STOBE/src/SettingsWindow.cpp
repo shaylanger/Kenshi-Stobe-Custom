@@ -37,6 +37,7 @@ MyGUI::ComboBox *g_speakerModeCombo = nullptr;
 MyGUI::EditBox *g_talkRadiusEdit = nullptr;
 MyGUI::EditBox *g_shoutRadiusEdit = nullptr;
 MyGUI::EditBox *g_ttsVolumeEdit = nullptr;
+MyGUI::EditBox *g_ttsFadeEdit = nullptr;
 MyGUI::EditBox *g_boredRangeEdit = nullptr;
 MyGUI::EditBox *g_boredIntervalEdit = nullptr;
 MyGUI::Button *g_autoChatToggle = nullptr;
@@ -276,6 +277,10 @@ void RefreshPluginSettingsUI() {
     g_ttsVolumeEdit->setCaption(
         WideFromUtf8(ToString(g_ttsVolumePercent)).c_str());
   }
+  if (g_ttsFadeEdit) {
+    g_ttsFadeEdit->setCaption(
+        WideFromUtf8(ToString(g_ttsFadePercent)).c_str());
+  }
 
   PopulateHotkeyCombo();
   PopulateGeneralHotkeyCombo();
@@ -352,12 +357,16 @@ void OnSettingsSaveClick(MyGUI::Widget *sender) {
   int ttsVolume = ParseIntOrDefault(
       g_ttsVolumeEdit ? g_ttsVolumeEdit->getCaption() : "",
       g_ttsVolumePercent);
+  int ttsFade = ParseIntOrDefault(
+      g_ttsFadeEdit ? g_ttsFadeEdit->getCaption() : "",
+      g_ttsFadePercent);
 
   g_proximityRadius = (float)ClampInt(talkRadius, 1, 5000);
   g_shoutRadius = (float)ClampInt(shoutRadius, 1, 5000);
   g_boredEventRange = (float)ClampInt(boredRange, 1, 5000);
   g_boredEventIntervalHours = ClampInt(boredInterval, 1, 720);
-  g_ttsVolumePercent = ClampInt(ttsVolume, 0, 100);
+  g_ttsVolumePercent = ClampInt(ttsVolume, 0, 200);
+  g_ttsFadePercent = ClampInt(ttsFade, 25, 400);
 
   SaveStobeRuntimeConfig();
   if (previousTtsEnabled && !g_ttsEnabled) {
@@ -499,6 +508,7 @@ void CloseSettingsUI() {
   g_talkRadiusEdit = nullptr;
   g_shoutRadiusEdit = nullptr;
   g_ttsVolumeEdit = nullptr;
+  g_ttsFadeEdit = nullptr;
   g_boredRangeEdit = nullptr;
   g_boredIntervalEdit = nullptr;
   g_autoChatToggle = nullptr;
@@ -637,11 +647,14 @@ void CreateSettingsUI() {
       MyGUI::Align::Top | MyGUI::Align::Left, "Stobe_Plugin_ShoutEdit");
   y += rowH + rowGap;
 
-  CreateLabel(client, labelX, y, labelW, rowH, "TTS Volume (0-100)",
+  CreateLabel(client, labelX, y, labelW, rowH, "TTS Volume % (0-200) / Fade %",
               "Stobe_Plugin_TtsVolumeLabel");
   g_ttsVolumeEdit = client->createWidgetReal<MyGUI::EditBox>(
-      "Kenshi_EditBox", fieldX, y, fieldW, rowH,
+      "Kenshi_EditBox", fieldX, y, fieldW * 0.48f, rowH,
       MyGUI::Align::Top | MyGUI::Align::Left, "Stobe_Plugin_TtsVolumeEdit");
+  g_ttsFadeEdit = client->createWidgetReal<MyGUI::EditBox>(
+      "Kenshi_EditBox", fieldX + fieldW * 0.52f, y, fieldW * 0.48f, rowH,
+      MyGUI::Align::Top | MyGUI::Align::Left, "Stobe_Plugin_TtsFadeEdit");
   y += rowH + rowGap;
 
   CreateLabel(client, labelX, y, labelW, rowH, "Bored Event Range",
