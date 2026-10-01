@@ -76,6 +76,14 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 68 | LOOT found no dead body (Sorth died at Home) | KFP r17h (scan merge + diag log) | installed, not retested |
 | 69 | Hauling took water out of the Bread Oven's input to water the farm | KFP r17h | installed, not retested |
 | 70 | Farm wait hidden by "Obtaining …"; dry farm waited forever | KFP r17h | installed, not retested |
+| 71 | LOOT_AREA rejected Sorth's corpse (scan dead=1 valid=0) | KFP r19: native bool returns read as 1 byte (isPlayerCharacter garbage) + per-body scan log | installed, not retested |
+| 72 | Goal reports queued but never spoken ("Director scene failed: No eligible Director cast") | server r19: goal_report never uses director mode; failed director falls back to a normal turn | live, not retested |
+| 73 | Malzin talked about dead Sorth as alive | Stobe r19: roster marks "(dead)/(unconscious)", corpses merged into nearby; server r19: prompt says DEAD | installed, not retested |
+| 74 | Job list panel only refreshed after reselecting her | KFP r19: replay updatePlayerSelection after GOAL_JOB add/remove | installed, not retested |
+| 75 | No walk-back after work goals (silent 180 s, gave up); report fired at once | KFP r19: return/report target = other squad member when the worker is selected; skip reasons logged; report fallback 200 s; started on accept | installed, not retested |
+| 76 | "Make 3 steel bars" became a question, no goal | server r19: infer WORK_GOAL from a plain make-order to a faction member | live, not retested |
+| 77 | "Put them back" stored only the Mead | server r19: them/those/both → every item of the last FETCH batch | live, not retested |
+| 78 | Long idles between goal steps at high game speed | KFP r19: goal clock = real time x game speed; ticks/waits/stalls in game time | installed, not retested |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.
@@ -83,4 +91,5 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 - STOBE defers speech and actions while the game is paused (`ACTION_QUEUE: paused`); lines sent while paused run on unpause, in order.
 - Reloading a save drops the DLL's queued actions (a queued payment and a revenge attack were discarded in run 3).
 - The server's deal clocks only tick when something reaches the server (a chat line or game event).
+- At high game speed, watch for knockouts too (hunger), not just fights: Malzin starved at 50x in run 5.
 - Low-trust NPCs (Resentful) refuse credit ("cats first"); Fond NPCs accept pay-later. Set trust by hand for tests that need it (see the plan).

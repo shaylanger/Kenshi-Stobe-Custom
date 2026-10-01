@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-01 (after run 4 and round 18; Stobe.dll `3F967C4E…`, KenshiFP `1C768AB1…`, server round 18c). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–70 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `archive/test-run-2026-09-30-r4.md`.
+Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `8B231133…`, KenshiFP `639DAD65…`, server round 19). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -97,6 +97,22 @@ What rounds 17–18 added (what these rows check):
 | C9 | "Buy 3 bread from the trader" (needs a trader) | Walks there and really buys them |
 | C10 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
 | C11b | "Wait here for Wendy" (needs a 2nd squad member) | Holds until Wendy is near |
+
+**Round 19 retest** (run 5 passed J1, J2, N4, F1 fetch, P1, P1b, B1c; see `test-run-2026-10-01.md`). At Home with Malzin in the squad; automate unless marked.
+| # | Say / do | Expect |
+|---|---|---|
+| R1 | "Make 1 building material", **Malzin selected** (worst case), then again with Shay selected | `GOAL_RETURN walking actor=Malzin to=Shay`, then `arrived`; report spoken (server `Goal report queued`, no `Director scene failed`, a Malzin line) (bugs 72, 75) |
+| R2 | "Make 3 steel bars." | WORK_GOAL queued even if she grumbles (server `Work goal inferred from a direct order` if the model gave none); BLOCKED; she walks back and says why (bugs 76, 72, 75) |
+| C2 | "Loot everything from Sorth's body" (or any corpse) | KenshiFP `loot scan body name=Sorth … match=1`; walks to the body; items in her pack (bug 71) |
+| C1 | "Loot the weapons from these bandits" (a body with a weapon) | Only weapons moved (bug 71) |
+| F1b | Fetch two items, then "put them back in the chest" | Server `STORE expanded to the last fetched items`; two STORE goals; both items in the chest (bug 77) |
+| D1 | Talk to Malzin near a corpse / a knocked-out NPC | Roster in stobe.log shows `(dead)` / `(unconscious)`; she never treats the corpse as alive (bug 73) |
+| J1b (Shay looks) | "Make 2 building materials" with Malzin **selected** | Job list panel switches Stone Mine ↔ Manual Stone Processor by itself; no `GOAL_JOB ui refresh faulted` (bug 74) |
+| H1 | 50x goal: compare to run 5 (`[202 s]` to the bread block) | Steps follow each other without long idles; pauses freeze the goal (bug 78) |
+| M1 | Long goal at 50x with food in a chest, Malzin's food low | `GOAL_MEAL hungry` → `ate from …` → `done`; goal resumes (round 19 meals) |
+| M2 | Same with no food anywhere | `GOAL_MEAL no food anywhere`; she says she's hungry and there's no food (server `Hunger report queued`); keeps working |
+| S1 | Game speed 3x/10x, long NPC line | TTS normal pitch, not overlapping (feature 3, not run in run 5) |
+Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as combat.
 
 **Round 18 features** (all automatable unless marked; check logs, state and goal status)
 | # | Say / do | Expect |
