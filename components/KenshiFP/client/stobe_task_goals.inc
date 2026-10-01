@@ -37,19 +37,19 @@
 #define STG_NEEDED_MATS_SYM "?getNeededMats@ConstructionState@Building@@QEAAXAEAV?$lektor@PEAVBuildMaterial@ConstructionState@Building@@@@@Z"
 
 typedef void *(*stg_remove_t)(void *, void *, int, int);
-typedef int (*stg_add_t)(void *, void *, int, int, int);
-typedef int (*stg_give_t)(void *, void *, int, int);
-typedef int (*stg_boolchar_t)(void *);
+typedef unsigned char (*stg_add_t)(void *, void *, int, int, int);
+typedef unsigned char (*stg_give_t)(void *, void *, int, int);
+typedef unsigned char (*stg_boolchar_t)(void *);
 typedef void *(*stg_isanimal_t)(void *);
 typedef void *(*stg_shop_ctor_t)(void *, void *);
 typedef void (*stg_shop_dtor_t)(void *);
 typedef void *(*stg_shop_inv_t)(void *);
 typedef void *(*stg_buy_item_t)(void *, void *, void *);
 typedef int (*stg_get_money_t)(void *);
-typedef int (*stg_is_trader_t)(void *);
-typedef int (*stg_is_injured_t)(void *, int);
+typedef unsigned char (*stg_is_trader_t)(void *);
+typedef unsigned char (*stg_is_injured_t)(void *, int);
 typedef int (*stg_take_stack_t)(void *, void *);
-typedef int (*stg_on_ground_t)(void *);
+typedef unsigned char (*stg_on_ground_t)(void *);
 typedef void (*stg_needed_mats_t)(void *, void *);
 
 #define STG_SHOP_CTOR_SYM "?_CONSTRUCTOR@ShopTrader@@QEAAPEAV1@PEAVCharacter@@@Z"
@@ -554,7 +554,12 @@ static void stg_loot_scan_log(void *gw,void *actor,StgGoal *g)
         void *c=chars[i];if(!c||!char_valid(c))continue;
         if(stg_exports()&&g_stg_isdead(c))dead++;
         int pr=char_prone_state(c);if(pr==2||pr==3||pr==4)downed++;
-        if(stg_valid_downed(actor,c,g->target))valid++;
+        int ok=stg_valid_downed(actor,c,g->target);if(ok)valid++;
+        if(stg_exports()&&(g_stg_isdead(c)||pr==2||pr==3||pr==4)){
+            char cn[128]={0};stg_char_name(c,cn,sizeof(cn));
+            logline("[stobe] TASK_GOAL loot scan body name=%s dead=%d prone=%d player=%d match=%d",
+                    cn,(int)g_stg_isdead(c),pr,(int)g_stg_isplayer(c),ok);
+        }
     }
     logline("[stobe] TASK_GOAL loot scan id=%s target=%s item=%s scanned=%d dead=%d downed=%d valid=%d",
             g->id,g->target,g->item,n,dead,downed,valid);

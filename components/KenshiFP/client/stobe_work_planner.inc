@@ -31,7 +31,7 @@
 
 typedef void *(*wgp_getprod_t)(void *);
 typedef void *(*wgp_getinv_building_t)(void *);
-typedef int (*wgp_isplayer_building_t)(void *);
+typedef unsigned char (*wgp_isplayer_building_t)(void *);
 typedef int (*wgp_special_t)(void *);
 typedef void (*wgp_available_crafts_t)(void *, void *);
 typedef void *(*wgp_add_craft_t)(void *, void *, void *, float, int);
