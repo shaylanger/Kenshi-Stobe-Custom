@@ -2793,6 +2793,21 @@ static void stobe_fight_truce_tick(void *gw)
     }
 }
 
+#define STOBE_TASK_FOLLOW_PLAYER_ORDER 44
+
+/* 1 when c is one of the player's own characters (squad list). */
+static int stobe_is_player_squad_char(void *gw, void *c)
+{
+    if (!c || !readable(gw, GW_PLAYER + 8)) return 0;
+    void *player = *(void **)((uintptr_t)gw + GW_PLAYER);
+    if (!readable(player, PI_PLAYERCHARS + LEK_STUFF + 8)) return 0;
+    uint32_t count = *(uint32_t *)((uintptr_t)player + PI_PLAYERCHARS + LEK_COUNT);
+    void **stuff = *(void ***)((uintptr_t)player + PI_PLAYERCHARS + LEK_STUFF);
+    if (!stuff || count > 4096 || !readable(stuff, count * sizeof(void *))) return 0;
+    for (uint32_t i = 0; i < count; i++) if (stuff[i] == c) return 1;
+    return 0;
+}
+
 static int stobe_handle_general_action(void *gw, uint32_t actor_serial,
                                        const char *command, uint32_t target_serial,
                                        const char *argument)
@@ -2892,6 +2907,14 @@ static int stobe_handle_general_action(void *gw, uint32_t actor_serial,
             void *o = g_stobe_getorders(actor);
             if (o && readable(o, 8)) g_stobe_clear_orders(o);
         }
+    }
+    if (task == STOBE_TASK_BODYGUARD && target &&
+        stobe_is_player_squad_char(gw, actor) && stobe_is_player_squad_char(gw, target)) {
+        /* Bug 86: BODYGUARD on one of the player's own characters is ignored by a
+         * squad member's AI (she stood "aimless"); the player's own follow order is
+         * FOLLOW_PLAYER_ORDER, which keeps her close and fighting for him. */
+        task = STOBE_TASK_FOLLOW_PLAYER_ORDER;
+        logline("[stobe] ACTION_BRIDGE %s squad->squad: using FOLLOW_PLAYER_ORDER", command);
     }
     if (task >= 0) {
         if ((task == STOBE_TASK_PATROL || task == STOBE_TASK_HOLD_POSITION) && !target)
