@@ -10,7 +10,7 @@ Usage:
   stobe-say mode <mode>              set chat mode for later lines
   stobe-say state <npc> [--json]     NPC AI/orders/movement, inventory, player cats
   stobe-say give_cats <n>            add Cats to the player
-  stobe-say speed <x>                game speed (0 = pause, 0.5..10)
+  stobe-say speed <x>                game speed (0 = pause, 0.5..50)
   stobe-say say <npc> <text...> [--wait S] [--raw]
                                      speak, wait for the reply to settle, then
                                      print stobe-session for that window

@@ -13120,10 +13120,10 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
   }
   if (cmd == "speed") {
     if (f.size() < 3 || !world)
-      return "usage: speed <0|0.5..10>";
+      return "usage: speed <0|0.5..50>";
     float v = (float)atof(f[2].c_str());
-    if (!(v == 0.0f || (v >= 0.5f && v <= 10.0f)))
-      return "usage: speed <0|0.5..10>";
+    if (!(v == 0.0f || (v >= 0.5f && v <= 50.0f)))
+      return "usage: speed <0|0.5..50>";
     float before = 0.0f, after = 0.0f;
     bool paused = false;
     try {
