@@ -1,4 +1,4 @@
-# STOBE bug history (bugs 1–43, 2026-09-30)
+# STOBE bug history (bugs 1–64, 2026-09-30)
 
 One line per bug found in the automated Malzin runs: what went wrong → fix round → status. Open work lives in `STOBE_full_test_plan.md`. The full run logs (exact lines, timestamps, deal ids) are in `archive/test-run-2026-09-30*.md`.
 
@@ -49,6 +49,27 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 41 | Combat pay window ran during a game pause → false breach + revenge attack | r15 (game-time deadline) | ✅ |
 | 42 | Breach instruction never reached the LLM ("Cats received" while attacking) | r15 | ⏳ not seen in game (plan F2) |
 | 43 | "The rest of them aren't mine to call off" | r16 | ⏳ not seen in game |
+| 44 | Work goal BLOCKED "stalled" while still mining raw stone (stall timer only counted the final item) | KFP r17 | ✅ run 4 |
+| 45 | Goal refused `actor_serial_unavailable` when the NPC was away at a far machine | r17 | ✅ run 4 |
+| 46 | NPC didn't know the base ("no stove, no mine in this shack"): `<player_base>` never reached the prompt | r17b | ✅ run 4 |
+| 47 | Planner never filled machine inputs (farm water, processor stone, silo wheat) | KFP r17c | ✅ water→farm, stone→processor |
+| 48 | Kept mining after there was enough stone; never switched to the processor | KFP r17d | ✅ run 4 |
+| 49 | Test inbox spoke as the selected target ("Malzin to Malzin") | DLL r17b | ✅ |
+| 50 | No walk back to the player after a goal (old orders won) | KFP r17b/17e | ✅ run 4 |
+| 51 | Fetch/store/loot moved items instantly from any chest/body in range | KFP r17e/17g | built; needs Shay's eyes |
+| 52 | "Put those back in storage" became GiveItem to the player | r17d | ✅ run 4 |
+| 53 | "Resume/try again" queued a duplicate goal instead of RESUME | r17e | ✅ run 4 |
+| 54 | (note) Goals for the same item count the stockpile, so a resumed goal can complete from another goal's output | — | by design |
+| 55 | "Keep N stocked" became a one-off WORK_GOAL | r17f | ✅ run 4 |
+| 56 | Direct actions (BODYGUARD) skipped `actor serial unavailable` when away | r17g | ✅ (order reached her) |
+| 57 | Base block lost when the selected character stood at outer base buildings | r17h | ✅ standalone |
+| 58 | Unpowered well: dead "operate" order, NPC idle | KFP r17e | superseded by 61 |
+| 59 | NPC never reported a finished/blocked goal (`lifelike_initiative.flag` unread in 1.3.1) | DLL r17d + KFP r17f + r17i | built, not installed |
+| 60 | "Fetch the vodka and the mead" only fetched one item | r17j | live, not retested |
+| 61 | Power gate blocked an idle machine (silo) before it was used | KFP r17g | built, not installed |
+| 62 | PATROL wandered the whole region (no waypoints) | KFP r17g + r17j | built, not installed |
+| 63 | "Wait here"/"come here" left the patrol running | KFP r17g | built, not installed |
+| 64 | "Loot the food off the dead bonedog": corpse not targetable, silent | r17j (+KFP r17g walking) | live, not retested |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

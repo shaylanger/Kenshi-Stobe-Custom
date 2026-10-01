@@ -71,28 +71,23 @@ Last updated 2026-09-30 (after run 3; Stobe.dll `236C3F2C…` round 15, server r
 | I18 | After a long fight, ask about something from earlier in it | She still remembers it |
 | D7b (bug 23) | "Here, take this bread" while carrying Poppyseed Bread | You hand it over (distinctive-word match, round 9d) |
 
-**Work and task goals** (base, machines, storage, bodies, traders; all need Shay)
+**Work and task goals** (run 4 at Home passed B4, B5, B6, C3, C4, C6, C7, C8, walk-back; see `archive/test-run-2026-09-30-r4.md`). Automated with `stobe-say` (+ `speed`) unless marked Shay.
 | # | Say / do | Expect |
 |---|---|---|
-| B1 | "Wendy, go Home and make 5 bread." | Walks home, uses the real machines, completes at exactly 5 (UI COMPLETE 5/5) |
-| B2 | Watch her during B1 | Not pulled back to the arrival spot every few seconds |
-| B3 | Ask for something needing a crafted ingredient | The bench queue grows only by what's missing |
-| B4 | "Pause the bread", then "resume" with another goal active | The paused goal resumes |
-| B5 | "Cancel the bread." | Stops; UI shows CANCELLED |
-| B6 | Ask for something nothing nearby can make | BLOCKED with a clear reason |
-| B7 | Save and reload mid-goal | Continues with progress intact |
-| C1 | After a fight: "loot the weapons from these bandits" | Only weapons taken |
-| C2 | "Loot the food" / "loot the medkits" | Only that category |
-| C3 | "Loot everything and put it away at Home." | Loots, then stores at Home |
-| C4 | "Go Home and get 5 medkits." | Exactly 5 from storage |
-| C5 | "Give Wendy 3 medkits." | 3 move between squad members |
-| C6 | "Keep 10 bread stocked." | Production starts whenever stock < 10 |
-| C7 | Pause or cancel C6 | Its production sub-goal pauses or stops too |
-| C8 | Stock goal for something that can't be made | "production is blocked… retrying later", no repeated chatter |
-| C9 | "Buy 3 bread from the trader." | Walks there and really buys them |
-| C10 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled, no money spent |
-| C11 | "Guard me" / "patrol" / "wait here for Wendy" | Each holds until cancelled or done |
-| C12 | "Treat the injured" after a fight | First aid or rescue for each hurt squad member |
+| B1 | "Make 2 bread" with silo/oven powered and the farm growing (run at 50x) | Water→farm, wheat→silo, flour→oven; COMPLETE 2/2; "Waiting for Wheat Farm S to grow" while growing (bugs 47, 58, 61) |
+| B1b | Same with a machine really unpowered while she works it | After ~30 s: BLOCKED "… has no power"; she walks back and says why (bugs 59, 61) |
+| B3 | Something needing a crafted ingredient at a bench | Bench queue grows only by what's missing |
+| B7 (Shay) | Save and reload mid-goal | Continues with progress intact |
+| R1 | Any goal finishing near Shay | She walks back **and reports** the result (bug 59) |
+| F1 (Shay watches) | "Fetch the vodka and the mead" / "put them back in the chest" | Both items; she **walks to the chest** first (bugs 51, 60) |
+| P1 (Shay watches) | "Patrol the base", then "wait here" | Loops between Home's buildings; "wait here" ends the patrol (bugs 62, 63) |
+| G1 (Shay watches) | "Guard me" | Stays close to Shay (stood ~29 m off in run 4) |
+| C1 | After a fight: "loot the weapons from these bandits" | Only weapons; walks to each body |
+| C2 | "Loot the food off that dead bonedog" | LOOT_AREA food; walks to the body (bug 64) |
+| C5 | "Give Wendy 3 medkits" (needs a 2nd squad member) | 3 move between squad members |
+| C9 | "Buy 3 bread from the trader" (needs a trader) | Walks there and really buys them |
+| C10 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
+| C11b | "Wait here for Wendy" (needs a 2nd squad member) | Holds until Wendy is near |
 
 ## 4. Known not working / open issues
 - **Hand-overs land on the floor.** Her GIVE_ITEM to Shay often logs `dropped_at_feet=1` (tobacco, twice in run 3), even when Shay's pack may have room. Check Shay's free space; if it has room, it's a DLL bug.
@@ -111,6 +106,9 @@ Last updated 2026-09-30 (after run 3; Stobe.dll `236C3F2C…` round 15, server r
 ## 5. Design work (Shay's notes, not started)
 - **Relationship should shape everything she does:** deal pricing and willingness by tier; hard rules like no pay-after deals and no favours below some tier. (Already seen: at Resentful she refused credit; at Fond she accepted it.)
 - **Tasks and goals only for the player's faction:** random NPCs shouldn't take "make 5 bread" or "loot that corpse"; minor requests ("follow me") only with trust or a fair deal. Gate on `npcIsInPlayerFaction` plus trust/deal.
+- **Volume control in kenshi esttings for TTS**: right now the tts is not piped into kenshi and thus the sound effect is played at a static volume (possibly based on proximity) and we should be able to adjust that so it can be louder or quieter in the games settings if possible
+- **TSS speed should not be effected by game speed setting**:right now if you speed up the game speed the tss gets played at a accelerated rate. I think it would be better if we didnt adjust the tts speed if the game speed changes
+- **Can we route the task/goals system into the inbuild kenshi jobs**: Ideally when a NPC is given a goal the goals and what they are working shows up in the existing jobs queue. Not sure the best way to make this happen it would just be nice to see if they have a goal/task and where they are on it via the ingame jobs. (just a suggestion but maybe the gaodl could be a custom job, and then all the tasks that are real kenshi jobs queue in order and with any custom tasks like move to or sush showing as well).
 
 ## Automated runs (stobe-say)
 Claude can run alone, once Shay has loaded the save near the NPC and unpaused: section 1 (fight rows with Shay on pause), section 2 rows L9, L10, E5, E8, pay-first refused, L3, and A6, A7, K11, F8, I13, D7b. The rest of section 3 needs Shay.
