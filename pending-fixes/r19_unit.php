@@ -56,3 +56,9 @@ if (function_exists('stobeInferFollowFromOrder')) {
     t("87 non-faction", stobeInferFollowFromOrder("Follow me.", ['faction'=>'Dust Bandits'], [], 'Shay') === '');
     echo "ok=$ok bad=$bad\n";
 }
+// 88 (run after patch_r19_bug88_surrender_stop)
+$r = normalizeActionTagToken('STOP_ATTACK@Shay', ['enabled'=>true,'disallow_stop_attack'=>true,'deal_sanctioned_give'=>true]);
+t("88 deal STOP_ATTACK kept", stripos($r, 'STOP_ATTACK') === 0, $r);
+$r = normalizeActionTagToken('STOP_ATTACK@Shay', ['enabled'=>true,'disallow_stop_attack'=>true]);
+t("88 no deal: still dropped", $r === '', $r);
+echo "ok=$ok bad=$bad\n";
