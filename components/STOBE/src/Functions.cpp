@@ -3615,7 +3615,7 @@ static void RegisterPersonalTruce(Character *first, Character *second) {
     guard.faction = nullptr;
   }
   DWORD now = GetTickCount();
-  guard.until = now + 20000;
+  guard.until = now + 120000; // 2 min: a paid ceasefire must outlast the gang re-aggro (bug 90)
   guard.nextCheck = now + 1000;
   guard.reapplied = 0;
   for (size_t i = 0; i < g_personalTruces.size(); ++i) {

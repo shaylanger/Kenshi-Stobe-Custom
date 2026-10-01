@@ -11774,11 +11774,28 @@ void ProcessMessageQueue(GameWorld *thisptr) {
   }
 }
 
+// Bug 89: a player character on block/passive that hits back at someone who is
+// attacking it was logged as "Initiated attack" and treated as breaking the
+// ceasefire. When the victim is already targeting the attacker, it's defence.
+static bool PlayerSideIsDefending(Character *attacker, Character *victim) {
+  try {
+    Faction *f = attacker->getFaction();
+    if (!f || !f->isThePlayer())
+      return false;
+    hand t = victim->getAttackTarget();
+    return t.isValid() && !t.isNull() && t.getCharacter() == attacker;
+  } catch (...) {
+    return false;
+  }
+}
+
 void attackingYou_hook(Character *npc, Character *attacker, bool so,
                        bool doAwarenessCheck) {
+  bool playerDefending = so && attacker && npc && PlayerSideIsDefending(attacker, npc);
   if (so && attacker && npc) {
-    BreakFactionCeasefireForPlayerOrder(attacker, npc,
-                                        "player_order_attacking_you");
+    if (!playerDefending)
+      BreakFactionCeasefireForPlayerOrder(attacker, npc,
+                                          "player_order_attacking_you");
     if (ShouldSuppressFactionCeasefireAttack(npc, attacker)) {
       RejectFactionCeasefireAttack(attacker, npc, "attacking_you");
       return;
@@ -11789,7 +11806,8 @@ void attackingYou_hook(Character *npc, Character *attacker, bool so,
     MarkRecentCombatSignal(attacker, nowTick);
     MarkRecentCombatSignal(npc, nowTick);
     LogGameEvent("combat", attacker->getName(), SafeFaction(attacker),
-                 npc->getName(), SafeFaction(npc), "Initiated attack",
+                 npc->getName(), SafeFaction(npc),
+                 playerDefending ? "Defending against" : "Initiated attack",
                  ResolveCharacterSerialForEvent(attacker),
                  ResolveCharacterSerialForEvent(npc));
   }

@@ -76,3 +76,16 @@ if (function_exists('stobeNegOfferCap')) {
     t("91 broke -> 0", $c === 0, $c);
     echo "ok=$ok bad=$bad\n";
 }
+// 90 (run after patch_r19_bug90_ceasefire)
+if (function_exists('stobeDealRecentCompletedCeasefire')) {
+    $db = $GLOBALS['db'];
+    $db->exec("DELETE FROM stobe_social_contract WHERE npc_name='R19B90Npc'");
+    t("90 none -> null", stobeDealRecentCompletedCeasefire('R19B90Npc') === null);
+    $db->exec("INSERT INTO stobe_social_contract (contract_id,npc_name,player_name,status,terms,kind,updated_at) VALUES ('r19b90-a','R19B90Npc','Shay','COMPLETE','[]','combat',NOW())");
+    $r = stobeDealRecentCompletedCeasefire('r19b90npc');
+    t("90 recent complete found", is_array($r) && $r['contract_id'] === 'r19b90-a', $r);
+    $db->exec("UPDATE stobe_social_contract SET updated_at=NOW() - INTERVAL '20 minutes' WHERE contract_id='r19b90-a'");
+    t("90 old complete ignored", stobeDealRecentCompletedCeasefire('R19B90Npc') === null);
+    $db->exec("DELETE FROM stobe_social_contract WHERE npc_name='R19B90Npc'");
+    echo "ok=$ok bad=$bad\n";
+}
