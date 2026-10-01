@@ -79,17 +79,17 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 71 | LOOT_AREA rejected Sorth's corpse (scan dead=1 valid=0) | KFP r19: native bool returns read as 1 byte (isPlayerCharacter garbage) + per-body scan log | installed, not retested |
 | 72 | Goal reports queued but never spoken ("Director scene failed: No eligible Director cast") | server r19: goal_report never uses director mode; failed director falls back to a normal turn | passed run 6 |
 | 73 | Malzin talked about dead Sorth as alive | Stobe r19: roster marks "(dead)/(unconscious)", corpses merged into nearby; server r19: prompt says DEAD | installed, not retested |
-| 74 | Job list panel only refreshed after reselecting her | KFP r19: replay updatePlayerSelection after GOAL_JOB add/remove | installed, not retested |
+| 74 | Job list panel only refreshed after reselecting her | KFP r19: replay updatePlayerSelection after GOAL_JOB add/remove; **failed run 8** → KFP r19h: replay her → nothing → her, log `GOAL_JOB ui refresh replayed/skipped` | installed 0193CD57, not retested |
 | 75 | No walk-back after work goals (silent 180 s, gave up); report fired at once | KFP r19: return/report target = other squad member when the worker is selected; skip reasons logged; report fallback 200 s; started on accept | passed run 6 |
 | 76 | "Make 3 steel bars" became a question, no goal | server r19: infer WORK_GOAL from a plain make-order to a faction member | passed run 6 |
 | 77 | "Put them back" stored only the Mead | server r19: them/those/both → every item of the last FETCH batch | passed run 6 |
 | 78 | Long idles between goal steps at high game speed | KFP r19: goal clock = real time x game speed; ticks/waits/stalls in game time | partly passed run 6 (patrol at 50x) |
-| 79 | FP look-at click on a squad member takes control of them | open (next round): show details only; portrait click still switches | open |
+| 79 | FP look-at click on a squad member takes control of them | KFP r19h: a captured-cursor FP click that switches the selection within 1 s is reverted (`_selectPlayerCharacter`); portrait clicks still switch. No details panel yet | installed 0193CD57, not retested |
 | 80 | Work goals blocked "production stalled" after ~3 game min (budgets 10x short on the goal clock) | KFP r19b: game-time budgets x10 | installed, not retested |
 | 81 | Meals never started; prompts said "Well fed" while starving (hunger read as hungriness) | KFP r19b + Stobe r19b: level = hunger + fed; eat <150, stop 250; eating detected by a rise | installed, not retested |
 | 82 | Game crash on loading Home (14:18): meal step called a NULL inventory function (Malzin starving, patrol goal still active) | KFP r19c: resolve getinv in stg_exports; meals skip anyone down/dead/not loaded; whole meal step under the crash guard | installed, not retested |
 | 83 | Goals given after a save came back when that save was loaded (goals live in our own files, not the save) | KFP r19d: goals stamped with in-game time (getTimeStamp_inGameHours); goals newer than the loaded world dropped silently | installed, not retested |
-| 84 | STOBE hotkeys (chat box, push-to-talk, settings menu) fired while typing in other apps | Stobe r19e: hotkeys need the Kenshi window focused (foreground window in our process) | built 49B87D03, not installed |
+| 84 | STOBE hotkeys (chat box, push-to-talk, settings menu) fired while typing in other apps | Stobe r19e: hotkeys need the Kenshi window focused (foreground window in our process) | passed run 8 (Shay) |
 | 85 | Hunger read 100x too low: raw MedicalSystem::hunger is 0..3, the UI shows x100 (Malzin raw 2.16 = UI 216); meals thought she starved, prompt said Starving | KFP + Stobe r19f: level = (hunger + fed) x 100; eating detection on raw rises >= 0.01 | installed, not retested |
 | 86 | "Guard me": BODYGUARD on Shay logged ok but Malzin stood aimless | KFP r19g: squad->squad guard/follow uses FOLLOW_PLAYER_ORDER (44) | installed, not retested |
 | 87 | "Follow me" → "Following you" with no action | server r19g: infer BODYGUARD@player for a plain follow/guard request to a faction member | live, not retested |
@@ -97,6 +97,8 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 89 | Shay on block + passive logged as "Initiated attack", could break the ceasefire | Stobe r19g: player hitting someone already targeting him = "Defending against", no ceasefire break | installed, not retested |
 | 90 | Paid ceasefire ended after ~30 s (deal complete, 20 s DLL guard); gang re-engaged; NPC forgot the deal | Stobe r19g: guard 2 min; server r19g: watch 120 s, 4 re-issues, completed ceasefire honoured for 10 min | installed, not retested |
 | 91 | Surrender offers 1000 then 9000 cats, twice in one fight | server r19g: caps (common 50-300, leader ~1000, wealthy scaled, max 35 % carried), per-NPC cooldown 30 min | live, not retested |
+| 92 | No food anywhere: `GOAL_MEAL hungry` logged every tick (~60 ms), storage rescanned each tick | KFP r19h: after "no food anywhere" wait 10 game min before looking again | installed 0193CD57, not retested |
+| 93 | "Make 1 building material" BLOCKED at the Manual Stone Processor ("made no progress") while she worked it | KFP r19h: only finished units counted as progress, one manual unit > 30 game min; standing at the machine now counts, max 4 game h/unit | installed 0193CD57, not retested |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

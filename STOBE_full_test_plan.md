@@ -98,7 +98,7 @@ What rounds 17–18 added (what these rows check):
 | C10 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
 | C11b | "Wait here for Wendy" (needs a 2nd squad member) | Holds until Wendy is near |
 
-**Round 19 retest** (passed so far: J1, J2, N4, F1 fetch, F1b, P1, P1b, B1c, R1/R2 walk-back + report, R2 inferred goal, attack order; see `archive/test-run-2026-10-01-r5-r7.md`. Still open: R1 to COMPLETE, H1, M1, M2, L83, G1b, FS1–FS3, C1, C2, D1, J1b, S1). At Home with Malzin in the squad; automate unless marked.
+**Round 19 retest** (passed so far: J1, J2, N4, F1 fetch, F1b, P1, P1b, B1c, R1/R2 walk-back + report, R2 inferred goal, attack order, hotkeys focus (84, run 8); see `archive/test-run-2026-10-01-r5-r7.md`, `test-run-2026-10-01-r8.md`. Still open: R1 to COMPLETE (93), H1, M1, M2 (92), L83, G1b, FS1–FS3, C1, C2, D1, J1b (74 reopened), S1 (**Shay selected**), 79 FP click (Shay)). At Home with Malzin in the squad; automate unless marked.
 | # | Say / do | Expect |
 |---|---|---|
 | R1 | "Make 1 building material", **Malzin selected** (worst case), then again with Shay selected | `GOAL_RETURN walking actor=Malzin to=Shay`, then `arrived`; report spoken (server `Goal report queued`, no `Director scene failed`, a Malzin line) (bugs 72, 75) |
