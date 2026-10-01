@@ -13331,6 +13331,23 @@ static void UpdateTestInbox(GameWorld *world, Character *sel) {
   }
 }
 
+// GetAsyncKeyState sees keys pressed in any window, so typing in another app
+// while Kenshi ran opened the chat box, the STOBE menu or push-to-talk. Only
+// react when Kenshi's own window has focus, like Kenshi and KenshiFP do.
+static bool IsKenshiWindowFocused() {
+  HWND fg = GetForegroundWindow();
+  if (!fg)
+    return false;
+  DWORD pid = 0;
+  GetWindowThreadProcessId(fg, &pid);
+  return pid == GetCurrentProcessId();
+}
+
+static bool StobeHotkeyDown(int vk) {
+  return vk != 0 && (GetAsyncKeyState(vk) & 0x8000) != 0 &&
+         IsKenshiWindowFocused();
+}
+
 void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
   static LONG postLoadHookProbe = 0;
   if (!thisptr || reinterpret_cast<uintptr_t>(thisptr) < 0x10000) {
@@ -13533,7 +13550,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
   }
 
   // Left menu hotkey (configurable) - only once world/UI are stable.
-  if ((GetAsyncKeyState(g_generalHotkey) & 0x8000)) {
+  if (StobeHotkeyDown(g_generalHotkey)) {
     static DWORD lastSettingsTick = 0;
     DWORD now = GetTickCount();
     if (now - lastSettingsTick > 500) {
@@ -13587,8 +13604,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
   static bool pushToTalkWasDown = false;
   bool pushToTalkEnabled = g_pushToTalkHotkey != 0;
   bool pushToTalkDown =
-      pushToTalkEnabled &&
-      (GetAsyncKeyState(g_pushToTalkHotkey) & 0x8000) != 0;
+      pushToTalkEnabled && StobeHotkeyDown(g_pushToTalkHotkey);
   if (!pushToTalkEnabled) {
     if (Stobe::Voice::IsRecording())
       Stobe::Voice::Cancel();
@@ -13939,7 +13955,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
 
   // Rename checks are now queued only for dialogue-tagged NPCs.
   // 4. Input Handling ??? Chat window hotkey
-  if ((GetAsyncKeyState(g_chatHotkey) & 0x8000) && !g_chatWindow) {
+  if (StobeHotkeyDown(g_chatHotkey) && !g_chatWindow) {
     static DWORD lastTalkTick = 0;
     if (GetTickCount() - lastTalkTick > 500) {
       lastTalkTick = GetTickCount();
