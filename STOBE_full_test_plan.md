@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `C3B41182…`, KenshiFP `1281DC7A…`, server round 19). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
+Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `261C7AF3…`, KenshiFP `BC284585…`, server round 19g). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -112,6 +112,10 @@ What rounds 17–18 added (what these rows check):
 | M1 | Long goal at 50x with food in a chest, Malzin's food low | `GOAL_MEAL hungry` → `ate from …` → `done`; goal resumes (round 19 meals) |
 | M2 | Same with no food anywhere | `GOAL_MEAL no food anywhere`; she says she's hungry and there's no food (server `Hunger report queued`); keeps working |
 | L83 | Save, give "Patrol the base", quit (or load the save) without saving | KenshiFP `GOAL_LOAD world time …`, then `GOAL_LOAD dropped id=… given_at=… world_now=…`; she isn't patrolling, no walk-back/report. A goal given **before** the save keeps running (bug 83) |
+| G1b | "Malzin, guard me." then walk 50 m; "Malzin, follow me." | KenshiFP `ACTION_BRIDGE … squad->squad: using FOLLOW_PLAYER_ORDER`; she keeps up (dist stays small). If she only talks: server `Follow inferred from a direct request (bug 87)` (bugs 86, 87) |
+| FS1 | Bandit fight: accept an NPC surrender ("Deal…") | Deal dispatches STOP_ATTACK + payment; he stops for good (bug 88) |
+| FS2 | Offer a bandit cats to stop, pay; stay on block + passive | Gang stands down and stays down for 2 min; your hits on attackers log as "Defending against"; "we had a deal" → `Ceasefire honoured from a completed deal` (bugs 89, 90) |
+| FS3 | Let a common bandit get badly hurt | Surrender offer ≤ 300 cats and ≤ 35 % of what he carries; server `NPC offer capped (bug 91)` if the model asked for more; only one offer per NPC per fight (bug 91) |
 | S1 | Game speed 3x/10x, long NPC line | TTS normal pitch, not overlapping (feature 3, not run in run 5) |
 Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as combat.
 

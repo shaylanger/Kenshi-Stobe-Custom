@@ -90,7 +90,13 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 82 | Game crash on loading Home (14:18): meal step called a NULL inventory function (Malzin starving, patrol goal still active) | KFP r19c: resolve getinv in stg_exports; meals skip anyone down/dead/not loaded; whole meal step under the crash guard | installed, not retested |
 | 83 | Goals given after a save came back when that save was loaded (goals live in our own files, not the save) | KFP r19d: goals stamped with in-game time (getTimeStamp_inGameHours); goals newer than the loaded world dropped silently | installed, not retested |
 | 84 | STOBE hotkeys (chat box, push-to-talk, settings menu) fired while typing in other apps | Stobe r19e: hotkeys need the Kenshi window focused (foreground window in our process) | built 49B87D03, not installed |
-| 85 | Hunger read 100x too low: raw MedicalSystem::hunger is 0..3, the UI shows x100 (Malzin raw 2.16 = UI 216); meals thought she starved, prompt said Starving | KFP + Stobe r19f: level = (hunger + fed) x 100; eating detection on raw rises >= 0.01 | built, not installed |
+| 85 | Hunger read 100x too low: raw MedicalSystem::hunger is 0..3, the UI shows x100 (Malzin raw 2.16 = UI 216); meals thought she starved, prompt said Starving | KFP + Stobe r19f: level = (hunger + fed) x 100; eating detection on raw rises >= 0.01 | installed, not retested |
+| 86 | "Guard me": BODYGUARD on Shay logged ok but Malzin stood aimless | KFP r19g: squad->squad guard/follow uses FOLLOW_PLAYER_ORDER (44) | installed, not retested |
+| 87 | "Follow me" → "Following you" with no action | server r19g: infer BODYGUARD@player for a plain follow/guard request to a faction member | live, not retested |
+| 88 | Accepted surrender: STOP_ATTACK filtered out (NPC not flagged in combat), he attacked again | server r19g: a deal-sanctioned STOP_ATTACK is never filtered | live, not retested |
+| 89 | Shay on block + passive logged as "Initiated attack", could break the ceasefire | Stobe r19g: player hitting someone already targeting him = "Defending against", no ceasefire break | installed, not retested |
+| 90 | Paid ceasefire ended after ~30 s (deal complete, 20 s DLL guard); gang re-engaged; NPC forgot the deal | Stobe r19g: guard 2 min; server r19g: watch 120 s, 4 re-issues, completed ceasefire honoured for 10 min | installed, not retested |
+| 91 | Surrender offers 1000 then 9000 cats, twice in one fight | server r19g: caps (common 50-300, leader ~1000, wealthy scaled, max 35 % carried), per-NPC cooldown 30 min | live, not retested |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.
