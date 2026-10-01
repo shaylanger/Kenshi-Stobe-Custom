@@ -71,7 +71,8 @@ Backups are in `/root/stobe-backups/` (no DB backups: Shay doesn't want them).
 
 ## Current state (2026-09-30, run 4 in progress: work/task goals at Home)
 - **Installed:** Stobe.dll `81964C7C…` (round 17 `speed` + 17b inbox speaker fix; previous copies `Stobe.dll.prev_*` in `C:\StobeBuild\out`), KenshiFP.dll `D565F854…` (round 17 stall fix, 17b walk back to player, 17c input hauling, 17d machine switch; previous copies `.prev_*` next to the Vortex target). NOTE: KenshiFP compiles `client/stobe_task_goals.inc`; `stobe_task_goals_stage.inc` is an unused copy. The server has everything up to round 17c (live + ss-merge). Run log: `test-run-2026-09-30-r4.md`.
-- `stobe-say speed <x>` sets game speed (0 = pause, 0.5–10). Use 5x for slow goals; drop to 1x (or pause) before anything risky.
+- **Built, not installed** (install when Kenshi is closed): KenshiFP `DF10C0F4…` (17e), Stobe.dll `449990F1…` (17c, speed up to 50x).
+- `stobe-say speed <x>` sets game speed (0 = pause, 0.5–10; 50 after 17c is installed). Use 5x for slow goals; drop to 1x (or pause) before anything risky.
 - **Malzin's relationship to Shay is +60 Fond/friend** (set by hand for the bug 41 test). Run `stobe-reset-npc Malzin` before tests that need her neutral.
 - **Next:** work from `STOBE_full_test_plan.md` (only open items): section 1 first (42 needs a real breach, 43, 35/37/38), then section 2. Then Shay's design notes below.
 - Three automated runs on 2026-09-30 found bugs 1–43; status of each is in `STOBE_bug_history.md` (full run logs in `archive/`).
