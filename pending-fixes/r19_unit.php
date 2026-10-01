@@ -41,3 +41,18 @@ if (function_exists('stobeRosterSplitState')) {
     t("73 state lookup", stobeRosterState('sorth [dust bandit]') === 'dead' && stobeRosterState('Malzin') === '');
     echo "ok=$ok bad=$bad\n";
 }
+// 87 (run after patch_r19_bug87_follow)
+if (function_exists('stobeInferFollowFromOrder')) {
+    $fac = ['faction'=>'Nameless'];
+    foreach ([
+        ["Malzin, follow me.", 'BODYGUARD@Shay'],
+        ["Malzin, guard me.", 'BODYGUARD@Shay'],
+        ["Stay close to me, it's dangerous.", 'BODYGUARD@Shay'],
+        ["Don't follow me.", ''],
+        ["Stop following me.", ''],
+        ["Nice weather.", ''],
+    ] as [$m,$exp]) { $r = stobeInferFollowFromOrder($m, $fac, [], 'Shay'); t("87 $m", $r === $exp, $r); }
+    t("87 skip when action present", stobeInferFollowFromOrder("Follow me.", $fac, ['BODYGUARD@Shay'], 'Shay') === '');
+    t("87 non-faction", stobeInferFollowFromOrder("Follow me.", ['faction'=>'Dust Bandits'], [], 'Shay') === '');
+    echo "ok=$ok bad=$bad\n";
+}
