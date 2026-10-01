@@ -13,6 +13,8 @@
 /* Game-time budgets (bug 80): these were real-time values tuned while testing
  * at 10x; on the goal clock (bug 78) they must be 10x larger in game ms. */
 #define WGP_STALL_MS 1800000
+#define WGP_UNIT_MAX_MS 14400000 /* bug 93: most game time one unit may take while she stands at the machine */
+#define WGP_OPERATE_NEAR 120.0f
 #define WGP_DEP_STALL_MS 9000000
 #define WGP_POWER_WAIT_MS 300000
 #define WGP_TRAVEL_STALL_MS 2400000
@@ -83,6 +85,7 @@ typedef struct WgpGoal {
     DWORD farm_dry_ms;          /* runtime only: farm missing an input nobody can bring */
     int haul_still;
     DWORD haul_next_ms;
+    DWORD rt_unit_start_ms;    /* runtime only: since when she has been at the machine for this unit (bug 93) */
 } WgpGoal;
 
 typedef struct WgpProducer {
@@ -830,7 +833,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
     g->completed=current-g->baseline;
     if (g->completed<0) g->completed=0;
     if (current!=g->last_count) {
-        g->last_count=current; g->last_progress_ms=now; g_wgp_dirty=1;
+        g->last_count=current; g->last_progress_ms=now; g->rt_unit_start_ms=0; g_wgp_dirty=1;
     }
     /* Finished intermediate crafts: new units observed come off the queued count.
      * (The old code zeroed the counter whenever any existed, which re-queued the
@@ -924,6 +927,14 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
     snprintf(g->current_step,sizeof(g->current_step),"Making %s: %d/%d complete at %s",
              g->item,g->completed,g->quantity,
              root.building_name[0]?root.building_name:"production building");
+    {   /* bug 93: a manual machine can need longer than WGP_STALL_MS for one unit;
+         * her standing at it counts as work, up to WGP_UNIT_MAX_MS per unit. */
+        Vec3 bp=*(Vec3 *)((uintptr_t)root.building+0x48);
+        if (wgp_distance(pos,bp)<=WGP_OPERATE_NEAR) {
+            if (!g->rt_unit_start_ms) g->rt_unit_start_ms=now;
+            if ((LONG)(now-g->rt_unit_start_ms)<WGP_UNIT_MAX_MS) g->last_progress_ms=now;
+        }
+    }
     if (g->last_progress_ms && (LONG)(now-g->last_progress_ms)>WGP_STALL_MS) {
         char r[256];
         snprintf(r,sizeof(r),"%s exists but made no progress; it may be unpowered, full, occupied, or unable to receive inputs",
