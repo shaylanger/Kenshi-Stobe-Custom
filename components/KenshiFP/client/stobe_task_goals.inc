@@ -428,7 +428,7 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
     Vec3 mpos=*(Vec3 *)((uintptr_t)p->building+0x48);
     void *minv=wgp_building_inventory(p->building);
     const char *mname=p->building_name[0]?p->building_name:"the machine";
-    DWORD now=GetTickCount();
+    DWORD now=stobe_game_ms();
     for(int i=0;i<miss;i++){
         char dep[128]={0};
         if(!wgp_name(missing[i],dep,sizeof(dep))||!dep[0])continue;
@@ -598,7 +598,7 @@ static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
         int before=stg_actor_item_count(actor,g->item);
         int moved=stg_loot_from_character(c,actor,g->item,want);
         int after=stg_actor_item_count(actor,g->item);
-        if(moved>0||after>before){g->completed+=after-before;g->last_progress_ms=GetTickCount();g_stg_dirty=1;}
+        if(moved>0||after>before){g->completed+=after-before;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;}
         stg_mark_seen(g,ser);
         snprintf(g->current_step,sizeof(g->current_step),"Looted %d %s so far; checking nearby downed targets",g->completed,g->item);
         return;
@@ -642,7 +642,7 @@ static void *stg_nearest_storage(void *gw,void *actor,const char *query,float *d
 /* 1 = at the position (or as close as pathing gets), 0 = walking */
 static int stg_walk_to_pos(void *actor,StgGoal *g,Vec3 t,float d)
 {
-    DWORD now=GetTickCount();
+    DWORD now=stobe_game_ms();
     if(d<=WGP_HAUL_REACH){g->walk_still=0;g->walk_last_dist=0;return 1;}
     if(g->walk_last_dist<=0||d<g->walk_last_dist-3.0f){g->walk_last_dist=d;g->walk_still=0;g->last_progress_ms=now;}
     else g->walk_still++;
@@ -654,7 +654,7 @@ static int stg_walk_to_pos(void *actor,StgGoal *g,Vec3 t,float d)
 /* 1 = at the storage (or as close as pathing gets), 0 = walking */
 static int stg_walk_to(void *actor,StgGoal *g,void *building,float d)
 {
-    DWORD now=GetTickCount();
+    DWORD now=stobe_game_ms();
     if(d<=WGP_HAUL_REACH){g->walk_still=0;g->walk_last_dist=0;return 1;}
     if(g->walk_last_dist<=0||d<g->walk_last_dist-3.0f){g->walk_last_dist=d;g->walk_still=0;g->last_progress_ms=now;}
     else g->walk_still++;
@@ -677,7 +677,7 @@ static void stg_tick_store(void *gw,void *actor,StgGoal *g)
         if(dst){
             int want=g->quantity>0?g->quantity-g->completed:stg_actor_item_count(actor,g->item);
             int m=want>0?stg_transfer_inventory(g_stobe_getinv(actor),wgp_building_inventory(dst),g->item,want):0;
-            if(m>0){g->completed+=m;g->last_progress_ms=GetTickCount();g_stg_dirty=1;
+            if(m>0){g->completed+=m;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;
                 snprintf(g->current_step,sizeof(g->current_step),"Stored %d %s in %s",g->completed,g->item,sn[0]?sn:"storage");
                 if((g->quantity>0&&g->completed>=g->quantity)||stg_actor_item_count(actor,g->item)<=0)stg_finish(g,STG_STATE_COMPLETE,"");
                 return;
@@ -694,7 +694,7 @@ static void stg_tick_store_any(void *gw,void *actor,StgGoal *g)
     int want=g->quantity>0?g->quantity-g->completed:have;
     if(want<=0){stg_finish(g,STG_STATE_COMPLETE,"");return;}
     int moved=stg_store_from_actor(gw,actor,g->item,want);
-    if(moved>0){g->completed+=moved;g->last_progress_ms=GetTickCount();g_stg_dirty=1;}
+    if(moved>0){g->completed+=moved;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;}
     snprintf(g->current_step,sizeof(g->current_step),"Stored %d %s",g->completed,g->item);
     if((g->quantity>0&&g->completed>=g->quantity)||stg_actor_item_count(actor,g->item)<=0)stg_finish(g,STG_STATE_COMPLETE,"");
     else if(moved<=0)stg_finish(g,STG_STATE_BLOCKED,"no compatible player storage has room for the requested items");
@@ -710,13 +710,13 @@ static void stg_tick_fetch(void *gw,void *actor,StgGoal *g)
         return;
     }
     int moved=src?stg_transfer_to_character(wgp_building_inventory(src),actor,g->item,need):0;
-    if(moved>0){g->completed+=moved;g->last_progress_ms=GetTickCount();g_stg_dirty=1;
+    if(moved>0){g->completed+=moved;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;
         snprintf(g->current_step,sizeof(g->current_step),"Fetched %d/%d %s from %s",g->completed,g->quantity,g->item,sn[0]?sn:"storage");
         if(g->completed>=g->quantity)stg_finish(g,STG_STATE_COMPLETE,"");
         return; /* next tick: next storage if still short */
     }
     moved=0;
-    if(moved>0){g->completed+=moved;g->last_progress_ms=GetTickCount();g_stg_dirty=1;}
+    if(moved>0){g->completed+=moved;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;}
     snprintf(g->current_step,sizeof(g->current_step),"Fetched %d/%d %s from player storage",g->completed,g->quantity,g->item);
     if(g->completed>=g->quantity)stg_finish(g,STG_STATE_COMPLETE,"");
     else if(moved<=0)stg_finish(g,STG_STATE_BLOCKED,"not enough matching items were found in nearby player storage");
@@ -753,7 +753,7 @@ static void stg_tick_medical(void *gw,void *actor,StgGoal *g)
         if(stobe_issue_order(actor,task,c)){
             stg_mark_seen(g,ser);g->completed++;
             snprintf(g->current_step,sizeof(g->current_step),task==STG_TASK_FIND_RESCUE?"Rescuing/assisting %u":"Checking/treating squad member %u",ser);
-            g->last_action_ms=GetTickCount();g_stg_dirty=1;return;
+            g->last_action_ms=stobe_game_ms();g_stg_dirty=1;return;
         }
         stg_mark_seen(g,ser);
     }
@@ -810,7 +810,7 @@ static WgpGoal *stg_recent_blocked_work(uint32_t actor_serial,const char *item)
     for(int i=0;i<WGP_MAX_GOALS;i++){
         WgpGoal *w=&g_wgp_goals[i];
         if(!w->used||w->actor_serial!=actor_serial||strcasecmp(w->item,item)||w->state!=2)continue;
-        if((LONG)(GetTickCount()-w->created_ms)<600000)return w;
+        if((LONG)(stobe_game_ms()-w->created_ms)<600000)return w;
     }
     return NULL;
 }
@@ -831,7 +831,7 @@ static int stg_spawn_work_goal(void *gw,void *actor,StgGoal *g,const char *item,
     strncpy(slot->item,item,sizeof(slot->item)-1);
     slot->quantity=qty;
     snprintf(slot->id,sizeof(slot->id),"sub-%.26s-%.28s",g->id,item);
-    slot->created_ms=GetTickCount();slot->last_progress_ms=GetTickCount();
+    slot->created_ms=stobe_game_ms();slot->last_progress_ms=stobe_game_ms();
     snprintf(slot->current_step,sizeof(slot->current_step),"Subgoal for %s: produce/obtain %d %s",g->id,qty,item);
     g_wgp_dirty=1;
     return 1;
@@ -970,7 +970,7 @@ static void stg_tick_trade(void *gw,void *actor,StgGoal *g,int buying)
         Vec3 tp={0,0,0};
         if(char_position(trader,&tp)&&try_move_to_pos(actor,&tp)){
             snprintf(g->current_step,sizeof(g->current_step),"Walking to trader %s",trader_name[0]?trader_name:"merchant");
-            g->last_action_ms=GetTickCount();return;
+            g->last_action_ms=stobe_game_ms();return;
         }
         stg_finish(g,STG_STATE_BLOCKED,"could not approach trader");return;
     }
@@ -994,7 +994,7 @@ static void stg_tick_trade(void *gw,void *actor,StgGoal *g,int buying)
 
     g->completed+=units;
     if(buying)g->spent+=actual;
-    g->last_progress_ms=GetTickCount();g_stg_dirty=1;
+    g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;
     if(buying){
         snprintf(g->current_step,sizeof(g->current_step),
                  "Bought %d/%d %s from %s; spent %d Cats",
@@ -1055,12 +1055,12 @@ static int stg_request_purchase_fallback(void *gw,void *actor,uint32_t actor_ser
     if(parent_goal_id&&*parent_goal_id)
         snprintf(slot->id,sizeof(slot->id),"buy-%.28s-%.28s",parent_goal_id,item);
     else
-        snprintf(slot->id,sizeof(slot->id),"buy-%.32s-%u",item,(unsigned)GetTickCount());
+        snprintf(slot->id,sizeof(slot->id),"buy-%.32s-%u",item,(unsigned)stobe_game_ms());
     slot->actor_serial=actor_serial;strncpy(slot->actor,actor_name,sizeof(slot->actor)-1);
     strncpy(slot->kind,"BUY",sizeof(slot->kind)-1);strncpy(slot->item,item,sizeof(slot->item)-1);
     strncpy(slot->target,trader_name,sizeof(slot->target)-1);
     slot->quantity=qty>0?qty:1;slot->max_spend=quote*slot->quantity;
-    slot->state=STG_STATE_APPROVAL;slot->created_ms=GetTickCount();slot->last_progress_ms=GetTickCount();
+    slot->state=STG_STATE_APPROVAL;slot->created_ms=stobe_game_ms();slot->last_progress_ms=stobe_game_ms();
     snprintf(slot->current_step,sizeof(slot->current_step),"Need approval to buy %d %s from %s for up to %d Cats",
              slot->quantity,item,trader_name[0]?trader_name:"nearby trader",slot->max_spend);
     snprintf(slot->reason,sizeof(slot->reason),"No owned/gatherable/producible route was found; buying is the last available nearby option");
@@ -1096,7 +1096,7 @@ static void stg_tick_stock(void *gw,void *actor,StgGoal *g)
 
 static void stg_tick_guard(void *gw,void *actor,StgGoal *g)
 {
-    if((LONG)(GetTickCount()-g->last_action_ms)<5000)return;
+    if((LONG)(stobe_game_ms()-g->last_action_ms)<5000)return;
     if(g->target[0]){
         void *target=wgp_find_squad_actor(gw,0,g->target);
         if(!target){snprintf(g->current_step,sizeof(g->current_step),"Guarding while waiting for %s to be loaded",g->target);return;}
@@ -1106,7 +1106,7 @@ static void stg_tick_guard(void *gw,void *actor,StgGoal *g)
         stobe_issue_order(actor,STG_TASK_HOLD_POSITION,NULL);
         snprintf(g->current_step,sizeof(g->current_step),"Guarding current position until paused or cancelled");
     }
-    g->last_action_ms=GetTickCount();
+    g->last_action_ms=stobe_game_ms();
 }
 
 static void stg_tick_wait_for(void *gw,void *actor,StgGoal *g)
@@ -1119,9 +1119,9 @@ static void stg_tick_wait_for(void *gw,void *actor,StgGoal *g)
             stg_finish(g,STG_STATE_COMPLETE,"wait condition satisfied; target returned nearby");return;
         }
     }
-    if((LONG)(GetTickCount()-g->last_action_ms)>5000){
+    if((LONG)(stobe_game_ms()-g->last_action_ms)>5000){
         stobe_issue_order(actor,STG_TASK_HOLD_POSITION,NULL);
-        g->last_action_ms=GetTickCount();
+        g->last_action_ms=stobe_game_ms();
     }
     snprintf(g->current_step,sizeof(g->current_step),"Waiting here for %s to return nearby",g->target);
 }
@@ -1180,7 +1180,7 @@ static void stg_tick_patrol(void *gw,void *actor,StgGoal *g)
         /* arrived, or this waypoint can't be reached (path_failed): next one */
         g->walk_still=0;g->walk_last_dist=0;g->walk_next_ms=0;
         g->patrol_idx=(g->patrol_idx+1)%np;
-        g->last_progress_ms=GetTickCount();
+        g->last_progress_ms=stobe_game_ms();
     }
     snprintf(g->current_step,sizeof(g->current_step),"Patrolling (%d/%d waypoints) until cancelled or paused",g->patrol_idx+1,np);
 }
@@ -1205,9 +1205,9 @@ static int stg_at_destination(void *actor,StgGoal *g)
     Vec3 p={0,0,0};if(!char_position(actor,&p))return 0;
     float d=wgp_distance(p,g->dest);
     if(d<=WGP_ARRIVE_DIST)return 1;
-    if((LONG)(GetTickCount()-g->last_action_ms)>3000){
+    if((LONG)(stobe_game_ms()-g->last_action_ms)>3000){
         if(!try_move_to_pos(actor,&g->dest)){stg_finish(g,STG_STATE_BLOCKED,"could not issue destination travel order");return -1;}
-        g->last_action_ms=GetTickCount();
+        g->last_action_ms=stobe_game_ms();
     }
     snprintf(g->current_step,sizeof(g->current_step),"Traveling to %s (%.0fm remaining)",
              g->destination[0]?g->destination:"destination",d);
@@ -1244,12 +1244,12 @@ static void stg_tick_recover_ground(void *gw,void *actor,StgGoal *g)
         Vec3 ip=readable((void *)((uintptr_t)it+0x48),sizeof(Vec3))?*(Vec3 *)((uintptr_t)it+0x48):ap;
         float dist=wgp_distance(ap,ip);
         if(dist>12.0f){
-            if(try_move_to_pos(actor,&ip)){snprintf(g->current_step,sizeof(g->current_step),"Moving to recover dropped %s",g->item);g->last_action_ms=GetTickCount();return;}
+            if(try_move_to_pos(actor,&ip)){snprintf(g->current_step,sizeof(g->current_step),"Moving to recover dropped %s",g->item);g->last_action_ms=stobe_game_ms();return;}
             if(ser)stg_mark_seen(g,ser);continue;
         }
         void *inv=g_stobe_getinv(actor);
         if(inv&&g_stg_take_stack&&g_stg_take_stack(inv,it)){
-            g->completed+=stack;g->last_progress_ms=GetTickCount();g_stg_dirty=1;
+            g->completed+=stack;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;
             if(ser)stg_mark_seen(g,ser);
             snprintf(g->current_step,sizeof(g->current_step),"Recovered %d%s %s from the ground",
                      g->completed,g->quantity>0?"/":"",g->item);
@@ -1315,11 +1315,11 @@ static void stg_tick_build_or_repair(void *gw,void *actor,StgGoal *g,int repair)
         }
     }
 
-    if((LONG)(GetTickCount()-g->last_action_ms)>2500){
+    if((LONG)(stobe_game_ms()-g->last_action_ms)>2500){
         if(!stobe_issue_order(actor,repair?STG_TASK_REPAIR:STG_TASK_JOB_BUILDER,b)){
             stg_finish(g,STG_STATE_BLOCKED,repair?"could not issue repair job":"could not issue builder job");return;
         }
-        g->last_action_ms=GetTickCount();
+        g->last_action_ms=stobe_game_ms();
     }
     snprintf(g->current_step,sizeof(g->current_step),repair?"Repairing %s":"Building %s",matched[0]?matched:"structure");
 }
@@ -1401,7 +1401,7 @@ static void stg_load(void)
         g.approved_purchase=atoi(fields[17]);g.max_spend=atoi(fields[18]);g.spent=atoi(fields[19]);
         strncpy(g.current_step,fields[20],219);strncpy(g.reason,fields[21],319);
         if(n>22&&fields[22]){char *ss=fields[22];while(ss&&*ss&&g.seen_count<STG_MAX_SEEN){char *c=strchr(ss,',');if(c)*c='\0';uint32_t v=(uint32_t)strtoul(ss,NULL,10);if(v)g.seen[g.seen_count++]=v;if(!c)break;ss=c+1;}}
-        g.created_ms=GetTickCount();g.last_progress_ms=GetTickCount();
+        g.created_ms=stobe_game_ms();g.last_progress_ms=stobe_game_ms();
         for(int i=0;i<STG_MAX_GOALS;i++)if(!g_stg_goals[i].used){g_stg_goals[i]=g;break;}
     }
     fclose(f);
@@ -1427,7 +1427,7 @@ static void stg_consume_requests(void)
                 if(n>11&&v[11]&&*v[11]){g->has_dest=1;g->dest.x=(float)atof(v[11]);g->dest.y=(float)atof(v[12]);g->dest.z=(float)atof(v[13]);}
                 if(n>14)g->explicit_purchase=atoi(v[14]);
                 if(!strcmp(g->kind,"BUY")&&g->explicit_purchase){g->approved_purchase=1;g->state=STG_STATE_ACTIVE;}
-                g->created_ms=GetTickCount();g->last_progress_ms=GetTickCount();
+                g->created_ms=stobe_game_ms();g->last_progress_ms=stobe_game_ms();
                 g->rt_seen_active=1; /* walk back + report even if it ends at once */
                 snprintf(g->current_step,sizeof(g->current_step),"Accepted %s goal",g->kind);g_stg_dirty=1;
                 logline("[stobe] TASK_GOAL accepted id=%s actor=%s kind=%s item=%s qty=%d target=%s dest=%s",
@@ -1490,7 +1490,7 @@ static void stg_maybe_trigger_report(void *gw,StgGoal *g)
     void *player=wgp_return_target(gw,actor);
     Vec3 a={0,0,0},p={0,0,0};
     if(!actor||!player||!char_position(actor,&a)||!char_position(player,&p))return;
-    int late=g->rt_end_ms&&(LONG)(GetTickCount()-g->rt_end_ms)>WGP_REPORT_FALLBACK_MS;
+    int late=g->rt_end_ms&&(LONG)(stobe_game_ms()-g->rt_end_ms)>WGP_REPORT_FALLBACK_MS;
     if(wgp_distance(a,p)>70.0f&&!late)return; /* report once she is back (bug 65) */
     char flag[MAX_PATH*2]={0};if(!stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag"))return;
     HANDLE h=CreateFileA(flag,GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -1529,7 +1529,7 @@ static int sgr_actor_busy(uint32_t serial)
 static void sgr_start(uint32_t serial,const char *actor)
 {
     if(!serial)return;
-    SgrReturn *slot=NULL;DWORD now=GetTickCount();
+    SgrReturn *slot=NULL;DWORD now=stobe_game_ms();
     for(int i=0;i<SGR_MAX;i++)if(g_sgr[i].serial==serial){slot=&g_sgr[i];break;}
     if(!slot)for(int i=0;i<SGR_MAX;i++)if(!g_sgr[i].serial){slot=&g_sgr[i];break;}
     if(!slot)return;
@@ -1541,7 +1541,7 @@ static void sgr_start(uint32_t serial,const char *actor)
 
 static void sgr_tick(void *gw)
 {
-    DWORD now=GetTickCount();
+    DWORD now=stobe_game_ms();
     for(int i=0;i<SGR_MAX;i++){
         SgrReturn *r=&g_sgr[i];if(!r->serial)continue;
         if((LONG)(now-r->until_ms)>0){logline("[stobe] GOAL_RETURN gave up actor=%s",r->actor);memset(r,0,sizeof(*r));continue;}
@@ -1590,7 +1590,7 @@ static void sgr_scan(void)
     for(int i=0;i<STG_MAX_GOALS;i++){
         StgGoal *g=&g_stg_goals[i];if(!g->used)continue;
         if(g->state==STG_STATE_ACTIVE){g->rt_seen_active=1;g->rt_end_ms=0;continue;}
-        if(g->rt_seen_active&&!g->rt_end_ms)g->rt_end_ms=GetTickCount();
+        if(g->rt_seen_active&&!g->rt_end_ms)g->rt_end_ms=stobe_game_ms();
         if(g->rt_seen_active&&!g->rt_return_started&&g->state!=STG_STATE_PAUSED){
             g->rt_return_started=1;sgr_start(g->actor_serial,g->actor);
         }
@@ -1617,7 +1617,7 @@ static void goal_label_build(void *gw,char *out,size_t outsz)
     void *sel=first_player_char(gw);
     if(!sel||!readable((void *)((uintptr_t)sel+CHAR_HANDLE+HAND_IDS),20))return;
     uint32_t serial=((uint32_t *)((uintptr_t)sel+CHAR_HANDLE+HAND_IDS))[4];
-    DWORD now=GetTickCount();
+    DWORD now=stobe_game_ms();
     const char *actor="";char head[200]="",step[260]="";int more=0,found=0;
     /* work goals first: active/paused, else the most recent ended one still in the keep window */
     for(int pass=0;pass<2&&!found;pass++){
@@ -1625,7 +1625,7 @@ static void goal_label_build(void *gw,char *out,size_t outsz)
             WgpGoal *g=&g_wgp_goals[i];
             if(!g->used||g->actor_serial!=serial)continue;
             int live=(g->state==0||g->state==4);
-            int recent=g->rt_end_ms&&(LONG)(now-g->rt_end_ms)<GOAL_LABEL_KEEP_MS;
+            int recent=g->rt_end_ms&&(double)(LONG)(now-g->rt_end_ms)<GOAL_LABEL_KEEP_MS*(g_sgc_speed>1.0f?g_sgc_speed:1.0f);
             if(pass==0?!live:!recent)continue;
             if(found){if(live)more++;continue;}
             found=1;actor=g->actor;
@@ -1640,7 +1640,7 @@ static void goal_label_build(void *gw,char *out,size_t outsz)
             StgGoal *g=&g_stg_goals[i];
             if(!g->used||g->actor_serial!=serial)continue;
             int live=(g->state==STG_STATE_ACTIVE||g->state==STG_STATE_PAUSED||g->state==STG_STATE_APPROVAL);
-            int recent=g->rt_end_ms&&(LONG)(now-g->rt_end_ms)<GOAL_LABEL_KEEP_MS;
+            int recent=g->rt_end_ms&&(double)(LONG)(now-g->rt_end_ms)<GOAL_LABEL_KEEP_MS*(g_sgc_speed>1.0f?g_sgc_speed:1.0f);
             if(pass==0?!live:!recent)continue;
             if(found){if(live)more++;continue;}
             found=1;actor=g->actor;
@@ -1705,7 +1705,11 @@ static void stobe_goal_label_update(void *gw)
 
 static void stobe_task_goal_tick(void *gw)
 {
-    DWORD now=GetTickCount();if(g_stg_next_tick&&(LONG)(now-g_stg_next_tick)<0)return;g_stg_next_tick=now+STG_TICK_MS;
+    static DWORD real_last;DWORD real=GetTickCount();
+    stobe_game_clock_update(gw);
+    DWORD now=stobe_game_ms();if(g_stg_next_tick&&(LONG)(now-g_stg_next_tick)<0)return;
+    if(real_last&&(LONG)(real-real_last)<STOBE_GOAL_MIN_TICK_REAL_MS)return;
+    real_last=real;g_stg_next_tick=now+STG_TICK_MS;
     stg_load();stg_consume_requests();stg_controls();
     uint32_t active[STG_MAX_GOALS]={0};int ac=0;
     for(int i=0;i<STG_MAX_GOALS;i++){
@@ -1726,6 +1730,6 @@ static void stobe_task_goal_tick(void *gw)
     sgr_scan();
     sgr_tick(gw);
     stg_status();
-    if(g_stg_dirty&&(!g_stg_next_save||(LONG)(now-g_stg_next_save)>=0)){stg_save();g_stg_next_save=now+2500;}
+    if(g_stg_dirty&&(!g_stg_next_save||(LONG)(real-g_stg_next_save)>=0)){stg_save();g_stg_next_save=real+2500;}
 }
 

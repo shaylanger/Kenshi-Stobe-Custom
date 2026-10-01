@@ -94,6 +94,35 @@ typedef struct WgpProducer {
     char output_name[160];
 } WgpProducer;
 
+/* Goal clock (bug 78): real time x game speed (GameWorld::frameSpeedMult), so
+ * waits, stalls and the decision rate cost the same game time at any speed,
+ * and goals freeze while paused. Ticks still run at most every 50 ms real. */
+#define STOBE_GOAL_MIN_TICK_REAL_MS 50
+static DWORD g_sgc_real_last;
+static double g_sgc_game_ms;
+static float g_sgc_speed=1.0f;
+static float stobe_game_speed(void *gw)
+{
+    if (!gw || !readable((void *)((uintptr_t)gw+GW_FRAMESPEED),4)) return 1.0f;
+    float s=*(float *)((uintptr_t)gw+GW_FRAMESPEED);
+    if (!(s>=0.0f) || s>100.0f) return 1.0f;
+    return s;
+}
+static void stobe_game_clock_update(void *gw)
+{
+    DWORD now=GetTickCount();
+    g_sgc_speed=stobe_game_speed(gw);
+    if (!g_sgc_real_last) { g_sgc_real_last=now; g_sgc_game_ms=(double)now; return; }
+    DWORD dt=now-g_sgc_real_last; g_sgc_real_last=now;
+    if (dt>2000) dt=2000; /* loading screens, hitches */
+    g_sgc_game_ms+=(double)dt*g_sgc_speed;
+}
+static DWORD stobe_game_ms(void)
+{
+    if (!g_sgc_real_last) return GetTickCount();
+    return (DWORD)(unsigned long long)g_sgc_game_ms;
+}
+
 static WgpGoal g_wgp_goals[WGP_MAX_GOALS];
 static int g_wgp_loaded;
 static DWORD g_wgp_next_tick;
@@ -529,7 +558,7 @@ static int wgp_power_gate(WgpGoal *g, WgpProducer *p, char *reason, size_t reaso
         void *m[WGP_MAX_MISSING]={0};
         if (p->production && wgp_missing(p->production,m,WGP_MAX_MISSING)>0) return 0;
     }
-    DWORD now=GetTickCount();
+    DWORD now=stobe_game_ms();
     if (!wgp_building_unpowered(p->building)) {
         if (g->power_wait_building==p->building) { g->power_wait_building=NULL; g->power_wait_ms=0; }
         return 0;
@@ -626,9 +655,9 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
 
     { int pw=wgp_power_gate(g,&p,reason,reason_sz); if (pw<0) return -1; if (pw>0) return 0; }
     if (wgp_feed_inputs(gw,actor,g,&p)) return 0;
-    if (g->rt_task_building != p.building || (LONG)(GetTickCount()-g->last_order_ms)>2000) {
+    if (g->rt_task_building != p.building || (LONG)(stobe_game_ms()-g->last_order_ms)>2000) {
         wgp_issue_goal_task(actor,g,&p);
-        g->last_order_ms=GetTickCount();
+        g->last_order_ms=stobe_game_ms();
     }
     if (wgp_icontains(p.building_name,"farm")) {
         void *fm[WGP_MAX_MISSING]={0};
@@ -636,7 +665,7 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         if (fmiss>0) {
             /* feed_inputs found nothing to carry: e.g. the well is dry/unpowered (bug 70). */
             char dn[128]={0}; wgp_name(fm[0],dn,sizeof(dn));
-            DWORD now2=GetTickCount();
+            DWORD now2=stobe_game_ms();
             if (!g->farm_dry_ms) g->farm_dry_ms=now2;
             if ((LONG)(now2-g->farm_dry_ms)>2*WGP_POWER_WAIT_MS) {
                 snprintf(reason,reason_sz,"%s has no %s and none is available to carry (check the well or water storage)",
@@ -650,7 +679,7 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         g->farm_dry_ms=0;
         /* Inputs are in; the crop needs game time. Not a stall. */
         snprintf(g->current_step,sizeof(g->current_step),"Waiting for %s to grow %s",p.building_name,item);
-        g->last_progress_ms=GetTickCount();
+        g->last_progress_ms=stobe_game_ms();
         return 0;
     }
     snprintf(g->current_step,sizeof(g->current_step),"Producing %s at %s",item,
@@ -682,7 +711,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
         return;
     }
 
-    DWORD now=GetTickCount();
+    DWORD now=stobe_game_ms();
     Vec3 pos={0,0,0};
     if (!char_position(actor,&pos)) return;
 
@@ -936,8 +965,8 @@ static void wgp_load(void)
             }
         }
         g.used=1;
-        g.created_ms=GetTickCount();
-        g.last_progress_ms=GetTickCount();
+        g.created_ms=stobe_game_ms();
+        g.last_progress_ms=stobe_game_ms();
         for (int i=0;i<WGP_MAX_GOALS;i++) {
             if (!g_wgp_goals[i].used) {
                 g_wgp_goals[i]=g;
@@ -1007,8 +1036,8 @@ static void wgp_consume_requests(void *gw)
                     slot->dest.y=(float)atof(fields[7]);
                     slot->dest.z=(float)atof(fields[8]);
                 }
-                slot->created_ms=GetTickCount();
-                slot->last_progress_ms=GetTickCount();
+                slot->created_ms=stobe_game_ms();
+                slot->last_progress_ms=stobe_game_ms();
                 slot->rt_seen_active=1; /* walk back + report even if it blocks at once (R2) */
                 snprintf(slot->current_step,sizeof(slot->current_step),
                          "Accepted goal: make/obtain %d %s",slot->quantity,slot->item);
@@ -1051,7 +1080,7 @@ static void wgp_control_line(char *line)
     WgpGoal *g=wgp_find_id(id);if(!g)return;
     if(!_stricmp(cmd,"PAUSE")&&g->state==0)g->state=4;
     else if(!_stricmp(cmd,"RESUME")&&(g->state==4||g->state==2)){
-        if(g->state==2){g->reason[0]='\0';g->report_triggered=0;g->last_progress_ms=GetTickCount();}
+        if(g->state==2){g->reason[0]='\0';g->report_triggered=0;g->last_progress_ms=stobe_game_ms();}
         g->state=0;
     }
     else if(!_stricmp(cmd,"CANCEL"))g->state=3;
@@ -1062,7 +1091,7 @@ static void wgp_control_line(char *line)
         if(!b)return;*b++='\0';c=strchr(b,'^');if(!c)return;*c++='\0';d=strchr(c,'^');if(!d)return;*d++='\0';
         strncpy(g->dest_label,a,sizeof(g->dest_label)-1);
         g->dest.x=(float)atof(b);g->dest.y=(float)atof(c);g->dest.z=(float)atof(d);g->has_dest=1;
-        g->last_distance=0;g->last_progress_ms=GetTickCount();
+        g->last_distance=0;g->last_progress_ms=stobe_game_ms();
     }
     else return;
     g_wgp_dirty=1;
@@ -1112,7 +1141,7 @@ static void wgp_maybe_trigger_report(void *gw, WgpGoal *g)
     void *player=wgp_return_target(gw,actor);
     Vec3 a={0,0,0}, p={0,0,0};
     if (!actor || !player || !char_position(actor,&a) || !char_position(player,&p)) return;
-    int late=g->rt_end_ms && (LONG)(GetTickCount()-g->rt_end_ms)>WGP_REPORT_FALLBACK_MS;
+    int late=g->rt_end_ms && (LONG)(stobe_game_ms()-g->rt_end_ms)>WGP_REPORT_FALLBACK_MS;
     if (wgp_distance(a,p)>70.0f && !late) return; /* report once she is back (bug 65) */
     char flag[MAX_PATH*2]={0};
     if (!stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag")) return;
@@ -1141,8 +1170,13 @@ static void wgp_goal_tick_guarded(void *gw, WgpGoal *g)
 
 static void stobe_work_goal_tick(void *gw)
 {
-    DWORD now=GetTickCount();
+    static DWORD real_last;
+    DWORD real=GetTickCount();
+    stobe_game_clock_update(gw);
+    DWORD now=stobe_game_ms();
     if (g_wgp_next_tick && (LONG)(now-g_wgp_next_tick)<0) return;
+    if (real_last && (LONG)(real-real_last)<STOBE_GOAL_MIN_TICK_REAL_MS) return;
+    real_last=real;
     g_wgp_next_tick=now+WGP_TICK_MS;
     wgp_load();
     wgp_consume_requests(gw);
@@ -1163,7 +1197,7 @@ static void stobe_work_goal_tick(void *gw)
             if (!already_running) {
                 active_actors[active_actor_count++]=g->actor_serial;
                 wgp_goal_tick_guarded(gw,g);
-                if (g->state!=0) g->rt_end_ms=GetTickCount();
+                if (g->state!=0) g->rt_end_ms=stobe_game_ms();
             } else if (g->baseline<0) {
                 snprintf(g->current_step,sizeof(g->current_step),
                          "Queued behind an earlier active work goal");
@@ -1171,15 +1205,15 @@ static void stobe_work_goal_tick(void *gw)
         }
         if (g->used && g->state!=0 && g->rt_job_tasker) {
             /* goal ended or paused: take its job out of her list */
-            if (!g->rt_end_ms) g->rt_end_ms=GetTickCount();
+            if (!g->rt_end_ms) g->rt_end_ms=stobe_game_ms();
             wgp_job_release_actor(wgp_find_squad_actor(gw,g->actor_serial,g->actor),g);
             g->rt_task_building=NULL; /* re-add on resume */
         }
         wgp_maybe_trigger_report(gw,g);
     }
     wgp_status_write();
-    if (g_wgp_dirty && (!g_wgp_next_save || (LONG)(now-g_wgp_next_save)>=0)) {
+    if (g_wgp_dirty && (!g_wgp_next_save || (LONG)(real-g_wgp_next_save)>=0)) {
         wgp_save();
-        g_wgp_next_save=now+3000;
+        g_wgp_next_save=real+3000;
     }
 }
