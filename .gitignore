@@ -25,3 +25,6 @@ __pycache__/
 test_outbox.txt
 *.status
 *.flag
+
+# Persistent raw training capture grows indefinitely; historical curated data is tracked.
+training-data/live/
