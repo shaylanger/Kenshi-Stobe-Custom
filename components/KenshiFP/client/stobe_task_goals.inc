@@ -129,6 +129,10 @@ static int stg_exports(void)
     if (!wgp_resolve_exports()) return 0;
     HMODULE k=GetModuleHandleA("KenshiLib.dll");
     if (!k) return 0;
+    /* was only resolved by the equipment code: a goal step right after a load
+     * called it NULL (crash 2026-10-01 14:18, sgm_meal_tick) */
+    if (!g_stobe_getinv) g_stobe_getinv=(stobe_getinv_t)GetProcAddress(k,KLIB_GETINV_SYM);
+    if (!g_stobe_getinv) return 0;
     if (!g_stg_remove) g_stg_remove=(stg_remove_t)GetProcAddress(k,STG_REMOVE_SYM);
     if (!g_stg_add) g_stg_add=(stg_add_t)GetProcAddress(k,STG_ADD_SYM);
     if (!g_stg_give) g_stg_give=(stg_give_t)GetProcAddress(k,STG_GIVE_SYM);
@@ -1744,17 +1748,27 @@ static int sgm_eat_one(void *actor,void *inv)
 {
     void *food=stg_first_matching(inv,"food");
     if(!food)return 0;
-    if(setjmp(g_guard_jb)){g_guard_armed=0;g_sgm_dead=1;logline("[stobe] GOAL_MEAL eat faulted -- meals disabled");return 0;}
-    guard_arm();
-    int ok=g_chr_eatitem(actor,food,inv)!=0;
-    g_guard_armed=0;
-    return ok;
+    return g_chr_eatitem(actor,food,inv)!=0; /* runs under sgm_meal_tick's crash guard */
 }
 
-/* 1 = she is busy with a meal this tick (the goal waits); step gets the status. */
+static int sgm_meal_tick_body(void *gw,uint32_t serial,const char *name,char *step,size_t stepsz);
+
+/* 1 = she is busy with a meal this tick (the goal waits); step gets the status.
+ * The whole step runs under the crash guard: a fault turns meals off for the
+ * session instead of taking the game down. */
 static int sgm_meal_tick(void *gw,uint32_t serial,const char *name,char *step,size_t stepsz)
 {
-    if(g_sgm_dead||!serial)return 0;
+    if(g_sgm_dead)return 0;
+    if(setjmp(g_guard_jb)){g_guard_armed=0;g_sgm_dead=1;logline("[stobe] GOAL_MEAL faulted -- meals disabled for this session");return 0;}
+    guard_arm();
+    int r=sgm_meal_tick_body(gw,serial,name,step,stepsz);
+    g_guard_armed=0;
+    return r;
+}
+
+static int sgm_meal_tick_body(void *gw,uint32_t serial,const char *name,char *step,size_t stepsz)
+{
+    if(g_sgm_dead||!serial||!stg_exports()||!g_stobe_getinv)return 0;
     if(!g_chr_eatitem){
         HMODULE k=GetModuleHandleA("KenshiLib.dll");
         if(k)g_chr_eatitem=(chr_eatitem_t)GetProcAddress(k,KLIB_EATITEM_SYM);
@@ -1771,7 +1785,8 @@ static int sgm_meal_tick(void *gw,uint32_t serial,const char *name,char *step,si
             diag_serial[k]=serial;diag_ms[k]=t;
         }
     }
-    int pr=char_prone_state(actor);if(pr==2||pr==3||pr==4)return 0;
+    int pr=char_prone_state(actor);if(pr!=0&&pr!=1)return 0; /* down, KO'd or not loaded yet */
+    if(g_stg_isdead&&g_stg_isdead(actor))return 0;
     SgmMeal *m=sgm_slot(serial);if(!m)return 0;
     if(!m->eating){
         if(lvl>=SGM_START_LEVEL){if(lvl>=SGM_STOP_LEVEL)m->warned=0;return 0;}
