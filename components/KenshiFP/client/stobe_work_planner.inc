@@ -431,6 +431,43 @@ static int wgp_job_exports(void)
     return 1;
 }
 
+/* Bug 74: Kenshi rebuilds the job list panel only when the selection changes,
+ * so a goal job added/removed for the selected character stayed invisible until
+ * the player clicked away and back. Replay that selection change once. */
+#define KLIB_PI_UPDATESEL_SYM "?updatePlayerSelection@PlayerInterface@@QEAAXAEBVhand@@0@Z"
+typedef void (*pi_updatesel_t)(void *, const void *, const void *);
+static void *g_job_ui_actor;
+static int g_job_ui_dead;
+
+static void wgp_job_ui_refresh(void *gw)
+{
+    void *actor = g_job_ui_actor;
+    g_job_ui_actor = NULL;
+    if (!actor || g_job_ui_dead || !readable(gw, GW_PLAYER + 8)) return;
+    static pi_updatesel_t fn;
+    if (!fn) {
+        HMODULE k = GetModuleHandleA("KenshiLib.dll");
+        if (k) fn = (pi_updatesel_t)GetProcAddress(k, KLIB_PI_UPDATESEL_SYM);
+        if (!fn) { g_job_ui_dead = 1; logline("[stobe] GOAL_JOB ui refresh export missing -- disabled"); return; }
+    }
+    void *pi = *(void **)((uintptr_t)gw + GW_PLAYER);
+    unsigned char *sel = (unsigned char *)pi + PI_SELECTED_CHAR;
+    uint32_t *ah = (uint32_t *)((uintptr_t)actor + CHAR_HANDLE + HAND_IDS);
+    if (!readable(sel, HAND_IDS + 20) || !readable(ah, 20)) return;
+    if (memcmp(sel + HAND_IDS, ah, 20) != 0) return; /* she isn't the selected one: panel shows someone else */
+    unsigned char none[HAND_IDS + 20];
+    memcpy(none, sel, sizeof(none));
+    ((uint32_t *)(none + HAND_IDS))[0] = 0xb; /* null hand: "nothing was selected" */
+    if (setjmp(g_guard_jb)) {
+        g_guard_armed = 0; g_job_ui_dead = 1;
+        logline("[stobe] GOAL_JOB ui refresh faulted -- disabled for this session");
+        return;
+    }
+    guard_arm();
+    fn(pi, none, sel);
+    g_guard_armed = 0;
+}
+
 /* Remove the job this goal added (matched by Tasker pointer). */
 static void wgp_job_release_actor(void *actor, WgpGoal *g)
 {
@@ -453,6 +490,7 @@ static void wgp_job_release_actor(void *actor, WgpGoal *g)
         return;
     }
     logline("[stobe] GOAL_JOB removed id=%s index=%d", g->id, idx);
+    g_job_ui_actor = actor;
 }
 
 /* Add the goal's current machine as a real job in her job list. */
@@ -471,6 +509,7 @@ static void wgp_job_add(void *actor, WgpGoal *g, WgpProducer *p)
         g->rt_job_serial = readable(h, 20) ? h[4] : g->actor_serial;
         logline("[stobe] GOAL_JOB added id=%s job=%s task=%d", g->id,
                 p->building_name[0] ? p->building_name : "building", task);
+        g_job_ui_actor = actor;
     } else {
         logline("[stobe] GOAL_JOB add did not create one job (before=%d after=%d)", n, after);
     }
@@ -1211,6 +1250,7 @@ static void stobe_work_goal_tick(void *gw)
         }
         wgp_maybe_trigger_report(gw,g);
     }
+    wgp_job_ui_refresh(gw);
     wgp_status_write();
     if (g_wgp_dirty && (!g_wgp_next_save || (LONG)(real-g_wgp_next_save)>=0)) {
         wgp_save();
