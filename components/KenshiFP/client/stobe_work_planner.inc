@@ -12,6 +12,7 @@
 #define WGP_TICK_MS 1000
 #define WGP_STALL_MS 180000
 #define WGP_DEP_STALL_MS 900000
+#define WGP_POWER_WAIT_MS 30000
 #define WGP_TRAVEL_STALL_MS 240000
 #define WGP_ARRIVE_DIST 65.0f
 #define WGP_SCAN_RADIUS 1400.0f
@@ -71,6 +72,8 @@ typedef struct WgpGoal {
     int rt_return_started;  /* runtime only: walk-back already requested */
     float haul_last_dist;   /* runtime only: hauling walk progress */
     void *rt_task_building; /* runtime only: building the last operate order was for */
+    void *power_wait_building; /* runtime only: building we are waiting on for power */
+    DWORD power_wait_ms;
     int haul_still;
     DWORD haul_next_ms;
 } WgpGoal;
@@ -411,6 +414,49 @@ static int wgp_queue_craft(WgpProducer *p, int count)
 
 static int wgp_feed_inputs(void *gw, void *actor, WgpGoal *g, WgpProducer *p); /* stobe_task_goals.inc */
 
+/* 1 when the building's UseableStuff reports it is out of power (same check as Stobe.dll's base snapshot). */
+static int wgp_building_unpowered(void *building)
+{
+    typedef void *(*us_t)(void *);
+    typedef float (*oop_t)(void *);
+    us_t us_fn=(us_t)wgp_vcall_ptr(building,0x300);   /* Building::getUseableStuff */
+    void *us=us_fn?us_fn(building):NULL;
+    if (!us || !readable(us,8)) return 0;
+    oop_t oop=(oop_t)wgp_vcall_ptr(us,0x4B8);          /* UseableStuff::isOutOfPower */
+    return oop ? (oop(us)>0.0f) : 0;
+}
+
+static int wgp_icontains(const char *hay, const char *needle)
+{
+    if (!hay || !needle || !*needle) return 0;
+    size_t n=strlen(needle);
+    for (const char *h=hay; *h; h++) if (!_strnicmp(h,needle,n)) return 1;
+    return 0;
+}
+
+/* 0 = powered, 1 = waiting for power (step set), -1 = give up (reason set) */
+static int wgp_power_gate(WgpGoal *g, WgpProducer *p, char *reason, size_t reason_sz)
+{
+    if (!p || !p->building) return 0;
+    DWORD now=GetTickCount();
+    if (!wgp_building_unpowered(p->building)) {
+        if (g->power_wait_building==p->building) { g->power_wait_building=NULL; g->power_wait_ms=0; }
+        return 0;
+    }
+    const char *bn=p->building_name[0]?p->building_name:"the production building";
+    if (g->power_wait_building!=p->building || !g->power_wait_ms) {
+        g->power_wait_building=p->building; g->power_wait_ms=now;
+        logline("[stobe] WORK_GOAL power wait id=%s building=%s",g->id,bn);
+    }
+    if ((LONG)(now-g->power_wait_ms)>WGP_POWER_WAIT_MS) {
+        snprintf(reason,reason_sz,"%s has no power (check generators, batteries and wiring)",bn);
+        return -1;
+    }
+    snprintf(g->current_step,sizeof(g->current_step),"Waiting for power at %s",bn);
+    g->last_progress_ms=now; /* the power wait has its own timer */
+    return 1;
+}
+
 /* return 1 ready/available, 0 working/waiting, -1 impossible */
 static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
                            int need, int depth, char chain[][128], int chain_n,
@@ -484,10 +530,17 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         }
     }
 
+    { int pw=wgp_power_gate(g,&p,reason,reason_sz); if (pw<0) return -1; if (pw>0) return 0; }
     if (wgp_feed_inputs(gw,actor,g,&p)) return 0;
     if (g->rt_task_building != p.building || (LONG)(GetTickCount()-g->last_order_ms)>2000) {
         wgp_issue_goal_task(actor,g,&p);
         g->last_order_ms=GetTickCount();
+    }
+    if (wgp_icontains(p.building_name,"farm")) {
+        /* Inputs are in; the crop needs game time. Not a stall. */
+        snprintf(g->current_step,sizeof(g->current_step),"Waiting for %s to grow %s",p.building_name,item);
+        g->last_progress_ms=GetTickCount();
+        return 0;
     }
     snprintf(g->current_step,sizeof(g->current_step),"Producing %s at %s",item,
              p.building_name[0]?p.building_name:"production building");
@@ -640,6 +693,12 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
         }
     }
 
+    {
+        char pr[200]={0};
+        int pw=wgp_power_gate(g,&root,pr,sizeof(pr));
+        if (pw<0) { char full[256]; snprintf(full,sizeof(full),"cannot make %s because %s",g->item,pr); wgp_goal_block(g,full); return; }
+        if (pw>0) return;
+    }
     if (wgp_feed_inputs(gw,actor,g,&root)) return;
     if (g->rt_task_building != root.building || (LONG)(now-g->last_order_ms)>2000) {
         wgp_issue_goal_task(actor,g,&root);

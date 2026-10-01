@@ -90,6 +90,9 @@ typedef struct StgGoal {
     int report_triggered;
     int rt_seen_active;     /* runtime only: was ACTIVE this session */
     int rt_return_started;  /* runtime only: walk-back already requested */
+    float walk_last_dist;   /* runtime only: walking to a storage building */
+    int walk_still;
+    DWORD walk_next_ms;
 } StgGoal;
 
 static StgGoal g_stg_goals[STG_MAX_GOALS];
@@ -547,7 +550,67 @@ static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
     stg_finish(g,STG_STATE_COMPLETE,"no more matching items on nearby downed targets");
 }
 
+/* ---- walking fetch/store (round 17e, bug 51) ---- */
+static void *stg_nearest_storage(void *gw,void *actor,const char *query,float *dist_out,char *name,size_t namesz)
+{
+    Vec3 a={0,0,0};if(!char_position(actor,&a))return NULL;
+    void *b[WGP_MAX_BUILDINGS]={0};
+    int n=wgp_scan_buildings(gw,actor,b,WGP_MAX_BUILDINGS);
+    void *best=NULL;float bd=1e30f;
+    for(int i=0;i<n;i++){
+        void *x=b[i];if(!x||!readable(x,0x80))continue;
+        int sp=wgp_building_special(x);
+        if(sp!=STG_BF_RESOURCE_STORAGE&&sp!=STG_BF_GENERAL_STORAGE)continue;
+        if(!g_wgp_isplayer_building(x))continue;
+        void *inv=wgp_building_inventory(x);if(!inv)continue;
+        if(query&&stg_count_matching(inv,query)<=0)continue;
+        float d=wgp_distance(a,*(Vec3 *)((uintptr_t)x+0x48));
+        if(d<bd){bd=d;best=x;}
+    }
+    if(best){
+        if(dist_out)*dist_out=bd;
+        if(name&&namesz){name[0]='\0';wgp_name(*(void **)((uintptr_t)best+0x40),name,namesz);}
+    }
+    return best;
+}
+
+/* 1 = at the storage (or as close as pathing gets), 0 = walking */
+static int stg_walk_to(void *actor,StgGoal *g,void *building,float d)
+{
+    DWORD now=GetTickCount();
+    if(d<=WGP_HAUL_REACH){g->walk_still=0;g->walk_last_dist=0;return 1;}
+    if(g->walk_last_dist<=0||d<g->walk_last_dist-3.0f){g->walk_last_dist=d;g->walk_still=0;g->last_progress_ms=now;}
+    else g->walk_still++;
+    if(d<=WGP_HAUL_NEAR&&g->walk_still>=4){g->walk_still=0;g->walk_last_dist=0;return 1;}
+    if((LONG)(now-g->walk_next_ms)>=0){Vec3 t=*(Vec3 *)((uintptr_t)building+0x48);try_move_to_pos(actor,&t);g->walk_next_ms=now+3000;}
+    return 0;
+}
+
+static void stg_tick_store_any(void *gw,void *actor,StgGoal *g);
+
 static void stg_tick_store(void *gw,void *actor,StgGoal *g)
+{
+    if(stg_actor_item_count(actor,g->item)>0){
+        float d=0;char sn[160]={0};
+        void *dst=stg_nearest_storage(gw,actor,NULL,&d,sn,sizeof(sn));
+        if(dst&&!stg_walk_to(actor,g,dst,d)){
+            snprintf(g->current_step,sizeof(g->current_step),"Walking to %s to store %s (%.0f)",sn[0]?sn:"storage",g->item,d);
+            return;
+        }
+        if(dst){
+            int want=g->quantity>0?g->quantity-g->completed:stg_actor_item_count(actor,g->item);
+            int m=want>0?stg_transfer_inventory(g_stobe_getinv(actor),wgp_building_inventory(dst),g->item,want):0;
+            if(m>0){g->completed+=m;g->last_progress_ms=GetTickCount();g_stg_dirty=1;
+                snprintf(g->current_step,sizeof(g->current_step),"Stored %d %s in %s",g->completed,g->item,sn[0]?sn:"storage");
+                if((g->quantity>0&&g->completed>=g->quantity)||stg_actor_item_count(actor,g->item)<=0)stg_finish(g,STG_STATE_COMPLETE,"");
+                return;
+            }
+        }
+    }
+    stg_tick_store_any(gw,actor,g); /* nearest took nothing: try the rest (old behaviour) */
+}
+
+static void stg_tick_store_any(void *gw,void *actor,StgGoal *g)
 {
     int have=stg_actor_item_count(actor,g->item);
     if(have<=0){stg_finish(g,STG_STATE_COMPLETE,"");return;}
@@ -563,7 +626,19 @@ static void stg_tick_store(void *gw,void *actor,StgGoal *g)
 static void stg_tick_fetch(void *gw,void *actor,StgGoal *g)
 {
     int need=g->quantity-g->completed;if(need<=0){stg_finish(g,STG_STATE_COMPLETE,"");return;}
-    int moved=stg_fetch_to_actor(gw,actor,g->item,need);
+    float d=0;char sn[160]={0};
+    void *src=stg_nearest_storage(gw,actor,g->item,&d,sn,sizeof(sn));
+    if(src&&!stg_walk_to(actor,g,src,d)){
+        snprintf(g->current_step,sizeof(g->current_step),"Walking to %s for %s (%.0f)",sn[0]?sn:"storage",g->item,d);
+        return;
+    }
+    int moved=src?stg_transfer_to_character(wgp_building_inventory(src),actor,g->item,need):0;
+    if(moved>0){g->completed+=moved;g->last_progress_ms=GetTickCount();g_stg_dirty=1;
+        snprintf(g->current_step,sizeof(g->current_step),"Fetched %d/%d %s from %s",g->completed,g->quantity,g->item,sn[0]?sn:"storage");
+        if(g->completed>=g->quantity)stg_finish(g,STG_STATE_COMPLETE,"");
+        return; /* next tick: next storage if still short */
+    }
+    moved=0;
     if(moved>0){g->completed+=moved;g->last_progress_ms=GetTickCount();g_stg_dirty=1;}
     snprintf(g->current_step,sizeof(g->current_step),"Fetched %d/%d %s from player storage",g->completed,g->quantity,g->item);
     if(g->completed>=g->quantity)stg_finish(g,STG_STATE_COMPLETE,"");
@@ -1317,7 +1392,7 @@ static void stg_tick_goal_guarded(void *gw,StgGoal *g)
 #define SGR_STOP_DIST 60.0f
 #define SGR_GIVEUP_MS 180000
 #define SGR_REORDER_MS 4000
-typedef struct { uint32_t serial; char actor[128]; DWORD until_ms; DWORD next_ms; } SgrReturn;
+typedef struct { uint32_t serial; char actor[128]; DWORD until_ms; DWORD next_ms; int cleared; } SgrReturn;
 static SgrReturn g_sgr[SGR_MAX];
 
 static int sgr_actor_busy(uint32_t serial)
@@ -1358,6 +1433,11 @@ static void sgr_tick(void *gw)
         if(wgp_distance(a,p)<=SGR_STOP_DIST){
             logline("[stobe] GOAL_RETURN arrived actor=%s",r->actor);
             memset(r,0,sizeof(*r));continue;
+        }
+        if(!r->cleared){
+            /* Her goal's operate/collect orders would win over the walk-back (bug 50). */
+            if(stobe_resolve_fight_exports()){void *o=g_stobe_getorders(actor);if(o&&readable(o,8))g_stobe_clear_orders(o);}
+            r->cleared=1;
         }
         if(!try_move_to_pos(actor,&p)){logline("[stobe] GOAL_RETURN move failed actor=%s",r->actor);memset(r,0,sizeof(*r));}
     }
