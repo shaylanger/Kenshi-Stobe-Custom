@@ -91,6 +91,7 @@ typedef struct StgGoal {
     int rt_seen_active;     /* runtime only: was ACTIVE this session */
     int rt_return_started;  /* runtime only: walk-back already requested */
     float walk_last_dist;   /* runtime only: walking to a storage building */
+    DWORD rt_end_ms;        /* runtime only: when the goal ended (label) */
     Vec3 patrol_center;     /* runtime only: custom patrol loop */
     int patrol_init;
     int patrol_idx;
@@ -1567,11 +1568,118 @@ static void sgr_scan(void)
     }
     for(int i=0;i<STG_MAX_GOALS;i++){
         StgGoal *g=&g_stg_goals[i];if(!g->used)continue;
-        if(g->state==STG_STATE_ACTIVE){g->rt_seen_active=1;continue;}
+        if(g->state==STG_STATE_ACTIVE){g->rt_seen_active=1;g->rt_end_ms=0;continue;}
+        if(g->rt_seen_active&&!g->rt_end_ms)g->rt_end_ms=GetTickCount();
         if(g->rt_seen_active&&!g->rt_return_started&&g->state!=STG_STATE_PAUSED){
             g->rt_return_started=1;sgr_start(g->actor_serial,g->actor);
         }
     }
+}
+
+/* ---- on-screen goal label for the selected squad member (round 18d) ---- */
+#define GOAL_LABEL_KEEP_MS 60000
+static void caption_set(void *w, const char *text, textbox_setcap_t setter); /* kenshifp_client.c */
+static void *make_mstr_long(unsigned char *b32, const char *s);              /* kenshifp_client.c */
+static void *g_goal_label;
+static int g_goal_label_dead;
+static DWORD g_goal_label_next;
+static char g_goal_label_text[600];
+
+static const char *goal_label_state(int state)
+{
+    switch(state){case 1:return "DONE";case 2:return "BLOCKED";case 3:return "CANCELLED";case 4:return "PAUSED";case 5:return "NEEDS APPROVAL";default:return "";}
+}
+
+static void goal_label_build(void *gw,char *out,size_t outsz)
+{
+    out[0]='\0';
+    void *sel=first_player_char(gw);
+    if(!sel||!readable((void *)((uintptr_t)sel+CHAR_HANDLE+HAND_IDS),20))return;
+    uint32_t serial=((uint32_t *)((uintptr_t)sel+CHAR_HANDLE+HAND_IDS))[4];
+    DWORD now=GetTickCount();
+    const char *actor="";char head[200]="",step[260]="";int more=0,found=0;
+    /* work goals first: active/paused, else the most recent ended one still in the keep window */
+    for(int pass=0;pass<2&&!found;pass++){
+        for(int i=0;i<WGP_MAX_GOALS;i++){
+            WgpGoal *g=&g_wgp_goals[i];
+            if(!g->used||g->actor_serial!=serial)continue;
+            int live=(g->state==0||g->state==4);
+            int recent=g->rt_end_ms&&(LONG)(now-g->rt_end_ms)<GOAL_LABEL_KEEP_MS;
+            if(pass==0?!live:!recent)continue;
+            if(found){if(live)more++;continue;}
+            found=1;actor=g->actor;
+            const char *st=goal_label_state(g->state);
+            if(st[0])snprintf(head,sizeof(head),"Make %d %s  (%d/%d) %s",g->quantity,g->item,g->completed,g->quantity,st);
+            else snprintf(head,sizeof(head),"Make %d %s  (%d/%d)",g->quantity,g->item,g->completed,g->quantity);
+            snprintf(step,sizeof(step),"%s",g->state==2&&g->reason[0]?g->reason:g->current_step);
+        }
+    }
+    for(int pass=0;pass<2&&!found;pass++){
+        for(int i=0;i<STG_MAX_GOALS;i++){
+            StgGoal *g=&g_stg_goals[i];
+            if(!g->used||g->actor_serial!=serial)continue;
+            int live=(g->state==STG_STATE_ACTIVE||g->state==STG_STATE_PAUSED||g->state==STG_STATE_APPROVAL);
+            int recent=g->rt_end_ms&&(LONG)(now-g->rt_end_ms)<GOAL_LABEL_KEEP_MS;
+            if(pass==0?!live:!recent)continue;
+            if(found){if(live)more++;continue;}
+            found=1;actor=g->actor;
+            char what[160];
+            if(!strcmp(g->kind,"STOCK"))snprintf(what,sizeof(what),"Keep %d %s stocked",g->minimum_stock,g->item);
+            else if(!strcmp(g->kind,"PATROL"))snprintf(what,sizeof(what),"Patrol");
+            else if(!strcmp(g->kind,"GUARD"))snprintf(what,sizeof(what),"Guard %s",g->target[0]?g->target:"position");
+            else if(g->quantity>0)snprintf(what,sizeof(what),"%s %s  (%d/%d)",g->kind,g->item,g->completed,g->quantity);
+            else snprintf(what,sizeof(what),"%s %s",g->kind,g->item);
+            const char *st=goal_label_state(g->state);
+            snprintf(head,sizeof(head),"%s%s%s",what,st[0]?"  ":"",st);
+            snprintf(step,sizeof(step),"%s",g->state==STG_STATE_BLOCKED&&g->reason[0]?g->reason:g->current_step);
+        }
+    }
+    if(!found)return;
+    if(more>0)snprintf(out,outsz,"%s - %s\n%s\n+%d more queued",actor,head,step,more);
+    else snprintf(out,outsz,"%s - %s\n%s",actor,head,step);
+}
+
+static void stobe_goal_label_update(void *gw)
+{
+    if(g_goal_label_dead||!gw||!g_gui_getinstance||!g_gui_createwidget||!g_widget_setvisible||!g_textbox_setcap)return;
+    DWORD now=GetTickCount();
+    if(g_goal_label_next&&(LONG)(now-g_goal_label_next)<0)return;
+    g_goal_label_next=now+250;
+    if(setjmp(g_guard_jb)){
+        g_guard_armed=0;g_goal_label_dead=1;
+        logline("[stobe] GOAL_LABEL faulted -- disabled for this session");
+        return;
+    }
+    guard_arm();
+    if(!g_goal_label){
+        void *gui=g_gui_getinstance();
+        if(!readable(gui,8)){g_guard_armed=0;return;}
+        int cx=GetSystemMetrics(SM_CXSCREEN),cy=GetSystemMetrics(SM_CYSCREEN);
+        if(cx<=0)cx=1920;
+        (void)cy;
+        unsigned char ty[32],sk[32],ly[32],nm[32];
+        void *f1=make_mstr_long(ty,"TextBox");
+        void *f2=make_mstr_long(sk,"Kenshi_GenericTextBoxFlat");
+        void *f3=make_mstr_long(ly,"Pointer");
+        void *f4=make_mstr_long(nm,"StobeGoalLabel");
+        void *w=g_gui_createwidget(gui,ty,sk,cx/2-330,70,660,78,0,ly,nm);
+        if(f1)free(f1);if(f2)free(f2);if(f3)free(f3);if(f4)free(f4);
+        if(!readable(w,8)){g_guard_armed=0;g_goal_label_dead=1;logline("[stobe] GOAL_LABEL create failed -- disabled");return;}
+        g_widget_setvisible(w,0);
+        g_goal_label=w;
+        g_goal_label_text[0]='\0';
+        logline("[stobe] GOAL_LABEL widget created %p",w);
+    }
+    char text[600];
+    goal_label_build(gw,text,sizeof(text));
+    if(!text[0]){
+        if(g_goal_label_text[0]){g_widget_setvisible(g_goal_label,0);g_goal_label_text[0]='\0';}
+    }else if(strcmp(text,g_goal_label_text)){
+        caption_set(g_goal_label,text,g_textbox_setcap);
+        g_widget_setvisible(g_goal_label,1);
+        strncpy(g_goal_label_text,text,sizeof(g_goal_label_text)-1);
+    }
+    g_guard_armed=0;
 }
 
 static void stobe_task_goal_tick(void *gw)

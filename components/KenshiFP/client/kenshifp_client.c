@@ -7908,6 +7908,7 @@ static void hooked_mainloop(void *gw, float time)
     if (gw) fp_sync_floor(gw);            /* reveal the character's building floor in FP */
     if (gw) fp_head_visibility(gw);       /* hide head while fast-forwarding (>1x) */
     fp_gui_update();                      /* post-frame: all MyGUI widget work */
+    if (gw) stobe_goal_label_update(gw);  /* selected squad member's goal (round 18d) */
 
     DWORD now = GetTickCount();
     if (KFP_DEBUG_LOG && gw && (now - g_last_tick_ms) >= 1000) {   /* 1 Hz observation log */

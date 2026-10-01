@@ -72,6 +72,9 @@ typedef struct WgpGoal {
     int rt_return_started;  /* runtime only: walk-back already requested */
     float haul_last_dist;   /* runtime only: hauling walk progress */
     void *rt_task_building; /* runtime only: building the last operate order was for */
+    const void *rt_job_tasker; /* runtime only: the Kenshi job (Tasker) this goal added */
+    uint32_t rt_job_serial;    /* runtime only: whose job list it is in */
+    DWORD rt_end_ms;           /* runtime only: when the goal ended (label) */
     void *power_wait_building; /* runtime only: building we are waiting on for power */
     DWORD power_wait_ms;
     DWORD farm_dry_ms;          /* runtime only: farm missing an input nobody can bring */
@@ -366,11 +369,91 @@ static int wgp_issue_building_task(void *actor, WgpProducer *p, int override_tas
     return 1;
 }
 
+/* ---- real Kenshi jobs for goal machines (round 18d) ---- */
+#define KLIB_CHR_ADDJOB_SYM "?addJob@Character@@QEAAXW4TaskType@@PEAVRootObject@@_N2AEBVVector3@Ogre@@@Z"
+#define KLIB_CHR_PJCOUNT_SYM "?getPermajobCount@Character@@QEBAHXZ"
+#define KLIB_CHR_PJDATA_SYM "?getPermajobData@Character@@QEBAPEBVTasker@@H@Z"
+#define KLIB_CHR_PJREMOVE_SYM "?removePermajob@Character@@QEAAXH@Z"
+typedef void (*chr_addjob_t)(void *, int, void *, char, char, const Vec3 *);
+typedef int (*chr_pjcount_t)(void *);
+typedef const void *(*chr_pjdata_t)(void *, int);
+typedef void (*chr_pjremove_t)(void *, int);
+static chr_addjob_t g_chr_addjob;
+static chr_pjcount_t g_chr_pjcount;
+static chr_pjdata_t g_chr_pjdata;
+static chr_pjremove_t g_chr_pjremove;
+static int g_goal_jobs_dead;
+
+static int wgp_job_exports(void)
+{
+    if (g_goal_jobs_dead) return 0;
+    if (g_chr_addjob && g_chr_pjcount && g_chr_pjdata && g_chr_pjremove) return 1;
+    HMODULE k = GetModuleHandleA("KenshiLib.dll");
+    if (!k) return 0;
+    g_chr_addjob = (chr_addjob_t)GetProcAddress(k, KLIB_CHR_ADDJOB_SYM);
+    g_chr_pjcount = (chr_pjcount_t)GetProcAddress(k, KLIB_CHR_PJCOUNT_SYM);
+    g_chr_pjdata = (chr_pjdata_t)GetProcAddress(k, KLIB_CHR_PJDATA_SYM);
+    g_chr_pjremove = (chr_pjremove_t)GetProcAddress(k, KLIB_CHR_PJREMOVE_SYM);
+    if (!(g_chr_addjob && g_chr_pjcount && g_chr_pjdata && g_chr_pjremove)) {
+        g_goal_jobs_dead = 1;
+        logline("[stobe] GOAL_JOB exports missing -- job mirroring disabled");
+        return 0;
+    }
+    return 1;
+}
+
+/* Remove the job this goal added (matched by Tasker pointer). */
+static void wgp_job_release_actor(void *actor, WgpGoal *g)
+{
+    if (!g->rt_job_tasker) return;
+    const void *mine = g->rt_job_tasker;
+    g->rt_job_tasker = NULL;
+    if (!actor || !wgp_job_exports()) return;
+    int n = g_chr_pjcount(actor);
+    if (n <= 0 || n > 64) return;
+    int idx = -1;
+    for (int i = 0; i < n; i++) if (g_chr_pjdata(actor, i) == mine) { idx = i; break; }
+    if (idx < 0) return; /* player removed it already */
+    g_chr_pjremove(actor, idx);
+    int after = g_chr_pjcount(actor);
+    int still = 0;
+    for (int i = 0; i < after && i < 64; i++) if (g_chr_pjdata(actor, i) == mine) still = 1;
+    if (after != n - 1 || still) {
+        g_goal_jobs_dead = 1;
+        logline("[stobe] GOAL_JOB unexpected removal (before=%d after=%d still=%d) -- job mirroring disabled", n, after, still);
+        return;
+    }
+    logline("[stobe] GOAL_JOB removed id=%s index=%d", g->id, idx);
+}
+
+/* Add the goal's current machine as a real job in her job list. */
+static void wgp_job_add(void *actor, WgpGoal *g, WgpProducer *p)
+{
+    if (!actor || !p || !p->building || !wgp_job_exports()) return;
+    int n = g_chr_pjcount(actor);
+    if (n < 0 || n > 60) return;
+    Vec3 pos = *(Vec3 *)((uintptr_t)p->building + 0x48);
+    int task = p->task > 0 ? p->task : 87;
+    g_chr_addjob(actor, task, p->building, 1 /*shift: append*/, 1 /*don't clear*/, &pos);
+    int after = g_chr_pjcount(actor);
+    if (after == n + 1) {
+        g->rt_job_tasker = g_chr_pjdata(actor, after - 1);
+        uint32_t *h = (uint32_t *)((uintptr_t)actor + CHAR_HANDLE + HAND_IDS);
+        g->rt_job_serial = readable(h, 20) ? h[4] : g->actor_serial;
+        logline("[stobe] GOAL_JOB added id=%s job=%s task=%d", g->id,
+                p->building_name[0] ? p->building_name : "building", task);
+    } else {
+        logline("[stobe] GOAL_JOB add did not create one job (before=%d after=%d)", n, after);
+    }
+}
+
 /* Operate order for a goal; clears the old order first when the target building changes. */
 static int wgp_issue_goal_task(void *actor, WgpGoal *g, WgpProducer *p)
 {
     if (!actor || !p || !p->building) return 0;
     if (g->rt_task_building != p->building) {
+        wgp_job_release_actor(actor, g);
+        wgp_job_add(actor, g, p);
         if (g->rt_task_building && stobe_resolve_fight_exports()) {
             void *orders = g_stobe_getorders(actor);
             if (orders && readable(orders, 8)) g_stobe_clear_orders(orders);
@@ -1052,10 +1135,17 @@ static void stobe_work_goal_tick(void *gw)
             if (!already_running) {
                 active_actors[active_actor_count++]=g->actor_serial;
                 wgp_goal_tick_guarded(gw,g);
+                if (g->state!=0) g->rt_end_ms=GetTickCount();
             } else if (g->baseline<0) {
                 snprintf(g->current_step,sizeof(g->current_step),
                          "Queued behind an earlier active work goal");
             }
+        }
+        if (g->used && g->state!=0 && g->rt_job_tasker) {
+            /* goal ended or paused: take its job out of her list */
+            if (!g->rt_end_ms) g->rt_end_ms=GetTickCount();
+            wgp_job_release_actor(wgp_find_squad_actor(gw,g->actor_serial,g->actor),g);
+            g->rt_task_building=NULL; /* re-add on resume */
         }
         wgp_maybe_trigger_report(gw,g);
     }
