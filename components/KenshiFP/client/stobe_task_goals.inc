@@ -327,7 +327,23 @@ static int stg_scan_chars(void *gw,void *actor,void **out,int max)
     StobePtrLektor l; memset(&l,0,sizeof(l)); l.max_size=max; l.stuff=out;
     g_stobe_getchars(gw,&l,&c,STG_SCAN_RADIUS,0,0,max,max,actor);
     if(!l.stuff||l.count>(uint32_t)max)return 0;
-    return (int)l.count;
+    int n=(int)l.count;
+    /* Dead bodies may not come back from the character sphere search (bug 68):
+     * merge the generic object search for CHARACTER (itemType 1). */
+    if(g_stobe_getobjects&&n<max){
+        void *extra[128]={0};
+        StobePtrLektor l2; memset(&l2,0,sizeof(l2)); l2.max_size=128; l2.stuff=extra;
+        g_stobe_getobjects(gw,&l2,&c,STG_SCAN_RADIUS,1,128,actor);
+        if(l2.stuff&&l2.count<=128){
+            for(uint32_t i=0;i<l2.count&&n<max;i++){
+                void *x=extra[i];int dup=0;
+                if(!x)continue;
+                for(int j=0;j<n;j++)if(out[j]==x){dup=1;break;}
+                if(!dup)out[n++]=x;
+            }
+        }
+    }
+    return n;
 }
 
 static int stg_character_enemy(void *actor,void *candidate)
@@ -440,6 +456,18 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
             if(!x||x==p->building||!readable(x,0x80))continue;
             int sp=wgp_building_special(x);
             if(!g_wgp_isplayer_building(x)&&sp!=WGP_BF_MINE&&sp!=WGP_BF_MINE_NATURAL)continue;
+            {
+                /* Only storage, mines, or a machine whose OUTPUT is this item: never
+                 * another machine's input (bug 69: water taken out of the oven). */
+                int ok_src=(sp==STG_BF_RESOURCE_STORAGE||sp==STG_BF_GENERAL_STORAGE||sp==WGP_BF_MINE||sp==WGP_BF_MINE_NATURAL);
+                if(!ok_src){
+                    void *pr=wgp_building_production(x);
+                    void *ogd=pr?wgp_prod_item(pr):NULL;
+                    char on[160]={0};
+                    if(ogd&&wgp_name(ogd,on,sizeof(on))&&wgp_name_match(on,dep)>0)ok_src=1;
+                }
+                if(!ok_src)continue;
+            }
             int c=wgp_item_count_inventory(wgp_building_inventory(x),dep);
             if(c<=0)continue;
             float d=wgp_distance(apos,*(Vec3 *)((uintptr_t)x+0x48));
@@ -517,6 +545,20 @@ static int stg_actor_item_count(void *actor,const char *query)
 
 static int stg_walk_to_pos(void *actor,StgGoal *g,Vec3 t,float d);
 
+static void stg_loot_scan_log(void *gw,void *actor,StgGoal *g)
+{
+    void *chars[128]={0};int n=stg_scan_chars(gw,actor,chars,128);
+    int dead=0,downed=0,valid=0;
+    for(int i=0;i<n;i++){
+        void *c=chars[i];if(!c||!char_valid(c))continue;
+        if(stg_exports()&&g_stg_isdead(c))dead++;
+        int pr=char_prone_state(c);if(pr==2||pr==3||pr==4)downed++;
+        if(stg_valid_downed(actor,c,g->target))valid++;
+    }
+    logline("[stobe] TASK_GOAL loot scan id=%s target=%s item=%s scanned=%d dead=%d downed=%d valid=%d",
+            g->id,g->target,g->item,n,dead,downed,valid);
+}
+
 static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
 {
     if(g->quantity>0&&g->completed>=g->quantity){
@@ -563,6 +605,7 @@ static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
             if(s<=0){snprintf(g->current_step,sizeof(g->current_step),"Looting finished; waiting for usable player storage");return;}
         }
     }
+    if(g->completed<=0)stg_loot_scan_log(gw,actor,g);
     stg_finish(g,STG_STATE_COMPLETE,"no more matching items on nearby downed targets");
 }
 
@@ -1111,7 +1154,12 @@ static void stg_tick_patrol(void *gw,void *actor,StgGoal *g)
     for(int i=0;i<n&&np<12;i++){
         void *x=b[i];if(!x||!readable(x,0x80)||!g_wgp_isplayer_building(x))continue;
         Vec3 bp=*(Vec3 *)((uintptr_t)x+0x48);
-        if(wgp_distance(bp,g->patrol_center)>STG_PATROL_RADIUS)continue;
+        float bd=wgp_distance(bp,g->patrol_center);
+        if(bd>STG_PATROL_RADIUS)continue;
+        if(bd>90.0f){ /* stand beside the building, not in its centre (bug 67) */
+            float k=90.0f/bd;
+            bp.x+= (g->patrol_center.x-bp.x)*k; bp.z+=(g->patrol_center.z-bp.z)*k;
+        }
         int dup=0;for(int k=0;k<np;k++)if(wgp_distance(pts[k],bp)<60.0f){dup=1;break;}
         if(!dup)pts[np++]=bp;
     }
@@ -1122,7 +1170,9 @@ static void stg_tick_patrol(void *gw,void *actor,StgGoal *g)
     if(g->patrol_idx>=np)g->patrol_idx=0;
     Vec3 t=pts[g->patrol_idx];
     float d=wgp_distance(a,t);
-    if(stg_walk_to_pos(actor,g,t,d)){
+    if(stg_walk_to_pos(actor,g,t,d)||g->walk_still>=8){
+        /* arrived, or this waypoint can't be reached (path_failed): next one */
+        g->walk_still=0;g->walk_last_dist=0;g->walk_next_ms=0;
         g->patrol_idx=(g->patrol_idx+1)%np;
         g->last_progress_ms=GetTickCount();
     }
@@ -1432,7 +1482,7 @@ static void stg_maybe_trigger_report(void *gw,StgGoal *g)
     void *actor=wgp_find_squad_actor(gw,g->actor_serial,g->actor);
     void *player=first_player_char(gw);
     Vec3 a={0,0,0},p={0,0,0};
-    if(!actor||!player||!char_position(actor,&a)||!char_position(player,&p)||wgp_distance(a,p)>180.0f)return;
+    if(!actor||!player||!char_position(actor,&a)||!char_position(player,&p)||wgp_distance(a,p)>70.0f)return; /* report once she is back (bug 65) */
     char flag[MAX_PATH*2]={0};if(!stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag"))return;
     HANDLE h=CreateFileA(flag,GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if(h!=INVALID_HANDLE_VALUE){CloseHandle(h);stobe_goal_report_append(g->id,g->actor,"task");g->report_triggered=1;g_stg_dirty=1;}

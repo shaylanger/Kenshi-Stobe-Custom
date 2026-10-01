@@ -5097,6 +5097,10 @@ void OnWriteNarratorDiaryClick(MyGUI::Widget *sender) {
   CloseChatUI();
 }
 
+// Set by the lifelike_initiative.flag reader (main.cpp): the next bored turn may
+// address the player when no NPC listener is around (goal reports, bug 65).
+bool g_initiativeAllowPlayerListener = false;
+
 bool TriggerBoredEvent(GameWorld *world, bool forceDirectorMode,
                        const std::string &preferredSpeakerName,
                        const std::string &preferredSpeakerSerial,
@@ -5323,11 +5327,20 @@ bool TriggerBoredEvent(GameWorld *world, bool forceDirectorMode,
     }
     listenerIndices.push_back(i);
   }
+  const bool allowPlayerListener = g_initiativeAllowPlayerListener;
+  g_initiativeAllowPlayerListener = false;
   if (listenerIndices.empty()) {
     if (!targetLockedSpeaker) {
-      Log("BORED_EVENT: skipped (no eligible NPC listener) speaker=" +
-          speaker.name + " candidate_count=" + ToString((int)candidates.size()));
-      return false;
+      if (allowPlayerListener && playerCanHear && !playerName.empty() &&
+          !sameIdentity(playerName, playerSerial, speaker.name, speaker.serial)) {
+        listener = playerName;
+        listenerSerial = playerSerial;
+        Log("BORED_EVENT: initiative turn addresses the player speaker=" + speaker.name);
+      } else {
+        Log("BORED_EVENT: skipped (no eligible NPC listener) speaker=" +
+            speaker.name + " candidate_count=" + ToString((int)candidates.size()));
+        return false;
+      }
     }
   }
 
@@ -5383,7 +5396,7 @@ bool TriggerBoredEvent(GameWorld *world, bool forceDirectorMode,
         listenerSerial = candidates[bestListenerIndex].serial;
       }
     }
-  } else {
+  } else if (listener.empty()) {
     size_t listenerIndex =
         listenerIndices[(size_t)(rand() % listenerIndices.size())];
     if (listenerIndex >= candidates.size()) {

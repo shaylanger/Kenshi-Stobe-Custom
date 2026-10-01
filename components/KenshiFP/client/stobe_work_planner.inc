@@ -74,6 +74,7 @@ typedef struct WgpGoal {
     void *rt_task_building; /* runtime only: building the last operate order was for */
     void *power_wait_building; /* runtime only: building we are waiting on for power */
     DWORD power_wait_ms;
+    DWORD farm_dry_ms;          /* runtime only: farm missing an input nobody can bring */
     int haul_still;
     DWORD haul_next_ms;
 } WgpGoal;
@@ -532,7 +533,10 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         int r=wgp_ensure_item(gw,actor,g,dep,need,depth+1,next_chain,next_n,budget,reason,reason_sz);
         if (r<0) return -1;
         if (r==0) {
-            snprintf(g->current_step,sizeof(g->current_step),"Obtaining %s for %s",dep,item);
+            if (strncmp(g->current_step,"Waiting",7) && strncmp(g->current_step,"Fetching",8) &&
+                strncmp(g->current_step,"Carrying",8) && strncmp(g->current_step,"Loaded",6) &&
+                strncmp(g->current_step,"Picked",6))
+                snprintf(g->current_step,sizeof(g->current_step),"Obtaining %s for %s",dep,item);
             return 0;
         }
     }
@@ -544,6 +548,23 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         g->last_order_ms=GetTickCount();
     }
     if (wgp_icontains(p.building_name,"farm")) {
+        void *fm[WGP_MAX_MISSING]={0};
+        int fmiss=p.production?wgp_missing(p.production,fm,WGP_MAX_MISSING):0;
+        if (fmiss>0) {
+            /* feed_inputs found nothing to carry: e.g. the well is dry/unpowered (bug 70). */
+            char dn[128]={0}; wgp_name(fm[0],dn,sizeof(dn));
+            DWORD now2=GetTickCount();
+            if (!g->farm_dry_ms) g->farm_dry_ms=now2;
+            if ((LONG)(now2-g->farm_dry_ms)>2*WGP_POWER_WAIT_MS) {
+                snprintf(reason,reason_sz,"%s has no %s and none is available to carry (check the well or water storage)",
+                         p.building_name,dn[0]?dn:"input");
+                return -1;
+            }
+            snprintf(g->current_step,sizeof(g->current_step),"Waiting: %s needs %s and none is available",p.building_name,dn[0]?dn:"input");
+            g->last_progress_ms=now2;
+            return 0;
+        }
+        g->farm_dry_ms=0;
         /* Inputs are in; the crop needs game time. Not a stall. */
         snprintf(g->current_step,sizeof(g->current_step),"Waiting for %s to grow %s",p.building_name,item);
         g->last_progress_ms=GetTickCount();
@@ -981,7 +1002,7 @@ static void wgp_maybe_trigger_report(void *gw, WgpGoal *g)
     void *player=first_player_char(gw);
     Vec3 a={0,0,0}, p={0,0,0};
     if (!actor || !player || !char_position(actor,&a) || !char_position(player,&p)) return;
-    if (wgp_distance(a,p)>180.0f) return;
+    if (wgp_distance(a,p)>70.0f) return; /* report once she is back (bug 65) */
     char flag[MAX_PATH*2]={0};
     if (!stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag")) return;
     HANDLE h=CreateFileA(flag,GENERIC_WRITE,

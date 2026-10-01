@@ -13214,6 +13214,8 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
   return "unknown command: " + cmd;
 }
 
+namespace Stobe { namespace UI { extern bool g_initiativeAllowPlayerListener; } } // ChatBox.cpp
+
 // Server/KenshiFP ask for an NPC-initiated turn by writing lifelike_initiative.flag.
 static void UpdateLifelikeInitiativeFlag() {
   static DWORD lastPoll = 0;
@@ -13231,6 +13233,7 @@ static void UpdateLifelikeInitiativeFlag() {
   }
   EnterCriticalSection(&g_stateMutex);
   g_triggerBoredEvent = true;
+  Stobe::UI::g_initiativeAllowPlayerListener = true;
   LeaveCriticalSection(&g_stateMutex);
   Log("LIFELIKE_INITIATIVE: flag consumed, initiative turn armed");
 }
