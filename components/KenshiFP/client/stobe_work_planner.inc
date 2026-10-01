@@ -956,6 +956,17 @@ static void wgp_control_line(char *line)
     g_wgp_dirty=1;
 }
 
+/* One line per ended goal for the server's report turn (round 17f). */
+static void stobe_goal_report_append(const char *id, const char *actor, const char *type)
+{
+    char path[MAX_PATH*2]={0};
+    if (!stobe_mod_path(path,sizeof(path),"stobe_goal_report.request")) return;
+    FILE *f=fopen(path,"ab");
+    if (!f) return;
+    fprintf(f,"%s\t%s\t%s\n",id?id:"",actor?actor:"",type?type:"");
+    fclose(f);
+}
+
 static void wgp_maybe_trigger_report(void *gw, WgpGoal *g)
 {
     if (!g->used || g->report_triggered || (g->state!=1 && g->state!=2)) return;
@@ -971,6 +982,7 @@ static void wgp_maybe_trigger_report(void *gw, WgpGoal *g)
                          NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if (h!=INVALID_HANDLE_VALUE) {
         CloseHandle(h);
+        stobe_goal_report_append(g->id,g->actor,"work");
         g->report_triggered=1;
         g_wgp_dirty=1;
     }

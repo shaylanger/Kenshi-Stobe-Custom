@@ -1372,7 +1372,7 @@ static void stg_maybe_trigger_report(void *gw,StgGoal *g)
     if(!actor||!player||!char_position(actor,&a)||!char_position(player,&p)||wgp_distance(a,p)>180.0f)return;
     char flag[MAX_PATH*2]={0};if(!stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag"))return;
     HANDLE h=CreateFileA(flag,GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
-    if(h!=INVALID_HANDLE_VALUE){CloseHandle(h);g->report_triggered=1;g_stg_dirty=1;}
+    if(h!=INVALID_HANDLE_VALUE){CloseHandle(h);stobe_goal_report_append(g->id,g->actor,"task");g->report_triggered=1;g_stg_dirty=1;}
 }
 
 static void stg_tick_goal_guarded(void *gw,StgGoal *g)

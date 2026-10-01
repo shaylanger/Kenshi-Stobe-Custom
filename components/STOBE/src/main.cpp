@@ -13214,6 +13214,27 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
   return "unknown command: " + cmd;
 }
 
+// Server/KenshiFP ask for an NPC-initiated turn by writing lifelike_initiative.flag.
+static void UpdateLifelikeInitiativeFlag() {
+  static DWORD lastPoll = 0;
+  DWORD now = GetTickCount();
+  if (now - lastPoll < 1000)
+    return;
+  lastPoll = now;
+  const std::string path = GetTestInboxDir() + "\\lifelike_initiative.flag";
+  if (GetFileAttributesA(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+    return;
+  DeleteFileA(path.c_str());
+  if (!g_enableBoredEvents) {
+    Log("LIFELIKE_INITIATIVE: flag ignored (bored events disabled)");
+    return;
+  }
+  EnterCriticalSection(&g_stateMutex);
+  g_triggerBoredEvent = true;
+  LeaveCriticalSection(&g_stateMutex);
+  Log("LIFELIKE_INITIATIVE: flag consumed, initiative turn armed");
+}
+
 static void UpdateTestInbox(GameWorld *world, Character *sel) {
   static DWORD lastPoll = 0;
   DWORD now = GetTickCount();
@@ -13613,6 +13634,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
   if (pushToTalkEnabled)
     Stobe::Voice::Update();
   UpdateTestInbox(worldUi, sel);
+  UpdateLifelikeInitiativeFlag();
 
   // Player Cats and squads for the server (these used to run on the background loop).
   static DWORD lastPlayerSyncTick = 0;
