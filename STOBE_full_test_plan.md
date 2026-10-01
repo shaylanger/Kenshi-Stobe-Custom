@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `C3B41182…`, KenshiFP `2CCD6265…`, server round 19). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
+Last updated 2026-10-01 (after run 5 and round 19; Stobe.dll `C3B41182…`, KenshiFP `1281DC7A…`, server round 19). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–78 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `test-run-2026-10-01.md` (run 5).
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -111,6 +111,7 @@ What rounds 17–18 added (what these rows check):
 | H1 | 50x goal: compare to run 5 (`[202 s]` to the bread block) | Steps follow each other without long idles; pauses freeze the goal (bug 78) |
 | M1 | Long goal at 50x with food in a chest, Malzin's food low | `GOAL_MEAL hungry` → `ate from …` → `done`; goal resumes (round 19 meals) |
 | M2 | Same with no food anywhere | `GOAL_MEAL no food anywhere`; she says she's hungry and there's no food (server `Hunger report queued`); keeps working |
+| L83 | Save, give "Patrol the base", quit (or load the save) without saving | KenshiFP `GOAL_LOAD world time …`, then `GOAL_LOAD dropped id=… given_at=… world_now=…`; she isn't patrolling, no walk-back/report. A goal given **before** the save keeps running (bug 83) |
 | S1 | Game speed 3x/10x, long NPC line | TTS normal pitch, not overlapping (feature 3, not run in run 5) |
 Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as combat.
 
@@ -135,7 +136,6 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 | L3 (Shay looks) | Select Shay (no goal), first-person and third-person view | Label hidden for Shay; shows in both camera modes for Malzin. Log `GOAL_LABEL widget created`; no `GOAL_LABEL faulted` |
 
 ## 4. Known not working / open issues
-- **Bug 83 (open):** goals live outside the Kenshi save (`stobe_work_goals.tsv`, `stobe_task_goals.tsv` in the mod folder + server DB), so a goal given after a save comes back when an older save is loaded (run 6 patrol → starving Malzin → crash 82). Plan: store the in-game time a goal was given; on load, drop goals newer than the loaded world (silently, no walk-back/report); goals given before the save keep running.
 - **Bug 79 (next round of fixes, KenshiFP first-person):** in FP mode, looking at a squad member and clicking them switches control to that character (breaks Shay out of FP). Wanted: look-at + click on a squad member acts like it does for a normal NPC (show their details) without taking control. Controlling a squad member stays possible via their portrait in the squad list. Only change the look-at click path.
 - **Hand-overs land on the floor.** Her GIVE_ITEM to Shay often logs `dropped_at_feet=1` (tobacco, twice in run 3), even when Shay's pack may have room. Check Shay's free space; if it has room, it's a DLL bug.
 - **Refund queued outside a chat turn** waits for her next reply (4 min once in a fight). Round 15 only fixed this for settles after a voice payment.

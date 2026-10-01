@@ -81,6 +81,7 @@ typedef struct StgGoal {
     int max_spend;
     int spent;
     DWORD created_ms;
+    double created_gt;   /* in-game seconds when given (bug 83) */
     DWORD last_action_ms;
     DWORD last_progress_ms;
     uint32_t seen[STG_MAX_SEEN];
@@ -835,7 +836,7 @@ static int stg_spawn_work_goal(void *gw,void *actor,StgGoal *g,const char *item,
     strncpy(slot->item,item,sizeof(slot->item)-1);
     slot->quantity=qty;
     snprintf(slot->id,sizeof(slot->id),"sub-%.26s-%.28s",g->id,item);
-    slot->created_ms=stobe_game_ms();slot->last_progress_ms=stobe_game_ms();
+    slot->created_ms=stobe_game_ms();slot->last_progress_ms=stobe_game_ms();slot->created_gt=g->created_gt>0?g->created_gt:g_sgt_now;
     snprintf(slot->current_step,sizeof(slot->current_step),"Subgoal for %s: produce/obtain %d %s",g->id,qty,item);
     g_wgp_dirty=1;
     return 1;
@@ -1064,7 +1065,7 @@ static int stg_request_purchase_fallback(void *gw,void *actor,uint32_t actor_ser
     strncpy(slot->kind,"BUY",sizeof(slot->kind)-1);strncpy(slot->item,item,sizeof(slot->item)-1);
     strncpy(slot->target,trader_name,sizeof(slot->target)-1);
     slot->quantity=qty>0?qty:1;slot->max_spend=quote*slot->quantity;
-    slot->state=STG_STATE_APPROVAL;slot->created_ms=stobe_game_ms();slot->last_progress_ms=stobe_game_ms();
+    slot->state=STG_STATE_APPROVAL;slot->created_ms=stobe_game_ms();slot->last_progress_ms=stobe_game_ms();slot->created_gt=g_sgt_now;
     snprintf(slot->current_step,sizeof(slot->current_step),"Need approval to buy %d %s from %s for up to %d Cats",
              slot->quantity,item,trader_name[0]?trader_name:"nearby trader",slot->max_spend);
     snprintf(slot->reason,sizeof(slot->reason),"No owned/gatherable/producible route was found; buying is the last available nearby option");
@@ -1363,12 +1364,12 @@ static void stg_save(void)
         stg_clean(g->actor);stg_clean(g->kind);stg_clean(g->item);stg_clean(g->target);stg_clean(g->destination);stg_clean(g->current_step);stg_clean(g->reason);
         char seen[1024]={0};
         for(int j=0;j<g->seen_count;j++){char p[24];snprintf(p,sizeof(p),"%u,",g->seen[j]);if(strlen(seen)+strlen(p)<sizeof(seen)-1)strcat(seen,p);}
-        fprintf(f,"%s\t%u\t%s\t%s\t%s\t%s\t%s\t%d\t%.3f\t%.3f\t%.3f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
+        fprintf(f,"%s\t%u\t%s\t%s\t%s\t%s\t%s\t%d\t%.3f\t%.3f\t%.3f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%.0f\n",
             g->id,g->actor_serial,g->actor,g->kind,g->item,g->target,g->destination,
             g->has_dest,g->dest.x,g->dest.y,g->dest.z,
             g->quantity,g->completed,g->state,g->store_after,g->minimum_stock,
             g->explicit_purchase,g->approved_purchase,g->max_spend,g->spent,
-            g->current_step,g->reason,seen);
+            g->current_step,g->reason,seen,g->created_gt);
     }
     fclose(f);g_stg_dirty=0;
 }
@@ -1392,8 +1393,8 @@ static void stg_load(void)
     char path[MAX_PATH*2]={0};if(!stobe_mod_path(path,sizeof(path),"stobe_task_goals.tsv"))return;
     FILE *f=fopen(path,"rb");if(!f)return;char line[6144];
     while(fgets(line,sizeof(line),f)){
-        char *fields[23]={0};int n=0;char *p=line;
-        while(n<23){fields[n++]=p;char *t=strchr(p,'\t');if(!t)break;*t='\0';p=t+1;}
+        char *fields[24]={0};int n=0;char *p=line;
+        while(n<24){fields[n++]=p;char *t=strchr(p,'\t');if(!t)break;*t='\0';p=t+1;}
         if(n<22)continue;char *e=strpbrk(fields[n-1],"\r\n");if(e)*e='\0';
         StgGoal g;memset(&g,0,sizeof(g));g.used=1;
         strncpy(g.id,fields[0],63);g.actor_serial=(uint32_t)strtoul(fields[1],NULL,10);
@@ -1405,6 +1406,7 @@ static void stg_load(void)
         g.approved_purchase=atoi(fields[17]);g.max_spend=atoi(fields[18]);g.spent=atoi(fields[19]);
         strncpy(g.current_step,fields[20],219);strncpy(g.reason,fields[21],319);
         if(n>22&&fields[22]){char *ss=fields[22];while(ss&&*ss&&g.seen_count<STG_MAX_SEEN){char *c=strchr(ss,',');if(c)*c='\0';uint32_t v=(uint32_t)strtoul(ss,NULL,10);if(v)g.seen[g.seen_count++]=v;if(!c)break;ss=c+1;}}
+        if(n>23)g.created_gt=atof(fields[23]);
         g.created_ms=stobe_game_ms();g.last_progress_ms=stobe_game_ms();
         for(int i=0;i<STG_MAX_GOALS;i++)if(!g_stg_goals[i].used){g_stg_goals[i]=g;break;}
     }
@@ -1431,7 +1433,7 @@ static void stg_consume_requests(void)
                 if(n>11&&v[11]&&*v[11]){g->has_dest=1;g->dest.x=(float)atof(v[11]);g->dest.y=(float)atof(v[12]);g->dest.z=(float)atof(v[13]);}
                 if(n>14)g->explicit_purchase=atoi(v[14]);
                 if(!strcmp(g->kind,"BUY")&&g->explicit_purchase){g->approved_purchase=1;g->state=STG_STATE_ACTIVE;}
-                g->created_ms=stobe_game_ms();g->last_progress_ms=stobe_game_ms();
+                g->created_ms=stobe_game_ms();g->last_progress_ms=stobe_game_ms();g->created_gt=g_sgt_now;
                 g->rt_seen_active=1; /* walk back + report even if it ends at once */
                 snprintf(g->current_step,sizeof(g->current_step),"Accepted %s goal",g->kind);g_stg_dirty=1;
                 logline("[stobe] TASK_GOAL accepted id=%s actor=%s kind=%s item=%s qty=%d target=%s dest=%s",
@@ -1842,7 +1844,15 @@ static void stobe_task_goal_tick(void *gw)
     DWORD now=stobe_game_ms();if(g_stg_next_tick&&(LONG)(now-g_stg_next_tick)<0)return;
     if(real_last&&(LONG)(real-real_last)<STOBE_GOAL_MIN_TICK_REAL_MS)return;
     real_last=real;g_stg_next_tick=now+STG_TICK_MS;
-    stg_load();stg_consume_requests();stg_controls();
+    stg_load();stobe_world_time_update(gw);stg_consume_requests();stg_controls();
+    for(int i=0;i<STG_MAX_GOALS;i++){
+        StgGoal *g=&g_stg_goals[i];
+        if(!g->used||(g->state!=STG_STATE_ACTIVE&&g->state!=STG_STATE_PAUSED&&g->state!=STG_STATE_APPROVAL)||!stobe_goal_from_future(g->created_gt))continue;
+        g->state=STG_STATE_CANCELLED;g->report_triggered=1;g->rt_return_started=1;g->rt_seen_active=0;
+        strncpy(g->reason,"given after the loaded save was made; dropped on load",sizeof(g->reason)-1);
+        logline("[stobe] GOAL_LOAD dropped id=%s actor=%s kind=%s given_at=%.0f world_now=%.0f",g->id,g->actor,g->kind,g->created_gt,g_sgt_now);
+        g_stg_dirty=1;
+    }
     uint32_t active[STG_MAX_GOALS]={0};int ac=0;
     for(int i=0;i<STG_MAX_GOALS;i++){
         StgGoal *g=&g_stg_goals[i];if(!g->used)continue;

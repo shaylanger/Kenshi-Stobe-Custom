@@ -62,6 +62,7 @@ typedef struct WgpGoal {
     char current_step[192];
     char reason[256];
     DWORD created_ms;
+    double created_gt;   /* in-game seconds when given (bug 83); 0 = unknown */
     DWORD last_progress_ms;
     DWORD last_order_ms;
     float last_distance;
@@ -123,6 +124,40 @@ static DWORD stobe_game_ms(void)
 {
     if (!g_sgc_real_last) return GetTickCount();
     return (DWORD)(unsigned long long)g_sgc_game_ms;
+}
+
+/* In-game world time (bug 83): goals live in our own files, not in the Kenshi
+ * save, so a goal given after a save came back when that older save was
+ * loaded. Goals are stamped with the world time they were given; any goal
+ * stamped later than the loaded world is dropped silently. */
+#define KLIB_GW_GAMETIME_SYM "?getTimeStamp_inGameHours@GameWorld@@QEAA?AVTimeOfDay@@XZ"
+typedef void *(*gw_gametime_t)(void *, double *);
+static double g_sgt_now;      /* world seconds at the last tick, 0 = unknown */
+static int g_sgt_dead;
+static void stobe_world_time_update(void *gw)
+{
+    if (g_sgt_dead || !gw || !first_player_char(gw)) return; /* world not loaded */
+    static gw_gametime_t fn;
+    if (!fn) {
+        HMODULE k = GetModuleHandleA("KenshiLib.dll");
+        if (k) fn = (gw_gametime_t)GetProcAddress(k, KLIB_GW_GAMETIME_SYM);
+        if (!fn) { g_sgt_dead = 1; logline("[stobe] GOAL_LOAD world time export missing -- save check off"); return; }
+    }
+    double hours = 0;
+    if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_sgt_dead = 1; logline("[stobe] GOAL_LOAD world time faulted -- save check off"); return; }
+    guard_arm();
+    fn(gw, &hours); /* TimeOfDay comes back through the hidden pointer: one double, hours */
+    g_guard_armed = 0;
+    if (hours > 0.01 && hours < 1.0e7) {
+        if (g_sgt_now <= 0) logline("[stobe] GOAL_LOAD world time %.0f s", hours * 3600.0);
+        g_sgt_now = hours * 3600.0;
+    }
+}
+
+/* 1 when a goal was given after the world we are in now (an older save was loaded). */
+static int stobe_goal_from_future(double created_gt)
+{
+    return created_gt > 0 && g_sgt_now > 0 && created_gt > g_sgt_now + 30.0;
 }
 
 static WgpGoal g_wgp_goals[WGP_MAX_GOALS];
@@ -919,10 +954,10 @@ static void wgp_save(void)
             snprintf(part,sizeof(part),"%s=%d;",g->subs[s].item,g->subs[s].queued);
             if (strlen(subbuf)+strlen(part)<sizeof(subbuf)-1) strcat(subbuf,part);
         }
-        fprintf(f,"%s\t%u\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%.3f\t%.3f\t%.3f\t%s\t%d\t%d\t%s\t%s\t%d\t%s\n",
+        fprintf(f,"%s\t%u\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%.3f\t%.3f\t%.3f\t%s\t%d\t%d\t%s\t%s\t%d\t%s\t%.0f\n",
             g->id,g->actor_serial,g->actor,g->item,g->quantity,g->baseline,g->completed,
             g->queued_root,g->has_dest,g->dest.x,g->dest.y,g->dest.z,g->dest_label,
-            g->state,g->last_count,g->current_step,g->reason,g->report_triggered,subbuf);
+            g->state,g->last_count,g->current_step,g->reason,g->report_triggered,subbuf,g->created_gt);
     }
     fclose(f);
     g_wgp_dirty=0;
@@ -958,10 +993,10 @@ static void wgp_load(void)
         WgpGoal g;
         memset(&g,0,sizeof(g));
         g.baseline=-1;
-        char *fields[19]={0};
+        char *fields[20]={0};
         int n=0;
         char *p=line;
-        while (n<19) {
+        while (n<20) {
             fields[n++]=p;
             char *t=strchr(p,'\t');
             if (!t) break;
@@ -989,6 +1024,7 @@ static void wgp_load(void)
         strncpy(g.current_step,fields[15],sizeof(g.current_step)-1);
         strncpy(g.reason,fields[16],sizeof(g.reason)-1);
         if (n>17) g.report_triggered=atoi(fields[17]);
+        if (n>19) g.created_gt=atof(fields[19]);
         if (n>18 && fields[18]) {
             char *subp=fields[18];
             while (subp && *subp) {
@@ -1079,6 +1115,7 @@ static void wgp_consume_requests(void *gw)
                     slot->dest.z=(float)atof(fields[8]);
                 }
                 slot->created_ms=stobe_game_ms();
+                slot->created_gt=g_sgt_now;
                 slot->last_progress_ms=stobe_game_ms();
                 slot->rt_seen_active=1; /* walk back + report even if it blocks at once (R2) */
                 snprintf(slot->current_step,sizeof(slot->current_step),
@@ -1221,8 +1258,17 @@ static void stobe_work_goal_tick(void *gw)
     real_last=real;
     g_wgp_next_tick=now+WGP_TICK_MS;
     wgp_load();
+    stobe_world_time_update(gw);
     wgp_consume_requests(gw);
     wgp_controls();
+    for (int i=0;i<WGP_MAX_GOALS;i++) {
+        WgpGoal *g=&g_wgp_goals[i];
+        if (!g->used || (g->state!=0 && g->state!=4) || !stobe_goal_from_future(g->created_gt)) continue;
+        g->state=3; g->report_triggered=1; g->rt_return_started=1; g->rt_seen_active=0;
+        strncpy(g->reason,"given after the loaded save was made; dropped on load",sizeof(g->reason)-1);
+        logline("[stobe] GOAL_LOAD dropped id=%s actor=%s given_at=%.0f world_now=%.0f",g->id,g->actor,g->created_gt,g_sgt_now);
+        g_wgp_dirty=1;
+    }
 
     uint32_t active_actors[WGP_MAX_GOALS]={0};
     int active_actor_count=0;
