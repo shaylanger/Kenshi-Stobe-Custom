@@ -137,6 +137,7 @@ static wgp_available_crafts_t g_wgp_available_crafts;
 static wgp_add_craft_t g_wgp_add_craft;
 
 static int try_move_to_pos(void *pc, const Vec3 *tgt);
+static int sgm_meal_tick(void *gw,uint32_t serial,const char *name,char *step,size_t stepsz); /* stobe_task_goals.inc */
 static int stg_request_purchase_fallback(void *gw,void *actor,uint32_t actor_serial,const char *actor_name,const char *parent_goal_id,const char *item,int qty,char *reason,size_t reason_sz);
 static void *wgp_vcall_ptr(void *obj, size_t byte_off);
 static int wgp_building_special(void *building);
@@ -1235,7 +1236,10 @@ static void stobe_work_goal_tick(void *gw)
             }
             if (!already_running) {
                 active_actors[active_actor_count++]=g->actor_serial;
-                wgp_goal_tick_guarded(gw,g);
+                if (sgm_meal_tick(gw,g->actor_serial,g->actor,g->current_step,sizeof(g->current_step)))
+                    g->last_progress_ms=stobe_game_ms(); /* eating: the goal waits */
+                else
+                    wgp_goal_tick_guarded(gw,g);
                 if (g->state!=0) g->rt_end_ms=stobe_game_ms();
             } else if (g->baseline<0) {
                 snprintf(g->current_step,sizeof(g->current_step),

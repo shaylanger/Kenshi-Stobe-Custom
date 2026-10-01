@@ -32,3 +32,12 @@ $GLOBALS['STOBE_CURRENT_PLAYER_MESSAGE'] = 'Put the mead back in the chest.';
 $r = stobeTaskStorePronounItems('R19Npc', 'Mead'); t("77 no pronoun", $r === [], $r);
 $db->exec("DELETE FROM stobe_task_goal_runtime WHERE actor_name='R19Npc'");
 echo "ok=$ok bad=$bad\n";
+// 73 (run after patch_r19_bug73): roster state markers
+if (function_exists('stobeRosterSplitState')) {
+    $GLOBALS['STOBE_ROSTER_STATES'] = [];
+    t("73 split dead", stobeRosterSplitState('Sorth [Dust Bandit] (dead)') === ['Sorth [Dust Bandit]', 'dead']);
+    t("73 split ko", stobeRosterSplitState(' Wendy (unconscious) ') === ['Wendy', 'unconscious']);
+    t("73 split plain", stobeRosterSplitState('Malzin') === ['Malzin', '']);
+    t("73 state lookup", stobeRosterState('sorth [dust bandit]') === 'dead' && stobeRosterState('Malzin') === '');
+    echo "ok=$ok bad=$bad\n";
+}

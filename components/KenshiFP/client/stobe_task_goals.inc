@@ -1703,6 +1703,114 @@ static void stobe_goal_label_update(void *gw)
     g_guard_armed=0;
 }
 
+/* ---- meals during goals (round 19) ----
+ * Goals used to work her until she passed out from hunger. While a goal is
+ * active and her food level (Kenshi: 300 - hunger + fed) is low, the goal waits
+ * while she eats: from her pack, else from the nearest base storage with food
+ * (walks there). No food anywhere: she says so once and keeps working. */
+#define SGM_MAX 8
+#define SGM_START_LEVEL 120.0f   /* 40 % of 300 */
+#define SGM_STOP_LEVEL 240.0f    /* 80 % */
+#define SGM_MAX_ITEMS 6
+#define CHAR_MEDICAL 0x458
+#define MED_HUNGER 0x60
+#define MED_FED 0x64
+#define KLIB_EATITEM_SYM "?eatItem@Character@@QEAA_NPEAVItem@@PEAVInventory@@@Z"
+typedef unsigned char (*chr_eatitem_t)(void *, void *, void *);
+typedef struct { uint32_t serial; int eating; int eaten; int warned; float last_d; int still; DWORD next_ms; } SgmMeal;
+static SgmMeal g_sgm[SGM_MAX];
+static chr_eatitem_t g_chr_eatitem;
+static int g_sgm_dead;
+
+static int sgm_food_level(void *actor,float *out)
+{
+    unsigned char *m=(unsigned char *)actor+CHAR_MEDICAL;
+    if(!readable(m+MED_HUNGER,8))return 0;
+    float h=*(float *)(m+MED_HUNGER),f=*(float *)(m+MED_FED);
+    float lvl=300.0f-h+f;
+    if(!(lvl>-200.0f&&lvl<2000.0f))return 0;
+    *out=lvl;return 1;
+}
+
+static SgmMeal *sgm_slot(uint32_t serial)
+{
+    SgmMeal *free_slot=NULL;
+    for(int i=0;i<SGM_MAX;i++){if(g_sgm[i].serial==serial)return &g_sgm[i];if(!g_sgm[i].serial&&!free_slot)free_slot=&g_sgm[i];}
+    if(free_slot){memset(free_slot,0,sizeof(*free_slot));free_slot->serial=serial;}
+    return free_slot;
+}
+
+static int sgm_eat_one(void *actor,void *inv)
+{
+    void *food=stg_first_matching(inv,"food");
+    if(!food)return 0;
+    if(setjmp(g_guard_jb)){g_guard_armed=0;g_sgm_dead=1;logline("[stobe] GOAL_MEAL eat faulted -- meals disabled");return 0;}
+    guard_arm();
+    int ok=g_chr_eatitem(actor,food,inv)!=0;
+    g_guard_armed=0;
+    return ok;
+}
+
+/* 1 = she is busy with a meal this tick (the goal waits); step gets the status. */
+static int sgm_meal_tick(void *gw,uint32_t serial,const char *name,char *step,size_t stepsz)
+{
+    if(g_sgm_dead||!serial)return 0;
+    if(!g_chr_eatitem){
+        HMODULE k=GetModuleHandleA("KenshiLib.dll");
+        if(k)g_chr_eatitem=(chr_eatitem_t)GetProcAddress(k,KLIB_EATITEM_SYM);
+        if(!g_chr_eatitem){g_sgm_dead=1;logline("[stobe] GOAL_MEAL eatItem export missing -- meals disabled");return 0;}
+    }
+    void *actor=wgp_find_squad_actor(gw,serial,name);
+    float lvl=0;if(!actor||!sgm_food_level(actor,&lvl))return 0;
+    int pr=char_prone_state(actor);if(pr==2||pr==3||pr==4)return 0;
+    SgmMeal *m=sgm_slot(serial);if(!m)return 0;
+    if(!m->eating){
+        if(lvl>=SGM_START_LEVEL){if(lvl>=SGM_STOP_LEVEL)m->warned=0;return 0;}
+        m->eating=1;m->eaten=0;m->last_d=0;m->still=0;
+        logline("[stobe] GOAL_MEAL hungry actor=%s level=%.0f",name,lvl);
+    }
+    DWORD now=stobe_game_ms();
+    if(lvl>=SGM_STOP_LEVEL||m->eaten>=SGM_MAX_ITEMS){
+        logline("[stobe] GOAL_MEAL done actor=%s ate=%d level=%.0f",name,m->eaten,lvl);
+        m->eating=0;m->warned=0;return 0;
+    }
+    if(m->next_ms&&(LONG)(now-m->next_ms)<0){snprintf(step,stepsz,"Eating (hungry)");return 1;}
+    void *own=g_stobe_getinv(actor);
+    if(own&&stg_count_matching(own,"food")>0){
+        if(sgm_eat_one(actor,own)){m->eaten++;m->next_ms=now+4000;logline("[stobe] GOAL_MEAL ate from her pack actor=%s level=%.0f",name,lvl);}
+        else{m->eating=0;logline("[stobe] GOAL_MEAL could not eat from her pack actor=%s",name);return 0;}
+        snprintf(step,stepsz,"Eating (hungry)");return 1;
+    }
+    float d=0;char sn[160]={0};
+    void *store=stg_nearest_storage(gw,actor,"food",&d,sn,sizeof(sn));
+    if(!store){
+        m->eating=0;
+        if(!m->warned){
+            m->warned=1;
+            logline("[stobe] GOAL_MEAL no food anywhere actor=%s level=%.0f -- keeps working",name,lvl);
+            char flag[MAX_PATH*2]={0};
+            if(stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag")){
+                HANDLE h=CreateFileA(flag,GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+                if(h!=INVALID_HANDLE_VALUE){CloseHandle(h);char id[64];snprintf(id,sizeof(id),"hunger-%u-%u",serial,(unsigned)GetTickCount());stobe_goal_report_append(id,name,"hunger");}
+            }
+        }
+        return 0;
+    }
+    if(d>WGP_HAUL_REACH){
+        if(m->last_d<=0||d<m->last_d-3.0f){m->last_d=d;m->still=0;}else m->still++;
+        if(!(d<=WGP_HAUL_NEAR&&m->still>=4)){
+            if(m->still>40){m->eating=0;logline("[stobe] GOAL_MEAL can't reach %s actor=%s",sn,name);return 0;}
+            Vec3 t=*(Vec3 *)((uintptr_t)store+0x48);try_move_to_pos(actor,&t);
+            snprintf(step,stepsz,"Hungry: walking to %s for food (%.0f)",sn[0]?sn:"storage",d);
+            return 1;
+        }
+    }
+    if(sgm_eat_one(actor,wgp_building_inventory(store))){m->eaten++;m->next_ms=now+4000;m->last_d=0;m->still=0;logline("[stobe] GOAL_MEAL ate from %s actor=%s level=%.0f",sn,name,lvl);}
+    else{m->eating=0;logline("[stobe] GOAL_MEAL could not eat from %s actor=%s",sn,name);return 0;}
+    snprintf(step,stepsz,"Eating at %s (hungry)",sn[0]?sn:"storage");
+    return 1;
+}
+
 static void stobe_task_goal_tick(void *gw)
 {
     static DWORD real_last;DWORD real=GetTickCount();
@@ -1720,6 +1828,8 @@ static void stobe_task_goal_tick(void *gw)
                 active[ac++]=g->actor_serial;
                 if(strcmp(g->kind,"STOCK")&&stg_actor_has_active_work(g->actor_serial))
                     snprintf(g->current_step,sizeof(g->current_step),"Queued behind an active production goal");
+                else if(sgm_meal_tick(gw,g->actor_serial,g->actor,g->current_step,sizeof(g->current_step)))
+                    g->last_progress_ms=stobe_game_ms(); /* eating: the goal waits */
                 else
                     stg_tick_goal_guarded(gw,g);
             }
