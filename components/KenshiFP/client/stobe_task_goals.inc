@@ -1723,7 +1723,8 @@ static void stobe_goal_label_update(void *gw)
 #define MED_FED 0x64
 #define KLIB_EATITEM_SYM "?eatItem@Character@@QEAA_NPEAVItem@@PEAVInventory@@@Z"
 typedef unsigned char (*chr_eatitem_t)(void *, void *, void *);
-typedef struct { uint32_t serial; int eating; int eaten; int warned; float last_d; int still; DWORD next_ms; } SgmMeal;
+typedef struct { uint32_t serial; int eating; int eaten; int warned; float last_d; int still; DWORD next_ms; DWORD retry_ms; } SgmMeal;
+#define SGM_NOFOOD_RETRY_MS 600000 /* bug 92: no food anywhere -> look again in 10 game min */
 static SgmMeal g_sgm[SGM_MAX];
 static chr_eatitem_t g_chr_eatitem;
 static int g_sgm_dead;
@@ -1792,12 +1793,13 @@ static int sgm_meal_tick_body(void *gw,uint32_t serial,const char *name,char *st
     int pr=char_prone_state(actor);if(pr!=0&&pr!=1)return 0; /* down, KO'd or not loaded yet */
     if(g_stg_isdead&&g_stg_isdead(actor))return 0;
     SgmMeal *m=sgm_slot(serial);if(!m)return 0;
+    DWORD now=stobe_game_ms();
     if(!m->eating){
-        if(lvl>=SGM_START_LEVEL){if(lvl>=SGM_STOP_LEVEL)m->warned=0;return 0;}
-        m->eating=1;m->eaten=0;m->last_d=0;m->still=0;
+        if(lvl>=SGM_START_LEVEL){if(lvl>=SGM_STOP_LEVEL)m->warned=0;m->retry_ms=0;return 0;}
+        if(m->retry_ms&&(LONG)(now-m->retry_ms)<0)return 0; /* bug 92 */
+        m->eating=1;m->eaten=0;m->last_d=0;m->still=0;m->retry_ms=0;
         logline("[stobe] GOAL_MEAL hungry actor=%s level=%.0f",name,lvl);
     }
-    DWORD now=stobe_game_ms();
     if(lvl>=SGM_STOP_LEVEL||m->eaten>=SGM_MAX_ITEMS){
         logline("[stobe] GOAL_MEAL done actor=%s ate=%d level=%.0f",name,m->eaten,lvl);
         m->eating=0;m->warned=0;return 0;
@@ -1812,7 +1814,7 @@ static int sgm_meal_tick_body(void *gw,uint32_t serial,const char *name,char *st
     float d=0;char sn[160]={0};
     void *store=stg_nearest_storage(gw,actor,"food",&d,sn,sizeof(sn));
     if(!store){
-        m->eating=0;
+        m->eating=0;m->retry_ms=now+SGM_NOFOOD_RETRY_MS;
         if(!m->warned){
             m->warned=1;
             logline("[stobe] GOAL_MEAL no food anywhere actor=%s level=%.0f -- keeps working",name,lvl);
