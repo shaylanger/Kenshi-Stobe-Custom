@@ -1423,6 +1423,7 @@ static void stg_consume_requests(void)
                 if(n>14)g->explicit_purchase=atoi(v[14]);
                 if(!strcmp(g->kind,"BUY")&&g->explicit_purchase){g->approved_purchase=1;g->state=STG_STATE_ACTIVE;}
                 g->created_ms=GetTickCount();g->last_progress_ms=GetTickCount();
+                g->rt_seen_active=1; /* walk back + report even if it ends at once */
                 snprintf(g->current_step,sizeof(g->current_step),"Accepted %s goal",g->kind);g_stg_dirty=1;
                 logline("[stobe] TASK_GOAL accepted id=%s actor=%s kind=%s item=%s qty=%d target=%s dest=%s",
                         g->id,g->actor,g->kind,g->item,g->quantity,g->target,g->destination);
@@ -1481,9 +1482,11 @@ static void stg_maybe_trigger_report(void *gw,StgGoal *g)
     if(!g->used||g->report_triggered)return;
     if(g->state!=STG_STATE_COMPLETE&&g->state!=STG_STATE_BLOCKED&&g->state!=STG_STATE_APPROVAL)return;
     void *actor=wgp_find_squad_actor(gw,g->actor_serial,g->actor);
-    void *player=first_player_char(gw);
+    void *player=wgp_return_target(gw,actor);
     Vec3 a={0,0,0},p={0,0,0};
-    if(!actor||!player||!char_position(actor,&a)||!char_position(player,&p)||wgp_distance(a,p)>70.0f)return; /* report once she is back (bug 65) */
+    if(!actor||!player||!char_position(actor,&a)||!char_position(player,&p))return;
+    int late=g->rt_end_ms&&(LONG)(GetTickCount()-g->rt_end_ms)>WGP_REPORT_FALLBACK_MS;
+    if(wgp_distance(a,p)>70.0f&&!late)return; /* report once she is back (bug 65) */
     char flag[MAX_PATH*2]={0};if(!stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag"))return;
     HANDLE h=CreateFileA(flag,GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if(h!=INVALID_HANDLE_VALUE){CloseHandle(h);stobe_goal_report_append(g->id,g->actor,"task");g->report_triggered=1;g_stg_dirty=1;}
@@ -1506,7 +1509,7 @@ static void stg_tick_goal_guarded(void *gw,StgGoal *g)
 #define SGR_STOP_DIST 60.0f
 #define SGR_GIVEUP_MS 180000
 #define SGR_REORDER_MS 4000
-typedef struct { uint32_t serial; char actor[128]; DWORD until_ms; DWORD next_ms; int cleared; } SgrReturn;
+typedef struct { uint32_t serial; char actor[128]; DWORD until_ms; DWORD next_ms; int cleared; int last_skip; int logged_target; } SgrReturn;
 static SgrReturn g_sgr[SGR_MAX];
 
 static int sgr_actor_busy(uint32_t serial)
@@ -1541,9 +1544,17 @@ static void sgr_tick(void *gw)
         if((LONG)(now-r->next_ms)<0)continue;
         r->next_ms=now+SGR_REORDER_MS;
         void *actor=wgp_find_squad_actor(gw,r->serial,r->actor);
-        void *player=first_player_char(gw);
+        void *player=actor?wgp_return_target(gw,actor):NULL;
         Vec3 a={0,0,0},p={0,0,0};
-        if(!actor||!player||actor==player||!char_position(actor,&a)||!char_position(player,&p))continue;
+        int skip=!actor?1:!player?2:!char_position(actor,&a)?3:!char_position(player,&p)?4:0;
+        if(!skip){int pr=char_prone_state(actor);if(pr==2||pr==3||pr==4)skip=5;}
+        if(skip){
+            /* bug 75: these used to fail silently until the 180 s give-up */
+            static const char *why[]={"","actor not in squad","no other squad member to return to","actor position","target position","actor is down"};
+            if(skip!=r->last_skip)logline("[stobe] GOAL_RETURN waiting actor=%s reason=%s",r->actor,why[skip]);
+            r->last_skip=skip;continue;
+        }
+        r->last_skip=0;
         if(wgp_distance(a,p)<=SGR_STOP_DIST){
             logline("[stobe] GOAL_RETURN arrived actor=%s",r->actor);
             memset(r,0,sizeof(*r));continue;
@@ -1552,6 +1563,11 @@ static void sgr_tick(void *gw)
             /* Her goal's operate/collect orders would win over the walk-back (bug 50). */
             if(stobe_resolve_fight_exports()){void *o=g_stobe_getorders(actor);if(o&&readable(o,8))g_stobe_clear_orders(o);}
             r->cleared=1;
+        }
+        if(!r->logged_target){
+            char tn[128]={0};stg_char_name(player,tn,sizeof(tn));
+            logline("[stobe] GOAL_RETURN walking actor=%s to=%s dist=%.0f",r->actor,tn,wgp_distance(a,p));
+            r->logged_target=1;
         }
         if(!try_move_to_pos(actor,&p)){logline("[stobe] GOAL_RETURN move failed actor=%s",r->actor);memset(r,0,sizeof(*r));}
     }

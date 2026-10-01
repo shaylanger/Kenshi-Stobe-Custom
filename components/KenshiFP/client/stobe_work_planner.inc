@@ -1009,6 +1009,7 @@ static void wgp_consume_requests(void *gw)
                 }
                 slot->created_ms=GetTickCount();
                 slot->last_progress_ms=GetTickCount();
+                slot->rt_seen_active=1; /* walk back + report even if it blocks at once (R2) */
                 snprintf(slot->current_step,sizeof(slot->current_step),
                          "Accepted goal: make/obtain %d %s",slot->quantity,slot->item);
                 g_wgp_dirty=1;
@@ -1078,14 +1079,41 @@ static void stobe_goal_report_append(const char *id, const char *actor, const ch
     fclose(f);
 }
 
+/* Who a goal worker walks back / reports to: the selected squad member, unless
+ * that is the worker herself (selected to watch her, or the selection read fell
+ * back to squad slot 0); then the nearest other conscious squad member (bug 75). */
+static void *wgp_return_target(void *gw, void *actor)
+{
+    void *sel=first_player_char(gw);
+    if (sel && sel!=actor && char_valid(sel)) return sel;
+    if (!actor || !readable(gw, GW_PLAYER + 8)) return NULL;
+    void *player=*(void **)((uintptr_t)gw+GW_PLAYER);
+    if (!readable(player,PI_PLAYERCHARS+LEK_STUFF+8)) return NULL;
+    uint32_t count=*(uint32_t *)((uintptr_t)player+PI_PLAYERCHARS+LEK_COUNT);
+    void **stuff=*(void ***)((uintptr_t)player+PI_PLAYERCHARS+LEK_STUFF);
+    if (!stuff || count>4096 || !readable(stuff,count*sizeof(void*))) return NULL;
+    Vec3 a={0,0,0}; if (!char_position(actor,&a)) return NULL;
+    void *best=NULL; float bd=1e30f;
+    for (uint32_t i=0;i<count;i++) {
+        void *c=stuff[i]; Vec3 p={0,0,0};
+        if (c==actor || !char_valid(c) || !char_position(c,&p)) continue;
+        int pr=char_prone_state(c); if (pr==2||pr==3||pr==4) continue;
+        float d=wgp_distance(a,p); if (d<bd) { bd=d; best=c; }
+    }
+    return best;
+}
+
+#define WGP_REPORT_FALLBACK_MS 200000 /* report anyway if she never gets back */
+
 static void wgp_maybe_trigger_report(void *gw, WgpGoal *g)
 {
     if (!g->used || g->report_triggered || (g->state!=1 && g->state!=2)) return;
     void *actor=wgp_find_squad_actor(gw,g->actor_serial,g->actor);
-    void *player=first_player_char(gw);
+    void *player=wgp_return_target(gw,actor);
     Vec3 a={0,0,0}, p={0,0,0};
     if (!actor || !player || !char_position(actor,&a) || !char_position(player,&p)) return;
-    if (wgp_distance(a,p)>70.0f) return; /* report once she is back (bug 65) */
+    int late=g->rt_end_ms && (LONG)(GetTickCount()-g->rt_end_ms)>WGP_REPORT_FALLBACK_MS;
+    if (wgp_distance(a,p)>70.0f && !late) return; /* report once she is back (bug 65) */
     char flag[MAX_PATH*2]={0};
     if (!stobe_mod_path(flag,sizeof(flag),"lifelike_initiative.flag")) return;
     HANDLE h=CreateFileA(flag,GENERIC_WRITE,
