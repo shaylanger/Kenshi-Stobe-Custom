@@ -2060,7 +2060,11 @@ std::string BuildMedicalPayload(Character *character) {
   json += "\"max_blood\": " + ToString((int)bloodMaxValue) + ",";
   json += "\"blood_rate\": " + ToString(med->currentBleedRate) + ",";
 
-  float hungerVal = (300.0f - med->hunger) + med->fed;
+  // hunger is fullness (0..300, falls as she gets hungry); fed is food still
+  // digesting. The old 300 - hunger read a starving NPC as well fed (bug 81).
+  float hungerVal = med->hunger + med->fed;
+  if (hungerVal > 300)
+    hungerVal = 300;
   if (hungerVal < 0)
     hungerVal = 0;
   json += "\"hunger\": " + ToString((int)hungerVal) + ",";

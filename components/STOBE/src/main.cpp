@@ -5337,7 +5337,7 @@ static bool ResolveNpcHungerMetrics(Character *npc, float &hungerOut,
   if (fedOut < 0.0f) {
     fedOut = 0.0f;
   }
-  satietyOut = (300.0f - hungerOut) + fedOut;
+  satietyOut = hungerOut + fedOut; // hunger is fullness, not hungriness (bug 81)
   if (satietyOut < 0.0f) {
     satietyOut = 0.0f;
   }
@@ -5855,11 +5855,13 @@ static std::map<std::string, int> DetectFoodConsumptionLossByKey(
     return consumedByKey;
   }
 
-  const float hungerDrop = hungerBefore - hungerAfter;
+  // Eating raises hunger (fullness) or fed; it falls on its own over time,
+  // so a drop is not a meal (bug 81).
+  const float hungerRise = hungerAfter - hungerBefore;
   const float fedRise = fedAfter - fedBefore;
   const float satietyRise = satietyAfter - satietyBefore;
   const bool hasConsumptionSignal =
-      hungerDrop >= 0.10f || fedRise >= 0.10f || satietyRise >= 0.50f;
+      hungerRise >= 0.10f || fedRise >= 0.10f || satietyRise >= 0.50f;
   if (!hasConsumptionSignal) {
     return consumedByKey;
   }

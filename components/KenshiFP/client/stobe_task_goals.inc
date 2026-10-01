@@ -1705,12 +1705,12 @@ static void stobe_goal_label_update(void *gw)
 
 /* ---- meals during goals (round 19) ----
  * Goals used to work her until she passed out from hunger. While a goal is
- * active and her food level (Kenshi: 300 - hunger + fed) is low, the goal waits
+ * active and her food level (Kenshi: hunger = fullness 0..300, plus fed = still digesting; bug 81) is low, the goal waits
  * while she eats: from her pack, else from the nearest base storage with food
  * (walks there). No food anywhere: she says so once and keeps working. */
 #define SGM_MAX 8
-#define SGM_START_LEVEL 120.0f   /* 40 % of 300 */
-#define SGM_STOP_LEVEL 240.0f    /* 80 % */
+#define SGM_START_LEVEL 150.0f   /* half of 300; KO thresholds seen: 76-87 */
+#define SGM_STOP_LEVEL 250.0f
 #define SGM_MAX_ITEMS 6
 #define CHAR_MEDICAL 0x458
 #define MED_HUNGER 0x60
@@ -1727,7 +1727,7 @@ static int sgm_food_level(void *actor,float *out)
     unsigned char *m=(unsigned char *)actor+CHAR_MEDICAL;
     if(!readable(m+MED_HUNGER,8))return 0;
     float h=*(float *)(m+MED_HUNGER),f=*(float *)(m+MED_FED);
-    float lvl=300.0f-h+f;
+    float lvl=h+f; /* hunger is fullness (73 = starving), not hungriness (bug 81) */
     if(!(lvl>-200.0f&&lvl<2000.0f))return 0;
     *out=lvl;return 1;
 }
