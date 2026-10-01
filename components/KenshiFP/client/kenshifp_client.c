@@ -1508,6 +1508,7 @@ static int char_position(void *c, Vec3 *out)
 }
 
 static int ui_panels_open(void);   /* forward decl (defined after the VEH guard) */
+static void fp_lookat_click_guard(void *gw); /* bug 79, defined after game_has_focus */
 
 /* Clear the game InputHandler's stuck keyboard-modifier flags. The instance's
  * controlEnabled sits at InputHandler+0xD0 (== RVA_INPUT_CONTROLENABLED, already
@@ -3572,6 +3573,45 @@ static int di_get_deltas(LONG *dx, LONG *dy, LONG *dz)
  * mouse is DISCL_BACKGROUND (keeps reporting even unfocused), so without this the
  * poll thread would accumulate deltas from mouse movement in OTHER apps while the
  * player is alt-tabbed -- on return the camera had spun away, unrecoverable. */
+/* Bug 79: in FP a captured-cursor left click on a squad member made Kenshi
+ * select her, and FP follows the selection. Revert such a switch so looking at
+ * and clicking a squad member never takes control; portrait clicks (free
+ * cursor) still switch. */
+#define KLIB_PI_SELECTPC_SYM "?_selectPlayerCharacter@PlayerInterface@@QEAAXPEAVRootObject@@_N1@Z"
+typedef void (*pi_selectpc_t)(void *, void *, unsigned char, unsigned char);
+static int game_has_focus(void);
+static void fp_lookat_click_guard(void *gw)
+{
+    static int lmb_prev, dead;
+    static DWORD click_ms;
+    static void *keep;
+    static pi_selectpc_t fn;
+    if (dead) return;
+    int lmb = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    DWORD now = GetTickCount();
+    if (lmb && !lmb_prev && g_fp_mode && g_cursor_hidden && !g_ui_open && game_has_focus()) {
+        click_ms = now ? now : 1;
+        keep = g_player_pc;
+    }
+    lmb_prev = lmb;
+    if (!click_ms) return;
+    if ((LONG)(now - click_ms) > 1000) { click_ms = 0; return; }
+    void *cur = first_player_char(gw);
+    if (!keep || !cur || cur == keep || !char_valid(keep)) return;
+    click_ms = 0;
+    if (!fn) {
+        HMODULE k = GetModuleHandleA("KenshiLib.dll");
+        if (k) fn = (pi_selectpc_t)GetProcAddress(k, KLIB_PI_SELECTPC_SYM);
+        if (!fn) { dead = 1; logline("[fp] look-at click guard: export missing -- disabled"); return; }
+    }
+    void *pi = *(void **)((uintptr_t)gw + GW_PLAYER);
+    if (setjmp(g_guard_jb)) { g_guard_armed = 0; dead = 1; logline("[fp] look-at click guard faulted -- disabled"); return; }
+    guard_arm();
+    fn(pi, keep, 0, 0);
+    g_guard_armed = 0;
+    logline("[fp] look-at click selected another squad member: kept control (bug 79)");
+}
+
 static int game_has_focus(void)
 {
     HWND fg = GetForegroundWindow();
@@ -4434,6 +4474,7 @@ static void fp_camera_override(void *gw)
      * handing the spine back to the animation. Runs before the eye block below
      * so the FP eye still rides the bend. */
     {
+        fp_lookat_click_guard(gw);   /* bug 79: before the swap below sees her */
         void *pcx = first_player_char(gw);
         /* Character swap (selected a different squad member): release the old
          * character's driven bones and reset all per-character calibrations so
