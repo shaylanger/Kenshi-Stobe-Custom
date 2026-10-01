@@ -70,6 +70,7 @@ typedef struct WgpGoal {
     int rt_seen_active;     /* runtime only: was ACTIVE this session */
     int rt_return_started;  /* runtime only: walk-back already requested */
     float haul_last_dist;   /* runtime only: hauling walk progress */
+    void *rt_task_building; /* runtime only: building the last operate order was for */
     int haul_still;
     DWORD haul_next_ms;
 } WgpGoal;
@@ -361,6 +362,22 @@ static int wgp_issue_building_task(void *actor, WgpProducer *p, int override_tas
     return 1;
 }
 
+/* Operate order for a goal; clears the old order first when the target building changes. */
+static int wgp_issue_goal_task(void *actor, WgpGoal *g, WgpProducer *p)
+{
+    if (!actor || !p || !p->building) return 0;
+    if (g->rt_task_building != p->building) {
+        if (g->rt_task_building && stobe_resolve_fight_exports()) {
+            void *orders = g_stobe_getorders(actor);
+            if (orders && readable(orders, 8)) g_stobe_clear_orders(orders);
+            logline("[stobe] WORK_GOAL switch id=%s -> %s", g->id,
+                    p->building_name[0] ? p->building_name : "building");
+        }
+        g->rt_task_building = p->building;
+    }
+    return wgp_issue_building_task(actor, p, -1);
+}
+
 static WgpSubstate *wgp_substate(WgpGoal *g, const char *item)
 {
     for (int i=0;i<WGP_MAX_SUBSTATE;i++)
@@ -468,8 +485,8 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
     }
 
     if (wgp_feed_inputs(gw,actor,g,&p)) return 0;
-    if ((LONG)(GetTickCount()-g->last_order_ms)>2000) {
-        wgp_issue_building_task(actor,&p,-1);
+    if (g->rt_task_building != p.building || (LONG)(GetTickCount()-g->last_order_ms)>2000) {
+        wgp_issue_goal_task(actor,g,&p);
         g->last_order_ms=GetTickCount();
     }
     snprintf(g->current_step,sizeof(g->current_step),"Producing %s at %s",item,
@@ -624,8 +641,8 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
     }
 
     if (wgp_feed_inputs(gw,actor,g,&root)) return;
-    if ((LONG)(now-g->last_order_ms)>2000) {
-        wgp_issue_building_task(actor,&root,-1);
+    if (g->rt_task_building != root.building || (LONG)(now-g->last_order_ms)>2000) {
+        wgp_issue_goal_task(actor,g,&root);
         g->last_order_ms=now;
     }
     snprintf(g->current_step,sizeof(g->current_step),"Making %s: %d/%d complete at %s",
