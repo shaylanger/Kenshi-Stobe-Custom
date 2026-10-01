@@ -3951,9 +3951,36 @@ std::string BuildNpcContextEnvelope(Character *npc, const std::string &type) {
     lektor<RootObject *> results;
     world->getCharactersWithinSphere(results, npc->getPosition(), g_visionRange,
                                      0.0f, 0.0f, 16, 0, npc);
-    json += "\"nearby\": [";
+    std::vector<Character *> nearbyChars;
     for (uint32_t i = 0; i < results.size(); ++i) {
-      Character *other = (Character *)results.stuff[i];
+      nearbyChars.push_back((Character *)results.stuff[i]);
+    }
+    // Dead bodies don't come back from the character sphere search, so a
+    // corpse kept its last live state ("moving") and NPCs talked about it as
+    // alive (bug 73). Merge the generic CHARACTER object search.
+    try {
+      lektor<RootObject *> objects;
+      world->getObjectsWithinSphere(objects, npc->getPosition(), g_visionRange,
+                                    CHARACTER, 32, (RootObject *)npc);
+      for (uint32_t i = 0; i < objects.size() && nearbyChars.size() < 24; ++i) {
+        Character *c = (Character *)objects.stuff[i];
+        if (!c || (uintptr_t)c <= 0x1000 || c == npc)
+          continue;
+        bool known = false;
+        for (size_t j = 0; j < nearbyChars.size(); ++j) {
+          if (nearbyChars[j] == c) {
+            known = true;
+            break;
+          }
+        }
+        if (!known)
+          nearbyChars.push_back(c);
+      }
+    } catch (...) {
+    }
+    json += "\"nearby\": [";
+    for (size_t i = 0; i < nearbyChars.size(); ++i) {
+      Character *other = nearbyChars[i];
       if (other && (uintptr_t)other > 0x1000) {
         bool otherIsAnimal = false;
         unsigned int otherSerial = 0;

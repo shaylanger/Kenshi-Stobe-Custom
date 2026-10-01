@@ -7278,10 +7278,38 @@ static bool BuildInfonpcPayload(GameWorld *world, Character *player,
       break;
     }
   }
+  // Corpses don't come back from the character sphere search (bug 73).
+  try {
+    lektor<RootObject *> bodies;
+    world->getObjectsWithinSphere(bodies, player->getPosition(), scanRange,
+                                  CHARACTER, 32, (RootObject *)player);
+    for (uint32_t i = 0; i < bodies.size() && candidates.size() < 48; ++i) {
+      AppendInfonpcCandidate(candidates, seen, (Character *)bodies.stuff[i],
+                             player);
+    }
+  } catch (...) {
+  }
 
   if (candidates.empty()) {
     return false;
   }
+
+  // "(dead)" / "(unconscious)" so NPCs don't talk about a corpse as alive
+  // (bug 73); part of the digest so a death re-sends the roster.
+  struct RosterState {
+    static std::string Of(Character *c) {
+      try {
+        if (c && (uintptr_t)c > 0x1000) {
+          if (c->isDead())
+            return " (dead)";
+          if (c->isUnconcious())
+            return " (unconscious)";
+        }
+      } catch (...) {
+      }
+      return "";
+    }
+  };
 
   std::sort(candidates.begin(), candidates.end(),
             [](const InfoNearbyNpcCandidate &a,
@@ -7304,6 +7332,12 @@ static bool BuildInfonpcPayload(GameWorld *world, Character *player,
   if (digestOut.empty()) {
     return false;
   }
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    std::string st = RosterState::Of(candidates[i].npc);
+    if (!st.empty()) {
+      digestOut += "|" + ToString(candidates[i].serial) + st;
+    }
+  }
 
   messageOut = "nearby NPC roster (" + ToString((int)candidates.size()) + "): ";
   size_t listed = 0;
@@ -7311,7 +7345,7 @@ static bool BuildInfonpcPayload(GameWorld *world, Character *player,
     if (listed > 0) {
       messageOut += ", ";
     }
-    messageOut += candidates[i].name;
+    messageOut += candidates[i].name + RosterState::Of(candidates[i].npc);
     ++listed;
   }
   if (candidates.size() > listed) {
