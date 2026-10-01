@@ -1,0 +1,19 @@
+#!/bin/bash
+# stobe-rotate-logs [KEEP]
+# Archive StobeServer's logs (gzip) and empty them in place, keeping the last KEEP
+# archives (default 3). Run after each deploy so post-deploy tests start with
+# small, clean logs. Game-side logs (stobe.log, KenshiFP.log) reset on each Kenshi launch.
+KEEP=${1:-3}
+LOGDIR=/var/www/html/StobeServer/log
+ARCH=$LOGDIR/archive
+STAMP=$(date +%Y%m%d_%H%M%S)
+mkdir -p "$ARCH/$STAMP"
+total=0
+for f in "$LOGDIR"/*.log; do
+  [ -s "$f" ] || continue
+  size=$(stat -c %s "$f"); total=$((total+size))
+  gzip -c "$f" > "$ARCH/$STAMP/$(basename "$f").gz" && : > "$f"   # truncate in place: Apache keeps its handle
+done
+chown -R www-data:www-data "$ARCH" 2>/dev/null
+ls -1d "$ARCH"/*/ 2>/dev/null | sort | head -n -"$KEEP" | xargs -r rm -rf
+echo "rotated $((total/1048576)) MB of logs -> $ARCH/$STAMP ($(du -sh "$ARCH/$STAMP" | cut -f1) compressed); keeping last $KEEP archives"

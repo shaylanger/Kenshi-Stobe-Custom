@@ -1,0 +1,10 @@
+# build output
+client/*.dll
+dist/
+*.dll
+*.log
+*.o
+# scratch
+
+# python bytecode
+__pycache__/

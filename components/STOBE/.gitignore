@@ -1,0 +1,38 @@
+build/
+build-map/
+build-tests/
+*.dll
+!mod/Stobe.dll
+!mod/Stobe.ini
+!mod/RE_Kenshi.json
+*.lib
+*.exp
+*.obj
+*.pdb
+*.ilk
+*.map
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+!mod/Stobe.mod
+
+# Visual Studio / local IDE
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+*.ipch
+
+# MSBuild intermediates
+*.tlog
+*.lastbuildstate
+*.intermediate.manifest
+*.recipe
+*.idb
+x64/Debug/
+x64/Release/
+
+# Locked SDK snapshot outputs generated at build time
+/vendor/stobe-sdk/

@@ -1,0 +1,31 @@
+#!/bin/bash
+# stobe-tests [TREE] [PATTERN]
+# Quiet StobeServer test runner on the stobe_test database: one line per suite,
+# failures first-class, known pre-existing failures marked as such.
+# TREE defaults to the live server; PATTERN is a grep -E filter on test file names.
+TREE=${1:-/var/www/html/StobeServer}
+PATTERN=${2:-.}
+cd "$TREE" || exit 2
+export STOBE_DB_NAME=stobe_test STOBE_NEG_TEST_NO_SIGNAL=1 \
+  STOBE_NEG_STOBE_LOG=/tmp/negtest/stobe.log STOBE_NEG_KFP_LOG=/tmp/negtest/kfp.log \
+  STOBE_NEG_ACTION_REQUEST=/tmp/negtest/stobe_action.request
+mkdir -p /tmp/negtest
+# Failing before our work or in pure upstream; reported but not counted as regressions.
+KNOWN="autonomy_phase3_regression chat_processor_regression import_rules_regression player2_client_id_db_regression structured_dialogue_contract_regression schema_clone_identity_regression playthrough_storage_regression"
+clean_db() {  # other suites leave events with late game times behind; negotiation deadlines read them
+  (cd /tmp && su postgres -c "psql -q -d stobe_test -c \"delete from eventlog where gamets >= 100000\"" >/dev/null 2>&1)
+}
+pass=0; fail=0; known=0
+# negotiation suites first, each on a clean slate
+for t in $(ls tests/*.php | grep -E "$PATTERN" | sort -t/ -k2 | awk '/negotiation_/{print; next} {rest=rest" "$0} END{print rest}' | tr ' ' '\n' | grep .); do
+  name=$(basename "$t" .php)
+  clean_db
+  out=$(timeout 180 php "$t" 2>&1); rc=$?
+  last=$(printf '%s' "$out" | grep -v '^\s*$' | tail -1 | cut -c1-110)
+  if [ $rc -eq 0 ]; then pass=$((pass+1));
+  elif echo " $KNOWN " | grep -q " $name "; then known=$((known+1)); echo "known-fail  $name: $last";
+  else fail=$((fail+1)); echo "FAIL        $name: $last"; printf '%s\n' "$out" | grep -E 'FAIL' | head -3 | sed 's/^/            /' | cut -c1-200; fi
+done
+clean_db
+echo "suites: $pass passed, $fail FAILED, $known known pre-existing"
+[ $fail -eq 0 ]

@@ -1,0 +1,12 @@
+#!/bin/bash
+# stobe-force-attack <npc> [help]   TEST ONLY
+# Queues ATTACK@<player> (or ATTACK@<player>@help) as a breach_react directive for <npc>.
+# It goes out with the NPC's next chat reply (within 45 s), through the normal chat path,
+# so the server's one-on-one block and Stobe.dll's personal-fight guard both run.
+npc="$1"; [ -z "$npc" ] && { echo "usage: stobe-force-attack <npc> [help]"; exit 1; }
+cd /tmp
+player=$(sudo -u postgres psql -d stobe -At -c "SELECT value FROM general_settings WHERE id='PLAYER_NAME'")
+act="ATTACK@${player}"; [ "$2" = "help" ] && act="${act}@help"
+sudo -u postgres psql -d stobe -At -v ON_ERROR_STOP=1 \
+  -c "INSERT INTO stobe_negotiation_directive (npc_name,kind,contract_id,payload,created_unix) VALUES ('$npc','breach_react','','{\"actions\":[\"$act\"],\"note\":\"test: stobe-force-attack\"}'::jsonb, extract(epoch from now())::bigint) RETURNING id" \
+  | head -1 | sed "s/^/queued directive id=/; s/\$/ action=$act/"

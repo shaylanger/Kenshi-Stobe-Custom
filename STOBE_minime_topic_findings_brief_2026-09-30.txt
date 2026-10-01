@@ -1,0 +1,34 @@
+STOBE MiniMe Topic Extraction Findings
+Date: 2026-09-30
+
+Test:
+- 40 representative prompts
+- Included single-topic lore, two-topic lore, mixed questions, follow-ups, casual chat, and commands
+- No STOBE code/settings were changed
+
+Key finding:
+STOBE currently performs up to 2 sequential MiniMe topic inferences, but world-knowledge retrieval only uses topics[0] as $primaryTopic.
+Topic #2 is only retained in audit logging.
+
+Measured latency:
+- Current 2-call extraction: 196 ms average, 187 ms median, 266 ms p90
+- First MiniMe call only: 98 ms average, 94 ms median, 133 ms p90
+- Removing call #2 would save about 98 ms average / 88 ms median
+
+Quality:
+- Current two-pass extraction can find useful second topics
+- But those second topics are not currently used by the retriever
+- A one-inference prompt asking FLAN-T5-small for two topics was less reliable than the current two-pass method
+
+Conclusion:
+Best low-risk latency optimization is to keep the first MiniMe topic inference and stop performing the second one.
+
+Expected saving:
+~90-100 ms per normal turn
+
+Risk:
+Very low for current retrieval behavior, because only the first topic is currently used.
+Confirmed behavioral difference: audit logs would contain one extracted topic instead of two.
+
+Separate future idea:
+If multi-topic retrieval is desired, the retriever could later be changed to genuinely use multiple extracted topics. That would be a feature/behavior change, not a pure latency optimization.

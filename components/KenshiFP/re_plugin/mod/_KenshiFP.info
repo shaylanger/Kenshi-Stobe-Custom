@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ModData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <id>3770491611</id>
+  <mod>KenshiFP</mod>
+  <title>KenshiFP</title>
+  <tags>
+    <string>Gameplay</string>
+  </tags>
+  <visibility>0</visibility>
+  <lastUpdate>2026-08-30T10:35:05.1103488-07:00</lastUpdate>
+</ModData>

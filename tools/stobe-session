@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+"""stobe-session: compact summary of a play-test window across STOBE's logs.
+
+Usage: stobe-session START END [NPC] [--max N]
+  START/END  local game-clock times as shown in Windows / stobe.log, HH:MM or HH:MM:SS
+             (today's date; END may be "now")
+  NPC        optional name filter (case-insensitive substring)
+
+Sections: conversation (player lines + NPC replies with actions/deal decisions),
+deals & negotiation, what the game actually executed (Stobe + KenshiFP),
+and server warnings (deduplicated). Each section is capped (--max, default 40).
+"""
+import datetime as dt
+import os
+import re
+import sys
+from collections import Counter
+
+SERVER_LOG = '/var/www/html/StobeServer/log/stobeserver.log'
+LLM_LOG = '/var/www/html/StobeServer/log/output_from_llm.log'
+STOBE_LOG = '/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log'
+KFP_LOG = '/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log'
+
+
+def die(msg):
+    print(msg)
+    sys.exit(2)
+
+
+def tail_lines_since(path, since_utc_str, chunk=4 << 20, max_bytes=400 << 20):
+    """Lines from the end of a server log back to the first line older than since (UTC, 'YYYY-MM-DD HH:MM:SS')."""
+    if not os.path.exists(path):
+        return []
+    size = os.path.getsize(path)
+    pos, data = size, b''
+    with open(path, 'rb') as f:
+        while pos > 0 and size - pos < max_bytes:
+            step = min(chunk, pos)
+            pos -= step
+            f.seek(pos)
+            data = f.read(step) + data
+            m = re.search(rb'\n\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]', data)
+            if m and m.group(1).decode() < since_utc_str:
+                break
+    return data.decode('utf-8', 'replace').splitlines()
+
+
+def local_offset():
+    """Game-log local time minus UTC, from stobe.log's last timestamp vs its mtime."""
+    try:
+        with open(STOBE_LOG, 'rb') as f:
+            f.seek(max(0, os.path.getsize(STOBE_LOG) - 65536))
+            tail = f.read().decode('utf-8', 'replace')
+        stamps = re.findall(r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', tail, re.M)
+        last_local = dt.datetime.strptime(stamps[-1], '%Y-%m-%d %H:%M:%S')
+        mtime_utc = dt.datetime.utcfromtimestamp(os.path.getmtime(STOBE_LOG))
+        hours = round((last_local - mtime_utc).total_seconds() / 1800) / 2
+        return dt.timedelta(hours=hours)
+    except Exception:
+        return dt.timedelta(0)
+
+
+def parse_clock(text, today):
+    if text == 'now':
+        return None
+    parts = [int(p) for p in text.split(':')]
+    while len(parts) < 3:
+        parts.append(0)
+    return dt.datetime.combine(today, dt.time(*parts))
+
+
+def cap(lines, n):
+    if len(lines) <= n:
+        return lines
+    return lines[:n // 2] + ['   ... %d more ...' % (len(lines) - n)] + lines[-(n - n // 2):]
+
+
+def short(s, n=220):
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s if len(s) <= n else s[:n - 3] + '...'
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    maxn = 40
+    if '--max' in sys.argv:
+        maxn = int(sys.argv[sys.argv.index('--max') + 1])
+        args = [a for a in args if a != str(maxn)]
+    if len(args) < 2:
+        die(__doc__)
+    npc = args[2].lower() if len(args) > 2 else ''
+    off = local_offset()
+    today = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) + off
+    start_l = parse_clock(args[0], today.date())
+    end_l = parse_clock(args[1], today.date()) or today
+    start_u, end_u = start_l - off, end_l - off
+    su, eu = start_u.strftime('%Y-%m-%d %H:%M:%S'), end_u.strftime('%Y-%m-%d %H:%M:%S')
+    sl, el = start_l.strftime('%H:%M:%S'), end_l.strftime('%H:%M:%S')
+    want = (lambda s: npc in s.lower()) if npc else (lambda s: True)
+    print('== window local %s-%s (UTC %s-%s)%s' % (sl, el, su[11:], eu[11:], ('  npc~' + npc) if npc else ''))
+
+    server = [l for l in tail_lines_since(SERVER_LOG, su) if l[1:20] >= su and l[1:20] <= eu]
+
+    # --- conversation
+    convo = []
+    for l in server:
+        if 'Chat input received' in l:
+            m = re.search(r'"target_npc":"([^"]*)".*"message_preview":"(.*?)"\}', l)
+            if m and want(m.group(1)):
+                convo.append((l[12:20], 'YOU -> %s: %s' % (m.group(1), short(m.group(2), 180))))
+    if os.path.exists(LLM_LOG):
+        txt = ''.join(tail_lines_since_raw(LLM_LOG, su))
+        for blk in re.split(r'\n== (?=\d{4}-\d{2}-\d{2}T)', txt):
+            m = re.match(r'(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})\+00:00 START', blk)
+            if not m or not (su <= m.group(1) + ' ' + m.group(2) <= eu):
+                continue
+            name = re.search(r"'npc_name' => '([^']*)'", blk)
+            ev = re.search(r"'event_type' => '([^']*)'", blk)
+            msg = re.search(r'"message": "(.*?)",?\n', blk)
+            if not (name and msg and ev) or ev.group(1) in ('relationship_eval',) or not want(name.group(1)):
+                continue
+            act = re.search(r'"action": "(.*?)"', blk)
+            deal = re.search(r'"deal_decision": "(.*?)"', blk)
+            extra = []
+            if act and act.group(1) not in ('', 'Talk'):
+                extra.append(act.group(1))
+            if deal and deal.group(1) not in ('', 'NONE'):
+                extra.append('deal=' + deal.group(1))
+            convo.append((m.group(2), '%s [%s%s]: %s' % (name.group(1), ev.group(1), (',' + ','.join(extra)) if extra else '', short(msg.group(1).replace("\\'", "'"), 200))))
+    convo.sort()
+    print('\n-- conversation (UTC)')
+    for s in cap([t + ' ' + s for t, s in convo], maxn):
+        print(s)
+
+    # --- deals / negotiation / actions queued by the server
+    deal_pat = re.compile(r'Negotiation|Deal |Voice hand-over|Player refused|unpaid gift|Queued KenshiFP|Deferred action')
+    deals = [l[12:20] + ' ' + short(re.sub(r'^\[[^\]]*\] \[\w+\] ', '', l), 200) for l in server if deal_pat.search(l) and want(l)]
+    print('\n-- deals / queued actions (UTC)')
+    for s in cap(deals, maxn):
+        print(s)
+
+    # --- what the game executed (local clock)
+    game = []
+    for path, pat in ((STOBE_LOG, r'ACTION_EXEC|ACTION_BRIDGE|SERIAL_HTTP|debounced'), (KFP_LOG, r'\[stobe\] .*(result=|ACTION_BRIDGE)')):
+        if not os.path.exists(path):
+            continue
+        for l in open(path, 'r', errors='replace'):
+            m = re.match(r'^\[(?:\d{4}-\d{2}-\d{2} )?(\d{2}:\d{2}:\d{2})', l)
+            if m and sl <= m.group(1) <= el and re.search(pat, l) and want(l):
+                if 'SAY [' in l:
+                    continue
+                game.append(m.group(1) + ' ' + short(re.sub(r'^\[[^\]]*\] (\[\w+\] )?', '', l), 200))
+    print('\n-- game executed (local)')
+    for s in cap(game, maxn):
+        print(s)
+
+    # --- warnings (deduplicated)
+    warn = Counter()
+    for l in server:
+        if '[WARN]' in l or '[ERROR]' in l:
+            key = re.sub(r'\d+', '#', re.sub(r'^\[[^\]]*\] ', '', l).split(' | ')[0])
+            warn[key] += 1
+    print('\n-- server warnings (count x message)')
+    for k, c in warn.most_common(15):
+        print('%5d x %s' % (c, short(k, 160)))
+    lag = sum(1 for l in server if 'late event ignored' in l)
+    rb = sum(1 for l in server if 'Rollback detected' in l)
+    print('\n-- health: events=%d rollbacks=%d late_events_ignored_logs=%d' % (sum(1 for l in server if 'Game event received' in l), rb, lag))
+
+
+def tail_lines_since_raw(path, since_utc_str, chunk=4 << 20, max_bytes=200 << 20):
+    """Raw text tail of output_from_llm.log back to 'since' (its markers are ISO 'YYYY-MM-DDTHH:MM:SS')."""
+    size = os.path.getsize(path)
+    pos, data = size, b''
+    iso = since_utc_str.replace(' ', 'T').encode()
+    with open(path, 'rb') as f:
+        while pos > 0 and size - pos < max_bytes:
+            step = min(chunk, pos)
+            pos -= step
+            f.seek(pos)
+            data = f.read(step) + data
+            m = re.search(rb'\n== (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', data)
+            if m and m.group(1) < iso:
+                break
+    return [data.decode('utf-8', 'replace')]
+
+
+if __name__ == '__main__':
+    main()

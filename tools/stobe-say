@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""stobe-say: drive a running Kenshi through Stobe.dll's test inbox.
+
+Lines go through the same path as push-to-talk (after STT), so the server,
+LLM, actions and TTS all run as if Shay had spoken.
+
+Usage:
+  stobe-say on | off                 enable/disable the inbox (flag file)
+  stobe-say ping                     speaker, nearest NPC, chat mode
+  stobe-say mode <mode>              set chat mode for later lines
+  stobe-say state <npc> [--json]     NPC AI/orders/movement, inventory, player cats
+  stobe-say give_cats <n>            add Cats to the player
+  stobe-say speed <x>                game speed (0 = pause, 0.5..10)
+  stobe-say say <npc> <text...> [--wait S] [--raw]
+                                     speak, wait for the reply to settle, then
+                                     print stobe-session for that window
+<npc> is a character name (nearest match), @nearest or @selected.
+"""
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+MOD = '/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe'
+FLAG = MOD + '/test_inbox.flag'
+INBOX = MOD + '/test_inbox.txt'
+OUTBOX = MOD + '/test_outbox.txt'
+STOBE_LOG = MOD + '/stobe.log'
+
+
+def die(msg, code=2):
+    print(msg)
+    sys.exit(code)
+
+
+def send(cmd, *args, timeout=15):
+    if not os.path.exists(FLAG):
+        die('inbox is off: run "stobe-say on"')
+    for field in args:
+        if '\t' in field or '\n' in field:
+            die('arguments may not contain tabs or newlines')
+    deadline = time.time() + timeout
+    while os.path.exists(INBOX):
+        if time.time() > deadline:
+            die('previous command still unread: is Kenshi running with a save loaded?')
+        time.sleep(0.2)
+    cid = str(int(time.time() * 1000))
+    tmp = INBOX + '.tmp'
+    with open(tmp, 'w', newline='\n') as f:
+        f.write('\t'.join((cid, cmd) + args) + '\n')
+    os.rename(tmp, INBOX)
+    while time.time() < deadline:
+        if os.path.exists(OUTBOX):
+            with open(OUTBOX, encoding='utf-8', errors='replace') as f:
+                for line in f:
+                    parts = line.rstrip('\n').split('\t', 2)
+                    if parts[0] == cid and len(parts) == 3:
+                        return parts[1] == 'ok', parts[2]
+        time.sleep(0.2)
+    die('no answer from the game within %ds (paused, loading, or not running?)' % timeout)
+
+
+def log_size():
+    try:
+        return os.path.getsize(STOBE_LOG)
+    except OSError:
+        return 0
+
+
+def read_from(offset):
+    with open(STOBE_LOG, 'rb') as f:
+        f.seek(offset)
+        return f.read().decode('utf-8', 'replace')
+
+
+def wait_for_reply(offset, target, max_wait, quiet=8.0):
+    """Returns when the target has spoken and nothing new came for `quiet` s."""
+    start = time.time()
+    last_activity = None
+    seen = 0
+    while time.time() - start < max_wait:
+        text = read_from(offset)
+        hits = [l for l in text.splitlines()
+                if ('Processing: NPC_SAY: ' + target) in l or 'Processing: NPC_ACTION' in l]
+        if len(hits) != seen:
+            seen = len(hits)
+            last_activity = time.time()
+        if last_activity and time.time() - last_activity >= quiet:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def show_state(detail, as_json):
+    state = json.loads(detail)
+    if as_json:
+        print(json.dumps(state, indent=1))
+        return
+    ai = state.get('ai', {})
+    print('%s (#%s, %s)  dist=%.1f  player_cats=%s' % (
+        state.get('name'), state.get('serial'), state.get('faction'),
+        state.get('distance_to_player', -1), state.get('player_cats')))
+    flags = [k for k in ('dead', 'unconscious', 'moving', 'path_failed',
+                         'destination_reached', 'has_player_orders', 'jobs_enabled')
+             if ai.get(k)]
+    print('  goal=%s  orders=%s  permajobs=%s  flags=%s' % (
+        ai.get('current_goal') or '-', ai.get('first_order'),
+        ai.get('permajobs') or [], ','.join(flags) or '-'))
+    print('  pos=%s  dest=%s' % (
+        [round(v) for v in ai.get('position', [])],
+        [round(v) for v in ai.get('destination', [])]))
+    inv = state.get('inventory', [])
+    equipped = ['%s' % i.get('name') for i in inv if i.get('equipped')]
+    carried = ['%s x%s' % (i.get('name'), i.get('count')) for i in inv if not i.get('equipped')]
+    print('  equipped: ' + (', '.join(equipped) or '-'))
+    print('  carried:  ' + (', '.join(carried) or '-'))
+
+
+def main(argv):
+    if not argv or argv[0] in ('-h', '--help'):
+        die(__doc__, 0)
+    cmd = argv[0]
+    if cmd == 'on':
+        for stale in (INBOX, INBOX + '.tmp'):
+            if os.path.exists(stale):
+                os.remove(stale)
+        open(FLAG, 'w').close()
+        print('inbox on')
+        return
+    if cmd == 'off':
+        if os.path.exists(FLAG):
+            os.remove(FLAG)
+        print('inbox off')
+        return
+    if cmd == 'ping':
+        ok, detail = send('ping')
+        print(('ok ' if ok else 'ERROR ') + detail)
+        return
+    if cmd == 'mode' and len(argv) == 2:
+        ok, detail = send('mode', argv[1])
+        print(('ok ' if ok else 'ERROR ') + detail)
+        return
+    if cmd == 'speed' and len(argv) == 2:
+        ok, detail = send('speed', argv[1])
+        print(('ok ' if ok else 'ERROR ') + detail)
+        return
+    if cmd == 'give_cats' and len(argv) == 2:
+        ok, detail = send('give_cats', argv[1])
+        print(('ok ' if ok else 'ERROR ') + detail)
+        return
+    if cmd == 'state' and len(argv) >= 2:
+        ok, detail = send('state', argv[1])
+        if not ok:
+            die('ERROR ' + detail, 1)
+        show_state(detail, '--json' in argv)
+        return
+    if cmd == 'say' and len(argv) >= 3:
+        max_wait = 90
+        raw = '--raw' in argv
+        rest = [a for a in argv[2:] if a != '--raw']
+        if '--wait' in rest:
+            i = rest.index('--wait')
+            max_wait = int(rest[i + 1])
+            rest = rest[:i] + rest[i + 2:]
+        target, text = argv[1], ' '.join(rest)
+        offset = log_size()
+        ok, detail = send('say', target, text)
+        if not ok:
+            die('ERROR ' + detail, 1)
+        print('sent: ' + detail, flush=True)
+        name = detail.split('target=', 1)[1].split(' serial=', 1)[0]
+        settled = wait_for_reply(offset, name, max_wait)
+        if not settled:
+            print('(no settled reply from %s within %ds)' % (name, max_wait))
+        if raw:
+            for l in read_from(offset).splitlines():
+                if 'Processing: ' in l or 'TEST_INBOX' in l or 'ERROR' in l:
+                    print(l[:300])
+            return
+        game = read_from(offset).splitlines()
+        print('-- game log')
+        for l in game:
+            if ('Processing: NPC_SAY: ' + name) in l:
+                print(l[12:24] + ' ' + name + ': ' + re.sub(r'\s*\[[A-Z]+:[^\]]*\]', '', l.split(name + '|', 1)[-1].split(': ', 1)[-1])[:300])
+            elif 'ACTION_EXEC:' in l and 'ACTION_EXEC: SAY' not in l:
+                print(l[12:24] + ' ' + l.split('ACTION_EXEC: ', 1)[1][:200])
+        sys.stdout.flush()
+        # WSL's clock zone differs from Windows; take the window from the game log.
+        stamps = re.findall(r'^\[\d{4}-\d\d-\d\d (\d\d:\d\d:\d\d)', read_from(offset), re.M)
+        began = stamps[0] if stamps else dt.datetime.now().strftime('%H:%M:%S')
+        began = (dt.datetime.strptime(began, '%H:%M:%S') - dt.timedelta(seconds=2)).strftime('%H:%M:%S')
+        subprocess.call(['stobe-session', began, 'now', name])
+        return
+    die(__doc__)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])

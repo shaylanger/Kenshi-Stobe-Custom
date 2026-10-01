@@ -1,0 +1,65 @@
+/* Version metadata for the KenshiFP DLLs. A native DLL with no VERSIONINFO reads
+ * as more suspicious to antivirus ML models than a properly-described, versioned
+ * one -- this is a legitimate, free step toward fewer false positives. The
+ * OriginalFilename differs per edition; override via -DKFP_ORIGFILE at build. */
+#include <winver.h>
+
+/* RE build passes -DKFP_RE_BUILD; standalone passes nothing. */
+#ifdef KFP_RE_BUILD
+#define KFP_ORIGFILE "KenshiFP.dll"
+#else
+#define KFP_ORIGFILE "KenshiFP_x64.dll"
+#endif
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,6,1,0
+ PRODUCTVERSION 0,6,1,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "linguine2552"
+            VALUE "FileDescription",  "KenshiFP - First-Person Mode for Kenshi"
+            VALUE "FileVersion",      "0.6.1.0"
+            VALUE "InternalName",     "KenshiFP"
+            VALUE "LegalCopyright",   "(C) 2026 linguine2552. GPL-3.0."
+            VALUE "OriginalFilename", KFP_ORIGFILE
+            VALUE "ProductName",      "KenshiFP"
+            VALUE "ProductVersion",   "0.6.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+/* ---- EMBEDDED ASSETS ------------------------------------------------------
+ * Everything KenshiFP needs at runtime is compiled INTO the DLL, so an install
+ * cannot be broken by a missing side file and the Steam Workshop item is a
+ * single self-contained binary + config. Paths are relative to the REPO ROOT
+ * (both build scripts pass -I ..). The loader still prefers real files when
+ * they exist, so a custom bake or reskin can be dropped in without rebuilding.
+ * IDs must match the KFP_RES_* defines in kenshifp_client.c. */
+100 RCDATA "re_plugin/mod/locomotion.kfa"
+200 RCDATA "re_plugin/mod/kenshifp/blk0.png"
+201 RCDATA "re_plugin/mod/kenshifp/blk1.png"
+202 RCDATA "re_plugin/mod/kenshifp/blk2.png"
+203 RCDATA "re_plugin/mod/kenshifp/blk3.png"
+204 RCDATA "re_plugin/mod/kenshifp/blk4.png"
+205 RCDATA "re_plugin/mod/kenshifp/blk5.png"
+206 RCDATA "re_plugin/mod/kenshifp/blk6.png"
+207 RCDATA "re_plugin/mod/kenshifp/blk7.png"
+208 RCDATA "re_plugin/mod/kenshifp/blk8.png"
+209 RCDATA "re_plugin/mod/kenshifp/blk9.png"
+210 RCDATA "re_plugin/mod/kenshifp/crosshair.png"
+211 RCDATA "re_plugin/mod/kenshifp/vignette.png"
+212 RCDATA "re_plugin/mod/kenshifp/xhair_grn.png"
+213 RCDATA "re_plugin/mod/kenshifp/xhair_red.png"
+214 RCDATA "re_plugin/mod/kenshifp/xhair_ylw.png"

@@ -1,0 +1,27 @@
+# Large local toolchain/install payloads
+tools/msvc2010/downloads/
+
+# Generated/native build outputs
+*.dll
+*.exe
+*.iso
+*.obj
+*.o
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.log
+
+# Temporary/backups
+*.bak
+*.bak_*
+*.prev_*
+*.tmp
+*.pyc
+__pycache__/
+
+# Runtime/test output
+test_outbox.txt
+*.status
+*.flag

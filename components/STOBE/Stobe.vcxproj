@@ -1,0 +1,159 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{5BF8C658-6108-4A4D-9230-8B5F4E7F6B19}</ProjectGuid>
+    <RootNamespace>Stobe</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v100</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v100</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetName>Stobe</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Include;$(ProjectDir)..\third_party\kenshi\KenshiLib_Examples_deps\boost_1_60_0;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)..\third_party\kenshi\KenshiLib;$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Libraries\mygui;$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Libraries\ogre;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetName>Stobe</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Include;$(ProjectDir)..\third_party\kenshi\KenshiLib_Examples_deps\boost_1_60_0;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)..\third_party\kenshi\KenshiLib;$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Libraries\mygui;$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Libraries\ogre;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN;NOMINMAX;BOOST_ALL_NO_LIB;BOOST_ERROR_CODE_HEADER_ONLY;BOOST_SYSTEM_NO_DEPRECATED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>KenshiLib.lib;MyGUIEngine_x64.lib;OgreMain_x64.lib;winhttp.lib;winmm.lib;ole32.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;WIN32_LEAN_AND_MEAN;NOMINMAX;BOOST_ALL_NO_LIB;BOOST_ERROR_CODE_HEADER_ONLY;BOOST_SYSTEM_NO_DEPRECATED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>KenshiLib.lib;MyGUIEngine_x64.lib;OgreMain_x64.lib;winhttp.lib;winmm.lib;ole32.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\AiNpcInfoWindow.cpp" />
+    <ClCompile Include="src\AudioPlayback.cpp" />
+    <ClCompile Include="src\AutonomyController.cpp" />
+    <ClCompile Include="src\AutonomyExecutor.cpp" />
+    <ClCompile Include="src\AutonomyMonitor.cpp" />
+    <ClCompile Include="src\AutonomyProtocol.cpp" />
+    <ClCompile Include="src\AutonomySafetyProbe.cpp" />
+    <ClCompile Include="src\AutonomySafetyProbePolicy.cpp" />
+    <ClCompile Include="src\ChatBox.cpp" />
+    <ClCompile Include="src\ChatUI.cpp" />
+    <ClCompile Include="src\ChatUIGlobals.cpp" />
+    <ClCompile Include="src\Comm.cpp" />
+    <ClCompile Include="src\Context.cpp" />
+    <ClCompile Include="src\\Functions.cpp" />
+    <ClCompile Include="src\Globals.cpp" />
+    <ClCompile Include="src\KenshiAiCompat.cpp" />
+    <ClCompile Include="src\JournalWindow.cpp" />
+    <ClCompile Include="src\KenshiRvaCompat.cpp" />
+    <ClCompile Include="src\KenshiTownIdentity.cpp">
+      <AdditionalIncludeDirectories>$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Include\ogre;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\PlayerBaseState.cpp" />
+    <ClCompile Include="src\SettingsWindow.cpp" />
+    <ClCompile Include="src\StobeChatMode.cpp" />
+    <ClCompile Include="src\StobeIdentityRename.cpp" />
+    <ClCompile Include="src\StobeText.cpp" />
+    <ClCompile Include="src\StobeTiming.cpp" />
+    <ClCompile Include="src\StartingWindow.cpp" />
+    <ClCompile Include="src\Utils.cpp" />
+    <ClCompile Include="src\VoiceCapture.cpp" />
+    <ClCompile Include="src\WelcomeWindow.cpp" />
+    <ClCompile Include="src\WorldStateRuntime.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\AiNpcInfoWindow.h" />
+    <ClInclude Include="src\AudioPlayback.h" />
+    <ClInclude Include="src\AutonomyController.h" />
+    <ClInclude Include="src\AutonomyExecutor.h" />
+    <ClInclude Include="src\AutonomyMonitor.h" />
+    <ClInclude Include="src\AutonomyProtocol.h" />
+    <ClInclude Include="src\AutonomySafetyProbe.h" />
+    <ClInclude Include="src\AutonomySafetyProbePolicy.h" />
+    <ClInclude Include="src\ChatBox.h" />
+    <ClInclude Include="src\ChatUI.h" />
+    <ClInclude Include="src\ChatUIGlobals.h" />
+    <ClInclude Include="src\Comm.h" />
+    <ClInclude Include="src\Context.h" />
+    <ClInclude Include="src\\Functions.h" />
+    <ClInclude Include="src\Globals.h" />
+    <ClInclude Include="src\KenshiAiCompat.h" />
+    <ClInclude Include="src\JournalWindow.h" />
+    <ClInclude Include="src\KenshiRvaCompat.h" />
+    <ClInclude Include="src\KenshiTownIdentity.h" />
+    <ClInclude Include="src\PlayerBaseState.h" />
+    <ClInclude Include="src\SettingsWindow.h" />
+    <ClInclude Include="src\StobeChatMode.h" />
+    <ClInclude Include="src\StobeIdentityRename.h" />
+    <ClInclude Include="src\StobeText.h" />
+    <ClInclude Include="src\StobeTiming.h" />
+    <ClInclude Include="src\StartingWindow.h" />
+    <ClInclude Include="src\Utils.h" />
+    <ClInclude Include="src\VoiceCapture.h" />
+    <ClInclude Include="src\WelcomeWindow.h" />
+    <ClInclude Include="src\WorldStateCatalog.h" />
+    <ClInclude Include="src\WorldStateRuntime.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

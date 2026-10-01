@@ -1,0 +1,26 @@
+#!/bin/bash
+# stobe-reset-npc <npc> [since-date]
+# Clears one NPC's server-side test state (live `stobe` DB, no backup; Shay OK'd this for test
+# data, 2026-09-30): her deals and queued directives, memories / summaries / diary / events
+# involving her since <since-date> (default 2026-09-29), and her relationship entry for the
+# player (affinity back to neutral). The game save is untouched: reload it separately.
+set -e
+npc="${1:?usage: stobe-reset-npc <npc> [since-date YYYY-MM-DD]}"
+since="${2:-2026-09-29}"
+lower=$(echo "$npc" | tr '[:upper:]' '[:lower:]')
+player=$(sudo -u postgres psql -d stobe -At -c "SELECT value FROM general_settings WHERE id='PLAYER_NAME'" 2>/dev/null)
+player="${player:-Shay}"
+sudo -u postgres psql -d stobe -v ON_ERROR_STOP=1 -q <<SQL
+BEGIN;
+\set since 'extract(epoch from timestamptz ''${since} 00:00-06'')'
+SELECT 'deals', count(*) FROM stobe_social_contract WHERE LOWER(npc_name)='${lower}';
+DELETE FROM stobe_social_contract WHERE LOWER(npc_name)='${lower}';
+DELETE FROM stobe_negotiation_directive WHERE LOWER(npc_name)='${lower}';
+DELETE FROM memory WHERE people ILIKE '%${lower}%' AND localts >= :since;
+DELETE FROM memory_summary WHERE people ILIKE '%${lower}%' AND localts >= :since;
+DELETE FROM diarylog WHERE people ILIKE '%${lower}%' AND localts >= :since;
+DELETE FROM eventlog WHERE people ILIKE '%${lower}%' AND localts >= :since;
+UPDATE core_npc_master SET extended_data = extended_data #- '{relationships,${player}}' WHERE LOWER(name)='${lower}';
+COMMIT;
+SQL
+echo "reset $npc (since $since, relationship to $player cleared)"

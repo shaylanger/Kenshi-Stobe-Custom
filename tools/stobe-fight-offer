@@ -1,0 +1,20 @@
+#!/bin/bash
+# stobe-fight-offer "<line>" [npc] [timeout_s]
+# Offer-only fight watcher (run 3). Watches stobe.log from now; on the first attack on the
+# player it waits DELAY seconds (default 2) and sends <line> to the NPC, then exits. Unlike
+# stobe-fight-watch it never pays by itself: Claude checks the ledger and pays by hand.
+# Run it in the background BEFORE `stobe-force-attack <npc> [help]`. Output: /tmp/fight-offer.log
+L=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
+LINE="$1"; NPC="${2:-Malzin}"; T=${3:-180}
+[ -z "$LINE" ] && { echo "usage: stobe-fight-offer \"<line>\" [npc] [timeout_s]"; exit 1; }
+O=/tmp/fight-offer.log; : > $O
+start=$(stat -c %s "$L"); end=$(( $(date +%s) + T ))
+while [ $(date +%s) -lt $end ]; do
+  if tail -c +$((start+1)) "$L" | grep -aq "\[EVENT\] combat: .* -> Shay"; then
+    echo "ATTACK $(date +%T)" >> $O; sleep ${DELAY:-2}
+    stobe-say say "$NPC" "$LINE" >> $O 2>&1
+    echo "OFFER-SENT $(date +%T)" >> $O; cat $O; exit 0
+  fi
+  sleep 0.25
+done
+echo "TIMEOUT (no attack)" | tee -a $O

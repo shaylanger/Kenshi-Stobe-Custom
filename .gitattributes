@@ -1,0 +1,10 @@
+# Keep scripts portable between Windows and WSL
+*.sh text eol=lf
+*.py text eol=lf
+*.php text eol=lf
+tools/stobe-* text eol=lf
+*.c text
+*.h text
+*.cpp text
+*.hpp text
+*.md text

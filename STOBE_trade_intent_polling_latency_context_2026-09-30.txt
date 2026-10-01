@@ -1,0 +1,504 @@
+STOBE Local Latency Investigation Context
+Focus: Trade-intent polling / stobeRefreshNpcDataForTraderInventory()
+Date: 2026-09-30
+
+PURPOSE
+This file captures the investigation findings for the trade-intent latency path:
+why stobeRefreshNpcDataForTraderInventory() adds about 806 ms on many trade/equipment-related dialogue turns.
+
+This is intended to be re-uploaded later so another agent can continue investigating the trade inventory data flow and decide whether the polling behavior should be changed.
+
+IMPORTANT
+No behavior changes were made during this investigation.
+This file records observed timings, exact code behavior, what is already proven, and the remaining open questions.
+
+PRIMARY FINDING
+The ~806 ms delay is directly explained by an intentional polling loop inside:
+
+processor/chat.php
+stobeRefreshNpcDataForTraderInventory()
+
+The function does this:
+
+1. Check whether trader inventory metadata is already present.
+2. If inventory exists, return immediately.
+3. Determine whether:
+   - the NPC is likely a trader, OR
+   - the player's message looks like trade intent.
+4. If neither condition is true, return immediately.
+5. Otherwise poll up to 8 times.
+6. Before each poll:
+   - sleep 100 ms
+7. Reload NPC data with getNpcData($targetNpc).
+8. Check whether trader inventory metadata has appeared.
+9. If inventory appears, return immediately.
+10. If all 8 attempts fail, return the latest NPC data after the full wait.
+
+Relevant code behavior:
+
+$maxAttempts = 8;
+$sleepMs = 100;
+
+for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+    usleep($sleepMs * 1000);
+    $refreshed = getNpcData($targetNpc);
+    ...
+}
+
+Therefore the full wait is:
+
+8 x 100 ms = 800 ms
+
+plus a few milliseconds of database reads and PHP overhead.
+
+This exactly matches the measured:
+~805-807 ms
+
+OBSERVED TIMING PATTERN
+Normal dialogue turns:
+
+trader_refresh:
+0 ms
+
+Trade/equipment-intent turns:
+
+trader_refresh:
+~805-807 ms
+
+Examples from Malzin testing:
+
+"Here is your three hundred cats."
+trader_refresh:
+805 ms
+
+"Malzin, here are 99999 cats."
+trader_refresh:
+807 ms
+
+"Malzin, 2500 cats for your iron hat and your black cloth shirt, both off. Deal?"
+trader_refresh:
+806 ms
+
+"Malzin, would you take off your iron hat for 1000 cats and five pieces of dried meat?"
+trader_refresh:
+806 ms
+
+"Malzin, 500 cats and you take off your black cloth shirt and your shorts. Would you do that"
+trader_refresh:
+806 ms
+
+Ordinary examples:
+
+"Everything alright?"
+trader_refresh:
+0 ms
+
+"Thanks Malzin. Quiet night in here, huh?"
+trader_refresh:
+0 ms
+
+"Malzin, put your iron hat back on."
+trader_refresh:
+0 ms
+
+This shows the delay is deterministic and tied to the trade-intent path, not random system load.
+
+IMPACT ON TOTAL PRE-LLM LATENCY
+Normal Malzin conversation:
+pre-LLM typically around:
+0.46-0.60 s
+
+Trade/equipment-intent Malzin conversation:
+pre-LLM typically around:
+1.27-1.42 s
+
+The extra ~0.8 s is almost entirely explained by stobeRefreshNpcDataForTraderInventory().
+
+Example:
+
+Normal:
+"Everything alright?"
+pre-LLM:
+457 ms
+
+Trade:
+"Malzin, 2500 cats for your iron hat and your black cloth shirt, both off. Deal?"
+pre-LLM:
+1422 ms
+
+Difference:
+~965 ms
+
+Of that:
+~806 ms is trader_refresh
+
+The rest is ordinary variation in prompt construction and other local work.
+
+TRADE-INTENT DETECTION
+The helper:
+
+stobeMessageLooksTradeIntent()
+
+currently performs a simple keyword scan.
+
+Keywords include:
+
+- trade
+- trading
+- business
+- shop
+- buy
+- sell
+- for sale
+- cats
+- price
+- cost
+- merchant
+- vendor
+
+If ANY of these substrings appear in the message, trade intent becomes true.
+
+This means messages that merely mention "cats" can trigger the trader inventory polling path.
+
+Examples:
+"Malzin, here are 99999 cats."
+will trigger trade intent.
+
+This is an important design detail because the polling path is not limited to explicit shop interactions.
+
+TRADER INVENTORY PRESENCE CHECK
+The function first calls:
+
+stobeTraderInventoryEntryCountFromNpcData()
+
+This checks NPC metadata for:
+
+trader_inventory_items
+
+If trader_inventory_items contains valid named entries, the count is returned.
+
+If that is empty, it also checks:
+
+trader_shop_sources
+
+and:
+trader_shop_item_count
+
+If shop sources exist, the helper returns at least 1.
+
+If neither inventory entries nor shop source metadata exists:
+count = 0
+
+Only when count = 0 does the polling path remain eligible.
+
+LIKELY PURPOSE OF THE POLLING LOOP
+Based on the code structure, the polling appears designed to handle asynchronous arrival of trader inventory metadata from the Kenshi/plugin side.
+
+Likely intended sequence:
+
+player says something trade-related
+-> server realizes trader/shop data may be needed
+-> plugin/game-side trader inventory metadata may arrive shortly after
+-> server waits up to ~800 ms
+-> server reloads NPC profile repeatedly
+-> if inventory data appears, it can include it in the prompt
+
+This is consistent with the log message:
+
+"Chat trader metadata hydration succeeded"
+
+when inventory appears during polling.
+
+If inventory never appears, the function logs:
+
+"Chat trader metadata hydration timed out"
+
+and continues with the latest NPC data.
+
+IMPORTANT:
+The exact producer of trader_inventory_items / trader_shop_sources has not yet been fully traced.
+That is one of the main open questions.
+
+WHY THIS MATTERS
+The delay is not just a small optimization issue.
+
+For voice interaction, an extra ~806 ms before the LLM request is noticeable.
+
+Combined with provider TTFT:
+normal turn:
+~0.5 s local + provider latency
+
+trade turn:
+~1.3 s local + provider latency
+
+So on a 3-second LLM TTFT:
+normal turn might start around ~3.5-4 s
+trade turn might start around ~4.3-4.8 s
+
+The trade path therefore adds a substantial perceived delay before the NPC starts speaking.
+
+WHAT HAS BEEN PROVEN
+The following are established from code and measurements:
+
+1. The ~806 ms delay is intentional waiting, not random slowness.
+
+2. It is caused by:
+8 polling attempts x 100 ms sleep.
+
+3. The delay occurs only when:
+- trader inventory metadata is absent, AND
+- NPC is likely a trader OR player message matches trade intent.
+
+4. Ordinary dialogue avoids the polling delay.
+
+5. Messages containing "cats" alone are enough to trigger trade intent.
+
+6. The polling loop repeatedly reloads NPC data using getNpcData($targetNpc).
+
+7. If trader inventory appears before attempt 8, the function can exit early.
+
+8. In the tested Malzin turns, many trade-intent requests appear to consume the full ~805-807 ms, strongly suggesting the expected metadata is not arriving during the polling window.
+
+IMPORTANT:
+Point 8 is strongly implied by the exact full-duration timings, but the per-attempt success/failure logs were not yet correlated for every test turn.
+That should be verified explicitly in the next investigation.
+
+WHAT HAS NOT YET BEEN PROVEN
+The following remain open:
+
+1. What exact game/plugin event populates:
+trader_inventory_items
+
+2. What populates:
+trader_shop_sources
+
+3. Whether that metadata is expected to arrive:
+- before the chat request
+- during the chat request
+- only after a separate plugin event
+- only when a real shop/trade UI is open
+
+4. Whether Malzin is actually supposed to ever have trader inventory metadata.
+
+5. Whether generic negotiation around the NPC's personal equipment should use this trader inventory hydration path at all.
+
+6. Whether messages like:
+"here are 99999 cats"
+should trigger trader inventory polling.
+
+7. Whether the plugin is sending the relevant inventory data but too late.
+
+8. Whether the server is polling the wrong data source or wrong NPC row.
+
+9. Whether the metadata is being written, then overwritten/cleared before the server reads it.
+
+10. Whether the 800 ms timeout was chosen based on real plugin timing or is simply a conservative delay.
+
+11. Whether early exit is actually happening in any current live scenarios.
+
+12. Whether this path was designed mainly for true merchants but is now being triggered by personal negotiation features added later.
+
+OPEN QUESTION: PERSONAL EQUIPMENT VS TRADER INVENTORY
+This is particularly important for Malzin.
+
+Many test messages were not merchant-shop interactions.
+
+They were things like:
+
+- paying him to remove his hat
+- paying him for clothing
+- giving Cats during a personal deal
+- negotiating over items he is wearing or carrying
+
+Those use trade-like language but are conceptually:
+NPC negotiation / equipment exchange
+
+not necessarily:
+merchant shop inventory
+
+If the polling function is waiting for merchant inventory metadata that will never exist for a normal NPC, the full 800 ms wait may be fundamentally unnecessary in these cases.
+
+This is one of the strongest hypotheses to investigate.
+
+OPEN QUESTION: KEYWORD FALSE POSITIVES
+Current trade detection is broad.
+
+Because "cats" is a trigger, messages such as:
+
+"Malzin, here are 99999 cats."
+
+cause the same polling behavior as:
+
+"What do you have for sale?"
+
+This may be intentional if all Cats-related interactions need fresh inventory state.
+
+But it may also be an overly broad trigger.
+
+Need to determine:
+
+- which downstream prompt/action logic truly requires trader inventory
+- whether generic negotiations only need current equipment/inventory already stored in npcData
+- whether real merchant interactions can be detected more precisely
+
+OPEN QUESTION: WHY FULL 800 MS SO OFTEN?
+Measured trade_refresh values repeatedly land at:
+
+805 ms
+806 ms
+807 ms
+
+This strongly indicates:
+all 8 attempts are being exhausted.
+
+If metadata were often arriving on attempt 2 or 3, timings would cluster around:
+200-300 ms
+
+If attempt 5:
+~500 ms
+
+Instead, the repeated ~806 ms pattern suggests:
+the loop frequently waits until timeout.
+
+That raises an important question:
+
+Is the data source simply never expected to update for these requests?
+
+If yes, the polling delay is pure wasted latency for those cases.
+
+RECOMMENDED NEXT INVESTIGATION
+No code change yet.
+
+The next investigation should trace the full producer/consumer path for trader inventory metadata.
+
+Specifically:
+
+1. Find every place that writes:
+trader_inventory_items
+
+2. Find every place that writes:
+trader_shop_sources
+
+3. Find every place that writes:
+trader_shop_item_count
+
+4. Determine whether those values are written by:
+- Kenshi plugin
+- STOBE PHP
+- another process
+- inventory sync event
+- shop UI event
+
+5. Inspect logs around the exact 8 polling attempts for a trade turn.
+
+6. Determine whether any inventory-sync event arrives during those ~800 ms.
+
+7. Determine whether getNpcData() is reading the expected updated source.
+
+8. Compare:
+- a true merchant NPC
+- a normal NPC like Malzin
+- an NPC with known trader metadata
+
+9. Check whether early success ever occurs and on which attempt.
+
+10. Determine whether Malzin's personal equipment/inventory data is already available elsewhere before the polling starts.
+
+11. Determine whether the negotiation/action system actually needs trader_inventory_items for personal equipment deals.
+
+12. Determine whether "cats" should remain a generic trade-intent trigger.
+
+13. Inspect whether a plugin-side inventory sync request is explicitly triggered before this polling loop.
+If not, the server may simply be waiting without asking anything to refresh.
+
+POTENTIAL FUTURE OPTIMIZATION DIRECTIONS
+These are hypotheses only.
+Do not implement before tracing the data flow.
+
+Possible approaches depending on findings:
+
+A. Skip polling for non-trader NPCs
+Only poll when is_trader is true or real merchant/shop context exists.
+
+B. Separate merchant-shop intent from personal negotiation intent
+Example:
+"what do you sell?" -> trader inventory polling
+"1000 cats for your hat" -> negotiation/equipment data only
+
+C. Trigger an explicit inventory refresh before polling
+Only if the plugin supports a fast request/response path.
+
+D. Reduce poll count or sleep duration
+Only if actual metadata arrival usually happens faster.
+
+E. Use event-driven hydration instead of fixed polling
+If plugin can notify server when inventory metadata is ready.
+
+F. Reuse already-current NPC equipment/inventory metadata
+If the information needed for the prompt is already present.
+
+G. Cache trader inventory for a short window
+Useful if inventory does not change between every dialogue turn.
+
+H. Poll only when metadata is stale, not merely empty
+If freshness timestamps are available.
+
+I. Remove "cats" as a broad trigger
+Only if investigation confirms it causes unnecessary polling.
+
+J. Differentiate:
+merchant inventory
+personal inventory
+worn equipment
+negotiation state
+
+The current helper appears to blur these concepts.
+
+RELATED LOCAL TIMING CONTEXT
+Other measured local costs:
+
+normal system prompt:
+~300-440 ms
+
+regular memory:
+~22-29 ms
+
+event history:
+~30-40 ms
+
+profile lookup:
+~16-22 ms
+
+message assembly:
+~9 ms
+
+The trade polling delay:
+~806 ms
+
+is therefore the single largest deterministic local delay currently observed.
+
+It is larger than the entire normal pre-LLM pipeline by itself.
+
+CONCLUSION
+The original question was:
+
+Why does stobeRefreshNpcDataForTraderInventory() consume almost exactly ~806 ms whenever trade intent is detected?
+
+Answer:
+
+Because the function intentionally waits up to 8 times for trader inventory metadata, sleeping 100 ms before each reload.
+
+8 x 100 ms = 800 ms
+
+plus small DB/PHP overhead produces the observed:
+~805-807 ms
+
+The important unresolved question is not why it takes 806 ms.
+
+That is fully explained.
+
+The important unresolved question is:
+
+Why is the function frequently reaching the full timeout, and does the requested trader inventory metadata actually need to be refreshed for these Malzin-style personal negotiation turns at all?
+
+That is the next investigation target.
