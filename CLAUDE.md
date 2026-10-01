@@ -4,7 +4,7 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
 ## Current state (2026-10-01, after run 5 + round 19) — start here
 - **Installed:** Stobe.dll `8B231133…`, KenshiFP.dll `639DAD65…`; server through round 19 (live + ss-merge, pushed). stobe-tests baseline 52 pass / 7 known (negotiation_engine flakes; rerun).
-- **Next job:** test plan "Round 19 retest" (R1, R2, C1, C2, F1b, D1, H1, M1, M2, S1) plus the untested round 18 rows (N1–N3, N5, V1–V2, S1). Log in a new `test-run-<date>.md`; next bug is **79**. Run 5 log: `test-run-2026-10-01.md`.
+- **Next job:** test plan "Round 19 retest" (R1, R2, C1, C2, F1b, D1, H1, M1, M2, S1) plus the untested round 18 rows (N1–N3, N5, V1–V2, S1). Log in a new `test-run-<date>.md`; next bug is **80** (79 is logged in the test plan, section 4, to fix next round). Run 5 log: `test-run-2026-10-01.md`.
 - **No manual validation:** run only rows Claude can verify from logs/state/goal status; list the "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. DLL fixes: build during the run, install only when Shay says Kenshi is closed.
 - **Test location:** Shay's outpost "Home" (layout in the test plan). Malzin is in Shay's squad (faction "Nameless"), Fond (+60). Keep food in a chest for long goals.
 - History: `STOBE_bug_history.md` (bugs 1–78), `PATCH_HISTORY.md`, run logs in `archive/`.
