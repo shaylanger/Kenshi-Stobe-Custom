@@ -62,6 +62,32 @@ const DWORD kSustainedKnockoutPulseMs = kDrunkKnockoutPulseMs;
 const int kDrugHighDurationSeconds = 5 * 60 * 60;
 const float kDrugHungerMultiplier = 1.5f;
 const float kDrugExtraHungerMultiplier = kDrugHungerMultiplier - 1.0f;
+// Hand an item to a character: into their inventory first; only if that fails,
+// Kenshi's giveItem with drop-on-fail (counted as dropped at their feet).
+// giveItem alone failed silently with room in the pack (run 11).
+static bool StobeHandOverItem(Character *recipient, Item *item, int quantity,
+                              bool *droppedAtFeet) {
+  if (droppedAtFeet)
+    *droppedAtFeet = false;
+  if (!recipient || !item || (uintptr_t)item <= 0x1000)
+    return false;
+  try {
+    Inventory *inv = recipient->getInventory();
+    if (inv && (uintptr_t)inv > 0x1000 &&
+        inv->addItem(item, quantity > 0 ? quantity : 1, false, false))
+      return true;
+  } catch (...) {
+  }
+  try {
+    recipient->giveItem(item, true, false);
+  } catch (...) {
+    return false;
+  }
+  if (droppedAtFeet)
+    *droppedAtFeet = true;
+  return true;
+}
+
 const float kNpcCloseActionRangeUnits = 25.0f;
 const DWORD kNpcCloseActionApproachTimeoutMs = 10000;
 
@@ -4331,10 +4357,13 @@ bool TryTransferItemFromInventoryByQuery(Inventory *sourceInventory,
     } catch (...) {
       detachedQuantity = transferQuantity;
     }
-    try {
-      recipient->giveItem(detached, true, false);
-    } catch (...) {
+    bool handOverDropped = false;
+    if (!StobeHandOverItem(recipient, detached, detachedQuantity, &handOverDropped)) {
       return false;
+    }
+    if (handOverDropped) {
+      Log("ACTION_EXEC: hand-over to " + SafeCharacterName(recipient) +
+          " did not fit: dropped at their feet item='" + itemName + "'");
     }
 
     itemNameOut = itemName;
@@ -8295,7 +8324,13 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
               return false;
             }
             try {
-              npc->giveItem(toGive, true, false);
+              if (detached) {
+                if (!StobeHandOverItem(npc, toGive, transferQuantity, nullptr)) {
+                  return false;
+                }
+              } else {
+                npc->giveItem(toGive, true, false);
+              }
             } catch (...) {
               return false;
             }
@@ -8691,8 +8726,13 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
                 } catch (...) {
                   recipientHasRoom = true;
                 }
-                recipient->giveItem(detached, true, false);
-                if (!recipientHasRoom) {
+                (void)recipientHasRoom; // prediction only; the real result decides
+                bool handOverDropped = false;
+                if (!StobeHandOverItem(recipient, detached, actualTransferred,
+                                       &handOverDropped)) {
+                  continue;
+                }
+                if (handOverDropped) {
                   droppedAtFeetCount += actualTransferred;
                 }
                 transferredCount += actualTransferred;
