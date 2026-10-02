@@ -101,7 +101,6 @@ What rounds 17–18 added (what these rows check):
 | 49 | 50x goal: compare to run 5 (`[202 s]` to the bread block) | Steps follow each other without long idles; pauses freeze the goal (bug 78) |
 | 50 | Long goal at 50x with food in a chest, Malzin's food low | `GOAL_MEAL hungry` → `ate from …` → `done`; goal resumes (round 19 meals) |
 | 51 | Same with no food anywhere | `GOAL_MEAL no food anywhere`; she says she's hungry and there's no food (server `Hunger report queued`); keeps working; afterwards **no** `GOAL_MEAL hungry` flood (one line, then quiet ~10 game min) (bug 92) |
-| 52 | Save, give "Patrol the base", quit (or load the save) without saving | KenshiFP `GOAL_LOAD world time …`, then `GOAL_LOAD dropped id=… given_at=… world_now=…`; she isn't patrolling, no walk-back/report. A goal given **before** the save keeps running (bug 83) |
 | 54 | Bandit fight: accept an NPC surrender ("Deal…") | Deal dispatches STOP_ATTACK + payment; he stops for good (bug 88) |
 | 55 | Offer a bandit cats to stop, pay; stay on block + passive | Gang stands down and stays down for 2 min; your hits on attackers log as "Defending against"; "we had a deal" → `Ceasefire honoured from a completed deal` (bugs 89, 90) |
 | 56 | Let a common bandit get badly hurt | Surrender offer ≤ 300 cats and ≤ 35 % of what he carries; server `NPC offer capped (bug 91)` if the model asked for more; only one offer per NPC per fight (bug 91) |
@@ -115,8 +114,6 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 | 59 | Same NPC with trust ≥ 56 (set by hand) or after agreeing a paid deal ("follow me for 200 cats. Deal?" → pay) | Follow/guard/wait **does** run |
 | 60 | Non-faction NPC in a fight or deal: help/attack, give items, take cats, surrender | Unaffected by the order gate |
 | 61 | STOBE Settings window: TTS Volume row now has two boxes | Volume 0–200, Fade 25–400; values save to `StobeCustom.ini` (`TTSVolume`, `TTSFadePercent`) and survive a relaunch (feature 2) |
-| 62 | TTS Volume 150–200 | Log `TTS_PLAYBACK … volume_pct=150+`; louder (Shay listens; clipping on loud lines is expected) |
-| 63 (Shay listens) | Fade 50 vs 200, with the NPC ~30–60 m away | 50: fades/mutes sooner (`camera_out_of_range` skips at shorter range); 200: carries further |
 | 65 (optional) | Turn `Speed Dialogue` back on | Old behaviour returns (faster TTS at 2–3x) |
 | 66 (Shay) | Give her a job of your own first, then a goal | Your job stays; only the goal's job comes and goes. Any `GOAL_JOB unexpected removal … disabled` = removal API is type-based → report |
 | 67 (Shay looks) | Select Malzin during a goal | Top-centre label: "Malzin - Make 2 Building Material (1/2)" + current step; "+N more queued" when queued |

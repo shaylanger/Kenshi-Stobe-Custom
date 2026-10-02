@@ -88,7 +88,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 80 | Work goals blocked "production stalled" after ~3 game min (budgets 10x short on the goal clock) | KFP r19b: game-time budgets x10 | installed, not retested |
 | 81 | Meals never started; prompts said "Well fed" while starving (hunger read as hungriness) | KFP r19b + Stobe r19b: level = hunger + fed; eat <150, stop 250; eating detected by a rise | installed, not retested |
 | 82 | Game crash on loading Home (14:18): meal step called a NULL inventory function (Malzin starving, patrol goal still active) | KFP r19c: resolve getinv in stg_exports; meals skip anyone down/dead/not loaded; whole meal step under the crash guard | installed, not retested |
-| 83 | Goals given after a save came back when that save was loaded (goals live in our own files, not the save) | KFP r19d: goals stamped with in-game time (getTimeStamp_inGameHours); goals newer than the loaded world dropped silently | installed, not retested |
+| 83 | Goals given after a save came back when that save was loaded (goals live in our own files, not the save) | KFP r19d: goals stamped with in-game time (getTimeStamp_inGameHours); goals newer than the loaded world dropped silently | passed run 8 |
 | 84 | STOBE hotkeys (chat box, push-to-talk, settings menu) fired while typing in other apps | Stobe r19e: hotkeys need the Kenshi window focused (foreground window in our process) | passed run 8 (Shay) |
 | 85 | Hunger read 100x too low: raw MedicalSystem::hunger is 0..3, the UI shows x100 (Malzin raw 2.16 = UI 216); meals thought she starved, prompt said Starving | KFP + Stobe r19f: level = (hunger + fed) x 100; eating detection on raw rises >= 0.01 | installed, not retested |
 | 86 | "Guard me": BODYGUARD on Shay logged ok but Malzin stood aimless | KFP r19g: squad->squad guard/follow uses FOLLOW_PLAYER_ORDER (44) | installed, not retested |
@@ -111,7 +111,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 103 | Purchases from a trader logged as bought from Malzin (cats really spent; seller name wrong) | open | open |
 | 104 | A loot goal that took 0 items is reported as success ("picked clean", "weapons are stripped") | open | open |
 | 105 | Fight narration invents facts: wrong person credited for knockouts, knockouts stated too early, Skovr/Skovrek mixed up, enemy gangs treated as allies | open | open |
-| 106 | Work goals: she works ~1 s, stops, waits, repeats; goals crawl even at 50x. The planner re-sends the operate order + rethink every 2 game s | fix planned: order only on machine change or after 30+ game s idle | open |
+| 106 | Work goals: she works ~1 s, stops, waits, repeats; goals crawl even at 50x. The planner re-sends the operate order + rethink every 2 game s | KFP r19i: order only on a machine change or after 30 game s idle (NULL_TASK/IDLE) | built 8751BF24, not installed |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.
