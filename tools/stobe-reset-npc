@@ -20,7 +20,15 @@ DELETE FROM memory WHERE people ILIKE '%${lower}%' AND localts >= :since;
 DELETE FROM memory_summary WHERE people ILIKE '%${lower}%' AND localts >= :since;
 DELETE FROM diarylog WHERE people ILIKE '%${lower}%' AND localts >= :since;
 DELETE FROM eventlog WHERE people ILIKE '%${lower}%' AND localts >= :since;
-UPDATE core_npc_master SET extended_data = extended_data #- '{relationships,${player}}' WHERE LOWER(name)='${lower}';
+-- the player's key in either case ("Shay" vs setting "shay"), in both copies (extended_data + relationships column)
+UPDATE core_npc_master SET extended_data = jsonb_set(extended_data, '{relationships}',
+    COALESCE((SELECT jsonb_object_agg(k, v) FROM jsonb_each(extended_data->'relationships') AS e(k, v) WHERE LOWER(k) <> LOWER('${player}')), '{}'::jsonb))
+  WHERE LOWER(name)='${lower}' AND jsonb_typeof(extended_data->'relationships') = 'object';
+UPDATE core_npc_master SET relationships = COALESCE((SELECT jsonb_object_agg(k, v) FROM jsonb_each(relationships::jsonb) AS e(k, v) WHERE LOWER(k) <> LOWER('${player}')), '{}'::jsonb)::text
+  WHERE LOWER(name)='${lower}' AND relationships LIKE '{%';
+SELECT 'relationship left', COUNT(*) FROM core_npc_master WHERE LOWER(name)='${lower}'
+  AND (EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(extended_data->'relationships','{}'::jsonb)) k WHERE LOWER(k)=LOWER('${player}'))
+    OR (relationships LIKE '{%' AND EXISTS (SELECT 1 FROM jsonb_object_keys(relationships::jsonb) k WHERE LOWER(k)=LOWER('${player}'))));
 COMMIT;
 SQL
 echo "reset $npc (since $since, relationship to $player cleared)"
