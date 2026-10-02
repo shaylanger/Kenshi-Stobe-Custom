@@ -13,6 +13,7 @@
 /* Game-time budgets (bug 80): these were real-time values tuned while testing
  * at 10x; on the goal clock (bug 78) they must be 10x larger in game ms. */
 #define WGP_STALL_MS 1800000
+#define WGP_REORDER_MS 30000 /* bug 106: re-send the operate order only after 30 game s idle */
 #define WGP_UNIT_MAX_MS 14400000 /* bug 93: most game time one unit may take while she stands at the machine */
 #define WGP_OPERATE_NEAR 120.0f
 #define WGP_DEP_STALL_MS 9000000
@@ -559,6 +560,21 @@ static void wgp_job_add(void *actor, WgpGoal *g, WgpProducer *p)
     }
 }
 
+/* Bug 106: is she doing nothing right now? (no task, NULL_TASK 0 or IDLE 14) */
+static int wgp_actor_idle(void *actor)
+{
+    void *tholder = readable((void *)((uintptr_t)actor + CHAR_TASKHOLDER), 8)
+        ? *(void **)((uintptr_t)actor + CHAR_TASKHOLDER) : NULL;
+    if (!readable(tholder, TASK_CUR + 8)) return 1;
+    void *cur = *(void **)((uintptr_t)tholder + TASK_CUR);
+    if (!cur) return 1;
+    if (!readable(cur, TASK_DESC + 8)) return 0;
+    void *desc = *(void **)((uintptr_t)cur + TASK_DESC);
+    if (!readable(desc, TASKDESC_TYPE + 4)) return 0;
+    int t = *(int *)((uintptr_t)desc + TASKDESC_TYPE);
+    return t == 0 || t == 14;
+}
+
 /* Operate order for a goal; clears the old order first when the target building changes. */
 static int wgp_issue_goal_task(void *actor, WgpGoal *g, WgpProducer *p)
 {
@@ -738,7 +754,8 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
 
     { int pw=wgp_power_gate(g,&p,reason,reason_sz); if (pw<0) return -1; if (pw>0) return 0; }
     if (wgp_feed_inputs(gw,actor,g,&p)) return 0;
-    if (g->rt_task_building != p.building || (LONG)(stobe_game_ms()-g->last_order_ms)>2000) {
+    if (g->rt_task_building != p.building ||
+        ((LONG)(stobe_game_ms()-g->last_order_ms)>WGP_REORDER_MS && wgp_actor_idle(actor))) { /* bug 106 */
         wgp_issue_goal_task(actor,g,&p);
         g->last_order_ms=stobe_game_ms();
     }
@@ -923,7 +940,8 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
         if (pw>0) return;
     }
     if (wgp_feed_inputs(gw,actor,g,&root)) return;
-    if (g->rt_task_building != root.building || (LONG)(now-g->last_order_ms)>2000) {
+    if (g->rt_task_building != root.building ||
+        ((LONG)(now-g->last_order_ms)>WGP_REORDER_MS && wgp_actor_idle(actor))) { /* bug 106 */
         wgp_issue_goal_task(actor,g,&root);
         g->last_order_ms=now;
     }
