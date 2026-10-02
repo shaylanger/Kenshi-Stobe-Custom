@@ -33,6 +33,7 @@
 #include "PlayerBaseState.h"
 #include "StobeIdentityRename.h"
 #include "StobeChatMode.h"
+#include "TestAutomation.h"
 #include "Utils.h"
 #include "VoiceCapture.h"
 #include "WorldStateRuntime.h"
@@ -14343,6 +14344,7 @@ __declspec(dllexport) void startPlugin() {
   Log("HOOK_DIAG: AddHook status=" + ToString((int)status) +
       " orig=" + ToString((unsigned int)(uintptr_t)playerUpdate_orig));
   Log("HOOK: PlayerInterface::update installed (UI-only mode).");
+  InstallTestAutomationHooks(); // test-only automation commands (auto_inbox.txt)
 
   void *thunkAttackingYou = (void *)GetProcAddress(
       hLib, "?attackingYou@Character@@QEAAXPEAV1@_N1@Z");
