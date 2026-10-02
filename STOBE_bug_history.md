@@ -118,7 +118,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 110 | Malzin refused a loot order on fresh bodies: "Already picked that one clean" (old chat history) | open: needs a server guard (loot orders become goals; the goal decides) | open |
 | 111 | Full pack/slots reported as "found no weapons to take" | KFP r21 c15dec1: "no room" / "took what fit" | PASSED run 9 |
 | 112 | Weapons that go straight into her weapon slots counted as 0 looted | KFP r21 2b62a1a: count what moved | PASSED run 9 |
-| 113 | The player's own knockout/recovery/death never became events | Stobe r21 4ca2d63 | built, not seen yet (needs Shay KO) |
+| 113 | The player's own knockout/recovery/death never became events | Stobe r21 4ca2d63 | PASSED run 9 (`[EVENT] knockout: Shay` when Lornic KO'd her) |
 | 114 | A big worn weapon (Staff) dropped next to the body instead of looted | KFP r21 81f6b90: worn items taken straight from bodies | PASSED run 9 |
 | 115 | Goal meals used food up without feeding her (eatItem: +1 per Dried Meat) | KFP r21 7c3d3e3: food into her pack, the game eats | PASSED run 9 (test 50) |
 | 116 | A paid ceasefire broken by a gang-mate's idle chat (Attack action) | server r21 5d75ff2 + c0599a4: ATTACK on the player dropped for the deal's gang for 10 min | PASSED run 9 (test 55) |
@@ -127,6 +127,15 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 119 | Asked to put on something she already wears, she tries to equip it ("let me get it back on") | open: server guard (worn item -> say it's on) | open |
 | 120 | A squadmate's gift to the player blocked as an outsider's ("Blocked unpaid gift ... affinity 0") | server r21 7eeeefb: speaker's own action config | PASSED run 9 (test 28) |
 | 121 | Full pack: work goal retried "could not take Raw Stone" every second, never blocked | KFP r21 814e72e: BLOCKED "her pack is full" after 5 tries | PASSED run 9 |
+| 122 | Cats paid up front for a refused request were kept | server ecdf4fc: unearned prepayment refunded | PASSED run 9 (test 11) |
+| 123 | Action target "Grenn Hungry Bandit" (brackets stripped) didn't match; item went to Shay | Stobe 8a08078: punctuation-insensitive match | built, not retested |
+| 124 | "Wait here for <name>" → plain HoldPosition | server 3ffad07: prompt → WaitForGoal | PASSED run 9 (test 42) |
+| 125 | WAIT_FOR target with stripped brackets never matched the squad member | KFP cf0d2fa | PASSED run 9 (test 42) |
+| 126 | Payment skipped while the NPC was KO'd → deal IMPOSSIBLE | server a652d74: re-sent up to 2x on her next line (10 min) | unit-tested, not seen in game |
+| 127 | SPARE broken by the squad's swing 3–10 s after a truce | server fd36e05: 10 s grace | PASSED run 9 (test 19) |
+| 128 | Surrender directive lost when the NPC was named mid-fight | server 9203c6f: "<title>" matches "<Name> [<title>]" | unit-tested, not seen in game |
+| 129 | NPC accepting the player's counter dropped by the bug 96 guard | server 5cfc41f | PASSED run 9 (test 18) |
+| 130 | Offer cap (bug 91) lowers an accepted 400 to 300 after she said "Four hundred" | open: correct her line or refuse above the cap | open |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, KenshiFP `0193CD57…`, server round 19g). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work; rows that passed are removed (they stay in the run logs). Bugs 1–93 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/`, `test-run-2026-10-01-r8.md` (run 8).
+Last updated 2026-10-02 (run 9 + round 21, bugs through 130; Stobe.dll `4182D962`, KenshiFP `F7935763`, server through bug 129). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work; rows that passed are removed (they stay in the run logs). Bugs and their fixes: `STOBE_bug_history.md`. Run logs: `test-run-2026-10-02-r9.md` (run 9), `archive/`.
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -21,16 +21,17 @@ Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, Ken
 |---|---|---|
 | 1 (bug 42) | Fight setup. She agrees to stop for pay-later ("…I pay you right after. Deal?"; she needs trust for this, so Fond works). **Don't pay** and don't pause for over 1 minute of game time. | After the window: BREACHED_PLAYER, an angry line **that matches her attack** (no "cats received"), and she attacks again. Log: `Negotiation directive queued … breach_react`. Pause at once when she attacks. |
 | 2 (bug 43) | Fight setup with `help`; she stops for pay | Her words don't claim her gang "isn't hers to call off"; the gang stands down (`PERSONAL_TRUCE: stood down faction-mate`). |
-| 3 (bug 35) | While a deal is underway, make a **new** offer with a different amount ("…and 300 cats to take off your hat?") | Her reply is kept; she may repeat your 300. Only a sentence with a truly wrong amount is dropped. |
 | 4 (bug 37) | Watch for a COUNTER with no terms (log `Negotiation rejected by deterministic validation … invalid_terms_json`) | Next negotiation turn she's reminded and restates it as COUNTER with terms. |
 | 6 | Only if she ever agrees to sell or stow her katana without Fond trust | Line replaced with "Not my Chisa Katana…", log `Negotiation rejected: NPC would give up her weapon`. (She has refused on her own every time so far.) |
+| 86 (bug 126) | `scenarios.sh surrender`, let the raider get knocked out, then "<Name>, deal." | Deal not IMPOSSIBLE: term REISSUE_QUEUED, he pays (GIVE_CATS VERIFIED) on his first line after waking |
+| 87 (bug 128) | Surrender from an unnamed raider who gets named mid-fight | Server log `Directive follows the NPC's new name (bug 128)`, offer arrives |
+| 89 (bug 130, open) | Counter above the cap ("make it 400" when the cap is 300) | Her words should match what she pays (today: says 400, pays 300) |
 
 ## 2. Couldn't be triggered so far
 | # | Say / do | Expect | Why not yet |
 |---|---|---|---|
 | 7 (bug 30) | If she says "Fine…" but the ledger shows nothing, send the next line | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision |
 | 9 | Pay for something she can't do, and she agrees | Deal fails and **your Cats come back** | She always says she can't. (The refund itself works: seen in run 2.) |
-| 11 | "Here's 500 cats, now <something she won't do>" | The 500 moves at once (by design); she refuses → the 500 is refunded | Not tried yet |
 | 13 | One-on-one fight (no `help`) where a faction-mate joins uninvited | `PERSONAL_FIGHT: stood down joiner=…` within ~0.25 s | In every one-on-one fight nobody joined |
 | 14 | Counter-offers where she might misquote ("300 now, 200 after?") | Misquoted amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted |
 
@@ -44,14 +45,9 @@ Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, Ken
 | # | Scenario | Expect |
 |---|---|---|
 | 17 | Refuse to pay after she's handed something over | She may threaten or attack; paying then stops it and the stop holds |
-| 18 | Two or more enemies: bargain with one, no names in follow-ups | Your lines stay with the NPC you're bargaining with |
-| 19 | After the truce, call your squad off within ~10 s | Not counted as you breaking the deal |
-| 20 | After the truce, attack her again (after 10 s) | BREACHED_PLAYER, your fault |
 | 21 | Haggle back and forth more than 6 times | She ends the talks |
-| 22 | Beat an enemy to low health (don't kill) | They beg or offer terms; "<Name>, deal." → accepted |
 | 23 | Stand near a neutral NPC losing a fight | They ask for help, maybe with a reward, paid after |
-| 24 | Trigger test 22 again right away | No second offer from the same NPC within 10 minutes |
-| 25 | Break 2+ deals, then talk to a new NPC | "Word gets around": your reputation is mentioned |
+| 25 | Break 2+ deals, then talk to a new NPC | "Word gets around": your reputation is mentioned | Run 9: the line is in the prompt (broken > kept), she got stricter but never said it. Needs `player_broken > player_kept` (currently 39 kept / 10 broken) |
 | 26 | Betrayal (rare: dishonest NPC who dislikes you) | They attack after you pay; BREACHED_NPC, marked intentional |
 
 **Needs Shay's hands** (heal, hand items, two NPCs)
@@ -76,10 +72,9 @@ What rounds 17–18 added (what these rows check):
 | 35 | Same with a machine really unpowered while she works it | After ~30 s: BLOCKED "… has no power"; she walks back and says why (bugs 59, 61) |
 | 36 | Something needing a crafted ingredient at a bench | Bench queue grows only by what's missing |
 | 38 (Shay looks) | "Fetch the mead" with her starting **far** from the chest | Step "Walking to …"; she walks to the chest instead of fetching from afar (bug 51) |
-| 39 | "Give Wendy 3 medkits" (needs a 2nd squad member) | 3 move between squad members |
+| 39 | "Give Grenn 3 medkits" to a recruit with a bracketed name | 3 move between squad members (bug 123 fix, not retested) |
 | 40 | "Buy 3 bread from the trader" (needs a trader) | Walks there and really buys them |
 | 41 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
-| 42 | "Wait here for Wendy" (needs a 2nd squad member) | Holds until Wendy is near |
 
 **Round 19 retest** (round 19h fixes installed after run 8). At Home with Malzin in the squad, **Shay selected** (the test inbox speaks as the selected character); automate unless marked.
 | # | Say / do | Expect |
