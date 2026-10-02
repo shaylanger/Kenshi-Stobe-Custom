@@ -294,17 +294,49 @@ static int stg_transfer_to_character(void *src_inv,void *dst_char,const char *qu
     return moved;
 }
 
+/* Bug 108: worn items aren't in Inventory::_allItems; they sit in the
+ * equipment sections. sectionsInSearchOrder lektor @0x68; each
+ * InventorySection holds a vector<SectionItem> @0x40 (first, last), 0x10 per
+ * entry with the Item* first. Returns the first worn item matching query. */
+static void *stg_first_worn_matching(void *inv,const char *query)
+{
+    if(!inv||!readable((void *)((uintptr_t)inv+0x68),sizeof(StobePtrLektor)))return NULL;
+    StobePtrLektor *secs=(StobePtrLektor *)((uintptr_t)inv+0x68);
+    if(!secs->stuff||secs->count>256||!readable(secs->stuff,secs->count*sizeof(void*)))return NULL;
+    for(uint32_t s=0;s<secs->count;s++){
+        void *sec=secs->stuff[s];
+        if(!sec||!readable((void *)((uintptr_t)sec+0x40),16))continue;
+        uintptr_t first=*(uintptr_t *)((uintptr_t)sec+0x40),last=*(uintptr_t *)((uintptr_t)sec+0x48);
+        if(!first||last<first||(last-first)>0x10*512||!readable((void *)first,last-first))continue;
+        for(uintptr_t e=first;e<last;e+=0x10){
+            void *it=*(void **)e;
+            if(!it||!readable((void *)((uintptr_t)it+ITEM_IS_EQUIPPED),1))continue;
+            if(!*(unsigned char *)((uintptr_t)it+ITEM_IS_EQUIPPED))continue;
+            if(stg_item_matches(it,query))return it;
+        }
+    }
+    return NULL;
+}
+
 static int stg_transfer_char_to_char(void *src_char,void *dst_char,const char *query,int maxqty)
 {
     if(!src_char||!dst_char||maxqty<=0||!stg_exports())return 0;
     void *src=g_stobe_getinv(src_char);
     if(!src)return 0;
     int moved=0,guard=0;
+    int pr=char_prone_state(src_char);
+    int body=(g_stg_isdead&&g_stg_isdead(src_char))||pr==2||pr==3||pr==4;
     while(moved<maxqty && guard++<64){
         void *it=stg_first_matching(src,query);
+        if(!it&&body)it=stg_first_worn_matching(src,query); /* bug 108 */
         if(!it)break;
         if(readable((void *)((uintptr_t)it+ITEM_IS_EQUIPPED),1) && *(unsigned char *)((uintptr_t)it+ITEM_IS_EQUIPPED)){
-            if(!stobe_unequip_item(src_char,it))break; /* still worn: leave it */
+            if(!stobe_unequip_item(src_char,it)){
+                /* Bug 108: bodies can't unequip; take worn gear straight out of a
+                 * dead or downed body's inventory, as the loot screen does. */
+                if(!body)break; /* a standing character keeps what it wears */
+                logline("[stobe] TASK_GOAL loot worn item from body (unequip refused, taking it directly)");
+            }
         }
         int avail=*(int *)((uintptr_t)it+0x12C);if(avail<1)avail=1;
         int take=maxqty-moved;if(take>avail)take=avail;
