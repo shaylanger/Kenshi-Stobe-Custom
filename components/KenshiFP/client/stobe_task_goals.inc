@@ -331,7 +331,21 @@ static int stg_transfer_char_to_char(void *src_char,void *dst_char,const char *q
         void *it=stg_first_matching(src,query);
         if(!it&&body)it=stg_first_worn_matching(src,query); /* bug 108 */
         if(!it)break;
-        if(readable((void *)((uintptr_t)it+ITEM_IS_EQUIPPED),1) && *(unsigned char *)((uintptr_t)it+ITEM_IS_EQUIPPED)){
+        int worn=readable((void *)((uintptr_t)it+ITEM_IS_EQUIPPED),1) && *(unsigned char *)((uintptr_t)it+ITEM_IS_EQUIPPED);
+        void *direct=NULL;
+        if(worn&&body){ /* bug 114: unequip into a full body bag drops big weapons on the ground */
+            int availw=*(int *)((uintptr_t)it+0x12C);if(availw<1)availw=1;
+            int takew=maxqty-moved;if(takew>availw)takew=availw;
+            direct=g_stg_remove(src,it,takew,0);
+            if(direct)logline("[stobe] TASK_GOAL loot worn item straight from body");
+        }
+        if(direct){
+            int actual=*(int *)((uintptr_t)direct+0x12C);if(actual<1)actual=1;
+            if(!g_stg_give(dst_char,direct,0,0)){g_stg_add(src,direct,actual,1,0);g_stg_loot_no_room=1;break;}
+            moved+=actual;
+            continue;
+        }
+        if(worn){
             if(!stobe_unequip_item(src_char,it)){
                 /* Bug 108: bodies can't unequip; take worn gear straight out of a
                  * dead or downed body's inventory, as the loot screen does. */
