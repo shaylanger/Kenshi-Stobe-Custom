@@ -1,9 +1,9 @@
 # STOBE: open issues and tests left
 
-Last updated 2026-10-02 (run 11). Installed: Stobe.dll `D7DA294A`, KenshiFP `F7935763`; server through round 23.
+Last updated 2026-10-02 (run 12). Installed: Stobe.dll `526D69F1`, KenshiFP `D3C78B3D`; server through round 24 (`b375e2b`).
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **41**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **54**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -32,40 +32,43 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 | 14 | A friendly trader nearby: "Buy 3 bread from the trader" | She walks there and really buys them |
 | 15 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
 | 16 | A goal needing a crafted ingredient at a bench | The bench queue grows only by what's missing |
-| 17 | Break 2+ deals so broken > kept (now 39 kept / 10 broken), then talk to a new NPC | She mentions your reputation ("word gets around") |
+| 17 | Break 2+ deals so broken > kept (now 45 kept / 10 broken), then talk to a new NPC | She mentions your reputation ("word gets around"). Tried run 12 (counts set to 1/5): the prompt had "Word gets around: Shay has a reputation for breaking deals." every time, but 3 NPCs never voiced it |
 | 18 | Betrayal: a dishonest NPC who dislikes you, a deal with payment first | They attack after you pay; BREACHED_NPC, marked intentional (rare by design) |
-| 19 | Deal talk with NPC A while NPC B stands nearby; then talk to B | B doesn't act as if you'd asked him; may mention he overheard |
-| 20 | Refuse to pay after she's handed something over (fight setup) | She may threaten or attack; paying then stops it and the stop holds |
-| 21 (was 42) | Fight setup, Fond trust, she stops for pay-later; don't pay for 1+ game minute | BREACHED_PLAYER, an angry line that matches her attack (no "cats received"), log `breach_react` |
-| 22 (was 43) | Fight setup with `help`; she stops for pay | Her words don't say her gang "isn't hers to call off"; the gang stands down |
-| 23 (was 78) | A long goal at 50x | No long idles between steps (partly seen in run 6) |
-| 24 (was 131) | An NPC who agreed to pay while knocked out wakes up | Payment re-sent and VERIFIED, never IMPOSSIBLE while his line is being written (unit-tested; seen once in run 10) |
+| 20 | Refuse to pay after she's handed something over (fight setup) | She may threaten or attack; paying then stops it and the stop holds. Tried run 12: spawned raiders always want Cats first ("You pay first, then we talk about the bow"), 2 tries; needs Malzin's force-attack setup or a trader |
+| 21 (was 42) | Fight setup, Fond trust, she stops for pay-later; don't pay for 1+ game minute | BREACHED_PLAYER, an angry line that matches her attack (no "cats received"), log `breach_react`. Tried run 12: a raider at Fond 60 refused pay-later 3 times ("After is where men die"). The unit check "unpaid -> BREACHED_PLAYER" is stale: hostile deals expire on game time, the test only backdates wall time |
+| 22 (was 43) | Fight setup with `help`; she stops for pay | Her words don't say her gang "isn't hers to call off"; the gang stands down. Run 12 (gang of 3 raiders, paid 1000): words fine ("You're paying the whole gang"), deal COMPLETE, no fighting after; but the gang stood down only because gang-mate Yarel's own surrender offer sent a faction STOP_ATTACK. The paid deal itself sends only an individual STOP_FIGHT for the payee |
 
 ## C. Can't reproduce so far (fixed or built, never triggered in game)
 
 | # | What would show it | Expect | Tried |
 |---|---|---|---|
-| 25 (was 128) | A surrender offer from a raider who gets **named** mid-fight | Server log `Directive follows the NPC's new name`; offer arrives | Spawned raiders are named before any offer (run 10) |
-| 26 (was 30) | She says "Fine…" but the ledger shows nothing | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision |
-| 27 (was 37) | A COUNTER with no terms (log `invalid_terms_json`) | Next turn she's reminded and restates it with terms | Never happened |
-| 28 (was 31) | "Take off X" during a deal | Recorded as UNEQUIP, not a hand-over | Never happened |
-| 29 (was 35) | She misquotes an amount in a longer reply | Only the wrong sentence is rewritten, not the whole reply | Never happened |
-| 30 (was 38) | A non-member's prompt | No "Shay \| squadmate" line | Never seen |
-| 31 | Counter-offers like "300 now, 200 after?" where she misquotes | Amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted |
-| 32 | A REJECT that names her own price ("2000 for the hat") | Recorded as COUNTER (fixed run 11, unit-tested) | The model chose COUNTER by itself in run 11 |
-| 33 | Pay for something she can't do, and she agrees | Deal fails and your Cats come back | She always says she can't (refund itself works) |
+| 25 (was 128) | A surrender offer from a raider who gets **named** mid-fight | Server log `Directive follows the NPC's new name`; offer arrives | Spawned raiders are named before any offer (run 10). Run 12: no `Directive follows` line in ~10 fights |
+| 26 (was 30) | She says "Fine…" but the ledger shows nothing | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision (run 12 too) |
+| 27 (was 37) | A COUNTER with no terms (log `invalid_terms_json`) | Next turn she's reminded and restates it with terms | Never happened (run 12: none in ~40 deal turns) |
+| 28 (was 31) | "Take off X" during a deal | Recorded as UNEQUIP, not a hand-over | Tried run 12: Malzin refused both (iron hat for 50, sandals for 200), no terms |
+| 29 (was 35) | She misquotes an amount in a longer reply | Only the wrong sentence is rewritten, not the whole reply | Run 12: 8 rewrites, all from the first number on (held-back streaming); 4 were false alarms, now item 51 |
+| 30 (was 38) | A non-member's prompt | No "Shay \| squadmate" line | Never seen (run 12: 0 in all of today's prompts) |
+| 31 | Counter-offers like "300 now, 200 after?" where she misquotes | Amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted (run 12: "300 now, 200 after" countered with the same numbers) |
+| 32 | A REJECT that names her own price ("2000 for the hat") | Recorded as COUNTER (fixed run 11, unit-tested) | The model chose COUNTER by itself in run 11; run 12 "5 cats" got a plain REJECT |
+| 33 | Pay for something she can't do, and she agrees | Deal fails and your Cats come back | She always says she can't (refund itself works); run 12: "carry me to the Hub", "build a house now" both refused |
 | 34 | One-on-one fight where a faction-mate joins uninvited | `PERSONAL_FIGHT: stood down joiner=…` within ~0.25 s | Nobody joined so far |
-| 35 | She agrees to sell/stow her weapon without Fond trust | "Not my Chisa Katana…", log `NPC would give up her weapon` | She refuses on her own |
-| 36 | Haggle back and forth more than 6 times | She ends the talks | Run 10: accepted at round 2 (unit-tested) |
+| 35 | She agrees to sell/stow her weapon without Fond trust | "Not my Chisa Katana…", log `NPC would give up her weapon` | She refuses on her own (run 12: 3000 and 5000 Cats, refused) |
+| 36 | Haggle back and forth more than 6 times | She ends the talks | Run 10: accepted at round 2 (unit-tested). Run 12: 8 rounds with a raider, but every ACCEPT starts a new deal, so rounds never passed 2 |
 | 37 | A neutral NPC losing a fight near Shay | They ask for help, maybe with a reward | Run 10: spawned victim wandered off |
 
+| 44 | A Cats term recorded the wrong way round (her words/action say she pays) | Turned round: her GiveCats action, "you give me N", or the deal on the table (log `Negotiation term fixed`) | Run 12: the first two rules fixed it in game; the third ("350 and you go free") unit-tested only; the model keeps finding new wordings |
+| 45 | An extra 0-Cats term in her terms | Dropped (log `0 Cats (item 45)`); deal recorded | Unit-tested |
+| 47 | An action target by a shared name with a corpse of that name nearby | The living NPC is chosen (Stobe `526D69F1`) | Built; scenarios no longer leave corpses, so not re-seen |
+| 49 | Pay an NPC who was named after the deal | Payment VERIFIED, and only for that NPC's deal (serial-pinned) | Part 1 seen in game (1000 Cats verified); part 2 (serial pin) unit-tested |
+| 51 | She repeats your offer, then names hers | Her reply is kept, no "My terms:" rewrite | Unit-tested |
 ## D. Open bugs (known broken, not fixed)
 
 | # | Bug | Notes |
 |---|---|---|
-| 38 | The work planner assumes 1 input per output | A recipe needing 2 raw stone per building material sends her back to the mine for the rest; she still finishes. Fix: read the recipe's input amounts from Kenshi's production data (KenshiFP `stobe_work_planner.inc`, `wgp_ensure_item` gets `need` = outputs) |
-| 39 | She claims an order is done when it isn't | Run 11: "Already done." to "stow your katana" while it was still equipped, no action sent. Needs a guard: a done-claim without a matching action/state |
-| 40 | Her inventory knowledge lags | Run 11: holding 4 Dried Meat she said she had 1 (the items came from the test helper, outside a chat). Check whether `INV_SYNC` reaches the prompt before her reply |
+| 41 | She claims something false about her gear | Run 12: right after re-equipping her katana: "You've got my larder and my blade both" (the prompt listed the katana under Equipment) |
+| 43 | A two-part order does only one part | `max_actions = 1`: "give me all your bread and all your dried meat" gave only the bread, while she said "You took my food". Fix or design call: allow 2 hand-overs, or make her say she does one |
+| 48 | A dying or dead NPC negotiates | Run 12: a raider hit by `stobe-auto kill` (dying) proposed a deal 19 s later, died, and his COUNTER came 2 s after death. Needs a rule: no deal talk once dying/dead |
+| 53 | The Cats cap comes out as a lie | Run 12: a raider with 10,000 Cats, capped at 300 (design), said "I don't have 350 cats. Never did." The prompt should let her refuse without claiming to be broke |
 
 ## E. Design questions and features
 
