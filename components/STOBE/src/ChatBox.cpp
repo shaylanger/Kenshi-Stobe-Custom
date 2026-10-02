@@ -2412,6 +2412,8 @@ struct StreamChatTask {
   std::string peopleJson;
   std::string previousSpeaker;
   std::string previousSpeakerHandle;
+  std::string playerFallbackName;   // bug 95: who a server-swapped speaker addresses
+  std::string playerFallbackHandle;
   std::string initiatorSpeaker;
   std::string initiatorSpeakerHandle;
   std::string requestMode;
@@ -3607,6 +3609,19 @@ bool ProcessStreamChatResponseLine(StreamChatParseState *state,
         std::string listenerName = TrimChatLine(state->task->previousSpeaker);
         std::string listenerHandle =
             TrimChatLine(state->task->previousSpeakerHandle);
+        // Bug 95: the server can swap in another speaker (goal report, NPC
+        // offer); that speaker addresses the player, not this turn's listener.
+        std::string taskSpeaker = TrimChatLine(state->task->npcName);
+        std::string fallbackName = TrimChatLine(state->task->playerFallbackName);
+        if (!fallbackName.empty() && !taskSpeaker.empty() &&
+            !EqualsIgnoreCase(actor, taskSpeaker) &&
+            !EqualsIgnoreCase(actor, listenerName) &&
+            !EqualsIgnoreCase(actor, fallbackName)) {
+          Log("BORED_EVENT: speaker swapped by server (" + taskSpeaker + " -> " +
+              actor + "); addressing " + fallbackName + " instead of " + listenerName);
+          listenerName = fallbackName;
+          listenerHandle = TrimChatLine(state->task->playerFallbackHandle);
+        }
         if (!listenerName.empty() && !EqualsIgnoreCase(listenerName, actor)) {
           explicitTalkTargetToken =
               BuildTalkTargetMetadataToken(listenerName, listenerHandle);
@@ -5460,6 +5475,8 @@ bool TriggerBoredEvent(GameWorld *world, bool forceDirectorMode,
   task->peopleJson = peopleJson;
   task->previousSpeaker = listener;
   task->previousSpeakerHandle = listenerSerial;
+  task->playerFallbackName = playerName;     // bug 95
+  task->playerFallbackHandle = playerSerial;
   if (task->previousSpeakerHandle.empty() && listener == playerName &&
       !playerSerial.empty()) {
     task->previousSpeakerHandle = playerSerial;
