@@ -111,6 +111,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 103 | Purchases from a trader logged as bought from Malzin (cats really spent; seller name wrong) | open | open |
 | 104 | A loot goal that took 0 items is reported as success ("picked clean", "weapons are stripped") | open | open |
 | 105 | Fight narration invents facts: wrong person credited for knockouts, knockouts stated too early, Skovr/Skovrek mixed up, enemy gangs treated as allies | open | open |
+| 106 | Work goals: she works ~1 s, stops, waits, repeats; goals crawl even at 50x. The planner re-sends the operate order + rethink every 2 game s | fix planned: order only on machine change or after 30+ game s idle | open |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

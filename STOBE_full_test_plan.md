@@ -117,7 +117,6 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 | 61 | STOBE Settings window: TTS Volume row now has two boxes | Volume 0–200, Fade 25–400; values save to `StobeCustom.ini` (`TTSVolume`, `TTSFadePercent`) and survive a relaunch (feature 2) |
 | 62 | TTS Volume 150–200 | Log `TTS_PLAYBACK … volume_pct=150+`; louder (Shay listens; clipping on loud lines is expected) |
 | 63 (Shay listens) | Fade 50 vs 200, with the NPC ~30–60 m away | 50: fades/mutes sooner (`camera_out_of_range` skips at shorter range); 200: carries further |
-| 64 | Game speed 3x (and 10x), NPC says a long line (Shay selected) | TTS at normal pitch/speed; log `TTS_PLAYBACK … speed` not scaled; next line doesn't start before the audio ends (feature 3). `Speed Dialogue` toggle in STOBE settings is off |
 | 65 (optional) | Turn `Speed Dialogue` back on | Old behaviour returns (faster TTS at 2–3x) |
 | 66 (Shay) | Give her a job of your own first, then a goal | Your job stays; only the goal's job comes and goes. Any `GOAL_JOB unexpected removal … disabled` = removal API is type-based → report |
 | 67 (Shay looks) | Select Malzin during a goal | Top-centre label: "Malzin - Make 2 Building Material (1/2)" + current step; "+N more queued" when queued |
