@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-01 (after runs 5–7 and round 19g; Stobe.dll `261C7AF3…`, KenshiFP `BC284585…`, server round 19g). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work. Bugs 1–91 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/` and `archive/test-run-2026-10-01-r5-r7.md` (runs 5–7).
+Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, KenshiFP `0193CD57…`, server round 19g). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work; rows that passed are removed (they stay in the run logs). Bugs 1–93 and their fixes: `STOBE_bug_history.md`. Run logs: `archive/`, `test-run-2026-10-01-r8.md` (run 8).
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -81,42 +81,32 @@ What rounds 17–18 added (what these rows check):
 | # | Say / do | Expect |
 |---|---|---|
 | B1 | "Make 2 bread" with the well powered and the farm watered (run at 50x, auto-pause on combat) | Water→farm only from the well (never out of the oven), wheat→silo, flour→oven; COMPLETE 2/2; status "Waiting for Wheat Farm … to grow" while growing (bugs 47, 58, 61, 69, 70) |
-| B1c | "Make 2 bread" with the farm dry and no water to bring | After ~60 s: BLOCKED "Wheat Farm … has no Water and none is available to carry"; she says so (bug 70) |
 | B1b | Same with a machine really unpowered while she works it | After ~30 s: BLOCKED "… has no power"; she walks back and says why (bugs 59, 61) |
 | B3 | Something needing a crafted ingredient at a bench | Bench queue grows only by what's missing |
 | B7 (Shay) | Save and reload mid-goal | Continues with progress intact |
-| R1 | "Make 1 building material", Malzin the only NPC near Shay | Walks back (`GOAL_RETURN arrived`) **and reports** the result; log `LIFELIKE_INITIATIVE: flag consumed`, `BORED_EVENT: initiative turn addresses the player`, server `Goal report queued` and no "Director scene failed" (bugs 59, 65, 66) |
-| R2 | A goal that gets BLOCKED (e.g. "make 3 steel bars") | She comes back and says **why** it is blocked (bugs 59, 65, 66) |
-| F1 | "Fetch the vodka and the mead" / "put them back in the chest" | **Both** items (server log: two FETCH goals); then both stored (bug 60). Walking to the chest is only judgeable when she starts far from it (step "Walking to …") (bug 51) |
-| P1 | "Patrol the base" | PATROL goal; her position changes; step "Patrolling (n/N waypoints)" advances; no lasting `path_failed` (bugs 62, 67) |
-| P1b | Then "wait here" | Patrol CANCELLED "replaced by a new order"; she stops (bug 63, passed once in run 4) |
-| G1 (Shay watches) | "Guard me" | Stays close to Shay (stood ~29 m off in run 4) |
-| C1 | After a fight: "loot the weapons from these bandits" | LOOT_AREA weapons; walks to each body; only weapons in her pack. If nothing: KenshiFP log `TASK_GOAL loot scan … dead=N valid=N` tells why (bug 68) |
-| C2 | "Loot the food off that dead bonedog" / "loot everything from <name>'s body" | LOOT_AREA food/all on that body; walks to it (bugs 64, 68) |
+| F1w (Shay looks) | "Fetch the mead" with her starting **far** from the chest | Step "Walking to …"; she walks to the chest instead of fetching from afar (bug 51) |
 | C5 | "Give Wendy 3 medkits" (needs a 2nd squad member) | 3 move between squad members |
 | C9 | "Buy 3 bread from the trader" (needs a trader) | Walks there and really buys them |
 | C10 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
 | C11b | "Wait here for Wendy" (needs a 2nd squad member) | Holds until Wendy is near |
 
-**Round 19 retest** (passed so far: J1, J2, N4, F1 fetch, F1b, P1, P1b, B1c, R1/R2 walk-back + report, R2 inferred goal, attack order, hotkeys focus (84, run 8); see `archive/test-run-2026-10-01-r5-r7.md`, `test-run-2026-10-01-r8.md`. Still open: R1 to COMPLETE (93), H1, M1, M2 (92), L83, G1b, FS1–FS3, C1, C2, D1, J1b (74 reopened), S1 (**Shay selected**), 79 FP click (Shay)). At Home with Malzin in the squad; automate unless marked.
+**Round 19 retest** (round 19h fixes installed after run 8). At Home with Malzin in the squad, **Shay selected** (the test inbox speaks as the selected character); automate unless marked.
 | # | Say / do | Expect |
 |---|---|---|
-| R1 | "Make 1 building material", **Malzin selected** (worst case), then again with Shay selected | `GOAL_RETURN walking actor=Malzin to=Shay`, then `arrived`; report spoken (server `Goal report queued`, no `Director scene failed`, a Malzin line) (bugs 72, 75) |
-| R2 | "Make 3 steel bars." | WORK_GOAL queued even if she grumbles (server `Work goal inferred from a direct order` if the model gave none); BLOCKED; she walks back and says why (bugs 76, 72, 75) |
+| R1 | "Make 1 building material" at 50x | COMPLETE 1/1; no BLOCKED "made no progress" while she works the Manual Stone Processor (bugs 80, 93) |
 | C2 | "Loot everything from Sorth's body" (or any corpse) | KenshiFP `loot scan body name=Sorth … match=1`; walks to the body; items in her pack (bug 71) |
 | C1 | "Loot the weapons from these bandits" (a body with a weapon) | Only weapons moved (bug 71) |
-| F1b | Fetch two items, then "put them back in the chest" | Server `STORE expanded to the last fetched items`; two STORE goals; both items in the chest (bug 77) |
 | D1 | Talk to Malzin near a corpse / a knocked-out NPC | Roster in stobe.log shows `(dead)` / `(unconscious)`; she never treats the corpse as alive (bug 73) |
-| J1b (Shay looks) | "Make 2 building materials" with Malzin **selected** | Job list panel switches Stone Mine ↔ Manual Stone Processor by itself; no `GOAL_JOB ui refresh faulted` (bug 74) |
+| J1b (Shay looks) | "Make 2 building materials" with Malzin **selected** | Job list panel switches Stone Mine ↔ Manual Stone Processor by itself; KenshiFP `GOAL_JOB ui refresh replayed selection`, no `faulted` (bug 74, failed run 8, refix 19h) |
+| FP1 (Shay) | FP mode: look at Malzin and left-click; then click her portrait | Click: you stay Shay, KenshiFP `[fp] look-at click … kept control (bug 79)`. Portrait: switches to her as before. (Her details panel on click: not built yet) |
 | H1 | 50x goal: compare to run 5 (`[202 s]` to the bread block) | Steps follow each other without long idles; pauses freeze the goal (bug 78) |
 | M1 | Long goal at 50x with food in a chest, Malzin's food low | `GOAL_MEAL hungry` → `ate from …` → `done`; goal resumes (round 19 meals) |
-| M2 | Same with no food anywhere | `GOAL_MEAL no food anywhere`; she says she's hungry and there's no food (server `Hunger report queued`); keeps working |
+| M2 | Same with no food anywhere | `GOAL_MEAL no food anywhere`; she says she's hungry and there's no food (server `Hunger report queued`); keeps working; afterwards **no** `GOAL_MEAL hungry` flood (one line, then quiet ~10 game min) (bug 92) |
 | L83 | Save, give "Patrol the base", quit (or load the save) without saving | KenshiFP `GOAL_LOAD world time …`, then `GOAL_LOAD dropped id=… given_at=… world_now=…`; she isn't patrolling, no walk-back/report. A goal given **before** the save keeps running (bug 83) |
 | G1b | "Malzin, guard me." then walk 50 m; "Malzin, follow me." | KenshiFP `ACTION_BRIDGE … squad->squad: using FOLLOW_PLAYER_ORDER`; she keeps up (dist stays small). If she only talks: server `Follow inferred from a direct request (bug 87)` (bugs 86, 87) |
 | FS1 | Bandit fight: accept an NPC surrender ("Deal…") | Deal dispatches STOP_ATTACK + payment; he stops for good (bug 88) |
 | FS2 | Offer a bandit cats to stop, pay; stay on block + passive | Gang stands down and stays down for 2 min; your hits on attackers log as "Defending against"; "we had a deal" → `Ceasefire honoured from a completed deal` (bugs 89, 90) |
 | FS3 | Let a common bandit get badly hurt | Surrender offer ≤ 300 cats and ≤ 35 % of what he carries; server `NPC offer capped (bug 91)` if the model asked for more; only one offer per NPC per fight (bug 91) |
-| S1 | Game speed 3x/10x, long NPC line | TTS normal pitch, not overlapping (feature 3, not run in run 5) |
 Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as combat.
 
 **Round 18 features** (all automatable unless marked; check logs, state and goal status)
@@ -125,22 +115,19 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 | N1 | Ask a **non-faction** NPC (Malzin out of the squad, or any stranger) at low trust: "loot that corpse", "make 5 bread", "repair the gate", "patrol here" | Refuses in character; server log `Order refused: NPC is not in the player faction`; no goal/action queued (feature 1) |
 | N2 | Same NPC at low trust: "follow me" / "guard me" / "wait here" | Refuses or names a price; nothing executed |
 | N3 | Same NPC with trust ≥ 56 (set by hand) or after agreeing a paid deal ("follow me for 200 cats. Deal?" → pay) | Follow/guard/wait **does** run |
-| N4 | Faction member (Malzin in the squad): all the work orders above | Still work exactly as before (no refusal) |
 | N5 | Non-faction NPC in a fight or deal: help/attack, give items, take cats, surrender | Unaffected by the order gate |
 | V1 | STOBE Settings window: TTS Volume row now has two boxes | Volume 0–200, Fade 25–400; values save to `StobeCustom.ini` (`TTSVolume`, `TTSFadePercent`) and survive a relaunch (feature 2) |
 | V2 | TTS Volume 150–200 | Log `TTS_PLAYBACK … volume_pct=150+`; louder (Shay listens; clipping on loud lines is expected) |
 | V3 (Shay listens) | Fade 50 vs 200, with the NPC ~30–60 m away | 50: fades/mutes sooner (`camera_out_of_range` skips at shorter range); 200: carries further |
-| S1 | Game speed 3x (and 10x), NPC says a long line | TTS at normal pitch/speed; log `TTS_PLAYBACK … speed` not scaled; next line doesn't start before the audio ends (feature 3). `Speed Dialogue` toggle in STOBE settings is off |
+| S1 | Game speed 3x (and 10x), NPC says a long line (Shay selected) | TTS at normal pitch/speed; log `TTS_PLAYBACK … speed` not scaled; next line doesn't start before the audio ends (feature 3). `Speed Dialogue` toggle in STOBE settings is off |
 | S2 (optional) | Turn `Speed Dialogue` back on | Old behaviour returns (faster TTS at 2–3x) |
-| J1 | "Make 2 building materials" | `GOAL_JOB added … job=Stone Mine`, then `GOAL_JOB removed` + `added … Manual Stone Processor`; at the end `GOAL_JOB removed`; her job list (`stobe-say state` `permajobs=`) shows the machine during the goal and is empty after (feature 4) |
-| J2 | Pause the goal, then resume | Job removed on pause, re-added on resume |
 | J3 (Shay) | Give her a job of your own first, then a goal | Your job stays; only the goal's job comes and goes. Any `GOAL_JOB unexpected removal … disabled` = removal API is type-based → report |
 | L1 (Shay looks) | Select Malzin during a goal | Top-centre label: "Malzin - Make 2 Building Material (1/2)" + current step; "+N more queued" when queued |
 | L2 (Shay looks) | Goal blocked / done / cancelled | Label shows BLOCKED + reason / DONE / CANCELLED for 60 s, then hides |
 | L3 (Shay looks) | Select Shay (no goal), first-person and third-person view | Label hidden for Shay; shows in both camera modes for Malzin. Log `GOAL_LABEL widget created`; no `GOAL_LABEL faulted` |
 
 ## 4. Known not working / open issues
-- **Bug 79 (next round of fixes, KenshiFP first-person):** in FP mode, looking at a squad member and clicking them switches control to that character (breaks Shay out of FP). Wanted: look-at + click on a squad member acts like it does for a normal NPC (show their details) without taking control. Controlling a squad member stays possible via their portrait in the squad list. Only change the look-at click path.
+- **Bug 79, second half:** FP look-at click on a squad member should open her details (like a normal NPC). 19h only keeps control on Shay (retest FP1).
 - **Hand-overs land on the floor.** Her GIVE_ITEM to Shay often logs `dropped_at_feet=1` (tobacco, twice in run 3), even when Shay's pack may have room. Check Shay's free space; if it has room, it's a DLL bug.
 - **Refund queued outside a chat turn** waits for her next reply (4 min once in a fight). Round 15 only fixed this for settles after a voice payment.
 - **L2b:** holding back a money sentence costs about 6 s of silence.
@@ -159,7 +146,7 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 ## 5. Design work (Shay's notes, not started)
 - **Relationship should shape everything she does:** deal pricing and willingness by tier; hard rules like no pay-after deals and no favours below some tier. (Already seen: at Resentful she refused credit; at Fond she accepted it.)
 ## Automated runs (stobe-say)
-Claude can run alone, once Shay has loaded the save near the NPC and unpaused: section 1 (fight rows with Shay on pause), section 2 rows L9, L10, E5, E8, pay-first refused, L3, and A6, A7, K11, F8, I13, D7b; goal rows R1, R2, B1, B1c, F1, P1, P1b, C1, C2; round 18 rows N1–N5, V1, V2, S1, J1, J2. Rows marked Shay need his eyes/ears/hands. Use `stobe-say speed` (≤50) for slow goals and pause on any combat toward Shay/Malzin.
+Claude can run alone, once Shay has loaded the save near the NPC and unpaused: section 1 (fight rows with Shay on pause), section 2 rows L9, L10, E5, E8, pay-first refused, L3, and A6, A7, K11, F8, I13, D7b; goal rows B1, B1b, B3, round 19 retest rows (except J1b, FP1); round 18 rows N1–N3, N5, V1, V2. Rows marked Shay need his eyes/ears/hands. Use `stobe-say speed` (≤50) for slow goals and pause on any combat toward Shay/Malzin.
 
 ## Switches
 If a phase misbehaves: `… phase <2-8> off`. Voice payment: `NEGOTIATION_VOICE_PAYMENT`. Trust for free gifts: `GIFT_TRUST_THRESHOLD` (default 56 = Fond). Trust to give up her own weapon: `NEG_WEAPON_TRUST_MIN` (default 56). Trust for minor orders from non-faction NPCs: `MINOR_ORDER_TRUST_MIN` (default = `GIFT_TRUST_THRESHOLD`). STOBE ini: `Speed Dialogue` (0 = TTS at 1x), `TTSVolume` (0–200), `TTSFadePercent` (25–400).
