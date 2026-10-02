@@ -360,6 +360,19 @@ static int stg_character_enemy(void *actor,void *candidate)
     return fn ? (fn(actor,candidate,1)&0xFF)!=0 : 0;
 }
 
+/* Bug 101: lower-case, punctuation/brackets -> one space ("Pax [Hungry Bandit]" -> "pax hungry bandit"). */
+static void stg_norm_name(char *s)
+{
+    char *w=s;int sp=1;
+    for(char *r=s;*r;r++){
+        unsigned char ch=(unsigned char)*r;
+        if(isalnum(ch)){*w++=(char)tolower(ch);sp=0;}
+        else if(!sp){*w++=' ';sp=1;}
+    }
+    if(w>s&&w[-1]==' ')w--;
+    *w='\0';
+}
+
 static int stg_valid_downed(void *actor,void *c,const char *filter)
 {
     if(!c||!char_valid(c)||!stg_exports())return 0;
@@ -380,7 +393,14 @@ static int stg_valid_downed(void *actor,void *c,const char *filter)
         if(!strcmp(f,"enemy")||!strcmp(f,"enemies")||!strcmp(f,"hostile")||!strcmp(f,"hostiles")||
            !strcmp(f,"raider")||!strcmp(f,"raiders"))
             return !animal && stg_character_enemy(actor,c);
-        if(strstr(cnlow,f)==NULL) return 0;
+        stg_norm_name(f);stg_norm_name(cnlow);
+        if(!*f) return 0;
+        if(strstr(cnlow,f)==NULL){ /* "bandits" vs "[Hungry Bandit]": try the singular */
+            size_t fl=strlen(f);
+            if(fl<4||f[fl-1]!='s') return 0;
+            f[fl-1]='\0';
+            if(strstr(cnlow,f)==NULL) return 0;
+        }
     }
     return 1;
 }
