@@ -6861,7 +6861,7 @@ static void UpdateLocalCombatEncounter(
     // Bug 98: report an opponent's health per bucket from the fight itself;
     // the periodic NPC sweep only covers a few nearby characters.
     if (!participant.playerSide && !observation.dead && !observation.unconscious &&
-        observation.evidence) {
+        (observation.evidence || observation.fleeing)) { // a hurt enemy breaking off counts
       std::map<uintptr_t, float> healthByPart;
       if (CollectFleshHealthByPart(npc, healthByPart))
         ReportHealthBucket(npc, serial, OverallHealthPercent(healthByPart));
