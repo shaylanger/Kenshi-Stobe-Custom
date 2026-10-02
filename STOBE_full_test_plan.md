@@ -106,6 +106,26 @@ What rounds 17–18 added (what these rows check):
 | 56 | Let a common bandit get badly hurt | Surrender offer ≤ 300 cats and ≤ 35 % of what he carries; server `NPC offer capped (bug 91)` if the model asked for more; only one offer per NPC per fight (bug 91) |
 Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as combat.
 
+**Run 8 bugs (round 20 fixes)**: root causes in `run8-deep-dive.md`. Automate unless marked.
+| # | Say / do | Expect |
+|---|---|---|
+| 70 (bug 106) | "Make 1 building material" at 50x, watch her | She works the machine without stopping every second; no repeated `addOrder` while she's busy; finishes in a fraction of the old time |
+| 71 (bug 101) | Near bodies: "Loot everything from <name>'s body", then "loot the weapons from these bandits" | `loot scan body … match=1` for the named body; weapons move into her pack |
+| 72 (bug 104) | "Loot everything from Nobody's body" (no such body) | Goal BLOCKED "couldn't find …"; she says she couldn't find it, never "done" |
+| 73 (bug 94) | Finish any task goal, relaunch Kenshi, stand near her for 2 min | No second report of the old goal; KenshiFP doesn't append it to `stobe_goal_report.request` |
+| 74 (bug 95) | Let an NPC offer or goal report fire while two other NPCs chat nearby | The line's `TALKTARGET` is Shay; server stores "(talking to: Shay)"; the other NPCs don't answer it |
+| 75 (bug 95) | Give her an order with another NPC nearby | Her reply is stored "(talking to: Shay)", not the other NPC |
+| 76 (bug 96) | During an NPC's open offer, say "We're done here." | No ACCEPT; server log has no "player has just accepted" note |
+| 77 (bug 98) | Fight weak bandits until one is badly hurt | A surrender offer arrives (server `NPC-initiated negotiation … kind=surrender`), even after another NPC's "help me" offer |
+| 78 (bug 99) | Stand near a fight between strangers for 3 min | At most ~1 idle line per 30 s; strangers healing each other don't trigger lines |
+| 79 (bug 102) | Let Shay and Malzin eat/drink from their packs near another NPC | No `trade: … transferred … to <NPC>` event; nobody says you gave them food |
+| 80 (bug 103) | Buy food from a trader while Malzin was your last chat partner | Event names the trader as seller, never Malzin |
+| 81 (bug 105) | Fight with several NPCs; read the lines | Nobody claims a knockout/death before the event; Skovr/Skovrek-style names not mixed; enemy gangs not called friends |
+| 82 (bug 97) | Any NPC talks about Malzin | Uses "she/her"; prompts show "Malzin (female)" in people lines |
+| 83 (bug 107) | Any NPC line | No `#HERIKA_NAME#` in `context_sent_to_llm.log` |
+| 84 (bug 100, Shay) | FP mode: pick up an NPC, then press the put-down key | The NPC is put down |
+| 85 (bug 79, Shay) | FP mode: look at Malzin and left-click | You stay Shay **and** her details show (not yours) |
+
 **Round 18 features** (all automatable unless marked; check logs, state and goal status)
 | # | Say / do | Expect |
 |---|---|---|
