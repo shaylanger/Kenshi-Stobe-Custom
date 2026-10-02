@@ -81,6 +81,9 @@ case "$cmd" in
       [ -n "$deal" ] && break
     done
     stobe-say speed 0 >/dev/null
+    # bring Malzin back: parked 300 away she once landed next to a wild Dust Bandit squad (run 10)
+    stobe-auto teleport Malzin Shay dist 6 >/dev/null
+    tail -n +"$base" "$L" | grep -a -q -E "\[EVENT\] (combat|knockout).*Malzin" && echo "WARNING: Malzin fought while away" >&2
     echo "$r|$name|$deal"
     ;;
   trust)

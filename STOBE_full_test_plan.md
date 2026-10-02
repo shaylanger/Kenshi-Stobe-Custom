@@ -1,6 +1,6 @@
 # STOBE test plan: what's left
 
-Last updated 2026-10-02 (run 9 + round 21, bugs through 130; Stobe.dll `4182D962`, KenshiFP `F7935763`, server through bug 129). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work; rows that passed are removed (they stay in the run logs). Bugs and their fixes: `STOBE_bug_history.md`. Run logs: `test-run-2026-10-02-r9.md` (run 9), `archive/`.
+Last updated 2026-10-02 (run 10, bugs through 131; Stobe.dll `4182D962`, KenshiFP `F7935763`, server through bug 131). Run logs: `test-run-2026-10-02-r10.md` (run 10). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work; rows that passed are removed (they stay in the run logs). Bugs and their fixes: `STOBE_bug_history.md`. Run logs: `test-run-2026-10-02-r9.md` (run 9), `archive/`.
 
 **How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -23,9 +23,7 @@ Last updated 2026-10-02 (run 9 + round 21, bugs through 130; Stobe.dll `4182D962
 | 2 (bug 43) | Fight setup with `help`; she stops for pay | Her words don't claim her gang "isn't hers to call off"; the gang stands down (`PERSONAL_TRUCE: stood down faction-mate`). |
 | 4 (bug 37) | Watch for a COUNTER with no terms (log `Negotiation rejected by deterministic validation … invalid_terms_json`) | Next negotiation turn she's reminded and restates it as COUNTER with terms. |
 | 6 | Only if she ever agrees to sell or stow her katana without Fond trust | Line replaced with "Not my Chisa Katana…", log `Negotiation rejected: NPC would give up her weapon`. (She has refused on her own every time so far.) |
-| 86 (bug 126) | `scenarios.sh surrender`, let the raider get knocked out, then "<Name>, deal." | Deal not IMPOSSIBLE: term REISSUE_QUEUED, he pays (GIVE_CATS VERIFIED) on his first line after waking |
-| 87 (bug 128) | Surrender from an unnamed raider who gets named mid-fight | Server log `Directive follows the NPC's new name (bug 128)`, offer arrives |
-| 89 (bug 130, open) | Counter above the cap ("make it 400" when the cap is 300) | Her words should match what she pays (today: says 400, pays 300) |
+| 87 (bug 128) | Surrender from an unnamed raider who gets named mid-fight | Server log `Directive follows the NPC's new name (bug 128)`, offer arrives. Run 10: spawned raiders are named before any directive; not triggered |
 
 ## 2. Couldn't be triggered so far
 | # | Say / do | Expect | Why not yet |
@@ -36,17 +34,13 @@ Last updated 2026-10-02 (run 9 + round 21, bugs through 130; Stobe.dll `4182D962
 | 14 | Counter-offers where she might misquote ("300 now, 200 after?") | Misquoted amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted |
 
 ## 3. Not run yet
-**Clothing**
-| # | Say / do | Expect |
-|---|---|---|
-| 16 | Ask her to put on something she's **already wearing** ("put your vest back on" with the Black Rag Shirt on) | She says it's already on, and doesn't try to equip it (in run 1 she tried to equip it) |
 
 **Combat and NPC-initiated** (fight setup)
 | # | Scenario | Expect |
 |---|---|---|
 | 17 | Refuse to pay after she's handed something over | She may threaten or attack; paying then stops it and the stop holds |
-| 21 | Haggle back and forth more than 6 times | She ends the talks |
-| 23 | Stand near a neutral NPC losing a fight | They ask for help, maybe with a reward, paid after |
+| 21 | Haggle back and forth more than 6 times | She ends the talks (run 10: Ket accepted at round 2; unit-tested) |
+| 23 | Stand near a neutral NPC losing a fight | They ask for help, maybe with a reward, paid after (run 10: spawned victim wandered off; needs a real neutral fight near Shay) |
 | 25 | Break 2+ deals, then talk to a new NPC | "Word gets around": your reputation is mentioned | Run 9: the line is in the prompt (broken > kept), she got stricter but never said it. Needs `player_broken > player_kept` (currently 39 kept / 10 broken) |
 | 26 | Betrayal (rare: dishonest NPC who dislikes you) | They attack after you pay; BREACHED_NPC, marked intentional |
 
@@ -68,11 +62,9 @@ What rounds 17–18 added (what these rows check):
 - **18c:** non-faction NPCs refuse work orders; follow/guard/wait/come/go only at trust ≥ `MINOR_ORDER_TRUST_MIN` (56) or an open deal. **18a/b:** TTS at 1x at any game speed; Volume 0–200 %, Fade 25–400 %.
 | # | Say / do | Expect |
 |---|---|---|
-| 34 | "Make 2 bread" with the well powered and the farm watered (run at 50x, auto-pause on combat) | Water→farm only from the well (never out of the oven), wheat→silo, flour→oven; COMPLETE 2/2; status "Waiting for Wheat Farm … to grow" while growing (bugs 47, 58, 61, 69, 70) |
-| 35 | Same with a machine really unpowered while she works it | After ~30 s: BLOCKED "… has no power"; she walks back and says why (bugs 59, 61) |
+| 34 (Shay: power) | "Make 2 bread" with the well powered and the farm watered (run at 50x, auto-pause on combat). Run 10: the Grain Silo has no power in the fixture | Water→farm only from the well (never out of the oven), wheat→silo, flour→oven; COMPLETE 2/2; status "Waiting for Wheat Farm … to grow" while growing (bugs 47, 58, 61, 69, 70) |
 | 36 | Something needing a crafted ingredient at a bench | Bench queue grows only by what's missing |
 | 38 (Shay looks) | "Fetch the mead" with her starting **far** from the chest | Step "Walking to …"; she walks to the chest instead of fetching from afar (bug 51) |
-| 39 | "Give Grenn 3 medkits" to a recruit with a bracketed name | 3 move between squad members (bug 123 fix, not retested) |
 | 40 | "Buy 3 bread from the trader" (needs a trader) | Walks there and really buys them |
 | 41 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
 

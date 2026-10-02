@@ -28,7 +28,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 20 | Breach started a fight; the stop didn't hold (Shay knocked out) | DLL r8 personal truce | ✅ (K9/K10) |
 | 21 | Worn item handed over + separate unequip term → false IMPOSSIBLE + refund | r9b | ✅ |
 | 22 | One-sided social deals (no NPC side) completed with nothing done | r9c | ✅ |
-| 23 | "Take this bread" gave nothing for "Poppyseed Bread" | r9d | ⏳ not retested (plan D7b) |
+| 23 | "Take this bread" gave nothing for "Poppyseed Bread" | r9d | ✅ PASSED run 9 (test 33) |
 | 24 | GIVE_ITEM to a full pack dropped the item but logged `transferred=1` | DLL r9 | ✅ (L1) |
 | 25 | ACCEPT with `{"accepted": true}` left the deal COUNTERED | r9e | ✅ |
 | 26 | Spoken amounts differed from recorded terms | r10/10b | ✅ (L2); misquote rewrite not seen (plan L3) |
@@ -64,19 +64,19 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 56 | Direct actions (BODYGUARD) skipped `actor serial unavailable` when away | r17g | ✅ (order reached her) |
 | 57 | Base block lost when the selected character stood at outer base buildings | r17h | ✅ standalone |
 | 58 | Unpowered well: dead "operate" order, NPC idle | KFP r17e | superseded by 61 |
-| 59 | NPC never reported a finished/blocked goal (`lifelike_initiative.flag` unread in 1.3.1) | DLL r17d + KFP r17f + r17i | installed, not retested |
-| 60 | "Fetch the vodka and the mead" only fetched one item | r17j + r17k | live, not retested |
-| 61 | Power gate blocked an idle machine (silo) before it was used | KFP r17g | installed, not retested |
-| 62 | PATROL wandered the whole region (no waypoints) | KFP r17g + r17j | installed, not retested |
-| 63 | "Wait here"/"come here" left the patrol running | KFP r17g | installed, not retested |
-| 64 | "Loot the food off the dead bonedog": corpse not targetable, silent | r17j (+KFP r17g walking) | live, not retested |
-| 65 | Goal-report initiative turn skipped "no eligible NPC listener" (only Malzin + player) | DLL r17e + KFP r17h (report within 70) | installed, not retested |
-| 66 | goal_report directive forced director mode → "No eligible Director cast", report lost | r17k | live, not retested |
-| 67 | Patrol waypoints at building centres → path_failed, patrol never advanced | KFP r17h | installed, not retested |
-| 68 | LOOT found no dead body (Sorth died at Home) | KFP r17h (scan merge + diag log) | installed, not retested |
-| 69 | Hauling took water out of the Bread Oven's input to water the farm | KFP r17h | installed, not retested |
-| 70 | Farm wait hidden by "Obtaining …"; dry farm waited forever | KFP r17h | installed, not retested |
-| 71 | LOOT_AREA rejected Sorth's corpse (scan dead=1 valid=0) | KFP r19: native bool returns read as 1 byte (isPlayerCharacter garbage) + per-body scan log | installed, not retested |
+| 59 | NPC never reported a finished/blocked goal (`lifelike_initiative.flag` unread in 1.3.1) | DLL r17d + KFP r17f + r17i | PASSED run 9/10 (goal reports spoken) |
+| 60 | "Fetch the vodka and the mead" only fetched one item | r17j + r17k | PASSED run 5–7 (F1) |
+| 61 | Power gate blocked an idle machine (silo) before it was used | KFP r17g | PASSED run 10 (power wait only after loading the silo) |
+| 62 | PATROL wandered the whole region (no waypoints) | KFP r17g + r17j | PASSED run 4 (managed patrol) |
+| 63 | "Wait here"/"come here" left the patrol running | KFP r17g | PASSED run 4 (P1b) |
+| 64 | "Loot the food off the dead bonedog": corpse not targetable, silent | r17j (+KFP r17g walking) | PASSED run 4 (C1/C2 conversion) |
+| 65 | Goal-report initiative turn skipped "no eligible NPC listener" (only Malzin + player) | DLL r17e + KFP r17h (report within 70) | PASSED run 9 (tests 72, 74) |
+| 66 | goal_report directive forced director mode → "No eligible Director cast", report lost | r17k | PASSED run 9 (tests 72, 74) |
+| 67 | Patrol waypoints at building centres → path_failed, patrol never advanced | KFP r17h | PASSED run 10 (patrol 4/12 waypoints, no path_failed) |
+| 68 | LOOT found no dead body (Sorth died at Home) | KFP r17h (scan merge + diag log) | PASSED run 9 (test 71) |
+| 69 | Hauling took water out of the Bread Oven's input to water the farm | KFP r17h | not seen (needs a powered bread run, test 34) |
+| 70 | Farm wait hidden by "Obtaining …"; dry farm waited forever | KFP r17h | partly seen run 10 ("Waiting for Wheat Farm XL to grow"); dry farm not seen |
+| 71 | LOOT_AREA rejected Sorth's corpse (scan dead=1 valid=0) | KFP r19: native bool returns read as 1 byte (isPlayerCharacter garbage) + per-body scan log | PASSED run 9 (test 71) |
 | 72 | Goal reports queued but never spoken ("Director scene failed: No eligible Director cast") | server r19: goal_report never uses director mode; failed director falls back to a normal turn | passed run 6 |
 | 73 | Malzin talked about dead Sorth as alive | Stobe r19: roster marks "(dead)/(unconscious)", corpses merged into nearby; server r19: prompt says DEAD | passed run 8 |
 | 74 | Job list panel only refreshed after reselecting her | KFP r19: replay updatePlayerSelection after GOAL_JOB add/remove; **failed run 8** → KFP r19h: replay her → nothing → her, log `GOAL_JOB ui refresh replayed/skipped` | installed 0193CD57, not retested |
@@ -85,20 +85,20 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 77 | "Put them back" stored only the Mead | server r19: them/those/both → every item of the last FETCH batch | passed run 6 |
 | 78 | Long idles between goal steps at high game speed | KFP r19: goal clock = real time x game speed; ticks/waits/stalls in game time | partly passed run 6 (patrol at 50x) |
 | 79 | FP look-at click on a squad member takes control of them | KFP r19h+r20: click keeps control; r20 opens the clicked member's stats window | built 111289C5, not installed (test 85) |
-| 80 | Work goals blocked "production stalled" after ~3 game min (budgets 10x short on the goal clock) | KFP r19b: game-time budgets x10 | installed, not retested |
-| 81 | Meals never started; prompts said "Well fed" while starving (hunger read as hungriness) | KFP r19b + Stobe r19b: level = hunger + fed; eat <150, stop 250; eating detected by a rise | installed, not retested |
-| 82 | Game crash on loading Home (14:18): meal step called a NULL inventory function (Malzin starving, patrol goal still active) | KFP r19c: resolve getinv in stg_exports; meals skip anyone down/dead/not loaded; whole meal step under the crash guard | installed, not retested |
+| 80 | Work goals blocked "production stalled" after ~3 game min (budgets 10x short on the goal clock) | KFP r19b: game-time budgets x10 | PASSED run 9 (test 70) |
+| 81 | Meals never started; prompts said "Well fed" while starving (hunger read as hungriness) | KFP r19b + Stobe r19b: level = hunger + fed; eat <150, stop 250; eating detected by a rise | PASSED run 9 (tests 50, 51) |
+| 82 | Game crash on loading Home (14:18): meal step called a NULL inventory function (Malzin starving, patrol goal still active) | KFP r19c: resolve getinv in stg_exports; meals skip anyone down/dead/not loaded; whole meal step under the crash guard | no crash in ~15 loads of Home (runs 9, 10) |
 | 83 | Goals given after a save came back when that save was loaded (goals live in our own files, not the save) | KFP r19d: goals stamped with in-game time (getTimeStamp_inGameHours); goals newer than the loaded world dropped silently | passed run 8 |
 | 84 | STOBE hotkeys (chat box, push-to-talk, settings menu) fired while typing in other apps | Stobe r19e: hotkeys need the Kenshi window focused (foreground window in our process) | passed run 8 (Shay) |
-| 85 | Hunger read 100x too low: raw MedicalSystem::hunger is 0..3, the UI shows x100 (Malzin raw 2.16 = UI 216); meals thought she starved, prompt said Starving | KFP + Stobe r19f: level = (hunger + fed) x 100; eating detection on raw rises >= 0.01 | installed, not retested |
-| 86 | "Guard me": BODYGUARD on Shay logged ok but Malzin stood aimless | KFP r19g: squad->squad guard/follow uses FOLLOW_PLAYER_ORDER (44) | installed, not retested |
-| 87 | "Follow me" → "Following you" with no action | server r19g: infer BODYGUARD@player for a plain follow/guard request to a faction member | live, not retested |
+| 85 | Hunger read 100x too low: raw MedicalSystem::hunger is 0..3, the UI shows x100 (Malzin raw 2.16 = UI 216); meals thought she starved, prompt said Starving | KFP + Stobe r19f: level = (hunger + fed) x 100; eating detection on raw rises >= 0.01 | PASSED run 9 (tests 50, 51) |
+| 86 | "Guard me": BODYGUARD on Shay logged ok but Malzin stood aimless | KFP r19g: squad->squad guard/follow uses FOLLOW_PLAYER_ORDER (44) | PASSED run 10 (BODYGUARD → FOLLOW_PLAYER_ORDER) |
+| 87 | "Follow me" → "Following you" with no action | server r19g: infer BODYGUARD@player for a plain follow/guard request to a faction member | PASSED run 10 ("Right behind you", follow executed) |
 | 88 | Accepted surrender: STOP_ATTACK filtered out (NPC not flagged in combat), he attacked again | server r19g: a deal-sanctioned STOP_ATTACK is never filtered | PASSED run 9 (test 54: surrender accepted, STOP_ATTACK + 300 cats, deal COMPLETE) |
 | 89 | Shay on block + passive logged as "Initiated attack", could break the ceasefire | Stobe r19g: player hitting someone already targeting him = "Defending against", no ceasefire break | PASSED run 9 (test 55: Shay's hits logged "Defending against") |
 | 90 | Paid ceasefire ended after ~30 s (deal complete, 20 s DLL guard); gang re-engaged; NPC forgot the deal | Stobe r19g: guard 2 min; server r19g: watch 120 s, 4 re-issues, completed ceasefire honoured for 10 min | run 9: truce held for 2.5 min after the bug 116 fix |
 | 91 | Surrender offers 1000 then 9000 cats, twice in one fight | server r19g: caps (common 50-300, leader ~1000, wealthy scaled, max 35 % carried), per-NPC cooldown 30 min | PASSED run 9 (test 56: offer 300 of 10000 carried) |
 | 92 | No food anywhere: `GOAL_MEAL hungry` logged every tick (~60 ms), storage rescanned each tick | KFP r19h: after "no food anywhere" wait 10 game min before looking again | PASSED run 9 (test 51: one hunger report, re-check per 10 game min) |
-| 93 | "Make 1 building material" BLOCKED at the Manual Stone Processor ("made no progress") while she worked it | KFP r19h: only finished units counted as progress, one manual unit > 30 game min; standing at the machine now counts, max 4 game h/unit | installed 0193CD57, not retested |
+| 93 | "Make 1 building material" BLOCKED at the Manual Stone Processor ("made no progress") while she worked it | KFP r19h: only finished units counted as progress, one manual unit > 30 game min; standing at the machine now counts, max 4 game h/unit | PASSED run 9 (test 70) |
 | 94 | Old goal report re-delivered on a later initiative turn (mead STORE reported again at a knockout; "…the Hub") | KFP r20: goals loaded as finished count as reported | PASSED run 9 (test 73) |
 | 95 | Lines meant for the player get a nearby NPC as speech target; that NPC answers as if addressed (goal report → Maelis, Skovrek's 300-cat offer → Maelis) | Stobe r20: server-swapped speaker addresses the player; server r20: chat/idle replies stored with the real listener | PASSED run 9 (tests 74, 75: TALKTARGET Shay) |
 | 96 | "We're done here." recorded as ACCEPT of the NPC's assist deal + StopAttack | server r20: stobeNegLooksLikeAcceptance (no 'we're done') | FAILED run 9 (model ACCEPT on its own); fixed r21 server 072c3c5, PASSED test 76 |
@@ -115,27 +115,28 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 107 | 55 of 135 prompts start with an unfilled "#HERIKA_NAME#" placeholder | server r20: placeholders filled in stobeResolveNpcPromptOverrides | PASSED run 9 (test 83) |
 | 108 | Looting ignored what a body wears (weapons, clothes): "found no items to take" | KFP r21 86cb3e6: dead/downed bodies' equipment sections searched | PASSED run 9 |
 | 109 | A fight never ended when the enemy walked off into another fight 300 away; Malzin refused orders ("bandit breathing down our necks") | Stobe r21 3c7709d: local radius 150, far targets aren't evidence | PASSED run 9 (combat_end 12 s after) |
-| 110 | Malzin refused a loot order on fresh bodies: "Already picked that one clean" (old chat history) | open: needs a server guard (loot orders become goals; the goal decides) | open |
+| 110 | Malzin refused a loot order on fresh bodies: "Already picked that one clean" (old chat history) | server f3a45df: loot order to a squad member gets a prompt note; no loot action in her reply → LOOT_TARGET (→ LOOT_AREA goal) | PASSED run 10 (goal ran; BLOCKED pack full) |
 | 111 | Full pack/slots reported as "found no weapons to take" | KFP r21 c15dec1: "no room" / "took what fit" | PASSED run 9 |
 | 112 | Weapons that go straight into her weapon slots counted as 0 looted | KFP r21 2b62a1a: count what moved | PASSED run 9 |
 | 113 | The player's own knockout/recovery/death never became events | Stobe r21 4ca2d63 | PASSED run 9 (`[EVENT] knockout: Shay` when Lornic KO'd her) |
 | 114 | A big worn weapon (Staff) dropped next to the body instead of looted | KFP r21 81f6b90: worn items taken straight from bodies | PASSED run 9 |
 | 115 | Goal meals used food up without feeding her (eatItem: +1 per Dried Meat) | KFP r21 7c3d3e3: food into her pack, the game eats | PASSED run 9 (test 50) |
 | 116 | A paid ceasefire broken by a gang-mate's idle chat (Attack action) | server r21 5d75ff2 + c0599a4: ATTACK on the player dropped for the deal's gang for 10 min | PASSED run 9 (test 55) |
-| 117 | After a reload the same serial carries another session's name (Garven = Smeck); the voice payment went to "Smeck" and the deal with "Garven" stayed unpaid | open: identity by serial vs name across reloads | open |
+| 117 | After a reload the same serial carries another session's name (Garven = Smeck); the voice payment went to "Smeck" and the deal with "Garven" stayed unpaid | server 88f1080 (getNpcData takes the live serial) + fd5975c (snapshot never claims a profile with another serial) | PASSED run 10 (new raiders got their own rows; fallback refused logged) |
 | 118 | Bridged actions (EQUIP/UNEQUIP...) failed for a squad member >750 units from Shay ("ACTION_BRIDGE actor not found") | KFP r21 fd1c317: squad list searched first | PASSED run 9 |
-| 119 | Asked to put on something she already wears, she tries to equip it ("let me get it back on") | open: server guard (worn item -> say it's on) | open |
+| 119 | Asked to put on something she already wears, she tries to equip it ("let me get it back on") | server c331522: prompt note "already wearing"; EQUIP of a worn item dropped | PASSED run 10 (test 16: "It's already on") |
 | 120 | A squadmate's gift to the player blocked as an outsider's ("Blocked unpaid gift ... affinity 0") | server r21 7eeeefb: speaker's own action config | PASSED run 9 (test 28) |
 | 121 | Full pack: work goal retried "could not take Raw Stone" every second, never blocked | KFP r21 814e72e: BLOCKED "her pack is full" after 5 tries | PASSED run 9 |
 | 122 | Cats paid up front for a refused request were kept | server ecdf4fc: unearned prepayment refunded | PASSED run 9 (test 11) |
-| 123 | Action target "Grenn Hungry Bandit" (brackets stripped) didn't match; item went to Shay | Stobe 8a08078: punctuation-insensitive match | built, not retested |
+| 123 | Action target "Grenn Hungry Bandit" (brackets stripped) didn't match; item went to Shay | Stobe 8a08078: punctuation-insensitive match | PASSED run 10 (test 39: 3 kits to Drask [Hungry Bandit]) |
 | 124 | "Wait here for <name>" → plain HoldPosition | server 3ffad07: prompt → WaitForGoal | PASSED run 9 (test 42) |
 | 125 | WAIT_FOR target with stripped brackets never matched the squad member | KFP cf0d2fa | PASSED run 9 (test 42) |
-| 126 | Payment skipped while the NPC was KO'd → deal IMPOSSIBLE | server a652d74: re-sent up to 2x on her next line (10 min) | unit-tested, not seen in game |
+| 126 | Payment skipped while the NPC was KO'd → deal IMPOSSIBLE | server a652d74: re-sent up to 2x on her next line (10 min) | PASSED run 10 (test 86: Skelden paid 300 after waking) |
 | 127 | SPARE broken by the squad's swing 3–10 s after a truce | server fd36e05: 10 s grace | PASSED run 9 (test 19) |
 | 128 | Surrender directive lost when the NPC was named mid-fight | server 9203c6f: "<title>" matches "<Name> [<title>]" | unit-tested, not seen in game |
 | 129 | NPC accepting the player's counter dropped by the bug 96 guard | server 5cfc41f | PASSED run 9 (test 18) |
-| 130 | Offer cap (bug 91) lowers an accepted 400 to 300 after she said "Four hundred" | open: correct her line or refuse above the cap | open |
+| 130 | Offer cap (bug 91) lowers an accepted 400 to 300 after she said "Four hundred" | server 52468b7: capped ACCEPT recorded as COUNTER at the cap; her line rewritten; bare amounts count as spoken | PASSED run 10 (test 89: Tarvek "I can't go above 300") |
+| 131 | Re-queued payment marked IMPOSSIBLE ("never delivered") while the bored path was still generating his line | server 0f839c8: a directive claimed <60 s ago with no outcome counts as pending | unit-tested (seen in run 10: overwritten by the dispatch 0 s later) |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

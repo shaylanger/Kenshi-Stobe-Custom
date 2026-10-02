@@ -2,13 +2,14 @@
 
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
-## Current state (2026-10-02, after run 9 + round 21) — start here
-- **Installed:** Stobe.dll `4182D962`, KenshiFP.dll `F7935763`. Server through bug 129 (live + ss-merge identical, pushed). Kenshi is closed.
-- **Run 9** (`test-run-2026-10-02-r9.md`, fully automated): bugs 96, 98, 108–129 fixed; passed in game this run incl. tests 3, 11, 18, 19, 20, 22, 24, 42 (25 partial). **Open bugs: 110, 117, 119, 130.** Fixed but not seen in game: 123 (test 39), 126 (test 86), 128 (test 87). **Next bug is 131.**
-- **Next job:** plan section 1 retest rows (39, 86, 87, 89), then fix the open bugs (130 first: cap vs her spoken amount; 119 and 110 need server guards), then the remaining rows: 4, 9, 13, 14, 16, 17, 21, 23, 25–27, 29–32, 34–36, 38, 40, 41; then the Shay rows (47, 48, 61, 66–69 looks, 84, 85; 80 needs a friendly trader). Run `stobe-tests` once at the end (negotiation_engine: 59 pass, 2 pre-existing fails).
+## Current state (2026-10-02, after run 10) — start here
+- **Installed:** Stobe.dll `4182D962`, KenshiFP.dll `F7935763` (unchanged in run 10). Server through bug 131 (live + ss-merge patched with the same scripts, pushed). Kenshi is closed.
+- **Run 10** (`test-run-2026-10-02-r10.md`): passed in game: tests 16, 35, 39, 86, 89 + bugs 67, 86, 87 (stale rows); bugs 110, 117, 119, 130 fixed and seen in game; bug 131 found + fixed (unit-tested). **No open bugs. Next bug is 132.**
+- **Next job:** plan rows that can still be automated but weren't triggered: 4, 9, 13, 14, 17, 21, 23, 25–27, 87; rows needing setup: 34 (power the Grain Silo), 36 (bench), 40/41/80 (friendly trader); then the Shay rows (29–32, 38, 47, 48, 61, 66–69 looks, 84, 85). Run `stobe-tests` once at the end.
+- Shay works on the server too (e.g. `61658b2` dialogue contract split): check `git log`/`git status` in the live tree before patching, and patch with anchor scripts, never by copying whole files.
 - Untracked `tools/*.py` inspection scripts (extract-meaningful-responses, inspect-*, list-session-core, summarize-gameplay-shadow) came from another session: not mine, left uncommitted.
 - **Automated test bed works** (see "Test bed" below); run 9 (`test-run-2026-10-02-r9.md`) is the first fully automated run. Other sessions: coordinate (SendMessage) before installing DLLs or launching Kenshi so two sessions don't fight over the game.
-- stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks (49 of 51 pass incl. run 9 regressions for bugs 96, 98, 116) ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
+- stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it). The runner deletes the leftover "Inactive game probe" event (it failed 3 deal checks at random).
 - **Naming:** test rows are plain numbers ("test 70"); bugs always "bug N"; no letter codes. Passed rows get deleted from the test plan.
 - **No manual validation:** run only rows Claude can verify from logs/state/goal status; list "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. **Claude runs the whole loop alone** (Shay's decision 2026-10-02): launch Kenshi, load a test save, test, log bugs, close Kenshi, fix, build, install, relaunch, retest until every testable bug is fixed, then close Kenshi. No "go" needed. Use `tools/automation/kenshi-ctl.ps1` (launch/stop/restart/status/health) and `install-dll.ps1`.
 - **Test location:** Shay's outpost "Home" (game calls the area "The Hub, Border Zone"). Malzin is in Shay's squad (faction "Nameless"), Fond. Keep food in a chest for long goals. The test inbox speaker is the **selected** character: keep Shay selected.
