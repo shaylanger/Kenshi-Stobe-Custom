@@ -2,16 +2,23 @@
 
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
-## Current state (2026-10-02 early, after run 8 + round 20 fixes) — start here
-- **Run 8** (`test-run-2026-10-01-r8.md`): bugs 92, 93 found, 74 reopened, 84 passed; fixes installed. Its "Retest next run" list comes first. **Next bug is 108.** Deep dive: `run8-deep-dive.md`; automation plan: `test-automation-plan.md`. The test inbox speaker is the *selected* character: keep Shay selected.
-- **Round 20 (all run 8 bugs 94–107 fixed):** server fixes **live** (95 server, 96, 97, 98, 99, 104 server, 105, 107; live + ss-merge, pushed, logs rotated). **Built (now installed, see below):** Stobe.dll `040A3B1C` (U push-to-talk, bugs 95 DLL, 102, 103; `C:\StobeBuild\out`) and KenshiFP.dll `111289C5` (bugs 101, 106, 94, 104, 100, 79b; `/root/KenshiFP/re_plugin`). Install both only when Shay says Kenshi is closed, and check with the "Game testing automation research" session first (it is adding test commands to Stobe.dll on top of 040A3B1C). Then run test plan rows 70–85 first. stobe-tests after round 20: 51 pass / 7 known / negotiation_engine fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
-- **Installed (2026-10-02):** Stobe.dll `d6b1809e` (round 20 fixes + the automation session's TestAutomation.cpp; prev `261C7AF3`), KenshiFP.dll `111289C5` (round 20; prev `0193CD57`). Not yet tested in game; server through round 19g (live + ss-merge, pushed). stobe-tests baseline: 51 pass / 7 known / 1 pre-existing fail (`negotiation_engine` "unpaid -> BREACHED_PLAYER", fails on pre-r19 code too: not ours, investigate some day).
-- **Next job:** test plan section "Round 19 retest" (tests 43–56; Shay: 47, 48), then round 18 (tests 57–69), then the rest. Log in a new `test-run-<date>.md`.
-- **Naming:** test rows are plain numbers (test 43); bugs are always "bug N". No letter codes (Shay finds them confusing). Passed rows are deleted from the test plan.
-- **Bug 79** (FP look-at click takes control): r19h keeps control on Shay; details panel on click not done yet.
-- **No manual validation:** run only rows Claude can verify from logs/state/goal status; list the "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. DLL fixes: build during the run, install only when Shay says Kenshi is closed.
-- **Test location:** Shay's outpost "Home" (layout in the test plan). Malzin is in Shay's squad (faction "Nameless"), Fond (+60). Keep food in a chest for long goals.
-- History: `STOBE_bug_history.md` (bugs 1–91), `PATCH_HISTORY.md`, run logs in `archive/` (runs 5–7: `archive/test-run-2026-10-01-r5-r7.md`).
+## Current state (2026-10-02, after run 8 + round 20) — start here
+- **Installed:** Stobe.dll `d6b1809e` (round 20 fixes + the automation session's TestAutomation.cpp; prev `261C7AF3` kept as `C:\StobeBuild\out\Stobe.dll.prev_261C7AF3`), KenshiFP.dll `111289C5` (prev `0193CD57`, `.prev_` next to the Vortex copy). Server round 20 live (live + ss-merge, pushed, logs rotated).
+- **Round 20 = fixes for all run 8 bugs 94–107** (+ 101, 106, 79b), **none tested in game yet**. Root causes: `run8-deep-dive.md`. Status per bug: `STOBE_bug_history.md` (bugs 1–107). **Next bug is 108.**
+- **Next job:** test plan section "Run 8 bugs (round 20 fixes)", tests 70–85 (Shay: 84 put-down with G, 85 FP click details). Then "Round 19 retest" (43–56; Shay 47, 48), round 18 (57–69), the rest. Log in a new `test-run-<date>.md`; latest log `test-run-2026-10-01-r8.md`.
+- **Test automation** is being built by a separate session ("Game testing automation research"): plan in `test-automation-plan.md`, its code in Stobe `src/TestAutomation.cpp` + `tools/automation/` (uncommitted, theirs). Coordinate before installing DLLs or launching Kenshi.
+- stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
+- **Naming:** test rows are plain numbers ("test 70"); bugs always "bug N"; no letter codes. Passed rows get deleted from the test plan.
+- **No manual validation:** run only rows Claude can verify from logs/state/goal status; list "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. DLL fixes: build during the run, install only when Shay says Kenshi is closed.
+- **Test location:** Shay's outpost "Home" (game calls the area "The Hub, Border Zone"). Malzin is in Shay's squad (faction "Nameless"), Fond. Keep food in a chest for long goals. The test inbox speaker is the **selected** character: keep Shay selected.
+- History: `STOBE_bug_history.md`, `PATCH_HISTORY.md`, run logs in `archive/`; run 8 raw logs + all LLM prompts in `archive/logs-run8-2026-10-01/` (local only, gitignored).
+
+## Process rules from run 8 (Shay's feedback)
+- Say the full plan up front and run exactly that; never add steps mid-test.
+- After a watch-script ALERT the game **stays paused** until Shay unpauses; never send a speed command after an alert.
+- Watch fights live (NPC lines + events), and fact-check NPC claims against `[EVENT]` lines; wrong statements are bugs.
+- Save `stobe.log`/`KenshiFP.log` (and server/prompt slices) before any relaunch: both game logs reset on launch.
+- Prompts sent to the LLM: `log/context_sent_to_llm.log`, outputs `log/output_from_llm.log` (server). `stobe-rotate-logs` archives them.
 
 ## Gotchas learned (runs 5–7)
 - **Goals live outside the Kenshi save** (`RE_Kenshi\mods\Stobe\stobe_work_goals.tsv`, `stobe_task_goals.tsv` + server DB). Since bug 83 new goals carry the in-game time and are dropped when an older save is loaded; older unstamped goals are not. Clear leftovers before testing: write `<id>\tCANCEL` lines to `stobe_work_goal.control` / `stobe_task_goal.control`.
