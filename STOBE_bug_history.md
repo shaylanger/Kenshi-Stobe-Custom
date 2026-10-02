@@ -99,6 +99,13 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 91 | Surrender offers 1000 then 9000 cats, twice in one fight | server r19g: caps (common 50-300, leader ~1000, wealthy scaled, max 35 % carried), per-NPC cooldown 30 min | live, not retested |
 | 92 | No food anywhere: `GOAL_MEAL hungry` logged every tick (~60 ms), storage rescanned each tick | KFP r19h: after "no food anywhere" wait 10 game min before looking again | installed 0193CD57, not retested |
 | 93 | "Make 1 building material" BLOCKED at the Manual Stone Processor ("made no progress") while she worked it | KFP r19h: only finished units counted as progress, one manual unit > 30 game min; standing at the machine now counts, max 4 game h/unit | installed 0193CD57, not retested |
+| 94 | Old goal report re-delivered on a later initiative turn (mead STORE reported again at a knockout; "…the Hub") | open | open |
+| 95 | Lines meant for the player get a nearby NPC as speech target; that NPC answers as if addressed (goal report → Maelis, Skovrek's 300-cat offer → Maelis) | open | open |
+| 96 | "We're done here." recorded as ACCEPT of the NPC's assist deal + StopAttack | open | open |
+| 97 | Other NPCs call Malzin "him" | open | open |
+| 98 | No surrender offer to the player though several bandits were badly hurt (Pax pleaded in words, no deal) | open | open |
+| 99 | Fight chatter flood: ~35 NPC-to-NPC lines in 10 min, all spoken | open | open |
+| 100 | KenshiFP FP mode: an NPC you pick up can't be put down | open | open |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

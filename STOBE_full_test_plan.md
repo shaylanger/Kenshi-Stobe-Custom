@@ -127,6 +127,7 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 | 69 (Shay looks) | Select Shay (no goal), first-person and third-person view | Label hidden for Shay; shows in both camera modes for Malzin. Log `GOAL_LABEL widget created`; no `GOAL_LABEL faulted` |
 
 ## 4. Known not working / open issues
+- **Bugs 94–100 (run 8 fight, not fixed yet):** old goal report repeated (94); player-directed lines aimed at a nearby NPC (95); "we're done here" accepted an assist deal (96); Malzin called "him" (97); no surrender offers (98); NPC-to-NPC fight chatter flood (99); **FP: a picked-up NPC can't be put down (100)**.
 - **Bug 79, second half:** FP look-at click on a squad member should open her details (like a normal NPC). 19h only keeps control on Shay (retest: test 48).
 - **Hand-overs land on the floor.** Her GIVE_ITEM to Shay often logs `dropped_at_feet=1` (tobacco, twice in run 3), even when Shay's pack may have room. Check Shay's free space; if it has room, it's a DLL bug.
 - **Refund queued outside a chat turn** waits for her next reply (4 min once in a fight). Round 15 only fixed this for settles after a voice payment.
