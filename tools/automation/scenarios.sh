@@ -11,7 +11,7 @@ case "$cmd" in
   raid)
     stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 30 count 1 target Shay size "${1:-0.1}" >/dev/null
     sleep 1
-    for s in $("$0" raiders); do stobe-auto attack "$s" @player >/dev/null; done
+    for s in $("$0" raiders); do stobe-auto attack "$s" Shay >/dev/null; done
     echo "raiders: $("$0" raiders | wc -l)"
     ;;
   duel)
@@ -23,8 +23,8 @@ case "$cmd" in
       if [ -z "$keep" ]; then keep="$s"; else stobe-auto kill "$s" >/dev/null; fi
     done
     stobe-auto teleport "$keep" Shay dist 3 >/dev/null # inside the outpost walls (else path_failed)
-    stobe-auto attack "$keep" @player >/dev/null
-    stobe-auto attack @player "$keep" >/dev/null # squad AI may ignore its order; Shay starting it works
+    stobe-auto attack "$keep" Shay >/dev/null
+    stobe-auto attack Shay "$keep" >/dev/null # squad AI may ignore its order; Shay starting it works
     stobe-auto attack Malzin "$keep" >/dev/null
     echo "$keep"
     ;;
@@ -37,7 +37,7 @@ case "$cmd" in
     for s in $("$0" raiders); do
       if [ "$k" -lt "$n" ]; then
         stobe-auto teleport "$s" Shay dist 3 >/dev/null
-        stobe-auto attack "$s" @player >/dev/null
+        stobe-auto attack "$s" Shay >/dev/null
         echo "$s"; k=$((k+1))
       else
         stobe-auto kill "$s" >/dev/null
@@ -47,18 +47,27 @@ case "$cmd" in
   surrender)
     # duel, let them engage, drop the raider to 25 %, wait for his surrender offer;
     # prints "<serial> <name> <deal id>" (deal id empty if none came)
+    # Malzin stays out (sent 300 away; bring her back after): she defends Shay
+    # and knocks him out before his health event goes out.
     L=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
     base=$(grep -a -c "" "$L")
-    r=$("$0" duel)
-    stobe-say speed 1 >/dev/null
-    for i in $(seq 1 6); do # wait for the fight to really start, re-ordering the attack
-      sleep 10
-      tail -n +"$base" "$L" | grep -a -q "\[EVENT\] combat_start" && break
-      stobe-auto attack "$r" @player >/dev/null; stobe-auto attack @player "$r" >/dev/null
+    stobe-auto teleport Malzin Shay dist 300 >/dev/null
+    stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
+    sleep 1
+    r=""
+    for s in $("$0" raiders); do
+      if [ -z "$r" ]; then r="$s"; else stobe-auto kill "$s" >/dev/null; fi
     done
-    sleep 5
-    stobe-auto health "$r" 25 >/dev/null
+    stobe-auto teleport "$r" Shay dist 3 >/dev/null
     name=$(stobe-auto where "$r" | sed -E 's/ #[0-9]+ .*//')
+    stobe-say speed 1 >/dev/null
+    for i in $(seq 1 15); do # until he really swings at Shay (squad AI ignores some orders)
+      stobe-auto attack "$r" Shay >/dev/null; stobe-auto attack Shay "$r" >/dev/null
+      sleep 4
+      tail -n +"$base" "$L" | grep -a -F "[EVENT] combat: $name" | grep -a -q -- "-> Shay" && break
+    done
+    stobe-auto health "$r" 25 >/dev/null
+    name=$(stobe-auto where "$r" | sed -E 's/ #[0-9]+ .*//') # he may have been named meanwhile
     deal=""
     for i in $(seq 1 12); do
       sleep 5
@@ -80,7 +89,7 @@ case "$cmd" in
       WHERE lower(name)=lower('$name') RETURNING extended_data->'relationships'->'Shay'->>'aff'"
     ;;
   raiders)
-    stobe-auto chars 150 | tr '|' '\n' | grep 'Starving Bandits' | grep -v ' DEAD' | grep -o '#[0-9]*' || true
+    stobe-auto chars 150 | tr '|' '\n' | grep 'Starving Bandits' | grep -v -e ' DEAD' -e ' KO' | grep -o '#[0-9]*' || true
     ;;
   bodies)
     n="${1:-2}"; near="${2:-Malzin}"; faction="${3:-Drifters}"
