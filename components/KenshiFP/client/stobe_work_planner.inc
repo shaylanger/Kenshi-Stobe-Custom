@@ -225,6 +225,21 @@ static int wgp_name(void *gd, char *out, size_t outsz)
     return stobe_copy_native_string((void *)((uintptr_t)gd + GD_NAME), out, outsz);
 }
 
+/* Bug 125: lower-case letters/digits with single spaces ("Lorn [Hungry Bandit]"
+ * -> "lorn hungry bandit"); the server's sanitizer strips the brackets. */
+static void wgp_name_squash(const char *in, char *out, size_t outsz)
+{
+    size_t n=0; int space=0;
+    for (; *in && n+2<outsz; in++) {
+        unsigned char c=(unsigned char)*in;
+        if (isalnum(c)) {
+            if (space && n) out[n++]=' ';
+            out[n++]=(char)tolower(c); space=0;
+        } else space=1;
+    }
+    out[n]=0;
+}
+
 static int wgp_name_match(const char *actual, const char *query)
 {
     char a[192]={0}, q[192]={0};
@@ -233,6 +248,11 @@ static int wgp_name_match(const char *actual, const char *query)
     stobe_ascii_lower(a); stobe_ascii_lower(q);
     if (!strcmp(a,q)) return 3;
     if (strstr(a,q) || strstr(q,a)) return 2;
+    {
+        char sa[192], sq[192];
+        wgp_name_squash(a,sa,sizeof(sa)); wgp_name_squash(q,sq,sizeof(sq));
+        if (sa[0] && sq[0] && !strcmp(sa,sq)) return 3;
+    }
     if ((!strcmp(q,"copper") && strstr(a,"raw copper")) ||
         (!strcmp(q,"iron") && strstr(a,"raw iron"))) return 3;
     return 0;
@@ -246,6 +266,7 @@ static void *wgp_find_squad_actor(void *gw, uint32_t serial, const char *name)
     uint32_t count=*(uint32_t *)((uintptr_t)player+PI_PLAYERCHARS+LEK_COUNT);
     void **stuff=*(void ***)((uintptr_t)player+PI_PLAYERCHARS+LEK_STUFF);
     if (!stuff || count>4096 || !readable(stuff,count*sizeof(void*))) return NULL;
+    void *partial=NULL; int partials=0;
     for (uint32_t i=0;i<count;i++) {
         void *c=stuff[i];
         if (!char_valid(c) || !readable((void *)((uintptr_t)c+CHAR_HANDLE+HAND_IDS),20)) continue;
@@ -253,11 +274,14 @@ static void *wgp_find_squad_actor(void *gw, uint32_t serial, const char *name)
         if (serial && h[4]==serial) return c;
         if (!serial && name && *name) {
             char display[128]={0};
-            if (stobe_copy_native_string((void *)((uintptr_t)c+0x18),display,sizeof(display)) &&
-                !_stricmp(display,name)) return c;
+            if (stobe_copy_native_string((void *)((uintptr_t)c+0x18),display,sizeof(display))) {
+                int m=wgp_name_match(display,name); /* bug 125: "Rovar Dust Bandit Bowman" */
+                if (m==3) return c;
+                if (m==2) { partial=c; partials++; }
+            }
         }
     }
-    return NULL;
+    return partials==1 ? partial : NULL;
 }
 
 static int wgp_item_count_inventory(void *inv, const char *query)
