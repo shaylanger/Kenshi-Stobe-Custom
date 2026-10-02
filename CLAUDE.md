@@ -3,7 +3,7 @@
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
 ## Current state (2026-10-01 night, after run 8 + round 19h) — start here
-- **Run 8** (`test-run-2026-10-01-r8.md`): bugs 92, 93 found, 74 reopened, 84 passed; fixes installed. Its "Retest next run" list comes first. **Next bug is 101.** The test inbox speaker is the *selected* character: keep Shay selected.
+- **Run 8** (`test-run-2026-10-01-r8.md`): bugs 92, 93 found, 74 reopened, 84 passed; fixes installed. Its "Retest next run" list comes first. **Next bug is 102.** The test inbox speaker is the *selected* character: keep Shay selected.
 - **Installed:** Stobe.dll `261C7AF3…`, KenshiFP.dll `0193CD57…` (all fixes through bug 93; prev `BC284585`); server through round 19g (live + ss-merge, pushed). stobe-tests baseline: 51 pass / 7 known / 1 pre-existing fail (`negotiation_engine` "unpaid -> BREACHED_PLAYER", fails on pre-r19 code too: not ours, investigate some day).
 - **Next job:** test plan section "Round 19 retest" (tests 43–56; Shay: 47, 48), then round 18 (tests 57–69), then the rest. Log in a new `test-run-<date>.md`.
 - **Naming:** test rows are plain numbers (test 43); bugs are always "bug N". No letter codes (Shay finds them confusing). Passed rows are deleted from the test plan.

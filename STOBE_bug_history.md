@@ -78,7 +78,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 70 | Farm wait hidden by "Obtaining …"; dry farm waited forever | KFP r17h | installed, not retested |
 | 71 | LOOT_AREA rejected Sorth's corpse (scan dead=1 valid=0) | KFP r19: native bool returns read as 1 byte (isPlayerCharacter garbage) + per-body scan log | installed, not retested |
 | 72 | Goal reports queued but never spoken ("Director scene failed: No eligible Director cast") | server r19: goal_report never uses director mode; failed director falls back to a normal turn | passed run 6 |
-| 73 | Malzin talked about dead Sorth as alive | Stobe r19: roster marks "(dead)/(unconscious)", corpses merged into nearby; server r19: prompt says DEAD | installed, not retested |
+| 73 | Malzin talked about dead Sorth as alive | Stobe r19: roster marks "(dead)/(unconscious)", corpses merged into nearby; server r19: prompt says DEAD | passed run 8 |
 | 74 | Job list panel only refreshed after reselecting her | KFP r19: replay updatePlayerSelection after GOAL_JOB add/remove; **failed run 8** → KFP r19h: replay her → nothing → her, log `GOAL_JOB ui refresh replayed/skipped` | installed 0193CD57, not retested |
 | 75 | No walk-back after work goals (silent 180 s, gave up); report fired at once | KFP r19: return/report target = other squad member when the worker is selected; skip reasons logged; report fallback 200 s; started on accept | passed run 6 |
 | 76 | "Make 3 steel bars" became a question, no goal | server r19: infer WORK_GOAL from a plain make-order to a faction member | passed run 6 |
@@ -106,6 +106,7 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 98 | No surrender offer to the player though several bandits were badly hurt (Pax pleaded in words, no deal) | open | open |
 | 99 | Fight chatter flood: ~35 NPC-to-NPC lines in 10 min, all spoken | open | open |
 | 100 | KenshiFP FP mode: an NPC you pick up can't be put down | open | open |
+| 101 | Loot orders looted nothing: target "Pax Hungry Bandit" vs body "Pax [Hungry Bandit]", and "bandits" vs "Bandit" | KFP r19i: names compared without punctuation; plural retried as singular | built E73512B1, not installed |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

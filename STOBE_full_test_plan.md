@@ -96,14 +96,12 @@ What rounds 17–18 added (what these rows check):
 | 43 | "Make 1 building material" at 50x | COMPLETE 1/1; no BLOCKED "made no progress" while she works the Manual Stone Processor (bugs 80, 93) |
 | 44 | "Loot everything from Sorth's body" (or any corpse) | KenshiFP `loot scan body name=Sorth … match=1`; walks to the body; items in her pack (bug 71) |
 | 45 | "Loot the weapons from these bandits" (a body with a weapon) | Only weapons moved (bug 71) |
-| 46 | Talk to Malzin near a corpse / a knocked-out NPC | Roster in stobe.log shows `(dead)` / `(unconscious)`; she never treats the corpse as alive (bug 73) |
 | 47 (Shay looks) | "Make 2 building materials" with Malzin **selected** | Job list panel switches Stone Mine ↔ Manual Stone Processor by itself; KenshiFP `GOAL_JOB ui refresh replayed selection`, no `faulted` (bug 74, failed run 8, refix 19h) |
 | 48 (Shay) | FP mode: look at Malzin and left-click; then click her portrait | Click: you stay Shay, KenshiFP `[fp] look-at click … kept control (bug 79)`. Portrait: switches to her as before. (Her details panel on click: not built yet) |
 | 49 | 50x goal: compare to run 5 (`[202 s]` to the bread block) | Steps follow each other without long idles; pauses freeze the goal (bug 78) |
 | 50 | Long goal at 50x with food in a chest, Malzin's food low | `GOAL_MEAL hungry` → `ate from …` → `done`; goal resumes (round 19 meals) |
 | 51 | Same with no food anywhere | `GOAL_MEAL no food anywhere`; she says she's hungry and there's no food (server `Hunger report queued`); keeps working; afterwards **no** `GOAL_MEAL hungry` flood (one line, then quiet ~10 game min) (bug 92) |
 | 52 | Save, give "Patrol the base", quit (or load the save) without saving | KenshiFP `GOAL_LOAD world time …`, then `GOAL_LOAD dropped id=… given_at=… world_now=…`; she isn't patrolling, no walk-back/report. A goal given **before** the save keeps running (bug 83) |
-| 53 | "Malzin, guard me." then walk 50 m; "Malzin, follow me." | KenshiFP `ACTION_BRIDGE … squad->squad: using FOLLOW_PLAYER_ORDER`; she keeps up (dist stays small). If she only talks: server `Follow inferred from a direct request (bug 87)` (bugs 86, 87) |
 | 54 | Bandit fight: accept an NPC surrender ("Deal…") | Deal dispatches STOP_ATTACK + payment; he stops for good (bug 88) |
 | 55 | Offer a bandit cats to stop, pay; stay on block + passive | Gang stands down and stays down for 2 min; your hits on attackers log as "Defending against"; "we had a deal" → `Ceasefire honoured from a completed deal` (bugs 89, 90) |
 | 56 | Let a common bandit get badly hurt | Surrender offer ≤ 300 cats and ≤ 35 % of what he carries; server `NPC offer capped (bug 91)` if the model asked for more; only one offer per NPC per fight (bug 91) |
