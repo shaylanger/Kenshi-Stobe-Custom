@@ -2,8 +2,9 @@
 
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
-## Current state (2026-10-01 night, after run 8 + round 19h) — start here
+## Current state (2026-10-02 early, after run 8 + round 20 fixes) — start here
 - **Run 8** (`test-run-2026-10-01-r8.md`): bugs 92, 93 found, 74 reopened, 84 passed; fixes installed. Its "Retest next run" list comes first. **Next bug is 108.** Deep dive: `run8-deep-dive.md`; automation plan: `test-automation-plan.md`. The test inbox speaker is the *selected* character: keep Shay selected.
+- **Round 20 (all run 8 bugs 94–107 fixed):** server fixes **live** (95 server, 96, 97, 98, 99, 104 server, 105, 107; live + ss-merge, pushed, logs rotated). **Built, NOT installed:** Stobe.dll `040A3B1C` (U push-to-talk, bugs 95 DLL, 102, 103; `C:\StobeBuild\out`) and KenshiFP.dll `111289C5` (bugs 101, 106, 94, 104, 100, 79b; `/root/KenshiFP/re_plugin`). Install both only when Shay says Kenshi is closed, and check with the "Game testing automation research" session first (it is adding test commands to Stobe.dll on top of 040A3B1C). Then run test plan rows 70–85 first. stobe-tests after round 20: 51 pass / 7 known / negotiation_engine fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
 - **Installed:** Stobe.dll `261C7AF3…`, KenshiFP.dll `0193CD57…` (all fixes through bug 93; prev `BC284585`); server through round 19g (live + ss-merge, pushed). stobe-tests baseline: 51 pass / 7 known / 1 pre-existing fail (`negotiation_engine` "unpaid -> BREACHED_PLAYER", fails on pre-r19 code too: not ours, investigate some day).
 - **Next job:** test plan section "Round 19 retest" (tests 43–56; Shay: 47, 48), then round 18 (tests 57–69), then the rest. Log in a new `test-run-<date>.md`.
 - **Naming:** test rows are plain numbers (test 43); bugs are always "bug N". No letter codes (Shay finds them confusing). Passed rows are deleted from the test plan.
