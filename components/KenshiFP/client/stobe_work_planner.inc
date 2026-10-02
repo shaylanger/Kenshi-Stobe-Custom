@@ -394,6 +394,46 @@ static int wgp_missing(void *prod, void **out, int max)
     return (int)list.count;
 }
 
+/* Bug 38: how many units of input `dep_gd` the machine eats for `outputs` units of
+ * its product, from its consumption rates (input.rate / output.rate). Falls back
+ * to 1:1 when the data can't be read. */
+static int wgp_input_need(void *prod, const char *machine, void *dep_gd, int outputs)
+{
+    typedef int (*num_t)(void *);
+    typedef void *(*get_t)(void *, int);
+    if (outputs<1 || !prod || !dep_gd || !readable(prod,0x468)) return outputs;
+    num_t nf=(num_t)wgp_vcall_ptr(prod,0x588);
+    get_t gf=(get_t)wgp_vcall_ptr(prod,0x590);
+    void *out=*(void **)((uintptr_t)prod+0x448);
+    if (!nf || !gf || !readable(out,0x20)) return outputs;
+    float orate=*(float *)((uintptr_t)out+4);
+    if (!(orate>0.0f)) return outputs;
+    int n=nf(prod);
+    if (n<1 || n>8) return outputs;
+    for (int i=0;i<n;i++) {
+        void *ci=gf(prod,i);
+        if (!ci || ci==out || !readable(ci,0x20)) continue;
+        if (*(void **)((uintptr_t)ci+0x10)!=dep_gd) continue;
+        float r=*(float *)((uintptr_t)ci+4);
+        if (!(r>0.0f)) return outputs;
+        float ratio=r/orate;
+        if (ratio<0.05f || ratio>20.0f) return outputs;
+        int need=(int)(outputs*ratio+0.999f);
+        if (need<1) need=1;
+        {
+            static void *last_dep; static float last_ratio;
+            if (last_dep!=dep_gd || last_ratio!=ratio) {
+                char dn[128]={0}; wgp_name(dep_gd,dn,sizeof(dn));
+                logline("[stobe] WORK_GOAL input ratio %s: %s x%.2f (in %.3f / out %.3f) -> %d for %d",
+                        machine&&machine[0]?machine:"machine",dn,ratio,r,orate,need,outputs);
+                last_dep=dep_gd; last_ratio=ratio;
+            }
+        }
+        return need;
+    }
+    return outputs;
+}
+
 static int wgp_find_producer(void *gw, void *actor, const char *query, WgpProducer *out)
 {
     if (!out || !wgp_resolve_exports()) return 0;
@@ -765,7 +805,8 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
     for (int i=0;i<miss;i++) {
         char dep[128]={0};
         if (!wgp_name(missing[i],dep,sizeof(dep)) || !dep[0]) continue;
-        int r=wgp_ensure_item(gw,actor,g,dep,need,depth+1,next_chain,next_n,budget,reason,reason_sz);
+        int dneed=p.is_crafting?need:wgp_input_need(p.production,p.building_name,missing[i],need);
+        int r=wgp_ensure_item(gw,actor,g,dep,dneed,depth+1,next_chain,next_n,budget,reason,reason_sz);
         if (r<0) return -1;
         if (r==0) {
             if (strncmp(g->current_step,"Waiting",7) && strncmp(g->current_step,"Fetching",8) &&
@@ -937,6 +978,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
         if (!wgp_name(missing[i],dep,sizeof(dep)) || !dep[0]) continue;
         int outstanding=g->quantity-g->completed;
         if (outstanding<1) outstanding=1;
+        if (!root.is_crafting) outstanding=wgp_input_need(root.production,root.building_name,missing[i],outstanding);
         int r=wgp_ensure_item(gw,actor,g,dep,outstanding,1,chain,1,&budget,reason,sizeof(reason));
         if (r<0) {
             char full[256];
