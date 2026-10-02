@@ -2,12 +2,12 @@
 
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
-## Current state (2026-10-02, after run 8 + round 20) — start here
-- **Installed:** Stobe.dll `5018124F` (round 20 fixes + TestAutomation), KenshiFP.dll `111289C5`. Server round 20 live (live + ss-merge, pushed, logs rotated).
-- **Round 20 = fixes for all run 8 bugs 94–107** (+ 101, 106, 79b), **none tested in game yet**. Root causes: `run8-deep-dive.md`. Status per bug: `STOBE_bug_history.md` (bugs 1–107). **Next bug is 108.**
-- **Next job:** test plan section "Run 8 bugs (round 20 fixes)", tests 70–85 (Shay: 84 put-down with G, 85 FP click details). Then "Round 19 retest" (43–56; Shay 47, 48), round 18 (57–69), the rest. Log in a new `test-run-<date>.md`; latest log `test-run-2026-10-01-r8.md`.
+## Current state (2026-10-02, after run 9 + round 21) — start here
+- **Installed:** Stobe.dll `5CFE999F`, KenshiFP.dll `0CB0CD9A` (round 21). Server round 21 live (live + ss-merge, pushed).
+- **Run 9** (`test-run-2026-10-02-r9.md`, fully automated): round 20 tests 70–83 done, round 19 retest, round 18 (57–60), and old rows 5, 8, 10, 12, 15, 28, 33, 37. Round 21 fixed bugs 96, 98 (several parts), 108, 109, 111–116, 118, 120, 121 (all retested in game). Open: 110, 117, 119. **Next bug is 122.**
+- **Next job:** the rest of the test plan (sections 1–3: 3, 4, 9, 11, 13, 14, 16, 17–27, 29–32, 34–36, 38–42), then the Shay rows (47, 48, 61, 66–69 looks, 84, 85; 80 needs a friendly trader).
 - **Automated test bed works** (see "Test bed" below); run 9 (`test-run-2026-10-02-r9.md`) is the first fully automated run. Other sessions: coordinate (SendMessage) before installing DLLs or launching Kenshi so two sessions don't fight over the game.
-- stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
+- stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks (49 of 51 pass incl. run 9 regressions for bugs 96, 98, 116) ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
 - **Naming:** test rows are plain numbers ("test 70"); bugs always "bug N"; no letter codes. Passed rows get deleted from the test plan.
 - **No manual validation:** run only rows Claude can verify from logs/state/goal status; list "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. **Claude runs the whole loop alone** (Shay's decision 2026-10-02): launch Kenshi, load a test save, test, log bugs, close Kenshi, fix, build, install, relaunch, retest until every testable bug is fixed, then close Kenshi. No "go" needed. Use `tools/automation/kenshi-ctl.ps1` (launch/stop/restart/status/health) and `install-dll.ps1`.
 - **Test location:** Shay's outpost "Home" (game calls the area "The Hub, Border Zone"). Malzin is in Shay's squad (faction "Nameless"), Fond. Keep food in a chest for long goals. The test inbox speaker is the **selected** character: keep Shay selected.
@@ -59,6 +59,9 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 - A pass means real game state changed (status files, KenshiFP.log, inventories, events), never just the words.
 - **Safety:** at speed >10x use `tools/stobe-goal-watch.sh` (pauses on combat/knockout toward Shay/Malzin). On a fixture copy an alert ends that test: pause, save logs, log the bug, reload the fixture (`stobe-auto load auto-home`).
 - The LLM often picks a different action than intended: log it as a bug and add a server guard.
+- **Scenarios** (`tools/automation/scenarios.sh`, WSL): `fresh` (reload auto-home, feed, reset Malzin), `bodies <n>`, `duel`, `gang <n>`, `surrender` (prints `serial|name|deal`; retry a few times), `trust "<npc>" 60 Fond`. Raiders must be teleported inside the outpost walls (else `path_failed`); Shay attacking first is what reliably starts a fight. `buy`, `money`, `stash`, `inv`, `hp` in `stobe-auto`; `give` can't create weapons.
+- **Builds:** `tools/automation/build-stobe.ps1` (syncs changed WSL sources, builds); KenshiFP `build.sh` in WSL; then `kenshi-ctl.ps1 stop` + `install-dll.ps1`.
+- **Gotchas:** after a reload spawned NPCs get the same serials (and the server's old names: bug 117); PHP opcache serves a changed server file only after ~1 min; WSL clock is 1 h ahead of stobe.log (use `stobe-guard.sh`, line numbers). Never `git checkout` a file in ss-merge (it holds uncommitted round work).
 
 ## Working rules
 - Shay: concise answers, one step at a time, no unrelated changes.

@@ -123,6 +123,10 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 115 | Goal meals used food up without feeding her (eatItem: +1 per Dried Meat) | KFP r21 7c3d3e3: food into her pack, the game eats | PASSED run 9 (test 50) |
 | 116 | A paid ceasefire broken by a gang-mate's idle chat (Attack action) | server r21 5d75ff2 + c0599a4: ATTACK on the player dropped for the deal's gang for 10 min | PASSED run 9 (test 55) |
 | 117 | After a reload the same serial carries another session's name (Garven = Smeck); the voice payment went to "Smeck" and the deal with "Garven" stayed unpaid | open: identity by serial vs name across reloads | open |
+| 118 | Bridged actions (EQUIP/UNEQUIP...) failed for a squad member >750 units from Shay ("ACTION_BRIDGE actor not found") | KFP r21 fd1c317: squad list searched first | PASSED run 9 |
+| 119 | Asked to put on something she already wears, she tries to equip it ("let me get it back on") | open: server guard (worn item -> say it's on) | open |
+| 120 | A squadmate's gift to the player blocked as an outsider's ("Blocked unpaid gift ... affinity 0") | server r21 7eeeefb: speaker's own action config | PASSED run 9 (test 28) |
+| 121 | Full pack: work goal retried "could not take Raw Stone" every second, never blocked | KFP r21 814e72e: BLOCKED "her pack is full" after 5 tries | PASSED run 9 |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

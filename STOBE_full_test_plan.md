@@ -10,8 +10,7 @@ Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, Ken
 - **Malzin's relationship to Shay is currently +60 Fond** (set for the bug 41 test). Run `stobe-reset-npc Malzin` first unless a test needs trust (test 28).
 - **Fights only with the fight setup:** Shay on pause duty, a watcher armed in the background **before** the attack, fight started with `stobe-force-attack Malzin [help]` (voice alone can't start one). Watchers: `DELAY=2 stobe-fight-watch "<pay line>"` pays by itself; `stobe-fight-offer "<offer line>"` only sends an offer (then Claude checks the ledger and pays). Her gang stands down when she stops (DLL round 15).
 - **Pause behaviour:** while paused, STOBE holds speech and actions (`ACTION_QUEUE: paused`) and runs them in order on unpause. Lines can still be sent while paused (payment + her stop then fire together on unpause). **Reloading a save drops the DLL's queued actions.** Deal clocks only tick when a chat line or game event reaches the server.
-- **Setting trust for a test** (test data only; `stobe-reset-npc` clears it):
-  `sudo -u postgres psql -d stobe -c "UPDATE core_npc_master SET extended_data = jsonb_set(extended_data, '{relationships,Shay}', jsonb_build_object('aff',60,'tier','Fond','type','friend','note','test','updated_at',extract(epoch from now())::int)) WHERE lower(name)='malzin'"` (tiers: 56 Fond, 31 Friendly, −56 Resentful). Low trust: she refuses credit; Fond: she accepts pay-later.
+- **Setting trust for a test** (test data only; `stobe-reset-npc` clears it): `bash tools/automation/scenarios.sh trust "<npc name>" 60 Fond` (WSL). The old `jsonb_set(…, '{relationships,Shay}', …)` silently does nothing when the NPC has no relationships yet. (tiers: 56 Fond, 31 Friendly, −56 Resentful). Low trust: she refuses credit; Fond: she accepts pay-later.
 - **Safety:** if any NPC is harmed or knocked out by an action, or Shay goes down, stop immediately.
 - Deal ledger: `cd /tmp && sudo -u www-data php /var/www/html/StobeServer/tools/negotiation_admin.php deals 3` (`deal <id>` for evidence, `directives` for queued NPC actions). KenshiFP results: `Kenshi\KenshiFP.log` (lines starting `[stobe]`).
 
@@ -24,18 +23,14 @@ Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, Ken
 | 2 (bug 43) | Fight setup with `help`; she stops for pay | Her words don't claim her gang "isn't hers to call off"; the gang stands down (`PERSONAL_TRUCE: stood down faction-mate`). |
 | 3 (bug 35) | While a deal is underway, make a **new** offer with a different amount ("…and 300 cats to take off your hat?") | Her reply is kept; she may repeat your 300. Only a sentence with a truly wrong amount is dropped. |
 | 4 (bug 37) | Watch for a COUNTER with no terms (log `Negotiation rejected by deterministic validation … invalid_terms_json`) | Next negotiation turn she's reminded and restates it as COUNTER with terms. |
-| 5 (bug 38) | Any chat with Malzin | Her prompt shows "Shay \| player's squad", not "squadmate" (`context_sent_to_llm.log`). |
 | 6 | Only if she ever agrees to sell or stow her katana without Fond trust | Line replaced with "Not my Chisa Katana…", log `Negotiation rejected: NPC would give up her weapon`. (She has refused on her own every time so far.) |
 
 ## 2. Couldn't be triggered so far
 | # | Say / do | Expect | Why not yet |
 |---|---|---|---|
 | 7 (bug 30) | If she says "Fine…" but the ledger shows nothing, send the next line | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision |
-| 8 (bug 31) | "N cats and you take off your X. Deal?" (no "hand it to me") | Recorded as UNEQUIP_ITEM; log `take-off request recorded as UNEQUIP_ITEM` | She refused all take-off deals in run 3 (hat, sandals, shirt). Try with trust (Fond). |
 | 9 | Pay for something she can't do, and she agrees | Deal fails and **your Cats come back** | She always says she can't. (The refund itself works: seen in run 2.) |
-| 10 | Item for item: "I'll give you <valuable item> for your pants." Then "Here's your <item>." | Both items change hands, deal COMPLETE, no refund, no second deal | She refused every item-only offer as not worth it |
 | 11 | "Here's 500 cats, now <something she won't do>" | The 500 moves at once (by design); she refuses → the 500 is refunded | Not tried yet |
-| 12 | Hand over a **stack** (e.g. 5 bread) into a nearly full pack | `dropped_at_feet=5` | Nobody had a stack (we don't spawn items) |
 | 13 | One-on-one fight (no `help`) where a faction-mate joins uninvited | `PERSONAL_FIGHT: stood down joiner=…` within ~0.25 s | In every one-on-one fight nobody joined |
 | 14 | Counter-offers where she might misquote ("300 now, 200 after?") | Misquoted amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted |
 
@@ -43,7 +38,6 @@ Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, Ken
 **Clothing**
 | # | Say / do | Expect |
 |---|---|---|
-| 15 | Ask her to put on a hat while already wearing one | Log `no free equipment section … occupied=head`; she doesn't claim success |
 | 16 | Ask her to put on something she's **already wearing** ("put your vest back on" with the Black Rag Shirt on) | She says it's already on, and doesn't try to equip it (in run 1 she tried to equip it) |
 
 **Combat and NPC-initiated** (fight setup)
@@ -64,12 +58,10 @@ Last updated 2026-10-01 (after run 8 and round 19h; Stobe.dll `261C7AF3…`, Ken
 | # | Say / do | Expect |
 |---|---|---|
 | 27 | Deal talk with NPC A while NPC B stands nearby; then talk to B | B doesn't act as if you'd asked him; may mention he overheard |
-| 28 | Ask for something free from someone Fond+ (56+) or a squadmate (Malzin is Fond right now) | They may give it freely |
 | 29 | Mid-fight, heal someone (or hand them an item), then talk without mentioning it | They already know ("thanks for patching me up") |
 | 30 | "Senlin, what if I bandage you up and you give me your rags?" Heal her and say nothing | She hands the rags over on her own; deal completes |
 | 31 | Same, but after she hands over first, "I'm not going to heal you" | You broke the deal; she doesn't say "we're square" |
 | 32 | After a long fight, ask about something from earlier in it | She still remembers it |
-| 33 (bug 23) | "Here, take this bread" while carrying Poppyseed Bread | You hand it over (distinctive-word match, round 9d) |
 
 **Work and task goals** (passed rows are in `archive/test-run-2026-09-30-r4.md` and later run logs). Automated with `stobe-say` (+ `speed`) unless marked Shay.
 
@@ -83,7 +75,6 @@ What rounds 17–18 added (what these rows check):
 | 34 | "Make 2 bread" with the well powered and the farm watered (run at 50x, auto-pause on combat) | Water→farm only from the well (never out of the oven), wheat→silo, flour→oven; COMPLETE 2/2; status "Waiting for Wheat Farm … to grow" while growing (bugs 47, 58, 61, 69, 70) |
 | 35 | Same with a machine really unpowered while she works it | After ~30 s: BLOCKED "… has no power"; she walks back and says why (bugs 59, 61) |
 | 36 | Something needing a crafted ingredient at a bench | Bench queue grows only by what's missing |
-| 37 (Shay) | Save and reload mid-goal | Continues with progress intact |
 | 38 (Shay looks) | "Fetch the mead" with her starting **far** from the chest | Step "Walking to …"; she walks to the chest instead of fetching from afar (bug 51) |
 | 39 | "Give Wendy 3 medkits" (needs a 2nd squad member) | 3 move between squad members |
 | 40 | "Buy 3 bread from the trader" (needs a trader) | Walks there and really buys them |
@@ -107,10 +98,6 @@ Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as 
 **Round 18 features** (all automatable unless marked; check logs, state and goal status)
 | # | Say / do | Expect |
 |---|---|---|
-| 57 | Ask a **non-faction** NPC (Malzin out of the squad, or any stranger) at low trust: "loot that corpse", "make 5 bread", "repair the gate", "patrol here" | Refuses in character; server log `Order refused: NPC is not in the player faction`; no goal/action queued (feature 1) |
-| 58 | Same NPC at low trust: "follow me" / "guard me" / "wait here" | Refuses or names a price; nothing executed |
-| 59 | Same NPC with trust ≥ 56 (set by hand) or after agreeing a paid deal ("follow me for 200 cats. Deal?" → pay) | Follow/guard/wait **does** run |
-| 60 | Non-faction NPC in a fight or deal: help/attack, give items, take cats, surrender | Unaffected by the order gate |
 | 61 | STOBE Settings window: TTS Volume row now has two boxes | Volume 0–200, Fade 25–400; values save to `StobeCustom.ini` (`TTSVolume`, `TTSFadePercent`) and survive a relaunch (feature 2) |
 | 65 (optional) | Turn `Speed Dialogue` back on | Old behaviour returns (faster TTS at 2–3x) |
 | 66 (Shay) | Give her a job of your own first, then a goal | Your job stays; only the goal's job comes and goes. Any `GOAL_JOB unexpected removal … disabled` = removal API is type-based → report |
