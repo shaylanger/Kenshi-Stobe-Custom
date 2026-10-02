@@ -1,0 +1,10 @@
+# Exact compatibility rules.
+# Explicit exclusions and tags override automatic classification.
+#
+# exclude|base_item_string_id
+# tag|base_item_string_id|TAG1,TAG2
+#
+# Examples:
+# tag|my_mod_iron_hoe|TOOL_FARMING
+# tag|my_mod_mining_pack|PACK_ORE
+# exclude|my_mod_decorative_pickaxe

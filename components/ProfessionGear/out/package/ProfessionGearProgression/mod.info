@@ -1,0 +1,5 @@
+name=Profession Gear Progression
+version=0.1.0
+author=Shay
+category=Gameplay
+description=Contextual profession equipment progression with per-instance affixes. Requires RE_Kenshi/KenshiLib.
