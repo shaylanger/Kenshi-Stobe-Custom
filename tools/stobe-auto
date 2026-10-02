@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""stobe-auto: test automation commands for a running Kenshi (Stobe.dll TestAutomation).
+
+Works at the main menu too. Needs the test inbox switch (stobe-say on).
+
+  stobe-auto status                       phase (menu|loading|world), save, speed, squad
+  stobe-auto wait-world [timeout_s]       wait until a save is loaded and the world runs
+  stobe-auto load <save> | save <name>
+  stobe-auto chars [radius]               characters near the player
+  stobe-auto find <character|squad|item|weapon|armour> <text>
+  stobe-auto spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m]
+  stobe-auto where|select|recruit|kill <npc>
+  stobe-auto teleport <npc> <npc2 | x y z> [dist m]
+  stobe-auto ko <npc> [seconds] | health <npc> <percent> | hunger <npc> <0..300>
+  stobe-auto attack <attacker> <target> | give <npc> <item> [n] | relation <npc> <-100..100>
+<npc> is a name (exact match nearest the player wins), #serial, @player or @selected.
+"""
+import os
+import sys
+import time
+
+MOD = '/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe'
+FLAG = MOD + '/test_inbox.flag'
+INBOX = MOD + '/auto_inbox.txt'
+OUTBOX = MOD + '/auto_outbox.txt'
+
+
+def send(cmd, args, timeout=20):
+    if not os.path.exists(FLAG):
+        sys.exit('inbox is off: run "stobe-say on"')
+    if any('\t' in a or '\n' in a for a in args):
+        sys.exit('arguments may not contain tabs or newlines')
+    deadline = time.time() + timeout
+    while os.path.exists(INBOX):
+        if time.time() > deadline:
+            sys.exit('previous command still unread: is Kenshi running?')
+        time.sleep(0.2)
+    cid = 'a%d' % int(time.time() * 1000)
+    tmp = INBOX + '.tmp'
+    with open(tmp, 'w', newline='\n') as f:
+        f.write('\t'.join([cid, cmd] + args) + '\n')
+    os.rename(tmp, INBOX)
+    while time.time() < deadline:
+        if os.path.exists(OUTBOX):
+            with open(OUTBOX, encoding='utf-8', errors='replace') as f:
+                for line in f:
+                    parts = line.rstrip('\n').split('\t', 2)
+                    if parts[0] == cid and len(parts) == 3:
+                        return parts[1] == 'ok', parts[2]
+        time.sleep(0.2)
+    sys.exit('no answer within %ds (Kenshi not running or stuck loading?)' % timeout)
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
+        print(__doc__)
+        return 0
+    cmd, args = sys.argv[1], sys.argv[2:]
+    if cmd == 'wait-world':
+        limit = float(args[0]) if args else 300
+        end = time.time() + limit
+        while time.time() < end:
+            try:
+                ok, detail = send('status', [], timeout=10)
+            except SystemExit:
+                ok, detail = False, 'no answer (loading?)'
+            if ok and 'phase=world' in detail:
+                print(detail)
+                return 0
+            time.sleep(2)
+        print('world not ready after %ds: %s' % (limit, detail))
+        return 1
+    ok, detail = send(cmd, args)
+    print(('' if ok else 'ERROR: ') + detail)
+    return 0 if ok else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
