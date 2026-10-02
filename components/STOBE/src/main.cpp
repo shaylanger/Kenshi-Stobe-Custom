@@ -5284,7 +5284,9 @@ static bool CollectFleshHealthByPart(
 
 // Bug 98: overall health (worst body part, 0..100) and the last bucket
 // reported per NPC, so the server can offer a surrender before the knockout.
-static std::map<unsigned int, int> g_healthBucketBySerial;
+// Serial -> (bucket, last update); entries expire so a reload (same serials)
+// or a later fight reports again.
+static std::map<unsigned int, std::pair<int, DWORD> > g_healthBucketBySerial;
 
 static int OverallHealthPercent(const std::map<uintptr_t, float> &healthByPart) {
   float worst = 1.0f;
@@ -5324,14 +5326,16 @@ static void ReportHealthBucket(Character *npc, unsigned int serial, int healthPe
   for (int b = 0; b < 4; ++b)
     if (healthPercent < kHealthBuckets[b])
       bucket = kHealthBuckets[b];
-  std::map<unsigned int, int>::iterator last = g_healthBucketBySerial.find(serial);
-  int lastBucket = last == g_healthBucketBySerial.end() ? 100 : last->second;
-  if (bucket > lastBucket) {
-    g_healthBucketBySerial[serial] = bucket;
-  } else if (bucket < lastBucket) {
-    g_healthBucketBySerial[serial] = bucket;
+  const DWORD now = GetTickCount();
+  std::map<unsigned int, std::pair<int, DWORD> >::iterator last =
+      g_healthBucketBySerial.find(serial);
+  int lastBucket = (last == g_healthBucketBySerial.end() ||
+                    now - last->second.second > 120000)
+                       ? 100
+                       : last->second.first;
+  if (bucket < lastBucket)
     EmitHealthBucketEvent(npc, healthPercent);
-  }
+  g_healthBucketBySerial[serial] = std::make_pair(bucket, now);
 }
 
 static void EmitMajorDamageEvent(Character *victim) {
