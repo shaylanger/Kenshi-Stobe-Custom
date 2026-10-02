@@ -1,0 +1,87 @@
+diff --git a/components/STOBE/src/main.cpp b/components/STOBE/src/main.cpp
+index 6739778..d3b6f02 100644
+--- a/components/STOBE/src/main.cpp
++++ b/components/STOBE/src/main.cpp
+@@ -5282,6 +5282,58 @@ static bool CollectFleshHealthByPart(
+   return !healthByPartOut.empty();
+ }
+ 
++// Bug 98: overall health (worst body part, 0..100) and the last bucket
++// reported per NPC, so the server can offer a surrender before the knockout.
++static std::map<unsigned int, int> g_healthBucketBySerial;
++
++static int OverallHealthPercent(const std::map<uintptr_t, float> &healthByPart) {
++  float worst = 1.0f;
++  int parts = 0;
++  for (std::map<uintptr_t, float>::const_iterator it = healthByPart.begin();
++       it != healthByPart.end(); ++it) {
++    MedicalSystem::HealthPartStatus *part = (MedicalSystem::HealthPartStatus *)it->first;
++    float maxHealth = 0.0f;
++    try {
++      maxHealth = part->maxHealth();
++    } catch (...) {
++      maxHealth = 0.0f;
++    }
++    if (maxHealth <= 0.0f)
++      continue;
++    float ratio = it->second / maxHealth;
++    ratio = ratio < 0.0f ? 0.0f : (ratio > 1.0f ? 1.0f : ratio);
++    if (ratio < worst)
++      worst = ratio; // worst part: a knockout comes when one part runs out
++    ++parts;
++  }
++  return parts ? (int)(100.0f * worst + 0.5f) : 100;
++}
++
++static void EmitHealthBucketEvent(Character *victim, int healthPercent) {
++  LogGameEvent("major_damage", ResolveCharacterNameSafe(victim), SafeFaction(victim),
++               "None", "None",
++               "took a major hit (health " + ToString(healthPercent) + "%)",
++               ResolveCharacterSerialForEvent(victim), 0);
++}
++
++// Emits once each time the health falls into a lower bucket (60/45/30/15 %);
++// healing back up re-arms the higher buckets.
++static void ReportHealthBucket(Character *npc, unsigned int serial, int healthPercent) {
++  static const int kHealthBuckets[] = {60, 45, 30, 15};
++  int bucket = 100;
++  for (int b = 0; b < 4; ++b)
++    if (healthPercent < kHealthBuckets[b])
++      bucket = kHealthBuckets[b];
++  std::map<unsigned int, int>::iterator last = g_healthBucketBySerial.find(serial);
++  int lastBucket = last == g_healthBucketBySerial.end() ? 100 : last->second;
++  if (bucket > lastBucket) {
++    g_healthBucketBySerial[serial] = bucket;
++  } else if (bucket < lastBucket) {
++    g_healthBucketBySerial[serial] = bucket;
++    EmitHealthBucketEvent(npc, healthPercent);
++  }
++}
++
+ static void EmitMajorDamageEvent(Character *victim) {
+   CombatAttribution attribution = ResolveCombatAttribution(victim);
+   std::string victimName = ResolveCharacterNameSafe(victim);
+@@ -6806,6 +6858,14 @@ static void UpdateLocalCombatEncounter(
+     participant.unconscious = observation.unconscious;
+     participant.fled = observation.fleeing;
+     participant.lastSeenTick = nowTick;
++    // Bug 98: report an opponent's health per bucket from the fight itself;
++    // the periodic NPC sweep only covers a few nearby characters.
++    if (!participant.playerSide && !observation.dead && !observation.unconscious &&
++        observation.evidence) {
++      std::map<uintptr_t, float> healthByPart;
++      if (CollectFleshHealthByPart(npc, healthByPart))
++        ReportHealthBucket(npc, serial, OverallHealthPercent(healthByPart));
++    }
+ 
+     if (!participant.playerSide) {
+       combatState.sawOpponent = true;
+@@ -8004,6 +8064,8 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+       MarkRecentCombatSignal(npc, nowTick);
+       EmitMajorDamageEvent(npc);
+     }
++    if (ObserveCombatCharacter(npc, nowTick).evidence && !deadNow && !unconsciousNow)
++      ReportHealthBucket(npc, serial, OverallHealthPercent(fleshHealthByPartNow));
+     std::map<std::string, int> gainByKey;
+     std::map<std::string, int> lossByKey;
+     bool suppressPickupEvent = false;
