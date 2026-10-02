@@ -13,6 +13,7 @@
 #include "TestAutomation.h"
 
 #include <core/Functions.h>
+#include <kenshi/AI/AITaskSystem.h>
 #include <kenshi/Character.h>
 #include <kenshi/Damages.h>
 #include <kenshi/Faction.h>
@@ -47,6 +48,7 @@
 
 #include "AutonomySafetyProbe.h" // GetTestInboxDir
 #include "Context.h"             // BuildInventorySnapshot
+#include "Functions.h"           // BreakFactionCeasefireForExplicitAttack
 #include "Utils.h"               // Log
 
 namespace {
@@ -659,6 +661,12 @@ std::string RunCommand(GameWorld *world, const std::vector<std::string> &f, bool
     Character *target = FindCharacter(world, f[3]);
     if (!target)
       return "no character named: " + f[3];
+    // A real order, as the player gives it: break a truce, queue the attack.
+    BreakFactionCeasefireForExplicitAttack(c, target, "test_attack_order");
+    OrdersReceiver *orders = c->getOrdersReciever();
+    if (orders && (uintptr_t)orders > 0x1000)
+      orders->addOrder(UNPROVOKED_FOCUSED_MELEE_ATTACK, target->getHandle(),
+                       target->getPosition(), true, false);
     c->attackTarget(target);
     ok = true;
     Log("TEST_AUTO: attack " + c->getName() + " -> " + target->getName());
