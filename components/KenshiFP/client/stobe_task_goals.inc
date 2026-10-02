@@ -657,7 +657,8 @@ static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
         int before=stg_actor_item_count(actor,g->item);
         int moved=stg_loot_from_character(c,actor,g->item,want);
         int after=stg_actor_item_count(actor,g->item);
-        if(moved>0||after>before){g->completed+=after-before;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;}
+        int got=after-before;if(moved>got)got=moved; /* bug 112: equipped on arrival = not in the pack */
+        if(got>0){g->completed+=got;g->last_progress_ms=stobe_game_ms();g_stg_dirty=1;}
         stg_mark_seen(g,ser);
         snprintf(g->current_step,sizeof(g->current_step),"Looted %d %s so far; checking nearby downed targets",g->completed,g->item);
         return;
