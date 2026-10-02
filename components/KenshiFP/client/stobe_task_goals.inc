@@ -561,8 +561,21 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
             logline("[stobe] WORK_GOAL haul picked id=%s %d %s from %s",g->id,m,dep,sname);
             return 1;
         }
-        logline("[stobe] WORK_GOAL haul: could not take %s from %s",dep,sname);
-        return 0;
+        { /* bug 121: a take that keeps failing means her pack is full: block with the
+           * reason instead of retrying every tick */
+            static void *fail_goal; static int fails;
+            if(fail_goal!=(void *)g){fail_goal=(void *)g;fails=0;}
+            if(++fails>=5){
+                char why[256];
+                snprintf(why,sizeof(why),"her pack is full: can't carry %s from %s",dep,sname);
+                logline("[stobe] WORK_GOAL haul: could not take %s from %s -- blocking",dep,sname);
+                fails=0;fail_goal=NULL;
+                wgp_goal_block(g,why);
+                return 1;
+            }
+            snprintf(g->current_step,sizeof(g->current_step),"Her pack is full: can't carry %s from %s",dep,sname);
+        }
+        return 1;
     }
     return 0;
 }
