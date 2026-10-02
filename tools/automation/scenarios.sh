@@ -51,6 +51,7 @@ case "$cmd" in
     # and knocks him out before his health event goes out.
     L=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
     base=$(grep -a -c "" "$L")
+    if stobe-auto where Shay | grep -q " KO"; then echo "Shay is knocked out: run '$0 fresh' first" >&2; exit 1; fi
     stobe-auto teleport Malzin Shay dist 300 >/dev/null
     stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
     sleep 1
@@ -65,6 +66,10 @@ case "$cmd" in
       stobe-auto attack "$r" Shay >/dev/null; stobe-auto attack Shay "$r" >/dev/null
       sleep 4
       tail -n +"$base" "$L" | grep -a -F "[EVENT] combat: $name" | grep -a -q -- "-> Shay" && break
+    done
+    for i in $(seq 1 10); do # the encounter must exist, else no health event goes out
+      tail -n +"$base" "$L" | grep -a -F "[EVENT] combat_start" | grep -a -q -F "$name" && break
+      sleep 2
     done
     stobe-auto health "$r" 25 >/dev/null
     name=$(stobe-auto where "$r" | sed -E 's/ #[0-9]+ .*//') # he may have been named meanwhile
