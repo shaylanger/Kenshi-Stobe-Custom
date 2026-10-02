@@ -1165,6 +1165,7 @@ static void *g_player_pc;                       /* player char, cached each fram
 #define RC_STAT    0x30                         /* RangedCombatClass::currentStat */
 #define GUN_AMMO   0x20                         /* GunClass ammo count (shoot decrements it) */
 static void manual_fire_update(void *pcx);      /* defined with the hooks below */
+static void fp_putdown_update(void *pcx);      /* bug 100: G puts down a carried NPC */
 static int fp_aim_point(Vec3 *out);
 static void make_mstr(unsigned char *b32, const char *s);
 static int g_aim_mode;                          /* R-toggled: weapon raised, manual aim */
@@ -4658,6 +4659,7 @@ static void fp_camera_override(void *gw)
 
         if (KFP_MANUAL_AIM)
             manual_fire_update(pcx);    /* LMB -> GunClass::shoot at crosshair */
+        fp_putdown_update(pcx);         /* bug 100: G -> put down whoever you carry */
 
         /* R toggles manual aim: raise the ranged weapon with no target needed.
          * While on, force the ranged state machine into aiming every frame
@@ -8122,6 +8124,31 @@ static void hooked_face_direction(void *mv, const Vec3 *dir)
  * drawn, gun loaded) call GunClass::shoot directly at the crosshair point.
  * target=NULL is explicitly handled by shoot (verified in decomp); ammo,
  * visibility, and tracer bookkeeping all run inside the game's own code. */
+/* Bug 100: FP has no right-click menu, so a carried NPC could not be put
+ * down. G (edge, FP, cursor captured, Kenshi focused) calls the game's own
+ * Character::dropCarriedObject(ragdoll, removeOnly) under the crash guard. */
+#define KLIB_DROPCARRIED_SYM "?dropCarriedObject@Character@@QEAAX_N0@Z"
+typedef void (*chr_dropcarried_t)(void *, unsigned char, unsigned char);
+static void fp_putdown_update(void *pcx)
+{
+    static int prev, dead;
+    static chr_dropcarried_t fn;
+    int k = (GetAsyncKeyState('G') & 0x8000) != 0;
+    int edge = k && !prev;
+    prev = k;
+    if (!edge || dead || !g_fp_mode || g_ui_open || !g_cursor_hidden || !pcx || !game_has_focus()) return;
+    if (!fn) {
+        HMODULE kl = GetModuleHandleA("KenshiLib.dll");
+        if (kl) fn = (chr_dropcarried_t)GetProcAddress(kl, KLIB_DROPCARRIED_SYM);
+        if (!fn) { dead = 1; logline("[fp] put down: export missing -- disabled"); return; }
+    }
+    if (setjmp(g_guard_jb)) { g_guard_armed = 0; dead = 1; logline("[fp] put down FAULTED -- disabled"); return; }
+    guard_arm();
+    fn(pcx, 1, 0);
+    g_guard_armed = 0;
+    logline("[fp] put down: dropCarriedObject called (bug 100)");
+}
+
 static void manual_fire_update(void *pcx)
 {
     static int lmb_prev;
