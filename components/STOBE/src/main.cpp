@@ -8115,15 +8115,16 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       pendingPickupEvents.push_back(pickupEvent);
     }
 
+    // Bug 113: the player's own knockout/recovery/death are events too.
+    if (!state.unconscious && unconsciousNow) {
+      EmitKnockoutEvent(npc);
+    } else if (state.unconscious && !unconsciousNow && !deadNow) {
+      EmitRecoveredEvent(npc);
+    }
+    if (!state.dead && deadNow) {
+      EmitDeathEvent(npc);
+    }
     if (!isPlayerActor) {
-      if (!state.unconscious && unconsciousNow) {
-        EmitKnockoutEvent(npc);
-      } else if (state.unconscious && !unconsciousNow && !deadNow) {
-        EmitRecoveredEvent(npc);
-      }
-      if (!state.dead && deadNow) {
-        EmitDeathEvent(npc);
-      }
       if (!state.enslaved && enslavedNow) {
         EmitSlaveryEvent(npc, true);
       } else if (state.enslaved && !enslavedNow) {
