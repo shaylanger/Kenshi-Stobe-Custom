@@ -3,10 +3,10 @@
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
 ## Current state (2026-10-02, after run 8 + round 20) — start here
-- **Installed:** Stobe.dll `d6b1809e` (round 20 fixes + the automation session's TestAutomation.cpp; prev `261C7AF3`), KenshiFP.dll `111289C5` (prev `0193CD57`). Server round 20 live (live + ss-merge, pushed, logs rotated).
+- **Installed:** Stobe.dll `5018124F` (round 20 fixes + TestAutomation), KenshiFP.dll `111289C5`. Server round 20 live (live + ss-merge, pushed, logs rotated).
 - **Round 20 = fixes for all run 8 bugs 94–107** (+ 101, 106, 79b), **none tested in game yet**. Root causes: `run8-deep-dive.md`. Status per bug: `STOBE_bug_history.md` (bugs 1–107). **Next bug is 108.**
 - **Next job:** test plan section "Run 8 bugs (round 20 fixes)", tests 70–85 (Shay: 84 put-down with G, 85 FP click details). Then "Round 19 retest" (43–56; Shay 47, 48), round 18 (57–69), the rest. Log in a new `test-run-<date>.md`; latest log `test-run-2026-10-01-r8.md`.
-- **Test automation** is being built by a separate session ("Game testing automation research"): plan in `test-automation-plan.md`, its code in Stobe `src/TestAutomation.cpp` + `tools/automation/` (uncommitted, theirs). Other sessions: coordinate (SendMessage) before installing DLLs or launching Kenshi so two sessions don't fight over the game.
+- **Automated test bed works** (see "Test bed" below); run 9 (`test-run-2026-10-02-r9.md`) is the first fully automated run. Other sessions: coordinate (SendMessage) before installing DLLs or launching Kenshi so two sessions don't fight over the game.
 - stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
 - **Naming:** test rows are plain numbers ("test 70"); bugs always "bug N"; no letter codes. Passed rows get deleted from the test plan.
 - **No manual validation:** run only rows Claude can verify from logs/state/goal status; list "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. **Claude runs the whole loop alone** (Shay's decision 2026-10-02): launch Kenshi, load a test save, test, log bugs, close Kenshi, fix, build, install, relaunch, retest until every testable bug is fixed, then close Kenshi. No "go" needed. Use `tools/automation/kenshi-ctl.ps1` (launch/stop/restart/status/health) and `install-dll.ps1`.
@@ -15,7 +15,7 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
 ## Process rules from run 8 (Shay's feedback)
 - Say the full plan up front and run exactly that; never add steps mid-test.
-- After a watch-script ALERT the game **stays paused** until Shay unpauses; never send a speed command after an alert.
+- After a watch-script ALERT the game **stays paused** until Shay unpauses; never send a speed command after an alert. (Exception: automated runs on a fixture copy, see "Test bed".)
 - Watch fights live (NPC lines + events), and fact-check NPC claims against `[EVENT]` lines; wrong statements are bugs.
 - Save `stobe.log`/`KenshiFP.log` (and server/prompt slices) before any relaunch: both game logs reset on launch.
 - Prompts sent to the LLM: `log/context_sent_to_llm.log`, outputs `log/output_from_llm.log` (server). `stobe-rotate-logs` archives them.
@@ -45,15 +45,19 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 - **Machines:** this PC (RTX 5090) runs Kenshi + WSL stack + PocketTTS; the 4080 (`ssh 4080`) is reserved for a future background LLM. Chat: DeepInfra (DeepSeek V4.1 Flash); relationship eval still via OpenRouter. Don't change the runtime unless asked. Slow replies → rerun `tools/stobe-provider-bench.php` before blaming the server.
 
 ## Tools (WSL `/usr/local/bin`; sources in `tools/`)
-- `stobe-say on|off|ping|state <npc> [--json]|speed <0|0.5..50>|give_cats <n>|say <npc> <text…> [--wait S]` (drives the game via the DLL test inbox).
+- `stobe-say on|off|ping|state <npc> [--json]|speed <0|0.5..50>|give_cats <n>|say <npc> <text…> [--wait S]` (drives the game via the DLL test inbox). `stobe-auto` (scenario commands, see "Test bed").
 - `stobe-reset-npc <npc>`, `stobe-session HH:MM HH:MM|now [npc]` (for Shay's time + NPC reports), `stobe-tests [tree] [pattern]` (once at the end), `stobe-rotate-logs` (after every server deploy), `negotiation_admin.php deals N`.
 - `tools/stobe-goal-watch.sh <goal_id> <max_s>` (Git Bash): goal status + auto-pause on combat/knockout toward Shay/Malzin.
 - Fights: Shay on pause duty; arm `stobe-fight-offer`/`stobe-fight-watch` before `stobe-force-attack`.
 
-## Automated testing
-- **No "go" needed:** Claude launches Kenshi and loads the test save itself (`kenshi-ctl.ps1 launch -Save <name>`). If Kenshi is already running when a run starts, check first whether Shay is playing (recent chat/goal activity in the logs); if unsure, ask before closing it.
-- Then: both DLL hashes, `stobe-say on`, `ping`, `state Malzin`/`state Shay`, combat check. One line at a time; a pass means real game state changed (status files, KenshiFP.log, inventories), never just the words.
-- **Safety:** after risky lines grep stobe.log for `[EVENT] combat…-> Shay|Malzin` before the next line; at speed >10x poll every 10 s and `stobe-say speed 0` on any combat toward them; if Shay is attacked or knocked out, stop and tell him. Back to 1x when done.
+## Test bed (automated, Claude runs it alone)
+- **Loop:** `kenshi-ctl.ps1 launch -Save auto-home` → `stobe-auto wait-world` → pre-flight → build the situation with `stobe-auto` → `stobe-say say …` → check real game state → log in `test-run-<date>.md` → after a batch: `kenshi-ctl.ps1 stop` → fix → build → `install-dll.ps1 Stobe|KenshiFP` → relaunch → retest. Close Kenshi when done.
+- **Launch** (`tools/automation/kenshi-ctl.ps1`, PowerShell; allowed without asking): `launch [-Save x]` starts `kenshi_x64.exe` directly (Steam running, no Steam prompt), RE_Kenshi restarts it as `RE_Kenshi\kenshi_x64.exe --norestart`, the script presses the launcher dialog's OK (button 1003), archives logs to `C:\KenshiTestRuns\logs\` and deletes the old `stobe.log`, then waits for `TEST_AUTO: frame listener running` and the autoload. Also `stop`, `restart`, `status`, `health` (ok/crashed/hung), `screenshot [-Save n]` (`C:\KenshiTestRuns\shots\`; Kenshi's HUD doesn't show in it yet).
+- **Saves:** fixtures (master copies) in `C:\KenshiTestFixtures\` (`auto-home` = run 8 autosave at Home, Malzin in squad); a copy lives in `%LOCALAPPDATA%\kenshi\save\`. Restore a fixture by copying it over the save folder. Never test on Shay's own saves.
+- **In-game commands** (`stobe-auto`, WSL; Stobe `src/TestAutomation.cpp`, needs `stobe-say on`, works at the main menu): `status`, `wait-world`, `load`, `save`, `chars [r]`, `find <character|squad|item|weapon|armour> <text>`, `spawn <template> <faction> [near <npc>|at x y z] [count n] [dist m]`, `where`, `teleport`, `ko`, `health <pct>`, `kill`, `hunger <0..300>`, `attack <a> <b>` (player → NPC works; same-faction NPCs ignore it), `select`, `recruit`, `give <npc> <item> [n]`, `relation <npc> <v>`. Names: exact match nearest the player, `#serial` for one of several same-named NPCs, `@player`, `@selected`; corpses near the player are found too. Spawned "Hungry Bandit" + faction `Drifters` = neutral test dummy.
+- **Pre-flight:** DLL hashes, `stobe-say ping`, `state Malzin`/`state Shay`, goal status files all terminal, no `[EVENT] combat…-> Shay|Malzin`; `stobe-reset-npc Malzin` unless trust matters; `stobe-auto hunger Malzin 250` before long 50x runs.
+- A pass means real game state changed (status files, KenshiFP.log, inventories, events), never just the words.
+- **Safety:** at speed >10x use `tools/stobe-goal-watch.sh` (pauses on combat/knockout toward Shay/Malzin). On a fixture copy an alert ends that test: pause, save logs, log the bug, reload the fixture (`stobe-auto load auto-home`).
 - The LLM often picks a different action than intended: log it as a bug and add a server guard.
 
 ## Working rules

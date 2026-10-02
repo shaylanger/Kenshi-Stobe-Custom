@@ -7,6 +7,8 @@ kenshi-ctl.ps1: start, stop and watch Kenshi for automated test runs.
   kenshi-ctl.ps1 stop                   kill Kenshi (never saves)
   kenshi-ctl.ps1 restart [-Save <name>] stop + launch
   kenshi-ctl.ps1 health                 ok | crashed | hung | not-running (exit code 0/1)
+  kenshi-ctl.ps1 screenshot [-Save n]   PNG of the game window (works in the background)
+                                        -> C:\KenshiTestRuns\shots\<n|time>.png
 
 Steam must be running (steam_appid.txt lets the exe start without the Steam
 "Play / modding tool" prompt). RE_Kenshi restarts the game into
@@ -142,5 +144,15 @@ switch ($Command) {
   'stop' { Save-Logs 'stop' | Out-Null; Stop-Kenshi }
   'restart' { if ((Get-KenshiProcs).Count -gt 0) { Save-Logs 'restart' | Out-Null; Stop-Kenshi }; Start-Kenshi }
   'health' { $h = Get-Health; $h; if ($h -ne 'ok') { exit 1 } }
+  'screenshot' {
+    Add-Type -Path (Join-Path $PSScriptRoot 'WindowCapture.cs') -ReferencedAssemblies System.Drawing
+    $win = Get-GameWindow
+    if (-not $win) { throw 'no game window' }
+    $dir = 'C:\KenshiTestRuns\shots'
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    $path = if ($Save) { Join-Path $dir "$Save.png" } else { Join-Path $dir ("shot-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.png') }
+    $size = [KenshiCapture]::Save($win.Handle, $path, 1600)
+    "$path ($size)"
+  }
   default { throw "unknown command: $Command" }
 }
