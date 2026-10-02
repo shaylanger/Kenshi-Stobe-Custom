@@ -1802,8 +1802,10 @@ static void stobe_goal_label_update(void *gw)
 #define MED_FED 0x64
 #define KLIB_EATITEM_SYM "?eatItem@Character@@QEAA_NPEAVItem@@PEAVInventory@@@Z"
 typedef unsigned char (*chr_eatitem_t)(void *, void *, void *);
-typedef struct { uint32_t serial; int eating; int eaten; int warned; float last_d; int still; DWORD next_ms; DWORD retry_ms; } SgmMeal;
+typedef struct { uint32_t serial; int eating; int eaten; int warned; float last_d; int still; DWORD next_ms; DWORD retry_ms; int packnote; } SgmMeal;
 #define SGM_NOFOOD_RETRY_MS 600000 /* bug 92: no food anywhere -> look again in 10 game min */
+#define SGM_PACK_RETRY_MS 60000 /* bug 115: food in her pack -> the game eats; look again in 1 game min */
+#define SGM_TAKE_FOOD 3
 static SgmMeal g_sgm[SGM_MAX];
 static chr_eatitem_t g_chr_eatitem;
 static int g_sgm_dead;
@@ -1874,10 +1876,10 @@ static int sgm_meal_tick_body(void *gw,uint32_t serial,const char *name,char *st
     SgmMeal *m=sgm_slot(serial);if(!m)return 0;
     DWORD now=stobe_game_ms();
     if(!m->eating){
-        if(lvl>=SGM_START_LEVEL){if(lvl>=SGM_STOP_LEVEL)m->warned=0;m->retry_ms=0;return 0;}
+        if(lvl>=SGM_START_LEVEL){if(lvl>=SGM_STOP_LEVEL){m->warned=0;m->packnote=0;}m->retry_ms=0;return 0;}
         if(m->retry_ms&&(LONG)(now-m->retry_ms)<0)return 0; /* bug 92 */
         m->eating=1;m->eaten=0;m->last_d=0;m->still=0;m->retry_ms=0;
-        logline("[stobe] GOAL_MEAL hungry actor=%s level=%.0f",name,lvl);
+        if(!m->packnote)logline("[stobe] GOAL_MEAL hungry actor=%s level=%.0f",name,lvl);
     }
     if(lvl>=SGM_STOP_LEVEL||m->eaten>=SGM_MAX_ITEMS){
         logline("[stobe] GOAL_MEAL done actor=%s ate=%d level=%.0f",name,m->eaten,lvl);
@@ -1886,9 +1888,10 @@ static int sgm_meal_tick_body(void *gw,uint32_t serial,const char *name,char *st
     if(m->next_ms&&(LONG)(now-m->next_ms)<0){snprintf(step,stepsz,"Eating (hungry)");return 1;}
     void *own=g_stobe_getinv(actor);
     if(own&&stg_count_matching(own,"food")>0){
-        if(sgm_eat_one(actor,own)){m->eaten++;m->next_ms=now+4000;logline("[stobe] GOAL_MEAL ate from her pack actor=%s level=%.0f",name,lvl);}
-        else{m->eating=0;logline("[stobe] GOAL_MEAL could not eat from her pack actor=%s",name);return 0;}
-        snprintf(step,stepsz,"Eating (hungry)");return 1;
+        /* bug 115: eatItem used the food up without the meal (~+1 per Dried Meat,
+         * the game's own eating gives ~+14). With food in her pack the game feeds her. */
+        if(!m->packnote){m->packnote=1;logline("[stobe] GOAL_MEAL food in her pack; the game feeds her actor=%s level=%.0f",name,lvl);}
+        m->eating=0;m->retry_ms=now+SGM_PACK_RETRY_MS;return 0;
     }
     float d=0;char sn[160]={0};
     void *store=stg_nearest_storage(gw,actor,"food",&d,sn,sizeof(sn));
@@ -1914,10 +1917,13 @@ static int sgm_meal_tick_body(void *gw,uint32_t serial,const char *name,char *st
             return 1;
         }
     }
-    if(sgm_eat_one(actor,wgp_building_inventory(store))){m->eaten++;m->next_ms=now+4000;m->last_d=0;m->still=0;logline("[stobe] GOAL_MEAL ate from %s actor=%s level=%.0f",sn,name,lvl);}
-    else{m->eating=0;logline("[stobe] GOAL_MEAL could not eat from %s actor=%s",sn,name);return 0;}
-    snprintf(step,stepsz,"Eating at %s (hungry)",sn[0]?sn:"storage");
-    return 1;
+    { /* bug 115: take food into her pack; the game feeds her from there */
+        int took=stg_transfer_to_character(wgp_building_inventory(store),actor,"food",SGM_TAKE_FOOD);
+        m->eating=0;m->last_d=0;m->still=0;
+        if(took>0){m->retry_ms=now+SGM_PACK_RETRY_MS;logline("[stobe] GOAL_MEAL took %d food from %s actor=%s level=%.0f",took,sn,name,lvl);}
+        else logline("[stobe] GOAL_MEAL could not take food from %s actor=%s",sn,name);
+        return 0;
+    }
 }
 
 static void stobe_task_goal_tick(void *gw)
