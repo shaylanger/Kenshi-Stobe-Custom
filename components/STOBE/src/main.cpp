@@ -6333,21 +6333,11 @@ static void EmitInventoryTransferEventsFromDeltas(
     bool empty = it->qty <= 0 || it->itemKey.empty() || it->fromSerial == 0;
     if (expired || empty) {
       if (!empty && expired) {
-        Character *fromActor =
-            ResolveCharacterBySerialForInventoryEvent(it->fromSerial);
-        Character *counterparty =
-            ResolveLikelyInventoryTransferCounterparty(fromActor);
-        if (counterparty && (uintptr_t)counterparty > 0x1000) {
-          appendAggregation(
-              agedOutByPair, it->fromSerial, it->fromName, it->fromFaction,
-              ResolveCharacterSerialForEvent(counterparty),
-              ResolveCharacterNameSafe(counterparty), SafeFaction(counterparty),
-              it->itemKey, it->itemName, it->qty);
-        } else {
-          appendAggregation(agedOutByPair, it->fromSerial, it->fromName,
-                            it->fromFaction, 0, "Ground", "None", it->itemKey,
-                            it->itemName, it->qty);
-        }
+        // Bug 102: no matching gain = eaten, drunk, used up or dropped; never
+        // a hand-over to whoever is nearby.
+        Log("INV_TRANSFER: unmatched loss from=" + it->fromName + " item=" +
+            it->itemName + " qty=" + ToString(it->qty) +
+            " (used up or dropped; no event)");
       }
       it = pendingLosses.erase(it);
     } else {
@@ -6488,21 +6478,9 @@ static void EmitInventoryTransferEventsFromDeltas(
   while (pendingLosses.size() > kPendingLossMaxEntries) {
     const PendingTransferLoss &overflow = pendingLosses.front();
     if (overflow.qty > 0 && overflow.fromSerial != 0 && !overflow.itemKey.empty()) {
-      Character *fromActor =
-          ResolveCharacterBySerialForInventoryEvent(overflow.fromSerial);
-      Character *counterparty =
-          ResolveLikelyInventoryTransferCounterparty(fromActor);
-      if (counterparty && (uintptr_t)counterparty > 0x1000) {
-        appendAggregation(
-            agedOutByPair, overflow.fromSerial, overflow.fromName,
-            overflow.fromFaction, ResolveCharacterSerialForEvent(counterparty),
-            ResolveCharacterNameSafe(counterparty), SafeFaction(counterparty),
-            overflow.itemKey, overflow.itemName, overflow.qty);
-      } else {
-        appendAggregation(agedOutByPair, overflow.fromSerial, overflow.fromName,
-                          overflow.fromFaction, 0, "Ground", "None",
-                          overflow.itemKey, overflow.itemName, overflow.qty);
-      }
+      Log("INV_TRANSFER: unmatched loss from=" + overflow.fromName + " item=" +
+          overflow.itemName + " qty=" + ToString(overflow.qty) +
+          " (queue full; no event)"); // bug 102
     }
     pendingLosses.pop_front();
   }
