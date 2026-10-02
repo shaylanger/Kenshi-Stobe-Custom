@@ -14,6 +14,8 @@ Works at the main menu too. Needs the test inbox switch (stobe-say on).
   stobe-auto teleport <npc> <npc2 | x y z> [dist m]
   stobe-auto ko <npc> [seconds] | health <npc> <percent> | hunger <npc> <0..300>
   stobe-auto attack <attacker> <target> | give <npc> <item> [n] | relation <npc> <-100..100>
+  stobe-auto money <npc> <delta>           add cats (negative takes); hp <npc> per-part health
+  stobe-auto buy <buyer> <seller> <item> <price>   one atomic purchase (item + cats in the same frame)
 <npc> is a name (exact match nearest the player wins), #serial, @player or @selected.
 """
 import os

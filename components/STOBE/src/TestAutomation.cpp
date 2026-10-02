@@ -603,6 +603,44 @@ std::string RunCommand(GameWorld *world, const std::vector<std::string> &f, bool
     return c->getName() + " attacks " + target->getName();
   }
 
+  if (cmd == "money") { // money <npc> <delta>: add (or with a minus, take) cats
+    if (f.size() < 4)
+      return "usage: money <npc> <delta>";
+    int delta = atoi(f[3].c_str());
+    int before = c->getMoney();
+    c->takeMoney(-delta);
+    ok = true;
+    Log("TEST_AUTO: money " + c->getName() + " " + Int(before) + " -> " + Int(c->getMoney()));
+    return c->getName() + " cats " + Int(before) + " -> " + Int(c->getMoney());
+  }
+
+  if (cmd == "buy") { // buy <buyer> <seller> <item> <price>: one atomic purchase
+    if (f.size() < 6)
+      return "usage: buy <buyer> <seller> <item> <price>";
+    Character *seller = FindCharacter(world, f[3]);
+    if (!seller)
+      return "no character named: " + f[3];
+    int price = atoi(f[5].c_str());
+    std::string error;
+    GameData *data = nullptr;
+    const itemType types[] = {ITEM, WEAPON, ARMOUR};
+    for (int t = 0; t < 3 && !data; ++t)
+      data = FindData(world, types[t], f[4], error);
+    if (!data)
+      return error;
+    Item *item = world->theFactory->createItem(data, hand(), nullptr, nullptr, -1, nullptr);
+    Inventory *inv = c->getInventory();
+    if (!Valid(item) || !Valid(inv) || !inv->addItem(item, 1, false, true))
+      return "could not add the item";
+    c->takeMoney(price);
+    seller->takeMoney(-price);
+    ok = true;
+    Log("TEST_AUTO: buy " + c->getName() + " <- " + seller->getName() + " " + data->name +
+        " for " + Int(price));
+    return c->getName() + " bought " + data->name + " from " + seller->getName() + " for " +
+           Int(price);
+  }
+
   if (cmd == "select") {
     world->player->selectObject(c, false);
     ok = true;
