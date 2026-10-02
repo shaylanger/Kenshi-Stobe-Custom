@@ -8,8 +8,9 @@ Works at the main menu too. Needs the test inbox switch (stobe-say on).
   stobe-auto load <save> | save <name>
   stobe-auto chars [radius]               characters near the player
   stobe-auto find <character|squad|item|weapon|armour> <text>
-  stobe-auto spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m]
-  stobe-auto where|select|recruit|kill <npc>
+  stobe-auto spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m] [target <npc>] [size <mult>]
+                                          (target: a squad template's AI goes for that character)
+  stobe-auto where|inv|select|recruit|kill <npc>   (inv: inventory JSON incl. worn items)
   stobe-auto teleport <npc> <npc2 | x y z> [dist m]
   stobe-auto ko <npc> [seconds] | health <npc> <percent> | hunger <npc> <0..300>
   stobe-auto attack <attacker> <target> | give <npc> <item> [n] | relation <npc> <-100..100>

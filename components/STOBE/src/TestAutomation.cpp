@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "AutonomySafetyProbe.h" // GetTestInboxDir
+#include "Context.h"             // BuildInventorySnapshot
 #include "Utils.h"               // Log
 
 namespace {
@@ -432,9 +433,10 @@ std::string RunCommand(GameWorld *world, const std::vector<std::string> &f, bool
   }
 
   if (cmd == "spawn") {
-    // spawn <character|squad template> <faction> [near <npc>|at x y z] [count n] [dist m]
+    // spawn <character|squad template> <faction> [near <npc>|at x y z] [count n] [dist m] [target <npc>]
     if (f.size() < 4)
-      return "usage: spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m]";
+      return "usage: spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m] "
+             "[target <npc>]";
     Faction *faction = FindFaction(world, f[3]);
     if (!faction)
       return "no faction named: " + f[3];
@@ -456,9 +458,23 @@ std::string RunCommand(GameWorld *world, const std::vector<std::string> &f, bool
     std::string squadError;
     GameData *squad = FindData(world, SQUAD_TEMPLATE, f[2], squadError);
     if (squad && Lower(squad->name) == Lower(f[2])) {
+      // "target <npc>": the squad's AI goes for that character (a raid on the
+      // player); without it spawned squads walk off to their own goals.
+      hand aiTarget;
+      const std::string targetName = Option(f, 4, "target", "");
+      if (!targetName.empty()) {
+        Character *t = FindCharacter(world, targetName);
+        if (!t)
+          return "no character named: " + targetName;
+        aiTarget = t->getHandle();
+      }
+      // "size <mult>": the template decides the squad size; this scales it.
+      float sizeMult = (float)atof(Option(f, 4, "size", "1").c_str());
+      if (sizeMult <= 0.0f || sizeMult > 3.0f)
+        return "size must be 0..3";
       Platoon *p = world->theFactory->createRandomSquad(
           faction, pos, nullptr, count, nullptr, squad, nullptr, nullptr, nullptr, false,
-          hand(), nullptr, 1.0f, SQ_ROAMING, false);
+          aiTarget, nullptr, sizeMult, SQ_ROAMING, false);
       Log("TEST_AUTO: spawn squad=" + squad->name + " faction=" + faction->getName() +
           " ok=" + (Valid(p) ? "1" : "0"));
       ok = Valid(p);
@@ -497,6 +513,33 @@ std::string RunCommand(GameWorld *world, const std::vector<std::string> &f, bool
   if (cmd == "where") {
     ok = true;
     return Describe(c, &origin);
+  }
+
+  if (cmd == "hp") { // per body part flesh/max, and the worst part in %
+    MedicalSystem &med = c->medical;
+    std::string out;
+    float worst = 1.0f;
+    int count = med.getPartCount();
+    for (int i = 0; i < count; ++i) {
+      MedicalSystem::HealthPartStatus *part = med.getPart((unsigned __int64)i);
+      if (!Valid(part))
+        continue;
+      float maxHp = part->maxHealth();
+      if (maxHp > 0.0f && part->flesh / maxHp < worst)
+        worst = part->flesh / maxHp;
+      out += " " + Int(i) + ":" + Num(part->flesh) + "/" + Num(maxHp);
+    }
+    ok = true;
+    return c->getName() + " worst=" + Int((long long)(worst * 100.0f)) + "% blood=" +
+           Num(med.blood) + "/" + Num(med.getMaxBlood()) + (c->isUnconcious() ? " KO" : "") +
+           " parts" + out;
+  }
+
+  if (cmd == "inv") { // inventory incl. worn items, as JSON (works on bodies)
+    std::string json, hash;
+    int count = 0;
+    ok = BuildInventorySnapshot(c, json, hash, count);
+    return Describe(c, nullptr) + " items=" + Int(count) + " " + json;
   }
 
   if (cmd == "teleport") { // teleport <npc> <npc2 | x y z> [dist m]
@@ -626,6 +669,7 @@ void ProcessInbox(GameWorld *world) {
   if (!FileExists(dir + "\\test_inbox.flag"))
     return;
 
+
   const std::string autoload = dir + "\\autoload.txt";
   if (FileExists(autoload) && Phase(world) == "menu") {
     std::string name;
@@ -729,11 +773,40 @@ public:
 
 AutomationFrameListener g_frameListener;
 
+// Test sessions must not overwrite Shay's autosave slots: skip the autosave
+// update while the test inbox switch is on (checked once a second).
+typedef void(__fastcall *UpdateAutoSaveFn)(SaveManager *);
+UpdateAutoSaveFn g_updateAutoSaveOrig = nullptr;
+
+void __fastcall Hook_UpdateAutoSave(SaveManager *sm) {
+  static DWORD lastCheck = 0;
+  static bool testing = false;
+  DWORD now = GetTickCount();
+  if (now - lastCheck >= 1000) {
+    lastCheck = now;
+    bool was = testing;
+    testing = FileExists(GetTestInboxDir() + "\\test_inbox.flag");
+    if (testing != was)
+      Log(std::string("TEST_AUTO: autosave ") + (testing ? "off (test inbox on)" : "on"));
+  }
+  if (!testing)
+    g_updateAutoSaveOrig(sm);
+}
+
 void OnGuiFrame(float) { Tick("mygui"); }
 
 } // namespace
 
 void InstallTestAutomationHooks() {
+  __int64 autoSaveAddr = KenshiLib::GetRealAddress(&SaveManager::updateAutoSave);
+  if (autoSaveAddr) {
+    KenshiLib::HookStatus autoSaveStatus = KenshiLib::AddHook(
+        (void *)autoSaveAddr, (void *)Hook_UpdateAutoSave, (void **)&g_updateAutoSaveOrig);
+    Log("TEST_AUTO: SaveManager::updateAutoSave hook status=" + Int((int)autoSaveStatus));
+  } else {
+    Log("TEST_AUTO: SaveManager::updateAutoSave not found; autosave stays on");
+  }
+
   Ogre::Root *root = Ogre::Root::getSingletonPtr();
   if (!root) {
     Log("TEST_AUTO: no Ogre::Root yet; automation commands off.");
