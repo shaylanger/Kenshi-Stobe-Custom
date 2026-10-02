@@ -105,6 +105,7 @@ static int g_stg_loaded;
 static DWORD g_stg_next_tick;
 static DWORD g_stg_next_save;
 static int g_stg_dirty;
+static int g_stg_loot_no_room; /* bug 111: a hand-over failed for lack of room */
 static stg_remove_t g_stg_remove;
 static stg_add_t g_stg_add;
 static stg_give_t g_stg_give;
@@ -342,7 +343,7 @@ static int stg_transfer_char_to_char(void *src_char,void *dst_char,const char *q
         int take=maxqty-moved;if(take>avail)take=avail;
         void *det=g_stg_remove(src,it,take,0);if(!det)break;
         int actual=*(int *)((uintptr_t)det+0x12C);if(actual<1)actual=take;
-        if(!g_stg_give(dst_char,det,0,0)){g_stg_add(src,det,actual,1,0);break;}
+        if(!g_stg_give(dst_char,det,0,0)){g_stg_add(src,det,actual,1,0);g_stg_loot_no_room=1;break;}
         moved+=actual;
     }
     return moved;
@@ -673,11 +674,12 @@ static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
         int matched=stg_loot_scan_log(gw,actor,g);
         char r[256];
         if(g->target[0]&&matched==0)snprintf(r,sizeof(r),"couldn't find %s's body nearby",g->target);
+        else if(g_stg_loot_no_room)snprintf(r,sizeof(r),"no room to carry the %s (pack and slots full)",g->item[0]&&strcmp(g->item,"all")?g->item:"items");
         else snprintf(r,sizeof(r),"found no %s to take on the nearby bodies",g->item[0]&&strcmp(g->item,"all")?g->item:"items");
         stg_finish(g,STG_STATE_BLOCKED,r);
         return;
     }
-    stg_finish(g,STG_STATE_COMPLETE,"no more matching items on nearby downed targets");
+    stg_finish(g,STG_STATE_COMPLETE,g_stg_loot_no_room?"took what fit; left the rest (no room to carry more)":"no more matching items on nearby downed targets");
 }
 
 /* ---- walking fetch/store (round 17e, bug 51) ---- */
@@ -1497,6 +1499,7 @@ static void stg_consume_requests(void)
                 g->created_ms=stobe_game_ms();g->last_progress_ms=stobe_game_ms();g->created_gt=g_sgt_now;
                 g->rt_seen_active=1; /* walk back + report even if it ends at once */
                 snprintf(g->current_step,sizeof(g->current_step),"Accepted %s goal",g->kind);g_stg_dirty=1;
+                g_stg_loot_no_room=0;
                 logline("[stobe] TASK_GOAL accepted id=%s actor=%s kind=%s item=%s qty=%d target=%s dest=%s",
                         g->id,g->actor,g->kind,g->item,g->quantity,g->target,g->destination);
             }
