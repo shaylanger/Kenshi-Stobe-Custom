@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # scenarios.sh (WSL): reusable test situations built with stobe-auto.
+#   (extra squad members are sent 3000 away, not killed: corpses with the same generic
+#    name next to the fight took deals and payments in run 12, plan items 47/48)
 #   scenarios.sh raid [size]     bandit raid squad on Shay; every raider ordered to attack
 #   scenarios.sh bodies <n> [near] [faction]   n neutral bandits killed next to <near> (Malzin);
 #                                prints the corpse serials
@@ -20,7 +22,7 @@ case "$cmd" in
     sleep 1
     keep=""
     for s in $("$0" raiders); do
-      if [ -z "$keep" ]; then keep="$s"; else stobe-auto kill "$s" >/dev/null; fi
+      if [ -z "$keep" ]; then keep="$s"; else stobe-auto teleport "$s" Shay dist 3000 >/dev/null; fi
     done
     stobe-auto teleport "$keep" Shay dist 3 >/dev/null # inside the outpost walls (else path_failed)
     stobe-auto attack "$keep" Shay >/dev/null
@@ -40,7 +42,7 @@ case "$cmd" in
         stobe-auto attack "$s" Shay >/dev/null
         echo "$s"; k=$((k+1))
       else
-        stobe-auto kill "$s" >/dev/null
+        stobe-auto teleport "$s" Shay dist 3000 >/dev/null
       fi
     done
     ;;
@@ -57,7 +59,7 @@ case "$cmd" in
     sleep 1
     r=""
     for s in $("$0" raiders); do
-      if [ -z "$r" ]; then r="$s"; else stobe-auto kill "$s" >/dev/null; fi
+      if [ -z "$r" ]; then r="$s"; else stobe-auto teleport "$s" Shay dist 3000 >/dev/null; fi
     done
     stobe-auto teleport "$r" Shay dist 3 >/dev/null
     name=$(stobe-auto where "$r" | sed -E 's/ #[0-9]+ .*//')
