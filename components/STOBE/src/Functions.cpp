@@ -1244,6 +1244,25 @@ Character *ResolveLiveCharacter(GameWorld *world, const hand &characterHandle) {
   return nullptr;
 }
 
+// Bug 123: lower-case letters/digits with single spaces ("Pax [Hungry Bandit]"
+// -> "pax hungry bandit"); the server's sanitizer strips the brackets.
+static std::string LettersAndSpacesOnly(const std::string &value) {
+  std::string out;
+  bool space = false;
+  for (size_t i = 0; i < value.size(); ++i) {
+    unsigned char c = (unsigned char)value[i];
+    if (isalnum(c)) {
+      if (space && !out.empty())
+        out += ' ';
+      out += (char)tolower(c);
+      space = false;
+    } else {
+      space = true;
+    }
+  }
+  return out;
+}
+
 Character *ResolveCharacterByTargetToken(GameWorld *world,
                                          const std::string &rawTarget,
                                          Character *actorToExclude) {
@@ -1417,6 +1436,8 @@ Character *ResolveCharacterByTargetToken(GameWorld *world,
         score = 320;
       } else if (candidateLow.find(tokenLow) != std::string::npos) {
         score = 180;
+      } else if (LettersAndSpacesOnly(candidateLow) == LettersAndSpacesOnly(tokenLow)) {
+        score = 480; // bug 123: "grenn hungry bandit" == "grenn [hungry bandit]"
       } else if (!candidate->displayName.empty()) {
         std::string displayLow = candidate->displayName;
         std::transform(displayLow.begin(), displayLow.end(), displayLow.begin(),

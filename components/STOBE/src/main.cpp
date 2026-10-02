@@ -122,6 +122,25 @@ void (*dialogueReplyClickedString_orig)(Dialogue *, const std::string &) = nullp
 
 // --- Main Hook Core ---
 
+// Bug 123: lower-case letters/digits with single spaces ("Pax [Hungry Bandit]"
+// -> "pax hungry bandit"); the server's sanitizer strips the brackets.
+static std::string LettersAndSpacesOnlyName(const std::string &value) {
+  std::string out;
+  bool space = false;
+  for (size_t i = 0; i < value.size(); ++i) {
+    unsigned char c = (unsigned char)value[i];
+    if (isalnum(c)) {
+      if (space && !out.empty())
+        out += ' ';
+      out += (char)tolower(c);
+      space = false;
+    } else {
+      space = true;
+    }
+  }
+  return out;
+}
+
 static std::string ToLowerAsciiCopy(const std::string &value) {
   std::string lowered = value;
   for (size_t i = 0; i < lowered.size(); ++i) {
@@ -10203,6 +10222,9 @@ void ProcessMessageQueue(GameWorld *thisptr) {
                     score = 320;
                   } else if (candidateLow.find(tokenLow) != std::string::npos) {
                     score = 180;
+                  } else if (LettersAndSpacesOnlyName(candidateLow) ==
+                             LettersAndSpacesOnlyName(tokenLow)) {
+                    score = 480; // bug 123: brackets stripped by the server
                   } else if (!candidate->displayName.empty()) {
                     std::string displayLow = candidate->displayName;
                     std::transform(displayLow.begin(), displayLow.end(),
