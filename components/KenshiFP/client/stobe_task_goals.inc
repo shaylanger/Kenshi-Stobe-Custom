@@ -261,7 +261,7 @@ static int stg_transfer_inventory(void *src_inv,void *dst_inv,const char *query,
         int avail=readable((void *)((uintptr_t)it+0x12C),4)?*(int *)((uintptr_t)it+0x12C):1;
         if(avail<1)avail=1;
         int take=maxqty-moved; if(take>avail)take=avail;
-        void *det=g_stg_remove(src_inv,it,take,0);
+        void *det=g_stg_remove(src_inv,it,take,take<avail?1:0); /* item 42 */
         if(!det)break;
         int actual=readable((void *)((uintptr_t)det+0x12C),4)?*(int *)((uintptr_t)det+0x12C):take;
         if(actual<1)actual=take;
@@ -277,17 +277,31 @@ static int stg_transfer_inventory(void *src_inv,void *dst_inv,const char *query,
 static int stg_transfer_to_character(void *src_inv,void *dst_char,const char *query,int maxqty)
 {
     if(!src_inv||!dst_char||maxqty<=0||!stg_exports())return 0;
-    int moved=0,guard=0;
+    int moved=0,guard=0,cap=0;
     while(moved<maxqty && guard++<64){
         void *it=stg_first_matching(src_inv,query);
         if(!it)break;
         int avail=*(int *)((uintptr_t)it+0x12C); if(avail<1)avail=1;
         int take=maxqty-moved; if(take>avail)take=avail;
-        void *det=g_stg_remove(src_inv,it,take,0);
-        if(!det)break;
+        if(cap>0&&take>cap)take=cap;
+        /* item 42: a partial take needs returnCopyIfSomeLeft, else it returns NULL */
+        void *det=g_stg_remove(src_inv,it,take,take<avail?1:0);
+        if(!det){logline("[stobe] WORK_GOAL haul: could not split %d %s (stack %d)",take,query,avail);break;}
         int actual=*(int *)((uintptr_t)det+0x12C); if(actual<1)actual=take;
-        if(!g_stg_give(dst_char,det,0,0)){
+        /* item 42: her inventory's addItem, not Character::giveItem: giveItem reported
+         * failure yet handed the stones over (then they went back to the mine too) */
+        void *dinv=g_stobe_getinv(dst_char);
+        if(!(dinv&&g_stg_add(dinv,det,actual,0,0))){
+            /* addItem puts in what fits and leaves the rest in the stack */
+            int rem=readable((void *)((uintptr_t)det+0x12C),4)?*(int *)((uintptr_t)det+0x12C):actual;
+            if(rem>=0&&rem<actual){
+                moved+=actual-rem;
+                if(rem>0)g_stg_add(src_inv,det,rem,1,0);
+                break; /* her pack is full now */
+            }
             g_stg_add(src_inv,det,actual,1,0);
+            if(actual>1){cap=actual/2;continue;} /* item 42: didn't fit; try half as many */
+            logline("[stobe] WORK_GOAL haul: 1 %s does not fit in her pack",query);
             break;
         }
         moved+=actual;
@@ -355,7 +369,7 @@ static int stg_transfer_char_to_char(void *src_char,void *dst_char,const char *q
         }
         int avail=*(int *)((uintptr_t)it+0x12C);if(avail<1)avail=1;
         int take=maxqty-moved;if(take>avail)take=avail;
-        void *det=g_stg_remove(src,it,take,0);if(!det)break;
+        void *det=g_stg_remove(src,it,take,take<avail?1:0);if(!det)break; /* item 42 */
         int actual=*(int *)((uintptr_t)det+0x12C);if(actual<1)actual=take;
         if(!g_stg_give(dst_char,det,0,0)){g_stg_add(src,det,actual,1,0);g_stg_loot_no_room=1;break;}
         moved+=actual;
@@ -488,6 +502,8 @@ static int wgp_haul_walk(void *actor,WgpGoal *g,Vec3 target,float dist,DWORD now
     return 0;
 }
 
+static void *g_haul_fail_goal; static int g_haul_fails; /* bug 121 / item 42 */
+
 /* 1 = hauling in progress this tick (caller must not issue operate), 0 = nothing to haul */
 static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
 {
@@ -513,6 +529,7 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
             }
             int m=minv?stg_transfer_inventory(ainv,minv,dep,carried):0;
             if(m>0){
+                g_haul_fails=0; /* item 42 */
                 g->last_progress_ms=now;g->last_order_ms=0;g->haul_last_dist=0;g_wgp_dirty=1;
                 snprintf(g->current_step,sizeof(g->current_step),"Loaded %d %s into %s",m,dep,mname);
                 logline("[stobe] WORK_GOAL haul loaded id=%s %d %s into %s",g->id,m,dep,mname);
@@ -556,6 +573,7 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
         int take=have<WGP_HAUL_BATCH?have:WGP_HAUL_BATCH;
         int m=stg_transfer_to_character(wgp_building_inventory(src),actor,dep,take);
         if(m>0){
+            g_haul_fails=0; /* item 42: only misses in a row block */
             g->last_progress_ms=now;g->haul_last_dist=0;g_wgp_dirty=1;
             snprintf(g->current_step,sizeof(g->current_step),"Picked up %d %s from %s",m,dep,sname);
             logline("[stobe] WORK_GOAL haul picked id=%s %d %s from %s",g->id,m,dep,sname);
@@ -563,13 +581,12 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
         }
         { /* bug 121: a take that keeps failing means her pack is full: block with the
            * reason instead of retrying every tick */
-            static void *fail_goal; static int fails;
-            if(fail_goal!=(void *)g){fail_goal=(void *)g;fails=0;}
-            if(++fails>=5){
+            if(g_haul_fail_goal!=(void *)g){g_haul_fail_goal=(void *)g;g_haul_fails=0;}
+            if(++g_haul_fails>=5){
                 char why[256];
                 snprintf(why,sizeof(why),"her pack is full: can't carry %s from %s",dep,sname);
                 logline("[stobe] WORK_GOAL haul: could not take %s from %s -- blocking",dep,sname);
-                fails=0;fail_goal=NULL;
+                g_haul_fails=0;g_haul_fail_goal=NULL;
                 wgp_goal_block(g,why);
                 return 1;
             }
