@@ -4432,6 +4432,11 @@ static Character *ResolveLikelyTraderForActor(GameWorld *world, Character *actor
     if (!candidate || (uintptr_t)candidate < 0x1000 || candidate == actor) {
       return false;
     }
+    try { // bug 103: your own squad never sells to you
+      if (candidate->isPlayerCharacter()) return false;
+    } catch (...) {
+      return false;
+    }
     bool trader = false;
     try {
       trader = candidate->isATrader();
@@ -7993,10 +7998,26 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       int moneyDelta = hasMoneyDelta ? (moneyNow - previousState.money) : 0;
       Character *tradeCounterparty = nullptr;
       if (hasMoneyDelta && moneyDelta != 0) {
-        tradeCounterparty = ResolveLikelyInventoryTransferCounterparty(npc);
-        if ((!tradeCounterparty || (uintptr_t)tradeCounterparty <= 0x1000) &&
-            isPlayerActor) {
+        // Bug 103: a real trader first; squad members never trade cats with you.
+        if (isPlayerActor) {
           tradeCounterparty = ResolveLikelyTraderForActor(world, npc);
+        }
+        if (!tradeCounterparty || (uintptr_t)tradeCounterparty <= 0x1000) {
+          tradeCounterparty = ResolveLikelyInventoryTransferCounterparty(npc);
+        }
+        if (tradeCounterparty && (uintptr_t)tradeCounterparty > 0x1000 && isPlayerActor) {
+          bool counterpartySquad = false;
+          try {
+            counterpartySquad = tradeCounterparty->isPlayerCharacter();
+          } catch (...) {
+            counterpartySquad = true;
+          }
+          if (counterpartySquad) {
+            Log("INV_TRANSFER: cats trade counterparty " +
+                ResolveCharacterNameSafe(tradeCounterparty) +
+                " is in the player's squad; not a seller (bug 103)");
+            tradeCounterparty = nullptr;
+          }
         }
       }
       if (tradeCounterparty && (uintptr_t)tradeCounterparty > 0x1000) {
