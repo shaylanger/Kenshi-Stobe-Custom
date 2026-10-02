@@ -127,6 +127,21 @@ def main():
             if deal and deal.group(1) not in ('', 'NONE'):
                 extra.append('deal=' + deal.group(1))
             convo.append((m.group(2), '%s [%s%s]: %s' % (name.group(1), ev.group(1), (',' + ','.join(extra)) if extra else '', short(msg.group(1).replace("\\'", "'"), 200))))
+    # What the game really said: the LLM log misses compact JSON replies and is emptied by
+    # stobe-rotate-logs, so NPC lines also come from stobe.log (duplicates of the LLM lines skipped).
+    if os.path.exists(STOBE_LOG):
+        seen = {s.split(': ', 1)[-1][:60] for _, s in convo}
+        with open(STOBE_LOG, 'rb') as f:
+            f.seek(max(0, os.path.getsize(STOBE_LOG) - (64 << 20)))
+            for raw in f.read().decode('utf-8', 'replace').splitlines():
+                m = re.match(r'^\[\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})[^\]]*\] \[Stobe\] HOOK_MSG_PROC: Queuing SAY for (.+?): (.*)$', raw)
+                if not m or not (sl <= m.group(1) <= el) or not want(m.group(2)):
+                    continue
+                text = short(m.group(3), 200)
+                if text[:60] in seen or any(text[:40] in s for s in seen):
+                    continue
+                t_utc = (dt.datetime.combine(start_l.date(), dt.time(*map(int, m.group(1).split(':')))) - off).strftime('%H:%M:%S')
+                convo.append((t_utc, '%s [said]: %s' % (m.group(2), text)))
     convo.sort()
     print('\n-- conversation (UTC)')
     for s in cap([t + ' ' + s for t, s in convo], maxn):
