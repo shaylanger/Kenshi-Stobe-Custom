@@ -740,15 +740,20 @@ std::string RunCommand(GameWorld *world, const std::vector<std::string> &f, bool
     if (!Valid(inv))
       return "no inventory";
     int added = 0;
+    int countBefore = inv->countItems(data);
     for (int i = 0; i < count; ++i) {
       Item *item = world->theFactory->createItem(data, hand(), nullptr, nullptr, -1, nullptr);
       if (!Valid(item) || !inv->addItem(item, 1, false, true))
         break;
       ++added;
     }
-    Log("TEST_AUTO: give " + c->getName() + " item=" + data->name + " added=" + Int(added));
-    ok = added > 0;
-    return c->getName() + " got " + Int(added) + "/" + Int(count) + " " + data->name;
+    // addItem can report success for items that don't stay: report what really arrived.
+    int real = inv->countItems(data) - countBefore;
+    Log("TEST_AUTO: give " + c->getName() + " item=" + data->name + " added=" + Int(added) +
+        " real=" + Int(real) + " now=" + Int(countBefore + real));
+    ok = real > 0;
+    return c->getName() + " got " + Int(real) + "/" + Int(count) + " " + data->name +
+           " (now " + Int(countBefore + real) + ")";
   }
 
   if (cmd == "relation") { // relation <npc> <value -100..100>: npc's faction <-> player faction
