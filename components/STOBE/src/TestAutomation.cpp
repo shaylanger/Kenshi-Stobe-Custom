@@ -503,6 +503,68 @@ std::string RunCommand(GameWorld *world, const std::vector<std::string> &f, bool
     return "spawned " + Int(made) + "/" + Int(count) + " " + charData->name + ": " + names;
   }
 
+  if (cmd == "stash") { // stash <item> <count> [near <npc>]: fill the nearest storage
+    if (f.size() < 4)
+      return "usage: stash <item> <count> [near <npc>]";
+    int count = atoi(f[3].c_str());
+    if (count < 1 || count > 50)
+      return "count must be 1..50";
+    Ogre::Vector3 at = origin;
+    std::string error;
+    if (f.size() >= 6 && Lower(f[4]) == "near" && !ResolvePosition(world, f, 5, at, error))
+      return error;
+    GameData *data = nullptr;
+    const itemType types[] = {ITEM, WEAPON, ARMOUR};
+    for (int t = 0; t < 3 && !data; ++t)
+      data = FindData(world, types[t], f[2], error);
+    if (!data)
+      return error;
+    lektor<RootObject *> nearby;
+    world->getObjectsWithinSphere(nearby, at, 300.0f, BUILDING, 256, nullptr);
+    RootObject *best = nullptr;
+    float bestDist = 0.0f;
+    for (uint32_t i = 0; i < nearby.size(); ++i) {
+      RootObject *b = nearby.stuff[i];
+      if (!Valid(b))
+        continue;
+      std::string name;
+      try {
+        name = Lower(b->getName());
+      } catch (...) {
+        continue;
+      }
+      if (name.find("storage") == std::string::npos && name.find("chest") == std::string::npos)
+        continue;
+      Inventory *inv = nullptr;
+      try {
+        inv = b->getInventory();
+      } catch (...) {
+        inv = nullptr;
+      }
+      if (!Valid(inv))
+        continue;
+      float d = b->getPosition().distance(at);
+      if (!best || d < bestDist) {
+        best = b;
+        bestDist = d;
+      }
+    }
+    if (!best)
+      return "no storage chest within 300";
+    Inventory *inv = best->getInventory();
+    int added = 0;
+    for (int i = 0; i < count; ++i) {
+      Item *item = world->theFactory->createItem(data, hand(), nullptr, nullptr, -1, nullptr);
+      if (!Valid(item) || !inv->addItem(item, 1, false, true))
+        break;
+      ++added;
+    }
+    ok = added > 0;
+    Log("TEST_AUTO: stash " + data->name + " x" + Int(added) + " in " + best->getName());
+    return "stashed " + Int(added) + "/" + Int(count) + " " + data->name + " in " +
+           best->getName() + " (" + Num(bestDist) + " away)";
+  }
+
   // The remaining commands take a character first.
   if (f.size() < 3)
     return "usage: " + cmd + " <npc> ...";

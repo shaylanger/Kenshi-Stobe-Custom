@@ -16,6 +16,7 @@ Works at the main menu too. Needs the test inbox switch (stobe-say on).
   stobe-auto attack <attacker> <target> | give <npc> <item> [n] | relation <npc> <-100..100>
   stobe-auto money <npc> <delta>           add cats (negative takes); hp <npc> per-part health
   stobe-auto buy <buyer> <seller> <item> <price>   one atomic purchase (item + cats in the same frame)
+  stobe-auto stash <item> <n> [near <npc>]  put items into the nearest storage chest
 <npc> is a name (exact match nearest the player wins), #serial, @player or @selected.
 """
 import os
