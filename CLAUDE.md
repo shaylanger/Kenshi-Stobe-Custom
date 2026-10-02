@@ -6,10 +6,10 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 - **Installed:** Stobe.dll `d6b1809e` (round 20 fixes + the automation session's TestAutomation.cpp; prev `261C7AF3`), KenshiFP.dll `111289C5` (prev `0193CD57`). Server round 20 live (live + ss-merge, pushed, logs rotated).
 - **Round 20 = fixes for all run 8 bugs 94–107** (+ 101, 106, 79b), **none tested in game yet**. Root causes: `run8-deep-dive.md`. Status per bug: `STOBE_bug_history.md` (bugs 1–107). **Next bug is 108.**
 - **Next job:** test plan section "Run 8 bugs (round 20 fixes)", tests 70–85 (Shay: 84 put-down with G, 85 FP click details). Then "Round 19 retest" (43–56; Shay 47, 48), round 18 (57–69), the rest. Log in a new `test-run-<date>.md`; latest log `test-run-2026-10-01-r8.md`.
-- **Test automation** is being built by a separate session ("Game testing automation research"): plan in `test-automation-plan.md`, its code in Stobe `src/TestAutomation.cpp` + `tools/automation/` (uncommitted, theirs). Coordinate before installing DLLs or launching Kenshi.
+- **Test automation** is being built by a separate session ("Game testing automation research"): plan in `test-automation-plan.md`, its code in Stobe `src/TestAutomation.cpp` + `tools/automation/` (uncommitted, theirs). Other sessions: coordinate (SendMessage) before installing DLLs or launching Kenshi so two sessions don't fight over the game.
 - stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it).
 - **Naming:** test rows are plain numbers ("test 70"); bugs always "bug N"; no letter codes. Passed rows get deleted from the test plan.
-- **No manual validation:** run only rows Claude can verify from logs/state/goal status; list "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. DLL fixes: build during the run, install only when Shay says Kenshi is closed.
+- **No manual validation:** run only rows Claude can verify from logs/state/goal status; list "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. **Claude runs the whole loop alone** (Shay's decision 2026-10-02): launch Kenshi, load a test save, test, log bugs, close Kenshi, fix, build, install, relaunch, retest until every testable bug is fixed, then close Kenshi. No "go" needed. Use `tools/automation/kenshi-ctl.ps1` (launch/stop/restart/status/health) and `install-dll.ps1`.
 - **Test location:** Shay's outpost "Home" (game calls the area "The Hub, Border Zone"). Malzin is in Shay's squad (faction "Nameless"), Fond. Keep food in a chest for long goals. The test inbox speaker is the **selected** character: keep Shay selected.
 - History: `STOBE_bug_history.md`, `PATCH_HISTORY.md`, run logs in `archive/`; run 8 raw logs + all LLM prompts in `archive/logs-run8-2026-10-01/` (local only, gitignored).
 
@@ -51,7 +51,7 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 - Fights: Shay on pause duty; arm `stobe-fight-offer`/`stobe-fight-watch` before `stobe-force-attack`.
 
 ## Automated testing
-- **Wait for Shay's "go"** (Kenshi running ≠ save loaded). Read-only checks are fine before that.
+- **No "go" needed:** Claude launches Kenshi and loads the test save itself (`kenshi-ctl.ps1 launch -Save <name>`). If Kenshi is already running when a run starts, check first whether Shay is playing (recent chat/goal activity in the logs); if unsure, ask before closing it.
 - Then: both DLL hashes, `stobe-say on`, `ping`, `state Malzin`/`state Shay`, combat check. One line at a time; a pass means real game state changed (status files, KenshiFP.log, inventories), never just the words.
 - **Safety:** after risky lines grep stobe.log for `[EVENT] combat…-> Shay|Malzin` before the next line; at speed >10x poll every 10 s and `stobe-say speed 0` on any combat toward them; if Shay is attacked or knocked out, stop and tell him. Back to 1x when done.
 - The LLM often picks a different action than intended: log it as a bug and add a server guard.
