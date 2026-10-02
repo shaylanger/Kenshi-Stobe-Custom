@@ -178,7 +178,7 @@ void PopulatePushToTalkHotkeyCombo() {
   if (!g_pushToTalkHotkeyCombo)
     return;
   g_pushToTalkHotkeyCombo->removeAllItems();
-  const char *keys[] = {"V", "B", "N", "M", "C", "X", "Z"};
+  const char *keys[] = {"V", "B", "N", "M", "C", "X", "Z", "U"};
   const size_t disabledIndex = 0;
   g_pushToTalkHotkeyCombo->addItem(
       WideFromUtf8(kPushToTalkDisabledLabel).c_str());
