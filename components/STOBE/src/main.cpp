@@ -1549,6 +1549,8 @@ static const DWORD kCombatEndGraceMs = 12 * 1000;
 static const DWORD kRecentCombatSignalMs = 8 * 1000;
 static const float kMajorDamageThreshold = 15.0f;
 static const size_t kCombatParticipantLimit = 64;
+// Bug 109: a separate fight farther away must not keep this encounter alive.
+static const float kCombatLocalRadius = 150.0f;
 static std::map<unsigned int, DWORD> g_recentCombatSignalTickBySerial;
 static DWORD g_lastIdentityRenameSweepTick = 0;
 static const DWORD kIdentityRenameSweepIntervalMs = 2500;
@@ -6699,11 +6701,24 @@ static CombatCharacterObservation ObserveCombatCharacter(Character *npc,
     }
   }
 
+  // Bug 109: someone far away (fled, or fighting elsewhere) is no evidence.
+  bool closeTarget = false;
+  try {
+    const Ogre::Vector3 me = npc->getPosition();
+    if (observation.attackTarget &&
+        observation.attackTarget->getPosition().distance(me) <= kCombatLocalRadius)
+      closeTarget = true;
+    for (size_t i = 0; i < observation.attackers.size() && !closeTarget; ++i)
+      if (observation.attackers[i]->getPosition().distance(me) <= kCombatLocalRadius)
+        closeTarget = true;
+  } catch (...) {
+  }
   observation.evidence =
       !observation.dead && !observation.unconscious &&
-      (inCombat || rangedCombat || underMeleeAttack ||
-       observation.attackTarget != nullptr || !observation.attackers.empty() ||
-       HasRecentCombatSignal(serial, nowTick));
+      (underMeleeAttack || closeTarget ||
+       ((inCombat || rangedCombat || HasRecentCombatSignal(serial, nowTick)) &&
+        (closeTarget || (observation.attackTarget == nullptr &&
+                         observation.attackers.empty()))));
   return observation;
 }
 
@@ -6776,7 +6791,7 @@ static void UpdateLocalCombatEncounter(
     Character *npc = queue[queueIndex];
     unsigned int serial = ResolveCharacterSerialForEvent(npc);
     if (serial == 0 || claimed.count(serial) != 0 ||
-        npc->getPosition().distance(combatState.origin) > 600.0f) {
+        npc->getPosition().distance(combatState.origin) > kCombatLocalRadius) {
       continue;
     }
     claimed.insert(serial);
