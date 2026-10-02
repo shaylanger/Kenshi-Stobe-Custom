@@ -22,7 +22,10 @@ case "$cmd" in
     for s in $("$0" raiders); do
       if [ -z "$keep" ]; then keep="$s"; else stobe-auto kill "$s" >/dev/null; fi
     done
+    stobe-auto teleport "$keep" Shay dist 3 >/dev/null # inside the outpost walls (else path_failed)
     stobe-auto attack "$keep" @player >/dev/null
+    stobe-auto attack @player "$keep" >/dev/null # squad AI may ignore its order; Shay starting it works
+    stobe-auto attack Malzin "$keep" >/dev/null
     echo "$keep"
     ;;
   surrender)
@@ -35,7 +38,7 @@ case "$cmd" in
     for i in $(seq 1 6); do # wait for the fight to really start, re-ordering the attack
       sleep 10
       tail -n +"$base" "$L" | grep -a -q "\[EVENT\] combat_start" && break
-      stobe-auto attack "$r" @player >/dev/null
+      stobe-auto attack "$r" @player >/dev/null; stobe-auto attack @player "$r" >/dev/null
     done
     sleep 5
     stobe-auto health "$r" 25 >/dev/null
