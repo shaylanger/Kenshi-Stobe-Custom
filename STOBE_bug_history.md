@@ -107,6 +107,10 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 99 | Fight chatter flood: ~35 NPC-to-NPC lines in 10 min, all spoken | open | open |
 | 100 | KenshiFP FP mode: an NPC you pick up can't be put down | open | open |
 | 101 | Loot orders looted nothing: target "Pax Hungry Bandit" vs body "Pax [Hungry Bandit]", and "bandits" vs "Bandit" | KFP r19i: names compared without punctuation; plural retried as singular | built E73512B1, not installed |
+| 102 | Eating/drinking from your own pack logged as giving the item to the nearest NPC ("feeding Skovrek like a pet") | open | open |
+| 103 | Purchases from a trader logged as bought from Malzin (cats really spent; seller name wrong) | open | open |
+| 104 | A loot goal that took 0 items is reported as success ("picked clean", "weapons are stripped") | open | open |
+| 105 | Fight narration invents facts: wrong person credited for knockouts, knockouts stated too early, Skovr/Skovrek mixed up, enemy gangs treated as allies | open | open |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.
