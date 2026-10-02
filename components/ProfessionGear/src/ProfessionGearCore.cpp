@@ -276,6 +276,48 @@ float AggregatePercent(const std::vector<AffixRecord>& records, ProfessionStat s
   return total;
 }
 
+float EffectiveStatValue(float baseValue, float totalPercent, bool unmodified,
+                         float hardCap) {
+  if (unmodified || totalPercent == 0.0f) return baseValue;
+  float result = baseValue * (1.0f + totalPercent / 100.0f);
+  if (result < 0.0f) result = 0.0f;
+  if (hardCap > 0.0f && result > hardCap) result = hardCap;
+  return result;
+}
+
+static bool HasTagCore(const std::vector<ItemTag>& tags, ItemTag tag) {
+  return std::find(tags.begin(), tags.end(), tag) != tags.end();
+}
+
+float SpecialistPackItemWeightMultiplier(const std::vector<ItemTag>& tags,
+                                         const std::string& itemName,
+                                         const std::string& itemBaseId,
+                                         bool isTradeItem) {
+  const std::string n = Lower(itemName + " " + itemBaseId);
+  if (HasTagCore(tags, TAG_PACK_ORE)) {
+    if (Has(n,"ore") || Has(n,"raw iron") || Has(n,"copper")) return 0.25f;
+  }
+  if (HasTagCore(tags, TAG_PACK_CROP)) {
+    if (Has(n,"wheatstraw") || Has(n,"cactus") || Has(n,"greenfruit") ||
+        Has(n,"riceweed") || Has(n,"hemp") || Has(n,"cotton")) return 0.30f;
+  }
+  if (HasTagCore(tags, TAG_PACK_CONSTRUCTION)) {
+    if (Has(n,"building material") || Has(n,"iron plate") ||
+        Has(n,"steel bar") || Has(n,"copper alloy")) return 0.35f;
+  }
+  if (HasTagCore(tags, TAG_PACK_MEDICAL)) {
+    if (Has(n,"first aid") || Has(n,"splint") || Has(n,"repair kit") ||
+        Has(n,"medical")) return 0.35f;
+  }
+  if (HasTagCore(tags, TAG_PACK_TECH)) {
+    if (Has(n,"ancient science") || Has(n,"engineering research") ||
+        Has(n,"ai core") || Has(n,"book") || Has(n,"cpu") ||
+        Has(n,"power core")) return 0.35f;
+  }
+  if (HasTagCore(tags, TAG_PACK_TRADE) && isTradeItem) return 0.55f;
+  return 1.0f;
+}
+
 std::string SerializeRecord(const AffixRecord& r) {
   std::ostringstream s; s<<r.instanceKey<<'\t'<<r.baseId<<'\t'<<r.tier<<'\t';
   for(size_t i=0;i<r.affixes.size();++i){if(i)s<<',';s<<(int)r.affixes[i].stat<<':'<<std::fixed<<std::setprecision(1)<<r.affixes[i].percent;}

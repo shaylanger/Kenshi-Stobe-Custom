@@ -26,6 +26,7 @@ namespace {
 CRITICAL_SECTION g_lock;
 PGP::RuleConfig g_cfg;
 std::map<std::string, PGP::AffixRecord> g_records;
+std::map<unsigned int, std::map<PGP::ProfessionStat, float> > g_bonusCache;
 std::map<std::string, std::vector<PGP::ItemTag> > g_overrides;
 std::set<std::string> g_exclusions;
 std::string g_dir;
@@ -39,6 +40,8 @@ typedef float (*GetStatFn)(const CharStats*, StatsEnumerated, bool);
 typedef void (*CraftFinishedFn)(CraftingBuilding*, Item*);
 typedef void (*TooltipFn)(InventoryItemBase*, Ogre::vector<StringPair>::type&);
 typedef float (*InventoryWeightFn)(Inventory*);
+typedef void (*InventoryAddRemoveFn)(Inventory*, Item*);
+typedef void (*InventoryUpdateFn)(Inventory*, Item*, int);
 
 PlayerUpdateFn g_playerUpdateOrig = 0;
 GetStatFn g_getStatOrig = 0;
@@ -49,6 +52,9 @@ TooltipFn g_tipContainerOrig = 0;
 TooltipFn g_tipCrossbowOrig = 0;
 TooltipFn g_tipSwordOrig = 0;
 InventoryWeightFn g_inventoryWeightOrig = 0;
+InventoryAddRemoveFn g_inventoryAddOrig = 0;
+InventoryAddRemoveFn g_inventoryRemoveOrig = 0;
+InventoryUpdateFn g_inventoryUpdateOrig = 0;
 
 void Log(const std::string& s) {
   std::ofstream f(g_logPath.c_str(), std::ios::app);
@@ -111,37 +117,6 @@ PGP::ProfessionStat MapStat(StatsEnumerated st) {
 
 static bool HasTag(const std::vector<PGP::ItemTag>& tags, PGP::ItemTag tag) {
   return std::find(tags.begin(), tags.end(), tag) != tags.end();
-}
-
-static float PackItemMultiplier(const std::vector<PGP::ItemTag>& tags, Item* item) {
-  if (!item) return 1.0f;
-  std::string n = PGP::Lower(item->getName() + " " + BaseId(item));
-  if (HasTag(tags, PGP::TAG_PACK_ORE)) {
-    if (n.find("ore") != std::string::npos || n.find("raw iron") != std::string::npos ||
-        n.find("copper") != std::string::npos) return 0.25f;
-  }
-  if (HasTag(tags, PGP::TAG_PACK_CROP)) {
-    if (n.find("wheatstraw") != std::string::npos || n.find("cactus") != std::string::npos ||
-        n.find("greenfruit") != std::string::npos || n.find("riceweed") != std::string::npos ||
-        n.find("hemp") != std::string::npos || n.find("cotton") != std::string::npos) return 0.30f;
-  }
-  if (HasTag(tags, PGP::TAG_PACK_CONSTRUCTION)) {
-    if (n.find("building material") != std::string::npos || n.find("iron plate") != std::string::npos ||
-        n.find("steel bar") != std::string::npos || n.find("copper alloy") != std::string::npos) return 0.35f;
-  }
-  if (HasTag(tags, PGP::TAG_PACK_MEDICAL)) {
-    if (n.find("first aid") != std::string::npos || n.find("splint") != std::string::npos ||
-        n.find("repair kit") != std::string::npos || n.find("medical") != std::string::npos) return 0.35f;
-  }
-  if (HasTag(tags, PGP::TAG_PACK_TECH)) {
-    if (n.find("ancient science") != std::string::npos || n.find("engineering research") != std::string::npos ||
-        n.find("ai core") != std::string::npos || n.find("book") != std::string::npos ||
-        n.find("cpu") != std::string::npos || n.find("power core") != std::string::npos) return 0.35f;
-  }
-  if (HasTag(tags, PGP::TAG_PACK_TRADE)) {
-    if (item->isTradeItem) return 0.55f;
-  }
-  return 1.0f;
 }
 
 std::vector<PGP::ItemTag> TagsFor(const PGP::ItemDescriptor& item) {
@@ -233,21 +208,12 @@ PGP::AffixRecord* EnsureRecord(Item* item, Character* owner, bool crafted) {
   return p;
 }
 
-void ProcessCharacter(Character* c) {
-  if(!g_cfg.enabled || !c) return;
+void RebuildCharacterBonusCache(Character* c) {
+  if(!c) return;
   Inventory* inv=0;
   try { inv=c->getInventory(); } catch (...) { return; }
   if(!inv) return;
-  const lektor<Item*>& items=inv->getAllItems();
-  for(unsigned int i=0;i<items.size();++i) if(items[i]) EnsureRecord(items[i],c,false);
-}
-
-float EquippedBonus(Character* c, PGP::ProfessionStat stat) {
-  if(!g_cfg.enabled || !c || stat==PGP::STAT_NONE) return 0;
-  Inventory* inv=0;
-  try { inv=c->getInventory(); } catch (...) { return 0; }
-  if(!inv) return 0;
-  float total=0;
+  std::map<PGP::ProfessionStat,float> totals;
   const lektor<Item*>& items=inv->getAllItems();
   EnterCriticalSection(&g_lock);
   for(unsigned int i=0;i<items.size();++i){
@@ -256,10 +222,48 @@ float EquippedBonus(Character* c, PGP::ProfessionStat stat) {
     std::map<std::string,PGP::AffixRecord>::const_iterator it=g_records.find(ItemKey(item));
     if(it==g_records.end()) continue;
     for(size_t j=0;j<it->second.affixes.size();++j)
-      if(it->second.affixes[j].stat==stat) total+=it->second.affixes[j].percent;
+      totals[it->second.affixes[j].stat]+=it->second.affixes[j].percent;
+  }
+  unsigned int serial=0;
+  try { serial=c->getHandle().serial; } catch (...) {}
+  if(serial) g_bonusCache[serial]=totals;
+  LeaveCriticalSection(&g_lock);
+}
+
+void ProcessCharacter(Character* c) {
+  if(!g_cfg.enabled || !c) return;
+  Inventory* inv=0;
+  try { inv=c->getInventory(); } catch (...) { return; }
+  if(!inv) return;
+  const lektor<Item*>& items=inv->getAllItems();
+  for(unsigned int i=0;i<items.size();++i) if(items[i]) EnsureRecord(items[i],c,false);
+  RebuildCharacterBonusCache(c);
+}
+
+float EquippedBonus(Character* c, PGP::ProfessionStat stat) {
+  if(!g_cfg.enabled || !c || stat==PGP::STAT_NONE) return 0;
+  unsigned int serial=0;
+  try { serial=c->getHandle().serial; } catch (...) { return 0; }
+  if(!serial) return 0;
+  EnterCriticalSection(&g_lock);
+  std::map<unsigned int,std::map<PGP::ProfessionStat,float> >::const_iterator ci=g_bonusCache.find(serial);
+  if(ci!=g_bonusCache.end()){
+    std::map<PGP::ProfessionStat,float>::const_iterator bi=ci->second.find(stat);
+    float value=(bi==ci->second.end())?0.0f:bi->second;
+    LeaveCriticalSection(&g_lock);
+    return value;
   }
   LeaveCriticalSection(&g_lock);
-  return total;
+  RebuildCharacterBonusCache(c);
+  EnterCriticalSection(&g_lock);
+  ci=g_bonusCache.find(serial);
+  float value=0.0f;
+  if(ci!=g_bonusCache.end()){
+    std::map<PGP::ProfessionStat,float>::const_iterator bi=ci->second.find(stat);
+    if(bi!=ci->second.end()) value=bi->second;
+  }
+  LeaveCriticalSection(&g_lock);
+  return value;
 }
 
 void AppendTip(InventoryItemBase* base,Ogre::vector<StringPair>::type& lines) {
@@ -305,10 +309,7 @@ float HookGetStat(const CharStats* s,StatsEnumerated st,bool unmodified) {
   PGP::ProfessionStat p=MapStat(st);
   if(p==PGP::STAT_NONE) return base;
   float pct=EquippedBonus(s->me,p);
-  float result=base*(1.0f+pct/100.0f);
-  if(result<0) result=0;
-  if(result>150) result=150;
-  return result;
+  return PGP::EffectiveStatValue(base,pct,false,150.0f);
 }
 
 float HookInventoryWeight(Inventory* inv) {
@@ -330,11 +331,33 @@ float HookInventoryWeight(Inventory* inv) {
       if(!items[i]) continue;
       float w=items[i]->getItemWeight();
       raw+=w;
-      adjusted+=w*PackItemMultiplier(tags,items[i]);
+      adjusted+=w*PGP::SpecialistPackItemWeightMultiplier(tags,items[i]->getName(),BaseId(items[i]),items[i]->isTradeItem);
     }
   } catch (...) { return base; }
   if(raw<=0.0001f) return base;
   return base*(adjusted/raw);
+}
+
+void RefreshInventoryOwner(Inventory* inv) {
+  if(!g_cfg.enabled || !inv) return;
+  Character* c=0;
+  try { c=inv->getCallbackCharacter(); } catch (...) {}
+  if(c) ProcessCharacter(c);
+}
+
+void HookInventoryAdd(Inventory* inv,Item* item) {
+  if(g_inventoryAddOrig) g_inventoryAddOrig(inv,item);
+  RefreshInventoryOwner(inv);
+}
+
+void HookInventoryRemove(Inventory* inv,Item* item) {
+  if(g_inventoryRemoveOrig) g_inventoryRemoveOrig(inv,item);
+  RefreshInventoryOwner(inv);
+}
+
+void HookInventoryUpdate(Inventory* inv,Item* item,int amount) {
+  if(g_inventoryUpdateOrig) g_inventoryUpdateOrig(inv,item,amount);
+  RefreshInventoryOwner(inv);
 }
 
 void HookCraft(CraftingBuilding* b,Item* item) {
@@ -342,6 +365,7 @@ void HookCraft(CraftingBuilding* b,Item* item) {
   try { crafter=b?b->whosCrafting.getCharacter():0; } catch (...) {}
   if(item) EnsureRecord(item,crafter,true);
   if(g_craftOrig) g_craftOrig(b,item);
+  if(crafter) RebuildCharacterBonusCache(crafter);
   SaveDb();
 }
 
@@ -368,6 +392,9 @@ void InstallHooks() {
   HookSymbol(lib,"?getStat@CharStats@@QEBAMW4StatsEnumerated@@_N@Z",(void*)HookGetStat,(void**)&g_getStatOrig);
   HookSymbol(lib,"?addFinishedCraftItem@CraftingBuilding@@QEAAXPEAVItem@@@Z",(void*)HookCraft,(void**)&g_craftOrig);
   HookSymbol(lib,"?getTotalWeight@Inventory@@QEAAMXZ",(void*)HookInventoryWeight,(void**)&g_inventoryWeightOrig);
+  HookSymbol(lib,"?_sectionAddItemCallback@Inventory@@UEAAXPEAVItem@@@Z",(void*)HookInventoryAdd,(void**)&g_inventoryAddOrig);
+  HookSymbol(lib,"?_sectionRemoveItemCallback@Inventory@@UEAAXPEAVItem@@@Z",(void*)HookInventoryRemove,(void**)&g_inventoryRemoveOrig);
+  HookSymbol(lib,"?_sectionUpdateItemCallback@Inventory@@UEAAXPEAVItem@@H@Z",(void*)HookInventoryUpdate,(void**)&g_inventoryUpdateOrig);
   HookSymbol(lib,"?getTooltipData1@InventoryItemBase@@UEAAXAEAV?$vector@VStringPair@@V?$STLAllocator@VStringPair@@V?$CategorisedAllocPolicy@$0A@@Ogre@@@Ogre@@@std@@@Z",(void*)TipBase,(void**)&g_tipBaseOrig);
   HookSymbol(lib,"?getTooltipData1@Armour@@UEAAXAEAV?$vector@VStringPair@@V?$STLAllocator@VStringPair@@V?$CategorisedAllocPolicy@$0A@@Ogre@@@Ogre@@@std@@@Z",(void*)TipArmour,(void**)&g_tipArmourOrig);
   HookSymbol(lib,"?getTooltipData1@ContainerItem@@UEAAXAEAV?$vector@VStringPair@@V?$STLAllocator@VStringPair@@V?$CategorisedAllocPolicy@$0A@@Ogre@@@Ogre@@@std@@@Z",(void*)TipContainer,(void**)&g_tipContainerOrig);

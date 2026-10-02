@@ -7,6 +7,7 @@ Standalone RE_Kenshi plugin that adds contextual profession-equipment progressio
 - Classifies existing vanilla and mod-added equipment by profession context.
 - Rolls per-instance profession affixes using item quality/tier.
 - Applies profession bonuses at `CharStats::getStat` without modifying base skills or XP.
+- Caches equipped profession aggregates per character; inventory add/remove/update callbacks refresh the cache, with the 1-second loaded-character sweep retained as discovery/safety fallback.
 - Gives player-crafted items their roll at `CraftingBuilding::addFinishedCraftItem`.
 - Uses the owning NPC's strongest profession skills as role context.
 - Heavily suppresses special gear rolls for slaves/very low-tier NPCs.
@@ -28,6 +29,7 @@ Use the same VS2010/Kenshi SDK toolchain as STOBE:
 ```
 build_portable.bat
 run_tests.bat
+verify_offline.bat
 ```
 
 Output:

@@ -140,6 +140,14 @@ AffixRecord RollAffixes(const ItemDescriptor& item,
 float AggregatePercent(const std::vector<AffixRecord>& records,
                        ProfessionStat stat);
 
+float EffectiveStatValue(float baseValue, float totalPercent, bool unmodified,
+                         float hardCap);
+
+float SpecialistPackItemWeightMultiplier(const std::vector<ItemTag>& packTags,
+                                         const std::string& itemName,
+                                         const std::string& itemBaseId,
+                                         bool isTradeItem);
+
 std::string SerializeRecord(const AffixRecord& record);
 bool ParseRecord(const std::string& line, AffixRecord& out);
 

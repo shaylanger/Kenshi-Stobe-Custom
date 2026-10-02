@@ -2,6 +2,8 @@
 
 **Status:** pre-install plan. The mod must not be copied into Kenshi until Shay explicitly authorizes installation/testing.
 
+**Current offline automation:** `run_tests.bat` passes 5,135 core checks; `verify_offline.bat` passes 13 required SDK/export symbol checks; `build_portable.bat` and `package.bat` are green. These do not substitute for the in-game rows below.
+
 ## Test policy
 
 - Automated tests are run by the agent whenever they can be proven from process output, logs, saved state or deterministic game state.
