@@ -99,19 +99,20 @@ Rounds: server patches `pending-fixes/patch_roundN*.py` (live + ss-merge); DLL `
 | 91 | Surrender offers 1000 then 9000 cats, twice in one fight | server r19g: caps (common 50-300, leader ~1000, wealthy scaled, max 35 % carried), per-NPC cooldown 30 min | live, not retested |
 | 92 | No food anywhere: `GOAL_MEAL hungry` logged every tick (~60 ms), storage rescanned each tick | KFP r19h: after "no food anywhere" wait 10 game min before looking again | installed 0193CD57, not retested |
 | 93 | "Make 1 building material" BLOCKED at the Manual Stone Processor ("made no progress") while she worked it | KFP r19h: only finished units counted as progress, one manual unit > 30 game min; standing at the machine now counts, max 4 game h/unit | installed 0193CD57, not retested |
-| 94 | Old goal report re-delivered on a later initiative turn (mead STORE reported again at a knockout; "…the Hub") | open | open |
-| 95 | Lines meant for the player get a nearby NPC as speech target; that NPC answers as if addressed (goal report → Maelis, Skovrek's 300-cat offer → Maelis) | open | open |
-| 96 | "We're done here." recorded as ACCEPT of the NPC's assist deal + StopAttack | open | open |
-| 97 | Other NPCs call Malzin "him" | open | open |
-| 98 | No surrender offer to the player though several bandits were badly hurt (Pax pleaded in words, no deal) | open | open |
-| 99 | Fight chatter flood: ~35 NPC-to-NPC lines in 10 min, all spoken | open | open |
+| 94 | Old goal report re-delivered on a later initiative turn (mead STORE reported again at a knockout; "…the Hub") | open; cause: KFP: report_triggered not saved in stobe_task_goals.tsv, so finished task goals re-report after every launch (run8-deep-dive.md) | open |
+| 95 | Lines meant for the player get a nearby NPC as speech target; that NPC answers as if addressed (goal report → Maelis, Skovrek's 300-cat offer → Maelis) | open; cause: DLL tags lines with the idle pair's old listener when the server swaps the speaker; server guesser skips the player (stobeInferDialogueTargetForLog) (run8-deep-dive.md) | open |
+| 96 | "We're done here." recorded as ACCEPT of the NPC's assist deal + StopAttack | open; cause: stobeNegPlayerAcceptsOfferNote treats single words (done/fine/ok) as acceptance (run8-deep-dive.md) | open |
+| 97 | Other NPCs call Malzin "him" | open; cause: gender missing from people-awareness lines (only 7 of 38 mentions) (run8-deep-dive.md) | open |
+| 98 | No surrender offer to the player though several bandits were badly hurt (Pax pleaded in words, no deal) | open; cause: bandits had no health data (blood 0/0) so ratio defaulted to 1.0; assist offer started the shared 120 s cooldown (run8-deep-dive.md) | open |
+| 99 | Fight chatter flood: ~35 NPC-to-NPC lines in 10 min, all spoken | open; cause: every knockout/hit/death/heal arms an extra idle turn (18 heals by strangers) (run8-deep-dive.md) | open |
 | 100 | KenshiFP FP mode: an NPC you pick up can't be put down | open | open |
 | 101 | Loot orders looted nothing: target "Pax Hungry Bandit" vs body "Pax [Hungry Bandit]", and "bandits" vs "Bandit" | KFP r19i: names compared without punctuation; plural retried as singular | built E73512B1, not installed |
-| 102 | Eating/drinking from your own pack logged as giving the item to the nearest NPC ("feeding Skovrek like a pet") | open | open |
-| 103 | Purchases from a trader logged as bought from Malzin (cats really spent; seller name wrong) | open | open |
-| 104 | A loot goal that took 0 items is reported as success ("picked clean", "weapons are stripped") | open | open |
-| 105 | Fight narration invents facts: wrong person credited for knockouts, knockouts stated too early, Skovr/Skovrek mixed up, enemy gangs treated as allies | open | open |
+| 102 | Eating/drinking from your own pack logged as giving the item to the nearest NPC ("feeding Skovrek like a pet") | open; cause: DLL pins unmatched inventory losses (eating/drinking) on a likely counterparty (run8-deep-dive.md) | open |
+| 103 | Purchases from a trader logged as bought from Malzin (cats really spent; seller name wrong) | open; cause: DLL names the last talk target as seller if flagged trader (Malzin) (run8-deep-dive.md) | open |
+| 104 | A loot goal that took 0 items is reported as success ("picked clean", "weapons are stripped") | open; cause: COMPLETE with 0 done gets the 'tell Shay it's done' instruction (run8-deep-dive.md) | open |
+| 105 | Fight narration invents facts: wrong person credited for knockouts, knockouts stated too early, Skovr/Skovrek mixed up, enemy gangs treated as allies | open; cause: 1,862 'Initiated attack' lines bury knockouts; no 'only state what events show' rule; Skovr/Skovrek confusion; wrong [Friendly] faction tag (run8-deep-dive.md) | open |
 | 106 | Work goals: she works ~1 s, stops, waits, repeats; goals crawl even at 50x. The planner re-sends the operate order + rethink every 2 game s | KFP r19i: order only on a machine change or after 30 game s idle (NULL_TASK/IDLE) | built 8751BF24, not installed |
+| 107 | 55 of 135 prompts start with an unfilled "#HERIKA_NAME#" placeholder | open; only the diary code replaces it | open |
 
 ## Lessons from the runs (process)
 - Claude is too slow for live fights (checks plus 5–10 s replies): Shay was knocked out twice. Fights need Shay on pause and a pre-armed watcher.

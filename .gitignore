@@ -33,3 +33,6 @@ training-data/shadow-enabled.flag
 
 # Personal Claude Code settings
 .claude/settings.local.json
+
+# Saved run logs (local only)
+archive/logs-*/
