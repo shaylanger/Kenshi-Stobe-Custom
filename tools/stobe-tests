@@ -13,7 +13,7 @@ mkdir -p /tmp/negtest
 # Failing before our work or in pure upstream; reported but not counted as regressions.
 KNOWN="autonomy_phase3_regression chat_processor_regression import_rules_regression player2_client_id_db_regression structured_dialogue_contract_regression schema_clone_identity_regression playthrough_storage_regression"
 clean_db() {  # other suites leave events with late game times behind; negotiation deadlines read them
-  (cd /tmp && su postgres -c "psql -q -d stobe_test -c \"delete from eventlog where gamets >= 100000\"" >/dev/null 2>&1)
+  (cd /tmp && su postgres -c "psql -q -d stobe_test -c \"delete from eventlog where gamets >= 100000 or data = 'Inactive game probe'\"" >/dev/null 2>&1)
 }
 pass=0; fail=0; known=0
 # negotiation suites first, each on a clean slate
