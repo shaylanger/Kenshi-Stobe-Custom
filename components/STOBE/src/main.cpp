@@ -10293,6 +10293,14 @@ void ProcessMessageQueue(GameWorld *thisptr) {
                   }
                 }
 
+                if (score > 1 && !(hasSerial && candidateSerial == wantedSerial)) {
+                  // item 47: a corpse with the same name must not win over the living
+                  try {
+                    if (candidate->isDead())
+                      score = 1;
+                  } catch (...) {
+                  }
+                }
                 if (score > bestScore) {
                   bestScore = score;
                   bestMatch = candidate;
