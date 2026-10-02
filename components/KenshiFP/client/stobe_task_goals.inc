@@ -571,7 +571,7 @@ static int stg_actor_item_count(void *actor,const char *query)
 
 static int stg_walk_to_pos(void *actor,StgGoal *g,Vec3 t,float d);
 
-static void stg_loot_scan_log(void *gw,void *actor,StgGoal *g)
+static int stg_loot_scan_log(void *gw,void *actor,StgGoal *g)
 {
     void *chars[128]={0};int n=stg_scan_chars(gw,actor,chars,128);
     int dead=0,downed=0,valid=0;
@@ -588,6 +588,7 @@ static void stg_loot_scan_log(void *gw,void *actor,StgGoal *g)
     }
     logline("[stobe] TASK_GOAL loot scan id=%s target=%s item=%s scanned=%d dead=%d downed=%d valid=%d",
             g->id,g->target,g->item,n,dead,downed,valid);
+    return valid;
 }
 
 static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
@@ -636,7 +637,14 @@ static void stg_tick_loot(void *gw,void *actor,StgGoal *g)
             if(s<=0){snprintf(g->current_step,sizeof(g->current_step),"Looting finished; waiting for usable player storage");return;}
         }
     }
-    if(g->completed<=0)stg_loot_scan_log(gw,actor,g);
+    if(g->completed<=0){ /* bug 104: nothing taken is not "done" */
+        int matched=stg_loot_scan_log(gw,actor,g);
+        char r[256];
+        if(g->target[0]&&matched==0)snprintf(r,sizeof(r),"couldn't find %s's body nearby",g->target);
+        else snprintf(r,sizeof(r),"found no %s to take on the nearby bodies",g->item[0]&&strcmp(g->item,"all")?g->item:"items");
+        stg_finish(g,STG_STATE_BLOCKED,r);
+        return;
+    }
     stg_finish(g,STG_STATE_COMPLETE,"no more matching items on nearby downed targets");
 }
 
@@ -1422,6 +1430,7 @@ static void stg_load(void)
         strncpy(g.target,fields[5],127);strncpy(g.destination,fields[6],127);
         g.has_dest=atoi(fields[7]);g.dest.x=(float)atof(fields[8]);g.dest.y=(float)atof(fields[9]);g.dest.z=(float)atof(fields[10]);
         g.quantity=atoi(fields[11]);g.completed=atoi(fields[12]);g.state=atoi(fields[13]);
+        if(g.state==STG_STATE_COMPLETE||g.state==STG_STATE_BLOCKED||g.state==STG_STATE_CANCELLED){g.report_triggered=1;g.rt_return_started=1;} /* bug 94: ended before this launch: already reported */
         g.store_after=atoi(fields[14]);g.minimum_stock=atoi(fields[15]);g.explicit_purchase=atoi(fields[16]);
         g.approved_purchase=atoi(fields[17]);g.max_spend=atoi(fields[18]);g.spent=atoi(fields[19]);
         strncpy(g.current_step,fields[20],219);strncpy(g.reason,fields[21],319);
