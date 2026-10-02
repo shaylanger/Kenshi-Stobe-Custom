@@ -4,7 +4,7 @@ This catalog points to existing project records that are useful for future model
 
 ## Curated gameplay/test labels
 
-- `../../STOBE_bug_history.md`: numbered bugs, fixes, and known behavior failures. Excellent negative-example source.
+- `../../archive/STOBE_bug_history_old_numbers.md`: numbered bugs (old numbering, closed), fixes, and known behavior failures. Excellent negative-example source.
 - `../../STOBE_full_test_plan.md`: current/open regression scenarios and expected behavior.
 - `../../archive/test-run-2026-09-30.md`: first detailed automated/live gameplay run.
 - `../../archive/test-run-2026-09-30-r2.md`: second run and discovered regressions.

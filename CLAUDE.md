@@ -2,18 +2,18 @@
 
 STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 
-## Current state (2026-10-02, after run 10) — start here
-- **Installed:** Stobe.dll `4182D962`, KenshiFP.dll `F7935763` (unchanged in run 10). Server through bug 131 (live + ss-merge patched with the same scripts, pushed). Kenshi is closed.
-- **Run 10** (`test-run-2026-10-02-r10.md`): passed in game: tests 16, 35, 39, 86, 89 + bugs 67, 86, 87 (stale rows); bugs 110, 117, 119, 130 fixed and seen in game; bug 131 found + fixed (unit-tested). **No open bugs. Next bug is 132.**
-- **Next job:** plan rows that can still be automated but weren't triggered: 4, 9, 13, 14, 17, 21, 23, 25–27, 87; rows needing setup: 34 (power the Grain Silo), 36 (bench), 40/41/80 (friendly trader); then the Shay rows (29–32, 38, 47, 48, 61, 66–69 looks, 84, 85). Run `stobe-tests` once at the end.
+## Current state (2026-10-02, after run 11) — start here
+- **Installed:** Stobe.dll `D7DA294A` (hand-overs inventory-first), KenshiFP.dll `F7935763`. Server through round 23 (live + ss-merge, pushed). Kenshi is closed.
+- **Open items live only in `STOBE_full_test_plan.md`**, numbered from 1 (restarted 2026-10-02; "was N" = old bug number used in commits/code). Sections: A needs Shay, B needs a game state, C can't reproduce, D open bugs (38–40), E design/features. **Next item is 41.**
+- **Next job:** D bugs 38–40 (planner input ratio, false "done" claims, inventory lag), then B rows that can be staged; then Shay's A rows. Run `stobe-tests` once at the end.
 - Shay works on the server too (e.g. `61658b2` dialogue contract split): check `git log`/`git status` in the live tree before patching, and patch with anchor scripts, never by copying whole files.
 - Untracked `tools/*.py` inspection scripts (extract-meaningful-responses, inspect-*, list-session-core, summarize-gameplay-shadow) came from another session: not mine, left uncommitted.
-- **Automated test bed works** (see "Test bed" below); run 9 (`test-run-2026-10-02-r9.md`) is the first fully automated run. Other sessions: coordinate (SendMessage) before installing DLLs or launching Kenshi so two sessions don't fight over the game.
+- **Automated test bed works** (see "Test bed" below); run 9 (`archive/test-run-2026-10-02-r9.md`) is the first fully automated run. Other sessions: coordinate (SendMessage) before installing DLLs or launching Kenshi so two sessions don't fight over the game.
 - stobe-tests: 51 pass / 7 known / `negotiation_engine` fails 2 checks ("unpaid -> BREACHED_PLAYER" pre-existing; "breach reaction queued" depends on it). The runner deletes the leftover "Inactive game probe" event (it failed 3 deal checks at random).
-- **Naming:** test rows are plain numbers ("test 70"); bugs always "bug N"; no letter codes. Passed rows get deleted from the test plan.
+- **Naming:** plan items are plain numbers ("item 7"/"bug 7"), numbered from 1 since 2026-10-02; old numbers ("was 79") only for tracing. No letter codes. Fixed and confirmed items get deleted from the plan (add a line to the run log in `archive/`).
 - **No manual validation:** run only rows Claude can verify from logs/state/goal status; list "Shay" rows at the end. Test everything and log bugs, then fix all, then retest. **Claude runs the whole loop alone** (Shay's decision 2026-10-02): launch Kenshi, load a test save, test, log bugs, close Kenshi, fix, build, install, relaunch, retest until every testable bug is fixed, then close Kenshi. No "go" needed. Use `tools/automation/kenshi-ctl.ps1` (launch/stop/restart/status/health) and `install-dll.ps1`.
 - **Test location:** Shay's outpost "Home" (game calls the area "The Hub, Border Zone"). Malzin is in Shay's squad (faction "Nameless"), Fond. Keep food in a chest for long goals. The test inbox speaker is the **selected** character: keep Shay selected.
-- History: `STOBE_bug_history.md`, `PATCH_HISTORY.md`, run logs in `archive/`; run 8 raw logs + all LLM prompts in `archive/logs-run8-2026-10-01/` (local only, gitignored).
+- History (all in `archive/`): `STOBE_bug_history_old_numbers.md` (closed bugs, old numbering), `PATCH_HISTORY.md`, `run8-deep-dive.md`, run logs `test-run-*.md`; run 8 raw logs + all LLM prompts in `archive/logs-run8-2026-10-01/` (local only, gitignored).
 
 ## Process rules from run 8 (Shay's feedback)
 - Say the full plan up front and run exactly that; never add steps mid-test.
@@ -53,7 +53,7 @@ STOBE / KenshiFP work: notes, test plan, patch scripts, tools, source snapshots.
 - Fights: Shay on pause duty; arm `stobe-fight-offer`/`stobe-fight-watch` before `stobe-force-attack`.
 
 ## Test bed (automated, Claude runs it alone)
-- **Loop:** `kenshi-ctl.ps1 launch -Save auto-home` → `stobe-auto wait-world` → pre-flight → build the situation with `stobe-auto` → `stobe-say say …` → check real game state → log in `test-run-<date>.md` → after a batch: `kenshi-ctl.ps1 stop` → fix → build → `install-dll.ps1 Stobe|KenshiFP` → relaunch → retest. Close Kenshi when done.
+- **Loop:** `kenshi-ctl.ps1 launch -Save auto-home` → `stobe-auto wait-world` → pre-flight → build the situation with `stobe-auto` → `stobe-say say …` → check real game state → log in `archive/test-run-<date>.md` → after a batch: `kenshi-ctl.ps1 stop` → fix → build → `install-dll.ps1 Stobe|KenshiFP` → relaunch → retest. Close Kenshi when done.
 - **Launch** (`tools/automation/kenshi-ctl.ps1`, PowerShell; allowed without asking): `launch [-Save x]` starts `kenshi_x64.exe` directly (Steam running, no Steam prompt), RE_Kenshi restarts it as `RE_Kenshi\kenshi_x64.exe --norestart`, the script presses the launcher dialog's OK (button 1003), archives logs to `C:\KenshiTestRuns\logs\` and deletes the old `stobe.log`, then waits for `TEST_AUTO: frame listener running` and the autoload. Also `stop`, `restart`, `status`, `health` (ok/crashed/hung), `screenshot [-Save n]` (`C:\KenshiTestRuns\shots\`; Kenshi's HUD doesn't show in it yet).
 - **Saves:** fixtures (master copies) in `C:\KenshiTestFixtures\` (`auto-home` = run 8 autosave at Home, Malzin in squad); a copy lives in `%LOCALAPPDATA%\kenshi\save\`. Restore a fixture by copying it over the save folder. Never test on Shay's own saves.
 - **In-game commands** (`stobe-auto`, WSL; Stobe `src/TestAutomation.cpp`, needs `stobe-say on`, works at the main menu): `status`, `wait-world`, `load`, `save`, `chars [r]`, `find <character|squad|item|weapon|armour> <text>`, `spawn <template> <faction> [near <npc>|at x y z] [count n] [dist m]`, `where`, `teleport`, `ko`, `health <pct>`, `kill`, `hunger <0..300>`, `attack <a> <b>` (player → NPC works; same-faction NPCs ignore it), `select`, `recruit`, `give <npc> <item> [n]`, `relation <npc> <v>`. Names: exact match nearest the player, `#serial` for one of several same-named NPCs, `@player`, `@selected`; corpses near the player are found too. Spawned "Hungry Bandit" + faction `Drifters` = neutral test dummy.

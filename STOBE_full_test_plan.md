@@ -1,119 +1,87 @@
-# STOBE test plan: what's left
+# STOBE: open issues and tests left
 
-Last updated 2026-10-02 (run 10, bugs through 131; Stobe.dll `4182D962`, KenshiFP `F7935763`, server through bug 131). Run logs: `test-run-2026-10-02-r10.md` (run 10). This list holds **only** tests not yet run, tests that couldn't be triggered, and things known not to work; rows that passed are removed (they stay in the run logs). Bugs and their fixes: `STOBE_bug_history.md`. Run logs: `test-run-2026-10-02-r9.md` (run 9), `archive/`.
+Last updated 2026-10-02 (run 11). Installed: Stobe.dll `D7DA294A`, KenshiFP `F7935763`; server through round 23.
+This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**How to report a test:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **41**.
 
-## Before you start
-- Goal/round 18 rows: the save at Shay's outpost **Home** (wheat farms S + XL, grain silo, well, bread oven, stone mine, manual stone processor, 4 General Camp Storage Chests, generators; Malzin in the squad, faction "Nameless"). Bread needs the well powered and the farm watered (it ran dry in run 4). Negotiation rows: the clean save (Malzin, Outlaw Tavern, The Hub). Test one step at a time; if something goes wrong, stop and tell me.
-- Say the NPC's name in your first line to them.
-- **Malzin's relationship to Shay is currently +60 Fond** (set for the bug 41 test). Run `stobe-reset-npc Malzin` first unless a test needs trust (test 28).
-- **Fights only with the fight setup:** Shay on pause duty, a watcher armed in the background **before** the attack, fight started with `stobe-force-attack Malzin [help]` (voice alone can't start one). Watchers: `DELAY=2 stobe-fight-watch "<pay line>"` pays by itself; `stobe-fight-offer "<offer line>"` only sends an offer (then Claude checks the ledger and pays). Her gang stands down when she stops (DLL round 15).
-- **Pause behaviour:** while paused, STOBE holds speech and actions (`ACTION_QUEUE: paused`) and runs them in order on unpause. Lines can still be sent while paused (payment + her stop then fire together on unpause). **Reloading a save drops the DLL's queued actions.** Deal clocks only tick when a chat line or game event reaches the server.
-- **Setting trust for a test** (test data only; `stobe-reset-npc` clears it): `bash tools/automation/scenarios.sh trust "<npc name>" 60 Fond` (WSL). The old `jsonb_set(…, '{relationships,Shay}', …)` silently does nothing when the NPC has no relationships yet. (tiers: 56 Fond, 31 Friendly, −56 Resentful). Low trust: she refuses credit; Fond: she accepts pay-later.
-- **Safety:** if any NPC is harmed or knocked out by an action, or Shay goes down, stop immediately.
-- Deal ledger: `cd /tmp && sudo -u www-data php /var/www/html/StobeServer/tools/negotiation_admin.php deals 3` (`deal <id>` for evidence, `directives` for queued NPC actions). KenshiFP results: `Kenshi\KenshiFP.log` (lines starting `[stobe]`).
+**How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
+
+## A. Needs Shay (eyes, hands or first-person mode)
+
+| # | What to do | Expect |
+|---|---|---|
+| 1 (was 79) | FP mode: look at Malzin and left-click; then click her portrait | You stay Shay and **her** details open; log `[fp] look-at click … kept control (bug 79)`. Portrait still switches to her. Code is in the installed KenshiFP |
+| 2 (was 100) | FP mode: pick up an NPC, press G | The NPC is put down; log `put down: dropCarriedObject called`. Code is in the installed KenshiFP |
+| 3 (was 103) | Talk to Malzin, then buy food from a **friendly** trader | The purchase event names the trader as seller, never Malzin. Code is in the installed Stobe.dll |
+| 4 (was 51) | "Malzin, fetch the mead" with her far from the chest | She walks to the chest (step "Walking to …") instead of taking it from afar |
+| 5 (was 74) | "Make 2 building materials" with Malzin **selected** | The job list switches Stone Mine ↔ Manual Stone Processor by itself; log `GOAL_JOB ui refresh replayed selection`, no `faulted` |
+| 6 | Goal label: give her a job of your own, then a goal; select her; let a goal block/finish; select Shay; FP and 3rd person | Your job stays; label "Malzin - Make 2 Building Material (1/2)" + step; BLOCKED/DONE for 60 s; hidden for Shay; `GOAL_LABEL widget created`, no `faulted` |
+| 7 | Fill your pack, then "Malzin, give me one of your bread" | On-screen message "No room in Shay's pack: dropped at their feet." (run 11: the drop and its event are verified; the message itself only shows on screen) |
+| 8 (was 69, 70) | Power the Grain Silo (it has no power in the test save), water the farm, then "Malzin, make 2 bread" at 50x | Water only from the well (never out of the oven), wheat → silo, flour → oven, COMPLETE 2/2; "Waiting for Wheat Farm … to grow" while growing; a dry farm blocks after ~60 s |
+| 9 | STOBE Settings window: TTS Volume row | Two boxes: Volume 0–200, Fade 25–400; saved to `StobeCustom.ini` (`TTSVolume`, `TTSFadePercent`) and kept after a relaunch |
+| 10 | Mid-fight, heal someone (or hand them an item), then talk without mentioning it | They already know ("thanks for patching me up") |
+| 11 | "Senlin, what if I bandage you up and you give me your rags?" Heal her, say nothing | She hands the rags over on her own; deal completes |
+| 12 | Same, but after she hands over first: "I'm not going to heal you" | You broke the deal; she doesn't say "we're square" |
+| 13 | After a long fight, ask about something from earlier in it | She still remembers it |
+
+## B. Needs a specific game state or situation (automatable once it exists)
+
+| # | Situation | Expect |
+|---|---|---|
+| 14 | A friendly trader nearby: "Buy 3 bread from the trader" | She walks there and really buys them |
+| 15 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
+| 16 | A goal needing a crafted ingredient at a bench | The bench queue grows only by what's missing |
+| 17 | Break 2+ deals so broken > kept (now 39 kept / 10 broken), then talk to a new NPC | She mentions your reputation ("word gets around") |
+| 18 | Betrayal: a dishonest NPC who dislikes you, a deal with payment first | They attack after you pay; BREACHED_NPC, marked intentional (rare by design) |
+| 19 | Deal talk with NPC A while NPC B stands nearby; then talk to B | B doesn't act as if you'd asked him; may mention he overheard |
+| 20 | Refuse to pay after she's handed something over (fight setup) | She may threaten or attack; paying then stops it and the stop holds |
+| 21 (was 42) | Fight setup, Fond trust, she stops for pay-later; don't pay for 1+ game minute | BREACHED_PLAYER, an angry line that matches her attack (no "cats received"), log `breach_react` |
+| 22 (was 43) | Fight setup with `help`; she stops for pay | Her words don't say her gang "isn't hers to call off"; the gang stands down |
+| 23 (was 78) | A long goal at 50x | No long idles between steps (partly seen in run 6) |
+| 24 (was 131) | An NPC who agreed to pay while knocked out wakes up | Payment re-sent and VERIFIED, never IMPOSSIBLE while his line is being written (unit-tested; seen once in run 10) |
+
+## C. Can't reproduce so far (fixed or built, never triggered in game)
+
+| # | What would show it | Expect | Tried |
+|---|---|---|---|
+| 25 (was 128) | A surrender offer from a raider who gets **named** mid-fight | Server log `Directive follows the NPC's new name`; offer arrives | Spawned raiders are named before any offer (run 10) |
+| 26 (was 30) | She says "Fine…" but the ledger shows nothing | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision |
+| 27 (was 37) | A COUNTER with no terms (log `invalid_terms_json`) | Next turn she's reminded and restates it with terms | Never happened |
+| 28 (was 31) | "Take off X" during a deal | Recorded as UNEQUIP, not a hand-over | Never happened |
+| 29 (was 35) | She misquotes an amount in a longer reply | Only the wrong sentence is rewritten, not the whole reply | Never happened |
+| 30 (was 38) | A non-member's prompt | No "Shay \| squadmate" line | Never seen |
+| 31 | Counter-offers like "300 now, 200 after?" where she misquotes | Amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted |
+| 32 | A REJECT that names her own price ("2000 for the hat") | Recorded as COUNTER (fixed run 11, unit-tested) | The model chose COUNTER by itself in run 11 |
+| 33 | Pay for something she can't do, and she agrees | Deal fails and your Cats come back | She always says she can't (refund itself works) |
+| 34 | One-on-one fight where a faction-mate joins uninvited | `PERSONAL_FIGHT: stood down joiner=…` within ~0.25 s | Nobody joined so far |
+| 35 | She agrees to sell/stow her weapon without Fond trust | "Not my Chisa Katana…", log `NPC would give up her weapon` | She refuses on her own |
+| 36 | Haggle back and forth more than 6 times | She ends the talks | Run 10: accepted at round 2 (unit-tested) |
+| 37 | A neutral NPC losing a fight near Shay | They ask for help, maybe with a reward | Run 10: spawned victim wandered off |
+
+## D. Open bugs (known broken, not fixed)
+
+| # | Bug | Notes |
+|---|---|---|
+| 38 | The work planner assumes 1 input per output | A recipe needing 2 raw stone per building material sends her back to the mine for the rest; she still finishes. Fix: read the recipe's input amounts from Kenshi's production data (KenshiFP `stobe_work_planner.inc`, `wgp_ensure_item` gets `need` = outputs) |
+| 39 | She claims an order is done when it isn't | Run 11: "Already done." to "stow your katana" while it was still equipped, no action sent. Needs a guard: a done-claim without a matching action/state |
+| 40 | Her inventory knowledge lags | Run 11: holding 4 Dried Meat she said she had 1 (the items came from the test helper, outside a chat). Check whether `INV_SYNC` reaches the prompt before her reply |
+
+## E. Design questions and features
+
+- **Stowed weapons (answered in run 11):** with her katana in her pack or on the floor she fought ~50 s bare-handed; Kenshi's AI never re-equips or picks it up. Should she draw a stowed weapon when a fight starts?
+- **Goal panel (Shay, 2026-10-02):** when Malzin has a goal ("make bread"), show a small UI element above the jobs area with the goal's info, instead of the current top-centre label.
+- **Relationship shapes everything:** deal pricing and willingness by tier; hard rules like no pay-after deals and no favours below some tier.
 
 ---
 
-## 1. Fixed but not yet seen in game
-| # | Say / do | Expect |
-|---|---|---|
-| 1 (bug 42) | Fight setup. She agrees to stop for pay-later ("…I pay you right after. Deal?"; she needs trust for this, so Fond works). **Don't pay** and don't pause for over 1 minute of game time. | After the window: BREACHED_PLAYER, an angry line **that matches her attack** (no "cats received"), and she attacks again. Log: `Negotiation directive queued … breach_react`. Pause at once when she attacks. |
-| 2 (bug 43) | Fight setup with `help`; she stops for pay | Her words don't claim her gang "isn't hers to call off"; the gang stands down (`PERSONAL_TRUCE: stood down faction-mate`). |
-| 4 (bug 37) | Watch for a COUNTER with no terms (log `Negotiation rejected by deterministic validation … invalid_terms_json`) | Next negotiation turn she's reminded and restates it as COUNTER with terms. |
-| 6 | Only if she ever agrees to sell or stow her katana without Fond trust | Line replaced with "Not my Chisa Katana…", log `Negotiation rejected: NPC would give up her weapon`. (She has refused on her own every time so far.) |
-| 87 (bug 128) | Surrender from an unnamed raider who gets named mid-fight | Server log `Directive follows the NPC's new name (bug 128)`, offer arrives. Run 10: spawned raiders are named before any directive; not triggered |
-
-## 2. Couldn't be triggered so far
-| # | Say / do | Expect | Why not yet |
-|---|---|---|---|
-| 7 (bug 30) | If she says "Fine…" but the ledger shows nothing, send the next line | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision |
-| 9 | Pay for something she can't do, and she agrees | Deal fails and **your Cats come back** | She always says she can't. (The refund itself works: seen in run 2.) |
-| 13 | One-on-one fight (no `help`) where a faction-mate joins uninvited | `PERSONAL_FIGHT: stood down joiner=…` within ~0.25 s | In every one-on-one fight nobody joined |
-| 14 | Counter-offers where she might misquote ("300 now, 200 after?") | Misquoted amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted |
-
-## 3. Not run yet
-
-**Combat and NPC-initiated** (fight setup)
-| # | Scenario | Expect |
-|---|---|---|
-| 17 | Refuse to pay after she's handed something over | She may threaten or attack; paying then stops it and the stop holds |
-| 21 | Haggle back and forth more than 6 times | She ends the talks (run 10: Ket accepted at round 2; unit-tested) |
-| 23 | Stand near a neutral NPC losing a fight | They ask for help, maybe with a reward, paid after (run 10: spawned victim wandered off; needs a real neutral fight near Shay) |
-| 25 | Break 2+ deals, then talk to a new NPC | "Word gets around": your reputation is mentioned | Run 9: the line is in the prompt (broken > kept), she got stricter but never said it. Needs `player_broken > player_kept` (currently 39 kept / 10 broken) |
-| 26 | Betrayal (rare: dishonest NPC who dislikes you) | They attack after you pay; BREACHED_NPC, marked intentional |
-
-**Needs Shay's hands** (heal, hand items, two NPCs)
-| # | Say / do | Expect |
-|---|---|---|
-| 27 | Deal talk with NPC A while NPC B stands nearby; then talk to B | B doesn't act as if you'd asked him; may mention he overheard |
-| 29 | Mid-fight, heal someone (or hand them an item), then talk without mentioning it | They already know ("thanks for patching me up") |
-| 30 | "Senlin, what if I bandage you up and you give me your rags?" Heal her and say nothing | She hands the rags over on her own; deal completes |
-| 31 | Same, but after she hands over first, "I'm not going to heal you" | You broke the deal; she doesn't say "we're square" |
-| 32 | After a long fight, ask about something from earlier in it | She still remembers it |
-
-**Work and task goals** (passed rows are in `archive/test-run-2026-09-30-r4.md` and later run logs). Automated with `stobe-say` (+ `speed`) unless marked Shay.
-
-What rounds 17–18 added (what these rows check):
-- **Planner (KenshiFP):** walks back to the selected player when a goal ends; hauls inputs only from storage/mines/machine outputs; clears old orders when switching machines; power gate ("X has no power" after 30 s, only once she operates a machine with inputs loaded); "Waiting for <farm> to grow"; dry farm blocks after 60 s; goal machines mirrored as real Kenshi jobs (`GOAL_JOB added/removed`, switched off on an unexpected removal); label "StobeGoalLabel" (top centre) for the selected squad member.
-- **Goal reports:** KenshiFP writes `stobe_goal_report.request` + `lifelike_initiative.flag` when she's back within 70; Stobe.dll consumes the flag; server `bored.php` queues a `goal_report` directive (no director mode).
-- **Server:** store-not-give for "put back in storage"; "resume/try again" resumes the existing goal; "keep N stocked" → STOCK goal; item lists read from the player's line; PATROL → managed patrol goal; LOOT_TARGET with a category or an unreachable body → LOOT_AREA; stored-serial fallback outside the people list; `<player_base>` for faction members.
-- **18c:** non-faction NPCs refuse work orders; follow/guard/wait/come/go only at trust ≥ `MINOR_ORDER_TRUST_MIN` (56) or an open deal. **18a/b:** TTS at 1x at any game speed; Volume 0–200 %, Fade 25–400 %.
-| # | Say / do | Expect |
-|---|---|---|
-| 34 (Shay: power) | "Make 2 bread" with the well powered and the farm watered (run at 50x, auto-pause on combat). Run 10: the Grain Silo has no power in the fixture | Water→farm only from the well (never out of the oven), wheat→silo, flour→oven; COMPLETE 2/2; status "Waiting for Wheat Farm … to grow" while growing (bugs 47, 58, 61, 69, 70) |
-| 36 | Something needing a crafted ingredient at a bench | Bench queue grows only by what's missing |
-| 38 (Shay looks) | "Fetch the mead" with her starting **far** from the chest | Step "Walking to …"; she walks to the chest instead of fetching from afar (bug 51) |
-| 40 | "Buy 3 bread from the trader" (needs a trader) | Walks there and really buys them |
-| 41 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
-
-**Round 19 retest** (round 19h fixes installed after run 8). At Home with Malzin in the squad, **Shay selected** (the test inbox speaks as the selected character); automate unless marked.
-| # | Say / do | Expect |
-|---|---|---|
-| 47 (Shay looks) | "Make 2 building materials" with Malzin **selected** | Job list panel switches Stone Mine ↔ Manual Stone Processor by itself; KenshiFP `GOAL_JOB ui refresh replayed selection`, no `faulted` (bug 74, failed run 8, refix 19h) |
-| 48 (Shay) | FP mode: look at Malzin and left-click; then click her portrait | Click: you stay Shay, KenshiFP `[fp] look-at click … kept control (bug 79)`. Portrait: switches to her as before. (Her details panel on click: not built yet) |
-Watch script for fast runs: pause on `[EVENT] knockout: Shay|Malzin` as well as combat.
-
-**Run 8 bugs (round 20 fixes)**: root causes in `run8-deep-dive.md`. Automate unless marked.
-| # | Say / do | Expect |
-|---|---|---|
-| 80 (bug 103) | Buy food from a trader while Malzin was your last chat partner | Event names the trader as seller, never Malzin |
-| 84 (bug 100, Shay) | FP mode: pick up an NPC, then press the put-down key | The NPC is put down |
-| 85 (bug 79, Shay) | FP mode: look at Malzin and left-click | You stay Shay **and** her details show (not yours) |
-
-**Round 18 features** (all automatable unless marked; check logs, state and goal status)
-| # | Say / do | Expect |
-|---|---|---|
-| 61 | STOBE Settings window: TTS Volume row now has two boxes | Volume 0–200, Fade 25–400; values save to `StobeCustom.ini` (`TTSVolume`, `TTSFadePercent`) and survive a relaunch (feature 2) |
-| 65 (optional) | Turn `Speed Dialogue` back on | Old behaviour returns (faster TTS at 2–3x) |
-| 66 (Shay) | Give her a job of your own first, then a goal | Your job stays; only the goal's job comes and goes. Any `GOAL_JOB unexpected removal … disabled` = removal API is type-based → report |
-| 67 (Shay looks) | Select Malzin during a goal | Top-centre label: "Malzin - Make 2 Building Material (1/2)" + current step; "+N more queued" when queued |
-| 68 (Shay looks) | Goal blocked / done / cancelled | Label shows BLOCKED + reason / DONE / CANCELLED for 60 s, then hides |
-| 69 (Shay looks) | Select Shay (no goal), first-person and third-person view | Label hidden for Shay; shows in both camera modes for Malzin. Log `GOAL_LABEL widget created`; no `GOAL_LABEL faulted` |
-
-## 4. Known not working / open issues
-- **Bugs 94–100 (run 8 fight, not fixed yet):** old goal report repeated (94); player-directed lines aimed at a nearby NPC (95); "we're done here" accepted an assist deal (96); Malzin called "him" (97); no surrender offers (98); NPC-to-NPC fight chatter flood (99); **FP: a picked-up NPC can't be put down (100)**.
-- **Bug 79, second half:** FP look-at click on a squad member should open her details (like a normal NPC). 19h only keeps control on Shay (retest: test 48).
-- **Hand-overs land on the floor.** Her GIVE_ITEM to Shay often logs `dropped_at_feet=1` (tobacco, twice in run 3), even when Shay's pack may have room. Check Shay's free space; if it has room, it's a DLL bug.
-- **Refund queued outside a chat turn** waits for her next reply (4 min once in a fight). Round 15 only fixed this for settles after a voice payment.
-- **Money sentence delay:** holding back a money sentence costs about 6 s of silence.
-- **Player name lowercase** ("shay") in prompt lines (Money line, "known to honor deals", breach instruction).
-- **`stobe-reset-npc` isn't a neutral start:** the relationship eval re-runs after her first line (run 3: back to "Resentful (rival)" at once).
-- **A named price with conditions comes back as REJECT, not COUNTER**, so it isn't recorded (runs 2 and 3: "2000 for the hat", "3000 and a helmet swap"). The player has to restate it as an offer.
-- **Her words don't know about drops:** when a taken-off item is dropped at her feet (full pack), she still says it "goes in the pack" (run 2).
-- **Open question:** after she's disarmed (katana in her pack or on the floor), does Kenshi's AI re-equip or pick it up in a fight? Not observed yet.
-- **Her "cats first" is a COUNTER with identical terms.** The ledger can't express "pay first"; harmless so far.
-- **PocketTTS port 8024 unreachable** every line (falls back to 8086). Runtime, not code.
-- `stobe-session` sometimes misses NPC lines (use `stobe-say`'s output instead).
-- `stobe-tests` flakes intermittently (51/1, also with Kenshi closed); reruns are clean.
-- **Goals for the same item count the stockpile:** a resumed or second goal can complete from another goal's output (bug 54, by design).
-- **Planner assumes 1 input per output** (e.g. 1 raw stone per building material); she goes back to the mine if a recipe needs more.
-
-## 5. Design work (Shay's notes, not started)
-- **Relationship should shape everything she does:** deal pricing and willingness by tier; hard rules like no pay-after deals and no favours below some tier. (Already seen: at Resentful she refused credit; at Fond she accepted it.)
-## Automated runs (stobe-say)
-Claude can run every row **not** marked Shay, once Shay has loaded the save near the NPC and unpaused (fight rows: Shay on pause duty). Rows marked Shay need his eyes/ears/hands. Use `stobe-say speed` (≤50) for slow goals and pause on any combat toward Shay/Malzin.
+## Before you start
+- Goal rows: the save at Shay's outpost **Home** (Malzin in the squad, faction "Nameless"); negotiation rows: any save with Malzin. Say the NPC's name in your first line to them.
+- **Fights only with the fight setup:** Shay on pause duty, a watcher armed **before** the attack, fight started with `stobe-force-attack Malzin [help]`. Watchers: `DELAY=2 stobe-fight-watch "<pay line>"` pays by itself; `stobe-fight-offer "<offer line>"` only sends an offer.
+- **Pause behaviour:** while paused, STOBE holds speech and actions and runs them on unpause. Reloading a save drops queued actions. Deal clocks tick only when a chat line or game event reaches the server.
+- **Trust for a test:** `bash tools/automation/scenarios.sh trust "<npc name>" 60 Fond` (WSL); `stobe-reset-npc <npc>` clears it (tiers: 56 Fond, 31 Friendly, −56 Resentful).
+- **Safety:** if any NPC is harmed or knocked out by an action, or Shay goes down, stop.
+- Deal ledger: `cd /tmp && sudo -u www-data php /var/www/html/StobeServer/tools/negotiation_admin.php deals 3` (`deal <id>`, `directives`). KenshiFP results: `Kenshi\KenshiFP.log` (`[stobe]` lines).
 
 ## Switches
-If a phase misbehaves: `… phase <2-8> off`. Voice payment: `NEGOTIATION_VOICE_PAYMENT`. Trust for free gifts: `GIFT_TRUST_THRESHOLD` (default 56 = Fond). Trust to give up her own weapon: `NEG_WEAPON_TRUST_MIN` (default 56). Trust for minor orders from non-faction NPCs: `MINOR_ORDER_TRUST_MIN` (default = `GIFT_TRUST_THRESHOLD`). STOBE ini: `Speed Dialogue` (0 = TTS at 1x), `TTSVolume` (0–200), `TTSFadePercent` (25–400).
+If a phase misbehaves: `… phase <2-8> off`. Voice payment: `NEGOTIATION_VOICE_PAYMENT`. Trust for free gifts: `GIFT_TRUST_THRESHOLD` (56 = Fond). Trust to give up her own weapon: `NEG_WEAPON_TRUST_MIN` (56). Trust for minor orders from non-faction NPCs: `MINOR_ORDER_TRUST_MIN`. STOBE ini: `Speed Dialogue` (0 = TTS at 1x), `TTSVolume` (0–200), `TTSFadePercent` (25–400).
