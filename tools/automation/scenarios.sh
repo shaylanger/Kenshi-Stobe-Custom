@@ -28,6 +28,22 @@ case "$cmd" in
     stobe-auto attack Malzin "$keep" >/dev/null
     echo "$keep"
     ;;
+  gang)
+    # n squad-AI raiders (default 3) next to Shay, fight started; prints their serials
+    n="${1:-3}"
+    stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
+    sleep 1
+    k=0
+    for s in $("$0" raiders); do
+      if [ "$k" -lt "$n" ]; then
+        stobe-auto teleport "$s" Shay dist 3 >/dev/null
+        stobe-auto attack "$s" @player >/dev/null
+        echo "$s"; k=$((k+1))
+      else
+        stobe-auto kill "$s" >/dev/null
+      fi
+    done
+    ;;
   surrender)
     # duel, let them engage, drop the raider to 25 %, wait for his surrender offer;
     # prints "<serial> <name> <deal id>" (deal id empty if none came)
@@ -52,6 +68,16 @@ case "$cmd" in
     done
     stobe-say speed 0 >/dev/null
     echo "$r|$name|$deal"
+    ;;
+  trust)
+    # trust <npc name> <aff> [tier]: set the NPC's relationship to Shay (test data).
+    # jsonb_set on a missing 'relationships' key silently does nothing, so merge.
+    name="$1"; aff="${2:-60}"; tier="${3:-Fond}"
+    cd /tmp && sudo -u postgres psql -d stobe -At -c "UPDATE core_npc_master SET extended_data =
+      jsonb_set(coalesce(extended_data,'{}'::jsonb), '{relationships}',
+        coalesce(extended_data->'relationships','{}'::jsonb) || jsonb_build_object('Shay',
+          jsonb_build_object('aff',$aff,'tier','$tier','type','friend','note','test','updated_at',extract(epoch from now())::int)))
+      WHERE lower(name)=lower('$name') RETURNING extended_data->'relationships'->'Shay'->>'aff'"
     ;;
   raiders)
     stobe-auto chars 150 | tr '|' '\n' | grep 'Starving Bandits' | grep -v ' DEAD' | grep -o '#[0-9]*' || true

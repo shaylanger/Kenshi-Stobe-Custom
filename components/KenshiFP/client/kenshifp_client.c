@@ -1946,6 +1946,24 @@ static int stobe_ci_contains(const char *haystack, const char *needle)
 static void *stobe_find_character_by_serial(void *gw, uint32_t serial)
 {
     if (!gw || !serial) return NULL;
+    /* Bug 118: squad members can be far from the first squad member (working a
+     * goal at the mine); look them up in the squad list before the sphere. */
+    if (readable((void *)((uintptr_t)gw + GW_PLAYER), 8)) {
+        void *player = *(void **)((uintptr_t)gw + GW_PLAYER);
+        if (readable((void *)((uintptr_t)player + PI_PLAYERCHARS + LEK_STUFF), 8)) {
+            uint32_t count = *(uint32_t *)((uintptr_t)player + PI_PLAYERCHARS + LEK_COUNT);
+            void **stuff = *(void ***)((uintptr_t)player + PI_PLAYERCHARS + LEK_STUFF);
+            if (stuff && count <= 4096 && readable(stuff, count * sizeof(void *))) {
+                for (uint32_t i = 0; i < count; i++) {
+                    void *c = stuff[i];
+                    if (!char_valid(c) || !readable((void *)((uintptr_t)c + CHAR_HANDLE + HAND_IDS), 20))
+                        continue;
+                    if (((uint32_t *)((uintptr_t)c + CHAR_HANDLE + HAND_IDS))[4] == serial)
+                        return c;
+                }
+            }
+        }
+    }
     if (!g_stobe_getchars) {
         HMODULE klib = GetModuleHandleA("KenshiLib.dll");
         if (klib)
