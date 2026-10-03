@@ -55,6 +55,7 @@
 #include <kenshi/Platoon.h>
 #include <kenshi/PlayerInterface.h>
 #include <kenshi/Tasker.h>
+#include <kenshi/SensoryData.h>
 #include <kenshi/gui/InventoryGUI.h>
 #include <kenshi/gui/PortraitManager.h>
 #include <kenshi/util/hand.h>
@@ -5236,6 +5237,8 @@ static CombatAttribution ResolveCombatAttribution(Character *target) {
 
 static Character *ResolveCharacterBySerialForInventoryEvent(unsigned int serial);
 static Character *ResolveCharacterBySerialForInventoryEvent(unsigned int serial);
+static void SocialCollectWitnesses(Character *actor, Character *target, std::vector<StobeSocial::EntityInfo> &who,
+                                   std::vector<int> &sense);
 // REL: one structured entity (serial, name, storage id, faction, player faction, consciousness).
 // Unknown stays unknown (-1 -> null), never false.
 static StobeSocial::EntityInfo SocialEntityFor(Character *c) {
@@ -5292,7 +5295,11 @@ static void SocialEmitHarm(Character *victim, const CombatAttribution &attributi
                       ",\"attribution\":" + StobeSocial::JsonString(source);
   if (!extraFacts.empty())
     facts += "," + extraFacts;
-  SocialPostStructured("harm", hasActor ? &actor : nullptr, &target, facts);
+  std::vector<StobeSocial::EntityInfo> witnessWho;
+  std::vector<int> witnessSense;
+  Character *actorChar = hasActor ? ResolveCharacterBySerialForInventoryEvent(actor.serial) : nullptr;
+  SocialCollectWitnesses(actorChar, victim, witnessWho, witnessSense);
+  SocialPostStructuredW("harm", hasActor ? &actor : nullptr, &target, facts, witnessWho, witnessSense);
 }
 
 // REL phase 4: vitals for aid/carry facts. worst = lowest flesh/max over body parts (can go below 0),
@@ -5390,6 +5397,55 @@ static void SocialNoteFirstAid(Character *provider, Character *recipient, Charac
     it->second.lastTick = now;
   }
   LeaveCriticalSection(&g_eventMutex);
+}
+
+// REL phase 6: who saw it. Characters within 40 m of the target (at most 12), each with the game's own
+// sensing (SensoryData::canISeeThisGuy / canIHearThisGuy). Unknown consciousness = not listed.
+static int SocialSenseTri(SensoryData *sd, Character *who, bool hear) {
+  if (!sd || !who)
+    return 0;
+  try {
+    return (hear ? sd->canIHearThisGuy(who) : sd->canISeeThisGuy(who)) ? 2 : 1;
+  } catch (...) {
+    return 0;
+  }
+}
+
+static void SocialCollectWitnesses(Character *actor, Character *target, std::vector<StobeSocial::EntityInfo> &who,
+                                   std::vector<int> &sense) {
+  who.clear();
+  sense.clear();
+  if (!target || (uintptr_t)target < 0x1000 || !SocialCaptureEnabled())
+    return;
+  GameWorld *world = GetWorldSafe();
+  if (!world || (uintptr_t)world < 0x1000)
+    return;
+  lektor<RootObject *> nearby;
+  try {
+    world->getCharactersWithinSphere(nearby, target->getPosition(), 40.0f, 0.0f, 0.0f, 12, 0, target);
+  } catch (...) {
+    return;
+  }
+  for (uint32_t i = 0; i < nearby.size(); ++i) {
+    Character *w = (Character *)nearby.stuff[i];
+    if (!w || (uintptr_t)w < 0x1000 || w == actor || w == target)
+      continue;
+    StobeSocial::EntityInfo e = SocialEntityFor(w);
+    if (!e.serial || e.conscious < 0)
+      continue;
+    SensoryData *sd = nullptr;
+    try {
+      sd = w->getSensoryData();
+    } catch (...) {
+      sd = nullptr;
+    }
+    int seesActor = actor ? SocialSenseTri(sd, actor, false) : 0;
+    int seesTarget = SocialSenseTri(sd, target, false);
+    int hearsActor = actor ? SocialSenseTri(sd, actor, true) : 0;
+    bool perceived = e.conscious == 1 && (seesActor == 2 || seesTarget == 2 || hearsActor == 2);
+    who.push_back(e);
+    sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6));
+  }
 }
 
 // REL phase 3: inventory baseline (KO) / current inventory (recovered) as item key -> count, plus cats.
@@ -5940,8 +5996,29 @@ static void EmitSlaveryEvent(Character *victim, bool enslavedNow) {
     StobeSocial::EntityInfo actor;
     if (owner && owner != victim)
       actor = SocialEntityFor(owner);
-    SocialPostStructured(enslavedNow ? "enslaved" : "freed", (owner && owner != victim) ? &actor : nullptr, &target,
-                         "\"owner_role\":\"owner\"");
+    std::string facts = "\"owner_role\":\"owner\"";
+    if (!enslavedNow) {
+      // REL phase 7: who freed them = someone whose current task targets the slave right now (engine task subject).
+      unsigned int victimSerial = ResolveCharacterSerialForEvent(victim);
+      DWORD now = GetTickCount();
+      for (std::map<unsigned int, NpcWorldEventState>::const_iterator it = g_npcWorldEventStateBySerial.begin();
+           it != g_npcWorldEventStateBySerial.end(); ++it) {
+        if (it->first == victimSerial || it->second.currentTaskSubjectSerial != victimSerial || now - it->second.lastSeenTick > 5000)
+          continue;
+        Character *lib = ResolveCharacterBySerialForInventoryEvent(it->first);
+        if (!lib)
+          continue;
+        StobeSocial::EntityInfo l = SocialEntityFor(lib);
+        facts += ",\"liberator\":{\"entity_key\":\"" + PlaythroughSession::ClientId() + ":" +
+                 ToString((unsigned int)PlaythroughSession::Generation()) + ":" + ToString(l.serial) + "\",\"serial\":" +
+                 ToString(l.serial) + ",\"name\":" + StobeSocial::JsonString(l.name) + ",\"storage_id\":" +
+                 (l.storageId.empty() ? std::string("null") : StobeSocial::JsonString(l.storageId)) + ",\"faction\":" +
+                 StobeSocial::JsonString(l.faction) + ",\"in_player_faction\":" + StobeSocial::JsonBool(l.inPlayerFaction) +
+                 ",\"conscious\":" + StobeSocial::JsonBool(l.conscious) + "},\"liberator_task\":" + ToString(it->second.currentTask);
+        break;
+      }
+    }
+    SocialPostStructured(enslavedNow ? "enslaved" : "freed", (owner && owner != victim) ? &actor : nullptr, &target, facts);
   }
 }
 
@@ -6844,6 +6921,17 @@ static void EmitInventoryTransferEventsFromDeltas(
               taker.serial = agg.toSerial;
               taker.name = toName;
             }
+            // REL phase 6: "caught" = the conscious owner's own senses register the taker (SensoryData).
+            int caught = 0;
+            if (fromChar && toChar && loser.conscious == 1) {
+              SensoryData *ownerSense = nullptr;
+              try {
+                ownerSense = fromChar->getSensoryData();
+              } catch (...) {
+                ownerSense = nullptr;
+              }
+              caught = SocialSenseTri(ownerSense, toChar, false);
+            }
             std::map<std::string, int> food, stolen;
             std::string recipientHunger = "null", loserHunger = "null";
             int loserTotal = -1;
@@ -6878,7 +6966,8 @@ static void EmitInventoryTransferEventsFromDeltas(
                                      ",\"food_items\":" + StobeSocial::JsonCountMap(food, 64) +
                                      ",\"recipient_hunger\":" + recipientHunger +
                                      ",\"stolen_items\":" + StobeSocial::JsonCountMap(stolen, 64) +
-                                     ",\"caught\":null,\"loser_inventory_total\":" +
+                                     ",\"caught\":" + std::string(caught == 2 ? "true" : (caught == 1 ? "false" : "null")) +
+                                     ",\"loser_inventory_total\":" +
                                      (loserTotal >= 0 ? ToString(loserTotal + 0) : std::string("null")) +
                                      ",\"loser_hunger\":" + loserHunger);
           }
@@ -6974,6 +7063,9 @@ static void SocialFlushAidSessions(DWORD now) {
     if (!provider || !recipient || provider == recipient)
       continue; // self-treatment builds no relationship
     StobeSocial::EntityInfo a = SocialEntityFor(provider), t = SocialEntityFor(recipient);
+    std::vector<StobeSocial::EntityInfo> witnessWho;
+    std::vector<int> witnessSense;
+    SocialCollectWitnesses(provider, recipient, witnessWho, witnessSense);
     char before[320];
     if (s.known)
       sprintf_s(before, sizeof(before),
@@ -6981,12 +7073,13 @@ static void SocialFlushAidSessions(DWORD now) {
                 s.worst, s.blood, s.bleed, s.wound, s.untreated);
     else
       sprintf_s(before, sizeof(before), "\"before_known\":false");
-    SocialPostStructured("aid", &a, &t,
+    SocialPostStructuredW("aid", &a, &t,
                          std::string(before) + "," + SocialVitalsFacts("after_", recipient) +
                              ",\"conscious_before\":" + StobeSocial::JsonBool(s.conscious) +
                              ",\"seconds\":" + ToString((int)((s.lastTick - s.startTick) / 1000)) +
                              ",\"item\":" + StobeSocial::JsonString(s.item) +
-                             ",\"supplier_serial\":" + ToString(s.supplier));
+                             ",\"supplier_serial\":" + ToString(s.supplier),
+                         witnessWho, witnessSense);
   }
 }
 
@@ -12313,10 +12406,14 @@ void attackingYou_hook(Character *npc, Character *attacker, bool so,
       }
       StobeSocial::EntityInfo a = SocialEntityFor(attacker), v = SocialEntityFor(npc);
       SocialNoteAttack(a.serial, v.serial);
-      SocialPostStructured("attack", &a, &v,
+      std::vector<StobeSocial::EntityInfo> witnessWho;
+      std::vector<int> witnessSense;
+      SocialCollectWitnesses(attacker, npc, witnessWho, witnessSense);
+      SocialPostStructuredW("attack", &a, &v,
                            "\"victim_targeting_actor\":" + StobeSocial::JsonBool(targeting) +
                                ",\"player_defending\":" + std::string(playerDefending ? "true" : "false") +
-                               ",\"awareness_check\":" + std::string(doAwarenessCheck ? "true" : "false"));
+                               ",\"awareness_check\":" + std::string(doAwarenessCheck ? "true" : "false"),
+                           witnessWho, witnessSense);
     }
   }
   if (attackingYou_orig)

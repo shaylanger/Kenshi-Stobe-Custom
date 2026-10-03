@@ -78,8 +78,10 @@ std::string StructuredEntity(const EntityInfo* e,const std::string& session,unsi
 }
 }
 std::string StructuredEnvelope(const std::string& campaign,const std::string& session,unsigned long epoch,unsigned long sequence,
- long long gameTs,const std::string& kind,const EntityInfo* actor,const EntityInfo* target,const std::string& factsBody){
+ long long gameTs,const std::string& kind,const EntityInfo* actor,const EntityInfo* target,const std::string& factsBody,
+ const std::string& witnessesJson){
     if(!Id(campaign)||!Id(session)||session.size()>64||!epoch||!sequence||gameTs<0||!StructuredKind(kind)||factsBody.size()>32768)return "";
+    if(witnessesJson.empty()||witnessesJson[0]!='['||witnessesJson.size()>16384)return "";
     if(!factsBody.empty()&&(factsBody[0]!='"'))return "";
     std::ostringstream id; id<<session<<":"<<epoch<<":"<<sequence;
     std::ostringstream out;
@@ -87,8 +89,17 @@ std::string StructuredEnvelope(const std::string& campaign,const std::string& se
        <<"\",\"timeline_epoch\":\""<<epoch<<"\",\"event_id\":\""<<id.str()<<"\",\"incident_id\":\""<<id.str()
        <<"\",\"sequence\":"<<sequence<<",\"game_ts\":"<<gameTs<<",\"event_kind\":\""<<kind<<"\",\"origin\":\"gameplay\",\"actor\":"
        <<StructuredEntity(actor,session,epoch)<<",\"target\":"<<StructuredEntity(target,session,epoch)
-       <<",\"state_before\":{},\"state_after\":{},\"witnesses\":[],\"facts\":{\"source\":\"structured\""
+       <<",\"state_before\":{},\"state_after\":{},\"witnesses\":"<<witnessesJson<<",\"facts\":{\"source\":\"structured\""
        <<(factsBody.empty()?"":",")<<factsBody<<"}}";
     return out.str();
+}
+std::string WitnessJson(const EntityInfo& who,const std::string& session,unsigned long epoch,bool conscious,bool perceived,
+ int seesActor,int seesTarget,int hearsActor){
+    std::string e=StructuredEntity(&who,session,epoch);
+    if(e=="null")return "";
+    std::ostringstream w;
+    w<<"{\"entity\":"<<e<<",\"conscious\":"<<(conscious?"true":"false")<<",\"perceived\":"<<(perceived?"true":"false")
+     <<",\"sees_actor\":"<<JsonBool(seesActor)<<",\"sees_target\":"<<JsonBool(seesTarget)<<",\"hears_actor\":"<<JsonBool(hearsActor)<<"}";
+    return w.str();
 }
 }

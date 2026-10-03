@@ -1628,8 +1628,37 @@ bool SocialCaptureEnabled() {
   return g_socialCapture && PlaythroughSession::Allowed(PlaythroughSession::Generation());
 }
 
+// witnessSense per witness: bit0 conscious, bit1 perceived, then 2 bits each (0 unknown,1 no,2 yes)
+// for sees_actor (bits 2-3), sees_target (bits 4-5), hears_actor (bits 6-7).
+static std::string SocialWitnessArray(const std::vector<StobeSocial::EntityInfo> &who, const std::vector<int> &sense) {
+  std::string out = "[";
+  size_t n = 0;
+  for (size_t i = 0; i < who.size() && i < sense.size() && n < 12; ++i) {
+    int s = sense[i];
+    int tri[3];
+    for (int k = 0; k < 3; ++k) {
+      int v = (s >> (2 + 2 * k)) & 3;
+      tri[k] = v == 0 ? -1 : (v == 2 ? 1 : 0);
+    }
+    std::string w = StobeSocial::WitnessJson(who[i], PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
+                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2]);
+    if (w.empty())
+      continue;
+    out += (n ? "," : "") + w;
+    ++n;
+  }
+  return out + "]";
+}
+
 void SocialPostStructured(const std::string &kind, const StobeSocial::EntityInfo *actor,
                           const StobeSocial::EntityInfo *target, const std::string &factsBody) {
+  SocialPostStructuredW(kind, actor, target, factsBody, std::vector<StobeSocial::EntityInfo>(), std::vector<int>());
+}
+
+void SocialPostStructuredW(const std::string &kind, const StobeSocial::EntityInfo *actor,
+                           const StobeSocial::EntityInfo *target, const std::string &factsBody,
+                           const std::vector<StobeSocial::EntityInfo> &witnessWho,
+                           const std::vector<int> &witnessSense) {
   if (!SocialCaptureEnabled())
     return;
   SocialFocusTouch(actor ? actor->serial : 0u);
@@ -1650,7 +1679,8 @@ void SocialPostStructured(const std::string &kind, const StobeSocial::EntityInfo
     return;
   std::string payload = StobeSocial::StructuredEnvelope(
       SocialCampaignId(), PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
-      (unsigned long)sequence, ResolveCurrentGameTsForEvent(), kind, actor, target, factsBody);
+      (unsigned long)sequence, ResolveCurrentGameTsForEvent(), kind, actor, target, factsBody,
+      SocialWitnessArray(witnessWho, witnessSense));
   if (payload.empty()) {
     Log("SOCIAL_CAPTURE: skipped structured kind=" + kind + " (invalid envelope: client id or facts)");
     return;
@@ -1659,7 +1689,7 @@ void SocialPostStructured(const std::string &kind, const StobeSocial::EntityInfo
   Log("SOCIAL_CAPTURE: structured kind=" + kind + " seq=" + ToString((int)sequence) +
       " load=" + ToString((int)PlaythroughSession::Generation()) +
       " actor=#" + ToString(actor ? actor->serial : 0u) + " target=#" + ToString(target ? target->serial : 0u) +
-      " facts=" + factsBody.substr(0, 700));
+      " witnesses=" + ToString((unsigned int)witnessWho.size()) + " facts=" + factsBody.substr(0, 700));
 }
 
 // ---- REL social focus (global scope; see run m5) ----

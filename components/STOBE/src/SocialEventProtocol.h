@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 #include <string>
+#include <vector>
 namespace StobeSocial {
     bool SupportedKind(const std::string& kind);
     // Pure, portable serializer. Unknown knowledge is deliberately absent.
@@ -25,13 +26,22 @@ namespace StobeSocial {
     // factsBody: comma-separated "key":value pairs (may be empty); "source":"structured" is added here.
     std::string StructuredEnvelope(const std::string& campaign, const std::string& session,
         unsigned long epoch, unsigned long sequence, long long gameTs, const std::string& kind,
-        const EntityInfo* actor, const EntityInfo* target, const std::string& factsBody);
+        const EntityInfo* actor, const EntityInfo* target, const std::string& factsBody,
+        const std::string& witnessesJson = "[]");
+    // One witness entry: entity + explicit sensing (REL phase 6). Unknown consciousness = no entry.
+    std::string WitnessJson(const EntityInfo& who, const std::string& session, unsigned long epoch,
+        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor);
 }
 
 // Game-side runtime (Utils.cpp): one capture switch and one sequence for every social post.
 bool SocialCaptureEnabled();
 void SocialPostStructured(const std::string& kind, const StobeSocial::EntityInfo* actor,
                           const StobeSocial::EntityInfo* target, const std::string& factsBody);
+// Same, with witness entries built by the caller (each from StobeSocial::WitnessJson).
+void SocialPostStructuredW(const std::string& kind, const StobeSocial::EntityInfo* actor,
+                           const StobeSocial::EntityInfo* target, const std::string& factsBody,
+                           const std::vector<StobeSocial::EntityInfo>& witnessWho,
+                           const std::vector<int>& witnessSense);
 #include <vector>
 void SocialFocusTouch(unsigned int serial);
 void SocialFocusSerials(std::vector<unsigned int>& out, size_t cap);
