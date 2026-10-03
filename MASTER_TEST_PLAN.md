@@ -168,3 +168,4 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | KAH 5 | `power charge` untested (no battery in fixtures) | `build`/`unbuild` added (D8ECA273, PASS m10); power charge still untested |
 | KAH 6 | Hover tooltips can't be read (PG 135–141) | open: try `ui` while hovering |
 | KAH 7 | `camera` command (fixed view for perf windows) | deferred m16: not needed (REL gate passed); feasible via `ou->player->camera` (teleport, manuallySetOrientationAndZoom, lock per frame), needs in-game checks |
+| KAH 8 | `trade` of a trader's carried item fails (arrived=0 placed=failed) | found m16 (REL p5-01), harness helper fixing |
