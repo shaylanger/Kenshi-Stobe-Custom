@@ -11701,6 +11701,16 @@ void ProcessMessageQueue(GameWorld *thisptr) {
           else if (isNPCSay && bubbleContent.find("[DEBUG]") == 0)
             bubbleContent = "";
         }
+        if (!bubbleContent.empty() && isNPCSay) {
+          // Item 48: a reply that arrives after its speaker died or was knocked out isn't spoken.
+          Character *sayer = ResolveCharacterFromHandSafe(thisptr, targetHand);
+          if (sayer && (uintptr_t)sayer > 0x1000 && !sayer->isPlayerCharacter() &&
+              (sayer->isDead() || sayer->isUnconcious())) {
+            Log("HOOK_MSG_PROC: NPC_SAY dropped: speaker is dead or unconscious (item 48): " +
+                sayer->getName() + ": " + bubbleContent);
+            bubbleContent = "";
+          }
+        }
         if (bubbleContent.empty() && !utteranceId.empty()) {
           PostSpeechDeliveryState(utteranceId, "cancelled");
         }
