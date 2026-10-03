@@ -749,3 +749,52 @@ p3-01, p4-02, p4-03, p4-04, p6-01a/b, p7-02, plus the longer A-B-A-B frame-time 
 | Blocked / open | 4 |
 
 The 4 blocked / open rows are SR07, SR09, SR14 and SR25.
+
+## 2026-10-03 Run m15 results (REL m13 native, server f49a437)
+
+### Verdicts
+- **Pass in game:**
+  - **SR08 + SR42:** p3-01 39/0. Rel Tam -> Shay theft -9 is inferred (total -34). Toward the real taker Malzin
+    there is no theft, only the real injury after he woke.
+  - **SR18 / SR19 again** (+9 / -31). The `placed` fact now names Malzin (m13 native fix works).
+  - **SR32 capture:** "enslaved" with the owner was captured (the 50 s warm-up fix works).
+- **SR21:** both meals were captured, but hunger_before was the stale 2.90: the harness hunger change and the eat
+  fell in one sweep. Scenario fix: let a sweep run between them.
+- **SR25: the run is invalid.** The harness `#serial` of the spawned "Rel Vik" also matched Outlaw Watch Jamin,
+  4.5 km away (`setname` answered "Outlaw Watch Jamin -> Rel Vik"). Wren and Sorn were teleported there, so
+  neither was beside the fight.
+  - The native `sleeping` field logs correctly (0 for awake fighters).
+  - `setname` now has to answer `^Hungry Bandit ->`.
+  - **Harness bug for the helper:** `#serial` resolution can return a different character than the one just
+    spawned.
+- **SR32 liberator:** no freed fact. Malzin did not pick the lock in 80 game s. Also, Stobe renamed Xan before
+  the chat (NAME_ASSIGN, bug 117), so step 23 failed.
+  - Scenario fixes: chat with his current name, `setstat Malzin lockpicking 100`, wait 180 game s.
+
+### Delivery
+- **Server:** `feature/social-phase1` **`1b17b95`**: scenario fixes, states, final report after m15.
+  The runner passes all steps.
+- **Native:** none (the m13 patch stands).
+
+### Rerun
+p4-04, p6-01a/b, p7-02.
+
+### Frame-time windows
+Use a **separate idle script**, not the soak file. Per launch:
+1. Load kah-crafting, speed 1, wait 60 s.
+2. Spawn the same fixed raid as p8-01 once (6 Dust Bandits near Shay, dist 120), so B actually captures.
+3. `fps reset` and record memory.
+4. 10 min at speed 1.
+5. `fps` and record memory.
+6. B only: also `--check-shadow`, the overflow grep, and the inspect counts.
+
+### Report
+| Status | Rows |
+|---|---|
+| Pass in game | 14 |
+| Partial / rerun pending | 18 |
+| Offline only | 8 |
+| Blocked / open | 4 |
+
+### Purge
+Not done. Kenshi was started at 08:40, so a frame-time launch is probably running.
