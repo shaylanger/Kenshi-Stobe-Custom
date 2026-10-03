@@ -177,3 +177,45 @@ counting used-up items each fail the suite.
   the social tables empty.
 - Identity: generic names never bind; the player as an observer needs a stored profile (probe 3).
 - Encounter idle window (600 game s) is a guess until probe 4.
+
+## 2026-10-03 Delivery 4: Phase 4 aid, carry, food (supersedes Delivery 3; merge this one)
+
+### Server
+- Merge **`feature/social-phase1` at `9847985`** (based on live `stobe` `43c15d9`, fast-forward). No new
+  migration. Rules `phase4-v1` (new `care` thresholds).
+- Aid: one native fact per first-aid session with measured vitals before/after (worst body part
+  flesh/max, blood/max, bleed rate). Credit to the person who treats: routine +1..+3 / meaningful
+  +5..+12 / lifesaving +20..+35, one growing budget per injury episode (repeat treatment free), counts
+  while the patient is unconscious; nothing when the helper or the helper's side caused the injury;
+  nothing when unmeasured.
+- Carry: outsider pickup of a conscious person -5..-12; unconscious pickup judged only by the outcome:
+  bed (placed within 15 s by the carrier) +8..+18, lifesaving class if near death at pickup; prison
+  -20..-40 (learned on waking when unconscious); drop alone or placement without a known carrier =
+  nothing. Squad: no penalties, routine bedding 0, critical rescue positive.
+- Food: food handed over by a conscious donor and eaten within a game day: +2..+5 (hunger < 2.0
+  native = UI 200) or +6..+12 (< 1.0); full, own food, routine squad supply, food taken from an
+  unconscious body = nothing; one class per donor/recipient/day.
+
+### Native
+- Patch `C:\KenshiModding\pending-fixes\rel-native-phase4.patch` (cumulative; SHA256
+  `499e20463b893af2fa03c24d475b5ac4c31e3187ef03fee376a7a18f8f2e17f0`), applies clean to the current
+  `/root/STOBE-src` (incl. the newer PlayerBaseState.cpp). No new source file.
+- Adds `aid` (first-aid sessions closed 4 s after the last treatment frame), `carry_start`, `carry_end`
+  (target state at drop), `placed` (bed/prison with the carrier remembered for 15 s), `eat` (with
+  fullness before/after), `food_items` + `recipient_hunger` on `item_transfer`.
+- Private proof build: SHA256 `24f5ac83e0c33deb5931a562b3e95e25fa9ce2bf3628de684b58b1bcf6deee64`.
+
+### Scenarios
+`REL-p4-01-first-aid`, `REL-p4-02-carry-to-bed`, `REL-p4-03-carry-to-cage` (Crafting base fixture: bed and
+cages), `REL-p4-04-food` (auto-home). Checks in `RUN_ORDER.md` "Phase 4".
+
+### Offline evidence
+Runner 20/20 steps, incl. `social_care` (27 checks) and `mutation_proof` (11 mutations over the combat,
+KO and care suites each fail their suite; now part of the runner).
+
+### Needs a game probe
+10. Vitals scale: the `kind=aid` stobe.log lines (before/after health, blood, bleed) calibrate the aid classes.
+11. `order Malzin FIND_BED_AND_PUT_IN target <npc>` carries and beds a KO'd NPC.
+12. `LIFT_PERSON` + `PUT_IN_CAGE building <cage>` cages him; `placed` "prison" names Malzin.
+13. `transfer` + `eat` produce `item_transfer` with `food_items`/`recipient_hunger` and `eat` lines.
+Known gap: carry by the player actor (Shay) is not captured (the world poller skips the player actor).
