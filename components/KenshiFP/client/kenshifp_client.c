@@ -2665,13 +2665,14 @@ static void *stobe_find_building_by_query(void *gw, void *actor, const char *que
     Vec3 center = {0,0,0};
     if (!char_position(actor, &center)) return NULL;
 
-    void *nearby[192] = {0};
+    static void *nearby[1024]; /* item 89: spare room so the game never grows our buffer */
+    memset(nearby, 0, sizeof(nearby));
     StobePtrLektor out;
     memset(&out, 0, sizeof(out));
-    out.max_size = 192;
+    out.max_size = 1024;
     out.stuff = nearby;
     g_stobe_getobjects(gw, &out, &center, 450.0f, 0, 192, actor);
-    if (!out.stuff || out.count > 192) return NULL;
+    if (out.stuff != nearby || out.count > 1024) return NULL;
 
     char q[192] = {0};
     strncpy(q, query ? query : "", sizeof(q) - 1);

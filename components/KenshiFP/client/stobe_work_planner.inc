@@ -304,16 +304,28 @@ static int wgp_item_count_inventory(void *inv, const char *query)
     return total;
 }
 
+/* Item 89: the game grows a full lektor with its own allocator (freeing our buffer): scan into
+ * a static scratch lektor with plenty of spare room and copy out. Main thread only. */
+#define WGP_SCAN_CAP 4096
+static void *g_wgp_scan_buf[WGP_SCAN_CAP];
+
 static int wgp_scan_buildings(void *gw, void *actor, void **out, int max)
 {
     if (!gw || !actor || !out || max<1 || !wgp_resolve_exports()) return 0;
+    if (max > WGP_SCAN_CAP/2) max = WGP_SCAN_CAP/2;
     Vec3 center={0,0,0};
     if (!char_position(actor,&center)) return 0;
+    memset(g_wgp_scan_buf,0,sizeof(g_wgp_scan_buf));
     StobePtrLektor list; memset(&list,0,sizeof(list));
-    list.max_size=(uint32_t)max; list.stuff=out;
+    list.max_size=(uint32_t)WGP_SCAN_CAP; list.stuff=g_wgp_scan_buf;
     g_stobe_getobjects(gw,&list,&center,WGP_SCAN_RADIUS,0,max,actor);
-    if (!list.stuff || list.count>(uint32_t)max) return 0;
-    return (int)list.count;
+    if (list.stuff!=g_wgp_scan_buf || list.count>(uint32_t)WGP_SCAN_CAP) {
+        logline("[stobe] WGP_SCAN lektor grown (count=%u) -- result dropped",list.count);
+        return 0;
+    }
+    int n=0;
+    for (uint32_t i=0;i<list.count && n<max;i++) if (g_wgp_scan_buf[i]) out[n++]=g_wgp_scan_buf[i];
+    return n;
 }
 
 static int wgp_item_count_world(void *gw, void *actor, const char *query)
@@ -948,8 +960,15 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
         return;
     }
 
+    static DWORD s_step_log_ms; static char s_step_log_id[64];
+    int slog=strcmp(s_step_log_id,g->id)!=0||(LONG)(GetTickCount()-s_step_log_ms)>10000;
+    if (slog) { s_step_log_ms=GetTickCount(); strncpy(s_step_log_id,g->id,sizeof(s_step_log_id)-1);
+        logline("[stobe] WORK_STEP id=%s find_producer start item=%s have=%d/%d",g->id,g->item,g->completed,g->quantity); }
     WgpProducer root;
-    if (!wgp_find_producer(gw,actor,g->item,&root)) {
+    int found_root=wgp_find_producer(gw,actor,g->item,&root);
+    if (slog) logline("[stobe] WORK_STEP id=%s find_producer done found=%d building=%s crafting=%d",
+                      g->id,found_root,found_root?root.building_name:"",found_root?root.is_crafting:0);
+    if (!found_root) {
         char r[256]={0};
         int outstanding=g->quantity-g->completed;if(outstanding<1)outstanding=1;
         int purchase=stg_request_purchase_fallback(gw,actor,g->actor_serial,g->actor,g->id,g->item,outstanding,r,sizeof(r));
@@ -969,6 +988,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
 
     void *missing[WGP_MAX_MISSING]={0};
     int miss=wgp_missing(root.production,missing,WGP_MAX_MISSING);
+    if (slog) logline("[stobe] WORK_STEP id=%s missing inputs=%d queued_root=%d",g->id,miss,g->queued_root);
     char chain[WGP_MAX_DEPTH+2][128]; memset(chain,0,sizeof(chain));
     g->dep_sig=0;
     strncpy(chain[0],g->item,sizeof(chain[0])-1);

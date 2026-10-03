@@ -1434,10 +1434,14 @@ static int stg_scan_world_items(void *gw,void *actor,void **out,int max)
     int count=0;
     const int types[3]={2,3,4};
     for(int ti=0;ti<3 && count<max;ti++){
+        /* item 89: room for every result, copied out (the game would grow a full lektor) */
+        memset(g_stg_obj_buf,0,sizeof(g_stg_obj_buf));
         StobePtrLektor l;memset(&l,0,sizeof(l));
-        l.max_size=(uint32_t)(max-count);l.stuff=out+count;
-        g_stobe_getobjects(gw,&l,&center,STG_SCAN_RADIUS,types[ti],max-count,actor);
-        if(l.stuff&&l.count<=(uint32_t)(max-count))count+=(int)l.count;
+        l.max_size=(uint32_t)STG_OBJ_CAP;l.stuff=g_stg_obj_buf;
+        int want=max-count; if(want>STG_OBJ_CAP/2)want=STG_OBJ_CAP/2;
+        g_stobe_getobjects(gw,&l,&center,STG_SCAN_RADIUS,types[ti],want,actor);
+        if(l.stuff!=g_stg_obj_buf||l.count>(uint32_t)STG_OBJ_CAP){logline("[stobe] STG_SCAN items lektor grown -- dropped");continue;}
+        for(uint32_t i=0;i<l.count&&count<max;i++)if(g_stg_obj_buf[i])out[count++]=g_stg_obj_buf[i];
     }
     return count;
 }
