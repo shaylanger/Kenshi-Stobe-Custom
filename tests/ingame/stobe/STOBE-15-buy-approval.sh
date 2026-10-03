@@ -5,7 +5,7 @@
 # fixture: Crafting base
 # reset: fresh (reload the Crafting base copy first; once per mode)
 # usage: STOBE-15-buy-approval.sh approve|decline
-# needs: KenshiFP DC37D57B (medical bench found + queued, items 93-93c; STOBE 89 should pass first), Stobe E1CD05BF+,
+# needs: KenshiFP 80475308 (medical bench found + queued, items 93-95; STOBE 89 should pass first), Stobe E1CD05BF+,
 #        harness F946C881
 # chain: Basic First Aid Kit = Fabrics at the Basic Medical Workbench (game data: 'medical crafting basic' consumes
 #        Fabrics). No Loom in the base, so Fabrics have no producer; the planner then asks the NEAREST trader to
@@ -28,7 +28,8 @@ CT=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_task_goal.con
 BASE_K=$(grep -a -c "" "$KFP" 2>/dev/null || echo 0)
 stobe-auto speed 0 >/dev/null; stobe-auto select Shay >/dev/null
 stobe-auto clearjobs Malzin >/dev/null
-stobe-auto blueprint "Basic First Aid Kit" | cut -c1-160
+stobe-auto research "Fabric Manufacture" | cut -c1-160
+stobe-auto research "Basic First Aid Kits" | cut -c1-160   # m16: blueprint found nothing for the kit
 stobe-auto benches 200 crafts | tr '|' '\n' | grep -A0 "Basic Medical Workbench" | cut -c1-200
 stobe-auto inv Malzin | grep -q '"name":"Fabrics"' && { verdict 15 "SETUP FAIL Malzin already has Fabrics"; exit 1; }
 stobe-auto find item Fabrics | cut -c1-200

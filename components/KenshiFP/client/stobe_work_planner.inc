@@ -46,6 +46,7 @@ typedef struct WgpSubstate {
     char item[128];
     int queued;     /* crafts queued and not yet observed as finished */
     int last_have;  /* runtime only: count seen last tick (-1 = unknown) */
+    int consumed;   /* Item 95, runtime only: units that disappeared (used by the goal's own crafts) */
 } WgpSubstate;
 
 typedef struct WgpGoal {
@@ -727,6 +728,7 @@ static WgpSubstate *wgp_substate(WgpGoal *g, const char *item)
     for (int i=0;i<WGP_MAX_SUBSTATE;i++) if (!g->subs[i].item[0]) {
         strncpy(g->subs[i].item,item,sizeof(g->subs[i].item)-1);
         g->subs[i].last_have=-1;
+        g->subs[i].consumed=0;
         return &g->subs[i];
     }
     return NULL;
@@ -826,7 +828,15 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
     if (have>=need) return 1;
 
     WgpProducer p;
-    if (!wgp_find_producer(gw,actor,item,&p)) {
+    int found_p=wgp_find_producer(gw,actor,item,&p);
+    /* Item 95: track a crafted intermediate from the first look (stock used now must not be re-queued later) */
+    WgpSubstate *ss95=NULL;
+    if (found_p && p.is_crafting) {
+        ss95=wgp_substate(g,item);
+        if (ss95 && ss95->last_have<0) ss95->last_have=have;
+        if (ss95 && have+ss95->consumed>=need) return 1;
+    }
+    if (!found_p) {
         int purchase=stg_request_purchase_fallback(gw,actor,g->actor_serial,g->actor,g->id,item,need,reason,reason_sz);
         if(purchase>0){
             snprintf(g->current_step,sizeof(g->current_step),"%s",reason);
@@ -857,13 +867,14 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
     int next_n=chain_n<WGP_MAX_DEPTH+1 ? chain_n+1 : chain_n;
 
     if (p.is_crafting) {
-        WgpSubstate *ss=wgp_substate(g,item);
+        WgpSubstate *ss=ss95?ss95:wgp_substate(g,item);
         if (!ss) {
             snprintf(reason,reason_sz,"too many distinct dependency items while trying to make %s",item);
             return -1;
         }
-        /* Queue only the shortfall that is not already waiting at the bench. */
-        int shortfall=need-have-ss->queued;
+        /* Queue only the shortfall that is not already waiting at the bench
+         * (Item 95: nor already used by this goal's crafts). */
+        int shortfall=need-have-ss->queued-ss->consumed;
         if (shortfall>0) {
             ss->last_have=have; /* finished crafts are measured from here */
             int q=wgp_queue_craft(&p,shortfall);
@@ -991,8 +1002,16 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
     }
 
     int current=wgp_item_count_world(gw,actor,g->item);
+    int completed_before95=g->completed;
     g->completed=current-g->baseline;
     if (g->completed<0) g->completed=0;
+    if (g->completed>completed_before95) { /* Item 95: finished root units no longer need their inputs */
+        int done=g->completed-completed_before95;
+        for (int i=0;i<WGP_MAX_SUBSTATE;i++) {
+            if (!g->subs[i].item[0]) continue;
+            g->subs[i].consumed-=done; if (g->subs[i].consumed<0) g->subs[i].consumed=0;
+        }
+    }
     if (current!=g->last_count) {
         g->last_count=current; g->last_progress_ms=now; g->rt_unit_start_ms=0; g_wgp_dirty=1;
     }
@@ -1001,8 +1020,13 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
      * full amount again and again -- a runaway crafting queue.) */
     for (int i=0;i<WGP_MAX_SUBSTATE;i++) {
         WgpSubstate *ss=&g->subs[i];
-        if (!ss->item[0] || ss->queued<=0) continue; /* only intermediates still being crafted */
+        if (!ss->item[0]) continue;
         int have=wgp_item_count_world(gw,actor,ss->item);
+        if (ss->last_have>=0 && have<ss->last_have) { /* Item 95: used by the goal's own crafts */
+            ss->consumed+=ss->last_have-have;
+            logline("[stobe] WORK_STEP id=%s %s used %d (consumed=%d queued=%d)",g->id,ss->item,ss->last_have-have,ss->consumed,ss->queued);
+        }
+        if (ss->queued<=0) { ss->last_have=have; continue; } /* only intermediates still being crafted below */
         if (ss->last_have>=0 && have>ss->last_have && ss->queued>0) {
             ss->queued-=have-ss->last_have;
             if (ss->queued<0) ss->queued=0;

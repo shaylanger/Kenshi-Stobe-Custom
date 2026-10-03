@@ -3,7 +3,7 @@
 #         then Kenshi died silently on the goal's first tick); also item 93b (crafting bench constant)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP DC37D57B (scan buffers from B67AEAD3 + items 93-93c), Stobe E1CD05BF, harness F946C881
+# needs: KenshiFP 80475308 (scan buffers from B67AEAD3 + items 93-93c, 95), Stobe E1CD05BF, harness F946C881
 # verify:
 #   - no crash: `kenshi-ctl.ps1 health` = ok after the run, `status` still answers (last steps below), no new
 #     crashDump zip in D:\...\Kenshi\;
@@ -13,7 +13,7 @@
 #   - progress: the medical bench queue goes to 1 (`benches` step) and the goal step moves past "Accepted"
 #     (stobe_work_goal.status field 8, or KenshiFP.log WORK_STEP lines); COMPLETE 1/1 + a kit in Malzin's
 #     inventory is a bonus (crafting time depends on her medic skill).
-#   Medical crafting (tech level 100) needs research: `blueprint` completes what the game links to the kit.
+#   Medical crafting needs research "Basic First Aid Kits" (after "Fabric Manufacture"; game data).
 @wait-world
 @sleep 8
 speed 0
@@ -22,7 +22,9 @@ select Shay
 hunger Malzin 250
 hunger Shay 250
 clearjobs Malzin
-blueprint "Basic First Aid Kit"
+# m16: blueprint found nothing; the game data research is "Basic First Aid Kits" (requires "Fabric Manufacture")
+research "Fabric Manufacture"
+research "Basic First Aid Kits"
 benches 200 crafts ~ Basic Medical Workbench [^|]*Basic First Aid Kit
 give Malzin "Large Backpack" 1 ~ got 1/1
 give Malzin "Fabrics" 6 ~ got 6/6

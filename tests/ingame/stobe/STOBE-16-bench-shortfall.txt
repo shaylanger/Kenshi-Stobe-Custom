@@ -2,12 +2,17 @@
 # covers: STOBE 16 (a goal needing a crafted ingredient at a bench: the bench queue grows only by what's missing)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP DC37D57B (work planner, items 93, 93b, 93c), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
+# needs: KenshiFP 80475308 (work planner, items 93-93c + 95), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
 # verify:
 #   Chain (from this install's game data, tools/research): Junkbow = Steel Bars + Hinge, crafted at the
 #   Crossbow Crafting Bench (in the base); Hinge = crafted at the "Arrow Making Bench " (sid 96184-Newwworld.mod,
 #   built here; the name has a trailing space, so build uses the sid). Research: Crossbow Bolts -> Crossbow Crafting.
 #   Malzin already carries 1 Hinge, so for "2 Junkbows" the Hinge shortfall is 2 - 1 = 1.
+#   v5 (m16 v4): Hinge = Iron Plates (game data; not Steel Bars) -> she gets 4 Iron Plates. The built Arrow Making
+#   Bench needs power and is not part of the outpost (harness `build`: no town), so it may never get power: then
+#   the goal waits/blocks on power after queuing the 1 Hinge - fine for row 16 (the queue sizes are the test);
+#   the completion steps at the end are informational then. Item 95: KenshiFP.log
+#   `WORK_STEP id=... Hinge used 1 (consumed=1 queued=...)` when the stock Hinge goes into the first Junkbow.
 #   PASS when:
 #   - KenshiFP.log: `WORK_GOAL accepted id=<ID> actor=Malzin ... item=Junkbow qty=2` (if the LLM picks another
 #     item/qty, log it as a STOBE bug and rerun with the exact phrase);
@@ -34,6 +39,10 @@ give Malzin "Large Backpack" 1 ~ got 1/1
 sections Malzin ~ Large Backpack
 give Malzin "Hinge" 1 ~ got 1/1
 give Malzin "Steel Bars" 6 ~ got 6/6
+give Malzin "Iron Plates" 4 ~ got 4/4
+# try to power the built bench (outside the outpost; may stay unpowered)
+power "Arrow Making Bench" on radius 300
+building "Arrow Making Bench" radius 300
 stash "Steel Bars" 10 near Malzin ~ 10
 inv Malzin ~ Hinge
 stobe_say Malzin "Malzin, make 2 Junkbows at the crossbow bench, please."
@@ -58,10 +67,12 @@ speed 0
 benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
 benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
 speed 10
-@until 600 benches 200 ~ Crossbow Crafting Bench [^|]*queue=0\b
+@until 300 benches 200 ~ Crossbow Crafting Bench [^|]*queue=0\b
 speed 0
 benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
 @log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=2\b
+# item 95: the stock Hinge used by the goal is not queued again
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ Hinge used 1 \(consumed=1
 # collect + completion (the goal collects the bench output when it completes)
 speed 10
 @sleep 30
