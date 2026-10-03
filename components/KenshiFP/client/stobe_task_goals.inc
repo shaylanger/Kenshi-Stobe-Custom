@@ -1124,6 +1124,19 @@ static int stg_trade_once(void *actor,void *trader_char,const char *item_query,i
     }
     logline("[stobe] TRADE_RESULT buying=%d item=%s moved=%p in_inventory=%d physical=%d holder=%u buyer=%u count %d->%d money %d->%d",
         buying,item_query,moved,in_inv,physical,holder,buyer,count_before,count_after,money_before,money_after);
+    if(buying&&moved&&price>0&&delta<=0&&in_inv==0&&physical!=1&&g_stg_give){
+        /* item 84: buyItem hands the item back detached; put it in her inventory (or at her feet) */
+        int placed=g_stg_give(actor,moved,1,0)?1:0;
+        count_after=stg_count_matching(actor_inv,item_query);
+        delta=count_after-count_before;
+        if(readable(moved,0x1D0)){
+            in_inv=*(unsigned char *)((uintptr_t)moved+0xD8);
+            physical=*(unsigned char *)((uintptr_t)moved+0x1C8);
+            holder=((uint32_t *)((uintptr_t)moved+0x160+HAND_IDS))[4];
+        }
+        logline("[stobe] TRADE_PLACE give=%d in_inventory=%d physical=%d holder=%u count %d->%d",
+            placed,in_inv,physical,holder,count_before,count_after);
+    }
     if(moved&&price>=0&&delta>0){
         ok=1;
         if(actual_price)*actual_price=price;
