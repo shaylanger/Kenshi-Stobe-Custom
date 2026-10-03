@@ -257,3 +257,26 @@ Runner 22/22 steps incl. `social_property` (31 checks), `legacy_negotiation` (19
     buyer_spent / reference_value for a normal purchase (calibrates the economy thresholds)?
 15. `transfer` of a non-food item to an NPC gives an `item_transfer` with a conscious giver and no stolen items.
 16. Blocker for SR13/SR14 in game: an engine signal that a theft was caught (and a steal action driver).
+
+## 2026-10-03 Fix for run m4: no social events without Playthrough Saves
+
+**Cause:** live runs with Playthrough Saves (automatic switching) off. The handshake then answers `off`, so
+`PlaythroughSession::Character()` stays empty. The native code needed a campaign id for every envelope, and
+the server scope needed a `ready` handshake. Every event was therefore skipped
+(`SOCIAL_CAPTURE: skipped ... (no playthrough campaign id)`), and all counts stayed 0. The autoload path
+was not the cause. You can confirm with `SELECT value FROM stobe_meta.settings WHERE key='PLAYTHROUGH_AUTO_SWITCH'`,
+which should not be `true`.
+
+**Fix**
+- Native: `C:\KenshiModding\pending-fixes\rel-native-m4-fix.patch` (SHA256 `6f89051603ea900aa23f646d14d7fd540e2089e26687f4040e8591dbae3fd30e`).
+  - It is incremental: it applies to the current `/root/STOBE-src`, which already contains phase 5. Only `src/Utils.cpp` changes.
+  - Without a campaign id the game now sends campaign `legacy` and logs once: `SOCIAL_CAPTURE: no playthrough campaign id (Playthrough Saves off): using campaign 'legacy'`.
+  - Private proof build: `7f8a738c…`.
+- Server: merge `feature/social-phase1` at **`5cd104e`** (one commit on top of live `dcf71ac`).
+  - `stobeSocialScope` accepts `legacy` only while switching is off. It takes the load id and client from the event, and refuses an older load after a newer one (stale queue after a reload). Behaviour with switching on is unchanged.
+  - The inspect tool's `session` field and its checks follow the same scope: `"status": "playthrough_saves_off"`, `"campaign_id": "legacy"`.
+  - New `tests/social_scope_regression.php` (9 checks) fails without the fix. The runner passes 23/23 steps.
+- Scenarios:
+  - `REL-p1-02`: removed the `@log` of the startup "enabled" line; it moved to the verify header as a grep, since `@log` only sees new lines.
+  - `REL-p1-02` step 19 and `REL-p1-03` (`queued`) failed because nothing was sent. They should pass with the fix.
+  - `RUN_ORDER.md` has a new "Playthrough Saves off" section.

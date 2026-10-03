@@ -1,0 +1,55 @@
+diff --git a/src/Utils.cpp b/src/Utils.cpp
+index e0496d7..7fc1e47 100644
+--- a/src/Utils.cpp
++++ b/src/Utils.cpp
+@@ -270,6 +270,19 @@ static bool g_socialCapture = false;
+ // server sees them in order (its late-event check is per sequence).
+ static volatile LONG g_socialSequence = 0;
+ 
++// Without Playthrough Saves (server automatic switching off) the handshake answers "off" and no
++// campaign id exists; social events then use the shared server timeline "legacy" (run m4: every
++// event was skipped). The server accepts "legacy" only while switching is off.
++static std::string SocialCampaignId() {
++  std::string campaign = PlaythroughSession::Character();
++  if (!campaign.empty())
++    return campaign;
++  static volatile LONG logged = 0;
++  if (InterlockedExchange(&logged, 1) == 0)
++    Log("SOCIAL_CAPTURE: no playthrough campaign id (Playthrough Saves off): using campaign 'legacy'");
++  return "legacy";
++}
++
+ std::string GetStobeCustomIniPath(bool ensureModDir) {
+   std::string stobeDir = GetStobeConfigDir(ensureModDir);
+   return stobeDir + "\\StobeCustom.ini";
+@@ -1503,7 +1516,7 @@ void LogGameEvent(const std::string &type, const std::string &actor,
+   if (g_socialCapture && PlaythroughSession::Allowed(PlaythroughSession::Generation())) {
+     LONG sequence = StobeSocial::SupportedKind(normalizedType) ? InterlockedIncrement(&g_socialSequence) : 0;
+     if (sequence > 0) {
+-      std::string payload = StobeSocial::Envelope(PlaythroughSession::Character(), PlaythroughSession::ClientId(),
++      std::string payload = StobeSocial::Envelope(SocialCampaignId(), PlaythroughSession::ClientId(),
+           PlaythroughSession::Generation(), (unsigned long)sequence, gameTs, normalizedType,
+           actorSerial, actor, targetSerial, target, message);
+       if (!payload.empty()) {
+@@ -1512,7 +1525,7 @@ void LogGameEvent(const std::string &type, const std::string &actor,
+             " load=" + ToString((int)PlaythroughSession::Generation()) +
+             " actor=#" + ToString((int)actorSerial) + " target=#" + ToString((int)targetSerial));
+       } else {
+-        Log("SOCIAL_CAPTURE: skipped kind=" + normalizedType + " (no playthrough campaign id)");
++        Log("SOCIAL_CAPTURE: skipped kind=" + normalizedType + " (invalid envelope: client id or message)");
+       }
+     }
+   }
+@@ -1628,10 +1641,10 @@ void SocialPostStructured(const std::string &kind, const StobeSocial::EntityInfo
+   if (sequence <= 0)
+     return;
+   std::string payload = StobeSocial::StructuredEnvelope(
+-      PlaythroughSession::Character(), PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
++      SocialCampaignId(), PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
+       (unsigned long)sequence, ResolveCurrentGameTsForEvent(), kind, actor, target, factsBody);
+   if (payload.empty()) {
+-    Log("SOCIAL_CAPTURE: skipped structured kind=" + kind + " (no campaign id or invalid facts)");
++    Log("SOCIAL_CAPTURE: skipped structured kind=" + kind + " (invalid envelope: client id or facts)");
+     return;
+   }
+   AsyncPostToStobeSerialWithPriority(L"/StobeServer/social_event.php", payload, 1);
