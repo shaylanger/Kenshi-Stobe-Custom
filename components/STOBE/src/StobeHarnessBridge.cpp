@@ -57,6 +57,10 @@ void BeforeAttack(void *attacker, void *target, void *) {
   BreakFactionCeasefireForExplicitAttack(static_cast<Character *>(attacker),
                                          static_cast<Character *>(target),
                                          "test_attack_order");
+  // Item 97: the harness `attack` acts like a player click: it ends the pair's personal truce too
+  BreakPersonalTruceForExplicitAttack(static_cast<Character *>(attacker),
+                                      static_cast<Character *>(target),
+                                      "test_attack_order");
 }
 
 } // namespace

@@ -3287,8 +3287,11 @@ bool BreakFactionCeasefireForExplicitAttack(Character *attacker,
 bool BreakFactionCeasefireForPlayerOrder(Character *attacker,
                                          Character *target,
                                          const std::string &source) {
-  return HasExplicitPlayerAttackOrder(attacker, target) &&
-         BreakFactionCeasefireForExplicitAttack(attacker, target, source);
+  if (!HasExplicitPlayerAttackOrder(attacker, target)) {
+    return false;
+  }
+  BreakPersonalTruceForExplicitAttack(attacker, target, source); // Item 97
+  return BreakFactionCeasefireForExplicitAttack(attacker, target, source);
 }
 
 // Rejects a package-generated attack and asks GOAP to choose a non-truce goal.
@@ -3643,6 +3646,39 @@ struct PersonalTruceGuard {
 };
 static std::vector<PersonalTruceGuard> g_personalTruces;
 
+// Item 97: the player chose to fight this pair again: drop the guard instead of clearing the order.
+bool BreakPersonalTruceForExplicitAttack(Character *attacker, Character *target,
+                                         const std::string &source) {
+  if (!attacker || (uintptr_t)attacker <= 0x1000 || !target ||
+      (uintptr_t)target <= 0x1000 || g_personalTruces.empty()) {
+    return false;
+  }
+  unsigned int a = 0, t = 0;
+  try {
+    a = attacker->getHandle().serial;
+    t = target->getHandle().serial;
+  } catch (...) {
+    return false;
+  }
+  bool removed = false;
+  for (std::vector<PersonalTruceGuard>::iterator it = g_personalTruces.begin();
+       it != g_personalTruces.end();) {
+    if ((it->first.serial == a && it->second.serial == t) ||
+        (it->first.serial == t && it->second.serial == a)) {
+      it = g_personalTruces.erase(it);
+      removed = true;
+    } else {
+      ++it;
+    }
+  }
+  if (removed) {
+    Log("PERSONAL_TRUCE: broken by player order source=" + source + " attacker=" +
+        SafeCharacterName(attacker) + " target=" + SafeCharacterName(target) +
+        " (item 97: explicit orders are never cleared)");
+  }
+  return removed;
+}
+
 static void RegisterPersonalTruce(Character *first, Character *second) {
   PersonalTruceGuard guard;
   try {
@@ -3823,6 +3859,17 @@ void UpdatePersonalTruces(GameWorld *world) {
     }
     if (!first || (uintptr_t)first <= 0x1000 || !second ||
         (uintptr_t)second <= 0x1000) {
+      it = g_personalTruces.erase(it);
+      continue;
+    }
+    // Item 97: a player's explicit attack order is the player's choice, not aggro to clear
+    if (HasExplicitPlayerAttackOrder(first, second) ||
+        HasExplicitPlayerAttackOrder(second, first)) {
+      Character *attacker = HasExplicitPlayerAttackOrder(first, second) ? first : second;
+      Character *target = attacker == first ? second : first;
+      Log("PERSONAL_TRUCE: broken by player order source=guard_tick attacker=" +
+          SafeCharacterName(attacker) + " target=" + SafeCharacterName(target) +
+          " (item 97: explicit orders are never cleared)");
       it = g_personalTruces.erase(it);
       continue;
     }
