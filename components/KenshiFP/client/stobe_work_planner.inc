@@ -39,7 +39,7 @@ typedef void *(*wgp_getinv_building_t)(void *);
 typedef unsigned char (*wgp_isplayer_building_t)(void *);
 typedef int (*wgp_special_t)(void *);
 typedef void (*wgp_available_crafts_t)(void *, void *);
-typedef void *(*wgp_add_craft_t)(void *, void *, void *, float, int);
+typedef void *(*wgp_add_craft_t)(void *, void *, void *, float, const int *); /* item 93c: YesNoMaybe by reference (MSVC x64, non-trivial copy ctor) */
 
 typedef struct WgpGroup { void *g1; void *g2; } WgpGroup;
 typedef struct WgpSubstate {
@@ -744,7 +744,8 @@ static int wgp_queue_craft(WgpProducer *p, int count)
     int made=0;
     if (count>32) count=32;
     for (int i=0;i<count;i++) {
-        void *ci=g_wgp_add_craft(p->building,p->craft_base,p->craft_material,0.0f,2);
+        int ynm_maybe=2; /* item 93c: YesNoMaybe::MAYBE */
+        void *ci=g_wgp_add_craft(p->building,p->craft_base,p->craft_material,0.0f,&ynm_maybe);
         if (!ci) break;
         made++;
     }

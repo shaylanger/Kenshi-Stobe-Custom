@@ -30,7 +30,7 @@ typedef void *(*stobe_goal_getptr_t)(void *);
 typedef int (*stobe_goal_numinputs_t)(void *);
 typedef void *(*stobe_goal_getinput_t)(void *, int);
 typedef void (*stobe_goal_getcrafts_t)(void *, void *);
-typedef void *(*stobe_goal_addcraft_t)(void *, void *, void *, float, int);
+typedef void *(*stobe_goal_addcraft_t)(void *, void *, void *, float, const int *); /* item 93c */
 typedef int (*stobe_goal_hascraft_t)(void *);
 typedef int (*stobe_goal_combat_t)(void *, int, int);
 typedef int (*stobe_goal_boolchar_t)(void *);
@@ -433,7 +433,7 @@ static void stobe_goal_tick_one(void *gw,StobeGoalRuntime *g)
     void *building=stobe_goal_building_by_serial(gw,actor,n->producer_serial);if(!building){n->stage=0;return;}
     if(n->stage==1){
         if(n->recipe1||n->recipe2){
-            if(!g_goal_hascraft(building)&&!n->craft_queued){void *ci=g_goal_addcraft(building,n->recipe1,n->recipe2,0.0f,2);if(ci)n->craft_queued=1;}
+            if(!g_goal_hascraft(building)&&!n->craft_queued){static const int ynm_maybe=2; void *ci=g_goal_addcraft(building,n->recipe1,n->recipe2,0.0f,&ynm_maybe);if(ci)n->craft_queued=1;}
         }
         char missing[160]={0};int need=0;
         if(stobe_goal_missing_input(building,missing,sizeof(missing),&need)){
