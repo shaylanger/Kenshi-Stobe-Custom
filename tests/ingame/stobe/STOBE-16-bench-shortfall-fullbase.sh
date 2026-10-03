@@ -7,7 +7,7 @@
 # needs: KenshiFP E64B1BD5+, Stobe EF62563B+, harness 12F5CE0B+
 # usage: [PLAYER=Beaks] [MATE=Avarek] [OUT=<dir>] STOBE-16-bench-shortfall-fullbase.sh
 # How: runs STOBE-16-bench-shortfall.txt through run-as.sh with the squad names and --real-power (the base's own
-#   power; the `out_of_power=0` steps must pass without supply). If the base has an Arrow Making Bench, the
+#   power for benches the base has). Missing crossbow/arrow benches are built and get the supply cheat (outside
 #   scenario's `build` is dropped; if not, it builds one and keeps the supply cheat for that one building only
 #   (a built bench is outside the base grid).
 # verify: the .txt criteria (Arrow queue <= 1, Crossbow queue <= 2, queued_root=2, subs Hinge=1, `Hinge used 1`)
@@ -16,12 +16,23 @@ set -u
 D="$(cd "$(dirname "$0")" && pwd)"
 PLAYER="${PLAYER:-Beaks}"; MATE="${MATE:-Avarek}"; OUT="${OUT:-/tmp}"
 b=$(stobe-auto benches 400 | tr '|' '\n')
-echo "$b" | grep -q "Crossbow Crafting Bench" || { echo "VERDICT 16-fullbase: SETUP FAIL no Crossbow Crafting Bench within 400"; exit 1; }
+extra=()
+# m16 next: Full-Base has no Crossbow Crafting Bench (in this load order only the crossbow/arrow and the robotics
+# limb benches form a bench -> bench chain). A missing bench is built next to <mate> (sids 96183/96184-Newwworld.mod;
+# never the Biofuel Distillery) and gets the supply cheat, since a built bench is outside the base grid. Benches the
+# base already has run on its real power.
+if echo "$b" | grep -q "Crossbow Crafting Bench"; then
+  echo "base has a Crossbow Crafting Bench: using it (real power)"
+else
+  stobe-auto build 96183-Newwworld.mod near "$MATE" dist 18 | cut -c1-160
+  extra+=(--keep-supply "Crossbow Crafting Bench")
+  echo "built a Crossbow Crafting Bench (supply cheat for it)"
+fi
 if echo "$b" | grep -q "Arrow Making Bench"; then
-  extra=(--drop '^build 96184-Newwworld.mod')
+  extra+=(--drop '^build 96184-Newwworld.mod')
   echo "base has an Arrow Making Bench: using it (real power)"
 else
-  extra=(--keep-supply "Arrow Making Bench")
-  echo "no Arrow Making Bench in the base: the scenario builds one (supply cheat for it only)"
+  extra+=(--keep-supply "Arrow Making Bench")
+  echo "no Arrow Making Bench in the base: the scenario builds one (supply cheat for it)"
 fi
 bash "$D/run-as.sh" "$D/STOBE-16-bench-shortfall.txt" "$PLAYER" "$MATE" --real-power "${extra[@]}" --csv "$OUT/STOBE-16-fullbase.csv"
