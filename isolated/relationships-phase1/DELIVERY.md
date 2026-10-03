@@ -407,3 +407,65 @@ Judged from the `m5/rel/*.inspect.txt` snapshots, the gain/loss files and the ar
 6. p5-02
 
 Do not rerun p4-02/p4-03 until there is a suitable fixture.
+
+## 2026-10-03 Delivery 6/7: witnesses, dialogue guard, recruitment gate, slave escape
+
+### Server
+- Merge **`feature/social-phase1` at `307b011`** (one commit on live `stobe` `de3b29c`; fast-forward).
+  No migration. Rules are now `phase7-v1`.
+- **Touches `lib/chat_helper_functions.php`** in 3 small hooks, all inert unless mode is `enabled`:
+  1. The relationship evaluator filters its updates (`social_dialogue.php`).
+  2. `stobeBuildActionConfigForNpc` asks the recruitment gate (`social_recruitment.php`).
+  3. `normalizeActionTagToken` drops `JOIN_PARTY` when the gate blocks it.
+- **Witnesses:** the native envelope now lists characters within 40 m, each with the game's own
+  sensing (`SensoryData::canISeeThisGuy` / `canIHearThisGuy`) and consciousness.
+  - Only conscious witnesses who perceived the act get a share of the victim's effect toward the culprit.
+  - The share depends on how the witness felt about the victim before the event: affinity 11/31/56/76/91 → 5–10 / 15–25 / 25–40 / 40–55 / 55–70%. Positive acts (aid) count at half that rate.
+  - Each witness counts once per incident, the share grows with the harm budget, and it is one hop only (echoes never echo).
+  - Switch: `SOCIAL_CATEGORY_WITNESS`.
+- **Dialogue guard (enabled only):** LLM evaluator deltas are clamped to -8..+3. For a pair that REL
+  already scored mechanically in the last game hour, the dialogue delta is dropped (no double count).
+- **Recruitment gate (enabled only):** JoinParty needs affinity >= 76 plus trust evidence (lifesaving,
+  a completed escape, or 2+ major aid/rescue) and no severe grievance. Economic evidence never counts.
+  `SOCIAL_RECRUITMENT_OVERRIDE=true` lifts the gate (documented override); `SOCIAL_CATEGORY_RECRUITMENT` switches it.
+- **Slave escape:**
+  - A known liberator gets chains_freed (+8..+18) right away.
+  - If the freed slave is seen alive and free one game day later (`escape.sustain_seconds`), the escape completes: one budget of +15..+65, chains included.
+  - Recaptured or dead before that: no completion. Unknown liberator: nobody credited.
+
+### Native
+- Patch `C:\KenshiModding\pending-fixes\rel-native-p67.patch` (SHA256 `f2b686189d05a1505b9a9f7e13b4e80b66d3ce0572599868700d05f6c88d5334`).
+  - Incremental against the current `/root/STOBE-src`, which already has m5. Private build `e8f430d1…`.
+  - Witnesses on attack, harm and aid facts. The log line now shows `witnesses=N`.
+  - Theft `caught` = the conscious owner's senses register the taker (was always null).
+  - `freed` carries the liberator: the character whose current task targets the slave, e.g. `PICK_LOCK_ON_SHACKLES`.
+  - `#include <kenshi/SensoryData.h>` added; no new source file.
+
+### Scenarios (order in `RUN_ORDER.md` "Phase 6/7")
+1. `REL-p6-01a-witness-setup` (fresh).
+2. Two `--set-relation` commands (new test-setup option of the inspect tool).
+3. `REL-p6-01b-witness-attack` (keep).
+4. `REL-p7-02-slave-escape` (fresh).
+5. `REL-p7-01-recruit-gate` (fresh, enabled mode, LLM-dependent).
+
+### Fixture for SR18/SR19
+Build one Bed and one Prisoner Cage at Home in a copy of auto-home, using the game UI (the harness has no
+build command), and save it as fixture "Home beds". The Hub doesn't work: town guards haul knocked-out
+outsiders away. p4-02 and p4-03 then run there unchanged.
+
+### Offline evidence
+- The runner passes 24/24 steps; new suites `social_witness` (19 checks) and `social_recruitment` (21 checks).
+- `mutation_proof`: 20 mutations, each fails its suite. New ones cover: nearby counted as witnessed, every
+  witness treated as a close friend, the dialogue re-scoring a fight, the gate only in the prompt, and an
+  escape completing without the wait.
+
+### Needs a game probe
+- **17:** `caught` reported by the owner's senses on a real conscious transfer (look for `"caught":true|false` on `item_transfer` lines).
+- **18:** witness sensing returns sensible values (the attack line has `witnesses>=1`; the friend is perceived).
+- **5:** `isUnconcious()` while sleeping (the sleeping friend in p6-01b).
+- **20:** `PICK_LOCK_ON_SHACKLES` gives the freed fact a liberator.
+
+### Not done (blocked or partial)
+- An insult heard by a friend: dialogue listeners are not witnesses yet.
+- Prompt-side belief injection: notes only.
+- Native `ACT_JOIN_PARTY` fallback paths: not audited in game.
