@@ -15,11 +15,11 @@ HEALER=""
 # these wrappers goes through one lock. stobe-say's --wait would hold the lock (and stop the healer), so it is
 # dropped here and the wrapper sleeps instead.
 KAH_LOCK=/tmp/stobe-kah.lock
-stobe-auto() { flock "$KAH_LOCK" command stobe-auto "$@"; }
+stobe-auto() { flock "$KAH_LOCK" stobe-auto "$@"; }
 stobe-say() {
   local a=() w=0
   while [ $# -gt 0 ]; do if [ "$1" = "--wait" ]; then w="${2:-0}"; shift 2; else a+=("$1"); shift; fi; done
-  flock "$KAH_LOCK" command stobe-say "${a[@]}"
+  flock "$KAH_LOCK" stobe-say "${a[@]}"
   local rc=$?
   [ "$w" -gt 0 ] && sleep 15
   return $rc
