@@ -47,6 +47,14 @@ the live server, `/root/STOBE-src`, `C:\StobeBuild` or the `stobe`/`stobe_test` 
 - Live server has REL merged (dcf71ac); the server branch is now live HEAD + fixes.
 - Live runs with Playthrough Saves off: campaign `legacy` (see DELIVERY.md "Fix for run m4").
 
+## Phases 6-7 (2026-10-03)
+- Server: `lib/social_dialogue.php`, `lib/social_recruitment.php`, witness echoes in `social_interpreter.php`
+  (`witnesses()`), escape in `escapeProgress()`/`freed()`. Tests `social_witness_regression`,
+  `social_recruitment_regression`. Delivery 6/7 = server `307b011`, `rel-native-p67.patch`.
+- Live `/root/STOBE-src` already contains every REL native patch up to m5; `live-base` synced (a7f69ca).
+- Waiting for: m5 reruns and the Phase 6/7 scenarios; probes 5, 17, 18, 20; fixture "Home beds" for SR18/19.
+- Next (after results): Phase 8 (full validation, retention for social_event_inbox, soak) only when asked.
+
 ## Status
 - Delivery 5 (Phases 1-5): server `3cd48b5` on live `1a8fc3f`, `rel-native-phase5.patch`, private DLL 0fb7e3ca.
 - Stopped after Phase 5 as instructed (coordinator 2026-10-03). Waiting for the coordinator's in-game results
