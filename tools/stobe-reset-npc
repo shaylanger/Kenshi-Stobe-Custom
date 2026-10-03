@@ -19,6 +19,9 @@ if [ "$1" = "--restore" ]; then
   entry=$(cat "$f")
   # keep the casing of the key she already has ("Shay"), else the setting's; drop other casings
   key=$(sudo -u postgres psql -d stobe -At -c "SELECT k FROM core_npc_master m, jsonb_object_keys(COALESCE(m.extended_data->'relationships','{}'::jsonb)) k WHERE LOWER(m.name)='${lower}' AND LOWER(k)=LOWER('${player}') ORDER BY k ASC LIMIT 1")
+  # item 94: after a reset she has no key; the setting is lower case ("shay"), the server writes the
+  # player's name as the game reports it ("Shay"): use the player's own NPC row for the casing
+  [ -n "$key" ] || key=$(sudo -u postgres psql -d stobe -At -c "SELECT name FROM core_npc_master WHERE LOWER(name)=LOWER('${player}') ORDER BY name ASC LIMIT 1")
   key="${key:-$player}"
   sudo -u postgres psql -d stobe -v ON_ERROR_STOP=1 -q -v entry="$entry" <<SQL
 UPDATE core_npc_master SET extended_data = jsonb_set(COALESCE(extended_data,'{}'::jsonb), '{relationships}',
