@@ -252,6 +252,28 @@ static void *stg_trade_matching_stack(void *inv,const char *query,int max_units,
     return best;
 }
 
+/* Item 81: like stg_trade_matching_stack, but never an item the trader wears. */
+static void *stg_trade_matching_unworn(void *inv,const char *query,int max_units,int *stack_out)
+{
+    if(stack_out)*stack_out=0;
+    if(!inv||!readable((void *)((uintptr_t)inv+INV_ALLITEMS),sizeof(StobePtrLektor)))return NULL;
+    StobePtrLektor *l=(StobePtrLektor *)((uintptr_t)inv+INV_ALLITEMS);
+    if(!l->stuff||l->count>4096||!readable(l->stuff,l->count*sizeof(void*)))return NULL;
+    void *best=NULL;int best_stack=0;
+    for(uint32_t i=0;i<l->count;i++){
+        void *it=l->stuff[i];
+        if(!it||!readable((void *)((uintptr_t)it+ITEM_IS_EQUIPPED),1))continue;
+        if(*(unsigned char *)((uintptr_t)it+ITEM_IS_EQUIPPED))continue;
+        if(!stg_item_matches(it,query))continue;
+        int stack=readable((void *)((uintptr_t)it+0x12C),4)?*(int *)((uintptr_t)it+0x12C):1;
+        if(stack<1)stack=1;
+        if(max_units>0&&stack>max_units)continue;
+        if(!best||stack>best_stack){best=it;best_stack=stack;}
+    }
+    if(best&&stack_out)*stack_out=best_stack;
+    return best;
+}
+
 static int stg_transfer_inventory(void *src_inv,void *dst_inv,const char *query,int maxqty)
 {
     if(!src_inv||!dst_inv||maxqty<=0||!stg_exports())return 0;
@@ -1052,6 +1074,12 @@ static int stg_trade_once(void *actor,void *trader_char,const char *item_query,i
     void *source=buying?shop_inv:actor_inv;
     int chosen_stack=0;
     void *item=stg_trade_matching_stack(source,item_query,max_units,&chosen_stack);
+    if(!item&&buying){
+        /* item 81: goods the trader carries (the trade window shows them too) */
+        void *carried=g_stobe_getinv(trader_char);
+        void *it2=carried?stg_trade_matching_unworn(carried,item_query,max_units,&chosen_stack):NULL;
+        if(it2){item=it2;source=carried;logline("[stobe] TRADE buying from the trader's carried goods: %s",item_query);}
+    }
     if(!item){
         void *any=stg_first_matching(source,item_query);
         if(any&&max_units>0){
