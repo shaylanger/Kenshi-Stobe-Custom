@@ -38,6 +38,20 @@ def die(msg, code=2):
     sys.exit(code)
 
 
+KAH_PY = '/mnt/c/KenshiModding/Kenshi-Automation-Harness/client/kah.py'
+
+
+def _kah():
+    """The harness client (kah.py) as a module, for its inbox writer."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('kah', KAH_PY)
+    if spec is None:
+        die('harness client not found: ' + KAH_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def send(cmd, *args, timeout=15):
     if not os.path.exists(FLAG):
         die('inbox is off: run "stobe-say on"')
@@ -45,17 +59,13 @@ def send(cmd, *args, timeout=15):
         if '\t' in field or '\n' in field:
             die('arguments may not contain tabs or newlines')
     deadline = time.time() + timeout
-    while os.path.exists(INBOX):
-        if time.time() > deadline:
-            die('previous command still unread: is Kenshi running with a save loaded?')
-        time.sleep(0.2)
-    cid = str(int(time.time() * 1000))
-    tmp = INBOX + '.tmp'
-    with open(tmp, 'w', newline='\n') as f:
-        # Stobe's commands are stobe_*; speed is the harness's own.
-        wire = cmd if cmd == 'speed' else 'stobe_' + cmd
-        f.write('\t'.join((cid, wire) + args) + '\n')
-    os.rename(tmp, INBOX)
+    # Unique across concurrent clients; written through the harness client's
+    # locked protocol (KAH 9: a shared inbox.txt.tmp lost commands when a
+    # background loop and a scenario sent at the same time).
+    cid = 's%d_%d' % (int(time.time() * 1000), os.getpid())
+    # Stobe's commands are stobe_*; speed is the harness's own.
+    wire = cmd if cmd == 'speed' else 'stobe_' + cmd
+    _kah().write_command(HARNESS, '\t'.join((cid, wire) + args), deadline)
     while time.time() < deadline:
         if os.path.exists(OUTBOX):
             with open(OUTBOX, encoding='utf-8', errors='replace') as f:
