@@ -125,6 +125,17 @@ no Stobe history/relationships. **Never build a Biofuel Distillery** (crash, see
 
 Guards in the slave camp: keep them off with `ko <guard> <s>` or `relation <guard> <value>`, never `kill`; log any guard handling.
 
+### 1g. Relationship-shaped trading, willingness lines, weapon-stow guard (Shay: "build it", 2026-10-03; being built m16)
+
+Spec: memory `stobe-negotiation-rules`. r = NPC's relationship toward the trading squad member (no data = 0 = vanilla).
+
+| ID | What | How | Status |
+|---|---|---|---|
+| TRADE prices | Shop + deal prices at r = -80, -50, -10, 0, +10, +56, +100 vs vanilla, buy and sell; formula exact (buy: -30%·(r/100)^1.1 / +1000%·(|r|/100)^2.32; sell: up to +10% / down to -75% (proposed, Shay to confirm)) | trust setup + `shopstock` + real `trade`; STOBE deal | building (server: fixer; shop hook: native builder) |
+| TRADE floor | Buy/sell or sell/buy-back loop never profits | trade loop | building |
+| GUARD weapon | Outsider won't stow/drop/hand over her weapon below r +70 (+69 refused, +70 allowed); squadmate + surrendering NPC exempt | ask for her weapon | building |
+| WILL lines | Pay-later -1 refused / 0 allowed; free favour +29 refused / +30 allowed; any trade at -80 refused (STOBE deal + shop window) | deals at set trust | building |
+
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
 Rows unlocked by the 4080 saves moved to 1f (2026-10-03).
