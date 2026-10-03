@@ -949,3 +949,10 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
   - p7-06 asks again after `--set-relation "Rel Nima" <free member> 80`, enabled.
 - Guards: every non-squad faction within 150 gets `relation 100` before p7-04. Nothing is killed.
 - No Shay/Malzin literals.
+
+## 2026-10-03 SR07 fallback, theft feasibility (server b0808aa)
+- `REL-p3-05b-defensive-limb-loss-sever.txt`: the same as p3-05, but with `sever ${L} left_arm` (KAH 20). Stobe sees
+  a lost limb through the limb state and the part-present check in its sweep (`ResolveLimbState`,
+  `ResolveLimbPartPresent`), so `sever` must leave the game's own "limb lost" state.
+- SR09/13/14 feasibility: estimate only, see the coordinator report. Main lever: the game's own HUNT_MY_THIEF task as
+  the caught signal. Main risk: a real steal driver in the harness.

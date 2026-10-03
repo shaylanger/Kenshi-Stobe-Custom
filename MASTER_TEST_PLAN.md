@@ -127,6 +127,13 @@ Guards in the slave camp: keep them off with `ko <guard> <s>` or `relation <guar
 
 Rows unlocked by the 4080 saves moved to 1f (2026-10-03).
 
+**Being automated (Shay, 2026-10-03: turn section 2 into tests):**
+- Harness helper: KAH 13 `unique=1` (PG 108) + KAH 14 `research start` (PG 184) built (harness 6BA59614); next KAH 15 `drop`/`pickup` (PG 50), 16 melee stat names (PG 84), 17 unload/reload NPC (PG 106), 18 nested/unowned pack weight (PG 120), 19 run speed (PG 254), 20 `sever` (REL SR07 fallback), 21 import/new game (PG 132/133/240, last).
+- PG agent: PG 89 forced-critical test switch; PG 274 colliding-ID case on an edited fixture copy; scenarios for the KAH commands above.
+- STOBE 18: test switch `NEG_TEST_FORCE_BETRAYAL` (server 96b2c91, off by default) + `STOBE-18-forced-betrayal.sh`: to run.
+- REL SR09/SR13/SR14: feasibility only (REL builder, m16): ~1.5–2.5 days for the caught signal (HUNT_MY_THIEF watch) + late theft_caught + SR09 witness evidence; +1–3 days for a steal driver (may not be feasible). Recommended first: a 1-hour probe where Shay steals once by hand. Shay decides.
+- Stay here: PG 256 (deferred by Shay), PG 250 (waits for a ruin save), section C passive checks; STOBE A12 by design (NPC counters with a promise instead of handing over first, per the negotiation rules; optional `TRUST=60` variant).
+
 | ID | What it needs |
 |---|---|
 | STOBE 61 | tier 3+ top-up: Shay must stay conscious through the Dust King fight (harness `protect`, KAH 11, being tested m16) |
