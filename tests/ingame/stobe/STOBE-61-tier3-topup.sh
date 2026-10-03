@@ -52,8 +52,18 @@ for try in 1 2; do
 done
 # m16 next: GIVE_CATS waits for the player's SPARE term, which verifies only after 120 s without attacks
 # (STOBE_NEG_TRUCE_OBSERVE_SECONDS); the 90 s wait ended before the payment was due. Game running, 240 s.
+# Once SPARE is verified, his payment is queued as a settle directive (GIVE_CATS SETTLE_QUEUED) that rides on his
+# next line, so the player gives him a reason to speak (m16 next: it was queued, then the run ended and the
+# fixture reload cancelled the deal).
 stobe-say speed 1 >/dev/null
-wait_deal "$name" "COMPLETE|BREACHED|IMPOSSIBLE" 240 >/dev/null
+prompted=0
+for i in $(seq 1 80); do
+  sleep 3
+  deal_line "$name" | grep -q -E "COMPLETE|BREACHED|IMPOSSIBLE|CANCELLED" && break
+  if [ "$prompted" -lt 2 ] && deal_block "$id" | grep -E "npc +GIVE_CATS" | grep -q "SETTLE_QUEUED"; then
+    say_to "$r" "$name" "Right, ${name}. I've spared you. Now pay up, as we agreed."; prompted=$((prompted + 1))
+  fi
+done
 sleep 5
 m1=$(money_of ${PLAYER}); stobe-say speed 0 >/dev/null; heal_stop
 deal_block "$id"
