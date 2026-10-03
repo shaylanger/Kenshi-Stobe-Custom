@@ -29,6 +29,7 @@ stobe-auto speed 0 >/dev/null; stobe-auto select "${PLAYER}" >/dev/null
 stobe-auto chars 60 | cut -c1-200
 stobe-auto hunger "${PLAYER}" 280 >/dev/null; stobe-auto hunger "${MATE}" 280 >/dev/null
 stobe-say ping | head -2
+calm_raiders 400
 
 # --- 1. hand-over
 stobe-auto give "${MATE}" "Bread" 2 | cut -c1-120

@@ -79,7 +79,7 @@ done
 stobe-auto speed 0 >/dev/null
 log "end: $s"
 tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i -E "water|power|grow|blocked|complete" | tail -12 | cut -c1-220
-oven_water=$(tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i "water" | grep -a -c -i "oven")
+oven_water=$(tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i "picked.*water.*from .*oven" | grep -a -c .)  # water taken OUT of the oven (loading water into it is the recipe)
 stobe-auto inv ${MATE} | grep -o '"name":"[^"]*Bread[^"]*","count":[0-9]*' | head -3
 silo_ok=1; [ "${REAL_POWER:-0}" = 1 ] && ! awk -v m="${silo_max:-0}" 'BEGIN{exit !(m>0)}' && silo_ok=0
 log "silo current_power max while working: ${silo_max:-0} (real power: ${REAL_POWER:-0})"
