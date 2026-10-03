@@ -469,3 +469,66 @@ outsiders away. p4-02 and p4-03 then run there unchanged.
 - An insult heard by a friend: dialogue listeners are not witnesses yet.
 - Prompt-side belief injection: notes only.
 - Native `ACT_JOIN_PARTY` fallback paths: not audited in game.
+
+## 2026-10-03 Run m8 results, fixes and reruns
+
+### Verdicts (m8)
+- **Pass:**
+  - SR02 and SR05 (p2-01: Rel Vorn->Shay aggression -15 + KO -21, KO attributed to Shay, remembered attacker Shay).
+  - SR10 (p3-02: KO with no attacker, transfer latent, on waking `no_known_culprit`).
+  - SR15 (p4-01: Rel Ona->Malzin **lifesaving +29** while unconscious).
+  - SR22 normal purchase (p5-01: Shay buys from Keys = `fair_trade`).
+  - SR24 (p6-01b: Rel Wren, bonded 91, -> Shay witness -7 of the victim's -10).
+  - SR41 (all shadow runs). p7-01 in enabled mode: the NPC was not recruited.
+- **Real bugs, fixed:**
+  - SR25: a floor-sleeping friend (Rel Sorn) counted as a witness (-6). `isUnconcious()` is false while sleeping (probe 5).
+    **Fix (native):** a character in a bed or whose current task is sleeping is not a witness.
+  - SR08: looting a knocked-out body showed only the looter's gain (Malzin: rag shirt, fabrics); the body's loss never appeared.
+    **Fix:** the native side sends unmatched gains as `item_gain`. The server ties a gain to the one knocked-out owner whose
+    baseline holds those items (ambiguous = no attribution), so waking with them missing blames the remembered attacker.
+- **Scenario issues:**
+  - My m7 log format added `witnesses=N` before `facts=`, so the `@log` regexes did not match (p2-01 #34, p3-01 #37,
+    p4-04 #38, p4-02/03). Fixed in the scenario files.
+  - A fled bandit (230 m away) cannot be teleported once KO'd. He is now brought next to Shay before the forced KO.
+  - The gift donor was never talked to, so the world sweep never looked at her inventory. She is now talked to first.
+- **Inconclusive:**
+  - SR06 (p2-04): after the first beating the bandit turned hostile and struck first on return, so Shay's blows were
+    correctly retaliation (no new row). A clean repeat needs a victim who stays non-hostile.
+  - SR30 (p7-01): the LLM never tried JoinParty, so the gate was not exercised.
+- **Blocked / probe:** SR11, SR12, SR32. No `enslaved`/`freed` fact at all, although `shackle` reported
+  `chained=1 slave_state=1`, and no legacy `[EVENT] slavery` line either.
+  New probe 21: a capture-only line `EVENT_SCAN: first seen already enslaved serial=… name=…` shows whether these
+  bandits are already slaves when first seen; if so, no transition can be reported.
+
+### Delivery
+- **Server:** `feature/social-phase1` at **`7f57911`** (one commit on live `795b0f1`). Adds `item_gain`;
+  the runner passes all steps; unconscious suite now 36 checks.
+- **Native:** `C:\KenshiModding\pending-fixes\rel-native-m8.patch` (SHA256 `d8404870dd92d97dc7acd1f597c17c1bf67ef32b151e4d06b4f6221f808778d4`).
+  Incremental against the current `/root/STOBE-src` (which has REL 1-7). Private build `349e787e…`.
+
+### Rerun (m8 build, Capture=1, shadow, fresh fixture unless noted)
+1. p2-01, p3-01, p3-03, p3-04
+2. p4-04
+3. p5-02
+4. p6-01a, set-relation, p6-01b (keep)
+5. p7-02
+
+p2-04 is optional (see SR06). Afterwards, grep stobe.log for `first seen already enslaved` (probe 21) and for
+`kind=freed ... liberator` (probe 20).
+
+### Harness build command (answer for SR18/SR19)
+Feasible. KenshiLib exposes `RootObjectFactory::createBuilding(GameData* data, Ogre::Vector3 position, TownBase* t,
+Faction* owner, Ogre::Quaternion rotation, FactoryCallbackInterface*, Layout*, Building* isDoorOf, GameSaveState*,
+Building* isIndoorsOf, bool invisible, bool completed, bool isFoliage, int floorNumber, bool isOutsideFurniture)`
+(RVA 0x57C4F0, `RootObjectFactory.h`), and `GameWorld::theFactory` is a member.
+
+Suggested command: `build <building name> [near <npc> dist m | at x y z] [faction <name>]`.
+1. Look up the GameData of type BUILDING by name (as `find` does).
+2. Call `world->theFactory->createBuilding(data, pos, nullptr, faction ? faction : player faction, Ogre::Quaternion::IDENTITY,
+   nullptr, nullptr, nullptr, nullptr, nullptr, false, /*completed*/ true, false, 0, false)`.
+3. Report the building name and position (`buildings` then lists it).
+
+Unverified: whether a town pointer (nullptr) and an identity rotation are accepted for furniture like "Bed" and
+"Prisoner Cage", and whether the building needs a terrain/height snap. Test by building one bed at Home and checking
+`buildings 50 Bed`. With it, p4-02/p4-03 run on auto-home: `build Bed near Shay dist 10`,
+`build "Prisoner Cage" near Shay dist 15`.
