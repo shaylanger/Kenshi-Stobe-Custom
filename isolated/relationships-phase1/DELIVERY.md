@@ -917,3 +917,24 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
 - **Script fix** (server `22ace3a`):
   - breach waits 25 s, teleports him next to Shay and attacks every 4 s until a major_damage/knockout from Shay lands;
   - kept asks him once for the cats when the payment term is REISSUE_QUEUED (bug 126 reissue path).
+
+## 2026-10-03 p5-01 rerun (harness 74B99AC7, server 0f869ca): 21/0
+- **SR23: partial; the parts that can be reached in game pass.**
+  - Three First Aid Kits went to the trader to make room. Shay then bought a Splint Kit from Iflem's carried stock
+    (186 cats; buyer 58926 -> 58740, trader 5827 -> 6013).
+  - REL resolved the seller as the character Iflem: fair_trade, no reward. check-shadow passed.
+  - The rel6 attempt is the atomic-failure case: the buy was refused for lack of room, nothing moved, and there was
+    no capture and no effect.
+  - Shop storage and faction purse sellers cannot be reached in game: the harness cannot buy from shop storage, and
+    the game pays nobody there. Offline only.
+
+## 2026-10-03 SR28/SR29 pass (m16 fights2), last automatable rows (server 45eea92)
+- **SR28 and SR29 pass in game** with rel-surrender.sh, after STOBE 96 (payment found up to 30 s before dispatch)
+  and 97 (an explicit player attack ends the truce guard).
+- **SR06:** p2-04 now puts Rel Vorn 2 m from Shay while paused and gives Shay's attack order first. The capture
+  check requires actor Shay and victim_targeting_actor false.
+- **SR07:** new `REL-p3-05-defensive-limb-loss.txt`. Shay is protected; Rel Lark attacks first, Shay defends, and
+  harness `damage left_arm 400` cuts the arm off mid-fight. Expected: limb_loss event, a maiming harm fact by Shay,
+  and a defensive_maiming grievance for Lark toward Shay.
+- **SR30:** p7-01 unchanged, one more attempt (LLM-dependent).
+- All scenarios accept an already-named spawned bandit, both in the chars capture and in the setname guard.

@@ -18,11 +18,11 @@ IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `arch
 
 | Component | Installed | Pending install |
 |---|---|---|
-| Stobe.dll | `162DB1E3` (REL 1–7 + m8) | - |
-| KenshiFP.dll | `8A7BC8A8` (…, 84) | - |
-| ProfessionGearProgression.dll | `FAA5B471` (craft-output roll, shop radius 60) | - |
-| AutomationHarness.dll | `D8ECA273` (trade places items incl. shop storage, build/unbuild) | - |
-| Server (live) | `2b3593c`+ (branch `stobe`, m1 fixes 64–72) | REL phase 1 (`feature/social-phase1`, inert by default) once delivered |
+| Stobe.dll | `EF62563B` (REL 1–7 + m8–m16c, STOBE items to 97) | - |
+| KenshiFP.dll | `E64B1BD5` (items to 99b) | - |
+| ProfessionGearProgression.dll | `7D80DBB3` (job scaling on; Forced + InGameTest during tests) | - |
+| AutomationHarness.dll | `08AB6BF0` (#serial/index, trade room check, inbox lock, power supply, protect) | - |
+| Server (live) | `45eea92` (branch `stobe` = REL + STOBE fixes to 96; SOCIAL_RELATIONSHIP_MODE off between REL batches) | - |
 
 ## 1. Automated: runnable now
 
@@ -94,25 +94,53 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | REL p8 soak + perf gate | 1 h Hub soak A (Capture=0) / B (Capture=1, shadow) | PASS (m13 soak: functional 30/0, fps 99.5 %, worst 107.7 %; m15 B-A-B-A windows within the same fps regime 99.6-100.2 %, memory B-A -45/+4 MB: gate pass, idle capture) |
 | REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | PASS: SR22 fair trade 0 (m8), SR23 m16 (carried-stock seller named), gift +2/+3 (m11, m13); SR29 deal procedures not run; SR13/14 blocked (no theft-caught signal); SR28 + SR29 PASS m16 (rel-surrender.sh kept-hate / breach) |
 
+### 1f. New fixtures from the 4080 (2026-10-03): smoke load first, then the rows they unlock
+
+Details: `handoff/new-test-saves-context.md` (local) and `C:\KenshiTestFixtures\FIXTURES.md` ("Saves made on the 4080").
+Copies: `relaunch.ps1 -Fixture "Testing-Save-Full-Base" -Copy kah-fullbase` (also `kah-squin`, `kah-enslaved`).
+**The squads are not Shay + Malzin**: pass names explicitly (`select <name>` before `stobe-say say`); a Shay/Malzin literal
+required by mod code (not test tools) is a bug. Made without our plugins: first load = PG affix roll for all items (load test);
+no Stobe history/relationships. **Never build a Biofuel Distillery** (crash, see KAH 12).
+
+| ID | What | Fixture | Status |
+|---|---|---|---|
+| SMOKE fullbase / squin / enslaved | loads, 2+ min at 1x without crash, `status` shows the save, `chars` lists the squad, `[EVENT]` lines flow, PG first-load roll ok | each new save | todo |
+| STOBE A8 | Bread chain well -> farm -> Grain Silo -> oven with real power ("make 2 bread", 50x + goal watch; `building "Grain Silo"` power first) | Full-Base (Beaks/Avarek) | todo (auto-home version uses `power supply`, m16) |
+| STOBE 16 (full chain) | crafted-ingredient goal completes with powered benches (queue property already PASS m16) | Full-Base | todo |
+| KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | todo |
+| STOBE generic regression | green STOBE goal scenarios with Beaks/Avarek (no Shay/Malzin hard-coding) | Full-Base | todo |
+| PG 145, 229 | mod tool weapons (ArkWeaponPack Sickle etc.): research Basic Weapon Smithing/Grades/Utility Weapons, `craft <npc> Sickle at <weapon smith>` with Iron Plates | Full-Base | todo (PG agent scenario) |
+| PG 161–199 | balance/benchmark rows: research bench (184), robotics (186), turret + target dummy; needs the balance measurement driver | Full-Base | todo (PG agent driver) |
+| REL SR18/19, p4 | bed/cage rescue, first aid, carry on a second base | Full-Base | todo (optional, already PASS on auto-home) |
+| PG 220–227 | shop stock by trader type (`traders 300`, `shopstock`/`pg_shop`/`pg_census`); missing types -> "needs setup (no <type> shop in Squin)" | Squin (Beak/Kint) | todo |
+| PG 217 | restock: note stock, `wait-game` past restock, compare; instance keys don't reroll | Squin | todo |
+| PG 108 | a unique named NPC with gear, if Squin has one | Squin | todo |
+| STOBE 15 | WAITING_APPROVAL: missing ingredient only a Squin trader sells (Crafting base version running m16) | Squin | todo |
+| STOBE 14 / A3 | buy from a trader, purchase event names the seller, with new characters | Squin | todo |
+| REL SR12 (real) | an enslavement the game itself reports: server capture right after load and after the labour shift | Enslaved (Izumi/Daphnilis) | todo |
+| REL SR32 (real) | the free squad member frees the enslaved one by `order` (real lockpick); server names the freer | Enslaved | todo |
+| REL p7 | free a non-squad slave, then the recruitment gate (low/high trust) | Enslaved | todo |
+
+Guards in the slave camp: keep them off with `ko <guard> <s>` or `relation <guard> <value>`, never `kill`; log any guard handling.
+
 ## 2. Requires specific game setup (no fixture/command for it yet)
+
+Rows unlocked by the 4080 saves moved to 1f (2026-10-03).
 
 | ID | What it needs |
 |---|---|
-| STOBE 61 | a tier 3+ NPC (Samurai/Dust King) who stays to negotiate after losing (the Dust King flees ~240 m before the offer is spoken) |
-| STOBE 15 | a production goal whose missing ingredient only a trader sells (to see WAITING_APPROVAL) |
-| STOBE A8 | power at Home (the Grain Silo/Well have no supply: no working generator/battery in auto-home; harness `build` could place a generator + battery, untested) |
-| STOBE 20, 21, 22 | A fight Shay survives long enough for an offer: 3 raiders KO her (m8); needs a stronger test character (`setstat`/health regen) or the raid squad `size` scaled down per member |
-| REL SR07, SR09, SR13, SR14 | forced limb loss in a fight; a source of better evidence; a theft-caught signal + steal driver |
-| REL SR11 (old) | An enslavement the game reports (spawned bandits may already count as slaves: probe 21); SR12 + SR32 PASS m16 |
+| STOBE 61 | tier 3+ top-up: Shay must stay conscious through the Dust King fight (harness `protect`, KAH 11, being tested m16) |
+| STOBE 20, 21, 22 | a fight Shay survives long enough for an offer (harness `protect`, KAH 11, being tested m16) |
 | STOBE A12 | A wounded NPC who hands over before being healed: the model counters with a promise instead (m16, by design) |
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
-| KAH power charge | A battery building in a fixture (none has one) |
-| PG 50, 84, 89, 106, 108, 120, 132, 133, 240 | ground drop/pick-up; melee stat names in `stat`; forcing a critical craft; NPC unload trigger; a unique NPC fixture; nested/unowned pack weight; import / new-game commands |
-| PG 145, 229 | an equippable mod tool weapon (harness can't create weapons; `craft` may cover it) |
-| PG 151, 152, 161–199 (not 177) | frame-time metric; balance measurement driver + benchmark fixtures (job-path proof done: PG 177/331 PASS m16) |
-| PG 217, 220–227, 250, 256, 274 | restock trigger; fixtures next to several shop types; ruin loot; swim gear + water; colliding item ID save |
-| REL SR07, SR09 | forcing a limb loss in a fight; an in-game source of better evidence (phase 6) |
+| REL SR07 | forced limb loss in a fight (p3-05 with harness `damage` 400, m16 batch 8: may stay blocked if the game doesn't sever) |
+| REL SR09, SR13, SR14 | an in-game source of better evidence; a theft-caught signal + steal driver |
+| PG 50, 84, 89, 106, 120, 132, 133, 240, 254 | ground drop/pick-up; melee stat names in `stat`; forcing a critical craft; NPC unload trigger; nested/unowned pack weight; import / new-game commands; run-speed readout |
+| PG 151, 152 | frame-time: pg-15 crowd frametime written m16 (launch 1 + launch 3 comparison), pending run |
+| PG 250 | ruin loot: no ruin save yet (Shay may make one, low priority) |
+| PG 256 | swim gear: no item in this load order rolls Swimming (Shay: defer, not applicable) |
+| PG 274 | a save with a colliding item ID |
 
 ## 3. Requires Shay
 
@@ -170,3 +198,4 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | KAH 9 | `kah.py` client: concurrent callers share `inbox.txt.tmp` and lose commands (FileNotFoundError) | fixed (kah.py lock + unique temp, harness 55192E94) |
 | KAH 10 | No way to power a bench in fixtures: built + charged Battery Bank leaves out_of_power=1.0 (blocks STOBE A8, 15/16/89 completion) | fixed + confirmed m16 (`power <b> supply`, harness 12F5CE0B) |
 | KAH 11 | `protect <npc>`: keep a character conscious through a fight (Shay KO blocks deal tests 20/21/22/61) | requested m16, harness helper |
+| KAH 12 | **Never build a Biofuel Distillery** (`43875-Newwworld.mod`): StorageBuilding without inventory, crash ~10 s after load (`kenshi_x64.exe+0x2988b5`, null `UseableStuff::inventory` +0x430); harness `build` must refuse it | known limit (2026-10-03), harness helper: add a refusal |
