@@ -3,7 +3,7 @@
 Last updated 2026-10-02 (run 12). Installed: Stobe.dll `526D69F1`, KenshiFP `D3C78B3D`; server through round 24 (`b375e2b`).
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **59**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **60**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -42,6 +42,7 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 | 56 | Relationship types (R1): a few chats that change a relationship | New entries only use list types (no "annoyed"/"ally"); an odd type never turns "romantic" into "neutral" |
 | 57 | Generic names (R3): talk to / fight an unnamed "Hungry Bandit" | No relationship entry keyed "Hungry Bandit"; named ones ("Ket [Hungry Bandit]") still get entries |
 | 58 | `stobe-reset-npc Malzin`, then `stobe-reset-npc --restore Malzin` | First reset prints `saved Malzin -> Shay: …`; restore puts the same entry back (one "Shay" key, no "shay" duplicate) |
+| 59 | Relationships follow the save: in a test save, make Malzin hate Shay (`scenarios.sh trust Malzin -80 Hateful enemy` writes no snapshot, so use a real fight or a few insults at game time T), save nothing, then load a save from before T | Server log `PLAYTHROUGH: restored relationship timeline state` with `restored` ≥ 1; Malzin → Shay back to the value at that save (96 Bonded on the auto-home fixture); NPCs first met after that save have no entry. Unit-tested (tests/relationship_rollback_regression.php) |
 
 ## C. Can't reproduce so far (fixed or built, never triggered in game)
 
@@ -86,8 +87,8 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
   - **Type** = what the evaluator says, else inferred from aff only while still "neutral" (≥+6 platonic, ≤−6 wary, ≤−30 rival, ≤−55 enemy); type changes are meant for defining moments only (romance, betrayal, violence, marriage, family).
   - **Malzin now:** → Shay 0..−2 "Neutral (neutral)", note "refused to sell katana"; Shay → Malzin +3 Neutral. → bandits: Boss Madoc −6 Wary (rival) "threatens Boss Madoc after a hit", Ulan [Dust Bandit] −11 Wary (rival) "taunted about crew's defeat", Vren [Dust Bandit] +6 Acquaintance (neutral) "No hard feelings after the fight", Dust Bandit Bowman +2 Neutral (acquaintance) "Considered execution", Hesk +0 "Accepted payment and issued warning", … (14 entries, all from run 11/12 test fights).
   - **Why Vren became an Acquaintance after a fight:** the evaluator only ran when someone spoke and saw one line; combat events never counted. After the fight Vren said something friendly → +6 "No hard feelings after the fight". Fixed (R4, below).
-  - **Why she was only Neutral with Shay:** the test runs reset her with `stobe-reset-npc` (live DB). Loading an older save does **not** bring relationships back (`NEVER_CLEAR_RELATIONSHIP_DATA` = true, and no history snapshot had the old value). Restored by hand to 96 Bonded (platonic) on 2026-10-02; `stobe-reset-npc` now saves the entry first and `--restore` puts it back.
-  - **Fixed 2026-10-02 (StobeServer 956000f, e714b66, 43a5516, 9839389):** R1 types mapped onto the official list (unknown type keeps the old one); R2 Kenshi examples in the analysis prompt fallback; R3 no entries for unnamed template names (5 existing ones removed, backup `/root/stobe-backups/relationships_pre_r25_cleanup.tsv`); R4 a fight lowers both sides (victim −10, attacker −4, once per pair per 15 min). Tests: B 55–57.
+  - **Why she was only Neutral with Shay:** the test runs reset her with `stobe-reset-npc` (live DB). Loading an older save did not bring relationships back then (`NEVER_CLEAR_RELATIONSHIP_DATA` = true). **Since 2026-10-02 relationships follow the loaded save** (StobeServer 78243b0, 28dff99; baseline snapshots at game time 0 for 61 NPCs; test B 59). Restored by hand to 96 Bonded (platonic) on 2026-10-02; `stobe-reset-npc` now saves the entry first and `--restore` puts it back.
+  - **Fixed 2026-10-02 (StobeServer 956000f, e714b66, 43a5516, 9839389):** R1 types mapped onto the official list (unknown type keeps the old one); R2 Kenshi examples in the analysis prompt fallback; R3 no entries for unnamed template names (5 existing ones removed, backup `/root/stobe-backups/relationships_pre_r25_cleanup.tsv`); R4 a fight lowers both sides (victim −10, attacker −4, once per pair per 15 min). Tests: B 55–57. R4 (the fight rule) is up for a deep analysis: `handoff/relationship-fights-context.md`.
 - **Deal-offer cap tiers (Shay, 2026-10-02):** replace common 300 / leader 1000 / wealthy with 6 tiers from the game data (`archive/npc-wealth-survey.tsv`, `tools/research/npc_wealth.py`); proposal in the run 12 chat, waiting for Shay's OK.
 - **Decided for D 43 / 48 (Shay):** 43: do both hand-overs (fallback: she says she does one). 48: dying but conscious may deal; unconscious or dead may not; a deal interrupted by a KO resumes when they wake.
 
