@@ -848,3 +848,23 @@ Compared within the same regime (harness.log 10 s samples):
 
 ### Rerun (m16 builds)
 p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs native m16 + server 68fec51).
+
+## 2026-10-03 Run m16 rerun (Stobe 008DF4A0 = m16 native, server 68fec51)
+- **SR25: passes in game.** Rel Sorn was in a bed beside the fight. Her witness entry read conscious false, perceived
+  false, sleeping 1, task 258, and she has no effect toward Shay. The awake witness Rel Wren got witness_aggression -8
+  and Rel Vik aggression -14 (both shadow).
+- **SR32: the earlier diagnosis was wrong.** The handle does not change when he is chained. It changes when he is
+  freed: Malzin picked the lock (prisoner shackles left his inventory, 4 -> 3 items, at the same moment) and the game
+  moved him into another squad. The same happened in the first m16 run.
+  - The sweep then saw a new serial "first seen already enslaved". isSlave() is ESCAPING_SLAVE and still counted as
+    enslaved, so no freed line was written.
+  - The m16 `SOCIAL_IDENTITY` line in SocialEntityFor never ran, because no event was emitted for him.
+- **Native m16b** (`pending-fixes/rel-native-m16b.patch`, SHA256
+  `431c0c0a8e84bd3af36adfda10435e4166bd4fad7d175e50e050ce460934064e`, on `/root/STOBE-src` with m16; private build
+  `8cce567a…`):
+  - only IS_SLAVE or chains count as enslaved;
+  - the sweep state follows the same live character (same name) to its new handle, logged as
+    `SOCIAL_IDENTITY: handle changed (scan)`;
+  - chain and slave state changes are logged (`EVENT_SCAN: slave state`);
+  - the liberator also comes from a task subject seen in the last 10 s.
+- **Server** `17fcb2a`: the p7-02 freed regex no longer pins the serial, and there is a check for the scan line.
