@@ -31,11 +31,26 @@ since_stobe() { tail -n +"$BASE_L" "$L"; }
 since_srv() { tail -n +"$BASE_SRV" "$SRV"; }
 
 # heal_start "Shay [Malzin]": health 100 every 10 s (A13 v4: keeps Shay up against Hungry Bandits / weakened raiders)
+# m16 fights2: every 10 s was not enough against raiders/the Dust King (Shay KO'd in 61/21/22/20 within 30 s, and a
+# KO'd speaker can't talk: stobe.log `CHAT_VALIDATE: fail speaker unavailable`). Now every HEAL_EVERY s (2) + blood.
 heal_start() {
   local who="${*:-Shay}"
-  ( while :; do for n in $who; do stobe-auto health "$n" 100 >/dev/null 2>&1; done; sleep 10; done ) </dev/null &
+  ( while :; do for n in $who; do stobe-auto health "$n" 100 >/dev/null 2>&1; stobe-auto blood "$n" 100% >/dev/null 2>&1; done; sleep "${HEAL_EVERY:-2}"; done ) </dev/null &
   HEALER=$!
 }
+# talk_ready <npc handle>: Shay awake (waits out a KO, up to 150 s) and the NPC next to her (fled raiders were 290 m off)
+talk_ready() {
+  local h="$1"
+  for i in $(seq 1 50); do stobe-auto where Shay | grep -q " KO" || break; [ "$i" = 1 ] && log "Shay is knocked out: waiting"; stobe-say speed 1 >/dev/null; sleep 3; done
+  stobe-auto where Shay | grep -q " KO" && log "Shay still KO"
+  if [ -n "$h" ]; then
+    local dist; dist=$(stobe-auto where "$h" | grep -oE 'dist=[0-9.]+' | cut -d= -f2 | cut -d. -f1)
+    [ "${dist:-0}" -gt 12 ] && { stobe-auto teleport "$h" Shay dist 4 >/dev/null; log "brought $h back from ${dist} m"; }
+  fi
+  stobe-auto select Shay >/dev/null
+}
+# say_to <npc handle> <name> <text>: talk_ready, then the line (no --wait: sleeps 15 s after)
+say_to() { talk_ready "$1"; stobe-say say "$2" "$3" --wait 15 >/dev/null 2>&1 || log "say failed"; }
 heal_stop() { [ -n "$HEALER" ] && kill "$HEALER" 2>/dev/null; HEALER=""; }
 trap 'heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 

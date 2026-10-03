@@ -46,7 +46,7 @@ offer=$(deal_block "$id" | awk '$1=="npc" && $2=="GIVE_CATS"{print $3}' | head -
 m0=$(money_of Shay)
 # m16: the "deal." line was lost to an inbox race (deal stayed PROPOSED); now locked, and repeated once
 for try in 1 2; do
-  stobe-say say "$name" "$name, deal." >/dev/null 2>&1 || log "say failed"
+  say_to "$r" "$name" "$name, deal."
   wait_deal "$name" "ACCEPTED|AWAITING|COMPLETE|SETTLE" 30 >/dev/null && break
   log "still $(deal_line "$name" | awk '{print $3, $4}') after try $try"
 done

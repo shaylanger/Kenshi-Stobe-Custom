@@ -26,7 +26,7 @@ name=$(name_of "$r"); log "raider $r = $name"
 trust "$name" 60 Fond >/dev/null 2>&1 || true
 stobe-auto health "$r" 45 >/dev/null          # hurting, not yet ready to beg (we want Shay's offer, not his)
 sleep 4
-stobe-say say "$name" "Stop! Stop fighting. Stand down now and I'll pay you 200 cats later, once this is over. You have my word." --wait 40 >/dev/null 2>&1 || true
+say_to "$r" "$name" "Stop! Stop fighting. Stand down now and I'll pay you 200 cats later, once this is over. You have my word."
 d=$(wait_accept "$name" 90)
 if [ -z "$d" ]; then
   stobe-say speed 0 >/dev/null; heal_stop

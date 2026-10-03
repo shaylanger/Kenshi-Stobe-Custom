@@ -29,7 +29,7 @@ stobe-auto health "$r" 30 >/dev/null
 sleep 4
 weapon=$(stobe-auto inv "$r" | grep -o '"name":"[^"]*","count":1,"equipped":true' | head -1 | sed -E 's/"name":"([^"]*)".*/\1/')
 log "his first worn item: ${weapon:-?}"
-stobe-say say "$name" "Enough! Toss me your weapon first and I'll pay you 100 cats right after. Deal?" --wait 40 >/dev/null 2>&1 || true
+say_to "$r" "$name" "Enough! Toss me your weapon first and I'll pay you 100 cats right after. Deal?"
 d=$(wait_accept "$name" 90)
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; heal_stop; verdict 20 "INCONCLUSIVE no accepted deal: $(deal_line "$name")"; exit 2; }
 id=$(echo "$d" | awk '{print $1}'); log "deal $id"
@@ -39,13 +39,13 @@ if ! deal_block "$id" | grep -E "npc +(GIVE_ITEM|UNEQUIP_ITEM)" | grep -q -E "VE
   stobe-say speed 0 >/dev/null; heal_stop; verdict 20 "INCONCLUSIVE he did not hand over first"; exit 2
 fi
 m_shay0=$(money_of Shay); m_him0=$(money_of "$r")
-stobe-say say "$name" "Actually, I'm not paying you anything. Get lost." --wait 40 >/dev/null 2>&1 || true
+say_to "$r" "$name" "Actually, I'm not paying you anything. Get lost."
 sleep 20
 reacted=0
 deal_line "$name" | grep -q BREACHED_PLAYER && reacted=1
 since_stobe | grep -a -F "[EVENT] combat: $name" | grep -a -q -- "-> Shay" && reacted=1
 since_stobe | grep -a -F "NPC_SAY: $name|" | tail -2 | cut -c1-300
-stobe-say say "$name" "Fine, fine. Here are your 100 cats." --wait 40 >/dev/null 2>&1 || true
+say_to "$r" "$name" "Fine, fine. Here are your 100 cats."
 sleep 6
 m_shay1=$(money_of Shay); m_him1=$(money_of "$r")
 mark=$(grep -a -c "" "$L")
