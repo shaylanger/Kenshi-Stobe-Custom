@@ -965,3 +965,24 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
 - Found: 43 live `core_npc` rows have `extended_data` as a JSON array, so relationship writes to them fail
   (STOBE fixer).
 - Theft probe scenarios `REL-probe-theft-seen/unseen.txt` (KAH 22).
+
+## 2026-10-03 rel-enslaved.sh first run (kah-enslaved; Stobe EF62563B, server 97e0b9f)
+- **SR12 real: passes.** Izumi was "first seen already enslaved". After a 2-game-hour shift she has no enslavement
+  effect or belief (nobody blamed). The camp itself enslaved new captives (Shek Outcasts), and the game reported
+  them with the owner (`kind=enslaved actor=<owner>`); their generic names write nothing.
+  - Failed step 10 was a scenario issue: the line comes before the run starts.
+- **SR32 real: native bugs, now fixed in m16d.** Daphnilis picked Izumi's lock (`chained=1->0 slave_state=1->2`),
+  but no freed fact was written:
+  - (1) The slavery transitions skipped the player actor, and Izumi is the first squad member.
+  - (2) The freeing also re-squadded Daphnilis (`handle changed (scan)`), so her old serial no longer resolved.
+- **p7-05:** Kad (Rel Nima) had his chains taken off (still IS_SLAVE) about 65 s after the order, with no
+  liberator. The camp unchains slaves itself (a second "freed" at 14:29:35 for another slave), so m16c's "chains off
+  = freed" also fired for owner unchaining.
+  - m16d: "chains off but still IS_SLAVE" counts only if someone did a lock or shackle task on him within 60 s.
+- **Gate:** no JoinParty attempt at low trust or at 80 (he asked to be paid first), so it was not exercised:
+  inconclusive (LLM).
+  - set-relation 80 succeeded, so STOBE 101 was not involved.
+  - check-shadow FAIL in p7-05/06 is expected (enabled mode).
+- **Native** `pending-fixes/rel-native-m16d.patch` (SHA256
+  `68c98455623cc3c8f46a78b754b78288581c1d72dd0d416d614bab2183126767`; private build `0c597068…`).
+  **Server** `5dfeec5`: scenarios; the Slave Traders are knocked out for the freeing steps.

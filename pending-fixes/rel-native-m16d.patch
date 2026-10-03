@@ -1,0 +1,151 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index 2fb3cbf..c8f2d7e 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1452,6 +1452,9 @@ struct NpcWorldEventState {
+   DWORD recentTaskSubjectTick;
+   bool chained;
+   int slaveState;
++  unsigned int libSubjectSerial; // REL m16d: last subject of a lock/shackle task (lockpicks get interrupted; 60 s memory)
++  int libTask;
++  DWORD libTick;
+   bool freedLatch; // REL m16c: chains came off while IS_SLAVE: free until chained again or the slave state changes
+ 
+   NpcWorldEventState()
+@@ -1468,7 +1471,7 @@ struct NpcWorldEventState {
+         constructionSubjectSerial(0), constructionSubjectName(""),
+         lockpickingSkill(0), lastSpeechLine(""), lastSeenTick(0), useState(-1),
+         lastCarrierSerial(0), lastCarryDropTick(0), recentTaskSubjectSerial(0), recentTask(0),
+-        recentTaskSubjectTick(0), chained(false), slaveState(0), freedLatch(false) {}
++        recentTaskSubjectTick(0), chained(false), slaveState(0), freedLatch(false), libSubjectSerial(0), libTask(0), libTick(0) {}
+ };
+ 
+ struct CombatParticipantState {
+@@ -6066,6 +6069,36 @@ static void EmitDeathEvent(Character *victim) {
+     SocialEmitHarm(victim, ResolveCombatAttribution(victim), "death", "");
+ }
+ 
++// REL m16d: someone who worked on this slave's locks/shackles in the last 60 s (or targets him with any task right
++// now). Returns the sweep key (serial) or 0; owner never counts. Used to tell "freed" from an owner unchaining a slave.
++static bool IsLiberationTask(int t) {
++  return t == (int)PICK_LOCK_ON_SHACKLES || t == (int)CUT_SHACKLES || t == (int)BRUTE_FORCE_SHACKLES ||
++         t == (int)PICK_LOCK || t == (int)CUT_LOCK || t == (int)BRUTE_FORCE_LOCK;
++}
++static unsigned int SocialFindLiberator(unsigned int victimSerial, unsigned int aliasSerial, unsigned int ownerSerial, int &task) {
++  DWORD now = GetTickCount();
++  unsigned int best = 0;
++  for (std::map<unsigned int, NpcWorldEventState>::const_iterator it = g_npcWorldEventStateBySerial.begin();
++       it != g_npcWorldEventStateBySerial.end(); ++it) {
++    if (it->first == victimSerial || (ownerSerial && it->first == ownerSerial))
++      continue;
++    const NpcWorldEventState &s = it->second;
++    bool hits = s.libSubjectSerial && (s.libSubjectSerial == victimSerial || s.libSubjectSerial == aliasSerial) &&
++                now - s.libTick <= 60000;
++    if (hits) {
++      task = s.libTask;
++      return it->first; // a lock/shackle task wins
++    }
++    unsigned int subject = s.currentTaskSubjectSerial;
++    if (!best && subject && (subject == victimSerial || subject == aliasSerial) && now - s.lastSeenTick <= 5000 &&
++        IsLiberationTask(s.currentTask)) {
++      best = it->first;
++      task = s.currentTask;
++    }
++  }
++  return best;
++}
++
+ static void EmitSlaveryEvent(Character *victim, bool enslavedNow) {
+   std::string victimName = ResolveCharacterNameSafe(victim);
+   std::string victimFaction = SafeFaction(victim);
+@@ -6102,22 +6135,22 @@ static void EmitSlaveryEvent(Character *victim, bool enslavedNow) {
+       // REL phase 7: who freed them = someone whose current task targets the slave right now (engine task subject).
+       unsigned int victimSerial = ResolveCharacterSerialForEvent(victim);
+       unsigned int victimAliasSerial = SocialAliasSerial(target); // an order given before the re-squad targets the old handle
+-      DWORD now = GetTickCount();
+-      for (std::map<unsigned int, NpcWorldEventState>::const_iterator it = g_npcWorldEventStateBySerial.begin();
+-           it != g_npcWorldEventStateBySerial.end(); ++it) {
+-        unsigned int subject = it->second.currentTaskSubjectSerial;
+-        int libTask = it->second.currentTask;
+-        bool current = subject && (subject == victimSerial || subject == victimAliasSerial) && now - it->second.lastSeenTick <= 5000;
+-        unsigned int recent = it->second.recentTaskSubjectSerial;
+-        bool recentHit = recent && (recent == victimSerial || recent == victimAliasSerial) &&
+-                         now - it->second.recentTaskSubjectTick <= 10000;
+-        if (it->first == victimSerial || (!current && !recentHit))
+-          continue;
+-        if (!current)
+-          libTask = it->second.recentTask;
+-        Character *lib = ResolveCharacterBySerialForInventoryEvent(it->first);
+-        if (!lib)
+-          continue;
++      int libTask = 0;
++      unsigned int libKey = SocialFindLiberator(victimSerial, victimAliasSerial,
++                                                (owner && owner != victim) ? ResolveCharacterSerialForEvent(owner) : 0, libTask);
++      Character *lib = libKey ? ResolveCharacterBySerialForInventoryEvent(libKey) : nullptr;
++      if (libKey && !lib) { // m16d: the freeing can re-squad the freer too (new handle): find her by the sweep's memo
++        for (std::map<uintptr_t, SocialScanMemo>::const_iterator m = g_socialScanSerialByChar.begin();
++             m != g_socialScanSerialByChar.end(); ++m)
++          if (m->second.serial == libKey) {
++            lib = (Character *)m->first;
++            break;
++          }
++      }
++      if (libKey && SocialCaptureEnabled())
++        Log("EVENT_SCAN: liberator for serial=" + ToString(victimSerial) + " key=" + ToString(libKey) + " task=" +
++            ToString(libTask) + (lib ? " name=" + ResolveCharacterNameSafe(lib) : std::string(" (not resolved)")));
++      if (lib) {
+         StobeSocial::EntityInfo l = SocialEntityFor(lib);
+         facts += ",\"liberator\":{\"entity_key\":\"" + PlaythroughSession::ClientId() + ":" +
+                  ToString((unsigned int)PlaythroughSession::Generation()) + ":" + ToString(l.serial) + "\",\"serial\":" +
+@@ -6127,7 +6160,6 @@ static void EmitSlaveryEvent(Character *victim, bool enslavedNow) {
+                  ",\"faction\":" +
+                  StobeSocial::JsonString(l.faction) + ",\"in_player_faction\":" + StobeSocial::JsonBool(l.inPlayerFaction) +
+                  ",\"conscious\":" + StobeSocial::JsonBool(l.conscious) + "},\"liberator_task\":" + ToString(libTask);
+-        break;
+       }
+     }
+     SocialPostStructured(enslavedNow ? "enslaved" : "freed", (owner && owner != victim) ? &actor : nullptr, &target, facts);
+@@ -8656,6 +8688,11 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+     bool wasChained = state.chained;
+     state.chained = chainedNow;
+     state.slaveState = slaveStateNow;
++    if (currentTaskSubjectSerialNow != 0 && IsLiberationTask((int)currentTaskNow)) {
++      state.libSubjectSerial = currentTaskSubjectSerialNow;
++      state.libTask = (int)currentTaskNow;
++      state.libTick = nowTick;
++    }
+     if (currentTaskSubjectSerialNow != 0) {
+       state.recentTaskSubjectSerial = currentTaskSubjectSerialNow;
+       state.recentTask = (int)currentTaskNow;
+@@ -8895,11 +8932,19 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+                                "," + SocialVitalsFacts("", npc));
+     }
+     state.useState = useStateNow;
+-    if (!isPlayerActor) {
++    {
+       // REL m16c: a picked lock takes the chains off but leaves isSlave()==IS_SLAVE (the game then re-creates him
+       // under a new handle, a different object). The chains coming off is the freeing: report it on this handle.
+-      if (wasChained && !chainedNow && state.enslaved && !deadNow)
+-        state.freedLatch = true;
++      // m16d: only when someone worked the lock/shackles (an owner unchaining his slave in a camp is not freeing);
++      // and also for the player actor (Testing-Save-Enslaved: the first squad member is the slave).
++      if (wasChained && !chainedNow && state.enslaved && !deadNow) {
++        int t = 0;
++        if (slaveStateNow != (int)IS_SLAVE || SocialFindLiberator(serial, 0, 0, t))
++          state.freedLatch = true;
++        else if (SocialCaptureEnabled())
++          Log("EVENT_SCAN: chains off, still a slave, nobody worked the lock: not freed serial=" + ToString(serial) +
++              " name=" + ResolveCharacterNameSafe(npc));
++      }
+       if (chainedNow || slaveStateNow != (int)IS_SLAVE)
+         state.freedLatch = false;
+       if (state.freedLatch)
+@@ -8909,6 +8954,8 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+       } else if (state.enslaved && !enslavedNow) {
+         EmitSlaveryEvent(npc, false);
+       }
++    }
++    if (!isPlayerActor) {
+       if (!state.carrying && carryingNow) {
+         EmitCarryPickupEvent(npc, carryingTargetSerialNow, carryingTargetNameNow);
+       } else if (state.carrying && !carryingNow) {
