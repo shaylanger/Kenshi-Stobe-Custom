@@ -37,3 +37,7 @@ training-data/shadow-enabled.flag
 # Saved run logs (local only)
 archive/logs-*/
 handoff/
+
+# Separate git repos checked out inside the workspace
+Kenshi-Automation-Harness/
+Kenshi-Profession-Gear-Progression/
