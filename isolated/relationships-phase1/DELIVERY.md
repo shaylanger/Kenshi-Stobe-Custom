@@ -613,3 +613,70 @@ Rule from the coordinator: **REL purges only when the coordinator says so.** My 
   outside the sweep. The scenario now uses `LIFT_PERSON`, then `PUT_SOMEONE_IN_BED building "Bed"`, with `where` checks.
 - **Server:** `feature/social-phase1` at `7a0a000` (scenarios only, on live `8da1a73`). No native change.
 - **Rerun in m11:** p4-02, p4-03 (auto-home, `build` Bed and Prisoner Cage first).
+
+## 2026-10-03 Run m11 results, fixes, frame-time gate, final report draft
+
+### Verdicts (m11)
+- **Pass in game (new):**
+  - SR18: Rel Cobb -> Malzin safe_rescue +9 (`LIFT_PERSON` + `PUT_SOMEONE_IN_BED` on the built bed).
+  - SR19: Rel Kade -> Malzin imprisonment -31 (`LIFT_PERSON` + `PUT_IN_CAGE`).
+  - SR05: Malzin's knockout of Rel Vorn is now charged as a joined assault (-40).
+  - Gift: Rel Gav -> Rel Dona +3.
+  - SR24 again.
+- **Probe 7 answered:** the enslaved fact names the shackle owner (Rel Grell -> Rel Vash).
+- **Real bugs, fixed:**
+  - SR11: Rel Vash's own knockout was never seen, so his enslavement was lost on waking. **Server:** a KO holder
+    now keeps the enslavement until he wakes.
+  - SR32 / focus: raid attack facts flooded the 16-character focus list, so Rel Xan was again "first seen already
+    chained" (`SOCIAL_FOCUS` showed many unresolved serials). **Native:** focus now comes only from chats, facts
+    involving the player's side, and KO / enslave / carry / transfer facts; the list holds 24.
+  - SR25: the floor-sleeping witness still counted (-5). The stobe.log line now includes the witness entries
+    (`w=[...]` with `task` / `prone`) so the next run shows whether he was asleep or woken by the fight.
+- **Scenario issues:**
+  - Regex `witnesses=d+` lost its backslash, which broke the harm `@log` steps in p2-01 / p3-01. Fixed.
+  - Malzin attacked the spawned Drifters (p4-04, p5-02, p7-02). Their faction is now set to friendly with `relation 60`.
+  - The m11 soak was healthy but quiet (68 facts in 6 game hours). It now spawns three raids.
+- **Still open:** p3-01's loot by Malzin (`LOOT_TARGET`, probe 6) was not captured.
+
+### Delivery
+- **Server:** `feature/social-phase1` at **`796019b`** (2 commits on live `7a0a000`).
+- **Native:** `C:\KenshiModding\pending-fixes\rel-native-m11.patch` (SHA256 `ce715bbbde8ca2048fa3f7abbefb8ab84539adea63f8027293e6feace7377daa`).
+  Incremental against the current `/root/STOBE-src` (REL m9 + item 88). Private build `67bf37a0…`.
+- **Note:** the live `main.cpp` "Item 88b" fighter loop sits right after the REL focus block. A rebase conflict
+  there was resolved by keeping both; the patch only touches the focus cap line.
+
+### Frame-time gate: what to record
+The harness has no fps today. Please have the helper add **`fps`**:
+- `Ogre::Root::getSingleton().getAutoCreatedWindow()` -> `getAverageFPS()`, `getWorstFPS()`, `getWorstFrameTime()`;
+  then `resetStatistics()`.
+- It answers `avg=… worst=… worst_ms=…`.
+
+Until then, the soak screenshots capture RE_Kenshi's on-screen FPS counter.
+
+At each soak checkpoint, for A (Capture=0) and B (Capture=1, shadow), record:
+1. `fps`
+2. `(Get-Process kenshi_x64).WorkingSet64/1MB`
+3. B only: the inspect counts, `grep -c "SERIAL_HTTP: queue overflow"`, the last `SOCIAL_FOCUS` line, and the stobe.log size
+
+**Pass:** B avg fps >= 95% of A; worst frame time <= 110% of A; memory growth B-A < 100 MB; no overflow;
+`--check-shadow` exit 0.
+
+### Rerun (m11 build)
+1. p2-01, p3-01, p3-03
+2. p4-04, p5-02
+3. p6-01a/b: report `w=` for Rel Sorn
+4. p7-02
+5. p8-01 twice (A Capture=0, B Capture=1)
+
+Optionally p4-02/p4-03 once more to confirm.
+
+### Final report draft
+In `docs/social_relationship_release.md` ("Final report (draft)"), generated from scenarios.json:
+- 12 rows pass in game
+- 9 offline only / by construction
+- 18 partial / rerun pending
+- 5 blocked / open
+
+Recommendation: keep `shadow` for normal play until the soak gate and the open rows close. `enabled` is fine for a
+supervised balance session on a fixture copy. Turn off `SOCIAL_CATEGORY_SLAVERY` / `_WITNESS` if they are still
+open when enabling for real play.
