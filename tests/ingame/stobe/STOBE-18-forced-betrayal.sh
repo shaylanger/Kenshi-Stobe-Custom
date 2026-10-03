@@ -36,7 +36,7 @@ id=$(echo "$d" | awk '{print $1}'); log "deal $id"
 PSQL "SELECT betrayal FROM stobe_social_contract WHERE contract_id='$id'" | cut -c1-200
 mark=$(grep -a -c "" "$L")
 say_to "$r" "$name" "Here are your 200 cats."
-wait_deal "$name" "BREACHED_NPC|COMPLETE" 90 >/dev/null
+wait_deal "$name" "BREACHED_NPC|COMPLETE" 200 >/dev/null  # a player SPARE term is watched 120 s before the betrayal fires
 sleep 10
 stobe-auto speed 0 >/dev/null
 deal_block "$id"

@@ -29,7 +29,7 @@ stobe-say() {
 }
 trust() { flock "$KAH_LOCK" bash "$SC" trust "$@"; }  # stobe-rel-stamp reads the game time through the harness
 
-log() { echo "[$(date +%H:%M:%S)] $*"; }
+log() { echo "[$(date +%H:%M:%S)] $*" >&2; }  # stderr: functions whose stdout is captured (wait_accept) stay clean
 since_stobe() { tail -n +"$BASE_L" "$L"; }
 since_srv() { tail -n +"$BASE_SRV" "$SRV"; }
 
