@@ -1,12 +1,13 @@
 <#
-install-dll.ps1 Stobe|KenshiFP: install the freshly built DLL (Kenshi must be closed).
+install-dll.ps1 Stobe|KenshiFP|Harness: install the freshly built DLL (Kenshi must be closed).
 
   Stobe     C:\StobeBuild\out\Stobe.dll  -> Kenshi\mods\Stobe\Stobe.dll
   KenshiFP  WSL /root/KenshiFP/re_plugin/KenshiFP.dll -> the Vortex KenshiFP folder
+  Harness   Kenshi-Automation-Harness\out\AutomationHarness.dll -> Kenshi\mods\AutomationHarness\
 
 No backup copies: git is the history. Prints old and new SHA256 (first 8).
 #>
-param([Parameter(Mandatory = $true, Position = 0)][ValidateSet('Stobe', 'KenshiFP')][string]$Component)
+param([Parameter(Mandatory = $true, Position = 0)][ValidateSet('Stobe', 'KenshiFP', 'Harness')][string]$Component)
 $ErrorActionPreference = 'Stop'
 
 $targets = @{
@@ -14,6 +15,8 @@ $targets = @{
                  'D:\Steam\steamapps\common\Kenshi\mods\Stobe\Stobe.dll')
   'KenshiFP' = @('\\wsl.localhost\DwemerAI4Skyrim3\root\KenshiFP\re_plugin\KenshiFP.dll',
                  'C:\Users\Shay\AppData\Roaming\Vortex\kenshi\mods\KenshiFP RE V0.6.1 2063 1 2026-08-30T19-04Z mloL06QcG\KenshiFP\KenshiFP.dll')
+  'Harness'  = @('C:\KenshiModding\Kenshi-Automation-Harness\out\AutomationHarness.dll',
+                 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll')
 }
 $src, $dst = $targets[$Component]
 
