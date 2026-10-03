@@ -32,12 +32,12 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How (short) | Status |
 |---|---|---|---|
-| STOBE 41 | No false "you have my katana" claim | re-equip katana, gear exchange, "What have I taken from you?" | todo |
+| STOBE 41 | No false "you have my katana" claim | re-equip katana, gear exchange, "What have I taken from you?" | PASS m1 |
 | STOBE 43 | Two-part hand-over gives both items | give bread + dried meat, "give me all your bread and all your dried meat" | FAIL m1 -> STOBE 67 (no action at all; she asked "All of it?" once, agreed once) |
-| STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | todo |
+| STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | partial m1: Hateful PASS; Fond/Bonded tone not warm in the same conversation -> retest per tier on a fresh load |
 | STOBE 55 | R4 fights count (superseded once REL is enabled) | `scenarios.sh duel`, server log `a fight counts (R4)` | todo |
-| STOBE 56 | Relationship types from the list only | chats, check entries | todo |
-| STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | todo |
+| STOBE 56 | Relationship types from the list only | chats, check entries | inconclusive m1 (no new entries) |
+| STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | FAIL m1 -> STOBE 70 (old entry back via snapshot) |
 | STOBE 58 | `stobe-reset-npc` save + `--restore` | WSL only, no game action needed | todo |
 | STOBE 59 | Relationships follow the save | real insult/fight at T, reload fixture, `PLAYTHROUGH: restored` | todo |
 | STOBE 48 | KO/death during a deal | `scenarios.sh surrender` + `ko` / `kill` | todo |
@@ -48,10 +48,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | todo |
 | STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | todo |
 | STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | todo |
-| STOBE 14 | Buy from a trader | spawn Skeleton Traders near Home, "buy 3 bread from the trader" | todo |
-| STOBE 15 | Goal needing trader stock -> approval | same traders | todo |
-| STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | todo |
-| STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | todo |
+| STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | FAIL m1 -> STOBE 68 |
 | STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | todo |
 | STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | FAIL m1 -> STOBE 65 (rest OK: created at jobs widget, text, hidden for Shay) |
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
@@ -59,12 +56,15 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | todo |
 | STOBE A11 / A12 | Heal-for-item deal kept / broken | first aid via `order`, deal state | todo |
 | STOBE A13 | Remembers earlier fight events | long fight, then ask | todo |
-| STOBE A1 / A2 | FP mode: look-at click keeps control; put down with G | `fp_mode`, `fp_click`, `fp_putdown`, `fp_state` + KenshiFP.log | todo |
+| STOBE A1 / A2 | FP mode: look-at click keeps control; put down with G | `fp_mode`, `fp_click`, `fp_putdown`, `fp_state` + KenshiFP.log | PASS m1 |
 
 ### 1b. Fixture `Crafting base` (benches, Malzin, apothecaries in town)
 
 | ID | What | How | Status |
 |---|---|---|---|
+| STOBE 14 | Buy from a trader | spawn Skeleton Traders near Home, "buy 3 bread from the trader" | todo (moved: apothecaries) |
+| STOBE 15 | Goal needing trader stock -> approval | same traders | todo (moved: apothecaries) |
+| STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | todo (moved: apothecaries) |
 | STOBE 16 | Goal with a crafted ingredient: bench queue grows only by what's missing | goal at a bench | todo |
 | PG crafting group | PG 85–92, 306 (+ weapons) | PG scenarios (pending from PG agent) | todo |
 
@@ -103,10 +103,13 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 
 | Bug | Owner | Found | What | Status |
 |---|---|---|---|---|
-| STOBE 64 | STOBE | stobe-tests | `negotiation_engine` regression: "unpaid -> BREACHED_PLAYER" backdates wall time but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | open |
-| STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | open |
-| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | open |
-| STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | open |
+| STOBE 64 | STOBE | stobe-tests | `negotiation_engine` regression: "unpaid -> BREACHED_PLAYER" backdates wall time but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | fixer |
+| STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | fixer |
+| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | fixer |
+| STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | fixer |
+| STOBE 68 | STOBE | m1 | Fetch goal with destination "Shay" -> destination_not_known; failure is silent (she promised to go) | fixer |
+| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | open |
+| STOBE 70 | STOBE | m1 | Generic-name relationship key ("Dust Bandit Bowman") restored from a snapshot after the R3 cleanup | open |
 
 ## 5. Harness (KAH) known limits / open items
 
