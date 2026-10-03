@@ -13,6 +13,7 @@
 #   leave the nearby roster, else "Kor Gast (unconscious)" is in every prompt: the squad moves 700 m away after
 #   his KO. (3) Shay/Malzin were KO'd by 6 bandits at once: now 4 rounds of 2 with `health 100` between rounds.
 #   (4) the right prompt is the FIRST one after the run start that contains the question.
+#   v3: the prompt now has a <this_fight_so_far> block (server item 91, 43df0ae): PASS = Kor Gast's knockout is in it.
 #   In WSL:
 #     F=/var/www/html/StobeServer/log/context_sent_to_llm.log; N=$(wc -l < $F)      # BEFORE `stobe-auto run`
 #     ... run ...; sleep 30
@@ -38,8 +39,12 @@ health Malzin 100
 # --- opening event: a named bandit knocked out at the very start ---
 @set FIRST spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ (#\d+/\d+)
 setname ${FIRST} "Kor Gast"
-damage ${FIRST} left_leg 110 ~ flesh
-damage ${FIRST} right_leg 110 ~ flesh
+# v3 (m16 v2): no leg damage before the fight (-27 on both legs KO'd him at once, before Stobe ever saw him
+# awake); let the sweep (every 3 s) see him standing first, then fight and KO him.
+speed 1
+@sleep 8
+speed 0
+where ${FIRST} ~ ^Kor Gast(?!.*\bKO\b)
 fight Malzin ${FIRST}
 attack Shay ${FIRST}
 speed 1

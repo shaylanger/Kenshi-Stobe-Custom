@@ -8697,6 +8697,15 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       state.inventory = inventorySnapshot;
       state.fleshHealthByPart = fleshHealthByPartNow;
       state.lastSeenTick = nowTick;
+      // Item 92: first seen already down, but he went down in a fight with the squad (sweep missed the moment)
+      if (unconsciousNow && !deadNow) {
+        std::map<unsigned int, DWORD>::const_iterator pf92 = g_lastPlayerFightTickBySerial.find(serial);
+        if (pf92 != g_lastPlayerFightTickBySerial.end() && nowTick - pf92->second <= kFledFighterHealthMs) {
+          Log("EVENT_SCAN: first seen unconscious after a squad fight serial=" + ToString(serial) +
+              " name=" + ResolveCharacterNameSafe(npc) + " (item 92: knockout reported now)");
+          EmitKnockoutEvent(npc, &inventorySnapshot, hasMoneyNow ? moneyNow : -1);
+        }
+      }
       if (!isPlayerActor && IsAnyPredationTask(currentTaskNow)) {
         EmitPredationEventFromTask(npc, currentTaskSubject, nowTick,
                                    currentTaskNow);
