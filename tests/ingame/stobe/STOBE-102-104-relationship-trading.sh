@@ -70,7 +70,7 @@ case "$mode" in
     wait_deal "$n" "PROPOSED|COUNTERED" 60 >/dev/null || log "no offer from $n"
     say_to "$r" "$n" "$n, drop your weapon and I'll spare you."
     blocked=$(tail -n +"$m" "$SRV" | grep -a -F "$n" | grep -a -c -E "Weapon hand-over blocked|would give up her weapon")
-    [ "$blocked" -eq 0 ] && verdict "$mode" "PASS no block for a surrendering NPC ($(deal_line "$n" | awk '{print $3}'))" || verdict "$mode" "FAIL surrender blocked" ;;
+    [ "$blocked" -eq 0 ] && verdict "$mode" "PASS no block for a surrendering NPC ($(deal_line "$n" | awk -F '  ' '{print $3}'))" || verdict "$mode" "FAIL surrender blocked" ;;
   paylater|favour|gift|notrade)
     make_vel
     case "$mode" in

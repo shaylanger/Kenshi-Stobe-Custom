@@ -21,7 +21,7 @@ switch_off() { PSQL "DELETE FROM general_settings WHERE id='NEG_TEST_FORCE_BETRA
 trap 'switch_off; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 PSQL "DELETE FROM general_settings WHERE id='NEG_TEST_FORCE_BETRAYAL'; INSERT INTO general_settings (id, value) VALUES ('NEG_TEST_FORCE_BETRAYAL', 'true')" >/dev/null
 log "18: test switch on; setup"
-rep0=$(PSQL "SELECT COALESCE(MAX(npc_broken),0) FROM stobe_negotiation_reputation WHERE player_name=LOWER('${PLAYER}')")
+rep0=$(PSQL "SELECT COALESCE(MAX(npc_broken),0) FROM stobe_negotiation_reputation WHERE player_name=(SELECT LOWER(value) FROM general_settings WHERE id='PLAYER_NAME')")
 wait_personal_guard
 stobe-auto select ${PLAYER} >/dev/null
 park_malzin 600
@@ -40,12 +40,12 @@ wait_deal "$name" "BREACHED_NPC|COMPLETE" 90 >/dev/null
 sleep 10
 stobe-auto speed 0 >/dev/null
 deal_block "$id"
-st=$(deal_line "$name" | awk '{print $3}')
+st=$(deal_line "$name" | awk -F '  ' '{print $3}')
 plan=$(PSQL "SELECT betrayal::text FROM stobe_social_contract WHERE contract_id='$id'")
 intent=$(PSQL "SELECT (term_state::text LIKE '%intentional_betrayal%')::int FROM stobe_social_contract WHERE contract_id='$id'")
 dir=$(PSQL "SELECT COUNT(*) FROM stobe_negotiation_directive WHERE contract_id='$id' AND kind='betray' AND payload::text LIKE '%ATTACK@%'")
 atk=$(tail -n +"$mark" "$L" | grep -a -F "[EVENT] combat: $name" | grep -a -c -- "-> ${PLAYER}")
-rep1=$(PSQL "SELECT COALESCE(MAX(npc_broken),0) FROM stobe_negotiation_reputation WHERE player_name=LOWER('${PLAYER}')")
+rep1=$(PSQL "SELECT COALESCE(MAX(npc_broken),0) FROM stobe_negotiation_reputation WHERE player_name=(SELECT LOWER(value) FROM general_settings WHERE id='PLAYER_NAME')")
 mem=$(PSQL "SELECT COUNT(*) FROM eventlog WHERE data LIKE '%went back on our deal%' AND data LIKE '%${PLAYER}%' AND localts > EXTRACT(EPOCH FROM NOW())::bigint - 900")
 log "status=$st intentional=$intent betray_directive=$dir attacks_after_pay=$atk npc_broken $rep0 -> $rep1 memory_rows=$mem"
 log "plan: $(echo "$plan" | cut -c1-200)"

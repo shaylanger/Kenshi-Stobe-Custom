@@ -73,4 +73,4 @@ stobe-say speed 0 >/dev/null
 deal_block "$id"
 have=$(stobe-auto inv ${PLAYER} | grep -c -F "\"name\":\"$item\"")
 if deal_line Senlin | grep -q COMPLETE && [ "$have" -ge 1 ]; then verdict a11 "PASS healed, she handed over $item on her own, COMPLETE"
-else verdict a11 "FAIL state=$(deal_line Senlin | awk '{print $3}') item_in_shay_inv=$have"; fi
+else verdict a11 "FAIL state=$(deal_line Senlin | awk -F '  ' '{print $3}') item_in_shay_inv=$have"; fi
