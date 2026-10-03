@@ -33,7 +33,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | ID | What | How (short) | Status |
 |---|---|---|---|
 | STOBE 41 | No false "you have my katana" claim | re-equip katana, gear exchange, "What have I taken from you?" | todo |
-| STOBE 43 | Two-part hand-over gives both items | give bread + dried meat, "give me all your bread and all your dried meat" | todo |
+| STOBE 43 | Two-part hand-over gives both items | give bread + dried meat, "give me all your bread and all your dried meat" | FAIL m1 -> STOBE 67 (no action at all; she asked "All of it?" once, agreed once) |
 | STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | todo |
 | STOBE 55 | R4 fights count (superseded once REL is enabled) | `scenarios.sh duel`, server log `a fight counts (R4)` | todo |
 | STOBE 56 | Relationship types from the list only | chats, check entries | todo |
@@ -106,6 +106,7 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 64 | STOBE | stobe-tests | `negotiation_engine` regression: "unpaid -> BREACHED_PLAYER" backdates wall time but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | open |
 | STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | open |
 | STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | open |
+| STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | open |
 
 ## 5. Harness (KAH) known limits / open items
 
