@@ -44,6 +44,14 @@
 7. **Section C (25-37, 44, 45, 47, 49, 51), STOBE 20, A12**: test switches/forcing like `NEG_TEST_FORCE_BETRAYAL`, then test.
 8. **Confirm fixed-but-unconfirmed bugs in game**: 70, 86, 94, 96, 97, 99, 101, 105, 106, 107, STOBE 18 Full-Base.
 9. Rest of the m18 batch results -> bugs -> fixes -> retest. 4080 rows.
+11. **KAH 5** `power <battery> charge` on a real Battery Bank (Full-Base): coordinator, next Full-Base launch.
+12. **PG 89** = `pg-56-critical-craft` (pg.sh runs only pg-50..55): add to the PG run.
+13. **PG 151-152** = pg-15 on launch 3 with PG disabled, compared with launch 1 (same machine).
+14. **REL SR30** (recruitment join never tried) and **SR06** (victim turns hostile): force them like section C (REL builder).
+15. **KAH 2** (no vanilla game message seen by `messages`) and **KAH 3** (shop-barrel trade names "Old Wooden Barrel",
+    trader's cats unchanged): fix + verify (harness).
+16. **REL SR18/19 on Full-Base** (bed/cage rescue, plan 1f).
+17. End: prune `STOBE_full_test_plan.md` (header + section D still list confirmed items 65-89 and old DLL hashes).
 10. End: Capture=0, REL mode off, PG `set_test_mode.ps1 -Mode Normal -Rules Normal`, close Kenshi, one final summary
     (with the Shay decisions above).
 
