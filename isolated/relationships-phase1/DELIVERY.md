@@ -889,3 +889,15 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
   setname guard now accepts `^([^ ].* \[)?Hungry Bandit\]? -> ` in p6-01a and p7-02, and still rejects another NPC
   ("Outlaw Watch Jamin -> ...").
 - Server `feature/social-phase1` with those fixes plus SR43 (perf gate) marked as passing in game.
+
+## 2026-10-03 m16 batch 5 (server 5b847f5, Stobe E1CD05BF)
+- **SR16: passes in game.** p4-01: Rel Ona -> Malzin lifesaving +31. The second treatment added routine_healing 0
+  (shadow).
+- **SR12: passes in game for "actor vs later owner".** p3-03: Rel Vash woke enslaved.
+  - Enslavement -73 goes to the owner Rel Grell only.
+  - Shay, the KO attacker, gets only aggression and serious_assault (-37).
+  - There is one enslaved fact, and the unchaining credited nobody (no_liberator).
+  - Repeated chaining is tested offline only.
+- **Surrender rows unattended:** `server/tests/social_relationship/ingame/rel-surrender.sh` (server `0e2c835`):
+  - `kept <out> hate` = SR28 + row 3;
+  - `breach <out>` = row 4 (SR29).

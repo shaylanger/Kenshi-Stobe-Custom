@@ -79,7 +79,7 @@ case "$cmd" in
     done
     [ -n "$r" ] || { stobe-auto speed 0 >/dev/null; echo "no raider found: paused" >&2; exit 1; }
     stobe-auto teleport "$r" Shay dist 3 >/dev/null
-    name=$(stobe-auto where "$r" | sed -E 's/ #[0-9]+ .*//')
+    name=$(stobe-auto where "$r" | sed -E 's/ #[0-9].*//')
     stobe-say speed 1 >/dev/null
     for i in $(seq 1 15); do # until he really swings at Shay (squad AI ignores some orders)
       stobe-auto attack "$r" Shay >/dev/null; stobe-auto attack Shay "$r" >/dev/null
@@ -91,7 +91,7 @@ case "$cmd" in
       sleep 2
     done
     stobe-auto health "$r" 25 >/dev/null
-    name=$(stobe-auto where "$r" | sed -E 's/ #[0-9]+ .*//') # he may have been named meanwhile
+    name=$(stobe-auto where "$r" | sed -E 's/ #[0-9].*//') # he may have been named meanwhile
     deal=""
     for i in $(seq 1 12); do
       sleep 5
@@ -117,12 +117,12 @@ case "$cmd" in
     stobe-rel-stamp "$name" || true  # item 59: stamp the edit with the current game time
     ;;
   raiders)
-    stobe-auto chars 150 | tr '|' '\n' | grep 'Starving Bandits' | grep -v -e ' DEAD' -e ' KO' | grep -o '#[0-9]*' || true
+    stobe-auto chars 150 | tr '|' '\n' | grep 'Starving Bandits' | grep -v -e ' DEAD' -e ' KO' | grep -oE '#[0-9]+/[0-9]+' || true
     ;;
   bodies)
     n="${1:-2}"; near="${2:-Malzin}"; faction="${3:-Drifters}"
     out=$(stobe-auto spawn "Hungry Bandit" "$faction" near "$near" dist 5 count "$n")
-    for s in $(echo "$out" | grep -o '#[0-9]*'); do stobe-auto kill "$s" >/dev/null; echo "$s"; done
+    for s in $(echo "$out" | grep -oE '#[0-9]+/[0-9]+'); do stobe-auto kill "$s" >/dev/null; echo "$s"; done
     ;;
   fresh)
     stobe-auto load auto-home >/dev/null; sleep 12; stobe-auto wait-world 180 >/dev/null; sleep 5
