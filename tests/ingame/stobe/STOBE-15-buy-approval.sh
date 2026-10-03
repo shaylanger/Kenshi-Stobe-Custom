@@ -34,11 +34,11 @@ stobe-auto benches 200 crafts | tr '|' '\n' | grep -A0 "Basic Medical Workbench"
 stobe-auto inv Malzin | grep -q '"name":"Fabrics"' && { verdict 15 "SETUP FAIL Malzin already has Fabrics"; exit 1; }
 stobe-auto find item Fabrics | cut -c1-200
 n=0
-# m16 craft2: no buy row. The fallback only asks the nearest trader within 220 m of Malzin (STG_SCAN_RADIUS);
-# the town apothecaries may be further. A trader squad right next to her makes the nearest one known.
-# KenshiFP.log `BUY_FALLBACK <goal> Fabrics: ...` (item 99) says why if it still fails.
-stobe-auto spawn "Skeleton Traders Animals" "Traders Guild" near Malzin dist 60 | cut -c1-200
-sleep 2
+# m16 craft4: the "Skeleton Traders Animals" squad is only pack spiders (traders, but they never held the Fabrics:
+# shopstock showed Iron Plates/Electrical Components/Skeleton Muscle), and the town apothecaries are ~250 m from
+# Malzin, outside the fallback's 220 m. So: bring a real trader with real stock next to her.
+stobe-auto teleport "Apothecary Abia" Malzin dist 30 | cut -c1-160
+stobe-auto give "Apothecary Abia" "Fabrics" 5 | cut -c1-120
 # the medical bench needs power (m16 craft2: out_of_power=1.0): harness `power ... supply` (KAH 10)
 stobe-auto power "Basic Medical Workbench" supply radius 300 | cut -c1-200
 stobe-say speed 1 >/dev/null; sleep 3; stobe-say speed 0 >/dev/null
@@ -47,6 +47,11 @@ for t in $(stobe-auto traders 600 | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do
   stobe-auto give "$t" "Fabrics" 5 | cut -c1-120; n=$((n+1))
 done
 log "gave Fabrics to $n trader(s)"; [ "$n" -gt 0 ] || { verdict 15 "SETUP FAIL no trader within 600"; exit 1; }
+# what the fallback will see: traders near Malzin and what each really sells (`shopstock` = the game's view)
+for t in $(stobe-auto traders 300 near Malzin | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do
+  stobe-auto shopstock "$t" | cut -c1-300
+done
+stobe-auto shopstock "Apothecary Abia" | grep -q "Fabrics" || { verdict 15 "SETUP FAIL Abia does not sell Fabrics"; exit 1; }
 tail -n +"$BASE_K" "$KFP" | grep -a "BUY_FALLBACK" | tail -3
 cats0=$(money_of Malzin)
 stobe-say say Malzin "Malzin, make me one Basic First Aid Kit at the medical workbench." --wait 40 >/dev/null 2>&1 || true
