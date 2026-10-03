@@ -18,10 +18,10 @@ IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `arch
 
 | Component | Installed | Pending install |
 |---|---|---|
-| Stobe.dll | `32C70253` (REL 1–5 + m4b; Capture=1 in test runs) | - |
-| KenshiFP.dll | `846E6119` (65, 75, 76, 80, 81) | - |
+| Stobe.dll | `86EF4CD0` (REL 1–7) | `162DB1E3` (REL m8) |
+| KenshiFP.dll | `C4DE5E63` (…, 83 diag) | `8A7BC8A8` (84) |
 | ProfessionGearProgression.dll | `FAA5B471` (craft-output roll, shop radius 60) | - |
-| AutomationHarness.dll | `542B90BF` (radius, teleport building, hunger read, shop radius 60) | - |
+| AutomationHarness.dll | `542B90BF` | `FE2A1AE3` (trade places the item) + `build` in progress |
 | Server (live) | `2b3593c`+ (branch `stobe`, m1 fixes 64–72) | REL phase 1 (`feature/social-phase1`, inert by default) once delivered |
 
 ## 1. Automated: runnable now
@@ -42,12 +42,12 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 59 | Relationships follow the save | real insult/fight at T, reload fixture, `PLAYTHROUGH: restored` | PASS m3 (stamped trust -80 -> reload -> back to the save's state) |
 | STOBE 48 | KO/death during a deal | `scenarios.sh surrender` + `ko` / `kill` | PASS m1 (a + b) |
 | STOBE 53 | Cap without a lie | surrender, "Make it 350" | PASS m1 |
-| STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | tier 1 PASS m2 (offer 200 = carried, `GIVE_CATS@Shay@200@exact`, Shay +200); tier 0 (Hungry Bandit) todo |
-| STOBE 61 | Cap tiers 3–5 (top-up) | spawn Samurai Sergeant / Dust King, beat, accept, 2nd deal | todo |
-| STOBE 20 | Refuse to pay after hand-over | fight setup | todo |
-| STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | todo |
-| STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | todo |
-| STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | FAIL m8 -> STOBE 85 (prompt has it, NPC ignores it) |
+| STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | PASS (tier 1 m2, tier 0 m8) |
+| STOBE 61 | Cap tiers 3–5 (top-up) | spawn Samurai Sergeant / Dust King, beat, accept, 2nd deal | blocked m8 -> STOBE 87 (Dust King never gets an initiative check) |
+| STOBE 20 | Refuse to pay after hand-over | fight setup | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
+| STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
+| STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
+| STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | PASS m8 (after 85) |
 | STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | PASS m3 (fetch + return); hand-over on return -> 76, retest |
 | STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | PASS m8 |
 | STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | PASS m2 (after 65: panel 2086,1030, above TimeMoneyPanel 1096) |
@@ -73,7 +73,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | ran m8: 27/0, 17/0, 11/0 (no gate line), 23/2; REL builder judging |
+| REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | SR24 PASS m8; SR25 sleeping witness fixed (rerun); SR30 inconclusive (LLM never tried to join); SR32 blocked (slavery) |
 | PG config launches | pg-30 (AutoClassify off) | pg-30 PASS m5, pg-31 PASS m6, pg-40 PASS m6, pg-41 65/1 m6 (chest full, scenario) |
 | PG trader group | PG 211–237 shop rows | PG `tests/ingame/trader/pg-20` (launch 1); `pg-40` (launch 4, NormalVerbose) | todo |
 
@@ -82,20 +82,22 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | ID | What | How | Status |
 |---|---|---|---|
 | REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | PASS (p1-01 m3; p1-02/03/04 m4 after the campaign 'legacy' fix) |
-| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | ran m4: p2-02 22/0, p2-03 31/0, p2-05 18/0 (enabled), p2-04 15/0, p2-01 inspect ok; REL builder judging SR rows |
-| REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | ran m4: 28/4, 26/1, 34/3, 32/2; REL builder judging |
+| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | PASS in game: SR02/05 (m8), SR03/04 (m4); SR06 inconclusive (victim turns hostile) |
+| REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | SR10 PASS m8; SR08 fixed (m8 build), rerun; SR11/12 blocked (no enslaved fact, probe 21) |
 
 ### 1e. REL phases 4–5 (ran m4)
 
 | ID | What | Status |
 |---|---|---|
-| REL p4-01…04 | first aid, carry to bed / cage, food | ran m4: 27/1, 21/2, 30/8, 42/3; REL builder judging |
-| REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | ran m4: 9/4, 16/2; deal procedures todo |
+| REL p4-01…04 | first aid, carry to bed / cage, food | SR15 PASS m8 (+29 lifesaving); food rerun; SR18/19 need a bed/cage fixture (harness `build` in progress) |
+| REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | SR22 PASS m8 (fair trade scores 0); gift rerun; deal procedures (SR29) todo |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
 | ID | What it needs |
 |---|---|
+| STOBE 20, 21, 22 | A fight Shay survives long enough for an offer: 3 raiders KO her (m8); needs a stronger test character (`setstat`/health regen) or the raid squad `size` scaled down per member |
+| REL SR11, SR12, SR32 | An enslavement the game reports (spawned bandits may already count as slaves: probe 21) |
 | STOBE A11 / A12 | A wounded NPC who can't bandage herself (harness `damage` wounds don't bleed; NPCs self-treat) and stays put for a heal-for-item deal |
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
@@ -142,7 +144,9 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 82 | KFP | m6 | "buy … and bring it to me": no hand-over on return (76 covers FETCH only) | server+KFP fixed; blocked by 84 (item never placed), retest |
 | STOBE 83 | KFP | m7 | Carried-goods BUY: money paid, item missing ("Kenshi rejected the purchase") | -> 84 |
 | STOBE 84 | KFP+KAH | m8 | `Inventory::buyItem` returns the bought item unplaced: KenshiFP BUY and harness `trade` lose the item (money paid) | fixed (KenshiFP 8A7BC8A8, harness FE2A1AE3), install + retest |
-| STOBE 85 | STOBE | m8 | Bad reputation (broken > kept) in the prompt is ignored by new NPCs | fixer |
+| STOBE 85 | STOBE | m8 | Bad reputation (broken > kept) in the prompt is ignored by new NPCs | fixed live (795b0f1), PASS m8 |
+| STOBE 86 | STOBE | m8 | Reloading an older save turns deals made after it into BREACHED_PLAYER | fixer |
+| STOBE 87 | STOBE | m8 | Unique NPC named like its template (Dust King) gets no initiative check / surrender | fixer |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
