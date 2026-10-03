@@ -1,15 +1,42 @@
 #!/bin/bash
 # stobe-reset-npc <npc> [since-date]
-# Clears one NPC's server-side test state (live `stobe` DB, no backup; Shay OK'd this for test
+# Clears one NPC's server-side test state (live `stobe` DB; Shay OK'd this for test
 # data, 2026-09-30): her deals and queued directives, memories / summaries / diary / events
 # involving her since <since-date> (default 2026-09-29), and her relationship entry for the
 # player (affinity back to neutral). The game save is untouched: reload it separately.
+# Her relationship entry for the player is saved first (only the first time, so repeated
+# test resets keep the real value) to /root/stobe-backups/relationship_saved/<npc>.json;
+# `stobe-reset-npc --restore <npc>` puts it back and removes the saved copy.
 set -e
-npc="${1:?usage: stobe-reset-npc <npc> [since-date YYYY-MM-DD]}"
+SAVE_DIR=/root/stobe-backups/relationship_saved
+mkdir -p "$SAVE_DIR"
+if [ "$1" = "--restore" ]; then
+  npc="${2:?usage: stobe-reset-npc --restore <npc>}"
+  lower=$(echo "$npc" | tr '[:upper:]' '[:lower:]')
+  f="$SAVE_DIR/$lower.json"
+  [ -s "$f" ] || { echo "nothing saved for $npc"; exit 1; }
+  player=$(sudo -u postgres psql -d stobe -At -c "SELECT value FROM general_settings WHERE id='PLAYER_NAME'" 2>/dev/null); player="${player:-Shay}"
+  entry=$(cat "$f")
+  sudo -u postgres psql -d stobe -v ON_ERROR_STOP=1 -q -v entry="$entry" <<SQL
+UPDATE core_npc_master SET extended_data = jsonb_set(COALESCE(extended_data,'{}'::jsonb), '{relationships}',
+    COALESCE(extended_data->'relationships','{}'::jsonb) || jsonb_build_object('${player}', :'entry'::jsonb))
+  WHERE LOWER(name)='${lower}';
+UPDATE core_npc_master SET relationships = (CASE WHEN relationships LIKE '{%' THEN relationships::jsonb ELSE '{}'::jsonb END
+    || jsonb_build_object('${player}', :'entry'::jsonb))::text WHERE LOWER(name)='${lower}';
+SQL
+  rm -f "$f"
+  echo "restored $npc -> $player: $entry"
+  exit 0
+fi
+npc="${1:?usage: stobe-reset-npc <npc> [since-date YYYY-MM-DD] | --restore <npc>}"
 since="${2:-2026-09-29}"
 lower=$(echo "$npc" | tr '[:upper:]' '[:lower:]')
 player=$(sudo -u postgres psql -d stobe -At -c "SELECT value FROM general_settings WHERE id='PLAYER_NAME'" 2>/dev/null)
 player="${player:-Shay}"
+if [ ! -s "$SAVE_DIR/$lower.json" ]; then
+  saved=$(sudo -u postgres psql -d stobe -At -c "SELECT v FROM core_npc_master m, jsonb_each(m.extended_data->'relationships') AS e(k, v) WHERE LOWER(m.name)='${lower}' AND LOWER(k)=LOWER('${player}') LIMIT 1")
+  if [ -n "$saved" ]; then echo "$saved" > "$SAVE_DIR/$lower.json"; echo "saved $npc -> $player: $saved"; fi
+fi
 sudo -u postgres psql -d stobe -v ON_ERROR_STOP=1 -q <<SQL
 BEGIN;
 \set since 'extract(epoch from timestamptz ''${since} 00:00-06'')'
