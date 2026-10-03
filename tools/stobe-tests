@@ -17,10 +17,22 @@ clean_db() {  # other suites leave events with late game times behind; negotiati
 }
 pass=0; fail=0; known=0
 # negotiation suites first, each on a clean slate
-for t in $(ls tests/*.php | grep -E "$PATTERN" | sort -t/ -k2 | awk '/negotiation_/{print; next} {rest=rest" "$0} END{print rest}' | tr ' ' '\n' | grep .); do
+for t in $(ls tests/*.php | grep -v '/social_' | grep -E "$PATTERN" | sort -t/ -k2 | awk '/negotiation_/{print; next} {rest=rest" "$0} END{print rest}' | tr ' ' '\n' | grep .); do
   name=$(basename "$t" .php)
   clean_db
   out=$(timeout 180 php "$t" 2>&1); rc=$?
+  last=$(printf '%s' "$out" | grep -v '^\s*$' | tail -1 | cut -c1-110)
+  if [ $rc -eq 0 ]; then pass=$((pass+1));
+  elif echo " $KNOWN " | grep -q " $name "; then known=$((known+1)); echo "known-fail  $name: $last";
+  else fail=$((fail+1)); echo "FAIL        $name: $last"; printf '%s\n' "$out" | grep -E 'FAIL' | head -3 | sed 's/^/            /' | cut -c1-200; fi
+done
+# REL social suites: their own disposable DB (stobe_social_phase1_test), run like
+# tests/run_social_phase1.py does (php -r require, no argv), in its order.
+SOCIAL="social_relationship_unit social_relationship_integration social_playthrough_regression social_concurrency_regression social_combat_regression social_unconscious_regression social_care_regression social_property_regression"
+for name in $SOCIAL; do
+  [ -f "tests/$name.php" ] || continue
+  echo "tests/$name.php" | grep -qE "$PATTERN" || continue
+  out=$(STOBE_DB_NAME=stobe_social_phase1_test timeout 180 php -r "try { require 'tests/$name.php'; } catch (Throwable \$e) { echo 'FAIL ', get_class(\$e), ': ', \$e->getMessage(), \"\n\"; exit(1); }" 2>&1); rc=$?
   last=$(printf '%s' "$out" | grep -v '^\s*$' | tail -1 | cut -c1-110)
   if [ $rc -eq 0 ]; then pass=$((pass+1));
   elif echo " $KNOWN " | grep -q " $name "; then known=$((known+1)); echo "known-fail  $name: $last";

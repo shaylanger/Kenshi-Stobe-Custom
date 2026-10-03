@@ -1649,7 +1649,8 @@ static void stg_tick_goal_guarded(void *gw,StgGoal *g)
 #define SGR_STOP_DIST 60.0f
 #define SGR_GIVEUP_MS 180000
 #define SGR_REORDER_MS 4000
-typedef struct { uint32_t serial; char actor[128]; DWORD until_ms; DWORD next_ms; int cleared; int last_skip; int logged_target; } SgrReturn;
+typedef struct { uint32_t serial; char actor[128]; DWORD until_ms; DWORD next_ms; int cleared; int last_skip; int logged_target;
+                 char give_item[128]; char give_to[128]; int give_qty; /* item 76: hand a fetch over on arrival */ } SgrReturn;
 static SgrReturn g_sgr[SGR_MAX];
 
 static int sgr_actor_busy(uint32_t serial)
@@ -1661,7 +1662,13 @@ static int sgr_actor_busy(uint32_t serial)
     return 0;
 }
 
+static void sgr_start_give(uint32_t serial,const char *actor,const char *give_item,const char *give_to,int give_qty);
 static void sgr_start(uint32_t serial,const char *actor)
+{
+    sgr_start_give(serial,actor,NULL,NULL,0);
+}
+
+static void sgr_start_give(uint32_t serial,const char *actor,const char *give_item,const char *give_to,int give_qty)
 {
     if(!serial)return;
     SgrReturn *slot=NULL;DWORD now=stobe_game_ms();
@@ -1671,7 +1678,12 @@ static void sgr_start(uint32_t serial,const char *actor)
     memset(slot,0,sizeof(*slot));
     slot->serial=serial;strncpy(slot->actor,actor?actor:"",sizeof(slot->actor)-1);
     slot->until_ms=now+SGR_GIVEUP_MS;slot->next_ms=now+1500; /* let the last order settle */
-    logline("[stobe] GOAL_RETURN start actor=%s",slot->actor);
+    if(give_item&&*give_item&&give_to&&*give_to&&give_qty>0){
+        strncpy(slot->give_item,give_item,sizeof(slot->give_item)-1);
+        strncpy(slot->give_to,give_to,sizeof(slot->give_to)-1);
+        slot->give_qty=give_qty;
+    }
+    logline("[stobe] GOAL_RETURN start actor=%s%s%s",slot->actor,slot->give_item[0]?" give_to=":"",slot->give_item[0]?slot->give_to:"");
 }
 
 static void sgr_tick(void *gw)
@@ -1697,6 +1709,18 @@ static void sgr_tick(void *gw)
         r->last_skip=0;
         if(wgp_distance(a,p)<=SGR_STOP_DIST){
             logline("[stobe] GOAL_RETURN arrived actor=%s",r->actor);
+            if(r->give_item[0]&&r->give_qty>0){
+                /* item 76: "bring it to me": the named person if close, else the return target when it is that person */
+                void *dst=wgp_find_squad_actor(gw,0,r->give_to);
+                Vec3 dp={0,0,0};
+                if(!dst||!char_position(dst,&dp)||wgp_distance(a,dp)>SGR_STOP_DIST*2){
+                    char tn[128]={0};stg_char_name(player,tn,sizeof(tn));
+                    dst=wgp_name_match(tn,r->give_to)>0?player:NULL;
+                }
+                int moved=dst?stg_transfer_char_to_char(actor,dst,r->give_item,r->give_qty):0;
+                char dn[128]={0};if(dst)stg_char_name(dst,dn,sizeof(dn));
+                logline("[stobe] GOAL_RETURN handed actor=%s item=%s qty=%d/%d to=%s",r->actor,r->give_item,moved,r->give_qty,dst?dn:"(not here)");
+            }
             memset(r,0,sizeof(*r));continue;
         }
         if(!r->cleared){
@@ -1727,7 +1751,10 @@ static void sgr_scan(void)
         if(g->state==STG_STATE_ACTIVE){g->rt_seen_active=1;g->rt_end_ms=0;continue;}
         if(g->rt_seen_active&&!g->rt_end_ms)g->rt_end_ms=stobe_game_ms();
         if(g->rt_seen_active&&!g->rt_return_started&&g->state!=STG_STATE_PAUSED){
-            g->rt_return_started=1;sgr_start(g->actor_serial,g->actor);
+            g->rt_return_started=1;
+            if(!strcmp(g->kind,"FETCH")&&g->state==STG_STATE_COMPLETE&&g->destination[0]&&!g->has_dest&&g->completed>0)
+                sgr_start_give(g->actor_serial,g->actor,g->item,g->destination,g->completed); /* item 76 */
+            else sgr_start(g->actor_serial,g->actor);
         }
     }
 }
