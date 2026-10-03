@@ -23,8 +23,8 @@
 #define WGP_SCAN_RADIUS 1400.0f
 
 #define WGP_BF_MINE 1
-#define WGP_BF_CRAFTING 9
-#define WGP_BF_MINE_NATURAL 25
+#define WGP_BF_CRAFTING 10 /* item 93b: BF_CRAFTING (9 is BF_SHOP) */
+#define WGP_BF_MINE_NATURAL 27 /* item 93b: BF_MINE_NATURAL (25 is BF_SKELETON_BED) */
 #define WGP_TASK_COLLECT_OUTPUT 92
 
 #define WGP_GETPROD_SYM "?_NV_getProductionBuilding@Building@@QEAAPEAVProductionBuilding@@XZ"

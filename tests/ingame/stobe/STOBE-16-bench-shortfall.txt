@@ -2,7 +2,7 @@
 # covers: STOBE 16 (a goal needing a crafted ingredient at a bench: the bench queue grows only by what's missing)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP B3E2800C (work planner, item 93), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
+# needs: KenshiFP BAF2D1DE (work planner, items 93 + 93b), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
 # verify:
 #   Chain (from this install's game data, tools/research): Junkbow = Steel Bars + Hinge, crafted at the
 #   Crossbow Crafting Bench (in the base); Hinge = crafted at the "Arrow Making Bench " (sid 96184-Newwworld.mod,
@@ -41,7 +41,7 @@ speed 1
 # m16: the goal was accepted only after the reply (LLM + TTS): wait before checking
 @sleep 30
 @log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Junkbow qty=2
-# item 93 (KenshiFP B3E2800C): the planner must find the bench (if not: KenshiFP.log WORK_DIAG lines say why)
+# item 93 + 93b (KenshiFP BAF2D1DE): the planner must find the bench (if not: KenshiFP.log WORK_DIAG lines say why)
 @log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ find_producer done found=1 building=Crossbow Crafting Bench crafting=1
 speed 0
 # samples while the goal queues and crafts: the queues must never pass the shortfall
