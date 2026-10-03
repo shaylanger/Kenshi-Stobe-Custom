@@ -2,7 +2,7 @@
 # covers: STOBE 16 (a goal needing a crafted ingredient at a bench: the bench queue grows only by what's missing)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP 80475308 (work planner, items 93-93c + 95), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
+# needs: KenshiFP 616FBF45 (work planner, items 93-95), Stobe EF62563B, harness 55192E94 (build, research, benches, #serial/index)
 # verify:
 #   Chain (from this install's game data, tools/research): Junkbow = Steel Bars + Hinge, crafted at the
 #   Crossbow Crafting Bench (in the base); Hinge = crafted at the "Arrow Making Bench " (sid 96184-Newwworld.mod,
@@ -31,6 +31,15 @@ clearjobs Malzin
 research "Crossbow Bolts"
 research "Crossbow Crafting"
 build 96184-Newwworld.mod near Malzin dist 12 ~ Arrow Making Bench
+# m16 craft2: the base grid has power (has_power=1) but nothing stored (out_of_power=1.0): the benches need
+# -5..-10 power and the base has no battery. A charged Battery Bank next to them feeds the grid.
+build "Battery Bank" near Malzin dist 25 ~ Battery Bank
+power "Battery Bank" charge
+speed 1
+@sleep 3
+speed 0
+building "Crossbow Crafting Bench" radius 300 ~ out_of_power=0
+building "Arrow Making Bench" radius 300 ~ out_of_power=0
 benches 200 crafts ~ Crossbow Crafting Bench [^|]*queue=0[^|]*Junkbow
 benches 200 crafts ~ Arrow Making Bench [^|]*queue=0[^|]*Hinge
 # m16: her main inventory held only 10 Steel Bars (Hinge 0/1): backpack first, Hinge before the bars,
@@ -39,7 +48,8 @@ give Malzin "Large Backpack" 1 ~ got 1/1
 sections Malzin ~ Large Backpack
 give Malzin "Hinge" 1 ~ got 1/1
 give Malzin "Steel Bars" 6 ~ got 6/6
-give Malzin "Iron Plates" 4 ~ got 4/4
+# m16 craft2: her main inventory was full (0/4): Iron Plates go into the base storage (the planner fetches from it)
+stash "Iron Plates" 4 near Malzin ~ 4
 # try to power the built bench (outside the outpost; may stay unpowered)
 power "Arrow Making Bench" on radius 300
 building "Arrow Making Bench" radius 300

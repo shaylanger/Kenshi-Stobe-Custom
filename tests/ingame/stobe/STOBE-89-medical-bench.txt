@@ -3,7 +3,7 @@
 #         then Kenshi died silently on the goal's first tick); also item 93b (crafting bench constant)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP 80475308 (scan buffers from B67AEAD3 + items 93-93c, 95), Stobe E1CD05BF, harness F946C881
+# needs: KenshiFP 616FBF45 (items 93-95 + 99 diag), Stobe EF62563B, harness 55192E94 (build Battery Bank, power charge)
 # verify:
 #   - no crash: `kenshi-ctl.ps1 health` = ok after the run, `status` still answers (last steps below), no new
 #     crashDump zip in D:\...\Kenshi\;
@@ -25,6 +25,14 @@ clearjobs Malzin
 # m16: blueprint found nothing; the game data research is "Basic First Aid Kits" (requires "Fabric Manufacture")
 research "Fabric Manufacture"
 research "Basic First Aid Kits"
+# m16 craft2: the base grid has power (has_power=1) but nothing stored (out_of_power=1.0): the benches need
+# -5..-10 power and the base has no battery. A charged Battery Bank next to them feeds the grid.
+build "Battery Bank" near Malzin dist 25 ~ Battery Bank
+power "Battery Bank" charge
+speed 1
+@sleep 3
+speed 0
+building "Basic Medical Workbench" radius 300 ~ out_of_power=0
 benches 200 crafts ~ Basic Medical Workbench [^|]*Basic First Aid Kit
 give Malzin "Large Backpack" 1 ~ got 1/1
 give Malzin "Fabrics" 6 ~ got 6/6

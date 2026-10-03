@@ -1248,18 +1248,23 @@ static int stg_request_purchase_fallback(void *gw,void *actor,uint32_t actor_ser
     if(existing>0){snprintf(reason,reason_sz,existing==2?"purchase of %s completed":"waiting for approval to buy %s",item);return existing==2?2:1;}
 
     char trader_name[128]={0};float dist=0;
+    /* Item 99: say once per goal+item why no purchase was offered */
+    static char s_diag99[512];
+    char key99[256];snprintf(key99,sizeof(key99),"%s|%s",parent_goal_id?parent_goal_id:"",item);
+    int log99=strcmp(s_diag99,key99)!=0;
+    if(log99){strncpy(s_diag99,key99,sizeof(s_diag99)-1);s_diag99[sizeof(s_diag99)-1]='\0';}
     void *trader=stg_find_trader(gw,actor,"",trader_name,sizeof(trader_name),&dist);
-    if(!trader){return 0;}
+    if(!trader){if(log99)logline("[stobe] BUY_FALLBACK %s %s: no trader within %.0f of %s (Item 99)",parent_goal_id?parent_goal_id:"",item,STG_SCAN_RADIUS,actor_name);return 0;}
 
     unsigned char shop_mem[0xE0] __attribute__((aligned(16)));
     memset(shop_mem,0,sizeof(shop_mem));
-    if(!g_stg_shop_ctor||!g_stg_shop_inv||!g_stg_shop_dtor)return 0;
-    void *shop=g_stg_shop_ctor(shop_mem,trader);if(!shop)return 0;
+    if(!g_stg_shop_ctor||!g_stg_shop_inv||!g_stg_shop_dtor){if(log99)logline("[stobe] BUY_FALLBACK %s %s: shop exports missing (Item 99)",parent_goal_id?parent_goal_id:"",item);return 0;}
+    void *shop=g_stg_shop_ctor(shop_mem,trader);if(!shop){if(log99)logline("[stobe] BUY_FALLBACK %s %s: no shop for %s (Item 99)",parent_goal_id?parent_goal_id:"",item,trader_name);return 0;}
     void *inv=g_stg_shop_inv(shop);
     void *offer=inv?stg_first_matching(inv,item):NULL;
     int quote=offer?stg_item_value_single(offer,1):-1;
     g_stg_shop_dtor(shop);
-    if(!offer||quote<0)return 0;
+    if(!offer||quote<0){if(log99)logline("[stobe] BUY_FALLBACK %s %s: nearest trader %s (%.0f away) %s (Item 99)",parent_goal_id?parent_goal_id:"",item,trader_name,dist,!inv?"has no shop inventory":!offer?"does not stock it":"has no price for it");return 0;}
 
     StgGoal *slot=NULL;
     for(int i=0;i<STG_MAX_GOALS;i++)if(!g_stg_goals[i].used||g_stg_goals[i].state==STG_STATE_COMPLETE||g_stg_goals[i].state==STG_STATE_CANCELLED||g_stg_goals[i].state==STG_STATE_BLOCKED){slot=&g_stg_goals[i];break;}

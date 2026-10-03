@@ -5,7 +5,7 @@
 # fixture: Crafting base
 # reset: fresh (reload the Crafting base copy first; once per mode)
 # usage: STOBE-15-buy-approval.sh approve|decline
-# needs: KenshiFP 80475308 (medical bench found + queued, items 93-95; STOBE 89 should pass first), Stobe E1CD05BF+,
+# needs: KenshiFP 616FBF45 (medical bench + item 99 BUY_FALLBACK diagnostics; STOBE 89 should pass first), Stobe EF62563B+,
 #        harness F946C881
 # chain: Basic First Aid Kit = Fabrics at the Basic Medical Workbench (game data: 'medical crafting basic' consumes
 #        Fabrics). No Loom in the base, so Fabrics have no producer; the planner then asks the NEAREST trader to
@@ -34,16 +34,27 @@ stobe-auto benches 200 crafts | tr '|' '\n' | grep -A0 "Basic Medical Workbench"
 stobe-auto inv Malzin | grep -q '"name":"Fabrics"' && { verdict 15 "SETUP FAIL Malzin already has Fabrics"; exit 1; }
 stobe-auto find item Fabrics | cut -c1-200
 n=0
+# m16 craft2: no buy row. The fallback only asks the nearest trader within 220 m of Malzin (STG_SCAN_RADIUS);
+# the town apothecaries may be further. A trader squad right next to her makes the nearest one known.
+# KenshiFP.log `BUY_FALLBACK <goal> Fabrics: ...` (item 99) says why if it still fails.
+stobe-auto spawn "Skeleton Traders Animals" "Traders Guild" near Malzin dist 60 | cut -c1-200
+sleep 2
+# the medical bench needs power (m16 craft2: out_of_power=1.0): a charged Battery Bank
+stobe-auto build "Battery Bank" near Malzin dist 25 | cut -c1-160
+stobe-auto power "Battery Bank" charge | cut -c1-160
+stobe-say speed 1 >/dev/null; sleep 3; stobe-say speed 0 >/dev/null
+stobe-auto building "Basic Medical Workbench" radius 300 | grep -oE "has_power=[0-9] out_of_power=[0-9.]+"
 for t in $(stobe-auto traders 600 | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do
   stobe-auto give "$t" "Fabrics" 5 | cut -c1-120; n=$((n+1))
 done
 log "gave Fabrics to $n trader(s)"; [ "$n" -gt 0 ] || { verdict 15 "SETUP FAIL no trader within 600"; exit 1; }
+tail -n +"$BASE_K" "$KFP" | grep -a "BUY_FALLBACK" | tail -3
 cats0=$(money_of Malzin)
 stobe-say say Malzin "Malzin, make me one Basic First Aid Kit at the medical workbench." --wait 40 >/dev/null 2>&1 || true
 stobe-say speed 1 >/dev/null
 row=""
 for i in $(seq 1 20); do sleep 3; row=$(grep -a -P '^buy-[^\t]*Fabrics' "$ST" 2>/dev/null | tail -1); echo "$row" | grep -q WAITING_APPROVAL && break; done
-tail -n +"$BASE_K" "$KFP" | grep -a -E "WORK_GOAL (accepted|blocked)|find_producer done" | tail -4 | cut -c1-220
+tail -n +"$BASE_K" "$KFP" | grep -a -E "WORK_GOAL (accepted|blocked)|find_producer done|BUY_FALLBACK" | tail -6 | cut -c1-260
 echo "$row" | grep -q WAITING_APPROVAL || { stobe-say speed 0 >/dev/null; verdict 15 "FAIL no WAITING_APPROVAL buy row: ${row:-none}"; exit 1; }
 bid=$(echo "$row" | cut -f1); log "approval row: $(echo "$row" | tr '\t' '|' | cut -c1-250)"
 if [ "$mode" = approve ]; then line="Yes, go ahead and buy the fabrics."; want="ACTIVE|COMPLETE"; ctl=APPROVE
