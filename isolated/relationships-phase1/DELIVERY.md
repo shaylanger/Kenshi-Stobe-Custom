@@ -956,3 +956,12 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
   `ResolveLimbPartPresent`), so `sever` must leave the game's own "limb lost" state.
 - SR09/13/14 feasibility: estimate only, see the coordinator report. Main lever: the game's own HUNT_MY_THIEF task as
   the caught signal. Main risk: a real steal driver in the harness.
+
+## 2026-10-03 Phase 8 wrap-up (server feature/social-phase1 8ca2a49)
+- `REL_FINAL_REPORT.md`: every SR row with its test, run and verdict. 22 pass in game; SR06/07/30 and the
+  real-slave parts of SR12/SR32 are pending the queued runs; SR09/13/14 wait for Shay.
+- `REL_INSTALL_MANIFEST.md`: server commits, DB tables and migration, native patches (EF62563B), settings.
+- Offline runner passes 25/25 on 8ca2a49 after resetting the test DB's core_npc_id_seq.
+- Found: 43 live `core_npc` rows have `extended_data` as a JSON array, so relationship writes to them fail
+  (STOBE fixer).
+- Theft probe scenarios `REL-probe-theft-seen/unseen.txt` (KAH 22).
