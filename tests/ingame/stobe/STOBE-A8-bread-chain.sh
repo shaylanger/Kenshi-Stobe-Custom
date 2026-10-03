@@ -13,7 +13,8 @@
 #     Well, never the Bread Oven (`grep -a "<goal id>" KenshiFP.log | grep -i water`);
 #   - `inv Malzin` (or the oven output) holds the bread at the end.
 #   A dry farm blocking after ~60 s is the designed outcome when there is no water at all (not expected here).
-# reliability: medium-high (no LLM choice beyond accepting the goal; long: up to 10 min at 20x)
+# reliability: medium-high (no LLM choice beyond accepting the goal). Default stashes 20 Wheatstraw (farm growth takes game
+#   days); GROW=1 [SPEED=50] runs the real farm chain with a 40-min budget.
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 trap 'stobe-auto speed 0 >/dev/null 2>&1' EXIT
@@ -40,6 +41,14 @@ done
 fi
 stobe-auto building "Grain Silo" radius 1000 | grep -oE "out_of_power=[0-9.]+|supplied=[0-9]" | tr '\n' ' '; echo
 stobe-auto buildings 300 Wheat near ${MATE} | cut -c1-200
+# m16 next: the wheat farm needs game days to grow (12 min at 20x ended at "Obtaining Wheatstraw for Strawflour").
+# Default: 20 Wheatstraw (10 per Strawflour, 2 breads) go into the base storage, so the chain runs
+# chest -> Grain Silo -> Bread Oven now. GROW=1 tests the full farm chain instead (50x, up to 40 min).
+if [ "${GROW:-0}" != 1 ]; then
+  log "stash 20 Wheatstraw: $(stobe-auto stash Wheatstraw 20 near ${MATE} 2>&1 | cut -c1-140)"
+else
+  SPEED="${SPEED:-50}"; log "GROW=1: full farm chain at ${SPEED}x, budget 40 min"
+fi
 before=$(cut -f1 "$ST" 2>/dev/null | sort)
 stobe-say speed 1 >/dev/null
 stobe-say say ${MATE} "${MATE}, make 2 bread." --wait 15 >/dev/null 2>&1 || log "say failed"
@@ -53,7 +62,7 @@ done
 log "goal $id"
 stobe-auto speed "${SPEED:-20}" >/dev/null
 s=""
-for i in $(seq 1 150); do
+for i in $(seq 1 $([ "${GROW:-0}" = 1 ] && echo 600 || echo 150)); do
   sleep 4
   # REAL_POWER: does the silo draw power while she works it? (sampled every poll, ~4 s; at 50x her silo step is short)
   if [ "${REAL_POWER:-0}" = 1 ]; then

@@ -453,8 +453,15 @@ static int wgp_input_need(void *prod, const char *machine, void *dep_gd, int out
             static void *last_dep; static float last_ratio;
             if (last_dep!=dep_gd || last_ratio!=ratio) {
                 char dn[128]={0}; wgp_name(dep_gd,dn,sizeof(dn));
-                logline("[stobe] WORK_GOAL input ratio %s: %s x%.2f (in %.3f / out %.3f) -> %d for %d",
+                { /* Item 105: once per (machine, input, result) per 30 s, not every pass */
+                    static unsigned s_ratio_key[8]; static DWORD s_ratio_ms[8]; static int s_ratio_next; int slot=-1;
+                    unsigned k=(unsigned)(uintptr_t)prod ^ ((unsigned)(uintptr_t)dep_gd<<1) ^ ((unsigned)need<<7) ^ (unsigned)outputs;
+                    for (int q=0;q<8;q++) if (s_ratio_key[q]==k) slot=q;
+                    if (slot<0 || (LONG)(GetTickCount()-s_ratio_ms[slot])>30000) { if (slot<0) { slot=s_ratio_next; s_ratio_next=(s_ratio_next+1)%8; } s_ratio_key[slot]=k; s_ratio_ms[slot]=GetTickCount();
+                    logline("[stobe] WORK_GOAL input ratio %s: %s x%.2f (in %.3f / out %.3f) -> %d for %d",
                         machine&&machine[0]?machine:"machine",dn,ratio,r,orate,need,outputs);
+                    }
+                }
                 last_dep=dep_gd; last_ratio=ratio;
             }
         }
