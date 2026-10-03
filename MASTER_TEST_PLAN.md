@@ -42,15 +42,15 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 59 | Relationships follow the save | real insult/fight at T, reload fixture, `PLAYTHROUGH: restored` | FAIL? m1: entry missing after restore, fixer investigating |
 | STOBE 48 | KO/death during a deal | `scenarios.sh surrender` + `ko` / `kill` | PASS m1 (a + b) |
 | STOBE 53 | Cap without a lie | surrender, "Make it 350" | PASS m1 |
-| STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | partial m1: offer ≤ carried 200 OK; payment -> bug 72 fixed, retest |
+| STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | tier 1 PASS m2 (offer 200 = carried, `GIVE_CATS@Shay@200@exact`, Shay +200); tier 0 (Hungry Bandit) todo |
 | STOBE 61 | Cap tiers 3–5 (top-up) | spawn Samurai Sergeant / Dust King, beat, accept, 2nd deal | todo |
 | STOBE 20 | Refuse to pay after hand-over | fight setup | todo |
 | STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | todo |
 | STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | todo |
 | STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | todo |
-| STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | retest (68 fixed live) |
+| STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | FAIL m2 -> STOBE 73 (agreed, no action) |
 | STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | todo |
-| STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | FAIL m1 -> STOBE 65 (rest OK: created at jobs widget, text, hidden for Shay) |
+| STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | PASS m2 (after 65: panel 2086,1030, above TimeMoneyPanel 1096) |
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
 | STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | todo |
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | PASS m1 |
@@ -79,7 +79,9 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| REL P1 smoke | Phase 1 merged inert (capture off), then shadow: raw events, identity, no affinity change, stale events rejected | REL scenarios (pending delivery) | blocked: delivery |
+| REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | todo (integrate server `68c0c25` + `pending-fixes/rel-native-phase3.patch` at next restart) |
+| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | todo |
+| REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | todo |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
@@ -88,7 +90,11 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
 | KAH power charge | A battery building in a fixture (none has one) |
-| PG rows | filled from the PG agent's `INGAME_STATUS.md` (NEEDS-SETUP) |
+| PG 50, 84, 89, 106, 108, 120, 132, 133, 240 | ground drop/pick-up; melee stat names in `stat`; forcing a critical craft; NPC unload trigger; a unique NPC fixture; nested/unowned pack weight; import / new-game commands |
+| PG 145, 229 | an equippable mod tool weapon (harness can't create weapons; `craft` may cover it) |
+| PG 151, 152, 161–199 (not 177) | frame-time metric; balance measurement driver + benchmark fixtures |
+| PG 217, 220–227, 250, 256, 274 | restock trigger; fixtures next to several shop types; ruin loot; swim gear + water; colliding item ID save |
+| REL SR07, SR09 | forcing a limb loss in a fight; an in-game source of better evidence (phase 6) |
 
 ## 3. Requires Shay
 
@@ -96,7 +102,8 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 |---|---|
 | STOBE A9 | TTS volume/fade: the setting and ini are checked automatically; how it sounds is Shay's |
 | Voice / feel | Voice quality, overall play feel, relationship balance feel (REL §9) |
-| PG rows | filled from the PG agent's `INGAME_STATUS.md` (NEEDS-SHAY), e.g. tooltip readability |
+| PG 135–141, 277 | Profession Gear tooltip text/readability (hover tooltips can't be read by the harness) |
+| PG 155, 238 | game feel |
 
 ## 4. Bugs found (open)
 
@@ -105,14 +112,15 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | Bug | Owner | Found | What | Status |
 |---|---|---|---|---|
 | STOBE 64 | STOBE | stobe-tests | `negotiation_engine` regression: "unpaid -> BREACHED_PLAYER" backdates wall time but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | fixed, confirmed (stobe-tests 55/0/7) |
-| STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | fixed: KenshiFP 0D2E3A1F, install + retest |
-| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | server PASS m1; Stobe E36506E5 install + retest |
+| STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | fixed, PASS m2 |
+| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | server fallback PASS; DLL part (E36506E5) still registers no base -> debug logging |
 | STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | fixed, PASS m1 |
 | STOBE 68 | STOBE | m1 | Fetch goal with destination "Shay" -> destination_not_known; failure is silent (she promised to go) | fixed live (48a32df), retest |
-| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | fixed live (89d037c), retest |
+| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | partial m2: hand-over added (67 path) but the generic denial sentence was still spoken -> extend |
 | STOBE 70 | STOBE | m1 | Generic-name relationship key ("Dust Bandit Bowman") restored from a snapshot after the R3 cleanup | fixed live (197d921) + DB cleanup, retest |
 | STOBE 71 | STOBE | m1 | Surrender offers never fired: raider's combat rows under his generic pre-naming name | fixed live (722d53d), PASS m1 |
-| STOBE 72 | STOBE | m1 | Accepting after a rejected counter flipped the payer (Shay pays) | fixed live (2b3593c), retest |
+| STOBE 72 | STOBE | m1 | Accepting after a rejected counter flipped the payer (Shay pays) | fixed, PASS m2 |
+| STOBE 73 | STOBE | m2 | Squad member agrees to a fetch ("I'll go dig it out") but sends no TASK_GOAL | fixer |
 
 ## 5. Harness (KAH) known limits / open items
 
