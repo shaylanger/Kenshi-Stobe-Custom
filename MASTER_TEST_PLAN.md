@@ -19,9 +19,9 @@ IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `arch
 | Component | Installed | Pending install |
 |---|---|---|
 | Stobe.dll | `D64BBA22` (REL 1–5 merged, Capture=0) | - |
-| KenshiFP.dll | `D5795BD5` (65, 75) | `603C456E` (76) |
-| ProfessionGearProgression.dll | `159C552F` (craft-output roll fix, row 329) | - |
-| AutomationHarness.dll | `E1095847` (radius, teleport building, hunger read) | - |
+| KenshiFP.dll | `603C456E` (65, 75, 76) | - |
+| ProfessionGearProgression.dll | `FAA5B471` (craft-output roll, shop radius 60) | - |
+| AutomationHarness.dll | `542B90BF` (radius, teleport building, hunger read, shop radius 60) | - |
 | Server (live) | `2b3593c`+ (branch `stobe`, m1 fixes 64–72) | REL phase 1 (`feature/social-phase1`, inert by default) once delivered |
 
 ## 1. Automated: runnable now
@@ -34,7 +34,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 |---|---|---|---|
 | STOBE 41 | No false "you have my katana" claim | re-equip katana, gear exchange, "What have I taken from you?" | PASS m1 |
 | STOBE 43 | Two-part hand-over gives both items | give bread + dried meat, "give me all your bread and all your dried meat" | PASS m1 (after fix 67) |
-| STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | FAIL m3 -> STOBE 77 (same flat tone at -80/60/96 on fresh loads) |
+| STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | PASS m3 (after 77) |
 | STOBE 55 | R4 fights count (superseded once REL is enabled) | `scenarios.sh duel`, server log `a fight counts (R4)` | PASS m1 (fires once per pair; direction = event attacker) |
 | STOBE 56 | Relationship types from the list only | chats, check entries | inconclusive m1 (no new entries) |
 | STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | FAIL m1 -> STOBE 70 (old entry back via snapshot) |
@@ -63,7 +63,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| STOBE 14 | Buy from a trader | spawn Skeleton Traders near Home, "buy 3 bread from the trader" | todo (moved: apothecaries) |
+| STOBE 14 | Buy from a trader | spawn Skeleton Traders near Home, "buy 3 bread from the trader" | FAIL m3 -> STOBE 78 (doesn't know the out-of-range trader) |
 | STOBE 15 | Goal needing trader stock -> approval | same traders | todo (moved: apothecaries) |
 | STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | todo (moved: apothecaries) |
 | STOBE 16 | Goal with a crafted ingredient: bench queue grows only by what's missing | goal at a bench | todo |
@@ -116,7 +116,7 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | closed: no player-owned town in auto-home; server fallback is the fix (PASS m2) |
 | STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | fixed, PASS m1 |
 | STOBE 68 | STOBE | m1 | Fetch goal with destination "Shay" -> destination_not_known; failure is silent (she promised to go) | fixed live (48a32df), retest |
-| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | partial m3: items arrive, some denial wordings still spoken -> broaden |
+| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | semantic guard live (d22ecdc), retest |
 | STOBE 70 | STOBE | m1 | Generic-name relationship key ("Dust Bandit Bowman") restored from a snapshot after the R3 cleanup | fixed live (197d921) + DB cleanup, retest |
 | STOBE 71 | STOBE | m1 | Surrender offers never fired: raider's combat rows under his generic pre-naming name | fixed live (722d53d), PASS m1 |
 | STOBE 72 | STOBE | m1 | Accepting after a rejected counter flipped the payer (Shay pays) | fixed, PASS m2 |
@@ -124,7 +124,9 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 74 | STOBE | m2 | Agreed purchase, no action | fixed live (1a8fc3f), PASS m2 (goal added) |
 | STOBE 75 | KFP | m2 | BUY goal blocked: trader 285 away "not nearby" (220 search) + stray MOVE_TO failure line | fixed (KenshiFP D5795BD5 installed, server efffb3e), retest |
 | STOBE 76 | KFP | m3 | "bring it to me" fetch keeps the item on return | fixed (server ecb793b, KenshiFP 603C456E built), retest |
-| STOBE 77 | STOBE | m3 | Relationship stance block doesn't shape tone (same reply at -80/60/96) | fixer |
+| STOBE 77 | STOBE | m3 | Relationship stance block doesn't shape tone (same reply at -80/60/96) | fixed live (0a22a77), PASS m3 |
+| STOBE 78 | STOBE | m3 | Errand to a named trader out of nearby range: she doubts/asks back, no action | fixer |
+| CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | analysing |
 
 ## 5. Harness (KAH) known limits / open items
 
