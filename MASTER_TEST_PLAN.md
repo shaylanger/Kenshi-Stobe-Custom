@@ -43,7 +43,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 48 | KO/death during a deal | `scenarios.sh surrender` + `ko` / `kill` | PASS m1 (a + b) |
 | STOBE 53 | Cap without a lie | surrender, "Make it 350" | PASS m1 |
 | STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | PASS (tier 1 m2, tier 0 m8) |
-| STOBE 61 | Cap tiers 3–5 (top-up) | spawn Samurai Sergeant / Dust King, beat, accept, 2nd deal | blocked m10 -> STOBE 87 part 2 |
+| STOBE 61 | Cap tiers 3–5 (top-up) | spawn Samurai Sergeant / Dust King, beat, accept, 2nd deal | partial m12: surrender trigger fixed (88: health event + ratio 0.25 check); the Dust King flees before speaking, so the tier 3+ top-up needs a setup (section 2) |
 | STOBE 20 | Refuse to pay after hand-over | fight setup | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
 | STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
 | STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
@@ -64,7 +64,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | ID | What | How | Status |
 |---|---|---|---|
 | STOBE 14 | Buy from a trader | spawn Skeleton Traders near Home, "buy 3 bread from the trader" | PASS m6 (bought from Abia's carried goods; seller named) |
-| STOBE 15 | Goal needing trader stock -> approval | same traders | todo (moved: apothecaries) |
+| STOBE 15 | Goal needing trader stock -> approval | same traders | partial m12: direct BUY works; WAITING_APPROVAL (production chain needing a bought ingredient) needs a setup |
 | STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | PASS m4 (event names Apothecary Abia as seller) |
 | STOBE 16 | Goal with a crafted ingredient: bench queue grows only by what's missing | goal at a bench | todo |
 | PG crafting group | PG 85–92, 306 (+ weapons) | PG `tests/ingame/crafting-base/pg-10`, `pg-11` (Forced + InGameTest) | PASS (pg-10 m3, pg-11 m8) |
@@ -74,9 +74,9 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | ID | What | How | Status |
 |---|---|---|---|
 | REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | SR24 PASS m8; SR25 sleeping witness fixed (rerun); SR30 inconclusive (LLM never tried to join); SR32 blocked (slavery) |
-| PG status | `INGAME_STATUS.md`: 161 PASS-live, 71 PASS-offline, 8 PENDING (pg-21 rerun, pg-09 soak), 65 NEEDS-SETUP, 10 NEEDS-SHAY, 26 DEFERRED | - |
+| PG status | `INGAME_STATUS.md`: 161 PASS-live, 71 PASS-offline, 8 PENDING (pg-21 rerun, pg-09 soak), 65 NEEDS-SETUP, 10 NEEDS-SHAY, 26 DEFERRED | 342 rows: 169 PASS-live, 71 PASS-offline, 1 PENDING (pg-09 optional soak), 65 NEEDS-SETUP, 10 NEEDS-SHAY, 26 DEFERRED (`INGAME_STATUS.md`, PG ab3ec89, DLL 59EFB4B1) |
 | PG config launches | pg-30 (AutoClassify off) | pg-30 PASS m5, pg-31 PASS m6, pg-40 PASS m6, pg-41 65/1 m6 (chest full, scenario) |
-| PG trader group | PG 211–237 shop rows | PG `tests/ingame/trader/pg-20` (launch 1); `pg-40` (launch 4, NormalVerbose) | todo |
+| PG trader group | PG 211–237 shop rows | PG `tests/ingame/trader/pg-20` (launch 1); `pg-40` (launch 4, NormalVerbose) | PASS m13 (pg-20 diag m3, pg-21 39/0) |
 
 ### 1d. Relationship system
 
@@ -97,12 +97,15 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What it needs |
 |---|---|
+| STOBE 61 | a tier 3+ NPC (Samurai/Dust King) who stays to negotiate after losing (the Dust King flees ~240 m before the offer is spoken) |
+| STOBE 15 | a production goal whose missing ingredient only a trader sells (to see WAITING_APPROVAL) |
 | STOBE 20, 21, 22 | A fight Shay survives long enough for an offer: 3 raiders KO her (m8); needs a stronger test character (`setstat`/health regen) or the raid squad `size` scaled down per member |
 | REL SR11, SR12, SR32 | An enslavement the game reports (spawned bandits may already count as slaves: probe 21) |
 | STOBE A11 / A12 | A wounded NPC who can't bandage herself (harness `damage` wounds don't bleed; NPCs self-treat) and stays put for a heal-for-item deal |
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
 | KAH power charge | A battery building in a fixture (none has one) |
+| PG 177 (most important) | a production counter (units per game hour) to prove real jobs read the hooked skill |
 | PG 50, 84, 89, 106, 108, 120, 132, 133, 240 | ground drop/pick-up; melee stat names in `stat`; forcing a critical craft; NPC unload trigger; a unique NPC fixture; nested/unowned pack weight; import / new-game commands |
 | PG 145, 229 | an equippable mod tool weapon (harness can't create weapons; `craft` may cover it) |
 | PG 151, 152, 161–199 (not 177) | frame-time metric; balance measurement driver + benchmark fixtures |
@@ -115,8 +118,8 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 |---|---|
 | STOBE A9 | TTS volume/fade: the setting and ini are checked automatically; how it sounds is Shay's |
 | Voice / feel | Voice quality, overall play feel, relationship balance feel (REL §9) |
-| PG 135–141, 277 | Profession Gear tooltip text/readability (hover tooltips can't be read by the harness) |
-| PG 155, 238 | game feel |
+| PG 135–141, 277 | Profession Gear tooltip section on armour, backpack, weapon/tool, plain item, two-affix item, shop/loot views: shown once, readable, no layout break |
+| PG 155, 238 | feel: repeated tooltip opening; no stall when a shop opens |
 
 ## 4. Bugs found (open)
 
@@ -147,7 +150,9 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 84 | KFP+KAH | m8 | `Inventory::buyItem` returns the bought item unplaced: KenshiFP BUY and harness `trade` lose the item (money paid) | fixed, PASS m9 (KenshiFP); harness trade from shop storage fixed D8ECA273 |
 | STOBE 85 | STOBE | m8 | Bad reputation (broken > kept) in the prompt is ignored by new NPCs | fixed live (795b0f1), PASS m8 |
 | STOBE 86 | STOBE | m8 | Reloading an older save turns deals made after it into BREACHED_PLAYER | fixed live (f98b88e + e9f8598): false breach from repeated 'Initiated attack'; older-save load cancels later deals; deal repaired |
-| STOBE 87 | STOBE | m8 | Unique NPC named like its template (Dust King) gets no initiative check / surrender | part 1 = test collision (scenario waits now); part 2: no combat_start for Dust King -> fixer |
+| STOBE 87 | STOBE | m8 | Unique NPC named like its template (Dust King) gets no initiative check / surrender | see rows 87/88 |
+| STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
+| STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
