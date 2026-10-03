@@ -73,7 +73,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | SR24 PASS (m8–m13); SR25 sleeping witness: native fix m13, verdict pending (m15 18/1); SR30 inconclusive (LLM never tried to join); SR32 liberator not yet seen (p7-02 28/2) |
+| REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | SR24 PASS (m8–m13); SR25 PASS m16 (asleep in a bed: no effect); SR30 inconclusive (LLM never tried to join); SR32 PASS m16 (chains_freed +14 after m16/m16b/m16c) |
 | PG status | `INGAME_STATUS.md`: 161 PASS-live, 71 PASS-offline, 8 PENDING (pg-21 rerun, pg-09 soak), 65 NEEDS-SETUP, 10 NEEDS-SHAY, 26 DEFERRED | 342 rows: 169 PASS-live, 71 PASS-offline, 1 PENDING (pg-09 optional soak), 65 NEEDS-SETUP, 10 NEEDS-SHAY, 26 DEFERRED (`INGAME_STATUS.md`, PG ab3ec89, DLL 59EFB4B1) |
 | PG config launches | pg-30 (AutoClassify off) | pg-30 PASS m5, pg-31 PASS m6, pg-40 PASS m6, pg-41 65/1 m6 (chest full, scenario) |
 | PG trader group | PG 211–237 shop rows | PG `tests/ingame/trader/pg-20` (launch 1); `pg-40` (launch 4, NormalVerbose) | PASS m13 (pg-20 diag m3, pg-21 39/0) |
@@ -102,7 +102,6 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 15 | a production goal whose missing ingredient only a trader sells (to see WAITING_APPROVAL) |
 | STOBE A8 | power at Home (the Grain Silo/Well have no supply: no working generator/battery in auto-home; harness `build` could place a generator + battery, untested) |
 | STOBE 20, 21, 22 | A fight Shay survives long enough for an offer: 3 raiders KO her (m8); needs a stronger test character (`setstat`/health regen) or the raid squad `size` scaled down per member |
-| REL SR32 | the liberator (who picks the shackle lock) is never reported (probe 20) |
 | REL SR07, SR09, SR13, SR14 | forced limb loss in a fight; a source of better evidence; a theft-caught signal + steal driver |
 | REL SR11, SR12, SR32 (old) | An enslavement the game reports (spawned bandits may already count as slaves: probe 21) |
 | STOBE A11 / A12 | A wounded NPC who can't bandage herself (harness `damage` wounds don't bleed; NPCs self-treat) and stays put for a heal-for-item deal |

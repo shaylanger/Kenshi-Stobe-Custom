@@ -881,3 +881,11 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
 - **Server** `bbc1ddc`: p7-02 checks `chained=1->0` and the freed line with a liberator; the two SOCIAL_IDENTITY
   checks are gone.
 - Known limit: escape completion (a game day seen free) is not tracked across the new handle.
+
+## 2026-10-03 p7-02 fourth run (Stobe E1CD05BF = m16c, server bbc1ddc): 39/1
+- **SR32: passes in game.** The chains came off, freed was captured with the liberator, and Rel Xan got chains_freed
+  +14 toward Malzin (shadow; the expected range is 8..18). His enslavement by Rel Ober is -88.
+- The only failure was step 20: the spawned bandit already had a name ("Nykkel [Hungry Bandit] -> Rel Xan"). The
+  setname guard now accepts `^([^ ].* \[)?Hungry Bandit\]? -> ` in p6-01a and p7-02, and still rejects another NPC
+  ("Outlaw Watch Jamin -> ...").
+- Server `feature/social-phase1` with those fixes plus SR43 (perf gate) marked as passing in game.
