@@ -47,8 +47,8 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | PASS (tier 1 m2, tier 0 m8) |
 | STOBE 61 | Cap tiers 3–5 (top-up) | spawn Samurai Sergeant / Dust King, beat, accept, 2nd deal | partial m12: surrender trigger fixed (88: health event + ratio 0.25 check); the Dust King flees before speaking, so the tier 3+ top-up needs a setup (section 2) |
 | STOBE 20 | Refuse to pay after hand-over | fight setup | -> section 2 (m16: by design, he won't hand over first) |
-| STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | PASS m16 (`STOBE-21-paylater-breach.sh` with harness `protect`: BREACHED_PLAYER) |
-| STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | PASS m16 (`STOBE-22-gang-stands-down.sh` with `protect`: paid deal COMPLETE, gang quiet 120 s) |
+| STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | PASS m16, confirming rerun queued (stale-deal lookup) (`STOBE-21-paylater-breach.sh` with harness `protect`: BREACHED_PLAYER) |
+| STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | PASS m16, confirming rerun queued (stale-deal lookup) (`STOBE-22-gang-stands-down.sh` with `protect`: paid deal COMPLETE, gang quiet 120 s) |
 | STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | PASS m8 (after 85) |
 | STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | PASS m3 (fetch + return); hand-over on return -> 76, retest |
 | STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | PASS m8 |
