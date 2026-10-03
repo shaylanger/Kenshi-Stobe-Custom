@@ -53,7 +53,12 @@ log "gave Fabrics to $n trader(s)"; [ "$n" -gt 0 ] || { verdict 15 "SETUP FAIL n
 for t in $(stobe-auto traders 300 near ${MATE} | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do
   stobe-auto shopstock "$t" | cut -c1-300
 done
-stobe-auto shopstock "$TRADER" | grep -q "Fabrics" || { verdict 15 "SETUP FAIL $TRADER does not sell Fabrics"; exit 1; }
+# m16 Squin: Marquart got 4/5 given Fabrics but `shopstock` didn't list them; KenshiFP 99c also reads carried
+# unworn goods, so carried Fabrics (`inv`) are enough. Fail only when the trader has none at all.
+if ! stobe-auto shopstock "$TRADER" | grep -q "Fabrics"; then
+  if stobe-auto inv "$TRADER" | grep -q '"name":"Fabrics"'; then log "$TRADER carries Fabrics (not listed by shopstock; KenshiFP 99c reads carried goods)"
+  else verdict 15 "SETUP FAIL $TRADER has no Fabrics (shopstock and inv)"; exit 1; fi
+fi
 tail -n +"$BASE_K" "$KFP" | grep -a "BUY_FALLBACK" | tail -3
 cats0=$(money_of ${MATE})
 stobe-say say ${MATE} "${MATE}, make me one Basic First Aid Kit at the medical workbench." --wait 40 >/dev/null 2>&1 || true

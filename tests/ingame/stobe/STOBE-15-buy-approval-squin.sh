@@ -15,7 +15,7 @@
 set -u
 export PLAYER="${PLAYER:-Beak}" MATE="${MATE:-Kint}" BUILD_BENCH=1
 if [ -z "${TRADER:-}" ]; then
-  TR=$(stobe-auto traders 600 near "${MATE}" | tr '|' '\n' | grep -E '#[0-9]+/[0-9]+')
+  TR=$(stobe-auto traders 600 near "${MATE}" | sed -E 's/^ *[0-9]+ traders? within [0-9.]+: *//' | tr '|' '\n' | grep -E '#[0-9]+/[0-9]+')
   first=""
   while read -r line; do
     name=$(echo "$line" | sed -E 's/^ *([^#]+) #.*/\1/; s/ +$//'); h=$(echo "$line" | grep -oE '#[0-9]+/[0-9]+')
