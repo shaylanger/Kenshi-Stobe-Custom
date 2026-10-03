@@ -30,6 +30,7 @@ UPDATE core_npc_master SET relationships = (COALESCE((SELECT jsonb_object_agg(k,
 SQL
   player="$key"
   rm -f "$f"
+  stobe-rel-stamp "$npc" || true  # item 59: the change happens now, after the loaded save
   echo "restored $npc -> $player: $entry"
   exit 0
 fi
@@ -63,4 +64,5 @@ SELECT 'relationship left', COUNT(*) FROM core_npc_master WHERE LOWER(name)='${l
     OR (relationships LIKE '{%' AND EXISTS (SELECT 1 FROM jsonb_object_keys(relationships::jsonb) k WHERE LOWER(k)=LOWER('${player}'))));
 COMMIT;
 SQL
+stobe-rel-stamp "$npc" || true  # item 59: the reset happens now, after the loaded save
 echo "reset $npc (since $since, relationship to $player cleared)"

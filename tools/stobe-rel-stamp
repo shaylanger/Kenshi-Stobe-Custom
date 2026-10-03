@@ -1,0 +1,13 @@
+#!/bin/bash
+# stobe-rel-stamp <npc>: after a test tool edited an NPC's relationship map directly in the DB,
+# stamp the change with the current game time (PLAYTHROUGH_LAST_SEEN_GAMETS) and store a
+# 'relationship' history snapshot, like an in-game relationship write does
+# (stobeRelationshipTimelineStamp). Without it the edit kept the row's old game time, and the next
+# save load treated it as part of the save (item 59, run m1: a reset after loading the fixture
+# replaced Malzin's Bonded entry at the save).
+npc="${1:?usage: stobe-rel-stamp <npc>}"
+lower=$(echo "$npc" | tr '[:upper:]' '[:lower:]')
+id=$(cd /tmp && sudo -u postgres psql -d stobe -At -c "SELECT id FROM core_npc_master WHERE LOWER(name)='${lower}' ORDER BY id LIMIT 1")
+[ -n "$id" ] || { echo "stobe-rel-stamp: no NPC $npc" >&2; exit 1; }
+cd /var/www/html/StobeServer && sudo -u www-data php -r "require 'lib/bootstrap.php'; exit(stobeRelationshipTimelineStamp($id) ? 0 : 1);" >/dev/null 2>&1 \
+  || { echo "stobe-rel-stamp: stamp failed for $npc (id $id)" >&2; exit 1; }
