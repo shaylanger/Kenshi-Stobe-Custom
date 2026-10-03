@@ -7153,6 +7153,27 @@ static void MarkRecentCombatSignal(Character *npc, DWORD nowTick) {
   }
 }
 
+// Item 88c: fights with the player side get their own list: in a busy town the general list
+// (walked in serial order, capped) is full of animal and guard fights.
+static std::map<unsigned int, DWORD> g_lastPlayerFightTickBySerial;
+
+static void MarkPlayerSideFight(Character *attacker, Character *npc, DWORD nowTick) {
+  bool playerSide = false;
+  try {
+    Faction *fa = attacker ? attacker->getFaction() : nullptr;
+    Faction *fn = npc ? npc->getFaction() : nullptr;
+    playerSide = (fa && fa->isThePlayer()) || (fn && fn->isThePlayer());
+  } catch (...) {
+    playerSide = false;
+  }
+  if (!playerSide) return;
+  if (g_lastPlayerFightTickBySerial.size() > 256) g_lastPlayerFightTickBySerial.clear();
+  unsigned int sa = ResolveCharacterSerialForEvent(attacker);
+  unsigned int sn = ResolveCharacterSerialForEvent(npc);
+  if (sa) g_lastPlayerFightTickBySerial[sa] = nowTick;
+  if (sn) g_lastPlayerFightTickBySerial[sn] = nowTick;
+}
+
 static bool FoughtRecently(unsigned int serial, DWORD nowTick) {
   std::map<unsigned int, DWORD>::const_iterator it = g_lastFightTickBySerial.find(serial);
   return it != g_lastFightTickBySerial.end() && nowTick - it->second <= kFledFighterHealthMs;
@@ -8329,6 +8350,19 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
   // Item 88b: everyone who fought in the last 2 min is scanned (health buckets for surrender
   // offers), even beyond the sphere's 16 results or after fleeing out of range.
   {
+    // item 88c: fighters in a fight with the player side first (uncapped by the town's fights)
+    int addedPlayerFights = 0;
+    for (std::map<unsigned int, DWORD>::const_iterator pf = g_lastPlayerFightTickBySerial.begin();
+         pf != g_lastPlayerFightTickBySerial.end() && addedPlayerFights < 16; ++pf) {
+      if (nowTick - pf->second > kFledFighterHealthMs) continue;
+      Character *pc = ResolveCharacterBySerialForInventoryEvent(pf->first);
+      if (pc) {
+        AddInventorySyncCandidate(pc, candidates, seen);
+        ++addedPlayerFights;
+      }
+    }
+  }
+  {
     int added = 0;
     for (std::map<unsigned int, DWORD>::const_iterator f = g_lastFightTickBySerial.begin();
          f != g_lastFightTickBySerial.end() && added < 8; ++f) {
@@ -8337,6 +8371,12 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       if (fc) {
         AddInventorySyncCandidate(fc, candidates, seen);
         ++added;
+      } else {
+        static DWORD s_unresolvedDbg = 0; // item 88 debug (temporary)
+        if (nowTick - s_unresolvedDbg > 4000) {
+          s_unresolvedDbg = nowTick;
+          Log("HEALTH_SCAN_DEBUG: recent fighter serial=" + ToString(f->first) + " not resolved");
+        }
       }
     }
   }
@@ -8508,6 +8548,8 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
 
     NpcWorldEventState &state = g_npcWorldEventStateBySerial[serial];
     if (!state.initialized) {
+      if (FoughtRecently(serial, nowTick)) // item 88 debug (temporary)
+        Log("HEALTH_SCAN_DEBUG: first sight serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc));
       state.initialized = true;
       state.useState = useStateNow;
       if (enslavedNow && SocialCaptureEnabled())
@@ -8583,6 +8625,21 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     if (majorDamageNow && ObserveCombatCharacter(npc, nowTick).evidence) {
       MarkRecentCombatSignal(npc, nowTick);
       EmitMajorDamageEvent(npc);
+    }
+    if (FoughtRecently(serial, nowTick)) { // item 88 debug (temporary): why no health bucket?
+      static std::map<unsigned int, DWORD> s_healthDebugTick;
+      DWORD &lastDbg = s_healthDebugTick[serial];
+      if (nowTick - lastDbg > 4000) {
+        lastDbg = nowTick;
+        std::map<unsigned int, std::pair<int, DWORD> >::const_iterator hb = g_healthBucketBySerial.find(serial);
+        Log("HEALTH_SCAN_DEBUG: serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
+            " health=" + ToString(OverallHealthPercent(fleshHealthByPartNow)) +
+            " parts=" + ToString((int)fleshHealthByPartNow.size()) +
+            " evidence=" + std::string(ObserveCombatCharacter(npc, nowTick).evidence ? "1" : "0") +
+            " dead=" + std::string(deadNow ? "1" : "0") + " unconscious=" + std::string(unconsciousNow ? "1" : "0") +
+            " last_bucket=" + (hb == g_healthBucketBySerial.end() ? std::string("none") :
+                               ToString(hb->second.first) + "@" + ToString((int)(nowTick - hb->second.second)) + "ms"));
+      }
     }
     if ((ObserveCombatCharacter(npc, nowTick).evidence || FoughtRecently(serial, nowTick)) &&
         !deadNow && !unconsciousNow) // item 88: also after he fled
@@ -12453,6 +12510,7 @@ void attackingYou_hook(Character *npc, Character *attacker, bool so,
     DWORD nowTick = GetTickCount();
     MarkRecentCombatSignal(attacker, nowTick);
     MarkRecentCombatSignal(npc, nowTick);
+    MarkPlayerSideFight(attacker, npc, nowTick); // item 88c
     LogGameEvent("combat", attacker->getName(), SafeFaction(attacker),
                  npc->getName(), SafeFaction(npc),
                  playerDefending ? "Defending against" : "Initiated attack",
