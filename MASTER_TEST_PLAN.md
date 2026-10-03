@@ -109,10 +109,9 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
 | KAH power charge | A battery building in a fixture (none has one) |
-| PG 177 (most important) | a production counter (units per game hour) to prove real jobs read the hooked skill |
 | PG 50, 84, 89, 106, 108, 120, 132, 133, 240 | ground drop/pick-up; melee stat names in `stat`; forcing a critical craft; NPC unload trigger; a unique NPC fixture; nested/unowned pack weight; import / new-game commands |
 | PG 145, 229 | an equippable mod tool weapon (harness can't create weapons; `craft` may cover it) |
-| PG 151, 152, 161–199 (not 177) | frame-time metric; balance measurement driver + benchmark fixtures |
+| PG 151, 152, 161–199 (not 177) | frame-time metric; balance measurement driver + benchmark fixtures (job-path proof done: PG 177/331 PASS m16) |
 | PG 217, 220–227, 250, 256, 274 | restock trigger; fixtures next to several shop types; ruin loot; swim gear + water; colliding item ID save |
 | REL SR07, SR09 | forcing a limb loss in a fight; an in-game source of better evidence (phase 6) |
 
@@ -170,3 +169,4 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | KAH 4 | `faction` gives the NPC a new #serial | limit, documented |
 | KAH 5 | `power charge` untested (no battery in fixtures) | `build`/`unbuild` added (D8ECA273, PASS m10); power charge still untested |
 | KAH 6 | Hover tooltips can't be read (PG 135–141) | open: try `ui` while hovering |
+| KAH 7 | `camera` command (fixed view for perf windows) | deferred m16: not needed (REL gate passed); feasible via `ou->player->camera` (teleport, manuallySetOrientationAndZoom, lock per frame), needs in-game checks |
