@@ -394,16 +394,20 @@ static int wgp_default_task(void *building)
     return fn ? fn(building) : 87;
 }
 
+static void *g_wgp_missing_buf[256]; /* item 90: room so the game never grows our buffer */
 static int wgp_missing(void *prod, void **out, int max)
 {
     typedef void (*fn_t)(void *, StobePtrLektor *);
     fn_t fn=(fn_t)wgp_vcall_ptr(prod,0x560);
     if (!fn || !out || max<1) return 0;
+    memset(g_wgp_missing_buf,0,sizeof(g_wgp_missing_buf));
     StobePtrLektor list; memset(&list,0,sizeof(list));
-    list.max_size=(uint32_t)max; list.stuff=out;
+    list.max_size=256; list.stuff=g_wgp_missing_buf;
     fn(prod,&list);
-    if (!list.stuff || list.count>(uint32_t)max) return 0;
-    return (int)list.count;
+    if (list.stuff!=g_wgp_missing_buf || list.count>256) return 0;
+    int n=0;
+    for (uint32_t i=0;i<list.count && n<max;i++) if (g_wgp_missing_buf[i]) out[n++]=g_wgp_missing_buf[i];
+    return n;
 }
 
 /* Bug 38: how many units of input `dep_gd` the machine eats for `outputs` units of
@@ -783,6 +787,18 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         if(purchase<0)return -1;
         snprintf(reason,reason_sz,"no usable mine, farm, production machine, crafting bench, or approved nearby purchase route can provide %s",item);
         return -1;
+    }
+
+    /* Item 90: some of it is in stock but its producer has no power: use the stock first
+     * (the parent machine gets fed what exists); the power wait applies once it's gone. */
+    if (have>0 && p.building && wgp_building_unpowered(p.building)) {
+        static DWORD s_stock_log_ms;
+        if ((LONG)(GetTickCount()-s_stock_log_ms)>10000) {
+            s_stock_log_ms=GetTickCount();
+            logline("[stobe] WORK_STEP id=%s using %d/%d %s in stock (%s has no power)",
+                    g->id,have,need,item,p.building_name[0]?p.building_name:"producer");
+        }
+        return 1;
     }
 
     char next_chain[WGP_MAX_DEPTH+2][128];

@@ -41,6 +41,8 @@
 
 #include <kenshi/CharStats.h>
 #include <kenshi/Character.h>
+#include <kenshi/StateBroadcastData.h>
+#include <kenshi/util/YesNoMaybe.h>
 #include <kenshi/CharBody.h>
 #include <kenshi/CharMovement.h>
 #include <kenshi/Dialogue.h>
@@ -5435,7 +5437,7 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
       continue;
     // Run m8: isUnconcious() is false while sleeping. Asleep = in a bed, or the current task is sleeping.
     bool asleep = false;
-    int taskId = 0, prone = 0;
+    int taskId = 0, prone = 0, sleeping = 3; // 3 = unknown (logged as -1)
     try {
       hand ignoredSubject;
       TaskType task = ResolveCurrentNpcTaskSafe(w, ignoredSubject);
@@ -5443,6 +5445,16 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
       prone = (int)w->getProneState();
       asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED || prone == (int)PS_KO ||
                prone == (int)PS_PLAYING_DEAD;
+      // Run m13: a floor sleeper's body task was not SLEEP_ON_FLOOR (logged 290); the AI's own broadcast state
+      // (StateBroadcastData::isSleeping, what other characters' senses read) is the reliable flag.
+      StateBroadcastData *sb = w->stateBroadcast;
+      if (sb && (uintptr_t)sb > 0x1000) {
+        sleeping = (int)sb->isSleeping.key;
+        if (sleeping < 0 || sleeping > 2)
+          sleeping = 3;
+        if (sb->isSleeping.key == YesNoMaybe::YES)
+          asleep = true;
+      }
     } catch (...) {
       asleep = false;
     }
@@ -5460,7 +5472,7 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
     bool perceived = e.conscious == 1 && (seesActor == 2 || seesTarget == 2 || hearsActor == 2);
     who.push_back(e);
     sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6) |
-                    ((taskId & 0x3FF) << 8) | ((prone & 7) << 18));
+                    ((taskId & 0x3FF) << 8) | ((prone & 7) << 18) | ((sleeping & 3) << 21));
   }
 }
 
@@ -8371,12 +8383,6 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       if (fc) {
         AddInventorySyncCandidate(fc, candidates, seen);
         ++added;
-      } else {
-        static DWORD s_unresolvedDbg = 0; // item 88 debug (temporary)
-        if (nowTick - s_unresolvedDbg > 4000) {
-          s_unresolvedDbg = nowTick;
-          Log("HEALTH_SCAN_DEBUG: recent fighter serial=" + ToString(f->first) + " not resolved");
-        }
       }
     }
   }
@@ -8548,8 +8554,6 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
 
     NpcWorldEventState &state = g_npcWorldEventStateBySerial[serial];
     if (!state.initialized) {
-      if (FoughtRecently(serial, nowTick)) // item 88 debug (temporary)
-        Log("HEALTH_SCAN_DEBUG: first sight serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc));
       state.initialized = true;
       state.useState = useStateNow;
       if (enslavedNow && SocialCaptureEnabled())
@@ -8625,21 +8629,6 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     if (majorDamageNow && ObserveCombatCharacter(npc, nowTick).evidence) {
       MarkRecentCombatSignal(npc, nowTick);
       EmitMajorDamageEvent(npc);
-    }
-    if (FoughtRecently(serial, nowTick)) { // item 88 debug (temporary): why no health bucket?
-      static std::map<unsigned int, DWORD> s_healthDebugTick;
-      DWORD &lastDbg = s_healthDebugTick[serial];
-      if (nowTick - lastDbg > 4000) {
-        lastDbg = nowTick;
-        std::map<unsigned int, std::pair<int, DWORD> >::const_iterator hb = g_healthBucketBySerial.find(serial);
-        Log("HEALTH_SCAN_DEBUG: serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
-            " health=" + ToString(OverallHealthPercent(fleshHealthByPartNow)) +
-            " parts=" + ToString((int)fleshHealthByPartNow.size()) +
-            " evidence=" + std::string(ObserveCombatCharacter(npc, nowTick).evidence ? "1" : "0") +
-            " dead=" + std::string(deadNow ? "1" : "0") + " unconscious=" + std::string(unconsciousNow ? "1" : "0") +
-            " last_bucket=" + (hb == g_healthBucketBySerial.end() ? std::string("none") :
-                               ToString(hb->second.first) + "@" + ToString((int)(nowTick - hb->second.second)) + "ms"));
-      }
     }
     if ((ObserveCombatCharacter(npc, nowTick).evidence || FoughtRecently(serial, nowTick)) &&
         !deadNow && !unconsciousNow) // item 88: also after he fled
@@ -8771,6 +8760,18 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       Character *carrier = (state.lastCarrierSerial != 0 && nowTick - state.lastCarryDropTick < 15000)
                                ? ResolveCharacterBySerialForInventoryEvent(state.lastCarrierSerial)
                                : nullptr;
+      if (!carrier) {
+        // Run m13: the bed/cage flag shows up in the same sweep, before the carrier's own drop is processed
+        // (placed came 5 ms ahead of carry_end, actor #0). The carrier's last state still says it carries us.
+        for (std::map<unsigned int, NpcWorldEventState>::const_iterator it = g_npcWorldEventStateBySerial.begin();
+             it != g_npcWorldEventStateBySerial.end(); ++it) {
+          if (it->first != serial && it->second.carryingTargetSerial == serial) {
+            carrier = ResolveCharacterBySerialForInventoryEvent(it->first);
+            if (carrier)
+              break;
+          }
+        }
+      }
       StobeSocial::EntityInfo c = SocialEntityFor(carrier), t = SocialEntityFor(npc);
       SocialPostStructured("placed", carrier ? &c : nullptr, &t,
                            std::string("\"place\":") + (useStateNow == (int)IN_BED ? "\"bed\"" : "\"prison\"") +
