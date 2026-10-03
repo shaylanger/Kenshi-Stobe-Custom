@@ -4,7 +4,7 @@
 #         A12 (she hands over first, Shay then refuses to heal: Shay broke the deal, no "we're square")
 # fixture: auto-home
 # reset: fresh (run `bash /mnt/c/KenshiModding/tools/automation/scenarios.sh fresh` first; once per mode)
-# usage: STOBE-A11-A12-heal-deal.sh a11|a12
+# usage: [TRUST=60] STOBE-A11-A12-heal-deal.sh a11|a12
 # needs: Stobe E1CD05BF+, server live, harness F946C881
 # setup: a neutral Drifter renamed "Senlin" 12 m from Shay (closer gets her attacked), no medical item on her
 #        (checked; anything found is moved to Shay), a bleeding chest wound (`damage` + `blood 40%`) and crippled-ish
@@ -41,6 +41,13 @@ stobe-auto give ${PLAYER} "Basic First Aid Kit" 2 >/dev/null
 stobe-auto hp "$v" | cut -c1-200
 stobe-say speed 1 >/dev/null
 sleep 8
+# Optional (A12): TRUST=<aff> (e.g. 60 = Fond, at/above the gift threshold 56) makes her trust the player first, the one
+# legitimate reason in Shay's rules for an outsider to hand over before being paid/healed. A greeting creates her
+# server profile so the trust can be set. Default: unset (A12 is "by design" inconclusive without it).
+if [ -n "${TRUST:-}" ]; then
+  stobe-say say "Senlin" "Hello Senlin. Easy, I'm not here to hurt you." --wait 15 >/dev/null 2>&1 || true
+  trust "Senlin" "$TRUST" Fond platonic >/dev/null 2>&1 && log "Senlin -> ${PLAYER} trust set to $TRUST (Fond)"
+fi
 stobe-say say "Senlin" "Senlin, you're bleeding badly. What if I bandage you up and you give me your $item?" --wait 40 >/dev/null 2>&1 || true
 d=$(wait_accept "Senlin" 90)
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; verdict "$mode" "INCONCLUSIVE no accepted deal: $(deal_line Senlin)"; exit 2; }
