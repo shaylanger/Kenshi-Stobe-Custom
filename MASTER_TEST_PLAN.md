@@ -6,7 +6,7 @@ launch; feature agents write scenarios and fix their own bugs. Roles, loop and s
 
 | Feature | Owner | Detail plan (source of truth for rows) | Scenarios |
 |---|---|---|---|
-| STOBE (Stobe.dll + server) | coordinator | `STOBE_full_test_plan.md` (items numbered from 1, next 64) | `tests/ingame/stobe/` |
+| STOBE (Stobe.dll + server) | coordinator | `STOBE_full_test_plan.md` (items numbered from 1, next 107) | `tests/ingame/stobe/` |
 | KenshiFP (KFP) | coordinator | rows live in the STOBE plan (goal panel, FP mode) | `tests/ingame/stobe/` |
 | Profession Gear (PG) | PG agent | `Kenshi-Profession-Gear-Progression/TEST_PLAN.md` (rows 1–320), status `INGAME_STATUS.md` | PG repo `tests/ingame/` |
 | Relationship system (REL) | REL builder | `STOBE_relationship_system_audit_and_implementation_plan.md` (SR01–SR44), deliveries `isolated/relationships-phase1/DELIVERY.md` | `/root/stobe-work/social-phase1/server/tests/social_relationship/ingame/` |
@@ -20,11 +20,11 @@ IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `arch
 
 | Component | Installed | Pending install |
 |---|---|---|
-| Stobe.dll | `EF62563B` (REL 1–7 + m8–m16c, STOBE items to 97) | - |
-| KenshiFP.dll | `E64B1BD5` (items to 99b) | - |
-| ProfessionGearProgression.dll | `7D80DBB3` (job scaling on; Forced + InGameTest during tests) | - |
-| AutomationHarness.dll | `08AB6BF0` (#serial/index, trade room check, inbox lock, power supply, protect) | - |
-| Server (live) | `45eea92` (branch `stobe` = REL + STOBE fixes to 96; SOCIAL_RELATIONSHIP_MODE off between REL batches) | - |
+| Stobe.dll | `478D8AA6` (REL 1–7 + m8–m16d, STOBE items to 97) | - |
+| KenshiFP.dll | `5719BEA5` (items to 105) | - |
+| ProfessionGearProgression.dll | `D7A60E49` (job scaling on, pg_force_critical; Forced + InGameTest during tests) | - |
+| AutomationHarness.dll | `F6A3FC31` (+ protect, power supply, KAH 15–23) | - |
+| Server (live) | `31b8c75` (branch `stobe` = REL + STOBE fixes to 106; SOCIAL_RELATIONSHIP_MODE off between REL batches) | - |
 
 ## 1. Automated: runnable now
 
