@@ -8,20 +8,21 @@
 #   scenarios.sh raiders         serials of Starving Bandits within 150
 #   scenarios.sh fresh           reload auto-home, wait, pause, feed squad, reset Malzin
 set -e
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"  # works however the script is called (bash scenarios.sh, ./scenarios.sh)
 cmd="$1"; shift || true
 case "$cmd" in
   raid)
     stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 30 count 1 target Shay size "${1:-0.1}" >/dev/null
     sleep 1
-    for s in $("$0" raiders); do stobe-auto attack "$s" Shay >/dev/null; done
-    echo "raiders: $("$0" raiders | wc -l)"
+    for s in $(bash "$SELF" raiders); do stobe-auto attack "$s" Shay >/dev/null; done
+    echo "raiders: $(bash "$SELF" raiders | wc -l)"
     ;;
   duel)
     # one squad-AI raider against Shay + Malzin (the rest of the raid is killed at once)
     stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
     sleep 1
     keep=""
-    for s in $("$0" raiders); do
+    for s in $(bash "$SELF" raiders); do
       if [ -z "$keep" ]; then keep="$s"; else stobe-auto teleport "$s" Shay dist 3000 >/dev/null; fi
     done
     stobe-auto teleport "$keep" Shay dist 3 >/dev/null # inside the outpost walls (else path_failed)
@@ -36,7 +37,7 @@ case "$cmd" in
     stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
     sleep 1
     k=0
-    for s in $("$0" raiders); do
+    for s in $(bash "$SELF" raiders); do
       if [ "$k" -lt "$n" ]; then
         stobe-auto teleport "$s" Shay dist 3 >/dev/null
         stobe-auto attack "$s" Shay >/dev/null
@@ -49,18 +50,20 @@ case "$cmd" in
   surrender)
     # duel, let them engage, drop the raider to 25 %, wait for his surrender offer;
     # prints "<serial> <name> <deal id>" (deal id empty if none came)
-    # Malzin stays out (sent 300 away; bring her back after): she defends Shay
+    # Malzin stays out (knocked out 40 m away in camp for 150 s): she defends Shay
     # and knocks him out before his health event goes out.
     L=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
     base=$(grep -a -c "" "$L")
     if stobe-auto where Shay | grep -q " KO"; then echo "Shay is knocked out: run '$0 fresh' first" >&2; exit 1; fi
-    stobe-auto teleport Malzin Shay dist 300 >/dev/null
+    # parked 300 away she landed among wild bandits twice (runs 10, m1): keep her in camp, knocked out
+    stobe-auto teleport Malzin Shay dist 40 >/dev/null; stobe-auto ko Malzin 150 >/dev/null
     stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
     sleep 1
     r=""
-    for s in $("$0" raiders); do
+    for s in $(bash "$SELF" raiders); do
       if [ -z "$r" ]; then r="$s"; else stobe-auto teleport "$s" Shay dist 3000 >/dev/null; fi
     done
+    [ -n "$r" ] || { stobe-auto speed 0 >/dev/null; echo "no raider found: paused" >&2; exit 1; }
     stobe-auto teleport "$r" Shay dist 3 >/dev/null
     name=$(stobe-auto where "$r" | sed -E 's/ #[0-9]+ .*//')
     stobe-say speed 1 >/dev/null
@@ -83,9 +86,9 @@ case "$cmd" in
       [ -n "$deal" ] && break
     done
     stobe-say speed 0 >/dev/null
-    # bring Malzin back: parked 300 away she once landed next to a wild Dust Bandit squad (run 10)
+    # bring Malzin back next to Shay (she was knocked out 40 m away)
     stobe-auto teleport Malzin Shay dist 6 >/dev/null
-    tail -n +"$base" "$L" | grep -a -q -E "\[EVENT\] (combat|knockout).*Malzin" && echo "WARNING: Malzin fought while away" >&2
+    tail -n +"$base" "$L" | grep -a -q -E "\[EVENT\] combat.*Malzin" && echo "WARNING: Malzin fought while away" >&2
     echo "$r|$name|$deal"
     ;;
   trust)
