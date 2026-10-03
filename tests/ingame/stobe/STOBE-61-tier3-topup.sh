@@ -50,7 +50,10 @@ for try in 1 2; do
   wait_deal "$name" "ACCEPTED|AWAITING|COMPLETE|SETTLE" 30 >/dev/null && break
   log "still $(deal_line "$name" | awk '{print $3, $4}') after try $try"
 done
-wait_deal "$name" "COMPLETE" 90 >/dev/null
+# m16 next: GIVE_CATS waits for the player's SPARE term, which verifies only after 120 s without attacks
+# (STOBE_NEG_TRUCE_OBSERVE_SECONDS); the 90 s wait ended before the payment was due. Game running, 240 s.
+stobe-say speed 1 >/dev/null
+wait_deal "$name" "COMPLETE|BREACHED|IMPOSSIBLE" 240 >/dev/null
 sleep 5
 m1=$(money_of ${PLAYER}); stobe-say speed 0 >/dev/null; heal_stop
 deal_block "$id"
