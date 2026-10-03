@@ -54,7 +54,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
 | STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | needs setup m15: chain works up to power (90 fixed: uses the well's stock), Grain Silo has no power supply in auto-home |
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | PASS m1 |
-| STOBE A11 / A12 | Heal-for-item deal kept / broken | `tests/ingame/stobe/STOBE-A11-A12-heal-deal.sh` | A11 PASS m16; A12 inconclusive (she won't hand over first: by design) |
+| STOBE A11 / A12 | Heal-for-item deal kept / broken | `tests/ingame/stobe/STOBE-A11-A12-heal-deal.sh` | A11 PASS m16; A12 -> section 2 |
 | STOBE A13 | Remembers earlier fight events | long fight, then ask (`tests/ingame/stobe/STOBE-A13-fight-memory.txt`) | PASS m16 (A13 v4, after 91/92) |
 | PG auto-home group | 95 PENDING rows (see PG `INGAME_STATUS.md`) | PG `tests/ingame/auto-home/pg-01…pg-09` (Forced + InGameTest), then config launches 2–4 (`RUN_ORDER.md`) | PASS m4 (pg-01…08 all green on FAA5B471) |
 | STOBE A1 / A2 | FP mode: look-at click keeps control; put down with G | `fp_mode`, `fp_click`, `fp_putdown`, `fp_state` + KenshiFP.log | PASS m1 |
@@ -104,6 +104,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 20, 21, 22 | A fight Shay survives long enough for an offer: 3 raiders KO her (m8); needs a stronger test character (`setstat`/health regen) or the raid squad `size` scaled down per member |
 | REL SR07, SR09, SR13, SR14 | forced limb loss in a fight; a source of better evidence; a theft-caught signal + steal driver |
 | REL SR11 (old) | An enslavement the game reports (spawned bandits may already count as slaves: probe 21); SR12 + SR32 PASS m16 |
+| STOBE A12 | A wounded NPC who hands over before being healed: the model counters with a promise instead (m16, by design) |
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
 | KAH power charge | A battery building in a fixture (none has one) |
