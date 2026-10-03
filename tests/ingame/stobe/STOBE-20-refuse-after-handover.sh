@@ -18,9 +18,9 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 log "20: setup"
 wait_personal_guard
-stobe-auto select Shay >/dev/null
+stobe-auto select ${PLAYER} >/dev/null
 park_malzin 500
-heal_start Shay
+heal_start ${PLAYER}
 r=$(spawn_raiders 1 | head -1); [ -n "$r" ] || { verdict 20 "SETUP FAIL no raider"; exit 1; }
 engage "$r" || log "warning: no combat_start seen"
 name=$(name_of "$r"); log "raider $r = $name"
@@ -38,22 +38,22 @@ deal_block "$id"
 if ! deal_block "$id" | grep -E "npc +(GIVE_ITEM|UNEQUIP_ITEM)" | grep -q -E "VERIFIED|DISPATCHED"; then
   stobe-say speed 0 >/dev/null; heal_stop; verdict 20 "INCONCLUSIVE he did not hand over first"; exit 2
 fi
-m_shay0=$(money_of Shay); m_him0=$(money_of "$r")
+m_shay0=$(money_of ${PLAYER}); m_him0=$(money_of "$r")
 say_to "$r" "$name" "Actually, I'm not paying you anything. Get lost."
 sleep 20
 reacted=0
 deal_line "$name" | grep -q BREACHED_PLAYER && reacted=1
-since_stobe | grep -a -F "[EVENT] combat: $name" | grep -a -q -- "-> Shay" && reacted=1
+since_stobe | grep -a -F "[EVENT] combat: $name" | grep -a -q -- "-> ${PLAYER}" && reacted=1
 since_stobe | grep -a -F "NPC_SAY: $name|" | tail -2 | cut -c1-300
 say_to "$r" "$name" "Fine, fine. Here are your 100 cats."
 sleep 6
-m_shay1=$(money_of Shay); m_him1=$(money_of "$r")
+m_shay1=$(money_of ${PLAYER}); m_him1=$(money_of "$r")
 mark=$(grep -a -c "" "$L")
 sleep 60
 stobe-say speed 0 >/dev/null; heal_stop
-late=$(tail -n +"$mark" "$L" | grep -a -F "[EVENT] combat: $name" | grep -a -c -- "-> Shay")
+late=$(tail -n +"$mark" "$L" | grep -a -F "[EVENT] combat: $name" | grep -a -c -- "-> ${PLAYER}")
 deal_block "$id"
-log "cats Shay $m_shay0 -> $m_shay1, $name $m_him0 -> $m_him1; attacks on Shay after paying: $late; reacted to refusal: $reacted"
+log "cats ${PLAYER} $m_shay0 -> $m_shay1, $name $m_him0 -> $m_him1; attacks on ${PLAYER} after paying: $late; reacted to refusal: $reacted"
 paid=$(( ${m_shay0:-0} - ${m_shay1:-0} ))
 if [ "$paid" -ge 100 ] && [ "${late:-0}" -eq 0 ]; then verdict 20 "PASS paid $paid after refusing, stop held (reacted=$reacted: see his lines)"
 else verdict 20 "FAIL paid=$paid attacks_after_pay=$late"; fi

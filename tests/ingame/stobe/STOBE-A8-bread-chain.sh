@@ -20,16 +20,24 @@ trap 'stobe-auto speed 0 >/dev/null 2>&1' EXIT
 ST=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_work_goal.status
 BASE_K=$(grep -a -c "" "$KFP" 2>/dev/null || echo 0)
 log "A8: setup"
-stobe-auto speed 0 >/dev/null; stobe-auto select Shay >/dev/null
-stobe-auto hunger Malzin 280 >/dev/null; stobe-auto hunger Shay 280 >/dev/null; stobe-auto health Malzin 100 >/dev/null
-for b in "Grain Silo" "Well III" "Bread Oven"; do
+stobe-auto speed 0 >/dev/null; stobe-auto select ${PLAYER} >/dev/null
+stobe-auto hunger ${MATE} 280 >/dev/null; stobe-auto hunger ${PLAYER} 280 >/dev/null; stobe-auto health ${MATE} 100 >/dev/null
+# REAL_POWER=1 (Full-Base): no supply cheat; the base's own power must run the chain.
+if [ "${REAL_POWER:-0}" = 1 ]; then
+  for b in "Grain Silo" "${WELL:-Well}" "Bread Oven"; do
+    log "power $b: $(stobe-auto building "$b" radius 1000 2>&1 | grep -oE 'has_power=[0-9]|out_of_power=[0-9.]+|current_power=[0-9.]+' | tr '\n' ' ')"
+  done
+  stobe-auto building "Grain Silo" radius 1000 | grep -q "out_of_power=0" || { verdict A8 "SETUP FAIL Grain Silo has no real power: $(stobe-auto building "Grain Silo" radius 1000 | cut -c1-200)"; exit 1; }
+else
+for b in "Grain Silo" "${WELL:-Well III}" "Bread Oven"; do
   r=$(stobe-auto power "$b" supply radius 1000 2>&1 | cut -c1-200); log "supply $b: $r"
 done
+fi
 stobe-auto building "Grain Silo" radius 1000 | grep -oE "out_of_power=[0-9.]+|supplied=[0-9]" | tr '\n' ' '; echo
-stobe-auto buildings 300 Wheat near Malzin | cut -c1-200
+stobe-auto buildings 300 Wheat near ${MATE} | cut -c1-200
 before=$(cut -f1 "$ST" 2>/dev/null | sort)
 stobe-say speed 1 >/dev/null
-stobe-say say Malzin "Malzin, make 2 bread." --wait 15 >/dev/null 2>&1 || log "say failed"
+stobe-say say ${MATE} "${MATE}, make 2 bread." --wait 15 >/dev/null 2>&1 || log "say failed"
 id=""
 for i in $(seq 1 15); do
   id=$(comm -13 <(echo "$before") <(cut -f1 "$ST" 2>/dev/null | sort) | head -1)
@@ -38,19 +46,22 @@ for i in $(seq 1 15); do
 done
 [ -n "$id" ] || { verdict A8 "FAIL no bread goal: $(tail -n +"$BASE_K" "$KFP" | grep -a WORK_GOAL | tail -2)"; exit 1; }
 log "goal $id"
-stobe-auto speed 20 >/dev/null
+stobe-auto speed "${SPEED:-20}" >/dev/null
 s=""
 for i in $(seq 1 150); do
   sleep 4
   s=$(grep -a "^$id" "$ST" | cut -f3,6,8,9 | tr '\t' '|')
   echo "$s" | grep -q -E "COMPLETE|BLOCKED|CANCEL" && break
-  stobe-auto where Shay | grep -q " KO" && { log "Shay KO: paused"; break; }
+  stobe-auto where ${PLAYER} | grep -q " KO" && { log "${PLAYER} KO: paused"; break; }
+  # goal-watch safety (tools/stobe-goal-watch.sh logic, any squad names): squad attacked or knocked out -> pause
+  alert=$(since_stobe | grep -a -E "\[EVENT\] (combat: .* -> (${PLAYER}|${MATE}) |knockout: (${PLAYER}|${MATE}) )" | tail -1)
+  if [ -n "$alert" ]; then stobe-auto speed 0 >/dev/null; verdict A8 "ALERT at ${SPEED:-20}x: $(echo "$alert" | cut -c1-200)"; exit 3; fi
 done
 stobe-auto speed 0 >/dev/null
 log "end: $s"
 tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i -E "water|power|grow|blocked|complete" | tail -12 | cut -c1-220
 oven_water=$(tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i "water" | grep -a -c -i "oven")
-stobe-auto inv Malzin | grep -o '"name":"[^"]*Bread[^"]*","count":[0-9]*' | head -3
+stobe-auto inv ${MATE} | grep -o '"name":"[^"]*Bread[^"]*","count":[0-9]*' | head -3
 if echo "$s" | grep -q COMPLETE && [ "$oven_water" -eq 0 ]; then verdict A8 "PASS bread COMPLETE, water never from the oven"
 elif echo "$s" | grep -q -i "power"; then verdict A8 "FAIL still a power block: $s"
 else verdict A8 "FAIL $s (oven water lines: $oven_water)"; fi

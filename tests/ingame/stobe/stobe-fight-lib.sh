@@ -2,6 +2,8 @@
 # stobe-fight-lib.sh: shared helpers for the STOBE fight/deal wrappers (source it; WSL, harness on).
 # Paths, a background healer that keeps Shay (and optionally Malzin) up, one-raider setup that waits for
 # a real fight, deal lookups via negotiation_admin.php, and log slices since the wrapper started.
+# Squad names (m16: the 4080 fixtures have other squads; nothing may depend on Shay/Malzin)
+PLAYER="${PLAYER:-Shay}"; MATE="${MATE:-Malzin}"
 L=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
 KFP=/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log
 SRV=/var/www/html/StobeServer/log/stobeserver.log
@@ -35,7 +37,7 @@ since_srv() { tail -n +"$BASE_SRV" "$SRV"; }
 # m16 fights2: every 10 s was not enough against raiders/the Dust King (Shay KO'd in 61/21/22/20 within 30 s, and a
 # KO'd speaker can't talk: stobe.log `CHAT_VALIDATE: fail speaker unavailable`). Now every HEAL_EVERY s (2) + blood.
 heal_start() {
-  local who="${*:-Shay}"
+  local who="${*:-${PLAYER}}"
   # m16 fights3: even 2-s heals didn't stop knockouts. Preferred: harness `protect <npc> on` (KAH: wakes a KO'd
   # character at once, keeps HP/blood full every frame). Fallback when the harness doesn't know it: the heal loop.
   PROTECTED=""
@@ -55,7 +57,7 @@ heal_stop() {
 trap 'heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 
 # Malzin out of the way (the surrender recipe): KO'd 40 m off for <s> seconds, so she doesn't finish the raider
-park_malzin() { stobe-auto teleport Malzin Shay dist 40 >/dev/null; stobe-auto ko Malzin "${1:-300}" >/dev/null; }
+park_malzin() { stobe-auto teleport ${MATE} ${PLAYER} dist 40 >/dev/null; stobe-auto ko ${MATE} "${1:-300}" >/dev/null; }
 
 # wait_personal_guard: item 87, a previous personal fight's 180 s guard stands down new attackers
 wait_personal_guard() {
@@ -73,9 +75,9 @@ wait_personal_guard() {
 spawn_raiders() {
   local n="${1:-1}" t="${2:-Bandit Raiders (weakened) 1}" k=0
   if [ "$t" = "Bandit Raiders (weakened) 1" ]; then
-    stobe-auto spawn "$t" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
+    stobe-auto spawn "$t" "Starving Bandits" near ${PLAYER} dist 4 count 1 target ${PLAYER} size 0.1 >/dev/null
   else
-    stobe-auto spawn "$t" "Starving Bandits" near Shay dist 4 count 1 >/dev/null
+    stobe-auto spawn "$t" "Starving Bandits" near ${PLAYER} dist 4 count 1 >/dev/null
   fi
   sleep 1
   # m16: in-process (scenarios.sh raiders ran outside the lock) and every kept raider gets a unique name:
@@ -89,10 +91,10 @@ spawn_raiders() {
   [ -n "$found" ] || log "no Starving Bandits within 300 after the spawn: $(stobe-auto chars 300 | cut -c1-300)" >&2
   for s in $found; do
     if [ "$k" -lt "$n" ]; then
-      stobe-auto teleport "$s" Shay dist 3 >/dev/null
+      stobe-auto teleport "$s" ${PLAYER} dist 3 >/dev/null
       [ "${KEEP_TEMPLATE_NAME:-0}" = 1 ] || stobe-auto setname "$s" "${names[$k]}" >/dev/null
       echo "$s"; k=$((k+1))
-    else stobe-auto teleport "$s" Shay dist 3000 >/dev/null; fi
+    else stobe-auto teleport "$s" ${PLAYER} dist 3000 >/dev/null; fi
   done
 }
 
@@ -122,9 +124,9 @@ engage() {
   local r="$1" name; name=$(name_of "$r")
   stobe-say speed 1 >/dev/null
   for i in $(seq 1 15); do
-    stobe-auto attack "$r" Shay >/dev/null; stobe-auto attack Shay "$r" >/dev/null
+    stobe-auto attack "$r" ${PLAYER} >/dev/null; stobe-auto attack ${PLAYER} "$r" >/dev/null
     sleep 4
-    since_stobe | grep -a -F "[EVENT] combat: $name" | grep -a -q -- "-> Shay" && break
+    since_stobe | grep -a -F "[EVENT] combat: $name" | grep -a -q -- "-> ${PLAYER}" && break
   done
   for i in $(seq 1 10); do since_stobe | grep -a -F "[EVENT] combat_start" | grep -a -q -F "$name" && return 0; sleep 2; done
   return 1

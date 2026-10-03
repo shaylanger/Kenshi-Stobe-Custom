@@ -26,19 +26,21 @@ mode="${1:-approve}"
 ST=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_task_goal.status
 CT=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_task_goal.control
 BASE_K=$(grep -a -c "" "$KFP" 2>/dev/null || echo 0)
-stobe-auto speed 0 >/dev/null; stobe-auto select Shay >/dev/null
-stobe-auto clearjobs Malzin >/dev/null
+stobe-auto speed 0 >/dev/null; stobe-auto select ${PLAYER} >/dev/null
+stobe-auto clearjobs ${MATE} >/dev/null
 stobe-auto research "Fabric Manufacture" | cut -c1-160
 stobe-auto research "Basic First Aid Kits" | cut -c1-160   # m16: blueprint found nothing for the kit
 stobe-auto benches 200 crafts | tr '|' '\n' | grep -A0 "Basic Medical Workbench" | cut -c1-200
-stobe-auto inv Malzin | grep -q '"name":"Fabrics"' && { verdict 15 "SETUP FAIL Malzin already has Fabrics"; exit 1; }
+stobe-auto inv ${MATE} | grep -q '"name":"Fabrics"' && { verdict 15 "SETUP FAIL ${MATE} already has Fabrics"; exit 1; }
 stobe-auto find item Fabrics | cut -c1-200
 n=0
 # m16 craft4: the "Skeleton Traders Animals" squad is only pack spiders (traders, but they never held the Fabrics:
 # shopstock showed Iron Plates/Electrical Components/Skeleton Muscle), and the town apothecaries are ~250 m from
 # Malzin, outside the fallback's 220 m. So: bring a real trader with real stock next to her.
-stobe-auto teleport "Apothecary Abia" Malzin dist 30 | cut -c1-160
-stobe-auto give "Apothecary Abia" "Fabrics" 5 | cut -c1-120
+TRADER="${TRADER:-Apothecary Abia}"   # m16 4080 fixtures: any trader (the Squin wrapper picks one)
+if [ "${BUILD_BENCH:-0}" = 1 ]; then stobe-auto build "Basic Medical Workbench" near ${MATE} dist 15 | cut -c1-160; fi  # towns without a medical bench (Squin)
+stobe-auto teleport "$TRADER" ${MATE} dist 30 | cut -c1-160
+stobe-auto give "$TRADER" "Fabrics" 5 | cut -c1-120
 # the medical bench needs power (m16 craft2: out_of_power=1.0): harness `power ... supply` (KAH 10)
 stobe-auto power "Basic Medical Workbench" supply radius 300 | cut -c1-200
 stobe-say speed 1 >/dev/null; sleep 3; stobe-say speed 0 >/dev/null
@@ -48,13 +50,13 @@ for t in $(stobe-auto traders 600 | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do
 done
 log "gave Fabrics to $n trader(s)"; [ "$n" -gt 0 ] || { verdict 15 "SETUP FAIL no trader within 600"; exit 1; }
 # what the fallback will see: traders near Malzin and what each really sells (`shopstock` = the game's view)
-for t in $(stobe-auto traders 300 near Malzin | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do
+for t in $(stobe-auto traders 300 near ${MATE} | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do
   stobe-auto shopstock "$t" | cut -c1-300
 done
-stobe-auto shopstock "Apothecary Abia" | grep -q "Fabrics" || { verdict 15 "SETUP FAIL Abia does not sell Fabrics"; exit 1; }
+stobe-auto shopstock "$TRADER" | grep -q "Fabrics" || { verdict 15 "SETUP FAIL $TRADER does not sell Fabrics"; exit 1; }
 tail -n +"$BASE_K" "$KFP" | grep -a "BUY_FALLBACK" | tail -3
-cats0=$(money_of Malzin)
-stobe-say say Malzin "Malzin, make me one Basic First Aid Kit at the medical workbench." --wait 40 >/dev/null 2>&1 || true
+cats0=$(money_of ${MATE})
+stobe-say say ${MATE} "${MATE}, make me one Basic First Aid Kit at the medical workbench." --wait 40 >/dev/null 2>&1 || true
 stobe-say speed 1 >/dev/null
 row=""
 for i in $(seq 1 20); do sleep 3; row=$(grep -a -P '^buy-[^\t]*Fabrics' "$ST" 2>/dev/null | tail -1); echo "$row" | grep -q WAITING_APPROVAL && break; done
@@ -63,16 +65,16 @@ echo "$row" | grep -q WAITING_APPROVAL || { stobe-say speed 0 >/dev/null; verdic
 bid=$(echo "$row" | cut -f1); log "approval row: $(echo "$row" | tr '\t' '|' | cut -c1-250)"
 if [ "$mode" = approve ]; then line="Yes, go ahead and buy the fabrics."; want="ACTIVE|COMPLETE"; ctl=APPROVE
 else line="No, don't buy anything."; want="CANCELLED"; ctl=CANCEL; fi
-stobe-say say Malzin "$line" --wait 40 >/dev/null 2>&1 || true
+stobe-say say ${MATE} "$line" --wait 40 >/dev/null 2>&1 || true
 ok=0; for i in $(seq 1 10); do sleep 3; grep -a -P "^\Q$bid\E\t" "$ST" | grep -q -E "$want" && { ok=1; break; }; done
 if [ "$ok" = 0 ]; then log "voice not taken: writing $ctl to the control file"; printf '%s\t%s\n' "$bid" "$ctl" >> "$CT"; voice=0; sleep 8; else voice=1; fi
 if [ "$mode" = approve ]; then
   for i in $(seq 1 40); do sleep 3; grep -a -P "^\Q$bid\E\t" "$ST" | grep -q COMPLETE && break; done
 fi
 stobe-say speed 0 >/dev/null
-final=$(grep -a -P "^\Q$bid\E\t" "$ST" | tail -1 | tr '\t' '|' | cut -c1-250); cats1=$(money_of Malzin)
-has=$(stobe-auto inv Malzin | grep -c '"name":"Fabrics"')
-log "final: $final; Malzin cats $cats0 -> $cats1; Fabrics in inv: $has; voice=$voice"
+final=$(grep -a -P "^\Q$bid\E\t" "$ST" | tail -1 | tr '\t' '|' | cut -c1-250); cats1=$(money_of ${MATE})
+has=$(stobe-auto inv ${MATE} | grep -c '"name":"Fabrics"')
+log "final: $final; ${MATE} cats $cats0 -> $cats1; Fabrics in inv: $has; voice=$voice"
 if [ "$mode" = approve ]; then
   echo "$final" | grep -q COMPLETE && [ "$has" -ge 1 ] && verdict 15 "PASS approve (voice=$voice): bought, goal continues" || verdict 15 "FAIL approve: $final"
 else

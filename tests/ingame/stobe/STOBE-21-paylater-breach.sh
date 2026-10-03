@@ -17,14 +17,14 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 log "21: setup"
 wait_personal_guard
-stobe-auto select Shay >/dev/null
+stobe-auto select ${PLAYER} >/dev/null
 park_malzin 400
-heal_start Shay
+heal_start ${PLAYER}
 r=$(spawn_raiders 1 | head -1); [ -n "$r" ] || { verdict 21 "SETUP FAIL no raider"; exit 1; }
 engage "$r" || log "warning: no combat_start seen"
 name=$(name_of "$r"); log "raider $r = $name"
 trust "$name" 60 Fond >/dev/null 2>&1 || true
-stobe-auto health "$r" 45 >/dev/null          # hurting, not yet ready to beg (we want Shay's offer, not his)
+stobe-auto health "$r" 45 >/dev/null          # hurting, not yet ready to beg (we want ${PLAYER}'s offer, not his)
 sleep 4
 say_to "$r" "$name" "Stop! Stop fighting. Stand down now and I'll pay you 200 cats later, once this is over. You have my word."
 d=$(wait_accept "$name" 90)

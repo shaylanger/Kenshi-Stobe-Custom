@@ -20,9 +20,9 @@ set -u
 T="${1:-2849-gamedata.base}"
 log "61: setup with $T"
 wait_personal_guard
-stobe-auto select Shay >/dev/null
+stobe-auto select ${PLAYER} >/dev/null
 park_malzin 600
-heal_start Shay
+heal_start ${PLAYER}
 # keep "Dust King": the cap tier comes from the template/name (m16 lib renames other raiders)
 r=$(KEEP_TEMPLATE_NAME=1 spawn_raiders 1 "$T" | head -1); [ -n "$r" ] || { verdict 61 "SETUP FAIL no NPC from $T"; exit 1; }
 carried=$(money_of "$r"); log "$r carries ${carried:-?} cats"
@@ -35,7 +35,7 @@ d=""
 for i in $(seq 1 30); do
   sleep 4
   dist=$(stobe-auto where "$r" | grep -oE 'dist=[0-9.]+' | cut -d= -f2 | cut -d. -f1)
-  [ "${dist:-0}" -gt 15 ] && stobe-auto teleport "$r" Shay dist 4 >/dev/null
+  [ "${dist:-0}" -gt 15 ] && stobe-auto teleport "$r" ${PLAYER} dist 4 >/dev/null
   stobe-auto where "$r" | grep -q " KO" && { log "he went down (KO)"; break; }
   d=$(deal_line "$name" "PROPOSED|COUNTERED"); [ -n "$d" ] && break
   name=$(name_of "$r")
@@ -43,7 +43,7 @@ done
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; heal_stop; verdict 61 "INCONCLUSIVE no offer: $(deal_line "$name")"; exit 2; }
 id=$(echo "$d" | awk '{print $1}'); deal_block "$id"
 offer=$(deal_block "$id" | awk '$1=="npc" && $2=="GIVE_CATS"{print $3}' | head -1)
-m0=$(money_of Shay)
+m0=$(money_of ${PLAYER})
 # m16: the "deal." line was lost to an inbox race (deal stayed PROPOSED); now locked, and repeated once
 for try in 1 2; do
   say_to "$r" "$name" "$name, deal."
@@ -52,12 +52,12 @@ for try in 1 2; do
 done
 wait_deal "$name" "COMPLETE" 90 >/dev/null
 sleep 5
-m1=$(money_of Shay); stobe-say speed 0 >/dev/null; heal_stop
+m1=$(money_of ${PLAYER}); stobe-say speed 0 >/dev/null; heal_stop
 deal_block "$id"
 since_stobe | grep -a -E "GIVE_CATS@[^@]*@[0-9]+@(topup|exact)|GIVE_CATS topup" | tail -4 | cut -c1-250
 got=$(( ${m1:-0} - ${m0:-0} ))
-log "carried=$carried offer=${offer:-?} Shay got=$got"
+log "carried=$carried offer=${offer:-?} ${PLAYER} got=$got"
 if [ -n "$offer" ] && [ "$offer" -gt "${carried:-0}" ] && [ "$got" -ge "$offer" ] && since_stobe | grep -a -q "GIVE_CATS topup"; then
-  verdict 61 "PASS offer $offer > carried $carried, topped up, Shay +$got"
+  verdict 61 "PASS offer $offer > carried $carried, topped up, ${PLAYER} +$got"
 elif [ -n "$offer" ] && [ "$offer" -le "${carried:-0}" ]; then verdict 61 "INCONCLUSIVE offer $offer within what he carried ($carried): no top-up needed"
 else verdict 61 "FAIL offer=${offer:-none} carried=$carried got=$got"; fi

@@ -18,12 +18,12 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 log "22: setup"
 wait_personal_guard
-stobe-auto select Shay >/dev/null
+stobe-auto select ${PLAYER} >/dev/null
 park_malzin 600
-heal_start Shay
+heal_start ${PLAYER}
 mapfile -t G < <(spawn_raiders 3)
 [ "${#G[@]}" -ge 2 ] || { verdict 22 "SETUP FAIL raiders=${#G[@]}"; exit 1; }
-for s in "${G[@]}"; do stobe-auto attack "$s" Shay >/dev/null; done
+for s in "${G[@]}"; do stobe-auto attack "$s" ${PLAYER} >/dev/null; done
 engage "${G[0]}" || log "warning: no combat_start seen"
 names=(); for s in "${G[@]}"; do names+=("$(name_of "$s")"); done
 lead="${names[0]}"; log "gang: ${names[*]} (talking to $lead)"
@@ -32,17 +32,17 @@ say_to "${G[0]}" "$lead" "Enough! Call your whole gang off and I'll pay you 300 
 d=$(wait_accept "$lead" 90)
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; heal_stop; verdict 22 "INCONCLUSIVE no accepted deal: $(deal_line "$lead")"; exit 2; }
 id=$(echo "$d" | awk '{print $1}'); log "deal $id"
-m0=$(money_of Shay)
+m0=$(money_of ${PLAYER})
 say_to "${G[0]}" "$lead" "Here are your 300 cats."
 wait_deal "$lead" "COMPLETE" 40 >/dev/null
-m1=$(money_of Shay)
+m1=$(money_of ${PLAYER})
 mark=$(grep -a -c "" "$L")
 sleep 120
 stobe-say speed 0 >/dev/null; heal_stop
 deal_block "$id"
-late=0; for n in "${names[@]}"; do c=$(tail -n +"$mark" "$L" | grep -a -F "[EVENT] combat: $n" | grep -a -c -- "-> Shay"); late=$((late + c)); log "$n attacks on Shay after paying: $c"; done
+late=0; for n in "${names[@]}"; do c=$(tail -n +"$mark" "$L" | grep -a -F "[EVENT] combat: $n" | grep -a -c -- "-> ${PLAYER}"); late=$((late + c)); log "$n attacks on ${PLAYER} after paying: $c"; done
 tail -n +"$BASE_L" "$L" | grep -a "PERSONAL_TRUCE: stood down" | tail -4 | cut -c1-250
 bad=$(since_stobe | grep -a -F "NPC_SAY: $lead|" | grep -a -i -c -E "isn.t mine to call off|not my call|can.t call them off|not mine to call")
-log "cats Shay $m0 -> $m1"
+log "cats ${PLAYER} $m0 -> $m1"
 if deal_line "$lead" | grep -q COMPLETE && [ "$late" -eq 0 ] && [ "$bad" -eq 0 ]; then verdict 22 "PASS paid deal COMPLETE, gang quiet for 120 s"
 else verdict 22 "FAIL complete=$(deal_line "$lead" | grep -c COMPLETE) attacks_after=$late wrong_words=$bad"; fi

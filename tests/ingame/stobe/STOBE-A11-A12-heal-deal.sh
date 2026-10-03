@@ -21,14 +21,14 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 mode="${1:-a11}"
 log "$mode: setup"
-stobe-auto select Shay >/dev/null
-stobe-auto teleport Malzin Shay dist 25 >/dev/null
-out=$(stobe-auto spawn "Hungry Bandit" Drifters near Shay dist 12 count 1)
+stobe-auto select ${PLAYER} >/dev/null
+stobe-auto teleport ${MATE} ${PLAYER} dist 25 >/dev/null
+out=$(stobe-auto spawn "Hungry Bandit" Drifters near ${PLAYER} dist 12 count 1)
 v=$(echo "$out" | grep -oE '#[0-9]+/[0-9]+' | head -1); [ -n "$v" ] || { verdict "$mode" "SETUP FAIL spawn: $out"; exit 1; }
 stobe-auto setname "$v" "Senlin" >/dev/null
 # no self-treatment: move any medical item to Shay
 for it in $(stobe-auto inv "$v" | grep -oE '"name":"[^"]*(First Aid|Bandage|Splint|Medkit)[^"]*"' | sed -E 's/"name":"(.*)"/\1/' | tr ' ' '_'); do
-  stobe-auto transfer "$v" Shay "${it//_/ }" >/dev/null; log "moved ${it//_/ } to Shay"
+  stobe-auto transfer "$v" ${PLAYER} "${it//_/ }" >/dev/null; log "moved ${it//_/ } to ${PLAYER}"
 done
 item=$(stobe-auto inv "$v" | grep -oE '"name":"[^"]*","count":1,"equipped":true' | head -1 | sed -E 's/"name":"([^"]*)".*/\1/')
 [ -n "$item" ] || item="shirt"
@@ -37,7 +37,7 @@ stobe-auto damage "$v" chest 35 >/dev/null
 stobe-auto damage "$v" left_leg 40 >/dev/null
 stobe-auto damage "$v" right_leg 40 >/dev/null
 stobe-auto blood "$v" 40% >/dev/null
-stobe-auto give Shay "Basic First Aid Kit" 2 >/dev/null
+stobe-auto give ${PLAYER} "Basic First Aid Kit" 2 >/dev/null
 stobe-auto hp "$v" | cut -c1-200
 stobe-say speed 1 >/dev/null
 sleep 8
@@ -58,12 +58,12 @@ if [ "$mode" = a12 ]; then
   else verdict a12 "FAIL state=$(deal_line Senlin | awk '{print $NF}') square_lines=$sq"; fi
   exit 0
 fi
-stobe-auto order Shay FIRST_AID_ORDER target "$v" >/dev/null
+stobe-auto order ${PLAYER} FIRST_AID_ORDER target "$v" >/dev/null
 for i in $(seq 1 20); do deal_block "$id" | grep -E "player +FIRST_AID" | grep -q VERIFIED && break; sleep 4; done
-since_stobe | grep -a "\[EVENT\] healing: Shay" | tail -2 | cut -c1-200
+since_stobe | grep -a "\[EVENT\] healing: ${PLAYER}" | tail -2 | cut -c1-200
 for i in $(seq 1 20); do npc_done && break; sleep 4; done
 stobe-say speed 0 >/dev/null
 deal_block "$id"
-have=$(stobe-auto inv Shay | grep -c -F "\"name\":\"$item\"")
+have=$(stobe-auto inv ${PLAYER} | grep -c -F "\"name\":\"$item\"")
 if deal_line Senlin | grep -q COMPLETE && [ "$have" -ge 1 ]; then verdict a11 "PASS healed, she handed over $item on her own, COMPLETE"
 else verdict a11 "FAIL state=$(deal_line Senlin | awk '{print $3}') item_in_shay_inv=$have"; fi
