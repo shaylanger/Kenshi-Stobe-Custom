@@ -47,7 +47,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | PASS (tier 1 m2, tier 0 m8) |
 | STOBE 61 | Cap tiers 3–5 (top-up) | spawn Samurai Sergeant / Dust King, beat, accept, 2nd deal | partial m12: surrender trigger fixed (88: health event + ratio 0.25 check); the Dust King flees before speaking, so the tier 3+ top-up needs a setup (section 2) |
 | STOBE 20 | Refuse to pay after hand-over | fight setup | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
-| STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
+| STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | PASS m16 (`STOBE-21-paylater-breach.sh` with harness `protect`: BREACHED_PLAYER) |
 | STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | needs setup (m8: a gang of 3 KOs Shay before any offer; see section 2) |
 | STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | PASS m8 (after 85) |
 | STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | PASS m3 (fetch + return); hand-over on return -> 76, retest |
@@ -139,7 +139,7 @@ Rows unlocked by the 4080 saves moved to 1f (2026-10-03).
 | ID | What it needs |
 |---|---|
 | STOBE 61 | tier 3+ top-up: Shay must stay conscious through the Dust King fight (harness `protect`, KAH 11, being tested m16) |
-| STOBE 20, 21, 22 | a fight Shay survives long enough for an offer (harness `protect`, KAH 11, being tested m16) |
+| STOBE 20, 22 | a fight Shay survives long enough for an offer (harness `protect`, KAH 11, being tested m16) |
 | STOBE A12 | A wounded NPC who hands over before being healed: the model counters with a promise instead (m16, by design) |
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
