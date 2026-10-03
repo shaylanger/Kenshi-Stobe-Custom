@@ -1,0 +1,87 @@
+# id: STOBE-A13-fight-memory
+# covers: STOBE A13 (after a long fight she still remembers something from early in it)
+# fixture: auto-home
+# reset: fresh
+# needs: Stobe 49AFB0A7, server live (round 26+), harness F946C881 (#serial/index)
+# verify:
+#   Why it can fail: the chat prompt carries the last CONTEXT_HISTORY (50) events for the NPC and a combat
+#   block of the last 5 major_damage/knockout/... events within 1200 game s; every hit is a stored `combat`
+#   event, so a long fight pushes the opening knockout out of both.
+#   PASS = the prompt for the final question still contains the opening KO. In WSL, after the run:
+#     F=/var/www/html/StobeServer/log/context_sent_to_llm.log
+#     awk '/^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/{if(b~/very first bandit/)l=b;b=""}{b=b"\n"$0}END{if(b~/very first bandit/)l=b;print l}' $F | grep -c "Kor Gast"
+#     -> >= 1 (0 = FAIL: she can't know; log a STOBE bug with the prompt slice).
+#   Also check the fight was long enough to matter (>= 50 events after the KO), DB stobe:
+#     select count(*) from eventlog where gamets > (select max(gamets) from eventlog where data like '%Kor Gast was Knocked Out%');
+#   Her answer (output_from_llm.log / stobe.log NPC_SAY Malzin) naming Kor Gast is supporting evidence only.
+#   Safety: Shay/Malzin KO during wave 2 is fine (Hungry Bandits); if both are KO the run still continues to the question.
+@wait-world
+@sleep 8
+speed 0
+stobe_ping ~ speaker=Shay
+hunger Malzin 250
+hunger Shay 250
+health Shay 100
+health Malzin 100
+# --- opening event: a named bandit knocked out at the very start ---
+@set FIRST spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ (#\d+/\d+)
+setname ${FIRST} "Kor Gast"
+damage ${FIRST} left_leg 110 ~ flesh
+damage ${FIRST} right_leg 110 ~ flesh
+fight Malzin ${FIRST}
+attack Shay ${FIRST}
+speed 1
+@sleep 8
+ko ${FIRST} 900
+@until 30 where ${FIRST} ~ KO
+speed 0
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ \[EVENT\] knockout: Kor Gast
+# --- the long part: a wave of 6 (Drifters are now hostile to the squad after `fight`) ---
+@set W1 spawn "Hungry Bandit" Drifters near Shay dist 15 count 1 ~ (#\d+/\d+)
+@set W2 spawn "Hungry Bandit" Drifters near Shay dist 15 count 1 ~ (#\d+/\d+)
+@set W3 spawn "Hungry Bandit" Drifters near Malzin dist 15 count 1 ~ (#\d+/\d+)
+@set W4 spawn "Hungry Bandit" Drifters near Malzin dist 15 count 1 ~ (#\d+/\d+)
+@set W5 spawn "Hungry Bandit" Drifters near Shay dist 18 count 1 ~ (#\d+/\d+)
+@set W6 spawn "Hungry Bandit" Drifters near Malzin dist 18 count 1 ~ (#\d+/\d+)
+attack Shay ${W1}
+attack Malzin ${W3}
+speed 1
+@sleep 60
+speed 0
+where Shay
+where Malzin
+attack Shay ${W2}
+attack Malzin ${W4}
+speed 1
+@sleep 60
+speed 0
+attack Shay ${W5}
+attack Malzin ${W6}
+speed 1
+@sleep 60
+speed 0
+# end the fight: whoever is still up goes down
+ko ${W1} 600
+ko ${W2} 600
+ko ${W3} 600
+ko ${W4} 600
+ko ${W5} 600
+ko ${W6} 600
+speed 1
+@sleep 15
+speed 0
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ \[EVENT\] knockout: Hungry Bandit
+# both squad members up for the question
+health Shay 100
+health Malzin 100
+select Shay
+teleport Malzin Shay dist 4
+speed 1
+@sleep 10
+speed 0
+where Malzin ~ ^Malzin(?!.*\bKO\b)
+stobe_say Malzin "Malzin, that fight went on forever. Who was the very first bandit we put down, back at the start?"
+speed 1
+@sleep 25
+speed 0
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ NPC_SAY: Malzin\|

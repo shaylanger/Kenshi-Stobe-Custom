@@ -1,0 +1,50 @@
+# id: STOBE-56-relationship-types
+# covers: STOBE 56 (R1, StobeServer 956000f: new relationship entries use list types only; an odd type never turns "romantic" into "neutral")
+# fixture: auto-home
+# reset: fresh, THEN in WSL before `run`:  bash /mnt/c/KenshiModding/tools/automation/scenarios.sh trust Malzin 96 Bonded romantic
+# needs: server live (956000f + 70 legacy-type mapping), RELATIONSHIP_UPDATE_CHANCE > 0 (default 50). The lines below contain
+#        the salient words (thank/trust/hate/betray/sorry/friend) that always trigger an evaluation
+#        (stobeRelationshipTurnNeedsConnectorEvaluation), so every turn is evaluated. m1 was inconclusive (no new entries): this
+#        file makes a fresh named NPC (new entry) and drives Malzin's romantic entry with "annoyed"-style lines.
+# verify (WSL, after the run):
+#   1. every type written this run is on the list:
+#      grep "Relationship updates applied" /var/www/html/StobeServer/log/relationship_worker.log | tail -n 20 \
+#        | grep -o '"type":"[^"]*"' | sort | uniq -c
+#      -> only romantic platonic familial professional rival enemy neutral nemesis estranged transactional protective indebted
+#         fanatical mentor student servant client patron crush ex betrayed suspicious admirer jealous fearful obsessed awed
+#         contempt pitying grateful curious dismissive wary  (FAIL: annoyed, ally, distrust, friend, hostile, ...)
+#   2. cd /tmp && sudo -u postgres psql -d stobe -Atc "select name, extended_data->'relationships'->'Shay' from core_npc_master where name in ('Malzin','Tovin Brask')"
+#      -> Tovin Brask has a Shay entry (new) with a list type; Malzin's Shay type is NOT "neutral" (romantic, or a list type
+#         the evaluator chose on purpose, e.g. wary); no "shay" duplicate key.
+#   If there are no "Relationship updates applied" lines for Tovin Brask/Malzin at all: inconclusive again; grep
+#   relationship_worker.log for "skipped/no changes" and report the reason.
+@wait-world
+@sleep 8
+speed 0
+stobe_ping ~ speaker=Shay
+select Shay
+@set TOV spawn "Hungry Bandit" Drifters near Shay dist 15 count 1 ~ (#\d+/\d+)
+setname ${TOV} "Tovin Brask"
+where ${TOV} ~ Tovin Brask
+# --- a new entry: Tovin Brask -> Shay ---
+stobe_say "Tovin Brask" "Hello there, I'm Shay. Thanks for not robbing us, friend. I think I could trust you."
+speed 1
+@sleep 25
+speed 0
+stobe_say "Tovin Brask" "Actually, I hate drifters. You'd betray your own mother for a loaf of bread."
+speed 1
+@sleep 25
+speed 0
+@log /var/www/html/StobeServer/log/relationship_worker.log ~ Relationship updates applied .*"speaker":"Tovin Brask".*"type":"(romantic|platonic|familial|professional|rival|enemy|neutral|nemesis|estranged|transactional|protective|indebted|fanatical|mentor|student|servant|client|patron|crush|ex|betrayed|suspicious|admirer|jealous|fearful|obsessed|awed|contempt|pitying|grateful|curious|dismissive|wary)"
+# --- Malzin's romantic entry under "annoyed"/"distrust"-style pressure ---
+stobe_say Malzin "Malzin, you annoyed me today. I'm not sure I trust you with the cats anymore."
+speed 1
+@sleep 25
+speed 0
+stobe_say Malzin "Sorry, I didn't mean it. Thank you for always watching my back, love."
+speed 1
+@sleep 25
+speed 0
+@log /var/www/html/StobeServer/log/relationship_worker.log ~ Relationship updates applied .*"speaker":"Malzin"
+# teleport Tovin away so he doesn't wander into the squad (never kill a spawned neutral near the squad)
+teleport ${TOV} Shay dist 300

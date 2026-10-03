@@ -1,0 +1,62 @@
+# id: STOBE-16-bench-shortfall
+# covers: STOBE 16 (a goal needing a crafted ingredient at a bench: the bench queue grows only by what's missing)
+# fixture: Crafting base
+# reset: fresh
+# needs: KenshiFP 7043126D (work planner), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
+# verify:
+#   Chain (from this install's game data, tools/research): Junkbow = Steel Bars + Hinge, crafted at the
+#   Crossbow Crafting Bench (in the base); Hinge = crafted at the "Arrow Making Bench " (sid 96184-Newwworld.mod,
+#   built here; the name has a trailing space, so build uses the sid). Research: Crossbow Bolts -> Crossbow Crafting.
+#   Malzin already carries 1 Hinge, so for "2 Junkbows" the Hinge shortfall is 2 - 1 = 1.
+#   PASS when:
+#   - KenshiFP.log: `WORK_GOAL accepted id=<ID> actor=Malzin ... item=Junkbow qty=2` (if the LLM picks another
+#     item/qty, log it as a STOBE bug and rerun with the exact phrase);
+#   - every `benches` sample: Arrow Making Bench queue <= 1, Crossbow Crafting Bench queue <= 2 (steps below);
+#   - RE_Kenshi\mods\Stobe\stobe_work_goals.tsv, the goal's row: field 8 (queued_root) = 2 and field 19 (subs)
+#     `Hinge=1;` (never 2+), e.g. `awk -F'\t' '$4=="Junkbow"{print $8, $19}' stobe_work_goals.tsv`;
+#   - finally COMPLETE 2/2 in stobe_work_goal.status and `inv Malzin`/the bench output holds 2 Junkbows.
+#   FAIL: a queue above those numbers at any sample, or subs Hinge=2+ (queued again for the Hinge she has).
+@wait-world
+@sleep 8
+speed 0
+stobe_ping ~ speaker=Shay
+hunger Malzin 250
+hunger Shay 250
+clearjobs Malzin
+research "Crossbow Bolts"
+research "Crossbow Crafting"
+build 96184-Newwworld.mod near Malzin dist 12 ~ Arrow Making Bench
+benches 200 crafts ~ Crossbow Crafting Bench [^|]*queue=0[^|]*Junkbow
+benches 200 crafts ~ Arrow Making Bench [^|]*queue=0[^|]*Hinge
+give Malzin "Steel Bars" 12 ~ got 12/12
+give Malzin "Hinge" 1 ~ got 1/1
+inv Malzin ~ Hinge
+stobe_say Malzin "Malzin, make 2 Junkbows at the crossbow bench, please."
+speed 1
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Junkbow qty=2
+@sleep 20
+speed 0
+# samples while the goal queues and crafts: the queues must never pass the shortfall
+benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
+benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
+speed 10
+@sleep 30
+speed 0
+benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
+benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
+speed 10
+@sleep 30
+speed 0
+benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
+benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
+speed 10
+@until 600 benches 200 ~ Crossbow Crafting Bench [^|]*queue=0\b
+speed 0
+benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=2\b
+# collect + completion (the goal collects the bench output when it completes)
+speed 10
+@sleep 30
+speed 0
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL complete id=\S+ actor=Malzin item=Junkbow qty=2
+inv Malzin ~ Junkbow
