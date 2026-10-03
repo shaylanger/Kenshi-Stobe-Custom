@@ -22,7 +22,7 @@ tools/msvc2010/downloads/
 __pycache__/
 
 # Runtime/test output
-test_outbox.txt
+outbox.txt
 *.status
 *.flag
 
