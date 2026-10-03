@@ -1518,8 +1518,10 @@ void LogGameEvent(const std::string &type, const std::string &actor,
       Stobe::EventPolicy::PriorityForEventType(normalizedType);
   AsyncPostToStobeSerialWithPriority(endpoint, "", eventPriority);
   if (g_socialCapture && PlaythroughSession::Allowed(PlaythroughSession::Generation())) {
-    SocialFocusTouch(actorSerial);
-    SocialFocusTouch(targetSerial);
+    if (normalizedType == "chat") {
+      SocialFocusTouch(actorSerial);
+      SocialFocusTouch(targetSerial);
+    }
     LONG sequence = StobeSocial::SupportedKind(normalizedType) ? InterlockedIncrement(&g_socialSequence) : 0;
     if (sequence > 0) {
       std::string payload = StobeSocial::Envelope(SocialCampaignId(), PlaythroughSession::ClientId(),
@@ -1661,8 +1663,12 @@ void SocialPostStructuredW(const std::string &kind, const StobeSocial::EntityInf
                            const std::vector<int> &witnessSense) {
   if (!SocialCaptureEnabled())
     return;
-  SocialFocusTouch(actor ? actor->serial : 0u);
-  SocialFocusTouch(target ? target->serial : 0u);
+  bool focusWorthy = (actor && actor->inPlayerFaction == 1) || (target && target->inPlayerFaction == 1) ||
+                     (kind != "attack" && kind != "aid" && kind != "item_gain");
+  if (focusWorthy) {
+    SocialFocusTouch(actor ? actor->serial : 0u);
+    SocialFocusTouch(target ? target->serial : 0u);
+  }
   if (kind == "attack") {
     // The attack hook can fire many times a second in a fight; one fact per pair per 3 s is enough
     // (the server keys the encounter per pair and only needs the first strike and the direction).
@@ -1689,7 +1695,8 @@ void SocialPostStructuredW(const std::string &kind, const StobeSocial::EntityInf
   Log("SOCIAL_CAPTURE: structured kind=" + kind + " seq=" + ToString((int)sequence) +
       " load=" + ToString((int)PlaythroughSession::Generation()) +
       " actor=#" + ToString(actor ? actor->serial : 0u) + " target=#" + ToString(target ? target->serial : 0u) +
-      " witnesses=" + ToString((unsigned int)witnessWho.size()) + " facts=" + factsBody.substr(0, 700));
+      " witnesses=" + ToString((unsigned int)witnessWho.size()) + " facts=" + factsBody.substr(0, 700) +
+      (witnessWho.empty() ? std::string("") : " w=" + SocialWitnessArray(witnessWho, witnessSense).substr(0, 900)));
 }
 
 // ---- REL social focus (global scope; see run m5) ----

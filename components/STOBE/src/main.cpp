@@ -8331,7 +8331,7 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
   AddInventorySyncCandidate(talkTarget, candidates, seen);
   {
     std::vector<unsigned int> focus;
-    SocialFocusSerials(focus, 16);
+    SocialFocusSerials(focus, 24);
     size_t resolvedFocus = 0;
     std::string unresolvedFocus;
     for (size_t f = 0; f < focus.size(); ++f) {
