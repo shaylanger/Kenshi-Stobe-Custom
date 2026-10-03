@@ -33,15 +33,18 @@ Send each agent results with exact file paths; they reply with commits/hashes; y
 | StobeCustom.ini | `[SocialRelationships] Capture=` toggled by the perf runner (B=1, A=0); **set back as needed** | - |
 | PG config | Forced + InGameTest (test mode) | after all PG testing: `set_test_mode.ps1 -Mode Normal -Rules Normal` |
 
-## Running at handoff time
-`C:\KenshiTestRuns\m15\perf-abab.ps1` (PowerShell background task of the old session; may be killed when that
-session closes): frame-time windows B1 (done: avg 57.1, worst 348.7 ms, mem 5069→4981), then A1/B2/A2 with
-relaunches. Results append to `C:\KenshiTestRuns\m15\rel\windows.txt`. If it was killed: finish the missing
-windows yourself (`window.sh` per launch, Capture per label: A=0, B=1), then send all four lines to the REL builder
-(gate: B avg fps ≥ 95 % of A, worst frame ≤ 110 %, memory delta < 100 MB).
+## Frame-time windows (finished; not yet sent to the REL builder)
+`C:\KenshiTestRuns\m15el\windows.txt` (10 min each after 60 s warm-up, kah-crafting, order B-A-B-A, relaunch between):
+- B1 Capture=1: avg 57.1 fps, worst 348.7 ms, mem 5069 -> 4981 MB
+- A1 Capture=0: avg 57.2 fps, worst 1983.7 ms, mem 4886 -> 4843 MB
+- B2 Capture=1: avg 80.1 fps, worst 773.2 ms, mem 4878 -> 4866 MB
+- A2 Capture=0: avg 106.6 fps, worst 402.8 ms, mem 4918 -> 4902 MB
+Launch-to-launch variance is large (camera/scene), so pairwise B1/A1 ≈ equal, B2/A2 = 75 %. **First task: send these to the
+REL builder** (ask for a verdict; maybe more pairs or a fixed camera position: the harness has no camera command yet).
+Kenshi is left running on kah-crafting with Capture=0 (A2 was last) and REL mode off.
 
 ## Next steps (in order)
-1. Finish/collect the frame windows → REL builder.
+1. Send the frame windows above to the REL builder.
 2. Install PG `7D80DBB3` + harness `F946C881` (Kenshi closed), `set_test_mode.ps1 -Mode Forced -Rules InGameTest`,
    Capture=1, fresh fixtures. Run PG `auto-home/pg-12-job-throughput.txt` (v5: expect B ≈ 1.5× A, C ≈ A on
    output_progress) → PG agent (rows 177, 331).
