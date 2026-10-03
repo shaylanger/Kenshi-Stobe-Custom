@@ -7134,11 +7134,23 @@ struct CombatCharacterObservation {
         attackTarget(nullptr) {}
 };
 
+// Item 88: when a character last fought (kept 2 min, unlike the 12 s combat signal) so a
+// fighter who flees at low health still reports his health buckets (surrender offers).
+static std::map<unsigned int, DWORD> g_lastFightTickBySerial;
+static const DWORD kFledFighterHealthMs = 120 * 1000;
+
 static void MarkRecentCombatSignal(Character *npc, DWORD nowTick) {
   unsigned int serial = ResolveCharacterSerialForEvent(npc);
   if (serial != 0) {
     g_recentCombatSignalTickBySerial[serial] = nowTick;
+    if (g_lastFightTickBySerial.size() > 2048) g_lastFightTickBySerial.clear();
+    g_lastFightTickBySerial[serial] = nowTick;
   }
+}
+
+static bool FoughtRecently(unsigned int serial, DWORD nowTick) {
+  std::map<unsigned int, DWORD>::const_iterator it = g_lastFightTickBySerial.find(serial);
+  return it != g_lastFightTickBySerial.end() && nowTick - it->second <= kFledFighterHealthMs;
 }
 
 static bool HasRecentCombatSignal(unsigned int serial, DWORD nowTick) {
@@ -8541,7 +8553,8 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       MarkRecentCombatSignal(npc, nowTick);
       EmitMajorDamageEvent(npc);
     }
-    if (ObserveCombatCharacter(npc, nowTick).evidence && !deadNow && !unconsciousNow)
+    if ((ObserveCombatCharacter(npc, nowTick).evidence || FoughtRecently(serial, nowTick)) &&
+        !deadNow && !unconsciousNow) // item 88: also after he fled
       ReportHealthBucket(npc, serial, OverallHealthPercent(fleshHealthByPartNow));
     std::map<std::string, int> gainByKey;
     std::map<std::string, int> lossByKey;
