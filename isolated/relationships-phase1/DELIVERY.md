@@ -345,3 +345,65 @@ it, plus stobe.log. I purged the six tables afterwards: they were already empty.
 p1-04 (log format only), p2-01, p2-04, p3-01, p3-02, p3-03, p3-04, p4-01, p4-04, p5-01, p5-02.
 Then p4-02 and p4-03 once, for the where/screenshot diagnostics. Optionally the two deal procedures (SR29).
 Also please check `grep "INV_TRANSFER: gain without loss" stobe.log` during p3-02/p5-02.
+
+## 2026-10-03 Run m5 results, fixes and reruns
+
+Judged from the `m5/rel/*.inspect.txt` snapshots, the gain/loss files and the archived stobe.log
+(`C:\KenshiTestRuns\logs\20261003-040157-stop\stobe.log`).
+
+### Root causes found
+1. **Crowd limit (native, real bug):** Stobe's world sweep covers the player plus at most 16 characters
+   around her (`getCharactersWithinSphere(..., 16, ...)`). In the Hub (raids, many townsfolk) the test NPCs
+   dropped out. As a result their KO, shackle, transfer and recovery facts were never seen (p3-02 KO, p3-03
+   enslaved, p3-04 recovered, p5-02 gain).
+   **Fix:** characters that appeared in a social fact or event in the last 5 min (newest 16) are always
+   added to the sweep.
+2. **KO without attribution (native):** a KO in a fight can come with no attacker from the game (p2-01:
+   `unattributed`). **Fix:** the KO/harm fact then names the last attacker the attack hook saw for that
+   victim within 10 s (`attribution: recent_attacker`). The server still scores harm only inside an
+   observed encounter.
+3. **Trade sides lost (native):** `getDataType()` did not identify Shay or Keys as characters, so the
+   fact had actor and target null (`incomplete_roles`). **Fix:** sides are resolved by serial in the
+   character list; shop storage still resolves to nobody.
+4. Scenario issues:
+   - Crippling at 95 still let them flee. Now legs go to -10%, and the KO is forced 6 s after the attack.
+   - Hub guards haul KO'd outsiders away. p4-01 now runs on auto-home; p4-02/03 are blocked.
+   - Hungry NPCs eat food on arrival. Food is now handed over while the recipient is full, then he is
+     made hungry and eats it.
+   - Shay's full inventory hides items from the scan. The gift now comes from an NPC donor.
+   - p2-04 must run chained after p2-01 (keep).
+5. Not noise: the meaningful-aid rows between townsfolk are real. Hub medics bandage raid wounded
+   (e.g. worst -0.22, 230 untreated points bandaged).
+
+### Verdicts (m5)
+- **Pass:**
+  - SR41 (every shadow run passed `--check-shadow`).
+  - SR38/SR40 (p1-04 25/0, including the log-format fix).
+  - SR02 (Rel Vorn->Shay -12).
+  - SR15 (Malzin->Rel Ona meaningful_aid +11 while she was unconscious and near death).
+- **Rerun needed after the m5 build:** SR05 (KO attribution), SR06 (chained), SR08, SR10, SR11, SR12,
+  SR16, SR21, SR22/SR23 (trade sides), gift.
+- **Blocked:** SR18/SR19. Needs a fixture with a bed and a cage and no town guards. Also, Malzin did not
+  act on `FIND_BED_AND_PUT_IN`.
+- **Probe answers:**
+  - 14: a normal purchase from Keys paid 146 = value 146, ratio 1.0, so the trade is fair and earns nothing.
+  - 15: the gift transfer from Shay's full inventory is not seen by the inventory scan (Stobe's own scan,
+    not REL; probably backpack contents).
+  - The `gain without loss` lines (Liplom water) are townsfolk getting water: harmless.
+
+### Delivery
+- **Native:** `C:\KenshiModding\pending-fixes\rel-native-m5.patch` (SHA256 `97f7296d0fa7395e889233c9492c037e94cce86b92b196db03a9ed0cf7778ab0`).
+  Incremental against the current `/root/STOBE-src` (which has m4b). Changes `Utils.cpp`, `main.cpp`,
+  `SocialEventProtocol.h`. Private build `b47f8fc1…`.
+- **Server:** `feature/social-phase1` at `de3b29c` on live `4a1cfe3`. Only scenarios and scenarios.json
+  changed; no lib change since `1ca847c`.
+
+### Rerun (m5 build, Capture=1, shadow; fresh fixture before each unless noted; inspect before the next reload)
+1. p2-01, then **p2-04 with keep** (no reload)
+2. p3-01, p3-02, p3-03, p3-04
+3. p4-01 (now auto-home)
+4. p4-04
+5. p5-01 (Trader)
+6. p5-02
+
+Do not rerun p4-02/p4-03 until there is a suitable fixture.
