@@ -149,7 +149,13 @@ engage() {
 
 # deal_line <name> [state regex]: newest deal header line for <name> (negotiation_admin deals 8)
 deals() { (cd /tmp && sudo -u www-data php /var/www/html/StobeServer/tools/negotiation_admin.php deals "${1:-8}" 2>/dev/null); }
-deal_line() { deals 8 | grep -F "$1" | grep -E "${2:-.}" | head -1; }
+# m16 next (18): names repeat across runs (Garro Vex), so only deals created since this wrapper started count.
+WRAP_START=$(date +%s)
+deal_line() {
+  (cd /tmp && sudo -u postgres psql -d stobe -At -F '  ' -c "SELECT contract_id, npc_name, status, 'kind=' || COALESCE(kind,'') || ' by=' || COALESCE(proposer,'') || ' rounds=' || COALESCE(rounds,0) || ' updated=' || updated_at
+      FROM stobe_social_contract WHERE LOWER(npc_name)=LOWER('$(echo "$1" | sed "s/'/''/g")') AND created_at >= to_timestamp(${WRAP_START} - 5)
+      ORDER BY updated_at DESC LIMIT 5" 2>/dev/null) | grep -E "${2:-.}" | head -1
+}
 deal_id() { deal_line "$@" | awk '{print $1}'; }
 # deal_block <id>: header + term lines of one deal
 deal_block() { deals 12 | awk -v id="$1" '$1==id{p=1;print;next} /^deal-/{p=0} p'; }
