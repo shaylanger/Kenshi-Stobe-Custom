@@ -33,6 +33,13 @@ int main(int argc,char** argv){
     check(StobeSocial::StructuredEnvelope("campaign","session",2,5,300,"combat",nullptr,nullptr,"").empty(),"legacy kind not structured");
     check(StobeSocial::StructuredEnvelope("campaign","session",2,5,300,"harm",nullptr,nullptr,"{}").empty(),"facts body must be pairs");
     check(StobeSocial::StructuredEnvelope("campaign","session",2,5,300,"harm",nullptr,nullptr,"").find("\"actor\":null")!=std::string::npos,"unknown attacker null");
+    StobeSocial::EntityInfo w; w.serial=33; w.name="Witness"; w.conscious=1;
+    std::string wj=StobeSocial::WitnessJson(w,"session",2,true,true,1,-1,0);
+    check(wj.find("\"perceived\":true")!=std::string::npos&&wj.find("\"sees_target\":null")!=std::string::npos,"witness entry tri-state");
+    std::string tw=StobeSocial::StructuredEnvelope("campaign","session",2,6,300,"harm",nullptr,nullptr,"","["+wj+"]");
+    check(tw.find("\"witnesses\":[{\"entity\"")!=std::string::npos,"witnesses in envelope");
+    check(StobeSocial::StructuredEnvelope("campaign","session",2,6,300,"harm",nullptr,nullptr,"","{}").empty(),"witnesses must be an array");
+    StobeSocial::EntityInfo none; check(StobeSocial::WitnessJson(none,"session",2,true,true,1,1,1).empty(),"witness needs an entity");
     if(argc>1&&std::string(argv[1])=="--emit-structured")std::cout<<t;
-    else if(argc>1)std::cout<<s; else std::cout<<"18 native contract checks passed\n";
+    else if(argc>1)std::cout<<s; else std::cout<<"22 native contract checks passed\n";
 }
