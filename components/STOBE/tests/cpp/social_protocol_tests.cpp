@@ -30,6 +30,14 @@ int main(int argc,char** argv){
     check(t.find("\"in_player_faction\":true")!=std::string::npos,"tri-state true");
     check(t.find("\"bad\"")==std::string::npos,"zero counts dropped");
     check(t.find("Vorl [Dust \\\"Bandit\\\"]")!=std::string::npos,"structured name escaping");
+    {
+        StobeSocial::EntityInfo x; x.serial=9; x.name="Rel Xan"; x.storageId="hand_9";
+        std::string plain=StobeSocial::StructuredEnvelope("campaign","session",2,6,300,"freed",nullptr,&x,"");
+        check(plain.find("storage_alias")==std::string::npos,"no alias unless the handle changed");
+        x.storageAlias="hand_7";
+        std::string aliased=StobeSocial::StructuredEnvelope("campaign","session",2,6,300,"freed",nullptr,&x,"");
+        check(aliased.find("\"storage_id\":\"hand_9\",\"storage_alias\":\"hand_7\"")!=std::string::npos,"re-squad alias sent");
+    }
     check(StobeSocial::StructuredEnvelope("campaign","session",2,5,300,"combat",nullptr,nullptr,"").empty(),"legacy kind not structured");
     check(StobeSocial::StructuredEnvelope("campaign","session",2,5,300,"harm",nullptr,nullptr,"{}").empty(),"facts body must be pairs");
     check(StobeSocial::StructuredEnvelope("campaign","session",2,5,300,"harm",nullptr,nullptr,"").find("\"actor\":null")!=std::string::npos,"unknown attacker null");

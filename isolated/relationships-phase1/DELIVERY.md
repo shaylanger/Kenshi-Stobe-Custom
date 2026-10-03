@@ -819,3 +819,32 @@ Compared within the same regime (harness.log 10 s samples):
   under combat load is covered by the m13 soak (99.5% fps, 107.7% worst frame).
 - No camera command needed. If another pair is ever wanted: keep Kenshi foreground and untouched for the window and
   log the cap regime (the `fps` 10 s samples show it).
+
+## 2026-10-03 Run m16 results (Stobe 49AFB0A7, harness F946C881, server 50ec073)
+
+- **SR21: pass in game.** Rel Hask was hungry (hunger_before 1.20) and got Shay food_aid +5 (shadow). Rel Fenn, already
+  fed, was not_hungry.
+- **SR25: still open; the failure is in the scenario.** SLEEP_ON_FLOOR never put Rel Sorn to sleep: after 15 s her entry
+  read awake, task 290, prone 0, with a raid going on nearby. She got -10 as an awake witness, which is right for an
+  awake witness. The native flag works: NPCs in beds read conscious false and sleeping 1 (Fenn [Captain Grolf] and
+  others, task 98 USE_BED). Scenario fix: `build Bed near Vik faction Drifters`, then `sleep Sorn bed Bed`, wait 20 s,
+  and `unbuild Bed` at the end.
+- **SR32: partial; the failure is in the scenario, and there is a bug in the identity binding.** About 5-10 s after a
+  slave is chained, Kenshi moves him into another squad, which gives him a new handle (stobe.log "first seen already
+  enslaved serial=1591796864 name=Rel Xan"). The lockpick order still pointed at the old handle, so nobody freed him.
+  - Scenario: wait 15 s, then look him up again by name (`X2`) and use that for the order and the freed regex.
+  - Bug: hand_<serial> changes, so the server profile, which is bound to the old storage id, no longer resolves
+    (`unresolved_identity`).
+  - Native fix: the first hand_ id of the same live character (same name) is sent as `storage_alias`, and stobe.log
+    shows `SOCIAL_IDENTITY: handle changed`. The liberator is also matched on the old handle.
+  - Server fix: `SocialIdentity::resolve` accepts the alias (basis `storage_alias+name`). An alias that belongs to
+    another profile still does not bind.
+  - New checks in `social_combat_regression`.
+
+### Delivery
+- Server: `feature/social-phase1` **`68fec51`** (on `origin/stobe`). The runner passes all steps.
+- Native: `pending-fixes/rel-native-m16.patch` (SHA256 `c225a626dfdc2c1ba569d85e8c3b4f38fe27242bec43ad0acc8dffccadd1cb29`),
+  incremental on the current `/root/STOBE-src`. Private build `5b114197…`.
+
+### Rerun (m16 builds)
+p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs native m16 + server 68fec51).

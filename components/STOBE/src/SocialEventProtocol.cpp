@@ -71,6 +71,7 @@ std::string StructuredEntity(const EntityInfo* e,const std::string& session,unsi
     s<<"{\"entity_key\":\""<<Escape(session)<<":"<<epoch<<":"<<e->serial<<"\",\"serial\":"<<e->serial
      <<",\"name\":"<<JsonString(e->name)
      <<",\"storage_id\":"<<(e->storageId.empty()||e->storageId.size()>128?"null":JsonString(e->storageId))
+     <<(e->storageAlias.empty()||e->storageAlias.size()>128?std::string():",\"storage_alias\":"+JsonString(e->storageAlias))
      <<",\"faction\":"<<(e->faction.empty()||e->faction.size()>128?"null":JsonString(e->faction))
      <<",\"in_player_faction\":"<<JsonBool(e->inPlayerFaction)
      <<",\"conscious\":"<<JsonBool(e->conscious)<<"}";

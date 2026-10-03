@@ -15,6 +15,7 @@ namespace StobeSocial {
     struct EntityInfo {
         unsigned int serial;
         std::string name, storageId, faction;
+        std::string storageAlias; // earlier hand_<serial> of the same live character (re-squad gave it a new handle)
         int inPlayerFaction;
         int conscious;
         EntityInfo() : serial(0), inPlayerFaction(-1), conscious(-1) {}
