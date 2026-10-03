@@ -280,3 +280,68 @@ which should not be `true`.
   - `REL-p1-02`: removed the `@log` of the startup "enabled" line; it moved to the verify header as a grep, since `@log` only sees new lines.
   - `REL-p1-02` step 19 and `REL-p1-03` (`queued`) failed because nothing was sent. They should pass with the fix.
   - `RUN_ORDER.md` has a new "Playthrough Saves off" section.
+
+## 2026-10-03 Run m4 results, fixes and reruns
+
+**The DB rows were already gone when I looked.** Each fixture reload runs the playthrough rollback,
+which prunes social rows later than the fixture's game time. That is by design: relationships follow
+the loaded save. So for each scenario I judged from the `*.inspect.txt` snapshots taken right after
+it, plus stobe.log. I purged the six tables afterwards: they were already empty. Mode is off.
+
+### Verdict per SR row (m4)
+| Row | Verdict | Evidence / reason |
+|---|---|---|
+| SR41 | pass | p1-01 inert; p1-02 server off stored nothing; every shadow run passed `--check-shadow`; p2-05 enabled applied effects. Not checked: the R4 `--relation` check. |
+| SR02 | pass | p2-01 Rel Vorn->Shay -14; p2-02 Malzin->Rel Kesh -14; p2-03 Rel Bek->Rel Arn -15; p2-05 Rel Dov->Malzin -31 (applied) |
+| SR03 | pass | no row for the side that hit back (p2-02: Kesh->Malzin, Kesh->Shay; p2-03: Arn->Bek) |
+| SR04 | pass | Shay defending Malzin not charged (p2-02) |
+| SR05 | pass | p2-05: aggression -15, injury -1, KO -15, one budget (-31 inside the KO band) |
+| SR34 (binding) | pass | renamed NPCs, Malzin and Shay all resolved (probe 3) |
+| SR38/SR40 | pass (stale check) | p1-04 `--check-stale` passed. Step #27 failed only because of a log format bug (fixed, below). |
+| SR06 | scenario issue | p2-04: the fight went on during the wait, so it stayed one encounter |
+| SR08, SR11, SR12, SR38 (p3-04) | scenario issue | the bandits fled and were never knocked out; in p3-03 he also left event range before the shackle |
+| SR10 | scenario issue | p3-02: no blame, as expected, but the transfer itself was not captured (food eaten on arrival) |
+| SR15/SR16 | **real bug** + scenario issue | first aid bandages wounds; flesh barely changes (-41% stayed, bandaging 0->96), so aid was graded by the wrong measure. The aid session was also never closed before the game paused. |
+| SR21 | scenario issue | the hungry NPC ate the meat on arrival. Native facts were correct for the full NPC (Fenn: food_items, hunger 2.8, eat 2.8->2.8). |
+| SR18/SR19 | blocked (probes 11/12 negative) | `FIND_BED_AND_PUT_IN` and `LIFT_PERSON` produced no carry: no `[EVENT] carry` line at all |
+| SR22/SR23 | scenario issue | p5-01's regex captured "5 traders within 300.0: Erisila" as the trader name |
+| gift | open (probe 15) | the Iron Plates transfer Shay->Rel Gav left no inventory line at all (Shay's inventory was full: 3/6 arrived) |
+| SR29 | not run | deal procedures |
+| noise (**real bug**) | fixed | town medics' +0.5% flesh top-ups were earning routine-healing credit |
+| SR43 | noted | in the Hub: ~1500 inbox rows and ~850 checkpoints per load in a few minutes |
+
+### Probe answers
+- 1: `order … UNPROVOKED_FOCUSED_MELEE_ATTACK` works.
+- 2: the attack hook fires for NPC vs NPC fights.
+- 3: binding works for renamed NPCs, Malzin and Shay.
+- 4: `game_ts` is game seconds (gamets/3600 = the harness's game_hours).
+- 10: first aid raises bandaging, not flesh; harness `damage` wounds have bleed 0.
+- 13: the item_transfer and eat facts are correct.
+- 11/12: negative (see above).
+- 5, 6, 7, 9, 14, 15, 16: still open.
+
+### Fixes
+- **Server: merge `feature/social-phase1` at `1ca847c`** (one commit on live `stobe` `21fdbed`).
+  - Aid is now graded by wound points newly bandaged; near death = worst part <= -30% or blood <= 35%; routine credit needs >= 2% flesh or >= 5 bandaged points.
+  - An open encounter is refreshed and checkpointed at most once per game minute.
+  - inspect: the `loads.events` count is fixed.
+  - Rules are now `phase5-v2`. The runner passes 23/23 steps; new care checks fail without the fix.
+- **Native: `C:\KenshiModding\pending-fixes\rel-native-m4b.patch`** (SHA256 `3af774a4e51bee0097f13b8980182326698910cbe9480e2f4d80e573ba3e6349`).
+  - Incremental against the current `/root/STOBE-src`; changes `Utils.cpp` and `main.cpp`. Private build `3940adb7…`.
+  - Unsigned serials in the `queued` log lines: serials >= 2^31 printed negative, which broke `@log` matches like p1-04 step #27.
+  - Aid facts now include `wound`/`untreated` (bandaging).
+  - A capture-only probe line `INV_TRANSFER: gain without loss this sweep to=… item=…` for the unseen transfers.
+- **Scenarios:**
+  - p2-01, p3-01, p3-03, p3-04 cripple the bandit's legs so the knockout happens.
+  - p3-03 brings him back into range before the shackle.
+  - p3-01, p3-02, p3-04 use Iron Plates instead of food for transfers.
+  - p2-04 sends the bandit 300 m away during the wait.
+  - p4-01 waits for full bandaging, then lets the game run 8 s so the session closes.
+  - p4-02/03 log `where` plus a screenshot; p4-03 spawns near Shay.
+  - p4-04 uses hunger 170 and an `inv` check.
+  - p5-01 has fixed regexes; p5-02 gives 1 plate and checks `inv`.
+
+### What to rerun (after installing m4b, Capture=1, mode shadow; inspect after each, before the next reload)
+p1-04 (log format only), p2-01, p2-04, p3-01, p3-02, p3-03, p3-04, p4-01, p4-04, p5-01, p5-02.
+Then p4-02 and p4-03 once, for the where/screenshot diagnostics. Optionally the two deal procedures (SR29).
+Also please check `grep "INV_TRANSFER: gain without loss" stobe.log` during p3-02/p5-02.
