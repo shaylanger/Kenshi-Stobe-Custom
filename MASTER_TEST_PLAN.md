@@ -80,8 +80,15 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | ID | What | How | Status |
 |---|---|---|---|
 | REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | PASS (p1-01 m3; p1-02/03/04 m4 after the campaign 'legacy' fix) |
-| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | p2-01 inspect PASS (scenario timing fails), p2-04 PASS; rest in batch m4 |
-| REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | todo |
+| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | ran m4: p2-02 22/0, p2-03 31/0, p2-05 18/0 (enabled), p2-04 15/0, p2-01 inspect ok; REL builder judging SR rows |
+| REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | ran m4: 28/4, 26/1, 34/3, 32/2; REL builder judging |
+
+### 1e. REL phases 4–5 (ran m4)
+
+| ID | What | Status |
+|---|---|---|
+| REL p4-01…04 | first aid, carry to bed / cage, food | ran m4: 27/1, 21/2, 30/8, 42/3; REL builder judging |
+| REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | ran m4: 9/4, 16/2; deal procedures todo |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
