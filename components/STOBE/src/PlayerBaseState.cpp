@@ -111,7 +111,36 @@ TownBase *ResolvePlayerOwnedTown(Character *actor,
   }
 
   candidate = actor->getCurrentTownLocation();
-  return IsPlayerOwnedTownAt(candidate, position) ? candidate : nullptr;
+  if (IsPlayerOwnedTownAt(candidate, position)) {
+    return candidate;
+  }
+
+  // Item 66: a player outpost inside a bigger town's radius (Home inside The
+  // Hub's area) is shadowed by that town in both lookups above; scan all towns
+  // for the nearest player-owned one whose borders contain the position.
+  if (!IsUsablePointer(shou) || !IsUsablePointer(shou->townList)) {
+    return nullptr;
+  }
+  lektor<RootObject *> &allTowns = shou->townList->getAllTowns();
+  TownBase *best = nullptr;
+  float bestDistance = 0.0f;
+  const uint32_t count = allTowns.count;
+  for (uint32_t i = 0; i < count && i < 4096; ++i) {
+    RootObject *object = allTowns.stuff[i];
+    if (!IsUsablePointer(object) || object->getDataType() != TOWN) {
+      continue;
+    }
+    TownBase *town = static_cast<TownBase *>(object);
+    if (!IsPlayerOwnedTownAt(town, position)) {
+      continue;
+    }
+    const float distance = object->getPosition().squaredDistance(position);
+    if (!best || distance < bestDistance) {
+      best = town;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 std::string BuildStableBaseId(Town *town, const Ogre::Vector3 &townPosition) {
