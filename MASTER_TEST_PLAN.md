@@ -4,6 +4,11 @@ Started 2026-10-02 (late). One coordinator session runs Kenshi and tests every f
 launch; feature agents write scenarios and fix their own bugs. Roles, loop and scenario format:
 `testing/README.md`. This file is the index: details stay in each feature's own plan.
 
+**Goal (Shay, 2026-10-03, firm):** the coordinator builds, tests, validates and fixes EVERYTHING and only stops for
+Shay's decisions or when nothing testable is left. Any handler, harness command, test switch, hook, driver or code a
+test needs gets built, then the test runs: "needs setup"/"missing code" is never a final status (section 2 rows are a
+build to-do list, not a parking place). Full to-do list: `testing/HANDOFF.md`.
+
 | Feature | Owner | Detail plan (source of truth for rows) | Scenarios |
 |---|---|---|---|
 | STOBE (Stobe.dll + server) | coordinator | `STOBE_full_test_plan.md` (items numbered from 1, next 107) | `tests/ingame/stobe/` |
