@@ -1,0 +1,154 @@
+diff --git a/lib/social_event_contract.php b/lib/social_event_contract.php
+index 84fcde6..da24ce2 100644
+--- a/lib/social_event_contract.php
++++ b/lib/social_event_contract.php
+@@ -42,14 +42,17 @@ final class SocialEventContract
+         foreach (['in_player_faction', 'in_player_squad', 'conscious'] as $flag) {
+             if (isset($value[$flag]) && !is_bool($value[$flag])) throw new InvalidArgumentException('Invalid membership');
+         }
+-        foreach (['storage_id', 'faction'] as $text) {
++        // storage_alias: the storage id this character had earlier in the session (Kenshi gives a re-squadded
++        // character, e.g. a fresh slave, a new handle, so hand_<serial> changes; the profile keeps the old one).
++        foreach (['storage_id', 'storage_alias', 'faction'] as $text) {
+             if (isset($value[$text]) && (!is_string($value[$text]) || strlen($value[$text]) > 180 || preg_match('/[\x00-\x1f]/', $value[$text]))) {
+                 throw new InvalidArgumentException('Invalid entity ' . $text);
+             }
+         }
+         // null = unknown, never false/zero by default.
+         return ['entity_key'=>$key, 'serial'=>$serial, 'name'=>$name,
+-            'storage_id'=>$value['storage_id'] ?? null, 'faction'=>$value['faction'] ?? null,
++            'storage_id'=>$value['storage_id'] ?? null, 'storage_alias'=>$value['storage_alias'] ?? null,
++            'faction'=>$value['faction'] ?? null,
+             'in_player_faction'=>$value['in_player_faction'] ?? null,
+             'in_player_squad'=>$value['in_player_squad'] ?? null,
+             'conscious'=>$value['conscious'] ?? null];
+diff --git a/lib/social_identity.php b/lib/social_identity.php
+index 80d78f3..50592a3 100644
+--- a/lib/social_identity.php
++++ b/lib/social_identity.php
+@@ -35,15 +35,17 @@ final class SocialIdentity
+         $name = self::name(strval($entity['name'] ?? ''));
+         if ($name === '' || self::generic($name)) return null;
+         $storage = self::storage($entity['storage_id'] ?? null);
++        $alias = self::storage($entity['storage_alias'] ?? null); // earlier storage id of the same live character
+         $rows = $GLOBALS['db']->fetchAll('SELECT id,name,metadata->>\'storage_id\' AS storage_id FROM core_npc WHERE LOWER(name)=LOWER($1) ORDER BY id', [$name]) ?: [];
+         $matches = [];
+         foreach ($rows as $row) {
+             $stored = self::storage($row['storage_id'] ?? null);
+-            if ($stored !== '' && $storage !== '' && strcasecmp($stored, $storage) !== 0) continue; // another NPC / reused serial
++            $aliasHit = $stored !== '' && $alias !== '' && strcasecmp($stored, $alias) === 0;
++            if ($stored !== '' && $storage !== '' && strcasecmp($stored, $storage) !== 0 && !$aliasHit) continue; // another NPC / reused serial
+             $matches[] = ['id'=>(int)$row['id'], 'name'=>strval($row['name']),
+-                'basis'=>($stored !== '' && $storage !== '') ? 'storage_id+name' : 'unique_name_no_storage'];
++                'basis'=>($stored !== '' && $storage !== '') ? ($aliasHit && strcasecmp($stored, $storage) !== 0 ? 'storage_alias+name' : 'storage_id+name') : 'unique_name_no_storage'];
+         }
+-        $exact = array_values(array_filter($matches, fn($m) => $m['basis'] === 'storage_id+name'));
++        $exact = array_values(array_filter($matches, fn($m) => $m['basis'] === 'storage_id+name' || $m['basis'] === 'storage_alias+name'));
+         if (count($exact) === 1) return $exact[0];
+         if (count($matches) === 1) return $matches[0];
+         if (count($matches) > 1) return null;
+diff --git a/tests/social_combat_regression.php b/tests/social_combat_regression.php
+index afdeb45..4a27fd3 100644
+--- a/tests/social_combat_regression.php
++++ b/tests/social_combat_regression.php
+@@ -126,6 +126,17 @@ ok(affOf('Combat Charlie', 'Combat Grunt') === 0, 'SR34 generic culprit name not
+ $imposter = ent('Combat Delta', true, 'hand_999');
+ send(ev('attack', $A, $imposter, ['victim_targeting_actor'=>false], 4010));
+ ok(affOf('Combat Delta', 'Combat Alpha') === 0, 'SR34 reused serial / other storage id not attributed');
++// SR32 (m16): the same live character after a re-squad (new handle, new hand_<serial>) carries its old storage id as
++// storage_alias: still bound to its profile. The imposter above (no alias) stays unattributed.
++$resquad = ['entity_key'=>'sess2:7:998', 'serial'=>998, 'name'=>'Combat Delta', 'storage_id'=>'hand_998', 'storage_alias'=>'hand_104',
++    'faction'=>'Green', 'in_player_faction'=>false, 'conscious'=>true];
++send(ev('attack', $A, $resquad, ['victim_targeting_actor'=>false], 4015));
++ok(affOf('Combat Delta', 'Combat Alpha') < 0, 'SR32 storage_alias binds a re-squadded character to its profile');
++$wrongAlias = ['entity_key'=>'sess2:7:997', 'serial'=>997, 'name'=>'Combat Echo', 'storage_id'=>'hand_997', 'storage_alias'=>'hand_104',
++    'faction'=>'Grey', 'in_player_faction'=>false, 'conscious'=>true];
++$echoBefore = affOf('Combat Echo', 'Combat Bravo');
++send(ev('attack', $B, $wrongAlias, ['victim_targeting_actor'=>false], 4016));
++ok(affOf('Combat Echo', 'Combat Bravo') === $echoBefore, 'SR32 an alias of another profile does not bind');
+ 
+ // Death closes the encounter; later harm in it is not scored.
+ send(ev('harm', null, $C, ['level'=>'death'], 4020));
+diff --git a/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt b/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt
+index 67b5236..b633cca 100644
+--- a/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt
++++ b/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt
+@@ -15,10 +15,12 @@
+ @set SHAY_S where ${SHAY} ~ (#\d+)/\d+
+ teleport ${W} ${V} dist 8
+ teleport ${S} ${V} dist 8
+-sleep ${S}
+-# run m13: 5 s was too short (her task was not SLEEP_ON_FLOOR, not prone, at the attack): give her time to lie down
++# run m16: SLEEP_ON_FLOOR never put her to sleep (15 s, raid nearby: awake, not prone), while NPCs in beds read
++# conscious false / sleeping 1. Give her her own bed beside Vik and order her into it.
++build Bed near ${V} dist 6 faction Drifters ~ built Bed
++sleep ${S} bed Bed ~ USE_BED_ORDER -> Bed
+ speed 1
+-@sleep 15
++@sleep 20
+ speed 0
+ @set SN where "Rel Sorn" ~ #(\d+)/\d+
+ attack Shay ${V}
+@@ -30,3 +32,4 @@ speed 0
+ @log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ "serial":${SN},"name":"Rel Sorn"[^]]*?"conscious":false[^]]*?"sleeping":1
+ teleport ${V} Shay dist 300
+ wake ${S}
++unbuild Bed
+diff --git a/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt b/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt
+index 476aa0e..8400e7b 100644
+--- a/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt
++++ b/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt
+@@ -39,10 +39,20 @@ speed 1
+ @sleep 5
+ speed 0
+ @log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=enslaved seq=\d+ load=\d+ actor=${O_S} target=${X_S}
++# run m16: about 5-10 s after the chains the game moves him into another squad and he gets a NEW handle (stobe.log
++# "first seen already enslaved serial=<new> name=Rel Xan"); the m16 lockpick order still pointed at the old one.
++# Wait for the re-squad, then resolve him again by name.
++speed 1
++@sleep 15
++speed 0
++@set X2 where "${XNAME}" ~ (#\d+/\d+)
++@set X2_S where ${X2} ~ (#\d+)/\d+
+ # run m15: no freed in 80 game s at her own skill: raise lockpicking and wait longer
+ setstat Malzin lockpicking 100
+-order Malzin PICK_LOCK_ON_SHACKLES target ${X}
++order Malzin PICK_LOCK_ON_SHACKLES target ${X2}
+ speed 2
+ @sleep 90
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=freed seq=\d+ load=\d+ actor=#\d+ target=${X_S} witnesses=\d+ facts=.*"liberator"
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=freed seq=\d+ load=\d+ actor=#\d+ target=${X2_S} witnesses=\d+ facts=.*"liberator"
++# run m16 native (rel-native-m16): the freed line carries his old storage id as storage_alias, so the server binds his profile
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_IDENTITY: handle changed name=${XNAME} storage=hand_\d+ alias=hand_\d+
+diff --git a/tests/social_relationship/scenarios.json b/tests/social_relationship/scenarios.json
+index 17b2ae8..b580e4a 100644
+--- a/tests/social_relationship/scenarios.json
++++ b/tests/social_relationship/scenarios.json
+@@ -795,7 +795,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "partial: m15 transfer + eat captured for Rel Hask, but hunger_before was the stale 2.90 (harness hunger and eat in one sweep) -> not_hungry; scenario now lets a sweep see the lowered hunger first; full recipient not_hungry (m8, m13, m15)",
++   "rel_state": "game-pass: m16 Rel Hask hungry (hunger_before 1.20) -> Shay food_aid +5 (shadow); full recipient Rel Fenn not_hungry (m8, m13, m15, m16)",
+    "offline_tests": [
+     "social_care_regression"
+    ],
+@@ -946,7 +946,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "open: m15 run invalid: the spawned \"Rel Vik\" was Outlaw Watch Jamin 4.5 km away (harness #serial matched another character), so Sorn was never beside the fight; native sleeping flag (m13) logs \"sleeping\" (seen as 0 for awake fighters); setname now must rename the spawned bandit",
++   "rel_state": "open: m16 SLEEP_ON_FLOOR never put Rel Sorn to sleep (15 s, raid nearby; awake witness -10, correct for awake); the native sleeping flag reads 1 for NPCs in beds; scenario now gives her a built bed (USE_BED_ORDER)",
+    "offline_tests": [
+     "social_witness_regression"
+    ],
+@@ -1214,7 +1214,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "partial: m15 enslaved captured with owner (50 s warm-up fix works); no freed: Malzin did not pick the lock in 80 game s; scenario raises her lockpicking to 100 and waits 180 game s; liberator (probe 20) still unseen",
++   "rel_state": "partial: m16 enslaved captured; the game re-squads a fresh slave ~5-10 s after the chains (new handle), so the lockpick order hit the old handle and nobody freed him; scenario re-resolves him; native m16 sends storage_alias and the server binds it (social_combat_regression SR32 checks)",
+    "offline_tests": [
+     "social_recruitment_regression"
+    ],
