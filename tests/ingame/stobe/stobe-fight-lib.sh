@@ -72,7 +72,7 @@ talk_ready() {
 say_to() { talk_ready "$1"; stobe-say say "$2" "$3" --wait 15 >/dev/null 2>&1 || log "say failed"; }
 
 # Malzin out of the way (the surrender recipe): KO'd 40 m off for <s> seconds, so she doesn't finish the raider
-park_malzin() { stobe-auto teleport ${MATE} ${PLAYER} dist 40 >/dev/null; stobe-auto ko ${MATE} "${1:-300}" >/dev/null; }
+park_malzin() { stobe-auto protect ${MATE} off >/dev/null 2>&1; stobe-auto teleport ${MATE} ${PLAYER} dist 40 >/dev/null; stobe-auto ko ${MATE} "${1:-300}" >/dev/null; }  # protect (fullbase-guard) would block the ko
 
 # wait_personal_guard: item 87, a previous personal fight's 180 s guard stands down new attackers
 wait_personal_guard() {
