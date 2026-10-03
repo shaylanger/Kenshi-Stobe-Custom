@@ -1,6 +1,6 @@
 # STOBE: open issues and tests left
 
-Last updated 2026-10-02 (round 26: D 41/43/48/53 fixed, cap tiers built). Installed: Stobe.dll `FF633947` (items 48 + cap tiers + harness bridge), KenshiFP `D3C78B3D`. **Built, not installed:** KenshiFP `4D04FC9C` (goal panel). Server: round 26 (`5f71138`, live + ss-merge). `NEG_CATS_PURSE_MODES` is on.
+Last updated 2026-10-02 (round 26: D 41/43/48/53 fixed, cap tiers built). Installed: Stobe.dll `FF633947` (items 48 + cap tiers + harness bridge), KenshiFP `4D04FC9C` (goal panel). Server: round 26 (`5f71138`, live + ss-merge). `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
 **Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **62**.
