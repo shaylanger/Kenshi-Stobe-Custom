@@ -18,8 +18,8 @@ IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `arch
 
 | Component | Installed | Pending install |
 |---|---|---|
-| Stobe.dll | `D64BBA22` (REL 1–5 merged, Capture=0) | - |
-| KenshiFP.dll | `603C456E` (65, 75, 76) | - |
+| Stobe.dll | `44793036` (REL 1–5 + campaign 'legacy'; Capture=1 during m4) | - |
+| KenshiFP.dll | `603C456E` (65, 75, 76) | `B98AE99A` (80) |
 | ProfessionGearProgression.dll | `FAA5B471` (craft-output roll, shop radius 60) | - |
 | AutomationHarness.dll | `542B90BF` (radius, teleport building, hunger read, shop radius 60) | - |
 | Server (live) | `2b3593c`+ (branch `stobe`, m1 fixes 64–72) | REL phase 1 (`feature/social-phase1`, inert by default) once delivered |
@@ -54,9 +54,9 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
 | STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | todo |
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | PASS m1 |
-| STOBE A11 / A12 | Heal-for-item deal kept / broken | first aid via `order`, deal state | todo (moved: Crafting base, wound a townsperson; Drifter near squad attacked) |
+| STOBE A11 / A12 | Heal-for-item deal kept / broken | first aid via `order`, deal state | needs setup: harness wounds don't bleed, NPCs self-bandage (see section 2) |
 | STOBE A13 | Remembers earlier fight events | long fight, then ask | todo |
-| PG auto-home group | 95 PENDING rows (see PG `INGAME_STATUS.md`) | PG `tests/ingame/auto-home/pg-01…pg-09` (Forced + InGameTest), then config launches 2–4 (`RUN_ORDER.md`) | todo |
+| PG auto-home group | 95 PENDING rows (see PG `INGAME_STATUS.md`) | PG `tests/ingame/auto-home/pg-01…pg-09` (Forced + InGameTest), then config launches 2–4 (`RUN_ORDER.md`) | PASS m4 (pg-01…08 all green on FAA5B471) |
 | STOBE A1 / A2 | FP mode: look-at click keeps control; put down with G | `fp_mode`, `fp_click`, `fp_putdown`, `fp_state` + KenshiFP.log | PASS m1 |
 
 ### 1b. Fixture `Crafting base` (benches, Malzin, apothecaries in town)
@@ -65,7 +65,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 |---|---|---|---|
 | STOBE 14 | Buy from a trader | spawn Skeleton Traders near Home, "buy 3 bread from the trader" | FAIL m3 -> STOBE 78 (doesn't know the out-of-range trader) |
 | STOBE 15 | Goal needing trader stock -> approval | same traders | todo (moved: apothecaries) |
-| STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | todo (moved: apothecaries) |
+| STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | PASS m4 (event names Apothecary Abia as seller) |
 | STOBE 16 | Goal with a crafted ingredient: bench queue grows only by what's missing | goal at a bench | todo |
 | PG crafting group | PG 85–92, 306 (+ weapons) | PG `tests/ingame/crafting-base/pg-10`, `pg-11` (Forced + InGameTest) | todo |
 
@@ -79,14 +79,15 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | p1-01 PASS m3; p1-02/03 m4: native has no campaign id (all events skipped) -> REL builder |
-| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | todo |
+| REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | PASS (p1-01 m3; p1-02/03/04 m4 after the campaign 'legacy' fix) |
+| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | p2-01 inspect PASS (scenario timing fails), p2-04 PASS; rest in batch m4 |
 | REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | todo |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
 | ID | What it needs |
 |---|---|
+| STOBE A11 / A12 | A wounded NPC who can't bandage herself (harness `damage` wounds don't bleed; NPCs self-treat) and stays put for a heal-for-item deal |
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
 | KAH power charge | A battery building in a fixture (none has one) |
@@ -125,7 +126,10 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 75 | KFP | m2 | BUY goal blocked: trader 285 away "not nearby" (220 search) + stray MOVE_TO failure line | fixed (KenshiFP D5795BD5 installed, server efffb3e), retest |
 | STOBE 76 | KFP | m3 | "bring it to me" fetch keeps the item on return | fixed, PASS m4 |
 | STOBE 77 | STOBE | m3 | Relationship stance block doesn't shape tone (same reply at -80/60/96) | fixed live (0a22a77), PASS m3 |
-| STOBE 78 | STOBE | m3 | Errand to a named trader out of nearby range: she doubts/asks back, no action | fixed live (dcf71ac), retest |
+| STOBE 78 | STOBE | m3 | Errand to a named trader out of nearby range: she doubts/asks back, no action | fixed, PASS m4 (prompt block; model returns BUY) |
+| STOBE 79 | STOBE | m4 | BUY goal with destination = trader name rejected (destination_not_known) | fixed live (21fdbed), PASS m4 |
+| STOBE 80 | KFP | m4 | Silent crash (no dump) right after a BUY goal: character search buffer overflow | fixed (KenshiFP B98AE99A), install + retest |
+| REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
 ## 5. Harness (KAH) known limits / open items
