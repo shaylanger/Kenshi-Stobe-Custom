@@ -107,10 +107,10 @@ no Stobe history/relationships. **Never build a Biofuel Distillery** (crash, see
 | ID | What | Fixture | Status |
 |---|---|---|---|
 | SMOKE fullbase / squin / enslaved | loads, 2+ min at 1x without crash, `status` shows the save, `chars` lists the squad, `[EVENT]` lines flow, PG first-load roll ok | each new save | PASS m16 (no crash, squads listed, events flow, PG rolled 241/350/297 items, no exceptions) |
-| STOBE A8 | Bread chain well -> farm -> Grain Silo -> oven with real power ("make 2 bread", 50x + goal watch; `building "Grain Silo"` power first) | Full-Base (Beaks/Avarek) | todo (auto-home version uses `power supply`, m16) |
-| STOBE 16 (full chain) | crafted-ingredient goal completes with powered benches (queue property already PASS m16) | Full-Base | todo |
+| STOBE A8 | Bread chain well -> farm -> Grain Silo -> oven with real power ("make 2 bread", 50x + goal watch; `building "Grain Silo"` power first) | Full-Base (Beaks/Avarek) | PASS m17 (COMPLETE 2/2 bread, silo drew real power; wrapper oven check fixed) |
+| STOBE 16 (full chain) | crafted-ingredient goal completes with powered benches (queue property already PASS m16) | Full-Base | m17 46/10: queues ok, Avarek killed by Kral's Chosen raiders mid-goal -> rerun with `fullbase-guard.sh` (queued) |
 | KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | todo |
-| STOBE generic regression | green STOBE goal scenarios with Beaks/Avarek (no Shay/Malzin hard-coding) | Full-Base | todo |
+| STOBE generic regression | green STOBE goal scenarios with Beaks/Avarek (no Shay/Malzin hard-coding) | Full-Base | m17: hand-over PASS (item 100 confirmed: only GIVE_ITEM@Beaks); fetch/work cut off by a world raid -> rerun with `fullbase-guard.sh` (queued `m17/rerun.sh`) |
 | PG 145, 229 | mod tool weapons (ArkWeaponPack Sickle etc.): research Basic Weapon Smithing/Grades/Utility Weapons, `craft <npc> Sickle at <weapon smith>` with Iron Plates | Full-Base | todo (PG agent scenario) |
 | PG 161–199 | balance/benchmark rows: research bench (184), robotics (186), turret + target dummy; needs the balance measurement driver | Full-Base | todo (PG agent driver) |
 | REL SR18/19, p4 | bed/cage rescue, first aid, carry on a second base | Full-Base | todo (optional, already PASS on auto-home) |
@@ -203,6 +203,9 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 94 | STOBE | m16 | `stobe-reset-npc --restore` writes the entry under PLAYER_NAME `shay` while the server writes `Shay`: possible duplicate relationship keys | fixed (tool), round trip at the end |
 | STOBE 100 | STOBE | m16 | In a save without Shay (Beaks/Avarek) actions and goals target "Shay" (PLAYER_NAME): `GIVE_ITEM@Shay`, FETCH `dest=Shay`; works only via a name mapping; caused a double hand-over (item 43 helper added GIVE_ITEM@Shay next to the LLM's GIVE_ITEM@Beaks) and disables deals/voice payment for other squads (speaker != PLAYER_NAME) | fixer: action targets = speaking player character, "player speaking" = inputtext speaker or PLAYER_NAME; persona (a)/(b) is Shay's call |
 | STOBE 101 | STOBE | m16 | 43 live NPC rows (ids 33330-34013, since 2026-10-02) have extended_data `[]` instead of `{}`: every relationship write fails ("path element at position 1 is not an integer") | fixed live (3e50770, writers always store objects) + 41/55 rows repaired (backup table item101_npc_json_backup); rerun rel-enslaved set-relation |
+| STOBE 107 | STOBE | m17 | Full-Base: Beaks' unpaid pay-later deal never BREACHED_PLAYER (auto-home PASS); persona-keyed breach path? | open, not investigated (fixer stopped at session end) |
+| STOBE 18 (Full-Base) | STOBE | m17 | forced-betrayal wrapper on Full-Base: `status=2 intentional=0 npc_broken 0->0 directive=1` (directive sent, no betrayal) | open, output `m17
+ext2\STOBE-18-forced-betrayal-fullbase.txt`, check after 107 |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
