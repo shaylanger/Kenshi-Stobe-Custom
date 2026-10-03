@@ -55,7 +55,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | needs setup m15: chain works up to power (90 fixed: uses the well's stock), Grain Silo has no power supply in auto-home |
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | PASS m1 |
 | STOBE A11 / A12 | Heal-for-item deal kept / broken | first aid via `order`, deal state | needs setup: harness wounds don't bleed, NPCs self-bandage (see section 2) |
-| STOBE A13 | Remembers earlier fight events | long fight, then ask (`tests/ingame/stobe/STOBE-A13-fight-memory.txt`) | FAIL m16 -> STOBE 91 |
+| STOBE A13 | Remembers earlier fight events | long fight, then ask (`tests/ingame/stobe/STOBE-A13-fight-memory.txt`) | PASS m16 (A13 v4, after 91/92) |
 | PG auto-home group | 95 PENDING rows (see PG `INGAME_STATUS.md`) | PG `tests/ingame/auto-home/pg-01…pg-09` (Forced + InGameTest), then config launches 2–4 (`RUN_ORDER.md`) | PASS m4 (pg-01…08 all green on FAA5B471) |
 | STOBE A1 / A2 | FP mode: look-at click keeps control; put down with G | `fp_mode`, `fp_click`, `fp_putdown`, `fp_state` + KenshiFP.log | PASS m1 |
 
@@ -156,8 +156,7 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 87 | STOBE | m8 | Unique NPC named like its template (Dust King) gets no initiative check / surrender | see rows 87/88 |
 | STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
 | STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
-| STOBE 91 | STOBE | m16 | Long fight pushes early fight events (opening knockout, first attack) out of the prompt: she can't remember the start of the fight (A13) | fixed live (43df0ae, `<this_fight_so_far>`), rerun A13 v3 |
-| STOBE 92 | STOBE | m16 | NPC first seen already unconscious after a squad fight gets no knockout event | fixed (Stobe FA4EEBE9), rerun A13 v3 |
+| STOBE 93 | KFP | m16 | Work planner: building-type enum off by one (shop taken for a bench, no bench found); after the fix a native fault right after the bench is found | fixer working (KenshiFP BAF2D1DE found the bench) |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
