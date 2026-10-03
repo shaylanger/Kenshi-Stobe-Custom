@@ -3,7 +3,7 @@
 Last updated 2026-10-02 (round 26: D 41/43/48/53 fixed, cap tiers built). Installed: Stobe.dll `FF633947` (items 48 + cap tiers + harness bridge), KenshiFP `4D04FC9C` (goal panel). Server: round 26 (`5f71138`, live + ss-merge). `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **62**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **64**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -90,6 +90,13 @@ None open. 41, 43, 48, 53 fixed 2026-10-02 (round 26): test rows in B.
   - **Why Vren became an Acquaintance after a fight:** the evaluator only ran when someone spoke and saw one line; combat events never counted. After the fight Vren said something friendly → +6 "No hard feelings after the fight". Fixed (R4, below).
   - **Why she was only Neutral with Shay:** the test runs reset her with `stobe-reset-npc` (live DB). Loading an older save did not bring relationships back then (`NEVER_CLEAR_RELATIONSHIP_DATA` = true). **Since 2026-10-02 relationships follow the loaded save** (StobeServer 78243b0, 28dff99; baseline snapshots at game time 0 for 61 NPCs; test B 59). Restored by hand to 96 Bonded (platonic) on 2026-10-02; `stobe-reset-npc` now saves the entry first and `--restore` puts it back.
   - **Fixed 2026-10-02 (StobeServer 956000f, e714b66, 43a5516, 9839389):** R1 types mapped onto the official list (unknown type keeps the old one); R2 Kenshi examples in the analysis prompt fallback; R3 no entries for unnamed template names (5 existing ones removed, backup `/root/stobe-backups/relationships_pre_r25_cleanup.tsv`); R4 a fight lowers both sides (victim −10, attacker −4, once per pair per 15 min). Tests: B 55–57. R4 (the fight rule) is up for a deep analysis: `handoff/relationship-fights-context.md`.
+
+## F. Next big things
+
+| # | What | Notes |
+|---|---|---|
+| 62 | Decouple our logic from KenshiFP | We started by tacking our features onto KenshiFP, and a lot now lives there that shouldn't (e.g. work planner `client/stobe_work_planner.inc`, task goals `client/stobe_task_goals.inc` + goal panel, GIVE_ITEM/BODYGUARD handling). Goal: KenshiFP holds only FP-mode logic; the rest moves into Stobe or a new mod, whichever fits each piece |
+| 63 | Pick the next big feature | Go through the big features list (`KENSHI_BIG_MOD_IDEAS_CONTEXT.md`, `PROFESSION_GEAR_PROGRESSION_MOD_CONTEXT.md`) and start on the next big item |
 
 ---
 
