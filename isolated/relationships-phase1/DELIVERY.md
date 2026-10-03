@@ -938,3 +938,14 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
   and a defensive_maiming grievance for Lark toward Shay.
 - **SR30:** p7-01 unchanged, one more attempt (LLM-dependent).
 - All scenarios accept an already-named spawned bandit, both in the chars capture and in the setname guard.
+
+## 2026-10-03 Testing-Save-Enslaved scenarios (server 79b368b)
+- `ingame/rel-enslaved.sh <outdir> [Izumi] [Daphnilis]` loads kah-enslaved. It learns which squad member is the
+  slave and which camp slave is not in the squad from Stobe's "first seen already enslaved" lines, fills in the
+  templates REL-p7-03..06 and runs them in order:
+  - p7-03 SR12 real, shadow: a 2-game-hour shift at speed 5;
+  - p7-04 SR32 real liberator, shadow: PICK_LOCK_ON_SHACKLES by the free member, with protect on her;
+  - p7-05 frees a camp slave (renamed Rel Nima), then asks him to join at low trust, enabled;
+  - p7-06 asks again after `--set-relation "Rel Nima" <free member> 80`, enabled.
+- Guards: every non-squad faction within 150 gets `relation 100` before p7-04. Nothing is killed.
+- No Shay/Malzin literals.
