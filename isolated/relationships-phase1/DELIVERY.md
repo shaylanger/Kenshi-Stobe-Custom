@@ -600,3 +600,16 @@ For the offline part, yes (done above). For the final in-game sign-off, not yet.
 - Repeat assault (SR06): needs a non-hostile victim.
 
 The soak can run now, in parallel with those reruns.
+
+## 2026-10-03 Run m10 (p4-02 / p4-03 with the fixed `build`), judged from the snapshots
+
+Rule from the coordinator: **REL purges only when the coordinator says so.** My m9 purge hit this run.
+
+- **p4-03:**
+  - `LIFT_PERSON` works: Malzin and Rel Kade ended up at the same position, i.e. she was carrying him.
+    `carry_start` and `placed` facts were captured (probe 12 answered: yes for LIFT).
+  - `PUT_IN_CAGE` failed because of my regex: it captured " Prisoner Cage dist". Fixed.
+- **p4-02:** `FIND_BED_AND_PUT_IN` did nothing for Malzin (probe 11 negative). Rel Cobb was hauled 218 m by someone
+  outside the sweep. The scenario now uses `LIFT_PERSON`, then `PUT_SOMEONE_IN_BED building "Bed"`, with `where` checks.
+- **Server:** `feature/social-phase1` at `7a0a000` (scenarios only, on live `8da1a73`). No native change.
+- **Rerun in m11:** p4-02, p4-03 (auto-home, `build` Bed and Prisoner Cage first).
