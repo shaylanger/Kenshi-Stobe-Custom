@@ -40,6 +40,13 @@ the live server, `/root/STOBE-src`, `C:\StobeBuild` or the `stobe`/`stobe_test` 
 - Runner: 22 steps incl. `legacy_negotiation` (needs `/tmp/negtest`, created by the runner) and
   `mutation_proof` (15 mutations). Regression events must be in game-time order (later ts) or they are "late".
 
+## Since run m4 (REL merged live)
+- Live `/root/STOBE-src` now contains REL phase 5. `live-base` was synced to it (67d737e) and
+  `feature/social-phase1` reset onto it (old history: tag `rel-phase5-delivered`). Native patches are now
+  INCREMENTAL against live (`rel-native-m4-fix.patch` = first one).
+- Live server has REL merged (dcf71ac); the server branch is now live HEAD + fixes.
+- Live runs with Playthrough Saves off: campaign `legacy` (see DELIVERY.md "Fix for run m4").
+
 ## Status
 - Delivery 5 (Phases 1-5): server `3cd48b5` on live `1a8fc3f`, `rel-native-phase5.patch`, private DLL 0fb7e3ca.
 - Stopped after Phase 5 as instructed (coordinator 2026-10-03). Waiting for the coordinator's in-game results
