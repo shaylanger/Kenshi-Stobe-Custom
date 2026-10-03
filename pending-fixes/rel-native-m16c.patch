@@ -1,0 +1,44 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index dc4b88b..2fb3cbf 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1452,6 +1452,7 @@ struct NpcWorldEventState {
+   DWORD recentTaskSubjectTick;
+   bool chained;
+   int slaveState;
++  bool freedLatch; // REL m16c: chains came off while IS_SLAVE: free until chained again or the slave state changes
+ 
+   NpcWorldEventState()
+       : initialized(false), dead(false), unconscious(false), enslaved(false),
+@@ -1467,7 +1468,7 @@ struct NpcWorldEventState {
+         constructionSubjectSerial(0), constructionSubjectName(""),
+         lockpickingSkill(0), lastSpeechLine(""), lastSeenTick(0), useState(-1),
+         lastCarrierSerial(0), lastCarryDropTick(0), recentTaskSubjectSerial(0), recentTask(0),
+-        recentTaskSubjectTick(0), chained(false), slaveState(0) {}
++        recentTaskSubjectTick(0), chained(false), slaveState(0), freedLatch(false) {}
+ };
+ 
+ struct CombatParticipantState {
+@@ -8652,6 +8653,7 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+       Log("EVENT_SCAN: slave state serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
+           " chained=" + ToString((int)state.chained) + "->" + ToString((int)chainedNow) +
+           " slave_state=" + ToString(state.slaveState) + "->" + ToString(slaveStateNow));
++    bool wasChained = state.chained;
+     state.chained = chainedNow;
+     state.slaveState = slaveStateNow;
+     if (currentTaskSubjectSerialNow != 0) {
+@@ -8894,6 +8896,14 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+     }
+     state.useState = useStateNow;
+     if (!isPlayerActor) {
++      // REL m16c: a picked lock takes the chains off but leaves isSlave()==IS_SLAVE (the game then re-creates him
++      // under a new handle, a different object). The chains coming off is the freeing: report it on this handle.
++      if (wasChained && !chainedNow && state.enslaved && !deadNow)
++        state.freedLatch = true;
++      if (chainedNow || slaveStateNow != (int)IS_SLAVE)
++        state.freedLatch = false;
++      if (state.freedLatch)
++        enslavedNow = false;
+       if (!state.enslaved && enslavedNow) {
+         EmitSlaveryEvent(npc, true);
+       } else if (state.enslaved && !enslavedNow) {

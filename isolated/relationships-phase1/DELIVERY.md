@@ -868,3 +868,16 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
   - chain and slave state changes are logged (`EVENT_SCAN: slave state`);
   - the liberator also comes from a task subject seen in the last 10 s.
 - **Server** `17fcb2a`: the p7-02 freed regex no longer pins the serial, and there is a check for the scan line.
+
+## 2026-10-03 p7-02 third run (Stobe FA4EEBE9 = m16 + m16b + item 92, server 17fcb2a): 38/3
+- stobe.log at 10:39:06: `slave state serial=2227538944 name=Rel Xan chained=1->0 slave_state=1->1`. The picked lock
+  takes the chains off, but isSlave() stays IS_SLAVE. Three seconds later a new serial 862060544 is "first seen
+  already enslaved", and the m16b scan carry-over did not run. So the game **re-creates** him as a new object, and the
+  "same character object" assumption is wrong. The m16/m16b alias and carry-over code stays in but has no effect here.
+- **Native m16c** (`pending-fixes/rel-native-m16c.patch`, SHA256
+  `7f60d81a6cc551058fa09d3c859f96236610ecc43267b38906304c6e3d7583a4`, on `/root/STOBE-src` with m16b + item 92;
+  private build `05f30b23…`): chains coming off an enslaved character is reported as freed on that (old) handle,
+  which is the one the profile is bound to. A latch keeps him free while he is IS_SLAVE without chains.
+- **Server** `bbc1ddc`: p7-02 checks `chained=1->0` and the freed line with a liberator; the two SOCIAL_IDENTITY
+  checks are gone.
+- Known limit: escape completion (a game day seen free) is not tracked across the new handle.
