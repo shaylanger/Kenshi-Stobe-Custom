@@ -14,6 +14,12 @@
 #   his KO. (3) Shay/Malzin were KO'd by 6 bandits at once: now 4 rounds of 2 with `health 100` between rounds.
 #   (4) the right prompt is the FIRST one after the run start that contains the question.
 #   v3: the prompt now has a <this_fight_so_far> block (server item 91, 43df0ae): PASS = Kor Gast's knockout is in it.
+#   v4 (server bf5c9c8 + ecbcac8): the block survives Malzin being knocked out mid-fight. Check in WSL after the run:
+#     grep 'Fight so far (item 91c)' /var/www/html/StobeServer/log/stobeserver.log | grep '"npc":"Malzin"' | tail -3
+#       -> the line at the question: lines >= 2, first = the opening attack on Kor Gast
+#     grep 'very first bandit' /var/www/html/StobeServer/log/chat_llm_full_capture.log | tail -1 | grep -o 'this_fight_so_far.\{0,1500\}'
+#       -> PASS = the block lists 'Kor Gast was Knocked Out.' (the request that answered the question)
+#   Older recipe (context_sent_to_llm.log, from line N):
 #   In WSL:
 #     F=/var/www/html/StobeServer/log/context_sent_to_llm.log; N=$(wc -l < $F)      # BEFORE `stobe-auto run`
 #     ... run ...; sleep 30
@@ -69,7 +75,10 @@ chars 600 ~ ^(?!.*Kor Gast)
 attack Shay ${W1}
 attack Malzin ${W2}
 speed 1
-@sleep 20
+@sleep 10
+health Shay 100
+health Malzin 100
+@sleep 10
 health Shay 100
 health Malzin 100
 @sleep 20
@@ -83,7 +92,10 @@ health Malzin 100
 attack Shay ${W3}
 attack Malzin ${W4}
 speed 1
-@sleep 20
+@sleep 10
+health Shay 100
+health Malzin 100
+@sleep 10
 health Shay 100
 health Malzin 100
 @sleep 20
@@ -97,7 +109,10 @@ health Malzin 100
 attack Shay ${W5}
 attack Malzin ${W6}
 speed 1
-@sleep 20
+@sleep 10
+health Shay 100
+health Malzin 100
+@sleep 10
 health Shay 100
 health Malzin 100
 @sleep 20
@@ -111,7 +126,10 @@ health Malzin 100
 attack Shay ${W7}
 attack Malzin ${W8}
 speed 1
-@sleep 20
+@sleep 10
+health Shay 100
+health Malzin 100
+@sleep 10
 health Shay 100
 health Malzin 100
 @sleep 20
@@ -123,7 +141,8 @@ health Malzin 100
 speed 1
 @sleep 10
 speed 0
-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ \[EVENT\] knockout: Hungry Bandit
+# v4: wave bandits get names ("Kolven [Hungry Bandit]"), so match the bracket form too
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ \[EVENT\] knockout: .*Hungry Bandit
 # both squad members up for the question
 where Shay ~ ^Shay(?!.*\bKO\b)
 where Malzin ~ ^Malzin(?!.*\bKO\b)
