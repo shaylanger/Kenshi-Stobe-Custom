@@ -72,9 +72,11 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 
 ## E. Design questions and features
 
-- **Stowed weapons (answered in run 11):** with her katana in her pack or on the floor she fought ~50 s bare-handed; Kenshi's AI never re-equips or picks it up. Should she draw a stowed weapon when a fight starts?
-- **Goal panel (Shay, 2026-10-02):** when Malzin has a goal ("make bread"), show a small UI element above the jobs area with the goal's info, instead of the current top-centre label.
+- **Stowed weapons (Shay, 2026-10-02):** an NPC must not stow or drop her weapon unless she really trusts Shay, is in Shay's faction, or is surrendering. (Re-drawing in a fight is not needed.) To build: guard on UNEQUIP/DROP_WEAPON/SHEATHE-to-pack for outsiders.
+- **Goal panel (Shay, 2026-10-02, not built yet; Shay wants it built):** when Malzin has a goal ("make bread"), show a small UI element above the jobs area with the goal's info, instead of the current top-centre label.
 - **Relationship shapes everything:** deal pricing and willingness by tier; hard rules like no pay-after deals and no favours below some tier.
+- **Deal-offer cap tiers (Shay, 2026-10-02):** replace common 300 / leader 1000 / wealthy with 6 tiers from the game data (`archive/npc-wealth-survey.tsv`, `tools/research/npc_wealth.py`); proposal in the run 12 chat, waiting for Shay's OK.
+- **Decided for D 43 / 48 (Shay):** 43: do both hand-overs (fallback: she says she does one). 48: dying but conscious may deal; unconscious or dead may not; a deal interrupted by a KO resumes when they wake.
 
 ---
 
