@@ -901,3 +901,19 @@ p6-01a, the two set-relation calls, p6-01b keep (SR25); p7-02 (SR32, needs nativ
 - **Surrender rows unattended:** `server/tests/social_relationship/ingame/rel-surrender.sh` (server `0e2c835`):
   - `kept <out> hate` = SR28 + row 3;
   - `breach <out>` = row 4 (SR29).
+
+## 2026-10-03 rel-surrender.sh first run (server 0e2c835, Stobe E1CD05BF)
+- **kept + hate:** -85 was set and read back as Hateful. Rel Krag still offered 300 cats + stop attack and accepted,
+  so SR28's "no affection gate" holds. The deal then stuck in AWAITING_PERFORMANCE with GIVE_CATS REISSUE_QUEUED.
+  - **Engine bug:** GIVE_CATS ran in game at 17:42:43.66 (the accept reply streams it at once). The server's
+    "Deal performance started" (dispatched_unix) is at 17:42:47, and stobeNegEvaluateTerm only looks from
+    dispatched_unix-3, so it missed the payment.
+  - The reissue directive (bug 126) only goes out when he speaks again; he never did.
+  - Rel Brak verified only because his gap was 2.1 s.
+- **breach:** Shay's attack at 11:50:32.66 was undone 0.7 s later by `PERSONAL_TRUCE: reapplied first=Rel Brak
+  second=Shay orders_cleared=1`. That is the STOP_ATTACK guard, guard_seconds=20, from 11:50:15. No hit landed, so
+  SPARE was VERIFIED after 120 s and the deal ended COMPLETE.
+  - Script problem, plus a question for the STOBE fixer: should the guard clear an explicit player attack order?
+- **Script fix** (server `22ace3a`):
+  - breach waits 25 s, teleports him next to Shay and attacks every 4 s until a major_damage/knockout from Shay lands;
+  - kept asks him once for the cats when the payment term is REISSUE_QUEUED (bug 126 reissue path).

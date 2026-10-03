@@ -152,8 +152,12 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 87 | STOBE | m8 | Unique NPC named like its template (Dust King) gets no initiative check / surrender | see rows 87/88 |
 | STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
 | STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
-| STOBE 93 | KFP | m16 | Work planner: building-type enum off by one (shop taken for a bench, no bench found); after the fix a native fault right after the bench is found | fixer working (KenshiFP BAF2D1DE found the bench) |
-| STOBE 94 | STOBE | m16 | `stobe-reset-npc --restore` writes the entry under PLAYER_NAME `shay` while the server writes `Shay`: possible duplicate relationship keys | open (tool) |
+| STOBE 93 | KFP | m16 | Work planner: building-type enum off by one (shop taken for a bench, no bench found); after the fix a native fault right after the bench is found | fixed (KenshiFP DC37D57B: no fault, queues), rerun 16 v5 |
+| STOBE 94 | STOBE | m16 | `stobe-reset-npc --restore` writes the entry under PLAYER_NAME `shay` while the server writes `Shay`: possible duplicate relationship keys | fixed (tool), round trip at the end |
+| STOBE 95 | KFP | m16 | Crafted ingredient used by the goal's own craft was queued again (Hinge=2 instead of 1) | fixed (KenshiFP 80475308), rerun 16 v5 |
+| STOBE 96 | STOBE | m16 | Deal payment verified only from dispatched_unix-3: an NPC paying on accept is missed; REISSUE waits for speech, deal hangs | fixer |
+| STOBE 97 | STOBE | m16 | Personal-truce guard (20 s) clears an explicit player attack order: player betrayal impossible | fixer |
+| STOBE 98 | STOBE | m16 | Dust King top-up offer 50000 cats (carries 150): check against Shay's offer-size rules | fixer |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
@@ -169,3 +173,4 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | KAH 6 | Hover tooltips can't be read (PG 135–141) | open: try `ui` while hovering |
 | KAH 7 | `camera` command (fixed view for perf windows) | deferred m16: not needed (REL gate passed); feasible via `ou->player->camera` (teleport, manuallySetOrientationAndZoom, lock per frame), needs in-game checks |
 | KAH 8 | `trade` of a trader's carried item fails (arrived=0 placed=failed) | found m16 (REL p5-01), harness helper fixing |
+| KAH 9 | `kah.py` client: concurrent callers share `inbox.txt.tmp` and lose commands (FileNotFoundError) | found m16 (fight wrappers), harness helper fixing; wrappers now flock |
