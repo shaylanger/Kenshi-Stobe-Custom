@@ -17,13 +17,18 @@ if [ "$1" = "--restore" ]; then
   [ -s "$f" ] || { echo "nothing saved for $npc"; exit 1; }
   player=$(sudo -u postgres psql -d stobe -At -c "SELECT value FROM general_settings WHERE id='PLAYER_NAME'" 2>/dev/null); player="${player:-Shay}"
   entry=$(cat "$f")
+  # keep the casing of the key she already has ("Shay"), else the setting's; drop other casings
+  key=$(sudo -u postgres psql -d stobe -At -c "SELECT k FROM core_npc_master m, jsonb_object_keys(COALESCE(m.extended_data->'relationships','{}'::jsonb)) k WHERE LOWER(m.name)='${lower}' AND LOWER(k)=LOWER('${player}') ORDER BY k ASC LIMIT 1")
+  key="${key:-$player}"
   sudo -u postgres psql -d stobe -v ON_ERROR_STOP=1 -q -v entry="$entry" <<SQL
 UPDATE core_npc_master SET extended_data = jsonb_set(COALESCE(extended_data,'{}'::jsonb), '{relationships}',
-    COALESCE(extended_data->'relationships','{}'::jsonb) || jsonb_build_object('${player}', :'entry'::jsonb))
+    COALESCE((SELECT jsonb_object_agg(k, v) FROM jsonb_each(COALESCE(extended_data->'relationships','{}'::jsonb)) AS e(k, v) WHERE LOWER(k) <> LOWER('${player}')), '{}'::jsonb)
+    || jsonb_build_object('${key}', :'entry'::jsonb))
   WHERE LOWER(name)='${lower}';
-UPDATE core_npc_master SET relationships = (CASE WHEN relationships LIKE '{%' THEN relationships::jsonb ELSE '{}'::jsonb END
-    || jsonb_build_object('${player}', :'entry'::jsonb))::text WHERE LOWER(name)='${lower}';
+UPDATE core_npc_master SET relationships = (COALESCE((SELECT jsonb_object_agg(k, v) FROM jsonb_each(CASE WHEN relationships LIKE '{%' THEN relationships::jsonb ELSE '{}'::jsonb END) AS e(k, v) WHERE LOWER(k) <> LOWER('${player}')), '{}'::jsonb)
+    || jsonb_build_object('${key}', :'entry'::jsonb))::text WHERE LOWER(name)='${lower}';
 SQL
+  player="$key"
   rm -f "$f"
   echo "restored $npc -> $player: $entry"
   exit 0
