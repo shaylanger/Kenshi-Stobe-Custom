@@ -1,0 +1,122 @@
+diff --git a/src/SocialEventProtocol.cpp b/src/SocialEventProtocol.cpp
+index db678a9..8e0120b 100644
+--- a/src/SocialEventProtocol.cpp
++++ b/src/SocialEventProtocol.cpp
+@@ -94,12 +94,12 @@ std::string StructuredEnvelope(const std::string& campaign,const std::string& se
+     return out.str();
+ }
+ std::string WitnessJson(const EntityInfo& who,const std::string& session,unsigned long epoch,bool conscious,bool perceived,
+- int seesActor,int seesTarget,int hearsActor){
++ int seesActor,int seesTarget,int hearsActor,int task,int prone){
+     std::string e=StructuredEntity(&who,session,epoch);
+     if(e=="null")return "";
+     std::ostringstream w;
+     w<<"{\"entity\":"<<e<<",\"conscious\":"<<(conscious?"true":"false")<<",\"perceived\":"<<(perceived?"true":"false")
+-     <<",\"sees_actor\":"<<JsonBool(seesActor)<<",\"sees_target\":"<<JsonBool(seesTarget)<<",\"hears_actor\":"<<JsonBool(hearsActor)<<"}";
++     <<",\"sees_actor\":"<<JsonBool(seesActor)<<",\"sees_target\":"<<JsonBool(seesTarget)<<",\"hears_actor\":"<<JsonBool(hearsActor)<<",\"task\":"<<task<<",\"prone\":"<<prone<<"}";
+     return w.str();
+ }
+ }
+diff --git a/src/SocialEventProtocol.h b/src/SocialEventProtocol.h
+index 1441f66..f8d52d7 100644
+--- a/src/SocialEventProtocol.h
++++ b/src/SocialEventProtocol.h
+@@ -30,7 +30,7 @@ namespace StobeSocial {
+         const std::string& witnessesJson = "[]");
+     // One witness entry: entity + explicit sensing (REL phase 6). Unknown consciousness = no entry.
+     std::string WitnessJson(const EntityInfo& who, const std::string& session, unsigned long epoch,
+-        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor);
++        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor, int task = -1, int prone = -1);
+ }
+ 
+ // Game-side runtime (Utils.cpp): one capture switch and one sequence for every social post.
+@@ -45,6 +45,7 @@ void SocialPostStructuredW(const std::string& kind, const StobeSocial::EntityInf
+ #include <vector>
+ void SocialFocusTouch(unsigned int serial);
+ void SocialFocusSerials(std::vector<unsigned int>& out, size_t cap);
++void SocialFocusReport(size_t focus, size_t resolved, const std::string& unresolved);
+ // The last character the attack hook saw attacking this victim within maxAgeMs (0 = none).
+ unsigned int SocialRecentAttacker(unsigned int victimSerial, unsigned long maxAgeMs);
+ void SocialNoteAttack(unsigned int attackerSerial, unsigned int victimSerial);
+diff --git a/src/Utils.cpp b/src/Utils.cpp
+index 1f45953..94526a7 100644
+--- a/src/Utils.cpp
++++ b/src/Utils.cpp
+@@ -1641,7 +1641,7 @@ static std::string SocialWitnessArray(const std::vector<StobeSocial::EntityInfo>
+       tri[k] = v == 0 ? -1 : (v == 2 ? 1 : 0);
+     }
+     std::string w = StobeSocial::WitnessJson(who[i], PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
+-                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2]);
++                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2], (s >> 8) & 0x3FF, (s >> 18) & 7);
+     if (w.empty())
+       continue;
+     out += (n ? "," : "") + w;
+@@ -1733,6 +1733,16 @@ void SocialFocusTouch(unsigned int serial) {
+   ReleaseSRWLockExclusive(&g_socialFocusLock);
+ }
+ 
++void SocialFocusReport(size_t focus, size_t resolved, const std::string &unresolved) {
++  static DWORD last = 0;
++  DWORD now = GetTickCount();
++  if (now - last < 20000)
++    return;
++  last = now;
++  Log("SOCIAL_FOCUS: focus=" + ToString((unsigned int)focus) + " resolved=" + ToString((unsigned int)resolved) +
++      (unresolved.empty() ? std::string("") : " unresolved=" + unresolved));
++}
++
+ void SocialFocusSerials(std::vector<unsigned int> &out, size_t cap) {
+   out.clear();
+   if (!g_socialCapture)
+diff --git a/src/main.cpp b/src/main.cpp
+index 1516190..f1f5886 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -5435,10 +5435,14 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
+       continue;
+     // Run m8: isUnconcious() is false while sleeping. Asleep = in a bed, or the current task is sleeping.
+     bool asleep = false;
++    int taskId = 0, prone = 0;
+     try {
+       hand ignoredSubject;
+       TaskType task = ResolveCurrentNpcTaskSafe(w, ignoredSubject);
+-      asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED;
++      taskId = (int)task;
++      prone = (int)w->getProneState();
++      asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED || prone == (int)PS_KO ||
++               prone == (int)PS_PLAYING_DEAD;
+     } catch (...) {
+       asleep = false;
+     }
+@@ -5455,7 +5459,8 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
+     int hearsActor = actor ? SocialSenseTri(sd, actor, true) : 0;
+     bool perceived = e.conscious == 1 && (seesActor == 2 || seesTarget == 2 || hearsActor == 2);
+     who.push_back(e);
+-    sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6));
++    sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6) |
++                    ((taskId & 0x3FF) << 8) | ((prone & 7) << 18));
+   }
+ }
+ 
+@@ -8294,8 +8299,19 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+   {
+     std::vector<unsigned int> focus;
+     SocialFocusSerials(focus, 16);
+-    for (size_t f = 0; f < focus.size(); ++f)
+-      AddInventorySyncCandidate(ResolveCharacterBySerialForInventoryEvent(focus[f]), candidates, seen);
++    size_t resolvedFocus = 0;
++    std::string unresolvedFocus;
++    for (size_t f = 0; f < focus.size(); ++f) {
++      Character *fc = ResolveCharacterBySerialForInventoryEvent(focus[f]);
++      if (fc) {
++        ++resolvedFocus;
++        AddInventorySyncCandidate(fc, candidates, seen);
++      } else if (unresolvedFocus.size() < 200) {
++        unresolvedFocus += (unresolvedFocus.empty() ? "#" : ",#") + ToString(focus[f]);
++      }
++    }
++    if (!focus.empty())
++      SocialFocusReport(focus.size(), resolvedFocus, unresolvedFocus);
+   }
+ 
+   float eventRange = g_shoutRadius;

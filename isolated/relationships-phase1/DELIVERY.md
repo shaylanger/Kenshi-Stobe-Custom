@@ -532,3 +532,71 @@ Unverified: whether a town pointer (nullptr) and an identity rotation are accept
 "Prisoner Cage", and whether the building needs a terrain/height snap. Test by building one bed at Home and checking
 `buildings 50 Bed`. With it, p4-02/p4-03 run on auto-home: `build Bed near Shay dist 10`,
 `build "Prisoner Cage" near Shay dist 15`.
+
+## 2026-10-03 Run m9 results, fixes, phase 8 (offline)
+
+### Verdicts (m9)
+- **Pass:**
+  - SR38 (p3-04 39/0: knocked out, loot latent, reload).
+  - SR24 (Rel Wren -6 of the victim's -10).
+  - SR02 again (Rel Vorn->Shay, Rel Tam->Shay -31 = aggression + KO).
+  - The m8 `item_gain` path works: Rel Gav's unmatched gain was reported, `no_ko_owner` as expected.
+  - SR11 progress: p3-03 44/0, the enslaved fact for Rel Vash is now captured (he was brought close).
+- **Real bugs:**
+  - p2-01: Malzin's KO of the bandit had no encounter (`no_encounter`) because the hook never reported her own
+    attack. **Fixed (server):** an ally who harms someone already being assaulted by their side joined that assault.
+  - SR25: the floor-sleeping witness (Rel Sorn) still counted (-7) despite the m8 sleep check. Witness entries now
+    carry the character's `task` and `prone` state (probe 22), and prone KO / playing dead never witnesses.
+- **Scenario issues:**
+  - p3-01: the KO'd bandit was killed because the fight went on over the body. Everyone now steps back right after the KO.
+  - p4-04 / p5-02: the recipient wandered off and was never scanned. Recipients are now brought next to Shay first.
+  - p7-02: probe 21 answer: "first seen already enslaved: Rel Xan". He was never scanned before the shackle.
+    He now spawns next to Shay, and a sweep sees him free before the shackle.
+  - The `@log` harm lines in p2-01 / p3-01 depended on the KO attacker; they are now covered by the inspect checks.
+  - p4-02 / p4-03 must be rerun after harness D8ECA273 (the `build` height bug).
+- **New diagnostic:** stobe.log `SOCIAL_FOCUS: focus=N resolved=M unresolved=#…` every 20 s. If unresolved serials
+  show up, the character list Stobe searches doesn't contain them (out of the active area).
+
+### Phase 8: offline parts done
+- **Retention (SR43):** raw facts, checkpoints and finished incidents older than 3 game days are pruned every 2000
+  facts (also `inspect --retention`). Never pruned: the ledger, beliefs, latent incidents.
+- **Perf/soak bench** `tests/social_perf_bench.php`, part of the runner: 6000 facts over 4.2 game days in shadow mode.
+  p50 5.9 ms, p95 12.2 ms, max 18 ms per fact; tables bounded; no latent incident lost.
+- **Release notes:** `docs/social_relationship_release.md` (switches, install manifest, rollback recipe, validation summary, open gates).
+- Runner: all steps pass, including 20 mutations and the perf bench.
+
+### Delivery
+- **Server:** `feature/social-phase1` at **`8da1a73`** (one commit on live `e9f8598`); rules `phase8-v1`.
+- **Native:** `C:\KenshiModding\pending-fixes\rel-native-m9.patch` (SHA256 `5738976b3cdff7ed82e70f245c09c33a2b9c78a95f434a7b355c314a288b92da`),
+  incremental against the current `/root/STOBE-src` (which has m8). Private build `24a71b5c…`.
+
+### Rerun (m9 build, Capture=1, shadow, fresh unless noted)
+1. p2-01
+2. p3-01, p3-03
+3. p4-02, p4-03 (auto-home with the fixed harness `build`)
+4. p4-04, p5-02
+5. p6-01a, set-relation, p6-01b (keep): report the witness `task`/`prone` values of Rel Sorn (`--events 60` or stobe.log)
+6. p7-02
+
+Afterwards, grep stobe.log for `SOCIAL_FOCUS` and `first seen already enslaved`.
+
+### Phase 8: in-game parts (the coordinator's)
+1. **Soak + performance gate:** `REL-p8-01-soak.txt` (Crafting base = the Hub, 3 × 2 game hours at speed 5, about an
+   hour of real time). Run once with Capture=0 and once with Capture=1 (shadow).
+   Pass: no crash or hang; no `SERIAL_HTTP: queue overflow`; inbox growth flattens once retention runs;
+   `--check-shadow` exit 0; frame time / fps within 5% of the Capture=0 run.
+2. **Full matrix rerun on one build:** p1-01..04, p2-01..05, p3-01..04, p4-01..04, p5-01..02, p6-01a/b, p7-01..02.
+   Record the DLL hash and server commit.
+3. **Enabled-mode session** on a kah-* copy (p2-05 style): Shay's short balance and feel review.
+4. Install manifest and rollback check: follow the release notes once (`--set-mode off`, purge, Capture=0) and
+   confirm legacy behaviour (p1-01).
+
+### Is REL ready for phase 8?
+For the offline part, yes (done above). For the final in-game sign-off, not yet. These gates are still open:
+- Carry (SR18/19): needs the harness `build`.
+- Slavery capture (SR11/12/32): needs the probe 21 rerun.
+- Sleeping witnesses (SR25): needs probe 22.
+- Recruitment gate exercised (SR30): LLM-dependent.
+- Repeat assault (SR06): needs a non-hostile victim.
+
+The soak can run now, in parallel with those reruns.
