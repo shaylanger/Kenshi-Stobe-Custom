@@ -11252,6 +11252,20 @@ void ProcessMessageQueue(GameWorld *thisptr) {
           } else if (actionCommand == "GIVE_CATS") {
             std::string catsTargetToken = "";
             int catsAmount = 0;
+            // Cap tiers: GIVE_CATS purse mode, a trailing @topup / @exact.
+            std::string catsMode = "";
+            {
+              size_t modeAt = actionArgument.rfind('@');
+              if (modeAt != std::string::npos) {
+                std::string tail = TrimCopy(actionArgument.substr(modeAt + 1));
+                for (size_t i = 0; i < tail.size(); ++i)
+                  tail[i] = (char)tolower((unsigned char)tail[i]);
+                if (tail == "topup" || tail == "exact") {
+                  catsMode = tail;
+                  actionArgument = actionArgument.substr(0, modeAt);
+                }
+              }
+            }
             if (!parseCatsPayload(actionArgument, catsTargetToken, catsAmount)) {
               Log("HOOK_MSG_PROC: GIVE_CATS ignored; invalid payload '" +
                   actionArgument + "'");
@@ -11273,6 +11287,7 @@ void ProcessMessageQueue(GameWorld *thisptr) {
             act.target = catsTarget;
             act.message = catsTargetToken;
             act.taskValue = catsAmount;
+            act.catsMode = catsMode;
             g_uiActionQueue.push_back(act);
             LeaveCriticalSection(&g_uiMutex);
             Log("HOOK_MSG_PROC: GIVE_CATS queued actor_serial=" +

@@ -9173,13 +9173,31 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
             if (actorMoney <= 0 && npc->getOwnerships()) {
               actorMoney = npc->getOwnerships()->getMoney();
             }
+            if (act.catsMode == "topup" && act.taskValue > actorMoney) {
+              // Cap tiers 3-5: the rest is brought; top her purse up to the agreed amount.
+              int added = act.taskValue - actorMoney;
+              npc->takeMoney(-added);
+              Log("ACTION_EXEC: GIVE_CATS topup actor=" + SafeCharacterName(npc) +
+                  " added=" + ToString(added) + " had=" + ToString(actorMoney));
+              actorMoney = npc->getMoney();
+              if (actorMoney <= 0 && npc->getOwnerships()) {
+                actorMoney = npc->getOwnerships()->getMoney();
+              }
+            }
             int amt = (act.taskValue > actorMoney) ? actorMoney : act.taskValue;
             bool actorIsPlayer = false;
             try {
               actorIsPlayer = npc->isPlayerCharacter();
             } catch (...) {
             }
-            if (actorIsPlayer && act.taskValue > actorMoney) {
+            if (!actorIsPlayer && act.catsMode == "exact" && act.taskValue > actorMoney) {
+              // Cap tiers 0-2: all or nothing, never a silent part payment.
+              thisptr->showPlayerAMessage_withLog(
+                  SafeCharacterName(npc) + " only has " + ToString(actorMoney) + " cats.", true);
+              Log("ACTION_EXEC: GIVE_CATS actor=" + SafeCharacterName(npc) +
+                  " skipped reason=insufficient requested=" + ToString(act.taskValue) +
+                  " available=" + ToString(actorMoney));
+            } else if (actorIsPlayer && act.taskValue > actorMoney) {
               // A player payment is all or nothing: never hand over the whole purse.
               thisptr->showPlayerAMessage_withLog(
                   SafeCharacterName(npc) + " only has " + ToString(actorMoney) + " cats.", true);

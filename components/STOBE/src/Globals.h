@@ -147,6 +147,7 @@ struct QueuedAction {
   bool allowUnavailableSpeech; // Preserve reactions to forced limb removal.
   bool directorAction; // Dispatch without holding the following authored dialogue for completion.
   std::string autonomyDecisionId; // Set only for validated autonomy actions.
+  std::string catsMode; // GIVE_CATS purse mode: "topup", "exact" or empty (cap tiers).
 
   QueuedAction()
       : interactionEpoch(Stobe::Interaction::Epoch()), type(ACT_NOTIFY), taskValue(0), proximityStartTick(0),
