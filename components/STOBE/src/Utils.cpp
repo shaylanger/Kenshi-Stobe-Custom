@@ -270,6 +270,10 @@ static bool g_socialCapture = false;
 // server sees them in order (its late-event check is per sequence).
 static volatile LONG g_socialSequence = 0;
 
+// REL (run m5): the world sweep looks at the player plus at most 16 characters around her; in a crowded
+// town the test NPCs fell out (KO/shackle/transfer never seen). Characters that recently appeared in a
+// social fact are kept in the sweep for 5 minutes (at most 16, newest first).
+
 // Without Playthrough Saves (server automatic switching off) the handshake answers "off" and no
 // campaign id exists; social events then use the shared server timeline "legacy" (run m4: every
 // event was skipped). The server accepts "legacy" only while switching is off.
@@ -1514,6 +1518,8 @@ void LogGameEvent(const std::string &type, const std::string &actor,
       Stobe::EventPolicy::PriorityForEventType(normalizedType);
   AsyncPostToStobeSerialWithPriority(endpoint, "", eventPriority);
   if (g_socialCapture && PlaythroughSession::Allowed(PlaythroughSession::Generation())) {
+    SocialFocusTouch(actorSerial);
+    SocialFocusTouch(targetSerial);
     LONG sequence = StobeSocial::SupportedKind(normalizedType) ? InterlockedIncrement(&g_socialSequence) : 0;
     if (sequence > 0) {
       std::string payload = StobeSocial::Envelope(SocialCampaignId(), PlaythroughSession::ClientId(),
@@ -1626,6 +1632,8 @@ void SocialPostStructured(const std::string &kind, const StobeSocial::EntityInfo
                           const StobeSocial::EntityInfo *target, const std::string &factsBody) {
   if (!SocialCaptureEnabled())
     return;
+  SocialFocusTouch(actor ? actor->serial : 0u);
+  SocialFocusTouch(target ? target->serial : 0u);
   if (kind == "attack") {
     // The attack hook can fire many times a second in a fight; one fact per pair per 3 s is enough
     // (the server keys the encounter per pair and only needs the first strike and the direction).
@@ -1651,5 +1659,67 @@ void SocialPostStructured(const std::string &kind, const StobeSocial::EntityInfo
   Log("SOCIAL_CAPTURE: structured kind=" + kind + " seq=" + ToString((int)sequence) +
       " load=" + ToString((int)PlaythroughSession::Generation()) +
       " actor=#" + ToString(actor ? actor->serial : 0u) + " target=#" + ToString(target ? target->serial : 0u) +
-      " facts=" + factsBody.substr(0, 200));
+      " facts=" + factsBody.substr(0, 700));
+}
+
+// ---- REL social focus (global scope; see run m5) ----
+static SRWLOCK g_socialFocusLock = SRWLOCK_INIT;
+static std::map<unsigned int, DWORD> g_socialFocus;
+
+static std::map<unsigned int, std::pair<unsigned int, DWORD> > g_socialLastAttacker;
+
+void SocialNoteAttack(unsigned int attackerSerial, unsigned int victimSerial) {
+  if (!attackerSerial || !victimSerial || !g_socialCapture)
+    return;
+  AcquireSRWLockExclusive(&g_socialFocusLock);
+  g_socialLastAttacker[victimSerial] = std::make_pair(attackerSerial, GetTickCount());
+  if (g_socialLastAttacker.size() > 256)
+    g_socialLastAttacker.erase(g_socialLastAttacker.begin());
+  ReleaseSRWLockExclusive(&g_socialFocusLock);
+}
+
+unsigned int SocialRecentAttacker(unsigned int victimSerial, unsigned long maxAgeMs) {
+  unsigned int out = 0;
+  AcquireSRWLockExclusive(&g_socialFocusLock);
+  std::map<unsigned int, std::pair<unsigned int, DWORD> >::iterator it = g_socialLastAttacker.find(victimSerial);
+  if (it != g_socialLastAttacker.end() && GetTickCount() - it->second.second <= maxAgeMs)
+    out = it->second.first;
+  ReleaseSRWLockExclusive(&g_socialFocusLock);
+  return out;
+}
+
+void SocialFocusTouch(unsigned int serial) {
+  if (!serial || !g_socialCapture)
+    return;
+  AcquireSRWLockExclusive(&g_socialFocusLock);
+  g_socialFocus[serial] = GetTickCount();
+  if (g_socialFocus.size() > 64) {
+    std::map<unsigned int, DWORD>::iterator oldest = g_socialFocus.begin();
+    for (std::map<unsigned int, DWORD>::iterator it = g_socialFocus.begin(); it != g_socialFocus.end(); ++it)
+      if (GetTickCount() - it->second > GetTickCount() - oldest->second)
+        oldest = it;
+    g_socialFocus.erase(oldest);
+  }
+  ReleaseSRWLockExclusive(&g_socialFocusLock);
+}
+
+void SocialFocusSerials(std::vector<unsigned int> &out, size_t cap) {
+  out.clear();
+  if (!g_socialCapture)
+    return;
+  DWORD now = GetTickCount();
+  std::vector<std::pair<DWORD, unsigned int> > recent;
+  AcquireSRWLockExclusive(&g_socialFocusLock);
+  for (std::map<unsigned int, DWORD>::iterator it = g_socialFocus.begin(); it != g_socialFocus.end();) {
+    if (now - it->second > 300000) {
+      g_socialFocus.erase(it++);
+    } else {
+      recent.push_back(std::make_pair(now - it->second, it->first));
+      ++it;
+    }
+  }
+  ReleaseSRWLockExclusive(&g_socialFocusLock);
+  std::sort(recent.begin(), recent.end());
+  for (size_t i = 0; i < recent.size() && i < cap; ++i)
+    out.push_back(recent[i].second);
 }

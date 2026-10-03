@@ -5234,6 +5234,8 @@ static CombatAttribution ResolveCombatAttribution(Character *target) {
   return out;
 }
 
+static Character *ResolveCharacterBySerialForInventoryEvent(unsigned int serial);
+static Character *ResolveCharacterBySerialForInventoryEvent(unsigned int serial);
 // REL: one structured entity (serial, name, storage id, faction, player faction, consciousness).
 // Unknown stays unknown (-1 -> null), never false.
 static StobeSocial::EntityInfo SocialEntityFor(Character *c) {
@@ -5273,10 +5275,21 @@ static void SocialEmitHarm(Character *victim, const CombatAttribution &attributi
   StobeSocial::EntityInfo target = SocialEntityFor(victim);
   StobeSocial::EntityInfo actor;
   bool hasActor = attribution.actor && attribution.actor != victim;
-  if (hasActor)
+  const char *source = hasActor ? attribution.source : "none";
+  if (hasActor) {
     actor = SocialEntityFor(attribution.actor);
+  } else if (std::string(level) != "death") {
+    // REL (run m5): the game named no attacker for the KO; the attack hook saw who hit this victim last.
+    unsigned int recent = SocialRecentAttacker(target.serial, 10000);
+    Character *recentChar = recent ? ResolveCharacterBySerialForInventoryEvent(recent) : nullptr;
+    if (recentChar && recentChar != victim) {
+      actor = SocialEntityFor(recentChar);
+      hasActor = true;
+      source = "recent_attacker";
+    }
+  }
   std::string facts = "\"level\":" + StobeSocial::JsonString(level) +
-                      ",\"attribution\":" + StobeSocial::JsonString(hasActor ? attribution.source : "none");
+                      ",\"attribution\":" + StobeSocial::JsonString(source);
   if (!extraFacts.empty())
     facts += "," + extraFacts;
   SocialPostStructured("harm", hasActor ? &actor : nullptr, &target, facts);
@@ -8169,6 +8182,12 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     talkTarget = nullptr;
   }
   AddInventorySyncCandidate(talkTarget, candidates, seen);
+  {
+    std::vector<unsigned int> focus;
+    SocialFocusSerials(focus, 16);
+    for (size_t f = 0; f < focus.size(); ++f)
+      AddInventorySyncCandidate(ResolveCharacterBySerialForInventoryEvent(focus[f]), candidates, seen);
+  }
 
   float eventRange = g_shoutRadius;
   if (eventRange < 120.0f) {
@@ -12293,6 +12312,7 @@ void attackingYou_hook(Character *npc, Character *attacker, bool so,
         targeting = -1;
       }
       StobeSocial::EntityInfo a = SocialEntityFor(attacker), v = SocialEntityFor(npc);
+      SocialNoteAttack(a.serial, v.serial);
       SocialPostStructured("attack", &a, &v,
                            "\"victim_targeting_actor\":" + StobeSocial::JsonBool(targeting) +
                                ",\"player_defending\":" + std::string(playerDefending ? "true" : "false") +
@@ -12592,16 +12612,14 @@ Item *buyItem_hook(Inventory *inv, Item *itemToBuy, RootObject *sendingTo) {
     if (SocialCaptureEnabled()) {
       // REL phase 5: completed purchase. A seller that is not a character (shop storage) stays null:
       // nobody is credited personally. reference_value = the game's own value of the goods.
-      Character *buyerChar = nullptr, *sellerChar = nullptr;
-      try {
-        if (buyerObj && (buyerObj->getDataType() == HUMAN_CHARACTER || buyerObj->getDataType() == ANIMAL_CHARACTER))
-          buyerChar = static_cast<Character *>(buyerObj);
-        if (sellerObj && sellerObj != buyerObj &&
-            (sellerObj->getDataType() == HUMAN_CHARACTER || sellerObj->getDataType() == ANIMAL_CHARACTER))
-          sellerChar = static_cast<Character *>(sellerObj);
-      } catch (...) {
-        buyerChar = sellerChar = nullptr;
-      }
+      // Run m5: getDataType() did not report a character for either side; a character is whatever the
+      // serial resolves to in the world's character list (shop storage resolves to nothing).
+      unsigned int buyerSerialNow = ResolveRootObjectSerialForEvent(buyerObj);
+      unsigned int sellerSerialNow = sellerObj != buyerObj ? ResolveRootObjectSerialForEvent(sellerObj) : 0;
+      Character *buyerChar = buyerSerialNow ? ResolveCharacterBySerialForInventoryEvent(buyerSerialNow) : nullptr;
+      Character *sellerChar = sellerSerialNow ? ResolveCharacterBySerialForInventoryEvent(sellerSerialNow) : nullptr;
+      if (sellerChar == buyerChar)
+        sellerChar = nullptr;
       int reference = -1;
       try {
         reference = result->getValueAll(false);

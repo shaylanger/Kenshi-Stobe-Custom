@@ -32,3 +32,9 @@ namespace StobeSocial {
 bool SocialCaptureEnabled();
 void SocialPostStructured(const std::string& kind, const StobeSocial::EntityInfo* actor,
                           const StobeSocial::EntityInfo* target, const std::string& factsBody);
+#include <vector>
+void SocialFocusTouch(unsigned int serial);
+void SocialFocusSerials(std::vector<unsigned int>& out, size_t cap);
+// The last character the attack hook saw attacking this victim within maxAgeMs (0 = none).
+unsigned int SocialRecentAttacker(unsigned int victimSerial, unsigned long maxAgeMs);
+void SocialNoteAttack(unsigned int attackerSerial, unsigned int victimSerial);
