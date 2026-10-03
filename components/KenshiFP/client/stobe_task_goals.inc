@@ -389,28 +389,41 @@ static int stg_scan_chars(void *gw,void *actor,void **out,int max)
     return stg_scan_chars_r(gw,actor,out,max,STG_SCAN_RADIUS);
 }
 
+/* Item 80: scratch lektors big enough for every result the game may add (it grows a full
+ * lektor with its own allocator, which would free our buffer). Main thread only. */
+#define STG_SCAN_CAP 1024
+#define STG_OBJ_CAP 512
+static void *g_stg_scan_buf[STG_SCAN_CAP];
+static void *g_stg_obj_buf[STG_OBJ_CAP];
+
 static int stg_scan_chars_r(void *gw,void *actor,void **out,int max,float radius)
 {
     if(!gw||!actor||!out||max<1)return 0;
+    if(max>(STG_SCAN_CAP-32)/2)max=(STG_SCAN_CAP-32)/2;
     if(!g_stobe_getchars){
         HMODULE k=GetModuleHandleA("KenshiLib.dll");
         if(k)g_stobe_getchars=(stobe_getchars_t)GetProcAddress(k,KLIB_GETCHARS_SYM);
     }
     if(!g_stobe_getchars)return 0;
     Vec3 c={0,0,0}; if(!char_position(actor,&c))return 0;
-    StobePtrLektor l; memset(&l,0,sizeof(l)); l.max_size=max; l.stuff=out;
-    g_stobe_getchars(gw,&l,&c,radius,0,0,max,max,actor);
-    if(!l.stuff||l.count>(uint32_t)max)return 0;
-    int n=(int)l.count;
+    memset(g_stg_scan_buf,0,sizeof(g_stg_scan_buf));
+    StobePtrLektor l; memset(&l,0,sizeof(l)); l.max_size=STG_SCAN_CAP; l.stuff=g_stg_scan_buf;
+    g_stobe_getchars(gw,&l,&c,radius,0,0,max,0,actor);
+    if(l.stuff!=g_stg_scan_buf||l.count>(uint32_t)STG_SCAN_CAP){
+        logline("[stobe] STG_SCAN lektor grown (count=%u) -- result dropped",l.count);
+        return 0;
+    }
+    int n=0;
+    for(uint32_t i=0;i<l.count&&n<max;i++)if(g_stg_scan_buf[i])out[n++]=g_stg_scan_buf[i];
     /* Dead bodies may not come back from the character sphere search (bug 68):
      * merge the generic object search for CHARACTER (itemType 1). */
     if(g_stobe_getobjects&&n<max){
-        void *extra[128]={0};
-        StobePtrLektor l2; memset(&l2,0,sizeof(l2)); l2.max_size=128; l2.stuff=extra;
+        memset(g_stg_obj_buf,0,sizeof(g_stg_obj_buf));
+        StobePtrLektor l2; memset(&l2,0,sizeof(l2)); l2.max_size=STG_OBJ_CAP; l2.stuff=g_stg_obj_buf;
         g_stobe_getobjects(gw,&l2,&c,radius,1,128,actor);
-        if(l2.stuff&&l2.count<=128){
+        if(l2.stuff==g_stg_obj_buf&&l2.count<=STG_OBJ_CAP){
             for(uint32_t i=0;i<l2.count&&n<max;i++){
-                void *x=extra[i];int dup=0;
+                void *x=g_stg_obj_buf[i];int dup=0;
                 if(!x)continue;
                 for(int j=0;j<n;j++)if(out[j]==x){dup=1;break;}
                 if(!dup)out[n++]=x;
@@ -1093,14 +1106,24 @@ static void stg_tick_trade(void *gw,void *actor,StgGoal *g,int buying)
     if(g->quantity>0&&g->completed>=g->quantity){stg_finish(g,STG_STATE_COMPLETE,"");return;}
 
     char trader_name[128]={0};float dist=0;
+    static DWORD s_trade_log_ms;static char s_trade_log_id[64];
+    DWORD tnow=GetTickCount();
+    int tlog=strcmp(s_trade_log_id,g->id)!=0||(LONG)(tnow-s_trade_log_ms)>10000;
+    if(tlog){s_trade_log_ms=tnow;strncpy(s_trade_log_id,g->id,sizeof(s_trade_log_id)-1);
+        logline("[stobe] TRADE_SEARCH start goal=%s target=%s",g->id,g->target[0]?g->target:"(nearest)");}
     void *trader=stg_find_trader(gw,actor,g->target,trader_name,sizeof(trader_name),&dist);
+    if(tlog)logline("[stobe] TRADE_SEARCH done goal=%s found=%s dist=%.0f",g->id,trader?trader_name:"(none)",trader?dist:-1.0f);
     if(!trader){
         stg_finish(g,STG_STATE_BLOCKED,g->target[0]?"requested trader is not nearby/loaded":"no nearby loaded trader was found");
         return;
     }
     if(dist>14.0f){
         Vec3 tp={0,0,0};
-        if(char_position(trader,&tp)&&try_move_to_pos(actor,&tp)){
+        int have_pos=char_position(trader,&tp);
+        if(tlog)logline("[stobe] TRADE_WALK issue goal=%s to=%s pos=%.0f,%.0f,%.0f",g->id,trader_name,tp.x,tp.y,tp.z);
+        int walk_ok=have_pos&&try_move_to_pos(actor,&tp);
+        if(tlog)logline("[stobe] TRADE_WALK done goal=%s ok=%d",g->id,walk_ok);
+        if(walk_ok){
             snprintf(g->current_step,sizeof(g->current_step),"Walking to trader %s",trader_name[0]?trader_name:"merchant");
             g->last_action_ms=stobe_game_ms();return;
         }
