@@ -3,7 +3,7 @@
 Last updated 2026-10-02 (round 26: D 41/43/48/53 fixed, cap tiers built). Installed: Stobe.dll `FF633947` (items 48 + cap tiers + harness bridge), KenshiFP `4D04FC9C` (goal panel). Server: round 26 (`5f71138`, live + ss-merge). `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **65**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **67**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -80,6 +80,8 @@ None open. 41, 43, 48, 53 fixed 2026-10-02 (round 26): test rows in B.
 | # | Bug | Notes |
 |---|---|---|
 | 64 | `stobe-tests` negotiation_engine fails 2 checks: "unpaid -> BREACHED_PLAYER" backdates wall time, but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | Fix the test (backdate game time), not the engine |
+| 65 | Goal panel covers the Money/Day/speed box when a goal NPC is selected (2560x1440, run m1): panel at 2086,1127 466x62 overlaps `TimeMoneyPanel` 2185,1096 268x88 | KenshiFP `stobe_task_goals.inc` `goal_panel_rect`: place it above the TimeMoneyPanel (or left of it) |
+| 66 | "Malzin, make 2 building materials" -> "I do not know how to reach Home" (run m1): `player_bases`/`player_base_locations` empty; a load of an older-game-time save (other fixtures) prunes bases with `first_game_ts > cutoff`, and Stobe doesn't re-detect Home (`ResolvePlayerOwnedTown` finds no player town at the auto-home position) | server `work_goal_functions.php` resolver + `playthrough_rollback.php`; Stobe `PlayerBaseState.cpp` |
 
 ## E. Design questions and features
 

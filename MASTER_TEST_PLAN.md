@@ -53,8 +53,8 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | todo |
 | STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | todo |
 | STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | todo |
-| STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | todo |
-| STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | todo |
+| STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | FAIL m1 -> STOBE 65 (rest OK: created at jobs widget, text, hidden for Shay) |
+| STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
 | STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | todo |
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | todo |
 | STOBE A11 / A12 | Heal-for-item deal kept / broken | first aid via `order`, deal state | todo |
@@ -104,6 +104,8 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | Bug | Owner | Found | What | Status |
 |---|---|---|---|---|
 | STOBE 64 | STOBE | stobe-tests | `negotiation_engine` regression: "unpaid -> BREACHED_PLAYER" backdates wall time but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | open |
+| STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | open |
+| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | open |
 
 ## 5. Harness (KAH) known limits / open items
 
