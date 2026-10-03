@@ -19,6 +19,7 @@
  * All offsets: see ../re/NOTES.md.
  */
 #include <windows.h>
+#include "KenshiAutomationHarness.h" /* test commands, if the harness is installed */
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -1207,6 +1208,8 @@ static int g_ogre_ready;
 static DWORD g_last_tick_ms;
 static int g_fp_mode;              /* toggled by VK_TOGGLE_FP edge */
 static volatile LONG g_toggle_edge;    /* FP-toggle press latched by the DI poll thread */
+static volatile LONG g_kah_inject_click, g_kah_inject_putdown; /* harness-injected presses */
+static void kah_bridge_tick(void);    /* registers the harness test commands */
 static int g_prev_fp;             /* g_fp_mode from last frame (camera_lock edge) */
 static int g_ovr_prev;            /* was the FP node override active last frame */
 static float g_yaw, g_pitch;      /* accumulated mouse-look angles (radians) */
@@ -3154,6 +3157,7 @@ static void camera_lock(void *gw)
     stobe_fight_truce_tick(gw);
     stobe_work_goal_tick(gw);
     stobe_task_goal_tick(gw);
+    kah_bridge_tick();
 
     if (g_fp_mode) {
         void *pc = first_player_char(gw);   /* v1: squad leader (index 0) */
@@ -3602,6 +3606,77 @@ typedef void (*pi_selectpc_t)(void *, void *, unsigned char, unsigned char);
 #define RVA_GUI_INSTANCE 0x21337b0u /* static ForgottenGUI instance (see RVA_GUI_* above) */
 typedef void (*gui_showstats_t)(void *, const void *);
 static int game_has_focus(void);
+
+/* ---- Kenshi Automation Harness bridge (TEST ONLY) ----
+ * fp_mode / fp_click / fp_putdown / fp_state, registered only when
+ * AutomationHarness.dll is loaded (retried once a second). Handlers just latch
+ * presses; the FP code consumes them on its next frame. */
+static KAH_Api g_kah;
+static int g_kah_connected;
+static DWORD g_kah_last_try;
+
+static int kah_fp_mode(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
+{
+    (void)id; (void)u;
+    if (argc < 2 || (_stricmp(argv[1], "on") && _stricmp(argv[1], "off"))) {
+        r->append(r, "usage: fp_mode on|off");
+        return KAH_ERROR;
+    }
+    int want = !_stricmp(argv[1], "on");
+    if (want == (g_fp_mode != 0)) {
+        r->append(r, want ? "FP mode already ON" : "FP mode already OFF");
+        return KAH_OK;
+    }
+    InterlockedExchange(&g_toggle_edge, 1);
+    r->append(r, want ? "FP mode toggling ON (next frame; log [input] FP mode toggled)"
+                      : "FP mode toggling OFF (next frame)");
+    return KAH_OK;
+}
+
+static int kah_fp_click(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
+{
+    (void)id; (void)argc; (void)argv; (void)u;
+    if (!g_fp_mode) { r->append(r, "FP mode is off (fp_mode on first)"); return KAH_ERROR; }
+    InterlockedExchange(&g_kah_inject_click, 1);
+    r->append(r, "left click injected: select a squad member within 1 s (bug 79 guard)");
+    return KAH_OK;
+}
+
+static int kah_fp_putdown(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
+{
+    (void)id; (void)argc; (void)argv; (void)u;
+    if (!g_fp_mode) { r->append(r, "FP mode is off (fp_mode on first)"); return KAH_ERROR; }
+    InterlockedExchange(&g_kah_inject_putdown, 1);
+    r->append(r, "G injected (bug 100 put down; log [fp] put down)");
+    return KAH_OK;
+}
+
+static int kah_fp_state(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
+{
+    (void)id; (void)argc; (void)argv; (void)u;
+    char b[160];
+    snprintf(b, sizeof(b), "fp_mode=%d cursor_hidden=%d ui_open=%d", g_fp_mode ? 1 : 0,
+             g_cursor_hidden ? 1 : 0, g_ui_open ? 1 : 0);
+    r->append(r, b);
+    return KAH_OK;
+}
+
+static void kah_bridge_tick(void)
+{
+    if (g_kah_connected) return;
+    DWORD now = GetTickCount();
+    if (now - g_kah_last_try < 1000) return;
+    g_kah_last_try = now;
+    if (!KAH_Connect(&g_kah)) return;
+    g_kah_connected = 1;
+    int n = g_kah.registerCommand("fp_mode", "fp_mode on|off", kah_fp_mode, NULL)
+          + g_kah.registerCommand("fp_click", "fp_click (then select a squad member)", kah_fp_click, NULL)
+          + g_kah.registerCommand("fp_putdown", "fp_putdown (G while carrying)", kah_fp_putdown, NULL)
+          + g_kah.registerCommand("fp_state", "fp_state", kah_fp_state, NULL);
+    g_kah.log("KenshiFP: first-person test commands registered");
+    logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
+}
+
 static void fp_lookat_click_guard(void *gw)
 {
     static int lmb_prev, dead;
@@ -3610,10 +3685,13 @@ static void fp_lookat_click_guard(void *gw)
     static pi_selectpc_t fn;
     if (dead) return;
     int lmb = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    int injected = InterlockedExchange(&g_kah_inject_click, 0) != 0; /* harness fp_click */
     DWORD now = GetTickCount();
-    if (lmb && !lmb_prev && g_fp_mode && g_cursor_hidden && !g_ui_open && game_has_focus()) {
+    if ((lmb && !lmb_prev && g_fp_mode && g_cursor_hidden && !g_ui_open && game_has_focus())
+        || (injected && g_fp_mode && !g_ui_open)) {
         click_ms = now ? now : 1;
         keep = g_player_pc;
+        if (injected) logline("[fp] look-at click (harness-injected)");
     }
     lmb_prev = lmb;
     if (!click_ms) return;
@@ -8172,9 +8250,11 @@ static void fp_putdown_update(void *pcx)
     static int prev, dead;
     static chr_dropcarried_t fn;
     int k = (GetAsyncKeyState('G') & 0x8000) != 0;
-    int edge = k && !prev;
+    int injected = InterlockedExchange(&g_kah_inject_putdown, 0) != 0; /* harness fp_putdown */
+    int edge = (k && !prev) || injected;
     prev = k;
-    if (!edge || dead || !g_fp_mode || g_ui_open || !g_cursor_hidden || !pcx || !game_has_focus()) return;
+    if (!edge || dead || !g_fp_mode || g_ui_open || !pcx) return;
+    if (!injected && (!g_cursor_hidden || !game_has_focus())) return;
     if (!fn) {
         HMODULE kl = GetModuleHandleA("KenshiLib.dll");
         if (kl) fn = (chr_dropcarried_t)GetProcAddress(kl, KLIB_DROPCARRIED_SYM);
