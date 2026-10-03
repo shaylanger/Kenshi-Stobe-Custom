@@ -5,6 +5,7 @@
 #   scenarios.sh raid [size]     bandit raid squad on Shay; every raider ordered to attack
 #   scenarios.sh bodies <n> [near] [faction]   n neutral bandits killed next to <near> (Malzin);
 #                                prints the corpse serials
+#   scenarios.sh surrender [template]   (default Dust Bandit raiders; "Hungry Bandit" = tier 0)
 #   scenarios.sh raiders         serials of Starving Bandits within 150
 #   scenarios.sh fresh           reload auto-home, wait, pause, feed squad, reset Malzin
 set -e
@@ -55,9 +56,22 @@ case "$cmd" in
     L=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
     base=$(grep -a -c "" "$L")
     if stobe-auto where Shay | grep -q " KO"; then echo "Shay is knocked out: run '$0 fresh' first" >&2; exit 1; fi
+    # Item 87: Stobe guards a personal fight for 180 s and stands down every other member of that
+    # faction who targets the same victim (run m8: Dust King spawned 160 s after Skarven's fight was
+    # stood down, no encounter, no health event, no offer). Wait until no guard is active.
+    for i in $(seq 1 40); do
+      last_reg=$(grep -a -n "PERSONAL_FIGHT: registered" "$L" | tail -1 | cut -d: -f1)
+      last_end=$(grep -a -n "PERSONAL_FIGHT: ended" "$L" | tail -1 | cut -d: -f1)
+      [ -z "$last_reg" ] && break
+      [ -n "$last_end" ] && [ "$last_end" -gt "$last_reg" ] && break
+      [ "$i" = 1 ] && echo "waiting for the last personal fight guard to end (max 200 s)" >&2
+      stobe-say speed 1 >/dev/null; sleep 5
+    done
     # parked 300 away she landed among wild bandits twice (runs 10, m1): keep her in camp, knocked out
     stobe-auto teleport Malzin Shay dist 40 >/dev/null; stobe-auto ko Malzin 150 >/dev/null
-    stobe-auto spawn "Bandit Raiders (weakened) 1" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
+    T="${1:-Bandit Raiders (weakened) 1}"  # optional: another squad/character template (e.g. "Hungry Bandit", tier 0)
+    if [ "$T" = "Bandit Raiders (weakened) 1" ]; then stobe-auto spawn "$T" "Starving Bandits" near Shay dist 4 count 1 target Shay size 0.1 >/dev/null
+    else stobe-auto spawn "$T" "Starving Bandits" near Shay dist 4 count 1 >/dev/null; fi
     sleep 1
     r=""
     for s in $(bash "$SELF" raiders); do
