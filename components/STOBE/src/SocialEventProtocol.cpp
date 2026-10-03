@@ -94,12 +94,12 @@ std::string StructuredEnvelope(const std::string& campaign,const std::string& se
     return out.str();
 }
 std::string WitnessJson(const EntityInfo& who,const std::string& session,unsigned long epoch,bool conscious,bool perceived,
- int seesActor,int seesTarget,int hearsActor){
+ int seesActor,int seesTarget,int hearsActor,int task,int prone){
     std::string e=StructuredEntity(&who,session,epoch);
     if(e=="null")return "";
     std::ostringstream w;
     w<<"{\"entity\":"<<e<<",\"conscious\":"<<(conscious?"true":"false")<<",\"perceived\":"<<(perceived?"true":"false")
-     <<",\"sees_actor\":"<<JsonBool(seesActor)<<",\"sees_target\":"<<JsonBool(seesTarget)<<",\"hears_actor\":"<<JsonBool(hearsActor)<<"}";
+     <<",\"sees_actor\":"<<JsonBool(seesActor)<<",\"sees_target\":"<<JsonBool(seesTarget)<<",\"hears_actor\":"<<JsonBool(hearsActor)<<",\"task\":"<<task<<",\"prone\":"<<prone<<"}";
     return w.str();
 }
 }

@@ -5435,10 +5435,14 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
       continue;
     // Run m8: isUnconcious() is false while sleeping. Asleep = in a bed, or the current task is sleeping.
     bool asleep = false;
+    int taskId = 0, prone = 0;
     try {
       hand ignoredSubject;
       TaskType task = ResolveCurrentNpcTaskSafe(w, ignoredSubject);
-      asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED;
+      taskId = (int)task;
+      prone = (int)w->getProneState();
+      asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED || prone == (int)PS_KO ||
+               prone == (int)PS_PLAYING_DEAD;
     } catch (...) {
       asleep = false;
     }
@@ -5455,7 +5459,8 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
     int hearsActor = actor ? SocialSenseTri(sd, actor, true) : 0;
     bool perceived = e.conscious == 1 && (seesActor == 2 || seesTarget == 2 || hearsActor == 2);
     who.push_back(e);
-    sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6));
+    sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6) |
+                    ((taskId & 0x3FF) << 8) | ((prone & 7) << 18));
   }
 }
 
@@ -8306,8 +8311,19 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
   {
     std::vector<unsigned int> focus;
     SocialFocusSerials(focus, 16);
-    for (size_t f = 0; f < focus.size(); ++f)
-      AddInventorySyncCandidate(ResolveCharacterBySerialForInventoryEvent(focus[f]), candidates, seen);
+    size_t resolvedFocus = 0;
+    std::string unresolvedFocus;
+    for (size_t f = 0; f < focus.size(); ++f) {
+      Character *fc = ResolveCharacterBySerialForInventoryEvent(focus[f]);
+      if (fc) {
+        ++resolvedFocus;
+        AddInventorySyncCandidate(fc, candidates, seen);
+      } else if (unresolvedFocus.size() < 200) {
+        unresolvedFocus += (unresolvedFocus.empty() ? "#" : ",#") + ToString(focus[f]);
+      }
+    }
+    if (!focus.empty())
+      SocialFocusReport(focus.size(), resolvedFocus, unresolvedFocus);
   }
 
   float eventRange = g_shoutRadius;

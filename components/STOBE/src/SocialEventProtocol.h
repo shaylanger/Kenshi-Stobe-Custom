@@ -30,7 +30,7 @@ namespace StobeSocial {
         const std::string& witnessesJson = "[]");
     // One witness entry: entity + explicit sensing (REL phase 6). Unknown consciousness = no entry.
     std::string WitnessJson(const EntityInfo& who, const std::string& session, unsigned long epoch,
-        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor);
+        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor, int task = -1, int prone = -1);
 }
 
 // Game-side runtime (Utils.cpp): one capture switch and one sequence for every social post.
@@ -45,6 +45,7 @@ void SocialPostStructuredW(const std::string& kind, const StobeSocial::EntityInf
 #include <vector>
 void SocialFocusTouch(unsigned int serial);
 void SocialFocusSerials(std::vector<unsigned int>& out, size_t cap);
+void SocialFocusReport(size_t focus, size_t resolved, const std::string& unresolved);
 // The last character the attack hook saw attacking this victim within maxAgeMs (0 = none).
 unsigned int SocialRecentAttacker(unsigned int victimSerial, unsigned long maxAgeMs);
 void SocialNoteAttack(unsigned int attackerSerial, unsigned int victimSerial);

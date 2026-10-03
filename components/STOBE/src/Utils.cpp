@@ -1641,7 +1641,7 @@ static std::string SocialWitnessArray(const std::vector<StobeSocial::EntityInfo>
       tri[k] = v == 0 ? -1 : (v == 2 ? 1 : 0);
     }
     std::string w = StobeSocial::WitnessJson(who[i], PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
-                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2]);
+                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2], (s >> 8) & 0x3FF, (s >> 18) & 7);
     if (w.empty())
       continue;
     out += (n ? "," : "") + w;
@@ -1731,6 +1731,16 @@ void SocialFocusTouch(unsigned int serial) {
     g_socialFocus.erase(oldest);
   }
   ReleaseSRWLockExclusive(&g_socialFocusLock);
+}
+
+void SocialFocusReport(size_t focus, size_t resolved, const std::string &unresolved) {
+  static DWORD last = 0;
+  DWORD now = GetTickCount();
+  if (now - last < 20000)
+    return;
+  last = now;
+  Log("SOCIAL_FOCUS: focus=" + ToString((unsigned int)focus) + " resolved=" + ToString((unsigned int)resolved) +
+      (unresolved.empty() ? std::string("") : " unresolved=" + unresolved));
 }
 
 void SocialFocusSerials(std::vector<unsigned int> &out, size_t cap) {
