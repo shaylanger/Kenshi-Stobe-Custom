@@ -4,6 +4,7 @@
 #define STG_MAX_GOALS 20
 #define STG_MAX_SEEN 64
 #define STG_SCAN_RADIUS 220.0f
+#define STG_TRADER_NAMED_RADIUS 1000.0f /* item 75: a named trader further off is walked to */
 #define STG_TICK_MS 800
 #define STG_STATE_ACTIVE 0
 #define STG_STATE_COMPLETE 1
@@ -382,7 +383,13 @@ static int stg_loot_from_character(void *src_char,void *dst_char,const char *que
     return stg_transfer_char_to_char(src_char,dst_char,query,maxqty);
 }
 
+static int stg_scan_chars_r(void *gw,void *actor,void **out,int max,float radius);
 static int stg_scan_chars(void *gw,void *actor,void **out,int max)
+{
+    return stg_scan_chars_r(gw,actor,out,max,STG_SCAN_RADIUS);
+}
+
+static int stg_scan_chars_r(void *gw,void *actor,void **out,int max,float radius)
 {
     if(!gw||!actor||!out||max<1)return 0;
     if(!g_stobe_getchars){
@@ -392,7 +399,7 @@ static int stg_scan_chars(void *gw,void *actor,void **out,int max)
     if(!g_stobe_getchars)return 0;
     Vec3 c={0,0,0}; if(!char_position(actor,&c))return 0;
     StobePtrLektor l; memset(&l,0,sizeof(l)); l.max_size=max; l.stuff=out;
-    g_stobe_getchars(gw,&l,&c,STG_SCAN_RADIUS,0,0,max,max,actor);
+    g_stobe_getchars(gw,&l,&c,radius,0,0,max,max,actor);
     if(!l.stuff||l.count>(uint32_t)max)return 0;
     int n=(int)l.count;
     /* Dead bodies may not come back from the character sphere search (bug 68):
@@ -400,7 +407,7 @@ static int stg_scan_chars(void *gw,void *actor,void **out,int max)
     if(g_stobe_getobjects&&n<max){
         void *extra[128]={0};
         StobePtrLektor l2; memset(&l2,0,sizeof(l2)); l2.max_size=128; l2.stuff=extra;
-        g_stobe_getobjects(gw,&l2,&c,STG_SCAN_RADIUS,1,128,actor);
+        g_stobe_getobjects(gw,&l2,&c,radius,1,128,actor);
         if(l2.stuff&&l2.count<=128){
             for(uint32_t i=0;i<l2.count&&n<max;i++){
                 void *x=extra[i];int dup=0;
@@ -975,16 +982,29 @@ static void *stg_find_trader(void *gw,void *actor,const char *requested,char *na
     if(name&&namesz)name[0]='\0';
     if(dist_out)*dist_out=1.0e30f;
     if(!stg_exports()||!g_stg_is_trader)return NULL;
-    void *chars[128]={0};int n=stg_scan_chars(gw,actor,chars,128);
+    /* Item 75: a named trader is looked up among loaded characters within
+     * STG_TRADER_NAMED_RADIUS (she walks there); unnamed = the nearest one close by. */
+    int named=requested&&*requested;
+    void *chars[256]={0};int n=stg_scan_chars_r(gw,actor,chars,256,named?STG_TRADER_NAMED_RADIUS:STG_SCAN_RADIUS);
     Vec3 ap={0,0,0};if(!char_position(actor,&ap))return NULL;
-    void *best=NULL;float bestd=1.0e30f;char bestn[128]={0};
+    void *best=NULL;float bestd=1.0e30f;char bestn[128]={0};int bestq=0;
     for(int i=0;i<n;i++){
         void *c=chars[i];if(!char_valid(c)||c==actor||!g_stg_is_trader(c))continue;
         char cn[128]={0};stg_char_name(c,cn,sizeof(cn));
-        if(requested&&*requested&&wgp_name_match(cn,requested)<=0)continue;
+        int q=0;
+        if(named){
+            q=wgp_name_match(cn,requested); /* 3 exact, 2 contained */
+            if(q<=0){ /* the name without its bracket title */
+                char bare[128]={0};strncpy(bare,cn,sizeof(bare)-1);
+                char *br=strchr(bare,'[');
+                if(br){*br='\0';size_t L=strlen(bare);while(L&&bare[L-1]==' ')bare[--L]='\0';}
+                if(bare[0]&&wgp_name_match(bare,requested)>0)q=1;
+            }
+            if(q<=0||q<bestq)continue;
+        }
         Vec3 cp={0,0,0};if(!char_position(c,&cp))continue;
         float d=wgp_distance(ap,cp);
-        if(d<bestd){best=c;bestd=d;strncpy(bestn,cn,sizeof(bestn)-1);}
+        if(q>bestq||d<bestd){best=c;bestd=d;bestq=q;strncpy(bestn,cn,sizeof(bestn)-1);}
     }
     if(best&&name&&namesz){strncpy(name,bestn,namesz-1);name[namesz-1]='\0';}
     if(best&&dist_out)*dist_out=bestd;
