@@ -173,8 +173,9 @@ verdict() { echo "VERDICT $1: $2"; }
 # calm_raiders [radius] [factions-regex]: knock out world raiders near the squad for 15 min (Full-Base gets
 # Band of Bones raids that reach the squad mid-test, m17); prints how many
 calm_raiders() {
-  local n=0 h
-  for h in $(stobe-auto chars "${1:-400}" | grep -E "\[(${2:-Band of Bones|Dust Bandits|Hungry Bandits|Starving Bandits})\]" | grep -oE '#[0-9]+/[0-9]+'); do
+  local n=0 h re="${2:-}"
+  [ -n "$re" ] || re="Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits"
+  for h in $(stobe-auto chars "${1:-400}" | grep -E "\[(${re})\]" | grep -oE '#[0-9]+/[0-9]+'); do
     stobe-auto ko "$h" 900 >/dev/null && n=$((n+1))
   done
   log "calm_raiders: knocked out $n"

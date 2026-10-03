@@ -10,4 +10,5 @@
 #   against / knockout of the squad (VERDICT ALERT, exit 3: reload the fixture, don't continue).
 # Never build a Biofuel Distillery in this mod setup (crash).
 export PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}" REAL_POWER=1 SPEED="${SPEED:-50}" WELL="${WELL:-Well}"
+bash "$(dirname "$0")/fullbase-guard.sh"
 exec bash "$(dirname "$0")/STOBE-A8-bread-chain.sh"
