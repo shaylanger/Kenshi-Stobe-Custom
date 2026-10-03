@@ -104,7 +104,7 @@ no Stobe history/relationships. **Never build a Biofuel Distillery** (crash, see
 
 | ID | What | Fixture | Status |
 |---|---|---|---|
-| SMOKE fullbase / squin / enslaved | loads, 2+ min at 1x without crash, `status` shows the save, `chars` lists the squad, `[EVENT]` lines flow, PG first-load roll ok | each new save | todo |
+| SMOKE fullbase / squin / enslaved | loads, 2+ min at 1x without crash, `status` shows the save, `chars` lists the squad, `[EVENT]` lines flow, PG first-load roll ok | each new save | PASS m16 (no crash, squads listed, events flow, PG rolled 241/350/297 items, no exceptions) |
 | STOBE A8 | Bread chain well -> farm -> Grain Silo -> oven with real power ("make 2 bread", 50x + goal watch; `building "Grain Silo"` power first) | Full-Base (Beaks/Avarek) | todo (auto-home version uses `power supply`, m16) |
 | STOBE 16 (full chain) | crafted-ingredient goal completes with powered benches (queue property already PASS m16) | Full-Base | todo |
 | KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | todo |
