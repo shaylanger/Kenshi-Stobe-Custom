@@ -8326,6 +8326,21 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       SocialFocusReport(focus.size(), resolvedFocus, unresolvedFocus);
   }
 
+  // Item 88b: everyone who fought in the last 2 min is scanned (health buckets for surrender
+  // offers), even beyond the sphere's 16 results or after fleeing out of range.
+  {
+    int added = 0;
+    for (std::map<unsigned int, DWORD>::const_iterator f = g_lastFightTickBySerial.begin();
+         f != g_lastFightTickBySerial.end() && added < 8; ++f) {
+      if (nowTick - f->second > kFledFighterHealthMs) continue;
+      Character *fc = ResolveCharacterBySerialForInventoryEvent(f->first);
+      if (fc) {
+        AddInventorySyncCandidate(fc, candidates, seen);
+        ++added;
+      }
+    }
+  }
+
   float eventRange = g_shoutRadius;
   if (eventRange < 120.0f) {
     eventRange = 120.0f;
