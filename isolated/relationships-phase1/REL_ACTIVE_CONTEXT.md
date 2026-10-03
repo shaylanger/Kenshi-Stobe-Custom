@@ -55,6 +55,13 @@ the live server, `/root/STOBE-src`, `C:\StobeBuild` or the `stobe`/`stobe_test` 
 - Waiting for: m5 reruns and the Phase 6/7 scenarios; probes 5, 17, 18, 20; fixture "Home beds" for SR18/19.
 - Next (after results): Phase 8 (full validation, retention for social_event_inbox, soak) only when asked.
 
+## Coordinator rules (2026-10-03)
+- **Never purge the live social tables unless the coordinator says so** (an m9 purge hit a running m10 batch).
+- Live tables get pruned by fixture reloads anyway; judge runs from `C:\KenshiTestRuns\<run>\rel\*.inspect.txt`
+  (summary script: `/root/stobe-work/social-phase1/m5_summary.py <run>`) and the archived stobe.log in
+  `C:\KenshiTestRuns\logs\<time>-stop\`.
+- Native patches are incremental against live `/root/STOBE-src`; sync `live-base` first (other fixers change main.cpp).
+
 ## Status
 - Delivery 5 (Phases 1-5): server `3cd48b5` on live `1a8fc3f`, `rel-native-phase5.patch`, private DLL 0fb7e3ca.
 - Stopped after Phase 5 as instructed (coordinator 2026-10-03). Waiting for the coordinator's in-game results
