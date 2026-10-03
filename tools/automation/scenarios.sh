@@ -100,6 +100,7 @@ case "$cmd" in
         coalesce(extended_data->'relationships','{}'::jsonb) || jsonb_build_object('Shay',
           jsonb_build_object('aff',$aff,'tier','$tier','type','$rtype','note','test','updated_at',extract(epoch from now())::int)))
       WHERE lower(name)=lower('$name') RETURNING extended_data->'relationships'->'Shay'->>'aff'"
+    stobe-rel-stamp "$name" || true  # item 59: stamp the edit with the current game time
     ;;
   raiders)
     stobe-auto chars 150 | tr '|' '\n' | grep 'Starving Bandits' | grep -v -e ' DEAD' -e ' KO' | grep -o '#[0-9]*' || true
