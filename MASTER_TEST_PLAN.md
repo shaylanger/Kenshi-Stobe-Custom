@@ -14,6 +14,8 @@ launch; feature agents write scenarios and fix their own bugs. Roles, loop and s
 
 IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `archive/test-run-<date>-m<n>.md`.
 
+**Two test machines (2026-10-03):** the 5090 (this PC: STOBE, KenshiFP, REL, server, perf/frame-time/soak rows) and the **4080 rig** (`ssh 4080`, `C:\KAH\ctl.ps1`, harness + PG only: PG rows, new harness commands). Never compare performance across machines; 4080 results are labelled "-4080" (`C:\KenshiTestRuns\m<n>-4080\` on the 4080).
+
 ## 0. Builds under test
 
 | Component | Installed | Pending install |
