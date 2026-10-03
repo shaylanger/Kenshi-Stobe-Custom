@@ -47,9 +47,9 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 20 | Refuse to pay after hand-over | fight setup | todo |
 | STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | todo |
 | STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | todo |
-| STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | todo |
+| STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | FAIL m8 -> STOBE 85 (prompt has it, NPC ignores it) |
 | STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | PASS m3 (fetch + return); hand-over on return -> 76, retest |
-| STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | todo |
+| STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | PASS m8 |
 | STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | PASS m2 (after 65: panel 2086,1030, above TimeMoneyPanel 1096) |
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
 | STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | todo |
@@ -67,12 +67,13 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 15 | Goal needing trader stock -> approval | same traders | todo (moved: apothecaries) |
 | STOBE A3 | Purchase event names the trader | talk to Malzin, then `trade Shay <trader> <food>` | PASS m4 (event names Apothecary Abia as seller) |
 | STOBE 16 | Goal with a crafted ingredient: bench queue grows only by what's missing | goal at a bench | todo |
-| PG crafting group | PG 85–92, 306 (+ weapons) | PG `tests/ingame/crafting-base/pg-10`, `pg-11` (Forced + InGameTest) | todo |
+| PG crafting group | PG 85–92, 306 (+ weapons) | PG `tests/ingame/crafting-base/pg-10`, `pg-11` (Forced + InGameTest) | PASS (pg-10 m3, pg-11 m8) |
 
 ### 1c. Fixture `Trader` (Shay alone next to 5 real traders)
 
 | ID | What | How | Status |
 |---|---|---|---|
+| REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | ran m8: 27/0, 17/0, 11/0 (no gate line), 23/2; REL builder judging |
 | PG config launches | pg-30 (AutoClassify off) | pg-30 PASS m5, pg-31 PASS m6, pg-40 PASS m6, pg-41 65/1 m6 (chest full, scenario) |
 | PG trader group | PG 211–237 shop rows | PG `tests/ingame/trader/pg-20` (launch 1); `pg-40` (launch 4, NormalVerbose) | todo |
 
@@ -138,7 +139,10 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 79 | STOBE | m4 | BUY goal with destination = trader name rejected (destination_not_known) | fixed live (21fdbed), PASS m4 |
 | STOBE 80 | KFP | m4 | Silent crash (no dump) right after a BUY goal: character search buffer overflow | fixed, PASS m5 (no crash, trader found and reached) |
 | STOBE 81 | KFP | m5 | BUY goal: "merchant does not have" an item the trader carries (stock view misses carried goods) | fixed (KenshiFP 846E6119), PASS m6 |
-| STOBE 82 | KFP | m6 | "buy … and bring it to me": no hand-over on return (76 covers FETCH only) | fixer |
+| STOBE 82 | KFP | m6 | "buy … and bring it to me": no hand-over on return (76 covers FETCH only) | server+KFP fixed; blocked by 84 (item never placed), retest |
+| STOBE 83 | KFP | m7 | Carried-goods BUY: money paid, item missing ("Kenshi rejected the purchase") | -> 84 |
+| STOBE 84 | KFP+KAH | m8 | `Inventory::buyItem` returns the bought item unplaced: KenshiFP BUY and harness `trade` lose the item (money paid) | fixed (KenshiFP 8A7BC8A8, harness FE2A1AE3), install + retest |
+| STOBE 85 | STOBE | m8 | Bad reputation (broken > kept) in the prompt is ignored by new NPCs | fixer |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
