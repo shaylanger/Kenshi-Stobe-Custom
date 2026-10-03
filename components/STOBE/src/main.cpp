@@ -33,7 +33,7 @@
 #include "PlayerBaseState.h"
 #include "StobeIdentityRename.h"
 #include "StobeChatMode.h"
-#include "TestAutomation.h"
+#include "StobeHarnessBridge.h"
 #include "Utils.h"
 #include "VoiceCapture.h"
 #include "WorldStateRuntime.h"
@@ -13076,11 +13076,9 @@ static bool IsSpeechSystemBusyForMOTD() {
 }
 
 
-// Test inbox: lets tooling submit chat lines as if the player had spoken them.
-// Active only while mods\Stobe\test_inbox.flag exists. Tooling writes
-// test_inbox.txt (one command per line: id<TAB>command<TAB>args...), the DLL
-// consumes and deletes it, and appends id<TAB>ok|error<TAB>detail lines to
-// test_outbox.txt.
+// Test commands (stobe_say, stobe_state, ...): tooling sends them through the
+// Kenshi Automation Harness, which queues them for the player update hook
+// (StobeHarnessBridge.cpp). "say" lines go the same path as push-to-talk.
 static std::string TestInboxLower(const std::string &value) {
   std::string out = value;
   for (size_t i = 0; i < out.size(); ++i)
@@ -13310,37 +13308,6 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
     ok = true;
     return json;
   }
-  if (cmd == "speed") {
-    if (f.size() < 3 || !world)
-      return "usage: speed <0|0.5..50>";
-    float v = (float)atof(f[2].c_str());
-    if (!(v == 0.0f || (v >= 0.5f && v <= 50.0f)))
-      return "usage: speed <0|0.5..50>";
-    float before = 0.0f, after = 0.0f;
-    bool paused = false;
-    try {
-      before = world->getFrameSpeedMultiplier();
-      if (v == 0.0f) {
-        world->userPause(true);
-      } else {
-        world->userPause(false);
-        world->setGameSpeed(v, false);
-        if (world->getFrameSpeedMultiplier() < v - 0.01f ||
-            world->getFrameSpeedMultiplier() > v + 0.01f)
-          world->setFrameSpeedMultiplier(v);
-      }
-      after = world->getFrameSpeedMultiplier();
-      paused = world->isPaused();
-    } catch (...) {
-      return "speed change failed";
-    }
-    Log("TEST_INBOX: speed id=" + f[0] + " requested=" + f[2] +
-        " before=" + ToString(before) + " after=" + ToString(after) +
-        " paused=" + (paused ? "1" : "0"));
-    ok = true;
-    return "speed " + ToString(before) + " -> " + ToString(after) +
-           " paused=" + (paused ? "1" : "0");
-  }
   if (cmd == "give_cats") {
     int amount = f.size() >= 3 ? atoi(f[2].c_str()) : 0;
     if (amount <= 0 || amount > 1000000)
@@ -13428,63 +13395,6 @@ static void UpdateLifelikeInitiativeFlag() {
   Stobe::UI::g_initiativeAllowPlayerListener = true;
   LeaveCriticalSection(&g_stateMutex);
   Log("LIFELIKE_INITIATIVE: flag consumed, initiative turn armed");
-}
-
-static void UpdateTestInbox(GameWorld *world, Character *sel) {
-  static DWORD lastPoll = 0;
-  DWORD now = GetTickCount();
-  if (now - lastPoll < 500)
-    return;
-  lastPoll = now;
-  const std::string dir = GetTestInboxDir();
-  if (GetFileAttributesA((dir + "\\test_inbox.flag").c_str()) ==
-      INVALID_FILE_ATTRIBUTES)
-    return;
-  const std::string inboxPath = dir + "\\test_inbox.txt";
-  std::vector<std::string> lines;
-  {
-    std::ifstream in(inboxPath.c_str());
-    if (!in)
-      return;
-    std::string line;
-    while (std::getline(in, line)) {
-      if (!line.empty() && line[line.size() - 1] == '\r')
-        line.erase(line.size() - 1);
-      if (!line.empty())
-        lines.push_back(line);
-    }
-  }
-  DeleteFileA(inboxPath.c_str());
-  std::ofstream out((dir + "\\test_outbox.txt").c_str(), std::ios::app);
-  for (size_t i = 0; i < lines.size(); ++i) {
-    std::vector<std::string> fields;
-    size_t start = 0;
-    while (true) {
-      size_t tab = lines[i].find('\t', start);
-      fields.push_back(lines[i].substr(start, tab == std::string::npos
-                                                  ? std::string::npos
-                                                  : tab - start));
-      if (tab == std::string::npos)
-        break;
-      start = tab + 1;
-    }
-    bool ok = false;
-    std::string detail;
-    if (fields.size() < 2) {
-      detail = "malformed line";
-    } else {
-      try {
-        detail = RunTestInboxCommand(world, sel, fields, ok);
-      } catch (...) {
-        detail = "exception";
-      }
-    }
-    out << fields[0] << "\t" << (ok ? "ok" : "error") << "\t"
-        << TestInboxOneLine(detail) << "\n";
-    out.flush();
-    if (!ok)
-      Log("TEST_INBOX: error id=" + fields[0] + " " + detail);
-  }
 }
 
 // GetAsyncKeyState sees keys pressed in any window, so typing in another app
@@ -13844,7 +13754,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
   pushToTalkWasDown = pushToTalkDown;
   if (pushToTalkEnabled)
     Stobe::Voice::Update();
-  UpdateTestInbox(worldUi, sel);
+  Stobe::HarnessBridge::Drain(worldUi, sel, &RunTestInboxCommand);
   UpdateLifelikeInitiativeFlag();
 
   // Player Cats and squads for the server (these used to run on the background loop).
@@ -14481,7 +14391,7 @@ __declspec(dllexport) void startPlugin() {
   Log("HOOK_DIAG: AddHook status=" + ToString((int)status) +
       " orig=" + ToString((unsigned int)(uintptr_t)playerUpdate_orig));
   Log("HOOK: PlayerInterface::update installed (UI-only mode).");
-  InstallTestAutomationHooks(); // test-only automation commands (auto_inbox.txt)
+  Stobe::HarnessBridge::Connect(); // test commands via the automation harness, if installed
 
   void *thunkAttackingYou = (void *)GetProcAddress(
       hLib, "?attackingYou@Character@@QEAAXPEAV1@_N1@Z");

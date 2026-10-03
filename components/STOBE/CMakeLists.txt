@@ -96,7 +96,7 @@ add_library(Stobe SHARED
   src/StobeText.cpp
   src/StobeTiming.cpp
   src/StobeEventPolicy.cpp
-  src/TestAutomation.cpp
+  src/StobeHarnessBridge.cpp
   src/main.cpp
   src/SettingsWindow.cpp
   src/Utils.cpp

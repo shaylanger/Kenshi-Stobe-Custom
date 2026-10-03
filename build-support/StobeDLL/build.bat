@@ -16,7 +16,7 @@ if exist "%ROOT%obj" rmdir /s /q "%ROOT%obj"
 if not exist "%ROOT%out" mkdir "%ROOT%out"
 mkdir "%ROOT%obj"
 
-set SOURCES=AudioPlayback AutonomyController AutonomyExecutor AutonomyMonitor AutonomyProtocol AutonomySafetyProbe AutonomySafetyProbePolicy ChatUI ChatUIGlobals ChatBox Interaction Comm PlaythroughSession Context DialogueMenuTts Functions Globals KenshiAiCompat JournalWindow StartingWindow SupportReportLauncher AiNpcInfoWindow KenshiBuildingStatus KenshiRvaCompat KenshiTownIdentity PlayerBaseState StobeIdentityRename StobeChatMode StobeText StobeTiming StobeEventPolicy main TestAutomation SettingsWindow Utils VoiceCapture WelcomeWindow WorldStateRuntime
+set SOURCES=AudioPlayback AutonomyController AutonomyExecutor AutonomyMonitor AutonomyProtocol AutonomySafetyProbe AutonomySafetyProbePolicy ChatUI ChatUIGlobals ChatBox Interaction Comm PlaythroughSession Context DialogueMenuTts Functions Globals KenshiAiCompat JournalWindow StartingWindow SupportReportLauncher AiNpcInfoWindow KenshiBuildingStatus KenshiRvaCompat KenshiTownIdentity PlayerBaseState StobeIdentityRename StobeChatMode StobeText StobeTiming StobeEventPolicy main StobeHarnessBridge SettingsWindow Utils VoiceCapture WelcomeWindow WorldStateRuntime
 
 set CFLAGS=/nologo /c /MD /O2 /Ob2 /GR /EHa /W3 /Zi /DWIN32 /D_WINDOWS /DNDEBUG /DUNICODE /D_UNICODE /DBOOST_ALL_NO_LIB /DBOOST_ERROR_CODE_HEADER_ONLY /DBOOST_SYSTEM_NO_DEPRECATED /DSTOBE_DIAG_PROFILE_NORMAL=1 /DStobe_EXPORTS
 set INCS=/I"%ROOT%compat" /I"%ROOT%src" /I"%ROOT%sdk\Include" /I"%ROOT%sdk\Include\ogre" /I"%ROOT%sdk\Include\mygui" /I"%ROOT%boost"
