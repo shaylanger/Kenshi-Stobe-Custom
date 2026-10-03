@@ -1,0 +1,1927 @@
+diff --git a/data/social_relationship_rules.json b/data/social_relationship_rules.json
+index 4fdd25f..f0afb9f 100644
+--- a/data/social_relationship_rules.json
++++ b/data/social_relationship_rules.json
+@@ -1,5 +1,5 @@
+ {
+- "version": "phase7-v1",
++ "version": "phase8-v1",
+  "ranges": {
+   "aggression": [
+    -15,
+@@ -263,5 +263,9 @@
+  "escape": {
+   "sustain_seconds": 86400,
+   "note": "game seconds a freed slave must be seen alive and free before the escape completes"
++ },
++ "retention": {
++  "keep_seconds": 259200,
++  "note": "raw facts/checkpoints/finished incidents older than this (game seconds) are pruned every 2000 facts; ledger, evidence, beliefs and waiting incidents are kept"
+  }
+ }
+diff --git a/docs/social_relationship_release.md b/docs/social_relationship_release.md
+new file mode 100644
+index 0000000..2d3fe8a
+--- /dev/null
++++ b/docs/social_relationship_release.md
+@@ -0,0 +1,121 @@
++# STOBE stateful relationships (REL): release notes, install manifest, rollback recipe
++
++Status 2026-10-03: phases 1-7 built, merged live in shadow mode; phase 8 offline parts done.
++The authoritative row-by-row state lives in `tests/social_relationship/scenarios.json` (`rel_state`).
++
++## What it does (one paragraph)
++Native Stobe.dll reports objective facts (attacks, harm levels, knockouts with inventory, recoveries, item
++transfers and unmatched gains, enslavement/freeing with owner and liberator, first-aid sessions with measured
++vitals, carry/placement, meals, purchases, witnesses with the game's own sensing). The server turns them into
++directed relationship effects through one locked writer: victim -> attacker only, retaliation free, one harm
++budget per encounter, latent facts for the unconscious resolved on waking with inferred blame, outcome-based
++aid/rescue/food credit with anti-farming budgets, theft only when caught, capped economics, deal outcomes,
++witness echoes for friends who really saw it, a dialogue guard, a recruitment gate, slave escapes.
++
++## Switches
++| Setting | Where | Values | Default |
++|---|---|---|---|
++| Native capture | `RE_Kenshi\mods\Stobe\StobeCustom.ini` `[SocialRelationships] Capture` | 0/1, read at game start | 0 |
++| Mode | `general_settings.SOCIAL_RELATIONSHIP_MODE` | off / shadow / enabled | off |
++| Categories | `general_settings.SOCIAL_CATEGORY_{COMBAT,AID,CARRY,SLAVERY,PROPERTY,ECONOMY,AGREEMENTS,DIALOGUE,WITNESS,RECRUITMENT}` | `false` turns one off | on |
++| Recruitment override | `general_settings.SOCIAL_RECRUITMENT_OVERRIDE` | true = gate lifted | unset |
++| R4 (item 55) | `RELATIONSHIP_FIGHTS_COUNT` | used while REL is not enabled | unchanged |
++| Rules | `data/social_relationship_rules.json` (`version` phase8-v1) | ranges, thresholds, retention | - |
++Tool: `php tools/social_relationship_inspect.php --set-mode off|shadow|enabled` (prints the previous value).
++
++## Install manifest (what a release consists of)
++1. Server: branch `feature/social-phase1` merged into `stobe` (lib/social_*.php, social_event.php,
++   data/social_relationship_*.{json,sql}, tools/social_relationship_inspect.php, small hooks in
++   lib/chat_helper_functions.php, lib/negotiation_engine.php, lib/relationship_manager.php, playthrough policy 5).
++2. DB: `php debug/run_db_updates.php` creates the six `social_*` tables (version 202610020001); playthrough
++   API 9 reinstalls its SQL functions on first use.
++3. Native: Stobe.dll from `/root/STOBE-src` with the REL patches (SocialEventProtocol.{h,cpp} in the build
++   SOURCES list). Record the DLL SHA256 next to the server commit in the run log.
++4. Settings: Capture=1 only when REL should run; mode `shadow` first, `enabled` after the in-game gates.
++5. Verify: `php tools/social_relationship_inspect.php` -> `mode`, `session` (with Playthrough Saves off:
++   `playthrough_saves_off`, campaign `legacy`), counts growing during play; `--check-shadow` exit 0 in shadow.
++
++## Rollback recipe
++- Instant, no data change: `--set-mode off` (server answers `disabled`, nothing is written; R4 and the legacy
++  deal/dialogue paths come back). Then `Capture=0` at the next game start.
++- Remove REL data: `--purge-all --yes` empties the six tables (nothing else reads them).
++- Undo affinity written in enabled mode: relationships follow the loaded save (NEVER_CLEAR_RELATIONSHIP_DATA
++  =false): load a save from before enabling, or restore the relationship history snapshot.
++- Remove the code: revert the merge commit on `stobe` (the tables can stay; they are unmanaged by legacy code)
++  and rebuild Stobe.dll from the source without the REL patches.
++
++## Offline validation (phase 8)
++`STOBE_DB_NAME=stobe_social_phase1_test python3 tests/run_social_phase1.py` (isolated tree): contract/unit/
++property, integration, save/migration, concurrency, combat, unconscious, care, property/agreements, witness/
++dialogue, recruitment/escape, scope (Playthrough Saves off), HTTP, inspect tool, legacy relationship/stance/
++rollback, legacy negotiation (190), mutation proof (20 mutations, each must fail its suite), perf/soak bench,
++native portable + cross-language contract.
++
++Perf/soak bench (6000 facts, 4.2 game days, shadow): p50 5.9 ms, p95 12.2 ms, max 18 ms per fact; retention
++keeps raw facts/checkpoints/finished incidents to a 3-game-day window, never the ledger, beliefs or waiting
++(latent) incidents. In-game m9: up to ~4700 attack facts in one load during Hub raids.
++
++## In-game gates still open (see RUN_ORDER.md and scenarios.json)
++Liberator (probe 20), sleeping witness (SR25), theft caught
++(probe 17), recruitment gate exercised by the LLM, repeat assault with a non-hostile victim, a longer frame-time
++A/B window (Capture 0 vs 1, 10 min), enabled-mode balance review (Shay).
++
++## Final report (draft, 2026-10-03, after run m15)
++
++| Row | Class | State | Open |
++|---|---|---|---|
++| SR01 | offline only / by construction | offline-pass |  |
++| SR02 | pass in game | game-pass (m4, m5, m8, m13: p2-01 Rel Vorn->Shay aggression -15 + KO -21) |  |
++| SR03 | pass in game | game-pass (m4: no row for the retaliating side in p2-02/p2-03) |  |
++| SR04 | pass in game | game-pass (m4: Shay joining to defend Malzin not charged; many defending_ally encounters in Hub fights) | ally = same faction or both player faction |
++| SR05 | pass in game | game-pass (m4, m8, m11: Malzin's KO of Rel Vorn charged as a joined assault, -40) |  |
++| SR06 | partial / rerun pending | partial: offline-pass; game m8: second encounter started by the now-hostile bandit (retaliation, correctly no new row); a clean repeat needs a non-hostile victim | consent/duel and accident signals do not exist |
++| SR07 | blocked / open | offline-pass; game blocked | needs a real limb loss caused in a fight (harness damage/kill have no attacker); probabilistic in game |
++| SR08 | pass in game | game-pass (m15 p3-01 39/0: KO by Shay, Malzin took the Iron Plates, on waking Rel Tam -> Shay theft -9 strongly inferred (total -34), no theft toward the real taker Malzin) |  |
++| SR09 | blocked / open | offline-pass (evidence adapter); game blocked | no in-game source of better evidence until witnesses/sensing (phase 6) |
++| SR10 | pass in game | game-pass (m8 p3-02: KO without attacker, transfer latent, waking = no_known_culprit, nobody blamed) |  |
++| SR11 | pass in game | game-pass (m13 p3-03: Rel Vash -> Rel Grell enslavement -86 on waking although his KO was not seen; owner = shackle owner, probe 7) |  |
++| SR12 | offline only / by construction | offline-pass; game as SR11 (m13 pass) |  |
++| SR13 | partial / rerun pending | offline-pass; needs-game: native now reports caught from the owner's senses (probe 17) | probe 17: owner SensoryData canISeeThisGuy(taker) at the transfer = caught; no steal action driver in the harness |
++| SR14 | blocked / open | offline-pass (petty/ordinary/near-total/starving-food severity, returned property once); game blocked | same blocker as SR13; item value not used (counts/share only) |
++| SR15 | pass in game | game-pass (m5 meaningful +11, m8 lifesaving +29 Rel Ona -> Malzin while unconscious) |  |
++| SR16 | partial / rerun pending | offline-pass; game: second treatment in the same episode not yet observed (p4-01 rerun on auto-home) |  |
++| SR17 | offline only / by construction | offline-pass (own harm / ally harm then healing earns nothing) | staged self-harm by the patient: harness damage has no attacker, so it is unattributed; real self-harm path not testable |
++| SR18 | pass in game | game-pass (m11 +9, m13 +8, m15 +9: Rel Cobb -> Malzin safe_rescue); m15 the placed fact names Malzin (m13 native fix) | carry by the player actor (Shay) is not captured |
++| SR19 | pass in game | game-pass (m11 -31, m13 -33, m15 -31: Rel Kade -> Malzin imprisonment); m15 placed prison names Malzin | ground drop / unknown placer: offline only |
++| SR20 | partial / rerun pending | partial: offline-pass (squad carry/caging/inventory/equipment exempt, critical rescue positive) | in-game squad looting of a conscious mate not scripted |
++| SR21 | partial / rerun pending | partial: m15 transfer + eat captured for Rel Hask, but hunger_before was the stale 2.90 (harness hunger and eat in one sweep) -> not_hungry; scenario now lets a sweep see the lowered hunger first; full recipient not_hungry (m8, m13, m15) |  |
++| SR22 | pass in game | game-pass (m8 fair trade, m11 +3 / m13 +2 gift Rel Gav -> Rel Dona) |  |
++| SR23 | offline only / by construction | offline-pass; game: character seller resolved (m8); shop storage / purse not seen in game |  |
++| SR24 | pass in game | game-pass (m8, m9, m13: Rel Wren -6/-7/-8 of the victim's share) |  |
++| SR25 | blocked / open | open: m15 run invalid: the spawned "Rel Vik" was Outlaw Watch Jamin 4.5 km away (harness #serial matched another character), so Sorn was never beside the fight; native sleeping flag (m13) logs "sleeping" (seen as 0 for awake fighters); setname now must rename the spawned bandit | rerun p6-01a/b; harness #serial ambiguity |
++| SR26 | offline only / by construction | offline-pass (single hop, pre-event affinity, once per witness/incident) |  |
++| SR27 | partial / rerun pending | partial: offline-pass (dialogue band -8..+3, no re-scoring of a mechanical outcome); insult witnesses not implemented | insult heard by a friend: needs dialogue listener data as witnesses |
++| SR28 | partial / rerun pending | unchanged by REL (surrender trigger has no affinity term; REL does not touch negotiation); needs-game for the -85 case | needs a scenario with a stored -85 affinity + low health (scenarios.sh surrender); no REL code involved |
++| SR29 | partial / rerun pending | partial: offline-pass (kept promise, honored coercive deal minimal, betrayal after accepted surrender, legacy delta replaced only when enabled); needs-game | 'dishonest hated enemy can betray' is the negotiation engine's existing rule (unchanged) |
++| SR30 | partial / rerun pending | game inconclusive (m8 p7-01: no JoinParty attempted by the NPC, not recruited) | LLM-dependent |
++| SR31 | offline only / by construction | offline-pass (chat + director configs, dispatch normalizer; autonomy never offers JoinParty; override) | native ACT_JOIN_PARTY fallback paths not audited in game |
++| SR32 | partial / rerun pending | partial: m15 enslaved captured with owner (50 s warm-up fix works); no freed: Malzin did not pick the lock in 80 game s; scenario raises her lockpicking to 100 and waits 180 game s; liberator (probe 20) still unseen | probe 20 liberator |
++| SR33 | offline only / by construction | offline-pass by construction (REL gate only on STOBE's JoinParty path; vanilla recruitment untouched) | vanilla recruit in game not run |
++| SR34 | partial / rerun pending | partial: game-pass for named NPC / Shay / Malzin binding (m4); offline-pass generic name + serial reuse | rename alias and same-name NPCs need game data |
++| SR35 | partial / rerun pending | partial: offline-pass (retry dedup, duplicate KO/limb once, second wake once) | out-of-order delivery beyond the late-event rule not tested |
++| SR36 | offline only / by construction | offline-pass |  |
++| SR37 | partial / rerun pending | partial: offline-pass (restart mid-KO, KO carried across reload) | crash between writes: atomicity covered by the integration test only; carry/escape: later phases |
++| SR38 | pass in game | game-pass (m9 p3-04 39/0: KO, loot latent, reload; plus p1-04 stale checks) |  |
++| SR39 | partial / rerun pending | partial: offline-pass (A/B/A switch, old snapshot upgrade, fresh) | export/import not tested |
++| SR40 | partial / rerun pending | partial: offline-pass + game-pass stale check (m4) | NEVER_CLEAR_RELATIONSHIP_DATA=true not tested |
++| SR41 | pass in game | game-pass (m4: p1-01 Capture=0 inert, p1-02 server off stores nothing, every shadow run check-shadow pass; p2-05 enabled applied) | R4 exclusion in enabled mode: --relation check not run in m4 |
++| SR42 | partial / rerun pending | partial: m15 p3-01 beliefs: the theft belief names only Shay (inferred); Malzin appears only as the injury culprit after Tam woke (real hit) | prompt-side belief injection not implemented (notes only) |
++| SR43 | partial / rerun pending | partial: m13 soaks A (Capture=0) and B (Capture=1, shadow) 30/0, no queue overflow, check-shadow 0; fps window 157 s: avg 54.5 vs 54.8 (99.5%), worst frame 348.5 vs 323.5 ms (107.7%); memory inconclusive (both fell during the run; B fell 137 MB less); a longer measured window is requested | longer A/B window (10 min at speed 1, fps reset after warm-up, A-B-A-B) |
++| SR44 | partial / rerun pending | partial: offline runner resumable steps + manifest; game runner resume is the coordinator's harness | phase 8 game runner not REL-owned |
++
++Totals: blocked / open: 4, offline only / by construction: 8, partial / rerun pending: 18, pass in game: 14
++
++Frame-time gate (m13, 157 s windows): fps 99.5% (gate >= 95%) and worst frame 107.7% (gate <= 110%) pass;
++memory is inconclusive (both runs fell, B 137 MB less; start already 111 MB apart). Final sign-off needs a longer window:
++10 min at speed 1 after a 60 s warm-up, `fps` reset after the warm-up, runs A-B-A-B to see the noise.
++
++Release recommendation: keep `shadow` for normal play until the longer frame-time window and the open rows close;
++`enabled` is ready for a supervised balance session on a fixture copy (combat, KO/theft inference, aid/rescue/cage,
++gifts/trade, witnesses, deals, slavery on waking). Sleeping witnesses (SR25) and escape/liberator (SR32) are still open:
++switch `SOCIAL_CATEGORY_WITNESS=false` (and keep SR32 in mind for slavery) if they are not closed before real enabled play.
+diff --git a/lib/social_event_contract.php b/lib/social_event_contract.php
+index 0396add..84fcde6 100644
+--- a/lib/social_event_contract.php
++++ b/lib/social_event_contract.php
+@@ -11,7 +11,7 @@ final class SocialEventContract
+         'recovered', 'death', 'limb_loss', 'healing', 'slavery', 'imprisonment', 'carry',
+         'looting', 'item_pickup', 'trade', 'eat', 'predation', 'dialogue', 'semantic',
+         // Structured native facts (facts.source = "structured"), explicit roles: actor did it, target had it done.
+-        'attack', 'harm', 'item_transfer', 'enslaved', 'freed', 'aid', 'carry_start', 'carry_end', 'placed', 'eat'];
++        'attack', 'harm', 'item_transfer', 'enslaved', 'freed', 'aid', 'carry_start', 'carry_end', 'placed', 'eat', 'item_gain'];
+ 
+     public static function token(mixed $value, string $field): string
+     {
+diff --git a/lib/social_interpreter.php b/lib/social_interpreter.php
+index 046e6f9..e0bf4db 100644
+--- a/lib/social_interpreter.php
++++ b/lib/social_interpreter.php
+@@ -37,6 +37,7 @@ final class SocialInterpreter
+             'harm' => $this->harm($event, $mode),
+             'recovered' => $this->recovered($event, $mode),
+             'item_transfer' => $this->itemTransfer($event, $mode),
++            'item_gain' => $this->itemGain($event),
+             'enslaved' => $this->enslaved($event, $mode),
+             'freed' => $this->freed($event, $mode),
+             'aid' => $this->aid($event, $mode),
+@@ -239,6 +240,31 @@ final class SocialInterpreter
+         return [$result];
+     }
+ 
++    /**
++     * Run m9: Malzin knocked out a bandit Shay had attacked; the attack hook never reported Malzin's own
++     * attack, so her KO had no encounter. A character who harms someone already being assaulted by an ally
++     * (same faction / both player faction) joined that assault: an encounter with them as initiator.
++     */
++    private function joinedAllyAssault(array $event, array $a, array $b): ?array
++    {
++        $rows = $this->store->fetchRows("SELECT state FROM social_incident WHERE campaign_id=\$1 AND timeline_epoch=\$2 AND state->>'kind'='combat'
++              AND state->>'phase'='active' AND state->>'victim'=\$3 AND state->>'initiator'<>\$4 AND (state->>'last_ts')::bigint >= \$5",
++            [$event['campaign_id'], $event['timeline_epoch'], $b['entity_key'], $a['entity_key'], $event['game_ts'] - $this->idle()]);
++        foreach ($rows as $row) {
++            $state = json_decode($row['state'], true);
++            $initiator = $state['parties'][$state['initiator'] ?? ''] ?? null;
++            if (!$initiator || !self::allies($initiator, $a)) continue;
++            $incident = 'combat:' . $event['sequence'] . ':' . substr(hash('sha256', self::pairKey($a['entity_key'], $b['entity_key'])), 0, 16);
++            $new = ['kind'=>'combat', 'phase'=>'active', 'pair'=>self::pairKey($a['entity_key'], $b['entity_key']),
++                'initiator'=>$a['entity_key'], 'victim'=>$b['entity_key'], 'basis'=>'joined_ally_assault', 'ally'=>$initiator['entity_key'],
++                'severity'=>1.0, 'parties'=>[$a['entity_key']=>$a, $b['entity_key']=>$b], 'opened_ts'=>$event['game_ts'],
++                'last_ts'=>$event['game_ts'], 'pending'=>(object)[]];
++            $this->store->saveIncident($event, $incident, $new);
++            return ['id'=>$incident, 'state'=>$new];
++        }
++        return null;
++    }
++
+     private function harm(array $event, string $mode): array
+     {
+         $b = $event['target']; $a = $event['actor']; $level = strval($event['facts']['level'] ?? '');
+@@ -259,6 +285,7 @@ final class SocialInterpreter
+         }
+         if (!$a || $a['entity_key'] === $b['entity_key']) return [['status'=>'unattributed']];
+         $open = $this->openPair($event, $a['entity_key'], $b['entity_key']);
++        if (!$open) $open = $this->joinedAllyAssault($event, $a, $b);
+         if (!$open) return [['status'=>'no_encounter', 'note'=>'harm without an observed attack between this pair is not scored']];
+         $state = $open['state'];
+         $state['last_ts'] = $event['game_ts'];
+@@ -338,6 +365,28 @@ final class SocialInterpreter
+         return [['status'=>'latent_property', 'incident'=>$ko['id']]];
+     }
+ 
++    /**
++     * Run m8: looting a knocked-out body shows only the looter's gain (the body's loss appears on waking).
++     * The gain is attached to a knocked-out owner whose baseline holds those items, only when exactly one
++     * such owner exists in this load (objective diagnostics; the victim still only infers on waking).
++     */
++    private function itemGain(array $event): array
++    {
++        $taker = $event['actor'];
++        $items = is_array($event['facts']['items'] ?? null) ? $event['facts']['items'] : [];
++        if (!$taker || !$items) return [['status'=>'incomplete_roles']];
++        $rows = $this->store->fetchRows("SELECT incident_id,state FROM social_incident WHERE campaign_id=\$1 AND timeline_epoch=\$2 AND state->>'kind'='ko' AND state->>'phase'='pending_awareness'
++              AND state->'victim'->>'entity_key'<>\$3 AND state->'baseline' ?| ARRAY(SELECT jsonb_array_elements_text(\$4::jsonb))", [$event['campaign_id'], $event['timeline_epoch'], $taker['entity_key'],
++              json_encode(array_map('strval', array_keys($items)))]);
++        if (count($rows) !== 1) return [['status'=>count($rows) ? 'ambiguous_owner' : 'no_ko_owner']];
++        $state = json_decode($rows[0]['state'], true);
++        $state['objective']['transfers'][] = ['taker'=>$taker, 'to_ground'=>false, 'items'=>$items, 'game_ts'=>$event['game_ts'],
++            'sequence'=>$event['sequence'], 'inferred_from'=>'unmatched_gain'];
++        $state['objective']['transfers'] = array_slice($state['objective']['transfers'], -64);
++        $this->store->saveIncident($event, $rows[0]['incident_id'], $state);
++        return [['status'=>'latent_property', 'incident'=>$rows[0]['incident_id'], 'basis'=>'unmatched_gain']];
++    }
++
+     private function enslaved(array $event, string $mode): array
+     {
+         $victim = $event['target']; $owner = $event['actor'];
+@@ -352,6 +401,12 @@ final class SocialInterpreter
+         }
+         // Unconscious (or unknown): discovered on waking.
+         $ko = $this->activeKo($event, $victim)[0] ?? null;
++        if (!$ko) {
++            // Run m11: the knockout itself was not seen (Rel Vash): keep the enslavement for his waking anyway,
++            // in a KO holder without a remembered attacker or baseline (no theft can be inferred from it).
++            $this->openKo($event, null, $victim);
++            $ko = $this->activeKo($event, $victim)[0] ?? null;
++        }
+         if ($ko) {
+             $ko['state']['enslaved_by'] = ['owner'=>$owner, 'incident'=>$incident, 'sequence'=>$event['sequence']];
+             $this->store->saveIncident($event, $ko['id'], $ko['state']);
+diff --git a/lib/social_store.php b/lib/social_store.php
+index f57ce7e..071b300 100644
+--- a/lib/social_store.php
++++ b/lib/social_store.php
+@@ -69,6 +69,8 @@ final class SocialStore
+             if (($event['facts']['source'] ?? null) !== 'structured') return ['status'=>'captured','effects'=>[]];
+             require_once __DIR__ . '/social_interpreter.php';
+             $effects = (new SocialInterpreter($this, $this->rules))->interpret($event, $mode);
++            // Phase 8: bounded tables; every 2000th fact of a native session runs the retention pass.
++            if ($event['sequence'] % 2000 === 0) $this->retention($event['campaign_id'], (int)($this->rules->section('retention')['keep_seconds'] ?? 259200));
+             if (function_exists('stobeLogRelationshipInfo')) {
+                 $brief = array_map(static fn($e) => array_intersect_key($e + (isset($e['effect']) ? ['delta'=>$e['effect']['delta'] ?? null, 'reason'=>$e['effect']['reason'] ?? null] : []),
+                     array_flip(['status','component','observer','culprit','delta','reason','basis','incident'])), $effects);
+@@ -201,6 +203,31 @@ final class SocialStore
+             [$event['campaign_id'],$event['timeline_epoch'],$incident,self::json($state),$event['game_ts'],$event['sequence']]);
+         $this->checkpoint($event, $incident);
+     }
++    /**
++     * Phase 8 retention (SR43): keep the tables bounded during long play. Older than keepSeconds of game
++     * time (default 3 game days) relative to the campaign's newest event: raw inbox rows go, checkpoints of
++     * finished incidents go, finished incidents go. Never removed: effects (the ledger), evidence, beliefs,
++     * and any incident still waiting (pending awareness, a freed slave, an open carry or food gift window).
++     * A rollback to a time before the window restores what is left (documented).
++     */
++    public function retention(string $campaign, int $keepSeconds = 259200): array
++    {
++        return $this->transaction(function () use ($campaign, $keepSeconds): array {
++            $this->lock($campaign);
++            $newest = $this->row('SELECT MAX(game_ts) AS ts FROM social_event_inbox WHERE campaign_id=$1', [$campaign]);
++            if (!isset($newest['ts'])) return ['skipped'=>'empty'];
++            $cutoff = (int)$newest['ts'] - max(3600, $keepSeconds);
++            $open = "state->>'phase' IN ('pending_awareness','freed')"; // a combat/food/carry incident untouched for the whole window is over
++            $out = [];
++            $out['inbox'] = pg_affected_rows($this->query('DELETE FROM social_event_inbox WHERE campaign_id=$1 AND game_ts < $2', [$campaign, $cutoff]));
++            $out['checkpoints'] = pg_affected_rows($this->query("DELETE FROM social_checkpoint c WHERE c.campaign_id=\$1 AND c.game_ts < \$2
++                AND NOT EXISTS (SELECT 1 FROM social_incident i WHERE i.campaign_id=c.campaign_id AND i.timeline_epoch=c.timeline_epoch AND i.incident_id=c.incident_id AND i.$open)", [$campaign, $cutoff]));
++            $out['incidents'] = pg_affected_rows($this->query("DELETE FROM social_incident WHERE campaign_id=\$1 AND game_ts < \$2 AND NOT ($open)", [$campaign, $cutoff]));
++            $out['cutoff'] = $cutoff;
++            return $out;
++        });
++    }
++
+     /** A KO incident carried into a newer load is closed in its old load (no double resolution). */
+     public function retireIncident(string $campaign, string $epoch, string $incident): void
+     {
+diff --git a/tests/run_social_phase1.py b/tests/run_social_phase1.py
+index d95f7ca..18deafe 100644
+--- a/tests/run_social_phase1.py
++++ b/tests/run_social_phase1.py
+@@ -24,7 +24,7 @@ for f in sorted(files):
+ manifest={'started_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'source_hash':hashers.hexdigest(),'server_head':server_head,'native_head':native_head,'database':os.environ['STOBE_DB_NAME'],'deployment':'isolated','game_tests':'not_run','steps':[]}
+ def save():
+     p=OUT/'manifest.tmp';p.write_text(json.dumps(manifest,indent=2));p.replace(OUT/'manifest.json')
+-steps=[('scenario_manifests',[sys.executable,'tests/social_relationship/validate_scenarios.py']),('social_unit',suite('social_relationship_unit')),('social_integration',suite('social_relationship_integration')),('social_save_migration',suite('social_playthrough_regression')),('social_concurrency',suite('social_concurrency_regression')),('social_scope',suite('social_scope_regression')),('social_combat',suite('social_combat_regression')),('social_unconscious',suite('social_unconscious_regression')),('social_care',suite('social_care_regression')),('social_property',suite('social_property_regression')),('social_witness',suite('social_witness_regression')),('social_recruitment',suite('social_recruitment_regression')),('legacy_negotiation',['env','STOBE_NEG_TEST_NO_SIGNAL=1','STOBE_NEG_STOBE_LOG=/tmp/negtest/stobe.log','STOBE_NEG_KFP_LOG=/tmp/negtest/kfp.log','php','tests/negotiation_engine_regression.php']),('mutation_proof',['bash','tests/social_relationship/mutation_proof.sh']),('social_http',[sys.executable,'tests/social_http_regression.py']),('inspect_tool',['php','tools/social_relationship_inspect.php','--events','5','--effects','5']),('legacy_relationship',suite('relationship_system_regression')),('legacy_stance',suite('relationship_stance_regression')),('legacy_rollback',suite('relationship_rollback_regression')),('native_rebuild',['cmake','--build',str(ROOT.parent/'build-tests')]),('native_portable',['ctest','--test-dir',str(ROOT.parent/'build-tests'),'--output-on-failure']),('native_emit',[str(ROOT.parent/'build-tests/social_protocol_tests'),'--emit']),('native_emit_structured',[str(ROOT.parent/'build-tests/social_protocol_tests'),'--emit-structured']),('native_php_contract',suite('social_relationship_unit')+[str(OUT/'native_emit.log'),str(OUT/'native_emit_structured.log')])]
++steps=[('scenario_manifests',[sys.executable,'tests/social_relationship/validate_scenarios.py']),('social_unit',suite('social_relationship_unit')),('social_integration',suite('social_relationship_integration')),('social_save_migration',suite('social_playthrough_regression')),('social_concurrency',suite('social_concurrency_regression')),('social_scope',suite('social_scope_regression')),('social_combat',suite('social_combat_regression')),('social_unconscious',suite('social_unconscious_regression')),('social_care',suite('social_care_regression')),('social_property',suite('social_property_regression')),('social_witness',suite('social_witness_regression')),('social_recruitment',suite('social_recruitment_regression')),('perf_bench',suite('social_perf_bench')),('legacy_negotiation',['env','STOBE_NEG_TEST_NO_SIGNAL=1','STOBE_NEG_STOBE_LOG=/tmp/negtest/stobe.log','STOBE_NEG_KFP_LOG=/tmp/negtest/kfp.log','php','tests/negotiation_engine_regression.php']),('mutation_proof',['bash','tests/social_relationship/mutation_proof.sh']),('social_http',[sys.executable,'tests/social_http_regression.py']),('inspect_tool',['php','tools/social_relationship_inspect.php','--events','5','--effects','5']),('legacy_relationship',suite('relationship_system_regression')),('legacy_stance',suite('relationship_stance_regression')),('legacy_rollback',suite('relationship_rollback_regression')),('native_rebuild',['cmake','--build',str(ROOT.parent/'build-tests')]),('native_portable',['ctest','--test-dir',str(ROOT.parent/'build-tests'),'--output-on-failure']),('native_emit',[str(ROOT.parent/'build-tests/social_protocol_tests'),'--emit']),('native_emit_structured',[str(ROOT.parent/'build-tests/social_protocol_tests'),'--emit-structured']),('native_php_contract',suite('social_relationship_unit')+[str(OUT/'native_emit.log'),str(OUT/'native_emit_structured.log')])]
+ try:
+     for name,cmd in steps:
+         if name.startswith('legacy'):mode_off()
+diff --git a/tests/social_combat_regression.php b/tests/social_combat_regression.php
+index 08e0d0e..afdeb45 100644
+--- a/tests/social_combat_regression.php
++++ b/tests/social_combat_regression.php
+@@ -11,7 +11,7 @@ function sql(string $s, array $p = []): mixed { $r = $GLOBALS['db']->exec($s, $p
+ function affOf(string $a, string $b): int { return (int)(stobeRelationshipEntryFor(getNpcData($a), $b)['aff'] ?? 0); }
+ function rows(string $t): int { return (int)pg_fetch_result(sql("SELECT count(*) FROM $t"), 0, 0); }
+ 
+-const NAMES = ['Combat Alpha'=>[101,'Red'], 'Combat Bravo'=>[102,'Blue'], 'Combat Charlie'=>[103,'Blue'], 'Combat Delta'=>[104,'Green'], 'Combat Echo'=>[105,'Grey'], 'Combat Foxtrot'=>[106,'Yellow']];
++const NAMES = ['Combat Alpha'=>[101,'Red'], 'Combat Bravo'=>[102,'Blue'], 'Combat Charlie'=>[103,'Blue'], 'Combat Delta'=>[104,'Green'], 'Combat Echo'=>[105,'Grey'], 'Combat Foxtrot'=>[106,'Yellow'], 'Combat Golf'=>[107,'Yellow']];
+ foreach (['social_event_inbox','social_incident','social_belief','social_effect','social_evidence','social_checkpoint'] as $t) sql("DELETE FROM $t");
+ foreach (NAMES as $name => [$serial, $faction]) {
+     sql('DELETE FROM core_npc_master_history WHERE name=$1', [$name]); sql('DELETE FROM core_npc WHERE name=$1', [$name]);
+@@ -152,5 +152,13 @@ ok(stobeRelationshipOnAttack('Combat Alpha: Initiated attack (talking to: Combat
+ // SR43: bounded per event: an attack writes at most one incident (+ one checkpoint per touched incident).
+ ok(rows('social_incident') < 40 && rows('social_checkpoint') < 80, 'bounded incident growth');
+ 
++// Run m9: an ally who joins an assault without an observed attack of their own (Malzin's KO) is charged; a stranger is not.
++send(ev('attack', ent('Combat Foxtrot'), ent('Combat Echo'), ['victim_targeting_actor'=>false], 7000));
++send(ev('harm', ent('Combat Golf'), ent('Combat Echo', false), ['level'=>'knockout', 'attribution'=>'defeated_by'], 7010));
++$joined = affOf('Combat Echo', 'Combat Golf');
++ok($joined <= -25 && $joined >= -40, "m9 ally joining the assault charged ($joined)");
++$before = affOf('Combat Echo', 'Combat Delta');
++send(ev('harm', ent('Combat Delta'), ent('Combat Echo', false), ['level'=>'injury', 'attribution'=>'attacker_list'], 7020));
++ok(affOf('Combat Echo', 'Combat Delta') === $before, 'm9 a non-ally without an encounter: not charged');
+ sql("UPDATE general_settings SET value='off' WHERE id='SOCIAL_RELATIONSHIP_MODE'");
+ echo "$n combat regression checks passed\n";
+diff --git a/tests/social_perf_bench.php b/tests/social_perf_bench.php
+new file mode 100644
+index 0000000..4c8d776
+--- /dev/null
++++ b/tests/social_perf_bench.php
+@@ -0,0 +1,64 @@
++<?php
++// REL phase 8: offline soak/performance bench. 6000 structured facts (attacks with witnesses, harm, aid,
++// transfers, KO/wake) over ~4 game days through SocialStore::ingest in shadow mode. Budgets: p95 per fact
++// and bounded tables after the retention passes; latent (pending) incidents and the ledger are never lost.
++declare(strict_types=1);
++if (getenv('STOBE_DB_NAME') !== 'stobe_social_phase1_test') throw new RuntimeException('Dedicated social DB required');
++require_once __DIR__ . '/../lib/bootstrap.php';
++require_once __DIR__ . '/../lib/social_runtime.php';
++$db = $GLOBALS['db']; $n = 0;
++function ok(bool $c, string $what): void { global $n; if (!$c) throw new RuntimeException('FAIL: ' . $what); ++$n; }
++function sql(string $s, array $p = []): mixed { $r = $GLOBALS['db']->exec($s, $p); if ($r === false) throw new RuntimeException('SQL failed: ' . $s); return $r; }
++function count_rows(string $t, string $where = 'true'): int { return (int)pg_fetch_result(sql("SELECT count(*) FROM $t WHERE $where"), 0, 0); }
++foreach (['social_event_inbox','social_incident','social_belief','social_effect','social_evidence','social_checkpoint'] as $t) sql("DELETE FROM $t");
++$people = [];
++for ($i = 0; $i < 40; ++$i) {
++    $name = sprintf('Bench Person %02d', $i); $serial = 900000 + $i;
++    sql('DELETE FROM core_npc WHERE name=$1', [$name]);
++    sql("INSERT INTO core_npc(name,extended_data,metadata) VALUES($1,'{}'::jsonb,jsonb_build_object('storage_id',$2::text))", [$name, 'hand_' . $serial]);
++    $people[] = ['entity_key'=>"bench:1:$serial", 'serial'=>$serial, 'name'=>$name, 'storage_id'=>"hand_$serial", 'faction'=>'F' . ($i % 5), 'in_player_faction'=>false, 'conscious'=>true];
++}
++sql("INSERT INTO general_settings(id,value) VALUES('SOCIAL_RELATIONSHIP_MODE','shadow') ON CONFLICT(id) DO UPDATE SET value=EXCLUDED.value");
++$store = new SocialStore($db);
++mt_srand(42);
++$times = []; $total = 6000; $ts = 100000;
++$scope = ['campaign_id'=>'bench', 'timeline_epoch'=>'1', 'native_session_id'=>'bench'];
++for ($seq = 1; $seq <= $total; ++$seq) {
++    $ts += 60;
++    $a = $people[mt_rand(0, 39)]; $b = $people[mt_rand(0, 39)];
++    if ($a['entity_key'] === $b['entity_key']) $b = $people[($a['serial'] + 1 - 900000) % 40];
++    $roll = mt_rand(1, 100);
++    $wit = [];
++    for ($w = 0; $w < 4; ++$w) { $p = $people[mt_rand(0, 39)]; if ($p['entity_key'] !== $a['entity_key'] && $p['entity_key'] !== $b['entity_key']) $wit[$p['entity_key']] = ['entity'=>$p, 'conscious'=>true, 'perceived'=>(bool)mt_rand(0, 1)]; }
++    if ($roll <= 55) { $kind = 'attack'; $facts = ['victim_targeting_actor'=>(bool)mt_rand(0, 1)]; }
++    elseif ($roll <= 75) { $kind = 'harm'; $facts = ['level'=>['injury','knockout','maiming'][mt_rand(0, 2)], 'attribution'=>'defeated_by', 'inventory'=>['iron plates'=>2, 'bread'=>1], 'inventory_total'=>3]; }
++    elseif ($roll <= 85) { $kind = 'aid'; $facts = ['before_known'=>true, 'before_health'=>-0.4, 'before_blood'=>0.4, 'before_bleed'=>0.2, 'before_wound'=>200.0, 'before_untreated'=>200.0,
++        'after_known'=>true, 'after_health'=>-0.3, 'after_blood'=>0.45, 'after_bleed'=>0.0, 'after_wound'=>190.0, 'after_untreated'=>60.0, 'conscious_before'=>(bool)mt_rand(0, 1)]; }
++    elseif ($roll <= 93) { $kind = 'item_transfer'; $facts = ['items'=>['iron plates'=>1], 'to_ground'=>false, 'food_items'=>[], 'stolen_items'=>[], 'caught'=>null, 'loser_inventory_total'=>5]; $b['conscious'] = (bool)mt_rand(0, 1); }
++    else { $kind = 'recovered'; $facts = ['inventory'=>['bread'=>1], 'inventory_total'=>1]; $a = null; }
++    $e = ['schema_version'=>1, 'event_id'=>"bench:1:$seq", 'incident_id'=>"bench:1:$seq", 'campaign_id'=>'bench', 'timeline_epoch'=>'1', 'native_session_id'=>'bench',
++        'sequence'=>$seq, 'game_ts'=>$ts, 'event_kind'=>$kind, 'origin'=>'gameplay', 'actor'=>$a, 'target'=>$b, 'state_before'=>[], 'state_after'=>[],
++        'witnesses'=>array_values($wit), 'facts'=>['source'=>'structured'] + $facts];
++    $pendingBefore = $seq % 2000 === 0 ? count_rows('social_incident', "state->>'phase'='pending_awareness'") : null;
++    $t0 = hrtime(true);
++    $r = $store->ingest($e, $scope, 'shadow');
++    $times[] = (hrtime(true) - $t0) / 1e6;
++    if ($pendingBefore !== null) ok(count_rows('social_incident', "state->>'phase'='pending_awareness'") >= $pendingBefore - 1, "retention keeps latent incidents (seq $seq)");
++    if (($r['status'] ?? '') !== 'captured') throw new RuntimeException("FAIL: bench fact $seq " . ($r['status'] ?? '?'));
++}
++sort($times);
++$p = fn(float $q) => round($times[(int)floor($q * (count($times) - 1))], 2);
++$result = ['facts'=>$total, 'game_days'=>round(($ts - 100000) / 86400, 1), 'ms_p50'=>$p(0.5), 'ms_p95'=>$p(0.95), 'ms_max'=>round(end($times), 2),
++    'rows'=>['inbox'=>count_rows('social_event_inbox'), 'incidents'=>count_rows('social_incident'), 'checkpoints'=>count_rows('social_checkpoint'),
++             'effects'=>count_rows('social_effect'), 'beliefs'=>count_rows('social_belief')],
++    'applied_effects'=>count_rows('social_effect', 'applied')];
++echo json_encode($result), "\n";
++ok($result['ms_p95'] < 80, 'p95 per fact under 80 ms (' . $result['ms_p95'] . ')');
++ok($result['rows']['inbox'] < $total, 'retention bounded the raw inbox (' . $result['rows']['inbox'] . ' of ' . $total . ')');
++ok($result['rows']['effects'] > 0 && $result['applied_effects'] === 0, 'shadow ledger kept, nothing applied');
++ok($result['rows']['checkpoints'] < $total * 3, 'checkpoints bounded (' . $result['rows']['checkpoints'] . ')');
++$oldFinished = (int)pg_fetch_result(sql("SELECT count(*) FROM social_incident WHERE campaign_id='bench' AND game_ts < $1 AND state->>'phase' NOT IN ('pending_awareness','freed')", [$ts - 259200 - 2000 * 60]), 0, 0);
++ok($oldFinished === 0, "no finished incident older than the retention window survives ($oldFinished)");
++sql("UPDATE general_settings SET value='off' WHERE id='SOCIAL_RELATIONSHIP_MODE'");
++@file_put_contents(dirname(__DIR__, 2) . '/test-results/perf_bench.json', json_encode($result, JSON_PRETTY_PRINT));
++echo "$n perf/soak checks passed\n";
+diff --git a/tests/social_relationship/ingame/REL-p1-01-capture-off.txt b/tests/social_relationship/ingame/REL-p1-01-capture-off.txt
+index b399903..38f394b 100644
+--- a/tests/social_relationship/ingame/REL-p1-01-capture-off.txt
++++ b/tests/social_relationship/ingame/REL-p1-01-capture-off.txt
+@@ -8,9 +8,9 @@
+ @sleep 8
+ speed 0
+ stobe_ping ~ speaker=Shay
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
+ spawn "Hungry Bandit" Drifters near Shay dist 25 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
+ attack Shay ${BANDIT}
+ speed 1
+ @sleep 10
+diff --git a/tests/social_relationship/ingame/REL-p1-02-capture-on-server-off.txt b/tests/social_relationship/ingame/REL-p1-02-capture-on-server-off.txt
+index 77557db..c9bd6ad 100644
+--- a/tests/social_relationship/ingame/REL-p1-02-capture-on-server-off.txt
++++ b/tests/social_relationship/ingame/REL-p1-02-capture-on-server-off.txt
+@@ -9,12 +9,14 @@
+ @sleep 8
+ speed 0
+ stobe_ping ~ speaker=Shay
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set SHAY_S where ${SHAY} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Shay dist 25 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ attack Shay ${BANDIT}
+ speed 1
+ @sleep 10
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: queued kind=combat seq=\d+ load=\d+ actor=${SHAY} target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: queued kind=combat seq=\d+ load=\d+ actor=${SHAY_S} target=${BANDIT_S}
+ teleport ${BANDIT} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p1-03-shadow-capture.txt b/tests/social_relationship/ingame/REL-p1-03-shadow-capture.txt
+index 11cf3c6..54d461b 100644
+--- a/tests/social_relationship/ingame/REL-p1-03-shadow-capture.txt
++++ b/tests/social_relationship/ingame/REL-p1-03-shadow-capture.txt
+@@ -11,14 +11,16 @@
+ @sleep 8
+ speed 0
+ stobe_ping ~ speaker=Shay
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set SHAY_S where ${SHAY} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Shay dist 25 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ attack Shay ${BANDIT}
+ speed 1
+ @sleep 10
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: queued kind=combat seq=\d+ load=\d+ actor=${SHAY} target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: queued kind=combat seq=\d+ load=\d+ actor=${SHAY_S} target=${BANDIT_S}
+ ko ${BANDIT} 20
+ speed 1
+ @sleep 6
+diff --git a/tests/social_relationship/ingame/REL-p1-04-reload-stale.txt b/tests/social_relationship/ingame/REL-p1-04-reload-stale.txt
+index 5dcb5b5..80aeaf0 100644
+--- a/tests/social_relationship/ingame/REL-p1-04-reload-stale.txt
++++ b/tests/social_relationship/ingame/REL-p1-04-reload-stale.txt
+@@ -8,7 +8,7 @@
+ #   (the reload's playthrough rollback prunes social rows later than the fixture's game time). Optional: grep "SOCIAL_INGRESS rejected" log/stobeserver.log (0 or more, all scope_or_replay_conflict).
+ @set SAVE status ~ save=(\S+)
+ spawn "Hungry Bandit" Drifters near Shay dist 25 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
+ attack Shay ${BANDIT}
+ speed 3
+ @sleep 3
+@@ -17,14 +17,16 @@ load ${SAVE}
+ @sleep 8
+ speed 0
+ stobe_ping ~ speaker=Shay
+-@set SHAY2 where Shay ~ Shay (#\d+)
++@set SHAY2 where Shay ~ Shay (#\d+/\d+)
++@set SHAY2_S where ${SHAY2} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Shay dist 25 count 1 ~ spawned 1/1
+-@set BANDIT2 chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT2 chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT2_S where ${BANDIT2} ~ (#\d+)/\d+
+ attack Shay ${BANDIT2}
+ speed 1
+ @sleep 10
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: queued kind=combat seq=\d+ load=\d+ actor=${SHAY2} target=${BANDIT2}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: queued kind=combat seq=\d+ load=\d+ actor=${SHAY2_S} target=${BANDIT2_S}
+ stobe_say Malzin "Malzin, are you still with me?"
+ speed 1
+ @sleep 25
+diff --git a/tests/social_relationship/ingame/REL-p2-01-player-first-strike.txt b/tests/social_relationship/ingame/REL-p2-01-player-first-strike.txt
+index 7b9f57d..454f0cf 100644
+--- a/tests/social_relationship/ingame/REL-p2-01-player-first-strike.txt
++++ b/tests/social_relationship/ingame/REL-p2-01-player-first-strike.txt
+@@ -11,9 +11,11 @@
+ @sleep 8
+ speed 0
+ stobe_ping ~ speaker=Shay
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set SHAY_S where ${SHAY} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ setname ${BANDIT} "Rel Vorn"
+ stobe_say "Rel Vorn" "Hello there. Who are you?"
+ speed 1
+@@ -27,9 +29,11 @@ attack Shay ${BANDIT}
+ speed 1
+ @sleep 6
+ # run m5: no reliable KO in a fight; force it right after the attack (KO fact: attribution recent_attacker)
++# run m8: a fled bandit 230 m away is out of reach and teleport cannot move a KO'd body: bring him first
++teleport ${BANDIT} Shay dist 4
+ ko ${BANDIT} 60
+ @until 20 where ${BANDIT} ~ KO
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${SHAY} target=${BANDIT}
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=harm seq=\d+ load=\d+ actor=#\d+ target=${BANDIT} facts="level":"knockout","attribution":"(defeated_by|attacker_list|recent_attacker)"
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${SHAY_S} target=${BANDIT_S}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=harm seq=\d+ load=\d+ actor=#\d+ target=${BANDIT_S} witnesses=\d+ facts="level":"knockout","attribution":"(defeated_by|attacker_list|recent_attacker)"
+ teleport ${BANDIT} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p2-02-npc-attacks-squad.txt b/tests/social_relationship/ingame/REL-p2-02-npc-attacks-squad.txt
+index beb926f..21ea445 100644
+--- a/tests/social_relationship/ingame/REL-p2-02-npc-attacks-squad.txt
++++ b/tests/social_relationship/ingame/REL-p2-02-npc-attacks-squad.txt
+@@ -8,10 +8,12 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set SHAY where Shay ~ Shay (#\d+)
+-@set MALZIN where Malzin ~ Malzin (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++@set MALZIN_S where ${MALZIN} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Malzin dist 20 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ setname ${BANDIT} "Rel Kesh"
+ stobe_say "Rel Kesh" "You there, state your business."
+ speed 1
+@@ -23,7 +25,7 @@ speed 1
+ @sleep 10
+ @sleep 15
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${BANDIT} target=${MALZIN}
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${MALZIN} target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${BANDIT_S} target=${MALZIN_S}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${MALZIN_S} target=${BANDIT_S}
+ ko ${BANDIT} 30
+ teleport ${BANDIT} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p2-03-npc-vs-npc.txt b/tests/social_relationship/ingame/REL-p2-03-npc-vs-npc.txt
+index 300f793..11dacd7 100644
+--- a/tests/social_relationship/ingame/REL-p2-03-npc-vs-npc.txt
++++ b/tests/social_relationship/ingame/REL-p2-03-npc-vs-npc.txt
+@@ -9,13 +9,16 @@
+ @sleep 8
+ speed 0
+ spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ spawned 1/1
+-@set A chars 60 ~ Hungry Bandit (#\d+)
++@set A chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set A_S where ${A} ~ (#\d+)/\d+
+ setname ${A} "Rel Arn"
+ spawn "Hungry Bandit" Drifters near Shay dist 25 count 1 ~ spawned 1/1
+-@set B chars 60 ~ Hungry Bandit (#\d+)
++@set B chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set B_S where ${B} ~ (#\d+)/\d+
+ setname ${B} "Rel Bek"
+ faction ${B} "Traders Guild"
+-@set B chars 60 ~ Rel Bek (#\d+)
++@set B chars 60 ~ Rel Bek (#\d+/\d+)
++@set B_S where ${B} ~ (#\d+)/\d+
+ stobe_say "Rel Arn" "Arn, a word."
+ speed 1
+ @sleep 15
+@@ -32,7 +35,7 @@ order ${A} UNPROVOKED_FOCUSED_MELEE_ATTACK target ${B}
+ speed 1
+ @sleep 25
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${A} target=${B}
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${B} target=${A}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${A_S} target=${B_S}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${B_S} target=${A_S}
+ ko ${A} 30
+ ko ${B} 30
+diff --git a/tests/social_relationship/ingame/REL-p2-04-repeat-assault.txt b/tests/social_relationship/ingame/REL-p2-04-repeat-assault.txt
+index e23ba40..d3a5f96 100644
+--- a/tests/social_relationship/ingame/REL-p2-04-repeat-assault.txt
++++ b/tests/social_relationship/ingame/REL-p2-04-repeat-assault.txt
+@@ -4,9 +4,12 @@
+ # reset: keep  (run right after REL-p2-01 WITHOUT reloading: it uses p2-01's bandit "Rel Vorn")
+ # needs: as REL-p2-01
+ # note: game_ts is game seconds (run m4), 15 game minutes = 900 > the 600 s encounter window
++# run m8: after the first beating the bandit turned hostile and struck first on return, so the second encounter was HIS
++#   (correct: Shay's blows are retaliation, no new aggression row). Check --interpret-log for the second encounter's basis.
+ # verify: php tools/social_relationship_inspect.php --pair-effects --effects 20 --check-shadow -> "<TNAME>" -> "Shay" lists TWO aggression rows (two combat:<seq> incidents), the second within [-18,-9];
+ #   report the two time lines (game probe 4: game minutes per real second at speed 10, to calibrate encounter_idle_seconds=600).
+-@set BANDIT where "Rel Vorn" ~ (#\d+)
++@set BANDIT where "Rel Vorn" ~ (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ time ~ game_hours=
+ teleport ${BANDIT} Shay dist 15
+ health ${BANDIT} 100
+@@ -21,6 +24,6 @@ attack Shay ${BANDIT}
+ speed 1
+ @sleep 8
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=#\d+ target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=#\d+ target=${BANDIT_S}
+ ko ${BANDIT} 30
+ teleport ${BANDIT} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p2-05-enabled-affinity.txt b/tests/social_relationship/ingame/REL-p2-05-enabled-affinity.txt
+index f3f8036..759ca78 100644
+--- a/tests/social_relationship/ingame/REL-p2-05-enabled-affinity.txt
++++ b/tests/social_relationship/ingame/REL-p2-05-enabled-affinity.txt
+@@ -8,9 +8,11 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set MALZIN where Malzin ~ Malzin (#\d+)
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++@set MALZIN_S where ${MALZIN} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Malzin dist 20 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ setname ${BANDIT} "Rel Dov"
+ stobe_say "Rel Dov" "Dov, stay where you are."
+ speed 1
+@@ -21,5 +23,5 @@ attack Malzin ${BANDIT}
+ speed 1
+ @until 90 where ${BANDIT} ~ KO
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${MALZIN} target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${MALZIN_S} target=${BANDIT_S}
+ teleport ${BANDIT} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p3-01-ko-loot-inferred.txt b/tests/social_relationship/ingame/REL-p3-01-ko-loot-inferred.txt
+index 656168b..8d84bab 100644
+--- a/tests/social_relationship/ingame/REL-p3-01-ko-loot-inferred.txt
++++ b/tests/social_relationship/ingame/REL-p3-01-ko-loot-inferred.txt
+@@ -12,10 +12,13 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set SHAY where Shay ~ Shay (#\d+)
+-@set MALZIN where Malzin ~ Malzin (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set SHAY_S where ${SHAY} ~ (#\d+)/\d+
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++@set MALZIN_S where ${MALZIN} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ setname ${BANDIT} "Rel Tam"
+ give "Rel Tam" "Iron Plates" 2 ~ got 2/2
+ stobe_say "Rel Tam" "Tam, isn't it? Stay a moment."
+@@ -31,19 +34,27 @@ attack Shay ${BANDIT}
+ speed 1
+ @sleep 6
+ # run m5: no reliable KO in a fight; force it right after the attack (KO fact: attribution recent_attacker)
++# run m8: a fled bandit 230 m away is out of reach and teleport cannot move a KO'd body: bring him first
++teleport ${BANDIT} Shay dist 4
+ ko ${BANDIT} 60
+ @until 20 where ${BANDIT} ~ KO
++# run m9: he died because the fight went on over the KO'd body: everyone steps back at once
++teleport Shay ${BANDIT} dist 40
++# run m13: the KO fact comes from the world sweep (every few s, not while paused): let it run before checking
++@sleep 4
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=harm seq=\d+ load=\d+ actor=${SHAY} target=${BANDIT} facts="level":"knockout".*"inventory"
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=harm seq=\d+ load=\d+ actor=${SHAY_S} target=${BANDIT_S} witnesses=\d+ facts="level":"knockout".*"inventory"
+ teleport Malzin ${BANDIT} dist 2
+-order Malzin LOOT_TARGET target ${BANDIT}
++# run m13 (probe 6): LOOT_TARGET on a KO'd NPC moved nothing in 20 s (Malzin's inventory unchanged), so the
++# loot itself is done by the harness (the capture path is the same inventory sweep)
++transfer ${BANDIT} Malzin "Iron Plates"
+ speed 1
+ @sleep 20
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${MALZIN} target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${MALZIN_S} target=${BANDIT_S}
+ inv ${BANDIT}
+ speed 5
+ @until 240 where ${BANDIT} ~ dist=[0-9.]+$
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT_S}
+ teleport ${BANDIT} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p3-02-unknown-ko.txt b/tests/social_relationship/ingame/REL-p3-02-unknown-ko.txt
+index 316b17a..263494e 100644
+--- a/tests/social_relationship/ingame/REL-p3-02-unknown-ko.txt
++++ b/tests/social_relationship/ingame/REL-p3-02-unknown-ko.txt
+@@ -8,9 +8,11 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set MALZIN where Malzin ~ Malzin (#\d+)
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++@set MALZIN_S where ${MALZIN} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ setname ${BANDIT} "Rel Ubo"
+ give "Rel Ubo" "Iron Plates" 2 ~ got 2/2
+ stobe_say "Rel Ubo" "Ubo, hold on a moment."
+@@ -26,9 +28,9 @@ transfer ${BANDIT} Malzin "Iron Plates"
+ speed 1
+ @sleep 6
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${MALZIN} target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${MALZIN_S} target=${BANDIT_S}
+ speed 5
+ @until 240 where ${BANDIT} ~ dist=[0-9.]+$
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT_S}
+ teleport ${BANDIT} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p3-03-enslaved-while-ko.txt b/tests/social_relationship/ingame/REL-p3-03-enslaved-while-ko.txt
+index 57c79c7..3b7545c 100644
+--- a/tests/social_relationship/ingame/REL-p3-03-enslaved-while-ko.txt
++++ b/tests/social_relationship/ingame/REL-p3-03-enslaved-while-ko.txt
+@@ -10,12 +10,14 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
+ spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set BANDIT_S where ${BANDIT} ~ (#\d+)/\d+
+ setname ${BANDIT} "Rel Vash"
+ spawn "Hungry Bandit" Drifters near Shay dist 40 count 1 ~ spawned 1/1
+-@set SLAVER chars 60 ~ Hungry Bandit (#\d+)
++@set SLAVER chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set SLAVER_S where ${SLAVER} ~ (#\d+)/\d+
+ setname ${SLAVER} "Rel Grell"
+ stobe_say "Rel Vash" "Vash, a word."
+ speed 1
+@@ -35,6 +37,8 @@ attack Shay ${BANDIT}
+ speed 1
+ @sleep 6
+ # run m5: no reliable KO in a fight; force it right after the attack (KO fact: attribution recent_attacker)
++# run m8: a fled bandit 230 m away is out of reach and teleport cannot move a KO'd body: bring him first
++teleport ${BANDIT} Shay dist 4
+ ko ${BANDIT} 60
+ @until 20 where ${BANDIT} ~ KO
+ speed 0
+@@ -45,11 +49,11 @@ shackle ${BANDIT} owner ${SLAVER}
+ speed 1
+ @sleep 6
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=enslaved seq=\d+ load=\d+ actor=${SLAVER} target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=enslaved seq=\d+ load=\d+ actor=${SLAVER_S} target=${BANDIT_S}
+ speed 5
+ @until 240 where ${BANDIT} ~ dist=[0-9.]+$
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT_S}
+ unshackle ${BANDIT}
+ teleport ${BANDIT} Shay dist 300
+ teleport ${SLAVER} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p3-04-reload-mid-ko.txt b/tests/social_relationship/ingame/REL-p3-04-reload-mid-ko.txt
+index dbd7c28..6b6e4b8 100644
+--- a/tests/social_relationship/ingame/REL-p3-04-reload-mid-ko.txt
++++ b/tests/social_relationship/ingame/REL-p3-04-reload-mid-ko.txt
+@@ -10,9 +10,9 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
+ spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ spawned 1/1
+-@set BANDIT chars 60 ~ Hungry Bandit (#\d+)
++@set BANDIT chars 60 ~ Hungry Bandit (#\d+/\d+)
+ setname ${BANDIT} "Rel Wex"
+ give "Rel Wex" "Iron Plates" 2 ~ got 2/2
+ stobe_say "Rel Wex" "Wex, a word."
+@@ -28,6 +28,8 @@ attack Shay ${BANDIT}
+ speed 1
+ @sleep 6
+ # run m5: no reliable KO in a fight; force it right after the attack (KO fact: attribution recent_attacker)
++# run m8: a fled bandit 230 m away is out of reach and teleport cannot move a KO'd body: bring him first
++teleport ${BANDIT} Shay dist 4
+ ko ${BANDIT} 60
+ @until 20 where ${BANDIT} ~ KO
+ speed 0
+@@ -41,9 +43,10 @@ load kah-rel-ko
+ @wait-world
+ @sleep 8
+ speed 0
+-@set BANDIT2 where "${TNAME}" ~ (#\d+)
++@set BANDIT2 where "${TNAME}" ~ (#\d+/\d+)
++@set BANDIT2_S where ${BANDIT2} ~ (#\d+)/\d+
+ speed 5
+ @until 300 where ${BANDIT2} ~ dist=[0-9.]+$
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT2}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${BANDIT2_S}
+ teleport ${BANDIT2} Shay dist 300
+diff --git a/tests/social_relationship/ingame/REL-p4-01-first-aid.txt b/tests/social_relationship/ingame/REL-p4-01-first-aid.txt
+index 172045c..c1d03c4 100644
+--- a/tests/social_relationship/ingame/REL-p4-01-first-aid.txt
++++ b/tests/social_relationship/ingame/REL-p4-01-first-aid.txt
+@@ -11,9 +11,11 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set MALZIN where Malzin ~ Malzin (#\d+)
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++@set MALZIN_S where ${MALZIN} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Malzin dist 15 count 1 ~ spawned 1/1
+-@set P chars 60 ~ Hungry Bandit (#\d+)
++@set P chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set P_S where ${P} ~ (#\d+)/\d+
+ setname ${P} "Rel Ona"
+ stobe_say "Rel Ona" "Ona, are you hurt?"
+ speed 1
+@@ -35,7 +37,7 @@ speed 1
+ @sleep 8
+ speed 0
+ hp ${P} ~ worst=
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=aid seq=\d+ load=\d+ actor=${MALZIN} target=${P}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=aid seq=\d+ load=\d+ actor=${MALZIN_S} target=${P_S}
+ teleport Malzin ${P} dist 2
+ order Malzin FIRST_AID_ORDER target ${P} ~ FIRST_AID_ORDER
+ speed 2
+diff --git a/tests/social_relationship/ingame/REL-p4-02-carry-to-bed.txt b/tests/social_relationship/ingame/REL-p4-02-carry-to-bed.txt
+index 812e4de..ebffa79 100644
+--- a/tests/social_relationship/ingame/REL-p4-02-carry-to-bed.txt
++++ b/tests/social_relationship/ingame/REL-p4-02-carry-to-bed.txt
+@@ -13,9 +13,11 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set MALZIN where Malzin ~ Malzin (#\d+)
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++@set MALZIN_S where ${MALZIN} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Malzin dist 15 count 1 ~ spawned 1/1
+-@set C chars 60 ~ Hungry Bandit (#\d+)
++@set C chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set C_S where ${C} ~ (#\d+)/\d+
+ setname ${C} "Rel Cobb"
+ stobe_say "Rel Cobb" "Cobb, you look unwell."
+ speed 1
+@@ -27,12 +29,19 @@ speed 1
+ @sleep 4
+ speed 0
+ buildings 200 Bed ~ Bed
+-order Malzin FIND_BED_AND_PUT_IN target ${C}
++# run m10: FIND_BED_AND_PUT_IN did nothing (Malzin stayed, someone else hauled Cobb 218 m); LIFT_PERSON works (p4-03 m10)
++order Malzin LIFT_PERSON target ${C}
++speed 2
++@sleep 10
++speed 0
++where Malzin
++where ${C}
++order Malzin PUT_SOMEONE_IN_BED building "Bed"
+ speed 2
+ @sleep 40
+ speed 0
+ where Malzin
+ where ${C}
+ screenshot rel-p4-02 ~ png
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=carry_start seq=\d+ load=\d+ actor=${MALZIN} target=${C}
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=placed seq=\d+ load=\d+ actor=${MALZIN} target=${C} facts="place":"bed"
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=carry_start seq=\d+ load=\d+ actor=${MALZIN_S} target=${C_S}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=placed seq=\d+ load=\d+ actor=${MALZIN_S} target=${C_S} witnesses=\d+ facts="place":"bed"
+diff --git a/tests/social_relationship/ingame/REL-p4-03-carry-to-cage.txt b/tests/social_relationship/ingame/REL-p4-03-carry-to-cage.txt
+index 08e639b..d96066f 100644
+--- a/tests/social_relationship/ingame/REL-p4-03-carry-to-cage.txt
++++ b/tests/social_relationship/ingame/REL-p4-03-carry-to-cage.txt
+@@ -12,9 +12,11 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set MALZIN where Malzin ~ Malzin (#\d+)
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++@set MALZIN_S where ${MALZIN} ~ (#\d+)/\d+
+ spawn "Hungry Bandit" Drifters near Malzin dist 15 count 1 ~ spawned 1/1
+-@set K chars 60 ~ Hungry Bandit (#\d+)
++@set K chars 60 ~ Hungry Bandit (#\d+/\d+)
++@set K_S where ${K} ~ (#\d+)/\d+
+ setname ${K} "Rel Kade"
+ stobe_say "Rel Kade" "Kade, stop there."
+ speed 1
+@@ -25,7 +27,8 @@ ko ${K} 90
+ speed 1
+ @sleep 4
+ speed 0
+-@set CAGE buildings 400 Cage ~ ([A-Za-z ]*Cage[A-Za-z ]*)
++# run m10: the old regex captured " Prisoner Cage dist"; take the name between "| " and " dist="
++@set CAGE buildings 400 Cage ~ \| ([A-Za-z ]*Cage[A-Za-z ]*?) dist=
+ order Malzin LIFT_PERSON target ${K}
+ speed 2
+ @sleep 10
+@@ -35,13 +38,13 @@ speed 0
+ where Malzin
+ where ${K}
+ screenshot rel-p4-03 ~ png
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=placed seq=\d+ load=\d+ actor=${MALZIN} target=${K} facts="place":"prison"
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=placed seq=\d+ load=\d+ actor=${MALZIN_S} target=${K_S} witnesses=\d+ facts="place":"prison"
+ speed 5
+ @until 300 where ${K} ~ dist=[0-9.]+$
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${K}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=recovered seq=\d+ load=\d+ actor=#0 target=${K_S}
+ spawn "Hungry Bandit" Drifters near Shay dist 15 count 1 ~ spawned 1/1
+-@set U chars 60 ~ Hungry Bandit (#\d+)
++@set U chars 60 ~ Hungry Bandit (#\d+/\d+)
+ setname ${U} "Rel Ulf"
+ @set UNAME where ${U} ~ ^(.+?) #\d+
+ cage ${U}
+diff --git a/tests/social_relationship/ingame/REL-p4-04-food.txt b/tests/social_relationship/ingame/REL-p4-04-food.txt
+index c1e44f0..8d4ed74 100644
+--- a/tests/social_relationship/ingame/REL-p4-04-food.txt
++++ b/tests/social_relationship/ingame/REL-p4-04-food.txt
+@@ -9,12 +9,16 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set SHAY_S where ${SHAY} ~ (#\d+)/\d+
+ give Shay "Dried Meat" 4 ~ 4/4
+ spawn "Hungry Bandit" Drifters near Shay dist 10 count 2 ~ spawned 2/2
+-@set H chars 40 ~ Hungry Bandit (#\d+)
++@set H chars 40 ~ Hungry Bandit (#\d+/\d+)
++@set H_S where ${H} ~ (#\d+)/\d+
++# run m11: Malzin attacked the test Drifters; make their faction friendly to the squad
++relation ${H} 60
+ setname ${H} "Rel Hask"
+-@set F chars 40 ~ Hungry Bandit (#\d+)
++@set F chars 40 ~ Hungry Bandit (#\d+/\d+)
+ setname ${F} "Rel Fenn"
+ stobe_say "Rel Hask" "Hask, you look starved."
+ speed 1
+@@ -30,18 +34,29 @@ speed 0
+ # Hand it over while he is full, then make him hungry and let him eat it.
+ hunger ${H} 290
+ hunger ${F} 280
++teleport ${H} Shay dist 3
++speed 1
++@sleep 4
++speed 0
++inv Shay ~ Dried Meat
+ transfer Shay ${H} "Dried Meat"
+ speed 1
+ @sleep 4
+ speed 0
+ inv ${H} ~ Dried Meat
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${H} target=${SHAY} facts=.*"food_items":\{"
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${H_S} target=${SHAY_S} witnesses=\d+ facts=.*"food_items":\{"
+ # hungry now: he eats it himself within a few seconds (m4/m5 behaviour); that meal is the one scored
+-hunger ${H} 150
++# run m13: at 150 he did not eat within 8 s; hungrier, then the harness makes him eat the gift
++hunger ${H} 120
++# run m15: let the sweep record the lowered hunger first (else hunger_before is the old 2.90 -> not_hungry)
+ speed 1
+-@sleep 8
++@sleep 5
++speed 0
++eat ${H} "Dried Meat"
++speed 1
++@sleep 6
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=eat seq=\d+ load=\d+ actor=${H}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=eat seq=\d+ load=\d+ actor=${H_S}
+ transfer Shay ${F} "Dried Meat"
+ speed 1
+ @sleep 4
+diff --git a/tests/social_relationship/ingame/REL-p5-01-trade.txt b/tests/social_relationship/ingame/REL-p5-01-trade.txt
+index e9076fe..6958269 100644
+--- a/tests/social_relationship/ingame/REL-p5-01-trade.txt
++++ b/tests/social_relationship/ingame/REL-p5-01-trade.txt
+@@ -10,7 +10,8 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set SHAY_S where ${SHAY} ~ (#\d+)/\d+
+ money Shay 5000
+ @set TRADER traders 300 ~ traders within [0-9.]+: (.+?) #\d+
+ shopstock "${TRADER}" ~ .
+@@ -19,4 +20,4 @@ trade Shay "${TRADER}" "${ITEM}"
+ speed 1
+ @sleep 5
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=trade seq=\d+ load=\d+ actor=${SHAY}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=trade seq=\d+ load=\d+ actor=${SHAY_S}
+diff --git a/tests/social_relationship/ingame/REL-p5-02-gift.txt b/tests/social_relationship/ingame/REL-p5-02-gift.txt
+index 7b4d898..9b905c3 100644
+--- a/tests/social_relationship/ingame/REL-p5-02-gift.txt
++++ b/tests/social_relationship/ingame/REL-p5-02-gift.txt
+@@ -9,22 +9,36 @@
+ @wait-world
+ @sleep 8
+ speed 0
+-@set SHAY where Shay ~ Shay (#\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
+ # run m4/m5: Shay's inventory is full, the plate goes where the inventory scan does not look; a fresh NPC gives instead
+ spawn "Hungry Bandit" Drifters near Shay dist 8 count 1 ~ spawned 1/1
+-@set DONOR chars 40 ~ Hungry Bandit (#\d+)
++@set DONOR chars 40 ~ Hungry Bandit (#\d+/\d+)
++@set DONOR_S where ${DONOR} ~ (#\d+)/\d+
++# run m11: Malzin attacked the test Drifters; make their faction friendly to the squad
++relation ${DONOR} 60
+ setname ${DONOR} "Rel Dona"
+ give "Rel Dona" "Iron Plates" 1 ~ got 1/1
++# run m8: the donor was never talked to, so the world sweep never looked at her inventory (her loss unseen)
++stobe_say "Rel Dona" "Dona, wait here."
++speed 1
++@sleep 10
++speed 0
+ spawn "Hungry Bandit" Drifters near Shay dist 10 count 1 ~ spawned 1/1
+-@set G chars 40 ~ Hungry Bandit (#\d+)
++@set G chars 40 ~ Hungry Bandit (#\d+/\d+)
++@set G_S where ${G} ~ (#\d+)/\d+
+ setname ${G} "Rel Gav"
+ stobe_say "Rel Gav" "Gav, I have something for you."
+ speed 1
+ @sleep 20
+ speed 0
+ @set GNAME where ${G} ~ ^(.+?) #\d+
++teleport ${DONOR} Shay dist 3
++teleport ${G} Shay dist 4
++speed 1
++@sleep 4
++speed 0
+ transfer ${DONOR} ${G} "Iron Plates"
+ speed 1
+ @sleep 4
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${G} target=${DONOR}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=item_transfer seq=\d+ load=\d+ actor=${G_S} target=${DONOR_S}
+diff --git a/tests/social_relationship/ingame/REL-p6-01a-witness-setup.txt b/tests/social_relationship/ingame/REL-p6-01a-witness-setup.txt
+index bee7004..79f2719 100644
+--- a/tests/social_relationship/ingame/REL-p6-01a-witness-setup.txt
++++ b/tests/social_relationship/ingame/REL-p6-01a-witness-setup.txt
+@@ -8,14 +8,17 @@
+ @sleep 8
+ speed 0
+ spawn "Hungry Bandit" Drifters near Shay dist 12 count 1 ~ spawned 1/1
+-@set V chars 40 ~ Hungry Bandit (#\d+)
+-setname ${V} "Rel Vik"
++@set V chars 40 ~ Hungry Bandit (#\d+/\d+)
++# run m15: must rename the spawned bandit (a #serial once matched a far NPC)
++setname ${V} "Rel Vik" ~ ^Hungry Bandit -> 
+ spawn "Hungry Bandit" Drifters near Shay dist 16 count 1 ~ spawned 1/1
+-@set W chars 40 ~ Hungry Bandit (#\d+)
+-setname ${W} "Rel Wren"
++@set W chars 40 ~ Hungry Bandit (#\d+/\d+)
++# run m15: must rename the spawned bandit (a #serial once matched a far NPC)
++setname ${W} "Rel Wren" ~ ^Hungry Bandit -> 
+ spawn "Hungry Bandit" Drifters near Shay dist 16 count 1 ~ spawned 1/1
+-@set S chars 40 ~ Hungry Bandit (#\d+)
+-setname ${S} "Rel Sorn"
++@set S chars 40 ~ Hungry Bandit (#\d+/\d+)
++# run m15: must rename the spawned bandit (a #serial once matched a far NPC)
++setname ${S} "Rel Sorn" ~ ^Hungry Bandit -> 
+ stobe_say "Rel Vik" "Vik, hello."
+ speed 1
+ @sleep 12
+diff --git a/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt b/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt
+index 256efcf..67b5236 100644
+--- a/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt
++++ b/tests/social_relationship/ingame/REL-p6-01b-witness-attack.txt
+@@ -7,20 +7,26 @@
+ #   pair_effects: <WNAME> -> Shay has witness_aggression (55-70% of the victim's share, bonded); <SNAME> (asleep) nothing.
+ #   Game probes 18/19: the attack line has witnesses>=1 and the interpret-log shows <WNAME> status shadow; if <SNAME> appears as a
+ #   witness, report whether isUnconcious() is true while sleeping (probe 5).
+-@set V where "Rel Vik" ~ (#\d+)
+-@set W where "Rel Wren" ~ (#\d+)
+-@set S where "Rel Sorn" ~ (#\d+)
+-@set SHAY where Shay ~ Shay (#\d+)
++@set V where "Rel Vik" ~ (#\d+/\d+)
++@set V_S where ${V} ~ (#\d+)/\d+
++@set W where "Rel Wren" ~ (#\d+/\d+)
++@set S where "Rel Sorn" ~ (#\d+/\d+)
++@set SHAY where Shay ~ Shay (#\d+/\d+)
++@set SHAY_S where ${SHAY} ~ (#\d+)/\d+
+ teleport ${W} ${V} dist 8
+ teleport ${S} ${V} dist 8
+ sleep ${S}
++# run m13: 5 s was too short (her task was not SLEEP_ON_FLOOR, not prone, at the attack): give her time to lie down
+ speed 1
+-@sleep 5
++@sleep 15
+ speed 0
++@set SN where "Rel Sorn" ~ #(\d+)/\d+
+ attack Shay ${V}
+ speed 1
+ @sleep 6
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${SHAY} target=${V} witnesses=[1-9]
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=attack seq=\d+ load=\d+ actor=${SHAY_S} target=${V_S} witnesses=[1-9]
++# run m13: the witness entry for Sorn must say she is asleep (StateBroadcastData isSleeping=1, conscious false)
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ "serial":${SN},"name":"Rel Sorn"[^]]*?"conscious":false[^]]*?"sleeping":1
+ teleport ${V} Shay dist 300
+ wake ${S}
+diff --git a/tests/social_relationship/ingame/REL-p7-01-recruit-gate.txt b/tests/social_relationship/ingame/REL-p7-01-recruit-gate.txt
+index 1bc3812..c2ccbf1 100644
+--- a/tests/social_relationship/ingame/REL-p7-01-recruit-gate.txt
++++ b/tests/social_relationship/ingame/REL-p7-01-recruit-gate.txt
+@@ -9,7 +9,7 @@
+ @sleep 8
+ speed 0
+ spawn "Hungry Bandit" Drifters near Shay dist 10 count 1 ~ spawned 1/1
+-@set R chars 40 ~ Hungry Bandit (#\d+)
++@set R chars 40 ~ Hungry Bandit (#\d+/\d+)
+ setname ${R} "Rel Rook"
+ stobe_say "Rel Rook" "Rook, join my squad right now. You're one of us from today."
+ speed 1
+diff --git a/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt b/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt
+index e56e41e..476aa0e 100644
+--- a/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt
++++ b/tests/social_relationship/ingame/REL-p7-02-slave-escape.txt
+@@ -7,27 +7,42 @@
+ #   the escape incident is "freed" (completion needs 24 game hours; optional: speed 50 with the goal watch, then any event with him: slave_escape row)
+ #   Game probe 20: PICK_LOCK_ON_SHACKLES gives the freed line a liberator (stobe.log "structured kind=freed ... liberator").
+ @wait-world
+-@sleep 8
++# run m13: Stobe's world event sweep only starts 45 s (real time) after a load; Xan was shackled before it ran
++# and was "first seen already enslaved"
++@sleep 50
+ speed 0
+-@set MALZIN where Malzin ~ Malzin (#\d+)
+-spawn "Hungry Bandit" Drifters near Malzin dist 6 count 1 ~ spawned 1/1
+-@set X chars 40 ~ Hungry Bandit (#\d+)
+-setname ${X} "Rel Xan"
+-spawn "Hungry Bandit" Drifters near Malzin dist 20 count 1 ~ spawned 1/1
+-@set O chars 40 ~ Hungry Bandit (#\d+)
+-setname ${O} "Rel Ober"
+-stobe_say "Rel Xan" "Xan, hold still."
++@set MALZIN where Malzin ~ Malzin (#\d+/\d+)
++spawn "Hungry Bandit" Drifters near Shay dist 6 count 1 ~ spawned 1/1
++@set X chars 40 ~ Hungry Bandit (#\d+/\d+)
++@set X_S where ${X} ~ (#\d+)/\d+
++# run m11: Malzin attacked the test Drifters; make their faction friendly to the squad
++relation ${X} 60
++setname ${X} "Rel Xan" ~ ^Hungry Bandit -> 
++spawn "Hungry Bandit" Drifters near Shay dist 20 count 1 ~ spawned 1/1
++@set O chars 40 ~ Hungry Bandit (#\d+/\d+)
++@set O_S where ${O} ~ (#\d+)/\d+
++setname ${O} "Rel Ober" ~ ^Hungry Bandit -> 
++# run m15: Stobe renamed him (NAME_ASSIGN) before the chat: talk to his current name
++@set XNAME0 where ${X} ~ ^(.+?) #\d+
++stobe_say "${XNAME0}" "Hello there, hold still."
+ speed 1
+ @sleep 12
+ speed 0
+ @set XNAME where ${X} ~ ^(.+?) #\d+
++# run m9: "first seen already enslaved": let the world sweep see him free first
++teleport Malzin ${X} dist 3
++speed 1
++@sleep 6
++speed 0
+ shackle ${X} owner ${O}
+ speed 1
+ @sleep 5
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=enslaved seq=\d+ load=\d+ actor=${O} target=${X}
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=enslaved seq=\d+ load=\d+ actor=${O_S} target=${X_S}
++# run m15: no freed in 80 game s at her own skill: raise lockpicking and wait longer
++setstat Malzin lockpicking 100
+ order Malzin PICK_LOCK_ON_SHACKLES target ${X}
+ speed 2
+-@sleep 40
++@sleep 90
+ speed 0
+-@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=freed seq=\d+ load=\d+ actor=#\d+ target=${X} witnesses=\d+ facts=.*"liberator"
++@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe.log ~ SOCIAL_CAPTURE: structured kind=freed seq=\d+ load=\d+ actor=#\d+ target=${X_S} witnesses=\d+ facts=.*"liberator"
+diff --git a/tests/social_relationship/ingame/REL-p8-01-soak.txt b/tests/social_relationship/ingame/REL-p8-01-soak.txt
+new file mode 100644
+index 0000000..93a4eda
+--- /dev/null
++++ b/tests/social_relationship/ingame/REL-p8-01-soak.txt
+@@ -0,0 +1,44 @@
++# id: REL-p8-01-soak
++# covers: phase 8 soak + performance gate (SR43): about an hour in the Hub with raids, capture on, shadow mode
++# fixture: Crafting base   (the Hub)
++# reset: fresh
++# needs: run twice on the same build and fixture: A) Capture=0 (baseline), B) Capture=1 + mode shadow. Harness `fps` command
++#   (helper: Ogre::Root::getSingleton().getAutoCreatedWindow() -> getAverageFPS(), getWorstFPS(), getWorstFrameTime() since
++#   the last call, then resetStatistics()); until it exists, the screenshot steps capture RE_Kenshi's on-screen FPS counter.
++# record at each of the 4 checkpoints (after each "speed 0"), for A and B:
++#   1. `fps` output (avg / worst fps, worst frame ms) or the screenshot's FPS number
++#   2. memory: PowerShell (Get-Process kenshi_x64).WorkingSet64 / 1MB
++#   3. B only: php tools/social_relationship_inspect.php | counts (inbox, incident, checkpoint, effect); grep -c "SERIAL_HTTP: queue overflow" stobe.log;
++#      the last "SOCIAL_FOCUS" line; stobe.log size in MB
++#   Pass: no crash/hang (kenshi-ctl health ok); no queue overflow; B avg fps >= 95% of A at the same checkpoint and worst frame ms
++#   <= 110% of A; memory growth B-A < 100 MB; inspect counts flatten once retention runs; --check-shadow exit 0 at the end.
++@wait-world
++@sleep 8
++speed 0
++hunger Shay 280
++hunger Malzin 280
++time ~ game_hours=
++screenshot rel-p8-soak-0 ~ png
++spawn "Hungry Bandit" "Dust Bandits" near Shay dist 120 count 6 ~ spawned
++speed 5
++@wait-game 120 1200
++speed 0
++status ~ phase=world
++screenshot rel-p8-soak-1 ~ png
++hunger Shay 280
++hunger Malzin 280
++spawn "Hungry Bandit" "Dust Bandits" near Shay dist 120 count 6 ~ spawned
++speed 5
++@wait-game 120 1200
++speed 0
++status ~ phase=world
++screenshot rel-p8-soak-2 ~ png
++hunger Shay 280
++hunger Malzin 280
++spawn "Hungry Bandit" "Dust Bandits" near Shay dist 120 count 6 ~ spawned
++speed 5
++@wait-game 120 1200
++speed 0
++time ~ game_hours=
++status ~ phase=world
++screenshot rel-p8-soak-3 ~ png
+diff --git a/tests/social_relationship/scenarios.json b/tests/social_relationship/scenarios.json
+index b7d3d16..17b2ae8 100644
+--- a/tests/social_relationship/scenarios.json
++++ b/tests/social_relationship/scenarios.json
+@@ -66,7 +66,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "game-pass (m4: p2-01 Rel Vorn->Shay -14, p2-02 Malzin->Rel Kesh -14, p2-03 Rel Bek->Rel Arn -15, p2-05 enabled -31 applied)",
++   "rel_state": "game-pass (m4, m5, m8, m13: p2-01 Rel Vorn->Shay aggression -15 + KO -21)",
+    "offline_tests": [
+     "social_combat_regression"
+    ],
+@@ -183,12 +183,11 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "game-pass (m4 p2-05 one budget -31); m5 p2-01 KO had no game attribution (native fallback recent_attacker added)",
++   "rel_state": "game-pass (m4, m8, m11: Malzin's KO of Rel Vorn charged as a joined assault, -40)",
+    "offline_tests": [
+     "social_combat_regression"
+    ],
+    "ingame_scenarios": [
+-    "REL-p2-05-enabled-affinity",
+     "REL-p2-01-player-first-strike"
+    ],
+    "open_blockers": []
+@@ -221,7 +220,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "partial: offline-pass; game: rerun p2-04 chained right after p2-01 without a reload (m5 reloaded in between)",
++   "rel_state": "partial: offline-pass; game m8: second encounter started by the now-hostile bandit (retaliation, correctly no new row); a clean repeat needs a non-hostile victim",
+    "offline_tests": [
+     "social_combat_regression"
+    ],
+@@ -299,16 +298,14 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game rerun needed (m5: bandit still fled; test NPCs fell out of the 16-character world sweep in the crowd; native focus fix + forced KO)",
++   "rel_state": "game-pass (m15 p3-01 39/0: KO by Shay, Malzin took the Iron Plates, on waking Rel Tam -> Shay theft -9 strongly inferred (total -34), no theft toward the real taker Malzin)",
+    "offline_tests": [
+     "social_unconscious_regression"
+    ],
+    "ingame_scenarios": [
+     "REL-p3-01-ko-loot-inferred"
+    ],
+-   "open_blockers": [
+-    "probe 6 LOOT_TARGET"
+-   ]
++   "open_blockers": []
+   },
+   {
+    "id": "SR09",
+@@ -377,7 +374,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game: no blame (m5 p3-02 27/0) but the KO itself was not captured (crowd); rerun",
++   "rel_state": "game-pass (m8 p3-02: KO without attacker, transfer latent, waking = no_known_culprit, nobody blamed)",
+    "offline_tests": [
+     "social_unconscious_regression"
+    ],
+@@ -416,16 +413,14 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game rerun needed (m5: no KO and no enslaved fact: sweep crowd limit; fixed natively)",
++   "rel_state": "game-pass (m13 p3-03: Rel Vash -> Rel Grell enslavement -86 on waking although his KO was not seen; owner = shackle owner, probe 7)",
+    "offline_tests": [
+     "social_unconscious_regression"
+    ],
+    "ingame_scenarios": [
+     "REL-p3-03-enslaved-while-ko"
+    ],
+-   "open_blockers": [
+-    "probe 7"
+-   ]
++   "open_blockers": []
+   },
+   {
+    "id": "SR12",
+@@ -455,7 +450,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game rerun needed (as SR11)",
++   "rel_state": "offline-pass; game as SR11 (m13 pass)",
+    "offline_tests": [
+     "social_unconscious_regression"
+    ],
+@@ -567,16 +562,14 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "game-pass (m5: Malzin -> Rel Ona meaningful_aid +11 while she was unconscious and near death; graded by bandaging)",
++   "rel_state": "game-pass (m5 meaningful +11, m8 lifesaving +29 Rel Ona -> Malzin while unconscious)",
+    "offline_tests": [
+     "social_care_regression"
+    ],
+    "ingame_scenarios": [
+     "REL-p4-01-first-aid"
+    ],
+-   "open_blockers": [
+-    "lifesaving class not reached in game yet (share bandaged < 50%)"
+-   ]
++   "open_blockers": []
+   },
+   {
+    "id": "SR16",
+@@ -683,7 +676,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game blocked",
++   "rel_state": "game-pass (m11 +9, m13 +8, m15 +9: Rel Cobb -> Malzin safe_rescue); m15 the placed fact names Malzin (m13 native fix)",
+    "offline_tests": [
+     "social_care_regression"
+    ],
+@@ -691,8 +684,7 @@
+     "REL-p4-02-carry-to-bed"
+    ],
+    "open_blockers": [
+-    "m5: Hub guards carry KO'd outsiders away (300-1600 m) and Malzin's FIND_BED_AND_PUT_IN did nothing; needs a fixture with a bed and no guards",
+-    "carry by the player actor is not captured"
++    "carry by the player actor (Shay) is not captured"
+    ]
+   },
+   {
+@@ -723,7 +715,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game blocked",
++   "rel_state": "game-pass (m11 -31, m13 -33, m15 -31: Rel Kade -> Malzin imprisonment); m15 placed prison names Malzin",
+    "offline_tests": [
+     "social_care_regression"
+    ],
+@@ -731,7 +723,7 @@
+     "REL-p4-03-carry-to-cage"
+    ],
+    "open_blockers": [
+-    "as SR18 (cage)"
++    "ground drop / unknown placer: offline only"
+    ]
+   },
+   {
+@@ -803,7 +795,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game rerun needed (m5: hungry NPCs eat food on arrival at 120 and 170: hand over while full, then make him hungry)",
++   "rel_state": "partial: m15 transfer + eat captured for Rel Hask, but hunger_before was the stale 2.90 (harness hunger and eat in one sweep) -> not_hungry; scenario now lets a sweep see the lowered hunger first; full recipient not_hungry (m8, m13, m15)",
+    "offline_tests": [
+     "social_care_regression"
+    ],
+@@ -842,7 +834,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game rerun needed (m5 probe 14: seller Keys is a character, paid 146 = value 146, ratio 1.0; native lost both sides: fixed)",
++   "rel_state": "game-pass (m8 fair trade, m11 +3 / m13 +2 gift Rel Gav -> Rel Dona)",
+    "offline_tests": [
+     "social_property_regression"
+    ],
+@@ -850,9 +842,7 @@
+     "REL-p5-01-trade",
+     "REL-p5-02-gift"
+    ],
+-   "open_blockers": [
+-    "gift: Shay's full inventory hides items from the inventory scan (STOBE); scenario now uses an NPC donor"
+-   ]
++   "open_blockers": []
+   },
+   {
+    "id": "SR23",
+@@ -882,7 +872,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; game rerun needed (as SR22)",
++   "rel_state": "offline-pass; game: character seller resolved (m8); shop storage / purse not seen in game",
+    "offline_tests": [
+     "social_property_regression"
+    ],
+@@ -919,17 +909,14 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; needs-game",
++   "rel_state": "game-pass (m8, m9, m13: Rel Wren -6/-7/-8 of the victim's share)",
+    "offline_tests": [
+     "social_witness_regression"
+    ],
+    "ingame_scenarios": [
+-    "REL-p6-01a-witness-setup",
+     "REL-p6-01b-witness-attack"
+    ],
+-   "open_blockers": [
+-    "probe 18: SensoryData canISeeThisGuy/canIHearThisGuy give meaningful witness data"
+-   ]
++   "open_blockers": []
+   },
+   {
+    "id": "SR25",
+@@ -959,7 +946,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; needs-game (sleeping witness)",
++   "rel_state": "open: m15 run invalid: the spawned \"Rel Vik\" was Outlaw Watch Jamin 4.5 km away (harness #serial matched another character), so Sorn was never beside the fight; native sleeping flag (m13) logs \"sleeping\" (seen as 0 for awake fighters); setname now must rename the spawned bandit",
+    "offline_tests": [
+     "social_witness_regression"
+    ],
+@@ -967,7 +954,7 @@
+     "REL-p6-01b-witness-attack"
+    ],
+    "open_blockers": [
+-    "probe 5: isUnconcious while sleeping; occluded witness not scripted"
++    "probe 22"
+    ]
+   },
+   {
+@@ -1149,14 +1136,16 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; needs-game (LLM-dependent)",
++   "rel_state": "game inconclusive (m8 p7-01: no JoinParty attempted by the NPC, not recruited)",
+    "offline_tests": [
+     "social_recruitment_regression"
+    ],
+    "ingame_scenarios": [
+     "REL-p7-01-recruit-gate"
+    ],
+-   "open_blockers": []
++   "open_blockers": [
++    "LLM-dependent"
++   ]
+   },
+   {
+    "id": "SR31",
+@@ -1225,7 +1214,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "offline-pass; needs-game",
++   "rel_state": "partial: m15 enslaved captured with owner (50 s warm-up fix works); no freed: Malzin did not pick the lock in 80 game s; scenario raises her lockpicking to 100 and waits 180 game s; liberator (probe 20) still unseen",
+    "offline_tests": [
+     "social_recruitment_regression"
+    ],
+@@ -1233,8 +1222,7 @@
+     "REL-p7-02-slave-escape"
+    ],
+    "open_blockers": [
+-    "probe 20: liberator from the PICK_LOCK_ON_SHACKLES task subject",
+-    "completion needs a game day of the freed slave being seen"
++    "probe 20 liberator"
+    ]
+   },
+   {
+@@ -1461,7 +1449,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "partial: offline-pass; game-pass stale/reload (m4+m5 p1-04 25/0)",
++   "rel_state": "game-pass (m9 p3-04 39/0: KO, loot latent, reload; plus p1-04 stale checks)",
+    "offline_tests": [
+     "social_relationship_integration",
+     "social_unconscious_regression"
+@@ -1470,9 +1458,7 @@
+     "REL-p1-04-reload-stale",
+     "REL-p3-04-reload-mid-ko"
+    ],
+-   "open_blockers": [
+-    "p3-04 recovered fact missed in m5 (crowd): rerun"
+-   ]
++   "open_blockers": []
+   },
+   {
+    "id": "SR39",
+@@ -1628,7 +1614,7 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "partial: offline-pass (beliefs/notes name only the inferred culprit; witnesses learn only what they saw)",
++   "rel_state": "partial: m15 p3-01 beliefs: the theft belief names only Shay (inferred); Malzin appears only as the injury culprit after Tam woke (real hit)",
+    "offline_tests": [
+     "social_unconscious_regression",
+     "social_witness_regression"
+@@ -1670,14 +1656,17 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "partial: offline-pass; m4 volume: ~1500 inbox rows / 850 checkpoints per load in the Hub (encounter refresh now at most once per game minute)",
++   "rel_state": "partial: m13 soaks A (Capture=0) and B (Capture=1, shadow) 30/0, no queue overflow, check-shadow 0; fps window 157 s: avg 54.5 vs 54.8 (99.5%), worst frame 348.5 vs 323.5 ms (107.7%); memory inconclusive (both fell during the run; B fell 137 MB less); a longer measured window is requested",
+    "offline_tests": [
+     "social_concurrency_regression",
+-    "social_combat_regression"
++    "social_combat_regression",
++    "social_perf_bench"
++   ],
++   "ingame_scenarios": [
++    "REL-p8-01-soak"
+    ],
+-   "ingame_scenarios": [],
+    "open_blockers": [
+-    "retention for the inbox not implemented"
++    "fps source: harness fps command (requested)"
+    ]
+   },
+   {
+@@ -1707,11 +1696,11 @@
+    "timeout_seconds": 120,
+    "cleanup": "restore_paired_fixture",
+    "on_lost_ack": "archive_and_reset_paired_fixture; never blindly repeat mutation",
+-   "rel_state": "not-started (phase 8)",
++   "rel_state": "partial: offline runner resumable steps + manifest; game runner resume is the coordinator's harness",
+    "offline_tests": [],
+    "ingame_scenarios": [],
+    "open_blockers": [
+-    "later phase"
++    "phase 8 game runner not REL-owned"
+    ]
+   }
+  ]
+diff --git a/tests/social_relationship/states_phase3.json b/tests/social_relationship/states_phase3.json
+index cfb6ad6..f4ac2ae 100644
+--- a/tests/social_relationship/states_phase3.json
++++ b/tests/social_relationship/states_phase3.json
+@@ -1,15 +1,13 @@
+ {
+  "SR08": [
+-  "offline-pass; game rerun needed (m5: bandit still fled; test NPCs fell out of the 16-character world sweep in the crowd; native focus fix + forced KO)",
++  "offline-pass; game rerun needed (m8: KO and remembered attacker Shay OK; the loot showed only Malzin's gain: item_gain fix)",
+   [
+    "social_unconscious_regression"
+   ],
+   [
+    "REL-p3-01-ko-loot-inferred"
+   ],
+-  [
+-   "probe 6 LOOT_TARGET"
+-  ]
++  []
+  ],
+  "SR09": [
+   "offline-pass (evidence adapter); game blocked",
+@@ -22,7 +20,7 @@
+   ]
+  ],
+  "SR10": [
+-  "offline-pass; game: no blame (m5 p3-02 27/0) but the KO itself was not captured (crowd); rerun",
++  "game-pass (m8 p3-02: KO without attacker, transfer latent, waking = no_known_culprit, nobody blamed)",
+   [
+    "social_unconscious_regression"
+   ],
+@@ -32,19 +30,17 @@
+   []
+  ],
+  "SR11": [
+-  "offline-pass; game rerun needed (m5: no KO and no enslaved fact: sweep crowd limit; fixed natively)",
++  "partial game: m11 enslaved fact with the owner captured (probe 7 yes: owner = shackle owner); waking charge failed because the KO itself was not seen: server now keeps the enslavement for waking anyway",
+   [
+    "social_unconscious_regression"
+   ],
+   [
+    "REL-p3-03-enslaved-while-ko"
+   ],
+-  [
+-   "probe 7"
+-  ]
++  []
+  ],
+  "SR12": [
+-  "offline-pass; game rerun needed (as SR11)",
++  "offline-pass; game as SR11",
+   [
+    "social_unconscious_regression"
+   ],
+@@ -78,7 +74,7 @@
+   ]
+  ],
+  "SR38": [
+-  "partial: offline-pass; game-pass stale/reload (m4+m5 p1-04 25/0)",
++  "game-pass (m9 p3-04 39/0: KO, loot latent, reload; plus p1-04 stale checks)",
+   [
+    "social_relationship_integration",
+    "social_unconscious_regression"
+@@ -87,9 +83,7 @@
+    "REL-p1-04-reload-stale",
+    "REL-p3-04-reload-mid-ko"
+   ],
+-  [
+-   "p3-04 recovered fact missed in m5 (crowd): rerun"
+-  ]
++  []
+  ],
+  "SR42": [
+   "partial: offline-pass (beliefs/notes name only the inferred culprit; witnesses learn only what they saw)",
+@@ -127,16 +121,14 @@
+   ]
+  ],
+  "SR15": [
+-  "game-pass (m5: Malzin -> Rel Ona meaningful_aid +11 while she was unconscious and near death; graded by bandaging)",
++  "game-pass (m5 meaningful +11, m8 lifesaving +29 Rel Ona -> Malzin while unconscious)",
+   [
+    "social_care_regression"
+   ],
+   [
+    "REL-p4-01-first-aid"
+   ],
+-  [
+-   "lifesaving class not reached in game yet (share bandaged < 50%)"
+-  ]
++  []
+  ],
+  "SR16": [
+   "offline-pass; game: second treatment in the same episode not yet observed (p4-01 rerun on auto-home)",
+@@ -160,7 +152,7 @@
+   ]
+  ],
+  "SR18": [
+-  "offline-pass; game blocked",
++  "game-pass (m11 p4-02: Rel Cobb -> Malzin safe_rescue +9 after LIFT_PERSON + PUT_SOMEONE_IN_BED on the built bed)",
+   [
+    "social_care_regression"
+   ],
+@@ -168,12 +160,11 @@
+    "REL-p4-02-carry-to-bed"
+   ],
+   [
+-   "m5: Hub guards carry KO'd outsiders away (300-1600 m) and Malzin's FIND_BED_AND_PUT_IN did nothing; needs a fixture with a bed and no guards",
+-   "carry by the player actor is not captured"
++   "carry by the player actor (Shay) is not captured"
+   ]
+  ],
+  "SR19": [
+-  "offline-pass; game blocked",
++  "game-pass (m11 p4-03: Rel Kade -> Malzin imprisonment -31 after LIFT_PERSON + PUT_IN_CAGE)",
+   [
+    "social_care_regression"
+   ],
+@@ -181,11 +172,11 @@
+    "REL-p4-03-carry-to-cage"
+   ],
+   [
+-   "as SR18 (cage)"
++   "ground drop / unknown placer: offline only"
+   ]
+  ],
+  "SR21": [
+-  "offline-pass; game rerun needed (m5: hungry NPCs eat food on arrival at 120 and 170: hand over while full, then make him hungry)",
++  "partial: game-pass for the full recipient (m8: food_gift_recorded, eat not_hungry); hungry case rerun (log regex)",
+   [
+    "social_care_regression"
+   ],
+@@ -216,7 +207,7 @@
+   ]
+  ],
+  "SR22": [
+-  "offline-pass; game rerun needed (m5 probe 14: seller Keys is a character, paid 146 = value 146, ratio 1.0; native lost both sides: fixed)",
++  "game-pass (m8 fair trade, m11 gift Rel Gav -> Rel Dona +3)",
+   [
+    "social_property_regression"
+   ],
+@@ -224,12 +215,10 @@
+    "REL-p5-01-trade",
+    "REL-p5-02-gift"
+   ],
+-  [
+-   "gift: Shay's full inventory hides items from the inventory scan (STOBE); scenario now uses an NPC donor"
+-  ]
++  []
+  ],
+  "SR23": [
+-  "offline-pass; game rerun needed (as SR22)",
++  "offline-pass; game: character seller resolved (m8); shop storage / purse not seen in game",
+   [
+    "social_property_regression"
+   ],
+@@ -252,7 +241,7 @@
+   ]
+  ],
+  "SR02": [
+-  "game-pass (m4: p2-01 Rel Vorn->Shay -14, p2-02 Malzin->Rel Kesh -14, p2-03 Rel Bek->Rel Arn -15, p2-05 enabled -31 applied)",
++  "game-pass (m4, m5, m8: p2-01 Rel Vorn->Shay aggression -15 + KO -21)",
+   [
+    "social_combat_regression"
+   ],
+@@ -288,18 +277,17 @@
+   ]
+  ],
+  "SR05": [
+-  "game-pass (m4 p2-05 one budget -31); m5 p2-01 KO had no game attribution (native fallback recent_attacker added)",
++  "game-pass (m4, m8, m11: Malzin's KO of Rel Vorn charged as a joined assault, -40)",
+   [
+    "social_combat_regression"
+   ],
+   [
+-   "REL-p2-05-enabled-affinity",
+    "REL-p2-01-player-first-strike"
+   ],
+   []
+  ],
+  "SR06": [
+-  "partial: offline-pass; game: rerun p2-04 chained right after p2-01 without a reload (m5 reloaded in between)",
++  "partial: offline-pass; game m8: second encounter started by the now-hostile bandit (retaliation, correctly no new row); a clean repeat needs a non-hostile victim",
+   [
+    "social_combat_regression"
+   ],
+@@ -353,31 +341,31 @@
+   ]
+  ],
+  "SR43": [
+-  "partial: offline-pass; m4 volume: ~1500 inbox rows / 850 checkpoints per load in the Hub (encounter refresh now at most once per game minute)",
++  "offline-pass (bench p95 12 ms); m11 soak healthy but quiet (68 facts): soak now spawns raids; Capture=0 vs 1 frame-time gate pending",
+   [
+    "social_concurrency_regression",
+-   "social_combat_regression"
++   "social_combat_regression",
++   "social_perf_bench"
++  ],
++  [
++   "REL-p8-01-soak"
+   ],
+-  [],
+   [
+-   "retention for the inbox not implemented"
++   "fps source: harness fps command (requested)"
+   ]
+  ],
+  "SR24": [
+-  "offline-pass; needs-game",
++  "game-pass (m8, m9: Rel Wren -6/-7 of the victim's -10)",
+   [
+    "social_witness_regression"
+   ],
+   [
+-   "REL-p6-01a-witness-setup",
+    "REL-p6-01b-witness-attack"
+   ],
+-  [
+-   "probe 18: SensoryData canISeeThisGuy/canIHearThisGuy give meaningful witness data"
+-  ]
++  []
+  ],
+  "SR25": [
+-  "offline-pass; needs-game (sleeping witness)",
++  "open: m11 the floor-sleeping witness still counted (-5); witness task/prone now logged (w=...) to decide (possibly woken by the fight)",
+   [
+    "social_witness_regression"
+   ],
+@@ -385,7 +373,7 @@
+    "REL-p6-01b-witness-attack"
+   ],
+   [
+-   "probe 5: isUnconcious while sleeping; occluded witness not scripted"
++   "probe 22"
+   ]
+  ],
+  "SR26": [
+@@ -409,14 +397,16 @@
+   ]
+  ],
+  "SR30": [
+-  "offline-pass; needs-game (LLM-dependent)",
++  "game inconclusive (m8 p7-01: no JoinParty attempted by the NPC, not recruited)",
+   [
+    "social_recruitment_regression"
+   ],
+   [
+    "REL-p7-01-recruit-gate"
+   ],
+-  []
++  [
++   "LLM-dependent"
++  ]
+  ],
+  "SR31": [
+   "offline-pass (chat + director configs, dispatch normalizer; autonomy never offers JoinParty; override)",
+@@ -431,7 +421,7 @@
+   ]
+  ],
+  "SR32": [
+-  "offline-pass; needs-game",
++  "offline-pass; game blocked: m11 Rel Xan first seen already chained (raid facts flooded the focus); native focus now limited to player-side facts",
+   [
+    "social_recruitment_regression"
+   ],
+@@ -439,8 +429,7 @@
+    "REL-p7-02-slave-escape"
+   ],
+   [
+-   "probe 20: liberator from the PICK_LOCK_ON_SHACKLES task subject",
+-   "completion needs a game day of the freed slave being seen"
++   "probe 20 liberator"
+   ]
+  ],
+  "SR33": [
+@@ -452,5 +441,13 @@
+   [
+    "vanilla recruit in game not run"
+   ]
++ ],
++ "SR44": [
++  "partial: offline runner resumable steps + manifest; game runner resume is the coordinator's harness",
++  [],
++  [],
++  [
++   "phase 8 game runner not REL-owned"
++  ]
+  ]
+ }
+\ No newline at end of file
+diff --git a/tests/social_unconscious_regression.php b/tests/social_unconscious_regression.php
+index 0cd6c6f..3010443 100644
+--- a/tests/social_unconscious_regression.php
++++ b/tests/social_unconscious_regression.php
+@@ -17,7 +17,7 @@ const PEOPLE = ['Uncon Attacker'=>[201,'Red',false], 'Uncon Looter'=>[202,'Grey'
+     'Uncon Victim One'=>[211,'Blue',false], 'Uncon Victim Two'=>[212,'Blue',false], 'Uncon Victim Three'=>[213,'Blue',false],
+     'Uncon Victim Four'=>[214,'Blue',false], 'Uncon Victim Five'=>[215,'Blue',false], 'Uncon Victim Six'=>[216,'Blue',false],
+     'Uncon Victim Seven'=>[217,'Blue',false], 'Uncon Victim Eight'=>[218,'Blue',false], 'Uncon Squad Victim'=>[219,'Nameless',true],
+-    'Uncon Squad Mate'=>[220,'Nameless',true], 'Uncon Victim Nine'=>[221,'Blue',false]];
++    'Uncon Squad Mate'=>[220,'Nameless',true], 'Uncon Victim Nine'=>[221,'Blue',false], 'Uncon Victim Ten'=>[222,'Blue',false]];
+ foreach (['social_event_inbox','social_incident','social_belief','social_effect','social_evidence','social_checkpoint'] as $t) sql("DELETE FROM $t");
+ foreach (PEOPLE as $name => [$serial]) {
+     sql('DELETE FROM core_npc_master_history WHERE name=$1', [$name]); sql('DELETE FROM core_npc WHERE name=$1', [$name]);
+@@ -164,5 +164,20 @@ take('Uncon Looter', 'Uncon Victim Four', ['Katana'=>1], 11010);
+ send(ev('harm', null, ent('Uncon Victim Four', false), ['level'=>'death'], 11020));
+ ok(one("SELECT state->>'phase' FROM social_incident WHERE state->>'kind'='ko' AND state->'victim'->>'serial'='214' ORDER BY game_ts DESC LIMIT 1") === 'dead', 'death closes the KO incident');
+ 
++// Run m8: looting a KO'd body shows only the looter's gain; it is tied to the one KO'd owner whose baseline has the items.
++$koAff = koBy('Uncon Attacker', 'Uncon Victim Five', 12000, ['rag shirt'=>1, 'fabrics'=>3]);
++$r = send(ev('item_gain', ent('Uncon Looter'), null, ['items'=>['rag shirt'=>1]], 12010));
++ok(($r['effects'][0]['status'] ?? '') === 'latent_property', 'm8 unmatched gain attached to the KO owner');
++wake('Uncon Victim Five', ['fabrics'=>3], 12100);
++ok(affOf('Uncon Victim Five', 'Uncon Attacker') < $koAff, 'm8 looted (gain only) item blamed on the remembered attacker');
++koBy('Uncon Attacker', 'Uncon Victim Seven', 13000, ['rag shirt'=>1]);
++koBy('Uncon Attacker', 'Uncon Victim Eight', 13100, ['rag shirt'=>1]);
++$r = send(ev('item_gain', ent('Uncon Looter'), null, ['items'=>['rag shirt'=>1]], 13200));
++ok(($r['effects'][0]['status'] ?? '') === 'ambiguous_owner', 'm8 two possible owners: not attributed');
++// Run m11: enslaved while unconscious but the knockout itself was never seen: still learned on waking.
++send(ev('enslaved', ent('Uncon Slaver'), ent('Uncon Victim Ten', false), ['owner_role'=>'owner'], 14000));
++ok(entryOf('Uncon Victim Ten', 'Uncon Slaver') === null, 'm11 not charged while unconscious');
++wake('Uncon Victim Ten', [], 14100);
++ok(affOf('Uncon Victim Ten', 'Uncon Slaver') <= -56, 'm11 enslavement without a seen KO learned on waking');
+ sql("UPDATE general_settings SET value='off' WHERE id='SOCIAL_RELATIONSHIP_MODE'");
+ echo "$n unconscious-perception regression checks passed\n";
+diff --git a/tools/social_relationship_inspect.php b/tools/social_relationship_inspect.php
+index fb7f8e7..65cb0f2 100644
+--- a/tools/social_relationship_inspect.php
++++ b/tools/social_relationship_inspect.php
+@@ -18,6 +18,8 @@
+  *   php tools/social_relationship_inspect.php --incidents 20       combat/ko/slavery incidents (phase, remembered attacker, transfers, enslaver)
+  *   php tools/social_relationship_inspect.php --interpret-log 30    last 30 SOCIAL_INTERPRET lines from log/relationship_worker.log
+  *   php tools/social_relationship_inspect.php --set-relation "Observer" "Target" 91   TEST SETUP: write a stored affinity (fixture copies only)
++ *   php tools/social_relationship_inspect.php --interpret-log 40 --log-filter "Rel Vash"   only log lines mentioning that text
++ *   php tools/social_relationship_inspect.php --retention [campaign]   run the retention pass now (phase 8)
+  *   php tools/social_relationship_inspect.php --set-mode off|shadow|enabled   prints the previous mode (restore with it)
+  *   php tools/social_relationship_inspect.php --purge-all --yes            empties the six social tables (test data only)
+  *
+@@ -61,6 +63,13 @@ if (($i = array_search('--set-relation', $args, true)) !== false) {
+ ";
+     exit($ok ? 0 : 1);
+ }
++if (($i = array_search('--retention', $args, true)) !== false) {
++    // Phase 8: run the retention pass now for one campaign (default: the current scope's campaign).
++    $campaign = strval($args[$i+1] ?? '');
++    if ($campaign === '' || str_starts_with($campaign, '--')) { try { $campaign = stobeSocialScope($db)['campaign_id']; } catch (Throwable $e) { $campaign = 'legacy'; } }
++    echo json_encode(['retention'=>(new SocialStore($db))->retention($campaign), 'campaign'=>$campaign]), "\n";
++    exit(0);
++}
+ if ($has('--purge-all')) {
+     if (!$has('--yes')) { fwrite(STDERR, "--purge-all needs --yes\n"); exit(2); }
+     $before = [];
+@@ -181,6 +190,8 @@ if (($n = $opt('--incidents')) !== null) {
+ if (($n = $opt('--interpret-log')) !== null) {
+     $file = dirname(__DIR__) . '/log/relationship_worker.log';
+     $lines = is_file($file) ? preg_grep('/SOCIAL_INTERPRET/', file($file, FILE_IGNORE_NEW_LINES) ?: []) : [];
++    $filter = $opt('--log-filter');
++    if ($filter !== null && $filter !== '') $lines = array_filter($lines ?: [], fn($l) => stripos($l, $filter) !== false);
+     $out['interpret_log'] = array_values(array_slice($lines ?: [], -max(1, min(500, intval($n)))));
+ }
+ if (($i = array_search('--expect-pair', $args, true)) !== false) {
