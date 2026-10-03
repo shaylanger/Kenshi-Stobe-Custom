@@ -115,6 +115,7 @@
     <ClCompile Include="src\StobeText.cpp" />
     <ClCompile Include="src\StobeTiming.cpp" />
     <ClCompile Include="src\StartingWindow.cpp" />
+    <ClCompile Include="src\SocialEventProtocol.cpp" />
     <ClCompile Include="src\Utils.cpp" />
     <ClCompile Include="src\VoiceCapture.cpp" />
     <ClCompile Include="src\WelcomeWindow.cpp" />

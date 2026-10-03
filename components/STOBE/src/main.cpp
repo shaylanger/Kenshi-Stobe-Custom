@@ -35,6 +35,7 @@
 #include "StobeChatMode.h"
 #include "StobeHarnessBridge.h"
 #include "Utils.h"
+#include "SocialEventProtocol.h"
 #include "VoiceCapture.h"
 #include "WorldStateRuntime.h"
 
@@ -1440,6 +1441,9 @@ struct NpcWorldEventState {
   InventoryEventSnapshot inventory;
   std::map<uintptr_t, float> fleshHealthByPart;
   DWORD lastSeenTick;
+  int useState;                    // REL: Character::inSomething (bed/prison), -1 unknown
+  unsigned int lastCarrierSerial;  // REL: who last put this character down
+  DWORD lastCarryDropTick;
 
   NpcWorldEventState()
       : initialized(false), dead(false), unconscious(false), enslaved(false),
@@ -1453,7 +1457,8 @@ struct NpcWorldEventState {
         currentTask((int)NULL_TASK), currentTaskSubjectSerial(0),
         currentTaskSubjectName(""), constructionAction(0),
         constructionSubjectSerial(0), constructionSubjectName(""),
-        lockpickingSkill(0), lastSpeechLine(""), lastSeenTick(0) {}
+        lockpickingSkill(0), lastSpeechLine(""), lastSeenTick(0), useState(-1),
+        lastCarrierSerial(0), lastCarryDropTick(0) {}
 };
 
 struct CombatParticipantState {
@@ -5074,10 +5079,12 @@ struct CombatAttribution {
   std::string actorFaction;
   std::string weaponName;
   unsigned int actorSerial;
+  Character *actor;   // valid only in the frame it was resolved
+  const char *source; // REL: defeated_by | attacker_list | predation | none
 
   CombatAttribution()
       : actorName("Unknown"), actorFaction("None"), weaponName("Unknown"),
-        actorSerial(0) {}
+        actorSerial(0), actor(nullptr), source("none") {}
 };
 
 static Character *ResolveCharacterFromHandSafe(const hand &h);
@@ -5160,11 +5167,14 @@ static CombatAttribution ResolveCombatAttribution(Character *target) {
 
   Character *attacker = nullptr;
   bool predationAttribution = false;
+  const char *source = "none";
   try {
     attacker = ResolveCharacterFromHandSafe(target->lastGuyWhoDefeatedMe);
   } catch (...) {
     attacker = nullptr;
   }
+  if (attacker)
+    source = "defeated_by";
 
   if (!attacker) {
     lektor<hand> attackers;
@@ -5178,6 +5188,7 @@ static CombatAttribution ResolveCombatAttribution(Character *target) {
         continue;
       }
       attacker = candidate;
+      source = "attacker_list";
       break;
     }
   }
@@ -5186,6 +5197,7 @@ static CombatAttribution ResolveCombatAttribution(Character *target) {
     attacker = ResolvePredationAttackerForVictim(target);
     if (attacker) {
       predationAttribution = true;
+      source = "predation";
     }
   }
 
@@ -5217,7 +5229,149 @@ static CombatAttribution ResolveCombatAttribution(Character *target) {
     out.weaponName = predationAttribution ? "Teeth" : "Unarmed";
   }
   out.actorSerial = ResolveCharacterSerialForEvent(attacker);
+  out.actor = attacker;
+  out.source = source;
   return out;
+}
+
+// REL: one structured entity (serial, name, storage id, faction, player faction, consciousness).
+// Unknown stays unknown (-1 -> null), never false.
+static StobeSocial::EntityInfo SocialEntityFor(Character *c) {
+  StobeSocial::EntityInfo e;
+  if (!c || (uintptr_t)c < 0x1000)
+    return e;
+  e.serial = ResolveCharacterSerialForEvent(c);
+  e.name = ResolveCharacterNameSafe(c);
+  try {
+    e.storageId = GetStorageIDFor(c, e.name, "");
+  } catch (...) {
+    e.storageId.clear();
+  }
+  if (e.storageId == e.name)
+    e.storageId.clear();
+  e.faction = SafeFaction(c);
+  try {
+    Faction *f = c->getFaction();
+    e.inPlayerFaction = (f && (uintptr_t)f >= 0x1000) ? (f->isThePlayer() ? 1 : 0) : -1;
+  } catch (...) {
+    e.inPlayerFaction = -1;
+  }
+  try {
+    e.conscious = c->isDead() ? 0 : (c->isUnconcious() ? 0 : 1);
+  } catch (...) {
+    e.conscious = -1;
+  }
+  return e;
+}
+
+// REL: harm with the attacker as actor and the victim as target (attribution source included so
+// the server can refuse weak guesses). Emitted only from the polling path: one fact per transition.
+static void SocialEmitHarm(Character *victim, const CombatAttribution &attribution,
+                           const char *level, const std::string &extraFacts) {
+  if (!SocialCaptureEnabled() || !victim || (uintptr_t)victim < 0x1000)
+    return;
+  StobeSocial::EntityInfo target = SocialEntityFor(victim);
+  StobeSocial::EntityInfo actor;
+  bool hasActor = attribution.actor && attribution.actor != victim;
+  if (hasActor)
+    actor = SocialEntityFor(attribution.actor);
+  std::string facts = "\"level\":" + StobeSocial::JsonString(level) +
+                      ",\"attribution\":" + StobeSocial::JsonString(hasActor ? attribution.source : "none");
+  if (!extraFacts.empty())
+    facts += "," + extraFacts;
+  SocialPostStructured("harm", hasActor ? &actor : nullptr, &target, facts);
+}
+
+// REL phase 4: vitals for aid/carry facts. worst = lowest flesh/max over body parts (can go below 0),
+// blood = blood/max, bleed = current bleed rate (game units). Unknown -> false.
+static bool SocialVitals(Character *c, float &worst, float &blood, float &bleed) {
+  worst = 1.0f; blood = 1.0f; bleed = 0.0f;
+  if (!c || (uintptr_t)c < 0x1000)
+    return false;
+  try {
+    MedicalSystem *med = c->getMedical();
+    if (!med || (uintptr_t)med < 0x1000)
+      return false;
+    bool any = false;
+    for (uint32_t i = 0; i < med->anatomy.size(); ++i) {
+      MedicalSystem::HealthPartStatus *part = med->anatomy[i];
+      if (!part || (uintptr_t)part < 0x1000)
+        continue;
+      float maxHealth = part->maxHealth();
+      if (maxHealth <= 0.0f)
+        continue;
+      float ratio = part->flesh / maxHealth;
+      if (!any || ratio < worst)
+        worst = ratio;
+      any = true;
+    }
+    float maxBlood = med->getMaxBlood();
+    blood = maxBlood > 0.0f ? med->blood / maxBlood : 1.0f;
+    bleed = med->currentBleedRate;
+    return any;
+  } catch (...) {
+    return false;
+  }
+}
+
+static std::string SocialVitalsFacts(const char *prefix, Character *c) {
+  float worst, blood, bleed;
+  if (!SocialVitals(c, worst, blood, bleed))
+    return std::string("\"") + prefix + "known\":false";
+  char buf[200];
+  sprintf_s(buf, sizeof(buf), "\"%sknown\":true,\"%shealth\":%.3f,\"%sblood\":%.3f,\"%sbleed\":%.4f",
+            prefix, prefix, worst, prefix, blood, prefix, bleed);
+  return buf;
+}
+
+// REL phase 4: a first-aid session per (provider, recipient). The hook fires every treatment frame;
+// the session is closed by the world sweep once no treatment happened for 4 s, and one 'aid' fact
+// with before/after vitals is sent (provider credited once per session, not per tick).
+struct SocialAidSession {
+  unsigned int provider, recipient, supplier;
+  std::string item;
+  DWORD startTick, lastTick;
+  float worst, blood, bleed;
+  bool known;
+  int conscious;
+};
+static std::map<unsigned long long, SocialAidSession> g_socialAidSessions;
+
+static void SocialNoteFirstAid(Character *provider, Character *recipient, Character *supplier,
+                               const std::string &item) {
+  if (!SocialCaptureEnabled() || !provider || !recipient)
+    return;
+  unsigned int ps = ResolveCharacterSerialForEvent(provider), rs = ResolveCharacterSerialForEvent(recipient);
+  if (!ps || !rs)
+    return;
+  unsigned long long key = ((unsigned long long)ps << 32) | rs;
+  DWORD now = GetTickCount();
+  EnterCriticalSection(&g_eventMutex);
+  std::map<unsigned long long, SocialAidSession>::iterator it = g_socialAidSessions.find(key);
+  if (it == g_socialAidSessions.end() && g_socialAidSessions.size() < 64) {
+    SocialAidSession s;
+    s.provider = ps; s.recipient = rs; s.supplier = ResolveCharacterSerialForEvent(supplier);
+    s.item = item; s.startTick = now; s.lastTick = now;
+    s.known = SocialVitals(recipient, s.worst, s.blood, s.bleed);
+    try {
+      s.conscious = recipient->isDead() ? 0 : (recipient->isUnconcious() ? 0 : 1);
+    } catch (...) {
+      s.conscious = -1;
+    }
+    g_socialAidSessions[key] = s;
+  } else if (it != g_socialAidSessions.end()) {
+    it->second.lastTick = now;
+  }
+  LeaveCriticalSection(&g_eventMutex);
+}
+
+// REL phase 3: inventory baseline (KO) / current inventory (recovered) as item key -> count, plus cats.
+static std::string SocialInventoryFacts(const InventoryEventSnapshot *inv, int money) {
+  if (!inv)
+    return "";
+  return "\"inventory\":" + StobeSocial::JsonCountMap(inv->countsByKey, 64) +
+         ",\"inventory_total\":" + ToString(inv->totalCount) +
+         ",\"money\":" + (money >= 0 ? ToString(money) : std::string("null"));
 }
 
 static bool IsLimbLostState(int limbState) {
@@ -5383,6 +5537,7 @@ static void EmitMajorDamageEvent(Character *victim) {
                knownAttacker ? attribution.actorFaction : "None", message,
                ResolveCharacterSerialForEvent(victim),
                knownAttacker ? attribution.actorSerial : 0);
+  SocialEmitHarm(victim, attribution, "injury", "");
 }
 
 static bool ResolveNpcHungerMetrics(Character *npc, float &hungerOut,
@@ -5658,6 +5813,7 @@ static void EmitLimbLossEvent(Character *victim, const std::string &limbLabel) {
   LogGameEvent("limb_loss", attribution.actorName, attribution.actorFaction,
                victimName, victimFaction, message, attribution.actorSerial,
                ResolveCharacterSerialForEvent(victim));
+  SocialEmitHarm(victim, attribution, "maiming", "\"limb\":" + StobeSocial::JsonString(limbLabel));
 }
 
 static std::string EnsureLeadingArticle(const std::string &rawValue) {
@@ -5676,7 +5832,8 @@ static std::string EnsureLeadingArticle(const std::string &rawValue) {
   return std::string(vowel ? "an " : "a ") + value;
 }
 
-static void EmitKnockoutEvent(Character *victim) {
+static void EmitKnockoutEvent(Character *victim, const InventoryEventSnapshot *inventory = nullptr,
+                              int money = -1) {
   CombatAttribution attribution = ResolveCombatAttribution(victim);
   std::string victimName = ResolveCharacterNameSafe(victim);
   std::string victimFaction = SafeFaction(victim);
@@ -5700,14 +5857,20 @@ static void EmitKnockoutEvent(Character *victim) {
   }
   LogGameEvent("knockout", victimName, victimFaction, "None", "None", message,
                ResolveCharacterSerialForEvent(victim), 0);
+  SocialEmitHarm(victim, attribution, "knockout", SocialInventoryFacts(inventory, money));
 }
 
-static void EmitRecoveredEvent(Character *victim) {
+static void EmitRecoveredEvent(Character *victim, const InventoryEventSnapshot *inventory = nullptr,
+                               int money = -1) {
   std::string victimName = ResolveCharacterNameSafe(victim);
   std::string victimFaction = SafeFaction(victim);
   LogGameEvent("recovered", victimName, victimFaction, "None", "None",
                "regained consciousness",
                ResolveCharacterSerialForEvent(victim), 0);
+  if (SocialCaptureEnabled()) {
+    StobeSocial::EntityInfo target = SocialEntityFor(victim);
+    SocialPostStructured("recovered", nullptr, &target, SocialInventoryFacts(inventory, money));
+  }
 }
 
 static void EmitDeathEvent(Character *victim) {
@@ -5715,6 +5878,8 @@ static void EmitDeathEvent(Character *victim) {
   std::string victimFaction = SafeFaction(victim);
   LogGameEvent("death", victimName, victimFaction, "None", "None", "has died",
                ResolveCharacterSerialForEvent(victim), 0);
+  if (SocialCaptureEnabled())
+    SocialEmitHarm(victim, ResolveCombatAttribution(victim), "death", "");
 }
 
 static void EmitSlaveryEvent(Character *victim, bool enslavedNow) {
@@ -5742,6 +5907,15 @@ static void EmitSlaveryEvent(Character *victim, bool enslavedNow) {
   LogGameEvent("slavery", victimName, victimFaction, "None", "None", message,
                ResolveCharacterSerialForEvent(victim),
                ResolveCharacterSerialForEvent(owner));
+  if (SocialCaptureEnabled()) {
+    // REL phase 3: confirmed state after the change (polling), owner as the actor; unknown owner = null.
+    StobeSocial::EntityInfo target = SocialEntityFor(victim);
+    StobeSocial::EntityInfo actor;
+    if (owner && owner != victim)
+      actor = SocialEntityFor(owner);
+    SocialPostStructured(enslavedNow ? "enslaved" : "freed", (owner && owner != victim) ? &actor : nullptr, &target,
+                         "\"owner_role\":\"owner\"");
+  }
 }
 
 static void EmitLockpickedEvent(Character *npc, int previousSkill,
@@ -5973,7 +6147,8 @@ static std::map<std::string, int> DetectFoodConsumptionLossByKey(
 static void EmitEatEvent(Character *npc,
                          const InventoryEventSnapshot &beforeSnapshot,
                          const InventoryEventSnapshot &afterSnapshot,
-                         const std::map<std::string, int> &consumedByKey) {
+                         const std::map<std::string, int> &consumedByKey,
+                         float hungerBefore = -1.0f, float hungerAfter = -1.0f) {
   if (consumedByKey.empty()) {
     return;
   }
@@ -5989,6 +6164,13 @@ static void EmitEatEvent(Character *npc,
   std::string message = "ate " + itemsText;
   LogGameEvent("eat", actorName, actorFaction, "None", "None", message,
                ResolveCharacterSerialForEvent(npc), 0);
+  if (SocialCaptureEnabled()) {
+    // REL phase 4: who ate what, with fullness before/after (native 0..3; UI x100).
+    StobeSocial::EntityInfo a = SocialEntityFor(npc);
+    char hunger[96];
+    sprintf_s(hunger, sizeof(hunger), "\"hunger_before\":%.3f,\"hunger_after\":%.3f", hungerBefore, hungerAfter);
+    SocialPostStructured("eat", &a, nullptr, "\"items\":" + StobeSocial::JsonCountMap(consumedByKey, 32) + "," + hunger);
+  }
 }
 
 static void ComputeInventoryDeltaByKey(
@@ -6616,6 +6798,58 @@ static void EmitInventoryTransferEventsFromDeltas(
                                        toName);
           LogGameEvent("trade", fromName, fromFaction, toName, toFaction,
                        message, agg.fromSerial, agg.toSerial);
+          if (SocialCaptureEnabled()) {
+            // REL phase 3: objective item movement (actor = taker, target = loser). The server keeps it
+            // as diagnostic truth while the loser is unconscious; it never becomes the victim's belief.
+            Character *fromChar = ResolveCharacterBySerialForInventoryEvent(agg.fromSerial);
+            Character *toChar = isGroundDrop ? nullptr : ResolveCharacterBySerialForInventoryEvent(agg.toSerial);
+            StobeSocial::EntityInfo loser = SocialEntityFor(fromChar), taker = SocialEntityFor(toChar);
+            if (!fromChar) {
+              loser.serial = agg.fromSerial;
+              loser.name = fromName;
+            }
+            if (!isGroundDrop && !toChar) {
+              taker.serial = agg.toSerial;
+              taker.name = toName;
+            }
+            std::map<std::string, int> food, stolen;
+            std::string recipientHunger = "null", loserHunger = "null";
+            int loserTotal = -1;
+            std::map<unsigned int, NpcWorldEventState>::const_iterator from =
+                g_npcWorldEventStateBySerial.find(agg.fromSerial);
+            if (from != g_npcWorldEventStateBySerial.end()) {
+              loserTotal = from->second.inventory.totalCount;
+              if (from->second.hasHunger) {
+                char h[32];
+                sprintf_s(h, sizeof(h), "%.3f", from->second.hunger);
+                loserHunger = h;
+              }
+            }
+            std::map<unsigned int, NpcWorldEventState>::const_iterator to =
+                g_npcWorldEventStateBySerial.find(agg.toSerial);
+            if (!isGroundDrop && to != g_npcWorldEventStateBySerial.end()) {
+              for (std::map<std::string, int>::const_iterator q = agg.qtyByKey.begin(); q != agg.qtyByKey.end(); ++q) {
+                if (to->second.inventory.foodByKey.count(q->first))
+                  food[q->first] = q->second;
+                if (to->second.inventory.stolenByKey.count(q->first))
+                  stolen[q->first] = q->second;
+              }
+              if (to->second.hasHunger) {
+                char h[32];
+                sprintf_s(h, sizeof(h), "%.3f", to->second.hunger);
+                recipientHunger = h;
+              }
+            }
+            SocialPostStructured("item_transfer", isGroundDrop ? nullptr : &taker, &loser,
+                                 "\"items\":" + StobeSocial::JsonCountMap(agg.qtyByKey, 64) +
+                                     ",\"to_ground\":" + std::string(isGroundDrop ? "true" : "false") +
+                                     ",\"food_items\":" + StobeSocial::JsonCountMap(food, 64) +
+                                     ",\"recipient_hunger\":" + recipientHunger +
+                                     ",\"stolen_items\":" + StobeSocial::JsonCountMap(stolen, 64) +
+                                     ",\"caught\":null,\"loser_inventory_total\":" +
+                                     (loserTotal >= 0 ? ToString(loserTotal + 0) : std::string("null")) +
+                                     ",\"loser_hunger\":" + loserHunger);
+          }
         }
       };
   emitAggregations(aggregatedByPair);
@@ -6642,6 +6876,10 @@ static void EmitCarryPickupEvent(Character *carrier, unsigned int targetSerial,
                message, ResolveCharacterSerialForEvent(carrier),
                targetSerial != 0 ? targetSerial
                                  : ResolveCharacterSerialForEvent(target));
+  if (SocialCaptureEnabled() && target) {
+    StobeSocial::EntityInfo a = SocialEntityFor(carrier), t = SocialEntityFor(target);
+    SocialPostStructured("carry_start", &a, &t, SocialVitalsFacts("", target));
+  }
 }
 
 static void EmitCarryDropEvent(Character *carrier, unsigned int targetSerial,
@@ -6660,6 +6898,63 @@ static void EmitCarryDropEvent(Character *carrier, unsigned int targetSerial,
                message, ResolveCharacterSerialForEvent(carrier),
                targetSerial != 0 ? targetSerial
                                  : ResolveCharacterSerialForEvent(target));
+  unsigned int droppedSerial = targetSerial != 0 ? targetSerial : ResolveCharacterSerialForEvent(target);
+  if (droppedSerial != 0) {
+    NpcWorldEventState &dropped = g_npcWorldEventStateBySerial[droppedSerial];
+    dropped.lastCarrierSerial = ResolveCharacterSerialForEvent(carrier);
+    dropped.lastCarryDropTick = GetTickCount();
+  }
+  if (SocialCaptureEnabled() && target) {
+    StobeSocial::EntityInfo a = SocialEntityFor(carrier), t = SocialEntityFor(target);
+    int place = -1;
+    bool chained = false, dead = false;
+    try {
+      place = (int)target->inSomething;
+      chained = target->isChainedMode();
+      dead = target->isDead();
+    } catch (...) {
+    }
+    SocialPostStructured("carry_end", &a, &t,
+                         "\"in_something\":" + ToString(place) + ",\"chained\":" + (chained ? "true" : "false") +
+                             ",\"dead\":" + (dead ? "true" : "false") + "," + SocialVitalsFacts("", target));
+  }
+}
+
+static void SocialFlushAidSessions(DWORD now) {
+  if (g_socialAidSessions.empty())
+    return;
+  std::vector<SocialAidSession> done;
+  EnterCriticalSection(&g_eventMutex);
+  for (std::map<unsigned long long, SocialAidSession>::iterator it = g_socialAidSessions.begin();
+       it != g_socialAidSessions.end();) {
+    if (now - it->second.lastTick > 4000) {
+      done.push_back(it->second);
+      it = g_socialAidSessions.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  LeaveCriticalSection(&g_eventMutex);
+  for (size_t i = 0; i < done.size(); ++i) {
+    const SocialAidSession &s = done[i];
+    Character *provider = ResolveCharacterBySerialForInventoryEvent(s.provider);
+    Character *recipient = ResolveCharacterBySerialForInventoryEvent(s.recipient);
+    if (!provider || !recipient || provider == recipient)
+      continue; // self-treatment builds no relationship
+    StobeSocial::EntityInfo a = SocialEntityFor(provider), t = SocialEntityFor(recipient);
+    char before[200];
+    if (s.known)
+      sprintf_s(before, sizeof(before), "\"before_known\":true,\"before_health\":%.3f,\"before_blood\":%.3f,\"before_bleed\":%.4f",
+                s.worst, s.blood, s.bleed);
+    else
+      sprintf_s(before, sizeof(before), "\"before_known\":false");
+    SocialPostStructured("aid", &a, &t,
+                         std::string(before) + "," + SocialVitalsFacts("after_", recipient) +
+                             ",\"conscious_before\":" + StobeSocial::JsonBool(s.conscious) +
+                             ",\"seconds\":" + ToString((int)((s.lastTick - s.startTick) / 1000)) +
+                             ",\"item\":" + StobeSocial::JsonString(s.item) +
+                             ",\"supplier_serial\":" + ToString(s.supplier));
+  }
 }
 
 static void PruneNpcWorldEventState() {
@@ -7830,6 +8125,7 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
   }
 
   DWORD nowTick = GetTickCount();
+  SocialFlushAidSessions(nowTick);
   if (nowTick - g_lastNpcWorldEventSweepTick < kNpcWorldEventSweepIntervalMs) {
     return;
   }
@@ -8012,10 +8308,17 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     if (carryingNow && carryingTargetNameNow.empty()) {
       carryingTargetNameNow = "someone";
     }
+    int useStateNow = 0;
+    try {
+      useStateNow = (int)npc->inSomething;
+    } catch (...) {
+      useStateNow = 0;
+    }
 
     NpcWorldEventState &state = g_npcWorldEventStateBySerial[serial];
     if (!state.initialized) {
       state.initialized = true;
+      state.useState = useStateNow;
       state.dead = deadNow;
       state.unconscious = unconsciousNow;
       state.enslaved = enslavedNow;
@@ -8166,7 +8469,8 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       if (!consumedFoodByKey.empty()) {
         SubtractInventoryDeltaByKey(lossByKey, consumedFoodByKey);
         EmitEatEvent(npc, previousState.inventory, inventorySnapshot,
-                     consumedFoodByKey);
+                     consumedFoodByKey, previousState.hasHunger ? previousState.hunger : -1.0f,
+                     hasHungerNow ? hungerNow : -1.0f);
       }
     }
     if (!lossByKey.empty()) {
@@ -8202,13 +8506,25 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
 
     // Bug 113: the player's own knockout/recovery/death are events too.
     if (!state.unconscious && unconsciousNow) {
-      EmitKnockoutEvent(npc);
+      EmitKnockoutEvent(npc, &inventorySnapshot, hasMoneyNow ? moneyNow : -1);
     } else if (state.unconscious && !unconsciousNow && !deadNow) {
-      EmitRecoveredEvent(npc);
+      EmitRecoveredEvent(npc, &inventorySnapshot, hasMoneyNow ? moneyNow : -1);
     }
     if (!state.dead && deadNow) {
       EmitDeathEvent(npc);
     }
+    if (state.useState >= 0 && state.useState != useStateNow && useStateNow != (int)IN_NOTHING &&
+        SocialCaptureEnabled()) {
+      // REL phase 4: put into a bed or a prison; the carrier who set them down in the last 15 s did it.
+      Character *carrier = (state.lastCarrierSerial != 0 && nowTick - state.lastCarryDropTick < 15000)
+                               ? ResolveCharacterBySerialForInventoryEvent(state.lastCarrierSerial)
+                               : nullptr;
+      StobeSocial::EntityInfo c = SocialEntityFor(carrier), t = SocialEntityFor(npc);
+      SocialPostStructured("placed", carrier ? &c : nullptr, &t,
+                           std::string("\"place\":") + (useStateNow == (int)IN_BED ? "\"bed\"" : "\"prison\"") +
+                               "," + SocialVitalsFacts("", npc));
+    }
+    state.useState = useStateNow;
     if (!isPlayerActor) {
       if (!state.enslaved && enslavedNow) {
         EmitSlaveryEvent(npc, true);
@@ -11947,6 +12263,21 @@ void attackingYou_hook(Character *npc, Character *attacker, bool so,
                  playerDefending ? "Defending against" : "Initiated attack",
                  ResolveCharacterSerialForEvent(attacker),
                  ResolveCharacterSerialForEvent(npc));
+    if (SocialCaptureEnabled()) {
+      // REL: was the victim already fighting the attacker (any faction)? That makes this a reply.
+      int targeting = -1;
+      try {
+        hand t = npc->getAttackTarget();
+        targeting = (t.isValid() && !t.isNull() && t.getCharacter() == attacker) ? 1 : 0;
+      } catch (...) {
+        targeting = -1;
+      }
+      StobeSocial::EntityInfo a = SocialEntityFor(attacker), v = SocialEntityFor(npc);
+      SocialPostStructured("attack", &a, &v,
+                           "\"victim_targeting_actor\":" + StobeSocial::JsonBool(targeting) +
+                               ",\"player_defending\":" + std::string(playerDefending ? "true" : "false") +
+                               ",\"awareness_check\":" + std::string(doAwarenessCheck ? "true" : "false"));
+    }
   }
   if (attackingYou_orig)
     attackingYou_orig(npc, attacker, so, doAwarenessCheck);
@@ -12119,6 +12450,7 @@ bool applyFirstAid_hook(MedicalSystem *med, float skill, Item *equipment,
     std::string healMsg =
         "is using (" + itemName + ") to heal " + healTargetText;
 
+    SocialNoteFirstAid(who, med->me, itemOwner, itemName);
     DWORD nowTick = GetTickCount();
     if (ShouldEmitHealingEvent(healerSerial, actorName, medSerial, targetName,
                                itemName, nowTick)) {
@@ -12237,6 +12569,31 @@ Item *buyItem_hook(Inventory *inv, Item *itemToBuy, RootObject *sendingTo) {
     LogGameEvent("trade", buyerName, buyerFaction, sellerName, sellerFaction,
                  message, ResolveRootObjectSerialForEvent(buyerObj),
                  ResolveRootObjectSerialForEvent(sellerObj));
+    if (SocialCaptureEnabled()) {
+      // REL phase 5: completed purchase. A seller that is not a character (shop storage) stays null:
+      // nobody is credited personally. reference_value = the game's own value of the goods.
+      Character *buyerChar = nullptr, *sellerChar = nullptr;
+      try {
+        if (buyerObj && (buyerObj->getDataType() == HUMAN_CHARACTER || buyerObj->getDataType() == ANIMAL_CHARACTER))
+          buyerChar = static_cast<Character *>(buyerObj);
+        if (sellerObj && sellerObj != buyerObj &&
+            (sellerObj->getDataType() == HUMAN_CHARACTER || sellerObj->getDataType() == ANIMAL_CHARACTER))
+          sellerChar = static_cast<Character *>(sellerObj);
+      } catch (...) {
+        buyerChar = sellerChar = nullptr;
+      }
+      int reference = -1;
+      try {
+        reference = result->getValueAll(false);
+      } catch (...) {
+        reference = -1;
+      }
+      StobeSocial::EntityInfo b = SocialEntityFor(buyerChar), sl = SocialEntityFor(sellerChar);
+      SocialPostStructured("trade", buyerChar ? &b : nullptr, sellerChar ? &sl : nullptr,
+                           "\"item\":" + StobeSocial::JsonString(itemName) + ",\"quantity\":" + ToString(itemQty) +
+                               ",\"buyer_spent\":" + ToString(buyerSpent) + ",\"seller_gained\":" + ToString(sellerGained) +
+                               ",\"reference_value\":" + ToString(reference));
+    }
   }
   return result;
 }

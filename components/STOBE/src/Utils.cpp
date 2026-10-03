@@ -1,3 +1,5 @@
+#include "PlaythroughSession.h"
+#include "SocialEventProtocol.h"
 #include "Utils.h"
 #include "ChatBox.h"
 #include "ChatUIGlobals.h"
@@ -263,6 +265,11 @@ std::string GetStobeIniPath(bool ensureModDir) {
   return stobeDir + "\\Stobe.ini";
 }
 
+static bool g_socialCapture = false;
+// One sequence for every social post (legacy piggyback + structured), all on one queue lane, so the
+// server sees them in order (its late-event check is per sequence).
+static volatile LONG g_socialSequence = 0;
+
 std::string GetStobeCustomIniPath(bool ensureModDir) {
   std::string stobeDir = GetStobeConfigDir(ensureModDir);
   return stobeDir + "\\StobeCustom.ini";
@@ -498,6 +505,8 @@ void SetPushToTalkHotkeyFromString(const std::string &keyStr) {
 void LoadStobeRuntimeConfig() {
   std::string baseIniPath = GetStobeIniPath(false);
   std::string customIniPath = GetStobeCustomIniPath(true);
+  g_socialCapture = GetPrivateProfileIntA("SocialRelationships", "Capture", 0, customIniPath.c_str()) != 0;
+  if (g_socialCapture) Log("SOCIAL_CAPTURE: enabled (StobeCustom.ini [SocialRelationships] Capture=1)");
   EnsureCustomIniSeeded(baseIniPath, customIniPath);
 
   g_serverHost = TrimCopy(ReadLayeredIniString(baseIniPath, customIniPath,
@@ -1491,6 +1500,22 @@ void LogGameEvent(const std::string &type, const std::string &actor,
   const int eventPriority =
       Stobe::EventPolicy::PriorityForEventType(normalizedType);
   AsyncPostToStobeSerialWithPriority(endpoint, "", eventPriority);
+  if (g_socialCapture && PlaythroughSession::Allowed(PlaythroughSession::Generation())) {
+    LONG sequence = StobeSocial::SupportedKind(normalizedType) ? InterlockedIncrement(&g_socialSequence) : 0;
+    if (sequence > 0) {
+      std::string payload = StobeSocial::Envelope(PlaythroughSession::Character(), PlaythroughSession::ClientId(),
+          PlaythroughSession::Generation(), (unsigned long)sequence, gameTs, normalizedType,
+          actorSerial, actor, targetSerial, target, message);
+      if (!payload.empty()) {
+        AsyncPostToStobeSerialWithPriority(L"/StobeServer/social_event.php", payload, 1);
+        Log("SOCIAL_CAPTURE: queued kind=" + normalizedType + " seq=" + ToString((int)sequence) +
+            " load=" + ToString((int)PlaythroughSession::Generation()) +
+            " actor=#" + ToString((int)actorSerial) + " target=#" + ToString((int)targetSerial));
+      } else {
+        Log("SOCIAL_CAPTURE: skipped kind=" + normalizedType + " (no playthrough campaign id)");
+      }
+    }
+  }
   Log("EVENT_STREAM: queued type=" + eventType +
       " priority=" + ToString(eventPriority) +
       " gamets=" + ToString(gameTs) +
@@ -1578,4 +1603,40 @@ void SleepIfPaused(DWORD ms) {
 
     Sleep(sleepSliceMs);
   }
+}
+
+bool SocialCaptureEnabled() {
+  return g_socialCapture && PlaythroughSession::Allowed(PlaythroughSession::Generation());
+}
+
+void SocialPostStructured(const std::string &kind, const StobeSocial::EntityInfo *actor,
+                          const StobeSocial::EntityInfo *target, const std::string &factsBody) {
+  if (!SocialCaptureEnabled())
+    return;
+  if (kind == "attack") {
+    // The attack hook can fire many times a second in a fight; one fact per pair per 3 s is enough
+    // (the server keys the encounter per pair and only needs the first strike and the direction).
+    static Stobe::EventPolicy::Debouncer attackDebouncer(512);
+    const std::string key = "social_attack|" + ToString(actor ? actor->serial : 0u) + "|" + ToString(target ? target->serial : 0u);
+    EnterCriticalSection(&g_eventMutex);
+    const bool drop = attackDebouncer.ShouldDrop(key, GetTickCount(), 3000);
+    LeaveCriticalSection(&g_eventMutex);
+    if (drop)
+      return;
+  }
+  LONG sequence = InterlockedIncrement(&g_socialSequence);
+  if (sequence <= 0)
+    return;
+  std::string payload = StobeSocial::StructuredEnvelope(
+      PlaythroughSession::Character(), PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
+      (unsigned long)sequence, ResolveCurrentGameTsForEvent(), kind, actor, target, factsBody);
+  if (payload.empty()) {
+    Log("SOCIAL_CAPTURE: skipped structured kind=" + kind + " (no campaign id or invalid facts)");
+    return;
+  }
+  AsyncPostToStobeSerialWithPriority(L"/StobeServer/social_event.php", payload, 1);
+  Log("SOCIAL_CAPTURE: structured kind=" + kind + " seq=" + ToString((int)sequence) +
+      " load=" + ToString((int)PlaythroughSession::Generation()) +
+      " actor=#" + ToString(actor ? actor->serial : 0u) + " target=#" + ToString(target ? target->serial : 0u) +
+      " facts=" + factsBody.substr(0, 200));
 }

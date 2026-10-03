@@ -146,3 +146,5 @@ HANDLE StartTask(LPSECURITY_ATTRIBUTES attributes, SIZE_T stack, LPTHREAD_START_
     if(!thread)delete task;return thread;
 }
 }
+
+namespace PlaythroughSession { std::string ClientId() { Lock lock; return Get().client; } }

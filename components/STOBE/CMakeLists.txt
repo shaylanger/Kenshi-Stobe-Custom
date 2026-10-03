@@ -95,6 +95,7 @@ add_library(Stobe SHARED
   src/StobeChatMode.cpp
   src/StobeText.cpp
   src/StobeTiming.cpp
+  src/SocialEventProtocol.cpp
   src/StobeEventPolicy.cpp
   src/StobeHarnessBridge.cpp
   src/main.cpp

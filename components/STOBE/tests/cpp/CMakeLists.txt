@@ -23,3 +23,7 @@ target_include_directories(stobe_portable_tests PRIVATE
 
 enable_testing()
 add_test(NAME stobe_portable_tests COMMAND stobe_portable_tests)
+
+add_executable(social_protocol_tests social_protocol_tests.cpp ../../src/SocialEventProtocol.cpp)
+target_include_directories(social_protocol_tests PRIVATE ../../src)
+add_test(NAME social_protocol_tests COMMAND social_protocol_tests)

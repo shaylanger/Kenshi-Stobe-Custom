@@ -8,6 +8,7 @@ namespace PlaythroughSession {
     std::wstring Headers(unsigned long epoch);
     void BeginLoad(bool newGame = false);
     std::string Character();
+    std::string ClientId();
     bool NewCharacter();
     void RestoreCharacter(const std::string& id, bool isNew = false);
     void Connect(const std::string& name, long long gamets, const std::string& members = "[]");
