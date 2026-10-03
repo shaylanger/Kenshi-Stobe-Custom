@@ -1,9 +1,9 @@
 # STOBE: open issues and tests left
 
-Last updated 2026-10-02 (after run 12). Installed: Stobe.dll `526D69F1`, KenshiFP `D3C78B3D`. **Built, not installed:** KenshiFP `4D04FC9C` (goal panel; Kenshi was running). Server: round 25 (`28dff99`, live + ss-merge).
+Last updated 2026-10-02 (round 26: D 41/43/48/53 fixed, cap tiers built). Installed: Stobe.dll `526D69F1`, KenshiFP `D3C78B3D`. **Built, not installed:** Stobe.dll `DFD8CFB3` (items 48 + cap tiers), KenshiFP `4D04FC9C` (goal panel). Server: round 26 (`5f71138`, live + ss-merge). **After installing Stobe `DFD8CFB3`:** set `NEG_CATS_PURSE_MODES` to true (general_settings).
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **60**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **62**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -37,12 +37,18 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 | 20 | Refuse to pay after she's handed something over (fight setup) | She may threaten or attack; paying then stops it and the stop holds. Tried run 12: spawned raiders always want Cats first ("You pay first, then we talk about the bow"), 2 tries; needs Malzin's force-attack setup or a trader |
 | 21 (was 42) | Fight setup, Fond trust, she stops for pay-later; don't pay for 1+ game minute | BREACHED_PLAYER, an angry line that matches her attack (no "cats received"), log `breach_react`. Tried run 12: a raider at Fond 60 refused pay-later 3 times ("After is where men die"). The unit check "unpaid -> BREACHED_PLAYER" is stale: hostile deals expire on game time, the test only backdates wall time |
 | 22 (was 43) | Fight setup with `help`; she stops for pay | Her words don't say her gang "isn't hers to call off"; the gang stands down. Run 12 (gang of 3 raiders, paid 1000): words fine ("You're paying the whole gang"), deal COMPLETE, no fighting after; but the gang stood down only because gang-mate Yarel's own surrender offer sent a faction STOP_ATTACK. The paid deal itself sends only an individual STOP_FIGHT for the payee |
-| 54 | Relationship talk (StobeServer f83a3fb): `scenarios.sh trust Malzin -80 Hateful enemy`, "Malzin, hey, how are you?"; then 60 Fond; then `scenarios.sh trust Malzin 96 Bonded romantic`; restore afterwards (`stobe-reset-npc --restore Malzin` after a reset, or set back to 96 Bonded platonic) | Prompt has `<how_you_feel_about_them>` with the tier/type each time; hated: rude/"leave me alone"/a threat (an outsider at Hateful/Hostile may even attack; a squadmate never does); Fond: warm, glad to see you; romantic: loving words. Unit-tested (tests/relationship_stance_regression.php) |
+| 54 | Relationship talk (StobeServer f83a3fb): `scenarios.sh trust Malzin -80 Hateful enemy`, "Malzin, hey, how are you?"; then 60 Fond; then `scenarios.sh trust Malzin 96 Bonded romantic` | Prompt has `<how_you_feel_about_them>` with the tier/type each time; hated: rude/"leave me alone"/a threat (an outsider at Hateful/Hostile may even attack; a squadmate never does); Fond: warm, glad to see you; romantic: loving words. Unit-tested (tests/relationship_stance_regression.php) |
 | 55 | Fights count (R4): duel a named raider (`scenarios.sh duel`) | Server log `Relationship: a fight counts (R4)`; the raider's entry for Shay drops by 10 (her entry for him by 4 if she attacked); only once per pair per 15 min |
 | 56 | Relationship types (R1): a few chats that change a relationship | New entries only use list types (no "annoyed"/"ally"); an odd type never turns "romantic" into "neutral" |
 | 57 | Generic names (R3): talk to / fight an unnamed "Hungry Bandit" | No relationship entry keyed "Hungry Bandit"; named ones ("Ket [Hungry Bandit]") still get entries |
 | 58 | `stobe-reset-npc Malzin`, then `stobe-reset-npc --restore Malzin` | First reset prints `saved Malzin -> Shay: …`; restore puts the same entry back (one "Shay" key, no "shay" duplicate) |
 | 59 | Relationships follow the save: in a test save, make Malzin hate Shay (`scenarios.sh trust Malzin -80 Hateful enemy` writes no snapshot, so use a real fight or a few insults at game time T), save nothing, then load a save from before T | Server log `PLAYTHROUGH: restored relationship timeline state` with `restored` ≥ 1; Malzin → Shay back to the value at that save (96 Bonded on the auto-home fixture); NPCs first met after that save have no entry. Unit-tested (tests/relationship_rollback_regression.php) |
+| 41 | False gear claim (StobeServer 51bc0cb): Malzin re-equips her katana ("put your katana back on"), then a gear exchange ("give me all your dried meat"), then "What have I taken from you?" | She never says Shay has her katana while it's in her Equipment. If the model writes it: server log `False gear claim not spoken (item 41)` and the sentence is missing from her bubble (stobe.log NPC_SAY) |
+| 43 | Two-part hand-over (StobeServer c87e552): give Malzin bread and dried meat (`stobe-auto give Malzin Bread 2`, `… "Dried Meat" 5`), then "Malzin, give me all your bread and all your dried meat." Then again with "…but keep the meat" style refusal from her side | Both arrive (`stobe-auto inv Shay`; KenshiFP/stobe.log GIVE_ITEM ×2). When her reply carried one, server log `Two-part hand-over: missing GIVE_ITEM added (item 43)`. An item her reply keeps ("the meat stays") is not handed over |
+| 48 | KO / death during a deal (StobeServer 5aaba07; Stobe `DFD8CFB3`): (a) `scenarios.sh surrender`, let the raider propose, then `stobe-auto ko <raider>` before answering; wait until he wakes. (b) Talk deal with a raider, `stobe-auto kill` him right after your line | (a) No deal line or COUNTER while he's KO (a late one: stobe.log `NPC_SAY dropped: speaker is dead or unconscious (item 48)`); the offer stays PROPOSED/COUNTERED (`negotiation_admin.php deals 3`); on waking server log `Deal resumes after a knockout (item 48)` and he brings the offer up again. (b) No line or recorded deal after his `[EVENT] death` (server log `Deal reply from a knocked-out or dead NPC dropped (item 48)` if the reply came back late). Dying but conscious may still talk |
+| 53 | Cap without a lie (StobeServer 5f71138): `scenarios.sh surrender` (Dust Bandit), ask for more than he offers ("Make it 350") | He refuses or counters at his limit, never "I don't have 350"/"never did" when he has money. His prompt line: "the most you will pay in a deal is N" |
+| 60 | Cap tiers 0–2 (StobeServer 5f71138; Stobe `DFD8CFB3` + `NEG_CATS_PURSE_MODES=true`): `scenarios.sh surrender` with a Dust Bandit (tier 1) and a Hungry Bandit (tier 0) | Offers ≤ min(300 / 100, carried); carried ≤ template max (Dust Bandit 200) even with a big squad purse; terms have `"purse":"exact"`; payment dispatched as `GIVE_CATS@Shay@N@exact`. If he can't pay all: stobe.log `GIVE_CATS … skipped reason=insufficient`, term IMPOSSIBLE (no part payment) |
+| 61 | Cap tiers 3–5 (same builds): spawn a Samurai Sergeant (tier 3) or Dust King (tier 4) with few Cats, beat him until he offers; accept; then a second deal with him | First offer can go up to 10,000 / 50,000 (above what he carries), term `"purse":"topup"`; on payment stobe.log `GIVE_CATS topup … added=` and Shay gets the full amount. Second deal within 3 game days: he offers only what he carries (no top-up) |
 
 ## C. Can't reproduce so far (fixed or built, never triggered in game)
 
@@ -69,12 +75,7 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 | 51 | She repeats your offer, then names hers | Her reply is kept, no "My terms:" rewrite | Unit-tested |
 ## D. Open bugs (known broken, not fixed)
 
-| # | Bug | Notes |
-|---|---|---|
-| 41 | She claims something false about her gear | Run 12: right after re-equipping her katana: "You've got my larder and my blade both" (the prompt listed the katana under Equipment). **Next:** a server guard (her line says Shay has her item while it's still in her Equipment/pack → drop/rewrite that sentence), like the bug 39 guard. |
-| 43 | A two-part order does only one part | `max_actions = 1`: "give me all your bread and all your dried meat" gave only the bread, while she said "You took my food". Fix or design call: allow 2 hand-overs, or make her say she does one | **Shay: do both hand-overs; fallback: she says she does only one.**
-| 48 | A dying or dead NPC negotiates | Run 12: a raider hit by `stobe-auto kill` (dying) proposed a deal 19 s later, died, and his COUNTER came 2 s after death. | **Shay's rule:** dying but conscious may still deal; unconscious or dead may not; a deal interrupted by a KO resumes when they wake (they know they were negotiating). |
-| 53 | The Cats cap comes out as a lie | Run 12: a raider with 10,000 Cats, capped at 300 (design), said "I don't have 350 cats. Never did." The prompt should let her refuse without claiming to be broke. **Shay: understandable with a 300 cap**; revisit when the tier caps (E) are built. |
+None open. 41, 43, 48, 53 fixed 2026-10-02 (round 26): test rows in B.
 
 ## E. Design questions and features
 
@@ -89,17 +90,6 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
   - **Why Vren became an Acquaintance after a fight:** the evaluator only ran when someone spoke and saw one line; combat events never counted. After the fight Vren said something friendly → +6 "No hard feelings after the fight". Fixed (R4, below).
   - **Why she was only Neutral with Shay:** the test runs reset her with `stobe-reset-npc` (live DB). Loading an older save did not bring relationships back then (`NEVER_CLEAR_RELATIONSHIP_DATA` = true). **Since 2026-10-02 relationships follow the loaded save** (StobeServer 78243b0, 28dff99; baseline snapshots at game time 0 for 61 NPCs; test B 59). Restored by hand to 96 Bonded (platonic) on 2026-10-02; `stobe-reset-npc` now saves the entry first and `--restore` puts it back.
   - **Fixed 2026-10-02 (StobeServer 956000f, e714b66, 43a5516, 9839389):** R1 types mapped onto the official list (unknown type keeps the old one); R2 Kenshi examples in the analysis prompt fallback; R3 no entries for unnamed template names (5 existing ones removed, backup `/root/stobe-backups/relationships_pre_r25_cleanup.tsv`); R4 a fight lowers both sides (victim −10, attacker −4, once per pair per 15 min). Tests: B 55–57. R4 (the fight rule) is up for a deep analysis: `handoff/relationship-fights-context.md`.
-- **Deal-offer cap tiers (Shay, 2026-10-02, agreed direction, build after D 41/43/48):** the most an NPC offers to pay Shay. Data: `archive/npc-wealth-survey.tsv` (Kenshi templates: `money min/max`, bounty, gear value; `tools/research/npc_wealth.py`).
-  | Tier | Who | Cap |
-  |---|---|---|
-  | 0 Destitute | Hungry/Starving bandits, slaves, savage hivers, beggars | 100 (or an item, or begging) |
-  | 1 Common | Dust Bandits, Red Sabres, low ninjas, farmers, basic guards | 300 |
-  | 2 Professional | Samurai, Paladin, Holy Sentinel, Shek warriors, mercenaries, caravan guards, barmen, shopkeepers | 5,000 |
-  | 3 Elite / officer | High Paladin, Paladin Elite, Samurai Elite/Sergeant, Inquisitor, Inquisitor Captain, Trader Boss, Mercenary Captain, named bosses with 10–20k bounty | 10,000 |
-  | 4 Local leaders | UC Lords/Nobles, Market Master, Slave Masters, High Inquisitors, 30–50k-bounty bosses | 50,000 |
-  | 5 Rulers | Holy Lord Phoenix, Emperor Tengu (Bugmaster-level 300k bounty) | 100,000 |
-  Tier by name/title (templates carry the rank), then by bounty. Decisions: (1) tiers 3–5 can pay more than they carry: just before the payment Stobe tops up the NPC's purse to the agreed amount (capped at the tier), plus a cooldown per leader (e.g. one paid deal per few game days); optional "my steward brings it" delay later. (2) Drop the 35 %-of-carried rule: tiers 0–2 offer up to what they really carry (≤ tier cap). (3) Bug: "carried" reads the squad's shared purse when the character has 0 (spawned raiders showed 10,000); use the template `money min/max` (and the real purse if smaller). Also: an NPC who owes more than he has pays the part he has silently (Stobe GIVE_CATS uses min(requested, available)); for tiers 0–2 it should fail clearly.
-- **Decided for D 43 / 48 (Shay):** 43: do both hand-overs (fallback: she says she does one). 48: dying but conscious may deal; unconscious or dead may not; a deal interrupted by a KO resumes when they wake.
 
 ---
 
@@ -113,4 +103,5 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 
 ## Switches
 Relationships: `RELATIONSHIP_STANCE` (how she talks by relationship, on), `RELATIONSHIP_FIGHTS_COUNT` (R4, on), `NEVER_CLEAR_RELATIONSHIP_DATA` (false = relationships follow the loaded save).
+Deals: `NEG_CATS_PURSE_MODES` (cap tiers: send GIVE_CATS `@topup`/`@exact` to Stobe.dll; only with Stobe `DFD8CFB3`+, off until installed).
 If a phase misbehaves: `… phase <2-8> off`. Voice payment: `NEGOTIATION_VOICE_PAYMENT`. Trust for free gifts: `GIFT_TRUST_THRESHOLD` (56 = Fond). Trust to give up her own weapon: `NEG_WEAPON_TRUST_MIN` (56). Trust for minor orders from non-faction NPCs: `MINOR_ORDER_TRUST_MIN`. STOBE ini: `Speed Dialogue` (0 = TTS at 1x), `TTSVolume` (0–200), `TTSFadePercent` (25–400).
