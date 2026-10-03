@@ -18,10 +18,10 @@ IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `arch
 
 | Component | Installed | Pending install |
 |---|---|---|
-| Stobe.dll | `FF633947` | `E36506E5` (66) |
-| KenshiFP.dll | `5A2E2085` (goal panel + fp_* commands) | `0D2E3A1F` (65) |
-| ProfessionGearProgression.dll | `D667F5EE` (pg_* commands) | `475B9508` (0.9.1-pretest, PG fixes + pg_check/shop/… commands) |
-| AutomationHarness.dll | `527113C2` | - |
+| Stobe.dll | `D64BBA22` (REL 1–5 merged, Capture=0) | - |
+| KenshiFP.dll | `D5795BD5` (65, 75) | `603C456E` (76) |
+| ProfessionGearProgression.dll | `159C552F` (craft-output roll fix, row 329) | - |
+| AutomationHarness.dll | `E1095847` (radius, teleport building, hunger read) | - |
 | Server (live) | `2b3593c`+ (branch `stobe`, m1 fixes 64–72) | REL phase 1 (`feature/social-phase1`, inert by default) once delivered |
 
 ## 1. Automated: runnable now
@@ -34,12 +34,12 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 |---|---|---|---|
 | STOBE 41 | No false "you have my katana" claim | re-equip katana, gear exchange, "What have I taken from you?" | PASS m1 |
 | STOBE 43 | Two-part hand-over gives both items | give bread + dried meat, "give me all your bread and all your dried meat" | PASS m1 (after fix 67) |
-| STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | partial m1: Hateful PASS; Fond/Bonded tone not warm in the same conversation -> retest per tier on a fresh load |
+| STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | FAIL m3 -> STOBE 77 (same flat tone at -80/60/96 on fresh loads) |
 | STOBE 55 | R4 fights count (superseded once REL is enabled) | `scenarios.sh duel`, server log `a fight counts (R4)` | PASS m1 (fires once per pair; direction = event attacker) |
 | STOBE 56 | Relationship types from the list only | chats, check entries | inconclusive m1 (no new entries) |
 | STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | FAIL m1 -> STOBE 70 (old entry back via snapshot) |
 | STOBE 58 | `stobe-reset-npc` save + `--restore` | WSL only, no game action needed | todo |
-| STOBE 59 | Relationships follow the save | real insult/fight at T, reload fixture, `PLAYTHROUGH: restored` | FAIL? m1: entry missing after restore, fixer investigating |
+| STOBE 59 | Relationships follow the save | real insult/fight at T, reload fixture, `PLAYTHROUGH: restored` | PASS m3 (stamped trust -80 -> reload -> back to the save's state) |
 | STOBE 48 | KO/death during a deal | `scenarios.sh surrender` + `ko` / `kill` | PASS m1 (a + b) |
 | STOBE 53 | Cap without a lie | surrender, "Make it 350" | PASS m1 |
 | STOBE 60 | Cap tiers 0–2 | surrender with Dust Bandit and Hungry Bandit | tier 1 PASS m2 (offer 200 = carried, `GIVE_CATS@Shay@200@exact`, Shay +200); tier 0 (Hungry Bandit) todo |
@@ -48,7 +48,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 21 | Pay-later breach | Fond trust, stop for pay-later, don't pay 1+ game min | todo |
 | STOBE 22 | Gang stands down on paid deal | `gang 3` + pay | todo |
 | STOBE 17 | Reputation voiced | set counts broken > kept, talk to a new NPC | todo |
-| STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | FAIL m2 -> STOBE 73 (agreed, no action) |
+| STOBE A4 | Fetch from a far chest walks there | goal status step "Walking to" | PASS m3 (fetch + return); hand-over on return -> 76, retest |
 | STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | todo |
 | STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | PASS m2 (after 65: panel 2086,1030, above TimeMoneyPanel 1096) |
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
@@ -79,7 +79,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | todo (integrate server `68c0c25` + `pending-fixes/rel-native-phase3.patch` at next restart) |
+| REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | p1-01 PASS m3 (Capture=0); p1-02…04 need a Capture=1 launch |
 | REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | todo |
 | REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | todo |
 
@@ -113,14 +113,18 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 |---|---|---|---|---|
 | STOBE 64 | STOBE | stobe-tests | `negotiation_engine` regression: "unpaid -> BREACHED_PLAYER" backdates wall time but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | fixed, confirmed (stobe-tests 55/0/7) |
 | STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | fixed, PASS m2 |
-| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | server fallback PASS; DLL part (E36506E5) still registers no base -> debug logging |
+| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | closed: no player-owned town in auto-home; server fallback is the fix (PASS m2) |
 | STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | fixed, PASS m1 |
 | STOBE 68 | STOBE | m1 | Fetch goal with destination "Shay" -> destination_not_known; failure is silent (she promised to go) | fixed live (48a32df), retest |
-| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | partial m2: hand-over added (67 path) but the generic denial sentence was still spoken -> extend |
+| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | partial m3: items arrive, some denial wordings still spoken -> broaden |
 | STOBE 70 | STOBE | m1 | Generic-name relationship key ("Dust Bandit Bowman") restored from a snapshot after the R3 cleanup | fixed live (197d921) + DB cleanup, retest |
 | STOBE 71 | STOBE | m1 | Surrender offers never fired: raider's combat rows under his generic pre-naming name | fixed live (722d53d), PASS m1 |
 | STOBE 72 | STOBE | m1 | Accepting after a rejected counter flipped the payer (Shay pays) | fixed, PASS m2 |
-| STOBE 73 | STOBE | m2 | Squad member agrees to a fetch ("I'll go dig it out") but sends no TASK_GOAL | fixer |
+| STOBE 73 | STOBE | m2 | Squad member agrees to a fetch ("I'll go dig it out") but sends no TASK_GOAL | fixed, PASS m3 |
+| STOBE 74 | STOBE | m2 | Agreed purchase, no action | fixed live (1a8fc3f), PASS m2 (goal added) |
+| STOBE 75 | KFP | m2 | BUY goal blocked: trader 285 away "not nearby" (220 search) + stray MOVE_TO failure line | fixed (KenshiFP D5795BD5 installed, server efffb3e), retest |
+| STOBE 76 | KFP | m3 | "bring it to me" fetch keeps the item on return | fixed (server ecb793b, KenshiFP 603C456E built), retest |
+| STOBE 77 | STOBE | m3 | Relationship stance block doesn't shape tone (same reply at -80/60/96) | fixer |
 
 ## 5. Harness (KAH) known limits / open items
 
