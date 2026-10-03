@@ -309,7 +309,14 @@ static int wgp_item_count_inventory(void *inv, const char *query)
 #define WGP_SCAN_CAP 4096
 static void *g_wgp_scan_buf[WGP_SCAN_CAP];
 
+static int wgp_scan_buildings_r(void *gw, void *actor, void **out, int max, float radius);
 static int wgp_scan_buildings(void *gw, void *actor, void **out, int max)
+{
+    return wgp_scan_buildings_r(gw,actor,out,max,WGP_SCAN_RADIUS);
+}
+
+/* Item 93: radius as a parameter (a busy town fills the 1400 m scan) */
+static int wgp_scan_buildings_r(void *gw, void *actor, void **out, int max, float radius)
 {
     if (!gw || !actor || !out || max<1 || !wgp_resolve_exports()) return 0;
     if (max > WGP_SCAN_CAP/2) max = WGP_SCAN_CAP/2;
@@ -318,7 +325,7 @@ static int wgp_scan_buildings(void *gw, void *actor, void **out, int max)
     memset(g_wgp_scan_buf,0,sizeof(g_wgp_scan_buf));
     StobePtrLektor list; memset(&list,0,sizeof(list));
     list.max_size=(uint32_t)WGP_SCAN_CAP; list.stuff=g_wgp_scan_buf;
-    g_stobe_getobjects(gw,&list,&center,WGP_SCAN_RADIUS,0,max,actor);
+    g_stobe_getobjects(gw,&list,&center,radius,0,max,actor);
     if (list.stuff!=g_wgp_scan_buf || list.count>(uint32_t)WGP_SCAN_CAP) {
         logline("[stobe] WGP_SCAN lektor grown (count=%u) -- result dropped",list.count);
         return 0;
@@ -450,12 +457,36 @@ static int wgp_input_need(void *prod, const char *machine, void *dep_gd, int out
     return outputs;
 }
 
+static int wgp_find_producer_r(void *gw, void *actor, const char *query, WgpProducer *out, float radius, int *scanned, int diag);
+/* Item 93: a full 1400 m scan in a town can miss the bench next door: retry within 300 m. */
 static int wgp_find_producer(void *gw, void *actor, const char *query, WgpProducer *out)
+{
+    int scanned=0;
+    int r=wgp_find_producer_r(gw,actor,query,out,WGP_SCAN_RADIUS,&scanned,0);
+    if (!r && scanned>=WGP_MAX_BUILDINGS)
+        r=wgp_find_producer_r(gw,actor,query,out,300.0f,&scanned,0);
+    return r;
+}
+
+/* Item 93: what the planner saw, once per goal, when no producer was found */
+static void wgp_log_producer_diag(void *gw, void *actor, const char *query)
+{
+    WgpProducer tmp; int scanned=0;
+    wgp_find_producer_r(gw,actor,query,&tmp,WGP_SCAN_RADIUS,&scanned,1);
+    logline("[stobe] WORK_DIAG no producer for %s: scanned=%d (cap %d) radius=1400",query,scanned,WGP_MAX_BUILDINGS);
+    if (scanned>=WGP_MAX_BUILDINGS) {
+        wgp_find_producer_r(gw,actor,query,&tmp,300.0f,&scanned,1);
+        logline("[stobe] WORK_DIAG no producer for %s: scanned=%d radius=300",query,scanned);
+    }
+}
+
+static int wgp_find_producer_r(void *gw, void *actor, const char *query, WgpProducer *out, float radius, int *scanned, int diag)
 {
     if (!out || !wgp_resolve_exports()) return 0;
     memset(out,0,sizeof(*out));
     void *buildings[WGP_MAX_BUILDINGS]={0};
-    int n=wgp_scan_buildings(gw,actor,buildings,WGP_MAX_BUILDINGS);
+    int n=wgp_scan_buildings_r(gw,actor,buildings,WGP_MAX_BUILDINGS,radius);
+    if (scanned) *scanned=n;
     int best=0;
     for (int i=0;i<n;i++) {
         void *b=buildings[i];
@@ -463,8 +494,16 @@ static int wgp_find_producer(void *gw, void *actor, const char *query, WgpProduc
         int special=wgp_building_special(b);
         int allowed=g_wgp_isplayer_building(b) ||
             special==WGP_BF_MINE || special==WGP_BF_MINE_NATURAL;
+        if (diag && special==WGP_BF_CRAFTING && !allowed) {
+            char dn[160]={0}; wgp_name(*(void **)((uintptr_t)b+0x40),dn,sizeof(dn));
+            logline("[stobe] WORK_DIAG bench %s skipped: not player-owned",dn);
+        }
         if (!allowed) continue;
         void *prod=wgp_building_production(b);
+        /* Item 93: a crafting bench whose data lacks 'is production building' has no production
+         * object, but the bench is its own ProductionBuilding (CraftingBuilding : ProductionBuilding). */
+        int prod_self=0;
+        if (!prod && special==WGP_BF_CRAFTING) { prod=b; prod_self=1; }
         if (!prod) continue;
         char bname[160]={0};
         void *bgd=*(void **)((uintptr_t)b+0x40);
@@ -476,6 +515,14 @@ static int wgp_find_producer(void *gw, void *actor, const char *query, WgpProduc
             list.max_size=WGP_MAX_CRAFTS; list.stuff=(void **)groups;
             g_wgp_available_crafts(b,&list);
             int count=(int)(list.count>WGP_MAX_CRAFTS?WGP_MAX_CRAFTS:list.count);
+            if (diag) {
+                char c0[96]={0},c1[96]={0},c2[96]={0};
+                if (count>0) wgp_name(groups[0].g1,c0,sizeof(c0));
+                if (count>1) wgp_name(groups[1].g1,c1,sizeof(c1));
+                if (count>2) wgp_name(groups[2].g1,c2,sizeof(c2));
+                logline("[stobe] WORK_DIAG bench %s prod_self=%d crafts=%d (lektor %u) first: %s | %s | %s",
+                        bname,prod_self,count,list.count,c0,c1,c2);
+            }
             for (int j=0;j<count;j++) {
                 char name1[160]={0};
                 if (!wgp_name(groups[j].g1,name1,sizeof(name1))) continue;
@@ -991,6 +1038,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
         if(purchase>0){snprintf(g->current_step,sizeof(g->current_step),"%s",r);return;}
         if(purchase<0){wgp_goal_block(g,r);return;}
         snprintf(r,sizeof(r),"no usable mine, farm, production machine, crafting bench, or approved nearby purchase route can provide %s",g->item);
+        wgp_log_producer_diag(gw,actor,g->item); /* Item 93 */
         wgp_goal_block(g,r); return;
     }
     if (root.is_crafting && g->queued_root<g->quantity) {

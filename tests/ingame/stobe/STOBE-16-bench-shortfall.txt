@@ -2,7 +2,7 @@
 # covers: STOBE 16 (a goal needing a crafted ingredient at a bench: the bench queue grows only by what's missing)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP 7043126D (work planner), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
+# needs: KenshiFP B3E2800C (work planner, item 93), Stobe 49AFB0A7, harness F946C881 (build, research, benches, #serial/index)
 # verify:
 #   Chain (from this install's game data, tools/research): Junkbow = Steel Bars + Hinge, crafted at the
 #   Crossbow Crafting Bench (in the base); Hinge = crafted at the "Arrow Making Bench " (sid 96184-Newwworld.mod,
@@ -28,13 +28,21 @@ research "Crossbow Crafting"
 build 96184-Newwworld.mod near Malzin dist 12 ~ Arrow Making Bench
 benches 200 crafts ~ Crossbow Crafting Bench [^|]*queue=0[^|]*Junkbow
 benches 200 crafts ~ Arrow Making Bench [^|]*queue=0[^|]*Hinge
-give Malzin "Steel Bars" 12 ~ got 12/12
+# m16: her main inventory held only 10 Steel Bars (Hinge 0/1): backpack first, Hinge before the bars,
+# the rest of the bars in the base's storage chest (the planner counts and fetches from player storage)
+give Malzin "Large Backpack" 1 ~ got 1/1
+sections Malzin ~ Large Backpack
 give Malzin "Hinge" 1 ~ got 1/1
+give Malzin "Steel Bars" 6 ~ got 6/6
+stash "Steel Bars" 10 near Malzin ~ 10
 inv Malzin ~ Hinge
 stobe_say Malzin "Malzin, make 2 Junkbows at the crossbow bench, please."
 speed 1
+# m16: the goal was accepted only after the reply (LLM + TTS): wait before checking
+@sleep 30
 @log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Junkbow qty=2
-@sleep 20
+# item 93 (KenshiFP B3E2800C): the planner must find the bench (if not: KenshiFP.log WORK_DIAG lines say why)
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ find_producer done found=1 building=Crossbow Crafting Bench crafting=1
 speed 0
 # samples while the goal queues and crafts: the queues must never pass the shortfall
 benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
