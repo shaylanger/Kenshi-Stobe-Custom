@@ -3,7 +3,7 @@
 # covers: STOBE 15 (WAITING_APPROVAL; approve -> she buys, decline -> cancelled) with another squad in Squin
 # fixture: Testing-Save-Squin (copy kah-squin); squad Beak + Kint
 # reset: fresh load of the copy, once per mode
-# needs: KenshiFP E64B1BD5+, Stobe EF62563B+, harness 12F5CE0B+ (power supply)
+# needs: KenshiFP B1F468C8+ (item 99c), Stobe EF62563B+, harness 12F5CE0B+ (power supply)
 # usage: [PLAYER=Beak] [MATE=Kint] [TRADER="<name>"] STOBE-15-buy-approval-squin.sh approve|decline
 # Chain: Basic First Aid Kit = Fabrics at a Basic Medical Workbench. Squin has no player bench, so one is built 15 m
 #   from <mate> (+ `power ... supply`, research); Fabrics have no producer, so the planner's purchase fallback asks

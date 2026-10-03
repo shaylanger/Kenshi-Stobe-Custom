@@ -1271,6 +1271,11 @@ static int stg_request_purchase_fallback(void *gw,void *actor,uint32_t actor_ser
             void *offer=inv?stg_first_matching(inv,item):NULL;
             int q=offer?stg_item_value_single(offer,1):-1;
             g_stg_shop_dtor(shop);
+            if(!offer||q<0){ /* Item 99c: carried, unworn goods are sold too (as stg_trade_once does) */
+                void *carried=g_stobe_getinv?g_stobe_getinv(c):NULL;int st=0;
+                offer=carried?stg_trade_matching_unworn(carried,item,0,&st):NULL;
+                q=offer?stg_item_value_single(offer,1):-1;
+            }
             if(!offer||q<0)continue;
             trader=c;quote=q;dist=d;stg_char_name(c,trader_name,sizeof(trader_name));
         }

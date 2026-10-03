@@ -56,6 +56,21 @@ heal_stop() {
 }
 trap 'heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 
+# talk_ready <npc handle>: the player awake (waits out a KO, up to 150 s) and the NPC next to them (fled raiders
+# were 290 m off). Restored after m16 fights4 (the protect change had dropped it: "say_to: command not found").
+talk_ready() {
+  local h="$1"
+  for i in $(seq 1 50); do stobe-auto where ${PLAYER} | grep -q " KO" || break; [ "$i" = 1 ] && log "${PLAYER} is knocked out: waiting"; stobe-say speed 1 >/dev/null; sleep 3; done
+  stobe-auto where ${PLAYER} | grep -q " KO" && log "${PLAYER} still KO"
+  if [ -n "$h" ]; then
+    local dist; dist=$(stobe-auto where "$h" | grep -oE 'dist=[0-9.]+' | cut -d= -f2 | cut -d. -f1)
+    [ "${dist:-0}" -gt 12 ] && { stobe-auto teleport "$h" ${PLAYER} dist 4 >/dev/null; log "brought $h back from ${dist} m"; }
+  fi
+  stobe-auto select ${PLAYER} >/dev/null
+}
+# say_to <npc handle> <name> <text>: talk_ready, then the line (no --wait: sleeps 15 s after)
+say_to() { talk_ready "$1"; stobe-say say "$2" "$3" --wait 15 >/dev/null 2>&1 || log "say failed"; }
+
 # Malzin out of the way (the surrender recipe): KO'd 40 m off for <s> seconds, so she doesn't finish the raider
 park_malzin() { stobe-auto teleport ${MATE} ${PLAYER} dist 40 >/dev/null; stobe-auto ko ${MATE} "${1:-300}" >/dev/null; }
 
