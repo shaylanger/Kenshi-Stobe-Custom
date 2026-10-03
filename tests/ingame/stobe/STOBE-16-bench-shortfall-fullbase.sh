@@ -7,9 +7,8 @@
 # needs: KenshiFP E64B1BD5+, Stobe EF62563B+, harness 12F5CE0B+
 # usage: [PLAYER=Beaks] [MATE=Avarek] [OUT=<dir>] STOBE-16-bench-shortfall-fullbase.sh
 # How: runs STOBE-16-bench-shortfall.txt through run-as.sh with the squad names and --real-power (the base's own
-#   power for benches the base has). Missing crossbow/arrow benches are built and get the supply cheat (outside
-#   scenario's `build` is dropped; if not, it builds one and keeps the supply cheat for that one building only
-#   (a built bench is outside the base grid).
+#   power for benches the base has). Missing crossbow/arrow benches are built and get the supply cheat (a built
+#   bench is outside the base grid); an Arrow Making Bench the base has replaces the scenario's `build`.
 # verify: the .txt criteria (Arrow queue <= 1, Crossbow queue <= 2, queued_root=2, subs Hinge=1, `Hinge used 1`)
 #   PLUS completion: `WORK_GOAL complete ... item=Junkbow qty=2` and Junkbows in `inv <mate>`; no `power wait`.
 set -u
