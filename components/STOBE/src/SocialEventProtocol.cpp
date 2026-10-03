@@ -49,7 +49,7 @@ std::string Envelope(const std::string& campaign,const std::string& session,unsi
 
 namespace StobeSocial {
 bool StructuredKind(const std::string& kind) {
-    const char* kinds[]={"attack","harm","recovered","item_transfer","enslaved","freed","aid","carry_start","carry_end","placed","eat","trade"};
+    const char* kinds[]={"attack","harm","recovered","item_transfer","enslaved","freed","aid","carry_start","carry_end","placed","eat","trade","item_gain"};
     for(size_t i=0;i<sizeof(kinds)/sizeof(kinds[0]);++i)if(kind==kinds[i])return true;
     return false;
 }

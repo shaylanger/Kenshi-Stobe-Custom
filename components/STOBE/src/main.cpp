@@ -5433,6 +5433,17 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
     StobeSocial::EntityInfo e = SocialEntityFor(w);
     if (!e.serial || e.conscious < 0)
       continue;
+    // Run m8: isUnconcious() is false while sleeping. Asleep = in a bed, or the current task is sleeping.
+    bool asleep = false;
+    try {
+      hand ignoredSubject;
+      TaskType task = ResolveCurrentNpcTaskSafe(w, ignoredSubject);
+      asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED;
+    } catch (...) {
+      asleep = false;
+    }
+    if (asleep)
+      e.conscious = 0;
     SensoryData *sd = nullptr;
     try {
       sd = w->getSensoryData();
@@ -6778,6 +6789,11 @@ static void EmitInventoryTransferEventsFromDeltas(
           // REL probe (capture on only): which gains find no loss in this sweep (matched later or never).
           Log("INV_TRANSFER: gain without loss this sweep to=" + toDelta.actorName + " item=" + itemKey +
               " qty=" + ToString(gainRemaining));
+          // Run m8: looting a knocked-out body shows only the looter's gain (the body's loss appears on waking).
+          StobeSocial::EntityInfo gainer = SocialEntityFor(toDelta.npc);
+          std::map<std::string, int> gained;
+          gained[itemKey] = gainRemaining;
+          SocialPostStructured("item_gain", &gainer, nullptr, "\"items\":" + StobeSocial::JsonCountMap(gained, 8));
         }
         if (gainRemaining > 0) {
           for (std::deque<PendingTransferLoss>::iterator pendingIt =
@@ -8451,6 +8467,9 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     if (!state.initialized) {
       state.initialized = true;
       state.useState = useStateNow;
+      if (enslavedNow && SocialCaptureEnabled())
+        Log("EVENT_SCAN: first seen already enslaved serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
+            " (no enslaved transition will be reported)");
       state.dead = deadNow;
       state.unconscious = unconsciousNow;
       state.enslaved = enslavedNow;
