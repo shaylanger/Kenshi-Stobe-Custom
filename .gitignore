@@ -36,3 +36,4 @@ training-data/shadow-enabled.flag
 
 # Saved run logs (local only)
 archive/logs-*/
+handoff/
