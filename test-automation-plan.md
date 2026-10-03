@@ -2,6 +2,12 @@
 
 Goal: Claude sets up and checks most test cases alone; Shay only loads the game once and does the few "eyes/ears" checks.
 
+> **Update 2026-10-02:** the test inbox and the automation commands now live in the standalone
+> Kenshi Automation Harness mod (`Kenshi-Automation-Harness/`, see its `AGENTS.md` and
+> `docs/COMMANDS.md`); Stobe adds its commands (`stobe_say`, `stobe_state`, ...) through
+> `StobeHarnessBridge.cpp`. `stobe-say`/`stobe-auto` keep working as before. The text below is the
+> original plan.
+
 ## What exists already
 - **Test inbox in Stobe.dll** (`stobe-say`), processed on the game thread: `say`, `speed`, `give_cats`, `give_item` (creates items with the game's own factory; proven), `ping`, `state`.
 - `stobe-force-attack` (start a fight), goal status files, `KenshiFP.log`, `stobe.log`, server logs and the full LLM prompt logs.
