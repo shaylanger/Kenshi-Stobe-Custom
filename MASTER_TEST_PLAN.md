@@ -168,4 +168,5 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | KAH 6 | Hover tooltips can't be read (PG 135–141) | open: try `ui` while hovering |
 | KAH 7 | `camera` command (fixed view for perf windows) | deferred m16: not needed (REL gate passed); feasible via `ou->player->camera` (teleport, manuallySetOrientationAndZoom, lock per frame), needs in-game checks |
 | KAH 9 | `kah.py` client: concurrent callers share `inbox.txt.tmp` and lose commands (FileNotFoundError) | fixed (kah.py lock + unique temp, harness 55192E94) |
-| KAH 10 | No way to power a bench in fixtures: built + charged Battery Bank leaves out_of_power=1.0 (blocks STOBE A8, 15/16/89 completion) | found m16, harness helper |
+| KAH 10 | No way to power a bench in fixtures: built + charged Battery Bank leaves out_of_power=1.0 (blocks STOBE A8, 15/16/89 completion) | fixed + confirmed m16 (`power <b> supply`, harness 12F5CE0B) |
+| KAH 11 | `protect <npc>`: keep a character conscious through a fight (Shay KO blocks deal tests 20/21/22/61) | requested m16, harness helper |
