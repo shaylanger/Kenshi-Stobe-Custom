@@ -52,7 +52,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE A5 | Job list switches by itself (Malzin selected) | log `GOAL_JOB ui refresh replayed selection`, harness `screenshot` | PASS m8 |
 | STOBE A6 / KFP | Goal panel above the job list | log `GOAL_PANEL created … (jobs widget)` + harness `screenshot` + `ui` | PASS m2 (after 65: panel 2086,1030, above TimeMoneyPanel 1096) |
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
-| STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | todo |
+| STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | needs setup m15: chain works up to power (90 fixed: uses the well's stock), Grain Silo has no power supply in auto-home |
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | PASS m1 |
 | STOBE A11 / A12 | Heal-for-item deal kept / broken | first aid via `order`, deal state | needs setup: harness wounds don't bleed, NPCs self-bandage (see section 2) |
 | STOBE A13 | Remembers earlier fight events | long fight, then ask | todo |
@@ -73,7 +73,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | SR24 PASS m8; SR25 sleeping witness fixed (rerun); SR30 inconclusive (LLM never tried to join); SR32 blocked (slavery) |
+| REL p6-01a/b, p7-01, p7-02 | witnesses, recruitment gate, slave escape | SR24 PASS (m8–m13); SR25 sleeping witness: native fix m13, verdict pending (m15 18/1); SR30 inconclusive (LLM never tried to join); SR32 liberator not yet seen (p7-02 28/2) |
 | PG status | `INGAME_STATUS.md`: 161 PASS-live, 71 PASS-offline, 8 PENDING (pg-21 rerun, pg-09 soak), 65 NEEDS-SETUP, 10 NEEDS-SHAY, 26 DEFERRED | 342 rows: 169 PASS-live, 71 PASS-offline, 1 PENDING (pg-09 optional soak), 65 NEEDS-SETUP, 10 NEEDS-SHAY, 26 DEFERRED (`INGAME_STATUS.md`, PG ab3ec89, DLL 59EFB4B1) |
 | PG config launches | pg-30 (AutoClassify off) | pg-30 PASS m5, pg-31 PASS m6, pg-40 PASS m6, pg-41 65/1 m6 (chest full, scenario) |
 | PG trader group | PG 211–237 shop rows | PG `tests/ingame/trader/pg-20` (launch 1); `pg-40` (launch 4, NormalVerbose) | PASS m13 (pg-20 diag m3, pg-21 39/0) |
@@ -82,16 +82,17 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 
 | ID | What | How | Status |
 |---|---|---|---|
-| REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | PASS (p1-01 m3; p1-02/03/04 m4 after the campaign 'legacy' fix) |
-| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | PASS in game: SR02/05 (m8), SR03/04 (m4); SR06 inconclusive (victim turns hostile) |
-| REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | SR10 PASS m8; SR08 fixed (m8 build), rerun; SR11/12 blocked (no enslaved fact, probe 21) |
+| REL p1-01…04 | Phase 1 smoke: Capture=0 legacy unchanged; Capture=1 server off / shadow (raw events, identity, no affinity change); reload rejects stale events | REL `ingame/RUN_ORDER.md` | PASS (m3/m4/m5) |
+| REL p2-01…05 | Phase 2 combat: SR02–05 (+ probes 1, 2, 4); p2-05 enabled mode | same | PASS in game: SR02 (m8, m13), SR03/04 (m4), SR05 (m11), SR41; SR06 inconclusive (victim turns hostile) |
+| REL p3-01…04 | Phase 3 unconscious perception: SR08, 10–12 (+ probes 5–9) | same | PASS: SR08 loot via harness transfer + SR10 (m8) + SR11 enslavement (m13) + SR38 (m9); p3-01 39/0 m15 |
 
-### 1e. REL phases 4–5 (ran m4)
+### 1e. REL phases 4–8
 
 | ID | What | Status |
 |---|---|---|
-| REL p4-01…04 | first aid, carry to bed / cage, food | SR15 PASS m8 (+29 lifesaving); food rerun; SR18/19 need a bed/cage fixture (harness `build` in progress) |
-| REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | SR22 PASS m8 (fair trade scores 0); gift rerun; deal procedures (SR29) todo |
+| REL p4-01…04 | first aid, carry to bed / cage, food | PASS: SR15 lifesaving +29 (m8), SR18 bed rescue +8/+9 and SR19 cage -31/-33 (m11, m13; harness `build`), SR21 food transfer (m13/m15 48/0) |
+| REL p8 soak + perf gate | 1 h Hub soak A (Capture=0) / B (Capture=1, shadow) | PASS functional (30/0 both, no queue overflow, shadow check 0); fps 99.5 %, worst frame 107.7 % (gate pass); memory inconclusive -> 10-min B-A-B-A windows running (m15) |
+| REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | PASS: SR22 fair trade 0 (m8), gift +2/+3 (m11, m13); SR29 deal procedures not run; SR13/14 blocked (no theft-caught signal) |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
@@ -99,8 +100,11 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 |---|---|
 | STOBE 61 | a tier 3+ NPC (Samurai/Dust King) who stays to negotiate after losing (the Dust King flees ~240 m before the offer is spoken) |
 | STOBE 15 | a production goal whose missing ingredient only a trader sells (to see WAITING_APPROVAL) |
+| STOBE A8 | power at Home (the Grain Silo/Well have no supply: no working generator/battery in auto-home; harness `build` could place a generator + battery, untested) |
 | STOBE 20, 21, 22 | A fight Shay survives long enough for an offer: 3 raiders KO her (m8); needs a stronger test character (`setstat`/health regen) or the raid squad `size` scaled down per member |
-| REL SR11, SR12, SR32 | An enslavement the game reports (spawned bandits may already count as slaves: probe 21) |
+| REL SR32 | the liberator (who picks the shackle lock) is never reported (probe 20) |
+| REL SR07, SR09, SR13, SR14 | forced limb loss in a fight; a source of better evidence; a theft-caught signal + steal driver |
+| REL SR11, SR12, SR32 (old) | An enslavement the game reports (spawned bandits may already count as slaves: probe 21) |
 | STOBE A11 / A12 | A wounded NPC who can't bandage herself (harness `damage` wounds don't bleed; NPCs self-treat) and stays put for a heal-for-item deal |
 | STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
 | STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
