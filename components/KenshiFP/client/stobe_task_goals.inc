@@ -1114,10 +1114,27 @@ static int stg_trade_once(void *actor,void *trader_char,const char *item_query,i
     int count_after=stg_count_matching(actor_inv,item_query);
     int delta=buying?count_after-count_before:count_before-count_after;
     int price=buying?money_before-money_after:money_after-money_before;
+    /* item 83: where did it go? (Item: isInInventory 0xD8, _whosInventoryWeAreIn hand 0x160, _isPhysical 0x1C8) */
+    int in_inv=-1,physical=-1;uint32_t holder=0,buyer=stg_serial(actor);int mq=0;
+    if(moved&&readable(moved,0x1D0)){
+        in_inv=*(unsigned char *)((uintptr_t)moved+0xD8);
+        physical=*(unsigned char *)((uintptr_t)moved+0x1C8);
+        holder=((uint32_t *)((uintptr_t)moved+0x160+HAND_IDS))[4];
+        mq=*(int *)((uintptr_t)moved+0x12C);if(mq<1)mq=1;
+    }
+    logline("[stobe] TRADE_RESULT buying=%d item=%s moved=%p in_inventory=%d physical=%d holder=%u buyer=%u count %d->%d money %d->%d",
+        buying,item_query,moved,in_inv,physical,holder,buyer,count_before,count_after,money_before,money_after);
     if(moved&&price>=0&&delta>0){
         ok=1;
         if(actual_price)*actual_price=price;
         if(units_moved)*units_moved=delta;
+    }else if(buying&&moved&&price>0&&in_inv==1&&physical!=1){
+        /* item 83: paid and in an inventory that isn't her main list (e.g. her backpack) */
+        ok=1;
+        if(actual_price)*actual_price=price;
+        if(units_moved)*units_moved=mq;
+    }else if(buying&&moved&&price>0&&physical==1){
+        if(why)snprintf(why,why_sz,"bought %s but it fell to the ground (no room)",item_query);
     }else if(why){
         snprintf(why,why_sz,buying?"Kenshi rejected the purchase":"Kenshi rejected the sale");
     }
