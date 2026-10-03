@@ -1,0 +1,113 @@
+diff --git a/src/SocialEventProtocol.cpp b/src/SocialEventProtocol.cpp
+index 8e0120b..caffdc8 100644
+--- a/src/SocialEventProtocol.cpp
++++ b/src/SocialEventProtocol.cpp
+@@ -94,12 +94,12 @@ std::string StructuredEnvelope(const std::string& campaign,const std::string& se
+     return out.str();
+ }
+ std::string WitnessJson(const EntityInfo& who,const std::string& session,unsigned long epoch,bool conscious,bool perceived,
+- int seesActor,int seesTarget,int hearsActor,int task,int prone){
++ int seesActor,int seesTarget,int hearsActor,int task,int prone,int sleeping){
+     std::string e=StructuredEntity(&who,session,epoch);
+     if(e=="null")return "";
+     std::ostringstream w;
+     w<<"{\"entity\":"<<e<<",\"conscious\":"<<(conscious?"true":"false")<<",\"perceived\":"<<(perceived?"true":"false")
+-     <<",\"sees_actor\":"<<JsonBool(seesActor)<<",\"sees_target\":"<<JsonBool(seesTarget)<<",\"hears_actor\":"<<JsonBool(hearsActor)<<",\"task\":"<<task<<",\"prone\":"<<prone<<"}";
++     <<",\"sees_actor\":"<<JsonBool(seesActor)<<",\"sees_target\":"<<JsonBool(seesTarget)<<",\"hears_actor\":"<<JsonBool(hearsActor)<<",\"task\":"<<task<<",\"prone\":"<<prone<<",\"sleeping\":"<<sleeping<<"}";
+     return w.str();
+ }
+ }
+diff --git a/src/SocialEventProtocol.h b/src/SocialEventProtocol.h
+index f8d52d7..9dbd168 100644
+--- a/src/SocialEventProtocol.h
++++ b/src/SocialEventProtocol.h
+@@ -30,7 +30,7 @@ namespace StobeSocial {
+         const std::string& witnessesJson = "[]");
+     // One witness entry: entity + explicit sensing (REL phase 6). Unknown consciousness = no entry.
+     std::string WitnessJson(const EntityInfo& who, const std::string& session, unsigned long epoch,
+-        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor, int task = -1, int prone = -1);
++        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor, int task = -1, int prone = -1, int sleeping = -1);
+ }
+ 
+ // Game-side runtime (Utils.cpp): one capture switch and one sequence for every social post.
+diff --git a/src/Utils.cpp b/src/Utils.cpp
+index fb1eb13..2a4a3b9 100644
+--- a/src/Utils.cpp
++++ b/src/Utils.cpp
+@@ -1643,7 +1643,8 @@ static std::string SocialWitnessArray(const std::vector<StobeSocial::EntityInfo>
+       tri[k] = v == 0 ? -1 : (v == 2 ? 1 : 0);
+     }
+     std::string w = StobeSocial::WitnessJson(who[i], PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
+-                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2], (s >> 8) & 0x3FF, (s >> 18) & 7);
++                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2], (s >> 8) & 0x3FF, (s >> 18) & 7,
++                                             ((s >> 21) & 3) == 3 ? -1 : ((s >> 21) & 3));
+     if (w.empty())
+       continue;
+     out += (n ? "," : "") + w;
+diff --git a/src/main.cpp b/src/main.cpp
+index 26cb4f7..e9fdc8f 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -41,6 +41,8 @@
+ 
+ #include <kenshi/CharStats.h>
+ #include <kenshi/Character.h>
++#include <kenshi/StateBroadcastData.h>
++#include <kenshi/util/YesNoMaybe.h>
+ #include <kenshi/CharBody.h>
+ #include <kenshi/CharMovement.h>
+ #include <kenshi/Dialogue.h>
+@@ -5435,7 +5437,7 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
+       continue;
+     // Run m8: isUnconcious() is false while sleeping. Asleep = in a bed, or the current task is sleeping.
+     bool asleep = false;
+-    int taskId = 0, prone = 0;
++    int taskId = 0, prone = 0, sleeping = 3; // 3 = unknown (logged as -1)
+     try {
+       hand ignoredSubject;
+       TaskType task = ResolveCurrentNpcTaskSafe(w, ignoredSubject);
+@@ -5443,6 +5445,16 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
+       prone = (int)w->getProneState();
+       asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED || prone == (int)PS_KO ||
+                prone == (int)PS_PLAYING_DEAD;
++      // Run m13: a floor sleeper's body task was not SLEEP_ON_FLOOR (logged 290); the AI's own broadcast state
++      // (StateBroadcastData::isSleeping, what other characters' senses read) is the reliable flag.
++      StateBroadcastData *sb = w->stateBroadcast;
++      if (sb && (uintptr_t)sb > 0x1000) {
++        sleeping = (int)sb->isSleeping.key;
++        if (sleeping < 0 || sleeping > 2)
++          sleeping = 3;
++        if (sb->isSleeping.key == YesNoMaybe::YES)
++          asleep = true;
++      }
+     } catch (...) {
+       asleep = false;
+     }
+@@ -5460,7 +5472,7 @@ static void SocialCollectWitnesses(Character *actor, Character *target, std::vec
+     bool perceived = e.conscious == 1 && (seesActor == 2 || seesTarget == 2 || hearsActor == 2);
+     who.push_back(e);
+     sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6) |
+-                    ((taskId & 0x3FF) << 8) | ((prone & 7) << 18));
++                    ((taskId & 0x3FF) << 8) | ((prone & 7) << 18) | ((sleeping & 3) << 21));
+   }
+ }
+ 
+@@ -8771,6 +8783,18 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection)
+       Character *carrier = (state.lastCarrierSerial != 0 && nowTick - state.lastCarryDropTick < 15000)
+                                ? ResolveCharacterBySerialForInventoryEvent(state.lastCarrierSerial)
+                                : nullptr;
++      if (!carrier) {
++        // Run m13: the bed/cage flag shows up in the same sweep, before the carrier's own drop is processed
++        // (placed came 5 ms ahead of carry_end, actor #0). The carrier's last state still says it carries us.
++        for (std::map<unsigned int, NpcWorldEventState>::const_iterator it = g_npcWorldEventStateBySerial.begin();
++             it != g_npcWorldEventStateBySerial.end(); ++it) {
++          if (it->first != serial && it->second.carryingTargetSerial == serial) {
++            carrier = ResolveCharacterBySerialForInventoryEvent(it->first);
++            if (carrier)
++              break;
++          }
++        }
++      }
+       StobeSocial::EntityInfo c = SocialEntityFor(carrier), t = SocialEntityFor(npc);
+       SocialPostStructured("placed", carrier ? &c : nullptr, &t,
+                            std::string("\"place\":") + (useStateNow == (int)IN_BED ? "\"bed\"" : "\"prison\"") +

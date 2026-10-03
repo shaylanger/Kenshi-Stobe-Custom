@@ -680,3 +680,72 @@ In `docs/social_relationship_release.md` ("Final report (draft)"), generated fro
 Recommendation: keep `shadow` for normal play until the soak gate and the open rows close. `enabled` is fine for a
 supervised balance session on a fixture copy. Turn off `SOCIAL_CATEGORY_SLAVERY` / `_WITNESS` if they are still
 open when enabling for real play.
+
+## 2026-10-03 Run m13 results, fixes, frame-time gate verdict
+
+### Verdicts (m13: Stobe FD651985 = REL m11 + item 88, server 796019b, Capture=1, shadow)
+- **Pass in game:**
+  - SR11, new: Rel Vash -> Rel Grell enslavement -86 on waking, although his own KO was never seen.
+  - SR02 (Rel Vorn -> Shay -36).
+  - SR18 (Rel Cobb -> Malzin safe_rescue +8).
+  - SR19 (Rel Kade -> Malzin imprisonment -33).
+  - SR22 (gift +2).
+  - SR24 (Rel Wren -8).
+  - p4-04: Hask's food transfer is now captured, so the m11 "transfer not seen" is closed.
+- **Failed steps, judged:**
+  - p3-01 step 41: the KO fact exists, but the world sweep does not run while paused, and the check ran before
+    the sweep did. Scenario fix: run 4 s before pausing.
+  - p3-01 step 47 (probe 6 answered): LOOT_TARGET on a KO'd NPC moved nothing in 20 s; Malzin's inventory did
+    not change. The loot is now a harness `transfer`.
+  - p4-02 / p4-03 `placed` had actor #0. The bed/cage flag is seen 5 ms before the carrier's drop in the same
+    sweep. The server still credited the carrier through carry_end. **Native fix:** fall back to the character
+    who still carries the target.
+  - p4-04 step 51: Hask at 1.50 did not eat within 8 s. The scenario now sets 1.20 and forces the meal.
+  - p7-02 (SR32): Rel Xan was again "first seen already enslaved". Cause: Stobe's NPC world event sweep starts
+    45 s (real time) after a load, and he was shackled about 25 s after it. The scenario now waits 50 s.
+- **SR25 still open:** Rel Sorn -9. Her witness entry showed task 290, prone 0, so she was not asleep by our check
+  5 s after the floor-sleep order.
+  - **Native fix:** also read `StateBroadcastData::isSleeping`, the AI's own flag, and log `"sleeping"`.
+  - **Scenario:** wait 15 s after the sleep order, and require her entry to read conscious false and sleeping 1.
+
+### Frame-time gate (soak A2 / B2, 157 s fps windows)
+| | avg fps | worst frame | memory start -> end |
+|---|---|---|---|
+| A2 (Capture=0, mode off) | 54.8 | 323.5 ms | 5206 -> 4930 MB |
+| B2 (Capture=1, shadow) | 54.5 | 348.5 ms | 5317 -> 5178 MB |
+
+- **fps:** 99.5% of A (gate >= 95%). **Pass.**
+- **Worst frame:** 107.7% of A (gate <= 110%). **Pass,** with little margin.
+- **Memory: inconclusive.**
+  - Both runs fell.
+  - B fell 137 MB less than A; the starts were 111 MB apart.
+  - The end gap of 248 MB is mostly the starting gap plus streaming noise. It is not shown to be growth.
+- Both runs: no overflow, check-shadow 0.
+- **Yes, a longer window is wanted:**
+  - 10 min at speed 1 after a 60 s warm-up, with `fps` reset after the warm-up (not over the load).
+  - Order A-B-A-B on the same fixture.
+  - Record avg / min / worst_ms and memory at the reset and at the end.
+
+### Delivery
+- **Server:** `feature/social-phase1` **`f49a437`** on live `796019b`. Changes:
+  - scenario fixes in p3-01, p4-04, p6-01b, p7-02;
+  - scenarios.json states;
+  - final report "after run m13" in `docs/social_relationship_release.md`.
+  - The runner passes all steps.
+- **Native:** `pending-fixes/rel-native-m13.patch` (SHA256 `8554eae6e9235bc153476d6bb2a7b24a2c2bc764fb4a435b3e50d33cde9288db`).
+  - Incremental on the current `/root/STOBE-src` (which already has REL m11).
+  - Two commits: the sleeping witness, and the placed-actor fallback.
+  - Private build `3590c56d…`.
+
+### Rerun (m13 builds)
+p3-01, p4-02, p4-03, p4-04, p6-01a/b, p7-02, plus the longer A-B-A-B frame-time window.
+
+### Final report (after m13)
+| Status | Rows |
+|---|---|
+| Pass in game | 13 |
+| Partial / rerun pending | 19 |
+| Offline only | 8 |
+| Blocked / open | 4 |
+
+The 4 blocked / open rows are SR07, SR09, SR14 and SR25.
