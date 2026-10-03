@@ -35,7 +35,13 @@ the live server, `/root/STOBE-src`, `C:\StobeBuild` or the `stobe`/`stobe_test` 
   `SocialPostStructured`), `main.cpp` (`SocialEntityFor`, `SocialEmitHarm`, emitters in attackingYou,
   major damage, KO, recovered, limb, death, slavery, transfer aggregation).
 
+- Phase 4/5 code: `lib/social_care.php` (trait: aid/carry/food), `lib/social_property.php` (trait:
+  theft/gift/trade), `lib/social_agreements.php` (deal outcomes; hooked from `stobeNegApplyConsequences`).
+- Runner: 22 steps incl. `legacy_negotiation` (needs `/tmp/negtest`, created by the runner) and
+  `mutation_proof` (15 mutations). Regression events must be in game-time order (later ts) or they are "late".
+
 ## Status
-- Delivery 3 (Phases 1-3): server `68c0c25` on live `2b3593c`, `rel-native-phase3.patch`, private DLL b588f9c8.
-- Stopped after Phase 3 as instructed. Next: Phase 4 (aid and carry) after the coordinator's game probes
-  1-9 (DELIVERY.md) come back; fix REL bugs from the master plan first.
+- Delivery 5 (Phases 1-5): server `3cd48b5` on live `1a8fc3f`, `rel-native-phase5.patch`, private DLL 0fb7e3ca.
+- Stopped after Phase 5 as instructed (coordinator 2026-10-03). Waiting for the coordinator's in-game results
+  and probe answers 1-16 (DELIVERY.md). Next: fix REL bugs from those runs, calibrate rules from the probes,
+  then Phase 6 (witnesses/dialogue: needs a sensing API probe first).

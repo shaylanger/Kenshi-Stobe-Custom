@@ -219,3 +219,41 @@ KO and care suites each fail their suite; now part of the runner).
 12. `LIFT_PERSON` + `PUT_IN_CAGE building <cage>` cages him; `placed` "prison" names Malzin.
 13. `transfer` + `eat` produce `item_transfer` with `food_items`/`recipient_hunger` and `eat` lines.
 Known gap: carry by the player actor (Shay) is not captured (the world poller skips the player actor).
+
+## 2026-10-03 Delivery 5: Phase 5 property, economy, agreements (supersedes Delivery 4; merge this one)
+
+### Server
+- Merge **`feature/social-phase1` at `3cd48b5`** (based on live `stobe` `1a8fc3f`, item 74; fast-forward).
+  No new migration. Rules `phase5-v1`.
+- **Touches a live file outside REL:** `lib/negotiation_engine.php` `stobeNegApplyConsequences` gets a
+  4-line hook: when REL is enabled it scores the deal outcome (kept_promise +1..+3, kept_coercive_deal
+  0..+2, broken_promise -5..-15, + betrayal -20..-40 if the player broke the truce) and the legacy
+  +4/-15 is skipped. Off/shadow keep the legacy delta (shadow records the would-be effect).
+  `tests/negotiation_engine_regression.php`: 190 pass with and without the hook.
+- Theft: scores only stolen-flagged items the owner CAUGHT; native sends `caught: null` (no proven
+  detection signal) so **no theft scores in game yet** (by design, plan section 3). Severity by share of
+  belongings, starving owner's food = major, returned items = small compensation once, squad exempt.
+- Gifts (+1..+4) and trade (buyItem path; price vs the game value) share the economic budget (decreasing
+  weights, +6/day, never past +30); shop storage seller, faction purse, missing value = nobody credited;
+  deal payments are not gifts.
+
+### Native
+- Patch `C:\KenshiModding\pending-fixes\rel-native-phase5.patch` (cumulative; SHA256
+  `830ec34258e98f63a4421d44a71adc5b6fc1ff5d104363bf391f3372e9861790`), applies clean to the current
+  `/root/STOBE-src`. Adds `trade` from the buyItem hook (buyer, seller only if a character, buyer_spent,
+  seller_gained, reference_value) and on `item_transfer`: stolen_items, caught=null, owner inventory size, owner fullness.
+- Private proof build: SHA256 `0fb7e3cae0a8f7569834a04f28d53fa8368c666f6d5bd49a8818fba1c80fcb52`.
+
+### Scenarios
+`REL-p5-01-trade` (Trader), `REL-p5-02-gift` (auto-home), plus two deal procedures in `RUN_ORDER.md`
+"Phase 5" (scenarios.sh surrender: kept deal; attack after acceptance: broken + betrayal).
+
+### Offline evidence
+Runner 22/22 steps incl. `social_property` (31 checks), `legacy_negotiation` (190) and `mutation_proof`
+(15 mutations, each fails its suite).
+
+### Needs a game probe
+14. A real purchase (`trade Shay <trader> <item>`): is the seller a character or shop storage, and what is
+    buyer_spent / reference_value for a normal purchase (calibrates the economy thresholds)?
+15. `transfer` of a non-food item to an NPC gives an `item_transfer` with a conscious giver and no stolen items.
+16. Blocker for SR13/SR14 in game: an engine signal that a theft was caught (and a steal action driver).
