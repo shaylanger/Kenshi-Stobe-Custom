@@ -54,7 +54,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE A7 | "No room in pack" on-screen message | fill pack, ask for bread, harness `messages` | PASS m1 |
 | STOBE A8 | Bread chain: well -> farm -> silo -> oven | `power` the silo, water, "make 2 bread" at 50x | needs setup m15: chain works up to power (90 fixed: uses the well's stock), Grain Silo has no power supply in auto-home |
 | STOBE A10 | Mid-fight heal is known without saying | `order Shay FIRST_AID_ORDER target <npc>`, then talk | PASS m1 |
-| STOBE A11 / A12 | Heal-for-item deal kept / broken | first aid via `order`, deal state | needs setup: harness wounds don't bleed, NPCs self-bandage (see section 2) |
+| STOBE A11 / A12 | Heal-for-item deal kept / broken | `tests/ingame/stobe/STOBE-A11-A12-heal-deal.sh` | A11 PASS m16; A12 inconclusive (she won't hand over first: by design) |
 | STOBE A13 | Remembers earlier fight events | long fight, then ask (`tests/ingame/stobe/STOBE-A13-fight-memory.txt`) | PASS m16 (A13 v4, after 91/92) |
 | PG auto-home group | 95 PENDING rows (see PG `INGAME_STATUS.md`) | PG `tests/ingame/auto-home/pg-01…pg-09` (Forced + InGameTest), then config launches 2–4 (`RUN_ORDER.md`) | PASS m4 (pg-01…08 all green on FAA5B471) |
 | STOBE A1 / A2 | FP mode: look-at click keeps control; put down with G | `fp_mode`, `fp_click`, `fp_putdown`, `fp_state` + KenshiFP.log | PASS m1 |
@@ -92,7 +92,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 |---|---|---|
 | REL p4-01…04 | first aid, carry to bed / cage, food | PASS: SR15 lifesaving +29 (m8), SR18 bed rescue +8/+9 and SR19 cage -31/-33 (m11, m13; harness `build`), SR21 food transfer (m13/m15 48/0) |
 | REL p8 soak + perf gate | 1 h Hub soak A (Capture=0) / B (Capture=1, shadow) | PASS (m13 soak: functional 30/0, fps 99.5 %, worst 107.7 %; m15 B-A-B-A windows within the same fps regime 99.6-100.2 %, memory B-A -45/+4 MB: gate pass, idle capture) |
-| REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | PASS: SR22 fair trade 0 (m8), gift +2/+3 (m11, m13); SR29 deal procedures not run; SR13/14 blocked (no theft-caught signal) |
+| REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | PASS: SR22 fair trade 0 (m8), SR23 m16 (carried-stock seller named), gift +2/+3 (m11, m13); SR29 deal procedures not run; SR13/14 blocked (no theft-caught signal); SR28 + SR29 PASS m16 (rel-surrender.sh kept-hate / breach) |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
@@ -153,8 +153,6 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
 | STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
 | STOBE 94 | STOBE | m16 | `stobe-reset-npc --restore` writes the entry under PLAYER_NAME `shay` while the server writes `Shay`: possible duplicate relationship keys | fixed (tool), round trip at the end |
-| STOBE 96 | STOBE | m16 | Deal payment verified only from dispatched_unix-3: an NPC paying on accept is missed; REISSUE waits for speech, deal hangs | fixed live (c5a8e25), rerun surrender |
-| STOBE 97 | STOBE | m16 | Personal-truce guard (20 s) clears an explicit player attack order: player betrayal impossible | fixed (Stobe EF62563B), rerun SR29 breach |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
