@@ -5,7 +5,7 @@
 # fixture: Crafting base
 # reset: fresh (reload the Crafting base copy first; once per mode)
 # usage: STOBE-15-buy-approval.sh approve|decline
-# needs: KenshiFP 616FBF45 (medical bench + item 99 BUY_FALLBACK diagnostics; STOBE 89 should pass first), Stobe EF62563B+,
+# needs: KenshiFP E64B1BD5 (item 99b: nearest trader that stocks it; STOBE 89 should pass first), Stobe EF62563B+,
 #        harness F946C881
 # chain: Basic First Aid Kit = Fabrics at the Basic Medical Workbench (game data: 'medical crafting basic' consumes
 #        Fabrics). No Loom in the base, so Fabrics have no producer; the planner then asks the NEAREST trader to

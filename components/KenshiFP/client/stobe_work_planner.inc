@@ -336,6 +336,8 @@ static int wgp_scan_buildings_r(void *gw, void *actor, void **out, int max, floa
     return n;
 }
 
+static int g_wgp_count_scanned, g_wgp_count_inv; /* Item 99b: last count's sources (log only) */
+static int wgp_scan_buildings_r(void *gw, void *actor, void **out, int max, float radius);
 static int wgp_item_count_world(void *gw, void *actor, const char *query)
 {
     int total=0;
@@ -343,6 +345,9 @@ static int wgp_item_count_world(void *gw, void *actor, const char *query)
     total += wgp_item_count_inventory(inv,query);
     void *buildings[WGP_MAX_BUILDINGS]={0};
     int n=wgp_scan_buildings(gw,actor,buildings,WGP_MAX_BUILDINGS);
+    /* Item 99b: a full town scan can miss the base chest next door: count within 300 m instead */
+    if (n>=WGP_MAX_BUILDINGS) { memset(buildings,0,sizeof(buildings)); n=wgp_scan_buildings_r(gw,actor,buildings,WGP_MAX_BUILDINGS,300.0f); }
+    g_wgp_count_scanned=n; g_wgp_count_inv=total;
     for (int i=0;i<n;i++) {
         void *b=buildings[i];
         if (!readable(b,0x80)) continue;
@@ -837,6 +842,8 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         if (ss95 && have+ss95->consumed>=need) return 1;
     }
     if (!found_p) {
+        logline("[stobe] WORK_STEP id=%s %s have=%d need=%d (inventory %d, buildings %d of %d scanned) no producer (Item 99b)",
+                g->id,item,have,need,g_wgp_count_inv,have-g_wgp_count_inv,g_wgp_count_scanned);
         int purchase=stg_request_purchase_fallback(gw,actor,g->actor_serial,g->actor,g->id,item,need,reason,reason_sz);
         if(purchase>0){
             snprintf(g->current_step,sizeof(g->current_step),"%s",reason);

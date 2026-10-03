@@ -2,7 +2,7 @@
 # covers: STOBE 16 (a goal needing a crafted ingredient at a bench: the bench queue grows only by what's missing)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP 616FBF45 (work planner, items 93-95), Stobe EF62563B, harness 55192E94 (build, research, benches, #serial/index)
+# needs: KenshiFP E64B1BD5 (work planner, items 93-95, 99b stock count + WORK_STEP have= line), Stobe EF62563B, harness 55192E94 (build, research, benches, #serial/index)
 # verify:
 #   Chain (from this install's game data, tools/research): Junkbow = Steel Bars + Hinge, crafted at the
 #   Crossbow Crafting Bench (in the base); Hinge = crafted at the "Arrow Making Bench " (sid 96184-Newwworld.mod,
