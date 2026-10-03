@@ -1643,7 +1643,8 @@ static std::string SocialWitnessArray(const std::vector<StobeSocial::EntityInfo>
       tri[k] = v == 0 ? -1 : (v == 2 ? 1 : 0);
     }
     std::string w = StobeSocial::WitnessJson(who[i], PlaythroughSession::ClientId(), PlaythroughSession::Generation(),
-                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2], (s >> 8) & 0x3FF, (s >> 18) & 7);
+                                             (s & 1) != 0, (s & 2) != 0, tri[0], tri[1], tri[2], (s >> 8) & 0x3FF, (s >> 18) & 7,
+                                             ((s >> 21) & 3) == 3 ? -1 : ((s >> 21) & 3));
     if (w.empty())
       continue;
     out += (n ? "," : "") + w;

@@ -30,7 +30,7 @@ namespace StobeSocial {
         const std::string& witnessesJson = "[]");
     // One witness entry: entity + explicit sensing (REL phase 6). Unknown consciousness = no entry.
     std::string WitnessJson(const EntityInfo& who, const std::string& session, unsigned long epoch,
-        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor, int task = -1, int prone = -1);
+        bool conscious, bool perceived, int seesActor, int seesTarget, int hearsActor, int task = -1, int prone = -1, int sleeping = -1);
 }
 
 // Game-side runtime (Utils.cpp): one capture switch and one sequence for every social post.
