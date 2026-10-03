@@ -39,9 +39,8 @@ n=0
 # KenshiFP.log `BUY_FALLBACK <goal> Fabrics: ...` (item 99) says why if it still fails.
 stobe-auto spawn "Skeleton Traders Animals" "Traders Guild" near Malzin dist 60 | cut -c1-200
 sleep 2
-# the medical bench needs power (m16 craft2: out_of_power=1.0): a charged Battery Bank
-stobe-auto build "Battery Bank" near Malzin dist 25 | cut -c1-160
-stobe-auto power "Battery Bank" charge | cut -c1-160
+# the medical bench needs power (m16 craft2: out_of_power=1.0): harness `power ... supply` (KAH 10)
+stobe-auto power "Basic Medical Workbench" supply radius 300 | cut -c1-200
 stobe-say speed 1 >/dev/null; sleep 3; stobe-say speed 0 >/dev/null
 stobe-auto building "Basic Medical Workbench" radius 300 | grep -oE "has_power=[0-9] out_of_power=[0-9.]+"
 for t in $(stobe-auto traders 600 | tr '|' '\n' | grep -oE '#[0-9]+/[0-9]+'); do

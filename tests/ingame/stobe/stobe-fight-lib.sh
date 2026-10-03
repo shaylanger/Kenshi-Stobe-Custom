@@ -9,6 +9,7 @@ SC=/mnt/c/KenshiModding/tools/automation/scenarios.sh
 BASE_L=$(grep -a -c "" "$L" 2>/dev/null || echo 0)
 BASE_SRV=$(grep -a -c "" "$SRV" 2>/dev/null || echo 0)
 HEALER=""
+PROTECTED=""
 
 # m16: the healer and the main flow wrote the harness inbox at the same moment (kah.py uses one fixed
 # inbox.txt.tmp -> FileNotFoundError, lost commands: the raider spawn, the "deal." line). Every harness call from
@@ -35,23 +36,22 @@ since_srv() { tail -n +"$BASE_SRV" "$SRV"; }
 # KO'd speaker can't talk: stobe.log `CHAT_VALIDATE: fail speaker unavailable`). Now every HEAL_EVERY s (2) + blood.
 heal_start() {
   local who="${*:-Shay}"
+  # m16 fights3: even 2-s heals didn't stop knockouts. Preferred: harness `protect <npc> on` (KAH: wakes a KO'd
+  # character at once, keeps HP/blood full every frame). Fallback when the harness doesn't know it: the heal loop.
+  PROTECTED=""
+  for n in $who; do
+    if stobe-auto protect "$n" on >/dev/null 2>&1; then PROTECTED="$PROTECTED $n"; fi
+  done
+  if [ -n "$PROTECTED" ]; then log "protect on:$PROTECTED"; return 0; fi
+  log "harness has no 'protect': heal loop every ${HEAL_EVERY:-2} s"
   ( while :; do for n in $who; do stobe-auto health "$n" 100 >/dev/null 2>&1; stobe-auto blood "$n" 100% >/dev/null 2>&1; done; sleep "${HEAL_EVERY:-2}"; done ) </dev/null &
   HEALER=$!
 }
-# talk_ready <npc handle>: Shay awake (waits out a KO, up to 150 s) and the NPC next to her (fled raiders were 290 m off)
-talk_ready() {
-  local h="$1"
-  for i in $(seq 1 50); do stobe-auto where Shay | grep -q " KO" || break; [ "$i" = 1 ] && log "Shay is knocked out: waiting"; stobe-say speed 1 >/dev/null; sleep 3; done
-  stobe-auto where Shay | grep -q " KO" && log "Shay still KO"
-  if [ -n "$h" ]; then
-    local dist; dist=$(stobe-auto where "$h" | grep -oE 'dist=[0-9.]+' | cut -d= -f2 | cut -d. -f1)
-    [ "${dist:-0}" -gt 12 ] && { stobe-auto teleport "$h" Shay dist 4 >/dev/null; log "brought $h back from ${dist} m"; }
-  fi
-  stobe-auto select Shay >/dev/null
+heal_stop() {
+  [ -n "$HEALER" ] && kill "$HEALER" 2>/dev/null; HEALER=""
+  for n in ${PROTECTED:-}; do stobe-auto protect "$n" off >/dev/null 2>&1; done
+  [ -n "${PROTECTED:-}" ] && log "protect off:$PROTECTED"; PROTECTED=""
 }
-# say_to <npc handle> <name> <text>: talk_ready, then the line (no --wait: sleeps 15 s after)
-say_to() { talk_ready "$1"; stobe-say say "$2" "$3" --wait 15 >/dev/null 2>&1 || log "say failed"; }
-heal_stop() { [ -n "$HEALER" ] && kill "$HEALER" 2>/dev/null; HEALER=""; }
 trap 'heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 
 # Malzin out of the way (the surrender recipe): KO'd 40 m off for <s> seconds, so she doesn't finish the raider

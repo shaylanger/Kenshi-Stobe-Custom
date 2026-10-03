@@ -3,7 +3,7 @@
 #         then Kenshi died silently on the goal's first tick); also item 93b (crafting bench constant)
 # fixture: Crafting base
 # reset: fresh
-# needs: KenshiFP E64B1BD5 (items 93-95, 99b), Stobe EF62563B, harness 55192E94 (build Battery Bank, power charge)
+# needs: KenshiFP E64B1BD5 (items 93-95, 99b), Stobe EF62563B, harness 12F5CE0B (power supply)
 # verify:
 #   - no crash: `kenshi-ctl.ps1 health` = ok after the run, `status` still answers (last steps below), no new
 #     crashDump zip in D:\...\Kenshi\;
@@ -25,10 +25,9 @@ clearjobs Malzin
 # m16: blueprint found nothing; the game data research is "Basic First Aid Kits" (requires "Fabric Manufacture")
 research "Fabric Manufacture"
 research "Basic First Aid Kits"
-# m16 craft2: the base grid has power (has_power=1) but nothing stored (out_of_power=1.0): the benches need
-# -5..-10 power and the base has no battery. A charged Battery Bank next to them feeds the grid.
-build "Battery Bank" near Malzin dist 25 ~ Battery Bank
-power "Battery Bank" charge
+# m16: the Hub grid is 77.8/190 with no battery, so the benches read out_of_power=1.0. The harness
+# `power <building> supply` cheat (KAH 10, harness 12F5CE0B) powers one building directly.
+power "Basic Medical Workbench" supply radius 300 ~ supplied=1
 speed 1
 @sleep 3
 speed 0
