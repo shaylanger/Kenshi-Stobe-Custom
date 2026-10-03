@@ -37,8 +37,8 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | PASS m3 (after 77) |
 | STOBE 55 | R4 fights count (superseded once REL is enabled) | `scenarios.sh duel`, server log `a fight counts (R4)` | PASS m1 (fires once per pair; direction = event attacker) |
 | STOBE 56 | Relationship types from the list only | chats, check entries | PASS m16 (all types on the list, new entry for Tovin Brask) |
-| STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | FAIL m1 -> STOBE 70 (old entry back via snapshot) |
-| STOBE 58 | `stobe-reset-npc` save + `--restore` | WSL only, no game action needed | todo |
+| STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | PASS m16 (after 70: no generic-name keys in the DB after the m16 bandit fights) |
+| STOBE 58 | `stobe-reset-npc` save + `--restore` | WSL only, no game action needed | PASS m16 (saved once, restore works; key case -> 94) |
 | STOBE 59 | Relationships follow the save | real insult/fight at T, reload fixture, `PLAYTHROUGH: restored` | PASS m3 (stamped trust -80 -> reload -> back to the save's state) |
 | STOBE 48 | KO/death during a deal | `scenarios.sh surrender` + `ko` / `kill` | PASS m1 (a + b) |
 | STOBE 53 | Cap without a lie | surrender, "Make it 350" | PASS m1 |
@@ -134,14 +134,11 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | fixed, PASS m2 |
 | STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | closed: no player-owned town in auto-home; server fallback is the fix (PASS m2) |
 | STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | fixed, PASS m1 |
-| STOBE 68 | STOBE | m1 | Fetch goal with destination "Shay" -> destination_not_known; failure is silent (she promised to go) | fixed live (48a32df), retest |
 | STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | fixed (semantic guard), PASS m4 |
-| STOBE 70 | STOBE | m1 | Generic-name relationship key ("Dust Bandit Bowman") restored from a snapshot after the R3 cleanup | fixed live (197d921) + DB cleanup, retest |
 | STOBE 71 | STOBE | m1 | Surrender offers never fired: raider's combat rows under his generic pre-naming name | fixed live (722d53d), PASS m1 |
 | STOBE 72 | STOBE | m1 | Accepting after a rejected counter flipped the payer (Shay pays) | fixed, PASS m2 |
 | STOBE 73 | STOBE | m2 | Squad member agrees to a fetch ("I'll go dig it out") but sends no TASK_GOAL | fixed, PASS m3 |
 | STOBE 74 | STOBE | m2 | Agreed purchase, no action | fixed live (1a8fc3f), PASS m2 (goal added) |
-| STOBE 75 | KFP | m2 | BUY goal blocked: trader 285 away "not nearby" (220 search) + stray MOVE_TO failure line | fixed (KenshiFP D5795BD5 installed, server efffb3e), retest |
 | STOBE 76 | KFP | m3 | "bring it to me" fetch keeps the item on return | fixed, PASS m4 |
 | STOBE 77 | STOBE | m3 | Relationship stance block doesn't shape tone (same reply at -80/60/96) | fixed live (0a22a77), PASS m3 |
 | STOBE 78 | STOBE | m3 | Errand to a named trader out of nearby range: she doubts/asks back, no action | fixed, PASS m4 (prompt block; model returns BUY) |
@@ -157,6 +154,7 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
 | STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
 | STOBE 93 | KFP | m16 | Work planner: building-type enum off by one (shop taken for a bench, no bench found); after the fix a native fault right after the bench is found | fixer working (KenshiFP BAF2D1DE found the bench) |
+| STOBE 94 | STOBE | m16 | `stobe-reset-npc --restore` writes the entry under PLAYER_NAME `shay` while the server writes `Shay`: possible duplicate relationship keys | open (tool) |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
