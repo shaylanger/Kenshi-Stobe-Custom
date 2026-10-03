@@ -99,6 +99,67 @@ bool IsPlayerOwnedTownAt(TownBase *candidate, const Ogre::Vector3 &position) {
   return IsUsablePointer(owner) && owner->isThePlayer();
 }
 
+// Item 66 debug: once per 30 s, why no player base is detected at the observer.
+DWORD g_lastTownDebugTick = 0;
+
+std::string DescribeTownForDebug(TownBase *town, const Ogre::Vector3 &position) {
+  if (!IsUsablePointer(town)) {
+    return "none";
+  }
+  std::ostringstream out;
+  Faction *owner = town->getFaction();
+  const Ogre::Vector3 townPosition = town->getPosition();
+  out << "'" << town->getName() << "' type=" << static_cast<int>(town->getDataType())
+      << " faction='" << (IsUsablePointer(owner) ? owner->getName() : std::string("?"))
+      << "' player=" << (IsUsablePointer(owner) && owner->isThePlayer() ? 1 : 0)
+      << " inBorders=" << (town->withinBordersRange(position, 1.0f) ? 1 : 0)
+      << " dist=" << static_cast<int>(townPosition.distance(position));
+  return out.str();
+}
+
+void DebugLogTowns(Character *actor, const Ogre::Vector3 &position) {
+  const DWORD now = GetTickCount();
+  if (g_lastTownDebugTick != 0 && now - g_lastTownDebugTick < 30000) {
+    return;
+  }
+  g_lastTownDebugTick = now;
+  std::ostringstream line;
+  line << "PLAYER_BASE_DEBUG: observer='" << actor->getName() << "' pos="
+       << static_cast<int>(position.x) << "," << static_cast<int>(position.y)
+       << "," << static_cast<int>(position.z);
+  TownBase *nearest = nullptr;
+  if (IsUsablePointer(shou) && IsUsablePointer(shou->townList)) {
+    nearest = shou->townList->getNearestWithinItsRadius(position, false);
+  }
+  line << " | nearestWithinRadius: " << DescribeTownForDebug(nearest, position);
+  line << " | currentTown: "
+       << DescribeTownForDebug(actor->getCurrentTownLocation(), position);
+  if (IsUsablePointer(shou) && IsUsablePointer(shou->townList)) {
+    lektor<RootObject *> &allTowns = shou->townList->getAllTowns();
+    int playerOwned = 0;
+    int shown = 0;
+    for (uint32_t i = 0; i < allTowns.count && i < 4096; ++i) {
+      RootObject *object = allTowns.stuff[i];
+      if (!IsUsablePointer(object)) {
+        continue;
+      }
+      TownBase *town = static_cast<TownBase *>(object);
+      Faction *owner = town->getFaction();
+      const bool mine = IsUsablePointer(owner) && owner->isThePlayer();
+      if (mine) {
+        ++playerOwned;
+      }
+      const float distance = object->getPosition().distance(position);
+      if ((mine || distance < 3000.0f) && shown < 6) {
+        line << " | town[" << i << "]: " << DescribeTownForDebug(town, position);
+        ++shown;
+      }
+    }
+    line << " | allTowns=" << allTowns.count << " playerOwned=" << playerOwned;
+  }
+  Log(line.str());
+}
+
 TownBase *ResolvePlayerOwnedTown(Character *actor,
                                  const Ogre::Vector3 &position) {
   TownBase *candidate = nullptr;
@@ -593,6 +654,7 @@ bool CaptureUnsafe(GameWorld *world, Character *actor, Snapshot &out) {
   out.observerName = actor->getName();
 
   const Ogre::Vector3 actorPosition = actor->getPosition();
+  DebugLogTowns(actor, actorPosition); // item 66 debug
   TownBase *base = ResolvePlayerOwnedTown(actor, actorPosition);
   if (!base) {
     return true;
