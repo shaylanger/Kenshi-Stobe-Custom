@@ -27,7 +27,12 @@ if [ "${REAL_POWER:-0}" = 1 ]; then
   for b in "Grain Silo" "${WELL:-Well}" "Bread Oven"; do
     log "power $b: $(stobe-auto building "$b" radius 1000 2>&1 | grep -oE 'has_power=[0-9]|out_of_power=[0-9.]+|current_power=[0-9.]+' | tr '\n' ' ')"
   done
-  stobe-auto building "Grain Silo" radius 1000 | grep -q "out_of_power=0" || { verdict A8 "SETUP FAIL Grain Silo has no real power: $(stobe-auto building "Grain Silo" radius 1000 | cut -c1-200)"; exit 1; }
+  # m16 next: an idle silo (no operator) asks for no power and reads out_of_power=1.0 on a full grid, so the
+  # setup checks the GRID (grid_power or grid_battery > 0); the silo must draw power later, while she works it.
+  g=$(stobe-auto building "Grain Silo" radius 1000)
+  gp=$(echo "$g" | grep -oE "grid_power=[0-9.]+" | cut -d= -f2 | cut -d. -f1); gb=$(echo "$g" | grep -oE "grid_battery=[0-9.]+" | cut -d= -f2 | cut -d. -f1)
+  log "silo grid: $(echo "$g" | grep -oE 'grid="[^"]*"|grid_power=[^ ]+|grid_battery=[^ ]+|operators=[^ ]+|needs_power_now=[^ ]+' | tr '\n' ' ')"
+  [ "${gp:-0}" -gt 0 ] || [ "${gb:-0}" -gt 0 ] || { verdict A8 "SETUP FAIL the Grain Silo grid has no power: $(echo "$g" | cut -c1-220)"; exit 1; }
 else
 for b in "Grain Silo" "${WELL:-Well III}" "Bread Oven"; do
   r=$(stobe-auto power "$b" supply radius 1000 2>&1 | cut -c1-200); log "supply $b: $r"
@@ -50,6 +55,11 @@ stobe-auto speed "${SPEED:-20}" >/dev/null
 s=""
 for i in $(seq 1 150); do
   sleep 4
+  # REAL_POWER: does the silo draw power while she works it? (sampled every poll, ~4 s; at 50x her silo step is short)
+  if [ "${REAL_POWER:-0}" = 1 ]; then
+    cp=$(stobe-auto building "Grain Silo" radius 1000 | grep -oE "current_power=[0-9.]+" | cut -d= -f2)
+    awk -v c="${cp:-0}" -v m="${silo_max:-0}" 'BEGIN{exit !(c>m)}' && silo_max="$cp"
+  fi
   s=$(grep -a "^$id" "$ST" | cut -f3,6,8,9 | tr '\t' '|')
   echo "$s" | grep -q -E "COMPLETE|BLOCKED|CANCEL" && break
   stobe-auto where ${PLAYER} | grep -q " KO" && { log "${PLAYER} KO: paused"; break; }
@@ -62,6 +72,9 @@ log "end: $s"
 tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i -E "water|power|grow|blocked|complete" | tail -12 | cut -c1-220
 oven_water=$(tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i "water" | grep -a -c -i "oven")
 stobe-auto inv ${MATE} | grep -o '"name":"[^"]*Bread[^"]*","count":[0-9]*' | head -3
-if echo "$s" | grep -q COMPLETE && [ "$oven_water" -eq 0 ]; then verdict A8 "PASS bread COMPLETE, water never from the oven"
+silo_ok=1; [ "${REAL_POWER:-0}" = 1 ] && ! awk -v m="${silo_max:-0}" 'BEGIN{exit !(m>0)}' && silo_ok=0
+log "silo current_power max while working: ${silo_max:-0} (real power: ${REAL_POWER:-0})"
+if echo "$s" | grep -q COMPLETE && [ "$oven_water" -eq 0 ] && [ "$silo_ok" = 1 ]; then verdict A8 "PASS bread COMPLETE, water never from the oven, silo drew power (max ${silo_max:-n/a})"
+elif echo "$s" | grep -q COMPLETE && [ "$silo_ok" = 0 ]; then verdict A8 "FAIL COMPLETE but the silo never showed current_power>0 (sampled every poll, ~4 s; at 50x her silo step is short)"
 elif echo "$s" | grep -q -i "power"; then verdict A8 "FAIL still a power block: $s"
 else verdict A8 "FAIL $s (oven water lines: $oven_water)"; fi
