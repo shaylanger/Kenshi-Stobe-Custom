@@ -156,7 +156,8 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 87 | STOBE | m8 | Unique NPC named like its template (Dust King) gets no initiative check / surrender | see rows 87/88 |
 | STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
 | STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
-| STOBE 91 | STOBE | m16 | Long fight pushes early fight events (opening knockout, first attack) out of the prompt: she can't remember the start of the fight (A13) | STOBE fixer working |
+| STOBE 91 | STOBE | m16 | Long fight pushes early fight events (opening knockout, first attack) out of the prompt: she can't remember the start of the fight (A13) | fixed live (43df0ae, `<this_fight_so_far>`), rerun A13 v3 |
+| STOBE 92 | STOBE | m16 | NPC first seen already unconscious after a squad fight gets no knockout event | fixed (Stobe FA4EEBE9), rerun A13 v3 |
 | REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
 | CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
 
