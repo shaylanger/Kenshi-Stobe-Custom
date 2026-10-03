@@ -1701,7 +1701,8 @@ static void stg_tick_goal_guarded(void *gw,StgGoal *g)
 #define SGR_GIVEUP_MS 180000
 #define SGR_REORDER_MS 4000
 typedef struct { uint32_t serial; char actor[128]; DWORD until_ms; DWORD next_ms; int cleared; int last_skip; int logged_target;
-                 char give_item[128]; char give_to[128]; int give_qty; /* item 76: hand a fetch over on arrival */ } SgrReturn;
+                 char give_item[128]; char give_to[128]; int give_qty; /* item 76: hand a fetch over on arrival */
+                 uint32_t target_serial; /* item 82: the walk-back target, locked when first found */ } SgrReturn;
 static SgrReturn g_sgr[SGR_MAX];
 
 static int sgr_actor_busy(uint32_t serial)
@@ -1747,7 +1748,9 @@ static void sgr_tick(void *gw)
         if((LONG)(now-r->next_ms)<0)continue;
         r->next_ms=now+SGR_REORDER_MS;
         void *actor=wgp_find_squad_actor(gw,r->serial,r->actor);
-        void *player=actor?wgp_return_target(gw,actor):NULL;
+        void *player=NULL;
+        if(actor&&r->target_serial)player=wgp_find_squad_actor(gw,r->target_serial,NULL); /* item 82: locked */
+        if(actor&&!player){player=wgp_return_target(gw,actor);if(player)r->target_serial=stg_serial(player);}
         Vec3 a={0,0,0},p={0,0,0};
         int skip=!actor?1:!player?2:!char_position(actor,&a)?3:!char_position(player,&p)?4:0;
         if(!skip){int pr=char_prone_state(actor);if(pr==2||pr==3||pr==4)skip=5;}
@@ -1759,7 +1762,8 @@ static void sgr_tick(void *gw)
         }
         r->last_skip=0;
         if(wgp_distance(a,p)<=SGR_STOP_DIST){
-            logline("[stobe] GOAL_RETURN arrived actor=%s",r->actor);
+            {char an[128]={0};stg_char_name(player,an,sizeof(an));
+             logline("[stobe] GOAL_RETURN arrived actor=%s at=%s dist=%.0f",r->actor,an,wgp_distance(a,p));}
             if(r->give_item[0]&&r->give_qty>0){
                 /* item 76: "bring it to me": the named person if close, else the return target when it is that person */
                 void *dst=wgp_find_squad_actor(gw,0,r->give_to);
@@ -1803,8 +1807,8 @@ static void sgr_scan(void)
         if(g->rt_seen_active&&!g->rt_end_ms)g->rt_end_ms=stobe_game_ms();
         if(g->rt_seen_active&&!g->rt_return_started&&g->state!=STG_STATE_PAUSED){
             g->rt_return_started=1;
-            if(!strcmp(g->kind,"FETCH")&&g->state==STG_STATE_COMPLETE&&g->destination[0]&&!g->has_dest&&g->completed>0)
-                sgr_start_give(g->actor_serial,g->actor,g->item,g->destination,g->completed); /* item 76 */
+            if((!strcmp(g->kind,"FETCH")||!strcmp(g->kind,"BUY"))&&g->state==STG_STATE_COMPLETE&&g->destination[0]&&!g->has_dest&&g->completed>0)
+                sgr_start_give(g->actor_serial,g->actor,g->item,g->destination,g->completed); /* items 76/82 */
             else sgr_start(g->actor_serial,g->actor);
         }
     }
