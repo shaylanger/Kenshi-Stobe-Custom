@@ -91,7 +91,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | ID | What | Status |
 |---|---|---|
 | REL p4-01…04 | first aid, carry to bed / cage, food | PASS: SR15 lifesaving +29 (m8), SR18 bed rescue +8/+9 and SR19 cage -31/-33 (m11, m13; harness `build`), SR21 food transfer (m13/m15 48/0) |
-| REL p8 soak + perf gate | 1 h Hub soak A (Capture=0) / B (Capture=1, shadow) | PASS functional (30/0 both, no queue overflow, shadow check 0); fps 99.5 %, worst frame 107.7 % (gate pass); memory inconclusive -> 10-min B-A-B-A windows running (m15) |
+| REL p8 soak + perf gate | 1 h Hub soak A (Capture=0) / B (Capture=1, shadow) | PASS (m13 soak: functional 30/0, fps 99.5 %, worst 107.7 %; m15 B-A-B-A windows within the same fps regime 99.6-100.2 %, memory B-A -45/+4 MB: gate pass, idle capture) |
 | REL p5-01, p5-02 | trade, gift (+ deal kept/broken procedures) | PASS: SR22 fair trade 0 (m8), gift +2/+3 (m11, m13); SR29 deal procedures not run; SR13/14 blocked (no theft-caught signal) |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)

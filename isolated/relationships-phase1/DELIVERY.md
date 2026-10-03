@@ -798,3 +798,24 @@ Use a **separate idle script**, not the soak file. Per launch:
 
 ### Purge
 Not done. Kenshi was started at 08:40, so a frame-time launch is probably running.
+
+## 2026-10-03 Frame-time gate verdict (m15 10-min windows, B-A-B-A, kah-crafting)
+
+**Pass** (idle capture). The four avg numbers are not comparable as reported: the game ran under a ~57.7 fps frame cap
+in B1, A1 and the first 320 s of B2, and uncapped (~100-115 fps) for the rest of B2 and all of A2. The cap flipped
+at 09:13:11 in B2 with no harness command or Stobe activity at that moment (a focus/display change, not capture).
+Compared within the same regime (harness.log 10 s samples):
+
+| Regime | B (Capture=1) | A (Capture=0) | B/A |
+|---|---|---|---|
+| capped | B1 57.1, B2 first 320 s 57.3 | A1 57.2 | 99.8-100.2% |
+| uncapped | B2 last 280 s 106.2 | A2 106.6 | 99.6% |
+
+- **Worst frame:** B1 348.7, B2 404.8 before the cap flip (the 773.2 ms spike sits in the flip interval
+  09:13:01-09:13:11); A1 1983.7, A2 402.8. Same 350-405 ms spikes on both sides: no capture cost.
+- **Memory:** every window shrank (B1 -88, A1 -43, B2 -12, A2 -16 MB); B-A growth -45 / +4 MB (gate < 100). Pass.
+- No overflow in any launch.
+- **Caveat:** `window.sh` skipped the fixed raid spawn, so B captured little (B2: 6 SOCIAL_CAPTURE lines). Capture
+  under combat load is covered by the m13 soak (99.5% fps, 107.7% worst frame).
+- No camera command needed. If another pair is ever wanted: keep Kenshi foreground and untouched for the window and
+  log the cap regime (the `fps` 10 s samples show it).
