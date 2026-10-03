@@ -1,0 +1,46 @@
+# id: STOBE-89-medical-bench
+# covers: STOBE 89 (m12: "Malzin, make me one Basic First Aid Kit at the medical workbench." -> WORK_GOAL accepted,
+#         then Kenshi died silently on the goal's first tick); also item 93b (crafting bench constant)
+# fixture: Crafting base
+# reset: fresh
+# needs: KenshiFP BAF2D1DE (scan buffers from B67AEAD3 + items 93/93b), Stobe E1CD05BF, harness F946C881
+# verify:
+#   - no crash: `kenshi-ctl.ps1 health` = ok after the run, `status` still answers (last steps below), no new
+#     crashDump zip in D:\...\Kenshi\;
+#   - KenshiFP.log: `WORK_GOAL accepted ... item=Basic First Aid Kit qty=1`, then
+#     `find_producer done found=1 building=Basic Medical Workbench crafting=1` (found=0 -> read the WORK_DIAG lines),
+#     no `WGP_SCAN lektor grown`;
+#   - progress: the medical bench queue goes to 1 (`benches` step) and the goal step moves past "Accepted"
+#     (stobe_work_goal.status field 8, or KenshiFP.log WORK_STEP lines); COMPLETE 1/1 + a kit in Malzin's
+#     inventory is a bonus (crafting time depends on her medic skill).
+#   Medical crafting (tech level 100) needs research: `blueprint` completes what the game links to the kit.
+@wait-world
+@sleep 8
+speed 0
+stobe_ping ~ speaker=Shay
+select Shay
+hunger Malzin 250
+hunger Shay 250
+clearjobs Malzin
+blueprint "Basic First Aid Kit"
+benches 200 crafts ~ Basic Medical Workbench [^|]*Basic First Aid Kit
+give Malzin "Large Backpack" 1 ~ got 1/1
+give Malzin "Fabrics" 6 ~ got 6/6
+stobe_say Malzin "Malzin, make me one Basic First Aid Kit at the medical workbench."
+speed 1
+@sleep 30
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Basic First Aid Kit qty=1
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ find_producer done found=1 building=Basic Medical Workbench crafting=1
+speed 0
+status ~ phase=world
+benches 200 ~ Basic Medical Workbench [^|]*queue=1\b
+speed 10
+@sleep 40
+speed 0
+status ~ phase=world
+@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=1\b
+speed 10
+@sleep 40
+speed 0
+status ~ phase=world
+inv Malzin
