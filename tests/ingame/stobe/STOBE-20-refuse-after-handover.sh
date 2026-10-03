@@ -24,13 +24,13 @@ heal_start Shay
 r=$(spawn_raiders 1 | head -1); [ -n "$r" ] || { verdict 20 "SETUP FAIL no raider"; exit 1; }
 engage "$r" || log "warning: no combat_start seen"
 name=$(name_of "$r"); log "raider $r = $name"
-bash "$SC" trust "$name" 60 Fond >/dev/null 2>&1 || true
+trust "$name" 60 Fond >/dev/null 2>&1 || true
 stobe-auto health "$r" 30 >/dev/null
 sleep 4
 weapon=$(stobe-auto inv "$r" | grep -o '"name":"[^"]*","count":1,"equipped":true' | head -1 | sed -E 's/"name":"([^"]*)".*/\1/')
 log "his first worn item: ${weapon:-?}"
 stobe-say say "$name" "Enough! Toss me your weapon first and I'll pay you 100 cats right after. Deal?" --wait 40 >/dev/null 2>&1 || true
-d=$(wait_deal "$name" "ACCEPTED|AWAITING|WAITING_FOR_PLAYER|COMPLETE" 60)
+d=$(wait_accept "$name" 90)
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; heal_stop; verdict 20 "INCONCLUSIVE no accepted deal: $(deal_line "$name")"; exit 2; }
 id=$(echo "$d" | awk '{print $1}'); log "deal $id"
 for i in $(seq 1 15); do deal_block "$id" | grep -E "npc +(GIVE_ITEM|UNEQUIP_ITEM)" | grep -q -E "VERIFIED|DISPATCHED" && break; sleep 4; done

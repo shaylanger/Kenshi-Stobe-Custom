@@ -23,11 +23,11 @@ heal_start Shay
 r=$(spawn_raiders 1 | head -1); [ -n "$r" ] || { verdict 21 "SETUP FAIL no raider"; exit 1; }
 engage "$r" || log "warning: no combat_start seen"
 name=$(name_of "$r"); log "raider $r = $name"
-bash "$SC" trust "$name" 60 Fond >/dev/null 2>&1 || true
+trust "$name" 60 Fond >/dev/null 2>&1 || true
 stobe-auto health "$r" 45 >/dev/null          # hurting, not yet ready to beg (we want Shay's offer, not his)
 sleep 4
 stobe-say say "$name" "Stop! Stop fighting. Stand down now and I'll pay you 200 cats later, once this is over. You have my word." --wait 40 >/dev/null 2>&1 || true
-d=$(wait_deal "$name" "ACCEPTED|AWAITING|WAITING_FOR_PLAYER" 60)
+d=$(wait_accept "$name" 90)
 if [ -z "$d" ]; then
   stobe-say speed 0 >/dev/null; heal_stop
   verdict 21 "INCONCLUSIVE no accepted pay-later deal: $(deal_line "$name")"; exit 2

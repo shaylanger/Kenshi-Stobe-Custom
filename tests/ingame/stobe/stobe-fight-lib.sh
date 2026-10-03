@@ -10,6 +10,22 @@ BASE_L=$(grep -a -c "" "$L" 2>/dev/null || echo 0)
 BASE_SRV=$(grep -a -c "" "$SRV" 2>/dev/null || echo 0)
 HEALER=""
 
+# m16: the healer and the main flow wrote the harness inbox at the same moment (kah.py uses one fixed
+# inbox.txt.tmp -> FileNotFoundError, lost commands: the raider spawn, the "deal." line). Every harness call from
+# these wrappers goes through one lock. stobe-say's --wait would hold the lock (and stop the healer), so it is
+# dropped here and the wrapper sleeps instead.
+KAH_LOCK=/tmp/stobe-kah.lock
+stobe-auto() { flock "$KAH_LOCK" command stobe-auto "$@"; }
+stobe-say() {
+  local a=() w=0
+  while [ $# -gt 0 ]; do if [ "$1" = "--wait" ]; then w="${2:-0}"; shift 2; else a+=("$1"); shift; fi; done
+  flock "$KAH_LOCK" command stobe-say "${a[@]}"
+  local rc=$?
+  [ "$w" -gt 0 ] && sleep 15
+  return $rc
+}
+trust() { flock "$KAH_LOCK" bash "$SC" trust "$@"; }  # stobe-rel-stamp reads the game time through the harness
+
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 since_stobe() { tail -n +"$BASE_L" "$L"; }
 since_srv() { tail -n +"$BASE_SRV" "$SRV"; }
@@ -47,10 +63,41 @@ spawn_raiders() {
     stobe-auto spawn "$t" "Starving Bandits" near Shay dist 4 count 1 >/dev/null
   fi
   sleep 1
-  for s in $(bash "$SC" raiders); do
-    if [ "$k" -lt "$n" ]; then stobe-auto teleport "$s" Shay dist 3 >/dev/null; echo "$s"; k=$((k+1))
+  # m16: in-process (scenarios.sh raiders ran outside the lock) and every kept raider gets a unique name:
+  # three "Dust Bandit"s can't be told apart by stobe_say or the deal list (22), and reloads reuse old names (117)
+  local names=("Garro Vex" "Tannik Rule" "Morb Ashel" "Vesk Arlo" "Quill Darrow")
+  local found=""
+  for try in 1 2 3; do  # m16 (21, 20): "no raider" right after the spawn; look again, wider
+    found=$(stobe-auto chars 300 | tr '|' '\n' | grep 'Starving Bandits' | grep -v -e ' DEAD' -e ' KO' | grep -oE '#[0-9]+/[0-9]+')
+    [ -n "$found" ] && break; sleep 2
+  done
+  [ -n "$found" ] || log "no Starving Bandits within 300 after the spawn: $(stobe-auto chars 300 | cut -c1-300)" >&2
+  for s in $found; do
+    if [ "$k" -lt "$n" ]; then
+      stobe-auto teleport "$s" Shay dist 3 >/dev/null
+      [ "${KEEP_TEMPLATE_NAME:-0}" = 1 ] || stobe-auto setname "$s" "${names[$k]}" >/dev/null
+      echo "$s"; k=$((k+1))
     else stobe-auto teleport "$s" Shay dist 3000 >/dev/null; fi
   done
+}
+
+# wait_accept <name> <seconds>: until the newest deal for <name> is accepted; a COUNTERED deal is printed and
+# accepted once per round ("<name>, deal.") - m16: Senlin countered and the wrapper never answered
+wait_accept() {
+  local who="$1" end=$(( $(date +%s) + ${2:-60} )) answered="" line id
+  while [ "$(date +%s)" -lt "$end" ]; do
+    line=$(deal_line "$who")
+    if echo "$line" | grep -q -E "ACCEPTED|AWAITING|WAITING_FOR_PLAYER|COMPLETE"; then echo "$line"; return 0; fi
+    if echo "$line" | grep -q COUNTERED; then
+      id=$(echo "$line" | awk '{print $1}'); local key="$id/$(echo "$line" | grep -oE 'rounds=[0-9]+')"
+      if [ "$key" != "$answered" ]; then
+        log "counter-offer: accepting"; deal_block "$id" | sed 's/^/    /' >&2
+        stobe-say say "$who" "$who, deal." >/dev/null 2>&1; answered="$key"
+      fi
+    fi
+    sleep 4
+  done
+  return 1
 }
 
 name_of() { stobe-auto where "$1" | sed -E 's/ #[0-9].*//'; }

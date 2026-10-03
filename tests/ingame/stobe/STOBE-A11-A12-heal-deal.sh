@@ -42,7 +42,7 @@ stobe-auto hp "$v" | cut -c1-200
 stobe-say speed 1 >/dev/null
 sleep 8
 stobe-say say "Senlin" "Senlin, you're bleeding badly. What if I bandage you up and you give me your $item?" --wait 40 >/dev/null 2>&1 || true
-d=$(wait_deal "Senlin" "ACCEPTED|AWAITING|WAITING_FOR_PLAYER" 60)
+d=$(wait_accept "Senlin" 90)
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; verdict "$mode" "INCONCLUSIVE no accepted deal: $(deal_line Senlin)"; exit 2; }
 id=$(echo "$d" | awk '{print $1}'); deal_block "$id"
 npc_done() { deal_block "$id" | grep -E "npc +(GIVE_ITEM|UNEQUIP_ITEM)" | grep -q -E "VERIFIED"; }

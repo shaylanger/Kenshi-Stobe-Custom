@@ -29,7 +29,7 @@ names=(); for s in "${G[@]}"; do names+=("$(name_of "$s")"); done
 lead="${names[0]}"; log "gang: ${names[*]} (talking to $lead)"
 sleep 10
 stobe-say say "$lead" "Enough! Call your whole gang off and I'll pay you 300 cats right now." --wait 40 >/dev/null 2>&1 || true
-d=$(wait_deal "$lead" "ACCEPTED|AWAITING|WAITING_FOR_PLAYER" 60)
+d=$(wait_accept "$lead" 90)
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; heal_stop; verdict 22 "INCONCLUSIVE no accepted deal: $(deal_line "$lead")"; exit 2; }
 id=$(echo "$d" | awk '{print $1}'); log "deal $id"
 m0=$(money_of Shay)

@@ -23,7 +23,8 @@ wait_personal_guard
 stobe-auto select Shay >/dev/null
 park_malzin 600
 heal_start Shay
-r=$(spawn_raiders 1 "$T" | head -1); [ -n "$r" ] || { verdict 61 "SETUP FAIL no NPC from $T"; exit 1; }
+# keep "Dust King": the cap tier comes from the template/name (m16 lib renames other raiders)
+r=$(KEEP_TEMPLATE_NAME=1 spawn_raiders 1 "$T" | head -1); [ -n "$r" ] || { verdict 61 "SETUP FAIL no NPC from $T"; exit 1; }
 carried=$(money_of "$r"); log "$r carries ${carried:-?} cats"
 if [ "${carried:-0}" -gt 200 ]; then stobe-auto money "$r" "-$(( carried - 150 ))" >/dev/null; carried=$(money_of "$r"); log "now carries $carried"; fi
 engage "$r" || log "warning: no combat_start seen"
@@ -43,8 +44,13 @@ done
 id=$(echo "$d" | awk '{print $1}'); deal_block "$id"
 offer=$(deal_block "$id" | awk '$1=="npc" && $2=="GIVE_CATS"{print $3}' | head -1)
 m0=$(money_of Shay)
-stobe-say say "$name" "$name, deal." --wait 40 >/dev/null 2>&1 || true
-wait_deal "$name" "COMPLETE" 60 >/dev/null
+# m16: the "deal." line was lost to an inbox race (deal stayed PROPOSED); now locked, and repeated once
+for try in 1 2; do
+  stobe-say say "$name" "$name, deal." >/dev/null 2>&1 || log "say failed"
+  wait_deal "$name" "ACCEPTED|AWAITING|COMPLETE|SETTLE" 30 >/dev/null && break
+  log "still $(deal_line "$name" | awk '{print $3, $4}') after try $try"
+done
+wait_deal "$name" "COMPLETE" 90 >/dev/null
 sleep 5
 m1=$(money_of Shay); stobe-say speed 0 >/dev/null; heal_stop
 deal_block "$id"
