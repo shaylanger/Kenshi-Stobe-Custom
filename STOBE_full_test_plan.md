@@ -1,6 +1,6 @@
 # STOBE: open issues and tests left
 
-Last updated 2026-10-02 (run 12). Installed: Stobe.dll `526D69F1`, KenshiFP `D3C78B3D`; server through round 24 (`b375e2b`).
+Last updated 2026-10-02 (after run 12). Installed: Stobe.dll `526D69F1`, KenshiFP `D3C78B3D`. **Built, not installed:** KenshiFP `4D04FC9C` (goal panel; Kenshi was running). Server: round 25 (`28dff99`, live + ss-merge).
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
 **Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **60**.
@@ -71,10 +71,10 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 
 | # | Bug | Notes |
 |---|---|---|
-| 41 | She claims something false about her gear | Run 12: right after re-equipping her katana: "You've got my larder and my blade both" (the prompt listed the katana under Equipment) |
-| 43 | A two-part order does only one part | `max_actions = 1`: "give me all your bread and all your dried meat" gave only the bread, while she said "You took my food". Fix or design call: allow 2 hand-overs, or make her say she does one |
-| 48 | A dying or dead NPC negotiates | Run 12: a raider hit by `stobe-auto kill` (dying) proposed a deal 19 s later, died, and his COUNTER came 2 s after death. Needs a rule: no deal talk once dying/dead |
-| 53 | The Cats cap comes out as a lie | Run 12: a raider with 10,000 Cats, capped at 300 (design), said "I don't have 350 cats. Never did." The prompt should let her refuse without claiming to be broke |
+| 41 | She claims something false about her gear | Run 12: right after re-equipping her katana: "You've got my larder and my blade both" (the prompt listed the katana under Equipment). **Next:** a server guard (her line says Shay has her item while it's still in her Equipment/pack → drop/rewrite that sentence), like the bug 39 guard. |
+| 43 | A two-part order does only one part | `max_actions = 1`: "give me all your bread and all your dried meat" gave only the bread, while she said "You took my food". Fix or design call: allow 2 hand-overs, or make her say she does one | **Shay: do both hand-overs; fallback: she says she does only one.**
+| 48 | A dying or dead NPC negotiates | Run 12: a raider hit by `stobe-auto kill` (dying) proposed a deal 19 s later, died, and his COUNTER came 2 s after death. | **Shay's rule:** dying but conscious may still deal; unconscious or dead may not; a deal interrupted by a KO resumes when they wake (they know they were negotiating). |
+| 53 | The Cats cap comes out as a lie | Run 12: a raider with 10,000 Cats, capped at 300 (design), said "I don't have 350 cats. Never did." The prompt should let her refuse without claiming to be broke. **Shay: understandable with a 300 cap**; revisit when the tier caps (E) are built. |
 
 ## E. Design questions and features
 
@@ -89,7 +89,16 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
   - **Why Vren became an Acquaintance after a fight:** the evaluator only ran when someone spoke and saw one line; combat events never counted. After the fight Vren said something friendly → +6 "No hard feelings after the fight". Fixed (R4, below).
   - **Why she was only Neutral with Shay:** the test runs reset her with `stobe-reset-npc` (live DB). Loading an older save did not bring relationships back then (`NEVER_CLEAR_RELATIONSHIP_DATA` = true). **Since 2026-10-02 relationships follow the loaded save** (StobeServer 78243b0, 28dff99; baseline snapshots at game time 0 for 61 NPCs; test B 59). Restored by hand to 96 Bonded (platonic) on 2026-10-02; `stobe-reset-npc` now saves the entry first and `--restore` puts it back.
   - **Fixed 2026-10-02 (StobeServer 956000f, e714b66, 43a5516, 9839389):** R1 types mapped onto the official list (unknown type keeps the old one); R2 Kenshi examples in the analysis prompt fallback; R3 no entries for unnamed template names (5 existing ones removed, backup `/root/stobe-backups/relationships_pre_r25_cleanup.tsv`); R4 a fight lowers both sides (victim −10, attacker −4, once per pair per 15 min). Tests: B 55–57. R4 (the fight rule) is up for a deep analysis: `handoff/relationship-fights-context.md`.
-- **Deal-offer cap tiers (Shay, 2026-10-02):** replace common 300 / leader 1000 / wealthy with 6 tiers from the game data (`archive/npc-wealth-survey.tsv`, `tools/research/npc_wealth.py`); proposal in the run 12 chat, waiting for Shay's OK.
+- **Deal-offer cap tiers (Shay, 2026-10-02, agreed direction, build after D 41/43/48):** the most an NPC offers to pay Shay. Data: `archive/npc-wealth-survey.tsv` (Kenshi templates: `money min/max`, bounty, gear value; `tools/research/npc_wealth.py`).
+  | Tier | Who | Cap |
+  |---|---|---|
+  | 0 Destitute | Hungry/Starving bandits, slaves, savage hivers, beggars | 100 (or an item, or begging) |
+  | 1 Common | Dust Bandits, Red Sabres, low ninjas, farmers, basic guards | 300 |
+  | 2 Professional | Samurai, Paladin, Holy Sentinel, Shek warriors, mercenaries, caravan guards, barmen, shopkeepers | 5,000 |
+  | 3 Elite / officer | High Paladin, Paladin Elite, Samurai Elite/Sergeant, Inquisitor, Inquisitor Captain, Trader Boss, Mercenary Captain, named bosses with 10–20k bounty | 10,000 |
+  | 4 Local leaders | UC Lords/Nobles, Market Master, Slave Masters, High Inquisitors, 30–50k-bounty bosses | 50,000 |
+  | 5 Rulers | Holy Lord Phoenix, Emperor Tengu (Bugmaster-level 300k bounty) | 100,000 |
+  Tier by name/title (templates carry the rank), then by bounty. Decisions: (1) tiers 3–5 can pay more than they carry: just before the payment Stobe tops up the NPC's purse to the agreed amount (capped at the tier), plus a cooldown per leader (e.g. one paid deal per few game days); optional "my steward brings it" delay later. (2) Drop the 35 %-of-carried rule: tiers 0–2 offer up to what they really carry (≤ tier cap). (3) Bug: "carried" reads the squad's shared purse when the character has 0 (spawned raiders showed 10,000); use the template `money min/max` (and the real purse if smaller). Also: an NPC who owes more than he has pays the part he has silently (Stobe GIVE_CATS uses min(requested, available)); for tiers 0–2 it should fail clearly.
 - **Decided for D 43 / 48 (Shay):** 43: do both hand-overs (fallback: she says she does one). 48: dying but conscious may deal; unconscious or dead may not; a deal interrupted by a KO resumes when they wake.
 
 ---
@@ -103,4 +112,5 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 - Deal ledger: `cd /tmp && sudo -u www-data php /var/www/html/StobeServer/tools/negotiation_admin.php deals 3` (`deal <id>`, `directives`). KenshiFP results: `Kenshi\KenshiFP.log` (`[stobe]` lines).
 
 ## Switches
+Relationships: `RELATIONSHIP_STANCE` (how she talks by relationship, on), `RELATIONSHIP_FIGHTS_COUNT` (R4, on), `NEVER_CLEAR_RELATIONSHIP_DATA` (false = relationships follow the loaded save).
 If a phase misbehaves: `… phase <2-8> off`. Voice payment: `NEGOTIATION_VOICE_PAYMENT`. Trust for free gifts: `GIFT_TRUST_THRESHOLD` (56 = Fond). Trust to give up her own weapon: `NEG_WEAPON_TRUST_MIN` (56). Trust for minor orders from non-faction NPCs: `MINOR_ORDER_TRUST_MIN`. STOBE ini: `Speed Dialogue` (0 = TTS at 1x), `TTSVolume` (0–200), `TTSFadePercent` (25–400).
