@@ -131,10 +131,10 @@ Spec: memory `stobe-negotiation-rules`. r = NPC's relationship toward the tradin
 
 | ID | What | How | Status |
 |---|---|---|---|
-| TRADE prices | Shop + deal prices at r = -80, -50, -10, 0, +10, +56, +100 vs vanilla, buy and sell; formula exact (buy: -30%·(r/100)^1.1 / +1000%·(|r|/100)^2.32; sell: up to +10% / down to -75% (proposed, Shay to confirm)) | trust setup + `shopstock` + real `trade`; STOBE deal | building (server: fixer; shop hook: native builder) |
-| TRADE floor | Buy/sell or sell/buy-back loop never profits | trade loop | building |
-| GUARD weapon | Outsider won't stow/drop/hand over her weapon below r +70 (+69 refused, +70 allowed); squadmate + surrendering NPC exempt | ask for her weapon | building |
-| WILL lines | Pay-later -1 refused / 0 allowed; free favour +29 refused / +30 allowed; any trade at -80 refused (STOBE deal + shop window) | deals at set trust | building |
+| TRADE prices | Shop + deal prices at r = -80, -50, -10, 0, +10, +56, +100 vs vanilla, buy and sell; formula exact (buy: -30%·(r/100)^1.1 / +1000%·(|r|/100)^2.32; sell: up to +10% / down to -75% (proposed, Shay to confirm)) | trust setup + `shopstock` + real `trade`; STOBE deal (`STOBE-102-104-relationship-trading.sh prices`) | STOBE 104 server live (1c2457f; sell-side -75% max pending Shay); shop-window hook: native builder |
+| TRADE floor | Buy/sell or sell/buy-back loop never profits | trade loop | server floor live (assumes trader buys at 0.5x sell); shop hook: native builder |
+| GUARD weapon | Outsider won't stow/drop/hand over her weapon below r +70 (+69 refused, +70 allowed); squadmate + surrendering NPC exempt | ask for her weapon (`… weapon69/weapon70/weapon-squad/weapon-surrender`) | STOBE 102 live, to run |
+| WILL lines | Pay-later -1 refused / 0 allowed; free favour +29 refused / +30 allowed; any trade at -80 refused (STOBE deal + shop window) | deals at set trust (`… paylater/favour/gift/notrade`) | STOBE 103 live (deals), to run; shop-window -80 block: native builder |
 
 ## 2. Requires specific game setup (no fixture/command for it yet)
 
