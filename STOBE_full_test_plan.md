@@ -3,7 +3,7 @@
 Last updated 2026-10-02 (round 26: D 41/43/48/53 fixed, cap tiers built). Installed: Stobe.dll `FF633947` (items 48 + cap tiers + harness bridge), KenshiFP `4D04FC9C` (goal panel). Server: round 26 (`5f71138`, live + ss-merge). `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **64**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **65**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -76,6 +76,10 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 ## D. Open bugs (known broken, not fixed)
 
 None open. 41, 43, 48, 53 fixed 2026-10-02 (round 26): test rows in B.
+
+| # | Bug | Notes |
+|---|---|---|
+| 64 | `stobe-tests` negotiation_engine fails 2 checks: "unpaid -> BREACHED_PLAYER" backdates wall time, but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | Fix the test (backdate game time), not the engine |
 
 ## E. Design questions and features
 

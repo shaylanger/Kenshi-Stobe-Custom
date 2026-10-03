@@ -1,13 +1,14 @@
 <#
-install-dll.ps1 Stobe|KenshiFP|Harness: install the freshly built DLL (Kenshi must be closed).
+install-dll.ps1 Stobe|KenshiFP|Harness|ProfessionGear: install the freshly built DLL (Kenshi must be closed).
 
   Stobe     C:\StobeBuild\out\Stobe.dll  -> Kenshi\mods\Stobe\Stobe.dll
   KenshiFP  WSL /root/KenshiFP/re_plugin/KenshiFP.dll -> the Vortex KenshiFP folder
+  ProfessionGear  Kenshi-Profession-Gear-Progression\out\ProfessionGearProgression.dll -> Kenshi\mods\ProfessionGearProgression\
   Harness   Kenshi-Automation-Harness\out\AutomationHarness.dll -> Kenshi\mods\AutomationHarness\
 
 No backup copies: git is the history. Prints old and new SHA256 (first 8).
 #>
-param([Parameter(Mandatory = $true, Position = 0)][ValidateSet('Stobe', 'KenshiFP', 'Harness')][string]$Component)
+param([Parameter(Mandatory = $true, Position = 0)][ValidateSet('Stobe', 'KenshiFP', 'Harness', 'ProfessionGear')][string]$Component)
 $ErrorActionPreference = 'Stop'
 
 $targets = @{
@@ -17,6 +18,8 @@ $targets = @{
                  'C:\Users\Shay\AppData\Roaming\Vortex\kenshi\mods\KenshiFP RE V0.6.1 2063 1 2026-08-30T19-04Z mloL06QcG\KenshiFP\KenshiFP.dll')
   'Harness'  = @('C:\KenshiModding\Kenshi-Automation-Harness\out\AutomationHarness.dll',
                  'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll')
+  'ProfessionGear' = @('C:\KenshiModding\Kenshi-Profession-Gear-Progression\out\ProfessionGearProgression.dll',
+                 'D:\Steam\steamapps\common\Kenshi\mods\ProfessionGearProgression\ProfessionGearProgression.dll')
 }
 $src, $dst = $targets[$Component]
 
