@@ -1801,7 +1801,22 @@ static int goal_abs_rect(void *w,int *x,int *y,int *wd,int *ht)
 }
 
 #define GOAL_PANEL_H 62
-/* Where the panel goes: above the job box frame (JobsPanel's parent). 1 = from the widget. */
+static void *g_goal_money;        /* Kenshi's TimeMoneyPanel (Money / Day / speed box) */
+static int g_goal_money_tries;
+/* Item 65: the Money/Day/speed box sits on top of the orders panel, overlapping the
+ * strip right above the job box: the goal panel goes above it, never over it. */
+static void goal_panel_avoid_money(void *gui,int x,int *y,int w)
+{
+    if(!g_goal_money&&g_goal_money_tries<40){
+        g_goal_money_tries++;
+        g_goal_money=settings_find(gui,"TimeMoneyPanel");
+    }
+    int mx,my,mw,mh;
+    if(!g_goal_money||!goal_abs_rect(g_goal_money,&mx,&my,&mw,&mh))return;
+    if(mx<x+w&&x<mx+mw&&my<*y+GOAL_PANEL_H&&*y<my+mh)*y=my-GOAL_PANEL_H-4;
+}
+/* Where the panel goes: above the job box frame (JobsPanel's parent), lifted above the
+ * TimeMoneyPanel when they'd overlap. 1 = from the widget. */
 static int goal_panel_rect(void *gui,int *x,int *y,int *w)
 {
     if(!g_goal_jobs&&g_goal_jobs_tries<40){
@@ -1811,15 +1826,20 @@ static int goal_panel_rect(void *gui,int *x,int *y,int *w)
     if(g_goal_jobs){
         void *frame=g_widget_getparent?g_widget_getparent(g_goal_jobs):NULL;
         int fx,fy,fw,fh;
-        if(frame&&goal_abs_rect(frame,&fx,&fy,&fw,&fh)){*x=fx;*y=fy-GOAL_PANEL_H-4;*w=fw;return 1;}
+        if(frame&&goal_abs_rect(frame,&fx,&fy,&fw,&fh)){
+            *x=fx;*y=fy-GOAL_PANEL_H-4;*w=fw;
+            goal_panel_avoid_money(gui,*x,y,*w);
+            return 1;
+        }
     }
     /* layout fallback (Kenshi_MainPanel.layout): OrdersPanel 0.748438,0.761111 w 0.252083;
-     * job box at 0.274793 / 0.0269231 of it, 0.714876 wide */
+     * job box at 0.274793 / 0.0269231 of it, 0.714876 wide. The TimeMoneyPanel starts at
+     * the OrdersPanel's top (0.761111; 2185,1096 268x88 at 2560x1440), so go above that. */
     int cx=GetSystemMetrics(SM_CXSCREEN),cy=GetSystemMetrics(SM_CYSCREEN);
     if(cx<=0)cx=1920; if(cy<=0)cy=1080;
-    double pw=0.252083*cx, ph=0.240741*cy;
+    double pw=0.252083*cx;
     *x=(int)(0.748438*cx+0.274793*pw); *w=(int)(0.714876*pw);
-    *y=(int)(0.761111*cy+0.0269231*ph)-GOAL_PANEL_H-4;
+    *y=(int)(0.761111*cy)-GOAL_PANEL_H-4;
     return 0;
 }
 
