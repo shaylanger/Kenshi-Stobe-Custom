@@ -89,13 +89,13 @@ case "$cmd" in
     echo "$r|$name|$deal"
     ;;
   trust)
-    # trust <npc name> <aff> [tier]: set the NPC's relationship to Shay (test data).
+    # trust <npc name> <aff> [tier] [type]: set the NPC's relationship to Shay (test data).
     # jsonb_set on a missing 'relationships' key silently does nothing, so merge.
-    name="$1"; aff="${2:-60}"; tier="${3:-Fond}"
+    name="$1"; aff="${2:-60}"; tier="${3:-Fond}"; rtype="${4:-friend}"
     cd /tmp && sudo -u postgres psql -d stobe -At -c "UPDATE core_npc_master SET extended_data =
       jsonb_set(coalesce(extended_data,'{}'::jsonb), '{relationships}',
         coalesce(extended_data->'relationships','{}'::jsonb) || jsonb_build_object('Shay',
-          jsonb_build_object('aff',$aff,'tier','$tier','type','friend','note','test','updated_at',extract(epoch from now())::int)))
+          jsonb_build_object('aff',$aff,'tier','$tier','type','$rtype','note','test','updated_at',extract(epoch from now())::int)))
       WHERE lower(name)=lower('$name') RETURNING extended_data->'relationships'->'Shay'->>'aff'"
     ;;
   raiders)
