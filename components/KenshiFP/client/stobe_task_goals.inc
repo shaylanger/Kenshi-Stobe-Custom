@@ -1716,6 +1716,12 @@ static void sgr_scan(void)
 #define GOAL_LABEL_KEEP_MS 60000
 static void caption_set(void *w, const char *text, textbox_setcap_t setter); /* kenshifp_client.c */
 static void *make_mstr_long(unsigned char *b32, const char *s);              /* kenshifp_client.c */
+static void *settings_find(void *gui, const char *target);                   /* kenshifp_client.c */
+static void *make_child(void *parent, const char *type, const char *skin, int l, int t, int w, int h, const char *name);
+static void *g_goal_panel_text;   /* the TextBox inside the panel frame */
+static void *g_goal_jobs;         /* Kenshi's JobsPanel widget */
+static int g_goal_jobs_tries;
+static int g_goal_panel_x, g_goal_panel_y;
 static void *g_goal_label;
 static int g_goal_label_dead;
 static DWORD g_goal_label_next;
@@ -1771,8 +1777,50 @@ static void goal_label_build(void *gw,char *out,size_t outsz)
         }
     }
     if(!found)return;
+    if(strlen(step)>58){step[55]='.';step[56]='.';step[57]='.';step[58]='\0';} /* fits the job box */
     if(more>0)snprintf(out,outsz,"%s - %s\n%s\n+%d more queued",actor,head,step,more);
     else snprintf(out,outsz,"%s - %s\n%s",actor,head,step);
+}
+
+/* Goal panel: absolute screen rect of a MyGUI widget, summing the parent-relative
+ * IntCoord (+0x20 left, +0x24 top, +0x28 width, +0x2C height) up the parent chain. */
+static int goal_abs_rect(void *w,int *x,int *y,int *wd,int *ht)
+{
+    if(!readable(w,0x30))return 0;
+    *wd=*(int *)((uintptr_t)w+0x28); *ht=*(int *)((uintptr_t)w+0x2C);
+    if(*wd<=0||*wd>8192||*ht<=0||*ht>8192)return 0;
+    int ax=0,ay=0; void *c=w;
+    for(int i=0;i<16&&c;i++){
+        if(!readable(c,0x30))return 0;
+        ax+=*(int *)((uintptr_t)c+0x20); ay+=*(int *)((uintptr_t)c+0x24);
+        if(!g_widget_getparent)break;
+        c=g_widget_getparent(c);
+    }
+    if(ax<0||ay<0||ax>16384||ay>16384)return 0;
+    *x=ax; *y=ay; return 1;
+}
+
+#define GOAL_PANEL_H 62
+/* Where the panel goes: above the job box frame (JobsPanel's parent). 1 = from the widget. */
+static int goal_panel_rect(void *gui,int *x,int *y,int *w)
+{
+    if(!g_goal_jobs&&g_goal_jobs_tries<40){
+        g_goal_jobs_tries++;
+        g_goal_jobs=settings_find(gui,"JobsPanel");
+    }
+    if(g_goal_jobs){
+        void *frame=g_widget_getparent?g_widget_getparent(g_goal_jobs):NULL;
+        int fx,fy,fw,fh;
+        if(frame&&goal_abs_rect(frame,&fx,&fy,&fw,&fh)){*x=fx;*y=fy-GOAL_PANEL_H-4;*w=fw;return 1;}
+    }
+    /* layout fallback (Kenshi_MainPanel.layout): OrdersPanel 0.748438,0.761111 w 0.252083;
+     * job box at 0.274793 / 0.0269231 of it, 0.714876 wide */
+    int cx=GetSystemMetrics(SM_CXSCREEN),cy=GetSystemMetrics(SM_CYSCREEN);
+    if(cx<=0)cx=1920; if(cy<=0)cy=1080;
+    double pw=0.252083*cx, ph=0.240741*cy;
+    *x=(int)(0.748438*cx+0.274793*pw); *w=(int)(0.714876*pw);
+    *y=(int)(0.761111*cy+0.0269231*ph)-GOAL_PANEL_H-4;
+    return 0;
 }
 
 static void stobe_goal_label_update(void *gw)
@@ -1787,31 +1835,39 @@ static void stobe_goal_label_update(void *gw)
         return;
     }
     guard_arm();
+    void *gui=g_gui_getinstance();
+    if(!readable(gui,8)){g_guard_armed=0;return;}
+    int px=0,py=0,pw=0;
+    int from_widget=goal_panel_rect(gui,&px,&py,&pw);
     if(!g_goal_label){
-        void *gui=g_gui_getinstance();
-        if(!readable(gui,8)){g_guard_armed=0;return;}
-        int cx=GetSystemMetrics(SM_CXSCREEN),cy=GetSystemMetrics(SM_CYSCREEN);
-        if(cx<=0)cx=1920;
-        (void)cy;
+        if(!from_widget&&g_goal_jobs_tries<40){g_guard_armed=0;return;} /* give the HUD a moment */
+        if(pw<120)pw=120;
         unsigned char ty[32],sk[32],ly[32],nm[32];
-        void *f1=make_mstr_long(ty,"TextBox");
-        void *f2=make_mstr_long(sk,"Kenshi_GenericTextBoxFlat");
-        void *f3=make_mstr_long(ly,"Pointer");
-        void *f4=make_mstr_long(nm,"StobeGoalLabel");
-        void *w=g_gui_createwidget(gui,ty,sk,cx/2-330,70,660,78,0,ly,nm);
+        void *f1=make_mstr_long(ty,"Widget");
+        void *f2=make_mstr_long(sk,"Kenshi_OrdersTextboxSkin");
+        void *f3=make_mstr_long(ly,"Middle");
+        void *f4=make_mstr_long(nm,"StobeGoalPanel");
+        void *w=g_gui_createwidget(gui,ty,sk,px,py,pw,GOAL_PANEL_H,0,ly,nm);
         if(f1)free(f1);if(f2)free(f2);if(f3)free(f3);if(f4)free(f4);
-        if(!readable(w,8)){g_guard_armed=0;g_goal_label_dead=1;logline("[stobe] GOAL_LABEL create failed -- disabled");return;}
+        if(!readable(w,8)){g_guard_armed=0;g_goal_label_dead=1;logline("[stobe] GOAL_PANEL create failed -- disabled");return;}
+        void *t=make_child(w,"TextBox","Kenshi_TextboxStandardText",8,5,pw-16,GOAL_PANEL_H-10,"StobeGoalPanelText");
+        if(!readable(t,8)){g_guard_armed=0;g_goal_label_dead=1;logline("[stobe] GOAL_PANEL text create failed -- disabled");return;}
         g_widget_setvisible(w,0);
-        g_goal_label=w;
+        g_goal_label=w; g_goal_panel_text=t; g_goal_panel_x=px; g_goal_panel_y=py;
         g_goal_label_text[0]='\0';
-        logline("[stobe] GOAL_LABEL widget created %p",w);
+        logline("[stobe] GOAL_PANEL created at %d,%d %dx%d (%s)",px,py,pw,GOAL_PANEL_H,from_widget?"jobs widget":"layout fallback");
+    }
+    if(from_widget&&g_widget_setpos&&(px!=g_goal_panel_x||py!=g_goal_panel_y)){
+        g_widget_setpos(g_goal_label,px,py); g_goal_panel_x=px; g_goal_panel_y=py;
     }
     char text[600];
     goal_label_build(gw,text,sizeof(text));
-    if(!text[0]){
+    /* hidden with the HUD job list (menus, map, hidden UI) */
+    int hud=!g_goal_jobs||!g_widget_inhvis||g_widget_inhvis(g_goal_jobs);
+    if(!text[0]||!hud){
         if(g_goal_label_text[0]){g_widget_setvisible(g_goal_label,0);g_goal_label_text[0]='\0';}
     }else if(strcmp(text,g_goal_label_text)){
-        caption_set(g_goal_label,text,g_textbox_setcap);
+        caption_set(g_goal_panel_text,text,g_textbox_setcap);
         g_widget_setvisible(g_goal_label,1);
         strncpy(g_goal_label_text,text,sizeof(g_goal_label_text)-1);
     }
