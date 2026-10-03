@@ -1523,7 +1523,7 @@ void LogGameEvent(const std::string &type, const std::string &actor,
         AsyncPostToStobeSerialWithPriority(L"/StobeServer/social_event.php", payload, 1);
         Log("SOCIAL_CAPTURE: queued kind=" + normalizedType + " seq=" + ToString((int)sequence) +
             " load=" + ToString((int)PlaythroughSession::Generation()) +
-            " actor=#" + ToString((int)actorSerial) + " target=#" + ToString((int)targetSerial));
+            " actor=#" + ToString((unsigned int)actorSerial) + " target=#" + ToString((unsigned int)targetSerial));
       } else {
         Log("SOCIAL_CAPTURE: skipped kind=" + normalizedType + " (invalid envelope: client id or message)");
       }
