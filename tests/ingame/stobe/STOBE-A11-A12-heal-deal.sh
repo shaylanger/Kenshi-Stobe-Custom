@@ -16,9 +16,14 @@
 #   A12: her GIVE_ITEM VERIFIED before any healing; after "I'm not going to heal you": deal BREACHED_PLAYER, her next
 #        NPC_SAY has no "we're square"/"we are square".
 #   INCONCLUSIVE: no deal, or (A12) she waits for the healing before handing over.
-# reliability: A11 medium; A12 low (needs her to go first)
+# reliability: A11 medium; A12 low (needs her to go first) -> with FORCE=1 (default for a12) the "she goes first" choice is
+#   forced: test switch NEG_TEST_INJECT (StobeServer 2b2b52d+) makes her reply an ACCEPT with npc GIVE_ITEM <her item> now +
+#   player FIRST_AID after_npc (the model counters with a promise instead, by design, m16). Needs StobeServer 01a7c4e+ for
+#   "I'm not going to heal you" to count as the refusal. FORCE=0 = old run. The switch is turned off on exit.
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
+. "$(dirname "$0")/stobe-switch-lib.sh"
+sw_trap
 mode="${1:-a11}"
 log "$mode: setup"
 stobe-auto select ${PLAYER} >/dev/null
@@ -47,6 +52,9 @@ sleep 8
 if [ -n "${TRUST:-}" ]; then
   stobe-say say "Senlin" "Hello Senlin. Easy, I'm not here to hurt you." --wait 15 >/dev/null 2>&1 || true
   trust "Senlin" "$TRUST" Fond platonic >/dev/null 2>&1 && log "Senlin -> ${PLAYER} trust set to $TRUST (Fond)"
+fi
+if [ "$mode" = a12 ] && [ "${FORCE:-1}" = 1 ]; then
+  inject_on A12 "Senlin" chat "[{\"deal_decision\":\"ACCEPT\",\"deal_terms\":[{\"kind\":\"GIVE_ITEM\",\"by\":\"npc\",\"to\":\"player\",\"item\":\"$item\"},{\"kind\":\"FIRST_AID\",\"by\":\"player\",\"target\":\"npc\",\"when\":\"after_npc\"}],\"message\":\"Here, take it first. Now patch me up.\"}]"
 fi
 stobe-say say "Senlin" "Senlin, you're bleeding badly. What if I bandage you up and you give me your $item?" --wait 40 >/dev/null 2>&1 || true
 d=$(wait_accept "Senlin" 90)

@@ -13,9 +13,15 @@
 #     `[EVENT] combat: <name> ... -> Shay` in the 60 s after the payment (the stop holds).
 #   INCONCLUSIVE when he insists on being paid first (run 12) - the trust 60 + "you first, I pay right after" wording
 #   is meant to avoid that.
-# reliability: low-medium (two LLM decisions: hand over first, then react to the refusal)
+# reliability: low-medium (two LLM decisions: hand over first, then react to the refusal); with FORCE=1 (default) the
+#   first decision is forced: test switch NEG_TEST_INJECT (StobeServer 2b2b52d+) makes his reply an ACCEPT with npc
+#   GIVE_ITEM {worn} now + player GIVE_CATS 100 after_npc + npc STOP_ATTACK (raiders always wanted Cats first, run 12/m16;
+#   by design per the negotiation rules, so the switch is the only way to reach the rest of the row). FORCE=0 = old run.
+#   The switch is turned off on exit.
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
+. "$(dirname "$0")/stobe-switch-lib.sh"
+sw_trap
 log "20: setup"
 wait_personal_guard
 stobe-auto select ${PLAYER} >/dev/null
@@ -29,6 +35,9 @@ stobe-auto health "$r" 30 >/dev/null
 sleep 4
 weapon=$(stobe-auto inv "$r" | grep -o '"name":"[^"]*","count":1,"equipped":true' | head -1 | sed -E 's/"name":"([^"]*)".*/\1/')
 log "his first worn item: ${weapon:-?}"
+if [ "${FORCE:-1}" = 1 ]; then
+  inject_on 20 "$name" chat '[{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"{worn}"},{"kind":"GIVE_CATS","by":"player","to":"npc","amount":100,"when":"after_npc"},{"kind":"STOP_ATTACK","by":"npc","target":"player"}],"message":"Fine. You first get my {worn}, then you pay me 100."}]'
+fi
 say_to "$r" "$name" "Enough! Toss me your weapon first and I'll pay you 100 cats right after. Deal?"
 d=$(wait_accept "$name" 90)
 [ -n "$d" ] || { stobe-say speed 0 >/dev/null; heal_stop; verdict 20 "INCONCLUSIVE no accepted deal: $(deal_line "$name")"; exit 2; }
