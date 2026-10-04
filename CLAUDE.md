@@ -10,7 +10,7 @@ Older notes, run 5-8 lessons, the full command list and scenario details: `archi
 - **Token use (Shay, 2026-10-03):** keep context reads small (grep/tail, line ranges, never whole large files or logs).
 - **Subagents (Shay, 2026-10-03):** at most 2 standing helpers: 1 fixer for bugs the tests find (server/Stobe/KenshiFP) and 1 operator for the 4080 rig (PG/harness rows). A third only for a big build, stopped as soon as it's done. The single game is the bottleneck; more agents only cost tokens.
 - **Naming:** plan items are plain numbers ("item 7"); old numbers ("was 79") only for tracing. Fixed and confirmed items get deleted from the plan (a line in the run log).
-- **No manual validation:** Claude runs the whole loop alone (launch, test, fix, build, install, relaunch). A pass means real game state changed (status files, logs, inventories, events), never just the words. Rows only Shay can judge (sound, feel, tooltips) wait in MASTER section 3.
+- **No manual validation:** Claude runs the whole loop alone (launch, test, fix, build, install, relaunch). A pass means real game state changed (status files, logs, inventories, events), never just the words. Rows only Shay can judge (sound, feel, tooltips) wait in MASTER section 2.
 - Malzin is a test character only: her relationship values don't matter. Never test on Shay's own saves.
 - Not mine, left uncommitted: `components/ProfessionGear/ACTIVE_CONTEXT.md`, `KENSHI_BIG_MOD_IDEAS_CONTEXT.md`, `PROFESSION_GEAR_PROGRESSION_MOD_CONTEXT.md`, untracked `tools/*.py` inspection scripts.
 - Shay works on the server too: check `git log`/`git status` in the live tree before patching; patch with anchor scripts, never by copying whole files.
