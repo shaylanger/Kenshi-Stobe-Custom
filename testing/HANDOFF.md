@@ -11,10 +11,15 @@
   give Shay ONE final summary.
 - **Shay's decisions (typed by Shay, 2026-10-03), build + test them:** item 104 sell-side max drop = **90 %** (a hater
   only buys if they rip you off hugely); item 100 = **option (b)**: reputation and relationship history follow the
-  squad character who is speaking, not the persona "Shay"; **B 55 decided**: retire R4, use the REL combat rules plus
-  the 6 additions in `STOBE_full_test_plan.md` section E (REL builder; forgiveness threshold is a setting, default
-  "up to -28 fades over ~14 game days", Shay may still adjust it); F 62 deferred; F 63 deferred until this master
-  plan is done and all bugs are fixed/validated; STOBE A9 (TTS volume/fade) PASS (Shay tested). PG 256 stays deferred.
+  squad character who is speaking, not the persona "Shay"; **B 55 decided** (final spec = `STOBE_full_test_plan.md`
+  section E items 1-8, commit 6391c32): retire R4, use the REL combat rules with: event-based forgiveness (each fight
+  its own grudge; up to -28 fades over ~14 game days, KO or worse never fades by itself; no relationship-value cutoff;
+  a setting), kept deal wins back variable 0..1/3, consensual sparring free, no chat gains for 1 game day, only fights
+  that matter count, first fight leaves a permanent mark, **harsher penalties by her state when she wakes x closeness
+  multiplier** (Friendly 1.3, Fond 2.0, Devoted 2.5, Bonded 3.0; floor -100), **treating her afterwards takes off a
+  variable 15-30 %** (never positive); F 62 deferred; F 63 deferred until this master plan is done and all bugs are
+  fixed/validated; STOBE A9 (TTS volume/fade) PASS (Shay tested). PG 256 stays deferred.
+- **Git commits/pushes are allowed** (Shay added allow rules in `.claude/settings.local.json`): commit + push after every step.
 - Confirmed by Shay directly (2026-10-03 ~18:00): this goal and the to-do list below are Shay's orders, also written
   into CLAUDE.md "Current state" and `MASTER_TEST_PLAN.md`.
 
@@ -22,7 +27,7 @@
 `CLAUDE.md`, `testing/README.md`, `MASTER_TEST_PLAN.md`, run log `archive/test-run-2026-10-03-m18.md` (+ m17),
 `C:\KenshiTestFixtures\FIXTURES.md`, harness `docs/COMMANDS.md`, local `handoff/4080-test-rig.md`, `testing/AGENT_PROMPTS.md`.
 
-## State now (2026-10-03 ~19:30, coordinator context full: new session takes over here)
+## State now (2026-10-03 ~20:00, m18 coordinator closed: new session takes over here)
 - 5090: Kenshi running; m18 batch `C:\KenshiTestRuns\m18atch.sh` running detached in WSL (log `batch.log`, outputs `out\`;
   done so far: 21/18/generic/16 Full-Base, Squin 14/15; next: 61, rel-enslaved, rel-theft, trading modes, A8, 18/21/22 home,
   pg.sh). After it: `C:\KenshiTestRuns\m18ollowup.sh` (21/18/generic/16 Full-Base reruns with the fixes). Results so far
@@ -33,14 +38,15 @@
   KAH 2/3, KAH 22b, KAH 24 balance commands; check KAH 3 commit 7778508 is in it), PG 266C68F5 (only for row 250).
 - Server live (all pushed): item 100 (b) (0c6ed3e: deal reputation + relationship outcome on the deal's character; rerun 18/21/17 Full-Base + an auto-home deal), item 110 (e605768), items 107, 18 markers, 108, 109, 111, 113, 90 (e3b9cc3), A12 refusal (01a7c4e), item 29 (cd5a316),
   test switches NEG_TEST_INJECT / NEG_TEST_FORCE_INITIATIVE (2b2b52d).
-- Subagents still running: REL builder (SR09/13/14, SR07, SR30/SR06 forcing, B 55 fight rules: spec = STOBE plan section E as of d6abec1, event-based forgiveness), item 100 (b) fixer,
-  4080 rig operator (PG rows). They die with this session: check git logs + their repos.
-- **B 55 spec extended (Shay, 2026-10-03):** STOBE plan section E items 7 (harsher fight penalties x closeness
-  multiplier) and 8 (variable 15-30 % reduction when the attacker treats her afterwards). Give the updated section E to
-  the REL builder (its spec was d6abec1; this supersedes it). Build + unit tests + in-game rows.
-- **Item 104 sell side -90 %: START NOW (Shay, 2026-10-03, direct order).** Not delegated yet because the permission
-  checker blocked the hand-off message. Scope: C++ ShopPricing + tests, server deal price + relationship_pricing
-  endpoint, wrapper python copy; build, install, test in game. If the hand-off is blocked again, the coordinator builds it itself.
+- **No subagents are running** (the m18 coordinator session was closed by Shay ~20:00; all its subagents ended with it).
+- **First jobs for the new coordinator (Shay's direct orders):**
+  1. **Item 104 sell side -90 %: START NOW.** Never started (the old session's hand-off was blocked). The built Stobe
+     E45BFB0E still has -75 %. Scope: C++ ShopPricing + tests, server deal price + relationship_pricing endpoint,
+     wrapper python copy; build, install, test in game.
+  2. **B 55 fight rules: build them** (REL builder; it was never built): spec = STOBE plan section E items 1-8 (commit
+     6391c32, supersedes d6abec1), continue from local `handoff/rel-b55-fights-build.md` + draft
+     `pending-fixes/b55_social_fights.php`. Build + unit tests + in-game rows.
+  3. Item 100 (b) is live (server 0c6ed3e): test it (rerun 18/21/17 Full-Base + an auto-home deal).
 
 ## Next steps
 1. When m18 batch + followup end: stop Kenshi, install the builds above, relaunch.
@@ -49,7 +55,8 @@
    `STOBE-C*.sh` + `STOBE-20-refuse-after-handover.sh` + `STOBE-A11-A12-heal-deal.sh a12` (auto-home, `scenarios.sh fresh`
    first), `C:\KenshiTestRuns\scenarios\kah-2-3-msg-trade.txt` (kah-trader copy), PG launch 5 balance files + pg-56 (PG 89)
    on Full-Base (`RUN_ORDER.md`), PG 151-152 (pg-15 on/off, steps in PG RUN_ORDER), KAH 5, REL SR18/19 Full-Base.
-3. PG fit finding (pg-14): +25 % Labouring gear beats the whole skill range (x1.26): design principle 4 -> Shay decision.
+3. PG fit finding (pg-14): +25 % Labouring gear beats the whole skill range (x1.26): design principle 4 -> Shay decision
+   (open: ask Shay together with any other decision; keep working meanwhile).
 
 ## To-do (all of it, in parallel where possible)
 1. **PG balance driver, all rows 161-199** (PG agent): extend `Kenshi-Profession-Gear-Progression/tools/balance_driver.py`
@@ -74,7 +81,7 @@
     trader's cats unchanged): fix + verify (harness).
 16. **REL SR18/19 on Full-Base** (bed/cage rescue, plan 1f).
 17. End: prune `STOBE_full_test_plan.md` (header + section D still list confirmed items 65-89 and old DLL hashes).
-10. End: Capture=0, REL mode off, PG `set_test_mode.ps1 -Mode Normal -Rules Normal`, close Kenshi, one final summary
+18. (was 10) End: Capture=0, REL mode off, PG `set_test_mode.ps1 -Mode Normal -Rules Normal`, close Kenshi, one final summary
     (with the Shay decisions above).
 
 ## Gotchas
