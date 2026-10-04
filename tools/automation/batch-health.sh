@@ -11,7 +11,8 @@ set -u
 O="${1:?usage: batch-health.sh <out-dir> [stall-minutes]}"; STALL_MIN="${2:-20}"
 [ -f "$O/DONE" ] && { echo "HEALTH DONE $(tail -1 "$O/SUMMARY.txt" 2>/dev/null)"; exit 0; }
 f=$(find "$O" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1)
-age=$(( ( $(date +%s) - ${f%%.*} ) / 60 )); f="${f#* }"
+if [ -n "$f" ]; then age=$(( ( $(date +%s) - ${f%%.*} ) / 60 )); f="${f#* }"
+else age=0; f="(no output yet in $O)"; fi
 cur=$(grep -a -E '^[0-9]{2}:[0-9]{2} .*: (prepare|run) ' "$O/batch.log" 2>/dev/null | tail -1 | cut -c1-80)
 if ! tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then
   echo "HEALTH STALL Kenshi is not running file=$f age=${age}m ${cur:+now=\"$cur\"}"; exit 2
