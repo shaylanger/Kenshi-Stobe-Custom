@@ -28,7 +28,7 @@ Coordinator handoff: temp folder coordinator-handoff-m31.md (m26 has Shay decisi
 - Loop: test -> log bugs -> fix -> build -> install -> retest until every testable row passes, then close Kenshi and
   give Shay ONE final summary.
 - **How (Shay, 2026-10-03):** batch the game runs: as many tests as possible per launch, fix + build all bugs found
-  together, restart once to install and retest; start batches detached and check in every 10 min with
+  together, restart once to install and retest; start batches detached and check in every 5 min with
   `batch-health.sh <out>` (one line: OK = keep waiting, STALL = act now, DONE = read SUMMARY.txt).
   At most 2 standing subagents: 1 fixer + 1 4080 rig operator; a third only for a big build, stopped when done.
 - **Token-light tests (Shay, 2026-10-03):** tokens are the priority, so make the tests report compactly instead of
@@ -37,8 +37,8 @@ Coordinator handoff: temp folder coordinator-handoff-m31.md (m26 has Shay decisi
   it (shared helper in `stobe-fight-lib.sh`). Group rows by save so each launch covers as many as possible; batch fixes.
 - **Batch tooling (Shay, 2026-10-03, items 2/4/5/7 of the token plan):** batches run with
   `tools/automation/run-batch.sh [--launch <save>] [--stop] <list> <out>` (WSL, detached; list = `name | save |
-  player | mate | timeout | command`, header has examples; `home` and `kah-fullbase` setup built in). Every 10 min a
-  background `sleep 600; bash tools/automation/batch-health.sh <out>`; on DONE read `<out>/SUMMARY.txt` only. Each FAIL carries `excerpt=` (from `batch-excerpts.sh`); open that,
+  player | mate | timeout | command`, header has examples; `home` and `kah-fullbase` setup built in). Every 5 min a
+  background `sleep 300; bash tools/automation/batch-health.sh <out>`; on DONE read `<out>/SUMMARY.txt` only. Each FAIL carries `excerpt=` (from `batch-excerpts.sh`); open that,
   full logs only if needed. Fixer gets a ticket (template in `testing/AGENT_PROMPTS.md`). After every server fix,
   `stobe-tests` must pass before the next game batch. The runner was tested offline with stubs only; its first real
   batch is the live check (if it misbehaves, fix the runner, don't fall back to hand-written batch scripts).
