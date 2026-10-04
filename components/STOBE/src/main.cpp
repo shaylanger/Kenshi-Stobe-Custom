@@ -5462,8 +5462,18 @@ static void SocialNoteFirstAid(Character *provider, Character *recipient, Charac
   unsigned long long key = ((unsigned long long)ps << 32) | rs;
   DWORD now = GetTickCount();
   EnterCriticalSection(&g_eventMutex);
+  // m22 B55: aid sessions never drop the squad's first aid (a load opens ~50 world sessions at once; the old cap
+  // was 64 and a refused session vanished silently).
+  bool squadAid = false;
+  try {
+    squadAid = provider->isPlayerCharacter() || recipient->isPlayerCharacter();
+  } catch (...) {
+  }
   std::map<unsigned long long, SocialAidSession>::iterator it = g_socialAidSessions.find(key);
-  if (it == g_socialAidSessions.end() && g_socialAidSessions.size() < 64) {
+  bool refused = false;
+  if (it == g_socialAidSessions.end() && !squadAid && g_socialAidSessions.size() >= 512) {
+    refused = true;
+  } else if (it == g_socialAidSessions.end()) {
     SocialAidSession s;
     s.provider = ps; s.recipient = rs; s.supplier = ResolveCharacterSerialForEvent(supplier);
     s.item = item; s.startTick = now; s.lastTick = now;
@@ -5474,10 +5484,19 @@ static void SocialNoteFirstAid(Character *provider, Character *recipient, Charac
       s.conscious = -1;
     }
     g_socialAidSessions[key] = s;
-  } else if (it != g_socialAidSessions.end()) {
+  } else {
     it->second.lastTick = now;
   }
+  size_t open = g_socialAidSessions.size();
   LeaveCriticalSection(&g_eventMutex);
+  static DWORD lastRefusedLog = 0;
+  if (refused && now - lastRefusedLog > 10000) {
+    lastRefusedLog = now;
+    Log("SOCIAL_AID: session refused (" + ToString((unsigned int)open) + " open) provider=#" + ToString(ps) +
+        " recipient=#" + ToString(rs));
+  }
+  if (squadAid && it == g_socialAidSessions.end())
+    Log("SOCIAL_AID: squad session provider=#" + ToString(ps) + " recipient=#" + ToString(rs) + " item=" + item);
 }
 
 // REL phase 6: who saw it. Characters within 40 m of the target (at most 12), each with the game's own
@@ -7309,7 +7328,12 @@ static void SocialFlushAidSessions(DWORD now) {
     const SocialAidSession &s = done[i];
     Character *provider = ResolveCharacterBySerialForInventoryEvent(s.provider);
     Character *recipient = ResolveCharacterBySerialForInventoryEvent(s.recipient);
-    if (!provider || !recipient || provider == recipient)
+    if (!provider || !recipient) {
+      Log("SOCIAL_AID: dropped unresolved session provider=#" + ToString(s.provider) + (provider ? "" : "(gone)") +
+          " recipient=#" + ToString(s.recipient) + (recipient ? "" : "(gone)"));
+      continue;
+    }
+    if (provider == recipient)
       continue; // self-treatment builds no relationship
     StobeSocial::EntityInfo a = SocialEntityFor(provider), t = SocialEntityFor(recipient);
     std::vector<StobeSocial::EntityInfo> witnessWho;
