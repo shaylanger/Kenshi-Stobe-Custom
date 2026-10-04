@@ -12,6 +12,11 @@
 - **How (Shay, 2026-10-03):** batch the game runs: as many tests as possible per launch, fix + build all bugs found
   together, restart once to install and retest; start batches detached and check them when they end (no polling).
   At most 2 standing subagents: 1 fixer + 1 4080 rig operator; a third only for a big build, stopped when done.
+- **Token-light tests (Shay, 2026-10-03):** tokens are the priority, so make the tests report compactly instead of
+  reading logs: every wrapper/scenario prints one `RESULT <row> PASS|FAIL <key evidence>` line per row (+ log path on
+  FAIL); read only `grep ^RESULT` output, open logs only for FAILs. Retrofit the line into each wrapper as you next touch
+  it (shared helper in `stobe-fight-lib.sh`). Group rows by save so each launch covers as many as possible; batch fixes.
+  No second full test rig for now (same tokens per row, more sync overhead).
 - **Shay's decisions (typed by Shay, 2026-10-03), build + test them:** item 104 sell-side max drop = **90 %** (a hater
   only buys if they rip you off hugely); item 100 = **option (b)**: reputation and relationship history follow the
   squad character who is speaking, not the persona "Shay"; **B 55 decided** (final spec = `STOBE_full_test_plan.md`
