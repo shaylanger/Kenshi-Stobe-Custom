@@ -52,7 +52,7 @@ print('write lib/social_fights.php, tests/social_fights_regression.php, tests/so
 patch('tests/social_relationship/ingame/RUN_ORDER.md',
       "| R4 (item 55) | `RELATIONSHIP_FIGHTS_COUNT` | unchanged; R4 runs in `off`/`shadow`, REL replaces it only in `enabled` | - |",
       "| B 55 fights mode | `SOCIAL_FIGHTS_LIVE` (unset = on) | with the mode `off`, REL runs in \"fights\" mode: fights and deal outcomes change relationships (B 55 rules), everything else is recorded only; R4 is retired. `false` = old behaviour (R4, `RELATIONSHIP_FIGHTS_COUNT`) | delete the row |\n"
-      "| B 55 rules / fade | `SOCIAL_FIGHT_RULES` (`rel` = plain phase-8 REL), `SOCIAL_GRUDGE_FADE_DAYS` (14), `SOCIAL_GRUDGE_FADE_THRESHOLD` (30) | `--set-switch <id> <value>` | `--set-switch <id> off` |\n"
+      "| B 55 rules / fade | `SOCIAL_FIGHT_RULES` (`rel` = plain phase-8 REL), `SOCIAL_GRUDGE_FADE_DAYS` (14; fading is decided by what happened, no size threshold) | `--set-switch <id> <value>` | `--set-switch <id> off` |\n"
       "| B 55 in-game rows | `rel-b55.sh <outdir> [blocks]` | see its header | - |",
       '| B 55 fights mode |')
 
@@ -139,9 +139,9 @@ patch(S, "        if (!in_array($mode, ['shadow', 'enabled'], true)) return null
       "['shadow', 'enabled', 'fights'], true)) return null;")
 patch(S, "    // Interpreter helpers (server-owned; never reachable from client input directly).\n",
       r'''    /**
-     * B 55 item 1: forgiveness over time, event-based. Each fight incident (per observer -> culprit) is its own grudge;
-     * one with no knockout or worse and an unscaled worst charge of at most SOCIAL_GRUDGE_FADE_THRESHOLD fades back
-     * linearly over SOCIAL_GRUDGE_FADE_DAYS game days (what treatment/deals already won back is not faded twice).
+     * B 55 item 1: forgiveness over time, decided by what happened. Each fight incident (per observer -> culprit) is its
+     * own grudge; one with no knockout or worse (STOBE_SOCIAL_NEVER_FADE, accidental KO/limb) fades back linearly over
+     * SOCIAL_GRUDGE_FADE_DAYS game days whatever its size (what treatment/deals already won back is not faded twice).
      * Runs inside ingest at most every fights.fade_check_seconds of game time per load (and after a time jump back).
      * Each step is its own grudge_fade row at the event's game time, so a rollback removes exactly the later steps.
      */
@@ -154,7 +154,7 @@ patch(S, "    // Interpreter helpers (server-owned; never reachable from client 
         $last = getConfOpt($throttle, '');
         if ($last !== '' && $ts >= (int)$last && $ts - (int)$last < $every) return [];
         setConfOpt($throttle, strval($ts));
-        [$threshold, $days] = stobeSocialFadeSettings($this->rules);
+        $days = stobeSocialFadeDays($this->rules);
         $span = max(1.0, $days * 86400.0);
         $fight = stobeSocialPgList(STOBE_SOCIAL_FIGHT_COMPONENTS);
         $groups = $this->fetchRows("SELECT COALESCE(detail->>'fight_incident', incident_id) AS fi, lower(detail->>'observer_name') AS o, lower(detail->>'culprit_name') AS c,
@@ -163,7 +163,6 @@ patch(S, "    // Interpreter helpers (server-owned; never reachable from client 
               MAX(CASE WHEN component = ANY(\$2::text[]) THEN observer_key END) AS observer_key,
               MAX(CASE WHEN component = ANY(\$2::text[]) THEN culprit_key END) AS culprit_key,
               bool_or(component = ANY(\$3::text[]) OR (component = 'accident' AND detail->>'level' IN ('knockout', 'maiming'))) AS never,
-              MIN(CASE WHEN component = ANY(\$2::text[]) THEN COALESCE((detail->>'unscaled')::int, (detail->>'total')::int, delta) END) AS worst,
               SUM(CASE WHEN component = ANY(\$2::text[]) THEN delta ELSE 0 END) AS charged,
               SUM(CASE WHEN component = ANY(\$4::text[]) THEN delta ELSE 0 END) AS relief,
               SUM(CASE WHEN component = 'grudge_fade' THEN delta ELSE 0 END) AS faded,
@@ -174,7 +173,7 @@ patch(S, "    // Interpreter helpers (server-owned; never reachable from client 
             [$event['campaign_id'], $fight, stobeSocialPgList(STOBE_SOCIAL_NEVER_FADE), stobeSocialPgList(STOBE_SOCIAL_FIGHT_RELIEF), $ts]);
         $out = [];
         foreach ($groups as $g) {
-            if ($g['never'] === 't' || (int)$g['worst'] < -$threshold || $g['observer_key'] === null) continue;
+            if ($g['never'] === 't' || $g['observer_key'] === null) continue; // severity class, never the size (Shay 94761de)
             $owed = -(int)$g['charged'] - (int)$g['relief'];
             if ($owed <= 0) continue;
             $fraction = $days <= 0 ? 1.0 : min(1.0, max(0.0, ($ts - (int)$g['first_ts']) / $span));
@@ -459,7 +458,6 @@ if 'fights' not in rules:
         'ranges': {'aggression': [-15, -10], 'injury': [-30, -23], 'serious_assault': [-50, -40], 'critical_harm': [-65, -55], 'maiming': [-78, -68]},
         'closeness': [[31, 1.3], [56, 2.0], [76, 2.5], [91, 3.0]],
         'accident_scale': 0.25,
-        'fade_threshold': 30,
         'fade_days': 14,
         'fade_check_seconds': 600,
         'spar_window_seconds': 3600,
@@ -468,7 +466,7 @@ if 'fights' not in rules:
         'deal_share': 0.3333,
         'treated_share': [0.15, 0.30],
         'treated_soon_seconds': 21600,
-        'note': 'B 55 (SOCIAL_FIGHT_RULES=b55, default): ranges = victim state when the fight ends/she wakes (not hurt, wounded standing, KO moderate, bleeding out, limb); x closeness (victim -> attacker before the fight, from aff >=) floor -100; accident = scale x level range; incidents with no KO-or-worse and unscaled worst >= -fade_threshold fade linearly over fade_days (settings SOCIAL_GRUDGE_FADE_THRESHOLD/DAYS); treated_share 15-30 % (more the sooner within treated_soon_seconds, seeded per incident); deal_share x keptness x forgiveness.',
+        'note': 'B 55 (SOCIAL_FIGHT_RULES=b55, default): ranges = victim state when the fight ends/she wakes (not hurt, wounded standing, KO moderate, bleeding out, limb); x closeness (victim -> attacker before the fight, from aff >=) floor -100; accident = scale x level range; incidents that stayed not-hurt/wounded-standing (no KO or worse, no accidental KO) fade linearly over fade_days whatever their size (setting SOCIAL_GRUDGE_FADE_DAYS); treated_share 15-30 % (more the sooner within treated_soon_seconds, seeded per incident); deal_share x keptness x forgiveness.',
     }
     with open(rp, 'w', encoding='utf-8') as f:
         f.write(json.dumps(rules, indent=1) + '\n')
@@ -481,13 +479,13 @@ T = 'tools/social_relationship_inspect.php'
 patch(T, " *   php tools/social_relationship_inspect.php --purge-all --yes",
       """ *   php tools/social_relationship_inspect.php --add-spar "A" "B" [game_ts]   TEST SETUP (B 55): record spar consent between A and B
  *                                                  (game_ts default: the latest game time; a fight between them within 1 game hour is free)
- *   php tools/social_relationship_inspect.php --set-switch SOCIAL_FIGHTS_LIVE|SOCIAL_FIGHT_RULES|SOCIAL_GRUDGE_FADE_DAYS|SOCIAL_GRUDGE_FADE_THRESHOLD <value|off>
- *                                                  B 55 settings (off = back to the default: live, b55, 14 days, 30)
+ *   php tools/social_relationship_inspect.php --set-switch SOCIAL_FIGHTS_LIVE|SOCIAL_FIGHT_RULES|SOCIAL_GRUDGE_FADE_DAYS <value|off>
+ *                                                  B 55 settings (off = back to the default: live, b55, 14 days)
  *   php tools/social_relationship_inspect.php --purge-all --yes""",
       '--add-spar "A" "B" [game_ts]')
 patch(T, "    if (!in_array($id, ['SOCIAL_TEST_FORCE_JOIN_ATTEMPT', 'SOCIAL_TEST_FORCE_FIRST_STRIKE'], true) || $value === '') {",
-      "    if (!in_array($id, ['SOCIAL_TEST_FORCE_JOIN_ATTEMPT', 'SOCIAL_TEST_FORCE_FIRST_STRIKE', 'SOCIAL_FIGHTS_LIVE', 'SOCIAL_FIGHT_RULES', 'SOCIAL_GRUDGE_FADE_DAYS', 'SOCIAL_GRUDGE_FADE_THRESHOLD'], true) || $value === '') {",
-      "'SOCIAL_GRUDGE_FADE_DAYS', 'SOCIAL_GRUDGE_FADE_THRESHOLD'], true) || $value === '') {")
+      "    if (!in_array($id, ['SOCIAL_TEST_FORCE_JOIN_ATTEMPT', 'SOCIAL_TEST_FORCE_FIRST_STRIKE', 'SOCIAL_FIGHTS_LIVE', 'SOCIAL_FIGHT_RULES', 'SOCIAL_GRUDGE_FADE_DAYS'], true) || $value === '') {",
+      "'SOCIAL_FIGHT_RULES', 'SOCIAL_GRUDGE_FADE_DAYS'], true) || $value === '') {")
 patch(T, "if (($i = array_search('--retention', $args, true)) !== false) {",
       """if (($i = array_search('--add-spar', $args, true)) !== false) {
     // TEST SETUP (B 55 item 3): spar consent between two characters, as if both agreed in dialogue.
@@ -507,8 +505,7 @@ patch(T, """    'mode' => stobeSocialMode(),
     'fight_rules' => stobeSocialFightRulesOn() ? 'b55' : 'rel',
     'settings' => [
         'SOCIAL_FIGHTS_LIVE' => $setting('SOCIAL_FIGHTS_LIVE'),
-        'SOCIAL_GRUDGE_FADE_DAYS' => $setting('SOCIAL_GRUDGE_FADE_DAYS'),
-        'SOCIAL_GRUDGE_FADE_THRESHOLD' => $setting('SOCIAL_GRUDGE_FADE_THRESHOLD'),""",
+        'SOCIAL_GRUDGE_FADE_DAYS' => $setting('SOCIAL_GRUDGE_FADE_DAYS'),""",
       "'ingest_mode' => stobeSocialIngestMode(),")
 
 # ---- tests that pin the legacy (non-REL) behaviour ----
