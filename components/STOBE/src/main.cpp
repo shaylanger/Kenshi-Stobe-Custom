@@ -34,6 +34,7 @@
 #include "StobeIdentityRename.h"
 #include "StobeChatMode.h"
 #include "StobeHarnessBridge.h"
+#include "ShopPriceHook.h"
 #include "Utils.h"
 #include "SocialEventProtocol.h"
 #include "VoiceCapture.h"
@@ -12929,10 +12930,31 @@ Item *buyItem_hook(Inventory *inv, Item *itemToBuy, RootObject *sendingTo) {
   bool hasSellerMoneyBefore =
       TryResolveRootObjectMoneySafe(sellerObj, sellerMoneyBefore);
 
+  // Item 104: relationship shop prices. The value hooks price this purchase for the
+  // (trader, squad member) pair; at r <= -80 the trader refuses (nothing moves).
+  Character *shopBuyerChar = buyerObj ? ResolveCharacterBySerialForInventoryEvent(
+                                            ResolveRootObjectSerialForEvent(buyerObj))
+                                      : nullptr;
+  Character *shopSellerChar = sellerObj ? ResolveCharacterBySerialForInventoryEvent(
+                                              ResolveRootObjectSerialForEvent(sellerObj))
+                                        : nullptr;
+  if (shopBuyerChar && (RootObject *)shopBuyerChar != buyerObj) shopBuyerChar = nullptr;
+  if (shopSellerChar && (RootObject *)shopSellerChar != sellerObj) shopSellerChar = nullptr;
+  if (Stobe::ShopPrice::BeginBuy(shopBuyerChar, shopSellerChar)) {
+    Stobe::ShopPrice::EndBuy();
+    return nullptr;
+  }
+
   Item *result = nullptr;
   if (buyItem_orig) {
-    result = buyItem_orig(inv, itemToBuy, sendingTo);
+    try {
+      result = buyItem_orig(inv, itemToBuy, sendingTo);
+    } catch (...) {
+      Stobe::ShopPrice::EndBuy();
+      throw;
+    }
   }
+  Stobe::ShopPrice::EndBuy();
 
   if (buyerObj && result) {
     int buyerMoneyAfter = 0;
@@ -13619,6 +13641,7 @@ bool __fastcall SaveCampaign(SaveFileSystem* fs, const std::string& path) {
 }
 void __fastcall LoadCampaign(SaveFileSystem* fs, const std::string& path) {
     PlaythroughSession::BeginLoad();
+    Stobe::ShopPrice::ClearCache();
     BeginChatInterruptGeneration(false);
     Stobe::Voice::Cancel();
     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
@@ -13627,6 +13650,7 @@ void __fastcall LoadCampaign(SaveFileSystem* fs, const std::string& path) {
 }
 void __fastcall NewCampaign(SaveManager* manager, const std::string& start) {
     PlaythroughSession::BeginLoad(true);
+    Stobe::ShopPrice::ClearCache();
     BeginChatInterruptGeneration(false);
     Stobe::Voice::Cancel();
     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
@@ -13634,6 +13658,7 @@ void __fastcall NewCampaign(SaveManager* manager, const std::string& start) {
 }
 void __fastcall ImportCampaign(SaveManager* manager, const SaveInfo& save, int flags) {
     PlaythroughSession::BeginLoad();
+    Stobe::ShopPrice::ClearCache();
     BeginChatInterruptGeneration(false);
     Stobe::Voice::Cancel();
     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
@@ -14058,6 +14083,21 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
                         targetSerial, mode);
     ok = true;
     return "target=" + targetName + " serial=" + targetSerial + " mode=" + mode;
+  }
+  if (cmd == "shopprice") { // item 104: refetch r for (trader, player) and show the cached value
+    if (f.size() < 3)
+      return "usage: shopprice <trader> [player]";
+    Character *trader = ResolveTestInboxTarget(world, sel, speaker, f[2]);
+    if (!trader)
+      return "target not found: " + f[2];
+    Character *player = speaker;
+    if (f.size() >= 4 && !f[3].empty()) {
+      player = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!player)
+        return "target not found: " + f[3];
+    }
+    ok = true;
+    return Stobe::ShopPrice::DebugRefresh(trader, player);
   }
   if (cmd == "state") {
     if (f.size() < 3)
@@ -15313,6 +15353,7 @@ __declspec(dllexport) void startPlugin() {
           ToString((unsigned int)(uintptr_t)buyItem_orig));
     }
   }
+  Stobe::ShopPrice::Install(hLib); // item 104: relationship shop prices
 
   void *thunkMedicalApplyFirstAid = (void *)GetProcAddress(
       hLib, "?applyFirstAid@MedicalSystem@@QEAA_NMPEAVItem@@MPEAVCharacter@@@Z");

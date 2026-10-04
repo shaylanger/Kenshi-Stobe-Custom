@@ -98,6 +98,8 @@ add_library(Stobe SHARED
   src/SocialEventProtocol.cpp
   src/StobeEventPolicy.cpp
   src/StobeHarnessBridge.cpp
+  src/ShopPricing.cpp
+  src/ShopPriceHook.cpp
   src/main.cpp
   src/SettingsWindow.cpp
   src/Utils.cpp

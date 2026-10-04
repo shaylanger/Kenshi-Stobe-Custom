@@ -810,6 +810,13 @@ RequestPlan ResolveRequest(const std::wstring &endpoint,
     return request;
   }
 
+  if (endpoint == L"/relationship_pricing") { // item 104: jsonData = "player=..&npcs=.." (url-encoded)
+    request.method = L"GET";
+    request.path = L"/StobeServer/relationship_pricing.php?" + ToWide(jsonData);
+    request.body.clear();
+    return request;
+  }
+
   if (endpoint == L"/get_batch_identities") {
     request.path = L"/StobeServer/get_batch_identities.php";
     return request;

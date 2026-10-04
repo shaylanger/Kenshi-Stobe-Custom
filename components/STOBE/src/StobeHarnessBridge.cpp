@@ -28,6 +28,7 @@ const char *const kCommands[][2] = {
     {"state", "stobe_state <target>"},
     {"give_cats", "stobe_give_cats <1..1000000>"},
     {"give_item", "stobe_give_item <name> [count]"},
+    {"shopprice", "stobe_shopprice <trader> [player]"},
 };
 
 KAH_Api g_kah;
@@ -80,8 +81,8 @@ void Connect() {
   g_kah.registerBeforeAttack(&BeforeAttack, nullptr);
   g_kah.log("Stobe: test commands registered");
   Log("TEST_HARNESS: connected to the automation harness, " +
-      std::string(registered == 6 ? "6 commands" : "SOME COMMANDS REFUSED") +
-      " (stobe_ping/mode/say/state/give_cats/give_item)");
+      std::string(registered == 7 ? "7 commands" : "SOME COMMANDS REFUSED") +
+      " (stobe_ping/mode/say/state/give_cats/give_item/shopprice)");
 }
 
 void Drain(GameWorld *world, Character *sel, RunFn run) {

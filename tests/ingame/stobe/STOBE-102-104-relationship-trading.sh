@@ -7,6 +7,16 @@
 # needs: StobeServer 1c2457f+ (items 102-104), Stobe EF62563B+, harness C2929739+
 # usage: STOBE-102-104-relationship-trading.sh <mode>
 #   modes: weapon69 weapon70 weapon-squad weapon-surrender paylater favour gift notrade prices
+#          shop-prices shop-floor shop-block   (Stobe.dll shop-price hook, items 103/104; need Stobe 13A097D5+)
+# shop-* modes: Vel is the shopkeeper (the hook prices any non-squad seller; a real trader's window is a Shay row).
+#   Purchases go through the game's Inventory::buyItem (harness `trade`); `stobe_shopprice` refetches r after each
+#   trust change. Truth = cats moved + stobe.log "SHOP_PRICE:" lines (vanilla_buy/vanilla_sell/price per item).
+#   shop-prices: r in -79 -50 -10 0 10 56 100: player buys ITEM (default Hashish); paid == logged price ==
+#     the formula with the floor (python mirror of ShopPricing::Adjust), logged vanilla_buy == harness "(price P)".
+#   shop-floor: at r 10, 56, 100 the player buys ITEM then sells it straight back (r raised by +5 in between at 56):
+#     no loop profits (sold_for <= paid; equal only for items the game itself buys and sells at one price).
+#   shop-block: r=-80: purchase and sale both refused ("SHOP_PRICE: blocked", harness "buyItem refused"; the harness
+#     then sells by hand at vanilla: that is its own fallback, not the game path); r=-79: buyItem goes through.
 # How: a neutral Drifter renamed "Vel Harrow" (12 m away, so the squad leaves him alone) gets a server profile
 #   (greeting), then his relationship to the player is set with scenarios.sh trust (the live map the server reads),
 #   then the player asks. Server truth (stobeserver.log since the start + negotiation_admin deals) decides, never his words.
@@ -108,6 +118,90 @@ case "$mode" in
       # close the open deal before the next price
       [ -n "$id" ] && (cd /tmp && sudo -u postgres psql -d stobe -Atc "UPDATE stobe_social_contract SET status='CANCELLED', consequences_applied=TRUE, resolved_at=NOW() WHERE contract_id='$id'" >/dev/null)
     done ;;
+  shop-prices|shop-floor|shop-block)
+    ITEM="${ITEM:-Hashish}"
+    make_vel
+    stobe-auto money ${PLAYER} 60000 >/dev/null; stobe-auto money "$V" 60000 >/dev/null
+    shop_r() {  # set r, make the hook refetch it, wait for the SHOP_PRICE r line
+      set_r "$1"
+      stobe-auto stobe_shopprice "$NAME" ${PLAYER} >/dev/null 2>&1; sleep 3
+      log "hook cache: $(stobe-auto stobe_shopprice "$NAME" ${PLAYER} 2>&1 | head -1)"; sleep 2
+    }
+    buy() {  # player buys ITEM from Vel; prints "paid logged_vb logged_vs logged_price harness_price reply"
+      stobe-auto give "$V" "$ITEM" 1 >/dev/null
+      local m b a out lp
+      m=$(grep -a -c "" "$L"); b=$(money_of ${PLAYER})
+      out=$(stobe-auto trade ${PLAYER} "$V" "$ITEM" 2>&1); sleep 1; a=$(money_of ${PLAYER})
+      lp=$(tail -n +"$m" "$L" | grep -a "SHOP_PRICE: player buys" | tail -1)
+      local vb vs p hp
+      vb=$(echo "$lp" | grep -oE 'vanilla_buy=[0-9]+' | cut -d= -f2); vs=$(echo "$lp" | grep -oE 'vanilla_sell=[0-9]+' | cut -d= -f2)
+      p=$(echo "$lp" | grep -oE ' price=[0-9]+' | cut -d= -f2); hp=$(echo "$out" | grep -oE '\(price [0-9]+\)' | grep -oE '[0-9]+')
+      echo "$((b - a)) ${vb:--} ${vs:--} ${p:--} ${hp:--} | $out"
+    }
+    sell() {  # Vel buys ITEM from the player; prints "gained logged_price | reply"
+      local m b a out lp
+      m=$(grep -a -c "" "$L"); b=$(money_of ${PLAYER})
+      out=$(stobe-auto trade "$V" ${PLAYER} "$ITEM" 2>&1); sleep 1; a=$(money_of ${PLAYER})
+      lp=$(tail -n +"$m" "$L" | grep -a "SHOP_PRICE: player sells" | tail -1)
+      local p; p=$(echo "$lp" | grep -oE ' price=[0-9]+' | cut -d= -f2); echo "$((a - b)) ${p:--} | $out"
+    }
+    expect() {  # expect <vb> <vs> <r>: "buy sell" from ShopPricing::Adjust (python mirror, default constants)
+      python3 - "$@" <<'PY'
+import sys, math
+vb, vs, r = int(sys.argv[1]), int(sys.argv[2]), max(-100, min(100, int(sys.argv[3])))
+def shape(m, e): return m * (abs(r) / 100.0) ** e
+bf = 1 - shape(0.30, 1.1) if r > 0 else (1 + shape(10.0, 2.32) if r < 0 else 1.0)
+sf = 1 + shape(0.10, 1.1) if r > 0 else (max(0.0, 1 - shape(0.75, 2.32)) if r < 0 else 1.0)
+rnd = lambda v: 0 if v <= 0 else min(100000000, int(math.floor(v + 0.5)))
+if r == 0 or (vb <= 0 and vs <= 0): print(vb, vs); sys.exit()
+b0, s0 = max(vb, 0), max(vs, 0)
+sell, buy = rnd(s0 * sf), rnd(b0 * bf)
+if b0 > 0:
+    buy = max(buy, sell + 1, s0)
+    if r > 0 and buy > b0:
+        buy = b0
+        if sell >= buy:
+            sell = buy - 1
+            if sell < s0 <= buy: sell = s0
+print(buy, sell)
+PY
+    }
+    case "$mode" in
+      shop-prices)
+        for r in -79 -50 -10 0 10 56 100; do
+          shop_r "$r"; res=$(buy); set -- ${res%%|*}; paid=$1 vb=${2:-} vs=${3:-} lp=${4:-} hp=${5:-}
+          log "r=$r buy: $res"
+          if [ "$r" = 0 ]; then
+            [ "$paid" = "$hp" ] && verdict "shop-prices r=0" "PASS paid $paid = vanilla" || verdict "shop-prices r=0" "FAIL paid $paid, vanilla $hp"
+            continue
+          fi
+          [ "$lp" != - ] || { verdict "shop-prices r=$r" "FAIL no SHOP_PRICE line (paid $paid, vanilla $hp): ${res#*|}"; continue; }
+          want=$(expect "$vb" "$vs" "$r" | awk '{print $1}')
+          if [ "$paid" = "$lp" ] && [ "$lp" = "$want" ] && [ "$vb" = "$hp" ]; then
+            verdict "shop-prices r=$r" "PASS paid $paid (vanilla $vb, trader pays $vs, formula $want)"
+          else verdict "shop-prices r=$r" "FAIL paid $paid logged $lp formula $want vanilla log $vb harness $hp"; fi
+        done ;;
+      shop-floor)
+        for r in 10 56 100; do
+          shop_r "$r"; res=$(buy); paid=${res%% *}
+          [ "$r" = 56 ] && shop_r 61
+          s=$(sell); got=${s%% *}
+          log "r=$r paid $paid, sold back for $got ($s)"
+          if [ "$got" -le "$paid" ] 2>/dev/null; then verdict "shop-floor r=$r" "PASS no loop profit: loses $((paid - got)) (paid $paid, sold $got; 0 only when the game itself buys = sells)"
+          else verdict "shop-floor r=$r" "FAIL loop profit/even: paid $paid sold $got"; fi
+        done ;;
+      shop-block)
+        shop_r -80; m=$(grep -a -c "" "$L")
+        res=$(buy); s=$(sell)
+        blocked=$(tail -n +"$m" "$L" | grep -a -c "SHOP_PRICE: blocked")
+        refused=$(echo "$res $s" | grep -a -o "buyItem refused" | wc -l)
+        [ "$blocked" -ge 2 ] && [ "$refused" -ge 2 ] && verdict "shop-block r=-80" "PASS purchase + sale refused (blocked lines $blocked)" \
+          || verdict "shop-block r=-80" "FAIL blocked lines $blocked, harness refusals $refused | $res | $s"
+        shop_r -79; m=$(grep -a -c "" "$L"); res=$(buy)
+        blocked=$(tail -n +"$m" "$L" | grep -a -c "SHOP_PRICE: blocked")
+        [ "$blocked" -eq 0 ] && ! echo "$res" | grep -q "buyItem refused" && verdict "shop-block r=-79" "PASS purchase went through (paid ${res%% *})" \
+          || verdict "shop-block r=-79" "FAIL blocked at -79 | $res" ;;
+    esac ;;
   *) echo "unknown mode $mode"; exit 2 ;;
 esac
 heal_stop; stobe-auto speed 0 >/dev/null
