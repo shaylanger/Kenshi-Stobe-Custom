@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-batch.sh [--launch <save>] [--stop] <list-file> <out-dir> (WSL): runs a whole game batch from a short list
 # file and leaves ONE file to read at the end, <out-dir>/SUMMARY.txt (RESULT lines, notes, batch start/end).
-# Start it detached and check it when it ends (no polling):
+# Start it detached, then check in every 10 min with batch-health.sh <out-dir> (one line: OK / STALL / DONE):
 #   wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'setsid nohup bash /mnt/c/KenshiModding/tools/automation/run-batch.sh --launch auto-home --stop /mnt/c/KenshiTestRuns/m20/list.txt /mnt/c/KenshiTestRuns/m20/out >/dev/null 2>&1 &'
 # Done when <out-dir>/DONE exists. Then: cat SUMMARY.txt; for a FAIL open only its excerpt (excerpt=...).
 #
@@ -34,7 +34,7 @@ STOBELOG=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
 say() { echo "$*" | tee -a "$S"; }
 offsets() { local p; for p in $LOGPATHS; do stat -c %s "$p" 2>/dev/null || echo 0; done | paste -sd'\t'; }
 world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
-ctl() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" | tr -d '\r'; }
+ctl() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" </dev/null | tr -d '\r'; }
 reload() {   # reload <save> <player>; 1 = the game didn't come back
   stobe-auto load "$1" >/dev/null 2>&1; sleep 12
   world 300 || { sleep 30; world 300 || return 1; }
@@ -59,7 +59,7 @@ if [ -n "$LAUNCH" ]; then
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; touch "$O/DONE"; exit 1; }
 fi
 pass=0; fail=0; dead=0
-while IFS= read -r line || [ -n "$line" ]; do
+while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tools (powershell, tasklist) eat stdin
   line="${line%%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
   IFS='|' read -r name save player mate to cmd <<<"$line"
   t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
@@ -111,7 +111,7 @@ while IFS= read -r line || [ -n "$line" ]; do
   hit=$(tail -c +"$((sl + 1))" "$STOBELOG" 2>/dev/null | grep -a -E "\[EVENT\] (combat[^]]*-> ($player|$mate) \(|knockout: ($player|$mate) |death: ($player|$mate) )" | head -2 | cut -c1-160 | paste -sd';')
   [ -n "$hit" ] && say "NOTE $name: combat/KO toward the squad: $hit"
   world 120 || { sleep 30; world 120 || { say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1; }; }
-done <"$L"
+done 3<"$L"
 [ "$STOP" = 1 ] && ctl stop | tail -2
 say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail"
 touch "$O/DONE"
