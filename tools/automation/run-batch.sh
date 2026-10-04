@@ -92,13 +92,18 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   res=$(grep -a '^RESULT ' "$out")
   if [ -z "$res" ]; then
     if [ $rc = 124 ]; then res="RESULT $name FAIL timed out after ${to}s"
-    elif v=$(grep -a '^VERDICT' "$out" | tail -6) && [ -n "$v" ]; then
+    elif v=$(grep -a '^VERDICT' "$out") && [ -n "$v" ]; then
       res=$(while IFS= read -r l; do r="${l#VERDICT }"; row="${r%%:*}"; txt="${r#*: }"
               case "$txt" in PASS*) echo "RESULT $row PASS ${txt#PASS }" ;; *) echo "RESULT $row FAIL $txt" ;; esac
             done <<<"$v")
     elif s=$(grep -a '^== [0-9]* passed, [0-9]* failed' "$out" | tail -1) && [ -n "$s" ]; then
       case "$s" in *' 0 failed'*) res="RESULT $name PASS $s" ;; *) res="RESULT $name FAIL $s" ;; esac
     else res="RESULT $name FAIL no RESULT/VERDICT line (exit $rc): $(tail -1 "$out" | cut -c1-150)"; fi
+  fi
+  # Partial row successes never hide a killed/timed-out wrapper.
+  if [ $rc -ne 0 ] && ! grep -q ' FAIL' <<<"$res"; then
+    res="$res
+RESULT $name FAIL wrapper did not complete (exit $rc)"
   fi
   res=$(cut -c1-300 <<<"$res")
   if grep -q ' FAIL' <<<"$res"; then
