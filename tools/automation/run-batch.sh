@@ -17,7 +17,10 @@
 #         A8-grow     | kah-fullbase | Beaks | Avarek | 3000 | GROW=1 STOBE-A8-bread-chain-fullbase.sh
 # Every test runs with PLAYER, MATE and RESULT_LOG=<out>/<name>.txt set. Its RESULT lines go to SUMMARY.txt; a
 # test with no RESULT line gets one built from its VERDICT lines, the `== N passed, M failed` line or its exit code.
-# Every FAIL gets an excerpt (batch-excerpts.sh). If the game stops answering, the rest of the batch is skipped.
+# Every FAIL gets an excerpt (batch-excerpts.sh). If the game stops answering or Kenshi died, it is relaunched on the
+# next row's save (at most RECOVER=2 times, NOTE line); after that the rest of the batch is skipped.
+# Memory: before every row the Windows commit headroom is checked; below MIN_COMMIT_GB (default 3) Kenshi is
+# restarted first (NOTE line). m22: Kenshi crashed on a NULL texture allocation with the commit charge at its limit.
 set -u
 A=/mnt/c/KenshiModding/tools/automation; T=/mnt/c/KenshiModding/tests/ingame/stobe
 CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'
@@ -40,6 +43,15 @@ reload() {   # reload <save> <player>; 1 = the game didn't come back
   world 300 || { sleep 30; world 300 || return 1; }
   sleep 10; stobe-auto select "$2" >/dev/null 2>&1; return 0
 }
+memline() {  # "<free-commit-GB> <kenshi-private-GB>" (kenshi "-" when not running)
+  powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select-Object -First 1; "{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d ',' | tail -1
+}
+relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = auto-home); 1 = it didn't come back
+  local s="$1"; case "$s" in home|-) s=auto-home ;; esac
+  recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"
+  ctl stop >/dev/null 2>&1; stobe-say on >/dev/null 2>&1
+  ctl launch -Save "$s" | tail -1; world 900
+}
 prepare() {  # prepare <save> <player> <mate>
   case "$1" in
     -) return 0 ;;
@@ -58,13 +70,21 @@ if [ -n "$LAUNCH" ]; then
   ctl launch -Save "$LAUNCH" | tail -3
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; touch "$O/DONE"; exit 1; }
 fi
-pass=0; fail=0; dead=0
+pass=0; fail=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
 while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tools (powershell, tasklist) eat stdin
   line="${line%%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
   IFS='|' read -r name save player mate to cmd <<<"$line"
   t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
   name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
   cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
+  read -r freec kpriv <<<"$(memline)"
+  echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
+  if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
+  if [ "$dead" = 1 ] && [ "$recovered" -lt "$RECOVER" ]; then
+    if relaunch "$save" "game dead before $name (commit free ${freec:-?} GB)"; then dead=0; else say "NOTE relaunch failed"; fi
+  elif [ "$dead" = 0 ] && [ -n "${freec:-}" ] && [ "$recovered" -lt "$RECOVER" ] && awk -v f="$freec" -v m="$MIN_COMMIT_GB" 'BEGIN{exit !(f+0 < m+0)}'; then
+    relaunch "$save" "commit free $freec GB < $MIN_COMMIT_GB GB (kenshi private $kpriv GB)" || { say "NOTE relaunch failed"; dead=1; }
+  fi
   if [ "$dead" = 1 ]; then say "RESULT $name FAIL skipped: game not responding"; fail=$((fail + 1)); continue; fi
   echo "$(date +%H:%M) $name: prepare $save"
   if ! prepare "$save" "$player" "$mate"; then
