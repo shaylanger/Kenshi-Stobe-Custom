@@ -74,6 +74,7 @@ Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 | REL SR07, SR30 | scenario baselines and post-recruit handle relookup | rel-m18 |
 | STOBE 118 | spoken offer paid before agreement | TRADE prices |
 | STOBE 121 | stale ended-goal block reasons made the NPC refuse a new production order (server e0e8e5c) | home PASS m21; grow Full-Base still pending |
+| STOBE 123 | older-save rollback left the relationships column, cleared grudges came back (server 45022f9) | rel-b55 fade (batch F) |
 | KAH to-do 19 | `walktime`, `newgame`, `pickup`, kah.py `@log`, nested `packput` (installed harness E83B0826) | PG 254, 132/133/240, 120 (4080) |
 
 ## 4. Harness (KAH) limits and open items

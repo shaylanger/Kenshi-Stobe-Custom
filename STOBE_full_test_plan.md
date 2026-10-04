@@ -3,7 +3,7 @@
 Last updated 2026-10-04 (m23 reconciliation of m22 batch D; m21 reconciliation; m19: pruned 53 fixed + confirmed rows, see `archive/test-run-2026-10-03-m19.md`). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **123**. Work resumed m22; run log archive/test-run-2026-10-03-m22.md.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **124**. Work resumed m22; run log archive/test-run-2026-10-03-m22.md.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -41,6 +41,7 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
 | 118 | spoken "one cat, take it or leave it" paid before any agreement | fixed live (fda6a7f) |
 | 121 | stale ended goals made the NPC refuse new production orders | fixed e0e8e5c; A8home PASS m21 (2/2 Bread); Full-Base grow pending |
+| 123 | older-save rollback cleared only extended_data.relationships; the core_npc.relationships column brought a cleared grudge back | fixed live (45022f9, regression in relationship_rollback_regression.php); confirm in rel-b55 fade |
 
 ## E. Design questions and features
 
