@@ -127,7 +127,7 @@ case "$mode" in
       [ -n "$id" ] && (cd /tmp && sudo -u postgres psql -d stobe -Atc "UPDATE stobe_social_contract SET status='CANCELLED', consequences_applied=TRUE, resolved_at=NOW() WHERE contract_id='$id'" >/dev/null)
     done ;;
   shop-prices|shop-floor|shop-block)
-    ITEM="${ITEM:-Hashish}"
+    ITEM_SET=${ITEM:-}; ITEM="${ITEM:-Hashish}"
     if [ "${REAL_TRADER:-0}" = 1 ]; then
       # A real shopkeeper (isATrader): harness `trade` buys through the game's trade window object (ShopTrader,
       # harness 7778508+), the path a GUI purchase takes; the hook maps the ShopTrader to her (Stobe E45BFB0E+).
@@ -141,6 +141,11 @@ case "$mode" in
       stobe-auto teleport "$V" ${PLAYER} dist 12 >/dev/null; stobe-auto setname "$V" "$NAME" >/dev/null
       stobe-say speed 1 >/dev/null; stobe-say say "$NAME" "Hello there, ${NAME%% *}." >/dev/null 2>&1; sleep 15
       log "real trader $V renamed $NAME"
+      # m19: a given item isn't in a real trader's sale stock: buy the first thing her trade window offers (unless ITEM= was set)
+      if [ -z "${ITEM_SET:-}" ]; then
+        w=$(stobe-auto shopstock "$V" | sed -n 's/.*|| trade window ([0-9]* items[^:]*: \[\([^]]*\) x[0-9]* \$.*/\1/p' | head -1)
+        [ -n "$w" ] && ITEM="$w"; log "real trader item: $ITEM"
+      fi
     else
       make_vel
     fi
@@ -222,7 +227,7 @@ PY
           || verdict "shop-block r=-80" "FAIL blocked lines $blocked, harness refusals $refused | $res | $s"
         shop_r -79; m=$(grep -a -c "" "$L"); res=$(buy)
         blocked=$(tail -n +"$m" "$L" | grep -a -c "SHOP_PRICE: blocked")
-        [ "$blocked" -eq 0 ] && ! echo "$res" | grep -q "buyItem refused" && verdict "shop-block r=-79" "PASS purchase went through (paid ${res%% *})" \
+        [ "$blocked" -eq 0 ] && [ "${res%% *}" -gt 0 ] 2>/dev/null && ! echo "$res" | grep -q "buyItem refused" && verdict "shop-block r=-79" "PASS purchase went through (paid ${res%% *})" \
           || verdict "shop-block r=-79" "FAIL blocked at -79 | $res" ;;
     esac ;;
   *) echo "unknown mode $mode"; exit 2 ;;
