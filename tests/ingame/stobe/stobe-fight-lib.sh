@@ -176,6 +176,17 @@ wait_deal() {
   done
   return 1
 }
+# m22: game-time helpers. PSQLQ runs one query; srv_gamets = the newest game time the server has seen (the clock the
+# deal deadlines use: MAX(eventlog.gamets) over the last 10 min); deal_field <id> <column>; deal_terms <id> prints
+# "by:KIND:STATUS" per term (space separated), so a wrapper can see an NPC action still in flight (DISPATCHED).
+PSQLQ() { (cd /tmp && sudo -u postgres psql -d stobe -At -c "$1" 2>/dev/null); }
+srv_gamets() { PSQLQ "SELECT COALESCE(MAX(gamets),0) FROM eventlog WHERE localts >= EXTRACT(EPOCH FROM NOW())::bigint - 600"; }
+deal_field() { PSQLQ "SELECT COALESCE($2::text,'') FROM stobe_social_contract WHERE contract_id='$1'"; }
+deal_terms() {
+  PSQLQ "SELECT string_agg(COALESCE(t->>'by','') || ':' || COALESCE(t->>'kind','') || ':' || COALESCE(t->>'status',''), ' ')
+         FROM stobe_social_contract c, jsonb_array_elements(CASE WHEN jsonb_typeof(c.term_state::jsonb)='array' THEN c.term_state::jsonb ELSE '[]'::jsonb END) t
+         WHERE c.contract_id='$1'"
+}
 money_of() { stobe-auto money "$1" 0 | grep -oE -- '-> -?[0-9]+' | grep -oE -- '-?[0-9]+$'; }  # reply: "<npc> cats A -> B"
 # verdict <row> <text>: the human line, plus ONE token-light line per row (Shay, 2026-10-03):
 # "RESULT <row> PASS|FAIL <evidence>" (anything that isn't PASS counts as FAIL; INCONCLUSIVE/SETUP kept in the text),
