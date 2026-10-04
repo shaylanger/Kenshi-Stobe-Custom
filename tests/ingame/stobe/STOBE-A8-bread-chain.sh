@@ -17,7 +17,7 @@
 #   days); GROW=1 [SPEED=50] runs the real farm chain with a 40-min budget.
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
-preflight A8 advancing  # shared setup check (Shay 2026-10-04)
+preflight A8 advancing squad  # shared setup check (Shay 2026-10-04); squad: m25, server knows MATE as squad before the order
 trap 'stobe-auto speed 0 >/dev/null 2>&1' EXIT
 ST=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_work_goal.status
 BASE_K=$(grep -a -c "" "$KFP" 2>/dev/null || echo 0)
@@ -59,7 +59,8 @@ for i in $(seq 1 15); do
   [ -z "$id" ] && id=$(grep -a -P '\tBread\t' "$ST" | grep -v -E 'COMPLETE|CANCELLED|BLOCKED' | head -1 | cut -f1)
   [ -n "$id" ] && break; sleep 2
 done
-[ -n "$id" ] || { verdict A8 "FAIL no bread goal: $(tail -n +"$BASE_K" "$KFP" | grep -a WORK_GOAL | tail -2)"; exit 1; }
+# m25: the reason names what happened (KenshiFP goal lines, else her reply), never an empty reason
+[ -n "$id" ] || { verdict A8 "FAIL no bread goal: kfp=[$(tail -n +"$BASE_K" "$KFP" | grep -a WORK_GOAL | tail -2 | tr '\n' ' ' | cut -c1-200)] reply=[$(since_stobe | grep -a -F "SAY [${MATE}]" | tail -3 | sed -E 's/.*SAY \[[^]]*\]: //' | tr '\n' ' ' | cut -c1-240)] faction=$(srv_faction "$MATE")"; exit 1; }
 log "goal $id"
 stobe-auto speed "${SPEED:-20}" >/dev/null
 s=""

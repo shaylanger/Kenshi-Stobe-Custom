@@ -230,19 +230,26 @@ selected_is() { stobe-auto where @selected 2>/dev/null | grep -q "^$1 #"; }
 setup_fail() { verdict "$1" "SETUP FAIL $2"; exit 4; }
 # stobe_ready [secs] [base_line] / stobe_log_lines: wait for the Stobe NPC event sweep after a load (stobe-ready.sh)
 source "$(dirname "${BASH_SOURCE[0]}")/stobe-ready.sh"
-# preflight <row> [save=<name>] [advancing] [npc ...]: world loaded (and the expected save), OUT dir exists, PLAYER selected,
-# PLAYER/MATE (and each npc) present and not KO/DEAD, game time advancing when asked (unpauses at 1x for the check)
+# srv_faction <name>: the server's core_npc faction for <name> ('' = unknown/not synced yet)
+srv_faction() { PSQLQ "SELECT COALESCE(faction,'') FROM core_npc WHERE LOWER(name)=LOWER('$1') ORDER BY updated_at DESC LIMIT 1"; }
+# srv_squad_synced: the server has PLAYER and MATE in the same (non-empty) faction. m25 (A8): right after a load the
+# playthrough rollback could drop the squad rows and the next chat re-created them faction-less -> orders to the
+# mate were treated as a stranger's (no goal inferred). Orders/goal rows wait for this.
+srv_squad_synced() { local p m; p=$(srv_faction "$PLAYER"); m=$(srv_faction "$MATE"); [ -n "$p" ] && [ "$p" = "$m" ]; }
+# preflight <row> [save=<name>] [advancing] [squad] [npc ...]: world loaded (and the expected save), OUT dir exists, PLAYER selected,
+# PLAYER/MATE (and each npc) present and not KO/DEAD, game time advancing when asked (unpauses at 1x for the check),
+# squad: the server knows MATE as PLAYER's faction member (bounded 90 s wait for the NPC sync after a load)
 preflight() {
-  local row="$1" save="" adv=0 st w n h1 h2; shift
+  local row="$1" save="" adv=0 sq=0 st w n h1 h2; shift
   [ -n "${OUT:-}" ] && { mkdir -p "$OUT" || setup_fail "$row" "cannot create OUT=$OUT"; }
   st=$(stobe-auto status)
   case "$st" in *phase=world*) ;; *) setup_fail "$row" "game not in the world: $st" ;; esac
-  for n in "$@"; do case "$n" in save=*) save="${n#save=}" ;; advancing) adv=1 ;; esac; done
+  for n in "$@"; do case "$n" in save=*) save="${n#save=}" ;; advancing) adv=1 ;; squad) sq=1 ;; esac; done
   [ -n "$save" ] && ! echo "$st" | grep -q " save=$save " && setup_fail "$row" "wrong save (want $save): $st"
   # m23: status player= is the first squad member, not the selection (Full-Base lists Avarek first): check @selected
   selected_is "$PLAYER" || { stobe-auto select "$PLAYER" >/dev/null; wait_for 10 selected_is "$PLAYER" || setup_fail "$row" "cannot select $PLAYER (selected: $(stobe-auto where @selected 2>&1 | cut -c1-60))"; }
   for n in "$PLAYER" "$MATE" "$@"; do
-    case "$n" in save=*|advancing|'') continue ;; esac
+    case "$n" in save=*|advancing|squad|'') continue ;; esac
     w=$(stobe-auto where "$n" 2>&1)
     echo "$w" | grep -q "#[0-9]" || setup_fail "$row" "no character '$n' ($w)"
     echo "$w" | grep -q -E " (KO|DEAD)" && setup_fail "$row" "'$n' is KO/DEAD ($w)"
@@ -254,6 +261,9 @@ preflight() {
     h2=$(stobe-auto time | grep -oE "game_hours=[0-9.]+" | cut -d= -f2)
     awk -v a="${h1:-0}" -v b="${h2:-0}" 'BEGIN{exit !(b>a)}' || setup_fail "$row" "game time not advancing ($h1 -> $h2)"
     [ "${sp%.*}" = 0 ] && stobe-auto speed 0 >/dev/null
+  fi
+  if [ "$sq" = 1 ]; then
+    wait_for 90 srv_squad_synced || setup_fail "$row" "server does not know $MATE as $PLAYER's squad (faction: $PLAYER='$(srv_faction "$PLAYER")' $MATE='$(srv_faction "$MATE")')"
   fi
   log "preflight $row ok"
 }
