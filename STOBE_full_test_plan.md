@@ -12,7 +12,6 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 | # | Situation | Expect |
 |---|---|---|
 | 16 | A goal needing a crafted ingredient at a bench | The bench queue grows only by what's missing |
-| 55 | Fights and relationships (B 55, section E items 1-8): BUILT live StobeServer `1392155` (REL "fights" mode replaces R4, switch `SOCIAL_FIGHTS_LIVE`, `lib/social_fights.php`); native "recovered" vitals for the bleeding-out level in Stobe (m19 build) | `rel-b55.sh <outdir> [mode squad wild spar close treat fade chat bleed deal]` (auto-home kah copy, Capture=1): one VERDICT per block; `chat` may be INCONCLUSIVE when the evaluator proposes no gain; accidental squad hit uses installed harness `hit`. m21 stopped before live B55 batch; event-based severity fade already decided/built (a098236) |
 
 ## C. Open reproduction and regression checks
 

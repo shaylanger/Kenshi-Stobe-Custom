@@ -20,10 +20,10 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
 | Stobe.dll | `137286B7` (rename guard 9af0971 + game theft-dialog hook a99f498) | - |
-| KenshiFP.dll | `6E0A031E` (items to 112) | - |
+| KenshiFP.dll | `47E5700A` (planner missing-dep need, ba0fb83) | - |
 | ProfessionGearProgression.dll | `D7A60E49` (paused: Normal config + Normal rules) | `266C68F5` (PG 250, 4080) |
-| AutomationHarness.dll | `70953474` (client fc53dba `@log-wait`) | 4080: kah-pg-wt c5a5c88 (artifact give, `research start any`) + B1EBCA95 power supply |
-| Server (live) | `stobe` 0b5399d (base town position 0b5399d, B55 test switch ed90be0, item 123 45022f9) | - |
+| AutomationHarness.dll | `A14D5891` (`senses` 2758ee7, `fill optional` 59b742d, `face` d91fe88) | 4080: D3B372F9 (operator m26) |
+| Server (live) | `stobe` 9f6fc55 (rollback keeps squad 04fc777, SR09 face 9f6fc55) | - |
 
 ## 1. Open automated rows
 
@@ -35,12 +35,11 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE 55 (B 55) | fight rules (STOBE plan section E items 1-8): `rel-b55.sh` | auto-home | all blocks PASS except bleed (H: victim never woke in the window) -> fixer 15 |
 | STOBE section C (31, 32) | misquoted counter amounts; REJECT naming a price | auto-home | never reproduced live; candidates for injection rows |
-| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | I 54/2: 2nd Junkbow never made (planner assumed 1 Hinge per item) -> KenshiFP 47E5700A (ba0fb83) + squad preflight; rerun J |
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | I: no bread goal (rollback deleted the squad NPC, faction empty) -> server m25-rollback-squad (50514ba) + squad preflight 92ccbd3; rerun J |
+| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | J 52/4: Junkbow queued, never crafted; Kral's Chosen raid on Beaks during the row -> fixer 19 |
+| STOBE A8 | bread chain grow on Full-Base | Full-Base | J: squad fix works (reached GROW); ALERT Band of Bones KO Beaks at 50x -> fixer 19 (raid protection) |
 | REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
-| REL SR09 | KO loot witnessed -> known_thief | auto-home | H: no known_thief (after witness-senses fix 5fbe34f) -> fixer 15 |
+| REL SR09 | KO loot witnessed -> known_thief | auto-home | J: SETUP FAIL witness faced away (fov 0) -> harness `face` d91fe88 + scenario 9f6fc55; rerun K |
 | REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | todo |
 | PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | pg-09 soak 24/0 PASS D (5090); 4080 operator m23 rerunning pg54/84/81/80/52/53/82/87-fs/89 + home list; see INGAME_STATUS.md |
 
