@@ -22,15 +22,30 @@
 `CLAUDE.md`, `testing/README.md`, `MASTER_TEST_PLAN.md`, run log `archive/test-run-2026-10-03-m18.md` (+ m17),
 `C:\KenshiTestFixtures\FIXTURES.md`, harness `docs/COMMANDS.md`, local `handoff/4080-test-rig.md`, `testing/AGENT_PROMPTS.md`.
 
-## State now
-- 5090: Kenshi running (auto-home launch 17:43), batch `C:\KenshiTestRuns\m18\batch.sh` (detached in WSL, log
-  `batch.log`, outputs `out\`): Full-Base 21/18 -> generic + 16 Full-Base -> Squin 14/A3/15 -> 61 -> rel-enslaved ->
-  rel-theft -> trading modes -> A8 home + GROW -> 18/21/22 home -> pg.sh.
+## State now (2026-10-03 ~19:30, coordinator context full: new session takes over here)
+- 5090: Kenshi running; m18 batch `C:\KenshiTestRuns\m18atch.sh` running detached in WSL (log `batch.log`, outputs `out\`;
+  done so far: 21/18/generic/16 Full-Base, Squin 14/15; next: 61, rel-enslaved, rel-theft, trading modes, A8, 18/21/22 home,
+  pg.sh). After it: `C:\KenshiTestRuns\m18ollowup.sh` (21/18/generic/16 Full-Base reruns with the fixes). Results so far
+  and analysis: `archive/test-run-2026-10-03-m18.md`.
 - Installed: Stobe 478D8AA6, KenshiFP 5719BEA5, harness F6A3FC31, PG D7A60E49 (Forced + InGameTest), Capture=1.
-  Server live 6ca4822 (item 107 6146805, STOBE 18 marker 6ca4822).
-- m18 21 Full-Base INCONCLUSIVE: fullbase-guard's `protect Avarek` blocked park_malzin's `ko`, Avarek KO'd the raider.
-  Lib fixed (park_malzin turns protect off first) after 18 Full-Base had started -> rerun 21 + 18 Full-Base.
-- 4080 rig operator subagent: PG 254/120, Squin 220-227/217/108, pg-01..08, 132/133/240 -> `C:\KenshiTestRuns\m18-4080\`.
+- **Built, install at the next restart** (Kenshi closed, `install-dll.ps1`): Stobe E45BFB0E (shop price hook 103/104 incl.
+  ShopTrader sellers; still -75 % sell side), KenshiFP 6E0A031E (items 111 + 112), harness 33087EDE (repo main 8116c46:
+  KAH 2/3, KAH 22b, KAH 24 balance commands; check KAH 3 commit 7778508 is in it), PG 266C68F5 (only for row 250).
+- Server live (all pushed): items 107, 18 markers, 108, 109, 111, 113, 90 (e3b9cc3), A12 refusal (01a7c4e), item 29 (cd5a316),
+  test switches NEG_TEST_INJECT / NEG_TEST_FORCE_INITIATIVE (2b2b52d).
+- Subagents still running: REL builder (SR09/13/14, SR07, SR30/SR06 forcing, B 55 fight rules), item 100 (b) fixer,
+  item 110 rollback fixer, 4080 rig operator (PG rows). They die with this session: check git logs + their repos.
+- **Not delegated (blocked by the permission checker):** item 104 sell side -90 % (C++ ShopPricing + tests, server deal
+  price + relationship_pricing endpoint, wrapper python copy). Do it next.
+
+## Next steps
+1. When m18 batch + followup end: stop Kenshi, install the builds above, relaunch.
+2. Run: item 107/18/109/16 Full-Base reruns (followup.sh if not done), Squin 14/A3 + 15 approve/decline (items 111-113),
+   `STOBE-102-104-relationship-trading.sh shop-prices|shop-floor|shop-block` (+ `REAL_TRADER=1`), section C wrappers
+   `STOBE-C*.sh` + `STOBE-20-refuse-after-handover.sh` + `STOBE-A11-A12-heal-deal.sh a12` (auto-home, `scenarios.sh fresh`
+   first), `C:\KenshiTestRuns\scenarios\kah-2-3-msg-trade.txt` (kah-trader copy), PG launch 5 balance files + pg-56 (PG 89)
+   on Full-Base (`RUN_ORDER.md`), PG 151-152 (pg-15 on/off, steps in PG RUN_ORDER), KAH 5, REL SR18/19 Full-Base.
+3. PG fit finding (pg-14): +25 % Labouring gear beats the whole skill range (x1.26): design principle 4 -> Shay decision.
 
 ## To-do (all of it, in parallel where possible)
 1. **PG balance driver, all rows 161-199** (PG agent): extend `Kenshi-Profession-Gear-Progression/tools/balance_driver.py`
