@@ -59,7 +59,14 @@ heal_start ${PLAYER}
 case "$mode" in
   weapon69|weapon70)
     make_vel; r=${mode#weapon}; set_r "$r"
-    w=$(weapon_of "$V"); [ -n "$w" ] || { verdict "$mode" "SETUP FAIL $NAME has no equipped weapon"; exit 1; }
+    # Fixture spawns can have no equipped weapon. Supply one and verify the actual equipped item.
+    w=$(weapon_of "$V")
+    if [ -z "$w" ]; then
+      stobe-auto give "$V" "Iron Stick" 1 >/dev/null
+      stobe-auto equip "$V" "Iron Stick" >/dev/null
+      w=$(weapon_of "$V")
+    fi
+    [ -n "$w" ] || { verdict "$mode" "SETUP FAIL $NAME has no equipped weapon"; exit 1; }
     out=$(ask "${NAME%% *}, I'll give you 300 cats for your $w. Hand it over.")
     blocked=$(echo "$out" | grep -a -c -E "Weapon hand-over blocked|would give up her weapon")
     still=$(stobe-auto inv "$V" | grep -c -F "\"name\":\"$w\",\"count\":1,\"equipped\":true")
@@ -128,16 +135,29 @@ case "$mode" in
     done ;;
   shop-prices|shop-floor|shop-block)
     ITEM_SET=${ITEM:-}; ITEM="${ITEM:-Hashish}"
+    # Tests use throwaway fixtures. Free carried space before purchases; keep worn gear.
+    clear_carried() {
+      local n
+      while IFS= read -r n; do
+        [ -n "$n" ] && stobe-auto drop "${PLAYER}" "$n" >/dev/null 2>&1
+      done < <(stobe-auto inv "${PLAYER}" | python3 -c 'import json,sys; a=json.load(sys.stdin); print("\n".join(dict.fromkeys(x["name"] for x in a if not x.get("equipped"))))')
+    }
+    clear_carried
     if [ "${REAL_TRADER:-0}" = 1 ]; then
       # A real shopkeeper (isATrader): harness `trade` buys through the game's trade window object (ShopTrader,
       # harness 7778508+), the path a GUI purchase takes; the hook maps the ShopTrader to her (Stobe E45BFB0E+).
       # A squad spawn's reply names no members (m19): the new trader is the one `traders` lists only after the spawn.
+      if [ "${EXISTING_TRADER:-0}" = 1 ]; then
+        V=$(stobe-auto traders 300 | grep -oE '#[0-9]+/[0-9]+' | head -1)
+        [ -n "$V" ] || { verdict "$mode" "SETUP FAIL fixture has no real trader"; exit 1; }
+      else
       before=$(stobe-auto traders 300 | grep -oE '#[0-9]+/[0-9]+')
       out=$(stobe-auto spawn "Skeleton Traders Animals" "Traders Guild" near ${PLAYER} dist 140)
       V=""; for i in 1 2 3 4 5 6; do sleep 3
         for s in $(stobe-auto traders 300 | grep -oE '#[0-9]+/[0-9]+'); do echo "$before" | grep -qxF "$s" || { V=$s; break; }; done
         [ -n "$V" ] && break; done
       [ -n "$V" ] || { verdict "$mode" "SETUP FAIL no isATrader in the spawned squad: $out"; exit 1; }
+      fi
       stobe-auto teleport "$V" ${PLAYER} dist 12 >/dev/null; stobe-auto setname "$V" "$NAME" >/dev/null
       stobe-say speed 1 >/dev/null; stobe-say say "$NAME" "Hello there, ${NAME%% *}." >/dev/null 2>&1; sleep 15
       log "real trader $V renamed $NAME"
@@ -156,7 +176,10 @@ case "$mode" in
       log "hook cache: $(stobe-auto stobe_shopprice "$NAME" ${PLAYER} 2>&1 | head -1)"; sleep 2
     }
     buy() {  # player buys ITEM from Vel; prints "paid logged_vb logged_vs logged_price harness_price reply"
+      # Keep buyer space constant between relationship points. Given armour may auto-equip on the seller.
+      clear_carried
       stobe-auto give "$V" "$ITEM" 1 >/dev/null
+      stobe-auto unequip "$V" "$ITEM" >/dev/null 2>&1
       local m b a out lp
       m=$(grep -a -c "" "$L"); b=$(money_of ${PLAYER})
       out=$(stobe-auto trade ${PLAYER} "$V" "$ITEM" 2>&1); sleep 1; a=$(money_of ${PLAYER})
@@ -215,12 +238,18 @@ PY
           [ "$r" = 56 ] && shop_r 61
           s=$(sell); got=${s%% *}
           log "r=$r paid $paid, sold back for $got ($s)"
-          if [ "$got" -le "$paid" ] 2>/dev/null; then verdict "shop-floor r=$r" "PASS no loop profit: loses $((paid - got)) (paid $paid, sold $got; 0 only when the game itself buys = sells)"
+          if echo "$res $s" | grep -qE 'ERROR:|placed=failed|arrived=0'; then
+            verdict "shop-floor r=$r" "FAIL trade did not complete: $res | $s"
+          elif [ "$got" -le "$paid" ] 2>/dev/null; then verdict "shop-floor r=$r" "PASS no loop profit: loses $((paid - got)) (paid $paid, sold $got; 0 only when the game itself buys = sells)"
           else verdict "shop-floor r=$r" "FAIL loop profit/even: paid $paid sold $got"; fi
         done ;;
       shop-block)
         shop_r -80; m=$(grep -a -c "" "$L")
-        res=$(buy); s=$(sell)
+        res=$(buy)
+        # The blocked purchase must not be the only source of the sell-side test item.
+        stobe-auto give "${PLAYER}" "$ITEM" 1 >/dev/null
+        stobe-auto unequip "${PLAYER}" "$ITEM" >/dev/null 2>&1
+        s=$(sell)
         blocked=$(tail -n +"$m" "$L" | grep -a -c "SHOP_PRICE: blocked")
         refused=$(echo "$res $s" | grep -a -o "buyItem refused" | wc -l)
         [ "$blocked" -ge 2 ] && [ "$refused" -ge 2 ] && verdict "shop-block r=-80" "PASS purchase + sale refused (blocked lines $blocked)" \
