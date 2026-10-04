@@ -31,7 +31,7 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (KenshiFP: carried goods + nearest stocking trader) |
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
-| 124 | server background processor started by stobe-tests with the test DB (STOBE_DB_NAME=stobe_test) holds the live lock + port 12346: live ticks stale for hours, recovery fails ("already running"); batch O REL rows ran during the stall | fixer m29; live stray processor needs a restart (Shay) |
+| 124 | server background processor started by stobe-tests with the test DB (STOBE_DB_NAME=stobe_test) holds the live lock + port 12346: live ticks stale for hours, recovery fails ("already running"); batch O REL rows ran during the stall | fixed 27d411e (live-DB guard in start + start.sh, stobe-tests off switch, owner stamp, listener drops lock fd; regression background_processor_guard_regression.php); confirm: after the stray is gone, live ticks advance during a batch |
 
 ## E. Design questions and features
 

@@ -19,11 +19,11 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
-| Stobe.dll | `80E8816A` (REL seed race d8cb37f + squad-member world-event sweep 06e032d, installed m29 for batch O) | - |
+| Stobe.dll | `80E8816A` (REL seed race d8cb37f + squad-member world-event sweep 06e032d) | `5B148D87` (carry events for the player actor 26b6133, REL SR18) |
 | KenshiFP.dll | `0349AA2A` (missing-input log ring 9e9a9e0) | - |
 | ProfessionGearProgression.dll | `D7A60E49` (paused: Normal config + Normal rules) | `266C68F5` (PG 250, 4080) |
 | AutomationHarness.dll | `9DB0D416` (`cage` free cage + KO first 4b53da0, `stat` mod= fd9a84e, `@any` cd21aa8; installed m29) | 4080: same build, operator m29 installs |
-| Server (live) | `stobe` 90a92e8 (A8 workstation destination; rel-enslaved poll c01292f) | - |
+| Server (live) | `stobe` dcabbfd (A8 station destination 90a92e8, background-processor live-DB guard 27d411e, p7-05 lockpickable slave 619d7eb, Terrorism not theft dcabbfd) | stray test-DB processor (WSL 1632/1641) must be killed or WSL restarted (Shay) |
 
 ## 1. Open automated rows
 
@@ -35,8 +35,8 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | O: p7-03/04/06 PASS (seed race fixed); p7-05 FAIL step 18 no new SOCIAL_CAPTURE after freeing (ran during the background-processor stall, STOBE 124) -> fixer, rerun p7-05 |
-| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | O: SR18 35/2 effect Rel Cobb -> Avarek outside [8,35] (during the processor stall, STOBE 124); SR19 setup FAIL (bed 38.5 m > 30) -> fixer, rerun |
+| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | O: p7-03/04/06 PASS; p7-05 FAIL = setup (caged slave, not shackled) -> 619d7eb picks a lockpickable slave; rerun p7-05 + p7-06 in batch P |
+| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | O: SR18 = Stobe skipped carry events of playerCharacters[0] (Avarek) -> 26b6133 (5B148D87, install); SR19 setup = Avarek KO by raiders -> guard + heal 9362d65; rerun in batch P |
 | PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + 5090, Full-Base | BLOCKER (m29, proven on the 4080): harness `protect on` / `health 100` set the wounds factor to 0.25 (stat mod=0.25), so every balance point from batches 17-20 + m29 is INVALID. Harness fix + live check by the 5090 PG operator, then the gate: 4080 = 52, 53, 54, 80-84, 90 + pg-51; 5090 = 85-89, 92 (+fs) + pg-89 full + pg-55. Worker now Beaks, Avarek pinned (PG 86ad346). Older provisional per-profession notes are void until regated |
 
 ## 2. Requires Shay
