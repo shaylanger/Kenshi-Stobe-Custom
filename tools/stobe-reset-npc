@@ -7,6 +7,9 @@
 # Her relationship entry for the player is saved first (only the first time, so repeated
 # test resets keep the real value) to /root/stobe-backups/relationship_saved/<npc>.json;
 # `stobe-reset-npc --restore <npc>` puts it back and removes the saved copy.
+# Item 100 (b): each squad character has its own history. PLAYER=<character> (e.g. PLAYER=Beaks on
+# Full-Base) resets/restores her entry for that character instead of the PLAYER_NAME persona; its
+# saved copy is <npc>.<character>.json.
 set -e
 SAVE_DIR=/root/stobe-backups/relationship_saved
 mkdir -p "$SAVE_DIR"
@@ -14,8 +17,10 @@ if [ "$1" = "--restore" ]; then
   npc="${2:?usage: stobe-reset-npc --restore <npc>}"
   lower=$(echo "$npc" | tr '[:upper:]' '[:lower:]')
   f="$SAVE_DIR/$lower.json"
-  [ -s "$f" ] || { echo "nothing saved for $npc"; exit 1; }
+  [ -n "$PLAYER" ] && f="$SAVE_DIR/$lower.$(echo "$PLAYER" | tr '[:upper:]' '[:lower:]').json"
+  [ -s "$f" ] || { echo "nothing saved for $npc${PLAYER:+ -> $PLAYER}"; exit 1; }
   player=$(sudo -u postgres psql -d stobe -At -c "SELECT value FROM general_settings WHERE id='PLAYER_NAME'" 2>/dev/null); player="${player:-Shay}"
+  [ -n "$PLAYER" ] && player="$PLAYER"
   entry=$(cat "$f")
   # keep the casing of the key she already has ("Shay"), else the setting's; drop other casings
   key=$(sudo -u postgres psql -d stobe -At -c "SELECT k FROM core_npc_master m, jsonb_object_keys(COALESCE(m.extended_data->'relationships','{}'::jsonb)) k WHERE LOWER(m.name)='${lower}' AND LOWER(k)=LOWER('${player}') ORDER BY k ASC LIMIT 1")
@@ -42,9 +47,11 @@ since="${2:-2026-09-29}"
 lower=$(echo "$npc" | tr '[:upper:]' '[:lower:]')
 player=$(sudo -u postgres psql -d stobe -At -c "SELECT value FROM general_settings WHERE id='PLAYER_NAME'" 2>/dev/null)
 player="${player:-Shay}"
-if [ ! -s "$SAVE_DIR/$lower.json" ]; then
+sf="$SAVE_DIR/$lower.json"
+if [ -n "$PLAYER" ]; then player="$PLAYER"; sf="$SAVE_DIR/$lower.$(echo "$PLAYER" | tr '[:upper:]' '[:lower:]').json"; fi
+if [ ! -s "$sf" ]; then
   saved=$(sudo -u postgres psql -d stobe -At -c "SELECT v FROM core_npc_master m, jsonb_each(m.extended_data->'relationships') AS e(k, v) WHERE LOWER(m.name)='${lower}' AND LOWER(k)=LOWER('${player}') LIMIT 1")
-  if [ -n "$saved" ]; then echo "$saved" > "$SAVE_DIR/$lower.json"; echo "saved $npc -> $player: $saved"; fi
+  if [ -n "$saved" ]; then echo "$saved" > "$sf"; echo "saved $npc -> $player: $saved"; fi
 fi
 sudo -u postgres psql -d stobe -v ON_ERROR_STOP=1 -q <<SQL
 BEGIN;
