@@ -9926,6 +9926,15 @@ void ProcessMessageQueue(GameWorld *thisptr) {
           unsigned int serial =
               (unsigned int)strtoul(payload.substr(0, sep).c_str(), NULL, 10);
           std::string newName = payload.substr(sep + 1);
+          // M23_RENAME_GUARD: "<new>|<sent>": skip when the character was renamed after the request
+          std::string sentName;
+          bool hasSent = false;
+          size_t sep2 = newName.find('|');
+          if (sep2 != std::string::npos) {
+            sentName = newName.substr(sep2 + 1);
+            newName = newName.substr(0, sep2);
+            hasSent = true;
+          }
           if (serial > 0 && !newName.empty() && thisptr) {
             const ogre_unordered_set<Character *>::type &chars =
                 thisptr->getCharacterUpdateList();
@@ -9933,6 +9942,11 @@ void ProcessMessageQueue(GameWorld *thisptr) {
               if (*it && (uintptr_t)*it > 0x1000 &&
                   (*it)->getHandle().serial == serial) {
                 std::string oldName = (*it)->getName();
+                if (hasSent && !sentName.empty() && oldName != sentName) {
+                  Log("NAME_ASSIGN: kept '" + oldName + "' (renamed after the identity request for '" + sentName +
+                      "'; dropped '" + newName + "', serial " + ToString(serial) + ")");
+                  break;
+                }
                 (*it)->setName(newName);
                 Log("NAME_ASSIGN: Renamed '" + oldName + "' -> '" + newName +
                     "' (serial " + ToString(serial) + ")");
@@ -15224,7 +15238,11 @@ DWORD WINAPI RenameWorker(LPVOID lpParam) {
       if (batchStatus == Stobe::IdentityRename::BATCH_STATUS_RENAME) {
         std::string newName = JsonReadField(obj, "new_name");
         if (!newName.empty()) {
-          std::string renameMsg = "NPC_RENAME: " + sSerial + "|" + newName;
+          // M23_RENAME_GUARD: carry the name that was sent, the rename applies only if it is still current
+          std::string sentName;
+          for (size_t bi = 0; bi < batch.size(); ++bi)
+            if (batch[bi].serial == serial) { sentName = batch[bi].name; break; }
+          std::string renameMsg = "NPC_RENAME: " + sSerial + "|" + newName + "|" + sentName;
           EnterCriticalSection(&g_msgMutex);
           g_messageQueue.push_back(renameMsg);
           LeaveCriticalSection(&g_msgMutex);
