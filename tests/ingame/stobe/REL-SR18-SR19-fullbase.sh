@@ -33,6 +33,7 @@ wake $MATE
 speed 1
 @sleep 3
 speed 0
+health $MATE 100
 @until 20 teleport $MATE building Bed dist 30 ~ moved=1
 health $MATE 100
 where $MATE ~ $MATE #\d+/\d+ \[[^]]*\] pos=[-0-9.,]+ dist=[0-9.]+$
@@ -43,6 +44,12 @@ EOF
 }
 # row <id> <file> <name-var> <lo> <hi> <setup check line>
 row(){ local id=$1 b v=${3%NAME}; b=$(basename "$2" .txt)
+  # m22 batch O SR19: KO'd raiders lying in the base woke after SR18 and knocked the mate out (teleport moved=0):
+  # protect + calm raiders + both awake before every row's setup
+  local g; g=$(PLAYER="$PLAYER" MATE="$MATE" bash "$H/fullbase-guard.sh" "$id" 2>&1) \
+    || { res "$id FAIL setup: fullbase-guard: $(echo "$g" | grep -m1 -i -E 'fail' | cut -c1-140) log=$OUT/$b.guard.txt"
+         echo "$g" > "$OUT/$b.guard.txt"; return; }
+  echo "$g" > "$OUT/$b.guard.txt"
   local bad; bad=$(setup "$b" "$6")
   [ -n "$bad" ] && { res "$id FAIL setup: $MATE not ready / no free furniture: $bad log=$OUT/$b.setup.out"; return; }
   bash "$H/run-as.sh" "$I/$2" "$PLAYER" "$MATE" \
