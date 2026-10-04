@@ -85,10 +85,10 @@
     stops 4-9 m short (PG 254 FAIL); `newgame` hangs in loading, Kenshi exits ~9 min later (PG 132/133/240 FAIL);
     `pickup` treats No Faction drops as owned (Commands.cpp ~1301); kah.py `@log` path with spaces; `packput` into a
     nested pack (PG 120 nested case).
-20. **Server side finding (m18, item 110):** concurrent rollback requests at a load run without the advisory lock
+20. DONE (StobeServer 538bf00, m19) **Server side finding (m18, item 110):** concurrent rollback requests at a load run without the advisory lock
     ("rollback lock busy"): fix + check php_error.log after older-save loads.
-21. **Master plan refresh:** sections 2 and 4 of `MASTER_TEST_PLAN.md` are stale (rows built/moved since m16): update them.
-17. End: prune `STOBE_full_test_plan.md` (header + section D still list confirmed items 65-89 and old DLL hashes).
+21. DONE (ff51538, m19) **Master plan refresh:** sections 2 and 4 of `MASTER_TEST_PLAN.md` are stale (rows built/moved since m16): update them.
+17. DONE (83f579c, planning session): prune `STOBE_full_test_plan.md`.
 18. (was 10) End: Capture=0, REL mode off, PG `set_test_mode.ps1 -Mode Normal -Rules Normal`, close Kenshi, one final summary
     (with the Shay decisions above).
 
