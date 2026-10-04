@@ -199,9 +199,10 @@ verdict() {
   if [ "$st" = PASS ]; then echo "RESULT $1 PASS ${ev:0:200}"; else echo "RESULT $1 FAIL ${ev:0:200}${RESULT_LOG:+ log=$RESULT_LOG}"; fi
 }
 # RAID_RE: world-raid factions that reach the squad on Full-Base (m17 Band of Bones; m24 Bele'coz, Hill Marauders,
-# Black Dragon Ninjas; m22 J Kral's Chosen). RAID_FILTER: the same for the harness `chars <r> <filter>` (m26).
-RAID_RE="${RAID_RE:-Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Bele.coz|Hill Marauders|Black Dragon Ninjas}"
-RAID_FILTER="${RAID_FILTER:-[band of bones]|[kral|[dust bandits]|[hungry bandits]|[starving bandits]|[bele|[hill marauders]|[black dragon ninjas]}"
+# Black Dragon Ninjas; m22 J Kral's Chosen; m22 L Berserkers: not calmed, ~1100 protect revives in 16-fullbase).
+# RAID_FILTER: the same for the harness `chars <r> <filter>` (m26).
+RAID_RE="${RAID_RE:-Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Bele.coz|Hill Marauders|Black Dragon Ninjas|Berserkers|Cannibals|Fogmen}"
+RAID_FILTER="${RAID_FILTER:-[band of bones]|[kral|[dust bandits]|[hungry bandits]|[starving bandits]|[bele|[hill marauders]|[black dragon ninjas]|[berserkers]|[cannibals]|[fogmen]}"
 # calm_raiders [radius] [factions-regex]: knock out world raiders near the squad for RAID_KO_S game seconds (Full-Base
 # gets raids that reach the squad mid-test, m17); logs how many
 calm_raiders() {
