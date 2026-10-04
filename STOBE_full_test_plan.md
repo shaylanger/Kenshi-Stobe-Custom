@@ -3,7 +3,7 @@
 Last updated 2026-10-03 (m19: pruned 53 fixed + confirmed rows, see `archive/test-run-2026-10-03-m19.md`). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **120**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **121**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -74,6 +74,7 @@ Fixed and confirmed, deleted: 64, 67 (m1); 65, 66, 68, 69, 71-85, 88-93, 95, 98 
 | 111 | m18 Squin STOBE 14: "Kint, go buy one Limited-sight Scrap Helm from the shop here." -> "Aye, I'll see what the armor trader's got." + MOVE_TO only, no BUY (item 74 guard needs a trader name); the shop's trader Double was 272 m away (unnamed search 220) | Fixed: server 6fd2406 (generic shop words -> TASK_GOAL@BUY with no trader) + KenshiFP 65E27B68 (unnamed trader search retries out to 1000 m; not installed). Retest Squin 14/A3 |
 | 118 | m19 trading prices: the offer "Vel, I'll buy your Iron Hat. One cat, take it or leave it." (r=-80, no deal) dispatched `GIVE_CATS@Vel Harrow@1` (Voice hand-over dispatched): the cue `take it` in an offer sentence counted as payment; no check for an agreed deal or the r<=-80 no-trade line | **Fixed live** (StobeServer `fda6a7f`): offers never pay, weak cue after an offer = offer, no voice payment at r<=-80 with nothing owed. Retest: wrapper `prices` (m19b) |
 | 119 | m19 trading prices: Vel countered "three hundred" for a 16-cat Iron Hat at r=0/+10/+56/+100 and the deal recorded GIVE_CATS 300: item 104 only corrects a cheaper accept, so the relationship price never applies to a higher counter | STOBE fixer (counter/accept price = relationship price). Retest: wrapper `prices` |
+| 120 | m19 trading favour: at r=29 Vel agreed to a free bandage ("Show me the arm", ROLEPLAY_ACTION, no deal terms), so the free-favour line (r >= +30) never fired; at r=30 she agreed but sent no real heal | STOBE fixer. Retest: wrapper `favour` |
 ext2\STOBE-21-paylater-breach-fullbase.txt`, breach paths `lib/negotiation_engine.php` ~1220-1240. Retest: `PLAYER=Beaks MATE=Avarek STOBE-21-paylater-breach.sh` on kah-fullbase |
 
 ## E. Design questions and features
