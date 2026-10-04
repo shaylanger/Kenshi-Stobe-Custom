@@ -16,8 +16,6 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 
 | # | What would show it | Expect | Tried |
 |---|---|---|---|
-| 31 | Counter-offers like "300 now, 200 after?" where she misquotes | Amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted (run 12: "300 now, 200 after" countered with the same numbers) |
-| 32 | A REJECT that names her own price ("2000 for the hat") | Recorded as COUNTER (fixed run 11, unit-tested) | The model chose COUNTER by itself in run 11; run 12 "5 cats" got a plain REJECT |
 ## D. Bugs fixed or open, not yet confirmed in game
 
 Fixed and confirmed items are deleted (run log line). Full history of each row below: `git log -p STOBE_full_test_plan.md`. Where each is confirmed: `MASTER_TEST_PLAN.md` section 3.

@@ -35,7 +35,6 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE section C (31, 32) | misquoted counter amounts; REJECT naming a price | auto-home | never reproduced live; candidates for injection rows |
 | STOBE A8 | bread chain grow on Full-Base | Full-Base | J: raid KO -> whole-row raid guard 7e937ef + `chars` filter; rerun L |
 | REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
 | REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | todo |
