@@ -8728,6 +8728,28 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     eventRange = 600.0f;
   }
 
+  // REL_SQUAD_SWEEP_M22: squad members near the player or the selection are always scanned
+  // (carry_start/placed for a squad carrier on a crowded base, SR18/SR19), cap 16.
+  {
+    int addedSquad = 0;
+    Ogre::Vector3 playerPos = player->getPosition();
+    bool haveSel = selection && (uintptr_t)selection >= 0x1000;
+    Ogre::Vector3 selPos = haveSel ? selection->getPosition() : playerPos;
+    for (uint32_t i = 0; i < world->player->playerCharacters.size() && addedSquad < 16; ++i) {
+      Character *member = world->player->playerCharacters[i];
+      if (!member || (uintptr_t)member < 0x1000) continue;
+      try {
+        Ogre::Vector3 mp = member->getPosition();
+        if (mp.distance(playerPos) > eventRange && mp.distance(selPos) > eventRange) continue;
+      } catch (...) {
+        continue;
+      }
+      size_t before = candidates.size();
+      AddInventorySyncCandidate(member, candidates, seen);
+      if (candidates.size() > before) ++addedSquad;
+    }
+  }
+
   lektor<RootObject *> nearby;
   world->getCharactersWithinSphere(nearby, player->getPosition(), eventRange, 0.0f,
                                    0.0f, 16, 0, player);
