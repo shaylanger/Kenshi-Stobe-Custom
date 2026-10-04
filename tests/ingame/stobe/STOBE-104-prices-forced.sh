@@ -18,6 +18,7 @@ stobe-auto give "$v" "Iron Hat" 1 >/dev/null
 stobe-auto give "$PLAYER" "Iron Hat" 1 >/dev/null
 stobe-auto money "$v" 30000 >/dev/null
 stobe-auto money "$PLAYER" 30000 >/dev/null
+inv_items() { stobe-auto inv "$1" | sed 's/^.* items=[0-9]* //'; }  # items JSON only (the prefix carries pos=, which moves)
 value() { stobe-auto inv "$1" | python3 -c 'import json,sys; print(next((x.get("value_each",0) for x in (lambda s: json.loads(s.split(" items=",1)[1].split(" ",1)[1]))(sys.stdin.read()) if x["name"]=="Iron Hat"),0))'; }
 nv=$(value "$v"); pv=$(value "$PLAYER")
 [ "$nv" -gt 0 ] && [ "$pv" -gt 0 ] || { verdict "prices-forced" "SETUP FAIL inventory values npc=$nv player=$pv"; exit 1; }
@@ -37,7 +38,7 @@ PY
 )
       inject_on "prices-$side-$r-$asked" "$NPC" chat "$steps"
       before_player=$(money_of "$PLAYER"); before_npc=$(money_of "$v")
-      if [ "$r" = -80 ]; then before_pi=$(stobe-auto inv "$PLAYER"); before_ni=$(stobe-auto inv "$v"); fi
+      if [ "$r" = -80 ]; then before_pi=$(inv_items "$PLAYER"); before_ni=$(inv_items "$v"); fi
       if [ "$side" = buy ]; then line="$NPC, I want to buy your Iron Hat. What is your price?"
       else line="$NPC, I want to sell you my Iron Hat. What will you pay?"; fi
       talk "$NPC" "$line" 25
@@ -49,12 +50,12 @@ PY
       terms=$(echo "$row" | cut -d'|' -f5)
       after_player=$(money_of "$PLAYER"); after_npc=$(money_of "$v")
       if [ "$r" = -80 ]; then
-        after_pi=$(stobe-auto inv "$PLAYER"); after_ni=$(stobe-auto inv "$v")
+        after_pi=$(inv_items "$PLAYER"); after_ni=$(inv_items "$v")
         if echo "$status" | grep -qE 'PROPOSED|COUNTERED|ACCEPTED|AWAITING_PERFORMANCE|COMPLETE'; then
           verdict "price-$side-$r-$asked" "FAIL no-trade gate recorded $status terms=$terms"
         elif [ "$before_player" = "$after_player" ] && [ "$before_npc" = "$after_npc" ] && [ "$before_pi" = "$after_pi" ] && [ "$before_ni" = "$after_ni" ]; then
           verdict "price-$side-$r-$asked" "PASS no live deal, inventory transfer or cats movement"
-        else verdict "price-$side-$r-$asked" "FAIL cats moved without agreement"; fi
+        else verdict "price-$side-$r-$asked" "FAIL moved without agreement: cats p=$before_player->$after_player n=$before_npc->$after_npc items_p=$([ "$before_pi" = "$after_pi" ] && echo same || echo changed) items_n=$([ "$before_ni" = "$after_ni" ] && echo same || echo changed)"; fi
       else
         got=$(python3 - "$side" "$terms" <<'PY'
 import json,sys
