@@ -92,7 +92,7 @@
 
 ## Session end (coordinator m18, ~19:45)
 - The m18 batch keeps running detached in WSL (it doesn't need this session): check `C:\KenshiTestRuns\m18\batch.log`
-  (`batch done` = finished), then run `followup.sh` the same way (`setsid nohup bash … &` in WSL). Kenshi stays running on
+  (finished when its last line is `HH:MM batch done`; rel-theft also prints "batch done, mode off", which is NOT the end), then run `followup.sh` the same way (`setsid nohup bash … &` in WSL). Kenshi stays running on
   the 5090 (lock owner `coordinator`).
 - All subagents ended with the session. The 4080 rig operator never reported: check the 4080 (`ctl.ps1 status`, lock
   `rig4080`, results `C:\KenshiTestRuns\m18-4080\` there), stop its game and delete its kah-* copies if left.
