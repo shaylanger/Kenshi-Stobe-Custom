@@ -1526,7 +1526,10 @@ void AsyncPostToStobe(const std::wstring &endpoint,
   task->playthroughEpoch = PlaythroughSession::Context();
   task->endpoint = endpoint;
   task->data = jsonData;
-  CreateThread(NULL, 0, AsyncHttpThread, task, 0, NULL);
+  // Close our copy of the thread handle: the thread keeps running, and a
+  // never-closed handle keeps the dead thread's kernel object alive (leak).
+  HANDLE thread = CreateThread(NULL, 0, AsyncHttpThread, task, 0, NULL);
+  if (thread) CloseHandle(thread); else delete task;
 }
 
 void AsyncPostToStobeSerial(const std::wstring &endpoint,
