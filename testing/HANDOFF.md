@@ -89,3 +89,12 @@
   (apply to /root/STOBE-src, build; private build 018496B9 OK). Run after installing: `bash
   /var/www/html/StobeServer/tests/social_relationship/ingame/rel-m18.sh <outdir>` (auto-home, Capture=1).
   **B 55 not built:** continue from local `handoff/rel-b55-fights-build.md` + draft `pending-fixes/b55_social_fights.php`.
+
+## Session end (coordinator m18, ~19:45)
+- The m18 batch keeps running detached in WSL (it doesn't need this session): check `C:\KenshiTestRuns\m18\batch.log`
+  (`batch done` = finished), then run `followup.sh` the same way (`setsid nohup bash … &` in WSL). Kenshi stays running on
+  the 5090 (lock owner `coordinator`).
+- All subagents ended with the session. The 4080 rig operator never reported: check the 4080 (`ctl.ps1 status`, lock
+  `rig4080`, results `C:\KenshiTestRuns\m18-4080\` there), stop its game and delete its kah-* copies if left.
+- Unanalysed results (logged in the m18 run log): rel-enslaved p7-04 15/2, p7-05 21/1; rel-theft p3-05b 31/2,
+  probe-theft-seen 19/3.
