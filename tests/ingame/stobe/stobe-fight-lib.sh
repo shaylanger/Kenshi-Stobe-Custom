@@ -234,7 +234,19 @@ calm_raiders() {
 raid_guard_start() {
   local every="${1:-${RAID_GUARD_EVERY:-10}}"
   calm_raiders 1500
-  ( while sleep "$every"; do calm_raiders 1500 2>&1 | grep -v 'knocked out 0$' >&2; done ) </dev/null &
+  # m22 L (A8-grow-fb): a Bele'coz raid dialog paused the game for 25 min; `ko` does not take while paused, so the
+  # sweep re-KO'd the same 15 raiders every pass (78 identical lines, the batch looked alive). Bounded now: it skips
+  # (one line) while the game is paused, stops when its row's shell is gone or after RAID_GUARD_MAX_S (7200) s.
+  ( pp=$$; t0=$(date +%s); pz=0
+    while sleep "$every"; do
+      kill -0 "$pp" 2>/dev/null || exit 0
+      [ $(( $(date +%s) - t0 )) -ge "${RAID_GUARD_MAX_S:-7200}" ] && { log "raid_guard: stopped after ${RAID_GUARD_MAX_S:-7200} s"; exit 0; }
+      if stobe-auto status 2>/dev/null | grep -q 'paused=1'; then
+        [ "$pz" = 0 ] && log "raid_guard: game paused, sweeps skipped until it runs again"; pz=1; continue
+      fi
+      [ "$pz" = 1 ] && log "raid_guard: game running again"; pz=0
+      calm_raiders 1500 2>&1 | grep -v 'knocked out 0$' >&2
+    done ) </dev/null &
   RAID_GUARD=$!
   log "raid_guard: sweeping raiders within 1500 m every ${every} s (pid $RAID_GUARD)"
 }
