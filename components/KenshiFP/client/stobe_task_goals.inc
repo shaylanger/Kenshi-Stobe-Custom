@@ -2216,7 +2216,8 @@ static void stobe_task_goal_tick(void *gw)
             int busy=0;for(int j=0;j<ac;j++)if(active[j]==g->actor_serial){busy=1;break;}
             if(!busy){
                 active[ac++]=g->actor_serial;
-                if(strcmp(g->kind,"STOCK")&&stg_actor_has_active_work(g->actor_serial))
+                /* Item 112: a work goal's own purchase sub-goal ("buy-wg-...") must run, not wait for it. */
+                if(strcmp(g->kind,"STOCK")&&strncmp(g->id,"buy-wg-",7)&&stg_actor_has_active_work(g->actor_serial))
                     snprintf(g->current_step,sizeof(g->current_step),"Queued behind an active production goal");
                 else if(sgm_meal_tick(gw,g->actor_serial,g->actor,g->current_step,sizeof(g->current_step)))
                     g->last_progress_ms=stobe_game_ms(); /* eating: the goal waits */

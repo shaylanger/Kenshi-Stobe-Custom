@@ -60,6 +60,7 @@ if ! stobe-auto shopstock "$TRADER" | grep -q "Fabrics"; then
   else verdict 15 "SETUP FAIL $TRADER has no Fabrics (shopstock and inv)"; exit 1; fi
 fi
 tail -n +"$BASE_K" "$KFP" | grep -a "BUY_FALLBACK" | tail -3
+[ "$(money_of ${MATE})" -lt 200 ] 2>/dev/null && { stobe-auto money ${MATE} 500 >/dev/null; log "${MATE} had under 200 cats: +500 (m18 Squin: Kint 0)"; }
 cats0=$(money_of ${MATE})
 stobe-say say ${MATE} "${MATE}, make me one Basic First Aid Kit at the medical workbench." --wait 40 >/dev/null 2>&1 || true
 stobe-say speed 1 >/dev/null
