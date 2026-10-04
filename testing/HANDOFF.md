@@ -9,6 +9,9 @@
   4080 rig operator). Memory `coordinator-builds-everything`.
 - Loop: test -> log bugs -> fix -> build -> install -> retest until every testable row passes, then close Kenshi and
   give Shay ONE final summary.
+- **How (Shay, 2026-10-03):** batch the game runs: as many tests as possible per launch, fix + build all bugs found
+  together, restart once to install and retest; start batches detached and check them when they end (no polling).
+  At most 2 standing subagents: 1 fixer + 1 4080 rig operator; a third only for a big build, stopped when done.
 - **Shay's decisions (typed by Shay, 2026-10-03), build + test them:** item 104 sell-side max drop = **90 %** (a hater
   only buys if they rip you off hugely); item 100 = **option (b)**: reputation and relationship history follow the
   squad character who is speaking, not the persona "Shay"; **B 55 decided** (final spec = `STOBE_full_test_plan.md`
