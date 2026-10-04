@@ -202,7 +202,8 @@ verdict() {
 # Band of Bones raids that reach the squad mid-test, m17); prints how many
 calm_raiders() {
   local n=0 h re="${2:-}"
-  [ -n "$re" ] || re="Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits"
+  # m24: Bele'coz (A8-grow-fb ALERT, m22 G), Hill Marauders, Black Dragon Ninjas also raid Full-Base
+  [ -n "$re" ] || re="Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Bele.coz|Hill Marauders|Black Dragon Ninjas"
   for h in $(stobe-auto chars "${1:-400}" | grep -E "\[(${re})\]" | grep -oE '#[0-9]+/[0-9]+'); do
     stobe-auto ko "$h" 900 >/dev/null && n=$((n+1))
   done

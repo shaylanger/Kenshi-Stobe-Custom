@@ -10,5 +10,12 @@
 #   against / knockout of the squad (VERDICT ALERT, exit 3: reload the fixture, don't continue).
 # Never build a Biofuel Distillery in this mod setup (crash).
 export RAID_CALM=1 PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}" REAL_POWER=1 SPEED="${SPEED:-50}" WELL="${WELL:-Well}"
-bash "$(dirname "$0")/fullbase-guard.sh"
-exec bash "$(dirname "$0")/STOBE-A8-bread-chain.sh"
+D="$(cd "$(dirname "$0")" && pwd)"
+bash "$D/fullbase-guard.sh"
+. "$D/stobe-fight-lib.sh"
+# m24: a Bele'coz raid reached Beaks ~1 min into the 50x run (m22 batch G ALERT); the in-loop calm (every 10 polls)
+# was too slow at 50x. Like 16-fullbase: knock out raiders near the squad every 15 s while it runs (the alert is unchanged).
+( while sleep 15; do calm_raiders 1500 >/dev/null 2>&1; done ) & CALM=$!
+trap 'kill $CALM 2>/dev/null; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
+bash "$D/STOBE-A8-bread-chain.sh"
+exit $?
