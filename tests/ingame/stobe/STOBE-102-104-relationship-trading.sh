@@ -156,7 +156,7 @@ case "$mode" in
       local n
       while IFS= read -r n; do
         [ -n "$n" ] && stobe-auto drop "${PLAYER}" "$n" >/dev/null 2>&1
-      done < <(stobe-auto inv "${PLAYER}" | python3 -c 'import json,sys; a=json.load(sys.stdin); print("\n".join(dict.fromkeys(x["name"] for x in a if not x.get("equipped"))))')
+      done < <(stobe-auto inv "${PLAYER}" | python3 -c 'import json,sys; s=sys.stdin.read(); a=json.loads(s.split(" items=",1)[1].split(" ",1)[1]); print("\n".join(dict.fromkeys(x["name"] for x in a if not x.get("equipped"))))')
     }
     clear_carried
     if [ "${REAL_TRADER:-0}" = 1 ]; then

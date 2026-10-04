@@ -18,7 +18,7 @@ stobe-auto give "$v" "Iron Hat" 1 >/dev/null
 stobe-auto give "$PLAYER" "Iron Hat" 1 >/dev/null
 stobe-auto money "$v" 30000 >/dev/null
 stobe-auto money "$PLAYER" 30000 >/dev/null
-value() { stobe-auto inv "$1" | python3 -c 'import json,sys; print(next((x.get("value_each",0) for x in json.load(sys.stdin) if x["name"]=="Iron Hat"),0))'; }
+value() { stobe-auto inv "$1" | python3 -c 'import json,sys; print(next((x.get("value_each",0) for x in (lambda s: json.loads(s.split(" items=",1)[1].split(" ",1)[1]))(sys.stdin.read()) if x["name"]=="Iron Hat"),0))'; }
 nv=$(value "$v"); pv=$(value "$PLAYER")
 [ "$nv" -gt 0 ] && [ "$pv" -gt 0 ] || { verdict "prices-forced" "SETUP FAIL inventory values npc=$nv player=$pv"; exit 1; }
 for side in buy sell; do
