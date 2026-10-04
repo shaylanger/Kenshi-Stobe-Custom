@@ -37,7 +37,9 @@ STOBELOG=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
 say() { echo "$*" | tee -a "$S"; }
 offsets() { local p; for p in $LOGPATHS; do stat -c %s "$p" 2>/dev/null || echo 0; done | paste -sd'\t'; }
 world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
-ctl() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" </dev/null | tr -d '\r'; }
+# timeout: the WSL powershell proxy can hang after a launch (pipe held by Kenshi, m23); launch output lines
+# are printed before it hangs, so killing it after 420 s loses nothing
+ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" </dev/null | tr -d '\r'; }
 reload() {   # reload <save> <player>; 1 = the game didn't come back
   stobe-auto load "$1" >/dev/null 2>&1; sleep 12
   world 300 || { sleep 30; world 300 || return 1; }
