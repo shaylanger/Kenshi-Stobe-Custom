@@ -8645,6 +8645,44 @@ static void RunTownKnowledgeSync(GameWorld *world) {
       " changed=" + std::string(changed ? "1" : "0"));
 }
 
+// REL_LIB_WATCH_M31: a squad member's lock/shackle task is sampled every 250 ms (the 3 s sweep missed a 7 s pick at
+// speed 2, batch P p7-05), into the same memo SocialFindLiberator reads. Squad only (<= 16): the player frees people.
+static DWORD g_lastLiberationWatchTick = 0;
+static void SocialLiberationWatch(GameWorld *world, DWORD nowTick) {
+  if (!SocialCaptureEnabled() || nowTick - g_lastLiberationWatchTick < 250)
+    return;
+  g_lastLiberationWatchTick = nowTick;
+  if (!world || !world->player)
+    return;
+  uint32_t n = world->player->playerCharacters.size();
+  for (uint32_t i = 0; i < n && i < 16; ++i) {
+    Character *member = world->player->playerCharacters[i];
+    if (!member || (uintptr_t)member < 0x1000)
+      continue;
+    unsigned int serial = 0;
+    try {
+      serial = member->getHandle().serial;
+    } catch (...) {
+      serial = 0;
+    }
+    if (!serial)
+      continue;
+    hand subject;
+    TaskType task = ResolveCurrentNpcTaskSafe(member, subject);
+    if (!IsLiberationTask((int)task) || !subject.isValid() || subject.isNull() || !subject.serial)
+      continue;
+    NpcWorldEventState &state = g_npcWorldEventStateBySerial[serial];
+    bool changed = state.libSubjectSerial != subject.serial || state.libTask != (int)task ||
+                   nowTick - state.libTick > 60000;
+    state.libSubjectSerial = subject.serial;
+    state.libTask = (int)task;
+    state.libTick = nowTick;
+    if (changed)
+      Log("EVENT_SCAN: liberation task serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(member) +
+          " task=" + ToString((int)task) + " subject=" + ToString(subject.serial));
+  }
+}
+
 static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) {
   if (!world || !world->player || world->player->playerCharacters.size() == 0) {
     return;
@@ -8652,6 +8690,7 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
 
   DWORD nowTick = GetTickCount();
   SocialFlushAidSessions(nowTick);
+  SocialLiberationWatch(world, nowTick); // REL_LIB_WATCH_M31
   if (nowTick - g_lastNpcWorldEventSweepTick < kNpcWorldEventSweepIntervalMs) {
     return;
   }
@@ -9180,7 +9219,7 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
       // and also for the player actor (Testing-Save-Enslaved: the first squad member is the slave).
       if (wasChained && !chainedNow && state.enslaved && !deadNow) {
         int t = 0;
-        if (slaveStateNow != (int)IS_SLAVE || SocialFindLiberator(serial, 0, 0, t))
+        if (slaveStateNow != (int)IS_SLAVE || SocialFindLiberator(serial, SocialAliasSerial(SocialEntityFor(npc)), 0, t))
           state.freedLatch = true;
         else if (SocialCaptureEnabled())
           Log("EVENT_SCAN: chains off, still a slave, nobody worked the lock: not freed serial=" + ToString(serial) +
