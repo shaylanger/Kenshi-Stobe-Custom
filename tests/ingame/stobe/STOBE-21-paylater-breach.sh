@@ -25,6 +25,7 @@ engage "$r" || log "warning: no combat_start seen"
 name=$(name_of "$r"); log "raider $r = $name"
 trust "$name" 60 Fond >/dev/null 2>&1 || true
 stobe-auto health "$r" 45 >/dev/null          # hurting, not yet ready to beg (we want ${PLAYER}'s offer, not his)
+stobe-auto protect "$r" on >/dev/null 2>&1 && PROTECTED="${PROTECTED:-} $r"   # m19: Beaks KO'd him before he could answer (item 48 drops a KO'd reply)
 sleep 4
 say_to "$r" "$name" "Stop! Stop fighting. Stand down now and I'll pay you 200 cats later, once this is over. You have my word."
 d=$(wait_accept "$name" 90)
