@@ -15,7 +15,7 @@ set -u
 bash "$(dirname "$0")/fullbase-guard.sh"
 D="$(cd "$(dirname "$0")" && pwd)"
 PLAYER="${PLAYER:-Beaks}"; MATE="${MATE:-Avarek}"; OUT="${OUT:-/tmp}"
-b=$(stobe-auto benches 400 | tr '|' '\n')
+b=$(stobe-auto benches 200 | tr '|' '\n')  # m18: same radius as the scenario checks (a bench 300-400 m away made it skip the build)
 extra=()
 # m16 next: Full-Base has no Crossbow Crafting Bench (in this load order only the crossbow/arrow and the robotics
 # limb benches form a bench -> bench chain). A missing bench is built next to <mate> (sids 96183/96184-Newwworld.mod;
