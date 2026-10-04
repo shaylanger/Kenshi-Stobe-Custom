@@ -23,7 +23,7 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 | KenshiFP.dll | `6E0A031E` (items to 112) | - |
 | ProfessionGearProgression.dll | `D7A60E49` (paused: Normal config + Normal rules) | `266C68F5` (PG 250, 4080) |
 | AutomationHarness.dll | `70953474` (client fc53dba `@log-wait`) | 4080: kah-pg-wt c5a5c88 (artifact give, `research start any`) + B1EBCA95 power supply |
-| Server (live) | `stobe` ded3623 (B55 test switch ed90be0, item 123 45022f9) | - |
+| Server (live) | `stobe` 0b5399d (base town position 0b5399d, B55 test switch ed90be0, item 123 45022f9) | - |
 
 ## 1. Open automated rows
 
@@ -33,14 +33,14 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE 55 (B 55) | fight rules (STOBE plan section E items 1-8): `rel-b55.sh` | auto-home | E: mode/spar/close/treat/deal PASS; squad/wild/fade/chat/bleed/accident test-fixed (ed90be0, ded3623) -> batch F |
+| STOBE 55 (B 55) | fight rules (STOBE plan section E items 1-8): `rel-b55.sh` | auto-home | E+F: mode/spar/close/treat/deal/squad/fade/chat/accident KO+injury PASS; F: wild SETUP FAIL (squad joined), bleed INCONCLUSIVE (Rel Vex died) -> fixer 12 |
 | STOBE section C (31, 32) | misquoted counter amounts; REJECT naming a price | auto-home | never reproduced live; candidates for injection rows |
 | STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | E 43/13 (no Arrow/Crossbow bench in range, no WORK_STEP) -> fixer 11 |
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | E SETUP FAIL cannot select Beaks -> fixer 11 |
-| KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | E 7/1: battery already full, no charge to see -> fixer 11 |
+| STOBE A8 | bread chain grow on Full-Base | Full-Base | preflight selected-check fixed (3e7b2cd) -> batch G |
+| KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | `power drain` added (KAH 37cf5c3, harness 4002D570 installed) -> batch G |
 | REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
-| REL SR09, SR13, SR14 | theft seen/unseen + theft_caught | auto-home | E: SR13 unseen PASS; SR13 seen/14 game never ran theft detection (Stobe theft-dialog hook), SR09 name overwritten (rename guard) -> batch F |
-| REL SR06 | forced first strike (`SOCIAL_TEST_FORCE_*`) | auto-home | E FAIL: Stobe rename overwrote "Rel Vorn" (rename guard 137286B7) -> batch F |
+| REL SR09, SR13, SR14 | theft seen/unseen + theft_caught | auto-home | SR13 unseen PASS; F: SR13 seen no theft row, SR14 no property_returned, SR09 no known_thief -> fixer 12 |
+| REL SR06 | forced first strike (`SOCIAL_TEST_FORCE_*`) | auto-home | F FAIL: aggression rows mentioned=2 (need two combat incidents) -> fixer 12 |
 | REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | todo |
 | PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | pg-09 soak 24/0 PASS D (5090); 4080 operator m23 rerunning pg54/84/81/80/52/53/82/87-fs/89 + home list; see INGAME_STATUS.md |
 
@@ -68,7 +68,6 @@ Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 | STOBE 105 | KenshiFP log spam | A8 log |
 | REL SR07, SR30 | scenario baselines and post-recruit handle relookup | rel-m18 |
 | STOBE 121 | stale ended-goal block reasons made the NPC refuse a new production order (server e0e8e5c) | home PASS m21; grow Full-Base still pending |
-| STOBE 123 | older-save rollback left the relationships column, cleared grudges came back (server 45022f9) | rel-b55 fade (batch F) |
 | KAH to-do 19 | `walktime`, `newgame`, `pickup`, kah.py `@log`, nested `packput` (installed harness E83B0826) | PG 254, 132/133/240, 120 (4080) |
 
 ## 4. Harness (KAH) limits and open items

@@ -36,7 +36,6 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
 | 121 | stale ended goals made the NPC refuse new production orders | fixed e0e8e5c; A8home PASS m21 (2/2 Bread); Full-Base grow pending |
-| 123 | older-save rollback cleared only extended_data.relationships; the core_npc.relationships column brought a cleared grudge back | fixed live (45022f9, regression in relationship_rollback_regression.php); confirm in rel-b55 fade |
 
 ## E. Design questions and features
 
