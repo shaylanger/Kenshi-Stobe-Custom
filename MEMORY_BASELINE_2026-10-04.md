@@ -43,3 +43,13 @@ Answer: the Kenshi side has barely changed since our first commits; nearly all o
   - drop `stobe_profile_save_*` schemas of deleted kah-* copies (15 GB disk, less page cache);
   - restart Kenshi instead of reloading many times in long batches;
   - fewer parallel Claude sessions.
+
+## Graphics mods A/B (2026-10-04, save auto-home, 4 loads each, `mem-ab.sh` ONLY="all gfxOff gfxOffHD", out `C:\KenshiTestRuns\memab-gfx`)
+| Variant | load0 private | load3 private | per load | file handles | allocs >16 MB |
+|---|---|---|---|---|---|
+| all (Dust + ReShade + HD textures on) | 12547 MB | 13307 MB | +253 MB | 1585 -> 3935 | 268 / 7448 MB |
+| gfxOff (Dust + effect DLLs + ReShade off) | 11940 MB | 12383 MB | +147 MB | 1581 -> 3850 | 263 / 7159 MB |
+| gfxOffHD (also HD detail textures off) | 9334 MB | 9928 MB | +198 MB | 1462 -> 3471 | 171 / 4729 MB |
+
+- Dust/ReShade off saves about 0.6-0.9 GB; HD detail textures off saves another 2.6 GB (mostly large texture allocations: 4.7 vs 7.2 GB in >16 MB blocks).
+- Decision: automated runs use `gfx-mods.sh off --hdtex` (about 3.2-3.4 GB less than everything on). Shay restores everything with `gfx-mods.sh on` before playing.
