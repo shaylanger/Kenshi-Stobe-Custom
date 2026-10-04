@@ -23,13 +23,13 @@ IDs: `<feature> <row>` (e.g. STOBE 41, PG 306, REL SR02, KAH 3). Run logs: `arch
 
 ## 0. Builds under test
 
-| Component | Installed | Pending install |
+| Component | Installed (5090, m19) | Pending install |
 |---|---|---|
-| Stobe.dll | `478D8AA6` (REL 1–7 + m8–m16d, STOBE items to 97) | - |
-| KenshiFP.dll | `5719BEA5` (items to 105) | - |
-| ProfessionGearProgression.dll | `D7A60E49` (job scaling on, pg_force_critical; Forced + InGameTest during tests) | - |
-| AutomationHarness.dll | `F6A3FC31` (+ protect, power supply, KAH 15–23) | - |
-| Server (live) | `31b8c75` (branch `stobe` = REL + STOBE fixes to 106; SOCIAL_RELATIONSHIP_MODE off between REL batches) | - |
+| Stobe.dll | `CA758842` (shop-window relationship pricing hook 103/104 with sell-side -90 %, REL theft_caught SR09/13/14) | - |
+| KenshiFP.dll | `6E0A031E` (items to 112) | - |
+| ProfessionGearProgression.dll | `D7A60E49` (Forced + InGameTest during tests) | `266C68F5` (only for PG 250, 4080) |
+| AutomationHarness.dll | `33087EDE` (main 8116c46: KAH 2/3, 22b `drop owned`, 24 balance commands) | to-do 19 fixes (harness helper) |
+| Server (live) | `cef19fe` (branch `stobe`: item 104 -90 %, item 100 b, 110, REL theft/SR09) | B 55 fight rules (REL builder) |
 
 ## 1. Automated: runnable now
 
@@ -136,36 +136,33 @@ Spec: memory `stobe-negotiation-rules`. r = NPC's relationship toward the tradin
 
 | ID | What | How | Status |
 |---|---|---|---|
-| TRADE prices | Shop + deal prices at r = -80, -50, -10, 0, +10, +56, +100 vs vanilla, buy and sell; formula exact (buy: -30%·(r/100)^1.1 / +1000%·(|r|/100)^2.32; sell: up to +10% / down to -90% (Shay, 2026-10-03)) | trust setup + `shopstock` + real `trade`; STOBE deal (`STOBE-102-104-relationship-trading.sh prices`) | STOBE 104 server live (1c2457f; sell-side -75% max pending Shay); shop-window hook: native builder |
-| TRADE floor | Buy/sell or sell/buy-back loop never profits | trade loop | server floor live (assumes trader buys at 0.5x sell); shop hook: native builder |
-| GUARD weapon | Outsider won't stow/drop/hand over her weapon below r +70 (+69 refused, +70 allowed); squadmate + surrendering NPC exempt | ask for her weapon (`… weapon69/weapon70/weapon-squad/weapon-surrender`) | STOBE 102 live, to run |
-| WILL lines | Pay-later -1 refused / 0 allowed; free favour +29 refused / +30 allowed; any trade at -80 refused (STOBE deal + shop window) | deals at set trust (`… paylater/favour/gift/notrade`) | STOBE 103 live (deals), to run; shop-window -80 block: native builder |
+| TRADE prices | Shop + deal prices at r = -80, -50, -10, 0, +10, +56, +100 vs vanilla, buy and sell; formula exact (buy: -30%·(r/100)^1.1 / +1000%·(|r|/100)^2.32; sell: up to +10% / down to -90% (Shay, 2026-10-03)) | trust setup + `shopstock` + real `trade`; STOBE deal (`STOBE-102-104-relationship-trading.sh prices`) | server cef19fe (-90 %) + shop-window hook Stobe CA758842: m19 `prices`, `shop-prices` (+ REAL_TRADER) |
+| TRADE floor | Buy/sell or sell/buy-back loop never profits | trade loop | server floor live + shop hook CA758842: m19 `shop-floor` |
+| GUARD weapon | Outsider won't stow/drop/hand over her weapon below r +70 (+69 refused, +70 allowed); squadmate + surrendering NPC exempt | ask for her weapon (`… weapon69/weapon70/weapon-squad/weapon-surrender`) | PASS m18 (69 setup fail: rerun) |
+| WILL lines | Pay-later -1 refused / 0 allowed; free favour +29 refused / +30 allowed; any trade at -80 refused (STOBE deal + shop window) | deals at set trust (`… paylater/favour/gift/notrade`) | STOBE 103 live; m19 `paylater/favour/gift/notrade` + `shop-block` |
 
-## 2. Requires specific game setup (no fixture/command for it yet)
+## 2. Rows that needed setup: build status (refreshed 2026-10-03, m19)
 
-Rows unlocked by the 4080 saves moved to 1f (2026-10-03).
+Not a parking place (Shay's goal): every row here has its code built or being built, then runs.
 
-**Being automated (Shay, 2026-10-03: turn section 2 into tests):**
-- Harness helper: all built (harness 5798EDF5, m16): KAH 13 `unique=1` (PG 108), KAH 14 `research start` (PG 184), KAH 15 `drop`/`pickup` (PG 50), 16 melee stat names (PG 84), 17 unload/reload NPC (PG 106), 18 nested/unowned pack weight (PG 120), 19 run speed (PG 254), 20 `sever` (REL SR07 fallback), 21 import/new game (PG 132/133/240, last).
-- PG agent: PG 89 forced-critical test switch; PG 274 colliding-ID case on an edited fixture copy; scenarios for the KAH commands above.
-- STOBE 18: test switch `NEG_TEST_FORCE_BETRAYAL` (server 96b2c91, off by default) + `STOBE-18-forced-betrayal.sh`: to run.
-- REL SR09/SR13/SR14: steal driver = real player-style pickup of an owned item (harness KAH 22, Shay 2026-10-03) + probe on the 5090 (seen / unseen steal), then a firm estimate; feasibility (REL builder, m16): ~1.5–2.5 days for the caught signal (HUNT_MY_THIEF watch) + late theft_caught + SR09 witness evidence; +1–3 days for a steal driver (may not be feasible). Recommended first: a 1-hour probe where Shay steals once by hand. Shay decides.
-- Stay here: PG 256 (deferred by Shay), PG 250 (waits for a ruin save), section C passive checks; STOBE A12 by design (NPC counters with a promise instead of handing over first, per the negotiation rules; optional `TRUST=60` variant).
-
-| ID | What it needs |
-|---|---|
-| STOBE 61 | tier 3+ top-up: Shay must stay conscious through the Dust King fight (harness `protect`, KAH 11, being tested m16) |
-| STOBE 20 | NPC hands over first, then Shay refuses: with `protect` the fight works (m16), but the raider won't hand over first (model choice, by design like A12) |
-| STOBE A12 | A wounded NPC who hands over before being healed: the model counters with a promise instead (m16, by design) |
-| STOBE 18 | A dishonest NPC who dislikes Shay betraying a paid deal: rare by design; needs many tries or a forced-betrayal test switch |
-| STOBE 25–37, 44, 45, 47, 49, 51 (section C) | LLM behaviours that haven't happened in game; checked passively: after every run grep the server/stobe logs for their log lines |
-| REL SR07 | forced limb loss in a fight (p3-05 with harness `damage` 400, m16 batch 8: may stay blocked if the game doesn't sever) |
-| REL SR09, SR13, SR14 | an in-game source of better evidence; a theft-caught signal + steal driver |
-| PG 50, 84, 89, 106, 120, 132, 133, 240, 254 | ground drop/pick-up; melee stat names in `stat`; forcing a critical craft; NPC unload trigger; nested/unowned pack weight; import / new-game commands; run-speed readout |
-| PG 151, 152 | frame-time: pg-15 crowd frametime written m16 (launch 1 + launch 3 comparison), pending run |
-| PG 250 | ruin loot: no ruin save yet (Shay may make one, low priority) |
-| PG 256 | swim gear: no item in this load order rolls Swimming (Shay: defer, not applicable) |
-| PG 274 | a save with a colliding item ID |
+| ID | Built / being built | Runs in |
+|---|---|---|
+| STOBE 61 | `protect` (KAH 11) | PASS m18 (tier 3+ top-up) |
+| STOBE 18 | switch `NEG_TEST_FORCE_BETRAYAL` + `STOBE-18-forced-betrayal.sh` | m19 (home + Full-Base) |
+| STOBE 20, A12 | switches `NEG_TEST_INJECT` / `NEG_TEST_FORCE_INITIATIVE` (2b2b52d) + wrappers | m19 section C block |
+| STOBE 25-37, 44, 45, 47, 49, 51 (section C) | one wrapper each (`tests/ingame/stobe/STOBE-C*.sh`) | m19 section C block |
+| STOBE A8 | `power <b> supply` (KAH 10) | PASS m17 Full-Base; home rerun m19 |
+| REL SR09, SR13, SR14 | harness `drop … owned` (KAH 22b) + native theft_caught (Stobe CA758842) + server cb3bc44 | m19 `rel-m18.sh` |
+| REL SR06, SR30 | switches SOCIAL_TEST_FORCE_FIRST_STRIKE / SOCIAL_TEST_FORCE_JOIN_ATTEMPT | m19 `rel-m18.sh` |
+| REL SR07 | harness `sever` (KAH 20) | to run (p3-05 + sever) |
+| PG 50, 84, 106, 108, 120, 184 | KAH 13-18 | PASS / run by the PG agent (4080) |
+| PG 132, 133, 240, 254, 120 nested | KAH 19/21 + to-do 19 harness fixes (`newgame` hang, `walktime` short stop, nested `packput`) | harness helper, then 4080 |
+| PG 89 | `pg_force_critical` + `pg-56-critical-craft` | m19 pg block + 4080 |
+| PG 151, 152 | pg-15 launch 1 vs launch 3 (PG off), same machine | PG agent (4080) |
+| PG 161-210 | balance driver + KAH 24 measurement commands | PG agent (4080) |
+| PG 250 | ruin/loot fixture via harness spawn/stash (PG 266C68F5) | PG agent (4080) |
+| PG 274 | colliding-ID case on an edited fixture copy | PG agent |
+| PG 256 | deferred by Shay (no Swimming roll in this load order) | - |
 
 ## 3. Requires Shay
 
@@ -178,40 +175,26 @@ Rows unlocked by the 4080 saves moved to 1f (2026-10-03).
 
 ## 4. Bugs found (open)
 
-Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (line in the run log).
+Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (line in the run log). Pruned 2026-10-03
+(m19): 64-85, 88, 89, REL capture confirmed; CRASH m3 = NVIDIA TDR, not our mods. Details: `STOBE_full_test_plan.md`.
 
 | Bug | Owner | Found | What | Status |
 |---|---|---|---|---|
-| STOBE 64 | STOBE | stobe-tests | `negotiation_engine` regression: "unpaid -> BREACHED_PLAYER" backdates wall time but hostile deals expire on game time (stale test); "breach reaction queued" depends on it | fixed, confirmed (stobe-tests 55/0/7) |
-| STOBE 65 | KFP | m1 | Goal panel overlaps the Money/Day/speed box | fixed, PASS m2 |
-| STOBE 66 | STOBE | m1 | Work goal to "Home": destination_not_known (base registry pruned by cross-fixture loads, not re-detected) | closed: no player-owned town in auto-home; server fallback is the fix (PASS m2) |
-| STOBE 67 | STOBE | m1 | Squad member agrees to hand over items, no GIVE_ITEM sent | fixed, PASS m1 |
-| STOBE 69 | STOBE | m1 | Denies carrying an item her prompt lists ("nothing left") | fixed (semantic guard), PASS m4 |
-| STOBE 71 | STOBE | m1 | Surrender offers never fired: raider's combat rows under his generic pre-naming name | fixed live (722d53d), PASS m1 |
-| STOBE 72 | STOBE | m1 | Accepting after a rejected counter flipped the payer (Shay pays) | fixed, PASS m2 |
-| STOBE 73 | STOBE | m2 | Squad member agrees to a fetch ("I'll go dig it out") but sends no TASK_GOAL | fixed, PASS m3 |
-| STOBE 74 | STOBE | m2 | Agreed purchase, no action | fixed live (1a8fc3f), PASS m2 (goal added) |
-| STOBE 76 | KFP | m3 | "bring it to me" fetch keeps the item on return | fixed, PASS m4 |
-| STOBE 77 | STOBE | m3 | Relationship stance block doesn't shape tone (same reply at -80/60/96) | fixed live (0a22a77), PASS m3 |
-| STOBE 78 | STOBE | m3 | Errand to a named trader out of nearby range: she doubts/asks back, no action | fixed, PASS m4 (prompt block; model returns BUY) |
-| STOBE 79 | STOBE | m4 | BUY goal with destination = trader name rejected (destination_not_known) | fixed live (21fdbed), PASS m4 |
-| STOBE 80 | KFP | m4 | Silent crash (no dump) right after a BUY goal: character search buffer overflow | fixed, PASS m5 (no crash, trader found and reached) |
-| STOBE 81 | KFP | m5 | BUY goal: "merchant does not have" an item the trader carries (stock view misses carried goods) | fixed (KenshiFP 846E6119), PASS m6 |
-| STOBE 82 | KFP | m6 | "buy … and bring it to me": no hand-over on return (76 covers FETCH only) | fixed, PASS m9 |
-| STOBE 83 | KFP | m7 | Carried-goods BUY: money paid, item missing ("Kenshi rejected the purchase") | -> 84 |
-| STOBE 84 | KFP+KAH | m8 | `Inventory::buyItem` returns the bought item unplaced: KenshiFP BUY and harness `trade` lose the item (money paid) | fixed, PASS m9 (KenshiFP); harness trade from shop storage fixed D8ECA273 |
-| STOBE 85 | STOBE | m8 | Bad reputation (broken > kept) in the prompt is ignored by new NPCs | fixed live (795b0f1), PASS m8 |
-| STOBE 86 | STOBE | m8 | Reloading an older save turns deals made after it into BREACHED_PLAYER | fixed live (f98b88e + e9f8598): false breach from repeated 'Initiated attack'; older-save load cancels later deals; deal repaired |
-| STOBE 87 | STOBE | m8 | Unique NPC named like its template (Dust King) gets no initiative check / surrender | see rows 87/88 |
-| STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
-| STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
-| STOBE 94 | STOBE | m16 | `stobe-reset-npc --restore` writes the entry under PLAYER_NAME `shay` while the server writes `Shay`: possible duplicate relationship keys | fixed (tool), round trip at the end |
-| STOBE 100 | STOBE | m16 | In a save without Shay (Beaks/Avarek) actions and goals target "Shay" (PLAYER_NAME): `GIVE_ITEM@Shay`, FETCH `dest=Shay`; works only via a name mapping; caused a double hand-over (item 43 helper added GIVE_ITEM@Shay next to the LLM's GIVE_ITEM@Beaks) and disables deals/voice payment for other squads (speaker != PLAYER_NAME) | fixer: action targets = speaking player character, "player speaking" = inputtext speaker or PLAYER_NAME; persona Shay chose (b) 2026-10-03: reputation/relationship history follow the speaking character (build + test) |
-| STOBE 101 | STOBE | m16 | 43 live NPC rows (ids 33330-34013, since 2026-10-02) have extended_data `[]` instead of `{}`: every relationship write fails ("path element at position 1 is not an integer") | fixed live (3e50770, writers always store objects) + 41/55 rows repaired (backup table item101_npc_json_backup); rerun rel-enslaved set-relation |
-| STOBE 107 | STOBE | m17 | Full-Base: Beaks' unpaid pay-later deal never BREACHED_PLAYER | fixed live (6146805: deal kind was `social` because the fight check matched only the persona), rerun STOBE 21 Full-Base |
-| STOBE 18 (Full-Base) | STOBE | m17 | forced betrayal did happen (BREACHED_NPC, 2 attacks after paying, persona reputation npc_broken 0->1); FAIL came from the wrapper (`awk $3` on a name with spaces; reputation read for `beaks` instead of the persona row) + no `intentional_betrayal` marker on a pay-now deal | fixed: wrapper + server 6ca4822; rerun |
-| REL capture | REL | m4 | No campaign id with Playthrough Saves off: all social events skipped | fixed (server 5cd104e, Stobe 44793036), PASS m4 |
-| CRASH m3 | ? | m3 | 02:05:45 crash dump, game frozen on kah-crafting while idle | NVIDIA TDR (GPU driver hang, nvlddmkm 153/4101, DXGI DEVICE_HUNG) in vanilla render: not our mods; Shay: driver/TdrDelay |
+| STOBE 70, 108 | STOBE | m16/m18 | template-name relationship keys (Dust Bandit Bowman, Berserker) | fixed live, confirm in game (to-do 8) |
+| STOBE 86 | STOBE | m8 | older-save load turned later deals into BREACHED_PLAYER | fixed live, confirm in game |
+| STOBE 87 | STOBE | m8 | Dust King: no initiative check | covered by 88 + 61 PASS m18; confirm |
+| STOBE 94 | STOBE | m16 | reset-npc `--restore` key case | fixed (tool), round trip at the end |
+| STOBE 96, 97 | STOBE | m16 | surrender payment check window; PERSONAL_TRUCE cancels Shay's attack order | fixed, confirm in game |
+| STOBE 99, 112, 113 | STOBE+KFP | m16/m18 | WAITING_APPROVAL for a trader-only ingredient; approved buy sub-goal deadlock | fixed (KenshiFP 6E0A031E + server), m19 Squin 15 |
+| STOBE 100 (b) | STOBE | m16 | reputation/relationship history follow the speaking character | live 0c6ed3e, m19 18/21 Full-Base + home 21; reputation migration optional (Shay) |
+| STOBE 101 | STOBE | m16 | `[]` extended_data | fixed live, rerun rel-enslaved set-relation |
+| STOBE 104 | STOBE | m18 | sell-side max -90 % (Shay) | server cef19fe + Stobe CA758842, m19 trading block |
+| STOBE 105 | KFP | m16 | 30k `WORK_GOAL input ratio` lines | fixed (KenshiFP 5719BEA5+), confirm in A8 log |
+| STOBE 106, 107, 18 FB | STOBE | m16-m18 | SPARE term wrong_performer; Full-Base pay-later never breached; forced-betrayal wrapper | fixed live, m19 18/21 Full-Base |
+| STOBE 109, 111 | STOBE | m18 | old COMPLETE fetch in prompt; generic "the shop here" buy -> MOVE_TO only | fixed live, m19 generic Full-Base + Squin 14 |
+| STOBE 110 + lock race | STOBE | m18 | rollback write failed; concurrent rollbacks run unlocked ("rollback lock busy") | 110 fixed live (e605768); lock race: STOBE fixer (to-do 20) |
+| KAH to-do 19 | KAH | m18-4080 | `walktime` short stop, `newgame` hang, `pickup` No Faction as owned, kah.py `@log` path with spaces, nested `packput` | harness helper |
+| B 55 | REL | design | R4 retired -> REL combat rules + STOBE plan section E items 1-8 | REL builder building |
 
 ## 5. Harness (KAH) known limits / open items
 
