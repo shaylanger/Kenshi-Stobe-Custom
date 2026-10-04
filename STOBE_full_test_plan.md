@@ -11,7 +11,6 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 
 | # | Situation | Expect |
 |---|---|---|
-| 16 | A goal needing a crafted ingredient at a bench | The bench queue grows only by what's missing |
 
 ## C. Open reproduction and regression checks
 
