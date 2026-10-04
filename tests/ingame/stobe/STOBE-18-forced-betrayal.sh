@@ -32,7 +32,7 @@ engage "$r" || log "warning: no combat_start seen"
 name=$(name_of "$r"); log "raider $r = $name"
 stobe-auto protect "$r" on >/dev/null 2>&1 && PROTECTED="${PROTECTED:-} $r"   # m19: KO'd before his "Deal" reply (item 48 drops it); the betrayal attack still runs
 say_to "$r" "$name" "Enough! Stop fighting and I'll pay you 200 cats right now."
-d=$(wait_accept "$name" 90)
+d=$(wait_accept "$name" 150 "$r")
 [ -n "$d" ] || { verdict 18 "INCONCLUSIVE no accepted deal: $(deal_line "$name")"; exit 2; }
 id=$(echo "$d" | awk '{print $1}'); log "deal $id"
 PSQL "SELECT betrayal FROM stobe_social_contract WHERE contract_id='$id'" | cut -c1-200

@@ -115,16 +115,24 @@ spawn_raiders() {
 
 # wait_accept <name> <seconds>: until the newest deal for <name> is accepted; a COUNTERED deal is printed and
 # accepted once per round ("<name>, deal.") - m16: Senlin countered and the wrapper never answered
+# wait_accept <name> [seconds] [handle]: accepts his counter-offer with "<name>, deal.". m22 (STOBE-18 m21): his
+# reply to "deal." came while he was knocked out and was dropped (item 48), the counter stayed at rounds=0 and the
+# old code never answered again. Now the same counter is answered again after 25 s without a change (max 3 tries),
+# and with a handle a KO'd NPC is woken first (protect on + wait for the KO to clear) so his answer is kept.
 wait_accept() {
-  local who="$1" end=$(( $(date +%s) + ${2:-60} )) answered="" line id
+  local who="$1" end=$(( $(date +%s) + ${2:-60} )) h="${3:-}" answered="" line id tries=0 last=0 i
   while [ "$(date +%s)" -lt "$end" ]; do
     line=$(deal_line "$who")
     if echo "$line" | grep -q -E "ACCEPTED|AWAITING|WAITING_FOR_PLAYER|COMPLETE"; then echo "$line"; return 0; fi
     if echo "$line" | grep -q COUNTERED; then
       id=$(echo "$line" | awk '{print $1}'); local key="$id/$(echo "$line" | grep -oE 'rounds=[0-9]+')"
-      if [ "$key" != "$answered" ]; then
-        log "counter-offer: accepting"; deal_block "$id" | sed 's/^/    /' >&2
-        stobe-say say "$who" "$who, deal." >/dev/null 2>&1; answered="$key"
+      if [ "$key" != "$answered" ] || { [ "$tries" -lt 3 ] && [ $(( $(date +%s) - last )) -ge 25 ]; }; then
+        [ "$key" != "$answered" ] && tries=0
+        if [ -n "$h" ]; then
+          for i in 1 2 3 4 5; do stobe-auto where "$h" | grep -q " KO" || break; [ "$i" = 1 ] && { log "$who is KO: waking before accepting"; stobe-auto protect "$h" on >/dev/null 2>&1; }; sleep 3; done
+        fi
+        tries=$((tries+1)); log "counter-offer: accepting (try $tries)"; [ "$tries" = 1 ] && deal_block "$id" | sed 's/^/    /' >&2
+        stobe-say say "$who" "$who, deal." >/dev/null 2>&1; answered="$key"; last=$(date +%s)
       fi
     fi
     sleep 4
