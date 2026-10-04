@@ -35,9 +35,8 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 |---|---|---|---|
 | STOBE 55 (B 55) | fight rules (STOBE plan section E items 1-8): `rel-b55.sh` | auto-home | E+F: mode/spar/close/treat/deal/squad/fade/chat/accident KO+injury PASS; F: wild SETUP FAIL (squad joined), bleed INCONCLUSIVE (Rel Vex died) -> fixer 12 |
 | STOBE section C (31, 32) | misquoted counter amounts; REJECT naming a price | auto-home | never reproduced live; candidates for injection rows |
-| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | E 43/13 (no Arrow/Crossbow bench in range, no WORK_STEP) -> fixer 11 |
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | preflight selected-check fixed (3e7b2cd) -> batch G |
-| KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | `power drain` added (KAH 37cf5c3, harness 4002D570 installed) -> batch G |
+| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | G 50/6: benches found (base position fixed 0b5399d), no WORK_GOAL accepted (LLM reply without goal?) -> fixer 12 |
+| STOBE A8 | bread chain grow on Full-Base | Full-Base | G: ALERT at 50x, world raid (Turgut -> Beaks) -> fixer 12 (calm raiders) |
 | REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
 | REL SR09, SR13, SR14 | theft seen/unseen + theft_caught | auto-home | SR13 unseen PASS; F: SR13 seen no theft row, SR14 no property_returned, SR09 no known_thief -> fixer 12 |
 | REL SR06 | forced first strike (`SOCIAL_TEST_FORCE_*`) | auto-home | F FAIL: aggression rows mentioned=2 (need two combat incidents) -> fixer 12 |
