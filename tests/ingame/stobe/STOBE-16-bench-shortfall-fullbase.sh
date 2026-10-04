@@ -18,7 +18,7 @@ export PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}"; OUT="${OUT:-/tmp}"
 mkdir -p "$OUT"  # m22: OUT=<batch>/bench16 did not exist (FileNotFoundError on the scenario copy)
 # m23: setup checks first (Full-Base lists Avarek first in the squad: the selection is checked via @selected)
 . "$D/stobe-fight-lib.sh"
-preflight 16-fullbase save=kah-fullbase
+preflight 16-fullbase save=kah-fullbase squad  # m25: the server must know MATE as squad before the order (A8 rollback case)
 # m23: a Band of Bones raid hit Avarek mid-goal (m22 batch E): knock out raiders near the squad every 30 s while it runs
 ( while sleep 30; do calm_raiders 1500 >/dev/null 2>&1; done ) & CALM=$!
 trap 'kill $CALM 2>/dev/null; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
