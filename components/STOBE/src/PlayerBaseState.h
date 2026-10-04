@@ -151,6 +151,8 @@ struct Snapshot {
   int membersInside;
   bool hasGates;
   bool gatesClosed;
+  bool hasTownPos;
+  float townX, townY, townZ; // m23: the base's real position (base ids repeat across saves)
   int gameTs;
   BaseDetails details;
 

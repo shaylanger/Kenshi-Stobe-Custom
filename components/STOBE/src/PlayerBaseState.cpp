@@ -663,6 +663,10 @@ bool CaptureUnsafe(GameWorld *world, Character *actor, Snapshot &out) {
   Town *town = static_cast<Town *>(base);
   const Ogre::Vector3 townPosition = town->getPosition();
   out.inside = true;
+  out.hasTownPos = true;
+  out.townX = townPosition.x;
+  out.townY = townPosition.y;
+  out.townZ = townPosition.z;
   out.baseId = BuildStableBaseId(town, townPosition);
   out.name = town->getKnownName();
   if (out.name.empty()) {
@@ -879,6 +883,8 @@ void Snapshot::Clear() {
   membersInside = 0;
   hasGates = false;
   gatesClosed = false;
+  hasTownPos = false;
+  townX = townY = townZ = 0.0f;
   gameTs = 0;
   details.Clear();
 }
@@ -910,6 +916,7 @@ std::string BuildJson(const Snapshot &snapshot) {
        << snapshot.batteryDrain << ",\"battery_charging\":"
        << snapshot.batteryCharging << ",\"battery_mode\":"
        << (snapshot.batteryMode ? "true" : "false")
+       << (snapshot.hasTownPos ? ",\"town_x\":" + ToString(snapshot.townX) + ",\"town_y\":" + ToString(snapshot.townY) + ",\"town_z\":" + ToString(snapshot.townZ) : std::string())
        << ",\"has_spare_power\":"
        << (snapshot.hasSparePower ? "true" : "false")
        << ",\"members_inside\":" << snapshot.membersInside
