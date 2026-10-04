@@ -1415,6 +1415,7 @@ struct InventoryEventSnapshot {
 
 struct NpcWorldEventState {
   bool initialized;
+  bool seededWithCapture; // REL_SEED_CAPTURE_M22
   bool dead;
   bool unconscious;
   bool enslaved;
@@ -1461,7 +1462,7 @@ struct NpcWorldEventState {
   bool freedLatch; // REL m16c: chains came off while IS_SLAVE: free until chained again or the slave state changes
 
   NpcWorldEventState()
-      : initialized(false), dead(false), unconscious(false), enslaved(false),
+      : initialized(false), seededWithCapture(false), dead(false), unconscious(false), enslaved(false),
         hasMoney(false), money(0), hasHunger(false), hunger(0.0f), fed(0.0f),
         satiety(0.0f),
         carrying(false), carryingTargetSerial(0), carryingTargetName(""),
@@ -8892,6 +8893,11 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
 
     SocialCarryStateOnHandleChange(npc, serial);
     NpcWorldEventState &state = g_npcWorldEventStateBySerial[serial];
+    // REL_SEED_CAPTURE_M22: sweeps run right after world-stable, before the playthrough session is
+    // ready (SocialCaptureEnabled false). States seeded then were silent (no "first seen already
+    // enslaved", squad slaves missed on a later load). Re-seed once capture is on.
+    if (state.initialized && !state.seededWithCapture && SocialCaptureEnabled())
+      state.initialized = false;
     if (state.initialized && (state.chained != chainedNow || state.slaveState != slaveStateNow) && SocialCaptureEnabled())
       Log("EVENT_SCAN: slave state serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
           " chained=" + ToString((int)state.chained) + "->" + ToString((int)chainedNow) +
@@ -8912,6 +8918,7 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     }
     if (!state.initialized) {
       state.initialized = true;
+      state.seededWithCapture = SocialCaptureEnabled();
       state.useState = useStateNow;
       if (enslavedNow && SocialCaptureEnabled())
         Log("EVENT_SCAN: first seen already enslaved serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
