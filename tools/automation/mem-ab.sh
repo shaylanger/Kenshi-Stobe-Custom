@@ -16,6 +16,7 @@ CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'
 PROBE='C:\KenshiModding\tools\automation\memprobe.ps1'
 ALL="Stobe KenshiFP ProfessionGearProgression Dust KenshiExtensionPlugin GearCompare"
 VARIANTS=("all:" "noStobe:Stobe" "noKenshiFP:KenshiFP" "noPG:ProfessionGearProgression" "noDust:Dust" "noKEP:KenshiExtensionPlugin" "noGearCompare:GearCompare" "harnessOnly:$ALL")
+[ -n "${ONLY:-}" ] && { k=(); for v in "${VARIANTS[@]}"; do case " $ONLY " in *" ${v%%:*} "*) k+=("$v") ;; esac; done; VARIANTS=("${k[@]}"); }  # ONLY="all noDust harnessOnly"
 
 restore() { for m in $ALL; do [ -e "$K/$m/RE_Kenshi.json.memoff" ] && mv -f "$K/$m/RE_Kenshi.json.memoff" "$K/$m/RE_Kenshi.json"; done; return 0; }
 if [ "${1:-}" = --restore ]; then restore; echo restored; exit 0; fi
