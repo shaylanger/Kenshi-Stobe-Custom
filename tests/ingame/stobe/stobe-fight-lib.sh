@@ -169,7 +169,16 @@ wait_deal() {
   return 1
 }
 money_of() { stobe-auto money "$1" 0 | grep -oE -- '-> -?[0-9]+' | grep -oE -- '-?[0-9]+$'; }  # reply: "<npc> cats A -> B"
-verdict() { echo "VERDICT $1: $2"; }
+# verdict <row> <text>: the human line, plus ONE token-light line per row (Shay, 2026-10-03):
+# "RESULT <row> PASS|FAIL <evidence>" (anything that isn't PASS counts as FAIL; INCONCLUSIVE/SETUP kept in the text),
+# with the run's log path on FAIL (RESULT_LOG, default the wrapper's stdout file if the caller exports it).
+verdict() {
+  echo "VERDICT $1: $2"
+  local st=FAIL; case "$2" in PASS*) st=PASS ;; esac
+  local ev="${2#PASS }"; ev="${ev//$'
+'/ }"
+  if [ "$st" = PASS ]; then echo "RESULT $1 PASS ${ev:0:200}"; else echo "RESULT $1 FAIL ${ev:0:200}${RESULT_LOG:+ log=$RESULT_LOG}"; fi
+}
 # calm_raiders [radius] [factions-regex]: knock out world raiders near the squad for 15 min (Full-Base gets
 # Band of Bones raids that reach the squad mid-test, m17); prints how many
 calm_raiders() {
