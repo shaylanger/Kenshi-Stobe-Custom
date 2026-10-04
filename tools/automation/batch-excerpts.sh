@@ -19,7 +19,8 @@ harness|/mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log|
 server|/var/www/html/StobeServer/log/stobeserver.log|ERROR|WARN|Fatal|xception|guard|refus|BLOCK|FAIL
 php|/var/www/html/StobeServer/log/php_error.log|."
 # routine lines that match the filters but never explain a failure
-NOISE='Unhandled event type stored only'
+# Local TTS warnings: PocketTTS stays stopped for automated runs (RAM rule), the server's TTS call fails in ~2 ms per line.
+NOISE='Unhandled event type stored only|Local TTS synthesis failed|TTS synthesis latency'
 
 {
   echo "== $N  ($(awk -F'\t' '{print $2}' <<<"$row"))"

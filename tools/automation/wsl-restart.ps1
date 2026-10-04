@@ -16,5 +16,9 @@ for ($i = 0; $i -lt 60; $i++) {
     if ($r -match 'ready') { $ready = $true; break }
 }
 $mem = & wsl.exe -d $distro -u root --cd / -- bash -c "free -g | awk '/Mem:/{print \`$2}'"
-if ($ready) { Write-Output "WSL-RESTART OK mem_total_gb=$mem"; exit 0 }
+if ($ready) {
+    # RAM rule (CLAUDE.md): start_env brings up Parakeet STT and PocketTTS; tests run without them
+    $voice = & wsl.exe -d $distro -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/wsl-voice.sh all stop --wait 120
+    Write-Output "WSL-RESTART OK mem_total_gb=$mem voice=$($voice -join ',')"; exit 0
+}
 Write-Output "WSL-RESTART FAIL stack not ready after 300 s (mem_total_gb=$mem)"; exit 1
