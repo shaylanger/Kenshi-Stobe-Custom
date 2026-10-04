@@ -547,6 +547,7 @@ static int wgp_haul_walk(void *actor,WgpGoal *g,Vec3 target,float dist,DWORD now
 static void *g_haul_fail_goal; static int g_haul_fails; /* bug 121 / item 42 */
 
 /* 1 = hauling in progress this tick (caller must not issue operate), 0 = nothing to haul */
+static int g_wgp_feed_carried_only; /* m26: wgp_feed_carried */
 static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
 {
     if(!p||!p->building||!p->production||!stg_exports())return 0;
@@ -580,6 +581,7 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
             logline("[stobe] WORK_GOAL haul: %s would not accept %s",mname,dep);
             return 0;
         }
+        if(g_wgp_feed_carried_only)continue; /* m26 */
         void *b[WGP_MAX_BUILDINGS]={0};
         int n=wgp_scan_buildings(gw,actor,b,WGP_MAX_BUILDINGS);
         void *src=NULL;float best=1e30f;int have=0;
@@ -637,6 +639,17 @@ static int wgp_feed_inputs(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
         return 1;
     }
     return 0;
+}
+
+/* m26 (16-fullbase): load what she already carries for this machine first, so her pack
+ * isn't full of its inputs while she fetches a sub-dependency's inputs (batch J: 6 Steel
+ * Bars + 1 Hinge in her pack, Iron Plates for the 2nd Hinge didn't fit -> goal blocked). */
+static int wgp_feed_carried(void *gw,void *actor,WgpGoal *g,WgpProducer *p)
+{
+    g_wgp_feed_carried_only=1;
+    int r=wgp_feed_inputs(gw,actor,g,p);
+    g_wgp_feed_carried_only=0;
+    return r;
 }
 
 static int stg_store_from_actor(void *gw,void *actor,const char *query,int qty)

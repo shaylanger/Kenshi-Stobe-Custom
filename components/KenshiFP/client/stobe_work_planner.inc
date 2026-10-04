@@ -767,6 +767,7 @@ static int wgp_queue_craft(WgpProducer *p, int count)
 }
 
 static int wgp_feed_inputs(void *gw, void *actor, WgpGoal *g, WgpProducer *p); /* stobe_task_goals.inc */
+static int wgp_feed_carried(void *gw, void *actor, WgpGoal *g, WgpProducer *p); /* m26 */
 
 /* 1 when the building's UseableStuff reports it is out of power (same check as Stobe.dll's base snapshot). */
 static int wgp_building_unpowered(void *building)
@@ -929,6 +930,7 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
 
     void *missing[WGP_MAX_MISSING]={0};
     int miss=wgp_missing(p.production,missing,WGP_MAX_MISSING);
+    if (miss>0 && wgp_feed_carried(gw,actor,g,&p)) return 0; /* m26 */
     for (int i=0;i<miss;i++) {
         char dep[128]={0};
         if (!wgp_name(missing[i],dep,sizeof(dep)) || !dep[0]) continue;
@@ -1123,6 +1125,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
     g->dep_sig=0;
     strncpy(chain[0],g->item,sizeof(chain[0])-1);
     int budget=0;
+    if (miss>0 && wgp_feed_carried(gw,actor,g,&root)) return; /* m26 */
     for (int i=0;i<miss;i++) {
         char dep[128]={0}, reason[256]={0};
         if (!wgp_name(missing[i],dep,sizeof(dep)) || !dep[0]) continue;
