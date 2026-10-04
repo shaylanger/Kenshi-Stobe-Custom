@@ -29,14 +29,16 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 
 Resumed m22 (Shay 2026-10-03). Batch D/E reconciled (E: 57/14, `C:\KenshiTestRuns\m22\out-e\SUMMARY.txt`; passes deleted, evidence in `archive/test-run-2026-10-03-m22.md`). Running: batch F (`m22\list-f.txt`: rel-m18 + rel-b55 retests).
 
+Memory baseline (Shay 2026-10-04): first-commit DLLs vs current, Kenshi +171 MB at load 0 and less growth per load (118 vs 134 MB/load); no bug. Report `MEMORY_BASELINE_2026-10-04.md`.
+
 Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete the row).
 
 | ID | What | Save | Status |
 |---|---|---|---|
 | STOBE 55 (B 55) | fight rules (STOBE plan section E items 1-8): `rel-b55.sh` | auto-home | all blocks PASS except bleed (H: victim never woke in the window) -> fixer 15 |
 | STOBE section C (31, 32) | misquoted counter amounts; REJECT naming a price | auto-home | never reproduced live; candidates for injection rows |
-| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | G 50/6: benches found (base position fixed 0b5399d), no WORK_GOAL accepted (LLM reply without goal?) -> fixer 12 |
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | G: ALERT at 50x, world raid (Turgut -> Beaks) -> fixer 12 (calm raiders) |
+| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | I 54/2: 2nd Junkbow never made (planner assumed 1 Hinge per item) -> KenshiFP 47E5700A (ba0fb83) + squad preflight; rerun J |
+| STOBE A8 | bread chain grow on Full-Base | Full-Base | I: no bread goal (rollback deleted the squad NPC, faction empty) -> server m25-rollback-squad (50514ba) + squad preflight 92ccbd3; rerun J |
 | REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
 | REL SR09 | KO loot witnessed -> known_thief | auto-home | H: no known_thief (after witness-senses fix 5fbe34f) -> fixer 15 |
 | REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | todo |
