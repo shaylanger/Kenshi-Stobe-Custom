@@ -31,10 +31,10 @@
 - **Built, install at the next restart** (Kenshi closed, `install-dll.ps1`): Stobe E45BFB0E (shop price hook 103/104 incl.
   ShopTrader sellers; still -75 % sell side), KenshiFP 6E0A031E (items 111 + 112), harness 33087EDE (repo main 8116c46:
   KAH 2/3, KAH 22b, KAH 24 balance commands; check KAH 3 commit 7778508 is in it), PG 266C68F5 (only for row 250).
-- Server live (all pushed): items 107, 18 markers, 108, 109, 111, 113, 90 (e3b9cc3), A12 refusal (01a7c4e), item 29 (cd5a316),
+- Server live (all pushed): item 110 (e605768), items 107, 18 markers, 108, 109, 111, 113, 90 (e3b9cc3), A12 refusal (01a7c4e), item 29 (cd5a316),
   test switches NEG_TEST_INJECT / NEG_TEST_FORCE_INITIATIVE (2b2b52d).
 - Subagents still running: REL builder (SR09/13/14, SR07, SR30/SR06 forcing, B 55 fight rules), item 100 (b) fixer,
-  item 110 rollback fixer, 4080 rig operator (PG rows). They die with this session: check git logs + their repos.
+  4080 rig operator (PG rows). They die with this session: check git logs + their repos.
 - **Not delegated (blocked by the permission checker):** item 104 sell side -90 % (C++ ShopPricing + tests, server deal
   price + relationship_pricing endpoint, wrapper python copy). Do it next.
 
