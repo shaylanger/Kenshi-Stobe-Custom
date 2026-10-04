@@ -1,3 +1,16 @@
+# Current checkpoint: m22 running (2026-10-04, coordinator session 2)
+Supersedes the m21 checkpoint. Coordinator handoff: temp folder coordinator-handoff-m22.md; fixers: fixer-m22-handoff.md; PG/4080: C:\KenshiTestRuns\pgbal-4080\HANDOFF-pg-agent.md. Run log: archive/test-run-2026-10-03-m22.md (every result + commit).
+- **5090:** batch D (m22/list-d.txt -> m22/out-d) on its last row (pg-09 soak) then rb-check. Batch E ready: m22/list-e.txt (fixer 5 retests C49/C30/C26/C27/paylater, prices-forced, rel-b55, 3 shop rows, 16/A8/kah-5 Full-Base retests); fixer 6 (rel-m18 SR rows) adds its lines.
+- **4080:** batch16 (pgbal-4080/batch16.txt, runner PID 49881 on the 5090, log batch16.log, read with `tr -d '\0'`) left by the old operator; no agent attached. Next operator: triage batch16, then pg87-fs, pg89, home list, pg91, medic 191.
+- **Installed (5090):** Stobe 66ADABB1, KenshiFP 6E0A031E, harness 70953474, PG D7A60E49. **Pending:** Stobe 6EBC6403 (aid e1d8eed + thread handle c02f95f) + any fixer 6 build: install at the D->E restart.
+- Memory A/B (mem-ab.sh) runs with Kenshi closed between D and E.
+
+## Test efficiency rules (Shay, 2026-10-04; full text in CLAUDE.md "Test efficiency")
+- Mechanical rows = deterministic: inject the model reply (NEG_TEST_INJECT ...) before the logic under test; prove the injection fired + real game/server change; switches restored on exit. Live-model rows = a small separate batch (prompt -> intended reply).
+- Setup checks before long tests (shared helpers): out dir, fixture, selected chars, live NPC names/handles, inventory, worker/bench/materials/research/power/job, game time advancing, raid protection. Bounded polls, specific SETUP FAIL reason, repair then rerun.
+- PG: per-point provenance (build/config/fixture/skill/gear/setup/evidence); no stale captures; reuse only compatible points; block reruns when points aren't independently resettable; investigate flat data even with 0 script failures.
+- After each batch: reconcile (passes out of the plans, evidence in run log), classify every non-pass, map bugs to confirmations, rerun only invalidated passes; report requirement IDs and scenarios separately.
+---
 # Handoff: multi-feature test loop (coordinator) — state 2026-10-03 ~17:55 (run m18 running)
 
 ## Goal (Shay, 2026-10-03, firm): build, test, validate, fix EVERYTHING; only stop for decisions or when done

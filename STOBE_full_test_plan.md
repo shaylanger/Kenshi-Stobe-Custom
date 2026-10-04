@@ -1,53 +1,29 @@
 # STOBE: open issues and tests left
 
-Last updated 2026-10-03 (m19: pruned 53 fixed + confirmed rows, see `archive/test-run-2026-10-03-m19.md`). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
+Last updated 2026-10-04 (m23 reconciliation of m22 batch D; m21 reconciliation; m19: pruned 53 fixed + confirmed rows, see `archive/test-run-2026-10-03-m19.md`). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **121**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **123**. Work resumed m22; run log archive/test-run-2026-10-03-m22.md.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
-
-## A. Needs Shay (eyes, hands or first-person mode)
-
-| # | What to do | Expect |
-|---|---|---|
-| 12 | "Senlin, what if I bandage you up and you give me your rags?"; after she hands over first: "I'm not going to heal you" (automated as `STOBE-A11-A12-heal-deal.sh a12`; by design she counters with a promise instead of handing over first) | You broke the deal; she doesn't say "we're square" |
 
 ## B. Needs a specific game state or situation (automatable once it exists)
 
 | # | Situation | Expect |
 |---|---|---|
-| 15 | A goal needing something only a trader has | WAITING_APPROVAL; approve → buys; decline → cancelled |
 | 16 | A goal needing a crafted ingredient at a bench | The bench queue grows only by what's missing |
-| 18 | Betrayal: a dishonest NPC who dislikes you, a deal with payment first. Automatable since StobeServer `96b2c91`: test switch `NEG_TEST_FORCE_BETRAYAL` (general_settings, off by default) + `tests/ingame/stobe/STOBE-18-forced-betrayal.sh` (sets it on, and off on exit) | They attack after you pay; BREACHED_NPC, marked intentional (rare by design); plan reason `test_switch`; reputation npc_broken +1; memory "went back on our deal" |
-| 20 | Refuse to pay after she's handed something over (fight setup) | She may threaten or attack; paying then stops it and the stop holds. Tried run 12: spawned raiders always want Cats first ("You pay first, then we talk about the bow"), 2 tries; needs Malzin's force-attack setup or a trader |
-| 21 (was 42) | Fight setup, Fond trust, she stops for pay-later; don't pay for 1+ game minute | BREACHED_PLAYER, an angry line that matches her attack (no "cats received"), log `breach_react`. Tried run 12: a raider at Fond 60 refused pay-later 3 times ("After is where men die"). The unit check "unpaid -> BREACHED_PLAYER" is stale: hostile deals expire on game time, the test only backdates wall time |
-| 22 (was 43) | Fight setup with `help`; she stops for pay | Her words don't say her gang "isn't hers to call off"; the gang stands down. Run 12 (gang of 3 raiders, paid 1000): words fine ("You're paying the whole gang"), deal COMPLETE, no fighting after; but the gang stood down only because gang-mate Yarel's own surrender offer sent a faction STOP_ATTACK. The paid deal itself sends only an individual STOP_FIGHT for the payee |
-| 55 | Fights and relationships (B 55, section E items 1-8): BUILT live StobeServer `1392155` (REL "fights" mode replaces R4, switch `SOCIAL_FIGHTS_LIVE`, `lib/social_fights.php`); native "recovered" vitals for the bleeding-out level in Stobe (m19 build) | `rel-b55.sh <outdir> [mode squad wild spar close treat fade chat bleed deal]` (auto-home kah copy, Capture=1): one VERDICT per block; `chat` may be INCONCLUSIVE when the evaluator proposes no gain; accidental squad hit needs harness `hit` (being built). Fade threshold set to 30 (spec said 28; wounded range is now -23..-30): confirm with Shay |
+| 55 | Fights and relationships (B 55, section E items 1-8): BUILT live StobeServer `1392155` (REL "fights" mode replaces R4, switch `SOCIAL_FIGHTS_LIVE`, `lib/social_fights.php`); native "recovered" vitals for the bleeding-out level in Stobe (m19 build) | `rel-b55.sh <outdir> [mode squad wild spar close treat fade chat bleed deal]` (auto-home kah copy, Capture=1): one VERDICT per block; `chat` may be INCONCLUSIVE when the evaluator proposes no gain; accidental squad hit uses installed harness `hit`. m21 stopped before live B55 batch; event-based severity fade already decided/built (a098236) |
 
-## C. Can't reproduce so far (fixed or built, never triggered in game)
+## C. Open reproduction and regression checks
 
 | # | What would show it | Expect | Tried |
 |---|---|---|---|
-| 25 (was 128) | A surrender offer from a raider who gets **named** mid-fight | Server log `Directive follows the NPC's new name`; offer arrives | Spawned raiders are named before any offer (run 10). Run 12: no `Directive follows` line in ~10 fights |
-| 26 (was 30) | She says "Fine…" but the ledger shows nothing | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision (run 12 too) |
-| 27 (was 37) | A COUNTER with no terms (log `invalid_terms_json`) | Next turn she's reminded and restates it with terms | Never happened (run 12: none in ~40 deal turns) |
-| 28 (was 31) | "Take off X" during a deal | Recorded as UNEQUIP, not a hand-over | Tried run 12: Malzin refused both (iron hat for 50, sandals for 200), no terms |
-| 29 (was 35) | She misquotes an amount in a longer reply | Only the wrong sentence is rewritten, not the whole reply | Run 12: 8 rewrites, all from the first number on (held-back streaming); 4 were false alarms, now item 51 |
-| 30 (was 38) | A non-member's prompt | No "Shay \| squadmate" line | Never seen (run 12: 0 in all of today's prompts) |
+| 26 (was 30) | She says "Fine…" but the ledger shows nothing | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision (run 12 too); m22 D INCONCLUSIVE (no deal after the reminder): wrapper now injects the post-reminder reply (0d2b742) |
+| 27 (was 37) | A COUNTER with no terms (log `invalid_terms_json`) | Next turn she's reminded and restates it with terms | m19 C26: guard fired, reminder_in_prompt=0; fixer reviewing combined26/27 wrapper |
+| 30 (was 38) | A non-member's prompt | No "Shay \| squadmate" line | Never seen (run 12: 0 in all of today's prompts); m22 D INCONCLUSIVE (squad not in Varn's nearby list): wrapper puts Malzin 4 m from Varn (12fac38) |
 | 31 | Counter-offers like "300 now, 200 after?" where she misquotes | Amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted (run 12: "300 now, 200 after" countered with the same numbers) |
 | 32 | A REJECT that names her own price ("2000 for the hat") | Recorded as COUNTER (fixed run 11, unit-tested) | The model chose COUNTER by itself in run 11; run 12 "5 cats" got a plain REJECT |
-| 33 | Pay for something she can't do, and she agrees | Deal fails and your Cats come back | She always says she can't (refund itself works); run 12: "carry me to the Hub", "build a house now" both refused |
-| 34 | One-on-one fight where a faction-mate joins uninvited | `PERSONAL_FIGHT: stood down joiner=…` within ~0.25 s | Nobody joined so far |
-| 35 | She agrees to sell/stow her weapon without Fond trust | "Not my Chisa Katana…", log `NPC would give up her weapon` | She refuses on her own (run 12: 3000 and 5000 Cats, refused) |
-| 36 | Haggle back and forth more than 6 times | She ends the talks | Run 10: accepted at round 2 (unit-tested). Run 12: 8 rounds with a raider, but every ACCEPT starts a new deal, so rounds never passed 2 |
-| 37 | A neutral NPC losing a fight near Shay | They ask for help, maybe with a reward | Run 10: spawned victim wandered off |
-
-| 44 | A Cats term recorded the wrong way round (her words/action say she pays) | Turned round: her GiveCats action, "you give me N", or the deal on the table (log `Negotiation term fixed`) | Run 12: the first two rules fixed it in game; the third ("350 and you go free") unit-tested only; the model keeps finding new wordings |
-| 45 | An extra 0-Cats term in her terms | Dropped (log `0 Cats (item 45)`); deal recorded | Unit-tested |
-| 47 | An action target by a shared name with a corpse of that name nearby | The living NPC is chosen (Stobe `526D69F1`) | Built; scenarios no longer leave corpses, so not re-seen |
-| 49 | Pay an NPC who was named after the deal | Payment VERIFIED, and only for that NPC's deal (serial-pinned) | Part 1 seen in game (1000 Cats verified); part 2 (serial pin) unit-tested |
-| 51 | She repeats your offer, then names hers | Her reply is kept, no "My terms:" rewrite | Unit-tested |
+| 49 | Pay an NPC who was named after the deal | Payment VERIFIED, and only for that NPC's deal (serial-pinned) | m21 a71df49 fixed stale renamed-partner/current-roster routing; five checks fail before/pass after; m22 D FAIL verified=0 AWAITING_PERFORMANCE (raid during the test); server 4181499 matches the renamed NPC by bracket name + serial; rerun E |
 ## D. Bugs fixed or open, not yet confirmed in game
 
 Fixed and confirmed items are deleted (run log line). Full history of each row below: `git log -p STOBE_full_test_plan.md`. Where each is confirmed: `MASTER_TEST_PLAN.md` section 3.
@@ -61,19 +37,10 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 96 | surrender payment on accept missed by the payment check (3 s window) | fixed live (c5a8e25: 30 s window) |
 | 97 | personal truce cancelled Shay's explicit attack order | fixed (Stobe: a player attack order ends the truce guard, deal BREACHED_PLAYER) |
 | 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (KenshiFP: carried goods + nearest stocking trader) |
-| 100 | other squads (Beaks/Avarek) addressed as the persona "Shay" | fixed live (97e0b9f); option (b) live (0c6ed3e): reputation/relationship history follow the speaking character |
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
-| 102 | weapon-stow guard: outsider keeps her weapon below r +70 | built live (1c2457f); PASS m18 except `weapon69` |
-| 103 | willingness lines (no trade <= -80, pay-later >= 0, favours >= +30, gifts >= +56) | built live; notrade + paylater PASS m19; favour/gift -> 120 |
-| 104 | prices by relationship (buy -30 %…+1000 %, sell +10 %…-90 %, floor) | deal side live (cef19fe), shop hook Stobe CA758842 (shop-prices/floor/block PASS m19); deal prices -> 119 |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
-| 106 | wrong-side SPARE term rejected the whole deal | fixed live (terms repaired or dropped) |
-| 107 | Full-Base pay-later deal never breached (fight check matched only the persona) | fixed live (6146805) |
-| 110 | playthrough rollback "write failed" + unlocked concurrent rollbacks | fixed live (e605768, 538bf00) |
-| 111 | "buy from the shop here" -> MOVE_TO only | fixed (server 6fd2406 + KenshiFP unnamed trader search) |
 | 118 | spoken "one cat, take it or leave it" paid before any agreement | fixed live (fda6a7f) |
-| 119 | higher counters ignored the relationship price | fixed live (3bbbd87) |
-| 120 | free favour agreed below +30 without deal terms; no real heal | fixed live (9aadccc) |
+| 121 | stale ended goals made the NPC refuse new production orders | fixed e0e8e5c; A8home PASS m21 (2/2 Bread); Full-Base grow pending |
 
 ## E. Design questions and features
 

@@ -19,39 +19,34 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
-| Stobe.dll | `CA758842` (shop pricing hook 103/104, -90 % sell side; REL theft_caught) | `66620F55` (B 55 vitals on waking) |
+| Stobe.dll | `6EBC6403` (aid e1d8eed + thread handle c02f95f) | - |
 | KenshiFP.dll | `6E0A031E` (items to 112) | - |
-| ProfessionGearProgression.dll | `D7A60E49` (Forced + InGameTest during tests) | `266C68F5` (PG 250, 4080) |
-| AutomationHarness.dll | `33087EDE` | `609C459C` (to-do 19 fixes + `hit`) |
-| Server (live) | B 55 `1392155`, items 104, 100 (b), 110 + lock, 118-121 | - |
+| ProfessionGearProgression.dll | `D7A60E49` (paused: Normal config + Normal rules) | `266C68F5` (PG 250, 4080) |
+| AutomationHarness.dll | `70953474` (client fc53dba `@log-wait`) | 4080: kah-pg-wt c5a5c88 (artifact give, `research start any`) + B1EBCA95 power supply |
+| Server (live) | `stobe` 2e84508 (C49 4181499; rel-m18 fixes 3f341bc..2e84508) | - |
 
 ## 1. Open automated rows
+
+Resumed m22 (Shay 2026-10-03). Batch D results: `C:\KenshiTestRuns\m22\out-d\SUMMARY.txt` (37/16, reconciled m23: passes deleted, evidence in `archive/test-run-2026-10-03-m22.md`). Next: batch E (`m22\list-e.txt`).
 
 Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete the row).
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE 55 (B 55) | fight rules (STOBE plan section E items 1-8): `rel-b55.sh` blocks mode/squad/wild/spar/close/treat/fade/chat/bleed/deal/accident | auto-home | built live, 63 unit checks; m19c |
-| STOBE 21 | pay-later breach (`STOBE-21-paylater-breach.sh`, `protect`) | home + Full-Base | PASS m16 home; confirming reruns m19b (Full-Base: items 107, 100 b) |
-| STOBE 22 | gang stands down on a paid deal | home | PASS m16; confirming rerun |
-| STOBE 18 | forced betrayal (`NEG_TEST_FORCE_BETRAYAL`, `STOBE-18-forced-betrayal.sh`) | home + Full-Base | m19 Full-Base inconclusive (raider KO'd); rerun m19b |
-| STOBE 20, A12, section C (25-37, 44, 45, 47, 49, 51) | forced via `NEG_TEST_INJECT` / `NEG_TEST_FORCE_INITIATIVE`, one `STOBE-C*.sh` wrapper each | auto-home | m19 section C block |
-| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | m19 54/4 (backpack setup); rerun m19b |
-| STOBE generic | goal scenarios with Beaks/Avarek: work part (hand-over + fetch PASS m19) | Full-Base | rerun m19b with `fb()` |
-| STOBE 14 / A3 | buy from "the shop here", purchase event names the seller | Squin | FAIL m18 -> 111 (fixed); rerun |
-| STOBE 15 | WAITING_APPROVAL approve/decline for a trader-only ingredient | Squin | FAIL m18 -> 112/113 (fixed); rerun |
-| STOBE A8 | bread chain at home (PASS m17 on Full-Base) | auto-home | rerun (+ GROW=1 optional) |
-| TRADE prices | deal prices at r = -80…+100 (buy -30 %…+1000 %, sell +10 %…-90 %) | auto-home | FAIL m19 -> 119 (fixed); rerun m19b `prices` |
-| TRADE shop real | shop window with a real spawned trader (`REAL_TRADER=1`) | auto-home | setup fixed (cc4d14e); rerun m19b |
-| GUARD weapon | +69 refused / +70 allowed; squadmate + surrendering NPC exempt | auto-home | PASS m18 except `weapon69` (setup); rerun |
-| WILL favour / gift | free favour only at r >= +30, free items at +56 | auto-home | m19 -> 120 (fixed); rerun m19b |
-| KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | todo |
+| STOBE 55 (B 55) | fight rules (STOBE plan section E items 1-8): `rel-b55.sh` blocks mode/squad/wild/spar/close/treat/fade/chat/bleed/deal/accident | auto-home | built live; remaining m21 batch stopped before this row; resume B55 after Capture=1 |
+| STOBE section C (26, 27, 30-32, 49) | forced test switches / injection | auto-home | D: C49 FAIL verified=0 (server 4181499 fix), C30/C26 INCONCLUSIVE (wrappers 12fac38/0d2b742); rerun E |
+| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | D setup fail (OUT dir, fixed); rerun E |
+| STOBE A8 | bread chain at home (PASS m17 on Full-Base) | Full-Base | home PASS m21; D Full-Base ALERT (Kral's Chosen raid, RAID_CALM added); rerun E |
+| TRADE prices | deal prices at r = -80…+100 (buy -30 %…+1000 %, sell +10 %…-90 %) | auto-home | D 27/28 PASS (ledger = formula -50..+100, -80 no deal); sell -80/1 wrapper bug fixed 58d943f; rerun E |
+| TRADE shop real | shop window with a real spawned trader (`REAL_TRADER=1`) | kah-trader | in batch E (shop-prices/floor/block-rt) |
+| WILL paylater | no pay-later below 0 | auto-home | D INCONCLUSIVE (model refused at r=0 too); wrapper injects the same ACCEPT both sides (2fa6371); rerun E |
+| KAH 5 | `power <battery> charge` on a real Battery Bank | Full-Base | D 4/3 (battery search radius, fixed r=3000); rerun E |
 | REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
-| REL SR09, SR13, SR14 | theft seen/unseen + theft_caught (`drop … owned`, native theft_caught) | auto-home | `rel-m18.sh`; m18 probe-theft-seen 19/3: analyse |
-| REL SR07 | limb loss (`sever`) | auto-home | m18 p3-05b 31/2: analyse, rerun |
-| REL SR06, SR30 | forced first strike / join attempt (`SOCIAL_TEST_FORCE_*`) | auto-home | `rel-m18.sh` |
+| REL SR09, SR13, SR14 | theft seen/unseen + theft_caught (`drop … owned`, native theft_caught) | auto-home | D FAIL SR09/13 seen/14; SR13 unseen PASS = invalid evidence; fixer 7 (Nomads owner, stobe_ready, witness); rerun E rel-m18-r |
+| REL SR07 | limb loss (`sever`) | auto-home | D FAIL (attribution window); re-attack fix 1e15790; rerun E |
+| REL SR06, SR30 | forced first strike / join attempt (`SOCIAL_TEST_FORCE_*`) | auto-home | D: SR30 low trust PASS; SR06 + SR30 trusted FAIL (fixes a83011e, ac5ff4b); rerun E |
 | REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | todo |
-| PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | PG agent; status in `INGAME_STATUS.md` |
+| PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | pg-09 soak 24/0 PASS D (5090); 4080 operator m23 rerunning pg54/84/81/80/52/53/82/87-fs/89 + home list; see INGAME_STATUS.md |
 
 ## 2. Requires Shay
 
@@ -73,18 +68,13 @@ Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 | STOBE 87 | Dust King: no initiative check (covered by 88 + 61 PASS m18) | close at the next surrender run |
 | STOBE 94 | reset-npc `--restore` key case | round trip at the end |
 | STOBE 96, 97 | surrender payment window; truce cancelled Shay's attack order | REL surrender / accept + `attack` |
-| STOBE 99, 112, 113 | WAITING_APPROVAL + approved buy deadlock | STOBE 15 |
-| STOBE 100 (b) | reputation/relationship history follow the speaking character | STOBE 18/21 Full-Base |
 | STOBE 101 | `[]` extended_data | rel-enslaved set-relation |
-| STOBE 104, 119 | -90 % sell side; higher counters ignored the relationship price | TRADE prices |
 | STOBE 105 | KenshiFP log spam | A8 log |
-| STOBE 106, 107, 18 FB | wrong-side SPARE; Full-Base pay-later; betrayal wrapper | STOBE 18/21 Full-Base |
-| STOBE 110 + lock race | rollback write failed; unlocked concurrent rollbacks | php_error.log after older-save loads |
-| STOBE 111 | "the shop here" buy | STOBE 14 Squin |
-| STOBE 118, 120 | spoken offer paid before agreement; willingness lines outside deal terms | TRADE prices, WILL favour/gift |
-| STOBE 121 | stale ended-goal block reasons made the NPC refuse a new production order (server e0e8e5c) | A8 home + grow Full-Base (m19c) |
-| KAH 122 | protect never fed: squad starved at 50x in pg-09-soak, game fell to menu; kah run now aborts on menu (harness bf43c27 + 7e9dff1, DLL E83B0826) | pg-09-soak (m19c) |
-| KAH to-do 19 | `walktime`, `newgame`, `pickup`, kah.py `@log`, nested `packput` (harness 609C459C) | PG 254, 132/133/240, 120 (4080) |
+| STOBE C49 | renamed partner/current roster payment routing (server 4181499) | C49 auto-home |
+| REL SR07, SR30 | scenario baselines and post-recruit handle relookup | rel-m18 |
+| STOBE 118 | spoken offer paid before agreement | TRADE prices |
+| STOBE 121 | stale ended-goal block reasons made the NPC refuse a new production order (server e0e8e5c) | home PASS m21; grow Full-Base still pending |
+| KAH to-do 19 | `walktime`, `newgame`, `pickup`, kah.py `@log`, nested `packput` (installed harness E83B0826) | PG 254, 132/133/240, 120 (4080) |
 
 ## 4. Harness (KAH) limits and open items
 
