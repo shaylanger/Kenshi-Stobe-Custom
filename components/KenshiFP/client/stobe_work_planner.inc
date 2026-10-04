@@ -818,6 +818,32 @@ static int wgp_power_gate(WgpGoal *g, WgpProducer *p, char *reason, size_t reaso
     return 1;
 }
 
+/* m25 (16-fullbase): the parent bench reports `dep` missing. If none is on hand or queued
+ * but item-95 accounting (consumed) would call it satisfied, the recipe takes more than one
+ * per unit: raise the need so at least one more gets queued, and name the missing input. */
+static int wgp_missing_dep_need(void *gw, void *actor, WgpGoal *g, const char *parent,
+                                const char *dep, int need)
+{
+    WgpSubstate *ss=NULL;
+    for (int i=0;i<WGP_MAX_SUBSTATE;i++)
+        if (g->subs[i].item[0] && !_stricmp(g->subs[i].item,dep)) { ss=&g->subs[i]; break; }
+    int have=wgp_item_count_world(gw,actor,dep);
+    int bumped=need;
+    /* keep the shortfall >= 1 (queue one) and, once queued, keep the dep "not ready" so she
+     * is sent to craft it instead of item-95 calling it satisfied */
+    if (ss && have<=0 && ss->consumed>0 && ss->consumed>=need)
+        bumped=ss->consumed+(ss->queued>0?ss->queued:1);
+    static DWORD s_md_ms; static char s_md_key[192];
+    char key[192]; snprintf(key,sizeof(key),"%s|%s|%d|%d",g->id,dep,need,bumped);
+    if (strcmp(key,s_md_key) || (LONG)(GetTickCount()-s_md_ms)>10000) {
+        s_md_ms=GetTickCount(); strncpy(s_md_key,key,sizeof(s_md_key)-1);
+        logline("[stobe] WORK_STEP id=%s %s missing input %s (have=%d queued=%d consumed=%d) need %d%s",
+                g->id,parent,dep,have,ss?ss->queued:0,ss?ss->consumed:0,bumped,
+                bumped>need?" (m25: recipe uses more per unit, queue 1 more)":"");
+    }
+    return bumped;
+}
+
 /* return 1 ready/available, 0 working/waiting, -1 impossible */
 static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
                            int need, int depth, char chain[][128], int chain_n,
@@ -907,6 +933,7 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         char dep[128]={0};
         if (!wgp_name(missing[i],dep,sizeof(dep)) || !dep[0]) continue;
         int dneed=p.is_crafting?need:wgp_input_need(p.production,p.building_name,missing[i],need);
+        dneed=wgp_missing_dep_need(gw,actor,g,item,dep,dneed);
         int r=wgp_ensure_item(gw,actor,g,dep,dneed,depth+1,next_chain,next_n,budget,reason,reason_sz);
         if (r<0) return -1;
         if (r==0) {
@@ -1102,6 +1129,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
         int outstanding=g->quantity-g->completed;
         if (outstanding<1) outstanding=1;
         if (!root.is_crafting) outstanding=wgp_input_need(root.production,root.building_name,missing[i],outstanding);
+        outstanding=wgp_missing_dep_need(gw,actor,g,g->item,dep,outstanding);
         int r=wgp_ensure_item(gw,actor,g,dep,outstanding,1,chain,1,&budget,reason,sizeof(reason));
         if (r<0) {
             char full[256];
