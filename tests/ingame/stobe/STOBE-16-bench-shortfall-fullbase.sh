@@ -35,4 +35,7 @@ else
   extra+=(--keep-supply "Arrow Making Bench")
   echo "no Arrow Making Bench in the base: the scenario builds one (supply cheat for it)"
 fi
+# m19: the Full-Base mate already wears a backpack, so a given Large Backpack lands in her main inventory and fills it
+# (Iron Plates haul blocked: "her pack is full"): skip the backpack steps here.
+extra+=(--drop "Large Backpack")
 bash "$D/run-as.sh" "$D/STOBE-16-bench-shortfall.txt" "$PLAYER" "$MATE" --real-power "${extra[@]}" --csv "$OUT/STOBE-16-fullbase.csv"
