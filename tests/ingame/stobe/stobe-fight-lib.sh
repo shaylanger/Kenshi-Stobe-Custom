@@ -204,8 +204,19 @@ calm_raiders() {
   local n=0 h re="${2:-}"
   # m24: Bele'coz (A8-grow-fb ALERT, m22 G), Hill Marauders, Black Dragon Ninjas also raid Full-Base
   [ -n "$re" ] || re="Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Bele.coz|Hill Marauders|Black Dragon Ninjas"
-  for h in $(stobe-auto chars "${1:-400}" | grep -E "\[(${re})\]" | grep -oE '#[0-9]+/[0-9]+'); do
-    stobe-auto ko "$h" 900 >/dev/null && n=$((n+1))
+  # m24 fixer 14: `chars` prints ONE line ("a | b | c"), so the faction grep matched the whole line whenever any raider
+  # was in range and every handle in it was knocked out, the squad included (harness.log: `ko Beaks`/`ko Avarek` every
+  # 30 s; 16-fullbase Avarek KO x3, A8-grow-fb Beaks KO). Split per character first; never touch the squad; skip ones
+  # already KO/DEAD. `chars` lists at most 40 (unsorted), so a near pass (400 m) runs before a wide one.
+  local r lines seen=" "
+  for r in 400 "${1:-400}"; do
+    lines=$(stobe-auto chars "$r" | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n' | sed 's/^ *//' \
+      | grep -E "\[(${re})\]" | grep -v -E ' (KO|DEAD)( |$)' | grep -v -E "^(${PLAYER:-Shay}|${MATE:-Malzin}) #")
+    for h in $(echo "$lines" | grep -oE '#[0-9]+/[0-9]+'); do
+      case "$seen" in *" $h "*) continue ;; esac; seen="$seen$h "
+      stobe-auto ko "$h" 900 >/dev/null && n=$((n+1))
+    done
+    [ "${1:-400}" = 400 ] && break
   done
   log "calm_raiders: knocked out $n"
 }

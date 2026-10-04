@@ -12,7 +12,7 @@
 # verify: the .txt criteria (Arrow queue <= 1, Crossbow queue <= 2, queued_root=2, subs Hinge=1, `Hinge used 1`)
 #   PLUS completion: `WORK_GOAL complete ... item=Junkbow qty=2` and Junkbows in `inv <mate>`; no `power wait`.
 set -u
-bash "$(dirname "$0")/fullbase-guard.sh"
+bash "$(dirname "$0")/fullbase-guard.sh" 16-fullbase || exit $?  # m24: SETUP FAIL when the squad is not protected/awake
 D="$(cd "$(dirname "$0")" && pwd)"
 export PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}"; OUT="${OUT:-/tmp}"
 mkdir -p "$OUT"  # m22: OUT=<batch>/bench16 did not exist (FileNotFoundError on the scenario copy)

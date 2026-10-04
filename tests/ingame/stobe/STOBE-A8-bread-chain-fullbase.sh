@@ -11,7 +11,7 @@
 # Never build a Biofuel Distillery in this mod setup (crash).
 export RAID_CALM=1 PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}" REAL_POWER=1 SPEED="${SPEED:-50}" WELL="${WELL:-Well}"
 D="$(cd "$(dirname "$0")" && pwd)"
-bash "$D/fullbase-guard.sh"
+bash "$D/fullbase-guard.sh" A8 || exit $?  # m24: SETUP FAIL when the squad is not protected/awake
 . "$D/stobe-fight-lib.sh"
 # m24: a Bele'coz raid reached Beaks ~1 min into the 50x run (m22 batch G ALERT); the in-loop calm (every 10 polls)
 # was too slow at 50x. Like 16-fullbase: knock out raiders near the squad every 15 s while it runs (the alert is unchanged).
