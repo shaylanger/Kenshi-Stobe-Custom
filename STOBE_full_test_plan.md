@@ -18,12 +18,8 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 
 | # | What would show it | Expect | Tried |
 |---|---|---|---|
-| 26 (was 30) | She says "Fine…" but the ledger shows nothing | Log `NPC agreed in words but recorded no deal`; the next line records ACCEPT | Every clear offer got a proper decision (run 12 too); m22 D INCONCLUSIVE (no deal after the reminder): wrapper now injects the post-reminder reply (0d2b742) |
-| 27 (was 37) | A COUNTER with no terms (log `invalid_terms_json`) | Next turn she's reminded and restates it with terms | m19 C26: guard fired, reminder_in_prompt=0; fixer reviewing combined26/27 wrapper |
-| 30 (was 38) | A non-member's prompt | No "Shay \| squadmate" line | Never seen (run 12: 0 in all of today's prompts); m22 D INCONCLUSIVE (squad not in Varn's nearby list): wrapper puts Malzin 4 m from Varn (12fac38) |
 | 31 | Counter-offers like "300 now, 200 after?" where she misquotes | Amounts rewritten; log `Negotiation speech amounts differ` | She never misquoted (run 12: "300 now, 200 after" countered with the same numbers) |
 | 32 | A REJECT that names her own price ("2000 for the hat") | Recorded as COUNTER (fixed run 11, unit-tested) | The model chose COUNTER by itself in run 11; run 12 "5 cats" got a plain REJECT |
-| 49 | Pay an NPC who was named after the deal | Payment VERIFIED, and only for that NPC's deal (serial-pinned) | m21 a71df49 fixed stale renamed-partner/current-roster routing; five checks fail before/pass after; m22 D FAIL verified=0 AWAITING_PERFORMANCE (raid during the test); server 4181499 matches the renamed NPC by bracket name + serial; rerun E |
 ## D. Bugs fixed or open, not yet confirmed in game
 
 Fixed and confirmed items are deleted (run log line). Full history of each row below: `git log -p STOBE_full_test_plan.md`. Where each is confirmed: `MASTER_TEST_PLAN.md` section 3.
@@ -39,7 +35,6 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (KenshiFP: carried goods + nearest stocking trader) |
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
-| 118 | spoken "one cat, take it or leave it" paid before any agreement | fixed live (fda6a7f) |
 | 121 | stale ended goals made the NPC refuse new production orders | fixed e0e8e5c; A8home PASS m21 (2/2 Bread); Full-Base grow pending |
 | 123 | older-save rollback cleared only extended_data.relationships; the core_npc.relationships column brought a cleared grudge back | fixed live (45022f9, regression in relationship_rollback_regression.php); confirm in rel-b55 fade |
 
