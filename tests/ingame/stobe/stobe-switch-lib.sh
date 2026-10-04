@@ -54,7 +54,12 @@ cancel_deals() {
         WHERE LOWER(npc_name)=LOWER('$(sq "$1")') AND status IN ('PROPOSED','COUNTERED','ACCEPTED','AWAITING_PERFORMANCE')
           AND created_at >= to_timestamp(${WRAP_START} - 5)" >/dev/null
 }
-# the NPC's spoken lines since the wrapper started
-npc_said() { since_stobe | grep -a -F "NPC_SAY: $1|" | cut -c1-300; }
+# the NPC's spoken lines since the wrapper started, one per utterance. m22 (C29 m21): each line is logged twice
+# (CHAT_TIMING "pipe queued" + HOOK_MSG_PROC "Processing", same UTTERANCEID), which counted as a repeat; only the
+# HOOK_MSG_PROC lines count, once per UTTERANCEID (lines without an id are kept as they are).
+npc_said() {
+  since_stobe | grep -a -F "NPC_SAY: $1|" | grep -a -F "HOOK_MSG_PROC" \
+    | awk 'match($0, /\[UTTERANCEID:[^]]*\]/) { u = substr($0, RSTART, RLENGTH); if (seen[u]++) next } { print }' | cut -c1-300
+}
 # put a spawned helper NPC out of the way (knocked out 15 min)
 put_away() { for h in "$@"; do [ -n "$h" ] && stobe-auto ko "$h" 900 >/dev/null 2>&1; done; }
