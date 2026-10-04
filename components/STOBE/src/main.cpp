@@ -11253,6 +11253,15 @@ void ProcessMessageQueue(GameWorld *thisptr) {
                     } catch (...) {
                     }
 
+                    if (score > 1 && !(hasSerial && candidateSerial == wantedSerial)) {
+                      // item 47 (C47): the sphere fallback finds corpses too; a
+                      // dead namesake must not outscore the living one
+                      try {
+                        if (candidate->isDead())
+                          score = 1;
+                      } catch (...) {
+                      }
+                    }
                     if (score > bestScore) {
                       bestScore = score;
                       bestMatch = candidate;
