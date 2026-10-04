@@ -62,10 +62,18 @@ done
 # m25: the reason names what happened (KenshiFP goal lines, else her reply), never an empty reason
 [ -n "$id" ] || { verdict A8 "FAIL no bread goal: kfp=[$(tail -n +"$BASE_K" "$KFP" | grep -a WORK_GOAL | tail -2 | tr '\n' ' ' | cut -c1-200)] reply=[$(since_stobe | grep -a -F "SAY [${MATE}]" | tail -3 | sed -E 's/.*SAY \[[^]]*\]: //' | tr '\n' ' ' | cut -c1-240)] faction=$(srv_faction "$MATE")"; exit 1; }
 log "goal $id"
-stobe-auto speed "${SPEED:-20}" >/dev/null
-s=""
+# m22 L: on Full-Base a Bele'coz raid dialog paused the game (no `speed` sent) and the row sat 25 min at speed 0.
+# RAID_CALM=1: `speed <x> hold` unpauses after the game's own pauses; every 10 polls the loop also checks that game
+# time advances and stops with SETUP FAIL when it stood still for 2 checks in a row (game paused/stuck, not her goal).
+stobe-auto speed "${SPEED:-20}" $([ "${RAID_CALM:-0}" = 1 ] && echo hold) >/dev/null
+s=""; gh_last=""; gh_same=0
 for i in $(seq 1 $([ "${GROW:-0}" = 1 ] && echo 600 || echo 150)); do
   sleep 4
+  if [ $((i % 10)) = 0 ]; then
+    gt=$(stobe-auto time 2>/dev/null | tr -d '\r'); gh=$(echo "$gt" | grep -oE 'game_hours=[0-9.]+')
+    if [ -n "$gh" ] && [ "$gh" = "$gh_last" ]; then gh_same=$((gh_same + 1)); else gh_same=0; fi; gh_last="$gh"
+    [ "$gh_same" -ge 2 ] && { stobe-auto speed 0 >/dev/null; setup_fail A8 "game time stuck at ${gh#*=} h for 2 checks (80+ s;$(echo "$gt" | grep -oE 'speed=[0-9.]+ paused=[01]'); a game pause/dialog, goal: ${s:-none})"; }
+  fi
   # REAL_POWER: does the silo draw power while she works it? (sampled every poll, ~4 s; at 50x her silo step is short)
   if [ "${REAL_POWER:-0}" = 1 ]; then
     cp=$(stobe-auto building "Grain Silo" radius 1000 | grep -oE "current_power=[0-9.]+" | cut -d= -f2)
@@ -73,12 +81,15 @@ for i in $(seq 1 $([ "${GROW:-0}" = 1 ] && echo 600 || echo 150)); do
   fi
   s=$(grep -a "^$id" "$ST" | cut -f3,6,8,9 | tr '\t' '|')
   echo "$s" | grep -q -E "COMPLETE|BLOCKED|CANCEL" && break
-  if stobe-auto where ${PLAYER} | grep -q " KO"; then
-    # m26 RAID_CALM=1: `protect` (fullbase-guard) wakes a knocked-out squad member at once; only a KO that lasts stops
-    if [ "${RAID_CALM:-0}" = 1 ]; then
-      wait_for 20 awake "${PLAYER}" || { stobe-auto speed 0 >/dev/null; setup_fail A8 "${PLAYER} still KO 20 s after a knockout although protected"; }
-    else log "${PLAYER} KO: paused"; break; fi
-  fi
+  # m22 L: RAID_CALM=1 checks the mate too (Avarek stayed KO'd while only Beaks was checked; protect could not wake her)
+  for who in ${PLAYER} $([ "${RAID_CALM:-0}" = 1 ] && echo "${MATE}"); do
+    if stobe-auto where "$who" | grep -q " KO"; then
+      # m26 RAID_CALM=1: `protect` (fullbase-guard) wakes a knocked-out squad member at once; only a KO that lasts stops
+      if [ "${RAID_CALM:-0}" = 1 ]; then
+        wait_for 20 awake "$who" || { stobe-auto speed 0 >/dev/null; setup_fail A8 "$who still KO 20 s after a knockout although protected ($(stobe-auto status 2>/dev/null | grep -oE 'speed=[0-9.]+ paused=[01]'))"; }
+      else log "$who KO: paused"; break 2; fi
+    fi
+  done
   # goal-watch safety (tools/stobe-goal-watch.sh logic, any squad names): squad attacked or knocked out -> pause
   # RAID_CALM=1 (Full-Base, squad protected, raid_guard_start sweeping): combat AND knockouts from world raiders
   # (RAID_RE factions, lib raid_event) are logged and tolerated (m22 D: Kral's Chosen, m22 J: a Band of Bones KO of
