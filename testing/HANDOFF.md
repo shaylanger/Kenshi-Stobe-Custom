@@ -1,8 +1,8 @@
-# Current checkpoint: m22 running (2026-10-04, coordinator session 2)
-Supersedes the m21 checkpoint. Coordinator handoff: temp folder coordinator-handoff-m22.md; fixers: fixer-m22-handoff.md; PG/4080: C:\KenshiTestRuns\pgbal-4080\HANDOFF-pg-agent.md. Run log: archive/test-run-2026-10-03-m22.md (every result + commit).
-- **5090:** batch D (m22/list-d.txt -> m22/out-d) on its last row (pg-09 soak) then rb-check. Batch E ready: m22/list-e.txt (fixer 5 retests C49/C30/C26/C27/paylater, prices-forced, rel-b55, 3 shop rows, 16/A8/kah-5 Full-Base retests); fixer 6 (rel-m18 SR rows) adds its lines.
-- **4080:** batch16 (pgbal-4080/batch16.txt, runner PID 49881 on the 5090, log batch16.log, read with `tr -d '\0'`) left by the old operator; no agent attached. Next operator: triage batch16, then pg87-fs, pg89, home list, pg91, medic 191.
-- **Installed (5090):** Stobe 66ADABB1, KenshiFP 6E0A031E, harness 70953474, PG D7A60E49. **Pending:** Stobe 6EBC6403 (aid e1d8eed + thread handle c02f95f) + any fixer 6 build: install at the D->E restart.
+# Current checkpoint: m22 STOPPED (2026-10-04 ~13:30, Shay: stop after batch and report)
+Coordinator handoff: temp folder coordinator-handoff-m28.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
+- **5090:** batch N done (4 FAIL, see run log), Kenshi closed, Capture=0, REL mode off, game lock released. Next on Shay's go: batch O (m22/list-o.txt), install Stobe 0A670197 first.
+- **Open bugs:** A8 'cannot reach Campfire' after accepting (no goal); SR18 carry-to-bed SOCIAL_CAPTURE missing; harness `cage` crash (rva 792089, intermittent).
+- **4080:** batch20 (pgbal-4080/batch20.log) left to finish, then Kenshi stopped + rig4080 lock released. Operator log: temp pgop/HANDOFF-4080-operator-m27.md.
 - Memory A/B (mem-ab.sh) runs with Kenshi closed between D and E.
 
 ## Test efficiency rules (Shay, 2026-10-04; full text in CLAUDE.md "Test efficiency")
@@ -10,6 +10,11 @@ Supersedes the m21 checkpoint. Coordinator handoff: temp folder coordinator-hand
 - Setup checks before long tests (shared helpers): out dir, fixture, selected chars, live NPC names/handles, inventory, worker/bench/materials/research/power/job, game time advancing, raid protection. Bounded polls, specific SETUP FAIL reason, repair then rerun.
 - PG: per-point provenance (build/config/fixture/skill/gear/setup/evidence); no stale captures; reuse only compatible points; block reruns when points aren't independently resettable; investigate flat data even with 0 script failures.
 - After each batch: reconcile (passes out of the plans, evidence in run log), classify every non-pass, map bugs to confirmations, rerun only invalidated passes; report requirement IDs and scenarios separately.
+
+## New standing rules (Shay, 2026-10-04; full text in CLAUDE.md "PG validation gate" and "RAM budget")
+- PG: 3-point validation gate (low skill/no gear, high skill/no gear, low skill/gear) before any full matrix; mechanical pass and balance acceptance tracked separately; one gate line per profession; one runner per machine, recorded here.
+- RAM: parakeet STT off unless a test needs voice; PocketTTS off unless a batch tests audio (after checking replies still work without it); WSL cap 8 GB; graphics-only mods (Dust, ReShade, HD textures if worth it) off for automated runs, with a restore command for Shay.
+- **To do at the next stop (not done yet when this was written):** apply both rules (see CLAUDE.md), then per-profession gate results below this line.
 ---
 # Handoff: multi-feature test loop (coordinator) — state 2026-10-03 ~17:55 (run m18 running)
 

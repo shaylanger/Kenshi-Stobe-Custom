@@ -35,9 +35,9 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | J: raid KO -> whole-row raid guard 7e937ef + `chars` filter; rerun L |
-| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
-| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | todo |
+| STOBE A8 | bread chain grow on Full-Base | Full-Base | N: no bread goal ('do not know how to reach Campfire' after accepting) -> fix, rerun |
+| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | N: p7-03 FAIL = seed race; Stobe d8cb37f (0A670197) built, install + rerun in batch O |
+| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | N: SR18 35/2 capture missing; SR19 crash after harness `cage` (intermittent) -> fix, rerun |
 | PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | pg-09 soak 24/0 PASS D (5090); 4080 operator m23 rerunning pg54/84/81/80/52/53/82/87-fs/89 + home list; see INGAME_STATUS.md |
 
 ## 2. Requires Shay
