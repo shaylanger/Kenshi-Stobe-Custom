@@ -35,6 +35,9 @@
   test switches NEG_TEST_INJECT / NEG_TEST_FORCE_INITIATIVE (2b2b52d).
 - Subagents still running: REL builder (SR09/13/14, SR07, SR30/SR06 forcing, B 55 fight rules: spec = STOBE plan section E as of d6abec1, event-based forgiveness), item 100 (b) fixer,
   4080 rig operator (PG rows). They die with this session: check git logs + their repos.
+- **B 55 spec extended (Shay, 2026-10-03):** STOBE plan section E items 7 (harsher fight penalties x closeness
+  multiplier) and 8 (variable 15-30 % reduction when the attacker treats her afterwards). Give the updated section E to
+  the REL builder (its spec was d6abec1; this supersedes it). Build + unit tests + in-game rows.
 - **Item 104 sell side -90 %: START NOW (Shay, 2026-10-03, direct order).** Not delegated yet because the permission
   checker blocked the hand-off message. Scope: C++ ShopPricing + tests, server deal price + relationship_pricing
   endpoint, wrapper python copy; build, install, test in game. If the hand-off is blocked again, the coordinator builds it itself.
