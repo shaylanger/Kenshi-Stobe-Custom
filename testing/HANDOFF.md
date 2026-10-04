@@ -9,9 +9,12 @@
   4080 rig operator). Memory `coordinator-builds-everything`.
 - Loop: test -> log bugs -> fix -> build -> install -> retest until every testable row passes, then close Kenshi and
   give Shay ONE final summary.
-- Contact Shay only for real decisions, asked together once while work continues: item 104 sell-side -75 % max;
-  item 100 option (b); F 63 next big feature; B 55 (whether fights count, R4); F 62 (move our logic out of KenshiFP,
-  a refactor: confirm before starting). PG 256 stays deferred.
+- **Shay's decisions (typed by Shay, 2026-10-03), build + test them:** item 104 sell-side max drop = **90 %** (a hater
+  only buys if they rip you off hugely); item 100 = **option (b)**: reputation and relationship history follow the
+  squad character who is speaking, not the persona "Shay"; **B 55 decided**: retire R4, use the REL combat rules plus
+  the 6 additions in `STOBE_full_test_plan.md` section E (REL builder; forgiveness threshold is a setting, default
+  "up to -28 fades over ~14 game days", Shay may still adjust it); F 62 deferred; F 63 deferred until this master
+  plan is done and all bugs are fixed/validated; STOBE A9 (TTS volume/fade) PASS (Shay tested). PG 256 stays deferred.
 - Confirmed by Shay directly (2026-10-03 ~18:00): this goal and the to-do list below are Shay's orders, also written
   into CLAUDE.md "Current state" and `MASTER_TEST_PLAN.md`.
 

@@ -42,7 +42,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 41 | No false "you have my katana" claim | re-equip katana, gear exchange, "What have I taken from you?" | PASS m1 |
 | STOBE 43 | Two-part hand-over gives both items | give bread + dried meat, "give me all your bread and all your dried meat" | PASS m1 (after fix 67) |
 | STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | PASS m3 (after 77) |
-| STOBE 55 | R4 fights count (superseded once REL is enabled) | `scenarios.sh duel`, server log `a fight counts (R4)` | PASS m1 (fires once per pair; direction = event attacker) |
+| STOBE 55 | R4 fights count (Shay 2026-10-03: R4 retired, replaced by the REL combat rules + additions in STOBE plan section E: build + test) | `scenarios.sh duel`, server log `a fight counts (R4)` | PASS m1 (fires once per pair; direction = event attacker) |
 | STOBE 56 | Relationship types from the list only | chats, check entries | PASS m16 (all types on the list, new entry for Tovin Brask) |
 | STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | PASS m16 (after 70: no generic-name keys in the DB after the m16 bandit fights) |
 | STOBE 58 | `stobe-reset-npc` save + `--restore` | WSL only, no game action needed | PASS m16 (saved once, restore works; key case -> 94) |
@@ -136,7 +136,7 @@ Spec: memory `stobe-negotiation-rules`. r = NPC's relationship toward the tradin
 
 | ID | What | How | Status |
 |---|---|---|---|
-| TRADE prices | Shop + deal prices at r = -80, -50, -10, 0, +10, +56, +100 vs vanilla, buy and sell; formula exact (buy: -30%·(r/100)^1.1 / +1000%·(|r|/100)^2.32; sell: up to +10% / down to -75% (proposed, Shay to confirm)) | trust setup + `shopstock` + real `trade`; STOBE deal (`STOBE-102-104-relationship-trading.sh prices`) | STOBE 104 server live (1c2457f; sell-side -75% max pending Shay); shop-window hook: native builder |
+| TRADE prices | Shop + deal prices at r = -80, -50, -10, 0, +10, +56, +100 vs vanilla, buy and sell; formula exact (buy: -30%·(r/100)^1.1 / +1000%·(|r|/100)^2.32; sell: up to +10% / down to -90% (Shay, 2026-10-03)) | trust setup + `shopstock` + real `trade`; STOBE deal (`STOBE-102-104-relationship-trading.sh prices`) | STOBE 104 server live (1c2457f; sell-side -75% max pending Shay); shop-window hook: native builder |
 | TRADE floor | Buy/sell or sell/buy-back loop never profits | trade loop | server floor live (assumes trader buys at 0.5x sell); shop hook: native builder |
 | GUARD weapon | Outsider won't stow/drop/hand over her weapon below r +70 (+69 refused, +70 allowed); squadmate + surrendering NPC exempt | ask for her weapon (`… weapon69/weapon70/weapon-squad/weapon-surrender`) | STOBE 102 live, to run |
 | WILL lines | Pay-later -1 refused / 0 allowed; free favour +29 refused / +30 allowed; any trade at -80 refused (STOBE deal + shop window) | deals at set trust (`… paylater/favour/gift/notrade`) | STOBE 103 live (deals), to run; shop-window -80 block: native builder |
@@ -171,7 +171,7 @@ Rows unlocked by the 4080 saves moved to 1f (2026-10-03).
 
 | ID | What |
 |---|---|
-| STOBE A9 | TTS volume/fade: the setting and ini are checked automatically; how it sounds is Shay's |
+| STOBE A9 | TTS volume/fade: PASS (Shay tested, 2026-10-03) |
 | Voice / feel | Voice quality, overall play feel, relationship balance feel (REL §9) |
 | PG 135–141, 277 | Profession Gear tooltip section on armour, backpack, weapon/tool, plain item, two-affix item, shop/loot views: shown once, readable, no layout break |
 | PG 155, 238 | feel: repeated tooltip opening; no stall when a shop opens |
@@ -206,7 +206,7 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 88 | STOBE | m10 | Fleeing/out-of-scan fighters never sent a health event (no surrender check below 35%) | fixed (Stobe 99092DDD+), PASS m12 |
 | STOBE 89 | KFP | m12 | Silent crash on a work goal at the Crafting base: object-search buffers sized to the request | fixed (KenshiFP B67AEAD3), PASS m12 |
 | STOBE 94 | STOBE | m16 | `stobe-reset-npc --restore` writes the entry under PLAYER_NAME `shay` while the server writes `Shay`: possible duplicate relationship keys | fixed (tool), round trip at the end |
-| STOBE 100 | STOBE | m16 | In a save without Shay (Beaks/Avarek) actions and goals target "Shay" (PLAYER_NAME): `GIVE_ITEM@Shay`, FETCH `dest=Shay`; works only via a name mapping; caused a double hand-over (item 43 helper added GIVE_ITEM@Shay next to the LLM's GIVE_ITEM@Beaks) and disables deals/voice payment for other squads (speaker != PLAYER_NAME) | fixer: action targets = speaking player character, "player speaking" = inputtext speaker or PLAYER_NAME; persona (a)/(b) is Shay's call |
+| STOBE 100 | STOBE | m16 | In a save without Shay (Beaks/Avarek) actions and goals target "Shay" (PLAYER_NAME): `GIVE_ITEM@Shay`, FETCH `dest=Shay`; works only via a name mapping; caused a double hand-over (item 43 helper added GIVE_ITEM@Shay next to the LLM's GIVE_ITEM@Beaks) and disables deals/voice payment for other squads (speaker != PLAYER_NAME) | fixer: action targets = speaking player character, "player speaking" = inputtext speaker or PLAYER_NAME; persona Shay chose (b) 2026-10-03: reputation/relationship history follow the speaking character (build + test) |
 | STOBE 101 | STOBE | m16 | 43 live NPC rows (ids 33330-34013, since 2026-10-02) have extended_data `[]` instead of `{}`: every relationship write fails ("path element at position 1 is not an integer") | fixed live (3e50770, writers always store objects) + 41/55 rows repaired (backup table item101_npc_json_backup); rerun rel-enslaved set-relation |
 | STOBE 107 | STOBE | m17 | Full-Base: Beaks' unpaid pay-later deal never BREACHED_PLAYER | fixed live (6146805: deal kind was `social` because the fight check matched only the persona), rerun STOBE 21 Full-Base |
 | STOBE 18 (Full-Base) | STOBE | m17 | forced betrayal did happen (BREACHED_NPC, 2 attacks after paying, persona reputation npc_broken 0->1); FAIL came from the wrapper (`awk $3` on a name with spaces; reputation read for `beaks` instead of the persona row) + no `intentional_betrayal` marker on a pay-now deal | fixed: wrapper + server 6ca4822; rerun |
