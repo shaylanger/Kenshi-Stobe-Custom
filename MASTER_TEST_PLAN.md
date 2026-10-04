@@ -186,13 +186,14 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 94 | STOBE | m16 | reset-npc `--restore` key case | fixed (tool), round trip at the end |
 | STOBE 96, 97 | STOBE | m16 | surrender payment check window; PERSONAL_TRUCE cancels Shay's attack order | fixed, confirm in game |
 | STOBE 99, 112, 113 | STOBE+KFP | m16/m18 | WAITING_APPROVAL for a trader-only ingredient; approved buy sub-goal deadlock | fixed (KenshiFP 6E0A031E + server), m19 Squin 15 |
-| STOBE 100 (b) | STOBE | m16 | reputation/relationship history follow the speaking character | live 0c6ed3e, m19 18/21 Full-Base + home 21; reputation migration optional (Shay) |
+| STOBE 100 (b) | STOBE | m16 | reputation/relationship history follow the speaking character | live 0c6ed3e, m19 18/21 Full-Base + home 21; reputation migration skipped (Shay: test data) |
 | STOBE 101 | STOBE | m16 | `[]` extended_data | fixed live, rerun rel-enslaved set-relation |
 | STOBE 104 | STOBE | m18 | sell-side max -90 % (Shay) | server cef19fe + Stobe CA758842, m19 trading block |
 | STOBE 105 | KFP | m16 | 30k `WORK_GOAL input ratio` lines | fixed (KenshiFP 5719BEA5+), confirm in A8 log |
 | STOBE 106, 107, 18 FB | STOBE | m16-m18 | SPARE term wrong_performer; Full-Base pay-later never breached; forced-betrayal wrapper | fixed live, m19 18/21 Full-Base |
 | STOBE 109, 111 | STOBE | m18 | old COMPLETE fetch in prompt; generic "the shop here" buy -> MOVE_TO only | fixed live, m19 generic Full-Base + Squin 14 |
 | STOBE 110 + lock race | STOBE | m18 | rollback write failed; concurrent rollbacks run unlocked ("rollback lock busy") | 110 fixed live (e605768); lock race: STOBE fixer (to-do 20) |
+| STOBE 118 | STOBE | m19 | "One cat, take it or leave it" at r=-80 paid GIVE_CATS@Vel Harrow@1 before any agreement | fixed live (fda6a7f), rerun trading `prices` (m19b) |
 | KAH to-do 19 | KAH | m18-4080 | `walktime` short stop, `newgame` hang, `pickup` No Faction as owned, kah.py `@log` path with spaces, nested `packput` | harness helper |
 | B 55 | REL | design | R4 retired -> REL combat rules + STOBE plan section E items 1-8 | REL builder building |
 
