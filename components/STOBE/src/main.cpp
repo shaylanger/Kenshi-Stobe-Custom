@@ -12979,7 +12979,7 @@ void attackingYou_hook(Character *npc, Character *attacker, bool so,
       BreakFactionCeasefireForPlayerOrder(attacker, npc,
                                           "player_order_attacking_you");
     if (ShouldSuppressFactionCeasefireAttack(npc, attacker)) {
-      RejectFactionCeasefireAttack(attacker, npc, "attacking_you");
+      QueueFactionCeasefireReject(attacker, npc, "attacking_you");
       return;
     }
   }
@@ -13116,7 +13116,7 @@ void attackTarget_hook(Character *attacker, Character *target) {
     BreakFactionCeasefireForPlayerOrder(attacker, target,
                                         "player_order_attack_target");
     if (ShouldSuppressFactionCeasefireAttack(attacker, target)) {
-      RejectFactionCeasefireAttack(attacker, target, "attack_target");
+      QueueFactionCeasefireReject(attacker, target, "attack_target");
       return;
     }
   }

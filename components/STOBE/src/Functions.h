@@ -46,6 +46,11 @@ bool BreakFactionCeasefireForPlayerOrder(Character *attacker,
                                          const std::string &source);
 void RejectFactionCeasefireAttack(Character *attacker, Character *target,
                                   const std::string &gate);
+// Hooks (attackingYou/attackTarget) may fire inside CombatClassAI::decisionState:
+// they only queue the reject; ExecuteQueuedActions applies it (m31 crash fix).
+void QueueFactionCeasefireReject(Character *attacker, Character *target,
+                                 const std::string &gate);
+void ApplyDeferredFactionCeasefireRejects(GameWorld *world);
 
 // Action execution entry points for work queued from chat/rechat responses.
 void PerformLeaveSquad(Character *npc, GameWorld *world,

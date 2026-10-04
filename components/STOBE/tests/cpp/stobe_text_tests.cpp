@@ -7,6 +7,7 @@
 #include "StobeTiming.h"
 #include <sstream>
 #include "StobeEventPolicy.h"
+#include "StobeDeferredCombat.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -1006,6 +1007,23 @@ int main() {
       small.ShouldDrop(key.str(), 100000 + i * 10, 4000);
     }
     ExpectBool("Debouncer stays bounded", small.Size() <= 16, true);
+  }
+
+  {
+    // m31 crash: hooks queue ceasefire rejects; the pump applies them later.
+    Stobe::DeferredCombatRejectQueue q(2);
+    ExpectBool("Deferred reject queues a pair", q.Push(10, 20, "attacking_you"), true);
+    ExpectBool("Deferred reject dedupes the same pair", q.Push(10, 20, "attack_target"), false);
+    ExpectBool("Deferred reject ignores zero serials", q.Push(0, 20, "attacking_you"), false);
+    ExpectBool("Deferred reject keeps reversed pair", q.Push(20, 10, "attacking_you"), true);
+    ExpectBool("Deferred reject drops when full", q.Push(30, 40, "attacking_you"), false);
+    ExpectUInt32("Deferred reject counts drops", (unsigned int)q.Dropped(), 1);
+    std::vector<Stobe::DeferredCombatReject> taken;
+    q.TakeAll(taken);
+    ExpectUInt32("Deferred reject TakeAll returns all", (unsigned int)taken.size(), 2);
+    ExpectEq("Deferred reject keeps order and gate", taken.empty() ? "" : taken[0].gate, "attacking_you");
+    ExpectUInt32("Deferred reject TakeAll empties queue", (unsigned int)q.Size(), 0);
+    ExpectBool("Deferred reject accepts pair again after drain", q.Push(10, 20, "attacking_you"), true);
   }
 
   if (g_failures != 0) {

@@ -7,6 +7,7 @@
 #include "Context.h"
 #include "Globals.h"
 #include "KenshiBuildingCompat.h"
+#include "StobeDeferredCombat.h"
 #include "Utils.h"
 #include <algorithm>
 #include <cctype>
@@ -3363,6 +3364,74 @@ void RejectFactionCeasefireAttack(Character *attacker, Character *target,
         " attack_events_suppressed=" + ToString((int)attackEventsSuppressed) +
         " enemy_checks_suppressed=" + ToString((int)enemyChecksSuppressed) +
         " " + aiState);
+  }
+}
+
+static SRWLOCK g_deferredCeasefireRejectLock = SRWLOCK_INIT;
+static Stobe::DeferredCombatRejectQueue g_deferredCeasefireRejects;
+
+void QueueFactionCeasefireReject(Character *attacker, Character *target,
+                                 const std::string &gate) {
+  if (!attacker || (uintptr_t)attacker <= 0x1000 || !target ||
+      (uintptr_t)target <= 0x1000) {
+    return;
+  }
+  unsigned int attackerSerial = 0;
+  unsigned int targetSerial = 0;
+  try {
+    attackerSerial = attacker->getHandle().serial;
+    targetSerial = target->getHandle().serial;
+  } catch (...) {
+    return;
+  }
+  AcquireSRWLockExclusive(&g_deferredCeasefireRejectLock);
+  g_deferredCeasefireRejects.Push(attackerSerial, targetSerial, gate);
+  ReleaseSRWLockExclusive(&g_deferredCeasefireRejectLock);
+}
+
+static Character *FindLiveCharacterBySerial(GameWorld *world,
+                                            unsigned int serial) {
+  if (!world || serial == 0) {
+    return nullptr;
+  }
+  try {
+    const ogre_unordered_set<Character *>::type &chars =
+        world->getCharacterUpdateList();
+    for (ogre_unordered_set<Character *>::type::const_iterator it =
+             chars.begin();
+         it != chars.end(); ++it) {
+      Character *candidate = *it;
+      if (candidate && (uintptr_t)candidate > 0x1000 &&
+          candidate->getHandle().serial == serial) {
+        return candidate;
+      }
+    }
+  } catch (...) {
+  }
+  return nullptr;
+}
+
+void ApplyDeferredFactionCeasefireRejects(GameWorld *world) {
+  std::vector<Stobe::DeferredCombatReject> pending;
+  size_t dropped = 0;
+  AcquireSRWLockExclusive(&g_deferredCeasefireRejectLock);
+  g_deferredCeasefireRejects.TakeAll(pending);
+  dropped = g_deferredCeasefireRejects.Dropped();
+  ReleaseSRWLockExclusive(&g_deferredCeasefireRejectLock);
+  static size_t loggedDropped = 0;
+  if (dropped != loggedDropped) {
+    loggedDropped = dropped;
+    Log("CEASEFIRE_TRUCE: deferred reject queue full, dropped_total=" +
+        ToString((int)dropped));
+  }
+  for (size_t i = 0; i < pending.size(); ++i) {
+    Character *attacker =
+        FindLiveCharacterBySerial(world, pending[i].attackerSerial);
+    Character *target = FindLiveCharacterBySerial(world, pending[i].targetSerial);
+    if (!attacker || !target) {
+      continue;
+    }
+    RejectFactionCeasefireAttack(attacker, target, pending[i].gate);
   }
 }
 struct StopFactionAttackResult {
@@ -6939,6 +7008,7 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
   UpdateNarratorTimedPopupLifecycle();
 
   UpdateFactionCeasefireGuards(thisptr);
+  ApplyDeferredFactionCeasefireRejects(thisptr);
   UpdatePersonalTruces(thisptr);
   UpdatePersonalFights(thisptr);
 
