@@ -32,7 +32,8 @@ for v in "${VARIANTS[@]}"; do
   name=${v%%:*}; off=${v#*:}
   for m in $off; do [ -e "$K/$m/RE_Kenshi.json" ] && mv -f "$K/$m/RE_Kenshi.json" "$K/$m/RE_Kenshi.json.memoff"; done
   stobe-say on >/dev/null 2>&1
-  ctl launch -Save "$SAVE" >/dev/null
+  # timeout: the WSL powershell proxy can hang after the launch (pipe held by Kenshi, m23)
+  timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" launch -Save "$SAVE" </dev/null >/dev/null 2>&1
   if ! world 900; then echo "RESULT $name FAIL game did not reach the world" >> "$O/SUMMARY.txt"; ctl stop >/dev/null; restore; continue; fi
   sleep "$SETTLE"; first=$(probe "$name/load0")
   last=$first
