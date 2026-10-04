@@ -44,7 +44,8 @@ reload() {   # reload <save> <player>; 1 = the game didn't come back
   sleep 10; stobe-auto select "$2" >/dev/null 2>&1; return 0
 }
 memline() {  # "<free-commit-GB> <kenshi-private-GB>" (kenshi "-" when not running)
-  powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select-Object -First 1; "{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d ',' | tail -1
+  powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select-Object -First 1; "{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
+,' | tail -1
 }
 relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = auto-home); 1 = it didn't come back
   local s="$1"; case "$s" in home|-) s=auto-home ;; esac
@@ -116,8 +117,10 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
       res=$(while IFS= read -r l; do r="${l#VERDICT }"; row="${r%%:*}"; txt="${r#*: }"
               case "$txt" in PASS*) echo "RESULT $row PASS ${txt#PASS }" ;; *) echo "RESULT $row FAIL $txt" ;; esac
             done <<<"$v")
-    elif s=$(grep -a '^== [0-9]* passed, [0-9]* failed' "$out" | tail -1) && [ -n "$s" ]; then
-      case "$s" in *' 0 failed'*) res="RESULT $name PASS $s" ;; *) res="RESULT $name FAIL $s" ;; esac
+    elif s=$(grep -a -oE '== [0-9]+ passed, [0-9]+ failed.*' "$out") && [ -n "$s" ]; then
+      # m22: also mid-line (run-pg.sh prints "<file> rc=0 == N passed, 0 failed"); any file with failures = FAIL
+      bad=$(grep -v -E '== [0-9]+ passed, 0 failed' <<<"$s" | head -1)
+      if [ -z "$bad" ]; then res="RESULT $name PASS $(tail -1 <<<"$s")"; else res="RESULT $name FAIL $bad"; fi
     else res="RESULT $name FAIL no RESULT/VERDICT line (exit $rc): $(tail -1 "$out" | cut -c1-150)"; fi
   fi
   # Partial row successes never hide a killed/timed-out wrapper.
