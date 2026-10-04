@@ -6079,6 +6079,93 @@ static void SocialTheftHuntCheck(Character *hunter, unsigned int hunterSerial, D
                            ",\"crime\":" + StobeSocial::JsonString(crime));
 }
 
+// M23_THEFT_DIALOG (SR13): the game's own "caught a thief" dialog events (EV_THIEF_CAUGHT_STEALING_FROM_ME = the
+// victim/owner caught him, EV_WITNESS_THIEF_OR_LOCKPICK = a witness saw it). actor = thief, target = speaker.
+static std::map<std::string, DWORD> g_socialTheftDialogSeen;
+static bool SocialIsTheftDialogEvent(int what) {
+  return what == (int)EV_THIEF_CAUGHT_STEALING_FROM_ME || what == (int)EV_WITNESS_THIEF_OR_LOCKPICK;
+}
+static void SocialTheftDialog(Character *speaker, Character *thief, int what, bool delivered, const char *via) {
+  if (!speaker || (uintptr_t)speaker < 0x1000 || !thief || (uintptr_t)thief < 0x1000 || speaker == thief ||
+      !SocialCaptureEnabled())
+    return;
+  try {
+    const char *ev = what == (int)EV_THIEF_CAUGHT_STEALING_FROM_ME ? "EV_THIEF_CAUGHT_STEALING_FROM_ME"
+                                                                   : "EV_WITNESS_THIEF_OR_LOCKPICK";
+    unsigned int ss = ResolveCharacterSerialForEvent(speaker), ts = ResolveCharacterSerialForEvent(thief);
+    std::string key = ToString(ss) + ":" + ToString(ts) + ":" + ToString(what);
+    DWORD now = GetTickCount();
+    std::map<std::string, DWORD>::iterator seen = g_socialTheftDialogSeen.find(key);
+    if (seen != g_socialTheftDialogSeen.end() && now - seen->second < 60000)
+      return;
+    if (g_socialTheftDialogSeen.size() > 512)
+      g_socialTheftDialogSeen.clear();
+    g_socialTheftDialogSeen[key] = now;
+    int stolenCount = -1;
+    std::string crime = "none";
+    try {
+      Inventory *inv = thief->getInventory();
+      if (inv && (uintptr_t)inv > 0x1000) {
+        lektor<Item *> stolen;
+        inv->getAllStolenItems(stolen, false);
+        stolenCount = (int)stolen.size();
+      }
+      if (thief->crimes.isCommittingCrime())
+        crime = BountyManager::crimeToStr(thief->crimes.committingCrime);
+    } catch (...) {
+    }
+    std::map<std::string, int> stolenByKey;
+    std::map<unsigned int, NpcWorldEventState>::const_iterator st = g_npcWorldEventStateBySerial.find(ts);
+    if (st != g_npcWorldEventStateBySerial.end())
+      stolenByKey = st->second.inventory.stolenByKey;
+    Log(std::string("SOCIAL_CAPTURE: theft dialog ev=") + ev + " speaker=" + ResolveCharacterNameSafe(speaker) +
+        " thief=" + ResolveCharacterNameSafe(thief) + " delivered=" + (delivered ? "1" : "0") + " via=" + via +
+        " stolen=" + ToString(stolenCount) + " crime=" + crime);
+    StobeSocial::EntityInfo t = SocialEntityFor(thief), h = SocialEntityFor(speaker);
+    SocialPostStructured("theft_caught", &t, &h,
+                         std::string("\"goal\":") + StobeSocial::JsonString(ev) +
+                             ",\"stolen_items\":" + StobeSocial::JsonCountMap(stolenByKey, 32) +
+                             ",\"thief_stolen_count\":" + ToString(stolenCount) +
+                             ",\"crime\":" + StobeSocial::JsonString(crime));
+  } catch (...) {
+  }
+}
+bool (*dialogueSendEvent_orig)(Dialogue *, Character *, EventTriggerEnum) = nullptr;
+bool (*dialogueSendEventOverride_orig)(Dialogue *, Character *, EventTriggerEnum, bool) = nullptr;
+bool (*charSendDialogEvent_orig)(Character *, Character *, EventTriggerEnum) = nullptr;
+bool (*charSendDialogEventOverride_orig)(Character *, Character *, EventTriggerEnum, bool) = nullptr;
+static Character *SocialDialogueOwner(Dialogue *d) {
+  try {
+    return d && (uintptr_t)d > 0x1000 ? d->getCharacter() : nullptr;
+  } catch (...) {
+    return nullptr;
+  }
+}
+bool dialogueSendEvent_hook(Dialogue *d, Character *who, EventTriggerEnum what) {
+  bool r = dialogueSendEvent_orig(d, who, what);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(SocialDialogueOwner(d), who, (int)what, r, "Dialogue::sendEvent");
+  return r;
+}
+bool dialogueSendEventOverride_hook(Dialogue *d, Character *who, EventTriggerEnum what, bool force) {
+  bool r = dialogueSendEventOverride_orig(d, who, what, force);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(SocialDialogueOwner(d), who, (int)what, r, "Dialogue::sendEventOverride");
+  return r;
+}
+bool charSendDialogEvent_hook(Character *c, Character *who, EventTriggerEnum what) {
+  bool r = charSendDialogEvent_orig(c, who, what);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(c, who, (int)what, r, "Character::sendDialogEvent");
+  return r;
+}
+bool charSendDialogEventOverride_hook(Character *c, Character *who, EventTriggerEnum what, bool force) {
+  bool r = charSendDialogEventOverride_orig(c, who, what, force);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(c, who, (int)what, r, "Character::sendDialogEventOverride");
+  return r;
+}
+
 static void EmitLimbLossEvent(Character *victim, const std::string &limbLabel) {
   CombatAttribution attribution = ResolveCombatAttribution(victim);
   std::string victimName = ResolveCharacterNameSafe(victim);
@@ -15385,6 +15472,31 @@ __declspec(dllexport) void startPlugin() {
       Log("HOOK_DIAG: Character::attackingYou AddHook status=" +
           ToString((int)attackingYouStatus) + " orig=" +
           ToString((unsigned int)(uintptr_t)attackingYou_orig));
+    }
+  }
+
+  // M23_THEFT_DIALOG: the game's theft dialog events (SR13 engine detection signal)
+  {
+    struct TheftDialogHook { const char *sym; void *hook; void **orig; };
+    TheftDialogHook hooks[] = {
+      {"?sendEvent@Dialogue@@QEAA_NPEAVCharacter@@W4EventTriggerEnum@@@Z", (void *)dialogueSendEvent_hook,
+       (void **)&dialogueSendEvent_orig},
+      {"?sendEventOverride@Dialogue@@QEAA_NPEAVCharacter@@W4EventTriggerEnum@@_N@Z",
+       (void *)dialogueSendEventOverride_hook, (void **)&dialogueSendEventOverride_orig},
+      {"?sendDialogEvent@Character@@QEAA_NPEAV1@W4EventTriggerEnum@@@Z", (void *)charSendDialogEvent_hook,
+       (void **)&charSendDialogEvent_orig},
+      {"?sendDialogEventOverride@Character@@QEAA_NPEAV1@W4EventTriggerEnum@@_N@Z",
+       (void *)charSendDialogEventOverride_hook, (void **)&charSendDialogEventOverride_orig},
+    };
+    for (size_t hi = 0; hi < sizeof(hooks) / sizeof(hooks[0]); ++hi) {
+      void *thunk = (void *)GetProcAddress(hLib, hooks[hi].sym);
+      __int64 real = thunk ? KenshiLib::GetRealAddress(thunk) : 0;
+      if (!real) {
+        Log(std::string("HOOK_WARN: theft dialog hook not found: ") + hooks[hi].sym);
+        continue;
+      }
+      KenshiLib::HookStatus st = KenshiLib::AddHook((void *)real, hooks[hi].hook, hooks[hi].orig);
+      Log(std::string("HOOK_DIAG: theft dialog hook ") + hooks[hi].sym + " status=" + ToString((int)st));
     }
   }
 
