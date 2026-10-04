@@ -131,9 +131,12 @@ case "$mode" in
     if [ "${REAL_TRADER:-0}" = 1 ]; then
       # A real shopkeeper (isATrader): harness `trade` buys through the game's trade window object (ShopTrader,
       # harness 7778508+), the path a GUI purchase takes; the hook maps the ShopTrader to her (Stobe E45BFB0E+).
+      # A squad spawn's reply names no members (m19): the new trader is the one `traders` lists only after the spawn.
+      before=$(stobe-auto traders 300 | grep -oE '#[0-9]+/[0-9]+')
       out=$(stobe-auto spawn "Skeleton Traders Animals" "Traders Guild" near ${PLAYER} dist 140)
-      ts=$(stobe-auto traders 300 | grep -oE '#[0-9]+/[0-9]+')
-      V=""; for s in $(echo "$out" | grep -oE '#[0-9]+/[0-9]+'); do echo "$ts" | grep -qxF "$s" && { V=$s; break; }; done
+      V=""; for i in 1 2 3 4 5 6; do sleep 3
+        for s in $(stobe-auto traders 300 | grep -oE '#[0-9]+/[0-9]+'); do echo "$before" | grep -qxF "$s" || { V=$s; break; }; done
+        [ -n "$V" ] && break; done
       [ -n "$V" ] || { verdict "$mode" "SETUP FAIL no isATrader in the spawned squad: $out"; exit 1; }
       stobe-auto teleport "$V" ${PLAYER} dist 12 >/dev/null; stobe-auto setname "$V" "$NAME" >/dev/null
       stobe-say speed 1 >/dev/null; stobe-say say "$NAME" "Hello there, ${NAME%% *}." >/dev/null 2>&1; sleep 15
