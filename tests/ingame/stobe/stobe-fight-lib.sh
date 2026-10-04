@@ -208,3 +208,35 @@ calm_raiders() {
   done
   log "calm_raiders: knocked out $n"
 }
+
+# --- setup checks (Shay 2026-10-04: check setup before long tests; bounded polls, specific SETUP FAIL reason) ---
+# wait_for <secs> <cmd...>: poll every 2 s until cmd succeeds; 1 on timeout (use instead of long fixed sleeps)
+wait_for() { local t=$(( $(date +%s) + $1 )); shift; until "$@" >/dev/null 2>&1; do [ "$(date +%s)" -ge "$t" ] && return 1; sleep 2; done; }
+# setup_fail <row> <reason>: one SETUP FAIL verdict and exit 4 (run-batch counts it as FAIL; repair setup, then rerun)
+setup_fail() { verdict "$1" "SETUP FAIL $2"; exit 4; }
+# preflight <row> [save=<name>] [advancing] [npc ...]: world loaded (and the expected save), OUT dir exists, PLAYER selected,
+# PLAYER/MATE (and each npc) present and not KO/DEAD, game time advancing when asked (unpauses at 1x for the check)
+preflight() {
+  local row="$1" save="" adv=0 st w n h1 h2; shift
+  [ -n "${OUT:-}" ] && { mkdir -p "$OUT" || setup_fail "$row" "cannot create OUT=$OUT"; }
+  st=$(stobe-auto status)
+  case "$st" in *phase=world*) ;; *) setup_fail "$row" "game not in the world: $st" ;; esac
+  for n in "$@"; do case "$n" in save=*) save="${n#save=}" ;; advancing) adv=1 ;; esac; done
+  [ -n "$save" ] && ! echo "$st" | grep -q " save=$save " && setup_fail "$row" "wrong save (want $save): $st"
+  echo "$st" | grep -q " player=${PLAYER}\$" || { stobe-auto select "$PLAYER" >/dev/null; stobe-auto status | grep -q " player=${PLAYER}\$" || setup_fail "$row" "cannot select $PLAYER"; }
+  for n in "$PLAYER" "$MATE" "$@"; do
+    case "$n" in save=*|advancing|'') continue ;; esac
+    w=$(stobe-auto where "$n" 2>&1)
+    echo "$w" | grep -q "#[0-9]" || setup_fail "$row" "no character '$n' ($w)"
+    echo "$w" | grep -q -E " (KO|DEAD)" && setup_fail "$row" "'$n' is KO/DEAD ($w)"
+  done
+  if [ "$adv" = 1 ]; then
+    local sp; sp=$(stobe-auto time | grep -oE "speed=[0-9.]+" | cut -d= -f2)
+    [ "${sp%.*}" = 0 ] && stobe-auto speed 1 >/dev/null
+    h1=$(stobe-auto time | grep -oE "game_hours=[0-9.]+" | cut -d= -f2); sleep 3
+    h2=$(stobe-auto time | grep -oE "game_hours=[0-9.]+" | cut -d= -f2)
+    awk -v a="${h1:-0}" -v b="${h2:-0}" 'BEGIN{exit !(b>a)}' || setup_fail "$row" "game time not advancing ($h1 -> $h2)"
+    [ "${sp%.*}" = 0 ] && stobe-auto speed 0 >/dev/null
+  fi
+  log "preflight $row ok"
+}

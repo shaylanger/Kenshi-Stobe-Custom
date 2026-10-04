@@ -43,6 +43,7 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
 sw_trap
+preflight "${1:-trading}"  # shared setup check (Shay 2026-10-04)
 mode="${1:?mode}"
 SRVLIB=/var/www/html/StobeServer/lib/relationship_trading.php
 NAME="Vel Harrow"

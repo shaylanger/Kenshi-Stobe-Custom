@@ -13,6 +13,7 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
 sw_trap
+preflight 30  # shared setup check (Shay 2026-10-04)
 NPC="Varn Oddie"; CTX=/var/www/html/StobeServer/log/context_sent_to_llm.log
 log "30: setup"
 stobe-auto select ${PLAYER} >/dev/null

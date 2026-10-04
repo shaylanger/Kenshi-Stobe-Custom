@@ -15,6 +15,7 @@
 # reliability: medium (LLM must accept pay-later; trust 60 Fond helps)
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
+preflight 21  # shared setup check (Shay 2026-10-04)
 log "21: setup"
 wait_personal_guard
 stobe-auto select ${PLAYER} >/dev/null

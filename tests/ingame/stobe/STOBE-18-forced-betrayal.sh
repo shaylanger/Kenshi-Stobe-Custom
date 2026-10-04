@@ -16,6 +16,7 @@
 # reliability: medium (the deal acceptance is an LLM decision; the betrayal itself is forced)
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
+preflight 18  # shared setup check (Shay 2026-10-04)
 PSQL() { (cd /tmp && sudo -u postgres psql -d stobe -At -c "$1"); }
 switch_off() { PSQL "DELETE FROM general_settings WHERE id='NEG_TEST_FORCE_BETRAYAL'" >/dev/null; log "test switch NEG_TEST_FORCE_BETRAYAL off"; }
 trap 'switch_off; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT

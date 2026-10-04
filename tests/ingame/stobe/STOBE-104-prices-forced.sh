@@ -8,6 +8,7 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
 sw_trap
+preflight prices-forced  # shared setup check (Shay 2026-10-04)
 NPC="Price Probe"
 stobe-auto select "$PLAYER" >/dev/null
 stobe-say speed 1 >/dev/null

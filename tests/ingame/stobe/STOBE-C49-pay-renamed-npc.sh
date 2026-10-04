@@ -16,6 +16,7 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
 sw_trap
+preflight 49  # shared setup check (Shay 2026-10-04)
 log "49: setup"
 wait_personal_guard
 stobe-auto select ${PLAYER} >/dev/null

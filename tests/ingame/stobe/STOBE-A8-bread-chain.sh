@@ -17,6 +17,7 @@
 #   days); GROW=1 [SPEED=50] runs the real farm chain with a 40-min budget.
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
+preflight A8 advancing  # shared setup check (Shay 2026-10-04)
 trap 'stobe-auto speed 0 >/dev/null 2>&1' EXIT
 ST=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_work_goal.status
 BASE_K=$(grep -a -c "" "$KFP" 2>/dev/null || echo 0)
