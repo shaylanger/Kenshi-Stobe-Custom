@@ -23,7 +23,7 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 | KenshiFP.dll | `6E0A031E` (items to 112) | - |
 | ProfessionGearProgression.dll | `D7A60E49` (Forced + InGameTest during tests) | `266C68F5` (PG 250, 4080) |
 | AutomationHarness.dll | `33087EDE` | `609C459C` (to-do 19 fixes + `hit`) |
-| Server (live) | B 55 `1392155`, items 104, 100 (b), 110 + lock, 118-120 | - |
+| Server (live) | B 55 `1392155`, items 104, 100 (b), 110 + lock, 118-121 | - |
 
 ## 1. Open automated rows
 
@@ -82,6 +82,7 @@ Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 | STOBE 110 + lock race | rollback write failed; unlocked concurrent rollbacks | php_error.log after older-save loads |
 | STOBE 111 | "the shop here" buy | STOBE 14 Squin |
 | STOBE 118, 120 | spoken offer paid before agreement; willingness lines outside deal terms | TRADE prices, WILL favour/gift |
+| STOBE 121 | stale ended-goal block reasons made the NPC refuse a new production order (server e0e8e5c) | A8 home + grow Full-Base (m19c) |
 | KAH to-do 19 | `walktime`, `newgame`, `pickup`, kah.py `@log`, nested `packput` (harness 609C459C) | PG 254, 132/133/240, 120 (4080) |
 
 ## 4. Harness (KAH) limits and open items
