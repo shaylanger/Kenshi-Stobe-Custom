@@ -15,7 +15,9 @@ bash "$D/fullbase-guard.sh" A8 || exit $?  # m24: SETUP FAIL when the squad is n
 . "$D/stobe-fight-lib.sh"
 # m24: a Bele'coz raid reached Beaks ~1 min into the 50x run (m22 batch G ALERT); the in-loop calm (every 10 polls)
 # was too slow at 50x. Like 16-fullbase: knock out raiders near the squad every 15 s while it runs (the alert is unchanged).
-( while sleep 15; do calm_raiders 1500 >/dev/null 2>&1; done ) & CALM=$!
-trap 'kill $CALM 2>/dev/null; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
+# m26: Band of Bones still KO'd Beaks at 50x (m22 J, 16 s after the guard): the shared raid guard sweeps every 10 s
+# (filtered `chars`, 6-game-hour KOs) for the whole row; the A8 loop tolerates raid events (RAID_CALM=1, see there)
+raid_guard_start
+trap 'raid_guard_stop; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 bash "$D/STOBE-A8-bread-chain.sh"
 exit $?

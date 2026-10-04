@@ -73,18 +73,31 @@ for i in $(seq 1 $([ "${GROW:-0}" = 1 ] && echo 600 || echo 150)); do
   fi
   s=$(grep -a "^$id" "$ST" | cut -f3,6,8,9 | tr '\t' '|')
   echo "$s" | grep -q -E "COMPLETE|BLOCKED|CANCEL" && break
-  stobe-auto where ${PLAYER} | grep -q " KO" && { log "${PLAYER} KO: paused"; break; }
+  if stobe-auto where ${PLAYER} | grep -q " KO"; then
+    # m26 RAID_CALM=1: `protect` (fullbase-guard) wakes a knocked-out squad member at once; only a KO that lasts stops
+    if [ "${RAID_CALM:-0}" = 1 ]; then
+      wait_for 20 awake "${PLAYER}" || { stobe-auto speed 0 >/dev/null; setup_fail A8 "${PLAYER} still KO 20 s after a knockout although protected"; }
+    else log "${PLAYER} KO: paused"; break; fi
+  fi
   # goal-watch safety (tools/stobe-goal-watch.sh logic, any squad names): squad attacked or knocked out -> pause
-  # RAID_CALM=1 (Full-Base, squad protected): knock out world raiders every ~40 s and don't stop on their attacks
-  # (m22 batch D: Kral's Chosen raid ended A8 at 50x); a knockout of the squad still stops the test
-  if [ "${RAID_CALM:-0}" = 1 ] && [ $((i % 10)) = 0 ]; then calm_raiders 1500 >/dev/null; fi
-  raid_re='\((Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits)\) ->'
-  [ "${RAID_CALM:-0}" = 1 ] || raid_re='^$x'
-  alert=$(since_stobe | grep -a -E "\[EVENT\] (combat: .* -> (${PLAYER}|${MATE}) |knockout: (${PLAYER}|${MATE}) )" | grep -a -v -E "combat: .*$raid_re" | tail -1)
+  # RAID_CALM=1 (Full-Base, squad protected, raid_guard_start sweeping): combat AND knockouts from world raiders
+  # (RAID_RE factions, lib raid_event) are logged and tolerated (m22 D: Kral's Chosen, m22 J: a Band of Bones KO of
+  # Beaks ended A8 at 50x); anything else against the squad (guards, shop owners, the mate) still stops the test
+  if [ "${RAID_CALM:-0}" = 1 ] && [ $((i % 10)) = 0 ]; then calm_raiders 1500 2>/dev/null; fi
+  alert=""
+  evs=$(since_stobe | grep -a -E "\[EVENT\] (combat: .* -> (${PLAYER}|${MATE}) |knockout: (${PLAYER}|${MATE}) )")
+  while IFS= read -r ev; do
+    [ -n "$ev" ] || continue
+    if [ "${RAID_CALM:-0}" = 1 ] && raid_event "$ev"; then
+      RAID_EVENTS=$(( ${RAID_EVENTS:-0} + 1 )); log "raid event tolerated (squad protected): $(echo "$ev" | cut -c1-170)"; continue
+    fi
+    alert="$ev"
+  done < <(echo "$evs" | tail -n +$(( ${EV_SEEN:-0} + 1 )))
+  EV_SEEN=$(echo "$evs" | grep -c .)
   if [ -n "$alert" ]; then stobe-auto speed 0 >/dev/null; verdict A8 "ALERT at ${SPEED:-20}x: $(echo "$alert" | cut -c1-200)"; exit 3; fi
 done
 stobe-auto speed 0 >/dev/null
-log "end: $s"
+log "end: $s (raid events tolerated: ${RAID_EVENTS:-0})"
 tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i -E "water|power|grow|blocked|complete" | tail -12 | cut -c1-220
 oven_water=$(tail -n +"$BASE_K" "$KFP" | grep -a -F "$id" | grep -a -i "picked.*water.*from .*oven" | grep -a -c .)  # water taken OUT of the oven (loading water into it is the recipe)
 stobe-auto inv ${MATE} | grep -o '"name":"[^"]*Bread[^"]*","count":[0-9]*' | head -3

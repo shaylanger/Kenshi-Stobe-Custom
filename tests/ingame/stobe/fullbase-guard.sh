@@ -12,7 +12,7 @@ for n in "$PLAYER" "$MATE"; do
   echo "$p" | grep -q -i -E "error|unknown|not found|no character" && setup_fail "$row" "protect $n failed: ${p:0:120}"
 done
 log "fullbase-guard: protected $PLAYER + $MATE"
-calm_raiders 400
+calm_raiders 1500  # m26: 400 m missed the raid that hit Beaks 16 s later (m22 J A8)
 awake() { ! stobe-auto where "$1" 2>&1 | grep -q -E " (KO|DEAD)( |$)"; }
 for n in "$PLAYER" "$MATE"; do
   wait_for 20 awake "$n" || setup_fail "$row" "$n still KO/DEAD after protect + calm_raiders ($(stobe-auto where "$n" 2>&1 | cut -c1-120))"
