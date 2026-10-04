@@ -25,6 +25,7 @@
 #   then the player asks. Server truth (stobeserver.log since the start + negotiation_admin deals) decides, never his words.
 # verify per mode (VERDICT lines):
 #   weapon69: "Weapon hand-over blocked" / "would give up her weapon" logged, his weapon still equipped (`inv`).
+#   (both: NEG_TEST_INJECT forces his ACCEPT of 300 cats for GIVE_ITEM {weapon}, so the guard always gets weapon terms)
 #   weapon70: no such block line (whether he agrees is his choice; a recorded deal/handover is fine).
 #   weapon-squad: "<mate>, drop your weapon." -> no block line for <mate> (squad exempt).
 #   weapon-surrender: a raider's own surrender deal with "drop your weapon": no block line for him.
@@ -39,6 +40,8 @@
 #   without terms (INCONCLUSIVE, rerun).
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
+. "$(dirname "$0")/stobe-switch-lib.sh"
+sw_trap
 mode="${1:?mode}"
 SRVLIB=/var/www/html/StobeServer/lib/relationship_trading.php
 NAME="Vel Harrow"
@@ -67,10 +70,15 @@ case "$mode" in
       w=$(weapon_of "$V")
     fi
     [ -n "$w" ] || { verdict "$mode" "SETUP FAIL $NAME has no equipped weapon"; exit 1; }
+    # m22 (weapon69 m22): the model never proposed weapon terms (INCONCLUSIVE). NEG_TEST_INJECT makes him ACCEPT
+    # 300 cats for {weapon} (his equipped weapon), so the guard always sees a weapon hand-over.
+    inject_on "$mode" "$NAME" chat '[{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_CATS","by":"player","to":"npc","amount":300},{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"{weapon}"}],"message":"300? Fine, it is yours."}]'
     out=$(ask "${NAME%% *}, I'll give you 300 cats for your $w. Hand it over.")
+    nf=$(fired "$mode"); sw_off
     blocked=$(echo "$out" | grep -a -c -E "Weapon hand-over blocked|would give up her weapon")
     still=$(stobe-auto inv "$V" | grep -c -F "\"name\":\"$w\",\"count\":1,\"equipped\":true")
-    if [ "$r" = 69 ]; then
+    if [ "$nf" -lt 1 ]; then verdict "$mode" "INCONCLUSIVE NEG_TEST_INJECT never fired"
+    elif [ "$r" = 69 ]; then
       [ "$blocked" -ge 1 ] && [ "$still" -ge 1 ] && verdict "$mode" "PASS blocked at r=69, $w still equipped" \
         || verdict "$mode" "$( [ "$still" -ge 1 ] && echo INCONCLUSIVE no weapon terms proposed, $w kept || echo FAIL weapon left at r=69 )"
     else
