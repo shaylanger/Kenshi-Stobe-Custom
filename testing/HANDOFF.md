@@ -16,6 +16,13 @@
   reading logs: every wrapper/scenario prints one `RESULT <row> PASS|FAIL <key evidence>` line per row (+ log path on
   FAIL); read only `grep ^RESULT` output, open logs only for FAILs. Retrofit the line into each wrapper as you next touch
   it (shared helper in `stobe-fight-lib.sh`). Group rows by save so each launch covers as many as possible; batch fixes.
+- **Batch tooling (Shay, 2026-10-03, items 2/4/5/7 of the token plan):** batches run with
+  `tools/automation/run-batch.sh [--launch <save>] [--stop] <list> <out>` (WSL, detached; list = `name | save |
+  player | mate | timeout | command`, header has examples; `home` and `kah-fullbase` setup built in). Check it once
+  `<out>/DONE` exists: read `<out>/SUMMARY.txt` only. Each FAIL carries `excerpt=` (from `batch-excerpts.sh`); open that,
+  full logs only if needed. Fixer gets a ticket (template in `testing/AGENT_PROMPTS.md`). After every server fix,
+  `stobe-tests` must pass before the next game batch. The runner was tested offline with stubs only; its first real
+  batch is the live check (if it misbehaves, fix the runner, don't fall back to hand-written batch scripts).
 - **Shay's decisions (typed by Shay, 2026-10-03), build + test them:** item 104 sell-side max drop = **90 %** (a hater
   only buys if they rip you off hugely); item 100 = **option (b)**: reputation and relationship history follow the
   squad character who is speaking, not the persona "Shay"; **B 55 decided** (final spec = `STOBE_full_test_plan.md`

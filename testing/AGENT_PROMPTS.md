@@ -17,7 +17,10 @@ checkout in ss-merge), commit in the live tree, `git push origin HEAD:stobe`; sk
 test run reads the logs. Native: edit `/root/STOBE-src` (REL patches are applied there; keep changes minimal),
 build with `C:\KenshiModding\tools\automation\build-stobe.ps1`, report the hash, don't install. KenshiFP:
 `/root/KenshiFP`, `cd re_plugin && bash build.sh`, snapshot into `C:\KenshiModding\components\KenshiFP`, commit/push.
-Task: <bug details with log lines and file paths>. Report: cause, fix, commits, deployed yes/no, tests, hashes.
+After a server fix, run `stobe-tests` (offline) and report its counts; it must pass before the coordinator's next game batch.
+Task (ticket): row <id> | RESULT line: <...> | excerpt: <path from SUMMARY.txt> | suspected: <server / Stobe.dll /
+KenshiFP + file if known> | ruled out: <...>. Start from the excerpt; open full logs only if it doesn't explain the bug.
+Report (short): cause, fix, commits, deployed yes/no, stobe-tests counts, hashes.
 
 ## PG agent
 You are the **PG agent** (Profession Gear Progression mod). The coordinator runs the game and sends you results;

@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# run-batch.sh [--launch <save>] [--stop] <list-file> <out-dir> (WSL): runs a whole game batch from a short list
+# file and leaves ONE file to read at the end, <out-dir>/SUMMARY.txt (RESULT lines, notes, batch start/end).
+# Start it detached and check it when it ends (no polling):
+#   wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'setsid nohup bash /mnt/c/KenshiModding/tools/automation/run-batch.sh --launch auto-home --stop /mnt/c/KenshiTestRuns/m20/list.txt /mnt/c/KenshiTestRuns/m20/out >/dev/null 2>&1 &'
+# Done when <out-dir>/DONE exists. Then: cat SUMMARY.txt; for a FAIL open only its excerpt (excerpt=...).
+#
+# List file: one test per line, "name | save | player | mate | timeout-seconds | command"; # comments, blank lines ok.
+#   save:    a save name (loaded, then `select <player>`); "home" = auto-home + scenarios.sh fresh + select Shay;
+#            kah-fullbase also runs fullbase-guard.sh after the load; "-" = keep the current world (no load)
+#   command: leading VAR=value words are exported (e.g. GROW=1); then a script and its arguments:
+#            *.sh  -> bash <script> (relative paths are under tests/ingame/stobe)
+#            *.txt -> stobe-auto run <file> --csv <out>/<name>.csv (run-as.sh <file> <player> <mate> for other squads)
+#            {OUT} in the command becomes <out-dir>
+#   e.g.  21-fullbase | kah-fullbase | Beaks | Avarek | 1500 | STOBE-21-paylater-breach.sh
+#         C25         | home         | Shay  | Malzin | 1800 | STOBE-C25-renamed-surrender.sh
+#         A8-grow     | kah-fullbase | Beaks | Avarek | 3000 | GROW=1 STOBE-A8-bread-chain-fullbase.sh
+# Every test runs with PLAYER, MATE and RESULT_LOG=<out>/<name>.txt set. Its RESULT lines go to SUMMARY.txt; a
+# test with no RESULT line gets one built from its VERDICT lines, the `== N passed, M failed` line or its exit code.
+# Every FAIL gets an excerpt (batch-excerpts.sh). If the game stops answering, the rest of the batch is skipped.
+set -u
+A=/mnt/c/KenshiModding/tools/automation; T=/mnt/c/KenshiModding/tests/ingame/stobe
+CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'
+LAUNCH=""; STOP=0
+while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; *) break ;; esac; done
+L="${1:?usage: run-batch.sh [--launch <save>] [--stop] <list-file> <out-dir>}"; O="${2:?out-dir}"
+mkdir -p "$O"; rm -f "$O/DONE"
+exec >>"$O/batch.log" 2>&1
+S="$O/SUMMARY.txt"; R="$O/ranges.tsv"
+# same order as LOGS in batch-excerpts.sh
+LOGPATHS="/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log /mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log /mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log /var/www/html/StobeServer/log/stobeserver.log /var/www/html/StobeServer/log/php_error.log"
+STOBELOG=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
+
+say() { echo "$*" | tee -a "$S"; }
+offsets() { local p; for p in $LOGPATHS; do stat -c %s "$p" 2>/dev/null || echo 0; done | paste -sd'\t'; }
+world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
+ctl() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" | tr -d '\r'; }
+reload() {   # reload <save> <player>; 1 = the game didn't come back
+  stobe-auto load "$1" >/dev/null 2>&1; sleep 12
+  world 300 || { sleep 30; world 300 || return 1; }
+  sleep 10; stobe-auto select "$2" >/dev/null 2>&1; return 0
+}
+prepare() {  # prepare <save> <player> <mate>
+  case "$1" in
+    -) return 0 ;;
+    home) reload auto-home Shay || return 1
+          bash "$A/scenarios.sh" fresh >/dev/null 2>&1 </dev/null; stobe-auto select Shay >/dev/null 2>&1 ;;
+    *) reload "$1" "$2" || return 1
+       [ "$1" = kah-fullbase ] && PLAYER="$2" MATE="$3" bash "$T/fullbase-guard.sh" >/dev/null 2>&1 </dev/null ;;
+  esac
+  return 0
+}
+
+: > "$S"; : > "$R"
+say "BATCH START $(date '+%F %H:%M') list=$L"
+if [ -n "$LAUNCH" ]; then
+  stobe-say on >/dev/null 2>&1
+  ctl launch -Save "$LAUNCH" | tail -3
+  world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; touch "$O/DONE"; exit 1; }
+fi
+pass=0; fail=0; dead=0
+while IFS= read -r line || [ -n "$line" ]; do
+  line="${line%%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
+  IFS='|' read -r name save player mate to cmd <<<"$line"
+  t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
+  name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
+  cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
+  if [ "$dead" = 1 ]; then say "RESULT $name FAIL skipped: game not responding"; fail=$((fail + 1)); continue; fi
+  echo "$(date +%H:%M) $name: prepare $save"
+  if ! prepare "$save" "$player" "$mate"; then
+    say "RESULT $name FAIL game not responding after loading $save (rest of the batch skipped)"
+    fail=$((fail + 1)); dead=1; continue
+  fi
+  # split the command: VAR=value words, then the script and its arguments
+  read -r -a words <<<"$cmd"; envs=(); i=0
+  while [ $i -lt ${#words[@]} ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do envs+=("${words[$i]}"); i=$((i + 1)); done
+  script="${words[$i]:-}"; args=("${words[@]:$((i + 1))}")
+  case "$script" in /*) ;; *) [ -e "$T/$script" ] && script="$T/$script" ;; esac
+  case "$script" in
+    *.sh) run=(bash "$script" "${args[@]}") ;;
+    *.txt) if [ "$player" = Shay ] && [ "$mate" = Malzin ]; then run=(stobe-auto run "$script" --csv "$O/$name.csv" "${args[@]}")
+           else run=(bash "$T/run-as.sh" "$script" "$player" "$mate" --csv "$O/$name.csv" "${args[@]}"); fi ;;
+    *) run=("$script" "${args[@]}") ;;
+  esac
+  before=$(offsets); sl=$(stat -c %s "$STOBELOG" 2>/dev/null || echo 0)
+  echo "$(date +%H:%M) $name: run ${run[*]}"
+  env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null
+  rc=$?
+  stobe-auto speed 0 >/dev/null 2>&1
+  printf '%s\t%s\t' "$name" "$save" >>"$R"; paste <(echo "$before" | tr '\t' '\n') <(offsets | tr '\t' '\n') | paste -sd'\t' >>"$R"
+  # result lines: the test's own RESULT lines, else built from VERDICT / scenario summary / exit code
+  res=$(grep -a '^RESULT ' "$out")
+  if [ -z "$res" ]; then
+    if [ $rc = 124 ]; then res="RESULT $name FAIL timed out after ${to}s"
+    elif v=$(grep -a '^VERDICT' "$out" | tail -6) && [ -n "$v" ]; then
+      res=$(while IFS= read -r l; do r="${l#VERDICT }"; row="${r%%:*}"; txt="${r#*: }"
+              case "$txt" in PASS*) echo "RESULT $row PASS ${txt#PASS }" ;; *) echo "RESULT $row FAIL $txt" ;; esac
+            done <<<"$v")
+    elif s=$(grep -a '^== [0-9]* passed, [0-9]* failed' "$out" | tail -1) && [ -n "$s" ]; then
+      case "$s" in *' 0 failed'*) res="RESULT $name PASS $s" ;; *) res="RESULT $name FAIL $s" ;; esac
+    else res="RESULT $name FAIL no RESULT/VERDICT line (exit $rc): $(tail -1 "$out" | cut -c1-150)"; fi
+  fi
+  res=$(cut -c1-300 <<<"$res")
+  if grep -q ' FAIL' <<<"$res"; then
+    ex=$(bash "$A/batch-excerpts.sh" "$O" "$name" 2>/dev/null)
+    res=$(sed "/ FAIL/{/ log=/!s|\$| out=$out|;s|\$|${ex:+ excerpt=$ex}|}" <<<"$res")
+  fi
+  echo "$res" | tee -a "$S"
+  pass=$((pass + $(grep -c ' PASS' <<<"$res"))); fail=$((fail + $(grep -c ' FAIL' <<<"$res")))
+  # combat/knockout/death toward the squad while the test ran: a note (fight tests cause it on purpose)
+  hit=$(tail -c +"$((sl + 1))" "$STOBELOG" 2>/dev/null | grep -a -E "\[EVENT\] (combat[^]]*-> ($player|$mate) \(|knockout: ($player|$mate) |death: ($player|$mate) )" | head -2 | cut -c1-160 | paste -sd';')
+  [ -n "$hit" ] && say "NOTE $name: combat/KO toward the squad: $hit"
+  world 120 || { sleep 30; world 120 || { say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1; }; }
+done <"$L"
+[ "$STOP" = 1 ] && ctl stop | tail -2
+say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail"
+touch "$O/DONE"
