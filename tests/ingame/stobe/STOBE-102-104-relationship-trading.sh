@@ -29,7 +29,8 @@
 #   weapon70: no such block line (whether he agrees is his choice; a recorded deal/handover is fine).
 #   weapon-squad: "<mate>, drop your weapon." -> no block line for <mate> (squad exempt).
 #   weapon-surrender: a raider's own surrender deal with "drop your weapon": no block line for him.
-#   paylater: r=-1 -> "refused by relationship: pay-later"; r=0 -> no refusal line for pay-later.
+#   paylater: NEG_TEST_INJECT gives the same pay-later ACCEPT at both asks; r=-1 -> "refused by relationship: pay-later",
+#     no deal; r=0 -> a deal with the player's GIVE_CATS when=after_npc.
 #   favour: r=29 -> "refused by relationship: free favours"; r=30 -> none.
 #   gift: r=55 -> "free items/Cats"; r=56 -> none.
 #   notrade: r=-80 -> "refused by relationship: no trade"; r=-79 -> none.
@@ -107,6 +108,10 @@ case "$mode" in
       gift) lo=55; hi=56; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, could you just give me one of your bread? I've nothing to pay with."; rule="free items" ;;
       notrade) lo=-80; hi=-79; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, sell me one of your bread. I'll pay you 200 cats for it, more than it's worth."; rule="no trade" ;;
     esac
+    # m22 batch D: at r=0 the model itself countered "pay first" (451 cats), so the allowed side never showed. Both asks
+    # get the same injected ACCEPT of the pay-later deal; the server's relationship gate alone decides (r=-1 refuse,
+    # r=0 record a deal with the player's payment when=after_npc).
+    [ "$mode" = paylater ] && inject_on paylater "$NAME" chat '[{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"Bread","quantity":1},{"kind":"GIVE_CATS","by":"player","to":"npc","amount":20,"when":"after_npc"}],"message":"Fine, bread now, twenty cats tomorrow."},{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"Bread","quantity":1},{"kind":"GIVE_CATS","by":"player","to":"npc","amount":20,"when":"after_npc"}],"message":"Fine, bread now, twenty cats tomorrow."}]'
     set_r "$lo"; t_lo=$(date +%s); out_lo=$(ask "$line")
     set_r "$hi"; t_hi=$(date +%s); out_hi=$(ask "$line")
     ref_lo=$(echo "$out_lo" | grep -a -c "refused by relationship: $rule"); ref_hi=$(echo "$out_hi" | grep -a -c "refused by relationship: $rule")
@@ -132,7 +137,10 @@ case "$mode" in
       mv_lo=$(( $(pl_deal "$t_lo" "$t_hi") + $(gave "$out_lo") )); mv_hi=$(( $(pl_deal "$t_hi" $((now+5))) + $(gave "$out_hi") ))
     fi
     log "r=$lo: guard=$ref_lo moved/agreed=$mv_lo | r=$hi: guard=$ref_hi moved/agreed=$mv_hi"
-    if [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -ge 1 ]; then verdict "$mode" "PASS refused at r=$lo (guard lines $ref_lo), went ahead at r=$hi"
+    inj=$(fired paylater)
+    if [ "$mode" = paylater ] && [ "$inj" -lt 2 ] && [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -eq 0 ]; then verdict "$mode" "INCONCLUSIVE injected ACCEPT fired $inj/2 times"
+    elif [ "$mode" = paylater ] && [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -eq 0 ]; then verdict "$mode" "FAIL injected pay-later ACCEPT recorded no deal at r=$hi (guard lines r=$lo $ref_lo, r=$hi $ref_hi)"
+    elif [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -ge 1 ]; then verdict "$mode" "PASS refused at r=$lo (guard lines $ref_lo), went ahead at r=$hi"
     elif [ "$mv_lo" -ge 1 ]; then verdict "$mode" "FAIL agreed/gave at r=$lo ($rule needs more)"
     else verdict "$mode" "INCONCLUSIVE refused at r=$lo, but the model refused at r=$hi too (allowed side not shown)"; fi ;;
   prices)
