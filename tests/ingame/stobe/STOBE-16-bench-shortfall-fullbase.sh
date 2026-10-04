@@ -15,6 +15,7 @@ set -u
 bash "$(dirname "$0")/fullbase-guard.sh"
 D="$(cd "$(dirname "$0")" && pwd)"
 PLAYER="${PLAYER:-Beaks}"; MATE="${MATE:-Avarek}"; OUT="${OUT:-/tmp}"
+mkdir -p "$OUT"  # m22: OUT=<batch>/bench16 did not exist (FileNotFoundError on the scenario copy)
 b=$(stobe-auto benches 200 | tr '|' '\n')  # m18: same radius as the scenario checks (a bench 300-400 m away made it skip the build)
 extra=()
 # m16 next: Full-Base has no Crossbow Crafting Bench (in this load order only the crossbow/arrow and the robotics
