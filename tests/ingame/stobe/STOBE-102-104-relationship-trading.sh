@@ -88,7 +88,7 @@ case "$mode" in
     make_vel
     case "$mode" in
       paylater) lo=-1; hi=0; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, give me one of your bread now and I'll pay you 20 cats tomorrow."; rule="pay-later" ;;
-      favour) lo=29; hi=30; line="${NAME%% *}, would you bandage my arm for me, for free? I'm hurt."; rule="free favours" ;;
+      favour) lo=29; hi=30; stobe-auto give "$V" "Basic First Aid Kit" 1 >/dev/null; line="${NAME%% *}, would you bandage my arm for me, for free? I'm hurt."; rule="free favours" ;;
       gift) lo=55; hi=56; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, could you just give me one of your bread? I've nothing to pay with."; rule="free items" ;;
       notrade) lo=-80; hi=-79; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, sell me one of your bread. I'll pay you 200 cats for it, more than it's worth."; rule="no trade" ;;
     esac
