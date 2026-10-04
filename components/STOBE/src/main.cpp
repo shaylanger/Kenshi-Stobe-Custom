@@ -12932,14 +12932,10 @@ Item *buyItem_hook(Inventory *inv, Item *itemToBuy, RootObject *sendingTo) {
 
   // Item 104: relationship shop prices. The value hooks price this purchase for the
   // (trader, squad member) pair; at r <= -80 the trader refuses (nothing moves).
-  Character *shopBuyerChar = buyerObj ? ResolveCharacterBySerialForInventoryEvent(
-                                            ResolveRootObjectSerialForEvent(buyerObj))
-                                      : nullptr;
-  Character *shopSellerChar = sellerObj ? ResolveCharacterBySerialForInventoryEvent(
-                                              ResolveRootObjectSerialForEvent(sellerObj))
-                                        : nullptr;
-  if (shopBuyerChar && (RootObject *)shopBuyerChar != buyerObj) shopBuyerChar = nullptr;
-  if (shopSellerChar && (RootObject *)shopSellerChar != sellerObj) shopSellerChar = nullptr;
+  // A shop's trade window (and the harness `trade`) sells through a ShopTrader built around the
+  // shopkeeper: TradingCharacter maps it to her.
+  Character *shopBuyerChar = Stobe::ShopPrice::TradingCharacter(buyerObj);
+  Character *shopSellerChar = Stobe::ShopPrice::TradingCharacter(sellerObj);
   if (Stobe::ShopPrice::BeginBuy(shopBuyerChar, shopSellerChar)) {
     Stobe::ShopPrice::EndBuy();
     return nullptr;

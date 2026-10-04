@@ -15,6 +15,7 @@
 #include <windows.h>
 
 class Character;
+class RootObject;
 
 namespace Stobe {
 namespace ShopPrice {
@@ -28,6 +29,11 @@ void Install(HMODULE kenshiLib);
 // don't call the original, return null. Always call EndBuy afterwards.
 bool BeginBuy(Character *buyer, Character *seller);
 void EndBuy();
+
+// The character behind one side of Inventory::buyItem: the object itself if it is a
+// Character, the shopkeeper if it is a ShopTrader (the game's trade window wraps her goods
+// and shop storage in one), else null.
+Character *TradingCharacter(RootObject *obj);
 
 // Drops all cached r values (load/new game).
 void ClearCache();

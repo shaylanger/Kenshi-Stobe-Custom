@@ -9,6 +9,7 @@
 #include <kenshi/Character.h>
 #include <kenshi/Faction.h>
 #include <kenshi/Item.h>
+#include <kenshi/ShopTrader.h>
 #include <kenshi/gui/InventoryGUI.h>
 #include <kenshi/util/hand.h>
 
@@ -428,6 +429,19 @@ bool BeginBuy(Character *buyer, Character *seller) {
     return true;
   }
   return false;
+}
+
+Character *TradingCharacter(RootObject *obj) {
+  if (!obj || (uintptr_t)obj < 0x1000) return 0;
+  try {
+    if (Character *c = dynamic_cast<Character *>(obj)) return c;
+    if (ShopTrader *s = dynamic_cast<ShopTrader *>(obj)) {
+      Character *c = s->trader;
+      return (c && (uintptr_t)c >= 0x1000) ? c : 0;
+    }
+  } catch (...) {
+  }
+  return 0;
 }
 
 void EndBuy() {

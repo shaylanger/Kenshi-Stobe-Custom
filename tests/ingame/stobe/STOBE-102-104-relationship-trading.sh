@@ -17,6 +17,9 @@
 #     no loop profits (sold_for <= paid; equal only for items the game itself buys and sells at one price).
 #   shop-block: r=-80: purchase and sale both refused ("SHOP_PRICE: blocked", harness "buyItem refused"; the harness
 #     then sells by hand at vanilla: that is its own fallback, not the game path); r=-79: buyItem goes through.
+#   REAL_TRADER=1: the shopkeeper is a spawned isATrader (Skeleton Traders), so purchases go through the
+#     ShopTrader (trade window) object like a GUI purchase (reply "from <trader> trade window"); needs Stobe
+#     E45BFB0E+ and harness 7778508+. Default (Vel, not a trader) uses the harness's plain-inventory path.
 # How: a neutral Drifter renamed "Vel Harrow" (12 m away, so the squad leaves him alone) gets a server profile
 #   (greeting), then his relationship to the player is set with scenarios.sh trust (the live map the server reads),
 #   then the player asks. Server truth (stobeserver.log since the start + negotiation_admin deals) decides, never his words.
@@ -120,7 +123,19 @@ case "$mode" in
     done ;;
   shop-prices|shop-floor|shop-block)
     ITEM="${ITEM:-Hashish}"
-    make_vel
+    if [ "${REAL_TRADER:-0}" = 1 ]; then
+      # A real shopkeeper (isATrader): harness `trade` buys through the game's trade window object (ShopTrader,
+      # harness 7778508+), the path a GUI purchase takes; the hook maps the ShopTrader to her (Stobe E45BFB0E+).
+      out=$(stobe-auto spawn "Skeleton Traders Animals" "Traders Guild" near ${PLAYER} dist 140)
+      ts=$(stobe-auto traders 300 | grep -oE '#[0-9]+/[0-9]+')
+      V=""; for s in $(echo "$out" | grep -oE '#[0-9]+/[0-9]+'); do echo "$ts" | grep -qxF "$s" && { V=$s; break; }; done
+      [ -n "$V" ] || { verdict "$mode" "SETUP FAIL no isATrader in the spawned squad: $out"; exit 1; }
+      stobe-auto teleport "$V" ${PLAYER} dist 12 >/dev/null; stobe-auto setname "$V" "$NAME" >/dev/null
+      stobe-say speed 1 >/dev/null; stobe-say say "$NAME" "Hello there, ${NAME%% *}." >/dev/null 2>&1; sleep 15
+      log "real trader $V renamed $NAME"
+    else
+      make_vel
+    fi
     stobe-auto money ${PLAYER} 60000 >/dev/null; stobe-auto money "$V" 60000 >/dev/null
     shop_r() {  # set r, make the hook refetch it, wait for the SHOP_PRICE r line
       set_r "$1"
