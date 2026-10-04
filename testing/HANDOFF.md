@@ -55,8 +55,9 @@
    `STOBE-C*.sh` + `STOBE-20-refuse-after-handover.sh` + `STOBE-A11-A12-heal-deal.sh a12` (auto-home, `scenarios.sh fresh`
    first), `C:\KenshiTestRuns\scenarios\kah-2-3-msg-trade.txt` (kah-trader copy), PG launch 5 balance files + pg-56 (PG 89)
    on Full-Base (`RUN_ORDER.md`), PG 151-152 (pg-15 on/off, steps in PG RUN_ORDER), KAH 5, REL SR18/19 Full-Base.
-3. PG fit finding (pg-14): +25 % Labouring gear beats the whole skill range (x1.26): design principle 4 -> Shay decision
-   (open: ask Shay together with any other decision; keep working meanwhile).
+3. PG fit finding (pg-14): +25 % Labouring gear beats the whole skill range (x1.26): design principle 4 -> **Shay
+   decided (2026-10-03): wait.** No change to Labouring (or any profession) until the balance data for every profession
+   is in; then present the whole picture to Shay (option discussed: scale the gear bonus by skill).
 
 ## To-do (all of it, in parallel where possible)
 1. **PG balance driver, all rows 161-199** (PG agent): extend `Kenshi-Profession-Gear-Progression/tools/balance_driver.py`
@@ -97,9 +98,9 @@
 - `stobe-fight-lib.sh` is sourced by every wrapper: `bash -n` it after any edit (run via WSL with `MSYS_NO_PATHCONV=1`).
 - Long WSL batches: start detached (`setsid nohup bash … &` inside WSL); Bash `run_in_background` dies at 10 min.
 - Don't run Windows `python3` in Git Bash for repo scripts that need WSL paths; use WSL python3.
-- **Needs Shay (blocked for agents):** item 100 (b) reputation migration (moves today's 2 Beaks BREACHED_NPC counts off
-  the "shay" row, backup first): `tr -d '\r' < /mnt/c/KenshiModding/pending-fixes/item100b_reputation_migration.sh | bash`
-  in WSL. Optional; nothing is lost if it stays unrun.
+- **Item 100 (b) reputation migration: skipped (Shay, 2026-10-03: test data).** The 2 Beaks BREACHED_NPC counts on
+  the "shay" row stay; `npc_broken` is only recorded, never read by the server. Don't run
+  `pending-fixes/item100b_reputation_migration.sh`.
 - **REL builder (finished, m18):** server cb3bc44 + 2fbd947 live (theft_caught SR13/14, SR09 witness, switches
   SOCIAL_TEST_FORCE_FIRST_STRIKE / SOCIAL_TEST_FORCE_JOIN_ATTEMPT); harness e8b4688 (`drop ... owned`, KAH 22b; worktree
   `C:\KenshiModding\kah-rel-wt`, remove after building main). Native patch `pending-fixes/rel_theft_caught_native.py`
