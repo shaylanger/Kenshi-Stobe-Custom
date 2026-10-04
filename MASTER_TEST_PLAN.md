@@ -42,7 +42,7 @@ Status: `todo` / `PASS <run>` / `FAIL <run> -> bug` / `blocked: <why>`.
 | STOBE 41 | No false "you have my katana" claim | re-equip katana, gear exchange, "What have I taken from you?" | PASS m1 |
 | STOBE 43 | Two-part hand-over gives both items | give bread + dried meat, "give me all your bread and all your dried meat" | PASS m1 (after fix 67) |
 | STOBE 54 | Relationship talk by tier | `scenarios.sh trust` -80 / 60 / 96, prompt `<how_you_feel_about_them>` + words | PASS m3 (after 77) |
-| STOBE 55 | R4 fights count (Shay 2026-10-03: R4 retired, replaced by the REL combat rules + additions in STOBE plan section E: build + test) | `scenarios.sh duel`, server log `a fight counts (R4)` | PASS m1 (fires once per pair; direction = event attacker) |
+| STOBE 55 | B 55 fight rules (R4 retired; REL fights mode, STOBE plan section E items 1-8) | `rel-b55.sh` blocks mode/squad/wild/spar/close/treat/fade/chat/bleed/deal | built live (server 1392155), 63 unit checks; in game: m19c after the Stobe rebuild |
 | STOBE 56 | Relationship types from the list only | chats, check entries | PASS m16 (all types on the list, new entry for Tovin Brask) |
 | STOBE 57 | No entries for generic names | talk/fight an unnamed Hungry Bandit | PASS m16 (after 70: no generic-name keys in the DB after the m16 bandit fights) |
 | STOBE 58 | `stobe-reset-npc` save + `--restore` | WSL only, no game action needed | PASS m16 (saved once, restore works; key case -> 94) |
@@ -195,7 +195,7 @@ Owner fixes; the coordinator reruns. Fixed + confirmed bugs leave this table (li
 | STOBE 110 + lock race | STOBE | m18 | rollback write failed; concurrent rollbacks run unlocked ("rollback lock busy") | 110 fixed live (e605768); lock race: STOBE fixer (to-do 20) |
 | STOBE 118 | STOBE | m19 | "One cat, take it or leave it" at r=-80 paid GIVE_CATS@Vel Harrow@1 before any agreement | fixed live (fda6a7f), rerun trading `prices` (m19b) |
 | KAH to-do 19 | KAH | m18-4080 | `walktime` short stop, `newgame` hang, `pickup` No Faction as owned, kah.py `@log` path with spaces, nested `packput` | harness helper |
-| B 55 | REL | design | R4 retired -> REL combat rules + STOBE plan section E items 1-8 | REL builder building |
+| B 55 | REL | design | R4 retired -> REL combat rules + STOBE plan section E items 1-8 | built live 1392155; in-game m19c; harness `hit` for the accident row |
 
 ## 5. Harness (KAH) known limits / open items
 
