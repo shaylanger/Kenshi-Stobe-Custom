@@ -77,7 +77,9 @@ speed 0
 benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
 benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
 speed 10
-@until 300 benches 200 ~ Crossbow Crafting Bench [^|]*queue=0\b
+# m26 (16-fullbase): one Junkbow takes ~290 s real at speed 10 for Avarek, so 2 units + hauls need ~650 s;
+# 300 s timed out with unit 2 at 14% (goal still progressing). Same check, honest window.
+@until 900 benches 200 ~ Crossbow Crafting Bench [^|]*queue=0b
 speed 0
 benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
 @log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=2\b
