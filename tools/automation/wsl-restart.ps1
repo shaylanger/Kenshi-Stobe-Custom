@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Stop'
 $distro = 'DwemerAI4Skyrim3'
 if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { Write-Output 'WSL-RESTART REFUSED: Kenshi is running'; exit 2 }
-$busy = & wsl.exe -d $distro -u root --cd / -- bash -c 'pgrep -f run-batch.sh >/dev/null && echo busy'
+$busy = & wsl.exe -d $distro -u root --cd / -- bash -c 'pgrep -f [r]un-batch.sh >/dev/null && echo busy'
 if ($busy -match 'busy') { Write-Output 'WSL-RESTART REFUSED: run-batch.sh is running'; exit 2 }
 & wsl.exe --shutdown
 Start-Sleep -Seconds 8
