@@ -26,13 +26,19 @@ r=$(KEEP_TEMPLATE_NAME=1 spawn_raiders 1 | head -1); [ -n "$r" ] || { verdict 49
 old=$(name_of "$r"); serial=$(echo "$r" | sed -E 's/#([0-9]+)\/.*/\1/')
 case "$old" in *"["*) put_away "$r"; verdict 49 "SETUP FAIL raider already named: $old"; exit 1;; esac
 engage "$r" || log "warning: no combat_start seen"
-inject_on 49 "$old" chat '[{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_CATS","by":"player","to":"npc","amount":200},{"kind":"STOP_ATTACK","by":"npc","target":"player"}],"message":"Fine. 200 cats and I stop."}]'
+# m22 (C49 m22): Stobe's batch identity auto-naming renamed him "Zeth 2 [Dust Bandit Bowman]" right as the wrapper
+# spoke the template name. Let the name settle (two equal reads 3 s apart) and talk to whatever he is called now;
+# the injection is keyed to the template name, which also matches "<auto name> [<template>]".
+tmpl="$old"; prev=""; cur=""
+for i in $(seq 1 8); do sleep 3; cur=$(name_of "$r"); [ -n "$cur" ] && [ "$cur" = "$prev" ] && break; prev="$cur"; done
+[ -n "$cur" ] && old="$cur"; [ "$old" != "$tmpl" ] && log "raider auto-named '$tmpl' -> '$old'"
+inject_on 49 "$tmpl" chat '[{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_CATS","by":"player","to":"npc","amount":200},{"kind":"STOP_ATTACK","by":"npc","target":"player"}],"message":"Fine. 200 cats and I stop."}]'
 say_to "$r" "$old" "Stop fighting! I'll pay you 200 cats right now."
 d=$(wait_accept "$old" 60)
 [ -n "$d" ] || { put_away "$r"; verdict 49 "INCONCLUSIVE no accepted deal: $(deal_line "$old")"; exit 2; }
 id=$(echo "$d" | awk '{print $1}')
 dserial=$(PSQL "SELECT npc_serial FROM stobe_social_contract WHERE contract_id='$id'")
-new="Weth [$old]"
+new="Weth [$tmpl]"
 stobe-auto setname "$r" "$new" >/dev/null
 log "deal $id (npc_serial=$dserial, his serial=$serial); renamed '$old' -> '$new'"
 m0=$(money_of ${PLAYER})
