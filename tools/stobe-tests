@@ -28,7 +28,7 @@ for t in $(ls tests/*.php | grep -v '/social_' | grep -E "$PATTERN" | sort -t/ -
 done
 # REL social suites: their own disposable DB (stobe_social_phase1_test), run like
 # tests/run_social_phase1.py does (php -r require, no argv), in its order.
-SOCIAL="social_relationship_unit social_relationship_integration social_playthrough_regression social_concurrency_regression social_combat_regression social_unconscious_regression social_care_regression social_property_regression"
+SOCIAL="social_relationship_unit social_relationship_integration social_playthrough_regression social_concurrency_regression social_combat_regression social_unconscious_regression social_care_regression social_property_regression social_fights_regression"
 for name in $SOCIAL; do
   [ -f "tests/$name.php" ] || continue
   echo "tests/$name.php" | grep -qE "$PATTERN" || continue
