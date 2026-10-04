@@ -6,7 +6,8 @@
 TREE=${1:-/var/www/html/StobeServer}
 PATTERN=${2:-.}
 cd "$TREE" || exit 2
-export STOBE_DB_NAME=stobe_test STOBE_NEG_TEST_NO_SIGNAL=1 \
+# STOBE_NO_BACKGROUND_PROCESSOR: no suite may start the background processor (STOBE 124).
+export STOBE_DB_NAME=stobe_test STOBE_NEG_TEST_NO_SIGNAL=1 STOBE_NO_BACKGROUND_PROCESSOR=1 \
   STOBE_NEG_STOBE_LOG=/tmp/negtest/stobe.log STOBE_NEG_KFP_LOG=/tmp/negtest/kfp.log \
   STOBE_NEG_ACTION_REQUEST=/tmp/negtest/stobe_action.request
 mkdir -p /tmp/negtest
