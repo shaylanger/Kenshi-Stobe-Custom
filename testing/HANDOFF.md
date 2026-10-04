@@ -83,3 +83,9 @@
 - **Needs Shay (blocked for agents):** item 100 (b) reputation migration (moves today's 2 Beaks BREACHED_NPC counts off
   the "shay" row, backup first): `tr -d '\r' < /mnt/c/KenshiModding/pending-fixes/item100b_reputation_migration.sh | bash`
   in WSL. Optional; nothing is lost if it stays unrun.
+- **REL builder (finished, m18):** server cb3bc44 + 2fbd947 live (theft_caught SR13/14, SR09 witness, switches
+  SOCIAL_TEST_FORCE_FIRST_STRIKE / SOCIAL_TEST_FORCE_JOIN_ATTEMPT); harness e8b4688 (`drop ... owned`, KAH 22b; worktree
+  `C:\KenshiModding\kah-rel-wt`, remove after building main). Native patch `pending-fixes/rel_theft_caught_native.py`
+  (apply to /root/STOBE-src, build; private build 018496B9 OK). Run after installing: `bash
+  /var/www/html/StobeServer/tests/social_relationship/ingame/rel-m18.sh <outdir>` (auto-home, Capture=1).
+  **B 55 not built:** continue from local `handoff/rel-b55-fights-build.md` + draft `pending-fixes/b55_social_fights.php`.
