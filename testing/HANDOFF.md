@@ -81,7 +81,7 @@
 15. **KAH 2** (no vanilla game message seen by `messages`) and **KAH 3** (shop-barrel trade names "Old Wooden Barrel",
     trader's cats unchanged): fix + verify (harness).
 16. **REL SR18/19 on Full-Base** (bed/cage rescue, plan 1f).
-19. **Harness bugs from the 4080 (m18 run log): fix + retest the rows:** `walktime` times out when the character
+19. FIXED (harness 8BF347BF, m19; 4080 reruns by PG agent) **Harness bugs from the 4080 (m18 run log): fix + retest the rows:** `walktime` times out when the character
     stops 4-9 m short (PG 254 FAIL); `newgame` hangs in loading, Kenshi exits ~9 min later (PG 132/133/240 FAIL);
     `pickup` treats No Faction drops as owned (Commands.cpp ~1301); kah.py `@log` path with spaces; `packput` into a
     nested pack (PG 120 nested case).
