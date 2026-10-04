@@ -6125,7 +6125,10 @@ static void EmitRecoveredEvent(Character *victim, const InventoryEventSnapshot *
                ResolveCharacterSerialForEvent(victim), 0);
   if (SocialCaptureEnabled()) {
     StobeSocial::EntityInfo target = SocialEntityFor(victim);
-    SocialPostStructured("recovered", nullptr, &target, SocialInventoryFacts(inventory, money));
+    // B 55: vitals on waking (server: bleeding out / near death on waking = critical_harm in the attacker's fight budget).
+    std::string facts = SocialInventoryFacts(inventory, money);
+    facts += (facts.empty() ? "" : ",") + SocialVitalsFacts("", victim);
+    SocialPostStructured("recovered", nullptr, &target, facts);
   }
 }
 
