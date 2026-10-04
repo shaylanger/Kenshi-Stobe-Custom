@@ -2,6 +2,7 @@
 Coordinator handoff: temp folder coordinator-handoff-m29.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
 - **5090:** batch O running (m22/list-o.txt, out m22/out-o: home-warm, REL-enslaved, A8-grow-fb, SR18-19-fb), runner = coordinator, game lock = coordinator. Installed Stobe 80E8816A, harness 9DB0D416; StobeCustom.ini Capture=1 (set back to 0 + REL mode off after the batch). Graphics mods off (`gfx-mods.sh off --hdtex`).
 - **Fixes awaiting batch O:** A8 'cannot reach Campfire' (server 90a92e8), Enslaved first-seen seed race (Stobe d8cb37f), SR18/SR19 squad-member capture (Stobe 06e032d; batch N SR19 actor=#0 too), harness `cage` crash (4b53da0: free cage, KO conscious NPC first).
+- **5090 after its own work (Shay, 2026-10-04):** don't stop; use it for PG testing too, alongside the 4080; the coordinator decides the split.
 - **4080:** runner = operator subagent m29 (owner rig4080), resuming the PG validation gate from pgop/HANDOFF-4080-operator-m28.md, progress in pgop/HANDOFF-4080-operator-m29.md; then pg-89 full, pg-55, pg-51.
 - **Memory:** mem-ab gfx A/B done (MEMORY_BASELINE_2026-10-04.md): HD textures off saves 2.6 GB, Dust/ReShade 0.6 GB.
 

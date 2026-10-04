@@ -35,9 +35,8 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | N: no bread goal ('do not know how to reach Campfire') -> server 90a92e8 (station/base building = here); confirm in batch O |
-| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | N: p7-03 FAIL = seed race; Stobe d8cb37f (in 80E8816A, installed) + test poll c01292f; confirm in batch O |
-| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | N: SR18 35/2 capture missing, SR19 actor=#0 + crash after `cage` -> Stobe 06e032d squad sweep + harness 4b53da0; confirm in batch O |
+| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | O: p7-03/04/06 PASS (seed race fixed); p7-05 FAIL step 18 no new SOCIAL_CAPTURE after freeing (ran during the background-processor stall, STOBE 124) -> fixer, rerun p7-05 |
+| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | O: SR18 35/2 effect Rel Cobb -> Avarek outside [8,35] (during the processor stall, STOBE 124); SR19 setup FAIL (bed 38.5 m > 30) -> fixer, rerun |
 | PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | PG validation gate first (CLAUDE.md): 4080 operator m29 running gate per profession, then pg-89 full, pg-55 (pinned dummies d6bb99b), pg-51 (Sickle @any 57e0381). Provisional (before gate): crafting/science valid; engineering gear no effect (product?); medic flat (kit-driven); athletics/swimming capped; stealth + lockpicking measurement broken; assassination/swimming gear only with FormulaScaling (Shay decision); thievery works; farming crop-state dominated; perception unrun. See INGAME_STATUS.md |
 
 ## 2. Requires Shay
