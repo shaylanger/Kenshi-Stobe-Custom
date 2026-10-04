@@ -9196,19 +9196,20 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
         EmitSlaveryEvent(npc, false);
       }
     }
+    // SR18: carry events for the player actor too (playerCharacters[0] carrying someone to a bed/cage
+    // must set lastCarrierSerial, else `placed` has actor #0).
+    if (!state.carrying && carryingNow) {
+      EmitCarryPickupEvent(npc, carryingTargetSerialNow, carryingTargetNameNow);
+    } else if (state.carrying && !carryingNow) {
+      EmitCarryDropEvent(npc, state.carryingTargetSerial,
+                         state.carryingTargetName);
+    } else if (state.carrying && carryingNow &&
+               state.carryingTargetSerial != carryingTargetSerialNow) {
+      EmitCarryDropEvent(npc, state.carryingTargetSerial,
+                         state.carryingTargetName);
+      EmitCarryPickupEvent(npc, carryingTargetSerialNow, carryingTargetNameNow);
+    }
     if (!isPlayerActor) {
-      if (!state.carrying && carryingNow) {
-        EmitCarryPickupEvent(npc, carryingTargetSerialNow, carryingTargetNameNow);
-      } else if (state.carrying && !carryingNow) {
-        EmitCarryDropEvent(npc, state.carryingTargetSerial,
-                           state.carryingTargetName);
-      } else if (state.carrying && carryingNow &&
-                 state.carryingTargetSerial != carryingTargetSerialNow) {
-        EmitCarryDropEvent(npc, state.carryingTargetSerial,
-                           state.carryingTargetName);
-        EmitCarryPickupEvent(npc, carryingTargetSerialNow, carryingTargetNameNow);
-      }
-
       bool predationTaskNow = IsAnyPredationTask(currentTaskNow);
       bool predationTaskPrevious = IsAnyPredationTask((TaskType)state.currentTask);
       bool predationTargetChanged = false;
