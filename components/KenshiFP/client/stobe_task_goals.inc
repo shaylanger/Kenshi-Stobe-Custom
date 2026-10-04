@@ -1020,9 +1020,11 @@ static void *stg_find_trader(void *gw,void *actor,const char *requested,char *na
     /* Item 75: a named trader is looked up among loaded characters within
      * STG_TRADER_NAMED_RADIUS (she walks there); unnamed = the nearest one close by. */
     int named=requested&&*requested;
-    void *chars[256]={0};int n=stg_scan_chars_r(gw,actor,chars,256,named?STG_TRADER_NAMED_RADIUS:STG_SCAN_RADIUS);
     Vec3 ap={0,0,0};if(!char_position(actor,&ap))return NULL;
     void *best=NULL;float bestd=1.0e30f;char bestn[128]={0};int bestq=0;
+    /* Item 111: unnamed ("the shop here") retries out to the named radius when none is close by. */
+    for(int pass=0;pass<(named?1:2)&&!best;pass++){
+    void *chars[256]={0};int n=stg_scan_chars_r(gw,actor,chars,256,(named||pass)?STG_TRADER_NAMED_RADIUS:STG_SCAN_RADIUS);
     for(int i=0;i<n;i++){
         void *c=chars[i];if(!char_valid(c)||c==actor||!g_stg_is_trader(c))continue;
         char cn[128]={0};stg_char_name(c,cn,sizeof(cn));
@@ -1040,6 +1042,7 @@ static void *stg_find_trader(void *gw,void *actor,const char *requested,char *na
         Vec3 cp={0,0,0};if(!char_position(c,&cp))continue;
         float d=wgp_distance(ap,cp);
         if(q>bestq||d<bestd){best=c;bestd=d;bestq=q;strncpy(bestn,cn,sizeof(bestn)-1);}
+    }
     }
     if(best&&name&&namesz){strncpy(name,bestn,namesz-1);name[namesz-1]='\0';}
     if(best&&dist_out)*dist_out=bestd;
