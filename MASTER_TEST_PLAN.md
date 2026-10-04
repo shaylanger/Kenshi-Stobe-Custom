@@ -35,8 +35,8 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | O: p7-03/04/06 PASS; p7-05 FAIL = setup (caged slave, not shackled) -> 619d7eb picks a lockpickable slave; rerun p7-05 + p7-06 in batch P |
-| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | O: SR18 = Stobe skipped carry events of playerCharacters[0] (Avarek) -> 26b6133 (5B148D87, install); SR19 setup = Avarek KO by raiders -> guard + heal 9362d65; rerun in batch P |
+| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | P: p7-03, p7-06 PASS (deleted); p7-04 FAIL (no EVENT_SCAN/SOCIAL_CAPTURE after liberation), p7-05 FAIL (no SOCIAL_CAPTURE; Rel Nima handle #706909184/5 gone) -> fixer m31, retest batch Q |
+| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | P: SR18 PASS, SR19 PASS (rows done); SR19 cage/uncage sub-check steps 50-57 = setup (no Hungry Bandit within 60 m) -> fixer m31, batch Q |
 | PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + 5090, Full-Base | BLOCKER (m29, proven on the 4080): harness `protect on` / `health 100` set the wounds factor to 0.25 (stat mod=0.25), so every balance point from batches 17-20 + m29 is INVALID. Harness fix + live check by the 5090 PG operator, then the gate: 4080 = 52, 53, 54, 80-84, 90 + pg-51; 5090 = 85-89, 92 (+fs) + pg-89 full + pg-55. Worker now Beaks, Avarek pinned (PG 86ad346). Older provisional per-profession notes are void until regated |
 
 ## 2. Requires Shay

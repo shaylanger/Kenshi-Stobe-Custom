@@ -1,7 +1,6 @@
-# Current checkpoint: m22 running (m29 coordinator, 2026-10-04 ~14:20)
-Coordinator handoff: temp folder coordinator-handoff-m29.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
-- **5090:** batch O running (m22/list-o.txt, out m22/out-o: home-warm, REL-enslaved, A8-grow-fb, SR18-19-fb), runner = coordinator, game lock = coordinator. Installed Stobe 80E8816A, harness 9DB0D416; StobeCustom.ini Capture=1 (set back to 0 + REL mode off after the batch). Graphics mods off (`gfx-mods.sh off --hdtex`).
-- **Fixes awaiting batch O:** A8 'cannot reach Campfire' (server 90a92e8), Enslaved first-seen seed race (Stobe d8cb37f), SR18/SR19 squad-member capture (Stobe 06e032d; batch N SR19 actor=#0 too), harness `cage` crash (4b53da0: free cage, KO conscious NPC first).
+# Current checkpoint: m31 (2026-10-04 evening, after RAM upgrade to 48 GB)
+Coordinator handoff: temp folder coordinator-handoff-m31.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
+- **5090:** PG operator subagent runs the 5090 PG queue (pgop HANDOFF-5090-operator-m32.md) and the 4080 queue; coordinator borrows the 5090 game for REL batch Q (list-q, after fixer m31: p7-04, p7-05, SR19 cage sub-check).
 - **5090 after its own work (Shay, 2026-10-04):** don't stop; use it for PG testing too, alongside the 4080; the coordinator decides the split.
 - **PG (m29):** BLOCKER: harness protect/health -> wounds factor 0.25, all PG balance data invalid. 5090 runner = 5090 PG operator subagent (game lock owner 5090-pg-operator): harness fix + live check, then gate 85-89/92(+fs), pg-89, pg-55; progress pgop/HANDOFF-5090-operator-m29.md. 4080: previous operator out of context (handoff pgop/HANDOFF-4080-operator-m29.md); a new one gets gate 52-54/80-84/90 + pg-51 once the harness fix is on the rig.
 - **Memory:** mem-ab gfx A/B done (MEMORY_BASELINE_2026-10-04.md): HD textures off saves 2.6 GB, Dust/ReShade 0.6 GB.
