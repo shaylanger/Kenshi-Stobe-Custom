@@ -212,6 +212,8 @@ calm_raiders() {
 # --- setup checks (Shay 2026-10-04: check setup before long tests; bounded polls, specific SETUP FAIL reason) ---
 # wait_for <secs> <cmd...>: poll every 2 s until cmd succeeds; 1 on timeout (use instead of long fixed sleeps)
 wait_for() { local t=$(( $(date +%s) + $1 )); shift; until "$@" >/dev/null 2>&1; do [ "$(date +%s)" -ge "$t" ] && return 1; sleep 2; done; }
+# selected_is <name>: the selected character (harness @selected) is <name>
+selected_is() { stobe-auto where @selected 2>/dev/null | grep -q "^$1 #"; }
 # setup_fail <row> <reason>: one SETUP FAIL verdict and exit 4 (run-batch counts it as FAIL; repair setup, then rerun)
 setup_fail() { verdict "$1" "SETUP FAIL $2"; exit 4; }
 # stobe_ready [secs] [base_line] / stobe_log_lines: wait for the Stobe NPC event sweep after a load (stobe-ready.sh)
@@ -225,7 +227,8 @@ preflight() {
   case "$st" in *phase=world*) ;; *) setup_fail "$row" "game not in the world: $st" ;; esac
   for n in "$@"; do case "$n" in save=*) save="${n#save=}" ;; advancing) adv=1 ;; esac; done
   [ -n "$save" ] && ! echo "$st" | grep -q " save=$save " && setup_fail "$row" "wrong save (want $save): $st"
-  echo "$st" | grep -q " player=${PLAYER}\$" || { stobe-auto select "$PLAYER" >/dev/null; stobe-auto status | grep -q " player=${PLAYER}\$" || setup_fail "$row" "cannot select $PLAYER"; }
+  # m23: status player= is the first squad member, not the selection (Full-Base lists Avarek first): check @selected
+  selected_is "$PLAYER" || { stobe-auto select "$PLAYER" >/dev/null; wait_for 10 selected_is "$PLAYER" || setup_fail "$row" "cannot select $PLAYER (selected: $(stobe-auto where @selected 2>&1 | cut -c1-60))"; }
   for n in "$PLAYER" "$MATE" "$@"; do
     case "$n" in save=*|advancing|'') continue ;; esac
     w=$(stobe-auto where "$n" 2>&1)
