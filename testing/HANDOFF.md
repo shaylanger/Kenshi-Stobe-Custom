@@ -2,7 +2,7 @@
 Coordinator handoff: temp folder coordinator-handoff-m28.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
 - **5090:** batch N done (4 FAIL, see run log), Kenshi closed, Capture=0, REL mode off, game lock released. Next on Shay's go: batch O (m22/list-o.txt), install Stobe 0A670197 first.
 - **Open bugs:** A8 'cannot reach Campfire' after accepting (no goal); SR18 carry-to-bed SOCIAL_CAPTURE missing; harness `cage` crash (rva 792089, intermittent).
-- **4080:** batch20 (pgbal-4080/batch20.log) left to finish, then Kenshi stopped + rig4080 lock released. Operator log: temp pgop/HANDOFF-4080-operator-m27.md.
+- **4080:** batch20 stopped (Shay) with pg-89 unrun; 4080 Kenshi closed, PG Normal + Rules Normal, rig lock free. Next: rerun pg-89, pg-55 (pinned dummies), pg-51. Operator log: temp pgop/HANDOFF-4080-operator-m27.md.
 - Memory A/B (mem-ab.sh) runs with Kenshi closed between D and E.
 
 ## Test efficiency rules (Shay, 2026-10-04; full text in CLAUDE.md "Test efficiency")
