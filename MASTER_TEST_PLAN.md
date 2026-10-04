@@ -19,26 +19,26 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
-| Stobe.dll | `137286B7` (rename guard 9af0971 + game theft-dialog hook a99f498) | - |
-| KenshiFP.dll | `2092A07C` (feed carried inputs first da02382, missing-dep need ba0fb83) | - |
+| Stobe.dll | `80E8816A` (REL seed race d8cb37f + squad-member world-event sweep 06e032d, installed m29 for batch O) | - |
+| KenshiFP.dll | `0349AA2A` (missing-input log ring 9e9a9e0) | - |
 | ProfessionGearProgression.dll | `D7A60E49` (paused: Normal config + Normal rules) | `266C68F5` (PG 250, 4080) |
-| AutomationHarness.dll | `4B835FCC` (`chars` filter a8005d3, `face` d91fe88, `senses`, `fill optional`) | 4080: D3B372F9 (operator m26) |
-| Server (live) | `stobe` 9f6fc55 (rollback keeps squad 04fc777, SR09 face 9f6fc55) | - |
+| AutomationHarness.dll | `9DB0D416` (`cage` free cage + KO first 4b53da0, `stat` mod= fd9a84e, `@any` cd21aa8; installed m29) | 4080: same build, operator m29 installs |
+| Server (live) | `stobe` 90a92e8 (A8 workstation destination; rel-enslaved poll c01292f) | - |
 
 ## 1. Open automated rows
 
-Resumed m22 (Shay 2026-10-03). Batch D/E reconciled (E: 57/14, `C:\KenshiTestRuns\m22\out-e\SUMMARY.txt`; passes deleted, evidence in `archive/test-run-2026-10-03-m22.md`). Running: batch F (`m22\list-f.txt`: rel-m18 + rel-b55 retests).
+m22 resumed (m29, 2026-10-04): batches D-N reconciled (passes deleted, evidence in `archive/test-run-2026-10-03-m22.md`). Running: batch O (`m22\list-o.txt`, out `m22\out-o`: Enslaved, A8 grow, SR18/19 Full-Base) with the builds above. Automated runs use graphics mods off (`gfx-mods.sh off --hdtex`).
 
-Memory baseline (Shay 2026-10-04): first-commit DLLs vs current, Kenshi +171 MB at load 0 and less growth per load (118 vs 134 MB/load); no bug. Report `MEMORY_BASELINE_2026-10-04.md`.
+Memory baseline (Shay 2026-10-04): first-commit DLLs vs current, Kenshi +171 MB at load 0 and less growth per load (118 vs 134 MB/load); no bug. Graphics A/B: Dust/ReShade off -0.6 GB, HD detail textures off another -2.6 GB (9.3 GB private at load 0). Report `MEMORY_BASELINE_2026-10-04.md`.
 
 Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete the row).
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | N: no bread goal ('do not know how to reach Campfire' after accepting) -> fix, rerun |
-| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | N: p7-03 FAIL = seed race; Stobe d8cb37f (0A670197) built, install + rerun in batch O |
-| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | N: SR18 35/2 capture missing; SR19 crash after harness `cage` (intermittent) -> fix, rerun |
-| PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | pg-09 soak 24/0 PASS D (5090); 4080 operator m23 rerunning pg54/84/81/80/52/53/82/87-fs/89 + home list; see INGAME_STATUS.md |
+| STOBE A8 | bread chain grow on Full-Base | Full-Base | N: no bread goal ('do not know how to reach Campfire') -> server 90a92e8 (station/base building = here); confirm in batch O |
+| REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | N: p7-03 FAIL = seed race; Stobe d8cb37f (in 80E8816A, installed) + test poll c01292f; confirm in batch O |
+| REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | N: SR18 35/2 capture missing, SR19 actor=#0 + crash after `cage` -> Stobe 06e032d squad sweep + harness 4b53da0; confirm in batch O |
+| PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | PG validation gate first (CLAUDE.md): 4080 operator m29 running gate per profession, then pg-89 full, pg-55 (pinned dummies d6bb99b), pg-51 (Sickle @any 57e0381). Provisional (before gate): crafting/science valid; engineering gear no effect (product?); medic flat (kit-driven); athletics/swimming capped; stealth + lockpicking measurement broken; assassination/swimming gear only with FormulaScaling (Shay decision); thievery works; farming crop-state dominated; perception unrun. See INGAME_STATUS.md |
 
 ## 2. Requires Shay
 

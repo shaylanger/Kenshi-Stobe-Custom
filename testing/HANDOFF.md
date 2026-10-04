@@ -1,9 +1,9 @@
-# Current checkpoint: m22 STOPPED (2026-10-04 ~13:30, Shay: stop after batch and report)
-Coordinator handoff: temp folder coordinator-handoff-m28.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
-- **5090:** batch N done (4 FAIL, see run log), Kenshi closed, Capture=0, REL mode off, game lock released. Next on Shay's go: batch O (m22/list-o.txt), install Stobe 0A670197 first.
-- **Open bugs:** A8 'cannot reach Campfire' after accepting (no goal); SR18 carry-to-bed SOCIAL_CAPTURE missing; harness `cage` crash (rva 792089, intermittent).
-- **4080:** batch20 stopped (Shay) with pg-89 unrun; 4080 Kenshi closed, PG Normal + Rules Normal, rig lock free. Next: rerun pg-89, pg-55 (pinned dummies), pg-51. Operator log: temp pgop/HANDOFF-4080-operator-m27.md.
-- Memory A/B (mem-ab.sh) runs with Kenshi closed between D and E.
+# Current checkpoint: m22 running (m29 coordinator, 2026-10-04 ~14:20)
+Coordinator handoff: temp folder coordinator-handoff-m29.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
+- **5090:** batch O running (m22/list-o.txt, out m22/out-o: home-warm, REL-enslaved, A8-grow-fb, SR18-19-fb), runner = coordinator, game lock = coordinator. Installed Stobe 80E8816A, harness 9DB0D416; StobeCustom.ini Capture=1 (set back to 0 + REL mode off after the batch). Graphics mods off (`gfx-mods.sh off --hdtex`).
+- **Fixes awaiting batch O:** A8 'cannot reach Campfire' (server 90a92e8), Enslaved first-seen seed race (Stobe d8cb37f), SR18/SR19 squad-member capture (Stobe 06e032d; batch N SR19 actor=#0 too), harness `cage` crash (4b53da0: free cage, KO conscious NPC first).
+- **4080:** runner = operator subagent m29 (owner rig4080), resuming the PG validation gate from pgop/HANDOFF-4080-operator-m28.md, progress in pgop/HANDOFF-4080-operator-m29.md; then pg-89 full, pg-55, pg-51.
+- **Memory:** mem-ab gfx A/B done (MEMORY_BASELINE_2026-10-04.md): HD textures off saves 2.6 GB, Dust/ReShade 0.6 GB.
 
 ## Test efficiency rules (Shay, 2026-10-04; full text in CLAUDE.md "Test efficiency")
 - Mechanical rows = deterministic: inject the model reply (NEG_TEST_INJECT ...) before the logic under test; prove the injection fired + real game/server change; switches restored on exit. Live-model rows = a small separate batch (prompt -> intended reply).
@@ -14,7 +14,7 @@ Coordinator handoff: temp folder coordinator-handoff-m28.md (m26 has Shay decisi
 ## New standing rules (Shay, 2026-10-04; full text in CLAUDE.md "PG validation gate" and "RAM budget")
 - PG: 3-point validation gate (low skill/no gear, high skill/no gear, low skill/gear) before any full matrix; mechanical pass and balance acceptance tracked separately; one gate line per profession; one runner per machine, recorded here.
 - RAM: parakeet STT off unless a test needs voice; PocketTTS off unless a batch tests audio (after checking replies still work without it); WSL cap 8 GB; graphics-only mods (Dust, ReShade, HD textures if worth it) off for automated runs, with a restore command for Shay.
-- **To do at the next stop (not done yet when this was written):** apply both rules (see CLAUDE.md), then per-profession gate results below this line.
+- Both rules applied (m29, commits 2574235, cbc7148, 558154d). Per-profession gate results go below this line when the operator reports.
 ---
 # Handoff: multi-feature test loop (coordinator) — state 2026-10-03 ~17:55 (run m18 running)
 

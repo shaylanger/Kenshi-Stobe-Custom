@@ -31,7 +31,7 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (KenshiFP: carried goods + nearest stocking trader) |
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
-| 121 | stale ended goals made the NPC refuse new production orders | fixed e0e8e5c; A8home PASS m21 (2/2 Bread); Full-Base grow pending |
+| 121 | stale ended goals made the NPC refuse new production orders | fixed e0e8e5c; A8home PASS m21 (2/2 Bread); Full-Base grow: N FAIL 'cannot reach Campfire' -> server 90a92e8, confirm batch O |
 
 ## E. Design questions and features
 
