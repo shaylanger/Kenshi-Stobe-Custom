@@ -62,14 +62,25 @@ row(){ local id=$1 b v=${3%NAME}; b=$(basename "$2" .txt)
   grep -qE "^FAIL +[0-9]+ @until 20 teleport" "$OUT/$b.out" \
     && { res "$id FAIL setup: KO'd $n could not be put next to $MATE (teleport moved=0) log=$OUT/$b.out"; return; }
   sleep 20
-  if insp --pair-effects --incidents 10 --check-shadow --expect-effect "$n" "$MATE" "$4" "$5" > "$OUT/$b.inspect.txt" 2>&1
-  then res "$id PASS effect $n -> $MATE in [$4,$5] ($sum)"
-  else res "$id FAIL effect $n -> $MATE not in [$4,$5] ($sum) log=$OUT/$b.inspect.txt"; fi
+  # m31 (batch P: SR19 said PASS with 5 failed steps and never checked the second bandit): PASS needs the effect,
+  #   "0 failed" in the scenario summary and, if a 7th arg names it, no effect from that outsider (unknown captor)
+  if ! insp --pair-effects --incidents 10 --check-shadow --expect-effect "$n" "$MATE" "$4" "$5" > "$OUT/$b.inspect.txt" 2>&1
+  then res "$id FAIL effect $n -> $MATE not in [$4,$5] ($sum) log=$OUT/$b.inspect.txt"; return; fi
+  echo "$sum" | grep -qE ', 0 failed' || {
+    res "$id FAIL scenario steps failed ($sum; first: $(grep -m1 '^FAIL' "$OUT/$b.out" | cut -c1-100)) log=$OUT/$b.out"; return; }
+  local none=""
+  if [ -n "${7:-}" ]; then
+    local u; u=$(grep -o "$7=.*" "$OUT/$b.out" | head -1 | sed "s/$7=//")
+    [ -z "$u" ] && { res "$id FAIL scenario gave no $7 ($sum) log=$OUT/$b.out"; return; }
+    insp --expect-none "$u" "$MATE" > "$OUT/$b.none.txt" 2>&1       || { res "$id FAIL $u (caged, unknown captor) has an effect -> $MATE ($sum) log=$OUT/$b.none.txt"; return; }
+    none=", none $u -> $MATE"
+  fi
+  res "$id PASS effect $n -> $MATE in [$4,$5]$none ($sum)"
 }
 BED="buildings 200 Bed near $MATE ~ \| Bed dist=([1-9]|0\.[1-9])"
 CAGE="buildings 400 Cage near $MATE ~ Cage[A-Za-z ]* dist="
 case "${1:-all}" in
   p4-02) row SR18 REL-p4-02-carry-to-bed.txt CNAME 8 35 "$BED";;
-  p4-03) row SR19 REL-p4-03-carry-to-cage.txt KNAME -40 -20 "$CAGE";;
-  all)   row SR18 REL-p4-02-carry-to-bed.txt CNAME 8 35 "$BED"; row SR19 REL-p4-03-carry-to-cage.txt KNAME -40 -20 "$CAGE";;
+  p4-03) row SR19 REL-p4-03-carry-to-cage.txt KNAME -40 -20 "$CAGE" UNAME;;
+  all)   row SR18 REL-p4-02-carry-to-bed.txt CNAME 8 35 "$BED"; row SR19 REL-p4-03-carry-to-cage.txt KNAME -40 -20 "$CAGE" UNAME;;
 esac
