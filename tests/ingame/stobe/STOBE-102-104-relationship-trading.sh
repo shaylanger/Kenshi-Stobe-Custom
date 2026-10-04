@@ -166,7 +166,7 @@ import sys, math
 vb, vs, r = int(sys.argv[1]), int(sys.argv[2]), max(-100, min(100, int(sys.argv[3])))
 def shape(m, e): return m * (abs(r) / 100.0) ** e
 bf = 1 - shape(0.30, 1.1) if r > 0 else (1 + shape(10.0, 2.32) if r < 0 else 1.0)
-sf = 1 + shape(0.10, 1.1) if r > 0 else (max(0.0, 1 - shape(0.75, 2.32)) if r < 0 else 1.0)
+sf = 1 + shape(0.10, 1.1) if r > 0 else (max(0.0, 1 - shape(0.90, 2.32)) if r < 0 else 1.0)
 rnd = lambda v: 0 if v <= 0 else min(100000000, int(math.floor(v + 0.5)))
 if r == 0 or (vb <= 0 and vs <= 0): print(vb, vs); sys.exit()
 b0, s0 = max(vb, 0), max(vs, 0)

@@ -8,7 +8,7 @@ namespace StobeShopPricing {
 Constants::Constants()
     : buyDiscountMax(0.30), buyDiscountExp(1.1), buyIncreaseMax(10.0),
       buyIncreaseExp(2.32), sellBonusMax(0.10), sellBonusExp(1.1),
-      sellCutMax(0.75), sellCutExp(2.32), blockAtOrBelow(-80) {}
+      sellCutMax(0.90), sellCutExp(2.32), blockAtOrBelow(-80) {}
 
 int ClampR(int r) { return r < -100 ? -100 : (r > 100 ? 100 : r); }
 

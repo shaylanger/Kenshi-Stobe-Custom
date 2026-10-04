@@ -17,7 +17,7 @@ struct Constants {
   double buyDiscountMax, buyDiscountExp;  // r>0, player buys: -30% at +100, shape 1.1
   double buyIncreaseMax, buyIncreaseExp;  // r<0, player buys: +1000% at -100, shape 2.32
   double sellBonusMax, sellBonusExp;      // r>0, player sells: +10% at +100, shape 1.1
-  double sellCutMax, sellCutExp;          // r<0, player sells: -75% at -100, shape 2.32
+  double sellCutMax, sellCutExp;          // r<0, player sells: -90% at -100, shape 2.32 (item 104)
   int blockAtOrBelow;                     // no trade at r <= -80
   Constants();
 };

@@ -20,7 +20,7 @@ squad member who is trading, from -100 to 100. No history means r = 0, which is 
 ```json
 {"ok":true,"player":"Shay",
  "constants":{"buy_discount_max":0.3,"buy_discount_exp":1.1,"buy_increase_max":10,"buy_increase_exp":2.32,
-              "sell_bonus_max":0.1,"sell_bonus_exp":1.1,"sell_cut_max":0.75,"sell_cut_exp":2.32,
+              "sell_bonus_max":0.1,"sell_bonus_exp":1.1,"sell_cut_max":0.9,"sell_cut_exp":2.32,
               "trader_buy_ratio":0.5},
  "entries":[{"query":"Apothecary Abia","npc":"Apothecary Abia","found":true,"r":9,
              "buy_factor":0.9788,"sell_factor":1.0071}]}
@@ -36,7 +36,7 @@ squad member who is trading, from -100 to 100. No history means r = 0, which is 
   - r < 0: `1 + buy_increase_max * (|r|/100)^buy_increase_exp`, which is +4.8% at -10, +200% at -50, +1000% at -100.
 - **Player sells to the trader:** price = vanilla buy price × `sell_factor`.
   - r > 0: `1 + sell_bonus_max * (r/100)^sell_bonus_exp`, up to +10% at +100.
-  - r < 0: `1 - sell_cut_max * (|r|/100)^sell_cut_exp`, down to -75% at -100. This max is **proposed; Shay to confirm**.
+  - r < 0: `1 - sell_cut_max * (|r|/100)^sell_cut_exp`, down to -90% at -100 (Shay, 2026-10-03).
 - **Anti-exploit floor (the hook must apply it):** for each item, the adjusted buy price is never lower than either:
   1. what that trader pays the player for the same item right now (vanilla buy price × `sell_factor`), plus 1;
   2. the trader's vanilla buy price for it.

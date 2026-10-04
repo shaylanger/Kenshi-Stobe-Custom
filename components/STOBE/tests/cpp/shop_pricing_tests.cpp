@@ -32,8 +32,8 @@ int main() {
     check(near(BuyFactor(-50, c), 3.0, 0.01), "-50 -> +200%");
     check(near(BuyFactor(-100, c), 11.0, 1e-9), "-100 -> +1000%");
     check(near(SellFactor(100, c), 1.10, 1e-9), "sell +100 -> +10%");
-    check(near(SellFactor(-100, c), 0.25, 1e-9), "sell -100 -> -75%");
-    check(SellFactor(-50, c) < 1.0 && SellFactor(-50, c) > 0.25, "sell -50 between");
+    check(near(SellFactor(-100, c), 0.10, 1e-9), "sell -100 -> -90%");
+    check(SellFactor(-50, c) < 1.0 && SellFactor(-50, c) > 0.10, "sell -50 between");
     check(BuyFactor(150, c) == BuyFactor(100, c) && BuyFactor(-150, c) == BuyFactor(-100, c), "r clamped");
     for (int r = -100; r < 100; ++r) {
       check(BuyFactor(r + 1, c) <= BuyFactor(r, c), "buy factor falls as r rises at " + S(r));
@@ -56,7 +56,7 @@ int main() {
     check(p.buy == 3003, "r=-50 weapon buy x3.003, got " + S(p.buy));
     check(p.sell < 500, "r=-50 weapon sell below vanilla");
     p = Adjust(1000, 500, -100, c);
-    check(p.buy == 11000 && p.sell == 125, "r=-100 weapon, got " + S(p.buy) + "/" + S(p.sell));
+    check(p.buy == 11000 && p.sell == 50, "r=-100 weapon, got " + S(p.buy) + "/" + S(p.sell));
 
     // floor: thin margin (vanilla buy 1.1x sell): the discount stops at sell + 1 and at the vanilla sell value
     p = Adjust(110, 100, 100, c);
@@ -106,7 +106,7 @@ int main() {
     const std::string live =
         "{\"ok\":true,\"player\":\"Shay\",\"constants\":{\"buy_discount_max\":0.3,\"buy_discount_exp\":1.1,"
         "\"buy_increase_max\":10,\"buy_increase_exp\":2.32,\"sell_bonus_max\":0.1,\"sell_bonus_exp\":1.1,"
-        "\"sell_cut_max\":0.75,\"sell_cut_exp\":2.32,\"trader_buy_ratio\":0.5},\"entries\":[{\"query\":\"Malzin\","
+        "\"sell_cut_max\":0.90,\"sell_cut_exp\":2.32,\"trader_buy_ratio\":0.5},\"entries\":[{\"query\":\"Malzin\","
         "\"npc\":\"Malzin\",\"found\":true,\"r\":100,\"buy_factor\":0.7,\"sell_factor\":1.1}]}";
     check(ParseReply(live, r, found, pc) && found && r == 100, "parse live reply");
     check(near(BuyFactor(r, pc), 0.7, 1e-9), "parsed constants");
