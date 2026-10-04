@@ -83,6 +83,7 @@ Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 | STOBE 111 | "the shop here" buy | STOBE 14 Squin |
 | STOBE 118, 120 | spoken offer paid before agreement; willingness lines outside deal terms | TRADE prices, WILL favour/gift |
 | STOBE 121 | stale ended-goal block reasons made the NPC refuse a new production order (server e0e8e5c) | A8 home + grow Full-Base (m19c) |
+| KAH 122 | protect never fed: squad starved at 50x in pg-09-soak, game fell to menu; kah run now aborts on menu (harness bf43c27 + 7e9dff1, DLL E83B0826) | pg-09-soak (m19c) |
 | KAH to-do 19 | `walktime`, `newgame`, `pickup`, kah.py `@log`, nested `packput` (harness 609C459C) | PG 254, 132/133/240, 120 (4080) |
 
 ## 4. Harness (KAH) limits and open items
