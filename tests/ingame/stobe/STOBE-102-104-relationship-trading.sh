@@ -112,6 +112,16 @@ case "$mode" in
     # get the same injected ACCEPT of the pay-later deal; the server's relationship gate alone decides (r=-1 refuse,
     # r=0 record a deal with the player's payment when=after_npc).
     [ "$mode" = paylater ] && inject_on paylater "$NAME" chat '[{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"Bread","quantity":1},{"kind":"GIVE_CATS","by":"player","to":"npc","amount":20,"when":"after_npc"}],"message":"Fine, bread now, twenty cats tomorrow."},{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"Bread","quantity":1},{"kind":"GIVE_CATS","by":"player","to":"npc","amount":20,"when":"after_npc"}],"message":"Fine, bread now, twenty cats tomorrow."}]'
+    # m22 (Shay 2026-10-04: mechanical rows deterministic): favour/gift/notrade get the same injected ACCEPT at both
+    # asks too, so the relationship gate alone decides; agreed = a live deal row for him in that ask (or real hand-over).
+    st(){ printf '{"deal_decision":"ACCEPT","deal_terms":[%s],"message":"%s"}' "$1" "$2"; }
+    case "$mode" in
+      favour) j=$(st '{"kind":"FIRST_AID","by":"npc","to":"player"}' "Fine, hold still, I will bandage it.") ;;
+      gift) j=$(st '{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"Bread","quantity":1}' "Here, take a bread.") ;;
+      notrade) j=$(st '{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"Bread","quantity":1},{"kind":"GIVE_CATS","by":"player","to":"npc","amount":200}' "Two hundred? Deal.") ;;
+      *) j="" ;;
+    esac
+    [ -n "$j" ] && inject_on "$mode" "$NAME" chat "[$j,$j]"
     set_r "$lo"; t_lo=$(date +%s); out_lo=$(ask "$line")
     set_r "$hi"; t_hi=$(date +%s); out_hi=$(ask "$line")
     ref_lo=$(echo "$out_lo" | grep -a -c "refused by relationship: $rule"); ref_hi=$(echo "$out_hi" | grep -a -c "refused by relationship: $rule")
@@ -136,10 +146,19 @@ case "$mode" in
       log "r=$lo deals: $(pl_terms "$t_lo" "$t_hi") | r=$hi deals: $(pl_terms "$t_hi" $((now+5)))"
       mv_lo=$(( $(pl_deal "$t_lo" "$t_hi") + $(gave "$out_lo") )); mv_hi=$(( $(pl_deal "$t_hi" $((now+5))) + $(gave "$out_hi") ))
     fi
+    if [ "$mode" != paylater ]; then
+      any_deal(){ (cd /tmp && sudo -u postgres psql -d stobe -At -c "SELECT COUNT(*) FROM stobe_social_contract
+        WHERE LOWER(npc_name)=LOWER('${NAME}') AND updated_at >= to_timestamp($1) AND updated_at < to_timestamp($2)
+          AND status NOT IN ('REJECTED','CANCELLED')" 2>/dev/null); }
+      acted(){ echo "$1" | grep -a -c -E "${NAME}: action command received: (GIVE_ITEM|GIVE_CATS|FIRST_AID[A-Z_]*)@|Voice hand-over dispatched"; }
+      now=$(date +%s)
+      mv_lo=$(( $(any_deal "$t_lo" "$t_hi") + $(acted "$out_lo") )); mv_hi=$(( $(any_deal "$t_hi" $((now+5))) + $(acted "$out_hi") ))
+    fi
     log "r=$lo: guard=$ref_lo moved/agreed=$mv_lo | r=$hi: guard=$ref_hi moved/agreed=$mv_hi"
-    inj=$(fired paylater)
-    if [ "$mode" = paylater ] && [ "$inj" -lt 2 ] && [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -eq 0 ]; then verdict "$mode" "INCONCLUSIVE injected ACCEPT fired $inj/2 times"
-    elif [ "$mode" = paylater ] && [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -eq 0 ]; then verdict "$mode" "FAIL injected pay-later ACCEPT recorded no deal at r=$hi (guard lines r=$lo $ref_lo, r=$hi $ref_hi)"
+    inj=$(fired "$mode")
+    if [ "$inj" -lt 2 ] && [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -eq 0 ]; then verdict "$mode" "INCONCLUSIVE injected ACCEPT fired $inj/2 times"
+    elif [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -eq 0 ]; then verdict "$mode" "FAIL injected $mode ACCEPT recorded no deal at r=$hi (guard lines r=$lo $ref_lo, r=$hi $ref_hi)"
+    elif [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -ge 1 ] && [ "$ref_lo" -eq 0 ]; then verdict "$mode" "FAIL no deal at r=$lo but no relationship guard line (injected ACCEPT should hit the gate)"
     elif [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -ge 1 ]; then verdict "$mode" "PASS refused at r=$lo (guard lines $ref_lo), went ahead at r=$hi"
     elif [ "$mv_lo" -ge 1 ]; then verdict "$mode" "FAIL agreed/gave at r=$lo ($rule needs more)"
     else verdict "$mode" "INCONCLUSIVE refused at r=$lo, but the model refused at r=$hi too (allowed side not shown)"; fi ;;
