@@ -59,6 +59,8 @@
 #include <kenshi/PlayerInterface.h>
 #include <kenshi/Tasker.h>
 #include <kenshi/SensoryData.h>
+#include <kenshi/AI/AITaskSystem.h> // REL_THEFT_CAUGHT_M18: OrdersReceiver::currentGoal
+#include <kenshi/BountyManager.h>
 #include <kenshi/gui/InventoryGUI.h>
 #include <kenshi/gui/PortraitManager.h>
 #include <kenshi/util/hand.h>
@@ -5992,6 +5994,72 @@ static void EmitDismantleEvent(Character *npc, const std::string &subjectName) {
                ResolveCharacterSerialForEvent(npc), 0);
 }
 
+// REL_THEFT_CAUGHT_M18 (SR13): the game's own "caught a thief" signal. A character whose current goal is
+// HUNT_MY_THIEF reports it once per hunter/thief pair (again after 5 min real time while it lasts):
+// actor = thief, target = hunter. The server pairs it with the stolen goods.
+static std::map<unsigned long long, DWORD> g_socialTheftHunts;
+static void SocialTheftHuntCheck(Character *hunter, unsigned int hunterSerial, DWORD now) {
+  if (!hunter || (uintptr_t)hunter < 0x1000 || !SocialCaptureEnabled())
+    return;
+  hand subject;
+  try {
+    OrdersReceiver *orders = hunter->getOrdersReciever();
+    if (!orders || (uintptr_t)orders < 0x1000 || !orders->currentGoal.taskData)
+      return;
+    if (orders->currentGoal.key() != HUNT_MY_THIEF)
+      return;
+    subject = orders->currentGoal.subject;
+  } catch (...) {
+    return;
+  }
+  Character *thief = nullptr;
+  try {
+    if (subject.isValid() && !subject.isNull())
+      thief = subject.getCharacter();
+  } catch (...) {
+    thief = nullptr;
+  }
+  if (!thief || (uintptr_t)thief < 0x1000 || thief == hunter)
+    return;
+  unsigned int thiefSerial = ResolveCharacterSerialForEvent(thief);
+  unsigned long long key = ((unsigned long long)hunterSerial << 32) | (unsigned long long)thiefSerial;
+  std::map<unsigned long long, DWORD>::iterator seen = g_socialTheftHunts.find(key);
+  if (seen != g_socialTheftHunts.end() && now - seen->second < 300000)
+    return;
+  if (g_socialTheftHunts.size() > 512)
+    g_socialTheftHunts.clear();
+  g_socialTheftHunts[key] = now;
+  int stolenCount = -1, bounty = -1;
+  std::string crime = "none";
+  try {
+    Inventory *inv = thief->getInventory();
+    if (inv && (uintptr_t)inv > 0x1000) {
+      lektor<Item *> stolen;
+      inv->getAllStolenItems(stolen, false);
+      stolenCount = (int)stolen.size();
+    }
+  } catch (...) {
+  }
+  try {
+    BountyManager &b = thief->crimes;
+    bounty = b.getTotalBounty();
+    if (b.isCommittingCrime())
+      crime = BountyManager::crimeToStr(b.committingCrime);
+  } catch (...) {
+  }
+  std::map<std::string, int> stolenByKey;
+  std::map<unsigned int, NpcWorldEventState>::const_iterator ts = g_npcWorldEventStateBySerial.find(thiefSerial);
+  if (ts != g_npcWorldEventStateBySerial.end())
+    stolenByKey = ts->second.inventory.stolenByKey;
+  Log("SOCIAL_CAPTURE: theft hunt hunter=" + ResolveCharacterNameSafe(hunter) + " thief=" + ResolveCharacterNameSafe(thief) +
+      " stolen=" + ToString(stolenCount) + " bounty=" + ToString(bounty) + " crime=" + crime);
+  StobeSocial::EntityInfo t = SocialEntityFor(thief), h = SocialEntityFor(hunter);
+  SocialPostStructured("theft_caught", &t, &h,
+                       "\"goal\":\"HUNT_MY_THIEF\",\"stolen_items\":" + StobeSocial::JsonCountMap(stolenByKey, 32) +
+                           ",\"thief_stolen_count\":" + ToString(stolenCount) + ",\"thief_bounty\":" + ToString(bounty) +
+                           ",\"crime\":" + StobeSocial::JsonString(crime));
+}
+
 static void EmitLimbLossEvent(Character *victim, const std::string &limbLabel) {
   CombatAttribution attribution = ResolveCombatAttribution(victim);
   std::string victimName = ResolveCharacterNameSafe(victim);
@@ -6927,7 +6995,29 @@ static void EmitInventoryTransferEventsFromDeltas(
           StobeSocial::EntityInfo gainer = SocialEntityFor(toDelta.npc);
           std::map<std::string, int> gained;
           gained[itemKey] = gainRemaining;
-          SocialPostStructured("item_gain", &gainer, nullptr, "\"items\":" + StobeSocial::JsonCountMap(gained, 8));
+          // REL_THEFT_CAUGHT_M18: the stolen-flagged part of the gain (shop/world goods) and who saw the taker.
+          int stolenGain = 0;
+          {
+            std::map<std::string, int>::const_iterator sa = toDelta.afterSnapshot.stolenByKey.find(itemKey);
+            std::map<std::string, int>::const_iterator sb = toDelta.beforeSnapshot.stolenByKey.find(itemKey);
+            stolenGain = (sa != toDelta.afterSnapshot.stolenByKey.end() ? sa->second : 0) -
+                         (sb != toDelta.beforeSnapshot.stolenByKey.end() ? sb->second : 0);
+            if (stolenGain > gainRemaining)
+              stolenGain = gainRemaining;
+            if (stolenGain < 0)
+              stolenGain = 0;
+          }
+          std::map<std::string, int> stolenGained;
+          if (stolenGain > 0)
+            stolenGained[itemKey] = stolenGain;
+          std::vector<StobeSocial::EntityInfo> gainWho;
+          std::vector<int> gainSense;
+          // Who saw the taker: SR09 evidence when he loots a knocked-out body (only the gain shows then).
+          SocialCollectWitnesses(toDelta.npc, toDelta.npc, gainWho, gainSense);
+          SocialPostStructuredW("item_gain", &gainer, nullptr,
+                                "\"items\":" + StobeSocial::JsonCountMap(gained, 8) +
+                                    ",\"stolen_items\":" + StobeSocial::JsonCountMap(stolenGained, 8),
+                                gainWho, gainSense);
         }
         if (gainRemaining > 0) {
           for (std::deque<PendingTransferLoss>::iterator pendingIt =
@@ -7110,7 +7200,12 @@ static void EmitInventoryTransferEventsFromDeltas(
                 recipientHunger = h;
               }
             }
-            SocialPostStructured("item_transfer", isGroundDrop ? nullptr : &taker, &loser,
+            // REL_THEFT_CAUGHT_M18 (SR09): who saw the taker take it.
+            std::vector<StobeSocial::EntityInfo> transferWho;
+            std::vector<int> transferSense;
+            if (!isGroundDrop && toChar && fromChar)
+              SocialCollectWitnesses(toChar, fromChar, transferWho, transferSense);
+            SocialPostStructuredW("item_transfer", isGroundDrop ? nullptr : &taker, &loser,
                                  "\"items\":" + StobeSocial::JsonCountMap(agg.qtyByKey, 64) +
                                      ",\"to_ground\":" + std::string(isGroundDrop ? "true" : "false") +
                                      ",\"food_items\":" + StobeSocial::JsonCountMap(food, 64) +
@@ -7119,7 +7214,8 @@ static void EmitInventoryTransferEventsFromDeltas(
                                      ",\"caught\":" + std::string(caught == 2 ? "true" : (caught == 1 ? "false" : "null")) +
                                      ",\"loser_inventory_total\":" +
                                      (loserTotal >= 0 ? ToString(loserTotal + 0) : std::string("null")) +
-                                     ",\"loser_hunger\":" + loserHunger);
+                                     ",\"loser_hunger\":" + loserHunger,
+                                 transferWho, transferSense);
           }
         }
       };
@@ -8689,6 +8785,7 @@ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) 
     bool wasChained = state.chained;
     state.chained = chainedNow;
     state.slaveState = slaveStateNow;
+    SocialTheftHuntCheck(npc, serial, nowTick); // REL_THEFT_CAUGHT_M18
     if (currentTaskSubjectSerialNow != 0 && IsLiberationTask((int)currentTaskNow)) {
       state.libSubjectSerial = currentTaskSubjectSerialNow;
       state.libTask = (int)currentTaskNow;
