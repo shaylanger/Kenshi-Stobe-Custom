@@ -99,14 +99,30 @@ case "$mode" in
       gift) lo=55; hi=56; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, could you just give me one of your bread? I've nothing to pay with."; rule="free items" ;;
       notrade) lo=-80; hi=-79; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, sell me one of your bread. I'll pay you 200 cats for it, more than it's worth."; rule="no trade" ;;
     esac
-    set_r "$lo"; out_lo=$(ask "$line")
-    set_r "$hi"; out_hi=$(ask "$line")
+    set_r "$lo"; t_lo=$(date +%s); out_lo=$(ask "$line")
+    set_r "$hi"; t_hi=$(date +%s); out_hi=$(ask "$line")
     ref_lo=$(echo "$out_lo" | grep -a -c "refused by relationship: $rule"); ref_hi=$(echo "$out_hi" | grep -a -c "refused by relationship: $rule")
     # m19: judge what really happened (an item/cats moved, a deal agreed, or for favours a heal/roleplay of it),
     # not only the server guard line: a refusal by the model itself is a refusal too.
     extra=""; [ "$mode" = favour ] && extra="|${NAME}: action command received: (ROLEPLAY_ACTION|FIRST_AID[A-Z_]*|HEAL[A-Z_]*)@"
     moved(){ echo "$1" | grep -a -c -E "${NAME}: action command received: (GIVE_ITEM|GIVE_CATS)@|Voice hand-over dispatched|\"npc\":\"${NAME}\",\"decision\":\"(ACCEPT|COUNTER|PROPOSE)\"${extra}"; }
     mv_lo=$(moved "$out_lo"); mv_hi=$(moved "$out_hi")
+    if [ "$mode" = paylater ]; then
+      # m22 (m19 r=-1 moved/agreed=2): a PROPOSE/COUNTER is not pay-later; his advance-payment counter ("pay first")
+      # is the refusal. Agreed = a deal for him touched during that ask whose player term is due after his part
+      # (when=after_npc), or he really handed the item over (no payment ever comes in this test).
+      pl_deal(){ (cd /tmp && sudo -u postgres psql -d stobe -At -c "SELECT COUNT(*) FROM stobe_social_contract
+        WHERE LOWER(npc_name)=LOWER('${NAME}') AND updated_at >= to_timestamp($1) AND updated_at < to_timestamp($2)
+          AND status NOT IN ('REJECTED','CANCELLED')
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(terms)='array' THEN terms ELSE '[]'::jsonb END) t
+                      WHERE t->>'by'='player' AND t->>'when'='after_npc')" 2>/dev/null); }
+      pl_terms(){ (cd /tmp && sudo -u postgres psql -d stobe -At -c "SELECT string_agg(status || ':' || terms::text, ' ; ') FROM stobe_social_contract
+        WHERE LOWER(npc_name)=LOWER('${NAME}') AND updated_at >= to_timestamp($1) AND updated_at < to_timestamp($2)" 2>/dev/null | cut -c1-300); }
+      gave(){ echo "$1" | grep -a -c -E "${NAME}: action command received: GIVE_ITEM@|Voice hand-over dispatched"; }
+      now=$(date +%s)
+      log "r=$lo deals: $(pl_terms "$t_lo" "$t_hi") | r=$hi deals: $(pl_terms "$t_hi" $((now+5)))"
+      mv_lo=$(( $(pl_deal "$t_lo" "$t_hi") + $(gave "$out_lo") )); mv_hi=$(( $(pl_deal "$t_hi" $((now+5))) + $(gave "$out_hi") ))
+    fi
     log "r=$lo: guard=$ref_lo moved/agreed=$mv_lo | r=$hi: guard=$ref_hi moved/agreed=$mv_hi"
     if [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -ge 1 ]; then verdict "$mode" "PASS refused at r=$lo (guard lines $ref_lo), went ahead at r=$hi"
     elif [ "$mv_lo" -ge 1 ]; then verdict "$mode" "FAIL agreed/gave at r=$lo ($rule needs more)"
