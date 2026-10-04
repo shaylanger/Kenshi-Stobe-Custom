@@ -214,6 +214,8 @@ calm_raiders() {
 wait_for() { local t=$(( $(date +%s) + $1 )); shift; until "$@" >/dev/null 2>&1; do [ "$(date +%s)" -ge "$t" ] && return 1; sleep 2; done; }
 # setup_fail <row> <reason>: one SETUP FAIL verdict and exit 4 (run-batch counts it as FAIL; repair setup, then rerun)
 setup_fail() { verdict "$1" "SETUP FAIL $2"; exit 4; }
+# stobe_ready [secs] [base_line] / stobe_log_lines: wait for the Stobe NPC event sweep after a load (stobe-ready.sh)
+source "$(dirname "${BASH_SOURCE[0]}")/stobe-ready.sh"
 # preflight <row> [save=<name>] [advancing] [npc ...]: world loaded (and the expected save), OUT dir exists, PLAYER selected,
 # PLAYER/MATE (and each npc) present and not KO/DEAD, game time advancing when asked (unpauses at 1x for the check)
 preflight() {
