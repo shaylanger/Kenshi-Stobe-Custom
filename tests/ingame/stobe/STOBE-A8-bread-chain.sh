@@ -73,7 +73,12 @@ for i in $(seq 1 $([ "${GROW:-0}" = 1 ] && echo 600 || echo 150)); do
   echo "$s" | grep -q -E "COMPLETE|BLOCKED|CANCEL" && break
   stobe-auto where ${PLAYER} | grep -q " KO" && { log "${PLAYER} KO: paused"; break; }
   # goal-watch safety (tools/stobe-goal-watch.sh logic, any squad names): squad attacked or knocked out -> pause
-  alert=$(since_stobe | grep -a -E "\[EVENT\] (combat: .* -> (${PLAYER}|${MATE}) |knockout: (${PLAYER}|${MATE}) )" | tail -1)
+  # RAID_CALM=1 (Full-Base, squad protected): knock out world raiders every ~40 s and don't stop on their attacks
+  # (m22 batch D: Kral's Chosen raid ended A8 at 50x); a knockout of the squad still stops the test
+  if [ "${RAID_CALM:-0}" = 1 ] && [ $((i % 10)) = 0 ]; then calm_raiders 1500 >/dev/null; fi
+  raid_re='\((Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits)\) ->'
+  [ "${RAID_CALM:-0}" = 1 ] || raid_re='^$x'
+  alert=$(since_stobe | grep -a -E "\[EVENT\] (combat: .* -> (${PLAYER}|${MATE}) |knockout: (${PLAYER}|${MATE}) )" | grep -a -v -E "combat: .*$raid_re" | tail -1)
   if [ -n "$alert" ]; then stobe-auto speed 0 >/dev/null; verdict A8 "ALERT at ${SPEED:-20}x: $(echo "$alert" | cut -c1-200)"; exit 3; fi
 done
 stobe-auto speed 0 >/dev/null
