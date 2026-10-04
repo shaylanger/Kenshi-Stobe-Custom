@@ -20,9 +20,9 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
 | Stobe.dll | `137286B7` (rename guard 9af0971 + game theft-dialog hook a99f498) | - |
-| KenshiFP.dll | `47E5700A` (planner missing-dep need, ba0fb83) | - |
+| KenshiFP.dll | `2092A07C` (feed carried inputs first da02382, missing-dep need ba0fb83) | - |
 | ProfessionGearProgression.dll | `D7A60E49` (paused: Normal config + Normal rules) | `266C68F5` (PG 250, 4080) |
-| AutomationHarness.dll | `A14D5891` (`senses` 2758ee7, `fill optional` 59b742d, `face` d91fe88) | 4080: D3B372F9 (operator m26) |
+| AutomationHarness.dll | `4B835FCC` (`chars` filter a8005d3, `face` d91fe88, `senses`, `fill optional`) | 4080: D3B372F9 (operator m26) |
 | Server (live) | `stobe` 9f6fc55 (rollback keeps squad 04fc777, SR09 face 9f6fc55) | - |
 
 ## 1. Open automated rows
@@ -36,10 +36,9 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 | ID | What | Save | Status |
 |---|---|---|---|
 | STOBE section C (31, 32) | misquoted counter amounts; REJECT naming a price | auto-home | never reproduced live; candidates for injection rows |
-| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | J 52/4: Junkbow queued, never crafted; Kral's Chosen raid on Beaks during the row -> fixer 19 |
-| STOBE A8 | bread chain grow on Full-Base | Full-Base | J: squad fix works (reached GROW); ALERT Band of Bones KO Beaks at 50x -> fixer 19 (raid protection) |
+| STOBE 16 | crafted-ingredient goal completes with powered benches | Full-Base | J: goal blocked "pack full" 7 s in (fetched Iron Plates while carrying the Crossbow inputs) -> KenshiFP da02382; rerun L |
+| STOBE A8 | bread chain grow on Full-Base | Full-Base | J: raid KO -> whole-row raid guard 7e937ef + `chars` filter; rerun L |
 | REL SR12, SR32, p7 | real enslavement capture; freeing by `order`; free a non-squad slave + recruitment gate | Enslaved | m18 p7-04 15/2, p7-05 21/1: analyse, fix, rerun |
-| REL SR09 | KO loot witnessed -> known_thief | auto-home | J: SETUP FAIL witness faced away (fov 0) -> harness `face` d91fe88 + scenario 9f6fc55; rerun K |
 | REL SR18/19 | bed/cage rescue on a second base (PASS on auto-home) | Full-Base | todo |
 | PG rows | open PG rows (balance 161-210, 89, 132/133/240, 145/229, 151/152, 184, 188-192, 220-227, 250, 254, 274) | 4080 + Full-Base | pg-09 soak 24/0 PASS D (5090); 4080 operator m23 rerunning pg54/84/81/80/52/53/82/87-fs/89 + home list; see INGAME_STATUS.md |
 
