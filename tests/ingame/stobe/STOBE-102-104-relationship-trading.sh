@@ -90,15 +90,20 @@ case "$mode" in
       paylater) lo=-1; hi=0; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, give me one of your bread now and I'll pay you 20 cats tomorrow."; rule="pay-later" ;;
       favour) lo=29; hi=30; line="${NAME%% *}, would you bandage my arm for me, for free? I'm hurt."; rule="free favours" ;;
       gift) lo=55; hi=56; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, could you just give me one of your bread? I've nothing to pay with."; rule="free items" ;;
-      notrade) lo=-80; hi=-79; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, sell me one of your bread for 20 cats."; rule="no trade" ;;
+      notrade) lo=-80; hi=-79; stobe-auto give "$V" Bread 2 >/dev/null; line="${NAME%% *}, sell me one of your bread. I'll pay you 200 cats for it, more than it's worth."; rule="no trade" ;;
     esac
     set_r "$lo"; out_lo=$(ask "$line")
     set_r "$hi"; out_hi=$(ask "$line")
     ref_lo=$(echo "$out_lo" | grep -a -c "refused by relationship: $rule"); ref_hi=$(echo "$out_hi" | grep -a -c "refused by relationship: $rule")
-    terms_lo=$(echo "$out_lo" | grep -a -c -E "Negotiation contract recorded|refused by relationship")
-    if [ "$ref_lo" -ge 1 ] && [ "$ref_hi" -eq 0 ]; then verdict "$mode" "PASS refused at r=$lo, not at r=$hi"
-    elif [ "$terms_lo" -eq 0 ]; then verdict "$mode" "INCONCLUSIVE no deal terms at r=$lo (model answered without a deal)"
-    else verdict "$mode" "FAIL refusals r=$lo:$ref_lo r=$hi:$ref_hi"; fi ;;
+    # m19: judge what really happened (an item/cats moved, a deal agreed, or for favours a heal/roleplay of it),
+    # not only the server guard line: a refusal by the model itself is a refusal too.
+    extra=""; [ "$mode" = favour ] && extra="|${NAME}: action command received: (ROLEPLAY_ACTION|FIRST_AID[A-Z_]*|HEAL[A-Z_]*)@"
+    moved(){ echo "$1" | grep -a -c -E "${NAME}: action command received: (GIVE_ITEM|GIVE_CATS)@|Voice hand-over dispatched|\"npc\":\"${NAME}\",\"decision\":\"(ACCEPT|COUNTER|PROPOSE)\"${extra}"; }
+    mv_lo=$(moved "$out_lo"); mv_hi=$(moved "$out_hi")
+    log "r=$lo: guard=$ref_lo moved/agreed=$mv_lo | r=$hi: guard=$ref_hi moved/agreed=$mv_hi"
+    if [ "$mv_lo" -eq 0 ] && [ "$mv_hi" -ge 1 ]; then verdict "$mode" "PASS refused at r=$lo (guard lines $ref_lo), went ahead at r=$hi"
+    elif [ "$mv_lo" -ge 1 ]; then verdict "$mode" "FAIL agreed/gave at r=$lo ($rule needs more)"
+    else verdict "$mode" "INCONCLUSIVE refused at r=$lo, but the model refused at r=$hi too (allowed side not shown)"; fi ;;
   prices)
     make_vel
     stobe-auto give "$V" "Iron Hat" 1 >/dev/null
