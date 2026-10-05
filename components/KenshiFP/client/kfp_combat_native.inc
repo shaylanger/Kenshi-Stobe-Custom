@@ -1,6 +1,6 @@
 /* Native ranged ownership. Feature is opt-in until coordinator acceptance.
- * setup/end/reload/reset use KenshiLib's version-aware exported bindings.
- * T/MT/end intercepts use unique executable signatures, never fixed RVAs. */
+ * Native lifecycle and physics use verified unique executable signatures.
+ * No SDK address-table dependency or fixed native function RVAs. */
 #include "kfp_combat_controller.h"
 #include "kfp_aim_geometry.h"
 static KfpCombatController g_combat_control;
@@ -31,6 +31,7 @@ static int combat_owned_rc(void *rc) {
            !memcmp(g_combat_actor_ids,(void *)((uintptr_t)g_combat_pc+CHAR_HANDLE+HAND_IDS),20);
 }
 static uintptr_t combat_unique_signature(const char *sig);
+#include "kfp_combat_trace.inc"
 #include "kfp_combat_input.inc"
 static void combat_rc_hook(void *rc,float dt,const void *a,const void *b) {
     if (!combat_owned_rc(rc)) g_combat_rc_orig(rc,dt,a,b);
@@ -60,6 +61,7 @@ static void *combat_virtual(void *object,size_t slot) {
  * Camera scene position uses the established floating-origin translation.
  * Called under the owning main-loop crash guard, never nests a guard. */
 static int combat_camera_aim(Vec3 *out) {
+    memset(&g_combat_camera_hit,0,sizeof(g_combat_camera_hit));
     if (!g_have_t || !g_have_eye || !g_view_have_anchor || !g_ogre_ready || !g_node_get_dpos)
         return 0;
     void *cam=readable((void *)(g_base+RVA_CAM_INSTANCE),8)?*(void **)(g_base+RVA_CAM_INSTANCE):NULL;
@@ -75,13 +77,21 @@ static int combat_camera_aim(Vec3 *out) {
     Vec3 origin={origin_xyz[0],origin_xyz[1],origin_xyz[2]};
     Vec3 dir={dir_xyz[0],dir_xyz[1],dir_xyz[2]};
     Vec3 best={end_xyz[0],end_xyz[1],end_xyz[2]},hit;
+    CombatRayHit physical={0};
+    memset(&g_combat_camera_hit,0,sizeof(g_combat_camera_hit));
+    int traced=combat_trace_ray(&origin,&dir,80.0f,&physical);
+    if (traced<0)return 0;
     float nearest=80.0f;
+    if (traced>0) {best=physical.position;nearest=physical.distance;g_combat_camera_hit=physical;}
     void *saved_node=g_mr_perch_node;mr_cache_t *saved_cache=g_mr_perch_cache;
     for(int visual=0;visual<2;++visual) {
         int got=visual?meshray_refine(&origin,&dir,80.0f,&hit):fall_ray(&origin,&dir,&hit);
         if (!got)continue;
         float distance=(hit.x-origin.x)*dir.x+(hit.y-origin.y)*dir.y+(hit.z-origin.z)*dir.z;
-        if (isfinite(distance)&&distance>=0 && distance<nearest) {best=hit;nearest=distance;}
+        if (isfinite(distance)&&distance>=0 && distance<nearest) {
+            best=hit;nearest=distance;
+            memset(&g_combat_camera_hit,0,sizeof(g_combat_camera_hit));
+        }
     }
     g_mr_perch_node=saved_node;g_mr_perch_cache=saved_cache;
     *out=best;return 1;
@@ -245,6 +255,21 @@ static void fp_manual_combat_tick(void *gw,float dt) {
 
 static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id;(void)u;
+    if (argc==2 && !_stricmp(argv[1],"aim")) {
+        if (g_guard_armed) {r->append(r,"aim query busy");return KAH_ERROR;}
+        if (setjmp(g_guard_jb)) {g_guard_armed=0;r->append(r,"aim query fault");return KAH_ERROR;}
+        guard_arm();Vec3 aim;
+        int valid=combat_camera_aim(&aim);
+        g_guard_armed=0;
+        if (!valid) {r->append(r,"aim query unavailable");return KAH_ERROR;}
+        char b[320];
+        snprintf(b,sizeof(b),"x=%.6f y=%.6f z=%.6f physical=%u distance=%.6f shape=%llx group=%u id0=%u id1=%u id2=%u id3=%u id4=%u",
+          aim.x,aim.y,aim.z,!!g_combat_camera_hit.shape,g_combat_camera_hit.distance,
+          (unsigned long long)g_combat_camera_hit.shape,g_combat_camera_hit.group,
+          g_combat_camera_hit.ids[0],g_combat_camera_hit.ids[1],g_combat_camera_hit.ids[2],
+          g_combat_camera_hit.ids[3],g_combat_camera_hit.ids[4]);
+        r->append(r,b);return KAH_OK;
+    }
     if (argc==2 && !_stricmp(argv[1],"off")) {
         g_combat_enabled=0;g_combat_injection=0;r->append(r,"manual ownership release requested");return KAH_OK;
     }
@@ -274,7 +299,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
           g_combat_actual_shots,g_combat_suppressed,g_combat_reload_starts,g_combat_control.rejected,g_combat_injection);
         r->append(r,b);return KAH_OK;
     }
-    r->append(r,"usage: fp_combat on|off|state|physical|input <aim 0|1> <fire 0|1> <reload 0|1>");return KAH_ERROR;
+    r->append(r,"usage: fp_combat on|off|state|aim|physical|input <aim 0|1> <fire 0|1> <reload 0|1>");return KAH_ERROR;
 }
 static uintptr_t combat_unique_signature(const char *sig) {
 #ifdef KFP_RE_PLUGIN
@@ -294,7 +319,8 @@ static void fp_combat_native_init(void) {
     uintptr_t mt=combat_unique_signature("40 57 48 83 EC 40 80 79 36 00 48 8B F9 0F 84 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 47 28 48 85 C0");
     uintptr_t end=combat_unique_signature("40 53 48 83 EC 20 33 D2 48 8B D9 C6 41 36 00 E8 ?? ?? ?? ?? 48 8B 4B 68 B2 01 48 8B 89 48 04 00 00");
     g_combat_end=(combat_end_t)end;
-    int bindings=g_combat_setup&&g_combat_reload&&g_combat_end&&g_combat_reset_timer&&
+    int trace_ready=fp_combat_trace_init();
+    int bindings=trace_ready&&g_combat_setup&&g_combat_reload&&g_combat_end&&g_combat_reset_timer&&
                  g_ranged_animupd_orig&&g_gun_shoot_orig&&RVA_RC_GETGUN;
     if (bindings && t && mt && end) {
         int a=install_hook((void *)t,(void *)combat_rc_hook,(void **)&g_combat_rc_orig);

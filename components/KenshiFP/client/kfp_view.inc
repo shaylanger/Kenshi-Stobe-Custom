@@ -67,6 +67,21 @@ static void fp_view_apply(Vec3 *eye) {
 }
 static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id; (void)u;
+    if (argc==4 && !_stricmp(argv[1],"look")) {
+        char *end;errno=0;float yaw=strtof(argv[2],&end);
+        if (errno||end==argv[2]||*end||!isfinite(yaw)||fabsf(yaw)>6.283186f) {
+            r->append(r,"yaw must be finite radians -2pi..2pi");return KAH_ERROR;
+        }
+        errno=0;float pitch=strtof(argv[3],&end);
+        if (errno||end==argv[3]||*end||!isfinite(pitch)||fabsf(pitch)>1.4f) {
+            r->append(r,"pitch must be finite radians -1.4..1.4");return KAH_ERROR;
+        }
+        if (!g_fp_mode||g_ui_open||g_is_down) {
+            r->append(r,"direct camera control unavailable");return KAH_ERROR;
+        }
+        g_yaw=yaw;g_pitch=pitch;
+        r->append(r,"look requested through normal camera update; verify actual state next frame");return KAH_OK;
+    }
     if (argc==3 && !_stricmp(argv[1],"distance")) {
         char *end; errno=0; float d=strtof(argv[2],&end);
         if (errno || end==argv[2] || *end || !isfinite(d) || d<0 || d>KFP_VIEW_MAX) {
@@ -83,9 +98,9 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         r->append(r,"wheel input queued through normal zoom handler"); return KAH_OK;
     }
     if (argc!=2 || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_camera state|distance <0..12>|wheel <-2400..2400>"); return KAH_ERROR;
+        r->append(r,"usage: fp_camera state|distance <0..12>|wheel <-2400..2400>|look <yaw radians> <pitch radians>"); return KAH_ERROR;
     }
-    Vec3 actual; int have_actual=0;
+    Vec3 actual={0}; int have_actual=0;
     if (g_fp_mode && g_have_eye && g_fp_control_actor && g_ogre_ready && g_node_get_dpos && g_view_have_anchor) {
         void *cam=readable((void *)(g_base+RVA_CAM_INSTANCE),8)?*(void **)(g_base+RVA_CAM_INSTANCE):NULL;
         void *node=readable(cam,CC_NODE+8)?*(void **)((uintptr_t)cam+CC_NODE):NULL;
@@ -102,9 +117,11 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         float x=actual.x-g_view_anchor.x,y=actual.y-g_view_anchor.y,z=actual.z-g_view_anchor.z;
         distance=sqrtf(x*x+y*y+z*z);
     }
-    char b[240];
-    snprintf(b,sizeof(b),"direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f",
+    char b[420];
+    snprintf(b,sizeof(b),"direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f yaw=%.6f pitch=%.6f world_valid=%d camera_x=%.6f camera_y=%.6f camera_z=%.6f",
         !!g_fp_mode,g_cfg_camera_zoom,g_view.target,g_view.applied,distance,have_actual,fp_view_is_eye(),
-        g_view.blocked,g_view.collision_known,g_speed_scale);
+        g_view.blocked,g_view.collision_known,g_speed_scale,g_yaw,g_pitch,have_actual&&g_have_t,
+        have_actual&&g_have_t?actual.x-g_tx:0,have_actual&&g_have_t?actual.y:0,
+        have_actual&&g_have_t?actual.z-g_tz:0);
     r->append(r,b); return KAH_OK;
 }
