@@ -65,6 +65,7 @@ memline() {  # "<free-commit-GB> <kenshi-private-GB>" (kenshi "-" when not runni
   powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select-Object -First 1; "{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
 ,' | tail -1
 }
+kenshi_up() { tasklist.exe /FI "IMAGENAME eq kenshi_x64.exe" /NH </dev/null 2>/dev/null | grep -qi kenshi_x64; }
 relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = auto-home); 1 = it didn't come back
   local s="$1"; case "$s" in home|-) s=auto-home ;; esac
   recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"
@@ -156,8 +157,12 @@ RESULT $name FAIL wrapper did not complete (exit $rc)"
   # combat/knockout/death toward the squad while the test ran: a note (fight tests cause it on purpose)
   hit=$(tail -c +"$((sl + 1))" "$STOBELOG" 2>/dev/null | grep -a -E "\[EVENT\] (combat[^]]*-> ($player|$mate) \(|knockout: ($player|$mate) |death: ($player|$mate) )" | head -2 | cut -c1-160 | paste -sd';')
   [ -n "$hit" ] && say "NOTE $name: combat/KO toward the squad: $hit"
-  world 120 || { sleep 30; world 120 || { say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1; }; }
+  # m37: a crashed/killed Kenshi = dead now, no 4.5 min of waits on a game that is gone (the next row relaunches)
+  if kenshi_up; then
+    world 120 || { sleep 30; world 120 || { say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1; }; }
+  else dead=1; fi
 done 3<"$L"
-[ "$STOP" = 1 ] && ctl stop | tail -2
+# m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
+[ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
 say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail"
 touch "$O/DONE"
