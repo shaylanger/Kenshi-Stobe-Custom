@@ -30,6 +30,8 @@ static int combat_owned_rc(void *rc) {
            readable((void *)((uintptr_t)g_combat_pc+CHAR_HANDLE+HAND_IDS),20) &&
            !memcmp(g_combat_actor_ids,(void *)((uintptr_t)g_combat_pc+CHAR_HANDLE+HAND_IDS),20);
 }
+static uintptr_t combat_unique_signature(const char *sig);
+#include "kfp_combat_input.inc"
 static void combat_rc_hook(void *rc,float dt,const void *a,const void *b) {
     if (!combat_owned_rc(rc)) g_combat_rc_orig(rc,dt,a,b);
 }
@@ -170,6 +172,11 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         *(float *)((uintptr_t)gw+GW_FRAMESPEED):0;
     KfpCombatObservation o={0};o.actor=(uint64_t)(uintptr_t)pc;o.weapon=(uint64_t)(uintptr_t)weapon;
     o.enabled=1;o.allowed=!g_ui_open&&!g_is_down&&!char_prone_state(pc)&&(g_combat_injection||game_has_focus());
+    if (!g_combat_injection && o.allowed) {
+        void *gui=g_combat_gui_instance?g_combat_gui_instance():NULL;
+        int modifier=(GetAsyncKeyState(VK_MENU)|GetAsyncKeyState(VK_CONTROL)|GetAsyncKeyState(VK_SHIFT))&0x8000;
+        o.allowed=gui && g_combat_gui_focus && !g_combat_gui_focus(gui) && !modifier;
+    }
     o.running=isfinite(speed)&&speed>0&&isfinite(dt)&&dt>0;o.dt=dt*speed;o.kind=KFP_WEAPON_RANGED;
     /* Yield the real native task on focus/UI/KO interruption. Leaving owned
      * update hooks suppressed would otherwise strand an unfinished reload. */
@@ -293,7 +300,8 @@ static void fp_combat_native_init(void) {
         int a=install_hook((void *)t,(void *)combat_rc_hook,(void **)&g_combat_rc_orig);
         int b=install_hook((void *)mt,(void *)combat_mt_hook,(void **)&g_combat_mt_orig);
         int c=install_hook((void *)end,(void *)combat_end_hook,(void **)&g_combat_end_orig);
-        g_combat_native_ready=a&&b&&c; /* partial install stays transparent */
+        int input=fp_combat_input_init();
+        g_combat_native_ready=a&&b&&c&&input; /* partial install stays transparent */
     }
     logline("[combat] native ranged bindings=%d signatures=%p/%p/%p ready=%d; manual default OFF",
         !!bindings,(void *)t,(void *)mt,(void *)end,g_combat_native_ready);
