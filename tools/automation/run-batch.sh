@@ -123,9 +123,19 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
     *) run=("$script" "${args[@]}") ;;
   esac
   before=$(offsets); sl=$(stat -c %s "$STOBELOG" 2>/dev/null || echo 0)
+  # m41: fullbase-guard only calms raiders once after the load; raids that arrive later in a long row (gate-90
+  # farming: Hill Marauders pulled Beaks off the farm) need the lib's raid_guard sweep for the whole row.
+  # The lib's EXIT trap pauses the game, so the guard subshell clears it.
+  rg=""
+  if [ "$save" = kah-fullbase ] && [ "${NO_RAID_GUARD:-0}" != 1 ]; then
+    ( export PLAYER="$player" MATE="$mate"; . "$T/stobe-fight-lib.sh"; trap - EXIT
+      trap 'raid_guard_stop; exit 0' TERM; raid_guard_start; while :; do sleep 5 & wait $!; done )       >/dev/null 2>>"$O/$name.raids" </dev/null &
+    rg=$!
+  fi
   echo "$(date +%H:%M) $name: run ${run[*]}"
   env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null
   rc=$?
+  [ -n "$rg" ] && { kill "$rg" 2>/dev/null; wait "$rg" 2>/dev/null; }
   stobe-auto speed 0 >/dev/null 2>&1
   printf '%s\t%s\t' "$name" "$save" >>"$R"; paste <(echo "$before" | tr '\t' '\n') <(offsets | tr '\t' '\n') | paste -sd'\t' >>"$R"
   # result lines: the test's own RESULT lines, else built from VERDICT / scenario summary / exit code
