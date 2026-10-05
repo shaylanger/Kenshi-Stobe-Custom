@@ -32,6 +32,7 @@ static int combat_owned_rc(void *rc) {
 }
 static uintptr_t combat_unique_signature(const char *sig);
 #include "kfp_combat_trace.inc"
+#include "kfp_combat_target.inc"
 #include "kfp_combat_input.inc"
 static void combat_rc_hook(void *rc,float dt,const void *a,const void *b) {
     if (!combat_owned_rc(rc)) g_combat_rc_orig(rc,dt,a,b);
@@ -243,8 +244,9 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     if ((action&KFP_ACT_SHOOT) && have_aim) {
         int before=*(int *)((uintptr_t)gun+GUN_AMMO);
         int stat=*(int *)((uintptr_t)rc+RC_STAT);
+        void *intended=combat_ray_target(&g_combat_camera_hit,pc);
         g_combat_dispatch_tid=GetCurrentThreadId();g_combat_dispatch=1;
-        hooked_gun_shoot(gun,pc,NULL,stat,&aim);
+        hooked_gun_shoot(gun,pc,intended,stat,&aim);
         g_combat_dispatch=0;g_combat_dispatch_tid=0;
         int after=*(int *)((uintptr_t)gun+GUN_AMMO);
         if (before>0&&after==before-1)++g_combat_actual_shots;
@@ -320,7 +322,8 @@ static void fp_combat_native_init(void) {
     uintptr_t end=combat_unique_signature("40 53 48 83 EC 20 33 D2 48 8B D9 C6 41 36 00 E8 ?? ?? ?? ?? 48 8B 4B 68 B2 01 48 8B 89 48 04 00 00");
     g_combat_end=(combat_end_t)end;
     int trace_ready=fp_combat_trace_init();
-    int bindings=trace_ready&&g_combat_setup&&g_combat_reload&&g_combat_end&&g_combat_reset_timer&&
+    int target_ready=fp_combat_target_init();
+    int bindings=trace_ready&&target_ready&&g_combat_setup&&g_combat_reload&&g_combat_end&&g_combat_reset_timer&&
                  g_ranged_animupd_orig&&g_gun_shoot_orig&&RVA_RC_GETGUN;
     if (bindings && t && mt && end) {
         int a=install_hook((void *)t,(void *)combat_rc_hook,(void **)&g_combat_rc_orig);
