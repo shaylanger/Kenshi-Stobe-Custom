@@ -40,6 +40,16 @@ world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
 # timeout: the WSL powershell proxy can hang after a launch (pipe held by Kenshi, m23); launch output lines
 # are printed before it hangs, so killing it after 420 s loses nothing
 ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" </dev/null | tr -d '\r'; }
+# launch <save>: the proxy often never exits after a launch (m32: 2 of 3 launches sat the full 420 s although
+# the game was in the world in 10 s): run it in the background, wait for its last line ("running: pid=") or its
+# exit, kill the stuck proxy, then wait for the world
+launch() {
+  ctl launch -Save "$1" > "$O/launch.out" 2>&1 &
+  local i
+  for i in $(seq 1 140); do grep -q "running: pid=" "$O/launch.out" && break; kill -0 $! 2>/dev/null || break; sleep 3; done
+  pkill -f "kenshi-ctl.ps1 launch" 2>/dev/null; wait 2>/dev/null
+  tail -3 "$O/launch.out"
+}
 reload() {   # reload <save> <player>; 1 = the game didn't come back
   stobe-auto load "$1" >/dev/null 2>&1; sleep 12
   world 300 || { sleep 30; world 300 || return 1; }
@@ -53,7 +63,7 @@ relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = a
   local s="$1"; case "$s" in home|-) s=auto-home ;; esac
   recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"
   ctl stop >/dev/null 2>&1; stobe-say on >/dev/null 2>&1
-  ctl launch -Save "$s" | tail -1; world 900
+  launch "$s" | tail -1; world 900
 }
 prepare() {  # prepare <save> <player> <mate>
   case "$1" in
@@ -70,7 +80,7 @@ prepare() {  # prepare <save> <player> <mate>
 say "BATCH START $(date '+%F %H:%M') list=$L"
 if [ -n "$LAUNCH" ]; then
   stobe-say on >/dev/null 2>&1
-  ctl launch -Save "$LAUNCH" | tail -3
+  launch "$LAUNCH"
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; touch "$O/DONE"; exit 1; }
 fi
 pass=0; fail=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
