@@ -1216,6 +1216,8 @@ static volatile LONG g_toggle_edge;    /* FP-toggle press latched by the DI poll
 static volatile LONG g_kah_inject_click, g_kah_inject_putdown; /* harness-injected presses */
 static void fp_manual_combat_tick(void *,float);
 static void fp_combat_native_init(void);
+static void fp_melee_observe_init(void);
+static int kah_fp_melee(const char *,int,const char *const *,KAH_Reply *,void *);
 static int fp_combat_suppress_shot(void *,void *);
 static int install_hook(void *,void *,void **);
 static int kah_fp_combat(const char *,int,const char *const *,KAH_Reply *,void *);
@@ -3694,7 +3696,8 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_combat_probe", "fp_combat_probe begin|end|state|events [after_sequence]|clear", kah_fp_combat_probe, NULL)
           + g_kah.registerCommand("fp_control", "fp_control state|take", kah_fp_control, NULL)
           + g_kah.registerCommand("fp_camera", "fp_camera state|distance <0..12>|wheel <delta>", kah_fp_camera, NULL)
-          + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL);
+          + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
+          + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
 }
@@ -8241,7 +8244,7 @@ static void hooked_gun_shoot(void *gun, void *me, void *target, int stat, const 
 {
     if (fp_combat_suppress_shot(gun,me)) return;
     Vec3 aim;
-    if (g_fp_mode && g_cfg_freeaim && me && me == g_fp_control_actor && fp_aim_point(&aim)) {
+    if (g_fp_mode && g_cfg_freeaim && !g_aim_mode && me && me == g_fp_control_actor && fp_aim_point(&aim)) {
         aimpos = &aim;
         static int logged;
         if (!logged) { logged = 1; logline("[freeaim] projectile override LIVE"); }
@@ -8365,6 +8368,7 @@ static void hooked_sheathe(void *pc)
 }
 
 #include "kfp_combat_native.inc"
+#include "kfp_melee_observe.inc"
 
 /* CharMovement::update hook: re-assert the player's direct-drive intent
  * IMMEDIATELY BEFORE the engine consumes movement state -- combat AI (and the
@@ -9371,6 +9375,7 @@ __declspec(dllexport) void dllStartPlugin(void)
             logline(gsok ? "projectile aim hook installed (GunClass::shoot)"
                          : "projectile aim hook FAILED");
             fp_combat_native_init();
+            fp_melee_observe_init();
             void *fd = (void *)(g_base + RVA_FACE_DIR);
             int fdok = install_hook(fd, (void *)hooked_face_direction,
                                     (void **)&g_face_dir_orig);

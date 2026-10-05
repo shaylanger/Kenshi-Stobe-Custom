@@ -2,11 +2,14 @@
  * setup/end/reload/reset use KenshiLib's version-aware exported bindings.
  * T/MT/end intercepts use unique executable signatures, never fixed RVAs. */
 #include "kfp_combat_controller.h"
+#include "kfp_aim_geometry.h"
 static KfpCombatController g_combat_control;
 static KfpCombatObservation g_combat_observed;
 static KfpCombatInput g_combat_injected;
 static int g_combat_injection, g_combat_enabled, g_combat_native_ready;
 static int g_combat_fault, g_combat_dispatch, g_combat_auto_reload=1;
+static DWORD g_combat_dispatch_tid;
+static uint32_t g_combat_actor_ids[5];
 static void *g_combat_pc, *g_combat_rc, *g_combat_weapon, *g_combat_gun;
 static unsigned g_combat_actual_shots, g_combat_suppressed, g_combat_reload_starts;
 typedef void (*combat_rc_t)(void *,float,const void *,const void *);
@@ -23,7 +26,9 @@ static combat_end_t g_combat_reset_timer;
 static int combat_owned_rc(void *rc) {
     return g_combat_enabled && g_combat_native_ready && !g_combat_fault &&
            g_fp_mode && rc && rc==g_combat_rc && char_valid(g_combat_pc) &&
-           g_combat_pc==g_fp_control_actor;
+           g_combat_pc==g_fp_control_actor &&
+           readable((void *)((uintptr_t)g_combat_pc+CHAR_HANDLE+HAND_IDS),20) &&
+           !memcmp(g_combat_actor_ids,(void *)((uintptr_t)g_combat_pc+CHAR_HANDLE+HAND_IDS),20);
 }
 static void combat_rc_hook(void *rc,float dt,const void *a,const void *b) {
     if (!combat_owned_rc(rc)) g_combat_rc_orig(rc,dt,a,b);
@@ -36,7 +41,7 @@ static void combat_end_hook(void *rc) {
 }
 static int fp_combat_suppress_shot(void *gun,void *pc) {
     if (combat_owned_rc(g_combat_rc) && pc==g_combat_pc) {
-        if (!g_combat_dispatch || gun!=g_combat_gun) {++g_combat_suppressed;return 1;}
+        if (!g_combat_dispatch || GetCurrentThreadId()!=g_combat_dispatch_tid || gun!=g_combat_gun) {++g_combat_suppressed;return 1;}
     }
     return 0;
 }
@@ -49,11 +54,53 @@ static void *combat_virtual(void *object,size_t slot) {
     return fn && VirtualQuery(fn,&mi,sizeof(mi)) && mi.State==MEM_COMMIT &&
         (mi.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))?fn:NULL;
 }
+/* No target/limb grant: native projectile still resolves its physical hit.
+ * Camera scene position uses the established floating-origin translation.
+ * Called under the owning main-loop crash guard, never nests a guard. */
+static int combat_camera_aim(Vec3 *out) {
+    if (!g_have_t || !g_have_eye || !g_view_have_anchor || !g_ogre_ready || !g_node_get_dpos)
+        return 0;
+    void *cam=readable((void *)(g_base+RVA_CAM_INSTANCE),8)?*(void **)(g_base+RVA_CAM_INSTANCE):NULL;
+    void *node=readable(cam,CC_NODE+8)?*(void **)((uintptr_t)cam+CC_NODE):NULL;
+    if (!readable(node,8))return 0;
+    Vec3 scene;
+    const Vec3 *actual=g_node_get_dpos(node,&scene);
+    if (!readable((void *)actual,sizeof(scene)))return 0;
+    scene=*actual;
+    float scene_xyz[3]={scene.x,scene.y,scene.z},origin_xyz[3],dir_xyz[3],end_xyz[3];
+    if (!kfp_aim_geometry(scene_xyz,g_tx,g_tz,g_yaw,g_pitch,80.0f,
+                          origin_xyz,dir_xyz,end_xyz))return 0;
+    Vec3 origin={origin_xyz[0],origin_xyz[1],origin_xyz[2]};
+    Vec3 dir={dir_xyz[0],dir_xyz[1],dir_xyz[2]};
+    Vec3 best={end_xyz[0],end_xyz[1],end_xyz[2]},hit;
+    float nearest=80.0f;
+    void *saved_node=g_mr_perch_node;mr_cache_t *saved_cache=g_mr_perch_cache;
+    for(int visual=0;visual<2;++visual) {
+        int got=visual?meshray_refine(&origin,&dir,80.0f,&hit):fall_ray(&origin,&dir,&hit);
+        if (!got)continue;
+        float distance=(hit.x-origin.x)*dir.x+(hit.y-origin.y)*dir.y+(hit.z-origin.z)*dir.z;
+        if (isfinite(distance)&&distance>=0 && distance<nearest) {best=hit;nearest=distance;}
+    }
+    g_mr_perch_node=saved_node;g_mr_perch_cache=saved_cache;
+    *out=best;return 1;
+}
+static int combat_truce_pending(void) {
+    /* Conservative interim policy: with any active protected NPC, reject new
+     * manual shots everywhere, including potential spread into that NPC.
+     * Scoped first-victim truce routing replaces this only after validation. */
+    for(int i=0;i<STOBE_FIGHT_TRUCE_SLOTS;++i)
+        if(g_stobe_fight_truce[i].serial)return 1;
+    return 0;
+}
 static void combat_release(void) {
     void *rc=g_combat_rc,*pc=g_combat_pc;
     g_combat_rc=NULL;g_combat_pc=NULL;g_combat_gun=NULL;g_combat_weapon=NULL;g_aim_mode=0;
-    g_combat_dispatch=0;memset(&g_combat_control,0,sizeof(g_combat_control));
-    if (rc && char_valid(pc) && readable(rc,0x88) &&
+    g_combat_dispatch=0;g_combat_dispatch_tid=0;
+    int same_actor=char_valid(pc) && readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) &&
+        !memcmp(g_combat_actor_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20);
+    memset(g_combat_actor_ids,0,sizeof(g_combat_actor_ids));
+    memset(&g_combat_control,0,sizeof(g_combat_control));
+    if (rc && same_actor && readable(rc,0x88) &&
         *(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT)==rc &&
         *(void **)((uintptr_t)rc+RC_ME)==pc && g_combat_end_orig) g_combat_end_orig(rc);
 }
@@ -103,19 +150,34 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     if (!char_valid(pc) || !readable(rc,0x88) || *(void **)((uintptr_t)rc+RC_ME)!=pc || !weapon) {
         combat_release();memset(&g_combat_observed,0,sizeof(g_combat_observed));g_guard_armed=0;return;
     }
-    if (g_combat_pc!=pc || g_combat_rc!=rc || g_combat_weapon!=weapon) {
-        combat_release();g_combat_pc=pc;g_combat_rc=rc;g_combat_weapon=weapon;
+    if (g_combat_pc!=pc || g_combat_rc!=rc || g_combat_weapon!=weapon ||
+        !readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) ||
+        memcmp(g_combat_actor_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) {
+        combat_release();
+        if (!readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) {g_guard_armed=0;return;}
+        g_combat_pc=pc;g_combat_rc=rc;g_combat_weapon=weapon;
+        memcpy(g_combat_actor_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20);
     }
     void *gun=((void *(*)(void *))(g_base+RVA_RC_GETGUN))(rc);
-    if (!readable(gun,0x121)) {g_guard_armed=0;return;}
+    if (!readable(gun,0x121)) {
+        combat_release();memset(&g_combat_observed,0,sizeof(g_combat_observed));g_guard_armed=0;return;
+    }
+    if (g_combat_gun && g_combat_gun!=gun) {
+        combat_release();memset(&g_combat_observed,0,sizeof(g_combat_observed));g_guard_armed=0;return;
+    }
     g_combat_gun=gun;*(void **)((uintptr_t)rc+RC_GUN)=gun;
     float speed=readable((void *)((uintptr_t)gw+GW_FRAMESPEED),4)?
         *(float *)((uintptr_t)gw+GW_FRAMESPEED):0;
     KfpCombatObservation o={0};o.actor=(uint64_t)(uintptr_t)pc;o.weapon=(uint64_t)(uintptr_t)weapon;
     o.enabled=1;o.allowed=!g_ui_open&&!g_is_down&&!char_prone_state(pc)&&(g_combat_injection||game_has_focus());
     o.running=isfinite(speed)&&speed>0&&isfinite(dt)&&dt>0;o.dt=dt*speed;o.kind=KFP_WEAPON_RANGED;
+    /* Yield the real native task on focus/UI/KO interruption. Leaving owned
+     * update hooks suppressed would otherwise strand an unfinished reload. */
+    if (!o.allowed) {
+        combat_release();g_combat_observed=o;g_guard_armed=0;return;
+    }
     o.ammo=*(int *)((uintptr_t)gun+GUN_AMMO);o.reloading=*(unsigned char *)((uintptr_t)rc+0x80);
-    Vec3 aim;int have_aim=fp_aim_point(&aim);
+    Vec3 aim;int have_aim=combat_camera_aim(&aim);
     if (o.allowed && o.running && have_aim && (g_combat_control.aimed||o.reloading)) {
         if (combat_weapon_pose(pc,gun,&aim)) {
             *(Vec3 *)((uintptr_t)rc+RC_AIMPOS)=aim;
@@ -138,7 +200,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     float timer=*(float *)((uintptr_t)rc+0x70);
     o.aim_ready=have_aim && ready && ((char (*)(void *))ready)(gun) &&
                 isfinite(closeness) && closeness<=1.0f;
-    o.shot_ready=o.aim_ready && isfinite(timer)&&timer<=0;
+    o.shot_ready=o.aim_ready && isfinite(timer)&&timer<=0 && !combat_truce_pending();
     o.reload_allowed=have_aim;o.committed=o.reloading;
     unsigned action=kfp_combat_step(&g_combat_control,&o,input,g_combat_auto_reload,0);
     g_combat_observed=o;
@@ -151,7 +213,9 @@ static void fp_manual_combat_tick(void *gw,float dt) {
             g_aim_mode=1;
         } else {g_combat_control.aimed=0;}
     }
-    if ((action&KFP_ACT_LOWER) && !o.reloading) {
+    /* A release during reload clears controller aim before native reload ends.
+     * Reconcile the owned pose afterward even without a second LOWER edge. */
+    if (g_aim_mode && !g_combat_control.aimed && !o.reloading) {
         g_combat_end_orig(rc);g_aim_mode=0;
     }
     if ((action&KFP_ACT_RELOAD) && !*(unsigned char *)((uintptr_t)rc+0x80)) {
@@ -162,7 +226,9 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     if ((action&KFP_ACT_SHOOT) && have_aim) {
         int before=*(int *)((uintptr_t)gun+GUN_AMMO);
         int stat=*(int *)((uintptr_t)rc+RC_STAT);
-        g_combat_dispatch=1;hooked_gun_shoot(gun,pc,NULL,stat,&aim);g_combat_dispatch=0;
+        g_combat_dispatch_tid=GetCurrentThreadId();g_combat_dispatch=1;
+        hooked_gun_shoot(gun,pc,NULL,stat,&aim);
+        g_combat_dispatch=0;g_combat_dispatch_tid=0;
         int after=*(int *)((uintptr_t)gun+GUN_AMMO);
         if (before>0&&after==before-1)++g_combat_actual_shots;
         g_combat_reset_timer(rc); /* native minimum aim-cycle reset */

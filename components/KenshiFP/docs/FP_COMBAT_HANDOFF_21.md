@@ -1,9 +1,10 @@
 # FP combat handoff 21 — full resume context
-Updated 2026-10-05 21:36 UTC (15:36 user local). Paused at the user's explicit latest request to write all context and stop. This dedicated FP combat record does not replace the coordinator's normal handoff.
+Status: ACTIVE — resumed on the user's latest instruction to keep implementing and keep this file continuously current. This dedicated FP combat record does not replace the coordinator's normal handoff.
+Current work: P01 native lifecycle evidence and restoration consumed (PASS); no further routine polling. Private native lifecycle fixes passed offline suites/build; continuing actual-camera aim geometry, conservative truce gate, and verified melee startup/commitment analysis. Wrapper friendly_fire name corrected after coordinator setup failure. Manual native adapter remains OFF/uninstalled. Latest committed checkpoint df81ee3; current edits are saved locally. Update this entry before long investigations and after meaningful edits/validation.
 
 ## Objective and latest instruction
-The user authorized all implementation in an isolated clone/worktree while another agent extracts STOBE/standalone code and runs master tests. Implement camera/control, ranged phase 1, then melee phase 2 with automated test coverage. Earlier unrelated stop/checkpoint instructions were stale; do not apply them to a resumed implementation. The latest user explicitly requested this pause. A new user instruction to resume authorizes continuing.
-Stop polling the coordinator once their requested information has arrived. Coordination/baseline context has arrived; actual P01 native ranged evidence has NOT arrived at the latest results-directory check (~21:31 UTC).
+The user authorized all implementation in an isolated clone/worktree while another agent extracts STOBE/standalone code and runs master tests. Implement camera/control, ranged phase 1, then melee phase 2 with automated test coverage. Earlier unrelated stop/checkpoint instructions were stale; do not apply them to a resumed implementation. The latest user explicitly resumed implementation and requires this handoff to stay current. Continue work; do not stop at a routine checkpoint.
+Stop polling the coordinator once their requested information has arrived. Coordination/baseline context has arrived. P01 raw evidence has now arrived: native-fp0.csv has 3562 rows, 10 shot before/after pairs; native-fp1.csv has 1460 rows, 4 pairs. Raw state values include 0/2 (and 3 in FP1), stat35. P01 final verdict PASS and verified main restoration consumed; native lifecycle gate complete only. No manual/body-part/parity acceptance inferred.
 
 ## Accepted design
 1. Persistent FP-style WASD controls while wheel zooms continuously between eyes and third person; wheel no longer throttles run speed. Retain old toggle as native-control fallback.
@@ -18,7 +19,7 @@ Stop polling the coordinator once their requested information has arrived. Coord
 - Edit/build/offline-test private combat worktree and mirror only. Package immutable candidate requests between master batches.
 - Do not change shared first_player_char(gw), g_player_pc or STOBE actor resolvers. Source first_player_char actually returns selected squad member, fallback slot 0; old coordinator table leader comment is stale.
 - New hooks must use unique executable signatures (rva_sigs/sigscan), never guessed fixed RVAs. Normal/unowned actors must pass through.
-- Respect STOBE fight truce before initiating an attack. Draft native adapter currently lacks this gate: MUST fix before enabling/packaging manual combat. Request/read-only accessor integration according to coordinator contract; do not alter frozen STOBE functions.
+- Respect STOBE fight truce before initiating an attack. Draft now conservatively rejects manual shots while any truce slot is active. Precise first-victim and in-flight impact protection still required before manual acceptance; do not alter frozen STOBE functions.
 - No new subagents were spawned during this work. Other existing machine/coordinator agents must not be interrupted to perform this handoff.
 - Automatic approval review rejected a combined local-commit + GitHub push because external change-set destination authorization was not established. Local commits are allowed and continue. Do not retry/bypass push without explicit user authorization. Earlier probe commits were already pushed; camera and subsequent checkpoint are local only.
 
@@ -42,7 +43,7 @@ P01 candidate C:\KenshiTestRuns\fp-combat\candidates\538851a\KenshiFP.dll, SHA25
 P01 immutable request C:\KenshiTestRuns\fp-combat\requests\20261005-2043-native-ranged-probe.txt.
 Camera candidate C:\KenshiTestRuns\fp-combat\candidates\77b9099\KenshiFP.dll, SHA256 a57d12e79037f66d22838c696bbeb3c414023bff784bfac3c04384655a164674.
 Camera request requests\20261005-2119-camera-control.txt; wrapper copied into candidate folder, so later worktree changes cannot alter it.
-Results contract C:\KenshiTestRuns\fp-combat\results\<request-id>\RESULT.txt, run.txt, raw CSV/logs, restore.txt SHA-verified restoration. At latest check results folder still empty. User sent reminder request to coordinator.
+Results contract C:\KenshiTestRuns\fp-combat\results\<request-id>\RESULT.txt, run.txt, raw CSV/logs, restore.txt SHA-verified restoration. P01 results finalized and consumed; see Active resume progress for native evidence, fixture disclosure, upgraded harness and verified restoration. No repeated native-evidence requests/polling.
 
 ## Completed camera/control source
 client/kfp_control.inc: pin all five native handle IDs independently from inspection. Explicit F6 key_take_control transfer, fp_control state|take; refuses non-squad selection fallback. Missing actor releases instead of silently transferring. direct_default=1 enables once a valid squad world appears; explicit old toggle fallback stays off until toggled or new world.
@@ -62,18 +63,18 @@ tests/run_offline.py runs all three C tests + Python decoder, bounded timeout/CP
 
 ## Draft native ranged adapter — NOT READY FOR GAME ACCEPTANCE
 client/kfp_combat_native.inc (235 lines), integrated into main source, PRIVATE BUILD ONLY, g_combat_enabled defaults OFF. Not packaged/installed/game-tested.
-fp_combat on|off|state|physical|input <aim 0|1> <fire 0|1> <reload 0|1>. Injection feeds same controller; cannot override readiness. Current adapter RANGED ONLY; melee policy exists but has no native adapter.
+fp_combat on|off|state|physical|input <aim 0|1> <fire 0|1> <reload 0|1>. Injection feeds same controller; cannot override readiness. Current adapter RANGED ONLY; melee policy and read-only fp_melee observer exist, no native melee action adapter.
 KenshiLib exported setup/end/reloadCheck/resetShotTimer bindings, unique scans intercept native RC updateT/updateMT/end for only owned actor. Unowned and partially installed hook state pass through. Gun shoot hook suppresses autonomous owned shots unless explicit dispatch. Guarded main-loop native tick after movement; probes remain independent.
 Draft calls native draw, gun createPhysical/setVisible/update, native reloadCheck once per owned game frame, animationUpdate non-null sentinel to aim/reload, measured native gun readiness/closeness and aimTimer, GunClass::shoot, native reset timer. No instant ammo refill or forced async loading counter.
 Latest fix: explicit lower/release uses end trampoline directly, avoiding interception swallowing the adapter's own end call. Final private build/check status is recorded below once complete.
 IMPORTANT remaining engineering before manual candidate:
-- STOBE truce gate absent.
+- Conservative broad truce readiness gate present; precise victim/in-flight guard pending.
 - Review hook/AI lifecycle conflicts, thread ownership/global crash guard, stale pointer/full-handle identity on reuse, missing/changed gun, hook installation order and native exports readiness.
-- Existing sheathe suppressor only works if installed; verify install conditional because baseline KFP_MANUAL_AIM=0. Draft sets g_aim_mode but never enables old prototype.
+- Existing sheathe installation verified unconditional inside hook-ready ranged block; include success in manual-ready requirements. Draft never enables old prototype.
 - Verify dt vs game-speed scaling (dt*speed currently for own aim timer), pause/no overspeed/double native ticks.
-- Improve LOWER while reload/UI interrupted: g_aim_mode/animation ownership must eventually lower after completion even if controller already cleared aimed.
+- Deferred LOWER reconciliation and UI/focus/KO ownership yield implemented; native acceptance tests still pending.
 - Native manual ammo/reload/readiness/XP not game-validated. GunClass::shoot receives NULL target; height/wall/power/hostility modifiers and actual collision attribution may differ from native targeted shooting.
-- fp_aim_point is still OLD head + 80m look ray; no actual TPS camera-to-world/muzzle obstruction yet. ADS optics/FOV/alignment not implemented.
+- Manual combat_camera_aim now uses actual TPS/FP camera-to-world plus nearest static/visual hit. Legacy native free-aim hook remains old head ray outside manual pose. Explicit muzzle cover and animated-NPC aim selection missing; ADS optics/FOV/alignment not implemented.
 - Native mouse button dispatch not filtered; vanilla RMB orders/LMB interactions may conflict. Must integrate scoped mouse input ownership.
 - No spatial body-part routing, actual animated-body collision refinement or balance calibrations.
 - No native melee action integration or root-motion yield.
@@ -115,7 +116,7 @@ Unsigned UNC PowerShell script blocked; no policy changed. Python staging packag
 
 ## Resume order
 1. Read this file, coordination context, COMBAT_TEST_PLAN.md, NATIVE_PROBE.md and repository CLAUDE/context/AGENTS instructions. Review git log/status/diff without reverting checkpoint work.
-2. Check P01 results until actual evidence arrives. Once complete, consume raw state/ammo/reload observations and stop routine checking; no repeated requests for already delivered baseline.
+2. P01 evidence has arrived and was consumed: do not poll/request it again. P02 native melee observation request is next after current wrapper validation/candidate packaging. See latest active entries.
 3. Audit/fix native draft blockers above, complete actual-camera/muzzle aim, ADS, input consumption, truce and scoped native lifecycle; build/offline-test then immutable ranged request. Do not enable unsafe old KFP_MANUAL_AIM prototype.
 4. Trace native projectile first-hit/spatial body-part routing; preserve native damage/armour/XP and downstream mod effects. Add animated/race/missing-limb/cover/crowd cases.
 5. Implement native melee ready-start/commitment/defence/recovery and movement root-motion yield, using real native state calls and scoped AI ownership, not just a click queue.
@@ -124,3 +125,35 @@ Unsigned UNC PowerShell script blocked; no policy changed. Python staging packag
 
 ## Final stop verification
 2026-10-05 ~21:37 UTC: bounded validation-stop completed exit0. Production-include/portable B07/B09/B10 plain GCC and UBSan PASS; eight Python native trace decoder tests PASS; isolated MinGW RE_Kenshi DLL build PASS and exported startPlugin verified. git diff --check PASS (CRLF normalization warnings only). No game test/install was performed. No manual-combat candidate packaged. Final source/docs saved as a LOCAL checkpoint commit; publishing remains blocked. No development child agents or test processes remain running; unrelated coordinator agents retain their own work.
+
+## Active resume progress (2026-10-05)
+- User resumed and requires this file to remain current at meaningful changes. Earlier final-stop verification is historical, not a stop instruction.
+- Read fresh coordination m45 and workspace CLAUDE m46. Private git was clean at start, local checkpoint df81ee3.
+- New P01 partial captures read: FP0 3562 rows/10 before-after shot pairs; FP1 1460 rows/4 pairs. Raw state0/2/3 and stat35. Final report/restoration not yet seen; no P01 acceptance claim. Analysis script staging/resume_analysis.py; consume capture integrity once finalized.
+- Resolved actual melee bodies through RTTI E9 thunks: AI attack0x60a970, block0x60a190, whoAttacks0x666a30, update0x60d6a0; base attack0x60a590, block0x609c70; AttackState initialise0x2b4af0, update0x2b2d50/end0x2b2d60 are no-op virtuals. These are analysis addresses, never hardcoded hooks. Bounded dumps staging/native/*_body.asm. AI attack checks target+0x290, sets deadtime if absent, then calls base attack; investigate base animation/technique start and startup gates next.
+- Native draft edits SAVED but not yet validated: snapshot full five actor handle IDs in ownership and release checks (avoid reused pointer cleanup); release/rearm on invalid or replaced gun; dispatch permission requires issuing thread ID as well as gun/actor; reconcile deferred LOWER after native reload completes; release native update ownership on UI/focus/KO interruption so reload is not stranded. Feature remains OFF and uninstalled.
+- Next immediate action: private bounded tests/build, review diff and record result, then continue native ready/aim/target/input/truce integration. Existing sheathe hook found installed in startup (review surrounding install guards still needed). Global VEH already tracks issuing thread; nested guard use remains audit item.
+
+- Validation-resume1 PASS: B07/B09/B10 plain+UBSan, eight B08 decoder tests; private MinGW DLL build exported startPlugin PASS. Lifecycle changes compile, actual native behavior remains unvalidated.
+- Requested P01 native evidence HAS ARRIVED: capture.console.txt now RESULT P01 PASS exit0; FP0 shots10/ammo-increases9/animation3503, FP1 shots4/increases4/animation1415. Stop routine evidence polling now. Still obtain final run/hash/restoration metadata when coordinator publishes it; that is release accounting, not missing native evidence. Raw captures do not validate manual combat/body-part/parity.
+- Verified startup surrounding sheathe installation: unconditional inside hook-ready ranged block, independent of disabled old KFP_MANUAL_AIM. Requires checking sheathe success in manual-ready status before enabling candidate. SDK path in prior record may have wrong filename; locate actual file before reading field layout.
+
+- Final P01 run.txt/RESULT.txt/restore.txt consumed. PASS attempt2; attempt1 setup failure was unsupported stat precisionfriendlyfire. Only wrapper patch friendly_fire; corrected private source now. Fixture recruited Axima Oldworld Bow MkI vs protected/pinned Skaera26–30m, 1x. Protected shooter/target disclosed, native lifecycle only. Installed candidate9357105B verified; main KenshiFP0349AA2A8FF481FC88BD9733D5C0D12BC6F37CA8B5D5A120102A960BAB677291 restored game+Vortex; FP0 restored. Harness nowB847ACF6 from93d03e3 (new rangedinfo/rangedtest attack fixes); PG2E533D44, StobeDAF1390F NPC-panel candidate. No need to keep checking for requested native evidence.
+- SDK actual path /root/KenshiLib-src/Include/kenshi/combat/CombatClass.h. Important correction: +0x140 _isAttacking is FLOAT (not bool); +0x144 inDeadTime bool; +0x148 deadTimer. Base attack requires technique and target; never force CHOP without native startup selecting technique/range. AttackState initialise performs legal range/init check and may issue move when out of range; do not count that as immediate swing.
+
+- Saved next implementation: kfp_aim_geometry.h + production native combat_camera_aim reads actual Ogre camera scene position, converts existing floating origin, builds forward ray, takes nearest native static/visual mesh hit <=80m, otherwise far point. Existing gun hook no longer overwrites manual supplied aim when g_aim_mode owns pose. This is camera/static aim only: animated NPC target-ray intersection, explicit muzzle cover query, ADS optics and spatial limb routing still missing. Native projectile keeps physical collision and native spread/damage; no hit grant.
+- combat_truce_pending reads existing frozen truce slot array without changing STOBE functions. Conservative interim shot readiness false while ANY slot is active; this avoids stray manual spread starting fights during active truce. Needs coordinator-reviewed precise victim/impact guard later, including truce beginning after projectile spawn. Feature still OFF and no manual candidate.
+- Added B11 test_aim_geometry.c to bounded runner: origin translation invariance, TPS forward ray, yaw/pitch/unit vector, finite inputs and failure leaves outputs untouched. Next run validation-resume2 and build; no native collision acceptance inferred from this test.
+
+- Validation-resume2 completed PASS: four C suites plain+UBSan including new B11 geometry; eight decoder tests; private DLL MinGW build/export PASS. No native/game claim and no install.
+- Current next work: resolve native AttackState::initialiseAttack (thunk0x2b2c9), inspect startup/technique gates, build passive melee readiness telemetry and candidate coverage before committing any forced state transition. AI startup body0x60d0b0 initializes stateMap[nextMove] and only then changes combatState; blocked path can enter PATHSTART. Native _isAttacking remains float. Avoid guessing counters/forcing ready.
+
+- Added read-only fp_melee state in kfp_melee_observe.inc (native getCombatClass export, guarded ownership and readable0x2b8). Reports actual actor/combat/active/state/next/float attacking/deadtime/timers/technique/finished/movement/current and blocking targets/threat count/native frame dt. No readiness interpretation, AI suppression, attack or movement writes. New command registration/init included. Build verification next; production observation tests + coordinator native-state capture next.
+- Native AttackState::initialiseAttack thunk0x2b2c9 resolves0x2b4570. Reads target distance/sizes and native stats technique selection; if selection fails issues movement and returnsfalse; if succeeds sets currentTechnique, starts native attack animation with stat/technique-derived speed, creates XP/informs target and halts movement before returningtrue. It does not contain autonomous initiative contest in the inspected body. Need use this path, then native state transition/update, while retaining real commitment/recovery and spacing. No forced melee adapter yet.
+- New assembly dumps decision_body.asm actual0x60c8b0, blockinit_body.asm actual0x609290, baseupdate_body.asm actual0x60ce30. decisionState starts autonomous startup/circle/wait/block choices; narrowly scoped hook may replace decision for manually owned actor while leaving committed update and attackImpactCheck native. Do not suppress whole combat update.
+
+- B12 production observation include tests PASS plain+UBSan with mock native memory. validation-resume3 includes prior B07/B09/B10/B11+eight ranged decoder PASS. DLL build PID26820 needs completion read before packaging.
+- Added coordinator-only tests/capture_native_melee.py P02: prepared native duel/manual OFF, polls raw fp_melee state in FP0/FP1, stable actor/combat/movement, native positive dt/active, >=3 CHOP entries and positive deadtime samples. Restores original mode; no attack/load/install/heal/speed. It is polling evidence, not complete impacts/readiness. Decoder tests test_melee_trace.py added to run_offline.py; next validation-resume4. No P02 request yet.
+- Local wrapper-fix commit e86b5fb. Native lifecycle/aim/truce/observer source and B11/B12/P02 tests are saved but not committed yet. Next validate wrapper+build, review and local checkpoint, package immutable P02 request with manual OFF. Continue other engineering while coordinator owns live run.
+
+- Validation-resume4 PASS: five production/portable C suites plain+UBSan; eight native ranged decoder tests + four new melee decoder tests. P02 stuck CHOP cannot count repeated cycles; stopped fight/identity change/nonfinite time/missing recovery fail. Private observer DLL build/export PASS. git diff --check PASS (CRLF normalization warnings only). Preparing local checkpoint and immutable observational P02 candidate/request; manual combat remains OFF.

@@ -19,7 +19,7 @@ def run(name,cmd):
         except subprocess.TimeoutExpired: code=124
     print(name,"exit="+str(code)); print(log.read_text(errors="replace")[:3000])
     if code: raise SystemExit(1)
-for source in ("test_combat_probe.c","test_control_view.c","test_combat_controller.c"):
+for source in ("test_combat_probe.c","test_control_view.c","test_combat_controller.c","test_aim_geometry.c","test_melee_observe.c"):
     for name,flags in [("plain",[]),("ubsan",["-fsanitize=undefined","-fno-sanitize-recover=all"])]:
         label=Path(source).stem+"-"+name
         binary=str(logs/label)
@@ -28,4 +28,6 @@ for source in ("test_combat_probe.c","test_control_view.c","test_combat_controll
         run(label,[binary])
 run("decoder",[sys.executable,"-m","unittest","discover","-s",str(root/"tests"),
                "-p","test_native_trace.py","-v"])
+run("melee-decoder",[sys.executable,"-m","unittest","discover","-s",str(root/"tests"),
+               "-p","test_melee_trace.py","-v"])
 print("RESULT B08 PASS bounded plain+UBSan probe and native trace decoder checks; engine offsets/runtime not validated")
