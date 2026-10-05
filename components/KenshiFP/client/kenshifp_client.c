@@ -844,6 +844,11 @@ static addr_table_t g_rva;   /* active table, selected at load by build signatur
 /* ---- user configuration (KenshiFP.ini, hot-reloaded in-game) ------------ */
 static int g_cfg_aim_lean = 1;     /* aim_lean: spine bend with weapon drawn */
 static int g_cfg_freeaim  = 1;     /* ranged_freeaim: crosshair aim in combat */
+#include "kfp_view.h"
+static KfpView g_view;
+static int g_cfg_camera_zoom=1;
+static int g_cfg_direct_default = 1; /* always direct controls after world load */
+static int g_cfg_key_take_control = 0x75; /* F6: explicit control transfer */
 static int g_cfg_wheel    = 1;     /* wheel_speed: scrollwheel gait control */
 static int g_cfg_vignette = 1;     /* ko_vignette: dark edges while knocked out */
 static int g_cfg_key_fp   = 0xA5;  /* key_toggle_fp (VK code; default Right Alt) */
@@ -1209,6 +1214,18 @@ static DWORD g_last_tick_ms;
 static int g_fp_mode;              /* toggled by VK_TOGGLE_FP edge */
 static volatile LONG g_toggle_edge;    /* FP-toggle press latched by the DI poll thread */
 static volatile LONG g_kah_inject_click, g_kah_inject_putdown; /* harness-injected presses */
+static void fp_manual_combat_tick(void *,float);
+static void fp_combat_native_init(void);
+static void fp_melee_observe_init(void);
+static int kah_fp_melee(const char *,int,const char *const *,KAH_Reply *,void *);
+static int fp_combat_suppress_shot(void *,void *);
+static int install_hook(void *,void *,void **);
+static int kah_fp_combat(const char *,int,const char *const *,KAH_Reply *,void *);
+static void fp_view_input(void);
+static int fp_view_is_eye(void);
+static int kah_fp_camera(const char *,int,const char *const *,KAH_Reply *,void *);
+static void *fp_controlled_char(void *gw);
+static int game_has_focus(void);
 static void kah_bridge_tick(void);    /* registers the harness test commands */
 static int g_prev_fp;             /* g_fp_mode from last frame (camera_lock edge) */
 static int g_ovr_prev;            /* was the FP node override active last frame */
@@ -3161,7 +3178,7 @@ static void camera_lock(void *gw)
     kah_bridge_tick();
 
     if (g_fp_mode) {
-        void *pc = first_player_char(gw);   /* v1: squad leader (index 0) */
+        void *pc = fp_controlled_char(gw);   /* camera follows controlled, not inspected */
         if (pc && readable((void *)((uintptr_t)pc + CHAR_HANDLE), 0x20))
             g_follow_object(cam, (void *)((uintptr_t)pc + CHAR_HANDLE));
     } else if (g_prev_fp) {
@@ -3330,6 +3347,8 @@ static void kfp_extract_assets(void)
 }
 
 #include "kfp_locomotion.h"
+#include "kfp_control.inc"
+#include "kfp_combat_probe.inc" /* passive native lifecycle prerequisite */
 #include "kfp_meshray.h"   /* true-geometry .mesh triangle raycasts (task #22) */
 
 /* Perch ground for the loco layer: while standing on a mesh, foot-IK probes
@@ -3673,7 +3692,12 @@ static void kah_bridge_tick(void)
     int n = g_kah.registerCommand("fp_mode", "fp_mode on|off", kah_fp_mode, NULL)
           + g_kah.registerCommand("fp_click", "fp_click (then select a squad member)", kah_fp_click, NULL)
           + g_kah.registerCommand("fp_putdown", "fp_putdown (G while carrying)", kah_fp_putdown, NULL)
-          + g_kah.registerCommand("fp_state", "fp_state", kah_fp_state, NULL);
+          + g_kah.registerCommand("fp_state", "fp_state", kah_fp_state, NULL)
+          + g_kah.registerCommand("fp_combat_probe", "fp_combat_probe begin|end|state|events [after_sequence]|clear", kah_fp_combat_probe, NULL)
+          + g_kah.registerCommand("fp_control", "fp_control state|take", kah_fp_control, NULL)
+          + g_kah.registerCommand("fp_camera", "fp_camera state|distance <0..12>|wheel <delta>|look <yaw radians> <pitch radians>", kah_fp_camera, NULL)
+          + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|aim (read-only)|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
+          + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
 }
@@ -4050,6 +4074,7 @@ static int fall_ray(const Vec3 *from, const Vec3 *dir, Vec3 *hit)
 {
     return fall_ray_m(from, dir, hit, 0x88204u);
 }
+#include "kfp_view.inc"
 
 /* Horizontal sweep for the arc: is a surface within `reach` units of `from`
  * along `dirh`, at either of two body heights? (two rays: shin and chest) */
@@ -4573,7 +4598,7 @@ static void fp_camera_override(void *gw)
     if (!readable(node, 8)) return;
 
     /* Only drive the override while FP is on AND not in free-cam mode. */
-    int active = g_fp_mode && !*(unsigned char *)((uintptr_t)cam + CC_FREECAM);
+    int active = g_fp_mode && fp_controlled_char(gw) && !*(unsigned char *)((uintptr_t)cam + CC_FREECAM);
 
     {   /* [map-bug diag] log every state flip that can knock us out of FP */
         static int pa = -1, pf = -1, po = -1, pm = -1;
@@ -4593,7 +4618,7 @@ static void fp_camera_override(void *gw)
      * so the FP eye still rides the bend. */
     {
         fp_lookat_click_guard(gw);   /* bug 79: before the swap below sees her */
-        void *pcx = first_player_char(gw);
+        void *pcx = fp_controlled_char(gw);
         /* Character swap (selected a different squad member): release the old
          * character's driven bones and reset all per-character calibrations so
          * FP re-seats cleanly on the new body. */
@@ -4615,7 +4640,8 @@ static void fp_camera_override(void *gw)
              * camera glided away while holding WASD (even paused). */
             pc_prev = pcx;
         }
-        g_player_pc = pcx;              /* cached for the ranged free-aim hook */
+        g_player_pc = first_player_char(gw); /* preserve shared selected-actor cache */
+        g_fp_control_actor = g_fp_mode ? pcx : NULL; /* private controlled-actor hook cache */
         /* Sneak/detection state for the screen-space eye (drawn post-frame in
          * fp_gui_update). Field reads only -- no game calls. */
         {
@@ -5123,7 +5149,7 @@ static void fp_camera_override(void *gw)
              * the player's hand HERE, after the map's camera update, every frame.
              * This lets the map camera track the moving player without touching
              * the map's own orientation/zoom and without blocking WASD. */
-            void *pc_map = first_player_char(gw);
+            void *pc_map = fp_controlled_char(gw);
             if (pc_map && readable((void *)((uintptr_t)pc_map + CHAR_HANDLE), 0x20))
                 g_follow_object(cam, (void *)((uintptr_t)pc_map + CHAR_HANDLE));
 
@@ -5139,7 +5165,7 @@ static void fp_camera_override(void *gw)
              * before deriving our FP eye from it. Without this re-anchor the
              * center remains at the map's last world position, so FP resumes
              * metres away while the character walks off independently. */
-            void *pc_map = first_player_char(gw);
+            void *pc_map = fp_controlled_char(gw);
             if (pc_map && readable((void *)((uintptr_t)pc_map + CHAR_HANDLE), 0x20))
                 g_follow_object(cam, (void *)((uintptr_t)pc_map + CHAR_HANDLE));
             overview_prev = 0;
@@ -5169,7 +5195,7 @@ static void fp_camera_override(void *gw)
             Vec3 eyeW = { centerW.x, centerW.y + EYE_HEIGHT - EYE_DROP, centerW.z };  /* fallback */
             g_eye_from_head = 0;
             if (g_get_bone_world) {
-                void *pc = first_player_char(gw);
+                void *pc = fp_controlled_char(gw);
                 Vec3 feet, head;
                 if (pc && char_position(pc, &feet)) {
                     /* Horizontal ground speed from feet delta / dt (framerate-
@@ -5315,7 +5341,7 @@ static void fp_camera_override(void *gw)
             if (KFP_DEBUG_LOG && !g_eye_from_head && g_was_moving) {
                 static int fl;
                 if ((++fl % 30) == 1) {
-                    void *pcd = first_player_char(gw);
+                    void *pcd = fp_controlled_char(gw);
                     Vec3 fd = {0,0,0}; int cpok = pcd && char_position(pcd, &fd);
                     logline("[weld] FALLBACK while moving: pc=%p charpos=%d gbw=%p feet=(%.1f,%.1f,%.1f)",
                             pcd, cpok, (void *)g_get_bone_world, fd.x, fd.y, fd.z);
@@ -5359,7 +5385,7 @@ static void fp_camera_override(void *gw)
              * launch velocity. */
             if (g_cfg_cam_weld && !g_is_down && !g_fall_active
                 && g_fall_rd == FALLRD_OFF) {
-                void *pcl = first_player_char(gw);
+                void *pcl = fp_controlled_char(gw);
                 void *mvl = (pcl && readable((void *)((uintptr_t)pcl + CHAR_MOVEMENT), 8))
                           ? *(void **)((uintptr_t)pcl + CHAR_MOVEMENT) : NULL;
                 if (mvl && readable((void *)((uintptr_t)mvl + MV_CURRENT_MOTION), 12)) {
@@ -5419,6 +5445,7 @@ static void fp_camera_override(void *gw)
              * visible at high game speed. Input smoothness comes from
              * DirectInput now, not from damping the eye path. */
 
+            fp_view_apply(&eyeW); /* distance/collision after calibrated eye anchor */
             g_dbg_center_y = centerW.y; g_dbg_eye_y = eyeW.y;   /* for tuning */
             /* [fdbg] eye trace, every camera frame while airborne: this is the
              * position the player actually SEES. Repeated y across consecutive
@@ -5459,7 +5486,7 @@ static void fp_camera_override(void *gw)
          * undergone from standing (bone-axis convention cancels). Apply that to
          * the look direction, blended in/out so knockdown and get-up are smooth. */
         {
-            void *pc2 = first_player_char(gw);
+            void *pc2 = fp_controlled_char(gw);
             void *anim = (pc2 && readable((void *)((uintptr_t)pc2 + CHAR_ANIM), 8))
                 ? *(void **)((uintptr_t)pc2 + CHAR_ANIM) : NULL;
             int is_down = readable((void *)((uintptr_t)anim + ANIM_RAGDOLL_MASK + 4), 4)
@@ -5837,8 +5864,31 @@ static int terrain_ray(const Vec3 *origin, const Vec3 *dir, Vec3 *out)
 #define MV_SPEEDORDERS    0x20     /* CharMovement::speedOrders (MoveSpeed) */
 #define MV_MOVEMODE       0x378    /* MovementMode: 0 normal, 1 combat, 2 direction */
 #define MV_DESIREDMOTION  0x38C    /* Vector3, consumed when mode==2 */
+#define MV_CHARACTER 0x3A8 /* CharMovement::character */
 #define MV_HALT_SLOT      (0x98/8) /* vtable: halt() -- cancels current orders */
 #define MV_SETSPEED_SLOT  (0xA8/8) /* vtable: setDesiredSpeed(MoveSpeed) */
+
+/* Stop only our own direct vector; preserve native combat/root motion. */
+static void fp_control_release_actor(void *pc) {
+    void *mv=g_dm_mv;
+    int driven=(g_dm_active || g_was_direct || g_was_moving);
+    InterlockedExchange(&g_dm_active,0); InterlockedExchange(&g_face_active,0);
+    if (!pc && readable((void *)((uintptr_t)mv+MV_CHARACTER),8))
+        pc=*(void **)((uintptr_t)mv+MV_CHARACTER);
+    if (driven && char_valid(pc) &&
+        readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) &&
+        !memcmp(g_fp_control_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) &&
+        readable((void *)((uintptr_t)pc+CHAR_MOVEMENT),8) &&
+        *(void **)((uintptr_t)pc+CHAR_MOVEMENT)==mv &&
+        readable((void *)((uintptr_t)mv+MV_MOVEMODE),4) &&
+        *(int *)((uintptr_t)mv+MV_MOVEMODE)==2) {
+        if (readable((void *)((uintptr_t)mv+MV_DESIREDMOTION),12))
+            memset((void *)((uintptr_t)mv+MV_DESIREDMOTION),0,12);
+        *(int *)((uintptr_t)mv+MV_MOVEMODE)=0;
+    }
+    g_dm_mv=NULL; g_was_moving=0; g_was_direct=0;
+    g_have_dest=0; g_face_have=0; g_face_turning=0; g_lead_sm=0;
+}
 
 /* --- athletics + strength XP for WASD movement (v0.4.6) ---------------------
  * WASD drives the character with MOVE_DIRECTION (setDirectMovement), which
@@ -5878,7 +5928,7 @@ static void fp_movement(void *gw, float dt)
         g_face_have = 0; g_face_turning = 0;
         return;
     }
-    void *pc = first_player_char(gw);
+    void *pc = fp_controlled_char(gw);
     if (!pc) return;
     /* While ragdolled (incl. a fall in progress) the physics owns the body -- our per-frame
      * move orders would drag it back onto walkable ground (that was the "pushed back" bug).
@@ -5900,20 +5950,12 @@ static void fp_movement(void *gw, float dt)
         ? *(void **)((uintptr_t)pc + CHAR_MOVEMENT) : NULL;
     if (!readable(mv, 8)) return;
 
-    /* Scrollwheel throttle: consume the wheel captured by our LL hook. */
-    LONG wheel = InterlockedExchange(&g_wheel_accum, 0);
-    g_dbg_wheel = (int)wheel;
-    if (!g_cfg_wheel) wheel = 0;   /* wheel speed control disabled in config */
-    if (wheel != 0) {
-        g_speed_scale += (wheel / 120.0f) * 0.15f;      /* one notch = 0.15 */
-        if (g_speed_scale < 0.15f) g_speed_scale = 0.15f;   /* slow walk */
-        if (g_speed_scale > 1.0f)  g_speed_scale = 1.0f;    /* full run */
-    }
+    /* Wheel consumed by fp_view_input; locomotion speed is independent. */
 
-    int w = (GetAsyncKeyState(VK_W) & 0x8000) != 0;
-    int s = (GetAsyncKeyState(VK_S) & 0x8000) != 0;
-    int a = (GetAsyncKeyState(VK_A) & 0x8000) != 0;
-    int d = (GetAsyncKeyState(VK_D) & 0x8000) != 0;
+    int w = game_has_focus() && (GetAsyncKeyState(VK_W) & 0x8000) != 0;
+    int s = game_has_focus() && (GetAsyncKeyState(VK_S) & 0x8000) != 0;
+    int a = game_has_focus() && (GetAsyncKeyState(VK_A) & 0x8000) != 0;
+    int d = game_has_focus() && (GetAsyncKeyState(VK_D) & 0x8000) != 0;
     int keys = w | (s << 1) | (a << 2) | (d << 3);
     float mf = (float)(w - s);     /* forward/back */
     float mr = (float)(d - a);     /* left/right (turns the char, not strafe) */
@@ -6847,7 +6889,7 @@ static void fp_sync_floor(void *gw)
     if (!readable((void *)((uintptr_t)gw + GW_PLAYER), 8)) return;
     void *player = *(void **)((uintptr_t)gw + GW_PLAYER);
     if (!readable(player, 8) || !in_module(*(void ***)player)) return;
-    void *pc = first_player_char(gw);
+    void *pc = fp_controlled_char(gw);
     if (!pc) return;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_track_dead = 1;
         logline("[floor] startTrackCharacter FAULTED -- native tracking disabled"); return; }
@@ -6865,7 +6907,7 @@ static void fp_load_nearby_interiors(void *gw)
     if (cooldown > 0) { cooldown--; return; }
     cooldown = 60;                                  /* ~1 Hz at 60 fps */
 
-    void *pc = first_player_char(gw);
+    void *pc = fp_controlled_char(gw);
     Vec3 here;
     if (!pc || !char_position(pc, &here)) return;
 
@@ -7174,7 +7216,7 @@ static int set_head_disabled(void *pc, int disable)
 static void hooked_update_hidden(void *app)
 {
     g_update_hidden_orig(app);
-    if (g_head_dead || !g_cfg_hide_head || !g_fp_mode || !app || app != g_player_app) return;
+    if (g_head_dead || !g_cfg_hide_head || !g_fp_mode || !fp_view_is_eye() || !app || app != g_player_app) return;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_head_dead = 1;
         logline("[head] updateHiddenParts hook FAULTED -- head-hide disabled"); return; }
     guard_arm();
@@ -7198,8 +7240,8 @@ static void fp_head_visibility(void *gw)
     if (g_head_dead || !g_gpup_setnamedi) return;
     float speed = readable((void *)((uintptr_t)gw + GW_FRAMESPEED), 4)
         ? *(float *)((uintptr_t)gw + GW_FRAMESPEED) : 1.0f;
-    void *pc = first_player_char(gw);
-    int want = g_fp_mode && pc && (g_cfg_hide_head || speed > 1.05f);
+    void *pc = fp_controlled_char(gw);
+    int want = g_fp_mode && fp_view_is_eye() && pc && (g_cfg_hide_head || speed > 1.05f);
     if (want) {
         if (g_head_hidden && g_head_hidden_char && g_head_hidden_char != pc) {
             set_head_disabled(g_head_hidden_char, 0);   /* char switched: restore the old head */
@@ -7252,7 +7294,7 @@ static void hooked_cam_update(void *cam, char controlEnabled)
     if (g_was_moving && g_have_t && g_eye_from_head && g_node_set_dpos) {
         void *center = *(void **)((uintptr_t)cam + CC_CENTER);
         if (readable(center, 8)) {
-            g_node_set_dpos(center, &g_last_eye);
+            g_node_set_dpos(center, g_view_have_anchor ? &g_view_anchor : &g_last_eye);
             /* CRITICAL ordering: the camera node is a CHILD of the center.
              * _setDerivedPosition converts derived->local against the parent's
              * CACHED derived transform, and after the snap the center's cache
@@ -7358,6 +7400,9 @@ static void load_ini(void)
         if (ini_int(line, "fps_cap", &v))        g_fps_cap = (v >= 15 && v <= 1000) ? v : 0;
         else if (ini_int(line, "aim_lean", &v))       g_cfg_aim_lean = !!v;
         else if (ini_int(line, "ranged_freeaim", &v)) g_cfg_freeaim  = !!v;
+        else if (ini_int(line, "camera_zoom", &v)) g_cfg_camera_zoom=!!v;
+        else if (ini_int(line, "direct_control_default", &v)) g_cfg_direct_default = !!v;
+        else if (ini_int(line, "key_take_control", &v)) { if (v>0 && v<255) g_cfg_key_take_control=v; }
         else if (ini_int(line, "wheel_speed", &v))    g_cfg_wheel    = !!v;
         else if (ini_int(line, "ko_vignette", &v))    g_cfg_vignette = !!v;
         else if (ini_int(line, "key_toggle_fp", &v))  { if (v > 0 && v < 255) g_cfg_key_fp = v; }
@@ -7455,6 +7500,9 @@ static void save_ini(void)
     fprintf(f, "exit_camera_zoom=%.2f\n",g_cfg_exit_zoom);
     fprintf(f, "aim_lean=%d\n",         g_cfg_aim_lean);
     fprintf(f, "ranged_freeaim=%d\n",   g_cfg_freeaim);
+    fprintf(f, "camera_zoom=%d\n",g_cfg_camera_zoom);
+    fprintf(f, "direct_control_default=%d\n",g_cfg_direct_default);
+    fprintf(f, "key_take_control=%d\n",g_cfg_key_take_control);
     fprintf(f, "wheel_speed=%d\n",      g_cfg_wheel);
     fprintf(f, "ko_vignette=%d\n",      g_cfg_vignette);
     fprintf(f, "sneak_eye=%d\n",        g_cfg_sneak_eye);
@@ -8080,6 +8128,8 @@ static void hooked_mainloop(void *gw, float time)
     g_mainloop_orig(gw, time);     /* run the game's frame first */
 
     poll_input();                  /* every frame: catch toggle edges */
+    if (gw) fp_control_tick(gw);   /* pin control independently from inspected selection */
+    fp_view_input();               /* wheel zoom never changes direct-control owner */
     if (gw) fp_jump_pause_guard(gw); /* every frame: space -> jump + pause swallow */
     if (gw) camera_lock(gw);       /* every frame: assert/release the lock */
     /* Camera now runs mid-frame via the CameraClass::update hook (consistent
@@ -8087,6 +8137,8 @@ static void hooked_mainloop(void *gw, float time)
      * hook failed to install. */
     if (gw && !g_cam_update_orig) fp_camera_override(gw);
     if (gw) fp_movement(gw, time); /* every frame: WASD -> custom motion drive */
+    if (gw) fp_manual_combat_tick(gw, time); /* own native actions after movement */
+    if (gw) fp_combat_tick(gw, time); /* independent passive trace */
     if (gw) fp_load_nearby_interiors(gw); /* ~1 Hz: preload nearby building interiors */
     if (gw) fp_sync_floor(gw);            /* reveal the character's building floor in FP */
     if (gw) fp_head_visibility(gw);       /* hide head while fast-forwarding (>1x) */
@@ -8146,9 +8198,9 @@ static DWORD WINAPI hook_watchdog(void *unused)
  * coords. Shared by the ranged free-aim hooks. Returns 0 if unavailable. */
 static int fp_aim_point(Vec3 *out)
 {
-    if (!g_player_pc || !g_get_bone_world) return 0;
+    if (!g_fp_control_actor || !g_get_bone_world) return 0;
     Vec3 head;
-    g_get_bone_world(g_player_pc, &head, g_head_bone);       /* game coords */
+    g_get_bone_world(g_fp_control_actor, &head, g_head_bone);       /* game coords */
     float cp = cosf(g_pitch);
     out->x = head.x + sinf(g_yaw) * cp * 80.0f;
     out->y = head.y - sinf(g_pitch)     * 80.0f;
@@ -8162,10 +8214,11 @@ static int fp_aim_point(Vec3 *out)
  * follows the crosshair. Non-player characters pass through. */
 static void hooked_ranged_animupd(void *rc, float ft, Vec3 *aimpos, void *target)
 {
+    fp_combat_probe_animation(rc, target);
     Vec3 aim;
     if (g_fp_mode && g_cfg_freeaim && rc
         && readable((void *)((uintptr_t)rc + RC_ME), 8)
-        && *(void **)((uintptr_t)rc + RC_ME) == g_player_pc
+        && *(void **)((uintptr_t)rc + RC_ME) == g_fp_control_actor
         && readable(aimpos, sizeof(Vec3))
         && fp_aim_point(&aim)) {
         *aimpos = aim;
@@ -8189,13 +8242,16 @@ typedef void (*gun_shoot_t)(void *gun, void *me, void *target, int stat, const V
 static gun_shoot_t g_gun_shoot_orig;
 static void hooked_gun_shoot(void *gun, void *me, void *target, int stat, const Vec3 *aimpos)
 {
+    if (fp_combat_suppress_shot(gun,me)) return;
     Vec3 aim;
-    if (g_fp_mode && g_cfg_freeaim && me && me == g_player_pc && fp_aim_point(&aim)) {
+    if (g_fp_mode && g_cfg_freeaim && !g_aim_mode && me && me == g_fp_control_actor && fp_aim_point(&aim)) {
         aimpos = &aim;
         static int logged;
         if (!logged) { logged = 1; logline("[freeaim] projectile override LIVE"); }
     }
+    fp_combat_probe_shot(gun, me, target, stat, KFP_EV_SHOT_BEFORE);
     g_gun_shoot_orig(gun, me, target, stat, aimpos);
+    fp_combat_probe_shot(gun, me, target, stat, KFP_EV_SHOT_AFTER);
 }
 
 /* CharMovement::faceDirection hook: while the player is in RANGED combat mode
@@ -8206,12 +8262,12 @@ typedef void (*face_dir_t)(void *mv, const Vec3 *dir);
 static face_dir_t g_face_dir_orig;
 static void hooked_face_direction(void *mv, const Vec3 *dir)
 {
-    if (g_fp_mode && g_player_pc
-        && readable((void *)((uintptr_t)g_player_pc + CHAR_MOVEMENT), 8)
-        && *(void **)((uintptr_t)g_player_pc + CHAR_MOVEMENT) == mv) {
+    if (g_fp_mode && g_fp_control_actor
+        && readable((void *)((uintptr_t)g_fp_control_actor + CHAR_MOVEMENT), 8)
+        && *(void **)((uintptr_t)g_fp_control_actor + CHAR_MOVEMENT) == mv) {
         if (g_cfg_freeaim) {
-            void *rc = readable((void *)((uintptr_t)g_player_pc + CHAR_RANGEDCOMBAT), 8)
-                ? *(void **)((uintptr_t)g_player_pc + CHAR_RANGEDCOMBAT) : NULL;
+            void *rc = readable((void *)((uintptr_t)g_fp_control_actor + CHAR_RANGEDCOMBAT), 8)
+                ? *(void **)((uintptr_t)g_fp_control_actor + CHAR_RANGEDCOMBAT) : NULL;
             if (readable((void *)((uintptr_t)rc + RC_COMBATMODE), 1)
                 && *(unsigned char *)((uintptr_t)rc + RC_COMBATMODE)) {
                 Vec3 look = { sinf(g_yaw), 0.0f, cosf(g_yaw) };
@@ -8303,13 +8359,16 @@ typedef void (*sheathe_t)(void *pc);
 static sheathe_t g_sheathe_orig;
 static void hooked_sheathe(void *pc)
 {
-    if (g_aim_mode && pc && pc == g_player_pc) {
+    if (g_aim_mode && pc && pc == g_fp_control_actor) {
         static int cnt;
         if ((++cnt % 60) == 1) logline("[aim] suppressed AI sheathe (x%d)", cnt);
         return;
     }
     g_sheathe_orig(pc);
 }
+
+#include "kfp_combat_native.inc"
+#include "kfp_melee_observe.inc"
 
 /* CharMovement::update hook: re-assert the player's direct-drive intent
  * IMMEDIATELY BEFORE the engine consumes movement state -- combat AI (and the
@@ -8318,7 +8377,6 @@ static void hooked_sheathe(void *pc)
  * in combat: the fight's locomotion suggestions lose the race every frame. */
 typedef void (*charmove_update_t)(void *mv, float t);
 static charmove_update_t g_charmove_update_orig;
-#define MV_CHARACTER   0x3A8            /* CharMovement::character (backref) */
 #define MV_ANIMOVERRIDE 0x37C           /* CharMovement::animationOverride (bool) */
 #define CHAR_VISNEAR   0x1A8            /* Character::isVisibleAndNear */
 #define CHAR_ONSCREEN  0x1A9            /* Character::isOnScreen */
@@ -8364,12 +8422,12 @@ static void hooked_charmove_update(void *mv, float t)
      * the head, so looking level/up culls your own body and freezes the head
      * bone (camera detaches). Force the visibility flags for the FP character
      * right before its update, every frame. */
-    if (g_fp_mode && g_player_pc
+    if (g_fp_mode && g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8)
-        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_player_pc
-        && readable((void *)((uintptr_t)g_player_pc + CHAR_VISNEAR), 2)) {
-        *(unsigned char *)((uintptr_t)g_player_pc + CHAR_VISNEAR)  = 1;
-        *(unsigned char *)((uintptr_t)g_player_pc + CHAR_ONSCREEN) = 1;
+        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_fp_control_actor
+        && readable((void *)((uintptr_t)g_fp_control_actor + CHAR_VISNEAR), 2)) {
+        *(unsigned char *)((uintptr_t)g_fp_control_actor + CHAR_VISNEAR)  = 1;
+        *(unsigned char *)((uintptr_t)g_fp_control_actor + CHAR_ONSCREEN) = 1;
     }
     /* FALL LAUNCH HOLD: while a ragdoll-fall request is queued, keep the launch
      * velocity parked in currentMotion(+0xA8) across the WHOLE frame -- we're
@@ -8378,9 +8436,9 @@ static void hooked_charmove_update(void *mv, float t)
      * after this update). Without this the body crumples in place on the ledge
      * instead of diving off it. Small +y so the body arcs clear of the lip. */
 #define FALL_LAUNCH_HOLD(mvp) \
-    if (g_fall_rd == FALLRD_QUEUED && g_player_pc \
+    if (g_fall_rd == FALLRD_QUEUED && g_fp_control_actor \
         && readable((void *)((uintptr_t)(mvp) + MV_CHARACTER), 8) \
-        && *(void **)((uintptr_t)(mvp) + MV_CHARACTER) == g_player_pc \
+        && *(void **)((uintptr_t)(mvp) + MV_CHARACTER) == g_fp_control_actor \
         && readable((void *)((uintptr_t)(mvp) + MV_CURRENT_MOTION), 12)) { \
         Vec3 *cmh = (Vec3 *)((uintptr_t)(mvp) + MV_CURRENT_MOTION); \
         cmh->x = g_fall_hx; cmh->y = g_fall_launch_y; cmh->z = g_fall_hz; \
@@ -8414,9 +8472,9 @@ static void hooked_charmove_update(void *mv, float t)
      *    there is exactly right); NO ragdoll, NO get-up;
      *  - past fall_air seconds airborne, escalate to the full ragdoll with the
      *    current fall velocity ("ragdoll strength grows with fall time"). */
-    if (g_fall_active && RVA_CHAR_SETDEST && RVA_GROUND_AT && g_player_pc
+    if (g_fall_active && RVA_CHAR_SETDEST && RVA_GROUND_AT && g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8)
-        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_player_pc
+        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_ANIMATION), 8)
         && readable((void *)((uintptr_t)mv + 0xC4), 12)) {
         float fdt = (g_frame_dt > 0.0f && g_frame_dt < 0.25f) ? g_frame_dt : 0.016f;
@@ -8631,8 +8689,8 @@ static void hooked_charmove_update(void *mv, float t)
         if (gnd == nohit && g_fall_t > 0.6f && g_fall_y0 - np.y > 80.0f) {
             Vec3 back = { g_fall_startx, g_fall_y0 + 0.5f, g_fall_startz };
             float q[4] = { g_fall_qw, 0.0f, g_fall_qy, 0.0f };
-            g_char_setdest(g_player_pc, &back, q);
-            fall_restore_mover(g_player_pc);
+            g_char_setdest(g_fp_control_actor, &back, q);
+            fall_restore_mover(g_fp_control_actor);
             g_fall_active = 0; g_fall_jump = 0; g_fall_perched = 0; g_fall_cd_t = 0.5f;
             g_have_last_feet = 0; g_move_speed = 0.0f; g_have_prevraw = 0;
             g_rebase_hold_t = 1.0f; g_loco_reassert_t = 0.7f;
@@ -8792,8 +8850,8 @@ static void hooked_charmove_update(void *mv, float t)
         g_fall_pos = np;
         if (landed) {
             float q[4] = { g_fall_qw, 0.0f, g_fall_qy, 0.0f };   /* Ogre w,x,y,z */
-            g_char_setdest(g_player_pc, &np, q);                 /* commit char + mover */
-            fall_restore_mover(g_player_pc);   /* if the teleport left the mover torn down,
+            g_char_setdest(g_fp_control_actor, &np, q);                 /* commit char + mover */
+            fall_restore_mover(g_fp_control_actor);   /* if the teleport left the mover torn down,
                                                 * CharMovement::update early-returns and the
                                                 * character freezes in place -- rebuild NOW */
             g_fall_active = 0; g_fall_perched = 0;
@@ -8822,14 +8880,14 @@ static void hooked_charmove_update(void *mv, float t)
                 g_fall_settle_goal = g_cfg_fall_settle * (0.12f + 0.55f * over);
                 g_fall_launch_y = g_fall_vy;
                 if (RVA_SET_UNCON)
-                    ((void (*)(void *, char))(g_base + RVA_SET_UNCON))(g_player_pc, 1);
+                    ((void (*)(void *, char))(g_base + RVA_SET_UNCON))(g_fp_control_actor, 1);
                 else
-                    ((void (*)(void *, char, int))(g_base + RVA_RAGDOLL_QUEUED))(g_player_pc, 1, 1);
+                    ((void (*)(void *, char, int))(g_base + RVA_RAGDOLL_QUEUED))(g_fp_control_actor, 1, 1);
                 g_fall_rd = FALLRD_QUEUED; g_fall_rd_t = 0.0f; g_fall_rd_landed = 1;
                 logline("[fall] hard landing after %.1f units (%.2fs, vy=%.1f, state=%d) -> crumple (KO)",
                         g_fall_y0 - np.y, g_fall_t, g_fall_vy,
-                        readable((void *)((uintptr_t)g_player_pc + 0x2F8), 4)
-                            ? *(int *)((uintptr_t)g_player_pc + 0x2F8) : -1);
+                        readable((void *)((uintptr_t)g_fp_control_actor + 0x2F8), 4)
+                            ? *(int *)((uintptr_t)g_fp_control_actor + 0x2F8) : -1);
             } else {
                 /* soft landing: knee-bend absorb scaled by impact (loco layer
                  * dips the pelvis; leg IK plants the feet; camera dips) */
@@ -8919,9 +8977,9 @@ static void hooked_charmove_update(void *mv, float t)
     /* [ftrc] post-landing freeze diagnosis: is the mover alive and consuming
      * velocity? (mover null -> update early-returns -> frozen in place while
      * the animation keeps playing -- the "stuck after landing" symptom) */
-    if (g_fall_trace_t > 0.0f && g_player_pc
+    if (g_fall_trace_t > 0.0f && g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8)
-        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_player_pc
+        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_fp_control_actor
         && readable((void *)((uintptr_t)mv + 0xC4), 12)
         && readable((void *)((uintptr_t)mv + MV_CURRENT_MOTION), 12)) {
         float fdt2 = (g_frame_dt > 0.0f && g_frame_dt < 0.25f) ? g_frame_dt : 0.016f;
@@ -8945,9 +9003,9 @@ static void hooked_charmove_update(void *mv, float t)
                     g_dm_active, tso, g_dm_speed, g_speed_scale, tkey);
         }
     }
-    if (g_face_active && RVA_ANIM_SETPOSDIR && g_player_pc
+    if (g_face_active && RVA_ANIM_SETPOSDIR && g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8)
-        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_player_pc
+        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_ANIMATION), 8)) {
         void *anim = *(void **)((uintptr_t)mv + MV_ANIMATION);
         if (readable(anim, 8) && readable((void *)((uintptr_t)mv + 0xC4), 12)) {
@@ -9316,6 +9374,8 @@ __declspec(dllexport) void dllStartPlugin(void)
                                     (void **)&g_gun_shoot_orig);
             logline(gsok ? "projectile aim hook installed (GunClass::shoot)"
                          : "projectile aim hook FAILED");
+            fp_combat_native_init();
+            fp_melee_observe_init();
             void *fd = (void *)(g_base + RVA_FACE_DIR);
             int fdok = install_hook(fd, (void *)hooked_face_direction,
                                     (void **)&g_face_dir_orig);
