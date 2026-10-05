@@ -5594,6 +5594,12 @@ void OnChatWindowButtonPressed(MyGUI::Window *sender, const std::string &name) {
     CloseChatUI();
 }
 
+// NPC info panel: the game thread opens it for the current chat target.
+extern bool g_npcPanelOpenRequest; // AiNpcInfoWindow.cpp
+static void OnChatNpcInfoClick(MyGUI::Widget *sender) {
+  g_npcPanelOpenRequest = true;
+}
+
 void CreateChatUI(const std::string &npcName, const std::string &playerName,
                   const std::string &handleStr) {
   MyGUI::Gui *gui = MyGUI::Gui::getInstancePtr();
@@ -5829,10 +5835,18 @@ void CreateChatUI(const std::string &npcName, const std::string &playerName,
       MyGUI::newDelegate(OnWriteNarratorDiaryClick);
 
   MyGUI::Button *renameBtn = client->createWidgetReal<MyGUI::Button>(
-      "Kenshi_Button1", primaryRenameX, primaryRowY, primaryBtnW, rowH,
+      "Kenshi_Button1", primaryRenameX, primaryRowY, (primaryBtnW - primaryRowGap) / 2.0f, rowH,
       MyGUI::Align::Top | MyGUI::Align::Left, "Stobe_ChatRenameBtn");
   renameBtn->setCaption(WideFromUtf8("Rename").c_str());
   renameBtn->eventMouseButtonClick += MyGUI::newDelegate(OnRenameClick);
+
+  // NPC info panel: Rename and Info share the third primary slot.
+  MyGUI::Button *npcInfoBtn = client->createWidgetReal<MyGUI::Button>(
+      "Kenshi_Button1", primaryRenameX + (primaryBtnW + primaryRowGap) / 2.0f,
+      primaryRowY, (primaryBtnW - primaryRowGap) / 2.0f, rowH,
+      MyGUI::Align::Top | MyGUI::Align::Left, "Stobe_ChatNpcInfoBtn");
+  npcInfoBtn->setCaption(WideFromUtf8(T("Info")).c_str());
+  npcInfoBtn->eventMouseButtonClick += MyGUI::newDelegate(OnChatNpcInfoClick);
 
   g_chatProfileModelCombo = client->createWidgetReal<MyGUI::ComboBox>(
       "Kenshi_ComboBox", profileModelX, secondaryRowY, profileModelW, rowH,

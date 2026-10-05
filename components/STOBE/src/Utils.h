@@ -19,6 +19,8 @@ void SaveStobeRuntimeConfig();
 void SetHotkeyFromString(const std::string &keyStr);
 void SetGeneralHotkeyFromString(const std::string &keyStr);
 void SetPushToTalkHotkeyFromString(const std::string &keyStr);
+void SetNpcInfoHotkeyFromString(const std::string &keyStr); // NPC info panel
+int CurrentGameTsSeconds(); // game seconds now (same clock as event gamets), 0 if no world
 float ResolveDialogueGameSpeedMultiplier(GameWorld *world);
 void SleepIfPaused(DWORD ms);
 void ResetRuntimeLogsForSession();

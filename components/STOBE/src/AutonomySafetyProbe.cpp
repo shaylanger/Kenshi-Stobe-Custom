@@ -737,6 +737,35 @@ std::string DescribeCharacterAiStateJson(Character *character) {
   return json;
 }
 
+// NPC info panel: the observed state, never an order the NPC was only told about.
+std::string DescribeCharacterLiveActivity(Character *character) {
+  if (!IsValidCharacterPointer(character)) {
+    return "";
+  }
+  AiSnapshot s = CaptureSnapshot(character);
+  if (s.dead) {
+    return "Dead";
+  }
+  if (s.unconscious) {
+    return "Unconscious";
+  }
+  const bool moving = s.hasMovement && !s.movementIdle;
+  std::string goal;
+  if (s.currentGoalKey != (int)NULL_TASK && s.currentGoal != "unavailable") {
+    goal = s.currentGoal;
+    for (size_t i = 0; i < goal.size(); ++i) {
+      goal[i] = goal[i] == '_' ? ' ' : static_cast<char>(tolower((unsigned char)goal[i]));
+    }
+    if (!goal.empty()) {
+      goal[0] = static_cast<char>(toupper((unsigned char)goal[0]));
+    }
+  }
+  if (goal.empty()) {
+    return moving ? "Walking" : "Standing still";
+  }
+  return goal + (moving ? " (on the move)" : "");
+}
+
 void ResetAutonomySafetyProbe(const char *reason) {
   if (!Stobe::AutonomyReleaseGate::kEnabled) {
     return;

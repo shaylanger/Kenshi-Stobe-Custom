@@ -30,6 +30,18 @@ void PopulateAiDiaryEntries(const std::string &data);
 void SetAiDiaryText(const std::string &data);
 void SetAiDiaryAudioState(const std::string &data);
 
+// NPC info panel: compact read-only view of the conversation target.
+extern bool g_npcPanelOpenRequest;    // chat window Info button -> game thread
+extern bool g_npcPanelRefreshRequest; // panel Refresh button -> game thread
+bool IsNpcPanelOpen();
+void RequestNpcPanel(const std::string &key, const std::string &title,
+                     const std::string &json, bool showLoading);
+void SetNpcPanelText(const std::string &data);
+void CloseNpcPanelUI();
+std::string NpcPanelKey();
+std::string NpcPanelText();
+int NpcPanelGeneration();
+
 void OnAiNpcInfoNPCSelect(MyGUI::ListBox *sender, size_t index);
 void OnAiNpcInfoWindowButtonPressed(MyGUI::Window *sender,
                                   const std::string &name);

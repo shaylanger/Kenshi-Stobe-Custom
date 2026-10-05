@@ -1,5 +1,6 @@
 # Current checkpoint: m40 (2026-10-05, before Shay's PC reboot)
 Coordinator handoff: temp folder coordinator-handoff-m40.md (copy in handoff/). Run log: archive/test-run-2026-10-03-m22.md.
+- **NPC info panel (2026-10-05):** implemented + installed (Stobe DAF1390F, server 2596ef2) + verified (STOBE-NPCPANEL NP1-NP8 PASS, hotkey/Info button by real keys). `NPC_INFO_PANEL_CONTEXT.md`.
 - **State:** all automated rows done (PG 250 PASS-live in m39). Kenshi closed, nothing running, game lock released, PG config Normal/Normal, 4080 idle, no subagents.
 - **Open = Shay decisions D1-D8** in MASTER_TEST_PLAN.md section 2 ("Open Shay decisions"): farming gear too strong, medic saturation, perception flat, athletics short runs, crossbow outlier + lab50 controls, turret targeting, import crash (vanilla), pg-84 file drift (our to-do).
 - **Graphics mods still OFF:** `bash C:/KenshiModding/tools/automation/gfx-mods.sh on` before playing.

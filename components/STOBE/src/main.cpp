@@ -9971,6 +9971,8 @@ void ProcessMessageQueue(GameWorld *thisptr) {
             PopulateSettingsUI(data);
           } else if (command == "POPULATE_AINPCINFO") {
             PopulateAiNpcInfoUI(data);
+          } else if (command == "SET_NPCPANEL_TEXT") { // NPC info panel
+            Stobe::UI::SetNpcPanelText(data);
           } else if (command == "SET_AINPCINFO_TEXT") {
             SetAiNpcInfoText(data);
           } else if (command == "POPULATE_AIDIARIES") {
@@ -14305,6 +14307,165 @@ static GameData *FindTestInboxItemData(GameWorld *world, const std::string &name
   return nullptr;
 }
 
+// ---------------------------------------------------------------- NPC info panel
+// Game-thread side: who the panel is about and who is asking. Live fields (what the
+// NPC is doing, faction, trader) are read here and sent with the request; the server
+// adds stored deals/goals/relationship/learned facts. No LLM call.
+static unsigned int g_npcPanelTargetSerial = 0;
+static std::string g_npcPanelTargetName;
+static unsigned int g_npcPanelSpeakerSerial = 0;
+static std::string g_npcPanelSpeakerName;
+static DWORD g_npcPanelLastRequestTick = 0;
+static const DWORD kNpcPanelRefreshMs = 10000;
+
+static void NpcPanelSend(GameWorld *world, const char *why, bool showLoading) {
+  if (g_npcPanelTargetSerial == 0) {
+    return;
+  }
+  Character *target = FindCharacterBySerial(world, g_npcPanelTargetSerial);
+  std::string activity, faction;
+  bool trader = false;
+  if (target) {
+    activity = DescribeCharacterLiveActivity(target);
+    try {
+      faction = SafeFactionName(target->getFaction());
+    } catch (...) {
+    }
+    try {
+      trader = !target->isPlayerCharacter() && target->isATrader();
+    } catch (...) {
+    }
+    try {
+      std::string liveName = target->getName();
+      if (!liveName.empty())
+        g_npcPanelTargetName = liveName; // renamed NPCs follow their new name
+    } catch (...) {
+    }
+  }
+  const std::string serial = ToString(g_npcPanelTargetSerial);
+  const std::string key = serial + "|" + g_npcPanelSpeakerName;
+  std::string json = "{\"action\":\"player_view\",\"storage_id\":\"hand_" + serial +
+                     "\",\"serial\":" + serial + ",\"name\":\"" +
+                     EscapeJSON(g_npcPanelTargetName) + "\",\"speaker\":\"" +
+                     EscapeJSON(g_npcPanelSpeakerName) + "\",\"gamets\":" +
+                     ToString(CurrentGameTsSeconds()) + ",\"live_activity\":\"" +
+                     EscapeJSON(target ? activity : std::string("")) +
+                     "\",\"live_faction\":\"" + EscapeJSON(faction) +
+                     "\",\"trader\":" + (trader ? "true" : "false") +
+                     ",\"key\":\"" + EscapeJSON(key) + "\"}";
+  g_npcPanelLastRequestTick = GetTickCount();
+  if (showLoading)
+    Log(std::string("NPC_PANEL: request why=") + why + " target=" +
+        g_npcPanelTargetName + " serial=" + serial + " speaker=" +
+        g_npcPanelSpeakerName + " visible=" + (target ? "1" : "0"));
+  Stobe::UI::RequestNpcPanel(key, g_npcPanelTargetName, json, showLoading);
+}
+
+static bool NpcPanelOpenFor(GameWorld *world, Character *speaker, Character *target,
+                            const char *why) {
+  if (!target || (uintptr_t)target <= 0x1000 || target == speaker)
+    return false;
+  try {
+    g_npcPanelTargetSerial = target->getHandle().serial;
+    g_npcPanelTargetName = target->getName();
+    g_npcPanelSpeakerSerial = 0;
+    g_npcPanelSpeakerName.clear();
+    if (speaker && (uintptr_t)speaker > 0x1000) {
+      g_npcPanelSpeakerSerial = speaker->getHandle().serial;
+      g_npcPanelSpeakerName = speaker->getName();
+    }
+  } catch (...) {
+    return false;
+  }
+  NpcPanelSend(world, why, true);
+  return true;
+}
+
+// Same pick as the chat hotkey: a selected squad member talks to the nearest NPC,
+// a selected NPC is talked to by the nearest squad member.
+static bool NpcPanelOpenForSelection(GameWorld *world, Character *sel, const char *why) {
+  if (!sel || (uintptr_t)sel <= 0x1000)
+    return false;
+  Character *speaker = nullptr;
+  Character *target = nullptr;
+  try {
+    if (sel->isPlayerCharacter()) {
+      speaker = sel;
+      target = ResolveNearestNpcTargetForSelection(world, sel);
+    } else {
+      target = sel;
+      speaker = ResolveNearestPlayerSpeakerForTarget(world, sel);
+    }
+  } catch (...) {
+    return false;
+  }
+  return NpcPanelOpenFor(world, speaker, target, why);
+}
+
+// The chat window's current target and speaking character, if a chat is open.
+static bool NpcPanelChatPair(GameWorld *world, Character *sel, Character *&speaker,
+                             Character *&target) {
+  speaker = nullptr;
+  target = nullptr;
+  if (!Stobe::UI::g_chatWindow)
+    return false;
+  unsigned int serial = (unsigned int)strtoul(Stobe::UI::g_chatTargetHandleStr.c_str(), nullptr, 10);
+  if (serial == 0)
+    return false;
+  target = FindCharacterBySerial(world, serial);
+  if (!Stobe::UI::g_chatPlayerNameStr.empty())
+    speaker = ResolveTestInboxTarget(world, sel, nullptr, Stobe::UI::g_chatPlayerNameStr);
+  return target != nullptr;
+}
+
+// Per tick: chat Info button, follow the chat target, Refresh button, periodic refresh.
+static void NpcPanelTick(GameWorld *world, Character *sel) {
+  if (Stobe::UI::g_npcPanelOpenRequest) {
+    Stobe::UI::g_npcPanelOpenRequest = false;
+    Character *speaker = nullptr, *target = nullptr;
+    if (NpcPanelChatPair(world, sel, speaker, target))
+      NpcPanelOpenFor(world, speaker, target, "chat_info_button");
+    else if (!NpcPanelOpenForSelection(world, sel, "chat_info_button_selection"))
+      Log("NPC_PANEL: Info pressed but no conversation target");
+  }
+  if (!Stobe::UI::IsNpcPanelOpen())
+    return;
+  Character *speaker = nullptr, *target = nullptr;
+  if (NpcPanelChatPair(world, sel, speaker, target)) {
+    std::string speakerName;
+    try {
+      speakerName = speaker ? speaker->getName() : std::string("");
+    } catch (...) {
+    }
+    if (target->getHandle().serial != g_npcPanelTargetSerial ||
+        (!speakerName.empty() && speakerName != g_npcPanelSpeakerName)) {
+      NpcPanelOpenFor(world, speaker, target, "chat_target_changed");
+      return;
+    }
+  }
+  if (Stobe::UI::g_npcPanelRefreshRequest) {
+    Stobe::UI::g_npcPanelRefreshRequest = false;
+    NpcPanelSend(world, "refresh_button", true);
+    return;
+  }
+  if (GetTickCount() - g_npcPanelLastRequestTick >= kNpcPanelRefreshMs)
+    NpcPanelSend(world, "periodic", false);
+}
+
+static std::string NpcPanelOneLine(const std::string &text) {
+  std::string out;
+  for (size_t i = 0; i < text.size(); ++i) {
+    char c = text[i];
+    if (c == '\r')
+      continue;
+    if (c == '\n')
+      out += " | ";
+    else
+      out += c;
+  }
+  return out;
+}
+
 static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
                                        const std::vector<std::string> &f,
                                        bool &ok) {
@@ -14382,6 +14543,55 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
                         targetSerial, mode);
     ok = true;
     return "target=" + targetName + " serial=" + targetSerial + " mode=" + mode;
+  }
+  if (cmd == "npcinfo") { // NPC info panel: drive and read the panel like a player would
+    std::string sub = f.size() >= 3 ? f[2] : "";
+    if (sub == "open") {
+      if (f.size() < 4)
+        return "usage: npcinfo open <target> [speaker]";
+      Character *target = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!target)
+        return "target not found: " + f[3];
+      Character *asker = speaker;
+      if (f.size() >= 5 && !f[4].empty()) {
+        asker = ResolveTestInboxTarget(world, sel, speaker, f[4]);
+        if (!asker)
+          return "speaker not found: " + f[4];
+      }
+      if (!NpcPanelOpenFor(world, asker, target, "test_open"))
+        return "cannot open the panel for " + f[3];
+      ok = true;
+      return "open key=" + Stobe::UI::NpcPanelKey() +
+             " gen=" + ToString(Stobe::UI::NpcPanelGeneration());
+    }
+    if (sub == "chat") { // same path as the chat window's Info button
+      Stobe::UI::g_npcPanelOpenRequest = true;
+      ok = true;
+      return "queued";
+    }
+    if (sub == "refresh") {
+      if (!Stobe::UI::IsNpcPanelOpen())
+        return "panel not open";
+      Stobe::UI::g_npcPanelRefreshRequest = true;
+      ok = true;
+      return "queued";
+    }
+    if (sub == "close") {
+      Stobe::UI::CloseNpcPanelUI();
+      ok = true;
+      return "closed";
+    }
+    if (sub == "read") {
+      ok = true;
+      if (!Stobe::UI::IsNpcPanelOpen())
+        return "open=0";
+      std::string text = Stobe::UI::NpcPanelText();
+      return "open=1 key=" + Stobe::UI::NpcPanelKey() +
+             " gen=" + ToString(Stobe::UI::NpcPanelGeneration()) +
+             " loaded=" + (text.empty() ? std::string("0") : std::string("1")) +
+             " text=" + NpcPanelOneLine(text);
+    }
+    return "usage: npcinfo <open <target> [speaker]|chat|read|refresh|close>";
   }
   if (cmd == "shopprice") { // item 104: refetch r for (trader, player) and show the cached value
     if (f.size() < 3)
@@ -15147,6 +15357,26 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
       }
     }
   }
+
+  // NPC info panel: hotkey toggles it for the current conversation pair (not while
+  // typing in a text box); the panel follows the chat target and refreshes itself.
+  if (StobeHotkeyDown(g_npcInfoHotkey) &&
+      !MyGUI::InputManager::getInstance().isFocusKey()) {
+    static DWORD lastNpcPanelTick = 0;
+    if (GetTickCount() - lastNpcPanelTick > 500) {
+      lastNpcPanelTick = GetTickCount();
+      if (Stobe::UI::IsNpcPanelOpen()) {
+        Stobe::UI::CloseNpcPanelUI();
+      } else {
+        Character *chatSpeaker = nullptr, *chatTarget = nullptr;
+        if (NpcPanelChatPair(world, sel, chatSpeaker, chatTarget))
+          NpcPanelOpenFor(world, chatSpeaker, chatTarget, "hotkey_chat");
+        else if (!NpcPanelOpenForSelection(world, sel, "hotkey"))
+          Log("NPC_PANEL: hotkey pressed but no conversation target");
+      }
+    }
+  }
+  NpcPanelTick(world, sel);
 
   // Rename checks are now queued only for dialogue-tagged NPCs.
   // 4. Input Handling ??? Chat window hotkey

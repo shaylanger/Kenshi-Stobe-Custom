@@ -14,6 +14,9 @@ void ResetAutonomySafetyProbe(const char *reason);
 // One-line JSON of the character's AI/order/movement state (test inbox).
 std::string DescribeCharacterAiStateJson(Character *character);
 
+// NPC info panel: short readable "what are they doing now" ("" if unreadable).
+std::string DescribeCharacterLiveActivity(Character *character);
+
 // mods\Stobe folder next to the executable (same as the config dir).
 std::string GetTestInboxDir();
 

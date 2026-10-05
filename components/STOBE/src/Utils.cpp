@@ -519,6 +519,35 @@ void SetPushToTalkHotkeyFromString(const std::string &keyStr) {
   }
 }
 
+// NPC info panel hotkey: \\ [ ] F1-F12, a letter or digit; "-" turns it off.
+void SetNpcInfoHotkeyFromString(const std::string &keyStr) {
+  std::string n = TrimCopy(keyStr);
+  for (size_t i = 0; i < n.size(); ++i)
+    if (n[i] >= 'a' && n[i] <= 'z')
+      n[i] = static_cast<char>(n[i] - ('a' - 'A'));
+  int vk = -1;
+  if (n == "-")
+    vk = 0;
+  else if (n == "\\")
+    vk = VK_OEM_5;
+  else if (n == "[")
+    vk = VK_OEM_4;
+  else if (n == "]")
+    vk = VK_OEM_6;
+  else if (n.size() >= 2 && n.size() <= 3 && n[0] == 'F') {
+    int f = atoi(n.c_str() + 1);
+    if (f >= 1 && f <= 12)
+      vk = VK_F1 + f - 1;
+  } else if (n.size() == 1 && ((n[0] >= 'A' && n[0] <= 'Z') || (n[0] >= '0' && n[0] <= '9')))
+    vk = n[0];
+  if (vk < 0) {
+    vk = VK_OEM_5;
+    n = "\\";
+  }
+  g_npcInfoHotkey = vk;
+  g_npcInfoHotkeyStr = n;
+}
+
 void LoadStobeRuntimeConfig() {
   std::string baseIniPath = GetStobeIniPath(false);
   std::string customIniPath = GetStobeCustomIniPath(true);
@@ -544,6 +573,8 @@ void LoadStobeRuntimeConfig() {
                                            "Settings", "ChatHotkey", "/"));
   SetPushToTalkHotkeyFromString(ReadLayeredIniString(
       baseIniPath, customIniPath, "Settings", "PushToTalkHotkey", "V"));
+  SetNpcInfoHotkeyFromString(ReadLayeredIniString(
+      baseIniPath, customIniPath, "Settings", "NpcInfoHotkey", "\\"));
   g_chatMode = Stobe::ChatMode::Normalize(ReadLayeredIniString(
       baseIniPath, customIniPath, "Settings", "ChatMode", "chat"));
   g_autoChatEnabled =
@@ -672,6 +703,8 @@ void SaveStobeRuntimeConfig() {
                              iniPath.c_str());
   WritePrivateProfileStringA("Settings", "PushToTalkHotkey",
                              g_pushToTalkHotkeyStr.c_str(), iniPath.c_str());
+  WritePrivateProfileStringA("Settings", "NpcInfoHotkey", // NPC info panel
+                             g_npcInfoHotkeyStr.c_str(), iniPath.c_str());
   WritePrivateProfileStringA("Settings", "ChatMode", g_chatMode.c_str(),
                              iniPath.c_str());
   WritePrivateProfileStringA("Settings", "AutoChat",
@@ -1069,6 +1102,9 @@ static std::string ResolveCharacterNameForEvent(Character *npc) {
   }
   return NormalizeEventName(name);
 }
+
+// NPC info panel: exported game clock (deal deadlines are stamped with it).
+int CurrentGameTsSeconds() { return ResolveCurrentGameTsForEvent(); }
 
 static Character *FindCharacterBySerialForEvent(GameWorld *world,
                                                 unsigned int serial) {

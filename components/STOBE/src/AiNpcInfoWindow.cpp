@@ -440,6 +440,160 @@ void CreateAiNpcInfoUI() {
   StartUiWorker(AiNpcInfoListThread, NULL, "NPC list");
 }
 
+// ---------------------------------------------------------------- NPC info panel
+// Compact, read-only view of one NPC as the speaking squad character knows them
+// (ai_npcs.php action player_view: no LLM call). Requests run on a worker thread;
+// a reply is shown only if it carries the newest generation and the key
+// ("<target serial>|<speaker>") still on screen, so a late answer for an older
+// target never overwrites the current one.
+MyGUI::Window *g_npcPanelWindow = nullptr;
+MyGUI::ListBox *g_npcPanelText = nullptr;
+volatile LONG g_npcPanelGeneration = 0;
+std::string g_npcPanelKey;
+std::string g_npcPanelLastText;
+bool g_npcPanelOpenRequest = false;
+bool g_npcPanelRefreshRequest = false;
+
+namespace {
+struct NpcPanelTask {
+  std::string json;
+  std::string key;
+  LONG generation;
+};
+
+DWORD WINAPI NpcPanelThread(LPVOID lpParam) {
+  NpcPanelTask *task = static_cast<NpcPanelTask *>(lpParam);
+  std::string response =
+      PostToStobeWithResponse(L"/ai_npcs/player_view", task->json);
+  std::string content = JsonReadField(response, "text");
+  if (content.empty()) {
+    std::string error = JsonReadField(response, "error");
+    content = response.empty() ? "Unable to reach the Stobe server."
+                               : (error.empty() ? "The server returned an unreadable answer."
+                                                : error);
+  }
+  QueueUiCommand("SET_NPCPANEL_TEXT", ToString((int)task->generation) + "\n" +
+                                          task->key + "\n" + content);
+  delete task;
+  return 0;
+}
+
+void OnNpcPanelCloseClick(MyGUI::Widget *sender) { CloseNpcPanelUI(); }
+void OnNpcPanelRefreshClick(MyGUI::Widget *sender) {
+  g_npcPanelRefreshRequest = true;
+}
+void OnNpcPanelWindowButtonPressed(MyGUI::Window *sender,
+                                   const std::string &name) {
+  if (name == "close") {
+    CloseNpcPanelUI();
+  }
+}
+
+void EnsureNpcPanelWindow() {
+  if (g_npcPanelWindow) {
+    return;
+  }
+  MyGUI::Gui *gui = MyGUI::Gui::getInstancePtr();
+  if (!gui) {
+    return;
+  }
+  g_npcPanelWindow = gui->createWidgetReal<MyGUI::Window>(
+      "Kenshi_WindowCX", 0.68f, 0.10f, 0.30f, 0.62f, MyGUI::Align::Default,
+      "Popup", "Stobe_NpcPanelWindow");
+  if (!g_npcPanelWindow) {
+    return;
+  }
+  g_npcPanelWindow->setCaption(WideFromUtf8(T("NPC Info")).c_str());
+  g_npcPanelWindow->eventWindowButtonPressed +=
+      MyGUI::newDelegate(OnNpcPanelWindowButtonPressed);
+  MyGUI::Widget *client = g_npcPanelWindow->getClientWidget();
+  if (!client) {
+    return;
+  }
+  g_npcPanelText = client->createWidgetReal<MyGUI::ListBox>(
+      "Kenshi_ListBox", 0.03f, 0.02f, 0.94f, 0.84f, MyGUI::Align::Stretch,
+      "Stobe_NpcPanelText");
+  MyGUI::Button *refresh = client->createWidgetReal<MyGUI::Button>(
+      "Kenshi_Button1", 0.03f, 0.88f, 0.34f, 0.09f,
+      MyGUI::Align::Bottom | MyGUI::Align::Left, "Stobe_NpcPanelRefreshBtn");
+  refresh->setCaption(WideFromUtf8(T("Refresh")).c_str());
+  refresh->eventMouseButtonClick += MyGUI::newDelegate(OnNpcPanelRefreshClick);
+  MyGUI::Button *close = client->createWidgetReal<MyGUI::Button>(
+      "Kenshi_Button1", 0.63f, 0.88f, 0.34f, 0.09f,
+      MyGUI::Align::Bottom | MyGUI::Align::Right, "Stobe_NpcPanelCloseBtn");
+  close->setCaption(WideFromUtf8(T("Close")).c_str());
+  close->eventMouseButtonClick += MyGUI::newDelegate(OnNpcPanelCloseClick);
+}
+} // namespace
+
+bool IsNpcPanelOpen() { return g_npcPanelWindow != nullptr; }
+std::string NpcPanelKey() { return g_npcPanelKey; }
+std::string NpcPanelText() { return g_npcPanelLastText; }
+int NpcPanelGeneration() { return (int)g_npcPanelGeneration; }
+
+void RequestNpcPanel(const std::string &key, const std::string &title,
+                     const std::string &json, bool showLoading) {
+  EnsureNpcPanelWindow();
+  if (!g_npcPanelWindow || !g_npcPanelText) {
+    Log("NPC_PANEL_WARN: window could not be created");
+    return;
+  }
+  const bool targetChanged = key != g_npcPanelKey;
+  g_npcPanelKey = key;
+  LONG generation = InterlockedIncrement(&g_npcPanelGeneration);
+  if (targetChanged || showLoading) {
+    g_npcPanelWindow->setCaption(WideFromUtf8(T("NPC Info") + ": " + title).c_str());
+    g_npcPanelLastText.clear();
+    SetReadOnlyText(g_npcPanelText, T("Loading what you know about ") + title + "...");
+  }
+  NpcPanelTask *task = new NpcPanelTask();
+  task->json = json;
+  task->key = key;
+  task->generation = generation;
+  StartUiWorker(NpcPanelThread, task, "NPC panel");
+}
+
+void SetNpcPanelText(const std::string &data) {
+  size_t a = data.find('\n');
+  size_t b = a == std::string::npos ? std::string::npos : data.find('\n', a + 1);
+  if (b == std::string::npos) {
+    return;
+  }
+  int generation = atoi(data.substr(0, a).c_str());
+  std::string key = data.substr(a + 1, b - a - 1);
+  if (!g_npcPanelWindow || generation != (int)g_npcPanelGeneration ||
+      key != g_npcPanelKey) {
+    Log("NPC_PANEL: dropped stale reply gen=" + ToString(generation) +
+        " key=" + key + " current_gen=" + ToString((int)g_npcPanelGeneration) +
+        " current_key=" + g_npcPanelKey);
+    return;
+  }
+  std::string text = SanitizeUiText(data.substr(b + 1));
+  if (text == g_npcPanelLastText) {
+    return; // periodic refresh, nothing changed: keep the scroll position
+  }
+  g_npcPanelLastText = text;
+  SetReadOnlyText(g_npcPanelText, text);
+  Log("NPC_PANEL: shown key=" + key + " gen=" + ToString(generation) +
+      " chars=" + ToString((int)text.size()));
+}
+
+void CloseNpcPanelUI() {
+  if (g_npcPanelWindow && !TryDestroyWidgetSafe(g_npcPanelWindow)) {
+    Log("UI_WARN: CloseNpcPanelUI destroyWidget failed; clearing stale pointer.");
+  }
+  const bool wasOpen = g_npcPanelWindow != nullptr;
+  g_npcPanelWindow = nullptr;
+  g_npcPanelText = nullptr;
+  g_npcPanelKey.clear();
+  g_npcPanelLastText.clear();
+  g_npcPanelRefreshRequest = false;
+  InterlockedIncrement(&g_npcPanelGeneration); // replies in flight are dropped
+  if (wasOpen) {
+    Log("NPC_PANEL: closed");
+  }
+}
+
 void CloseAiDiaryUI(bool destroyWindow) {
   CancelAiDiaryAudio(false);
   if (destroyWindow && g_aiDiaryWindow &&

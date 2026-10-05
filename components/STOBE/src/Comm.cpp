@@ -902,7 +902,8 @@ RequestPlan ResolveRequest(const std::wstring &endpoint,
     return request;
   }
 
-  if (endpoint == L"/ai_npcs/list" || endpoint == L"/ai_npcs/detail") {
+  if (endpoint == L"/ai_npcs/list" || endpoint == L"/ai_npcs/detail" ||
+      endpoint == L"/ai_npcs/player_view") { // NPC info panel
     request.path = L"/StobeServer/ai_npcs.php";
     return request;
   }

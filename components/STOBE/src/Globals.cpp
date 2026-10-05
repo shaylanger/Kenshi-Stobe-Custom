@@ -157,6 +157,9 @@ int g_generalHotkey = VK_OEM_PLUS; // '=' by default
 std::string g_generalHotkeyStr = "=";
 int g_pushToTalkHotkey = 'V';
 std::string g_pushToTalkHotkeyStr = "V";
+// NPC info panel hotkey (ini NpcInfoHotkey, "-" = off)
+int g_npcInfoHotkey = VK_OEM_5; // '\' by default
+std::string g_npcInfoHotkeyStr = "\\";
 std::string g_chatMode = "chat";
 bool g_autoChatEnabled = false;
 bool g_useNearestPlayerSpeaker = true;
