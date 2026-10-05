@@ -31,7 +31,7 @@ Coordinator handoff: temp folder coordinator-handoff-m31.md (m26 has Shay decisi
   - stealth: s10 0.70 / s90 1.30 / +16.7% -> mechanical PASS, balance open
   - swimming: s10 2.38 / s90 30.9 / +24.8% -> mechanical PASS, balance open
   - athletics (5090 batch T pg-85, swim 300 m s, lower = faster): s10 4.3 / s90 3.0 / own50 ~2.8 / lab50 ctl 3.5 -> mechanical PASS, balance open
-  - turrets: pg-55 rerun batch U (regex fix PG 7a303e7)
+  - turrets: NO valid data yet (turret never fired: batch T damage was Beaks in melee, batch U dummies untouched); operator fixing pg-55
   - perception: not run (pending decision "perception ignored by 1.0.65 detection")
 ---
 # Handoff: multi-feature test loop (coordinator) — state 2026-10-03 ~17:55 (run m18 running)
