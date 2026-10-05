@@ -19,11 +19,13 @@ def run(name,cmd):
         except subprocess.TimeoutExpired: code=124
     print(name,"exit="+str(code)); print(log.read_text(errors="replace")[:3000])
     if code: raise SystemExit(1)
-for name,flags in [("plain",[]),("ubsan",["-fsanitize=undefined","-fno-sanitize-recover=all"])]:
-    binary=str(logs/("test_probe_"+name))
-    run(name+"-compile",["gcc","-std=c11","-Wall","-Wextra","-Werror","-g",*flags,
-                        str(root/"tests/test_combat_probe.c"),"-o",binary])
-    run(name,[binary])
+for source in ("test_combat_probe.c","test_control_view.c"):
+    for name,flags in [("plain",[]),("ubsan",["-fsanitize=undefined","-fno-sanitize-recover=all"])]:
+        label=Path(source).stem+"-"+name
+        binary=str(logs/label)
+        run(label+"-compile",["gcc","-std=c11","-Wall","-Wextra","-Werror","-g",*flags,
+                             str(root/"tests"/source),"-lm","-o",binary])
+        run(label,[binary])
 run("decoder",[sys.executable,"-m","unittest","discover","-s",str(root/"tests"),
                "-p","test_native_trace.py","-v"])
 print("RESULT B08 PASS bounded plain+UBSan probe and native trace decoder checks; engine offsets/runtime not validated")

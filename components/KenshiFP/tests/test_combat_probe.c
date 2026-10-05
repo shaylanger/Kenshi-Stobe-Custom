@@ -20,7 +20,7 @@ typedef struct KAH_Reply {
 static unsigned char actor_mem[0x310], rc_mem[0x80], gun_mem[0x30];
 static float g_frame_dt=0.016f;
 static uint64_t GetTickCount64(void) { static uint64_t ms; return ++ms; }
-static void *first_player_char(void *gw) { return gw; }
+static void *fp_controlled_char(void *gw) { return gw; }
 static int readable(void *p, size_t n) {
     const uintptr_t bases[]={(uintptr_t)actor_mem,(uintptr_t)rc_mem,(uintptr_t)gun_mem};
     const size_t sizes[]={sizeof(actor_mem),sizeof(rc_mem),sizeof(gun_mem)};

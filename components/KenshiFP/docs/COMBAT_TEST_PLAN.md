@@ -1,5 +1,5 @@
 # KenshiFP Player-Controlled Combat Test Plan
-Updated: 2026-10-05. Owner: FP combat development agent. Status: native lifecycle probe built and offline-validated; game evidence pending coordinator. Manual combat and camera implementation remain pending.
+Updated: 2026-10-05. Owner: FP combat development agent. Status: native lifecycle probe and camera/control implementation built and offline-validated; game evidence pending coordinator. Manual combat implementation continues.
 Coordination: C:\KenshiModding\FP_COMBAT_COORDINATION_CONTEXT.md (received: m45 baseline).
 Design: KENSHI_BIG_MOD_IDEAS_CONTEXT.md section 24.
 Game-test owner retains installs, launches, fixture preparation and master test batches.
@@ -137,3 +137,11 @@ Coordinator-only P01: python3 components/KenshiFP/tests/capture_native_ranged.py
 - SHA256: 9357105baaa1236cd89df0ecf1d606d9d58accf208b9017e214c73ca28325cf8.
 - Immutable coordinator request: C:\KenshiTestRuns\fp-combat\requests\20261005-2043-native-ranged-probe.txt.
 - P01 result pending. No game execution by this agent; no native readiness, manual-control, reload animation, hit/body-part, accuracy-parity or melee validation claimed. Later docs-only commits do not change this candidate DLL/source identity.
+
+## Camera/control implementation and offline evidence (2026-10-05)
+- Implemented commands: fp_control state|take; fp_camera state|distance <0..12>|wheel <-2400..2400>. Existing fp_mode on|off and fp_state retain their contracts. Earlier planned command spellings are proposals, not executable commands.
+- Defaults: direct_default=1; camera_zoom=1; key_take_control=F6 (0x75). Wheel changes camera distance, retaining persistent direct controls and old toggle fallback. Physical wheel/WASD respect foreground focus; camera_zoom=0 offers legacy throttle.
+- B09 PASS plain GCC and UBSan: full-handle pinning, inspection isolation, explicit transfer, outsider refusal, UI key guard, fallback persistence, missing actor without silent fallback, unload/reload, bounded/finite zoom, eye threshold and frame-rate smoothing. Release callback tested; real engine movement-vector clearing and collision remain unvalidated.
+- B07/B08 re-run PASS after control integration; isolated MinGW DLL build PASS. No game commands or installs by development agent.
+- Coordinator numeric subset C00: tests/validate_camera_control.py --kah-client <kah.py> --dir <installed-harness> --out <new-directory> --actor-a <awake-squad-ref> --actor-b <different-awake-squad-ref>. Open clear space, closed UI, unpaused disposable fixture required. Actual applied camera distance must exceed 0.75m; confinement that prevents zoom is invalid setup rather than evidence against collision.
+- C00 observations cover portions of C01-C04 only. It records raw replies and summary; it does not claim physical WASD, UI/focus scrolling, visible inventory panels, moving transfer, body/head rendering, clipping, C05 lifecycle or full gameplay PASS. Wrapper restores original toggle/requested distance, leaves actor-a selected/controlled; coordinator restores fixture and installed hashes.

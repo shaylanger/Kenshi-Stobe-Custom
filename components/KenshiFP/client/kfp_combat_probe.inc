@@ -37,7 +37,7 @@ static void fp_combat_tick(void *gw, float time) {
     (void)time;
     ++g_combat_probe_frame;
     if (!g_combat_probe_active) return;
-    void *actor=first_player_char(gw);
+    void *actor=fp_controlled_char(gw);
     KfpCombatEvent e=fp_combat_snapshot(actor,NULL,NULL,NULL,KFP_EV_FRAME);
     KfpCombatEvent *p=&g_combat_probe_previous;
     if (!g_combat_probe_have_previous || e.actor!=p->actor || e.ranged!=p->ranged
