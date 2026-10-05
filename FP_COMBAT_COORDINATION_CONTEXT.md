@@ -33,16 +33,20 @@ The combat agent builds camera/control improvements first, then ranged combat, t
 | STOBE communication | **coordinator**, frozen | Called from `camera_lock` (3150-3161): `stobe_voice_modifier_tick`, `stobe_unequip_request_tick`, `stobe_general_action_request_tick`, `stobe_fight_truce_tick` (2794: NPC truce/disengage after STOBE deals), `stobe_work_goal_tick`, `stobe_task_goal_tick`, `kah_bridge_tick`. Files in `RE_Kenshi\mods\Stobe\`: `stobe_action.req`, `stobe_work_goal.{req,status,control}`, `stobe_task_goal.{req,status,control}`, `stobe_goal_report.req`, `voice_action.flag`, `voice_command.flag`. Code: `stobe_work_planner.inc`, `stobe_task_goals.inc`, lines ~1650-3130 of the client. | Don't change these. Combat must not start fights against NPCs under an active STOBE truce. Check `stobe_fight_truce` state before forcing attack orders and ask the coordinator for an accessor if one is needed. |
 | Hook install | shared | `install_hook` (8970), `hook_watchdog` (8113), `rva_sigs.h` | New hooks: add a signature in `rva_sigs.h` (signature scan, no fixed RVAs) and log install success/failure once. |
 
-## 3. Harness and installed builds (5090, 2026-10-05)
-- Harness repo `C:\KenshiModding\Kenshi-Automation-Harness`, HEAD `a6d00f3`.
-  - The installed `AutomationHarness.dll` is `EF9AA227`, built from `4a736d6`. Commits after that are docs/client-only.
+## 3. Harness and installed builds (5090, 2026-10-05, updated m46)
+- Harness repo `C:\KenshiModding\Kenshi-Automation-Harness`, HEAD `93d03e3`; installed `AutomationHarness.dll` `B847ACF6` (built from 93d03e3).
+  - m46 additions: `give` searches CROSSBOW + exact names first (71b475c; the game's item factory still refuses to create crossbows),
+    `rangedtest` (KAH 26: per-shot acc01/spread/hits, `loaded=n/max`, `reloads=`), `rangedinfo <npc>` (bow, has_ammo, loaded, ammo type,
+    ranged mode/state), `attack` gives crossbow users `RANGED_ATTACK_FOCUSED_UNPROVOKED` (93d03e3).
+  - Crossbow fight recipe (proven m46, auto-home): spawn + `recruit` a "Mercenary Crossbowman", `select`/`protect` him, `pin` a Hungry
+    Bandit target ~30 m off, `order <shooter> RANGED_ATTACK_FOCUSED_UNPROVOKED target <t>` (or `rangedtest <shooter> <t> shots N attack`).
+    Pin/protect don't survive a reload. Kenshi doesn't consume the inventory bolt stack: ammo evidence is the gun's loaded count.
   - KenshiFP registers `fp_mode`, `fp_click`, `fp_putdown` and `fp_state` through `KenshiAutomationHarness.h` (3665).
-- Installed SHA256 (first 8 hex digits):
-  - KenshiFP `0349AA2A` (Vortex folder `...\Vortex\kenshi\mods\KenshiFP RE V0.6.1 ...\KenshiFP\KenshiFP.dll`)
-  - Stobe `2A3FC123`
-  - AutomationHarness `EF9AA227`
-  - ProfessionGear `F3F040C3`
-  - PG config is back on Normal/Normal.
+  - Stat names the harness knows: see `kStatNames` in `src/Commands.cpp` (`friendly_fire`/`precision_shooting`, not `precisionfriendlyfire`).
+- Installed SHA256 (first 8 hex digits), 5090: KenshiFP `0349AA2A` (main, Vortex folder `...\Vortex\kenshi\mods\KenshiFP RE V0.6.1 ...\KenshiFP\KenshiFP.dll`),
+  Stobe `DAF1390F` (NPC-panel session candidate; `2A3FC123` is the last coordinator build), AutomationHarness `B847ACF6`, ProfessionGear `2E533D44`; PG config Normal/Normal.
+- Results so far: `results/20261005-2043-native-ranged-probe/` P01 PASS (FP off 10 shots/9 ammo increases, FP on 4/4); the wrapper's
+  `precisionfriendlyfire` stat name had to be patched to `friendly_fire` for the run (see its run.txt): fix it in the wrapper.
 - **Harness additions:** general test commands (aim, attack, combat state, camera readouts) go into the harness repo as **separate commits** on a branch `fp-combat-harness`, one command per commit with a `docs/COMMANDS.md` row and an offline test (`tests\run_tests.bat`).
   - The coordinator reviews and merges them into the harness `main` and installs them at a batch boundary. Two harness DLLs are never installed at the same time.
   - KenshiFP-only commands go in KenshiFP itself (`kah_bridge_tick`).
