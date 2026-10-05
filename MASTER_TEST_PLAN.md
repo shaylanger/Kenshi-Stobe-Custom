@@ -35,7 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| PG rows | open PG rows: 250 ruin loot (batch Z FAIL 70/9: chest full, pg_lootscan own-check + building enumeration -> fixer m37); balance = Shay decisions (206 farming gear too strong, medic saturation by Medic 50, 199 perception flat 1.4-1.9 s, 191, athletics +38% max / +6% 30 m runs, crossbow lab50 1.60); 132 BLOCKED-vanilla (import into a new game crashes Kenshi +0x94d6db even with PG not loaded); 135-141/155/238/277 Shay-only (section 2) | 5090, Full-Base | m37: everything else PASS-live/offline in PG INGAME_STATUS.md (Y3: 254, 199; I2: 133, 240; 256 by roll census). Run log archive/test-run-2026-10-03-m22.md |
+| PG rows | open PG rows: balance = Shay decisions (206 farming gear too strong, medic saturation by Medic 50, 199 perception flat 1.4-1.9 s, 191, athletics +38% max / +6% 30 m runs, crossbow lab50 1.60); 132 BLOCKED-vanilla (import into a new game crashes Kenshi +0x94d6db even with PG not loaded); 135-141/155/238/277 Shay-only (section 2) | 5090, Full-Base | m39: everything else PASS-live/offline in PG INGAME_STATUS.md (Z2: 250; Y3: 254, 199; I2: 133, 240; 256 by roll census). Run log archive/test-run-2026-10-03-m22.md |
 
 ## 2. Requires Shay
 
