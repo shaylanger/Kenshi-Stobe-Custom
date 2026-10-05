@@ -285,15 +285,15 @@ static uintptr_t combat_unique_signature(const char *sig) {
 #endif
 }
 static void fp_combat_native_init(void) {
-    HMODULE lib=GetModuleHandleA("KenshiLib.dll");
-    if (!lib)return;
-    g_combat_setup=(combat_setup_t)GetProcAddress(lib,"?setup@RangedCombatClass@@QEAAXPEAVTurretBuilding@@W4StatsEnumerated@@@Z");
-    g_combat_reload=(combat_reload_t)GetProcAddress(lib,"?reloadCheck@RangedCombatClass@@QEAA_NXZ");
-    g_combat_end=(combat_end_t)GetProcAddress(lib,"?end@RangedCombatClass@@QEAAXXZ");
-    g_combat_reset_timer=(combat_end_t)GetProcAddress(lib,"?resetShotTimer@RangedCombatClass@@QEAAXXZ");
+    /* SDK export-table versions can disagree with the running executable.
+       Bind only independently verified, unique native function bodies. */
+    g_combat_setup=(combat_setup_t)combat_unique_signature("48 85 D2 75 09 48 8D 15 ?? ?? ?? ?? EB 04 48 83 C2 58 8B 42 08 89 41 10 8B 42 0C 89 41 14");
+    g_combat_reload=(combat_reload_t)combat_unique_signature("48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 30 48 8B 41 68 8B 51 30 48 8B F9 0F 29 74 24 20 48 8B");
+    g_combat_reset_timer=(combat_end_t)combat_unique_signature("C7 41 70 CD CC CC 3E C3 CC CC CC CC CC CC CC CC");
     uintptr_t t=combat_unique_signature("48 89 5C 24 18 55 56 57 48 8D 6C 24 B9 48 81 EC 00 01 00 00 80 79 36 00 44 0F 29 84 24 E0 00 00 00");
     uintptr_t mt=combat_unique_signature("40 57 48 83 EC 40 80 79 36 00 48 8B F9 0F 84 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 47 28 48 85 C0");
     uintptr_t end=combat_unique_signature("40 53 48 83 EC 20 33 D2 48 8B D9 C6 41 36 00 E8 ?? ?? ?? ?? 48 8B 4B 68 B2 01 48 8B 89 48 04 00 00");
+    g_combat_end=(combat_end_t)end;
     int bindings=g_combat_setup&&g_combat_reload&&g_combat_end&&g_combat_reset_timer&&
                  g_ranged_animupd_orig&&g_gun_shoot_orig&&RVA_RC_GETGUN;
     if (bindings && t && mt && end) {

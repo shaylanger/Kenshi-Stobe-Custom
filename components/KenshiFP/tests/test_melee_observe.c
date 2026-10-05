@@ -8,7 +8,6 @@
 #define _stricmp strcasecmp
 #define KAH_OK 0
 #define KAH_ERROR 1
-typedef void *HMODULE;
 typedef struct KAH_Reply {void (*append)(struct KAH_Reply *,const char *);} KAH_Reply;
 static unsigned char pc[16],cc[0x2b8];
 static void *g_gw_cache=(void *)1;
@@ -22,10 +21,9 @@ static int readable(void *p,size_t n){return allow_read&&p==cc&&n<=sizeof(cc);}
 static void guard_arm(void){g_guard_armed=1;}
 static void logline(const char *fmt,...){(void)fmt;}
 static void *native_get(void *p){assert(p==pc);return cc;}
-static HMODULE GetModuleHandleA(const char *name){assert(!strcmp(name,"KenshiLib.dll"));return (void *)1;}
-static void *GetProcAddress(HMODULE h,const char *name) {
- assert(h==(void *)1);
- assert(!strcmp(name,"?getCombatClass@Character@@QEBAPEAVCombatClass@@XZ"));return (void *)native_get;
+static uintptr_t combat_unique_signature(const char *sig) {
+ assert(!strcmp(sig,"48 8B 81 48 06 00 00 48 8B 40 08 C3"));
+ return (uintptr_t)native_get;
 }
 #include "../client/kfp_melee_observe.inc"
 static void append(KAH_Reply *r,const char *s){(void)r;snprintf(reply,sizeof(reply),"%s",s);}

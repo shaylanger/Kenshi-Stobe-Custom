@@ -30,7 +30,9 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
     g_guard_armed=0;r->append(r,b);return KAH_OK;
 }
 static void fp_melee_observe_init(void) {
-    HMODULE lib=GetModuleHandleA("KenshiLib.dll");
-    if(lib) g_melee_get_combat=(melee_get_combat_t)GetProcAddress(lib,"?getCombatClass@Character@@QEBAPEAVCombatClass@@XZ");
-    logline("[melee] read-only combat binding %s",g_melee_get_combat?"available":"unavailable");
+    /* Verified leaf: Character::body(+0x648)->combatClass(+8). Avoid
+     * trusting an SDK table from a different executable revision. */
+    g_melee_get_combat=(melee_get_combat_t)combat_unique_signature(
+        "48 8B 81 48 06 00 00 48 8B 40 08 C3");
+    logline("[melee] uniquely scanned read-only getter %s",g_melee_get_combat?"available":"unavailable");
 }
