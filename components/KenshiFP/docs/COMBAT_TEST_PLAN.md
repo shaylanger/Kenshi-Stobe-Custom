@@ -130,3 +130,10 @@ P01 PASS requires verified command registration, actual native shot callbacks wi
 ## Reproducible runner and coordinator wrapper
 Offline (WSL, never contacts game): python3 components/KenshiFP/tests/run_offline.py --out <private-artifacts-directory>.
 Coordinator-only P01: python3 components/KenshiFP/tests/capture_native_ranged.py --kah-client C:/KenshiModding/Kenshi-Automation-Harness/client/kah.py --dir <installed-harness-folder> --out <new-results-subdirectory> --seconds 60 --min-shots 3. Paths must be converted to WSL paths when using WSL Python. This wrapper does not install/launch/load/equip, issue attacks, heal or change speed. Coordinator prepares selected crossbow actor and sustained native combat on disposable fixture. It observes native FP-off and FP-on cycles, records setup metadata, drains pages with capture IDs, saves raw replies/CSVs, and verifies FP toggle restoration. Separate coordinator restoration of installed DLL hash is still required. A protected target may be used only to sustain this lifecycle probe if disclosed; those results cannot validate damage or accuracy parity.
+
+## Delivered candidate / pending game validation
+- Source revision pushed on fp-combat: 538851a6f8f605ffd7a2f80b124a03b5f36f35e3.
+- Candidate: C:\KenshiTestRuns\fp-combat\candidates\538851a\KenshiFP.dll.
+- SHA256: 9357105baaa1236cd89df0ecf1d606d9d58accf208b9017e214c73ca28325cf8.
+- Immutable coordinator request: C:\KenshiTestRuns\fp-combat\requests\20261005-2043-native-ranged-probe.txt.
+- P01 result pending. No game execution by this agent; no native readiness, manual-control, reload animation, hit/body-part, accuracy-parity or melee validation claimed. Later docs-only commits do not change this candidate DLL/source identity.

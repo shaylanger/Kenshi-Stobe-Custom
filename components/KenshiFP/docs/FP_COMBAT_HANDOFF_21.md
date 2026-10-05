@@ -29,7 +29,7 @@ Updated 2026-10-05. Dedicated development checkpoint; does not replace the other
 - P01 native lifecycle evidence pending; no C/R/M/S gameplay PASS claimed. This candidate is telemetry prerequisite, not the requested final combat system.
 
 ## Next
-1 Commit/push the native probe+tests/docs on fp-combat, package DLL/hash/manifest and immutable P01 request. Keep runtime logs/DLLs out of git.
+1 DONE: native probe+tests/docs committed and pushed as 538851a6f8f605ffd7a2f80b124a03b5f36f35e3. Candidate C:\KenshiTestRuns\fp-combat\candidates\538851a; SHA256 9357105baaa1236cd89df0ecf1d606d9d58accf208b9017e214c73ca28325cf8. Immutable request C:\KenshiTestRuns\fp-combat\requests\20261005-2043-native-ranged-probe.txt. No game results present yet. Runtime logs/DLLs kept outside git.
 2 Check coordination context and fp-combat/results during further work; use returned raw native state/animation/shoot evidence for safe readiness/reload ownership design.
 3 Build continuous camera zoom while retaining direct controls and fallback toggle; account for collision, head/body visibility, UI/focus and rebasing.
 4 Implement phase 1 ranged using native lifecycle, skill spread, ammo/XP/damage and actual first hit; no instant reload/state forcing. Get coordinator's STOBE truce accessor before initiating attacks.
