@@ -52,7 +52,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 |---|---|---|
 | D1 | 206 farming | done: +25% gear +16.5%, +50% +29.7% (0.59/pt), 206 PASS (4080 m41) |
 | D2 | 191 medic | done: gear raises kit quality, +22.1% / +41.5% heal rate at +25 / +50% gear, 191 PASS (4080 m43) |
-| D3 | 199 perception | done: Perception removed from gear |
+| D3 | 199 perception | done: reverted (m46 Shay), Perception back on gear; ranged gate PASS m47 (4080, PG 199a/b/c) |
 | D4 | 254 athletics | **feel row for Shay**: +50% gear reaches half run speed ~25% faster (t50 0.30 vs 0.40 s, 3 batches), top speed +38% unchanged; the 50->90% ramp and stopping don't change: in 1.0.65 they come from the path slow-down / move-order delay / halt routine, not the acceleration value (both acceleration reads hooked, PG f212cbc; on-screen verified). Play and judge whether short runs feel right |
 | D5 | 190 crossbow | done: no Labouring leak, crossbow +14.1% at +50% |
 | D6 | 192 turrets | done: balance accepted |
