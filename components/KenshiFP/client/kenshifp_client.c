@@ -3330,6 +3330,7 @@ static void kfp_extract_assets(void)
 }
 
 #include "kfp_locomotion.h"
+#include "kfp_combat_probe.inc" /* passive native lifecycle prerequisite */
 #include "kfp_meshray.h"   /* true-geometry .mesh triangle raycasts (task #22) */
 
 /* Perch ground for the loco layer: while standing on a mesh, foot-IK probes
@@ -3673,7 +3674,8 @@ static void kah_bridge_tick(void)
     int n = g_kah.registerCommand("fp_mode", "fp_mode on|off", kah_fp_mode, NULL)
           + g_kah.registerCommand("fp_click", "fp_click (then select a squad member)", kah_fp_click, NULL)
           + g_kah.registerCommand("fp_putdown", "fp_putdown (G while carrying)", kah_fp_putdown, NULL)
-          + g_kah.registerCommand("fp_state", "fp_state", kah_fp_state, NULL);
+          + g_kah.registerCommand("fp_state", "fp_state", kah_fp_state, NULL)
+          + g_kah.registerCommand("fp_combat_probe", "fp_combat_probe begin|end|state|events [after_sequence]|clear", kah_fp_combat_probe, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
 }
@@ -8087,6 +8089,7 @@ static void hooked_mainloop(void *gw, float time)
      * hook failed to install. */
     if (gw && !g_cam_update_orig) fp_camera_override(gw);
     if (gw) fp_movement(gw, time); /* every frame: WASD -> custom motion drive */
+    if (gw) fp_combat_tick(gw, time); /* passive trace; never dispatches actions */
     if (gw) fp_load_nearby_interiors(gw); /* ~1 Hz: preload nearby building interiors */
     if (gw) fp_sync_floor(gw);            /* reveal the character's building floor in FP */
     if (gw) fp_head_visibility(gw);       /* hide head while fast-forwarding (>1x) */
@@ -8162,6 +8165,7 @@ static int fp_aim_point(Vec3 *out)
  * follows the crosshair. Non-player characters pass through. */
 static void hooked_ranged_animupd(void *rc, float ft, Vec3 *aimpos, void *target)
 {
+    fp_combat_probe_animation(rc, target);
     Vec3 aim;
     if (g_fp_mode && g_cfg_freeaim && rc
         && readable((void *)((uintptr_t)rc + RC_ME), 8)
@@ -8195,7 +8199,9 @@ static void hooked_gun_shoot(void *gun, void *me, void *target, int stat, const 
         static int logged;
         if (!logged) { logged = 1; logline("[freeaim] projectile override LIVE"); }
     }
+    fp_combat_probe_shot(gun, me, target, stat, KFP_EV_SHOT_BEFORE);
     g_gun_shoot_orig(gun, me, target, stat, aimpos);
+    fp_combat_probe_shot(gun, me, target, stat, KFP_EV_SHOT_AFTER);
 }
 
 /* CharMovement::faceDirection hook: while the player is in RANGED combat mode
