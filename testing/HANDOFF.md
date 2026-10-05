@@ -15,6 +15,24 @@ Coordinator handoff: temp folder coordinator-handoff-m31.md (m26 has Shay decisi
 - PG: 3-point validation gate (low skill/no gear, high skill/no gear, low skill/gear) before any full matrix; mechanical pass and balance acceptance tracked separately; one gate line per profession; one runner per machine, recorded here.
 - RAM: parakeet STT off unless a test needs voice; PocketTTS off unless a batch tests audio (after checking replies still work without it); WSL cap 8 GB; graphics-only mods (Dust, ReShade, HD textures if worth it) off for automated runs, with a restore command for Shay.
 - Both rules applied (m29, commits 2574235, cbc7148, 558154d). Per-profession gate results go below this line when the operator reports.
+- **PG gate lines (m35, 4080 matrix m35 + 5090 batch T; throughput per profession, gear = s50 +50% unless noted; mechanical = gear moves the stat; balance = Shay/balance pass):**
+  - armour smithing: s10 0.024 / s90 0.054 / +50% gain +27.7% -> mechanical PASS, balance open
+  - weapon smithing: s10 0.034 / s90 0.077 / +25.6% -> mechanical PASS, balance open
+  - crossbow smithing: s10 0.0064 / s90 0.0147 / +99.6% (lab50 ctl 1.60 off) -> mechanical PASS, balance suspicious (gear far above others; recheck)
+  - cooking: s10 0.127 / s90 0.287 / +23.6% -> mechanical PASS, balance open
+  - farming: s10 0.364 / s90 0.728 / s25+50% 0.888 > s75, +108.7% -> mechanical PASS, balance FAIL row 206 (gear too strong)
+  - robotics: s10 0.021 / s90 0.048 / +22.0% (lab50 ctl 0.84) -> mechanical PASS, balance open
+  - science: s10 21.5 / s90 47.7 / +23.1% (lab50 ctl 0.75) -> mechanical PASS, balance open
+  - engineering: s10 2.90 / s90 8.39 / +25.3% -> mechanical PASS, balance open
+  - medic: s10 6.37 / s90 18.3 / +0.1% (Standard kit saturates by Medic 50) -> mechanical flat, Shay decision "medic curve saturation"
+  - assassination: s10 43.8 / s90 180 / s25+50% 92.7 / +36.7% -> mechanical PASS, balance open
+  - lockpicking: s10 0.117 / s90 0.90 / s25+50% 0.483 / +70.0% -> mechanical PASS, balance open (lock level <= skill reads flat 0.9)
+  - thievery: s10 0.11 / s90 0.99 / s25+50% 0.41 / +50.0% -> mechanical PASS, balance open
+  - stealth: s10 0.70 / s90 1.30 / +16.7% -> mechanical PASS, balance open
+  - swimming: s10 2.38 / s90 30.9 / +24.8% -> mechanical PASS, balance open
+  - athletics (5090 batch T pg-85, swim 300 m s, lower = faster): s10 4.3 / s90 3.0 / own50 ~2.8 / lab50 ctl 3.5 -> mechanical PASS, balance open
+  - turrets: pg-55 rerun batch U (regex fix PG 7a303e7)
+  - perception: not run (pending decision "perception ignored by 1.0.65 detection")
 ---
 # Handoff: multi-feature test loop (coordinator) — state 2026-10-03 ~17:55 (run m18 running)
 
