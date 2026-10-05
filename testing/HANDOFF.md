@@ -147,5 +147,5 @@ Coordinator handoff: temp folder coordinator-handoff-m31.md (m26 has Shay decisi
   the 5090 (lock owner `coordinator`).
 - All subagents ended with the session. The 4080 rig operator never reported: check the 4080 (`ctl.ps1 status`, lock
   `rig4080`, results `C:\KenshiTestRuns\m18-4080\` there), stop its game and delete its kah-* copies if left.
-- Unanalysed results (logged in the m18 run log): rel-enslaved p7-04 15/2, p7-05 21/1; rel-theft p3-05b 31/2,
+- Unanalysed results (logged in the m18 run log): rel-theft p3-05b 31/2,
   probe-theft-seen 19/3.
