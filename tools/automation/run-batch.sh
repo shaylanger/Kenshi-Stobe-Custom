@@ -40,13 +40,19 @@ world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
 # timeout: the WSL powershell proxy can hang after a launch (pipe held by Kenshi, m23); launch output lines
 # are printed before it hangs, so killing it after 420 s loses nothing
 ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" </dev/null | tr -d '\r'; }
-# launch <save>: the proxy often never exits after a launch (m32: 2 of 3 launches sat the full 420 s although
-# the game was in the world in 10 s): run it in the background, wait for its last line ("running: pid=") or its
-# exit, kill the stuck proxy, then wait for the world
+# launch <save>: the proxy often never exits after a launch (m32: 3 of 5 launches sat the full 420 s although
+# the game was in the world in 10 s) and its output arrives only when it exits: run it in the background, wait
+# for its exit or the harness log written by THIS launch (kenshi-ctl deletes the old one) to show the autoload,
+# kill the stuck proxy, then wait for the world
+HLOG=/mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log
 launch() {
+  local t0 i; t0=$(date +%s)
   ctl launch -Save "$1" > "$O/launch.out" 2>&1 &
-  local i
-  for i in $(seq 1 140); do grep -q "running: pid=" "$O/launch.out" && break; kill -0 $! 2>/dev/null || break; sleep 3; done
+  for i in $(seq 1 140); do
+    kill -0 $! 2>/dev/null || break
+    [ -f "$HLOG" ] && [ "$(stat -c %Y "$HLOG")" -ge "$t0" ] && grep -a -q "KAH: autoload $1" "$HLOG" && { sleep 5; break; }
+    sleep 3
+  done
   pkill -f "kenshi-ctl.ps1 launch" 2>/dev/null; wait 2>/dev/null
   tail -3 "$O/launch.out"
 }
