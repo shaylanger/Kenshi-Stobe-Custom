@@ -33,6 +33,7 @@ static int combat_owned_rc(void *rc) {
 static uintptr_t combat_unique_signature(const char *sig);
 #include "kfp_combat_trace.inc"
 #include "kfp_combat_target.inc"
+#include "kfp_combat_body.inc"
 #include "kfp_combat_input.inc"
 static void combat_rc_hook(void *rc,float dt,const void *a,const void *b) {
     if (!combat_owned_rc(rc)) g_combat_rc_orig(rc,dt,a,b);
@@ -122,7 +123,7 @@ static int combat_weapon_pose(void *pc,void *gun,const Vec3 *aim) {
     if (!fn || !vis || !readable(gun,0x121)) return 0;
     if (!*(unsigned char *)((uintptr_t)gun+0x60)) {
         void *an=*(void **)((uintptr_t)pc+CHAR_ANIM);
-        void *entity=an?find_body_entity(an):NULL;
+        void *entity=an?combat_cached_body_entity(an):NULL;
         void *parent=entity&&g_get_parent_scenenode?g_get_parent_scenenode(entity):NULL;
         void *create=combat_virtual(gun,0x18);
         if (!parent || !create) return 0;
@@ -149,8 +150,12 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         }
         memset(&g_combat_observed,0,sizeof(g_combat_observed));return;
     }
+    combat_prepare_body_entity(); /* owns its guard; must precede our setjmp */
+    void *saved_perch_node=g_mr_perch_node;
+    mr_cache_t *saved_perch_cache=g_mr_perch_cache;
     if (setjmp(g_guard_jb)) {
-        g_guard_armed=0;g_combat_fault=1;g_combat_dispatch=0;g_aim_mode=0;
+        g_mr_perch_node=saved_perch_node;g_mr_perch_cache=saved_perch_cache;
+        g_guard_armed=0;g_combat_fault=1;g_combat_dispatch=0;g_combat_dispatch_tid=0;g_aim_mode=0;
         g_combat_pc=NULL;g_combat_rc=NULL;g_combat_gun=NULL;
         logline("[combat] native call fault; manual ownership disabled");return;
     }
@@ -259,7 +264,11 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
     (void)id;(void)u;
     if (argc==2 && !_stricmp(argv[1],"aim")) {
         if (g_guard_armed) {r->append(r,"aim query busy");return KAH_ERROR;}
-        if (setjmp(g_guard_jb)) {g_guard_armed=0;r->append(r,"aim query fault");return KAH_ERROR;}
+        void *saved_node=g_mr_perch_node;mr_cache_t *saved_cache=g_mr_perch_cache;
+        if (setjmp(g_guard_jb)) {
+            g_mr_perch_node=saved_node;g_mr_perch_cache=saved_cache;
+            g_guard_armed=0;r->append(r,"aim query fault");return KAH_ERROR;
+        }
         guard_arm();Vec3 aim;
         int valid=combat_camera_aim(&aim);
         g_guard_armed=0;
