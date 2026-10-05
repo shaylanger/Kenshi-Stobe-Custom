@@ -101,7 +101,7 @@ def main():
             for cmd,items in [("status",()),("where",("@selected",)),("inv",("@selected",)),
                               ("hp",("@selected","detail")),("stat",("@selected","crossbows")),
                               ("stat",("@selected","perception")),("stat",("@selected","dexterity")),
-                              ("stat",("@selected","precisionfriendlyfire"))]:
+                              ("stat",("@selected","friendly_fire"))]:
                 send(cmd,*items)
             begin=send("fp_combat_probe","begin")
             found=re.search(r"capture=(\d+)",begin)
