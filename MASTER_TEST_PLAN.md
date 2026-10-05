@@ -44,7 +44,23 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 | Voice / feel | voice quality, overall play feel, relationship balance feel (REL §9) |
 | PG 135–141, 277 | tooltip section on armour, backpack, weapon/tool, plain item, two-affix item, shop/loot views |
 | PG 155, 238 | feel: repeated tooltip opening; no stall when a shop opens |
-| PG balance decision | after all professions are measured (Labouring: +25 % gear = whole skill range) |
+| PG balance decision | after all professions are measured (Labouring: +25 % gear = whole skill range). Open decisions D1-D8 below |
+
+### Open Shay decisions (m39, 2026-10-05; everything else is tested, Kenshi closed, nothing running)
+Data: 4080 matrix `C:\KenshiTestRuns\pgbal-4080\m35-analysis.txt` ("Cross-profession" block), 5090 batches in `archive/test-run-2026-10-03-m22.md`, rows in PG `INGAME_STATUS.md`.
+
+| # | PG row | Finding | Question for Shay |
+|---|---|---|---|
+| D1 | 206 farming | +25% gear = +40.9% output, +50% gear = +108.7% (per gear point 2.17, the highest of all; others 0.44-0.73 except crossbow). Skill 25 + 50% gear (0.888) out-produces skill 75 with no gear (0.675) = row FAIL | Lower the farming gear multiplier (e.g. to ~0.5 per point like the other trades), or accept? |
+| D2 | 191 medic | Healing time s10 6.37 / s90 18.3 rate, but +50% gear = +0.1%: the Standard kit already saturates by Medic 50 (12.4 s at 10, 4.5 s at 50 and 90), so gear has nothing left to improve | Change how medic gear applies (e.g. scale kit quality/heal amount instead of speed), cap lower, or accept that medic gear does nothing past 50? |
+| D3 | 199 perception | 16 observers, perception 10-90 x gear 0-50: detection always 1.4-1.9 s. Game 1.0.65 detection doesn't seem to use perception at this setup (stealth 195 also flat ~1.5 s at 20 m) | Accept perception gear as cosmetic for detection, give it another effect, or have us test other distances/angles? |
+| D4 | 254 athletics | +50% Athletics gear: top run speed 81.8 -> 113.1 u/s (+38%), but ~30 m runs only 75.8 -> 80.6 u/s (+6%, acceleration dominates short runs) | Fine as is, or also boost acceleration so short runs feel it? |
+| D5 | 190 crossbow | +50% gear = +99.6% output (per point 1.99, 2x the other smithing trades); lab-level-50 control 1.60 (should be ~1.0; science 0.75, robotics 0.84 also off) | Lower crossbow gear multiplier? Rerun the lab50 controls to rule out noise first (our default unless you say otherwise) |
+| D6 | 192 turrets | Turrets never fire at a pinned training dummy unless it is designated (harness `turret ... aim`); with designation the mechanic PASSes, per-shot damage noisy (n=1) | Accept (vanilla targeting behaviour) and close balance, or want a longer turret run for damage balance? |
+| D7 | 132 import | Importing a character into a NEW game crashes Kenshi every time (kenshi_x64+0x94d6db read 0x270), with import all/squad/unpaused/game's own dialog, and with PG not loaded (dump `C:\KenshiTestRuns\crash-m37-i4-nopg\`); the 4080 crashes too without Stobe/KenshiFP = vanilla/mod stack, not PG | Close as "not ours" (row stays BLOCKED-vanilla), or bisect the other mods to find the culprit? |
+| D8 | 191 medic files | `full-base/pg-84-balance-medic.txt` scenario files drifted from `tools/balance_driver.py` (kit refill fix PG b1cde2f: `give 1` with 16 kits held) | No decision needed: TO-DO for us = regenerate pg-84 from balance_driver.py and diff before any medic rerun |
+
+**After reboot (resume):** read `testing/HANDOFF.md` + newest `coordinator-handoff-m40.md` (temp folder, copy in `handoff/`). Kenshi graphics mods are still OFF: `bash C:/KenshiModding/tools/automation/gfx-mods.sh on` before playing. PG config already Normal/Normal, game lock released. Once Shay answers D1-D7: apply the balance changes in PG config, rebuild/install PG, rerun only the affected rows' matrix points (gate first, RUN_ORDER.md).
 
 Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 

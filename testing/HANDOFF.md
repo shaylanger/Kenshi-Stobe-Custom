@@ -1,4 +1,10 @@
-# Current checkpoint: m31 (2026-10-04 evening, after RAM upgrade to 48 GB)
+# Current checkpoint: m40 (2026-10-05, before Shay's PC reboot)
+Coordinator handoff: temp folder coordinator-handoff-m40.md (copy in handoff/). Run log: archive/test-run-2026-10-03-m22.md.
+- **State:** all automated rows done (PG 250 PASS-live in m39). Kenshi closed, nothing running, game lock released, PG config Normal/Normal, 4080 idle, no subagents.
+- **Open = Shay decisions D1-D8** in MASTER_TEST_PLAN.md section 2 ("Open Shay decisions"): farming gear too strong, medic saturation, perception flat, athletics short runs, crossbow outlier + lab50 controls, turret targeting, import crash (vanilla), pg-84 file drift (our to-do).
+- **Graphics mods still OFF:** `bash C:/KenshiModding/tools/automation/gfx-mods.sh on` before playing.
+
+# Previous checkpoint: m31 (2026-10-04 evening, after RAM upgrade to 48 GB)
 Coordinator handoff: temp folder coordinator-handoff-m31.md (m26 has Shay decisions). Run log: archive/test-run-2026-10-03-m22.md.
 - **5090:** PG operator subagent runs the 5090 PG queue (pgop HANDOFF-5090-operator-m32.md) and the 4080 queue; coordinator borrows the 5090 game for REL batch Q (list-q, after fixer m31: p7-04, p7-05, SR19 cage sub-check).
 - **5090 after its own work (Shay, 2026-10-04):** don't stop; use it for PG testing too, alongside the 4080; the coordinator decides the split.
