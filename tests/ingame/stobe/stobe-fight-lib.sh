@@ -5,7 +5,8 @@
 # Squad names (m16: the 4080 fixtures have other squads; nothing may depend on Shay/Malzin)
 PLAYER="${PLAYER:-Shay}"; MATE="${MATE:-Malzin}"
 L=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
-KFP=/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log
+# goal/voice/action lines (WORK_GOAL, BUY_FALLBACK, SAY) moved from KenshiFP.log to Stobe's stobe_goals.log (decoupling, Stobe DFADCCF6+)
+KFP=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_goals.log
 SRV=/var/www/html/StobeServer/log/stobeserver.log
 SC=/mnt/c/KenshiModding/tools/automation/scenarios.sh
 BASE_L=$(grep -a -c "" "$L" 2>/dev/null || echo 0)
@@ -201,8 +202,9 @@ verdict() {
 # RAID_RE: world-raid factions that reach the squad on Full-Base (m17 Band of Bones; m24 Bele'coz, Hill Marauders,
 # Black Dragon Ninjas; m22 J Kral's Chosen; m22 L Berserkers: not calmed, ~1100 protect revives in 16-fullbase).
 # RAID_FILTER: the same for the harness `chars <r> <filter>` (m26).
-RAID_RE="${RAID_RE:-Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Bele.coz|Hill Marauders|Black Dragon Ninjas|Berserkers|Cannibals|Fogmen}"
-RAID_FILTER="${RAID_FILTER:-[band of bones]|[kral|[dust bandits]|[hungry bandits]|[starving bandits]|[bele|[hill marauders]|[black dragon ninjas]|[berserkers]|[cannibals]|[fogmen]}"
+# m49 (A8-grow-fb dec-5090-2): wildlife (Savannah Hounds) attacked Avarek at 10x: wildlife factions added
+RAID_RE="${RAID_RE:-Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Bele.coz|Hill Marauders|Black Dragon Ninjas|Berserkers|Cannibals|Fogmen|Savannah Hounds|Bonedogs|Beak Things|Blood Spiders|Skin Spiders|Gorillos|Landbats}"
+RAID_FILTER="${RAID_FILTER:-[band of bones]|[kral|[dust bandits]|[hungry bandits]|[starving bandits]|[bele|[hill marauders]|[black dragon ninjas]|[berserkers]|[cannibals]|[fogmen]|[savannah hounds]|[bonedogs]|[beak things]|[blood spiders]|[skin spiders]|[gorillos]|[landbats]}"
 # calm_raiders [radius] [factions-regex]: knock out world raiders near the squad for RAID_KO_S game seconds (Full-Base
 # gets raids that reach the squad mid-test, m17); logs how many
 calm_raiders() {

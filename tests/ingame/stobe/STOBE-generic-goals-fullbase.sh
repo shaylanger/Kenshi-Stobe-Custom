@@ -21,15 +21,19 @@ WORK_ITEM="${WORK_ITEM:-building materials}"; WORK_QTY="${WORK_QTY:-2}"
 STK=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_task_goal.status
 STW=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_work_goal.status
 BASE_K=$(grep -a -c "" "$KFP" 2>/dev/null || echo 0)
-trap 'stobe-auto speed 0 >/dev/null 2>&1' EXIT
+trap 'raid_guard_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 count_of() { stobe-auto inv "$1" | grep -oE "\"name\":\"$2\",\"count\":[0-9]+" | grep -oE '[0-9]+$' | awk '{s+=$1} END{print s+0}'; }
-alert() { since_stobe | grep -a -E "\[EVENT\] (combat: .* -> (${PLAYER}|${MATE}) |knockout: (${PLAYER}|${MATE}) )" | tail -1; }
+# m48 (dec-5090-1): a Band of Bones raid aborted the work part; world raiders are swept by raid_guard and their
+# events skipped here (raid_event); any other attack on the squad still ends the row
+alert() { since_stobe | grep -a -E "\[EVENT\] (combat: .* -> (${PLAYER}|${MATE}) |knockout: (${PLAYER}|${MATE}) )" |
+  while IFS= read -r l; do raid_event "$l" || echo "$l"; done | tail -1; }
 log "generic: squad ${PLAYER} + ${MATE}"
 stobe-auto speed 0 >/dev/null; stobe-auto select "${PLAYER}" >/dev/null
 stobe-auto chars 60 | cut -c1-200
 stobe-auto hunger "${PLAYER}" 280 >/dev/null; stobe-auto hunger "${MATE}" 280 >/dev/null
 stobe-say ping | head -2
 bash "$(dirname "$0")/fullbase-guard.sh"
+raid_guard_start
 
 # --- 1. hand-over
 stobe-auto give "${MATE}" "Bread" 2 | cut -c1-120

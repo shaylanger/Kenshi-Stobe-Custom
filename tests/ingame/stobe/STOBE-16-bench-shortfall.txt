@@ -59,35 +59,36 @@ stobe_say Malzin "Malzin, make 2 Junkbows at the crossbow bench, please."
 speed 1
 # m16: the goal was accepted only after the reply (LLM + TTS): wait before checking
 @sleep 30
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Junkbow qty=2
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Junkbow qty=2
 # items 93-93c (KenshiFP DC37D57B): the planner must find the bench (if not: KenshiFP.log WORK_DIAG lines say why)
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ find_producer done found=1 building=Crossbow Crafting Bench crafting=1
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ find_producer done found=1 building=Crossbow Crafting Bench crafting=1
 speed 0
 # samples while the goal queues and crafts: the queues must never pass the shortfall
-benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
-benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
+# m49 (16-fb): benches sampled near the worker (the selected player moved: the Crossbow/Arrow bench fell outside 200 of her) ; Crossbow lines 600: on Full-Base the two benches are >300 apart (dec-5090-4 step 70)
+benches 300 near Malzin ~ Arrow Making Bench [^|]*queue=[01]\b
+benches 600 near Malzin ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
 speed 10
 @sleep 30
 speed 0
-benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
-benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
+benches 300 near Malzin ~ Arrow Making Bench [^|]*queue=[01]\b
+benches 600 near Malzin ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
 speed 10
 @sleep 30
 speed 0
-benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
-benches 200 ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
+benches 300 near Malzin ~ Arrow Making Bench [^|]*queue=[01]\b
+benches 600 near Malzin ~ Crossbow Crafting Bench [^|]*queue=[0-2]\b
 speed 10
 # m26 (16-fullbase): one Junkbow takes ~290 s real at speed 10 for Avarek, so 2 units + hauls need ~650 s;
 # 300 s timed out with unit 2 at 14% (goal still progressing). Same check, honest window.
-@until 900 benches 200 ~ Crossbow Crafting Bench [^|]*queue=0\b
+@until 900 benches 300 near Malzin ~ Crossbow Crafting Bench [^|]*queue=0\b
 speed 0
-benches 200 ~ Arrow Making Bench [^|]*queue=[01]\b
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=2\b
+benches 300 near Malzin ~ Arrow Making Bench [^|]*queue=[01]\b
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=2\b
 # item 95: the stock Hinge used by the goal is not queued again
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ Hinge used 1 \(consumed=1
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ WORK_STEP id=\S+ Hinge used 1 \(consumed=1
 # collect + completion (the goal collects the bench output when it completes)
 speed 10
-@sleep 30
+# m49 (16-fb): 30 s at 10x ended before unit 2 finished (goal still running): wait for the line instead
+@log-wait 600 D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ WORK_GOAL complete id=\S+ actor=Malzin item=Junkbow qty=2
 speed 0
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL complete id=\S+ actor=Malzin item=Junkbow qty=2
 inv Malzin ~ Junkbow

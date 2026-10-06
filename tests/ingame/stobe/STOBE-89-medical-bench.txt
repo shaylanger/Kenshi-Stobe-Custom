@@ -38,8 +38,8 @@ give Malzin "Fabrics" 6 ~ got 6/6
 stobe_say Malzin "Malzin, make me one Basic First Aid Kit at the medical workbench."
 speed 1
 @sleep 30
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Basic First Aid Kit qty=1
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ find_producer done found=1 building=Basic Medical Workbench crafting=1
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ WORK_GOAL accepted id=\S+ actor=Malzin serial=\d+ item=Basic First Aid Kit qty=1
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ find_producer done found=1 building=Basic Medical Workbench crafting=1
 speed 0
 status ~ phase=world
 benches 200 ~ Basic Medical Workbench [^|]*queue=1\b
@@ -47,7 +47,7 @@ speed 10
 @sleep 40
 speed 0
 status ~ phase=world
-@log D:\Steam\steamapps\common\Kenshi\KenshiFP.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=1\b
+@log D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log ~ WORK_STEP id=\S+ missing inputs=\d+ queued_root=1\b
 speed 10
 @sleep 40
 speed 0
