@@ -10,10 +10,10 @@ The master list is `C:\KenshiModding\MASTER_TEST_PLAN.md` (the coordinator is th
 |---|---|---|---|
 | **Coordinator** (main session) | Kenshi, installs, fixtures, `MASTER_TEST_PLAN.md`, run logs, STOBE + KenshiFP + harness fixes, merging REL into live | launch/stop Kenshi, install DLLs, deploy the live server, start helper subagents | - |
 | **PG agent** | `Kenshi-Profession-Gear-Progression` repo (own git) | edit/build/test PG offline, write PG in-game scenario files, commit + push PG | launch Kenshi, install DLLs, touch the game folder, edit the master plan |
-| **REL builder** | `/root/stobe-work/social-phase1/{server,native-workspace}` (branch `feature/social-phase1`), its DB `stobe_social_phase1_test` | build REL phases, private DLL builds, offline tests, REL in-game scenario files, merge-ready deliveries | launch Kenshi, install DLLs, touch `/var/www/html/StobeServer`, `/root/STOBE-src`, `C:\StobeBuild`, the `stobe_test`/`stobe` DBs |
 | Helper subagents | whatever the coordinator assigns | that task only | anything above unless told |
 
-Only the coordinator drives the game. The lock is `C:\KenshiTestRuns\game.lock`
+Only the coordinator drives the game (exception since 2026-10-05: the FP combat session, lock owner `fpcombat`, see
+`FP_COMBAT_COORDINATION_CONTEXT.md`). The REL builder role ended when REL went live (m18). The lock is `C:\KenshiTestRuns\game.lock`
 (`tools/automation/kenshi-ctl.ps1 lock|release`); launch/stop/restart refuse if someone else holds it.
 
 ## The loop
