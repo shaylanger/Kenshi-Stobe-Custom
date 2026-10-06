@@ -17,7 +17,8 @@ LOGS="stobe|/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log|
 kenshifp|/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log|ERROR|Error|WARN|FAIL|BLOCK|xception|crash|goal
 harness|/mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log|ERROR|Error|error|WARN|FAIL|xception
 server|/var/www/html/StobeServer/log/stobeserver.log|ERROR|WARN|Fatal|xception|guard|refus|BLOCK|FAIL
-php|/var/www/html/StobeServer/log/php_error.log|."
+php|/var/www/html/StobeServer/log/php_error.log|.
+stobegoals|/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_goals.log|ERROR|Error|WARN|FAIL|BLOCK|REFUS|CANCEL|xception|crash|goal|GOAL"
 # routine lines that match the filters but never explain a failure
 # Local TTS warnings: PocketTTS stays stopped for automated runs (RAM rule), the server's TTS call fails in ~2 ms per line.
 NOISE='Unhandled event type stored only|Local TTS synthesis failed|TTS synthesis latency'

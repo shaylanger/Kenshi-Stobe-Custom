@@ -31,7 +31,7 @@ mkdir -p "$O"; rm -f "$O/DONE"
 exec >>"$O/batch.log" 2>&1
 S="$O/SUMMARY.txt"; R="$O/ranges.tsv"
 # same order as LOGS in batch-excerpts.sh
-LOGPATHS="/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log /mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log /mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log /var/www/html/StobeServer/log/stobeserver.log /var/www/html/StobeServer/log/php_error.log"
+LOGPATHS="/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log /mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log /mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log /var/www/html/StobeServer/log/stobeserver.log /var/www/html/StobeServer/log/php_error.log /mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_goals.log"
 STOBELOG=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
 
 say() { echo "$*" | tee -a "$S"; }

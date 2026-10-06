@@ -42,7 +42,7 @@ if ($Command -in @('launch', 'stop', 'restart')) {
 
 & 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' $Command -Save $Save -TimeoutSec $TimeoutSec `
   -Kenshi $Kenshi -ArchiveRoot 'C:\KenshiTestRuns' `
-  -ExtraLogs @("$Kenshi\RE_Kenshi\mods\Stobe\stobe.log", "$Kenshi\KenshiFP.log",
+  -ExtraLogs @("$Kenshi\RE_Kenshi\mods\Stobe\stobe.log", "$Kenshi\KenshiFP.log", "$Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log",
                "$Kenshi\mods\ProfessionGearProgression\ProfessionGear.log",
                "$Kenshi\mods\ProfessionGearProgression\profession_gear_affixes.tsv")
 exit $LASTEXITCODE
