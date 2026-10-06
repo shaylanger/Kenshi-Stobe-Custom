@@ -284,6 +284,24 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
           g_combat_camera_hit.ids[3],g_combat_camera_hit.ids[4]);
         r->append(r,b);return KAH_OK;
     }
+    /* Test hook (read-only): native physics ray from an arbitrary world point, same trace as aim.
+     * Measures the vertical frame of the eye anchor against `where` and body shapes (R08/R10). */
+    if (argc==7 && !_stricmp(argv[1],"ray")) {
+        float v[5];
+        for(int i=0;i<5;++i) {char *e;v[i]=strtof(argv[2+i],&e);if(e==argv[2+i]||*e||!isfinite(v[i])){r->append(r,"usage: fp_combat ray <x> <y> <z> <yaw> <pitch>");return KAH_ERROR;}}
+        if (g_guard_armed) {r->append(r,"ray query busy");return KAH_ERROR;}
+        if (setjmp(g_guard_jb)) {g_guard_armed=0;r->append(r,"ray query fault");return KAH_ERROR;}
+        guard_arm();
+        Vec3 o={v[0],v[1],v[2]},d={sinf(v[3])*cosf(v[4]),-sinf(v[4]),cosf(v[3])*cosf(v[4])};
+        CombatRayHit h={0};int t=combat_trace_ray(&o,&d,80.0f,&h);
+        g_guard_armed=0;
+        if (t<0) {r->append(r,"ray query unavailable");return KAH_ERROR;}
+        char b[320];
+        snprintf(b,sizeof(b),"hit=%d x=%.4f y=%.4f z=%.4f distance=%.4f shape=%llx group=%u id0=%u id1=%u id2=%u id3=%u id4=%u",
+          t,h.position.x,h.position.y,h.position.z,h.distance,(unsigned long long)h.shape,h.group,
+          h.ids[0],h.ids[1],h.ids[2],h.ids[3],h.ids[4]);
+        r->append(r,b);return KAH_OK;
+    }
     if (argc==2 && !_stricmp(argv[1],"off")) {
         g_combat_enabled=0;g_combat_injection=0;r->append(r,"manual ownership release requested");return KAH_OK;
     }
@@ -318,7 +336,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
           g_combat_actual_shots,g_combat_suppressed,g_combat_reload_starts,g_combat_last_reload_timer,g_combat_control.rejected,g_combat_injection,g_cfg_combat_auto_reload);
         r->append(r,b);return KAH_OK;
     }
-    r->append(r,"usage: fp_combat on|off|state|aim|physical|autoreload <0|1>|input <aim 0|1> <fire 0|1> <reload 0|1>");return KAH_ERROR;
+    r->append(r,"usage: fp_combat on|off|state|aim|ray <x> <y> <z> <yaw> <pitch>|physical|autoreload <0|1>|input <aim 0|1> <fire 0|1> <reload 0|1>");return KAH_ERROR;
 }
 static uintptr_t combat_unique_signature(const char *sig) {
 #ifdef KFP_RE_PLUGIN
