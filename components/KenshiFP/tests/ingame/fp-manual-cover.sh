@@ -53,6 +53,7 @@ A buildings 3000 near "$SH" | grep -o 'pos=[-0-9.]*,[-0-9.]*,[-0-9.]*' | cut -d=
 [ -s "$OUT/cands.txt" ] || setup_fail "no building within 3000 of $SH"
 COVER=""
 while IFS=, read -r bx by bz; do
+  A pin "$SH" off >/dev/null; A pin "$TG" off >/dev/null   # a kept pin snaps back to the previous candidate (4080 b26)
   A teleport "$SH" "$(awk -v x="$bx" 'BEGIN{print x-180}')" "$by" "$bz" >/dev/null; A pin "$SH" >/dev/null
   A teleport "$TG" "$(awk -v x="$bx" 'BEGIN{print x+120}')" "$by" "$bz" >/dev/null; A pin "$TG" >/dev/null
   sleep 2; A fp_control take >/dev/null; aim_at "$TG" 13

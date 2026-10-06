@@ -32,8 +32,8 @@ take() { A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_contr
   read -r tx tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
   A fp_camera look "$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')" 0.02 >/dev/null; }
 # fresh_shot [ready_s]: release, aim, wait shot-ready (default 10 s), one trigger; echoes the harness shot delta (expect 1)
-fresh_shot() { local h0; inp 0 0 0; sleep 0.5; inp 1 0 0; waitfor "${1:-10}" shot_ready 1 || { echo "not_ready/anim=$(cs anim_ready)/ammo=$(cs ammo)/reloading=$(cs reloading)/why=$(cs why)"; return; }
-  h0=$(hshots); inp 1 1 0; sleep 1.5; inp 1 0 0; local d=$(( $(hshots) - h0 ))
+fresh_shot() { local h0; inp 0 0 0; h0=$(hshots); sleep 0.5; inp 1 0 0; waitfor "${1:-10}" shot_ready 1 || { echo "not_ready/anim=$(cs anim_ready)/ammo=$(cs ammo)/reloading=$(cs reloading)/why=$(cs why)"; return; }
+  inp 1 1 0; sleep 1.5; inp 1 0 0; local d=$(( $(hshots) - h0 ))
   [ "$d" = 0 ] && { echo "0/rej=$(cs last_reject)/rej_why=$(cs last_reject_why)/anim_sup=$(cs anim_suppressed)"; return; }; echo "$d"; }
 ready_held() { inp 0 0 0; sleep 0.5; inp 1 0 0; waitfor 10 shot_ready 1 || return 1; return 0; }
 
