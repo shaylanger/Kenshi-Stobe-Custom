@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <stdarg.h>
@@ -25,6 +26,12 @@ static uintptr_t combat_unique_signature(const char *sig) {
  assert(!strcmp(sig,"48 8B 81 48 06 00 00 48 8B 40 08 C3"));
  return (uintptr_t)native_get;
 }
+static int fp_melee_state_append(char *b,size_t n){(void)b;(void)n;return 0;}
+static void fp_melee_set_passive(unsigned s){(void)s;}
+static unsigned spam_n,spam_p;static void fp_melee_spam_start(unsigned n,unsigned p){spam_n=n;spam_p=p;}
+static unsigned cl_ms,ss_resets;static void fp_melee_click_legal_start(unsigned ms){cl_ms=ms;}
+static void fp_melee_swingstat_reset(void){++ss_resets;}
+static int fp_melee_swingstat_append(char *b,size_t n){return snprintf(b,n,"atk_speed_mean=1.0000 techs=none");}
 #include "../client/kfp_melee_observe.inc"
 static void append(KAH_Reply *r,const char *s){(void)r;snprintf(reply,sizeof(reply),"%s",s);}
 static void put_pointer(size_t off,void *v){memcpy(cc+off,&v,sizeof(v));}
@@ -51,6 +58,17 @@ int main(void) {
  allow_read=0;assert(command("state")==KAH_ERROR);assert(!g_guard_armed);allow_read=1;
  put_pointer(0x188,(void *)2);assert(command("state")==KAH_ERROR);assert(!g_guard_armed);
  valid=0;assert(command("state")==KAH_ERROR);
- puts("RESULT B12 PASS production melee read-only snapshot, float state fields, ownership/binding guards; native layout/runtime unvalidated");
+ {KAH_Reply r={append};const char *a3[]={"fp_melee","spam","15","200"},*a2[]={"fp_melee","spam","off"},*bad[]={"fp_melee","spam","0"},*badp[]={"fp_melee","spam","5","10"};
+  assert(kah_fp_melee("t",4,a3,&r,NULL)==KAH_OK&&spam_n==15&&spam_p==200&&strstr(reply,"15 clicks every 200 ms"));
+  assert(kah_fp_melee("t",3,a2,&r,NULL)==KAH_OK&&spam_n==0);
+  assert(kah_fp_melee("t",3,bad,&r,NULL)==KAH_ERROR&&kah_fp_melee("t",4,badp,&r,NULL)==KAH_ERROR&&spam_n==0);
+  const char *a1[]={"fp_melee","spam","7"};assert(kah_fp_melee("t",3,a1,&r,NULL)==KAH_OK&&spam_n==7&&spam_p==200);
+  const char *c1[]={"fp_melee","click_legal"},*c2[]={"fp_melee","click_legal","2500"},*cb[]={"fp_melee","click_legal","50"},*cx[]={"fp_melee","click_legal","9x"};
+  assert(kah_fp_melee("t",2,c1,&r,NULL)==KAH_OK&&cl_ms==6000&&kah_fp_melee("t",3,c2,&r,NULL)==KAH_OK&&cl_ms==2500);
+  assert(kah_fp_melee("t",3,cb,&r,NULL)==KAH_ERROR&&kah_fp_melee("t",3,cx,&r,NULL)==KAH_ERROR&&cl_ms==2500);
+  const char *w1[]={"fp_melee","swingstat"},*w2[]={"fp_melee","swingstat","reset"},*wb[]={"fp_melee","swingstat","x"};
+  assert(kah_fp_melee("t",2,w1,&r,NULL)==KAH_OK&&ss_resets==0&&kah_fp_melee("t",3,w2,&r,NULL)==KAH_OK&&ss_resets==1);
+  assert(kah_fp_melee("t",3,wb,&r,NULL)==KAH_ERROR&&ss_resets==1);}
+ puts("RESULT B12 PASS production melee read-only snapshot, float state fields, ownership/binding guards, spam/click_legal/swingstat switch parsing; native layout/runtime unvalidated");
  return 0;
 }

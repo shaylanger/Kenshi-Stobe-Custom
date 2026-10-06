@@ -1218,6 +1218,17 @@ static volatile LONG g_kah_inject_click, g_kah_inject_putdown; /* harness-inject
 static void fp_manual_combat_tick(void *,float);
 static void fp_combat_native_init(void);
 static void fp_melee_observe_init(void);
+static void fp_melee_manual_init(void);
+static void fp_melee_manual_tick(void *,void *,int,int,float);
+static void fp_melee_release(void);
+static int fp_melee_state_append(char *,size_t);
+static void fp_melee_set_passive(unsigned);
+static void fp_melee_spam_start(unsigned,unsigned);
+static void fp_melee_click_legal_start(unsigned);
+static void fp_melee_swingstat_reset(void);
+static int fp_melee_swingstat_append(char *,size_t);
+static void fp_melee_hold_ground(void *);
+static void fp_melee_observe_swing(void *,float);
 static int kah_fp_melee(const char *,int,const char *const *,KAH_Reply *,void *);
 static int fp_combat_suppress_shot(void *,void *);
 static int install_hook(void *,void *,void **);
@@ -1404,6 +1415,18 @@ static int g_ui_moveblock;         /* HARD block (control disabled: dialogue/cut
 static int g_settings_open;        /* our settings window is showing -> free the cursor like a panel */
 static int g_free_toggle;          /* key_free_cursor TOGGLE: 1 = cursor freed (like a panel) */
 static int g_dbg_control;          /* controlEnabled read, for verification */
+/* S03 diag: the five ui_open inputs of the last FP frame (fp_state + [ui] edge log) */
+static int g_ui_c_control = 1, g_ui_c_keyfocus, g_ui_c_mask, g_ui_c_pframes;
+static unsigned g_ui_open_edges;    /* 0->1 transitions of g_ui_open since launch */
+static void *g_settings_win;       /* tentative decl; defined with the settings window */
+static const char *ui_why_str(int control, int kf, int panels_gate, int settings, int freet, char *b, size_t n)
+{
+    snprintf(b, n, "%s%s%s%s%s", control == 0 ? "control," : "", kf ? "key_focus," : "",
+             panels_gate ? "panels," : "", settings ? "settings," : "", freet ? "free," : "");
+    size_t l = strlen(b);
+    if (l) b[l - 1] = 0; else snprintf(b, n, "none");
+    return b;
+}
 static float g_tx, g_tz;           /* game->Ogre translation, calibrated when still */
 static int g_have_t;
 static float g_prevraw_tx, g_prevraw_tz;  /* prev-frame raw (centerW-feet), for rebase detect */
@@ -3348,6 +3371,8 @@ static void kfp_extract_assets(void)
 }
 
 #include "kfp_locomotion.h"
+#include "kfp_cmd_args.h"
+#include "kfp_free_key.h"
 #include "kfp_control.inc"
 #include "kfp_combat_probe.inc" /* passive native lifecycle prerequisite */
 #include "kfp_meshray.h"   /* true-geometry .mesh triangle raycasts (task #22) */
@@ -3674,10 +3699,29 @@ static int kah_fp_putdown(const char *id, int argc, const char *const *argv, KAH
 
 static int kah_fp_state(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
 {
-    (void)id; (void)argc; (void)argv; (void)u;
-    char b[160];
-    snprintf(b, sizeof(b), "fp_mode=%d cursor_hidden=%d ui_open=%d", g_fp_mode ? 1 : 0,
-             g_cursor_hidden ? 1 : 0, g_ui_open ? 1 : 0);
+    (void)id; (void)u;
+    char b[400], wb[64];
+    const int fsa = kfp_fp_state_args(argc, argv);   /* argv[0] = command name */
+    if (fsa == KFP_FPSTATE_FREE_OFF) {
+        /* S03 recovery: drop a stuck free-cursor toggle / our settings window */
+        int was_free = g_free_toggle, was_set = g_settings_open;
+        g_free_toggle = 0;
+        if (g_settings_open) {
+            g_settings_open = 0;
+            if (g_settings_win && g_widget_setvisible) g_widget_setvisible(g_settings_win, 0);
+        }
+        snprintf(b, sizeof(b), "free cleared (free %d->0, settings %d->0)", was_free, was_set);
+        r->append(r, b);
+        return KAH_OK;
+    }
+    if (fsa == KFP_FPSTATE_USAGE) { r->append(r, "usage: fp_state [free off]"); return KAH_ERROR; }
+    int pgate = g_ui_c_mask && g_ui_c_pframes >= 8;
+    snprintf(b, sizeof(b), "fp_mode=%d cursor_hidden=%d ui_open=%d ui_why=%s control=%d key_focus=%d"
+             " panels=0x%03x panel_frames=%d settings=%d free=%d ui_open_edges=%u",
+             g_fp_mode ? 1 : 0, g_cursor_hidden ? 1 : 0, g_ui_open ? 1 : 0,
+             ui_why_str(g_ui_c_control, g_ui_c_keyfocus, pgate, g_settings_open, g_free_toggle, wb, sizeof(wb)),
+             g_ui_c_control, g_ui_c_keyfocus, g_ui_c_mask, g_ui_c_pframes, g_settings_open ? 1 : 0,
+             g_free_toggle ? 1 : 0, g_ui_open_edges);
     r->append(r, b);
     return KAH_OK;
 }
@@ -3784,7 +3828,10 @@ static DWORD WINAPI di_poll_thread(void *unused)
          * and because this thread is off the frame loop it still catches the
          * toggle even if an Alt press briefly stalls the game's message loop. */
         int kd = (GetAsyncKeyState(g_cfg_key_fp) & 0x8000) != 0;
-        if (kd && !fp_key_down) InterlockedExchange(&g_toggle_edge, 1);   /* press edge */
+        /* Only while Kenshi has focus: GetAsyncKeyState is global, so a Right Alt/AltGr
+         * typed in another window toggled FP mid-test (fp-5090-5 R12-LOAD: [input] FP mode
+         * toggled -> OFF with no harness fp_mode call). */
+        if (kd && !fp_key_down && game_has_focus()) InterlockedExchange(&g_toggle_edge, 1);   /* press edge */
         fp_key_down = kd;
 
         /* Mouse look + wheel from DirectInput (once acquired) -- no WH_MOUSE_LL. */
@@ -5035,10 +5082,17 @@ static void fp_camera_override(void *gw)
          * while free are drained by the existing g_ui_prev path so the view never
          * jumps. g_free_toggle is reset when FP turns off (see the exit block). */
         {
-            static int free_was_down;
-            int fd = g_cfg_key_free && (GetAsyncKeyState(g_cfg_key_free) & 0x8000);
-            if (fd && !free_was_down) g_free_toggle = !g_free_toggle;   /* press edge */
-            free_was_down = fd;
+            static KfpFreeKey free_key;
+            /* GetAsyncKeyState is desktop-global: an Alt typed in another window
+             * flipped the toggle (S03), and Alt+Tab OUT of Kenshi starts with
+             * focus, so it flipped it too (S04 soak). Toggle on a clean tap only:
+             * release, focus kept, no switch-away combo key (Tab/Esc/F4/Win)
+             * during the hold. Movement keys held while tapping still count. */
+            int kd = g_cfg_key_free && (GetAsyncKeyState(g_cfg_key_free) & 0x8000);
+            int other = kd && ((GetAsyncKeyState(VK_TAB) | GetAsyncKeyState(VK_ESCAPE) | GetAsyncKeyState(VK_F4)
+                                | GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000);
+            if (kfp_free_key_step(&free_key, kd, game_has_focus(), other))
+                g_free_toggle = !g_free_toggle;
         }
         /* STOBE's chat entry is a MyGUI EditBox but it does not toggle any of
          * Kenshi's vanilla panel/control flags. A focused MyGUI keyboard widget is
@@ -5051,6 +5105,27 @@ static void fp_camera_override(void *gw)
         }
         int ui_open = (control == 0) || key_focus_open || (panels_now && panel_frames >= 8)
                       || g_settings_open || g_free_toggle;
+        g_ui_c_control = control; g_ui_c_keyfocus = key_focus_open;
+        g_ui_c_mask = g_ui_mask; g_ui_c_pframes = panel_frames;
+        {   /* S03 diag: log which check holds ui_open, on every change of the set */
+            int sig = (control == 0) | (key_focus_open ? 2 : 0) | ((panels_now && panel_frames >= 8) ? 4 : 0)
+                      | (g_settings_open ? 8 : 0) | (g_free_toggle ? 16 : 0);
+            static int sig_prev = -1, suppressed;
+            static DWORD last_log;
+            if (ui_open && !g_ui_open) g_ui_open_edges++;
+            if (sig != sig_prev) {
+                DWORD t = GetTickCount();
+                if (sig_prev == -1 || t - last_log >= 250 || sig == 0) {
+                    char wb[64];
+                    logline("[ui] ui_open=%d why=%s control=%d key_focus=%d mask=0x%03x panel_frames=%d settings=%d free=%d edges=%u suppressed=%d",
+                            ui_open, ui_why_str(control, key_focus_open, panels_now && panel_frames >= 8,
+                            g_settings_open, g_free_toggle, wb, sizeof(wb)), control, key_focus_open,
+                            g_ui_mask, panel_frames, g_settings_open, g_free_toggle, g_ui_open_edges, suppressed);
+                    last_log = t; suppressed = 0;
+                } else suppressed++;
+                sig_prev = sig;
+            }
+        }
         int overview_now = (g_ui_mask & UIMASK_OVERVIEW) ? 1 : 0;
         static int overview_prev;
         g_ui_open = ui_open;                    /* read by the setPointer hook */
@@ -5091,7 +5166,10 @@ static void fp_camera_override(void *gw)
          * and touching widgets then corrupted MyGUI's lists and crashed the
          * order/job/inventory ItemBoxes. */
 
-        if (ui_open) {
+        /* Shay 2026-10-06: never grab/recenter the mouse while Kenshi is not the
+         * foreground window (other monitors/apps stay usable while the game runs). */
+        int cur_free = ui_open || !game_has_focus();
+        if (cur_free) {
             if (g_cursor_hidden) { while (ShowCursor(TRUE) < 0) { } g_cursor_hidden = 0; }
             mygui_cursor(1);                    /* dialogue: keep the game cursor visible */
             /* cursor free; leave look angle frozen */
@@ -5130,7 +5208,7 @@ static void fp_camera_override(void *gw)
             }
             SetCursorPos(cx, cy);  /* recenter so the cursor never drifts to edges */
         }
-        g_ui_prev = ui_open;
+        g_ui_prev = cur_free;
 
         /* Fullscreen overview (map/factions/squads) REPURPOSES the render view:
          * keeping our per-frame camera writes running while the map owns the
@@ -8214,8 +8292,10 @@ static int fp_aim_point(Vec3 *out)
  * target) is fed the auto-target's position each frame; for the PLAYER in FP
  * mode we substitute the point the camera is looking at, so the arm pose
  * follows the crosshair. Non-player characters pass through. */
+static int fp_combat_own_animupd(void *rc);   /* kfp_combat_native.inc */
 static void hooked_ranged_animupd(void *rc, float ft, Vec3 *aimpos, void *target)
 {
+    if (fp_combat_own_animupd(rc)) return;   /* manual ranged adapter drives this actor's aim anim */
     fp_combat_probe_animation(rc, target);
     Vec3 aim;
     if (g_fp_mode && g_cfg_freeaim && rc
@@ -8371,6 +8451,7 @@ static void hooked_sheathe(void *pc)
 
 #include "kfp_combat_native.inc"
 #include "kfp_melee_observe.inc"
+#include "kfp_combat_melee.inc"
 
 /* CharMovement::update hook: re-assert the player's direct-drive intent
  * IMMEDIATELY BEFORE the engine consumes movement state -- combat AI (and the
@@ -8418,7 +8499,7 @@ static void hooked_charmove_update(void *mv, float t)
         void **vt = *(void ***)mv;
         if (in_module(vt)) ((void (*)(void *))vt[MV_HALT_SLOT])(mv);
         mv_force_direct(mv);
-    }
+    } else fp_melee_hold_ground(mv);   /* manual melee: no AI combat locomotion while the player isn't driving (M06) */
     /* FP camera weld depends on a LIVE skeleton, but Kenshi culls animation
      * for characters it deems off-screen -- and in FP the camera sits inside
      * the head, so looking level/up culls your own body and freezes the head
@@ -9378,6 +9459,7 @@ __declspec(dllexport) void dllStartPlugin(void)
                          : "projectile aim hook FAILED");
             fp_combat_native_init();
             fp_melee_observe_init();
+            fp_melee_manual_init();
             void *fd = (void *)(g_base + RVA_FACE_DIR);
             int fdok = install_hook(fd, (void *)hooked_face_direction,
                                     (void **)&g_face_dir_orig);

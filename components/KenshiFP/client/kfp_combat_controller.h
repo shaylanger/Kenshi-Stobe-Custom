@@ -22,7 +22,13 @@ typedef struct {
     int buffer, block_ready_prev;
     float buffer_left;
     unsigned rejected, shots, swings, blocks, reloads;
+    /* Gates seen by the last rejected fire edge (R12 diagnostics: fp_combat state last_reject=). */
+    KfpCombatObservation last_reject;
+    int last_reject_aim;
 } KfpCombatController;
+static void kfp_combat_reject(KfpCombatController *c,const KfpCombatObservation *o,int aim) {
+    ++c->rejected;c->last_reject=*o;c->last_reject_aim=aim;
+}
 static unsigned kfp_combat_step(KfpCombatController *c,
         const KfpCombatObservation *o, KfpCombatInput in, int automatic_reload, float buffer_window) {
     unsigned actions=0;
@@ -53,7 +59,7 @@ static unsigned kfp_combat_step(KfpCombatController *c,
         if (fire_edge) {
             if (aim && o->aim_ready && o->shot_ready && o->ammo>0 && !o->reloading) {
                 actions|=KFP_ACT_SHOOT;++c->shots;
-            } else ++c->rejected;
+            } else kfp_combat_reject(c,o,aim);
         }
         if ((reload_edge || (automatic_reload && aim && o->ammo==0)) &&
             o->reload_allowed && !o->reloading && o->ammo==0) {
@@ -74,7 +80,7 @@ static unsigned kfp_combat_step(KfpCombatController *c,
                        isfinite(o->recovery_left) && o->recovery_left>=0 &&
                        o->recovery_left<=buffer_window && !c->buffer) {
                 c->buffer=1;c->buffer_left=buffer_window;
-            } else ++c->rejected;
+            } else kfp_combat_reject(c,o,aim);
         }
         if (c->buffer && o->swing_ready && !o->committed && !o->recovery && !aim &&
             !(actions&KFP_ACT_SWING)) {

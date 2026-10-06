@@ -21,6 +21,7 @@ int main(void) {
     assert(step(&c,&o,1,1,0)==KFP_ACT_SHOOT);
     for(int i=0;i<60;++i)assert(!step(&c,&o,1,1,0));
     step(&c,&o,1,0,0);o.shot_ready=0;assert(!step(&c,&o,1,1,0));
+    assert(c.rejected==1&&c.last_reject_aim==1&&c.last_reject.shot_ready==0&&c.last_reject.aim_ready==1&&c.last_reject.ammo==o.ammo); /* R12 last_reject= */
     o.shot_ready=1;assert(!step(&c,&o,1,1,0)); /* rejected click never deferred */
     step(&c,&o,1,0,0);assert(step(&c,&o,1,1,0)==KFP_ACT_SHOOT);
     o.reloading=1;o.ammo=0;step(&c,&o,1,0,0);

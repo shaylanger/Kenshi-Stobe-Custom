@@ -13,7 +13,13 @@ typedef struct {
     unsigned short group;
 } CombatRayHit;
 static CombatRayHit g_combat_camera_hit;
+/* Bolt tracer mask (GunClass::shoot ConstantTracer ctor, r9d=0x087FDE47): two more groups than the aim mask. */
+#define KFP_BOLT_TRACE_MASK 0x087fde47u
+static int combat_trace_ray_mask(const Vec3 *origin,const Vec3 *direction,float range,CombatRayHit *out,unsigned mask);
 static int combat_trace_ray(const Vec3 *origin,const Vec3 *direction,float range,CombatRayHit *out) {
+    return combat_trace_ray_mask(origin,direction,range,out,0x087f9e07u);
+}
+static int combat_trace_ray_mask(const Vec3 *origin,const Vec3 *direction,float range,CombatRayHit *out,unsigned mask) {
     if (!origin||!direction||!out||!g_combat_hit_ctor||!g_combat_physics_trace||
         !isfinite(range)||range<=0||!isfinite(origin->x)||!isfinite(origin->y)||!isfinite(origin->z)||
         !isfinite(direction->x)||!isfinite(direction->y)||!isfinite(direction->z))return -1;
@@ -21,7 +27,7 @@ static int combat_trace_ray(const Vec3 *origin,const Vec3 *direction,float range
     if (!isfinite(norm)||fabsf(norm-1)>0.001f)return -1;
     union { uint64_t alignment; unsigned char bytes[0x60]; } raw={0};
     g_combat_hit_ctor(raw.bytes,0,1,-99.0f);
-    g_combat_physics_trace(raw.bytes,origin,direction,0x087f9e07u);
+    g_combat_physics_trace(raw.bytes,origin,direction,mask);
     if (raw.bytes[4])return -1; /* native scene unavailable */
     CombatRayHit result={0};
     if (!raw.bytes[7]) {*out=result;return 0;}

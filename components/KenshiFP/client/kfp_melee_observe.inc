@@ -4,8 +4,34 @@ typedef void *(*melee_get_combat_t)(void *);
 static melee_get_combat_t g_melee_get_combat;
 static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id;(void)u;
+    if(argc==3 && !_stricmp(argv[1],"passive")) {
+        if(!_stricmp(argv[2],"off")) {fp_melee_set_passive(0);r->append(r,"passive off");return KAH_OK;}
+        char *e;unsigned long v=strtoul(argv[2],&e,10);
+        if(e==argv[2]||*e||!v) {r->append(r,"usage: fp_melee passive <serial>|off");return KAH_ERROR;}
+        fp_melee_set_passive((unsigned)v);r->append(r,"passive on: AI attacks aimed at that serial are refused");return KAH_OK;
+    }
+    if(argc>=3 && argc<=4 && !_stricmp(argv[1],"spam")) {
+        if(argc==3 && !_stricmp(argv[2],"off")) {fp_melee_spam_start(0,0);r->append(r,"spam off");return KAH_OK;}
+        char *e1,*e2=NULL;unsigned long n=strtoul(argv[2],&e1,10),p=argc==4?strtoul(argv[3],&e2,10):200;
+        if(e1==argv[2]||*e1||!n||n>1000||(argc==4&&(e2==argv[3]||*e2||p<20||p>5000))) {
+            r->append(r,"usage: fp_melee spam <clicks 1-1000> [period_ms 20-5000, default 200] | fp_melee spam off");return KAH_ERROR;
+        }
+        fp_melee_spam_start((unsigned)n,(unsigned)p);
+        char b[96];snprintf(b,sizeof(b),"spam on: %lu clicks every %lu ms",n,p);r->append(r,b);return KAH_OK;
+    }
+    if(argc>=2 && argc<=3 && !_stricmp(argv[1],"click_legal")) {
+        char *e=NULL;unsigned long ms=argc==3?strtoul(argv[2],&e,10):6000;
+        if(argc==3&&(e==argv[2]||*e||ms<100||ms>30000)) {r->append(r,"usage: fp_melee click_legal [timeout_ms 100-30000, default 6000]");return KAH_ERROR;}
+        fp_melee_click_legal_start((unsigned)ms);
+        char b[96];snprintf(b,sizeof(b),"click_legal armed: one click at the first legal frame within %lu ms",ms);r->append(r,b);return KAH_OK;
+    }
+    if(argc>=2 && argc<=3 && !_stricmp(argv[1],"swingstat")) {
+        if(argc==3 && _stricmp(argv[2],"reset")) {r->append(r,"usage: fp_melee swingstat [reset]");return KAH_ERROR;}
+        if(argc==3) fp_melee_swingstat_reset();
+        char b[768];fp_melee_swingstat_append(b,sizeof(b));r->append(r,b);return KAH_OK;
+    }
     if(argc!=2 || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_melee state (observational)");return KAH_ERROR;
+        r->append(r,"usage: fp_melee state | fp_melee passive <serial>|off (test: refuse AI attacks aimed at that character) | fp_melee spam <n> [period_ms]|off (test: n LMB clicks on the game thread) | fp_melee click_legal [timeout_ms] (test: one click at the first legal frame) | fp_melee swingstat [reset] (applied attack speed, per-technique swing time)");return KAH_ERROR;
     }
     if(!g_melee_get_combat) {r->append(r,"native combat binding unavailable");return KAH_ERROR;}
     void *pc=fp_controlled_char(g_gw_cache);
@@ -16,7 +42,7 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
     if(!readable(cc,0x2b8) || *(void **)((uintptr_t)cc+0x188)!=pc) {
         g_guard_armed=0;r->append(r,"native combat object unavailable or owner mismatch");return KAH_ERROR;
     }
-    char b[760];
+    char b[2048];
     /* hand = 0x20 bytes: index +0x14, serial +0x18 (printed #serial/index like the harness). */
     const int ai=readable(cc,0x2e8);
     snprintf(b,sizeof(b),
@@ -33,7 +59,9 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
       *(unsigned *)((uintptr_t)cc+0x1b0+0x18),*(unsigned *)((uintptr_t)cc+0x1b0+0x14),
       *(unsigned *)((uintptr_t)cc+0x1d8+0x8),
       ai?*(unsigned *)((uintptr_t)cc+0x2c8+0x18):0u,ai?*(unsigned *)((uintptr_t)cc+0x2c8+0x14):0u);
-    g_guard_armed=0;r->append(r,b);return KAH_OK;
+    g_guard_armed=0;
+    size_t l=strlen(b);fp_melee_state_append(b+l,sizeof(b)-l);
+    r->append(r,b);return KAH_OK;
 }
 static void fp_melee_observe_init(void) {
     /* Verified leaf: Character::body(+0x648)->combatClass(+8). Avoid
