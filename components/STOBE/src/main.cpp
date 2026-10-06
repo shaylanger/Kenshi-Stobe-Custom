@@ -34,6 +34,7 @@
 #include "StobeIdentityRename.h"
 #include "StobeChatMode.h"
 #include "StobeHarnessBridge.h"
+#include "StobeGoals.h"
 #include "ShopPriceHook.h"
 #include "Utils.h"
 #include "SocialEventProtocol.h"
@@ -14732,6 +14733,17 @@ static void UpdateLifelikeInitiativeFlag() {
   Log("LIFELIKE_INITIATIVE: flag consumed, initiative turn armed");
 }
 
+// StobeGoals.cpp (moved from KenshiFP): post-STT voice range lock and lifelike danger interrupt.
+float *StobeGoals_ProximityRadius(void) { return &g_proximityRadius; }
+long StobeGoals_ChatInterrupt(void) {
+  EnterCriticalSection(&g_stateMutex);
+  g_triggerBoredEvent = false;
+  LeaveCriticalSection(&g_stateMutex);
+  LONG generation = BeginChatInterruptGeneration();
+  Log("LIFELIKE_INTERRUPT: danger preempted chat/TTS");
+  return (long)generation;
+}
+
 // GetAsyncKeyState sees keys pressed in any window, so typing in another app
 // while Kenshi ran opened the chat box, the STOBE menu or push-to-talk. Only
 // react when Kenshi's own window has focus, like Kenshi and KenshiFP do.
@@ -14814,6 +14826,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
   }
 
   if (!worldStable) {
+    StobeGoals_HidePanel();
     Stobe::UI::ResetNpcContextRenameAction();
     ResetMoveToActions();
     ResetAutonomyController("world_unstable");
@@ -15210,6 +15223,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
     UpdateMoveToActions(world);
     ApplyFollowTargets(world);
     ApplyTravelTargets(world);
+    StobeGoals_Tick(world); // work/task goals, goal panel, action/unequip requests (was KenshiFP)
     RunQueuedItemImageSync();
     RunPendingSelectionContextPush(sel, worldBecameStableTick);
     if (probePostLoadPipeline) {

@@ -108,6 +108,7 @@
       <AdditionalIncludeDirectories>$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Include\ogre;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\StobeGoals.cpp" />
     <ClCompile Include="src\PlayerBaseState.cpp" />
     <ClCompile Include="src\SettingsWindow.cpp" />
     <ClCompile Include="src\StobeChatMode.cpp" />
