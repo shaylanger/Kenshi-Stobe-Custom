@@ -121,8 +121,9 @@ In-game results after the merge (2026-10-05, KenshiFP F44C1020 / main cc708e6, h
 - Melee target: CombatClass+0x290 pointer is 0 in every sample; `fp_melee state` now prints target_h (+0x298, follows the
   swing target) and focused_h (+0x2C8, ordered target). The melee adapter must use the handles.
 - C00 PASS (c00c) after the camera forced-update read fix (actual_distance 0.000 at eye; was 2.8-8.8 m, a stale cached read).
-- B14 runtime partial: `fp_combat aim` end = eye + 80 m along the look direction (3 angles). Physical hits show an unresolved
-  vertical frame offset. B14-frame FAIL (`tests/ingame/fp-aim-frame.sh`, `fp_combat ray`): terrain = game frame; eye anchor = `where` y + ~19 m; the target's traced shape is a column from 0.3 to 17 m, 0.5-1.25 m behind its centre. Blocks R08/R10.
+- B14 runtime PASS: `fp_combat aim` end = eye + 80 m along the look direction (3 angles). B14-frame PASS on re-read
+  (game units are decimetres): eye anchor = `where` y + 19 dm = 1.9 m eye height; the "17 m column" is the 1.7 m body capsule
+  ~0.05-0.13 m behind the centre. Physical aim rays hit the target (hits-2: Skaera's serial, ~0.25 m in front of her centre).
 - R01, R02, R03, R04, R05, R06 PASS and R12 subset PASS (pause, FP off, actor swap) via
   `components/KenshiFP/tests/ingame/fp-manual-ranged.sh` run r-3. Reload timer 6.11 s auto and manual (`last_reload_timer`).
   R12 still open: UI focus, KO, save/load, weapon swap, speed/FPS.

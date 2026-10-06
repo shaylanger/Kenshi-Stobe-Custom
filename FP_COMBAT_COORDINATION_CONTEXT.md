@@ -42,6 +42,5 @@ Order of work: camera/control (done), ranged (draft adapter, OFF by default, row
   RESULT lines). Offline: `python3 /root/KenshiFP/tests/run_offline.py`.
 - Results: `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt` (P01, P02, C00, B14, r-1..r-3, melee target).
 - Findings: CombatClass+0x290 pointer is always 0; use `target_h` (+0x298) / `focused_h` (+0x2C8). Spatial aim frame
-  (B14-frame FAIL, `tests/ingame/fp-aim-frame.sh` + `fp_combat ray`): physics terrain = game frame; eye anchor = `where` y
-  + ~19 m (Ogre y, the aim origin uses it unconverted); the target's traced shape is a 17 m column 0.5-1.25 m behind its
-  centre (offset frame). Find that transform before R08/R10.
+  (B14-frame PASS on re-read; game units are decimetres): eye anchor = `where` y + 19 dm (1.9 m eye); the traced 17 dm
+  column is the body capsule. Aim rays hit the target's handle (hits-2), so R08/R10 aren't blocked by the frame.
