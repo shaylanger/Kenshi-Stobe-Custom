@@ -1,5 +1,7 @@
 # STOBE stateful relationship system: audit, implementation and automated test plan
 
+Status 2026-10-06: built (phases 0-8) and live on the server; per-row results in `isolated/relationships-phase1/REL_FINAL_REPORT.md` and the run logs. Section 8 holds only rows not yet fully proven in game; rows that passed (SR01-SR16, SR18-SR19, SR21-SR22, SR24-SR26, SR28-SR30, SR33, SR36, SR38, SR41, SR43) were removed 2026-10-06 (trace in `archive/test-run-2026-10-05-m41.md`). The build-phase table (old section 6) and the next-builder checklist (old section 10) were removed as done.
+
 Date: 2026-10-02 (Shay local time). Status: design and source audit complete; implementation not started. This document authorizes no deployment by itself. Requested deliverable: audit and plan, ready for a later build.
 
 Canonical working copy: `C:\KenshiModding\STOBE_relationship_system_audit_and_implementation_plan.md`.
@@ -158,22 +160,6 @@ Witness propagation, based on witness → victim BEFORE event: neutral 0; acquai
 
 Recruitment: threshold >=76 plus strong verified rescue, lifesaving, repeated major aid or genuine companion history; economic evidence alone never qualifies. Preserve existing companions across migration. Apply deterministic authorization at all ordinary STOBE action dispatch paths, not just prompt hiding; native consumes validated request context and doesn't intercept vanilla recruitment. Explicit forced/cheat mode stays a documented override. NPC motive, independence, obligations and practical availability may still refuse above threshold. Rescue can offer recruitment once after freedom; not merely set faction automatically.
 
-## 6. Build phases and acceptance gates
-
-| Phase | Deliverables | Required gate before proceeding |
-|---|---|---|
-| 0: audit follow-through | identify every relationship writer/action dispatch path; exact identity mapping; telemetry API probes; fixture/server isolation specification | ambiguous telemetry listed, no invented native exports; ready probes for each category |
-| 1: framework | envelope, persistence, incident/knowledge models, locked writer, deterministic rules, flags, shadow diagnostics, migrations/rollback | replay/property tests; concurrency and migration/save restoration tests; old client and disabled mode compatibility |
-| 2: combat | generalized origin/defense, threshold escalation, KO/limb/death attribution, consent/duel context, surrender separation | real player/NPC and NPC/NPC fights plus offline large/multi-party traces; no reverse aggression penalty |
-| 3: unconscious perception | KO inventory baseline, latent harm, recovery attribution, slavery owner/captor evidence | C loots B after A KOs B; no immediate negative; correct inferred A blame; correct slaver C blame |
-| 4: aid and carry | treatment outcome severity, food linkage, carrier/destination checks, squad exemptions, rescue incident budget | real medicine/bed/food tests; same injury anti-farm; distinct lifesaving progression |
-| 5: property and agreements | confirmed caught theft, item significance, trade budget, gift meaning, deal honored/breached | no permission-check penalty, no unseen theft blame, no six-trade Bonded, verified deal outcomes |
-| 6: witnesses/dialogue | verified sensory evidence, friend propagation, insults, observer prompt knowledge filter | conscious/occluded/absent/KO variants; no recursive cascade or hidden culprit disclosure |
-| 7: recruitment/escape | full slave escape tracker, gate across dispatch paths, motives and exceptions | low/high trust scenarios; random slave can sometimes qualify; vanilla path unchanged |
-| 8: full validation | regression suite, automated game matrix, overnight bounded soak, installation manifest, rollback recipe, final report | zero unexplained new failures; every requirement traced; real-game gates passed or explicitly blocked |
-
-For each phase implement its tests with the feature, prove bug regressions fail without fixes, then validate and checkpoint. Do not defer telemetry tests to the end. Use isolated branches/worktrees and staged PHP DB tests. Follow existing build scripts and ABI requirements; snapshot native changes into components before source commits. Do not modify unrelated workspace changes, install pending unrelated builds, change providers, or merge/release as part of this plan.
-
 ## 7. Automation design
 
 Use the standalone harness through `stobe-auto` (switched over 2026-10-02; the old integrated backend is gone). New general commands go into the harness repo, Stobe-specific ones into `StobeHarnessBridge.cpp`. Harness commands execute on game thread, test-only, bounds checked. All proposed new command names below need implementation; none are claimed available today.
@@ -200,49 +186,18 @@ Modes: U=pure deterministic/unit/property, I=disposable DB/HTTP/replay, G=real g
 
 | ID | Scenario and decisive assertion | Modes |
 |---|---|---|
-| SR01 | Every tier boundary -100..100; directed maps; clamp/type independent; deterministic retry delta | U/I |
-| SR02 | A deliberately attacks B: immediate B→A loss; A→B unchanged until separate consequence | U/I/G |
-| SR03 | B retaliates normally in NPC/NPC fight: no A→B aggression penalty; repeat with player on each side | U/I/G |
-| SR04 | Multi-party fight, late joiner and defender protecting friend: origin retained; unrelated pair not mislabeled | U/I/G |
-| SR05 | Many hits then KO then combat_end: one escalated harm budget, not stacked full penalties | U/I/G |
-| SR06 | Duel/consent and accidental hit: distinct intent; no invented consent; second distinct assault still matters | U/I/G |
-| SR07 | Defensive limb loss grievance distinct from aggression; duplicate limb hook/poll applies once | U/I/G |
-| SR08 | B KO by A, C takes property: B has no immediate loss toward C or A for theft; wake missing item blames A | U/I/G |
-| SR09 | Same but B has verified better evidence of C: C blamed; no double inferred A charge | U/I/G |
-| SR10 | KO from unknown actor, own item consumption, restored item or normal squad inventory change: no invented theft blame | U/I/G |
-| SR11 | C enslaves unconscious B after A's attack: latent until aware; enslaver C receives slavery penalty; A only harm | U/I/G |
-| SR12 | Unknown owner/captor, actor versus later owner, repeated chaining/poll: no false attribution/duplicate | U/I/G |
-| SR13 | Conscious theft caught versus unseen; permission denied/check-only; confirmed removal absent: only confirmed known loss scores | U/I/G |
-| SR14 | Trivial item versus primary weapon/most belongings, starving victim's food, returned property: severity and budgets appropriate | U/I/G |
-| SR15 | Heal unconscious critically bleeding B with real medicine: stabilization verified; provider credited, not every tick | U/I/G |
-| SR16 | Routine aid repeated same episode gives bounded/zero extras; ten distinct genuine lifesaving episodes can reach >=91 | U/I/G |
 | SR17 | A injures B then patches B; staged self-harm or accomplice loop: no cheap positive trust farming | U/I/G |
-| SR18 | Outsider pickup conscious versus KO: initial suspicion only when known; bed/safe outcome resolves second component | U/I/G |
-| SR19 | Carry ends in cage/slavery/dump/death/unknown destination: outcome fact required and attributed; no generic drop rescue | U/I/G |
 | SR20 | Same carrying/looting/equipment controls on squad member: no routine penalties; critical rescue positive | U/I/G |
-| SR21 | Hungry recipient supplied food then eats: need/consumption reward; full NPC, own food, repeated supply do not farm | U/I/G |
-| SR22 | Ordinary trades near zero; six exceptional deals cannot reach Bonded; economic-only affinity cannot qualify recruit | U/I/G |
 | SR23 | Missing/heuristic seller, shared faction purse, atomic buy failure: no guessed personal reward or partial effect | U/I/G |
-| SR24 | Friend harmed/helped, actual witness with affinity 0/31/56/76/91: expected scaling and direction | U/I/G |
-| SR25 | Witness absent/occluded/asleep/KO; server nearby recovery: zero omniscient propagation | U/I/G |
-| SR26 | Multiple friends and simultaneous events: pre-event relationships, single-hop bounded propagation, no cascade | U/I/G |
 | SR27 | Insult heard by friend versus unseen dialogue: dialogue event validated once; mechanical consequences not counted twice by LLM | U/I/G |
-| SR28 | Enemy affinity -85 with low health: surrender offered; rational payment/ceasefire accepted; no affection gate | U/I/G |
-| SR29 | Dishonest hated enemy can betray; honored coercive deal minimal gain; attacking after accepted surrender adds betrayal | U/I/G |
-| SR30 | Join at 75/76 with/without trust, grievance, independent personality: dispatch gates enforce actual outcomes | U/I/G |
 | SR31 | Join bypass attempts via autonomy/director/inline action; forced override and already-companion migration | U/I/G |
 | SR32 | Non-scripted slave +10/+20 complete escape: varied lawful results, some >=76; chains only/failed escape no guaranteed join | U/I/G |
-| SR33 | Vanilla paid recruit and vanilla slave escape recruitment unchanged; real faction/squad membership proves join | I/G |
 | SR34 | Unknown/generic names, rename, same-name NPCs, reused serial after reload: no cross-entity attribution | U/I/G |
 | SR35 | Duplicate retry, same-tick distinct events, out-of-order KO/theft/wake: exactly once and correct causal state | U/I/G |
-| SR36 | Concurrent dialogue + game effect + worker update to same map: no lost deltas, ledger/snapshot atomic | I |
 | SR37 | Crash between ledger/map/history writes and server restart mid-KO/carry/escape: recover without partial or duplicate effect | I/G |
-| SR38 | Rollback before attack, during KO, after loot before wake: maps/evidence/incidents/baselines/cursors restore together | I/G |
 | SR39 | A→B→A server playthrough switch, New, old save upgrade, export/import: global/unmanaged data preserved | I/G |
 | SR40 | Failed migration/capture, stale old-epoch HTTP event, runtime barrier, NEVER_CLEAR option: documented consistent state | I |
-| SR41 | Feature disabled/shadow/category flags, old DLL/protocol: no R4 double-count or retroactive backlog | U/I/G |
 | SR42 | Hidden objective culprit in dialogue/history: victim prompt knows only inferred A blame; C truth stays diagnostic | I/G |
-| SR43 | Large combat flood, witness caps, bounded unresolved ledger, cleanup/restart: no lost severe event or unbounded growth | U/I/G |
 | SR44 | Harness interruption/lost acknowledgement/fix/rebuild: manifest resumes safely; no duplicate mutation or fabricated pass | I/G |
 
 Each G scenario includes: fixture checksum and server identity, exact setup commands, baseline captured, actual action, expected native event fields, observer knowledge before/after, independently computed expected range, direction, ledger cardinality, trust/grievance, actual game state and timeout/cleanup. Implement these as executable manifests in phase 1, enriching native scenarios with each phase. Explicit BLOCKED until fixtures/control APIs exist, never silently skip.
@@ -258,14 +213,3 @@ Performance gate: baseline and feature runs on the same fixture/build/provider s
 Human checks should be limited to a short subjective balance/play-feel review and voice tone/audio if requested. Visibility, equipment, membership and relationship logic should be verified automatically wherever state/telemetry is available. UI screenshot inspection is an agent task where capture works; existing capture notes say HUD may be absent, so fix capture before declaring visual coverage. Any remaining non-automatable native action must name the exact blocker and a minimal manual procedure; do not ask Shay to rerun the whole matrix.
 
 Ready-to-test package: source commits, DLL hashes, client/server protocol versions, rules version, disabled/shadow defaults, fixture installer, one runner entry point, resume instruction, full machine-readable matrix, known blockers, regression report and rollback instructions. Ready-to-build now means the architecture and behavior are settled; bounded engine probes and telemetry work are explicitly included in phases 0–3, not falsely claimed proven.
-
-## 10. Next builder checklist
-
-1. Read this plan and current repository instructions; recheck source/installed builds and unrelated work. Do not use pending unrelated DLL builds as the baseline without reconciliation.
-2. Create isolated source worktrees/staging DB; inspect all writers and action routes. Preserve configured providers, credentials and live gameplay.
-3. Implement framework, event transport, identity/epoch and test manifests first. Lock save/rollback behavior before enabling scores.
-4. Fix native attribution, then activate reliable combat in shadow mode. Continue phase gates in order.
-5. Use the standalone harness (`stobe-auto`/`stobe-say`), paired fixtures and resume logs; later launch/install only within the authorized testing session and with game ownership confirmed.
-6. Run automatic identify/fix/revalidate loop; keep results honest about U/I versus G coverage. Final subjective checks can wait until automated gates pass.
-
-Overall difficulty: high, feasible with existing foundations. Highest risk is false attribution/knowledge, then identity and rollback, then duplicate scoring and interactions with existing writers. Balance is configurable and lower technical risk. No calendar estimate is asserted before engine probes confirm visibility, completed theft and captivity hooks.
