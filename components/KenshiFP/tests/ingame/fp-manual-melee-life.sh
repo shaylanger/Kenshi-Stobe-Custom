@@ -8,11 +8,12 @@
 # Rows: M08-UI, M08-KO, M08-LOAD, M08-UNARMED, M08-CROWD, M08-ACTOR, M08-LIMB.
 # Usage: fp-manual-melee-life.sh [fighter] [target] [outdir] [other squad member for M08-ACTOR]. Ends with one `RESULT <row> PASS|FAIL <evidence>` per row.
 FI=${1:-Malzin}; TG=${2:-Skaera}; OUT=${3:-/tmp/fp-manual-melee-life}; OT=${4:-Axima}
-mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
+mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"; : > "$OUT/inputs"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 fld() { grep -o "\b$1=[^ ]*" | tail -1 | cut -d= -f2; }
 ms() { A fp_melee state | fld "$1"; }
-inp() { A fp_combat input "$1" "$2" 0 >/dev/null; }
+inp() { echo "$1 $2" >> "$OUT/inputs"; A fp_combat input "$1" "$2" 0 >/dev/null; }   # own inputs, counted for the foreign-client check
+cs() { A fp_combat state | fld "$1"; }
 flesh() { A hp "$1" | grep -o '[0-6]:[-0-9.]*/' | tr -d / | cut -d: -f2 | awk '{s+=$1}END{printf "%.1f", s}'; }
 RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
@@ -90,6 +91,12 @@ ready 20 || setup_fail "adapter not ready (why=$(ms why) armed=$(ms armed) manua
 # fighter and reject the clicks (4080 batch 2); M03 switches it back on, it needs a real attacker
 PS=$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')
 A fp_melee passive "$PS" | grep -q "passive on" || setup_fail "fp_melee passive $PS refused"
+# foreign-client check (4080 b25: batch 24's fp-manual-hits.sh ran on the same game the whole time; its `fp_combat input 1 ..`
+# held RMB for the melee fighter (M08-LOAD blocks rose with no aim sent, LIMB click_legal never found aim=0), its
+# `protect Skaera on` kept the target healed (ACTOR flesh 700->700)). Every `fp_combat input` the product received must
+# be one of ours; this wrapper never sends aim=1.
+IC0=$(cs inj_cmds); IA0=$(cs inj_aim_cmds); : > "$OUT/inputs"
+[ -n "$IC0" ] || setup_fail "fp_combat state has no inj_cmds (KenshiFP older than 4729B18B)"
 
 # ---- M08-UI: inventory open, then LMB held + clicks -> why=not_allowed, no swing; close with LMB held -> none; fresh swings ----
 S0=$(ms swings); A click INV >/dev/null; for _ in $(seq 1 12); do [ "$(ms why)" = not_allowed ] && break; sleep 0.25; done
@@ -107,11 +114,12 @@ ev="ko: why=$W swings_down=$((SK-S0)) after_wake_held=$((SW-SK)) why_after=$W2 f
 if [ "$W" = not_allowed ] && [ "$SK" = "$S0" ] && [ "$SW" = "$SK" ] && [ "$FS" = 1 ]; then row M08-KO PASS "$ev"; else row M08-KO FAIL "$ev"; fi
 
 # ---- M08-LOAD: save mid-fight, load with LMB held -> no inherited swing, adapter re-arms, fresh click swings ----
+BL0=$(ms blocks); FM0=$(ms fire_masked); LA0=$(cs inj_aim_cmds)
 ready 15 && PR=1 || PR=0; A save kah-fp-m08 >/dev/null; sleep 2; inp 0 1; A load kah-fp-m08 >/dev/null; A wait-world >/dev/null
 S0=$(ms swings); sleep 3; SL=$(ms swings); W=$(ms why); AR=$(ms armed); inp 0 0
 A protect "$FI" on >/dev/null; A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null; take
 A fp_combat on >/dev/null; close; ready 15; A fp_melee passive "$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')" >/dev/null; FS=$(fresh_click)   # new characters after load
-ev="load: pre_save_fight=$PR held_swings_after_load=$((SL-S0)) why=$W armed=$AR fresh_click_swings=$FS"
+ev="load: pre_save_fight=$PR held_swings_after_load=$((SL-S0)) why=$W armed=$AR fresh_click_swings=$FS blocks +$(( $(ms blocks) - BL0 )) fire_masked +$(( $(ms fire_masked) - FM0 )) inj_aim_cmds +$(( $(cs inj_aim_cmds) - LA0 )) (sent 0) in_aim=$(ms in_aim) injection=$(ms injection)"
 if [ "$SL" = "$S0" ] && [ "$FS" = 1 ]; then row M08-LOAD PASS "$ev"; else row M08-LOAD FAIL "$ev"; fi
 
 # ---- M08-UNARMED: melee weapon unequipped -> unarmed click still swings (native martial arts), hits land ----
@@ -140,10 +148,11 @@ if [ -n "$N2" ] && [ "$sw" -ge 3 ] && [ "$OW" = 1 ] && [ "$W" = ok ]; then row M
 # ---- M08-ACTOR: control moves to another squad member -> the fighter is released, its AI swings again (ai_refused
 #      stops rising, target flesh drops with no input); re-take the fighter -> owned again, fresh click swings ----
 ready 15; A select "$OT" >/dev/null; A fp_control take >/dev/null; sleep 1
-A health "$TG" 100 >/dev/null; sleep 0.3; R0=$(ms ai_refused); H0=$(flesh "$TG"); sleep 10; R1=$(ms ai_refused); H1=$(flesh "$TG"); OW=$(ms owned)
+A health "$TG" 100 >/dev/null; sleep 0.3; R0=$(ms ai_refused); H0=$(flesh "$TG"); sleep 10; R1=$(ms ai_refused); H1=$(flesh "$TG"); s=$(A fp_melee state "$FI"); OW=$(echo "$s" | fld owned)
+FIS="controlled=$(echo "$s" | fld controlled) state=$(echo "$s" | fld state) active=$(echo "$s" | fld active) attacking=$(echo "$s" | fld attacking) target_h=$(echo "$s" | fld target_h)"
 take; sleep 2; OW2=$(ms owned); FS=$(fresh_click)
-ev="control->$OT: owned=$OW ai_refused $R0->$R1 $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
-if [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && [ "$OW2" = 1 ] && [ "$FS" = 1 ]; then row M08-ACTOR PASS "$ev"; else row M08-ACTOR FAIL "$ev"; fi
+ev="control->$OT: $FI owned=$OW ($FIS) ai_refused $R0->$R1 $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
+if [ "$OW" = 0 ] && [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && [ "$OW2" = 1 ] && [ "$FS" = 1 ]; then row M08-ACTOR PASS "$ev"; else row M08-ACTOR FAIL "$ev"; fi
 
 # ---- M08-LIMB (last: permanent on this load): left arm severed -> adapter stays ok, fresh clicks still swing ----
 # 4080 batch 11: click 1 swung, then the target was KO (M08-ACTOR's native fight had worn it down; cleanup said "still KO")
@@ -155,4 +164,10 @@ for _ in 1 2 3; do r=$(cl_click); rs="$rs$r,"; [ "$r" = 1 ] && sw=$((sw+1)); sle
 ev="left arm severed (state=${LS:-?}): 3 clicks [${rs%,}] swung=$sw why=$(ms why) out_of_reach=$(ms out_of_reach) last_reject=$(ms last_reject) $TG $(A where "$TG" | grep -o 'KO\|DEAD' | head -1) fault=$(A fp_combat state | fld fault)"
 if [ "$LS" = stump ] && [ "$sw" -ge 2 ]; then row M08-LIMB PASS "$ev"; else row M08-LIMB FAIL "$ev"; fi
 
+NI=$(wc -l < "$OUT/inputs"); NA=$(grep -c "^1 " "$OUT/inputs"); DI=$(( $(cs inj_cmds) - IC0 )); DA=$(( $(cs inj_aim_cmds) - IA0 ))
+echo "inputs: product received $DI (aim=1: $DA), wrapper sent $NI (aim=1: $NA)" >> "$LOG"
+if [ "$DI" != "$NI" ] || [ "$DA" != "$NA" ]; then   # another harness client drove the game: no row of this run is valid
+  for i in "${!RESULTS[@]}"; do RESULTS[$i]=$(echo "${RESULTS[$i]}" | sed "s/^RESULT \([^ ]*\) PASS /RESULT \1 SETUP FAIL foreign_input; was PASS: /"); done
+  RESULTS+=("RESULT SETUP FAIL foreign harness client: fp_combat input received $DI (aim=1: $DA), this wrapper sent $NI (aim=1: $NA)")
+fi
 for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done
