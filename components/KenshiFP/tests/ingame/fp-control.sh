@@ -27,7 +27,7 @@
 #  C05-INTERIOR  in a building (INTERIOR="<buildings filters>", tried in order, default "house shack bar shop hut tower home"): walk into a
 #                wall, turn the camera so the wall is behind, third person: blocked=1 and applied<target; S walks away
 #  C05-STAIRS    needs STAIRS="x y z yaw" (bottom of a stair, facing up it): W climbs |dy| >= 10, stops on release
-# Usage: fp-control.sh [player] [mate] [target] [outdir]. Env: MOVE_MIN (10), STILL_MAX (3), INVALID_FACTION (Drifters),
+# Usage: fp-control.sh [player] [mate] [target] [outdir]. Env: MOVE_MIN (10), STILL_MAX (3), STALL_MS (250), INVALID_FACTION (Drifters),
 # INTERIOR, STAIRS. Leaves the fixture changed (save kah-fp-c05 written, Skaera KO, player moved): reload it after.
 SH=${1:-Axima}; MT=${2:-Malzin}; TG=${3:-Skaera}; OUT=${4:-/tmp/fp-control}
 MOVE_MIN=${MOVE_MIN:-10}; STILL_MAX=${STILL_MAX:-3}; STALL_MS=${STALL_MS:-250}; INVALID_FACTION=${INVALID_FACTION:-Drifters}
@@ -188,7 +188,7 @@ ge "$AIM" 25 || ok=0; lt "$SHI" "$STILL_MAX" || ok=0; lt "$RS" "$STILL_MAX" || o
 judge C04-FALLBACK $ok "$ev"
 
 # ---- C05 lifecycle (save first: C05-INVALID changes the squad, C05-LOAD restores it) ----
-ui_clear; take "$SH" >/dev/null; A save kah-fp-c05 >/dev/null; sleep 3
+ui_clear; take "$SH" >/dev/null; A save kah-fp-c05 >/dev/null; sleep 3; PSAVE=$(pos "$SH")
 A status | grep -q 'last_saved=kah-fp-c05' || echo "SETUP: save kah-fp-c05 not confirmed" >> "$LOG"
 
 # C05-KO: W held through a KO; no drive while down, same actor after, no stuck motion, fresh W walks
@@ -205,6 +205,16 @@ if [ $DOWN = 0 ]; then row C05-KO FAIL "setup $SH never knocked out: $ev"; else
   judge C05-KO $ok "$ev"; fi
 
 # C05-INVALID: the controlled mate gets a new handle outside the squad while W is held
+# setup: C05-KO can leave him displaced (b27: flung ~100 km out of the world, no walk possible). Repair once by
+# reloading the C05 save; still displaced = setup failure for this row, not a C05-INVALID verdict.
+near_save() { local p; p=$(pos "$SH"); [ -n "$p" ] && [ -n "$PSAVE" ] && lt "$(d2 "$PSAVE" "$p")" 500; }
+SETUPI=""
+if ! near_save; then DSV=$(d2 "$PSAVE" "$(pos "$SH")"); echo "SETUP: $SH is $DSV from his C05 save position: reloading kah-fp-c05" >> "$LOG"
+  A load kah-fp-c05 >/dev/null; A wait-world >/dev/null; A fp_move none >/dev/null; A speed 1 hold >/dev/null
+  for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done; ui_clear; take "$SH" >/dev/null
+  near_save || SETUPI="setup: $SH displaced by the previous row (dist=$DSV, after reload $(d2 "$PSAVE" "$(pos "$SH")"))"
+fi
+if [ -n "$SETUPI" ]; then row C05-INVALID FAIL "$SETUPI log=$LOG"; else
 ui_clear; take "$MT"; TM=$?; PS0=$(pos "$SH"); look "$YAW" 0; A fp_move w 15000 >/dev/null; sleep 1
 FR=$(A faction "$MT" "$INVALID_FACTION"); NEWID=$(grep -o '#[0-9]*' <<<"$FR" | head -1)
 waitf 3 bash -c '[ "$(stobe-auto fp_control state | grep -o "\bdirect=[0-9]" | cut -d= -f2)" = 0 ]'; REL=$?
@@ -215,6 +225,7 @@ ev="take_$MT=$((1-TM)) faction='$(cut -c1-60 <<<"$FR")' released=$((1-REL)) cont
 if [ $TM != 0 ] || [ -z "$NEWID" ] || grep -q ERROR <<<"$FR"; then row C05-INVALID FAIL "setup: $ev"; else
   ok=1; [ $REL = 0 ] && [ "$HC" = 0 ] && [ "$TRANS" = 0 ] && [ $REC = 0 ] || ok=0
   lt "$SHD" "$STILL_MAX" || ok=0; ge "$MI" "$MOVE_MIN" || ok=0; judge C05-INVALID $ok "$ev"; fi
+fi
 
 # C05-LOAD: W held through a load, released after; nobody walks on; camera valid; take + W walks; stops
 look "$YAW" 0; A fp_move w 30000 >/dev/null; A load kah-fp-c05 >/dev/null; A wait-world >/dev/null; A fp_move none >/dev/null; A speed 1 hold >/dev/null
