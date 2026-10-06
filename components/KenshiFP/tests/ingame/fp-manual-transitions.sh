@@ -70,8 +70,11 @@ for c in $(seq 1 "$N"); do
   # melee: take, why ok, block 2 s then release, swing still possible
   take "$FI" || bad "$c" take_fighter; A fp_melee passive "$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')" >/dev/null   # its hits would stumble-lock the fighter
   if ui_ready "$c" melee; then
-  ok=0; for _ in $(seq 1 40); do inp 0 0; [ "$(ms why)" = ok ] && [ "$(ms armed)" = 1 ] && { ok=1; break; }; sleep 0.3; done
-  [ $ok = 1 ] || bad "$c" "melee_ready(why=$(ms why))"
+  # the fight may have ended since prep (4080 b25 c2: active=0, every click rejected no_fight): re-engage first
+  ok=0; for i in $(seq 1 40); do inp 0 0; s=$(A fp_melee state)
+    [ "$(echo "$s" | ft why)" = ok ] && [ "$(echo "$s" | ft armed)" = 1 ] && [ "$(echo "$s" | ft active)" = 1 ] && { ok=1; break; }
+    [ "$(echo "$s" | ft active)" = 1 ] || [ $((i % 10)) != 1 ] || A attack "$FI" "$TG" >/dev/null; sleep 0.3; done
+  [ $ok = 1 ] || bad "$c" "melee_ready(why=$(ms why) active=$(ms active))"
   inp 1 0; sleep 2; inp 0 0; sleep 0.5; S0=$(ms swings)
   for _ in $(seq 1 10); do inp 0 1; sleep 0.15; inp 0 0; sleep 0.35; [ "$(ms swings)" != "$S0" ] && break; done
   [ "$(ms swings)" != "$S0" ] || bad "$c" no_swing_after_block
