@@ -15,6 +15,7 @@
 #define KAH_ERROR 0
 #define _stricmp strcasecmp
 typedef long LONG;
+typedef unsigned long DWORD;
 typedef struct KAH_Reply {void *impl;void (*append)(struct KAH_Reply *,const char *);} KAH_Reply;
 static unsigned char world[0x600],pi[0x300],a[0x90],b[0x90],outsider[0x90];
 static void *chars[2],*selected,*g_gw_cache=world;
@@ -32,6 +33,12 @@ static int readable(void *v,size_t n){
     return 0;
 }
 static int releases;
+/* fp_move state reads these client globals (kenshifp_client.c) */
+static DWORD fake_tick=1000;
+static DWORD GetTickCount(void){return fake_tick;}
+static int g_was_moving,g_was_direct,g_is_down,g_ui_moveblock;
+static volatile LONG g_dm_active;
+static float g_move_speed;
 static void fp_control_release_actor(void *pc){(void)pc;++releases;}
 #include "../client/kfp_control.inc"
 #include "../client/kfp_view.h"
@@ -60,6 +67,15 @@ int main(void){
     chars[0]=a;select_actor(a);fp_control_tick(world);assert(g_fp_mode && fp_controlled_char(world)==a);
     KAH_Reply r={NULL,append};const char *argv[]={"fp_control","state"};reply[0]=0;
     assert(kah_fp_control("test",2,argv,&r,NULL)==KAH_OK);assert(strstr(reply,"direct=1"));
+    /* fp_move (TEST ONLY): bounded WASD hold read by kah_move_key, expires on the tick, rejects bad args */
+    {const char *mv[]={"fp_move","wa","500"};reply[0]=0;assert(kah_fp_move("test",3,mv,&r,NULL)==KAH_OK);
+     assert(kah_move_key(1)&&kah_move_key(4)&&!kah_move_key(2)&&!kah_move_key(8));
+     const char *st[]={"fp_move","state"};reply[0]=0;assert(kah_fp_move("test",2,st,&r,NULL)==KAH_OK);
+     assert(strstr(reply,"keys=wa left_ms=500 ")&&strstr(reply,"fp_mode=1"));
+     fake_tick+=500;assert(!kah_move_key(1)&&!g_kah_move_keys); /* expired hold clears itself */
+     const char *bad[]={"fp_move","wx"};assert(kah_fp_move("test",2,bad,&r,NULL)==KAH_ERROR&&!g_kah_move_keys);
+     const char *badms[]={"fp_move","w","0"};assert(kah_fp_move("test",3,badms,&r,NULL)==KAH_ERROR&&!g_kah_move_keys);
+     const char *none[]={"fp_move","none"};assert(kah_fp_move("test",2,none,&r,NULL)==KAH_OK&&!kah_move_key(1));}
     KfpView v={0};
     kfp_view_wheel(&v,-120);assert(fabsf(v.target-.5f)<.001f);
     kfp_view_wheel(&v,-100000);assert(v.target==KFP_VIEW_MAX);

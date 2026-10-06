@@ -26,7 +26,9 @@ static uintptr_t combat_unique_signature(const char *sig) {
  assert(!strcmp(sig,"48 8B 81 48 06 00 00 48 8B 40 08 C3"));
  return (uintptr_t)native_get;
 }
-static int fp_melee_state_append(char *b,size_t n){(void)b;(void)n;return 0;}
+static int fp_melee_state_append(char *b,size_t n,const void *c){(void)b;(void)n;assert(c==cc);return 0;}
+/* harness API: only findCharacter is used (fp_melee state <npc>); NULL = old harness */
+static struct {void *(*findCharacter)(const char *,char *,size_t);} g_kah;
 static void fp_melee_set_passive(unsigned s){(void)s;}
 static unsigned spam_n,spam_p;static void fp_melee_spam_start(unsigned n,unsigned p){spam_n=n;spam_p=p;}
 static unsigned cl_ms,ss_resets;static void fp_melee_click_legal_start(unsigned ms){cl_ms=ms;}
