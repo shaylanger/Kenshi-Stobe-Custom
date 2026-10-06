@@ -84,6 +84,12 @@ walk() { local p0 p1 a0 a1 ms2 sp st wm; p0=$(pos "$1"); a0=$(anchor); A fps res
 # (logged as STALL). The assertions stay the same: a second stalled walk still fails on its numbers.
 walkr() { local r w; r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r")
   if ge "$w" "$STALL_MS"; then echo "STALL walk $* worst_ms=$w: redone once" >> "$LOG"; r=$(walk "$@"); fi; echo "$r"; }
+# native_walk <who> [axis]: native timed walk (walktime 40 walk) along the first axis that really walks (>= 25):
+# a blocked path is setup, not the row (b27: Malzin +x stopped 35 m short). Echo "<displacement> <axis> <tries>".
+native_walk() { local ax p0 d=0 n=0 tried=" "
+  for ax in "${2:-+x}" +x -x +z -z; do case "$tried" in *" $ax "*) continue;; esac; tried+="$ax "; n=$((n+1))
+    p0=$(pos "$1"); A walktime "$1" 40 "$ax" walk >/dev/null; d=$(d2 "$p0" "$(pos "$1")"); ge "$d" 25 && break; done
+  echo "$d $ax $n"; }
 # still <who> <s>: displacement over s seconds (no input expected)
 still() { local p0; p0=$(pos "$1"); sleep "$2"; d2 "$p0" "$(pos "$1")"; }
 FP0=$(fps fp_mode); DIST0=$(cam target)
@@ -98,7 +104,8 @@ for c in "$SH" "$MT"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not fou
 A fp_move state | grep -q '^keys=' || setup_fail "KenshiFP has no fp_move (needs 32905BE5+)"
 A fp_control state | grep -q 'take_presses=' || setup_fail "KenshiFP has no fp_control press (needs 32905BE5+)"
 . "$(dirname "$0")/fp-ui-guard.sh" 2>/dev/null || { ui_guard_setup() { :; }; ui_clear() { return 0; }; ui_summary() { echo "ui_guard=missing"; }; }
-A speed 1 >/dev/null; A fp_move none >/dev/null
+# speed hold: the game paused itself (squad event) mid-run in b27 and froze a native walk at seconds=0.0
+A speed 1 hold >/dev/null; A fp_move none >/dev/null
 for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
 if A where "$TG" | grep -q 'pos='; then A protect "$TG" off >/dev/null; A ko "$TG" 3600 >/dev/null; waitf 15 isko "$TG" || echo "SETUP: $TG never KO" >> "$LOG"; fi
 ui_guard_setup; ui_clear
@@ -168,13 +175,14 @@ judge C04-TAKE $ok "$ev"
 
 # ---- C04-FALLBACK: other squad AI, FP off mid-walk, native order, FP on keeps the pinned actor ----
 ui_clear; A fp_move none >/dev/null; A select "$SH" >/dev/null; A fp_control press >/dev/null; waitf 3 ctl_is "$SH"; BACK=$?
-PM0=$(pos "$MT"); PS0=$(pos "$SH"); A walktime "$MT" 40 +x walk >/dev/null; AIM=$(d2 "$PM0" "$(pos "$MT")")
+PS0=$(pos "$SH"); read -r AIM AIMAX AIMN <<<"$(native_walk "$MT" +x)"
 SHI=$(d2 "$PS0" "$(pos "$SH")"); STILLCTL=$(ctl_is "$SH" && echo 1 || echo 0)
-look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; mode off; OFF=$?; sleep 0.5; P1=$(pos "$SH"); sleep 2; P2=$(pos "$SH")
+look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; mode off; OFF=$?; PZ=$(A status | fld paused); sleep 0.5; P1=$(pos "$SH"); sleep 2; P2=$(pos "$SH")
 DMA=$(mvs dm_active); RS=$(d2 "$P1" "$P2"); A fp_move none >/dev/null
-P3=$(pos "$SH"); A walktime "$SH" 40 -x walk >/dev/null; NAT=$(d2 "$P3" "$(pos "$SH")")
+read -r NAT NATAX NATN <<<"$(native_walk "$SH" -x)"
 mode on; ON=$?; A fp_control state >/dev/null; sleep 0.5; PIN=$(ctl_is "$SH" && echo 1 || echo 0); STK=$(still "$SH" 2)
-ev="back_to_$SH=$((1-BACK)) | $MT native walk=$AIM while $SH direct (kept=$STILLCTL moved=$SHI) | fp_off=$((1-OFF)) dm_active=$DMA drift_with_w_held=$RS | native $SH walk=$NAT | fp_on=$((1-ON)) pinned=$PIN drift=$STK"
+FLAG=""; [ "$PZ" = 1 ] && FLAG=" | flag=product? game paused itself right at FP off (speed hold unpaused it)"
+ev="back_to_$SH=$((1-BACK)) | $MT native walk=$AIM axis=$AIMAX tries=$AIMN while $SH direct (kept=$STILLCTL moved=$SHI) | fp_off=$((1-OFF)) paused_at_off=${PZ:-na} dm_active=$DMA drift_with_w_held=$RS | native $SH walk=$NAT axis=$NATAX tries=$NATN | fp_on=$((1-ON)) pinned=$PIN drift=$STK$FLAG"
 ok=1; [ $BACK = 0 ] && [ $OFF = 0 ] && [ $ON = 0 ] && [ "$STILLCTL" = 1 ] && [ "$PIN" = 1 ] && [ "$DMA" = 0 ] || ok=0
 ge "$AIM" 25 || ok=0; lt "$SHI" "$STILL_MAX" || ok=0; lt "$RS" "$STILL_MAX" || ok=0; ge "$NAT" 25 || ok=0; lt "$STK" "$STILL_MAX" || ok=0
 judge C04-FALLBACK $ok "$ev"
@@ -209,7 +217,7 @@ if [ $TM != 0 ] || [ -z "$NEWID" ] || grep -q ERROR <<<"$FR"; then row C05-INVAL
   lt "$SHD" "$STILL_MAX" || ok=0; ge "$MI" "$MOVE_MIN" || ok=0; judge C05-INVALID $ok "$ev"; fi
 
 # C05-LOAD: W held through a load, released after; nobody walks on; camera valid; take + W walks; stops
-look "$YAW" 0; A fp_move w 30000 >/dev/null; A load kah-fp-c05 >/dev/null; A wait-world >/dev/null; A fp_move none >/dev/null
+look "$YAW" 0; A fp_move w 30000 >/dev/null; A load kah-fp-c05 >/dev/null; A wait-world >/dev/null; A fp_move none >/dev/null; A speed 1 hold >/dev/null
 sleep 3; LS=$(A status | fld save); LFP=$(fps fp_mode); LH=$(ctl controlled); STK=$(still "$SH" 2); MTB=$(A where "$MT" | grep -c 'pos=')
 for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done; ui_clear
 take "$SH"; LT=$?; A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye; LC=$?
