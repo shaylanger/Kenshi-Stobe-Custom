@@ -183,6 +183,39 @@ int main(void) {
     assert(kfp_wound_group_parse("leg")==KFP_WG_NONE);
     assert(kfp_wound_group_parse(NULL)==KFP_WG_NONE);
     for(int g=0;g<=KFP_WG_LEGS;++g) assert(kfp_wound_group_parse(kfp_wound_group_name(g))==g);
+    /* R08 5090 b9 (KenshiFP 39F58D2D): head shot 1 at Skaera, real impact, bolt and
+     * head/neck/pelvis world points (headnub not logged: fallback top). The bolt line
+     * passes 1.3 dm beside the neck->head axis (head radius 1.0), at shoulder height
+     * (rel_h 16.69, neck 16.95): core_s just over KFP_WOUND_CORE_MARGIN, so limbs compete. */
+    {
+        static const float im[3]={-54099.02f,662.39f,6798.27f},dv[3]={0.984f,-0.035f,-0.172f};
+        static const float hd[3]={-54097.25f,663.69f,6798.66f},nk[3]={-54096.52f,662.66f,6799.21f},
+                           pv[3]={-54096.74f,656.03f,6798.96f};
+        float lat[3]={0.172f,0,0.984f},ln=sqrtf(lat[0]*lat[0]+lat[2]*lat[2]);lat[0]/=ln;lat[2]/=ln;
+        human();
+        set(KFP_WB_HEAD,hd[0],hd[1],hd[2]);set(KFP_WB_NECK,nk[0],nk[1],nk[2]);set(KFP_WB_PELVIS,pv[0],pv[1],pv[2]);
+        set(KFP_WB_HEADNUB,NAN,NAN,NAN);
+        /* arms hanging 2.6 dm either side of the spine (in view), legs under the pelvis */
+        for(int a=0;a<2;++a) {float k=a?-2.6f:2.6f;int b0=a?KFP_WB_R_UPPERARM:KFP_WB_L_UPPERARM;
+            for(int j=0;j<3;++j) set(b0+j,nk[0]+k*lat[0],nk[1]-0.6f-2.8f*j,nk[2]+k*lat[2]);}
+        for(int a=0;a<2;++a) {float k=a?-0.9f:0.9f;int b0=a?KFP_WB_R_THIGH:KFP_WB_L_THIGH;
+            for(int j=0;j<3;++j) set(b0+j,pv[0]+k*lat[0],pv[1]-0.4f-4.4f*j,pv[2]+k*lat[2]);}
+        KfpWoundPick k;
+        assert(kfp_wound_from_bones(im,bones,dv,&k));
+        assert(k.core==KFP_WG_HEAD&&k.core_s>KFP_WOUND_CORE_MARGIN&&k.core_s<0.4f);
+        assert(k.group==KFP_WG_HEAD&&k.seg==-1);          /* no limb nearer: still head */
+        /* right forearm raised across the bolt line (0.35 dm off it, radius 0.45): arm_r */
+        set(KFP_WB_R_FOREARM,im[0]-0.35f*lat[0],im[1]-1.5f,im[2]-0.35f*lat[2]);
+        set(KFP_WB_R_HAND,im[0]-0.35f*lat[0]-dv[0],im[1]+0.3f-dv[1],im[2]-0.35f*lat[2]-dv[2]);
+        assert(kfp_wound_from_bones(im,bones,dv,&k));
+        assert(k.group==KFP_WG_ARM_R&&k.seg==KFP_WB_R_FOREARM&&k.core==KFP_WG_HEAD);
+        char ps[640];kfp_wound_pick_str(&k,bones,"",ps,sizeof(ps));
+        assert(strstr(ps," core=head core_s=0.3")&&strstr(ps," seg=rfarm")&&strstr(ps," bw_rhand="));
+        KfpWoundPick h;kfp_wound_from_height(16.69f,0.12f,&h);
+        assert(h.core==KFP_WG_NONE&&isnan(h.core_s)&&h.seg==-1);
+        printf("R08 b9 head shot 1: core_s=%.2f (margin %.1f)\n",k.core_s,KFP_WOUND_CORE_MARGIN);
+        human();
+    }
     puts("wound geometry ok");
     return 0;
 }

@@ -639,7 +639,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
             prone=char_prone_state(victim);}
         g_guard_armed=0;
         if (!valid) {r->append(r,"aim query unavailable");return KAH_ERROR;}
-        char b[1280];
+        char b[2048];
         snprintf(b,sizeof(b),"x=%.6f y=%.6f z=%.6f physical=%u distance=%.6f shape=%llx group=%u id0=%u id1=%u id2=%u id3=%u id4=%u",
           aim.x,aim.y,aim.z,!!g_combat_camera_hit.shape,g_combat_camera_hit.distance,
           (unsigned long long)g_combat_camera_hit.shape,g_combat_camera_hit.group,
@@ -656,6 +656,15 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
                 l=strlen(b);const float *q=bw[pts[i].b];
                 snprintf(b+l,sizeof(b)-l," bw_%s=%.2f,%.2f,%.2f",pts[i].n,q[0],q[1],q[2]);
             }
+            /* R08: the part the spatial wound would pick for a bolt along the camera ray at
+             * the crosshair contact (pick=, pick_core_s=, pick_seg=, pick_bw_* incl. arms), so
+             * a test can tell "crosshair on the head" from "on an arm raised beside it". */
+            KfpWoundPick k={KFP_WG_NONE,NAN,NAN,KFP_WG_NONE,NAN,-1};
+            float hp[3]={g_combat_camera_hit.position.x,g_combat_camera_hit.position.y,g_combat_camera_hit.position.z};
+            float hd[3]={g_combat_aim_dir.x,g_combat_aim_dir.y,g_combat_aim_dir.z};
+            int ok=kfp_wound_from_bones(hp,(const float (*)[3])bw,g_combat_aim_have_ray?hd:NULL,&k);
+            l=strlen(b);snprintf(b+l,sizeof(b)-l," pick=%s",ok?kfp_wound_group_name(k.group):"none");
+            l=strlen(b);kfp_wound_pick_str(&k,(const float (*)[3])bw,"pick_",b+l,sizeof(b)-l);
         }
         r->append(r,b);return KAH_OK;
     }
@@ -705,7 +714,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         g_combat_injection=1;r->append(r,"combat input published; same controller/native gates as physical input");return KAH_OK;
     }
     if (argc==2 && !_stricmp(argv[1],"state")) {
-        char b[2304];
+        char b[2560];
         snprintf(b,sizeof(b),"enabled=%d native_ready=%d fault=%d armed=%d kind=%d actor=%llx weapon=%llx gun=%llx aimed=%d anim_ready=%d shot_ready=%d ammo=%d reloading=%d reload_left=%.4f aim_left=%.4f actual_shots=%u suppressed=%u anim_suppressed=%u vis_forced=%u reload_starts=%u last_reload_timer=%.4f draws=%u sheathes=%u draw_refused=%u draw_hook=%d rejected=%u injected=%d auto_reload=%d why=%s wih=%llx cur=%llx rc_state=%d rc_mode=%d",
           g_combat_enabled,g_combat_native_ready,g_combat_fault,g_combat_control.armed,g_combat_observed.kind,
           (unsigned long long)(uintptr_t)g_combat_pc,(unsigned long long)(uintptr_t)g_combat_weapon,

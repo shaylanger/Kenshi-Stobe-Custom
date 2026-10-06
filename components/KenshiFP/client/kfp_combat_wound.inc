@@ -68,6 +68,9 @@ static int g_wound_last_part=-1, g_wound_last_group=KFP_WG_NONE;
 static float g_wound_last_rel_h=NAN, g_wound_last_dist=NAN, g_wound_last_lat=NAN;
 static float g_wound_last_bh[KFP_WH_COUNT]={NAN,NAN,NAN,NAN,NAN};  /* victim bone heights of the last wound */
 static const char *g_wound_last_src="none", *g_wound_last_why="none";
+static KfpWoundPick g_wound_last_pick={KFP_WG_NONE,NAN,NAN,KFP_WG_NONE,NAN,-1};  /* last bones pick (core_s, seg) */
+static float g_wound_last_bw[KFP_WB_COUNT][3];   /* victim bone world points at that impact */
+static int g_wound_last_have_bw;
 /* Test switch (R11-LIMB): `fp_combat wound force <group>` replaces the spatial pick of the NEXT tracked bolt with
  * <group>, so the rest of the real path (part mapping, hit-chance boost, native addWound, spatial/fallback
  * accounting) runs on a group the geometry rarely yields (a fully severed leg has no physics shape: real impacts
@@ -205,9 +208,10 @@ static int wound_choose(void *med,void *victim,const WoundShot *s,void *parts[2]
     void *mv=readable((void *)((uintptr_t)victim+CHAR_MOVEMENT),8)?*(void **)((uintptr_t)victim+CHAR_MOVEMENT):NULL;
     g_wound_last_lat=readable((void *)((uintptr_t)mv+0xD0),12)?   /* CharMovement facing (world) */
         kfp_wound_lateral(s->impact,centre,*(float *)((uintptr_t)mv+0xD0),*(float *)((uintptr_t)mv+0xD8)):NAN;
-    KfpWoundPick pick={KFP_WG_NONE,NAN,NAN};
+    KfpWoundPick pick={KFP_WG_NONE,NAN,NAN,KFP_WG_NONE,NAN,-1};
     float bones[KFP_WB_COUNT][3];
     int have_bones=wound_read_bones(victim,&feet,bones);   /* no skeleton -> height mode */
+    memcpy(g_wound_last_bw,bones,sizeof(bones));g_wound_last_have_bw=have_bones;
     kfp_wound_bone_heights((const float (*)[3])bones,feet.y,g_wound_last_bh);
     if (g_wound_force_group!=KFP_WG_NONE) {
         pick.group=g_wound_force_group;g_wound_force_group=KFP_WG_NONE;++g_wound_forced;*src="forced";
@@ -216,7 +220,7 @@ static int wound_choose(void *med,void *victim,const WoundShot *s,void *parts[2]
     else if (char_prone_state(victim)!=PS_NORMAL) {*why="pose";goto out;}
     else if (kfp_wound_from_height(g_wound_last_rel_h,g_wound_last_lat,&pick)) *src="height";
     else {*why="height";goto out;}
-    g_wound_last_group=pick.group;g_wound_last_dist=pick.dist;
+    g_wound_last_group=pick.group;g_wound_last_dist=pick.dist;g_wound_last_pick=pick;
     n=kfp_wound_part_index(pick.group,types,sides,(int)count,idx);
     if (!n) {*why="part_map";goto out;}
     for(int i=0;i<n;++i) parts[i]=anat[idx[i]];
@@ -234,6 +238,7 @@ static void *wound_add_hook(void *med,char low,int area,void *dmg,int *mat,void 
     const char *why=NULL,*src="none";
     g_wound_last_rel_h=NAN;g_wound_last_lat=NAN;g_wound_last_dist=NAN;g_wound_last_group=KFP_WG_NONE;
     for(int i=0;i<KFP_WH_COUNT;++i) g_wound_last_bh[i]=NAN;
+    {KfpWoundPick z={KFP_WG_NONE,NAN,NAN,KFP_WG_NONE,NAN,-1};g_wound_last_pick=z;g_wound_last_have_bw=0;}
     if (!g_wound_enabled) why="off";
     else if (g_wound_fault) why="fault";
     else if (s.captured!=1) why=s.why?s.why:"no_impact";
@@ -254,25 +259,27 @@ static void *wound_add_hook(void *med,char low,int area,void *dmg,int *mat,void 
     for(int i=0;i<n&&boosted;++i) if(ret && ret==*(void **)((uintptr_t)parts[i]+WOUND_HPS_DATA)) chosen=idx[i];
     g_wound_last_src=src;
     char bs[96];kfp_wound_heights_str(g_wound_last_bh,"",bs,sizeof(bs));
+    char ps[640];kfp_wound_pick_str(&g_wound_last_pick,g_wound_last_have_bw?(const float (*)[3])g_wound_last_bw:NULL,"",ps,sizeof(ps));
     if (chosen>=0) {
         ++g_wound_spatial;g_wound_last_part=chosen;g_wound_last_why="none";
-        logline("[combat] wound spatial part=%d %s src=%s rel_h=%.2f lat=%.2f dist=%.2f impact=%.2f,%.2f,%.2f dir=%.3f,%.3f,%.3f %s victim=%p",
+        logline("[combat] wound spatial part=%d %s src=%s rel_h=%.2f lat=%.2f dist=%.2f impact=%.2f,%.2f,%.2f dir=%.3f,%.3f,%.3f %s victim=%p%s",
             chosen,kfp_wound_group_name(g_wound_last_group),src,g_wound_last_rel_h,g_wound_last_lat,
-            g_wound_last_dist,s.impact[0],s.impact[1],s.impact[2],s.dir[0],s.dir[1],s.dir[2],bs,victim);
+            g_wound_last_dist,s.impact[0],s.impact[1],s.impact[2],s.dir[0],s.dir[1],s.dir[2],bs,victim,ps);
     } else {
         if (!why) why="ineligible";               /* native skipped the chosen part */
         ++g_wound_fallback;g_wound_last_part=-1;g_wound_last_why=why;
-        logline("[combat] wound native fallback why=%s group=%s src=%s rel_h=%.2f %s victim=%p",
-            why,kfp_wound_group_name(g_wound_last_group),src,g_wound_last_rel_h,bs,victim);
+        logline("[combat] wound native fallback why=%s group=%s src=%s rel_h=%.2f %s victim=%p%s",
+            why,kfp_wound_group_name(g_wound_last_group),src,g_wound_last_rel_h,bs,victim,ps);
     }
     return ret;
 }
 static void fp_combat_wound_state(char *b,size_t n) {
     char bs[96];kfp_wound_heights_str(g_wound_last_bh,"last_",bs,sizeof(bs));
-    snprintf(b,n," wound_ready=%d wound_enabled=%d wound_fault=%d wound_tracked=%u wound_impacts=%u wound_missed=%u wound_spatial=%u wound_native_fallback=%u last_part=%d last_group=%s last_src=%s last_rel_h=%.2f last_lat=%.2f last_dist=%.2f last_fallback=%s %s",
+    snprintf(b,n," wound_ready=%d wound_enabled=%d wound_fault=%d wound_tracked=%u wound_impacts=%u wound_missed=%u wound_spatial=%u wound_native_fallback=%u last_part=%d last_group=%s last_src=%s last_rel_h=%.2f last_lat=%.2f last_dist=%.2f last_fallback=%s %s last_core=%s last_core_s=%.2f last_seg=%s",
         g_wound_ready,g_wound_enabled,g_wound_fault,g_wound_tracked,g_wound_impacts,g_wound_missed,
         g_wound_spatial,g_wound_fallback,g_wound_last_part,kfp_wound_group_name(g_wound_last_group),
-        g_wound_last_src,g_wound_last_rel_h,g_wound_last_lat,g_wound_last_dist,g_wound_last_why,bs);
+        g_wound_last_src,g_wound_last_rel_h,g_wound_last_lat,g_wound_last_dist,g_wound_last_why,bs,
+        kfp_wound_group_name(g_wound_last_pick.core),g_wound_last_pick.core_s,kfp_wound_bone_name(g_wound_last_pick.seg));
 }
 /* fp_combat wound [on|off|reset] */
 static int kah_fp_combat_wound(int argc,const char *const *argv,KAH_Reply *r) {
@@ -283,12 +290,13 @@ static int kah_fp_combat_wound(int argc,const char *const *argv,KAH_Reply *r) {
         g_wound_last_part=-1;g_wound_last_group=KFP_WG_NONE;g_wound_last_src=g_wound_last_why="none";
         g_wound_last_rel_h=g_wound_last_lat=g_wound_last_dist=NAN;
         for(int i=0;i<KFP_WH_COUNT;++i) g_wound_last_bh[i]=NAN;
+        {KfpWoundPick z={KFP_WG_NONE,NAN,NAN,KFP_WG_NONE,NAN,-1};g_wound_last_pick=z;g_wound_last_have_bw=0;}
     } else if (argc==4 && !_stricmp(argv[2],"force")) {
         int g=kfp_wound_group_parse(argv[3]);
         if (g==KFP_WG_NONE && strcmp(argv[3],"none")) {r->append(r,"usage: fp_combat wound force head|chest|stomach|arm_l|arm_r|leg_l|leg_r|legs|none");return KAH_ERROR;}
         g_wound_force_group=g;
     } else if (argc!=2) {r->append(r,"usage: fp_combat wound [on|off|reset|force <group|none>]");return KAH_ERROR;}
-    char b[720];fp_combat_wound_state(b,sizeof(b));
+    char b[900];fp_combat_wound_state(b,sizeof(b));
     {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," wound_force=%s wound_forced=%u",kfp_wound_group_name(g_wound_force_group),g_wound_forced);}
     r->append(r,b+1);return KAH_OK;
 }

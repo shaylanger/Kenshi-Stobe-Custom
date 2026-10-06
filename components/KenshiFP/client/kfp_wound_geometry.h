@@ -33,7 +33,10 @@ enum { KFP_SIDE_NEITHER=0, KFP_SIDE_LEFT=1, KFP_SIDE_RIGHT=2 };
 #define KFP_WOUND_H_MIN     -2.0f
 #define KFP_WOUND_H_MAX     22.0f
 #define KFP_WOUND_SIDE_MIN   0.3f  /* |lateral| below this: leg side unknown */
-typedef struct { int group; float dist; float torso_t; } KfpWoundPick;
+/* core/core_s: the head/torso candidate and its silhouette distance (view distance
+ * minus radius, dm; limbs compete only above KFP_WOUND_CORE_MARGIN); seg: bone that
+ * starts the winning limb segment, -1 when the core won (diagnostics, R08 5090 b9). */
+typedef struct { int group; float dist; float torso_t; int core; float core_s; int seg; } KfpWoundPick;
 
 static int kfp_wg_finite3(const float v[3]) {
     return isfinite(v[0])&&isfinite(v[1])&&isfinite(v[2]);
@@ -85,7 +88,7 @@ static float kfp_wound_head_t(const float bones[KFP_WB_COUNT][3]) {
  * forearms in front of face and chest, and an arm is picked only for an impact
  * clearly beside the core. */
 static int kfp_wound_from_bones(const float impact[3],const float bones[KFP_WB_COUNT][3],const float *dir,KfpWoundPick *out) {
-    out->group=KFP_WG_NONE;out->dist=NAN;out->torso_t=NAN;
+    out->group=KFP_WG_NONE;out->dist=NAN;out->torso_t=NAN;out->core=KFP_WG_NONE;out->core_s=NAN;out->seg=-1;
     if (!kfp_wg_finite3(impact)) return 0;
     for(int i=0;i<KFP_WB_COUNT;++i) if(i!=KFP_WB_HEADNUB && !kfp_wg_finite3(bones[i])) return 0;
     float u[3],*up=NULL;
@@ -124,16 +127,17 @@ static int kfp_wound_from_bones(const float impact[3],const float bones[KFP_WB_C
         {KFP_WG_ARM_R,KFP_WB_R_UPPERARM,KFP_WB_R_FOREARM,KFP_WB_R_HAND},
         {KFP_WG_LEG_L,KFP_WB_L_THIGH,KFP_WB_L_CALF,KFP_WB_L_FOOT},
         {KFP_WG_LEG_R,KFP_WB_R_THIGH,KFP_WB_R_CALF,KFP_WB_R_FOOT}};
-    int group=core;float best_s=core_s,best_d=core_d;
+    int group=core,seg=-1;float best_s=core_s,best_d=core_d;
+    out->core=core;out->core_s=core_s;
     if (!(core_s<=KFP_WOUND_CORE_MARGIN)) {
         for(int l=0;l<4;++l) for(int s=1;s<3;++s) {
             float r=l<2?(s==1?KFP_WOUND_R_UPPERARM:KFP_WOUND_R_FOREARM):(s==1?KFP_WOUND_R_THIGH:KFP_WOUND_R_CALF);
             float d=kfp_wg_view_dist(bones[limb[l][s]],bones[limb[l][s+1]],impact,up,&t);
-            if (d-r<best_s) {best_s=d-r;best_d=d;group=limb[l][0];}
+            if (d-r<best_s) {best_s=d-r;best_d=d;group=limb[l][0];seg=limb[l][s];}
         }
     }
     if (!isfinite(best_s) || best_d>KFP_WOUND_MAX_DIST) return 0;
-    out->group=group;out->dist=best_d;out->torso_t=torso_t;
+    out->group=group;out->dist=best_d;out->torso_t=torso_t;out->seg=seg;
     return 1;
 }
 /* Bone heights above the feet (dm): head, headnub, neck, pelvis, calf (mean of
@@ -166,7 +170,7 @@ static void kfp_wound_heights_str(const float h[KFP_WH_COUNT],const char *p,char
 /* Fallback when the skeleton is unavailable: height above the feet (dm) of an
  * upright victim; lateral = offset toward the victim's right (dm), NAN unknown. */
 static int kfp_wound_from_height(float rel_h,float lateral,KfpWoundPick *out) {
-    out->group=KFP_WG_NONE;out->dist=NAN;out->torso_t=NAN;
+    out->group=KFP_WG_NONE;out->dist=NAN;out->torso_t=NAN;out->core=KFP_WG_NONE;out->core_s=NAN;out->seg=-1;
     if (!isfinite(rel_h)||rel_h<KFP_WOUND_H_MIN||rel_h>KFP_WOUND_H_MAX) return 0;
     if (rel_h>=KFP_WOUND_H_HEAD) out->group=KFP_WG_HEAD;
     else if (rel_h>=KFP_WOUND_H_CHEST) out->group=KFP_WG_CHEST;
@@ -224,6 +228,24 @@ static int kfp_wound_humanoid(const int *types,const int *sides,int count) {
 static const char *kfp_wound_group_name(int group) {
     static const char *names[]={"head","chest","stomach","arm_l","arm_r","leg_l","leg_r","legs"};
     return group>=0&&group<=KFP_WG_LEGS?names[group]:"none";
+}
+/* Short bone names for logs (KFP_WB_*); "none" for -1/unknown. */
+static const char *kfp_wound_bone_name(int b) {
+    static const char *names[KFP_WB_COUNT]={"head","headnub","neck","pelvis","luarm","lfarm","lhand",
+        "ruarm","rfarm","rhand","lthigh","lcalf","lfoot","rthigh","rcalf","rfoot"};
+    return b>=0&&b<KFP_WB_COUNT?names[b]:"none";
+}
+/* " core=<g> core_s=<s> seg=<bone>" + world points of the upper-body bones that
+ * decide head vs arm (prefix p on every key). */
+static void kfp_wound_pick_str(const KfpWoundPick *k,const float bones[KFP_WB_COUNT][3],const char *p,char *b,size_t n) {
+    static const int pts[]={KFP_WB_HEAD,KFP_WB_HEADNUB,KFP_WB_NECK,KFP_WB_PELVIS,KFP_WB_L_UPPERARM,KFP_WB_L_FOREARM,
+        KFP_WB_L_HAND,KFP_WB_R_UPPERARM,KFP_WB_R_FOREARM,KFP_WB_R_HAND};
+    int l=snprintf(b,n," %score=%s %score_s=%.2f %sseg=%s",p,kfp_wound_group_name(k->core),p,k->core_s,p,kfp_wound_bone_name(k->seg));
+    for(size_t i=0;bones&&i<sizeof(pts)/sizeof(pts[0]);++i) {
+        if (l<0||(size_t)l>=n) return;
+        const float *q=bones[pts[i]];
+        l+=snprintf(b+l,n-l," %sbw_%s=%.2f,%.2f,%.2f",p,kfp_wound_bone_name(pts[i]),q[0],q[1],q[2]);
+    }
 }
 /* Inverse of kfp_wound_group_name; KFP_WG_NONE for "none"/unknown (test hook `fp_combat wound force`). */
 static int kfp_wound_group_parse(const char *name) {
