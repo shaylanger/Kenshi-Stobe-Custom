@@ -70,7 +70,8 @@ static int combat_camera_aim(Vec3 *out) {
     void *node=readable(cam,CC_NODE+8)?*(void **)((uintptr_t)cam+CC_NODE):NULL;
     if (!readable(node,8))return 0;
     Vec3 scene;
-    const Vec3 *actual=g_node_get_dpos(node,&scene);
+    /* forced update: the cached derived position lags the FP eye write (child of the center node) */
+    const Vec3 *actual=g_node_getdpos_upd?g_node_getdpos_upd(node,&scene):g_node_get_dpos(node,&scene);
     if (!readable((void *)actual,sizeof(scene)))return 0;
     scene=*actual;
     float scene_xyz[3]={scene.x,scene.y,scene.z},origin_xyz[3],dir_xyz[3],end_xyz[3];

@@ -100,7 +100,7 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
     if (argc!=2 || _stricmp(argv[1],"state")) {
         r->append(r,"usage: fp_camera state|distance <0..12>|wheel <-2400..2400>|look <yaw radians> <pitch radians>"); return KAH_ERROR;
     }
-    Vec3 actual={0}; int have_actual=0;
+    Vec3 actual={0},fresh={0}; int have_actual=0,have_fresh=0;
     if (g_fp_mode && g_have_eye && g_fp_control_actor && g_ogre_ready && g_node_get_dpos && g_view_have_anchor) {
         void *cam=readable((void *)(g_base+RVA_CAM_INSTANCE),8)?*(void **)(g_base+RVA_CAM_INSTANCE):NULL;
         void *node=readable(cam,CC_NODE+8)?*(void **)((uintptr_t)cam+CC_NODE):NULL;
@@ -109,19 +109,41 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
             guard_arm();
             const Vec3 *p=g_node_get_dpos(node,&actual);
             if (readable((void *)p,sizeof(actual))) { actual=*p; have_actual=1; }
+            if (g_node_getdpos_upd) {   /* forced scene-graph update: the cached value can be stale */
+                const Vec3 *q=g_node_getdpos_upd(node,&fresh);
+                if (readable((void *)q,sizeof(fresh))) { fresh=*q; have_fresh=1; }
+            }
             g_guard_armed=0;
         }
     }
-    float distance=-1;
+    float cached_distance=-1;
     if (have_actual) {
+        float x=actual.x-g_view_anchor.x,y=actual.y-g_view_anchor.y,z=actual.z-g_view_anchor.z;
+        cached_distance=sqrtf(x*x+y*y+z*z);
+    }
+    /* The cached derived position lags our set_dpos until the scene graph updates (the camera node is a
+     * child of the center node): report the forced-update position as the actual camera. */
+    if (have_fresh) actual=fresh;
+    float distance=cached_distance;
+    if (have_fresh) {
         float x=actual.x-g_view_anchor.x,y=actual.y-g_view_anchor.y,z=actual.z-g_view_anchor.z;
         distance=sqrtf(x*x+y*y+z*z);
     }
-    char b[420];
+    float written_distance=-1;
+    if (have_fresh) {
+        float x=fresh.x-g_view_written.x,y=fresh.y-g_view_written.y,z=fresh.z-g_view_written.z;
+        written_distance=sqrtf(x*x+y*y+z*z);
+    }
+    char b[640];
     snprintf(b,sizeof(b),"direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f yaw=%.6f pitch=%.6f world_valid=%d camera_x=%.6f camera_y=%.6f camera_z=%.6f",
         !!g_fp_mode,g_cfg_camera_zoom,g_view.target,g_view.applied,distance,have_actual,fp_view_is_eye(),
         g_view.blocked,g_view.collision_known,g_speed_scale,g_yaw,g_pitch,have_actual&&g_have_t,
         have_actual&&g_have_t?actual.x-g_tx:0,have_actual&&g_have_t?actual.y:0,
         have_actual&&g_have_t?actual.z-g_tz:0);
+    if (g_view_have_anchor) {
+        size_t n=strlen(b);
+        snprintf(b+n,sizeof(b)-n," cached_distance=%.3f fresh_valid=%d written_distance=%.3f anchor_x=%.3f anchor_y=%.3f anchor_z=%.3f",
+            cached_distance,have_fresh,written_distance,g_view_anchor.x-(g_have_t?g_tx:0),g_view_anchor.y,g_view_anchor.z-(g_have_t?g_tz:0));
+    }
     r->append(r,b); return KAH_OK;
 }
