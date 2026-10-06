@@ -81,6 +81,24 @@ int main(void){
      const char *bad[]={"fp_move","wx"};assert(kah_fp_move("test",2,bad,&r,NULL)==KAH_ERROR&&!g_kah_move_keys);
      const char *badms[]={"fp_move","w","0"};assert(kah_fp_move("test",3,badms,&r,NULL)==KAH_ERROR&&!g_kah_move_keys);
      const char *none[]={"fp_move","none"};assert(kah_fp_move("test",2,none,&r,NULL)==KAH_OK&&!kah_move_key(1));}
+    /* C05-KO: the update hook stands direct drive down for a KO/crippled/down actor and clears
+     * MOVE_DIRECTION + desired/current motion; a standing actor keeps driving untouched. */
+    {unsigned char *mv=world+0x400;int two=2;float vec[3]={1.f,0.f,-1.f};
+     #define ARM() (memcpy(mv,&two,4),memcpy(mv+0x10,vec,12),memcpy(mv+0x20,vec,12),g_dm_active=1)
+     #define MODE() (*(int *)mv)
+     #define ZERO(o) (!memcmp(mv+(o),(float[3]){0,0,0},12))
+     ARM();assert(fp_drive_gate(mv,1,0,0,0,0x10,0x20)==1&&g_dm_active==1&&MODE()==2&&!ZERO(0x10)&&!ZERO(0x20));
+     ARM();assert(fp_drive_gate(mv,1,4,0,0,0x10,0x20)==0&&g_dm_active==0&&MODE()==0&&ZERO(0x10)&&ZERO(0x20)); /* KO */
+     ARM();assert(fp_drive_gate(mv,1,2,0,0,0x10,0x20)==0&&g_dm_active==0&&MODE()==0); /* crippled */
+     ARM();assert(fp_drive_gate(mv,1,0,1,0,0x10,0x20)==0&&g_dm_active==0&&MODE()==0); /* g_is_down */
+     ARM();g_dm_active=0;assert(fp_drive_gate(mv,0,4,0,0,0x10,0x20)==0&&MODE()==2); /* not driving: untouched */
+     ARM();assert(fp_mover_clear_direct(mv,0,0x10,0)==1&&MODE()==0&&ZERO(0x10)&&!ZERO(0x20)); /* motion_off 0 keeps currentMotion */
+     assert(fp_mover_clear_direct(NULL,0,0x10,0x20)==0);
+     memset(mv,0,0x30);g_dm_active=0;
+     #undef ARM
+     #undef MODE
+     #undef ZERO
+    }
     KfpView v={0};
     kfp_view_wheel(&v,-120);assert(fabsf(v.target-.5f)<.001f);
     kfp_view_wheel(&v,-100000);assert(v.target==KFP_VIEW_MAX);
@@ -92,5 +110,5 @@ int main(void){
     u.applied=d;u.applied=kfp_view_next(&u,1.0f/60.0f);assert(fabsf(u.applied-x)<.0001f);
     v.applied=.1f;assert(kfp_view_is_eye(&v));v.applied=2;assert(!kfp_view_is_eye(&v));
     v.target=NAN;assert(kfp_view_next(&v,.01f)==0);
-    puts("RESULT B09 PASS control pinning/inspection/explicit transfer/fallback/unload/reload, head-hide forget on world teardown and view wheel bounds/frame-rate smoothing");
+    puts("RESULT B09 PASS control pinning/inspection/explicit transfer/fallback/unload/reload, head-hide forget on world teardown, KO direct-drive stand-down and view wheel bounds/frame-rate smoothing");
 }

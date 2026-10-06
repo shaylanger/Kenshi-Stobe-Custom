@@ -4544,6 +4544,14 @@ static void fp_movement(void *gw, float dt)
         InterlockedExchange(&g_dm_active, 0);
         InterlockedExchange(&g_face_active, 0);
         g_was_moving = 0; g_face_turning = 0;
+        /* C05-KO: a hold that was direct-driving leaves MOVE_DIRECTION + desired motion
+         * behind; clear them once (the fall driver owns currentMotion, so leave that). */
+        if (g_is_down && g_was_direct) {
+            void *dmv = readable((void *)((uintptr_t)pc + CHAR_MOVEMENT), 8)
+                ? *(void **)((uintptr_t)pc + CHAR_MOVEMENT) : NULL;
+            fp_mover_clear_direct(dmv, MV_MOVEMODE, MV_DESIREDMOTION, 0);
+            g_was_direct = 0;
+        }
         /* Facing state: cleared ONLY for the ragdoll tiers (the body tumbles,
          * its final yaw is genuinely unknown). The walk-off/jump arc keeps the
          * body on its feet with its committed facing -- clearing g_face_have
@@ -7023,6 +7031,15 @@ static void hooked_charmove_update(void *mv, float t)
                     g_dm_active, mode, g_dm_dir.x, g_dm_dir.z);
         }
     }
+    /* C05-KO: never force standing direct drive into a KO/crippled/down actor. */
+    void *dpc = (drive && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8))
+        ? *(void **)((uintptr_t)mv + MV_CHARACTER) : NULL;
+    if (drive && !fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL, g_is_down,
+                                MV_MOVEMODE, MV_DESIREDMOTION, MV_CURRENT_MOTION)) {
+        drive = 0;
+        static int kol; if (kol++ < 8) logline("[control] direct drive stood down: actor down (prone=%d is_down=%d)",
+                                               dpc ? char_prone_state(dpc) : -1, g_is_down);
+    }
     if (drive) {
         /* Halt clears any combat chase motion the AI queued, then force our
          * direction. (halt = CharMovement vtable +0x98.) */
@@ -7063,8 +7080,11 @@ static void hooked_charmove_update(void *mv, float t)
     g_charmove_update_orig(mv, t);
     FALL_LAUNCH_HOLD(mv)
     /* Re-assert AFTER: the original just re-enabled combat locomotion mid-call.
-     * This post-write is the one that actually wins the race. */
-    if (drive) mv_force_direct(mv);
+     * This post-write is the one that actually wins the race -- unless the actor
+     * went down INSIDE the update (C05-KO): then clear instead of forcing. */
+    if (drive && fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL, g_is_down,
+                               MV_MOVEMODE, MV_DESIREDMOTION, MV_CURRENT_MOTION))
+        mv_force_direct(mv);
     /* facing lock: the original update turned the body toward the motion direction by
      * feeding facing(+0xD0)=velocity-dir to AnimationClass::setPositionAndDirection --
      * NOT via faceDirection (which is why redirecting that never worked). Re-feed the

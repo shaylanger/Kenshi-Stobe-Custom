@@ -78,6 +78,34 @@ static void fp_head_forget_world(void) {
     g_head_hidden=0; g_head_hidden_char=NULL; g_player_app=NULL;
     g_head_params=NULL; g_head_params_mat=NULL; g_gear_n=0;
 }
+/* C05-KO (2026-10-06): standing MOVE_DIRECTION drive is only valid on a character in
+ * the normal prone state (0) who is not down. KO/crippled/play-dead route to the order
+ * path; forcing direct motion into a KO hands our vector to the KO ragdoll. */
+static int fp_direct_drive_allowed(int prone,int is_down) {
+    return prone==0 && !is_down;
+}
+/* Clear our direct-drive state on a CharMovement: movementMode -> normal, desired
+ * motion and (motion_off != 0) current motion -> zero. Offsets are parameters so the
+ * offline test can use a plain buffer. Returns 1 if the mode was MOVE_DIRECTION (2). */
+static int fp_mover_clear_direct(void *mv,size_t mode_off,size_t desired_off,size_t motion_off) {
+    if (!mv || !readable((void *)((uintptr_t)mv+mode_off),4)) return 0;
+    int was=*(int *)((uintptr_t)mv+mode_off)==2;
+    if (readable((void *)((uintptr_t)mv+desired_off),12)) memset((void *)((uintptr_t)mv+desired_off),0,12);
+    if (motion_off && readable((void *)((uintptr_t)mv+motion_off),12)) memset((void *)((uintptr_t)mv+motion_off),0,12);
+    *(int *)((uintptr_t)mv+mode_off)=0;
+    return was;
+}
+/* CharMovement::update down check, run before AND after the original update (a KO can
+ * land inside it): keep driving only a standing character; otherwise stand the WASD drive
+ * down and clear what we forced so nothing of ours is consumed by the KO ragdoll. */
+static int fp_drive_gate(void *mv,int drive,int prone,int is_down,
+                         size_t mode_off,size_t desired_off,size_t motion_off) {
+    if (!drive) return 0;
+    if (fp_direct_drive_allowed(prone,is_down)) return 1;
+    InterlockedExchange(&g_dm_active,0);
+    fp_mover_clear_direct(mv,mode_off,desired_off,motion_off);
+    return 0;
+}
 static void fp_control_tick(void *gw) {
     void *selected=first_player_char(gw);
     if (!selected) {
