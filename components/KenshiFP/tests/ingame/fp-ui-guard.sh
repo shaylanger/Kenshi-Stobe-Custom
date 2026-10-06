@@ -22,6 +22,10 @@ ui_guard_setup() { local s
 ui_is_open() { A fp_state | grep -q '\bui_open=1\b'; }
 ui_clear() { local d end
   ui_is_open || return 0
+  # m49 (dec-5090-7): a Left Alt press (key_free_cursor toggle, e.g. an Alt-Tab on the test PC) left KenshiFP in free-cursor
+  # mode (ui_why=free): no camera control, every fp_camera look failed for ~10 min. Drop the toggle (S03 recovery command)
+  if A fp_state | grep -q '\bfree=1\b'; then echo "UI GUARD: free-cursor toggle on: fp_state free off" >> "$LOG"; A fp_state free off >/dev/null
+    ui_is_open || { UI_CLEARED=$((UI_CLEARED+1)); return 0; }; fi
   d=$(A dialog)
   if grep -q '^open=1' <<<"$d"; then
     echo "UI GUARD: dialogue open ($d): closing" >> "$LOG"; A dialog close >/dev/null

@@ -44,8 +44,10 @@ aim_at() { local s t e; read -r sx sy sz <<<"$(pos "$SH")"; read -r tx ty tz <<<
   # (5090 b9 R08: arm_r 3/3, core_s 0.32 > margin 0.3; ranged fixer r6). Bones from the reply with the ray on the npc.
   if [ -n "$AIM_BONE" ]; then local r nk pv bx bz; r=$(A fp_combat aim); nk=$(fld bw_neck <<<"$r"); pv=$(fld bw_pelvis <<<"$r")
     if [ -n "$nk" ] && [ -n "$pv" ]; then
-      read -r bx bz <<<"$(awk -v n="$nk" -v p="$pv" -v m="$AIM_BONE" 'BEGIN{split(n,a,",");split(p,b,",");f=(m=="neck")?1:0.7
-        printf "%.2f %.2f", b[1]+f*(a[1]-b[1]), b[3]+f*(a[3]-b[3])}')"
+      # AIM_LAT (dm, R08 occlusion): shift the point sideways, perpendicular to the horizontal eye->spine line (as occl)
+      read -r bx bz <<<"$(awk -v n="$nk" -v p="$pv" -v m="$AIM_BONE" -v sx="$sx" -v sz="$sz" -v lat="${AIM_LAT:-0}" 'BEGIN{split(n,a,",");split(p,b,",");f=(m=="neck")?1:0.7
+        x=b[1]+f*(a[1]-b[1]); z=b[3]+f*(a[3]-b[3]); dx=x-sx; dz=z-sz; L=sqrt(dx*dx+dz*dz); if (L>1) { x+=lat*dz/L; z-=lat*dx/L }
+        printf "%.2f %.2f", x, z}')"
       read -r YAW PIT <<<"$(awk -v a="$sx" -v b="$sz" -v c="$bx" -v d="$bz" -v ey="$e" -v py="$(awk -v y="$ty" -v h="$2" 'BEGIN{print y+h}')"          'BEGIN{h=sqrt((c-a)^2+(d-b)^2); printf "%.4f %.4f", atan2(c-a, d-b), atan2(ey-py, h)}')"
       A fp_camera look "$YAW" "$PIT" >/dev/null; sleep 0.4; fi; fi; }
 # shot <victim...>: one manual shot; prints "<shot 0|1> <hurt on victim1>|<hurt on victim2>..."
@@ -91,8 +93,8 @@ if [ "$W0" = holstered ] && [ "$SR" = 1 ] && [ $((D1-D0)) -ge 1 ]; then row R13 
 
 # ---- R07 native damage + XP at the fixture's own skill (chest aim) ----
 aim_at "$TG" 13
-# up to 3 shots: at the fixture's skill (acc ~0.44) one bolt can miss; XP accrues per shot either way
-K0=$(skill); n7=0; for _ in 1 2 3; do read -r ok h <<<"$(shot "$TG")"; n7=$((n7+1)); [ -n "$h" ] && [ "$h" != not_ready ] && break; done; K1=$(skill)
+# up to 6 shots: at the fixture's skill (acc ~0.44) bolts miss (4080 fp-4080-23: 3 misses in a row, p~0.18); XP accrues per shot either way
+K0=$(skill); n7=0; for _ in 1 2 3 4 5 6; do read -r ok h <<<"$(shot "$TG")"; n7=$((n7+1)); [ -n "$h" ] && [ "$h" != not_ready ] && break; done; K1=$(skill)
 ev="shot=$ok after $n7 $TG hurt=${h:-none} crossbows_base $K0->$K1"
 if [ "$ok" = 1 ] && [ -n "$h" ] && [ "$h" != not_ready ] && awk -v a="$K0" -v b="$K1" 'BEGIN{exit !(b>a)}'; then row R07 PASS "$ev"; else row R07 FAIL "$ev"; fi
 
@@ -135,21 +137,71 @@ pose_follow() { local n a b c; settled_br "$(cut -d' ' -f"$1" <<<"$MAH $MAC $MAL
 on_victim() { local x; [ -n "$VIC" ] && [ "$VIC" != 0 ] || { echo "$1"; return; }
   for x in $(awk -v a="$1" 'BEGIN{for(i=0;i<=6;i++)printf "%.2f ", a-0.2*i}'); do aim_at "$TG" "$x"
     grep -q "\bvictim=$VIC " <<<"$(A fp_combat aim)" && { echo "$x"; return; }; done; echo "$1"; }
+# occl <fp_combat aim reply> <h dm above the feet> <lateral dm>: the arm (arm_l|arm_r) that lies on the camera ray to the
+# aim point (the spine point aim_at targets with AIM_BONE, shifted by AIM_LAT) at least 0.6 dm in front of it, else none
+# (unknown without the pick_bw_* arm bones, i.e. the ray is not on the victim). Arm = upper arm (radius 0.5), forearm
+# (0.45), hand (1 dm past the wrist, 0.45), + 0.15 dm margin, sampled at 21 points per segment.
+# m49 (dec-5090-1/4/5): Skaera stands side-on in her Iron Stick stance, the left arm ~3 dm in front of the spine in every
+# combat mode/faction; chest shots through it hit arm_l 3/3 (physically blocked) and a "neutral pose" wait never ended.
+occl() { local r=$1 cam ex ey ez ty f b="" k v; cam=$(A fp_camera state); ex=$(fld camera_x <<<"$cam"); ey=$(fld camera_y <<<"$cam")
+  ez=$(fld camera_z <<<"$cam"); read -r _ ty _ <<<"$(pos "$TG")"; f=0.7; [ "$AIM_BONE" = neck ] && f=1
+  for k in neck pelvis luarm lfarm lhand ruarm rfarm rhand; do v=$(fld "pick_bw_$k" <<<"$r"); [ -n "$v" ] || { echo unknown; return; }; b+="$v "; done
+  [ -n "$ex" ] && [ -n "$ey" ] && [ -n "$ez" ] && [ -n "$ty" ] || { echo unknown; return; }
+  awk -v e="$ex,$ey,$ez" -v b="$b" -v ty="$ty" -v h="$2" -v lat="$3" -v f="$f" 'BEGIN{split(e,E,","); n=split(b,B," ")
+    for (i=1;i<=n;i++) { split(B[i],T,","); X[i]=T[1]; Y[i]=T[2]; Z[i]=T[3] }
+    px=X[2]+f*(X[1]-X[2]); pz=Z[2]+f*(Z[1]-Z[2]); dx=px-E[1]; dz=pz-E[3]; L=sqrt(dx*dx+dz*dz); if (L>1) { px+=lat*dz/L; pz-=lat*dx/L }
+    py=ty+h; rx=px-E[1]; ry=py-E[2]; rz=pz-E[3]; LP2=rx*rx+ry*ry+rz*rz; LP=sqrt(LP2); best=2; who="none"
+    for (s=0;s<2;s++) { u=3+3*s; fo=u+1; hd=u+2; nm=s?"arm_r":"arm_l"
+      hx=X[hd]-X[fo]; hy=Y[hd]-Y[fo]; hz=Z[hd]-Z[fo]; hl=sqrt(hx*hx+hy*hy+hz*hz); if (hl<0.01) hl=1
+      a[1]=u; c[1]=fo; R[1]=0.5; a[2]=fo; c[2]=hd; R[2]=0.45
+      for (g=1;g<=3;g++) { if (g<3) { ax=X[a[g]]; ay=Y[a[g]]; az=Z[a[g]]; bx=X[c[g]]; by=Y[c[g]]; bz=Z[c[g]]; rr=R[g] }
+        else { ax=X[hd]; ay=Y[hd]; az=Z[hd]; bx=ax+hx/hl; by=ay+hy/hl; bz=az+hz/hl; rr=0.45 }
+        for (j=0;j<=20;j++) { qx=ax+(bx-ax)*j/20; qy=ay+(by-ay)*j/20; qz=az+(bz-az)*j/20
+          t=((qx-E[1])*rx+(qy-E[2])*ry+(qz-E[3])*rz)/LP2; if (t<0) t=0; if (t>1) t=1
+          d=sqrt((E[1]+t*rx-qx)^2+(E[2]+t*ry-qy)^2+(E[3]+t*rz-qz)^2)
+          if (d<rr+0.15 && (1-t)*LP>0.6 && t<best) { best=t; who=nm } } } }
+    print who}'; }
+# free_aim <col> <h>: AIM_LAT for this shot: the first sideways offset (head 0/+-0.3, chest 0/+-0.6/+-1.0 dm) whose camera
+# ray is on the victim and not blocked by an arm; none free: AIM_LAT=0 (that shot's expected part = the blocking arm)
+free_aim() { local l r o; for l in $([ "$1" = 1 ] && echo "0 0.3 -0.3" || echo "0 0.6 -0.6 1.0 -1.0"); do AIM_LAT=$l; aim_at "$TG" "$2"
+    r=$(A fp_combat aim); { [ -z "$VIC" ] || [ "$VIC" = 0 ] || grep -q "\bvictim=$VIC " <<<"$r"; } || continue
+    o=$(occl "$r" "$2" "$l"); [ "$o" = none ] && return 0; done; AIM_LAT=0; aim_at "$TG" "$2"; }
 SK0=$(A stat "$SH" crossbows | grep -o 'base=[0-9.]*' | cut -d= -f2); PE0=$(A stat "$SH" perception | grep -o 'base=[0-9.]*' | cut -d= -f2)
 A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/null
-A fp_combat wound reset >/dev/null; r8=""; good=0; total=0
-HS=""
+A fp_combat wound reset >/dev/null; r8=""; good=0; total=0; HS=""; nocc=0; disturbed=0; GD=""
+# the target is hostile and aggro since R07's hit: passive combat mode for R08 (restored after)
+PV0=$(A combatmode "$TG" | fld passive); A combatmode "$TG" passive on >/dev/null
 for spec in "head 1 0" "chest 2 1" "legs 3 5,6"; do
-  read -r name col want <<<"$spec"; case $col in 1) AIM_BONE=neck;; 2) AIM_BONE=chest;; *) AIM_BONE="";; esac; measure_r08; got=""
-  for _ in 1 2 3; do ht=$(pose_follow "$col"); [ "$col" = 1 ] && ht=$(on_victim "$ht"); HS+="$ht,"; aim_at "$TG" "$ht"
-    read -r ok h <<<"$(shot "$TG")"; got+="${h:-miss};"; total=$((total+1))
-    for w in ${want//,/ }; do [[ ",$h" == *",$w("* ]] && { good=$((good+1)); break; }; done; done
+  read -r name col want <<<"$spec"; case $col in 1) AIM_BONE=neck;; 2) AIM_BONE=chest;; *) AIM_BONE="";; esac; AIM_LAT=0; measure_r08; got=""
+  for _ in 1 2 3; do cnt=0
+    # m49 (dec-5090-6): she ducks/staggers between the settled read and the trigger (neck 15.42 / 13.27 vs 16.95 upright):
+    # a shot counts only if the pose AT the trigger (shot()'s aim reply) still fits the aim: neck within 0.5 dm of the
+    # measured upright neck and the aim height within the part's zone tolerance; else retaken (<= 3 tries per counted shot)
+    for try in 1 2 3; do AIM_LAT=0; ht=$(pose_follow "$col"); [ "$col" = 1 ] && ht=$(on_victim "$ht")
+      # arms cannot cover the knees: legs keep the plain aim (no arm bones on the leg ray either)
+      if [ "$col" = 3 ]; then aim_at "$TG" "$ht"; else free_aim "$col" "$ht"; fi
+      read -r ok h <<<"$(shot "$TG")"; tr8=$(tail -n 1 "$OUT/aims.txt")
+      pm=$(awk -v b="$(grep -o '\bbones=[^ ]*' <<<"$tr8" | cut -d= -f2)" -v a="$(grep -o '\baim=[-0-9.,]*' <<<"$tr8" | cut -d= -f2)" \
+        -v mn="$MBN" -v mh="$MAH" -v c="$col" -v h="$ht" 'BEGIN{split(b,B,","); split(a,A,","); if (B[3]=="" || A[c]=="") { print "nobones"; exit }
+          e=(c==1)?mh+(B[3]-mn):A[c]; tol=(c==1)?1.3:0.8; d=B[3]-mn; x=h-e
+          if (d>0.5||d<-0.5||x>tol||x<-tol) printf "neck%+.2f,h%+.2f", d, x; else print "ok"}')
+      [ "$pm" = ok ] && { cnt=1; break; }; disturbed=$((disturbed+1)); GD+="$name:${h:-miss}($pm);"; done
+    [ "$cnt" = 1 ] || continue
+    oc=none; exp=$want
+    # arm on the line to the aim point at the trigger: the aimed part (core wins on its silhouette, kfp_wound_from_bones)
+    # or that arm (a bolt stopped by the forearm) both count
+    [ "$col" = 3 ] || oc=$(occl "$tr8" "$ht" "$AIM_LAT")
+    case $oc in arm_l) exp+=",3"; nocc=$((nocc+1));; arm_r) exp+=",4"; nocc=$((nocc+1));; esac
+    HS+="$ht$([ "$AIM_LAT" = 0 ] || echo "@$AIM_LAT"),"; got+="${h:-miss}$([ "$oc" = none ] || echo "[$oc]");"; total=$((total+1))
+    for w in ${exp//,/ }; do [[ ",$h" == *",$w("* ]] && { good=$((good+1)); break; }; done; done
   r8+="$name:${got%;} "
-done; AIM_BONE=""
+done; AIM_BONE=""; AIM_LAT=0
 A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >/dev/null
+case "$PV0" in 1|on|true) A combatmode "$TG" passive on >/dev/null;; *) A combatmode "$TG" passive off >/dev/null;; esac
 WS=$(A fp_combat wound | grep -o 'wound_ready=[0-9]*\|wound_spatial=[0-9]*\|wound_native_fallback=[0-9]*\|last_fallback=[a-z_]*' | tr '\n' ' ')
-ev="aimed part hit $good/$total: ${r8% } $BONES aim_h=$AH/$AC/$AL shot_h=${HS%,} ${WS% } $(ui_summary)"
-if [ "$good" -ge $((total-1)) ]; then row R08 PASS "$ev"; else row R08 FAIL "$ev"; fi
+ev="expected part hit $good/$total (arm-blocked $nocc: aimed part or [arm] counts): ${r8% } $BONES aim_h=$AH/$AC/$AL shot_h=${HS%,} pose_retaken=$disturbed${GD:+ [${GD%;}]} ${WS% } $(ui_summary)"
+if [ "$total" -lt 9 ]; then row R08 SETUP "FAIL reason=pose_moved: only $total of 9 shots with her pose at the trigger matching the aim: $ev"
+elif [ "$good" -ge $((total-1)) ]; then row R08 PASS "$ev"; else row R08 FAIL "$ev"; fi
 
 # ---- R09 intervening body: blocker halfway, aim at the target's chest through it ----
 A pin "$TG" off >/dev/null; A pin "$TG" at "$SH" dist 50 face "$SH" >/dev/null
