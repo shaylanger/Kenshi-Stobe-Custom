@@ -26,6 +26,8 @@ static void *g_melee_owned_cc;           /* CombatClass under manual ownership *
 static int g_melee_pending;              /* one click request, no queue (M07) */
 static float g_melee_pending_left;
 static int g_melee_armed, g_melee_fire_prev, g_melee_block_prev;
+/* input diagnostics: manual ticks, the last aim/fire the tick saw, LMB edges ignored because aim (RMB) was held */
+static unsigned g_melee_ticks, g_melee_fire_masked; static int g_melee_in_aim, g_melee_in_fire;
 static unsigned g_melee_clicks, g_melee_swings, g_melee_ai_refused, g_melee_rejected, g_melee_blocks, g_melee_block_ok, g_melee_autoblock_refused, g_melee_out_of_reach;
 static const char *g_melee_why="init";
 /* Click->swing latency in real ms, measured in the product (M01: the harness round trip of a test's
@@ -341,6 +343,7 @@ static void fp_melee_release(void) {
 }
 static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
     {int sp=melee_spam_fire();if (sp>=0) fire=sp;}
+    ++g_melee_ticks;g_melee_in_aim=aim;g_melee_in_fire=fire;
     if (!g_melee_ready || !g_melee_get_combat) {g_melee_why="unready";fp_melee_release();return;}
     void *cc=g_melee_get_combat(pc);
     if (!readable(cc,0x2b8) || *(void **)((uintptr_t)cc+CC_OWNER)!=pc) {g_melee_why="no_combat";fp_melee_release();return;}
@@ -392,6 +395,7 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
             fire=1;g_melee_cl_wait=0;g_melee_cl_release=1;++g_melee_cl_fired;
         }
     }
+    if (fire && !g_melee_fire_prev && aim) ++g_melee_fire_masked;
     if (fire && !g_melee_fire_prev && !aim) {
         ++g_melee_clicks;
         const char *bwhy=melee_click_block_why(active,target,dead,state);
@@ -412,14 +416,15 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
     }
     g_melee_fire_prev=fire;g_melee_block_prev=aim;
 }
-static int fp_melee_state_append(char *b,size_t n) {
-    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u",
-        g_melee_ready,g_melee_owned_cc!=NULL,g_melee_why,g_melee_armed,g_melee_pending,g_melee_clicks,
+static int fp_melee_state_append(char *b,size_t n,const void *cc) {
+    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u ticks=%u in_aim=%d in_fire=%d fire_masked=%u injection=%d inj_cmds=%u inj_aim_cmds=%u",
+        g_melee_ready,cc!=NULL&&cc==g_melee_owned_cc,g_melee_why,g_melee_armed,g_melee_pending,g_melee_clicks,
         g_melee_swings,g_melee_ai_refused,g_melee_rejected,g_melee_blocks,g_melee_block_ok,g_melee_autoblock_refused,g_melee_out_of_reach,g_melee_passive_serial!=0,g_melee_passive_refused,
         g_melee_approach_refused,g_melee_chase_frames,g_melee_expired,g_melee_last_latency_ms,g_melee_max_latency_ms,
         g_melee_hold_halts,g_melee_spam_left,g_melee_swing_ends,g_melee_swing_time,g_melee_last_swing_len,g_melee_min_swing_gap,g_melee_nat_swing_ends,g_melee_nat_swing_time,
         g_melee_early_starts,g_melee_unfinished_starts,g_melee_slack_n,g_melee_min_swing_slack,g_melee_last_reject,g_melee_last_reject_state,
-        g_melee_rej_stumble,g_melee_rej_chop,g_melee_rej_dead,g_melee_rej_other,g_melee_cl_wait,g_melee_cl_fired,g_melee_cl_timeouts,g_melee_cancel_refused,g_melee_abort_refused);
+        g_melee_rej_stumble,g_melee_rej_chop,g_melee_rej_dead,g_melee_rej_other,g_melee_cl_wait,g_melee_cl_fired,g_melee_cl_timeouts,g_melee_cancel_refused,g_melee_abort_refused,
+        g_melee_ticks,g_melee_in_aim,g_melee_in_fire,g_melee_fire_masked,g_combat_injection,g_combat_inj_cmds,g_combat_inj_aim_cmds);
 }
 static void fp_melee_manual_init(void) {
     uintptr_t init=combat_unique_signature("40 57 48 83 EC 40 48 8B 41 08 48 8B F9");

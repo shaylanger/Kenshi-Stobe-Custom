@@ -9,6 +9,9 @@ static KfpCombatController g_combat_control;
 static KfpCombatObservation g_combat_observed;
 static KfpCombatInput g_combat_injected;
 static int g_combat_injection, g_combat_enabled, g_combat_native_ready;
+/* `fp_combat input` commands received (all / with aim=1): a wrapper compares them with the inputs it sent itself, so
+ * a second harness client on the rig (4080 b24+b25: two runners at once) shows up as foreign input. */
+static unsigned g_combat_inj_cmds, g_combat_inj_aim_cmds;
 static int g_combat_fault, g_combat_dispatch;
 static DWORD g_combat_dispatch_tid;
 static uint32_t g_combat_actor_ids[5];
@@ -709,6 +712,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
             r->append(r,"input values must be 0 or 1");return KAH_ERROR;
         }
         g_combat_injected.aim=atoi(argv[2]);g_combat_injected.fire=atoi(argv[3]);g_combat_injected.reload=atoi(argv[4]);
+        ++g_combat_inj_cmds;if (g_combat_injected.aim) ++g_combat_inj_aim_cmds;
         g_combat_injection=1;r->append(r,"combat input published; same controller/native gates as physical input");return KAH_OK;
     }
     if (argc==2 && !_stricmp(argv[1],"state")) {
@@ -725,8 +729,8 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         {size_t l=strlen(b);fp_combat_wound_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);combat_shot_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
-         snprintf(b+l,sizeof(b)-l," last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
-           g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,
+         snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
+           g_combat_inj_cmds,g_combat_inj_aim_cmds,g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,
            g_combat_rej_why,g_combat_rej_have_aim,g_combat_rej_truce,j->allowed,
            g_combat_ready_native,g_combat_ready_latch.bridged,g_combat_ready_latch.latched,
            combat_char_unconscious(g_combat_state_pc),combat_char_ko_timer(g_combat_state_pc));}

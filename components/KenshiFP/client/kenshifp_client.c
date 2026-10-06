@@ -1218,7 +1218,7 @@ static void fp_melee_observe_init(void);
 static void fp_melee_manual_init(void);
 static void fp_melee_manual_tick(void *,void *,int,int,float);
 static void fp_melee_release(void);
-static int fp_melee_state_append(char *,size_t);
+static int fp_melee_state_append(char *,size_t,const void *);
 static void fp_melee_set_passive(unsigned);
 static void fp_melee_spam_start(unsigned,unsigned);
 static void fp_melee_click_legal_start(unsigned);

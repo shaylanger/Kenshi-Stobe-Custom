@@ -30,11 +30,18 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
         if(argc==3) fp_melee_swingstat_reset();
         char b[768];fp_melee_swingstat_append(b,sizeof(b));r->append(r,b);return KAH_OK;
     }
-    if(argc!=2 || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_melee state | fp_melee passive <serial>|off (test: refuse AI attacks aimed at that character) | fp_melee spam <n> [period_ms]|off (test: n LMB clicks on the game thread) | fp_melee click_legal [timeout_ms] (test: one click at the first legal frame) | fp_melee swingstat [reset] (applied attack speed, per-technique swing time)");return KAH_ERROR;
+    if((argc!=2 && argc!=3) || _stricmp(argv[1],"state")) {
+        r->append(r,"usage: fp_melee state [<npc>] (default: the controlled actor) | fp_melee passive <serial>|off (test: refuse AI attacks aimed at that character) | fp_melee spam <n> [period_ms]|off (test: n LMB clicks on the game thread) | fp_melee click_legal [timeout_ms] (test: one click at the first legal frame) | fp_melee swingstat [reset] (applied attack speed, per-technique swing time)");return KAH_ERROR;
     }
     if(!g_melee_get_combat) {r->append(r,"native combat binding unavailable");return KAH_ERROR;}
-    void *pc=fp_controlled_char(g_gw_cache);
+    /* <npc> (harness name/#serial forms): read that character, e.g. the fighter after control moved away (M08-ACTOR) */
+    void *ctl=fp_controlled_char(g_gw_cache),*pc=ctl;
+    if(argc==3) {
+        char err[160]="";
+        if(!g_kah.findCharacter) {r->append(r,"fp_melee state <npc> needs a harness with findCharacter (2026-10-03+)");return KAH_ERROR;}
+        pc=g_kah.findCharacter(argv[2],err,sizeof(err));
+        if(!char_valid(pc)) {r->append(r,err[0]?err:"character not found");return KAH_ERROR;}
+    }
     if(!char_valid(pc)) {r->append(r,"controlled actor unavailable");return KAH_ERROR;}
     if(setjmp(g_guard_jb)) {g_guard_armed=0;r->append(r,"melee state read fault");return KAH_ERROR;}
     guard_arm();
@@ -46,8 +53,8 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
     /* hand = 0x20 bytes: index +0x14, serial +0x18 (printed #serial/index like the harness). */
     const int ai=readable(cc,0x2e8);
     snprintf(b,sizeof(b),
-      "actor=%llx combat=%llx active=%u state=%d next=%d attacking=%.6f dead=%u dead_left=%.6f state_left=%.6f technique=%llx finished=%u movement=%llx target=%llx blocking_target=%llx threats=%u frame_dt=%.6f target_h=#%u/%u blocking_h=#%u/%u zone_targets=%u focused_h=#%u/%u",
-      (unsigned long long)(uintptr_t)pc,(unsigned long long)(uintptr_t)cc,
+      "actor=%llx controlled=%d combat=%llx active=%u state=%d next=%d attacking=%.6f dead=%u dead_left=%.6f state_left=%.6f technique=%llx finished=%u movement=%llx target=%llx blocking_target=%llx threats=%u frame_dt=%.6f target_h=#%u/%u blocking_h=#%u/%u zone_targets=%u focused_h=#%u/%u",
+      (unsigned long long)(uintptr_t)pc,pc==ctl,(unsigned long long)(uintptr_t)cc,
       *(unsigned char *)((uintptr_t)cc+0x130),*(int *)((uintptr_t)cc+0x1f0),*(int *)((uintptr_t)cc+0x1f4),
       *(float *)((uintptr_t)cc+0x140),*(unsigned char *)((uintptr_t)cc+0x144),
       *(float *)((uintptr_t)cc+0x148),*(float *)((uintptr_t)cc+0x14c),
@@ -60,7 +67,7 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
       *(unsigned *)((uintptr_t)cc+0x1d8+0x8),
       ai?*(unsigned *)((uintptr_t)cc+0x2c8+0x18):0u,ai?*(unsigned *)((uintptr_t)cc+0x2c8+0x14):0u);
     g_guard_armed=0;
-    size_t l=strlen(b);fp_melee_state_append(b+l,sizeof(b)-l);
+    size_t l=strlen(b);fp_melee_state_append(b+l,sizeof(b)-l,cc);
     r->append(r,b);return KAH_OK;
 }
 static void fp_melee_observe_init(void) {
