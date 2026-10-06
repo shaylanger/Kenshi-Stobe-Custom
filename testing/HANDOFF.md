@@ -9,7 +9,7 @@ Coordinator handoff: newest `coordinator-handoff-m<N>.md` in the temp folder (co
   S04 PASS. Open: R10, R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08/M09, Gate 3, S01/S03/S05;
   manual combat still OFF by default.
 - **PG:** all automated rows PASS; D1-D3, D5-D8 done; open D4 athletics feel + tooltip/feel rows (Shay).
-- **Waiting on Shay:** delete the 4080 save copies `kah-fp-*` (permission checker); delete the Avarek/Beaks Stobe DB rows
+- **Waiting on Shay:** delete the 4080 save copies `kah-fp-*` (permission checker) (Avarek/Beaks DB rows deleted 2026-10-06)
   (approved, permission checker blocked) so the Full-Base hand-over/fetch regression row can run.
 - **Fixture added:** `C:\KenshiTestFixtures\FP-crossbow` (from kah-fpxbow).
 - **Graphics mods may still be OFF:** `bash C:/KenshiModding/tools/automation/gfx-mods.sh on` before playing.
