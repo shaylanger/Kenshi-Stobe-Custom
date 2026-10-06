@@ -217,7 +217,7 @@ eye_dist() { local c t; c=$(A fp_camera state); read -r t <<<"$(pos "$1")"
 # reads in a row. A bolt staggers / knocks the target down; a lying body reads stable too, so fresh_bones aimed at the low
 # pose and the target stood up before the bolt arrived (4080 b19 Shek: head bone 21.0, 22.0, 11.9, 13.5 dm; aimed_part 2/6)
 REFH=""; upright() { local k h p=""; for k in $(seq 1 14); do
-    if bones_of "$1"; then h=$(grep -o 'bones=[^ ]*' <<<"$BREPLY" | cut -d= -f2 | cut -d, -f1)
+    if bones_of "$1"; then h=$(grep -o '\bbones=[^ ]*' <<<"$BREPLY" | cut -d= -f2 | cut -d, -f1)
       if [ -n "$h" ] && [ "$h" != nan ]; then REFH=$(awk -v a="${REFH:-0}" -v b="$h" 'BEGIN{print (b>a)?b:a}')
         if awk -v h="$h" -v r="$REFH" 'BEGIN{exit !(h>=r-1.0)}'; then [ -n "$p" ] && return 0; p=1; else p=""; fi; fi; fi
     sleep 0.7; done; return 1; }

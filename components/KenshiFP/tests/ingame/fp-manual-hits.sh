@@ -134,7 +134,7 @@ pose_follow() { local n a b c; settled_br "$(cut -d' ' -f"$1" <<<"$MAH $MAC $MAL
 # the victim, as a player lowers the sight onto the head. Height unchanged if no victim id or nothing hits.
 on_victim() { local x; [ -n "$VIC" ] && [ "$VIC" != 0 ] || { echo "$1"; return; }
   for x in $(awk -v a="$1" 'BEGIN{for(i=0;i<=6;i++)printf "%.2f ", a-0.2*i}'); do aim_at "$TG" "$x"
-    grep -q "victim=$VIC " <<<"$(A fp_combat aim)" && { echo "$x"; return; }; done; echo "$1"; }
+    grep -q "\bvictim=$VIC " <<<"$(A fp_combat aim)" && { echo "$x"; return; }; done; echo "$1"; }
 SK0=$(A stat "$SH" crossbows | grep -o 'base=[0-9.]*' | cut -d= -f2); PE0=$(A stat "$SH" perception | grep -o 'base=[0-9.]*' | cut -d= -f2)
 A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/null
 A fp_combat wound reset >/dev/null; r8=""; good=0; total=0
