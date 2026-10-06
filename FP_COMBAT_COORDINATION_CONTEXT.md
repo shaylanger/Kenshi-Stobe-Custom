@@ -18,8 +18,9 @@ Order of work: camera/control (done), ranged and melee adapters in main, manual 
 - Decoupling done (m49, KenshiFP f94b1d5 / Stobe 9d99f36): KenshiFP is FP-only. All goal/action logic (work planner, task goals,
   goal panel, action/unequip requests, interrupts) lives in Stobe. The only link left: KenshiFP asks Stobe for the fight
   truce through the `StobeFightTruceActive` export (`stobe_fight_truce_active`, kenshifp_client.c ~1690; works without Stobe).
-  Leftovers: `client/stobe_*.inc` are no longer built into the DLL (build.sh compiles only kenshifp_client.c); only the old
-  standalone test sources (`kenshifp_*_test.c`, `kenshifp_taskgoal_*.c`, `kfp_goal_engine.c`) still include them.
+  Leftovers removed 2026-10-06: `client/stobe_*.inc`, the 11 old full-copy builds (`kenshifp_*_test.c`, `kenshifp_taskgoal_*.c`,
+  `kfp_*_final.c`, `kfp_goal_engine.c`, `kenshifp_actions_batch.c`), the `.bak_*` copies and the unused inventory/unequip offsets.
+  Design + native RE findings: `components/KenshiFP/docs/FP_COMBAT_DESIGN_RE.md`.
 
 ## 2. Shared interfaces (`client/kenshifp_client.c`, pre-decoupling baseline line numbers: the STOBE rows are gone since m49)
 | Area | Owner | Code | Rule |

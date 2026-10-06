@@ -106,15 +106,8 @@
 #define MAPN_KEYCAP        0x28    /* node: key capacity (>15 => the key data is a pointer) */
 #define MAPN_VALUE         0x38    /* node: value (Item* here, int in the GameData int-map) */
 #define ITEM_GAMEDATA      0x78    /* Item::gameData (GameData*) */
-#define ITEM_ROOT_DATA     0x40    /* RootObjectBase::data on a real inventory Item (KenshiLib header) */
-#define ROOT_DISPLAY_NAME  0x18    /* RootObjectBase::displayName (native std::string) */
 #define ITEM_MESH          0x80    /* Item::mesh (Ogre::MovableObject*); NULL = the game destroyed it */
-#define ITEM_INV_SECTION   0xE8    /* native MSVC std::string InventoryItemBase::inventorySection */
-#define ITEM_SLOT_TYPE     0x110   /* AttachSlot */
-#define ITEM_IS_EQUIPPED   0x129   /* bool */
-#define GD_NAME            0x28    /* native MSVC std::string GameData::name */
 #define GD_INTMAP          0x178   /* GameData int-field map (same node layout, int value) */
-#define ROOT_UNEQUIP_VTSLOT (0x1A0 / 8) /* RootObject::unequipItem virtual slot */
 /* AttachSlot (the game's own fcs_enums.def) -- these are the BIT INDICES of the
  * headgear_slots ini bitmask: WEAPON 0, BACK 1, HAIR 2, HAT 3, EYES 4, BODY 5, LEGS 6,
  * NONE 7, SHIRT 8, BOOTS 9, GLOVES 10, NECK 11, BACKPACK 12, BEARD 13, BELT 14. */
@@ -135,8 +128,6 @@
 #define HEADGEAR_SLOTS_DEF ((1u << ATTACH_HAIR) | (1u << ATTACH_HAT) \
                           | (1u << ATTACH_EYES) | (1u << ATTACH_BEARD))  /* 0x201C */
 #define CHAR_WEAPON_IN_HANDS 0x6D8 /* CharacterHuman::weaponInHands (Weapon*); non-null = drawn */
-#define CHAR_INVENTORY      0x2E8 /* Character::inventory */
-#define INV_ALLITEMS        0x10  /* Inventory::_allItems lektor<Item*> */
 #define CHAR_MOVEMENT     0x640    /* Character::movement (CharMovement*) */
 #define CHAR_STATS        0x450    /* Character::stats (CharStats*) */
 #define CHAR_STEALTH_MODE   0xD4   /* Character::stealthMode (bool) */

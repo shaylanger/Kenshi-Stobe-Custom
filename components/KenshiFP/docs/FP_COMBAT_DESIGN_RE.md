@@ -1,12 +1,5 @@
-# FP combat handoff 21 — full resume context
-Status: MERGED (938d2e2) — fp-combat is merged into main; one session works on it directly (edits /root/KenshiFP + components/KenshiFP, builds, installs, runs the game, commits + pushes). The ownership, request/candidate and "push blocked" rules below are pre-merge history and are superseded. Current state: see "Status after merge" right below and `C:\KenshiModding\FP_COMBAT_COORDINATION_CONTEXT.md`.
-
-## Status (2026-10-06)
-- Installed KenshiFP 4FD22DEF on both rigs (main ac56752: manual melee adapter, spatial wounds, wound pick diagnostics),
-  harness 2995EE5E; manual combat OFF by default.
-- Open rows and current state: COMBAT_TEST_PLAN.md ("Current state"); context FP_COMBAT_COORDINATION_CONTEXT.md.
-- The pre-merge development log (candidates, requests, validation-resume runs, ownership rules) was removed 2026-10-06:
-  the work is merged and its rows passed; read it with `git log -p` on this file if needed.
+# FP combat: accepted design and native (reverse-engineering) findings
+Kept from the retired FP combat handoff 21. Current status: COMBAT_TEST_PLAN.md and C:\KenshiModding\testing\HANDOFF.md.
 
 ## Accepted design
 1. Persistent FP-style WASD controls while wheel zooms continuously between eyes and third person; wheel no longer throttles run speed. Retain old toggle as native-control fallback.
