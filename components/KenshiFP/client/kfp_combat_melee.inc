@@ -50,7 +50,7 @@ static unsigned g_melee_expired;         /* clicks whose buffer ran out before a
 typedef void (*melee_approach_t)(void *,void *,float,float,float,char,float);
 static melee_approach_t g_melee_approach_orig;
 static void *g_melee_owned_mv;
-static unsigned g_melee_approach_refused,g_melee_chase_frames;
+static unsigned g_melee_approach_refused,g_melee_chase_frames,g_melee_chase_drops;
 static void melee_approach_hook(void *mv,void *pos,float a,float b,float c,char d,float e) {
     if (mv && mv==g_melee_owned_mv) {++g_melee_approach_refused;return;}
     g_melee_approach_orig(mv,pos,a,b,c,d,e);
@@ -387,7 +387,15 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
     int dead=*(unsigned char *)((uintptr_t)cc+CC_DEADTIME);
     unsigned target=*(unsigned *)((uintptr_t)cc+CC_TARGET_H+0x18);
     g_melee_why="ok";
-    if (state==10 || state==11) ++g_melee_chase_frames;   /* native trace-blocked/pathfind chase (CharMovement vt+0x80), diagnostic */
+    /* Native trace-blocked/pathfind chase (states 10/11, CharMovement vt+0x80). While owned the chase can never finish
+     * (its approach is refused, hold ground halts its locomotion), so the fighter stayed in it and every click was
+     * rejected as "state" (M09 GreatAnims, 4080: 110/185 polls in state 11 after the first swing, swung=1 rejected+4;
+     * root motion leaves the target out of reach). Drop it back to WAIT (STARTUP with a click pending, so the buffered
+     * click still retries its attack init): spacing stays the player's job, an out-of-reach click still whiffs (M06). */
+    if (state==10 || state==11) {
+        ++g_melee_chase_frames;++g_melee_chase_drops;
+        state=g_melee_pending?MELEE_STARTUP:MELEE_WAIT;*(int *)((uintptr_t)cc+CC_STATE)=state;
+    }
     if (g_melee_cl_release) {fire=0;g_melee_cl_release=0;}
     else if (g_melee_cl_wait) {
         if (KFP_MELEE_NOW_MS()>g_melee_cl_deadline_ms) {g_melee_cl_wait=0;++g_melee_cl_timeouts;}
@@ -417,10 +425,10 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
     g_melee_fire_prev=fire;g_melee_block_prev=aim;
 }
 static int fp_melee_state_append(char *b,size_t n,const void *cc) {
-    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u ticks=%u in_aim=%d in_fire=%d fire_masked=%u injection=%d inj_cmds=%u inj_aim_cmds=%u",
+    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u chase_drops=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u ticks=%u in_aim=%d in_fire=%d fire_masked=%u injection=%d inj_cmds=%u inj_aim_cmds=%u",
         g_melee_ready,cc!=NULL&&cc==g_melee_owned_cc,g_melee_why,g_melee_armed,g_melee_pending,g_melee_clicks,
         g_melee_swings,g_melee_ai_refused,g_melee_rejected,g_melee_blocks,g_melee_block_ok,g_melee_autoblock_refused,g_melee_out_of_reach,g_melee_passive_serial!=0,g_melee_passive_refused,
-        g_melee_approach_refused,g_melee_chase_frames,g_melee_expired,g_melee_last_latency_ms,g_melee_max_latency_ms,
+        g_melee_approach_refused,g_melee_chase_frames,g_melee_chase_drops,g_melee_expired,g_melee_last_latency_ms,g_melee_max_latency_ms,
         g_melee_hold_halts,g_melee_spam_left,g_melee_swing_ends,g_melee_swing_time,g_melee_last_swing_len,g_melee_min_swing_gap,g_melee_nat_swing_ends,g_melee_nat_swing_time,
         g_melee_early_starts,g_melee_unfinished_starts,g_melee_slack_n,g_melee_min_swing_slack,g_melee_last_reject,g_melee_last_reject_state,
         g_melee_rej_stumble,g_melee_rej_chop,g_melee_rej_dead,g_melee_rej_other,g_melee_cl_wait,g_melee_cl_fired,g_melee_cl_timeouts,g_melee_cancel_refused,g_melee_abort_refused,

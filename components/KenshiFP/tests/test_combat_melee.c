@@ -14,6 +14,7 @@ static double fake_ms;
 static unsigned char pc[16],cc[0x2c0],gw[0x20],mv[0x400],other_mv[0x400],st[0x20],ecc[0x2c0],est[0x20],stats[0x200],techa[0x40],techb[0x40];
 static void *mv_vt[0x20];
 static int g_ui_open,g_is_down,g_combat_injection=1,focus=1;
+static unsigned g_combat_inj_cmds,g_combat_inj_aim_cmds;
 static int game_has_focus(void){return focus;}
 static void logline(const char *fmt,...){(void)fmt;}
 static int in(void *p,size_t n,void *b,size_t bn){return (unsigned char *)p>=(unsigned char *)b&&(unsigned char *)p+n<=(unsigned char *)b+bn;}
@@ -108,6 +109,14 @@ int main(void){
     tick(0,0,.016f);
     /* chase states counted (diagnostic) */
     put_int(CC_STATE,11);tick(0,0,.016f);assert(g_melee_chase_frames==1);reset_fight();
+    /* M09 GreatAnims: an owned fighter left in native chase (10/11) is dropped back to WAIT, so the next click is legal
+     * (was: rejected "state" forever, the chase can't finish while owned); a pending click goes back to STARTUP */
+    {unsigned r0=g_melee_rejected,c0=g_melee_clicks,f0=g_melee_chase_frames;
+     put_int(CC_STATE,11);tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_WAIT&&g_melee_chase_drops==2&&g_melee_chase_frames==f0+1);
+     put_int(CC_STATE,10);tick(0,1,.016f);assert(g_melee_clicks==c0+1&&g_melee_rejected==r0&&g_melee_pending&&get_int(CC_STATE)==MELEE_STARTUP);
+     put_int(CC_STATE,11);tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_STARTUP&&g_melee_pending&&get_int(CC_NEXTMOVE)==MELEE_CHOP);
+     tick(0,0,.3f);assert(!g_melee_pending&&g_melee_expired==3);
+     g_melee_expired=2;g_melee_clicks=c0;g_melee_chase_frames=f0;reset_fight();}
     /* M08: UI open releases (native approach again), held LMB through close never swings, release re-arms, fresh click swings */
     g_ui_open=1;tick(0,1,.016f);assert(!g_melee_owned_cc&&!strcmp(g_melee_why,"not_allowed"));
     approach(mv);assert(approach_calls==3);
@@ -132,8 +141,8 @@ int main(void){
      int nm;memcpy(&nm,ecc+CC_NEXTMOVE,4);assert(nm==MELEE_WAIT);
      fp_melee_set_passive(0);assert(melee_attack_init_hook(est)==1&&orig_attack_calls==o+1);}
     /* state line carries the new evidence fields */
-    char b[1024],fb[1024];fp_melee_state_append(b,sizeof(b));
-    assert(strstr(b," approach_refused=2 ")&&strstr(b," chase_frames=1 ")&&strstr(b," expired=4 ")&&strstr(b," last_latency_ms=16 ")&&strstr(b," max_latency_ms=120"));
+    char b[1024],fb[1024];fp_melee_state_append(b,sizeof(b),cc);
+    assert(strstr(b," approach_refused=2 ")&&strstr(b," chase_frames=1 chase_drops=4 ")&&strstr(b," expired=4 ")&&strstr(b," last_latency_ms=16 ")&&strstr(b," max_latency_ms=120"));
     assert(strstr(b," out_of_reach=1 ")&&strstr(b," swings=2 "));
     /* M06 hold ground: while owned and not driven, combat locomotion (mode 1) or a chase state is halted before the
      * movement update; player direct drive (mode 2), anim-driven motion, CHOP/STUMBLE and other movers stay native */
@@ -167,7 +176,7 @@ int main(void){
      assert(g_melee_slack_n==1&&g_melee_early_starts==0&&g_melee_min_swing_slack>=-1e-9&&g_melee_min_swing_slack<0.7);
      tick(0,0,.02f);assert(melee_spam_fire()==-1);     /* finished: real input again */
      fp_melee_spam_start(3,200);fp_melee_set_spam(0,0);assert(melee_spam_fire()==-1);
-     fb[0]=0;fp_melee_state_append(fb,sizeof(fb));assert(strstr(fb," hold_halts=2 ")&&strstr(fb," spam_left=0 ")&&strstr(fb," last_swing_len=0.5"));}
+     fb[0]=0;fp_melee_state_append(fb,sizeof(fb),cc);assert(strstr(fb," hold_halts=2 ")&&strstr(fb," spam_left=0 ")&&strstr(fb," last_swing_len=0.5"));}
     /* native swing timer: CHOP spans in game time (frame dt x speed), any owner; paused frames add nothing;
      * FP off resets an open span */
     {unsigned e0=g_melee_nat_swing_ends;double t0=g_melee_nat_swing_time;float two=2.0f,zero=0.0f;
@@ -179,7 +188,7 @@ int main(void){
      put_int(CC_STATE,MELEE_CHOP);fp_melee_observe_swing(gw,.1f);g_fp_mode=0;fp_melee_observe_swing(gw,.1f);g_fp_mode=1;
      put_int(CC_STATE,MELEE_DECISION);fp_melee_observe_swing(gw,.1f);assert(g_melee_nat_swing_ends==e0+1);
      memcpy(gw+GW_FRAMESPEED,&one,4);
-     fb[0]=0;fp_melee_state_append(fb,sizeof(fb));assert(strstr(fb," nat_swing_ends=")&&strstr(fb," nat_swing_time=0.800"));}
+     fb[0]=0;fp_melee_state_append(fb,sizeof(fb),cc);assert(strstr(fb," nat_swing_ends=")&&strstr(fb," nat_swing_time=0.800"));}
     /* click reject reasons + click_legal test switch (M08-CROWD): stumble frames reject with a reason; click_legal
      * waits for the first legal frame, presses once, releases next frame; times out if no legal frame comes */
     {reset_fight();tick(0,0,.02f);unsigned j0=g_melee_rejected,rs0=g_melee_rej_stumble;
@@ -198,7 +207,7 @@ int main(void){
      put_int(CC_STATE,MELEE_STUMBLE);fp_melee_click_legal_start(100);
      for (int f=0;f<10;++f) {tick(0,0,.02f);fake_ms+=20;}
      assert(g_melee_cl_timeouts==1&&!g_melee_cl_wait&&g_melee_clicks==c1+1);
-     fb[0]=0;fp_melee_state_append(fb,sizeof(fb));
+     fb[0]=0;fp_melee_state_append(fb,sizeof(fb),cc);
      assert(strstr(fb," cl_fired=1 ")&&strstr(fb," cl_timeouts=1")&&strstr(fb," last_reject=")&&strstr(fb," rej_stumble="));}
     /* unfinished_starts (diagnostic): the previous technique (not a block, not cut by a stumble) flagged unfinished */
     {reset_fight();tick(0,0,.02f);put_ptr(cc,CC_TECH,techa);techa[TECH_IS_BLOCK]=0;cc[CC_TECH_DONE]=0;
@@ -243,7 +252,7 @@ int main(void){
      cc[CC_WANTS_BLOCK]=1;melee_attack_state_hook(cc);assert(astate_saw_wants==0&&g_melee_cancel_refused==r0+1);   /* once per swing */
      g_melee_rmb=1;cc[CC_WANTS_BLOCK]=1;melee_attack_state_hook(cc);assert(astate_saw_wants==1&&cc[CC_WANTS_BLOCK]==1);   /* RMB: native cancel into block */
      g_melee_rmb=0;ecc[0x120]=1;melee_attack_state_hook(ecc);assert(astate_saw_wants==1&&ecc[0x120]==1);   /* other fighters untouched */
-     cc[CC_WANTS_BLOCK]=0;ecc[0x120]=0;astate_calls=0;char fb2[2048];fp_melee_state_append(fb2,sizeof(fb2));
+     cc[CC_WANTS_BLOCK]=0;ecc[0x120]=0;astate_calls=0;char fb2[2048];fp_melee_state_append(fb2,sizeof(fb2),cc);
      assert(strstr(fb2," cancel_refused="));g_melee_owned_cc=own;g_melee_rmb=rmb;}
     /* checkForNeedBlock refused for the owned fighter while RMB is up (swing abort into a refused block, batch 17) */
     {void *own=g_melee_owned_cc;int rmb=g_melee_rmb;g_melee_owned_cc=cc;g_melee_rmb=0;g_melee_abort_noted=0;unsigned a0=g_melee_abort_refused;
@@ -253,7 +262,7 @@ int main(void){
      g_melee_rmb=1;assert(melee_need_block_hook(cc,.5f,.5f)==1);                                 /* RMB: native check */
      g_melee_rmb=0;assert(melee_need_block_hook(ecc,.5f,.5f)==1);                                /* other fighters untouched */
      memcpy(cc+0x228,&zero,4);check_block_ok=0;put_int(CC_STATE,MELEE_DECISION);
-     char fb3[2048];fp_melee_state_append(fb3,sizeof(fb3));assert(strstr(fb3," abort_refused="));
+     char fb3[2048];fp_melee_state_append(fb3,sizeof(fb3),cc);assert(strstr(fb3," abort_refused="));
      g_melee_owned_cc=own;g_melee_rmb=rmb;}
     /* ranged path / no combat releases */
     fp_melee_release();assert(!g_melee_owned_cc&&!g_melee_owned_mv);approach(mv);assert(approach_calls==4);
