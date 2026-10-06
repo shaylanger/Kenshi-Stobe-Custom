@@ -1118,6 +1118,8 @@ static oldnode_getinitpos_t g_oldnode_getinitpos;
 static oldnode_getparent_t  g_oldnode_getparent;
 typedef void (*oldnode_setpos_t)(void *node, const Vec3 *p);
 static oldnode_setpos_t     g_oldnode_setpos;
+typedef const Vec3 *(*oldnode_getpos_t)(void *node);  /* getPosition (LOCAL); fp-eye-drift diag */
+static oldnode_getpos_t     g_oldnode_getpos;
 typedef const Vec3 *(*oldnode_getdscale_t)(void *node);
 static oldnode_getdscale_t  g_oldnode_getdscale;
 /* head-hide (hiddenMask shader constant) */
@@ -1161,6 +1163,10 @@ static unsigned char g_bone_rootspine[32];      /* "Bip01 Spine": facing ref (no
 static int g_spine_ready;                       /* spine-bend exports + names resolved */
 static int g_spine_manual;                      /* bones set manually-controlled (once) */
 static Quat g_spine_rest[3];                    /* captured reference pose the aim pivots around */
+/* fp-eye-drift: manual bones are not reset by the animation, but its tracks still
+ * translate() them each frame -> position must be re-pinned every frame too. */
+static Vec3 g_spine_rest_pos[3]; static int g_spine_rest_pos_ok[3];
+static float g_spine_pos_fix; static unsigned g_spine_pos_fixes;
 static Vec3 g_fwd_local; static int g_have_fwd; /* body forward in root-local frame (calibrated) */
 /* --- ranged free-aim (RangedCombatClass::animationUpdate hook) --- */
 #define RC_AIMPOS 0x38                          /* RangedCombatClass::currentAimPos (Vector3) */
@@ -1935,6 +1941,11 @@ static void bend_spine(void *pc, float pitch)
         for (int i = 0; i < NB; i++) {
             const Quat *lq = g_oldnode_getori(bones[i]);
             g_spine_rest[i] = readable((void *)lq, 16) ? *lq : (Quat){ 1, 0, 0, 0 };
+            {   /* fp-eye-drift: bind position = what the vanilla reset would restore */
+                const Vec3 *ip = g_oldnode_getinitpos ? g_oldnode_getinitpos(bones[i]) : NULL;
+                g_spine_rest_pos_ok[i] = readable((void *)ip, 12);
+                if (g_spine_rest_pos_ok[i]) g_spine_rest_pos[i] = *ip;
+            }
             g_oldbone_setmanual(bones[i], 1);
         }
         g_spine_manual = 1;
@@ -1996,6 +2007,17 @@ static void bend_spine(void *pc, float pitch)
         Quat d  = quat_norm(quat_mul(dpitch, droll));
         Quat nq = quat_norm(quat_mul(g_spine_rest[i], d)); /* rest * (pitch + roll correct) */
         g_oldnode_setori(bones[i], &nq);
+        if (g_oldnode_setpos && g_spine_rest_pos_ok[i]) {   /* fp-eye-drift */
+            const Vec3 *cp = g_oldnode_getpos ? g_oldnode_getpos(bones[i]) : NULL;
+            if (readable((void *)cp, 12)) {
+                float dx = cp->x - g_spine_rest_pos[i].x, dy = cp->y - g_spine_rest_pos[i].y,
+                      dz = cp->z - g_spine_rest_pos[i].z;
+                float dl = sqrtf(dx*dx + dy*dy + dz*dz);
+                if (i == 0) g_spine_pos_fix = dl; else if (dl > g_spine_pos_fix) g_spine_pos_fix = dl;
+                if (dl > 1e-4f) g_spine_pos_fixes++;
+            }
+            g_oldnode_setpos(bones[i], &g_spine_rest_pos[i]);
+        }
         g_oldnode_needupd(bones[i], 1);
         if (logit)
             logline("[spine] %s a=%.2f rollg=%.2f Al=(%.2f,%.2f,%.2f) set=(%.3f,%.3f,%.3f,%.3f)",
@@ -7884,6 +7906,8 @@ __declspec(dllexport) void dllStartPlugin(void)
         g_oldnode_getinitpos = (oldnode_getinitpos_t)GetProcAddress(ogre, OGRE_OLDNODE_GETINITPOS_SYM);
         g_oldnode_getparent  = (oldnode_getparent_t)GetProcAddress(ogre, OGRE_OLDNODE_GETPARENT_SYM);
         g_oldnode_setpos     = (oldnode_setpos_t)GetProcAddress(ogre, OGRE_OLDNODE_SETPOS_SYM);
+        g_oldnode_getpos     = (oldnode_getpos_t)GetProcAddress(ogre,   /* fp-eye-drift */
+                                   "?getPosition@OldNode@Ogre@@UEBAAEBVVector3@2@XZ");
         g_oldnode_getdscale  = (oldnode_getdscale_t)GetProcAddress(ogre, OGRE_OLDNODE_GETDSCALE_SYM);
         g_oldnode_setscale = (oldnode_setscale_t)GetProcAddress(ogre, OGRE_OLDNODE_SETSCALE_SYM);
         g_mat_gettech    = (mat_gettech_t)GetProcAddress(ogre, OGRE_MAT_GETTECH_SYM);

@@ -145,5 +145,10 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         snprintf(b+n,sizeof(b)-n," cached_distance=%.3f fresh_valid=%d written_distance=%.3f anchor_x=%.3f anchor_y=%.3f anchor_z=%.3f",
             cached_distance,have_fresh,written_distance,g_view_anchor.x-(g_have_t?g_tx:0),g_view_anchor.y,g_view_anchor.z-(g_have_t?g_tz:0));
     }
+    {   /* fp-eye-drift diagnostics */
+        size_t n=strlen(b);
+        snprintf(b+n,sizeof(b)-n," head_above=%.3f spine_manual=%d spine_pos_fix=%.4f spine_pos_fixes=%u",
+            g_head_above,g_spine_manual,g_spine_pos_fix,g_spine_pos_fixes);
+    }
     r->append(r,b); return KAH_OK;
 }
