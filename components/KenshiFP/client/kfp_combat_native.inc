@@ -170,9 +170,7 @@ static int combat_truce_pending(void) {
     /* Conservative interim policy: with any active protected NPC, reject new
      * manual shots everywhere, including potential spread into that NPC.
      * Scoped first-victim truce routing replaces this only after validation. */
-    for(int i=0;i<STOBE_FIGHT_TRUCE_SLOTS;++i)
-        if(g_stobe_fight_truce[i].serial)return 1;
-    return 0;
+    return stobe_fight_truce_active();
 }
 static void combat_release(void) {
     void *rc=g_combat_rc,*pc=g_combat_pc;
