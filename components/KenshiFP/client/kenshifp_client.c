@@ -1205,6 +1205,9 @@ static void guard_arm(void)
 }
 static int g_head_hidden;               /* our head-hide state (>1x fast-forward) */
 static void *g_head_hidden_char;        /* the exact character whose head we hid */
+static void *g_gear_hid[8];   /* the mesh entities WE hid, so the restore is exact and we
+                               * never re-show something the game had hidden on its own */
+static int   g_gear_n;
 static get_bone_world_t g_get_bone_world;   /* Character::getBoneWorldPosition */
 static unsigned char g_head_bone[32];   /* MSVC std::string "Bip01 Head" (SSO) */
 static int g_ogre_ready;
@@ -5611,9 +5614,7 @@ static int gd_int_field(void *gd, const char *key, int *out)
     return 0;
 }
 
-static void *g_gear_hid[8];   /* the mesh entities WE hid, so the restore is exact and we
-                               * never re-show something the game had hidden on its own */
-static int   g_gear_n;
+/* g_gear_hid / g_gear_n live next to g_head_hidden (fp_head_forget_world in kfp_control.inc) */
 static int   g_gear_dead;     /* headgear hide self-disabled after a fault */
 static int   g_gear_diag;     /* capped count of re-show diagnostic log lines */
 
@@ -5848,7 +5849,10 @@ static void fp_head_visibility(void *gw)
     int want = g_fp_mode && fp_view_is_eye() && pc && (g_cfg_hide_head || speed > 1.05f);
     if (want) {
         if (g_head_hidden && g_head_hidden_char && g_head_hidden_char != pc) {
-            set_head_disabled(g_head_hidden_char, 0);   /* char switched: restore the old head */
+            /* char switched: restore the old head -- only if that character is still a
+             * live squad member (a freed one must never reach updateHiddenParts) */
+            if (fp_char_in_squad(gw, g_head_hidden_char)) set_head_disabled(g_head_hidden_char, 0);
+            else fp_head_forget_world();
             g_head_hidden = 0;
         }
         /* Apply ONLY on transition -- manuallyControlled persists our scale, and
@@ -5864,7 +5868,9 @@ static void fp_head_visibility(void *gw)
          * worn head gear back immediately instead of stranding it invisible until FP exit. */
         if (!g_cfg_hide_headgear && g_gear_n > 0) headgear_apply(g_player_app, 0, 0);
     } else if (g_head_hidden) {
-        set_head_disabled(g_head_hidden_char ? g_head_hidden_char : pc, 0);
+        void *hc = g_head_hidden_char ? g_head_hidden_char : pc;
+        if (fp_char_in_squad(gw, hc)) set_head_disabled(hc, 0);
+        else fp_head_forget_world();   /* gone (load/unload): nothing live to restore */
         g_head_hidden = 0; g_head_hidden_char = NULL;
     }
 }

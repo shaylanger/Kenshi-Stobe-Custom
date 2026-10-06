@@ -56,9 +56,32 @@ static int fp_control_take_selected(void *gw) {
                (void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) return 0;
     return fp_control_pin(pc);
 }
+/* 1 = pc is one of gw's live player characters. Pointer compare only: pc itself is
+ * never dereferenced, so a stale (freed) character pointer is safe to ask about. */
+static int fp_char_in_squad(void *gw,void *pc) {
+    if (!pc || !readable((void *)((uintptr_t)gw+GW_PLAYER),8)) return 0;
+    void *pi=*(void **)((uintptr_t)gw+GW_PLAYER);
+    if (!readable(pi,PI_PLAYERCHARS+LEK_STUFF+8)) return 0;
+    uint32_t count=*(uint32_t *)((uintptr_t)pi+PI_PLAYERCHARS+LEK_COUNT);
+    void **chars=*(void ***)((uintptr_t)pi+PI_PLAYERCHARS+LEK_STUFF);
+    if (!count || count>4096 || !readable(chars,(size_t)count*8)) return 0;
+    for (uint32_t i=0;i<count;++i) if (chars[i]==pc) return 1;
+    return 0;
+}
+/* World teardown (load / quit to menu): the old characters, their appearances and
+ * worn-item entities are being freed. Drop every head-hide pointer WITHOUT touching
+ * it. 4080 b27b crash (2026-10-06): an in-world reload with the head hidden made the
+ * restore path run the game's updateHiddenParts on the torn-down character's
+ * appearance 2.4 s into the load ("head-mask FAULTED"); Kenshi died in the D3D11
+ * render ~40 s later. The new world rebuilds every appearance, so nothing to restore. */
+static void fp_head_forget_world(void) {
+    g_head_hidden=0; g_head_hidden_char=NULL; g_player_app=NULL;
+    g_head_params=NULL; g_head_params_mat=NULL; g_gear_n=0;
+}
 static void fp_control_tick(void *gw) {
     void *selected=first_player_char(gw);
     if (!selected) {
+        fp_head_forget_world();   /* before anything can "restore" a freed head */
         fp_control_release_actor(g_fp_control_actor);
         g_fp_mode=0; g_fp_world_seen=0; g_fp_control_pinned=0; g_fp_control_actor=NULL;
         return;

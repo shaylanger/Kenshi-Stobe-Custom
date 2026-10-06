@@ -40,6 +40,7 @@ static int g_was_moving,g_was_direct,g_is_down,g_ui_moveblock;
 static volatile LONG g_dm_active;
 static float g_move_speed;
 static void fp_control_release_actor(void *pc){(void)pc;++releases;}
+static int g_head_hidden,g_gear_n;static void *g_head_hidden_char,*g_player_app,*g_head_params,*g_head_params_mat;
 #include "../client/kfp_control.inc"
 #include "../client/kfp_view.h"
 static void put_ptr(unsigned char *p,size_t off,void *v){memcpy(p+off,&v,sizeof(v));}
@@ -63,7 +64,11 @@ int main(void){
     key=0;selected=a;memcpy(pi+PI_SELECTED_CHAR+HAND_IDS,hc,20);
     assert(!fp_control_take_selected(world));assert(fp_controlled_char(world)==a); /* inspected outsider is never controlled */
     select_actor(b);chars[0]=b;assert(!fp_controlled_char(world));fp_control_tick(world);assert(!g_fp_mode);
+    /* b27b crash: world teardown drops head-hide pointers without touching them */
+    assert(fp_char_in_squad(world,b)&&!fp_char_in_squad(world,a)&&!fp_char_in_squad(world,outsider)&&!fp_char_in_squad(world,NULL));
+    g_head_hidden=1;g_head_hidden_char=b;g_player_app=b;g_head_params=b;g_head_params_mat=b;g_gear_n=2;
     selected=NULL;fp_control_tick(world);assert(!g_fp_mode && !g_fp_control_pinned);
+    assert(!g_head_hidden&&!g_head_hidden_char&&!g_player_app&&!g_head_params&&!g_head_params_mat&&!g_gear_n);
     chars[0]=a;select_actor(a);fp_control_tick(world);assert(g_fp_mode && fp_controlled_char(world)==a);
     KAH_Reply r={NULL,append};const char *argv[]={"fp_control","state"};reply[0]=0;
     assert(kah_fp_control("test",2,argv,&r,NULL)==KAH_OK);assert(strstr(reply,"direct=1"));
@@ -87,5 +92,5 @@ int main(void){
     u.applied=d;u.applied=kfp_view_next(&u,1.0f/60.0f);assert(fabsf(u.applied-x)<.0001f);
     v.applied=.1f;assert(kfp_view_is_eye(&v));v.applied=2;assert(!kfp_view_is_eye(&v));
     v.target=NAN;assert(kfp_view_next(&v,.01f)==0);
-    puts("RESULT B09 PASS control pinning/inspection/explicit transfer/fallback/unload/reload and view wheel bounds/frame-rate smoothing");
+    puts("RESULT B09 PASS control pinning/inspection/explicit transfer/fallback/unload/reload, head-hide forget on world teardown and view wheel bounds/frame-rate smoothing");
 }
