@@ -1,18 +1,53 @@
-# Current checkpoint: m49 (2026-10-06)
-Coordinator handoff: newest `coordinator-handoff-m<N>.md` in the temp folder (copy in `handoff/`). Run logs:
-`archive/test-run-2026-10-05-m41.md` (m41-m48), `archive/test-run-2026-10-06-m49.md` (m49). Open rows: `MASTER_TEST_PLAN.md`.
-- **Builds:** 5090 Stobe 7A8997FD (KenshiFP decoupling + 16-fb Hinge fix), PG BAFB8C31 (Normal), KenshiFP FE26573F (decoupled +
-  eye-drift fix), harness 2995EE5E; 4080 PG BAFB8C31, KenshiFP FE26573F, harness 2995EE5E.
-- **KenshiFP decoupling (m49, done):** goal/action logic now lives in Stobe (stobe_goals.log); DC1-DC7 PASS (DC1-DC5 with
-  the KenshiFP DLL absent), 89, 14-A3, generic-fb, 16-fb 55/55, A8 PASS.
-- **FP combat (m49):** R07, R08 (8/9, arm-occlusion + pose check), R09, R13, R11, FP-EYE PASS both rigs; M00-M07 PASS (4080);
-  S04 PASS. Open: R10, R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08/M09, Gate 3, S01/S03/S05;
-  manual combat still OFF by default.
-- **PG:** all automated rows PASS; D1-D3, D5-D8 done; open D4 athletics feel + tooltip/feel rows (Shay).
-- **Done 2026-10-06:** 4080 kah-fp* save copies and Avarek/Beaks DB rows deleted
-  (approved, permission checker blocked) so the Full-Base hand-over/fetch regression row can run.
-- **Fixture added:** `C:\KenshiTestFixtures\FP-crossbow` (from kah-fpxbow).
-- **Graphics mods may still be OFF:** `bash C:/KenshiModding/tools/automation/gfx-mods.sh on` before playing.
+# Current state (m49, 2026-10-06)
+This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
+starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
+Run logs: `archive/test-run-2026-10-05-m41.md` (m41-m48), `archive/test-run-2026-10-06-m49.md` (m49). Open rows: `MASTER_TEST_PLAN.md`.
+
+## Right now
+- Nothing running. Kenshi closed on both rigs, no batches, no subagents. Graphics mods ON on the 5090 (Shay can play).
+- Nothing is waiting on Shay.
+
+## The mods and what each one owns (after the m49 decoupling)
+- **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
+  relationships (REL), NPC info panel, and since m49 ALL goal/action logic: work planner (production at benches), task goals
+  (fetch, buy, guard, stock, repair, give item, bodyguard...), goal lifecycle + status/control files, goal panel UI, native
+  actions (lookup, orders, movement, equip). Log `stobe_goals.log`. Works with KenshiFP absent (DC1-DC5).
+- **KenshiFP.dll** (`/root/KenshiFP`, snapshot `components/KenshiFP`): first-person mode only: camera/head/eye, mouse and
+  cursor, FP targeting, manual FP combat (ranged + melee adapters, OFF by default), FP harness commands.
+- **Profession Gear (PG)** (own repo `Kenshi-Profession-Gear-Progression`): per-item affixes and profession gear bonuses.
+- **Automation Harness** (own repo `Kenshi-Automation-Harness`): in-game test commands (`stobe-auto`).
+- **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
+
+## Builds installed
+- 5090: Stobe 7A8997FD, KenshiFP FE26573F, PG BAFB8C31 (Normal), harness 2995EE5E; server live `stobe` 0295a3a.
+- 4080: KenshiFP FE26573F, PG BAFB8C31, harness 2995EE5E (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
+
+## Status per mod
+- **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
+  confirmation; E/F: design + next big feature, item 63 = pick the next big feature with Shay).
+- **KenshiFP decoupling:** done m49 (Stobe 9d99f36, KenshiFP f94b1d5); DC1-DC7, 89, 14-A3, generic-fb, 16-fb 55/55, A8 PASS.
+- **FP combat:** on FE26573F R07, R08 (8/9), R09, R11, R13, FP-EYE PASS both rigs, S01 (= DC1-DC5). Passed on older builds,
+  to reconfirm in one batch per rig: R10, R12 (UI/KO/SWAP/SPEED/LOAD), R14-R16, M08, S03. Never passed: M09, S05, C01-C05,
+  Gate 3 balance acceptance. Manual combat stays OFF by default. Details: `components/KenshiFP/docs/COMBAT_TEST_PLAN.md`.
+- **PG:** all automated rows PASS; D1-D3, D5-D8 done; open D4 athletics feel + tooltip/feel rows (Shay, MASTER section 2).
+  `TEST_PLAN.md` there is the regression spec (scenarios cite its row IDs: never delete rows); status lives in `INGAME_STATUS.md`.
+
+## Next work (in order)
+1. FP combat reconfirm batch on FE26573F (both rigs, wrappers in `components/KenshiFP/tests/ingame/`, fixture FP-crossbow).
+2. FP combat open rows: M09, S05, C01-C05; define Gate 3 tolerances.
+3. STOBE section D in-game confirmations; then item 63 (next big feature) with Shay.
+
+## How to run things (recipes that used to live only in handoffs)
+- Detached 5090 batch: `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s <<'EOF'` +
+  `setsid nohup bash /mnt/c/KenshiModding/tools/automation/run-batch.sh ... >start.log 2>&1 </dev/null &` + `sleep 5; pgrep -f run-batch.sh`
+  (the `bash -c '... &'` form died silently). Health: `batch-health.sh <out>` (CLAUDE.md "Batch the game runs").
+- 4080: ssh default shell is cmd; bash = `"C:\Program Files\Git\bin\bash.exe" -l`. FP wrappers live in `C:\KAH\fp`, outputs
+  `C:\KenshiTestRuns\fp-4080-<N>`. Install KenshiFP: copy the DLL to `C:\KAH\KenshiFP.dll`, run `C:\KAH\inst.ps1` (harness:
+  `C:\KAH\insth.ps1`). Subagents can't ssh the 4080: copy logs to `C:\KenshiTestRuns\fp-4080-<N>-logs\` for them.
+- Never `mv` a `.new` over a wrapper a running 5090 batch reads straight from /mnt/c (drvfs kills it): run batches from copies.
+- KenshiFP free-cursor (Left Alt) blocks `fp_camera look`; `fp-ui-guard.sh` clears it (`stobe-auto fp_state free off`).
+- A physical Right Alt toggles FP mode (only with Kenshi focused); don't touch the 5090 keyboard during FP batches.
+- Git Bash clock is 1 h behind the WSL/batch clock. Git Bash `/tmp` is not WSL `/tmp`.
 
 Goal, batching, token-light test rules: CLAUDE.md "Start here" (Shay's standing orders, 2026-10-03/04). The m18-m40
 checkpoints, to-do list and session notes were removed 2026-10-06 (all items done or tracked in the plans; history in

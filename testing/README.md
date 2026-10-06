@@ -46,7 +46,7 @@ Fixtures and what's in them: `C:\KenshiTestFixtures\FIXTURES.md`.
 ## Reporting to the coordinator
 
 Subagents: return a short report (what changed, commits, hashes, scenario files, open questions).
-Keep repo context files (`ACTIVE_CONTEXT.md`, handoffs) current so a fresh agent can resume.
+Keep repo context files current (`testing/HANDOFF.md` "Current state", component `ACTIVE_CONTEXT.md`) so a fresh agent can resume; no separate handoff files.
 Commit identity in every repo: `shaylanger <shaylanger2@gmail.com>` (check `git config user.email`;
 use `git -c user.email=shaylanger2@gmail.com -c user.name=shaylanger commit` if it's wrong).
 Push right after each commit. Never commit logs, DLLs, saves or runtime state.

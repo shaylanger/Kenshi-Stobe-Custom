@@ -1,11 +1,11 @@
 # FP combat context (merged, worked directly on main)
 
-Updated 2026-10-06 (m48). fp-combat was merged into main (938d2e2); the branch/candidate/request workflow below the
+Updated 2026-10-06 (m49). Overall state of every mod: `testing/HANDOFF.md` "Current state". fp-combat was merged into main (938d2e2); the branch/candidate/request workflow below the
 merge is retired. One session does FP combat as coordinator + developer: it edits `/root/KenshiFP` and
 `components/KenshiFP` directly, builds, installs, launches Kenshi (lock owner `fpcombat` while it holds the game) and
 commits/pushes one fix per commit. The old "coordinator owns X / combat agent must not" rules are obsolete.
 Order of work: camera/control (done), ranged and melee adapters in main, manual combat OFF by default; open rows in
-`components/KenshiFP/docs/COMBAT_TEST_PLAN.md` (R10, 5090 R11 rerun pending (b10 invalid: raid; raid guard 16dc0b3, rerun fp-5090-11), R12 remainder, M08/M09, Gate 3, S01/S03/S05).
+`components/KenshiFP/docs/COMBAT_TEST_PLAN.md` ("Current state": reconfirm R10, R12, R14-R16, M08, S03 on FE26573F; never passed M09, S05, C01-C05, Gate 3 acceptance).
 
 
 ## 1. Source and build
@@ -15,9 +15,13 @@ Order of work: camera/control (done), ranged and melee adapters in main, manual 
   `tools/automation/install-dll.ps1 KenshiFP` (Kenshi closed). Builds aren't byte-reproducible: compare source, not hashes.
 - The live tree's own git (upstream `linguine2552/KenshiFP` v0.6.1) is not the history. Baseline tag `kfp-combat-baseline`;
   the old `fp-combat` branch/worktree `kfp-combat-wt` is merged (938d2e2) and no longer used.
-- `KENSHIFP_DECOUPLING_REFACTOR_HANDOFF.md` is investigation only.
+- Decoupling done (m49, KenshiFP f94b1d5 / Stobe 9d99f36): KenshiFP is FP-only. All goal/action logic (work planner, task goals,
+  goal panel, action/unequip requests, interrupts) lives in Stobe. The only link left: KenshiFP asks Stobe for the fight
+  truce through the `StobeFightTruceActive` export (`stobe_fight_truce_active`, kenshifp_client.c ~1690; works without Stobe).
+  Leftovers: `client/stobe_*.inc` are no longer built into the DLL (build.sh compiles only kenshifp_client.c); only the old
+  standalone test sources (`kenshifp_*_test.c`, `kenshifp_taskgoal_*.c`, `kfp_goal_engine.c`) still include them.
 
-## 2. Shared interfaces (`client/kenshifp_client.c`, baseline line numbers; still binding)
+## 2. Shared interfaces (`client/kenshifp_client.c`, pre-decoupling baseline line numbers: the STOBE rows are gone since m49)
 | Area | Owner | Code | Rule |
 |---|---|---|---|
 | Actor selection | shared, frozen | `first_player_char(gw)` (1474; v1 = squad leader index 0); `g_player_pc` (1164, per-frame cache for hooks); `stobe_find_character_by_serial` (1949); `stobe_is_player_squad_char` (2823) | STOBE goals, voice and labels use these. Combat may add its own target/actor helpers but must not change the meaning of `first_player_char` or `g_player_pc`. Propose changes here first. |
@@ -28,9 +32,9 @@ Order of work: camera/control (done), ranged and melee adapters in main, manual 
 | STOBE communication | **coordinator**, frozen | Called from `camera_lock` (3150-3161): `stobe_voice_modifier_tick`, `stobe_unequip_request_tick`, `stobe_general_action_request_tick`, `stobe_fight_truce_tick` (2794: NPC truce/disengage after STOBE deals), `stobe_work_goal_tick`, `stobe_task_goal_tick`, `kah_bridge_tick`. Files in `RE_Kenshi\mods\Stobe\`: `stobe_action.req`, `stobe_work_goal.{req,status,control}`, `stobe_task_goal.{req,status,control}`, `stobe_goal_report.req`, `voice_action.flag`, `voice_command.flag`. Code: `stobe_work_planner.inc`, `stobe_task_goals.inc`, lines ~1650-3130 of the client. | Don't change these. Combat must not start fights against NPCs under an active STOBE truce. Check `stobe_fight_truce` state before forcing attack orders and ask the coordinator for an accessor if one is needed. |
 | Hook install | shared | `install_hook` (8970), `hook_watchdog` (8113), `rva_sigs.h` | New hooks: add a signature in `rva_sigs.h` (signature scan, no fixed RVAs) and log install success/failure once. |
 
-## 3. Installed builds (2026-10-06)
-- KenshiFP `4FD22DEF` on both rigs (main ac56752: wound pick diagnostics on top of 39F58D2D manual melee adapter, spatial
-  wounds), harness `2995EE5E`; 5090 also Stobe `DAF1390F`, ProfessionGear `BAFB8C31`.
+## 3. Installed builds (2026-10-06, m49)
+- KenshiFP `FE26573F` on both rigs (decoupled + eye-drift fix), harness `2995EE5E`; 5090 also Stobe `7A8997FD`,
+  ProfessionGear `BAFB8C31`.
 - Harness notes: `rangedtest`/`rangedinfo` (KAH 26), `attack` gives crossbow users `RANGED_ATTACK_FOCUSED_UNPROVOKED`,
   `combatmode <npc> [block|ranged|taunt|hold|passive on|off]` (orders-panel stance; auto-home Shay has BLOCK=1 PASSIVE=1,
   which never swings). `drop <npc> <item> all` leaves one ground item per unit: `pickup` takes one per call (loop it).
@@ -42,9 +46,7 @@ Order of work: camera/control (done), ranged and melee adapters in main, manual 
 - Wrappers: `components/KenshiFP/tests/ingame/fp-manual-*.sh` (ranged, anatomy, limbs, melee skill/life, transitions,
   soak with native-AI control; RESULT lines). Offline: `python3 /root/KenshiFP/tests/run_offline.py`.
 - Results: `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt` (2026-10-05), 2026-10-06 batches 4080 b18-b21 and
-  5090 `C:\KenshiTestRuns\fp-5090-*` (run log `archive/test-run-2026-10-05-m41.md`).
-- Open admin: 4080 save copies `kah-fp-*` await deletion by Shay (permission checker); Full-Base hand-over/fetch regression
-  row waits on Shay deleting the Avarek/Beaks Stobe DB rows (approved, permission checker blocked).
+  5090 `C:\KenshiTestRuns\fp-5090-*` (run logs `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-10-06-m49.md`).
 - Findings: CombatClass+0x290 pointer is always 0; use `target_h` (+0x298) / `focused_h` (+0x2C8). Spatial aim frame
   (B14-frame PASS on re-read; game units are decimetres): eye anchor = `where` y + 19 dm (1.9 m eye); the traced 17 dm
   column is the body capsule. Aim rays hit the target's handle (hits-2), so R08/R10 aren't blocked by the frame.

@@ -36,7 +36,6 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 
 | # | What | Notes |
 |---|---|---|
-| 62 | Decouple our logic from KenshiFP | We started by tacking our features onto KenshiFP, and a lot now lives there that shouldn't (e.g. work planner `client/stobe_work_planner.inc`, task goals `client/stobe_task_goals.inc` + goal panel, GIVE_ITEM/BODYGUARD handling). Goal: KenshiFP holds only FP-mode logic; the rest moves into Stobe or a new mod, whichever fits each piece |
 | 63 | Pick the next big feature | Go through the big features list (`KENSHI_BIG_MOD_IDEAS_CONTEXT.md`, `PROFESSION_GEAR_PROGRESSION_MOD_CONTEXT.md`) and start on the next big item |
 
 ---

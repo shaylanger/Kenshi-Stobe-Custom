@@ -20,11 +20,11 @@ results labelled "-4080"). Never compare performance across machines.
 
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
-| Stobe.dll | `DAF1390F` (NPC info panel; verified 2026-10-05) | - |
-| KenshiFP.dll | `4FD22DEF` both rigs (main ac56752: manual ranged/melee adapter, spatial wounds, wound pick diagnostics; 2026-10-06) | - |
+| Stobe.dll | `7A8997FD` (goal/action logic moved in from KenshiFP + NPC info panel; 2026-10-06 m49) | - |
+| KenshiFP.dll | `FE26573F` both rigs (FP-only after the decoupling + eye-drift fix; 2026-10-06 m49) | - |
 | ProfessionGearProgression.dll | `BAFB8C31` (Normal; verified 2026-10-05) | - |
 | AutomationHarness.dll | `2995EE5E` (both rigs, 2026-10-06) | - |
-| Server (live) | `stobe` dcabbfd (A8 station destination 90a92e8, background-processor live-DB guard 27d411e, p7-05 lockpickable slave 619d7eb, Terrorism not theft dcabbfd) | - |
+| Server (live) | `stobe` 0295a3a (14-A3 "no promises" hedge fix; earlier: NPC panel player_view 2596ef2) | - |
 
 ## 1. Open automated rows
 
@@ -35,7 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| FP combat | open: R10, R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08, M09, Gate 3 (R14-R16), S01, S03, S05; manual combat still OFF by default | kah-fpxbow (fixture FP-crossbow), kah-fpcam | todo; PASS: P01, P02, C00, R01-R09, R13, S04, M00-M07 (4080), R11 + FP-EYE (both rigs, m49), R12 subset (run logs m41, m49); generic-fb hand-over/fetch PASS m49 |
+| FP combat | open: M09, S05, C01-C05 beyond C00, Gate 3 balance acceptance; reconfirm on FE26573F (passed on older builds): R10, R12 (UI/KO/SWAP/SPEED/LOAD), R14-R16, M08 (all 7), S03; manual combat still OFF by default | kah-fpxbow (fixture FP-crossbow), kah-fpcam | todo; PASS on FE26573F (m49): R07-R09, R11, R13, FP-EYE both rigs, S01 (= DC1-DC5); earlier builds: P01, P02, C00, R01-R06, S04, M00-M07 (4080) |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay

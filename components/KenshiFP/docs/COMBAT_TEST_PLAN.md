@@ -1,5 +1,5 @@
 # KenshiFP Player-Controlled Combat Test Plan
-Updated: 2026-10-06. Status: manual ranged/melee adapter in main (KenshiFP 4FD22DEF on both rigs, harness 2995EE5E), manual combat OFF by default. Passed rows are deleted (run log `archive/test-run-2026-10-05-m41.md`); the tables hold open rows only.
+Updated: 2026-10-06. Status: manual ranged/melee adapter in main (KenshiFP FE26573F on both rigs, FP-only since the m49 decoupling; harness 2995EE5E), manual combat OFF by default. Passed rows are deleted (run logs `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-10-06-m49.md`); the tables hold open rows only.
 Coordination: C:\KenshiModding\FP_COMBAT_COORDINATION_CONTEXT.md (received: m45 baseline).
 Design: KENSHI_BIG_MOD_IDEAS_CONTEXT.md section 24.
 Game-test owner retains installs, launches, fixture preparation and master test batches.
@@ -95,8 +95,9 @@ ADS alignment and reload readability; zoom/body/clipping; attack/block responsiv
 Keep these separate from automated mechanical results. No finite suite guarantees absence of all bugs.
 
 ## Current state
-PASS (evidence in `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-10-06-m49.md`, `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`): P01, P02, C00, B14/B14-frame, R01-R09 and R13 (both rigs again on the decoupled KenshiFP FE26573F, m49), R11 (both rigs), FP-EYE (`fp-eye-drift.sh`: the FP eye no longer rises while aiming; both rigs m49), S04 (both rigs; 5090 overshoot = native-AI baseline per S04-CTRL), M00-M07 (4080), R12 subset (pause, FP off, actor swap), S02 for ranged (P01 FP off/on A/B).
-Open: R10, R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08, M09, Gate 3 (R14-R16), S01, S03, S05, C01-C05 beyond the C00 numeric subset; manual combat stays OFF by default until these pass.
+PASS (evidence in `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-10-06-m49.md`, `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`): P01, P02, C00, B14/B14-frame, R01-R09 and R13 (both rigs again on the decoupled KenshiFP FE26573F, m49), R11 (both rigs), FP-EYE (`fp-eye-drift.sh`: the FP eye no longer rises while aiming; both rigs m49), S04 (both rigs; 5090 overshoot = native-AI baseline per S04-CTRL), M00-M07 (4080), R12 subset (pause, FP off, actor swap), S02 for ranged (P01 FP off/on A/B), S01 (= decoupling DC1-DC5: Stobe goals/actions work with the KenshiFP DLL absent, m49).
+Passed on older KenshiFP builds, reconfirm once on FE26573F (one batch per rig; evidence `archive/test-run-2026-10-06-m49.md` "Recovered passes"): R10 + R10-CTRL, R12-UI/KO/SWAP/SPEED/LOAD, R14, R15, R16, M08-UI/KO/LOAD/UNARMED/CROWD/ACTOR/LIMB, S03.
+Open (never passed): M09 (animation mods), S05 (release restoration), C01-C05 beyond the C00 numeric subset, Gate 3 balance acceptance (tolerances not defined yet); manual combat stays OFF by default until these pass.
 Method notes still valid: P01 needs a background `rangedtest <shooter> <target> shots 60 timeout 220 attack` to keep the native target; P02 needs `combatmode Shay block off passive off`; melee target = CombatClass+0x298 (swing target) / +0x2C8 (ordered target), +0x290 is always 0; game units are decimetres (eye = `where` y + 19 dm); R08 wrapper re-aims at the neck/chest bone, aims beside an arm that covers the aim point (else the aimed part or that arm counts) and retakes shots whose pose at the trigger no longer fits the aim; R09 blocker sits on the eye->target line ~13 dm up; R11-RACE uses Shek first (Hive drones bob 2.5 dm).
 
 ## Open notes (from the development log; history of finished candidates/requests: git log -p of this file)
