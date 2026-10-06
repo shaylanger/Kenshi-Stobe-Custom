@@ -95,7 +95,7 @@ shot() { local s0 b=() v i=0 p0 p1; S_HURT=(); S_OK=0; S_MOVE=0; S_ON=0; S_FP=1
   for v in "$@"; do A protect "$v" off >/dev/null; A health "$v" 100 >/dev/null; done; sleep 0.3
   for v in "$@"; do b+=("$(parts "$v")"); done
   ui_clear; inp 1 0 0; if ! { waitfor 8 shot_ready 1 || { ui_clear && inp 0 0 0 && sleep 0.4 && inp 1 0 0 && waitfor 8 shot_ready 1; }; }; then for v in "$@"; do A protect "$v" on >/dev/null; S_HURT+=(""); done; W1=$W0; return; fi
-  p0=$(pos "$AIM_NPC"); if [ -n "$AIM_COL" ] && [ -z "$AIM_PT" ]; then jit_aim; else reaim; fi; waitfor 3 shot_ready 1
+  p0=$(pos "$AIM_NPC"); if [ -n "$AIM_BONE" ]; then jit_bone; elif [ -n "$AIM_COL" ] && [ -z "$AIM_PT" ]; then jit_aim; else reaim; fi; waitfor 3 shot_ready 1
   AIMR=$(A fp_combat aim); echo "$AIMR" >> "$OUT/aims.txt"; S_ON=$(on_target "$AIM_NPC")
   inp 1 1 0; local end=$((SECONDS+3))
   while [ $SECONDS -lt $end ]; do [ "$(cs actual_shots)" != "$s0" ] && { S_OK=1; break; }; sleep 0.1; done
@@ -146,12 +146,28 @@ fresh_bones() { local prev="" a k; for k in 1 2 3 4 5 6; do
 # bonept_of <npc> <bone>: finds the npc under the crosshair at any height (standing or fallen: 12..0.8 dm above its
 # feet) and reads that bone's world point from `fp_combat aim` (bw_<bone>=x,y,z; "chest" = 70% pelvis->neck).
 # Sets BPT="x y z", BREPLY/AIMR = the reply; 1 when the ray never got on the npc or the bone is missing.
+# bpt <aim reply> <bone>: world point "x y z" of a bone in the reply (bw_<bone>), or a derived point: chest = 70%
+# pelvis->neck, skull = neck->head extended 1.8x (~skull centre; the reply has no victim headnub point), thigh_r = 70% rthigh->rcalf (lower thigh); "" when missing/nan
+mixpt() { awk -v p="$1" -v n="$2" -v f="$3" 'BEGIN{split(p,a,",");split(n,b,",");
+  if(a[3]==""||b[3]==""||p~/nan/||n~/nan/)exit;printf "%.2f %.2f %.2f",a[1]+f*(b[1]-a[1]),a[2]+f*(b[2]-a[2]),a[3]+f*(b[3]-a[3])}'; }
+bpt() { local q; case $2 in chest) q=$(mixpt "$(gf bw_pelvis "$1")" "$(gf bw_neck "$1")" 0.7);;
+    skull) q=$(mixpt "$(gf bw_neck "$1")" "$(gf bw_head "$1")" 1.8);; thigh_r) q=$(mixpt "$(gf bw_rthigh "$1")" "$(gf bw_rcalf "$1")" 0.7);;
+    *) q=$(gf "bw_$2" "$1" | tr , ' ');; esac; [[ "$q" == *nan* ]] && q=""; echo "$q"; }
 bonept_of() { local h r q; BPT=""; for h in 12 9 6 4 2.5 1.5 0.8; do ensure_fp || return 1
     aim_at "$1" "$h"; r=$(A fp_combat aim); BREPLY=$r; AIMR=$r; [ "$(on_target "$1")" = 1 ] || continue
-    if [ "$2" = chest ]; then q=$(awk -v p="$(gf bw_pelvis "$r")" -v n="$(gf bw_neck "$r")" 'BEGIN{split(p,a,",");split(n,b,",");
-        if(a[1]==""||b[1]==""||a[1]~/nan/||b[1]~/nan/)exit;printf "%.2f %.2f %.2f",a[1]+0.7*(b[1]-a[1]),a[2]+0.7*(b[2]-a[2]),a[3]+0.7*(b[3]-a[3])}')
-    else q=$(gf "bw_$2" "$r" | tr , ' '); fi
-    [ -n "$q" ] && [[ "$q" != *nan* ]] && { BPT=$q; return 0; }; done; return 1; }
+    q=$(bpt "$r" "$2")
+    [ -n "$q" ] && { BPT=$q; return 0; }; done; return 1; }
+# jit_bone: with AIM_BONE set (a bpt name), re-read that bone's world point right before the trigger and aim at it
+# (R11-RACE 5090 dec-5090-4: a Shek's skull/neck stood 3-5 dm sideways of its feet column, so feet+height aims passed
+# beside it: on_target=0 on all head/chest shots). From the crosshair as aimed when the ray is on the npc, else
+# bonept_of; JIT_H = the point's height over the npc's feet, "stale" = no fresh point (the previous aim is restored).
+AIM_BONE=""
+jit_bone() { local r q="" p0=$AIM_PT h0=$AIM_H; r=$(A fp_combat aim); AIMR=$r
+  [ "$(on_target "$AIM_NPC")" = 1 ] && q=$(bpt "$r" "$AIM_BONE")
+  [ -z "$q" ] && bonept_of "$AIM_NPC" "$AIM_BONE" && q=$BPT
+  if [ -n "$q" ]; then JIT_H=$(awk -v y="$(cut -d' ' -f2 <<<"$q")" -v f="$(pos "$AIM_NPC" | cut -d' ' -f2)" 'BEGIN{printf "%.2f", y-f}')
+    aim_pt "$AIM_NPC" $q
+  else JIT_H=stale; if [ -n "$p0" ]; then aim_pt "$AIM_NPC" $p0; else aim_at "$AIM_NPC" "$h0"; fi; fi; }
 # moving_now <npc>: 1 when the npc moves >= 1 dm within 0.5 s, polled up to 6 s (readiness: a really moving target)
 moving_now() { local a b end=$((SECONDS+6)); while [ $SECONDS -lt $end ]; do a=$(pos "$1"); sleep 0.5; b=$(pos "$1")
     awk -v d="$(dist2 "$a" "$b")" 'BEGIN{exit !(d>=1)}' && return 0; done; return 1; }
@@ -183,6 +199,8 @@ read -r sx sy sz <<<"$(pos "$SH")"
 A combatmode "$BL" block on >/dev/null
 A pin "$BL" off >/dev/null; A pin "$BL" at "$(awk -v x="$sx" 'BEGIN{print x+60}')" "$sy" "$sz" | grep -q '^pinned' || { row R11-MOVE "SETUP" "FAIL pin $BL at 60 dm refused"; SKIPMOVE=1; }
 hits=0; cons=0; moved=0; ontg=0; nofp=0; nomove=0; ev=""
+# NMOVE=0: skip R11-MOVE (rerun only RACE/LIMB after MOVE already passed on this build).
+[ "$NMOVE" = 0 ] && SKIPMOVE=1
 if [ -z "$SKIPMOVE" ]; then
   for k in $(seq 1 "$NMOVE"); do
     if [ $((k%2)) = 1 ]; then ph=run   # put 150 dm from Shay, sent at her: shot while she really runs (readiness below)
@@ -235,9 +253,12 @@ else
   BAIM=""; for _ in 1 2 3; do bones_of "$SPAWN" && AIMR=$BREPLY && [ "$(on_target "$SPAWN")" = 1 ] && break; BAIM=""; sleep 1; done
   read -r AH AC AL <<<"$BAIM"
   if [ -z "$AL" ]; then row R11-RACE SETUP "FAIL no bone reply with the ray on $SRACE $SPAWN fp_lost=$FPLOST (last aim: $(cut -c1-220 <<<"$BREPLY"))"
-  else hits=0; cons=0; good=0; total=0; fb=""; ev=""; ontg=0; nofp=0; tooclose=0; nup=0; REFH=
-    for spec in "head 1 0" "chest 2 1" "legs 3 5,6"; do read -r name col want <<<"$spec"
-      for _ in $(seq 1 "$NRACE"); do
+  else hits=0; cons=0; good=0; total=0; fb=""; ev=""; ontg=0; nofp=0; tooclose=0; nup=0; REFH=; shots=0; disturbed=0
+    # aim at bone points (bpt), not feet column + height: the body can stand 3-5 dm sideways of its feet (jit_bone)
+    for spec in "head 1 0 skull" "chest 2 1 chest" "legs 3 5,6 thigh_r"; do read -r name col want bone <<<"$spec"
+      # counted shots: the target upright at impact (impact head bone >= REFH-1.0); a crouched/staggered impact (5090
+      # fp-5090-11: head bone 16.6-17.0 vs 18.0 standing, aims placed for the upright pose) is retaken for aimed_part
+      valid=0; tries=0; while [ "$valid" -lt "$NRACE" ] && [ "$tries" -lt $((NRACE*3)) ]; do tries=$((tries+1))
         # aim height from the spawn's pose right now (settled), not the one read before the first shot
         # the spawn drifts inside its pin (4080 b16: 4 dm from the eye, a ray to the knee hits the capsule top): re-pin
         # at 30 dm when the eye is under 15 dm away; still too close = no shot, the row is a setup failure (too_close)
@@ -245,16 +266,23 @@ else
           [ "$(eye_dist "$SPAWN")" -lt 15 ] && { tooclose=$((tooclose+1)); ev+="$name:too_close=$(eye_dist "$SPAWN"); "; continue; }; fi
         upright "$SPAWN" || nup=$((nup+1))
         fresh_bones "$SPAWN" && ht=$(cut -d' ' -f"$col" <<<"$BAIM") || ht=$(cut -d' ' -f"$col" <<<"$AH $AC $AL")
-        aim_at "$SPAWN" "$ht"; AIM_COL=$col; JIT_H=""; shot "$SPAWN"; AIM_COL=""; judge "${S_HURT[0]}"; total=$((total+1))
+        q=""; [ -n "$BAIM" ] && q=$(bpt "$AIMR" "$bone")   # fresh_bones left AIMR = an on-target reply when BAIM is set
+        if [ -n "$q" ]; then aim_pt "$SPAWN" $q; else aim_at "$SPAWN" "$ht"; fi
+        AIM_BONE=$bone; JIT_H=""; shot "$SPAWN"; AIM_BONE=""; judge "${S_HURT[0]}"; shots=$((shots+1))
         [ "$S_FP" = 0 ] && nofp=$((nofp+1)); [ "$S_ON" = 1 ] && ontg=$((ontg+1))
-        for w in ${want//,/ }; do [[ ",${S_HURT[0]}" == *",$w("* ]] && { good=$((good+1)); break; }; done
         [ "$J" = hit ] && { hits=$((hits+1)); [ "$JC" = 1 ] && cons=$((cons+1)); [ "$JS" = 0 ] && fb+="$(gf last_fallback "$W1"),"; }
+        ih=$(gf last_bones "$W1" | cut -d, -f1)
+        if [ "$J" = hit ] && [ -n "$REFH" ] && awk -v h="$ih" -v r="$REFH" 'BEGIN{exit !(h!="nan" && h!="" && h<r-1.0)}'; then
+          disturbed=$((disturbed+1)); ev+="$name:DISTURBED(impact_head=$ih ref=$REFH; retaken) aim_h=$ht jit_h=${JIT_H:-none} on_target=$S_ON $JD; "; continue; fi
+        valid=$((valid+1)); total=$((total+1))
+        for w in ${want//,/ }; do [[ ",${S_HURT[0]}" == *",$w("* ]] && { good=$((good+1)); break; }; done
         ev+="$name:aim_h=$ht jit_h=${JIT_H:-none} on_target=$S_ON $JD; "; done; done
     echo "R11-RACE shots: $ev" >> "$LOG"
     F=$(cs fault)
-    sum="race=$SRACE (target race=${TGRACE:-?}) $SPAWN aim_h=$AH/$AC/$AL aim_on_target=$ontg/$total hits=$hits consistent=$cons aimed_part=$good/$total not_upright=$nup ref_head=$REFH fallbacks=${fb%,} fault=$F fp_lost=$FPLOST"
+    sum="race=$SRACE (target race=${TGRACE:-?}) $SPAWN aim_h=$AH/$AC/$AL aim_on_target=$ontg/$shots hits=$hits consistent=$cons aimed_part=$good/$total disturbed=$disturbed not_upright=$nup ref_head=$REFH fallbacks=${fb%,} fault=$F fp_lost=$FPLOST"
     if [ "$tooclose" -gt 0 ]; then row R11-RACE SETUP "FAIL reason=too_close: the spawn stayed under 15 dm from the eye on $tooclose shots: $sum"
     elif [ "$nofp" -gt 0 ]; then row R11-RACE SETUP "FAIL FP control lost and not re-taken on $nofp shots: $sum"
+    elif [ "$total" -lt $((3*NRACE)) ]; then row R11-RACE SETUP "FAIL reason=pose_unstable: only $total of $((3*NRACE)) shots had the target upright at impact: $sum"
     elif [ -n "$TGRACE" ] && [ "$SRACE" = "$TGRACE" ]; then row R11-RACE SETUP "FAIL spawned race equals the target's: $sum"
     elif [ "$hits" -ge 3 ] && [ "$cons" -ge $((hits-1)) ] && [ "$good" -ge $((total-2)) ] && [ -z "$fb" ] && [ "$F" = 0 ]; then row R11-RACE PASS "$sum"
     else row R11-RACE FAIL "$sum"; fi
@@ -285,7 +313,10 @@ if [ "$LS" = stump ] && [ -z "$NOLIMB" ]; then
   hits=0; p5=0; sp5=0; legl=0; leglf=0; forced=0; fbad=""; ev=""; ontg=0; nofp=0; kos=0
   if [ "$LIMBMODE" = bones ]; then SPECS=("lthigh -" "lcalf -" "lthigh -" "lcalf -" "lthigh -" "lfoot -" "chest -" "chest -" "chest - force" "chest - force")
   else SPECS=("$AL -1" "$AL 1" "$AL -1" "$AL 1" "$AL 0" "$AL 0" "$AC 0" "$AC 0" "$AC 0 force" "$AC 0 force"); fi
-  for spec in "${SPECS[@]}"; do read -r ht lat fc <<<"$spec"
+  for spec in "${SPECS[@]}"; do read -r ht lat fc <<<"$spec"; att=0
+    # a forced shot that misses (5090 fp-5090-11: both forced shots missed the crawling target, ray off her) is
+    # re-aimed at a fresh bone point and fired again, <= 3 tries; the extra misses are logged, not counted
+    while :; do att=$((att+1))
     A hp "$TG" | grep -q ' KO ' && { kos=$((kos+1)); A protect "$TG" on >/dev/null; sleep 2; }
     if [ "$LIMBMODE" = bones ]; then
       # live bone point; a bone that is gone with the leg (no point) falls back to the left thigh stump, then the pelvis
@@ -295,6 +326,9 @@ if [ "$LS" = stump ] && [ -z "$NOLIMB" ]; then
     if [ "$fc" = force ]; then FR=$(A fp_combat wound force leg_l)
       [ "$(gf wound_force "$FR")" = leg_l ] || { fbad+="arm:$(cut -c1-40 <<<"$FR"),"; fc=""; }; fi
     shot "$TG"; judge "${S_HURT[0]}"
+    if [ "$fc" = force ] && [ "$J" = miss ] && [ "$att" -lt 3 ]; then A fp_combat wound force none >/dev/null
+      [ "$S_FP" = 0 ] && nofp=$((nofp+1)); ev+="h=$ht force retry$att(miss on_target=$S_ON); "; continue; fi
+    break; done
     if [ "$fc" = force ]; then forced=$((forced+1)); FR=$(A fp_combat wound force none)
       [ "$J" = hit ] && [ "$(gf last_src "$W1")" != forced ] && fbad+="src=$(gf last_src "$W1"),"
       [ "$J" = hit ] && [ "$JW" = 1 ] && [ "$(gf last_group "$W1")" = leg_l ] && leglf=$((leglf+1)); fi
