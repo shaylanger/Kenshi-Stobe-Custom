@@ -30,7 +30,7 @@
 # Usage: fp-control.sh [player] [mate] [target] [outdir]. Env: MOVE_MIN (10), STILL_MAX (3), INVALID_FACTION (Drifters),
 # INTERIOR, STAIRS. Leaves the fixture changed (save kah-fp-c05 written, Skaera KO, player moved): reload it after.
 SH=${1:-Axima}; MT=${2:-Malzin}; TG=${3:-Skaera}; OUT=${4:-/tmp/fp-control}
-MOVE_MIN=${MOVE_MIN:-10}; STILL_MAX=${STILL_MAX:-3}; INVALID_FACTION=${INVALID_FACTION:-Drifters}
+MOVE_MIN=${MOVE_MIN:-10}; STILL_MAX=${STILL_MAX:-3}; STALL_MS=${STALL_MS:-250}; INVALID_FACTION=${INVALID_FACTION:-Drifters}
 INTERIOR=${INTERIOR:-}; STAIRS=${STAIRS:-}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
@@ -66,15 +66,22 @@ camsum() { local c; c=$(A fp_camera state); echo "target=$(fld target <<<"$c") a
 anchor() { local c; c=$(A fp_camera state); echo "$(fld anchor_x <<<"$c") $(fld anchor_y <<<"$c") $(fld anchor_z <<<"$c")"; }
 look() { A fp_camera look "$1" "${2:-0}" >/dev/null; sleep 0.3; }
 YAW=0
-# walk <who> <keys> <ms>: hold keys, echo "<horizontal displacement> <angle to camera forward deg> <anchor displacement> <mid move_speed>"
-walk() { local p0 p1 a0 a1 ms2 sp; p0=$(pos "$1"); a0=$(anchor); A fp_move "$2" "$3" >/dev/null
-  ms2=$(awk -v m="$3" 'BEGIN{printf "%.2f", m/2000}'); sleep "$ms2"; sp=$(mvs move_speed); sleep "$ms2"; sleep 0.6
-  p1=$(pos "$1"); a1=$(anchor)
-  awk -v a="$p0" -v b="$p1" -v c="$a0" -v d="$a1" -v y="$YAW" -v k="$2" -v sp="$sp" 'BEGIN{split(a,p," ");split(b,q," ");split(c,u," ");split(d,v," ")
+# walk <who> <keys> <ms>: hold keys, echo "<horizontal displacement> <angle to camera forward deg> <anchor displacement>
+# <mid move_speed, sampled only while moving=1, else na> <worst frame ms during the hold (fps window), na if unknown>"
+# fp_move's hold is wall-clock: a frame stall (first walk after a load ran ~15 fps with 12 s frames) shortens the walk.
+walk() { local p0 p1 a0 a1 ms2 sp st wm; p0=$(pos "$1"); a0=$(anchor); A fps reset >/dev/null; A fp_move "$2" "$3" >/dev/null
+  ms2=$(awk -v m="$3" 'BEGIN{printf "%.2f", m/2000}'); sleep "$ms2"; st=$(A fp_move state)
+  sp=$( [ "$(fld moving <<<"$st")" = 1 ] && fld move_speed <<<"$st"); sleep "$ms2"; sleep 0.6
+  p1=$(pos "$1"); a1=$(anchor); wm=$(A fps | fld worst_ms)
+  awk -v a="$p0" -v b="$p1" -v c="$a0" -v d="$a1" -v y="$YAW" -v k="$2" -v sp="$sp" -v wm="$wm" 'BEGIN{split(a,p," ");split(b,q," ");split(c,u," ");split(d,v," ")
     dx=q[1]-p[1]; dz=q[3]-p[3]; m=sqrt(dx*dx+dz*dz); fx=sin(y); fz=cos(y); if(k=="s"){fx=-fx;fz=-fz}
     ang=(m>0.01)?atan2(sqrt((dx*fz-dz*fx)^2), dx*fx+dz*fz)*57.2958:180
     am=(u[1]==""||v[1]=="")?-1:sqrt((v[1]-u[1])^2+(v[3]-u[3])^2)
-    printf "%.2f %.1f %.2f %s\n", m, ang, am, (sp==""?"na":sp)}'; }
+    printf "%.2f %.1f %.2f %s %s\n", m, ang, am, (sp==""?"na":sp), (wm==""?"na":wm)}'; }
+# walkr: walk, redone ONCE when a frame stall (worst_ms > STALL_MS) shortened the hold; the redo's numbers are used
+# (logged as STALL). The assertions stay the same: a second stalled walk still fails on its numbers.
+walkr() { local r w; r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r")
+  if ge "$w" "$STALL_MS"; then echo "STALL walk $* worst_ms=$w: redone once" >> "$LOG"; r=$(walk "$@"); fi; echo "$r"; }
 # still <who> <s>: displacement over s seconds (no input expected)
 still() { local p0; p0=$(pos "$1"); sleep "$2"; d2 "$p0" "$(pos "$1")"; }
 FP0=$(fps fp_mode); DIST0=$(cam target)
@@ -99,10 +106,10 @@ A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye || setup_fail "camera neve
 H0=$(ctl controlled); IDS0=$(ctl control_ids)
 
 # ---- C01: eye -> third person -> eye, control + WASD + camera ----
-ui_clear; look "$YAW" 0; read -r M1 G1 AN1 SP1 <<<"$(walk "$SH" w 2000)"
+ui_clear; look "$YAW" 0; read -r M1 G1 AN1 SP1 WM1 <<<"$(walkr "$SH" w 2000)"
 EYE1=$(camsum); A fp_camera distance 3 >/dev/null; waitf 6 cam_ok far; FAROK=$?; FAR=$(camsum)
 H1=$(ctl controlled); YAW=$(awk -v y="$YAW" 'BEGIN{y+=3.14159; if(y>3.14159)y-=6.28318; printf "%.4f", y}'); look "$YAW" 0
-read -r M2 G2 AN2 SP2 <<<"$(walk "$SH" w 2000)"
+read -r M2 G2 AN2 SP2 WM2 <<<"$(walkr "$SH" w 2000)"
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye; EYEOK=$?; EYE2=$(camsum); H2=$(ctl controlled); IDS2=$(ctl control_ids)
 ev="fp_walk=$M1 ang=$G1 anchor=$AN1 | far[$FAR] ok=$((1-FAROK)) tp_walk=$M2 ang=$G2 anchor=$AN2 | back_eye[$EYE2] ok=$((1-EYEOK)) | controlled=$H0/$H1/$H2 ids_same=$([ "$IDS0" = "$IDS2" ] && echo 1 || echo 0)"
 ok=1; [ $FAROK = 0 ] && [ $EYEOK = 0 ] && [ "$H0" = "$H1" ] && [ "$H1" = "$H2" ] && [ "$IDS0" = "$IDS2" ] || ok=0
@@ -120,7 +127,7 @@ A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; TU0=$(cam target); AU0=$(cam ap
 A fp_camera wheel -720 >/dev/null; sleep 1; TU1=$(cam target); AU1=$(cam applied); SU1=$(cam speed_scale)
 A click INV >/dev/null; waitf 4 ui_is 0; ui_clear
 RATIO=$(awk -v a="$M1" -v b="$M2" 'BEGIN{printf "%.2f", (a>0)?b/a:0}')
-ev="wheel target $T0->$T1->$T2 speed_scale $S0/$S1/$S2 | walk fp=$M1 tp=$M2 ratio=$RATIO move_speed fp=$SP1 tp=$SP2 | ui_open=$((1-UIO)) ui_wheel target $TU0->$TU1 applied $AU0->$AU1 speed $SU0->$SU1"
+ev="wheel target $T0->$T1->$T2 speed_scale $S0/$S1/$S2 | walk fp=$M1 tp=$M2 ratio=$RATIO move_speed fp=$SP1 tp=$SP2 worst_ms fp=$WM1 tp=$WM2 | ui_open=$((1-UIO)) ui_wheel target $TU0->$TU1 applied $AU0->$AU1 speed $SU0->$SU1"
 ok=1; [ "$S0" = "$S1" ] && [ "$S1" = "$S2" ] && [ "$SU0" = "$SU1" ] || ok=0
 awk -v a="$T0" -v b="$T1" -v c="$T2" 'BEGIN{exit !(b-a>.75 && b-c>.5)}' || ok=0
 awk -v r="$RATIO" 'BEGIN{exit !(r>=.75 && r<=1.33)}' || ok=0
