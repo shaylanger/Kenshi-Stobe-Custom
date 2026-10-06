@@ -43,23 +43,8 @@ character knows about that NPC, never the NPC's hidden profile.
 - Test: `tests/ingame/stobe/STOBE-NPCPANEL.sh [NP1..NP8]` (Crafting base copy `kah-npcpanel`).
 
 ## Build / install state
-- Stobe.dll DAF1390F built and installed on the 5090 (pre-panel build was 2A3FC123). Server live since `2596ef2`.
-- Implemented + installed + verified in game (all 8 rows + hotkey/button).
-
-## Evidence (2026-10-05, 5090, Stobe DAF1390F, Crafting base copy `kah-npcpanel`; logs `C:\KenshiTestRuns\npcpanel\run1-3.log`)
-- NP1 PASS opened for Apothecary Abia (key 1329101568|Shay), all sections, audit_llm/ctx lines 7535/18384 unchanged.
-- NP2 PASS target switch Malzin -> Abia, Close button -> open=0, 0 stale replies.
-- NP3 PASS relationship per speaker: Shay "Fond (friend)", Malzin "No opinion ... (neutral)".
-- NP4 PASS 0 of the stored bio's 5-word runs shown (bio 92 words).
-- NP5 PASS real chat turn -> fact recorded (0 -> 2), shown under "They told you", kept after save + reload (same serial).
-- NP6 PASS renamed to "Abia Panelcheck": same serial, facts and relationship kept.
-- NP7 PASS injected deal: "Agreed, in progress", "Outstanding: Shay owes <dealer> 45 Cats", "Deadline: in 24 game h";
-  pay deadline forced past -> BREACHED_PLAYER -> panel "Broken by Shay".
-- NP8 PASS Malzin goal row COMPLETE -> "Last agreed goal: Store mead ... Status: complete, 1/1 done".
-- Real keys (`tools/automation/kenshi-key.ps1`): `/` opened chat; chat Info button opened the panel for the chat
-  target (why=chat_info_button); `\` ignored while the chat input had focus; with chat closed `\` closed, then
-  reopened it for the nearest NPC (why=hotkey). KenshiFP GOAL_PANEL created, no errors in KenshiFP.log/stobe.log;
-  web UI `:8081/StobeServer/ui/` 200 "Stobe Dashboard".
+- Stobe.dll DAF1390F installed on the 5090; server live since `2596ef2`. Verified in game 2026-10-05 (NP1-NP8 + real
+  keys/Info button PASS, logs `C:\KenshiTestRuns\npcpanel\run1-3.log`; trace in `archive/test-run-2026-10-05-m41.md`).
 
 ## Limitations
 - Goals are matched by actor_serial, or by name when the goal row has no serial.
