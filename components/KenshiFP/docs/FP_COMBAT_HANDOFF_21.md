@@ -2,7 +2,7 @@
 Status: MERGED (938d2e2) — fp-combat is merged into main; one session works on it directly (edits /root/KenshiFP + components/KenshiFP, builds, installs, runs the game, commits + pushes). The ownership, request/candidate and "push blocked" rules below are pre-merge history and are superseded. Current state: see "Status after merge" right below and `C:\KenshiModding\FP_COMBAT_COORDINATION_CONTEXT.md`.
 
 ## Status after merge (2026-10-05)
-- Installed KenshiFP F44C1020 (main cc708e6), harness 452E2ABE (combatmode), manual combat OFF by default.
+- Installed KenshiFP 4CB6155E (main 2d1892b, adds the read-only `fp_combat ray` hook), harness 452E2ABE (combatmode), manual combat OFF by default.
 - In game PASS: P01, P02, C00, S02 (ranged native unchanged), R01-R06, R12 subset (pause/FP off/actor swap). B14 runtime partial.
   Details and evidence paths: COMBAT_TEST_PLAN.md "Current evidence".
 - Fixed: stale cached camera position read (C00); `fp_combat autoreload 0|1` + INI `combat_auto_reload`; `last_reload_timer`

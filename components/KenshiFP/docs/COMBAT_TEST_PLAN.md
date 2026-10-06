@@ -122,7 +122,7 @@ In-game results after the merge (2026-10-05, KenshiFP F44C1020 / main cc708e6, h
   swing target) and focused_h (+0x2C8, ordered target). The melee adapter must use the handles.
 - C00 PASS (c00c) after the camera forced-update read fix (actual_distance 0.000 at eye; was 2.8-8.8 m, a stale cached read).
 - B14 runtime partial: `fp_combat aim` end = eye + 80 m along the look direction (3 angles). Physical hits show an unresolved
-  vertical frame offset (eye y 661.6 Ogre vs `where` 641.7; character ray shapes hit at a flat y ~658.6). Blocks R08/R10.
+  vertical frame offset. B14-frame FAIL (`tests/ingame/fp-aim-frame.sh`, `fp_combat ray`): terrain = game frame; eye anchor = `where` y + ~19 m; the target's traced shape is a column from 0.3 to 17 m, 0.5-1.25 m behind its centre. Blocks R08/R10.
 - R01, R02, R03, R04, R05, R06 PASS and R12 subset PASS (pause, FP off, actor swap) via
   `components/KenshiFP/tests/ingame/fp-manual-ranged.sh` run r-3. Reload timer 6.11 s auto and manual (`last_reload_timer`).
   R12 still open: UI focus, KO, save/load, weapon swap, speed/FPS.

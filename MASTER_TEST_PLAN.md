@@ -21,7 +21,7 @@ Machines: the 5090 (STOBE, KenshiFP, REL, server, perf rows) and the 4080 rig (P
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
 | Stobe.dll | `DAF1390F` (NPC info panel; verified 2026-10-05) | - |
-| KenshiFP.dll | `F44C1020` (main cc708e6: FP combat merge + camera fix, autoreload, melee target handles; verified 2026-10-05) | - |
+| KenshiFP.dll | `4CB6155E` (main 2d1892b: FP combat merge + camera fix, autoreload, melee target handles, `fp_combat ray` hook; verified 2026-10-05) | - |
 | ProfessionGearProgression.dll | `BAFB8C31` (Normal; verified 2026-10-05) | - |
 | AutomationHarness.dll | `452E2ABE` (harness 67ab256 `combatmode`; verified 2026-10-05) | 4080: `B847ACF6` |
 | Server (live) | `stobe` dcabbfd (A8 station destination 90a92e8, background-processor live-DB guard 27d411e, p7-05 lockpickable slave 619d7eb, Terrorism not theft dcabbfd) | stray test-DB processor (WSL 1632/1641) must be killed or WSL restarted (Shay) |

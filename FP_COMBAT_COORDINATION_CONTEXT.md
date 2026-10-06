@@ -28,7 +28,7 @@ Order of work: camera/control (done), ranged (draft adapter, OFF by default, row
 | Hook install | shared | `install_hook` (8970), `hook_watchdog` (8113), `rva_sigs.h` | New hooks: add a signature in `rva_sigs.h` (signature scan, no fixed RVAs) and log install success/failure once. |
 
 ## 3. Installed builds (5090, verified 2026-10-05)
-- KenshiFP `F44C1020` (main cc708e6: camera forced-update read, `fp_combat autoreload`, `last_reload_timer`, fp_melee handles),
+- KenshiFP `4CB6155E` (main 2d1892b: camera forced-update read, `fp_combat autoreload`, `last_reload_timer`, fp_melee handles, `fp_combat ray`),
   Stobe `DAF1390F`, AutomationHarness `452E2ABE` (harness main 67ab256: `combatmode`), ProfessionGear `BAFB8C31`.
 - Harness notes: `rangedtest`/`rangedinfo` (KAH 26), `attack` gives crossbow users `RANGED_ATTACK_FOCUSED_UNPROVOKED`,
   `combatmode <npc> [block|ranged|taunt|hold|passive on|off]` (orders-panel stance; auto-home Shay has BLOCK=1 PASSIVE=1,
@@ -41,5 +41,7 @@ Order of work: camera/control (done), ranged (draft adapter, OFF by default, row
 - Wrapper: `components/KenshiFP/tests/ingame/fp-manual-ranged.sh [shooter] [target] [outdir]` (R01-R06 + R12 subset,
   RESULT lines). Offline: `python3 /root/KenshiFP/tests/run_offline.py`.
 - Results: `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt` (P01, P02, C00, B14, r-1..r-3, melee target).
-- Findings: CombatClass+0x290 pointer is always 0; use `target_h` (+0x298) / `focused_h` (+0x2C8). Vertical frame for
-  spatial aim unresolved: eye anchor y (Ogre) ~20 m above harness `where` y; body ray shapes hit at a flat y ~2 m below the eye.
+- Findings: CombatClass+0x290 pointer is always 0; use `target_h` (+0x298) / `focused_h` (+0x2C8). Spatial aim frame
+  (B14-frame FAIL, `tests/ingame/fp-aim-frame.sh` + `fp_combat ray`): physics terrain = game frame; eye anchor = `where` y
+  + ~19 m (Ogre y, the aim origin uses it unconverted); the target's traced shape is a 17 m column 0.5-1.25 m behind its
+  centre (offset frame). Find that transform before R08/R10.
