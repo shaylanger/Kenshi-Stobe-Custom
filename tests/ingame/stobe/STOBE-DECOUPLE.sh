@@ -7,7 +7,7 @@
 #   DC4 stale:     a flag 60 s old is dropped: `lifelike interrupt flag stale`
 #   DC5 hold:      stobe_action.request `<mate>\tHOLD_POSITION` -> ACTION_BRIDGE result=ok, mate teleported 200 units (positions are in dm: ~20 m) away stays >150
 #   DC6 bodyguard: stobe_action.request `<mate>\tBODYGUARD\t<player>` -> `squad->squad: using FOLLOW_PLAYER_ORDER`,
-#                  result=ok, mate comes within 60 units (~6 m) (game state)
+#                  result=ok, mate (started next to the player, who then walks 250 away) comes within 60 units or chases a second walk (game state)
 #   DC7 fp truce:  (not in the default set; after an FP manual-combat test) KenshiFP.log `truce bridge: ... resolved`
 # fixture: any squad save on a kah-* copy (default Shay + Malzin; PLAYER/MATE env for others); works with KenshiFP absent
 # usage: [PLAYER=..] [MATE=..] STOBE-DECOUPLE.sh [rows]   rows = space list of DC1..DC6 (default all)
@@ -91,21 +91,26 @@ if want DC5; then
 fi
 
 if want DC6; then
+  # m49 (dec-5090-4/5): teleports put PLAYER on a spot 49 dm above the mate (roof/cliff, harness.log y 690.6 vs 641.7):
+  # neither the Stobe follow nor the game's own FOLLOW_PLAYER_ORDER could path there. Now the mate starts next to the
+  # player and the player WALKS away (walktime: a navmesh move order, so the follower has a reachable path).
+  # walk_away <dist>: PLAYER runs <dist> units along the first axis that works; WAX = that axis (kept for the second walk)
+  walk_away() { local ax r; for ax in ${WAX:-+x -x +z -z}; do r=$(stobe-auto walktime "$PLAYER" "$1" "$ax" run 2>&1)
+      log "DC6 walktime $1 $ax: $(cut -c1-140 <<<"$r")"; grep -q ' walked ' <<<"$r" && { WAX=$ax; return 0; }; done; return 1; }
+  stobe-auto teleport "$MATE" "$PLAYER" dist 10 >/dev/null; sleep 2
+  WAX=""; walk_away 250 || setup_fail DC6 "$PLAYER could not walk 250 along any axis"
+  sleep 2; d0=$(dist_of "$MATE")
   BASE_G=$(grep -a -c "" "$KFP")
-  d0=$(dist_of "$MATE")
-  [ -n "$d0" ] && [ "$d0" -lt 150 ] && { stobe-auto teleport "$MATE" "$PLAYER" dist 200 >/dev/null; sleep 2; d0=$(dist_of "$MATE"); }
   printf '%s\tBODYGUARD\t%s\n' "$ms" "$ps" > "$MODS/stobe_action.request"
   if wait_goals 10 "ACTION_BRIDGE command=BODYGUARD actor=$ms .*result=ok"; then
     sw=$(since_goals | grep -a -c "squad->squad: using FOLLOW_PLAYER_ORDER")
     # closes_in <secs> <max>: poll until the mate is within <max> dm of PLAYER (d = last distance)
     closes_in() { local t=$(( $(date +%s) + $1 )); while [ "$(date +%s)" -lt "$t" ]; do d=$(dist_of "$MATE"); [ -n "$d" ] && [ "$d" -le "$2" ] && return 0; log "DC6 dist=$d (want <=$2)"; sleep 3; done; return 1; }
-    d=$d0; how=""
-    if closes_in 30 60; then how="closed at rest $d0 -> $d"
+    d=$d0; how=""; d1=""
+    if closes_in 45 60; then how="closed at rest $d0 -> $d"
     else
-      # m49 (dec-5090-3): at rest she stayed at 205-208 dm; a follower must at least chase a moving leader:
-      # move PLAYER 400 dm from her and want her >=150 dm closer within 60 s
-      stobe-auto teleport "$PLAYER" "$MATE" dist 400 >/dev/null; sleep 2; d1=$(dist_of "$MATE"); d1=${d1:-400}
-      if closes_in 60 $((d1 - 150)); then how="followed the moved leader $d1 -> $d (at rest stayed $d0)"; fi
+      # a follower must at least chase a moving leader: PLAYER walks 250 further, want her >=150 closer than right after
+      walk_away 250 && { d1=$(dist_of "$MATE"); closes_in 60 $(( ${d1:-400} - 150 )) && how="followed the walking leader $d1 -> $d (at rest stayed $d0)"; }
     fi
     if [ "$sw" -ge 1 ] && [ -n "$how" ]; then verdict DC6 "PASS BODYGUARD->FOLLOW_PLAYER_ORDER result=ok, $how"
     else
@@ -113,6 +118,6 @@ if want DC6; then
       stobe-auto order "$MATE" FOLLOW_PLAYER_ORDER target "$PLAYER" >/dev/null; dc0=$(dist_of "$MATE")
       closes_in 60 $(( ${dc0:-400} - 150 )) && ctl="control harness FOLLOW_PLAYER_ORDER moved her ${dc0} -> $d (Stobe dispatch bug)" || ctl="control harness FOLLOW_PLAYER_ORDER also did not move her ${dc0} -> $d"
       cm=$(stobe-auto combatmode "$MATE" 2>/dev/null | grep -oE "(block|hold|passive)=[^ ]*" | tr '\n' ' ')
-      verdict DC6 "FAIL follow_switch=$sw mate dist $d0 -> ${d1:-?} -> stayed; $ctl; mate combatmode: ${cm% }"; fi
+      verdict DC6 "FAIL follow_switch=$sw axis=$WAX mate dist $d0 -> ${d1:-?} -> stayed; $ctl; mate combatmode: ${cm% }"; fi
   else verdict DC6 "FAIL no ACTION_BRIDGE ok: $(since_goals | grep -a ACTION_BRIDGE | tail -1 | cut -c1-140)"; fi
 fi
