@@ -1,10 +1,11 @@
 # FP combat context (merged, worked directly on main)
 
-Updated 2026-10-05 (after m47). fp-combat was merged into main (938d2e2); the branch/candidate/request workflow below the
+Updated 2026-10-06 (m48). fp-combat was merged into main (938d2e2); the branch/candidate/request workflow below the
 merge is retired. One session does FP combat as coordinator + developer: it edits `/root/KenshiFP` and
 `components/KenshiFP` directly, builds, installs, launches Kenshi (lock owner `fpcombat` while it holds the game) and
 commits/pushes one fix per commit. The old "coordinator owns X / combat agent must not" rules are obsolete.
-Order of work: camera/control (done), ranged (draft adapter, OFF by default, rows R01-R06 + R12 subset PASS), then melee.
+Order of work: camera/control (done), ranged and melee adapters in main, manual combat OFF by default; open rows in
+`components/KenshiFP/docs/COMBAT_TEST_PLAN.md` (R10, 5090 R11 rerun pending (b10 invalid: raid; raid guard 16dc0b3, rerun fp-5090-11), R12 remainder, M08/M09, Gate 3, S01/S03/S05).
 
 
 ## 1. Source and build
@@ -27,20 +28,23 @@ Order of work: camera/control (done), ranged (draft adapter, OFF by default, row
 | STOBE communication | **coordinator**, frozen | Called from `camera_lock` (3150-3161): `stobe_voice_modifier_tick`, `stobe_unequip_request_tick`, `stobe_general_action_request_tick`, `stobe_fight_truce_tick` (2794: NPC truce/disengage after STOBE deals), `stobe_work_goal_tick`, `stobe_task_goal_tick`, `kah_bridge_tick`. Files in `RE_Kenshi\mods\Stobe\`: `stobe_action.req`, `stobe_work_goal.{req,status,control}`, `stobe_task_goal.{req,status,control}`, `stobe_goal_report.req`, `voice_action.flag`, `voice_command.flag`. Code: `stobe_work_planner.inc`, `stobe_task_goals.inc`, lines ~1650-3130 of the client. | Don't change these. Combat must not start fights against NPCs under an active STOBE truce. Check `stobe_fight_truce` state before forcing attack orders and ask the coordinator for an accessor if one is needed. |
 | Hook install | shared | `install_hook` (8970), `hook_watchdog` (8113), `rva_sigs.h` | New hooks: add a signature in `rva_sigs.h` (signature scan, no fixed RVAs) and log install success/failure once. |
 
-## 3. Installed builds (5090, verified 2026-10-05)
-- KenshiFP `4CB6155E` (main 2d1892b: camera forced-update read, `fp_combat autoreload`, `last_reload_timer`, fp_melee handles, `fp_combat ray`),
-  Stobe `DAF1390F`, AutomationHarness `452E2ABE` (harness main 67ab256: `combatmode`), ProfessionGear `BAFB8C31`.
+## 3. Installed builds (2026-10-06)
+- KenshiFP `4FD22DEF` on both rigs (main ac56752: wound pick diagnostics on top of 39F58D2D manual melee adapter, spatial
+  wounds), harness `2995EE5E`; 5090 also Stobe `DAF1390F`, ProfessionGear `BAFB8C31`.
 - Harness notes: `rangedtest`/`rangedinfo` (KAH 26), `attack` gives crossbow users `RANGED_ATTACK_FOCUSED_UNPROVOKED`,
   `combatmode <npc> [block|ranged|taunt|hold|passive on|off]` (orders-panel stance; auto-home Shay has BLOCK=1 PASSIVE=1,
   which never swings). `drop <npc> <item> all` leaves one ground item per unit: `pickup` takes one per call (loop it).
-- Fixtures: `kah-fpxbow` (Axima crossbow + hostile Skaera), `kah-fpcam` (fresh auto-home copy), `kah-fullbase`
+- Fixtures: `kah-fpxbow` (Axima crossbow + hostile Skaera; preserved as fixture `C:\KenshiTestFixtures\FP-crossbow`), `kah-fpcam` (fresh auto-home copy), `kah-fullbase`
   (regression; `fullbase-guard.sh`). Never Shay's own saves.
 
 ## 4. Tests and results
 - Plan: `components/KenshiFP/docs/COMBAT_TEST_PLAN.md`; master rows in `MASTER_TEST_PLAN.md`.
-- Wrapper: `components/KenshiFP/tests/ingame/fp-manual-ranged.sh [shooter] [target] [outdir]` (R01-R06 + R12 subset,
-  RESULT lines). Offline: `python3 /root/KenshiFP/tests/run_offline.py`.
-- Results: `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt` (P01, P02, C00, B14, r-1..r-3, melee target).
+- Wrappers: `components/KenshiFP/tests/ingame/fp-manual-*.sh` (ranged, anatomy, limbs, melee skill/life, transitions,
+  soak with native-AI control; RESULT lines). Offline: `python3 /root/KenshiFP/tests/run_offline.py`.
+- Results: `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt` (2026-10-05), 2026-10-06 batches 4080 b18-b21 and
+  5090 `C:\KenshiTestRuns\fp-5090-*` (run log `archive/test-run-2026-10-05-m41.md`).
+- Open admin: 4080 save copies `kah-fp-*` await deletion by Shay (permission checker); Full-Base hand-over/fetch regression
+  row waits on Shay deleting the Avarek/Beaks Stobe DB rows (approved, permission checker blocked).
 - Findings: CombatClass+0x290 pointer is always 0; use `target_h` (+0x298) / `focused_h` (+0x2C8). Spatial aim frame
   (B14-frame PASS on re-read; game units are decimetres): eye anchor = `where` y + 19 dm (1.9 m eye); the traced 17 dm
   column is the body capsule. Aim rays hit the target's handle (hits-2), so R08/R10 aren't blocked by the frame.

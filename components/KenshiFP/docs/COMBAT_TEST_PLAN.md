@@ -1,5 +1,5 @@
 # KenshiFP Player-Controlled Combat Test Plan
-Updated: 2026-10-05. Owner: FP combat development agent. Status: native lifecycle probe and camera/control implementation built and offline-validated; game evidence pending coordinator. Manual combat implementation continues.
+Updated: 2026-10-06. Status: manual ranged/melee adapter in main (KenshiFP 4FD22DEF on both rigs, harness 2995EE5E), manual combat OFF by default. Passed rows are deleted (run log `archive/test-run-2026-10-05-m41.md`); the tables hold open rows only.
 Coordination: C:\KenshiModding\FP_COMBAT_COORDINATION_CONTEXT.md (received: m45 baseline).
 Design: KENSHI_BIG_MOD_IDEAS_CONTEXT.md section 24.
 Game-test owner retains installs, launches, fixture preparation and master test batches.
@@ -54,19 +54,9 @@ Visual camera collision, body visibility and ADS alignment require screenshots/i
 ## Gate 2: ranged mechanics
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| R01 | Hold aim / release lower | weapon and animation state agree, both camera views |
-| R02 | One legal trigger / one actual shot | input, native shot event, measured loaded/inventory ammo delta |
-| R03 | No AI duplicate firing | loaded actor aimed without fire has zero shots; no extra shot after trigger |
-| R04 | Visible native-duration reload | no loaded grant before completion; shot rejected during reload; actual animation/time |
-| R05 | Manual/automatic reload equivalent | same weapon capacity/ammo/duration; configurable behavior |
-| R06 | Finite ammo | correct ammo type, empty/missing ammo, inventory capacity; no creation or underflow |
-| R07 | Native damage/XP/hostility | real victim health/armour and shooter XP/aggression, not narration |
-| R08 | Spatial body-part hit | directed low-spread diagnostic + actual intersection/part + health delta; no weighted reroll |
-| R09 | Intervening NPC | first actual collision victim injured; original aimed actor unchanged when occluded |
 | R10 | Cover/parallax | FP/third-person muzzle obstruction prevents shooting through walls |
-| R11 | Animated anatomy | moving/race/robot/missing limbs map correctly; nearest valid intersection (`fp-manual-anatomy.sh`: R11-MOVE/RACE/LIMB) |
+| R11 | Animated anatomy | moving/race/robot/missing limbs map correctly; nearest valid intersection (`fp-manual-anatomy.sh`: R11-MOVE/RACE/LIMB); PASS 4080 b21 (MOVE/RACE/LIMB); 5090 R11 rerun pending (b10 invalid: raid): the MOVE 6/10, RACE and LIMB setup fails in `fp-5090-10` were a setup failure (Dust Bandit raid attacked the shooter Axima mid-row, Stobe event 05:10), fixed by the raid guard in `fp-ui-guard.sh` (16dc0b3); rerun in `C:\KenshiTestRuns\fp-5090-11` |
 | R12 | Lifecycle/input | UI, pause, actor/weapon swap, KO, reload/save/load, speed/FPS; no inherited fire |
-| R13 | KEP compatibility | crossbow/damage option matrix, no duplicate spread/wound effects |
 Diagnostic forced spread may isolate hit routing but cannot count toward balance evidence; ordinary production RNG must be used for R14-R16.
 
 ## Gate 3: ranged parity and tactical balance
@@ -86,13 +76,6 @@ No final balance PASS until tolerances and missing native dependencies are defin
 ## Gate 4: melee feasibility and mechanics (phase 2)
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| M01 | Ready click starts native swing | input->wind-up latency, native technique starts without waiting for autonomous initiative |
-| M02 | Commitment/recovery | spam cannot increase rate or reset timers; move/block cannot cancel committed swing |
-| M03 | Block legal and responsive | actual defence phase/outcome, no blanket immunity or unrelated AI-turn delay; manual mode = no AI auto-block, block only while RMB is held (Shay 2026-10-05; stumbles stay native) |
-| M04 | Skill/weapon/injury effects | matched controls demonstrate real speed/defence/damage effects (`fp-manual-melee-skill.sh`: M04-SPEED/DEF/DMG/INJ) |
-| M05 | Native impact/enemy reaction | enemy threatens/defends; one impact; armour/XP/hostility retained |
-| M06 | Miss/spacing/recovery | real whiff/obstruction and vulnerability, no remote chase/hit |
-| M07 | Buffer | at most one short own-recovery request; expiration and no inherited actions |
 | M08 | Lifecycle/crowds | multiple attackers, KO, limbs, unarmed, UI, load, fallback and actor changes (`fp-manual-melee-life.sh`: M08-UI/KO/LOAD/UNARMED/CROWD/ACTOR/LIMB) |
 | M09 | Animation compatibility | vanilla first, individual MCA/DodgeStrafe/Great Anims, then full loadout |
 If M01 only passes by spam-forcing a flag or waiting for AI initiative, phase 2 feasibility fails even if health changes.
@@ -105,119 +88,23 @@ Notes (2026-10-05, KenshiFP 62464E5D): B17 offline covers AI refusal, click buff
 | S01 | Extraction integration | gameplay goals/actions work without FP dependency; controls use correct actor identity |
 | S02 | Normal/fallback combat | no changes to uncontrolled NPC/squad/native shooting outside manual ownership |
 | S03 | Repeated transitions | no stuck aim/reload/control after repeated switching/loading (`fp-manual-transitions.sh`) |
-| S04 | Soak/performance | bounded polling/event memory, frame cost and action integrity across long run (`fp-manual-soak.sh`) |
 | S05 | Release restoration | main build/config verified and test owner can resume existing batch |
 
 ## Visual/user checks
 ADS alignment and reload readability; zoom/body/clipping; attack/block responsiveness; tactical enjoyment and high-skill limb precision.
 Keep these separate from automated mechanical results. No finite suite guarantees absence of all bugs.
 
-## Current evidence
-In-game results after the merge (2026-10-05, KenshiFP F44C1020 / main cc708e6, harness 452E2ABE; evidence
-`C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`). The request/candidate notes further down are history
-(work now happens directly on main); "pending coordinator" there is superseded by this list.
-- P01 PASS (p01d): native shots FP off 10 shots/10 ammo increases, FP on 10/10. Needs the background
-  `rangedtest <shooter> <target> shots 60 timeout 220 attack` to keep the native target; earlier "stops" were the AI dropping it.
-- S02 (native shooting unchanged) PASS for ranged via the P01 FP off/on A/B.
-- P02 PASS (p02c): CHOP entries FP off 20 / FP on 17, recovery samples 30/30 (`combatmode Shay block off passive off` first).
-- Melee target: CombatClass+0x290 pointer is 0 in every sample; `fp_melee state` now prints target_h (+0x298, follows the
-  swing target) and focused_h (+0x2C8, ordered target). The melee adapter must use the handles.
-- C00 PASS (c00c) after the camera forced-update read fix (actual_distance 0.000 at eye; was 2.8-8.8 m, a stale cached read).
-- B14 runtime PASS: `fp_combat aim` end = eye + 80 m along the look direction (3 angles). B14-frame PASS on re-read
-  (game units are decimetres): eye anchor = `where` y + 19 dm = 1.9 m eye height; the "17 m column" is the 1.7 m body capsule
-  ~0.05-0.13 m behind the centre. Physical aim rays hit the target (hits-2: Skaera's serial, ~0.25 m in front of her centre).
-- R01, R02, R03, R04, R05, R06 PASS and R12 subset PASS (pause, FP off, actor swap) via
-  `components/KenshiFP/tests/ingame/fp-manual-ranged.sh` run r-3. Reload timer 6.11 s auto and manual (`last_reload_timer`).
-  R12 still open: UI focus, KO, save/load, weapon swap, speed/FPS.
-- 2026-10-06 (KenshiFP 39F58D2D, then 4FD22DEF = + wound pick diagnostics; harness 2995EE5E; both rigs, wrappers
-  `tests/ingame/fp-manual-*.sh`): R07, R13 PASS both rigs. R08 PASS 9/9 both rigs on 4FD22DEF (wrapper re-aims at the
-  neck/chest bone x/z; root position sits ~1.3 dm off the spine in guard pose, so earlier arm_r hits were legitimate
-  shoulder hits). R09 PASS both rigs (blocker placed on the eye->target line where the ray is ~13 dm up; blocker hurt,
-  target untouched). R11-MOVE PASS both. R11-LIMB PASS both (the lost leg is never picked naturally; the forced pick
-  is handled, 2/2). R11-RACE PASS 4080 (Shek, aimed part 4/6, upright wait before each shot; Hive drones bob 2.5 dm so
-  Shek goes first). M00-M07 PASS (4080 b18/b19, M04-SPEED/DEF/DMG/INJ). S04 PASS: 4080 growth -7 MB; 5090 159 MB vs
-  bound 150 MB, but the native-AI control (S04-CTRL, same fixture/method/machine) grows 156 MB with the same late steps,
-  so the overshoot is game baseline, not the adapter (4080 control: 112 MB).
+## Current state
+PASS (evidence in `archive/test-run-2026-10-05-m41.md`, `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`): P01, P02, C00, B14/B14-frame, R01-R09, R13, S04 (both rigs; 5090 overshoot = native-AI baseline per S04-CTRL), M00-M07 (4080), R12 subset (pause, FP off, actor swap), S02 for ranged (P01 FP off/on A/B).
+Open: R10, R11 on the 5090 (see row), R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08, M09, Gate 3 (R14-R16), S01, S03, S05, C01-C05 beyond the C00 numeric subset; manual combat stays OFF by default until these pass.
+Method notes still valid: P01 needs a background `rangedtest <shooter> <target> shots 60 timeout 220 attack` to keep the native target; P02 needs `combatmode Shay block off passive off`; melee target = CombatClass+0x298 (swing target) / +0x2C8 (ordered target), +0x290 is always 0; game units are decimetres (eye = `where` y + 19 dm); R08 wrapper re-aims at the neck/chest bone; R09 blocker sits on the eye->target line ~13 dm up; R11-RACE uses Shek first (Hive drones bob 2.5 dm).
 
-## Native lifecycle prerequisite P01 (first candidate)
-The baseline defines KFP_MANUAL_AIM=0: out-of-combat raise/fire is disabled because field-forcing conflicts with native AI tasks. Do not count that prototype as a validated foundation or enable its instant reload. Before implementing manual dispatch, record native state transitions, animationUpdate callbacks and GunClass::shoot invocations with actual ammo before/after, target identity and stat argument. State integers remain raw until empirically mapped. Polling alone can miss intra-frame events; hook events preserve these. Native target attribution and projectile collision/body-part selection are separate unresolved requirements.
-
-Probe command contract: fp_combat_probe begin|end|state|events [after_sequence]|clear. Recording defaults off. begin resets capture; events returns a bounded sequence log and reports lost records. No command dispatches attacks, reloads, draw, target selection or game-state writes. The coordinator runs P01 in a disposable native crossbow fixture: FP off, then FP on, unchanged native auto combat, initial ammo/skills/equipment recorded via existing harness. Drain events frequently; overflow makes a lifecycle trace incomplete. Include idle, draw, aim, several fire/reload cycles and ammo exhaustion. Record per-limb health/inventory independently. Capture is observational, not proof of manual input or balance.
-
-P01 PASS requires verified command registration, actual native shot callbacks with observable ammo changes, animation callbacks, non-overflowing ordered trace, and clean fixture restore. A missing actor, absent callbacks, unreadable raw state or invalid setup is FAIL with setup=invalid/unresolved and evidence; never a fabricated success. Mapping raw state values to safe manual-action readiness is a separate pending engineering task, not proven by P01 capture. Game runtime/P01 execution is pending coordinator ownership.
-
-## Recorded validations (2026-10-05)
-- B07 PASS: gcc C11 -Wall -Wextra -Werror, plain and UndefinedBehaviorSanitizer -fno-sanitize-recover=all. The production probe include is compiled against mocked readable engine regions. Covers capture-off gating, native observed fields, missing actor/unknown fields, unrelated actor exclusion, shot argument identity/ammo before-after, invalid command/sequence/overflow parsing, bounded pagination/lost-record reporting, capture reset ID, and no replenishment writes. Does not establish native offsets or engine lifecycle correctness.
-- B08 PASS: eight Python unittest decoder/assessment tests. Covers flattened harness replies, loss/reset, missing CSV columns, sequence gaps/footer inconsistencies, actual paired shot/ammo observations, absent actor/animation/pairs, identity changes and insufficient cycles. Initial truncation test mistakenly retained a valid float; fixed fixture to omit a whole CSV field, then all eight passed.
-- B01 partial/build validation PASS: isolated RE_Kenshi MinGW DLL built with expected exported startPlugin symbol. DLL remains uninstalled. Source reviewed: include + new command + post-movement tick + observations in existing hooks; no new hooks or shared actor/STOBE changes.
-- ASan attempt FAILED/UNRESOLVED: diagnostic loop required other agent to stop isolated test; targeted process absence confirmed afterward. Root cause not determined; no ASan success claimed. All new offline runs have 20s subprocess timeout, 15s CPU limit, 1MiB output file limit and disabled core dump. No unbounded ASan reruns.
-- P01 and every C/R/M/S gameplay row: NOT RUN / PENDING coordinator. Native state mapping, targetless weapon lifecycle, manual firing, reload animation/timing, projectile collision/body-part attribution, XP and parity remain unvalidated.
+## Open notes (from the development log; history of finished candidates/requests: git log -p of this file)
+- STOP before gameplay enable: truce guard, physical mouse dispatch conflicts, lifecycle/identity/thread/fault handling, dt/speed ownership, reload interruption/lowering, TPS actual-camera/muzzle/ADS, projectile target modifiers/spatial part routing and melee/root motion all remain unresolved. See full FP_COMBAT_HANDOFF_21.md.
+- R10 pending native acceptance: actual-camera scene-to-world ray now used by manual adapter, nearest <=80m static/visual obstruction; verify crosshair vs true bolt path at FP/near/far TPS and both floating origins. Native animated NPC aim selection/muzzle-vs-camera obstruction remains incomplete.
+- R12/S02 pending truce cases: conservative interim gate rejects manual shots while any STOBE truce slot is active; clicks during truce must not queue/replay on expiry; normal/unowned actors untouched. Test precise victim checks and truce starting while a projectile is in flight before replacing broad gate.
+- R12 pending engine input validation: preserve actual inventory/stat/squad-widget MyGUI clicks, modifier selection/orders, releasing previously held buttons, focus/window/UI changes mid-aim; zero vanilla attack/move orders from consumed unmodified world fire/aim clicks; no manual shot from UI or modifier passthrough. GUI refresh query and callback threading need runtime evidence. No new manual candidate packaged.
 
 ## Reproducible runner and coordinator wrapper
 Offline (WSL, never contacts game): python3 components/KenshiFP/tests/run_offline.py --out <private-artifacts-directory>.
 Coordinator-only P01: python3 components/KenshiFP/tests/capture_native_ranged.py --kah-client C:/KenshiModding/Kenshi-Automation-Harness/client/kah.py --dir <installed-harness-folder> --out <new-results-subdirectory> --seconds 60 --min-shots 3. Paths must be converted to WSL paths when using WSL Python. This wrapper does not install/launch/load/equip, issue attacks, heal or change speed. Coordinator prepares selected crossbow actor and sustained native combat on disposable fixture. It observes native FP-off and FP-on cycles, records setup metadata, drains pages with capture IDs, saves raw replies/CSVs, and verifies FP toggle restoration. Separate coordinator restoration of installed DLL hash is still required. A protected target may be used only to sustain this lifecycle probe if disclosed; those results cannot validate damage or accuracy parity.
-
-## Delivered candidate / pending game validation
-- Source revision pushed on fp-combat: 538851a6f8f605ffd7a2f80b124a03b5f36f35e3.
-- Candidate: C:\KenshiTestRuns\fp-combat\candidates\538851a\KenshiFP.dll.
-- SHA256: 9357105baaa1236cd89df0ecf1d606d9d58accf208b9017e214c73ca28325cf8.
-- Immutable coordinator request: C:\KenshiTestRuns\fp-combat\requests\20261005-2043-native-ranged-probe.txt.
-- P01 result pending. No game execution by this agent; no native readiness, manual-control, reload animation, hit/body-part, accuracy-parity or melee validation claimed. Later docs-only commits do not change this candidate DLL/source identity.
-
-## Camera/control implementation and offline evidence (2026-10-05)
-- Implemented commands: fp_control state|take; fp_camera state|distance <0..12>|wheel <-2400..2400>. Existing fp_mode on|off and fp_state retain their contracts. Earlier planned command spellings are proposals, not executable commands.
-- Defaults: direct_default=1; camera_zoom=1; key_take_control=F6 (0x75). Wheel changes camera distance, retaining persistent direct controls and old toggle fallback. Physical wheel/WASD respect foreground focus; camera_zoom=0 offers legacy throttle.
-- B09 PASS plain GCC and UBSan: full-handle pinning, inspection isolation, explicit transfer, outsider refusal, UI key guard, fallback persistence, missing actor without silent fallback, unload/reload, bounded/finite zoom, eye threshold and frame-rate smoothing. Release callback tested; real engine movement-vector clearing and collision remain unvalidated.
-- B07/B08 re-run PASS after control integration; isolated MinGW DLL build PASS. No game commands or installs by development agent.
-- Coordinator numeric subset C00: tests/validate_camera_control.py --kah-client <kah.py> --dir <installed-harness> --out <new-directory> --actor-a <awake-squad-ref> --actor-b <different-awake-squad-ref>. Open clear space, closed UI, unpaused disposable fixture required. Actual applied camera distance must exceed 0.75m; confinement that prevents zoom is invalid setup rather than evidence against collision.
-- C00 observations cover portions of C01-C04 only. It records raw replies and summary; it does not claim physical WASD, UI/focus scrolling, visible inventory panels, moving transfer, body/head rendering, clipping, C05 lifecycle or full gameplay PASS. Wrapper restores original toggle/requested distance, leaves actor-a selected/controlled; coordinator restores fixture and installed hashes.
-
-## Controller decision validation B10 (2026-10-05)
-- PASS plain GCC and UBSan compiling production kfp_combat_controller.h: one ranged request per legal fire edge, held/rejected clicks never become later shots, no request while native reload/readiness rejects, automatic empty reload gated by native ability, UI/pause/NaN-time and owner/weapon change rearm only after release.
-- PASS melee decision tests: commitment blocks swing/block, only own recovery tail accepts one short buffer, repeated clicks cannot refresh it, expiration produces no deferred attack, held block starts only on regained native readiness, simultaneous attack+defence chooses defence.
-- These verify policy decisions only. B03-B05 engine-level acceptance, R/M gameplay rows and actual timing/animation/damage/XP remain pending adapter integration and coordinator evidence.
-
-## Native adapter checkpoint — paused at user request (2026-10-05)
-- Draft kfp_combat_native.inc is compiled into private candidate source, manual ownership defaults OFF. It is not delivered/installed/game-validated. Commands fp_combat on|off|state|physical|input <aim 0|1> <fire 0|1> <reload 0|1>. No native melee adapter yet.
-- Native RC updateT/updateMT/end patterns each verified unique in installed executable via read-only PE scan. Unknown/ambiguous/missing bindings leave ownership disabled and hooks transparent.
-- Native setup, reloadCheck, reset timer, gun pose/draw and one-shot dispatch wired experimentally. Native reloadCheck retains timer/inventory/XP path; direct GunClass refill is never called by this adapter. Explicit lower/release uses original end trampoline to bypass our own end suppression.
-- STOP before gameplay enable: truce guard, physical mouse dispatch conflicts, lifecycle/identity/thread/fault handling, dt/speed ownership, reload interruption/lowering, TPS actual-camera/muzzle/ADS, projectile target modifiers/spatial part routing and melee/root motion all remain unresolved. See full FP_COMBAT_HANDOFF_21.md.
-- No B03-B05 native engine or C/R/M/S gameplay PASS inferred from portable B10. P01 still pending coordinator. Camera C00 request remains numeric subset only.
-- Final bounded checks are logged in /root/stobe-work/fp-combat-staging/validation-stop. Plain/UBSan probe/control/controller and eight decoder tests plus private DLL build are recorded in handoff after completion. ASan remains unresolved/not passed.
-
-## Active resume validation (2026-10-05)
-- P01 coordinator capture.console.txt now reports PASS, exit0: FP0 10 actual paired native shot events, 9 observed ammo increases, 3503 animation callbacks, raw states0/2; FP1 4 shots, 4 increases, 1415 callbacks, states0/2/3. Raw CSVs consumed. This completes requested native lifecycle data delivery; stop routine evidence polling. Installed hash/fixture/main restoration report still needed for complete candidate acceptance. Does not validate manual combat, spatial anatomy or parity.
-- B07/B09/B10 rerun plain and UBSan PASS; eight B08 Python decoder tests PASS. Private MinGW DLL build PASS, exported startPlugin verified. Artifacts /root/stobe-work/fp-combat-staging/validation-resume1. No game execution/install by combat developer.
-- Native adapter lifecycle fixes compiled: full actor IDs checked, issuing-thread shot permission, invalid/replaced gun release, lower reconciliation after reload, UI/focus/KO yields original lifecycle. These specific native changes remain engine-unvalidated; add R12 cases for pointer/handle reuse, weapon/gun replacement, release during reload, focus/UI/KO midreload and cross-thread autonomous shoot suppression before candidate acceptance.
-
-- B11 PASS plain+UBSan production aim geometry: floating-origin invariance, TPS actual-eye origin, direction unit length/yaw/pitch and finite input rejection without partial writes. Validation-resume2 all prior suites+eight decoder tests PASS. Private DLL build/export PASS.
-- P01 release accounting consumed: attempt1 invalid stat name corrected in wrapper to friendly_fire; attempt2 coordinator PASS. Protected Axima/Skaera fixture disclosed, 1x, lifecycle only. Main0349AA2A verified restored in game+Vortex; original FP0 restored. Harness upgraded B847ACF6/93d03e3; PG2E533D44 and StobeDAF1390F during capture. No additional native-evidence polling needed.
-- R10 pending native acceptance: actual-camera scene-to-world ray now used by manual adapter, nearest <=80m static/visual obstruction; verify crosshair vs true bolt path at FP/near/far TPS and both floating origins. Native animated NPC aim selection/muzzle-vs-camera obstruction remains incomplete.
-- R12/S02 pending truce cases: conservative interim gate rejects manual shots while any STOBE truce slot is active; clicks during truce must not queue/replay on expiry; normal/unowned actors untouched. Test precise victim checks and truce starting while a projectile is in flight before replacing broad gate.
-
-## Native melee prerequisite P02
-- Implemented fp_melee state is read-only: version-aware getCombatClass binding, owner/readability guard, raw native state/next/active/_isAttacking(float)/deadtime/timers/technique/finished/movement/targets/threat count/frame dt. It does not claim to report validated swing/block readiness.
-- B12 PASS plain+UBSan production observation include with mocked native memory: binding/command/actor/object ownership/readability guards, correct float field handling, exact native memory remains unchanged. Private DLL build pending final check.
-- Coordinator-only tests/capture_native_melee.py runs prepared sustained native duel in disposable fixture, manual combat OFF, FP off/on60s, raw command JSONL/CSV. No attack/fixture/game-speed/install/launch calls; restore original FP mode. Requires stable ownership, advancing native frame time, sustained active fight, >=3 observed CHOP entries per mode and positive recovery timer observations. Polling may miss intra-frame states and cannot prove hit/impact completeness; failure to capture a required state is incomplete mapping, not automatically a product bug.
-- Before request: tests/test_melee_trace.py verifies parsing/finite time, independent CHOP transition counting, owner changes, stuck state cannot count repeated swings, absent recovery/stopped fight rejected. New wrapper not yet run in game.
-- Need additional callbacks or animation progress telemetry if P02 polling cannot establish commitment/recovery. Keep ready click latency, native block outcomes, impact/XP, root-motion yield and manual combat separate M01-M09 acceptance gates.
-
-- B12 and four P02 decoder tests PASS; validation-resume4 five C suites plain+UBSan and 12 Python tests PASS. Observer DLL build/export PASS. Local source88758f6302be11a933288bc1bd6c69bb4fa37a9a.
-- P02 immutable request20261005-2211-native-melee-state.txt queued; candidate88758f6 SHA256f10c5e16940d98d8d4a58f85a82522282372e95f638257564820e050331ab133, pinned wrappers. Manual adapter OFF, native duel/current controlled shooter explicit during setup. Runtime P02 unrun; coordinator owns install/fixture/capture/restoration.
-
-- B13 PASS plain+UBSan production input hook include: only owned world L/R command events consumed; GUI focus, Alt/Ctrl/Shift, other buttons/keyboard, inactive owner, background, KO, injection mode, missing GUI, enclosing crash guard and faulted query pass original. Native signature verified unique0x360b30 in installed exe; private DLL build/export PASS; all six C suites and 12 decoder tests PASS validation-resume5.
-- R12 pending engine input validation: preserve actual inventory/stat/squad-widget MyGUI clicks, modifier selection/orders, releasing previously held buttons, focus/window/UI changes mid-aim; zero vanilla attack/move orders from consumed unmodified world fire/aim clicks; no manual shot from UI or modifier passthrough. GUI refresh query and callback threading need runtime evidence. No new manual candidate packaged.
-
-### Native binding correction / P02 hold
-Old P02 candidate88758f6/request20261005-2211-native-melee-state is held by20261005-2240-hold-88758f6-native-bindings.txt: installed KenshiLib address table did not match local headers/executable. Replaced melee getter with unique native leaf signature (Character body648/CharBody CC8); replaced ranged setup/reloadCheck/resetShotTimer/end exported table bindings with independently disassembled unique signatures. Read-only PE scan: all six lifecycle signatures resolve once to verified function entries. No guessed addresses are used in production. validation-resume7 PASS: six C suites plain+UBSan, eight ranged and four melee decoder tests. These remain offline checks; actual engine binding/calling convention and lifecycle acceptance require replacement candidate P02/runtime validation. Old held candidate must not be used.
-
-Replacement P02 queued: requests/20261005-2241-native-melee-state-replacement.txt, source f50ae85e0d554fb9f536e2b1b4b81b024a08b6a9, DLL SHA256e6932c7288430fd716266b20dda57fd864ce8fbbf0da8aa91e4fcc8c634df92d. Source mirror equality checked before packaging. Corrected observer/lifecycle bindings, manual OFF. Runtime results still pending; no native acceptance claimed.
-
-### B14 / pending native ray validation
-B14 production-include adapter tests pass plain+UBSan: unavailable bindings/bad input never call physics; native aborted query preserves unavailable verdict; misses/range limits clear hit identity; finite valid hit copies complete five-word handle/shape/group; NaN/negative results rejected. Signature scan verifies unique native ctor and synchronous trace. validation-resume9 all seven C suites and twelve decoders PASS; integrated DLL rebuild PASS after fixing pointer/probe-ring name collision. Added read-only `fp_combat aim` diagnostic (manual can remain OFF), returns aimxyz/current-query physicalhit metadata or explicit unavailable/fault; requires established camera/view anchor. Visual nearer obstruction clears actor identity. Pending runtime: actor ahead, intervening actor, static cover, camera within own collision capsule, TPS/FP/origin translations, physics-unavailable phase, terrain/visual nearer geometry, valid ray range. Trace is pre-spread aiming telemetry; actual projectile first-victim/spatial limb validation remains separate. Do not count a query as a shot/impact or bypass physics abort to pass a test.
-
-### B15 intended-target identity guards
-Production-include target adapter tests PASS validation-resume10 plain+UBSan: reject every mismatched ID word, missing/native-null/invalid pointer, noncharacter/null hand, missing shape, self-target. Full offline run now eight C suites plus twelve decoders PASS. Unique executable resolver signature matches verified native entry once. Native intended target restores original target-dependent height/damage/attribution context while GunClass direction still uses explicit camera point/native spread. Pending runtime: moving/stale/unloaded target, intervening NPC, nearer cover, intended versus actual impact victim, self capsule, height multiplier/parity, hostility/XP. Adapter does not award damage and does not assert native resolver/engine acceptance from mocks.
-
-### B16 body entity guard ownership
-Production-include B16 verifies no body-entity probing while an enclosing guard is armed; cached pose lookup checks live skeleton identity and rejects absent binding/actor/mismatch. validation-resume11 PASS: nine C suites plain+UBSan and twelve decoders. Body Entity probe now precedes manual tick's own setjmp; guarded pose calls cached identity verifier. Native fault paths for manual tick/read-only aim also restore prior visual perch cache, and dispatch thread scope is cleared on fault. Runtime fault injection and unloaded/changed model cases remain pending; no engine acceptance inferred.
