@@ -55,7 +55,7 @@ Visual camera collision, body visibility and ADS alignment require screenshots/i
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
 | R10 | Cover/parallax | FP/third-person muzzle obstruction prevents shooting through walls |
-| R11 | Animated anatomy | moving/race/robot/missing limbs map correctly; nearest valid intersection (`fp-manual-anatomy.sh`: R11-MOVE/RACE/LIMB); PASS 4080 b21 (MOVE/RACE/LIMB); 5090 R11 rerun pending (b10 invalid: raid): the MOVE 6/10, RACE and LIMB setup fails in `fp-5090-10` were a setup failure (Dust Bandit raid attacked the shooter Axima mid-row, Stobe event 05:10), fixed by the raid guard in `fp-ui-guard.sh` (16dc0b3); rerun in `C:\KenshiTestRuns\fp-5090-11` |
+| R11 | Animated anatomy | moving/race/robot/missing limbs map correctly; nearest valid intersection (`fp-manual-anatomy.sh`: R11-MOVE/RACE/LIMB); PASS 4080 b21 (MOVE/RACE/LIMB); PASS 5090 m49 (MOVE dec-5090-2, LIMB dec-5090-4, RACE dec-5090-5 with bone-point aim) |
 | R12 | Lifecycle/input | UI, pause, actor/weapon swap, KO, reload/save/load, speed/FPS; no inherited fire |
 Diagnostic forced spread may isolate hit routing but cannot count toward balance evidence; ordinary production RNG must be used for R14-R16.
 
@@ -95,9 +95,9 @@ ADS alignment and reload readability; zoom/body/clipping; attack/block responsiv
 Keep these separate from automated mechanical results. No finite suite guarantees absence of all bugs.
 
 ## Current state
-PASS (evidence in `archive/test-run-2026-10-05-m41.md`, `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`): P01, P02, C00, B14/B14-frame, R01-R09, R13, S04 (both rigs; 5090 overshoot = native-AI baseline per S04-CTRL), M00-M07 (4080), R12 subset (pause, FP off, actor swap), S02 for ranged (P01 FP off/on A/B).
-Open: R10, R11 on the 5090 (see row), R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08, M09, Gate 3 (R14-R16), S01, S03, S05, C01-C05 beyond the C00 numeric subset; manual combat stays OFF by default until these pass.
-Method notes still valid: P01 needs a background `rangedtest <shooter> <target> shots 60 timeout 220 attack` to keep the native target; P02 needs `combatmode Shay block off passive off`; melee target = CombatClass+0x298 (swing target) / +0x2C8 (ordered target), +0x290 is always 0; game units are decimetres (eye = `where` y + 19 dm); R08 wrapper re-aims at the neck/chest bone; R09 blocker sits on the eye->target line ~13 dm up; R11-RACE uses Shek first (Hive drones bob 2.5 dm).
+PASS (evidence in `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-10-06-m49.md`, `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`): P01, P02, C00, B14/B14-frame, R01-R09 and R13 (both rigs again on the decoupled KenshiFP FE26573F, m49), R11 (both rigs), FP-EYE (`fp-eye-drift.sh`: the FP eye no longer rises while aiming; both rigs m49), S04 (both rigs; 5090 overshoot = native-AI baseline per S04-CTRL), M00-M07 (4080), R12 subset (pause, FP off, actor swap), S02 for ranged (P01 FP off/on A/B).
+Open: R10, R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08, M09, Gate 3 (R14-R16), S01, S03, S05, C01-C05 beyond the C00 numeric subset; manual combat stays OFF by default until these pass.
+Method notes still valid: P01 needs a background `rangedtest <shooter> <target> shots 60 timeout 220 attack` to keep the native target; P02 needs `combatmode Shay block off passive off`; melee target = CombatClass+0x298 (swing target) / +0x2C8 (ordered target), +0x290 is always 0; game units are decimetres (eye = `where` y + 19 dm); R08 wrapper re-aims at the neck/chest bone, aims beside an arm that covers the aim point (else the aimed part or that arm counts) and retakes shots whose pose at the trigger no longer fits the aim; R09 blocker sits on the eye->target line ~13 dm up; R11-RACE uses Shek first (Hive drones bob 2.5 dm).
 
 ## Open notes (from the development log; history of finished candidates/requests: git log -p of this file)
 - STOP before gameplay enable: truce guard, physical mouse dispatch conflicts, lifecycle/identity/thread/fault handling, dt/speed ownership, reload interruption/lowering, TPS actual-camera/muzzle/ADS, projectile target modifiers/spatial part routing and melee/root motion all remain unresolved. See full FP_COMBAT_HANDOFF_21.md.

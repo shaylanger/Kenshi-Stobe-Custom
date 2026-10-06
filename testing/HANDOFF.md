@@ -1,12 +1,12 @@
-# Current checkpoint: m48 (2026-10-06)
-Coordinator handoff: newest `coordinator-handoff-m<N>.md` in the temp folder (copy in `handoff/`). Run log:
-`archive/test-run-2026-10-05-m41.md` (m41-m48). Open rows: `MASTER_TEST_PLAN.md`.
-- **Builds:** 5090 Stobe DAF1390F, PG BAFB8C31 (Normal), KenshiFP 4FD22DEF, harness 2995EE5E; 4080 PG BAFB8C31,
-  KenshiFP 4FD22DEF, harness 2995EE5E.
-- **FP combat (2026-10-06):** R07, R08 9/9, R09, R13 PASS both rigs; R11-MOVE/RACE/LIMB PASS 4080; M00-M07 PASS (4080);
-  S04 PASS (5090 overshoot = native-AI baseline, S04-CTRL). Open: R10, R12 remainder (UI focus, KO, save/load, weapon
-  swap, speed/FPS), M08/M09, Gate 3, S01/S03/S05; 5090 R11 rerun pending (b10 invalid: raid; Dust Bandit raid hit
-  the shooter Axima mid-row = setup failure, raid guard in fp-ui-guard.sh 16dc0b3; rerun `C:\KenshiTestRuns\fp-5090-11`);
+# Current checkpoint: m49 (2026-10-06)
+Coordinator handoff: newest `coordinator-handoff-m<N>.md` in the temp folder (copy in `handoff/`). Run logs:
+`archive/test-run-2026-10-05-m41.md` (m41-m48), `archive/test-run-2026-10-06-m49.md` (m49). Open rows: `MASTER_TEST_PLAN.md`.
+- **Builds:** 5090 Stobe 7A8997FD (KenshiFP decoupling + 16-fb Hinge fix), PG BAFB8C31 (Normal), KenshiFP FE26573F (decoupled +
+  eye-drift fix), harness 2995EE5E; 4080 PG BAFB8C31, KenshiFP FE26573F, harness 2995EE5E.
+- **KenshiFP decoupling (m49, done):** goal/action logic now lives in Stobe (stobe_goals.log); DC1-DC7 PASS (DC1-DC5 with
+  the KenshiFP DLL absent), 89, 14-A3, generic-fb, 16-fb 55/55, A8 PASS.
+- **FP combat (m49):** R07, R08 (8/9, arm-occlusion + pose check), R09, R13, R11, FP-EYE PASS both rigs; M00-M07 PASS (4080);
+  S04 PASS. Open: R10, R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08/M09, Gate 3, S01/S03/S05;
   manual combat still OFF by default.
 - **PG:** all automated rows PASS; D1-D3, D5-D8 done; open D4 athletics feel + tooltip/feel rows (Shay).
 - **Waiting on Shay:** delete the 4080 save copies `kah-fp-*` (permission checker); delete the Avarek/Beaks Stobe DB rows

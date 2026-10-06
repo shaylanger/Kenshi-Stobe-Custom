@@ -35,7 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| FP combat | open: R10, 5090 R11 rerun pending (b10 invalid: raid; Dust Bandit raid hit the shooter = setup failure, raid guard 16dc0b3; rerun `C:\KenshiTestRuns\fp-5090-11`), R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08, M09, Gate 3 (R14-R16), S01, S03, S05; manual combat still OFF by default; Full-Base hand-over/fetch regression waits on Shay deleting the Avarek/Beaks Stobe DB rows | kah-fpxbow (fixture FP-crossbow), kah-fpcam | todo; PASS: P01, P02, C00, R01-R09, R13, S04, M00-M07 (4080), R11 (4080), R12 subset (run log m41) |
+| FP combat | open: R10, R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS), M08, M09, Gate 3 (R14-R16), S01, S03, S05; manual combat still OFF by default | kah-fpxbow (fixture FP-crossbow), kah-fpcam | todo; PASS: P01, P02, C00, R01-R09, R13, S04, M00-M07 (4080), R11 + FP-EYE (both rigs, m49), R12 subset (run logs m41, m49); generic-fb hand-over/fetch PASS m49 |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
