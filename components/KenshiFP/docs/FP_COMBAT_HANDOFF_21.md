@@ -1,5 +1,17 @@
 # FP combat handoff 21 — full resume context
-Status: ACTIVE — resumed on the user's latest instruction to keep implementing and keep this file continuously current. This dedicated FP combat record does not replace the coordinator's normal handoff.
+Status: MERGED (938d2e2) — fp-combat is merged into main; one session works on it directly (edits /root/KenshiFP + components/KenshiFP, builds, installs, runs the game, commits + pushes). The ownership, request/candidate and "push blocked" rules below are pre-merge history and are superseded. Current state: see "Status after merge" right below and `C:\KenshiModding\FP_COMBAT_COORDINATION_CONTEXT.md`.
+
+## Status after merge (2026-10-05)
+- Installed KenshiFP F44C1020 (main cc708e6), harness 452E2ABE (combatmode), manual combat OFF by default.
+- In game PASS: P01, P02, C00, S02 (ranged native unchanged), R01-R06, R12 subset (pause/FP off/actor swap). B14 runtime partial.
+  Details and evidence paths: COMBAT_TEST_PLAN.md "Current evidence".
+- Fixed: stale cached camera position read (C00); `fp_combat autoreload 0|1` + INI `combat_auto_reload`; `last_reload_timer`
+  in fp_combat state; fp_melee prints target_h/focused_h because CombatClass+0x290 is always 0.
+- Next: melee adapter target from target_h (+0x298) / focused_h (+0x2C8); vertical frame for spatial aim (R08/R10: eye y
+  vs `where` y ~20 m, body shapes hit at a flat y); impact observer on MedicalSystem::addWound; ADS; native melee adapter +
+  root-motion yield; R12 remainder (UI focus, KO, save/load, weapon swap, speed/FPS).
+
+## Pre-merge record (history)
 Current work: native getter/lifecycle binding correction committed f50ae85e0d554fb9f536e2b1b4b81b024a08b6a9; validation-resume7 and private DLL build PASS. Replacement P02 request20261005-2241-native-melee-state-replacement.txt queued; candidatef50ae85 SHA256e6932c7288430fd716266b20dda57fd864ce8fbbf0da8aa91e4fcc8c634df92d. Old candidate88758f6 remains HELD; replacement request explicitly supersedes old request/hold for NEW candidate only. Latest trace/camera harness source committed ce6233d (local), after validation-resume9 PASS (seven C suites plain+UBSan+twelve decoders) and latest integrated build6176 PASS. Includes synchronous camera physics query, read-only fp_combat aim, fp_camera look/world telemetry. Earlier compile name collision fixed. Latest intended-target context checkpoint365f5cc local: native resolver uniquely scanned, full handle validated, native shoot target supplied without changing aim/spread; validation-resume10 and DLL build PASS. Current uncommitted fix moves body Entity probe outside the manual guard and verifies cached skeleton identity (kfp_combat_body.inc/B16). validation-resume11 and private mirror sync started; next inspect test/build results and commit guard fix, then actual muzzle/spatial limb/impact routing, ADS and melee action/root-motion integration. Private source remains experimental, runtime acceptance pending. Manual adapter remains OFF/uninstalled; coordinator owns game/runtime. P01 evidence complete; do not poll it again. Keep this top status and activity entries current before substantial work and after results.
 
 ## Objective and latest instruction

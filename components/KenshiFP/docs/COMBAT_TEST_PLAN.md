@@ -111,7 +111,21 @@ ADS alignment and reload readability; zoom/body/clipping; attack/block responsiv
 Keep these separate from automated mechanical results. No finite suite guarantees absence of all bugs.
 
 ## Current evidence
-2026-10-05: plan created from live source/SDK and existing harness documentation. Coordination baseline pending. No game commands, installations or game validations performed by this agent.
+In-game results after the merge (2026-10-05, KenshiFP F44C1020 / main cc708e6, harness 452E2ABE; evidence
+`C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`). The request/candidate notes further down are history
+(work now happens directly on main); "pending coordinator" there is superseded by this list.
+- P01 PASS (p01d): native shots FP off 10 shots/10 ammo increases, FP on 10/10. Needs the background
+  `rangedtest <shooter> <target> shots 60 timeout 220 attack` to keep the native target; earlier "stops" were the AI dropping it.
+- S02 (native shooting unchanged) PASS for ranged via the P01 FP off/on A/B.
+- P02 PASS (p02c): CHOP entries FP off 20 / FP on 17, recovery samples 30/30 (`combatmode Shay block off passive off` first).
+- Melee target: CombatClass+0x290 pointer is 0 in every sample; `fp_melee state` now prints target_h (+0x298, follows the
+  swing target) and focused_h (+0x2C8, ordered target). The melee adapter must use the handles.
+- C00 PASS (c00c) after the camera forced-update read fix (actual_distance 0.000 at eye; was 2.8-8.8 m, a stale cached read).
+- B14 runtime partial: `fp_combat aim` end = eye + 80 m along the look direction (3 angles). Physical hits show an unresolved
+  vertical frame offset (eye y 661.6 Ogre vs `where` 641.7; character ray shapes hit at a flat y ~658.6). Blocks R08/R10.
+- R01, R02, R03, R04, R05, R06 PASS and R12 subset PASS (pause, FP off, actor swap) via
+  `components/KenshiFP/tests/ingame/fp-manual-ranged.sh` run r-3. Reload timer 6.11 s auto and manual (`last_reload_timer`).
+  R12 still open: UI focus, KO, save/load, weapon swap, speed/FPS.
 
 ## Native lifecycle prerequisite P01 (first candidate)
 The baseline defines KFP_MANUAL_AIM=0: out-of-combat raise/fire is disabled because field-forcing conflicts with native AI tasks. Do not count that prototype as a validated foundation or enable its instant reload. Before implementing manual dispatch, record native state transitions, animationUpdate callbacks and GunClass::shoot invocations with actual ammo before/after, target identity and stat argument. State integers remain raw until empirically mapped. Polling alone can miss intra-frame events; hook events preserve these. Native target attribution and projectile collision/body-part selection are separate unresolved requirements.
