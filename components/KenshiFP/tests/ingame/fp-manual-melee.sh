@@ -95,11 +95,19 @@ for i in 1 2 3 4 5; do
     awk -v a="$l" -v m="$maxlat" 'BEGIN{exit !(a>m)}' && maxlat=$l; fi
   sleep 3; H1=$(flesh "$TG"); awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && hits=$((hits+1))
 done
+# M05 top-up: `stat` prints one decimal and one hit adds ~0.07 XP (4080 m09 mca: 1 hit, 5.1->5.1), so click
+# on (max 10 more) until 3 manual hits have landed before reading the skill
+m05hits=$hits
+for _ in $(seq 1 10); do [ "$m05hits" -ge 3 ] && break
+  A health "$TG" 100 >/dev/null; sleep 0.3; H0=$(flesh "$TG")
+  for _ in $(seq 1 20); do [ "$(ms dead)" = 0 ] && [ "$(ms state)" != 8 ] && break; sleep 0.1; done
+  click; sleep 3; H1=$(flesh "$TG"); awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && m05hits=$((m05hits+1))
+done
 K1=$(skill)
 ev="5 clicks ($WEP): swung=$swung latency_ms=[${lat% }] hits=$hits out_of_reach+$(( $(ms out_of_reach)-O0 )) expired+$(( $(ms expired)-E0 )) rejected+$(( $(ms rejected)-J0 )) technique=$(ms technique)"
 if [ "$swung" -ge 4 ] && [ "$hits" -ge 1 ] && awk -v m="$maxlat" 'BEGIN{exit !(m<=1000)}'; then row M01 PASS "$ev"; else row M01 FAIL "$ev"; fi
-ev="attack base $K0->$K1 over $hits manual hits ($WEP)"
-if [ "$hits" -ge 1 ] && awk -v a="$K0" -v b="$K1" 'BEGIN{exit !(b>a)}'; then row M05 PASS "$ev"; else row M05 FAIL "$ev"; fi
+ev="attack base $K0->$K1 over $m05hits manual hits ($WEP)"
+if [ "$m05hits" -ge 1 ] && awk -v a="$K0" -v b="$K1" 'BEGIN{exit !(b>a)}'; then row M05 PASS "$ev"; else row M05 FAIL "$ev"; fi
 
 # ---- M02 spam: 15 clicks in 3 s can't start more swings than the native swing allows ----
 # The clicks come from the product's spam switch (game thread, 200 ms period): wrapper-driven clicks cost ~0.3 s per
