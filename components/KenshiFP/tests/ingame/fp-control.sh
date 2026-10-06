@@ -41,6 +41,8 @@ fps() { A fp_state | fld "$1"; }
 mvs() { A fp_move state | fld "$1"; }
 id_of() { A where "$1" | grep -o '#[0-9]*' | head -1 | tr -d '#'; }
 pos() { A where "$1" | grep -o 'pos=[^ ]*' | cut -d= -f2 | tr ',' ' '; }      # "x y z"
+# nwid <filter>: widget count from the one-line `ui` reply "N widget(s) | ..." (0 if none/unparsed)
+nwid() { local n; n=$(A ui "$1" | grep -o '^[0-9]* widget' | grep -o '^[0-9]*'); echo "${n:-0}"; }
 isko() { A where "$1" | grep -qE ' (KO|DEAD)( |$)'; }
 # d2 "x y z" "x y z": horizontal distance; dy: vertical change
 d2() { awk -v a="$1" -v b="$2" 'BEGIN{split(a,p," ");split(b,q," ");printf "%.2f", sqrt((q[1]-p[1])^2+(q[3]-p[3])^2)}'; }
@@ -139,11 +141,11 @@ ui_clear; HM=$(id_of "$MT"); A select "$MT" >/dev/null
 waitf 4 bash -c '[ "$(stobe-auto fp_control state | grep -o "\binspected=[^ ]*" | cut -d= -f2)" != "'"$H0"'" ]'; INSP=$?
 C3=$(A fp_control state); HC=$(fld controlled <<<"$C3"); HI=$(fld inspected <<<"$C3"); IDS3=$(fld control_ids <<<"$C3")
 PM0=$(pos "$MT"); look "$YAW" 0; read -r M3 G3 AN3 _ <<<"$(walk "$SH" w 2000)"; DM=$(d2 "$PM0" "$(pos "$MT")")
-BM=$(A ui "$MT" | grep -ci "$MT"); BS=$(A ui "$SH" | grep -ci "$SH")
+BM=$(nwid "$MT"); BS=$(nwid "$SH")
 A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; sleep 0.5
-NM=$(A ui "$MT" | grep -ci "$MT"); NS=$(A ui "$SH" | grep -ci "$SH"); HU=$(ctl controlled)
+NM=$(nwid "$MT"); NS=$(nwid "$SH"); HU=$(ctl controlled)
 A click INV >/dev/null; waitf 4 ui_is 0; HA=$(ctl controlled); IDSA=$(ctl control_ids)
-ev="inspected=$HI(changed=$((1-INSP))) controlled=$H0/$HC/$HU/$HA ids_same=$([ "$IDS0" = "$IDSA" ] && [ "$IDS0" = "$IDS3" ] && echo 1 || echo 0) | walk $SH=$M3 ang=$G3 anchor=$AN3 $MT=$DM | inv ui_open=$((1-UIO)) name hits $MT $BM->$NM $SH $BS->$NS"
+ev="inspected=$HI(changed=$((1-INSP))) controlled=$H0/$HC/$HU/$HA ids_same=$([ "$IDS0" = "$IDSA" ] && [ "$IDS0" = "$IDS3" ] && echo 1 || echo 0) | walk $SH=$M3 ang=$G3 anchor=$AN3 $MT=$DM | inv ui_open=$((1-UIO)) name widgets $MT $BM->$NM $SH $BS->$NS"
 ok=1; [ $INSP = 0 ] && [ "$HC" = "$H0" ] && [ "$HU" = "$H0" ] && [ "$HA" = "$H0" ] && [ "$IDS3" = "$IDS0" ] && [ "$IDSA" = "$IDS0" ] || ok=0
 ge "$M3" "$MOVE_MIN" || ok=0; lt "$DM" "$(awk -v m="$MOVE_MIN" 'BEGIN{print m/2}')" || ok=0
 awk -v m="$M3" -v a="$AN3" 'BEGIN{t=m*.25; if(t<3)t=3; d=m-a; if(d<0)d=-d; exit !(a>=0 && d<=t)}' || ok=0
