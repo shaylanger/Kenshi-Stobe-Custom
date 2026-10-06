@@ -64,7 +64,7 @@ Visual camera collision, body visibility and ADS alignment require screenshots/i
 | R08 | Spatial body-part hit | directed low-spread diagnostic + actual intersection/part + health delta; no weighted reroll |
 | R09 | Intervening NPC | first actual collision victim injured; original aimed actor unchanged when occluded |
 | R10 | Cover/parallax | FP/third-person muzzle obstruction prevents shooting through walls |
-| R11 | Animated anatomy | moving/race/robot/missing limbs map correctly; nearest valid intersection |
+| R11 | Animated anatomy | moving/race/robot/missing limbs map correctly; nearest valid intersection (`fp-manual-anatomy.sh`: R11-MOVE/RACE/LIMB) |
 | R12 | Lifecycle/input | UI, pause, actor/weapon swap, KO, reload/save/load, speed/FPS; no inherited fire |
 | R13 | KEP compatibility | crossbow/damage option matrix, no duplicate spread/wound effects |
 Diagnostic forced spread may isolate hit routing but cannot count toward balance evidence; ordinary production RNG must be used for R14-R16.
@@ -74,7 +74,7 @@ Diagnostic forced spread may isolate hit routing but cannot count toward balance
 |---|---|---|
 | R14 | Torso accuracy parity | matched native/manual hit rates with sample counts and intervals |
 | R15 | Fire-rate/damage parity | shots/game minute, reload time, ammo and damage/game minute |
-| R16 | Limb-target tactical impact | miss rates, armour, limb distribution and time to incapacitate |
+| R16 | Limb-target tactical impact | miss rates, armour, limb distribution and time to incapacitate (`fp-manual-limbs.sh`) |
 Matrix: low/medium/high crossbow skill x independent Perception bands; first fixed weapon/quality and stationary human target, then weapon accuracy requirements, distances, movement, injuries/gear, races and armour.
 Record effective stats and environmental modifiers immediately before each block. Keep input/aim protocol, target pose and RNG policy explicit.
 Use native centre-of-target combat vs reproducible manual torso aim as initial reference; aiming at a leg is a separate tactic, not silently compared with native torso shooting.
@@ -88,22 +88,24 @@ No final balance PASS until tolerances and missing native dependencies are defin
 |---|---|---|
 | M01 | Ready click starts native swing | input->wind-up latency, native technique starts without waiting for autonomous initiative |
 | M02 | Commitment/recovery | spam cannot increase rate or reset timers; move/block cannot cancel committed swing |
-| M03 | Block legal and responsive | actual defence phase/outcome, no blanket immunity or unrelated AI-turn delay |
-| M04 | Skill/weapon/injury effects | matched controls demonstrate real speed/defence/damage effects |
+| M03 | Block legal and responsive | actual defence phase/outcome, no blanket immunity or unrelated AI-turn delay; manual mode = no AI auto-block, block only while RMB is held (Shay 2026-10-05; stumbles stay native) |
+| M04 | Skill/weapon/injury effects | matched controls demonstrate real speed/defence/damage effects (`fp-manual-melee-skill.sh`: M04-SPEED/DEF/DMG/INJ) |
 | M05 | Native impact/enemy reaction | enemy threatens/defends; one impact; armour/XP/hostility retained |
 | M06 | Miss/spacing/recovery | real whiff/obstruction and vulnerability, no remote chase/hit |
 | M07 | Buffer | at most one short own-recovery request; expiration and no inherited actions |
-| M08 | Lifecycle/crowds | multiple attackers, KO, limbs, unarmed, UI, load, fallback and actor changes |
+| M08 | Lifecycle/crowds | multiple attackers, KO, limbs, unarmed, UI, load, fallback and actor changes (`fp-manual-melee-life.sh`: M08-UI/KO/LOAD/UNARMED/CROWD/ACTOR/LIMB) |
 | M09 | Animation compatibility | vanilla first, individual MCA/DodgeStrafe/Great Anims, then full loadout |
 If M01 only passes by spam-forcing a flag or waiting for AI initiative, phase 2 feasibility fails even if health changes.
+
+Notes (2026-10-05, KenshiFP 62464E5D): B17 offline covers AI refusal, click buffer, latency, owned-only approach refusal, hold ground, spam switch and swing timing. M01 latency is product-measured (`last_latency_ms`, harness round trip ~0.3 s per call). M02 uses the product spam switch `fp_melee spam 15 200` (wrapper clicks really ran at ~0.8 s each: 8 swings + 7 rejected = native pace) and asserts `min_swing_gap >= last_swing_len`. M06: no AI combat locomotion while owned (`hold_halts`, `approach_refused`), out-of-reach click counted `out_of_reach`; evidence includes target drift to rule out the pin. M04 windows use the spam switch (wrapper clicks capped every window at ~6 swings); M04-DMG picks the stat that moves the native `primaryweapondamage` for the weapon (katana = cutting; strength gave +7%); M04-DEF uses 3x windows and logs a native-AI control on FAIL. M08-UNARMED counts blood loss too (martial-arts hits left every part at 100% but blood 77.6->69.5); M08-CROWD clicks at legal native moments (two attackers, no RMB block -> mostly STUMBLE, where clicks are rejected natively).
 
 ## Gate 5: merged regression and reliability
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
 | S01 | Extraction integration | gameplay goals/actions work without FP dependency; controls use correct actor identity |
 | S02 | Normal/fallback combat | no changes to uncontrolled NPC/squad/native shooting outside manual ownership |
-| S03 | Repeated transitions | no stuck aim/reload/control after repeated switching/loading |
-| S04 | Soak/performance | bounded polling/event memory, frame cost and action integrity across long run |
+| S03 | Repeated transitions | no stuck aim/reload/control after repeated switching/loading (`fp-manual-transitions.sh`) |
+| S04 | Soak/performance | bounded polling/event memory, frame cost and action integrity across long run (`fp-manual-soak.sh`) |
 | S05 | Release restoration | main build/config verified and test owner can resume existing batch |
 
 ## Visual/user checks
@@ -127,6 +129,15 @@ In-game results after the merge (2026-10-05, KenshiFP F44C1020 / main cc708e6, h
 - R01, R02, R03, R04, R05, R06 PASS and R12 subset PASS (pause, FP off, actor swap) via
   `components/KenshiFP/tests/ingame/fp-manual-ranged.sh` run r-3. Reload timer 6.11 s auto and manual (`last_reload_timer`).
   R12 still open: UI focus, KO, save/load, weapon swap, speed/FPS.
+- 2026-10-06 (KenshiFP 39F58D2D, then 4FD22DEF = + wound pick diagnostics; harness 2995EE5E; both rigs, wrappers
+  `tests/ingame/fp-manual-*.sh`): R07, R13 PASS both rigs. R08 PASS 9/9 both rigs on 4FD22DEF (wrapper re-aims at the
+  neck/chest bone x/z; root position sits ~1.3 dm off the spine in guard pose, so earlier arm_r hits were legitimate
+  shoulder hits). R09 PASS both rigs (blocker placed on the eye->target line where the ray is ~13 dm up; blocker hurt,
+  target untouched). R11-MOVE PASS both. R11-LIMB PASS both (the lost leg is never picked naturally; the forced pick
+  is handled, 2/2). R11-RACE PASS 4080 (Shek, aimed part 4/6, upright wait before each shot; Hive drones bob 2.5 dm so
+  Shek goes first). M00-M07 PASS (4080 b18/b19, M04-SPEED/DEF/DMG/INJ). S04 PASS: 4080 growth -7 MB; 5090 159 MB vs
+  bound 150 MB, but the native-AI control (S04-CTRL, same fixture/method/machine) grows 156 MB with the same late steps,
+  so the overshoot is game baseline, not the adapter (4080 control: 112 MB).
 
 ## Native lifecycle prerequisite P01 (first candidate)
 The baseline defines KFP_MANUAL_AIM=0: out-of-combat raise/fire is disabled because field-forcing conflicts with native AI tasks. Do not count that prototype as a validated foundation or enable its instant reload. Before implementing manual dispatch, record native state transitions, animationUpdate callbacks and GunClass::shoot invocations with actual ammo before/after, target identity and stat argument. State integers remain raw until empirically mapped. Polling alone can miss intra-frame events; hook events preserve these. Native target attribution and projectile collision/body-part selection are separate unresolved requirements.
