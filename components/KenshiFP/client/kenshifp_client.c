@@ -849,6 +849,7 @@ static KfpView g_view;
 static int g_cfg_camera_zoom=1;
 static int g_cfg_direct_default = 1; /* always direct controls after world load */
 static int g_cfg_key_take_control = 0x75; /* F6: explicit control transfer */
+static int g_cfg_combat_auto_reload = 1; /* manual ranged: reload while aiming an empty weapon */
 static int g_cfg_wheel    = 1;     /* wheel_speed: scrollwheel gait control */
 static int g_cfg_vignette = 1;     /* ko_vignette: dark edges while knocked out */
 static int g_cfg_key_fp   = 0xA5;  /* key_toggle_fp (VK code; default Right Alt) */
@@ -7401,6 +7402,7 @@ static void load_ini(void)
         else if (ini_int(line, "aim_lean", &v))       g_cfg_aim_lean = !!v;
         else if (ini_int(line, "ranged_freeaim", &v)) g_cfg_freeaim  = !!v;
         else if (ini_int(line, "camera_zoom", &v)) g_cfg_camera_zoom=!!v;
+        else if (ini_int(line, "combat_auto_reload", &v)) g_cfg_combat_auto_reload=!!v;
         else if (ini_int(line, "direct_control_default", &v)) g_cfg_direct_default = !!v;
         else if (ini_int(line, "key_take_control", &v)) { if (v>0 && v<255) g_cfg_key_take_control=v; }
         else if (ini_int(line, "wheel_speed", &v))    g_cfg_wheel    = !!v;

@@ -7,11 +7,13 @@ static KfpCombatController g_combat_control;
 static KfpCombatObservation g_combat_observed;
 static KfpCombatInput g_combat_injected;
 static int g_combat_injection, g_combat_enabled, g_combat_native_ready;
-static int g_combat_fault, g_combat_dispatch, g_combat_auto_reload=1;
+static int g_combat_fault, g_combat_dispatch;
 static DWORD g_combat_dispatch_tid;
 static uint32_t g_combat_actor_ids[5];
 static void *g_combat_pc, *g_combat_rc, *g_combat_weapon, *g_combat_gun;
 static unsigned g_combat_actual_shots, g_combat_suppressed, g_combat_reload_starts;
+/* Native reload timer (rc+0x78) read the frame a reload starts: R04/R05 evidence. */
+static float g_combat_last_reload_timer=-1;
 typedef void (*combat_rc_t)(void *,float,const void *,const void *);
 typedef void (*combat_mt_t)(void *,float);
 typedef void (*combat_end_t)(void *);
@@ -207,9 +209,9 @@ static void fp_manual_combat_tick(void *gw,float dt) {
             *(Vec3 *)((uintptr_t)rc+RC_AIMPOS)=aim;
             int before=o.reloading;
             /* Native timer/ammo/XP path exactly once per owned game frame. */
-            if (o.reloading || (g_combat_auto_reload && input.aim && o.ammo==0))
+            if (o.reloading || (g_cfg_combat_auto_reload && input.aim && o.ammo==0))
                 g_combat_reload(rc);
-            if (!before && *(unsigned char *)((uintptr_t)rc+0x80)) ++g_combat_reload_starts;
+            if (!before && *(unsigned char *)((uintptr_t)rc+0x80)) {++g_combat_reload_starts;g_combat_last_reload_timer=*(float *)((uintptr_t)rc+0x78);}
             o.reloading=*(unsigned char *)((uintptr_t)rc+0x80);o.ammo=*(int *)((uintptr_t)gun+GUN_AMMO);
             g_ranged_animupd_orig(rc,o.dt,&aim,(input.aim||o.reloading)?pc:NULL);
             fp_combat_probe_animation(rc,(input.aim||o.reloading)?pc:NULL);
@@ -226,7 +228,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
                 isfinite(closeness) && closeness<=1.0f;
     o.shot_ready=o.aim_ready && isfinite(timer)&&timer<=0 && !combat_truce_pending();
     o.reload_allowed=have_aim;o.committed=o.reloading;
-    unsigned action=kfp_combat_step(&g_combat_control,&o,input,g_combat_auto_reload,0);
+    unsigned action=kfp_combat_step(&g_combat_control,&o,input,g_cfg_combat_auto_reload,0);
     g_combat_observed=o;
     if (action&KFP_ACT_RAISE) {
         unsigned char str[32];make_mstr(str,"");
@@ -245,7 +247,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     if ((action&KFP_ACT_RELOAD) && !*(unsigned char *)((uintptr_t)rc+0x80)) {
         int before=*(unsigned char *)((uintptr_t)rc+0x80);
         g_combat_reload(rc);
-        if (!before && *(unsigned char *)((uintptr_t)rc+0x80)) ++g_combat_reload_starts;
+        if (!before && *(unsigned char *)((uintptr_t)rc+0x80)) {++g_combat_reload_starts;g_combat_last_reload_timer=*(float *)((uintptr_t)rc+0x78);}
     }
     if ((action&KFP_ACT_SHOOT) && have_aim) {
         int before=*(int *)((uintptr_t)gun+GUN_AMMO);
@@ -289,6 +291,11 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         if (!g_combat_native_ready || g_combat_fault) {r->append(r,"native bindings/hooks unavailable or faulted");return KAH_ERROR;}
         g_combat_enabled=1;r->append(r,"manual ownership requested; release all combat buttons to arm");return KAH_OK;
     }
+    if (argc==3 && !_stricmp(argv[1],"autoreload")) {
+        if (strcmp(argv[2],"0")&&strcmp(argv[2],"1")) {r->append(r,"autoreload must be 0 or 1");return KAH_ERROR;}
+        g_cfg_combat_auto_reload=atoi(argv[2]);
+        r->append(r,g_cfg_combat_auto_reload?"auto_reload=1":"auto_reload=0");return KAH_OK;
+    }
     if (argc==2 && !_stricmp(argv[1],"physical")) {
         g_combat_injection=0;r->append(r,"physical combat input restored");return KAH_OK;
     }
@@ -300,18 +307,18 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         g_combat_injection=1;r->append(r,"combat input published; same controller/native gates as physical input");return KAH_OK;
     }
     if (argc==2 && !_stricmp(argv[1],"state")) {
-        char b[512];
-        snprintf(b,sizeof(b),"enabled=%d native_ready=%d fault=%d armed=%d kind=%d actor=%llx weapon=%llx gun=%llx aimed=%d anim_ready=%d shot_ready=%d ammo=%d reloading=%d reload_left=%.4f aim_left=%.4f actual_shots=%u suppressed=%u reload_starts=%u rejected=%u injected=%d",
+        char b[640];
+        snprintf(b,sizeof(b),"enabled=%d native_ready=%d fault=%d armed=%d kind=%d actor=%llx weapon=%llx gun=%llx aimed=%d anim_ready=%d shot_ready=%d ammo=%d reloading=%d reload_left=%.4f aim_left=%.4f actual_shots=%u suppressed=%u reload_starts=%u last_reload_timer=%.4f rejected=%u injected=%d auto_reload=%d",
           g_combat_enabled,g_combat_native_ready,g_combat_fault,g_combat_control.armed,g_combat_observed.kind,
           (unsigned long long)(uintptr_t)g_combat_pc,(unsigned long long)(uintptr_t)g_combat_weapon,
           (unsigned long long)(uintptr_t)g_combat_gun,g_combat_control.aimed,
           g_combat_observed.aim_ready,g_combat_observed.shot_ready,g_combat_observed.ammo,g_combat_observed.reloading,
           readable(g_combat_rc,0x88)?*(float *)((uintptr_t)g_combat_rc+0x78):-1,
           readable(g_combat_rc,0x88)?*(float *)((uintptr_t)g_combat_rc+0x70):-1,
-          g_combat_actual_shots,g_combat_suppressed,g_combat_reload_starts,g_combat_control.rejected,g_combat_injection);
+          g_combat_actual_shots,g_combat_suppressed,g_combat_reload_starts,g_combat_last_reload_timer,g_combat_control.rejected,g_combat_injection,g_cfg_combat_auto_reload);
         r->append(r,b);return KAH_OK;
     }
-    r->append(r,"usage: fp_combat on|off|state|aim|physical|input <aim 0|1> <fire 0|1> <reload 0|1>");return KAH_ERROR;
+    r->append(r,"usage: fp_combat on|off|state|aim|physical|autoreload <0|1>|input <aim 0|1> <fire 0|1> <reload 0|1>");return KAH_ERROR;
 }
 static uintptr_t combat_unique_signature(const char *sig) {
 #ifdef KFP_RE_PLUGIN
