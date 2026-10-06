@@ -12,7 +12,7 @@
 # and the same technique's CHOP is shorter), M04-DEF (target defence 1 vs 90 -> fewer hits per swing, 3x longer
 # windows; on FAIL a native-AI control at the same stats is logged), M04-DMG (the stat that moves the native AI's per-hit
 # damage for this weapon, strength/dexterity/katanas, 1 vs 80 -> more flesh per hit, scaled to the native change),
-# M04-INJ (fighter at 35% health -> wounds factor < 1, effective attack lower, not more swings).
+# M04-INJ (fighter at 35% health -> wounds factor < 1, effective attack lower, lower applied attack speed).
 # Direction checks only (mechanical PASS); the numbers go to the balance notes.
 # Usage: fp-manual-melee-skill.sh [fighter] [target] [outdir] [seconds per half, default 15].
 FI=${1:-Malzin}; TG=${2:-Skaera}; OUT=${3:-/tmp/fp-manual-melee-skill}; WIN=${4:-15}
@@ -224,18 +224,22 @@ fi
 
 # ---- M04-INJ: attack 50; healthy vs 35% health (protect off for the injured half) ----
 A setstat "$FI" attack 50 >/dev/null; A health "$FI" 100 >/dev/null
-E1=$(A stat "$FI" attack | grep -o 'eff[a-z]*=[0-9.]*' | head -1 | cut -d= -f2); read -r S1 _ _ M1 _ <<<"$(window)"
+E1=$(A stat "$FI" attack | grep -o 'eff[a-z]*=[0-9.]*' | head -1 | cut -d= -f2); A fp_melee swingstat reset >/dev/null; read -r S1 _ _ M1 _ <<<"$(window)"; W1=$(A fp_melee swingstat)
 A protect "$FI" off >/dev/null; A health "$FI" 35 >/dev/null; sleep 1
 SI=$(A stat "$FI" attack); E2=$(echo "$SI" | grep -o 'eff[a-z]*=[0-9.]*' | head -1 | cut -d= -f2); WF=$(echo "$SI" | fld wounds)
 # protect heals every frame (it would undo the 35%), so the injured half runs unprotected; window() tops the fighter
 # back up to 35% when a part drops below 30% (4080 b18: Skaera KO'd her mid-window -> not_allowed, 0 swings) and
 # stops on a KO; one repair (wake via protect, back to 35%), then SETUP FAIL
-for t in 1 2; do HOLD_FI=35; rm -f "$OUT/fi_ko"; read -r S2 _ _ M2 _ <<<"$(window)"; HOLD_FI=
+for t in 1 2; do HOLD_FI=35; rm -f "$OUT/fi_ko"; A fp_melee swingstat reset >/dev/null; read -r S2 _ _ M2 _ <<<"$(window)"; W2=$(A fp_melee swingstat); HOLD_FI=
   [ ! -e "$OUT/fi_ko" ] && ! A hp "$FI" | grep -q ' KO ' && break
   [ $t = 2 ] && { A protect "$FI" on >/dev/null; setup_fail "M04-INJ: fighter KO'd during the 35% window twice (swings=$S2)"; }
   A protect "$FI" on >/dev/null; sleep 3; A protect "$FI" off >/dev/null; A health "$FI" 35 >/dev/null; sleep 1; done
 A health "$FI" 100 >/dev/null; A protect "$FI" on >/dev/null
-ev="attack50: healthy eff=$E1 swings=$S1 mean_swing=${M1}s | 35% eff=$E2 wounds=$WF swings=$S2 mean_swing=${M2}s"
-if awk -v w="$WF" -v a="$E1" -v b="$E2" 'BEGIN{exit !(w<1 && b<a)}' && [ "$S2" -le "$S1" ] && [ "$S2" -ge 1 ]; then row M04-INJ PASS "$ev"; else row M04-INJ FAIL "$ev"; fi
+# swing count/mean swing mix techniques (see M04-SPEED; 4080 m09 DodgeStrafe: healthy 10 swings 0.915 s vs 35% 12
+# swings 0.734 s), so the row asserts the attack speed the game applied at each CHOP start (swingstat): lower when
+# injured; the swing counts stay in the line as evidence
+AS1=$(echo "$W1" | fld atk_speed_mean); AN1=$(echo "$W1" | fld atk_speed_n); AS2=$(echo "$W2" | fld atk_speed_mean); AN2=$(echo "$W2" | fld atk_speed_n)
+ev="attack50: healthy eff=$E1 swings=$S1 mean_swing=${M1}s | 35% eff=$E2 wounds=$WF swings=$S2 mean_swing=${M2}s | applied atk_speed $AS1(n=$AN1)->$AS2(n=$AN2)"
+if awk -v w="$WF" -v a="$E1" -v b="$E2" 'BEGIN{exit !(w<1 && b<a)}' && [ "${AN1:-0}" -ge 3 ] && [ "${AN2:-0}" -ge 3 ] && awk -v a="$AS1" -v b="$AS2" 'BEGIN{exit !(a>0 && b>0 && b<a)}'; then row M04-INJ PASS "$ev"; else row M04-INJ FAIL "$ev"; fi
 
 print_results
