@@ -2,14 +2,14 @@
 
 Index of every open test, one coordinator session runs Kenshi (roles, loop, scenario format: `testing/README.md`; goal,
 run rules and to-do list: `testing/HANDOFF.md`). **Open rows only:** a row that passed is deleted (line in the run log
-`archive/test-run-<date>-m<n>.md`); rows passed before 2026-10-03 m19 are listed in `archive/test-run-2026-10-03-m19.md`
-("master plan pruned"). IDs: `<feature> <row>` (STOBE 41, PG 306, REL SR02, KAH 3).
+`archive/test-run-<date>-m<n>.md`); rows passed before 2026-10-03 m19 are in the m19 run log (git history).
+IDs: `<feature> <row>` (STOBE 41, PG 306, REL SR02, KAH 3).
 
 | Feature | Detail plan (source of truth) | Scenarios |
 |---|---|---|
 | STOBE + KenshiFP | `STOBE_full_test_plan.md` | `tests/ingame/stobe/` |
 | Profession Gear (PG) | `Kenshi-Profession-Gear-Progression/TEST_PLAN.md`, status `INGAME_STATUS.md` | PG repo `tests/ingame/` (`RUN_ORDER.md`) |
-| Relationship system (REL) | `STOBE_relationship_system_audit_and_implementation_plan.md` section 8 (open SR rows) | `/var/www/html/StobeServer/tests/social_relationship/ingame/` |
+| Relationship system (REL) | `docs/RELATIONSHIP_SYSTEM_DESIGN.md` section 8 (open SR rows) | `/var/www/html/StobeServer/tests/social_relationship/ingame/` |
 | KenshiFP FP combat | `components/KenshiFP/docs/COMBAT_TEST_PLAN.md` (context `FP_COMBAT_COORDINATION_CONTEXT.md`) | `components/KenshiFP/tests/ingame/` |
 | Harness (KAH) | this file, section 5 | `C:\KenshiTestRuns\scenarios\` |
 
@@ -29,7 +29,7 @@ results labelled "-4080"). Never compare performance across machines.
 ## 1. Open automated rows
 
 
-Memory baseline (Shay 2026-10-04): first-commit DLLs vs current, Kenshi +171 MB at load 0 and less growth per load (118 vs 134 MB/load); no bug. Graphics A/B: Dust/ReShade off -0.6 GB, HD detail textures off another -2.6 GB (9.3 GB private at load 0). Report `MEMORY_BASELINE_2026-10-04.md`.
+Memory baseline (Shay 2026-10-04): first-commit DLLs vs current, Kenshi +171 MB at load 0 and less growth per load (118 vs 134 MB/load); no bug. Graphics A/B: Dust/ReShade off -0.6 GB, HD detail textures off another -2.6 GB (9.3 GB private at load 0). Report `archive/MEMORY_BASELINE_2026-10-04.md`.
 
 Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete the row).
 

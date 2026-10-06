@@ -6,6 +6,7 @@ Run logs: `archive/test-run-2026-10-05-m41.md` (m41-m48), `archive/test-run-2026
 ## Right now
 - Nothing running. Kenshi closed on both rigs, no batches, no subagents. Graphics mods ON on the 5090 (Shay can play).
 - Nothing is waiting on Shay.
+- Workspace cleanup 2026-10-06: applied patch scripts, old run logs (before m41), REL handoff docs and finished plans removed (git history); reference docs now in `docs/`.
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,

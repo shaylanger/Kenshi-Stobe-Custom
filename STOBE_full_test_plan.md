@@ -1,9 +1,9 @@
 # STOBE: open issues and tests left
 
-Last updated 2026-10-06 (doc cleanup: 96/97 and the built + confirmed B 55 spec removed, trace in `archive/test-run-2026-10-05-m41.md`; m19 pruned 53 rows, see `archive/test-run-2026-10-03-m19.md`). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
+Last updated 2026-10-06 (doc cleanup: 96/97 and the built + confirmed B 55 spec removed, trace in `archive/test-run-2026-10-05-m41.md`; older run logs are in git history). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **125**. Work resumed m22; run log archive/test-run-2026-10-03-m22.md.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **125**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -17,7 +17,7 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 86 | game re-reported `Initiated attack` during a truce, so a paid surrender turned BREACHED_PLAYER | fixed live (f98b88e, e9f8598: a breach needs real evidence within 8 s; older-save load cancels later deals) |
 | 87 | Dust King: no initiative check (his attack was stood down by another personal-fight guard) | test procedure fixed; covered by 88 + 61 PASS m18 |
 | 94 | `stobe-reset-npc --restore` wrote "shay" instead of "Shay" | fixed (tool) |
-| 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (KenshiFP: carried goods + nearest stocking trader) |
+| 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (goal code, in Stobe.dll since m49: carried goods + nearest stocking trader) |
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
 
