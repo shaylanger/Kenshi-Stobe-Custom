@@ -73,6 +73,20 @@ Repeated shots at one target are not necessarily independent; reset health/pose 
 Report casualties/KO/target movement that invalidate conditions. Do not pool different weapon/config/skill cells to mask a regression.
 No final balance PASS until tolerances and missing native dependencies are defined from measured baselines.
 
+**Gate 3 tolerance PROPOSAL (2026-10-06, awaiting Shay's approval; not in force).** Baselines (4080, 80 dm, crossbows 30,
+perception 59, stationary human, production RNG): torso hits manual b8 18/20 + b27 20/20 = 38/40 (0.95), native b8 18/20 +
+b25 17/20 + b27 17/20 = 52/60 (0.87); difference +0.08, 90% CI [-0.01, +0.18]. Damage/hit manual 21.5/20.5 vs native
+22.4/21.4. Real s/shot manual 13.1/12.9 vs native game s 6.4/6.3.
+- **R14 torso accuracy:** TOST equivalence on the hit-rate difference (manual - native), margin +/-0.15 absolute, alpha 0.05
+  (90% CI inside the margin). About 85 shots per arm per cell (true difference 0, power 0.8, p ~0.88); +/-0.10 needs ~190 per
+  arm. Shots in replicated blocks of 20 with target health/pose reset between blocks. The current pooled data (40/60) is not
+  yet equivalent (CI upper 0.18 > 0.15): manual aim at a stationary torso may be more accurate than native, which is
+  expected for player aim. If the powered run confirms manual > native + 0.15, that is a balance decision, not a mechanics bug.
+- **R15 fire rate/damage:** manual must not fire faster than native: game-time s/shot manual >= 0.9x native per cell.
+  Damage per hit: ratio manual/native with its 90% CI inside [0.85, 1.18].
+- **R16 limb targeting:** leg aim lands on the leg >= 0.8 of hits; leg targeting must not incapacitate faster than torso
+  aim by more than 20% (time to KO/immobile), so limb aim is a tactic, not a dominant exploit.
+
 ## Gate 4: melee feasibility and mechanics (phase 2)
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
