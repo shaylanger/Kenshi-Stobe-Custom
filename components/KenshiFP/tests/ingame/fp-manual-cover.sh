@@ -32,8 +32,12 @@ aim_at() { read -r sx sy sz <<<"$(pos "$SH")"; read -r tx ty tz <<<"$(pos "$1")"
      'BEGIN{h=sqrt((c-a)^2+(d-b)^2); printf "%.4f %.4f", atan2(c-a, d-b), atan2(ey-py, h)}')"
   A fp_camera look "$YAW" "$PIT" >/dev/null; sleep 0.4; }
 # ray_hits_target: the current aim ray's first hit is the target (id4 = its serial)
-ray_id() { A fp_combat aim | grep -o 'id4=[0-9]*' | cut -d= -f2; }
-ray_dist() { A fp_combat aim | grep -o 'distance=[0-9.]*' | cut -d= -f2; }
+# one settled aim read: retry ~2 s while physical=0 (4080 b27: the first read came before the ray updated, id4=0, and
+# the next read hit the Grain Silo at 164 dm; separate id/distance reads mixed the two), then id4 and distance from it
+ray() { local l; for _ in $(seq 1 10); do l=$(A fp_combat aim); echo "$l" | grep -q 'physical=1' && break; sleep 0.2; done
+  echo "$(echo "$l" | grep -o 'id4=[0-9]*' | cut -d= -f2) $(echo "$l" | grep -o 'distance=[0-9.]*' | cut -d= -f2)"; }
+ray_id() { ray | cut -d' ' -f1; }
+ray_dist() { ray | cut -d' ' -f2; }
 
 # ---- setup ----
 A status | grep -q phase=world || setup_fail "not in world"
@@ -58,7 +62,7 @@ while IFS=, read -r bx by bz; do
   A teleport "$TG" "$(awk -v x="$bx" 'BEGIN{print x+120}')" "$by" "$bz" >/dev/null; A pin "$TG" >/dev/null
   sleep 2; A fp_control take >/dev/null; aim_at "$TG" 13
   inp 1 0 0; waitfor 10 aimed 1; aim_at "$TG" 13
-  id=$(ray_id); d=$(ray_dist)
+  read -r id d <<<"$(ray)"
   # cover = a physical hit that isn't the target, nearer than the target (300 dm); no hit at all is not cover
   # (4080 batch 2: the 8 m aim ray accepted "id4=0 distance 0" as cover)
   if [ -n "$id" ] && [ "$id" != 0 ] && [ "$id" != "$TS" ] && awk -v d="$d" 'BEGIN{exit !(d>0 && d<300)}'; then COVER="$bx,$by,$bz"; RID=$id; RD=$d; break; fi
