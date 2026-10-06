@@ -68,7 +68,8 @@ for c in $(seq 1 "$N"); do
   fi
   [ "$(cs fault)" = 0 ] || bad "$c" ranged_fault
   # melee: take, why ok, block 2 s then release, swing still possible
-  take "$FI" || bad "$c" take_fighter; A fp_melee passive "$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')" >/dev/null   # its hits would stumble-lock the fighter
+  take "$FI" || bad "$c" take_fighter; A pin "$TG" at "$FI" dist 12 face "$FI" >/dev/null   # in reach (4080 b26 c1: 10 clicks out_of_reach at ~20 dm)
+  A fp_melee passive "$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')" >/dev/null   # its hits would stumble-lock the fighter
   if ui_ready "$c" melee; then
   # the fight may have ended since prep (4080 b25 c2: active=0, every click rejected no_fight): re-engage first
   ok=0; for i in $(seq 1 40); do inp 0 0; s=$(A fp_melee state)
@@ -79,6 +80,7 @@ for c in $(seq 1 "$N"); do
   for _ in $(seq 1 10); do inp 0 1; sleep 0.15; inp 0 0; sleep 0.35; [ "$(ms swings)" != "$S0" ] && break; done
   [ "$(ms swings)" != "$S0" ] || bad "$c" no_swing_after_block
   fi
+  A pin "$TG" at "$SH" dist 25 face "$SH" >/dev/null   # back in front of the shooter for the next ranged step
   # toggles
   A fp_mode off >/dev/null; sleep 0.5; A fp_mode on >/dev/null; sleep 0.5
   A fp_combat off >/dev/null; sleep 0.3; A fp_combat on >/dev/null; sleep 0.3
