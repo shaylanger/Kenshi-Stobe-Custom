@@ -2263,7 +2263,8 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_putdown", "fp_putdown (G while carrying)", kah_fp_putdown, NULL)
           + g_kah.registerCommand("fp_state", "fp_state", kah_fp_state, NULL)
           + g_kah.registerCommand("fp_combat_probe", "fp_combat_probe begin|end|state|events [after_sequence]|clear", kah_fp_combat_probe, NULL)
-          + g_kah.registerCommand("fp_control", "fp_control state|take", kah_fp_control, NULL)
+          + g_kah.registerCommand("fp_control", "fp_control state|take|press", kah_fp_control, NULL)
+          + g_kah.registerCommand("fp_move", "fp_move <wasd|none> [ms] | state (TEST ONLY WASD hold)", kah_fp_move, NULL)
           + g_kah.registerCommand("fp_camera", "fp_camera state|distance <0..12>|wheel <delta>|look <yaw radians> <pitch radians>", kah_fp_camera, NULL)
           + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|aim (read-only)|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
           + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL);
@@ -4555,10 +4556,10 @@ static void fp_movement(void *gw, float dt)
 
     /* Wheel consumed by fp_view_input; locomotion speed is independent. */
 
-    int w = game_has_focus() && (GetAsyncKeyState(VK_W) & 0x8000) != 0;
-    int s = game_has_focus() && (GetAsyncKeyState(VK_S) & 0x8000) != 0;
-    int a = game_has_focus() && (GetAsyncKeyState(VK_A) & 0x8000) != 0;
-    int d = game_has_focus() && (GetAsyncKeyState(VK_D) & 0x8000) != 0;
+    int w = (game_has_focus() && (GetAsyncKeyState(VK_W) & 0x8000) != 0) || kah_move_key(1);
+    int s = (game_has_focus() && (GetAsyncKeyState(VK_S) & 0x8000) != 0) || kah_move_key(2);
+    int a = (game_has_focus() && (GetAsyncKeyState(VK_A) & 0x8000) != 0) || kah_move_key(4);
+    int d = (game_has_focus() && (GetAsyncKeyState(VK_D) & 0x8000) != 0) || kah_move_key(8);
     int keys = w | (s << 1) | (a << 2) | (d << 3);
     float mf = (float)(w - s);     /* forward/back */
     float mr = (float)(d - a);     /* left/right (turns the char, not strafe) */
