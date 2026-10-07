@@ -19,7 +19,7 @@ def run(name,cmd):
         except subprocess.TimeoutExpired: code=124
     print(name,"exit="+str(code)); print(log.read_text(errors="replace")[:3000])
     if code: raise SystemExit(1)
-for source in ("test_combat_probe.c","test_control_view.c","test_combat_controller.c","test_aim_geometry.c","test_melee_observe.c","test_combat_melee.c","test_combat_input.c","test_combat_trace.c","test_combat_target.c","test_combat_body.c","test_wound_geometry.c","test_shot_geometry.c","test_cmd_args.c","test_ready_latch.c","test_free_key.c","test_weld.c"):
+for source in ("test_combat_probe.c","test_control_view.c","test_combat_controller.c","test_aim_geometry.c","test_melee_observe.c","test_combat_melee.c","test_combat_input.c","test_combat_trace.c","test_combat_target.c","test_combat_body.c","test_wound_geometry.c","test_shot_geometry.c","test_cmd_args.c","test_ready_latch.c","test_free_key.c","test_weld.c","test_stuck.c"):
     for name,flags in [("plain",[]),("ubsan",["-fsanitize=undefined","-fno-sanitize-recover=all"])]:
         label=Path(source).stem+"-"+name
         binary=str(logs/label)

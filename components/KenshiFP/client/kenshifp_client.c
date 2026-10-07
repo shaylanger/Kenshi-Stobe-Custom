@@ -1379,7 +1379,8 @@ static int g_interiors_dead;                   /* set if the interior preload ev
 static DWORD g_last_move_ms;
 static int g_was_moving;
 static int g_was_direct;           /* current WASD hold uses engine direct drive */
-static int g_stuck_frames;         /* direct-driving but body not translating (seated/bed/pinned) */
+static int g_stuck_frames;         /* direct-driving but body not translating (seated/bed/pinned); kfp_stuck.h */
+static int g_dbg_prone, g_dbg_in_bed, g_dbg_downed, g_dbg_ko;   /* last locomotion frame, for "fp_move state" */
 static int g_eye_from_head;        /* this frame's eye came from the head bone (not fallback) */
 /* Direct-drive intent, published by fp_movement and ENFORCED inside the
  * CharMovement::update hook -- applying there (before the original runs) wins
@@ -1904,6 +1905,7 @@ static void kfp_extract_assets(void)
 #include "kfp_locomotion.h"
 #include "kfp_cmd_args.h"
 #include "kfp_free_key.h"
+#include "kfp_stuck.h"
 #include "kfp_control.inc"
 #include "kfp_combat_probe.inc" /* passive native lifecycle prerequisite */
 #include "kfp_meshray.h"   /* true-geometry .mesh triangle raycasts (task #22) */
@@ -4540,6 +4542,7 @@ static void fp_control_release_actor(void *pc,int live) {
         *(int *)((uintptr_t)mv+MV_MOVEMODE)=0;
     }
     g_dm_mv=NULL; g_was_moving=0; g_was_direct=0;
+    kfp_stuck_idle(&g_stuck_frames);
     g_have_dest=0; g_face_have=0; g_face_turning=0; g_lead_sm=0;
 }
 
@@ -4591,10 +4594,17 @@ static void fp_movement(void *gw, float dt)
      * (4) and g_is_down follow only when the body has fallen; until then the standing branch
      * below kept direct drive on a KO'd actor (dm_active=1 on the first KO sample). */
     int ko_now = combat_char_unconscious(pc);
+    g_dbg_ko = ko_now;
     if (g_is_down || ko_now || g_fall_active || g_fall_rd != FALLRD_OFF) {
         InterlockedExchange(&g_dm_active, 0);
         InterlockedExchange(&g_face_active, 0);
         g_was_moving = 0; g_face_turning = 0;
+        /* C01/C02/C05 (4080 b30/b31): restart the pinned estimate and drop the stale walk target here --
+         * the release branch below is gated on g_was_moving, which this stand-down just cleared, so a
+         * stale "pinned" sent the next W hold down the order path. */
+        kfp_stuck_idle(&g_stuck_frames);
+        g_have_dest = 0; g_lead_sm = 0.0f;
+        g_dbg_prone = char_prone_state(pc); g_dbg_downed = 1;
         /* C05-KO: a hold that was direct-driving leaves MOVE_DIRECTION + desired motion
          * behind; clear them once (the fall driver owns currentMotion, so leave that). */
         if ((g_is_down || ko_now) && g_was_direct) {
@@ -4662,8 +4672,8 @@ static void fp_movement(void *gw, float dt)
             g_was_moving = 0;
             g_have_dest = 0;
             g_lead_sm = 0.0f;           /* fresh lead estimate on next move */
-            g_stuck_frames = 0;         /* fresh pinned estimate on next move */
         }
+        kfp_stuck_idle(&g_stuck_frames);    /* fresh pinned estimate on next move (any release, kfp_stuck.h) */
         /* ACTIVE BRAKE (all tiers): proportionally damp the mover's residual velocity
          * every glide frame -- cuts the momentum slide roughly in half at the default
          * loco_brake=6 (walk, jog AND sprint), for a more responsive stop across the
@@ -4777,9 +4787,7 @@ static void fp_movement(void *gw, float dt)
      * path instead, which cancels the holding job and walks us out. Clears as
      * soon as real movement resumes, so normal standing locomotion is untouched
      * (walking is ~26 u/s, far above the 2 u/s pinned floor). */
-    if (g_was_direct && g_move_speed < 2.0f) { if (g_stuck_frames < 600) g_stuck_frames++; }
-    else if (g_move_speed >= 4.0f) g_stuck_frames = 0;
-    int pinned = g_stuck_frames > 15;   /* ~0.25s of no progress under direct drive */
+    int pinned = kfp_stuck_step(&g_stuck_frames, g_was_direct, g_move_speed);  /* ~0.25s of no progress under direct drive */
 
     /* Authoritative state (KenshiLib members): prone state and bed flag tell us
      * directly when the character can't do standing MOVE_DIRECTION locomotion
@@ -4793,6 +4801,7 @@ static void fp_movement(void *gw, float dt)
      * state, so only stuck-detection catches it). Route these to the order path,
      * which cancels the holding job and runs the get-up. */
     int downed = (prone != PS_NORMAL) || in_bed || (g_head_above < 0.9f) || pinned;
+    g_dbg_prone = prone; g_dbg_in_bed = in_bed; g_dbg_downed = downed;
     if (KFP_DEBUG_LOG) {
         static int lg;
         if ((++lg % 20) == 1) {

@@ -22,6 +22,8 @@ static int fp_control_pin(void *gw,void *pc) {
     if (!char_valid(pc) || !readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) return 0;
     if (g_fp_control_pinned && memcmp(g_fp_control_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20))
         FP_CONTROL_RELEASE(gw);
+    if (!g_fp_control_pinned || memcmp(g_fp_control_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20))
+        kfp_stuck_idle(&g_stuck_frames);   /* new actor: fresh pinned estimate */
     memcpy(g_fp_control_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20);
     g_fp_control_pinned=1; g_fp_control_actor=pc;
     return 1;
@@ -172,14 +174,16 @@ static int kah_fp_control(const char *id,int argc,const char *const *argv,KAH_Re
 /* fp_move <keys wasd|none> [ms] | state: bounded harness WASD hold (TEST ONLY). */
 static int kah_fp_move(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id; (void)u;
-    char b[300];
+    char b[480];
     if (argc==2 && !_stricmp(argv[1],"state")) {
         LONG k=g_kah_move_keys; LONG left=(LONG)((DWORD)g_kah_move_until-GetTickCount());
         if (!k || left<0) { k=0; left=0; }
         snprintf(b,sizeof(b),"keys=%s%s%s%s left_ms=%ld moving=%d direct_drive=%d dm_active=%d move_speed=%.2f"
-            " is_down=%d ui_moveblock=%d fp_mode=%d",
+            " is_down=%d ui_moveblock=%d fp_mode=%d prone=%d in_bed=%d head_above=%.2f stuck_frames=%d pinned=%d"
+            " downed=%d ko=%d",
             (k&1)?"w":"",(k&2)?"s":"",(k&4)?"a":"",(k&8)?"d":"",(long)left,g_was_moving,g_was_direct,
-            (int)g_dm_active,g_move_speed,g_is_down,g_ui_moveblock,!!g_fp_mode);
+            (int)g_dm_active,g_move_speed,g_is_down,g_ui_moveblock,!!g_fp_mode,g_dbg_prone,g_dbg_in_bed,
+            g_head_above,g_stuck_frames,g_stuck_frames>KFP_STUCK_PINNED_FRAMES,g_dbg_downed,g_dbg_ko);
         r->append(r,b); return KAH_OK;
     }
     if (argc<2 || argc>3) {

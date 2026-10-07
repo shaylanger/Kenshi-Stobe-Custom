@@ -39,6 +39,9 @@ static DWORD GetTickCount(void){return fake_tick;}
 static int g_was_moving,g_was_direct,g_is_down,g_ui_moveblock;
 static volatile LONG g_dm_active;
 static float g_move_speed;
+static float g_head_above=2.0f;
+static int g_stuck_frames,g_dbg_prone,g_dbg_in_bed,g_dbg_downed,g_dbg_ko;
+#include "../client/kfp_stuck.h"
 static int live_releases;static void fp_control_release_actor(void *pc,int live){(void)pc;++releases;live_releases+=live!=0;}
 static int g_head_hidden,g_gear_n;static void *g_head_hidden_char,*g_player_app,*g_head_params,*g_head_params_mat;
 #include "../client/kfp_control.inc"
@@ -78,6 +81,12 @@ int main(void){
      assert(kah_move_key(1)&&kah_move_key(4)&&!kah_move_key(2)&&!kah_move_key(8));
      const char *st[]={"fp_move","state"};reply[0]=0;assert(kah_fp_move("test",2,st,&r,NULL)==KAH_OK);
      assert(strstr(reply,"keys=wa left_ms=500 ")&&strstr(reply,"fp_mode=1"));
+     /* C05-KO/INVALID evidence: the getup/pinned inputs are in the state line */
+     for(int i=0;i<20;i++) kfp_stuck_step(&g_stuck_frames,1,0.0f);
+     g_dbg_prone=4;g_dbg_downed=1;g_dbg_ko=1;g_head_above=0.4f;reply[0]=0;
+     assert(kah_fp_move("test",2,st,&r,NULL)==KAH_OK);
+     assert(strstr(reply,"prone=4 in_bed=0 head_above=0.40 stuck_frames=20 pinned=1 downed=1 ko=1"));
+     kfp_stuck_idle(&g_stuck_frames);g_dbg_prone=g_dbg_downed=g_dbg_ko=0;g_head_above=2.0f;
      fake_tick+=500;assert(!kah_move_key(1)&&!g_kah_move_keys); /* expired hold clears itself */
      const char *bad[]={"fp_move","wx"};assert(kah_fp_move("test",2,bad,&r,NULL)==KAH_ERROR&&!g_kah_move_keys);
      const char *badms[]={"fp_move","w","0"};assert(kah_fp_move("test",3,badms,&r,NULL)==KAH_ERROR&&!g_kah_move_keys);
