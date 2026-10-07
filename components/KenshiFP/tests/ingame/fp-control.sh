@@ -77,7 +77,7 @@ YAW=0
 align() { A fp_move w 1000 >/dev/null; sleep 1.6; }
 walk() { local p0 p1 a0 a1 ms2 sp st wm; p0=$(pos "$1"); a0=$(anchor); A fps reset >/dev/null; A fp_move "$2" "$3" >/dev/null
   ms2=$(awk -v m="$3" 'BEGIN{printf "%.2f", m/2000}'); sleep "$ms2"; st=$(A fp_move state)
-  sp=$( [ "$(fld moving <<<"$st")" = 1 ] && fld move_speed <<<"$st"); sleep "$ms2"; sleep 0.6
+  echo "$st" > "$OUT/last_walk_state.txt"; sp=$( [ "$(fld moving <<<"$st")" = 1 ] && fld move_speed <<<"$st"); sleep "$ms2"; sleep 0.6
   p1=$(pos "$1"); a1=$(anchor); wm=$(A fps | fld worst_ms)
   awk -v a="$p0" -v b="$p1" -v c="$a0" -v d="$a1" -v y="$YAW" -v k="$2" -v sp="$sp" -v wm="$wm" 'BEGIN{split(a,p," ");split(b,q," ");split(c,u," ");split(d,v," ")
     dx=q[1]-p[1]; dz=q[3]-p[3]; m=sqrt(dx*dx+dz*dz); fx=sin(y); fz=cos(y); if(k=="s"){fx=-fx;fz=-fz}
@@ -108,6 +108,21 @@ alive() { inworld && return 0; waitf 20 inworld && return 0; local s; s=$(A stat
   echo "RESULT SETUP FAIL game stuck out of the world $1 (20 s): $s log=$LOG"; echo "SETUP FAIL stuck $1: $s" >> "$LOG"; exit 1; }
 # still <who> <s>: displacement over s seconds (no input expected)
 still() { local p0; p0=$(pos "$1"); sleep "$2"; d2 "$p0" "$(pos "$1")"; }
+# pick_yaw <who> <label>: set YAW to the one of 16 headings whose walk line (-30..130 units, covers the C01 walk back)
+# passes farthest from the other two of player/mate/target. 4080 b31 C01: YAW was whatever the camera had and the walk
+# passed ~5 units from the KO'd Skaera body (deflected 11 deg, move_speed 34, fp/tp ratio 0.42). Sets YAWC (clearance).
+pick_yaw() { local p o="" c r; p=$(pos "$1")
+  for c in "$SH" "$MT" "$TG"; do [ "$c" = "$1" ] && continue; o+="$(pos "$c" | tr ' ' ',');"; done
+  r=$(awk -v p="$p" -v o="$o" 'BEGIN{split(p,s," "); n=split(o,ob,";"); best=-1; by=0
+    for(k=0;k<16;k++){y=-3.14159+k*6.28318/16; fx=sin(y); fz=cos(y); m=1e9
+      for(t=-30;t<=130;t+=10){x=s[1]+fx*t; z=s[3]+fz*t
+        for(i=1;i<=n;i++){ if(ob[i]=="") continue; split(ob[i],q,","); d=sqrt((q[1]-x)^2+(q[3]-z)^2); if(d<m)m=d }}
+      if(m>best){best=m; by=y}}
+    printf "%.4f %.1f\n", by, best}')
+  YAW=${r%% *}; YAWC=${r##* }; echo "YAW $2 ($1): yaw=$YAW clearance=$YAWC" >> "$LOG"; }
+# mvdiag: get-up/pinned inputs from the mid-hold `fp_move state` of the last walk (KenshiFP 272A573C+)
+mvdiag() { local s; s=$(cat "$OUT/last_walk_state.txt" 2>/dev/null)
+  echo "moving=$(fld moving <<<"$s") direct=$(fld direct_drive <<<"$s") dm=$(fld dm_active <<<"$s") speed=$(fld move_speed <<<"$s") prone=$(fld prone <<<"$s") in_bed=$(fld in_bed <<<"$s") head_above=$(fld head_above <<<"$s") stuck=$(fld stuck_frames <<<"$s") pinned=$(fld pinned <<<"$s") downed=$(fld downed <<<"$s") ko=$(fld ko <<<"$s")"; }
 FP0=$(fps fp_mode); DIST0=$(cam target)
 cleanup() { A fp_move none >/dev/null; A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
             for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
@@ -126,17 +141,17 @@ for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
 if A where "$TG" | grep -q 'pos='; then A protect "$TG" off >/dev/null; A ko "$TG" 3600 >/dev/null; waitf 15 isko "$TG" || echo "SETUP: $TG never KO" >> "$LOG"; fi
 ui_guard_setup; ui_clear
 take "$SH" || setup_fail "could not take $SH ($(A fp_control state))"
-YAW=$(cam yaw); YAW=${YAW:-0}; look "$YAW" 0
+pick_yaw "$SH" C01; look "$YAW" 0
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye || setup_fail "camera never at eye ($(camsum))"
 H0=$(ctl controlled); IDS0=$(ctl control_ids)
 
 # ---- C01: eye -> third person -> eye, control + WASD + camera ----
-ui_clear; look "$YAW" 0; read -r M1 G1 AN1 SP1 WM1 <<<"$(walkr "$SH" w 2000)"
+ui_clear; look "$YAW" 0; YAW0=$YAW; YAWC0=$YAWC; read -r M1 G1 AN1 SP1 WM1 <<<"$(walkr "$SH" w 2000)"
 EYE1=$(camsum); A fp_camera distance 3 >/dev/null; waitf 6 cam_ok far; FAROK=$?; FAR=$(camsum)
 H1=$(ctl controlled); YAW=$(awk -v y="$YAW" 'BEGIN{y+=3.14159; if(y>3.14159)y-=6.28318; printf "%.4f", y}'); look "$YAW" 0
 read -r M2 G2 AN2 SP2 WM2 <<<"$(walkr "$SH" w 2000)"
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye; EYEOK=$?; EYE2=$(camsum); H2=$(ctl controlled); IDS2=$(ctl control_ids)
-ev="fp_walk=$M1 ang=$G1 anchor=$AN1 | far[$FAR] ok=$((1-FAROK)) tp_walk=$M2 ang=$G2 anchor=$AN2 | back_eye[$EYE2] ok=$((1-EYEOK)) | controlled=$H0/$H1/$H2 ids_same=$([ "$IDS0" = "$IDS2" ] && echo 1 || echo 0)"
+ev="yaw=$YAW0 clearance=$YAWC0 | fp_walk=$M1 ang=$G1 anchor=$AN1 | far[$FAR] ok=$((1-FAROK)) tp_walk=$M2 ang=$G2 anchor=$AN2 | back_eye[$EYE2] ok=$((1-EYEOK)) | controlled=$H0/$H1/$H2 ids_same=$([ "$IDS0" = "$IDS2" ] && echo 1 || echo 0)"
 ok=1; [ $FAROK = 0 ] && [ $EYEOK = 0 ] && [ "$H0" = "$H1" ] && [ "$H1" = "$H2" ] && [ "$IDS0" = "$IDS2" ] || ok=0
 for m in "$M1" "$M2"; do ge "$m" "$MOVE_MIN" || ok=0; done
 for g in "$G1" "$G2"; do lt "$g" 35 || ok=0; done
@@ -164,7 +179,7 @@ else [ "$TU0" = "$TU1" ] && [ "$AU0" = "$AU1" ] || ok=0; judge C02 $ok "$ev"; fi
 ui_clear; HM=$(id_of "$MT"); A select "$MT" >/dev/null
 waitf 4 bash -c '[ "$(stobe-auto fp_control state | grep -o "\binspected=[^ ]*" | cut -d= -f2)" != "'"$H0"'" ]'; INSP=$?
 C3=$(A fp_control state); HC=$(fld controlled <<<"$C3"); HI=$(fld inspected <<<"$C3"); IDS3=$(fld control_ids <<<"$C3")
-PM0=$(pos "$MT"); look "$YAW" 0; read -r M3 G3 AN3 _ <<<"$(walk "$SH" w 2000)"; DM=$(d2 "$PM0" "$(pos "$MT")")
+PM0=$(pos "$MT"); pick_yaw "$SH" C03; look "$YAW" 0; read -r M3 G3 AN3 _ <<<"$(walk "$SH" w 2000)"; DM=$(d2 "$PM0" "$(pos "$MT")")
 BM=$(nwid "$MT"); BS=$(nwid "$SH")
 A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; sleep 0.5
 NM=$(nwid "$MT"); NS=$(nwid "$SH"); HU=$(ctl controlled)
@@ -180,7 +195,7 @@ if [ $UIO != 0 ]; then row C03 FAIL "setup inventory did not open: $ev"; else ju
 ui_clear; take "$SH" >/dev/null; A select "$MT" >/dev/null; sleep 0.5
 U0=$(ctl take_ui_ignored); A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; A fp_control press >/dev/null; sleep 0.8
 U1=$(ctl take_ui_ignored); HUI=$(ctl controlled); A click INV >/dev/null; waitf 4 ui_is 0; ui_clear
-D0=$(ctl take_done); look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
+D0=$(ctl take_done); pick_yaw "$SH" C04-TAKE; look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
 A fp_control press >/dev/null; waitf 3 ctl_is "$MT"; TOOK=$?; D1=$(ctl take_done); sleep 0.5
 PS1=$(pos "$SH"); PM1=$(pos "$MT"); sleep 2; PS2=$(pos "$SH"); PM2=$(pos "$MT")
 A fp_move none >/dev/null; sleep 0.8; MSTOP=$(still "$MT" 2)
@@ -194,7 +209,7 @@ judge C04-TAKE $ok "$ev"
 ui_clear; A fp_move none >/dev/null; A select "$SH" >/dev/null; A fp_control press >/dev/null; waitf 3 ctl_is "$SH"; BACK=$?
 alive "before C04-FALLBACK"; PS0=$(pos "$SH"); read -r AIM AIMAX AIMN <<<"$(native_walk "$MT" +x)"; alive "after the $MT native walk"
 SHI=$(d2 "$PS0" "$(pos "$SH")"); STILLCTL=$(ctl_is "$SH" && echo 1 || echo 0)
-look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; mode off; OFF=$?; PZ=$(A status | fld paused); sleep 0.5; P1=$(pos "$SH"); sleep 2; P2=$(pos "$SH")
+pick_yaw "$SH" C04-FALLBACK; look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; mode off; OFF=$?; PZ=$(A status | fld paused); sleep 0.5; P1=$(pos "$SH"); sleep 2; P2=$(pos "$SH")
 DMA=$(mvs dm_active); RS=$(d2 "$P1" "$P2"); A fp_move none >/dev/null; alive "after C04-FALLBACK fp_mode off (paused_at_off=${PZ:-na})"
 read -r NAT NATAX NATN <<<"$(native_walk "$SH" -x)"
 mode on; ON=$?; A fp_control state >/dev/null; sleep 0.5; PIN=$(ctl_is "$SH" && echo 1 || echo 0); STK=$(still "$SH" 2)
@@ -210,12 +225,12 @@ A status | grep -q 'last_saved=kah-fp-c05' || echo "SETUP: save kah-fp-c05 not c
 
 # C05-KO: W held through a KO; no drive while down, same actor after, no stuck motion, fresh W walks
 IDK=$(ctl control_ids); look "$YAW" 0; A fp_move w 30000 >/dev/null; A protect "$SH" off >/dev/null; A ko "$SH" 10 >/dev/null
-if waitf 15 isko "$SH"; then DOWN=1; DMS=""; for _ in 1 2 3; do MST=$(A fp_move state); DMS+="$(fld dm_active <<<"$MST")/$(fld is_down <<<"$MST"),"; sleep 0.7; done
+if waitf 15 isko "$SH"; then DOWN=1; DMS=""; for _ in 1 2 3; do MST=$(A fp_move state); DMS+="$(fld dm_active <<<"$MST")/$(fld is_down <<<"$MST")/$(fld ko <<<"$MST"),"; sleep 0.7; done
   waitf 40 bash -c "! stobe-auto where '$SH' | grep -qE ' (KO|DEAD)( |\$)'"; WOKE=$?
 else DOWN=0; DMS=never_down; WOKE=1; fi
 A fp_move none >/dev/null; A protect "$SH" on >/dev/null; sleep 1.5; STK=$(still "$SH" 2); IDK2=$(ctl control_ids)
-mode on >/dev/null; look "$YAW" 0; align; read -r MK MKA _ _ <<<"$(walk "$SH" w 2000)"
-ev="down=$DOWN dm_active/is_down_while_down=${DMS%,} woke=$((1-WOKE)) ids_same=$([ "$IDK" = "$IDK2" ] && echo 1 || echo 0) drift_after_release=$STK fresh_walk=$MK ang=$MKA"
+mode on >/dev/null; pick_yaw "$SH" C05-KO; look "$YAW" 0; align; read -r MK MKA _ _ <<<"$(walk "$SH" w 2000)"
+ev="down=$DOWN dm_active/is_down/ko_while_down=${DMS%,} woke=$((1-WOKE)) ids_same=$([ "$IDK" = "$IDK2" ] && echo 1 || echo 0) drift_after_release=$STK fresh_walk=$MK ang=$MKA clearance=$YAWC walk_state[$(mvdiag)]"
 if [ $DOWN = 0 ]; then row C05-KO FAIL "setup $SH never knocked out: $ev"; else
   ok=1; grep -qE '(^|,)1/' <<<"$DMS" && ok=0   # dm_active=1 while KO = still driven (is_down: evidence only)
   [ $WOKE = 0 ] && [ "$IDK" = "$IDK2" ] || ok=0; lt "$STK" "$STILL_MAX" || ok=0; ge "$MK" "$MOVE_MIN" || ok=0
@@ -232,13 +247,13 @@ if ! near_save; then DSV=$(d2 "$PSAVE" "$(pos "$SH")"); echo "SETUP: $SH is $DSV
   near_save || SETUPI="setup: $SH displaced by the previous row (dist=$DSV, after reload $(d2 "$PSAVE" "$(pos "$SH")"))"
 fi
 if [ -n "$SETUPI" ]; then row C05-INVALID FAIL "$SETUPI log=$LOG"; else
-ui_clear; take "$MT"; TM=$?; PS0=$(pos "$SH"); look "$YAW" 0; A fp_move w 15000 >/dev/null; sleep 1
+ui_clear; take "$MT"; TM=$?; PS0=$(pos "$SH"); pick_yaw "$MT" C05-INVALID-mate; look "$YAW" 0; A fp_move w 15000 >/dev/null; sleep 1
 FR=$(A faction "$MT" "$INVALID_FACTION"); NEWID=$(grep -o '#[0-9]*' <<<"$FR" | head -1)
 waitf 3 bash -c '[ "$(stobe-auto fp_control state | grep -o "\bdirect=[0-9]" | cut -d= -f2)" = 0 ]'; REL=$?
 C5=$(A fp_control state); HC=$(fld controlled <<<"$C5"); sleep 2; SHD=$(d2 "$PS0" "$(pos "$SH")"); A fp_move none >/dev/null
 A fp_mode on >/dev/null; sleep 1; RE=$(fps fp_mode); HR=$(ctl controlled); TRANS=$(ctl_is "$SH" && echo 1 || echo 0)
-A select "$SH" >/dev/null; A fp_control take >/dev/null; mode on; REC=$?; look "$YAW" 0; align; read -r MI MIA _ _ <<<"$(walk "$SH" w 2000)"
-ev="take_$MT=$((1-TM)) faction='$(cut -c1-60 <<<"$FR")' released=$((1-REL)) controlled_after=$HC $SH moved=$SHD | fp_on_again fp_mode=$RE controlled=$HR silent_transfer=$TRANS | explicit_take=$((1-REC)) walk=$MI ang=$MIA"
+A select "$SH" >/dev/null; A fp_control take >/dev/null; mode on; REC=$?; pick_yaw "$SH" C05-INVALID; look "$YAW" 0; align; read -r MI MIA _ _ <<<"$(walk "$SH" w 2000)"
+ev="take_$MT=$((1-TM)) faction='$(cut -c1-60 <<<"$FR")' released=$((1-REL)) controlled_after=$HC $SH moved=$SHD | fp_on_again fp_mode=$RE controlled=$HR silent_transfer=$TRANS | explicit_take=$((1-REC)) walk=$MI ang=$MIA clearance=$YAWC walk_state[$(mvdiag)]"
 if [ $TM != 0 ] || [ -z "$NEWID" ] || grep -q ERROR <<<"$FR"; then row C05-INVALID FAIL "setup: $ev"; else
   ok=1; [ $REL = 0 ] && [ "$HC" = 0 ] && [ "$TRANS" = 0 ] && [ $REC = 0 ] || ok=0
   lt "$SHD" "$STILL_MAX" || ok=0; ge "$MI" "$MOVE_MIN" || ok=0; judge C05-INVALID $ok "$ev"; fi
@@ -249,7 +264,7 @@ look "$YAW" 0; A fp_move w 30000 >/dev/null; A load kah-fp-c05 >/dev/null; A wai
 sleep 3; LS=$(A status | fld save); LFP=$(fps fp_mode); LH=$(ctl controlled); STK=$(still "$SH" 2); MTB=$(A where "$MT" | grep -c 'pos=')
 for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done; ui_clear
 take "$SH"; LT=$?; A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye; LC=$?
-look "$YAW" 0; read -r ML _ _ _ <<<"$(walk "$SH" w 2000)"; sleep 0.5; STK2=$(still "$SH" 2)
+pick_yaw "$SH" C05-LOAD; look "$YAW" 0; read -r ML _ _ _ <<<"$(walk "$SH" w 2000)"; sleep 0.5; STK2=$(still "$SH" 2)
 ev="save=$LS fp_mode=$LFP controlled=$LH drift_after_load=$STK mate_back=$MTB | take=$((1-LT)) camera_eye=$((1-LC)) [$(camsum)] walk=$ML drift_after_release=$STK2"
 ok=1; [ "$LS" = kah-fp-c05 ] && [ $LT = 0 ] && [ $LC = 0 ] || ok=0
 lt "$STK" "$STILL_MAX" || ok=0; ge "$ML" "$MOVE_MIN" || ok=0; lt "$STK2" "$STILL_MAX" || ok=0
