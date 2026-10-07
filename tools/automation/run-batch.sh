@@ -24,9 +24,9 @@
 set -u
 A=/mnt/c/KenshiModding/tools/automation; T=/mnt/c/KenshiModding/tests/ingame/stobe
 CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'
-LAUNCH=""; STOP=0
-while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; *) break ;; esac; done
-L="${1:?usage: run-batch.sh [--launch <save>] [--stop] <list-file> <out-dir>}"; O="${2:?out-dir}"
+LAUNCH=""; STOP=0; RESUME=0
+while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; *) break ;; esac; done
+L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] <list-file> <out-dir>}"; O="${2:?out-dir}"
 mkdir -p "$O"; rm -f "$O/DONE"
 exec >>"$O/batch.log" 2>&1
 S="$O/SUMMARY.txt"; R="$O/ranges.tsv"
@@ -83,8 +83,9 @@ prepare() {  # prepare <save> <player> <mate>
   return 0
 }
 
-: > "$S"; : > "$R"
-say "BATCH START $(date '+%F %H:%M') list=$L"
+D="$O/done.txt"   # names of the tests that ran to the end (any result); --resume skips them
+if [ "$RESUME" = 1 ]; then say "BATCH RESUME $(date '+%F %H:%M') list=$L done=$(wc -l <"$D" 2>/dev/null || echo 0)"
+else : > "$S"; : > "$R"; : > "$D"; say "BATCH START $(date '+%F %H:%M') list=$L"; fi
 if [ -n "$LAUNCH" ]; then
   stobe-say on >/dev/null 2>&1
   launch "$LAUNCH"
@@ -97,6 +98,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
   name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
   cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
+  if [ "$RESUME" = 1 ] && grep -qxF "$name" "$D" 2>/dev/null; then echo "$(date +%H:%M) $name: ran before, skipped (--resume)"; continue; fi
   read -r freec kpriv <<<"$(memline)"
   echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
   if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
@@ -162,7 +164,7 @@ RESULT $name FAIL wrapper did not complete (exit $rc)"
     ex=$(bash "$A/batch-excerpts.sh" "$O" "$name" 2>/dev/null)
     res=$(sed "/ FAIL/{/ log=/!s|\$| out=$out|;s|\$|${ex:+ excerpt=$ex}|}" <<<"$res")
   fi
-  echo "$res" | tee -a "$S"
+  echo "$res" | tee -a "$S"; echo "$name" >>"$D"
   pass=$((pass + $(grep -c ' PASS' <<<"$res"))); fail=$((fail + $(grep -c ' FAIL' <<<"$res")))
   # combat/knockout/death toward the squad while the test ran: a note (fight tests cause it on purpose)
   hit=$(tail -c +"$((sl + 1))" "$STOBELOG" 2>/dev/null | grep -a -E "\[EVENT\] (combat[^]]*-> ($player|$mate) \(|knockout: ($player|$mate) |death: ($player|$mate) )" | head -2 | cut -c1-160 | paste -sd';')
