@@ -45,14 +45,34 @@ dcount_ge() { [ "$(dcount "$2" "$3")" -ge "$1" ]; }
 targets_player() { dw pair "$1" | grep -q "attack_target=$PLAYER"; }
 
 SPAWNED=""
-# fresh <name> [dist m]: a neutral Drifter <name> pinned <dist> m (default 6, inside the 10 m radius, outside the 3 m
-# attack distance) from PLAYER, facing PLAYER and seeing him; sets h (not in $(): setup_fail must end the wrapper)
+# rows run in subshells (a setup fail ends only that row): spawned handles also go to a file the parent reads
+SPAWN_FILE=$(mktemp /tmp/stobe-drawn-spawn.XXXXXX); RETIRED=0
+track() { SPAWNED="$SPAWNED $1"; echo "$1" >> "$SPAWN_FILE"; }
+# fresh <name> [dist]: a neutral Drifter <name> pinned <dist> game units (10 = ~1 m; default 60 = 6 m, inside the 10 m
+# radius, outside the 3 m attack distance) from PLAYER, facing PLAYER and seeing him; sets h (not in $(): setup_fail must end the wrapper)
 fresh() {
   local row="$1" n="$2" r
+  mate_holster "$row"
   h=$(spawn_neutral "$n" 12) || setup_fail "$row" "spawn of $n failed"
-  SPAWNED="$SPAWNED $h"
-  r=$(stobe-auto pin "$h" at "$PLAYER" dist "${3:-6}" face "$PLAYER" 2>&1 | tail -1); log "pin $n: $r"
+  track "$h"
+  r=$(stobe-auto pin "$h" at "$PLAYER" dist "${3:-60}" face "$PLAYER" 2>&1 | tail -1); log "pin $n: $r"
   wait_for 20 sees_player "$h" || setup_fail "$row" "$n does not see $PLAYER ($(stobe-auto face "$h" "$PLAYER" 2>&1 | tail -1 | cut -c1-120))"
+}
+# mate_holster <row>: MATE's weapon away (an AI combat stance left over from the previous row must not be in the row)
+mate_holster() {
+  [ -n "${MATE:-}" ] || return 0
+  local r; r=$(dw sheathe "$MATE")
+  case "$r" in *drawn=0*) return 0 ;; esac
+  sleep 2; r=$(dw sheathe "$MATE")
+  case "$r" in *drawn=0*) return 0 ;; esac
+  setup_fail "$1" "$MATE still has a weapon drawn: $r"
+}
+# row_done: after each row subshell: weapon away, switches off, retire what the row spawned (also after a setup fail)
+row_done() {
+  draw_off; sw_off >/dev/null 2>&1
+  local all; all=$(cat "$SPAWN_FILE" 2>/dev/null | tail -n +$((RETIRED + 1)))
+  [ -n "$all" ] && retire $all
+  RETIRED=$(grep -c "" "$SPAWN_FILE" 2>/dev/null || echo 0)
 }
 retire() { for h in "$@"; do [ -n "$h" ] && { stobe-auto pin "$h" off >/dev/null 2>&1; stobe-auto ko "$h" 900 >/dev/null 2>&1; }; done; }
 # row_cfg <hostile_below> <warn> <cooldown>: forget per-NPC state/cooldowns/counters, then the row's knobs
@@ -67,10 +87,10 @@ case "$ST0" in *enabled=*) ;; *) setup_fail DW "no stobe_drawn command (Stobe.dl
 log "drawn status at start: $ST0"
 cleanup() {
   draw_off
-  for k in enabled radius warn attack_dist cooldown rewarn hostile_below min_fov; do
+  for k in enabled radius warn attack_dist min_warn close_margin cooldown rewarn hostile_below min_fov; do
     v=$(cfg "$ST0" "$k"); [ -n "$v" ] && dw set "$k" "$v" >/dev/null
   done
-  retire $SPAWNED
+  retire $(cat "$SPAWN_FILE" 2>/dev/null); rm -f "$SPAWN_FILE"
   log "drawn settings restored: $(dw status | cut -c1-160)"
 }
 trap 'cleanup; sw_off; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT; trap 'exit 130' INT TERM
@@ -78,7 +98,7 @@ draw_on || setup_fail DW "$PLAYER cannot draw a weapon: $(dw hold "$PLAYER" on)"
 draw_off; sleep 2
 
 # --- DW1 friendly line (+ DW7 own squad: MATE stands next to PLAYER and sees him during DW1) ---
-if want DW1 || want DW7; then
+if want DW1 || want DW7; then (
   N="Dorn Hask"; row_cfg -101 4 5
   fresh DW1 "$N"
   stobe-auto teleport "$MATE" "$PLAYER" dist 5 >/dev/null; wait_for 20 sees_player "$MATE"; msee=$?
@@ -107,10 +127,11 @@ if want DW1 || want DW7; then
     else verdict DW7 "FAIL $MATE lines=$mlines pair='$(echo "$mpair" | cut -c1-120)'"; fi
   fi
   retire "$h"; sw_off; sleep 3
+); row_done
 fi
 
 # --- DW2 guard line ---
-if want DW2; then
+if want DW2; then (
   N="Town Guard"; row_cfg -101 4 5
   fresh DW2 "$N"; rowmark
   inject_on DW2 "$N" react '[{"message":"Sheathe that weapon, {player}. Now."}]'
@@ -125,13 +146,14 @@ if want DW2; then
     verdict DW2 "PASS speak_guard kind=guard REACTION_TURN kind=guard=$rt injected line said, no friendly line"
   else verdict DW2 "FAIL line='$(echo "$l" | cut -c1-120)' friendly=$fr reaction_turn_guard=$rt fired=$f said=$said"; fi
   retire "$h"; sw_off; sleep 3
+); row_done
 fi
 
 # --- DW6 not seen: he faces a decoy straight away from PLAYER -> no line; control: turned back he speaks ---
-if want DW6; then
+if want DW6; then (
   N="Ollo Brisk"; row_cfg -101 4 5
   fresh DW6 "$N"
-  d=$(spawn_neutral "Pell Decoy" 12) || setup_fail DW6 "decoy spawn failed"; SPAWNED="$SPAWNED $d"
+  d=$(spawn_neutral "Pell Decoy" 12) || setup_fail DW6 "decoy spawn failed"; track "$d"
   pn=$(pos_of "$h"); ps=$(pos_of "$PLAYER")
   tgt=$(awk -v a="$pn" -v b="$ps" 'BEGIN{split(a,n,",");split(b,s,",");dx=n[1]-s[1];dz=n[3]-s[3];m=sqrt(dx*dx+dz*dz);if(m<0.01)m=1;printf "%.1f %.1f %.1f", n[1]+dx/m*12, n[2], n[3]+dz/m*12}')
   stobe-auto teleport "$d" $tgt >/dev/null
@@ -153,10 +175,11 @@ if want DW6; then
   elif [ "$neg" = 0 ] && ! echo "$p" | grep -q "sees=1"; then verdict DW6 "PASS facing away: no line ($(echo "$p" | grep -oE 'sees=[01] fov=[^ ]+' | head -1 || echo no_pair)); facing back: speak_friendly"
   else verdict DW6 "FAIL facing away: lines=$neg pair='$(echo "$p" | cut -c1-140)'"; fi
   retire "$h" "$d"; sleep 3
+); row_done
 fi
 
 # --- DW9 cooldown: second draw inside the cooldown gives no second line; with a short cooldown it does ---
-if want DW9; then
+if want DW9; then (
   N="Kessa Rook"; row_cfg -101 4 60
   fresh DW9 "$N"; rowmark
   inject_on DW9 "$N" react '[{"message":"That blade again, {player}?"},{"message":"Still waving that blade around, {player}?"}]'
@@ -172,10 +195,11 @@ if want DW9; then
   elif [ "$c2" = 1 ] && [ "$c3" -ge 2 ]; then verdict DW9 "PASS cooldown 60: redraw gave no second line (1); cooldown 5: second line ($c3)"
   else verdict DW9 "FAIL lines first=$c1 after_redraw_in_cooldown=$c2 after_short_cooldown=$c3"; fi
   retire "$h"; sw_off; sleep 3
+); row_done
 fi
 
 # --- DW10 live model (no injection): the line is about the weapon; speech only (no attack, no deal) ---
-if want DW10; then
+if want DW10; then (
   N="Marro Fenn"; row_cfg -101 4 5
   fresh DW10 "$N"; rowmark
   draw_on || setup_fail DW10 "draw failed"
@@ -184,7 +208,10 @@ if want DW10; then
   sleep 5
   l=$(dline speak_friendly "$N"); wn=$(echo "$l" | sed -E 's/.* weapon=(.*) speech=.*/\1/')
   s=$(npc_said "$N" | tail -1)
-  mention=$(echo "$s" | grep -i -c -E "${WEAPON_RE}|steel|draw|sheath|put (it|that) away|armed")
+  # the spoken text only; on topic = a weapon word, or "put it/that/... down|away", lower/holster/stow/drop it (m50 DW10:
+  # "Put it down and tell me what's going on." is on topic). Off-topic lines (trade, weather, greetings) still fail.
+  st=$(echo "$s" | sed -E 's/.*NPC_SAY: [^|]*\|[0-9]*: //; s/ \[TALK.*//')
+  mention=$(echo "$st" | grep -i -c -E "\b(${WEAPON_RE}|steel|drawn?|sheathe?|holster|stow|armed|arms)\b|\b(put|lower|drop|set|lay) (it|that|this|those|them|the|your)( [a-z]+)? (down|away)\b|\b(lower|drop|holster|sheathe|stow) (it|that|this|the|your)\b")
   p=$(dw pair "$N"); d=$(deal_row "$N"); srvt=$(rsrv | grep -a -c -F "Drawn weapon reaction turn")
   draw_off
   if [ -z "$l" ]; then verdict DW10 "FAIL no speak_friendly line"
@@ -193,13 +220,14 @@ if want DW10; then
     verdict DW10 "PASS live line mentions the weapon ($wn): '$(echo "$s" | sed -E 's/.*NPC_SAY: [^|]*\|//' | cut -c1-110)'; attack_target=none, no deal"
   else verdict DW10 "FAIL mention=$mention pair='$(echo "$p" | grep -oE 'attack_target=.*')' deal='${d:0:60}' said='$(echo "$s" | cut -c1-140)'"; fi
   retire "$h"; sleep 3
+); row_done
 fi
 
 # hostile rows: PLAYER protected (DW3/DW5 end in a real attack)
 if want DW4 || want DW8 || want DW5 || want DW3; then heal_start "$PLAYER"; fi
 
 # --- DW4 holster cancels the pending warning: no attack ---
-if want DW4; then
+if want DW4; then (
   N="Grell Saddo"; row_cfg 101 8 5
   fresh DW4 "$N"; rowmark
   draw_on || setup_fail DW4 "draw failed"
@@ -215,19 +243,20 @@ if want DW4; then
     else verdict DW4 "FAIL cancel='$(echo "$c" | cut -c1-80)' attacks=$a $(echo "$p" | grep -oE 'attack_target=.*')"; fi
     retire "$h"; sleep 3
   fi
+); row_done
 fi
 
 # --- DW8 combat gate: a warned NPC who gets into a fight cancels (cancel_combat), no line, no attack on PLAYER ---
-if want DW8; then
+if want DW8; then (
   N="Vosk Tamber"; row_cfg 101 30 5
   fresh DW8 "$N"; rowmark
   draw_on || setup_fail DW8 "draw failed"
   wait_line 25 warn "$N"; w=$(dline warn "$N")
   if [ -z "$w" ]; then draw_off; verdict DW8 "FAIL no warn line before the fight"
   else
-    r=$(stobe-auto spawn "Hungry Bandit" "Hungry Bandits" near "$h" dist 3 count 1 | grep -oE '#[0-9]+/[0-9]+' | head -1)
-    [ -n "$r" ] || setup_fail DW8 "fight partner spawn failed"
-    SPAWNED="$SPAWNED $r"
+    so=$(stobe-auto spawn "Hungry Bandit" Drifters near "$h" dist 30 count 1 2>&1); r=$(echo "$so" | grep -oE '#[0-9]+/[0-9]+' | head -1)
+    [ -n "$r" ] || setup_fail DW8 "fight partner spawn failed: $(echo "$so" | tail -1 | cut -c1-120)"
+    track "$r"
     stobe-auto fight "$h" "$r" >/dev/null
     wait_line 15 cancel_combat "$N"; c=$(dline cancel_combat "$N")
     sleep 10
@@ -238,17 +267,18 @@ if want DW8; then
     retire "$r"
   fi
   retire "$h"; sleep 8
+); row_done
 fi
 
-# --- DW5 closing in after the warning attacks at once (warn time 30 s, so only the distance can trigger it) ---
-if want DW5; then
+# --- DW5 closing in after the warning attacks (warn time 30 s, so only the distance can trigger it; not before min_warn) ---
+if want DW5; then (
   N="Hadda Crane"; row_cfg 101 30 5
   fresh DW5 "$N"; rowmark
   draw_on || setup_fail DW5 "draw failed"
   wait_line 25 warn "$N"; w=$(dline warn "$N")
   if [ -z "$w" ]; then draw_off; verdict DW5 "FAIL no warn line"
   else
-    stobe-auto pin "$h" at "$PLAYER" dist 1.5 face "$PLAYER" >/dev/null
+    stobe-auto pin "$h" at "$PLAYER" dist 15 face "$PLAYER" >/dev/null
     wait_line 10 attack "$N"; a=$(dline attack "$N")
     stobe-auto pin "$h" off >/dev/null 2>&1
     wait_for 15 targets_player "$N"
@@ -256,14 +286,15 @@ if want DW5; then
     dt=$(awk -v a="$(tof "$w")" -v b="$(tof "$a")" 'BEGIN{printf "%.1f", b-a}')
     draw_off
     if echo "$a" | grep -q "order=1" && awk -v d="$dt" 'BEGIN{exit !(d < 25)}' && { rhas "attack_confirmed npc=$N " || echo "$p" | grep -q "attack_target=$PLAYER"; }; then
-      verdict DW5 "PASS warn -> closed to 1.5 m -> attack order=1 after ${dt}s (warn time 30) $(echo "$p" | grep -oE 'attack_target=.*')"
+      verdict DW5 "PASS warn -> closed to 1.5 m (15 units) -> attack order=1 after ${dt}s (warn time 30) $(echo "$p" | grep -oE 'attack_target=.*')"
     else verdict DW5 "FAIL attack='$(echo "$a" | cut -c1-100)' dt=$dt $(echo "$p" | grep -oE 'attack_target=.*')"; fi
   fi
   retire "$h"; sleep 8
+); row_done
 fi
 
 # --- DW3 hostile: warn, weapon kept out in range -> attack after the warn time ---
-if want DW3; then
+if want DW3; then (
   N="Rusk Malver"; row_cfg 101 4 5
   fresh DW3 "$N"; rowmark
   draw_on || setup_fail DW3 "draw failed"
@@ -281,5 +312,6 @@ if want DW3; then
     else verdict DW3 "FAIL attack='$(echo "$a" | cut -c1-100)' dt=$dt confirmed=$conf $(echo "$p" | grep -oE 'attack_target=.*')"; fi
   fi
   retire "$h"
+); row_done
 fi
 log "STOBE-DRAWN done"
