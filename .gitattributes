@@ -8,3 +8,4 @@ tools/stobe-* text eol=lf
 *.cpp text
 *.hpp text
 *.md text
+*.awk text eol=lf
