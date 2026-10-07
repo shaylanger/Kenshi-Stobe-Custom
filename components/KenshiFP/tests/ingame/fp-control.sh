@@ -123,6 +123,14 @@ pick_yaw() { local p o="" c r; p=$(pos "$1")
 # mvdiag: get-up/pinned inputs from the mid-hold `fp_move state` of the last walk (KenshiFP 272A573C+)
 mvdiag() { local s; s=$(cat "$OUT/last_walk_state.txt" 2>/dev/null)
   echo "moving=$(fld moving <<<"$s") direct=$(fld direct_drive <<<"$s") dm=$(fld dm_active <<<"$s") speed=$(fld move_speed <<<"$s") prone=$(fld prone <<<"$s") in_bed=$(fld in_bed <<<"$s") head_above=$(fld head_above <<<"$s") stuck=$(fld stuck_frames <<<"$s") pinned=$(fld pinned <<<"$s") downed=$(fld downed <<<"$s") ko=$(fld ko <<<"$s")"; }
+# native_fix <who> <axis> <home "x y z">: native_walk; if no axis walks (b28/b31 C04-FALLBACK: "never started" on all
+# 4 axes at x~-54330, while b30 at z~6854 walked), note where he stood, teleport him back to <home> (his setup
+# position) and try once more. Echo "<displacement> <axis> <tries> <stuck_at x,z | ->"; the row flags a stuck spot.
+native_fix() { local d ax n sp=-; read -r d ax n <<<"$(native_walk "$1" "$2")"
+  if [ "$ax" != stuck ] && ! ge "$d" 25 && [ -n "$3" ]; then sp=$(pos "$1" | awk '{printf "%.0f,%.0f", $1, $3}')
+    echo "SETUP: $1 native walk never started at $sp: teleport back to $3, retry" >> "$LOG"
+    A teleport "$1" $3 >/dev/null; sleep 2; read -r d ax n <<<"$(native_walk "$1" "$2")"; n="$n+retry"; fi
+  echo "$d $ax $n $sp"; }
 FP0=$(fps fp_mode); DIST0=$(cam target)
 cleanup() { A fp_move none >/dev/null; A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
             for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
@@ -143,7 +151,7 @@ ui_guard_setup; ui_clear
 take "$SH" || setup_fail "could not take $SH ($(A fp_control state))"
 pick_yaw "$SH" C01; look "$YAW" 0
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye || setup_fail "camera never at eye ($(camsum))"
-H0=$(ctl controlled); IDS0=$(ctl control_ids)
+H0=$(ctl controlled); IDS0=$(ctl control_ids); HOME_SH=$(pos "$SH"); HOME_MT=$(pos "$MT")
 
 # ---- C01: eye -> third person -> eye, control + WASD + camera ----
 ui_clear; look "$YAW" 0; YAW0=$YAW; YAWC0=$YAWC; read -r M1 G1 AN1 SP1 WM1 <<<"$(walkr "$SH" w 2000)"
@@ -207,13 +215,14 @@ judge C04-TAKE $ok "$ev"
 
 # ---- C04-FALLBACK: other squad AI, FP off mid-walk, native order, FP on keeps the pinned actor ----
 ui_clear; A fp_move none >/dev/null; A select "$SH" >/dev/null; A fp_control press >/dev/null; waitf 3 ctl_is "$SH"; BACK=$?
-alive "before C04-FALLBACK"; PS0=$(pos "$SH"); read -r AIM AIMAX AIMN <<<"$(native_walk "$MT" +x)"; alive "after the $MT native walk"
+alive "before C04-FALLBACK"; PS0=$(pos "$SH"); read -r AIM AIMAX AIMN AIMS <<<"$(native_fix "$MT" +x "$HOME_MT")"; alive "after the $MT native walk"
 SHI=$(d2 "$PS0" "$(pos "$SH")"); STILLCTL=$(ctl_is "$SH" && echo 1 || echo 0)
 pick_yaw "$SH" C04-FALLBACK; look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; mode off; OFF=$?; PZ=$(A status | fld paused); sleep 0.5; P1=$(pos "$SH"); sleep 2; P2=$(pos "$SH")
 DMA=$(mvs dm_active); RS=$(d2 "$P1" "$P2"); A fp_move none >/dev/null; alive "after C04-FALLBACK fp_mode off (paused_at_off=${PZ:-na})"
-read -r NAT NATAX NATN <<<"$(native_walk "$SH" -x)"
+read -r NAT NATAX NATN NATS <<<"$(native_fix "$SH" -x "$HOME_SH")"
 mode on; ON=$?; A fp_control state >/dev/null; sleep 0.5; PIN=$(ctl_is "$SH" && echo 1 || echo 0); STK=$(still "$SH" 2)
 FLAG=""; [ "$PZ" = 1 ] && FLAG=" | flag=product? game paused itself right at FP off (speed hold unpaused it)"
+[ "$AIMS$NATS" != -- ] && FLAG+=" | flag=product? native walk never started at native_stuck_at=$MT:$AIMS/$SH:$NATS (retried from the setup position)"
 ev="back_to_$SH=$((1-BACK)) | $MT native walk=$AIM axis=$AIMAX tries=$AIMN while $SH direct (kept=$STILLCTL moved=$SHI) | fp_off=$((1-OFF)) paused_at_off=${PZ:-na} dm_active=$DMA drift_with_w_held=$RS | native $SH walk=$NAT axis=$NATAX tries=$NATN | fp_on=$((1-ON)) pinned=$PIN drift=$STK$FLAG"
 ok=1; [ $BACK = 0 ] && [ $OFF = 0 ] && [ $ON = 0 ] && [ "$STILLCTL" = 1 ] && [ "$PIN" = 1 ] && [ "$DMA" = 0 ] || ok=0
 ge "$AIM" 25 || ok=0; lt "$SHI" "$STILL_MAX" || ok=0; lt "$RS" "$STILL_MAX" || ok=0; ge "$NAT" 25 || ok=0; lt "$STK" "$STILL_MAX" || ok=0
