@@ -8,11 +8,22 @@ Game lock (C:\KenshiTestRuns\game.lock): only one session drives Kenshi.
 launch/stop/restart take the lock for $env:KAH_OWNER (default 'coordinator')
 and refuse if another owner holds it. `release` frees it (owner only),
 `lock` shows it. See MASTER_TEST_PLAN.md "How this works".
+
+Background runs (default for launch/restart, Shay 2026-10-07): the game opens on
+-Monitor (default $env:KENSHI_MONITOR, else DISPLAY1) without taking the focus
+(if it grabs it during the launch, it goes back to the window that had it),
+and starts with harness input isolation ON: real keys/mouse ignored, cursor
+never clipped, input only via `stobe-auto key_inject|mouse_inject` (kenshi-key.ps1 /
+kenshi-click.ps1 switch to those by themselves), game keeps running unfocused.
+-Play: a normal launch for Shay (no monitor move, focus allowed, isolation off).
+Also: monitors | place [-Monitor x] | window (which monitor, who has the focus).
 #>
 param(
   [Parameter(Position = 0)][string]$Command = 'status',
   [string]$Save = '',
-  [int]$TimeoutSec = 300
+  [int]$TimeoutSec = 300,
+  [string]$Monitor = $(if ($env:KENSHI_MONITOR) { $env:KENSHI_MONITOR } else { 'DISPLAY1' }),
+  [switch]$Play
 )
 $Kenshi = 'D:\Steam\steamapps\common\Kenshi'
 $LockFile = 'C:\KenshiTestRuns\game.lock'
@@ -40,7 +51,9 @@ if ($Command -in @('launch', 'stop', 'restart')) {
   }
 }
 
-& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' $Command -Save $Save -TimeoutSec $TimeoutSec `
+$bg = @{}
+if (-not $Play) { $bg = @{ Monitor = $Monitor; Background = $true; Isolate = $true } }
+& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' $Command -Save $Save -TimeoutSec $TimeoutSec @bg `
   -Kenshi $Kenshi -ArchiveRoot 'C:\KenshiTestRuns' `
   -ExtraLogs @("$Kenshi\RE_Kenshi\mods\Stobe\stobe.log", "$Kenshi\KenshiFP.log", "$Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log",
                "$Kenshi\mods\ProfessionGearProgression\ProfessionGear.log",

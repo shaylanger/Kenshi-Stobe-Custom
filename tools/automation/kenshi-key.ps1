@@ -1,6 +1,15 @@
-# kenshi-key.ps1 <vk-hex> [holdMs]: focus the Kenshi window and press one virtual key (real input, so hooks that
-# poll GetAsyncKeyState + window focus see it). Example: kenshi-key.ps1 0xDC (VK_OEM_5 '\'), 0xBF ('/'), 0x1B (Esc).
+# kenshi-key.ps1 <vk-hex> [holdMs]: press one virtual key in Kenshi. Example: kenshi-key.ps1 0xDC (VK_OEM_5 '\'), 0xBF ('/'), 0x1B (Esc).
+# Input isolation on (the harness writes mods\AutomationHarness\input_isolation.on; kenshi-ctl launch turns it on by default):
+# the key goes in through the harness (`key_inject <vk> tap <ms>`: DirectInput/OIS + GetAsyncKeyState, no focus needed).
+# Otherwise: focus the Kenshi window and press it for real (hooks that poll GetAsyncKeyState + window focus see it).
 param([Parameter(Mandatory=$true)][string]$Vk, [int]$HoldMs = 200)
+$iso = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\input_isolation.on'
+if ((Test-Path $iso) -and (Get-Process kenshi_x64 -ErrorAction SilentlyContinue)) {
+  $r = (& wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- stobe-auto key_inject $Vk tap $HoldMs 2>&1 | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0) { Write-Output "KEY FAIL injected vk=$Vk : $r"; exit 1 }
+  Start-Sleep -Milliseconds ($HoldMs + 100)   # like the real press: return after the key is up again
+  Write-Output "KEY OK vk=$Vk injected ($r)"; exit 0
+}
 Add-Type @'
 using System; using System.Runtime.InteropServices;
 public static class KK {

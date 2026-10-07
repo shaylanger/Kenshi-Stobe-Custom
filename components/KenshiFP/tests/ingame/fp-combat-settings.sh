@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # fp-combat-settings.sh: F10 combat settings (Shay 2026-10-07): manual combat ON by default with an in-game toggle, and
 # rebindable attack / block-aim / select / interact / draw keys. Settings change through KenshiFP.ini (the F10 panel
-# writes the same ini, hot-reloaded ~0.5 s); the key rows press REAL keys (kenshi-key.ps1 focuses Kenshi), so the
-# GetAsyncKeyState path the physical buttons use is what's tested. Evidence: `fp_keys binds`, `fp_keys state` counters,
+# writes the same ini, hot-reloaded ~0.5 s); the key rows press keys through the device
+# paths (harness key_inject while input isolation is on, else REAL keys via kenshi-key.ps1), so the GetAsyncKeyState/OIS
+# paths the physical buttons use are what's tested. Evidence: `fp_keys binds`, `fp_keys state` counters,
 # KenshiFP.log ([combat] manual combat, [settings] built/saved).
 # Run in WSL with Kenshi in the world on a kah-fpxbow copy right after load (Axima = crossbow player, Malzin = mate),
 # WITHOUT any `fp_combat on` before it (CS01 checks the default). Rows (one `RESULT <row> PASS|FAIL <evidence>` each):
@@ -28,8 +29,14 @@ ks() { A fp_keys state | fld "$1"; }
 bd() { A fp_keys binds | fld "$1"; }
 fps() { A fp_state | fld "$1"; }
 waitf() { local end=$((SECONDS+$1)); shift; while [ $SECONDS -lt $end ]; do "$@" && return 0; sleep 0.2; done; return 1; }
+# kpress <vk> <ms>: harness input isolation on (kenshi-ctl launch default) -> `key_inject` (DirectInput/OIS +
+# GetAsyncKeyState, the paths a physical key feeds, no focus needed); else a real key via kenshi-key.ps1 (focuses Kenshi)
+ISO_MARK=${ISO_MARK:-$KDIR/mods/AutomationHarness/input_isolation.on}
+kpress() { if [ -f "$ISO_MARK" ]; then local r; r=$(stobe-auto key_inject "$1" tap "$2" 2>&1)
+    case "$r" in *keyboards=*) sleep "$(awk -v m="$2" 'BEGIN{printf "%.2f", (m+100)/1000}')"; echo "KEY OK injected: $r";; *) echo "KEY FAIL injected: $r";; esac
+  else powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$KEY" "$1" "$2" </dev/null 2>&1 | tr -d '\r'; fi; }
 # a stray free-cursor toggle (shared desktop Alt) makes FP drop the key: clear it before every press (logged)
-key() { local r; [ "$(fps free)" = 1 ] && echo "FREE was on before $1: $(A fp_state free off)" >> "$LOG"; echo "PRE $1 $(A fp_state | grep -o "cursor_hidden=[0-9] ui_open=[0-9] ui_why=[^ ]*" ) free=$(A fp_state | fld free)" >> "$LOG"; r=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$KEY" "$1" "${2:-200}" </dev/null 2>&1 | tr -d '\r')
+key() { local r; [ "$(fps free)" = 1 ] && echo "FREE was on before $1: $(A fp_state free off)" >> "$LOG"; echo "PRE $1 $(A fp_state | grep -o "cursor_hidden=[0-9] ui_open=[0-9] ui_why=[^ ]*" ) free=$(A fp_state | fld free)" >> "$LOG"; r=$(kpress "$1" "${2:-200}")
   echo "KEY $1 $r | post: $(A fp_state | grep -o "cursor_hidden=[0-9] ui_open=[0-9] ui_why=[^ ]*")" >> "$LOG"; case "$r" in *FAIL*) return 1;; esac; return 0; }
 RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }

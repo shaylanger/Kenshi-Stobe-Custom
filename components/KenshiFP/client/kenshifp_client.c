@@ -2431,9 +2431,32 @@ static void fp_lookat_click_guard(void *gw)
     logline("[fp] look-at click: opened the clicked member's details (bug 79)");
 }
 
+/* Harness input isolation (AutomationHarness.dll KAH_InputIsolated, 2026-10-07): automated runs keep the game
+ * unfocused while Shay uses the PC; the harness then feeds GetAsyncKeyState and DirectInput (OIS + our look mouse)
+ * with injected input only (key_inject / mouse_inject), so the game counts as focused. Looked up once a second until
+ * found; cheap enough for the 1 kHz poll thread. */
+typedef int (*kah_isolated_t)(void);
+static kah_isolated_t volatile g_kah_isolated;
+static DWORD g_kah_isolated_try;
+static int kah_input_isolated(void)
+{
+    kah_isolated_t f = g_kah_isolated;
+    if (!f) {
+        DWORD now = GetTickCount();
+        if (now - g_kah_isolated_try < 1000) return 0;
+        g_kah_isolated_try = now;
+        HMODULE h = GetModuleHandleA(KAH_DLL_NAME);
+        f = h ? (kah_isolated_t)(void *)GetProcAddress(h, "KAH_InputIsolated") : NULL;
+        if (!f) return 0;
+        g_kah_isolated = f;
+    }
+    return f();
+}
+
 static int game_has_focus(void)
 {
     if (g_test_focus) return 1;
+    if (kah_input_isolated()) return 1;
     HWND fg = GetForegroundWindow();
     if (!fg) return 0;
     DWORD pid = 0;
