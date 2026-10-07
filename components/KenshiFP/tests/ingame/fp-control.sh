@@ -158,6 +158,7 @@ yaw_free() { local x y z f="$OUT/yaw_floors_$2_$1.txt" qx qz; read -r x y z <<<"
   [ -n "$z" ] && for qx in -66 66; do for qz in -66 66; do
     stobe-auto fp_camera floors "$(awk -v a="$x" -v d=$qx 'BEGIN{print a+d}')" "$(awk -v a="$z" -v d=$qz 'BEGIN{print a+d}')" 66 6 "$(awk -v a="$y" 'BEGIN{print a+80}')" "$(awk -v a="$y" 'BEGIN{print a-40}')" >> "$f" 2>&1; echo >> "$f"; done; done
   awk -v px="$x" -v pz="$z" -f "$(dirname "$0")/fp-yaw-free.awk" "$f"; }
+# YAW_SKIP=<yaw as printed, %.4f>: leave that heading out (C05-KO redo after a blocked line).
 pick_yaw() { local p o c r w wl="" ol="" fl=""
   local IFS0=$IFS; IFS="|"; set -f; local ws=($1); IFS=$IFS0; set +f
   for w in "${ws[@]}"; do p=$(pos "$w" | tr ' ' ','); o=$(others "$w")
@@ -165,10 +166,10 @@ pick_yaw() { local p o c r w wl="" ol="" fl=""
     wl+="$p|"; ol+="$o|"; fl+="$(yaw_free "$w" "$2")|"; done
   # a heading must be free of static obstacles (130 ahead, 30 behind) for every walker; among those the largest
   # character clearance wins; if none is free, the one free farthest ahead (then clearance), flagged free=<f>/<b>
-  r=$(awk -v wl="$wl" -v ol="$ol" -v fl="$fl" 'BEGIN{nw=split(wl,W,"|"); split(ol,O,"|"); split(fl,FL,"|"); best=-1; by=0; bf=-1
+  r=$(awk -v wl="$wl" -v ol="$ol" -v fl="$fl" -v sk="${YAW_SKIP:-}" 'BEGIN{nw=split(wl,W,"|"); split(ol,O,"|"); split(fl,FL,"|"); best=-1; by=0; bf=-1
     for(j=1;j<=nw;j++){ split(FL[j],tk," "); for(k=0;k<16;k++){ split(tk[k+1],fb,"/"); if(tk[k+1]==""){fb[1]=130;fb[2]=30}
       if(j==1||fb[1]+0<F[k])F[k]=fb[1]+0; if(j==1||fb[2]+0<B[k])B[k]=fb[2]+0 }}
-    for(k=0;k<16;k++){y=-3.14159+k*6.28318/16; fx=sin(y); fz=cos(y); m=1e9
+    for(k=0;k<16;k++){y=-3.14159+k*6.28318/16; if(sk!="" && sprintf("%.4f",y)==sk) continue; fx=sin(y); fz=cos(y); m=1e9
       for(j=1;j<=nw;j++){ if(W[j]=="") continue; split(W[j],s,","); n=split(O[j],ob,";")
         for(t=-30;t<=130;t+=10){x=s[1]+fx*t; z=s[3]+fz*t
           for(i=1;i<=n;i++){ if(ob[i]=="") continue; split(ob[i],q,","); d=sqrt((q[1]-x)^2+(q[3]-z)^2); if(d<m)m=d }}}
@@ -351,7 +352,19 @@ if waitf 15 isko "$SH"; then DOWN=1; DMS=""; for _ in 1 2 3; do MST=$(A fp_move 
 else DOWN=0; DMS=never_down; WOKE=1; fi
 A fp_move none >/dev/null; A protect "$SH" on >/dev/null; sleep 1.5; STK=$(still "$SH" 2); IDK2=$(ctl control_ids)
 mode on >/dev/null; pick_yaw "$SH" C05-KO; look "$YAW" 0; align; read -r MK MKA _ _ <<<"$(walk "$SH" w 2000)"
-ev="down=$DOWN dm_active/is_down/ko_while_down=${DMS%,} woke=$((1-WOKE)) ids_same=$([ "$IDK" = "$IDK2" ] && echo 1 || echo 0) drift_after_release=$STK fresh_walk=$MK ang=$MKA clearance=$YAWC walk_state[$(mvdiag)]"
+# Blocked line (4080 m51g ctl-on2): yaw -3.1416, the align walk covered 52, then the fresh walk stopped 58 units on in
+# open flat ground (scan free=130/30) with a STANDING body (prone=0 ko=0 head 17.5) pinned under direct drive; from the
+# same spot 30 s later C05-INVALID walked 104 at -2.7489. A thin static obstacle between the 6-unit scan rays, not a
+# post-KO state. When the fresh walk is short with the body standing and pinned, it is redone once on the next best
+# heading (YAW_SKIP); the first attempt stays in the row (blocked_first=) and the redo must walk MOVE_MIN under direct
+# drive like any fresh walk. A real post-KO stuck state fails the redo too.
+KOB=""; LWS=$(cat "$OUT/last_walk_state.txt" 2>/dev/null)
+if ! ge "$MK" "$MOVE_MIN" && [ "$(fld pinned <<<"$LWS")" = 1 ] && [ "$(fld ko <<<"$LWS")" = 0 ] && [ "$(fld is_down <<<"$LWS")" = 0 ] \
+   && [ "$(fld prone <<<"$LWS")" = 0 ] && ge "$(fld head_above <<<"$LWS")" 10; then
+  KOB=" blocked_first=[yaw=$YAW walk=$MK at $(pos "$SH" | tr ' ' ',') $(mvdiag)]"; echo "SETUP C05-KO line blocked:$KOB" >> "$LOG"
+  YAW_SKIP=$YAW pick_yaw "$SH" C05-KO-redo; look "$YAW" 0; align; read -r MK MKA _ _ <<<"$(walk "$SH" w 2000)"
+fi
+ev="down=$DOWN dm_active/is_down/ko_while_down=${DMS%,} woke=$((1-WOKE)) ids_same=$([ "$IDK" = "$IDK2" ] && echo 1 || echo 0) drift_after_release=$STK fresh_walk=$MK ang=$MKA clearance=$YAWC walk_state[$(mvdiag)]$KOB"
 if [ $DOWN = 0 ]; then row C05-KO FAIL "setup $SH never knocked out: $ev"; else
   ok=1; grep -qE '(^|,)1/' <<<"$DMS" && ok=0   # dm_active=1 while KO = still driven (is_down: evidence only)
   [ $WOKE = 0 ] && [ "$IDK" = "$IDK2" ] || ok=0; lt "$STK" "$STILL_MAX" || ok=0; ge "$MK" "$MOVE_MIN" || ok=0
@@ -402,9 +415,13 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
   YB=$(awk -v y="$YAW" 'BEGIN{y+=3.14159; if(y>3.14159)y-=6.28318; printf "%.4f", y}')   # face away: the wall is behind
   look "$YB" 0; A fp_camera distance 30 >/dev/null; sleep 0.5; waitf 5 bash -c 'stobe-auto fp_camera state | grep -q "blocked=1"'; CI=$(A fp_camera state)   # m51: poll, the clamp converges
   BLK=$(fld blocked <<<"$CI"); AP=$(fld applied <<<"$CI"); TT=$(fld target <<<"$CI"); AD=$(fld actual_distance <<<"$CI")
-  PRB=$(A fp_camera probe | grep -o 'cam=.*')   # pull-back ray per collision mask (which group the wall is in)
+  PRB=$(A fp_camera probe | grep -o 'cam=.*')
+  # m51e diag: does fp_view_apply still run (apply_n/cam_hb deltas over 1 s), did the trace in apply fail, is the override active
+  AN0=$(fld apply_n <<<"$CI"); CH0=$(fld cam_hb <<<"$CI"); sleep 1; CJ=$(A fp_camera state); FS=$(A fp_state)
+  AN1=$(fld apply_n <<<"$CJ"); CH1=$(fld cam_hb <<<"$CJ")
+  DG="apply_n+$(( ${AN1:-0}-${AN0:-0} )) cam_hb+$(( ${CH1:-0}-${CH0:-0} )) trace_err=$(fld trace_err <<<"$CJ") trace_last=$(fld trace_last <<<"$CJ") apply_ret=$(fld apply_ret <<<"$CJ") active=$(fld active <<<"$FS") freecam=$(fld freecam <<<"$FS") controlled=$(fld controlled <<<"$FS") ui_why=$(fld ui_why <<<"$FS")"   # pull-back ray per collision mask (which group the wall is in)
   YAW=$YB; read -r MA _ _ _ <<<"$(walk "$SH" w 1500)"; A fp_camera distance 0 >/dev/null
-  ev="building='$(cut -c1-50 <<<"$BL")' wall_reached=$WALL | wall_behind target=$TT applied=$AP actual=$AD blocked=$BLK [$PRB] | walk_away=$MA"
+  ev="building='$(cut -c1-50 <<<"$BL")' wall_reached=$WALL | wall_behind target=$TT applied=$AP actual=$AD blocked=$BLK [$PRB] {$DG} | walk_away=$MA"
   if [ $WALL = 0 ]; then row C05-INTERIOR FAIL "setup no wall reached walking 11 s: $ev"; else
     ok=1; [ "$BLK" = 1 ] && lt "$AP" "$TT" || ok=0
     awk -v a="$AD" -v p="$AP" 'BEGIN{d=a-p; if(d<0)d=-d; exit !(a!="" && d<.2)}' || ok=0

@@ -5112,6 +5112,21 @@ static void fp_movement(void *gw, float dt)
      * soon as real movement resumes, so normal standing locomotion is untouched
      * (walking is ~26 u/s, far above the 2 u/s pinned floor). */
     int pinned = kfp_stuck_step(&g_stuck_frames, g_was_direct, g_move_speed);  /* ~0.25s of no progress under direct drive */
+    {   /* C05-KO (4080 m51g): a standing body pinned under direct drive -- obstacle or a held mover? Log the edge once
+         * per hold with the mover state, so the next case says which (mode 2 + desired set + no speed = blocked). */
+        static int pin_logged;
+        if (!pinned) pin_logged = 0;
+        else if (!pin_logged) {
+            Vec3 pp = {0,0,0}; char_position(pc, &pp);
+            int pmode = readable((void *)((uintptr_t)mv + MV_MOVEMODE), 4) ? *(int *)((uintptr_t)mv + MV_MOVEMODE) : -1;
+            Vec3 pdm = readable((void *)((uintptr_t)mv + MV_DESIREDMOTION), 12) ? *(Vec3 *)((uintptr_t)mv + MV_DESIREDMOTION) : (Vec3){0,0,0};
+            float pcs = readable((void *)((uintptr_t)mv + MV_CURRENT_SPEED), 4) ? *(float *)((uintptr_t)mv + MV_CURRENT_SPEED) : -1.0f;
+            logline("[move] pinned edge: pos=%.1f,%.1f,%.1f dir=(%.2f,%.2f) spd=%.2f cur_speed=%.2f mode=%d desired=%.2f,%.2f,%.2f task_move=%d prone=%d head=%.2f",
+                    pp.x, pp.y, pp.z, dx, dz, g_move_speed, pcs, pmode, pdm.x, pdm.y, pdm.z, char_task_is_move(pc),
+                    char_prone_state(pc), g_head_above);
+            pin_logged = 1;
+        }
+    }
 
     /* Authoritative state (KenshiLib members): prone state and bed flag tell us
      * directly when the character can't do standing MOVE_DIRECTION locomotion

@@ -742,6 +742,7 @@ static float fp_view_trace_wall(const Vec3 *from,const Vec3 *dir,float range) {
     for (int i=0;i<4 && done<range;++i) {
         CombatRayHit h;
         int t=combat_trace_ray(&o,dir,range-done,&h);
+        if (t<0) ++g_view_trace_err;   /* C05-INTERIOR diag: native trace refused, not a miss */
         if (t<=0 || !isfinite(h.distance)) return -1.0f;
         if (h.ids[0]!=1) return done+h.distance;
         float step=h.distance+0.3f;     /* past this body's surface */

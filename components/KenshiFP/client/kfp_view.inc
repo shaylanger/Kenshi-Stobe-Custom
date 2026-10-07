@@ -4,6 +4,8 @@ static Vec3 g_view_anchor, g_view_written;
 /* combat physics trace past characters (kfp_controls.inc, after the trace bindings): wall distance or -1 */
 static float fp_view_trace_wall(const Vec3 *from,const Vec3 *dir,float range);
 static unsigned g_view_trace_blocks;
+static unsigned g_view_apply_n, g_view_trace_err;   /* C05-INTERIOR diag */
+static float g_view_trace_last=-1; static int g_view_apply_ret=-1;
 static int g_view_have_anchor, g_view_collision_dead;
 static volatile LONG g_view_injected_wheel;
 static void fp_view_input(void) {
@@ -24,13 +26,13 @@ static int fp_view_is_eye(void) {
     return !g_cfg_camera_zoom || kfp_view_is_eye(&g_view);
 }
 static void fp_view_apply(Vec3 *eye) {
-    g_view_anchor=*eye; g_view_have_anchor=1;
-    if (!g_cfg_camera_zoom) { g_view.applied=0; g_view_written=*eye; return; }
+    g_view_anchor=*eye; g_view_have_anchor=1; ++g_view_apply_n;
+    if (!g_cfg_camera_zoom) { g_view.applied=0; g_view_written=*eye; g_view_apply_ret=1; return; }
     float wanted=kfp_view_next(&g_view,g_frame_dt);
     g_view.blocked=0; g_view.collision_known=1;
-    if (wanted<=0.001f) { g_view.applied=0; g_view_written=*eye; return; }
+    if (wanted<=0.001f) { g_view.applied=0; g_view_written=*eye; g_view_apply_ret=2; return; }
     if (!g_have_t || !RVA_RAYCAST || !RVA_GROUND_NOHIT || g_view_collision_dead) {
-        g_view.applied=0; g_view.collision_known=0; g_view_written=*eye; return;
+        g_view.applied=0; g_view.collision_known=0; g_view_written=*eye; g_view_apply_ret=3; return;
     }
     float cp=cosf(g_pitch);
     Vec3 dir={-sinf(g_yaw)*cp,sinf(g_pitch),-cosf(g_yaw)*cp};
@@ -43,7 +45,7 @@ static void fp_view_apply(Vec3 *eye) {
     if (setjmp(g_guard_jb)) {
         g_guard_armed=0; g_view_collision_dead=1;
         g_mr_perch_node=old_perch_node; g_mr_perch_cache=old_perch_cache;
-        g_view.applied=0; g_view.collision_known=0; g_view_written=*eye;
+        g_view.applied=0; g_view.collision_known=0; g_view_written=*eye; g_view_apply_ret=4;
         logline("[view] collision fault; camera stays at eyes"); return;
     }
     guard_arm();
@@ -54,6 +56,7 @@ static void fp_view_apply(Vec3 *eye) {
         Vec3 hit;
         {   /* the physics trace the aim uses stops at building walls (R10); fall_ray/mesh missed shack walls (b30) */
             float distance=fp_view_trace_wall(&from,&dir,wanted+.25f);
+            if (i==0) g_view_trace_last=distance;
             if (distance>=0 && distance<allowed+.25f) {
                 float limit=distance-.25f; if (limit<0) limit=0;
                 if (limit<allowed) { allowed=limit; g_view.blocked=1; ++g_view_trace_blocks; }
@@ -71,7 +74,7 @@ static void fp_view_apply(Vec3 *eye) {
     }
     g_mr_perch_node=old_perch_node; g_mr_perch_cache=old_perch_cache;
     g_guard_armed=0;
-    g_view.applied=allowed;
+    g_view.applied=allowed; g_view_apply_ret=0;
     eye->x+=dir.x*allowed; eye->y+=dir.y*allowed; eye->z+=dir.z*allowed;
     g_view_written=*eye;
 }
@@ -222,12 +225,16 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         float x=fresh.x-g_view_written.x,y=fresh.y-g_view_written.y,z=fresh.z-g_view_written.z;
         written_distance=sqrtf(x*x+y*y+z*z);
     }
-    char b[640];
+    char b[1024];
     snprintf(b,sizeof(b),"view_max=%.1f trace_blocks=%u direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f yaw=%.6f pitch=%.6f world_valid=%d camera_x=%.6f camera_y=%.6f camera_z=%.6f body_yaw=%.6f body_yaw_valid=%d",
         (double)KFP_VIEW_MAX,g_view_trace_blocks,!!g_fp_mode,g_cfg_camera_zoom,g_view.target,g_view.applied,distance,have_actual,fp_view_is_eye(),
         g_view.blocked,g_view.collision_known,g_speed_scale,g_yaw,g_pitch,have_actual&&g_have_t,
         have_actual&&g_have_t?actual.x-g_tx:0,have_actual&&g_have_t?actual.y:0,
         have_actual&&g_have_t?actual.z-g_tz:0,(double)g_face_yaw,g_face_have);
+    {   size_t n=strlen(b);
+        snprintf(b+n,sizeof(b)-n," apply_n=%u cam_hb=%ld trace_err=%u trace_last=%.2f apply_ret=%d",
+            g_view_apply_n,(long)g_cam_heartbeat,g_view_trace_err,g_view_trace_last,g_view_apply_ret);
+    }
     if (g_view_have_anchor) {
         size_t n=strlen(b);
         snprintf(b+n,sizeof(b)-n," cached_distance=%.3f fresh_valid=%d written_distance=%.3f anchor_x=%.3f anchor_y=%.3f anchor_z=%.3f",
