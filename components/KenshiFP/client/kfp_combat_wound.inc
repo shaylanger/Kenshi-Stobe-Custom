@@ -235,7 +235,32 @@ out:
 static void *g_wound_melee_attacker;
 static unsigned g_wound_melee_hits,g_wound_any;
 static float g_wound_melee_cut,g_wound_melee_blunt;
+/* Wound ring (5090 m50-c: unarmed swings gave melee_hits +0 while wounds_any rose +15): the last 16 addWound calls
+ * with victim, attacker, the owned fighter at that moment and the Damages fields, read by `fp_melee wounds [reset]`.
+ * The wrapper maps the pointers to names with `fp_melee state <npc>` (actor=). */
+typedef struct {void *victim,*attacker,*owned;float cut,blunt,pierce,stun;int area,low,bolt;unsigned n;} KfpWoundRec;
+#define KFP_WOUND_RING 16
+static KfpWoundRec g_wound_ring[KFP_WOUND_RING];
+static unsigned g_wound_ring_n;
+static void wound_ring_add(void *med,char low,int area,void *dmg,void *attacker,void *harpoon) {
+    KfpWoundRec *w=&g_wound_ring[g_wound_ring_n%KFP_WOUND_RING];
+    w->victim=(void *)((uintptr_t)med-WOUND_CHAR_MEDICAL);w->attacker=attacker;w->owned=g_wound_melee_attacker;
+    w->cut=w->blunt=w->pierce=w->stun=NAN;
+    if (dmg && readable(dmg,16)) {float *d=(float *)dmg;w->cut=d[0];w->blunt=d[1];w->pierce=d[2];w->stun=d[3];}
+    w->area=area;w->low=low;w->bolt=harpoon!=NULL;w->n=++g_wound_ring_n;
+}
+static void fp_wound_ring_append(char *b,size_t n) {
+    size_t l=(size_t)snprintf(b,n,"wounds=%u owned=%llx",g_wound_ring_n,(unsigned long long)(uintptr_t)g_wound_melee_attacker);
+    unsigned first=g_wound_ring_n>KFP_WOUND_RING?g_wound_ring_n-KFP_WOUND_RING:0;
+    for (unsigned i=first;i<g_wound_ring_n && l<n;++i) {
+        KfpWoundRec *w=&g_wound_ring[i%KFP_WOUND_RING];
+        l+=(size_t)snprintf(b+l,n-l," | #%u v=%llx a=%llx%s c=%.1f b=%.1f p=%.1f s=%.1f area=%d low=%d%s",w->n,(unsigned long long)(uintptr_t)w->victim,(unsigned long long)(uintptr_t)w->attacker,
+            w->attacker&&w->attacker==w->owned?"(owned)":w->victim==w->owned?"(owned_victim)":"",w->cut,w->blunt,w->pierce,w->stun,w->area,w->low,w->bolt?" bolt":"");
+    }
+}
+static void fp_wound_ring_reset(void) {g_wound_ring_n=0;}
 static void *wound_add_hook(void *med,char low,int area,void *dmg,int *mat,void *attacker,int *dir,void *harpoon) {
+    wound_ring_add(med,low,area,dmg,attacker,harpoon);
     if (!harpoon && attacker) {
         ++g_wound_any;
         if (attacker==g_wound_melee_attacker) {

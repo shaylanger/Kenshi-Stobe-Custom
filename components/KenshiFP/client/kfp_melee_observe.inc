@@ -30,6 +30,11 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
         if(!on && _stricmp(argv[2],"off")) {r->append(r,"usage: fp_melee force_chase on|off");return KAH_ERROR;}
         fp_melee_set_force_chase(on);r->append(r,on?"force_chase on: owned fighter forced into the native chase lock (state 11) each tick":"force_chase off");return KAH_OK;
     }
+    if(argc>=2 && argc<=3 && !_stricmp(argv[1],"wounds")) {
+        if(argc==3 && _stricmp(argv[2],"reset")) {r->append(r,"usage: fp_melee wounds [reset]");return KAH_ERROR;}
+        if(argc==3) fp_wound_ring_reset();
+        char b[2048];fp_wound_ring_append(b,sizeof(b));r->append(r,b);return KAH_OK;
+    }
     if(argc>=2 && argc<=3 && !_stricmp(argv[1],"swingstat")) {
         if(argc==3 && _stricmp(argv[2],"reset")) {r->append(r,"usage: fp_melee swingstat [reset]");return KAH_ERROR;}
         if(argc==3) fp_melee_swingstat_reset();

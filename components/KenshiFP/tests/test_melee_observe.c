@@ -33,6 +33,8 @@ static void fp_melee_set_passive(unsigned s){(void)s;}
 static unsigned spam_n,spam_p;static void fp_melee_spam_start(unsigned n,unsigned p){spam_n=n;spam_p=p;}
 static unsigned cl_ms,ss_resets;static void fp_melee_click_legal_start(unsigned ms){cl_ms=ms;}
 static void fp_melee_swingstat_reset(void){++ss_resets;}
+static void fp_wound_ring_reset(void){}
+static void fp_wound_ring_append(char *b,size_t n){snprintf(b,n,"wounds=0");}
 static int force_chase=-1;static void fp_melee_set_force_chase(int on){force_chase=on;}
 static int fp_melee_swingstat_append(char *b,size_t n){return snprintf(b,n,"atk_speed_mean=1.0000 techs=none");}
 #include "../client/kfp_melee_observe.inc"

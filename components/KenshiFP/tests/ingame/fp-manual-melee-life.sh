@@ -87,8 +87,7 @@ for c in "$FI" "$TG"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not fou
 BOWN=$(A rangedinfo "$FI" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//')
 arm_melee || setup_fail "$FI has no melee weapon that equips (inv weapons: $(weapons | tr '\n' ';'))"
 A protect "$FI" on >/dev/null
-for m in $(A chars 3000 "[nameless]" | tr '|' '
-' | sed -n 's/^[0-9]* within [0-9.]*: //; s/^ *//; s/ #.*//p'); do
+for m in $(A chars 3000 "[nameless]" | tr '|' '\n' | sed -n 's/^[0-9]* within [0-9.]*: //; s/^ *//; s/ #.*//p'); do
   case "$m" in "$FI") ;; *) A protect "$m" on >/dev/null; A pin "$m" at "$FI" dist 600 >/dev/null;; esac; done
 A health "$TG" 100 >/dev/null; A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null
 take
@@ -138,16 +137,24 @@ U1=$(A unequip "$FI" "$WEP"); sleep 2; take
 A health "$TG" 100 >/dev/null; sleep 0.3; H0=$(flesh "$TG"); B0=$(blood "$TG"); sw=0; WK0=$WAKES
 s=$(A fp_melee state); MH0=$(echo "$s" | fld melee_hits); MC0=$(echo "$s" | fld melee_cut); MB0=$(echo "$s" | fld melee_blunt); WA0=$(echo "$s" | fld wounds_any)
 [ -n "$MH0" ] || setup_fail "fp_melee state has no melee_hits (KenshiFP older than the m50-b fix)"
+A fp_melee wounds reset | grep -q "^wounds=0" || setup_fail "fp_melee wounds reset refused (KenshiFP older than the m50-c fix)"
 for _ in 1 2 3 4; do r=$(fresh_click); [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
 s=$(A fp_melee state); MH=$(( $(echo "$s" | fld melee_hits) - MH0 )); WA=$(( $(echo "$s" | fld wounds_any) - WA0 ))
 MD=$(awk -v c0="$MC0" -v b0="$MB0" -v c1="$(echo "$s" | fld melee_cut)" -v b1="$(echo "$s" | fld melee_blunt)" 'BEGIN{printf "cut+%.1f blunt+%.1f", c1-c0, b1-b0}')
 MDT=$(echo "$MD" | awk '{gsub(/[a-z+]/," "); print $1+$2}')
+# who wounded whom (5090 m50-c: melee_hits +0 but wounds_any +15): the product's last 16 addWound calls, pointers mapped
+# to names with the actor= of `fp_melee state <npc>`; FT = wounds on the target dealt by the fighter (any attribution)
+FA=$(A fp_melee state "$FI" | fld actor); TA=$(A fp_melee state "$TG" | fld actor); WR=$(A fp_melee wounds)
+WS=$(echo "$WR" | tr '|' '\n' | awk -v fa="$FA" -v ta="$TA" '/ v=/{v="";a="";for(i=1;i<=NF;i++){if($i~/^v=/)v=substr($i,3);if($i~/^a=/)a=substr($i,3)}
+  sub(/\(.*/,"",a); vn=(v==fa?"FI":v==ta?"TG":"other"); an=(a==fa?"FI":a==ta?"TG":a=="0"?"none":"other"); k[an">"vn]++}
+  END{for(x in k) printf "%s=%d ", x, k[x]}')
+FT=$(echo "$WR" | tr '|' '\n' | grep -c " v=$TA a=$FA")
 A equip "$FI" "$WEP" | grep -q ERROR && { A pickup "$FI" "$WEP" now >/dev/null; sleep 1; A equip "$FI" "$WEP" >/dev/null; }; sleep 2
 # U2 = the second unequip's reply: "ERROR: not equipped" proves the weapon stayed off during the clicks (expected)
 # hit evidence: the target's flesh dropped, or native addWound calls by the fighter with cut+blunt > 0 (melee_hits).
 # Blood is reported only: it also falls from the bleeding of older cuts (m50-b: 77.7->76.9 with no part touched).
-ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
-if [[ "$U1" == unequipped* ]] && [[ "$U2" == *"not equipped"* ]] && [ "$sw" -ge 3 ] && awk -v a="$H0" -v b="$H1" -v h="$MH" -v d="$MDT" 'BEGIN{exit !(b<a-0.5 || (h>0 && d>0))}'; then row M08-UNARMED PASS "$ev"; else row M08-UNARMED FAIL "$ev"; fi
+ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA ring[${WS% }] fighter_on_target=$FT blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
+if [[ "$U1" == unequipped* ]] && [[ "$U2" == *"not equipped"* ]] && [ "$sw" -ge 3 ] && awk -v a="$H0" -v b="$H1" -v h="$MH" -v d="$MDT" -v ft="$FT" 'BEGIN{exit !(b<a-0.5 || (h>0 && d>0) || ft>0)}'; then row M08-UNARMED PASS "$ev"; else row M08-UNARMED FAIL "$ev"; fi
 
 # ---- M08-CROWD: a second hostile attacks the fighter -> adapter stays owned/ok, clicks still swing, AI refused ----
 A fp_melee passive off >/dev/null   # the second attacker must really attack
