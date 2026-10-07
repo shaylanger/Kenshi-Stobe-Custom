@@ -18,7 +18,7 @@
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
-ROWS="${1:-DW1 DW2 DW3 DW4 DW5 DW6 DW7 DW8 DW9 DW10}"
+ROWS="${*:-DW1 DW2 DW3 DW4 DW5 DW6 DW7 DW8 DW9 DW10}"
 want() { case " $ROWS " in *" $1 "*) return 0 ;; esac; return 1; }
 PSQLQ() { (cd /tmp && sudo -u postgres psql -d stobe -At -c "$1" 2>/dev/null); }
 
@@ -95,6 +95,21 @@ row_cfg() { draw_off; dw reset >/dev/null; dw set hostile_below "$1" >/dev/null;
 stobe-auto select "$PLAYER" >/dev/null
 stobe-say speed 1 >/dev/null
 preflight DW advancing
+# daylight: at night NPCs only notice the player within a few metres (m50-5090-d: 02:00, sees=0 los=0 on all 8 sides at 6 m),
+# so the rows run in daytime: fast-forward (squad protected) until 09:00-15:59
+hour_now() { stobe-auto time 2>/dev/null | grep -oE 'time=[0-9]+' | cut -d= -f2 | sed 's/^0//'; }
+daylight() {
+  local h end=$(( $(date +%s) + 180 )); h=$(hour_now); [ -n "$h" ] || setup_fail DW "no game time ($(stobe-auto time 2>&1 | tail -1))"
+  [ "$h" -ge 9 ] && [ "$h" -le 15 ] && return 0
+  for c in "$PLAYER" "$MATE"; do stobe-auto protect "$c" on >/dev/null; done
+  stobe-auto speed 50 >/dev/null
+  until h=$(hour_now); [ -n "$h" ] && [ "$h" -ge 9 ] && [ "$h" -le 15 ]; do
+    [ "$(date +%s)" -ge "$end" ] && { stobe-auto speed 1 >/dev/null; setup_fail DW "game time never reached 09:00 (hour=$h)"; }; sleep 1; done
+  stobe-auto speed 1 >/dev/null
+  for c in "$PLAYER" "$MATE"; do stobe-auto protect "$c" off >/dev/null; done
+  log "daylight: fast-forwarded to $(stobe-auto time | grep -oE 'time=[0-9:]+')"
+}
+daylight
 ST0=$(dw status)
 case "$ST0" in *enabled=*) ;; *) setup_fail DW "no stobe_drawn command (Stobe.dll older than fc1ead3?): $ST0" ;; esac
 log "drawn status at start: $ST0"
@@ -147,6 +162,7 @@ fi
 if want DW2; then (
   N="Town Guard"; row_cfg -101 4 5
   fresh DW2 "$N"; rowmark
+  N=$(name_of "$h"); [ -n "$N" ] || setup_fail DW2 "no live name for the guard"; log "DW2 guard live name: $N"   # a spawned guard gets a name (m50-e: Rhuk [Town Guard])
   inject_on DW2 "$N" react '[{"message":"Sheathe that weapon, {player}. Now."}]'
   draw_on || setup_fail DW2 "draw failed"
   wait_line 25 speak_guard "$N"; wait_for 40 said_has "$N" "Sheathe that weapon"
