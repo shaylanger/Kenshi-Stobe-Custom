@@ -107,6 +107,58 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         InterlockedExchangeAdd(&g_view_injected_wheel,(LONG)n);
         r->append(r,"wheel input queued through normal zoom handler"); return KAH_OK;
     }
+    if ((argc>=8 && argc<=10) && !_stricmp(argv[1],"ray")) {
+        /* C05-STAIRS setup: one engine ray in game coords, `ray x y z dx dy dz [range] [mask]` (mask default
+         * 0x88204 = the collision world: terrain, building shells/floors, rocks). Reply "ray d=<along dir>
+         * hit=x,y,z mask=0x..." or "ray miss". The test scans a built house with downward rays for its floors. */
+        float v[7]={0,0,0,0,0,0,1e9f}; unsigned mask=0x88204u; char *end;
+        for (int i=0;i<7 && i+2<argc;++i) {
+            errno=0; v[i]=strtof(argv[i+2],&end);
+            if (errno||end==argv[i+2]||*end||!isfinite(v[i])) { r->append(r,"ray: x y z dx dy dz [range] must be finite numbers"); return KAH_ERROR; }
+        }
+        if (argc==10) { errno=0; unsigned long m=strtoul(argv[9],&end,0);
+            if (errno||end==argv[9]||*end||!m) { r->append(r,"ray: mask must be a nonzero integer (0x.. ok)"); return KAH_ERROR; }
+            mask=(unsigned)m; }
+        float dl=sqrtf(v[3]*v[3]+v[4]*v[4]+v[5]*v[5]);
+        if (!(dl>1e-6f)||!(v[6]>0)) { r->append(r,"ray: direction must be nonzero, range > 0"); return KAH_ERROR; }
+        if (!g_base||!RVA_RAYCAST||!RVA_GROUND_NOHIT) { r->append(r,"ray unavailable (no raycast)"); return KAH_ERROR; }
+        if (g_guard_armed) { r->append(r,"ray busy"); return KAH_ERROR; }
+        Vec3 from={v[0],v[1],v[2]},dir={v[3]/dl,v[4]/dl,v[5]/dl},hit; int got;
+        if (setjmp(g_guard_jb)) { g_guard_armed=0; r->append(r,"ray fault"); return KAH_ERROR; }
+        guard_arm(); got=fall_ray_m(&from,&dir,&hit,mask); g_guard_armed=0;
+        char b[200]; float d=got?(hit.x-from.x)*dir.x+(hit.y-from.y)*dir.y+(hit.z-from.z)*dir.z:-1.0f;
+        if (!got||d>v[6]) snprintf(b,sizeof(b),"ray miss mask=0x%x",mask);
+        else snprintf(b,sizeof(b),"ray d=%.2f hit=%.2f,%.2f,%.2f mask=0x%x",d,hit.x,hit.y,hit.z,mask);
+        r->append(r,b); return KAH_OK;
+    }
+    if (argc==8 && !_stricmp(argv[1],"floors")) {
+        /* C05-STAIRS setup: `floors cx cz half step ytop ybot` -- a grid of downward rays (mask 0x88204) over the
+         * square cx+-half, cz+-half; per cell the surfaces from ytop down to ybot (each next ray starts 0.5 below
+         * the last hit, at most 8 per cell). Reply "floors cells=N" then " x,z:y1/y2/..;" per cell with a hit. */
+        float v[6]; char *end;
+        for (int i=0;i<6;++i) { errno=0; v[i]=strtof(argv[i+2],&end);
+            if (errno||end==argv[i+2]||*end||!isfinite(v[i])) { r->append(r,"floors: cx cz half step ytop ybot must be finite"); return KAH_ERROR; } }
+        if (!(v[2]>0&&v[2]<=200&&v[3]>=1&&v[4]>v[5])||(int)(2*v[2]/v[3]+1)>81) { r->append(r,"floors: 0<half<=200, step>=1 (<=81 per side), ytop>ybot"); return KAH_ERROR; }
+        if (!g_base||!RVA_RAYCAST||!RVA_GROUND_NOHIT) { r->append(r,"floors unavailable (no raycast)"); return KAH_ERROR; }
+        if (g_guard_armed) { r->append(r,"floors busy"); return KAH_ERROR; }
+        int cells=0; char b[160];
+        static const Vec3 down={0,-1,0};
+        for (float x=v[0]-v[2]; x<=v[0]+v[2]+0.01f; x+=v[3]) for (float z=v[1]-v[2]; z<=v[1]+v[2]+0.01f; z+=v[3]) {
+            Vec3 from={x,v[4],z},hit; size_t n=0; int k;
+            n+=snprintf(b,sizeof(b)," %.1f,%.1f:",x,z);
+            for (k=0;k<8;++k) {
+                int got;
+                if (setjmp(g_guard_jb)) { g_guard_armed=0; r->append(r," fault"); return KAH_ERROR; }
+                guard_arm(); got=fall_ray_m(&from,&down,&hit,0x88204u); g_guard_armed=0;
+                if (!got||hit.y<v[5]||hit.y>from.y+0.01f) break;
+                n+=snprintf(b+n,sizeof(b)-n,"%s%.1f",k?"/":"",hit.y);
+                if (n>=sizeof(b)-12) break;
+                from.y=hit.y-0.5f;
+            }
+            if (k) { snprintf(b+n,sizeof(b)-n,";"); if (!cells) r->append(r,"floors"); r->append(r,b); ++cells; }
+        }
+        snprintf(b,sizeof(b)," cells=%d",cells); r->append(r,b); return KAH_OK;
+    }
     if (argc==2 && !_stricmp(argv[1],"probe")) {
         /* C05-INTERIOR diagnostics: the camera's pull-back ray (from the eye anchor, backwards along the look)
          * per collision mask: cam = the mask fp_view_apply uses (0x88204), all = every group but bit 0, mesh =
@@ -134,7 +186,7 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         r->append(r,b); return KAH_OK;
     }
     if (argc!=2 || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_camera state|probe|distance <0..60>|wheel <-2400..2400>|look <yaw radians> <pitch radians>"); return KAH_ERROR;
+        r->append(r,"usage: fp_camera state|probe|distance <0..60>|wheel <-2400..2400>|look <yaw radians> <pitch radians>|ray x y z dx dy dz [range] [mask]|floors cx cz half step ytop ybot"); return KAH_ERROR;
     }
     Vec3 actual={0},fresh={0}; int have_actual=0,have_fresh=0;
     if (g_fp_mode && g_have_eye && g_fp_control_actor && g_ogre_ready && g_node_get_dpos && g_view_have_anchor) {
