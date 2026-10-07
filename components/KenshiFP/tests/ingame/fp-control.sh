@@ -92,10 +92,15 @@ walk() { local p0 p1 a0 a1 ms2 sp st wm; p0=$(pos "$1"); a0=$(anchor); A fps res
 # last walk's numbers are used (each redo logged as STALL). The assertions stay the same; a sample that is still stalled
 # is reported as such by the row (b28 C02: the FP walk stalled twice, 1100 then 557 ms, ratio 1.34 = lost hold time;
 # the same FP walk unstalled in C03 covered 103.65 vs third person 103.06).
+# Each redo starts from the first walk's start spot (teleport back): 5090 m50 K C02 redid the stalled FP walk from where
+# the first one ended (~106 m on), walked into an obstacle there (38.31, moved along +z only, stopped before the hold
+# ended) and the row failed on ratio 2.84 against an open-ground third-person walk.
 WALK_TRIES=${WALK_TRIES:-3}
-walkr() { local r w i=1; r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r")
+walkr() { local r w i=1 p0; p0=$(pos "$1"); r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r")
   while ge "$w" "$STALL_MS" && [ $i -lt "$WALK_TRIES" ]; do i=$((i+1))
-    echo "STALL walk $* worst_ms=$w: redo $i/$WALK_TRIES" >> "$LOG"; r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r"); done; echo "$r"; }
+    echo "STALL walk $* worst_ms=$w: redo $i/$WALK_TRIES from the start spot $p0" >> "$LOG"
+    [ -n "$p0" ] && { A teleport "$1" $p0 >/dev/null; sleep 1.5; }
+    r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r"); done; echo "$r"; }
 # native_walk <who> [axis]: native timed walk (walktime 40 walk) along the first axis that really walks (>= 25):
 # a blocked path is setup, not the row (b27: Malzin +x stopped 35 m short). Echo "<displacement> <axis> <tries>".
 native_walk() { local ax p0 d=0 n=0 tried=" "
