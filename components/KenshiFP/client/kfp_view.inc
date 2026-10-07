@@ -97,8 +97,33 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         InterlockedExchangeAdd(&g_view_injected_wheel,(LONG)n);
         r->append(r,"wheel input queued through normal zoom handler"); return KAH_OK;
     }
+    if (argc==2 && !_stricmp(argv[1],"probe")) {
+        /* C05-INTERIOR diagnostics: the camera's pull-back ray (from the eye anchor, backwards along the look)
+         * per collision mask: cam = the mask fp_view_apply uses (0x88204), all = every group but bit 0, mesh =
+         * the visual mesh refine, bits = each single group bit that hits within 20 dm. Distances along the ray. */
+        if (!g_view_have_anchor || !g_have_t || !RVA_RAYCAST || !RVA_GROUND_NOHIT) { r->append(r,"probe unavailable (no anchor/T/raycast)"); return KAH_ERROR; }
+        if (g_guard_armed) { r->append(r,"probe busy"); return KAH_ERROR; }
+        float cp=cosf(g_pitch);
+        Vec3 dir={-sinf(g_yaw)*cp,sinf(g_pitch),-cosf(g_yaw)*cp};
+        Vec3 from={g_view_anchor.x-g_tx,g_view_anchor.y,g_view_anchor.z-g_tz},hit;
+        char b[900]; size_t n=0; float d;
+        void *old_node=g_mr_perch_node; mr_cache_t *old_cache=g_mr_perch_cache;
+        if (setjmp(g_guard_jb)) { g_guard_armed=0; g_mr_perch_node=old_node; g_mr_perch_cache=old_cache; r->append(r,"probe fault"); return KAH_ERROR; }
+        guard_arm();
+#define KFP_PROBE_D(got) ((got)?((hit.x-from.x)*dir.x+(hit.y-from.y)*dir.y+(hit.z-from.z)*dir.z):-1.0f)
+        d=KFP_PROBE_D(fall_ray_m(&from,&dir,&hit,0x88204u)); n+=snprintf(b+n,sizeof(b)-n,"probe from=%.1f,%.1f,%.1f yaw=%.4f cam=%.2f",from.x,from.y,from.z,g_yaw,d);
+        d=KFP_PROBE_D(fall_ray_m(&from,&dir,&hit,0xfffffffeu)); n+=snprintf(b+n,sizeof(b)-n," all=%.2f",d);
+        d=KFP_PROBE_D(meshray_refine(&from,&dir,20.0f,&hit)); n+=snprintf(b+n,sizeof(b)-n," mesh=%.2f bits=",d);
+        for (int bit=1;bit<32 && n<sizeof(b)-24;++bit) {
+            d=KFP_PROBE_D(fall_ray_m(&from,&dir,&hit,1u<<bit));
+            if (d>=0 && d<20.0f) n+=snprintf(b+n,sizeof(b)-n,"%d:%.2f,",bit,d);
+        }
+#undef KFP_PROBE_D
+        g_guard_armed=0; g_mr_perch_node=old_node; g_mr_perch_cache=old_cache;
+        r->append(r,b); return KAH_OK;
+    }
     if (argc!=2 || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_camera state|distance <0..12>|wheel <-2400..2400>|look <yaw radians> <pitch radians>"); return KAH_ERROR;
+        r->append(r,"usage: fp_camera state|probe|distance <0..12>|wheel <-2400..2400>|look <yaw radians> <pitch radians>"); return KAH_ERROR;
     }
     Vec3 actual={0},fresh={0}; int have_actual=0,have_fresh=0;
     if (g_fp_mode && g_have_eye && g_fp_control_actor && g_ogre_ready && g_node_get_dpos && g_view_have_anchor) {
