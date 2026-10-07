@@ -15,6 +15,7 @@ static unsigned char pc[16],cc[0x2c0],gw[0x20],mv[0x400],other_mv[0x400],st[0x20
 static void *mv_vt[0x20];
 static int g_ui_open,g_is_down,g_combat_injection=1,focus=1;
 static unsigned g_combat_inj_cmds,g_combat_inj_aim_cmds;
+static void *g_wound_melee_attacker; static unsigned g_wound_melee_hits,g_wound_any; static float g_wound_melee_cut,g_wound_melee_blunt;   /* kfp_combat_wound.inc */
 static int game_has_focus(void){return focus;}
 static void logline(const char *fmt,...){(void)fmt;}
 static int in(void *p,size_t n,void *b,size_t bn){return (unsigned char *)p>=(unsigned char *)b&&(unsigned char *)p+n<=(unsigned char *)b+bn;}

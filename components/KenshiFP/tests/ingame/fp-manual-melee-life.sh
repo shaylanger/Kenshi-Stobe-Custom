@@ -135,12 +135,19 @@ if [ "$SL" = "$S0" ] && [ "$FS" = 1 ]; then row M08-LOAD PASS "$ev"; else row M0
 
 # ---- M08-UNARMED: melee weapon unequipped -> unarmed click still swings (native martial arts), hits land ----
 U1=$(A unequip "$FI" "$WEP"); sleep 2; take
-A health "$TG" 100 >/dev/null; sleep 0.3; H0=$(flesh "$TG"); B0=$(blood "$TG"); sw=0
-for _ in 1 2 3 4; do r=$(fresh_click); [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); U2=$(A unequip "$FI" "$WEP")
+A health "$TG" 100 >/dev/null; sleep 0.3; H0=$(flesh "$TG"); B0=$(blood "$TG"); sw=0; WK0=$WAKES
+s=$(A fp_melee state); MH0=$(echo "$s" | fld melee_hits); MC0=$(echo "$s" | fld melee_cut); MB0=$(echo "$s" | fld melee_blunt); WA0=$(echo "$s" | fld wounds_any)
+[ -n "$MH0" ] || setup_fail "fp_melee state has no melee_hits (KenshiFP older than the m50-b fix)"
+for _ in 1 2 3 4; do r=$(fresh_click); [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
+s=$(A fp_melee state); MH=$(( $(echo "$s" | fld melee_hits) - MH0 )); WA=$(( $(echo "$s" | fld wounds_any) - WA0 ))
+MD=$(awk -v c0="$MC0" -v b0="$MB0" -v c1="$(echo "$s" | fld melee_cut)" -v b1="$(echo "$s" | fld melee_blunt)" 'BEGIN{printf "cut+%.1f blunt+%.1f", c1-c0, b1-b0}')
+MDT=$(echo "$MD" | awk '{gsub(/[a-z+]/," "); print $1+$2}')
 A equip "$FI" "$WEP" | grep -q ERROR && { A pickup "$FI" "$WEP" now >/dev/null; sleep 1; A equip "$FI" "$WEP" >/dev/null; }; sleep 2
 # U2 = the second unequip's reply: "ERROR: not equipped" proves the weapon stayed off during the clicks (expected)
-ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw $TG flesh $H0->$H1 blood $B0->$B1 why=$(ms why)"
-if [[ "$U1" == unequipped* ]] && [[ "$U2" == *"not equipped"* ]] && [ "$sw" -ge 3 ] && awk -v a="$H0" -v b="$H1" -v c="$B0" -v d="$B1" 'BEGIN{exit !(b<a-0.5 || d<c-0.5)}'; then row M08-UNARMED PASS "$ev"; else row M08-UNARMED FAIL "$ev"; fi
+# hit evidence: the target's flesh dropped, or native addWound calls by the fighter with cut+blunt > 0 (melee_hits).
+# Blood is reported only: it also falls from the bleeding of older cuts (m50-b: 77.7->76.9 with no part touched).
+ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
+if [[ "$U1" == unequipped* ]] && [[ "$U2" == *"not equipped"* ]] && [ "$sw" -ge 3 ] && awk -v a="$H0" -v b="$H1" -v h="$MH" -v d="$MDT" 'BEGIN{exit !(b<a-0.5 || (h>0 && d>0))}'; then row M08-UNARMED PASS "$ev"; else row M08-UNARMED FAIL "$ev"; fi
 
 # ---- M08-CROWD: a second hostile attacks the fighter -> adapter stays owned/ok, clicks still swing, AI refused ----
 A fp_melee passive off >/dev/null   # the second attacker must really attack

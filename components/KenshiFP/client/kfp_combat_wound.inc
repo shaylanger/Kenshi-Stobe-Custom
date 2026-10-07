@@ -228,7 +228,25 @@ out:
     g_guard_armed=0;
     return n;
 }
+/* Melee hit evidence (M08-UNARMED, 5090 batch m50-b): unarmed manual swings never moved the target's flesh and the
+ * blood test could not tell a hit from the bleeding of older cuts. Every non-bolt addWound (lowBlow, cut direction,
+ * Damages cut/blunt, attacker) is counted; melee_hits / melee_cut / melee_blunt are the ones whose attacker is the
+ * fighter last owned by the manual melee adapter (set by fp_melee_manual_tick), wounds_any all of them. */
+static void *g_wound_melee_attacker;
+static unsigned g_wound_melee_hits,g_wound_any;
+static float g_wound_melee_cut,g_wound_melee_blunt;
 static void *wound_add_hook(void *med,char low,int area,void *dmg,int *mat,void *attacker,int *dir,void *harpoon) {
+    if (!harpoon && attacker) {
+        ++g_wound_any;
+        if (attacker==g_wound_melee_attacker) {
+            ++g_wound_melee_hits;
+            if (dmg && readable(dmg,8)) {
+                float c=((float *)dmg)[0],bl=((float *)dmg)[1];
+                if (isfinite(c)) g_wound_melee_cut+=c;
+                if (isfinite(bl)) g_wound_melee_blunt+=bl;
+            }
+        }
+    }
     if (!harpoon || !g_wound_live) return g_wound_add_orig(med,low,area,dmg,mat,attacker,dir,harpoon);
     WoundShot *found=wound_find(harpoon);
     if (!found) return g_wound_add_orig(med,low,area,dmg,mat,attacker,dir,harpoon);
