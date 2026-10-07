@@ -13,11 +13,8 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 
 | # | Bug | Fix / state |
 |---|---|---|
-| 86 | game re-reported `Initiated attack` during a truce, so a paid surrender turned BREACHED_PLAYER | fixed live (f98b88e, e9f8598: a breach needs real evidence within 8 s; older-save load cancels later deals) |
+| 86 | game re-reported `Initiated attack` during a truce, so a paid surrender turned BREACHED_PLAYER | fixed live (f98b88e, e9f8598: a breach needs real evidence within 8 s; older-save load cancels later deals); m50 I: the D86 setup hit a new bug (danger interrupt dropped the truce reply actions), fixed 5396293 (Stobe 8B861ADE), rerun `STOBE-D-confirm.sh D86` |
 | 87 | Dust King: no initiative check (his attack was stood down by another personal-fight guard) | test procedure fixed; covered by 88 + 61 PASS m18 |
-| 94 | `stobe-reset-npc --restore` wrote "shay" instead of "Shay" | fixed (tool) |
-| 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
-| 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
 
 ## E. Design questions and features
 

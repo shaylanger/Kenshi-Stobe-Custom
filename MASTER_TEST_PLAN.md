@@ -64,9 +64,6 @@ Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 |---|---|---|
 | STOBE 86 | older-save load turned later deals into BREACHED_PLAYER | a deal, then an older-save load |
 | STOBE 87 | Dust King: no initiative check (covered by 88 + 61 PASS m18) | close at the next surrender run |
-| STOBE 94 | reset-npc `--restore` key case | round trip at the end |
-| STOBE 101 | `[]` extended_data | rel-enslaved set-relation |
-| STOBE 105 | KenshiFP log spam | A8 log |
 
 ## 4. Harness (KAH) limits and open items
 
