@@ -15,7 +15,14 @@
  * The latch keeps the pose "ready" across such dips: once the native flag was 1, a 0 is bridged for at
  * most `window` game seconds while the hold stays intact (aim held, identity unchanged, not reloading,
  * ammo > 0, input allowed). Anything that breaks the hold clears it, and so does a shot (the caller
- * resets after firing). It never buffers or replays a fire edge: the edge is still judged on its frame. */
+ * resets after firing). It never buffers or replays a fire edge: the edge is still judged on its frame.
+ *
+ * The window is measured on the dip time BEFORE this frame: the first dip frame is always bridged,
+ * whatever its dt. A hitch frame (a game-thread stall, at 3x a 100 ms stall is 0.3 game s) is exactly
+ * when the native anim update runs without our play request and the flag dips; judging it by its own
+ * dt (old `since+dt<=window`) dropped the latch on that one frame, and a trigger landing there was
+ * refused with everything else ready (4080 b29 R12-UI/SPEED, b30 R10/R12-SWAP: last_reject
+ * 1/0/0/1/0/1.0/0.0, ready_bridged unchanged, native ready 1 again on the next poll). */
 typedef struct { int latched; float since; uint64_t identity; unsigned bridged; } KfpReadyLatch;
 static void kfp_ready_latch_reset(KfpReadyLatch *l) { l->latched=0; l->since=0; }
 /* Returns the readiness to use this frame. */
@@ -26,7 +33,7 @@ static int kfp_ready_latch_step(KfpReadyLatch *l,int native_ready,int hold_ok,ui
         return hold_ok && native_ready;
     }
     if (native_ready) { l->latched=1; l->since=0; return 1; }
-    if (l->latched && l->since+dt<=window) { l->since+=dt; ++l->bridged; return 1; }
+    if (l->latched && l->since<window) { l->since+=dt; ++l->bridged; return 1; }
     kfp_ready_latch_reset(l);
     return 0;
 }

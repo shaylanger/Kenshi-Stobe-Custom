@@ -34,6 +34,17 @@ int main(void) {
     assert(!kfp_ready_latch_step(&l,0,1,8,-1.0f,W));
     assert(kfp_ready_latch_step(&l,1,1,8,dt,W));
     assert(!kfp_ready_latch_step(&l,0,1,8,dt,0.0f));
+    /* a dip that starts on a hitch frame (dt over the window) is still bridged on that frame
+     * (4080 b29/b30: the trigger landed on it and was refused); the next dip frame is not */
+    {KfpReadyLatch h={0};
+     assert(kfp_ready_latch_step(&h,1,1,9,dt,W));      /* identity adopted */
+     assert(kfp_ready_latch_step(&h,1,1,9,dt,W));      /* latched */
+     assert(kfp_ready_latch_step(&h,0,1,9,0.30f,W));
+     assert(h.bridged==1);
+     assert(!kfp_ready_latch_step(&h,0,1,9,dt,W));
+     assert(kfp_ready_latch_step(&h,1,1,9,dt,W));
+     assert(kfp_ready_latch_step(&h,0,1,9,0.30f,W));   /* each new dip gets its first frame */
+    }
     puts("ready latch ok");
     return 0;
 }

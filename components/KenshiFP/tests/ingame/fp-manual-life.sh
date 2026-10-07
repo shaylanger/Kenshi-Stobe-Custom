@@ -34,7 +34,11 @@ take() { A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_contr
 # fresh_shot [ready_s]: release, aim, wait shot-ready (default 10 s), one trigger; echoes the harness shot delta (expect 1)
 fresh_shot() { local h0; inp 0 0 0; h0=$(hshots); sleep 0.5; inp 1 0 0; waitfor "${1:-10}" shot_ready 1 || { echo "not_ready/anim=$(cs anim_ready)/ammo=$(cs ammo)/reloading=$(cs reloading)/why=$(cs why)"; return; }
   inp 1 1 0; sleep 1.5; inp 1 0 0; local d=$(( $(hshots) - h0 ))
-  [ "$d" = 0 ] && { echo "0/rej=$(cs last_reject)/rej_why=$(cs last_reject_why)/anim_sup=$(cs anim_suppressed)"; return; }; echo "$d"; }
+  [ "$d" = 0 ] && { why_refused; return; }; echo "$d"; }
+# why_refused: one state read -> "0/gate=<first failed gate in words>/..." (pose_dip_past_window, pose_not_ready, hold_broken,
+# no_aim_ray, closeness, aim_timer, reloading, no_ammo, truce, holstered, aim_not_held; none = the edge was never seen)
+why_refused() { local st; st=$(A fp_combat state); local g; g() { fld "$1" <<<"$st"; }
+  echo "0/gate=$(g last_reject_gate)/rejected=$(g rejected)/native=$(g last_reject_native)/latched=$(g last_reject_latched)/dip_s=$(g last_reject_dip_s)/dt=$(g last_reject_dt)/rej=$(g last_reject)/anim_sup=$(g anim_suppressed)"; }
 ready_held() { inp 0 0 0; sleep 0.5; inp 1 0 0; waitfor 10 shot_ready 1 || return 1; return 0; }
 
 # ---- setup ----
@@ -89,6 +93,7 @@ if ready_held; then h0=$(hshots); inp 1 1 0; t0=$(date +%s.%N)
   for _ in $(seq 1 60); do [ "$(cs reloading)" = 0 ] && break; sleep 0.1; done
   RT=$(awk -v a="$t0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.2f", b-a}'); FS=$(( $(hshots) - h0 )); fi
 LT=$(cs last_reload_timer); A speed 1 >/dev/null
+[ "$FS" = 0 ] && FS=$(why_refused)
 ev="speed3: trigger_shots=$FS reload_seen=$SAW reload_real_s=$RT native_timer=$LT"
 if [ "$FS" = 1 ] && [ $SAW = 1 ] && awk -v r="$RT" -v t="$LT" 'BEGIN{exit !(t>0 && r>0 && r<=0.6*t)}'; then row R12-SPEED PASS "$ev"; else row R12-SPEED FAIL "$ev"; fi
 

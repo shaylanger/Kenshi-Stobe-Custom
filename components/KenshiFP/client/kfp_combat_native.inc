@@ -411,10 +411,41 @@ static void *g_combat_wih,*g_combat_cur;static int g_combat_rcstate=-1,g_combat_
 static float g_combat_rej_close=NAN,g_combat_rej_timer=NAN;
 static int g_combat_rej_have_aim=-1,g_combat_rej_truce=-1;
 static const char *g_combat_rej_why="none";
+/* The fire frame's readiness inputs (set by the tick before the controller step) and, for the last
+ * rejected edge, the first gate that failed in plain words (last_reject_gate) plus the ready-latch
+ * detail: native flag, latch before the step, dip time so far, frame game dt, hold intact. */
+static int g_combat_fr_native,g_combat_fr_latched,g_combat_fr_hold,g_combat_fr_readyfn;
+static float g_combat_fr_since,g_combat_fr_dt;
+static const char *g_combat_rej_gate="none";
+static int g_combat_rej_native=-1,g_combat_rej_latched=-1,g_combat_rej_hold=-1;
+static float g_combat_rej_since=NAN,g_combat_rej_dt=NAN;
+static const char *combat_reject_gate(const KfpCombatObservation *o,int aim,float closeness,float timer,int have_aim,const char *why) {
+    if (strcmp(why,"ok")) return why;                 /* holstered etc.: the tick's own reason */
+    if (!aim) return "aim_not_held";
+    if (!o->aim_ready) {
+        if (!have_aim) return "no_aim_ray";
+        if (!g_combat_fr_readyfn) return "no_ready_fn";
+        if (!(isfinite(closeness) && closeness<=1.0f)) return "closeness";
+        if (!g_combat_fr_hold) return "hold_broken";
+        if (!g_combat_fr_native) return g_combat_fr_latched?"pose_dip_past_window":"pose_not_ready";
+        return "aim_ready_other";
+    }
+    if (!(isfinite(timer) && timer<=0)) return "aim_timer";
+    if (combat_truce_pending()) return "truce";
+    if (o->reloading) return "reloading";
+    if (o->ammo<=0) return "no_ammo";
+    return "shot_ready_other";
+}
 static void combat_note_reject(unsigned before,float closeness,float timer,int have_aim,const char *why) {
     if (g_combat_control.rejected==before) return;
     g_combat_rej_close=closeness;g_combat_rej_timer=timer;g_combat_rej_have_aim=have_aim;
     g_combat_rej_truce=combat_truce_pending();g_combat_rej_why=why;
+    g_combat_rej_gate=combat_reject_gate(&g_combat_control.last_reject,g_combat_control.last_reject_aim,closeness,timer,have_aim,why);
+    g_combat_rej_native=g_combat_fr_native;g_combat_rej_latched=g_combat_fr_latched;g_combat_rej_hold=g_combat_fr_hold;
+    g_combat_rej_since=g_combat_fr_since;g_combat_rej_dt=g_combat_fr_dt;
+    logline("[combat] trigger refused: gate=%s native_ready=%d latched=%d dip_s=%.3f dt=%.3f hold=%d closeness=%.3f timer=%.3f ammo=%d",
+            g_combat_rej_gate,g_combat_fr_native,g_combat_fr_latched,g_combat_fr_since,g_combat_fr_dt,g_combat_fr_hold,
+            closeness,timer,g_combat_control.last_reject.ammo);
 }
 static void fp_manual_combat_tick(void *gw,float dt) {
     g_combat_gw=gw;
@@ -563,6 +594,8 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         int hold_ok=have_aim && input.aim && g_combat_control.aimed && o.allowed && !o.reloading && o.ammo>0 &&
                     !combat_truce_pending();
         uint64_t ident=((uint64_t)(uintptr_t)pc*31u)^(uint64_t)(uintptr_t)gun^((uint64_t)(uintptr_t)weapon<<1);
+        g_combat_fr_native=g_combat_ready_native;g_combat_fr_latched=g_combat_ready_latch.latched;
+        g_combat_fr_since=g_combat_ready_latch.since;g_combat_fr_dt=o.dt;g_combat_fr_hold=hold_ok;g_combat_fr_readyfn=ready!=NULL;
         int r=kfp_ready_latch_step(&g_combat_ready_latch,g_combat_ready_native,hold_ok,ident,
                                    isfinite(o.dt)&&o.dt>=0?o.dt:-1.0f,KFP_READY_BRIDGE_S);
         o.aim_ready=have_aim && ready && r && isfinite(closeness) && closeness<=1.0f;
@@ -719,7 +752,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         g_combat_injection=1;r->append(r,"combat input published; same controller/native gates as physical input");return KAH_OK;
     }
     if (argc==2 && !_stricmp(argv[1],"state")) {
-        char b[2560];
+        char b[4096];
         snprintf(b,sizeof(b),"enabled=%d native_ready=%d fault=%d armed=%d kind=%d actor=%llx weapon=%llx gun=%llx aimed=%d anim_ready=%d shot_ready=%d ammo=%d reloading=%d reload_left=%.4f aim_left=%.4f actual_shots=%u suppressed=%u anim_suppressed=%u vis_forced=%u reload_starts=%u last_reload_timer=%.4f draws=%u sheathes=%u draw_refused=%u draw_hook=%d rejected=%u injected=%d auto_reload=%d why=%s wih=%llx cur=%llx rc_state=%d rc_mode=%d",
           g_combat_enabled,g_combat_native_ready,g_combat_fault,g_combat_control.armed,g_combat_observed.kind,
           (unsigned long long)(uintptr_t)g_combat_pc,(unsigned long long)(uintptr_t)g_combat_weapon,
@@ -732,9 +765,9 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         {size_t l=strlen(b);fp_combat_wound_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);combat_shot_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
-         snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
+         snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_gate=%s last_reject_native=%d last_reject_latched=%d last_reject_dip_s=%.3f last_reject_dt=%.3f last_reject_hold=%d last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
            g_combat_inj_cmds,g_combat_inj_aim_cmds,g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,
-           g_combat_rej_why,g_combat_rej_have_aim,g_combat_rej_truce,j->allowed,
+           g_combat_rej_why,g_combat_rej_gate,g_combat_rej_native,g_combat_rej_latched,g_combat_rej_since,g_combat_rej_dt,g_combat_rej_hold,g_combat_rej_have_aim,g_combat_rej_truce,j->allowed,
            g_combat_ready_native,g_combat_ready_latch.bridged,g_combat_ready_latch.latched,
            combat_char_unconscious(g_combat_state_pc),combat_char_ko_timer(g_combat_state_pc));}
         r->append(r,b);return KAH_OK;

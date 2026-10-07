@@ -76,6 +76,7 @@ waitfor 10 shot_ready 1; aim_at "$TG" 13; R2=$(ray_id)
 inp 1 1 0; for _ in $(seq 1 30); do [ "$(cs actual_shots)" != "$S0" ] && break; sleep 0.1; done; inp 1 0 0
 S1=$(cs actual_shots); sleep 3; H1=$(flesh "$TG"); A protect "$TG" on >/dev/null
 ev="building=$COVER ray_first_hit id4=$RID (target $TS) at ${RD}dm, at_trigger id4=$R2; shots $S0->$S1 $TG flesh $H0->$H1"
+[ "$S1" = "$S0" ] && { st=$(A fp_combat state); ev="$ev refused: gate=$(fld last_reject_gate <<<"$st") rejected=$(fld rejected <<<"$st") native=$(fld last_reject_native <<<"$st") latched=$(fld last_reject_latched <<<"$st") dip_s=$(fld last_reject_dip_s <<<"$st") dt=$(fld last_reject_dt <<<"$st")"; }
 if [ "$S1" != "$S0" ] && [ "$R2" != "$TS" ] && [ "$R2" != 0 ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b>=a-0.5)}'; then row R10 PASS "$ev"; else row R10 FAIL "$ev"; fi
 
 # ---- R10-CTRL: the target in the open at the same distance -> the aim ray reaches it (first open spot of
