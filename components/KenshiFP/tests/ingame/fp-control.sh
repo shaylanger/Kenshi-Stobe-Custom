@@ -19,7 +19,10 @@
 #                old actor stops (released inputs), mate walks with the held W and stops on release
 #  C04-FALLBACK  native AI order to the mate works while the player is directly controlled; FP off with W held: actor
 #                stops (dm_active=0), a native move order moves him (native controls back); FP on again keeps the
-#                pinned actor and does not move without input
+#                pinned actor and does not move without input. A native walk that never starts (even after the retry
+#                from the setup spot) gets NATDIAG evidence + a natdiag= label on the row (KenshiFP FC16FF07+ for
+#                movers): product (KenshiFP still holds the mover: mode=2 / dm / melee) or env (a spawned non-squad
+#                control NPC can't walk either). The row stays FAIL either way.
 #  C05-KO        KO with W held: no drive while down (dm_active=0), same actor after waking, still after release, fresh W moves
 #  C05-INVALID   controlled mate leaves the squad (`faction`, new handle) with W held: ownership released (direct=0) in
 #                3 s, no silent transfer, nobody driven; explicit take of the player restores WASD
@@ -136,8 +139,38 @@ mvdiag() { local s; s=$(cat "$OUT/last_walk_state.txt" 2>/dev/null)
 # position) and try once more. Echo "<displacement> <axis> <tries> <stuck_at x,z | ->"; the row flags a stuck spot.
 # natdiag <who> <why>: evidence for a native walk that never started (4080 b31/b33 C04-FALLBACK/C05-LOAD walk 0.00
 # for both chars, also with FP off): where (state/pos), its jobs, buildings within 30 (inside an enclosure?).
-natdiag() { { echo "NATDIAG $1 $2"; echo "  where: $(A where "$1")"; echo "  jobs: $(A jobs "$1" | tr '\n' ';' | cut -c1-600)"
-  echo "  buildings: $(A buildings 30 near "$1" | tr '\n' ';' | cut -c1-900)"; } >> "$LOG"; }
+# Plus (4080 b33/b40, ticket 2) the label that decides product vs game/env, written as "NATCLASS <who> <class>" to
+# $OUT/natdiag.txt (native_fix runs in a subshell; C04-FALLBACK adds it to the row as natdiag=, the row stays FAIL):
+#  - `fp_keys movers` (KenshiFP FC16FF07+): every squad member's CharMovement mode/speed_orders/desired/anim_override and
+#    whether KenshiFP holds the mover (dm/melee/ctl). <who> with mode=2 (MOVE_DIRECTION), dm=1 while dm_active=1, or
+#    melee=1 -> "product: KenshiFP holds the mover";
+#  - a control walk by a spawned non-squad NPC (Hungry Bandit, Tech Hunters, relation NEUTRAL_REL) 30 from <who>,
+#    walktime 40 on +x then -x, retired (KO + unload) after; once per run ($OUT/natdiag_ctl.txt). It never starts too ->
+#    "env: native orders dead for every character"; it walks while <who>'s mover is clean -> "squad-only, mover clean".
+natctl() { local f="$OUT/natdiag_ctl.txt" sp h p0 d=0 ax; [ -s "$f" ] && { cat "$f"; return; }
+  sp=$(A spawn "Hungry Bandit" "Tech Hunters" near "$1" dist 30 count 1 2>&1); h=$(grep -oE '#[0-9]+/[0-9]+' <<<"$sp" | head -1)
+  echo "  control spawn: $(cut -c1-160 <<<"$sp")" >> "$LOG"
+  if [ -z "$h" ]; then echo "spawn_failed" > "$f"; cat "$f"; return; fi
+  A relation "$h" "${NEUTRAL_REL:-20}" >/dev/null
+  for ax in +x -x; do p0=$(pos "$h"); A walktime "$h" 40 "$ax" walk >/dev/null; d=$(d2 "$p0" "$(pos "$h")"); ge "$d" 25 && break; done
+  A ko "$h" 3600 >/dev/null; A unload "$h" >/dev/null
+  echo "walked=$d axis=$ax" > "$f"; cat "$f"; }
+natdiag() { local mv seg c ctl
+  A fp_keys movers >/dev/null; sleep 0.3; mv=$(A fp_keys movers show)
+  seg=$(awk -v w="$1 mode=" 'BEGIN{RS=" [|] "} index($0,w)==1{print; exit}' <<<"$mv")
+  { echo "NATDIAG $1 $2"; echo "  where: $(A where "$1")"; echo "  jobs: $(A jobs "$1" | tr '\n' ';' | cut -c1-600)"
+    echo "  buildings: $(A buildings 30 near "$1" | tr '\n' ';' | cut -c1-900)"; echo "  movers: $(cut -c1-1400 <<<"$mv")"; } >> "$LOG"
+  if ! grep -q '^movers n=' <<<"$mv"; then c="movers_unavailable"
+  elif [ -z "$seg" ]; then c="$1_not_in_movers"
+  elif [ "$(fld mode <<<"$seg")" = 2 ] || [ "$(fld melee <<<"$seg")" = 1 ] \
+       || { [ "$(fld dm <<<"$seg")" = 1 ] && [ "$(fld dm_active <<<"$mv")" = 1 ]; }; then
+    c="product: KenshiFP holds the mover [$seg]"; fi
+  ctl=$(natctl "$1"); echo "  control NPC: $ctl" >> "$LOG"
+  if [ -z "$c" ] || [ "${c%%:*}" != product ]; then
+    if [ "$ctl" = spawn_failed ]; then c="${c:+$c, }unclassified: control spawn failed [$seg]"
+    elif ge "$(fld walked <<<"$ctl")" 25; then c="${c:+$c, }squad-only: control NPC $ctl, $1 mover clean [$seg]"
+    else c="${c:+$c, }env: native orders dead for every character (control NPC $ctl) [$seg]"; fi; fi
+  echo "NATCLASS $1 $c" >> "$OUT/natdiag.txt"; echo "  class: $c" >> "$LOG"; }
 native_fix() { local d ax n sp=-; read -r d ax n <<<"$(native_walk "$1" "$2")"
   if [ "$ax" != stuck ] && ! ge "$d" 25 && [ -n "$3" ]; then sp=$(pos "$1" | awk '{printf "%.0f,%.0f", $1, $3}')
     echo "SETUP: $1 native walk never started at $sp: teleport back to $3, retry" >> "$LOG"
@@ -232,7 +265,7 @@ judge C04-TAKE $ok "$ev"
 
 # ---- C04-FALLBACK: other squad AI, FP off mid-walk, native order, FP on keeps the pinned actor ----
 ui_clear; A fp_move none >/dev/null; A select "$SH" >/dev/null; A fp_control press >/dev/null; waitf 3 ctl_is "$SH"; BACK=$?
-alive "before C04-FALLBACK"; PS0=$(pos "$SH"); read -r AIM AIMAX AIMN AIMS <<<"$(native_fix "$MT" +x "$HOME_MT")"; alive "after the $MT native walk"
+rm -f "$OUT/natdiag.txt" "$OUT/natdiag_ctl.txt"; alive "before C04-FALLBACK"; PS0=$(pos "$SH"); read -r AIM AIMAX AIMN AIMS <<<"$(native_fix "$MT" +x "$HOME_MT")"; alive "after the $MT native walk"
 SHI=$(d2 "$PS0" "$(pos "$SH")"); STILLCTL=$(ctl_is "$SH" && echo 1 || echo 0)
 pick_yaw "$SH" C04-FALLBACK; look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; mode off; OFF=$?; PZ=$(A status | fld paused); sleep 0.5; P1=$(pos "$SH"); sleep 2; P2=$(pos "$SH")
 DMA=$(mvs dm_active); RS=$(d2 "$P1" "$P2"); A fp_move none >/dev/null; alive "after C04-FALLBACK fp_mode off (paused_at_off=${PZ:-na})"
@@ -240,6 +273,7 @@ read -r NAT NATAX NATN NATS <<<"$(native_fix "$SH" -x "$HOME_SH")"
 mode on; ON=$?; A fp_control state >/dev/null; sleep 0.5; PIN=$(ctl_is "$SH" && echo 1 || echo 0); STK=$(still "$SH" 2)
 FLAG=""; [ "$PZ" = 1 ] && FLAG=" | flag=product? game paused itself right at FP off (speed hold unpaused it)"
 [ "$AIMS$NATS" != -- ] && FLAG+=" | flag=product? native walk never started at native_stuck_at=$MT:$AIMS/$SH:$NATS (retried from the setup position)"
+[ -s "$OUT/natdiag.txt" ] && FLAG+=" | natdiag=$(sed 's/^NATCLASS //' "$OUT/natdiag.txt" | tr '\n' ';' | cut -c1-900)"
 ev="back_to_$SH=$((1-BACK)) | $MT native walk=$AIM axis=$AIMAX tries=$AIMN while $SH direct (kept=$STILLCTL moved=$SHI) | fp_off=$((1-OFF)) paused_at_off=${PZ:-na} dm_active=$DMA drift_with_w_held=$RS | native $SH walk=$NAT axis=$NATAX tries=$NATN | fp_on=$((1-ON)) pinned=$PIN drift=$STK$FLAG"
 ok=1; [ $BACK = 0 ] && [ $OFF = 0 ] && [ $ON = 0 ] && [ "$STILLCTL" = 1 ] && [ "$PIN" = 1 ] && [ "$DMA" = 0 ] || ok=0
 ge "$AIM" 25 || ok=0; lt "$SHI" "$STILL_MAX" || ok=0; lt "$RS" "$STILL_MAX" || ok=0; ge "$NAT" 25 || ok=0; lt "$STK" "$STILL_MAX" || ok=0
