@@ -55,8 +55,21 @@ fresh() {
   mate_holster "$row"
   h=$(spawn_neutral "$n" 12) || setup_fail "$row" "spawn of $n failed"
   track "$h"
-  r=$(stobe-auto pin "$h" at "$PLAYER" dist "${3:-60}" face "$PLAYER" 2>&1 | tail -1); log "pin $n: $r"
-  wait_for 20 sees_player "$h" || setup_fail "$row" "$n does not see $PLAYER ($(stobe-auto face "$h" "$PLAYER" 2>&1 | tail -1 | cut -c1-120))"
+  pin_seen "$row" "$n" "$h" "${3:-60}"
+}
+# pin_seen <row> <name> <handle> <dist>: pins him <dist> units from PLAYER on the first side (of 8) with a clear view
+# (m50-c: +x alone put every NPC behind a Crafting-base wall: sees=0 los=0); setup_fail if no side works
+pin_seen() {
+  local row="$1" n="$2" h="$3" d="$4" pp px py pz dx dz r k=0
+  pp=$(pos_of "$PLAYER"); [ -n "$pp" ] || setup_fail "$row" "no position for $PLAYER"
+  IFS=, read -r px py pz <<<"$pp"
+  for o in "1 0" "-1 0" "0 1" "0 -1" "0.7 0.7" "-0.7 0.7" "0.7 -0.7" "-0.7 -0.7"; do
+    read -r dx dz <<<"$o"; k=$((k+1))
+    r=$(stobe-auto pin "$h" at $(awk -v x="$px" -v y="$py" -v z="$pz" -v a="$dx" -v b="$dz" -v d="$d" 'BEGIN{printf "%.1f %.1f %.1f", x+a*d, y, z+b*d}') face "$PLAYER" 2>&1 | tail -1)
+    log "pin $n side $k ($o): $r"
+    wait_for 6 sees_player "$h" && return 0
+  done
+  setup_fail "$row" "$n does not see $PLAYER from any of 8 sides ($(stobe-auto face "$h" "$PLAYER" 2>&1 | tail -1 | cut -c1-120))"
 }
 # mate_holster <row>: MATE's weapon away (an AI combat stance left over from the previous row must not be in the row)
 mate_holster() {
