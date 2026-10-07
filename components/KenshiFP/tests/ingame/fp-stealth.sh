@@ -7,7 +7,7 @@
 # `where` (KO), `fp_melee state` (native fight), KenshiFP.log `[controls] LMB sneak=1 ...` / `[controls] sneak result=...`.
 # Run in WSL with Kenshi in the world on a kah-fpxbow copy (Axima = player, Malzin = mate). Speed 1, FP on, Axima controlled.
 # Each row spawns its own target (Hungry Bandit, Tech Hunters, relation NEUTRAL_REL) pinned 1.5 m in front of the player,
-# retired after (KO + unload). Player stealth/assassination set to SKILL (default 100) for the row, restored on exit.
+# retired after (KO, moved 40 m away; no unload: unloading a char that is still a fight/order target crashes the game, 4080 b41 + 5090 K). Player stealth/assassination set to SKILL (default 100) for the row, restored on exit.
 # Rows (one `RESULT <row> PASS|FAIL <evidence>` each, log path on FAILs):
 #  ST01  sneak + LMB drawn on an unaware target (back turned, sighting reset, DLL probe target_aware=0 before the click):
 #        sneak_attacks+1, sneak_path=vanilla_sneak, last_task=228, `[controls] LMB sneak=1 ... target_aware=0 path=vanilla_sneak`
@@ -16,7 +16,7 @@
 #        sneak_path=engage_aware, last_task=61 (unprovoked engage), native fight on him
 #  ST03  not sneaking + LMB drawn on the same kind of unaware target: plain engage (sneak_clicks same, last_task=61), no KO order
 # Usage: fp-stealth.sh [player] [mate] [outdir]. Env: SKILL (100), NEUTRAL_REL (20), ST_WAIT (30 s), ROWS (default "ST01 ST02 ST03"),
-# KFPLOG (/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log). Leaves the fixture changed (spawned NPCs KO/unloaded): reload it after.
+# KFPLOG (/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log). Leaves the fixture changed (spawned NPCs left KO'd): reload it after.
 SH=${1:-Axima}; MT=${2:-Malzin}; OUT=${3:-/tmp/fp-stealth}
 SKILL=${SKILL:-100}; NEUTRAL_REL=${NEUTRAL_REL:-20}; ST_WAIT=${ST_WAIT:-30}; ROWS=${ROWS:-"ST01 ST02 ST03"}
 KFPLOG=${KFPLOG:-/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log}
@@ -75,7 +75,7 @@ probe() { A fp_keys sneak >/dev/null; sleep 0.3; A fp_keys sneak show; }
 FP0=$(fps fp_mode); PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; BOW_DROPPED=0; ST0=""; AS0=""; SPAWNED=""
 cleanup() { A fp_keys reset >/dev/null; A fp_keys focus off >/dev/null; A stealth "$SH" off >/dev/null
             for c in $PINNED; do A pin "$c" off >/dev/null; done
-            for c in $SPAWNED; do A ko "$c" 3600 >/dev/null; A unload "$c" >/dev/null; done
+            for c in $SPAWNED; do A ko "$c" 3600 >/dev/null; A teleport "$c" "$SH" dist 400 >/dev/null; done
             [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
             [ -n "$ST0" ] && A setstat "$SH" stealth "$ST0" >/dev/null; [ -n "$AS0" ] && A setstat "$SH" assassination "$AS0" >/dev/null
             [ -n "$WEP" ] && A unequip "$SH" "$WEP" >/dev/null
@@ -118,7 +118,7 @@ spawn_target() { local SP; SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH
   [ -n "$TH" ] || return 1; SPAWNED+=" $TH"; A relation "$TH" "$NEUTRAL_REL" >/dev/null; A hunger "$TH" 300 >/dev/null; }
 # place <face npc>: target pinned 1.5 m in front of the player, facing <face>
 place() { A pin "$TH" at "$SH" dist 15 face "$1" | grep -q '^pinned' && PINNED+=" $TH"; }
-retire() { A ko "$TH" 3600 >/dev/null; A pin "$TH" off >/dev/null; waitf 10 isko "$TH"; A unload "$TH" >/dev/null
+retire() { A ko "$TH" 3600 >/dev/null; A pin "$TH" off >/dev/null; waitf 10 isko "$TH"; A teleport "$TH" "$SH" dist 400 >/dev/null
   SPAWNED=${SPAWNED/ $TH/}; PINNED=${PINNED/ $TH/}; }
 # live_tn: TN = the target's live name. Stobe renames spawned generics ("Ivor 2 [Hungry Bandit]"),
 # so the spawn-time name never matched the pick/probe target (m50 5090 K ST01 false setup FAIL).

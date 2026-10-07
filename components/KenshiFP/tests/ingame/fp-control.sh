@@ -145,7 +145,7 @@ mvdiag() { local s; s=$(cat "$OUT/last_walk_state.txt" 2>/dev/null)
 #    whether KenshiFP holds the mover (dm/melee/ctl). <who> with mode=2 (MOVE_DIRECTION), dm=1 while dm_active=1, or
 #    melee=1 -> "product: KenshiFP holds the mover";
 #  - a control walk by a spawned non-squad NPC (Hungry Bandit, Tech Hunters, relation NEUTRAL_REL) 30 from <who>,
-#    walktime 40 on +x then -x, retired (KO + unload) after; once per run ($OUT/natdiag_ctl.txt). It never starts too ->
+#    walktime 40 on +x then -x, retired (KO, left lying; no unload: 4080 b41 + 5090 K crashes) after; once per run ($OUT/natdiag_ctl.txt). It never starts too ->
 #    "env: native orders dead for every character"; it walks while <who>'s mover is clean -> "squad-only, mover clean".
 natctl() { local f="$OUT/natdiag_ctl.txt" sp h p0 d=0 ax; [ -s "$f" ] && { cat "$f"; return; }
   sp=$(A spawn "Hungry Bandit" "Tech Hunters" near "$1" dist 30 count 1 2>&1); h=$(grep -oE '#[0-9]+/[0-9]+' <<<"$sp" | head -1)
@@ -153,7 +153,7 @@ natctl() { local f="$OUT/natdiag_ctl.txt" sp h p0 d=0 ax; [ -s "$f" ] && { cat "
   if [ -z "$h" ]; then echo "spawn_failed" > "$f"; cat "$f"; return; fi
   A relation "$h" "${NEUTRAL_REL:-20}" >/dev/null
   for ax in +x -x; do p0=$(pos "$h"); A walktime "$h" 40 "$ax" walk >/dev/null; d=$(d2 "$p0" "$(pos "$h")"); ge "$d" 25 && break; done
-  A ko "$h" 3600 >/dev/null; A unload "$h" >/dev/null
+  A ko "$h" 3600 >/dev/null
   echo "walked=$d axis=$ax" > "$f"; cat "$f"; }
 natdiag() { local mv seg c ctl
   A fp_keys movers >/dev/null; sleep 0.3; mv=$(A fp_keys movers show)
