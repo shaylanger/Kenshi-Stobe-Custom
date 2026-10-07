@@ -361,18 +361,20 @@ static void fp_controls_tick(void *gw,float dt) {
     g_fpc_ui_state=fpc_ui_state(pc,in[FPC_RMB]);
     g_guard_armed=0;
 }
+static void *g_fpc_hud;static const char *g_fpc_hud_text;static int g_fpc_hud_shown;static unsigned g_fpc_hud_changes;
 static size_t fpc_state(char *b,size_t n) {
     return (size_t)snprintf(b,n,"hook=%d fault=%d swallow=%d fp=%d drawn=%d ranged=%d fists=%d hold=%d ui_state=%s in=%d%d%d%d "
         "mmb_selects=%u mmb_none=%u last_select=%s ctx_opens=%u ctx_none=%u ctx_freed=%d rmb_swallowed=%u lmb_swallowed=%u "
         "mmb_cam_frames=%u r_keys=%u r_draws=%u r_holsters=%u r_draw_fail=%u sheathe_kept=%u lmb_clicks=%u engages=%u last_task=%d last_target=%s "
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
-        "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u",
+        "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
         g_fpc_mmb_cam_frames,g_fpc_r_keys_swallowed,g_fpc_r_draws,g_fpc_r_holsters,g_fpc_r_draw_fail,g_fpc_sheathe_kept,g_fpc_lmb_clicks,g_fpc_engages,g_fpc_last_task,g_fpc_last_target,
         g_fpc_free_swings,g_fpc_fs_tech!=NULL,g_fpc_fs_prog,g_fpc_fs_prog_max,g_fpc_fs_ends,g_fpc_fs_notech,g_fpc_fs_faults,g_fpc_fs_dead,
-        g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks);
+        g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
+        g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
@@ -435,4 +437,56 @@ static void fp_controls_init(void) {
     logline("[controls] playerControl=%p hook=%d select=%p ctxmenu=%p addOrder=%p attack=%p isEnemy=%p anim=%p choose=%p progress=%p end=%p startanim=%p",
         pcf,g_fpc_hook_ok,(void *)g_fpc_select,(void *)g_fpc_ctxmenu,(void *)g_fpc_addorder,(void *)g_fpc_attack,(void *)g_fpc_isenemy,
         (void *)g_fpc_getanim,(void *)g_fpc_choose,(void *)g_fpc_progress,(void *)g_fpc_endanim,(void *)g_fpc_startanim);
+}
+/* HUD: one label under the crosshair with fp_ui_state (MyGUI TextBox on the Pointer layer, centred,
+ * tinted per state). Post-frame from fp_gui_update; a faulting MyGUI call disables only the label. */
+#define FPC_SYM_TEXTALIGN "?setTextAlign@TextBox@MyGUI@@UEAAXAEBUAlign@2@@Z"
+#define FPC_SYM_TEXTCOLOUR "?setTextColour@TextBox@MyGUI@@UEAAXAEBVColour@2@@Z"
+static int g_fpc_hud_dead;
+static void fpc_hud_update(int show) {
+    if (g_fpc_hud_dead || !g_widget_setvisible) return;
+    if (!show) {if (g_fpc_hud && g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,0);g_fpc_hud_shown=0;}return;}
+    if (g_guard_armed) return;
+    if (setjmp(g_guard_jb)) {g_guard_armed=0;g_fpc_hud_dead=1;logline("[controls] state HUD FAULTED; disabled");return;}
+    guard_arm();
+    if (!g_fpc_hud && g_gui_getinstance && g_gui_createwidget) {
+        void *gui=g_gui_getinstance();
+        int cx=GetSystemMetrics(SM_CXSCREEN),cy=GetSystemMetrics(SM_CYSCREEN);
+        if (cx<=0) cx=1920;
+        if (cy<=0) cy=1080;
+        unsigned char t[32],sk[32],l[32],n[32];
+        make_mstr(t,"TextBox");make_mstr(l,"Pointer");make_mstr(n,"FPUiState");
+        void *skh=make_mstr_long(sk,"Kenshi_GenericTextBoxFlat");
+        void *w=readable(gui,8)?g_gui_createwidget(gui,t,sk,cx/2-90,cy/2+20,180,24,0,l,n):NULL;
+        if (skh) free(skh);
+        if (readable(w,8)) {
+            HMODULE mg=GetModuleHandleA(MYGUI_DLL);
+            void (*align)(void *,const int *)=mg?(void (*)(void *,const int *))GetProcAddress(mg,FPC_SYM_TEXTALIGN):NULL;
+            int centre=0;   /* MyGUI Align::Center (HCenter|VCenter) */
+            if (align) align(w,&centre);
+            g_fpc_hud=w;g_fpc_hud_text=NULL;
+            logline("[controls] state HUD widget %p",w);
+        }
+    }
+    if (g_fpc_hud) {
+        const char *st=g_fpc_ui_state?g_fpc_ui_state:"off";
+        if (st!=g_fpc_hud_text) {
+            char up[24];size_t i=0;for(;st[i]&&i+1<sizeof up;++i) up[i]=(char)toupper((unsigned char)st[i]);up[i]=0;
+            caption_set(g_fpc_hud,up,g_textbox_setcap);
+            static void (*colour)(void *,const float *);static int cres;
+            if (!cres) {HMODULE mg=GetModuleHandleA(MYGUI_DLL);cres=1;
+                colour=mg?(void (*)(void *,const float *))GetProcAddress(mg,FPC_SYM_TEXTCOLOUR):NULL;}
+            float c[4]={1,1,1,0.9f};
+            if (!strcmp(st,"holstered")) {c[0]=c[1]=c[2]=0.7f;c[3]=0.6f;}
+            else if (!strcmp(st,"swinging")) {c[0]=1;c[1]=0.6f;c[2]=0.2f;}
+            else if (!strcmp(st,"recovering")||!strcmp(st,"reloading")) {c[0]=1;c[1]=0.9f;c[2]=0.3f;}
+            else if (!strcmp(st,"blocking")) {c[0]=0.4f;c[1]=0.7f;c[2]=1;}
+            else if (!strcmp(st,"aiming")) {c[0]=0.4f;c[1]=1;c[2]=0.5f;}
+            else if (!strcmp(st,"staggered")||!strcmp(st,"down")) {c[0]=1;c[1]=0.3f;c[2]=0.3f;}
+            if (colour) colour(g_fpc_hud,c);
+            g_fpc_hud_text=st;++g_fpc_hud_changes;
+        }
+        if (!g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,1);g_fpc_hud_shown=1;}
+    }
+    g_guard_armed=0;
 }

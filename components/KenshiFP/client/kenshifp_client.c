@@ -1250,6 +1250,9 @@ static int fpc_suppress_sheathe(void *pc);
 static void fp_controls_tick(void *gw,float dt);
 static void fp_controls_init(void);
 static int kah_fp_keys(const char *,int,const char *const *,KAH_Reply *,void *);
+static void fpc_hud_update(int show);
+static const char *g_fpc_ui_state;   /* tentative: defined in kfp_controls.inc */
+static int g_cfg_state_hud = 1;      /* state_hud: FP combat state label under the crosshair */
 static int g_prev_fp;             /* g_fp_mode from last frame (camera_lock edge) */
 static int g_ovr_prev;            /* was the FP node override active last frame */
 static float g_yaw, g_pitch;      /* accumulated mouse-look angles (radians) */
@@ -6184,6 +6187,7 @@ static void load_ini(void)
         else if (ini_int(line, "key_jump", &v))           { if (v > 0 && v < 255) g_cfg_key_jump = v; }
         else if (ini_int(line, "key_pause", &v))          { if (v >= 0 && v < 255) g_cfg_key_pause = v; }
         else if (ini_int(line, "locomotion", &v))         g_cfg_loco = !!v;
+        else if (ini_int(line, "state_hud", &v))          g_cfg_state_hud = !!v;
         else if (ini_int(line, "loco_clip", &v))          { if (v >= -1 && v < 64) g_cfg_loco_clip = v; }
         else if (ini_int(line, "loco_hips", &v))          g_cfg_loco_hips = !!v;
         else if (ini_float(line, "loco_walk_ref", &fv))   { if (fv >= 1 && fv <= 400) g_cfg_loco_walkref = fv; }
@@ -6244,6 +6248,7 @@ static void save_ini(void)
     fprintf(f, "wheel_speed=%d\n",      g_cfg_wheel);
     fprintf(f, "ko_vignette=%d\n",      g_cfg_vignette);
     fprintf(f, "sneak_eye=%d\n",        g_cfg_sneak_eye);
+    fprintf(f, "state_hud=%d\n",        g_cfg_state_hud);
     fprintf(f, "stealth_arrows=%d\n",   g_cfg_stealth_arrows);
     fprintf(f, "screen_status=%d\n",    g_cfg_screen_status);
     fprintf(f, "hide_head=%d\n",        g_cfg_hide_head);
@@ -6432,6 +6437,7 @@ static tset_t g_tsets[] = {
         * animations. The gate's else-branch already releases every bone we own,
         * so this is safe to flip mid-game. */
     { "Sneak eye",       &g_cfg_sneak_eye, 1, 0 },
+    { "Combat state",    &g_cfg_state_hud, 1, 0 },
     { "Stealth arrows",  &g_cfg_stealth_arrows, 0, 0 },
     { "Status @ xhair",  &g_cfg_screen_status, 1, 0 },
     { "Head weld",       &g_cfg_cam_weld, 1, 0 },
@@ -6688,6 +6694,7 @@ static void fp_gui_update(void)
             if (g_black_ov)  g_widget_setvisible(g_black_ov, 0);
             if (g_sneak_icon) g_widget_setvisible(g_sneak_icon, 0);
         }
+        fpc_hud_update(0);
         g_down_blend = 0.0f;   /* reset the KO fade so re-entering FP doesn't flash */
         prev_fp = 0;
         return;
@@ -6708,6 +6715,7 @@ static void fp_gui_update(void)
     }
     if (g_crosshair && g_widget_setvisible)
         g_widget_setvisible(g_crosshair, (g_pointer_default && !g_ui_open) ? 1 : 0);
+    fpc_hud_update(g_cfg_state_hud && g_crosshair && g_pointer_default && !g_ui_open);
 
     /* Screen-space sneak eye: shown only while sneaking (state set per-frame from
      * the followed character), tinted by detection at ~50% alpha, hidden in menus. */
