@@ -314,13 +314,19 @@ ui_clear; take "$SH" >/dev/null; A select "$MT" >/dev/null; sleep 0.5
 U0=$(ctl take_ui_ignored); A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; A fp_control press >/dev/null; sleep 0.8
 U1=$(ctl take_ui_ignored); HUI=$(ctl controlled); A click INV >/dev/null; waitf 4 ui_is 0; ui_clear
 # 20 s hold (fp_move none below releases it): 9 s ran out on the 5090 before the mate's samples
-D0=$(ctl take_done); pick_yaw "$SH|$MT" C04-TAKE; look "$YAW" 0; A fp_move w 20000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
+# the mate's walk counts from her spot at the press, along the heading: m51 5090 M (isolation on) the press-to-sample
+# commands took ~1.5 s, Malzin had already walked ~150 units along the yaw under the held W and stopped at a rock
+# (fp_camera floors top 684-727 over ground 651, pinned edge 31 units past PM1, beyond pick_yaw's 130-unit check), so
+# the old PM1->PM2 window read 0. WMT = projection of press->PM2 on the yaw (AI drift off the heading doesn't count);
+# the old window stays in the evidence as late_window=.
+PMY=$(pos "$MT"); D0=$(ctl take_done); pick_yaw "$SH|$MT" C04-TAKE; look "$YAW" 0; A fp_move w 20000 >/dev/null; sleep 1.5; PS0=$(pos "$SH"); PMP=$(pos "$MT")
 A fp_control press >/dev/null; waitf 3 ctl_is "$MT"; TOOK=$?; CW=$(A fp_control state); D1=$(fld take_done <<<"$CW"); HL=$(A fp_move state | fld left_ms); sleep 0.5
 PS1=$(pos "$SH"); PM1=$(pos "$MT"); sleep 2; PS2=$(pos "$SH"); PM2=$(pos "$MT")
 A fp_move state > "$OUT/last_walk_state.txt"   # mvdiag: the mate's fp_move state while W is still held
 A fp_move none >/dev/null; sleep 0.8; MSTOP=$(still "$MT" 2)
-WSH=$(d2 "$PS0" "$PS1"); RSH=$(d2 "$PS1" "$PS2"); WMT=$(d2 "$PM1" "$PM2")
-ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 take_failed=$(fld take_failed <<<"$CW") take_why=$(fld take_why <<<"$CW") sel=$(fld sel <<<"$CW") sel_in_squad=$(fld sel_in_squad <<<"$CW") slot0=$(fld slot0 <<<"$CW") hold_left_ms=$HL $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT stop_after_release=$MSTOP clearance=$YAWC $MT[$(mvdiag)]"
+WSH=$(d2 "$PS0" "$PS1"); RSH=$(d2 "$PS1" "$PS2"); WML=$(d2 "$PM1" "$PM2"); PRE=$(d2 "$PMY" "$PMP")
+WMT=$(awk -v a="$PMP" -v b="$PM2" -v y="$YAW" 'BEGIN{split(a,p," ");split(b,q," ");printf "%.2f", (q[1]-p[1])*sin(y)+(q[3]-p[3])*cos(y)}')
+ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 take_failed=$(fld take_failed <<<"$CW") take_why=$(fld take_why <<<"$CW") sel=$(fld sel <<<"$CW") sel_in_squad=$(fld sel_in_squad <<<"$CW") slot0=$(fld slot0 <<<"$CW") hold_left_ms=$HL $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT late_window=$WML pre_press_drift=$PRE stop_after_release=$MSTOP clearance=$YAWC $MT[$(mvdiag)]"
 ok=1; [ $UIO = 0 ] && [ "$U1" -gt "$U0" ] && [ "$HUI" = "$H0" ] && [ $TOOK = 0 ] && [ "$D1" -gt "$D0" ] || ok=0
 lt "$RSH" "$STILL_MAX" || ok=0; ge "$WMT" "$MOVE_MIN" || ok=0; lt "$MSTOP" "$STILL_MAX" || ok=0
 judge C04-TAKE $ok "$ev"
