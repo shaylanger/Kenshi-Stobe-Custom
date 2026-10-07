@@ -1241,6 +1241,9 @@ static int kah_fp_camera(const char *,int,const char *const *,KAH_Reply *,void *
 static void *fp_controlled_char(void *gw);
 static int fp_char_in_squad(void *gw, void *pc);
 static int game_has_focus(void);
+/* TEST ONLY (fp_keys focus on): act as the foreground window. A locked test rig
+ * (no foreground window at all) can then run the cursor-hidden/look-mode rows. */
+static int g_test_focus;
 static void kah_bridge_tick(void);    /* registers the harness test commands */
 /* FP control scheme (kfp_controls.inc) */
 static int fpc_cam_pre(void *cam,float *yaw,float *pitch);
@@ -2307,7 +2310,7 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_camera", "fp_camera state|probe|distance <0..60>|wheel <delta>|look <yaw radians> <pitch radians>|ray x y z dx dy dz [range] [mask]|floors cx cz half step ytop ybot", kah_fp_camera, NULL)
           + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|aim (read-only)|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
           + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL)
-          + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|swallow on|off|reset", kah_fp_keys, NULL);
+          + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|swallow on|off|focus on|off (TEST)|reset", kah_fp_keys, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
 }
@@ -2366,6 +2369,7 @@ static void fp_lookat_click_guard(void *gw)
 
 static int game_has_focus(void)
 {
+    if (g_test_focus) return 1;
     HWND fg = GetForegroundWindow();
     if (!fg) return 0;
     DWORD pid = 0;

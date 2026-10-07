@@ -54,6 +54,7 @@ judge() { if [ "$2" = 1 ]; then row "$1" PASS "$3"; else row "$1" FAIL "$3"; fi;
 setup_fail() { for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done
   echo "RESULT SETUP FAIL $1 log=$LOG"; exit 1; }
 waitf() { local end=$((SECONDS+$1)); shift; while [ $SECONDS -lt $end ]; do "$@" && return 0; sleep 0.2; done; return 1; }
+cursor_ok() { [ "$(fps cursor_hidden)" = 1 ]; }
 fp_is() { [ "$(fps fp_mode)" = "$1" ]; }
 mode() { A fp_mode "$1" >/dev/null; waitf 4 fp_is "$([ "$1" = on ] && echo 1 || echo 0)"; }
 take() { A select "$1" >/dev/null; A fp_control take >/dev/null; mode on; A fp_control take >/dev/null; ctl_is "$1"; }
@@ -99,7 +100,7 @@ hud() { local s u t h; s=$(A fp_keys state); u=$(fld ui_state <<<"$s"); t=$(fld 
 hud_poll() { waitf "$2" kis ui_state "$1"; hud "$1"; }
 
 FP0=$(fps fp_mode); DIST0=$(cam target); AR0=""; PINNED=""; WEP=""; BOWN=""
-cleanup() { A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
+cleanup() { A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null; A fp_keys focus off >/dev/null
             A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null
             [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
@@ -132,6 +133,8 @@ if declare -f raid_sweep >/dev/null && [ -n "$TGH" ]; then   # raid guard withou
 ui_guard_setup; ui_clear
 take "$SH" || setup_fail "could not take $SH ($(A fp_control state | cut -c1-160))"
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok || setup_fail "camera never at eye ($(camsum))"
+# a locked rig has no foreground window: KenshiFP then frees the cursor; the test switch acts as focused
+[ "$(fps cursor_hidden)" = 1 ] || { A fp_keys focus on | grep -q test_focus=1 && echo "SETUP test_focus=1 (game window not foreground)" >> "$LOG"; waitf 3 cursor_ok; }
 [ "$(fps cursor_hidden)" = 1 ] || setup_fail "FP cursor not hidden (look mode off: $(A fp_state)); the swallow/MMB paths need it"
 H0=$(ctl controlled); IDS0=$(ctl control_ids); HOME=$(pos "$SH"); MTID=$(id_of "$MT")
 A pin "$MT" at "$SH" dist 25 face "$SH" | grep -q '^pinned' && PINNED+=" $MT" || setup_fail "could not pin $MT in front of $SH"
