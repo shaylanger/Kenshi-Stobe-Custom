@@ -397,7 +397,10 @@ find_stairs() { local r bx by bz f="$OUT/stairs_floors.txt"
   r=$(A build "Storm House" near "$SH" dist 60)
   grep -q 'pos=' <<<"$r" || { STAIRS_WHY="build failed: $(cut -c1-80 <<<"$r")"; return 1; }
   BUILT=1; read -r bx by bz <<<"$(grep -o 'pos=[^ ]*' <<<"$r" | head -1 | cut -d= -f2 | tr ',' ' ')"; sleep 2
-  stobe-auto fp_camera floors "$bx" "$bz" 30 3 "$(awk -v a="$by" 'BEGIN{print a+80}')" "$(awk -v a="$by" 'BEGIN{print a-5}')" > "$f" 2>&1
+  # four 30-radius scans (+-30 around the house position) cover +-60: the stair sits off-centre and the house turns
+  # with the build (m50 5090 R and 4080 b44: a single +-30 scan held flat floor / a counter only, no stair)
+  : > "$f"; local qx qz; for qx in -30 30; do for qz in -30 30; do
+    stobe-auto fp_camera floors "$(awk -v a="$bx" -v d=$qx 'BEGIN{print a+d}')" "$(awk -v a="$bz" -v d=$qz 'BEGIN{print a+d}')" 30 3       "$(awk -v a="$by" 'BEGIN{print a+80}')" "$(awk -v a="$by" 'BEGIN{print a-5}')" >> "$f" 2>&1; echo >> "$f"; done; done
   r=$(awk -v by="$by" -f "$(dirname "$0")/fp-stairs-scan.awk" "$f")
   echo "STAIRS house=$bx,$by,$bz scan=[$r] floors=$f" >> "$LOG"
   case "$r" in no_stair_line*|few_cells*) STAIRS_WHY="no climbable stair line in the built house (ray scan: $r)"; return 1;; esac

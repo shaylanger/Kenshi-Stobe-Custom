@@ -1,7 +1,8 @@
 # fp-stairs-scan.awk: pick a climbable stair line from a `fp_camera floors` reply (C05-STAIRS setup in fp-control.sh).
 # Usage: awk -v by=<house y> -f fp-stairs-scan.awk <floors file>
 # Prints "x y z yaw ground=G rise=R lines=N" (start on the ground floor, yaw up the stair) or a reason word.
-# Ground G = the most common surface height (the house floor; the old "lowest height in >= 10%" picked the terrain
+# Ground G = the most common height among surfaces with another surface below them (a built floor over terrain; a
+# wide scan also covers open terrain, which has nothing below it) (the house floor; the old "lowest height in >= 10%" picked the terrain
 # under the floor, so the whole floor counted as stair cells and m50 5090 p walked along the flat floor into a
 # counter, dy 0). A line is walked on the 3-unit grid: from the floor, each 3-unit step takes the highest surface
 # within -2..+7.5 of the current height; it stops at a gap, a drop, or anything 7.5..20 above the current height
@@ -11,7 +12,7 @@ BEGIN { RS = ";" }
 { sub(/^.*floors/, ""); if (!match($0, /-?[0-9.]+,-?[0-9.]+:[-0-9.\/]+/)) next
   c = substr($0, RSTART, RLENGTH); split(c, a, ":"); split(a[1], xz, ","); ++n
   X[n] = xz[1] + 0; Z[n] = xz[2] + 0; NS[n] = split(a[2], ys, "/")
-  for (i = 1; i <= NS[n]; i++) { y = ys[i] - by; Y[n, i] = y; cnt[int(y + 100.5) - 100]++ }
+  for (i = 1; i <= NS[n]; i++) { y = ys[i] - by; Y[n, i] = y; b = int(y + 100.5) - 100; all[b]++; if (i < NS[n]) cnt[b]++ }
   if (n == 1 || X[n] < x0) x0 = X[n]; if (n == 1 || Z[n] < z0) z0 = Z[n] }
 function cell(px, pz,   k) { k = (int((px - x0) / 3 + 100.5) - 100) SUBSEP (int((pz - z0) / 3 + 100.5) - 100); return (k in C) ? C[k] : 0 }
 function climb(px, pz, fx, fz,   h, k, c, i, y, b, top) { h = G; top = 0; RK = 99
@@ -24,6 +25,7 @@ function climb(px, pz, fx, fz,   h, k, c, i, y, b, top) { h = G; top = 0; RK = 9
   return top }
 END { if (n < 20) { print "few_cells " n; exit }
   mx = 0; for (b in cnt) if (cnt[b] > mx) { mx = cnt[b]; G = b + 0 }
+  if (!mx) for (b in all) if (all[b] > mx) { mx = all[b]; G = b + 0 }
   s = 0; m = 0; for (c = 1; c <= n; c++) for (i = 1; i <= NS[c]; i++) { y = Y[c, i]; if (y >= G - 1 && y <= G + 1) { s += y; m++ } }
   if (m) G = s / m
   for (c = 1; c <= n; c++) C[(int((X[c] - x0) / 3 + 100.5) - 100) SUBSEP (int((Z[c] - z0) / 3 + 100.5) - 100)] = c
