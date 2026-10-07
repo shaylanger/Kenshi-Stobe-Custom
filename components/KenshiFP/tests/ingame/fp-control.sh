@@ -188,14 +188,15 @@ trap cleanup EXIT
 
 # ---- setup ----
 A status | grep -q phase=world || setup_fail "not in world"
+# protect the squad and KO the hostile first: m50 5090 K Skaera reached Malzin during setup and left her downed (C04-TAKE walked 0)
+for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
+if A where "$TG" | grep -q 'pos='; then A protect "$TG" off >/dev/null; A ko "$TG" 3600 >/dev/null; waitf 15 isko "$TG" || echo "SETUP: $TG never KO" >> "$LOG"; fi
 for c in "$SH" "$MT"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not found"; done
 A fp_move state | grep -q '^keys=' || setup_fail "KenshiFP has no fp_move (needs 32905BE5+)"
 A fp_control state | grep -q 'take_presses=' || setup_fail "KenshiFP has no fp_control press (needs 32905BE5+)"
 . "$(dirname "$0")/fp-ui-guard.sh" 2>/dev/null || { ui_guard_setup() { :; }; ui_clear() { return 0; }; ui_summary() { echo "ui_guard=missing"; }; }
 # speed hold: the game paused itself (squad event) mid-run in b27 and froze a native walk at seconds=0.0
 A speed 1 hold >/dev/null; A fp_move none >/dev/null
-for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
-if A where "$TG" | grep -q 'pos='; then A protect "$TG" off >/dev/null; A ko "$TG" 3600 >/dev/null; waitf 15 isko "$TG" || echo "SETUP: $TG never KO" >> "$LOG"; fi
 ui_guard_setup; ui_clear
 take "$SH" || setup_fail "could not take $SH ($(A fp_control state))"
 pick_yaw "$SH" C01; look "$YAW" 0
@@ -232,7 +233,16 @@ if [ $UIO != 0 ]; then row C02 FAIL "setup inventory did not open (ui_open=0): $
 elif [ $ROK = 0 ] && { ge "$WM1" "$STALL_MS" || ge "$WM2" "$STALL_MS"; }; then row C02 FAIL "inconclusive: a walk sample is still frame-stalled after $WALK_TRIES tries (worst_ms >= $STALL_MS shortens the wall-clock hold): $ev"
 else [ "$TU0" = "$TU1" ] && [ "$AU0" = "$AU1" ] || ok=0; judge C02 $ok "$ev"; fi
 
+# mate_ready: setup check before C03/C04 (5090 K: Malzin downed=1 -> C04 walk 0 + stuck native walk). Mate not KO, worst part >= 30%,
+# hostile still KO; one repair (heal, re-KO, 15 s to stand up) then the run stops with the reason.
+mate_bad() { local h w; isko "$MT" && { echo "$MT KO"; return 0; }; h=$(A hp "$MT"); w=$(grep -oE 'worst=-?[0-9]+' <<<"$h" | cut -d= -f2)
+  [ -n "$w" ] && [ "$w" -lt 30 ] && { echo "$MT worst=$w%"; return 0; }
+  A where "$TG" | grep -q 'pos=' && ! isko "$TG" && { echo "$TG awake"; return 0; }; return 1; }
+mate_ready() { local why; why=$(mate_bad) || return 0; echo "SETUP $1: $why: heal $MT, re-KO $TG" >> "$LOG"
+  A health "$MT" 100 >/dev/null; A ko "$TG" 3600 >/dev/null; sleep 15
+  why=$(mate_bad) && setup_fail "$1: $MT not ready after repair ($why)"; return 0; }
 # ---- C03: inspect the mate without transfer ----
+mate_ready C03
 ui_clear; HM=$(id_of "$MT"); A select "$MT" >/dev/null
 waitf 4 bash -c '[ "$(stobe-auto fp_control state | grep -o "\binspected=[^ ]*" | cut -d= -f2)" != "'"$H0"'" ]'; INSP=$?
 C3=$(A fp_control state); HC=$(fld controlled <<<"$C3"); HI=$(fld inspected <<<"$C3"); IDS3=$(fld control_ids <<<"$C3")
@@ -249,6 +259,7 @@ awk -v m="$M3" -v a="$AN3" 'BEGIN{t=m*.25; if(t<3)t=3; d=m-a; if(d<0)d=-d; exit 
 if [ $UIO != 0 ]; then row C03 FAIL "setup inventory did not open: $ev"; else judge C03 $ok "$ev"; fi
 
 # ---- C04-TAKE: F6 (key_take_control) press: ignored with UI open; mid-walk transfer releases the old actor ----
+mate_ready C04-TAKE
 ui_clear; take "$SH" >/dev/null; A select "$MT" >/dev/null; sleep 0.5
 U0=$(ctl take_ui_ignored); A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; A fp_control press >/dev/null; sleep 0.8
 U1=$(ctl take_ui_ignored); HUI=$(ctl controlled); A click INV >/dev/null; waitf 4 ui_is 0; ui_clear
