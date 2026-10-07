@@ -472,7 +472,12 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
     g_melee_fire_prev=fire;g_melee_block_prev=aim;
 }
 static int fp_melee_state_append(char *b,size_t n,const void *cc) {
-    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u chase_drops=%u chase_swings=%u force_chase=%d forced_chase=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u ticks=%u in_aim=%d in_fire=%d fire_masked=%u injection=%d inj_cmds=%u inj_aim_cmds=%u melee_hits=%u melee_cut=%.1f melee_blunt=%.1f wounds_any=%u",
+    /* why=not_allowed diagnosis (4080 m09 dodge M08-CROWD: owned=0 not_allowed for 2 min with the fighter's combat
+     * frozen and no KenshiFP.log): ui_open/is_down/focus are the gate's inputs (controlled actor), prone/unconscious/
+     * ko_timer the read character's own medical state (-1 = no readable owner) */
+    void *own=cc&&readable((const void *)((uintptr_t)cc+CC_OWNER),8)?*(void **)((uintptr_t)cc+CC_OWNER):NULL;
+    if (own && !char_valid(own)) own=NULL;
+    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u chase_drops=%u chase_swings=%u force_chase=%d forced_chase=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u ticks=%u in_aim=%d in_fire=%d fire_masked=%u injection=%d inj_cmds=%u inj_aim_cmds=%u melee_hits=%u melee_cut=%.1f melee_blunt=%.1f wounds_any=%u ui_open=%d is_down=%d focus=%d prone=%d unconscious=%d ko_timer=%.1f head_above=%.2f",
         g_melee_ready,cc!=NULL&&cc==g_melee_owned_cc,g_melee_why,g_melee_armed,g_melee_pending,g_melee_clicks,
         g_melee_swings,g_melee_ai_refused,g_melee_rejected,g_melee_blocks,g_melee_block_ok,g_melee_autoblock_refused,g_melee_out_of_reach,g_melee_passive_serial!=0,g_melee_passive_refused,
         g_melee_approach_refused,g_melee_chase_frames,g_melee_chase_drops,g_melee_chase_swings,g_melee_force_chase,g_melee_forced_chase,g_melee_expired,g_melee_last_latency_ms,g_melee_max_latency_ms,
@@ -480,7 +485,8 @@ static int fp_melee_state_append(char *b,size_t n,const void *cc) {
         g_melee_early_starts,g_melee_unfinished_starts,g_melee_slack_n,g_melee_min_swing_slack,g_melee_last_reject,g_melee_last_reject_state,
         g_melee_rej_stumble,g_melee_rej_chop,g_melee_rej_dead,g_melee_rej_other,g_melee_cl_wait,g_melee_cl_fired,g_melee_cl_timeouts,g_melee_cancel_refused,g_melee_abort_refused,
         g_melee_ticks,g_melee_in_aim,g_melee_in_fire,g_melee_fire_masked,g_combat_injection,g_combat_inj_cmds,g_combat_inj_aim_cmds,
-        g_wound_melee_hits,g_wound_melee_cut,g_wound_melee_blunt,g_wound_any);
+        g_wound_melee_hits,g_wound_melee_cut,g_wound_melee_blunt,g_wound_any,
+        g_ui_open,g_is_down,game_has_focus(),own?char_prone_state(own):-1,own?combat_char_unconscious(own):-1,own?combat_char_ko_timer(own):-1.0f,g_head_above);
 }
 static void fp_melee_manual_init(void) {
     uintptr_t init=combat_unique_signature("40 57 48 83 EC 40 48 8B 41 08 48 8B F9");
