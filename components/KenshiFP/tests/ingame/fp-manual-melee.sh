@@ -155,7 +155,14 @@ if [ "$UB" = 0 ] && [ "$AB1" -gt "$AB0" ] && [ "$HB" -ge 3 ] && [ $((B1-B0)) -ge
 # ---- M06 out-of-reach click: target pinned 8 m away -> no swing, no walk to the target (whiff in place) ----
 pos2() { A where "$1" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}'; }
 dist() { awk -v a="$1" -v b="$2" -v c="$3" -v d="$4" 'BEGIN{printf "%.1f", sqrt((c-a)^2+(d-b)^2)}'; }
-A pin "$TG" at "$FI" dist 80 face "$FI" >/dev/null; sleep 2; HH0=$(ms hold_halts)
+# settle: the M03 attacker phase can leave the fighter in a native STUMBLE (anim-driven recoil, 4080 b28: 13 dm
+# "idle drift" sampled while state=8): wait (max 12 s) until it is out of CHOP/STUMBLE and holds still for 1 s,
+# else SETUP FAIL instead of a drift verdict
+A pin "$TG" at "$FI" dist 80 face "$FI" >/dev/null; sleep 2; ST_END=$((SECONDS+12)); settled=0
+while [ $SECONDS -lt $ST_END ]; do read -r sx sz <<<"$(pos2 "$FI")"; sleep 1; read -r sx2 sz2 <<<"$(pos2 "$FI")"
+  case "$(ms state)" in 0|8) ;; *) awk -v d="$(dist "$sx" "$sz" "$sx2" "$sz2")" 'BEGIN{exit !(d<=1)}' && { settled=1; break; };; esac; done
+[ $settled = 1 ] || { for r in "${RESULTS[@]}"; do echo "$r"; done; echo "RESULT SETUP FAIL M06: fighter not settled after 12 s (state=$(ms state)) log=$LOG"; exit 1; }
+HH0=$(ms hold_halts)
 read -r x0 z0 <<<"$(pos2 "$FI")"; read -r tx0 tz0 <<<"$(pos2 "$TG")"; sleep 2; read -r x1 z1 <<<"$(pos2 "$FI")"; D0=$(dist "$x0" "$z0" "$x1" "$z1")
 S0=$(ms swings); O0=$(ms out_of_reach); J0=$(ms rejected); E0=$(ms expired); click; sleep 2
 read -r x2 z2 <<<"$(pos2 "$FI")"; read -r tx2 tz2 <<<"$(pos2 "$TG")"; D1=$(dist "$x1" "$z1" "$x2" "$z2"); S1=$(ms swings); O1=$(ms out_of_reach); J1=$(ms rejected); E1=$(ms expired)
