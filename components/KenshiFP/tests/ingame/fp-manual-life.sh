@@ -27,10 +27,18 @@ cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
 trap cleanup EXIT
 # take: select + FP + take control of the shooter, camera at the target
-take() { A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null
+take() { A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null; look_tg 0.02; }
+# look_tg <pitch>: camera yaw from the shooter to the target's current position
+look_tg() { local sx sz tx tz
   read -r sx sz <<<"$(A where "$SH" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
   read -r tx tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
-  A fp_camera look "$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')" 0.02 >/dev/null; }
+  A fp_camera look "$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')" "$1" >/dev/null; }
+# aim_on <s>: bounded poll (re-aim at the target, pitch steps) until `fp_combat aim` has the crosshair ray on the
+# target (id4 = its serial). Sets AIMP (pitch that hit) and AIMR (last aim reply). 4080 b31 R12-SPEED: the trigger
+# went in with no aim ray (gate=no_aim_ray), so the row measured nothing.
+aim_on() { local end=$((SECONDS+$1)) s p; s=$(A where "$TG" | grep -o '#[0-9]*' | head -1 | tr -d '#'); AIMR=""; AIMP=none
+  while [ $SECONDS -lt $end ]; do for p in 0.02 0 -0.03 0.05 -0.06; do look_tg "$p"; sleep 0.4; AIMR=$(A fp_combat aim)
+    [ -n "$s" ] && grep -q "\bid4=$s\b" <<<"$AIMR" && { AIMP=$p; return 0; }; done; done; return 1; }
 # fresh_shot [ready_s]: release, aim, wait shot-ready (default 10 s), one trigger; echoes the harness shot delta (expect 1)
 fresh_shot() { local h0; inp 0 0 0; h0=$(hshots); sleep 0.5; inp 1 0 0; waitfor "${1:-10}" shot_ready 1 || { echo "not_ready/anim=$(cs anim_ready)/ammo=$(cs ammo)/reloading=$(cs reloading)/why=$(cs why)"; return; }
   inp 1 1 0; sleep 1.5; inp 1 0 0; local d=$(( $(hshots) - h0 ))
@@ -87,15 +95,17 @@ if [ "$W" = melee ] && [ "$HS" = "$H0" ] && [ "$HE" = "$HS" ] && [ "$FS" = 1 ] &
 # ---- R12-SPEED: at speed 3 one trigger = one shot; the native reload runs in game time (shorter real time) ----
 # 4080 b27: timing after fresh_shot (1.5 s hold + round trips) missed the whole ~2 s reload (reload_real_s=0 passed
 # vacuously), so the shot is inlined and timed from the trigger edge (sub-second clock); the reload must be seen running
-A speed 3 >/dev/null; FS=""; RT=-1; SAW=0
-if ready_held; then h0=$(hshots); inp 1 1 0; t0=$(date +%s.%N)
+# The trigger goes in only once the aim ray is on the target and the shot is ready again (bounded); else setup FAIL.
+A speed 3 >/dev/null; FS=""; RT=-1; SAW=0; AIMOK=0; SETUPS=""
+if ready_held && { aim_on 8 && AIMOK=1; [ $AIMOK = 1 ]; } && waitfor 3 shot_ready 1; then h0=$(hshots); inp 1 1 0; t0=$(date +%s.%N)
   for _ in $(seq 1 30); do [ "$(cs reloading)" = 1 ] && { SAW=1; break; }; sleep 0.1; done; inp 1 0 0
   for _ in $(seq 1 60); do [ "$(cs reloading)" = 0 ] && break; sleep 0.1; done
-  RT=$(awk -v a="$t0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.2f", b-a}'); FS=$(( $(hshots) - h0 )); fi
+  RT=$(awk -v a="$t0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.2f", b-a}'); FS=$(( $(hshots) - h0 )); else
+  SETUPS="setup aim_on_target=$AIMOK shot_ready=$(cs shot_ready) why=$(cs why) aim='$(cut -c1-90 <<<"$AIMR")' "; fi
 LT=$(cs last_reload_timer); A speed 1 >/dev/null
 [ "$FS" = 0 ] && FS=$(why_refused)
-ev="speed3: trigger_shots=$FS reload_seen=$SAW reload_real_s=$RT native_timer=$LT"
-if [ "$FS" = 1 ] && [ $SAW = 1 ] && awk -v r="$RT" -v t="$LT" 'BEGIN{exit !(t>0 && r>0 && r<=0.6*t)}'; then row R12-SPEED PASS "$ev"; else row R12-SPEED FAIL "$ev"; fi
+ev="${SETUPS}speed3: aim_on_target=$AIMOK pitch=$AIMP trigger_shots=$FS reload_seen=$SAW reload_real_s=$RT native_timer=$LT"
+if [ -z "$SETUPS" ] && [ "$FS" = 1 ] && [ $SAW = 1 ] && awk -v r="$RT" -v t="$LT" 'BEGIN{exit !(t>0 && r>0 && r<=0.6*t)}'; then row R12-SPEED PASS "$ev"; else row R12-SPEED FAIL "$ev"; fi
 
 # ---- R12-LOAD: save mid-aim, load it with the trigger held -> no inherited shot, adapter re-arms, fresh fires.
 #      The loaded crossbow comes back unloaded (4080 batch 6: ammo=0 after load), so the fresh shot needs the draw,
