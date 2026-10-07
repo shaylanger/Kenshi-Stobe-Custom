@@ -179,12 +179,12 @@ static struct { unsigned n; int aim_ok, have_t, have_eye, anchor, ogre, kept, dr
 static int g_fpc_pick_req;
 static size_t fpc_pick_text(char *b,size_t n) {
     return (size_t)snprintf(b,n,"pick n=%u age_ms=%.0f result=%s aim_ok=%d have_t=%d eye=%d anchor=%d ogre=%d shape=%p ids0=%u "
-        "hit_dist=%.2f hit=%.1f,%.1f,%.1f aim=%.1f,%.1f,%.1f origin=%.1f,%.1f,%.1f dir=%.3f,%.3f,%.3f mesh_kept=%d mesh_dropped=%d",
+        "hit_dist=%.2f hit=%.1f,%.1f,%.1f aim=%.1f,%.1f,%.1f origin=%.1f,%.1f,%.1f dir=%.3f,%.3f,%.3f mesh_kept=%d mesh_dropped=%d self_skips=%u",
         g_fpc_pick.n,g_fpc_pick.n?fpc_now_ms()-g_fpc_pick.ms:-1.0,g_fpc_pick.name,g_fpc_pick.aim_ok,g_fpc_pick.have_t,g_fpc_pick.have_eye,
         g_fpc_pick.anchor,g_fpc_pick.ogre,(void *)g_fpc_pick.hit.shape,g_fpc_pick.hit.ids[0],g_fpc_pick.hit.distance,
         g_fpc_pick.hit.position.x,g_fpc_pick.hit.position.y,g_fpc_pick.hit.position.z,g_fpc_pick.aim.x,g_fpc_pick.aim.y,g_fpc_pick.aim.z,
         g_fpc_pick.origin.x,g_fpc_pick.origin.y,g_fpc_pick.origin.z,g_fpc_pick.dir.x,g_fpc_pick.dir.y,g_fpc_pick.dir.z,
-        g_fpc_pick.kept,g_fpc_pick.dropped);
+        g_fpc_pick.kept,g_fpc_pick.dropped,g_combat_aim_self_skips);
 }
 /* Character under the crosshair (physics ray, mesh refine), without disturbing the shot telemetry. */
 static void *fpc_player_interface(void *gw);

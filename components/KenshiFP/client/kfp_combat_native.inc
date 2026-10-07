@@ -123,6 +123,11 @@ static unsigned g_combat_aim_attr_kept,g_combat_aim_attr_dropped;
 /* No target/limb grant: native projectile still resolves its physical hit.
  * Camera scene position uses the established floating-origin translation.
  * Called under the owning main-loop crash guard, never nests a guard. */
+/* K05-HOSTILE (4080 b41): pitched down at an NPC 1.5 m ahead, the eye ray started inside the controlled
+ * character's own head/shoulder shapes and hit them at 0.43 m: combat_ray_target drops the shooter, so the
+ * crosshair resolved to nothing (pick result=none ids0=1 hit_dist=4.29) and LMB never ordered the attack.
+ * Own-body hits are re-cast past (as fp_view_trace_wall does), at most 3 times. */
+static unsigned g_combat_aim_self_skips;
 static int combat_camera_aim(Vec3 *out) {
     memset(&g_combat_camera_hit,0,sizeof(g_combat_camera_hit));
     g_combat_aim_have_ray=0;
@@ -147,6 +152,19 @@ static int combat_camera_aim(Vec3 *out) {
     memset(&g_combat_camera_hit,0,sizeof(g_combat_camera_hit));
     int traced=combat_trace_ray(&origin,&dir,KFP_AIM_RANGE,&physical);
     if (traced<0)return 0;
+    {   void *self=g_fp_control_actor;Vec3 o=origin;float done=0;
+        for (int i=0;i<3 && traced>0 && self && physical.ids[0]==1 && isfinite(physical.distance) &&
+                         combat_hit_char(&physical)==self;++i) {
+            float step=physical.distance+0.3f;      /* past this body's surface */
+            done+=step;o.x+=dir.x*step;o.y+=dir.y*step;o.z+=dir.z*step;++g_combat_aim_self_skips;
+            if (done>=KFP_AIM_RANGE) {traced=0;break;}
+            memset(&physical,0,sizeof(physical));
+            traced=combat_trace_ray(&o,&dir,KFP_AIM_RANGE-done,&physical);
+            if (traced<0)return 0;
+            if (traced>0) physical.distance+=done;
+        }
+        if (traced>0 && self && physical.ids[0]==1 && combat_hit_char(&physical)==self) traced=0;  /* still inside */
+    }
     float nearest=KFP_AIM_RANGE;
     if (traced>0) {best=physical.position;nearest=physical.distance;g_combat_camera_hit=physical;}
     void *saved_node=g_mr_perch_node;mr_cache_t *saved_cache=g_mr_perch_cache;
