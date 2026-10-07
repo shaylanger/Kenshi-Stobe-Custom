@@ -7,8 +7,8 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - 5090: idle (Kenshi closed). Batches P/Q on KenshiFP 44458ACE logged in the m50 run log: NavMesh-thread crash fix (fc60924)
   confirmed (no crash, no weld jump, C05-LOAD PASS), stealth ST01-ST03 PASS, ranged R01-R06/R12 PASS. Fixer working on C02
   (5090 FP walk ~half the TP distance; 4080 passes) + C05-STAIRS; rerun those two on the 5090 after the fix.
-- 4080: bm43 = M09 rerun (`C:\KenshiTestRunsp-4080-m09b`, KenshiFP FCCC5FBD), then chain44 (`C:\KAHp\chain44`) installs
-  44458ACE and runs b44 (`C:\KAHp4080-44.sh`, out `C:\KenshiTestRunsp-4080-44`, status `C:\KAH\w44.ps1`): stealth + control.
+- 4080: bm43 = M09 rerun (`C:\KenshiTestRuns\fp-4080-m09b`, KenshiFP FCCC5FBD), then chain44 (`C:\KAH\fp\chain44`) installs
+  44458ACE and runs b44 (`C:\KAH\fp4080-44.sh`, out `C:\KenshiTestRuns\fp-4080-44`, status `C:\KAH\w44.ps1`): stealth + control.
   Runner = coordinator, lock rig4080.
 - Open FP rows: M09 (animation mods), S05, C02 (5090), C05-STAIRS. PG: no open automated rows.
 - Gotcha: never `unload` a char that is still someone's fight/order target (game crash, exe+268A68); tests KO and leave them.
