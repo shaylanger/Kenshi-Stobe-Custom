@@ -21,16 +21,6 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
 
-### Drawn-weapon reactions (Stobe 95B9D33A; DW1 DW2 DW4 DW5 DW6 DW7 DW9 PASS m50 5090 D/F, rows deleted)
-
-Wrapper `tests/ingame/stobe/STOBE-DRAWN.sh [DW1 .. DW10]` on a Crafting base kah-* copy (Shay + Malzin, Hub). Native state via harness `stobe_drawn status|pair|draw|hold|set|reset`, stobe.log `DRAWN_WEAPON:` lines; replies injected with NEG_TEST_INJECT context `react` (DW1 DW2 DW9).
-
-| # | Row | Pass when |
-|---|---|---|
-| 127 | DW3 hostile: warn, weapon kept out in range -> native attack after WarnSeconds | `warn` then `attack order=1` >= warn s later, `attack_confirmed` or `pair` attack_target=player |
-| 132 | DW8 no reaction during combat | a warned NPC who starts fighting gets `cancel_combat`, no attack order, no further line |
-| 134 | DW10 live model (no injection) | the line is about the weapon; speech only (attack_target=none, no deal) |
-
 ## E. Design questions and features
 
 - **B 55 fight rules: built (StobeServer 1392155) and confirmed in game (m22, all blocks PASS).** The full spec (Shay,
