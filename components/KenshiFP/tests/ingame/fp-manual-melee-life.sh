@@ -55,8 +55,10 @@ wake_tg() { [ "$TGP" = 1 ] && return 0; tg_ko || return 0; WAKES=$((WAKES+1)); A
 # ready: release input, wake a KO'd target, wait until the adapter owns a fighting fighter (why=ok, armed) and a click is legal
 ready() { inp 0 0; wake_tg; engage; local end=$((SECONDS+${1:-20})); while [ $SECONDS -lt $end ]; do
   [ "$(ms why)" = ok ] && [ "$(ms armed)" = 1 ] && in_fight && [ "$(ms dead)" = 0 ] && [ "$(ms state)" != 8 ] && return 0; sleep 0.3; done; return 1; }
-# fresh_click: one LMB edge at a legal moment; echoes the swing delta within 1.5 s (expect 1)
-fresh_click() { ready 15 || { echo not_ready; return; }; local s0; s0=$(ms swings); inp 0 1; sleep 0.15; inp 0 0
+# fresh_click [dist]: one LMB edge at a legal moment; echoes the swing delta within 1.5 s (expect 1). With dist the
+# target is re-pinned that far in front of the fighter after ready (spacing is the player's job, M06): 4080 m09 full
+# M08-ACTOR: the released AI knocked Skaera out and walked off, the retake click came at 46 dm (out_of_reach 1->2).
+fresh_click() { ready 15 || { echo not_ready; return; }; [ -n "$1" ] && close "$1"; local s0; s0=$(ms swings); inp 0 1; sleep 0.15; inp 0 0
   for _ in $(seq 1 15); do [ "$(ms swings)" != "$s0" ] && break; sleep 0.1; done; echo $(( $(ms swings) - s0 )); }
 # legal_click: wait (<= 6 s) for a native moment where a click is legal (state STARTUP/DECISION/CIRCLE/WAIT, not in
 # dead time, nothing pending), then click; echoes the swing delta or "no_window" (stumble-locked the whole time)
@@ -81,6 +83,8 @@ cl_click() { inp 0 0; wake_tg; engage; local end=$((SECONDS+10)) ok=0 s0 f0 t0 s
   for _ in $(seq 1 15); do [ "$(ms swings)" != "$s0" ] && break; sleep 0.1; done; echo $(( $(ms swings) - s0 )); }
 # blood: target blood (unarmed martial-arts hits: 5090 batch 1 showed blood 77.6->69.5 with every part still 100%)
 blood() { A hp "$1" | grep -o 'blood=[0-9.]*' | cut -d= -f2; }
+# gate: the inputs of the product's why=not_allowed gate (KenshiFP 96316C2D+), reported when a row ends not owned
+gate() { local s; s=$(A fp_melee state); echo "gate[ui_open=$(echo "$s" | fld ui_open) is_down=$(echo "$s" | fld is_down) focus=$(echo "$s" | fld focus) prone=$(echo "$s" | fld prone) unconscious=$(echo "$s" | fld unconscious) ko_timer=$(echo "$s" | fld ko_timer) head=$(echo "$s" | fld head_above) ui_why=$(A fp_state | fld ui_why)]"; }
 # held: hold LMB and count swings over N s (a held click must start at most the one its own edge allowed)
 
 # ---- setup (same as fp-manual-melee.sh) ----
@@ -143,8 +147,11 @@ s=$(A fp_melee state); MH0=$(echo "$s" | fld melee_hits); MC0=$(echo "$s" | fld 
 A fp_melee wounds reset | grep -q "^wounds=0" || setup_fail "fp_melee wounds reset refused (KenshiFP older than the m50-c fix)"
 # each click re-pins the target in reach first (as legal_click does): unarmed reach is short and the target drifted out
 # of it (4080 m09 vanilla/mca/dodge: 4 swings, fighter_on_target=0, the fighter's zone_targets=0 on most polls)
-ug=""; uz=""
-for _ in 1 2 3 4; do close; ug+="$(gap) "; r=$(fresh_click); uz+="$(ms zone_targets) "; [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
+# UD: unarmed spacing. The katana's 12 dm is at the edge of martial-arts reach: 4080 m09b (gap 12-13 dm) vanilla/mca/
+# dodge swung 2-4 times with no hit (vanilla clicks 3-4 found no technique in reach: native chase 10, out_of_reach 1->3),
+# gam/full landed 1-2 of 4. A player fighting unarmed steps in; the target is pinned at 8 dm instead.
+UD=${UNARMED_DIST:-8}; ug=""; uz=""
+for _ in 1 2 3 4; do close "$UD"; ug+="$(gap) "; r=$(fresh_click "$UD"); uz+="$(ms zone_targets) "; [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
 s=$(A fp_melee state); MH=$(( $(echo "$s" | fld melee_hits) - MH0 )); WA=$(( $(echo "$s" | fld wounds_any) - WA0 ))
 MD=$(awk -v c0="$MC0" -v b0="$MB0" -v c1="$(echo "$s" | fld melee_cut)" -v b1="$(echo "$s" | fld melee_blunt)" 'BEGIN{printf "cut+%.1f blunt+%.1f", c1-c0, b1-b0}')
 MDT=$(echo "$MD" | awk '{gsub(/[a-z+]/," "); print $1+$2}')
@@ -173,6 +180,7 @@ take; sleep 4; R0=$(ms ai_refused); J0=$(ms rejected); O0=$(ms out_of_reach); E0
 for _ in 1 2 3 4; do r=$(cl_click); rs="$rs$r,"; case "$r" in 1) sw=$((sw+1));; no_window) nw=$((nw+1));; not_ready) nr=$((nr+1));; esac; sleep 1.5; done
 sleep 3; s=$(A fp_melee state); R1=$(echo "$s" | fld ai_refused); J1=$(echo "$s" | fld rejected); OW=$(echo "$s" | fld owned); W=$(echo "$s" | fld why)
 ev="crowd (spawned '${N2:-?}'): 4 product-legal clicks [${rs%,}] swung=$sw no_window=$nw not_ready=$nr cl_fired=$(echo "$s" | fld cl_fired) cl_timeouts=$(echo "$s" | fld cl_timeouts) rejected $J0->$J1 last_reject=$(echo "$s" | fld last_reject)/$(echo "$s" | fld last_reject_state) rej_stumble=$(echo "$s" | fld rej_stumble) out_of_reach $O0->$(echo "$s" | fld out_of_reach) expired $E0->$(echo "$s" | fld expired) ai_refused $R0->$R1 owned=$OW why=$W fault=$(A fp_combat state | fld fault)"
+[ "$OW" = 1 ] || ev="$ev $(gate)"
 if [ -n "$N2" ] && [ "$sw" -ge 3 ] && [ "$OW" = 1 ] && [ "$W" = ok ]; then row M08-CROWD PASS "$ev"; else row M08-CROWD FAIL "$ev"; fi
 # the knocked-out second attacker is moved away: spawned 0.5 m from the fighter, its body can lie between fighter and
 # target and trace-block the released AI (4080 m09 vanilla M08-ACTOR: native chase state=11, no swing in 10 s)
@@ -183,8 +191,9 @@ if [ -n "$N2" ] && [ "$sw" -ge 3 ] && [ "$OW" = 1 ] && [ "$W" = ok ]; then row M
 ready 15; A select "$OT" >/dev/null; A fp_control take >/dev/null; sleep 1
 A health "$TG" 100 >/dev/null; sleep 0.3; R0=$(ms ai_refused); H0=$(flesh "$TG"); AG=$(gap); sleep 10; R1=$(ms ai_refused); H1=$(flesh "$TG"); s=$(A fp_melee state "$FI"); OW=$(echo "$s" | fld owned)
 FIS="controlled=$(echo "$s" | fld controlled) state=$(echo "$s" | fld state) active=$(echo "$s" | fld active) attacking=$(echo "$s" | fld attacking) target_h=$(echo "$s" | fld target_h)"
-take; sleep 2; OW2=$(ms owned); FS=$(fresh_click)
-ev="control->$OT: $FI owned=$OW ($FIS gap_dm=$AG->$(gap)) ai_refused $R0->$R1 $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
+take; sleep 2; OW2=$(ms owned); GR=$(gap); FS=$(fresh_click 12)
+ev="control->$OT: $FI owned=$OW ($FIS gap_dm=$AG->$GR, re-pinned 12 for the retake click) ai_refused $R0->$R1 $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
+[ "$FS" = 1 ] || ev="$ev why=$(ms why) $(gate)"
 if [ "$OW" = 0 ] && [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && [ "$OW2" = 1 ] && [ "$FS" = 1 ]; then row M08-ACTOR PASS "$ev"; else row M08-ACTOR FAIL "$ev"; fi
 
 # ---- M08-LIMB (last: permanent on this load): left arm severed -> adapter stays ok, fresh clicks still swing ----
@@ -194,7 +203,8 @@ if [ "$OW" = 0 ] && [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !
 A protect "$TG" on >/dev/null; TGP=1; A health "$TG" 100 >/dev/null
 LS=$(A sever "$FI" left_arm noitem | grep -o "> [a-z]*" | tr -d "> "); sleep 2; take; A protect "$FI" on >/dev/null; sw=0; rs=""
 for _ in 1 2 3; do r=$(cl_click); rs="$rs$r,"; [ "$r" = 1 ] && sw=$((sw+1)); sleep 1.5; done
-ev="left arm severed (state=${LS:-?}): 3 clicks [${rs%,}] swung=$sw why=$(ms why) out_of_reach=$(ms out_of_reach) last_reject=$(ms last_reject) $TG $(A where "$TG" | grep -o 'KO\|DEAD' | head -1) fault=$(A fp_combat state | fld fault)"
+[ "$sw" -ge 2 ] || LG=" $(gate)"
+ev="left arm severed (state=${LS:-?}): 3 clicks [${rs%,}] swung=$sw${LG} why=$(ms why) out_of_reach=$(ms out_of_reach) last_reject=$(ms last_reject) $TG $(A where "$TG" | grep -o 'KO\|DEAD' | head -1) fault=$(A fp_combat state | fld fault)"
 if [ "$LS" = stump ] && [ "$sw" -ge 2 ]; then row M08-LIMB PASS "$ev"; else row M08-LIMB FAIL "$ev"; fi
 
 NI=$(wc -l < "$OUT/inputs"); NA=$(grep -c "^1 " "$OUT/inputs"); DI=$(( $(cs inj_cmds) - IC0 )); DA=$(( $(cs inj_aim_cmds) - IA0 ))
