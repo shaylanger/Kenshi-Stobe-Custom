@@ -167,9 +167,12 @@ if want K01; then ui_clear; look "$(cam yaw)" 0.5
 
 # ---- K02: MMB select the mate, no camera rotate ----
 if want K02; then ui_clear; aim_at "$MT" 13; Y0=$(cam yaw); M0=$(ks mmb_selects); C0=$(ks mmb_cam_frames)
+  # readiness (bounded): the crosshair pick must report the mate before the press; the pick line goes into the evidence
+  PK=""; for _ in 1 2 3 4 5 6; do A fp_keys pick >/dev/null; sleep 0.3; PK=$(A fp_keys pick show); [ "$(fld result <<<"$PK")" = "$(uname_ "$MT")" ] && break; done
+  echo "K02 pre-press $PK"
   A fp_keys press mmb 200 >/dev/null; waitf 3 kge mmb_selects $((M0+1)); sleep 0.4
   K=$(A fp_keys state); Y1=$(cam yaw); C2=$(A fp_control state); HI=$(fld inspected <<<"$C2"); HC=$(fld controlled <<<"$C2"); IDS2=$(fld control_ids <<<"$C2")
-  ev="mmb_selects $M0->$(fld mmb_selects <<<"$K") none=$(fld mmb_none <<<"$K") last_select=$(fld last_select <<<"$K") cam_frames $C0->$(fld mmb_cam_frames <<<"$K") yaw $Y0->$Y1 | inspected=$HI controlled=$H0->$HC ids_same=$([ "$IDS0" = "$IDS2" ] && echo 1 || echo 0)"
+  ev="mmb_selects $M0->$(fld mmb_selects <<<"$K") none=$(fld mmb_none <<<"$K") last_select=$(fld last_select <<<"$K") cam_frames $C0->$(fld mmb_cam_frames <<<"$K") yaw $Y0->$Y1 pick_before=$(fld result <<<"$PK") pick_shape=$(fld shape <<<"$PK") pick_dist=$(fld hit_dist <<<"$PK") pick_aim_ok=$(fld aim_ok <<<"$PK") | inspected=$HI controlled=$H0->$HC ids_same=$([ "$IDS0" = "$IDS2" ] && echo 1 || echo 0)"
   ok=1; [ "$(fld mmb_selects <<<"$K")" = $((M0+1)) ] && [ "$(fld last_select <<<"$K")" = "$(uname_ "$MT")" ] || ok=0
   [ "$HC" = "$H0" ] && [ "$IDS2" = "$IDS0" ] && [ -n "$HI" ] && [ "$HI" != "$H0" ] || ok=0
   ge "$(fld mmb_cam_frames <<<"$K")" $((C0+1)) || ok=0

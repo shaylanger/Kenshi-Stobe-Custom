@@ -170,14 +170,33 @@ static int fpc_suppress_sheathe(void *pc) {
     if (fpc_in_fight(pc)) return 0;                 /* native weapon switching in a fight stays free */
     ++g_fpc_sheathe_kept;return 1;
 }
+/* K02 (4080 b37): last crosshair pick, for `fp_keys pick` and the MMB-none log line. */
+static struct { unsigned n; int aim_ok, have_t, have_eye, anchor, ogre, kept, dropped; CombatRayHit hit; Vec3 aim, origin, dir;
+                char name[64]; double ms; } g_fpc_pick;
+static int g_fpc_pick_req;
+static size_t fpc_pick_text(char *b,size_t n) {
+    return (size_t)snprintf(b,n,"pick n=%u age_ms=%.0f result=%s aim_ok=%d have_t=%d eye=%d anchor=%d ogre=%d shape=%p ids0=%u "
+        "hit_dist=%.2f hit=%.1f,%.1f,%.1f aim=%.1f,%.1f,%.1f origin=%.1f,%.1f,%.1f dir=%.3f,%.3f,%.3f mesh_kept=%d mesh_dropped=%d",
+        g_fpc_pick.n,g_fpc_pick.n?fpc_now_ms()-g_fpc_pick.ms:-1.0,g_fpc_pick.name,g_fpc_pick.aim_ok,g_fpc_pick.have_t,g_fpc_pick.have_eye,
+        g_fpc_pick.anchor,g_fpc_pick.ogre,(void *)g_fpc_pick.hit.shape,g_fpc_pick.hit.ids[0],g_fpc_pick.hit.distance,
+        g_fpc_pick.hit.position.x,g_fpc_pick.hit.position.y,g_fpc_pick.hit.position.z,g_fpc_pick.aim.x,g_fpc_pick.aim.y,g_fpc_pick.aim.z,
+        g_fpc_pick.origin.x,g_fpc_pick.origin.y,g_fpc_pick.origin.z,g_fpc_pick.dir.x,g_fpc_pick.dir.y,g_fpc_pick.dir.z,
+        g_fpc_pick.kept,g_fpc_pick.dropped);
+}
 /* Character under the crosshair (physics ray, mesh refine), without disturbing the shot telemetry. */
 static void *fpc_crosshair_char(void *pc) {
     CombatRayHit saved_hit=g_combat_camera_hit;
     Vec3 so=g_combat_aim_origin,sd=g_combat_aim_dir;int sh=g_combat_aim_have_ray;
     unsigned sk=g_combat_aim_attr_kept,sdr=g_combat_aim_attr_dropped;
     void *saved_node=g_mr_perch_node;mr_cache_t *saved_cache=g_mr_perch_cache;
-    Vec3 aim;void *t=NULL;
-    if (combat_camera_aim(&aim) && g_combat_camera_hit.shape) t=combat_ray_target(&g_combat_camera_hit,pc);
+    Vec3 aim={0,0,0};void *t=NULL;
+    int aim_ok=combat_camera_aim(&aim);
+    if (aim_ok && g_combat_camera_hit.shape) t=combat_ray_target(&g_combat_camera_hit,pc);
+    ++g_fpc_pick.n;g_fpc_pick.ms=fpc_now_ms();g_fpc_pick.aim_ok=aim_ok;g_fpc_pick.have_t=g_have_t;g_fpc_pick.have_eye=g_have_eye;
+    g_fpc_pick.anchor=g_view_have_anchor;g_fpc_pick.ogre=g_ogre_ready;g_fpc_pick.hit=g_combat_camera_hit;g_fpc_pick.aim=aim;
+    g_fpc_pick.origin=g_combat_aim_origin;g_fpc_pick.dir=g_combat_aim_dir;
+    g_fpc_pick.kept=(int)(g_combat_aim_attr_kept-sk);g_fpc_pick.dropped=(int)(g_combat_aim_attr_dropped-sdr);
+    if (t) fpc_name(t,g_fpc_pick.name,sizeof g_fpc_pick.name); else strcpy(g_fpc_pick.name,"none");
     g_mr_perch_node=saved_node;g_mr_perch_cache=saved_cache;
     g_combat_camera_hit=saved_hit;g_combat_aim_origin=so;g_combat_aim_dir=sd;g_combat_aim_have_ray=sh;
     g_combat_aim_attr_kept=sk;g_combat_aim_attr_dropped=sdr;
@@ -331,13 +350,14 @@ static void fp_controls_tick(void *gw,float dt) {
         if (edge[b]) g_fpc_down_ms[b]=now;
         g_fpc_prev[b]=in[b];g_fpc_input[b]=in[b];
     }
+    if (g_fpc_pick_req && pc) {g_fpc_pick_req=0;fpc_crosshair_char(pc);}   /* fp_keys pick (test) */
     if (!g_is_down && g_fpc_hook_ok) {
         if (edge[FPC_R] && !in[FPC_RMB]) fpc_draw_toggle(pc);   /* R with RMB held = reload (adapter) */
         if (edge[FPC_MMB] && g_fpc_select) {
             void *t=fpc_crosshair_char(pc);
             if (t) {g_fpc_select(fpc_player_interface(gw),t,0);++g_fpc_mmb_selects;fpc_name(t,g_fpc_last_select,sizeof g_fpc_last_select);
                     logline("[controls] MMB select %s",g_fpc_last_select);}
-            else ++g_fpc_mmb_none;
+            else {++g_fpc_mmb_none;char pb[512];fpc_pick_text(pb,sizeof pb);logline("[controls] MMB select: nothing under the crosshair (%s)",pb);}
         }
         if (rel[FPC_RMB] && !g_fpc_drawn && now-g_fpc_down_ms[FPC_RMB]<FPC_MENU_CLICK_MS && g_fpc_ctxmenu) {
             void *t=fpc_crosshair_char(pc);
@@ -397,6 +417,11 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         if (b<0 || b>1 || fr<2 || fr>600) {r->append(r,"native <lmb|rmb> [frames 2..600]");return KAH_ERROR;}
         g_fpc_native_total[b]=g_fpc_native_frames[b]=fr;r->append(r,"native flags queued (playerControl input)");return KAH_OK;
     }
+    if ((argc==2||argc==3) && !_stricmp(argv[1],"pick")) {   /* pick: request a fresh pick next frame + show the last; pick show: last only */
+        if (argc==2) g_fpc_pick_req=1;
+        else if (_stricmp(argv[2],"show")) {r->append(r,"pick [show]");return KAH_ERROR;}
+        char b[640];fpc_pick_text(b,sizeof b);r->append(r,b);return KAH_OK;
+    }
     if (argc==3 && !_stricmp(argv[1],"swallow")) {
         g_fpc_swallow=!_stricmp(argv[2],"on");r->append(r,g_fpc_swallow?"swallow=1":"swallow=0");return KAH_OK;
     }
@@ -411,7 +436,7 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         g_fpc_swallow=1;for (int b=0;b<FPC_NBTN;++b) g_fpc_inj_until[b]=0;
         r->append(r,"counters reset, swallow=1");return KAH_OK;
     }
-    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|swallow on|off|focus on|off|reset");
+    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|pick [show]|swallow on|off|focus on|off|reset");
     return KAH_ERROR;
 }
 /* AnimationClass::startCombatAnimation(tech, speed, std::string) is not exported: it sits at a fixed
