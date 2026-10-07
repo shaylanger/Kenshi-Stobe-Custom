@@ -62,7 +62,6 @@ Deferred by Shay: PG 256 (no Swimming roll in this load order), F 62, F 63.
 
 | Bug | What | Confirm in |
 |---|---|---|
-| STOBE 87 | Dust King: no initiative check (covered by 88 + 61 PASS m18) | close at the next surrender run |
 
 ## 4. Harness (KAH) limits and open items
 

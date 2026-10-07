@@ -13,7 +13,6 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 
 | # | Bug | Fix / state |
 |---|---|---|
-| 87 | Dust King: no initiative check (his attack was stood down by another personal-fight guard) | test procedure fixed; covered by 88 + 61 PASS m18 |
 
 ## E. Design questions and features
 
