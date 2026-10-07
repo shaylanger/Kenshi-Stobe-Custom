@@ -40,8 +40,17 @@ engage() { in_fight && return 0; local who end
   for who in 1 2; do if [ $who = 1 ]; then A attack "$TG" "$FI" >/dev/null; else A attack "$FI" "$TG" >/dev/null; fi; end=$((SECONDS+8))
     while [ $SECONDS -lt $end ]; do in_fight && return 0; sleep 0.5; done; done; return 1; }
 take() { A select "$FI" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null; }
-# ready: release input, wait until the adapter owns a fighting fighter (why=ok, armed) and a click is legal
-ready() { inp 0 0; engage; local end=$((SECONDS+${1:-20})); while [ $SECONDS -lt $end ]; do
+# wake_tg: a knocked-out target ends the native fight and no attack order restarts it until it gets up. 5090 m50-b:
+# the katana hits of UI/KO/LOAD knocked Skaera out (UNARMED's `hp Skaera` said KO with every part at 100%, health 100
+# doesn't clear a KO timer), so LOAD's fresh click was not_ready and UNARMED's clicks 1-2 too (the fight ran 1.5 s after
+# the load, then active=0 target_h=#0 for 45 s). protect clears a KO at once; it is switched off again so the target's
+# damage stays measurable (unless a row protects it on purpose: TGP=1). WAKES counts the repairs (reported per row).
+TGP=0; WAKES=0
+tg_ko() { A hp "$TG" | grep -q ' KO parts'; }
+wake_tg() { [ "$TGP" = 1 ] && return 0; tg_ko || return 0; WAKES=$((WAKES+1)); A protect "$TG" on >/dev/null
+  for _ in $(seq 1 10); do tg_ko || break; sleep 0.3; done; A protect "$TG" off >/dev/null; ! tg_ko; }
+# ready: release input, wake a KO'd target, wait until the adapter owns a fighting fighter (why=ok, armed) and a click is legal
+ready() { inp 0 0; wake_tg; engage; local end=$((SECONDS+${1:-20})); while [ $SECONDS -lt $end ]; do
   [ "$(ms why)" = ok ] && [ "$(ms armed)" = 1 ] && in_fight && [ "$(ms dead)" = 0 ] && [ "$(ms state)" != 8 ] && return 0; sleep 0.3; done; return 1; }
 # fresh_click: one LMB edge at a legal moment; echoes the swing delta within 1.5 s (expect 1)
 fresh_click() { ready 15 || { echo not_ready; return; }; local s0; s0=$(ms swings); inp 0 1; sleep 0.15; inp 0 0
@@ -57,7 +66,7 @@ legal_click() { local end=$((SECONDS+6)) s; while [ $SECONDS -lt $end ]; do s=$(
 # click). 4080 batch 11: the wrapper's poll->click round trip (~1-2 s) let a stumble-locked fighter flip 3->8 before the
 # click landed, so 4 "legal" clicks were all rejected in STUMBLE. Echoes the swing delta, no_window (no legal frame
 # in 6 s), not_ready (no owned live fight) or cl_refused.
-cl_click() { inp 0 0; engage; local end=$((SECONDS+10)) ok=0 s0 f0 t0 s; while [ $SECONDS -lt $end ]; do
+cl_click() { inp 0 0; wake_tg; engage; local end=$((SECONDS+10)) ok=0 s0 f0 t0 s; while [ $SECONDS -lt $end ]; do
     [ "$(ms why)" = ok ] && [ "$(ms armed)" = 1 ] && in_fight && { ok=1; break; }; sleep 0.3; done
   [ $ok = 1 ] || { echo not_ready; return; }
   s=$(A fp_melee state); s0=$(echo "$s" | fld swings); f0=$(echo "$s" | fld cl_fired); t0=$(echo "$s" | fld cl_timeouts); close
@@ -117,9 +126,11 @@ if [ "$W" = not_allowed ] && [ "$SK" = "$S0" ] && [ "$SW" = "$SK" ] && [ "$FS" =
 BL0=$(ms blocks); FM0=$(ms fire_masked); LA0=$(cs inj_aim_cmds)
 ready 15 && PR=1 || PR=0; A save kah-fp-m08 >/dev/null; sleep 2; inp 0 1; A load kah-fp-m08 >/dev/null; A wait-world >/dev/null
 S0=$(ms swings); sleep 3; SL=$(ms swings); W=$(ms why); AR=$(ms armed); inp 0 0
-A protect "$FI" on >/dev/null; A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null; take
+# held: why=arming armed=0 is the expected state while LMB is still held after the load (no inherited click)
+tg_ko && KL=1 || KL=0; WK0=$WAKES
+A protect "$FI" on >/dev/null; A health "$TG" 100 >/dev/null; A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null; take
 A fp_combat on >/dev/null; close; ready 15; A fp_melee passive "$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')" >/dev/null; FS=$(fresh_click)   # new characters after load
-ev="load: pre_save_fight=$PR held_swings_after_load=$((SL-S0)) why=$W armed=$AR fresh_click_swings=$FS blocks +$(( $(ms blocks) - BL0 )) fire_masked +$(( $(ms fire_masked) - FM0 )) inj_aim_cmds +$(( $(cs inj_aim_cmds) - LA0 )) (sent 0) in_aim=$(ms in_aim) injection=$(ms injection)"
+ev="load: pre_save_fight=$PR held_swings_after_load=$((SL-S0)) held_why=$W held_armed=$AR released_why=$(ms why) released_armed=$(ms armed) $TG ko_after_load=$KL wakes=$((WAKES-WK0)) fresh_click_swings=$FS blocks +$(( $(ms blocks) - BL0 )) fire_masked +$(( $(ms fire_masked) - FM0 )) inj_aim_cmds +$(( $(cs inj_aim_cmds) - LA0 )) (sent 0) in_aim=$(ms in_aim) injection=$(ms injection)"
 if [ "$SL" = "$S0" ] && [ "$FS" = 1 ]; then row M08-LOAD PASS "$ev"; else row M08-LOAD FAIL "$ev"; fi
 
 # ---- M08-UNARMED: melee weapon unequipped -> unarmed click still swings (native martial arts), hits land ----
@@ -158,7 +169,7 @@ if [ "$OW" = 0 ] && [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !
 # 4080 batch 11: click 1 swung, then the target was KO (M08-ACTOR's native fight had worn it down; cleanup said "still KO")
 # and the fight ended (active=0 target_h=#0), so clicks 2-3 were not_ready. The target is protected (protect clears a KO
 # at once and keeps it up) and healed; clicks come from the product at a legal frame (cl_click).
-A protect "$TG" on >/dev/null; A health "$TG" 100 >/dev/null
+A protect "$TG" on >/dev/null; TGP=1; A health "$TG" 100 >/dev/null
 LS=$(A sever "$FI" left_arm noitem | grep -o "> [a-z]*" | tr -d "> "); sleep 2; take; A protect "$FI" on >/dev/null; sw=0; rs=""
 for _ in 1 2 3; do r=$(cl_click); rs="$rs$r,"; [ "$r" = 1 ] && sw=$((sw+1)); sleep 1.5; done
 ev="left arm severed (state=${LS:-?}): 3 clicks [${rs%,}] swung=$sw why=$(ms why) out_of_reach=$(ms out_of_reach) last_reject=$(ms last_reject) $TG $(A where "$TG" | grep -o 'KO\|DEAD' | head -1) fault=$(A fp_combat state | fld fault)"
