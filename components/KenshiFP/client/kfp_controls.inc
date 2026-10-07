@@ -295,7 +295,9 @@ static float g_fpc_sneak_chance=-1.0f;
 static char g_fpc_sneak_target[48]="none";
 static void *g_fpc_sneak_pc,*g_fpc_sneak_t;static double g_fpc_sneak_ms,g_fpc_sneak_elapsed;
 static int g_fpc_sneak_req;   /* fp_keys sneak: probe the crosshair target next tick */
-static struct { unsigned n; int stealth,aware,aware_any; float chance; char name[48]; } g_fpc_sneak_probe;
+/* hostile = PlayerInterface::isEnemy on the probed target, the same test fpc_engage uses to pick the attack task
+ * (5090 m50 N ST02: an aware target answered task 5 instead of 61 -> the test checks hostile=0 before the click) */
+static struct { unsigned n; int stealth,aware,aware_any,hostile; float chance; char name[48]; } g_fpc_sneak_probe;
 static int fpc_is_sneaking(void *pc) {
     return readable((void *)((uintptr_t)pc+CHAR_STEALTH_MODE),1) && *(unsigned char *)((uintptr_t)pc+CHAR_STEALTH_MODE);
 }
@@ -350,6 +352,8 @@ static void fpc_sneak_probe(void *pc) {
     ++g_fpc_sneak_probe.n;g_fpc_sneak_probe.stealth=fpc_is_sneaking(pc);
     g_fpc_sneak_probe.aware=t?fpc_target_aware(t,pc,1):-1;g_fpc_sneak_probe.aware_any=t?fpc_target_aware(t,pc,0):-1;
     g_fpc_sneak_probe.chance=t&&g_fpc_kochance?g_fpc_kochance(pc,t,1):-1.0f;
+    {   void *pi=fpc_player_interface(g_gw_cache);
+        g_fpc_sneak_probe.hostile=t&&pi&&g_fpc_isenemy?g_fpc_isenemy(pi,t)!=0:-1; }
     if (t) fpc_name(t,g_fpc_sneak_probe.name,sizeof g_fpc_sneak_probe.name); else strcpy(g_fpc_sneak_probe.name,"none");
 }
 static void fpc_free_swing(void *pc) {
@@ -574,9 +578,9 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
     if ((argc==2||argc==3) && !_stricmp(argv[1],"sneak")) {   /* sneak: probe the crosshair target next frame + show the last; sneak show: last only */
         if (argc==2) g_fpc_sneak_req=1;
         else if (_stricmp(argv[2],"show")) {r->append(r,"sneak [show]");return KAH_ERROR;}
-        char b[256];snprintf(b,sizeof b,"sneak n=%u stealth=%d target=%s target_aware=%d aware_any=%d ko_chance=%.3f",
+        char b[256];snprintf(b,sizeof b,"sneak n=%u stealth=%d target=%s target_aware=%d aware_any=%d ko_chance=%.3f hostile=%d",
             g_fpc_sneak_probe.n,g_fpc_sneak_probe.stealth,g_fpc_sneak_probe.n?g_fpc_sneak_probe.name:"none",
-            g_fpc_sneak_probe.aware,g_fpc_sneak_probe.aware_any,g_fpc_sneak_probe.chance);
+            g_fpc_sneak_probe.aware,g_fpc_sneak_probe.aware_any,g_fpc_sneak_probe.chance,g_fpc_sneak_probe.hostile);
         r->append(r,b);return KAH_OK;
     }
     if ((argc==2||argc==3) && !_stricmp(argv[1],"movers")) {   /* movers: snapshot next frame + show the last; movers show: last only */
