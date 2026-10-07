@@ -138,8 +138,8 @@ if [ "$W" = not_allowed ] && [ "$SU" = "$S0" ] && [ "$SC" = "$SU" ] && [ "$FS" =
 ready 15; S0=$(ms swings); A protect "$FI" off >/dev/null; A ko "$FI" 6 >/dev/null   # protect clears a KO at once
 for _ in $(seq 1 12); do [ "$(ms why)" = not_allowed ] && break; sleep 0.25; done; inp 0 1; sleep 1; W=$(ms why); SK=$(ms swings)
 for _ in $(seq 1 60); do [ "$(ms why)" = not_allowed ] || break; inp 0 1; sleep 0.5; done
-sleep 2; SW=$(ms swings); W2=$(ms why); inp 0 0; A protect "$FI" on >/dev/null; take; FS=$(fresh_click)
-ev="ko: why=$W swings_down=$((SK-S0)) after_wake_held=$((SW-SK)) why_after=$W2 fresh_click_swings=$FS"
+sleep 2; SW=$(ms swings); W2=$(ms why); inp 0 0; A protect "$FI" on >/dev/null; take; FS=$(fresh_click 12)   # target re-pinned in reach (spacing, as LOAD)
+ev="ko: why=$W swings_down=$((SK-S0)) after_wake_held=$((SW-SK)) why_after=$W2 fresh_click_swings=$FS st_found=$(ms st_found) st_missing=$(ms st_missing)"
 if [ "$W" = not_allowed ] && [ "$SK" = "$S0" ] && [ "$SW" = "$SK" ] && [ "$FS" = 1 ]; then row M08-KO PASS "$ev"; else row M08-KO FAIL "$ev"; fi
 
 # ---- M08-LOAD: save mid-fight, load with LMB held -> no inherited swing, adapter re-arms, fresh click swings ----
@@ -150,7 +150,7 @@ S0=$(ms swings); sleep 3; SL=$(ms swings); W=$(ms why); AR=$(ms armed); inp 0 0
 tg_ko && KL=1 || KL=0; WK0=$WAKES
 A protect "$FI" on >/dev/null; A health "$TG" 100 >/dev/null; A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null; take
 A fp_combat on >/dev/null; close; ready 15; A fp_melee passive "$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')" >/dev/null; FS=$(fresh_click)   # new characters after load
-ev="load: pre_save_fight=$PR held_swings_after_load=$((SL-S0)) held_why=$W held_armed=$AR released_why=$(ms why) released_armed=$(ms armed) $TG ko_after_load=$KL wakes=$((WAKES-WK0)) fresh_click_swings=$FS blocks +$(( $(ms blocks) - BL0 )) fire_masked +$(( $(ms fire_masked) - FM0 )) inj_aim_cmds +$(( $(cs inj_aim_cmds) - LA0 )) (sent 0) in_aim=$(ms in_aim) injection=$(ms injection)"
+ev="load: pre_save_fight=$PR held_swings_after_load=$((SL-S0)) held_why=$W held_armed=$AR released_why=$(ms why) released_armed=$(ms armed) $TG ko_after_load=$KL wakes=$((WAKES-WK0)) fresh_click_swings=$FS st_found=$(ms st_found) st_missing=$(ms st_missing) blocks +$(( $(ms blocks) - BL0 )) fire_masked +$(( $(ms fire_masked) - FM0 )) inj_aim_cmds +$(( $(cs inj_aim_cmds) - LA0 )) (sent 0) in_aim=$(ms in_aim) injection=$(ms injection)"
 if [ "$SL" = "$S0" ] && [ "$FS" = 1 ]; then row M08-LOAD PASS "$ev"; else row M08-LOAD FAIL "$ev"; fi
 
 # ---- M08-UNARMED: melee weapon unequipped -> unarmed click still swings (native martial arts), hits land ----
@@ -181,7 +181,7 @@ A equip "$FI" "$WEP" | grep -q ERROR && { A pickup "$FI" "$WEP" now >/dev/null; 
 # U2 = the second unequip's reply: "ERROR: not equipped" proves the weapon stayed off during the clicks (expected)
 # hit evidence: the target's flesh dropped, or native addWound calls by the fighter with cut+blunt > 0 (melee_hits).
 # Blood is reported only: it also falls from the bleeding of older cuts (m50-b: 77.7->76.9 with no part touched).
-ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw gap_dm=[${ug% }] face_deg=[${uf% }] zone_targets=[${uz% }] $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA ring[${WS% }] fighter_on_target=$FT blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
+ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw gap_dm=[${ug% }] face_deg=[${uf% }] zone_targets=[${uz% }] $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA ring[${WS% }] fighter_on_target=$FT blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why) st_found=$(ms st_found) st_missing=$(ms st_missing) expired=$(ms expired)"
 if [[ "$U1" == unequipped* ]] && [[ "$U2" == *"not equipped"* ]] && [ "$sw" -ge 3 ] && awk -v a="$H0" -v b="$H1" -v h="$MH" -v d="$MDT" -v ft="$FT" 'BEGIN{exit !(b<a-0.5 || (h>0 && d>0) || ft>0)}'; then row M08-UNARMED PASS "$ev"; else row M08-UNARMED FAIL "$ev"; fi
 
 # ---- M08-CROWD: a second hostile attacks the fighter -> adapter stays owned/ok, clicks still swing, AI refused ----
