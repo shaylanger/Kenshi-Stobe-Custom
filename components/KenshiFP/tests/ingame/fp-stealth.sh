@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fp-stealth.sh: in-game FP stealth-attack rows (COMBAT_TEST_PLAN.md "Gate 1c"), KenshiFP 7B8175EF+ (fccc5fbd+ for the probe hostile field ST02 checks).
+# fp-stealth.sh: in-game FP stealth-attack rows (COMBAT_TEST_PLAN.md "Gate 1c"), KenshiFP 7B8175EF+ (fccc5fbd+ for the probe hostile field ST02/ST03 check, f6eb3d56+ for the enemy_tp/enemy_pt trace).
 # Sneaking + LMB drawn (melee) on a character that does not perceive the attacker = the game's own sneak knockout
 # (TaskType STEALTH_KNOCKOUT 228, the vanilla sneak-mode order). Evidence: `fp_keys state` sneak_* fields
 # (sneak_path, sneak_aware, sneak_chance, sneak_result, sneak_attacks), `fp_keys sneak` (crosshair probe: target_aware, hostile = isEnemy, the test fpc_engage uses for task 5 vs 61),
@@ -116,7 +116,7 @@ echo "SETUP sh=$SH mt=$MT stealth=$ST0 assassination=$AS0 -> $SKILL weapon=$WEP 
 # spawn_target <row>: TH (ref) / TN (name) of a fresh neutral Hungry Bandit (Tech Hunters), or return 1
 spawn_target() { local SP; SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH" dist 40 count 1 2>&1); echo "$1 spawn: $SP" >> "$LOG"
   TH=$(grep -oE '#[0-9]+/[0-9]+' <<<"$SP" | head -1); TN=$(sed 's/^spawned [^:]*: //; s/ #[0-9].*//' <<<"$SP")
-  [ -n "$TH" ] || { SPF="spawn failed ($(cut -c1-100 <<<"$SP"))"; return 1; }; SPAWNED+=" $TH"; A hunger "$TH" 300 >/dev/null
+  [ -n "$TH" ] || { SPF="spawn failed ($(cut -c1-100 <<<"$SP"))"; return 1; }; SPAWNED+=" $TH"; HT=""
   # relation also ends the faction's enemy state (harness 57c687f+: reply enemy=<before>-><after>). 4080 b42: K05-UNPROV
   # (and each ST01 knockout) made Tech Hunters an enemy at relation 20: the next spawn fought Axima at once, task 5 not 61
   local R; R=$(A relation "$TH" "$NEUTRAL_REL"); echo "$1 relation: $R" >> "$LOG"
@@ -125,6 +125,14 @@ spawn_target() { local SP; SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH
 # ready_check <sneak 0|1>: before the click the shooter is out of any native fight and in the wanted sneak state; RC = why not
 ready_check() { RC=""; waitf 8 not_fight || RC="$SH in a native fight before the click [$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')]"
   kis sneak "$1" || stealth_to "$1" || RC="$RC sneak not $1 before the click ($(A stealth "$SH" "$([ "$1" = 1 ] && echo on || echo off)" | cut -c1-80))"; [ -z "$RC" ]; }
+# htrace <row> <step>: probe hostile (PlayerInterface::isEnemy) and enemy_tp/enemy_pt (Character::isEnemy target->player,
+# player->target; KenshiFP f6eb3d56+) at a setup step, crosshair on the target; HT = the trace so far (in the evidence).
+# 4080 b43: each fresh Tech Hunters spawn showed hostile=1 (faction enemy=0, no crime) while K05-UNPROV's identical spawn
+# (no hunger call, no sneaking) got task 61: the trace shows which step flips it
+htrace() { local P; P=$(probe); HT="$HT $2:h=$(fld hostile <<<"$P")/tp=$(fld enemy_tp <<<"$P")/pt=$(fld enemy_pt <<<"$P")/s=$(fld stealth <<<"$P")"
+  echo "$1 hostile-trace $2: $(cut -d' ' -f2- <<<"$P")" >> "$LOG"; }
+# feed <row>: hunger 300 (spawned Hungry Bandits starve), now after the pick and traced before/after
+feed() { htrace "$1" picked; A hunger "$TH" 300 >/dev/null; sleep 0.5; htrace "$1" fed; }
 # place <face npc>: target pinned 1.5 m in front of the player, facing <face>
 place() { A pin "$TH" at "$SH" dist 15 face "$1" | grep -q '^pinned' && PINNED+=" $TH"; }
 retire() { A ko "$TH" 3600 >/dev/null; A pin "$TH" off >/dev/null; waitf 10 isko "$TH"; A teleport "$TH" "$SH" dist 400 >/dev/null
@@ -149,9 +157,9 @@ unaware_ready() { local d s p; for _ in 1 2 3; do live_tn; d=$(A detecttime "$SH
 if want ST01; then ui_clear
   if ! spawn_target ST01; then row ST01 FAIL "setup $SPF"
   elif ! place "$MT"; then row ST01 FAIL "setup could not pin $TN in front of $SH"; retire
-  else sleep 1; draw_to 1; stealth_to 1; aim_at "$TH" 13; waitf 8 not_fight
-    if ! pick_on ST01 1; then row ST01 FAIL "setup crosshair pick never on $TN ($(A fp_keys pick show | cut -c1-120))"
-    elif ! ready_check 1; then row ST01 FAIL "setup $RC"
+  else sleep 1; draw_to 1; stealth_to 0; aim_at "$TH" 13; waitf 8 not_fight
+    if ! pick_on ST01 0; then row ST01 FAIL "setup crosshair pick never on $TN ($(A fp_keys pick show | cut -c1-120))"
+    elif feed ST01; stealth_to 1; htrace ST01 sneaking; ! ready_check 1; then row ST01 FAIL "setup $RC"
     elif ! unaware_ready; then row ST01 FAIL "setup $TN never unaware of $SH: $UR"
     else KS0=$(A fp_keys state); A0=$(fld sneak_attacks <<<"$KS0"); C0=$(fld sneak_clicks <<<"$KS0")
       A fp_keys press lmb 100 >/dev/null; waitf 3 kge sneak_clicks $((C0+1)); K1=$(A fp_keys state)
@@ -159,7 +167,7 @@ if want ST01; then ui_clear
       sleep 0.5; K2=$(A fp_keys state); KO=0; isko "$TH" && KO=1
       LL=$(grep -a "\[controls\] LMB sneak=1 target=$(urx_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*LMB sneak=/sneak=/')
       LR=$(grep -a "\[controls\] sneak result=.* target=$(urx_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*sneak result=/result=/')
-      ev="pre: $UR | click: sneak_clicks $C0->$(fld sneak_clicks <<<"$K1") sneak_attacks $A0->$(fld sneak_attacks <<<"$K1") path=$(fld sneak_path <<<"$K1") last_task=$(fld last_task <<<"$K1") sneak=$(fld sneak <<<"$K1") drawn=$(fld drawn <<<"$K1") chance=$(fld sneak_chance <<<"$K1") | result=$(fld sneak_result <<<"$K2") elapsed_ms=$(fld sneak_elapsed_ms <<<"$K2") ${TN}_KO=$KO | log: [$LL] [$LR]"
+      ev="pre: $UR | trace:$HT | click: sneak_clicks $C0->$(fld sneak_clicks <<<"$K1") sneak_attacks $A0->$(fld sneak_attacks <<<"$K1") path=$(fld sneak_path <<<"$K1") last_task=$(fld last_task <<<"$K1") sneak=$(fld sneak <<<"$K1") drawn=$(fld drawn <<<"$K1") chance=$(fld sneak_chance <<<"$K1") | result=$(fld sneak_result <<<"$K2") elapsed_ms=$(fld sneak_elapsed_ms <<<"$K2") ${TN}_KO=$KO | log: [$LL] [$LR]"
       ok=1; [ "$(fld sneak_attacks <<<"$K1")" = $((A0+1)) ] && [ "$(fld sneak_path <<<"$K1")" = vanilla_sneak ] && [ "$(fld last_task <<<"$K1")" = 228 ] || ok=0
       grep -q 'target_aware=0 .*path=vanilla_sneak task=228' <<<"$LL" || ok=0
       [ "$(fld sneak_result <<<"$K2")" = ko ] && [ $KO = 1 ] && grep -q '^result=ko ' <<<"$LR" || ok=0
@@ -177,7 +185,7 @@ if want ST02; then ui_clear
     # aware while NOT sneaking first; sneak goes on only right before the click (5090 m50 N got task 5: Tech Hunters were an
     # enemy after the ST01 knockout, see spawn_target); the sneaking probe must show target_aware=1 and hostile=0
     if ! pick_on ST02 0; then row ST02 FAIL "setup crosshair pick never on $TN ($(A fp_keys pick show | cut -c1-120))"
-    elif ! ready_check 0; then row ST02 FAIL "setup $RC"
+    elif feed ST02; ! ready_check 0; then row ST02 FAIL "setup $RC"
     else AW=""; for _ in $(seq 1 10); do P=$(probe); S=$(A senses "$TH" "$SH")
       AW="probe: $(cut -d' ' -f2- <<<"$P") | senses: sees=$(fld sees <<<"$S") aware=$(fld aware <<<"$S")"
       [ "$(fld target <<<"$P")" = "$(uname_ "$TN")" ] && [ "$(fld target_aware <<<"$P")" = 1 ] && break; AW="NOTAWARE $AW"; sleep 1; done
@@ -185,7 +193,7 @@ if want ST02; then ui_clear
     else stealth_to 1; P2=$(probe); AW2="sneaking probe: $(cut -d' ' -f2- <<<"$P2")"
     if [ "$(fld stealth <<<"$P2")" != 1 ]; then row ST02 FAIL "setup sneak not on right before the click: $AW2"
     elif [ "$(fld target <<<"$P2")" != "$(uname_ "$TN")" ] || [ "$(fld target_aware <<<"$P2")" != 1 ]; then row ST02 FAIL "setup $TN not the aware crosshair target once sneaking: $AW2"
-    elif [ "$(fld hostile <<<"$P2")" != 0 ]; then row ST02 FAIL "setup target hostile before click (hostile=$(fld hostile <<<"$P2"), wanted 0; needs KenshiFP fccc5fbd+): $AW2 | crime: $(A crime "$SH" | cut -c1-200)"
+    elif [ "$(fld hostile <<<"$P2")" != 0 ]; then row ST02 FAIL "setup target hostile before click (hostile=$(fld hostile <<<"$P2"), wanted 0; needs KenshiFP fccc5fbd+): $AW2 | crime: $(A crime "$SH" | cut -c1-200) | trace:$HT"
     else KS0=$(A fp_keys state); A0=$(fld sneak_attacks <<<"$KS0"); C0=$(fld sneak_clicks <<<"$KS0"); G0=$(fld engages <<<"$KS0")
       A fp_keys press lmb 100 >/dev/null; waitf 3 kge sneak_clicks $((C0+1)); waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
       LL=$(grep -a "\[controls\] LMB sneak=1 target=$(urx_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*LMB sneak=/sneak=/')
@@ -202,8 +210,8 @@ if want ST03; then ui_clear
   elif ! place "$MT"; then row ST03 FAIL "setup could not pin $TN in front of $SH"; retire
   else sleep 1; draw_to 1; stealth_to 0; aim_at "$TH" 13; waitf 8 not_fight; live_tn; ser=$(id_of "$TH")
     if ! pick_on ST03 0; then row ST03 FAIL "setup crosshair pick never on $TN ($(A fp_keys pick show | cut -c1-120))"
-    elif ! ready_check 0; then row ST03 FAIL "setup $RC"
-    elif P3=$(probe); [ "$(fld hostile <<<"$P3")" != 0 ]; then row ST03 FAIL "setup target hostile before click (hostile=$(fld hostile <<<"$P3"), wanted 0; needs KenshiFP fccc5fbd+): $(cut -d" " -f2- <<<"$P3") | crime: $(A crime "$SH" | cut -c1-200)"
+    elif feed ST03; ! ready_check 0; then row ST03 FAIL "setup $RC"
+    elif P3=$(probe); [ "$(fld hostile <<<"$P3")" != 0 ]; then row ST03 FAIL "setup target hostile before click (hostile=$(fld hostile <<<"$P3"), wanted 0; needs KenshiFP fccc5fbd+): $(cut -d" " -f2- <<<"$P3") | crime: $(A crime "$SH" | cut -c1-200) | trace:$HT"
     else S=$(A senses "$TH" "$SH"); KS0=$(A fp_keys state); C0=$(fld sneak_clicks <<<"$KS0"); A0=$(fld sneak_attacks <<<"$KS0"); G0=$(fld engages <<<"$KS0")
       A fp_keys press lmb 100 >/dev/null; waitf 3 kge engages $((G0+1)); waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
       ev="sneak=$(fld sneak <<<"$KS0") senses_aware=$(fld aware <<<"$S") | sneak_clicks $C0->$(fld sneak_clicks <<<"$K") sneak_attacks $A0->$(fld sneak_attacks <<<"$K") engages $G0->$(fld engages <<<"$K") last_task=$(fld last_task <<<"$K") native_fight_on_$(uname_ "$TN")=$((1-FT))"
