@@ -1,6 +1,9 @@
 /* Camera zoom keeps direct-control ownership; native+visual static collision.
  * Floating-origin calibration uses the pre-offset anchor, never the orbit eye. */
 static Vec3 g_view_anchor, g_view_written;
+/* combat physics trace past characters (kfp_controls.inc, after the trace bindings): wall distance or -1 */
+static float fp_view_trace_wall(const Vec3 *from,const Vec3 *dir,float range);
+static unsigned g_view_trace_blocks;
 static int g_view_have_anchor, g_view_collision_dead;
 static volatile LONG g_view_injected_wheel;
 static void fp_view_input(void) {
@@ -49,6 +52,13 @@ static void fp_view_apply(Vec3 *eye) {
                    eye->y+right.y*sides[i][0]+up.y*sides[i][1],
                    eye->z-g_tz+right.z*sides[i][0]+up.z*sides[i][1]};
         Vec3 hit;
+        {   /* the physics trace the aim uses stops at building walls (R10); fall_ray/mesh missed shack walls (b30) */
+            float distance=fp_view_trace_wall(&from,&dir,wanted+.25f);
+            if (distance>=0 && distance<allowed+.25f) {
+                float limit=distance-.25f; if (limit<0) limit=0;
+                if (limit<allowed) { allowed=limit; g_view.blocked=1; ++g_view_trace_blocks; }
+            }
+        }
         for (int visual=0;visual<2;++visual) {
             int got=visual?meshray_refine(&from,&dir,wanted+.25f,&hit):fall_ray(&from,&dir,&hit);
             if (!got) continue;
@@ -85,7 +95,7 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
     if (argc==3 && !_stricmp(argv[1],"distance")) {
         char *end; errno=0; float d=strtof(argv[2],&end);
         if (errno || end==argv[2] || *end || !isfinite(d) || d<0 || d>KFP_VIEW_MAX) {
-            r->append(r,"distance must be finite 0..12"); return KAH_ERROR;
+            r->append(r,"distance must be finite 0..60"); return KAH_ERROR;
         }
         g_view.target=d; r->append(r,"camera distance requested; verify applied/actual state"); return KAH_OK;
     }
@@ -113,7 +123,8 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
 #define KFP_PROBE_D(got) ((got)?((hit.x-from.x)*dir.x+(hit.y-from.y)*dir.y+(hit.z-from.z)*dir.z):-1.0f)
         d=KFP_PROBE_D(fall_ray_m(&from,&dir,&hit,0x88204u)); n+=snprintf(b+n,sizeof(b)-n,"probe from=%.1f,%.1f,%.1f yaw=%.4f cam=%.2f",from.x,from.y,from.z,g_yaw,d);
         d=KFP_PROBE_D(fall_ray_m(&from,&dir,&hit,0xfffffffeu)); n+=snprintf(b+n,sizeof(b)-n," all=%.2f",d);
-        d=KFP_PROBE_D(meshray_refine(&from,&dir,20.0f,&hit)); n+=snprintf(b+n,sizeof(b)-n," mesh=%.2f bits=",d);
+        d=KFP_PROBE_D(meshray_refine(&from,&dir,20.0f,&hit)); n+=snprintf(b+n,sizeof(b)-n," mesh=%.2f",d);
+        d=fp_view_trace_wall(&from,&dir,KFP_VIEW_MAX+1.0f); n+=snprintf(b+n,sizeof(b)-n," trace=%.2f bits=",d);
         for (int bit=1;bit<32 && n<sizeof(b)-24;++bit) {
             d=KFP_PROBE_D(fall_ray_m(&from,&dir,&hit,1u<<bit));
             if (d>=0 && d<20.0f) n+=snprintf(b+n,sizeof(b)-n,"%d:%.2f,",bit,d);
@@ -123,7 +134,7 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         r->append(r,b); return KAH_OK;
     }
     if (argc!=2 || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_camera state|probe|distance <0..12>|wheel <-2400..2400>|look <yaw radians> <pitch radians>"); return KAH_ERROR;
+        r->append(r,"usage: fp_camera state|probe|distance <0..60>|wheel <-2400..2400>|look <yaw radians> <pitch radians>"); return KAH_ERROR;
     }
     Vec3 actual={0},fresh={0}; int have_actual=0,have_fresh=0;
     if (g_fp_mode && g_have_eye && g_fp_control_actor && g_ogre_ready && g_node_get_dpos && g_view_have_anchor) {
@@ -160,8 +171,8 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         written_distance=sqrtf(x*x+y*y+z*z);
     }
     char b[640];
-    snprintf(b,sizeof(b),"direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f yaw=%.6f pitch=%.6f world_valid=%d camera_x=%.6f camera_y=%.6f camera_z=%.6f",
-        !!g_fp_mode,g_cfg_camera_zoom,g_view.target,g_view.applied,distance,have_actual,fp_view_is_eye(),
+    snprintf(b,sizeof(b),"view_max=%.1f trace_blocks=%u direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f yaw=%.6f pitch=%.6f world_valid=%d camera_x=%.6f camera_y=%.6f camera_z=%.6f",
+        (double)KFP_VIEW_MAX,g_view_trace_blocks,!!g_fp_mode,g_cfg_camera_zoom,g_view.target,g_view.applied,distance,have_actual,fp_view_is_eye(),
         g_view.blocked,g_view.collision_known,g_speed_scale,g_yaw,g_pitch,have_actual&&g_have_t,
         have_actual&&g_have_t?actual.x-g_tx:0,have_actual&&g_have_t?actual.y:0,
         have_actual&&g_have_t?actual.z-g_tz:0);

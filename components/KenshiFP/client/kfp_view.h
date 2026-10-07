@@ -2,14 +2,17 @@
 #define KFP_VIEW_H
 #include <math.h>
 typedef struct { float target, applied; int collision_known, blocked; } KfpView;
-#define KFP_VIEW_MAX 12.0f
+/* ~3-4 body lengths (a body is ~18 dm): Shay 2026-10-06, needs wall collision (C05-INTERIOR) */
+#define KFP_VIEW_MAX 60.0f
 #define KFP_VIEW_EYE_LIMIT 0.65f
 static float kfp_view_clamp(float x) {
     if (!isfinite(x) || x<0.0f) return 0.0f;
     return x>KFP_VIEW_MAX?KFP_VIEW_MAX:x;
 }
 static void kfp_view_wheel(KfpView *v,int wheel) {
-    v->target=kfp_view_clamp(v->target-(float)wheel*(0.5f/120.0f));
+    /* nonlinear: 0.5 dm per notch at the eye, growing with distance (~17 notches eye -> max) */
+    float t=kfp_view_clamp(v->target);
+    v->target=kfp_view_clamp(t-(float)wheel*((0.5f+0.2f*t)/120.0f));
 }
 static float kfp_view_next(const KfpView *v,float dt) {
     float target=kfp_view_clamp(v->target);

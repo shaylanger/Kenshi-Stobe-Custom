@@ -291,7 +291,7 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
   for _ in $(seq 1 22); do sleep 0.5; PN=$(pos "$SH"); if lt "$(d2 "$PP" "$PN")" 0.5; then N=$((N+1)); [ $N -ge 3 ] && { WALL=1; break; }; else N=0; fi; PP=$PN; done
   A fp_move none >/dev/null; sleep 0.5
   YB=$(awk -v y="$YAW" 'BEGIN{y+=3.14159; if(y>3.14159)y-=6.28318; printf "%.4f", y}')   # face away: the wall is behind
-  look "$YB" 0; A fp_camera distance 12 >/dev/null; sleep 1.5; CI=$(A fp_camera state)
+  look "$YB" 0; A fp_camera distance 30 >/dev/null; sleep 1.5; CI=$(A fp_camera state)
   BLK=$(fld blocked <<<"$CI"); AP=$(fld applied <<<"$CI"); TT=$(fld target <<<"$CI"); AD=$(fld actual_distance <<<"$CI")
   PRB=$(A fp_camera probe | grep -o 'cam=.*')   # pull-back ray per collision mask (which group the wall is in)
   YAW=$YB; read -r MA _ _ _ <<<"$(walk "$SH" w 1500)"; A fp_camera distance 0 >/dev/null

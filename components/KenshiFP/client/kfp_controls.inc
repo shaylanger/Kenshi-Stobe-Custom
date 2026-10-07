@@ -490,3 +490,19 @@ static void fpc_hud_update(int show) {
     }
     g_guard_armed=0;
 }
+/* Camera pull-back collision (kfp_view.inc): the aim physics trace (0x087f9e07) from the eye backwards;
+ * character hits (our own head/body first, squad mates behind us) are re-cast past, at most 3 times.
+ * Caller (fp_view_apply / probe) holds the crash guard. Returns the wall distance along dir or -1. */
+static float fp_view_trace_wall(const Vec3 *from,const Vec3 *dir,float range) {
+    if (!g_combat_physics_trace || !g_combat_hit_ctor) return -1.0f;
+    Vec3 o=*from;float done=0;
+    for (int i=0;i<4 && done<range;++i) {
+        CombatRayHit h;
+        int t=combat_trace_ray(&o,dir,range-done,&h);
+        if (t<=0 || !isfinite(h.distance)) return -1.0f;
+        if (h.ids[0]!=1) return done+h.distance;
+        float step=h.distance+0.3f;     /* past this body's surface */
+        done+=step;o.x+=dir->x*step;o.y+=dir->y*step;o.z+=dir->z*step;
+    }
+    return -1.0f;
+}

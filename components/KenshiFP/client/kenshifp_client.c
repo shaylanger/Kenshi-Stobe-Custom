@@ -2304,7 +2304,7 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_combat_probe", "fp_combat_probe begin|end|state|events [after_sequence]|clear", kah_fp_combat_probe, NULL)
           + g_kah.registerCommand("fp_control", "fp_control state|take|press", kah_fp_control, NULL)
           + g_kah.registerCommand("fp_move", "fp_move <wasd|none> [ms] | state (TEST ONLY WASD hold)", kah_fp_move, NULL)
-          + g_kah.registerCommand("fp_camera", "fp_camera state|distance <0..12>|wheel <delta>|look <yaw radians> <pitch radians>", kah_fp_camera, NULL)
+          + g_kah.registerCommand("fp_camera", "fp_camera state|probe|distance <0..60>|wheel <delta>|look <yaw radians> <pitch radians>", kah_fp_camera, NULL)
           + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|aim (read-only)|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
           + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL)
           + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|swallow on|off|reset", kah_fp_keys, NULL);
