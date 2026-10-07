@@ -3427,7 +3427,10 @@ static void fp_camera_override(void *gw)
          * below is TODAY's, not yesterday's (Ogre otherwise applies animation at
          * render-queue time, leaving the camera one frame behind the rendered body).
          * Frame-guarded: the engine's own later call no-ops, no double cost. */
-        if (g_fp_mode && pcx && g_entity_updateanim) {
+        /* C05-KO: not on a downed body -- the ragdoll owns its bones; a forced mid-frame animation
+         * update re-poses a physics-driven skeleton (one frame of camera lag while down instead). */
+        if (body_down) fp_down_note("forced entity animation update", pcx);
+        if (g_fp_mode && pcx && g_entity_updateanim && !body_down) {
             void *animc = readable((void *)((uintptr_t)pcx + CHAR_ANIM), 8)
                         ? *(void **)((uintptr_t)pcx + CHAR_ANIM) : NULL;
             void *went = animc ? find_body_entity(animc) : NULL;   /* clobbers g_guard_jb: called unguarded */
@@ -3901,7 +3904,11 @@ static void fp_camera_override(void *gw)
                     }
                     g_get_bone_world(pc, &head, g_head_bone);
                     Vec3 h = { head.x - feet.x, head.y - feet.y, head.z - feet.z };
-                    g_head_above = h.y;   /* head height over feet; small => actually prone */
+                    /* A failed head-bone read returns the feet (|h| ~ 0): keep the last
+                     * height instead of reading it as "prone" (C05-KO b33: head_above=0.00
+                     * after the fling => downed=1 => no fresh walk on a standing char). */
+                    if (h.x*h.x + h.y*h.y + h.z*h.z > 0.25f)
+                        g_head_above = h.y;   /* head height over feet; small => actually prone */
                     if (h.x*h.x + h.y*h.y + h.z*h.z > 0.25f) {
                         eyeW.y = head.y - EYE_DROP;   /* head-bone Y directly (Y not rebased) */
                         /* Floating-origin rebase guard: loading a new map chunk
@@ -4620,6 +4627,68 @@ static void award_move_xp(void *pc, void *mv, float dt)
 }
 
 static int combat_char_unconscious(void *pc);   /* kfp_combat_native.inc: medical KO flag */
+/* C05-KO trace (4080 b33): the KO'd body still flew 7 km in ONE tick, 58 ms after the knockdown was
+ * first seen, with no FP writer armed (dm=0 face=0 fall=0 rd=0). Logged per episode: the last 6
+ * standing ticks and the first 12 down ticks, with the CharMovement state a KO ragdoll inherits
+ * (currentMotion +0xA8, currentSpeed, desiredMotion, movementMode) and the loco/IK bone ownership.
+ * At the knockdown edge the mover's motion is zeroed when no fall/dive owns it, so the ragdoll
+ * can't inherit a drive vector (the hold may have left MOVE_DIRECTION state behind). */
+typedef struct { DWORD ms; Vec3 p, cm, dmo; float spd; int mode, mask, prone, ko, loco, ikp, dm, wd; } KfpDownSample;
+static KfpDownSample g_down_ring[6];
+static int g_down_ring_n, g_down_ring_i, g_down_trace_left, g_down_prev;
+static unsigned g_down_episodes, g_down_motion_cleared;
+static void *fp_char_mover(void *pc)
+{
+    return (pc && readable((void *)((uintptr_t)pc + CHAR_MOVEMENT), 8)) ? *(void **)((uintptr_t)pc + CHAR_MOVEMENT) : NULL;
+}
+static void fp_down_sample(void *pc, int ko, KfpDownSample *s)
+{
+    memset(s, 0, sizeof *s);
+    s->ms = GetTickCount(); s->mode = -1; s->spd = -1.0f;
+    char_position(pc, &s->p);
+    void *mv = fp_char_mover(pc);
+    if (mv && readable((void *)((uintptr_t)mv + MV_CURRENT_MOTION), 12)) s->cm = *(Vec3 *)((uintptr_t)mv + MV_CURRENT_MOTION);
+    if (mv && readable((void *)((uintptr_t)mv + MV_CURRENT_SPEED), 4)) s->spd = *(float *)((uintptr_t)mv + MV_CURRENT_SPEED);
+    if (mv && readable((void *)((uintptr_t)mv + MV_DESIREDMOTION), 12)) s->dmo = *(Vec3 *)((uintptr_t)mv + MV_DESIREDMOTION);
+    if (mv && readable((void *)((uintptr_t)mv + MV_MOVEMODE), 4)) s->mode = *(int *)((uintptr_t)mv + MV_MOVEMODE);
+    s->mask = (int)fall_ragdoll_mask(pc); s->prone = char_prone_state(pc); s->ko = ko;
+    s->loco = g_loco_ready; s->ikp = g_ik_pospushed; s->dm = (int)g_dm_active; s->wd = g_was_direct;
+}
+static void fp_down_log(const char *tag, const KfpDownSample *s)
+{
+    logline("[down] trace %s t=%lu pos=%.1f,%.1f,%.1f cm=%.2f,%.2f,%.2f spd=%.2f desired=%.2f,%.2f,%.2f mode=%d mask=0x%x prone=%d ko=%d loco=%d ikpush=%d dm=%d was_direct=%d",
+            tag, (unsigned long)s->ms, s->p.x, s->p.y, s->p.z, s->cm.x, s->cm.y, s->cm.z, s->spd,
+            s->dmo.x, s->dmo.y, s->dmo.z, s->mode, (unsigned)s->mask, s->prone, s->ko, s->loco, s->ikp, s->dm, s->wd);
+}
+static void fp_down_trace(void *pc, int body_down, int ko)
+{
+    KfpDownSample s;
+    fp_down_sample(pc, ko, &s);
+    if (body_down && !g_down_prev) {
+        ++g_down_episodes;
+        int n = g_down_ring_n < 6 ? g_down_ring_n : 6;
+        for (int i = 0; i < n; ++i) fp_down_log("pre", &g_down_ring[(g_down_ring_i + 6 - n + i) % 6]);
+        g_down_trace_left = 12;
+        void *mv = fp_char_mover(pc);
+        if (mv && g_fall_rd == FALLRD_OFF && !g_fall_active
+            && readable((void *)((uintptr_t)mv + MV_CURRENT_MOTION), 12)
+            && readable((void *)((uintptr_t)mv + MV_CURRENT_SPEED), 4)) {
+            Vec3 *cm = (Vec3 *)((uintptr_t)mv + MV_CURRENT_MOTION);
+            logline("[down] knockdown edge: mover motion cleared (cm was %.2f,%.2f,%.2f spd=%.2f mode=%d)",
+                    cm->x, cm->y, cm->z, *(float *)((uintptr_t)mv + MV_CURRENT_SPEED), s.mode);
+            cm->x = cm->y = cm->z = 0.0f;
+            *(float *)((uintptr_t)mv + MV_CURRENT_SPEED) = 0.0f;
+            ++g_down_motion_cleared;
+        }
+    }
+    if (body_down && g_down_trace_left > 0) { --g_down_trace_left; fp_down_log("down", &s); }
+    if (!body_down) {
+        g_down_ring[g_down_ring_i] = s; g_down_ring_i = (g_down_ring_i + 1) % 6;
+        if (g_down_ring_n < 6) ++g_down_ring_n;
+    }
+    g_down_prev = body_down;
+}
+
 static void fp_movement(void *gw, float dt)
 {
     if (!g_fp_mode || !g_charmove_setdest) {
@@ -4652,6 +4721,7 @@ static void fp_movement(void *gw, float dt)
         } else dhave = 0;
         if (!body_down) g_down_note_mask = 0;   /* next episode logs again */
     }
+    fp_down_trace(pc, body_down, ko_now);
     if (body_down || g_fall_active || g_fall_rd != FALLRD_OFF) {
         /* C05-KO: keys held into a knockdown are dropped (no walk resumes on get-up) */
         if (body_down && g_kah_move_keys) { InterlockedExchange(&g_kah_move_keys, 0); logline("[down] held fp_move keys dropped on knockdown"); }
@@ -7213,6 +7283,14 @@ static void hooked_charmove_update(void *mv, float t)
     FALL_LAUNCH_HOLD(mv)
     g_charmove_update_orig(mv, t);
     FALL_LAUNCH_HOLD(mv)
+    if (drive && dpc && !dko && fp_body_down(dpc)) {   /* C05-KO trace: the KO landed inside this update */
+        static int kil;
+        if (kil++ < 8 && readable((void *)((uintptr_t)mv + MV_CURRENT_MOTION), 12)) {
+            Vec3 cmk = *(Vec3 *)((uintptr_t)mv + MV_CURRENT_MOTION);
+            logline("[down] KO inside CharMovement::update: cm=%.2f,%.2f,%.2f mask=0x%x prone=%d (post gate clears)",
+                    cmk.x, cmk.y, cmk.z, fall_ragdoll_mask(dpc), char_prone_state(dpc));
+        }
+    }
     /* Re-assert AFTER: the original just re-enabled combat locomotion mid-call.
      * This post-write is the one that actually wins the race -- unless the actor
      * went down INSIDE the update (C05-KO): then clear instead of forcing. */
