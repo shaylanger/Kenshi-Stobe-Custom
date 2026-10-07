@@ -7110,15 +7110,25 @@ static void hooked_ranged_animupd(void *rc, float ft, Vec3 *aimpos, void *target
         && *(void **)((uintptr_t)rc + RC_ME) == g_fp_control_actor
         && readable(aimpos, sizeof(Vec3))
         && fp_aim_point(&aim)) {
-        *aimpos = aim;
+        /* Pass the crosshair point as OUR OWN vector. aimpos is a const reference to
+         * a local in the caller's stack frame (logged 0x10deff700 next to rc/me) and
+         * the caller keeps using it after this call: writing the game-coordinate
+         * crosshair point through it moved the camera centre by exactly that point
+         * (the "[weld] world-scale centre jump tx-54127 tz+6879" = aim x/z), the world
+         * rebased on it, and ~4 s later the NavMesh thread crashed in Havok A*
+         * (garbage instance face map; m50 5090 K/M/N, 4080 b42). Repro
+         * tests/ingame/fp-navcrash-repro.sh: write-through crashed on the first try
+         * of every launch, the local copy ran clean. */
         if (readable((void *)((uintptr_t)rc + RC_AIMPOS), sizeof(Vec3)))
             *(Vec3 *)((uintptr_t)rc + RC_AIMPOS) = aim;
         static int logged;
-        if (!logged) { logged = 1; logline("[freeaim] pose override LIVE"); }
+        if (!logged) { logged = 1; logline("[freeaim] pose override LIVE (own aim vector)"); }
         if (g_aim_mode) {                     /* R-aim diagnostics: is this even called? */
             static int cnt;
             if ((++cnt % 120) == 1) logline("[aim] animationUpdate running (call %d)", cnt);
         }
+        g_ranged_animupd_orig(rc, ft, &aim, target);
+        return;
     }
     g_ranged_animupd_orig(rc, ft, aimpos, target);
 }
