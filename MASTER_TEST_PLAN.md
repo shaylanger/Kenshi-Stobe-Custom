@@ -21,7 +21,7 @@ results labelled "-4080"). Never compare performance across machines.
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
 | Stobe.dll | `7A8997FD` (goal/action logic moved in from KenshiFP + NPC info panel; 2026-10-06 m49) | - |
-| KenshiFP.dll | `FE26573F` both rigs (FP-only after the decoupling + eye-drift fix; 2026-10-06 m49) | - |
+| KenshiFP.dll | `8469D760` both rigs (melee chase fallback gets the AttackState via CombatClass::getState; 2026-10-07 m50) | - |
 | ProfessionGearProgression.dll | `BAFB8C31` (Normal; verified 2026-10-05) | - |
 | AutomationHarness.dll | `2995EE5E` (both rigs, 2026-10-06) | - |
 | Server (live) | `stobe` 0295a3a (14-A3 "no promises" hedge fix; earlier: NPC panel player_view 2596ef2) | - |
@@ -35,7 +35,6 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| FP combat | open: M09, S05, C01-C05 beyond C00, Gate 3 balance acceptance; reconfirm on FE26573F (passed on older builds): R10, R12 (UI/KO/SWAP/SPEED/LOAD), R14-R16, M08 (all 7), S03; manual combat still OFF by default | kah-fpxbow (fixture FP-crossbow), kah-fpcam | todo; PASS on FE26573F (m49): R07-R09, R11, R13, FP-EYE both rigs, S01 (= DC1-DC5); earlier builds: P01, P02, C00, R01-R06, S04, M00-M07 (4080) |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
@@ -43,6 +42,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 | ID | What |
 |---|---|
 | Voice / feel | voice quality, overall play feel, relationship balance feel (REL §9) |
+| FP combat | all automated rows PASS (m50, KenshiFP 8469D760; `components/KenshiFP/docs/COMBAT_TEST_PLAN.md` "Current state"). Shay: visual/feel checks (ADS alignment, reload readability, zoom/body clipping, attack/block responsiveness, limb precision) and the call on turning manual combat on by default (OFF now) |
 | PG 135–141, 277 | tooltip section on armour, backpack, weapon/tool, plain item, two-affix item, shop/loot views |
 | PG 155, 238 | feel: repeated tooltip opening; no stall when a shop opens |
 | PG balance decision | after all professions are measured (Labouring: +25 % gear = whole skill range); D4 feel open |

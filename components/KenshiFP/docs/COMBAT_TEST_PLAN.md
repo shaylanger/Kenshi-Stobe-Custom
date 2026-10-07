@@ -44,21 +44,12 @@ Offline tests are necessary but do not prove engine calls/animations/hit behavio
 ## Gate 1: camera/control
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| C01 | Zoom between FP and third person preserves control | camera coordinates + same actor/WASD response |
-| C02 | Wheel affects distance only | speed unchanged; UI scrolling does not also zoom |
-| C03 | Inspect without transfer | camera/input actor stable, stats/inventory actor correct |
-| C04 | Explicit transfer/fallback | released inputs, restored native controls, other squad AI unaffected |
-| C05 | Lifecycle | load, KO, invalid handle, interiors, stairs; no stuck controls |
 Visual camera collision, body visibility and ADS alignment require screenshots/inspection as well as numeric checks.
 
 ## Gate 1b: FP controls (scheme 2026-10-06, KenshiFP 6E5D502B+)
 Wrapper `tests/ingame/fp-controls.sh` (fixture kah-fpxbow: Axima crossbow player, Malzin mate, Skaera hostile; usage in its header). Input enters through `fp_keys press|native` (same tick path as the physical buttons) and `fp_combat input`; evidence is `fp_keys state` counters, `fp_combat state` (wih, fp_ui_state, actual_shots, ammo), `fp_camera state|probe`, `fp_melee state`, `where`/`hp`, KenshiFP.log. Not yet run in game.
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| K02 | MMB = select the crosshair character, no camera rotate | mmb press aimed at the mate: mmb_selects+1, last_select=mate, `fp_control state` inspected changed, controlled/control_ids unchanged, mmb_cam_frames>0 with the camera yaw unchanged |
-| K04 | RMB held drawn melee = block, no menu | aimed at the mate: ui_state=blocking, free_block_frames rising, ctx_opens unchanged |
-| K05 | LMB drawn on a character = vanilla attack order | K05-HOSTILE (Skaera): engages+1, last_task=5, last_target=Skaera, native fight active on her; K05-UNPROV (a neutral NPC, NEUTRAL= or found nearby): last_task=61, native fight active on him |
-| K06 | R draws/holsters, weapon stays out idle | r_draws+1, `fp_combat state` wih!=0, still drawn after 5 s idle (sheathe_kept evidence); R again: r_holsters+1, wih=0 |
 | FS01 | Free swing (LMB drawn melee, no target, no fight) | free_swings+1, fs_prog_max>0.5, fs_ends+1, fs_faults=0, fs_dead=0, no native fight started, mate hp unchanged |
 | FB01 | Free block out of combat | aimed at the sky, `fp_melee state` active=0: ui_state=blocking while RMB held, free_block_frames rising, back to ready after release |
 | FF01 | Ranged free fire (fp_combat on) | aimed at the sky, `fp_combat input 1 1 0`: actual_shots+1, ammo-1; reload (`fp_combat input 1 0 1`, the adapter path of R+RMB): reload_starts+1, ammo back up. Physical R+RMB mapping: Shay |
@@ -69,9 +60,6 @@ Visual rows (screenshot or Shay's eye, MASTER section 2): K01 native-walk marker
 Sneaking + LMB drawn (melee) on a character that does not perceive the attacker (`SensoryData::amIAwareOfThisGuy(attacker, needToSeeOrHear=1)` = 0) gives the vanilla sneak-mode order `STEALTH_KNOCKOUT` (228: walk up, `getStealthKOChance` roll); aware/unreadable target = the normal K05 engage. Holstered LMB stays non-combat (scheme). Evidence: `fp_keys state` sneak_* fields, `fp_keys sneak [show]` (crosshair probe), KenshiFP.log `[controls] LMB sneak=1 target= target_aware= aware_any= ko_chance= path= task=` and `[controls] sneak result=ko|dead|failed|timeout|lost`. Wrapper `tests/ingame/fp-stealth.sh` (kah-fpxbow, each row spawns its own neutral target; skills stealth/assassination 100 for the run).
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| ST01 | Sneak + LMB on an unaware target = vanilla sneak knockout | pre: detecttime seen=0, `senses` aware=0, probe target_aware=0; sneak_attacks+1, sneak_path=vanilla_sneak, last_task=228, log `target_aware=0 ... path=vanilla_sneak task=228`, then sneak_result=ko, target KO (`where`) |
-| ST02 | Sneak + LMB on an aware target = normal engage | probe target_aware=1; sneak_attacks unchanged, sneak_path=engage_aware, engages+1, last_task=61, native fight on him |
-| ST03 | Not sneaking + LMB = no sneak path | sneak=0; sneak_clicks/attacks unchanged, engages+1, last_task=61, native fight on him |
 
 ## Gate 2: ranged mechanics
 | ID | Requirement | Acceptance evidence |
@@ -112,9 +100,6 @@ b25 17/20 + b27 17/20 = 52/60 (0.87); difference +0.08, 90% CI [-0.01, +0.18]. D
 ## Gate 4: melee feasibility and mechanics (phase 2)
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| M08 | Lifecycle/crowds | multiple attackers, KO, limbs, unarmed, UI, load, fallback and actor changes (`fp-manual-melee-life.sh`: M08-UI/KO/LOAD/UNARMED/CROWD/ACTOR/LIMB) |
-| M09 | Animation compatibility | vanilla first, individual MCA/DodgeStrafe/Great Anims, then full loadout: `fp-m09.sh <out>` (loadouts via `tools/automation/anim-mods.sh`, mods installed on both rigs; one `RESULT M09-<loadout>-<row>` per loadout x M00-M07/M09-CHASE/M08 row) |
-| M09-CHASE | Swings through the native chase lock | `fp-manual-melee.sh` with `fp_melee force_chase on` (state 11/next 10 each tick) + 50 clicks: forced_chase and chase_drops rise, chase_swings >= 3, swings >= 3 (4080 m09: pending click expired in STARTUP->10) |
 If M01 only passes by spam-forcing a flag or waiting for AI initiative, phase 2 feasibility fails even if health changes.
 
 Notes (2026-10-05, KenshiFP 62464E5D): B17 offline covers AI refusal, click buffer, latency, owned-only approach refusal, hold ground, spam switch and swing timing. M01 latency is product-measured (`last_latency_ms`, harness round trip ~0.3 s per call). M02 uses the product spam switch `fp_melee spam 15 200` (wrapper clicks really ran at ~0.8 s each: 8 swings + 7 rejected = native pace) and asserts `min_swing_gap >= last_swing_len`. M06: no AI combat locomotion while owned (`hold_halts`, `approach_refused`), out-of-reach click counted `out_of_reach`; evidence includes target drift to rule out the pin. M04 windows use the spam switch (wrapper clicks capped every window at ~6 swings); M04-DMG picks the stat that moves the native `primaryweapondamage` for the weapon (katana = cutting; strength gave +7%); M04-DEF uses 3x windows and logs a native-AI control on FAIL. M08-UNARMED hit evidence = flesh drop or `melee_hits` (native addWound calls by the fighter, cut+blunt > 0); blood is reported only (older cuts keep bleeding: m50-b blood 77.7->76.9 with no hit); M08-CROWD clicks at legal native moments (two attackers, no RMB block -> mostly STUMBLE, where clicks are rejected natively).
@@ -125,7 +110,6 @@ Notes (2026-10-05, KenshiFP 62464E5D): B17 offline covers AI refusal, click buff
 | S01 | Extraction integration | gameplay goals/actions work without FP dependency; controls use correct actor identity |
 | S02 | Normal/fallback combat | no changes to uncontrolled NPC/squad/native shooting outside manual ownership |
 | S03 | Repeated transitions | no stuck aim/reload/control after repeated switching/loading (`fp-manual-transitions.sh`) |
-| S05 | Release restoration | main build/config verified and test owner can resume existing batch |
 
 ## Visual/user checks
 ADS alignment and reload readability; zoom/body/clipping; attack/block responsiveness; tactical enjoyment and high-skill limb precision.
@@ -136,7 +120,8 @@ PASS (evidence in `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-1
 Reconfirmed m50 (`archive/test-run-2026-10-06-m50.md`): R10 + R10-CTRL (4080 b33), R12-UI/KO/SWAP/SPEED/LOAD (4080 b36b), R14, R15, R16, S03 (5090 B), M08-UI/KO/LOAD/UNARMED/CROWD/ACTOR/LIMB (4080 b37, KenshiFP 29DEC0D2). Also PASS m50: C01, C02, C03, C04-TAKE, C04-FALLBACK (4080 b36b); controls K01, K03, Z01, Z01-INT, DOWN01 (4080 b37; rows deleted above).
 Also PASS m50 on KenshiFP 44458ACE (NavMesh-crash fix fc60924; 5090 P/Q): stealth ST01, ST02, ST03; ranged R01-R06 + R12 subset again (free-aim fix); C01, C03, C04-TAKE, C04-FALLBACK, C05-KO, C05-INVALID, C05-LOAD, C05-INTERIOR; no crash, no weld jump.
 Also PASS m50: C01-C04, C05-KO/INVALID/LOAD/INTERIOR on both rigs (5090 T, 4080 b45); M09 life rows M08-* in mca/dodge/full (4080 b45/b46), M09 melee rows in all 5 loadouts (bm43).
-Open: M09 vanilla M08-KO/LOAD/UNARMED (b46: fresh clicks never swing; fixer), S05 (release restoration), C05-STAIRS (built house has no navmesh: rerun on a real world stair); Gate 3 tolerances decided 2026-10-06 (R14 report-only, R15/R16 in force, reconfirmed m50); manual combat stays OFF by default until these pass.
+Also PASS m50 on KenshiFP 8469D760: M09 vanilla all rows (4080 b48) + mca life rows, so M09 is closed in all 5 loadouts; C05-STAIRS on a real world stair (5090, kah-fpstairs); S05-BUILD on both rigs (S05-RESUME earlier in m50); controls K01-K06 and stealth ST01-ST03 (rows deleted above).
+Open: no automated rows. Gate 3 tolerances decided 2026-10-06 (R14 report-only, R15/R16 in force, reconfirmed m50). Left: the visual/user checks below (Shay, MASTER section 2) and Shay's call on turning manual combat on by default (it stays OFF until then).
 Method notes still valid: P01 needs a background `rangedtest <shooter> <target> shots 60 timeout 220 attack` to keep the native target; P02 needs `combatmode Shay block off passive off`; melee target = CombatClass+0x298 (swing target) / +0x2C8 (ordered target), +0x290 is always 0; game units are decimetres (eye = `where` y + 19 dm); R08 wrapper re-aims at the neck/chest bone, aims beside an arm that covers the aim point (else the aimed part or that arm counts) and retakes shots whose pose at the trigger no longer fits the aim; R09 blocker sits on the eye->target line ~13 dm up; R11-RACE uses Shek first (Hive drones bob 2.5 dm).
 
 ## Open notes (from the development log; history of finished candidates/requests: git log -p of this file)
