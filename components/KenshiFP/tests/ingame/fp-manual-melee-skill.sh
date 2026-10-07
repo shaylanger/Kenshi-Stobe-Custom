@@ -70,17 +70,28 @@ ready() { inp 0 0; engage; local end=$((SECONDS+20)); while [ $SECONDS -lt $end 
 # ticking: the fighter's combat class advances (state_left/frame_dt change within 0.6 s; frozen in 4080 batch 13)
 ticking() { local a b; a=$(A fp_melee state | grep -o 'state_left=[^ ]* \|frame_dt=[^ ]*' | tr -d '\n'); sleep 0.6
   b=$(A fp_melee state | grep -o 'state_left=[^ ]* \|frame_dt=[^ ]*' | tr -d '\n'); [ -n "$a" ] && [ "$a" != "$b" ]; }
-# guard manual|ctrl <label>: per-window setup check; one repair (speed 1 hold, protect, re-take, fp_combat on/off,
-# engage), then a specific SETUP FAIL instead of a silent 0-swing window
+# refight: re-establish the native fight with manual ownership released (owned, the AI approach/target pick is refused;
+# 4080 b28 M04-INJ: after the fight ended, attack orders under fp_combat on left active=0 target=0 for the whole repair):
+# target healed and pinned in reach, both attack orders, bounded poll for active=1 and target!=0 (in_fight), then the
+# window's mode back. True when the fight is live.
+refight() { local mode=$1 end; A fp_combat off >/dev/null; inp 0 0; A health "$TG" 100 >/dev/null; close
+  A attack "$TG" "$FI" >/dev/null; A attack "$FI" "$TG" >/dev/null; end=$((SECONDS+12))
+  while [ $SECONDS -lt $end ] && ! in_fight; do sleep 0.5; done
+  if [ "$mode" = manual ]; then A fp_combat on >/dev/null; fi; inp 0 0; sleep 0.5; in_fight; }
+# guard manual|ctrl <label>: per-window setup check; one repair (speed 1 hold, protect, re-take, refight with a
+# bounded active/target poll), then a specific SETUP FAIL instead of a silent 0-swing window
 guard() { local i st ko w ok
   for i in 1 2; do st=$(A status); ko=$(A where "$FI" | grep -o 'KO\|DEAD' | head -1); ok=1
     echo "$st" | grep -q 'paused=0' || ok=0; [ -z "$ko" ] || ok=0
     if [ $ok = 1 ]; then if [ "$1" = manual ]; then ready && ticking || ok=0; else engage && ticking || ok=0; fi; fi
     [ $ok = 1 ] && return 0; [ $i = 2 ] && break
     A speed 1 hold >/dev/null; A protect "$FI" on >/dev/null; A select "$FI" >/dev/null; A fp_control take >/dev/null
-    if [ "$1" = manual ]; then A fp_combat on >/dev/null; else A fp_combat off >/dev/null; fi; inp 0 0; sleep 2; done
+    refight "$1" || echo "REPAIR $2: refight left the fight down ($(A fp_melee state | grep -o 'active=[^ ]*\|target_h=[^ ]*' | tr '
+' ' '))" >> "$LOG"
+    sleep 1; done
   w=$(A fp_melee state)
-  setup_fail "$2: $1 window not ready after one repair: $(echo "$st" | grep -o 'paused=[^ ]* speed=[^ ]*') fighter=${ko:-up} why=$(echo "$w" | fld why) armed=$(echo "$w" | fld armed) active=$(echo "$w" | fld active) ticking=$(ticking && echo 1 || echo 0) ui=[$(A ui | head -c 200 | tr '\n' ' ')]"; }
+  setup_fail "$2: $1 window not ready after one repair: $(echo "$st" | grep -o 'paused=[^ ]* speed=[^ ]*') fighter=${ko:-up} target=[$(A where "$TG" | grep -o '\[[A-Za-z ]*\]\| KO\| DEAD' | tr '
+' ' ')] target_h=$(echo "$w" | fld target_h) why=$(echo "$w" | fld why) armed=$(echo "$w" | fld armed) active=$(echo "$w" | fld active) ticking=$(ticking && echo 1 || echo 0) ui=[$(A ui | head -c 200 | tr '\n' ' ')]"; }
 window() { guard manual "window(${1:-$WIN}s)"; close; A health "$TG" 100 >/dev/null; sleep 0.3
   local w=${1:-$WIN} s0 t0 e0 p n hr end lost=0 hits=0 drops=""; s0=$(ms swings); t0=$(ms swing_time); e0=$(ms swing_ends); p=$(flesh "$TG")
   A fp_melee spam $((w*5)) 200 | grep -q "spam on" || { echo "0 0 0 0 spam_refused"; return; }; end=$((SECONDS+w+5))
