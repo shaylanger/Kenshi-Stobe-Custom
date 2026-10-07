@@ -141,19 +141,32 @@ clear_bystanders() { local l s e n p id ref rp
     p=$(grep -o 'pos=[-0-9.,]*' <<<"$e" | cut -d= -f2 | tr ',' ' '); lt "$(d2 "$s" "$p")" 100 || continue
     A teleport "$id" "$ref" 20 >/dev/null; echo "SETUP bystander $n ($id) was $(d2 "$s" "$p") from $SH: moved beside the player" >> "$LOG"
   done <<<"$l"; }
-pick_yaw() { local p o c r w wl="" ol=""
+# yaw_free <who> <label>: 16 "<forward>/<back>" free lengths of the pick_yaw headings against static obstacles, from
+# four 66-radius `fp_camera floors` scans (6-unit grid) around <who> (fp-yaw-free.awk; m50 5090 S: with no character
+# near, heading -2.7489 still ended 54 units on, 24 deg off, at the same spot as in p and 4080 b42).
+yaw_free() { local x y z f="$OUT/yaw_floors_$2_$1.txt" qx qz; read -r x y z <<<"$(pos "$1")"; : > "$f"
+  [ -n "$z" ] && for qx in -66 66; do for qz in -66 66; do
+    stobe-auto fp_camera floors "$(awk -v a="$x" -v d=$qx 'BEGIN{print a+d}')" "$(awk -v a="$z" -v d=$qz 'BEGIN{print a+d}')" 66 6 "$(awk -v a="$y" 'BEGIN{print a+80}')" "$(awk -v a="$y" 'BEGIN{print a-40}')" >> "$f" 2>&1; echo >> "$f"; done; done
+  awk -v px="$x" -v pz="$z" -f "$(dirname "$0")/fp-yaw-free.awk" "$f"; }
+pick_yaw() { local p o c r w wl="" ol="" fl=""
   local IFS0=$IFS; IFS="|"; set -f; local ws=($1); IFS=$IFS0; set +f
   for w in "${ws[@]}"; do p=$(pos "$w" | tr ' ' ','); o=$(others "$w")
     for c in "$SH" "$MT" "$TG"; do [ "$c" = "$w" ] && continue; o+="$(pos "$c" | tr ' ' ',');"; done
-    wl+="$p|"; ol+="$o|"; done
-  r=$(awk -v wl="$wl" -v ol="$ol" 'BEGIN{nw=split(wl,W,"|"); split(ol,O,"|"); best=-1; by=0
+    wl+="$p|"; ol+="$o|"; fl+="$(yaw_free "$w" "$2")|"; done
+  # a heading must be free of static obstacles (130 ahead, 30 behind) for every walker; among those the largest
+  # character clearance wins; if none is free, the one free farthest ahead (then clearance), flagged free=<f>/<b>
+  r=$(awk -v wl="$wl" -v ol="$ol" -v fl="$fl" 'BEGIN{nw=split(wl,W,"|"); split(ol,O,"|"); split(fl,FL,"|"); best=-1; by=0; bf=-1
+    for(j=1;j<=nw;j++){ split(FL[j],tk," "); for(k=0;k<16;k++){ split(tk[k+1],fb,"/"); if(tk[k+1]==""){fb[1]=130;fb[2]=30}
+      if(j==1||fb[1]+0<F[k])F[k]=fb[1]+0; if(j==1||fb[2]+0<B[k])B[k]=fb[2]+0 }}
     for(k=0;k<16;k++){y=-3.14159+k*6.28318/16; fx=sin(y); fz=cos(y); m=1e9
       for(j=1;j<=nw;j++){ if(W[j]=="") continue; split(W[j],s,","); n=split(O[j],ob,";")
         for(t=-30;t<=130;t+=10){x=s[1]+fx*t; z=s[3]+fz*t
           for(i=1;i<=n;i++){ if(ob[i]=="") continue; split(ob[i],q,","); d=sqrt((q[1]-x)^2+(q[3]-z)^2); if(d<m)m=d }}}
-      if(m>best){best=m; by=y}}
-    printf "%.4f %.1f\n", by, best}')
-  YAW=${r%% *}; YAWC=${r##* }; echo "YAW $2 ($1): yaw=$YAW clearance=$YAWC" >> "$LOG"; }
+      f=(F[k]>=130 && B[k]>=30) ? 1e6 : F[k]*1000+B[k]
+      if(f>bf || (f==bf && m>best)){bf=f; best=m; by=y; bk=k}}
+    printf "%.4f %.1f %d/%d\n", by, best, F[bk], B[bk]}')
+  YAW=$(cut -d' ' -f1 <<<"$r"); YAWC=$(cut -d' ' -f2 <<<"$r"); YAWF=$(cut -d' ' -f3 <<<"$r")
+  echo "YAW $2 ($1): yaw=$YAW clearance=$YAWC free=$YAWF" >> "$LOG"; }
 # mvdiag: get-up/pinned inputs from the mid-hold `fp_move state` of the last walk (KenshiFP 272A573C+)
 mvdiag() { local s; s=$(cat "$OUT/last_walk_state.txt" 2>/dev/null)
   echo "moving=$(fld moving <<<"$s") direct=$(fld direct_drive <<<"$s") dm=$(fld dm_active <<<"$s") speed=$(fld move_speed <<<"$s") prone=$(fld prone <<<"$s") in_bed=$(fld in_bed <<<"$s") head_above=$(fld head_above <<<"$s") stuck=$(fld stuck_frames <<<"$s") pinned=$(fld pinned <<<"$s") downed=$(fld downed <<<"$s") ko=$(fld ko <<<"$s")"; }
