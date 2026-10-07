@@ -1923,6 +1923,7 @@ static void kfp_extract_assets(void)
 #include "kfp_cmd_args.h"
 #include "kfp_free_key.h"
 #include "kfp_stuck.h"
+#include "kfp_fling.h"
 #include "kfp_control.inc"
 #include "kfp_combat_probe.inc" /* passive native lifecycle prerequisite */
 #include "kfp_meshray.h"   /* true-geometry .mesh triangle raycasts (task #22) */
@@ -4637,7 +4638,7 @@ static int combat_char_unconscious(void *pc);   /* kfp_combat_native.inc: medica
  * (currentMotion +0xA8, currentSpeed, desiredMotion, movementMode) and the loco/IK bone ownership.
  * At the knockdown edge the mover's motion is zeroed when no fall/dive owns it, so the ragdoll
  * can't inherit a drive vector (the hold may have left MOVE_DIRECTION state behind). */
-typedef struct { DWORD ms; Vec3 p, cm, dmo; float spd; int mode, mask, prone, ko, loco, ikp, dm, wd; } KfpDownSample;
+typedef struct { DWORD ms; Vec3 p, cm, dmo; float spd; int mode, mask, prone, ko, loco, ikp, dm, wd; void *mover; } KfpDownSample;
 static KfpDownSample g_down_ring[6];
 static int g_down_ring_n, g_down_ring_i, g_down_trace_left, g_down_prev;
 static unsigned g_down_episodes, g_down_motion_cleared;
@@ -4655,19 +4656,63 @@ static void fp_down_sample(void *pc, int ko, KfpDownSample *s)
     if (mv && readable((void *)((uintptr_t)mv + MV_CURRENT_SPEED), 4)) s->spd = *(float *)((uintptr_t)mv + MV_CURRENT_SPEED);
     if (mv && readable((void *)((uintptr_t)mv + MV_DESIREDMOTION), 12)) s->dmo = *(Vec3 *)((uintptr_t)mv + MV_DESIREDMOTION);
     if (mv && readable((void *)((uintptr_t)mv + MV_MOVEMODE), 4)) s->mode = *(int *)((uintptr_t)mv + MV_MOVEMODE);
+    if (mv && readable((void *)((uintptr_t)mv + MV_MOVER), 8)) s->mover = *(void **)((uintptr_t)mv + MV_MOVER);
     s->mask = (int)fall_ragdoll_mask(pc); s->prone = char_prone_state(pc); s->ko = ko;
     s->loco = g_loco_ready; s->ikp = g_ik_pospushed; s->dm = (int)g_dm_active; s->wd = g_was_direct;
 }
 static void fp_down_log(const char *tag, const KfpDownSample *s)
 {
-    logline("[down] trace %s t=%lu pos=%.1f,%.1f,%.1f cm=%.2f,%.2f,%.2f spd=%.2f desired=%.2f,%.2f,%.2f mode=%d mask=0x%x prone=%d ko=%d loco=%d ikpush=%d dm=%d was_direct=%d",
+    logline("[down] trace %s t=%lu pos=%.1f,%.1f,%.1f cm=%.2f,%.2f,%.2f spd=%.2f desired=%.2f,%.2f,%.2f mode=%d mask=0x%x prone=%d ko=%d loco=%d ikpush=%d dm=%d was_direct=%d physmover=%p",
             tag, (unsigned long)s->ms, s->p.x, s->p.y, s->p.z, s->cm.x, s->cm.y, s->cm.z, s->spd,
-            s->dmo.x, s->dmo.y, s->dmo.z, s->mode, (unsigned)s->mask, s->prone, s->ko, s->loco, s->ikp, s->dm, s->wd);
+            s->dmo.x, s->dmo.y, s->dmo.z, s->mode, (unsigned)s->mask, s->prone, s->ko, s->loco, s->ikp, s->dm, s->wd, s->mover);
+}
+/* C05-KO fling guard (kfp_fling.h): undo a physically impossible move of the controlled body that
+ * starts in a KO/down episode (restore on the wake edge and during the post-wake watch window). */
+static KfpFling g_fling;
+static void *g_fling_pc;
+static int g_wake_trace_left;
+static void fp_fling_restore(void *pc, const KfpDownSample *s)
+{
+    Vec3 back = { g_fling.ax, g_fling.ay + 0.5f, g_fling.az };
+    float yaw = g_face_have ? g_face_yaw : g_yaw;
+    float q[4] = { cosf(yaw * 0.5f), 0.0f, sinf(yaw * 0.5f), 0.0f };
+    if (g_char_setdest) g_char_setdest(pc, &back, q);
+    fall_restore_mover(pc);
+    void *mv = fp_char_mover(pc);
+    if (mv && readable((void *)((uintptr_t)mv + MV_CURRENT_MOTION), 12)) memset((void *)((uintptr_t)mv + MV_CURRENT_MOTION), 0, 12);
+    if (mv && readable((void *)((uintptr_t)mv + MV_CURRENT_SPEED), 4)) *(float *)((uintptr_t)mv + MV_CURRENT_SPEED) = 0.0f;
+    fp_mover_clear_direct(mv, MV_MOVEMODE, MV_DESIREDMOTION, 0);
+    if (mv && readable(mv, 8)) { void **vt = *(void ***)mv; if (in_module(vt)) ((void (*)(void *))vt[MV_HALT_SLOT])(mv); }
+    g_have_last_feet = 0; g_move_speed = 0.0f; g_have_prevraw = 0; g_rebase_hold_t = 1.0f;
+    Vec3 now = s->p; char_position(pc, &now);
+    logline("[down] FLING undone (restore %d, total %u): body at %.1f,%.1f,%.1f -> back to %.1f,%.1f,%.1f (now %.1f,%.1f,%.1f) last_jump=%.1f physmover=%p",
+            g_fling.restores, g_fling.restored, s->p.x, s->p.y, s->p.z, back.x, back.y, back.z, now.x, now.y, now.z,
+            g_fling.last_jump, s->mover);
+    g_wake_trace_left = 30;
 }
 static void fp_down_trace(void *pc, int body_down, int ko)
 {
     KfpDownSample s;
     fp_down_sample(pc, ko, &s);
+    if (pc != g_fling_pc) { kfp_fling_reset(&g_fling); g_fling_pc = pc; }
+    {
+        int fr = kfp_fling_step(&g_fling, body_down, s.p.x, s.p.y, s.p.z, (unsigned)s.ms);
+        if (fr == KFP_FLING_DETECTED) {
+            logline("[down] FLING detected (%s): jump %.1f units to %.1f,%.1f,%.1f; anchor %.1f,%.1f,%.1f cm=%.2f,%.2f,%.2f mode=%d mask=0x%x physmover=%p",
+                    body_down ? "while down" : "restore budget spent", g_fling.last_jump, s.p.x, s.p.y, s.p.z,
+                    g_fling.ax, g_fling.ay, g_fling.az, s.cm.x, s.cm.y, s.cm.z, s.mode, (unsigned)s.mask, s.mover);
+            if (body_down && g_down_trace_left < 12) g_down_trace_left = 12;
+        } else if (fr == KFP_FLING_RESTORE) fp_fling_restore(pc, &s);
+    }
+    if (!body_down && g_down_prev) {   /* wake edge: trace the get-up (b36b drifted ~10 km after the wake) */
+        logline("[down] wake edge: pos=%.1f,%.1f,%.1f physmover=%p cm=%.2f,%.2f,%.2f spd=%.2f mode=%d flung=%d",
+                s.p.x, s.p.y, s.p.z, s.mover, s.cm.x, s.cm.y, s.cm.z, s.spd, s.mode, g_fling.flung);
+        if (g_wake_trace_left < 30) g_wake_trace_left = 30;
+    }
+    if (!body_down && g_wake_trace_left > 0) {
+        static DWORD wlast;
+        if (s.ms - wlast >= 100u || g_wake_trace_left == 30) { wlast = s.ms; --g_wake_trace_left; fp_down_log("wake", &s); }
+    }
     if (body_down && !g_down_prev) {
         ++g_down_episodes;
         /* Always one line per knockdown edge with the mover state (b34: a later save load crashed at
