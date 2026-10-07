@@ -285,9 +285,13 @@ engage_row() { local G0 K FT ser ev ok PK P0 FB; ui_clear; draw_to 1
   if ! clear_fight "$1"; then FB=$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')
     row "$1" FAIL "setup $SH still in a native fight before the click, also after a STAND_STILL order (passive=$(A combatmode "$SH" | fld passive) [$FB])"; engage_end "$2" "$P0"; return; fi
   if ! pick_npc "$2" "$3"; then row "$1" FAIL "setup crosshair pick never on $3 (aim heights ${PICK_H}; last pick: $(cut -c1-140 <<<"$PK"))"; engage_end "$2" "$P0"; return; fi
-  echo "$1 pre-press h=$PICK_HU $PK" >> "$LOG"; G0=$(ks engages)
-  A fp_keys press lmb 100 >/dev/null; waitf 3 kge engages $((G0+1)); waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
-  ev="engages $G0->$(fld engages <<<"$K") last_task=$(fld last_task <<<"$K") last_target=$(fld last_target <<<"$K") lmb_clicks=$(fld lmb_clicks <<<"$K") native_fight_on_$3=$((1-FT)) [$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')] pick_before=$(fld result <<<"$PK") pick_dist=$(fld hit_dist <<<"$PK") passive=1"
+  echo "$1 pre-press h=$PICK_HU $PK" >> "$LOG"; G0=$(ks engages); local S0 MISS=0; S0=$(ks free_swings)
+  A fp_keys press lmb 100 >/dev/null; waitf 3 kge engages $((G0+1))
+  # 5090 m51 i: the click-time crosshair missed the (drifting) pinned npc -> free swing, no engage: re-aim, one more click
+  if [ "$(ks engages)" = "$G0" ] && [ "$(ks free_swings)" -gt "$S0" ]; then MISS=1; sleep 1.5
+    if pick_npc "$2" "$3"; then echo "$1 re-press after a miss h=$PICK_HU $PK" >> "$LOG"; A fp_keys press lmb 100 >/dev/null; waitf 3 kge engages $((G0+1)); fi; fi
+  waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
+  ev="engages $G0->$(fld engages <<<"$K") last_task=$(fld last_task <<<"$K") last_target=$(fld last_target <<<"$K") lmb_clicks=$(fld lmb_clicks <<<"$K") native_fight_on_$3=$((1-FT)) [$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')] pick_before=$(fld result <<<"$PK") pick_dist=$(fld hit_dist <<<"$PK") passive=1 click_misses=$MISS"
   ok=1; [ "$(fld engages <<<"$K")" = $((G0+1)) ] && [ "$(fld last_task <<<"$K")" = "$4" ] && [ "$(fld last_target <<<"$K")" = "$(uname_ "$3")" ] && [ $FT = 0 ] || ok=0
   if [ $ok = 0 ] && [ "$(fld engages <<<"$K")" = $((G0+1)) ] && [ "$(fld last_task <<<"$K")" != "$4" ]; then row "$1" FAIL "inconclusive: $3 hostility not as set up (task $(fld last_task <<<"$K"), wanted $4): $ev"
   else judge "$1" $ok "$ev"; fi
@@ -337,7 +341,8 @@ if want HUD01 || want FF01; then ui_clear; draw_to 0
   if ! arm_bow; then want FF01 && row FF01 FAIL "setup crossbow '$BOWN' would not equip"; HUDOK=0; HUDS+="aiming:no_bow "
   else sky
     if want HUD01; then A fp_keys press r 120 >/dev/null; waitf 6 kis ranged 1; waitf 4 kis drawn 1
-      A fp_keys press rmb 6000 >/dev/null; hud_poll aiming 3; A fp_keys release rmb >/dev/null; sleep 0.3; draw_to 0; fi
+      # 4080 m51e: an unloaded bow shows "reloading" first (~6 s reload) before "aiming": hold and poll past it
+      A fp_keys press rmb 12000 >/dev/null; hud_poll aiming 10; A fp_keys release rmb >/dev/null; sleep 0.3; draw_to 0; fi
     if want FF01; then A fp_combat autoreload 0 >/dev/null; A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
       if ! waitf 4 csis armed 1; then row FF01 FAIL "setup adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
       else sky
