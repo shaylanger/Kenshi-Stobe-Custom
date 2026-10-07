@@ -455,7 +455,8 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     else if (game_has_focus()) {
         input.aim=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
         input.fire=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0;
-        input.reload=(GetAsyncKeyState(0x52)&0x8000)!=0;
+        /* R alone = FP draw/holster (kfp_controls.inc); R with RMB (aim) held = reload */
+        input.reload=input.aim&&(GetAsyncKeyState(0x52)&0x8000)!=0;
     }
     fp_melee_observe_swing(gw,dt);   /* native swing timer (M04-SPEED control), any owner */
     if (!g_combat_enabled || !g_combat_native_ready || g_combat_fault || !g_fp_mode) {

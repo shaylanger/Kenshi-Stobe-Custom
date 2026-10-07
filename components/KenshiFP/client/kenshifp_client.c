@@ -1242,6 +1242,14 @@ static void *fp_controlled_char(void *gw);
 static int fp_char_in_squad(void *gw, void *pc);
 static int game_has_focus(void);
 static void kah_bridge_tick(void);    /* registers the harness test commands */
+/* FP control scheme (kfp_controls.inc) */
+static int fpc_cam_pre(void *cam,float *yaw,float *pitch);
+static void fpc_cam_post(void *cam,float yaw,float pitch);
+static int fpc_key_swallow(unsigned dik);
+static int fpc_suppress_sheathe(void *pc);
+static void fp_controls_tick(void *gw,float dt);
+static void fp_controls_init(void);
+static int kah_fp_keys(const char *,int,const char *const *,KAH_Reply *,void *);
 static int g_prev_fp;             /* g_fp_mode from last frame (camera_lock edge) */
 static int g_ovr_prev;            /* was the FP node override active last frame */
 static float g_yaw, g_pitch;      /* accumulated mouse-look angles (radians) */
@@ -2292,7 +2300,8 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_move", "fp_move <wasd|none> [ms] | state (TEST ONLY WASD hold)", kah_fp_move, NULL)
           + g_kah.registerCommand("fp_camera", "fp_camera state|distance <0..12>|wheel <delta>|look <yaw radians> <pitch radians>", kah_fp_camera, NULL)
           + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|aim (read-only)|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
-          + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL);
+          + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL)
+          + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|swallow on|off|reset", kah_fp_keys, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
 }
@@ -5955,7 +5964,10 @@ static void fp_head_visibility(void *gw)
 static void hooked_cam_update(void *cam, char controlEnabled)
 {
     InterlockedIncrement(&g_cam_heartbeat);
-    g_cam_update_orig(cam, controlEnabled);
+    float mmb_yaw, mmb_pitch;   /* FP owns MMB (select): the native MMB rotate is undone */
+    int mmb_swallow = fpc_cam_pre(cam, &mmb_yaw, &mmb_pitch);
+    g_cam_update_orig(cam, mmb_swallow ? 0 : controlEnabled);
+    if (mmb_swallow) fpc_cam_post(cam, mmb_yaw, mmb_pitch);
     /* Fully inert unless FP is (or was just) engaged: at the main menu / load
      * screens this hook fires while the game is half-initialised, and running
      * the override there crashed the title screen. */
@@ -6723,6 +6735,9 @@ static char hooked_keypressed(void *lst, void *evt)
         && (unsigned)*(int *)((uintptr_t)evt + 0x10)
            == MapVirtualKeyA((UINT)g_cfg_key_jump, 0 /* MAPVK_VK_TO_VSC */))
         return 1;   /* consumed by the FP jump: no dispatch, no pause, no sound */
+    if (readable((void *)((uintptr_t)evt + 0x10), 4)
+        && fpc_key_swallow((unsigned)*(int *)((uintptr_t)evt + 0x10)))
+        return 1;   /* R = FP draw/holster */
     return g_keypressed_orig(lst, evt);
 }
 
@@ -6816,6 +6831,7 @@ static void hooked_mainloop(void *gw, float time)
      * hook failed to install. */
     if (gw && !g_cam_update_orig) fp_camera_override(gw);
     if (gw) fp_movement(gw, time); /* every frame: WASD -> custom motion drive */
+    if (gw) fp_controls_tick(gw, time);      /* MMB select / RMB menu+block / LMB attack / R draw */
     if (gw) fp_manual_combat_tick(gw, time); /* own native actions after movement */
     if (gw) fp_combat_tick(gw, time); /* independent passive trace */
     if (gw) fp_load_nearby_interiors(gw); /* ~1 Hz: preload nearby building interiors */
@@ -7044,12 +7060,14 @@ static void hooked_sheathe(void *pc)
         if ((++cnt % 60) == 1) logline("[aim] suppressed AI sheathe (x%d)", cnt);
         return;
     }
+    if (fpc_suppress_sheathe(pc)) return;   /* R-drawn weapon stays out (not fighting) */
     g_sheathe_orig(pc);
 }
 
 #include "kfp_combat_native.inc"
 #include "kfp_melee_observe.inc"
 #include "kfp_combat_melee.inc"
+#include "kfp_controls.inc"
 
 /* CharMovement::update hook: re-assert the player's direct-drive intent
  * IMMEDIATELY BEFORE the engine consumes movement state -- combat AI (and the
@@ -8074,6 +8092,7 @@ __declspec(dllexport) void dllStartPlugin(void)
             fp_combat_native_init();
             fp_melee_observe_init();
             fp_melee_manual_init();
+            fp_controls_init();
             void *fd = (void *)(g_base + RVA_FACE_DIR);
             int fdok = install_hook(fd, (void *)hooked_face_direction,
                                     (void **)&g_face_dir_orig);
