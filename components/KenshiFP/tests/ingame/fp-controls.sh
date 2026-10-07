@@ -106,10 +106,14 @@ give_melee() { local w r; [ -n "$(weapons)" ] && return 0
 draw_to() { kis drawn "$1" && return 0; A fp_keys press r 120 >/dev/null; waitf 4 kis drawn "$1"; }
 # HUD samples: hud <expected>: fp_keys snapshot; HUDS += "exp:ui/hud_text/shown"; HUDOK=0 on a mismatch
 HUDS=""; HUDOK=1; HUDN=0
-hud() { local s u t h; s=$(A fp_keys state); u=$(fld ui_state <<<"$s"); t=$(fld hud_text <<<"$s"); h=$(fld hud_shown <<<"$s")
+hud() { hud_eval "$1" "$(A fp_keys state)"; }
+hud_eval() { local s=$2 u t h; u=$(fld ui_state <<<"$s"); t=$(fld hud_text <<<"$s"); h=$(fld hud_shown <<<"$s")
   HUDS+="$1:$u/$t/$h "; HUDN=$((HUDN+1)); [ "$u" = "$1" ] && [ "$t" = "$u" ] && [ "$h" = 1 ] && [ "$(fld hud <<<"$s")" = 1 ] || HUDOK=0; }
-# hud_poll <expected> <s>: sample until ui_state matches (bounded), then record the sample
-hud_poll() { waitf "$2" kis ui_state "$1"; hud "$1"; }
+# hud_poll <expected> <s>: snapshots until ui_state and hud_text both match (bounded), then judge THAT snapshot
+# (4080 b39: a separate sample after the wait came ~0.6 s later, after a short free swing had already ended)
+hud_poll() { local s end=$((SECONDS+$2)); while :; do s=$(A fp_keys state)
+  [ "$(fld ui_state <<<"$s")" = "$1" ] && [ "$(fld hud_text <<<"$s")" = "$1" ] && break; [ $SECONDS -ge $end ] && break; sleep 0.1; done
+  hud_eval "$1" "$s"; }
 
 FP0=$(fps fp_mode); DIST0=$(cam target); AR0=""; PINNED=""; WEP=""; BOWN=""
 cleanup() { A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null; A fp_keys focus off >/dev/null
@@ -225,7 +229,7 @@ if want FB01 || want HUD01; then if [ $MELEE = 0 ]; then want FB01 && mfail FB01
 if want FS01 || want HUD01; then if [ $MELEE = 0 ]; then want FS01 && mfail FS01; else ui_clear; draw_to 1; sky
   waitf 15 not_fight; FI0=$(A fp_melee state | fld active); HP0=$(A hp "$MT" | grep -o 'worst=[0-9-]*%'); K0=$(A fp_keys state)
   F0=$(fld free_swings <<<"$K0"); E0=$(fld fs_ends <<<"$K0"); G0=$(fld engages <<<"$K0")
-  A fp_keys press lmb 100 >/dev/null; waitf 2 kis fs_active 1; hud swinging
+  A fp_keys press lmb 100 >/dev/null; hud_poll swinging 2
   waitf 5 kge fs_ends $((E0+1)); sleep 0.5; K=$(A fp_keys state); FI1=$(A fp_melee state | fld active); HP1=$(A hp "$MT" | grep -o 'worst=[0-9-]*%')
   ev="fight_active=$FI0->$FI1 free_swings $F0->$(fld free_swings <<<"$K") fs_prog_max=$(fld fs_prog_max <<<"$K") fs_ends $E0->$(fld fs_ends <<<"$K") fs_notech=$(fld fs_notech <<<"$K") fs_faults=$(fld fs_faults <<<"$K") fs_dead=$(fld fs_dead <<<"$K") engages $G0->$(fld engages <<<"$K") $MT hp $HP0->$HP1"
   ok=1; [ "$(fld free_swings <<<"$K")" = $((F0+1)) ] && [ "$(fld fs_ends <<<"$K")" = $((E0+1)) ] && [ "$(fld fs_faults <<<"$K")" = 0 ] && [ "$(fld fs_dead <<<"$K")" = 0 ] || ok=0
@@ -269,7 +273,7 @@ if want HUD01 || want FF01; then ui_clear; draw_to 0
   if ! arm_bow; then want FF01 && row FF01 FAIL "setup crossbow '$BOWN' would not equip"; HUDOK=0; HUDS+="aiming:no_bow "
   else sky
     if want HUD01; then A fp_keys press r 120 >/dev/null; waitf 6 kis ranged 1; waitf 4 kis drawn 1
-      A fp_keys press rmb 1500 >/dev/null; sleep 0.6; hud aiming; sleep 1.2; draw_to 0; fi
+      A fp_keys press rmb 6000 >/dev/null; hud_poll aiming 3; A fp_keys release rmb >/dev/null; sleep 0.3; draw_to 0; fi
     if want FF01; then A fp_combat autoreload 0 >/dev/null; A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
       if ! waitf 4 csis armed 1; then row FF01 FAIL "setup adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
       else sky; S0=$(cs actual_shots); R0=$(cs reload_starts); A fp_combat input 1 0 0 >/dev/null; waitf 8 csis shot_ready 1; RDY=$(cs shot_ready)

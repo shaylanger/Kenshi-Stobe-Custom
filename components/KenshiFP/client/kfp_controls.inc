@@ -283,7 +283,15 @@ static const char *fpc_ui_state(void *pc,int rmb) {
     if (!g_fpc_drawn) return "holstered";
     if (g_fpc_ranged) {
         void *rc=readable((void *)((uintptr_t)pc+CHAR_RANGEDCOMBAT),8)?*(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT):NULL;
-        if (readable(rc,0x88) && *(float *)((uintptr_t)rc+0x78)>0.0f) return "reloading";
+        /* HUD01 (4080 b39): out of ranged combat with the adapter off nothing runs the native reload, so the
+         * timer (rc+0x78) sits frozen above 0 (0.0712 for minutes) and the HUD said RELOADING while aiming.
+         * Reloading = the timer is above 0 AND moved within the last 400 ms (or the adapter reloads). */
+        static void *trc;static float tval=-1;static double tms;
+        if (readable(rc,0x88)) {
+            float t=*(float *)((uintptr_t)rc+0x78);double now=fpc_now_ms();
+            if (rc!=trc || t!=tval) {if (rc==trc) tms=now; else tms=0;trc=rc;tval=t;}
+            if (t>0.0f && now-tms<400.0) return "reloading";
+        }
         if (g_combat_observed.reloading) return "reloading";
         return rmb?"aiming":"ready";
     }
