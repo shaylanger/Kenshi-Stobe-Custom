@@ -1570,6 +1570,16 @@ static int char_position(void *c, Vec3 *out)
     if (!in_module((void *)getpos)) return 0;   /* real fn lives in .text */
     Vec3 tmp = {0,0,0};
     getpos(c, &tmp);
+    /* (0,0,0) = no position (char between bodies/rebuilt): a failed read. Used as
+     * feet/head it put the FP eye at the world origin for a frame ("[weld]
+     * world-scale centre jump tx-54127"); each 5090 game with that line lost the
+     * NavMesh thread ~5 s later (m50 batches K/M). */
+    if (tmp.x == 0.0f && tmp.y == 0.0f && tmp.z == 0.0f) {
+        static unsigned zero_reads;
+        if ((zero_reads++ & 255) == 0)
+            logline("[pos] getPosition returned 0,0,0 for %p (read refused, n=%u)", c, zero_reads);
+        return 0;
+    }
     *out = tmp;
     return 1;
 }
