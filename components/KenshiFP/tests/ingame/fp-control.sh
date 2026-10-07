@@ -134,10 +134,16 @@ mvdiag() { local s; s=$(cat "$OUT/last_walk_state.txt" 2>/dev/null)
 # native_fix <who> <axis> <home "x y z">: native_walk; if no axis walks (b28/b31 C04-FALLBACK: "never started" on all
 # 4 axes at x~-54330, while b30 at z~6854 walked), note where he stood, teleport him back to <home> (his setup
 # position) and try once more. Echo "<displacement> <axis> <tries> <stuck_at x,z | ->"; the row flags a stuck spot.
+# natdiag <who> <why>: evidence for a native walk that never started (4080 b31/b33 C04-FALLBACK/C05-LOAD walk 0.00
+# for both chars, also with FP off): where (state/pos), its jobs, buildings within 30 (inside an enclosure?).
+natdiag() { { echo "NATDIAG $1 $2"; echo "  where: $(A where "$1")"; echo "  jobs: $(A jobs "$1" | tr '\n' ';' | cut -c1-600)"
+  echo "  buildings: $(A buildings 30 near "$1" | tr '\n' ';' | cut -c1-900)"; } >> "$LOG"; }
 native_fix() { local d ax n sp=-; read -r d ax n <<<"$(native_walk "$1" "$2")"
   if [ "$ax" != stuck ] && ! ge "$d" 25 && [ -n "$3" ]; then sp=$(pos "$1" | awk '{printf "%.0f,%.0f", $1, $3}')
     echo "SETUP: $1 native walk never started at $sp: teleport back to $3, retry" >> "$LOG"
-    A teleport "$1" $3 >/dev/null; sleep 2; read -r d ax n <<<"$(native_walk "$1" "$2")"; n="$n+retry"; fi
+    natdiag "$1" "never started at $sp"
+    A teleport "$1" $3 >/dev/null; sleep 2; read -r d ax n <<<"$(native_walk "$1" "$2")"; n="$n+retry"
+    ge "$d" 25 || natdiag "$1" "never started after the retry from $3"; fi
   echo "$d $ax $n $sp"; }
 FP0=$(fps fp_mode); DIST0=$(cam target)
 BUILT=""
