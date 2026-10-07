@@ -8,7 +8,7 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
   C05-STAIRS on a real world stair (kah-fpstairs = Crafting base Hub copy), S05-BUILD on both rigs, controls K01-K06, stealth
   ST01-ST03, ranged R01-R16, control C01-C05.
 - 5090: batch U (`C:\KenshiTestRuns\m50-5090-u`, run-batch.sh, kah-fpxbow) = cross-rig confirmation of 8469D760 melee
-  (fp-manual-melee M00-M07/M09-CHASE all PASS; life rows running); Kenshi stops at the end.
+  15/15 PASS (M00-M07, M09-CHASE, M08-*).
 - 4080: idle, Kenshi closed, anim mods restored (full), standing lock `rig4080`.
 - Gotcha: never `unload` a char that is still someone's fight/order target (game crash, exe+268A68); tests KO and leave them.
 - Gotcha: start detached WSL batches with `wsl.exe ... bash -s` + heredoc (`setsid nohup ... > log 2>&1 < /dev/null &`) and
