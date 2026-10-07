@@ -4,11 +4,15 @@ starting here needs nothing else. Keep it current: update this section at every 
 Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
 ## Right now
-- 4080: FP combat batch 32 running (out `C:\KenshiTestRuns\fp-4080-32`, rows melee/melee-skill/cover/life/control; check
-  `ssh 4080 powershell -File C:\KAH\w32.ps1`). Runner = coordinator, lock owner rig4080.
-- 5090: Shay plays (don't touch its game); WSL off except to build (`wsl.exe --shutdown` after).
+- 5090: batch C running (`C:\KenshiTestRuns\m50-5090-c`, run-batch.sh; rows DRAWN = DW1-DW10 on Stobe 95B9D33A, mlife = M08 on
+  KenshiFP ABEB8BF6). Health: `batch-health.sh /mnt/c/KenshiTestRuns/m50-5090-c/out`. Runner = coordinator.
+- 4080: batch 36b (KenshiFP FC5041E8: life PASS 5/5, control rows running), then batch 37 on ABEB8BF6 (staged C:\KAH\fp\b4080-37.sh,
+  start `C:\KAH\sb37.ps1` after `C:\KAH\inst.ps1 -Hash ABEB8BF6` with Kenshi stopped): controls rows (all incl. DOWN01) + mlife.
+  Check `ssh 4080 powershell -File C:/KAH/w36b.ps1` / `w37.ps1`. Runner = coordinator, lock owner rig4080.
+- 4080 desktop is locked (LogonUI): no window can be foreground, so KenshiFP frees the cursor. Test switch `fp_keys focus on|off`
+  (fp-controls.sh uses it). 4080 Defender ML flagged KenshiFP 47D56C70 as Trojan:Win32/Bearfoos.B!ml (false positive, quarantined);
+  probe every new DLL there first (copy to C:\KAH, Get-FileHash, wait 20 s, Test-Path).
 - Gate 3 decided (Shay 2026-10-06): manual aim may beat the dice for now; R15/R16 stay. Nothing waiting on Shay.
-- Next build: FP controls rework (approved, memory `fp-controls-scheme`) + zoom-out to ~3-4 body lengths with camera wall collision.
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
@@ -22,8 +26,8 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 7A8997FD, KenshiFP FE26573F, PG BAFB8C31 (Normal), harness 2995EE5E; server live `stobe` 0295a3a.
-- 4080: KenshiFP FE26573F, PG BAFB8C31, harness 2995EE5E (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
+- 5090: Stobe 95B9D33A (drawn-weapon reactions), KenshiFP ABEB8BF6, PG BAFB8C31 (Normal), harness C6969009; server live `stobe` 055e0c5.
+- 4080: KenshiFP FC5041E8 (ABEB8BF6 next), PG BAFB8C31, harness C6969009 (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
 - **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
