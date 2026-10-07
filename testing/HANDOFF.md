@@ -1,15 +1,18 @@
-# Current state (m50, 2026-10-07)
+# Current state (m51, 2026-10-07)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 ~06:30 5090 clock, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
-- FP combat: every automated row PASS (m50 run log): M09 closed in all 5 loadouts (vanilla 4080 b48 on KenshiFP 8469D760),
-  C05-STAIRS on a real world stair (kah-fpstairs = Crafting base Hub copy), S05-BUILD on both rigs, controls K01-K06, stealth
-  ST01-ST03, ranged R01-R16, control C01-C05.
-- 5090: batch U (`C:\KenshiTestRuns\m50-5090-u`, run-batch.sh, kah-fpxbow) = cross-rig confirmation of 8469D760 melee
-  15/15 PASS (M00-M07, M09-CHASE, M08-*).
-- 4080: idle, Kenshi closed, anim mods restored (full), standing lock `rig4080`.
+## Right now (2026-10-07 m51, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
+- m51 work: KenshiFP manual combat ON by default + F10 "Manual combat" toggle + 5 rebindable keys + bound-key leak fixes,
+  committed 7b85f67 (KenshiFP 9017FAA0). Stobe NPC biography card committed 8c45a9f/37fb725 (Stobe 3EF4CCEE, server 7ea8347).
+- 5090: batch I `C:\KenshiTestRuns\m51-5090-i` (run-batch.sh, --stop): CS01-CS08 (all PASS), K rows, NP5/NP11/NP12 (needs
+  DeepInfra credit; Shay is topping up). Run log `archive/test-run-2026-10-07-m51.md`.
+- 4080: runners bm51e (60F81473) then bm51f (9017FAA0), `C:\KAH\fp\bm51e.sh|bm51f.sh`, lock `C:\KenshiTestRuns\fp-runner.lock`,
+  out `C:\KenshiTestRuns\fp-4080-m51e|m51f` (SUMMARY.txt + DONE): K rows + fp-control COMBAT=on.
+- m51 B died 12:02 (5090 clock): WSL had shut down entirely (no crash dump); restart the stack with /etc/start_env, and
+  Steam (`D:\Steam\steam.exe -silent`) after a PC restart.
+- DeepInfra returned HTTP 402 on chat from 11:38 (5090 clock): check live chat before LLM rows.
 - Gotcha: never `unload` a char that is still someone's fight/order target (game crash, exe+268A68); tests KO and leave them.
 - Gotcha: start detached WSL batches with `wsl.exe ... bash -s` + heredoc (`setsid nohup ... > log 2>&1 < /dev/null &`) and
   check the out dir appears; the one-line `bash -c '... &'` form silently never ran (m50 G and U).
@@ -29,8 +32,8 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 8B861ADE (danger interrupt keeps deal actions), KenshiFP 8469D760, PG BAFB8C31 (Normal), harness 24BE3AEC; server live `stobe` 055e0c5.
-- 4080: KenshiFP 8469D760 (same as the 5090; S05-BUILD PASS), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
+- 5090: Stobe 3EF4CCEE (NPC biography card), KenshiFP 9017FAA0 (manual combat default ON + binds, 7b85f67), PG BAFB8C31 (Normal), harness 24BE3AEC; server live `stobe` 055e0c5.
+- 4080: KenshiFP 9017FAA0 (m51, from bm51f; FD7A9A27/60F81473 before), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
 - **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
