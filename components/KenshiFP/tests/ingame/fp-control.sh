@@ -425,7 +425,7 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
   # m51e diag: does fp_view_apply still run (apply_n/cam_hb deltas over 1 s), did the trace in apply fail, is the override active
   AN0=$(fld apply_n <<<"$CI"); CH0=$(fld cam_hb <<<"$CI"); sleep 1; CJ=$(A fp_camera state); FS=$(A fp_state)
   AN1=$(fld apply_n <<<"$CJ"); CH1=$(fld cam_hb <<<"$CJ")
-  DG="apply_n+$(( ${AN1:-0}-${AN0:-0} )) cam_hb+$(( ${CH1:-0}-${CH0:-0} )) trace_err=$(fld trace_err <<<"$CJ") trace_last=$(fld trace_last <<<"$CJ") apply_ret=$(fld apply_ret <<<"$CJ") active=$(fld active <<<"$FS") freecam=$(fld freecam <<<"$FS") controlled=$(fld controlled <<<"$FS") ui_why=$(fld ui_why <<<"$FS")"   # pull-back ray per collision mask (which group the wall is in)
+  DG="apply_n+$(( ${AN1:-0}-${AN0:-0} )) cam_hb+$(( ${CH1:-0}-${CH0:-0} )) trace_err=$(fld trace_err <<<"$CJ") trace_last=$(fld trace_last <<<"$CJ") apply_ret=$(fld apply_ret <<<"$CJ") hold_n=$(fld hold_n <<<"$CJ") active=$(fld active <<<"$FS") freecam=$(fld freecam <<<"$FS") controlled=$(fld controlled <<<"$FS") ui_why=$(fld ui_why <<<"$FS")"   # pull-back ray per collision mask (which group the wall is in)
   YAW=$YB; read -r MA _ _ _ <<<"$(walk "$SH" w 1500)"; A fp_camera distance 0 >/dev/null
   ev="building='$(cut -c1-50 <<<"$BL")' wall_reached=$WALL | wall_behind target=$TT applied=$AP actual=$AD blocked=$BLK [$PRB] {$DG} | walk_away=$MA"
   if [ $WALL = 0 ]; then row C05-INTERIOR FAIL "setup no wall reached walking 11 s: $ev"; else

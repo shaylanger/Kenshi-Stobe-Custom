@@ -125,5 +125,13 @@ int main(void){
     u.applied=d;u.applied=kfp_view_next(&u,1.0f/60.0f);assert(fabsf(u.applied-x)<.0001f);
     v.applied=.1f;assert(kfp_view_is_eye(&v));v.applied=2;assert(!kfp_view_is_eye(&v));
     v.target=NAN;assert(kfp_view_next(&v,.01f)==0);
+    {   /* C05-INTERIOR: a refused trace frame never eases past the last applied distance */
+        KfpView p={30,6.61f,1,1};unsigned st=0;int b=0;
+        float a=kfp_view_hold(&p,12.932f,&b,1,&st,3);assert(a==6.61f && b==1 && st==1);   /* refused: hold, stay blocked */
+        b=0;a=kfp_view_hold(&p,4.0f,&b,1,&st,3);assert(a==4.0f && b==0);                  /* refused but nearer: allowed */
+        b=1;a=kfp_view_hold(&p,6.5f,&b,0,&st,3);assert(a==6.5f && b==1 && st==0);          /* answered: streak reset */
+        for (int k=0;k<3;++k){b=0;a=kfp_view_hold(&p,20,&b,1,&st,3);assert(a==6.61f && b==1);}
+        b=0;a=kfp_view_hold(&p,20,&b,1,&st,3);assert(a==20 && b==0);                       /* persistent refusal: other rays decide */
+    }
     puts("RESULT B09 PASS control pinning/inspection/explicit transfer/fallback/unload/reload, head-hide forget on world teardown, KO direct-drive stand-down and view wheel bounds/frame-rate smoothing");
 }

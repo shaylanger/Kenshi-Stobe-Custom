@@ -21,5 +21,16 @@ static float kfp_view_next(const KfpView *v,float dt) {
     if (dt>0.1f) dt=0.1f;
     return v->applied+(target-v->applied)*(1.0f-expf(-dt/0.08f));
 }
+/* C05-INTERIOR: the native wall trace sometimes refuses a query (scene busy) instead of answering hit/miss.
+ * A refused frame proves nothing about the wall, so it must not ease the camera outward through it (the
+ * pull-back used to read "no hit" there: blocked=0, the camera popped through the wall for that frame).
+ * On a refused frame: never go past the last applied distance and keep the last blocked flag. After `limit`
+ * consecutive refused frames the trace counts as unavailable and the remaining rays decide alone. */
+static float kfp_view_hold(const KfpView *prev,float allowed,int *blocked,int refused,unsigned *streak,unsigned limit) {
+    if (!refused) { *streak=0; return allowed; }
+    if (++*streak>limit) return allowed;
+    if (allowed>prev->applied) { allowed=prev->applied; *blocked=prev->blocked; }
+    return allowed;
+}
 static int kfp_view_is_eye(const KfpView *v) { return v->applied<KFP_VIEW_EYE_LIMIT; }
 #endif

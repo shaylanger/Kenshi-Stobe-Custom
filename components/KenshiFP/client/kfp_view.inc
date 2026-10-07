@@ -4,7 +4,8 @@ static Vec3 g_view_anchor, g_view_written;
 /* combat physics trace past characters (kfp_controls.inc, after the trace bindings): wall distance or -1 */
 static float fp_view_trace_wall(const Vec3 *from,const Vec3 *dir,float range);
 static unsigned g_view_trace_blocks;
-static unsigned g_view_apply_n, g_view_trace_err;   /* C05-INTERIOR diag */
+static unsigned g_view_apply_n, g_view_trace_err, g_view_hold_n, g_view_refuse_streak;   /* C05-INTERIOR diag */
+#define KFP_VIEW_REFUSE_LIMIT 30u   /* refused frames in a row before the trace counts as unavailable */
 static float g_view_trace_last=-1; static int g_view_apply_ret=-1;
 static int g_view_have_anchor, g_view_collision_dead;
 static volatile LONG g_view_injected_wheel;
@@ -28,6 +29,7 @@ static int fp_view_is_eye(void) {
 static void fp_view_apply(Vec3 *eye) {
     g_view_anchor=*eye; g_view_have_anchor=1; ++g_view_apply_n;
     if (!g_cfg_camera_zoom) { g_view.applied=0; g_view_written=*eye; g_view_apply_ret=1; return; }
+    KfpView prev=g_view; int refused=0;
     float wanted=kfp_view_next(&g_view,g_frame_dt);
     g_view.blocked=0; g_view.collision_known=1;
     if (wanted<=0.001f) { g_view.applied=0; g_view_written=*eye; g_view_apply_ret=2; return; }
@@ -57,6 +59,7 @@ static void fp_view_apply(Vec3 *eye) {
         {   /* the physics trace the aim uses stops at building walls (R10); fall_ray/mesh missed shack walls (b30) */
             float distance=fp_view_trace_wall(&from,&dir,wanted+.25f);
             if (i==0) g_view_trace_last=distance;
+            if (distance<-1.5f) refused=1;
             if (distance>=0 && distance<allowed+.25f) {
                 float limit=distance-.25f; if (limit<0) limit=0;
                 if (limit<allowed) { allowed=limit; g_view.blocked=1; ++g_view_trace_blocks; }
@@ -74,6 +77,10 @@ static void fp_view_apply(Vec3 *eye) {
     }
     g_mr_perch_node=old_perch_node; g_mr_perch_cache=old_perch_cache;
     g_guard_armed=0;
+    {   int blocked=g_view.blocked; float held=kfp_view_hold(&prev,allowed,&blocked,refused,&g_view_refuse_streak,KFP_VIEW_REFUSE_LIMIT);
+        if (held<allowed) ++g_view_hold_n;
+        allowed=held; g_view.blocked=blocked;
+    }
     g_view.applied=allowed; g_view_apply_ret=0;
     eye->x+=dir.x*allowed; eye->y+=dir.y*allowed; eye->z+=dir.z*allowed;
     g_view_written=*eye;
@@ -232,8 +239,8 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         have_actual&&g_have_t?actual.x-g_tx:0,have_actual&&g_have_t?actual.y:0,
         have_actual&&g_have_t?actual.z-g_tz:0,(double)g_face_yaw,g_face_have);
     {   size_t n=strlen(b);
-        snprintf(b+n,sizeof(b)-n," apply_n=%u cam_hb=%ld trace_err=%u trace_last=%.2f apply_ret=%d",
-            g_view_apply_n,(long)g_cam_heartbeat,g_view_trace_err,g_view_trace_last,g_view_apply_ret);
+        snprintf(b+n,sizeof(b)-n," apply_n=%u cam_hb=%ld trace_err=%u trace_last=%.2f apply_ret=%d hold_n=%u refuse_streak=%u",
+            g_view_apply_n,(long)g_cam_heartbeat,g_view_trace_err,g_view_trace_last,g_view_apply_ret,g_view_hold_n,g_view_refuse_streak);
     }
     if (g_view_have_anchor) {
         size_t n=strlen(b);
