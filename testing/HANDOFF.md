@@ -16,6 +16,7 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - Gotcha: a detached WSL start must end with `& disown` and be checked with `ps` (m50 G first start never ran).
 - 4080 desktop is locked (LogonUI): KenshiFP test switch `fp_keys focus on` (fp-controls.sh uses it). Defender-probe each new DLL
   on the 4080 (copy to C:\KAH, Get-FileHash, wait 20 s, Test-Path + newest Get-MpThreatDetection).
+- Waiting on Shay: nothing.
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
