@@ -174,15 +174,17 @@ for _ in 1 2 3 4; do r=$(cl_click); rs="$rs$r,"; case "$r" in 1) sw=$((sw+1));; 
 sleep 3; s=$(A fp_melee state); R1=$(echo "$s" | fld ai_refused); J1=$(echo "$s" | fld rejected); OW=$(echo "$s" | fld owned); W=$(echo "$s" | fld why)
 ev="crowd (spawned '${N2:-?}'): 4 product-legal clicks [${rs%,}] swung=$sw no_window=$nw not_ready=$nr cl_fired=$(echo "$s" | fld cl_fired) cl_timeouts=$(echo "$s" | fld cl_timeouts) rejected $J0->$J1 last_reject=$(echo "$s" | fld last_reject)/$(echo "$s" | fld last_reject_state) rej_stumble=$(echo "$s" | fld rej_stumble) out_of_reach $O0->$(echo "$s" | fld out_of_reach) expired $E0->$(echo "$s" | fld expired) ai_refused $R0->$R1 owned=$OW why=$W fault=$(A fp_combat state | fld fault)"
 if [ -n "$N2" ] && [ "$sw" -ge 3 ] && [ "$OW" = 1 ] && [ "$W" = ok ]; then row M08-CROWD PASS "$ev"; else row M08-CROWD FAIL "$ev"; fi
-[ -n "$N2" ] && A ko "$N2" 600 >/dev/null; A fp_melee passive "$PS" >/dev/null
+# the knocked-out second attacker is moved away: spawned 0.5 m from the fighter, its body can lie between fighter and
+# target and trace-block the released AI (4080 m09 vanilla M08-ACTOR: native chase state=11, no swing in 10 s)
+[ -n "$N2" ] && { A ko "$N2" 600 >/dev/null; A pin "$N2" at "$FI" dist 600 >/dev/null; }; A fp_melee passive "$PS" >/dev/null
 
 # ---- M08-ACTOR: control moves to another squad member -> the fighter is released, its AI swings again (ai_refused
 #      stops rising, target flesh drops with no input); re-take the fighter -> owned again, fresh click swings ----
 ready 15; A select "$OT" >/dev/null; A fp_control take >/dev/null; sleep 1
-A health "$TG" 100 >/dev/null; sleep 0.3; R0=$(ms ai_refused); H0=$(flesh "$TG"); sleep 10; R1=$(ms ai_refused); H1=$(flesh "$TG"); s=$(A fp_melee state "$FI"); OW=$(echo "$s" | fld owned)
+A health "$TG" 100 >/dev/null; sleep 0.3; R0=$(ms ai_refused); H0=$(flesh "$TG"); AG=$(gap); sleep 10; R1=$(ms ai_refused); H1=$(flesh "$TG"); s=$(A fp_melee state "$FI"); OW=$(echo "$s" | fld owned)
 FIS="controlled=$(echo "$s" | fld controlled) state=$(echo "$s" | fld state) active=$(echo "$s" | fld active) attacking=$(echo "$s" | fld attacking) target_h=$(echo "$s" | fld target_h)"
 take; sleep 2; OW2=$(ms owned); FS=$(fresh_click)
-ev="control->$OT: $FI owned=$OW ($FIS) ai_refused $R0->$R1 $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
+ev="control->$OT: $FI owned=$OW ($FIS gap_dm=$AG->$(gap)) ai_refused $R0->$R1 $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
 if [ "$OW" = 0 ] && [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && [ "$OW2" = 1 ] && [ "$FS" = 1 ]; then row M08-ACTOR PASS "$ev"; else row M08-ACTOR FAIL "$ev"; fi
 
 # ---- M08-LIMB (last: permanent on this load): left arm severed -> adapter stays ok, fresh clicks still swing ----
