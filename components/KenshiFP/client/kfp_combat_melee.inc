@@ -52,10 +52,12 @@ typedef void (*melee_approach_t)(void *,void *,float,float,float,char,float);
 static melee_approach_t g_melee_approach_orig;
 static void *g_melee_owned_mv;
 static unsigned g_melee_approach_refused,g_melee_chase_frames,g_melee_chase_drops,g_melee_chase_swings;
-/* Test switch (fp_melee force_chase on|off): every manual tick that leaves the owned fighter in STARTUP/DECISION/
- * CIRCLE/WAIT (not dead) ends with state=11/nextMove=10, the native trace-blocked chase lock (M09 GreatAnims), and a
- * click still pending in STARTUP at the next tick is treated as locked too (the native startup never gets to run it),
- * so the chase-drop path runs deterministically (M09-CHASE). forced_chase counts the forced frames. */
+/* Test switch (fp_melee force_chase on|off): every manual tick that finds the owned fighter in STARTUP/DECISION/
+ * CIRCLE/WAIT (not dead) puts it in state=11/nextMove=10, the native trace-blocked chase lock (M09 GreatAnims), right
+ * before the tick reads the state, i.e. exactly what the tick sees when the native update left the lock behind, so
+ * the real chase-drop branch (state 10/11) runs deterministically (M09-CHASE). Forcing it at the END of the tick
+ * (4080 b29: forced_chase 0->76, chase_drops 0->0) let the native update leave 11 before the next tick saw it.
+ * forced_chase counts the forced frames. */
 static int g_melee_force_chase;static unsigned g_melee_forced_chase;
 static void fp_melee_set_force_chase(int on) {g_melee_force_chase=on!=0;}
 static void melee_approach_hook(void *mv,void *pos,float a,float b,float c,char d,float e) {
@@ -356,6 +358,19 @@ static void fp_melee_release(void) {
     g_melee_in_swing=0;g_melee_swing_start_s=-1;
     g_melee_owned_cc=NULL;g_melee_owned_mv=NULL;g_melee_owned_st=NULL;g_melee_pending=0;g_melee_pending_failed=0;g_melee_armed=0;g_melee_rmb=0;g_melee_cl_release=0;
 }
+/* Chase-lock drop (state 10/11 seen by the manual tick, see the call site): a pending click starts its swing here,
+ * otherwise back to STARTUP (click pending) or WAIT. Returns the new state. */
+static int melee_chase_drop(void *cc) {
+    int state;
+    ++g_melee_chase_frames;++g_melee_chase_drops;
+    void *ost=g_melee_owned_st;
+    if (g_melee_pending && ost && readable(ost,0x10) && *(void **)((uintptr_t)ost+8)==cc && melee_click_swing(ost,cc)) {
+        state=MELEE_CHOP;++g_melee_chase_swings;
+    } else state=g_melee_pending?MELEE_STARTUP:MELEE_WAIT;
+    *(int *)((uintptr_t)cc+CC_STATE)=state;
+    *(int *)((uintptr_t)cc+CC_NEXTMOVE)=g_melee_pending||state==MELEE_CHOP?MELEE_CHOP:MELEE_WAIT;   /* no stale 10 */
+    return state;
+}
 static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
     {int sp=melee_spam_fire();if (sp>=0) fire=sp;}
     ++g_melee_ticks;g_melee_in_aim=aim;g_melee_in_fire=fire;
@@ -397,6 +412,12 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
         g_melee_fire_prev=fire;g_melee_block_prev=aim;g_melee_why="arming";return;
     }
     g_melee_rmb=aim;
+    if (g_melee_force_chase) {
+        int s=*(int *)((uintptr_t)cc+CC_STATE);
+        if (!*(unsigned char *)((uintptr_t)cc+CC_DEADTIME) && (s==MELEE_STARTUP || s==MELEE_DECISION || s==MELEE_CIRCLE || s==MELEE_WAIT)) {
+            *(int *)((uintptr_t)cc+CC_STATE)=11;*(int *)((uintptr_t)cc+CC_NEXTMOVE)=10;++g_melee_forced_chase;
+        }
+    }
     int state=*(int *)((uintptr_t)cc+CC_STATE);
     int active=*(unsigned char *)((uintptr_t)cc+CC_ACTIVE);
     int dead=*(unsigned char *)((uintptr_t)cc+CC_DEADTIME);
@@ -407,19 +428,13 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
      * rejected as "state" (M09 GreatAnims, 4080: 110/185 polls in state 11 after the first swing, swung=1 rejected+4;
      * root motion leaves the target out of reach). Drop it back to WAIT (STARTUP with a click pending, so the buffered
      * click still retries its attack init): spacing stays the player's job, an out-of-reach click still whiffs (M06). */
-    if (state==10 || state==11 || (g_melee_force_chase && g_melee_pending && state==MELEE_STARTUP)) {
+    if (state==10 || state==11) {
         /* With a click pending the startup that sent us here was trace-blocked (startupState: blocked -> 10 before it
          * ever calls initialise), so putting it back in STARTUP looped STARTUP -> 10 -> drop until the click expired
          * (4080 m09 gam/dodge: next=10, expired 1->30, swings 202->202, M04-INJ swings=0): the click's swing starts
          * here through the same path initialise would run (state = nextMove = CHOP on success, as startupState does).
          * No technique in reach: back to STARTUP, the click retries until it expires (out_of_reach, M06). */
-        ++g_melee_chase_frames;++g_melee_chase_drops;
-        void *ost=g_melee_owned_st;
-        if (g_melee_pending && ost && readable(ost,0x10) && *(void **)((uintptr_t)ost+8)==cc && melee_click_swing(ost,cc)) {
-            state=MELEE_CHOP;++g_melee_chase_swings;
-        } else state=g_melee_pending?MELEE_STARTUP:MELEE_WAIT;
-        *(int *)((uintptr_t)cc+CC_STATE)=state;
-        *(int *)((uintptr_t)cc+CC_NEXTMOVE)=g_melee_pending||state==MELEE_CHOP?MELEE_CHOP:MELEE_WAIT;   /* no stale 10 */
+        state=melee_chase_drop(cc);
     }
     if (g_melee_cl_release) {fire=0;g_melee_cl_release=0;}
     else if (g_melee_cl_wait) {
@@ -435,6 +450,13 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
         if (!bwhy) {
             g_melee_pending=1;g_melee_pending_left=0.25f;g_melee_pending_failed=0;g_melee_click_ms=KFP_MELEE_NOW_MS();
             *(int *)((uintptr_t)cc+CC_NEXTMOVE)=MELEE_CHOP;*(int *)((uintptr_t)cc+CC_STATE)=MELEE_STARTUP;
+            if (g_melee_force_chase) {
+                /* force_chase: the startup this click queued is trace-blocked (STARTUP -> 11/10) before the native
+                 * update can run it, so the swing must start from the chase drop (b29: the native startup took it,
+                 * chase_swings stayed 0) */
+                *(int *)((uintptr_t)cc+CC_STATE)=11;*(int *)((uintptr_t)cc+CC_NEXTMOVE)=10;++g_melee_forced_chase;
+                state=melee_chase_drop(cc);
+            }
         } else {
             ++g_melee_rejected;g_melee_last_reject=bwhy;g_melee_last_reject_state=state;
             if (state==MELEE_STUMBLE && !dead) ++g_melee_rej_stumble; else if (state==MELEE_CHOP && !dead) ++g_melee_rej_chop;
@@ -446,12 +468,6 @@ static void fp_melee_manual_tick(void *gw,void *pc,int aim,int fire,float dt) {
         if (!g_melee_block_prev) ++g_melee_blocks;
         if (state!=MELEE_CHOP && state!=MELEE_BLOCK && state!=MELEE_STUMBLE && !dead &&
             g_melee_check_block(cc,0.5f,0.5f)) ++g_melee_block_ok;
-    }
-    if (g_melee_force_chase) {
-        int s=*(int *)((uintptr_t)cc+CC_STATE);
-        if (!*(unsigned char *)((uintptr_t)cc+CC_DEADTIME) && (s==MELEE_STARTUP || s==MELEE_DECISION || s==MELEE_CIRCLE || s==MELEE_WAIT)) {
-            *(int *)((uintptr_t)cc+CC_STATE)=11;*(int *)((uintptr_t)cc+CC_NEXTMOVE)=10;++g_melee_forced_chase;
-        }
     }
     g_melee_fire_prev=fire;g_melee_block_prev=aim;
 }

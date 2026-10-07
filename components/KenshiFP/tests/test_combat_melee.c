@@ -133,15 +133,19 @@ int main(void){
      /* AttackState of another CombatClass is never used: fallback STARTUP, expires */
      {void *keep=g_melee_owned_st;g_melee_owned_st=est;reset_fight();tick(0,0,.016f);tick(0,1,.016f);put_int(CC_STATE,11);tick(0,0,.016f);
       assert(get_int(CC_STATE)==MELEE_STARTUP&&g_melee_pending&&g_melee_chase_swings==1);tick(0,0,.3f);assert(g_melee_expired==x0+1);g_melee_owned_st=keep;}
-     /* M09-CHASE test switch: every tick ends in the forced lock (state 11, nextMove 10); a pending click is started by the drop,
-      * also when the native put it back in STARTUP; CHOP and dead time are never forced */
-     {unsigned fc0=g_melee_forced_chase;
+     /* M09-CHASE test switch: the lock (state 11, nextMove 10) is forced BEFORE the tick reads the state (b29: forced at the
+      * end, the native update left 11 before the next tick, chase_drops 0->0) and right after an accepted click, so the
+      * real drop branch runs and the click's swing starts from it; a click the drop could not start (STARTUP, pending) is
+      * started on a later tick; CHOP and dead time are never forced */
+     {unsigned fc0=g_melee_forced_chase,d0=g_melee_chase_drops;
       reset_fight();tick(0,0,.016f);fp_melee_set_force_chase(1);tick(0,0,.016f);
-      assert(get_int(CC_STATE)==11&&get_int(CC_NEXTMOVE)==10&&g_melee_forced_chase==fc0+1);
-      tick(0,1,.016f);assert(g_melee_pending&&get_int(CC_STATE)==11&&g_melee_forced_chase==fc0+2);
-      tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_CHOP&&!g_melee_pending&&g_melee_chase_swings==2&&g_melee_forced_chase==fc0+2);
-      reset_fight();tick(0,1,.016f);assert(g_melee_pending&&get_int(CC_STATE)==11);
-      put_int(CC_STATE,MELEE_STARTUP);tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_CHOP&&g_melee_chase_swings==3);
+      assert(get_int(CC_STATE)==MELEE_WAIT&&get_int(CC_NEXTMOVE)==MELEE_WAIT&&g_melee_forced_chase==fc0+1&&g_melee_chase_drops==d0+1);
+      tick(0,1,.016f);
+      assert(get_int(CC_STATE)==MELEE_CHOP&&!g_melee_pending&&g_melee_chase_swings==2&&g_melee_forced_chase==fc0+3&&g_melee_chase_drops==d0+3);
+      tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_CHOP&&g_melee_forced_chase==fc0+3);   /* CHOP never forced */
+      reset_fight();tick(0,0,.016f);init_attack_ok=0;tick(0,1,.016f);
+      assert(g_melee_pending&&get_int(CC_STATE)==MELEE_STARTUP&&g_melee_chase_swings==2);
+      init_attack_ok=1;tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_CHOP&&g_melee_chase_swings==3);
       reset_fight();cc[CC_DEADTIME]=1;tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_DECISION);
       {char fb[2048];fp_melee_state_append(fb,sizeof(fb),cc);assert(strstr(fb," chase_swings=3 force_chase=1 forced_chase="));}
       fp_melee_set_force_chase(0);reset_fight();tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_DECISION);}
