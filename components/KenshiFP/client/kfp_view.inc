@@ -223,11 +223,11 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         written_distance=sqrtf(x*x+y*y+z*z);
     }
     char b[640];
-    snprintf(b,sizeof(b),"view_max=%.1f trace_blocks=%u direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f yaw=%.6f pitch=%.6f world_valid=%d camera_x=%.6f camera_y=%.6f camera_z=%.6f",
+    snprintf(b,sizeof(b),"view_max=%.1f trace_blocks=%u direct=%d zoom=%d target=%.3f applied=%.3f actual_distance=%.3f actual_valid=%d eye=%d blocked=%d collision_known=%d speed_scale=%.3f yaw=%.6f pitch=%.6f world_valid=%d camera_x=%.6f camera_y=%.6f camera_z=%.6f body_yaw=%.6f body_yaw_valid=%d",
         (double)KFP_VIEW_MAX,g_view_trace_blocks,!!g_fp_mode,g_cfg_camera_zoom,g_view.target,g_view.applied,distance,have_actual,fp_view_is_eye(),
         g_view.blocked,g_view.collision_known,g_speed_scale,g_yaw,g_pitch,have_actual&&g_have_t,
         have_actual&&g_have_t?actual.x-g_tx:0,have_actual&&g_have_t?actual.y:0,
-        have_actual&&g_have_t?actual.z-g_tz:0);
+        have_actual&&g_have_t?actual.z-g_tz:0,(double)g_face_yaw,g_face_have);
     if (g_view_have_anchor) {
         size_t n=strlen(b);
         snprintf(b+n,sizeof(b)-n," cached_distance=%.3f fresh_valid=%d written_distance=%.3f anchor_x=%.3f anchor_y=%.3f anchor_z=%.3f",
