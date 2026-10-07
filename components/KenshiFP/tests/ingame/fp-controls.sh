@@ -93,10 +93,15 @@ arm_bow() { [ -n "$WEP" ] && { A unequip "$SH" "$WEP" >/dev/null; WEP=""; }; [ "
   # a full inventory drops the unequipped bow on the ground (m50 b37): pick it up again first
   [ "$BOW_DROPPED" = 1 ] && { echo "SETUP bow pickup: $(A pickup "$SH" "$BOWN" now | cut -c1-120)" >> "$LOG"; BOW_DROPPED=0; }
   A equip "$SH" "$BOWN" | grep -q '^equipped'; }
-# give_melee: the fixture's player may carry no melee weapon at all (m50 b37: only armour): create one
-give_melee() { local w; [ -n "$(weapons)" ] && return 0
-  for w in "Wakizashi" "Katana" "Iron Club" "Nodachi"; do
-    echo "SETUP give $w: $(A give "$SH" "$w" 1 | cut -c1-120)" >> "$LOG"; [ -n "$(weapons)" ] && return 0; done; return 1; }
+# give_melee: the fixture's player may carry no melee weapon at all (m50 b37: only armour) and the harness can't create
+# weapons (m50 b38): take the mate's melee weapon (unequipped first; a full inventory drops it, then the player picks it up)
+give_melee() { local w r; [ -n "$(weapons)" ] && return 0
+  w=$(A inv "$MT" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | head -1 | sed 's/.*"name":"\([^"]*\)".*/\1/')
+  [ -n "$w" ] || { echo "SETUP give_melee: mate $MT has no melee weapon either" >> "$LOG"; return 1; }
+  r=$(A transfer "$MT" "$SH" "$w")
+  case "$r" in transferred*) ;; *) r=$(A unequip "$MT" "$w")
+    case "$r" in *ground*) r=$(A pickup "$SH" "$w" now);; *) r=$(A transfer "$MT" "$SH" "$w");; esac;; esac
+  echo "SETUP give_melee $w from $MT: $(cut -c1-120 <<<"$r")" >> "$LOG"; [ -n "$(weapons)" ]; }
 # draw_state <0|1>: R until fp_keys drawn matches (one press, bounded wait)
 draw_to() { kis drawn "$1" && return 0; A fp_keys press r 120 >/dev/null; waitf 4 kis drawn "$1"; }
 # HUD samples: hud <expected>: fp_keys snapshot; HUDS += "exp:ui/hud_text/shown"; HUDOK=0 on a mismatch
