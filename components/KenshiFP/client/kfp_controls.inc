@@ -77,6 +77,9 @@ static float g_fpc_fs_prog, g_fpc_fs_prog_max;
 static int g_fpc_last_task=-1;
 static char g_fpc_last_select[48]="none", g_fpc_last_target[48]="none";
 static const char *g_fpc_ui_state="off";
+/* K06 (4080 b39): the controlled char's live weaponInHands (pc+0x6D8), read every tick; fp_combat's wih only
+ * updates inside the ranged adapter, so melee draw/holster evidence comes from here. */
+static void *g_fpc_wih;
 static int g_fpc_drawn, g_fpc_ranged, g_fpc_input[FPC_NBTN];
 
 static double fpc_now_ms(void) {
@@ -322,7 +325,7 @@ static void fp_controls_tick(void *gw,float dt) {
     static void *last_actor;
     if (!g_fp_mode || g_fpc_fault) {
         if (last_actor) fpc_release_all();
-        last_actor=NULL;g_fpc_ui_state="off";g_fpc_drawn=0;return;
+        last_actor=NULL;g_fpc_ui_state="off";g_fpc_drawn=0;g_fpc_wih=NULL;return;
     }
     static volatile int phase;   /* 1 = free swing native calls: a fault there only disables the free swing */
     phase=0;
@@ -334,13 +337,13 @@ static void fp_controls_tick(void *gw,float dt) {
     guard_arm();
     void *pc=fp_controlled_char(gw);
     if (pc!=last_actor) {fpc_release_all();last_actor=pc;}
-    if (!char_valid(pc)) {g_guard_armed=0;g_fpc_ui_state="none";return;}
+    if (!char_valid(pc)) {g_guard_armed=0;g_fpc_ui_state="none";g_fpc_wih=NULL;return;}
     if (g_is_down && g_fpc_hold_actor) {g_fpc_hold_actor=NULL;g_fpc_fists=0;}
     fpc_ctx_relock_step();
     void *wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
     void *ranged=combat_virtual(pc,0x3d0);
     g_fpc_ranged=ranged&&((void *(*)(void *))ranged)(pc)!=NULL;
-    g_fpc_drawn=wih!=NULL||g_fpc_fists;
+    g_fpc_drawn=wih!=NULL||g_fpc_fists;g_fpc_wih=wih;
     int phys_ok=g_cursor_hidden && !g_ui_open && game_has_focus();
     int in[FPC_NBTN],edge[FPC_NBTN],rel[FPC_NBTN];
     double now=fpc_now_ms();
@@ -383,12 +386,12 @@ static void fp_controls_tick(void *gw,float dt) {
 }
 static void *g_fpc_hud;static const char *g_fpc_hud_text;static int g_fpc_hud_shown;static unsigned g_fpc_hud_changes;
 static size_t fpc_state(char *b,size_t n) {
-    return (size_t)snprintf(b,n,"hook=%d fault=%d swallow=%d fp=%d drawn=%d ranged=%d fists=%d hold=%d ui_state=%s in=%d%d%d%d "
+    return (size_t)snprintf(b,n,"hook=%d fault=%d swallow=%d fp=%d drawn=%d wih=%llx ranged=%d fists=%d hold=%d ui_state=%s in=%d%d%d%d "
         "mmb_selects=%u mmb_none=%u last_select=%s ctx_opens=%u ctx_none=%u ctx_freed=%d rmb_swallowed=%u lmb_swallowed=%u "
         "mmb_cam_frames=%u r_keys=%u r_draws=%u r_holsters=%u r_draw_fail=%u sheathe_kept=%u lmb_clicks=%u engages=%u last_task=%d last_target=%s "
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d",
-        g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
+        g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
         g_fpc_mmb_cam_frames,g_fpc_r_keys_swallowed,g_fpc_r_draws,g_fpc_r_holsters,g_fpc_r_draw_fail,g_fpc_sheathe_kept,g_fpc_lmb_clicks,g_fpc_engages,g_fpc_last_task,g_fpc_last_target,
@@ -402,7 +405,7 @@ static int fpc_btn_index(const char *s) {
 }
 static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id;(void)u;
-    if (argc==2 && !_stricmp(argv[1],"state")) {char b[1400];fpc_state(b,sizeof b);r->append(r,b);return KAH_OK;}
+    if (argc==2 && !_stricmp(argv[1],"state")) {char b[1600];fpc_state(b,sizeof b);r->append(r,b);return KAH_OK;}
     if ((argc==3||argc==4) && !_stricmp(argv[1],"press")) {
         int b=fpc_btn_index(argv[2]);int ms=argc==4?atoi(argv[3]):80;
         if (b<0 || ms<20 || ms>20000) {r->append(r,"press <lmb|rmb|mmb|r> [hold_ms 20..20000]");return KAH_ERROR;}

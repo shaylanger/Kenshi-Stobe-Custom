@@ -15,7 +15,7 @@
 #  K05-HOSTILE LMB drawn on Skaera: engages+1, last_task=5, native fight on her
 #  K05-UNPROV  LMB drawn on a neutral NPC (NEUTRAL=<name|#serial/index>, else the first non-squad, non-raider NPC within
 #              1500 not of Axima's faction; its faction relation is set to NEUTRAL_REL (20)): last_task=61, native fight on him
-#  K06         R draw: r_draws+1, wih!=0, still drawn after 5 s idle; R holster: r_holsters+1, wih=0
+#  K06         R draw: r_draws+1, wih!=0 (fp_keys live weaponInHands), still drawn after 5 s idle; R holster: r_holsters+1, wih=0
 #  FB01        RMB held drawn, aimed at the sky, out of combat: blocking while held, ready after release
 #  FS01        LMB drawn melee, no target, no fight: free swing started and ended (fs_prog_max>0.5), no fault, mate hp same
 #  FF01        crossbow, fp_combat on, aimed at the sky: one shot (actual_shots+1, ammo-1); adapter reload: ammo back up
@@ -197,8 +197,8 @@ mfail() { row "$1" FAIL "setup $SH has no melee weapon that equips (inv: $(weapo
 # ---- K06 (draw part) + HUD holstered/ready ----
 K06EV=""; K06OK=1
 if [ $MELEE = 1 ]; then ui_clear; draw_to 0; sky; hud holstered
-  D0=$(ks r_draws); A fp_keys press r 120 >/dev/null; waitf 4 kis drawn 1; W1=$(cs wih); hud_poll ready 3
-  sleep 5; K=$(A fp_keys state); W2=$(cs wih)
+  D0=$(ks r_draws); A fp_keys press r 120 >/dev/null; waitf 4 kis drawn 1; W1=$(ks wih); hud_poll ready 3
+  sleep 5; K=$(A fp_keys state); W2=$(fld wih <<<"$K")
   K06EV="draw: r_draws $D0->$(fld r_draws <<<"$K") wih=$W1 after_5s drawn=$(fld drawn <<<"$K") wih=$W2 sheathe_kept=$(fld sheathe_kept <<<"$K") r_keys=$(fld r_keys <<<"$K") fail=$(fld r_draw_fail <<<"$K")"
   [ "$(fld r_draws <<<"$K")" = $((D0+1)) ] && [ "$(fld drawn <<<"$K")" = 1 ] && [ -n "$W1" ] && [ "$W1" != 0 ] && [ -n "$W2" ] && [ "$W2" != 0 ] || K06OK=0
 fi
@@ -259,7 +259,7 @@ fi
 
 # ---- K06 (holster part) ----
 if want K06; then if [ $MELEE = 0 ]; then mfail K06; else ui_clear; draw_to 1; H0R=$(ks r_holsters)
-  A fp_keys press r 120 >/dev/null; waitf 4 kis drawn 0; K=$(A fp_keys state); W3=$(cs wih)
+  A fp_keys press r 120 >/dev/null; waitf 4 kis drawn 0; K=$(A fp_keys state); W3=$(fld wih <<<"$K")
   K06EV+=" | holster: r_holsters $H0R->$(fld r_holsters <<<"$K") drawn=$(fld drawn <<<"$K") wih=$W3 ui_state=$(fld ui_state <<<"$K")"
   [ "$(fld r_holsters <<<"$K")" = $((H0R+1)) ] && [ "$(fld drawn <<<"$K")" = 0 ] && [ "$W3" = 0 ] || K06OK=0
   judge K06 $K06OK "$K06EV"; fi; fi
