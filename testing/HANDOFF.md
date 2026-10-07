@@ -30,8 +30,8 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 8B861ADE (danger interrupt keeps deal actions), KenshiFP 0E881572, PG BAFB8C31 (Normal), harness F453E8FE; server live  055e0c5.
-- 4080: KenshiFP 7B8175EF (0E881572 + harness F453E8FE after M09 via chain42), PG BAFB8C31, harness C6969009 (no Stobe there). Rig notes: local .
+- 5090: Stobe 8B861ADE (danger interrupt keeps deal actions), KenshiFP 0E881572, PG BAFB8C31 (Normal), harness F453E8FE; server live `stobe` 055e0c5.
+- 4080: KenshiFP 7B8175EF (0E881572 + harness F453E8FE after M09 via chain42), PG BAFB8C31, harness C6969009 (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
 - **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
