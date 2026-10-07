@@ -93,6 +93,9 @@ drawn_is 1 || setup_fail "weapon not drawn for CS04"
 # ---- CS04: attack on '[' (drawn, sky) ----
 setini key_attack 219; waitf 4 bis attack 0xDB
 yaw=$(A fp_camera state | fld yaw); A fp_camera look "${yaw:-0}" -0.9 >/dev/null; sleep 0.3
+# m51 L: the game re-holstered the crossbow (drawn 1->0) between the look and the press: re-draw right before it
+drawn_is 1 || { key 0xDD 150; waitf 4 drawn_is 1; }
+drawn_is 1 || setup_fail "weapon holstered again before the CS04 press"
 c0=$(ks lmb_clicks); key 0xDB 120; waitf 3 cnt_up lmb_clicks "$c0"; c1=$(ks lmb_clicks)
 judge CS04 $([ "${c1:-0}" -gt "${c0:-0}" ] && echo 1 || echo 0) "attack=$(bd attack) lmb_clicks $c0->$c1 drawn=$(ks drawn)"
 
