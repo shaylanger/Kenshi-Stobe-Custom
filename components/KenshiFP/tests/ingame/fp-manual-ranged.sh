@@ -73,13 +73,23 @@ ev="actual_shots $S0->$S1 harness_shots $H0->$H1 loaded_before=$L0 bolts '$B0'->
 if [ "$SHOT" = 1 ] && [ $((S1-S0)) = 1 ] && [ $((H1-H0)) = 1 ] && [ "$L0" = 1 ]; then row R02 PASS "$ev"; else row R02 FAIL "$ev"; fi
 
 # ---- R04 reload: auto reload while aiming the empty weapon, shot refused during it, native duration ----
-waitfor 4 reloading 1; RSa=$(cs reload_starts)
+# The trigger must land inside the reload: R02's evidence reads take several wall seconds, so if its reload has under
+# 3 s left, let it finish and fire one fresh shot (re-baselined) whose reload is then tested.
+st=$(A fp_combat state); RLX=$(echo "$st" | fld reloading); RLL=$(echo "$st" | fld reload_left); R04_BASE="r02_shot"
+if [ "$RLX" != 1 ] || awk -v l="$RLL" 'BEGIN{exit !(l<3)}'; then
+  reload_watch 12 >/dev/null
+  RS0=$(cs reload_starts); Hb=$(hshots); Sb=$(cs actual_shots)
+  shoot 1
+  S1=$((Sb+1)); H1=$((Hb+1)); R04_BASE="fresh_shot shot=$SHOT left_before=$RLL"
+  [ "$SHOT" = 1 ] || { S1=$Sb; H1=$Hb; }
+fi
+waitfor 4 reloading 1; RLT=$(cs reload_left)
 inp 1 1 0; sleep 0.5; inp 1 0 0                                      # trigger during reload
 S3=$(cs actual_shots); H3=$(hshots)
 read -r MX DUR <<<"$(reload_watch 30)"
 RS1=$(cs reload_starts); L4=$(loaded); R4=$(cs reloading)
-ev="reload_starts $RS0->$RS1 native_timer_max=${MX}s wall~${DUR}s fire_during_reload shots $S1->$S3 harness $H1->$H3 loaded_after=$L4 reloading_after=$R4"
-if [ $((RS1-RS0)) = 1 ] && [ "$S3" = "$S1" ] && [ "$H3" = "$H1" ] && [ "$L4" = 1 ] && [ "$R4" = 0 ] && awk -v m="$MX" 'BEGIN{exit !(m>=1)}'; then row R04 PASS "$ev"; else row R04 FAIL "$ev"; fi
+ev="base=$R04_BASE reload_starts $RS0->$RS1 reload_left_at_trigger=$RLT native_timer_max=${MX}s wall~${DUR}s fire_during_reload shots $S1->$S3 harness $H1->$H3 loaded_after=$L4 reloading_after=$R4"
+if [ $((RS1-RS0)) = 1 ] && [ "$S3" = "$S1" ] && [ "$H3" = "$H1" ] && [ "$L4" = 1 ] && [ "$R4" = 0 ] && awk -v m="$MX" -v t="$RLT" 'BEGIN{exit !(m>=1 && t>=0.5)}'; then row R04 PASS "$ev"; else row R04 FAIL "$ev"; fi
 AUTO_MX=$MX
 
 # ---- R03 no duplicate/AI firing: loaded + aimed at an in-range hostile, no trigger, 10 s ----
