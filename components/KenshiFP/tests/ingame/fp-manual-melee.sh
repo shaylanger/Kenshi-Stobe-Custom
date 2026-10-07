@@ -6,7 +6,7 @@
 # initiative refused, rejected = illegal clicks, blocks/block_ok), `fp_melee state` (state/technique), the target's
 # flesh per body part (`hp`) and the fighter's melee attack base skill (`stat`).
 # Rows: M00 ownership (no input -> no own swing, AI refused), M01 click -> native swing + impact, M02 spam can't raise
-# the rate, M07 no queued/inherited click, M03 block request, M05 XP from manual hits, M06 out-of-reach click whiffs
+# the rate, M07 no queued/inherited click, M09-CHASE swings through a forced chase lock, M03 block request, M05 XP from manual hits, M06 out-of-reach click whiffs
 # in place (no remote chase).
 # Usage: fp-manual-melee.sh [fighter] [target] [outdir]. Ends with one `RESULT <row> PASS|FAIL <evidence>` per row.
 FI=${1:-Malzin}; TG=${2:-Skaera}; OUT=${3:-/tmp/fp-manual-melee}
@@ -22,7 +22,7 @@ RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
 setup_fail() { echo "RESULT SETUP FAIL $1 log=$LOG"; exit 1; }
 FP0=$(A fp_state | fld fp_mode)
-cleanup() { A fp_melee passive off >/dev/null; A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
+cleanup() { A fp_melee force_chase off >/dev/null; A fp_melee passive off >/dev/null; A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             A pin "$TG" off >/dev/null; [ -n "$WEP" ] && A unequip "$FI" "$WEP" >/dev/null
             A protect "$FI" off >/dev/null; A protect "$TG" off >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
@@ -130,6 +130,21 @@ if [ $((C1-C0)) -ge 14 ] && [ $((S1-S0)) -ge 1 ] && [ $((S1-S0)) -le 5 ] && [ $(
 sleep 0.5; S0=$(ms swings); sleep 2; S1=$(ms swings); P=$(ms pending)
 ev="after spam idle 2s: swings $S0->$S1 pending=$P"
 if [ "$S1" = "$S0" ] && [ "$P" = 0 ]; then row M07 PASS "$ev"; else row M07 FAIL "$ev"; fi
+
+# ---- M09-CHASE chase lock: with the native chase lock forced each tick (state 11/next 10, `fp_melee force_chase`),
+#      pending clicks must still start swings (chase drop -> swing, chase_swings) instead of expiring (4080 m09: the
+#      pending click went back to STARTUP -> 10 every frame, swings stalled while chase_drops climbed) ----
+A health "$TG" 100 >/dev/null
+s=$(A fp_melee state); S0=$(echo "$s" | fld swings); D0=$(echo "$s" | fld chase_drops); W0=$(echo "$s" | fld chase_swings); F0=$(echo "$s" | fld forced_chase)
+[ -n "$W0" ] && [ -n "$F0" ] || setup_fail "fp_melee state has no chase_swings/forced_chase (needs KenshiFP with the M09 chase fix)"
+A fp_melee force_chase on | grep -q "force_chase on" || setup_fail "fp_melee force_chase refused"
+A fp_melee spam 50 200 | grep -q "spam on" || { A fp_melee force_chase off >/dev/null; setup_fail "fp_melee spam refused"; }
+end=$((SECONDS+16)); while [ $SECONDS -lt $end ] && [ "$(ms spam_left)" != 0 ]; do sleep 0.5; done
+sleep 1; A fp_melee force_chase off >/dev/null
+s=$(A fp_melee state); S1=$(echo "$s" | fld swings); D1=$(echo "$s" | fld chase_drops); W1=$(echo "$s" | fld chase_swings); F1=$(echo "$s" | fld forced_chase)
+X=$(echo "$s" | fld expired)
+ev="force_chase spam 50x200ms: forced_chase $F0->$F1 chase_drops $D0->$D1 chase_swings $W0->$W1 swings $S0->$S1 expired=$X"
+if [ "$F1" -gt "$F0" ] && [ "$D1" -gt "$D0" ] && [ $((W1-W0)) -ge 3 ] && [ $((S1-S0)) -ge 3 ]; then row M09-CHASE PASS "$ev"; else row M09-CHASE FAIL "$ev"; fi
 
 # ---- M03 block (RMB only): the target attacks again (passive off); 10 s RMB up -> the fighter's native state never
 #      enters BLOCK/REACTION_BLOCK (AI auto-block refused); 15 s RMB held -> it does, and no own swing starts.
