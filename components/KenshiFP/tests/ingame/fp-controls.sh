@@ -150,6 +150,9 @@ AR0=$(cs auto_reload)
 . "$(dirname "$0")/fp-ui-guard.sh" 2>/dev/null || { ui_guard_setup() { :; }; ui_clear() { return 0; }; ui_summary() { echo "ui_guard=missing"; }; raid_sweep() { :; }; }
 A speed 1 hold >/dev/null; A fp_move none >/dev/null; A fp_keys reset >/dev/null
 for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
+# the shooter stays passive (no AI-started fights) for the whole run, restored on exit: 5090 m50 M her crossbow AI shot
+# the pinned hostile (rc_target=Skaera, in_ranged_combat=1) unconscious long before K05-HOSTILE
+PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/dev/null
 # the hostile stays conscious for K05-HOSTILE: pinned 60 m away and kept out of the raid guard until then
 TGH=""; if A where "$TG" | grep -q 'pos='; then TGH=$(A where "$TG" | grep -oE '#[0-9]+/[0-9]+' | head -1)
   A pin "$TG" at "$SH" dist 600 >/dev/null && PINNED+=" $TG"; A hunger "$TG" 300 >/dev/null; fi
@@ -252,10 +255,14 @@ if want FS01 || want HUD01; then if [ $MELEE = 0 ]; then want FS01 && mfail FS01
 # fpc_engage's "already fighting this target" early return (no new order, engages 0->0). The shooter is put in passive
 # combat mode (the orders-panel toggle: no AI-started fights; player attack orders still run) for the row and must be
 # out of any fight before the click; the crosshair pick must report the npc before the press (pick line in the evidence).
+# live_name <ref>: the character's live name (getName, as KenshiFP's pick/last_target print it): Stobe renames spawned
+# generics ("Drannik 2 [Hungry Bandit]", 5090 m50 M K05-UNPROV) and named NPCs carry their template ("Skaera [Hungry Bandit]")
+live_name() { A where "$1" | sed -n 's/^\(.*\) #[0-9][0-9]*\/[0-9][0-9]* .*/\1/p' | head -1; }
 engage_row() { local G0 K FT ser ev ok PK P0 FB; ui_clear; draw_to 1
   P0=$(A combatmode "$SH" | fld passive); PASSIVE0=${PASSIVE0:-$P0}; A combatmode "$SH" passive on >/dev/null
   A pin "$2" at "$SH" dist 15 face "$SH" | grep -q '^pinned' || { row "$1" FAIL "setup could not pin $3 in front of $SH"; engage_end "$2" "$P0"; return; }
   PINNED+=" $2"; sleep 1; aim_at "$2" 13; ser=$(A where "$2" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
+  local LN; LN=$(live_name "$2"); set -- "$1" "$2" "${LN:-$3}" "$4"   # the name KenshiFP reports (getName)
   if ! waitf 8 not_fight; then FB=$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')
     row "$1" FAIL "setup $SH still in a native fight before the click (passive=$(A combatmode "$SH" | fld passive) [$FB])"; engage_end "$2" "$P0"; return; fi
   PK=""; for _ in 1 2 3 4 5 6; do A fp_keys pick >/dev/null; sleep 0.3; PK=$(A fp_keys pick show); [ "$(fld result <<<"$PK")" = "$(uname_ "$3")" ] && break; done
@@ -269,8 +276,13 @@ engage_row() { local G0 K FT ser ev ok PK P0 FB; ui_clear; draw_to 1
 # engage_end <npc ref> <shooter passive before>: KO + unpin the npc, restore the shooter's passive toggle
 engage_end() { A ko "$1" 3600 >/dev/null; A pin "$1" off >/dev/null; waitf 10 isko "$1"
   [ -n "$2" ] && A combatmode "$SH" passive "$([ "$2" = 1 ] && echo on || echo off)" >/dev/null; }
+# tg_ready: the hostile conscious for K05-HOSTILE; a KO'd one is woken (protect on clears a knockout at once, bounded
+# 15 s), protect off again, and must still be up 2 s later (5090 m50 M: found KO at the row)
+notko() { ! isko "$1"; }
+tg_ready() { notko "$TGH" && return 0; A protect "$TGH" on >/dev/null; waitf 15 notko "$TGH"; A protect "$TGH" off >/dev/null; sleep 2
+  echo "SETUP K05-HOSTILE: $TG was KO, woken via protect: $(A where "$TGH" | cut -c1-120)" >> "$LOG"; notko "$TGH"; }
 if want K05; then if [ $MELEE = 0 ]; then mfail K05-HOSTILE; mfail K05-UNPROV; else
-  if [ -n "$TGH" ] && ! isko "$TG"; then engage_row K05-HOSTILE "$TGH" "$TG" 5; else row K05-HOSTILE FAIL "setup hostile $TG missing or KO ($(A where "$TG" | cut -c1-100))"; fi
+  if [ -n "$TGH" ] && tg_ready; then engage_row K05-HOSTILE "$TGH" "$TG" 5; else row K05-HOSTILE FAIL "setup hostile $TG missing or KO ($(A where "$TG" | cut -c1-100))"; fi
   # neutral: NEUTRAL=<name> if given, else one spawned for the row (Tech Hunters, not hostile to the squad; 4080 b39
   # kah-fpxbow had no neutral NPC within 1500), left KO'd after (no unload: b41 crash); the old nearby search only as a fallback
   NH=""; NN=""; NSPAWN=""
