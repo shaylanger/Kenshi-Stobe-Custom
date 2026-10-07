@@ -14,7 +14,7 @@
 #  K04         RMB held, melee drawn, on the mate: blocking, free_block_frames rising, no context menu
 #  K05-HOSTILE LMB drawn on Skaera: engages+1, last_task=5, native fight on her
 #  K05-UNPROV  LMB drawn on a neutral NPC (NEUTRAL=<name|#serial/index>, else a Hungry Bandit spawned in Tech Hunters 40 away
-#              and retired after (KO + unload); its faction relation is set to NEUTRAL_REL (20)): last_task=61, native fight on him.
+#              and left KO'd after (no unload: b41 crash); its faction relation is set to NEUTRAL_REL (20)): last_task=61, native fight on him.
 #              Both K05 rows: shooter in passive combat mode, out of any fight and the crosshair pick on the npc before the click
 #  K06         R draw: r_draws+1, wih!=0 (fp_keys live weaponInHands), still drawn after 5 s idle; R holster: r_holsters+1, wih=0
 #  FB01        RMB held drawn, aimed at the sky, out of combat: blocking while held, ready after release
@@ -272,7 +272,7 @@ engage_end() { A ko "$1" 3600 >/dev/null; A pin "$1" off >/dev/null; waitf 10 is
 if want K05; then if [ $MELEE = 0 ]; then mfail K05-HOSTILE; mfail K05-UNPROV; else
   if [ -n "$TGH" ] && ! isko "$TG"; then engage_row K05-HOSTILE "$TGH" "$TG" 5; else row K05-HOSTILE FAIL "setup hostile $TG missing or KO ($(A where "$TG" | cut -c1-100))"; fi
   # neutral: NEUTRAL=<name> if given, else one spawned for the row (Tech Hunters, not hostile to the squad; 4080 b39
-  # kah-fpxbow had no neutral NPC within 1500), retired after (KO + unload); the old nearby search only as a fallback
+  # kah-fpxbow had no neutral NPC within 1500), left KO'd after (no unload: b41 crash); the old nearby search only as a fallback
   NH=""; NN=""; NSPAWN=""
   if [ -n "$NEUTRAL" ]; then NH=$(A where "$NEUTRAL" | grep -oE '#[0-9]+/[0-9]+' | head -1); NN=$(A where "$NEUTRAL" | sed 's/ #[0-9].*//')
   else SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH" dist 40 count 1 2>&1); echo "K05-UNPROV spawn: $SP" >> "$LOG"
@@ -284,7 +284,9 @@ if want K05; then if [ $MELEE = 0 ]; then mfail K05-HOSTILE; mfail K05-UNPROV; e
       NH=$(grep -oE '#[0-9]+/[0-9]+' <<<"$L" | head -1); NN=$(sed 's/ #[0-9].*//' <<<"$L"); fi; fi
   if [ -z "$NH" ]; then row K05-UNPROV FAIL "setup no neutral NPC: spawn failed ($(cut -c1-100 <<<"$SP")) and none within 1500 (set NEUTRAL=<name>)"
   else A relation "$NH" "$NEUTRAL_REL" >/dev/null; echo "K05-UNPROV neutral=$NN $NH relation set $NEUTRAL_REL spawned=$([ -n "$NSPAWN" ] && echo 1 || echo 0)" >> "$LOG"; engage_row K05-UNPROV "$NH" "$NN" 61
-    [ -n "$NSPAWN" ] && echo "K05-UNPROV retire: $(A unload "$NSPAWN" 2>&1 | cut -c1-120)" >> "$LOG"; fi
+    # no `unload`: 4080 b41 crashed the game (access violation in the exe's main loop, 0.3 s after unload) when the
+    # spawned neutral was unloaded while the shooter still had the attack order/fight on him; engage_end has KO'd him
+    [ -n "$NSPAWN" ] && echo "K05-UNPROV retire: left KO'd ($(A where "$NSPAWN" | cut -c1-100))" >> "$LOG"; fi
   raid_sweep; waitf 20 not_fight || echo "SETUP: still in a native fight 20 s after K05" >> "$LOG"; fi
 fi
 [ -n "$TGH" ] && { A pin "$TG" off >/dev/null; isko "$TG" || A ko "$TG" 3600 >/dev/null; }
