@@ -83,6 +83,20 @@ cl_click() { inp 0 0; wake_tg; engage; local end=$((SECONDS+10)) ok=0 s0 f0 t0 s
   for _ in $(seq 1 15); do [ "$(ms swings)" != "$s0" ] && break; sleep 0.1; done; echo $(( $(ms swings) - s0 )); }
 # blood: target blood (unarmed martial-arts hits: 5090 batch 1 showed blood 77.6->69.5 with every part still 100%)
 blood() { A hp "$1" | grep -o 'blood=[0-9.]*' | cut -d= -f2; }
+# face_tg: look at the target's chest and wait (<= 2.5 s) until the body has turned to it. In FP every facing request
+# of the controlled fighter is redirected to the camera-driven body yaw (faceDirection lock), so the native swing no
+# longer turns to its target: the player aims by looking. The pin puts the target at +x of the fighter whatever he
+# faces, so the clicks swung at wherever the camera pointed (4080 m09c vanilla/mca M08-UNARMED at 8-9 dm: 4 swings,
+# zone_targets 0, no hit; the katana's wider arc hid it). Echoes the body-to-target angle in degrees (? = no body_yaw).
+face_tg() { local p q c cx cz cy yaw pit by i d="?"; p=$(A where "$FI" | grep -o 'pos=[^ ]*' | cut -d= -f2); q=$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2)
+  c=$(A fp_camera state); cx=$(echo "$c" | fld camera_x); cz=$(echo "$c" | fld camera_z); cy=$(echo "$c" | fld camera_y)
+  read -r yaw pit <<<"$(awk -v p="$p" -v q="$q" -v cx="$cx" -v cz="$cz" -v cy="$cy" 'BEGIN{split(p,a,",");split(q,b,",")
+    if(cx!=""&&cz!=""){a[1]=cx;a[3]=cz}; e=(cy!="")?cy:a[2]+16; h=sqrt((b[1]-a[1])^2+(b[3]-a[3])^2)
+    printf "%.4f %.4f", atan2(b[1]-a[1], b[3]-a[3]), atan2(e-(b[2]+12), h)}')"
+  A fp_camera look "$yaw" "$pit" >/dev/null
+  for i in $(seq 1 10); do sleep 0.25; by=$(A fp_camera state | fld body_yaw); [ -n "$by" ] || { sleep 1; break; }
+    d=$(awk -v a="$yaw" -v b="$by" 'BEGIN{x=a-b; while(x>3.14159)x-=6.28318; while(x<-3.14159)x+=6.28318; printf "%.0f", (x<0?-x:x)*57.2958}')
+    [ "$d" -le 8 ] && break; done; echo "$d"; }
 # gate: the inputs of the product's why=not_allowed gate (KenshiFP 96316C2D+), reported when a row ends not owned
 gate() { local s; s=$(A fp_melee state); echo "gate[ui_open=$(echo "$s" | fld ui_open) is_down=$(echo "$s" | fld is_down) focus=$(echo "$s" | fld focus) prone=$(echo "$s" | fld prone) unconscious=$(echo "$s" | fld unconscious) ko_timer=$(echo "$s" | fld ko_timer) head=$(echo "$s" | fld head_above) ui_why=$(A fp_state | fld ui_why)]"; }
 # held: hold LMB and count swings over N s (a held click must start at most the one its own edge allowed)
@@ -150,8 +164,9 @@ A fp_melee wounds reset | grep -q "^wounds=0" || setup_fail "fp_melee wounds res
 # UD: unarmed spacing. The katana's 12 dm is at the edge of martial-arts reach: 4080 m09b (gap 12-13 dm) vanilla/mca/
 # dodge swung 2-4 times with no hit (vanilla clicks 3-4 found no technique in reach: native chase 10, out_of_reach 1->3),
 # gam/full landed 1-2 of 4. A player fighting unarmed steps in; the target is pinned at 8 dm instead.
-UD=${UNARMED_DIST:-8}; ug=""; uz=""
-for _ in 1 2 3 4; do close "$UD"; ug+="$(gap) "; r=$(fresh_click "$UD"); uz+="$(ms zone_targets) "; [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
+# Before each click the fighter looks at the target (face_tg); face_deg = body-to-target angle at the click.
+UD=${UNARMED_DIST:-8}; ug=""; uz=""; uf=""
+for _ in 1 2 3 4; do close "$UD"; ug+="$(gap) "; uf+="$(face_tg) "; r=$(fresh_click "$UD"); uz+="$(ms zone_targets) "; [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
 s=$(A fp_melee state); MH=$(( $(echo "$s" | fld melee_hits) - MH0 )); WA=$(( $(echo "$s" | fld wounds_any) - WA0 ))
 MD=$(awk -v c0="$MC0" -v b0="$MB0" -v c1="$(echo "$s" | fld melee_cut)" -v b1="$(echo "$s" | fld melee_blunt)" 'BEGIN{printf "cut+%.1f blunt+%.1f", c1-c0, b1-b0}')
 MDT=$(echo "$MD" | awk '{gsub(/[a-z+]/," "); print $1+$2}')
@@ -166,7 +181,7 @@ A equip "$FI" "$WEP" | grep -q ERROR && { A pickup "$FI" "$WEP" now >/dev/null; 
 # U2 = the second unequip's reply: "ERROR: not equipped" proves the weapon stayed off during the clicks (expected)
 # hit evidence: the target's flesh dropped, or native addWound calls by the fighter with cut+blunt > 0 (melee_hits).
 # Blood is reported only: it also falls from the bleeding of older cuts (m50-b: 77.7->76.9 with no part touched).
-ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw gap_dm=[${ug% }] zone_targets=[${uz% }] $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA ring[${WS% }] fighter_on_target=$FT blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
+ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw gap_dm=[${ug% }] face_deg=[${uf% }] zone_targets=[${uz% }] $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA ring[${WS% }] fighter_on_target=$FT blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
 if [[ "$U1" == unequipped* ]] && [[ "$U2" == *"not equipped"* ]] && [ "$sw" -ge 3 ] && awk -v a="$H0" -v b="$H1" -v h="$MH" -v d="$MDT" -v ft="$FT" 'BEGIN{exit !(b<a-0.5 || (h>0 && d>0) || ft>0)}'; then row M08-UNARMED PASS "$ev"; else row M08-UNARMED FAIL "$ev"; fi
 
 # ---- M08-CROWD: a second hostile attacks the fighter -> adapter stays owned/ok, clicks still swing, AI refused ----
