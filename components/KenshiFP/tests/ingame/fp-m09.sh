@@ -25,7 +25,13 @@ say() { echo "$*" | tee -a "$S"; }
 note() { echo "$(date +%T) $*" >> "$O/progress.txt"; }
 ctl() { timeout 900 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTLPS" "$@" </dev/null >> "$O/ctl.log" 2>&1; }
 [ -n "$ANIM" ] || { say "RESULT M09-SETUP FAIL anim-mods.sh not found (set ANIM=)"; touch "$O/DONE"; exit 1; }
-finish() { ctl stop; note "restore: $(bash "$ANIM" restore 2>&1)"; touch "$O/DONE"; }
+# keepfp <loadout>: copy KenshiFP.log (reset on launch; the 4080's ctl archive skips it) before the next stop/launch:
+# 4080 m09b dodge M08-CROWD lost ownership for 2 min and no KenshiFP.log of that launch was left
+KD=${KENSHI_DIR:-}; for d in /d/Steam/steamapps/common/Kenshi /mnt/d/Steam/steamapps/common/Kenshi "/c/Program Files (x86)/Steam/steamapps/common/Kenshi"; do
+  [ -z "$KD" ] && [ -f "$d/KenshiFP.log" ] && KD=$d; done
+keepfp() { [ -n "$1" ] && [ -n "$KD" ] && [ -f "$KD/KenshiFP.log" ] && mkdir -p "$O/$1" && cp "$KD/KenshiFP.log" "$O/$1/KenshiFP.log"; return 0; }
+LO_RUN=""
+finish() { keepfp "$LO_RUN"; ctl stop; note "restore: $(bash "$ANIM" restore 2>&1)"; touch "$O/DONE"; }
 trap finish EXIT
 say "M09 start $(date '+%F %T') save=$SAVE fighter=$FI target=$TG loadouts='$LOADOUTS' anim=$ANIM ctl=$CTLPS before: $(bash "$ANIM" status)"
 # expected `loaded:` line of anim-mods.sh for a loadout
@@ -38,13 +44,13 @@ runrows() { local lo=$1 n=$2 f=$3 out="$O/$1/$2" rc a args=(); shift 3; mkdir -p
   if grep -q '^RESULT ' "$out/RESULT.txt"; then sed -n "s/^RESULT /RESULT M09-$lo-/p" "$out/RESULT.txt" | tee -a "$S"
   else say "RESULT M09-$lo-$n FAIL no RESULT line (rc=$rc) log=$out/RESULT.txt"; fi; }
 for lo in $LOADOUTS; do
-  note "loadout $lo"; ctl stop
+  note "loadout $lo"; keepfp "$LO_RUN"; LO_RUN=""; ctl stop
   st=$(bash "$ANIM" set "$lo" 2>&1) || { say "RESULT M09-$lo-SETUP FAIL anim-mods.sh set $lo: $st"; continue; }
   if ! ctl launch -Save "$SAVE" || ! stobe-auto wait-world "$WORLD_S" >/dev/null 2>&1; then
     say "RESULT M09-$lo-SETUP FAIL launch on $SAVE never reached the world (ctl.log; $st)"; continue; fi
   got=$(bash "$ANIM" loaded | grep '^loaded:'); exp=$(want_loaded "$lo")
   if [ "$got" != "$exp" ]; then say "RESULT M09-$lo-SETUP FAIL kenshi_info.log '$got', wanted '$exp' ($st)"; continue; fi
-  say "M09 $lo: $st | $got"
+  say "M09 $lo: $st | $got"; LO_RUN=$lo
   runrows "$lo" melee fp-manual-melee.sh "$FI" "$TG" "{OUT}"
   runrows "$lo" life fp-manual-melee-life.sh "$FI" "$TG" "{OUT}" "$OT"
 done
