@@ -21,7 +21,10 @@ A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r";
 fld() { grep -o "\b$1=[^ ]*" | tail -1 | cut -d= -f2; }
 ms() { A fp_melee state | fld "$1"; }
 inp() { A fp_combat input "$1" "$2" 0 >/dev/null; }
-flesh() { A hp "$1" | grep -o '[0-6]:[-0-9.]*/' | tr -d / | cut -d: -f2 | awk '{s+=$1}END{printf "%.1f", s}'; }
+flesh_of() { grep -o '[0-6]:[-0-9.]*/' | tr -d / | cut -d: -f2 | awk '{s+=$1}END{printf "%.1f", s}'; }   # hp reply on stdin
+flesh() { A hp "$1" | flesh_of; }
+# median <d1,d2,...>: median flesh drop (non-numbers ignored; 0 if none)
+median() { echo "$1" | tr ',' '\n' | grep -E '^[0-9]+(\.[0-9]+)?$' | sort -g | awk '{a[NR]=$1}END{if(!NR){print 0;exit};printf "%.2f", (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}'; }
 RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
 # setup_fail also works inside $(window): the line goes to $OUT/ABORT and the main shell is TERMed, prints the rows
@@ -60,8 +63,10 @@ engage() { in_fight && return 0; local who end
 ready() { inp 0 0; engage; local end=$((SECONDS+20)); while [ $SECONDS -lt $end ]; do
   [ "$(ms why)" = ok ] && [ "$(ms armed)" = 1 ] && in_fight && return 0; sleep 0.3; done; return 1; }
 # window [seconds]: clicks every 0.2 s from the product's spam switch for that long (default WIN); the target is
-# healed whenever it drops below 60% so it never goes down. Echoes "<swings> <hits> <flesh lost> <mean swing s>"
-# (a hit = a flesh drop > 0.5 between two polls; mean swing = native CHOP time per finished swing, game s).
+# healed whenever it drops below 60% so it never goes down. Echoes "<swings> <hits> <flesh lost> <mean swing s> <drops>"
+# (a hit = a flesh drop > 0.5 between two polls; drops = those drops, comma list or "-"; mean swing = native CHOP time
+# per finished swing, game s). One hp read per poll serves both the drop and the heal check (4080 m09 mca: the old
+# second hp read between polls hid drops, two 21.2 hits merged into one 42.5 "hit": manual per_hit 27.3 vs 21.2 real).
 # ticking: the fighter's combat class advances (state_left/frame_dt change within 0.6 s; frozen in 4080 batch 13)
 ticking() { local a b; a=$(A fp_melee state | grep -o 'state_left=[^ ]* \|frame_dt=[^ ]*' | tr -d '\n'); sleep 0.6
   b=$(A fp_melee state | grep -o 'state_left=[^ ]* \|frame_dt=[^ ]*' | tr -d '\n'); [ -n "$a" ] && [ "$a" != "$b" ]; }
@@ -77,28 +82,29 @@ guard() { local i st ko w ok
   w=$(A fp_melee state)
   setup_fail "$2: $1 window not ready after one repair: $(echo "$st" | grep -o 'paused=[^ ]* speed=[^ ]*') fighter=${ko:-up} why=$(echo "$w" | fld why) armed=$(echo "$w" | fld armed) active=$(echo "$w" | fld active) ticking=$(ticking && echo 1 || echo 0) ui=[$(A ui | head -c 200 | tr '\n' ' ')]"; }
 window() { guard manual "window(${1:-$WIN}s)"; close; A health "$TG" 100 >/dev/null; sleep 0.3
-  local w=${1:-$WIN} s0 t0 e0 p n end lost=0 hits=0; s0=$(ms swings); t0=$(ms swing_time); e0=$(ms swing_ends); p=$(flesh "$TG")
+  local w=${1:-$WIN} s0 t0 e0 p n hr end lost=0 hits=0 drops=""; s0=$(ms swings); t0=$(ms swing_time); e0=$(ms swing_ends); p=$(flesh "$TG")
   A fp_melee spam $((w*5)) 200 | grep -q "spam on" || { echo "0 0 0 0 spam_refused"; return; }; end=$((SECONDS+w+5))
   while [ $SECONDS -lt $end ]; do sleep 0.3
-    n=$(flesh "$TG"); if awk -v a="$p" -v b="$n" 'BEGIN{exit !(b<a-0.5)}'; then hits=$((hits+1)); lost=$(awk -v l="$lost" -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", l+a-b}'); fi
-    p=$n; A hp "$TG" | grep -q 'worst=[0-5]\?[0-9]%' && { A health "$TG" 100 >/dev/null; p=$(flesh "$TG"); }
+    hr=$(A hp "$TG"); n=$(echo "$hr" | flesh_of)
+    if awk -v a="$p" -v b="$n" 'BEGIN{exit !(b<a-0.5)}'; then hits=$((hits+1)); lost=$(awk -v l="$lost" -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", l+a-b}'); drops="$drops${drops:+,}$(awk -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", a-b}')"; fi
+    p=$n; echo "$hr" | grep -q 'worst=[0-5]\?[0-9]%' && { A health "$TG" 100 >/dev/null; p=$(flesh "$TG"); }
     if [ -n "$HOLD_FI" ]; then local hf; hf=$(A hp "$FI"); echo "$hf" | grep -q ' KO ' && { : > "$OUT/fi_ko"; break; }
       echo "$hf" | grep -q 'worst=[0-2]\?[0-9]%' && A health "$FI" "$HOLD_FI" >/dev/null; fi
     [ "$(ms spam_left)" = 0 ] && break; done
   A fp_melee spam off >/dev/null
-  sleep 1.5; n=$(flesh "$TG"); awk -v a="$p" -v b="$n" 'BEGIN{exit !(b<a-0.5)}' && { hits=$((hits+1)); lost=$(awk -v l="$lost" -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", l+a-b}'); }
+  sleep 1.5; n=$(flesh "$TG"); awk -v a="$p" -v b="$n" 'BEGIN{exit !(b<a-0.5)}' && { hits=$((hits+1)); lost=$(awk -v l="$lost" -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", l+a-b}'); drops="$drops${drops:+,}$(awk -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", a-b}')"; }
   local mean; mean=$(awk -v t0="$t0" -v t1="$(ms swing_time)" -v e0="$e0" -v e1="$(ms swing_ends)" 'BEGIN{printf "%.3f", (e1>e0) ? (t1-t0)/(e1-e0) : 0}')
-  echo "$(( $(ms swings) - s0 )) $hits $lost $mean"; }
+  echo "$(( $(ms swings) - s0 )) $hits $lost $mean ${drops:--}"; }
 # ctrl_window <s>: native-AI control (manual ownership off, the fighter's own AI swings)
-#   -> "<hits> <flesh lost> <native swings> <mean native swing s>" (product native swing timer nat_swing_*)
+#   -> "<hits> <flesh lost> <native swings> <mean native swing s> <drops>" (product native swing timer nat_swing_*)
 ctrl_window() { A fp_combat off >/dev/null; guard ctrl "ctrl_window(${1}s)"; close; A health "$TG" 100 >/dev/null; sleep 0.3
-  local p n end=$((SECONDS+$1)) lost=0 hits=0 ne0 nt0; p=$(flesh "$TG"); ne0=$(ms nat_swing_ends); nt0=$(ms nat_swing_time)
-  while [ $SECONDS -lt $end ]; do sleep 0.3; n=$(flesh "$TG")
-    if awk -v a="$p" -v b="$n" 'BEGIN{exit !(b<a-0.5)}'; then hits=$((hits+1)); lost=$(awk -v l="$lost" -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", l+a-b}'); fi
-    p=$n; A hp "$TG" | grep -q 'worst=[0-5]\?[0-9]%' && { A health "$TG" 100 >/dev/null; p=$(flesh "$TG"); }; done
+  local p n hr end=$((SECONDS+$1)) lost=0 hits=0 ne0 nt0 drops=""; p=$(flesh "$TG"); ne0=$(ms nat_swing_ends); nt0=$(ms nat_swing_time)
+  while [ $SECONDS -lt $end ]; do sleep 0.3; hr=$(A hp "$TG"); n=$(echo "$hr" | flesh_of)
+    if awk -v a="$p" -v b="$n" 'BEGIN{exit !(b<a-0.5)}'; then hits=$((hits+1)); lost=$(awk -v l="$lost" -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", l+a-b}'); drops="$drops${drops:+,}$(awk -v a="$p" -v b="$n" 'BEGIN{printf "%.1f", a-b}')"; fi
+    p=$n; echo "$hr" | grep -q 'worst=[0-5]\?[0-9]%' && { A health "$TG" 100 >/dev/null; p=$(flesh "$TG"); }; done
   local ne1 nt1; ne1=$(ms nat_swing_ends); nt1=$(ms nat_swing_time)
   A fp_combat on >/dev/null
-  echo "$hits $lost $((ne1-ne0)) $(awk -v t0="$nt0" -v t1="$nt1" -v e0="$ne0" -v e1="$ne1" 'BEGIN{printf "%.3f", (e1>e0) ? (t1-t0)/(e1-e0) : 0}')"; }
+  echo "$hits $lost $((ne1-ne0)) $(awk -v t0="$nt0" -v t1="$nt1" -v e0="$ne0" -v e1="$ne1" 'BEGIN{printf "%.3f", (e1>e0) ? (t1-t0)/(e1-e0) : 0}') ${drops:--}"; }
 eff() { A stat "$FI" "$1" | grep -o 'effective=[-0-9.]*' | head -1 | cut -d= -f2; }
 # tech_ratio <techs5> <techs80>: swingstat techs (addr:n:time;...) -> "<ratio> <common>": over techniques with >= 2
 # completed CHOPs in both halves, total time at 80 / (count at 80 x mean time at 5); < 1 = the same moves got faster
@@ -201,24 +207,35 @@ A setstat "$TG" defence 1 >/dev/null
 # alone 1 vs 80, the others at their start value): the stat that moves it most (>= 10%, >= 3 hits per half) is used,
 # and the manual per-hit damage must rise by at least half that native change. (5090 batch 2: `stat <c>
 # primaryweapondamage` reads 0.0 always: CharStats::getStat doesn't compute the derived stats, no harness reader.)
-A setstat "$FI" attack 80 >/dev/null; best=""; NR=1; nd=""
+# per_hit = MEDIAN flesh drop per hit (4080 m09 mca/dodge: lost/hits counted two hits landing between polls as one,
+# manual katanas1 27.3 "per hit" while every single drop was 21.2 = the native value). Each half runs up to 3 windows
+# until it has >= 3 hits (4080 m09 gam: the native AI landed 2-4 of ~10 swings per 15 s window); a stat whose native
+# halves still have < 3 hits gives no reference, and with no reference at all the row is INCONCLUSIVE, not "< 10%".
+# dmg_half ctrl|manual -> "<hits> <drops> <windows>"
+dmg_half() { local h=0 d="" i hh dd
+  for i in 1 2 3; do if [ "$1" = ctrl ]; then read -r hh _ _ _ dd <<<"$(ctrl_window $WIN)"; else read -r _ hh _ _ dd <<<"$(window)"; fi
+    h=$((h+${hh:-0})); case "$dd" in [0-9]*) d="$d${d:+,}$dd";; esac; [ $h -ge 3 ] && break; done
+  echo "$h ${d:--} $i"; }
+A setstat "$FI" attack 80 >/dev/null; best=""; NR=1; nd=""; few=""
 for s in strength dexterity katanas; do
-  A setstat "$FI" "$s" 1 >/dev/null; v1=$(nstat "$s"); read -r h1 l1 _ <<<"$(ctrl_window $WIN)"
-  A setstat "$FI" "$s" 80 >/dev/null; v2=$(nstat "$s"); read -r h2 l2 _ <<<"$(ctrl_window $WIN)"
+  A setstat "$FI" "$s" 1 >/dev/null; v1=$(nstat "$s"); read -r h1 d1 w1 <<<"$(dmg_half ctrl)"
+  A setstat "$FI" "$s" 80 >/dev/null; v2=$(nstat "$s"); read -r h2 d2 w2 <<<"$(dmg_half ctrl)"
   case "$s" in strength) A setstat "$FI" "$s" "$ST0" >/dev/null;; dexterity) A setstat "$FI" "$s" "$DX0" >/dev/null;; katanas) A setstat "$FI" "$s" "$KT0" >/dev/null;; esac
-  q1=$(awk -v l="$l1" -v h="$h1" 'BEGIN{printf "%.2f", h? l/h : 0}'); q2=$(awk -v l="$l2" -v h="$h2" 'BEGIN{printf "%.2f", h? l/h : 0}')
-  nd="$nd $s:$v1->$v2:ai_hits=$h1/$h2:ai_per_hit=$q1->$q2"
+  q1=$(median "$d1"); q2=$(median "$d2")
+  nd="$nd $s:$v1->$v2:ai_hits=$h1/$h2(win=$w1/$w2):ai_per_hit=$q1->$q2"
+  [ "$h1" -ge 3 ] && [ "$h2" -ge 3 ] || few="$few $s"
   r=$(awk -v a="$q1" -v b="$q2" -v h1="$h1" -v h2="$h2" 'BEGIN{printf "%.4f", (a>0 && h1>=3 && h2>=3)? b/a : 0}')
   awk -v r="$r" -v n="$NR" 'BEGIN{exit !(r>n)}' && { NR=$r; best=$s; }
 done
 if [ -z "$best" ] || ! awk -v n="$NR" 'BEGIN{exit !(n>=1.1)}'; then
-  row M04-DMG FAIL "native-AI per-hit damage moved < 10% for every stat ($WEP):$nd"
+  if [ -n "$few" ] && [ -z "$best" ]; then row M04-DMG INCONCLUSIVE "no native reference: native-AI control < 3 hits in a half after 3 windows for:$few ($WEP):$nd"
+  else row M04-DMG FAIL "native-AI per-hit damage moved < 10% for every stat with >= 3 hits per half ($WEP):$nd${few:+ | too few hits:$few}"; fi
 else
-  A setstat "$FI" "$best" 1 >/dev/null; read -r S1 H1 L1 _ <<<"$(window)"
-  A setstat "$FI" "$best" 80 >/dev/null; read -r S2 H2 L2 _ <<<"$(window)"
+  A setstat "$FI" "$best" 1 >/dev/null; read -r H1 D1 MW1 <<<"$(dmg_half manual)"
+  A setstat "$FI" "$best" 80 >/dev/null; read -r H2 D2 MW2 <<<"$(dmg_half manual)"
   case "$best" in strength) A setstat "$FI" "$best" "$ST0" >/dev/null;; dexterity) A setstat "$FI" "$best" "$DX0" >/dev/null;; katanas) A setstat "$FI" "$best" "$KT0" >/dev/null;; esac
-  P1=$(awk -v l="$L1" -v h="$H1" 'BEGIN{printf "%.2f", h? l/h : 0}'); P2=$(awk -v l="$L2" -v h="$H2" 'BEGIN{printf "%.2f", h? l/h : 0}')
-  ev="attack80 $WEP: ${best}1 hits=$H1 per_hit=$P1 | ${best}80 hits=$H2 per_hit=$P2 | native_ratio=$NR;$nd"
+  P1=$(median "$D1"); P2=$(median "$D2")
+  ev="attack80 $WEP: ${best}1 hits=$H1(win=$MW1) per_hit=$P1 | ${best}80 hits=$H2(win=$MW2) per_hit=$P2 | native_ratio=$NR;$nd"
   if [ "$H1" -ge 3 ] && [ "$H2" -ge 3 ] && awk -v a="$P1" -v b="$P2" -v n="$NR" 'BEGIN{exit !(a>0 && b/a >= 1+(n-1)*0.5)}'; then row M04-DMG PASS "$ev"; else row M04-DMG FAIL "$ev"; fi
 fi
 
