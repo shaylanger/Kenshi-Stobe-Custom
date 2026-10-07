@@ -44,6 +44,8 @@ MOVE_MIN=${MOVE_MIN:-10}; STILL_MAX=${STILL_MAX:-3}; STALL_MS=${STALL_MS:-250}; 
 INTERIOR=${INTERIOR:-}; STAIRS=${STAIRS:-}; ONLY=${ONLY:-}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
+# COMBAT=on|off: set manual combat for the run (default: leave it; since 2026-10-07 it starts ON)
+[ -n "$COMBAT" ] && echo "SETUP fp_combat $COMBAT: $(A fp_combat "$COMBAT")" >> "$LOG"
 fld() { grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
 cam() { A fp_camera state | fld "$1"; }
 ctl() { A fp_control state | fld "$1"; }
@@ -64,6 +66,8 @@ RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
 judge() { if [ "$2" = 1 ]; then row "$1" PASS "$3"; else row "$1" FAIL "$3"; fi; }
 setup_fail() { echo "RESULT SETUP FAIL $1 log=$LOG"; exit 1; }
+# m51: a copied run.sh without its awk helpers made the obstacle check pass silently (4080 C05-KO walked into a wall)
+for f in fp-yaw-free.awk fp-stairs-scan.awk; do [ -f "$(dirname "$0")/$f" ] || setup_fail "helper $f missing next to $0"; done
 waitf() { local end=$((SECONDS+$1)); shift; while [ $SECONDS -lt $end ]; do "$@" && return 0; sleep 0.25; done; return 1; }
 fp_is() { [ "$(fps fp_mode)" = "$1" ]; }
 ui_is() { [ "$(fps ui_open)" = "$1" ]; }
@@ -308,13 +312,14 @@ mate_ready C04-TAKE
 ui_clear; take "$SH" >/dev/null; A select "$MT" >/dev/null; sleep 0.5
 U0=$(ctl take_ui_ignored); A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; A fp_control press >/dev/null; sleep 0.8
 U1=$(ctl take_ui_ignored); HUI=$(ctl controlled); A click INV >/dev/null; waitf 4 ui_is 0; ui_clear
-D0=$(ctl take_done); pick_yaw "$SH|$MT" C04-TAKE; look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
-A fp_control press >/dev/null; waitf 3 ctl_is "$MT"; TOOK=$?; D1=$(ctl take_done); sleep 0.5
+# 20 s hold (fp_move none below releases it): 9 s ran out on the 5090 before the mate's samples
+D0=$(ctl take_done); pick_yaw "$SH|$MT" C04-TAKE; look "$YAW" 0; A fp_move w 20000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
+A fp_control press >/dev/null; waitf 3 ctl_is "$MT"; TOOK=$?; D1=$(ctl take_done); HL=$(A fp_move state | fld left_ms); sleep 0.5
 PS1=$(pos "$SH"); PM1=$(pos "$MT"); sleep 2; PS2=$(pos "$SH"); PM2=$(pos "$MT")
 A fp_move state > "$OUT/last_walk_state.txt"   # mvdiag: the mate's fp_move state while W is still held
 A fp_move none >/dev/null; sleep 0.8; MSTOP=$(still "$MT" 2)
 WSH=$(d2 "$PS0" "$PS1"); RSH=$(d2 "$PS1" "$PS2"); WMT=$(d2 "$PM1" "$PM2")
-ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT stop_after_release=$MSTOP clearance=$YAWC $MT[$(mvdiag)]"
+ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 hold_left_ms=$HL $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT stop_after_release=$MSTOP clearance=$YAWC $MT[$(mvdiag)]"
 ok=1; [ $UIO = 0 ] && [ "$U1" -gt "$U0" ] && [ "$HUI" = "$H0" ] && [ $TOOK = 0 ] && [ "$D1" -gt "$D0" ] || ok=0
 lt "$RSH" "$STILL_MAX" || ok=0; ge "$WMT" "$MOVE_MIN" || ok=0; lt "$MSTOP" "$STILL_MAX" || ok=0
 judge C04-TAKE $ok "$ev"
@@ -395,7 +400,7 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
   for _ in $(seq 1 22); do sleep 0.5; PN=$(pos "$SH"); if lt "$(d2 "$PP" "$PN")" 0.5; then N=$((N+1)); [ $N -ge 3 ] && { WALL=1; break; }; else N=0; fi; PP=$PN; done
   A fp_move none >/dev/null; sleep 0.5
   YB=$(awk -v y="$YAW" 'BEGIN{y+=3.14159; if(y>3.14159)y-=6.28318; printf "%.4f", y}')   # face away: the wall is behind
-  look "$YB" 0; A fp_camera distance 30 >/dev/null; sleep 1.5; CI=$(A fp_camera state)
+  look "$YB" 0; A fp_camera distance 30 >/dev/null; sleep 0.5; waitf 5 bash -c 'stobe-auto fp_camera state | grep -q "blocked=1"'; CI=$(A fp_camera state)   # m51: poll, the clamp converges
   BLK=$(fld blocked <<<"$CI"); AP=$(fld applied <<<"$CI"); TT=$(fld target <<<"$CI"); AD=$(fld actual_distance <<<"$CI")
   PRB=$(A fp_camera probe | grep -o 'cam=.*')   # pull-back ray per collision mask (which group the wall is in)
   YAW=$YB; read -r MA _ _ _ <<<"$(walk "$SH" w 1500)"; A fp_camera distance 0 >/dev/null

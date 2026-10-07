@@ -223,6 +223,21 @@ static void combat_release(void) {
         *(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT)==rc &&
         *(void **)((uintptr_t)rc+RC_ME)==pc && g_combat_end_orig) g_combat_end_orig(rc);
 }
+/* C05-KO: while manual combat owns the actor its native RangedCombatClass update/end never run, so a combat
+ * mode the AI entered while ownership was released (KO: the AI picked a ranged fight with the raiders around)
+ * stayed set after the wake: aim-stance locomotion and the free-aim facing override while the player walked
+ * (fresh W after the wake 6-10 units at ~80 deg). Not aiming = no native ranged combat mode: end it (native
+ * end at most once a second, then just keep the flag clear). */
+static DWORD g_combat_stale_end_ms;
+static void combat_end_stale(void *rc) {
+    DWORD now=GetTickCount();
+    if (g_combat_end_orig && (!g_combat_stale_end_ms || now-g_combat_stale_end_ms>=1000)) {
+        g_combat_stale_end_ms=now;g_combat_end_orig(rc);
+        if (g_combat_stale_ends<8) logline("[combat] stale native ranged combat mode ended (not aiming)");
+        ++g_combat_stale_ends;
+    }
+    *(unsigned char *)((uintptr_t)rc+RC_COMBATMODE)=0;
+}
 /* GunClass::createPhysical (vt+0x18) sets harpoonMaterial (+0x70) =
  * MaterialManager::getByName(material). GunClass::shoot decrements ammo and then
  * returns before spawning the bolt when +0x70 is NULL (1.0.68 0x43A84F; 1.0.65
@@ -483,13 +498,21 @@ static void combat_note_reject(unsigned before,float closeness,float timer,int h
 static void fp_manual_combat_tick(void *gw,float dt) {
     g_combat_gw=gw;
     g_combat_anim_drive=0;   /* set again below only when this tick drives the anim */
+    /* F10 "Manual combat" (manual_combat, default on) sets the runtime switch whenever it changes; the harness
+     * fp_combat on|off overrides it until the next change */
+    static int pref_applied=-1;
+    if (g_cfg_manual_combat!=pref_applied) {
+        pref_applied=g_cfg_manual_combat;g_combat_enabled=g_cfg_manual_combat;
+        if (!g_combat_enabled) g_combat_injection=0;
+        logline("[combat] manual combat %s (setting)",g_combat_enabled?"on":"off");
+    }
     KfpCombatInput input={0};
     if (g_combat_injection) input=g_combat_injected;
     else if (game_has_focus()) {
-        input.aim=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
-        input.fire=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0;
-        /* R alone = FP draw/holster (kfp_controls.inc); R with RMB (aim) held = reload */
-        input.reload=input.aim&&(GetAsyncKeyState(0x52)&0x8000)!=0;
+        input.aim=(GetAsyncKeyState(g_cfg_key_block)&0x8000)!=0;
+        input.fire=(GetAsyncKeyState(g_cfg_key_attack)&0x8000)!=0;
+        /* draw key alone = FP draw/holster (kfp_controls.inc); draw key with block (aim) held = reload */
+        input.reload=input.aim&&(GetAsyncKeyState(g_cfg_key_draw)&0x8000)!=0;
     }
     fp_melee_observe_swing(gw,dt);   /* native swing timer (M04-SPEED control), any owner */
     if (!g_combat_enabled || !g_combat_native_ready || g_combat_fault || !g_fp_mode) {
@@ -536,6 +559,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         if (!readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) {g_guard_armed=0;return;}
         g_combat_pc=pc;g_combat_rc=rc;g_combat_weapon=weapon;
         memcpy(g_combat_actor_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20);
+        if (*(unsigned char *)((uintptr_t)rc+RC_COMBATMODE) && !g_aim_mode) combat_end_stale(rc);   /* C05-KO */
     }
     void *gun=((void *(*)(void *))(g_base+RVA_RC_GETGUN))(rc);
     {void *cur=combat_virtual(pc,0x3c0);g_combat_cur=cur?((void *(*)(void *))cur)(pc):NULL;}
@@ -571,6 +595,8 @@ static void fp_manual_combat_tick(void *gw,float dt) {
          * Native ranged-combat mode is held meanwhile. No shot/reload while holstered. */
         unsigned rej0=g_combat_control.rejected;
         unsigned action=kfp_combat_step(&g_combat_control,&o,input,0,0);
+        if (!g_combat_control.aimed && !(action&KFP_ACT_RAISE) && !g_aim_mode &&
+            *(unsigned char *)((uintptr_t)rc+RC_COMBATMODE)) combat_end_stale(rc);   /* C05-KO */
         g_combat_why="holstered";combat_note_reject(rej0,NAN,NAN,-1,"holstered");
         if (g_combat_draw_cd>0) g_combat_draw_cd-=dt;
         if (g_combat_control.aimed || (action&KFP_ACT_RAISE)) {

@@ -12,10 +12,16 @@ static unsigned g_fp_take_req_n, g_fp_take_req_done, g_fp_take_req_ui;
 /* Harness fp_move (TEST ONLY): WASD held for a bounded time through the same
  * fp_movement path as the physical keys (bit0 W, bit1 S, bit2 A, bit3 D). */
 static volatile LONG g_kah_move_keys, g_kah_move_until;
+static DWORD g_kah_move_start;   /* C04-TAKE diag: when the current fp_move hold began */
 static int kah_move_key(int bit) {
     LONG k=g_kah_move_keys;
     if (!(k&bit)) return 0;
-    if ((LONG)(GetTickCount()-(DWORD)g_kah_move_until)>=0) { InterlockedExchange(&g_kah_move_keys,0); return 0; }
+    if ((LONG)(GetTickCount()-(DWORD)g_kah_move_until)>=0) {
+        if (InterlockedExchange(&g_kah_move_keys,0))
+            logline("[move] harness fp_move hold expired (keys=0x%lx held %lu ms)",
+                    (long)k,(unsigned long)(GetTickCount()-g_kah_move_start));
+        return 0;
+    }
     return 1;
 }
 static int fp_control_pin(void *gw,void *pc) {
@@ -117,6 +123,7 @@ static void fp_control_tick(void *gw) {
         fp_head_forget_world();   /* before anything can "restore" a freed head */
         fp_control_release_actor(g_fp_control_actor,0);   /* teardown: forget, never write (b27b) */
         g_fp_mode=0; g_fp_world_seen=0; g_fp_control_pinned=0; g_fp_control_actor=NULL;
+        g_freecam_clear_pending=1;   /* load: a vanilla FPS camera may carry over (m51-F) */
         return;
     }
     if (!g_fp_mode) FP_CONTROL_RELEASE(gw);
@@ -136,7 +143,10 @@ static void fp_control_tick(void *gw) {
     take |= (req && !g_ui_open);
     if (take && fp_control_take_selected(gw)) {
         if (req && !g_ui_open) ++g_fp_take_req_done;
-        logline("[control] transferred to explicitly selected squad member");
+        {   LONG hk=g_kah_move_keys; LONG left=(LONG)((DWORD)g_kah_move_until-GetTickCount());
+            if (!hk || left<0) { hk=0; left=0; }
+            logline("[control] transferred to explicitly selected squad member (held: harness=0x%lx left_ms=%ld"
+                    " phys_w=%d)", (long)hk,(long)left,(GetAsyncKeyState(0x57 /* W */)&0x8000)?1:0); }
     }
     if (g_fp_mode && !fp_controlled_char(gw)) {
         FP_CONTROL_RELEASE(gw);
@@ -177,13 +187,20 @@ static int kah_fp_move(const char *id,int argc,const char *const *argv,KAH_Reply
     char b[480];
     if (argc==2 && !_stricmp(argv[1],"state")) {
         LONG k=g_kah_move_keys; LONG left=(LONG)((DWORD)g_kah_move_until-GetTickCount());
+        int rc_mode=-1,mv_mode=-1;   /* C05-KO diag: native ranged combat mode / CharMovement mode (0x378) */
+        {void *pc=g_fp_mode?fp_controlled_char(g_gw_cache):NULL;
+         void *rc=char_valid(pc)&&readable((void *)((uintptr_t)pc+CHAR_RANGEDCOMBAT),8)?*(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT):NULL;
+         void *mv=char_valid(pc)&&readable((void *)((uintptr_t)pc+CHAR_MOVEMENT),8)?*(void **)((uintptr_t)pc+CHAR_MOVEMENT):NULL;
+         if (readable((void *)((uintptr_t)rc+RC_COMBATMODE),1)) rc_mode=*(unsigned char *)((uintptr_t)rc+RC_COMBATMODE);
+         if (readable((void *)((uintptr_t)mv+0x378),4)) mv_mode=*(int *)((uintptr_t)mv+0x378);}
         if (!k || left<0) { k=0; left=0; }
         snprintf(b,sizeof(b),"keys=%s%s%s%s left_ms=%ld moving=%d direct_drive=%d dm_active=%d move_speed=%.2f"
             " is_down=%d ui_moveblock=%d fp_mode=%d prone=%d in_bed=%d head_above=%.2f stuck_frames=%d pinned=%d"
-            " downed=%d ko=%d",
+            " downed=%d ko=%d rc_mode=%d mv_mode=%d stale_ends=%u",
             (k&1)?"w":"",(k&2)?"s":"",(k&4)?"a":"",(k&8)?"d":"",(long)left,g_was_moving,g_was_direct,
             (int)g_dm_active,g_move_speed,g_is_down,g_ui_moveblock,!!g_fp_mode,g_dbg_prone,g_dbg_in_bed,
-            g_head_above,g_stuck_frames,g_stuck_frames>KFP_STUCK_PINNED_FRAMES,g_dbg_downed,g_dbg_ko);
+            g_head_above,g_stuck_frames,g_stuck_frames>KFP_STUCK_PINNED_FRAMES,g_dbg_downed,g_dbg_ko,
+            rc_mode,mv_mode,g_combat_stale_ends);
         r->append(r,b); return KAH_OK;
     }
     if (argc<2 || argc>3) {
@@ -203,6 +220,7 @@ static int kah_fp_move(const char *id,int argc,const char *const *argv,KAH_Reply
         char *e; ms=strtol(argv[2],&e,10);
         if (*e || ms<1 || ms>30000) { r->append(r,"ms must be 1..30000"); return KAH_ERROR; }
     }
+    g_kah_move_start=GetTickCount();
     InterlockedExchange(&g_kah_move_until,(LONG)(GetTickCount()+(DWORD)ms));
     InterlockedExchange(&g_kah_move_keys,k);
     if (k) snprintf(b,sizeof(b),"keys held %ld ms through fp_movement; verify with where/fp_move state",ms);

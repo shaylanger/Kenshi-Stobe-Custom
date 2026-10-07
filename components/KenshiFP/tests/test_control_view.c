@@ -40,6 +40,11 @@ static int g_was_moving,g_was_direct,g_is_down,g_ui_moveblock;
 static volatile LONG g_dm_active;
 static float g_move_speed;
 static float g_head_above=2.0f;
+#define CHAR_RANGEDCOMBAT 0x2F0
+#define CHAR_MOVEMENT 0x640
+#define RC_COMBATMODE 0x36
+static unsigned g_combat_stale_ends;   /* fp_move state C05-KO diag */
+static int g_freecam_clear_pending;
 static int g_stuck_frames,g_dbg_prone,g_dbg_in_bed,g_dbg_downed,g_dbg_ko;
 #include "../client/kfp_stuck.h"
 static int live_releases;static void fp_control_release_actor(void *pc,int live){(void)pc;++releases;live_releases+=live!=0;}

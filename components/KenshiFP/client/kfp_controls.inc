@@ -53,8 +53,9 @@ static fpc_startanim_t g_fpc_startanim;
 static int g_fpc_hook_ok, g_fpc_fault, g_fpc_fs_dead;
 static int g_fpc_swallow=1;             /* test switch: fp_keys swallow off = native mouse flags pass (control rows) */
 /* buttons: 0 lmb 1 rmb 2 mmb 3 r */
-enum {FPC_LMB,FPC_RMB,FPC_MMB,FPC_R,FPC_NBTN};
-static const char *const g_fpc_btn_names[FPC_NBTN]={"lmb","rmb","mmb","r"};
+/* logical FP buttons; the physical key of each comes from the F10 binds (defaults LMB, RMB, MMB, R, RMB) */
+enum {FPC_LMB,FPC_RMB,FPC_MMB,FPC_R,FPC_INT,FPC_NBTN};
+static const char *const g_fpc_btn_names[FPC_NBTN]={"lmb","rmb","mmb","r","interact"};
 static double g_fpc_inj_until[FPC_NBTN];    /* harness press: held until this QPC ms */
 static int g_fpc_prev[FPC_NBTN];
 static double g_fpc_down_ms[FPC_NBTN];
@@ -158,10 +159,31 @@ static void fpc_cam_post(void *cam,float yaw,float pitch) {
     *(float *)((uintptr_t)cam+0x18)=yaw;*(float *)((uintptr_t)cam+0x1C)=pitch;
     *(unsigned char *)cam=0;                        /* isRotating */
 }
-/* keyPressed: R belongs to draw/holster in FP (OIS DIK_R = 0x13). */
+/* keyPressed: every keyboard-bound FP button (draw = R by default, plus any attack/block/select/
+ * interact rebound to a key) belongs to FP while it owns input, so a vanilla bind on the same key
+ * never fires too (CS06: interact on ';' also ran Kenshi's toggle_fps_camera and dropped FP).
+ * Mouse binds (VK < 8) have no DIK. */
+static int fpc_key_is_bound(int vk,unsigned dik) {
+    return vk>=8 && dik==MapVirtualKeyA((UINT)vk,0 /* MAPVK_VK_TO_VSC */);
+}
+static int fpc_key_bound_any(unsigned dik) {
+    return dik && (fpc_key_is_bound(g_cfg_key_draw,dik) || fpc_key_is_bound(g_cfg_key_attack,dik) ||
+        fpc_key_is_bound(g_cfg_key_block,dik) || fpc_key_is_bound(g_cfg_key_select,dik) ||
+        fpc_key_is_bound(g_cfg_key_interact,dik));
+}
+/* also under the free cursor / a game panel (m51-F: ';' with free=1 reached toggle_fps_camera);
+ * a focused text field or the F10 bind capture gets every key */
+static int fpc_key_owned(unsigned dik) {
+    if (!dik || !g_fp_mode || !g_fpc_hook_ok || g_ui_c_keyfocus || g_kb_cap>=0) return 0;
+    return fpc_key_bound_any(dik);
+}
+static void fpc_key_note_swallow(unsigned dik) {
+    ++g_fp_keys_swallowed;g_fp_last_swallow_dik=dik;g_fp_swallow_ms=GetTickCount();g_fp_swallow_seen=1;
+}
 static int fpc_key_swallow(unsigned dik) {
-    if (dik!=0x13 || !g_fp_mode || g_ui_open || !g_fpc_hook_ok) return 0;
-    ++g_fpc_r_keys_swallowed;return 1;
+    if (!fpc_key_owned(dik)) return 0;
+    if (fpc_key_is_bound(g_cfg_key_draw,dik)) ++g_fpc_r_keys_swallowed;
+    fpc_key_note_swallow(dik);return 1;
 }
 static int fpc_in_fight(void *pc) {
     void *cc=g_melee_get_combat&&char_valid(pc)?g_melee_get_combat(pc):NULL;
@@ -435,7 +457,7 @@ static const char *fpc_ui_state(void *pc,int rmb) {
     return rmb?"blocking":"ready";
 }
 static int fpc_button(int b,int phys_ok) {
-    static const int vk[FPC_NBTN]={VK_LBUTTON,VK_RBUTTON,VK_MBUTTON,0x52};
+    const int vk[FPC_NBTN]={g_cfg_key_attack,g_cfg_key_block,g_cfg_key_select,g_cfg_key_draw,g_cfg_key_interact};
     int phys=phys_ok && (GetAsyncKeyState(vk[b])&0x8000)!=0;
     return phys || fpc_now_ms()<g_fpc_inj_until[b];
 }
@@ -499,7 +521,11 @@ static void fp_controls_tick(void *gw,float dt) {
                     logline("[controls] MMB select %s",g_fpc_last_select);}
             else {++g_fpc_mmb_none;char pb[512];fpc_pick_text(pb,sizeof pb);logline("[controls] MMB select: nothing under the crosshair (%s)",pb);}
         }
-        if (rel[FPC_RMB] && !g_fpc_drawn && now-g_fpc_down_ms[FPC_RMB]<FPC_MENU_CLICK_MS && g_fpc_ctxmenu) {
+        /* interact on the block key = tap it while holstered (hold = block); its own key = on press, any time */
+        int ctx=g_cfg_key_interact==g_cfg_key_block
+            ? rel[FPC_RMB] && !g_fpc_drawn && now-g_fpc_down_ms[FPC_RMB]<FPC_MENU_CLICK_MS
+            : edge[FPC_INT];
+        if (ctx && g_fpc_ctxmenu) {
             void *t=fpc_crosshair_char(pc);
             void *pi=fpc_player_interface(gw);
             if (t && readable(pi,FPC_PI_CTXMENU+8)) {
@@ -564,9 +590,14 @@ static int fpc_btn_index(const char *s) {
 static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id;(void)u;
     if (argc==2 && !_stricmp(argv[1],"state")) {char b[2400];fpc_state(b,sizeof b);r->append(r,b);return KAH_OK;}
+    if (argc==2 && !_stricmp(argv[1],"binds")) {   /* F10 combat settings as applied (ini hot-reload included) */
+        char b[200];snprintf(b,sizeof b,"manual_combat=%d enabled=%d attack=0x%02X block=0x%02X select=0x%02X interact=0x%02X draw=0x%02X",
+            g_cfg_manual_combat,g_combat_enabled,g_cfg_key_attack,g_cfg_key_block,g_cfg_key_select,g_cfg_key_interact,g_cfg_key_draw);
+        r->append(r,b);return KAH_OK;
+    }
     if ((argc==3||argc==4) && !_stricmp(argv[1],"press")) {
         int b=fpc_btn_index(argv[2]);int ms=argc==4?atoi(argv[3]):80;
-        if (b<0 || ms<20 || ms>20000) {r->append(r,"press <lmb|rmb|mmb|r> [hold_ms 20..20000]");return KAH_ERROR;}
+        if (b<0 || ms<20 || ms>20000) {r->append(r,"press <lmb|rmb|mmb|r|interact> [hold_ms 20..20000]");return KAH_ERROR;}
         g_fpc_inj_until[b]=fpc_now_ms()+ms;r->append(r,"press published");return KAH_OK;
     }
     if (argc==3 && !_stricmp(argv[1],"release")) {

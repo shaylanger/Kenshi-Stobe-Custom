@@ -513,7 +513,7 @@ typedef struct {
                           * dispatch: kills the vanilla space-pause AND its sound at the
                           * source. Cross-validated: vtable slot resolves to this fn in both
                           * Steam builds. */
-        RAYCAST;         /* the GENERAL ray query GROUND_AT wraps (GROUND_AT = this with a
+        RAYCAST,         /* the GENERAL ray query GROUND_AT wraps (GROUND_AT = this with a
                           * static down vector): raycast(Vec3* outHit, const Vec3* origin,
                           * const Vec3* dir, u32 mask) -- normalizes dir, casts through the
                           * physics scene ([global]+0xE8, vt+0x380), writes the hit POINT to
@@ -521,6 +521,14 @@ typedef struct {
                           * miss (decomp: the miss constant IS DAT_GROUND_NOHIT). mask
                           * 0x88204 = both fall-system channel sets + objects. Basis of the
                           * jump/fall arc's wall collision. */
+        IH_KEYDOWN,      /* InputHandler::keyDownEvent(this, int key): the only producer of the
+                          * vanilla command queue (toggle_fps_camera = cmd 0x28 etc.; callers:
+                          * MainListener::keyPressed, mousePressed). Hooked so FP-bound keys
+                          * never reach a vanilla command (CS05). APPEND-ONLY position. */
+        IH_KEYBOARD;     /* data: InputHandler+0xA0 = OIS::Keyboard* (written right after
+                          * MainListener's keyboard->setEventCallback). KenshiFP puts its own
+                          * KeyListener in front of the keyboard's one (CS05 path 2: RE_Kenshi's
+                          * listener wrapper runs toggle_fps_camera itself). APPEND-ONLY. */
 } addr_table_t;
 
 static const addr_table_t T_1068 = {
@@ -580,6 +588,9 @@ static const addr_table_t T_1068 = {
     0x82b010,       /* KEYPRESSED: MainListener::keyPressed (RTTI walk, KeyListener
                      * sub-vtable +0x20 slot 1; keycode remap table at fn+0x4a) */
     0x9b39d0,       /* RAYCAST: general ray query (decomp: GROUND_AT's inner fn) */
+    0x360b30,       /* IH_KEYDOWN: InputHandler::keyDownEvent (keyPressed's dispatch call
+                     * 0x82b25f -> thunk 0x46722) */
+    0x2133410,      /* IH_KEYBOARD: InputHandler(0x2133370)+0xA0, stored at 0x8299e5 */
 };
 /* Steam 1.0.65 (RE_Kenshi's downgrade build). Signature-transplant mapped;
  * 0 = TODO (Ghidra pass in progress) or unused-in-client. Same field order. */
@@ -640,6 +651,9 @@ static const addr_table_t T_1065 = {
                  * thunk resolves here (double-confirmed) */
     0x9b2b00,   /* RAYCAST: sig-transplant of 1.0.68 0x9b39d0 (byte-identical prologue;
                  * also matches the region's known -0xED0 delta exactly) */
+    0x360ad0,   /* IH_KEYDOWN: keyPressed's dispatch call 0x82a6af -> thunk 0x466f0; body
+                 * identical to 1.0.68 0x360b30 except call rel32s */
+    0x21323c0,  /* IH_KEYBOARD: InputHandler(0x2132320)+0xA0, stored at 0x828e15 */
 };
 /* GOG 1.0.68 ("Kenshi 1.0.68 - x64 (Newland) (GOG)", stamp 0x6602d5e3, image
  * 0x232c000, entry 0xed6bec) -- the sibling compile of Steam 1.0.68 linked
@@ -674,6 +688,8 @@ static const addr_table_t T_GOG68 = {
                  * only the spacebar-pause swallow degrades -- rebind pause in-game) */
     0,          /* KEYPRESSED: TODO GOG (same) */
     0,          /* RAYCAST: TODO GOG (same; arc collision degrades to none) */
+    0,          /* IH_KEYDOWN: TODO GOG (runtime sig fills it) */
+    0,          /* IH_KEYBOARD: TODO GOG (front key listener off) */
 };
 /* GOG 1.0.65 ("Kenshi 1.0.65 - x64 (Newland) (GOG)", stamp 0x65d60519, image
  * 0x232a000, entry 0xed5cfc) -- RE_Kenshi's GOG downgrade exe, i.e. THE build
@@ -706,6 +722,8 @@ static const addr_table_t T_GOG65 = {
     0,          /* SET_PAUSE: TODO GOG (see T_GOG68 note) */
     0,          /* KEYPRESSED: TODO GOG (see T_GOG68 note) */
     0,          /* RAYCAST: TODO GOG (see T_GOG68 note) */
+    0,          /* IH_KEYDOWN: TODO GOG (runtime sig fills it) */
+    0,          /* IH_KEYBOARD: TODO GOG (front key listener off) */
 };
 static addr_table_t g_rva;   /* active table, selected at load by build signature */
 
@@ -809,6 +827,8 @@ static addr_table_t g_rva;   /* active table, selected at load by build signatur
 #define RVA_SET_PAUSE           (g_rva.SET_PAUSE)
 #define RVA_KEYPRESSED          (g_rva.KEYPRESSED)
 #define RVA_RAYCAST             (g_rva.RAYCAST)
+#define RVA_IH_KEYDOWN          (g_rva.IH_KEYDOWN)
+#define RVA_IH_KEYBOARD         (g_rva.IH_KEYBOARD)
 /* ========================================================================= */
 #define HEAD_BONE_NAME    "Bip01 Head"
 /* World-space orientation setter. Used for the look direction so it's immune to
@@ -850,6 +870,12 @@ static int g_cfg_key_a    = 0x41;  /* key_left */
 static int g_cfg_key_s    = 0x53;  /* key_back */
 static int g_cfg_key_d    = 0x44;  /* key_right */
 static int g_cfg_key_settings = 0x79;  /* key_settings (VK code; default F10) -- toggles the settings window */
+static int g_cfg_manual_combat = 1;    /* manual_combat: FP manual melee/ranged combat (F10 toggle; harness
+                                        * fp_combat on|off overrides at runtime until this changes) */
+/* FP combat binds (VK codes, mouse buttons allowed: 1 LMB, 2 RMB, 4 MMB, 5/6 side buttons). interact = block
+ * (default) keeps the tap-RMB-while-holstered context menu; a separate interact key opens it on press. */
+static int g_cfg_key_attack = 0x01, g_cfg_key_block = 0x02, g_cfg_key_select = 0x04,
+           g_cfg_key_interact = 0x02, g_cfg_key_draw = 0x52;
 static int   g_cfg_sneak_eye = 1;   /* show the screen-space sneak eye in FP */
 static int   g_cfg_stealth_arrows = 0; /* show the world-space 3D stealth arrows in FP (0 = hidden, default) */
 static int   g_cfg_hide_head   = 1;    /* always hide the player's head mesh in FP (not just FF) */
@@ -1249,6 +1275,9 @@ static void kah_bridge_tick(void);    /* registers the harness test commands */
 static int fpc_cam_pre(void *cam,float *yaw,float *pitch);
 static void fpc_cam_post(void *cam,float yaw,float pitch);
 static int fpc_key_swallow(unsigned dik);
+static int fpc_key_owned(unsigned dik);
+static int fpc_key_bound_any(unsigned dik);
+static void fpc_key_note_swallow(unsigned dik);
 static int fpc_suppress_sheathe(void *pc);
 static void fp_controls_tick(void *gw,float dt);
 static void fp_controls_init(void);
@@ -1258,6 +1287,18 @@ static const char *g_fpc_ui_state;   /* tentative: defined in kfp_controls.inc *
 static int g_cfg_state_hud = 1;      /* state_hud: FP combat state label under the crosshair */
 static int g_prev_fp;             /* g_fp_mode from last frame (camera_lock edge) */
 static int g_ovr_prev;            /* was the FP node override active last frame */
+static unsigned g_fp_keys_swallowed, g_fp_last_swallow_dik;
+static unsigned g_bound_toggle_reverts;    /* CS05: vanilla FPS toggles from a bound key undone */
+static unsigned g_ih_swallowed, g_ih_leak_logs;   /* CS05: bound DIKs dropped at InputHandler::keyDownEvent */
+static unsigned g_fp_swallow_ms;           /* GetTickCount of the last swallowed bound key */
+static int g_fp_swallow_seen;              /* g_fp_swallow_ms valid */
+static unsigned g_kl_installs, g_kl_eaten; /* CS05 path 2: OIS front key listener */
+static void kfp_front_listener_tick(void);
+static int kfp_front_listener_on(void);
+#include "kfp_bound_toggle.h"
+static unsigned g_combat_stale_ends;
+static unsigned g_freecam_clears;          /* vanilla free/FPS camera cleared on FP enter / after a load */
+static int g_freecam_clear_pending;        /* set on world teardown: clear once FP is on again */   /* C05-KO: stale native ranged combat mode ended under manual ownership */   /* fp_state diag: FP-bound keys kept from vanilla binds */
 static float g_yaw, g_pitch;      /* accumulated mouse-look angles (radians) */
 static cam_set_fovy_t g_cam_set_fovy;
 static cam_get_fovy_t g_cam_get_fovy;
@@ -2277,7 +2318,7 @@ static int kah_fp_putdown(const char *id, int argc, const char *const *argv, KAH
 static int kah_fp_state(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
 {
     (void)id; (void)u;
-    char b[400], wb[64];
+    char b[768], wb[64];
     const int fsa = kfp_fp_state_args(argc, argv);   /* argv[0] = command name */
     if (fsa == KFP_FPSTATE_FREE_OFF) {
         /* S03 recovery: drop a stuck free-cursor toggle / our settings window */
@@ -2293,12 +2334,24 @@ static int kah_fp_state(const char *id, int argc, const char *const *argv, KAH_R
     }
     if (fsa == KFP_FPSTATE_USAGE) { r->append(r, "usage: fp_state [free off]"); return KAH_ERROR; }
     int pgate = g_ui_c_mask && g_ui_c_pframes >= 8;
+    /* CS06 diag: why the camera hook is (in)active. active = fp_mode && controlled && !freecam */
+    int freecam = -1;
+    if (g_base) {
+        void *cam = *(void **)(g_base + RVA_CAM_INSTANCE);
+        if (readable(cam, CC_FREECAM + 1)) freecam = *(unsigned char *)((uintptr_t)cam + CC_FREECAM);
+    }
+    int controlled = (g_fp_mode && g_gw_cache) ? (fp_controlled_char(g_gw_cache) != NULL) : 0;
     snprintf(b, sizeof(b), "fp_mode=%d cursor_hidden=%d ui_open=%d ui_why=%s control=%d key_focus=%d"
-             " panels=0x%03x panel_frames=%d settings=%d free=%d ui_open_edges=%u",
+             " panels=0x%03x panel_frames=%d settings=%d free=%d ui_open_edges=%u"
+             " active=%d freecam=%d ovr_prev=%d controlled=%d focus=%d keys_swallowed=%u last_swallow_dik=0x%02X"
+             " freecam_clears=%u bound_toggle_reverts=%u ih_swallowed=%u kl_front=%d kl_eaten=%u",
              g_fp_mode ? 1 : 0, g_cursor_hidden ? 1 : 0, g_ui_open ? 1 : 0,
              ui_why_str(g_ui_c_control, g_ui_c_keyfocus, pgate, g_settings_open, g_free_toggle, wb, sizeof(wb)),
              g_ui_c_control, g_ui_c_keyfocus, g_ui_c_mask, g_ui_c_pframes, g_settings_open ? 1 : 0,
-             g_free_toggle ? 1 : 0, g_ui_open_edges);
+             g_free_toggle ? 1 : 0, g_ui_open_edges,
+             (g_fp_mode && controlled && freecam == 0) ? 1 : 0, freecam, g_ovr_prev ? 1 : 0, controlled,
+             game_has_focus() ? 1 : 0, g_fp_keys_swallowed, g_fp_last_swallow_dik, g_freecam_clears,
+             g_bound_toggle_reverts, g_ih_swallowed, kfp_front_listener_on(), g_kl_eaten);
     r->append(r, b);
     return KAH_OK;
 }
@@ -3245,11 +3298,38 @@ static void fp_fall_update(void *pc)
 static void fp_camera_override(void *gw)
 {
     if (!g_ogre_ready) return;
+    kfp_front_listener_tick();
     void *cam = *(void **)(g_base + RVA_CAM_INSTANCE);
     if (!readable(cam, CC_FREECAM + 1)) return;
     void *node = *(void **)((uintptr_t)cam + CC_NODE);
     if (!readable(node, 8)) return;
 
+    {   /* m51-F: a vanilla FPS camera left on (survives a save reload) kept FP inactive for good.
+         * Clear it when FP turns on and after a world load; a free cam toggled while FP is on stays. */
+        static int fpm_prev;
+        if (g_fp_mode && (!fpm_prev || g_freecam_clear_pending)) {
+            g_freecam_clear_pending = 0;
+            unsigned char *fcp = (unsigned char *)((uintptr_t)cam + CC_FREECAM);
+            if (*fcp) {
+                *fcp = 0; ++g_freecam_clears;
+                logline("[cam] vanilla FPS camera was on: cleared (%s)", fpm_prev ? "after load" : "FP enter");
+            }
+        }
+        fpm_prev = g_fp_mode;
+    }
+    {   /* CS05 defense in depth: a bound FP key that still reached vanilla toggle_fps_camera
+         * flips cam+0xBF 0->1 right after we swallowed it. Undo that edge only (a free cam
+         * switched on with an unbound key, no recent swallow, stays). */
+        static int fc_prev = -1;
+        unsigned char *fcp = (unsigned char *)((uintptr_t)cam + CC_FREECAM);
+        int fc = *fcp ? 1 : 0;
+        if (kfp_bound_toggle_revert(g_fp_mode, fc_prev, fc, g_fp_swallow_seen,
+                                    (unsigned)GetTickCount(), g_fp_swallow_ms)) {
+            *fcp = 0; fc = 0; ++g_bound_toggle_reverts; g_fp_swallow_seen = 0;
+            logline("[cam] vanilla FPS toggle from bound key reverted (dik=0x%02X)", g_fp_last_swallow_dik);
+        }
+        fc_prev = fc;
+    }
     /* Only drive the override while FP is on AND not in free-cam mode. */
     int active = g_fp_mode && fp_controlled_char(gw) && !*(unsigned char *)((uintptr_t)cam + CC_FREECAM);
 
@@ -4757,6 +4837,27 @@ static void fp_down_trace(void *pc, int body_down, int ko)
     g_down_prev = body_down;
 }
 
+/* C04-TAKE: why direct drive is refused while movement keys are held for the controlled actor.
+ * Logged on a reason change, else at most every 2 s; a NULL reason (drive engaged / no keys)
+ * re-arms it. */
+static void fp_move_refusal(const char *why)
+{
+    static const char *last; static DWORD last_ms;
+    if (!why) { last = NULL; return; }
+    DWORD now = GetTickCount();
+    if (why == last && now - last_ms < 2000) return;
+    last = why; last_ms = now;
+    logline("[move] direct drive refused for the controlled actor: %s (prone=%d bed=%d head=%.2f pinned=%d"
+            " ui_moveblock=%d down=%d fall=%d)", why, g_dbg_prone, g_dbg_in_bed, g_head_above,
+            g_stuck_frames > KFP_STUCK_PINNED_FRAMES, g_ui_moveblock, g_is_down, g_fall_active);
+}
+static int fp_move_keys_held(void)
+{
+    if (g_kah_move_keys) return 1;
+    return game_has_focus() && ((GetAsyncKeyState(VK_W) | GetAsyncKeyState(VK_A)
+                                 | GetAsyncKeyState(VK_S) | GetAsyncKeyState(VK_D)) & 0x8000);
+}
+
 static void fp_movement(void *gw, float dt)
 {
     if (!g_fp_mode || !g_charmove_setdest) {
@@ -4791,6 +4892,7 @@ static void fp_movement(void *gw, float dt)
     }
     fp_down_trace(pc, body_down, ko_now);
     if (body_down || g_fall_active || g_fall_rd != FALLRD_OFF) {
+        if (fp_move_keys_held()) fp_move_refusal(body_down ? "body down (ragdoll/KO)" : "falling");
         /* C05-KO: keys held into a knockdown are dropped (no walk resumes on get-up) */
         if (body_down && g_kah_move_keys) { InterlockedExchange(&g_kah_move_keys, 0); logline("[down] held fp_move keys dropped on knockdown"); }
         InterlockedExchange(&g_dm_active, 0);
@@ -4821,7 +4923,7 @@ static void fp_movement(void *gw, float dt)
     }
     void *mv = readable((void *)((uintptr_t)pc + CHAR_MOVEMENT), 8)
         ? *(void **)((uintptr_t)pc + CHAR_MOVEMENT) : NULL;
-    if (!readable(mv, 8)) return;
+    if (!readable(mv, 8)) { if (fp_move_keys_held()) fp_move_refusal("no CharMovement"); return; }
 
     /* Wheel consumed by fp_view_input; locomotion speed is independent. */
 
@@ -4839,6 +4941,8 @@ static void fp_movement(void *gw, float dt)
      * WASD keeps walking the character while inventory/squad/jobs are open,
      * matching vanilla (which still pans the camera then). */
     if (g_ui_moveblock || keys == 0 || (mf == 0.0f && mr == 0.0f)) {
+        if (keys && g_ui_moveblock) fp_move_refusal("ui_moveblock (dialogue/cutscene/control disabled)");
+        else if (!keys) fp_move_refusal(NULL);
         if (g_was_moving) {         /* release: halt at current position */
             if (g_was_direct) {
                 /* direct drive: instant stop -- zero the motion, return the
@@ -5105,12 +5209,16 @@ static void fp_movement(void *gw, float dt)
             g_guard_armed = 0;
             g_was_direct = 1;
             g_was_moving = 1;
+            fp_move_refusal(NULL);
             /* MOVE_DIRECTION skips the game's own athletics/strength XP tick --
              * run it ourselves so WASD trains like click-move. */
             award_move_xp(pc, mv, dt);
             return;
         }
     }
+    fp_move_refusal(downed ? (prone != PS_NORMAL ? "downed: prone state" : in_bed ? "downed: in bed"
+                              : pinned ? "downed: pinned (no progress under direct drive)" : "downed: head low")
+                           : "mover vtable outside the game module");
     if (g_was_direct) {   /* fell/crippled mid-hold: return mode to normal */
         InterlockedExchange(&g_dm_active, 0);
         if (readable((void *)((uintptr_t)mv + MV_DESIREDMOTION), 12)) {
@@ -6290,6 +6398,12 @@ static void load_ini(void)
         else if (ini_int(line, "key_back", &v))       { if (v > 0 && v < 255) g_cfg_key_s = v; }
         else if (ini_int(line, "key_right", &v))      { if (v > 0 && v < 255) g_cfg_key_d = v; }
         else if (ini_int(line, "key_settings", &v))   { if (v > 0 && v < 255) g_cfg_key_settings = v; }
+        else if (ini_int(line, "manual_combat", &v))  g_cfg_manual_combat = !!v;
+        else if (ini_int(line, "key_attack", &v))     { if (v > 0 && v < 255) g_cfg_key_attack = v; }
+        else if (ini_int(line, "key_block", &v))      { if (v > 0 && v < 255) g_cfg_key_block = v; }
+        else if (ini_int(line, "key_select", &v))     { if (v > 0 && v < 255) g_cfg_key_select = v; }
+        else if (ini_int(line, "key_interact", &v))   { if (v > 0 && v < 255) g_cfg_key_interact = v; }
+        else if (ini_int(line, "key_draw", &v))       { if (v > 0 && v < 255) g_cfg_key_draw = v; }
         else if (ini_int(line, "key_free_cursor", &v)) { if (v >= 0 && v < 255) g_cfg_key_free = v; }
         else if (ini_int(line, "key_sprint", &v))     { if (v >= 0 && v < 255) g_cfg_key_sprint = v; }
         else if (ini_float(line, "fov", &fv))             { if (fv >= 40 && fv <= 120) g_cfg_fov = fv; }
@@ -6438,6 +6552,12 @@ static void save_ini(void)
     fprintf(f, "key_settings=%d\n",     g_cfg_key_settings);
     fprintf(f, "key_free_cursor=%d\n",  g_cfg_key_free);
     fprintf(f, "key_sprint=%d\n",       g_cfg_key_sprint);
+    fprintf(f, "manual_combat=%d\n",    g_cfg_manual_combat);
+    fprintf(f, "key_attack=%d\n",       g_cfg_key_attack);
+    fprintf(f, "key_block=%d\n",        g_cfg_key_block);
+    fprintf(f, "key_select=%d\n",       g_cfg_key_select);
+    fprintf(f, "key_interact=%d\n",     g_cfg_key_interact);
+    fprintf(f, "key_draw=%d\n",         g_cfg_key_draw);
     fclose(f);
     logline("[settings] saved to %s", path);
 }
@@ -6582,7 +6702,61 @@ static tset_t g_tsets[] = {
     { "Hide head",       &g_cfg_hide_head, 1, 0 },
     { "Hide headgear",   &g_cfg_hide_headgear, 1, 0 },
     { "Auto floors",     &g_cfg_auto_floors, 1, 0 },
+    { "Manual combat",   &g_cfg_manual_combat, 1, 0 },
 };
+/* key-bind rows: click the button, then press a key or mouse button (Esc cancels) */
+typedef struct { const char *label; int *cfg, def; void *btn; } kset_t;
+static kset_t g_ksets[] = {
+    { "Attack",          &g_cfg_key_attack,   0x01, 0 },
+    { "Block / aim",     &g_cfg_key_block,    0x02, 0 },
+    { "Select target",   &g_cfg_key_select,   0x04, 0 },
+    { "Interact",        &g_cfg_key_interact, 0x02, 0 },
+    { "Draw / holster",  &g_cfg_key_draw,     0x52, 0 },
+};
+static int g_kb_cap = -1;      /* bind row waiting for a key, -1 = none */
+static int g_kb_cap_armed;     /* all keys were up since the capture started */
+static int g_kb_eat;           /* >0: swallow Esc/LMB in the settings window until they are released */
+static void kb_name(int vk, char *out, size_t n)
+{
+    switch (vk) {
+    case 0x01: snprintf(out, n, "Left mouse"); return;
+    case 0x02: snprintf(out, n, "Right mouse"); return;
+    case 0x04: snprintf(out, n, "Middle mouse"); return;
+    case 0x05: snprintf(out, n, "Mouse 4"); return;
+    case 0x06: snprintf(out, n, "Mouse 5"); return;
+    }
+    LONG sc = (LONG)MapVirtualKeyA((UINT)vk, 0 /* MAPVK_VK_TO_VSC */) << 16;
+    if ((vk >= 0x21 && vk <= 0x2E) || vk == 0xA3 || vk == 0xA5 || vk == 0x5B || vk == 0x5C || vk == 0x6F || vk == 0x90)
+        sc |= 1 << 24;          /* extended key: arrows, nav block, right ctrl/alt, win, num / */
+    if (!sc || !GetKeyNameTextA(sc, out, (int)n)) snprintf(out, n, "Key 0x%02X", vk);
+}
+static void kb_caption(int i)
+{
+    char b[48];
+    if (i == g_kb_cap) snprintf(b, sizeof b, "Press a key... (Esc)"); else kb_name(*g_ksets[i].cfg, b, sizeof b);
+    if (g_ksets[i].btn) caption_set(g_ksets[i].btn, b, g_textbox_setcap);
+}
+/* While a bind row waits: first wait until every key is up (the click that started it), then take the next
+ * pressed key/button. Generic Shift/Ctrl/Alt (0x10-0x12) are skipped so the left/right variant is stored. */
+static int kb_capture_step(void)
+{
+    int down = 0;
+    for (int vk = 1; vk < 0xFF; ++vk) {
+        if (vk == 0x03 || vk == 0x07 || (vk >= 0x10 && vk <= 0x12)) continue;
+        if (!(GetAsyncKeyState(vk) & 0x8000)) continue;
+        if (!g_kb_cap_armed) return 0;
+        down = vk; break;
+    }
+    if (!g_kb_cap_armed) { g_kb_cap_armed = 1; return 0; }
+    if (!down) return 0;
+    int i = g_kb_cap; g_kb_cap = -1; g_kb_eat = 1;
+    if (down != VK_ESCAPE && down != g_cfg_key_settings) {
+        *g_ksets[i].cfg = down;
+        logline("[settings] bind %s = 0x%02X", g_ksets[i].label, down);
+    }
+    kb_caption(i);
+    return down != VK_ESCAPE && down != g_cfg_key_settings;
+}
 static void *g_reset_btn, *g_close_btn;
 #define KFP_SCROLL_RANGE 1000
 #define FN(a) ((int)(sizeof(a)/sizeof((a)[0])))
@@ -6623,6 +6797,8 @@ static void settings_reset_defaults(void)
         *g_tsets[i].cfg = g_tsets[i].def;
         if (g_tsets[i].btn && g_btn_setsel) g_btn_setsel(g_tsets[i].btn, *g_tsets[i].cfg ? 1 : 0);
     }
+    g_kb_cap = -1;
+    for (int i = 0; i < FN(g_ksets); i++) { *g_ksets[i].cfg = g_ksets[i].def; kb_caption(i); }
     if (KFP_DEBUG_LOG) logline("[settings] reset to defaults");
 }
 
@@ -6676,11 +6852,29 @@ static void settings_build_content(void *win)
         }
         y = y0 + rows * rowh;
     }
+    y += 10;
+    {
+        int y0 = y, rows = (FN(g_ksets) + 1) / 2;
+        for (int i = 0; i < FN(g_ksets); i++) {
+            kset_t *ks = &g_ksets[i];
+            int col = i / rows, row = i % rows;
+            int lx = pad + col * 250;
+            int ry = y0 + row * rowh;
+            char nm[32];
+            snprintf(nm, sizeof nm, "KFPkl%d", i);
+            void *lbl = make_child(win, "TextBox", "Kenshi_GenericTextBoxFlat", lx, ry, 100, 24, nm);
+            if (lbl) caption_set(lbl, ks->label, g_textbox_setcap);
+            snprintf(nm, sizeof nm, "KFPkb%d", i);
+            ks->btn = make_child(win, "Button", "Kenshi_Button1", lx + 102, ry - 2, 138, 28, nm);
+            kb_caption(i);
+        }
+        y = y0 + rows * rowh;
+    }
     g_reset_btn = make_child(win, "Button", "Kenshi_Button1", pad, y + 8, 190, 32, "KFPreset");
     if (g_reset_btn) caption_set(g_reset_btn, "Reset to Defaults", g_textbox_setcap);
     g_close_btn = make_child(win, "Button", "Kenshi_Button1", pad + 200, y + 8, 110, 32, "KFPclose");
     if (g_close_btn) caption_set(g_close_btn, "Close", g_textbox_setcap);
-    if (KFP_DEBUG_LOG) logline("[settings] built %d sliders + %d toggles; reset=%p close=%p", FN(g_fsets), FN(g_tsets), g_reset_btn, g_close_btn);
+    logline("[settings] built %d sliders + %d toggles + %d binds; reset=%p close=%p", FN(g_fsets), FN(g_tsets), FN(g_ksets), g_reset_btn, g_close_btn);
 }
 
 /* Poll widget state -> config, every frame while the window is open. */
@@ -6703,6 +6897,19 @@ static void settings_poll_content(void)
     int released = (lmb_prev && !lmb);
     lmb_prev = lmb;
     int changed = 0;
+    if (g_kb_cap >= 0) { if (kb_capture_step()) save_ini(); return; }
+    if (g_kb_eat) {     /* the key/click that ended a capture: eat it until released, plus one frame */
+        int esc = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+        if (lmb || esc) g_kb_eat = 1; else if (++g_kb_eat > 2) g_kb_eat = 0;
+        return;
+    }
+    for (int i = 0; i < FN(g_ksets); i++)
+        if (released && g_ksets[i].btn && widget_clicked(g_ksets[i].btn)) {
+            int was = g_kb_cap; g_kb_cap = i; g_kb_cap_armed = 0;
+            if (was >= 0) kb_caption(was);
+            kb_caption(i);
+            return;
+        }
     for (int i = 0; i < FN(g_tsets); i++) {
         tset_t *ts = &g_tsets[i];
         if (!ts->btn) continue;
@@ -6722,7 +6929,7 @@ static void settings_ensure_window(void *gui)
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
     /* dynamic height: fit all rows + the reset button + window chrome
      * (toggles are laid out in two columns) */
-    int content_bottom = 14 + FN(g_fsets) * 30 + 10 + ((FN(g_tsets) + 1) / 2) * 30 + 8 + 32;
+    int content_bottom = 14 + FN(g_fsets) * 30 + 10 + ((FN(g_tsets) + 1) / 2) * 30 + 10 + ((FN(g_ksets) + 1) / 2) * 30 + 8 + 32;
     int ww = 520, wh = content_bottom + 60;
     int wx = (sw > 0 ? sw / 2 - ww / 2 : 200), wy = (sh > 0 ? sh / 2 - wh / 2 : 150);
     g_settings_win = g_gui_createwidget(gui, ty, sk, wx, wy, ww, wh, 0, lay, nm);
@@ -6787,8 +6994,8 @@ static void fp_settings_ui(void)
         static int esc_prev, lmb_prev;
         int esc = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
         int lmb = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-        int close = (esc && !esc_prev);
-        if (lmb_prev && !lmb) {
+        int close = (esc && !esc_prev) && g_kb_cap < 0 && !g_kb_eat;
+        if (lmb_prev && !lmb && g_kb_cap < 0 && !g_kb_eat) {
             if (widget_clicked(g_close_btn)) close = 1;
             void *im = g_input_getinst ? g_input_getinst() : NULL;
             void *f = (im && g_mousefocus) ? g_mousefocus(im) : NULL;
@@ -6806,6 +7013,7 @@ static void fp_settings_ui(void)
         }
         esc_prev = esc; lmb_prev = lmb;
         if (close) {
+            if (g_kb_cap >= 0) { int i = g_kb_cap; g_kb_cap = -1; kb_caption(i); }
             g_settings_open = 0;
             g_widget_setvisible(g_settings_win, 0);
             save_ini();               /* persist slider values on close */
@@ -6921,7 +7129,7 @@ static void fp_gui_update(void)
  * never filtered (mirror hygiene -- the handler clears held-key state). */
 typedef char (*keypressed_t)(void *lst, void *evt);
 static keypressed_t g_keypressed_orig;
-static char hooked_keypressed(void *lst, void *evt)
+static int kfp_keypress_eat(void *evt)
 {
     if (g_cfg_jump && g_cfg_falling && g_fp_mode && !g_ui_open
         && readable((void *)((uintptr_t)evt + 0x10), 4)
@@ -6931,7 +7139,104 @@ static char hooked_keypressed(void *lst, void *evt)
     if (readable((void *)((uintptr_t)evt + 0x10), 4)
         && fpc_key_swallow((unsigned)*(int *)((uintptr_t)evt + 0x10)))
         return 1;   /* R = FP draw/holster */
+    return 0;
+}
+static char hooked_keypressed(void *lst, void *evt)
+{
+    if (kfp_keypress_eat(evt)) return 1;
     return g_keypressed_orig(lst, evt);
+}
+
+/* CS05: InputHandler::keyDownEvent(this, int key) is the only producer of the vanilla command
+ * queue (toggle_fps_camera = cmd 0x28 on DIK 0x27 by default). keyPressed above already drops
+ * FP-bound keys, so a bound DIK arriving here came by a second path: drop it too and name the
+ * caller in the log (bounded) so that path is identified. Mouse codes ((btn+1)<<12) pass. */
+typedef void (*ih_keydown_t)(void *ih, int key);
+static ih_keydown_t g_ih_keydown_orig;
+static void hooked_ih_keydown(void *ih, int key)
+{
+    if (key > 0 && key < 0x100 && g_fp_mode && fpc_key_bound_any((unsigned)key)) {
+        int owned = fpc_key_owned((unsigned)key);
+        if (g_ih_leak_logs < 16) {
+            ++g_ih_leak_logs;
+            logline("[keys] bound DIK 0x%02X reached InputHandler::keyDownEvent past keyPressed"
+                    " (caller rva 0x%llx) -> %s", key,
+                    (unsigned long long)((uintptr_t)__builtin_return_address(0) - g_base),
+                    owned ? "swallowed" : "passed (text focus / bind capture)");
+        }
+        if (owned) { ++g_ih_swallowed; fpc_key_note_swallow((unsigned)key); return; }
+    }
+    g_ih_keydown_orig(ih, key);
+}
+
+/* CS05 path 2: RE_Kenshi (the 1.0.65 downgrade has no toggle_fps_camera) re-adds that bind with
+ * its own OIS KeyListener wrapped around the game's: it calls MainListener::keyPressed, ignores
+ * the result, then maps evt.key through the InputHandler key->command map itself and calls
+ * CameraClass::setFreeCameraMode -- past both hooks above. So KenshiFP sits in FRONT of whatever
+ * listener the keyboard holds and eats FP-owned keys there; other keys and all releases are
+ * forwarded. Object layout = MSVC KeyListener: vtable {dtor, keyPressed, keyReleased}. */
+typedef char (*kfp_kl_key_t)(void *self, void *evt);
+static void *g_kl_prev, *g_kl_first_prev;   /* listener wrapped now / at the first install */
+static int g_kl_depth;
+static void *kfp_kl_dtor(void *self, unsigned flags) { (void)flags; return self; }
+static char kfp_kl_forward(void *evt, int slot)
+{
+    /* re-entered = a later wrapper of ours called back into us: go to the original chain */
+    void *t = g_kl_depth > 1 ? g_kl_first_prev : g_kl_prev;
+    if (!readable(t, 8) || !readable(*(void **)t, 3 * sizeof(void *))) return 0;
+    return ((kfp_kl_key_t)(*(void ***)t)[slot])(t, evt);
+}
+static char kfp_kl_pressed(void *self, void *evt)
+{
+    char r;
+    (void)self;
+    ++g_kl_depth;
+    if (g_kl_depth == 1 && kfp_keypress_eat(evt)) { ++g_kl_eaten; r = 1; }
+    else r = kfp_kl_forward(evt, 1);
+    --g_kl_depth;
+    return r;
+}
+static char kfp_kl_released(void *self, void *evt)
+{
+    char r;
+    (void)self;
+    ++g_kl_depth;
+    r = kfp_kl_forward(evt, 2);
+    --g_kl_depth;
+    return r;
+}
+static void *g_kl_vt[3] = { (void *)kfp_kl_dtor, (void *)kfp_kl_pressed, (void *)kfp_kl_released };
+static struct { void **vt; } g_kl = { g_kl_vt };
+static void *kfp_kl_keyboard(void)
+{
+    if (!g_base || !RVA_IH_KEYBOARD) return NULL;
+    void *kb = *(void **)(g_base + RVA_IH_KEYBOARD);
+    return readable(kb, 0x58) && readable(*(void **)kb, 0x48) ? kb : NULL;
+}
+static int kfp_front_listener_on(void)
+{
+    void *kb = kfp_kl_keyboard();
+    return kb && *(void **)((uintptr_t)kb + 0x50) == (void *)&g_kl;
+}
+static void kfp_front_listener_tick(void)
+{
+    if (g_kl_installs >= 8) return;               /* someone keeps replacing it: stop, log says so */
+    void *kb = kfp_kl_keyboard();
+    if (!kb) return;
+    void *cur = *(void **)((uintptr_t)kb + 0x50);   /* OIS::Keyboard::mListener */
+    if (cur == (void *)&g_kl || !readable(cur, 8)) return;
+    if (!g_kl_first_prev) g_kl_first_prev = cur;
+    g_kl_prev = cur;
+    ((void (*)(void *, void *))(*(void ***)kb)[8])(kb, &g_kl);   /* setEventCallback, vt+0x40 */
+    ++g_kl_installs;
+    char mn[MAX_PATH] = "?"; HMODULE m = NULL;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)*(void **)cur, &m))
+        GetModuleFileNameA(m, mn, sizeof mn);
+    const char *bn = strrchr(mn, '\\');
+    logline("[keys] OIS front key listener #%u installed over %s vtable (FP-bound keys never reach"
+            " RE_Kenshi/vanilla key commands) -> %s", g_kl_installs, bn ? bn + 1 : mn,
+            kfp_front_listener_on() ? "on" : "FAILED");
 }
 
 /* ---- JUMP input: space REBOUND to jump, pause moved to its own key --------
@@ -8334,6 +8639,13 @@ __declspec(dllexport) void dllStartPlugin(void)
                                        (void **)&g_keypressed_orig);
                 logline(kok ? "keyPressed hook installed (FP jump owns the space keydown)"
                             : "keyPressed hook FAILED (fallback: setPause revert only)");
+            }
+            if (RVA_IH_KEYDOWN) {
+                int iok = install_hook((void *)(g_base + RVA_IH_KEYDOWN),
+                                       (void *)hooked_ih_keydown,
+                                       (void **)&g_ih_keydown_orig);
+                logline(iok ? "InputHandler::keyDownEvent hook installed (FP-bound keys never reach vanilla commands)"
+                            : "InputHandler::keyDownEvent hook FAILED (fallback: freecam revert only)");
             }
             /* updateHiddenParts detour: re-inject the head hide-bits the game clobbers. */
             uintptr_t uhp = kfp_text_scan(UHP_SIG, UHP_MASK, sizeof UHP_SIG);

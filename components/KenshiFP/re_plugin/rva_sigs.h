@@ -99,6 +99,11 @@ static const rentry_t KFP_RTAB[] = {
   /* General ray query (GROUND_AT's inner fn): raycast(out, origin, dir, mask) --
    * hit point out, GROUND_NOHIT sentinel on miss. Basis of arc wall collision. */
   { AF(RAYCAST), R_FUNC, "48 8B C4 48 89 58 08 57 48 81 EC E0 00 00 00 F3 0F 10 02 F3 0F 10 4A 04 F3 0F 10 52 08 0F 29 70", 0,0,0 },
+  /* InputHandler::keyDownEvent(this, int key) -- the only producer of the command queue
+   * (toggle_fps_camera etc.). Hooked so FP-bound keys never reach vanilla commands (CS05).
+   * 48B prologue (shift/ctrl DIK tests, +0xD9/+0xD8 writes), unique in 1.0.68 (0x360b30)
+   * and 1.0.65 (0x360ad0). */
+  { AF(IH_KEYDOWN), R_FUNC, "40 53 48 83 EC 30 44 8B C2 48 8B D9 83 FA 2A 74 05 83 FA 36 75 07 C6 81 D9 00 00 00 01 83 FA 1D 74 08 81 FA 9D 00 00 00 75 07 C6 81 D8 00 00 00", 0,0,0 },
   /* ScreenLabel::update -- per-frame world->screen projector for the floating status
    * texts ("Pick failed", "Pick success!", "*Thunk*", ...). Hooked to pin the FP
    * character's own statuses at the crosshair. Unique in 1.0.65 (0x6ea250) / 1.0.68

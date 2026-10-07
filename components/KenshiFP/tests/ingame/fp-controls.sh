@@ -35,8 +35,11 @@ SH=${1:-Axima}; MT=${2:-Malzin}; TG=${3:-Skaera}; OUT=${4:-/tmp/fp-controls}
 MOVE_MIN=${MOVE_MIN:-10}; STILL_MAX=${STILL_MAX:-3}; DOWN_MAX=${DOWN_MAX:-40}; NEUTRAL=${NEUTRAL:-}; NEUTRAL_REL=${NEUTRAL_REL:-20}
 INTERIOR=${INTERIOR:-}; KFPLOG=${KFPLOG:-/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log}
 ROWS=${ROWS:-"K01 K02 K03 K06 K04 FB01 FS01 K05 HUD01 FF01 Z01 DOWN01 Z01-INT"}
+ROWS=${ROWS//,/ }   # run-batch.sh splits on spaces: allow ROWS=K01,K03
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
+# COMBAT=on|off: set manual combat for the run (default: leave it; since 2026-10-07 it starts ON)
+[ -n "$COMBAT" ] && echo "SETUP fp_combat $COMBAT: $(A fp_combat "$COMBAT")" >> "$LOG"
 fld() { grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
 cam() { A fp_camera state | fld "$1"; }
 ctl() { A fp_control state | fld "$1"; }
@@ -93,7 +96,9 @@ arm_melee() { local w r; while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A
 bow_now() { A rangedinfo "$SH" | fld bow; }
 arm_bow() { [ -n "$WEP" ] && { A unequip "$SH" "$WEP" >/dev/null; WEP=""; }; [ "$(bow_now)" != none ] && return 0
   [ -n "$BOWN" ] || return 1
-  # a full inventory drops the unequipped bow on the ground (m50 b37): pick it up again first
+  # a full inventory drops the unequipped bow on the ground (m50 b37): the mate parks it at once (m51 h: left on the
+  # ground it was gone by FF01) and hands it back now; a bow still on the ground is picked up
+  [ "$BOW_DROPPED" = 2 ] && { echo "SETUP bow back from $MT: $(A transfer "$MT" "$SH" "$BOWN" | cut -c1-120)" >> "$LOG"; BOW_DROPPED=0; }
   [ "$BOW_DROPPED" = 1 ] && { echo "SETUP bow pickup: $(A pickup "$SH" "$BOWN" now | cut -c1-120)" >> "$LOG"; BOW_DROPPED=0; }
   A equip "$SH" "$BOWN" | grep -q '^equipped'; }
 # give_melee: the fixture's player may carry no melee weapon at all (m50 b37: only armour) and the harness can't create
@@ -208,7 +213,9 @@ if want K03; then ui_clear; draw_to 0; aim_at "$MT" 13; O0=$(ks ctx_opens)
 # melee weapon for K06/K04/FB01/FS01/K05 (the fixture's player wields only a crossbow)
 BOW_DROPPED=0; MELEE=0; if want K06 || want K04 || want FB01 || want FS01 || want K05 || want HUD01; then
   give_melee || echo "SETUP: could not give $SH a melee weapon" >> "$LOG"
-  if [ "$(bow_now)" != none ]; then r=$(A unequip "$SH" "$(bow_now)"); case "$r" in *ground*) BOW_DROPPED=1;; esac; fi
+  if [ "$(bow_now)" != none ]; then r=$(A unequip "$SH" "$(bow_now)"); case "$r" in *ground*) BOW_DROPPED=1
+    r=$(A pickup "$MT" "$BOWN" now); echo "SETUP bow parked on $MT: $(echo "$r" | cut -c1-120)" >> "$LOG"
+    case "$r" in *ERROR*) ;; *) BOW_DROPPED=2;; esac;; esac; fi
   if arm_melee; then MELEE=1; else echo "SETUP: no melee weapon equips (inv weapons: $(weapons | tr '\n' ';'))" >> "$LOG"; fi; fi
 mfail() { row "$1" FAIL "setup $SH has no melee weapon that equips (inv: $(weapons | tr '\n' ';'))"; }
 
@@ -333,7 +340,13 @@ if want HUD01 || want FF01; then ui_clear; draw_to 0
       A fp_keys press rmb 6000 >/dev/null; hud_poll aiming 3; A fp_keys release rmb >/dev/null; sleep 0.3; draw_to 0; fi
     if want FF01; then A fp_combat autoreload 0 >/dev/null; A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
       if ! waitf 4 csis armed 1; then row FF01 FAIL "setup adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
-      else sky; S0=$(cs actual_shots); R0=$(cs reload_starts); A fp_combat input 1 0 0 >/dev/null; waitf 8 csis shot_ready 1; RDY=$(cs shot_ready)
+      else sky
+        # m51 D: the bow can come in unloaded (K06 holster/draw, autoreload 0): load it via the adapter reload first
+        if [ "$(cs ammo)" = 0 ]; then A fp_combat input 1 0 0 >/dev/null; waitf 8 csis aimed 1; sleep 0.5   # reload needs the aim up
+          A fp_combat input 1 0 1 >/dev/null; sleep 0.3; A fp_combat input 1 0 0 >/dev/null; waitf 4 csge reload_starts 1
+          waitf 30 csge ammo 1; waitf 30 csis reloading 0; A fp_combat input 0 0 0 >/dev/null; sleep 0.3
+          echo "FF01 preload: ammo=$(cs ammo) reload_starts=$(cs reload_starts)" >> "$LOG"; fi
+        S0=$(cs actual_shots); R0=$(cs reload_starts); A fp_combat input 1 0 0 >/dev/null; waitf 8 csis shot_ready 1; RDY=$(cs shot_ready)
         AM0=$(cs ammo); A fp_combat input 1 1 0 >/dev/null; waitf 3 csge actual_shots $((S0+1)); A fp_combat input 1 0 0 >/dev/null; sleep 0.5
         S1=$(cs actual_shots); AM1=$(cs ammo); UI1=$(cs fp_ui_state); HA=$(cs has_ammo); RE0=$(cs reload_emits); RF0=$(cs reload_refused)
         if [ "$HA" = 0 ]; then A fp_combat input 0 0 0 >/dev/null
@@ -383,7 +396,7 @@ if want Z01-INT; then ui_clear; BL=""; for f in ${INTERIOR:-house shack bar shop
     for _ in $(seq 1 22); do sleep 0.5; PN=$(pos "$SH"); if lt "$(d2 "$PP" "$PN")" 0.5; then N=$((N+1)); [ $N -ge 3 ] && { WALL=1; break; }; else N=0; fi; PP=$PN; done
     A fp_move none >/dev/null; sleep 0.5
     YB=$(awk -v y="$YAW" 'BEGIN{y+=3.14159; if(y>3.14159)y-=6.28318; printf "%.4f", y}'); look "$YB" 0
-    TB0=$(cam trace_blocks); A fp_camera distance 30 >/dev/null; sleep 1.5; CI=$(A fp_camera state); PRB=$(A fp_camera probe | grep -o 'cam=.*' | cut -c1-120)
+    TB0=$(cam trace_blocks); A fp_camera distance 30 >/dev/null; sleep 0.5; waitf 5 bash -c 'stobe-auto fp_camera state | grep -q "blocked=1"'; CI=$(A fp_camera state)   # m51: poll, the clamp converges; PRB=$(A fp_camera probe | grep -o 'cam=.*' | cut -c1-120)
     ev="building='$(cut -c1-50 <<<"$BL")' wall_reached=$WALL | target=$(fld target <<<"$CI") applied=$(fld applied <<<"$CI") actual=$(fld actual_distance <<<"$CI") blocked=$(fld blocked <<<"$CI") trace_blocks $TB0->$(fld trace_blocks <<<"$CI") [$PRB]"
     A fp_camera distance 0 >/dev/null
     if [ $WALL = 0 ]; then row Z01-INT FAIL "setup no wall reached walking 11 s: $ev"; else

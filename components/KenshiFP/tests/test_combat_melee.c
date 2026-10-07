@@ -14,12 +14,16 @@ static double fake_ms;
 static unsigned char pc[16],cc[0x2c0],gw[0x20],mv[0x400],other_mv[0x400],st[0x20],ecc[0x2c0],est[0x20],stats[0x200],techa[0x40],techb[0x40];
 static void *mv_vt[0x20];
 static int g_ui_open,g_is_down,g_combat_injection=1,focus=1;
+static float g_head_above=2.0f;
 static unsigned g_combat_inj_cmds,g_combat_inj_aim_cmds;
 static void *g_wound_melee_attacker; static unsigned g_wound_melee_hits,g_wound_any; static float g_wound_melee_cut,g_wound_melee_blunt;   /* kfp_combat_wound.inc */
 static int game_has_focus(void){return focus;}
 static void logline(const char *fmt,...){(void)fmt;}
-static int in(void *p,size_t n,void *b,size_t bn){return (unsigned char *)p>=(unsigned char *)b&&(unsigned char *)p+n<=(unsigned char *)b+bn;}
-static int readable(void *p,size_t n){
+static int in(const void *p,size_t n,void *b,size_t bn){return (const unsigned char *)p>=(unsigned char *)b&&(const unsigned char *)p+n<=(unsigned char *)b+bn;}
+static int char_prone_state(void *p){(void)p;return 0;}
+static int combat_char_unconscious(void *p){(void)p;return 0;}
+static float combat_char_ko_timer(void *p){(void)p;return 0.0f;}
+static int readable(const void *p,size_t n){
     return in(p,n,cc,sizeof(cc))||in(p,n,gw,sizeof(gw))||in(p,n,mv,sizeof(mv))||in(p,n,other_mv,sizeof(other_mv))||
            in(p,n,st,sizeof(st))||in(p,n,mv_vt,sizeof(mv_vt))||in(p,n,ecc,sizeof(ecc))||in(p,n,est,sizeof(est))||
            in(p,n,stats,sizeof(stats))||in(p,n,techa,sizeof(techa))||in(p,n,techb,sizeof(techb));
@@ -44,6 +48,7 @@ static uintptr_t combat_unique_signature(const char *sig){
     if (!strcmp(sig,"40 56 57 48 81 EC B8 00 00 00 0F 29 B4 24 A0 00 00")) return (uintptr_t)fake_init_attack;
     if (!strcmp(sig,"48 89 5C 24 08 57 48 83 EC 60 48 8B FA 0F 29 74 24 50 BA 01 00 00 00")) return (uintptr_t)fake_approach;
     if (!strcmp(sig,"40 53 56 48 81 EC 98 00 00 00 48 8B D9 48 8B 89 80 01 00 00")) return (uintptr_t)fake_attack_state;
+    if (!strncmp(sig,"48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 89 54 24 10",56)) return 0;   /* melee get_state: optional, absent */
     assert(!"unexpected signature");return 0;
 }
 static int hooks;
