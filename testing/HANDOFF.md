@@ -3,16 +3,18 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now
-- 5090: batch C running (`C:\KenshiTestRuns\m50-5090-c`, run-batch.sh; rows DRAWN = DW1-DW10 on Stobe 95B9D33A, mlife = M08 on
-  KenshiFP ABEB8BF6). Health: `batch-health.sh /mnt/c/KenshiTestRuns/m50-5090-c/out`. Runner = coordinator.
-- 4080: batch 36b (KenshiFP FC5041E8: life PASS 5/5, control rows running), then batch 37 on ABEB8BF6 (staged C:\KAH\fp\b4080-37.sh,
-  start `C:\KAH\sb37.ps1` after `C:\KAH\inst.ps1 -Hash ABEB8BF6` with Kenshi stopped): controls rows (all incl. DOWN01) + mlife.
-  Check `ssh 4080 powershell -File C:/KAH/w36b.ps1` / `w37.ps1`. Runner = coordinator, lock owner rig4080.
-- 4080 desktop is locked (LogonUI): no window can be foreground, so KenshiFP frees the cursor. Test switch `fp_keys focus on|off`
-  (fp-controls.sh uses it). 4080 Defender ML flagged KenshiFP 47D56C70 as Trojan:Win32/Bearfoos.B!ml (false positive, quarantined);
-  probe every new DLL there first (copy to C:\KAH, Get-FileHash, wait 20 s, Test-Path).
-- Gate 3 decided (Shay 2026-10-06): manual aim may beat the dice for now; R15/R16 stay. Nothing waiting on Shay.
+## Right now (2026-10-07 ~01:20, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
+- 5090: batch G (`C:\KenshiTestRuns\m50-5090-g`: DW8 partner-faction fix d1ac8cf, DW3 on a fresh load), then H chained
+  (`m50-5090-h/chain.sh`: DW10 live model; DeepInfra 402 from ~05:38 UTC 10-07, Shay topped up). Stobe 95B9D33A, KenshiFP ABEB8BF6.
+  Next: STOBE section D confirm wrapper (`STOBE-D-confirm.sh`, builder agent writing it).
+- 4080: KenshiFP 904DDE9B (C05-KO fling guard 5e96705, `fp_keys pick` 10a4a01, FF01 ammo evidence 37e34b7), fresh launch; batch 40
+  (`C:\KAHp4080-40.sh`, status `C:\KAH\w40.ps1`): control C01-C05 + controls K02 FF01. Runner = coordinator, lock rig4080.
+- Fixer: ticket 4 (K06 wih, K05-HOSTILE engages, K04/FB01 block, HUD01 sampling, K05-UNPROV own neutral NPC), handoff
+  `%TEMP%\claude\C--KenshiModding\kfp-fix-ticket4-handoff.md`.
+- Gotcha: a detached WSL start must end with `& disown` and be checked with `ps` (m50 G first start never ran).
+- 4080 desktop is locked (LogonUI): KenshiFP test switch `fp_keys focus on` (fp-controls.sh uses it). Defender-probe each new DLL
+  on the 4080 (copy to C:\KAH, Get-FileHash, wait 20 s, Test-Path + newest Get-MpThreatDetection).
+- Waiting on Shay: nothing.
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
