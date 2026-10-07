@@ -836,6 +836,7 @@ static addr_table_t g_rva;   /* active table, selected at load by build signatur
 static int g_cfg_aim_lean = 1;     /* aim_lean: spine bend with weapon drawn */
 static int g_cfg_freeaim  = 1;     /* ranged_freeaim: crosshair aim in combat */
 #include "kfp_view.h"
+#include "kfp_weld.h"
 static KfpView g_view;
 static int g_cfg_camera_zoom=1;
 static int g_cfg_direct_default = 1; /* always direct controls after world load */
@@ -1238,6 +1239,7 @@ static void fp_view_input(void);
 static int fp_view_is_eye(void);
 static int kah_fp_camera(const char *,int,const char *const *,KAH_Reply *,void *);
 static void *fp_controlled_char(void *gw);
+static int fp_char_in_squad(void *gw, void *pc);
 static int game_has_focus(void);
 static void kah_bridge_tick(void);    /* registers the harness test commands */
 static int g_prev_fp;             /* g_fp_mode from last frame (camera_lock edge) */
@@ -1431,6 +1433,7 @@ static const char *ui_why_str(int control, int kf, int panels_gate, int settings
 static float g_tx, g_tz;           /* game->Ogre translation, calibrated when still */
 static int g_have_t;
 static float g_prevraw_tx, g_prevraw_tz;  /* prev-frame raw (centerW-feet), for rebase detect */
+static KfpWeldPend g_weld_pend;           /* world-scale centre jump awaiting confirmation (kfp_weld.h) */
 static int   g_have_prevraw;              /* g_prevraw_* is valid (continuous FP) */
 static float g_last_feet_x, g_last_feet_z;  /* prev-frame feet (horizontal), for speed calc */
 static int   g_have_last_feet;              /* g_last_feet_* is valid */
@@ -1713,12 +1716,28 @@ static void camera_lock(void *gw)
 
     kah_bridge_tick();
 
+    static void *followed;                  /* the actor the FP camera followed last frame */
     if (g_fp_mode) {
         void *pc = fp_controlled_char(gw);   /* camera follows controlled, not inspected */
+        if (pc && readable((void *)((uintptr_t)pc + CHAR_HANDLE), 0x20)) {
+            g_follow_object(cam, (void *)((uintptr_t)pc + CHAR_HANDLE));
+            followed = pc;
+        }
+    } else if (g_prev_fp) {
+        /* FP off: hand the camera to the game's own follow on the actor FP was driving (vanilla
+         * pan releases it, as after the vanilla follow key). Releasing the follow here (old code)
+         * left the camera centre wherever the FP eye snap had parked it; with W held that is the
+         * weld anchor, and a bad anchor left the RTS camera off in an unloaded zone: Kenshi then
+         * pauses on "Loading..." forever (4080 b28 C04-FALLBACK). The native follow moves the
+         * centre back to the actor in game space, independent of our floating-origin weld. */
+        void *pc = (followed && fp_char_in_squad(gw, followed)) ? followed : first_player_char(gw);
         if (pc && readable((void *)((uintptr_t)pc + CHAR_HANDLE), 0x20))
             g_follow_object(cam, (void *)((uintptr_t)pc + CHAR_HANDLE));
-    } else if (g_prev_fp) {
-        g_stop_following(cam);              /* released this frame */
+        else
+            g_stop_following(cam);
+        followed = NULL;
+        g_have_prevraw = 0;                 /* no rebase compare across an FP gap */
+        logline("[cam] FP off: camera handed to the native follow on %p", pc);
     }
     g_prev_fp = g_fp_mode;
 }
@@ -3873,15 +3892,36 @@ static void fp_camera_override(void *gw)
                                       ? g_frame_dt : 0.016f;
                             g_rebase_hold_t -= dtr;
                         }
+                        /* WORLD-SCALE OUTLIERS: 4080 b28 logged "rebase shift tx-54047.5
+                         * tz+6810.6" and 0.37 s later "+54145.1 -6904.3": a one-frame
+                         * centre read the size of the world coordinates, not a rebase.
+                         * Shifting T by it parks the eye (and the centre snap that follows
+                         * it while moving) kilometres away; a missed return frame (holdoff,
+                         * fall, swap) keeps it there, and an FP exit then left the RTS
+                         * camera in an unloaded zone ("Loading..." forever). So: a jump
+                         * that lands back on the calibrated weld is the end of an outlier
+                         * (no shift); a jump over WELD_BIG_JUMP must hold still for
+                         * WELD_CONFIRM frames before it is taken as a rebase, and while it
+                         * is pending neither T nor the idle calibration uses this frame. */
+                        int weld_suspect = 0;
                         if (g_have_prevraw && g_have_t && g_rebase_hold_t <= 0.0f
                             && !g_is_down && !g_fall_active && g_fall_rd == FALLRD_OFF) {
                             float ddx = rawtx - g_prevraw_tx, ddz = rawtz - g_prevraw_tz;
-                            if (ddx*ddx + ddz*ddz > 2500.0f) {   /* >50u/frame = rebase */
+                            KfpWeldStep ws = kfp_weld_step(&g_weld_pend, rawtx, rawtz,
+                                                           g_prevraw_tx, g_prevraw_tz, g_tx, g_tz);
+                            if (ws == KFP_WELD_SHIFT) {
                                 g_tx += ddx; g_tz += ddz;
                                 logline("[weld] rebase shift tx%+.1f tz%+.1f", ddx, ddz);
+                            } else if (ws == KFP_WELD_PENDING) {
+                                weld_suspect = 1;
+                                if (g_weld_pend.n == 1)
+                                    logline("[weld] world-scale centre jump tx%+.1f tz%+.1f held (not a rebase until it holds)", ddx, ddz);
+                            } else if (ws == KFP_WELD_RETURNED) {
+                                logline("[weld] centre back on the weld after an outlier: no shift");
                             }
-                        }
-                        g_prevraw_tx = rawtx; g_prevraw_tz = rawtz; g_have_prevraw = 1;
+                        } else g_weld_pend.n = 0;
+                        if (weld_suspect) g_calib_wait = 30;   /* never calibrate T on an outlier */
+                        else { g_prevraw_tx = rawtx; g_prevraw_tz = rawtz; g_have_prevraw = 1; }
                         /* head/feet are GAME coords, center is OGRE; they differ by
                          * a constant floating-origin translation T. Calibrate T ONLY
                          * while idle (the center node has caught up); freeze it during
