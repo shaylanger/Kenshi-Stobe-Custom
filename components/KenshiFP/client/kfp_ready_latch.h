@@ -15,7 +15,8 @@
  * The latch keeps the pose "ready" across such dips: once the native flag was 1, a 0 is bridged for at
  * most `window` game seconds while the hold stays intact (aim held, identity unchanged, not reloading,
  * ammo > 0, input allowed). Anything that breaks the hold clears it, and so does a shot (the caller
- * resets after firing). It never buffers or replays a fire edge: the edge is still judged on its frame.
+ * resets after firing). The latch itself never buffers a fire edge; a press refused only for readiness
+ * waits in the controller while fire+aim stay held (KFP_FIRE_PENDING_S, kfp_combat_controller.h, R12-UI).
  *
  * The window is measured on the dip time BEFORE this frame: the first dip frame is always bridged,
  * whatever its dt. A hitch frame (a game-thread stall, at 3x a 100 ms stall is 0.3 game s) is exactly

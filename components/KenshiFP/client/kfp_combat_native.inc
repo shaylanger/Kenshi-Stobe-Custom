@@ -765,7 +765,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
           (unsigned long long)(uintptr_t)g_combat_wih,(unsigned long long)(uintptr_t)g_combat_cur,g_combat_rcstate,g_combat_rcmode);
         {size_t l=strlen(b);fp_combat_wound_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);combat_shot_state(b+l,sizeof(b)-l);}
-        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s",g_fpc_ui_state?g_fpc_ui_state:"off");}
+        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
          snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_gate=%s last_reject_native=%d last_reject_latched=%d last_reject_dip_s=%.3f last_reject_dt=%.3f last_reject_hold=%d last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
            g_combat_inj_cmds,g_combat_inj_aim_cmds,g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,

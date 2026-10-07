@@ -20,9 +20,33 @@ int main(void) {
     assert(step(&c,&o,1,0,0)==KFP_ACT_RAISE);
     assert(step(&c,&o,1,1,0)==KFP_ACT_SHOOT);
     for(int i=0;i<60;++i)assert(!step(&c,&o,1,1,0));
-    step(&c,&o,1,0,0);o.shot_ready=0;assert(!step(&c,&o,1,1,0));
-    assert(c.rejected==1&&c.last_reject_aim==1&&c.last_reject.shot_ready==0&&c.last_reject.aim_ready==1&&c.last_reject.ammo==o.ammo); /* R12 last_reject= */
-    o.shot_ready=1;assert(!step(&c,&o,1,1,0)); /* rejected click never deferred */
+    /* R12-UI: a press refused only for readiness stays pending while fire+aim are held */
+    step(&c,&o,1,0,0);o.shot_ready=0;assert(!step(&c,&o,1,1,0));assert(c.fire_pending&&c.rejected==0);
+    assert(!step(&c,&o,1,1,0));
+    o.shot_ready=1;assert(step(&c,&o,1,1,0)==KFP_ACT_SHOOT);assert(!c.fire_pending&&c.pending_shots==1);
+    for(int i=0;i<40;++i)assert(!step(&c,&o,1,1,0)); /* one press, one shot */
+    /* fire release drops the pending press: counted as rejected, with its gates */
+    step(&c,&o,1,0,0);o.shot_ready=0;assert(!step(&c,&o,1,1,0));assert(!step(&c,&o,1,0,0));
+    assert(!c.fire_pending&&c.rejected==1);
+    assert(c.last_reject_aim==1&&c.last_reject.shot_ready==0&&c.last_reject.aim_ready==1&&c.last_reject.ammo==o.ammo); /* R12 last_reject= */
+    o.shot_ready=1;assert(!step(&c,&o,1,0,0));
+    /* expiry: never fires late (0.5 game s = ~31 frames at .016) */
+    o.shot_ready=0;assert(!step(&c,&o,1,1,0));for(int i=0;i<40;++i)assert(!step(&c,&o,1,1,0));
+    assert(!c.fire_pending&&c.rejected==2);
+    o.shot_ready=1;assert(!step(&c,&o,1,1,0)); /* expired click never deferred */
+    /* aim release drops it */
+    step(&c,&o,1,0,0);o.shot_ready=0;assert(!step(&c,&o,1,1,0));assert(c.fire_pending);
+    assert(step(&c,&o,0,1,0)==KFP_ACT_LOWER);assert(!c.fire_pending&&c.rejected==3);
+    o.shot_ready=1;assert(step(&c,&o,1,1,0)==KFP_ACT_RAISE); /* no edge: no shot */
+    /* a reload starting drops it; no ammo is refused at once */
+    step(&c,&o,1,0,0);o.shot_ready=0;step(&c,&o,1,1,0);assert(c.fire_pending);
+    o.reloading=1;assert(!step(&c,&o,1,1,0));assert(!c.fire_pending&&c.rejected==4);
+    o.reloading=0;o.ammo=0;step(&c,&o,1,0,0);assert(!(step(&c,&o,1,1,0)&KFP_ACT_SHOOT));assert(!c.fire_pending&&c.rejected==5);
+    o.ammo=1;o.shot_ready=1;step(&c,&o,1,0,0);
+    /* identity reset (weapon swap / UI / KO -> unusable) drops it */
+    o.shot_ready=0;step(&c,&o,1,1,0);assert(c.fire_pending);
+    o.allowed=0;assert(step(&c,&o,1,1,0)==KFP_ACT_LOWER);assert(!c.fire_pending&&c.rejected==6);
+    o.allowed=1;o.shot_ready=1;assert(!step(&c,&o,1,1,0));arm(&c,&o);step(&c,&o,1,0,0);
     step(&c,&o,1,0,0);assert(step(&c,&o,1,1,0)==KFP_ACT_SHOOT);
     o.reloading=1;o.ammo=0;step(&c,&o,1,0,0);
     assert(!step(&c,&o,1,1,1));
@@ -55,5 +79,5 @@ int main(void) {
     o.block_ready=1;assert(step(&c,&o,1,0,0)==KFP_ACT_BLOCK);
     assert(!step(&c,&o,1,1,0)); /* defence wins simultaneous input */
     o.actor=77;assert(!step(&c,&o,1,1,0));assert(!c.buffer&&!c.armed);
-    puts("RESULT B10 PASS native-gated action decisions, click edges/no deferred AI queue, interruption rearming, own-recovery buffer expiry/no refresh, block commitment");
+    puts("RESULT B10 PASS native-gated action decisions, click edges/readiness-pending press (held, 0.5 s, one shot)/no deferred AI queue, interruption rearming, own-recovery buffer expiry/no refresh, block commitment");
 }

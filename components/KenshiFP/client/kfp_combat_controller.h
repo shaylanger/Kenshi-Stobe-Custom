@@ -6,6 +6,12 @@
 /* Decisions never fabricate readiness, damage, ammo or animation time.
  * Engine adapter supplies observed native gates and performs native actions. */
 enum { KFP_WEAPON_NONE, KFP_WEAPON_RANGED, KFP_WEAPON_MELEE };
+/* R12-UI (4080 b33): a ranged fire press refused only for readiness (aim held, ammo, no reload; the
+ * pose/aim timer not ready yet, e.g. a native ready dip past the latch window) stays pending while
+ * fire AND aim stay held, for at most this many game seconds, and fires on the first ready frame.
+ * Release, a reload, no ammo, expiry, or any identity/usable reset (UI open, KO, weapon swap) drop it;
+ * only then is the edge counted as rejected. No AI queue: one press -> at most one shot. */
+#define KFP_FIRE_PENDING_S 0.5f
 enum { KFP_ACT_RAISE=1, KFP_ACT_LOWER=2, KFP_ACT_SHOOT=4,
        KFP_ACT_RELOAD=8, KFP_ACT_SWING=16, KFP_ACT_BLOCK=32 };
 typedef struct {
@@ -21,7 +27,8 @@ typedef struct {
     int kind, armed, aimed, fire_prev, reload_prev, block_prev;
     int buffer, block_ready_prev;
     float buffer_left;
-    unsigned rejected, shots, swings, blocks, reloads;
+    int fire_pending; float fire_pending_left;
+    unsigned rejected, shots, swings, blocks, reloads, pending_shots;
     /* Gates seen by the last rejected fire edge (R12 diagnostics: fp_combat state last_reject=). */
     KfpCombatObservation last_reject;
     int last_reject_aim;
@@ -40,6 +47,8 @@ static unsigned kfp_combat_step(KfpCombatController *c,
         if (c->aimed) actions|=KFP_ACT_LOWER;
         c->actor=o->actor; c->weapon=o->weapon; c->kind=o->kind;
         c->armed=0; c->aimed=0; c->buffer=0; c->buffer_left=0;
+        if (c->fire_pending) kfp_combat_reject(c,o,aim);
+        c->fire_pending=0; c->fire_pending_left=0;
         c->fire_prev=fire; c->reload_prev=reload; c->block_prev=aim;
         c->block_ready_prev=0;
         /* Changing actor/weapon, resuming or closing UI cannot inherit a click. */
@@ -56,9 +65,20 @@ static unsigned kfp_combat_step(KfpCombatController *c,
         c->buffer=0;
         if (aim&&!c->aimed) {c->aimed=1;actions|=KFP_ACT_RAISE;}
         if (!aim&&c->aimed) {c->aimed=0;actions|=KFP_ACT_LOWER;}
-        if (fire_edge) {
-            if (aim && o->aim_ready && o->shot_ready && o->ammo>0 && !o->reloading) {
-                actions|=KFP_ACT_SHOOT;++c->shots;
+        int ready=aim && o->aim_ready && o->shot_ready && o->ammo>0 && !o->reloading;
+        if (c->fire_pending) {
+            c->fire_pending_left-=o->dt;
+            if (ready) {
+                c->fire_pending=0;actions|=KFP_ACT_SHOOT;++c->shots;++c->pending_shots;
+            } else if (!fire || !aim || o->ammo<=0 || o->reloading || c->fire_pending_left<=0) {
+                c->fire_pending=0;kfp_combat_reject(c,o,aim);
+            }
+        }
+        if (fire_edge && !(actions&KFP_ACT_SHOOT)) {
+            if (ready) {
+                c->fire_pending=0;actions|=KFP_ACT_SHOOT;++c->shots;
+            } else if (aim && o->ammo>0 && !o->reloading) {
+                c->fire_pending=1;c->fire_pending_left=KFP_FIRE_PENDING_S;   /* readiness only: wait */
             } else kfp_combat_reject(c,o,aim);
         }
         if ((reload_edge || (automatic_reload && aim && o->ammo==0)) &&
