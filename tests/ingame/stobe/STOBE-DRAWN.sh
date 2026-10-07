@@ -283,7 +283,8 @@ if want DW8; then (
   wait_line 25 warn "$N"; w=$(dline warn "$N")
   if [ -z "$w" ]; then draw_off; verdict DW8 "FAIL no warn line before the fight"
   else
-    so=$(stobe-auto spawn "Hungry Bandit" Drifters near "$h" dist 30 count 1 2>&1); r=$(echo "$so" | grep -oE '#[0-9]+/[0-9]+' | head -1)
+    # partner in a faction neutral to the town and not Drifters: `fight` refuses two members of one faction (m50 F)
+    so=$(stobe-auto spawn "Hungry Bandit" "Tech Hunters" near "$h" dist 30 count 1 2>&1); r=$(echo "$so" | grep -oE '#[0-9]+/[0-9]+' | head -1)
     [ -n "$r" ] || setup_fail DW8 "fight partner spawn failed: $(echo "$so" | tail -1 | cut -c1-120)"
     track "$r"
     stobe-auto fight "$h" "$r" >/dev/null
