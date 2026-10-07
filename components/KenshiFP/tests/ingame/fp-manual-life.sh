@@ -27,18 +27,23 @@ cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
 trap cleanup EXIT
 # take: select + FP + take control of the shooter, camera at the target
-take() { A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null; look_tg 0.02; }
-# look_tg <pitch>: camera yaw from the shooter to the target's current position
-look_tg() { local sx sz tx tz
-  read -r sx sz <<<"$(A where "$SH" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
-  read -r tx tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
-  A fp_camera look "$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')" "$1" >/dev/null; }
-# aim_on <s>: bounded poll (re-aim at the target, pitch steps) until `fp_combat aim` has the crosshair ray on the
-# target (id4 = its serial). Sets AIMP (pitch that hit) and AIMR (last aim reply). 4080 b31 R12-SPEED: the trigger
-# went in with no aim ray (gate=no_aim_ray), so the row measured nothing.
+take() { A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null; look_tg 0; }
+# look_tg <pitch offset>: camera yaw AND pitch from the eye to the target's chest (feet y + 12), from geometry, plus
+# the offset (positive pitch = down). Eye = `fp_camera state` camera_x/y/z when world_valid=1, else shooter feet + 19.
+# 4080 b33 R12-SPEED: fixed pitches 0.02..-0.06 at 36 units put the ray ~18 above her feet (over her head). Sets LOOKP.
+look_tg() { local cs ex ey ez tx ty tz
+  cs=$(A fp_camera state)
+  if [ "$(fld world_valid <<<"$cs")" = 1 ]; then ex=$(fld camera_x <<<"$cs"); ey=$(fld camera_y <<<"$cs"); ez=$(fld camera_z <<<"$cs")
+  else read -r ex ey ez <<<"$(A where "$SH" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $2+19, $3}')"; fi
+  read -r tx ty tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $2, $3}')"
+  read -r LOOKY LOOKP <<<"$(awk -v a="$ex" -v e="$ey" -v b="$ez" -v c="$tx" -v t="$ty" -v d="$tz" -v o="$1" 'BEGIN{h=sqrt((c-a)^2+(d-b)^2); printf "%.4f %.4f", atan2(c-a, d-b), atan2(e-(t+12), h)+o}')"
+  A fp_camera look "$LOOKY" "$LOOKP" >/dev/null; }
+# aim_on <s>: bounded poll (re-aim at the target: geometric pitch, then +-0.03/+-0.06) until `fp_combat aim` has the
+# crosshair ray on the target (id4 = its serial). Sets AIMP (pitch that hit) and AIMR (last aim reply). 4080 b31
+# R12-SPEED: the trigger went in with no aim ray (gate=no_aim_ray), so the row measured nothing.
 aim_on() { local end=$((SECONDS+$1)) s p; s=$(A where "$TG" | grep -o '#[0-9]*' | head -1 | tr -d '#'); AIMR=""; AIMP=none
-  while [ $SECONDS -lt $end ]; do for p in 0.02 0 -0.03 0.05 -0.06; do look_tg "$p"; sleep 0.4; AIMR=$(A fp_combat aim)
-    [ -n "$s" ] && grep -q "\bid4=$s\b" <<<"$AIMR" && { AIMP=$p; return 0; }; done; done; return 1; }
+  while [ $SECONDS -lt $end ]; do for p in 0 0.03 -0.03 0.06 -0.06; do look_tg "$p"; sleep 0.4; AIMR=$(A fp_combat aim)
+    [ -n "$s" ] && grep -q "\bid4=$s\b" <<<"$AIMR" && { AIMP=$LOOKP; return 0; }; done; done; return 1; }
 # fresh_shot [ready_s]: release, aim, wait shot-ready (default 10 s), one trigger; echoes the harness shot delta (expect 1)
 fresh_shot() { local h0; inp 0 0 0; h0=$(hshots); sleep 0.5; inp 1 0 0; waitfor "${1:-10}" shot_ready 1 || { echo "not_ready/anim=$(cs anim_ready)/ammo=$(cs ammo)/reloading=$(cs reloading)/why=$(cs why)"; return; }
   inp 1 1 0; sleep 1.5; inp 1 0 0; local d=$(( $(hshots) - h0 ))
