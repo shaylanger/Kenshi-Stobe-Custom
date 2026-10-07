@@ -113,8 +113,11 @@ PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/de
 A pin "$MT" at "$SH" dist 300 | grep -q '^pinned' && PINNED+=" $MT" || setup_fail "could not pin $MT 30 m ahead of $SH"
 echo "SETUP sh=$SH mt=$MT stealth=$ST0 assassination=$AS0 -> $SKILL weapon=$WEP bow='$BOWN' passive0=$PASSIVE0" >> "$LOG"
 
-# spawn_target <row>: TH (ref) / TN (name) of a fresh neutral Hungry Bandit (Tech Hunters), or return 1
-spawn_target() { local SP; SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH" dist 40 count 1 2>&1); echo "$1 spawn: $SP" >> "$LOG"
+# spawn_target <row> [faction]: TH (ref) / TN (name) of a fresh neutral Hungry Bandit, or return 1
+# [faction] (default Tech Hunters): ST03 uses another faction (ST03_FACTION, Traders Guild): 5090 m50 P ST02 passed, then the
+# fresh Tech Hunters ST03 spawn was hostile from the first probe (h=1 tp=1 pt=1, faction enemy=0->0, no crime): Axima's
+# ST02 engage on a Tech Hunter leaves the next Tech Hunters spawn an enemy in a way the relation command doesn't clear
+spawn_target() { local SP; SP=$(A spawn "Hungry Bandit" "${2:-Tech Hunters}" near "$SH" dist 40 count 1 2>&1); echo "$1 spawn: $SP" >> "$LOG"
   TH=$(grep -oE '#[0-9]+/[0-9]+' <<<"$SP" | head -1); TN=$(sed 's/^spawned [^:]*: //; s/ #[0-9].*//' <<<"$SP")
   [ -n "$TH" ] || { SPF="spawn failed ($(cut -c1-100 <<<"$SP"))"; return 1; }; SPAWNED+=" $TH"; HT=""
   # relation also ends the faction's enemy state (harness 57c687f+: reply enemy=<before>-><after>). 4080 b42: K05-UNPROV
@@ -206,7 +209,7 @@ if want ST02; then ui_clear
 
 # ---- ST03: not sneaking + LMB on an unaware target = plain engage (no sneak path) ----
 if want ST03; then ui_clear
-  if ! spawn_target ST03; then row ST03 FAIL "setup $SPF"
+  if ! spawn_target ST03 "${ST03_FACTION:-Traders Guild}"; then row ST03 FAIL "setup $SPF"
   elif ! place "$MT"; then row ST03 FAIL "setup could not pin $TN in front of $SH"; retire
   else sleep 1; draw_to 1; stealth_to 0; aim_at "$TH" 13; waitf 8 not_fight; live_tn; ser=$(id_of "$TH")
     if ! pick_on ST03 0; then row ST03 FAIL "setup crosshair pick never on $TN ($(A fp_keys pick show | cut -c1-120))"
