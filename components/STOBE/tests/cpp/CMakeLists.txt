@@ -35,3 +35,7 @@ add_test(NAME shop_pricing_tests COMMAND shop_pricing_tests)
 add_executable(drawn_weapon_policy_tests drawn_weapon_policy_tests.cpp)
 target_include_directories(drawn_weapon_policy_tests PRIVATE ../../src)
 add_test(NAME drawn_weapon_policy_tests COMMAND drawn_weapon_policy_tests)
+
+add_executable(chat_interrupt_policy_tests chat_interrupt_policy_tests.cpp)
+target_include_directories(chat_interrupt_policy_tests PRIVATE ../../src)
+add_test(NAME chat_interrupt_policy_tests COMMAND chat_interrupt_policy_tests)

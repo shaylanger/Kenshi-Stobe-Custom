@@ -7662,8 +7662,14 @@ static void UpdateLocalCombatEncounter(
         (combatState.targetSerial != 0 &&
          playerSquadSerials.count(combatState.targetSerial) != 0);
     if (playerSquadInvolved) {
-      BeginChatInterruptGeneration(true);
-      Log("LIFELIKE_INTERRUPT: combat interrupted active dialogue");
+      std::string dangerActors;
+      if (ShouldSkipDangerInterruptForChatPartners(&dangerActors)) {
+        Log("LIFELIKE_INTERRUPT: combat start skipped, only chat partner(s) " +
+            dangerActors);
+      } else {
+        BeginChatInterruptGeneration(true, true);
+        Log("LIFELIKE_INTERRUPT: combat interrupted active dialogue (actions kept)");
+      }
     }
   }
 
@@ -14750,8 +14756,18 @@ long StobeGoals_ChatInterrupt(void) {
   EnterCriticalSection(&g_stateMutex);
   g_triggerBoredEvent = false;
   LeaveCriticalSection(&g_stateMutex);
-  LONG generation = BeginChatInterruptGeneration();
-  Log("LIFELIKE_INTERRUPT: danger preempted chat/TTS");
+  // m50 D86: danger fired only by NPCs we await a reply from (the bandit we
+  // are negotiating a truce with) must not cut that reply.
+  std::string dangerActors;
+  if (ShouldSkipDangerInterruptForChatPartners(&dangerActors)) {
+    Log("LIFELIKE_INTERRUPT: skipped, danger only from chat partner(s) " +
+        dangerActors + "; reply keeps playing");
+    return (long)GetChatInterruptGeneration();
+  }
+  // Danger: speech/TTS cut, action lines of in-flight replies still delivered.
+  LONG generation = BeginChatInterruptGeneration(true, true);
+  Log("LIFELIKE_INTERRUPT: danger preempted chat/TTS (actions kept) gen=" +
+      ToString((int)generation) + " actors=" + dangerActors);
   return (long)generation;
 }
 

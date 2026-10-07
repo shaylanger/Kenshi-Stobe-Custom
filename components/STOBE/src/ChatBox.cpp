@@ -6,6 +6,7 @@
 #include "Context.h"
 #include "Functions.h"
 #include "Globals.h"
+#include "StobeChatInterruptPolicy.h"
 #include "StobeChatMode.h"
 #include "StobeTiming.h"
 #include "Utils.h"
@@ -2450,7 +2451,25 @@ struct StreamChatParseState {
   std::string lastSubtitle;
   std::vector<std::string> speechUtteranceIds;
   std::set<std::string> seenActions;
+  // m50 D86: superseded by a danger interrupt only -> keep delivering actions.
+  bool actionsOnly;
+  int droppedSpeechLines;
+  int actionsAfterInterrupt;
 };
+
+// LINE_PROCESS / LINE_ACTIONS_ONLY / LINE_ABORT (StobeChatInterruptPolicy.h).
+static int StreamLineDecision(StreamChatParseState *state) {
+  bool director = state->task && state->task->requestMode == "director";
+  int decision = DecideChatStreamLine(state->generation, director);
+  if (decision == StobeChatInterrupt::LINE_ACTIONS_ONLY && !state->actionsOnly) {
+    state->actionsOnly = true;
+    Log("CHAT_INTERRUPT: danger interrupt superseded reply gen=" +
+        ToString((int)state->generation) + " npc=" +
+        (state->task ? state->task->npcName : std::string()) +
+        "; speech dropped, action lines still delivered");
+  }
+  return decision;
+}
 
 std::string TrimChatLine(const std::string &value) {
   if (value.empty())
@@ -3366,11 +3385,24 @@ static bool QueueStreamActionIfNew(StreamChatParseState *state,
         " action=" + actionLine + " gen=" + ToString((int)state->generation));
     return false;
   }
+  int lineDecision = StreamLineDecision(state);
+  if (lineDecision == StobeChatInterrupt::LINE_ABORT) {
+    Log("CHAT_TIMING: STREAM_ACTION dropped (hard interrupt) actor=" + actor +
+        " action=" + actionLine + " gen=" + ToString((int)state->generation));
+    return false;
+  }
   state->seenActions.insert(dedupeKey);
+  bool afterInterrupt = lineDecision == StobeChatInterrupt::LINE_ACTIONS_ONLY;
   Log("CHAT_TIMING: STREAM_ACTION actor=" + actor + " action=" + actionLine +
-      " gen=" + ToString((int)state->generation));
-  QueueChatPipeLine("NPC_ACTION: " + speakerHeader + ": " + actionLine,
-                    state->generation);
+      " gen=" + ToString((int)state->generation) +
+      (afterInterrupt ? " after_danger_interrupt=1" : ""));
+  // Generation 0 = no generation gate: the reply's own generation is stale
+  // after a danger interrupt, but its actions must still run (m50 D86).
+  if (!QueueChatPipeLine("NPC_ACTION: " + speakerHeader + ": " + actionLine,
+                         afterInterrupt ? 0 : state->generation)) {
+    return false;
+  }
+  if (afterInterrupt) state->actionsAfterInterrupt++;
   state->actionCount++;
   state->firstLine = false;
   return true;
@@ -3465,7 +3497,7 @@ bool ProcessStreamChatResponseLine(StreamChatParseState *state,
     return PlayDirectorScene(state, TrimChatLine(rawLine.substr(directorPrefix.size())));
   }
 
-  if (!IsChatInterruptGenerationCurrent(state->generation)) {
+  if (StreamLineDecision(state) == StobeChatInterrupt::LINE_ABORT) {
     return false;
   }
 
@@ -3583,6 +3615,12 @@ bool ProcessStreamChatResponseLine(StreamChatParseState *state,
     if (!IsChatInterruptGenerationCurrent(state->generation)) {
       if (!utteranceId.empty()) {
         PostSpeechDeliveryState(utteranceId, "cancelled");
+      }
+      if (StreamLineDecision(state) == StobeChatInterrupt::LINE_ACTIONS_ONLY) {
+        // Danger cut the speech; keep reading so later action lines still land.
+        state->droppedSpeechLines++;
+        state->firstLine = false;
+        return true;
       }
       return false;
     }
@@ -3705,10 +3743,26 @@ DWORD WINAPI StreamChatResponseThread(LPVOID lpParam) {
   parseState.lastSubtitle = "";
   parseState.speechUtteranceIds.clear();
   parseState.seenActions.clear();
+  parseState.actionsOnly = false;
+  parseState.droppedSpeechLines = 0;
+  parseState.actionsAfterInterrupt = 0;
+  unsigned int partnerSerial = 0;
+  if (task->requestMode != "director" && !task->handleStr.empty()) {
+    partnerSerial = (unsigned int)strtoul(task->handleStr.c_str(), NULL, 10);
+  }
+  AddActiveChatPartner(partnerSerial);
 
   bool requestOk =
       PostToStobeWithResponseStream(task->endpoint, "", OnStreamChatHttpLine,
                                     &parseState);
+  RemoveActiveChatPartner(partnerSerial);
+  if (parseState.actionsOnly) {
+    Log("CHAT_THREAD: reply after danger interrupt delivered " +
+        ToString(parseState.actionsAfterInterrupt) + " action lines, dropped " +
+        ToString(parseState.droppedSpeechLines) + " speech lines gen=" +
+        ToString((int)generation) + " request_ok=" +
+        std::string(requestOk ? "1" : "0"));
+  }
   if (task->requestMode == "director") {
     // All replies were authored and played by the scene callback. Never request a rechat.
     ForgetSpeechDeliveryStates(parseState.speechUtteranceIds);

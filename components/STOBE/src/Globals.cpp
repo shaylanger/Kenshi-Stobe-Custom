@@ -4,6 +4,7 @@
 #include "Comm.h"
 #include "Utils.h"
 #include <algorithm>
+#include "StobeChatInterruptPolicy.h"
 
 // Global Definitions
 GameWorld **ppWorld = nullptr;
@@ -20,6 +21,7 @@ DWORD g_nextSpeechActionTick = 0;
 DWORD g_lastRechatDispatchTick = 0;
 std::map<unsigned int, std::string> g_originFactions;
 LONG g_chatInterruptGeneration = 1;
+static volatile LONG g_lastHardChatInterruptGeneration = 1;
 
 namespace {
 const DWORD kPlayerTtsBarrierTimeoutMs = 65000;
@@ -242,6 +244,85 @@ bool IsChatInterruptGenerationCurrent(LONG generation) {
   return Stobe::Interaction::Allowed() && generation == GetChatInterruptGeneration();
 }
 
+int DecideChatStreamLine(LONG generation, bool director) {
+  return (int)StobeChatInterrupt::DecideStreamLine(
+      (long)generation, (long)GetChatInterruptGeneration(),
+      (long)InterlockedCompareExchange(&g_lastHardChatInterruptGeneration, 0, 0),
+      director, Stobe::Interaction::Allowed());
+}
+
+namespace {
+std::map<unsigned int, int> g_activeChatPartners;   // serial -> open replies
+struct DangerActorEntry { unsigned int serial; DWORD tick; };
+std::deque<DangerActorEntry> g_recentDangerActors; // newest at back, max 16
+const DWORD kDangerPartnerWindowMs = 3000;
+}
+
+void AddActiveChatPartner(unsigned int serial) {
+  if (serial == 0) return;
+  EnterCriticalSection(&g_stateMutex);
+  g_activeChatPartners[serial]++;
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+void RemoveActiveChatPartner(unsigned int serial) {
+  if (serial == 0) return;
+  EnterCriticalSection(&g_stateMutex);
+  std::map<unsigned int, int>::iterator it = g_activeChatPartners.find(serial);
+  if (it != g_activeChatPartners.end() && --it->second <= 0) g_activeChatPartners.erase(it);
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+void NoteDangerEventActor(const std::string &t, unsigned int actorSerial) {
+  // Same types as the server's stobeLifelikeSignalForIncomingEvent.
+  if (t != "combat" && t != "combat_start" && t != "attack" && t != "major_damage" &&
+      t != "knockout" && t != "death" && t != "predation" && t != "slavery" &&
+      t != "enslaved")
+    return;
+  DangerActorEntry e;
+  e.serial = actorSerial;
+  e.tick = GetTickCount();
+  EnterCriticalSection(&g_stateMutex);
+  g_recentDangerActors.push_back(e);
+  while (g_recentDangerActors.size() > 16) g_recentDangerActors.pop_front();
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+namespace {
+struct ChatPartnerPred {
+  const std::map<unsigned int, int> *partners;
+  bool operator()(unsigned int serial) const { return partners->count(serial) != 0; }
+};
+}
+
+bool ShouldSkipDangerInterruptForChatPartners(std::string *detail) {
+  DWORD now = GetTickCount();
+  StobeChatInterrupt::DangerActor actors[16];
+  int count = 0;
+  bool skip = false;
+  EnterCriticalSection(&g_stateMutex);
+  for (std::deque<DangerActorEntry>::const_iterator it = g_recentDangerActors.begin();
+       it != g_recentDangerActors.end() && count < 16; ++it) {
+    actors[count].serial = it->serial;
+    actors[count].ageMs = (unsigned long)(now - it->tick);
+    ++count;
+  }
+  ChatPartnerPred pred;
+  pred.partners = &g_activeChatPartners;
+  skip = StobeChatInterrupt::ShouldSkipDangerInterrupt(actors, count, kDangerPartnerWindowMs, pred);
+  if (detail) {
+    std::string d;
+    for (int i = 0; i < count; ++i) {
+      if (actors[i].ageMs > kDangerPartnerWindowMs) continue;
+      if (!d.empty()) d += ",";
+      d += ToString(actors[i].serial);
+    }
+    *detail = d;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  return skip;
+}
+
 void MarkAnimalActivated(unsigned int serial) {
   if (serial == 0) {
     return;
@@ -329,8 +410,9 @@ std::map<unsigned int, TravelTarget> SnapshotTravelTargets() {
   return copy;
 }
 
-LONG BeginChatInterruptGeneration(bool interruptPlaying) {
+LONG BeginChatInterruptGeneration(bool interruptPlaying, bool danger) {
   LONG generation = InterlockedIncrement(&g_chatInterruptGeneration);
+  if (!danger) InterlockedExchange(&g_lastHardChatInterruptGeneration, generation);
   std::set<std::string> cancelledUtterances;
 
   InterlockedExchange(&g_playerTtsBarrierGeneration, 0);
@@ -341,9 +423,9 @@ LONG BeginChatInterruptGeneration(bool interruptPlaying) {
   EnterCriticalSection(&g_msgMutex);
   g_messageQueue.erase(
       std::remove_if(g_messageQueue.begin(), g_messageQueue.end(),
-                     [&cancelledUtterances](const std::string &msg) -> bool {
+                     [&cancelledUtterances, danger](const std::string &msg) -> bool {
                        bool shouldRemove = msg.find("NPC_SAY: ") == 0 ||
-                                           msg.find("NPC_ACTION: ") == 0 ||
+                                           (!danger && msg.find("NPC_ACTION: ") == 0) ||
                                            msg.find("PLAYER_TTS: ") == 0;
                        if (shouldRemove && msg.find("NPC_SAY: ") == 0) {
                          std::string utteranceId =

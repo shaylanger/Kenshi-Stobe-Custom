@@ -1471,6 +1471,8 @@ void LogGameEvent(const std::string &type, const std::string &actor,
     }
   }
 
+  NoteDangerEventActor(normalizedType, actorSerial); // m50 D86: partner-only danger skip
+
   EnterCriticalSection(&g_eventMutex);
   GameEvent ev;
   ev.type = type;

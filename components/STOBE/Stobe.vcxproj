@@ -150,6 +150,7 @@
     <ClInclude Include="src\StobeText.h" />
     <ClInclude Include="src\StobeDrawnWeapon.h" />
     <ClInclude Include="src\StobeDrawnWeaponPolicy.h" />
+    <ClInclude Include="src\StobeChatInterruptPolicy.h" />
     <ClInclude Include="src\StobeTiming.h" />
     <ClInclude Include="src\StartingWindow.h" />
     <ClInclude Include="src\Utils.h" />

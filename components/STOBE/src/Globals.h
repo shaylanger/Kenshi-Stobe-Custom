@@ -211,9 +211,20 @@ GameWorld *GetWorldSafe();
 
 // Increments generation, flushes stale chat/TTS queue entries, and interrupts
 // active TTS playback. Returns the new generation token.
-LONG BeginChatInterruptGeneration(bool interruptPlaying = true);
+// danger=true (combat/knockout lifelike interrupt): cuts speech/TTS but keeps
+// queued NPC_ACTION lines and lets in-flight replies deliver their actions
+// (StobeChatInterruptPolicy.h, m50 D86). Every other caller is a hard interrupt.
+LONG BeginChatInterruptGeneration(bool interruptPlaying = true, bool danger = false);
 LONG GetChatInterruptGeneration();
 bool IsChatInterruptGenerationCurrent(LONG generation);
+// LINE_PROCESS / LINE_ACTIONS_ONLY / LINE_ABORT for a stream reply of `generation`.
+int DecideChatStreamLine(LONG generation, bool director);
+// Active chat partners (NPCs a reply is being streamed for) and recent danger
+// event actors: a danger interrupt fired only by partners is skipped.
+void AddActiveChatPartner(unsigned int serial);
+void RemoveActiveChatPartner(unsigned int serial);
+void NoteDangerEventActor(const std::string &normalizedType, unsigned int actorSerial);
+bool ShouldSkipDangerInterruptForChatPartners(std::string *detail);
 void BeginPlayerTtsPlaybackBarrier(LONG generation);
 bool IsPlayerTtsPlaybackBarrierPending(LONG generation = 0);
 bool ClearPlayerTtsPlaybackBarrier(LONG generation);
