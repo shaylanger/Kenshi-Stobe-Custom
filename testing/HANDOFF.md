@@ -1,17 +1,16 @@
-# Current state (m50, 2026-10-06)
+# Current state (m50, 2026-10-07)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 ~01:50 local, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
-- 5090: batch M (`C:\KenshiTestRuns\m50-5090-m`, list there): FP stealth ST01-ST03, controls (all rows), control C01-C05 on
-  harness F453E8FE (309b157 + bd454d1: inbox commands and per-frame keepers run at the world-thread safe point; the K ST hang
-  and control crash were harness world actions from frameStarted) + KenshiFP 0E881572 (K05-HOSTILE own-body re-cast, HUD01
-  hud_hist). Batches K/L logged: items 86 and 87 confirmed and deleted (STOBE section D is empty).
-- 4080: bm09 (M09 loadouts, `fp-4080-m09`) on KenshiFP 7B8175EF, then `C:\KAH\fp\chain42.ps1` installs 0E881572 + harness
-  F453E8FE (both Defender-probed clean) and runs batch 42 (`b4080-42.sh`, out `C:\KenshiTestRuns\fp-4080-42`, status
-  `C:\KAH\w42.ps1`): controls K06 K04 FB01 FS01 K05 HUD01, stealth, control. Runner = coordinator, lock rig4080.
-- Open: C04-FALLBACK flaky native walk (diagnostics in), C05-LOAD (out of world after load, 4080 b40) - both rerun in M/42.
+## Right now (2026-10-07 ~03:50 local, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
+- 5090: idle (Kenshi closed). Batches P/Q on KenshiFP 44458ACE logged in the m50 run log: NavMesh-thread crash fix (fc60924)
+  confirmed (no crash, no weld jump, C05-LOAD PASS), stealth ST01-ST03 PASS, ranged R01-R06/R12 PASS. Fixer working on C02
+  (5090 FP walk ~half the TP distance; 4080 passes) + C05-STAIRS; rerun those two on the 5090 after the fix.
+- 4080: bm43 = M09 rerun (`C:\KenshiTestRunsp-4080-m09b`, KenshiFP FCCC5FBD), then chain44 (`C:\KAHp\chain44`) installs
+  44458ACE and runs b44 (`C:\KAHp4080-44.sh`, out `C:\KenshiTestRunsp-4080-44`, status `C:\KAH\w44.ps1`): stealth + control.
+  Runner = coordinator, lock rig4080.
+- Open FP rows: M09 (animation mods), S05, C02 (5090), C05-STAIRS. PG: no open automated rows.
 - Gotcha: never `unload` a char that is still someone's fight/order target (game crash, exe+268A68); tests KO and leave them.
 - Gotcha: a detached WSL start must end with `& disown` and be checked with `ps` (m50 G first start never ran).
 - 4080 desktop is locked (LogonUI): KenshiFP test switch `fp_keys focus on` (fp-controls.sh uses it). Defender-probe each new DLL
@@ -30,8 +29,8 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 8B861ADE (danger interrupt keeps deal actions), KenshiFP 0E881572, PG BAFB8C31 (Normal), harness F453E8FE; server live `stobe` 055e0c5.
-- 4080: KenshiFP 7B8175EF (0E881572 + harness F453E8FE after M09 via chain42), PG BAFB8C31, harness C6969009 (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
+- 5090: Stobe 8B861ADE (danger interrupt keeps deal actions), KenshiFP 44458ACE, PG BAFB8C31 (Normal), harness 24BE3AEC; server live `stobe` 055e0c5.
+- 4080: KenshiFP FCCC5FBD (44458ACE after M09 via chain44), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
 - **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
