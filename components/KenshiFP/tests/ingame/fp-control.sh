@@ -386,10 +386,11 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
 
 # C05-STAIRS: a stair start STAIRS="x y z yaw" (bottom, facing up), else found at runtime in a Storm House built 60 from
 # the player (removed again by `unbuild Storm` in cleanup) by a ray scan (`fp_camera floors`: a 3-unit grid of downward
-# rays over the house, every surface per cell). Ground G = the lowest height found in >= 10% of the cells, upper floor
-# UP = the lowest one >= G+12 in >= 10% of them; stair cells have a surface between G+3 and UP-3; bottom = the lowest
-# stair cell, yaw toward the highest, start 6 units back from the bottom on the ground floor. 4080 b33: the old
-# teleport-onto-the-upper-floor search always clamped to the ground floor (y = base+4.5 at every offset/height).
+# rays over the house, every surface per cell), analysed by fp-stairs-scan.awk: ground = the most common height (the
+# house floor), then every floor cell x 32 headings is walked step by step on the grid (climbable steps only, stops at
+# walls/counters) and the line (with its 3-unit parallels) that rises most wins. m50 5090 p: the old scan took the
+# terrain under the floor as ground, counted the whole floor as stair cells and walked flat into a counter (dy 0).
+# 4080 b33: the old teleport-onto-the-upper-floor search always clamped to the ground floor (y = base+4.5).
 STAIRS_SRC=env; STAIRS_WHY=""
 find_stairs() { local r bx by bz f="$OUT/stairs_floors.txt"
   STAIRS_SRC=built; A fp_move none >/dev/null; [ -n "$PSAVE" ] && A teleport "$SH" $PSAVE >/dev/null; sleep 2
@@ -397,22 +398,9 @@ find_stairs() { local r bx by bz f="$OUT/stairs_floors.txt"
   grep -q 'pos=' <<<"$r" || { STAIRS_WHY="build failed: $(cut -c1-80 <<<"$r")"; return 1; }
   BUILT=1; read -r bx by bz <<<"$(grep -o 'pos=[^ ]*' <<<"$r" | head -1 | cut -d= -f2 | tr ',' ' ')"; sleep 2
   stobe-auto fp_camera floors "$bx" "$bz" 30 3 "$(awk -v a="$by" 'BEGIN{print a+80}')" "$(awk -v a="$by" 'BEGIN{print a-5}')" > "$f" 2>&1
-  r=$(awk -v by="$by" 'BEGIN{RS=";"} { sub(/^.*floors/,""); if (!match($0,/-?[0-9.]+,-?[0-9.]+:[-0-9.\/]+/)) next
-      c=substr($0,RSTART,RLENGTH); split(c,a,":"); split(a[1],xz,","); m=split(a[2],ys,"/"); ++n; X[n]=xz[1]; Z[n]=xz[2]; prev=1e9; S[n]=""
-      for(i=1;i<=m;i++){ y=ys[i]-by; if (prev-y<1.5) continue; prev=y; S[n]=S[n] " " y; b=int(y+100.5)-100; if(!((n,b) in seen)){seen[n,b]=1; cnt[b]++} } }
-    END{ if(n<20){print "few_cells " n; exit} th=0.1*n; G=""
-      for(b=-5;b<=80;b++) if(cnt[b]+cnt[b+1]>=th){G=b; break}
-      if(G==""){print "no_ground"; exit} UP=""
-      for(b=G+12;b<=80;b++) if(cnt[b]+cnt[b+1]>=th){UP=b; break}
-      if(UP==""){printf "no_upper_floor ground=%d cells=%d\n", G, n; exit}
-      lo=1e9; hi=-1e9; k=0
-      for(c=1;c<=n;c++){ q=split(S[c],v," "); for(i=1;i<=q;i++) if(v[i]>=G+3 && v[i]<=UP-3){ k++
-        if(v[i]<lo){lo=v[i]; lx=X[c]; lz=Z[c]} if(v[i]>hi){hi=v[i]; hx=X[c]; hz=Z[c]} } }
-      if(k<3 || hi-lo<5){printf "no_stair_cells ground=%d upper=%d between=%d span=%.1f\n", G, UP, k, (k?hi-lo:0); exit}
-      dx=hx-lx; dz=hz-lz; l=sqrt(dx*dx+dz*dz); if(l<1){print "stair_cells_stacked"; exit}
-      printf "%.1f %.1f %.1f %.4f ground=%d upper=%d stair_cells=%d span=%.1f\n", lx-6*dx/l, by+G+1, lz-6*dz/l, atan2(dx,dz), G, UP, k, hi-lo}' "$f")
+  r=$(awk -v by="$by" -f "$(dirname "$0")/fp-stairs-scan.awk" "$f")
   echo "STAIRS house=$bx,$by,$bz scan=[$r] floors=$f" >> "$LOG"
-  case "$r" in no_upper_floor*) STAIRS_WHY="built house has no upper floor surface (ray scan: $r)"; return 1;; esac
+  case "$r" in no_stair_line*|few_cells*) STAIRS_WHY="no climbable stair line in the built house (ray scan: $r)"; return 1;; esac
   grep -qE '^-?[0-9.]+ -?[0-9.]+ -?[0-9.]+ -?[0-9.]+ ' <<<"$r" || { STAIRS_WHY="no stair in the ray scan ($r, $f)"; return 1; }
   STAIRS=$(cut -d' ' -f1-4 <<<"$r"); return 0; }
 if [ -z "$STAIRS" ] && ! find_stairs; then row C05-STAIRS FAIL "setup stairs not found ($STAIRS_SRC): $STAIRS_WHY"; else
