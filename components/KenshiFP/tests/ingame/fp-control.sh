@@ -26,7 +26,8 @@
 #  C05-LOAD      load (W held through the load, released after): nobody walks on, camera valid, take + W moves, stops
 #  C05-INTERIOR  in a building (INTERIOR="<buildings filters>", tried in order, default "house shack bar shop hut tower home"): walk into a
 #                wall, turn the camera so the wall is behind, third person: blocked=1 and applied<target; S walks away
-#  C05-STAIRS    needs STAIRS="x y z yaw" (bottom of a stair, facing up it): W climbs |dy| >= 10, stops on release
+#  C05-STAIRS    from the bottom of a stair facing up it (STAIRS="x y z yaw", else found at runtime in a Storm House the
+#                run builds and removes): W climbs |dy| >= 10, stops on release
 # Usage: fp-control.sh [player] [mate] [target] [outdir]. Env: MOVE_MIN (10), STILL_MAX (3), STALL_MS (250), INVALID_FACTION (Drifters),
 # INTERIOR, STAIRS. Leaves the fixture changed (save kah-fp-c05 written, Skaera KO, player moved): reload it after.
 SH=${1:-Axima}; MT=${2:-Malzin}; TG=${3:-Skaera}; OUT=${4:-/tmp/fp-control}
@@ -132,8 +133,10 @@ native_fix() { local d ax n sp=-; read -r d ax n <<<"$(native_walk "$1" "$2")"
     A teleport "$1" $3 >/dev/null; sleep 2; read -r d ax n <<<"$(native_walk "$1" "$2")"; n="$n+retry"; fi
   echo "$d $ax $n $sp"; }
 FP0=$(fps fp_mode); DIST0=$(cam target)
+BUILT=""
 cleanup() { A fp_move none >/dev/null; A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
             for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
+            [ -n "$BUILT" ] && A unbuild Storm 2000 >/dev/null   # the C05-STAIRS house
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
 trap cleanup EXIT
 
@@ -298,11 +301,40 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
     awk -v a="$AD" -v p="$AP" 'BEGIN{d=a-p; if(d<0)d=-d; exit !(a!="" && d<.2)}' || ok=0
     ge "$MA" "$(awk -v m="$MOVE_MIN" 'BEGIN{print m/2}')" || ok=0; judge C05-INTERIOR $ok "$ev"; fi; fi
 
-# C05-STAIRS: needs a known stair (STAIRS="x y z yaw")
-if [ -z "$STAIRS" ]; then row C05-STAIRS FAIL "setup no stairs position in this fixture (set STAIRS=\"x y z yaw\")"; else
+# C05-STAIRS: a stair start STAIRS="x y z yaw" (bottom, facing up), else found at runtime in a Storm House built 60 from
+# the player (removed again by `unbuild Storm` in cleanup): he is put on its upper floor (teleport above the house, landed
+# >= 15 over its base), then walked out natively (walktime, answered on arrival) while his position is sampled; the first
+# flat sample >= 10 below the start is the stair bottom, the way back up from it the stair yaw, and the start is 6 units
+# back from the bottom on the floor.
+STAIRS_SRC=env; STAIRS_WHY=""
+find_stairs() { local r bx by bz h o dx dz ly up=0 f="$OUT/stairs_samples.txt" wpid end
+  STAIRS_SRC=built; A fp_move none >/dev/null; [ -n "$PSAVE" ] && A teleport "$SH" $PSAVE >/dev/null; sleep 2
+  r=$(A build "Storm House" near "$SH" dist 60)
+  grep -q 'pos=' <<<"$r" || { STAIRS_WHY="build failed: $(cut -c1-80 <<<"$r")"; return 1; }
+  BUILT=1; read -r bx by bz <<<"$(grep -o 'pos=[^ ]*' <<<"$r" | head -1 | cut -d= -f2 | tr ',' ' ')"; mode off
+  for h in 60 40 30; do for o in "0 0" "20 0" "-20 0" "0 20" "0 -20"; do read -r dx dz <<<"$o"
+      A teleport "$SH" "$(awk -v a="$bx" -v d="$dx" 'BEGIN{print a+d}')" "$(awk -v a="$by" -v d="$h" 'BEGIN{print a+d}')" \
+        "$(awk -v a="$bz" -v d="$dz" 'BEGIN{print a+d}')" >/dev/null; sleep 2.5
+      ly=$(pos "$SH" | awk '{print $2}'); ge "$ly" "$(awk -v a="$by" 'BEGIN{print a+15}')" && { up=1; break 2; }; done; done
+  [ $up = 1 ] || { STAIRS_WHY="never landed on an upper floor (last y=$ly, house base y=$by)"; return 1; }
+  : > "$f"; stobe-auto walktime "$SH" 150 +x walk >> "$LOG" 2>&1 & wpid=$!
+  end=$((SECONDS+60)); while kill -0 $wpid 2>/dev/null && [ $SECONDS -lt $end ]; do
+    stobe-auto where "$SH" | grep -o 'pos=[^ ]*' | head -1 | cut -d= -f2 | tr ',' ' ' >> "$f"; sleep 0.1; done
+  kill $wpid 2>/dev/null; wait $wpid 2>/dev/null
+  r=$(awk 'NF==3{n++; x[n]=$1; y[n]=$2; z[n]=$3} END{ if(n<5){print "few_samples " n; exit}
+      top=y[1]; j=0; for(i=2;i<=n-2;i++) if(y[i]<top-10 && (y[i+1]-y[i])^2<1 && (y[i+2]-y[i+1])^2<1){j=i; break}
+      if(!j){printf "no_descent top=%.1f last=%.1f\n", top, y[n]; exit}
+      k=0; for(i=j-1;i>=1;i--) if(y[i]>=y[j]+8){k=i; break}
+      if(!k){print "no_climb_sample"; exit}
+      dx=x[k]-x[j]; dz=z[k]-z[j]; l=sqrt(dx*dx+dz*dz); if(l<1){print "vertical_drop"; exit}
+      printf "%.1f %.1f %.1f %.4f\n", x[j]-6*dx/l, y[j], z[j]-6*dz/l, atan2(dx,dz)}' "$f")
+  echo "STAIRS house=$bx,$by,$bz upper_y=$ly found=[$r] samples=$(wc -l < "$f")" >> "$LOG"
+  grep -qE '^-?[0-9.]+ -?[0-9.]+ -?[0-9.]+ -?[0-9.]+$' <<<"$r" || { STAIRS_WHY="no stair in the walk out ($r, samples $f)"; return 1; }
+  STAIRS=$r; return 0; }
+if [ -z "$STAIRS" ] && ! find_stairs; then row C05-STAIRS FAIL "setup stairs not found ($STAIRS_SRC): $STAIRS_WHY"; else
   read -r SX SY SZ SYAW <<<"$STAIRS"; ui_clear; A teleport "$SH" "$SX" "$SY" "$SZ" >/dev/null; sleep 2; take "$SH" >/dev/null
   YAW=$SYAW; look "$YAW" 0; P0=$(pos "$SH"); read -r MS _ _ _ <<<"$(walk "$SH" w 4000)"; P1=$(pos "$SH"); DY=$(dy "$P0" "$P1")
-  STK=$(still "$SH" 2); ev="walk=$MS dy=$DY drift_after_release=$STK controlled_$SH=$(ctl_is "$SH" && echo 1 || echo 0) [$(camsum)]"
+  STK=$(still "$SH" 2); ev="stairs=$STAIRS_SRC start=[$STAIRS] walk=$MS dy=$DY drift_after_release=$STK controlled_$SH=$(ctl_is "$SH" && echo 1 || echo 0) [$(camsum)]"
   ok=1; awk -v d="$DY" 'BEGIN{if(d<0)d=-d; exit !(d>=10)}' || ok=0; lt "$STK" "$STILL_MAX" || ok=0; ctl_is "$SH" || ok=0
   judge C05-STAIRS $ok "$ev"; fi
 
