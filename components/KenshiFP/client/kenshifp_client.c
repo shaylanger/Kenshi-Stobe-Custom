@@ -3968,11 +3968,15 @@ static void fp_camera_override(void *gw)
                                                            g_prevraw_tx, g_prevraw_tz, g_tx, g_tz);
                             if (ws == KFP_WELD_SHIFT) {
                                 g_tx += ddx; g_tz += ddz;
-                                logline("[weld] rebase shift tx%+.1f tz%+.1f", ddx, ddz);
+                                logline("[weld] rebase shift tx%+.1f tz%+.1f centre=%.1f,%.1f,%.1f feet=%.1f,%.1f,%.1f",
+                                        ddx, ddz, centerW.x, centerW.y, centerW.z, feet.x, feet.y, feet.z);
                             } else if (ws == KFP_WELD_PENDING) {
                                 weld_suspect = 1;
                                 if (g_weld_pend.n == 1)
-                                    logline("[weld] world-scale centre jump tx%+.1f tz%+.1f held (not a rebase until it holds)", ddx, ddz);
+                                    logline("[weld] world-scale centre jump tx%+.1f tz%+.1f held (not a rebase until it holds)"
+                                            " centre=%.1f,%.1f,%.1f feet=%.1f,%.1f,%.1f prev_t=%.1f,%.1f pc=%p",
+                                            ddx, ddz, centerW.x, centerW.y, centerW.z, feet.x, feet.y, feet.z,
+                                            g_prevraw_tx, g_prevraw_tz, (void *)pc);
                             } else if (ws == KFP_WELD_RETURNED) {
                                 logline("[weld] centre back on the weld after an outlier: no shift");
                             }
