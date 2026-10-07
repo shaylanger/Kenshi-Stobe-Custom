@@ -19,6 +19,14 @@ cur=$(grep -a -E '^[0-9]{2}:[0-9]{2} .*: (prepare|run) ' "$O/batch.log" 2>/dev/n
 if ! tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then
   echo "HEALTH STALL Kenshi is not running file=$f age=${age}m ${cur:+now=\"$cur\"}"; exit 2
 fi
+# m50 5090 K: a crash leaves RE_Kenshi's handler on a hidden message box; the game ran on for 40 s and then froze
+# (main thread waiting for a crashed worker), so "Kenshi is running" proved nothing. A crash dump written after the
+# batch's first output file = crash, even while the harness still answers.
+cd_="${KENSHI_DIR:-/mnt/d/Steam/steamapps/common/Kenshi}/crashDump1.0.65_x64.dmp"
+first=$(find "$O" -type f -printf '%T@\n' 2>/dev/null | sort -n | head -1)
+if [ -f "$cd_" ] && [ -n "$first" ] && [ "$(stat -c %Y "$cd_")" -gt "${first%%.*}" ]; then
+  echo "HEALTH STALL Kenshi crashed (crash dump $(date -d @"$(stat -c %Y "$cd_")" +%H:%M:%S); RE_Kenshi's handler blocks on a hidden dialog, the game may still look alive) file=$f age=${age}m ${cur:+now=\"$cur\"}"; exit 2
+fi
 st=$(timeout 30 stobe-auto status </dev/null 2>&1 | tr -d '\r' | head -1)
 phase=$(grep -oE 'phase=[a-z]+' <<<"$st"); speed=$(grep -oE 'speed=[0-9.]+' <<<"$st"); paused=$(grep -oE 'paused=[01]' <<<"$st")
 why=""
