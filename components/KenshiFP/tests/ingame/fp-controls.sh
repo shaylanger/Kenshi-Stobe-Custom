@@ -110,10 +110,17 @@ HUDS=""; HUDOK=1; HUDN=0
 hud() { hud_eval "$1" "$(A fp_keys state)"; }
 hud_eval() { local s=$2 u t h; u=$(fld ui_state <<<"$s"); t=$(fld hud_text <<<"$s"); h=$(fld hud_shown <<<"$s")
   HUDS+="$1:$u/$t/$h "; HUDN=$((HUDN+1)); [ "$u" = "$1" ] && [ "$t" = "$u" ] && [ "$h" = 1 ] && [ "$(fld hud <<<"$s")" = 1 ] || HUDOK=0; }
-# hud_poll <expected> <s>: snapshots until ui_state and hud_text both match (bounded), then judge THAT snapshot
+# hud_poll <expected> <s> [since]: snapshots until ui_state and hud_text both match (bounded), then judge THAT snapshot
 # (4080 b39: a separate sample after the wait came ~0.6 s later, after a short free swing had already ended)
+# [since] = hud_changes before the input: 4080 b41 the ~0.5 s free swing still fell between two polls (~0.6 s each);
+# then the HUD's own caption history (hud_hist "<seq>:<state>", what the widget was really set to) must show
+# <expected> after <since>, with the HUD shown: evidence "exp:hist[...]/shown"
+hud_seen() { fld hud_hist <<<"$3" | tr , ' ' | awk -v s="$2" -v e="$1" '{for(i=1;i<=NF;i++){split($i,a,":"); if(a[1]+0>s+0 && a[2]==e) f=1}} END{exit !f}'; }
 hud_poll() { local s end=$((SECONDS+$2)); while :; do s=$(A fp_keys state)
-  [ "$(fld ui_state <<<"$s")" = "$1" ] && [ "$(fld hud_text <<<"$s")" = "$1" ] && break; [ $SECONDS -ge $end ] && break; sleep 0.1; done
+  [ "$(fld ui_state <<<"$s")" = "$1" ] && [ "$(fld hud_text <<<"$s")" = "$1" ] && break
+  if [ -n "$3" ] && hud_seen "$1" "$3" "$s"; then HUDS+="$1:hist[$(fld hud_hist <<<"$s")]/$(fld hud_shown <<<"$s") "; HUDN=$((HUDN+1))
+    [ "$(fld hud_shown <<<"$s")" = 1 ] && [ "$(fld hud <<<"$s")" = 1 ] || HUDOK=0; return; fi
+  [ $SECONDS -ge $end ] && break; sleep 0.1; done
   hud_eval "$1" "$s"; }
 
 FP0=$(fps fp_mode); DIST0=$(cam target); AR0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""
@@ -232,7 +239,7 @@ if want FB01 || want HUD01; then if [ $MELEE = 0 ]; then want FB01 && mfail FB01
 if want FS01 || want HUD01; then if [ $MELEE = 0 ]; then want FS01 && mfail FS01; else ui_clear; draw_to 1; sky
   waitf 15 not_fight; FI0=$(A fp_melee state | fld active); HP0=$(A hp "$MT" | grep -o 'worst=[0-9-]*%'); K0=$(A fp_keys state)
   F0=$(fld free_swings <<<"$K0"); E0=$(fld fs_ends <<<"$K0"); G0=$(fld engages <<<"$K0")
-  A fp_keys press lmb 100 >/dev/null; hud_poll swinging 2
+  A fp_keys press lmb 100 >/dev/null; hud_poll swinging 2 "$(fld hud_changes <<<"$K0")"
   waitf 5 kge fs_ends $((E0+1)); sleep 0.5; K=$(A fp_keys state); FI1=$(A fp_melee state | fld active); HP1=$(A hp "$MT" | grep -o 'worst=[0-9-]*%')
   ev="fight_active=$FI0->$FI1 free_swings $F0->$(fld free_swings <<<"$K") fs_prog_max=$(fld fs_prog_max <<<"$K") fs_ends $E0->$(fld fs_ends <<<"$K") fs_notech=$(fld fs_notech <<<"$K") fs_faults=$(fld fs_faults <<<"$K") fs_dead=$(fld fs_dead <<<"$K") engages $G0->$(fld engages <<<"$K") $MT hp $HP0->$HP1"
   ok=1; [ "$(fld free_swings <<<"$K")" = $((F0+1)) ] && [ "$(fld fs_ends <<<"$K")" = $((E0+1)) ] && [ "$(fld fs_faults <<<"$K")" = 0 ] && [ "$(fld fs_dead <<<"$K")" = 0 ] || ok=0

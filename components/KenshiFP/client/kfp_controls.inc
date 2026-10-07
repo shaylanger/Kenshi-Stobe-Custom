@@ -512,14 +512,29 @@ static void fp_controls_tick(void *gw,float dt) {
     g_guard_armed=0;
 }
 static void *g_fpc_hud;static const char *g_fpc_hud_text;static int g_fpc_hud_shown;static unsigned g_fpc_hud_changes;
+/* HUD01 (4080 b41): a free swing (~0.5 s) ends between two harness polls (~0.6 s each), so the live hud_text
+ * never read SWINGING. hud_hist = the last 8 captions the HUD widget was really set to, "<hud_changes>:<state>"
+ * (sequence = g_fpc_hud_changes after that change), so a test can prove what the HUD showed after an input. */
+#define FPC_HUD_HIST 8
+static const char *g_fpc_hud_hist[FPC_HUD_HIST];static unsigned g_fpc_hud_hist_seq[FPC_HUD_HIST];
+static void fpc_hud_hist_text(char *b,size_t n) {
+    size_t o=0;b[0]=0;
+    unsigned last=g_fpc_hud_changes,first=last>FPC_HUD_HIST?last-FPC_HUD_HIST+1:1;
+    for (unsigned q=first;q && q<=last && o+1<n;++q) {
+        unsigned i=q%FPC_HUD_HIST;if (g_fpc_hud_hist_seq[i]!=q || !g_fpc_hud_hist[i]) continue;
+        int w=snprintf(b+o,n-o,"%s%u:%s",o?",":"",q,g_fpc_hud_hist[i]);if (w<0) break;o+=(size_t)w;
+    }
+    if (!b[0]) snprintf(b,n,"none");
+}
 static size_t fpc_state(char *b,size_t n) {
+    char hh[200];fpc_hud_hist_text(hh,sizeof hh);
     return (size_t)snprintf(b,n,"hook=%d fault=%d swallow=%d fp=%d drawn=%d wih=%llx ranged=%d fists=%d hold=%d ui_state=%s in=%d%d%d%d "
         "mmb_selects=%u mmb_none=%u last_select=%s ctx_opens=%u ctx_none=%u ctx_freed=%d rmb_swallowed=%u lmb_swallowed=%u "
         "mmb_cam_frames=%u r_keys=%u r_draws=%u r_holsters=%u r_draw_fail=%u sheathe_kept=%u lmb_clicks=%u engages=%u last_task=%d last_target=%s "
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -528,7 +543,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
         g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
-        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed);
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
@@ -668,6 +683,7 @@ static void fpc_hud_update(int show) {
             else if (!strcmp(st,"staggered")||!strcmp(st,"down")) {c[0]=1;c[1]=0.3f;c[2]=0.3f;}
             if (colour) colour(g_fpc_hud,c);
             g_fpc_hud_text=st;++g_fpc_hud_changes;
+            g_fpc_hud_hist[g_fpc_hud_changes%FPC_HUD_HIST]=st;g_fpc_hud_hist_seq[g_fpc_hud_changes%FPC_HUD_HIST]=g_fpc_hud_changes;
         }
         if (!g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,1);g_fpc_hud_shown=1;}
     }
