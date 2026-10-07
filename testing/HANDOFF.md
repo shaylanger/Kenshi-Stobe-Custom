@@ -13,7 +13,8 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - KenshiFP manual combat ON by default + F10 toggle + rebindable keys (7b85f67) validated both rigs.
 - C05-KO (obstacle redo 8965bc3), C05-STAIRS (namesake handle a1414c4): 4080 bm51h 30/30, closed. C04-TAKE 5090
   ctl-off: test measured the mate walk too late (da96d77); take refusal reasons logged (ffad4e4). Batch N confirms.
-- NP5/NP11/NP12 (NPC bio LLM rows) wait on DeepInfra credit (HTTP 402 still at 23:09 UTC). List line:
+- NP5/NP11/NP12 (NPC bio LLM rows): DeepInfra credit is back (Shay); run on the 5090 when Shay says it is free (Stobe +
+  server only there; Shay is using the 5090 meanwhile, all other testing on the 4080). List line:
   `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12`.
 - Product note for Shay: once FP walk is pinned on a rock, the order fallback doesn't walk around it either.
 - Gotchas: detached WSL batches via `bash -s` heredoc (the `bash -c '... &'` form silently never ran, again m51 L);
