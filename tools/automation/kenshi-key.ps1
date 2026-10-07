@@ -9,6 +9,10 @@ public static class KK {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint type);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr p);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool f);
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
 }
 '@
 $p = Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1
@@ -17,6 +21,14 @@ $h = $p.MainWindowHandle
 if ([KK]::GetForegroundWindow() -ne $h) {
   (New-Object -ComObject WScript.Shell).AppActivate($p.Id) | Out-Null
   [KK]::SetForegroundWindow($h) | Out-Null
+  Start-Sleep -Milliseconds 400
+}
+# m51: while someone uses the desktop the foreground lock refuses SetForegroundWindow: attach to the foreground thread's input
+if ([KK]::GetForegroundWindow() -ne $h) {
+  $me = [KK]::GetCurrentThreadId(); $fg = [KK]::GetWindowThreadProcessId([KK]::GetForegroundWindow(), [IntPtr]::Zero)
+  [KK]::AttachThreadInput($me, $fg, $true) | Out-Null
+  [KK]::BringWindowToTop($h) | Out-Null; [KK]::SetForegroundWindow($h) | Out-Null
+  [KK]::AttachThreadInput($me, $fg, $false) | Out-Null
   Start-Sleep -Milliseconds 400
 }
 if ([KK]::GetForegroundWindow() -ne $h) { Write-Output 'KEY FAIL Kenshi not focused'; exit 1 }
