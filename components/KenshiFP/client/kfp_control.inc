@@ -8,7 +8,8 @@ static uint32_t g_fp_control_ids[5];
 static int g_fp_control_pinned, g_fp_world_seen, g_fp_take_key_prev;
 static void *g_fp_control_actor;
 static volatile LONG g_fp_take_request;
-static unsigned g_fp_take_req_n, g_fp_take_req_done, g_fp_take_req_ui;
+static unsigned g_fp_take_req_n, g_fp_take_req_done, g_fp_take_req_ui, g_fp_take_req_fail;
+static char g_fp_take_why[96]="none";   /* last take refusal reason (no spaces: state field) */
 /* Harness fp_move (TEST ONLY): WASD held for a bounded time through the same
  * fp_movement path as the physical keys (bit0 W, bit1 S, bit2 A, bit3 D). */
 static volatile LONG g_kah_move_keys, g_kah_move_until;
@@ -55,17 +56,30 @@ static void *fp_controlled_char(void *gw) {
     }
     g_fp_control_actor=NULL; return NULL; /* no silent transfer to another actor */
 }
-static int fp_control_take_selected(void *gw) {
+/* why = reason when refused (no spaces). m51 5090 L: the take of a just-selected mate was refused with
+ * no trace; the reason (nobody selected / selection not in the squad / pin) is now logged and reported. */
+static int fp_control_take_why(void *gw,char *why,size_t n) {
     void *pc=first_player_char(gw);
-    if (!pc || !readable((void *)((uintptr_t)gw+GW_PLAYER),8)) return 0;
+    if (!pc || !readable((void *)((uintptr_t)gw+GW_PLAYER),8)) { snprintf(why,n,"no_player_char"); return 0; }
     void *pi=*(void **)((uintptr_t)gw+GW_PLAYER);
     if (!readable((void *)((uintptr_t)pi+PI_SELECTED_CHAR+HAND_IDS),20) ||
-        !readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) return 0;
+        !readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) { snprintf(why,n,"handle_unreadable"); return 0; }
     /* first_player_char falls back to slot 0 for a non-squad selection;
      * explicit take-control must refuse that fallback. */
-    if (memcmp((void *)((uintptr_t)pi+PI_SELECTED_CHAR+HAND_IDS),
-               (void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) return 0;
-    return fp_control_pin(gw,pc);
+    const uint32_t *sel=(const uint32_t *)((uintptr_t)pi+PI_SELECTED_CHAR+HAND_IDS);
+    if (memcmp(sel,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) {
+        snprintf(why,n,"%s(ids=%u/%u/%u/%u/%u)",sel[0]==0xb?"nobody_selected":"selection_not_in_squad",
+                 sel[0],sel[1],sel[2],sel[3],sel[4]);
+        return 0;
+    }
+    if (!fp_control_pin(gw,pc)) { snprintf(why,n,"pin_failed"); return 0; }
+    return 1;
+}
+static int fp_control_take_selected(void *gw) {
+    char why[96];
+    if (fp_control_take_why(gw,why,sizeof why)) return 1;
+    snprintf(g_fp_take_why,sizeof g_fp_take_why,"%s",why);
+    return 0;
 }
 /* 1 = pc is one of gw's live player characters. Pointer compare only: pc itself is
  * never dereferenced, so a stale (freed) character pointer is safe to ask about. */
@@ -141,7 +155,10 @@ static void fp_control_tick(void *gw) {
     int req=InterlockedExchange(&g_fp_take_request,0)!=0;
     if (req && g_ui_open) { ++g_fp_take_req_ui; logline("[control] take press ignored: UI open"); }
     take |= (req && !g_ui_open);
-    if (take && fp_control_take_selected(gw)) {
+    if (take && !fp_control_take_selected(gw)) {
+        if (req && !g_ui_open) { ++g_fp_take_req_fail; logline("[control] take press dropped: %s",g_fp_take_why); }
+        else logline("[control] take key refused: %s",g_fp_take_why);
+    } else if (take) {
         if (req && !g_ui_open) ++g_fp_take_req_done;
         {   LONG hk=g_kah_move_keys; LONG left=(LONG)((DWORD)g_kah_move_until-GetTickCount());
             if (!hk || left<0) { hk=0; left=0; }
@@ -166,19 +183,39 @@ static int kah_fp_control(const char *id,int argc,const char *const *argv,KAH_Re
     }
     if (!_stricmp(argv[1],"take")) {
         if (!fp_control_take_selected(g_gw_cache)) {
-            r->append(r,"select a valid squad member first"); return KAH_ERROR;
+            char e[160]; snprintf(e,sizeof e,"select a valid squad member first (%s)",g_fp_take_why);
+            r->append(r,e); return KAH_ERROR;
         }
         r->append(r,"controlled actor transferred; inspected selection unchanged");
         return KAH_OK;
     }
     void *pc=g_fp_mode?fp_controlled_char(g_gw_cache):g_fp_control_actor;
-    char b[300];
+    /* sel = vanilla selectedCharacter hand ids, slot0 = squad slot 0 ids (the fallback "inspected") */
+    uint32_t sel[5]={0}, s0[5]={0}; int sel_sq=0;
+    {void *gw=g_gw_cache;
+     void *pi=gw&&readable((void *)((uintptr_t)gw+GW_PLAYER),8)?*(void **)((uintptr_t)gw+GW_PLAYER):NULL;
+     if (pi && readable((void *)((uintptr_t)pi+PI_SELECTED_CHAR+HAND_IDS),20))
+         memcpy(sel,(void *)((uintptr_t)pi+PI_SELECTED_CHAR+HAND_IDS),20);
+     if (pi && readable(pi,PI_PLAYERCHARS+LEK_STUFF+8)) {
+         uint32_t count=*(uint32_t *)((uintptr_t)pi+PI_PLAYERCHARS+LEK_COUNT);
+         void **chars=*(void ***)((uintptr_t)pi+PI_PLAYERCHARS+LEK_STUFF);
+         if (count && count<=4096 && readable(chars,(size_t)count*8))
+             for (uint32_t i=0;i<count;++i) {
+                 void *c=chars[i];
+                 if (!char_valid(c) || !readable((void *)((uintptr_t)c+CHAR_HANDLE+HAND_IDS),20)) continue;
+                 if (!i) memcpy(s0,(void *)((uintptr_t)c+CHAR_HANDLE+HAND_IDS),20);
+                 if (!memcmp(sel,(void *)((uintptr_t)c+CHAR_HANDLE+HAND_IDS),20)) sel_sq=1;
+             }
+     }}
+    char b[520];
     snprintf(b,sizeof(b),"direct=%d pinned=%d controlled=%llx inspected=%llx control_ids=%u/%u/%u/%u/%u"
-        " take_presses=%u take_done=%u take_ui_ignored=%u",
+        " take_presses=%u take_done=%u take_ui_ignored=%u take_failed=%u take_why=%s"
+        " sel=%u/%u/%u/%u/%u sel_in_squad=%d slot0=%u/%u/%u/%u/%u",
         !!g_fp_mode,g_fp_control_pinned,(unsigned long long)(uintptr_t)pc,
         (unsigned long long)(uintptr_t)first_player_char(g_gw_cache),
         g_fp_control_ids[0],g_fp_control_ids[1],g_fp_control_ids[2],g_fp_control_ids[3],g_fp_control_ids[4],
-        g_fp_take_req_n,g_fp_take_req_done,g_fp_take_req_ui);
+        g_fp_take_req_n,g_fp_take_req_done,g_fp_take_req_ui,g_fp_take_req_fail,g_fp_take_why,
+        sel[0],sel[1],sel[2],sel[3],sel[4],sel_sq,s0[0],s0[1],s0[2],s0[3],s0[4]);
     r->append(r,b); return KAH_OK;
 }
 /* fp_move <keys wasd|none> [ms] | state: bounded harness WASD hold (TEST ONLY). */

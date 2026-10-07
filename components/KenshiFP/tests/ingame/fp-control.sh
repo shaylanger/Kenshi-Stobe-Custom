@@ -315,12 +315,12 @@ U0=$(ctl take_ui_ignored); A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; A fp
 U1=$(ctl take_ui_ignored); HUI=$(ctl controlled); A click INV >/dev/null; waitf 4 ui_is 0; ui_clear
 # 20 s hold (fp_move none below releases it): 9 s ran out on the 5090 before the mate's samples
 D0=$(ctl take_done); pick_yaw "$SH|$MT" C04-TAKE; look "$YAW" 0; A fp_move w 20000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
-A fp_control press >/dev/null; waitf 3 ctl_is "$MT"; TOOK=$?; D1=$(ctl take_done); HL=$(A fp_move state | fld left_ms); sleep 0.5
+A fp_control press >/dev/null; waitf 3 ctl_is "$MT"; TOOK=$?; CW=$(A fp_control state); D1=$(fld take_done <<<"$CW"); HL=$(A fp_move state | fld left_ms); sleep 0.5
 PS1=$(pos "$SH"); PM1=$(pos "$MT"); sleep 2; PS2=$(pos "$SH"); PM2=$(pos "$MT")
 A fp_move state > "$OUT/last_walk_state.txt"   # mvdiag: the mate's fp_move state while W is still held
 A fp_move none >/dev/null; sleep 0.8; MSTOP=$(still "$MT" 2)
 WSH=$(d2 "$PS0" "$PS1"); RSH=$(d2 "$PS1" "$PS2"); WMT=$(d2 "$PM1" "$PM2")
-ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 hold_left_ms=$HL $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT stop_after_release=$MSTOP clearance=$YAWC $MT[$(mvdiag)]"
+ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 take_failed=$(fld take_failed <<<"$CW") take_why=$(fld take_why <<<"$CW") sel=$(fld sel <<<"$CW") sel_in_squad=$(fld sel_in_squad <<<"$CW") slot0=$(fld slot0 <<<"$CW") hold_left_ms=$HL $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT stop_after_release=$MSTOP clearance=$YAWC $MT[$(mvdiag)]"
 ok=1; [ $UIO = 0 ] && [ "$U1" -gt "$U0" ] && [ "$HUI" = "$H0" ] && [ $TOOK = 0 ] && [ "$D1" -gt "$D0" ] || ok=0
 lt "$RSH" "$STILL_MAX" || ok=0; ge "$WMT" "$MOVE_MIN" || ok=0; lt "$MSTOP" "$STILL_MAX" || ok=0
 judge C04-TAKE $ok "$ev"
@@ -381,13 +381,13 @@ if ! near_save; then DSV=$(d2 "$PSAVE" "$(pos "$SH")"); echo "SETUP: $SH is $DSV
   near_save || SETUPI="setup: $SH displaced by the previous row (dist=$DSV, after reload $(d2 "$PSAVE" "$(pos "$SH")"))"
 fi
 if [ -n "$SETUPI" ]; then row C05-INVALID FAIL "$SETUPI log=$LOG"; else
-ui_clear; take "$MT"; TM=$?; PS0=$(pos "$SH"); pick_yaw "$MT" C05-INVALID-mate; look "$YAW" 0; A fp_move w 15000 >/dev/null; sleep 1
+ui_clear; take "$MT"; TM=$?; TW=$(ctl take_why); PS0=$(pos "$SH"); pick_yaw "$MT" C05-INVALID-mate; look "$YAW" 0; A fp_move w 15000 >/dev/null; sleep 1
 FR=$(A faction "$MT" "$INVALID_FACTION"); NEWID=$(grep -o '#[0-9]*' <<<"$FR" | head -1)
 waitf 3 bash -c '[ "$(stobe-auto fp_control state | grep -o "\bdirect=[0-9]" | cut -d= -f2)" = 0 ]'; REL=$?
 C5=$(A fp_control state); HC=$(fld controlled <<<"$C5"); sleep 2; SHD=$(d2 "$PS0" "$(pos "$SH")"); A fp_move none >/dev/null
 A fp_mode on >/dev/null; sleep 1; RE=$(fps fp_mode); HR=$(ctl controlled); TRANS=$(ctl_is "$SH" && echo 1 || echo 0)
 A select "$SH" >/dev/null; A fp_control take >/dev/null; mode on; REC=$?; pick_yaw "$SH" C05-INVALID; look "$YAW" 0; align; read -r MI MIA _ _ <<<"$(walk "$SH" w 2000)"
-ev="take_$MT=$((1-TM)) faction='$(cut -c1-60 <<<"$FR")' released=$((1-REL)) controlled_after=$HC $SH moved=$SHD | fp_on_again fp_mode=$RE controlled=$HR silent_transfer=$TRANS | explicit_take=$((1-REC)) walk=$MI ang=$MIA clearance=$YAWC walk_state[$(mvdiag)]"
+ev="take_$MT=$((1-TM)) take_why=$TW faction='$(cut -c1-60 <<<"$FR")' released=$((1-REL)) controlled_after=$HC $SH moved=$SHD | fp_on_again fp_mode=$RE controlled=$HR silent_transfer=$TRANS | explicit_take=$((1-REC)) walk=$MI ang=$MIA clearance=$YAWC walk_state[$(mvdiag)]"
 if [ $TM != 0 ] || [ -z "$NEWID" ] || grep -q ERROR <<<"$FR"; then row C05-INVALID FAIL "setup: $ev"; else
   ok=1; [ $REL = 0 ] && [ "$HC" = 0 ] && [ "$TRANS" = 0 ] && [ $REC = 0 ] || ok=0
   lt "$SHD" "$STILL_MAX" || ok=0; ge "$MI" "$MOVE_MIN" || ok=0; judge C05-INVALID $ok "$ev"; fi
