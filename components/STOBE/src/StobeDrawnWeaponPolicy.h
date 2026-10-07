@@ -13,6 +13,10 @@
 //   hostile  = below neutral: a warning line, then an attack if the player keeps
 //              the weapon drawn in sight within the radius for warnSeconds, or
 //              closes in to attackDistance. Holstering cancels the warning.
+//              Every warning gets a real warning period: closing in only counts
+//              after minWarnSeconds and only if the player came closer than where
+//              he stood at the warning (warned already inside attackDistance and
+//              standing still = the warnSeconds timer, m50 DW5/DW4).
 // Never: the player's own squad/faction, during existing combat, when the NPC
 // can't see the player, or outside the radius.
 
@@ -40,9 +44,12 @@ struct Config {
   float cooldownSeconds; // per NPC between two lines
   float rewarnSeconds;   // hostile: a re-draw inside this window re-arms without a new line
   float leaveGraceSeconds; // hostile: pending warning dropped after this long out of range/sight
+  float minWarnSeconds;  // hostile: no attack of any kind sooner than this after the warning
+  float closeMargin;     // hostile: closing in = this much nearer than at the warning (game units)
   Config()
       : enabled(true), radius(100.0f), warnSeconds(4.0f), attackDistance(30.0f),
-        cooldownSeconds(90.0f), rewarnSeconds(20.0f), leaveGraceSeconds(6.0f) {}
+        cooldownSeconds(90.0f), rewarnSeconds(20.0f), leaveGraceSeconds(6.0f), minWarnSeconds(1.0f),
+        closeMargin(5.0f) {}
 };
 
 struct Observation {
@@ -61,12 +68,13 @@ struct Observation {
 struct PairState {
   bool warned;          // a hostile warning is pending
   double warnedAt;
+  float warnDistance;   // distance when the (re)warning started
   double lastSpokeAt;   // last line (any stance); <0 = never
   double lastSeenInRangeAt;
   double lastCancelAt;  // last time a pending warning ended; <0 = never
   int lastAction;
   PairState()
-      : warned(false), warnedAt(0.0), lastSpokeAt(-1.0), lastSeenInRangeAt(0.0),
+      : warned(false), warnedAt(0.0), warnDistance(1e9f), lastSpokeAt(-1.0), lastSeenInRangeAt(0.0),
         lastCancelAt(-1.0), lastAction(ACT_NONE) {}
 };
 
@@ -88,7 +96,9 @@ inline Action Step(const Config &c, PairState &s, const Observation &o) {
       a = ACT_CANCEL_HOLSTER;
     } else if (InRangeAndSeen(c, o)) {
       s.lastSeenInRangeAt = o.now;
-      if (o.distance <= c.attackDistance || o.now - s.warnedAt >= c.warnSeconds)
+      const double since = o.now - s.warnedAt;
+      const bool closedIn = o.distance <= c.attackDistance && o.distance < s.warnDistance - c.closeMargin;
+      if (since >= c.warnSeconds || (since >= c.minWarnSeconds && closedIn))
         a = ACT_ATTACK;
     } else if (o.now - s.lastSeenInRangeAt >= c.leaveGraceSeconds) {
       a = ACT_CANCEL_LEFT;
@@ -114,6 +124,7 @@ inline Action Step(const Config &c, PairState &s, const Observation &o) {
       return ACT_NONE; // already attacked recently; the fight (or its end) is native now
     s.warned = true;
     s.warnedAt = o.now;
+    s.warnDistance = o.distance;
     s.lastSeenInRangeAt = o.now;
     if (cooling && recent) {
       a = ACT_REARM;

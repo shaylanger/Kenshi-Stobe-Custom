@@ -241,6 +241,7 @@ void Carry(GameWorld *world, Pair &p, Action a, Character *npc, Character *playe
       done = false;
     }
     p.attackIssued = done;
+    extra += " since_warn=" + F1((float)(g_clock - p.s.warnedAt)) + " warn_dist=" + F1(p.s.warnDistance);
     p.attackConfirmed = false;
     extra = std::string(" weapon=") + weaponName + " order=" + (done ? "1" : "0");
   }
@@ -307,6 +308,8 @@ void Scan(GameWorld *world) {
       } catch (...) {
         continue;
       }
+      if (IsPlayerFaction(npc))
+        continue; // own squad: never tracked, no pair record (m50 DW7)
       const unsigned long long key = ((unsigned long long)ns << 32) | it->first;
       Pair &p = g_pairs[key];
       visited.insert(key);
@@ -317,18 +320,13 @@ void Scan(GameWorld *world) {
       Observation o;
       o.now = g_clock;
       o.drawn = true;
-      o.ownSquad = IsPlayerFaction(npc);
+      o.ownSquad = false;
       try {
         o.distance = npc->getPosition().distance(pc->getPosition());
       } catch (...) {
         o.distance = 1e9f;
       }
       p.dist = o.distance;
-      if (o.ownSquad) {
-        p.sees = false;
-        Step(g_cfg, p.s, o);
-        continue;
-      }
       bool npcCombat = HasAttackTarget(npc);
       try {
         npcCombat = npcCombat || npc->isInCombatMode(true, true);
@@ -389,8 +387,9 @@ float ParseF(const std::string &s, float def) {
 std::string ConfigLine() {
   return std::string("enabled=") + (g_cfg.enabled ? "1" : "0") + " radius=" + F1(g_cfg.radius) +
          " warn=" + F1(g_cfg.warnSeconds) + " attack_dist=" + F1(g_cfg.attackDistance) +
+         " min_warn=" + F1(g_cfg.minWarnSeconds) + " close_margin=" + F1(g_cfg.closeMargin) +
          " cooldown=" + F1(g_cfg.cooldownSeconds) + " rewarn=" + F1(g_cfg.rewarnSeconds) +
-         " hostile_below=" + F1(g_hostileBelow) + " min_fov=" + F1(g_minFov);
+         " hostile_below=" + F1(g_hostileBelow) + " min_fov=" + F1(g_minFov) + " units=game(10=1m)";
 }
 
 } // namespace
@@ -402,6 +401,8 @@ void LoadConfig(IniStringFn read) {
   g_cfg.attackDistance = ParseF(read("DrawnWeapon", "AttackDistance", "30"), 30.0f);
   g_cfg.cooldownSeconds = ParseF(read("DrawnWeapon", "CooldownSeconds", "90"), 90.0f);
   g_cfg.rewarnSeconds = ParseF(read("DrawnWeapon", "RewarnSeconds", "20"), 20.0f);
+  g_cfg.minWarnSeconds = ParseF(read("DrawnWeapon", "MinWarnSeconds", "1"), 1.0f);
+  g_cfg.closeMargin = ParseF(read("DrawnWeapon", "CloseMargin", "5"), 5.0f);
   g_hostileBelow = ParseF(read("DrawnWeapon", "HostileRelationBelow", "0"), 0.0f);
   g_minFov = ParseF(read("DrawnWeapon", "MinFovScore", "-1"), -1.0f);
   if (g_cfg.radius < 10.0f)
@@ -487,6 +488,8 @@ std::string TestCommand(GameWorld *world, Character *sel, const std::vector<std:
     else if (k == "attack_dist") g_cfg.attackDistance = v;
     else if (k == "cooldown") g_cfg.cooldownSeconds = v;
     else if (k == "rewarn") g_cfg.rewarnSeconds = v;
+    else if (k == "min_warn") g_cfg.minWarnSeconds = v;
+    else if (k == "close_margin") g_cfg.closeMargin = v;
     else if (k == "hostile_below") g_hostileBelow = v;
     else if (k == "min_fov") g_minFov = v;
     else return "unknown key: " + k;

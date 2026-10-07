@@ -71,6 +71,25 @@ int main() {
       check(Step(c, s, Obs(0, STANCE_HOSTILE, 90)) == ACT_WARN, "warn");
       check(Step(c, s, Obs(1, STANCE_HOSTILE, 29)) == ACT_ATTACK, "closing to attack distance attacks at once");
     }
+    { // m50 DW5/DW4: warned already inside the attack distance, standing still -> only the timer
+      PairState s;
+      check(Step(c, s, Obs(0, STANCE_HOSTILE, 9)) == ACT_WARN, "warn at 0.9 m");
+      check(Step(c, s, Obs(0.25, STANCE_HOSTILE, 9)) == ACT_NONE, "no attack 0.25 s after the warning");
+      check(Step(c, s, Obs(2, STANCE_HOSTILE, 8.6f)) == ACT_NONE, "no approach: still the warn period");
+      check(Step(c, s, Obs(4.1, STANCE_HOSTILE, 9)) == ACT_ATTACK, "timer runs out -> attack");
+    }
+    { // closing in inside the minimum warning time waits for it
+      PairState s;
+      check(Step(c, s, Obs(0, STANCE_HOSTILE, 60)) == ACT_WARN, "warn at 6 m");
+      check(Step(c, s, Obs(0.3, STANCE_HOSTILE, 15)) == ACT_NONE, "closed in 0.3 s after the warning: not yet");
+      check(Step(c, s, Obs(1.1, STANCE_HOSTILE, 15)) == ACT_ATTACK, "closed in after the minimum warn time");
+    }
+    { // warned at 2.5 m, closing to 1.5 m attacks
+      PairState s;
+      check(Step(c, s, Obs(0, STANCE_HOSTILE, 25)) == ACT_WARN, "warn at 2.5 m");
+      check(Step(c, s, Obs(1.5, STANCE_HOSTILE, 22)) == ACT_NONE, "0.3 m nearer is not closing in");
+      check(Step(c, s, Obs(2, STANCE_HOSTILE, 15)) == ACT_ATTACK, "closed to 1.5 m -> attack");
+    }
     { // hostile: holster cancels, re-draw re-arms silently inside the window, then attacks
       PairState s;
       check(Step(c, s, Obs(0, STANCE_HOSTILE, 80)) == ACT_WARN, "warn");
