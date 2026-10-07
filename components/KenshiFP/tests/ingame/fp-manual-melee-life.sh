@@ -34,6 +34,9 @@ arm_melee() { local w r; while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A
 # close: hold the target ~1.2 m in front of the fighter. Manual melee leaves spacing to the player (no AI approach
 # moves the owned fighter, M06) and the test has no WASD, so the target is brought into reach instead.
 close() { A pin "$TG" at "$FI" dist "${1:-12}" face "$FI" | grep -q '^pinned'; }
+# gap: fighter-target ground distance in dm (the pin only puts the target back when it is >1.5 m off its spot)
+gap() { local a b; a=$(A where "$FI" | grep -o 'pos=[^ ]*' | cut -d= -f2); b=$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2)
+  awk -v a="$a" -v b="$b" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.1f", sqrt((p[1]-q[1])^2+(p[3]-q[3])^2)}'; }
 # engage: a live native fight with a target (after a KO or a load the fight can end: 4080 batch 4 M08-KO..LIMB all
 # ran with active=0 target_h=#0). The hostile's attack order first, the fighter's own attack order as the fallback.
 engage() { in_fight && return 0; local who end
@@ -138,7 +141,10 @@ A health "$TG" 100 >/dev/null; sleep 0.3; H0=$(flesh "$TG"); B0=$(blood "$TG"); 
 s=$(A fp_melee state); MH0=$(echo "$s" | fld melee_hits); MC0=$(echo "$s" | fld melee_cut); MB0=$(echo "$s" | fld melee_blunt); WA0=$(echo "$s" | fld wounds_any)
 [ -n "$MH0" ] || setup_fail "fp_melee state has no melee_hits (KenshiFP older than the m50-b fix)"
 A fp_melee wounds reset | grep -q "^wounds=0" || setup_fail "fp_melee wounds reset refused (KenshiFP older than the m50-c fix)"
-for _ in 1 2 3 4; do r=$(fresh_click); [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
+# each click re-pins the target in reach first (as legal_click does): unarmed reach is short and the target drifted out
+# of it (4080 m09 vanilla/mca/dodge: 4 swings, fighter_on_target=0, the fighter's zone_targets=0 on most polls)
+ug=""; uz=""
+for _ in 1 2 3 4; do close; ug+="$(gap) "; r=$(fresh_click); uz+="$(ms zone_targets) "; [ "$r" = 1 ] && sw=$((sw+1)); sleep 2; done; H1=$(flesh "$TG"); B1=$(blood "$TG"); HD=$(A hp "$TG"); U2=$(A unequip "$FI" "$WEP")
 s=$(A fp_melee state); MH=$(( $(echo "$s" | fld melee_hits) - MH0 )); WA=$(( $(echo "$s" | fld wounds_any) - WA0 ))
 MD=$(awk -v c0="$MC0" -v b0="$MB0" -v c1="$(echo "$s" | fld melee_cut)" -v b1="$(echo "$s" | fld melee_blunt)" 'BEGIN{printf "cut+%.1f blunt+%.1f", c1-c0, b1-b0}')
 MDT=$(echo "$MD" | awk '{gsub(/[a-z+]/," "); print $1+$2}')
@@ -153,7 +159,7 @@ A equip "$FI" "$WEP" | grep -q ERROR && { A pickup "$FI" "$WEP" now >/dev/null; 
 # U2 = the second unequip's reply: "ERROR: not equipped" proves the weapon stayed off during the clicks (expected)
 # hit evidence: the target's flesh dropped, or native addWound calls by the fighter with cut+blunt > 0 (melee_hits).
 # Blood is reported only: it also falls from the bleeding of older cuts (m50-b: 77.7->76.9 with no part touched).
-ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA ring[${WS% }] fighter_on_target=$FT blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
+ev="unarmed ('$WEP': ${U1%% *}, still_unequipped=$([[ "$U2" == *"not equipped"* ]] && echo 1 || echo 0)): 4 clicks swung=$sw gap_dm=[${ug% }] zone_targets=[${uz% }] $TG flesh $H0->$H1 melee_hits +$MH ($MD) wounds_any +$WA ring[${WS% }] fighter_on_target=$FT blood $B0->$B1 hp_after='$(echo "$HD" | grep -o 'worst=.*' | cut -c1-120)' wakes=$((WAKES-WK0)) why=$(ms why)"
 if [[ "$U1" == unequipped* ]] && [[ "$U2" == *"not equipped"* ]] && [ "$sw" -ge 3 ] && awk -v a="$H0" -v b="$H1" -v h="$MH" -v d="$MDT" -v ft="$FT" 'BEGIN{exit !(b<a-0.5 || (h>0 && d>0) || ft>0)}'; then row M08-UNARMED PASS "$ev"; else row M08-UNARMED FAIL "$ev"; fi
 
 # ---- M08-CROWD: a second hostile attacks the fighter -> adapter stays owned/ok, clicks still swing, AI refused ----
