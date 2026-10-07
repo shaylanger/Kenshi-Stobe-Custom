@@ -89,7 +89,14 @@ arm_melee() { local w r; while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A
   case "$r" in equipped*) WEP=$w; return 0;; esac; done <<<"$(weapons)"; return 1; }
 bow_now() { A rangedinfo "$SH" | fld bow; }
 arm_bow() { [ -n "$WEP" ] && { A unequip "$SH" "$WEP" >/dev/null; WEP=""; }; [ "$(bow_now)" != none ] && return 0
-  [ -n "$BOWN" ] && A equip "$SH" "$BOWN" | grep -q '^equipped'; }
+  [ -n "$BOWN" ] || return 1
+  # a full inventory drops the unequipped bow on the ground (m50 b37): pick it up again first
+  [ "$BOW_DROPPED" = 1 ] && { echo "SETUP bow pickup: $(A pickup "$SH" "$BOWN" now | cut -c1-120)" >> "$LOG"; BOW_DROPPED=0; }
+  A equip "$SH" "$BOWN" | grep -q '^equipped'; }
+# give_melee: the fixture's player may carry no melee weapon at all (m50 b37: only armour): create one
+give_melee() { local w; [ -n "$(weapons)" ] && return 0
+  for w in "Wakizashi" "Katana" "Iron Club" "Nodachi"; do
+    echo "SETUP give $w: $(A give "$SH" "$w" 1 | cut -c1-120)" >> "$LOG"; [ -n "$(weapons)" ] && return 0; done; return 1; }
 # draw_state <0|1>: R until fp_keys drawn matches (one press, bounded wait)
 draw_to() { kis drawn "$1" && return 0; A fp_keys press r 120 >/dev/null; waitf 4 kis drawn "$1"; }
 # HUD samples: hud <expected>: fp_keys snapshot; HUDS += "exp:ui/hud_text/shown"; HUDOK=0 on a mismatch
@@ -173,8 +180,9 @@ if want K03; then ui_clear; draw_to 0; aim_at "$MT" 13; O0=$(ks ctx_opens)
   [ "$(fld last_target <<<"$K")" = "$(uname_ "$MT")" ] || ok=0; judge K03 $ok "$ev"; fi
 
 # melee weapon for K06/K04/FB01/FS01/K05 (the fixture's player wields only a crossbow)
-MELEE=0; if want K06 || want K04 || want FB01 || want FS01 || want K05 || want HUD01; then
-  [ "$(bow_now)" = none ] || A unequip "$SH" "$(bow_now)" >/dev/null
+BOW_DROPPED=0; MELEE=0; if want K06 || want K04 || want FB01 || want FS01 || want K05 || want HUD01; then
+  give_melee || echo "SETUP: could not give $SH a melee weapon" >> "$LOG"
+  if [ "$(bow_now)" != none ]; then r=$(A unequip "$SH" "$(bow_now)"); case "$r" in *ground*) BOW_DROPPED=1;; esac; fi
   if arm_melee; then MELEE=1; else echo "SETUP: no melee weapon equips (inv weapons: $(weapons | tr '\n' ';'))" >> "$LOG"; fi; fi
 mfail() { row "$1" FAIL "setup $SH has no melee weapon that equips (inv: $(weapons | tr '\n' ';'))"; }
 
