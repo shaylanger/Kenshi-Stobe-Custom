@@ -1340,6 +1340,9 @@ static widget_getname_t      g_widget_getname;
  * pointer walks + one virtual-free exported call). */
 static int readable(const void *p, size_t n);
 static int char_prone_state(void *pc);   /* fwd: used by the down-state detect before its def */
+static int combat_char_unconscious(void *pc);   /* kfp_combat_native.inc: medical KO flag */
+static int fp_body_down(void *pc);              /* physics owns the body: no FP writes (C05-KO) */
+static void fp_down_note(const char *site, void *pc);
 /* Tint a widget (incl. resource ImageBoxes) via Widget::setColour -- the same path
  * the layout's "Colour" property uses; the sub-widget colour path leaves resource
  * images untinted (white). Falls back to sub-colour if setColour is unavailable. */
@@ -2724,6 +2727,31 @@ static unsigned fall_ragdoll_mask(void *pc)
         ? *(unsigned *)((uintptr_t)anim + ANIM_RAGDOLL_MASK) : 0;
 }
 
+/* C05-KO (4080 b31/b32): a KO'd Axima flew 186 m then 80 km while W was held, and the next load
+ * crashed. g_is_down lags the knockdown (it waits for the head to be low), so the pose/facing/
+ * locomotion writers kept acting on a body the ragdoll already owned. This is the one gate for
+ * every FP writer: KO flag, whole-body/KO ragdoll bits, KO prone state, or g_is_down. */
+static int fp_body_down(void *pc)
+{
+    if (!pc) return 0;
+    if (g_is_down) return 1;
+    if (combat_char_unconscious(pc)) return 1;
+    if (fall_ragdoll_mask(pc) & 0x801u) return 1;
+    return char_prone_state(pc) == PS_KO;
+}
+/* One log line per suppressed writer per down episode (KenshiFP.log evidence for C05-KO). */
+static unsigned g_down_note_mask;
+static void fp_down_note(const char *site, void *pc)
+{
+    unsigned bit = 0;
+    for (const char *c = site; *c; ++c) bit = bit * 31u + (unsigned char)*c;
+    bit = 1u << (bit % 31u);
+    if (g_down_note_mask & bit) return;
+    g_down_note_mask |= bit;
+    logline("[down] suppressed %s write on downed actor %p (is_down=%d ko=%d mask=0x%x prone=%d)",
+            site, pc, g_is_down, combat_char_unconscious(pc), fall_ragdoll_mask(pc), char_prone_state(pc));
+}
+
 /* Fall finished (mask cleared): vanilla's plain ragdoll-off does NOT rebuild the
  * physics mover (only the KO-exit path does), so recreate it ourselves if it's
  * still missing -- CharMovement::update early-returns forever without it. */
@@ -2870,7 +2898,7 @@ static void fp_fall_update(void *pc)
         return;
     }
     /* ---- edge trigger ---- */
-    if (!g_fp_mode || g_fall_active || g_is_down) { g_guard_armed = 0; return; }
+    if (!g_fp_mode || g_fall_active || fp_body_down(pc)) { g_guard_armed = 0; return; }   /* C05-KO: no arc for a downed body */
     if (g_fall_cd_t > 0.0f) { g_fall_cd_t -= fdt; g_guard_armed = 0; return; }
     /* ---- JUMP (task #20): consume the space-press the mainloop hook posted.
      * A jump IS a walk-off arc launched upward: vy = +jump_vel, WASD momentum
@@ -3290,7 +3318,10 @@ static void fp_camera_override(void *gw)
             logline("[spine] weaponInHands=%p drawn=%d", wih, weapon_drawn);
             prev_drawn = weapon_drawn;
         }
-        if (g_fp_mode && !g_is_down && weapon_drawn && g_cfg_aim_lean && !g_cfg_loco) bend_spine(pcx, g_pitch);
+        int body_down = fp_body_down(pcx);
+        if (body_down && g_fp_mode && ((weapon_drawn && g_cfg_aim_lean && !g_cfg_loco) || (g_cfg_loco && g_loco_ready)))
+            fp_down_note("spine/loco pose", pcx);
+        if (g_fp_mode && !body_down && weapon_drawn && g_cfg_aim_lean && !g_cfg_loco) bend_spine(pcx, g_pitch);
         else if (g_spine_manual && !g_cfg_loco)      release_spine(pcx);
 
         /* custom full-body locomotion (Milestone 0): retarget a Destreza clip onto Bip01.
@@ -3303,7 +3334,7 @@ static void fp_camera_override(void *gw)
                 logline("[loco] gate: cfg_loco=%d fp=%d is_down=%d dead=%d kfa=%d getbone=%p anim=%p skel=%p",
                         g_cfg_loco, g_fp_mode, g_is_down, g_loco_dead, g_kfa.loaded, (void*)g_skel_getbone, an, sk); }
         }
-        if (g_cfg_loco && g_fp_mode && !g_is_down && !g_loco_dead && g_kfa.loaded && g_skel_getbone && pcx) {
+        if (g_cfg_loco && g_fp_mode && !body_down && !g_loco_dead && g_kfa.loaded && g_skel_getbone && pcx) {
             void *anim = readable((void *)((uintptr_t)pcx + CHAR_ANIM), 8)
                        ? *(void **)((uintptr_t)pcx + CHAR_ANIM) : NULL;
             void *skel = (anim && readable((void *)((uintptr_t)anim + ANIM_SKELETON), 8))
@@ -4604,7 +4635,23 @@ static void fp_movement(void *gw, float dt)
      * below kept direct drive on a KO'd actor (dm_active=1 on the first KO sample). */
     int ko_now = combat_char_unconscious(pc);
     g_dbg_ko = ko_now;
-    if (g_is_down || ko_now || g_fall_active || g_fall_rd != FALLRD_OFF) {
+    int body_down = fp_body_down(pc);
+    {   /* C05-KO evidence: any large per-tick jump of a downed body, with which FP writers were armed */
+        static Vec3 dprev; static int dhave;
+        Vec3 dp;
+        if (body_down && char_position(pc, &dp)) {
+            float jx = dp.x - dprev.x, jy = dp.y - dprev.y, jz = dp.z - dprev.z;
+            if (dhave && jx * jx + jy * jy + jz * jz > 100.0f * 100.0f)
+                logline("[down] position jump %.0f,%.0f,%.0f -> %.0f,%.0f,%.0f while down (ko=%d mask=0x%x prone=%d dm=%ld face=%ld fall=%d rd=%d)",
+                        dprev.x, dprev.y, dprev.z, dp.x, dp.y, dp.z, ko_now, fall_ragdoll_mask(pc), char_prone_state(pc),
+                        g_dm_active, g_face_active, g_fall_active, (int)g_fall_rd);
+            dprev = dp; dhave = 1;
+        } else dhave = 0;
+        if (!body_down) g_down_note_mask = 0;   /* next episode logs again */
+    }
+    if (body_down || g_fall_active || g_fall_rd != FALLRD_OFF) {
+        /* C05-KO: keys held into a knockdown are dropped (no walk resumes on get-up) */
+        if (body_down && g_kah_move_keys) { InterlockedExchange(&g_kah_move_keys, 0); logline("[down] held fp_move keys dropped on knockdown"); }
         InterlockedExchange(&g_dm_active, 0);
         InterlockedExchange(&g_face_active, 0);
         g_was_moving = 0; g_face_turning = 0;
@@ -4616,7 +4663,7 @@ static void fp_movement(void *gw, float dt)
         g_dbg_prone = char_prone_state(pc); g_dbg_downed = 1;
         /* C05-KO: a hold that was direct-driving leaves MOVE_DIRECTION + desired motion
          * behind; clear them once (the fall driver owns currentMotion, so leave that). */
-        if ((g_is_down || ko_now) && g_was_direct) {
+        if (body_down && g_was_direct) {
             void *dmv = readable((void *)((uintptr_t)pc + CHAR_MOVEMENT), 8)
                 ? *(void **)((uintptr_t)pc + CHAR_MOVEMENT) : NULL;
             fp_mover_clear_direct(dmv, MV_MOVEMODE, MV_DESIREDMOTION, 0);
@@ -4628,7 +4675,7 @@ static void fp_movement(void *gw, float dt)
          * here killed g_loco_in_havebody one frame into EVERY arc, which shut
          * down the airborne leg tuck ([air] fired exactly once per session)
          * and re-seeded the facing from scratch at each landing. */
-        if (g_is_down || g_fall_rd != FALLRD_OFF) g_face_have = 0;
+        if (body_down || g_fall_rd != FALLRD_OFF) g_face_have = 0;
         return;
     }
     void *mv = readable((void *)((uintptr_t)pc + CHAR_MOVEMENT), 8)
@@ -7112,7 +7159,7 @@ static void hooked_charmove_update(void *mv, float t)
     /* C05-KO: never force standing direct drive into a KO/crippled/down actor. */
     void *dpc = (drive && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8))
         ? *(void **)((uintptr_t)mv + MV_CHARACTER) : NULL;
-    int dko = g_is_down || (dpc && combat_char_unconscious(dpc));   /* KO flag leads the prone state */
+    int dko = dpc && fp_body_down(dpc);   /* KO flag / ragdoll bits lead the prone state */
     if (drive && !fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL, dko,
                                 MV_MOVEMODE, MV_DESIREDMOTION, MV_CURRENT_MOTION)) {
         drive = 0;
@@ -7162,7 +7209,7 @@ static void hooked_charmove_update(void *mv, float t)
      * This post-write is the one that actually wins the race -- unless the actor
      * went down INSIDE the update (C05-KO): then clear instead of forcing. */
     if (drive && fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL,
-                               g_is_down || (dpc && combat_char_unconscious(dpc)),
+                               dpc && fp_body_down(dpc),
                                MV_MOVEMODE, MV_DESIREDMOTION, MV_CURRENT_MOTION))
         mv_force_direct(mv);
     /* facing lock: the original update turned the body toward the motion direction by
@@ -7185,6 +7232,10 @@ static void hooked_charmove_update(void *mv, float t)
      *    there is exactly right); NO ragdoll, NO get-up;
      *  - past fall_air seconds airborne, escalate to the full ragdoll with the
      *    current fall velocity ("ragdoll strength grows with fall time"). */
+    if (g_fall_active && g_fp_control_actor && combat_char_unconscious(g_fp_control_actor)) {
+        g_fall_active = 0;   /* C05-KO: a KO mid-arc hands the body to the native ragdoll */
+        fp_down_note("fall arc", g_fp_control_actor);
+    }
     if (g_fall_active && RVA_CHAR_SETDEST && RVA_GROUND_AT && g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8)
         && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_fp_control_actor
@@ -7716,7 +7767,12 @@ static void hooked_charmove_update(void *mv, float t)
                     g_dm_active, tso, g_dm_speed, g_speed_scale, tkey);
         }
     }
-    if (g_face_active && RVA_ANIM_SETPOSDIR && g_fp_control_actor
+    int face_down = g_face_active && g_fp_control_actor
+        && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8)
+        && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_fp_control_actor
+        && fp_body_down(g_fp_control_actor);
+    if (face_down) fp_down_note("facing setPositionAndDirection", g_fp_control_actor);
+    if (g_face_active && !face_down && RVA_ANIM_SETPOSDIR && g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8)
         && *(void **)((uintptr_t)mv + MV_CHARACTER) == g_fp_control_actor
         && readable((void *)((uintptr_t)mv + MV_ANIMATION), 8)) {
