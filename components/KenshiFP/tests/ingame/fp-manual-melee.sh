@@ -40,6 +40,10 @@ arm_melee() { local w r; while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A
 # close: hold the target ~1.2 m in front of the fighter. Manual melee leaves spacing to the player (no AI approach
 # moves the owned fighter, M06) and the test has no WASD, so the target is brought into reach instead.
 close() { A pin "$TG" at "$FI" dist "${1:-12}" face "$FI" | grep -q '^pinned'; }
+# gap: fighter-target ground distance in dm (pin only puts the target back when it is >1.5 m off its spot, so the
+# gap drifts: M03 12.2->27.2 dm in 15 s)
+gap() { local a b; a=$(A where "$FI" | grep -o 'pos=[^ ]*' | cut -d= -f2); b=$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2)
+  awk -v a="$a" -v b="$b" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.1f", sqrt((p[1]-q[1])^2+(p[3]-q[3])^2)}'; }
 # engage: a live native fight with a target (after a KO or a load the fight can end: 4080 batch 4 M08-KO..LIMB all
 # ran with active=0 target_h=#0). The hostile's attack order first, the fighter's own attack order as the fallback.
 engage() { in_fight && return 0; local who end
@@ -85,26 +89,29 @@ if [ "$S1" = "$S0" ] && [ "$R1" -gt "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{
 # ---- M01 click -> native swing within 1 s, impact on the target within 4 s; M05 attack XP over the manual hits ----
 # latency = the product's own click-edge -> native swing start time (last_latency_ms, real ms): a harness command
 # takes ~0.3 s, so wall-clock timing around click/poll measured the test, not the game (4080 batch 4: 1.2-1.4 s)
-K0=$(skill); hits=0; lat=""; swung=0; maxlat=0; O0=$(ms out_of_reach); E0=$(ms expired); J0=$(ms rejected)
+# Each click re-pins the target in reach first (a player steps back in, as M03 samples() does): one setup pin before
+# M00 left it to drift (4080 m09 gam/full: 0/5 hits with zone_targets=0 on most polls, then hits on the M05 top-up;
+# vanilla 5/5 with zone_targets=1). gaps/zone = gap at the click and the native zone_targets once the swing started.
+K0=$(skill); hits=0; lat=""; swung=0; maxlat=0; gaps=""; zones=""; O0=$(ms out_of_reach); E0=$(ms expired); J0=$(ms rejected)
 for i in 1 2 3 4 5; do
-  A health "$TG" 100 >/dev/null; sleep 0.3; H0=$(flesh "$TG"); S0=$(ms swings)
+  A health "$TG" 100 >/dev/null; close; sleep 0.3; H0=$(flesh "$TG"); S0=$(ms swings)
   for _ in $(seq 1 20); do [ "$(ms dead)" = 0 ] && [ "$(ms state)" != 8 ] && break; sleep 0.1; done      # click at a legal moment
-  click; got=0
+  gaps+="$(gap) "; click; got=0
   for _ in $(seq 1 20); do [ "$(ms swings)" != "$S0" ] && { got=1; break; }; sleep 0.05; done
-  if [ $got = 1 ]; then swung=$((swung+1)); l=$(ms last_latency_ms); lat+="$l "
-    awk -v a="$l" -v m="$maxlat" 'BEGIN{exit !(a>m)}' && maxlat=$l; fi
+  if [ $got = 1 ]; then swung=$((swung+1)); l=$(ms last_latency_ms); lat+="$l "; zones+="$(ms zone_targets) "
+    awk -v a="$l" -v m="$maxlat" 'BEGIN{exit !(a>m)}' && maxlat=$l; else zones+="- "; fi
   sleep 3; H1=$(flesh "$TG"); awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && hits=$((hits+1))
 done
 # M05 top-up: `stat` prints one decimal and one hit adds ~0.07 XP (4080 m09 mca: 1 hit, 5.1->5.1), so click
 # on (max 10 more) until 3 manual hits have landed before reading the skill
 m05hits=$hits
 for _ in $(seq 1 10); do [ "$m05hits" -ge 3 ] && break
-  A health "$TG" 100 >/dev/null; sleep 0.3; H0=$(flesh "$TG")
+  A health "$TG" 100 >/dev/null; close; sleep 0.3; H0=$(flesh "$TG")
   for _ in $(seq 1 20); do [ "$(ms dead)" = 0 ] && [ "$(ms state)" != 8 ] && break; sleep 0.1; done
   click; sleep 3; H1=$(flesh "$TG"); awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && m05hits=$((m05hits+1))
 done
 K1=$(skill)
-ev="5 clicks ($WEP): swung=$swung latency_ms=[${lat% }] hits=$hits out_of_reach+$(( $(ms out_of_reach)-O0 )) expired+$(( $(ms expired)-E0 )) rejected+$(( $(ms rejected)-J0 )) technique=$(ms technique)"
+ev="5 clicks ($WEP): swung=$swung latency_ms=[${lat% }] hits=$hits gap_dm=[${gaps% }] zone_targets=[${zones% }] out_of_reach+$(( $(ms out_of_reach)-O0 )) expired+$(( $(ms expired)-E0 )) rejected+$(( $(ms rejected)-J0 )) technique=$(ms technique)"
 if [ "$swung" -ge 4 ] && [ "$hits" -ge 1 ] && awk -v m="$maxlat" 'BEGIN{exit !(m<=1000)}'; then row M01 PASS "$ev"; else row M01 FAIL "$ev"; fi
 ev="attack base $K0->$K1 over $m05hits manual hits ($WEP)"
 if [ "$m05hits" -ge 1 ] && awk -v a="$K0" -v b="$K1" 'BEGIN{exit !(b>a)}'; then row M05 PASS "$ev"; else row M05 FAIL "$ev"; fi
@@ -156,8 +163,6 @@ if [ "$F1" -gt "$F0" ] && [ "$D1" -gt "$D0" ] && [ $((W1-W0)) -ge 3 ] && [ $((S1
 # samples outside BLOCK/REACTION_BLOCK/STUMBLE, like a player stepping back in.
 samples() { local end=$((SECONDS+$1)) b=0 t=0 n=0 st; while [ $SECONDS -lt $end ]; do st=$(ms state)
   case "$st" in 1|2) b=$((b+1));; 8) t=$((t+1));; *) [ $((n % 6)) = 5 ] && close;; esac; n=$((n+1)); sleep 0.2; done; echo "$b $t $n"; }
-gap() { local a b; a=$(A where "$FI" | grep -o 'pos=[^ ]*' | cut -d= -f2); b=$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2)
-  awk -v a="$a" -v b="$b" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.1f", sqrt((p[1]-q[1])^2+(p[3]-q[3])^2)}'; }
 A fp_melee passive off >/dev/null; close; sleep 2
 A health "$FI" 100 >/dev/null; AB0=$(ms autoblock_refused); GU=$(gap); read -r UB UT UN <<<"$(samples 10)"; AB1=$(ms autoblock_refused)
 B0=$(ms blocks); O0=$(ms block_ok); S0=$(ms swings)
