@@ -335,11 +335,14 @@ if want DW3; then (
     stobe-auto pin "$h" off >/dev/null 2>&1
     wait_for 15 rhas "attack_confirmed npc=$N "
     p=$(dw pair "$N"); conf=$(rcount "attack_confirmed npc=$N ")
+    # the game's own combat event: the native target can switch to a mate who joins within ~0.1 s, before the
+    # per-tick attack_confirmed poll sees the player as target (m50 G: Malzin joined, attack_target=Malzin)
+    gev=$(rlog | grep -a -F "[EVENT] combat: $N (" | grep -a -F -- "-> $PLAYER (" | grep -a -c "Initiated attack")
     dt=$(awk -v a="$(tof "$w")" -v b="$(tof "$a")" 'BEGIN{printf "%.1f", b-a}')
     draw_off
-    if echo "$a" | grep -q "order=1" && awk -v d="$dt" 'BEGIN{exit !(d >= 3.5)}' && { [ "$conf" -ge 1 ] || echo "$p" | grep -q "attack_target=$PLAYER"; }; then
-      verdict DW3 "PASS warn t=$(tof "$w") -> attack order=1 after ${dt}s (warn 4) confirmed=$conf $(echo "$p" | grep -oE 'attack_target=.*')"
-    else verdict DW3 "FAIL attack='$(echo "$a" | cut -c1-100)' dt=$dt confirmed=$conf $(echo "$p" | grep -oE 'attack_target=.*')"; fi
+    if echo "$a" | grep -q "order=1" && awk -v d="$dt" 'BEGIN{exit !(d >= 3.5)}' && { [ "$conf" -ge 1 ] || [ "$gev" -ge 1 ] || echo "$p" | grep -q "attack_target=$PLAYER"; }; then
+      verdict DW3 "PASS warn t=$(tof "$w") -> attack order=1 after ${dt}s (warn 4) confirmed=$conf game_attack_event=$gev $(echo "$p" | grep -oE 'attack_target=.*')"
+    else verdict DW3 "FAIL attack='$(echo "$a" | cut -c1-100)' dt=$dt confirmed=$conf game_attack_event=$gev $(echo "$p" | grep -oE 'attack_target=.*')"; fi
   fi
   retire "$h"
 ); row_done
