@@ -13,8 +13,9 @@
 #  K03         RMB click holstered on the mate: context menu (ctx_opens+1, ctx_freed=1, free=1); `fp_state free off` relocks
 #  K04         RMB held, melee drawn, on the mate: blocking, free_block_frames rising, no context menu
 #  K05-HOSTILE LMB drawn on Skaera: engages+1, last_task=5, native fight on her
-#  K05-UNPROV  LMB drawn on a neutral NPC (NEUTRAL=<name|#serial/index>, else the first non-squad, non-raider NPC within
-#              1500 not of Axima's faction; its faction relation is set to NEUTRAL_REL (20)): last_task=61, native fight on him
+#  K05-UNPROV  LMB drawn on a neutral NPC (NEUTRAL=<name|#serial/index>, else a Hungry Bandit spawned in Tech Hunters 40 away
+#              and retired after (KO + unload); its faction relation is set to NEUTRAL_REL (20)): last_task=61, native fight on him.
+#              Both K05 rows: shooter in passive combat mode, out of any fight and the crosshair pick on the npc before the click
 #  K06         R draw: r_draws+1, wih!=0 (fp_keys live weaponInHands), still drawn after 5 s idle; R holster: r_holsters+1, wih=0
 #  FB01        RMB held drawn, aimed at the sky, out of combat: blocking while held, ready after release
 #  FS01        LMB drawn melee, no target, no fight: free swing started and ended (fs_prog_max>0.5), no fault, mate hp same
@@ -115,12 +116,13 @@ hud_poll() { local s end=$((SECONDS+$2)); while :; do s=$(A fp_keys state)
   [ "$(fld ui_state <<<"$s")" = "$1" ] && [ "$(fld hud_text <<<"$s")" = "$1" ] && break; [ $SECONDS -ge $end ] && break; sleep 0.1; done
   hud_eval "$1" "$s"; }
 
-FP0=$(fps fp_mode); DIST0=$(cam target); AR0=""; PINNED=""; WEP=""; BOWN=""
+FP0=$(fps fp_mode); DIST0=$(cam target); AR0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""
 cleanup() { A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null; A fp_keys focus off >/dev/null
             A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null
             [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
             for c in $PINNED; do A pin "$c" off >/dev/null; done
+            [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
             arm_bow >/dev/null
             for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
             A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
@@ -238,26 +240,44 @@ if want FS01 || want HUD01; then if [ $MELEE = 0 ]; then want FS01 && mfail FS01
   want FS01 && { if [ "$FI0" != 0 ]; then row FS01 FAIL "setup $SH still in a native fight after 15 s: $ev"; else judge FS01 $ok "$ev"; fi; }; fi; fi
 
 # ---- K05: LMB drawn on a character = vanilla attack order (hostile, then unprovoked) ----
-# engage_row <row> <npc ref> <name> <task>: LMB on the npc (pinned 1.5 m in front), engages+1, last_task, native fight on him
-engage_row() { local G0 K FT ser ev ok; ui_clear; draw_to 1
-  A pin "$2" at "$SH" dist 15 face "$SH" | grep -q '^pinned' || { row "$1" FAIL "setup could not pin $3 in front of $SH"; return; }
-  PINNED+=" $2"; sleep 1; aim_at "$2" 13; G0=$(ks engages); ser=$(A where "$2" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
+# engage_row <row> <npc ref> <name> <task>: LMB on the npc (pinned 1.5 m in front), engages+1, last_task, native fight on him.
+# 4080 b39: with her weapon drawn Axima's AI attacked the hostile as soon as it was pinned in front of her, so the LMB hit
+# fpc_engage's "already fighting this target" early return (no new order, engages 0->0). The shooter is put in passive
+# combat mode (the orders-panel toggle: no AI-started fights; player attack orders still run) for the row and must be
+# out of any fight before the click; the crosshair pick must report the npc before the press (pick line in the evidence).
+engage_row() { local G0 K FT ser ev ok PK P0 FB; ui_clear; draw_to 1
+  P0=$(A combatmode "$SH" | fld passive); PASSIVE0=${PASSIVE0:-$P0}; A combatmode "$SH" passive on >/dev/null
+  A pin "$2" at "$SH" dist 15 face "$SH" | grep -q '^pinned' || { row "$1" FAIL "setup could not pin $3 in front of $SH"; engage_end "$2" "$P0"; return; }
+  PINNED+=" $2"; sleep 1; aim_at "$2" 13; ser=$(A where "$2" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
+  if ! waitf 8 not_fight; then FB=$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')
+    row "$1" FAIL "setup $SH still in a native fight before the click (passive=$(A combatmode "$SH" | fld passive) [$FB])"; engage_end "$2" "$P0"; return; fi
+  PK=""; for _ in 1 2 3 4 5 6; do A fp_keys pick >/dev/null; sleep 0.3; PK=$(A fp_keys pick show); [ "$(fld result <<<"$PK")" = "$(uname_ "$3")" ] && break; done
+  echo "$1 pre-press $PK" >> "$LOG"; G0=$(ks engages)
   A fp_keys press lmb 100 >/dev/null; waitf 3 kge engages $((G0+1)); waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
-  ev="engages $G0->$(fld engages <<<"$K") last_task=$(fld last_task <<<"$K") last_target=$(fld last_target <<<"$K") lmb_clicks=$(fld lmb_clicks <<<"$K") native_fight_on_$3=$((1-FT)) [$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')]"
+  ev="engages $G0->$(fld engages <<<"$K") last_task=$(fld last_task <<<"$K") last_target=$(fld last_target <<<"$K") lmb_clicks=$(fld lmb_clicks <<<"$K") native_fight_on_$3=$((1-FT)) [$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')] pick_before=$(fld result <<<"$PK") pick_dist=$(fld hit_dist <<<"$PK") passive=1"
   ok=1; [ "$(fld engages <<<"$K")" = $((G0+1)) ] && [ "$(fld last_task <<<"$K")" = "$4" ] && [ "$(fld last_target <<<"$K")" = "$(uname_ "$3")" ] && [ $FT = 0 ] || ok=0
   if [ $ok = 0 ] && [ "$(fld engages <<<"$K")" = $((G0+1)) ] && [ "$(fld last_task <<<"$K")" != "$4" ]; then row "$1" FAIL "inconclusive: $3 hostility not as set up (task $(fld last_task <<<"$K"), wanted $4): $ev"
   else judge "$1" $ok "$ev"; fi
-  A ko "$2" 3600 >/dev/null; A pin "$2" off >/dev/null; waitf 10 isko "$2"; }
+  engage_end "$2" "$P0"; }
+# engage_end <npc ref> <shooter passive before>: KO + unpin the npc, restore the shooter's passive toggle
+engage_end() { A ko "$1" 3600 >/dev/null; A pin "$1" off >/dev/null; waitf 10 isko "$1"
+  [ -n "$2" ] && A combatmode "$SH" passive "$([ "$2" = 1 ] && echo on || echo off)" >/dev/null; }
 if want K05; then if [ $MELEE = 0 ]; then mfail K05-HOSTILE; mfail K05-UNPROV; else
   if [ -n "$TGH" ] && ! isko "$TG"; then engage_row K05-HOSTILE "$TGH" "$TG" 5; else row K05-HOSTILE FAIL "setup hostile $TG missing or KO ($(A where "$TG" | cut -c1-100))"; fi
-  NH=""; NN=""
+  # neutral: NEUTRAL=<name> if given, else one spawned for the row (Tech Hunters, not hostile to the squad; 4080 b39
+  # kah-fpxbow had no neutral NPC within 1500), retired after (KO + unload); the old nearby search only as a fallback
+  NH=""; NN=""; NSPAWN=""
   if [ -n "$NEUTRAL" ]; then NH=$(A where "$NEUTRAL" | grep -oE '#[0-9]+/[0-9]+' | head -1); NN=$(A where "$NEUTRAL" | sed 's/ #[0-9].*//')
-  else SF=$(A where "$SH" | grep -o '\[[^]]*\]' | head -1); SF=${SF:-@@nofaction@@}
-    L=$(A chars 1500 "!ko|!dead" | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n' | sed 's/^ *//' | grep 'pos=' \
-        | grep -v -F "$SF" | grep -v -E "\[(${FP_RAID_RE:-@@})\]|\[\?\]" | grep -v -E "^($SH|$MT|$TG) #" | head -1)
-    NH=$(grep -oE '#[0-9]+/[0-9]+' <<<"$L" | head -1); NN=$(sed 's/ #[0-9].*//' <<<"$L"); fi
-  if [ -z "$NH" ]; then row K05-UNPROV FAIL "setup no neutral NPC within 1500 (not squad/raider; set NEUTRAL=<name>)"
-  else A relation "$NH" "$NEUTRAL_REL" >/dev/null; echo "K05-UNPROV neutral=$NN $NH relation set $NEUTRAL_REL" >> "$LOG"; engage_row K05-UNPROV "$NH" "$NN" 61; fi
+  else SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH" dist 40 count 1 2>&1); echo "K05-UNPROV spawn: $SP" >> "$LOG"
+    NH=$(grep -oE '#[0-9]+/[0-9]+' <<<"$SP" | head -1)
+    if [ -n "$NH" ]; then NSPAWN=$NH; NN=$(sed 's/^spawned [^:]*: //; s/ #[0-9].*//' <<<"$SP")
+    else SF=$(A where "$SH" | grep -o '\[[^]]*\]' | head -1); SF=${SF:-@@nofaction@@}
+      L=$(A chars 1500 "!ko|!dead" | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n' | sed 's/^ *//' | grep 'pos=' \
+          | grep -v -F "$SF" | grep -v -E "\[(${FP_RAID_RE:-@@})\]|\[\?\]" | grep -v -E "^($SH|$MT|$TG) #" | head -1)
+      NH=$(grep -oE '#[0-9]+/[0-9]+' <<<"$L" | head -1); NN=$(sed 's/ #[0-9].*//' <<<"$L"); fi; fi
+  if [ -z "$NH" ]; then row K05-UNPROV FAIL "setup no neutral NPC: spawn failed ($(cut -c1-100 <<<"$SP")) and none within 1500 (set NEUTRAL=<name>)"
+  else A relation "$NH" "$NEUTRAL_REL" >/dev/null; echo "K05-UNPROV neutral=$NN $NH relation set $NEUTRAL_REL spawned=$([ -n "$NSPAWN" ] && echo 1 || echo 0)" >> "$LOG"; engage_row K05-UNPROV "$NH" "$NN" 61
+    [ -n "$NSPAWN" ] && echo "K05-UNPROV retire: $(A unload "$NSPAWN" 2>&1 | cut -c1-120)" >> "$LOG"; fi
   raid_sweep; waitf 20 not_fight || echo "SETUP: still in a native fight 20 s after K05" >> "$LOG"; fi
 fi
 [ -n "$TGH" ] && { A pin "$TG" off >/dev/null; isko "$TG" || A ko "$TG" 3600 >/dev/null; }
