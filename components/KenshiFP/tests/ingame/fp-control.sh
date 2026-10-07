@@ -80,16 +80,28 @@ walk() { local p0 p1 a0 a1 ms2 sp st wm; p0=$(pos "$1"); a0=$(anchor); A fps res
     ang=(m>0.01)?atan2(sqrt((dx*fz-dz*fx)^2), dx*fx+dz*fz)*57.2958:180
     am=(u[1]==""||v[1]=="")?-1:sqrt((v[1]-u[1])^2+(v[3]-u[3])^2)
     printf "%.2f %.1f %.2f %s %s\n", m, ang, am, (sp==""?"na":sp), (wm==""?"na":wm)}'; }
-# walkr: walk, redone ONCE when a frame stall (worst_ms > STALL_MS) shortened the hold; the redo's numbers are used
-# (logged as STALL). The assertions stay the same: a second stalled walk still fails on its numbers.
-walkr() { local r w; r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r")
-  if ge "$w" "$STALL_MS"; then echo "STALL walk $* worst_ms=$w: redone once" >> "$LOG"; r=$(walk "$@"); fi; echo "$r"; }
+# walkr: walk, redone (up to WALK_TRIES walks in all) while a frame stall (worst_ms > STALL_MS) shortened the hold; the
+# last walk's numbers are used (each redo logged as STALL). The assertions stay the same; a sample that is still stalled
+# is reported as such by the row (b28 C02: the FP walk stalled twice, 1100 then 557 ms, ratio 1.34 = lost hold time;
+# the same FP walk unstalled in C03 covered 103.65 vs third person 103.06).
+WALK_TRIES=${WALK_TRIES:-3}
+walkr() { local r w i=1; r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r")
+  while ge "$w" "$STALL_MS" && [ $i -lt "$WALK_TRIES" ]; do i=$((i+1))
+    echo "STALL walk $* worst_ms=$w: redo $i/$WALK_TRIES" >> "$LOG"; r=$(walk "$@"); w=$(awk '{print $5}' <<<"$r"); done; echo "$r"; }
 # native_walk <who> [axis]: native timed walk (walktime 40 walk) along the first axis that really walks (>= 25):
 # a blocked path is setup, not the row (b27: Malzin +x stopped 35 m short). Echo "<displacement> <axis> <tries>".
 native_walk() { local ax p0 d=0 n=0 tried=" "
   for ax in "${2:-+x}" +x -x +z -z; do case "$tried" in *" $ax "*) continue;; esac; tried+="$ax "; n=$((n+1))
+    inworld || { ax=stuck; break; }   # game not in the world (Kenshi "Loading..." pause): no 180 s walk retries
     p0=$(pos "$1"); A walktime "$1" 40 "$ax" walk >/dev/null; d=$(d2 "$p0" "$(pos "$1")"); ge "$d" 25 && break; done
   echo "$d $ax $n"; }
+# inworld: status phase=world. alive <where>: bounded poll (20 s) for it; a game stuck out of the world (b28: FP off
+# left Kenshi paused on "Loading..." for >1 h, every walk then burned 180 s) ends the run as SETUP FAIL with the reason,
+# after the rows already judged.
+inworld() { A status | grep -q 'phase=world'; }
+alive() { inworld && return 0; waitf 20 inworld && return 0; local s; s=$(A status)
+  for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done
+  echo "RESULT SETUP FAIL game stuck out of the world $1 (20 s): $s log=$LOG"; echo "SETUP FAIL stuck $1: $s" >> "$LOG"; exit 1; }
 # still <who> <s>: displacement over s seconds (no input expected)
 still() { local p0; p0=$(pos "$1"); sleep "$2"; d2 "$p0" "$(pos "$1")"; }
 FP0=$(fps fp_mode); DIST0=$(cam target)
@@ -129,7 +141,7 @@ for p in "$M1:$AN1" "$M2:$AN2"; do awk -v m="${p%%:*}" -v a="${p##*:}" 'BEGIN{t=
 judge C01 $ok "$ev"
 
 # ---- C02: wheel = distance only; speed unchanged; UI wheel does not zoom ----
-ui_clear; S0=$(cam speed_scale); T0=$(cam target); A fp_camera wheel -720 >/dev/null; sleep 0.8
+alive "before C02"; ui_clear; S0=$(cam speed_scale); T0=$(cam target); A fp_camera wheel -720 >/dev/null; sleep 0.8
 T1=$(cam target); S1=$(cam speed_scale); A fp_camera wheel 720 >/dev/null; sleep 0.8; T2=$(cam target); S2=$(cam speed_scale)
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye
 A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; TU0=$(cam target); AU0=$(cam applied); SU0=$(cam speed_scale)
@@ -139,8 +151,9 @@ RATIO=$(awk -v a="$M1" -v b="$M2" 'BEGIN{printf "%.2f", (a>0)?b/a:0}')
 ev="wheel target $T0->$T1->$T2 speed_scale $S0/$S1/$S2 | walk fp=$M1 tp=$M2 ratio=$RATIO move_speed fp=$SP1 tp=$SP2 worst_ms fp=$WM1 tp=$WM2 | ui_open=$((1-UIO)) ui_wheel target $TU0->$TU1 applied $AU0->$AU1 speed $SU0->$SU1"
 ok=1; [ "$S0" = "$S1" ] && [ "$S1" = "$S2" ] && [ "$SU0" = "$SU1" ] || ok=0
 awk -v a="$T0" -v b="$T1" -v c="$T2" 'BEGIN{exit !(b-a>.75 && b-c>.5)}' || ok=0
-awk -v r="$RATIO" 'BEGIN{exit !(r>=.75 && r<=1.33)}' || ok=0
+ROK=1; awk -v r="$RATIO" 'BEGIN{exit !(r>=.75 && r<=1.33)}' || { ok=0; ROK=0; }
 if [ $UIO != 0 ]; then row C02 FAIL "setup inventory did not open (ui_open=0): $ev"
+elif [ $ROK = 0 ] && { ge "$WM1" "$STALL_MS" || ge "$WM2" "$STALL_MS"; }; then row C02 FAIL "inconclusive: a walk sample is still frame-stalled after $WALK_TRIES tries (worst_ms >= $STALL_MS shortens the wall-clock hold): $ev"
 else [ "$TU0" = "$TU1" ] && [ "$AU0" = "$AU1" ] || ok=0; judge C02 $ok "$ev"; fi
 
 # ---- C03: inspect the mate without transfer ----
@@ -175,10 +188,10 @@ judge C04-TAKE $ok "$ev"
 
 # ---- C04-FALLBACK: other squad AI, FP off mid-walk, native order, FP on keeps the pinned actor ----
 ui_clear; A fp_move none >/dev/null; A select "$SH" >/dev/null; A fp_control press >/dev/null; waitf 3 ctl_is "$SH"; BACK=$?
-PS0=$(pos "$SH"); read -r AIM AIMAX AIMN <<<"$(native_walk "$MT" +x)"
+alive "before C04-FALLBACK"; PS0=$(pos "$SH"); read -r AIM AIMAX AIMN <<<"$(native_walk "$MT" +x)"; alive "after the $MT native walk"
 SHI=$(d2 "$PS0" "$(pos "$SH")"); STILLCTL=$(ctl_is "$SH" && echo 1 || echo 0)
 look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; mode off; OFF=$?; PZ=$(A status | fld paused); sleep 0.5; P1=$(pos "$SH"); sleep 2; P2=$(pos "$SH")
-DMA=$(mvs dm_active); RS=$(d2 "$P1" "$P2"); A fp_move none >/dev/null
+DMA=$(mvs dm_active); RS=$(d2 "$P1" "$P2"); A fp_move none >/dev/null; alive "after C04-FALLBACK fp_mode off (paused_at_off=${PZ:-na})"
 read -r NAT NATAX NATN <<<"$(native_walk "$SH" -x)"
 mode on; ON=$?; A fp_control state >/dev/null; sleep 0.5; PIN=$(ctl_is "$SH" && echo 1 || echo 0); STK=$(still "$SH" 2)
 FLAG=""; [ "$PZ" = 1 ] && FLAG=" | flag=product? game paused itself right at FP off (speed hold unpaused it)"
@@ -188,7 +201,7 @@ ge "$AIM" 25 || ok=0; lt "$SHI" "$STILL_MAX" || ok=0; lt "$RS" "$STILL_MAX" || o
 judge C04-FALLBACK $ok "$ev"
 
 # ---- C05 lifecycle (save first: C05-INVALID changes the squad, C05-LOAD restores it) ----
-ui_clear; take "$SH" >/dev/null; A save kah-fp-c05 >/dev/null; sleep 3; PSAVE=$(pos "$SH")
+alive "before C05"; ui_clear; take "$SH" >/dev/null; A save kah-fp-c05 >/dev/null; sleep 3; PSAVE=$(pos "$SH")
 A status | grep -q 'last_saved=kah-fp-c05' || echo "SETUP: save kah-fp-c05 not confirmed" >> "$LOG"
 
 # C05-KO: W held through a KO; no drive while down, same actor after, no stuck motion, fresh W walks
