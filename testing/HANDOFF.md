@@ -1,12 +1,14 @@
-# Current state (m49, 2026-10-06)
+# Current state (m50, 2026-10-06)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
-Run logs: `archive/test-run-2026-10-05-m41.md` (m41-m48), `archive/test-run-2026-10-06-m49.md` (m49). Open rows: `MASTER_TEST_PLAN.md`.
+Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
 ## Right now
-- Nothing running. Kenshi closed on both rigs, no batches, no subagents. Graphics mods ON on the 5090 (Shay can play).
-- Nothing is waiting on Shay.
-- Workspace cleanup 2026-10-06: applied patch scripts, old run logs (before m41), REL handoff docs and finished plans removed (git history); reference docs now in `docs/`.
+- 4080: FP combat batch 32 running (out `C:\KenshiTestRuns\fp-4080-32`, rows melee/melee-skill/cover/life/control; check
+  `ssh 4080 powershell -File C:\KAH\w32.ps1`). Runner = coordinator, lock owner rig4080.
+- 5090: Shay plays (don't touch its game); WSL off except to build (`wsl.exe --shutdown` after).
+- Gate 3 decided (Shay 2026-10-06): manual aim may beat the dice for now; R15/R16 stay. Nothing waiting on Shay.
+- Next build: FP controls rework (approved, memory `fp-controls-scheme`) + zoom-out to ~3-4 body lengths with camera wall collision.
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,

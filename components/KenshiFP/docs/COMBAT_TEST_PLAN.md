@@ -73,7 +73,7 @@ Repeated shots at one target are not necessarily independent; reset health/pose 
 Report casualties/KO/target movement that invalidate conditions. Do not pool different weapon/config/skill cells to mask a regression.
 No final balance PASS until tolerances and missing native dependencies are defined from measured baselines.
 
-**Gate 3 tolerance PROPOSAL (2026-10-06, awaiting Shay's approval; not in force).** Baselines (4080, 80 dm, crossbows 30,
+**Gate 3 DECISION (Shay, 2026-10-06): manual aim may beat the game's dice for now** (real targets move, which adds difficulty native shooting never has; no skill wobble added; revisit if it plays overpowered). R14 = report the hit-rate difference, not a pass/fail margin; R15 and R16 stay in force. Original proposal, kept for reference: Baselines (4080, 80 dm, crossbows 30,
 perception 59, stationary human, production RNG): torso hits manual b8 18/20 + b27 20/20 = 38/40 (0.95), native b8 18/20 +
 b25 17/20 + b27 17/20 = 52/60 (0.87); difference +0.08, 90% CI [-0.01, +0.18]. Damage/hit manual 21.5/20.5 vs native
 22.4/21.4. Real s/shot manual 13.1/12.9 vs native game s 6.4/6.3.
