@@ -367,14 +367,14 @@ static size_t fpc_state(char *b,size_t n) {
         "mmb_selects=%u mmb_none=%u last_select=%s ctx_opens=%u ctx_none=%u ctx_freed=%d rmb_swallowed=%u lmb_swallowed=%u "
         "mmb_cam_frames=%u r_keys=%u r_draws=%u r_holsters=%u r_draw_fail=%u sheathe_kept=%u lmb_clicks=%u engages=%u last_task=%d last_target=%s "
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
-        "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u",
+        "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
         g_fpc_mmb_cam_frames,g_fpc_r_keys_swallowed,g_fpc_r_draws,g_fpc_r_holsters,g_fpc_r_draw_fail,g_fpc_sheathe_kept,g_fpc_lmb_clicks,g_fpc_engages,g_fpc_last_task,g_fpc_last_target,
         g_fpc_free_swings,g_fpc_fs_tech!=NULL,g_fpc_fs_prog,g_fpc_fs_prog_max,g_fpc_fs_ends,g_fpc_fs_notech,g_fpc_fs_faults,g_fpc_fs_dead,
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
-        g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes);
+        g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
