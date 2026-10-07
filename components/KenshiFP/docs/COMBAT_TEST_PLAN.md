@@ -105,7 +105,7 @@ b25 17/20 + b27 17/20 = 52/60 (0.87); difference +0.08, 90% CI [-0.01, +0.18]. D
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
 | M08 | Lifecycle/crowds | multiple attackers, KO, limbs, unarmed, UI, load, fallback and actor changes (`fp-manual-melee-life.sh`: M08-UI/KO/LOAD/UNARMED/CROWD/ACTOR/LIMB) |
-| M09 | Animation compatibility | vanilla first, individual MCA/DodgeStrafe/Great Anims, then full loadout |
+| M09 | Animation compatibility | vanilla first, individual MCA/DodgeStrafe/Great Anims, then full loadout: `fp-m09.sh <out>` (loadouts via `tools/automation/anim-mods.sh`, mods installed on both rigs; one `RESULT M09-<loadout>-<row>` per loadout x M00-M07/M09-CHASE/M08 row) |
 | M09-CHASE | Swings through the native chase lock | `fp-manual-melee.sh` with `fp_melee force_chase on` (state 11/next 10 each tick) + 50 clicks: forced_chase and chase_drops rise, chase_swings >= 3, swings >= 3 (4080 m09: pending click expired in STARTUP->10) |
 If M01 only passes by spam-forcing a flag or waiting for AI initiative, phase 2 feasibility fails even if health changes.
 
