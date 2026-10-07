@@ -15,7 +15,9 @@
 #  K05-HOSTILE LMB drawn on Skaera: engages+1, last_task=5, native fight on her
 #  K05-UNPROV  LMB drawn on a neutral NPC (NEUTRAL=<name|#serial/index>, else a Hungry Bandit spawned in Tech Hunters 40 away
 #              and left KO'd after (no unload: b41 crash); its faction relation is set to NEUTRAL_REL (20)): last_task=61, native fight on him.
-#              Both K05 rows: shooter in passive combat mode, out of any fight and the crosshair pick on the npc before the click
+#              Both K05 rows: mate moved behind the shooter, shooter in passive combat mode, out of any fight (a leftover fight
+#              gets STAND_STILL + bounded wait) and the crosshair pick on the npc before the click (aim heights PICK_H "13 10 7"),
+#              else a setup FAIL
 #  K06         R draw: r_draws+1, wih!=0 (fp_keys live weaponInHands), still drawn after 5 s idle; R holster: r_holsters+1, wih=0
 #  FB01        RMB held drawn, aimed at the sky, out of combat: blocking while held, ready after release
 #  FS01        LMB drawn melee, no target, no fight: free swing started and ended (fs_prog_max>0.5), no fault, mate hp same
@@ -258,15 +260,25 @@ if want FS01 || want HUD01; then if [ $MELEE = 0 ]; then want FS01 && mfail FS01
 # live_name <ref>: the character's live name (getName, as KenshiFP's pick/last_target print it): Stobe renames spawned
 # generics ("Drannik 2 [Hungry Bandit]", 5090 m50 M K05-UNPROV) and named NPCs carry their template ("Skaera [Hungry Bandit]")
 live_name() { A where "$1" | sed -n 's/^\(.*\) #[0-9][0-9]*\/[0-9][0-9]* .*/\1/p' | head -1; }
+# pick_npc <ref> <name>: aim at the npc and require the crosshair pick to report him before the click (bounded: 2 picks
+# per aim height in PICK_H; a shorter race lets the ray pass over the head at 13); PK = last pick, PICK_HU = height used.
+# 5090 m50 O K05-HOSTILE: the ray missed Skaera and picked Malzin behind her (pick_dist 26.29), Axima attacked her mate.
+PICK_H=${PICK_H:-"13 10 7"}
+pick_npc() { local H; PK=""; PICK_HU=""; for H in $PICK_H; do for _ in 1 2; do aim_at "$1" "$H"; A fp_keys pick >/dev/null; sleep 0.3
+  PK=$(A fp_keys pick show); [ "$(fld result <<<"$PK")" = "$(uname_ "$2")" ] && { PICK_HU=$H; return 0; }; done; done; return 1; }
+# clear_fight <row>: the shooter out of any native fight (bounded 8 s); a leftover fight (5090 m50 O K05-UNPROV: still on
+# Malzin after K05-HOSTILE) gets a STAND_STILL order (replaces the attack order) and 10 s more
+clear_fight() { local FB; waitf 8 not_fight && return 0; FB=$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')
+  echo "SETUP $1: $SH still in a native fight [$FB]: order STAND_STILL: $(A order "$SH" STAND_STILL | cut -c1-100)" >> "$LOG"; waitf 10 not_fight; }
 engage_row() { local G0 K FT ser ev ok PK P0 FB; ui_clear; draw_to 1
   P0=$(A combatmode "$SH" | fld passive); PASSIVE0=${PASSIVE0:-$P0}; A combatmode "$SH" passive on >/dev/null
   A pin "$2" at "$SH" dist 15 face "$SH" | grep -q '^pinned' || { row "$1" FAIL "setup could not pin $3 in front of $SH"; engage_end "$2" "$P0"; return; }
-  PINNED+=" $2"; sleep 1; aim_at "$2" 13; ser=$(A where "$2" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
+  PINNED+=" $2"; sleep 1; ser=$(A where "$2" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
   local LN; LN=$(live_name "$2"); set -- "$1" "$2" "${LN:-$3}" "$4"   # the name KenshiFP reports (getName)
-  if ! waitf 8 not_fight; then FB=$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')
-    row "$1" FAIL "setup $SH still in a native fight before the click (passive=$(A combatmode "$SH" | fld passive) [$FB])"; engage_end "$2" "$P0"; return; fi
-  PK=""; for _ in 1 2 3 4 5 6; do A fp_keys pick >/dev/null; sleep 0.3; PK=$(A fp_keys pick show); [ "$(fld result <<<"$PK")" = "$(uname_ "$3")" ] && break; done
-  echo "$1 pre-press $PK" >> "$LOG"; G0=$(ks engages)
+  if ! clear_fight "$1"; then FB=$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')
+    row "$1" FAIL "setup $SH still in a native fight before the click, also after a STAND_STILL order (passive=$(A combatmode "$SH" | fld passive) [$FB])"; engage_end "$2" "$P0"; return; fi
+  if ! pick_npc "$2" "$3"; then row "$1" FAIL "setup crosshair pick never on $3 (aim heights ${PICK_H}; last pick: $(cut -c1-140 <<<"$PK"))"; engage_end "$2" "$P0"; return; fi
+  echo "$1 pre-press h=$PICK_HU $PK" >> "$LOG"; G0=$(ks engages)
   A fp_keys press lmb 100 >/dev/null; waitf 3 kge engages $((G0+1)); waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
   ev="engages $G0->$(fld engages <<<"$K") last_task=$(fld last_task <<<"$K") last_target=$(fld last_target <<<"$K") lmb_clicks=$(fld lmb_clicks <<<"$K") native_fight_on_$3=$((1-FT)) [$(A fp_melee state | grep -o 'active=[^ ]* state=[^ ]*\|target_h=[^ ]*' | tr '\n' ' ')] pick_before=$(fld result <<<"$PK") pick_dist=$(fld hit_dist <<<"$PK") passive=1"
   ok=1; [ "$(fld engages <<<"$K")" = $((G0+1)) ] && [ "$(fld last_task <<<"$K")" = "$4" ] && [ "$(fld last_target <<<"$K")" = "$(uname_ "$3")" ] && [ $FT = 0 ] || ok=0
@@ -282,6 +294,9 @@ notko() { ! isko "$1"; }
 tg_ready() { notko "$TGH" && return 0; A protect "$TGH" on >/dev/null; waitf 15 notko "$TGH"; A protect "$TGH" off >/dev/null; sleep 2
   echo "SETUP K05-HOSTILE: $TG was KO, woken via protect: $(A where "$TGH" | cut -c1-120)" >> "$LOG"; notko "$TGH"; }
 if want K05; then if [ $MELEE = 0 ]; then mfail K05-HOSTILE; mfail K05-UNPROV; else
+  # the mate out of the line of fire: the K05 npcs are pinned 1.5 m along +x from the shooter, the mate (setup: 2.5 m
+  # along +x, right behind them) goes to 2.5 m along -x (5090 m50 O: the crosshair passed the hostile and picked Malzin)
+  echo "SETUP K05: $MT moved behind $SH: $(A pin "$MT" at "$SH" dist -25 face "$SH" | cut -c1-100)" >> "$LOG"
   if [ -n "$TGH" ] && tg_ready; then engage_row K05-HOSTILE "$TGH" "$TG" 5; else row K05-HOSTILE FAIL "setup hostile $TG missing or KO ($(A where "$TG" | cut -c1-100))"; fi
   # neutral: NEUTRAL=<name> if given, else one spawned for the row (Tech Hunters, not hostile to the squad; 4080 b39
   # kah-fpxbow had no neutral NPC within 1500), left KO'd after (no unload: b41 crash); the old nearby search only as a fallback
