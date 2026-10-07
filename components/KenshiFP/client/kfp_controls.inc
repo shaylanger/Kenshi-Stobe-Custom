@@ -187,6 +187,7 @@ static size_t fpc_pick_text(char *b,size_t n) {
         g_fpc_pick.kept,g_fpc_pick.dropped);
 }
 /* Character under the crosshair (physics ray, mesh refine), without disturbing the shot telemetry. */
+static void *fpc_player_interface(void *gw);
 static void *fpc_crosshair_char(void *pc) {
     CombatRayHit saved_hit=g_combat_camera_hit;
     Vec3 so=g_combat_aim_origin,sd=g_combat_aim_dir;int sh=g_combat_aim_have_ray;
@@ -207,6 +208,35 @@ static void *fpc_crosshair_char(void *pc) {
 }
 static void *fpc_player_interface(void *gw) {
     return readable((void *)((uintptr_t)gw+GW_PLAYER),8)?*(void **)((uintptr_t)gw+GW_PLAYER):NULL;
+}
+/* fp_keys movers (C04-FALLBACK NATDIAG, 4080 b33/b40: native walk orders never started for the mate AND the player,
+ * also with FP off): per squad member, the CharMovement state a native MOVE order needs (movementMode 0 normal /
+ * 1 combat / 2 MOVE_DIRECTION, speedOrders, current speed/motion, desired motion, animationOverride) and whether
+ * KenshiFP still holds that mover (dm = WASD drive mover g_dm_mv, dm_active, melee = manual-melee owned mover,
+ * ctl = FP controlled actor). Built on the game thread (request -> next tick), shown by the command. */
+static int g_fpc_movers_req;static unsigned g_fpc_movers_n;static char g_fpc_movers_txt[1400]="none";
+static void fpc_movers_snapshot(void *gw) {
+    size_t o=0;char *b=g_fpc_movers_txt;size_t n=sizeof g_fpc_movers_txt;b[0]=0;
+    void *pi=fpc_player_interface(gw);
+    if (!readable(pi,PI_PLAYERCHARS+LEK_STUFF+8)) {snprintf(b,n,"no player interface");return;}
+    uint32_t count=*(uint32_t *)((uintptr_t)pi+PI_PLAYERCHARS+LEK_COUNT);
+    void **chars=*(void ***)((uintptr_t)pi+PI_PLAYERCHARS+LEK_STUFF);
+    if (!count || count>64 || !readable(chars,(size_t)count*8)) {snprintf(b,n,"no squad (count=%u)",count);return;}
+    ++g_fpc_movers_n;
+    o+=(size_t)snprintf(b+o,n-o,"movers n=%u fp=%d dm_active=%d",g_fpc_movers_n,!!g_fp_mode,(int)g_dm_active);
+    for (uint32_t i=0;i<count && o+8<n;++i) {
+        void *pc=chars[i];char nm[48];
+        if (!char_valid(pc)) continue;
+        fpc_name(pc,nm,sizeof nm);
+        void *mv=readable((void *)((uintptr_t)pc+CHAR_MOVEMENT),8)?*(void **)((uintptr_t)pc+CHAR_MOVEMENT):NULL;
+        if (!readable(mv,0x3B0)) {o+=(size_t)snprintf(b+o,n-o," | %s mv=none",nm);continue;}
+        const Vec3 *cm=(const Vec3 *)((uintptr_t)mv+MV_CURRENT_MOTION),*dm=(const Vec3 *)((uintptr_t)mv+0x38C);
+        o+=(size_t)snprintf(b+o,n-o," | %s mode=%d speed_orders=%d cur_speed=%.2f cur_motion=%.2f desired=%.2f anim_override=%d dm=%d melee=%d ctl=%d",
+            nm,*(int *)((uintptr_t)mv+0x378),*(int *)((uintptr_t)mv+0x20),*(float *)((uintptr_t)mv+MV_CURRENT_SPEED),
+            sqrtf(cm->x*cm->x+cm->z*cm->z),sqrtf(dm->x*dm->x+dm->z*dm->z),*(unsigned char *)((uintptr_t)mv+0x37C),
+            mv==g_dm_mv,mv==g_melee_owned_mv,pc==g_fp_control_actor);
+        if (o>=n) {o=n-1;break;}
+    }
 }
 static void fpc_draw_toggle(void *pc) {
     void **vt=readable(pc,8)?*(void ***)pc:NULL;
@@ -415,6 +445,7 @@ static void fpc_ctx_relock_step(void) {
 static void fp_controls_tick(void *gw,float dt) {
     (void)dt;++g_fpc_ticks;
     static void *last_actor;
+    if (g_fpc_movers_req) {g_fpc_movers_req=0;fpc_movers_snapshot(gw);}   /* fp_keys movers (test), also with FP off */
     if (!g_fp_mode || g_fpc_fault) {
         if (last_actor) fpc_release_all();
         last_actor=NULL;g_fpc_ui_state="off";g_fpc_drawn=0;g_fpc_wih=NULL;return;
@@ -533,6 +564,11 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
             g_fpc_sneak_probe.aware,g_fpc_sneak_probe.aware_any,g_fpc_sneak_probe.chance);
         r->append(r,b);return KAH_OK;
     }
+    if ((argc==2||argc==3) && !_stricmp(argv[1],"movers")) {   /* movers: snapshot next frame + show the last; movers show: last only */
+        if (argc==2) g_fpc_movers_req=1;
+        else if (_stricmp(argv[2],"show")) {r->append(r,"movers [show]");return KAH_ERROR;}
+        r->append(r,g_fpc_movers_txt);return KAH_OK;
+    }
     if (argc==3 && !_stricmp(argv[1],"swallow")) {
         g_fpc_swallow=!_stricmp(argv[2],"on");r->append(r,g_fpc_swallow?"swallow=1":"swallow=0");return KAH_OK;
     }
@@ -550,7 +586,7 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         g_fpc_swallow=1;for (int b=0;b<FPC_NBTN;++b) g_fpc_inj_until[b]=0;
         r->append(r,"counters reset, swallow=1");return KAH_OK;
     }
-    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|pick [show]|sneak [show]|swallow on|off|focus on|off|reset");
+    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|swallow on|off|focus on|off|reset");
     return KAH_ERROR;
 }
 /* AnimationClass::startCombatAnimation(tech, speed, std::string) is not exported: it sits at a fixed
