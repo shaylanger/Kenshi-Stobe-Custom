@@ -23,7 +23,8 @@ static unsigned g_melee_abort_refused;  /* swings whose native need-block abort 
 static int g_melee_abort_noted;
 static int g_melee_ready;                /* hook installed + bindings found */
 static void *g_melee_owned_cc;           /* CombatClass under manual ownership */
-static void *g_melee_owned_st;           /* its AttackState (seen in AttackState::initialise, st+8 == cc) */
+static void *g_melee_owned_st;
+static unsigned g_melee_st_found,g_melee_st_missing;   /* chase drops that had to look the AttackState up / found none */           /* its AttackState (seen in AttackState::initialise, st+8 == cc) */
 static int g_melee_pending;              /* one click request, no queue (M07) */
 static float g_melee_pending_left;
 static int g_melee_armed, g_melee_fire_prev, g_melee_block_prev;
@@ -294,14 +295,31 @@ static char melee_click_swing(void *st,void *cc) {
     if (g_melee_last_latency_ms>g_melee_max_latency_ms) g_melee_max_latency_ms=g_melee_last_latency_ms;
     return 1;
 }
+/* AttackState vtable (first seen in AttackState::initialise; the owned fighter's own when seen) and the lookup of a
+ * combat object's AttackState from it. fp_melee_release() drops g_melee_owned_st (KO/UI/load/actor change), and only
+ * a native initialise call set it again. 4080 m09d vanilla: after M08-KO the fighter sat in the trace-blocked chase
+ * loop (STARTUP -> 10 -> drop -> DECISION, chase_drops +250) where initialise never runs, so the chase drop had no
+ * AttackState, never started the click's swing and every click expired (KO/LOAD fresh_click_swings=0, UNARMED
+ * swung=0 at 8 dm facing 0 deg). The combat object holds its AttackState: find the field whose object has that
+ * vtable and points back to cc (st+8 == cc). */
+static void *g_melee_attack_st_vt;
+static void *melee_find_attack_st(void *cc) {
+    if (!g_melee_attack_st_vt || !readable(cc,0x2e8)) return NULL;
+    for (uintptr_t o=0;o<0x2e8;o+=8) {
+        void *p=*(void **)((uintptr_t)cc+o);
+        if (p && ((uintptr_t)p&7)==0 && readable(p,0x10) && *(void **)p==g_melee_attack_st_vt && *(void **)((uintptr_t)p+8)==cc) return p;
+    }
+    return NULL;
+}
 static char melee_attack_init_hook(void *st) {
     void *cc=readable(st,0x10)?*(void **)((uintptr_t)st+8):NULL;
+    if (cc && !g_melee_attack_st_vt) g_melee_attack_st_vt=*(void **)st;
     if (cc && g_melee_passive_serial && cc!=g_melee_owned_cc && readable((void *)((uintptr_t)cc+CC_TARGET_H),0x20) &&
         *(unsigned *)((uintptr_t)cc+CC_TARGET_H+0x18)==g_melee_passive_serial) {
         *(int *)((uintptr_t)cc+CC_NEXTMOVE)=MELEE_WAIT;++g_melee_passive_refused;return 0;
     }
     if (cc && cc==g_melee_owned_cc) {
-        g_melee_owned_st=st;
+        g_melee_owned_st=st;g_melee_attack_st_vt=*(void **)st;
         if (!g_melee_pending) {
             /* AI initiative refused: park in WAIT, block/stumble untouched. */
             *(int *)((uintptr_t)cc+CC_NEXTMOVE)=MELEE_WAIT;++g_melee_ai_refused;return 0;
@@ -364,6 +382,10 @@ static int melee_chase_drop(void *cc) {
     int state;
     ++g_melee_chase_frames;++g_melee_chase_drops;
     void *ost=g_melee_owned_st;
+    if (g_melee_pending && (!ost || !readable(ost,0x10) || *(void **)((uintptr_t)ost+8)!=cc)) {
+        ost=melee_find_attack_st(cc);
+        if (ost) {g_melee_owned_st=ost;++g_melee_st_found;} else ++g_melee_st_missing;
+    }
     if (g_melee_pending && ost && readable(ost,0x10) && *(void **)((uintptr_t)ost+8)==cc && melee_click_swing(ost,cc)) {
         state=MELEE_CHOP;++g_melee_chase_swings;
     } else state=g_melee_pending?MELEE_STARTUP:MELEE_WAIT;
@@ -477,7 +499,7 @@ static int fp_melee_state_append(char *b,size_t n,const void *cc) {
      * ko_timer the read character's own medical state (-1 = no readable owner) */
     void *own=cc&&readable((const void *)((uintptr_t)cc+CC_OWNER),8)?*(void **)((uintptr_t)cc+CC_OWNER):NULL;
     if (own && !char_valid(own)) own=NULL;
-    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u chase_drops=%u chase_swings=%u force_chase=%d forced_chase=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u ticks=%u in_aim=%d in_fire=%d fire_masked=%u injection=%d inj_cmds=%u inj_aim_cmds=%u melee_hits=%u melee_cut=%.1f melee_blunt=%.1f wounds_any=%u ui_open=%d is_down=%d focus=%d prone=%d unconscious=%d ko_timer=%.1f head_above=%.2f",
+    return snprintf(b,n," manual_ready=%d owned=%d why=%s armed=%d pending=%d clicks=%u swings=%u ai_refused=%u rejected=%u blocks=%u block_ok=%u autoblock_refused=%u out_of_reach=%u passive=%d passive_refused=%u approach_refused=%u chase_frames=%u chase_drops=%u chase_swings=%u force_chase=%d forced_chase=%u expired=%u last_latency_ms=%.0f max_latency_ms=%.0f hold_halts=%u spam_left=%u swing_ends=%u swing_time=%.3f last_swing_len=%.3f min_swing_gap=%.3f nat_swing_ends=%u nat_swing_time=%.3f early_starts=%u unfinished_starts=%u slack_n=%u min_swing_slack=%.3f last_reject=%s last_reject_state=%d rej_stumble=%u rej_chop=%u rej_dead=%u rej_other=%u cl_wait=%d cl_fired=%u cl_timeouts=%u cancel_refused=%u abort_refused=%u ticks=%u in_aim=%d in_fire=%d fire_masked=%u injection=%d inj_cmds=%u inj_aim_cmds=%u melee_hits=%u melee_cut=%.1f melee_blunt=%.1f wounds_any=%u ui_open=%d is_down=%d focus=%d prone=%d unconscious=%d ko_timer=%.1f head_above=%.2f st_found=%u st_missing=%u st_vt=%d",
         g_melee_ready,cc!=NULL&&cc==g_melee_owned_cc,g_melee_why,g_melee_armed,g_melee_pending,g_melee_clicks,
         g_melee_swings,g_melee_ai_refused,g_melee_rejected,g_melee_blocks,g_melee_block_ok,g_melee_autoblock_refused,g_melee_out_of_reach,g_melee_passive_serial!=0,g_melee_passive_refused,
         g_melee_approach_refused,g_melee_chase_frames,g_melee_chase_drops,g_melee_chase_swings,g_melee_force_chase,g_melee_forced_chase,g_melee_expired,g_melee_last_latency_ms,g_melee_max_latency_ms,
@@ -486,7 +508,7 @@ static int fp_melee_state_append(char *b,size_t n,const void *cc) {
         g_melee_rej_stumble,g_melee_rej_chop,g_melee_rej_dead,g_melee_rej_other,g_melee_cl_wait,g_melee_cl_fired,g_melee_cl_timeouts,g_melee_cancel_refused,g_melee_abort_refused,
         g_melee_ticks,g_melee_in_aim,g_melee_in_fire,g_melee_fire_masked,g_combat_injection,g_combat_inj_cmds,g_combat_inj_aim_cmds,
         g_wound_melee_hits,g_wound_melee_cut,g_wound_melee_blunt,g_wound_any,
-        g_ui_open,g_is_down,game_has_focus(),own?char_prone_state(own):-1,own?combat_char_unconscious(own):-1,own?combat_char_ko_timer(own):-1.0f,g_head_above);
+        g_ui_open,g_is_down,game_has_focus(),own?char_prone_state(own):-1,own?combat_char_unconscious(own):-1,own?combat_char_ko_timer(own):-1.0f,g_head_above,g_melee_st_found,g_melee_st_missing,g_melee_attack_st_vt!=NULL);
 }
 static void fp_melee_manual_init(void) {
     uintptr_t init=combat_unique_signature("40 57 48 83 EC 40 48 8B 41 08 48 8B F9");
