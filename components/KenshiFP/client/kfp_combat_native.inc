@@ -33,6 +33,21 @@ static int g_combat_ready_native=-1;
 static unsigned g_combat_vis_forced;        /* adapter animationUpdate calls made with the flag forced */
 /* Native reload timer (rc+0x78) read the frame a reload starts: R04/R05 evidence. */
 static float g_combat_last_reload_timer=-1;
+/* FF01 (4080 b38): a reload press that started nothing left no trace. reload_refused = controller emitted
+ * RELOAD but the native start (0x437940) left rc+0x80 at 0; has_ammo = Character vt+0x178(gun ammo type
+ * gun+0x58) = the native "carries a matching round" test (main inventory, then backpack); -1 = not checked. */
+static unsigned g_combat_reload_refused;
+static int g_combat_has_ammo=-1;
+static void *g_combat_ammo_type;
+#define GUN_AMMO_TYPE 0x58
+static void *combat_virtual(void *object,size_t slot);
+static int combat_has_ammo(void *pc,void *gun) {
+    void *type=readable((void *)((uintptr_t)gun+GUN_AMMO_TYPE),8)?*(void **)((uintptr_t)gun+GUN_AMMO_TYPE):NULL;
+    g_combat_ammo_type=type;
+    if (!type) return -1;
+    void *fn=combat_virtual(pc,0x178);
+    return fn?((char (*)(void *,void *))fn)(pc,type)!=0:-1;
+}
 typedef void (*combat_rc_t)(void *,float,const void *,const void *);
 typedef void (*combat_mt_t)(void *,float);
 typedef void (*combat_end_t)(void *);
@@ -605,6 +620,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
      * during reload sent test triggers into a refused window (4080 batch 3 R13). */
     o.shot_ready=o.aim_ready && isfinite(timer)&&timer<=0 && !combat_truce_pending() && o.ammo>0 && !o.reloading;
     o.reload_allowed=have_aim;o.committed=o.reloading;
+    if (o.ammo==0 && !o.reloading) g_combat_has_ammo=combat_has_ammo(pc,gun);   /* FF01 evidence (cheap inventory scan) */
     unsigned rej0=g_combat_control.rejected;
     unsigned action=kfp_combat_step(&g_combat_control,&o,input,g_cfg_combat_auto_reload,0);
     combat_note_reject(rej0,closeness,timer,have_aim,"ok");
@@ -627,6 +643,11 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         int before=*(unsigned char *)((uintptr_t)rc+0x80);
         g_combat_reload(rc);
         if (!before && *(unsigned char *)((uintptr_t)rc+0x80)) {++g_combat_reload_starts;g_combat_last_reload_timer=*(float *)((uintptr_t)rc+0x78);}
+        else {
+            ++g_combat_reload_refused;g_combat_has_ammo=combat_has_ammo(pc,gun);
+            logline("[combat] reload refused by the game: gun=%p ammo=%d ammo_type=%p has_ammo=%d (no matching round in inventory/backpack?)",
+                    gun,*(int *)((uintptr_t)gun+GUN_AMMO),g_combat_ammo_type,g_combat_has_ammo);
+        }
     }
     if ((action&KFP_ACT_SHOOT) && have_aim) {
         int before=*(int *)((uintptr_t)gun+GUN_AMMO);
@@ -765,7 +786,8 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
           (unsigned long long)(uintptr_t)g_combat_wih,(unsigned long long)(uintptr_t)g_combat_cur,g_combat_rcstate,g_combat_rcmode);
         {size_t l=strlen(b);fp_combat_wound_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);combat_shot_state(b+l,sizeof(b)-l);}
-        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots);}
+        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u reload_emits=%u reload_refused=%u has_ammo=%d ammo_type=%p",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots,
+         g_combat_control.reloads,g_combat_reload_refused,g_combat_has_ammo,g_combat_ammo_type);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
          snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_gate=%s last_reject_native=%d last_reject_latched=%d last_reject_dip_s=%.3f last_reject_dt=%.3f last_reject_hold=%d last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
            g_combat_inj_cmds,g_combat_inj_aim_cmds,g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,

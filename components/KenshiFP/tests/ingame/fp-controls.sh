@@ -274,12 +274,15 @@ if want HUD01 || want FF01; then ui_clear; draw_to 0
       if ! waitf 4 csis armed 1; then row FF01 FAIL "setup adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
       else sky; S0=$(cs actual_shots); R0=$(cs reload_starts); A fp_combat input 1 0 0 >/dev/null; waitf 8 csis shot_ready 1; RDY=$(cs shot_ready)
         AM0=$(cs ammo); A fp_combat input 1 1 0 >/dev/null; waitf 3 csge actual_shots $((S0+1)); A fp_combat input 1 0 0 >/dev/null; sleep 0.5
-        S1=$(cs actual_shots); AM1=$(cs ammo); UI1=$(cs fp_ui_state)
+        S1=$(cs actual_shots); AM1=$(cs ammo); UI1=$(cs fp_ui_state); HA=$(cs has_ammo); RE0=$(cs reload_emits); RF0=$(cs reload_refused)
+        if [ "$HA" = 0 ]; then A fp_combat input 0 0 0 >/dev/null
+          row FF01 FAIL "setup: no round matching the loaded bow in inventory/backpack (has_ammo=0 ammo_type=$(cs ammo_type) ammo=$AM1); shot actual_shots $S0->$S1 ammo $AM0->$AM1"
+        else
         A fp_combat input 1 0 1 >/dev/null; sleep 0.3; A fp_combat input 1 0 0 >/dev/null; waitf 4 csge reload_starts $((R0+1)); UIR=$(cs fp_ui_state)
         waitf 30 csis reloading 0; sleep 0.3; R1=$(cs reload_starts); AM2=$(cs ammo); A fp_combat input 0 0 0 >/dev/null
-        ev="shot_ready=$RDY actual_shots $S0->$S1 ammo $AM0->$AM1 ui=$UI1 | reload: reload_starts $R0->$R1 ui=$UIR ammo->$AM2 last_reload_timer=$(cs last_reload_timer) why=$(cs why)"
+        ev="shot_ready=$RDY actual_shots $S0->$S1 ammo $AM0->$AM1 ui=$UI1 | reload: reload_starts $R0->$R1 emits $RE0->$(cs reload_emits) refused $RF0->$(cs reload_refused) has_ammo=$HA ui=$UIR ammo->$AM2 last_reload_timer=$(cs last_reload_timer) why=$(cs why)"
         ok=1; [ "$RDY" = 1 ] && [ "$S1" = $((S0+1)) ] && [ "$AM1" = $((AM0-1)) ] && [ "$R1" = $((R0+1)) ] && lt "$AM1" "$AM2" || ok=0
-        judge FF01 $ok "$ev"; fi
+        judge FF01 $ok "$ev"; fi; fi
       A fp_combat off >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null; fi; fi; fi
 if want HUD01; then
   if [ $HUDN -lt 5 ]; then row HUD01 FAIL "setup only $HUDN of 5 states sampled (melee=$MELEE): $HUDS"; else judge HUD01 $HUDOK "$HUDS"; fi; fi
