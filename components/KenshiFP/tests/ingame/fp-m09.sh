@@ -10,7 +10,7 @@
 # Loadouts (default): vanilla mca dodge gam full (anim-mods.sh header: which lines each one keeps).
 # Rigs: the 4080 (Git Bash; copy this, anim-mods.sh, fp-manual-melee.sh, fp-manual-melee-life.sh into C:\KAH\fp) uses
 # C:\KAH\ctl.ps1; the 5090 (WSL) uses tools/automation/kenshi-ctl.ps1. Env: SAVE (kah-fpxbow), FI (Malzin), TG (Skaera),
-# OT (Axima, M08-ACTOR), ANIM (anim-mods.sh path), CTLPS (ctl script, Windows path), WORLD_S (600, launch -> world).
+# OT (Axima, M08-ACTOR), M09_MELEE (1; 0 = only the life rows M08-*), ANIM (anim-mods.sh path), CTLPS (ctl script, Windows path), WORLD_S (600, launch -> world).
 # Only one runner per machine; Kenshi must not be needed by anyone else for the whole run (~5 launches).
 set -u
 O=${1:?usage: fp-m09.sh <outdir> [loadouts]}; LOADOUTS=${2:-"vanilla mca dodge gam full"}
@@ -51,7 +51,7 @@ for lo in $LOADOUTS; do
   got=$(bash "$ANIM" loaded | grep '^loaded:'); exp=$(want_loaded "$lo")
   if [ "$got" != "$exp" ]; then say "RESULT M09-$lo-SETUP FAIL kenshi_info.log '$got', wanted '$exp' ($st)"; continue; fi
   say "M09 $lo: $st | $got"; LO_RUN=$lo
-  runrows "$lo" melee fp-manual-melee.sh "$FI" "$TG" "{OUT}"
+  [ "${M09_MELEE:-1}" = 1 ] && runrows "$lo" melee fp-manual-melee.sh "$FI" "$TG" "{OUT}"   # M09_MELEE=0: life rows only
   runrows "$lo" life fp-manual-melee-life.sh "$FI" "$TG" "{OUT}" "$OT"
 done
 say "M09 end $(date '+%F %T')"
