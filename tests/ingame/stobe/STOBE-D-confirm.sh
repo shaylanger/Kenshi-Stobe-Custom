@@ -221,14 +221,15 @@ row_D94() {
   [ -s "$f" ] || { verdict D94 "FAIL reset saved no entry ($f)"; return; }
   local want_aff; want_aff=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("aff",""))' "$f" 2>/dev/null)
   out=$("${envp[@]}" stobe-reset-npc --restore "$MATE" 2>&1); log "restore: $(echo "$out" | tail -1 | cut -c1-200)"
+  local aff_r; aff_r=$(aq)   # exact check before the chat: the chat's relationship_eval may legitimately move aff
   talk "$MATE" "$MATE, everything all right with us?" 20
   stobe-say speed 0 >/dev/null 2>&1
   keys2=$(kq); rkeys2=$(rq); aff2=$(aq)
-  log "after: extended keys=$keys2 column keys=$rkeys2 aff=$aff2 (saved aff $want_aff, before $aff0)"
-  if [ "$keys2" = "$exp" ] && [ "$rkeys2" = "$exp" ] && [ "$aff2" = "$want_aff" ]; then
-    verdict D94 "PASS restore key '$keys2' in both copies (PLAYER_NAME setting '$setting'), aff $aff2 = saved entry"
+  log "after: extended keys=$keys2 column keys=$rkeys2 aff right after restore=$aff_r, after chat=$aff2 (saved aff $want_aff, before $aff0)"
+  if [ "$keys2" = "$exp" ] && [ "$rkeys2" = "$exp" ] && [ "$aff_r" = "$want_aff" ]; then
+    verdict D94 "PASS restore key '$keys2' in both copies after a chat write (PLAYER_NAME setting '$setting'), restored aff $aff_r = saved entry (after chat $aff2)"
   elif [ "$keys2" = "$exp" ] && [ "$rkeys2" = "$exp" ]; then
-    verdict D94 "FAIL key case ok ('$keys2') but aff $aff2 != saved $want_aff (a chat line may have moved it: check the evaluator)"
+    verdict D94 "FAIL key case ok ('$keys2') but restored aff $aff_r != saved $want_aff"
   else verdict D94 "FAIL keys after restore: extended='$keys2' column='$rkeys2' (want '$exp'; setting '$setting')"; fi
 }
 
