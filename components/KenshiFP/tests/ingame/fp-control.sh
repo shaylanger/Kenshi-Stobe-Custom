@@ -71,6 +71,10 @@ YAW=0
 # walk <who> <keys> <ms>: hold keys, echo "<horizontal displacement> <angle to camera forward deg> <anchor displacement>
 # <mid move_speed, sampled only while moving=1, else na> <worst frame ms during the hold (fps window), na if unknown>"
 # fp_move's hold is wall-clock: a frame stall (first walk after a load ran ~15 fps with 12 s frames) shortens the walk.
+# align: one short W tap so the body turns to the camera yaw before a measured walk (after a KO or a control
+# transfer the body faces anywhere; the turn-in-place at tip_turn rate ate most of a 2 s walk: 4080 b30 C05-INVALID
+# walk=7.67 moving ~90 deg off the look)
+align() { A fp_move w 1000 >/dev/null; sleep 1.6; }
 walk() { local p0 p1 a0 a1 ms2 sp st wm; p0=$(pos "$1"); a0=$(anchor); A fps reset >/dev/null; A fp_move "$2" "$3" >/dev/null
   ms2=$(awk -v m="$3" 'BEGIN{printf "%.2f", m/2000}'); sleep "$ms2"; st=$(A fp_move state)
   sp=$( [ "$(fld moving <<<"$st")" = 1 ] && fld move_speed <<<"$st"); sleep "$ms2"; sleep 0.6
@@ -206,12 +210,12 @@ A status | grep -q 'last_saved=kah-fp-c05' || echo "SETUP: save kah-fp-c05 not c
 
 # C05-KO: W held through a KO; no drive while down, same actor after, no stuck motion, fresh W walks
 IDK=$(ctl control_ids); look "$YAW" 0; A fp_move w 30000 >/dev/null; A protect "$SH" off >/dev/null; A ko "$SH" 10 >/dev/null
-if waitf 15 isko "$SH"; then DOWN=1; DMS=""; for _ in 1 2 3; do DMS+="$(mvs dm_active)/$(mvs is_down),"; sleep 0.7; done
+if waitf 15 isko "$SH"; then DOWN=1; DMS=""; for _ in 1 2 3; do MST=$(A fp_move state); DMS+="$(fld dm_active <<<"$MST")/$(fld is_down <<<"$MST"),"; sleep 0.7; done
   waitf 40 bash -c "! stobe-auto where '$SH' | grep -qE ' (KO|DEAD)( |\$)'"; WOKE=$?
 else DOWN=0; DMS=never_down; WOKE=1; fi
 A fp_move none >/dev/null; A protect "$SH" on >/dev/null; sleep 1.5; STK=$(still "$SH" 2); IDK2=$(ctl control_ids)
-mode on >/dev/null; look "$YAW" 0; read -r MK _ _ _ <<<"$(walk "$SH" w 2000)"
-ev="down=$DOWN dm_active/is_down_while_down=${DMS%,} woke=$((1-WOKE)) ids_same=$([ "$IDK" = "$IDK2" ] && echo 1 || echo 0) drift_after_release=$STK fresh_walk=$MK"
+mode on >/dev/null; look "$YAW" 0; align; read -r MK MKA _ _ <<<"$(walk "$SH" w 2000)"
+ev="down=$DOWN dm_active/is_down_while_down=${DMS%,} woke=$((1-WOKE)) ids_same=$([ "$IDK" = "$IDK2" ] && echo 1 || echo 0) drift_after_release=$STK fresh_walk=$MK ang=$MKA"
 if [ $DOWN = 0 ]; then row C05-KO FAIL "setup $SH never knocked out: $ev"; else
   ok=1; grep -qE '(^|,)1/' <<<"$DMS" && ok=0   # dm_active=1 while KO = still driven (is_down: evidence only)
   [ $WOKE = 0 ] && [ "$IDK" = "$IDK2" ] || ok=0; lt "$STK" "$STILL_MAX" || ok=0; ge "$MK" "$MOVE_MIN" || ok=0
@@ -233,8 +237,8 @@ FR=$(A faction "$MT" "$INVALID_FACTION"); NEWID=$(grep -o '#[0-9]*' <<<"$FR" | h
 waitf 3 bash -c '[ "$(stobe-auto fp_control state | grep -o "\bdirect=[0-9]" | cut -d= -f2)" = 0 ]'; REL=$?
 C5=$(A fp_control state); HC=$(fld controlled <<<"$C5"); sleep 2; SHD=$(d2 "$PS0" "$(pos "$SH")"); A fp_move none >/dev/null
 A fp_mode on >/dev/null; sleep 1; RE=$(fps fp_mode); HR=$(ctl controlled); TRANS=$(ctl_is "$SH" && echo 1 || echo 0)
-A select "$SH" >/dev/null; A fp_control take >/dev/null; mode on; REC=$?; look "$YAW" 0; read -r MI _ _ _ <<<"$(walk "$SH" w 2000)"
-ev="take_$MT=$((1-TM)) faction='$(cut -c1-60 <<<"$FR")' released=$((1-REL)) controlled_after=$HC $SH moved=$SHD | fp_on_again fp_mode=$RE controlled=$HR silent_transfer=$TRANS | explicit_take=$((1-REC)) walk=$MI"
+A select "$SH" >/dev/null; A fp_control take >/dev/null; mode on; REC=$?; look "$YAW" 0; align; read -r MI MIA _ _ <<<"$(walk "$SH" w 2000)"
+ev="take_$MT=$((1-TM)) faction='$(cut -c1-60 <<<"$FR")' released=$((1-REL)) controlled_after=$HC $SH moved=$SHD | fp_on_again fp_mode=$RE controlled=$HR silent_transfer=$TRANS | explicit_take=$((1-REC)) walk=$MI ang=$MIA"
 if [ $TM != 0 ] || [ -z "$NEWID" ] || grep -q ERROR <<<"$FR"; then row C05-INVALID FAIL "setup: $ev"; else
   ok=1; [ $REL = 0 ] && [ "$HC" = 0 ] && [ "$TRANS" = 0 ] && [ $REC = 0 ] || ok=0
   lt "$SHD" "$STILL_MAX" || ok=0; ge "$MI" "$MOVE_MIN" || ok=0; judge C05-INVALID $ok "$ev"; fi
@@ -253,7 +257,7 @@ judge C05-LOAD $ok "$ev"
 
 # C05-INTERIOR: walk into a wall inside a building, wall behind the camera -> third person collision-limited
 ui_clear; BL=""; for f in ${INTERIOR:-house shack bar shop hut tower home}; do BL=$(A buildings 1500 "$f" | grep -m1 'pos='); [ -n "$BL" ] && break; done
-BP=$(grep -o 'pos=[^ ]*' <<<"$BL" | cut -d= -f2 | tr ',' ' ')
+BP=$(grep -o 'pos=[^ ]*' <<<"$BL" | head -1 | cut -d= -f2 | tr ',' ' ')
 if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTERIOR:-house shack bar shop hut tower home}' within 1500 (set INTERIOR=<filter>)"; else
   A teleport "$SH" $BP >/dev/null; sleep 2; take "$SH" >/dev/null; A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye
   look "$YAW" 0; A fp_move w 12000 >/dev/null; WALL=0; PP=$(pos "$SH"); N=0
@@ -262,8 +266,9 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
   YB=$(awk -v y="$YAW" 'BEGIN{y+=3.14159; if(y>3.14159)y-=6.28318; printf "%.4f", y}')   # face away: the wall is behind
   look "$YB" 0; A fp_camera distance 12 >/dev/null; sleep 1.5; CI=$(A fp_camera state)
   BLK=$(fld blocked <<<"$CI"); AP=$(fld applied <<<"$CI"); TT=$(fld target <<<"$CI"); AD=$(fld actual_distance <<<"$CI")
+  PRB=$(A fp_camera probe | grep -o 'cam=.*')   # pull-back ray per collision mask (which group the wall is in)
   YAW=$YB; read -r MA _ _ _ <<<"$(walk "$SH" w 1500)"; A fp_camera distance 0 >/dev/null
-  ev="building='$(cut -c1-50 <<<"$BL")' wall_reached=$WALL | wall_behind target=$TT applied=$AP actual=$AD blocked=$BLK | walk_away=$MA"
+  ev="building='$(cut -c1-50 <<<"$BL")' wall_reached=$WALL | wall_behind target=$TT applied=$AP actual=$AD blocked=$BLK [$PRB] | walk_away=$MA"
   if [ $WALL = 0 ]; then row C05-INTERIOR FAIL "setup no wall reached walking 11 s: $ev"; else
     ok=1; [ "$BLK" = 1 ] && lt "$AP" "$TT" || ok=0
     awk -v a="$AD" -v p="$AP" 'BEGIN{d=a-p; if(d<0)d=-d; exit !(a!="" && d<.2)}' || ok=0

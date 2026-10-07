@@ -4573,6 +4573,7 @@ static void award_move_xp(void *pc, void *mv, float dt)
     g_guard_armed = 0;
 }
 
+static int combat_char_unconscious(void *pc);   /* kfp_combat_native.inc: medical KO flag */
 static void fp_movement(void *gw, float dt)
 {
     if (!g_fp_mode || !g_charmove_setdest) {
@@ -4586,13 +4587,17 @@ static void fp_movement(void *gw, float dt)
     /* While ragdolled (incl. a fall in progress) the physics owns the body -- our per-frame
      * move orders would drag it back onto walkable ground (that was the "pushed back" bug).
      * Stand the driver down and let the game land + get up on its own. */
-    if (g_is_down || g_fall_active || g_fall_rd != FALLRD_OFF) {
+    /* C05-KO (4080 b30): the KO sets the medical unconscious flag at once, but the prone state
+     * (4) and g_is_down follow only when the body has fallen; until then the standing branch
+     * below kept direct drive on a KO'd actor (dm_active=1 on the first KO sample). */
+    int ko_now = combat_char_unconscious(pc);
+    if (g_is_down || ko_now || g_fall_active || g_fall_rd != FALLRD_OFF) {
         InterlockedExchange(&g_dm_active, 0);
         InterlockedExchange(&g_face_active, 0);
         g_was_moving = 0; g_face_turning = 0;
         /* C05-KO: a hold that was direct-driving leaves MOVE_DIRECTION + desired motion
          * behind; clear them once (the fall driver owns currentMotion, so leave that). */
-        if (g_is_down && g_was_direct) {
+        if ((g_is_down || ko_now) && g_was_direct) {
             void *dmv = readable((void *)((uintptr_t)pc + CHAR_MOVEMENT), 8)
                 ? *(void **)((uintptr_t)pc + CHAR_MOVEMENT) : NULL;
             fp_mover_clear_direct(dmv, MV_MOVEMODE, MV_DESIREDMOTION, 0);
@@ -7080,7 +7085,8 @@ static void hooked_charmove_update(void *mv, float t)
     /* C05-KO: never force standing direct drive into a KO/crippled/down actor. */
     void *dpc = (drive && readable((void *)((uintptr_t)mv + MV_CHARACTER), 8))
         ? *(void **)((uintptr_t)mv + MV_CHARACTER) : NULL;
-    if (drive && !fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL, g_is_down,
+    int dko = g_is_down || (dpc && combat_char_unconscious(dpc));   /* KO flag leads the prone state */
+    if (drive && !fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL, dko,
                                 MV_MOVEMODE, MV_DESIREDMOTION, MV_CURRENT_MOTION)) {
         drive = 0;
         static int kol; if (kol++ < 8) logline("[control] direct drive stood down: actor down (prone=%d is_down=%d)",
@@ -7128,7 +7134,8 @@ static void hooked_charmove_update(void *mv, float t)
     /* Re-assert AFTER: the original just re-enabled combat locomotion mid-call.
      * This post-write is the one that actually wins the race -- unless the actor
      * went down INSIDE the update (C05-KO): then clear instead of forcing. */
-    if (drive && fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL, g_is_down,
+    if (drive && fp_drive_gate(mv, 1, dpc ? char_prone_state(dpc) : PS_NORMAL,
+                               g_is_down || (dpc && combat_char_unconscious(dpc)),
                                MV_MOVEMODE, MV_DESIREDMOTION, MV_CURRENT_MOTION))
         mv_force_direct(mv);
     /* facing lock: the original update turned the body toward the motion direction by
