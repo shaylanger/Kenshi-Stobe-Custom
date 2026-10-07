@@ -4666,6 +4666,11 @@ static void fp_down_trace(void *pc, int body_down, int ko)
     fp_down_sample(pc, ko, &s);
     if (body_down && !g_down_prev) {
         ++g_down_episodes;
+        /* Always one line per knockdown edge with the mover state (b34: a later save load crashed at
+         * exe+0x37f665 after a fling), whether or not the motion is cleared below. */
+        logline("[down] knockdown edge #%u: mover=%p cm=%.2f,%.2f,%.2f spd=%.2f mode=%d fall_rd=%d fall_active=%d ko=%d mask=0x%x prone=%d",
+                g_down_episodes, fp_char_mover(pc), s.cm.x, s.cm.y, s.cm.z, s.spd, s.mode, (int)g_fall_rd, (int)g_fall_active,
+                ko, (unsigned)s.mask, s.prone);
         int n = g_down_ring_n < 6 ? g_down_ring_n : 6;
         for (int i = 0; i < n; ++i) fp_down_log("pre", &g_down_ring[(g_down_ring_i + 6 - n + i) % 6]);
         g_down_trace_left = 12;
