@@ -3,18 +3,19 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 ~01:20, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
-- 5090: batch G (`C:\KenshiTestRuns\m50-5090-g`: DW8 partner-faction fix d1ac8cf, DW3 on a fresh load), then H chained
-  (`m50-5090-h/chain.sh`: DW10 live model; DeepInfra 402 from ~05:38 UTC 10-07, Shay topped up). Stobe 95B9D33A, KenshiFP ABEB8BF6.
-  Next: STOBE section D confirm wrapper (`STOBE-D-confirm.sh`, builder agent writing it).
-- 4080: KenshiFP 904DDE9B (C05-KO fling guard 5e96705, `fp_keys pick` 10a4a01, FF01 ammo evidence 37e34b7), fresh launch; batch 40
-  (`C:\KAHp4080-40.sh`, status `C:\KAH\w40.ps1`): control C01-C05 + controls K02 FF01. Runner = coordinator, lock rig4080.
-- Fixer: ticket 4 (K06 wih, K05-HOSTILE engages, K04/FB01 block, HUD01 sampling, K05-UNPROV own neutral NPC), handoff
-  `%TEMP%\claude\C--KenshiModding\kfp-fix-ticket4-handoff.md`.
+## Right now (2026-10-07 ~02:05, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
+- 5090: batch K (`C:\KenshiTestRuns\m50-5090-k`, list there): D86 (item 86 on Stobe 8B861ADE = 5396293 danger interrupt keeps
+  deal actions), FP stealth ST01-ST03 + control C01-C05 on KenshiFP FC16FF07 (stealth 1f6b884, `fp_keys movers` 929ff50,
+  natdiag 4b77123). Batches I/J logged (items 70/108, 94, 99, 101, 105 + DW1-DW10 confirmed and deleted).
+- 4080: KenshiFP 7B8175EF (stealth; FC16FF07 is quarantined there by Defender ML Bearfoos.B!ml, false positive), chain41b ->
+  batch 41 (`C:\KAH\fp\b4080-41.sh`, out `C:\KenshiTestRuns\fp-4080-41`, status `C:\KAH\w41.ps1`): controls K06 K04 FB01 FS01
+  K05 HUD01, stealth, control C01-C05; then bm09 (M09 loadouts, `fp-4080-m09`). Still to run: K02, FF01 (b40 lost the world
+  after C05-LOAD). Runner = coordinator, lock rig4080.
+- Open: C04-FALLBACK flaky native walk (diagnostics in, cause unproven), C05-LOAD (game out of the world after the load on the
+  4080 b40), item 87 (close at the next surrender run).
 - Gotcha: a detached WSL start must end with `& disown` and be checked with `ps` (m50 G first start never ran).
 - 4080 desktop is locked (LogonUI): KenshiFP test switch `fp_keys focus on` (fp-controls.sh uses it). Defender-probe each new DLL
   on the 4080 (copy to C:\KAH, Get-FileHash, wait 20 s, Test-Path + newest Get-MpThreatDetection).
-- Waiting on Shay: nothing.
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
