@@ -252,7 +252,7 @@ row_D101() {
   local s; s=$(date +%s)
   local NPC="${firsts[$((s % 8))]} ${lasts[$(((s / 8) % 8))]}"
   NPCQ=$(sq "$NPC")
-  local h tx td pe0 pe1 a_aff b_keys mode fights shape note_b=""
+  local h tx td pe0 pe1 a_aff b_keys mode fights live shape note_b=""
   pe0=$(pg_err_count)
   h=$(spawn_neutral "$NPC" 6) || setup_fail D101 "spawn failed"
   sleep 4; greet "$NPC"
@@ -267,8 +267,11 @@ row_D101() {
   # (b) a real fight: the server's attack rule writes his map (R4; retired when REL scores fights)
   mode=$(PSQLQ "SELECT value FROM general_settings WHERE id='SOCIAL_RELATIONSHIP_MODE'")
   fights=$(PSQLQ "SELECT value FROM general_settings WHERE id='RELATIONSHIP_FIGHTS_COUNT'")
-  if [ "$mode" = enabled ] || [ "$mode" = fights ] || [ "$fights" = false ] || [ "$fights" = 0 ]; then
-    note_b="(b) skipped: mode=$mode fights_count=${fights:-default}"; b_keys=skip
+  live=$(PSQLQ "SELECT value FROM general_settings WHERE id='SOCIAL_FIGHTS_LIVE'")
+  # stobeSocialIngestMode(): mode off + SOCIAL_FIGHTS_LIVE (default true) = fights; R4 is retired then (REL scores fights)
+  if [ "${mode:-off}" = off ] && [ "$live" != false ] && [ "$live" != 0 ]; then mode=fights; fi
+  if [ "$fights" = false ] || [ "$fights" = 0 ]; then
+    note_b="(b) skipped: fights_count=$fights"; b_keys=skip
   else
     PSQLQ "UPDATE core_npc_master SET extended_data='[]'::jsonb WHERE LOWER(name)=LOWER('$NPCQ')" >/dev/null
     heal_start "$PLAYER"
@@ -280,19 +283,23 @@ row_D101() {
       since_stobe | grep -a -F "[EVENT] combat: $NPC" | grep -a -q . && break
     done
     b_keys=""
-    for i in $(seq 1 15); do
+    if [ "$mode" = enabled ] || [ "$mode" = fights ]; then
+      # REL scores the fight (R4 retired): the '[]' row must come out a valid object with no array-path errors
+      sleep 10; b_keys="rel:$(PSQLQ "SELECT jsonb_typeof(extended_data) FROM core_npc_master WHERE LOWER(name)=LOWER('$NPCQ') LIMIT 1")"
+    else for i in $(seq 1 15); do
       b_keys=$(PSQLQ "SELECT jsonb_typeof(extended_data)||':'||COALESCE((SELECT string_agg(k||'='||(v->>'aff'), ',') FROM jsonb_each(CASE WHEN jsonb_typeof(extended_data->'relationships')='object' THEN extended_data->'relationships' ELSE '{}'::jsonb END) e(k,v)),'none') FROM core_npc_master WHERE LOWER(name)=LOWER('$NPCQ') LIMIT 1")
       echo "$b_keys" | grep -q -i "^object:.*$PLAYER=" && break; sleep 3
-    done
+    done; fi
     heal_stop; stobe-say speed 0 >/dev/null
-    note_b="(b) fight wrote: $b_keys; combat events: $(since_stobe | grep -a -F "[EVENT] combat: $NPC" | grep -a -c .)"
+    note_b="(b) mode=$mode fight wrote: $b_keys; combat events: $(since_stobe | grep -a -F "[EVENT] combat: $NPC" | grep -a -c .)"
   fi
   stobe-auto ko "$h" 900 >/dev/null 2>&1; put_away "$h"
   pe1=$(pg_err_count)
   log "$note_b; postgres array-path errors $pe0 -> $pe1"
   if [ "${shape}" != "object/object" ]; then verdict D101 "FAIL new NPC row created with extended_data/metadata '$shape' (want object/object)"
   elif [ "$a_aff" != "object:37" ]; then verdict D101 "FAIL set-relation on a '[]' row gave '$a_aff' (want object:37)"
-  elif [ "$b_keys" != skip ] && ! echo "$b_keys" | grep -q -i "^object:.*$PLAYER="; then verdict D101 "FAIL $note_b"
+  elif [ "${b_keys#rel:}" != "$b_keys" ] && [ "$b_keys" != rel:object ]; then verdict D101 "FAIL $note_b (want rel:object)"
+  elif [ "$b_keys" != skip ] && [ "${b_keys#rel:}" = "$b_keys" ] && ! echo "$b_keys" | grep -q -i "^object:.*$PLAYER="; then verdict D101 "FAIL $note_b"
   elif [ "${pe1:-0}" -gt "${pe0:-0}" ]; then verdict D101 "FAIL $(( pe1 - pe0 )) new postgres 'path element at position 1' errors"
   else verdict D101 "PASS '$NPC' new row object/object; '[]' row set-relation -> aff 37; ${note_b:0:110}; no new pg errors"; fi
 }
