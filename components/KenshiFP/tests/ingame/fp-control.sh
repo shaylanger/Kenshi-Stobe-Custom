@@ -123,9 +123,27 @@ still() { local p0; p0=$(pos "$1"); sleep "$2"; d2 "$p0" "$(pos "$1")"; }
 # pick_yaw "<who>[|<who2>]" <label>: with two walkers (C04-TAKE: the walk continues on the mate after the transfer),
 # the heading must be clear on BOTH walk lines, each against the other characters (4080 b32/b33 C04-TAKE: the yaw
 # was picked for the player only and the mate stopped after 17-46 units).
+# Obstacles = EVERY character within 600 of the player (`chars`), not only player/mate/target: m50 (5090 p, 4080 b42)
+# C01 picked yaw -2.7489 past the idle 4th squad member Tassilo (33 units off Axima, 21 off the walk line, not in the
+# old list): the FP walk bumped him, slid 24-25 deg off and covered 49-53 vs the open-ground TP walk 102-109 (C02
+# ratio 2.04-2.10 on both rigs, a test-setup failure, not FP movement).
+others() { A chars 600 | tr '|' '\n' | sed 's/^[0-9]* within [0-9.]*: //' | awk -v w="$1" '{ n=$0; sub(/^ +/,"",n); sub(/ #.*/,"",n)
+  if (n==w) next; if (match($0,/pos=-?[0-9.]+,-?[0-9.]+,-?[0-9.]+/)) printf "%s;", substr($0,RSTART+4,RLENGTH-4) }'; }
+# clear_bystanders: every other character within 100 of $SH (not $SH/$MT/$TG, not the player) is teleported beside the
+# player (when the player stands >= 100 away): with Tassilo 33 units off Axima no heading had more than ~30 clearance.
+clear_bystanders() { local l s e n p id ref rp
+  l=$(A chars 600 | tr '|' '\n' | sed 's/^[0-9]* within [0-9.]*: //')
+  ref=$(grep ' dist=0\.0 ' <<<"$l" | head -1); rp=$(grep -o 'pos=[-0-9.,]*' <<<"$ref" | cut -d= -f2 | tr ',' ' ')
+  ref=$(grep -o '#[0-9]*/[0-9]*' <<<"$ref" | head -1); s=$(pos "$SH")
+  [ -n "$ref" ] && [ -n "$s" ] && ge "$(d2 "$s" "$rp")" 100 || return 0
+  while IFS= read -r e; do n=$(sed 's/^ *//; s/ #.*//; s/ \[.*//' <<<"$e"); id=$(grep -o '#[0-9]*/[0-9]*' <<<"$e" | head -1)
+    case "$n" in ""|"$SH"|"$MT"|"$TG") continue;; esac; [ -z "$id" ] || [ "$id" = "$ref" ] && continue
+    p=$(grep -o 'pos=[-0-9.,]*' <<<"$e" | cut -d= -f2 | tr ',' ' '); lt "$(d2 "$s" "$p")" 100 || continue
+    A teleport "$id" "$ref" 20 >/dev/null; echo "SETUP bystander $n ($id) was $(d2 "$s" "$p") from $SH: moved beside the player" >> "$LOG"
+  done <<<"$l"; }
 pick_yaw() { local p o c r w wl="" ol=""
   local IFS0=$IFS; IFS="|"; set -f; local ws=($1); IFS=$IFS0; set +f
-  for w in "${ws[@]}"; do p=$(pos "$w" | tr ' ' ','); o=""
+  for w in "${ws[@]}"; do p=$(pos "$w" | tr ' ' ','); o=$(others "$w")
     for c in "$SH" "$MT" "$TG"; do [ "$c" = "$w" ] && continue; o+="$(pos "$c" | tr ' ' ',');"; done
     wl+="$p|"; ol+="$o|"; done
   r=$(awk -v wl="$wl" -v ol="$ol" 'BEGIN{nw=split(wl,W,"|"); split(ol,O,"|"); best=-1; by=0
@@ -203,6 +221,7 @@ A fp_control state | grep -q 'take_presses=' || setup_fail "KenshiFP has no fp_c
 # speed hold: the game paused itself (squad event) mid-run in b27 and froze a native walk at seconds=0.0
 A speed 1 hold >/dev/null; A fp_move none >/dev/null
 ui_guard_setup; ui_clear
+clear_bystanders
 take "$SH" || setup_fail "could not take $SH ($(A fp_control state))"
 pick_yaw "$SH" C01; look "$YAW" 0
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye || setup_fail "camera never at eye ($(camsum))"
