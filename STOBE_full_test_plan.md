@@ -13,11 +13,9 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 
 | # | Bug | Fix / state |
 |---|---|---|
-| 70, 108 | template-name relationship keys (Dust Bandit Bowman, Berserker) came back via the save-follow restore / new fights | fixed live (197d921, 945dfe1: map reads/writes drop template keys, `data/npc_generic_templates.json`) |
 | 86 | game re-reported `Initiated attack` during a truce, so a paid surrender turned BREACHED_PLAYER | fixed live (f98b88e, e9f8598: a breach needs real evidence within 8 s; older-save load cancels later deals) |
 | 87 | Dust King: no initiative check (his attack was stood down by another personal-fight guard) | test procedure fixed; covered by 88 + 61 PASS m18 |
 | 94 | `stobe-reset-npc --restore` wrote "shay" instead of "Shay" | fixed (tool) |
-| 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (goal code, in Stobe.dll since m49: carried goods + nearest stocking trader) |
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
 
