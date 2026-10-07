@@ -14328,6 +14328,76 @@ static unsigned int g_npcPanelSpeakerSerial = 0;
 static std::string g_npcPanelSpeakerName;
 static DWORD g_npcPanelLastRequestTick = 0;
 static const DWORD kNpcPanelRefreshMs = 10000;
+static bool g_npcPanelPortraitDisabled = false;
+
+// The target's portrait region in PortraitManager's atlas texture (same source as the
+// portrait sync). Only reads the manager; asks it to (re)render the portrait when
+// render=true (open / Refresh / target change), not on the 10 s refresh.
+static bool NpcPanelPortraitUnsafe(Character *npc, bool render, std::string &texOut,
+                                   int &l, int &t, int &w, int &h, std::string &reason) {
+  try {
+    hand handle = npc->getHandle();
+    if (!handle.isValid()) {
+      reason = "invalid_handle";
+      return false;
+    }
+    PortraitManager *pm = PortraitManager::getInstance();
+    if (!pm || (uintptr_t)pm <= 0x1000) {
+      reason = "portrait_manager_unavailable";
+      return false;
+    }
+    auto it = pm->characterPortraits.find(handle);
+    if (render || it == pm->characterPortraits.end()) {
+      pm->getPortrait(handle);
+      pm->updatePortraitImage(handle);
+      it = pm->characterPortraits.find(handle);
+    }
+    if (it == pm->characterPortraits.end()) {
+      reason = "portrait_map_missing";
+      return false;
+    }
+    PortraitImage *img = it->second.second;
+    if (!img || (uintptr_t)img <= 0x1000) {
+      reason = "portrait_image_invalid";
+      return false;
+    }
+    if (!ResolvePortraitImageRegion(pm, img, l, t, w, h)) {
+      reason = "resolve_region_failed";
+      return false;
+    }
+    Ogre::Texture *texture = pm->texture.getPointer();
+    texOut = texture && (uintptr_t)texture > 0x1000 ? std::string(texture->getName().c_str())
+                                                     : std::string();
+    if (texOut.empty())
+      texOut = img->textureName.empty() ? pm->textureName : img->textureName;
+    if (texOut.empty()) {
+      reason = "no_texture_name";
+      return false;
+    }
+    return true;
+  } catch (...) {
+    reason = "exception";
+    return false;
+  }
+}
+
+static bool NpcPanelPortrait(Character *npc, bool render, std::string &texOut, int &l,
+                             int &t, int &w, int &h, std::string &reason) {
+  if (g_npcPanelPortraitDisabled) {
+    reason = "disabled_after_fault";
+    return false;
+  }
+  if (!npc || (uintptr_t)npc <= 0x1000) {
+    reason = "not_visible";
+    return false;
+  }
+  __try {
+    return NpcPanelPortraitUnsafe(npc, render, texOut, l, t, w, h, reason);
+  } __except (PortraitSehFilter(GetExceptionCode())) {
+    g_npcPanelPortraitDisabled = true;
+    return false;
+  }
+}
 
 static void NpcPanelSend(GameWorld *world, const char *why, bool showLoading) {
   if (g_npcPanelTargetSerial == 0) {
@@ -14363,6 +14433,7 @@ static void NpcPanelSend(GameWorld *world, const char *why, bool showLoading) {
                      EscapeJSON(target ? activity : std::string("")) +
                      "\",\"live_faction\":\"" + EscapeJSON(faction) +
                      "\",\"trader\":" + (trader ? "true" : "false") +
+                     ",\"why\":\"" + EscapeJSON(why) + "\"" +
                      ",\"key\":\"" + EscapeJSON(key) + "\"}";
   g_npcPanelLastRequestTick = GetTickCount();
   if (showLoading)
@@ -14370,6 +14441,12 @@ static void NpcPanelSend(GameWorld *world, const char *why, bool showLoading) {
         g_npcPanelTargetName + " serial=" + serial + " speaker=" +
         g_npcPanelSpeakerName + " visible=" + (target ? "1" : "0"));
   Stobe::UI::RequestNpcPanel(key, g_npcPanelTargetName, json, showLoading);
+  std::string tex, reason;
+  int pl = 0, pt = 0, pw = 0, ph = 0;
+  bool havePortrait = NpcPanelPortrait(target, showLoading, tex, pl, pt, pw, ph, reason);
+  if (g_npcPanelPortraitDisabled && reason.empty())
+    reason = "portrait_seh";
+  Stobe::UI::SetNpcPanelPortrait(havePortrait, tex, pl, pt, pw, ph, reason);
 }
 
 static bool NpcPanelOpenFor(GameWorld *world, Character *speaker, Character *target,
@@ -14605,6 +14682,7 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
       return "open=1 key=" + Stobe::UI::NpcPanelKey() +
              " gen=" + ToString(Stobe::UI::NpcPanelGeneration()) +
              " loaded=" + (text.empty() ? std::string("0") : std::string("1")) +
+             " " + Stobe::UI::NpcPanelStatus() +
              " text=" + NpcPanelOneLine(text);
     }
     return "usage: npcinfo <open <target> [speaker]|chat|read|refresh|close>";

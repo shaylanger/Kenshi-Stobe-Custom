@@ -10,6 +10,7 @@
 #include <mygui/MyGUI_Delegate.h>
 #include <mygui/MyGUI_EditBox.h>
 #include <mygui/MyGUI_Gui.h>
+#include <mygui/MyGUI_ImageBox.h>
 #include <mygui/MyGUI_ListBox.h>
 #include <mygui/MyGUI_TextBox.h>
 #include <mygui/MyGUI_Window.h>
@@ -441,11 +442,14 @@ void CreateAiNpcInfoUI() {
 }
 
 // ---------------------------------------------------------------- NPC info panel
-// Compact, read-only view of one NPC as the speaking squad character knows them
-// (ai_npcs.php action player_view: no LLM call). Requests run on a worker thread;
-// a reply is shown only if it carries the newest generation and the key
-// ("<target serial>|<speaker>") still on screen, so a late answer for an older
-// target never overwrites the current one.
+// Biography card of one NPC as the speaking squad character knows them
+// (ai_npcs.php action player_view). Header: in-game portrait + name, job, faction,
+// looks, relationship, how often you talked; body (scrolling list): About them,
+// What you've learned, Dealings with you, Right now. Requests run on a worker
+// thread in two phases: phase 1 never calls the LLM; if the server says the bio is
+// stale (new dialogue since the cached one) phase 2 asks again with bio=1 and the
+// card is filled when it arrives. A reply is shown only if it carries the newest
+// generation and the key ("<target serial>|<speaker>") still on screen.
 MyGUI::Window *g_npcPanelWindow = nullptr;
 MyGUI::ListBox *g_npcPanelText = nullptr;
 volatile LONG g_npcPanelGeneration = 0;
@@ -455,25 +459,57 @@ bool g_npcPanelOpenRequest = false;
 bool g_npcPanelRefreshRequest = false;
 
 namespace {
+MyGUI::ImageBox *g_npcPanelPortrait = nullptr;
+MyGUI::TextBox *g_npcPanelInitial = nullptr;
+MyGUI::TextBox *g_npcPanelName = nullptr;
+MyGUI::TextBox *g_npcPanelHeader[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+std::string g_npcPanelPortraitTex;    // texture shown now ("" = fallback initial)
+std::string g_npcPanelPortraitCoord;  // "l,t,w,h" shown now
+std::string g_npcPanelBioState;       // empty|cached|pending|updated (last shown reply)
+
 struct NpcPanelTask {
   std::string json;
   std::string key;
   LONG generation;
 };
 
+void QueueNpcPanelReply(const NpcPanelTask *task, const std::string &payload) {
+  QueueUiCommand("SET_NPCPANEL_TEXT", ToString((int)task->generation) + "\n" +
+                                          task->key + "\n" + payload);
+}
+
+// Reply payload: the server JSON, or "!<message>" when there is no usable answer.
+std::string NpcPanelFetch(const std::string &json) {
+  std::string response = PostToStobeWithResponse(L"/ai_npcs/player_view", json);
+  if (!JsonReadField(response, "text").empty()) {
+    return response;
+  }
+  std::string error = JsonReadField(response, "error");
+  return "!" + (response.empty() ? std::string("Unable to reach the Stobe server.")
+                                 : (error.empty() ? std::string("The server returned an unreadable answer.")
+                                                  : error));
+}
+
 DWORD WINAPI NpcPanelThread(LPVOID lpParam) {
   NpcPanelTask *task = static_cast<NpcPanelTask *>(lpParam);
-  std::string response =
-      PostToStobeWithResponse(L"/ai_npcs/player_view", task->json);
-  std::string content = JsonReadField(response, "text");
-  if (content.empty()) {
-    std::string error = JsonReadField(response, "error");
-    content = response.empty() ? "Unable to reach the Stobe server."
-                               : (error.empty() ? "The server returned an unreadable answer."
-                                                : error);
+  std::string reply = NpcPanelFetch(task->json);
+  QueueNpcPanelReply(task, reply);
+  // Phase 2: the bio is stale and the card is still the same request -> let the
+  // server write the new bio (one LLM call, a few seconds) and show it.
+  if (!reply.empty() && reply[0] != '!' && JsonReadField(reply, "bio_stale") == "1" &&
+      task->generation == g_npcPanelGeneration) {
+    std::string json = task->json;
+    size_t brace = json.find_last_of('}');
+    if (brace != std::string::npos) {
+      json.insert(brace, ",\"bio\":1");
+      std::string second = NpcPanelFetch(json);
+      if (!second.empty() && second[0] != '!') {
+        QueueNpcPanelReply(task, second);
+      } else {
+        Log("NPC_PANEL_WARN: bio update failed: " + second.substr(0, 160));
+      }
+    }
   }
-  QueueUiCommand("SET_NPCPANEL_TEXT", ToString((int)task->generation) + "\n" +
-                                          task->key + "\n" + content);
   delete task;
   return 0;
 }
@@ -489,6 +525,23 @@ void OnNpcPanelWindowButtonPressed(MyGUI::Window *sender,
   }
 }
 
+MyGUI::TextBox *NpcPanelLabel(MyGUI::Widget *parent, int left, int top, int width,
+                              int height, const char *name) {
+  MyGUI::TextBox *t = parent->createWidget<MyGUI::TextBox>(
+      "Kenshi_TextboxStandardText", MyGUI::IntCoord(left, top, width, height),
+      MyGUI::Align::Left | MyGUI::Align::Top | MyGUI::Align::HStretch, name);
+  if (t) {
+    t->setTextAlign(MyGUI::Align::Left | MyGUI::Align::VCenter);
+  }
+  return t;
+}
+
+void SetLabel(MyGUI::TextBox *t, const std::string &text) {
+  if (t) {
+    t->setCaption(WideFromUtf8(SanitizeUiText(text)).c_str());
+  }
+}
+
 void EnsureNpcPanelWindow() {
   if (g_npcPanelWindow) {
     return;
@@ -498,7 +551,7 @@ void EnsureNpcPanelWindow() {
     return;
   }
   g_npcPanelWindow = gui->createWidgetReal<MyGUI::Window>(
-      "Kenshi_WindowCX", 0.68f, 0.10f, 0.30f, 0.62f, MyGUI::Align::Default,
+      "Kenshi_WindowCX", 0.60f, 0.08f, 0.36f, 0.72f, MyGUI::Align::Default,
       "Popup", "Stobe_NpcPanelWindow");
   if (!g_npcPanelWindow) {
     return;
@@ -510,19 +563,85 @@ void EnsureNpcPanelWindow() {
   if (!client) {
     return;
   }
-  g_npcPanelText = client->createWidgetReal<MyGUI::ListBox>(
-      "Kenshi_ListBox", 0.03f, 0.02f, 0.94f, 0.84f, MyGUI::Align::Stretch,
-      "Stobe_NpcPanelText");
-  MyGUI::Button *refresh = client->createWidgetReal<MyGUI::Button>(
-      "Kenshi_Button1", 0.03f, 0.88f, 0.34f, 0.09f,
+  // Pixel layout from the client size so the header keeps its shape at any resolution.
+  const int cw = (std::max)(320, client->getWidth());
+  const int ch = (std::max)(360, client->getHeight());
+  const int pad = (std::max)(8, cw / 40);
+  const int lineH = (std::max)(20, ch / 34);
+  const int nameH = lineH + lineH / 2;
+  const int headerH = nameH + 5 * lineH + 4;
+  const int portrait = headerH;
+  // No portrait: the name's initial, large, in the same square.
+  g_npcPanelInitial = client->createWidget<MyGUI::TextBox>(
+      "Kenshi_TextboxStandardText", MyGUI::IntCoord(pad, pad, portrait, portrait),
+      MyGUI::Align::Left | MyGUI::Align::Top, "Stobe_NpcPanelInitial");
+  if (g_npcPanelInitial) {
+    g_npcPanelInitial->setTextAlign(MyGUI::Align::Center);
+    g_npcPanelInitial->setFontName("Kenshi_StandardFont_Large");
+  }
+  g_npcPanelPortrait = client->createWidget<MyGUI::ImageBox>(
+      "ImageBox", MyGUI::IntCoord(pad, pad, portrait, portrait),
+      MyGUI::Align::Left | MyGUI::Align::Top, "Stobe_NpcPanelPortrait");
+  if (g_npcPanelPortrait) {
+    g_npcPanelPortrait->setVisible(false);
+  }
+  const int hx = pad + portrait + pad;
+  const int hw = (std::max)(120, cw - hx - pad);
+  g_npcPanelName = NpcPanelLabel(client, hx, pad, hw, nameH, "Stobe_NpcPanelName");
+  if (g_npcPanelName) {
+    g_npcPanelName->setFontName("Kenshi_StandardFont_Large");
+  }
+  for (int i = 0; i < 5; ++i) {
+    g_npcPanelHeader[i] = NpcPanelLabel(client, hx, pad + nameH + i * lineH, hw, lineH,
+                                        ("Stobe_NpcPanelHeader" + ToString(i)).c_str());
+  }
+  const int bodyTop = pad + headerH + pad;
+  const int btnH = (std::max)(30, ch / 14);
+  const int bodyH = (std::max)(80, ch - bodyTop - btnH - 2 * pad);
+  g_npcPanelText = client->createWidget<MyGUI::ListBox>(
+      "Kenshi_ListBox", MyGUI::IntCoord(pad, bodyTop, cw - 2 * pad, bodyH),
+      MyGUI::Align::Stretch, "Stobe_NpcPanelText");
+  const int btnW = (cw - 3 * pad) / 3;
+  MyGUI::Button *refresh = client->createWidget<MyGUI::Button>(
+      "Kenshi_Button1", MyGUI::IntCoord(pad, ch - pad - btnH, btnW, btnH),
       MyGUI::Align::Bottom | MyGUI::Align::Left, "Stobe_NpcPanelRefreshBtn");
   refresh->setCaption(WideFromUtf8(T("Refresh")).c_str());
   refresh->eventMouseButtonClick += MyGUI::newDelegate(OnNpcPanelRefreshClick);
-  MyGUI::Button *close = client->createWidgetReal<MyGUI::Button>(
-      "Kenshi_Button1", 0.63f, 0.88f, 0.34f, 0.09f,
+  MyGUI::Button *close = client->createWidget<MyGUI::Button>(
+      "Kenshi_Button1", MyGUI::IntCoord(cw - pad - btnW, ch - pad - btnH, btnW, btnH),
       MyGUI::Align::Bottom | MyGUI::Align::Right, "Stobe_NpcPanelCloseBtn");
   close->setCaption(WideFromUtf8(T("Close")).c_str());
   close->eventMouseButtonClick += MyGUI::newDelegate(OnNpcPanelCloseClick);
+}
+
+void ClearNpcPanelHeader(const std::string &title) {
+  SetLabel(g_npcPanelName, title);
+  for (int i = 0; i < 5; ++i) {
+    SetLabel(g_npcPanelHeader[i], "");
+  }
+  std::string initial = title.empty() ? std::string("?") : title.substr(0, 1);
+  SetLabel(g_npcPanelInitial, initial);
+}
+
+bool SetNpcPanelImageUnsafe(MyGUI::ImageBox *box, const std::string &texture, int left,
+                            int top, int width, int height) {
+  try {
+    box->setImageInfo(texture, MyGUI::IntCoord(left, top, width, height),
+                      MyGUI::IntSize(width, height));
+    box->setImageIndex(0);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+bool SetNpcPanelImageSafe(MyGUI::ImageBox *box, const std::string &texture, int left,
+                          int top, int width, int height) {
+  __try {
+    return SetNpcPanelImageUnsafe(box, texture, left, top, width, height);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
 }
 } // namespace
 
@@ -530,6 +649,48 @@ bool IsNpcPanelOpen() { return g_npcPanelWindow != nullptr; }
 std::string NpcPanelKey() { return g_npcPanelKey; }
 std::string NpcPanelText() { return g_npcPanelLastText; }
 int NpcPanelGeneration() { return (int)g_npcPanelGeneration; }
+std::string NpcPanelStatus() {
+  return std::string("portrait=") + (g_npcPanelPortraitTex.empty() ? "0" : "1") +
+         " tex=" + (g_npcPanelPortraitTex.empty() ? std::string("-") : g_npcPanelPortraitTex) +
+         " bio_state=" + (g_npcPanelBioState.empty() ? std::string("-") : g_npcPanelBioState);
+}
+
+void SetNpcPanelPortrait(bool ok, const std::string &texture, int left, int top,
+                         int width, int height, const std::string &reason) {
+  static bool s_disabled = false;
+  if (!g_npcPanelWindow || !g_npcPanelPortrait) {
+    return;
+  }
+  std::string coord = ToString(left) + "," + ToString(top) + "," + ToString(width) +
+                      "," + ToString(height);
+  if (ok && !s_disabled && !texture.empty() && width > 0 && height > 0) {
+    if (texture == g_npcPanelPortraitTex && coord == g_npcPanelPortraitCoord) {
+      return; // unchanged
+    }
+    if (SetNpcPanelImageSafe(g_npcPanelPortrait, texture, left, top, width, height)) {
+      g_npcPanelPortrait->setVisible(true);
+      if (g_npcPanelInitial) {
+        g_npcPanelInitial->setVisible(false);
+      }
+      g_npcPanelPortraitTex = texture;
+      g_npcPanelPortraitCoord = coord;
+      Log("NPC_PANEL: portrait=1 tex=" + texture + " coord=" + coord);
+      return;
+    }
+    s_disabled = true; // a fault once: fallback for the rest of the session
+    Log("NPC_PANEL_WARN: portrait image fault; portraits off for this session");
+  }
+  if (!g_npcPanelPortraitTex.empty() || g_npcPanelPortraitCoord != "-") {
+    Log("NPC_PANEL: portrait=0 reason=" +
+        (s_disabled ? std::string("disabled") : (reason.empty() ? std::string("none") : reason)));
+  }
+  g_npcPanelPortrait->setVisible(false);
+  if (g_npcPanelInitial) {
+    g_npcPanelInitial->setVisible(true);
+  }
+  g_npcPanelPortraitTex.clear();
+  g_npcPanelPortraitCoord = "-";
+}
 
 void RequestNpcPanel(const std::string &key, const std::string &title,
                      const std::string &json, bool showLoading) {
@@ -541,6 +702,10 @@ void RequestNpcPanel(const std::string &key, const std::string &title,
   const bool targetChanged = key != g_npcPanelKey;
   g_npcPanelKey = key;
   LONG generation = InterlockedIncrement(&g_npcPanelGeneration);
+  if (targetChanged) {
+    ClearNpcPanelHeader(title);
+    g_npcPanelBioState.clear();
+  }
   if (targetChanged || showLoading) {
     g_npcPanelWindow->setCaption(WideFromUtf8(T("NPC Info") + ": " + title).c_str());
     g_npcPanelLastText.clear();
@@ -568,14 +733,40 @@ void SetNpcPanelText(const std::string &data) {
         " current_key=" + g_npcPanelKey);
     return;
   }
-  std::string text = SanitizeUiText(data.substr(b + 1));
-  if (text == g_npcPanelLastText) {
+  std::string payload = data.substr(b + 1);
+  if (!payload.empty() && payload[0] == '!') {
+    std::string error = SanitizeUiText(payload.substr(1));
+    g_npcPanelLastText = error;
+    SetReadOnlyText(g_npcPanelText, error);
+    Log("NPC_PANEL_WARN: no card key=" + key + " error=" + error.substr(0, 160));
+    return;
+  }
+  std::string text = SanitizeUiText(JsonReadField(payload, "text"));
+  std::string bioState = JsonReadField(payload, "bio_state");
+  if (text == g_npcPanelLastText && bioState == g_npcPanelBioState) {
     return; // periodic refresh, nothing changed: keep the scroll position
   }
   g_npcPanelLastText = text;
-  SetReadOnlyText(g_npcPanelText, text);
+  g_npcPanelBioState = bioState;
+  std::string name = JsonReadField(payload, "name");
+  SetLabel(g_npcPanelName, name);
+  if (!name.empty()) {
+    SetLabel(g_npcPanelInitial, name.substr(0, 1));
+  }
+  SetLabel(g_npcPanelHeader[0], T("Job") + ": " + JsonReadField(payload, "job"));
+  SetLabel(g_npcPanelHeader[1], T("Faction") + ": " + JsonReadField(payload, "faction"));
+  SetLabel(g_npcPanelHeader[2], JsonReadField(payload, "race_line"));
+  std::string relLine = JsonReadField(payload, "relation_line");
+  if (!relLine.empty()) {
+    relLine[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(relLine[0])));
+  }
+  SetLabel(g_npcPanelHeader[3], JsonReadField(payload, "relation_label") +
+                                    (relLine.empty() ? std::string("") : " - " + relLine));
+  SetLabel(g_npcPanelHeader[4], JsonReadField(payload, "talked_line"));
+  std::string body = JsonReadField(payload, "body");
+  SetReadOnlyText(g_npcPanelText, body.empty() ? text : body);
   Log("NPC_PANEL: shown key=" + key + " gen=" + ToString(generation) +
-      " chars=" + ToString((int)text.size()));
+      " chars=" + ToString((int)text.size()) + " bio_state=" + bioState);
 }
 
 void CloseNpcPanelUI() {
@@ -585,6 +776,15 @@ void CloseNpcPanelUI() {
   const bool wasOpen = g_npcPanelWindow != nullptr;
   g_npcPanelWindow = nullptr;
   g_npcPanelText = nullptr;
+  g_npcPanelPortrait = nullptr;
+  g_npcPanelInitial = nullptr;
+  g_npcPanelName = nullptr;
+  for (int i = 0; i < 5; ++i) {
+    g_npcPanelHeader[i] = nullptr;
+  }
+  g_npcPanelPortraitTex.clear();
+  g_npcPanelPortraitCoord.clear();
+  g_npcPanelBioState.clear();
   g_npcPanelKey.clear();
   g_npcPanelLastText.clear();
   g_npcPanelRefreshRequest = false;

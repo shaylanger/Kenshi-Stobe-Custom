@@ -41,6 +41,12 @@ void CloseNpcPanelUI();
 std::string NpcPanelKey();
 std::string NpcPanelText();
 int NpcPanelGeneration();
+// "portrait=0|1 tex=<texture|-> bio_state=<state|->" for the harness read
+std::string NpcPanelStatus();
+// Game thread: the target's in-game portrait (PortraitManager atlas texture + region),
+// re-resolved on every request; ok=false shows the fallback (name initial).
+void SetNpcPanelPortrait(bool ok, const std::string &texture, int left, int top,
+                         int width, int height, const std::string &reason);
 
 void OnAiNpcInfoNPCSelect(MyGUI::ListBox *sender, size_t index);
 void OnAiNpcInfoWindowButtonPressed(MyGUI::Window *sender,
