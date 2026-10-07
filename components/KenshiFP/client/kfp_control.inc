@@ -1,4 +1,7 @@
-static void fp_control_release_actor(void *pc);
+static void fp_control_release_actor(void *pc,int live);
+static int fp_char_in_squad(void *gw,void *pc);
+/* release the controlled actor's WASD drive; writes only if it is still a live squad member */
+#define FP_CONTROL_RELEASE(gw) fp_control_release_actor(g_fp_control_actor,fp_char_in_squad((gw),g_fp_control_actor))
 /* Controlled actor identity is independent of inspected vanilla selection.
  * Shared first_player_char/g_player_pc retain their existing semantics. */
 static uint32_t g_fp_control_ids[5];
@@ -15,10 +18,10 @@ static int kah_move_key(int bit) {
     if ((LONG)(GetTickCount()-(DWORD)g_kah_move_until)>=0) { InterlockedExchange(&g_kah_move_keys,0); return 0; }
     return 1;
 }
-static int fp_control_pin(void *pc) {
+static int fp_control_pin(void *gw,void *pc) {
     if (!char_valid(pc) || !readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) return 0;
     if (g_fp_control_pinned && memcmp(g_fp_control_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20))
-        fp_control_release_actor(g_fp_control_actor);
+        FP_CONTROL_RELEASE(gw);
     memcpy(g_fp_control_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20);
     g_fp_control_pinned=1; g_fp_control_actor=pc;
     return 1;
@@ -27,7 +30,7 @@ static void *fp_controlled_char(void *gw) {
     if (!g_fp_mode) return first_player_char(gw);
     if (!g_fp_control_pinned) {
         void *pc=first_player_char(gw);
-        return fp_control_pin(pc)?pc:NULL;
+        return fp_control_pin(gw,pc)?pc:NULL;
     }
     if (!readable((void *)((uintptr_t)gw+GW_PLAYER),8)) return NULL;
     void *pi=*(void **)((uintptr_t)gw+GW_PLAYER);
@@ -54,7 +57,7 @@ static int fp_control_take_selected(void *gw) {
      * explicit take-control must refuse that fallback. */
     if (memcmp((void *)((uintptr_t)pi+PI_SELECTED_CHAR+HAND_IDS),
                (void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20)) return 0;
-    return fp_control_pin(pc);
+    return fp_control_pin(gw,pc);
 }
 /* 1 = pc is one of gw's live player characters. Pointer compare only: pc itself is
  * never dereferenced, so a stale (freed) character pointer is safe to ask about. */
@@ -110,15 +113,15 @@ static void fp_control_tick(void *gw) {
     void *selected=first_player_char(gw);
     if (!selected) {
         fp_head_forget_world();   /* before anything can "restore" a freed head */
-        fp_control_release_actor(g_fp_control_actor);
+        fp_control_release_actor(g_fp_control_actor,0);   /* teardown: forget, never write (b27b) */
         g_fp_mode=0; g_fp_world_seen=0; g_fp_control_pinned=0; g_fp_control_actor=NULL;
         return;
     }
-    if (!g_fp_mode) fp_control_release_actor(g_fp_control_actor);
+    if (!g_fp_mode) FP_CONTROL_RELEASE(gw);
     if (!g_fp_world_seen) {
         g_fp_world_seen=1;
         if (g_cfg_direct_default && !g_fp_mode) {
-            fp_control_pin(selected); g_fp_mode=1;
+            fp_control_pin(gw,selected); g_fp_mode=1;
             logline("[control] direct controls enabled for loaded squad");
         }
     }
@@ -134,7 +137,7 @@ static void fp_control_tick(void *gw) {
         logline("[control] transferred to explicitly selected squad member");
     }
     if (g_fp_mode && !fp_controlled_char(gw)) {
-        fp_control_release_actor(g_fp_control_actor);
+        FP_CONTROL_RELEASE(gw);
         g_fp_mode=0;
         logline("[control] actor unavailable; direct ownership released");
     }

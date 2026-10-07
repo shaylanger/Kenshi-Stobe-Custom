@@ -707,6 +707,15 @@ static int loco_setup(void *skel){
     return 1;
 }
 
+/* The body is gone (world teardown / freed character): drop every bone/skeleton pointer
+ * without touching them; the next body runs setup from scratch. */
+static void loco_forget(void){
+    for (int i = 0; i < 128; i++) g_slots[i].bone = NULL;
+    g_ik_pospushed = 0; g_ik_drop = 0;
+    g_loco_skel = NULL; g_loco_root = NULL; g_loco_head = NULL;
+    g_idleaim_owned = 0;
+    g_loco_ready = 0;
+}
 /* Hand every controlled bone back to the game's animation. VEH-guarded by the caller. */
 static void loco_release(void){
     if (!g_loco_ready) return;

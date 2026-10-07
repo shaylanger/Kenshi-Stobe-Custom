@@ -3201,6 +3201,9 @@ static void fp_camera_override(void *gw)
          * FP re-seats cleanly on the new body. */
         static void *pc_prev;
         if (pcx != pc_prev) {
+            /* the old body must still be a live squad member before its bones are touched
+             * (after a load pc_prev is freed: forget, never write; b27b) */
+            if (pc_prev && !fp_char_in_squad(gw, pc_prev)) { g_spine_manual = 0; loco_forget(); }
             if (pc_prev && g_spine_manual) release_spine(pc_prev);
             if (pc_prev && g_loco_ready) {      /* old body's bones may be freed: guarded */
                 if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_loco_ready = 0; }
@@ -4476,14 +4479,16 @@ static int terrain_ray(const Vec3 *origin, const Vec3 *dir, Vec3 *out)
 #define MV_HALT_SLOT      (0x98/8) /* vtable: halt() -- cancels current orders */
 #define MV_SETSPEED_SLOT  (0xA8/8) /* vtable: setDesiredSpeed(MoveSpeed) */
 
-/* Stop only our own direct vector; preserve native combat/root motion. */
-static void fp_control_release_actor(void *pc) {
+/* Stop only our own direct vector; preserve native combat/root motion.
+ * live = the caller saw pc in the live squad list (fp_char_in_squad). A character that is not
+ * (world teardown on load/quit, actor gone) is only forgotten: its CharMovement may already be
+ * freed, and freed memory still passes readable() and the handle-id compare, so a write there
+ * corrupts the heap (4080 b27b: D3D11 NULL read ~40 s after an in-world reload). */
+static void fp_control_release_actor(void *pc,int live) {
     void *mv=g_dm_mv;
     int driven=(g_dm_active || g_was_direct || g_was_moving);
     InterlockedExchange(&g_dm_active,0); InterlockedExchange(&g_face_active,0);
-    if (!pc && readable((void *)((uintptr_t)mv+MV_CHARACTER),8))
-        pc=*(void **)((uintptr_t)mv+MV_CHARACTER);
-    if (driven && char_valid(pc) &&
+    if (driven && live && char_valid(pc) &&
         readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) &&
         !memcmp(g_fp_control_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) &&
         readable((void *)((uintptr_t)pc+CHAR_MOVEMENT),8) &&

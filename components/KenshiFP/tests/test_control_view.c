@@ -39,7 +39,7 @@ static DWORD GetTickCount(void){return fake_tick;}
 static int g_was_moving,g_was_direct,g_is_down,g_ui_moveblock;
 static volatile LONG g_dm_active;
 static float g_move_speed;
-static void fp_control_release_actor(void *pc){(void)pc;++releases;}
+static int live_releases;static void fp_control_release_actor(void *pc,int live){(void)pc;++releases;live_releases+=live!=0;}
 static int g_head_hidden,g_gear_n;static void *g_head_hidden_char,*g_player_app,*g_head_params,*g_head_params_mat;
 #include "../client/kfp_control.inc"
 #include "../client/kfp_view.h"
@@ -57,7 +57,7 @@ int main(void){
     chars[0]=a;chars[1]=b;select_actor(a);
     fp_control_tick(world);assert(g_fp_mode && fp_controlled_char(world)==a);
     select_actor(b);assert(fp_controlled_char(world)==a); /* all five handle words matter */
-    assert(fp_control_take_selected(world));assert(fp_controlled_char(world)==b);assert(releases>0);
+    assert(fp_control_take_selected(world));assert(fp_controlled_char(world)==b);assert(releases>0&&live_releases>0); /* a still in the squad: live release */
     g_fp_mode=0;fp_control_tick(world);assert(!g_fp_mode); /* explicit fallback stays off */
     g_fp_mode=1;select_actor(a);g_ui_open=1;key=1;fp_control_tick(world);assert(fp_controlled_char(world)==b);
     key=0;fp_control_tick(world);g_ui_open=0;key=1;fp_control_tick(world);assert(fp_controlled_char(world)==a);
@@ -67,7 +67,8 @@ int main(void){
     /* b27b crash: world teardown drops head-hide pointers without touching them */
     assert(fp_char_in_squad(world,b)&&!fp_char_in_squad(world,a)&&!fp_char_in_squad(world,outsider)&&!fp_char_in_squad(world,NULL));
     g_head_hidden=1;g_head_hidden_char=b;g_player_app=b;g_head_params=b;g_head_params_mat=b;g_gear_n=2;
-    selected=NULL;fp_control_tick(world);assert(!g_fp_mode && !g_fp_control_pinned);
+    {int r0=releases,l0=live_releases;selected=NULL;fp_control_tick(world);assert(!g_fp_mode && !g_fp_control_pinned);
+     assert(releases==r0+1&&live_releases==l0);} /* b27b: teardown forgets the actor, never writes to it */
     assert(!g_head_hidden&&!g_head_hidden_char&&!g_player_app&&!g_head_params&&!g_head_params_mat&&!g_gear_n);
     chars[0]=a;select_actor(a);fp_control_tick(world);assert(g_fp_mode && fp_controlled_char(world)==a);
     KAH_Reply r={NULL,append};const char *argv[]={"fp_control","state"};reply[0]=0;

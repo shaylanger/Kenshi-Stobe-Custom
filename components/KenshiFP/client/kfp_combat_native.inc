@@ -175,11 +175,13 @@ static int combat_truce_pending(void) {
      * Scoped first-victim truce routing replaces this only after validation. */
     return stobe_fight_truce_active();
 }
+static void *g_combat_gw;   /* this tick's GameWorld (combat_release liveness check) */
 static void combat_release(void) {
     void *rc=g_combat_rc,*pc=g_combat_pc;
     g_combat_rc=NULL;g_combat_pc=NULL;g_combat_gun=NULL;g_combat_weapon=NULL;g_aim_mode=0;
     g_combat_dispatch=0;g_combat_dispatch_tid=0;
-    int same_actor=char_valid(pc) && readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) &&
+    /* only a live squad member gets the native end call: after a load g_combat_pc/rc are freed (b27b) */
+    int same_actor=pc && fp_char_in_squad(g_combat_gw,pc) && char_valid(pc) && readable((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20) &&
         !memcmp(g_combat_actor_ids,(void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),20);
     memset(g_combat_actor_ids,0,sizeof(g_combat_actor_ids));
     memset(&g_combat_control,0,sizeof(g_combat_control));
@@ -415,6 +417,7 @@ static void combat_note_reject(unsigned before,float closeness,float timer,int h
     g_combat_rej_truce=combat_truce_pending();g_combat_rej_why=why;
 }
 static void fp_manual_combat_tick(void *gw,float dt) {
+    g_combat_gw=gw;
     g_combat_anim_drive=0;   /* set again below only when this tick drives the anim */
     KfpCombatInput input={0};
     if (g_combat_injection) input=g_combat_injected;
