@@ -3,7 +3,7 @@
 Last updated 2026-10-06 (doc cleanup: 96/97 and the built + confirmed B 55 spec removed, trace in `archive/test-run-2026-10-05-m41.md`; older run logs are in git history). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **125**.
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **135**.
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -20,6 +20,23 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 | 99 | WAITING_APPROVAL never offered for a trader-only ingredient | fixed (goal code, in Stobe.dll since m49: carried goods + nearest stocking trader) |
 | 101 | `[]` extended_data broke relationship writes | fixed live (3e50770), rows repaired |
 | 105 | KenshiFP log spam (30k `WORK_GOAL input ratio` lines) | fixed (KenshiFP 5719BEA5+) |
+
+### Drawn-weapon reactions (built: Stobe fc1ead3 / DLL F23B4432 not installed yet, StobeServer 055e0c5; never run in game)
+
+Wrapper `tests/ingame/stobe/STOBE-DRAWN.sh [DW1 .. DW10]` on a Crafting base kah-* copy (Shay + Malzin, Hub). Native state via harness `stobe_drawn status|pair|draw|hold|set|reset`, stobe.log `DRAWN_WEAPON:` lines; replies injected with NEG_TEST_INJECT context `react` (DW1 DW2 DW9).
+
+| # | Row | Pass when |
+|---|---|---|
+| 125 | DW1 neutral NPC who sees a drawn weapon within 10 m speaks | `speak_friendly ... speech=sent`, `REACTION_TURN: dispatched react=drawn_weapon`, server `Drawn weapon reaction turn`, eventlog infoaction "... with a drawn ...", injected line said |
+| 126 | DW2 guard (name/task heuristic) tells him to put it away | `speak_guard kind=guard`, no friendly line, injected line said |
+| 127 | DW3 hostile: warn, weapon kept out in range -> native attack after WarnSeconds | `warn` then `attack order=1` >= warn s later, `attack_confirmed` or `pair` attack_target=player |
+| 128 | DW4 holstering after the warning cancels | `cancel_holstered`, no attack after the warn time |
+| 129 | DW5 closing in inside AttackDistance after the warning attacks at once | `attack order=1` well before the (30 s) warn time |
+| 130 | DW6 NPC who can't see the player (faces away) doesn't react | no DRAWN_WEAPON line / sees=0; control: turned back he speaks |
+| 131 | DW7 own squad (Malzin) never reacts | no line, `pair` no_pair while a neutral NPC reacts |
+| 132 | DW8 no reaction during combat | a warned NPC who starts fighting gets `cancel_combat`, no attack order, no further line |
+| 133 | DW9 per-NPC cooldown | redraw inside the cooldown: no second line; short cooldown: second line |
+| 134 | DW10 live model (no injection) | the line is about the weapon; speech only (attack_target=none, no deal) |
 
 ## E. Design questions and features
 

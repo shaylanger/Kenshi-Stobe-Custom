@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # stobe-switch-lib.sh: helpers for the test-switch wrappers (source after stobe-fight-lib.sh; WSL, harness on).
 # Server test switches (StobeServer 2b2b52d+, general_settings, OFF by default, logged when they fire):
-#   NEG_TEST_INJECT            JSON {row, npc, context chat|directive|any, steps:[{reply fields...}]}: the model's
+#   NEG_TEST_INJECT            JSON {row, npc, context chat|directive|react|any, steps:[{reply fields...}]}: the model's
 #                              structured reply gets these fields for the next matching turns (one step per turn).
 #                              Placeholders {player} {npc} {weapon} {worn}. Server log `NEG_TEST_INJECT fired (test switch, row N)`.
+#                              Context react = the drawn-weapon reaction turn (StobeServer 055e0c5+, STOBE-DRAWN.sh).
 #   NEG_TEST_FORCE_INITIATIVE  JSON {row, kind surrender|assist, npc, queue_as_old_name}: the next initiative check for
 #                              that NPC queues the offer without health/cooldown gates; one-shot.
 #                              Server log `NEG_TEST_FORCE_INITIATIVE fired (test switch, row N)`.
