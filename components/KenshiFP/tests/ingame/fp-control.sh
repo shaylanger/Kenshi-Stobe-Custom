@@ -474,6 +474,11 @@ find_stairs() { local r bx by bz f="$OUT/stairs_floors.txt"
   echo "STAIRS house=$bx,$by,$bz scan=[$r] floors=$f" >> "$LOG"
   isline "$r" || { STAIRS_WHY="no world stair and no climbable stair line in the built house (ray scan: $r)"; return 1; }
   STAIRS=$(cut -d' ' -f1-4 <<<"$r"); return 0; }
+# Names resolve to the exact match nearest the PLAYER (docs/COMMANDS.md). 4080 m51g ctl-on1: world_stairs teleported
+# Axima 3-5 km off; from the third building on a Holy Nation Outlaw also named Axima (#3855102464/3) stood nearer the
+# player, so every later teleport/where/ctl_is followed him (walk 207 = his own AI walk, drift 62.8, controlled_Axima=0)
+# while control and camera stayed on our Axima at the Old Water Tower. The stair search and the row use her exact handle.
+SHN=$SH; SHH=$(A where "$SH" | grep -oE '#[0-9]+/[0-9]+' | head -1); [ -n "$SHH" ] && SH=$SHH
 if [ -z "$STAIRS" ] && ! find_stairs; then row C05-STAIRS FAIL "setup stairs not found ($STAIRS_SRC): $STAIRS_WHY"; else
   read -r SX SY SZ SYAW <<<"$STAIRS"; ui_clear; A teleport "$SH" "$SX" "$SY" "$SZ" >/dev/null; sleep 2; take "$SH" >/dev/null
   YAW=$SYAW; look "$YAW" 0; P0=$(pos "$SH"); read -r MS _ _ _ <<<"$(walk "$SH" w 4000)"; P1=$(pos "$SH"); DY=$(dy "$P0" "$P1")
@@ -481,9 +486,10 @@ if [ -z "$STAIRS" ] && ! find_stairs; then row C05-STAIRS FAIL "setup stairs not
   # level walk = passed through the stair (no character collision) rather than blocked at it
   FL=""; awk -v a="$(cut -d' ' -f2 <<<"$P0")" -v b="$SY" 'BEGIN{d=a-b; if(d<0)d=-d; exit !(d>4)}' && FL+=" | flag=setup? start y $(cut -d' ' -f2 <<<"$P0") vs planned $SY"
   ge "$MS" 120 && awk -v d="$DY" 'BEGIN{if(d<0)d=-d; exit !(d<10)}' && FL+=" | flag=walked $MS level through the stair line: no character collision with the $STAIRS_SRC stair (setup if built, product if world)"
-  STK=$(still "$SH" 2); ev="stairs=$STAIRS_SRC start=[$STAIRS] y0=$(cut -d' ' -f2 <<<"$P0") walk=$MS dy=$DY drift_after_release=$STK controlled_$SH=$(ctl_is "$SH" && echo 1 || echo 0) [$(camsum)]$FL"
+  STK=$(still "$SH" 2); ev="stairs=$STAIRS_SRC start=[$STAIRS] y0=$(cut -d' ' -f2 <<<"$P0") walk=$MS dy=$DY drift_after_release=$STK controlled_$SHN=$(ctl_is "$SH" && echo 1 || echo 0) [$(camsum)]$FL"
   ok=1; awk -v d="$DY" 'BEGIN{if(d<0)d=-d; exit !(d>=10)}' || ok=0; lt "$STK" "$STILL_MAX" || ok=0; ctl_is "$SH" || ok=0
   judge C05-STAIRS $ok "$ev"; fi
+SH=$SHN
 
 echo "$(ui_summary)" >> "$LOG"
 for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done
