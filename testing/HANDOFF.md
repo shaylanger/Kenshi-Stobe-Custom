@@ -3,22 +3,23 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 m51, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
-- m51 work: KenshiFP manual combat ON by default + F10 "Manual combat" toggle + 5 rebindable keys + bound-key leak fixes,
-  committed 7b85f67 (KenshiFP 9017FAA0). Stobe NPC biography card committed 8c45a9f/37fb725 (Stobe 3EF4CCEE, server 7ea8347).
-- 5090: batch I `C:\KenshiTestRuns\m51-5090-i` (run-batch.sh, --stop): CS01-CS08 (all PASS), K rows, NP5/NP11/NP12 (needs
-  DeepInfra credit; Shay is topping up). Run log `archive/test-run-2026-10-07-m51.md`.
-- 4080: runners bm51e (60F81473) then bm51f (9017FAA0), `C:\KAH\fp\bm51e.sh|bm51f.sh`, lock `C:\KenshiTestRuns\fp-runner.lock`,
-  out `C:\KenshiTestRuns\fp-4080-m51e|m51f` (SUMMARY.txt + DONE): K rows + fp-control COMBAT=on.
-- m51 B died 12:02 (5090 clock): WSL had shut down entirely (no crash dump); restart the stack with /etc/start_env, and
-  Steam (`D:\Steam\steam.exe -silent`) after a PC restart.
-- DeepInfra returned HTTP 402 on chat from 11:38 (5090 clock): check live chat before LLM rows.
-- Gotcha: never `unload` a char that is still someone's fight/order target (game crash, exe+268A68); tests KO and leave them.
-- Gotcha: start detached WSL batches with `wsl.exe ... bash -s` + heredoc (`setsid nohup ... > log 2>&1 < /dev/null &`) and
-  check the out dir appears; the one-line `bash -c '... &'` form silently never ran (m50 G and U).
-- 4080 desktop is locked (LogonUI): KenshiFP test switch `fp_keys focus on` (fp-controls.sh uses it). Defender-probe each new DLL
-  on the 4080 (copy to C:\KAH, Get-FileHash, wait 20 s, Test-Path + newest Get-MpThreatDetection).
-- Waiting on Shay: FP visual/feel checks and whether manual combat goes ON by default (MASTER section 2).
+## Right now (2026-10-07 m51 end, coordinator)
+- **Input isolation (Shay 2026-10-07): DONE.** `kenshi-ctl.ps1 launch` = background run by default: game window on
+  `-Monitor` (default `$env:KENSHI_MONITOR` else DISPLAY1), never activated, harness input isolation ON (real keys/mouse
+  ignored, cursor never clipped/moved, game keeps running unfocused; escape Ctrl+Alt+Shift+F12 at the game window).
+  Tests inject input: `stobe-auto key_inject|mouse_inject`, `input_isolation on|off|status` (harness f10996c, e617d36);
+  kenshi-key.ps1 + CS rows switch to key_inject by themselves. **Shay playing: `kenshi-ctl.ps1 launch -Play`.**
+  Verified in game (5090 L/M): CS01-CS08, K rows 14/14 (K01 first 5090 PASS), ctl-on 10/10 with the game unfocused.
+- KenshiFP manual combat ON by default + F10 toggle + rebindable keys (7b85f67) validated both rigs.
+- C05-KO (obstacle redo 8965bc3), C05-STAIRS (namesake handle a1414c4): 4080 bm51h 30/30, closed. C04-TAKE 5090
+  ctl-off: test measured the mate walk too late (da96d77); take refusal reasons logged (ffad4e4). Batch N confirms.
+- NP5/NP11/NP12 (NPC bio LLM rows) wait on DeepInfra credit (HTTP 402 still at 23:09 UTC). List line:
+  `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12`.
+- Product note for Shay: once FP walk is pinned on a rock, the order fallback doesn't walk around it either.
+- Gotchas: detached WSL batches via `bash -s` heredoc (the `bash -c '... &'` form silently never ran, again m51 L);
+  never `unload` a char that is still someone's fight/order target (crash exe+268A68); after a PC restart start the
+  WSL stack (/etc/start_env) and Steam (`D:\Steam\steam.exe -silent`); 4080 desktop locked -> `fp_keys focus on`;
+  Defender-probe new DLLs on the 4080.
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
@@ -26,26 +27,26 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
   (fetch, buy, guard, stock, repair, give item, bodyguard...), goal lifecycle + status/control files, goal panel UI, native
   actions (lookup, orders, movement, equip). Log `stobe_goals.log`. Works with KenshiFP absent (DC1-DC5).
 - **KenshiFP.dll** (`/root/KenshiFP`, snapshot `components/KenshiFP`): first-person mode only: camera/head/eye, mouse and
-  cursor, FP targeting, manual FP combat (ranged + melee adapters, OFF by default), FP harness commands.
+  cursor, FP targeting, manual FP combat (ranged + melee adapters, ON by default since 7b85f67, F10 toggle), FP harness commands.
 - **Profession Gear (PG)** (own repo `Kenshi-Profession-Gear-Progression`): per-item affixes and profession gear bonuses.
 - **Automation Harness** (own repo `Kenshi-Automation-Harness`): in-game test commands (`stobe-auto`).
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 3EF4CCEE (NPC biography card), KenshiFP 9017FAA0 (manual combat default ON + binds, 7b85f67), PG BAFB8C31 (Normal), harness 24BE3AEC; server live `stobe` 055e0c5.
-- 4080: KenshiFP 9017FAA0 (m51, from bm51f; FD7A9A27/60F81473 before), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
+- 5090: Stobe 3EF4CCEE (NPC biography card), KenshiFP 07376F24 (ffad4e4 + isolation a8dc8bc), PG BAFB8C31 (Normal), harness EF425B2D (input isolation f10996c); server live `stobe` 055e0c5.
+- 4080: KenshiFP F8223BCC (m51 bm51h), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
 - **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
   confirmation; E/F: design + next big feature, item 63 = pick the next big feature with Shay).
 - **KenshiFP decoupling:** done m49 (Stobe 9d99f36, KenshiFP f94b1d5); DC1-DC7, 89, 14-A3, generic-fb, 16-fb 55/55, A8 PASS.
 - **FP combat:** all automated rows PASS (m50, KenshiFP 8469D760; Gate 3 tolerances decided 2026-10-06). Left for Shay:
-  visual/feel checks and the manual-combat default (OFF now). Details: `components/KenshiFP/docs/COMBAT_TEST_PLAN.md`.
+  visual/feel checks (manual combat now ON by default, F10 toggle). Details: `components/KenshiFP/docs/COMBAT_TEST_PLAN.md`.
 - **PG:** all automated rows PASS; D1-D3, D5-D8 done; open D4 athletics feel + tooltip/feel rows (Shay, MASTER section 2).
   `TEST_PLAN.md` there is the regression spec (scenarios cite its row IDs: never delete rows); status lives in `INGAME_STATUS.md`.
 
 ## Next work (in order)
-1. Shay: FP visual/feel checks + manual-combat default; PG D4 + tooltip/feel rows (MASTER section 2).
+1. Shay: FP visual/feel checks (F10 settings); PG D4 + tooltip/feel rows (MASTER section 2).
 2. Item 63 (next big feature) with Shay (STOBE section D is empty since m50).
 
 ## How to run things (recipes that used to live only in handoffs)
