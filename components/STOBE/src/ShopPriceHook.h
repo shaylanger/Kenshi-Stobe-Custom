@@ -35,6 +35,11 @@ void EndBuy();
 // and shop storage in one), else null.
 Character *TradingCharacter(RootObject *obj);
 
+// The npc's Stobe relationship r toward the player from the same cache (-100..100);
+// false = nothing cached yet (a background fetch is queued, never waits).
+// Used by the drawn-weapon reactions (StobeDrawnWeapon.cpp).
+bool RelationshipR(Character *npc, Character *player, int &r);
+
 // Drops all cached r values (load/new game).
 void ClearCache();
 

@@ -9,6 +9,7 @@
 #include "StobeChatMode.h"
 #include "StobeEventPolicy.h"
 #include "StobeText.h"
+#include "StobeDrawnWeapon.h"
 #include <fstream>
 #include <iomanip>
 #include <kenshi/Character.h>
@@ -588,6 +589,17 @@ void LoadStobeRuntimeConfig() {
                         "UseNearestPlayerSpeaker", 1) != 0;
   g_lastChatModeIndex = Stobe::ChatMode::ToIndex(g_chatMode);
 
+  {
+    static std::string s_drawnBase, s_drawnCustom;
+    s_drawnBase = baseIniPath;
+    s_drawnCustom = customIniPath;
+    struct DrawnIni {
+      static std::string Read(const char *section, const char *key, const char *def) {
+        return TrimCopy(ReadLayeredIniString(s_drawnBase, s_drawnCustom, section, key, def));
+      }
+    };
+    Stobe::DrawnWeapon::LoadConfig(&DrawnIni::Read);
+  }
   g_boredEventRange = (float)ReadLayeredIniInt(baseIniPath, customIniPath,
                                                 "Settings", "BoredEventRange", 200);
   g_proximityRadius = (float)ReadLayeredIniInt(baseIniPath, customIniPath,

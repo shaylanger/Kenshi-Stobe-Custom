@@ -101,6 +101,7 @@ add_library(Stobe SHARED
   src/StobeGoals.cpp
   src/ShopPricing.cpp
   src/ShopPriceHook.cpp
+  src/StobeDrawnWeapon.cpp
   src/main.cpp
   src/SettingsWindow.cpp
   src/Utils.cpp

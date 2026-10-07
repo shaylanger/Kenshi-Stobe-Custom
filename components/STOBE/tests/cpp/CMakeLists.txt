@@ -31,3 +31,7 @@ add_test(NAME social_protocol_tests COMMAND social_protocol_tests)
 add_executable(shop_pricing_tests shop_pricing_tests.cpp ../../src/ShopPricing.cpp)
 target_include_directories(shop_pricing_tests PRIVATE ../../src)
 add_test(NAME shop_pricing_tests COMMAND shop_pricing_tests)
+
+add_executable(drawn_weapon_policy_tests drawn_weapon_policy_tests.cpp)
+target_include_directories(drawn_weapon_policy_tests PRIVATE ../../src)
+add_test(NAME drawn_weapon_policy_tests COMMAND drawn_weapon_policy_tests)

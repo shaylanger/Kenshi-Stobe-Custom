@@ -5520,6 +5520,70 @@ bool TriggerBoredEvent(GameWorld *world, bool forceDirectorMode,
   return true;
 }
 
+bool TriggerReactionTurn(GameWorld *world, Character *npc, Character *player,
+                         const std::string &react, const std::string &kind,
+                         const std::string &detail, int distance) {
+  if (!Stobe::Interaction::Allowed()) return false;
+  if (!world || !npc || !player || (uintptr_t)npc <= 0x1000 ||
+      (uintptr_t)player <= 0x1000) {
+    return false;
+  }
+  std::string npcName, npcSerial, playerName, playerSerial;
+  try {
+    npcName = npc->getName();
+    npcSerial = ToString(npc->getHandle().serial);
+    playerName = player->getName();
+    playerSerial = ToString(player->getHandle().serial);
+  } catch (...) {
+    return false;
+  }
+  if (npcName.empty() || playerName.empty()) return false;
+  std::string peopleJson = "[\"" + EscapeJSON(playerName + "|" + playerSerial) +
+                           "\",\"" + EscapeJSON(npcName + "|" + npcSerial) + "\"]";
+  std::string eventData =
+      npcName + ": [BORED_EVENT_TRIGGER] (talking to: " + playerName + ")";
+  std::wstring endpoint =
+      L"/StobeServer/stream.php?DATA=" +
+      ToWide(BuildStreamQueryData("bored", eventData, ResolveCurrentGameTs())) +
+      L"&profile=" + ToWide(UrlEncode(npcName)) +
+      L"&mode=autochat" +
+      L"&tts_enabled=" + (g_ttsEnabled ? L"1" : L"0") +
+      L"&people=" + ToWide(UrlEncode(peopleJson)) +
+      L"&react=" + ToWide(UrlEncode(react)) +
+      L"&react_kind=" + ToWide(UrlEncode(kind)) +
+      L"&react_detail=" + ToWide(UrlEncode(detail)) +
+      L"&react_player=" + ToWide(UrlEncode(playerName)) +
+      L"&react_dist=" + ToWide(ToString(distance));
+  AppendGeoQueryFromPlayer(endpoint, player);
+
+  StreamChatTask *task = new StreamChatTask();
+  task->endpoint = endpoint;
+  task->npcName = npcName;
+  task->handleStr = npcSerial;
+  task->peopleJson = peopleJson;
+  task->previousSpeaker = playerName;
+  task->previousSpeakerHandle = playerSerial;
+  task->playerFallbackName = playerName;
+  task->playerFallbackHandle = playerSerial;
+  task->initiatorSpeaker = "";
+  task->initiatorSpeakerHandle = "";
+  task->requestMode = "autochat";
+  task->generation = GetChatInterruptGeneration();
+  task->rechatDepth = 0;
+  task->allowUnavailableTargetSpeech = false;
+  HANDLE thread = PlaythroughSession::StartTask(NULL, 0, StreamChatResponseThread, task, 0, NULL);
+  if (!thread) {
+    delete task;
+    Log("REACTION_TURN: failed to start stream thread react=" + react);
+    return false;
+  }
+  CloseHandle(thread);
+  Log("REACTION_TURN: dispatched react=" + react + " kind=" + kind + " speaker=" +
+      npcName + " listener=" + playerName + " detail=" + detail +
+      " dist=" + ToString(distance));
+  return true;
+}
+
 bool TriggerNarratorWelcomeOnLoad(GameWorld *world, Character *preferredSpeaker,
                                   LONG generationOverride) {
   if (!world || !world->player || world->player->playerCharacters.size() == 0) {

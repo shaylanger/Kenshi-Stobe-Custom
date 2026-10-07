@@ -66,6 +66,13 @@ bool TriggerBoredEvent(GameWorld *world, bool forceDirectorMode,
                        const std::string &preferredListenerName = "",
                        const std::string &preferredListenerSerial = "",
                        const std::string &direction = "");
+// Drawn-weapon reactions (StobeDrawnWeapon.cpp): npc speaks one line to the player
+// about something the player did (react = "drawn_weapon", kind = friendly|guard|warn).
+// A bored-type turn with &react=... so the server writes the instruction; no
+// director, no chance gate, speech only (the native side owns any attack).
+bool TriggerReactionTurn(GameWorld *world, Character *npc, Character *player,
+                         const std::string &react, const std::string &kind,
+                         const std::string &detail, int distance);
 bool TriggerNarratorWelcomeOnLoad(GameWorld *world,
                                   Character *preferredSpeaker = nullptr,
                                   LONG generationOverride = 0);

@@ -486,5 +486,10 @@ std::string DebugRefresh(Character *trader, Character *player) {
   return out;
 }
 
+bool RelationshipR(Character *npc, Character *player, int &r) {
+  Constants c;
+  return LookupR(npc, player, r, c);
+}
+
 } // namespace ShopPrice
 } // namespace Stobe

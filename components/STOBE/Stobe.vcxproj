@@ -114,6 +114,7 @@
     <ClCompile Include="src\StobeChatMode.cpp" />
     <ClCompile Include="src\StobeIdentityRename.cpp" />
     <ClCompile Include="src\StobeText.cpp" />
+    <ClCompile Include="src\StobeDrawnWeapon.cpp" />
     <ClCompile Include="src\StobeTiming.cpp" />
     <ClCompile Include="src\StartingWindow.cpp" />
     <ClCompile Include="src\SocialEventProtocol.cpp" />
@@ -147,6 +148,8 @@
     <ClInclude Include="src\StobeChatMode.h" />
     <ClInclude Include="src\StobeIdentityRename.h" />
     <ClInclude Include="src\StobeText.h" />
+    <ClInclude Include="src\StobeDrawnWeapon.h" />
+    <ClInclude Include="src\StobeDrawnWeaponPolicy.h" />
     <ClInclude Include="src\StobeTiming.h" />
     <ClInclude Include="src\StartingWindow.h" />
     <ClInclude Include="src\Utils.h" />

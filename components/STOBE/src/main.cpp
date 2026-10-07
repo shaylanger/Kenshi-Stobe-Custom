@@ -36,6 +36,7 @@
 #include "StobeHarnessBridge.h"
 #include "StobeGoals.h"
 #include "ShopPriceHook.h"
+#include "StobeDrawnWeapon.h"
 #include "Utils.h"
 #include "SocialEventProtocol.h"
 #include "VoiceCapture.h"
@@ -13944,6 +13945,7 @@ bool __fastcall SaveCampaign(SaveFileSystem* fs, const std::string& path) {
 void __fastcall LoadCampaign(SaveFileSystem* fs, const std::string& path) {
     PlaythroughSession::BeginLoad();
     Stobe::ShopPrice::ClearCache();
+    Stobe::DrawnWeapon::Reset();
     BeginChatInterruptGeneration(false);
     Stobe::Voice::Cancel();
     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
@@ -13953,6 +13955,7 @@ void __fastcall LoadCampaign(SaveFileSystem* fs, const std::string& path) {
 void __fastcall NewCampaign(SaveManager* manager, const std::string& start) {
     PlaythroughSession::BeginLoad(true);
     Stobe::ShopPrice::ClearCache();
+    Stobe::DrawnWeapon::Reset();
     BeginChatInterruptGeneration(false);
     Stobe::Voice::Cancel();
     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
@@ -13961,6 +13964,7 @@ void __fastcall NewCampaign(SaveManager* manager, const std::string& start) {
 void __fastcall ImportCampaign(SaveManager* manager, const SaveInfo& save, int flags) {
     PlaythroughSession::BeginLoad();
     Stobe::ShopPrice::ClearCache();
+    Stobe::DrawnWeapon::Reset();
     BeginChatInterruptGeneration(false);
     Stobe::Voice::Cancel();
     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
@@ -14467,6 +14471,11 @@ static std::string NpcPanelOneLine(const std::string &text) {
   return out;
 }
 
+static Character *ResolveTestInboxTargetForDrawn(GameWorld *world, Character *sel,
+                                                 const std::string &name) {
+  return ResolveTestInboxTarget(world, sel, ResolveTestInboxSpeaker(world, sel), name);
+}
+
 static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
                                        const std::vector<std::string> &f,
                                        bool &ok) {
@@ -14594,6 +14603,8 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
     }
     return "usage: npcinfo <open <target> [speaker]|chat|read|refresh|close>";
   }
+  if (cmd == "drawn") // drawn-weapon reactions: status/draw/sheathe/hold/reset/set/pair
+    return Stobe::DrawnWeapon::TestCommand(world, sel, f, ok, &ResolveTestInboxTargetForDrawn);
   if (cmd == "shopprice") { // item 104: refetch r for (trader, player) and show the cached value
     if (f.size() < 3)
       return "usage: shopprice <trader> [player]";
@@ -15108,6 +15119,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
     Stobe::Voice::Update();
   Stobe::HarnessBridge::Drain(worldUi, sel, &RunTestInboxCommand);
   UpdateLifelikeInitiativeFlag();
+  Stobe::DrawnWeapon::Update(worldUi); // drawn-weapon reactions
 
   // Player Cats and squads for the server (these used to run on the background loop).
   static DWORD lastPlayerSyncTick = 0;
