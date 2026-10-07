@@ -112,12 +112,19 @@ still() { local p0; p0=$(pos "$1"); sleep "$2"; d2 "$p0" "$(pos "$1")"; }
 # pick_yaw <who> <label>: set YAW to the one of 16 headings whose walk line (-30..130 units, covers the C01 walk back)
 # passes farthest from the other two of player/mate/target. 4080 b31 C01: YAW was whatever the camera had and the walk
 # passed ~5 units from the KO'd Skaera body (deflected 11 deg, move_speed 34, fp/tp ratio 0.42). Sets YAWC (clearance).
-pick_yaw() { local p o="" c r; p=$(pos "$1")
-  for c in "$SH" "$MT" "$TG"; do [ "$c" = "$1" ] && continue; o+="$(pos "$c" | tr ' ' ',');"; done
-  r=$(awk -v p="$p" -v o="$o" 'BEGIN{split(p,s," "); n=split(o,ob,";"); best=-1; by=0
+# pick_yaw "<who>[|<who2>]" <label>: with two walkers (C04-TAKE: the walk continues on the mate after the transfer),
+# the heading must be clear on BOTH walk lines, each against the other characters (4080 b32/b33 C04-TAKE: the yaw
+# was picked for the player only and the mate stopped after 17-46 units).
+pick_yaw() { local p o c r w wl="" ol=""
+  local IFS0=$IFS; IFS="|"; set -f; local ws=($1); IFS=$IFS0; set +f
+  for w in "${ws[@]}"; do p=$(pos "$w" | tr ' ' ','); o=""
+    for c in "$SH" "$MT" "$TG"; do [ "$c" = "$w" ] && continue; o+="$(pos "$c" | tr ' ' ',');"; done
+    wl+="$p|"; ol+="$o|"; done
+  r=$(awk -v wl="$wl" -v ol="$ol" 'BEGIN{nw=split(wl,W,"|"); split(ol,O,"|"); best=-1; by=0
     for(k=0;k<16;k++){y=-3.14159+k*6.28318/16; fx=sin(y); fz=cos(y); m=1e9
-      for(t=-30;t<=130;t+=10){x=s[1]+fx*t; z=s[3]+fz*t
-        for(i=1;i<=n;i++){ if(ob[i]=="") continue; split(ob[i],q,","); d=sqrt((q[1]-x)^2+(q[3]-z)^2); if(d<m)m=d }}
+      for(j=1;j<=nw;j++){ if(W[j]=="") continue; split(W[j],s,","); n=split(O[j],ob,";")
+        for(t=-30;t<=130;t+=10){x=s[1]+fx*t; z=s[3]+fz*t
+          for(i=1;i<=n;i++){ if(ob[i]=="") continue; split(ob[i],q,","); d=sqrt((q[1]-x)^2+(q[3]-z)^2); if(d<m)m=d }}}
       if(m>best){best=m; by=y}}
     printf "%.4f %.1f\n", by, best}')
   YAW=${r%% *}; YAWC=${r##* }; echo "YAW $2 ($1): yaw=$YAW clearance=$YAWC" >> "$LOG"; }
@@ -206,12 +213,13 @@ if [ $UIO != 0 ]; then row C03 FAIL "setup inventory did not open: $ev"; else ju
 ui_clear; take "$SH" >/dev/null; A select "$MT" >/dev/null; sleep 0.5
 U0=$(ctl take_ui_ignored); A click INV >/dev/null; waitf 4 ui_is 1; UIO=$?; A fp_control press >/dev/null; sleep 0.8
 U1=$(ctl take_ui_ignored); HUI=$(ctl controlled); A click INV >/dev/null; waitf 4 ui_is 0; ui_clear
-D0=$(ctl take_done); pick_yaw "$SH" C04-TAKE; look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
+D0=$(ctl take_done); pick_yaw "$SH|$MT" C04-TAKE; look "$YAW" 0; A fp_move w 9000 >/dev/null; sleep 1.5; PS0=$(pos "$SH")
 A fp_control press >/dev/null; waitf 3 ctl_is "$MT"; TOOK=$?; D1=$(ctl take_done); sleep 0.5
 PS1=$(pos "$SH"); PM1=$(pos "$MT"); sleep 2; PS2=$(pos "$SH"); PM2=$(pos "$MT")
+A fp_move state > "$OUT/last_walk_state.txt"   # mvdiag: the mate's fp_move state while W is still held
 A fp_move none >/dev/null; sleep 0.8; MSTOP=$(still "$MT" 2)
 WSH=$(d2 "$PS0" "$PS1"); RSH=$(d2 "$PS1" "$PS2"); WMT=$(d2 "$PM1" "$PM2")
-ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT stop_after_release=$MSTOP"
+ev="ui_press ignored=$U0->$U1 controlled_kept=$([ "$HUI" = "$H0" ] && echo 1 || echo 0) | walk_press took=$((1-TOOK)) take_done=$D0->$D1 $SH walked=$WSH after_transfer=$RSH $MT walked=$WMT stop_after_release=$MSTOP clearance=$YAWC $MT[$(mvdiag)]"
 ok=1; [ $UIO = 0 ] && [ "$U1" -gt "$U0" ] && [ "$HUI" = "$H0" ] && [ $TOOK = 0 ] && [ "$D1" -gt "$D0" ] || ok=0
 lt "$RSH" "$STILL_MAX" || ok=0; ge "$WMT" "$MOVE_MIN" || ok=0; lt "$MSTOP" "$STILL_MAX" || ok=0
 judge C04-TAKE $ok "$ev"
