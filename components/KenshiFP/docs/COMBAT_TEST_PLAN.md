@@ -51,6 +51,24 @@ Offline tests are necessary but do not prove engine calls/animations/hit behavio
 | C05 | Lifecycle | load, KO, invalid handle, interiors, stairs; no stuck controls |
 Visual camera collision, body visibility and ADS alignment require screenshots/inspection as well as numeric checks.
 
+## Gate 1b: FP controls (scheme 2026-10-06, KenshiFP 6E5D502B+)
+Wrapper `tests/ingame/fp-controls.sh` (fixture kah-fpxbow: Axima crossbow player, Malzin mate, Skaera hostile; usage in its header). Input enters through `fp_keys press|native` (same tick path as the physical buttons) and `fp_combat input`; evidence is `fp_keys state` counters, `fp_combat state` (wih, fp_ui_state, actual_shots, ammo), `fp_camera state|probe`, `fp_melee state`, `where`/`hp`, KenshiFP.log. Not yet run in game.
+| ID | Requirement | Acceptance evidence |
+|---|---|---|
+| K01 | WASD-only: native RMB walk swallowed in FP | `fp_keys native rmb 20` with swallow on: rmb_swallowed rises, actor still (< STILL_MAX); control with swallow off: the same native RMB moves him (else inconclusive). Visual: no walk marker (screenshot/Shay) |
+| K02 | MMB = select the crosshair character, no camera rotate | mmb press aimed at the mate: mmb_selects+1, last_select=mate, `fp_control state` inspected changed, controlled/control_ids unchanged, mmb_cam_frames>0 with the camera yaw unchanged |
+| K03 | RMB click holstered = context menu | ctx_opens+1 on the mate, ctx_freed=1, `fp_state` free=1; `fp_state free off` relocks (ctx_freed=0). Visual: menu content and the relock on a real click (Shay) |
+| K04 | RMB held drawn melee = block, no menu | aimed at the mate: ui_state=blocking, free_block_frames rising, ctx_opens unchanged |
+| K05 | LMB drawn on a character = vanilla attack order | K05-HOSTILE (Skaera): engages+1, last_task=5, last_target=Skaera, native fight active on her; K05-UNPROV (a neutral NPC, NEUTRAL= or found nearby): last_task=61, native fight active on him |
+| K06 | R draws/holsters, weapon stays out idle | r_draws+1, `fp_combat state` wih!=0, still drawn after 5 s idle (sheathe_kept evidence); R again: r_holsters+1, wih=0 |
+| Z01 | Zoom to 60 outdoors; trace collision indoors | Z01: distance 60 outdoors: applied >= 59, actual ~ applied, blocked=0 (`fp_camera probe` trace= as evidence); Z01-INT: in a building, wall behind, distance 30: trace_blocks rises, blocked=1, applied<target. Visual: camera never inside walls (screenshot) |
+| FS01 | Free swing (LMB drawn melee, no target, no fight) | free_swings+1, fs_prog_max>0.5, fs_ends+1, fs_faults=0, fs_dead=0, no native fight started, mate hp unchanged |
+| FB01 | Free block out of combat | aimed at the sky, `fp_melee state` active=0: ui_state=blocking while RMB held, free_block_frames rising, back to ready after release |
+| FF01 | Ranged free fire (fp_combat on) | aimed at the sky, `fp_combat input 1 1 0`: actual_shots+1, ammo-1; reload (`fp_combat input 1 0 1`, the adapter path of R+RMB): reload_starts+1, ammo back up. Physical R+RMB mapping: Shay |
+| HUD01 | HUD state label follows the native state | fp_ui_state / hud_text: holstered -> ready (after R) -> swinging (free swing) -> blocking (RMB) -> aiming (crossbow drawn + RMB); hud_text = ui_state with hud_shown=1. Visual: label look/position/tint (screenshot/Shay) |
+| DOWN01 | C05-KO fix (33d0358): no body drive while down | KO the controlled actor with `fp_move w` held: stays within DOWN_MAX (40 dm) of the KO spot while down and after waking, no `[down] position jump` in KenshiFP.log, `[down] held fp_move keys dropped` logged and fp_move keys empty while down |
+Visual rows (screenshot or Shay's eye, MASTER section 2): K01 native-walk marker, the K03 context-menu visuals, the HUD01 label look.
+
 ## Gate 2: ranged mechanics
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
