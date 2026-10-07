@@ -33,6 +33,7 @@ static void fp_melee_set_passive(unsigned s){(void)s;}
 static unsigned spam_n,spam_p;static void fp_melee_spam_start(unsigned n,unsigned p){spam_n=n;spam_p=p;}
 static unsigned cl_ms,ss_resets;static void fp_melee_click_legal_start(unsigned ms){cl_ms=ms;}
 static void fp_melee_swingstat_reset(void){++ss_resets;}
+static int force_chase=-1;static void fp_melee_set_force_chase(int on){force_chase=on;}
 static int fp_melee_swingstat_append(char *b,size_t n){return snprintf(b,n,"atk_speed_mean=1.0000 techs=none");}
 #include "../client/kfp_melee_observe.inc"
 static void append(KAH_Reply *r,const char *s){(void)r;snprintf(reply,sizeof(reply),"%s",s);}
@@ -70,7 +71,10 @@ int main(void) {
   assert(kah_fp_melee("t",3,cb,&r,NULL)==KAH_ERROR&&kah_fp_melee("t",3,cx,&r,NULL)==KAH_ERROR&&cl_ms==2500);
   const char *w1[]={"fp_melee","swingstat"},*w2[]={"fp_melee","swingstat","reset"},*wb[]={"fp_melee","swingstat","x"};
   assert(kah_fp_melee("t",2,w1,&r,NULL)==KAH_OK&&ss_resets==0&&kah_fp_melee("t",3,w2,&r,NULL)==KAH_OK&&ss_resets==1);
-  assert(kah_fp_melee("t",3,wb,&r,NULL)==KAH_ERROR&&ss_resets==1);}
+  assert(kah_fp_melee("t",3,wb,&r,NULL)==KAH_ERROR&&ss_resets==1);
+  const char *f1[]={"fp_melee","force_chase","on"},*f0[]={"fp_melee","force_chase","off"},*fb[]={"fp_melee","force_chase","1"};
+  assert(kah_fp_melee("t",3,f1,&r,NULL)==KAH_OK&&force_chase==1&&kah_fp_melee("t",3,f0,&r,NULL)==KAH_OK&&force_chase==0);
+  assert(kah_fp_melee("t",3,fb,&r,NULL)==KAH_ERROR&&force_chase==0);}
  puts("RESULT B12 PASS production melee read-only snapshot, float state fields, ownership/binding guards, spam/click_legal/swingstat switch parsing; native layout/runtime unvalidated");
  return 0;
 }

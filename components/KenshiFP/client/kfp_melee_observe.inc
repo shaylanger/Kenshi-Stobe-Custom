@@ -25,13 +25,18 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
         fp_melee_click_legal_start((unsigned)ms);
         char b[96];snprintf(b,sizeof(b),"click_legal armed: one click at the first legal frame within %lu ms",ms);r->append(r,b);return KAH_OK;
     }
+    if(argc==3 && !_stricmp(argv[1],"force_chase")) {
+        int on=!_stricmp(argv[2],"on");
+        if(!on && _stricmp(argv[2],"off")) {r->append(r,"usage: fp_melee force_chase on|off");return KAH_ERROR;}
+        fp_melee_set_force_chase(on);r->append(r,on?"force_chase on: owned fighter forced into the native chase lock (state 11) each tick":"force_chase off");return KAH_OK;
+    }
     if(argc>=2 && argc<=3 && !_stricmp(argv[1],"swingstat")) {
         if(argc==3 && _stricmp(argv[2],"reset")) {r->append(r,"usage: fp_melee swingstat [reset]");return KAH_ERROR;}
         if(argc==3) fp_melee_swingstat_reset();
         char b[768];fp_melee_swingstat_append(b,sizeof(b));r->append(r,b);return KAH_OK;
     }
     if((argc!=2 && argc!=3) || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_melee state [<npc>] (default: the controlled actor) | fp_melee passive <serial>|off (test: refuse AI attacks aimed at that character) | fp_melee spam <n> [period_ms]|off (test: n LMB clicks on the game thread) | fp_melee click_legal [timeout_ms] (test: one click at the first legal frame) | fp_melee swingstat [reset] (applied attack speed, per-technique swing time)");return KAH_ERROR;
+        r->append(r,"usage: fp_melee state [<npc>] (default: the controlled actor) | fp_melee passive <serial>|off (test: refuse AI attacks aimed at that character) | fp_melee spam <n> [period_ms]|off (test: n LMB clicks on the game thread) | fp_melee click_legal [timeout_ms] (test: one click at the first legal frame) | fp_melee swingstat [reset] (applied attack speed, per-technique swing time) | fp_melee force_chase on|off (test: force the native chase lock, M09-CHASE)");return KAH_ERROR;
     }
     if(!g_melee_get_combat) {r->append(r,"native combat binding unavailable");return KAH_ERROR;}
     /* <npc> (harness name/#serial forms): read that character, e.g. the fighter after control moved away (M08-ACTOR) */

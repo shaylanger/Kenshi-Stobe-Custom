@@ -110,13 +110,46 @@ int main(void){
     /* chase states counted (diagnostic) */
     put_int(CC_STATE,11);tick(0,0,.016f);assert(g_melee_chase_frames==1);reset_fight();
     /* M09 GreatAnims: an owned fighter left in native chase (10/11) is dropped back to WAIT, so the next click is legal
-     * (was: rejected "state" forever, the chase can't finish while owned); a pending click goes back to STARTUP */
-    {unsigned r0=g_melee_rejected,c0=g_melee_clicks,f0=g_melee_chase_frames;
-     put_int(CC_STATE,11);tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_WAIT&&g_melee_chase_drops==2&&g_melee_chase_frames==f0+1);
+     * (was: rejected "state" forever, the chase can't finish while owned). A pending click means the native startup was
+     * trace-blocked into the chase before it could run the click's attack init (4080 m09: STARTUP -> 10 -> drop looped
+     * until every click expired, swings 0): the drop starts the click's swing itself (CHOP); with no technique in reach
+     * it goes back to STARTUP and expires as out_of_reach. */
+    {unsigned r0=g_melee_rejected,c0=g_melee_clicks,f0=g_melee_chase_frames,o0=g_melee_out_of_reach,x0=g_melee_expired,s0=g_melee_swings;
+     int sc0=stop_calls,iok=init_attack_ok;
+     unsigned se0=g_melee_swing_ends,sn0=g_melee_slack_n,es0=g_melee_early_starts,us0=g_melee_unfinished_starts;
+     double ss0=g_melee_swing_start_s,st0=g_melee_swing_time,ll0=g_melee_last_swing_len,mg0=g_melee_min_swing_gap,ms0=g_melee_min_swing_slack,lt0=g_melee_last_latency_ms,mx0=g_melee_max_latency_ms;
+     int is0=g_melee_in_swing;
+     put_int(CC_STATE,11);put_int(CC_NEXTMOVE,10);tick(0,0,.016f);
+     assert(get_int(CC_STATE)==MELEE_WAIT&&get_int(CC_NEXTMOVE)==MELEE_WAIT&&g_melee_chase_drops==2&&g_melee_chase_frames==f0+1&&g_melee_chase_swings==0);
      put_int(CC_STATE,10);tick(0,1,.016f);assert(g_melee_clicks==c0+1&&g_melee_rejected==r0&&g_melee_pending&&get_int(CC_STATE)==MELEE_STARTUP);
-     put_int(CC_STATE,11);tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_STARTUP&&g_melee_pending&&get_int(CC_NEXTMOVE)==MELEE_CHOP);
-     tick(0,0,.3f);assert(!g_melee_pending&&g_melee_expired==3);
-     g_melee_expired=2;g_melee_clicks=c0;g_melee_chase_frames=f0;reset_fight();}
+     /* no technique in reach: STARTUP, retried, expires as out_of_reach */
+     init_attack_ok=0;put_int(CC_STATE,11);put_int(CC_NEXTMOVE,10);tick(0,0,.016f);
+     assert(get_int(CC_STATE)==MELEE_STARTUP&&g_melee_pending&&g_melee_pending_failed&&get_int(CC_NEXTMOVE)==MELEE_CHOP&&g_melee_chase_swings==0);
+     tick(0,0,.3f);assert(!g_melee_pending&&g_melee_out_of_reach==o0+1&&g_melee_expired==x0);
+     /* in reach: the drop starts the swing (state = nextMove = CHOP, movement stop, one swing) */
+     reset_fight();tick(0,1,.016f);assert(g_melee_pending);
+     init_attack_ok=1;put_int(CC_STATE,11);put_int(CC_NEXTMOVE,10);tick(0,0,.016f);
+     assert(get_int(CC_STATE)==MELEE_CHOP&&get_int(CC_NEXTMOVE)==MELEE_CHOP&&!g_melee_pending&&g_melee_swings==s0+1&&g_melee_chase_swings==1&&stop_calls==sc0+1);
+     /* AttackState of another CombatClass is never used: fallback STARTUP, expires */
+     {void *keep=g_melee_owned_st;g_melee_owned_st=est;reset_fight();tick(0,0,.016f);tick(0,1,.016f);put_int(CC_STATE,11);tick(0,0,.016f);
+      assert(get_int(CC_STATE)==MELEE_STARTUP&&g_melee_pending&&g_melee_chase_swings==1);tick(0,0,.3f);assert(g_melee_expired==x0+1);g_melee_owned_st=keep;}
+     /* M09-CHASE test switch: every tick ends in the forced lock (state 11, nextMove 10); a pending click is started by the drop,
+      * also when the native put it back in STARTUP; CHOP and dead time are never forced */
+     {unsigned fc0=g_melee_forced_chase;
+      reset_fight();tick(0,0,.016f);fp_melee_set_force_chase(1);tick(0,0,.016f);
+      assert(get_int(CC_STATE)==11&&get_int(CC_NEXTMOVE)==10&&g_melee_forced_chase==fc0+1);
+      tick(0,1,.016f);assert(g_melee_pending&&get_int(CC_STATE)==11&&g_melee_forced_chase==fc0+2);
+      tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_CHOP&&!g_melee_pending&&g_melee_chase_swings==2&&g_melee_forced_chase==fc0+2);
+      reset_fight();tick(0,1,.016f);assert(g_melee_pending&&get_int(CC_STATE)==11);
+      put_int(CC_STATE,MELEE_STARTUP);tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_CHOP&&g_melee_chase_swings==3);
+      reset_fight();cc[CC_DEADTIME]=1;tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_DECISION);
+      {char fb[2048];fp_melee_state_append(fb,sizeof(fb),cc);assert(strstr(fb," chase_swings=3 force_chase=1 forced_chase="));}
+      fp_melee_set_force_chase(0);reset_fight();tick(0,0,.016f);assert(get_int(CC_STATE)==MELEE_DECISION);}
+     g_melee_expired=2;g_melee_clicks=c0;g_melee_chase_frames=f0;g_melee_chase_drops=4;g_melee_out_of_reach=o0;g_melee_swings=s0;stop_calls=sc0;
+     g_melee_rejected=r0;g_melee_chase_swings=0;init_attack_ok=iok;
+     g_melee_swing_ends=se0;g_melee_slack_n=sn0;g_melee_early_starts=es0;g_melee_unfinished_starts=us0;g_melee_swing_start_s=ss0;g_melee_swing_time=st0;
+     g_melee_last_swing_len=ll0;g_melee_min_swing_gap=mg0;g_melee_min_swing_slack=ms0;g_melee_last_latency_ms=lt0;g_melee_max_latency_ms=mx0;g_melee_in_swing=is0;
+     reset_fight();}
     /* M08: UI open releases (native approach again), held LMB through close never swings, release re-arms, fresh click swings */
     g_ui_open=1;tick(0,1,.016f);assert(!g_melee_owned_cc&&!strcmp(g_melee_why,"not_allowed"));
     approach(mv);assert(approach_calls==3);
