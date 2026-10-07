@@ -65,6 +65,14 @@ Wrapper `tests/ingame/fp-controls.sh` (fixture kah-fpxbow: Axima crossbow player
 | HUD01 | HUD state label follows the native state | fp_ui_state / hud_text: holstered -> ready (after R) -> swinging (free swing) -> blocking (RMB) -> aiming (crossbow drawn + RMB); hud_text = ui_state with hud_shown=1. Visual: label look/position/tint (screenshot/Shay) |
 Visual rows (screenshot or Shay's eye, MASTER section 2): K01 native-walk marker, the K03 context-menu visuals, the HUD01 label look.
 
+## Gate 1c: FP stealth attacks (KenshiFP 7B8175EF+)
+Sneaking + LMB drawn (melee) on a character that does not perceive the attacker (`SensoryData::amIAwareOfThisGuy(attacker, needToSeeOrHear=1)` = 0) gives the vanilla sneak-mode order `STEALTH_KNOCKOUT` (228: walk up, `getStealthKOChance` roll); aware/unreadable target = the normal K05 engage. Holstered LMB stays non-combat (scheme). Evidence: `fp_keys state` sneak_* fields, `fp_keys sneak [show]` (crosshair probe), KenshiFP.log `[controls] LMB sneak=1 target= target_aware= aware_any= ko_chance= path= task=` and `[controls] sneak result=ko|dead|failed|timeout|lost`. Wrapper `tests/ingame/fp-stealth.sh` (kah-fpxbow, each row spawns its own neutral target; skills stealth/assassination 100 for the run).
+| ID | Requirement | Acceptance evidence |
+|---|---|---|
+| ST01 | Sneak + LMB on an unaware target = vanilla sneak knockout | pre: detecttime seen=0, `senses` aware=0, probe target_aware=0; sneak_attacks+1, sneak_path=vanilla_sneak, last_task=228, log `target_aware=0 ... path=vanilla_sneak task=228`, then sneak_result=ko, target KO (`where`) |
+| ST02 | Sneak + LMB on an aware target = normal engage | probe target_aware=1; sneak_attacks unchanged, sneak_path=engage_aware, engages+1, last_task=61, native fight on him |
+| ST03 | Not sneaking + LMB = no sneak path | sneak=0; sneak_clicks/attacks unchanged, engages+1, last_task=61, native fight on him |
+
 ## Gate 2: ranged mechanics
 | ID | Requirement | Acceptance evidence |
 |---|---|---|

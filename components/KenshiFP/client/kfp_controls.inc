@@ -238,6 +238,90 @@ static void fpc_engage(void *gw,void *pc,void *t,int ranged) {
     if (!ranged && g_combat_enabled) fp_melee_click_legal_start(1500);   /* manual melee: the click becomes the first swing */
     logline("[controls] LMB engage %s task=%d hostile=%d",g_fpc_last_target,task,hostile);
 }
+
+/* FP stealth attack (Shay: stealth attacks right after the controls rework). Sneaking + LMB drawn (melee) on a
+ * character that does not perceive the attacker (SensoryData::amIAwareOfThisGuy(attacker, needToSeeOrHear=1) == 0)
+ * = the game's own sneak knockout: the same order the vanilla sneak-mode click gives (TaskType STEALTH_KNOCKOUT 228:
+ * walk up, Character::getStealthKOChance roll, EV_ASSASSINATION_FAILED on a miss). Aware (or unreadable) target =
+ * the normal LMB engage. Each sneak LMB logs `[controls] LMB sneak=1 target=.. target_aware=.. path=..`; the attempt
+ * is watched until the target is KO/dead, fights back (failed) or FPC_SNEAK_WATCH_MS passes: `[controls] sneak result=..`. */
+#define FPC_TASK_STEALTH_KO 228
+#define FPC_SNEAK_WATCH_MS 25000.0
+#define FPC_SYM_SENSORY "?_NV_getSensoryData@Character@@QEAAPEAVSensoryData@@XZ"
+#define FPC_SYM_AWARE "?amIAwareOfThisGuy@SensoryData@@QEAA_NPEAVCharacter@@_N@Z"
+#define FPC_SYM_KOCHANCE "?getStealthKOChance@Character@@QEAAMPEAV1@_N@Z"
+#define FPC_SYM_UNCON "?_NV_isUnconcious@Character@@QEBA_NXZ"
+#define FPC_SYM_DEAD "?isDead@Character@@QEBA_NXZ"
+typedef void *(*fpc_sensory_t)(void *pc);
+typedef unsigned char (*fpc_aware_t)(void *sd,void *who,unsigned char need);
+typedef float (*fpc_kochance_t)(void *pc,void *victim,unsigned char factors);
+typedef unsigned char (*fpc_cbool_t)(void *pc);
+static fpc_sensory_t g_fpc_sensory;static fpc_aware_t g_fpc_aware;static fpc_kochance_t g_fpc_kochance;
+static fpc_cbool_t g_fpc_uncon,g_fpc_dead;
+static unsigned g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout;
+static const char *g_fpc_sneak_path="none",*g_fpc_sneak_result="none";
+static int g_fpc_sneak_now,g_fpc_sneak_aware=-1,g_fpc_sneak_aware_any=-1;
+static float g_fpc_sneak_chance=-1.0f;
+static char g_fpc_sneak_target[48]="none";
+static void *g_fpc_sneak_pc,*g_fpc_sneak_t;static double g_fpc_sneak_ms,g_fpc_sneak_elapsed;
+static int g_fpc_sneak_req;   /* fp_keys sneak: probe the crosshair target next tick */
+static struct { unsigned n; int stealth,aware,aware_any; float chance; char name[48]; } g_fpc_sneak_probe;
+static int fpc_is_sneaking(void *pc) {
+    return readable((void *)((uintptr_t)pc+CHAR_STEALTH_MODE),1) && *(unsigned char *)((uintptr_t)pc+CHAR_STEALTH_MODE);
+}
+/* t perceives who: need=1 sees/hears him now, need=0 also aware from memory; -1 = not readable */
+static int fpc_target_aware(void *t,void *who,int need) {
+    void *sd=g_fpc_sensory&&g_fpc_aware&&char_valid(t)?g_fpc_sensory(t):NULL;
+    if (!readable(sd,8)) return -1;
+    return g_fpc_aware(sd,who,(unsigned char)need)!=0;
+}
+static void fpc_sneak_click(void *gw,void *pc,void *t) {
+    int aware=fpc_target_aware(t,pc,1),any=fpc_target_aware(t,pc,0);
+    float ch=g_fpc_kochance?g_fpc_kochance(pc,t,1):-1.0f;
+    ++g_fpc_sneak_clicks;fpc_name(t,g_fpc_sneak_target,sizeof g_fpc_sneak_target);
+    g_fpc_sneak_aware=aware;g_fpc_sneak_aware_any=any;g_fpc_sneak_chance=ch;
+    int task=-1;
+    if (aware==0 && g_fpc_addorder) {
+        Vec3 pos={0,0,0};char_position(t,&pos);
+        g_fpc_addorder(pc,NULL,FPC_TASK_STEALTH_KO,t,0,1,&pos);
+        task=FPC_TASK_STEALTH_KO;g_fpc_last_task=task;strcpy(g_fpc_last_target,g_fpc_sneak_target);
+        g_fpc_sneak_path="vanilla_sneak";g_fpc_sneak_result="pending";g_fpc_sneak_pc=pc;g_fpc_sneak_t=t;
+        g_fpc_sneak_ms=fpc_now_ms();g_fpc_sneak_elapsed=0;++g_fpc_sneak_attacks;
+    } else {
+        g_fpc_sneak_path=aware<0?"engage_unread":"engage_aware";
+        fpc_engage(gw,pc,t,0);task=g_fpc_last_task;
+    }
+    logline("[controls] LMB sneak=1 target=%s target_aware=%d aware_any=%d ko_chance=%.3f path=%s task=%d",
+        g_fpc_sneak_target,aware,any,ch,g_fpc_sneak_path,task);
+}
+/* the pending sneak knockout: KO/dead target, a fight back on the attacker (failed) or the watch window */
+static void fpc_sneak_watch(void) {
+    void *t=g_fpc_sneak_t;const char *res=NULL;
+    if (!t) return;
+    g_fpc_sneak_elapsed=fpc_now_ms()-g_fpc_sneak_ms;
+    if (!char_valid(t)) res="lost";
+    else if (g_fpc_dead && g_fpc_dead(t)) res="dead";
+    else if (g_fpc_uncon && g_fpc_uncon(t)) res="ko";
+    else {
+        void *cc=g_melee_get_combat?g_melee_get_combat(t):NULL;
+        int fights=readable(cc,0x2b8) && *(unsigned char *)((uintptr_t)cc+CC_ACTIVE) && *(void **)((uintptr_t)cc+CC_TARGET)==g_fpc_sneak_pc;
+        if (fights) res="failed";
+        else if (g_fpc_sneak_elapsed>FPC_SNEAK_WATCH_MS) res="timeout";
+    }
+    if (!res) return;
+    g_fpc_sneak_result=res;
+    if (!strcmp(res,"ko")||!strcmp(res,"dead")) ++g_fpc_sneak_ko; else if (!strcmp(res,"failed")) ++g_fpc_sneak_failed; else ++g_fpc_sneak_timeout;
+    logline("[controls] sneak result=%s target=%s elapsed_ms=%.0f target_aware_now=%d ko_chance=%.3f",
+        res,g_fpc_sneak_target,g_fpc_sneak_elapsed,char_valid(t)?fpc_target_aware(t,g_fpc_sneak_pc,1):-1,g_fpc_sneak_chance);
+    g_fpc_sneak_t=NULL;g_fpc_sneak_pc=NULL;
+}
+static void fpc_sneak_probe(void *pc) {
+    void *t=fpc_crosshair_char(pc);
+    ++g_fpc_sneak_probe.n;g_fpc_sneak_probe.stealth=fpc_is_sneaking(pc);
+    g_fpc_sneak_probe.aware=t?fpc_target_aware(t,pc,1):-1;g_fpc_sneak_probe.aware_any=t?fpc_target_aware(t,pc,0):-1;
+    g_fpc_sneak_probe.chance=t&&g_fpc_kochance?g_fpc_kochance(pc,t,1):-1.0f;
+    if (t) fpc_name(t,g_fpc_sneak_probe.name,sizeof g_fpc_sneak_probe.name); else strcpy(g_fpc_sneak_probe.name,"none");
+}
 static void fpc_free_swing(void *pc) {
     if (g_fpc_fs_dead || g_fpc_fs_tech || !g_fpc_getanim || !g_fpc_choose || !g_fpc_startanim || !g_fpc_progress) return;
     void *cc=g_melee_get_combat?g_melee_get_combat(pc):NULL;
@@ -362,6 +446,8 @@ static void fp_controls_tick(void *gw,float dt) {
         g_fpc_prev[b]=in[b];g_fpc_input[b]=in[b];
     }
     if (g_fpc_pick_req && pc) {g_fpc_pick_req=0;fpc_crosshair_char(pc);}   /* fp_keys pick (test) */
+    g_fpc_sneak_now=fpc_is_sneaking(pc);
+    if (g_fpc_sneak_req) {g_fpc_sneak_req=0;fpc_sneak_probe(pc);}           /* fp_keys sneak (test) */
     if (!g_is_down && g_fpc_hook_ok) {
         if (edge[FPC_R] && !in[FPC_RMB]) fpc_draw_toggle(pc);   /* R with RMB held = reload (adapter) */
         if (edge[FPC_MMB] && g_fpc_select) {
@@ -383,12 +469,14 @@ static void fp_controls_tick(void *gw,float dt) {
         if (g_fpc_drawn && edge[FPC_LMB] && !in[FPC_RMB]) {
             ++g_fpc_lmb_clicks;
             void *t=fpc_crosshair_char(pc);
-            if (t) fpc_engage(gw,pc,t,g_fpc_ranged);
+            if (t && g_fpc_sneak_now && !g_fpc_ranged) fpc_sneak_click(gw,pc,t);   /* sneak: vanilla knockout if unaware */
+            else if (t) fpc_engage(gw,pc,t,g_fpc_ranged);
             else if (!g_fpc_ranged && !fpc_in_fight(pc)) {phase=1;fpc_free_swing(pc);phase=0;}
         }
         if (g_fpc_fs_tech) {phase=1;fpc_free_swing_step(pc);phase=0;}
         if (g_fpc_drawn && !g_fpc_ranged && in[FPC_RMB]) fpc_free_block(pc);
     }
+    fpc_sneak_watch();
     g_fpc_ui_state=fpc_ui_state(pc,in[FPC_RMB]);
     g_guard_armed=0;
 }
@@ -398,14 +486,18 @@ static size_t fpc_state(char *b,size_t n) {
         "mmb_selects=%u mmb_none=%u last_select=%s ctx_opens=%u ctx_none=%u ctx_freed=%d rmb_swallowed=%u lmb_swallowed=%u "
         "mmb_cam_frames=%u r_keys=%u r_draws=%u r_holsters=%u r_draw_fail=%u sheathe_kept=%u lmb_clicks=%u engages=%u last_task=%d last_target=%s "
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
-        "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d",
+        "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
+        "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
         g_fpc_mmb_cam_frames,g_fpc_r_keys_swallowed,g_fpc_r_draws,g_fpc_r_holsters,g_fpc_r_draw_fail,g_fpc_sheathe_kept,g_fpc_lmb_clicks,g_fpc_engages,g_fpc_last_task,g_fpc_last_target,
         g_fpc_free_swings,g_fpc_fs_tech!=NULL,g_fpc_fs_prog,g_fpc_fs_prog_max,g_fpc_fs_ends,g_fpc_fs_notech,g_fpc_fs_faults,g_fpc_fs_dead,
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
-        g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus);
+        g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
+        g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
@@ -413,7 +505,7 @@ static int fpc_btn_index(const char *s) {
 }
 static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id;(void)u;
-    if (argc==2 && !_stricmp(argv[1],"state")) {char b[1600];fpc_state(b,sizeof b);r->append(r,b);return KAH_OK;}
+    if (argc==2 && !_stricmp(argv[1],"state")) {char b[2400];fpc_state(b,sizeof b);r->append(r,b);return KAH_OK;}
     if ((argc==3||argc==4) && !_stricmp(argv[1],"press")) {
         int b=fpc_btn_index(argv[2]);int ms=argc==4?atoi(argv[3]):80;
         if (b<0 || ms<20 || ms>20000) {r->append(r,"press <lmb|rmb|mmb|r> [hold_ms 20..20000]");return KAH_ERROR;}
@@ -433,6 +525,14 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         else if (_stricmp(argv[2],"show")) {r->append(r,"pick [show]");return KAH_ERROR;}
         char b[640];fpc_pick_text(b,sizeof b);r->append(r,b);return KAH_OK;
     }
+    if ((argc==2||argc==3) && !_stricmp(argv[1],"sneak")) {   /* sneak: probe the crosshair target next frame + show the last; sneak show: last only */
+        if (argc==2) g_fpc_sneak_req=1;
+        else if (_stricmp(argv[2],"show")) {r->append(r,"sneak [show]");return KAH_ERROR;}
+        char b[256];snprintf(b,sizeof b,"sneak n=%u stealth=%d target=%s target_aware=%d aware_any=%d ko_chance=%.3f",
+            g_fpc_sneak_probe.n,g_fpc_sneak_probe.stealth,g_fpc_sneak_probe.n?g_fpc_sneak_probe.name:"none",
+            g_fpc_sneak_probe.aware,g_fpc_sneak_probe.aware_any,g_fpc_sneak_probe.chance);
+        r->append(r,b);return KAH_OK;
+    }
     if (argc==3 && !_stricmp(argv[1],"swallow")) {
         g_fpc_swallow=!_stricmp(argv[2],"on");r->append(r,g_fpc_swallow?"swallow=1":"swallow=0");return KAH_OK;
     }
@@ -443,11 +543,14 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         g_fpc_mmb_selects=g_fpc_mmb_none=g_fpc_ctx_opens=g_fpc_ctx_none=g_fpc_rmb_swallowed=g_fpc_lmb_swallowed=g_fpc_mmb_cam_frames=0;
         g_fpc_r_draws=g_fpc_r_holsters=g_fpc_r_draw_fail=g_fpc_engages=g_fpc_free_swings=g_fpc_fs_faults=g_fpc_fs_notech=g_fpc_fs_ends=0;
         g_fpc_free_block_frames=g_fpc_block_checks=g_fpc_native_injected=g_fpc_sheathe_kept=g_fpc_lmb_clicks=g_fpc_r_keys_swallowed=0;
+        g_fpc_sneak_clicks=g_fpc_sneak_attacks=g_fpc_sneak_ko=g_fpc_sneak_failed=g_fpc_sneak_timeout=0;g_fpc_sneak_t=g_fpc_sneak_pc=NULL;
+        g_fpc_sneak_path=g_fpc_sneak_result="none";strcpy(g_fpc_sneak_target,"none");g_fpc_sneak_aware=g_fpc_sneak_aware_any=-1;
+        g_fpc_sneak_chance=-1.0f;g_fpc_sneak_elapsed=0;
         g_fpc_fs_prog_max=0;g_fpc_last_task=-1;strcpy(g_fpc_last_select,"none");strcpy(g_fpc_last_target,"none");
         g_fpc_swallow=1;for (int b=0;b<FPC_NBTN;++b) g_fpc_inj_until[b]=0;
         r->append(r,"counters reset, swallow=1");return KAH_OK;
     }
-    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|pick [show]|swallow on|off|focus on|off|reset");
+    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|pick [show]|sneak [show]|swallow on|off|focus on|off|reset");
     return KAH_ERROR;
 }
 /* AnimationClass::startCombatAnimation(tech, speed, std::string) is not exported: it sits at a fixed
@@ -470,6 +573,11 @@ static void fp_controls_init(void) {
     g_fpc_progress=(fpc_progress_t)fpc_klib(FPC_SYM_PROGRESS);
     g_fpc_endanim=(fpc_endanim_t)fpc_klib(FPC_SYM_ENDANIM);
     fpc_resolve_startanim();
+    g_fpc_sensory=(fpc_sensory_t)fpc_klib(FPC_SYM_SENSORY);g_fpc_aware=(fpc_aware_t)fpc_klib(FPC_SYM_AWARE);
+    g_fpc_kochance=(fpc_kochance_t)fpc_klib(FPC_SYM_KOCHANCE);
+    g_fpc_uncon=(fpc_cbool_t)fpc_klib(FPC_SYM_UNCON);g_fpc_dead=(fpc_cbool_t)fpc_klib(FPC_SYM_DEAD);
+    logline("[controls] stealth: sensory=%p aware=%p kochance=%p uncon=%p dead=%p",(void *)g_fpc_sensory,(void *)g_fpc_aware,
+        (void *)g_fpc_kochance,(void *)g_fpc_uncon,(void *)g_fpc_dead);
     void *pcf=fpc_klib_real(FPC_SYM_PLAYERCONTROL);
     g_fpc_hook_ok=pcf && fpc_input_handler() && install_hook(pcf,(void *)fpc_playercontrol_hook,(void **)&g_fpc_pc_orig);
     if (!g_fpc_startanim) g_fpc_fs_dead=1;
