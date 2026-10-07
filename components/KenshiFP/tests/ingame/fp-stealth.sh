@@ -44,6 +44,8 @@ take() { A select "$1" >/dev/null; A fp_control take >/dev/null; A fp_mode on >/
 kge() { ge "$(ks "$1")" "$2"; }
 kis() { [ "$(ks "$1")" = "$2" ]; }
 uname_() { tr ' =' '__' <<<"$1"; }
+# urx_: uname_ quoted for grep regexes (live names carry [ ], e.g. Ivor_2_[Hungry_Bandit])
+urx_() { uname_ "$1" | sed 's/[][\.*^$]/\\&/g'; }
 in_fight() { local s; s=$(A fp_melee state); grep -q 'active=1' <<<"$s" || return 1
   [ -z "$1" ] && { ! grep -q 'target_h=#0/' <<<"$s"; return; }; grep -q "target_h=#$1/" <<<"$s"; }
 not_fight() { ! in_fight; }
@@ -118,11 +120,14 @@ spawn_target() { local SP; SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH
 place() { A pin "$TH" at "$SH" dist 15 face "$1" | grep -q '^pinned' && PINNED+=" $TH"; }
 retire() { A ko "$TH" 3600 >/dev/null; A pin "$TH" off >/dev/null; waitf 10 isko "$TH"; A unload "$TH" >/dev/null
   SPAWNED=${SPAWNED/ $TH/}; PINNED=${PINNED/ $TH/}; }
+# live_tn: TN = the target's live name. Stobe renames spawned generics ("Ivor 2 [Hungry Bandit]"),
+# so the spawn-time name never matched the pick/probe target (m50 5090 K ST01 false setup FAIL).
+live_tn() { local W; W=$(A where "$TH" | sed -n 's/^\(.*\) #[0-9][0-9]*\/[0-9][0-9]* .*/\1/p'); [ -n "$W" ] && TN=$W; }
 # pick_on: the crosshair pick reports the target (bounded)
-pick_on() { local PK; for _ in 1 2 3 4 5 6; do A fp_keys pick >/dev/null; sleep 0.3; PK=$(A fp_keys pick show)
+pick_on() { local PK; for _ in 1 2 3 4 5 6; do live_tn; A fp_keys pick >/dev/null; sleep 0.3; PK=$(A fp_keys pick show)
   [ "$(fld result <<<"$PK")" = "$(uname_ "$TN")" ] && return 0; done; return 1; }
 # unaware_ready: sighting reset (detecttime, 3 s) not seen, game senses aware=0, DLL probe target_aware=0 (bounded, 3 tries)
-unaware_ready() { local d s p; for _ in 1 2 3; do d=$(A detecttime "$SH" "$TH" timeout 3); s=$(A senses "$TH" "$SH"); p=$(probe)
+unaware_ready() { local d s p; for _ in 1 2 3; do live_tn; d=$(A detecttime "$SH" "$TH" timeout 3); s=$(A senses "$TH" "$SH"); p=$(probe)
   UR="detect: seen=$(fld seen <<<"$d") los=$(fld los <<<"$d") | senses: sees=$(fld sees <<<"$s") hears=$(fld hears <<<"$s") aware=$(fld aware <<<"$s") | probe: $(cut -d' ' -f2- <<<"$p")"
   [ "$(fld target <<<"$p")" = "$(uname_ "$TN")" ] && [ "$(fld target_aware <<<"$p")" = 0 ] && [ "$(fld aware <<<"$s")" = 0 ] && return 0; sleep 1; done; return 1; }
 
@@ -137,8 +142,8 @@ if want ST01; then ui_clear
       A fp_keys press lmb 100 >/dev/null; waitf 3 kge sneak_clicks $((C0+1)); K1=$(A fp_keys state)
       waitf "$ST_WAIT" bash -c "stobe-auto fp_keys state | grep -q 'sneak_result=\(ko\|dead\|failed\|timeout\|lost\)\b'"
       sleep 0.5; K2=$(A fp_keys state); KO=0; isko "$TH" && KO=1
-      LL=$(grep -a "\[controls\] LMB sneak=1 target=$(uname_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*LMB sneak=/sneak=/')
-      LR=$(grep -a "\[controls\] sneak result=.* target=$(uname_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*sneak result=/result=/')
+      LL=$(grep -a "\[controls\] LMB sneak=1 target=$(urx_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*LMB sneak=/sneak=/')
+      LR=$(grep -a "\[controls\] sneak result=.* target=$(urx_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*sneak result=/result=/')
       ev="pre: $UR | click: sneak_clicks $C0->$(fld sneak_clicks <<<"$K1") sneak_attacks $A0->$(fld sneak_attacks <<<"$K1") path=$(fld sneak_path <<<"$K1") last_task=$(fld last_task <<<"$K1") sneak=$(fld sneak <<<"$K1") drawn=$(fld drawn <<<"$K1") chance=$(fld sneak_chance <<<"$K1") | result=$(fld sneak_result <<<"$K2") elapsed_ms=$(fld sneak_elapsed_ms <<<"$K2") ${TN}_KO=$KO | log: [$LL] [$LR]"
       ok=1; [ "$(fld sneak_attacks <<<"$K1")" = $((A0+1)) ] && [ "$(fld sneak_path <<<"$K1")" = vanilla_sneak ] && [ "$(fld last_task <<<"$K1")" = 228 ] || ok=0
       grep -q 'target_aware=0 .*path=vanilla_sneak task=228' <<<"$LL" || ok=0
@@ -150,14 +155,14 @@ if want ST01; then ui_clear
 if want ST02; then ui_clear
   if ! spawn_target ST02; then row ST02 FAIL "setup spawn failed"
   elif ! place "$SH"; then row ST02 FAIL "setup could not pin $TN in front of $SH"; retire
-  else sleep 1; draw_to 1; stealth_to 1; aim_at "$TH" 13; waitf 8 not_fight; ser=$(id_of "$TN")
+  else sleep 1; draw_to 1; stealth_to 1; aim_at "$TH" 13; waitf 8 not_fight; live_tn; ser=$(id_of "$TH")
     AW=""; for _ in $(seq 1 10); do P=$(probe); S=$(A senses "$TH" "$SH")
       AW="probe: $(cut -d' ' -f2- <<<"$P") | senses: sees=$(fld sees <<<"$S") aware=$(fld aware <<<"$S")"
       [ "$(fld target <<<"$P")" = "$(uname_ "$TN")" ] && [ "$(fld target_aware <<<"$P")" = 1 ] && break; AW="NOTAWARE $AW"; sleep 1; done
     if grep -q '^NOTAWARE' <<<"$AW"; then row ST02 FAIL "setup $TN (facing $SH at 1.5 m) never aware of him in 10 s: $AW"
     else KS0=$(A fp_keys state); A0=$(fld sneak_attacks <<<"$KS0"); C0=$(fld sneak_clicks <<<"$KS0"); G0=$(fld engages <<<"$KS0")
       A fp_keys press lmb 100 >/dev/null; waitf 3 kge sneak_clicks $((C0+1)); waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
-      LL=$(grep -a "\[controls\] LMB sneak=1 target=$(uname_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*LMB sneak=/sneak=/')
+      LL=$(grep -a "\[controls\] LMB sneak=1 target=$(urx_ "$TN") " "$KFPLOG" 2>/dev/null | tail -1 | sed 's/.*LMB sneak=/sneak=/')
       ev="pre: $AW | sneak_clicks $C0->$(fld sneak_clicks <<<"$K") sneak_attacks $A0->$(fld sneak_attacks <<<"$K") path=$(fld sneak_path <<<"$K") engages $G0->$(fld engages <<<"$K") last_task=$(fld last_task <<<"$K") native_fight_on_$(uname_ "$TN")=$((1-FT)) | log: [$LL]"
       ok=1; [ "$(fld sneak_clicks <<<"$K")" = $((C0+1)) ] && [ "$(fld sneak_attacks <<<"$K")" = "$A0" ] && [ "$(fld sneak_path <<<"$K")" = engage_aware ] || ok=0
       [ "$(fld engages <<<"$K")" = $((G0+1)) ] && [ "$(fld last_task <<<"$K")" = 61 ] && [ $FT = 0 ] || ok=0
@@ -169,7 +174,7 @@ if want ST02; then ui_clear
 if want ST03; then ui_clear
   if ! spawn_target ST03; then row ST03 FAIL "setup spawn failed"
   elif ! place "$MT"; then row ST03 FAIL "setup could not pin $TN in front of $SH"; retire
-  else sleep 1; draw_to 1; stealth_to 0; aim_at "$TH" 13; waitf 8 not_fight; ser=$(id_of "$TN")
+  else sleep 1; draw_to 1; stealth_to 0; aim_at "$TH" 13; waitf 8 not_fight; live_tn; ser=$(id_of "$TH")
     if ! pick_on; then row ST03 FAIL "setup crosshair pick never on $TN ($(A fp_keys pick show | cut -c1-120))"
     else S=$(A senses "$TH" "$SH"); KS0=$(A fp_keys state); C0=$(fld sneak_clicks <<<"$KS0"); A0=$(fld sneak_attacks <<<"$KS0"); G0=$(fld engages <<<"$KS0")
       A fp_keys press lmb 100 >/dev/null; waitf 3 kge engages $((G0+1)); waitf 8 in_fight "$ser"; FT=$?; K=$(A fp_keys state)
