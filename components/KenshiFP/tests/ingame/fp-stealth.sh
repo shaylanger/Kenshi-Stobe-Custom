@@ -87,7 +87,8 @@ A status | grep -q phase=world || setup_fail "not in world"
 for c in "$SH" "$MT"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not found"; done
 A fp_keys state | grep -q 'sneak_path=' || setup_fail "KenshiFP has no fp_keys sneak fields (needs 7B8175EF+): $(A fp_keys state | cut -c1-80)"
 A fp_keys state | grep -q '\bhook=1\b' || setup_fail "fp_keys hook=0 (playerControl hook not installed)"
-grep -q 'stealth: sensory=0x[0-9a-fA-F]* aware=0x[0-9a-fA-F]* kochance=0x[0-9a-fA-F]* uncon=0x[0-9a-fA-F]* dead=0x' "$KFPLOG" 2>/dev/null \
+# pointers print without 0x on this toolchain; every symbol must be non-zero
+grep -aqE 'stealth: sensory=(0x)?[0-9a-fA-F]*[1-9a-fA-F][0-9a-fA-F]* aware=(0x)?[0-9a-fA-F]*[1-9a-fA-F][0-9a-fA-F]* kochance=(0x)?[0-9a-fA-F]*[1-9a-fA-F][0-9a-fA-F]* uncon=(0x)?[0-9a-fA-F]*[1-9a-fA-F][0-9a-fA-F]* dead=(0x)?[0-9a-fA-F]*[1-9a-fA-F][0-9a-fA-F]*' "$KFPLOG" 2>/dev/null \
   || setup_fail "KenshiFP.log has no resolved '[controls] stealth:' symbols line ($(grep -a 'stealth: sensory' "$KFPLOG" 2>/dev/null | tail -1 | cut -c1-140))"
 A senses "$MT" "$SH" | grep -q 'aware=' || setup_fail "harness has no senses command"
 BOWN=$(A rangedinfo "$SH" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//'); [ "$BOWN" = none ] && BOWN=""
