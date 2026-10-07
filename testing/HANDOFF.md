@@ -3,18 +3,19 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 ~05:50 5090 clock, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
-- Done m50 (run log): NavMesh crash fix confirmed; stealth ST01-ST03 PASS (5090 Q); ranged R01-R06/R12 PASS; control C01-C05
-  PASS on both rigs (5090 T, 4080 b45) except C05-STAIRS; M09 life rows PASS in mca/dodge/full (4080 b45/b46).
-- 5090: owned by a STAIRS fixer subagent (C05-STAIRS on a real world stair in a town fixture: a `build` house has no navmesh).
-- 4080: idle, KenshiFP B83247F1 (face_tg body_yaw). Open: M09 vanilla KO/LOAD/UNARMED fresh clicks never swing (b46,
-  `C:\KenshiTestRuns\fp-4080-m09d`) -> melee fixer; then rerun vanilla life rows (M09_MELEE=0 fp-m09.sh, C:\KAH\fp\bm46.sh pattern).
-- Open FP rows: M09 vanilla life rows, C05-STAIRS, S05.
+## Right now (2026-10-07 ~06:30 5090 clock, coordinator; Shay: don't stop till done, wakers 2 min, log Shay-needs here and skip)
+- FP combat: every automated row PASS (m50 run log): M09 closed in all 5 loadouts (vanilla 4080 b48 on KenshiFP 8469D760),
+  C05-STAIRS on a real world stair (kah-fpstairs = Crafting base Hub copy), S05-BUILD on both rigs, controls K01-K06, stealth
+  ST01-ST03, ranged R01-R16, control C01-C05.
+- 5090: batch U (`C:\KenshiTestRuns\m50-5090-u`, run-batch.sh, kah-fpxbow) = cross-rig confirmation of 8469D760 melee
+  (fp-manual-melee M00-M07/M09-CHASE all PASS; life rows running); Kenshi stops at the end.
+- 4080: idle, Kenshi closed, anim mods restored (full), standing lock `rig4080`.
 - Gotcha: never `unload` a char that is still someone's fight/order target (game crash, exe+268A68); tests KO and leave them.
-- Gotcha: a detached WSL start must end with `& disown` and be checked with `ps` (m50 G first start never ran).
+- Gotcha: start detached WSL batches with `wsl.exe ... bash -s` + heredoc (`setsid nohup ... > log 2>&1 < /dev/null &`) and
+  check the out dir appears; the one-line `bash -c '... &'` form silently never ran (m50 G and U).
 - 4080 desktop is locked (LogonUI): KenshiFP test switch `fp_keys focus on` (fp-controls.sh uses it). Defender-probe each new DLL
   on the 4080 (copy to C:\KAH, Get-FileHash, wait 20 s, Test-Path + newest Get-MpThreatDetection).
-- Waiting on Shay: nothing.
+- Waiting on Shay: FP visual/feel checks and whether manual combat goes ON by default (MASTER section 2).
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
@@ -28,23 +29,21 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 8B861ADE (danger interrupt keeps deal actions), KenshiFP 44458ACE, PG BAFB8C31 (Normal), harness 24BE3AEC; server live `stobe` 055e0c5.
-- 4080: KenshiFP B83247F1 (melee gate diagnostics + body_yaw, test builds), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
+- 5090: Stobe 8B861ADE (danger interrupt keeps deal actions), KenshiFP 8469D760, PG BAFB8C31 (Normal), harness 24BE3AEC; server live `stobe` 055e0c5.
+- 4080: KenshiFP 8469D760 (same as the 5090; S05-BUILD PASS), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
 - **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
   confirmation; E/F: design + next big feature, item 63 = pick the next big feature with Shay).
 - **KenshiFP decoupling:** done m49 (Stobe 9d99f36, KenshiFP f94b1d5); DC1-DC7, 89, 14-A3, generic-fb, 16-fb 55/55, A8 PASS.
-- **FP combat:** on FE26573F R07, R08 (8/9), R09, R11, R13, FP-EYE PASS both rigs, S01 (= DC1-DC5). Passed on older builds,
-  to reconfirm in one batch per rig: R10, R12 (UI/KO/SWAP/SPEED/LOAD), R14-R16, M08, S03. Never passed: M09, S05, C01-C05,
-  Gate 3 balance acceptance. Manual combat stays OFF by default. Details: `components/KenshiFP/docs/COMBAT_TEST_PLAN.md`.
+- **FP combat:** all automated rows PASS (m50, KenshiFP 8469D760; Gate 3 tolerances decided 2026-10-06). Left for Shay:
+  visual/feel checks and the manual-combat default (OFF now). Details: `components/KenshiFP/docs/COMBAT_TEST_PLAN.md`.
 - **PG:** all automated rows PASS; D1-D3, D5-D8 done; open D4 athletics feel + tooltip/feel rows (Shay, MASTER section 2).
   `TEST_PLAN.md` there is the regression spec (scenarios cite its row IDs: never delete rows); status lives in `INGAME_STATUS.md`.
 
 ## Next work (in order)
-1. FP combat reconfirm batch on FE26573F (both rigs, wrappers in `components/KenshiFP/tests/ingame/`, fixture FP-crossbow).
-2. FP combat open rows: M09, S05, C01-C05; define Gate 3 tolerances.
-3. STOBE section D in-game confirmations; then item 63 (next big feature) with Shay.
+1. Shay: FP visual/feel checks + manual-combat default; PG D4 + tooltip/feel rows (MASTER section 2).
+2. Item 63 (next big feature) with Shay (STOBE section D is empty since m50).
 
 ## How to run things (recipes that used to live only in handoffs)
 - Detached 5090 batch: `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s <<'EOF'` +
