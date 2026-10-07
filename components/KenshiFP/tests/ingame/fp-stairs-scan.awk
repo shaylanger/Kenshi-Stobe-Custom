@@ -26,13 +26,10 @@ function climb(px, pz, fx, fz,   h, k, c, i, y, b, top) { h = G; top = 0; RK = 9
     if (k <= 1 && (b - G > 1.5 || G - b > 1.5)) return -1
     h = b; if (h - G > top) top = h - G; if (top >= 10 && RK == 99) RK = k }
   return top }
-END { if (n < 20) { print "few_cells " n; exit }
-  mx = 0; for (b in cnt) if (cnt[b] > mx) { mx = cnt[b]; G = b + 0 }
-  if (!mx) for (b in all) if (all[b] > mx) { mx = all[b]; G = b + 0 }
-  s = 0; m = 0; for (c = 1; c <= n; c++) for (i = 1; i <= NS[c]; i++) { y = Y[c, i]; if (y >= G - 1 && y <= G + 1) { s += y; m++ } }
-  if (m) G = s / m
-  for (c = 1; c <= n; c++) C[(int((X[c] - x0) / 3 + 100.5) - 100) SUBSEP (int((Z[c] - z0) / 3 + 100.5) - 100)] = c
-  best = -1e9; L = 0
+# search(g): ground g refined to the mean of the surfaces within +-1, then the best line from it (sets G L bs bx bz byaw)
+function search(g,   s, m, c, i, y, k, yaw, fx, fz, r0, rk, r1, r2, r3, r4, sc, w, best) {
+  s = 0; m = 0; for (c = 1; c <= n; c++) for (i = 1; i <= NS[c]; i++) { y = Y[c, i]; if (y >= g - 1 && y <= g + 1) { s += y; m++ } }
+  G = m ? s / m : g; best = -1e9; L = 0; bs = -1
   for (c = 1; c <= n; c++) for (k = 0; k < 32; k++) { yaw = -3.14159 + k * 6.28318 / 32; fx = sin(yaw); fz = cos(yaw)
     r0 = climb(X[c], Z[c], fx, fz); if (r0 < 12) continue; rk = RK
     r1 = climb(X[c] + fz * 3, Z[c] - fx * 3, fx, fz); r2 = climb(X[c] - fz * 3, Z[c] + fx * 3, fx, fz)
@@ -40,5 +37,14 @@ END { if (n < 20) { print "few_cells " n; exit }
     r3 = climb(X[c] + fz * 6, Z[c] - fx * 6, fx, fz); r4 = climb(X[c] - fz * 6, Z[c] + fx * 6, fx, fz); w = (r3 < r4) ? r3 : r4
     if (w < 0) w = 0; if (w > sc) w = sc
     if (sc + 0.5 * w - 0.01 * rk > best) { best = sc + 0.5 * w - 0.01 * rk; bs = sc; bx = X[c]; bz = Z[c]; byaw = yaw } }
-  if (!L || bs < 12) { printf "no_stair_line ground=%.1f lines=%d best=%.1f cells=%d\n", G, L, (L ? bs : 0), n; exit }
+  return (L && bs >= 12) }
+# Ground fallback: a game-placed (world) building scan is mostly open floor/terrain with roofs and furniture over it, so
+# the "surface with another below" mode is a roof (m50 5090 Hub Outlaw Quarters: ground=15.9, no line); when that mode
+# finds no line, retry with the most common height overall (the floor/terrain at the stair foot: 4.5, rise 31).
+END { if (n < 20) { print "few_cells " n; exit }
+  for (c = 1; c <= n; c++) C[(int((X[c] - x0) / 3 + 100.5) - 100) SUBSEP (int((Z[c] - z0) / 3 + 100.5) - 100)] = c
+  mx = 0; for (b in cnt) if (cnt[b] > mx) { mx = cnt[b]; g1 = b + 0 }
+  ma = 0; for (b in all) if (all[b] > ma) { ma = all[b]; g2 = b + 0 }
+  ok = mx ? search(g1) : 0; if (!ok && (!mx || g2 != g1)) ok = search(g2)
+  if (!ok) { printf "no_stair_line ground=%.1f lines=%d best=%.1f cells=%d\n", G, L, (L ? bs : 0), n; exit }
   printf "%.1f %.1f %.1f %.4f ground=%.1f rise=%.1f lines=%d cells=%d\n", bx, by + G + 1, bz, byaw, G, bs, L, n }

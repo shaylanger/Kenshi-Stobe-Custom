@@ -29,13 +29,19 @@
 #  C05-LOAD      load (W held through the load, released after): nobody walks on, camera valid, take + W moves, stops
 #  C05-INTERIOR  in a building (INTERIOR="<buildings filters>", tried in order, default "house shack bar shop hut tower home"): walk into a
 #                wall, turn the camera so the wall is behind, third person: blocked=1 and applied<target; S walks away
-#  C05-STAIRS    from the bottom of a stair facing up it (STAIRS="x y z yaw", else found at runtime in a Storm House the
-#                run builds and removes): W climbs |dy| >= 10, stops on release
+#  C05-STAIRS    from the bottom of a stair facing up it (STAIRS="x y z yaw", else the best ray-scanned stair line in up to
+#                STAIR_MAX game-placed buildings within 5000, else a Storm House the run builds and removes; a built house
+#                has no character collision, so only a world stair is a real test): W climbs |dy| >= 10, stops on release.
+#                Needs a town: kah-fpxbow has no stair building. Known stair (m50 5090, Crafting base fixture = Hub town,
+#                Shay/Malzin, no hostile): Outlaw Quarters outer stair STAIRS="-51024.9 1581.5 3710.3 -1.5708" (dy 66);
+#                the runtime search there found a stair by an Outhouse (-51168.6 1581.1 2581.8 0.7854, dy 62.7). Run alone:
+#                ONLY=C05-STAIRS STAIRS="-51024.9 1581.5 3710.3 -1.5708" fp-control.sh Shay Malzin NoTarget <outdir>
 # Usage: fp-control.sh [player] [mate] [target] [outdir]. Env: MOVE_MIN (10), STILL_MAX (3), STALL_MS (250), INVALID_FACTION (Drifters),
-# INTERIOR, STAIRS. Leaves the fixture changed (save kah-fp-c05 written, Skaera KO, player moved): reload it after.
+# INTERIOR, STAIRS, STAIR_BUILDINGS/STAIR_SKIP/STAIR_MAX (12)/STAIR_RISE (25), ONLY=C05-STAIRS (setup + that row only,
+# rows C01..C05-INTERIOR skipped). Leaves the fixture changed (save kah-fp-c05 written, Skaera KO, player moved): reload it after.
 SH=${1:-Axima}; MT=${2:-Malzin}; TG=${3:-Skaera}; OUT=${4:-/tmp/fp-control}
 MOVE_MIN=${MOVE_MIN:-10}; STILL_MAX=${STILL_MAX:-3}; STALL_MS=${STALL_MS:-250}; INVALID_FACTION=${INVALID_FACTION:-Drifters}
-INTERIOR=${INTERIOR:-}; STAIRS=${STAIRS:-}
+INTERIOR=${INTERIOR:-}; STAIRS=${STAIRS:-}; ONLY=${ONLY:-}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 fld() { grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
@@ -240,6 +246,8 @@ pick_yaw "$SH" C01; look "$YAW" 0
 A fp_camera distance 0 >/dev/null; waitf 6 cam_ok eye || setup_fail "camera never at eye ($(camsum))"
 H0=$(ctl controlled); IDS0=$(ctl control_ids); HOME_SH=$(pos "$SH"); HOME_MT=$(pos "$MT")
 
+if [ "$ONLY" = C05-STAIRS ]; then PSAVE=$(pos "$SH"); echo "ONLY=C05-STAIRS: rows C01..C05-INTERIOR skipped" >> "$LOG"
+else
 # ---- C01: eye -> third person -> eye, control + WASD + camera ----
 ui_clear; look "$YAW" 0; YAW0=$YAW; YAWC0=$YAWC; read -r M1 G1 AN1 SP1 WM1 <<<"$(walkr "$SH" w 2000)"
 EYE1=$(camsum); A fp_camera distance 3 >/dev/null; waitf 6 cam_ok far; FAROK=$?; FAR=$(camsum)
@@ -396,6 +404,7 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
     ok=1; [ "$BLK" = 1 ] && lt "$AP" "$TT" || ok=0
     awk -v a="$AD" -v p="$AP" 'BEGIN{d=a-p; if(d<0)d=-d; exit !(a!="" && d<.2)}' || ok=0
     ge "$MA" "$(awk -v m="$MOVE_MIN" 'BEGIN{print m/2}')" || ok=0; judge C05-INTERIOR $ok "$ev"; fi; fi
+fi   # ONLY
 
 # C05-STAIRS: a stair start STAIRS="x y z yaw" (bottom, facing up), else found at runtime in a Storm House built 60 from
 # the player (removed again by `unbuild Storm` in cleanup) by a ray scan (`fp_camera floors`: a 3-unit grid of downward
@@ -405,24 +414,52 @@ if [ -z "$BP" ]; then row C05-INTERIOR FAIL "setup no building matching '${INTER
 # terrain under the floor as ground, counted the whole floor as stair cells and walked flat into a counter (dy 0).
 # 4080 b33: the old teleport-onto-the-upper-floor search always clamped to the ground floor (y = base+4.5).
 STAIRS_SRC=env; STAIRS_WHY=""
+# scan_stairs <bx> <by> <bz> <file>: four 30-radius `fp_camera floors` scans (+-30 around the point, so +-60: the
+# stair sits off-centre and turns with the building; m50 5090 R / 4080 b44 missed it with one +-30 scan) analysed by
+# fp-stairs-scan.awk; echoes its line ("x y z yaw ground= rise= ..." or a reason word).
+scan_stairs() { local qx qz; : > "$4"; for qx in -30 30; do for qz in -30 30; do
+    stobe-auto fp_camera floors "$(awk -v a="$1" -v d=$qx 'BEGIN{print a+d}')" "$(awk -v a="$3" -v d=$qz 'BEGIN{print a+d}')" 30 3 "$(awk -v a="$2" 'BEGIN{print a+80}')" "$(awk -v a="$2" 'BEGIN{print a-5}')" >> "$4" 2>&1; echo >> "$4"; done; done
+  awk -v by="$2" -f "$(dirname "$0")/fp-stairs-scan.awk" "$4"; }
+isline() { grep -qE '^-?[0-9.]+ -?[0-9.]+ -?[0-9.]+ -?[0-9.]+ ' <<<"$1"; }
+# world_stairs: a stair in a game-placed building (up to 6 within 5000, by name filter; teleport there so the area is
+# loaded, then scan). Preferred over a `build` house: m50 5090 T / 4080 b45 walked 217/180 units straight through the
+# factory-built Storm House at floor height (through the stair cells rising to +69 and the far wall, dy -7.8/-6.3):
+# a factory-built building has ray collision but no character collision (no navmesh cut), so it can't test stairs.
+# names that match a filter but aren't buildings with stairs (m50 5090 Hub: "bar" matched 4 barrels before any house)
+STAIR_SKIP=${STAIR_SKIP:-barrel|stool|bed|chest|torch|banner|sign|lamp|box|crate|bench|cage|dummy|storage|rack}
+world_stairs() { local filt l bp bx by bz r n=0 seen=" " rs best=0 nm
+  for filt in ${STAIR_BUILDINGS:-tower bar house quarters hall shop inn store guild barracks keep outpost}; do
+    while IFS= read -r l; do bp=$(grep -o 'pos=[^ ]*' <<<"$l" | cut -d= -f2); [ -n "$bp" ] || continue
+      case "$seen" in *" $bp "*) continue;; esac; seen+="$bp "; n=$((n+1)); [ $n -gt "${STAIR_MAX:-12}" ] && break 2
+      read -r bx by bz <<<"$(tr ',' ' ' <<<"$bp")"; A teleport "$SH" "$bx" "$by" "$bz" >/dev/null; sleep 5
+      r=$(scan_stairs "$bx" "$by" "$bz" "$OUT/stairs_floors_w$n.txt"); nm=$(sed 's/^ *//; s/ dist=.*//' <<<"$l")
+      echo "STAIRS world '$nm' at $bp scan=[$r] floors=$OUT/stairs_floors_w$n.txt" >> "$LOG"
+      isline "$r" || continue; rs=$(grep -o 'rise=[0-9.]*' <<<"$r" | cut -d= -f2); ge "$rs" "${STAIR_RISE:-25}" || continue
+      # a world line needs rise >= STAIR_RISE (25): m50 5090 Hub lines below that were not stairs (Shinobi Tower 14.5 started
+      # 6.4 above its plan; an Outhouse 18.9 climbed a roof to +63 and slid 18 off it after release); the Outlaw Quarters
+      # outer stair (rise 31) started on it and climbed 66. Keep the line that rises most; >= 30 = full stair: stop looking
+      ge "$rs" "$best" && [ "$rs" != "$best" ] && { best=$rs; STAIRS=$(cut -d' ' -f1-4 <<<"$r"); STAIRS_SRC="world:$nm"; }
+      ge "$best" 30 && break 2
+    done <<<"$(A buildings 5000 "$filt" | tr '|' '\n' | grep 'pos=' | grep -viE "$STAIR_SKIP")"
+  done; [ -n "$STAIRS" ]; }
 find_stairs() { local r bx by bz f="$OUT/stairs_floors.txt"
-  STAIRS_SRC=built; A fp_move none >/dev/null; [ -n "$PSAVE" ] && A teleport "$SH" $PSAVE >/dev/null; sleep 2
+  A fp_move none >/dev/null; world_stairs && return 0
+  STAIRS_SRC=built; [ -n "$PSAVE" ] && A teleport "$SH" $PSAVE >/dev/null; sleep 2
   r=$(A build "Storm House" near "$SH" dist 60)
-  grep -q 'pos=' <<<"$r" || { STAIRS_WHY="build failed: $(cut -c1-80 <<<"$r")"; return 1; }
+  grep -q 'pos=' <<<"$r" || { STAIRS_WHY="no world stair; build failed: $(cut -c1-80 <<<"$r")"; return 1; }
   BUILT=1; read -r bx by bz <<<"$(grep -o 'pos=[^ ]*' <<<"$r" | head -1 | cut -d= -f2 | tr ',' ' ')"; sleep 2
-  # four 30-radius scans (+-30 around the house position) cover +-60: the stair sits off-centre and the house turns
-  # with the build (m50 5090 R and 4080 b44: a single +-30 scan held flat floor / a counter only, no stair)
-  : > "$f"; local qx qz; for qx in -30 30; do for qz in -30 30; do
-    stobe-auto fp_camera floors "$(awk -v a="$bx" -v d=$qx 'BEGIN{print a+d}')" "$(awk -v a="$bz" -v d=$qz 'BEGIN{print a+d}')" 30 3       "$(awk -v a="$by" 'BEGIN{print a+80}')" "$(awk -v a="$by" 'BEGIN{print a-5}')" >> "$f" 2>&1; echo >> "$f"; done; done
-  r=$(awk -v by="$by" -f "$(dirname "$0")/fp-stairs-scan.awk" "$f")
+  r=$(scan_stairs "$bx" "$by" "$bz" "$f")
   echo "STAIRS house=$bx,$by,$bz scan=[$r] floors=$f" >> "$LOG"
-  case "$r" in no_stair_line*|few_cells*) STAIRS_WHY="no climbable stair line in the built house (ray scan: $r)"; return 1;; esac
-  grep -qE '^-?[0-9.]+ -?[0-9.]+ -?[0-9.]+ -?[0-9.]+ ' <<<"$r" || { STAIRS_WHY="no stair in the ray scan ($r, $f)"; return 1; }
+  isline "$r" || { STAIRS_WHY="no world stair and no climbable stair line in the built house (ray scan: $r)"; return 1; }
   STAIRS=$(cut -d' ' -f1-4 <<<"$r"); return 0; }
 if [ -z "$STAIRS" ] && ! find_stairs; then row C05-STAIRS FAIL "setup stairs not found ($STAIRS_SRC): $STAIRS_WHY"; else
   read -r SX SY SZ SYAW <<<"$STAIRS"; ui_clear; A teleport "$SH" "$SX" "$SY" "$SZ" >/dev/null; sleep 2; take "$SH" >/dev/null
   YAW=$SYAW; look "$YAW" 0; P0=$(pos "$SH"); read -r MS _ _ _ <<<"$(walk "$SH" w 4000)"; P1=$(pos "$SH"); DY=$(dy "$P0" "$P1")
-  STK=$(still "$SH" 2); ev="stairs=$STAIRS_SRC start=[$STAIRS] walk=$MS dy=$DY drift_after_release=$STK controlled_$SH=$(ctl_is "$SH" && echo 1 || echo 0) [$(camsum)]"
+  # start check: on the planned floor height (a start off the floor/outside makes the row meaningless), and a long
+  # level walk = passed through the stair (no character collision) rather than blocked at it
+  FL=""; awk -v a="$(cut -d' ' -f2 <<<"$P0")" -v b="$SY" 'BEGIN{d=a-b; if(d<0)d=-d; exit !(d>4)}' && FL+=" | flag=setup? start y $(cut -d' ' -f2 <<<"$P0") vs planned $SY"
+  ge "$MS" 120 && awk -v d="$DY" 'BEGIN{if(d<0)d=-d; exit !(d<10)}' && FL+=" | flag=walked $MS level through the stair line: no character collision with the $STAIRS_SRC stair (setup if built, product if world)"
+  STK=$(still "$SH" 2); ev="stairs=$STAIRS_SRC start=[$STAIRS] y0=$(cut -d' ' -f2 <<<"$P0") walk=$MS dy=$DY drift_after_release=$STK controlled_$SH=$(ctl_is "$SH" && echo 1 || echo 0) [$(camsum)]$FL"
   ok=1; awk -v d="$DY" 'BEGIN{if(d<0)d=-d; exit !(d>=10)}' || ok=0; lt "$STK" "$STILL_MAX" || ok=0; ctl_is "$SH" || ok=0
   judge C05-STAIRS $ok "$ev"; fi
 
