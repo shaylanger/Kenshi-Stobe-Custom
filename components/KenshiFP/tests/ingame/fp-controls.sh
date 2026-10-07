@@ -208,9 +208,10 @@ if [ $MELEE = 1 ]; then ui_clear; draw_to 0; sky; hud holstered
 fi
 
 # ---- K04: RMB held drawn on the mate = block, no menu ----
+# RMB is held 8 s and released explicitly: harness calls take ~0.6 s, so a 2 s press had ended before the second sample (4080 b39)
 if want K04; then if [ $MELEE = 0 ]; then mfail K04; else ui_clear; draw_to 1; aim_at "$MT" 13; O0=$(ks ctx_opens); B0=$(ks free_block_frames)
-  A fp_keys press rmb 2000 >/dev/null; sleep 0.8; K1=$(A fp_keys state); sleep 0.6; K2=$(A fp_keys state); sleep 1; O1=$(ks ctx_opens)
-  ev="ui_state=$(fld ui_state <<<"$K1")/$(fld ui_state <<<"$K2") free_block_frames $B0->$(fld free_block_frames <<<"$K1")->$(fld free_block_frames <<<"$K2") block_checks=$(fld block_checks <<<"$K2") ctx_opens $O0->$O1 drawn=$(fld drawn <<<"$K1")"
+  A fp_keys press rmb 8000 >/dev/null; sleep 0.8; K1=$(A fp_keys state); sleep 0.6; K2=$(A fp_keys state); A fp_keys release rmb >/dev/null; sleep 1; O1=$(ks ctx_opens)
+  ev="ui_state=$(fld ui_state <<<"$K1")/$(fld ui_state <<<"$K2") free_block_frames $B0->$(fld free_block_frames <<<"$K1")->$(fld free_block_frames <<<"$K2") block_checks=$(fld block_checks <<<"$K2") ctx_opens $O0->$O1 in=$(fld in <<<"$K1")/$(fld in <<<"$K2") drawn=$(fld drawn <<<"$K1")"
   ok=1; [ "$(fld ui_state <<<"$K1")" = blocking ] && [ "$(fld ui_state <<<"$K2")" = blocking ] && [ "$O1" = "$O0" ] || ok=0
   lt "$B0" "$(fld free_block_frames <<<"$K1")" && lt "$(fld free_block_frames <<<"$K1")" "$(fld free_block_frames <<<"$K2")" || ok=0
   judge K04 $ok "$ev"; fi; fi
@@ -218,9 +219,9 @@ if want K04; then if [ $MELEE = 0 ]; then mfail K04; else ui_clear; draw_to 1; a
 # ---- FB01: free block out of combat, aimed at the sky (+ HUD blocking) ----
 if want FB01 || want HUD01; then if [ $MELEE = 0 ]; then want FB01 && mfail FB01; else ui_clear; draw_to 1; sky
   waitf 15 not_fight; FI0=$(A fp_melee state | fld active); B0=$(ks free_block_frames)
-  A fp_keys press rmb 2000 >/dev/null; sleep 0.8; hud blocking; K1=$(A fp_keys state); sleep 0.6; K2=$(A fp_keys state)
-  sleep 1.2; waitf 3 kis ui_state ready; U3=$(ks ui_state)
-  ev="fight_active=$FI0 held: ui_state=$(fld ui_state <<<"$K1")/$(fld ui_state <<<"$K2") free_block_frames $B0->$(fld free_block_frames <<<"$K1")->$(fld free_block_frames <<<"$K2") | released: ui_state=$U3"
+  A fp_keys press rmb 8000 >/dev/null; sleep 0.8; hud blocking; K1=$(A fp_keys state); sleep 0.6; K2=$(A fp_keys state); A fp_keys release rmb >/dev/null
+  sleep 0.3; waitf 3 kis ui_state ready; U3=$(ks ui_state)
+  ev="fight_active=$FI0 held: ui_state=$(fld ui_state <<<"$K1")/$(fld ui_state <<<"$K2") free_block_frames $B0->$(fld free_block_frames <<<"$K1")->$(fld free_block_frames <<<"$K2") in=$(fld in <<<"$K1")/$(fld in <<<"$K2") | released: ui_state=$U3"
   ok=1; [ "$FI0" = 0 ] && [ "$(fld ui_state <<<"$K1")" = blocking ] && [ "$(fld ui_state <<<"$K2")" = blocking ] && [ "$U3" = ready ] || ok=0
   lt "$B0" "$(fld free_block_frames <<<"$K1")" && lt "$(fld free_block_frames <<<"$K1")" "$(fld free_block_frames <<<"$K2")" || ok=0
   want FB01 && { if [ "$FI0" != 0 ]; then row FB01 FAIL "setup $SH still in a native fight after 15 s: $ev"; else judge FB01 $ok "$ev"; fi; }; fi; fi
