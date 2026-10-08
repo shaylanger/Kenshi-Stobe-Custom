@@ -2,7 +2,7 @@
 kenshi-ctl.ps1 (workspace): the harness repo's kenshi-ctl.ps1 with this PC's
 paths; also archives stobe.log, KenshiFP.log and ProfessionGear.log/affixes
 (all reset or rewritten on launch).
-Commands: status | launch [-Save x] | stop | restart [-Save x] | health | screenshot [-Save n] | lock | release
+Commands: status | launch [-Save x] | stop | restart [-Save x] | health | screenshot [-Save n] | lock | release | idle ["<reason>"|clear]
 
 Game lock (C:\KenshiTestRuns\game.lock): only one session drives Kenshi.
 launch/stop/restart take the lock for $env:KAH_OWNER (default 'coordinator')
@@ -86,6 +86,16 @@ if ($Command -eq 'cfg') {
 if ($Command -eq 'lock') {
   if (Test-Path $LockFile) { Get-Content $LockFile } else { 'free' }
   exit 0
+}
+if ($Command -eq 'idle') {
+  # Shay 2026-10-08: the 5090 must not sit idle unnoticed. The Stop hook (~/.claude/hooks/kenshi-waker-guard.ps1) blocks a
+  # Kenshi session from ending its turn while Kenshi is closed and the lock is free unless this reason is < 60 min old.
+  # `idle "<reason>"` records it; `idle` shows it; `idle clear` removes it.
+  $f = 'C:\KenshiTestRuns\rig5090.idle'
+  if ($Mode -eq 'status' -or -not $Mode) { if (Test-Path $f) { "$((Get-Item $f).LastWriteTime.ToString('HH:mm')) $(Get-Content $f -Raw)".Trim() } else { 'no idle reason recorded' }; exit 0 }
+  if ($Mode -eq 'clear') { Remove-Item $f -Force -ErrorAction SilentlyContinue; 'cleared'; exit 0 }
+  Set-Content -Path $f -Value "$Owner $(Get-Date -Format 'yyyy-MM-dd HH:mm') $Mode" -Encoding utf8
+  "idle reason recorded (60 min): $Mode"; exit 0
 }
 if ($Command -eq 'release') {
   if (Test-Path $LockFile) {
