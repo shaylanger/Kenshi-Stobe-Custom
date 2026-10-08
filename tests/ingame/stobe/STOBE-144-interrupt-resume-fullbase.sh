@@ -39,6 +39,14 @@ live_ids() { awk -F'\t' -v a="$MATE" -v it="${2:-}" 'tolower($2)==tolower(a) && 
 jobs_of() { stobe-auto jobs "$1" | grep -oE 'jobs=[0-9]+' | cut -d= -f2; }
 say_mate() { stobe-auto select "$PLAYER" >/dev/null; stobe-say say "$MATE" "$1" >/dev/null 2>&1 || log "say failed: $1"; sleep "${2:-18}"; }
 state_is() { [ "$(state_of "$1")" = "$2" ]; }
+# ensure_squad <row>: MATE back in PLAYER's squad (an earlier row may have left her outside: 141 spar); else SETUP FAIL
+ensure_squad() {
+  srv_squad_synced && return 0
+  log "$1 setup: $MATE not in ${PLAYER}'s squad, recruiting"
+  stobe-auto recruit "$MATE" >/dev/null 2>&1; stobe-auto select "$PLAYER" >/dev/null
+  wait_for 90 srv_squad_synced && return 0
+  verdict "$1" "SETUP FAIL $MATE not in ${PLAYER}'s squad (server faction '$(srv_faction "$MATE")' vs '$(srv_faction "$PLAYER")')"; return 1
+}
 # cancel every live goal of hers and empty her job list (setup, not under test)
 reset_mate() {
   local i; for i in $(live_ids); do printf '%s\tCANCEL\n' "$i" >> "$CTL"; done
@@ -91,8 +99,9 @@ fi
 # --- fight interrupt, auto-resume
 if [ -n "$GID" ] && want fight; then
   heal_start "$MATE"
-  out=$(stobe-auto spawn "Hungry Bandit" "Hungry Bandits" near "$MATE" dist 6 count 1)
+  out=$(stobe-auto spawn "Hungry Bandit" "Starving Bandits" near "$MATE" dist 6 count 1)
   rh=$(echo "$out" | grep -oE '#[0-9]+/[0-9]+' | head -1)
+  [ -n "$rh" ] || log "fight setup: spawn failed: $(echo "$out" | head -1 | cut -c1-160)"
   m=$(st_mark); fought=0
   if [ -n "$rh" ]; then
     for i in $(seq 1 10); do stobe-auto attack "$rh" "$MATE" >/dev/null; sleep 4
@@ -164,7 +173,7 @@ fi
 stobe-auto speed 1 >/dev/null
 
 # --- 141 spar: she rejoins the squad when the fight is stopped
-if want 141; then
+if want 141 && ensure_squad 141; then
   reset_mate
   heal_start "$PLAYER $MATE"
   m=$(st_mark)
@@ -180,7 +189,7 @@ if want 141; then
 fi
 
 # --- 142 first aid really treats
-if want 142; then
+if want 142 && ensure_squad 142; then
   stobe-auto give "$MATE" "Basic First Aid Kit" 1 >/dev/null 2>&1
   stobe-auto health "$PLAYER" 55 >/dev/null
   g=$(gl_mark)
