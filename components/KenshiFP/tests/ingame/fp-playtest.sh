@@ -237,10 +237,13 @@ if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
       [ $ph = free ] && { altkey; waitf 3 kis free 1 || { OK=0; EV+=" | free: Left Alt did not free the cursor (free=$(ks free))"; continue; }
                           A mouse_inject at $((SW/2)) $((SHH*7/10)) >/dev/null; sleep 0.3; }
       A pin "$MT" at "$SH" dist 25 face "$SH" >/dev/null; sleep 1; A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}; A select "$MT" >/dev/null
-      ST=0; for _ in 1 2 3 4 5 6 7 8; do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 1 && { ST=1; break; }; done
+      # m66b: settled by unpin alone she still drifted (<1 u/s passes the gate, 3.10 u over the RMB window in 'free', RMB
+      # swallowed): every phase now gives the real HOLD_POSITION order first (a player RMB move order would replace it)
+      A order "$MT" HOLD_POSITION >/dev/null
+      ST=0; for _ in 1 2 3 4 5 6 7 8; do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 0.3 && { ST=1; break; }; done
       # m64: right after the load (crossbow drawn) her AI kept wandering (8.46 u/s): settle her with a real HOLD_POSITION
       # AI order (a player RMB move order would replace it, so the no-walk assertion stays the same), bounded 12 s more
-      SET="unpin"; if [ $ST = 0 ]; then SET="hold($(A order "$MT" HOLD_POSITION | cut -c1-40))"
+      SET="unpin+hold"; if [ $ST = 0 ]; then SET="hold($(A order "$MT" HOLD_POSITION | cut -c1-40))"
         for _ in $(seq 12); do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 1 && { ST=1; break; }; done; fi
       if [ $ST = 0 ]; then OK=0; EV+=" | $ph: setup: $MT never stood still after unpin + HOLD_POSITION ($(d2 "$Q0" "$(pos "$MT")") u/s)"; continue; fi
       EV+=" | $ph: settled_by=$SET"
@@ -321,7 +324,10 @@ if want PT06 || want PT20; then menu_close; draw_to 0
 
 # ---- PT20: Control button in the menu on a squad mate; switch there and back ----
 # ctl_menu <viewer> <target>: holstered RMB tap on the target from the viewer's body; 0 = Control offered for it
-ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; CTL_DRAWN=$(ks drawn); mclick right 150; waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; }
+# m66b: right after a control switch the new body still had its sword drawn at the tap (draw_to unchecked, RMB = block):
+# holster again after the pick, bounded; still drawn = setup failure (return 2)
+ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; kis drawn 1 && { sleep 1; draw_to 0; kis drawn 1 && { CTL_DRAWN=1; return 2; }; pick_on "$1" "$2" || return 1; }
+  CTL_DRAWN=$(ks drawn); mclick right 150; waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; }
 # ctl_opt: the game's own menu option captioned exactly 'Control' (KenshiFP PT24 native option, never the KFPControlBtn
 # fallback widget) -> "x y w h name" of the first visible one, empty if none
 ctl_opt() { A ui control | tr -d '\r' | tr '|' '\n' | grep -E "^ *[^ ]+ 'Control' -?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+ *$" | grep -v '^ *KFPControlBtn ' | head -1 |
