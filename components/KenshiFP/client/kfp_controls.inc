@@ -306,9 +306,17 @@ static void fpc_draw_toggle(void *pc) {
     if (!w) {g_fpc_fists=1;g_fpc_hold_actor=pc;++g_fpc_r_draws;g_fpc_r_path="unarmed";
              logline("[controls] R ready (unarmed) inv=%p primary=%d secondary=%d",inv,inv_primary!=NULL,inv_secondary!=NULL);return;}
     g_fpc_r_path=path;
-    unsigned char empty[32];make_mstr(empty,"");
-    char ok=((char (*)(void *,void *,void *))vt[0x3D8/8])(pc,w,empty);
-    g_fpc_hold_actor=pc;++g_fpc_r_draws;logline("[controls] R draw weapon %p path=%s ok=%d",w,path,(int)ok);
+    /* PT14 (4080 m53): drawWeapon(item, lastSection) with "" set weaponInHands but left the melee mesh on the
+     * hip sheath (hand empty in FP and TP). Pass the item's own section (Item::inventorySection @0xE8, e.g.
+     * "hip"/"back"), as the native draw does. */
+    char sec[32]="";const unsigned char *ss=(const unsigned char *)((uintptr_t)w+0xE8);
+    if (readable((void *)ss,32)) {size_t sl=*(size_t *)(ss+0x10),cap=*(size_t *)(ss+0x18);
+        const char *sp=cap>15?(readable(*(void **)ss,1)?*(const char **)ss:NULL):(const char *)ss;
+        if (sp && sl<sizeof sec) {memcpy(sec,sp,sl);sec[sl]=0;}}
+    unsigned char secs[32];
+    if (strlen(sec)>15) make_mstr_long(secs,sec); else make_mstr(secs,sec);
+    char ok=((char (*)(void *,void *,void *))vt[0x3D8/8])(pc,w,secs);
+    g_fpc_hold_actor=pc;++g_fpc_r_draws;logline("[controls] R draw weapon %p path=%s section='%s' ok=%d",w,path,sec,(int)ok);
 }
 /* LMB drawn on a character: start (or retarget) the attack with the game's own order. */
 static void fpc_engage(void *gw,void *pc,void *t,int ranged) {
