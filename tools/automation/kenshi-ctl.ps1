@@ -37,7 +37,9 @@ $LockFile = 'C:\KenshiTestRuns\game.lock'
 $Owner = if ($env:KAH_OWNER) { $env:KAH_OWNER } else { 'coordinator' }
 $Cfg = "$Kenshi\kenshi.cfg"
 $CfgPlay = 'C:\KenshiTestRuns\kenshi.cfg.play'
-$TestCfg = @{ 'Full Screen' = 'No'; 'Video Mode' = '1600 x 900 @ 32-bit colour [0]' }
+# VSync=No for tests: a windowed background game presents at refresh/3 with VSync on (22 fps on the 60 Hz DISPLAY2, 45 on a
+# 143 Hz one; GPU idle), too slow for the ~40 fps viewmodel passes (vm-sword 2026-10-08). Shay's value goes to the play copy.
+$TestCfg = @{ 'Full Screen' = 'No'; 'Video Mode' = '1600 x 900 @ 32-bit colour [0]'; 'VSync' = 'No' }
 
 function Get-CfgValues {
   $v = @{}
@@ -61,7 +63,11 @@ function Cfg-Test {   # windowed for automated runs; remember Shay's values once
   $cur = Get-CfgValues
   $isTest = $true; foreach ($k in $TestCfg.Keys) { if ($cur[$k] -ne $TestCfg[$k]) { $isTest = $false } }
   if ($isTest) { return "kenshi.cfg already windowed for tests" }
-  Set-Content -Path $CfgPlay -Value @($cur.Keys | ForEach-Object { "$_=$($cur[$_])" }) -Encoding Ascii
+  # merge: keys already saved keep Shay's value; a key new to the play copy (e.g. VSync added later) is saved from the current
+  # file only while it still differs from the test value (so a test value never replaces a saved play value)
+  $saved = @{}; if (Test-Path $CfgPlay) { foreach ($line in Get-Content $CfgPlay) { $i = $line.IndexOf('='); if ($i -gt 0) { $saved[$line.Substring(0, $i)] = $line.Substring($i + 1) } } }
+  foreach ($k in $cur.Keys) { if (-not $saved.ContainsKey($k) -and $cur[$k] -ne $TestCfg[$k]) { $saved[$k] = $cur[$k] } }
+  Set-Content -Path $CfgPlay -Value @($saved.Keys | ForEach-Object { "$_=$($saved[$_])" }) -Encoding Ascii
   Set-CfgValues $TestCfg
   "kenshi.cfg set to windowed 1600x900 for tests (play values saved: $((Get-Content $CfgPlay) -join '; '))"
 }
