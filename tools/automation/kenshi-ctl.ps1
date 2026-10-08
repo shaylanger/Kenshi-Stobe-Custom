@@ -107,7 +107,12 @@ if ($Command -in @('launch', 'restart')) {
     # vanished from the monitor list mid-session and the windowed game landed on the primary)
     $mons = & 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' monitors -Kenshi $Kenshi
     $want = '\\.\' + ($Monitor -replace '^\\\\\.\\', '').ToUpper()
-    if ($mons -notmatch [regex]::Escape($want) + ' ') { "LAUNCH REFUSED: test monitor $want is not present (have: $mons); turn it on or pass -Monitor"; exit 3 }
+    $list = @($mons -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($mons -notmatch [regex]::Escape($want) + ' ') {
+      # Shay 2026-10-08: windowed + background is what matters, the monitor is a preference: when the preferred one is
+      # off use the first one that is on (a single screen: that one)
+      $Monitor = ($list[0] -split ' ')[0]; "test monitor $want is off: using $Monitor (windowed, background)"; $bg.Monitor = $Monitor
+    }
     Cfg-Test
   }
 }
@@ -116,4 +121,15 @@ if ($Command -in @('launch', 'restart')) {
   -ExtraLogs @("$Kenshi\RE_Kenshi\mods\Stobe\stobe.log", "$Kenshi\KenshiFP.log", "$Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log",
                "$Kenshi\mods\ProfessionGearProgression\ProfessionGear.log",
                "$Kenshi\mods\ProfessionGearProgression\profession_gear_affixes.tsv")
-exit $LASTEXITCODE
+$rc = $LASTEXITCODE
+if ($rc -eq 0 -and -not $Play -and $Command -in @('launch', 'restart')) {
+  # Ogre moves/resizes its window again after the launch waits (2026-10-08: ended on DISPLAY1): re-place it without
+  # activating, a few times, and report where it is and who has the focus
+  $ctl = 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1'
+  foreach ($i in 1..3) {
+    Start-Sleep -Seconds 3
+    & $ctl place -Monitor $Monitor -Kenshi $Kenshi | Out-Null
+  }
+  "placed: $(& $ctl window -Kenshi $Kenshi)"
+}
+exit $rc
