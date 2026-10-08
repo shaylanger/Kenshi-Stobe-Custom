@@ -1444,7 +1444,10 @@ std::string UploadCsvImportToStobe(const std::string &csvData,
 
 std::string UploadWavToStobe(const std::vector<unsigned char> &wavData) {
   const unsigned long playthroughEpoch=PlaythroughSession::Context();
-  if(!PlaythroughSession::Allowed(playthroughEpoch))return "";
+  if(!PlaythroughSession::Allowed(playthroughEpoch)){
+    Log("STT_UPLOAD: dropped (playthrough changed or not ready) epoch="+ToString((int)playthroughEpoch));
+    return "";
+  }
   EnsureDiscovered();
   if (wavData.size() <= 44 || wavData.size() > 4u * 1024u * 1024u) {
     Log("STT_UPLOAD: invalid WAV size=" + ToString((int)wavData.size()));

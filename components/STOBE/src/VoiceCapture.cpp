@@ -58,6 +58,8 @@ struct SignalStats {
 };
 
 DWORD g_startedAt = 0;
+// Playthrough epoch of the current recording (the worker thread itself starts at the main menu).
+volatile LONG g_recordEpoch = 0;
 LONG g_recording = 0;
 LONG g_cancelRequested = 0;
 LONG g_captureWorkerActive = 0;
@@ -455,6 +457,8 @@ DWORD WINAPI CaptureWorkerThread(LPVOID) {
         Log("STT_CAPTURE: selected input=" + winner->name +
             " duration_ms=" + ToString((int)duration));
         std::vector<unsigned char> wav = BuildWav(winner->audio);
+        const PlaythroughSession::Scope epochScope(
+            (unsigned long)InterlockedCompareExchange(&g_recordEpoch, 0, 0));
         std::string response = UploadWavToStobe(wav);
         std::string text = JsonReadField(response, "text");
         std::string error = JsonReadField(response, "error");
@@ -516,6 +520,7 @@ bool Start(const Context &context) {
   InterlockedExchange(&g_cancelRequested, 0);
   InterlockedExchange(&g_recording, 1);
   g_startedAt = GetTickCount();
+  InterlockedExchange(&g_recordEpoch, (LONG)PlaythroughSession::Generation());
   EnterCriticalSection(&g_mutex);
   g_pendingContext = context;
   g_captureInteractionEpoch = Stobe::Interaction::Epoch();
