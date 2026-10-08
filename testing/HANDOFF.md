@@ -15,9 +15,9 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
   distance, 799c3f9): all closed on the 4080 (bm51h 30/30, bm51i, bm51j 40/40). 4080 idle, lock released.
 - **5090 next time Shay frees it:** install KenshiFP 76CF7E8A (still 07376F24 there; Kenshi closed), then run the NP
   rows below.
-- NP5/NP11/NP12 (NPC bio LLM rows): DeepInfra credit is back (Shay); run on the 5090 when Shay says it is free (Stobe +
+- NP5/NP11/NP12 + NP13/NP14 (NPC bio LLM rows; NP13/14 = backstory confided at Devoted+, server bf31d12, setting NPC_BIO_BACKSTORY_MIN_TIER): DeepInfra credit is back (Shay); run on the 5090 when Shay says it is free (Stobe +
   server only there; Shay is using the 5090 meanwhile, all other testing on the 4080). List line:
-  `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12`.
+  `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12 NP13 NP14`.
 - Product note for Shay: once FP walk is pinned on a rock, the order fallback doesn't walk around it either.
 - Gotchas: detached WSL batches via `bash -s` heredoc (the `bash -c '... &'` form silently never ran, again m51 L);
   never `unload` a char that is still someone's fight/order target (crash exe+268A68); after a PC restart start the
@@ -36,7 +36,7 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 3EF4CCEE (NPC biography card), KenshiFP 07376F24 (ffad4e4 + isolation a8dc8bc), PG BAFB8C31 (Normal), harness EF425B2D (input isolation f10996c); server live `stobe` 055e0c5.
+- 5090: Stobe 3EF4CCEE (NPC biography card), KenshiFP 07376F24 (ffad4e4 + isolation a8dc8bc), PG BAFB8C31 (Normal), harness EF425B2D (input isolation f10996c); server live `stobe` bf31d12.
 - 4080: KenshiFP 76CF7E8A (799c3f9 C05-INTERIOR; bm51j 40/40), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
