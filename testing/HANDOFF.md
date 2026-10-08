@@ -1,14 +1,19 @@
-# Current state (m51, 2026-10-07)
+# Current state (m54, 2026-10-07)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
-Run logs: `archive/test-run-2026-10-07-m51.md` (m51, newest), `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
+Run logs: `archive/test-run-2026-10-07-m53.md` (m53, newest), `archive/test-run-2026-10-07-m51.md` (m51), `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 m52, Shay's playtest feedback)
-- Shay played on the 5090 (19:12-20:49) and sent ~33 bugs/changes: recorded as STOBE 135-145 (`STOBE_full_test_plan.md` D)
-  and FP PT01-PT22 (`components/KenshiFP/docs/COMBAT_TEST_PLAN.md` Gate 6). Logs + dialogue export: `C:\KenshiTestRuns\logs\20261007-shay-play\`.
-- Helpers: Stobe/server fixer (135-145 + compound wrappers), KenshiFP fixer (PT rows except PT13/14/17). Coordinator: FP
-  combat view study on the 4080 (PT13/14/17: Shay wants the coordinator to play and compare with other games, not just script).
-- 5090: Shay says when it is free; until then 4080 only. Each fix needs a compound (multi-action) in-game test.
+## Right now (2026-10-07 m54, coordinator)
+- Working Shay's playtest rows STOBE 135-145 + FP PT01-PT22 (Gate 6). m53 results + tickets: `archive/test-run-2026-10-07-m53.md`.
+- **5090 batch m54-5090-a running** (list `C:\KenshiTestRuns\m54-5090-a\list.txt`: 144-compound, npc-llm NP5/11/12/14,
+  fp-playtest, fp-viewmodel, fpspeaker 135/136; out `.../out`, waker `batch-health.sh` every 120 s). Fixes under test:
+  Stobe 5a006f3 (144 power wait) + 454c257 (say ui / npcinfo chatwith), server b74c72d (cancel BLOCKED goals, spar stop,
+  bio speaker parsing, bio pending), KenshiFP f6a8b2d (menu_vis) + 0de2242 (KenshiFP_ControlledCharacter export) +
+  e515843 (viewmodel arc), harness f4ab9f6 (ground pickup), wrappers fb8e3f1/0986433/372148e/6e6d137.
+- 4080: Kenshi on kah-fpview (Shay controlled, Ranger equipped), KenshiFP 2833BAB9 (viewmodel tuned live); its harness
+  lacks input_isolation, so fp-viewmodel.sh runs on the 5090. Screens `C:\KenshiTestRunspview\`.
+- No helpers running. Shay decisions to collect for the final summary: 135 semantics, PT20 portrait menu, PT15 spread,
+  PT10 reach, PT04 walk speed, m51 questions (backstory tier, kenshi-click.ps1), STT confirm, viewmodel look.
 
 ## Before m52 (2026-10-07 m51 end, coordinator handing over to a new agent)
 - **Shay is playing on the 5090: do not launch, stop or install anything there until Shay says it is free.** Kenshi on
@@ -52,7 +57,7 @@ Run logs: `archive/test-run-2026-10-07-m51.md` (m51, newest), `archive/test-run-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 3EF4CCEE (NPC biography card; B056BDF0 STT fix built, not installed), KenshiFP 07376F24 (ffad4e4 + isolation a8dc8bc), PG BAFB8C31 (Normal), harness EF425B2D (input isolation f10996c); server live `stobe` bf31d12.
+- 5090: Stobe C8020701, KenshiFP E9D3954D, harness 52C24941, PG BAFB8C31 (Normal); server live `stobe` b74c72d.
 - 4080: KenshiFP 76CF7E8A (799c3f9 C05-INTERIOR; bm51j 40/40), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
