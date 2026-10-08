@@ -1478,6 +1478,7 @@ static int g_ui_open;              /* dialogue/menu open THIS frame (read by the
 static int g_ui_moveblock;         /* HARD block (control disabled: dialogue/cutscene); halts WASD */
 static int g_settings_open;        /* our settings window is showing -> free the cursor like a panel */
 static int g_free_toggle;          /* key_free_cursor TOGGLE: 1 = cursor freed (like a panel) */
+static unsigned g_free_key_toggles, g_free_key_refocus, g_free_load_resets;   /* PT25 evidence (fp_keys) */
 static int g_dbg_control;          /* controlEnabled read, for verification */
 /* S03 diag: the five ui_open inputs of the last FP frame (fp_state + [ui] edge log) */
 static int g_ui_c_control = 1, g_ui_c_keyfocus, g_ui_c_mask, g_ui_c_pframes;
@@ -3810,8 +3811,23 @@ static void fp_camera_override(void *gw)
             int kd = g_cfg_key_free && (GetAsyncKeyState(g_cfg_key_free) & 0x8000);
             int other = kd && ((GetAsyncKeyState(VK_TAB) | GetAsyncKeyState(VK_ESCAPE) | GetAsyncKeyState(VK_F4)
                                 | GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000);
-            if (kfp_free_key_step(&free_key, kd, game_has_focus(), other))
-                g_free_toggle = !g_free_toggle;
+            /* PT25 (Shay 2026-10-08, loaded straight into FP: the cursor went free 7 s after the load, RMB = walk
+             * orders, MMB dead until FP off/on): the Alt of an Alt+Tab back into Kenshi is held when focus returns
+             * (or when frames resume after the load / a stall), so its release looked like a clean tap. A press
+             * that starts within 600 ms of Kenshi getting focus back, or of a >250 ms gap in this per-frame code,
+             * never toggles. */
+            {   static DWORD last_run, focus_at; static int had_focus;
+                DWORD t = GetTickCount(); int foc = game_has_focus();
+                if ((foc && !had_focus) || t - last_run > 250) focus_at = t;
+                had_focus = foc; last_run = t;
+                if (kd && !free_key.down && t - focus_at < 600) {
+                    other = 1; ++g_free_key_refocus;
+                    logline("[controls] free-cursor key held as focus/frames came back (%lu ms): not a tap", (unsigned long)(t - focus_at)); }
+            }
+            if (kfp_free_key_step(&free_key, kd, game_has_focus(), other)) {
+                g_free_toggle = !g_free_toggle; ++g_free_key_toggles;
+                logline("[controls] free cursor %s (key 0x%02X tap)", g_free_toggle ? "ON" : "OFF", g_cfg_key_free);
+            }
         }
         /* STOBE's chat entry is a MyGUI EditBox but it does not toggle any of
          * Kenshi's vanilla panel/control flags. A focused MyGUI keyboard widget is

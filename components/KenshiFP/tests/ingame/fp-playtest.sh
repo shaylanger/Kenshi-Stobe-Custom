@@ -11,6 +11,8 @@
 # KenshiFP.log lines written since the test started.
 # Run in WSL with Kenshi in the world on a kah-fpxbow copy (Axima = crossbow player, Malzin = mate, Skaera = hostile).
 # Rows (one `RESULT PTxx PASS|FAIL <evidence>` each, log path on FAILs):
+#  PT25      (runs first: LOADS the save) load with FP on, no toggle: RMB tap+hold on the ground with the mate selected =
+#            mate does not move, MMB on the mate selects; same after a Left Alt free cursor; no "FP mode toggled" line
 #  PT22+PT07 holstered physical LMB on the mate: selection/inspected unchanged, mouse_keys_swallowed rises, no stats
 #            window (`ui lbSkills`), no "opened the clicked member's details" log line
 #  PT06      holstered physical RMB HOLD on the mate: ctx_hold_opens+1, ctx_freed=1, menu still open after the release
@@ -41,12 +43,13 @@
 # Not here: PT13/PT14/PT17 (viewmodel: coordinator), PT15 head-hit rate vs vanilla (needs a target series: visual/
 # balance call), PT16 camera look (screenshot).
 # Usage: fp-playtest.sh [player] [mate] [hostile] [outdir] (defaults: $PLAYER/$MATE or Axima/Malzin, Skaera,
-# /tmp/fp-playtest). Env: ROWS (space/comma list), KFPLOG, STILL_MAX (3), SPIKE_MAX (1.5), FAR_NPC.
+# /tmp/fp-playtest). Env: ROWS (space/comma list), KFPLOG, STILL_MAX (3), SPIKE_MAX (1.5), FAR_NPC, SAVE (PT25: save to
+# load, default the current one from `status`).
 # Leaves the fixture changed (player KO'd/carried, Skaera KO'd, items moved): reload it after.
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-playtest}
 KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
 STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
-ROWS=${ROWS:-"PT22 PT07 PT06 PT20 PT21 PT19 PT08 PT09 PT04 PT05 PT23 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
+ROWS=${ROWS:-"PT25 PT22 PT07 PT06 PT20 PT21 PT19 PT08 PT09 PT04 PT05 PT23 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 note() { echo "$*" >> "$LOG"; }
@@ -200,6 +203,37 @@ A fp_keys ctl | grep -q '^ctl shown=' || setup_fail "fp_keys ctl missing (needs 
 A fp_combat state | grep -q 'spread_n=' || setup_fail "fp_combat state has no spread_n (needs 095837f+)"
 if ! A input_isolation status | grep -q 'isolation=on'; then A input_isolation on >/dev/null; ISO_SET=1
   A input_isolation status | grep -q 'isolation=on' || setup_fail "input isolation would not turn on (mouse_inject/key_inject need it)"; fi
+# ---- PT25: Shay's steps: load the save while FP is on (direct_control_default: the loaded squad starts in FP), NO FP
+# toggle, then the mouse: RMB tap + hold on the ground with the mate selected (mate must not move), MMB on the mate
+# (must select). Then the same after a Left Alt tap (free cursor, what the 2026-10-08 log showed 7 s after his load):
+# RMB on the ground under the free cursor = no walk order, Left Alt again, MMB selects. No "FP mode toggled" line.
+if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
+  RES=$(sed -n 's/^Video Mode=\([0-9]*\) x \([0-9]*\).*/\1 \2/p' "$KDIR/kenshi.cfg" | head -1); read -r SW SHH <<<"${RES:-1920 1080}"
+  A fp_mode on >/dev/null; sleep 0.5; L25=$(wc -l < "$KFPLOG"); A load "$SAVE" >/dev/null; sleep 5; stobe-auto wait-world 240 >/dev/null 2>&1; sleep 3
+  if ! A status | grep -q phase=world || ! waitf 20 fp_is 1; then row PT25 FAIL "setup: after load $SAVE: $(A status | cut -c1-80) fp_mode=$(fps fp_mode) (direct_control_default=1 should start FP)"
+  else waitf 6 cursor_ok; HC=$(ctl controlled); MTN25=$(live_name "$MT"); SMT=$(id_of "$MT")
+    TOG=$(tail -n +"$((L25+1))" "$KFPLOG" | tr -d '\r' | grep -c 'FP mode toggled')
+    EV+=" fp_mode=1 controlled=$HC cursor_hidden=$(fps cursor_hidden) free=$(ks free) load_resets=$(ks free_load_resets) toggles_since_load=$TOG"
+    [ "$TOG" = 0 ] || OK=0
+    ctl_is "$MT" && { OK=0; EV+=" setup: $MT is the controlled char"; }
+    for ph in look free; do
+      [ $ph = free ] && { altkey; waitf 3 kis free 1 || { OK=0; EV+=" | free: Left Alt did not free the cursor (free=$(ks free))"; continue; }
+                          A mouse_inject at $((SW/2)) $((SHH*7/10)) >/dev/null; sleep 0.3; }
+      A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}; A select "$MT" >/dev/null; sleep 1
+      [ $ph = look ] && look "$(cam yaw)" 0.45
+      P0=$(pos "$MT"); K0=$(A fp_keys state); mclick right 150; sleep 0.4; mdown right; sleep 1.2; mup right; sleep 3
+      K=$(A fp_keys state); DM=$(d2 "$P0" "$(pos "$MT")")
+      EV+=" | $ph: $MT selected, RMB tap+hold on the ground: moved=$DM rmb_swallowed $(fld rmb_swallowed <<<"$K0")->$(fld rmb_swallowed <<<"$K") rmb_free_swallowed $(fld rmb_free_swallowed <<<"$K0")->$(fld rmb_free_swallowed <<<"$K")"
+      lt "$DM" "$STILL_MAX" || OK=0
+      [ $ph = free ] && { altkey; waitf 3 kis free 0 || { OK=0; EV+=" free stuck on"; A fp_state free off >/dev/null; }; waitf 4 cursor_ok; }
+      menu_close
+      A pin "$MT" at "$SH" dist 25 face "$SH" | grep -q '^pinned' && PINNED+=" $MT"; sleep 1
+      if pick_on "$SH" "$MT"; then M0=$(ks mmb_selects); mclick middle 80; waitf 3 kge mmb_selects $((M0+1)); SEL=$(ks last_select)
+        EV+=" MMB on $MT: mmb_selects $M0->$(ks mmb_selects) last_select=$SEL"; [ "$SEL" = "$(uname_ "$MTN25")" ] || OK=0
+      else OK=0; EV+=" MMB: crosshair pick never on $MT"; fi
+      A select "$SH" >/dev/null; done
+    tail -n +"$((L25+1))" "$KFPLOG" | tr -d '\r' | grep -E '\[control|\[controls\]|\[input\]|\[ui\]' | head -60 > "$OUT/pt25-load.txt"
+    judge PT25 $OK "$EV log=$OUT/pt25-load.txt"; fi; fi
 FP0=$(fps fp_mode); DIST0=$(cam target); AR0=$(cs auto_reload)
 BOWN=$(A rangedinfo "$SH" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//'); [ "$BOWN" = none ] && BOWN=""
 A speed 1 hold >/dev/null; A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null

@@ -138,6 +138,8 @@ static void fp_control_tick(void *gw) {
         fp_control_release_actor(g_fp_control_actor,0);   /* teardown: forget, never write (b27b) */
         g_fp_mode=0; g_fp_world_seen=0; g_fp_control_pinned=0; g_fp_control_actor=NULL;
         g_freecam_clear_pending=1;   /* load: a vanilla FPS camera may carry over (m51-F) */
+        if (g_free_toggle) {         /* PT25: a free cursor never carries into the next world */
+            g_free_toggle=0; ++g_free_load_resets; logline("[controls] load: free cursor reset"); }
         return;
     }
     if (!g_fp_mode) FP_CONTROL_RELEASE(gw);
