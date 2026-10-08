@@ -135,7 +135,7 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; } VmRec;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; } VmRec;
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
 static int g_vm_rp = -1, g_vm_rp_t;          /* replay frame (-1 off), 1 = commanded pose */
@@ -291,6 +291,58 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
     return 1;
 }
 
+/* skeleton <-> world map from the clavicles + spine (world via getBoneWorldPosition, skeleton via derived pos).
+ * Called in vm_frame (measurement) AND at apply time (setAnimationState): the character moves/turns and the anim
+ * moves the torso between the camera callback and the anim update, so targets mapped with the camera-time map
+ * landed off by one frame of root motion (walking: weapon 1-3 dm off, jumping with the gait) and by the torso
+ * snap at a swing start. Mapping at apply time pins the weapon to the camera. */
+static int vm_basis(Vec3 lat, Vec3 up, Vec3 e[3]);
+static Vec3 vm_c2w_pos(Vec3 c); static Vec3 vm_c2w_dir(Vec3 c);
+static void *g_vm_pc; static int g_vm_applymap = 1, g_vm_in_map; static unsigned long g_vm_napply;
+static Vec3 g_vm_root_f, g_vm_root_a;
+static int char_position(void *c, Vec3 *out);
+static int vm_map(void *pc, void *skel)
+{
+    Vec3 cw[2], spw, cs[2], sps, ew[3], es[3];
+    for (int i = 0; i < 2; i++) {
+        g_get_bone_world(pc, &cw[i], g_vm_nm_clav[i]);
+        void *cb = g_skel_getbone(skel, g_vm_nm_clav[i]);
+        const Vec3 *d = readable(cb, 8) ? g_oldnode_getdpos(cb) : NULL;
+        if (!readable((void *)d, 12)) return 0;
+        cs[i] = *d;
+    }
+    g_get_bone_world(pc, &spw, g_vm_nm_spine);
+    {   void *sb = g_skel_getbone(skel, g_vm_nm_spine);
+        const Vec3 *d = readable(sb, 8) ? g_oldnode_getdpos(sb) : NULL;
+        if (!readable((void *)d, 12)) return 0;
+        sps = *d; }
+    Vec3 cmw = vm_mul(vm_add(cw[0], cw[1]), 0.5f), cms = vm_mul(vm_add(cs[0], cs[1]), 0.5f);
+    if (!vm_basis(vm_sub(cw[1], cw[0]), vm_sub(cmw, spw), ew) || !vm_basis(vm_sub(cs[1], cs[0]), vm_sub(cms, sps), es)) return 0;
+    float ls = vm_len(vm_sub(cs[1], cs[0]));
+    g_vm_scale = ls > 1e-6f ? vm_len(vm_sub(cw[1], cw[0])) / ls : 1.0f;
+    /* w2s rows: skeleton component k of a world vector = sum_i es_i[k] * dot(v, ew_i) */
+    g_vm_w2s[0] = vm_v(0, 0, 0); g_vm_w2s[1] = g_vm_w2s[0]; g_vm_w2s[2] = g_vm_w2s[0];
+    g_vm_s2w[0] = g_vm_w2s[0]; g_vm_s2w[1] = g_vm_w2s[0]; g_vm_s2w[2] = g_vm_w2s[0];
+    for (int i = 0; i < 3; i++) {
+        float es_[3] = { es[i].x, es[i].y, es[i].z }, ew_[3] = { ew[i].x, ew[i].y, ew[i].z };
+        for (int k = 0; k < 3; k++) {
+            g_vm_w2s[k] = vm_add(g_vm_w2s[k], vm_mul(ew[i], es_[k]));
+            g_vm_s2w[k] = vm_add(g_vm_s2w[k], vm_mul(es[i], ew_[k]));
+        }
+    }
+    g_vm_cms = cms; g_vm_cmw = cmw;
+    return 1;
+}
+/* commanded pose (camera numbers: g_vm_out, off-hand g_vm_oc, poles) -> skeleton-space IK targets */
+static void vm_targets(void)
+{
+    g_vm_tp = vm_w2s_pos(vm_c2w_pos(g_vm_out.p));
+    g_vm_tf = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_out.f)));
+    g_vm_tu = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_out.u)));
+    g_vm_op = vm_w2s_pos(vm_c2w_pos(g_vm_oc));
+    for (int i = 0; i < 2; i++) g_vm_tpole[i] = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_pole[g_vm_class][i])));
+}
+
 /* Runs inside setAnimationState, after the original posed the skeleton. */
 static void vm_apply(void *skel)
 {
@@ -325,6 +377,12 @@ static void vm_apply(void *skel)
     }
     g_vm_nat_ok = 1;
     if (!g_vm_have_t || g_vm_w <= 0.001f) return;
+    if (g_vm_applymap && g_vm_pc && !g_vm_in_map) {      /* re-map the targets with this update's root + torso */
+        g_vm_in_map = 1;
+        if (vm_map(g_vm_pc, skel)) { vm_targets(); g_vm_napply++; }
+        char_position(g_vm_pc, &g_vm_root_a);
+        g_vm_in_map = 0;
+    }
     int wh = g_vm_whand[g_vm_class] ? 1 : 0, oh = !wh;
     /* weapon prop target -> weapon hand target */
     Quat Qp = quat_norm(quat_mul(vm_frame_quat(g_vm_tf, g_vm_tu),
@@ -459,49 +517,25 @@ static void vm_frame_core(void *pc, int body_down)
     g_vm_skel = skel;
     if (!skel) return;
 
-    /* measure (world = game coords): clavicles + spine in world and skeleton space, both props in world */
-    Vec3 cw[2], spw, cs[2], sps, pw[2], jw[2][3];
+    /* measure (world = game coords): both props + arm joints in world; skeleton<->world map */
+    Vec3 pw[2], jw[2][3];
     int ok = 1;
+    g_vm_pc = pc;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; ok = 0; }
     else {
         guard_arm();
         for (int i = 0; i < 2; i++) {
             g_get_bone_world(pc, &pw[i], g_vm_nm_prop[i]);
-            g_get_bone_world(pc, &cw[i], g_vm_nm_clav[i]);
             g_get_bone_world(pc, &jw[i][0], g_vm_nm_arm[i]);
             g_get_bone_world(pc, &jw[i][1], g_vm_nm_fore[i]);
             g_get_bone_world(pc, &jw[i][2], g_vm_nm_hand[i]);
-            void *cb = g_skel_getbone(skel, g_vm_nm_clav[i]);
-            const Vec3 *d = readable(cb, 8) ? g_oldnode_getdpos(cb) : NULL;
-            if (!readable((void *)d, 12)) ok = 0; else cs[i] = *d;
         }
-        g_get_bone_world(pc, &spw, g_vm_nm_spine);
-        void *sb = g_skel_getbone(skel, g_vm_nm_spine);
-        const Vec3 *d = readable(sb, 8) ? g_oldnode_getdpos(sb) : NULL;
-        if (!readable((void *)d, 12)) ok = 0; else sps = *d;
+        ok = vm_map(pc, skel);
+        char_position(pc, &g_vm_root_f);
         g_guard_armed = 0;
     }
-    if (!ok) { g_vm_basis_ok = 0; return; }
-    {   Vec3 ew[3], es[3];
-        Vec3 cmw = vm_mul(vm_add(cw[0], cw[1]), 0.5f), cms = vm_mul(vm_add(cs[0], cs[1]), 0.5f);
-        g_vm_basis_ok = vm_basis(vm_sub(cw[1], cw[0]), vm_sub(cmw, spw), ew)
-                     && vm_basis(vm_sub(cs[1], cs[0]), vm_sub(cms, sps), es);
-        if (!g_vm_basis_ok) return;
-        float ls = vm_len(vm_sub(cs[1], cs[0]));
-        g_vm_scale = ls > 1e-6f ? vm_len(vm_sub(cw[1], cw[0])) / ls : 1.0f;
-        /* w2s rows: skeleton component k of a world vector = sum_i es_i[k] * dot(v, ew_i) */
-        g_vm_w2s[0] = vm_v(0, 0, 0); g_vm_w2s[1] = g_vm_w2s[0]; g_vm_w2s[2] = g_vm_w2s[0];
-        g_vm_s2w[0] = g_vm_w2s[0]; g_vm_s2w[1] = g_vm_w2s[0]; g_vm_s2w[2] = g_vm_w2s[0];
-        for (int i = 0; i < 3; i++) {
-            float es_[3] = { es[i].x, es[i].y, es[i].z }, ew_[3] = { ew[i].x, ew[i].y, ew[i].z };
-            for (int k = 0; k < 3; k++) {
-                Vec3 *rw = &g_vm_w2s[k], *rs = &g_vm_s2w[k];
-                *rw = vm_add(*rw, vm_mul(ew[i], es_[k]));
-                *rs = vm_add(*rs, vm_mul(es[i], ew_[k]));
-            }
-        }
-        g_vm_cms = cms; g_vm_cmw = cmw;
-    }
+    g_vm_basis_ok = ok;
+    if (!ok) return;
 
     /* camera frame from the UNZOOMED eye (PT29); eye is Ogre-world (floating origin): game = ogre - (g_tx,0,g_tz) */
     Vec3 eo = g_view_have_anchor ? g_view_anchor : g_last_eye;
@@ -542,10 +576,7 @@ static void vm_frame_core(void *pc, int body_down)
         if (!g_vm_rp_t) { out.p = nx->mp; out.f = nx->mf; out.u = nx->mu; oc = nx->mj[!whq][2]; }
         out = vm_pose_norm(out);
         g_vm_class = q->cls; g_vm_ti = q->ti; g_vm_w = 1.0f; g_vm_omode = q->omode; g_vm_cur = out; g_vm_have_cur = 1;
-        g_vm_tp = vm_w2s_pos(vm_c2w_pos(out.p));
-        g_vm_tf = vm_norm(vm_w2s_dir(vm_c2w_dir(out.f)));
-        g_vm_tu = vm_norm(vm_w2s_dir(vm_c2w_dir(out.u)));
-        g_vm_oc = oc; g_vm_have_oc = 1; g_vm_op = vm_w2s_pos(vm_c2w_pos(oc));
+        g_vm_out = out; g_vm_oc = oc; g_vm_have_oc = 1;
         goto targets;
     }
     float wt = on ? 1.0f : 0.0f;
@@ -620,10 +651,6 @@ static void vm_frame_core(void *pc, int body_down)
         }
         g_vm_target_e = vm_elev_of(out.p); g_vm_target_a = vm_az_of(out.p);
         g_vm_out = out; g_vm_kick_eff = k;
-        /* -> skeleton space */
-        g_vm_tp = vm_w2s_pos(vm_c2w_pos(out.p));
-        g_vm_tf = vm_norm(vm_w2s_dir(vm_c2w_dir(out.f)));
-        g_vm_tu = vm_norm(vm_w2s_dir(vm_c2w_dir(out.u)));
         /* off-hand: under the fore-stock (support point, f,u,s weapon numbers) while aiming a crossbow; otherwise
          * the rest point out of view (the arm can't reach the fore-stock in the low ready/reload holds and a hand
          * floating under the bow looked broken). The target glides between the two (no snap). */
@@ -635,10 +662,9 @@ static void vm_frame_core(void *pc, int body_down)
         }
         if (!g_vm_have_oc) { g_vm_oc = oc; g_vm_have_oc = 1; }
         else g_vm_oc = vm_add(g_vm_oc, vm_mul(vm_sub(oc, g_vm_oc), dt / (dt + g_vm_tau)));
-        g_vm_op = vm_w2s_pos(vm_c2w_pos(g_vm_oc));
     }
 targets:
-    for (int i = 0; i < 2; i++) g_vm_tpole[i] = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_pole[g_vm_class][i])));
+    vm_targets();
     g_vm_have_t = g_vm_have_cur;
 }
 
@@ -666,20 +692,21 @@ static void vm_frame(void *pc, int body_down)
         q->out = g_vm_out; q->oc = g_vm_oc; q->mp = g_vm_mp; q->mf = g_vm_mf; q->mu = g_vm_mu;
         memcpy(q->mj, g_vm_mj, sizeof(q->mj));
         q->eye = g_vm_eye; q->rt = g_vm_rt; q->up = g_vm_up; q->fw = g_vm_fw;
+        q->rootf = g_vm_root_f; q->roota = g_vm_root_a; q->napp = (unsigned)g_vm_napply;
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
 }
 static int vm_rec_dump(const char *path)
 {
     FILE *fo = fopen(path, "w"); if (!fo) return -1;
-    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world)\n");
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
                 q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
         const Vec3 *v[] = { &q->out.p, &q->out.f, &q->out.u, &q->oc, &q->mp, &q->mf, &q->mu,
                             &q->mj[0][0], &q->mj[0][1], &q->mj[0][2], &q->mj[1][0], &q->mj[1][1], &q->mj[1][2], &q->eye, &q->rt, &q->up, &q->fw };
         for (int k = 0; k < 17; k++) fprintf(fo, k == 13 ? " | %.4f,%.4f,%.4f" : " %.4f,%.4f,%.4f", v[k]->x, v[k]->y, v[k]->z);
-        fputc('\n', fo); }
+        fprintf(fo, " | %.4f,%.4f,%.4f %.4f,%.4f,%.4f %u\n", q->rootf.x, q->rootf.y, q->rootf.z, q->roota.x, q->roota.y, q->roota.z, q->napp); }
     fclose(fo); return g_vm_rn;
 }
 
@@ -723,6 +750,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "twist")) fp = &g_vm_twist;
     else if (!strcmp(k, "sw_pose")) fp = &g_vm_sw_pose;
     else if (!strcmp(k, "swlog")) { g_vm_sw_log = x != 0.0f; return 1; }
+    else if (!strcmp(k, "applymap")) { g_vm_applymap = x != 0.0f; return 1; }
     else if (!strcmp(k, "tau"))    { if (x > 0.005f && x < 2) g_vm_tau = x; return 1; }
     else if (!strcmp(k, "taurl"))  { if (x > 0.005f && x < 3) g_vm_tau_rl = x; return 1; }
     else if (!strcmp(k, "tauw"))   { if (x > 0.005f && x < 3) g_vm_tau_w = x; return 1; }
