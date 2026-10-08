@@ -1281,6 +1281,7 @@ static int fpc_key_bound_any(unsigned dik);
 static void fpc_key_note_swallow(unsigned dik);
 static int fpc_suppress_sheathe(void *pc);
 static int g_fpc_own_sheathe;   /* kfp_controls.inc: our own (R) sheathe in progress, never suppressed */
+static int g_fpc_ranged;         /* kfp_controls.inc: the ranged weapon is the one in hands (PT28 aim-stall log) */
 static void fp_controls_tick(void *gw,float dt);
 static void fp_controls_init(void);
 static int kah_fp_keys(const char *,int,const char *const *,KAH_Reply *,void *);

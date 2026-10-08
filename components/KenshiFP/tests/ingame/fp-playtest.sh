@@ -42,6 +42,7 @@
 #  PT11      bow only, holstered, manual combat physical: RMB hold -> nothing drawn (drawn=0 wih=0), combat draws and
 #            reload_starts unchanged, fp_combat why=ranged_holstered
 #  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts, ammo same), still holstered after RMB up
+#  PT31      after a physical R holster, R draw + RMB aim (why=ok aimed=1) + physical LMB = one shot (actual_shots +1)
 #  PT15      3 manual shots (injected aim/fire): spread_n +3, spread_cone = formula from spread_skill/spread_per,
 #            spread_off <= cone, "[combat] spread" log lines
 #  PT02      sword only (bow unequipped), physical R: drawn=1 wih!=0 r_path!=unarmed, log "R draw ... path="
@@ -60,7 +61,7 @@
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-playtest}
 KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
 STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
-ROWS=${ROWS:-"PT25 PT22 PT07 PT06 PT20 PT24 PT21 PT19 PT08 PT09 PT04 PT05 PT23 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
+ROWS=${ROWS:-"PT25 PT22 PT07 PT06 PT20 PT24 PT21 PT19 PT08 PT09 PT04 PT05 PT23 PT11 PT18 PT31 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 note() { echo "$*" >> "$LOG"; }
@@ -614,7 +615,21 @@ if want PT18; then if [ $BOWOK = 0 ]; then row PT18 FAIL "setup: no crossbow on 
   ev="R draw: r_draws $D0->$(fld r_draws <<<"$K1") ranged=$(fld ranged <<<"$K1") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C1") (2 s, no aim) | aim+R: drawn=$(fld drawn <<<"$K3") aim_ends=$(fld holster_aim_ends <<<"$K3") r_holsters $H0->$(fld r_holsters <<<"$K3") reload_starts $(fld reload_starts <<<"$C2")->$(fld reload_starts <<<"$C3") ammo $(fld ammo <<<"$C2")->$(fld ammo <<<"$C3") | RMB up: drawn=$(fld drawn <<<"$K4")"
   ok=1; [ "$(fld drawn <<<"$K4")" = 0 ] || ok=0; [ "$(fld drawn <<<"$K1")" = 1 ] && [ "$(fld ranged <<<"$K1")" = 1 ] && [ "$(fld reload_starts <<<"$C1")" = "$(fld reload_starts <<<"$C0")" ] || ok=0
   [ "$(fld drawn <<<"$K3")" = 0 ] && [ "$(fld r_holsters <<<"$K3")" = $((H0+1)) ] && [ "$(fld reload_starts <<<"$C3")" = "$(fld reload_starts <<<"$C2")" ] && [ "$(fld ammo <<<"$C3")" = "$(fld ammo <<<"$C2")" ] || ok=0
+  # m70: aim+R only proves the holster when the aim was live (m68/m70 passed with why!=ok: no aim at all)
+  ev+=" | aim before R: why=$(fld why <<<"$C2") aimed=$(fld aimed <<<"$C2") aim_stall_why=$(fld aim_stall_why <<<"$C2") gun_setups=$(fld gun_setups <<<"$C2")"
+  [ "$(fld why <<<"$C2")" = ok ] && [ "$(fld aimed <<<"$C2")" = 1 ] || ok=0
   judge PT18 $ok "$ev"; fi; fi
+
+# ---- PT31: R draw after an R holster restores aim + fire (m70 PT28: RMB held + LMB never shot) ----
+if want PT31; then if [ $BOWOK = 0 ]; then row PT31 FAIL "setup: no crossbow on $SH"; else
+  draw_to 1; sky; rkey; waitf 4 kis drawn 0; sleep 0.8; K0=$(A fp_keys state)   # physical R holster first (aim at the sky: no NPC hit)
+  rkey; waitf 4 kis drawn 1; waitf 6 kis ranged 1; sleep 1; K1=$(A fp_keys state); C0=$(A fp_combat state)
+  mdown right; waitf 8 csis aimed 1; waitf 20 csis shot_ready 1; C1=$(A fp_combat state)
+  mclick left 80; waitf 3 csge actual_shots $(( $(fld actual_shots <<<"$C0") + 1 )); C2=$(A fp_combat state); mup right; sleep 0.5
+  ev="holster: drawn=$(fld drawn <<<"$K0") | R draw: drawn=$(fld drawn <<<"$K1") ranged=$(fld ranged <<<"$K1") | RMB: why=$(fld why <<<"$C1") aimed=$(fld aimed <<<"$C1") shot_ready=$(fld shot_ready <<<"$C1") ammo=$(fld ammo <<<"$C1") has_ammo=$(fld has_ammo <<<"$C1") gun_setups $(fld gun_setups <<<"$C0")->$(fld gun_setups <<<"$C2") aim_stall_why=$(fld aim_stall_why <<<"$C2") | LMB: actual_shots $(fld actual_shots <<<"$C0")->$(fld actual_shots <<<"$C2") rejected $(fld rejected <<<"$C0")->$(fld rejected <<<"$C2")"
+  ok=1; [ "$(fld drawn <<<"$K0")" = 0 ] && [ "$(fld drawn <<<"$K1")" = 1 ] && [ "$(fld ranged <<<"$K1")" = 1 ] || ok=0
+  [ "$(fld why <<<"$C1")" = ok ] && [ "$(fld aimed <<<"$C1")" = 1 ] && inc "$(fld actual_shots <<<"$C0")" "$(fld actual_shots <<<"$C2")" || ok=0
+  judge PT31 $ok "$ev"; fi; fi
 
 # ---- PT15: manual crossbow shots get the skill cone ----
 if want PT15; then if [ $BOWOK = 0 ]; then row PT15 FAIL "setup: no crossbow on $SH"; else

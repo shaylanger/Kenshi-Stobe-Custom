@@ -481,6 +481,8 @@ typedef char (*combat_draw_weapon_t)(void *,void *,void *);
 static combat_draw_weapon_t g_combat_draw_orig;
 static int g_combat_draw_hook; /* 0 not tried, 1 installed, -1 failed */
 static unsigned g_combat_draw_refused;
+static unsigned g_combat_gun_setups,g_combat_aim_stalls;   /* PT28 (m70) */
+static const char *g_combat_aim_stall_why="none";
 static char combat_draw_weapon_hook(void *pc,void *item,void *str) {
     if (pc && pc==g_combat_pc && g_combat_enabled && g_fp_mode && g_combat_control.aimed &&
         g_combat_weapon && item!=g_combat_weapon) {++g_combat_draw_refused;return 0;}
@@ -557,6 +559,18 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         input.reload=0;
     }
     fp_melee_observe_swing(gw,dt);   /* native swing timer (M04-SPEED control), any owner */
+    {   /* PT28 (m70): physical RMB aim held 1 s with the crossbow in hands but no live aim: say why, once per hold */
+        static ULONGLONG t0;static int logged;
+        int held=!g_combat_injection && input.aim && g_fp_mode && g_fpc_ranged;
+        if (!held || g_aim_mode) {t0=0;logged=0;}
+        else if (!t0) t0=GetTickCount64();
+        else if (!logged && GetTickCount64()-t0>=1000) {
+            logged=1;++g_combat_aim_stalls;g_combat_aim_stall_why=g_combat_why?g_combat_why:"none";
+            logline("[combat] RMB aim held 1 s on the drawn crossbow, no aim: why=%s enabled=%d armed=%d aimed=%d allowed=%d running=%d gun=%p",
+                g_combat_aim_stall_why,g_combat_enabled,g_combat_control.armed,g_combat_control.aimed,
+                g_combat_observed.allowed,g_combat_observed.running,g_combat_gun);
+        }
+    }
     if (!g_combat_enabled || !g_combat_native_ready || g_combat_fault || !g_fp_mode) {
         if (g_combat_rc) {
             if (setjmp(g_guard_jb)) {g_guard_armed=0;g_combat_fault=1;return;}
@@ -659,7 +673,15 @@ static void fp_manual_combat_tick(void *gw,float dt) {
                 g_combat_why="wrong_weapon";
                 if (g_combat_draw_cd<=0 && g_sheathe_orig) {g_sheathe_orig(pc);++g_combat_sheathes;g_combat_draw_cd=0.5f;}
             } else if (g_combat_wih) {
+                /* PT28/PT18 (m70): the crossbow drawn by R out of native combat can have an empty getGun; the
+                 * physical aim then sat on drawn_no_gun forever (no raise, no shot). Set the ranged combat up on
+                 * the drawn bow (the same native call the raise/draw path makes) on a cooldown. */
                 g_combat_why="drawn_no_gun";
+                if (g_combat_draw_cd<=0) {
+                    g_combat_setup(rc,NULL,35);g_combat_draw_cd=1.0f;   /* STAT_CROSSBOWS */
+                    if (g_combat_gun_setups<8) logline("[combat] aim on a drawn crossbow without a gun: ranged combat set up (x%u)",g_combat_gun_setups+1);
+                    ++g_combat_gun_setups;
+                }
             } else if (g_combat_draw_cd<=0) {
                 unsigned char str[32];make_mstr(str,"");
                 void *draw=combat_virtual(pc,0x3d8);
@@ -886,8 +908,8 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
           (unsigned long long)(uintptr_t)g_combat_wih,(unsigned long long)(uintptr_t)g_combat_cur,g_combat_rcstate,g_combat_rcmode);
         {size_t l=strlen(b);fp_combat_wound_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);combat_shot_state(b+l,sizeof(b)-l);}
-        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u reload_emits=%u reload_refused=%u has_ammo=%d ammo_type=%p",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots,
-         g_combat_control.reloads,g_combat_reload_refused,g_combat_has_ammo,g_combat_ammo_type);}
+        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u reload_emits=%u reload_refused=%u has_ammo=%d ammo_type=%p gun_setups=%u aim_stalls=%u aim_stall_why=%s",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots,
+         g_combat_control.reloads,g_combat_reload_refused,g_combat_has_ammo,g_combat_ammo_type,g_combat_gun_setups,g_combat_aim_stalls,g_combat_aim_stall_why);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
          snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_gate=%s last_reject_native=%d last_reject_latched=%d last_reject_dip_s=%.3f last_reject_dt=%.3f last_reject_hold=%d last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
            g_combat_inj_cmds,g_combat_inj_aim_cmds,g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,
