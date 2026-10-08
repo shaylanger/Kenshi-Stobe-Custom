@@ -14,6 +14,7 @@
 #define FPC_PI_CTXMENU 0x48    /* PlayerInterface::contextMenu (embedded ContextMenu) */
 #define FPC_MENU_CLICK_MS 400  /* RMB held shorter than this (holstered) = context-menu click */
 #define FPC_TASK_MELEE 5       /* TaskType FOCUSED_MELEE_ATTACK */
+#define FPC_ENGAGE_REACH_DM 30.0f   /* PT10: LMB gives the native attack order only within this (dm, centre to centre) */
 #define FPC_TASK_MELEE_UNPROVOKED 61
 #define FPC_TASK_RANGED 263    /* RANGED_ATTACK_FOCUSED */
 #define FPC_TASK_RANGED_UNPROVOKED 266
@@ -78,6 +79,7 @@ static unsigned g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_ctx_opens,g_fpc_ctx_none,
     g_fpc_lmb_clicks,g_fpc_r_keys_swallowed,g_fpc_ticks;
 static float g_fpc_fs_prog, g_fpc_fs_prog_max;
 static int g_fpc_last_task=-1;
+static unsigned g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused;static float g_fpc_lmb_dist=-1;static const char *g_fpc_lmb_why="none";
 static char g_fpc_last_select[48]="none", g_fpc_last_target[48]="none";
 static const char *g_fpc_ui_state="off";
 /* K06 (4080 b39): the controlled char's live weaponInHands (pc+0x6D8), read every tick; fp_combat's wih only
@@ -564,12 +566,25 @@ static void fp_controls_tick(void *gw,float dt) {
                 logline("[controls] RMB context menu %s via=%s",g_fpc_last_target,hold_open?"hold":"tap");
             } else ++g_fpc_ctx_none;
         }
-        if (g_fpc_drawn && edge[FPC_LMB] && !in[FPC_RMB]) {
+        /* PT10 (Shay 2026-10-07): LMB swings; it gives the native attack order only to a non-squad character within
+         * melee reach (a far NPC facing away used to turn and fight; a squad mate under the crosshair started a
+         * fight). Ranged in hands: the adapter's manual shot only, never a ranged attack order. */
+        if (g_fpc_drawn && !g_fpc_ranged && edge[FPC_LMB] && !in[FPC_RMB]) {
             ++g_fpc_lmb_clicks;
             void *t=fpc_crosshair_char(pc);
-            if (t && g_fpc_sneak_now && !g_fpc_ranged) fpc_sneak_click(gw,pc,t);   /* sneak: vanilla knockout if unaware */
-            else if (t) fpc_engage(gw,pc,t,g_fpc_ranged);
-            else if (!g_fpc_ranged && !fpc_in_fight(pc)) {phase=1;fpc_free_swing(pc);phase=0;}
+            const char *why="engage";
+            if (t && fp_char_in_squad(gw,t)) {t=NULL;why="squad";++g_fpc_lmb_squad_refused;}
+            else if (t) {
+                Vec3 a={0,0,0},b={0,0,0};
+                if (!char_position(pc,&a) || !char_position(t,&b)) {t=NULL;why="no_pos";}
+                else {float dx=a.x-b.x,dz=a.z-b.z;g_fpc_lmb_dist=sqrtf(dx*dx+dz*dz);
+                      if (!(g_fpc_lmb_dist<=FPC_ENGAGE_REACH_DM)) {t=NULL;why="far";++g_fpc_lmb_far_refused;}}
+            }
+            g_fpc_lmb_why=why;
+            if (t && g_fpc_sneak_now) fpc_sneak_click(gw,pc,t);   /* sneak: vanilla knockout if unaware */
+            else if (t) fpc_engage(gw,pc,t,0);
+            else if (!fpc_in_fight(pc)) {phase=1;fpc_free_swing(pc);phase=0;}
+            if (strcmp(why,"engage")) logline("[controls] LMB no engage (%s dist=%.1f): free swing",why,g_fpc_lmb_dist);
         }
         if (g_fpc_fs_tech) {phase=1;fpc_free_swing_step(pc);phase=0;}
         if (g_fpc_drawn && !g_fpc_ranged && in[FPC_RMB]) fpc_free_block(pc);
@@ -601,7 +616,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -610,7 +625,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
         g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
-        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens);
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
@@ -666,7 +681,7 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
     if (argc==2 && !_stricmp(argv[1],"reset")) {
         g_fpc_mmb_selects=g_fpc_mmb_none=g_fpc_ctx_opens=g_fpc_ctx_none=g_fpc_rmb_swallowed=g_fpc_lmb_swallowed=g_fpc_mmb_cam_frames=0;
         g_fpc_r_draws=g_fpc_r_holsters=g_fpc_r_draw_fail=g_fpc_engages=g_fpc_free_swings=g_fpc_fs_faults=g_fpc_fs_notech=g_fpc_fs_ends=0;
-        g_fpc_free_block_frames=g_fpc_block_checks=g_fpc_native_injected=g_fpc_sheathe_kept=g_fpc_lmb_clicks=g_fpc_r_keys_swallowed=g_fpc_mouse_keys_swallowed=g_fpc_ctx_hold_opens=g_fpc_ctx_tap_opens=0;
+        g_fpc_free_block_frames=g_fpc_block_checks=g_fpc_native_injected=g_fpc_sheathe_kept=g_fpc_lmb_clicks=g_fpc_r_keys_swallowed=g_fpc_mouse_keys_swallowed=g_fpc_ctx_hold_opens=g_fpc_ctx_tap_opens=g_fpc_lmb_squad_refused=g_fpc_lmb_far_refused=0;g_fpc_lmb_why="none";g_fpc_lmb_dist=-1;
         g_fpc_sneak_clicks=g_fpc_sneak_attacks=g_fpc_sneak_ko=g_fpc_sneak_failed=g_fpc_sneak_timeout=0;g_fpc_sneak_t=g_fpc_sneak_pc=NULL;
         g_fpc_sneak_path=g_fpc_sneak_result="none";strcpy(g_fpc_sneak_target,"none");g_fpc_sneak_aware=g_fpc_sneak_aware_any=-1;
         g_fpc_sneak_chance=-1.0f;g_fpc_sneak_elapsed=0;
