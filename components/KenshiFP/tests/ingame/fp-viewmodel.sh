@@ -315,6 +315,14 @@ zoom() { local r; ZW=$1; A fp_camera distance "$1" >/dev/null; waitf 4 zd_ok; r=
 cap() { local V; V=$(A fp_vm state); VSL[$1]=$V; VST[$1]=$(fld state <<<"$V"); VMP[$1]=$(fld mp <<<"$V"); VMF[$1]=$(fld mf <<<"$V"); VMU[$1]=$(fld mu <<<"$V")
   shot "$1"; case "$1" in *-zo) sleep 0.7; shot "$1-b";; esac  # zoomed out: a 2nd shot (4080: intermittent black screen-space boxes)
   note "CAP $1 $(grep -oE '\b(state|mp|mf|mu|elev|az|target|fire|kicks)=[^ ]*' <<<"$V" | tr '\n' ' ')"; }
+# capst <tag> <state> [max_s]: capture while the weapon is in <state>; repeats until the grip settles (< 0.05 dm since the
+# previous capture) or the state ends, keeping the last capture taken inside <state> (a fixed settle missed the short
+# 5090 reload: captured in aiming, m71)
+capst() { local t=$1 st=$2 end=$((SECONDS+${3:-6})) pv="" pl="" pp="" pf="" pu="" ps="" d
+  while [ $SECONDS -lt $end ]; do
+    cap "$t"; if [ "${VST[$t]}" != "$st" ]; then [ -n "$ps" ] && { VSL[$t]=$pl; VST[$t]=$ps; VMP[$t]=$pp; VMF[$t]=$pf; VMU[$t]=$pu; }; break; fi
+    if [ -n "$pp" ]; then d=$(awk -v a="$pp" -v b="${VMP[$t]}" 'BEGIN{split(a,p,",");split(b,q,",");print sqrt((p[1]-q[1])^2+(p[2]-q[2])^2+(p[3]-q[3])^2)<0.05}'); [ "$d" = 1 ] && break; fi
+    pl=${VSL[$t]}; ps=${VST[$t]}; pp=${VMP[$t]}; pf=${VMF[$t]}; pu=${VMU[$t]}; sleep 0.15; done; }
 # cap2 <tag>: cap zoomed in, then (PT29 wanted) at distance $ZO as <tag>-zo, back to 0
 cap2() { cap "$1"; want PT29 || return 0
   if zoom "$ZO"; then cap "$1-zo"; ZTAGS+=" $1"; else note "SETUP zoom $ZO for $1 failed (actual_distance=$(cam actual_distance))"; fi; zoom 0; }
@@ -369,11 +377,11 @@ else
   # live shot zoomed in: kick + "[vm] fire" line, then the reload pose
   K0=$(vfld kicks); F0=$(kfpn '\[vm\] fire'); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K0" ]'
   K1=$(vfld kicks); F1=$(kfpn '\[vm\] fire'); shot xbow-fire-live
-  waitf 4 vm_is reloading || note "SETUP PT28: no reload after the shot ($(vev))"; waitf 2 fire_done; sleep 0.6; cap xbow-reload
+  waitf 4 vm_is reloading || note "SETUP PT28: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload reloading
   # live shot zoomed out (PT29 reload pair: same delay after the shot)
   if want PT29; then waitf 25 vm_is aiming || note "SETUP PT28: not aiming again after reload ($(vev))"
     if zoom "$ZO"; then K2=$(vfld kicks); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K2" ]'; shot xbow-fire-live-zo
-      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; waitf 2 fire_done; sleep 0.6; cap xbow-reload-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
+      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload-zo reloading; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
   mup right; sleep 0.4; A fp_vm set rlamp 1.6 >/dev/null
   ok=1; why=""
   # ready: low right, forward, top up, the whole crossbow above the HUD line (lowest on-screen body point y/z >= -0.33)
@@ -473,10 +481,11 @@ if want PT30; then ok=1; case "$P30X" in ok=1*) ;; *) ok=0;; esac; case "$P30S" 
   judge PT30 $ok "xbow: ${P30X:-not run} | sword: ${P30S:-not run}"; fi
 
 # ---- PT29: zooming out keeps the same hold (grip within ZO_TOL dm, blade within 5 deg, same state) ----
+# (the blade angle normalises the 2-decimal state vectors: identical vectors read 6.5 deg before, m71)
 if want PT29; then ok=1; ev=""; [ -n "$ZTAGS" ] || ok=0
   for t in $ZTAGS; do z="$t-zo"
     d=$(awk -v a="${VMP[$t]}" -v b="${VMP[$z]}" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.2f", sqrt((p[1]-q[1])^2+(p[2]-q[2])^2+(p[3]-q[3])^2)}')
-    g=$(awk -v a="${VMF[$t]}" -v b="${VMF[$z]}" 'BEGIN{split(a,p,",");split(b,q,",");c=p[1]*q[1]+p[2]*q[2]+p[3]*q[3];if(c>1)c=1;if(c<-1)c=-1;printf "%.1f", atan2(sqrt(1-c*c),c)*57.2958}')
+    g=$(awk -v a="${VMF[$t]}" -v b="${VMF[$z]}" 'BEGIN{split(a,p,",");split(b,q,",");c=(p[1]*q[1]+p[2]*q[2]+p[3]*q[3])/sqrt((p[1]^2+p[2]^2+p[3]^2)*(q[1]^2+q[2]^2+q[3]^2));if(c>1)c=1;if(c<-1)c=-1;printf "%.1f", atan2(sqrt(1-c*c),c)*57.2958}')
     s="ok"; { [ -n "${VMP[$t]}" ] && [ -n "${VMP[$z]}" ] && [ "${VST[$t]}" = "${VST[$z]}" ] && awk -v d="$d" -v g="$g" -v k="$ZO_TOL" 'BEGIN{exit !(d<=k && g<=5)}'; } || { s="BAD"; ok=0; }
     ev+=" $t:${VST[$t]}/${VST[$z]} dp=$d df=${g}deg $s;"; done
   judge PT29 $ok "zoom $ZO vs 0:$ev"; fi
