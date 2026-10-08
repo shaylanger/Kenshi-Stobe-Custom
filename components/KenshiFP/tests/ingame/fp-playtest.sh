@@ -248,7 +248,7 @@ if want PT06 || want PT20; then menu_close; draw_to 0
 
 # ---- PT20: Control button in the menu on a squad mate; switch there and back ----
 # ctl_menu <viewer> <target>: holstered RMB tap on the target from the viewer's body; 0 = Control offered for it
-ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; mclick right 150; waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; }
+ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; CTL_DRAWN=$(ks drawn); mclick right 150; waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; }
 if want PT20; then
   # the hold menu from PT06 if it really offers Control (bounded wait), else a fresh tap menu (PT06 judges the hold)
   if [ $MENU_ON_MT = 1 ] && ! waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; then
@@ -258,8 +258,8 @@ if want PT20; then
   if [ "$(fld shown <<<"$C1")" != 1 ]; then row PT20 FAIL "Control button not shown with the menu on $MT open: [$C1] free=$(fps free) ctx_freed=$(ks ctx_freed)"
   else A fp_keys ctl click >/dev/null; waitf 3 ctl_is "$MT"; C2=$(A fp_keys ctl); T1=$(ctl controlled); TO=$(ctl_is "$MT" && echo 1 || echo 0); FR1=$(fps free)
     # chain: FP off/on while controlling the mate, then back to the player from her body
-    toggles 1; AT=$(ctl_is "$MT" && echo 1 || echo 0); ctl_menu "$MT" "$SH"; C3=$(A fp_keys ctl); A fp_keys ctl click >/dev/null; waitf 3 ctl_is "$SH"; C4=$(A fp_keys ctl); BACK=$(ctl_is "$SH" && echo 1 || echo 0)
-    ev="to_mate: [target=$(fld target <<<"$C1") shown=1] switches $S0->$(fld switches <<<"$C2") last=$(fld last <<<"$C2") controlled=$T1 is_mate=$TO free_after=$FR1 still_mate_after_fp_toggle=$AT | back: shown=$(fld shown <<<"$C3") target=$(fld target <<<"$C3") switches->$(fld switches <<<"$C4") is_player=$BACK log=$(kfplines | grep -c '\[controls\] Control -> ')"
+    toggles 1; AT=$(ctl_is "$MT" && echo 1 || echo 0); ctl_menu "$MT" "$SH"; C3=$(A fp_keys ctl); W3=$(ks ctx_why); KL3=$(kfplines | grep -aE "RMB .* opened no menu|RMB press ignored|RMB context menu" | tail -1 | cut -c1-170); A fp_keys ctl click >/dev/null; waitf 3 ctl_is "$SH"; C4=$(A fp_keys ctl); BACK=$(ctl_is "$SH" && echo 1 || echo 0)
+    ev="to_mate: [target=$(fld target <<<"$C1") shown=1] switches $S0->$(fld switches <<<"$C2") last=$(fld last <<<"$C2") controlled=$T1 is_mate=$TO free_after=$FR1 still_mate_after_fp_toggle=$AT | back: shown=$(fld shown <<<"$C3") target=$(fld target <<<"$C3") switches->$(fld switches <<<"$C4") is_player=$BACK log=$(kfplines | grep -c '\[controls\] Control -> ') drawn_at_tap=${CTL_DRAWN:-n/a} ctx_why=${W3:-n/a} tap_log='${KL3:-none}'"
     ok=1; [ "$(fld target <<<"$C1")" = "$(uname_ "$MTN")" ] && [ "$(fld switches <<<"$C2")" = $((S0+1)) ] && [ "$TO" = 1 ] && [ "$FR1" = 0 ] || ok=0
     [ "$(fld switches <<<"$C4")" = $((S0+2)) ] && [ "$BACK" = 1 ] || ok=0; judge PT20 $ok "$ev"; fi
   menu_close; ctl_is "$SH" || take "$SH" >/dev/null; fi
