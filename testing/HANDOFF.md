@@ -13,8 +13,10 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - KenshiFP manual combat ON by default + F10 toggle + rebindable keys (7b85f67) validated both rigs.
 - C05-KO (8965bc3), C05-STAIRS (a1414c4), C04-TAKE (da96d77, ffad4e4), C05-INTERIOR (refused trace holds the last
   distance, 799c3f9): all closed on the 4080 (bm51h 30/30, bm51i, bm51j 40/40). 4080 idle, lock released.
-- **5090 next time Shay frees it:** install KenshiFP 76CF7E8A (still 07376F24 there; Kenshi closed), then run the NP
-  rows below.
+- **5090 next time Shay frees it:** install KenshiFP 76CF7E8A (still 07376F24 there; Kenshi closed) and Stobe B056BDF0
+  (e4e4f3a: push-to-talk after a save load always gave "Speech transcription failed.", the voice worker kept the
+  main-menu playthrough epoch; confirm: push-to-talk after a load -> stobe.log `STT_UPLOAD: completed`, no `dropped`),
+  then run the NP rows below.
 - NP5/NP11/NP12 + NP13/NP14 (NPC bio LLM rows; NP13/14 = backstory confided at Devoted+, server bf31d12, setting NPC_BIO_BACKSTORY_MIN_TIER): DeepInfra credit is back (Shay); run on the 5090 when Shay says it is free (Stobe +
   server only there; Shay is using the 5090 meanwhile, all other testing on the 4080). List line:
   `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12 NP13 NP14`.
