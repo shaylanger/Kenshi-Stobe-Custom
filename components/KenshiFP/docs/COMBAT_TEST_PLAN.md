@@ -114,7 +114,6 @@ needs a compound scenario (several actions in a row, toggles between them), not 
 |---|---|---|---|
 | PT04 | Movement feels far too fast with no athletics gear | find out: KenshiFP drive speed, PG athletics accel hook (f212cbc), time scale; compare vs vanilla run speed with the same char | measured m54: FP W 12.5 u/s vs vanilla run 54.1 u/s; Shay decision (target speed) |
 | PT17 | FP combat view/animations overall | coordinator plays it on the 4080 (screenshots), compares with other FP melee/crossbow games, then fixes | coordinator on the 4080, not in the wrapper |
-| PT20 | No way to switch which squad member you control in FP | squad bar right-click menu -> "Control" | fixed 968a5f6, wrapper `tests/ingame/fp-playtest.sh` (FP RMB menu path via fp_keys ctl click; squad-bar portrait path not automated) |
 
 ## Visual/user checks
 ADS alignment and reload readability; zoom/body/clipping; attack/block responsiveness; tactical enjoyment and high-skill limb precision.
