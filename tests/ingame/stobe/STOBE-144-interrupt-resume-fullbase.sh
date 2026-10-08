@@ -24,6 +24,7 @@ export PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}"
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
 ROWS="${ROWS:-137 140 fight 138 pause switch cancel clear 143 141 142}"
+ROWS=${ROWS//,/ }   # run-batch passes VAR=value words, so a list comes comma-separated
 MOD=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe
 STW=$MOD/stobe_work_goal.status
 CTL=$MOD/stobe_work_goal.control
