@@ -1,0 +1,430 @@
+#!/usr/bin/env bash
+# fp-playtest.sh: KenshiFP Gate 6 rows (Shay's 2026-10-07 playtest, COMBAT_TEST_PLAN.md "Gate 6", PT01-PT22) as ONE
+# compound in-game run: the rows chain the way Shay broke them (FP off/on toggles, weapon swaps, control switches
+# between them). Fixes: /root/KenshiFP 74a58ab..74b3408.
+# Input goes through the PHYSICAL paths (harness input isolation: `mouse_inject` / `key_inject` = DirectInput/OIS +
+# GetAsyncKeyState, what a real mouse/keyboard feeds), so the native select/command queue and the combat adapter's
+# physical input are what's tested; `fp_combat input` (injection) only for PT15's shots.
+# Evidence: `fp_keys state` (mouse_keys_swallowed ctx_hold_opens ctx_tap_opens lmb_why lmb_*_refused r_path mmb_objects
+# mmb_self hud_* carried down speed_*), `fp_keys ctl` (Control button), `fp_combat state` (why wih draws sheathes
+# reload_starts spread_*), `fp_control state` (controlled/inspected), `where`/`hp`/`runspeed`/`walktime`, `ui`, and
+# KenshiFP.log lines written since the test started.
+# Run in WSL with Kenshi in the world on a kah-fpxbow copy (Axima = crossbow player, Malzin = mate, Skaera = hostile).
+# Rows (one `RESULT PTxx PASS|FAIL <evidence>` each, log path on FAILs):
+#  PT22+PT07 holstered physical LMB on the mate: selection/inspected unchanged, mouse_keys_swallowed rises, no stats
+#            window (`ui lbSkills`), no "opened the clicked member's details" log line
+#  PT06      holstered physical RMB HOLD on the mate: ctx_hold_opens+1, ctx_freed=1, menu still open after the release
+#  PT20      in that menu: `fp_keys ctl` shows the Control button for the mate; `ctl click` -> switches+1, fp_control
+#            controlled = mate; back again the same way (RMB tap from the mate's body on the player)
+#  PT21      mate selected (physical MMB), RMB tap + hold on the ground: mate (unpinned) does not move, swallowed rises
+#  PT19      mate selected, physical MMB on the sky: mmb_self+1, last_select = player, inspected = controlled
+#  PT08      next to a building: physical MMB on it -> mmb_objects+1; holstered RMB tap on it -> ctx menu on it
+#  PT09      after 3 more FP off/on cycles + a control switch: hook=1 fault=0 swallow=1; MMB still selects the mate,
+#            RMB tap still opens the menu, LMB still doesn't select
+#  PT04      MEASURE only: FP W-drive speed vs vanilla run/walk (walktime) and runspeed numbers; PASS = measured
+#  PT05      evidence: physical LMB click on TimeSpeedButton2 (x1 while at x1), RTS and FP free cursor: speed_clicks rise,
+#            speed_peak_click / long frames / [speed] log lines; FAIL only if the spike shows (peak > SPIKE_MAX)
+#  PT11      bow only, holstered, manual combat physical: RMB hold -> nothing drawn (drawn=0 wih=0), combat draws and
+#            reload_starts unchanged, fp_combat why=ranged_holstered
+#  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts, ammo same)
+#  PT15      3 manual shots (injected aim/fire): spread_n +3, spread_cone = formula from spread_skill/spread_per,
+#            spread_off <= cone, "[combat] spread" log lines
+#  PT02      sword only (bow unequipped), physical R: drawn=1 wih!=0 r_path!=unarmed, log "R draw ... path="
+#  PT01+PT03 R draw: label "ready" shown <1.5 s then hidden; RMB block / LMB swing: hud_shown=0, hud_silent rises
+#  PT10      sword drawn: physical LMB on the mate in reach -> lmb_why=squad, no engage/fight, mate hp same; on a far NPC
+#            (pinned 8 m) -> lmb_why=far, no engage, no fight
+#  PT12      sword + bow equipped, sword drawn: RMB hold = melee block (ranged=0, why=melee_in_hands), combat sheathes /
+#            reload_starts / wih unchanged; LMB = free swing, no shot
+#  PT16      KO'd player lifted by the mate (LIFT_PERSON_PLAYER_ORDER): fp_keys carried=1 down=1, log "[down] carried=1"
+# Not here: PT13/PT14/PT17 (viewmodel: coordinator), PT15 head-hit rate vs vanilla (needs a target series: visual/
+# balance call), PT16 camera look (screenshot).
+# Usage: fp-playtest.sh [player] [mate] [hostile] [outdir] (defaults: $PLAYER/$MATE or Axima/Malzin, Skaera,
+# /tmp/fp-playtest). Env: ROWS (space/comma list), KFPLOG, STILL_MAX (3), SPIKE_MAX (1.5), FAR_NPC.
+# Leaves the fixture changed (player KO'd/carried, Skaera KO'd, items moved): reload it after.
+SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-playtest}
+KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
+STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
+ROWS=${ROWS:-"PT22 PT07 PT06 PT20 PT21 PT19 PT08 PT09 PT04 PT05 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
+mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
+A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
+note() { echo "$*" >> "$LOG"; }
+fld() { grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
+cam() { A fp_camera state | fld "$1"; }
+ctl() { A fp_control state | fld "$1"; }
+fps() { A fp_state | fld "$1"; }
+ks() { A fp_keys state | fld "$1"; }
+cs() { A fp_combat state | fld "$1"; }
+id_of() { A where "$1" | grep -o '#[0-9]*' | head -1 | tr -d '#'; }
+pos() { A where "$1" | grep -o 'pos=[^ ]*' | cut -d= -f2 | tr ',' ' '; }
+isko() { A where "$1" | grep -qE ' (KO|DEAD)( |$)'; }
+notko() { ! isko "$1"; }
+d2() { awk -v a="$1" -v b="$2" 'BEGIN{split(a,p," ");split(b,q," ");printf "%.2f", sqrt((q[1]-p[1])^2+(q[3]-p[3])^2)}'; }
+lt() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a!="" && a+0<b+0)}'; }
+ge() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a!="" && a+0>=b+0)}'; }
+inc() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a!="" && b!="" && b+0>a+0)}'; }     # inc <before> <after>: rose
+want() { case " $ROWS " in *" $1 "*) return 0;; esac; return 1; }
+waitf() { local end=$((SECONDS+$1)); shift; while [ $SECONDS -lt $end ]; do "$@" && return 0; sleep 0.2; done; return 1; }
+uname_() { tr ' =' '__' <<<"$1"; }
+kfplines() { tail -n +"$((LN0+1))" "$KFPLOG" 2>/dev/null | tr -d '\r'; }       # KenshiFP.log since the test start
+RESULTS=()
+row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
+judge() { if [ "$2" = 1 ]; then row "$1" PASS "$3"; else row "$1" FAIL "$3"; fi; }
+finish() { for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done; }
+# setup_fail <reason>: every wanted row not yet reported gets `FAIL setup: <reason>`
+setup_fail() { local r; for r in $ROWS; do printf '%s\n' "${RESULTS[@]}" | grep -q "^RESULT $r " || row "$r" FAIL "setup: $1"; done; finish; exit 1; }
+# rows_fail <reason> <rows...>: the listed wanted rows fail on a setup reason
+rows_fail() { local why=$1 r; shift; for r in "$@"; do want "$r" && row "$r" FAIL "setup: $why"; done; }
+
+# ---- physical input (input isolation) ----
+mclick() { A mouse_inject "$1" click "${2:-80}" >/dev/null; sleep "$(awk -v m="${2:-80}" 'BEGIN{printf "%.2f", (m+250)/1000}')"; }
+mdown() { A mouse_inject "$1" down >/dev/null; }
+mup() { A mouse_inject "$1" up >/dev/null; }
+rkey() { A key_inject r tap 120 >/dev/null; sleep 0.35; }
+altkey() { A key_inject 0xa4 tap 120 >/dev/null; sleep 0.4; }      # Left Alt = KenshiFP free-cursor toggle
+
+# ---- view / control ----
+fp_is() { [ "$(fps fp_mode)" = "$1" ]; }
+mode() { A fp_mode "$1" >/dev/null; waitf 4 fp_is "$([ "$1" = on ] && echo 1 || echo 0)"; }
+ctl_is() { local ids id; ids=$(ctl control_ids); id=$(id_of "$1"); [ -n "$id" ] && grep -qE "(^|/)$id(/|$)" <<<"$ids"; }
+take() { A select "$1" >/dev/null; A fp_control take >/dev/null; mode on; A fp_control take >/dev/null; waitf 4 ctl_is "$1"; }
+cursor_ok() { [ "$(fps cursor_hidden)" = 1 ]; }
+look() { A fp_camera look "$1" "${2:-0}" >/dev/null; sleep 0.3; }
+SKY=-0.9
+sky() { look "$(cam yaw)" "$SKY"; }
+# aim_pt <viewer> <x y z> <height dm>: FP camera from the eye at a world point + height; aim_at <viewer> <npc> <height>
+aim_pt() { local V=$1 sx sy sz tx ty tz c e YP; read -r sx sy sz <<<"$(pos "$V")"; read -r tx ty tz <<<"$2"
+  c=$(A fp_camera state); e=$(fld camera_y <<<"$c"); [ -n "$(fld camera_x <<<"$c")" ] && { sx=$(fld camera_x <<<"$c"); sz=$(fld camera_z <<<"$c"); }
+  [ -n "$e" ] || e=$(awk -v y="$sy" 'BEGIN{print y+19}')
+  YP=$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" -v ey="$e" -v py="$ty" -v h="$3" \
+     'BEGIN{L=sqrt((c-a)^2+(d-b)^2); printf "%.4f %.4f", atan2(c-a, d-b), atan2(ey-(py+h), L)}')
+  A fp_camera look $YP >/dev/null; sleep 0.4; }
+aim_at() { aim_pt "$1" "$(pos "$2")" "$3"; }
+# pick_on <viewer> <npc>: aim until the crosshair pick reports the npc (bounded: heights 13 10 7, 2 tries each)
+pick_on() { local H; for H in 13 10 7; do for _ in 1 2; do aim_at "$1" "$2" "$H"; A fp_keys pick >/dev/null; sleep 0.3
+  PK=$(A fp_keys pick show); [ "$(fld result <<<"$PK")" = "$(uname_ "$(live_name "$2")")" ] && return 0; done; done; return 1; }
+live_name() { local n; n=$(A where "$1" | sed -n 's/^\(.*\) #[0-9][0-9]*\/[0-9][0-9]* .*/\1/p' | head -1); echo "${n:-$1}"; }
+menu_close() { [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null; sleep 0.3; }
+toggles() { local i; for i in $(seq 1 "$1"); do mode off; sleep 0.5; mode on; sleep 0.5; done; }
+in_fight() { A fp_melee state | grep -q 'active=1' && ! A fp_melee state | grep -q 'target_h=#0/'; }
+not_fight() { ! in_fight; }
+kis() { [ "$(ks "$1")" = "$2" ]; }
+kge() { ge "$(ks "$1")" "$2"; }
+csis() { [ "$(cs "$1")" = "$2" ]; }
+csge() { ge "$(cs "$1")" "$2"; }
+
+# ---- equipment (as fp-controls.sh: the fixture player carries a crossbow only; melee comes from the mate) ----
+weapons() { A inv "$SH" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | grep -v -i -x -F "${BOWN:-@@}"; }
+bow_now() { A rangedinfo "$SH" | fld bow; }
+arm_melee() { local w r; while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A equip "$SH" "$w")
+  case "$r" in equipped*) WEP=$w; return 0;; esac; done <<<"$(weapons)"; return 1; }
+GIVEN=""
+give_melee() { local w r; [ -n "$(weapons)" ] && return 0
+  w=$(A inv "$MT" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | head -1 | sed 's/.*"name":"\([^"]*\)".*/\1/')
+  [ -n "$w" ] || { note "SETUP give_melee: $MT has no melee weapon either"; return 1; }
+  r=$(A transfer "$MT" "$SH" "$w")
+  case "$r" in transferred*) ;; *) r=$(A unequip "$MT" "$w")
+    case "$r" in *ground*) r=$(A pickup "$SH" "$w" now);; *) r=$(A transfer "$MT" "$SH" "$w");; esac;; esac
+  note "SETUP give_melee $w from $MT: $(cut -c1-120 <<<"$r")"; [ -n "$(weapons)" ] && GIVEN=$w; }
+# bow_off: unequip the bow; a full inventory drops it: the mate parks it (BOW_DROPPED=2) or it stays on the ground (1)
+BOW_DROPPED=0
+bow_off() { local r; [ "$(bow_now)" = none ] && return 0; r=$(A unequip "$SH" "$(bow_now)")
+  case "$r" in *ground*) BOW_DROPPED=1; r=$(A pickup "$MT" "$BOWN" now); note "SETUP bow parked on $MT: $(cut -c1-120 <<<"$r")"
+    case "$r" in *ERROR*) ;; *) BOW_DROPPED=2;; esac;; esac; [ "$(bow_now)" = none ]; }
+bow_on() { [ "$(bow_now)" != none ] && return 0; [ -n "$BOWN" ] || return 1
+  [ "$BOW_DROPPED" = 2 ] && { note "SETUP bow back from $MT: $(A transfer "$MT" "$SH" "$BOWN" | cut -c1-120)"; BOW_DROPPED=0; }
+  [ "$BOW_DROPPED" = 1 ] && { note "SETUP bow pickup: $(A pickup "$SH" "$BOWN" now | cut -c1-120)"; BOW_DROPPED=0; }
+  A equip "$SH" "$BOWN" | grep -q '^equipped'; }
+draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
+
+# ---- restore on exit ----
+FP0=""; DIST0=""; AR0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
+cleanup() { A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/null; A fp_move none >/dev/null
+  A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
+  A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null
+  [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
+  for c in $PINNED; do A pin "$c" off >/dev/null; done
+  [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
+  [ -n "$WEP" ] && A unequip "$SH" "$WEP" >/dev/null; [ -n "$BOWN" ] && bow_on >/dev/null
+  [ -n "$GIVEN" ] && A transfer "$SH" "$MT" "$GIVEN" >/dev/null
+  for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
+  A select "$SH" >/dev/null; A fp_control take >/dev/null
+  A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
+  [ -n "$FP0" ] && A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null
+  [ "$ISO_SET" = 1 ] && A input_isolation off >/dev/null; }
+trap cleanup EXIT
+
+# ---- setup (bounded checks) ----
+A status | grep -q phase=world || setup_fail "not in world"
+for c in "$SH" "$MT"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not found"; done
+[ -r "$KFPLOG" ] || setup_fail "KenshiFP.log not readable at $KFPLOG (set KFPLOG=)"
+LN0=$(wc -l < "$KFPLOG")
+K=$(A fp_keys state)
+grep -q 'speed_now=' <<<"$K" && grep -q 'mmb_self=' <<<"$K" || setup_fail "KenshiFP fp_keys state has no Gate 6 fields (needs 74b3408+): $(cut -c1-80 <<<"$K")"
+grep -q '\bhook=1\b' <<<"$K" || setup_fail "fp_keys hook=0 (playerControl hook not installed)"
+A fp_keys ctl | grep -q '^ctl shown=' || setup_fail "fp_keys ctl missing (needs 968a5f6+)"
+A fp_combat state | grep -q 'spread_n=' || setup_fail "fp_combat state has no spread_n (needs 095837f+)"
+if ! A input_isolation status | grep -q 'isolation=on'; then A input_isolation on >/dev/null; ISO_SET=1
+  A input_isolation status | grep -q 'isolation=on' || setup_fail "input isolation would not turn on (mouse_inject/key_inject need it)"; fi
+FP0=$(fps fp_mode); DIST0=$(cam target); AR0=$(cs auto_reload)
+BOWN=$(A rangedinfo "$SH" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//'); [ "$BOWN" = none ] && BOWN=""
+A speed 1 hold >/dev/null; A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
+for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
+PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/dev/null
+TGH=""; if A where "$TG" | grep -q 'pos='; then TGH=$(A where "$TG" | grep -oE '#[0-9]+/[0-9]+' | head -1)
+  A pin "$TGH" at "$SH" dist 600 >/dev/null && PINNED+=" $TGH"; fi
+take "$SH" || setup_fail "could not take $SH ($(A fp_control state | cut -c1-160))"
+A fp_camera distance 0 >/dev/null
+waitf 4 cursor_ok || setup_fail "FP cursor not hidden ($(A fp_state | cut -c1-120)): look mode needed for the mouse rows"
+H0=$(ctl controlled); HOME=$(pos "$SH"); MTN=$(live_name "$MT"); SHN=$(live_name "$SH")
+A pin "$MT" at "$SH" dist 25 face "$SH" | grep -q '^pinned' && PINNED+=" $MT" || setup_fail "could not pin $MT in front of $SH"
+sleep 1; draw_to 0 || setup_fail "$SH weapon would not holster"
+note "SETUP sh=$SH($SHN) mt=$MT($MTN) tg=$TG$TGH bow='$BOWN' auto_reload=$AR0 home=$HOME controlled=$H0 iso_set=$ISO_SET kfplog_from=$LN0"
+
+# chain step: FP off/on twice before the first rows (Shay: controls broke after a toggle)
+toggles 2; take "$SH" >/dev/null
+
+# ---- PT22 + PT07: holstered physical LMB on the mate: no select, no stats window ----
+if want PT22 || want PT07; then menu_close; A select "$SH" >/dev/null; sleep 0.3
+  if ! pick_on "$SH" "$MT"; then rows_fail "crosshair pick never on $MT ($(cut -c1-120 <<<"$PK"))" PT22 PT07
+  else I0=$(ctl inspected); K0=$(A fp_keys state); mclick left 80; sleep 0.6; K=$(A fp_keys state); I1=$(ctl inspected)
+    UIS=$(A ui lbskills | grep -c 'lbSkills'); OPN=$(kfplines | grep -c "opened the clicked member's details")
+    ev="inspected $I0->$I1 last_select $(fld last_select <<<"$K0")->$(fld last_select <<<"$K") mouse_keys_swallowed $(fld mouse_keys_swallowed <<<"$K0")->$(fld mouse_keys_swallowed <<<"$K") lmb_swallowed $(fld lmb_swallowed <<<"$K0")->$(fld lmb_swallowed <<<"$K") drawn=$(fld drawn <<<"$K") stats_widgets=$UIS details_log=$OPN"
+    ok=1; [ "$I1" = "$I0" ] && [ "$(fld last_select <<<"$K")" = "$(fld last_select <<<"$K0")" ] || ok=0
+    { inc "$(fld mouse_keys_swallowed <<<"$K0")" "$(fld mouse_keys_swallowed <<<"$K")" || inc "$(fld lmb_swallowed <<<"$K0")" "$(fld lmb_swallowed <<<"$K")"; } || ok=0
+    want PT07 && judge PT07 $ok "$ev"
+    ok2=1; [ "$UIS" = 0 ] && [ "$OPN" = 0 ] && [ "$I1" = "$I0" ] || ok2=0; want PT22 && judge PT22 $ok2 "$ev"; fi; fi
+
+# ---- PT06: holstered RMB HOLD on the mate opens the menu; its own release keeps it open ----
+MENU_ON_MT=0
+if want PT06 || want PT20; then menu_close; draw_to 0
+  if ! pick_on "$SH" "$MT"; then rows_fail "crosshair pick never on $MT" PT06
+  else K0=$(A fp_keys state); mdown right; sleep 0.9; K1=$(A fp_keys state); mup right; sleep 0.8; K2=$(A fp_keys state); FR=$(fps free)
+    ev="ctx_hold_opens $(fld ctx_hold_opens <<<"$K0")->$(fld ctx_hold_opens <<<"$K1") tap_opens $(fld ctx_tap_opens <<<"$K0")->$(fld ctx_tap_opens <<<"$K2") ctx_freed held=$(fld ctx_freed <<<"$K1") released=$(fld ctx_freed <<<"$K2") free=$FR last_target=$(fld last_target <<<"$K1") log_hold=$(kfplines | grep -c 'RMB context menu .* via=hold')"
+    ok=1; [ "$(fld ctx_hold_opens <<<"$K1")" = $(( $(fld ctx_hold_opens <<<"$K0") + 1 )) ] && [ "$(fld ctx_freed <<<"$K1")" = 1 ] && [ "$(fld ctx_freed <<<"$K2")" = 1 ] && [ "$FR" = 1 ] || ok=0
+    [ "$(fld last_target <<<"$K1")" = "$(uname_ "$MTN")" ] || ok=0
+    [ $ok = 1 ] && MENU_ON_MT=1; want PT06 && judge PT06 $ok "$ev"; fi; fi
+
+# ---- PT20: Control button in the menu on a squad mate; switch there and back ----
+# ctl_menu <viewer> <target>: holstered RMB tap on the target from the viewer's body; 0 = Control offered for it
+ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; mclick right 150; waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; }
+if want PT20; then
+  [ $MENU_ON_MT = 1 ] || ctl_menu "$SH" "$MT"
+  C1=$(A fp_keys ctl); S0=$(fld switches <<<"$C1")
+  if [ "$(fld shown <<<"$C1")" != 1 ]; then row PT20 FAIL "Control button not shown with the menu on $MT open: [$C1] free=$(fps free) ctx_freed=$(ks ctx_freed)"
+  else A fp_keys ctl click >/dev/null; waitf 3 ctl_is "$MT"; C2=$(A fp_keys ctl); T1=$(ctl controlled); TO=$(ctl_is "$MT" && echo 1 || echo 0); FR1=$(fps free)
+    # chain: FP off/on while controlling the mate, then back to the player from her body
+    toggles 1; AT=$(ctl_is "$MT" && echo 1 || echo 0); ctl_menu "$MT" "$SH"; C3=$(A fp_keys ctl); A fp_keys ctl click >/dev/null; waitf 3 ctl_is "$SH"; C4=$(A fp_keys ctl); BACK=$(ctl_is "$SH" && echo 1 || echo 0)
+    ev="to_mate: [target=$(fld target <<<"$C1") shown=1] switches $S0->$(fld switches <<<"$C2") last=$(fld last <<<"$C2") controlled=$T1 is_mate=$TO free_after=$FR1 still_mate_after_fp_toggle=$AT | back: shown=$(fld shown <<<"$C3") target=$(fld target <<<"$C3") switches->$(fld switches <<<"$C4") is_player=$BACK log=$(kfplines | grep -c '\[controls\] Control -> ')"
+    ok=1; [ "$(fld target <<<"$C1")" = "$(uname_ "$MTN")" ] && [ "$(fld switches <<<"$C2")" = $((S0+1)) ] && [ "$TO" = 1 ] && [ "$FR1" = 0 ] || ok=0
+    [ "$(fld switches <<<"$C4")" = $((S0+2)) ] && [ "$BACK" = 1 ] || ok=0; judge PT20 $ok "$ev"; fi
+  menu_close; ctl_is "$SH" || take "$SH" >/dev/null; fi
+menu_close
+
+# ---- PT21: a selected squad mate gets no move order from RMB ----
+if want PT21 || want PT19; then ctl_is "$SH" || take "$SH" >/dev/null
+  if ! pick_on "$SH" "$MT"; then rows_fail "crosshair pick never on $MT for the MMB select" PT21 PT19
+  else M0=$(ks mmb_selects); mclick middle 80; waitf 3 kge mmb_selects $((M0+1)); INS=$(ctl inspected); SEL=$(ks last_select)
+    if [ "$SEL" != "$(uname_ "$MTN")" ]; then rows_fail "physical MMB did not select $MT (last_select=$SEL mmb_selects $M0->$(ks mmb_selects))" PT21 PT19
+    else
+      if want PT21; then A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}; sleep 1
+        P0=$(pos "$MT"); YW=$(cam yaw); look "$(awk -v y="$YW" 'BEGIN{printf "%.4f", y+1.2}')" 0.45
+        K0=$(A fp_keys state); mclick right 150; sleep 0.5; menu_close; mdown right; sleep 1.2; mup right; sleep 0.5; menu_close; sleep 2.5
+        K=$(A fp_keys state); DM=$(d2 "$P0" "$(pos "$MT")")
+        ev="$MT selected (inspected=$INS) RMB tap+hold on the ground: $MT moved=$DM mouse_keys_swallowed $(fld mouse_keys_swallowed <<<"$K0")->$(fld mouse_keys_swallowed <<<"$K") rmb_swallowed $(fld rmb_swallowed <<<"$K0")->$(fld rmb_swallowed <<<"$K") ctx_opens $(fld ctx_opens <<<"$K0")->$(fld ctx_opens <<<"$K")"
+        ok=1; lt "$DM" "$STILL_MAX" || ok=0; judge PT21 $ok "$ev"
+        A pin "$MT" at "$SH" dist 25 face "$SH" | grep -q '^pinned' && PINNED+=" $MT"; sleep 1
+        A select "$MT" >/dev/null; sleep 0.3; fi   # PT19 needs the mate selected again
+      # ---- PT19: MMB on the sky = selection back to the controlled char ----
+      if want PT19; then sky; K0=$(A fp_keys state); mclick middle 80; waitf 3 kge mmb_self $(( $(fld mmb_self <<<"$K0") + 1 )); sleep 0.3
+        K=$(A fp_keys state); I1=$(ctl inspected); HC=$(ctl controlled)
+        ev="before: inspected=$INS | mmb_self $(fld mmb_self <<<"$K0")->$(fld mmb_self <<<"$K") last_select=$(fld last_select <<<"$K") inspected=$I1 controlled=$HC"
+        ok=1; [ "$(fld mmb_self <<<"$K")" = $(( $(fld mmb_self <<<"$K0") + 1 )) ] && [ "$(fld last_select <<<"$K")" = "$(uname_ "$SHN")" ] && [ "$I1" = "$HC" ] || ok=0
+        judge PT19 $ok "$ev"; fi; fi; fi; fi
+menu_close
+
+# ---- PT08: MMB / RMB menu on a building ----
+if want PT08; then BL=""; for f in house shack bar shop hut tower home wall gate; do BL=$(A buildings 1500 "$f" | grep -m1 'pos='); [ -n "$BL" ] && break; done
+  BP=$(grep -o 'pos=[^ ]*' <<<"$BL" | head -1 | cut -d= -f2 | tr ',' ' ')
+  if [ -z "$BP" ]; then row PT08 FAIL "setup: no building within 1500"
+  else read -r bx by bz <<<"$BP"; GOT=0
+    for off in 250 350 180; do A teleport "$SH" "$(awk -v x="$bx" -v o="$off" 'BEGIN{print x+o}')" "$by" "$bz" >/dev/null; sleep 1.5; take "$SH" >/dev/null
+      for h in 20 35 10; do aim_pt "$SH" "$BP" "$h"; K0=$(A fp_keys state); mclick middle 80; sleep 0.5; K=$(A fp_keys state)
+        [ "$(fld mmb_objects <<<"$K")" = $(( $(fld mmb_objects <<<"$K0") + 1 )) ] && { GOT=1; break 2; }; done; done
+    ev1="building='$(cut -c1-50 <<<"$BL")' MMB: mmb_objects $(fld mmb_objects <<<"$K0")->$(fld mmb_objects <<<"$K") mmb_self->$(fld mmb_self <<<"$K") last_select=$(fld last_select <<<"$K")"
+    if [ $GOT = 0 ]; then row PT08 FAIL "no object select on 9 aims at the building (pick: $(A fp_keys pick show | cut -c1-120)): $ev1"
+    else BN=$(fld last_select <<<"$K"); draw_to 0; O0=$(ks ctx_opens); mclick right 150; waitf 3 kge ctx_opens $((O0+1)); K2=$(A fp_keys state)
+      ev="$ev1 | RMB tap: ctx_opens $O0->$(fld ctx_opens <<<"$K2") last_target=$(fld last_target <<<"$K2") ctx_freed=$(fld ctx_freed <<<"$K2") log=$(kfplines | grep -c 'MMB select object')"
+      ok=1; [ "$(fld ctx_opens <<<"$K2")" = $((O0+1)) ] && [ "$(fld last_target <<<"$K2")" = "$BN" ] && [ "$BN" != "$(uname_ "$SHN")" ] || ok=0
+      judge PT08 $ok "$ev"; menu_close; fi
+    A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; fi; fi
+
+# ---- PT09: controls survive FP toggles (+ a control switch) ----
+if want PT09; then toggles 3; take "$MT" >/dev/null; mode off; take "$SH" >/dev/null; A select "$SH" >/dev/null; sleep 0.5
+  K0=$(A fp_keys state); OK0=1; [ "$(fld hook <<<"$K0")" = 1 ] && [ "$(fld fault <<<"$K0")" = 0 ] && [ "$(fld swallow <<<"$K0")" = 1 ] && [ "$(fld fp <<<"$K0")" = 1 ] || OK0=0
+  if ! pick_on "$SH" "$MT"; then row PT09 FAIL "setup: crosshair pick never on $MT after the toggles ($(cut -c1-100 <<<"$PK"))"
+  else I0=$(ctl inspected); mclick left 80; sleep 0.4; IL=$(ctl inspected)
+    M0=$(ks mmb_selects); mclick middle 80; waitf 3 kge mmb_selects $((M0+1)); SEL=$(ks last_select); A select "$SH" >/dev/null
+    O0=$(ks ctx_tap_opens); mclick right 150; waitf 3 kge ctx_tap_opens $((O0+1)); K=$(A fp_keys state); menu_close
+    ev="after 3 FP toggles + control switch: hook=$(fld hook <<<"$K0") fault=$(fld fault <<<"$K0") swallow=$(fld swallow <<<"$K0") | LMB inspected $I0->$IL | MMB last_select=$SEL | RMB tap ctx_tap_opens $O0->$(fld ctx_tap_opens <<<"$K") last_target=$(fld last_target <<<"$K")"
+    ok=$OK0; [ "$IL" = "$I0" ] && [ "$SEL" = "$(uname_ "$MTN")" ] && [ "$(fld ctx_tap_opens <<<"$K")" = $((O0+1)) ] || ok=0; judge PT09 $ok "$ev"; fi; fi
+menu_close
+
+# ---- PT04: MEASURE walk/run speed (FP drive vs vanilla), no pass/fail on the numbers ----
+if want PT04; then take "$SH" >/dev/null; A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null
+  aim_at "$SH" "$MT" 13; look "$(awk -v y="$(cam yaw)" 'BEGIN{printf "%.4f", y+3.14159}')" 0   # away from the mate
+  ATH=$(A stat "$SH" athletics | grep -o 'base=[^ ]*\|effective=[^ ]*' | tr '\n' ' ')
+  A fp_move w 6000 >/dev/null; sleep 1.5; P1=$(pos "$SH"); t1=$(date +%s.%N); RS=$(A runspeed "$SH" | cut -c1-200); sleep 3; P2=$(pos "$SH"); t2=$(date +%s.%N); A fp_move none >/dev/null
+  FPV=$(awk -v d="$(d2 "$P1" "$P2")" -v a="$t1" -v b="$t2" 'BEGIN{printf "%.1f", d/(b-a)}')
+  sleep 1; mode off; WR=$(A walktime "$SH" 150 -x run | grep -o 'speed=[^ ]*\|top_speed=[^ ]*' | tr '\n' ' ')
+  WW=$(A walktime "$SH" 100 -z walk | grep -o 'speed=[^ ]*\|top_speed=[^ ]*' | tr '\n' ' '); take "$SH" >/dev/null
+  if [ -z "$WR" ] || [ "$FPV" = 0.0 ]; then row PT04 FAIL "setup: no measurement (fp=$FPV u/s run=[$WR] walk=[$WW])"
+  else row PT04 PASS "MEASURE only: fp_W_drive=$FPV u/s (real time, speed 1) [runspeed during W: $RS] | vanilla run [$WR] walk [$WW] | athletics $ATH"; fi
+  A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; fi
+
+# ---- PT05: time-scale button click evidence (RTS, then FP free cursor) ----
+spd_click() { local u x y w h; u=$(A ui timespeedbutton2 | grep -oE "TimeSpeedButton2( '[^']*')? -?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+" | grep -oE -- '-?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+$' | head -1)
+  [ -n "$u" ] || return 1; read -r x y w h <<<"$(tr ',x' '  ' <<<"$u")"
+  A mouse_inject at $((x + w/2)) $((y + h/2)) >/dev/null; sleep 0.3; mclick left 80; sleep 3.3; }
+if want PT05; then A speed 1 >/dev/null; sleep 0.5; EV=""; OK=1; N=0
+  for where_ in rts fp; do
+    if [ $where_ = rts ]; then mode off; else take "$SH" >/dev/null; altkey; waitf 3 bash -c "stobe-auto fp_state | grep -q 'free=1'"; fi
+    L0=$(wc -l < "$KFPLOG"); K0=$(A fp_keys state)
+    if spd_click; then N=$((N+1)); K=$(A fp_keys state); SL=$(tail -n +"$((L0+1))" "$KFPLOG" | tr -d '\r' | grep -c '^.*\[speed\]')
+      PEAK=$(fld speed_peak_click <<<"$K")
+      EV+="$where_: speed_clicks $(fld speed_clicks <<<"$K0")->$(fld speed_clicks <<<"$K") peak_click=$PEAK changes $(fld speed_changes <<<"$K0")->$(fld speed_changes <<<"$K") long_frames $(fld speed_long_frames <<<"$K0")->$(fld speed_long_frames <<<"$K") now=$(fld speed_now <<<"$K") speed_log_lines=$SL | "
+      inc "$(fld speed_clicks <<<"$K0")" "$(fld speed_clicks <<<"$K")" || OK=0; lt "$PEAK" "$SPIKE_MAX" || OK=0
+      tail -n +"$((L0+1))" "$KFPLOG" | tr -d '\r' | grep '\[speed\]' | head -20 > "$OUT/pt05-$where_-speed.txt"
+    else EV+="$where_: TimeSpeedButton2 not visible ($(A ui timespeed | cut -c1-120)) | "; fi
+    [ $where_ = fp ] && menu_close; done
+  if [ $N = 0 ]; then row PT05 FAIL "setup: TimeSpeedButton2 never found: $EV"
+  else judge PT05 $OK "evidence ($N clicks, spike if peak_click>=$SPIKE_MAX): ${EV% | } logs=$OUT/pt05-*-speed.txt"; fi
+  A speed 1 >/dev/null; take "$SH" >/dev/null; fi
+
+# ---- weapon rows: mate behind the shooter, manual combat on (physical input) ----
+take "$SH" >/dev/null
+note "SETUP weapons: $MT behind $SH: $(A pin "$MT" at "$SH" dist -25 face "$SH" | cut -c1-100)"
+A fp_combat on >/dev/null; A fp_combat physical >/dev/null; A fp_combat autoreload 1 >/dev/null
+BOWOK=0; [ -n "$BOWN" ] && bow_on && BOWOK=1
+
+# ---- PT11: holstered crossbow, RMB does nothing combat-related ----
+if want PT11; then if [ $BOWOK = 0 ]; then row PT11 FAIL "setup: no crossbow on $SH ('$BOWN')"; else
+  menu_close; draw_to 0; sky; C0=$(A fp_combat state); mdown right; sleep 1.5; K1=$(A fp_keys state); C1=$(A fp_combat state); mup right; sleep 0.8; menu_close
+  K2=$(A fp_keys state); C2=$(A fp_combat state)
+  ev="RMB held 1.5 s: drawn=$(fld drawn <<<"$K1")/$(fld drawn <<<"$K2") wih=$(fld wih <<<"$K1")/$(fld wih <<<"$K2") ranged=$(fld ranged <<<"$K1") why=$(fld why <<<"$C1") combat draws $(fld draws <<<"$C0")->$(fld draws <<<"$C2") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C2") enabled=$(fld enabled <<<"$C1") injected=$(fld injected <<<"$C1")"
+  ok=1; [ "$(fld drawn <<<"$K1")" = 0 ] && [ "$(fld drawn <<<"$K2")" = 0 ] && [ "$(fld wih <<<"$K2")" = 0 ] && [ "$(fld why <<<"$C1")" = ranged_holstered ] || ok=0
+  [ "$(fld draws <<<"$C2")" = "$(fld draws <<<"$C0")" ] && [ "$(fld reload_starts <<<"$C2")" = "$(fld reload_starts <<<"$C0")" ] || ok=0
+  judge PT11 $ok "$ev"; fi; fi
+
+# chain: FP off/on + control to the mate and back between the bow rows
+toggles 1; take "$MT" >/dev/null; take "$SH" >/dev/null
+
+# ---- PT18: R only draws/holsters the crossbow ----
+if want PT18; then if [ $BOWOK = 0 ]; then row PT18 FAIL "setup: no crossbow on $SH"; else
+  draw_to 0; sky; C0=$(A fp_combat state); D0=$(ks r_draws); rkey; waitf 4 kis drawn 1; waitf 6 kis ranged 1; sleep 2; C1=$(A fp_combat state); K1=$(A fp_keys state)
+  mdown right; sleep 1; waitf 12 csis reloading 0; C2=$(A fp_combat state); H0=$(ks r_holsters); rkey; waitf 4 kis drawn 0; sleep 0.8; C3=$(A fp_combat state); K3=$(A fp_keys state); mup right; sleep 0.5
+  ev="R draw: r_draws $D0->$(fld r_draws <<<"$K1") ranged=$(fld ranged <<<"$K1") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C1") (2 s, no aim) | aim+R: drawn=$(fld drawn <<<"$K3") r_holsters $H0->$(fld r_holsters <<<"$K3") reload_starts $(fld reload_starts <<<"$C2")->$(fld reload_starts <<<"$C3") ammo $(fld ammo <<<"$C2")->$(fld ammo <<<"$C3")"
+  ok=1; [ "$(fld drawn <<<"$K1")" = 1 ] && [ "$(fld ranged <<<"$K1")" = 1 ] && [ "$(fld reload_starts <<<"$C1")" = "$(fld reload_starts <<<"$C0")" ] || ok=0
+  [ "$(fld drawn <<<"$K3")" = 0 ] && [ "$(fld r_holsters <<<"$K3")" = $((H0+1)) ] && [ "$(fld reload_starts <<<"$C3")" = "$(fld reload_starts <<<"$C2")" ] && [ "$(fld ammo <<<"$C3")" = "$(fld ammo <<<"$C2")" ] || ok=0
+  judge PT18 $ok "$ev"; fi; fi
+
+# ---- PT15: manual crossbow shots get the skill cone ----
+if want PT15; then if [ $BOWOK = 0 ]; then row PT15 FAIL "setup: no crossbow on $SH"; else
+  draw_to 0; aim_at "$SH" "$MT" 13; look "$(awk -v y="$(cam yaw)" 'BEGIN{printf "%.4f", y+3.14159}')" 0.05   # away from the mate, at the ground ahead
+  A fp_combat input 1 0 0 >/dev/null; waitf 8 csis armed 1; SL0=$(kfplines | grep -c '\[combat\] spread'); C0=$(A fp_combat state); SHOTS=0; WHY=""
+  for _ in 1 2 3; do waitf 20 csis shot_ready 1 || { WHY="shot_ready never 1 (ammo=$(cs ammo) has_ammo=$(cs has_ammo) reloading=$(cs reloading) why=$(cs why))"; break; }
+    S=$(cs actual_shots); A fp_combat input 1 1 0 >/dev/null; waitf 3 csge actual_shots $((S+1)) && SHOTS=$((SHOTS+1)); A fp_combat input 1 0 0 >/dev/null; sleep 0.4; done
+  A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; C1=$(A fp_combat state); SL1=$(kfplines | grep -c '\[combat\] spread')
+  N0=$(fld spread_n <<<"$C0"); N1=$(fld spread_n <<<"$C1"); SK=$(fld spread_skill <<<"$C1"); PE=$(fld spread_per <<<"$C1"); CO=$(fld spread_cone <<<"$C1"); OF=$(fld spread_off <<<"$C1"); SC=$(fld spread_scale <<<"$C1")
+  EXP=$(awk -v s="$SK" -v p="$PE" -v k="$SC" 'BEGIN{a=(0.75*s+0.25*p)/100; if(a<0)a=0; if(a>1)a=1; printf "%.3f", (0.5+6*(1-a)^1.5)*k}')
+  ev="shots=$SHOTS spread_n $N0->$N1 crossbows=$SK perception=$PE cone=$CO expected=$EXP off=$OF scale=$SC spread_log $SL0->$SL1 $WHY"
+  if [ $SHOTS = 0 ]; then row PT15 FAIL "setup: no shot fired: $ev"
+  else ok=1; [ "$N1" = $((N0+SHOTS)) ] && [ $((SL1-SL0)) -ge $SHOTS ] || ok=0
+    awk -v c="$CO" -v e="$EXP" -v o="$OF" 'BEGIN{d=c-e; if(d<0)d=-d; exit !(c!="" && d<0.02 && o+0<=c+0.001 && c+0>0)}' || ok=0
+    judge PT15 $ok "$ev"; fi
+  draw_to 0; fi; fi
+
+# ---- melee: bow off, sword from the mate ----
+MELEE=0; if want PT02 || want PT01 || want PT03 || want PT10 || want PT12; then draw_to 0
+  give_melee || note "SETUP: could not give $SH a melee weapon"; bow_off || note "SETUP: bow would not unequip ($(bow_now))"
+  arm_melee && MELEE=1; note "SETUP melee=$MELEE wep='$WEP' bow_now=$(bow_now) bow_dropped=$BOW_DROPPED"; fi
+mfail() { rows_fail "no melee weapon equips on $SH (inv: $(weapons | tr '\n' ';'))" "$@"; }
+toggles 1; take "$SH" >/dev/null
+
+# ---- PT02 (+ PT01): R with a sword only ----
+if want PT02 || want PT01; then if [ $MELEE = 0 ]; then mfail PT02 PT01; else draw_to 0; sky; sleep 2; K0=$(A fp_keys state)
+  rkey; K1=$(A fp_keys state); waitf 4 kis drawn 1; K2=$(A fp_keys state); sleep 2.6; K3=$(A fp_keys state)
+  RL=$(kfplines | grep '\[controls\] R \(draw\|ready\)' | tail -1 | cut -c1-120)
+  if want PT02; then ev="bow=$(bow_now) wep='$WEP' r_draws $(fld r_draws <<<"$K0")->$(fld r_draws <<<"$K2") drawn=$(fld drawn <<<"$K2") wih=$(fld wih <<<"$K2") r_path=$(fld r_path <<<"$K2") fists=$(fld fists <<<"$K2") log='$RL'"
+    ok=1; [ "$(fld drawn <<<"$K2")" = 1 ] && [ "$(fld wih <<<"$K2")" != 0 ] && [ -n "$(fld wih <<<"$K2")" ] && [ "$(fld r_path <<<"$K2")" != unarmed ] && [ "$(fld fists <<<"$K2")" = 0 ] || ok=0
+    judge PT02 $ok "$ev"; fi
+  if want PT01; then
+    # shown within the flash (K1 ~0.4 s / K2 after the draw), hidden 2.6 s later while still ready
+    SHOWN=0; for s in "$K1" "$K2"; do [ "$(fld hud_shown <<<"$s")" = 1 ] && [ "$(fld hud_text <<<"$s")" = ready ] && SHOWN=1; done
+    ev="after R: hud_text=$(fld hud_text <<<"$K1")/$(fld hud_text <<<"$K2") hud_shown=$(fld hud_shown <<<"$K1")/$(fld hud_shown <<<"$K2") | +2.6 s: ui_state=$(fld ui_state <<<"$K3") hud_shown=$(fld hud_shown <<<"$K3") hud_flashes $(fld hud_flashes <<<"$K0")->$(fld hud_flashes <<<"$K3") hist=$(fld hud_hist <<<"$K3")"
+    ok=1; [ $SHOWN = 1 ] && [ "$(fld ui_state <<<"$K3")" = ready ] && [ "$(fld hud_shown <<<"$K3")" = 0 ] && inc "$(fld hud_flashes <<<"$K0")" "$(fld hud_flashes <<<"$K3")" || ok=0
+    judge PT01 $ok "$ev"; fi; fi; fi
+
+# ---- PT03: no text while blocking / swinging ----
+if want PT03; then if [ $MELEE = 0 ]; then mfail PT03; else draw_to 1; sky; waitf 10 not_fight; sleep 1.6; K0=$(A fp_keys state)
+  mdown right; sleep 0.7; KB1=$(A fp_keys state); sleep 0.6; KB2=$(A fp_keys state); mup right; sleep 1
+  mclick left 80; KS1=$(A fp_keys state); waitf 5 kge fs_ends $(( $(fld fs_ends <<<"$K0") + 1 )); K=$(A fp_keys state)
+  ev="block: ui_state=$(fld ui_state <<<"$KB1")/$(fld ui_state <<<"$KB2") hud_shown=$(fld hud_shown <<<"$KB1")/$(fld hud_shown <<<"$KB2") | swing: free_swings $(fld free_swings <<<"$K0")->$(fld free_swings <<<"$K") ui=$(fld ui_state <<<"$KS1") hud_shown=$(fld hud_shown <<<"$KS1") | hud_silent $(fld hud_silent <<<"$K0")->$(fld hud_silent <<<"$K") hist=$(fld hud_hist <<<"$K")"
+  ok=1; [ "$(fld ui_state <<<"$KB1")" = blocking ] && [ "$(fld hud_shown <<<"$KB1")" = 0 ] && [ "$(fld hud_shown <<<"$KB2")" = 0 ] || ok=0
+  [ "$(fld ui_state <<<"$KS1")" != swinging ] || [ "$(fld hud_shown <<<"$KS1")" = 0 ] || ok=0
+  ge "$(fld hud_silent <<<"$K")" $(( $(fld hud_silent <<<"$K0") + 2 )) && inc "$(fld free_swings <<<"$K0")" "$(fld free_swings <<<"$K")" || ok=0
+  judge PT03 $ok "$ev"; fi; fi
+
+# ---- PT10: LMB never orders an attack on a squad mate or a far NPC ----
+if want PT10; then if [ $MELEE = 0 ]; then mfail PT10; else draw_to 1; waitf 10 not_fight
+  HP0=$(A hp "$MT" | grep -o 'worst=[0-9-]*%'); EV=""; ok=1
+  if pick_on "$SH" "$MT"; then K0=$(A fp_keys state); mclick left 80; sleep 1.5; K=$(A fp_keys state); FI=$(in_fight && echo 1 || echo 0)
+    EV="mate: lmb_why=$(fld lmb_why <<<"$K") dist=$(fld lmb_dist <<<"$K") squad_refused $(fld lmb_squad_refused <<<"$K0")->$(fld lmb_squad_refused <<<"$K") engages $(fld engages <<<"$K0")->$(fld engages <<<"$K") fight=$FI hp $HP0->$(A hp "$MT" | grep -o 'worst=[0-9-]*%')"
+    [ "$(fld lmb_why <<<"$K")" = squad ] && [ "$(fld lmb_squad_refused <<<"$K")" = $(( $(fld lmb_squad_refused <<<"$K0") + 1 )) ] && [ "$(fld engages <<<"$K")" = "$(fld engages <<<"$K0")" ] && [ $FI = 0 ] || ok=0
+  else ok=0; EV="setup: crosshair pick never on $MT"; fi
+  # far NPC: FAR_NPC=<name>, else the fixture hostile, else a neutral spawned 10 m away
+  FN=""; if [ -n "$FAR_NPC" ]; then FN=$FAR_NPC; elif [ -n "$TGH" ] && notko "$TGH"; then FN=$TGH
+  else SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH" dist 100 count 1); FN=$(grep -oE '#[0-9]+/[0-9]+' <<<"$SP" | head -1); note "PT10 spawn: $SP"; fi
+  if [ -n "$FN" ] && A pin "$FN" at "$SH" dist 80 | grep -q '^pinned'; then PINNED+=" $FN"; sleep 1; waitf 10 not_fight
+    if pick_on "$SH" "$FN"; then K0=$(A fp_keys state); mclick left 80; sleep 2; K=$(A fp_keys state); FI=$(in_fight && echo 1 || echo 0)
+      EV+=" | far $(live_name "$FN"): lmb_why=$(fld lmb_why <<<"$K") dist=$(fld lmb_dist <<<"$K") far_refused $(fld lmb_far_refused <<<"$K0")->$(fld lmb_far_refused <<<"$K") engages $(fld engages <<<"$K0")->$(fld engages <<<"$K") free_swings $(fld free_swings <<<"$K0")->$(fld free_swings <<<"$K") fight=$FI"
+      [ "$(fld lmb_why <<<"$K")" = far ] && [ "$(fld lmb_far_refused <<<"$K")" = $(( $(fld lmb_far_refused <<<"$K0") + 1 )) ] && [ "$(fld engages <<<"$K")" = "$(fld engages <<<"$K0")" ] && [ $FI = 0 ] || ok=0
+    else ok=0; EV+=" | setup: crosshair pick never on the far npc $FN"; fi
+    A pin "$FN" at "$SH" dist 600 >/dev/null
+  else ok=0; EV+=" | setup: no far NPC to pin (FAR_NPC=, $TG KO/missing, spawn failed)"; fi
+  EV+=" log_no_engage=$(kfplines | grep -c 'LMB no engage')"
+  case "$EV" in *setup:*) row PT10 FAIL "$EV";; *) judge PT10 $ok "$EV";; esac; fi; fi
+
+# ---- PT12: sword drawn + crossbow carried: RMB/LMB stay melee ----
+if want PT12; then if [ $MELEE = 0 ]; then mfail PT12; elif [ -z "$BOWN" ]; then row PT12 FAIL "setup: no crossbow"; else
+  draw_to 0; bow_on || note "SETUP PT12 bow would not re-equip"; A equip "$SH" "$WEP" >/dev/null
+  toggles 1; take "$SH" >/dev/null; sky; rkey; waitf 4 kis drawn 1; sleep 0.5
+  if [ "$(ks ranged)" = 1 ]; then rkey; waitf 4 kis drawn 0; rkey; waitf 4 kis drawn 1; sleep 0.5; fi
+  if [ "$(bow_now)" = none ] || [ "$(ks ranged)" != 0 ] || [ "$(ks drawn)" != 1 ]; then row PT12 FAIL "setup: need sword drawn + bow equipped (bow=$(bow_now) drawn=$(ks drawn) ranged=$(ks ranged) r_path=$(ks r_path))"
+  else waitf 10 not_fight; W0=$(ks wih); C0=$(A fp_combat state); K0=$(A fp_keys state)
+    mdown right; sleep 0.8; K1=$(A fp_keys state); C1=$(A fp_combat state); sleep 0.7; mup right; sleep 1
+    mclick left 80; waitf 5 kge fs_ends $(( $(fld fs_ends <<<"$K0") + 1 )); K=$(A fp_keys state); C2=$(A fp_combat state)
+    ev="bow=$(bow_now) RMB held: ui_state=$(fld ui_state <<<"$K1") ranged=$(fld ranged <<<"$K1") why=$(fld why <<<"$C1") wih $W0->$(fld wih <<<"$K1")->$(fld wih <<<"$K") sheathes $(fld sheathes <<<"$C0")->$(fld sheathes <<<"$C2") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C2") | LMB: free_swings $(fld free_swings <<<"$K0")->$(fld free_swings <<<"$K") actual_shots $(fld actual_shots <<<"$C0")->$(fld actual_shots <<<"$C2") wrong_weapon_log=$(kfplines | grep -c 'wrong_weapon')"
+    ok=1; [ "$(fld ui_state <<<"$K1")" = blocking ] && [ "$(fld ranged <<<"$K1")" = 0 ] && [ "$(fld why <<<"$C1")" = melee_in_hands ] || ok=0
+    [ "$(fld wih <<<"$K1")" = "$W0" ] && [ "$(fld wih <<<"$K")" = "$W0" ] && [ "$(fld sheathes <<<"$C2")" = "$(fld sheathes <<<"$C0")" ] && [ "$(fld reload_starts <<<"$C2")" = "$(fld reload_starts <<<"$C0")" ] || ok=0
+    inc "$(fld free_swings <<<"$K0")" "$(fld free_swings <<<"$K")" && [ "$(fld actual_shots <<<"$C2")" = "$(fld actual_shots <<<"$C0")" ] || ok=0
+    judge PT12 $ok "$ev"; fi; draw_to 0; fi; fi
+A fp_combat off >/dev/null; A fp_combat physical >/dev/null
+
+# ---- PT16: KO'd and carried by the mate ----
+iscarried() { kis carried 1; }
+notcarried() { kis carried 0; }
+if want PT16; then draw_to 0; take "$SH" >/dev/null; A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}
+  A protect "$SH" off >/dev/null; A ko "$SH" 120 >/dev/null
+  if ! waitf 15 isko "$SH"; then row PT16 FAIL "setup: $SH never knocked out"
+  else sleep 1; A order "$MT" LIFT_PERSON_PLAYER_ORDER target "$SH" >/dev/null
+    if ! waitf 40 iscarried; then row PT16 FAIL "setup: $MT never lifted $SH in 40 s (carried=$(ks carried) down=$(ks down) $MT: $(A where "$MT" | cut -c1-100))"
+    else sleep 1; K=$(A fp_keys state); CL=$(kfplines | grep '\[down\] carried=1' | tail -1 | cut -c1-140)
+      A screenshot pt16-carried >/dev/null
+      ev="carried=$(fld carried <<<"$K") down=$(fld down <<<"$K") ui_state=$(fld ui_state <<<"$K") fp=$(fld fp <<<"$K") log='$CL' screenshot=shots/pt16-carried.png"
+      ok=1; [ "$(fld carried <<<"$K")" = 1 ] && [ "$(fld down <<<"$K")" = 1 ] && [ -n "$CL" ] || ok=0; judge PT16 $ok "$ev"
+      A order "$MT" PUT_DOWN_OBJECT >/dev/null; waitf 20 notcarried || note "PT16: still carried 20 s after PUT_DOWN_OBJECT"; fi
+  fi
+  A protect "$SH" on >/dev/null; waitf 20 notko "$SH" || note "PT16: $SH still KO after protect on"; fi
+
+[ -n "$TGH" ] && { A pin "$TGH" off >/dev/null; PINNED=${PINNED/ $TGH/}; isko "$TGH" || A ko "$TGH" 3600 >/dev/null; }
+finish
