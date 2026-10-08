@@ -135,10 +135,10 @@ bow_on() { bow_back && return 0; [ -n "$BOWN" ] || return 1
 draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
 
 # ---- restore on exit ----
-FP0=""; DIST0=""; AR0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
+FP0=""; DIST0=""; AR0=""; EN0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
 cleanup() { A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/null; A fp_move none >/dev/null
   A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
-  A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null
+  A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null; [ "$EN0" = 0 ] && A fp_combat off >/dev/null
   [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
   for c in $PINNED; do A pin "$c" off >/dev/null; done
   [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
@@ -203,6 +203,7 @@ if want PT13; then if [ $BOWOK = 0 ]; then row PT13 FAIL "setup: no crossbow on 
   T1=$(vfld tilt); M1=$(vfld melee)
   look "$(cam yaw)" 0.05; mdown right; waitf 4 vm_on aiming; R2=$(vm_on aiming && echo 1 || echo 0); E2=$(vev); shot xbow-aim; mup right; sleep 0.4
   # m54: the controller arms only after one idle input frame (an aim already held never arms), so idle first
+  EN0=$(cs enabled); A fp_combat on >/dev/null   # m55: why=off, the controller was never enabled here (fp-playtest enables it itself)
   A fp_combat input 0 0 0 >/dev/null; waitf 4 csis armed 1 || note "SETUP PT13 not armed after idle input (why=$(cs why))"
   A fp_combat input 1 0 0 >/dev/null; waitf 8 csis aimed 1; RL=0
   if waitf 20 csis shot_ready 1; then S=$(cs actual_shots); A fp_combat input 1 1 0 >/dev/null; waitf 3 csge actual_shots $((S+1))
