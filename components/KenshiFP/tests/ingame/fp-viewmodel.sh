@@ -14,8 +14,9 @@
 #        0..0.4 NDC, grip within 0.5 dm of the aim hold), reload (lowered >=10 deg, pointing forward: not in the face)
 #  PT27  sword block: blade horizontal across the view (|mf.x|>=0.85, |mf.y|<=0.2) zoomed in and out
 #  PT26  sword swing: frozen frame sequence sw_pose 0.1..0.9 (screens + targets) and NSW (3) physical LMB swings:
-#        each "[vm] swing" line u_end=1, frames>=8, ratio (max/median blade deg/s, frame-time independent)<=RATIO_MAX
-#        (3.0), grip rises to elev>=0 (wind-up in view) and crosses to az<=-5 from az>=20, highest frame before the
+#        each "[vm] swing" line u_end=1, frames>=8, readable phases from the [vmsw] lines (wind-up 15-50% of the frames,
+#        strike mean blade speed >= 2x the wind-up; frame jumps = recorder vmcheck below; ratio only reported),
+#        grip rises to elev>=0 (wind-up in view) and crosses to az<=-5 from az>=20, highest frame before the
 #        leftmost ([vmsw] per-frame log) = top-right -> bottom-left; plus one LMB swing recorded every frame
 #        (fp_vm rec): no frame-to-frame jump on screen (vmcheck swing mode, see PT30)
 #  PT30  every-frame smoothness (fp_vm rec, the game's own frames): crossbow draw/aim/fire/reload/ready/aim/holster and
@@ -273,7 +274,7 @@ VM_TOL=${VM_TOL:-4}; SHOTS=""
 A fp_vm state | grep -q 'hooked=1' || setup_fail "fp_vm hooked=0 or missing (needs KenshiFP e515843+): $(A fp_vm state | cut -c1-100)"
 A fp_vm state | grep -q ' mu=' || setup_fail "fp_vm state has no mu= field (needs the 2026-10-08 viewmodel build)"
 A fp_vm on >/dev/null
-trap 'A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; cleanup' EXIT
+trap 'A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 1.6 >/dev/null; cleanup' EXIT
 vfld() { A fp_vm state | fld "$1"; }
 # vm_on <state>: vm in that state with the hand within VM_TOL deg of its target
 vm_on() { local V; V=$(A fp_vm state); [ -z "$1" ] || [ "$(fld state <<<"$V")" = "$1" ] || return 1
@@ -358,7 +359,7 @@ vmrec() { local f="$KDIR/vmrec-$1.txt"; rm -f "$f"; A fp_vm rec dump "vmrec-$1.t
 # ---- PT28: crossbow held like Skyrim/KCD (ready / aim / fire / reload, each zoomed in AND out for PT29) ----
 if want PT28 || want PT29; then if [ $BOWOK = 0 ] || [ "$(bow_now)" = none ]; then rows_fail "no crossbow on $SH" PT28
 else
-  A fp_combat physical >/dev/null; A fp_vm set kick_pose -1 >/dev/null; zoom 0
+  A fp_combat physical >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 0 >/dev/null; zoom 0
   draw_to 1 || note "SETUP PT28: R did not draw (drawn=$(ks drawn))"
   waitf 20 vm_on ready || note "SETUP PT28: not ready on target after draw ($(vev))"
   look "$(cam yaw)" 0.05; cap2 xbow-ready
@@ -367,12 +368,12 @@ else
   # live shot zoomed in: kick + "[vm] fire" line, then the reload pose
   K0=$(vfld kicks); F0=$(kfpn '\[vm\] fire'); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K0" ]'
   K1=$(vfld kicks); F1=$(kfpn '\[vm\] fire'); shot xbow-fire-live
-  waitf 4 vm_is reloading; sleep 1.5; cap xbow-reload
+  waitf 4 vm_is reloading || note "SETUP PT28: no reload after the shot ($(vev))"; sleep 0.6; cap xbow-reload
   # live shot zoomed out (PT29 reload pair: same delay after the shot)
   if want PT29; then waitf 25 vm_is aiming || note "SETUP PT28: not aiming again after reload ($(vev))"
     if zoom "$ZO"; then K2=$(vfld kicks); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K2" ]'; shot xbow-fire-live-zo
-      waitf 4 vm_is reloading; sleep 1.5; cap xbow-reload-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
-  mup right; sleep 0.4
+      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; sleep 0.6; cap xbow-reload-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
+  mup right; sleep 0.4; A fp_vm set rlamp 1.6 >/dev/null
   ok=1; why=""
   # ready: low right, forward, top up, the whole crossbow above the HUD line (lowest on-screen body point y/z >= -0.33)
   { [ "${VST[xbow-ready]}" = ready ] && vq "fz>=0.9 && uy>=0.9 && az>=10" xbow-ready && xq "bmin>=-0.33" xbow-ready; } || { ok=0; why+=" ready"; }
@@ -439,13 +440,22 @@ if want PT27 || want PT26 || want PT29 || want PT30; then
         # order: the highest grip frame (wind-up, top) comes before the leftmost one (follow-through)
         ORD=$(kfplines | grep "\[vmsw\] #$n " | sed 's/.*meas=\([^ ]*\).*/\1/' | awk -F, '{e=atan2($2,$3); a=atan2($1,$3)
           if(NR==1||e>me){me=e;ie=NR} if(NR==1||a<ma){ma=a;ia=NR}} END{print (ie<ia)?"top->left":"BAD(top@" ie ",left@" ia ")"}')
+        # phases: blade deg/s per frame (measured mf of line k = the frame of line k-1: divided by that dt)
+        PH=$(kfplines | grep "\[vmsw\] #$n " | awk 'function g(s,k){match(s,k"=[^ ]*");return substr(s,RSTART+length(k)+1,RLENGTH-length(k)-1)}
+          {n++; split(g($0,"mf"),f,","); split(g($0,"meas"),m,","); e=atan2(m[2],m[3]); a=atan2(m[1],m[3])
+           if(n==1||e>me){me=e;ie=n} if(n==1||a<ma){ma=a;ia=n}
+           if(n>1){d=f[1]*p[1]+f[2]*p[2]+f[3]*p[3]; l=sqrt((f[1]^2+f[2]^2+f[3]^2)*(p[1]^2+p[2]^2+p[3]^2)); c=l>0?d/l:1; c=c>1?1:(c<-1?-1:c)
+             r[n]=atan2(sqrt(1-c*c),c)*57.29578/(pd>1e-4?pd:1e-4)} pd=g($0,"dt")+0; p[1]=f[1];p[2]=f[2];p[3]=f[3]}
+          END{w=0;wn=0;for(i=2;i<=ie;i++){w+=r[i];wn++} s=0;sn=0;for(i=ie+1;i<=ia;i++){s+=r[i];sn++}
+            w=wn?w/wn:0; s=sn?s/sn:0; fr=n?ie/n:0; ok=(n>=8 && fr>=0.15 && fr<=0.5 && s>=2*w && s>0)
+            printf "%s wind=%.0f strike=%.0f windup=%.0f%%\n", ok?"phases":"BADPHASES", w, s, fr*100}')
         if ! awk -v l="$L" -v rm="$RATIO_MAX" 'BEGIN{
             if(!match(l,/u_end=[0-9.]+/))exit 1; u=substr(l,RSTART+6,RLENGTH-6)+0
             match(l,/frames=[0-9]+/); fr=substr(l,RSTART+7,RLENGTH-7)+0; match(l,/ratio=[0-9.]+/); r=substr(l,RSTART+6,RLENGTH-6)
             match(l,/elev=[-0-9.]+\.\.[-0-9.]+/); split(substr(l,RSTART+5,RLENGTH-5),e,/[.][.]/)
             match(l,/az=[-0-9.]+\.\.[-0-9.]+/); split(substr(l,RSTART+3,RLENGTH-3),a,/[.][.]/)
-            exit !(u>=1 && fr>=8 && r!="" && r+0<=rm+0 && e[2]>=0 && a[1]<=-5 && a[2]>=20)}' || [ "$ORD" != top-\>left ]; then ok=0; fi
-        ev+=" swing$i: $(grep -oE '(swing #[0-9]+ [0-9.]+s|frames|ratio|maxstep|elev|az)=?[^ ]*' <<<"$L" | tr '\n' ' ')$ORD;"
+            exit !(u>=1 && fr>=8 && e[2]>=0 && a[1]<=-5 && a[2]>=20)}' || [ "$ORD" != top-\>left ] || [ "${PH%% *}" != phases ]; then ok=0; fi
+        ev+=" swing$i: $(grep -oE '(swing #[0-9]+ [0-9.]+s|frames|ratio|maxstep|elev|az)=?[^ ]*' <<<"$L" | tr '\n' ' ')$ORD $PH;"
       done
       # live proof in screenshots: one physical LMB swing slowed to SLOW_DUR s (same live path, only the clock
       # is stretched), screenshot + swing progress u every step: u must rise monotonically over >= 5 shots
