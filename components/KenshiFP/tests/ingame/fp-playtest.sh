@@ -235,12 +235,17 @@ if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
                           A mouse_inject at $((SW/2)) $((SHH*7/10)) >/dev/null; sleep 0.3; }
       A pin "$MT" at "$SH" dist 25 face "$SH" >/dev/null; sleep 1; A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}; A select "$MT" >/dev/null
       ST=0; for _ in 1 2 3 4 5 6 7 8; do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 1 && { ST=1; break; }; done
-      if [ $ST = 0 ]; then OK=0; EV+=" | $ph: setup: $MT never stood still after unpin ($(d2 "$Q0" "$(pos "$MT")") u/s)"; continue; fi
+      # m64: right after the load (crossbow drawn) her AI kept wandering (8.46 u/s): settle her with a real HOLD_POSITION
+      # AI order (a player RMB move order would replace it, so the no-walk assertion stays the same), bounded 12 s more
+      SET="unpin"; if [ $ST = 0 ]; then SET="hold($(A order "$MT" HOLD_POSITION | cut -c1-40))"
+        for _ in $(seq 12); do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 1 && { ST=1; break; }; done; fi
+      if [ $ST = 0 ]; then OK=0; EV+=" | $ph: setup: $MT never stood still after unpin + HOLD_POSITION ($(d2 "$Q0" "$(pos "$MT")") u/s)"; continue; fi
+      EV+=" | $ph: settled_by=$SET"
       [ $ph != free ] && look "$(cam yaw)" 0.45
       P0=$(pos "$MT"); K0=$(A fp_keys state); mclick right 150; sleep 0.4; mdown right; sleep 1.2; mup right; sleep 3
       K=$(A fp_keys state); DM=$(d2 "$P0" "$(pos "$MT")")
       SW0=$(( $(fld rmb_swallowed <<<"$K0") + $(fld mouse_keys_swallowed <<<"$K0") )); SW1=$(( $(fld rmb_swallowed <<<"$K") + $(fld mouse_keys_swallowed <<<"$K") ))
-      EV+=" | $ph: $MT still, selected, RMB tap+hold on the ground (drawn=$(fld drawn <<<"$K0")): moved=$DM rmb_swallowed $(fld rmb_swallowed <<<"$K0")->$(fld rmb_swallowed <<<"$K") mouse_keys_swallowed $(fld mouse_keys_swallowed <<<"$K0")->$(fld mouse_keys_swallowed <<<"$K") rmb_free_swallowed $(fld rmb_free_swallowed <<<"$K0")->$(fld rmb_free_swallowed <<<"$K") ctx_why=$(fld ctx_why <<<"$K")"
+      EV+=" $MT still, selected, RMB tap+hold on the ground (drawn=$(fld drawn <<<"$K0")): moved=$DM rmb_swallowed $(fld rmb_swallowed <<<"$K0")->$(fld rmb_swallowed <<<"$K") mouse_keys_swallowed $(fld mouse_keys_swallowed <<<"$K0")->$(fld mouse_keys_swallowed <<<"$K") rmb_free_swallowed $(fld rmb_free_swallowed <<<"$K0")->$(fld rmb_free_swallowed <<<"$K") ctx_why=$(fld ctx_why <<<"$K")"
       lt "$DM" "$STILL_MAX" && [ "$SW1" -gt "$SW0" ] || OK=0   # the RMB arrived (a swallow counter rose) and gave no walk order
       [ $ph = look_drawn ] && continue
       [ $ph = free ] && { altkey; waitf 3 kis free 0 || { OK=0; EV+=" free stuck on"; A fp_state free off >/dev/null; }; waitf 4 cursor_ok; }
