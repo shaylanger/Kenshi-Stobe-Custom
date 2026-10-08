@@ -4972,6 +4972,24 @@ void OnRenameConfirmClick(MyGUI::Widget *sender) {
 
 void OnRenameCancelClick(MyGUI::Widget *sender) { CloseRenameUI(); }
 
+// Test hook (NP6): the player's rename path - open the Rename window on the target, type the
+// name, press Rename. Returns the window's status message; renamed = the window closed on success.
+std::string TestRenameViaWindow(const std::string &targetName, const std::string &serial,
+                                const std::string &newName, bool &renamed) {
+  renamed = false;
+  CreateRenameUI(targetName, targetName, serial);
+  if (!g_renameInput)
+    return "rename window did not open";
+  g_renameInput->setCaption(WideFromUtf8(newName).c_str());
+  GameWorld *world = GetWorldSafe();
+  std::string status;
+  renamed = TryRenameCharacterAndSync(world, g_renameTargetNameStr, g_renameTargetHandleStr,
+                                      newName, status);
+  if (renamed)
+    CloseRenameUI();
+  return status;
+}
+
 void OnRenameWindowButtonPressed(MyGUI::Window *sender,
                                  const std::string &name) {
   if (name == "close") {

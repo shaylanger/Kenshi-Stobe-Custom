@@ -14536,6 +14536,10 @@ static bool NpcPanelChatPair(GameWorld *world, Character *sel, Character *&speak
 // outsider keep the chat target's card.
 namespace Stobe { namespace UI { Character *StobeFpControlledCharacter(GameWorld *world); } }
 using Stobe::UI::StobeFpControlledCharacter;
+namespace Stobe { namespace UI {
+std::string TestRenameViaWindow(const std::string &targetName, const std::string &serial,
+                                const std::string &newName, bool &renamed);
+} }
 static bool NpcPanelPair(GameWorld *world, Character *sel, Character *&speaker,
                          Character *&target) {
   if (!NpcPanelChatPair(world, sel, speaker, target))
@@ -14717,6 +14721,23 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
       ok = true;
       return "open key=" + Stobe::UI::NpcPanelKey() +
              " gen=" + ToString(Stobe::UI::NpcPanelGeneration());
+    }
+    if (sub == "rename") { // NP6: rename through Stobe's Rename NPC window (the player's path)
+      if (f.size() < 5)
+        return "usage: npcinfo rename <target> <new name>";
+      Character *target = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!target)
+        return "target not found: " + f[3];
+      std::string newName = f[4];
+      for (size_t i = 5; i < f.size(); ++i)
+        newName += " " + f[i];
+      bool renamed = false;
+      std::string st = Stobe::UI::TestRenameViaWindow(target->getName(),
+                                                      ToString(target->getHandle().serial),
+                                                      newName, renamed);
+      ok = renamed;
+      return std::string(renamed ? "renamed" : "rename failed") + " name=" + newName +
+             " status=" + st;
     }
     if (sub == "chatwith") { // Item 135 tests: open the chat window on <target> as the chat hotkey does
       if (f.size() < 4)
