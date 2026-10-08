@@ -3,7 +3,7 @@
 Last updated 2026-10-06 (doc cleanup: 96/97 and the built + confirmed B 55 spec removed, trace in `archive/test-run-2026-10-05-m41.md`; older run logs are in git history). Installed builds and run status: `MASTER_TEST_PLAN.md` section 0 and `testing/HANDOFF.md`. `NEG_CATS_PURSE_MODES` is on.
 This list holds **only** open items. Everything fixed and confirmed is gone (history: `archive/STOBE_bug_history_old_numbers.md`, run logs `archive/test-run-*.md`).
 
-**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **146**. Items 135-145 = Shay's play session 2026-10-07 (logs `C:\KenshiTestRuns\logs\20261007-shay-play\`, dialogue export `dialogue.txt` there); the FP half is `components/KenshiFP/docs/COMBAT_TEST_PLAN.md` "Gate 6".
+**Numbering restarted on 2026-10-02:** items are numbered 1, 2, 3… here. "was N" is the old bug number (still used in commit messages and code comments). The next new item is **148**. Items 135-145 = Shay's play session 2026-10-07 (logs `C:\KenshiTestRuns\logs\20261007-shay-play\`, dialogue export `dialogue.txt` there); the FP half is `components/KenshiFP/docs/COMBAT_TEST_PLAN.md` "Gate 6".
 
 **How to report:** tell me roughly when (your clock) and which NPC, e.g. "Malzin around 11:02, she didn't take the vest off". Send it **before relaunching Kenshi** (logs reset on launch).
 
@@ -14,8 +14,6 @@ Fixed and confirmed items are deleted (run log line). Full history of each row b
 
 | # | Bug | Fix / state |
 |---|---|---|
-| 146 | (135 reported again 2026-10-08) NPC bio/info panel shows the wrong person. Shay's steps: own character selected + bio hotkey -> Malzin's bio; Malzin selected/targeted -> his own bio. Want: the panel shows the NPC he has selected/targeted. | open (m55 "pass" used the chat Info button path, not his steps) |
-| 147 | (136 reported again 2026-10-08) Squad NPC selected + "/" opens chat: speaker is the selected NPC, not the FP-controlled character. Want: speaker = controlled char. | open (m54 "pass" used stobe_say ui, not the "/" hotkey) |
 
 ## E. Design questions and features
 

@@ -120,6 +120,7 @@ the run logs and `git log -p testing/HANDOFF.md`).
   - perception: back on gear (m46 Shay); ranged gate PASS m47 (4080, PG 199a/b/c)
 
 ## Gotchas
+- Never replace a wrapper a running batch is executing, not even .new + mv: on /mnt/c (drvfs) the running bash loses its file ("error reading input file: No data available", m64 lost NP12). Edit only after its row ended.
 - Full-Base world raids: `fullbase-guard.sh` after each Full-Base load; it protects both squad members, so wrappers that
   KO the mate must turn protect off first (park_malzin does since m18).
 - `stobe-fight-lib.sh` is sourced by every wrapper: `bash -n` it after any edit (run via WSL with `MSYS_NO_PATHCONV=1`).
