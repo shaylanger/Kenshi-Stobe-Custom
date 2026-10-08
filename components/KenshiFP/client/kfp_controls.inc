@@ -646,7 +646,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -655,7 +655,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
         g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
-        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self);
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self,g_fpc_hud_flashes,g_fpc_hud_silent);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
@@ -759,7 +759,16 @@ static void fp_controls_init(void) {
 #define FPC_SYM_TEXTALIGN "?setTextAlign@TextBox@MyGUI@@UEAAXAEBUAlign@2@@Z"
 #define FPC_SYM_TEXTCOLOUR "?setTextColour@TextBox@MyGUI@@UEAAXAEBVColour@2@@Z"
 static int g_fpc_hud_dead;
+/* PT01/PT03 (Shay 2026-10-07): the label flashes for FPC_HUD_FLASH_MS after a state change only, and the combat
+ * states (swinging/blocking/recovering/staggered/aiming) never show text: the animation and view carry them.
+ * hud_hist still records every state change (evidence); hud_shown says whether the label is on screen now. */
+#define FPC_HUD_FLASH_MS 1500.0
+static unsigned g_fpc_hud_flashes,g_fpc_hud_silent;
+static int fpc_hud_texted(const char *st) {
+    return !strcmp(st,"holstered")||!strcmp(st,"ready")||!strcmp(st,"reloading")||!strcmp(st,"down");
+}
 static void fpc_hud_update(int show) {
+    static double change_ms;
     if (g_fpc_hud_dead || !g_widget_setvisible) return;
     if (!show) {if (g_fpc_hud && g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,0);g_fpc_hud_shown=0;}return;}
     if (g_guard_armed) return;
@@ -800,10 +809,12 @@ static void fpc_hud_update(int show) {
             else if (!strcmp(st,"aiming")) {c[0]=0.4f;c[1]=1;c[2]=0.5f;}
             else if (!strcmp(st,"staggered")||!strcmp(st,"down")) {c[0]=1;c[1]=0.3f;c[2]=0.3f;}
             if (colour) colour(g_fpc_hud,c);
-            g_fpc_hud_text=st;++g_fpc_hud_changes;
+            g_fpc_hud_text=st;++g_fpc_hud_changes;change_ms=fpc_now_ms();
+            if (fpc_hud_texted(st)) ++g_fpc_hud_flashes; else ++g_fpc_hud_silent;
             g_fpc_hud_hist[g_fpc_hud_changes%FPC_HUD_HIST]=st;g_fpc_hud_hist_seq[g_fpc_hud_changes%FPC_HUD_HIST]=g_fpc_hud_changes;
         }
-        if (!g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,1);g_fpc_hud_shown=1;}
+        int vis=fpc_hud_texted(st) && fpc_now_ms()-change_ms<FPC_HUD_FLASH_MS;
+        if (vis!=g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,vis);g_fpc_hud_shown=vis;}
     }
     g_guard_armed=0;
 }
