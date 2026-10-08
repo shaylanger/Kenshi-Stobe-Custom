@@ -67,7 +67,28 @@ waitf() { local end=$((SECONDS+$1)); shift; while [ $SECONDS -lt $end ]; do "$@"
 uname_() { tr ' =' '__' <<<"$1"; }
 kfplines() { tail -n +"$((LN0+1))" "$KFPLOG" 2>/dev/null | tr -d '\r'; }       # KenshiFP.log since the test start
 RESULTS=()
-row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
+# ---- world raids (m53: a Dust Bandits squad attacked Axima/Malzin mid-run: stagger flips in PT01/PT03, PT10 fight=1,
+# PT15/PT18 native ranged combat). Raiders within 1500 are knocked out at setup and every 10 s (as stobe-fight-lib.sh
+# calm_raiders; the fixture hostile $TG and the PT10 far NPC are kept), and a row during which a non-squad character
+# attacked the squad (stobe.log `[EVENT] combat: X -> <squad>`) is `FAIL setup: hostile ... attacking`, never judged.
+SLOG=${SLOG:-$KDIR/RE_Kenshi/mods/Stobe/stobe.log}; STOBELIB=${STOBELIB:-/mnt/c/KenshiModding/tests/ingame/stobe/stobe-fight-lib.sh}
+[ -r "$STOBELIB" ] && eval "$(grep -E '^RAID_(RE|FILTER)=' "$STOBELIB")"
+RAID_RE=${RAID_RE:-Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Hill Marauders|Black Dragon Ninjas|Berserkers|Cannibals|Fogmen}
+RAID_FILTER=${RAID_FILTER:-[band of bones]|[kral|[dust bandits]|[hungry bandits]|[starving bandits]|[hill marauders]|[black dragon ninjas]|[berserkers]|[cannibals]|[fogmen]}
+KEEP=""; KEEPN=(); RAIDG=""; SL0=0; SHN=""; MTN=""   # KEEPN: grep -e args for kept attackers ($TG, PT10 far NPC)
+sweep() { local lines h n=0
+  lines=$(stobe-auto chars 1500 "$RAID_FILTER" 2>/dev/null | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n' | sed 's/^ *//' \
+    | grep -E "\[(${RAID_RE})\]" | grep -v -E ' (KO|DEAD)( |$)' | grep -v -E "^(${SH}|${MT}) #")
+  for h in $(grep -oE '#[0-9]+/[0-9]+' <<<"$lines"); do case " $KEEP " in *" $h "*) continue;; esac
+    stobe-auto ko "$h" 21600 >/dev/null 2>&1 && n=$((n+1)); done; echo "$n"; }
+slog_n() { [ -r "$SLOG" ] && wc -l < "$SLOG" || echo 0; }
+# hostile_hit: the last `combat: X -> <player|mate>` since the previous row by anyone outside the squad / KEEP names
+hostile_hit() { [ -r "$SLOG" ] && [ -n "$SHN" ] || return 0
+  tail -n +"$((SL0+1))" "$SLOG" 2>/dev/null | tr -d '\r' | grep -a -F -e "-> $SHN (" -e "-> $MTN (" | grep -a 'EVENT\] combat: ' \
+    | grep -a -v -F -e "combat: $SHN (" -e "combat: $MTN (" "${KEEPN[@]}" | tail -1 | sed 's/.*combat: //' | cut -c1-110; }
+row() { local res=$2 ev=$3 hh; hh=$(hostile_hit)
+  case "$ev" in setup:*) ;; *) [ -n "$hh" ] && { res=FAIL; ev="setup: hostile attacking the squad during the row ($hh) | $ev"; };; esac
+  RESULTS+=("RESULT $1 $res $ev"); echo "RESULT $1 $res $ev" >> "$LOG"; SL0=$(slog_n); }
 judge() { if [ "$2" = 1 ]; then row "$1" PASS "$3"; else row "$1" FAIL "$3"; fi; }
 finish() { for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done; }
 # setup_fail <reason>: every wanted row not yet reported gets `FAIL setup: <reason>`
@@ -114,7 +135,12 @@ csge() { ge "$(cs "$1")" "$2"; }
 
 # ---- equipment (as fp-controls.sh: the fixture player carries a crossbow only; melee comes from the mate) ----
 weapons() { A inv "$SH" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | grep -v -i -x -F "${BOWN:-@@}"; }
-bow_now() { A rangedinfo "$SH" | fld bow; }
+# bow_now: the full bow name (`rangedinfo` prints `bow=<name with spaces> has_ammo=...`; m53: `fld bow` cut it to
+# "Oldworld" and every later unequip/pickup/equip by name missed)
+bow_now() { local r; r=$(A rangedinfo "$SH"); case "$r" in *" bow=none"*) echo none;; *" bow="*) sed -n 's/.* bow=\(.*\) has_ammo=.*/\1/p' <<<"$r" | head -1;; *) echo none;; esac; }
+# href <unequip reply>: the item's `#serial/index` (pickup by handle: exact, any distance)
+href() { local i s; i=$(grep -o 'h\.index=[0-9]*' <<<"$1" | head -1 | cut -d= -f2); s=$(grep -o 'h\.serial=[0-9]*' <<<"$1" | head -1 | cut -d= -f2)
+  [ -n "$i" ] && [ -n "$s" ] && echo "#$s/$i"; }
 arm_melee() { local w r; while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A equip "$SH" "$w")
   case "$r" in equipped*) WEP=$w; return 0;; esac; done <<<"$(weapons)"; return 1; }
 GIVEN=""
@@ -125,15 +151,19 @@ give_melee() { local w r; [ -n "$(weapons)" ] && return 0
   case "$r" in transferred*) ;; *) r=$(A unequip "$MT" "$w")
     case "$r" in *ground*) r=$(A pickup "$SH" "$w" now);; *) r=$(A transfer "$MT" "$SH" "$w");; esac;; esac
   note "SETUP give_melee $w from $MT: $(cut -c1-120 <<<"$r")"; [ -n "$(weapons)" ] && GIVEN=$w; }
-# bow_off: unequip the bow; a full inventory drops it: the mate parks it (BOW_DROPPED=2) or it stays on the ground (1)
-BOW_DROPPED=0
-bow_off() { local r; [ "$(bow_now)" = none ] && return 0; r=$(A unequip "$SH" "$(bow_now)")
-  case "$r" in *ground*) BOW_DROPPED=1; r=$(A pickup "$MT" "$BOWN" now); note "SETUP bow parked on $MT: $(cut -c1-120 <<<"$r")"
-    case "$r" in *ERROR*) ;; *) BOW_DROPPED=2;; esac;; esac; [ "$(bow_now)" = none ]; }
-bow_on() { [ "$(bow_now)" != none ] && return 0; [ -n "$BOWN" ] || return 1
-  [ "$BOW_DROPPED" = 2 ] && { note "SETUP bow back from $MT: $(A transfer "$MT" "$SH" "$BOWN" | cut -c1-120)"; BOW_DROPPED=0; }
-  [ "$BOW_DROPPED" = 1 ] && { note "SETUP bow pickup: $(A pickup "$SH" "$BOWN" now | cut -c1-120)"; BOW_DROPPED=0; }
-  A equip "$SH" "$BOWN" | grep -q '^equipped'; }
+# bow_off: unequip the bow. The fixture player's main inventory holds no long weapon (m53: bow and katana both went
+# "-> ground"), and the mate's back slot has her own bow, so a dropped bow stays on the ground next to the player
+# (BOW_DROPPED=1, handle BOWREF; harness f4ab9f6+ remembers unequip drops and scans CROSSBOW items for pickup)
+BOW_DROPPED=0; BOWREF=""
+bow_off() { local r; [ "$(bow_now)" = none ] && return 0; r=$(A unequip "$SH" "$BOWN")
+  case "$r" in *"-> ground"*) BOW_DROPPED=1; BOWREF=$(href "$r"); note "SETUP bow on the ground next to $SH ($BOWREF)";; esac
+  [ "$(bow_now)" = none ]; }
+bow_back() { [ "$(bow_now)" != none ]; }
+# bow_on: pickup by handle (`now` = giveItem: the game puts it on the free back slot = equipped), else equip by name
+bow_on() { bow_back && return 0; [ -n "$BOWN" ] || return 1
+  if [ "$BOW_DROPPED" = 1 ]; then note "SETUP bow pickup: $(A pickup "$SH" "${BOWREF:-$BOWN}" now | cut -c1-140)"
+    waitf 15 bow_back && { BOW_DROPPED=0; return 0; }; fi
+  A equip "$SH" "$BOWN" | grep -q '^equipped' && BOW_DROPPED=0; bow_back; }
 draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
 
 # ---- restore on exit ----
@@ -144,8 +174,10 @@ cleanup() { A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/nul
   [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
   for c in $PINNED; do A pin "$c" off >/dev/null; done
   [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
-  [ -n "$WEP" ] && A unequip "$SH" "$WEP" >/dev/null; [ -n "$BOWN" ] && bow_on >/dev/null
-  [ -n "$GIVEN" ] && A transfer "$SH" "$MT" "$GIVEN" >/dev/null
+  [ -n "$RAIDG" ] && kill "$RAIDG" 2>/dev/null
+  # the melee weapon goes back to the mate (an unequip with no room drops it: she picks it up by handle)
+  local wr=""; [ -n "$WEP" ] && wr=$(A unequip "$SH" "$WEP"); [ -n "$BOWN" ] && bow_on >/dev/null
+  if [ -n "$GIVEN" ]; then case "$wr" in *"-> ground"*) A pickup "$MT" "$(href "$wr")" now >/dev/null;; *) A transfer "$SH" "$MT" "$GIVEN" >/dev/null;; esac; fi
   for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
   A select "$SH" >/dev/null; A fp_control take >/dev/null
   A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
@@ -171,7 +203,8 @@ A speed 1 hold >/dev/null; A fp_move none >/dev/null; A fp_keys reset >/dev/null
 for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
 PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/dev/null
 TGH=""; if A where "$TG" | grep -q 'pos='; then TGH=$(A where "$TG" | grep -oE '#[0-9]+/[0-9]+' | head -1)
-  A pin "$TGH" at "$SH" dist 600 >/dev/null && PINNED+=" $TGH"; fi
+  A pin "$TGH" at "$SH" dist 600 >/dev/null && PINNED+=" $TGH"; KEEP+=" $TGH"; KEEPN+=(-e "combat: $(live_name "$TGH") ("); fi
+RK=$(sweep); note "SETUP raid sweep: knocked out $RK raiders within 1500 (kept:$KEEP)"; [ "$RK" -gt 0 ] 2>/dev/null && sleep 3
 take "$SH" || setup_fail "could not take $SH ($(A fp_control state | cut -c1-160))"
 A fp_camera distance 0 >/dev/null
 waitf 4 cursor_ok || setup_fail "FP cursor not hidden ($(A fp_state | cut -c1-120)): look mode needed for the mouse rows"
@@ -179,6 +212,8 @@ H0=$(ctl controlled); HOME=$(pos "$SH"); MTN=$(live_name "$MT"); SHN=$(live_name
 A pin "$MT" at "$SH" dist 25 face "$SH" | grep -q '^pinned' && PINNED+=" $MT" || setup_fail "could not pin $MT in front of $SH"
 sleep 1; draw_to 0 || setup_fail "$SH weapon would not holster"
 note "SETUP sh=$SH($SHN) mt=$MT($MTN) tg=$TG$TGH bow='$BOWN' auto_reload=$AR0 home=$HOME controlled=$H0 iso_set=$ISO_SET kfplog_from=$LN0"
+( while sleep 10; do kill -0 $$ 2>/dev/null || exit 0; n=$(sweep); [ "$n" = 0 ] || echo "RAID sweep $(date +%H:%M:%S): knocked out $n" >> "$LOG"; done ) </dev/null >/dev/null 2>&1 &
+RAIDG=$!; SL0=$(slog_n)
 
 # chain step: FP off/on twice before the first rows (Shay: controls broke after a toggle)
 toggles 2; take "$SH" >/dev/null
@@ -199,8 +234,13 @@ MENU_ON_MT=0
 if want PT06 || want PT20; then menu_close; draw_to 0
   if ! pick_on "$SH" "$MT"; then rows_fail "crosshair pick never on $MT" PT06
   else K0=$(A fp_keys state); mdown right; sleep 0.9; K1=$(A fp_keys state); mup right; sleep 0.8; K2=$(A fp_keys state); FR=$(fps free)
-    ev="ctx_hold_opens $(fld ctx_hold_opens <<<"$K0")->$(fld ctx_hold_opens <<<"$K1") tap_opens $(fld ctx_tap_opens <<<"$K0")->$(fld ctx_tap_opens <<<"$K2") ctx_freed held=$(fld ctx_freed <<<"$K1") released=$(fld ctx_freed <<<"$K2") free=$FR last_target=$(fld last_target <<<"$K1") log_hold=$(kfplines | grep -c 'RMB context menu .* via=hold')"
-    ok=1; [ "$(fld ctx_hold_opens <<<"$K1")" = $(( $(fld ctx_hold_opens <<<"$K0") + 1 )) ] && [ "$(fld ctx_freed <<<"$K1")" = 1 ] && [ "$(fld ctx_freed <<<"$K2")" = 1 ] && [ "$FR" = 1 ] || ok=0
+    # the GAME's menu must still be open after the release (m53: ctx_freed/free stayed 1 but no Control offer came:
+    # KenshiFP flags alone don't show the menu); `fp_keys ctl` menu_vis = the game's ContextMenu visible byte,
+    # menu_widgets = the menu widgets' own visible flags (KenshiFP PT06 diag build+)
+    CT=$(A fp_keys ctl); MV=$(fld menu_vis <<<"$CT"); MW=$(fld menu_widgets <<<"$CT")
+    MOPEN=1; if [ -n "$MV" ]; then { [ "$MV" = 1 ] || { [ -n "$MW" ] && [ "$MW" != 0 ] && [ "$MW" != -1 ]; }; } || MOPEN=0; fi
+    ev="menu_open_after_release=$MOPEN (menu_vis=${MV:-n/a} menu_widgets=${MW:-n/a} ctl_offers=$(fld offers <<<"$CT")) ctx_hold_opens $(fld ctx_hold_opens <<<"$K0")->$(fld ctx_hold_opens <<<"$K1") tap_opens $(fld ctx_tap_opens <<<"$K0")->$(fld ctx_tap_opens <<<"$K2") ctx_freed held=$(fld ctx_freed <<<"$K1") released=$(fld ctx_freed <<<"$K2") free=$FR last_target=$(fld last_target <<<"$K1") log_hold=$(kfplines | grep -c 'RMB context menu .* via=hold')"
+    ok=1; [ "$(fld ctx_hold_opens <<<"$K1")" = $(( $(fld ctx_hold_opens <<<"$K0") + 1 )) ] && [ "$(fld ctx_freed <<<"$K1")" = 1 ] && [ "$(fld ctx_freed <<<"$K2")" = 1 ] && [ "$FR" = 1 ] && [ $MOPEN = 1 ] || ok=0
     [ "$(fld last_target <<<"$K1")" = "$(uname_ "$MTN")" ] || ok=0
     [ $ok = 1 ] && MENU_ON_MT=1; want PT06 && judge PT06 $ok "$ev"; fi; fi
 
@@ -208,6 +248,9 @@ if want PT06 || want PT20; then menu_close; draw_to 0
 # ctl_menu <viewer> <target>: holstered RMB tap on the target from the viewer's body; 0 = Control offered for it
 ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; mclick right 150; waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; }
 if want PT20; then
+  # the hold menu from PT06 if it really offers Control (bounded wait), else a fresh tap menu (PT06 judges the hold)
+  if [ $MENU_ON_MT = 1 ] && ! waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; then
+    note "PT20: no Control offer on the PT06 hold menu ($(A fp_keys ctl)): tap menu instead"; MENU_ON_MT=0; fi
   [ $MENU_ON_MT = 1 ] || ctl_menu "$SH" "$MT"
   C1=$(A fp_keys ctl); S0=$(fld switches <<<"$C1")
   if [ "$(fld shown <<<"$C1")" != 1 ]; then row PT20 FAIL "Control button not shown with the menu on $MT open: [$C1] free=$(fps free) ctx_freed=$(ks ctx_freed)"
@@ -269,15 +312,23 @@ if want PT09; then toggles 3; take "$MT" >/dev/null; mode off; take "$SH" >/dev/
     ok=$OK0; [ "$IL" = "$I0" ] && [ "$SEL" = "$(uname_ "$MTN")" ] && [ "$(fld ctx_tap_opens <<<"$K")" = $((O0+1)) ] || ok=0; judge PT09 $ok "$ev"; fi; fi
 menu_close
 
+# vwalk <dist> <walk|run>: a native timed walk from home along the first axis that walks: sets VW="axis=.. speed=.. top_speed=.." (empty: no axis walked, VWERR = last error)
+VWERR=""; MVS=""
+vwalk() { local ax r; VW=""; for ax in -x +x -z +z; do A teleport "$SH" $HOME >/dev/null; sleep 1.5; r=$(A walktime "$SH" "$1" "$ax" "$2")
+    case "$r" in *" walked "*) VW="axis=$ax $(grep -o 'speed=[^ ]*\|top_speed=[^ ]*' <<<"$r" | tr '\n' ' ')"; return 0;; esac
+    VWERR="$2 $ax: $(cut -c1-90 <<<"$r")"; done; return 1; }
 # ---- PT04: MEASURE walk/run speed (FP drive vs vanilla), no pass/fail on the numbers ----
 if want PT04; then take "$SH" >/dev/null; A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null
   aim_at "$SH" "$MT" 13; look "$(awk -v y="$(cam yaw)" 'BEGIN{printf "%.4f", y+3.14159}')" 0   # away from the mate
   ATH=$(A stat "$SH" athletics | grep -o 'base=[^ ]*\|effective=[^ ]*' | tr '\n' ' ')
   A fp_move w 6000 >/dev/null; sleep 1.5; P1=$(pos "$SH"); t1=$(date +%s.%N); RS=$(A runspeed "$SH" | cut -c1-200); sleep 3; P2=$(pos "$SH"); t2=$(date +%s.%N); A fp_move none >/dev/null
   FPV=$(awk -v d="$(d2 "$P1" "$P2")" -v a="$t1" -v b="$t2" 'BEGIN{printf "%.1f", d/(b-a)}')
-  sleep 1; mode off; WR=$(A walktime "$SH" 150 -x run | grep -o 'speed=[^ ]*\|top_speed=[^ ]*' | tr '\n' ' ')
-  WW=$(A walktime "$SH" 100 -z walk | grep -o 'speed=[^ ]*\|top_speed=[^ ]*' | tr '\n' ' '); take "$SH" >/dev/null
-  if [ -z "$WR" ] || [ "$FPV" = 0.0 ]; then row PT04 FAIL "setup: no measurement (fp=$FPV u/s run=[$WR] walk=[$WW])"
+  # vanilla timed walks (m53: -x 150 "stopped short" and -z 100 "never started" at the fixture home, a known stuck
+  # spot, see fp-control.sh native_walk): every axis from home until one walks; none -> movers diag in the FAIL
+  sleep 1; mode off; vwalk 80 run; WR=$VW; vwalk 60 walk; WW=$VW; take "$SH" >/dev/null
+  if [ -z "$WR" ] || [ -z "$WW" ]; then A fp_keys movers >/dev/null; sleep 0.3
+    MVS=$(A fp_keys movers show | awk -v w="$SHN mode=" 'BEGIN{RS=" [|] "} index($0,w)==1{print; exit}' | cut -c1-160); fi
+  if [ -z "$WR" ] || [ "$FPV" = 0.0 ]; then row PT04 FAIL "setup: no measurement (fp=$FPV u/s run=[$WR] walk=[$WW]) native walk never started on any axis from $HOME: $SH mover [$MVS] ${VWERR:0:160}"
   else row PT04 PASS "MEASURE only: fp_W_drive=$FPV u/s (real time, speed 1) [runspeed during W: $RS] | vanilla run [$WR] walk [$WW] | athletics $ATH"; fi
   A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; fi
 
@@ -329,9 +380,11 @@ if want PT18; then if [ $BOWOK = 0 ]; then row PT18 FAIL "setup: no crossbow on 
 
 # ---- PT15: manual crossbow shots get the skill cone ----
 if want PT15; then if [ $BOWOK = 0 ]; then row PT15 FAIL "setup: no crossbow on $SH"; else
-  draw_to 0; aim_at "$SH" "$MT" 13; look "$(awk -v y="$(cam yaw)" 'BEGIN{printf "%.4f", y+3.14159}')" 0.05   # away from the mate, at the ground ahead
+  # m53: aiming a HOLSTERED crossbow does nothing by design (PT11, why=holstered), so draw it with R first
+  draw_to 1; waitf 6 kis ranged 1
+  aim_at "$SH" "$MT" 13; look "$(awk -v y="$(cam yaw)" 'BEGIN{printf "%.4f", y+3.14159}')" 0.05   # away from the mate, at the ground ahead
   A fp_combat input 1 0 0 >/dev/null; waitf 8 csis armed 1; SL0=$(kfplines | grep -c '\[combat\] spread'); C0=$(A fp_combat state); SHOTS=0; WHY=""
-  for _ in 1 2 3; do waitf 20 csis shot_ready 1 || { WHY="shot_ready never 1 (ammo=$(cs ammo) has_ammo=$(cs has_ammo) reloading=$(cs reloading) why=$(cs why))"; break; }
+  for _ in 1 2 3; do waitf 20 csis shot_ready 1 || { WHY="shot_ready never 1 (ammo=$(cs ammo) has_ammo=$(cs has_ammo) reloading=$(cs reloading) why=$(cs why) drawn=$(ks drawn) ranged=$(ks ranged))"; break; }
     S=$(cs actual_shots); A fp_combat input 1 1 0 >/dev/null; waitf 3 csge actual_shots $((S+1)) && SHOTS=$((SHOTS+1)); A fp_combat input 1 0 0 >/dev/null; sleep 0.4; done
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; C1=$(A fp_combat state); SL1=$(kfplines | grep -c '\[combat\] spread')
   N0=$(fld spread_n <<<"$C0"); N1=$(fld spread_n <<<"$C1"); SK=$(fld spread_skill <<<"$C1"); PE=$(fld spread_per <<<"$C1"); CO=$(fld spread_cone <<<"$C1"); OF=$(fld spread_off <<<"$C1"); SC=$(fld spread_scale <<<"$C1")
@@ -354,15 +407,18 @@ toggles 1; take "$SH" >/dev/null
 if want PT02 || want PT01; then if [ $MELEE = 0 ]; then mfail PT02 PT01; else draw_to 0; sky; sleep 2; K0=$(A fp_keys state)
   rkey; K1=$(A fp_keys state); waitf 4 kis drawn 1; K2=$(A fp_keys state); sleep 2.6; K3=$(A fp_keys state)
   RL=$(kfplines | grep '\[controls\] R \(draw\|ready\)' | tail -1 | cut -c1-120)
+  # m53: the weapon was already out before R (bandit fight: r_draws 1->1, no flash): that is setup, not a verdict
+  if [ "$(fld drawn <<<"$K0")" != 0 ]; then rows_fail "weapon not holstered before R (drawn=$(fld drawn <<<"$K0") ui_state=$(fld ui_state <<<"$K0"))" PT02 PT01
+  else
   if want PT02; then ev="bow=$(bow_now) wep='$WEP' r_draws $(fld r_draws <<<"$K0")->$(fld r_draws <<<"$K2") drawn=$(fld drawn <<<"$K2") wih=$(fld wih <<<"$K2") r_path=$(fld r_path <<<"$K2") fists=$(fld fists <<<"$K2") log='$RL'"
-    ok=1; [ "$(fld drawn <<<"$K2")" = 1 ] && [ "$(fld wih <<<"$K2")" != 0 ] && [ -n "$(fld wih <<<"$K2")" ] && [ "$(fld r_path <<<"$K2")" != unarmed ] && [ "$(fld fists <<<"$K2")" = 0 ] || ok=0
+    ok=1; inc "$(fld r_draws <<<"$K0")" "$(fld r_draws <<<"$K2")" && [ "$(fld drawn <<<"$K2")" = 1 ] && [ "$(fld wih <<<"$K2")" != 0 ] && [ -n "$(fld wih <<<"$K2")" ] && [ "$(fld r_path <<<"$K2")" != unarmed ] && [ "$(fld fists <<<"$K2")" = 0 ] || ok=0
     judge PT02 $ok "$ev"; fi
   if want PT01; then
     # shown within the flash (K1 ~0.4 s / K2 after the draw), hidden 2.6 s later while still ready
     SHOWN=0; for s in "$K1" "$K2"; do [ "$(fld hud_shown <<<"$s")" = 1 ] && [ "$(fld hud_text <<<"$s")" = ready ] && SHOWN=1; done
-    ev="after R: hud_text=$(fld hud_text <<<"$K1")/$(fld hud_text <<<"$K2") hud_shown=$(fld hud_shown <<<"$K1")/$(fld hud_shown <<<"$K2") | +2.6 s: ui_state=$(fld ui_state <<<"$K3") hud_shown=$(fld hud_shown <<<"$K3") hud_flashes $(fld hud_flashes <<<"$K0")->$(fld hud_flashes <<<"$K3") hist=$(fld hud_hist <<<"$K3")"
+    ev="before R: ui_state=$(fld ui_state <<<"$K0") | after R: hud_text=$(fld hud_text <<<"$K1")/$(fld hud_text <<<"$K2") hud_shown=$(fld hud_shown <<<"$K1")/$(fld hud_shown <<<"$K2") | +2.6 s: ui_state=$(fld ui_state <<<"$K3") hud_shown=$(fld hud_shown <<<"$K3") hud_flashes $(fld hud_flashes <<<"$K0")->$(fld hud_flashes <<<"$K3") hist=$(fld hud_hist <<<"$K3")"
     ok=1; [ $SHOWN = 1 ] && [ "$(fld ui_state <<<"$K3")" = ready ] && [ "$(fld hud_shown <<<"$K3")" = 0 ] && inc "$(fld hud_flashes <<<"$K0")" "$(fld hud_flashes <<<"$K3")" || ok=0
-    judge PT01 $ok "$ev"; fi; fi; fi
+    judge PT01 $ok "$ev"; fi; fi; fi; fi
 
 # ---- PT03: no text while blocking / swinging ----
 if want PT03; then if [ $MELEE = 0 ]; then mfail PT03; else draw_to 1; sky; waitf 10 not_fight; sleep 1.6; K0=$(A fp_keys state)
@@ -384,6 +440,7 @@ if want PT10; then if [ $MELEE = 0 ]; then mfail PT10; else draw_to 1; waitf 10 
   # far NPC: FAR_NPC=<name>, else the fixture hostile, else a neutral spawned 10 m away
   FN=""; if [ -n "$FAR_NPC" ]; then FN=$FAR_NPC; elif [ -n "$TGH" ] && notko "$TGH"; then FN=$TGH
   else SP=$(A spawn "Hungry Bandit" "Tech Hunters" near "$SH" dist 100 count 1); FN=$(grep -oE '#[0-9]+/[0-9]+' <<<"$SP" | head -1); note "PT10 spawn: $SP"; fi
+  [ -n "$FN" ] && [ "$FN" != "$TGH" ] && KEEPN+=(-e "combat: $(live_name "$FN") (")
   if [ -n "$FN" ] && A pin "$FN" at "$SH" dist 80 | grep -q '^pinned'; then PINNED+=" $FN"; sleep 1; waitf 10 not_fight
     if pick_on "$SH" "$FN"; then K0=$(A fp_keys state); mclick left 80; sleep 2; K=$(A fp_keys state); FI=$(in_fight && echo 1 || echo 0)
       EV+=" | far $(live_name "$FN"): lmb_why=$(fld lmb_why <<<"$K") dist=$(fld lmb_dist <<<"$K") far_refused $(fld lmb_far_refused <<<"$K0")->$(fld lmb_far_refused <<<"$K") engages $(fld engages <<<"$K0")->$(fld engages <<<"$K") free_swings $(fld free_swings <<<"$K0")->$(fld free_swings <<<"$K") fight=$FI"
