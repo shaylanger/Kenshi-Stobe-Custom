@@ -45,7 +45,8 @@ static VmPose g_vm_pose[2][VM_NT] = {
     { VP( 2.8f,-1.05f,4.0f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* sword ready: blade up-forward, right */
       VP( 2.8f,-1.05f,4.0f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (aim = ready) */
       VP( 2.8f,-1.05f,4.0f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (reload = ready) */
-      VP( 1.9f,-0.8f, 4.0f,  -1.00f, 0.05f, 0.20f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view */
+      VP( 2.2f,-0.35f,4.0f,  -1.00f, 0.08f, 0.22f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view in front of
+                                                                              * the face (hilt upper right, Chivalry 2 parry); was chest-high (y -0.8) */
     { VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.12f, 1.00f,    0.0f, 1.0f, 0.0f),     /* crossbow ready: right, angled in, whole bow (grip handle too) above the HUD */
       VP( 0.30f,-1.25f,2.4f,  0.00f, 0.00f, 1.00f,    0.0f, 1.0f, 0.0f),     /* aim: seen from behind, stock up from the bottom centre, limbs level, the
                                                                               * bolt line converging on the crosshair (the old cheek pose 0.05,-0.95,1.4
@@ -56,7 +57,8 @@ static VmPose g_vm_pose[2][VM_NT] = {
 /* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
 #define VM_SWK 5
 static VmPose g_vm_swk[VM_SWK] = {
-    VP( 3.0f, 0.5f, 4.0f,  -0.30f, 0.90f, 0.30f,   -0.20f,-0.40f, 0.30f),  /* wind-up, raised top right, arm in from the right edge */
+    VP( 3.0f, 0.5f, 4.0f,   0.22f, 0.88f, 0.22f,   -0.20f,-0.40f, 0.30f),  /* wind-up, raised top right, blade cocked back-right (out at the
+                                                                            * top-right corner), arm in from the right edge */
     VP( 1.3f, 0.0f, 4.2f,  -0.55f, 0.45f, 0.70f,   -0.30f,-1.20f, 0.45f),  /* strike: blade diagonal up-left */
     VP( 0.4f,-0.1f, 4.2f,  -0.92f, 0.02f, 0.38f,    0.00f,-1.00f, 0.05f),  /* strike: blade sweeps flat across the center (in view) */
     VP(-0.6f,-0.4f, 4.0f,  -0.90f,-0.18f, 0.40f,    0.20f,-0.95f,-0.05f),  /* follow-through left, blade still in view above the HUD */
@@ -84,7 +86,8 @@ static float g_vm_om_draw = 16.0f;                     /* draw rise / holster lo
 enum { VMP_NORMAL, VMP_DRAW, VMP_LOWER };
 static int   g_vm_phase; static float g_vm_ph_t, g_vm_wl, g_vm_lower_dur = 0.30f;
 static VmPose g_vm_low[2] = {
-    { { 1.6f,-4.0f, 2.0f }, { -0.20f,-0.60f, 0.77f }, { -0.5f, 0.0f, 0.85f } },   /* sword: grip + blade below the view */
+    { { 1.6f,-5.0f, 2.0f }, { -0.20f,-0.75f, 0.63f }, { -0.5f, 0.0f, 0.85f } },   /* sword: grip + blade below the view (deep, blade
+                                                                                 * down: the native draw blade points forward, its tip flashed in at y/z -0.55, s8 71) */
     { { 1.5f,-4.0f, 2.0f }, { -0.20f,-0.60f, 0.77f }, {  0.0f, 1.0f, 0.0f } } };  /* crossbow */
 static float g_vm_kick_t = -1.0f, g_vm_kick_rise = 0.06f;   /* fire kick: time since the shot; rise (ease-out) then smooth return */
 static float g_vm_rl_t; static float g_vm_rl_per = 1.3f, g_vm_rl_amp = 1.6f;  /* reload: time in reload, spanning cycle period */
@@ -99,9 +102,9 @@ static Quat  g_vm_pldq[2] = { { 0.600f, 0.267f, 0.724f, -0.211f }, { 0.656f, 0.1
 static Vec3  g_vm_pldp[2] = { { 0.737f, 0.180f, -0.299f }, { 0.693f, 0.201f, -0.510f } };
 static float g_vm_groll[2] = { 60.0f, 0.0f };  /* [class] grip roll, deg (sword 60: fingers behind the hilt, reads as a fist): turns the hand around the hilt (about the
                                                 * blade/bolt axis, prop origin fixed); Kenshi hands have no finger bones */
-static float g_vm_plsl[2] = { 0.7f, 0.0f };   /* [class] grip slide, dm: the weapon moves this far toward the tip in the
-                                                * hand (the hand holds nearer the pommel). Sword: the long katana handle stuck out ~1.1 dm
-                                                * past the little finger as a grey cylinder, its end cut by the near clip (e4 211-216) */
+static float g_vm_plsl[2] = { 1.0f, 0.0f };   /* [class] grip slide, dm: the weapon sits this far toward the tip in the
+                                                * hand (the hand holds nearer the pommel; the hand stays at the pose). Sword: the long katana handle stuck out ~1.1 dm
+                                                * past the little finger as a grey cylinder, its end cut by the near clip (e4 211-216); 0.7 still left a pommel stub in the block */
 static int   g_vm_plfix = 3;   /* bit 0 crossbow, bit 1 sword: the native swing anims move the katana in the hand (the
                                  * changed local lasted > 8 frames and was taken: the hilt slid out of the closed fingers,
                                  * open-hand look, C1); the sword keeps the ready-hold grip */
@@ -893,6 +896,11 @@ static void vm_frame_core(void *pc, int body_down)
             out.p = vm_add(out.p, vm_mul(g_vm_kick_p, e));
             out.f = vm_add(out.f, vm_v(0, g_vm_kick_up * e, 0)); out = vm_pose_norm(out);
         }
+        /* grip slide: the poses place the HAND (tuned so the wrist stays in front of the near clip and the arm leaves
+         * at an edge); the weapon sits plsl further along its blade in that hand. Sliding the hand back instead put the
+         * wrist behind the near clip in the recovery (z 2.79, s7 198-200) */
+        if (g_vm_plsl[g_vm_class ? 1 : 0] != 0.0f && (g_vm_plfix & (g_vm_class ? 1 : 2)))
+            out.p = vm_add(out.p, vm_mul(out.f, g_vm_plsl[g_vm_class ? 1 : 0]));
         g_vm_target_e = vm_elev_of(out.p); g_vm_target_a = vm_az_of(out.p);
         g_vm_out = out; g_vm_kick_eff = k;
         /* off-hand: under the fore-stock (support point, f,u,s weapon numbers) while aiming a crossbow; otherwise
