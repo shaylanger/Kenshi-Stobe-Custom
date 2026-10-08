@@ -1,19 +1,21 @@
-# Current state (m54, 2026-10-07)
+# Current state (m58, 2026-10-08)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
-Run logs: `archive/test-run-2026-10-07-m53.md` (m53, newest), `archive/test-run-2026-10-07-m51.md` (m51), `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
+Run logs: `archive/test-run-2026-10-08-m57-m58.md` (newest), `...-m56.md`, `...-m55.md`, `...-m54.md`, `archive/test-run-2026-10-07-m53.md`. Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 m54, coordinator)
-- Working Shay's playtest rows STOBE 135-145 + FP PT01-PT22 (Gate 6). m53 results + tickets: `archive/test-run-2026-10-07-m53.md`.
-- **5090 batch m54-5090-a running** (list `C:\KenshiTestRuns\m54-5090-a\list.txt`: 144-compound, npc-llm NP5/11/12/14,
-  fp-playtest, fp-viewmodel, fpspeaker 135/136; out `.../out`, waker `batch-health.sh` every 120 s). Fixes under test:
-  Stobe 5a006f3 (144 power wait) + 454c257 (say ui / npcinfo chatwith), server b74c72d (cancel BLOCKED goals, spar stop,
-  bio speaker parsing, bio pending), KenshiFP f6a8b2d (menu_vis) + 0de2242 (KenshiFP_ControlledCharacter export) +
-  e515843 (viewmodel arc), harness f4ab9f6 (ground pickup), wrappers fb8e3f1/0986433/372148e/6e6d137.
-- 4080: Kenshi on kah-fpview (Shay controlled, Ranger equipped), KenshiFP 2833BAB9 (viewmodel tuned live); its harness
-  lacks input_isolation, so fp-viewmodel.sh runs on the 5090. Screens `C:\KenshiTestRunspview\`.
-- No helpers running. Shay decisions to collect for the final summary: 135 semantics, PT20 portrait menu, PT15 spread,
-  PT10 reach, PT04 walk speed, m51 questions (backstory tier, kenshi-click.ps1), STT confirm, viewmodel look.
+## Right now (2026-10-08 m58, coordinator)
+- Shay's playtest rows: STOBE 135-145 all confirmed in game (m54-m56). FP Gate 6 open: PT20 switch-back (KenshiFP fixer
+  subagent on it: RMB tap from the newly controlled mate's body opens no menu), PT04 + PT17 = Shay decisions/looks.
+  PT06 fixed in KenshiFP b1bb72a (ContextMenu::update hooked by RVA +0x7abd20, Steam 1.0.65; 1.0.68 +0x7ac8c0; KenshiLib
+  export is a different function). /root/KenshiFP commits are not pushed (only remote = linguine2552); the snapshot in
+  components/KenshiFP is the pushed copy.
+- Next: fixer reports a new KenshiFP hash -> install -> batch `ROWS=PT20 fp-playtest.sh` on kah-fpxbow (list like
+  `C:\KenshiTestRuns\m58-5090-a\list.txt`) -> log -> final summary to Shay.
+- Shay decisions for the final summary: PT04 walk speed (FP W 12.5 u/s vs vanilla run 54.1), R with sword+bow draws per
+  the orders-panel ranged toggle (vanilla) vs always melee, PT15 spread (passes vanilla cone), PT10 reach, PT20 portrait
+  menu, viewmodel look (PT17 screens `D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\shotsm-*.png`, montage
+  `C:\KenshiTestRuns\m55-5090-am-montage.jpg`), 2-hander tilt untested (no 2-hander in fixtures), m51 questions
+  (backstory tier, kenshi-click.ps1), STT confirm. Before Shay plays: `bash C:/KenshiModding/tools/automation/gfx-mods.sh on`.
 
 ## Before m52 (2026-10-07 m51 end, coordinator handing over to a new agent)
 - **Shay is playing on the 5090: do not launch, stop or install anything there until Shay says it is free.** Kenshi on
@@ -57,7 +59,7 @@ Run logs: `archive/test-run-2026-10-07-m53.md` (m53, newest), `archive/test-run-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe C8020701, KenshiFP E9D3954D, harness 52C24941, PG BAFB8C31 (Normal); server live `stobe` b74c72d.
+- 5090: Stobe C8020701, KenshiFP 5B77CC3C (b1bb72a), harness 52C24941, PG BAFB8C31 (Normal); server live `stobe` 9c0fc10.
 - 4080: KenshiFP 76CF7E8A (799c3f9 C05-INTERIOR; bm51j 40/40), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
