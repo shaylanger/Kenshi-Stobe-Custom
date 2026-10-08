@@ -16,7 +16,7 @@ set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
 sw_trap
-ROWS="${1:-NP1 NP2 NP3 NP4 NP5 NP6 NP7 NP8 NP9 NP10 NP11 NP12 NP13 NP14}"
+ROWS="${*:-NP1 NP2 NP3 NP4 NP5 NP6 NP7 NP8 NP9 NP10 NP11 NP12 NP13 NP14}"
 EMPTYBIO="You don't know much about them yet. Talk to them to learn more."
 want() { case " $ROWS " in *" $1 "*) return 0 ;; esac; return 1; }
 PSQLQ() { (cd /tmp && sudo -u postgres psql -d stobe -At -c "$1" 2>/dev/null); }
