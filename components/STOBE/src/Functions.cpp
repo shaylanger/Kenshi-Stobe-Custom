@@ -2394,6 +2394,67 @@ ActivePlatoon *ResolvePlayerJoinPlatoon(GameWorld *world, Character *npc) {
   return nullptr;
 }
 
+bool ForceJoinPlayerSquad(GameWorld *world, Character *npc);
+
+// Item 141: a squad member who left the squad to fight a squad mate (a spar, ATTACK@<mate>)
+// rejoins when the fight is stopped; out of the squad she kept the red "attacking" icon,
+// swung again and could not be healed by right-click.
+static unsigned int g_sparLeftSquad[16];
+static void RememberSparLeaver(unsigned int serial) {
+  if (!serial)
+    return;
+  for (int i = 0; i < 16; ++i)
+    if (g_sparLeftSquad[i] == serial)
+      return;
+  for (int i = 0; i < 16; ++i)
+    if (!g_sparLeftSquad[i]) {
+      g_sparLeftSquad[i] = serial;
+      return;
+    }
+  g_sparLeftSquad[0] = serial;
+}
+bool StobeRejoinSparPartner(GameWorld *world, Character *npc, const char *why) {
+  if (!world || !world->player || !npc || (uintptr_t)npc <= 0x1000)
+    return false;
+  unsigned int serial = 0;
+  try {
+    serial = npc->getHandle().serial;
+  } catch (...) {
+    return false;
+  }
+  int slot = -1;
+  for (int i = 0; i < 16; ++i)
+    if (serial && g_sparLeftSquad[i] == serial)
+      slot = i;
+  if (slot < 0)
+    return false;
+  g_sparLeftSquad[slot] = 0;
+  bool before = IsInPlayerFactionSafe(npc);
+  bool recruited = false, forced = false;
+  if (!before) {
+    try {
+      recruited = world->player->recruit(npc, false);
+    } catch (...) {
+    }
+    if (!IsInPlayerFactionSafe(npc))
+      forced = ForceJoinPlayerSquad(world, npc);
+  }
+  bool after = IsInPlayerFactionSafe(npc);
+  std::string npcName;
+  try {
+    npcName = npc->getName();
+  } catch (...) {
+  }
+  Log(std::string("ACTION_EXEC: spar rejoin npc=") + npcName + " why=" +
+      (why ? why : "") + " in_faction_before=" + (before ? "1" : "0") +
+      " recruit=" + (recruited ? "1" : "0") + " forced=" + (forced ? "1" : "0") +
+      " in_faction_after=" + (after ? "1" : "0"));
+  return after;
+}
+bool StobeRejoinSparPartnerRaw(void *world, void *npc) {
+  return StobeRejoinSparPartner((GameWorld *)world, (Character *)npc, "stop_fight");
+}
+
 bool ForceJoinPlayerSquad(GameWorld *world, Character *npc) {
   if (!world || !world->player || !npc || (uintptr_t)npc <= 0x1000) {
     return false;
@@ -7541,6 +7602,10 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
             // in the current player faction.
             if (targetInPlayerFaction) {
               PerformLeaveSquad(npc, thisptr, "");
+              try {
+                RememberSparLeaver(npc->getHandle().serial);
+              } catch (...) {
+              }
             }
 
             // Clear existing goals so the attack command can take over.
@@ -7606,6 +7671,8 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
             int stopped = StopPersonalFightPair(npc, target, ordersCleared,
                                                 tasksRejected);
             RegisterPersonalTruce(npc, target);
+            StobeRejoinSparPartner(thisptr, npc, "stop_attack");
+            StobeRejoinSparPartner(thisptr, target, "stop_attack");
             Log("ACTION_EXEC: STOP_ATTACK personal actor=" + SafeCharacterName(npc) +
                 " target=" + SafeCharacterName(target) +
                 " sides_stopped=" + ToString(stopped) +

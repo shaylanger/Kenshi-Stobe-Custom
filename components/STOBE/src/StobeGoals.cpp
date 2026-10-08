@@ -1457,6 +1457,14 @@ static int stobe_is_player_squad_char(void *gw, void *c)
     return 0;
 }
 
+/* Item 142: FIRST_AID said result=ok but nobody was healed. Check after ~15 game s that she is
+ * treating (task 25) or the target is no longer injured; retry once with her orders cleared. */
+static uint32_t g_fa_actor, g_fa_target;
+static int g_fa_pending; /* 1 = just issued, 2 = waiting for g_fa_due */
+static int g_fa_stage;
+static DWORD g_fa_due;
+
+bool StobeRejoinSparPartnerRaw(void *world, void *npc); /* Functions.cpp, item 141 */
 static int stobe_handle_general_action(void *gw, uint32_t actor_serial,
                                        const char *command, uint32_t target_serial,
                                        const char *argument)
@@ -1492,6 +1500,7 @@ static int stobe_handle_general_action(void *gw, uint32_t actor_serial,
         }
         stobe_disengage_character(actor);
         stobe_fight_truce_add(actor_serial);
+        StobeRejoinSparPartnerRaw(gw, actor); /* item 141: a sparring squad member comes back */
         return 1;
     }
 
@@ -1569,7 +1578,11 @@ static int stobe_handle_general_action(void *gw, uint32_t actor_serial,
         if ((task == STOBE_TASK_PATROL || task == STOBE_TASK_HOLD_POSITION) && !target)
             return stobe_issue_order(actor, task, NULL);
         if (!target) return 0;
-        return stobe_issue_order(actor, task, target);
+        int issued = stobe_issue_order(actor, task, target);
+        if (issued && task == STOBE_TASK_FIRST_AID) {
+            g_fa_actor = actor_serial; g_fa_target = target_serial; g_fa_pending = 1; g_fa_stage = 0;
+        }
+        return issued;
     }
 
     if (!strcmp(command, "REPAIR") || !strcmp(command, "BUILD")) {
@@ -1741,7 +1754,8 @@ typedef struct WgpGoal {
     int rt_return_started;  /* runtime only: walk-back already requested */
     float haul_last_dist;   /* runtime only: hauling walk progress */
     void *rt_task_building; /* runtime only: building the last operate order was for */
-    const void *rt_job_tasker; /* runtime only: the Kenshi job (Tasker) this goal added */
+    const void *rt_job_taskers[4]; /* runtime only: every Kenshi job (Tasker) this goal added (item 139) */
+    int rt_job_n;
     uint32_t rt_job_serial;    /* runtime only: whose job list it is in */
     DWORD rt_end_ms;           /* runtime only: when the goal ended (label) */
     void *power_wait_building; /* runtime only: building we are waiting on for power */
@@ -2227,6 +2241,113 @@ static int wgp_find_producer_r(void *gw, void *actor, const char *query, WgpProd
     return best>0;
 }
 
+/* Item 137: what her base can make, for the server prompt (stobe_production_catalog.txt).
+ *   P<TAB>building<TAB>output<TAB>input1|input2     production machines (farms, silo, oven, pumps)
+ *   C<TAB>bench<TAB>craft1|craft2|...               crafting benches
+ * Player-owned buildings within 1400 m of the selected character; rewritten every 60 s. */
+static int wgp_catalog_has(char (*seen)[200], int n, const char *s)
+{
+    for (int i=0;i<n;i++) if (!strcmp(seen[i],s)) return 1;
+    return 0;
+}
+static int wgp_catalog_write_inner(void *gw, FILE *f)
+{
+    void *actor=first_player_char(gw);
+    if (!actor || !wgp_resolve_exports()) return -1;
+    static void *buildings[WGP_MAX_BUILDINGS];
+    memset(buildings,0,sizeof(buildings));
+    int n=wgp_scan_buildings_r(gw,actor,buildings,WGP_MAX_BUILDINGS,WGP_SCAN_RADIUS);
+    static char seen[160][200];
+    int ns=0, lines=0;
+    for (int i=0;i<n && lines<300;i++) {
+        void *b=buildings[i];
+        if (!readable(b,0x80) || !g_wgp_isplayer_building(b)) continue;
+        int special=wgp_building_special(b);
+        void *prod=wgp_building_production(b);
+        if (!prod && special==WGP_BF_CRAFTING) prod=b;
+        if (!prod) continue;
+        char bname[160]={0};
+        wgp_name(*(void **)((uintptr_t)b+0x40),bname,sizeof(bname));
+        wgp_clean(bname);
+        if (!bname[0]) continue;
+        char line[1024]={0};
+        if (special==WGP_BF_CRAFTING) {
+            WgpGroup groups[WGP_MAX_CRAFTS]; memset(groups,0,sizeof(groups));
+            StobePtrLektor list; memset(&list,0,sizeof(list));
+            list.max_size=WGP_MAX_CRAFTS; list.stuff=(void **)groups;
+            g_wgp_available_crafts(b,&list);
+            int count=(int)(list.count>WGP_MAX_CRAFTS?WGP_MAX_CRAFTS:list.count);
+            size_t len=(size_t)snprintf(line,sizeof(line),"C\t%s\t",bname);
+            int items=0;
+            for (int j=0;j<count && len<sizeof(line)-100;j++) {
+                char cn[96]={0};
+                if (!wgp_name(groups[j].g1,cn,sizeof(cn))) continue;
+                wgp_clean(cn);
+                if (!cn[0] || strchr(cn,'|')) continue;
+                len+=(size_t)snprintf(line+len,sizeof(line)-len,"%s%s",items?"|":"",cn);
+                items++;
+            }
+            if (!items) continue;
+        } else {
+            char pname[160]={0};
+            void *gd=wgp_prod_item(prod);
+            if (!wgp_name(gd,pname,sizeof(pname))) continue;
+            wgp_clean(pname);
+            if (!pname[0]) continue;
+            size_t len=(size_t)snprintf(line,sizeof(line),"P\t%s\t%s\t",bname,pname);
+            typedef int (*num_t)(void *);
+            typedef void *(*get_t)(void *, int);
+            if (readable(prod,0x468)) {
+                num_t nf=(num_t)wgp_vcall_ptr(prod,0x588);
+                get_t gf=(get_t)wgp_vcall_ptr(prod,0x590);
+                void *out=*(void **)((uintptr_t)prod+0x448);
+                int ni=nf?nf(prod):0, items=0;
+                for (int k=0;gf && k<ni && k<8 && len<sizeof(line)-100;k++) {
+                    void *ci=gf(prod,k);
+                    if (!ci || ci==out || !readable(ci,0x20)) continue;
+                    char in[96]={0};
+                    if (!wgp_name(*(void **)((uintptr_t)ci+0x10),in,sizeof(in))) continue;
+                    wgp_clean(in);
+                    if (!in[0] || !_stricmp(in,pname)) continue;
+                    len+=(size_t)snprintf(line+len,sizeof(line)-len,"%s%s",items?"|":"",in);
+                    items++;
+                }
+            }
+        }
+        char key[200]={0};
+        strncpy(key,line,sizeof(key)-1);
+        if (wgp_catalog_has(seen,ns,key)) continue;
+        if (ns<160) strcpy(seen[ns++],key);
+        fprintf(f,"%s\n",line);
+        lines++;
+    }
+    return lines;
+}
+static int wgp_catalog_write_guarded(void *gw, FILE *f)
+{
+    __try { return wgp_catalog_write_inner(gw,f); }
+    __except (STOBE_SEH_FILTER) { return -2; }
+}
+static void wgp_catalog_maybe_write(void *gw)
+{
+    static DWORD last; static int dead;
+    DWORD now=GetTickCount();
+    if (dead || (last && (LONG)(now-last)<60000)) return;
+    last=now;
+    char path[MAX_PATH*2]={0}, tmp[MAX_PATH*2+8]={0};
+    if (!stobe_mod_path(path,sizeof(path),"stobe_production_catalog.txt")) return;
+    snprintf(tmp,sizeof(tmp),"%s.tmp",path);
+    FILE *f=fopen(tmp,"wb");
+    if (!f) return;
+    int lines=wgp_catalog_write_guarded(gw,f);
+    fclose(f);
+    if (lines==-2) { dead=1; logline("[stobe] PRODUCTION_CATALOG faulted -- disabled for this session"); }
+    if (lines<=0) { DeleteFileA(tmp); return; }
+    if (!MoveFileExA(tmp,path,MOVEFILE_REPLACE_EXISTING)) { DeleteFileA(tmp); return; }
+    static int last_lines=-1;
+    if (lines!=last_lines) { logline("[stobe] PRODUCTION_CATALOG wrote %d lines",lines); last_lines=lines; }
+}
+
 static int wgp_issue_building_task(void *actor, WgpProducer *p, int override_task)
 {
     if (!actor || !p || !p->building || !wgp_resolve_exports()) return 0;
@@ -2313,29 +2434,39 @@ static void wgp_job_ui_refresh(void *gw)
     logline("[stobe] GOAL_JOB ui refresh replayed selection");
 }
 
-/* Remove the job this goal added (matched by Tasker pointer). */
+#define WGP_MAX_GOAL_JOBS 4
+/* Remove every job this goal added (matched by Tasker pointer). Item 139: one add can
+ * create several jobs (Auto Water Pump: before=1 after=3); all are tracked and removed.
+ * Without the actor (out of the squad) the jobs stay tracked and are retried later. */
 static void wgp_job_release_actor(void *actor, WgpGoal *g)
 {
-    if (!g->rt_job_tasker) return;
-    const void *mine = g->rt_job_tasker;
-    g->rt_job_tasker = NULL;
+    if (g->rt_job_n <= 0) return;
     if (!actor || !wgp_job_exports()) return;
-    int n = g_chr_pjcount(actor);
-    if (n <= 0 || n > 64) return;
-    int idx = -1;
-    for (int i = 0; i < n; i++) if (g_chr_pjdata(actor, i) == mine) { idx = i; break; }
-    if (idx < 0) return; /* player removed it already */
-    g_chr_pjremove(actor, idx);
-    int after = g_chr_pjcount(actor);
-    int still = 0;
-    for (int i = 0; i < after && i < 64; i++) if (g_chr_pjdata(actor, i) == mine) still = 1;
-    if (after != n - 1 || still) {
-        g_goal_jobs_dead = 1;
-        logline("[stobe] GOAL_JOB unexpected removal (before=%d after=%d still=%d) -- job mirroring disabled", n, after, still);
-        return;
+    int removed = 0;
+    for (int k = 0; k < g->rt_job_n && k < WGP_MAX_GOAL_JOBS; k++) {
+        const void *mine = g->rt_job_taskers[k];
+        g->rt_job_taskers[k] = NULL;
+        if (!mine) continue;
+        int n = g_chr_pjcount(actor);
+        if (n <= 0 || n > 64) break;
+        int idx = -1;
+        for (int i = 0; i < n; i++) if (g_chr_pjdata(actor, i) == mine) { idx = i; break; }
+        if (idx < 0) continue; /* player removed it already */
+        g_chr_pjremove(actor, idx);
+        int after = g_chr_pjcount(actor);
+        int still = 0;
+        for (int i = 0; i < after && i < 64; i++) if (g_chr_pjdata(actor, i) == mine) still = 1;
+        if (after != n - 1 || still) {
+            g_goal_jobs_dead = 1;
+            g->rt_job_n = 0;
+            logline("[stobe] GOAL_JOB unexpected removal (before=%d after=%d still=%d) -- job mirroring disabled", n, after, still);
+            return;
+        }
+        logline("[stobe] GOAL_JOB removed id=%s index=%d", g->id, idx);
+        removed++;
     }
-    logline("[stobe] GOAL_JOB removed id=%s index=%d", g->id, idx);
-    g_job_ui_actor = actor;
+    g->rt_job_n = 0;
+    if (removed) g_job_ui_actor = actor;
 }
 
 /* Add the goal's current machine as a real job in her job list. */
@@ -2346,17 +2477,28 @@ static void wgp_job_add(void *actor, WgpGoal *g, WgpProducer *p)
     if (n < 0 || n > 60) return;
     Vec3 pos = *(Vec3 *)((uintptr_t)p->building + 0x48);
     int task = p->task > 0 ? p->task : 87;
+    const void *before[64] = {0};
+    for (int i = 0; i < n && i < 64; i++) before[i] = g_chr_pjdata(actor, i);
     g_chr_addjob(actor, task, p->building, 1 /*shift: append*/, 1 /*don't clear*/, &pos);
     int after = g_chr_pjcount(actor);
-    if (after == n + 1) {
-        g->rt_job_tasker = g_chr_pjdata(actor, after - 1);
+    if (after < 0 || after > 64) after = 0;
+    int added = 0;
+    for (int i = 0; i < after; i++) {
+        const void *j = g_chr_pjdata(actor, i);
+        int old = 0;
+        for (int q = 0; q < n && q < 64; q++) if (before[q] == j) { old = 1; break; }
+        if (old || !j) continue;
+        if (g->rt_job_n < WGP_MAX_GOAL_JOBS) g->rt_job_taskers[g->rt_job_n++] = j;
+        added++;
+    }
+    if (added > 0) {
         uint32_t *h = (uint32_t *)((uintptr_t)actor + CHAR_HANDLE + HAND_IDS);
         g->rt_job_serial = readable(h, 20) ? h[4] : g->actor_serial;
-        logline("[stobe] GOAL_JOB added id=%s job=%s task=%d", g->id,
-                p->building_name[0] ? p->building_name : "building", task);
+        logline("[stobe] GOAL_JOB added id=%s job=%s task=%d jobs=%d (before=%d after=%d)", g->id,
+                p->building_name[0] ? p->building_name : "building", task, added, n, after);
         g_job_ui_actor = actor;
     } else {
-        logline("[stobe] GOAL_JOB add did not create one job (before=%d after=%d)", n, after);
+        logline("[stobe] GOAL_JOB add did not create a job (before=%d after=%d)", n, after);
     }
 }
 
@@ -3112,14 +3254,68 @@ static void wgp_controls(void)
     (void)any;
 }
 
+/* Item 139: "*<TAB>CLEARJOBS<TAB>serial^name" = cancel all her work goals and empty her job list.
+ * Needs the world (actor lookup), so it is queued here and run in the tick. */
+static uint32_t g_wgp_clear_serial;
+static char g_wgp_clear_name[128];
+static int g_wgp_clear_pending;
+static void wgp_clearjobs_run(void *gw)
+{
+    if (!g_wgp_clear_pending) return;
+    g_wgp_clear_pending=0;
+    int cancelled=0;
+    void *actor=wgp_find_squad_actor(gw,g_wgp_clear_serial,g_wgp_clear_name);
+    for (int i=0;i<WGP_MAX_GOALS;i++) {
+        WgpGoal *g=&g_wgp_goals[i];
+        if (!g->used) continue;
+        if (!(g_wgp_clear_serial && g->actor_serial==g_wgp_clear_serial) && _stricmp(g->actor,g_wgp_clear_name)) continue;
+        if (g->state==0 || g->state==4) {
+            g->state=3; g->rt_end_ms=stobe_game_ms();
+            strncpy(g->reason,"cleared by the player",sizeof(g->reason)-1);
+            cancelled++;
+        }
+        if (actor) { wgp_job_release_actor(actor,g); g->rt_task_building=NULL; }
+    }
+    int removed=0, before=-1;
+    if (actor && wgp_job_exports()) {
+        before=g_chr_pjcount(actor);
+        for (int guard=0;guard<64;guard++) {
+            int n=g_chr_pjcount(actor);
+            if (n<=0 || n>64) break;
+            g_chr_pjremove(actor,n-1);
+            if (g_chr_pjcount(actor)!=n-1) break;
+            removed++;
+        }
+        if (removed) g_job_ui_actor=actor;
+    }
+    if (actor && stobe_resolve_fight_exports()) {
+        void *orders=g_stobe_getorders(actor);
+        if (orders && readable(orders,8)) g_stobe_clear_orders(orders);
+    }
+    logline("[stobe] GOAL_CLEARJOBS actor=%s serial=%u found=%d goals_cancelled=%d jobs_before=%d jobs_removed=%d",
+            g_wgp_clear_name,g_wgp_clear_serial,actor?1:0,cancelled,before,removed);
+    g_wgp_dirty=1;
+}
+
 static void wgp_control_line(char *line)
 {
     char *id=strtok(line,"\t\r\n");char *cmd=strtok(NULL,"\t\r\n");char *arg=strtok(NULL,"\t\r\n");
     if(!id||!cmd)return;
+    if(!strcmp(id,"*")&&!_stricmp(cmd,"CLEARJOBS")&&arg){
+        char *caret=strchr(arg,'^');
+        g_wgp_clear_serial=(uint32_t)strtoul(arg,NULL,10);
+        g_wgp_clear_name[0]='\0';
+        if(caret)strncpy(g_wgp_clear_name,caret+1,sizeof(g_wgp_clear_name)-1);
+        g_wgp_clear_pending=1;
+        return;
+    }
     WgpGoal *g=wgp_find_id(id);if(!g)return;
     if(!_stricmp(cmd,"PAUSE")&&g->state==0)g->state=4;
-    else if(!_stricmp(cmd,"RESUME")&&(g->state==4||g->state==2)){
-        if(g->state==2){g->reason[0]='\0';g->report_triggered=0;g->last_progress_ms=stobe_game_ms();}
+    else if(!_stricmp(cmd,"RESUME")&&(g->state==4||g->state==2||g->state==0)){
+        /* Item 138: RESUME on a running goal restarts it (re-adds the job, re-issues the order). */
+        g->reason[0]='\0';g->report_triggered=0;g->last_progress_ms=stobe_game_ms();
+        g->rt_task_building=NULL;g->rt_unit_start_ms=0;g_wgp_next_tick=0;
+        logline("[stobe] WORK_GOAL resume id=%s from_state=%d",g->id,g->state);
         g->state=0;
     }
     else if(!_stricmp(cmd,"CANCEL"))g->state=3;
@@ -3219,6 +3415,8 @@ static void stobe_work_goal_tick(void *gw)
     stobe_world_time_update(gw);
     wgp_consume_requests(gw);
     wgp_controls();
+    wgp_clearjobs_run(gw);
+    wgp_catalog_maybe_write(gw);
     for (int i=0;i<WGP_MAX_GOALS;i++) {
         WgpGoal *g=&g_wgp_goals[i];
         if (!g->used || (g->state!=0 && g->state!=4) || !stobe_goal_from_future(g->created_gt)) continue;
@@ -3252,7 +3450,7 @@ static void stobe_work_goal_tick(void *gw)
                          "Queued behind an earlier active work goal");
             }
         }
-        if (g->used && g->state!=0 && g->rt_job_tasker) {
+        if (g->used && g->state!=0 && g->rt_job_n>0) {
             /* goal ended or paused: take its job out of her list */
             if (!g->rt_end_ms) g->rt_end_ms=stobe_game_ms();
             wgp_job_release_actor(wgp_find_squad_actor(gw,g->actor_serial,g->actor),g);
@@ -5266,6 +5464,25 @@ static void goal_panel_avoid_money(void *gui,int x,int *y,int w)
     if(!g_goal_money||!goal_abs_rect(g_goal_money,&mx,&my,&mw,&mh))return;
     if(mx<x+w&&x<mx+mw&&my<*y+GOAL_PANEL_H&&*y<my+mh)*y=my-GOAL_PANEL_H-4;
 }
+/* Item 140: in her own outpost Kenshi shows the TownPanel (outpost name, research, power)
+ * right where the goal panel sits: while it is visible, the goal panel goes above it. */
+static void *g_goal_town;
+static int g_goal_town_tries;
+static void goal_panel_avoid_town(void *gui,int x,int *y,int w)
+{
+    if(!g_goal_town&&g_goal_town_tries<200){
+        g_goal_town_tries++;
+        g_goal_town=settings_find(gui,"TownPanel");
+    }
+    if(!g_goal_town||(g_widget_inhvis&&!g_widget_inhvis(g_goal_town)))return;
+    int mx,my,mw,mh;
+    if(!goal_abs_rect(g_goal_town,&mx,&my,&mw,&mh))return;
+    if(mx<x+w&&x<mx+mw&&my<*y+GOAL_PANEL_H&&*y<my+mh){
+        static int logged;
+        *y=my-GOAL_PANEL_H-4;
+        if(!logged){logged=1;logline("[stobe] GOAL_PANEL moved above the TownPanel (%d,%d %dx%d) -> y=%d",mx,my,mw,mh,*y);}
+    }
+}
 /* Where the panel goes: above the job box frame (JobsPanel's parent), lifted above the
  * TimeMoneyPanel when they'd overlap. 1 = from the widget. */
 static int goal_panel_rect(void *gui,int *x,int *y,int *w)
@@ -5280,6 +5497,7 @@ static int goal_panel_rect(void *gui,int *x,int *y,int *w)
         if(frame&&goal_abs_rect(frame,&fx,&fy,&fw,&fh)){
             *x=fx;*y=fy-GOAL_PANEL_H-4;*w=fw;
             goal_panel_avoid_money(gui,*x,y,*w);
+            goal_panel_avoid_town(gui,*x,y,*w);
             return 1;
         }
     }
@@ -5662,6 +5880,42 @@ static void stobe_goals_init(void)
             (void *)mygui, (void *)g_textbox_setcap, (void *)g_gui_createwidget, (void *)g_gui_getenum);
 }
 
+static void stobe_first_aid_verify_tick(void *gw)
+{
+    if (!g_fa_pending || !g_fa_actor) return;
+    DWORD now = stobe_game_ms();
+    if (g_fa_pending == 1) { g_fa_due = now + 15000; g_fa_pending = 2; return; }
+    if ((LONG)(now - g_fa_due) < 0) return;
+    stg_exports();
+    void *a = stobe_find_character_by_serial(gw, g_fa_actor);
+    void *tg = g_fa_target ? stobe_find_character_by_serial(gw, g_fa_target) : NULL;
+    int task = -1;
+    void *th = a && readable((void *)((uintptr_t)a + CHAR_TASKHOLDER), 8) ? *(void **)((uintptr_t)a + CHAR_TASKHOLDER) : NULL;
+    void *cur = readable(th, TASK_CUR + 8) ? *(void **)((uintptr_t)th + TASK_CUR) : NULL;
+    void *desc = readable(cur, TASK_DESC + 8) ? *(void **)((uintptr_t)cur + TASK_DESC) : NULL;
+    if (readable(desc, TASKDESC_TYPE + 4)) task = *(int *)((uintptr_t)desc + TASKDESC_TYPE);
+    int injured = (tg && g_stg_is_injured) ? (g_stg_is_injured(tg, 0) || g_stg_is_injured(tg, 1)) : -1;
+    const char *res = injured == 0 ? "healed" : (task == STOBE_TASK_FIRST_AID ? "treating" : "not_treating");
+    logline("[stobe] FIRST_AID verify actor=%u target=%u stage=%d task=%d injured=%d squad=%d result=%s",
+            g_fa_actor, g_fa_target, g_fa_stage, task, injured, a ? stobe_is_player_squad_char(gw, a) : -1, res);
+    if (!strcmp(res, "treating")) { g_fa_due = now + 15000; if (++g_fa_stage < 6) return; }
+    else if (!strcmp(res, "not_treating") && g_fa_stage == 0 && a && tg && stobe_resolve_fight_exports()) {
+        void *o = g_stobe_getorders(a);
+        if (o && readable(o, 8)) g_stobe_clear_orders(o);
+        if (stobe_issue_order(a, STOBE_TASK_FIRST_AID, tg)) {
+            logline("[stobe] FIRST_AID retry actor=%u target=%u (orders cleared)", g_fa_actor, g_fa_target);
+            g_fa_stage = 1; g_fa_due = now + 15000; return;
+        }
+    }
+    g_fa_pending = 0; g_fa_actor = 0;
+}
+
+static void stobe_first_aid_verify_guarded(void *gw)
+{
+    __try { stobe_first_aid_verify_tick(gw); }
+    __except (STOBE_SEH_FILTER) { g_fa_pending = 0; g_fa_actor = 0; logline("[stobe] FIRST_AID verify faulted"); }
+}
+
 void StobeGoals_Tick(void *gw)
 {
     if (!gw) return;
@@ -5669,6 +5923,7 @@ void StobeGoals_Tick(void *gw)
     stobe_voice_modifier_tick();
     stobe_unequip_request_tick(gw);
     stobe_general_action_request_tick(gw);
+    stobe_first_aid_verify_guarded(gw);
     stobe_fight_truce_tick(gw);
     stobe_work_goal_tick(gw);
     stobe_task_goal_tick(gw);
