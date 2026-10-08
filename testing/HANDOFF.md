@@ -17,6 +17,14 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
   pass (second pass only on a finding); (3) sheets reviewed by the coordinator as they appear via vm-progress-sword.md /
   vm-progress-xbow.md (temp dir), PT26/PT28 accepted from numeric tables + sheets; (4) 40 fps pass only, fpscap 20 only
   for borderline frames; (5) agents take each other's unclaimed items when a rig frees up (CLAIM lines in the progress files).
+- **Amendment 2 (Shay, 18:00, full text vm-shared.md, replaces the above where different):** FAST PATH per weapon = one
+  offline review -> all fixes -> one build -> ONE zoomed-in every-frame pass of the MOVING states only (swing, reload,
+  fire/kick) with numeric tables; static holds (ready/aim/block) accepted from numeric checks; skip zoom-out passes,
+  draw/holster cycles, walk frames, PT29-at-25, PT30/regression rows on iteration builds, fpscap-20. `FASTPATH DONE
+  <weapon> <sha8>` in the progress file when merged. DEFERRED FINAL SWEEP once on the final merged DLL after BOTH weapons
+  are done (first free rig starts, split if both free): zoom-out spot frame per state + PT29 at 25, hold sheets in+out vs
+  Chivalry 2, draw/holster cycles, walk sheets, PT30 + regression rows, PT18/PT31/PT11/PT25 last on the 5090; logged as
+  `SWEEP <item> PASS|FAIL`; findings batched -> one fix/build -> targeted pass -> affected sweep items only.
 - **Next coordinator batch m73 (5090, when the lock is free):** viewmodel rows PT13,PT14,PT26-PT30 after the agents merge
   (KenshiFP main 614adb0+ rebuilt/installed by the sword agent; record its sha8 here).
   m72 dir C:\KenshiTestRuns\m72 (killed early; rerun as m73 with fresh frozen scripts). Run log m67-m71 in
