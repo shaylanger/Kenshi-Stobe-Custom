@@ -401,10 +401,45 @@ static void fpc_movers_snapshot(void *gw) {
         if (o>=n) {o=n-1;break;}
     }
 }
+static void *g_fpc_holster_pc,*g_fpc_holster_wih;static double g_fpc_holster_t0;
+static unsigned g_fpc_holster_done,g_fpc_holster_cancels;
+/* end the lowering window: sheathe=1 issues the game's sheathe on the char (if it still holds that weapon) */
+static void fpc_holster_end(int sheathe,const char *why) {
+    void *pc=g_fpc_holster_pc;
+    g_fpc_holster_pending=0;g_fpc_holster_pc=NULL;
+    if (sheathe && char_valid(pc)) {
+        void **vt=readable(pc,8)?*(void ***)pc:NULL;
+        void *wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
+        if (pc==g_fpc_hold_actor) g_fpc_hold_actor=NULL;
+        if (wih && readable((void *)((uintptr_t)vt+0x2D0),8)) {g_fpc_own_sheathe=1;((void (*)(void *))vt[0x2D0/8])(pc);g_fpc_own_sheathe=0;}
+        g_fpc_holster_prog=1.0f;++g_fpc_holster_done;
+    } else {g_fpc_holster_prog=0;++g_fpc_holster_cancels;}
+    logline("[controls] R holster %s (%s)",sheathe?"sheathed":"cancelled",why);
+}
+/* per tick: progress, then the sheathe; cancel when the weapon changed (native combat switch) or the char is down */
+static void fpc_holster_tick(void *pc,void *wih) {
+    if (!g_fpc_holster_pending) {g_fpc_holster_prog=0;return;}
+    if (pc!=g_fpc_holster_pc) {fpc_holster_end(1,"control switched");return;}
+    if (g_is_down) {fpc_holster_end(0,"down");return;}
+    if (wih!=g_fpc_holster_wih) {fpc_holster_end(0,wih?"weapon changed":"weapon already out of hand");return;}
+    double el=(fpc_now_ms()-g_fpc_holster_t0)/1000.0;
+    float p=g_fpc_holster_delay>0.0f?(float)(el/g_fpc_holster_delay):1.0f;
+    if (p>=1.0f || el>2.5) {fpc_holster_end(1,"lowered");return;}
+    g_fpc_holster_prog=p<0.0f?0.0f:p;
+}
 static void fpc_draw_toggle(void *pc) {
     void **vt=readable(pc,8)?*(void ***)pc:NULL;
     if (!readable((void *)((uintptr_t)vt+0x3D8),8)) {++g_fpc_r_draw_fail;return;}
     void *wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
+    if (g_fpc_holster_pending) {   /* R again inside the lowering window: keep it drawn */
+        g_fpc_holster_pending=0;g_fpc_holster_prog=0;g_fpc_holster_pc=NULL;++g_fpc_holster_cancels;
+        logline("[controls] R holster cancelled by R (weapon stays drawn)");return;
+    }
+    if (wih && g_fpc_holster_delay>0.0f) {   /* lowering window: weapon stays in hand, the viewmodel lowers it */
+        g_fpc_holster_pc=pc;g_fpc_holster_wih=wih;g_fpc_holster_t0=fpc_now_ms();g_fpc_holster_prog=0;g_fpc_holster_pending=1;
+        g_fpc_fists=0;++g_fpc_r_holsters;
+        logline("[controls] R holster: lowering %.2f s before the sheathe",g_fpc_holster_delay);return;
+    }
     if (wih || g_fpc_fists) {
         g_fpc_hold_actor=NULL;g_fpc_fists=0;
         if (wih) {g_fpc_own_sheathe=1;((void (*)(void *))vt[0x2D0/8])(pc);g_fpc_own_sheathe=0;}
@@ -649,6 +684,7 @@ static void fp_controls_tick(void *gw,float dt) {
     static void *last_actor;
     if (g_fpc_movers_req) {g_fpc_movers_req=0;fpc_movers_snapshot(gw);}   /* fp_keys movers (test), also with FP off */
     if (!g_fp_mode || g_fpc_fault) {
+        if (g_fpc_holster_pending) fpc_holster_end(1,"FP off");
         if (last_actor) fpc_release_all();
         last_actor=NULL;g_fpc_ui_state="off";g_fpc_drawn=0;g_fpc_wih=NULL;return;
     }
@@ -661,7 +697,7 @@ static void fp_controls_tick(void *gw,float dt) {
     }
     guard_arm();
     void *pc=fp_controlled_char(gw);
-    if (pc!=last_actor) {fpc_release_all();last_actor=pc;}
+    if (pc!=last_actor) {if (g_fpc_holster_pending) fpc_holster_end(1,"control switched");fpc_release_all();last_actor=pc;}
     if (!char_valid(pc)) {g_guard_armed=0;g_fpc_ui_state="none";g_fpc_wih=NULL;return;}
     if (g_is_down && g_fpc_hold_actor) {g_fpc_hold_actor=NULL;g_fpc_fists=0;}
     fpc_ctx_relock_step();
@@ -670,6 +706,10 @@ static void fp_controls_tick(void *gw,float dt) {
     /* PT11/PT12: "ranged" = the ranged weapon is the one in hands, not merely carried (a drawn sword with a
      * crossbow on the back is melee: LMB swings, RMB blocks) */
     void *rw=ranged?((void *(*)(void *))ranged)(pc):NULL;
+    g_fpc_ranged=rw!=NULL && wih==rw;
+    fpc_holster_tick(pc,wih);
+    if (!g_fpc_holster_pending && g_fpc_holster_prog>=1.0f)   /* sheathed this tick: reread the hand */
+        wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
     g_fpc_ranged=rw!=NULL && wih==rw;
     g_fpc_drawn=wih!=NULL||g_fpc_fists;g_fpc_wih=wih;
     int phys_ok=g_cursor_hidden && !g_ui_open && game_has_focus();
@@ -793,7 +833,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u ctx_why=%s ctx_tap_refused=%u speed_guard=%d speed_fixed=%u speed_synced=%u speed_target=%.2f speed_idx=%d speed_peak_input=%.2f speed_fix_run=%u free=%d free_toggles=%u free_refocus=%u free_load_resets=%u rmb_free_swallowed=%u gui_hook=%d gui_swallowed=%u gui_rel_swallowed=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u ctx_why=%s ctx_tap_refused=%u speed_guard=%d speed_fixed=%u speed_synced=%u speed_target=%.2f speed_idx=%d speed_peak_input=%.2f speed_fix_run=%u free=%d free_toggles=%u free_refocus=%u free_load_resets=%u rmb_free_swallowed=%u gui_hook=%d gui_swallowed=%u gui_rel_swallowed=%u holster_pending=%d holster_prog=%.2f holster_delay=%.2f holster_done=%u holster_cancels=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -807,7 +847,8 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva,g_fpc_ctxupd_hook_ok,g_fpc_ctxupd_addr,g_fpc_ctxupd_calls,g_fpc_ctxupd_fed,g_fpc_ctxupd_req,g_fpc_ctx_why,g_fpc_ctx_tap_refused,
         g_spd_custom == 1 && g_spd_reidx != NULL,g_spd_fixed,g_spd_synced,g_spd_target,g_spd_reidx ? *g_spd_reidx : -1,g_spd_peak_input,g_spd_fix_run_max,
         g_free_toggle,g_free_key_toggles,g_free_key_refocus,g_free_load_resets,g_fpc_rmb_free_swallowed,
-        g_fpc_gui_hook,g_fpc_gui_swallowed,g_fpc_gui_rel_swallowed);
+        g_fpc_gui_hook,g_fpc_gui_swallowed,g_fpc_gui_rel_swallowed,
+        g_fpc_holster_pending,g_fpc_holster_prog,g_fpc_holster_delay,g_fpc_holster_done,g_fpc_holster_cancels);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
 static void fpc_nctl_install(void);   /* PT24, end of file */
@@ -860,6 +901,10 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         if (argc==3) {if (_stricmp(argv[2],"click")) {r->append(r,"ctl [click]");return KAH_ERROR;} fpc_ctl_request();}
         char b[600];fpc_ctl_text(b,sizeof b);r->append(r,b);return KAH_OK;
     }
+    if (argc==4 && !_stricmp(argv[1],"set") && !_stricmp(argv[2],"holster_delay")) {
+        float v=(float)atof(argv[3]);if (v<0.0f) v=0.0f;if (v>2.0f) v=2.0f;g_fpc_holster_delay=v;
+        char b[48];snprintf(b,sizeof b,"holster_delay=%.2f",v);r->append(r,b);return KAH_OK;
+    }
     if (argc==3 && !_stricmp(argv[1],"swallow")) {
         g_fpc_swallow=!_stricmp(argv[2],"on");r->append(r,g_fpc_swallow?"swallow=1":"swallow=0");return KAH_OK;
     }
@@ -873,11 +918,11 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         g_fpc_sneak_clicks=g_fpc_sneak_attacks=g_fpc_sneak_ko=g_fpc_sneak_failed=g_fpc_sneak_timeout=0;g_fpc_sneak_t=g_fpc_sneak_pc=NULL;
         g_fpc_sneak_path=g_fpc_sneak_result="none";strcpy(g_fpc_sneak_target,"none");g_fpc_sneak_aware=g_fpc_sneak_aware_any=-1;
         g_fpc_sneak_chance=-1.0f;g_fpc_sneak_elapsed=0;
-        g_fpc_fs_prog_max=0;g_fpc_gui_swallowed=g_fpc_gui_rel_swallowed=0;g_fpc_last_task=-1;strcpy(g_fpc_last_select,"none");strcpy(g_fpc_last_target,"none");
+        g_fpc_fs_prog_max=0;g_fpc_gui_swallowed=g_fpc_gui_rel_swallowed=0;g_fpc_holster_done=g_fpc_holster_cancels=0;g_fpc_last_task=-1;strcpy(g_fpc_last_select,"none");strcpy(g_fpc_last_target,"none");
         g_fpc_swallow=1;for (int b=0;b<FPC_NBTN;++b) g_fpc_inj_until[b]=0;
         r->append(r,"counters reset, swallow=1");return KAH_OK;
     }
-    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|ctl [click]|swallow on|off|focus on|off|reset");
+    r->append(r,"usage: fp_keys state|press <lmb|rmb|mmb|r> [hold_ms]|release <btn>|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|ctl [click]|set holster_delay <s>|swallow on|off|focus on|off|reset");
     return KAH_ERROR;
 }
 /* AnimationClass::startCombatAnimation(tech, speed, std::string) is not exported: it sits at a fixed

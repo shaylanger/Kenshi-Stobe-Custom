@@ -1295,6 +1295,15 @@ static unsigned g_ih_swallowed, g_ih_leak_logs;   /* CS05: bound DIKs dropped at
 static unsigned g_fp_swallow_ms;           /* GetTickCount of the last swallowed bound key */
 static int g_fp_swallow_seen;              /* g_fp_swallow_ms valid */
 static unsigned g_kl_installs, g_kl_eaten; /* CS05 path 2: OIS front key listener */
+/* FP R holster lowering window (kfp_controls.inc fpc_draw_toggle / fpc_holster_tick), declared here so the
+ * viewmodel (kfp_viewmodel.inc, included earlier) can read it. While g_fpc_holster_pending is 1 the weapon is
+ * still in the hand (drawn=1, weaponInHands set) and the game's sheathe has NOT run yet: the viewmodel lowers it
+ * out of view, g_fpc_holster_prog going 0 -> 1 over g_fpc_holster_delay real seconds; at 1 the sheathe is issued
+ * (pending back to 0, the weapon leaves the hand that frame). Cancelled (pending 0, weapon stays) by a second R,
+ * a weapon change, KO; finished at once on FP off / control switch. */
+static volatile int   g_fpc_holster_pending;
+static volatile float g_fpc_holster_prog;
+static float g_fpc_holster_delay = 0.3f;     /* fp_keys set holster_delay <s> (0..2), 0 = instant (old behaviour) */
 static void kfp_front_listener_tick(void);
 static int kfp_front_listener_on(void);
 #include "kfp_bound_toggle.h"
