@@ -1,74 +1,125 @@
-/* kfp_viewmodel.inc -- FP "viewmodel" presentation layer (PT13/PT14/PT17).
+/* kfp_viewmodel.inc -- FP "viewmodel" presentation layer (PT13/PT14/PT17, rework PT26-PT29).
  *
- * Kenshi's combat animations hold the weapon at hip height and out to the
- * side, outside a first-person camera's view, so in FP the player barely sees
- * the weapon. This layer keeps the native animations (swing, block, reload)
- * but moves BOTH arms as one rigid piece -- rotated about the midpoint between
- * the shoulders -- so the weapon hand sits at a per-state spot in the view,
- * like other FP games. Rigid = the two hands keep their relative pose, so
- * two-handed grips (crossbow, bow, two-handers) stay intact.
+ * Kenshi's combat animations hold the weapon at hip height and out to the side, outside a first-person view.
+ * This layer poses the arms the way FP games do (Skyrim/KCD): the WEAPON gets a pose fixed in the camera
+ * frame per state (position of its grip + blade/bolt direction + its roll), and both arms reach it by
+ * analytic two-bone IK (upper arm + forearm, elbow toward a pole, forearm twist shared with the wrist).
+ *  - sword: ready = blade up-forward right of center; block = blade horizontal across the view; swing =
+ *    a procedural path (wind-up top right -> strike through the center -> follow-through bottom left ->
+ *    back to ready, Catmull-Rom through key poses, progress = the swing animation's own progress).
+ *  - crossbow: ready = held low right pointing forward; aim = stock to the shoulder, limbs horizontal,
+ *    bolt toward the crosshair; reload = lowered nose-down in front (not in the face); fire = short kick.
+ *  - zoom (PT29): the pose is built from the UNZOOMED eye (fp_view anchor), so zooming out only moves the
+ *    camera: the body keeps the same hold.
+ * The off-hand keeps its native transform relative to the weapon while the native animation holds the
+ * weapon two-handed (crossbow grip) and sits on a support point on the crossbow (ranged) / a rest point
+ * out of view (one-handed sword).
  *
- * Where: Entity::_updateAnimation calls the VIRTUAL Skeleton::setAnimationState
- * (set, float, const map<string,bool>&) directly (disassembly: OgreMain+0xc2aac
- * -> +0x343200) right before the bone matrices are built; the OldSkeletonInstance
- * overload is never called. The hook calls the original, then rewrites the two
- * upper arms' local orientation AND position (rigid rotation g_vm_R about the
- * shoulder midpoint, skeleton space).
+ * Where: Entity::_updateAnimation calls the VIRTUAL Skeleton::setAnimationState(set, float, map) right
+ * before the bone matrices are built. The hook calls the original (native pose), then rewrites the local
+ * orientations of UpperArm, Forearm, Hand on both sides (skeleton space). vm_frame (per camera frame)
+ * builds the targets in the camera frame, maps them into skeleton space (basis from the clavicles + spine
+ * measured in both spaces) and leaves them for the hook. Open loop: no feedback lag, no fighting the
+ * native swing.
  *
- * How much: closed loop, per camera frame (after the weld forced this frame's
- * animation): measure the weapon hand in the view, build the world rotation
- * that carries it onto the target ray (same reach from the shoulder midpoint),
- * take a smoothed fraction, map it into skeleton space (basis from the
- * clavicles + spine in both spaces) and accumulate into g_vm_R. Swing/stagger
- * HOLD g_vm_R so the native arc plays on top of the raised stance.
+ * Weapon axes: the weapon hangs off "Bip01 Prop1/2" (child of the L/R hand). Which local prop axis is the
+ * blade/bolt (f) and which is the edge/top (u) is per weapon class (ax_* keys, probed in game: fp_vm probe).
  *
- * Single translation unit: included from kenshifp_client.c. Tuning: harness
- * `fp_vm`, ini keys viewmodel / vm_*. */
+ * Single translation unit: included from kenshifp_client.c. Tuning: harness `fp_vm`, ini keys viewmodel / vm_*. */
 
 typedef void (*osi_setanim_t)(void *skel, const void *stateset, float w, const void *bmap);
 #define OGRE_OSI_SETANIM_SYM "?setAnimationState@Skeleton@Ogre@@UEAAXAEBVAnimationStateSet@2@MAEBV?$map@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_NU?$less@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@2@V?$STLAllocator@U?$pair@$$CBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@std@@V?$CategorisedAllocPolicy@$0A@@Ogre@@@Ogre@@@std@@@Z"
 
 enum { VM_READY, VM_AIM, VM_RELOAD, VM_BLOCK, VM_NT };
 static const char *const g_vm_tname[VM_NT] = { "ready", "aim", "reload", "block" };
-/* weapon-hand target in the view, degrees: elevation (down<0), azimuth (right>0) */
-static float g_vm_te[VM_NT] = { -28.0f, -9.0f, -26.0f, -16.0f };
-static float g_vm_ta[VM_NT] = {  16.0f,  5.0f,   8.0f,  12.0f };
+
+/* A weapon pose in camera numbers: x = right, y = up, z = forward (world units, dm, from the unzoomed eye).
+ * p = grip (prop bone origin), f = weapon forward (blade tip / bolt), u = weapon up (sword edge / crossbow top). */
+typedef struct { Vec3 p, f, u; } VmPose;
+#define VP(px,py,pz,fx,fy,fz,ux,uy,uz) { {px,py,pz}, {fx,fy,fz}, {ux,uy,uz} }
+/* [class 0 = melee, 1 = ranged][state] */
+static VmPose g_vm_pose[2][VM_NT] = {
+    /* calibrated in game 2026-10-08 (FOV 70 vertical; the HUD covers y/z < ~-0.33; arm reach ~4.5 dm) */
+    { VP( 1.9f,-1.4f, 3.2f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* sword ready: blade up-forward, right */
+      VP( 1.9f,-1.4f, 3.2f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (aim = ready) */
+      VP( 1.9f,-1.4f, 3.2f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (reload = ready) */
+      VP( 1.4f,-0.6f, 3.0f,  -1.00f, 0.05f, 0.20f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view */
+    { VP( 1.7f,-1.1f, 2.8f,  -0.05f,-0.08f, 1.00f,    0.0f, 1.0f, 0.0f),     /* crossbow ready (low right, forward) */
+      VP( 0.1f,-0.6f, 1.8f,   0.00f, 0.00f, 1.00f,    0.0f, 1.0f, 0.0f),     /* aim: stock at the shoulder, bolt at the crosshair */
+      VP( 1.5f,-1.0f, 2.8f,  -0.30f,-0.25f, 0.92f,    0.3f, 1.0f, 0.0f),     /* reload: lowered + canted, not in the face */
+      VP( 1.7f,-1.1f, 2.8f,  -0.05f,-0.08f, 1.00f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
+/* sword swing key poses (the path starts at the pose the swing began from and ends at the ready pose) */
+/* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
+#define VM_SWK 4
+static VmPose g_vm_swk[VM_SWK] = {
+    VP( 2.1f, 0.3f, 2.8f,  -0.30f, 0.90f, 0.30f,   -0.20f,-0.40f, 0.30f),  /* wind-up, raised top right (in view) */
+    VP( 1.0f, 0.0f, 3.3f,  -0.55f, 0.45f, 0.70f,   -0.30f,-1.20f, 0.45f),  /* strike: blade diagonal up-left */
+    VP( 0.3f,-0.05f,3.0f,  -0.92f, 0.02f, 0.38f,    0.00f,-1.00f, 0.05f),  /* strike: blade sweeps flat across the center (in view) */
+    VP(-0.4f,-0.25f,2.8f,  -0.90f,-0.18f, 0.40f,    0.20f,-0.95f,-0.05f) };/* follow-through left, blade still in view above the HUD */
+static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.17f, 0.36f, 0.50f, 0.62f, 1.0f };  /* key times (start, keys, end) */
+static int   g_vm_ax[2][2] = { { 2, 3 }, { 2, 1 } };  /* [class][f,u]: prop-local axis 1..3 = X,Y,Z, <0 = negative (probed in game) */
+static int   g_vm_whand[2] = { 1, 1 };                /* [class] weapon hand: 0 = L (Prop1), 1 = R (Prop2) */
+static Vec3  g_vm_rest = { -2.6f, -5.5f, 1.2f };      /* off-hand rest (one-handed melee), camera numbers */
+static Vec3  g_vm_sup = { 2.5f, -0.6f, 0.0f };        /* off-hand support on the crossbow: f,u,s weapon numbers */
+/* elbow pole [class][L,R], camera numbers; ranged R points out right so the forearm stays out of the aim view */
+static Vec3  g_vm_pole[2][2] = { { { -0.8f, -1.0f, -0.4f }, { 0.8f, -1.0f, -0.4f } },
+                                 { { -0.6f, -1.0f, -0.2f }, { 1.0f, -0.5f, -0.3f } } };
+static float g_vm_fire_hold = 0.35f;                  /* after a shot: keep the aim pose this long before reloading */
+static float g_vm_fire_t;
+static float g_vm_off_near = 3.5f;                    /* native off-hand within this of the weapon grip = 2-handed */
+static float g_vm_aim_dist = 400.0f;                  /* aim: the bolt converges on the crosshair at this range */
+static float g_vm_tau = 0.08f, g_vm_tau_rl = 0.15f, g_vm_tau_w = 0.12f;
+static float g_vm_twist = 0.5f;                       /* share of the wrist twist the forearm takes */
+static float g_vm_kick_dur = 0.30f;
+static Vec3  g_vm_kick_p = { 0.0f, 0.25f, -0.4f };    /* fire kick at its peak: grip offset (stays out of the face); + muzzle climb */
+static float g_vm_kick_up = 0.22f;
+
 static osi_setanim_t g_vm_setanim_orig;
 static int   g_cfg_vm = 1;                  /* ini viewmodel=0|1 */
-static float g_vm_tau      = 0.12f;         /* seconds: approach time constant */
-static float g_vm_tau_rl   = 0.40f;         /* slower while reloading */
-static float g_vm_maxdeg   = 110.0f;        /* clamp on the total arm rotation */
-
-static void *g_vm_skel;                     /* controlled char's OldSkeletonInstance */
-static Quat  g_vm_R = { 1, 0, 0, 0 };       /* skeleton-space rigid arm rotation */
-static float g_vm_ang;                      /* its angle, deg (diag) */
-static float g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a; /* last measure (deg) */
-static int   g_vm_hold, g_vm_dead, g_vm_hooked, g_vm_basis_ok;
+static void *g_vm_skel;
+static int   g_vm_dead, g_vm_hooked, g_vm_basis_ok, g_vm_hold, g_vm_names;
 static const char *g_vm_state = "off";
-static unsigned long g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_frames;
-static Quat  g_vm_bq[2], g_vm_wq[2];        /* base / last-written local orientation */
-static Vec3  g_vm_bp[2], g_vm_wp[2];        /* base / last-written local position */
+static unsigned long g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_frames, g_vm_ikfail;
+static float g_vm_w;                        /* blend native -> viewmodel, 0..1 */
+static int   g_vm_class;                    /* 0 melee, 1 ranged (last on state) */
+static int   g_vm_melee;
+static VmPose g_vm_cur;                     /* current weapon pose (camera numbers) */
+static int   g_vm_have_cur;
+/* targets for the hook (skeleton space) */
+static Vec3  g_vm_tp, g_vm_tf, g_vm_tu;     /* weapon grip + axes */
+static Vec3  g_vm_op;                       /* off-hand target (rest / support) */
+static int   g_vm_omode;                    /* 0 rest (keep native hand ori), 1 native-relative if near / support */
+static Vec3  g_vm_tpole[2];
+static int   g_vm_have_t;
+/* bone write bookkeeping: [side][0 ua,1 fa,2 ha] */
+static Quat  g_vm_bq[2][3], g_vm_wq[2][3];
 static int   g_vm_have_written[2];
-static unsigned char g_vm_nm_arm[2][32], g_vm_nm_clav[2][32], g_vm_nm_spine[32], g_vm_nm_hand[2][32];
-static int   g_vm_hand = 1;                 /* tracked weapon hand: 0 = L, 1 = R (fp_vm set hand, ini vm_hand) */
-static float g_vm_he[2], g_vm_ha[2];       /* both hands in the view (deg, diag) */
-/* wrist tilt (melee only): extra rotation of the weapon hand about the camera-right axis so a one-handed
- * blade rises out of the view ray instead of pointing straight away (end-on, unreadable). */
-static float g_vm_tilt[VM_NT] = { 25.0f, 0.0f, 0.0f, 30.0f };
-static float g_vm_tilt_cur;                 /* smoothed, deg */
-static Vec3  g_vm_tilt_ax;                  /* camera-right in skeleton space */
-static int   g_vm_melee;                    /* weapon in hands is not the ranged weapon */
-static Quat  g_vm_hbq, g_vm_hwq; static int g_vm_h_written;
-/* PT14: procedural melee swing -- the native free/combat swing barely moves the blade in the view, so while
- * "swinging" the hand target runs an arc (start -> end, eased) and the wrist tilt sweeps with it. */
-static float g_vm_sw[6] = { -8.0f, 24.0f, -30.0f, -12.0f, 50.0f, -20.0f };   /* e0 a0 e1 a1 tilt0 tilt1 */
-static float g_vm_sw_dur = 0.35f, g_vm_swt, g_vm_swu;
+static unsigned char g_vm_nm_arm[2][32], g_vm_nm_fore[2][32], g_vm_nm_hand[2][32], g_vm_nm_prop[2][32];
+static unsigned char g_vm_nm_clav[2][32], g_vm_nm_spine[32];
+/* native (pre-IK) snapshot from the hook, skeleton space: prop pos/ori, hand pos/ori per side */
+static Vec3  g_vm_npp[2], g_vm_nhp[2]; static Quat g_vm_npq[2], g_vm_nhq[2]; static int g_vm_nat_ok;
+static Quat  g_vm_orel; static int g_vm_have_orel;   /* off-hand ori relative to the weapon prop (native, last near) */
+static Vec3  g_vm_oprel; static int g_vm_off_near_now;
+/* diag (camera numbers / degrees) */
+static float g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_he[2], g_vm_ha[2];
+static Vec3  g_vm_mp, g_vm_mf, g_vm_mu;     /* measured weapon grip + forward + up (edge / crossbow top), camera numbers */
+static float g_vm_tilt_cur;                 /* compat: blade rise above the view plane (deg) */
+static int   g_vm_hand = 1;                 /* compat (state print): weapon hand of the current class */
+/* swing */
+static float g_vm_sw_dur = 0.55f, g_vm_swt, g_vm_swu;
 static int   g_vm_swing, g_vm_swings;
-static float g_vm_sw_pose = -1.0f;          /* test: >=0 freezes the swing arc at this u while ready */
+static float g_vm_sw_pose = -1.0f;          /* test: >=0 freezes the swing path at this u while ready */
+static VmPose g_vm_sw0;                     /* pose the swing started from */
+static float g_vm_sw_maxstep, g_vm_sw_last_step; static Vec3 g_vm_sw_prevf; static int g_vm_sw_n, g_vm_sw_log = 1;
+static float g_vm_sw_emin, g_vm_sw_emax, g_vm_sw_amin, g_vm_sw_amax;
+static float g_vm_sw_rate[128], g_vm_sw_rmax, g_vm_sw_rmed;   /* blade angular speed per frame (deg/s): snap check */
+/* fire kick */
+static float g_vm_kick, g_vm_kick_pose = -1.0f; static unsigned g_vm_shots0; static int g_vm_kicks;
 static float g_fpc_fs_prog;                 /* tentative decl; defined in kfp_controls.inc (free-swing anim progress 0..1) */
-static int   g_vm_names;
-
 static const char *g_fpc_ui_state;          /* tentative decl; defined in kfp_controls.inc */
+static unsigned g_combat_actual_shots;      /* tentative decl; defined in kfp_combat_native.inc */
+static Vec3 g_vm_s2w[3]; static Vec3 g_vm_w2s[3]; static float g_vm_scale = 1.0f;   /* skel<->world map (rows) */
+static Vec3 g_vm_cms, g_vm_cmw;
 
 static void vm_names(void)
 {
@@ -77,12 +128,17 @@ static void vm_names(void)
     make_mstr_long(g_vm_nm_arm[1], "Bip01 R UpperArm");
     make_mstr_long(g_vm_nm_clav[0], "Bip01 L Clavicle");
     make_mstr_long(g_vm_nm_clav[1], "Bip01 R Clavicle");
+    make_mstr(g_vm_nm_fore[0], "Bip01 L Forearm");
+    make_mstr(g_vm_nm_fore[1], "Bip01 R Forearm");
     make_mstr(g_vm_nm_spine, "Bip01 Spine");
     make_mstr(g_vm_nm_hand[0], "Bip01 L Hand");
     make_mstr(g_vm_nm_hand[1], "Bip01 R Hand");
+    make_mstr(g_vm_nm_prop[0], "Bip01 Prop1");
+    make_mstr(g_vm_nm_prop[1], "Bip01 Prop2");
     g_vm_names = 1;
 }
 
+static Vec3  vm_v(float x, float y, float z) { return (Vec3){ x, y, z }; }
 static Vec3  vm_sub(Vec3 a, Vec3 b) { return (Vec3){ a.x-b.x, a.y-b.y, a.z-b.z }; }
 static Vec3  vm_add(Vec3 a, Vec3 b) { return (Vec3){ a.x+b.x, a.y+b.y, a.z+b.z }; }
 static Vec3  vm_mul(Vec3 a, float s) { return (Vec3){ a.x*s, a.y*s, a.z*s }; }
@@ -90,87 +146,201 @@ static float vm_dot(Vec3 a, Vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 static Vec3  vm_cross(Vec3 a, Vec3 b) { return (Vec3){ a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x }; }
 static float vm_len(Vec3 a) { return sqrtf(vm_dot(a, a)); }
 static Vec3  vm_norm(Vec3 a) { float l = vm_len(a); return l > 1e-6f ? vm_mul(a, 1.0f / l) : a; }
+static Vec3  vm_lerp(Vec3 a, Vec3 b, float t) { return vm_add(a, vm_mul(vm_sub(b, a), t)); }
+static Vec3  vm_axis(int code) { int a = code < 0 ? -code : code; float s = code < 0 ? -1.0f : 1.0f;
+    return a == 1 ? vm_v(s, 0, 0) : a == 2 ? vm_v(0, s, 0) : vm_v(0, 0, s); }
 
-static Quat vm_axis_angle(Vec3 a, float ang)
+/* proper rotation whose columns are (a, b', a x b') with b' = b orthogonalized against a */
+static Quat vm_frame_quat(Vec3 a, Vec3 b)
 {
-    float l = vm_len(a);
-    if (l < 1e-6f) return (Quat){ 1, 0, 0, 0 };
-    float s = sinf(ang * 0.5f) / l;
-    return (Quat){ cosf(ang * 0.5f), a.x*s, a.y*s, a.z*s };
+    a = vm_norm(a); b = vm_norm(vm_sub(b, vm_mul(a, vm_dot(a, b))));
+    Vec3 c = vm_cross(a, b);
+    float m00 = a.x, m10 = a.y, m20 = a.z, m01 = b.x, m11 = b.y, m21 = b.z, m02 = c.x, m12 = c.y, m22 = c.z;
+    float tr = m00 + m11 + m22; Quat q;
+    if (tr > 0.0f) { float s = sqrtf(tr + 1.0f) * 2.0f; q = (Quat){ 0.25f*s, (m21-m12)/s, (m02-m20)/s, (m10-m01)/s }; }
+    else if (m00 > m11 && m00 > m22) { float s = sqrtf(1.0f + m00 - m11 - m22) * 2.0f; q = (Quat){ (m21-m12)/s, 0.25f*s, (m01+m10)/s, (m02+m20)/s }; }
+    else if (m11 > m22) { float s = sqrtf(1.0f + m11 - m00 - m22) * 2.0f; q = (Quat){ (m02-m20)/s, (m01+m10)/s, 0.25f*s, (m12+m21)/s }; }
+    else { float s = sqrtf(1.0f + m22 - m00 - m11) * 2.0f; q = (Quat){ (m10-m01)/s, (m02+m20)/s, (m12+m21)/s, 0.25f*s }; }
+    return quat_norm(q);
+}
+static Quat vm_fromto(Vec3 a, Vec3 b)
+{
+    a = vm_norm(a); b = vm_norm(b);
+    float d = vm_dot(a, b);
+    if (d < -0.9999f) {
+        Vec3 o = fabsf(a.x) < 0.9f ? vm_v(1, 0, 0) : vm_v(0, 1, 0);
+        Vec3 ax = vm_norm(vm_cross(a, o)); return (Quat){ 0, ax.x, ax.y, ax.z };
+    }
+    Vec3 c = vm_cross(a, b);
+    return quat_norm((Quat){ 1.0f + d, c.x, c.y, c.z });
+}
+static VmPose vm_pose_norm(VmPose p)
+{
+    p.f = vm_norm(p.f);
+    p.u = vm_norm(vm_sub(p.u, vm_mul(p.f, vm_dot(p.f, p.u))));
+    return p;
+}
+static VmPose vm_pose_lerp(VmPose a, VmPose b, float t)
+{
+    VmPose r = { vm_lerp(a.p, b.p, t), vm_lerp(a.f, b.f, t), vm_lerp(a.u, b.u, t) };
+    return vm_pose_norm(r);
+}
+/* Catmull-Rom on Vec3 with non-uniform key times (t0..t3, segment t1..t2) */
+static Vec3 vm_cr(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, float t0, float t1, float t2, float t3, float t)
+{
+    float d12 = t2 - t1; if (d12 < 1e-4f) return p1;
+    float s = (t - t1) / d12;
+    Vec3 m1 = vm_mul(vm_sub(p2, p0), d12 / fmaxf(t2 - t0, 1e-4f));
+    Vec3 m2 = vm_mul(vm_sub(p3, p1), d12 / fmaxf(t3 - t1, 1e-4f));
+    float s2 = s*s, s3 = s2*s;
+    float h00 = 2*s3 - 3*s2 + 1, h10 = s3 - 2*s2 + s, h01 = -2*s3 + 3*s2, h11 = s3 - s2;
+    return vm_add(vm_add(vm_mul(p1, h00), vm_mul(m1, h10)), vm_add(vm_mul(p2, h01), vm_mul(m2, h11)));
+}
+/* swing path at u in [0,1]: start pose -> keys -> end pose */
+static VmPose vm_swing_at(VmPose start, VmPose end, float u)
+{
+    VmPose k[VM_SWK + 2]; k[0] = start; for (int i = 0; i < VM_SWK; i++) k[i+1] = vm_pose_norm(g_vm_swk[i]); k[VM_SWK+1] = end;
+    const float *t = g_vm_swk_u; int n = VM_SWK + 2;
+    if (u <= 0.0f) return vm_pose_norm(start);
+    if (u >= 1.0f) return vm_pose_norm(end);
+    int i = 0; while (i < n - 2 && u > t[i+1]) i++;
+    int a = i > 0 ? i - 1 : i, d = i + 2 < n ? i + 2 : i + 1;
+    float ta = i > 0 ? t[a] : t[i] - (t[i+1] - t[i]), td = i + 2 < n ? t[d] : t[i+1] + (t[i+1] - t[i]);
+    VmPose r;
+    r.p = vm_cr(k[a].p, k[i].p, k[i+1].p, k[d].p, ta, t[i], t[i+1], td, u);
+    r.f = vm_cr(k[a].f, k[i].f, k[i+1].f, k[d].f, ta, t[i], t[i+1], td, u);
+    r.u = vm_cr(k[a].u, k[i].u, k[i+1].u, k[d].u, ta, t[i], t[i+1], td, u);
+    return vm_pose_norm(r);
+}
+
+/* skeleton <-> world (game coords) */
+static Vec3 vm_w2s_dir(Vec3 v) { return vm_mul(vm_v(vm_dot(v, g_vm_w2s[0]), vm_dot(v, g_vm_w2s[1]), vm_dot(v, g_vm_w2s[2])), 1.0f / g_vm_scale); }
+static Vec3 vm_s2w_dir(Vec3 v) { return vm_mul(vm_v(vm_dot(v, g_vm_s2w[0]), vm_dot(v, g_vm_s2w[1]), vm_dot(v, g_vm_s2w[2])), g_vm_scale); }
+static Vec3 vm_w2s_pos(Vec3 p) { return vm_add(g_vm_cms, vm_w2s_dir(vm_sub(p, g_vm_cmw))); }
+
+/* two-bone IK on one arm, skeleton space. Ht/Qt = hand bone target (derived pos/ori); keep_ori = keep the
+ * hand's native derived orientation instead of Qt. Writes local orientations blended by w. */
+static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int keep_ori, Vec3 pole, float w)
+{
+    void *cl = g_oldnode_getparent(ua);
+    if (!readable(cl, 8)) return 0;
+    const Quat *pc = g_oldnode_getdori(cl), *pua = g_oldnode_getdori(ua), *pfa = g_oldnode_getdori(fa), *pha = g_oldnode_getdori(ha);
+    const Vec3 *ps = g_oldnode_getdpos(ua), *pe = g_oldnode_getdpos(fa), *ph = g_oldnode_getdpos(ha);
+    if (!readable((void *)pc, 16) || !readable((void *)pua, 16) || !readable((void *)pfa, 16) || !readable((void *)pha, 16)
+        || !readable((void *)ps, 12) || !readable((void *)pe, 12) || !readable((void *)ph, 12)) return 0;
+    Quat Dc = *pc, Dua = *pua, Dfa = *pfa, Dh = *pha; Vec3 S = *ps, E = *pe, H = *ph;
+    if (keep_ori) Qt = Dh;
+    float L1 = vm_len(vm_sub(E, S)), L2 = vm_len(vm_sub(H, E));
+    if (L1 < 1e-4f || L2 < 1e-4f) return 0;
+    Vec3 d = vm_sub(Ht, S); float D = vm_len(d);
+    Vec3 n = D > 1e-5f ? vm_mul(d, 1.0f / D) : vm_norm(vm_sub(H, S));
+    float dmin = fabsf(L1 - L2) + 0.02f * (L1 + L2), dmax = (L1 + L2) * 0.995f;
+    if (D < dmin) D = dmin; if (D > dmax) D = dmax;
+    float a = (L1*L1 - L2*L2 + D*D) / (2.0f * D), h = sqrtf(fmaxf(0.0f, L1*L1 - a*a));
+    Vec3 pp = vm_sub(pole, vm_mul(n, vm_dot(pole, n)));
+    if (vm_len(pp) < 1e-4f) { Vec3 ce = vm_sub(E, S); pp = vm_sub(ce, vm_mul(n, vm_dot(ce, n))); }
+    pp = vm_norm(pp);
+    Vec3 E2 = vm_add(S, vm_add(vm_mul(n, a), vm_mul(pp, h))), H2 = vm_add(S, vm_mul(n, D));
+    Quat r1 = vm_fromto(vm_sub(E, S), vm_sub(E2, S));
+    Quat Dua2 = quat_norm(quat_mul(r1, Dua));
+    Vec3 v = quat_rotvec(r1, vm_sub(H, E));
+    Quat r2 = vm_fromto(v, vm_sub(H2, E2));
+    Quat Dfa2 = quat_norm(quat_mul(r2, quat_mul(r1, Dfa)));
+    {   /* forearm takes a share of the wrist twist (about the forearm bone) */
+        const Quat *plh = g_oldnode_getori(ha);
+        Quat Lh = readable((void *)plh, 16) ? *plh : (Quat){ 1, 0, 0, 0 };
+        Quat want = quat_mul(Qt, quat_conj(Lh));
+        Quat dl = quat_norm(quat_mul(want, quat_conj(Dfa2)));
+        Vec3 ax = vm_norm(vm_sub(H2, E2));
+        float pr = dl.x*ax.x + dl.y*ax.y + dl.z*ax.z;
+        Quat tw = quat_norm((Quat){ dl.w, ax.x*pr, ax.y*pr, ax.z*pr });
+        if (tw.w < 0) tw = (Quat){ -tw.w, -tw.x, -tw.y, -tw.z };
+        tw = quat_slerp((Quat){ 1, 0, 0, 0 }, tw, g_vm_twist);
+        Dfa2 = quat_norm(quat_mul(tw, Dfa2));
+    }
+    Quat nl[3] = { quat_norm(quat_mul(quat_conj(Dc), Dua2)), quat_norm(quat_mul(quat_conj(Dua2), Dfa2)),
+                   quat_norm(quat_mul(quat_conj(Dfa2), Qt)) };
+    void *b[3] = { ua, fa, ha };
+    for (int j = 0; j < 3; j++) {
+        Quat q = w >= 0.999f ? nl[j] : quat_norm(quat_slerp(g_vm_bq[side][j], nl[j], w));
+        g_oldnode_setori(b[j], &q); g_oldnode_needupd(b[j], 1);
+        g_vm_wq[side][j] = q;
+    }
+    g_vm_have_written[side] = 1;
+    return 1;
 }
 
 /* Runs inside setAnimationState, after the original posed the skeleton. */
 static void vm_apply(void *skel)
 {
-    void *b[2], *par[2];
-    Vec3 p[2]; Quat pdq[2]; Vec3 pdp[2], ps[2];
+    void *b[2][4];                       /* ua fa ha prop */
     for (int i = 0; i < 2; i++) {
-        b[i] = g_skel_getbone(skel, g_vm_nm_arm[i]);
-        if (!readable(b[i], 8)) return;
-        par[i] = g_oldnode_getparent(b[i]);
-        if (!readable(par[i], 8)) return;
-        const Quat *lq = g_oldnode_getori(b[i]);
-        const Vec3 *lp = g_oldnode_getpos(b[i]);
-        const Quat *dq = g_oldnode_getdori(par[i]);
-        const Vec3 *dp = g_oldnode_getdpos(par[i]);
-        const Vec3 *dsc = g_oldnode_getdscale ? g_oldnode_getdscale(par[i]) : NULL;
-        if (!readable((void *)lq, 16) || !readable((void *)lp, 12) || !readable((void *)dq, 16)
-            || !readable((void *)dp, 12)) return;
-        Quat q = *lq; Vec3 v = *lp;
-        /* Bone not reset since our last write (manually controlled, e.g. the
-         * locomotion layer owns it and skipped a frame): start from the saved
-         * base, never stack on our own output. */
-        if (g_vm_have_written[i] && !memcmp(&q, &g_vm_wq[i], sizeof(Quat))
-            && !memcmp(&v, &g_vm_wp[i], sizeof(Vec3))) { q = g_vm_bq[i]; v = g_vm_bp[i]; g_vm_reuse++; }
-        g_vm_bq[i] = q; g_vm_bp[i] = v;
-        pdq[i] = *dq; pdp[i] = *dp;
-        ps[i] = readable((void *)dsc, 12) ? *dsc : (Vec3){ 1, 1, 1 };
-        Vec3 sv = { v.x*ps[i].x, v.y*ps[i].y, v.z*ps[i].z };
-        p[i] = vm_add(pdp[i], quat_rotvec(pdq[i], sv));          /* unmodified derived position */
-    }
-    Vec3 c = vm_mul(vm_add(p[0], p[1]), 0.5f);
-    for (int i = 0; i < 2; i++) {
-        Vec3 np = vm_add(c, quat_rotvec(g_vm_R, vm_sub(p[i], c)));
-        Quat ip = quat_conj(pdq[i]);
-        Quat nq = quat_norm(quat_mul(quat_mul(quat_mul(ip, g_vm_R), pdq[i]), g_vm_bq[i]));
-        Vec3 lv = quat_rotvec(ip, vm_sub(np, pdp[i]));
-        lv.x /= (fabsf(ps[i].x) > 1e-6f ? ps[i].x : 1.0f);
-        lv.y /= (fabsf(ps[i].y) > 1e-6f ? ps[i].y : 1.0f);
-        lv.z /= (fabsf(ps[i].z) > 1e-6f ? ps[i].z : 1.0f);
-        g_oldnode_setori(b[i], &nq);
-        g_oldnode_setpos(b[i], &lv);
-        g_oldnode_needupd(b[i], 1);
-        g_vm_wq[i] = nq; g_vm_wp[i] = lv; g_vm_have_written[i] = 1;
-    }
-    if (fabsf(g_vm_tilt_cur) > 0.05f && vm_len(g_vm_tilt_ax) > 0.5f) {
-        void *hb = g_skel_getbone(skel, g_vm_nm_hand[g_vm_hand ? 1 : 0]);
-        void *hp = readable(hb, 8) ? g_oldnode_getparent(hb) : NULL;
-        const Quat *hq = readable(hb, 8) ? g_oldnode_getori(hb) : NULL;
-        const Quat *hdq = readable(hp, 8) ? g_oldnode_getdori(hp) : NULL;   /* lazily updated after our arm write */
-        if (readable((void *)hq, 16) && readable((void *)hdq, 16)) {
-            Quat q = *hq;
-            if (g_vm_h_written && !memcmp(&q, &g_vm_hwq, sizeof(Quat))) q = g_vm_hbq;
-            g_vm_hbq = q;
-            Quat T = vm_axis_angle(g_vm_tilt_ax, g_vm_tilt_cur * 0.0174533f);
-            Quat nq = quat_norm(quat_mul(quat_mul(quat_mul(quat_conj(*hdq), T), *hdq), q));
-            g_oldnode_setori(hb, &nq); g_oldnode_needupd(hb, 1);
-            g_vm_hwq = nq; g_vm_h_written = 1;
+        b[i][0] = g_skel_getbone(skel, g_vm_nm_arm[i]); b[i][1] = g_skel_getbone(skel, g_vm_nm_fore[i]);
+        b[i][2] = g_skel_getbone(skel, g_vm_nm_hand[i]); b[i][3] = g_skel_getbone(skel, g_vm_nm_prop[i]);
+        for (int j = 0; j < 4; j++) if (!readable(b[i][j], 8)) return;
+        if (g_oldnode_getparent(b[i][2]) != b[i][1] || g_oldnode_getparent(b[i][1]) != b[i][0]) { g_vm_ikfail++; return; }
+        /* bone not reset since our last write (another layer skipped a frame): restore the native local first,
+         * never stack on our own output */
+        for (int j = 0; j < 3; j++) {
+            const Quat *lq = g_oldnode_getori(b[i][j]);
+            if (!readable((void *)lq, 16)) return;
+            Quat q = *lq;
+            if (g_vm_have_written[i] && !memcmp(&q, &g_vm_wq[i][j], sizeof(Quat))) {
+                q = g_vm_bq[i][j]; g_oldnode_setori(b[i][j], &q); g_oldnode_needupd(b[i][j], 1); g_vm_reuse++;
+            }
+            g_vm_bq[i][j] = q;
         }
-    } else g_vm_h_written = 0;
+    }
+    /* native snapshot */
+    for (int i = 0; i < 2; i++) {
+        const Quat *hq = g_oldnode_getdori(b[i][2]), *lpq = g_oldnode_getori(b[i][3]);
+        const Vec3 *hp = g_oldnode_getdpos(b[i][2]), *lpp = g_oldnode_getpos(b[i][3]);
+        const Vec3 *hs = g_oldnode_getdscale ? g_oldnode_getdscale(b[i][2]) : NULL;
+        if (!readable((void *)hq, 16) || !readable((void *)lpq, 16) || !readable((void *)hp, 12) || !readable((void *)lpp, 12)) return;
+        Vec3 sc = readable((void *)hs, 12) ? *hs : vm_v(1, 1, 1), lp = *lpp;
+        g_vm_nhq[i] = *hq; g_vm_nhp[i] = *hp;
+        g_vm_npq[i] = quat_norm(quat_mul(*hq, *lpq));
+        g_vm_npp[i] = vm_add(*hp, quat_rotvec(*hq, vm_v(lp.x*sc.x, lp.y*sc.y, lp.z*sc.z)));
+    }
+    g_vm_nat_ok = 1;
+    if (!g_vm_have_t || g_vm_w <= 0.001f) return;
+    int wh = g_vm_whand[g_vm_class] ? 1 : 0, oh = !wh;
+    /* weapon prop target -> weapon hand target */
+    Quat Qp = quat_norm(quat_mul(vm_frame_quat(g_vm_tf, g_vm_tu),
+                                 quat_conj(vm_frame_quat(vm_axis(g_vm_ax[g_vm_class][0]), vm_axis(g_vm_ax[g_vm_class][1])))));
+    const Quat *lpq = g_oldnode_getori(b[wh][3]); const Vec3 *lpp = g_oldnode_getpos(b[wh][3]);
+    const Vec3 *hs = g_oldnode_getdscale ? g_oldnode_getdscale(b[wh][2]) : NULL;
+    Vec3 sc = readable((void *)hs, 12) ? *hs : vm_v(1, 1, 1), lp = *lpp;
+    Quat Qh = quat_norm(quat_mul(Qp, quat_conj(*lpq)));
+    Vec3 Ph = vm_sub(g_vm_tp, quat_rotvec(Qh, vm_v(lp.x*sc.x, lp.y*sc.y, lp.z*sc.z)));
+    /* off-hand */
+    Vec3 Po = g_vm_op; Quat Qo = g_vm_nhq[oh]; int keep = 1;
+    {   Vec3 dn = vm_sub(g_vm_nhp[oh], g_vm_npp[wh]);
+        g_vm_off_near_now = g_vm_scale * vm_len(dn) < g_vm_off_near;
+        if (g_vm_off_near_now) {
+            g_vm_orel = quat_norm(quat_mul(quat_conj(g_vm_npq[wh]), g_vm_nhq[oh]));
+            g_vm_oprel = quat_rotvec(quat_conj(g_vm_npq[wh]), dn); g_vm_have_orel = 1;
+        }
+        /* ranged: the off-hand always holds the support point; its orientation follows the weapon as in the
+         * native 2-handed grip (last seen near) */
+        if (g_vm_omode && g_vm_have_orel) { Qo = quat_norm(quat_mul(Qp, g_vm_orel)); keep = 0; }
+    }
+    if (!vm_ik(wh, b[wh][0], b[wh][1], b[wh][2], Ph, Qh, 0, g_vm_tpole[wh], g_vm_w)) g_vm_ikfail++;
+    if (!vm_ik(oh, b[oh][0], b[oh][1], b[oh][2], Po, Qo, keep, g_vm_tpole[oh], g_vm_w)) g_vm_ikfail++;
     g_vm_applied++;
 }
 
 static void hooked_vm_setanim(void *skel, const void *set, float w, const void *bmap)
 {
     g_vm_setanim_orig(skel, set, w, bmap);
-    if (!skel || skel != g_vm_skel || g_vm_dead || g_vm_R.w > 0.99999f) return;
+    if (!skel || skel != g_vm_skel || g_vm_dead) return;
     g_vm_calls++;
     /* May run nested inside a guarded caller (the camera weld): save and
      * restore the guard so a fault here doesn't strand the caller's jmp_buf. */
     jmp_buf saved; memcpy(saved, g_guard_jb, sizeof(jmp_buf));
     int was = g_guard_armed; DWORD wtid = g_guard_tid;
     if (setjmp(g_guard_jb)) {
-        g_vm_dead = 1; g_vm_R = (Quat){ 1, 0, 0, 0 };
+        g_vm_dead = 1; g_vm_w = 0.0f;
         logline("[vm] apply FAULTED -- viewmodel disabled");
     } else {
         guard_arm(); vm_apply(skel);
@@ -184,11 +354,11 @@ static void vm_install(HMODULE ogre)
     void *t = ogre ? (void *)GetProcAddress(ogre, OGRE_OSI_SETANIM_SYM) : NULL;
     if (!t || !g_skel_getbone || !g_oldnode_getori || !g_oldnode_setori || !g_oldnode_needupd
         || !g_oldnode_getdori || !g_oldnode_getdpos || !g_oldnode_getparent || !g_get_bone_world
-        || !g_oldnode_getpos || !g_oldnode_setpos) {
+        || !g_oldnode_getpos) {
         logline("[vm] viewmodel unavailable (setAnimationState=%p)", t); return;
     }
     g_vm_hooked = install_hook(t, (void *)hooked_vm_setanim, (void **)&g_vm_setanim_orig);
-    logline(g_vm_hooked ? "[vm] viewmodel hook installed (Skeleton::setAnimationState)"
+    logline(g_vm_hooked ? "[vm] viewmodel hook installed (Skeleton::setAnimationState, IK)"
                         : "[vm] viewmodel hook FAILED");
 }
 
@@ -203,12 +373,13 @@ static int vm_basis(Vec3 lat, Vec3 up, Vec3 e[3])
     return 1;
 }
 
-static void vm_ease_off(float dt)
-{
-    float a = dt / (dt + 0.15f);
-    g_vm_R = quat_norm(quat_slerp(g_vm_R, (Quat){ 1, 0, 0, 0 }, a));
-    if (g_vm_R.w > 0.99999f) g_vm_R = (Quat){ 1, 0, 0, 0 };
-}
+/* camera frame (world): unzoomed eye (game coords) + right/up/forward */
+static Vec3 g_vm_eye, g_vm_rt, g_vm_up, g_vm_fw;
+static Vec3 vm_c2w_dir(Vec3 c) { return vm_add(vm_add(vm_mul(g_vm_rt, c.x), vm_mul(g_vm_up, c.y)), vm_mul(g_vm_fw, c.z)); }
+static Vec3 vm_c2w_pos(Vec3 c) { return vm_add(g_vm_eye, vm_c2w_dir(c)); }
+static Vec3 vm_w2c_dir(Vec3 w) { return vm_v(vm_dot(w, g_vm_rt), vm_dot(w, g_vm_up), vm_dot(w, g_vm_fw)); }
+static float vm_elev_of(Vec3 c) { return atan2f(c.y, c.z) * 57.29578f; }
+static float vm_az_of(Vec3 c)   { return atan2f(c.x, c.z) * 57.29578f; }
 
 /* Per camera frame, after the eye/orientation are final. */
 static void vm_frame(void *pc, int body_down)
@@ -224,56 +395,44 @@ static void vm_frame(void *pc, int body_down)
     g_vm_frames++;
 
     const char *st = g_fpc_ui_state ? g_fpc_ui_state : "off";
-    int ti = -1, hold = 0, on = 1;
-    int was_swing = g_vm_swing; g_vm_swing = 0;
+    int ti = -1, hold = 0, on = 1, want_swing = 0;
     if      (!strcmp(st, "ready"))      ti = VM_READY;
     else if (!strcmp(st, "aiming"))     ti = VM_AIM;
     else if (!strcmp(st, "reloading"))  ti = VM_RELOAD;
     else if (!strcmp(st, "blocking"))   ti = VM_BLOCK;
-    else if (!strcmp(st, "swinging"))   { ti = VM_READY; g_vm_swing = 1; }
-    else if (!strcmp(st, "recovering")) {    /* "swinging" lasts ~0.1 s; the swing anim runs on through recovering */
-        ti = VM_READY;
-        int fs_run = g_fpc_fs_prog > 0.0f && g_fpc_fs_prog < 1.0f;
-        int fs_stale = !(g_fpc_fs_prog > 0.0f && g_fpc_fs_prog <= 1.0f);
-        if (was_swing && (fs_run || (fs_stale && g_vm_swt < g_vm_sw_dur))) g_vm_swing = 1;
-    }
+    else if (!strcmp(st, "swinging"))   { ti = VM_READY; want_swing = 1; }
+    else if (!strcmp(st, "recovering")) ti = VM_READY;
     else if (!strcmp(st, "staggered"))  hold = 1;
     else on = 0;                                       /* holstered/down/off/none */
     if (!g_cfg_vm || !g_fp_mode || !pc || body_down || !g_have_eye) on = 0;
-    int posed = g_vm_sw_pose >= 0.0f && ti == VM_READY && !g_vm_swing;
-    if (posed) g_vm_swing = 1;
-    g_vm_state = st; g_vm_hold = hold;
-    /* arc progress: the free swing's own anim progress when it advances (game time, any game speed), else
-     * real time over sw_dur (native combat swings) */
-    if (g_vm_swing) {
-        if (!was_swing) { g_vm_swt = 0.0f; g_vm_swings++; }
-        else g_vm_swt += dt;
-        float pu = g_fpc_fs_prog > 0.0f && g_fpc_fs_prog <= 1.0f ? g_fpc_fs_prog : -1.0f;
-        g_vm_swu = posed ? fminf(1.0f, g_vm_sw_pose) : pu >= 0.0f ? pu : fminf(1.0f, g_vm_swt / g_vm_sw_dur);
-    } else {
-        if (was_swing) logline("[vm] swing #%lu %.2fs u_end=%.2f prog=%.2f", (unsigned long)g_vm_swings, g_vm_swt, g_vm_swu, g_fpc_fs_prog);
-        g_vm_swt = g_vm_swu = 0.0f;
+    /* fire: a shot keeps the aim pose g_vm_fire_hold s (kick on top) before the reload pose */
+    if (g_combat_actual_shots != g_vm_shots0) {
+        if (g_combat_actual_shots > g_vm_shots0 && g_vm_class == 1) {
+            g_vm_kick = 1.0f; g_vm_kicks++; g_vm_fire_t = g_vm_fire_hold;
+            logline("[vm] fire #%d: aim pose held %.2fs + kick (state=%s)", g_vm_kicks, g_vm_fire_hold, st);
+        }
+        g_vm_shots0 = g_combat_actual_shots;
     }
+    if (g_vm_fire_t > 0.0f) { g_vm_fire_t -= dt; if (ti == VM_RELOAD || ti == VM_READY) ti = VM_AIM; }
+    g_vm_state = st; g_vm_hold = hold;
 
     void *skel = NULL;
     if (pc) {
         void *anim = readable((void *)((uintptr_t)pc + CHAR_ANIM), 8) ? *(void **)((uintptr_t)pc + CHAR_ANIM) : NULL;
         skel = readable(anim, ANIM_SKELETON + 8) ? *(void **)((uintptr_t)anim + ANIM_SKELETON) : NULL;
     }
-    if (skel != g_vm_skel) { g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_R = (Quat){ 1, 0, 0, 0 }; }
+    if (skel != g_vm_skel) { g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_w = 0.0f; g_vm_have_cur = 0; g_vm_have_t = 0; g_vm_have_orel = 0; }
     g_vm_skel = skel;
     if (!skel) return;
 
-    /* measure (world = game coords): hand, shoulders, clavicles + spine in world and skeleton space */
-    Vec3 h, hb[2], sh[2], cw[2], spw, cs[2], sps;
+    /* measure (world = game coords): clavicles + spine in world and skeleton space, both props in world */
+    Vec3 cw[2], spw, cs[2], sps, pw[2];
     int ok = 1;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; ok = 0; }
     else {
         guard_arm();
-        g_get_bone_world(pc, &hb[0], g_vm_nm_hand[0]);
-        g_get_bone_world(pc, &hb[1], g_vm_nm_hand[1]);
         for (int i = 0; i < 2; i++) {
-            g_get_bone_world(pc, &sh[i], g_vm_nm_arm[i]);
+            g_get_bone_world(pc, &pw[i], g_vm_nm_prop[i]);
             g_get_bone_world(pc, &cw[i], g_vm_nm_clav[i]);
             void *cb = g_skel_getbone(skel, g_vm_nm_clav[i]);
             const Vec3 *d = readable(cb, 8) ? g_oldnode_getdpos(cb) : NULL;
@@ -286,144 +445,262 @@ static void vm_frame(void *pc, int body_down)
         g_guard_armed = 0;
     }
     if (!ok) { g_vm_basis_ok = 0; return; }
+    {   Vec3 ew[3], es[3];
+        Vec3 cmw = vm_mul(vm_add(cw[0], cw[1]), 0.5f), cms = vm_mul(vm_add(cs[0], cs[1]), 0.5f);
+        g_vm_basis_ok = vm_basis(vm_sub(cw[1], cw[0]), vm_sub(cmw, spw), ew)
+                     && vm_basis(vm_sub(cs[1], cs[0]), vm_sub(cms, sps), es);
+        if (!g_vm_basis_ok) return;
+        float ls = vm_len(vm_sub(cs[1], cs[0]));
+        g_vm_scale = ls > 1e-6f ? vm_len(vm_sub(cw[1], cw[0])) / ls : 1.0f;
+        /* w2s rows: skeleton component k of a world vector = sum_i es_i[k] * dot(v, ew_i) */
+        g_vm_w2s[0] = vm_v(0, 0, 0); g_vm_w2s[1] = g_vm_w2s[0]; g_vm_w2s[2] = g_vm_w2s[0];
+        g_vm_s2w[0] = g_vm_w2s[0]; g_vm_s2w[1] = g_vm_w2s[0]; g_vm_s2w[2] = g_vm_w2s[0];
+        for (int i = 0; i < 3; i++) {
+            float es_[3] = { es[i].x, es[i].y, es[i].z }, ew_[3] = { ew[i].x, ew[i].y, ew[i].z };
+            for (int k = 0; k < 3; k++) {
+                Vec3 *rw = &g_vm_w2s[k], *rs = &g_vm_s2w[k];
+                *rw = vm_add(*rw, vm_mul(ew[i], es_[k]));
+                *rs = vm_add(*rs, vm_mul(es[i], ew_[k]));
+            }
+        }
+        g_vm_cms = cms; g_vm_cmw = cmw;
+    }
 
-    /* eye is Ogre-world (floating origin); bone world is game coords = ogre - (g_tx,0,g_tz) */
-    Vec3 eye = { g_last_eye.x - g_tx, g_last_eye.y, g_last_eye.z - g_tz };
+    /* camera frame from the UNZOOMED eye (PT29); eye is Ogre-world (floating origin): game = ogre - (g_tx,0,g_tz) */
+    Vec3 eo = g_view_have_anchor ? g_view_anchor : g_last_eye;
+    g_vm_eye = vm_v(eo.x - g_tx, eo.y, eo.z - g_tz);
     float cp = cosf(g_pitch), sp = sinf(g_pitch), cy = cosf(g_yaw), sy = sinf(g_yaw);
-    Vec3 fw = { sy*cp, -sp, cy*cp };                   /* g_pitch>0 = looking down */
-    Vec3 up = { sy*sp, cp, cy*sp };                    /* fw rotated 90 deg up */
-    Vec3 rt = vm_cross(fw, up);
-    for (int i = 0; i < 2; i++) {
-        Vec3 w = vm_sub(hb[i], eye);
-        g_vm_he[i] = atan2f(vm_dot(w, up), vm_dot(w, fw)) * 57.29578f;
-        g_vm_ha[i] = atan2f(vm_dot(w, rt), vm_dot(w, fw)) * 57.29578f;
-    }
-    h = hb[g_vm_hand ? 1 : 0];
-    Vec3 v = vm_sub(h, eye);
-    g_vm_elev = atan2f(vm_dot(v, up), vm_dot(v, fw)) * 57.29578f;
-    g_vm_az   = atan2f(vm_dot(v, rt), vm_dot(v, fw)) * 57.29578f;
+    g_vm_fw = vm_v(sy*cp, -sp, cy*cp);                   /* g_pitch>0 = looking down */
+    g_vm_up = vm_v(sy*sp, cp, cy*sp);
+    g_vm_rt = vm_cross(g_vm_fw, g_vm_up);
 
-    if (!on) { vm_ease_off(dt); return; }
-    if (hold) return;
-    g_vm_target_e = g_vm_te[ti]; g_vm_target_a = g_vm_ta[ti];
-    if (g_vm_swing && g_vm_melee) {
-        float u = g_vm_swu * g_vm_swu * (3.0f - 2.0f * g_vm_swu);
-        g_vm_target_e = g_vm_sw[0] + (g_vm_sw[2] - g_vm_sw[0]) * u;
-        g_vm_target_a = g_vm_sw[1] + (g_vm_sw[3] - g_vm_sw[1]) * u;
-    }
-
-    /* skeleton <-> world basis (lateral = clavicle line, up = spine -> clavicle midpoint) */
-    Vec3 ew[3], es[3];
-    Vec3 cmw = vm_mul(vm_add(cw[0], cw[1]), 0.5f), cms = vm_mul(vm_add(cs[0], cs[1]), 0.5f);
-    g_vm_basis_ok = vm_basis(vm_sub(cw[1], cw[0]), vm_sub(cmw, spw), ew)
-                 && vm_basis(vm_sub(cs[1], cs[0]), vm_sub(cms, sps), es);
-    if (!g_vm_basis_ok) return;
-    {   /* tilt: camera-right mapped into skeleton space; melee = weapon in hands is not the ranged weapon */
-        Vec3 rb = { vm_dot(rt, ew[0]), vm_dot(rt, ew[1]), vm_dot(rt, ew[2]) };
-        g_vm_tilt_ax = vm_add(vm_add(vm_mul(es[0], rb.x), vm_mul(es[1], rb.y)), vm_mul(es[2], rb.z));
-        void *wih = readable((void *)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS), 8) ? *(void **)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS) : NULL;
+    int cls = 0;
+    {   void *wih = readable((void *)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS), 8) ? *(void **)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS) : NULL;
         void **vt = readable(pc, 8) ? *(void ***)pc : NULL;
         void *rw = readable((void *)((uintptr_t)vt + 0x3D0), 8) ? ((void *(*)(void *))vt[0x3D0/8])(pc) : NULL;
         g_vm_melee = wih && wih != rw;
-        float tt = g_vm_melee ? g_vm_tilt[ti] : 0.0f;
-        if (g_vm_swing && g_vm_melee) {
-            float u = g_vm_swu * g_vm_swu * (3.0f - 2.0f * g_vm_swu);
-            tt = g_vm_sw[4] + (g_vm_sw[5] - g_vm_sw[4]) * u;
+        cls = (wih && wih == rw) ? 1 : 0;
+    }
+    /* measured: weapon grip (prop) + forward in camera numbers (post-IK of the last apply) */
+    {   int wh = g_vm_whand[cls] ? 1 : 0;
+        g_vm_hand = wh;
+        for (int i = 0; i < 2; i++) { Vec3 c = vm_w2c_dir(vm_sub(pw[i], g_vm_eye)); g_vm_he[i] = vm_elev_of(c); g_vm_ha[i] = vm_az_of(c); }
+        g_vm_mp = vm_w2c_dir(vm_sub(pw[wh], g_vm_eye));
+        g_vm_elev = vm_elev_of(g_vm_mp); g_vm_az = vm_az_of(g_vm_mp);
+        void *pb = g_skel_getbone(skel, g_vm_nm_prop[wh]);
+        const Quat *q = readable(pb, 8) ? g_oldnode_getdori(pb) : NULL;
+        if (readable((void *)q, 16)) {
+            g_vm_mf = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*q, vm_axis(g_vm_ax[cls][0])))));
+            g_vm_mu = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*q, vm_axis(g_vm_ax[cls][1])))));
+            g_vm_tilt_cur = asinf(fmaxf(-1.0f, fminf(1.0f, g_vm_mf.y))) * 57.29578f;
         }
-        g_vm_tilt_cur += (tt - g_vm_tilt_cur) * (dt / (dt + g_vm_tau));
     }
 
-    /* target ray from the eye; point on it at the hand's current reach from the shoulder midpoint */
-    float te = g_vm_target_e * 0.0174533f, ta = g_vm_target_a * 0.0174533f;
-    Vec3 dir = vm_norm(vm_add(vm_add(vm_mul(fw, cosf(te) * cosf(ta)), vm_mul(up, sinf(te))),
-                              vm_mul(rt, cosf(te) * sinf(ta))));
-    Vec3 c = vm_mul(vm_add(sh[0], sh[1]), 0.5f);
-    Vec3 hc = vm_sub(h, c);
-    float r = vm_len(hc);
-    Vec3 ec = vm_sub(eye, c);
-    float bq = vm_dot(dir, ec), cq = vm_dot(ec, ec) - r*r, disc = bq*bq - cq;
-    float s = disc >= 0.0f ? -bq + sqrtf(disc) : -bq;            /* far root / closest approach */
-    if (s < 0.0f) s = 0.0f;
-    Vec3 tc = vm_sub(vm_add(eye, vm_mul(dir, s)), c);
+    float wt = on ? 1.0f : 0.0f;
+    g_vm_w += (wt - g_vm_w) * (dt / (dt + g_vm_tau_w));
+    if (!on && g_vm_w < 0.01f) { g_vm_w = 0.0f; g_vm_have_cur = 0; g_vm_swing = 0; return; }
+    if (on) g_vm_class = cls;
+    if (hold || ti < 0) { if (!on) goto targets; return; }
 
-    /* world rotation hc -> tc, smoothed fraction, mapped into skeleton space */
-    Vec3 a1 = vm_norm(hc), a2 = vm_norm(tc);
-    Vec3 ax = vm_cross(a1, a2);
-    float sn = vm_len(ax), cs_ = vm_dot(a1, a2);
-    if (sn < 1e-5f) return;
-    float ang = atan2f(sn, cs_);
-    float tau = ti == VM_RELOAD ? g_vm_tau_rl : (g_vm_swing && g_vm_melee) ? 0.03f : g_vm_tau;
-    ang *= dt / (dt + tau);
-    Vec3 k = vm_mul(ax, 1.0f / sn);
-    Vec3 kb = { vm_dot(k, ew[0]), vm_dot(k, ew[1]), vm_dot(k, ew[2]) };
-    Vec3 ks = vm_add(vm_add(vm_mul(es[0], kb.x), vm_mul(es[1], kb.y)), vm_mul(es[2], kb.z));
-    Quat R = quat_norm(quat_mul(vm_axis_angle(ks, ang), g_vm_R));
-    float tot = 2.0f * acosf(fminf(1.0f, fabsf(R.w))) * 57.29578f;
-    if (tot <= g_vm_maxdeg) g_vm_R = R;
-    g_vm_ang = 2.0f * acosf(fminf(1.0f, fabsf(g_vm_R.w))) * 57.29578f;
+    {   VmPose tgt = vm_pose_norm(g_vm_pose[g_vm_class][ti]);
+        if (g_vm_class == 1 && ti == VM_AIM) {           /* bolt converges on the crosshair */
+            Vec3 b = tgt.p; tgt.f = vm_norm(vm_v(-b.x, -b.y, g_vm_aim_dist - b.z));
+            tgt = vm_pose_norm(tgt);
+        }
+        if (!g_vm_have_cur) { g_vm_cur = tgt; g_vm_have_cur = 1; }
+        /* swing (melee): own clock, progress = the free swing's anim progress when it runs */
+        int posed = g_vm_sw_pose >= 0.0f && ti == VM_READY && g_vm_class == 0;
+        static int prev_ws; int ws_edge = want_swing && !prev_ws; prev_ws = want_swing;
+        if (g_vm_class == 0 && (ws_edge || posed) && !g_vm_swing && ti == VM_READY) {
+            g_vm_swing = 1; g_vm_swt = 0.0f; g_vm_swu = 0.0f; g_vm_sw0 = posed ? tgt : g_vm_cur; g_vm_swings += !posed;
+            g_vm_sw_maxstep = 0.0f; g_vm_sw_n = 0; g_vm_sw_prevf = g_vm_cur.f;
+            g_vm_sw_emin = g_vm_sw_amin = 999.0f; g_vm_sw_emax = g_vm_sw_amax = -999.0f;
+        }
+        if (g_vm_swing && (ti != VM_READY || g_vm_class != 0)) {     /* block / weapon change aborts the swing */
+            logline("[vm] swing #%d aborted at u=%.2f (state=%s)", g_vm_swings, g_vm_swu, st); g_vm_swing = 0;
+        }
+        if (g_vm_swing) {
+            g_vm_swt += dt;
+            /* progress: the free swing's anim progress while it is valid, else advance by time from where it is
+             * (never jump to the absolute clock: the anim progress runs slower early, that jump was a snap) */
+            float pu = g_fpc_fs_prog > 0.0f && g_fpc_fs_prog <= 1.0f && want_swing ? g_fpc_fs_prog : -1.0f;
+            float u = posed ? fminf(1.0f, g_vm_sw_pose) : pu >= 0.0f ? fmaxf(g_vm_swu, pu)
+                    : fminf(1.0f, g_vm_swu + dt / g_vm_sw_dur);
+            g_vm_swu = u;
+            g_vm_cur = vm_swing_at(g_vm_sw0, tgt, u);
+            {   float step = acosf(fmaxf(-1.0f, fminf(1.0f, vm_dot(g_vm_cur.f, g_vm_sw_prevf)))) * 57.29578f;
+                g_vm_sw_prevf = g_vm_cur.f; g_vm_sw_last_step = step; if (step > g_vm_sw_maxstep && g_vm_sw_n > 0) g_vm_sw_maxstep = step;
+                if (g_vm_sw_n > 0 && g_vm_sw_n <= 128 && dt > 1e-4f) g_vm_sw_rate[g_vm_sw_n - 1] = step / dt;
+                g_vm_sw_n++;
+                float e = vm_elev_of(g_vm_mp), a = vm_az_of(g_vm_mp);
+                if (e < g_vm_sw_emin) g_vm_sw_emin = e; if (e > g_vm_sw_emax) g_vm_sw_emax = e;
+                if (a < g_vm_sw_amin) g_vm_sw_amin = a; if (a > g_vm_sw_amax) g_vm_sw_amax = a;
+                if (g_vm_sw_log && !posed)
+                    logline("[vmsw] #%d n=%d dt=%.3f u=%.3f prog=%.3f tgt=%.2f,%.2f,%.2f f=%.2f,%.2f,%.2f meas=%.2f,%.2f,%.2f mf=%.2f,%.2f,%.2f",
+                            g_vm_swings, g_vm_sw_n, dt, u, g_fpc_fs_prog, g_vm_cur.p.x, g_vm_cur.p.y, g_vm_cur.p.z,
+                            g_vm_cur.f.x, g_vm_cur.f.y, g_vm_cur.f.z, g_vm_mp.x, g_vm_mp.y, g_vm_mp.z, g_vm_mf.x, g_vm_mf.y, g_vm_mf.z);
+            }
+            if (u >= 1.0f && !posed) {
+                g_vm_swing = 0;
+                {   /* snap check: max vs median blade angular speed over the swing (frame-time independent) */
+                    int m = g_vm_sw_n - 1 < 128 ? g_vm_sw_n - 1 : 128; float t[128];
+                    memcpy(t, g_vm_sw_rate, sizeof(float) * (m > 0 ? m : 0));
+                    for (int i = 1; i < m; i++) { float x = t[i]; int j = i - 1; while (j >= 0 && t[j] > x) { t[j+1] = t[j]; j--; } t[j+1] = x; }
+                    g_vm_sw_rmed = m > 0 ? t[m / 2] : 0.0f; g_vm_sw_rmax = m > 0 ? t[m - 1] : 0.0f;
+                }
+                logline("[vm] swing #%d %.2fs u_end=%.2f prog=%.2f frames=%d maxstep=%.1f rate_max=%.0f rate_med=%.0f ratio=%.2f elev=%.1f..%.1f az=%.1f..%.1f",
+                        g_vm_swings, g_vm_swt, g_vm_swu, g_fpc_fs_prog, g_vm_sw_n, g_vm_sw_maxstep,
+                        g_vm_sw_rmax, g_vm_sw_rmed, g_vm_sw_rmed > 1.0f ? g_vm_sw_rmax / g_vm_sw_rmed : 0.0f,
+                        g_vm_sw_emin, g_vm_sw_emax, g_vm_sw_amin, g_vm_sw_amax);
+            }
+        } else {
+            float tau = ti == VM_RELOAD ? g_vm_tau_rl : g_vm_tau;
+            g_vm_cur = vm_pose_lerp(g_vm_cur, tgt, dt / (dt + tau));
+        }
+        /* fire kick (ranged) */
+        float k = g_vm_kick_pose >= 0.0f ? g_vm_kick_pose : g_vm_kick;
+        if (g_vm_kick > 0.0f) { g_vm_kick -= dt / g_vm_kick_dur; if (g_vm_kick < 0.0f) g_vm_kick = 0.0f; }
+        VmPose out = g_vm_cur;
+        if (k > 0.0f && g_vm_class == 1) {
+            float e = sinf(fminf(1.0f, k) * 3.14159f * 0.5f);
+            out.p = vm_add(out.p, vm_mul(g_vm_kick_p, e));
+            out.f = vm_add(out.f, vm_v(0, g_vm_kick_up * e, 0)); out = vm_pose_norm(out);
+        }
+        g_vm_target_e = vm_elev_of(out.p); g_vm_target_a = vm_az_of(out.p);
+        /* -> skeleton space */
+        g_vm_tp = vm_w2s_pos(vm_c2w_pos(out.p));
+        g_vm_tf = vm_norm(vm_w2s_dir(vm_c2w_dir(out.f)));
+        g_vm_tu = vm_norm(vm_w2s_dir(vm_c2w_dir(out.u)));
+        if (g_vm_class == 1) {   /* support point on the crossbow: f,u,s weapon numbers */
+            Vec3 s = vm_cross(out.f, out.u);
+            Vec3 c = vm_add(out.p, vm_add(vm_add(vm_mul(out.f, g_vm_sup.x), vm_mul(out.u, g_vm_sup.y)), vm_mul(s, g_vm_sup.z)));
+            g_vm_op = vm_w2s_pos(vm_c2w_pos(c)); g_vm_omode = 1;
+        } else { g_vm_op = vm_w2s_pos(vm_c2w_pos(g_vm_rest)); g_vm_omode = 0; }
+    }
+targets:
+    for (int i = 0; i < 2; i++) g_vm_tpole[i] = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_pole[g_vm_class][i])));
+    g_vm_have_t = g_vm_have_cur;
 }
 
+/* ---- tuning ---- */
+static float *vm_vec_field(Vec3 *v, char c) { return c == 'x' ? &v->x : c == 'y' ? &v->y : c == 'z' ? &v->z : NULL; }
+/* keys: <m|r>_<state>_<p|f|u><x|y|z>, sw<1..4>_<p|f|u><x|y|z>, swu<1..4>, ax_<m|r>_<f|u>, hand_<m|r>,
+ * rest_<xyz>, sup_<xyz>, pole<m|r><L|R>_<xyz>, fire_hold, offnear, aimdist, tau, taurl, tauw, twist, sw_dur, sw_pose, kick_pose,
+ * kick_<xyz>, kick_up, swlog */
+static float *vm_pose_field(VmPose *p, const char *k)   /* k = "px" etc */
+{
+    if (strlen(k) != 2) return NULL;
+    Vec3 *v = k[0] == 'p' ? &p->p : k[0] == 'f' ? &p->f : k[0] == 'u' ? &p->u : NULL;
+    return v ? vm_vec_field(v, k[1]) : NULL;
+}
 static int vm_set(const char *k, float x)
 {
-    for (int i = 0; i < VM_NT; i++) {
-        char e[24], a[24];
-        snprintf(e, sizeof(e), "%s_e", g_vm_tname[i]); snprintf(a, sizeof(a), "%s_a", g_vm_tname[i]);
-        if (!strcmp(k, e)) { g_vm_te[i] = x; return 1; }
-        if (!strcmp(k, a)) { g_vm_ta[i] = x; return 1; }
+    float *fp = NULL;
+    if ((k[0] == 'm' || k[0] == 'r') && k[1] == '_') {
+        int c = k[0] == 'r';
+        for (int i = 0; i < VM_NT; i++) { size_t n = strlen(g_vm_tname[i]);
+            if (!strncmp(k + 2, g_vm_tname[i], n) && k[2+n] == '_') { fp = vm_pose_field(&g_vm_pose[c][i], k + 3 + n); break; } }
+    } else if (!strncmp(k, "sw", 2) && k[2] >= '1' && k[2] <= '0' + VM_SWK && k[3] == '_') fp = vm_pose_field(&g_vm_swk[k[2]-'1'], k + 4);
+    else if (!strncmp(k, "swu", 3) && k[3] >= '1' && k[3] <= '0' + VM_SWK && !k[4]) fp = &g_vm_swk_u[k[3]-'0'];
+    else if (!strncmp(k, "ax_", 3) && (k[3] == 'm' || k[3] == 'r') && k[4] == '_' && (k[5] == 'f' || k[5] == 'u')) {
+        int c = x < 0 ? -(int)(-x + 0.5f) : (int)(x + 0.5f); if (c == 0 || c < -3 || c > 3) return 0;
+        g_vm_ax[k[3] == 'r'][k[5] == 'u'] = c; return 1;
     }
-    if (!strcmp(k, "tau"))    { if (x > 0.01f && x < 2) g_vm_tau = x; return 1; }
-    if (!strcmp(k, "taurl"))  { if (x > 0.01f && x < 3) g_vm_tau_rl = x; return 1; }
-    if (!strcmp(k, "max"))    { g_vm_maxdeg = x; return 1; }
-    if (!strncmp(k, "tilt_", 5)) {
-        for (int i = 0; i < VM_NT; i++) if (!strcmp(k + 5, g_vm_tname[i])) { g_vm_tilt[i] = x; return 1; }
-        return 0;
-    }
-    {   static const char *const swk[6] = { "sw_e0", "sw_a0", "sw_e1", "sw_a1", "sw_t0", "sw_t1" };
-        for (int i = 0; i < 6; i++) if (!strcmp(k, swk[i])) { g_vm_sw[i] = x; return 1; }
-        if (!strcmp(k, "sw_pose")) { g_vm_sw_pose = x; return 1; }
-        if (!strcmp(k, "sw_dur")) { if (x > 0.05f && x < 2) g_vm_sw_dur = x; return 1; } }
-    if (!strcmp(k, "hand"))   { g_vm_hand = x != 0.0f; g_vm_R = (Quat){ 1, 0, 0, 0 }; return 1; }
-    return 0;
+    else if (!strcmp(k, "hand_m")) { g_vm_whand[0] = x != 0.0f; return 1; }
+    else if (!strcmp(k, "hand_r")) { g_vm_whand[1] = x != 0.0f; return 1; }
+    else if (!strcmp(k, "hand"))   { g_vm_whand[0] = g_vm_whand[1] = x != 0.0f; return 1; }
+    else if (!strncmp(k, "rest_", 5)) fp = vm_vec_field(&g_vm_rest, k[5]);
+    else if (!strncmp(k, "sup_", 4)) fp = vm_vec_field(&g_vm_sup, k[4]);
+    else if (!strncmp(k, "pole", 4) && (k[4] == 'm' || k[4] == 'r') && (k[5] == 'L' || k[5] == 'R') && k[6] == '_')
+        fp = vm_vec_field(&g_vm_pole[k[4] == 'r'][k[5] == 'R'], k[7]);
+    else if (!strcmp(k, "fire_hold")) { if (x >= 0 && x < 3) g_vm_fire_hold = x; return 1; }
+    else if (!strncmp(k, "kick_", 5) && k[5] && !k[6]) fp = vm_vec_field(&g_vm_kick_p, k[5]);
+    else if (!strcmp(k, "kick_up")) fp = &g_vm_kick_up;
+    else if (!strcmp(k, "kick_pose")) fp = &g_vm_kick_pose;
+    else if (!strcmp(k, "offnear")) fp = &g_vm_off_near;
+    else if (!strcmp(k, "aimdist")) fp = &g_vm_aim_dist;
+    else if (!strcmp(k, "twist")) fp = &g_vm_twist;
+    else if (!strcmp(k, "sw_pose")) fp = &g_vm_sw_pose;
+    else if (!strcmp(k, "swlog")) { g_vm_sw_log = x != 0.0f; return 1; }
+    else if (!strcmp(k, "tau"))    { if (x > 0.005f && x < 2) g_vm_tau = x; return 1; }
+    else if (!strcmp(k, "taurl"))  { if (x > 0.005f && x < 3) g_vm_tau_rl = x; return 1; }
+    else if (!strcmp(k, "tauw"))   { if (x > 0.005f && x < 3) g_vm_tau_w = x; return 1; }
+    else if (!strcmp(k, "sw_dur")) { if (x > 0.05f && x <= 12) g_vm_sw_dur = x; return 1; }
+    if (!fp) return 0;
+    *fp = x; return 1;
 }
 
 static int vm_ini(const char *line)
 {
-    int v; float fv;
+    int v; float fv; char key[48];
     if (ini_int(line, "viewmodel", &v)) { g_cfg_vm = !!v; return 1; }
-    for (int i = 0; i < VM_NT; i++) {
-        char e[32], a[32];
-        snprintf(e, sizeof(e), "vm_%s_e", g_vm_tname[i]); snprintf(a, sizeof(a), "vm_%s_a", g_vm_tname[i]);
-        if (ini_float(line, e, &fv)) { g_vm_te[i] = fv; return 1; }
-        if (ini_float(line, a, &fv)) { g_vm_ta[i] = fv; return 1; }
-    }
-    if (ini_float(line, "vm_tau", &fv)) { vm_set("tau", fv); return 1; }
-    if (ini_int(line, "vm_hand", &v)) { g_vm_hand = !!v; return 1; }
-    return 0;
+    /* vm_<key>=<v> for any fp_vm set key */
+    if (strncmp(line, "vm_", 3)) return 0;
+    const char *eq = strchr(line, '='); size_t n = eq ? (size_t)(eq - line - 3) : 0;
+    if (!eq || n == 0 || n >= sizeof(key)) return 0;
+    memcpy(key, line + 3, n); key[n] = 0;
+    while (n && (key[n-1] == ' ' || key[n-1] == '\t')) key[--n] = 0;
+    fv = (float)atof(eq + 1);
+    return vm_set(key, fv);
 }
 
 static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
 {
     (void)id; (void)u;
-    char b[900];
+    char b[1400];
     const char *a = argc > 1 ? argv[1] : "state";
     if (!strcmp(a, "on"))  { g_cfg_vm = 1; g_vm_dead = 0; }
     else if (!strcmp(a, "off")) g_cfg_vm = 0;
     else if (!strcmp(a, "set") && argc > 3) {
         if (!vm_set(argv[2], (float)atof(argv[3]))) {
-            r->append(r, "keys: ready_e ready_a aim_e aim_a reload_e reload_a block_e block_a tau taurl max hand(0=L,1=R) tilt_ready tilt_aim tilt_reload tilt_block sw_e0 sw_a0 sw_e1 sw_a1 sw_t0 sw_t1 sw_dur sw_pose(-1 off)");
+            r->append(r, "keys: <m|r>_<ready|aim|reload|block>_<p|f|u><x|y|z> sw<1-4>_<p|f|u><x|y|z> swu<1-4> ax_<m|r>_<f|u> (+-1..3) "
+                         "hand_m hand_r rest_<xyz> sup_<xyz> pole<m|r><L|R>_<xyz> fire_hold offnear aimdist twist tau taurl tauw "
+                         "sw_dur sw_pose(-1 off) kick_pose(-1 off) kick_<xyz> kick_up swlog");
             return KAH_ERROR;
         }
-    } else if (strcmp(a, "state")) { r->append(r, "usage: fp_vm state|on|off|set <key> <value>"); return KAH_ERROR; }
+    } else if (!strcmp(a, "probe")) {
+        /* native (pre-IK) prop + hand axes of both sides in camera numbers */
+        int n = snprintf(b, sizeof(b), "probe nat=%d scale=%.3f", g_vm_nat_ok, g_vm_scale);
+        for (int i = 0; i < 2 && g_vm_nat_ok; i++) {
+            Vec3 pp = vm_w2c_dir(vm_sub(vm_add(g_vm_cmw, vm_s2w_dir(vm_sub(g_vm_npp[i], g_vm_cms))), g_vm_eye));
+            n += snprintf(b + n, sizeof(b) - n, " %c: p=%.2f,%.2f,%.2f", i ? 'R' : 'L', pp.x, pp.y, pp.z);
+            for (int ax = 1; ax <= 3; ax++) {
+                Vec3 c = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(g_vm_npq[i], vm_axis(ax)))));
+                n += snprintf(b + n, sizeof(b) - n, " %c=%.2f,%.2f,%.2f", 'W' + ax, c.x, c.y, c.z);
+            }
+            float dn = g_vm_scale * vm_len(vm_sub(g_vm_nhp[!i], g_vm_npp[i]));
+            n += snprintf(b + n, sizeof(b) - n, " offdist=%.2f", dn);
+        }
+        snprintf(b + n, sizeof(b) - n, " near=%d orel=%d", g_vm_off_near_now, g_vm_have_orel);
+        r->append(r, b); return KAH_OK;
+    } else if (!strcmp(a, "dump")) {
+        int n = 0;
+        for (int c = 0; c < 2; c++) for (int i = 0; i < VM_NT; i++) { VmPose *p = &g_vm_pose[c][i];
+            n += snprintf(b + n, sizeof(b) - n, "%c_%s p=%.2f,%.2f,%.2f f=%.2f,%.2f,%.2f u=%.2f,%.2f,%.2f | ", c ? 'r' : 'm', g_vm_tname[i],
+                          p->p.x, p->p.y, p->p.z, p->f.x, p->f.y, p->f.z, p->u.x, p->u.y, p->u.z); }
+        for (int i = 0; i < VM_SWK; i++) { VmPose *p = &g_vm_swk[i];
+            n += snprintf(b + n, sizeof(b) - n, "sw%d@%.2f p=%.2f,%.2f,%.2f f=%.2f,%.2f,%.2f u=%.2f,%.2f,%.2f | ", i + 1, g_vm_swk_u[i+1],
+                          p->p.x, p->p.y, p->p.z, p->f.x, p->f.y, p->f.z, p->u.x, p->u.y, p->u.z); }
+        snprintf(b + n, sizeof(b) - n, "ax m=%d,%d r=%d,%d hand m=%d r=%d rest=%.1f,%.1f,%.1f sup=%.1f,%.1f,%.1f polemR=%.1f,%.1f,%.1f polerL=%.1f,%.1f,%.1f polerR=%.1f,%.1f,%.1f",
+                 g_vm_ax[0][0], g_vm_ax[0][1], g_vm_ax[1][0], g_vm_ax[1][1], g_vm_whand[0], g_vm_whand[1],
+                 g_vm_rest.x, g_vm_rest.y, g_vm_rest.z, g_vm_sup.x, g_vm_sup.y, g_vm_sup.z,
+                 g_vm_pole[0][1].x, g_vm_pole[0][1].y, g_vm_pole[0][1].z, g_vm_pole[1][0].x, g_vm_pole[1][0].y, g_vm_pole[1][0].z,
+                 g_vm_pole[1][1].x, g_vm_pole[1][1].y, g_vm_pole[1][1].z);
+        r->append(r, b); return KAH_OK;
+    } else if (strcmp(a, "state")) { r->append(r, "usage: fp_vm state|probe|dump|on|off|set <key> <value>"); return KAH_ERROR; }
     snprintf(b, sizeof(b),
-        "vm on=%d hooked=%d dead=%d state=%s hold=%d ang=%.1f elev=%.1f az=%.1f target=%.1f,%.1f basis=%d "
-        "hand=%c lh=%.1f,%.1f rh=%.1f,%.1f melee=%d tilt=%.1f swing=%d swu=%.2f swings=%d "
-        "calls=%lu applied=%lu reuse=%lu frames=%lu "
-        "ready=%.0f,%.0f aim=%.0f,%.0f reload=%.0f,%.0f block=%.0f,%.0f tau=%.2f max=%.0f",
-        g_cfg_vm, g_vm_hooked, g_vm_dead, g_vm_state, g_vm_hold, g_vm_ang, g_vm_elev, g_vm_az,
-        g_vm_target_e, g_vm_target_a, g_vm_basis_ok,
-        g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_melee, g_vm_tilt_cur, g_vm_swing, g_vm_swu, g_vm_swings, g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_frames,
-        g_vm_te[0], g_vm_ta[0], g_vm_te[1], g_vm_ta[1], g_vm_te[2], g_vm_ta[2], g_vm_te[3], g_vm_ta[3],
-        g_vm_tau, g_vm_maxdeg);
+        "vm on=%d hooked=%d dead=%d state=%s hold=%d w=%.2f class=%s elev=%.1f az=%.1f target=%.1f,%.1f basis=%d "
+        "hand=%c lh=%.1f,%.1f rh=%.1f,%.1f melee=%d tilt=%.1f swing=%d swu=%.2f swings=%d sw_maxstep=%.1f "
+        "sw_ratio=%.2f sw_elev=%.1f,%.1f sw_az=%.1f,%.1f kicks=%d kick=%.2f fire=%.2f mp=%.2f,%.2f,%.2f mf=%.2f,%.2f,%.2f mu=%.2f,%.2f,%.2f tp=%.2f,%.2f,%.2f tf=%.2f,%.2f,%.2f "
+        "near=%d calls=%lu applied=%lu reuse=%lu ikfail=%lu frames=%lu zoom=%.2f",
+        g_cfg_vm, g_vm_hooked, g_vm_dead, g_vm_state, g_vm_hold, g_vm_w, g_vm_class ? "ranged" : "melee",
+        g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_basis_ok,
+        g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_melee, g_vm_tilt_cur,
+        g_vm_swing, g_vm_swu, g_vm_swings, g_vm_sw_maxstep, g_vm_sw_rmed > 1.0f ? g_vm_sw_rmax / g_vm_sw_rmed : 0.0f,
+        g_vm_sw_emin, g_vm_sw_emax, g_vm_sw_amin, g_vm_sw_amax,
+        g_vm_kicks, g_vm_kick, g_vm_fire_t, g_vm_mp.x, g_vm_mp.y, g_vm_mp.z, g_vm_mf.x, g_vm_mf.y, g_vm_mf.z, g_vm_mu.x, g_vm_mu.y, g_vm_mu.z,
+        g_vm_cur.p.x, g_vm_cur.p.y, g_vm_cur.p.z, g_vm_cur.f.x, g_vm_cur.f.y, g_vm_cur.f.z,
+        g_vm_off_near_now, g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_ikfail, g_vm_frames, g_view.applied);
     r->append(r, b);
     return KAH_OK;
 }
