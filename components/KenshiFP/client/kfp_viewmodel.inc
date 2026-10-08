@@ -31,8 +31,8 @@ typedef void (*osi_setanim_t)(void *skel, const void *stateset, float w, const v
 enum { VM_READY, VM_AIM, VM_RELOAD, VM_BLOCK, VM_NT };
 static const char *const g_vm_tname[VM_NT] = { "ready", "aim", "reload", "block" };
 /* weapon-hand target in the view, degrees: elevation (down<0), azimuth (right>0) */
-static float g_vm_te[VM_NT] = { -24.0f, -9.0f, -26.0f, -10.0f };
-static float g_vm_ta[VM_NT] = {  16.0f,  5.0f,   8.0f,   6.0f };
+static float g_vm_te[VM_NT] = { -28.0f, -9.0f, -26.0f, -16.0f };
+static float g_vm_ta[VM_NT] = {  16.0f,  5.0f,   8.0f,  12.0f };
 static osi_setanim_t g_vm_setanim_orig;
 static int   g_cfg_vm = 1;                  /* ini viewmodel=0|1 */
 static float g_vm_tau      = 0.12f;         /* seconds: approach time constant */
@@ -52,6 +52,20 @@ static int   g_vm_have_written[2];
 static unsigned char g_vm_nm_arm[2][32], g_vm_nm_clav[2][32], g_vm_nm_spine[32], g_vm_nm_hand[2][32];
 static int   g_vm_hand = 1;                 /* tracked weapon hand: 0 = L, 1 = R (fp_vm set hand, ini vm_hand) */
 static float g_vm_he[2], g_vm_ha[2];       /* both hands in the view (deg, diag) */
+/* wrist tilt (melee only): extra rotation of the weapon hand about the camera-right axis so a one-handed
+ * blade rises out of the view ray instead of pointing straight away (end-on, unreadable). */
+static float g_vm_tilt[VM_NT] = { 25.0f, 0.0f, 0.0f, 30.0f };
+static float g_vm_tilt_cur;                 /* smoothed, deg */
+static Vec3  g_vm_tilt_ax;                  /* camera-right in skeleton space */
+static int   g_vm_melee;                    /* weapon in hands is not the ranged weapon */
+static Quat  g_vm_hbq, g_vm_hwq; static int g_vm_h_written;
+/* PT14: procedural melee swing -- the native free/combat swing barely moves the blade in the view, so while
+ * "swinging" the hand target runs an arc (start -> end, eased) and the wrist tilt sweeps with it. */
+static float g_vm_sw[6] = { -8.0f, 24.0f, -30.0f, -12.0f, 50.0f, -20.0f };   /* e0 a0 e1 a1 tilt0 tilt1 */
+static float g_vm_sw_dur = 0.35f, g_vm_swt, g_vm_swu;
+static int   g_vm_swing, g_vm_swings;
+static float g_vm_sw_pose = -1.0f;          /* test: >=0 freezes the swing arc at this u while ready */
+static float g_fpc_fs_prog;                 /* tentative decl; defined in kfp_controls.inc (free-swing anim progress 0..1) */
 static int   g_vm_names;
 
 static const char *g_fpc_ui_state;          /* tentative decl; defined in kfp_controls.inc */
@@ -128,6 +142,21 @@ static void vm_apply(void *skel)
         g_oldnode_needupd(b[i], 1);
         g_vm_wq[i] = nq; g_vm_wp[i] = lv; g_vm_have_written[i] = 1;
     }
+    if (fabsf(g_vm_tilt_cur) > 0.05f && vm_len(g_vm_tilt_ax) > 0.5f) {
+        void *hb = g_skel_getbone(skel, g_vm_nm_hand[g_vm_hand ? 1 : 0]);
+        void *hp = readable(hb, 8) ? g_oldnode_getparent(hb) : NULL;
+        const Quat *hq = readable(hb, 8) ? g_oldnode_getori(hb) : NULL;
+        const Quat *hdq = readable(hp, 8) ? g_oldnode_getdori(hp) : NULL;   /* lazily updated after our arm write */
+        if (readable((void *)hq, 16) && readable((void *)hdq, 16)) {
+            Quat q = *hq;
+            if (g_vm_h_written && !memcmp(&q, &g_vm_hwq, sizeof(Quat))) q = g_vm_hbq;
+            g_vm_hbq = q;
+            Quat T = vm_axis_angle(g_vm_tilt_ax, g_vm_tilt_cur * 0.0174533f);
+            Quat nq = quat_norm(quat_mul(quat_mul(quat_mul(quat_conj(*hdq), T), *hdq), q));
+            g_oldnode_setori(hb, &nq); g_oldnode_needupd(hb, 1);
+            g_vm_hwq = nq; g_vm_h_written = 1;
+        }
+    } else g_vm_h_written = 0;
     g_vm_applied++;
 }
 
@@ -196,14 +225,35 @@ static void vm_frame(void *pc, int body_down)
 
     const char *st = g_fpc_ui_state ? g_fpc_ui_state : "off";
     int ti = -1, hold = 0, on = 1;
+    int was_swing = g_vm_swing; g_vm_swing = 0;
     if      (!strcmp(st, "ready"))      ti = VM_READY;
     else if (!strcmp(st, "aiming"))     ti = VM_AIM;
     else if (!strcmp(st, "reloading"))  ti = VM_RELOAD;
     else if (!strcmp(st, "blocking"))   ti = VM_BLOCK;
-    else if (!strcmp(st, "swinging") || !strcmp(st, "staggered") || !strcmp(st, "recovering")) hold = 1;
+    else if (!strcmp(st, "swinging"))   { ti = VM_READY; g_vm_swing = 1; }
+    else if (!strcmp(st, "recovering")) {    /* "swinging" lasts ~0.1 s; the swing anim runs on through recovering */
+        ti = VM_READY;
+        int fs_run = g_fpc_fs_prog > 0.0f && g_fpc_fs_prog < 1.0f;
+        int fs_stale = !(g_fpc_fs_prog > 0.0f && g_fpc_fs_prog <= 1.0f);
+        if (was_swing && (fs_run || (fs_stale && g_vm_swt < g_vm_sw_dur))) g_vm_swing = 1;
+    }
+    else if (!strcmp(st, "staggered"))  hold = 1;
     else on = 0;                                       /* holstered/down/off/none */
     if (!g_cfg_vm || !g_fp_mode || !pc || body_down || !g_have_eye) on = 0;
+    int posed = g_vm_sw_pose >= 0.0f && ti == VM_READY && !g_vm_swing;
+    if (posed) g_vm_swing = 1;
     g_vm_state = st; g_vm_hold = hold;
+    /* arc progress: the free swing's own anim progress when it advances (game time, any game speed), else
+     * real time over sw_dur (native combat swings) */
+    if (g_vm_swing) {
+        if (!was_swing) { g_vm_swt = 0.0f; g_vm_swings++; }
+        else g_vm_swt += dt;
+        float pu = g_fpc_fs_prog > 0.0f && g_fpc_fs_prog <= 1.0f ? g_fpc_fs_prog : -1.0f;
+        g_vm_swu = posed ? fminf(1.0f, g_vm_sw_pose) : pu >= 0.0f ? pu : fminf(1.0f, g_vm_swt / g_vm_sw_dur);
+    } else {
+        if (was_swing) logline("[vm] swing #%lu %.2fs u_end=%.2f prog=%.2f", (unsigned long)g_vm_swings, g_vm_swt, g_vm_swu, g_fpc_fs_prog);
+        g_vm_swt = g_vm_swu = 0.0f;
+    }
 
     void *skel = NULL;
     if (pc) {
@@ -256,6 +306,11 @@ static void vm_frame(void *pc, int body_down)
     if (!on) { vm_ease_off(dt); return; }
     if (hold) return;
     g_vm_target_e = g_vm_te[ti]; g_vm_target_a = g_vm_ta[ti];
+    if (g_vm_swing && g_vm_melee) {
+        float u = g_vm_swu * g_vm_swu * (3.0f - 2.0f * g_vm_swu);
+        g_vm_target_e = g_vm_sw[0] + (g_vm_sw[2] - g_vm_sw[0]) * u;
+        g_vm_target_a = g_vm_sw[1] + (g_vm_sw[3] - g_vm_sw[1]) * u;
+    }
 
     /* skeleton <-> world basis (lateral = clavicle line, up = spine -> clavicle midpoint) */
     Vec3 ew[3], es[3];
@@ -263,6 +318,20 @@ static void vm_frame(void *pc, int body_down)
     g_vm_basis_ok = vm_basis(vm_sub(cw[1], cw[0]), vm_sub(cmw, spw), ew)
                  && vm_basis(vm_sub(cs[1], cs[0]), vm_sub(cms, sps), es);
     if (!g_vm_basis_ok) return;
+    {   /* tilt: camera-right mapped into skeleton space; melee = weapon in hands is not the ranged weapon */
+        Vec3 rb = { vm_dot(rt, ew[0]), vm_dot(rt, ew[1]), vm_dot(rt, ew[2]) };
+        g_vm_tilt_ax = vm_add(vm_add(vm_mul(es[0], rb.x), vm_mul(es[1], rb.y)), vm_mul(es[2], rb.z));
+        void *wih = readable((void *)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS), 8) ? *(void **)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS) : NULL;
+        void **vt = readable(pc, 8) ? *(void ***)pc : NULL;
+        void *rw = readable((void *)((uintptr_t)vt + 0x3D0), 8) ? ((void *(*)(void *))vt[0x3D0/8])(pc) : NULL;
+        g_vm_melee = wih && wih != rw;
+        float tt = g_vm_melee ? g_vm_tilt[ti] : 0.0f;
+        if (g_vm_swing && g_vm_melee) {
+            float u = g_vm_swu * g_vm_swu * (3.0f - 2.0f * g_vm_swu);
+            tt = g_vm_sw[4] + (g_vm_sw[5] - g_vm_sw[4]) * u;
+        }
+        g_vm_tilt_cur += (tt - g_vm_tilt_cur) * (dt / (dt + g_vm_tau));
+    }
 
     /* target ray from the eye; point on it at the hand's current reach from the shoulder midpoint */
     float te = g_vm_target_e * 0.0174533f, ta = g_vm_target_a * 0.0174533f;
@@ -283,7 +352,7 @@ static void vm_frame(void *pc, int body_down)
     float sn = vm_len(ax), cs_ = vm_dot(a1, a2);
     if (sn < 1e-5f) return;
     float ang = atan2f(sn, cs_);
-    float tau = ti == VM_RELOAD ? g_vm_tau_rl : g_vm_tau;
+    float tau = ti == VM_RELOAD ? g_vm_tau_rl : (g_vm_swing && g_vm_melee) ? 0.03f : g_vm_tau;
     ang *= dt / (dt + tau);
     Vec3 k = vm_mul(ax, 1.0f / sn);
     Vec3 kb = { vm_dot(k, ew[0]), vm_dot(k, ew[1]), vm_dot(k, ew[2]) };
@@ -305,6 +374,14 @@ static int vm_set(const char *k, float x)
     if (!strcmp(k, "tau"))    { if (x > 0.01f && x < 2) g_vm_tau = x; return 1; }
     if (!strcmp(k, "taurl"))  { if (x > 0.01f && x < 3) g_vm_tau_rl = x; return 1; }
     if (!strcmp(k, "max"))    { g_vm_maxdeg = x; return 1; }
+    if (!strncmp(k, "tilt_", 5)) {
+        for (int i = 0; i < VM_NT; i++) if (!strcmp(k + 5, g_vm_tname[i])) { g_vm_tilt[i] = x; return 1; }
+        return 0;
+    }
+    {   static const char *const swk[6] = { "sw_e0", "sw_a0", "sw_e1", "sw_a1", "sw_t0", "sw_t1" };
+        for (int i = 0; i < 6; i++) if (!strcmp(k, swk[i])) { g_vm_sw[i] = x; return 1; }
+        if (!strcmp(k, "sw_pose")) { g_vm_sw_pose = x; return 1; }
+        if (!strcmp(k, "sw_dur")) { if (x > 0.05f && x < 2) g_vm_sw_dur = x; return 1; } }
     if (!strcmp(k, "hand"))   { g_vm_hand = x != 0.0f; g_vm_R = (Quat){ 1, 0, 0, 0 }; return 1; }
     return 0;
 }
@@ -333,18 +410,18 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
     else if (!strcmp(a, "off")) g_cfg_vm = 0;
     else if (!strcmp(a, "set") && argc > 3) {
         if (!vm_set(argv[2], (float)atof(argv[3]))) {
-            r->append(r, "keys: ready_e ready_a aim_e aim_a reload_e reload_a block_e block_a tau taurl max hand(0=L,1=R)");
+            r->append(r, "keys: ready_e ready_a aim_e aim_a reload_e reload_a block_e block_a tau taurl max hand(0=L,1=R) tilt_ready tilt_aim tilt_reload tilt_block sw_e0 sw_a0 sw_e1 sw_a1 sw_t0 sw_t1 sw_dur sw_pose(-1 off)");
             return KAH_ERROR;
         }
     } else if (strcmp(a, "state")) { r->append(r, "usage: fp_vm state|on|off|set <key> <value>"); return KAH_ERROR; }
     snprintf(b, sizeof(b),
         "vm on=%d hooked=%d dead=%d state=%s hold=%d ang=%.1f elev=%.1f az=%.1f target=%.1f,%.1f basis=%d "
-        "hand=%c lh=%.1f,%.1f rh=%.1f,%.1f "
+        "hand=%c lh=%.1f,%.1f rh=%.1f,%.1f melee=%d tilt=%.1f swing=%d swu=%.2f swings=%d "
         "calls=%lu applied=%lu reuse=%lu frames=%lu "
         "ready=%.0f,%.0f aim=%.0f,%.0f reload=%.0f,%.0f block=%.0f,%.0f tau=%.2f max=%.0f",
         g_cfg_vm, g_vm_hooked, g_vm_dead, g_vm_state, g_vm_hold, g_vm_ang, g_vm_elev, g_vm_az,
         g_vm_target_e, g_vm_target_a, g_vm_basis_ok,
-        g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_frames,
+        g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_melee, g_vm_tilt_cur, g_vm_swing, g_vm_swu, g_vm_swings, g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_frames,
         g_vm_te[0], g_vm_ta[0], g_vm_te[1], g_vm_ta[1], g_vm_te[2], g_vm_ta[2], g_vm_te[3], g_vm_ta[3],
         g_vm_tau, g_vm_maxdeg);
     r->append(r, b);
