@@ -1284,6 +1284,7 @@ static void fp_controls_tick(void *gw,float dt);
 static void fp_controls_init(void);
 static int kah_fp_keys(const char *,int,const char *const *,KAH_Reply *,void *);
 static void fpc_hud_update(int show);
+static void fpc_ctl_menu_update(void *gw);   /* PT20 Control button */
 static const char *g_fpc_ui_state;   /* tentative: defined in kfp_controls.inc */
 static int g_cfg_state_hud = 1;      /* state_hud: FP combat state label under the crosshair */
 static int g_prev_fp;             /* g_fp_mode from last frame (camera_lock edge) */
@@ -7087,6 +7088,7 @@ static void fp_gui_update(void)
             if (g_sneak_icon) g_widget_setvisible(g_sneak_icon, 0);
         }
         fpc_hud_update(0);
+        fpc_ctl_menu_update(g_gw_cache);   /* PT20: hides the Control button outside FP */
         g_down_blend = 0.0f;   /* reset the KO fade so re-entering FP doesn't flash */
         prev_fp = 0;
         return;
@@ -7108,6 +7110,7 @@ static void fp_gui_update(void)
     if (g_crosshair && g_widget_setvisible)
         g_widget_setvisible(g_crosshair, (g_pointer_default && !g_ui_open) ? 1 : 0);
     fpc_hud_update(g_cfg_state_hud && g_crosshair && g_pointer_default && !g_ui_open);
+    fpc_ctl_menu_update(g_gw_cache);       /* PT20: "Control" next to the native context menu on a squad mate */
 
     /* Screen-space sneak eye: shown only while sneaking (state set per-frame from
      * the followed character), tinted by detection at ~50% alpha, hidden in menus. */
