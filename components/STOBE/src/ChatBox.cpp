@@ -1598,6 +1598,65 @@ Character *ResolveConfiguredPlayerSpeaker(GameWorld *world, Character *target) {
   return primary;
 }
 
+// Items 135/136: the squad member KenshiFP controls in first person (NULL outside FP).
+// Uses KenshiFP's export KenshiFP_ControlledCharacter when present; until then the
+// squad member whose head the camera sits in (FP eye ~1.7 above the feet).
+typedef void *(*StobeFpActorFn)(void);
+Character *StobeFpControlledCharacter(GameWorld *world) {
+  if (!world || !world->player)
+    return nullptr;
+  HMODULE fp = GetModuleHandleA("KenshiFP.dll");
+  if (!fp)
+    return nullptr;
+  static StobeFpActorFn exported = nullptr;
+  static HMODULE exportedFrom = nullptr;
+  if (exportedFrom != fp) {
+    exportedFrom = fp;
+    exported = (StobeFpActorFn)GetProcAddress(fp, "KenshiFP_ControlledCharacter");
+  }
+  unsigned int count = world->player->playerCharacters.size();
+  if (count > 256)
+    return nullptr;
+  if (exported) {
+    void *p = exported();
+    if (!p)
+      return nullptr;
+    for (unsigned int i = 0; i < count; ++i)
+      if ((void *)world->player->playerCharacters[i] == p)
+        return world->player->playerCharacters[i];
+    return nullptr;
+  }
+  Ogre::Vector3 cam;
+  try {
+    cam = world->getCameraPos();
+  } catch (...) {
+    return nullptr;
+  }
+  Character *best = nullptr;
+  float bestD = 1.5f;
+  for (unsigned int i = 0; i < count; ++i) {
+    Character *c = world->player->playerCharacters[i];
+    if (!c || (uintptr_t)c <= 0x1000)
+      continue;
+    Ogre::Vector3 p;
+    try {
+      p = c->getPosition();
+    } catch (...) {
+      continue;
+    }
+    float dy = cam.y - p.y;
+    if (dy < 0.4f || dy > 3.0f)
+      continue;
+    float dx = cam.x - p.x, dz = cam.z - p.z;
+    float h = sqrtf(dx * dx + dz * dz);
+    if (h < bestD) {
+      bestD = h;
+      best = c;
+    }
+  }
+  return best;
+}
+
 Character *ResolveSelectedOrConfiguredPlayerSpeaker(GameWorld *world,
                                                     Character *target) {
   if (!g_chatSpeakerHandleOverride.empty()) {
@@ -1610,6 +1669,15 @@ Character *ResolveSelectedOrConfiguredPlayerSpeaker(GameWorld *world,
           return requested;
       } catch (...) {
       }
+    }
+  }
+  // Item 136: in first person the controlled character speaks, not the selected one.
+  Character *fpActor = StobeFpControlledCharacter(world);
+  if (fpActor && fpActor != target) {
+    try {
+      if (!IsCharacterUnavailableForConversation(fpActor))
+        return fpActor;
+    } catch (...) {
     }
   }
   Character *selected = ResolveSelectedChatSpeaker(world);

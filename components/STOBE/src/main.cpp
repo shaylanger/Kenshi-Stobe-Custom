@@ -14506,12 +14506,37 @@ static bool NpcPanelChatPair(GameWorld *world, Character *sel, Character *&speak
   return target != nullptr;
 }
 
+// Item 135: inside the squad the card is the SELECTED member's, seen by the controlled one
+// (KenshiFP's character in first person, else the other side of the chat). Chats with an
+// outsider keep the chat target's card.
+namespace Stobe { namespace UI { Character *StobeFpControlledCharacter(GameWorld *world); } }
+using Stobe::UI::StobeFpControlledCharacter;
+static bool NpcPanelPair(GameWorld *world, Character *sel, Character *&speaker,
+                         Character *&target) {
+  if (!NpcPanelChatPair(world, sel, speaker, target))
+    return false;
+  try {
+    if (sel && (uintptr_t)sel > 0x1000 && sel->isPlayerCharacter() &&
+        target->isPlayerCharacter()) {
+      Character *observer = StobeFpControlledCharacter(world);
+      if (!observer || observer == sel)
+        observer = (target != sel) ? target : speaker;
+      if (observer && observer != sel) {
+        speaker = observer;
+        target = sel;
+      }
+    }
+  } catch (...) {
+  }
+  return true;
+}
+
 // Per tick: chat Info button, follow the chat target, Refresh button, periodic refresh.
 static void NpcPanelTick(GameWorld *world, Character *sel) {
   if (Stobe::UI::g_npcPanelOpenRequest) {
     Stobe::UI::g_npcPanelOpenRequest = false;
     Character *speaker = nullptr, *target = nullptr;
-    if (NpcPanelChatPair(world, sel, speaker, target))
+    if (NpcPanelPair(world, sel, speaker, target))
       NpcPanelOpenFor(world, speaker, target, "chat_info_button");
     else if (!NpcPanelOpenForSelection(world, sel, "chat_info_button_selection"))
       Log("NPC_PANEL: Info pressed but no conversation target");
@@ -14519,7 +14544,7 @@ static void NpcPanelTick(GameWorld *world, Character *sel) {
   if (!Stobe::UI::IsNpcPanelOpen())
     return;
   Character *speaker = nullptr, *target = nullptr;
-  if (NpcPanelChatPair(world, sel, speaker, target)) {
+  if (NpcPanelPair(world, sel, speaker, target)) {
     std::string speakerName;
     try {
       speakerName = speaker ? speaker->getName() : std::string("");
@@ -15132,6 +15157,15 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
     if (Stobe::Voice::IsRecording())
       Stobe::Voice::Cancel();
   } else if (pushToTalkDown && !pushToTalkWasDown &&
+             MyGUI::InputManager::getInstance().isFocusKey()) {
+    // Item 145: V typed into the chat box (or any text field) is a letter, not push-to-talk
+    // (Shay's 2026-10-07 session: 120 "Hold push-to-talk longer" rejections of ~70 ms taps).
+    static DWORD lastTypedLog = 0;
+    if (GetTickCount() - lastTypedLog > 60000) {
+      lastTypedLog = GetTickCount();
+      Log("STT_CAPTURE: push-to-talk key ignored while a text field has focus");
+    }
+  } else if (pushToTalkDown && !pushToTalkWasDown &&
              !IsAnyStobeMenuUIOpen()) {
     std::string voiceMode = Stobe::ChatMode::Normalize(g_chatMode);
     bool narratorMode = (voiceMode == "narrator");
@@ -15151,6 +15185,16 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
                worldUi->player->playerCharacters.size() > 0) {
       speaker = worldUi->player->playerCharacters[0];
       target = ResolveNearestNpcTargetForSelection(worldUi, speaker);
+    }
+    // Item 136: in first person the controlled character speaks; a selected squad mate
+    // is who she talks to.
+    Character *fpSpeaker = StobeFpControlledCharacter(worldUi);
+    if (fpSpeaker && fpSpeaker != speaker) {
+      speaker = fpSpeaker;
+      if (selectedIsPlayer && sel != fpSpeaker)
+        target = sel;
+      else if (!target || target == fpSpeaker)
+        target = ResolveNearestNpcTargetForSelection(worldUi, speaker);
     }
 
     bool targetIsAnimal = target && IsAnimalCharacterSafe(target);
@@ -15489,7 +15533,7 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
         Stobe::UI::CloseNpcPanelUI();
       } else {
         Character *chatSpeaker = nullptr, *chatTarget = nullptr;
-        if (NpcPanelChatPair(world, sel, chatSpeaker, chatTarget))
+        if (NpcPanelPair(world, sel, chatSpeaker, chatTarget))
           NpcPanelOpenFor(world, chatSpeaker, chatTarget, "hotkey_chat");
         else if (!NpcPanelOpenForSelection(world, sel, "hotkey"))
           Log("NPC_PANEL: hotkey pressed but no conversation target");
