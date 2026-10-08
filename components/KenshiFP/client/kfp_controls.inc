@@ -69,7 +69,8 @@ static int g_fpc_ctx_freed, g_fpc_ctx_relock;   /* context menu freed the cursor
 static int g_fpc_ctx_skip_rrel, g_fpc_ctx_hold_done;   /* PT06: menu opened on an RMB hold (its own release must not relock) */
 static unsigned g_fpc_ctx_hold_opens, g_fpc_ctx_tap_opens;
 static double g_fpc_ctx_ms;
-static unsigned g_fpc_ctx_keep_frames;   /* PT06/PT20: frames the FP menu was kept open (RMB fed as held) */
+static unsigned g_fpc_ctx_keep_frames,g_fpc_ctx_tap_refused;
+static const char *g_fpc_ctx_why="none";   /* PT20: last RMB menu attempt: opened / why not */   /* PT06/PT20: frames the FP menu was kept open (RMB fed as held) */
 static unsigned char (*fpc_ctl_getvis(void))(void *);
 /* PT06/PT20 (m54): the game's ContextMenu::update (called at the end of playerControl) keeps the menu only while the
  * button that opened it is held: ContextMenu+0 = "opened with RMB held" (showContextMenu copies InputHandler mRight);
@@ -644,6 +645,11 @@ static void fp_controls_tick(void *gw,float dt) {
         if (edge[b]) g_fpc_down_ms[b]=now;
         g_fpc_prev[b]=in[b];g_fpc_input[b]=in[b];
     }
+    {   /* PT20 (m58): an RMB press the controls never see (UI open / no focus) is logged once per press */
+        static int raw_prev;int raw=fpc_button(FPC_RMB,phys_ok);
+        if (raw && !raw_prev && g_ui_open) logline("[controls] RMB press ignored: ui_open=1 (phys_ok=%d)",phys_ok);
+        raw_prev=raw;
+    }
     if (g_fpc_pick_req && pc) {g_fpc_pick_req=0;fpc_crosshair_char(pc);}   /* fp_keys pick (test) */
     g_fpc_sneak_now=fpc_is_sneaking(pc);
     if (g_fpc_sneak_req) {g_fpc_sneak_req=0;fpc_sneak_probe(pc);}           /* fp_keys sneak (test) */
@@ -673,6 +679,15 @@ static void fp_controls_tick(void *gw,float dt) {
                 if (rel[FPC_RMB] && !g_fpc_ctx_hold_done && now-g_fpc_down_ms[FPC_RMB]<FPC_MENU_CLICK_MS) ctx=1;
                 else if (in[FPC_RMB] && !g_fpc_ctx_hold_done && now-g_fpc_down_ms[FPC_RMB]>=FPC_MENU_CLICK_MS) {ctx=1;hold_open=1;}
             }
+            /* PT20 (m58): a tap that opens nothing says why (drawn weapon = block/aim, menu already up, hold used) */
+            if (rel[FPC_RMB] && !ctx) {   /* every RMB release that opens nothing is logged (also: input did arrive) */
+                int tap=now-g_fpc_down_ms[FPC_RMB]<FPC_MENU_CLICK_MS;
+                g_fpc_ctx_why=g_fpc_drawn?(g_fpc_ranged?"drawn_ranged_aim":"drawn_melee_block"):g_fpc_ctx_freed?"menu_already_open":
+                              tap?"hold_done":"hold_already_tried";
+                if (tap) ++g_fpc_ctx_tap_refused;
+                logline("[controls] RMB %s (%.0f ms) opened no menu: %s (drawn=%d ranged=%d ctx_freed=%d phys_ok=%d)",
+                        tap?"tap":"hold",now-g_fpc_down_ms[FPC_RMB],g_fpc_ctx_why,g_fpc_drawn,g_fpc_ranged,g_fpc_ctx_freed,phys_ok);
+            }
             if (in[FPC_RMB] && now-g_fpc_down_ms[FPC_RMB]>=FPC_MENU_CLICK_MS) g_fpc_ctx_hold_done=1;   /* one try per hold */
         } else ctx=edge[FPC_INT];
         if (ctx && g_fpc_ctxmenu) {
@@ -686,7 +701,10 @@ static void fp_controls_tick(void *gw,float dt) {
                 if (hold_open) ++g_fpc_ctx_hold_opens; else ++g_fpc_ctx_tap_opens;
                 fpc_name(t,g_fpc_last_target,sizeof g_fpc_last_target);
                 logline("[controls] RMB context menu %s via=%s",g_fpc_last_target,hold_open?"hold":"tap");
-            } else ++g_fpc_ctx_none;
+                g_fpc_ctx_why="opened";
+            } else {++g_fpc_ctx_none;g_fpc_ctx_why=t?"no_player_interface":"nothing_under_crosshair";
+                    char pb[512];fpc_pick_text(pb,sizeof pb);
+                    logline("[controls] RMB %s opened no menu: %s (%s)",hold_open?"hold":"tap",g_fpc_ctx_why,pb);}
         }
         /* PT10 (Shay 2026-10-07): LMB swings; it gives the native attack order only to a non-squad character within
          * melee reach (a far NPC facing away used to turn and fight; a squad mate under the crosshair started a
@@ -739,7 +757,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u ctx_why=%s ctx_tap_refused=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -750,7 +768,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
         g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self,g_fpc_hud_flashes,g_fpc_hud_silent,g_fp_carried,g_is_down,g_spd_changes,g_spd_long_frames,g_spd_clicks,g_spd_peak_click,g_spd_last,g_fpc_ctx_keep_frames,
         g_fpc_ctx_hook_ok,g_fpc_ctx_game_shows,g_fpc_ctx_game_hides,g_fpc_ctx_reshow_blocked,g_fpc_ctx_closes,g_fpc_ctx_close_where,
-        g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva,g_fpc_ctxupd_hook_ok,g_fpc_ctxupd_addr,g_fpc_ctxupd_calls,g_fpc_ctxupd_fed,g_fpc_ctxupd_req);
+        g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva,g_fpc_ctxupd_hook_ok,g_fpc_ctxupd_addr,g_fpc_ctxupd_calls,g_fpc_ctxupd_fed,g_fpc_ctxupd_req,g_fpc_ctx_why,g_fpc_ctx_tap_refused);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
 static int fpc_btn_index(const char *s) {
