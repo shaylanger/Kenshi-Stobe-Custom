@@ -1260,6 +1260,7 @@ static void fp_melee_hold_ground(void *);
 static void fp_melee_observe_swing(void *,float);
 static int kah_fp_melee(const char *,int,const char *const *,KAH_Reply *,void *);
 static int fp_combat_suppress_shot(void *,void *);
+static unsigned g_fp_ctl_shoot_calls;   /* PT18: GunClass::shoot calls (not suppressed) by the FP-controlled char */
 static int install_hook(void *,void *,void **);
 static int kah_fp_combat(const char *,int,const char *const *,KAH_Reply *,void *);
 static void fp_view_input(void);
@@ -7762,6 +7763,7 @@ static gun_shoot_t g_gun_shoot_orig;
 static void hooked_gun_shoot(void *gun, void *me, void *target, int stat, const Vec3 *aimpos)
 {
     if (fp_combat_suppress_shot(gun,me)) return;
+    if (me && me == g_fp_control_actor) ++g_fp_ctl_shoot_calls;
     Vec3 aim;
     if (g_fp_mode && g_cfg_freeaim && !g_aim_mode && me && me == g_fp_control_actor && fp_aim_point(&aim)) {
         aimpos = &aim;

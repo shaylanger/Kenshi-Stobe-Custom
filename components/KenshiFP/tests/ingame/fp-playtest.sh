@@ -41,7 +41,10 @@
 #            speed_clicks +N, gui_hook=1 and gui_swallowed +N (no press reached the GUI)
 #  PT11      bow only, holstered, manual combat physical: RMB hold -> nothing drawn (drawn=0 wih=0), combat draws and
 #            reload_starts unchanged, fp_combat why=ranged_holstered
-#  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts, ammo same), still holstered after RMB up
+#  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts same; the
+#            crossbow item's loaded bolts (fp_combat loaded=, read in or out of hands) same, >=1 before; ctl_shots (any
+#            GunClass::shoot by the FP char) same; inventory Bolts same), still holstered after RMB up; R draws again ->
+#            still loaded (no bolt lost while holstered)
 #  PT31      after a physical R holster, R draw + RMB aim (why=ok aimed=1) + physical LMB = one shot (actual_shots +1)
 #  PT15      3 manual shots (injected aim/fire): spread_n +3, spread_cone = formula from spread_skill/spread_per,
 #            spread_off <= cone, "[combat] spread" log lines
@@ -71,6 +74,8 @@ ctl() { A fp_control state | fld "$1"; }
 fps() { A fp_state | fld "$1"; }
 ks() { A fp_keys state | fld "$1"; }
 cs() { A fp_combat state | fld "$1"; }
+# inventory bolts of $1 (every 'Bolts ...' stack summed; m46: shots don't use the stack up, so this proves no bolt went back/away)
+bolt_n() { A inv "$1" | grep -o '"name":"Bolts[^"]*","count":[0-9]*' | grep -o '[0-9]*$' | awk '{n+=$1} END{print n+0}'; }
 id_of() { A where "$1" | grep -o '#[0-9]*' | head -1 | tr -d '#'; }
 pos() { A where "$1" | grep -o 'pos=[^ ]*' | cut -d= -f2 | tr ',' ' '; }
 isko() { A where "$1" | grep -qE ' (KO|DEAD)( |$)'; }
@@ -611,10 +616,20 @@ toggles 1; take "$MT" >/dev/null; take "$SH" >/dev/null
 # ---- PT18: R only draws/holsters the crossbow ----
 if want PT18; then if [ $BOWOK = 0 ]; then row PT18 FAIL "setup: no crossbow on $SH"; else
   draw_to 0; sky; C0=$(A fp_combat state); D0=$(ks r_draws); rkey; waitf 4 kis drawn 1; waitf 6 kis ranged 1; sleep 2; C1=$(A fp_combat state); K1=$(A fp_keys state)
-  mdown right; sleep 1; waitf 12 csis reloading 0; C2=$(A fp_combat state); H0=$(ks r_holsters); rkey; waitf 4 kis drawn 0; sleep 0.8; C3=$(A fp_combat state); K3=$(A fp_keys state); mup right; sleep 0.5; K4=$(A fp_keys state)
-  ev="R draw: r_draws $D0->$(fld r_draws <<<"$K1") ranged=$(fld ranged <<<"$K1") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C1") (2 s, no aim) | aim+R: drawn=$(fld drawn <<<"$K3") aim_ends=$(fld holster_aim_ends <<<"$K3") r_holsters $H0->$(fld r_holsters <<<"$K3") reload_starts $(fld reload_starts <<<"$C2")->$(fld reload_starts <<<"$C3") ammo $(fld ammo <<<"$C2")->$(fld ammo <<<"$C3") | RMB up: drawn=$(fld drawn <<<"$K4")"
+  mdown right; sleep 1; waitf 12 csis reloading 0; C2=$(A fp_combat state); B2=$(bolt_n "$SH"); H0=$(ks r_holsters); rkey; waitf 4 kis drawn 0; sleep 0.8; C3=$(A fp_combat state); K3=$(A fp_keys state); mup right; sleep 0.5; K4=$(A fp_keys state); B4=$(bolt_n "$SH")
+  # m71: fp_combat ammo= is the adapter's in-hands observation and is zeroed once the bow is out of hand (ranged_holstered
+  # memset), so it read 1->0 on every holster; loaded= reads the crossbow item's own GunClass (in or out of hands)
+  ev="R draw: r_draws $D0->$(fld r_draws <<<"$K1") ranged=$(fld ranged <<<"$K1") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C1") (2 s, no aim) | aim+R: drawn=$(fld drawn <<<"$K3") aim_ends=$(fld holster_aim_ends <<<"$K3") r_holsters $H0->$(fld r_holsters <<<"$K3") reload_starts $(fld reload_starts <<<"$C2")->$(fld reload_starts <<<"$C3") loaded $(fld loaded <<<"$C2")/$(fld loaded_max <<<"$C2")->$(fld loaded <<<"$C3") item_gun $(fld item_gun <<<"$C2")->$(fld item_gun <<<"$C3") ctl_shots $(fld ctl_shots <<<"$C2")->$(fld ctl_shots <<<"$C3") actual_shots $(fld actual_shots <<<"$C2")->$(fld actual_shots <<<"$C3") inv_bolts $B2->$B4 (adapter ammo $(fld ammo <<<"$C2")->$(fld ammo <<<"$C3")) | RMB up: drawn=$(fld drawn <<<"$K4")"
   ok=1; [ "$(fld drawn <<<"$K4")" = 0 ] || ok=0; [ "$(fld drawn <<<"$K1")" = 1 ] && [ "$(fld ranged <<<"$K1")" = 1 ] && [ "$(fld reload_starts <<<"$C1")" = "$(fld reload_starts <<<"$C0")" ] || ok=0
-  [ "$(fld drawn <<<"$K3")" = 0 ] && [ "$(fld r_holsters <<<"$K3")" = $((H0+1)) ] && [ "$(fld reload_starts <<<"$C3")" = "$(fld reload_starts <<<"$C2")" ] && [ "$(fld ammo <<<"$C3")" = "$(fld ammo <<<"$C2")" ] || ok=0
+  [ "$(fld drawn <<<"$K3")" = 0 ] && [ "$(fld r_holsters <<<"$K3")" = $((H0+1)) ] && [ "$(fld reload_starts <<<"$C3")" = "$(fld reload_starts <<<"$C2")" ] || ok=0
+  ge "$(fld loaded <<<"$C2")" 1 && [ "$(fld loaded <<<"$C3")" = "$(fld loaded <<<"$C2")" ] || ok=0
+  [ -n "$(fld ctl_shots <<<"$C2")" ] && [ "$(fld ctl_shots <<<"$C3")" = "$(fld ctl_shots <<<"$C2")" ] && [ "$(fld actual_shots <<<"$C3")" = "$(fld actual_shots <<<"$C2")" ] || ok=0
+  [ "$B4" = "$B2" ] || ok=0
+  # the bolt is still in the bow when R draws it again (no aim: nothing reloads it meanwhile)
+  C5=$(A fp_combat state); rkey; waitf 4 kis drawn 1; sleep 1; C6=$(A fp_combat state)
+  ev+=" | R redraw: drawn=$(ks drawn) loaded $(fld loaded <<<"$C6") reload_starts $(fld reload_starts <<<"$C5")->$(fld reload_starts <<<"$C6") ctl_shots $(fld ctl_shots <<<"$C6")"
+  [ "$(fld loaded <<<"$C6")" = "$(fld loaded <<<"$C2")" ] && [ "$(fld reload_starts <<<"$C6")" = "$(fld reload_starts <<<"$C5")" ] && [ "$(fld ctl_shots <<<"$C6")" = "$(fld ctl_shots <<<"$C2")" ] || ok=0
+  draw_to 0
   # m70: aim+R only proves the holster when the aim was live (m68/m70 passed with why!=ok: no aim at all)
   ev+=" | aim before R: why=$(fld why <<<"$C2") aimed=$(fld aimed <<<"$C2") aim_stall_why=$(fld aim_stall_why <<<"$C2") gun_setups=$(fld gun_setups <<<"$C2")"
   [ "$(fld why <<<"$C2")" = ok ] && [ "$(fld aimed <<<"$C2")" = 1 ] || ok=0

@@ -41,6 +41,17 @@ static int g_combat_has_ammo=-1;
 static void *g_combat_ammo_type;
 #define GUN_AMMO_TYPE 0x58
 static void *combat_virtual(void *object,size_t slot);
+/* PT18 (m71): the loaded bolts live on the crossbow item's own GunClass (getGun 0x4345c0 = getCurrentWeapon()->vt+0x2d8()
+ * ->+0x240), so they can be read while the bow is holstered too (observed.ammo is zeroed out of hands). -1 = no gun. */
+static int g_combat_loaded=-1,g_combat_loaded_max=-1;static void *g_combat_item_gun;
+static void combat_read_loaded(void *weapon) {
+    g_combat_loaded=g_combat_loaded_max=-1;g_combat_item_gun=NULL;
+    void *fn=weapon?combat_virtual(weapon,0x2d8):NULL;
+    void *cb=fn?((void *(*)(void *))fn)(weapon):NULL;
+    void *gun=cb&&readable((void *)((uintptr_t)cb+0x240),8)?*(void **)((uintptr_t)cb+0x240):NULL;
+    if (!gun||!readable(gun,0x24)) return;
+    g_combat_item_gun=gun;g_combat_loaded=*(int *)((uintptr_t)gun+0x20);g_combat_loaded_max=*(int *)((uintptr_t)gun+0x1C);
+}
 static int combat_has_ammo(void *pc,void *gun) {
     void *type=readable((void *)((uintptr_t)gun+GUN_AMMO_TYPE),8)?*(void **)((uintptr_t)gun+GUN_AMMO_TYPE):NULL;
     g_combat_ammo_type=type;
@@ -596,6 +607,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         *(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT):NULL;
     void *ranged=combat_virtual(pc,0x3d0);
     void *weapon=ranged?((void *(*)(void *))ranged)(pc):NULL;
+    combat_read_loaded(weapon);
     /* PT11/PT12 (Shay 2026-10-07): the ranged adapter runs only while the ranged weapon is in hands. Holstered
      * (nothing in hands) or a melee weapon in hands = the melee adapter, exactly like a char without a crossbow:
      * RMB never draws/reloads a holstered crossbow and never sheathes a drawn sword ("wrong_weapon"); R draws. */
@@ -908,8 +920,9 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
           (unsigned long long)(uintptr_t)g_combat_wih,(unsigned long long)(uintptr_t)g_combat_cur,g_combat_rcstate,g_combat_rcmode);
         {size_t l=strlen(b);fp_combat_wound_state(b+l,sizeof(b)-l);}
         {size_t l=strlen(b);combat_shot_state(b+l,sizeof(b)-l);}
-        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u reload_emits=%u reload_refused=%u has_ammo=%d ammo_type=%p gun_setups=%u aim_stalls=%u aim_stall_why=%s",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots,
-         g_combat_control.reloads,g_combat_reload_refused,g_combat_has_ammo,g_combat_ammo_type,g_combat_gun_setups,g_combat_aim_stalls,g_combat_aim_stall_why);}
+        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u reload_emits=%u reload_refused=%u has_ammo=%d ammo_type=%p gun_setups=%u aim_stalls=%u aim_stall_why=%s loaded=%d loaded_max=%d item_gun=%p ctl_shots=%u",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots,
+         g_combat_control.reloads,g_combat_reload_refused,g_combat_has_ammo,g_combat_ammo_type,g_combat_gun_setups,g_combat_aim_stalls,g_combat_aim_stall_why,
+         g_combat_loaded,g_combat_loaded_max,g_combat_item_gun,g_fp_ctl_shoot_calls);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
          snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_gate=%s last_reject_native=%d last_reject_latched=%d last_reject_dip_s=%.3f last_reject_dt=%.3f last_reject_hold=%d last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
            g_combat_inj_cmds,g_combat_inj_aim_cmds,g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,
