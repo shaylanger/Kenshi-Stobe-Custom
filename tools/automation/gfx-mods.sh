@@ -22,10 +22,13 @@ case $act in
     running && { echo "GFX REFUSED: Kenshi is running"; exit 2; }
     mvq "$K/mods/Dust/RE_Kenshi.json.gfxoff" "$K/mods/Dust/RE_Kenshi.json"
     mvq "$K/dxgi.dll.gfxoff" "$K/dxgi.dll"
-    [ -e "$CFG.gfxbak" ] && mv -f "$CFG.gfxbak" "$CFG" ;;
+    [ -e "$CFG.gfxbak" ] && mv -f "$CFG.gfxbak" "$CFG"
+    # kenshi.cfg back to Shay's full-screen values (test launches set it windowed: kenshi-ctl.ps1 cfg)
+    powershell.exe -NoProfile -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 cfg play </dev/null ;;
   status) ;;
   *) echo "usage: gfx-mods.sh off|on|status [--hdtex]"; exit 1 ;;
 esac
+powershell.exe -NoProfile -File C:/KenshiModding/tools/automation/kenshi-ctl.ps1 cfg status </dev/null
 d=on; [ -e "$K/mods/Dust/RE_Kenshi.json.gfxoff" ] && d=off
 r=on; [ -e "$K/dxgi.dll.gfxoff" ] && r=off
 h=on; grep -qxF "$HD" <(tr -d '\r' < "$CFG") || h=off
