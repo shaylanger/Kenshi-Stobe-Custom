@@ -7363,12 +7363,38 @@ static void fp_jump_pause_guard(void *gw)
     }
 }
 
+/* PT05 (Shay 2026-10-07: a time-scale click, even 1 -> 1, ran ~10x for a moment). KenshiFP never writes the game
+ * speed except setPause on its own P/space keys, so this only records the evidence: every frameSpeedMult change,
+ * long frames, and the peak speed within 3 s of an LMB release (a UI click). fp_keys state: speed_*. */
+static unsigned g_spd_changes, g_spd_long_frames, g_spd_clicks;
+static float g_spd_peak_click = -1.0f, g_spd_last = -1.0f;
+static void fp_speed_watch(void *gw, float time)
+{
+    static int lmbp; static DWORD lmb_up; static unsigned logs;
+    float fs = readable((void *)((uintptr_t)gw + GW_FRAMESPEED), 4) ? *(float *)((uintptr_t)gw + GW_FRAMESPEED) : -1.0f;
+    int l = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    if (lmbp && !l) { lmb_up = GetTickCount(); ++g_spd_clicks; g_spd_peak_click = fs; }
+    lmbp = l;
+    DWORD since = lmb_up ? GetTickCount() - lmb_up : 0xFFFFFFFFu;
+    if (since < 3000 && fs > g_spd_peak_click) g_spd_peak_click = fs;
+    if (fs != g_spd_last) {
+        ++g_spd_changes;
+        if (logs < 400) { ++logs; logline("[speed] frameSpeedMult %.2f -> %.2f (frame %.3f s, %lu ms after LMB up)",
+                                          g_spd_last, fs, time, (unsigned long)since); }
+        g_spd_last = fs;
+    }
+    if (time > 0.25f) {
+        ++g_spd_long_frames;
+        if (logs < 400) { ++logs; logline("[speed] long frame %.3f s at x%.2f (%lu ms after LMB up)", time, fs, (unsigned long)since); }
+    }
+}
 static void hooked_mainloop(void *gw, float time)
 {
     InterlockedIncrement(&g_heartbeat);   /* watchdog: proves the hook is live */
     g_gw_cache = gw;               /* CameraClass::update fires inside the frame */
     g_frame_dt = time;             /* stutter diag */
     g_mainloop_orig(gw, time);     /* run the game's frame first */
+    if (gw) fp_speed_watch(gw, time);   /* PT05 evidence */
 
     poll_input();                  /* every frame: catch toggle edges */
     if (gw) fp_control_tick(gw);   /* pin control independently from inspected selection */
