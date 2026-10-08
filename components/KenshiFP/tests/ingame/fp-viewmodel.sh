@@ -284,6 +284,7 @@ vm_is() { [ "$(vfld state)" = "$1" ]; }
 vev() { A fp_vm state | grep -oE '\b(state|elev|az|target|melee|tilt|swing|swu|swings)=[^ ]*' | tr '\n' ' '; }
 shot() { local p; p=$(A screenshot "vm-$1" | grep -oE '[^ ]*\.png' | head -1); SHOTS+=" ${p##*[\/]}"; }
 tilt_ge() { ge "$(vfld tilt)" "$1"; }
+fire_done() { awk -v f="$(vfld fire)" 'BEGIN{exit !(f!="" && f+0<=0)}'; }   # the shot's aim hold (fire_hold) is over
 
 # ---- PT13: crossbow ready / aim / reload ----
 BOWOK=0; [ -n "$BOWN" ] && [ "$(bow_now)" != none ] && BOWOK=1
@@ -368,11 +369,11 @@ else
   # live shot zoomed in: kick + "[vm] fire" line, then the reload pose
   K0=$(vfld kicks); F0=$(kfpn '\[vm\] fire'); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K0" ]'
   K1=$(vfld kicks); F1=$(kfpn '\[vm\] fire'); shot xbow-fire-live
-  waitf 4 vm_is reloading || note "SETUP PT28: no reload after the shot ($(vev))"; sleep 0.6; cap xbow-reload
+  waitf 4 vm_is reloading || note "SETUP PT28: no reload after the shot ($(vev))"; waitf 2 fire_done; sleep 0.6; cap xbow-reload
   # live shot zoomed out (PT29 reload pair: same delay after the shot)
   if want PT29; then waitf 25 vm_is aiming || note "SETUP PT28: not aiming again after reload ($(vev))"
     if zoom "$ZO"; then K2=$(vfld kicks); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K2" ]'; shot xbow-fire-live-zo
-      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; sleep 0.6; cap xbow-reload-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
+      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; waitf 2 fire_done; sleep 0.6; cap xbow-reload-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
   mup right; sleep 0.4; A fp_vm set rlamp 1.6 >/dev/null
   ok=1; why=""
   # ready: low right, forward, top up, the whole crossbow above the HUD line (lowest on-screen body point y/z >= -0.33)
