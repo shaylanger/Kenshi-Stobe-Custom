@@ -7376,13 +7376,118 @@ static void fp_jump_pause_guard(void *gw)
  * long frames, and the peak speed within 3 s of an LMB release (a UI click). fp_keys state: speed_*. */
 static unsigned g_spd_changes, g_spd_long_frames, g_spd_clicks;
 static float g_spd_peak_click = -1.0f, g_spd_last = -1.0f;
+
+/* PT23 (Shay 2026-10-08: 0.5x -> 1x -> speed up runs ~10-100x for a moment). Cause: RE_Kenshi "UseCustomGameSpeeds"
+ * (RE_Kenshi.ini GameSpeeds 0.5,1,2,5,10,...). Its OIS key hook writes GameSpeeds[idx +-1] on the speed_2/speed_3
+ * key PRESS, the game's own speed_2/speed_3 handling then writes its vanilla 2x/5x while the key is held, and RE_Kenshi
+ * only writes its value back on the RELEASE (2026-10-08 log: "1.00 -> 5.00" then "5.00 -> 1.00" ~150 ms later, every
+ * press). Its 1x button also leaves its index where it was (0.5x -> 1x -> speed up = index 0 -> 1 = still 1x after the
+ * 5x burst). Guard (before and after every frame, only with custom speeds on and RE_Kenshi's index found by code
+ * bytes): while speed_2/speed_3 (controls.cfg) or LMB is held and frameSpeedMult is the vanilla 2/5 but not RE_Kenshi's
+ * value, write RE_Kenshi's value; when the game sits at 1x (its 1x key/button) but RE_Kenshi's index points elsewhere,
+ * move the index onto 1x so the next speed up goes to 2x. fp_keys: speed_guard speed_fixed speed_synced speed_target
+ * speed_idx speed_peak_input speed_fix_run (longest run of consecutive frames the guard had to correct). */
+static int g_spd_custom = -1, g_spd_n, g_spd_vk[3] = { '1', '2', '3' };
+static float g_spd_list[32], g_spd_target = -1.0f, g_spd_peak_input = -1.0f;
+static volatile int *g_spd_reidx;
+static unsigned g_spd_fixed, g_spd_synced, g_spd_fix_run, g_spd_fix_run_max;
+static FILETIME g_spd_ini_mt;
+static int spd_vk_of(const char *v)
+{
+    while (*v == ' ' || *v == '\t') ++v;
+    size_t n = strcspn(v, "\r\n \t");
+    if (n == 1 && ((*v >= '0' && *v <= '9') || (*v >= 'A' && *v <= 'Z'))) return *v;
+    if (n == 1 && *v >= 'a' && *v <= 'z') return *v - 32;
+    if (n >= 2 && n <= 3 && (*v == 'F' || *v == 'f') && atoi(v + 1) >= 1 && atoi(v + 1) <= 12) return VK_F1 + atoi(v + 1) - 1;
+    if (n == 4 && !_strnicmp(v, "NUM", 3) && v[3] >= '0' && v[3] <= '9') return VK_NUMPAD0 + v[3] - '0';
+    return 0;
+}
+static void spd_read_ini(void)
+{
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    if (!GetFileAttributesExA("RE_Kenshi.ini", GetFileExInfoStandard, &fa)) { g_spd_custom = 0; return; }
+    if (g_spd_custom >= 0 && !CompareFileTime(&fa.ftLastWriteTime, &g_spd_ini_mt)) return;
+    g_spd_ini_mt = fa.ftLastWriteTime;
+    FILE *f = fopen("RE_Kenshi.ini", "rb"); if (!f) { g_spd_custom = 0; return; }
+    static char buf[65536]; size_t len = fread(buf, 1, sizeof buf - 1, f); fclose(f); buf[len] = 0;
+    const char *u = strstr(buf, "\"UseCustomGameSpeeds\""), *g = strstr(buf, "\"GameSpeeds\"");
+    int on = 0;
+    if (u && (u = strchr(u + 21, ':'))) { ++u; while (*u == ' ' || *u == '\t') ++u; on = !strncmp(u, "true", 4); }
+    g_spd_n = 0;
+    if (g && (g = strchr(g, '['))) {
+        const char *e = strchr(g, ']'); ++g;
+        while (e && g < e && g_spd_n < 32) { char *q; float v = strtof(g, &q); if (q == g) { ++g; continue; } g_spd_list[g_spd_n++] = v; g = q; }
+    }
+    g_spd_custom = on && g_spd_n > 0;
+    f = fopen("controls.cfg", "rb");
+    if (f) { char line[256]; while (fgets(line, sizeof line, f)) {
+        for (int k = 0; k < 3; ++k) { char nm[16]; snprintf(nm, sizeof nm, "speed_%d=", k + 1);
+            if (!strncmp(line, nm, 8)) { int vk = spd_vk_of(line + 8); if (vk) g_spd_vk[k] = vk; } } }
+        fclose(f); }
+    logline("[speed] RE_Kenshi custom speeds=%d n=%d first=%.2f keys speed_1/2/3=0x%x/0x%x/0x%x", g_spd_custom, g_spd_n,
+            g_spd_n ? g_spd_list[0] : -1.0f, g_spd_vk[0], g_spd_vk[1], g_spd_vk[2]);
+}
+/* RE_Kenshi SetSpeed2/SetSpeed3 tail: mov [rip+idx],edx; mov rax,[rip+ou]; mov rcx,[rax]; movss xmm0,[r8+rdx*4];
+ * movss [rcx+0x700],xmm0 (RE_Kenshi.dll RVA 0x12408 / 0x12698 -> idx 0x163040 in the 2026-09-24 build). */
+static void spd_find_idx(void)
+{
+    static int tried; if (tried) return; tried = 1;
+    HMODULE m = GetModuleHandleA("RE_Kenshi.dll"); if (!m) { logline("[speed] RE_Kenshi.dll not loaded: no speed guard"); return; }
+    const unsigned char *b = (const unsigned char *)m;
+    IMAGE_DOS_HEADER *dh = (IMAGE_DOS_HEADER *)m; IMAGE_NT_HEADERS64 *nh = (IMAGE_NT_HEADERS64 *)(b + dh->e_lfanew);
+    IMAGE_SECTION_HEADER *sh = IMAGE_FIRST_SECTION(nh); unsigned hits = 0; uintptr_t first = 0; int ok = 1;
+    static const unsigned char tail[] = { 0x48,0x8b,0x08,0xf3,0x41,0x0f,0x10,0x04,0x90,0xf3,0x0f,0x11,0x81,0x00,0x07,0x00,0x00 };
+    for (unsigned si = 0; si < nh->FileHeader.NumberOfSections; ++si) {
+        if (!(sh[si].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        const unsigned char *t = b + sh[si].VirtualAddress; size_t sz = sh[si].Misc.VirtualSize;
+        for (size_t i = 0; i + 30 < sz; ++i) {
+            if (!(((uintptr_t)(t + i)) & 0xFFF) && !readable(t + i, 0x1000)) { i += 0xFFF; continue; }
+            if (t[i] != 0x89 || t[i + 1] != 0x15 || t[i + 6] != 0x48 || t[i + 7] != 0x8b || t[i + 8] != 0x05) continue;
+            if (memcmp(t + i + 13, tail, sizeof tail)) continue;
+            uintptr_t a = (uintptr_t)(t + i + 6) + *(const int32_t *)(t + i + 2);
+            if (!first) first = a; else if (a != first) ok = 0;
+            ++hits;
+        }
+    }
+    if (hits && ok && readable((void *)first, 4)) g_spd_reidx = (volatile int *)first;
+    logline("[speed] RE_Kenshi speed index: %s (pattern hits=%u agree=%d rva=0x%llx idx=%d)", g_spd_reidx ? "found" : "NOT found",
+            hits, ok, first ? (unsigned long long)(first - (uintptr_t)m) : 0ull, g_spd_reidx ? *g_spd_reidx : -1);
+}
+static void fp_speed_guard(void *gw, int post)
+{
+    static DWORD last_ini; static unsigned logs; static int fixed_prev;
+    DWORD now = GetTickCount();
+    if (g_spd_custom < 0 || now - last_ini > 2000) { last_ini = now; spd_read_ini(); spd_find_idx(); }
+    if (g_spd_custom != 1 || !g_spd_reidx) return;
+    float *pfs = (float *)((uintptr_t)gw + GW_FRAMESPEED); if (!readable(pfs, 4)) return;
+    int idx = *g_spd_reidx; if (idx < 0) idx = 0; if (idx >= g_spd_n) idx = g_spd_n - 1;
+    float fs = *pfs, tgt = g_spd_list[idx]; g_spd_target = tgt;
+    int k2 = (GetAsyncKeyState(g_spd_vk[1]) & 0x8000) != 0, k3 = (GetAsyncKeyState(g_spd_vk[2]) & 0x8000) != 0;
+    int l = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0, fixed = 0;
+    if (fs > 0.0f && fs != tgt && ((fs == 2.0f && (k2 || l)) || (fs == 5.0f && (k3 || l)))) {
+        *pfs = tgt; ++g_spd_fixed; fixed = 1;
+        if (logs < 200) { ++logs; logline("[speed] guard: vanilla x%.2f while %s held -> RE_Kenshi x%.2f (idx %d, %s frame)",
+                                           fs, k3 ? "speed_3" : k2 ? "speed_2" : "LMB", tgt, idx, post ? "after" : "before"); }
+    } else if (post && fs == 1.0f && tgt != 1.0f && !k2 && !k3) {
+        for (int i = 0; i < g_spd_n; ++i) if (g_spd_list[i] == 1.0f) {
+            *g_spd_reidx = i; ++g_spd_synced; g_spd_target = 1.0f;
+            if (logs < 200) { ++logs; logline("[speed] guard: game at x1 (1x key/button), RE_Kenshi index %d (x%.2f) -> %d (x1)", idx, tgt, i); }
+            break; }
+    }
+    if (post) { if (fixed) { if (fixed_prev) ++g_spd_fix_run; else g_spd_fix_run = 1;
+                             if (g_spd_fix_run > g_spd_fix_run_max) g_spd_fix_run_max = g_spd_fix_run; }
+                fixed_prev = fixed; }
+}
 static void fp_speed_watch(void *gw, float time)
 {
-    static int lmbp; static DWORD lmb_up; static unsigned logs;
+    static int lmbp, keyp; static DWORD lmb_up; static unsigned logs;
     float fs = readable((void *)((uintptr_t)gw + GW_FRAMESPEED), 4) ? *(float *)((uintptr_t)gw + GW_FRAMESPEED) : -1.0f;
     int l = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    int ky = ((GetAsyncKeyState(g_spd_vk[0]) | GetAsyncKeyState(g_spd_vk[1]) | GetAsyncKeyState(g_spd_vk[2])) & 0x8000) != 0;
     if (lmbp && !l) { lmb_up = GetTickCount(); ++g_spd_clicks; g_spd_peak_click = fs; }
-    lmbp = l;
+    if ((lmbp && !l) || (!keyp && ky)) g_spd_peak_input = fs;
+    if (ky || l || (lmb_up && GetTickCount() - lmb_up < 3000)) { if (fs > g_spd_peak_input) g_spd_peak_input = fs; }
+    lmbp = l; keyp = ky;
     DWORD since = lmb_up ? GetTickCount() - lmb_up : 0xFFFFFFFFu;
     if (since < 3000 && fs > g_spd_peak_click) g_spd_peak_click = fs;
     if (fs != g_spd_last) {
@@ -7401,7 +7506,9 @@ static void hooked_mainloop(void *gw, float time)
     InterlockedIncrement(&g_heartbeat);   /* watchdog: proves the hook is live */
     g_gw_cache = gw;               /* CameraClass::update fires inside the frame */
     g_frame_dt = time;             /* stutter diag */
+    if (gw) fp_speed_guard(gw, 0);      /* PT23: RE_Kenshi custom speed vs vanilla held-key speed */
     g_mainloop_orig(gw, time);     /* run the game's frame first */
+    if (gw) fp_speed_guard(gw, 1);
     if (gw) fp_speed_watch(gw, time);   /* PT05 evidence */
 
     poll_input();                  /* every frame: catch toggle edges */

@@ -24,6 +24,8 @@
 #  PT04      MEASURE only: FP W-drive speed vs vanilla run/walk (walktime) and runspeed numbers; PASS = measured
 #  PT05      evidence: physical LMB click on TimeSpeedButton2 (x1 while at x1), RTS and FP free cursor: speed_clicks rise,
 #            speed_peak_click / long frames / [speed] log lines; FAIL only if the spike shows (peak > SPIKE_MAX)
+#  PT23      Shay's speed steps x0.5 -> 1x -> speed up, physical clicks on TimeSpeedButton3/2/4 then keys 2/1/3, RTS and FP:
+#            game-time rate per real second around every input <= SPIKE_MAX x the speed, speed up after 1x = x2, speed_guard=1
 #  PT11      bow only, holstered, manual combat physical: RMB hold -> nothing drawn (drawn=0 wih=0), combat draws and
 #            reload_starts unchanged, fp_combat why=ranged_holstered
 #  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts, ammo same)
@@ -44,7 +46,7 @@
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-playtest}
 KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
 STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
-ROWS=${ROWS:-"PT22 PT07 PT06 PT20 PT21 PT19 PT08 PT09 PT04 PT05 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
+ROWS=${ROWS:-"PT22 PT07 PT06 PT20 PT21 PT19 PT08 PT09 PT04 PT05 PT23 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 note() { echo "$*" >> "$LOG"; }
@@ -351,6 +353,50 @@ if want PT05; then A speed 1 >/dev/null; sleep 0.5; EV=""; OK=1; N=0
     [ $where_ = fp ] && menu_close; done
   if [ $N = 0 ]; then row PT05 FAIL "setup: TimeSpeedButton2 never found: $EV"
   else judge PT05 $OK "evidence ($N clicks, spike if peak_click>=$SPIKE_MAX): ${EV% | } logs=$OUT/pt05-*-speed.txt"; fi
+  A speed 1 >/dev/null; take "$SH" >/dev/null; fi
+
+# ---- PT23: Shay's speed sequence: x0.5 -> 1x button -> speed up (physical clicks on the speed buttons, then the same
+# with the speed keys), RTS and FP free cursor / FP look. After every step the game-time rate (harness `time`
+# game_hours per real second, back-to-back samples for 2 s, first sample taken right BEFORE the input) is compared
+# with the 1x base rate: no sample above SPIKE_MAX x the higher of the speeds before/after the step. Speed up after
+# 1x must land on x2 (RE_Kenshi custom speeds; KenshiFP speed guard armed: speed_guard=1).
+gh() { local a b r; a=$(date +%s.%N); r=$(stobe-auto time 2>&1); b=$(date +%s.%N)
+  echo "$(awk -v a="$a" -v b="$b" 'BEGIN{printf "%.4f",(a+b)/2}') $(fld game_hours <<<"$r") $(fld speed <<<"$r")"; }
+feq() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a!="" && a-b<0.01 && b-a<0.01)}'; }
+spd_now() { A time | fld speed; }
+spd_btn() { local n=$1 u x y w h; u=$(A ui "timespeedbutton$n" | grep -oE "TimeSpeedButton$n( '[^']*')? -?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+" | grep -oE -- '-?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+$' | head -1)
+  [ -n "$u" ] || return 1; read -r x y w h <<<"$(tr ',x' '  ' <<<"$u")"; BTN_XY="$((x + w/2)) $((y + h/2))"; }
+# pt23_step <click|key> <down|one|up>: one physical input, samples around it; sets ST_EV (evidence) and ST_BAD (1 = burst)
+pt23_step() { local how=$1 what=$2 n k s0 S=() i r
+  case $what in down) n=3; k=2;; one) n=2; k=1;; up) n=4; k=3;; esac
+  if [ "$how" = click ]; then spd_btn "$n" || { ST_EV="TimeSpeedButton$n not visible"; ST_BAD=1; return 1; }
+    A mouse_inject at $BTN_XY >/dev/null; sleep 0.25; fi
+  s0=$(spd_now); S+=("$(gh)")
+  if [ "$how" = click ]; then stobe-auto mouse_inject left click 80 >/dev/null 2>&1; else stobe-auto key_inject "$k" tap 150 >/dev/null 2>&1; fi
+  for i in $(seq 1 14); do S+=("$(gh)"); done
+  r=$(printf '%s\n' "${S[@]}" | awk -v base="$BASE" -v s0="$s0" -v lim="$SPIKE_MAX" '
+      { t[NR]=$1; h[NR]=$2; s[NR]=$3 } END { s1=s[NR]; ref=(s0+0>s1+0)?s0:s1; if (ref<=0) ref=1; mx=0
+        for (i=2;i<=NR;i++) { dt=t[i]-t[i-1]; if (dt<=0) continue; q=(h[i]-h[i-1])/dt/base/ref; if (q>mx) mx=q }
+        printf "%s %.2f %d", s1, mx, (mx>lim) }')
+  read -r ST_S1 ST_MAX ST_BAD <<<"$r"; ST_EV="$what($how) x$s0->x$ST_S1 max_rate=${ST_MAX}x"; }
+if want PT23; then mode off; A speed 1 >/dev/null; sleep 1.5; OK=1; EV=""
+  K=$(A fp_keys state); GUARD=$(fld speed_guard <<<"$K")
+  b1=$(gh); sleep 3; b2=$(gh)
+  BASE=$(awk -v a="$b1" -v b="$b2" 'BEGIN{split(a,p," ");split(b,q," "); d=q[1]-p[1]; if (d>0 && q[2]>p[2]) printf "%.8f", (q[2]-p[2])/d; else print 0}')
+  if [ "$GUARD" != 1 ] || [ "$BASE" = 0 ]; then row PT23 FAIL "setup/product: speed_guard=$GUARD (RE_Kenshi index or custom speeds not found: grep '[speed] RE_Kenshi' KenshiFP.log) base_rate=$BASE h/s [$b1 | $b2]"
+  else for v in rts:click rts:key fp:click fp:key; do where_=${v%%:*}; how=${v##*:}
+      if [ $where_ = rts ]; then mode off; else take "$SH" >/dev/null; [ $how = click ] && { altkey; waitf 3 bash -c "stobe-auto fp_state | grep -q 'free=1'"; }; fi
+      A speed 1 >/dev/null; sleep 1; K0=$(A fp_keys state); L0=$(wc -l < "$KFPLOG"); SEQ=""; j=0
+      # to x0.5 the way Shay does (speed down), then 1x, then speed up
+      while ! feq "$(spd_now)" 0.5 && [ $j -lt 4 ]; do pt23_step "$how" down; SEQ+="$ST_EV; "; [ "$ST_BAD" = 1 ] && OK=0; j=$((j+1)); done
+      feq "$(spd_now)" 0.5 || { OK=0; SEQ+="never reached x0.5; "; }
+      pt23_step "$how" one; SEQ+="$ST_EV; "; [ "$ST_BAD" = 1 ] && OK=0; feq "$ST_S1" 1 || { OK=0; SEQ+="1x gave x$ST_S1; "; }
+      pt23_step "$how" up; SEQ+="$ST_EV; "; [ "$ST_BAD" = 1 ] && OK=0; feq "$ST_S1" 2 || { OK=0; SEQ+="speed up after 1x gave x$ST_S1 (want x2); "; }
+      K=$(A fp_keys state)
+      EV+="$v: ${SEQ}fixed $(fld speed_fixed <<<"$K0")->$(fld speed_fixed <<<"$K") synced $(fld speed_synced <<<"$K0")->$(fld speed_synced <<<"$K") fix_run=$(fld speed_fix_run <<<"$K") | "
+      tail -n +"$((L0+1))" "$KFPLOG" | tr -d '\r' | grep '\[speed\]' | head -40 > "$OUT/pt23-$where_-$how-speed.txt"
+      menu_close; done
+    judge PT23 $OK "base=${BASE}h/s spike_max=$SPIKE_MAX ${EV% | } logs=$OUT/pt23-*-speed.txt"; fi
   A speed 1 >/dev/null; take "$SH" >/dev/null; fi
 
 # ---- weapon rows: mate behind the shooter, manual combat on (physical input) ----
