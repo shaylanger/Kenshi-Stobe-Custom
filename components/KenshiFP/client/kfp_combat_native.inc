@@ -511,8 +511,9 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     else if (game_has_focus()) {
         input.aim=(GetAsyncKeyState(g_cfg_key_block)&0x8000)!=0;
         input.fire=(GetAsyncKeyState(g_cfg_key_attack)&0x8000)!=0;
-        /* draw key alone = FP draw/holster (kfp_controls.inc); draw key with block (aim) held = reload */
-        input.reload=input.aim&&(GetAsyncKeyState(g_cfg_key_draw)&0x8000)!=0;
+        /* PT18 (Shay 2026-10-07): the draw key only draws/holsters (kfp_controls.inc); reload is automatic
+         * (auto_reload while aiming an empty crossbow), never aim+R */
+        input.reload=0;
     }
     fp_melee_observe_swing(gw,dt);   /* native swing timer (M04-SPEED control), any owner */
     if (!g_combat_enabled || !g_combat_native_ready || g_combat_fault || !g_fp_mode) {

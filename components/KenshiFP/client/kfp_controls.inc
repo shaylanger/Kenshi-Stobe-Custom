@@ -4,7 +4,7 @@
  *   RMB holstered = context menu for the crosshair target; RMB drawn = block (melee) / aim (ranged), held
  *   LMB drawn = attack the crosshair target (unprovoked if not hostile, vanilla consequences);
  *       no target: free swing (native attack animation, no damage); ranged free fire = adapter path
- *   R = draw / holster (reload moves to R while RMB is held)
+ *   R = draw / holster only (PT18: never reloads; reload is automatic while aiming an empty crossbow)
  * HUD: one label under the crosshair driven by the real native state (fp_ui_state).
  * Native input: PlayerInterface::playerControl(InputHandler&) reads the static InputHandler's
  * mouse flags; the hook clears the right-button flags (always) and the left-button flags (drawn)
@@ -535,7 +535,7 @@ static void fp_controls_tick(void *gw,float dt) {
     g_fpc_sneak_now=fpc_is_sneaking(pc);
     if (g_fpc_sneak_req) {g_fpc_sneak_req=0;fpc_sneak_probe(pc);}           /* fp_keys sneak (test) */
     if (!g_is_down && g_fpc_hook_ok) {
-        if (edge[FPC_R] && !in[FPC_RMB]) fpc_draw_toggle(pc);   /* R with RMB held = reload (adapter) */
+        if (edge[FPC_R]) fpc_draw_toggle(pc);   /* PT18: R only draws/holsters, also with RMB held */
         if (edge[FPC_MMB] && g_fpc_select) {
             void *t=fpc_crosshair_char(pc);
             if (t) {g_fpc_select(fpc_player_interface(gw),t,0);++g_fpc_mmb_selects;fpc_name(t,g_fpc_last_select,sizeof g_fpc_last_select);
