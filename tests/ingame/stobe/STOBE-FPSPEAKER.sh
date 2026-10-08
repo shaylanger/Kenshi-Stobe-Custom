@@ -75,8 +75,11 @@ if want 135; then
   so=$(A spawn "Hungry Bandit" "Tech Hunters" near "$PLAYER" dist 30 count 1)
   h=$(echo "$so" | grep -oE '#[0-9]+/[0-9]+' | head -1)
   [ -n "$h" ] || setup_fail 135 "third member spawn failed: $(echo "$so" | tail -1 | cut -c1-120)"
-  A recruit "$h" >/dev/null
-  T3=$(A where "$h" | sed -E 's/ #[0-9].*//')
+  # m54: `where "#serial/index"` answered "no character named" (T3 empty): take the name from the spawn reply
+  # ("spawned 1/1 <template>: <name> #serial/index ...") and recruit/locate it by name
+  T3=$(echo "$so" | grep -oE ': [^,#:]+ #[0-9]+/[0-9]+' | head -1 | sed -E 's/^: //; s/ #.*//')
+  [ -n "$T3" ] || setup_fail 135 "no name in the spawn reply: $(echo "$so" | tail -1 | cut -c1-120)"
+  r=$(A recruit "$T3"); A where "$T3" | grep -q 'pos=' || setup_fail 135 "recruited $T3 not found: $(echo "$r" | cut -c1-100)"
   fp_take "$PLAYER" || setup_fail 135 "could not take FP control of $PLAYER ($(A fp_control state | cut -c1-160))"
   A select "$MATE" >/dev/null; wait_for 6 selected_is "$MATE" || setup_fail 135 "cannot select $MATE"
   ctl_is "$PLAYER" || setup_fail 135 "selecting $MATE moved FP control off $PLAYER ($(A fp_control state | cut -c1-160))"
