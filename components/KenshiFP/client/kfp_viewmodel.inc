@@ -60,7 +60,7 @@ static VmPose g_vm_swk[VM_SWK] = {
     VP( 1.3f, 0.0f, 4.2f,  -0.55f, 0.45f, 0.70f,   -0.30f,-1.20f, 0.45f),  /* strike: blade diagonal up-left */
     VP( 0.4f,-0.1f, 4.2f,  -0.92f, 0.02f, 0.38f,    0.00f,-1.00f, 0.05f),  /* strike: blade sweeps flat across the center (in view) */
     VP(-0.6f,-0.4f, 4.0f,  -0.90f,-0.18f, 0.40f,    0.20f,-0.95f,-0.05f),  /* follow-through left, blade still in view above the HUD */
-    VP( 0.9f,-2.4f, 4.0f,  -0.55f, 0.15f, 0.82f,    0.10f,-0.90f, 0.40f) };/* recovery: dips low (behind the HUD) back to the guard,
+    VP( 0.9f,-1.55f,4.0f,  -0.55f, 0.30f, 0.78f,    0.10f,-0.90f, 0.40f) };/* recovery: dips low (grip just above the HUD) back to the guard,
                                                                             * no second sweep across the view */
 /* key times (start, keys, end), own clock over g_vm_sw_dur: anticipation (slower wind-up) ~30%, fast strike across
  * ~20%, follow-through decel, low recovery to the guard (reference: 1H melee 0.4-0.8 s, Chivalry/KCD-style) */
@@ -99,6 +99,9 @@ static Quat  g_vm_pldq[2] = { { 0.600f, 0.267f, 0.724f, -0.211f }, { 0.656f, 0.1
 static Vec3  g_vm_pldp[2] = { { 0.737f, 0.180f, -0.299f }, { 0.693f, 0.201f, -0.510f } };
 static float g_vm_groll[2] = { 60.0f, 0.0f };  /* [class] grip roll, deg (sword 60: fingers behind the hilt, reads as a fist): turns the hand around the hilt (about the
                                                 * blade/bolt axis, prop origin fixed); Kenshi hands have no finger bones */
+static float g_vm_plsl[2] = { 0.7f, 0.0f };   /* [class] grip slide, dm: the weapon moves this far toward the tip in the
+                                                * hand (the hand holds nearer the pommel). Sword: the long katana handle stuck out ~1.1 dm
+                                                * past the little finger as a grey cylinder, its end cut by the near clip (e4 211-216) */
 static int   g_vm_plfix = 3;   /* bit 0 crossbow, bit 1 sword: the native swing anims move the katana in the hand (the
                                  * changed local lasted > 8 frames and was taken: the hilt slid out of the closed fingers,
                                  * open-hand look, C1); the sword keeps the ready-hold grip */
@@ -534,6 +537,10 @@ static void vm_apply(void *skel)
             if (g_vm_groll[pc_] != 0.0f) {
                 float h = g_vm_groll[pc_] * 0.0087266f; Vec3 ax = vm_axis(g_vm_ax[pc_][0]);
                 lq = quat_norm(quat_mul(lq, (Quat){ cosf(h), ax.x * sinf(h), ax.y * sinf(h), ax.z * sinf(h) }));
+            }
+            if (g_vm_plsl[pc_] != 0.0f && g_vm_scale > 1e-6f) {
+                float sk = fabsf(sc.y) > 1e-3f ? sc.y : 1.0f;
+                lp = vm_add(lp, vm_mul(quat_rotvec(lq, vm_axis(g_vm_ax[pc_][0])), g_vm_plsl[pc_] / (g_vm_scale * sk)));
             }
             g_oldnode_setori(b[wh][3], &lq); g_oldnode_setpos(b[wh][3], &lp); g_oldnode_needupd(b[wh][3], 1);
         }
@@ -995,6 +1002,8 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "applymap")) { g_vm_applymap = x != 0.0f; return 1; }
     else if (!strcmp(k, "groll"))   { if (x > -360 && x < 360) g_vm_groll[0] = x; return 1; }
     else if (!strcmp(k, "grollr"))  { if (x > -360 && x < 360) g_vm_groll[1] = x; return 1; }
+    else if (!strcmp(k, "plsl"))    { if (x > -3 && x < 3) g_vm_plsl[0] = x; return 1; }
+    else if (!strcmp(k, "plslr"))   { if (x > -3 && x < 3) g_vm_plsl[1] = x; return 1; }
     else if (!strcmp(k, "plfix"))   { g_vm_plfix = (int)x & 3; return 1; }
     else if (!strcmp(k, "omdraw"))  { if (x > 1 && x < 100) g_vm_om_draw = x; return 1; }
     else if (!strcmp(k, "maxdt"))   { if (x > 0.005f && x <= 0.1f) g_vm_maxdt = x; return 1; }
