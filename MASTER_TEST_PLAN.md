@@ -35,7 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | open: PT04 (Shay decision), PT06, PT17, PT20; rest passed m54 |
+| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | open: PT04 (Shay decision), PT17, PT20 (switch back); rest passed m54 |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
