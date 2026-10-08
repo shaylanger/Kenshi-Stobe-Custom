@@ -1603,6 +1603,15 @@ static void *first_player_char(void *gw)
 }
 
 /* Character::getPosition via live vtable slot 8 (proven ABI). */
+/* PT16: Character::isBeingCarried (KenshiLib export); 0 if unresolved. Caller holds the crash guard. */
+static int g_fp_carried;
+static int fp_char_carried(void *pc)
+{
+    static unsigned char (*fn)(void *); static int res;
+    if (!res) { res = 1; HMODULE k = GetModuleHandleA("KenshiLib.dll");
+        fn = k ? (unsigned char (*)(void *))GetProcAddress(k, "?isBeingCarried@Character@@QEBA_NXZ") : NULL; }
+    return fn && readable(pc, 8) ? fn(pc) != 0 : 0;
+}
 static int char_position(void *c, Vec3 *out)
 {
     if (!readable(c, 8)) return 0;
@@ -4323,7 +4332,19 @@ static void fp_camera_override(void *gw)
                  * character who is ALREADY unconscious -- so the vignette used to
                  * vanish on swap. PS_KO doesn't need the reference. */
                 int ko = char_prone_state(pc2) == PS_KO;
-                int truly_down = ko ||
+                /* PT16 (Shay 2026-10-07): KO'd and carried, the view sat upright at the carried body's head
+                 * ("standing on the carrier's shoulders"): carried counts as down (view follows the head,
+                 * look frozen, upright reference kept from before the pick-up). */
+                int carried = fp_char_carried(pc2);
+                {   static int prev_carried;
+                    if (carried != prev_carried) {
+                        Vec3 cf = {0,0,0}; char_position(pc2, &cf);
+                        logline("[down] carried=%d ko=%d is_down=%d headY=%.2f feet=%.1f,%.1f,%.1f",
+                                carried, ko, is_down, g_head_above, cf.x, cf.y, cf.z);
+                        prev_carried = carried;
+                    }
+                    g_fp_carried = carried; }
+                int truly_down = ko || carried ||
                                  (is_down && g_have_qref && tiltdeg > 55.0f
                                   && g_head_above < 0.9f);
                 g_is_down = truly_down;   /* next frame's look-input freeze reads this */
@@ -4337,7 +4358,7 @@ static void fp_camera_override(void *gw)
                  * truly_down) so tilt measures from the pre-down pose and can
                  * actually accumulate as the head rolls -- otherwise it collapses
                  * to the per-frame delta (~0) and never crosses the threshold. */
-                if (!is_down) { g_qref = qh; g_have_qref = 1; }
+                if (!is_down && !carried) { g_qref = qh; g_have_qref = 1; }
                 float target = truly_down ? 1.0f : 0.0f;
                 g_down_blend += (target - g_down_blend) * 0.15f; /* ~0.3s ease */
                 if (g_down_blend > 0.002f && g_have_qref) {
