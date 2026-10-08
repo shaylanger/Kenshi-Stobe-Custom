@@ -6,12 +6,15 @@
 #  PT14  sword (bow off, sword from the mate): R draw -> ready on target, melee=1, tilt >= 20; RMB held -> blocking on
 #        the block target; physical LMB -> a new "[vm] swing" log line with u_end >= 0.5; test pose sw_pose 0 / 1 ->
 #        target = the ready target (the swing path starts and ends at the ready pose)
-#  PT28  crossbow like Skyrim/KCD, each state zoomed in AND out: ready (low right, forward, top up, whole crossbow
-#        above the HUD line: lowest projected body point y/z >= -0.33), aim (seen from behind: grip 2.0..2.9 dm ahead,
-#        |x|<=0.5, low (y<=-0.9) = stock up from the bottom centre, top up = limbs horizontal, bolt <=2 deg off the crosshair at AIMD, projected bolt tip
-#        within |x|<=0.06, -0.08..0.02 NDC of the centre, off-hand on the fore-stock support point, arm_cov<=0.15 = no
-#        forearm blob bottom centre), fire (physical LMB: kicks + "[vm] fire" line; frozen kick_pose 1 = muzzle climb
-#        0..0.4 NDC, grip within 0.5 dm of the aim hold), reload (lowered >=10 deg, pointing forward: not in the face)
+#  PT28  crossbow like Chivalry 2 (reference photos/crossbow aiming.PNG), each state zoomed in AND out: ready (low
+#        carry right: grip >=4 dm ahead, az>=15, nose 6..27 deg down, top up, whole crossbow above the HUD line: lowest
+#        projected body point y/z >= -0.33, limb line below the centre, right wrist in front of the near clip rwz>=3.3),
+#        aim (grip at the eye plane |z|<=1, |x|<=0.3, low (y<=-1.4): nothing of the hands drawn (wrists behind the near
+#        clip: rwz<=2.6, lwz<=2.8, arm_cov<=0.02), bolt <=2 deg off the crosshair at AIMD, projected bolt tip within
+#        |x|<=0.06 NDC and 0.05..0.25 below the centre, limb line y/z -0.30..-0.10 (lower third) with half span x/z >=0.6,
+#        off-hand on the support point), fire (physical LMB: kicks + "[vm] fire" line; frozen kick_pose 1 = muzzle climb
+#        tip -0.1..0.4 NDC, grip within 0.3 dm of the aim hold), reload (grip >=4 dm ahead, nose down >=14 deg, top
+#        rolled toward the eye uz<=-0.3, limb line above the HUD line, right wrist in front of the near clip)
 #  PT27  sword block: blade horizontal across the view (|mf.x|>=0.85, |mf.y|<=0.2) zoomed in and out
 #  PT26  sword swing: frozen frame sequence sw_pose 0.1..0.9 (screens + targets) and NSW (3) physical LMB swings:
 #        each "[vm] swing" line u_end=1, frames>=8, readable phases from the [vmsw] lines (wind-up 15-50% of the frames,
@@ -274,7 +277,7 @@ VM_TOL=${VM_TOL:-4}; SHOTS=""
 A fp_vm state | grep -q 'hooked=1' || setup_fail "fp_vm hooked=0 or missing (needs KenshiFP e515843+): $(A fp_vm state | cut -c1-100)"
 A fp_vm state | grep -q ' mu=' || setup_fail "fp_vm state has no mu= field (needs the 2026-10-08 viewmodel build)"
 A fp_vm on >/dev/null
-trap 'A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 1.6 >/dev/null; cleanup' EXIT
+trap 'A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 1.0 >/dev/null; cleanup' EXIT
 vfld() { A fp_vm state | fld "$1"; }
 # vm_on <state>: vm in that state with the hand within VM_TOL deg of its target
 vm_on() { local V; V=$(A fp_vm state); [ -z "$1" ] || [ "$(fld state <<<"$V")" = "$1" ] || return 1
@@ -332,11 +335,13 @@ vq() { awk -v P="${VMP[$2]}" -v F="${VMF[$2]}" -v U="${VMU[$2]}" "BEGIN{if(P==\"
   el=atan2(py,pz)*57.2958; az=atan2(px,pz)*57.2958; exit !($1)}"; }
 pev() { echo "$1:${VST[$1]} mp=${VMP[$1]} mf=${VMF[$1]} mu=${VMU[$1]}"; }
 # xbgeo <tag>: crossbow (Oldworld Bow MkI, repeating) screen geometry from the captured state line. Body model in grip
-# axes (f = bolt, u = top, s = f x u, dm): bolt tip 5.85f+0.84u, limb ends 5.0f+0.84u+-1.7s, fore-stock 4.8f, grip
-# handle 0..0.3f-0.45u, magazine 0.3f+1.3u, stock 0..-3.9f at +0.3u. Screen: 1920x1080, half-FOV tan 0.70 (v) /
-# 1.245 (h), HUD line y/z=-0.33, near clip 3 world units (points closer than NEAR=2.5 dm are not drawn).
-# Prints "tx ty bmin cov omode oerr": bolt tip NDC, lowest on-screen body point y/z, arm_cov = upper arm + forearm
-# area (radius 0.5 dm) inside the bottom-centre zone |x/z|<=0.436, -0.45<=y/z<=-0.05 / zone area (Lsh..Rwr joints).
+# axes (f = bolt, u = top, s = f x u, dm), MEASURED on the 4080 2026-10-08 from 3 grip depths: bolt tip 5.85f+1.0u,
+# limb ends 3.87f+1.0u+-3.2s, fore-stock 3.0f+0.5u, grip handle 0..0.3f-0.45u, magazine 0.3f+1.3u, stock 0..-3.9f at
+# +0.3u. Screen: 1920x1080, half-FOV tan 0.70 (v) / 1.245 (h), HUD line y/z=-0.33, near clip 3 world units (points
+# closer than NEAR=2.5 dm are not drawn).
+# Prints "tx ty bmin cov omode oerr ly lhs rwz lwz": bolt tip NDC, lowest on-screen body point y/z, arm_cov = upper arm
+# + forearm area (radius 0.5 dm) inside the bottom-centre zone |x/z|<=0.436, -0.45<=y/z<=-0.05 / zone area (Lsh..Rwr
+# joints), limb centre y/z, limb half span x/z, right / left wrist camera z (dm; < 3.0 = behind the near clip).
 xbgeo() { awk -v L="${VSL[$1]}" -v NEAR=2.5 -v R=0.5 '
   function g(k,  m){ if(match(" " L, " " k "=[^ ]*")){ m=substr(" " L,RSTART+1,RLENGTH-1); sub(/^[^=]*=/,"",m); return m } return "" }
   function pt(a,b,c){ n++; X[n]=p[1]+a*f[1]+b*u[1]+c*s[1]; Y[n]=p[2]+a*f[2]+b*u[2]+c*s[2]; Z[n]=p[3]+a*f[3]+b*u[3]+c*s[3] }
@@ -348,17 +353,19 @@ xbgeo() { awk -v L="${VSL[$1]}" -v NEAR=2.5 -v R=0.5 '
   BEGIN{ if(g("mp")==""||g("mf")==""||g("mu")=="") { print "x x x x x x"; exit }
    split(g("mp"),p,","); split(g("mf"),f,","); split(g("mu"),u,",")
    s[1]=f[2]*u[3]-f[3]*u[2]; s[2]=f[3]*u[1]-f[1]*u[3]; s[3]=f[1]*u[2]-f[2]*u[1]
-   n=0; pt(5.85,0.84,0); pt(5.0,0.84,1.7); pt(5.0,0.84,-1.7); pt(4.8,0,0); pt(0,-0.45,0); pt(0.3,-0.45,0); pt(0.3,1.3,0)
-   for(t=0;t>=-3.9;t-=0.3) pt(t,0.3,0)
-   tx=X[1]/Z[1]/1.245; ty=Y[1]/Z[1]/0.7; miny=9
+   n=0; pt(5.85,1.0,0); pt(3.87,1.0,3.2); pt(3.87,1.0,-3.2); pt(3.87,1.0,0); pt(3.87,1.0,1.6); pt(3.87,1.0,-1.6); pt(3.0,0.5,0)
+   pt(0,-0.45,0); pt(0.3,-0.45,0); pt(0.3,1.3,0); for(t=0;t>=-3.9;t-=0.3) pt(t,0.3,0)
+   tx=X[1]/Z[1]/1.245; ty=Y[1]/Z[1]/0.7; miny=9; ly=Z[4]>0.05?Y[4]/Z[4]:-9
+   lhs=(Z[2]>0.05&&Z[3]>0.05)?(X[2]/Z[2]-X[3]/Z[3])/2:0; if(lhs<0)lhs=-lhs
+   split(g("Rwr"),RW,","); split(g("Lwr"),LW,","); rwz=RW[3]==""?"x":RW[3]; lwz=LW[3]==""?"x":LW[3]
    for(i=1;i<=n;i++){ if(Z[i]<NEAR) continue; xs=X[i]/Z[i]; ys=Y[i]/Z[i]; if(xs<-1.245||xs>1.245||ys<-0.7) continue; if(ys<miny) miny=ys }
    area=0; cov="x"; for(si=1;si<=2;si++){ sd=si==1?"L":"R"; split(g(sd "sh"),S,","); split(g(sd "el"),E,","); split(g(sd "wr"),W,",")
      if(S[3]==""||E[3]==""||W[3]=="") { area=-1; break } seg(S,E); seg(E,W) }
    if(area>=0) cov=sprintf("%.3f", area/(0.872/0.7*0.4/0.7))
-   om=g("omode"); oe=g("oerr"); printf "%.3f %.3f %.3f %s %s %s\n", tx, ty, miny, cov, om==""?"x":om, oe==""?"x":oe }'; }
-# xq "<awk condition>" <tag>: condition over tx ty bmin cov om oe (xbgeo numbers)
-xq() { local G; G=$(xbgeo "$2"); awk -v G="$G" "BEGIN{split(G,v,\" \"); for(i=1;i<=6;i++) if(v[i]==\"x\") exit 1
-  tx=v[1]+0;ty=v[2]+0;bmin=v[3]+0;cov=v[4]+0;om=v[5]+0;oe=v[6]+0; exit !($1)}"; }
+   om=g("omode"); oe=g("oerr"); printf "%.3f %.3f %.3f %s %s %s %.3f %.3f %s %s\n", tx, ty, miny, cov, om==""?"x":om, oe==""?"x":oe, ly, lhs, rwz, lwz }'; }
+# xq "<awk condition>" <tag>: condition over tx ty bmin cov om oe ly lhs rwz lwz (xbgeo numbers)
+xq() { local G; G=$(xbgeo "$2"); awk -v G="$G" "BEGIN{split(G,v,\" \"); for(i=1;i<=10;i++) if(v[i]==\"x\") exit 1
+  tx=v[1]+0;ty=v[2]+0;bmin=v[3]+0;cov=v[4]+0;om=v[5]+0;oe=v[6]+0;ly=v[7]+0;lhs=v[8]+0;rwz=v[9]+0;lwz=v[10]+0; exit !($1)}"; }
 kfpn() { kfplines | grep -c "$1"; }
 # vmrec <name> <xbow|sword|swing>: dump the fp_vm recording to $KDIR/vmrec-<name>.txt (copied to $OUT) and print
 # vmcheck's one-line verdict (ok=0|1 frames vis fps flags errmax tipd_max df_max wih in/out [reload_zmin])
@@ -382,22 +389,25 @@ else
   if want PT29; then waitf 25 vm_is aiming || note "SETUP PT28: not aiming again after reload ($(vev))"
     if zoom "$ZO"; then K2=$(vfld kicks); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K2" ]'; shot xbow-fire-live-zo
       waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload-zo reloading; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
-  mup right; sleep 0.4; A fp_vm set rlamp 1.6 >/dev/null
+  mup right; sleep 0.4; A fp_vm set rlamp 1.0 >/dev/null
   ok=1; why=""
-  # ready: low right, forward, top up, the whole crossbow above the HUD line (lowest on-screen body point y/z >= -0.33)
-  { [ "${VST[xbow-ready]}" = ready ] && vq "fz>=0.9 && uy>=0.9 && az>=10" xbow-ready && xq "bmin>=-0.33" xbow-ready; } || { ok=0; why+=" ready"; }
-  # aim (zoomed in and out): seen from behind, stock up from the bottom centre (grip low, 2-2.9 dm ahead), limbs horizontal (top up), bolt on the
-  # crosshair (<=2 deg at AIMD), bolt tip projected within a few % of the screen centre (sight just below it), off-hand
-  # on the support point under the fore-stock (omode=1, oerr<=0.5 dm), no forearm/sleeve blob bottom centre (arm_cov<=0.15)
+  # ready: low carry right (grip >=4 dm ahead, az>=15), nose 6..27 deg down, top up, the whole crossbow above the HUD line
+  # (lowest on-screen body point y/z >= -0.33), limb line below the centre, right wrist in front of the near clip (no cut glove)
+  { [ "${VST[xbow-ready]}" = ready ] && vq "fz>=0.85 && fy<=-0.1 && fy>=-0.45 && uy>=0.9 && az>=15 && pz>=4.0" xbow-ready && xq "bmin>=-0.33 && ly<=-0.05 && rwz>=3.3" xbow-ready; } || { ok=0; why+=" ready"; }
+  # aim (zoomed in and out), Chivalry 2 hold: grip at the eye plane (|z|<=1, |x|<=0.3, y<=-1.4) so NO hand is drawn (both
+  # wrists behind the near clip rwz<=2.6 lwz<=2.8, arm_cov<=0.02), limbs horizontal (top up) in the lower third (limb line
+  # y/z -0.30..-0.10, half span x/z >=0.6), bolt on the crosshair (<=2 deg at AIMD), bolt tip projected |x|<=0.06 NDC and
+  # 0.05..0.25 below the centre, off-hand on the support point (omode=1, oerr<=0.5 dm)
   for t in xbow-aim xbow-aim-zo; do [ "$t" = xbow-aim ] || [ -n "${VSL[$t]}" ] || continue
-    { [ "${VST[$t]}" = aiming ] && vq "fz>=0.99 && uy>=0.95 && px*px<=0.25 && pz>=2.0 && pz<=2.9 && py<=-0.9 &&       (-fx*px - fy*py + fz*($AIMD-pz)) / sqrt(px*px+py*py+($AIMD-pz)^2) >= 0.99939" $t &&       xq "tx<=0.06 && tx>=-0.06 && ty>=-0.08 && ty<=0.02 && om==1 && oe<=0.5 && cov<=0.15" $t; } || { ok=0; why+=" $t"; }; done
-  # fire (frozen kick_pose 1 = kick peak): muzzle climbs (fy>=0.05, tip 0..0.4 above centre, |x|<=0.1), the grip stays
-  # within 0.5 dm of the aim hold (not in the face); live LMB: kicks + "[vm] fire" line
-  AZ=$(awk -v P="${VMP[xbow-aim]}" 'BEGIN{split(P,p,",");print p[3]-0.5}')
-  { vq "fy>=0.05 && pz>=$AZ" xbow-fire && xq "tx<=0.1 && tx>=-0.1 && ty>=0 && ty<=0.4" xbow-fire && [ "$K1" -gt "$K0" ] && [ "$F1" -gt "$F0" ]; } || { ok=0; why+=" fire(kicks $K0->$K1 lines $F0->$F1)"; }
-  # reload: lowered and pointing forward (not raised into the face)
-  { [ "${VST[xbow-reload]}" = reloading ] && vq "el<=-10 && fz>=0.8 && pz>=2.0" xbow-reload; } || { ok=0; why+=" reload"; }
-  GEO="geo(tx ty bmin cov om oe) ready=[$(xbgeo xbow-ready)] aim=[$(xbgeo xbow-aim)] aim-zo=[$(xbgeo xbow-aim-zo)] fire=[$(xbgeo xbow-fire)]"
+    { [ "${VST[$t]}" = aiming ] && vq "fz>=0.99 && uy>=0.95 && px*px<=0.09 && pz>=-1.0 && pz<=1.0 && py<=-1.4 &&       (-fx*px - fy*py + fz*($AIMD-pz)) / sqrt(px*px+py*py+($AIMD-pz)^2) >= 0.99939" $t &&       xq "tx<=0.06 && tx>=-0.06 && ty>=-0.25 && ty<=-0.05 && ly>=-0.30 && ly<=-0.10 && lhs>=0.6 && om==1 && oe<=0.5 && cov<=0.02 && rwz<=2.6 && lwz<=2.8" $t; } || { ok=0; why+=" $t"; }; done
+  # fire (frozen kick_pose 1 = kick peak): muzzle climbs (fy>=0.1, tip -0.1..0.4 NDC, |x|<=0.1), the grip stays within
+  # 0.3 dm of the aim hold (not in the face); live LMB: kicks + "[vm] fire" line
+  AZ=$(awk -v P="${VMP[xbow-aim]}" 'BEGIN{split(P,p,",");print p[3]-0.3}')
+  { vq "fy>=0.1 && pz>=$AZ" xbow-fire && xq "tx<=0.1 && tx>=-0.1 && ty>=-0.1 && ty<=0.4" xbow-fire && [ "$K1" -gt "$K0" ] && [ "$F1" -gt "$F0" ]; } || { ok=0; why+=" fire(kicks $K0->$K1 lines $F0->$F1)"; }
+  # reload: lowered (grip >=4 dm ahead, nose down >=14 deg, forward), top rolled toward the eye (uz<=-0.3: the spanning
+  # motion is readable), limb line above the HUD line, right wrist in front of the near clip (hand visible, no cut glove)
+  { [ "${VST[xbow-reload]}" = reloading ] && vq "pz>=4.0 && fy<=-0.25 && fz>=0.7 && uz<=-0.3" xbow-reload && xq "ly>=-0.33 && rwz>=3.3" xbow-reload; } || { ok=0; why+=" reload"; }
+  GEO="geo(tx ty bmin cov om oe ly lhs rwz lwz) ready=[$(xbgeo xbow-ready)] aim=[$(xbgeo xbow-aim)] aim-zo=[$(xbgeo xbow-aim-zo)] fire=[$(xbgeo xbow-fire)] reload=[$(xbgeo xbow-reload)]"
   judge PT28 $ok "$(pev xbow-ready) | $(pev xbow-aim) | $(pev xbow-fire) kicks=$K0->$K1 | $(pev xbow-reload) | $GEO${why:+ | bad:$why}"
   draw_to 0; fi; fi
 # ---- PT30 crossbow part: every frame of draw, aim, fire, reload, ready, aim, holster (fp_vm rec) ----
