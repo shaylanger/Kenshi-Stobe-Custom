@@ -2619,13 +2619,25 @@ static int wgp_icontains(const char *hay, const char *needle)
     return 0;
 }
 
+static float wgp_distance(Vec3 a, Vec3 b);
+
 /* 0 = powered, 1 = waiting for power (step set), -1 = give up (reason set) */
-static int wgp_power_gate(WgpGoal *g, WgpProducer *p, char *reason, size_t reason_sz)
+static int wgp_power_gate(void *actor, WgpGoal *g, WgpProducer *p, char *reason, size_t reason_sz)
 {
     if (!p || !p->building) return 0;
     /* Idle machines read as out of power: judge power only once she has been
      * ordered onto this machine and its inputs are loaded (bug 61). */
     if (g->rt_task_building!=p->building) return 0;
+    /* Item 144 (m53): an operated machine (Grain Silo) draws power only while she works it, so the
+     * wait timer runs only while she stands at it. Away (walking there, following, fighting) it
+     * restarts: a timer left from before an interrupt blocked the goal 65 ms after a resume. */
+    {
+        Vec3 a, bp=*(Vec3 *)((uintptr_t)p->building+0x48);
+        if (!actor || !char_position(actor,&a) || wgp_distance(a,bp)>WGP_OPERATE_NEAR) {
+            if (g->power_wait_building==p->building) { g->power_wait_building=NULL; g->power_wait_ms=0; }
+            return 0;
+        }
+    }
     {
         void *m[WGP_MAX_MISSING]={0};
         if (p->production && wgp_missing(p->production,m,WGP_MAX_MISSING)>0) return 0;
@@ -2806,7 +2818,7 @@ static int wgp_ensure_item(void *gw, void *actor, WgpGoal *g, const char *item,
         }
     }
 
-    { int pw=wgp_power_gate(g,&p,reason,reason_sz); if (pw<0) return -1; if (pw>0) return 0; }
+    { int pw=wgp_power_gate(actor,g,&p,reason,reason_sz); if (pw<0) return -1; if (pw>0) return 0; }
     if (wgp_feed_inputs(gw,actor,g,&p)) return 0;
     if (g->rt_task_building != p.building ||
         ((LONG)(stobe_game_ms()-g->last_order_ms)>WGP_REORDER_MS && wgp_actor_idle(actor))) { /* bug 106 */
@@ -3005,7 +3017,7 @@ static void wgp_goal_tick(void *gw, WgpGoal *g)
 
     {
         char pr[200]={0};
-        int pw=wgp_power_gate(g,&root,pr,sizeof(pr));
+        int pw=wgp_power_gate(actor,g,&root,pr,sizeof(pr));
         if (pw<0) { char full[256]; snprintf(full,sizeof(full),"cannot make %s because %s",g->item,pr); wgp_goal_block(g,full); return; }
         if (pw>0) return;
     }
@@ -3315,6 +3327,7 @@ static void wgp_control_line(char *line)
         /* Item 138: RESUME on a running goal restarts it (re-adds the job, re-issues the order). */
         g->reason[0]='\0';g->report_triggered=0;g->last_progress_ms=stobe_game_ms();
         g->rt_task_building=NULL;g->rt_unit_start_ms=0;g_wgp_next_tick=0;
+        g->power_wait_building=NULL;g->power_wait_ms=0; /* item 144: no stale power wait after a resume */
         logline("[stobe] WORK_GOAL resume id=%s from_state=%d",g->id,g->state);
         g->state=0;
     }
