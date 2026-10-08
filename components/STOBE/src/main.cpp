@@ -15034,6 +15034,12 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
     if (worldWasStable) {
       worldWasStable = false;
       Log("HOOK: world transition detected; pausing UI hook logic.");
+      // Kenshi crashed rendering the open NPC info panel (portrait image on the game's portrait
+      // texture) while a save loaded (m61/m62, kenshi_x64+0xb42f5): close it on the transition.
+      if (Stobe::UI::IsNpcPanelOpen()) {
+        Stobe::UI::CloseNpcPanelUI();
+        Log("NPC_PANEL: closed on world transition");
+      }
       EnterCriticalSection(&g_stateMutex);
         g_inventorySyncStateBySerial.clear();
         g_itemImageSyncStateByItemId.clear();
