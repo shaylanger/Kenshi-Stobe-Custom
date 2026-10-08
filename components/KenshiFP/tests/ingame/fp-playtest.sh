@@ -16,8 +16,12 @@
 #  PT22+PT07 holstered physical LMB on the mate: selection/inspected unchanged, mouse_keys_swallowed rises, no stats
 #            window (`ui lbSkills`), no "opened the clicked member's details" log line
 #  PT06      holstered physical RMB HOLD on the mate: ctx_hold_opens+1, ctx_freed=1, menu still open after the release
-#  PT20      in that menu: `fp_keys ctl` shows the Control button for the mate; `ctl click` -> switches+1, fp_control
-#            controlled = mate; back again the same way (RMB tap from the mate's body on the player)
+#  PT20      in that menu: `fp_keys ctl` shows Control for the mate; PHYSICAL click on the game's own 'Control' option
+#            (`ui control`, not KFPControlBtn) -> switches+1 via=menu, controlled = mate; back again the same way (RMB tap
+#            from the mate's body on the player, physical click)
+#  PT24      holstered RMB tap on the mate: Control is a native option (`fp_keys ctl` native=1 native_hooks=7 shown=1
+#            native_target=mate; `ui control` = a 'Control' widget in the column (same x, width) of the other options;
+#            no visible KFPControlBtn); physical click -> Control -> mate via=menu, menu closed (menu_vis=0)
 #  PT21      mate selected (physical MMB), RMB tap + hold on the ground: mate (unpinned) does not move, swallowed rises
 #  PT19      mate selected, physical MMB on the sky: mmb_self+1, last_select = player, inspected = controlled
 #  PT08      next to a building: physical MMB on it -> mmb_objects+1; holstered RMB tap on it -> ctx menu on it
@@ -51,7 +55,7 @@
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-playtest}
 KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
 STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
-ROWS=${ROWS:-"PT25 PT22 PT07 PT06 PT20 PT21 PT19 PT08 PT09 PT04 PT05 PT23 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
+ROWS=${ROWS:-"PT25 PT22 PT07 PT06 PT20 PT24 PT21 PT19 PT08 PT09 PT04 PT05 PT23 PT11 PT18 PT15 PT02 PT01 PT03 PT10 PT12 PT16"}; ROWS=${ROWS//,/ }
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 note() { echo "$*" >> "$LOG"; }
@@ -287,6 +291,15 @@ if want PT06 || want PT20; then menu_close; draw_to 0
 # ---- PT20: Control button in the menu on a squad mate; switch there and back ----
 # ctl_menu <viewer> <target>: holstered RMB tap on the target from the viewer's body; 0 = Control offered for it
 ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; CTL_DRAWN=$(ks drawn); mclick right 150; waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; }
+# ctl_opt: the game's own menu option captioned exactly 'Control' (KenshiFP PT24 native option, never the KFPControlBtn
+# fallback widget) -> "x y w h name" of the first visible one, empty if none
+ctl_opt() { A ui control | tr -d '\r' | tr '|' '\n' | grep -E "^ *[^ ]+ 'Control' -?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+ *$" | grep -v '^ *KFPControlBtn ' | head -1 |
+  sed -E "s/^ *([^ ]+) 'Control' (-?[0-9]+),(-?[0-9]+) ([0-9]+)x([0-9]+).*/\2 \3 \4 \5 \1/"; }
+# opt_col <x> <w>: other visible captioned widgets in that column (the game's other options of the same menu)
+opt_col() { { A ui option; A ui button; A ui value; } | tr -d '\r' | tr '|' '\n' | grep -E "'[^']+' $1,-?[0-9]+ ${2}x[0-9]+ *$" | grep -v "'Control' " | sort -u | wc -l; }
+# ctl_opt_click: PHYSICAL left click (virtual cursor + DirectInput button) on the centre of the 'Control' option
+ctl_opt_click() { local o x y w h; o=$(ctl_opt); [ -n "$o" ] || return 1; read -r x y w h _ <<<"$o"
+  A mouse_inject at $((x + w/2)) $((y + h/2)) >/dev/null; sleep 0.3; mclick left 80; }
 if want PT20; then
   # the hold menu from PT06 if it really offers Control (bounded wait), else a fresh tap menu (PT06 judges the hold)
   if [ $MENU_ON_MT = 1 ] && ! waitf 3 bash -c "stobe-auto fp_keys ctl | grep -q 'shown=1'"; then
@@ -294,12 +307,27 @@ if want PT20; then
   [ $MENU_ON_MT = 1 ] || ctl_menu "$SH" "$MT"
   C1=$(A fp_keys ctl); S0=$(fld switches <<<"$C1")
   if [ "$(fld shown <<<"$C1")" != 1 ]; then row PT20 FAIL "Control button not shown with the menu on $MT open: [$C1] free=$(fps free) ctx_freed=$(ks ctx_freed)"
-  else A fp_keys ctl click >/dev/null; waitf 3 ctl_is "$MT"; C2=$(A fp_keys ctl); T1=$(ctl controlled); TO=$(ctl_is "$MT" && echo 1 || echo 0); FR1=$(fps free)
-    # chain: FP off/on while controlling the mate, then back to the player from her body
-    toggles 1; AT=$(ctl_is "$MT" && echo 1 || echo 0); ctl_menu "$MT" "$SH"; C3=$(A fp_keys ctl); W3=$(ks ctx_why); KL3=$(kfplines | grep -aE "RMB .* opened no menu|RMB press ignored|RMB context menu" | tail -1 | cut -c1-170); A fp_keys ctl click >/dev/null; waitf 3 ctl_is "$SH"; C4=$(A fp_keys ctl); BACK=$(ctl_is "$SH" && echo 1 || echo 0)
-    ev="to_mate: [target=$(fld target <<<"$C1") shown=1] switches $S0->$(fld switches <<<"$C2") last=$(fld last <<<"$C2") controlled=$T1 is_mate=$TO free_after=$FR1 still_mate_after_fp_toggle=$AT | back: shown=$(fld shown <<<"$C3") target=$(fld target <<<"$C3") switches->$(fld switches <<<"$C4") is_player=$BACK log=$(kfplines | grep -c '\[controls\] Control -> ') drawn_at_tap=${CTL_DRAWN:-n/a} ctx_why=${W3:-n/a} tap_log='${KL3:-none}'"
-    ok=1; [ "$(fld target <<<"$C1")" = "$(uname_ "$MTN")" ] && [ "$(fld switches <<<"$C2")" = $((S0+1)) ] && [ "$TO" = 1 ] && [ "$FR1" = 0 ] || ok=0
-    [ "$(fld switches <<<"$C4")" = $((S0+2)) ] && [ "$BACK" = 1 ] || ok=0; judge PT20 $ok "$ev"; fi
+  else O1=$(ctl_opt); ctl_opt_click; waitf 3 ctl_is "$MT"; C2=$(A fp_keys ctl); T1=$(ctl controlled); TO=$(ctl_is "$MT" && echo 1 || echo 0); FR1=$(fps free)
+    # chain: FP off/on while controlling the mate, then back to the player from her body (physical click again)
+    toggles 1; AT=$(ctl_is "$MT" && echo 1 || echo 0); ctl_menu "$MT" "$SH"; C3=$(A fp_keys ctl); W3=$(ks ctx_why); KL3=$(kfplines | grep -aE "RMB .* opened no menu|RMB press ignored|RMB context menu" | tail -1 | cut -c1-170); O3=$(ctl_opt); ctl_opt_click; waitf 3 ctl_is "$SH"; C4=$(A fp_keys ctl); BACK=$(ctl_is "$SH" && echo 1 || echo 0)
+    ev="to_mate: [target=$(fld target <<<"$C1") shown=1 option='${O1:-none}'] switches $S0->$(fld switches <<<"$C2") via=$(fld via <<<"$C2") last=$(fld last <<<"$C2") controlled=$T1 is_mate=$TO free_after=$FR1 still_mate_after_fp_toggle=$AT | back: shown=$(fld shown <<<"$C3") target=$(fld target <<<"$C3") option='${O3:-none}' switches->$(fld switches <<<"$C4") via=$(fld via <<<"$C4") is_player=$BACK log=$(kfplines | grep -c '\[controls\] Control -> .* via=menu') drawn_at_tap=${CTL_DRAWN:-n/a} ctx_why=${W3:-n/a} tap_log='${KL3:-none}'"
+    ok=1; [ -n "$O1" ] && [ "$(fld target <<<"$C1")" = "$(uname_ "$MTN")" ] && [ "$(fld switches <<<"$C2")" = $((S0+1)) ] && [ "$(fld via <<<"$C2")" = menu ] && [ "$TO" = 1 ] && [ "$FR1" = 0 ] || ok=0
+    [ -n "$O3" ] && [ "$(fld switches <<<"$C4")" = $((S0+2)) ] && [ "$(fld via <<<"$C4")" = menu ] && [ "$BACK" = 1 ] || ok=0; judge PT20 $ok "$ev"; fi
+  menu_close; ctl_is "$SH" || take "$SH" >/dev/null; fi
+menu_close
+
+# ---- PT24: Control is an entry of the game's own RMB menu (not a separate button); physical click switches ----
+if want PT24; then ctl_is "$SH" || take "$SH" >/dev/null
+  if ! ctl_menu "$SH" "$MT"; then rows_fail "no menu with Control on $MT after a holstered RMB tap: $(A fp_keys ctl)" PT24
+  else C1=$(A fp_keys ctl); S0=$(fld switches <<<"$C1"); O=$(ctl_opt); NC=0; OX=""; OW=""
+    [ -n "$O" ] && { read -r OX _ OW _ _ <<<"$O"; NC=$(opt_col "$OX" "$OW"); }
+    KB=$(A ui kfpcontrolbtn all | tr -d '\r' | tr '|' '\n' | grep -E "^ *KFPControlBtn " | grep -vc " hidden *$")
+    ctl_opt_click; waitf 3 ctl_is "$MT"; C2=$(A fp_keys ctl); TO=$(ctl_is "$MT" && echo 1 || echo 0)
+    ev="[native=$(fld native <<<"$C1") hooks=$(fld native_hooks <<<"$C1") shown=$(fld shown <<<"$C1") native_target=$(fld native_target <<<"$C1") injected=$(fld native_injected <<<"$C1") captions=$(fld native_captions <<<"$C1")] option='${O:-none}' same_column_options=$NC kfpbtn_visible=$KB | click: switches $S0->$(fld switches <<<"$C2") via=$(fld via <<<"$C2") native_clicks $(fld native_clicks <<<"$C1")->$(fld native_clicks <<<"$C2") is_mate=$TO menu_vis_after=$(fld menu_vis <<<"$C2") log=$(kfplines | grep -c 'Control option added to the game.s context menu')"
+    ok=1; [ "$(fld native <<<"$C1")" = 1 ] && [ "$(fld native_hooks <<<"$C1")" = 7 ] && [ "$(fld shown <<<"$C1")" = 1 ] && [ "$(fld native_target <<<"$C1")" = "$(uname_ "$MTN")" ] || ok=0
+    [ -n "$O" ] && [ "$NC" -ge 1 ] && [ "$KB" = 0 ] || ok=0
+    [ "$(fld switches <<<"$C2")" = $((S0+1)) ] && [ "$(fld via <<<"$C2")" = menu ] && [ "$TO" = 1 ] && [ "$(fld menu_vis <<<"$C2")" = 0 ] || ok=0
+    judge PT24 $ok "$ev"; fi
   menu_close; ctl_is "$SH" || take "$SH" >/dev/null; fi
 menu_close
 
