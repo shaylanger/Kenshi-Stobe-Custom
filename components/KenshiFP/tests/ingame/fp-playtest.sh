@@ -425,83 +425,74 @@ vwalk() { local ax r; VW=""; for ax in -x +x -z +z; do A teleport "$SH" $HOME >/
     case "$r" in *" walked "*) VW="axis=$ax $(grep -o 'speed=[^ ]*\|top_speed=[^ ]*' <<<"$r" | tr '\n' ' ')"; return 0;; esac
     VWERR="$2 $ax: $(cut -c1-90 <<<"$r")"; done; return 1; }
 # ---- PT04: FP walk/run speed = the vanilla speed of the same char/state (within PT04_TOL, 5%) ----
-# Shay's steps: in FP, hold W (physical key) and walk/run; outside FP the same char gets a move order. One method on
-# both sides: `where` samples during steady motion (after the start-up), each stamped with real time AND game time
-# (`time` game_hours read before + after the `where`, midpoint); least-squares slope of distance vs GAME time, in u per
-# nominal second (game hours / PT04_BASE = the idle x1 game-hours rate per real second). m66a: the real-time slope
-# said FP walk 5.79 u/s while KenshiFP's own game-time meter said 15.4 (181 u in 11.65 game s) and vanilla walk 9.72 vs
-# walktime's 11.9: real-time slopes over 6 samples swallow frame stalls, so the verdict uses the game-time slope; the
-# real-time slope, tratio (game time per real time vs idle) and the sample rows stay as evidence.
-# A side is steady only with >= PT04_MINN samples over >= PT04_SPAN game s (walk; run 2 s, its 500 u end it sooner),
-# no segment below half the median segment (stopped) and sideways <= 15% of the distance (turned). Vanilla unsteady =
-# setup FAIL (path/obstacle), FP unsteady = product FAIL. Rows: $OUT/pt04-<van|fp>-<run|walk>-samples.txt ("t g d").
-# State: vanilla run order (walktime run) -> FP W must drive gait=run; vanilla walk order (walktime walk) -> FP W must
-# drive gait=walk; the char's order is handed back after each hold (gait_restores rises, mv_so = the vanilla order).
-PT04_TOL=${PT04_TOL:-0.05}; PT04_SPAN=${PT04_SPAN:-4}; PT04_MINN=${PT04_MINN:-6}; PT04_BASE=0
-ghour() { stobe-auto time 2>&1 | fld game_hours; }
-# psamp <n> <dist cap> <start pos>: up to n samples of $SH while d < cap, rows "t g d" (real s, game hours, XZ dist)
-psamp() { local i a b ga gb P d; for i in $(seq 1 "$1"); do a=$(date +%s.%N); ga=$(ghour); P=$(pos "$SH"); gb=$(ghour); b=$(date +%s.%N)
-    d=$(d2 "$3" "$P"); lt "$d" "$2" || break
-    awk -v a="$a" -v b="$b" -v ga="$ga" -v gb="$gb" -v d="$d" 'BEGIN{if (ga!="" && gb!="") printf "%.4f %.6f %.2f\n", (a+b)/2, (ga+gb)/2, d}'; done; }
-# rstat <rows file> <min game span s> [segchk 1/0, default 1; run = 0: its start-up ramp is inside the window]: "rate= rate_real= n= span= gspan= tratio= seg_min= seg_med= steady=0|1"
-rstat() { awk -v base="$PT04_BASE" -v mspan="$2" -v sc="${3:-1}" -v mn="$PT04_MINN" '{t[NR]=$1; g[NR]=$2/base; d[NR]=$3}
-  END{ if (NR<3 || base<=0) {printf "rate= n=%d steady=0", NR; exit}
-    for(i=1;i<=NR;i++){sg+=g[i]; st+=t[i]; sd+=d[i]} mg=sg/NR; mt=st/NR; md=sd/NR
-    for(i=1;i<=NR;i++){n1+=(g[i]-mg)*(d[i]-md); q1+=(g[i]-mg)^2; n2+=(t[i]-mt)*(d[i]-md); q2+=(t[i]-mt)^2}
-    m=0; for(i=2;i<=NR;i++){dg=g[i]-g[i-1]; if (dg>0) s[++m]=(d[i]-d[i-1])/dg}
-    for(i=1;i<=m;i++) for(j=i+1;j<=m;j++) if (s[j]<s[i]) {x=s[i]; s[i]=s[j]; s[j]=x}
-    med=m?s[int((m+1)/2)]:0; mins=m?s[1]:0; gs=g[NR]-g[1]; ts=t[NR]-t[1]
-    st_=(NR>=mn && gs>=mspan && m>0 && (sc==0 || mins>=0.5*med) && q1>0)?1:0
-    printf "rate=%.2f rate_real=%.2f n=%d span=%.1f gspan=%.1f tratio=%.2f seg_min=%.1f seg_med=%.1f steady=%d",
-      (q1>0?n1/q1:0), (q2>0?n2/q2:0), NR, ts, gs, (ts>0?gs/ts:0), mins, med, st_ }' "$1"; }
+# Shay's steps: in FP, hold W (physical key) and walk/run; outside FP the same char gets a move order. Both sides are
+# measured per FRAME in game (simulated) time, steady phase only: one stobe-auto call costs ~1.2 s real (m66b: a
+# time+where+time sample took 3.6 s and never caught the 5 s vanilla run; m66a's real-time where-slope over 6 samples
+# gave FP walk 5.79 u/s while the per-frame meter said 15.4), so the wrapper no longer times positions itself.
+#  vanilla: harness `acceltime <char> <dist> <axis> run|walk stopat <d> follow` (player-click order, camera follows
+#           so the physics path runs as in FP) -> cruise_speed = mean speed over the last 1 s before the stop
+#  FP:      physical W held; `fp_move state` read every ~1.2 s while he moves: KenshiFP's per-frame hold meter
+#           (hold_t game s, hold_dist u since the hold started); rate = (dist_last - dist_first) / (t_last - t_first)
+#           over the samples after the start-up (>= PT04_MINN_RUN/WALK samples over >= PT04_SPAN_RUN/WALK game s, no
+#           segment below half the median segment = stopped -> product FAIL); W released at PT04_CAP_RUN/WALK u.
+# Run axis = the first axis where a vanilla run of 500 u reaches its 420 u stop in a straight line (sideways < 25);
+# FP walk/run along it from the same spot. Sideways > 15% of the distance (turned) = FAIL (vanilla: setup).
+# State: vanilla run order -> FP W must drive gait=run; vanilla walk order -> FP W must drive gait=walk; the char's order
+# is handed back after each hold (gait_restores rises, mv_so = the vanilla order). Rows: $OUT/pt04-fp-<gait>-samples.txt
+PT04_TOL=${PT04_TOL:-0.05}; PT04_MINN_RUN=${PT04_MINN_RUN:-3}; PT04_MINN_WALK=${PT04_MINN_WALK:-5}
+PT04_SPAN_RUN=${PT04_SPAN_RUN:-1.5}; PT04_SPAN_WALK=${PT04_SPAN_WALK:-4}; PT04_CAP_RUN=${PT04_CAP_RUN:-300}; PT04_CAP_WALK=${PT04_CAP_WALK:-200}
 axis_yaw() { case "$1" in +x) echo 1.5708;; -x) echo 4.7124;; +z) echo 0;; -z) echo 3.1416;; esac; }
-# turned <lateral> <dist>: sideways > 15% of the distance (or no distance)
-turned() { awk -v l="$1" -v d="$2" 'BEGIN{exit !(l=="" || d+0<=0 || l/d>0.15)}'; }
-# van_rate <walk|run> <dist> <lead s> <n> <min gspan> [segchk]: vanilla move order along $AX from home -> VR (game-time rate), VS (rstat), VLAT, VEND
-van_rate() { local P0 P1 bg f="$OUT/pt04-van-$1-samples.txt"; mode off; A teleport "$SH" $HOME >/dev/null; sleep 1.5; P0=$(pos "$SH")
-  ( A walktime "$SH" "$2" "$AX" "$1" > "$OUT/pt04-walk-$1.txt" ) & bg=$!
-  sleep "$3"; psamp "$4" "$(awk -v d="$2" 'BEGIN{print d-40}')" "$P0" > "$f"; wait "$bg"; VRW=$(cut -c1-120 "$OUT/pt04-walk-$1.txt")
-  VS=$(rstat "$f" "$5" "$6"); VR=$(fld rate <<<"$VS"); P1=$(pos "$SH"); VEND=$(d2 "$P0" "$P1")
-  VLAT=$(lat "$P0" "$P1"); VDONE=$(grep -oE 'walked [0-9.]+' <<<"$VRW" | cut -d' ' -f2); }
 # lat <start> <end>: sideways offset from the axis $AX (a path that left the straight line = an obstacle on it)
 lat() { awk -v a="$1" -v b="$2" -v ax="$AX" 'BEGIN{split(a,p," ");split(b,q," "); d=(ax ~ /x/)?q[3]-p[3]:q[1]-p[1]; printf "%.1f", d<0?-d:d}'; }
-# fp_rate <lead s> <cap> <run|walk> <n> <min gspan> [segchk]: FP on, physical W held along $AX from home -> FR, FS (rstat), FLAT, FEND, meter FM
-fp_rate() { local P0 P1 f="$OUT/pt04-fp-$3-samples.txt"; A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; look "$(axis_yaw "$AX")" 0
-  P0=$(pos "$SH"); A key_inject w down >/dev/null; sleep "$1"; psamp "$4" "$2" "$P0" > "$f"; P1=$(pos "$SH")
-  A key_inject w up >/dev/null; FS=$(rstat "$f" "$5" "$6"); FR=$(fld rate <<<"$FS"); FLAT=$(lat "$P0" "$P1"); FEND=$(d2 "$P0" "$P1")
-  sleep 1.2; FM=$(A fp_move state); }
+# turned <lateral> <dist>: sideways > 15% of the distance (or no distance)
+turned() { awk -v l="$1" -v d="$2" 'BEGIN{exit !(l=="" || d+0<=0 || l/d>0.15)}'; }
+# van_acc <run|walk> <dist> <stopat>: vanilla order along $AX from home -> VR (cruise_speed), VA (reply), VSTOP, VLAT, VEND
+van_acc() { local P0 P1; mode off; A teleport "$SH" $HOME >/dev/null; sleep 1.5; P0=$(pos "$SH")
+  VA=$(A acceltime "$SH" "$2" "$AX" "$1" stopat "$3" follow | tr -d '\r' | head -1); P1=$(pos "$SH")
+  echo "$VA" > "$OUT/pt04-van-$1.txt"; VR=""; VSTOP=$(fld stop_at <<<"$VA"); VLAT=$(lat "$P0" "$P1"); VEND=$(d2 "$P0" "$P1")
+  case "$VA" in *" accel "*cruise_speed=*) VR=$(fld cruise_speed <<<"$VA");; esac; }
+# fp_rate <lead s> <cap u> <run|walk> <max n> <min n> <min span s>: FP on, physical W held along $AX from home
+#   -> FR (meter rate over the steady samples), FS (stats), FLAT, FEND, FM (fp_move state after the release)
+fp_rate() { local P0 P1 M i f="$OUT/pt04-fp-$3-samples.txt"; A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; look "$(axis_yaw "$AX")" 0
+  P0=$(pos "$SH"); : > "$f"; A key_inject w down >/dev/null; sleep "$1"
+  for i in $(seq 1 "$4"); do M=$(A fp_move state); echo "$(date +%s.%N) $(fld hold_t <<<"$M") $(fld hold_dist <<<"$M") $(fld rate_win <<<"$M")" >> "$f"
+    ge "$(fld hold_dist <<<"$M")" "$2" && break; done
+  A key_inject w up >/dev/null; sleep 1.2; P1=$(pos "$SH"); FM=$(A fp_move state)
+  FS=$(awk -v mn="$5" -v ms="$6" '$2!="" && $3!="" {r[++n]=$1; t[n]=$2; d[n]=$3}
+    END{ if (n<2) {printf "rate= n=%d steady=0", n; exit} m=0
+      for(i=2;i<=n;i++){dt=t[i]-t[i-1]; if (dt>0) s[++m]=(d[i]-d[i-1])/dt}
+      for(i=1;i<=m;i++) for(j=i+1;j<=m;j++) if (s[j]<s[i]) {x=s[i]; s[i]=s[j]; s[j]=x}
+      med=m?s[int((m+1)/2)]:0; gs=t[n]-t[1]; rs=r[n]-r[1]
+      st_=(n>=mn && gs>=ms && m>0 && s[1]>=0.5*med)?1:0
+      printf "rate=%.2f n=%d gspan=%.2f span=%.1f seg_min=%.1f seg_med=%.1f steady=%d", (gs>0?(d[n]-d[1])/gs:0), n, gs, rs, (m?s[1]:0), med, st_ }' "$f")
+  FR=$(fld rate <<<"$FS"); FLAT=$(lat "$P0" "$P1"); FEND=$(d2 "$P0" "$P1"); }
 within() { awk -v a="$1" -v b="$2" -v t="$PT04_TOL" 'BEGIN{exit !(a!="" && b!="" && b+0>0 && (a-b)/b<=t && (b-a)/b<=t)}'; }
 if want PT04; then take "$SH" >/dev/null; A teleport "$SH" $HOME >/dev/null; sleep 1.5
   SPN=$(ks speed_now); ATH=$(A stat "$SH" athletics | grep -o 'base=[^ ]*\|effective=[^ ]*' | tr '\n' ' ')
   mode off; AX=""; vwalk 80 run && AX=$(grep -o 'axis=[^ ]*' <<<"$VW" | cut -d= -f2)
-  b1=$(date +%s.%N); h1=$(ghour); sleep 3; b2=$(date +%s.%N); h2=$(ghour)
-  PT04_BASE=$(awk -v a="$b1" -v b="$b2" -v x="$h1" -v y="$h2" 'BEGIN{if (b>a && y>x) printf "%.8f", (y-x)/(b-a); else print 0}')
   if [ -z "$AX" ]; then A fp_keys movers >/dev/null; sleep 0.3
     MVS=$(A fp_keys movers show | awk -v w="$SHN mode=" 'BEGIN{RS=" [|] "} index($0,w)==1{print; exit}' | cut -c1-160)
     row PT04 FAIL "setup: native run never started on any axis from $HOME: $SH mover [$MVS] ${VWERR:0:160}"
-  elif [ "$SPN" != "1.00" ] && [ "$SPN" != "1.0" ] && [ "$SPN" != "1" ]; then row PT04 FAIL "setup: game speed $SPN, not 1 (rates are real time)"
-  elif [ "$PT04_BASE" = 0 ]; then row PT04 FAIL "setup: game time not advancing at x1 (time $h1 -> $h2 in 3 s)"
+  elif [ "$SPN" != "1.00" ] && [ "$SPN" != "1.0" ] && [ "$SPN" != "1" ]; then row PT04 FAIL "setup: game speed $SPN, not 1"
   else
-    # m64/m65: on -x a wall stands ~205 u from home: vanilla `walktime run 500` never started (no path) and FP run hit
-    # it after ~2 s (x stuck, sliding sideways, rate 11.8 u/s while the meter peaked at 112 = vanilla top speed). The
-    # run axis must carry a full vanilla run of 500 u in a straight line (walked >= 450, sideways < 25), and the FP run
-    # samples stop at 420 u from the start (inside the proven clear stretch).
+    # m64/m65: on -x a wall stands ~205 u from home (vanilla never started, FP slid along it). The run axis must carry
+    # a vanilla run to its 420 u stop in a straight line; FP releases W at PT04_CAP_RUN u, well inside that stretch.
     AXT=""; VRUN=""; G0=$(fld gait_restores <<<"$(A fp_move state)")
-    for AX in -x +x -z +z; do van_rate run 500 1.0 10 2 0; AXT+=" $AX:rate=${VR:-none},walked=${VDONE:-0},side=$VLAT"
-      if [ -n "$VR" ] && awk -v w="${VDONE:-0}" -v l="$VLAT" 'BEGIN{exit !(w+0>=450 && l+0<25)}'; then VRUN=$VR; VSRUN=$VS; VRUNW=$VRW; break; fi; done
-    [ -n "$VRUN" ] || { AX=""; VRUNW="no clear 500 u run axis:$AXT"; }
-    [ -n "$AX" ] && { fp_rate 1.0 420 run 10 2 0; FRUN=$FR; FSRUN=$FS; FMRUN=$FM; FLATRUN=$FLAT; FENDRUN=$FEND; }
-    # walk: 300 u order (~20 s), 3 s lead past the start-up, up to 16 samples inside 260 u (>= PT04_SPAN game s)
-    [ -n "$AX" ] && { van_rate walk 300 3.0 16 "$PT04_SPAN"; VWALK=$VR; VSWALK=$VS; VWALKW=$VRW; VLATW=$VLAT; VENDW=$VEND; }
-    [ -n "$AX" ] && { fp_rate 3.0 260 walk 16 "$PT04_SPAN"; FWALK=$FR; FSWALK=$FS; FMWALK=$FM; FLATW=$FLAT; FENDW=$FEND; }
+    for AX in -x +x -z +z; do van_acc run 500 420; AXT+=" $AX:cruise=${VR:-none},stop_at=${VSTOP:-0},side=$VLAT"
+      if [ -n "$VR" ] && awk -v w="${VSTOP:-0}" -v l="$VLAT" 'BEGIN{exit !(w+0>=400 && l+0<25)}'; then VRUN=$VR; VARUN=$VA; break; fi; done
+    [ -n "$VRUN" ] || { AX=""; VARUN="no clear 500 u run axis:$AXT"; }
+    [ -n "$AX" ] && { fp_rate 0.8 "$PT04_CAP_RUN" run 8 "$PT04_MINN_RUN" "$PT04_SPAN_RUN"; FRUN=$FR; FSRUN=$FS; FMRUN=$FM; FLATRUN=$FLAT; FENDRUN=$FEND; }
+    [ -n "$AX" ] && { van_acc walk 300 220; VWALK=$VR; VAWALK=$VA; VLATW=$VLAT; VENDW=$VEND; }
+    [ -n "$AX" ] && { fp_rate 2.0 "$PT04_CAP_WALK" walk 14 "$PT04_MINN_WALK" "$PT04_SPAN_WALK"; FWALK=$FR; FSWALK=$FS; FMWALK=$FM; FLATW=$FLAT; FENDW=$FEND; }
     mode off; vwalk 20 run >/dev/null; take "$SH" >/dev/null       # hand the char its run order back
     g() { fld "$1" <<<"$2"; }
-    ev="axis $AX base=${PT04_BASE}h/s | run: vanilla $VRUN u/s [$VSRUN] FP $FRUN u/s [$FSRUN] (FP gait=$(g gait "$FMRUN") vanilla_order=$(g vanilla_order "$FMRUN") meter rate_avg=$(g rate_avg "$FMRUN") rate_peak=$(g rate_peak "$FMRUN") sideways=$FLATRUN/$FENDRUN mv_max=$(g mv_max "$FMRUN") after release mv_so=$(g mv_so "$FMRUN"))"
-    ev="$ev | walk: vanilla $VWALK u/s [$VSWALK sideways=$VLATW/$VENDW] FP $FWALK u/s [$FSWALK sideways=$FLATW/$FENDW] (FP gait=$(g gait "$FMWALK") meter rate_avg=$(g rate_avg "$FMWALK") hold_t=$(g hold_t "$FMWALK") hold_dist=$(g hold_dist "$FMWALK") mv_walk=$(g mv_walk "$FMWALK") after release mv_so=$(g mv_so "$FMWALK"))"
-    ev="$ev | gait_restores $G0->$(g gait_restores "$FMWALK") | tol $PT04_TOL | athletics $ATH | axes$AXT | walktime run [$VRUNW] walk [$VWALKW] | rows $OUT/pt04-*-samples.txt"
-    if [ -z "$VRUN" ] || [ -z "$VWALK" ] || [ -z "$FRUN" ] || [ -z "$FWALK" ]; then row PT04 FAIL "setup: too few samples: $ev"
-    elif [ "$(g steady "$VSRUN")" != 1 ] || [ "$(g steady "$VSWALK")" != 1 ] || turned "$VLATW" "$VENDW"; then
-      row PT04 FAIL "setup: vanilla side not steady (stopped / turned / short window): $ev"
+    ev="axis $AX | run: vanilla cruise $VRUN u/s FP $FRUN u/s [$FSRUN sideways=$FLATRUN/$FENDRUN] (FP gait=$(g gait "$FMRUN") vanilla_order=$(g vanilla_order "$FMRUN") meter rate_avg=$(g rate_avg "$FMRUN") rate_peak=$(g rate_peak "$FMRUN") mv_max=$(g mv_max "$FMRUN") after release mv_so=$(g mv_so "$FMRUN"))"
+    ev="$ev | walk: vanilla cruise $VWALK u/s [sideways=$VLATW/$VENDW] FP $FWALK u/s [$FSWALK sideways=$FLATW/$FENDW] (FP gait=$(g gait "$FMWALK") meter rate_avg=$(g rate_avg "$FMWALK") mv_walk=$(g mv_walk "$FMWALK") after release mv_so=$(g mv_so "$FMWALK"))"
+    ev="$ev | gait_restores $G0->$(g gait_restores "$FMWALK") | tol $PT04_TOL | athletics $ATH | axes$AXT | acceltime run [$(cut -c1-200 <<<"$VARUN")] walk [$(cut -c1-200 <<<"$VAWALK")] | rows $OUT/pt04-fp-*-samples.txt"
+    if [ -z "$VRUN" ]; then row PT04 FAIL "setup: no clear run axis: $ev"
+    elif [ -z "$VWALK" ] || turned "$VLATW" "$VENDW" || [ "$(g offscreen_frames "$VAWALK")" != 0 ] || [ "$(g offscreen_frames "$VARUN")" != 0 ]; then
+      row PT04 FAIL "setup: vanilla walk/run not measured on screen in a straight line: $ev"
+    elif [ -z "$FRUN" ] || [ -z "$FWALK" ]; then row PT04 FAIL "FP meter gave no samples (fp_move state hold_t/hold_dist missing?): $ev"
     else ok=1; within "$FRUN" "$VRUN" && within "$FWALK" "$VWALK" || ok=0
       [ "$(g steady "$FSRUN")" = 1 ] && [ "$(g steady "$FSWALK")" = 1 ] && ! turned "$FLATW" "$FENDW" && ! turned "$FLATRUN" "$FENDRUN" || ok=0
       [ "$(g gait "$FMRUN")" = run ] && [ "$(g gait "$FMWALK")" = walk ] && [ "$(g mv_so "$FMRUN")" = run ] && [ "$(g mv_so "$FMWALK")" = walk ] || ok=0
