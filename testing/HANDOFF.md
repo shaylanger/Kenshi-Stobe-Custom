@@ -7,6 +7,13 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - **Launch rule (Shay, 2026-10-08, CLAUDE.md "Test launches on the 5090"):** test launches are windowed 1600x900, background,
   isolation on, DISPLAY2 preferred (m72 ran exclusive-fullscreen and interrupted Shay; killed). `kenshi-ctl.ps1 cfg status`
   shows the mode; `gfx-mods.sh on` / `-Play` restore Shay's full screen 2560x1440 (saved in C:\KenshiTestRuns\kenshi.cfg.play).
+- **18:30 status:** first fable agents hit their context limit after ~20 min (~200k tokens each); successors #2 started
+  18:25 from vm-handoff-sword-2.md / vm-handoff-xbow-2.md (builds ready, not installed: sword BA4025B2 = face-guard block,
+  cocked wind-up, deeper draw pose; crossbow 30B2D5EF = aim grip at the eye plane, low ready carry, reload rolled, near-plane
+  routing xwp, corrected limb model). m73 playtest inside the sword session (2546C194): PT25 PASS, PT11 PASS, PT18/PT31 FAIL
+  = setup (aim refused `no_focus`: the background window is never foreground) -> fp-playtest.sh now sets the `fp_keys
+  focus on` test switch like fp-controls.sh (18b57a9); rerun in the final sweep. Launch focus leak (game took the
+  foreground when launched while Shay was idle) -> harness `background` command + Demote fallback (harness bc53d38).
 - **Running (fable agents, started ~17:10):** sword viewmodel agent on the 5090 (lock owner `vm-sword`, clone
   /root/KenshiFP-sw, handoff vm-handoff-sword.md) and crossbow viewmodel agent on the 4080 (lock `rig4080`, clone
   /root/KenshiFP-vm, handoff vm-handoff-xbow.md); shared rules + Chivalry 2 reference (Shay's photo
