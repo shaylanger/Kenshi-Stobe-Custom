@@ -2367,6 +2367,7 @@ static int kah_fp_state(const char *id, int argc, const char *const *argv, KAH_R
     return KAH_OK;
 }
 
+static int kah_fp_vm(const char *, int, const char *const *, KAH_Reply *, void *);  /* kfp_viewmodel.inc */
 static void kah_bridge_tick(void)
 {
     if (g_kah_connected) return;
@@ -2385,7 +2386,8 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_camera", "fp_camera state|probe|distance <0..60>|wheel <delta>|look <yaw radians> <pitch radians>|ray x y z dx dy dz [range] [mask]|floors cx cz half step ytop ybot", kah_fp_camera, NULL)
           + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|aim (read-only)|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
           + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL)
-          + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|swallow on|off|focus on|off (TEST)|reset", kah_fp_keys, NULL);
+          + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|swallow on|off|focus on|off (TEST)|reset", kah_fp_keys, NULL)
+          + g_kah.registerCommand("fp_vm", "fp_vm state|on|off|set <ready|aim|reload|block|tau|taurl|sign|max|min|phi> <v>", kah_fp_vm, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
 }
@@ -3313,6 +3315,10 @@ static void fp_fall_update(void *pc)
     }
     g_guard_armed = 0;
 }
+
+static int ini_int(const char *line, const char *key, int *out);
+static int ini_float(const char *line, const char *key, float *out);
+#include "kfp_viewmodel.inc" /* PT13/14/17: weapon-in-view arm raise */
 
 static void fp_camera_override(void *gw)
 {
@@ -4378,6 +4384,7 @@ static void fp_camera_override(void *gw)
         }
         g_node_set_dori(node, &q);
         g_last_ori = q; g_have_eye = 1;    /* mid-frame re-assert now armed */
+        vm_frame(g_fp_control_actor, g_fp_control_actor ? fp_body_down(g_fp_control_actor) : 1);
 
         /* FOV: capture default once, then force the FP FOV each frame. */
         void *ogre_cam = *(void **)((uintptr_t)cam + CC_CAMERA);
@@ -6485,6 +6492,7 @@ static void load_ini(void)
         else if (ini_float(line, "jump_vel", &fv))        { if (fv >= 10 && fv <= 200) g_cfg_jump_vel = fv; }
         else if (ini_int(line, "key_jump", &v))           { if (v > 0 && v < 255) g_cfg_key_jump = v; }
         else if (ini_int(line, "key_pause", &v))          { if (v >= 0 && v < 255) g_cfg_key_pause = v; }
+        else if (vm_ini(line))                            ;
         else if (ini_int(line, "locomotion", &v))         g_cfg_loco = !!v;
         else if (ini_int(line, "state_hud", &v))          g_cfg_state_hud = !!v;
         else if (ini_int(line, "loco_clip", &v))          { if (v >= -1 && v < 64) g_cfg_loco_clip = v; }
@@ -8635,6 +8643,7 @@ __declspec(dllexport) void dllStartPlugin(void)
         logline("spine-bend: getori=%p setori=%p needupd=%p -> %s",
                 (void *)g_oldnode_getori, (void *)g_oldnode_setori,
                 (void *)g_oldnode_needupd, g_spine_ready ? "ARMED" : "unavailable");
+        vm_install(ogre);
         kfp_loco_load();   /* parse locomotion.kfa (inert until the retarget is wired) */
         logline("head-hide: hiddenMask set=%p find=%p -> %s (mask=0x%x)",
                 (void *)g_gpup_setnamedi, (void *)g_gpup_finddef,
