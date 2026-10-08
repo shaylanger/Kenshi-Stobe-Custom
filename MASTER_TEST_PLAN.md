@@ -35,9 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| STOBE 135-145 | Shay playtest 2026-10-07, Stobe/server half: panel target, FP speaker, bread chain, resume/clear goals, goal panel position, spar truce + heal deal, literal LLM, interrupt/resume compound tests (`STOBE_full_test_plan.md` D) | Full-Base, kah-* | open: 141, 143 (live-model), 145; rest passed m54 |
-| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | open: PT04 (Shay decision), PT06, PT13, PT17, PT20; rest passed m54 |
-| NP6 | NPC panel (`STOBE-NPCPANEL.sh "NP5 NP6"`): fact kept over reload (NP5, deterministic fact via NEG_TEST_INJECT), NP6; NP11/12/14 passed m54 | kah-npcpanel | NP5 passed m55; NP6 rerun (row sets Fond itself, d8a2020) |
+| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | open: PT04 (Shay decision), PT06, PT17, PT20; rest passed m54 |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
