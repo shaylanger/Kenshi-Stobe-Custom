@@ -191,7 +191,7 @@ draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
 # ---- restore on exit ----
 FP0=""; DIST0=""; AR0=""; PASSIVE0=""; RANGED0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
 cleanup() { A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/null; A fp_move none >/dev/null
-  A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
+  A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null; A fp_keys focus off >/dev/null
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null
   [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
   for c in $PINNED; do A pin "$c" off >/dev/null; done
@@ -290,6 +290,9 @@ if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
 FP0=$(fps fp_mode); DIST0=$(cam target); AR0=$(cs auto_reload)
 BOWN=$(A rangedinfo "$SH" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//'); [ "$BOWN" = none ] && BOWN=""
 A speed 1 hold >/dev/null; A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
+# windowed background launches (2026-10-08): the game window is never the foreground, so aim/fire would stall with
+# why=no_focus (m73 PT18/PT31); like fp-controls.sh, the test switch acts as focused when the cursor isn't captured
+[ "$(fps cursor_hidden)" = 1 ] || { A fp_keys focus on | grep -q test_focus=1 && echo "SETUP test_focus=1 (game window not foreground)" >> "$LOG"; waitf 3 cursor_ok; }
 for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
 PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/dev/null
 TGH=""; if A where "$TG" | grep -q 'pos='; then TGH=$(A where "$TG" | grep -oE '#[0-9]+/[0-9]+' | head -1)

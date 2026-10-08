@@ -128,8 +128,8 @@ if ($rc -eq 0 -and -not $Play -and $Command -in @('launch', 'restart')) {
   $ctl = 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1'
   foreach ($i in 1..3) {
     Start-Sleep -Seconds 3
-    & $ctl place -Monitor $Monitor -Kenshi $Kenshi | Out-Null
+    $last = & $ctl background -Monitor $Monitor -Kenshi $Kenshi
   }
-  "placed: $(& $ctl window -Kenshi $Kenshi)"
+  "background: $last"
 }
 exit $rc
