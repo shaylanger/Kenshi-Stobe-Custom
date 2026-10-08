@@ -3,7 +3,14 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-07-m51.md` (m51, newest), `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 m51 end, coordinator handing over to a new agent)
+## Right now (2026-10-07 m52, Shay's playtest feedback)
+- Shay played on the 5090 (19:12-20:49) and sent ~33 bugs/changes: recorded as STOBE 135-145 (`STOBE_full_test_plan.md` D)
+  and FP PT01-PT22 (`components/KenshiFP/docs/COMBAT_TEST_PLAN.md` Gate 6). Logs + dialogue export: `C:\KenshiTestRuns\logs\20261007-shay-play\`.
+- Helpers: Stobe/server fixer (135-145 + compound wrappers), KenshiFP fixer (PT rows except PT13/14/17). Coordinator: FP
+  combat view study on the 4080 (PT13/14/17: Shay wants the coordinator to play and compare with other games, not just script).
+- 5090: Shay says when it is free; until then 4080 only. Each fix needs a compound (multi-action) in-game test.
+
+## Before m52 (2026-10-07 m51 end, coordinator handing over to a new agent)
 - **Shay is playing on the 5090: do not launch, stop or install anything there until Shay says it is free.** Kenshi on
   the 5090 is Shay's (`-Play`), gfx-mods ON. 4080 idle, Kenshi closed, lock released.
 - **Nothing automated is left on the 4080.** All FP rows closed (C05-KO 8965bc3, C05-STAIRS a1414c4, C04-TAKE da96d77/

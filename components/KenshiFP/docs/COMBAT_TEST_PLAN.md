@@ -107,6 +107,34 @@ Notes (2026-10-05, KenshiFP 62464E5D): B17 offline covers AI refusal, click buff
 | S02 | Normal/fallback combat | no changes to uncontrolled NPC/squad/native shooting outside manual ownership |
 | S03 | Repeated transitions | no stuck aim/reload/control after repeated switching/loading (`fp-manual-transitions.sh`) |
 
+## Gate 6: Shay playtest 2026-10-07 (5090, KenshiFP 07376F24; logs `C:\KenshiTestRuns\logs\20261007-shay-play\`)
+Most of these broke under combined actions (toggle FP off/on, two weapons, squad switching, fight then talk), so every row
+needs a compound scenario (several actions in a row, toggles between them), not one isolated action.
+| ID | Problem (Shay) | Want / log evidence |
+|---|---|---|
+| PT01 | "Holstered"/"Ready" text stays on screen | show 1-2 s only on a change of state |
+| PT02 | R out of combat doesn't draw, no animation | Full-Base Beaks with a sword logged `R ready (unarmed)` (20:10, 20:28): weapon not found -> nothing drawn |
+| PT03 | Swinging/blocking text | no text; animation + view must make the state obvious |
+| PT04 | Movement feels far too fast with no athletics gear | find out: KenshiFP drive speed, PG athletics accel hook (f212cbc), time scale; compare vs vanilla run speed with the same char |
+| PT05 | Clicking a time-scale button (even 1 -> 1) runs ~10x for a moment | no speed spike |
+| PT06 | Hold-RMB context menu doesn't work any more | menu opens on hold |
+| PT07 | LMB still selects with "LMB select" set off | no select |
+| PT08 | MMB selects NPCs only, not buildings | buildings selectable/interactable |
+| PT09 | Fresh load: controls fine; after FP off -> on they break (PT06-PT08) | state survives any number of FP toggles |
+| PT10 | Weapon drawn + LMB on a far NPC facing away -> he turns and attacks though never hit; LMB on squad mate Avarek started a fight (20:11) | log `LMB engage <npc> task=5 hostile=1` (61x Yorin, 15x Morvek): LMB must swing, not give a native attack order to whoever is under the crosshair; never on squad mates |
+| PT11 | Holstered crossbow: RMB still starts a reload | RMB does nothing combat-related while holstered (menus/interaction work) |
+| PT12 | Crossbow + sword: block during a sword attack pulls the crossbow and reloads | block uses the drawn melee weapon only |
+| PT13 | Crossbow not visible in FP (out of FOV) | whole crossbow visible; raised on aim; reload clearly visible |
+| PT14 | Sword mostly invisible; can't tell block/swing/stagger | weapon + arms readable in each state |
+| PT15 | Crossbow far too accurate (skill 2: 70-80% head hits where aimed) | spread like vanilla Kenshi (skill/perception); supersedes the 2026-10-06 Gate 3 "manual may beat the dice" call; log: most `wound spatial` hits part=0 head |
+| PT16 | KO'd + carried in FP: looks like standing on the carrier's shoulders | proper carried pose/camera |
+| PT17 | FP combat view/animations overall | coordinator plays it on the 4080 (screenshots), compares with other FP melee/crossbow games, then fixes |
+| PT18 | R with a holstered crossbow reloads it; R with a loaded crossbow also acts | R only draws/holsters; never reloads |
+| PT19 | No way to clear an NPC selection | MMB/LMB on ground/sky -> selection back to the controlled char |
+| PT20 | No way to switch which squad member you control in FP | squad bar right-click menu -> "Control" |
+| PT21 | Selected squad mate + RMB = move order for them | same as with the controlled char selected |
+| PT22 | LMB on Avarek opens her stats in FP (bug 79 behaviour, `look-at click: opened the clicked member's details`) | no stats window |
+
 ## Visual/user checks
 ADS alignment and reload readability; zoom/body/clipping; attack/block responsiveness; tactical enjoyment and high-skill limb precision.
 Keep these separate from automated mechanical results. No finite suite guarantees absence of all bugs.
