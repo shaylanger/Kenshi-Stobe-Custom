@@ -376,6 +376,44 @@ static int combat_shot_prepare(void *gun,void *pc,void *intended,const Vec3 *aim
     }
     return moved;
 }
+/* PT15 (Shay 2026-10-07, supersedes the 2026-10-06 Gate 3 "manual aim may beat the dice" call): a skill 2 crossbow
+ * hit the head 70-80% of the time where aimed. The game's own randomDeviant cone (GunClass::shoot) is centred on the
+ * aim point and small next to a head, so the manual shot gets a skill cone first: the aim point moves inside
+ * cone = (0.5 + 6.0*(1-a)^1.5) deg * spread_scale, a = (0.75*crossbows + 0.25*perception)/100 (CharStats::getStat,
+ * unmodified=0: gear/injury apply). Skill 2 / perception 10 ~ 6.1 deg (a head at 80 dm is ~ +-1.8 deg), skill 50 ~ 2.6,
+ * skill 80 ~ 1.0, 100 = 0.5. Uniform in the disc; ini spread_scale (0 = off, default 1). */
+static unsigned g_spread_n;static float g_spread_skill=-1,g_spread_per=-1,g_spread_cone,g_spread_off;
+static void combat_apply_spread(void *pc,Vec3 *aim) {
+    if (!(g_cfg_spread_scale>0) || !g_combat_aim_have_ray) return;
+    static float (*getstat)(void *,int,unsigned char);static int res;
+    if (!res) {res=1;HMODULE k=GetModuleHandleA("KenshiLib.dll");
+        getstat=k?(float (*)(void *,int,unsigned char))GetProcAddress(k,"?getStat@CharStats@@QEBAMW4StatsEnumerated@@_N@Z"):NULL;}
+    void *st=readable((void *)((uintptr_t)pc+CHAR_STATS),8)?*(void **)((uintptr_t)pc+CHAR_STATS):NULL;
+    if (!readable(st,0x118)) return;
+    float cb=getstat?getstat(st,35,0):*(float *)((uintptr_t)st+0x110);
+    float pe=getstat?getstat(st,24,0):*(float *)((uintptr_t)st+0x8C);
+    if (!isfinite(cb)) cb=0;
+    if (!isfinite(pe)) pe=0;
+    float a=(0.75f*cb+0.25f*pe)/100.0f;a=a<0?0:a>1?1:a;
+    float cone=(0.5f+6.0f*powf(1.0f-a,1.5f))*g_cfg_spread_scale*(float)M_PI/180.0f;
+    Vec3 o=g_combat_aim_origin,d={aim->x-o.x,aim->y-o.y,aim->z-o.z};
+    float L=sqrtf(d.x*d.x+d.y*d.y+d.z*d.z);
+    if (!(L>0.5f) || !isfinite(L)) return;
+    d.x/=L;d.y/=L;d.z/=L;
+    Vec3 up=fabsf(d.y)<0.95f?(Vec3){0,1,0}:(Vec3){1,0,0};
+    Vec3 e1={d.y*up.z-d.z*up.y,d.z*up.x-d.x*up.z,d.x*up.y-d.y*up.x};
+    float l1=sqrtf(e1.x*e1.x+e1.y*e1.y+e1.z*e1.z);e1.x/=l1;e1.y/=l1;e1.z/=l1;
+    Vec3 e2={d.y*e1.z-d.z*e1.y,d.z*e1.x-d.x*e1.z,d.x*e1.y-d.y*e1.x};
+    static uint64_t rs;if (!rs) {LARGE_INTEGER c;QueryPerformanceCounter(&c);rs=(uint64_t)c.QuadPart|1;}
+    rs^=rs<<13;rs^=rs>>7;rs^=rs<<17;float u1=(float)((rs>>11)&0xFFFFFF)/16777216.0f;
+    rs^=rs<<13;rs^=rs>>7;rs^=rs<<17;float u2=(float)((rs>>11)&0xFFFFFF)/16777216.0f;
+    float r=cone*sqrtf(u1),ph=2.0f*(float)M_PI*u2,t=tanf(r);
+    Vec3 nd={d.x+t*(cosf(ph)*e1.x+sinf(ph)*e2.x),d.y+t*(cosf(ph)*e1.y+sinf(ph)*e2.y),d.z+t*(cosf(ph)*e1.z+sinf(ph)*e2.z)};
+    float ln=sqrtf(nd.x*nd.x+nd.y*nd.y+nd.z*nd.z);
+    aim->x=o.x+nd.x/ln*L;aim->y=o.y+nd.y/ln*L;aim->z=o.z+nd.z/ln*L;
+    ++g_spread_n;g_spread_skill=cb;g_spread_per=pe;g_spread_cone=cone*180.0f/(float)M_PI;g_spread_off=r*180.0f/(float)M_PI;
+    logline("[combat] spread crossbows=%.1f perception=%.1f cone=%.2fdeg off=%.2fdeg dist=%.1f",cb,pe,g_spread_cone,g_spread_off,L);
+}
 static size_t combat_shot_state(char *b,size_t n) {
     int w0=snprintf(b,n," shot_spawns=%u spawn_any=%u shot_nospawn=%u shot_mat=%d gun_mat=%d gun_creates=%u gun_repairs=%u gun_matless=%u matname=%d",
         g_wound_spawn_dispatch,g_wound_spawn_any,g_shot_nospawn,g_shot_mat,
@@ -392,9 +430,11 @@ static size_t combat_shot_state(char *b,size_t n) {
     if (w<0) w=0;
     if ((size_t)w>=n) return (size_t)w0+(n?n-1:0);
     b+=w;n-=(size_t)w;
-    int w2=snprintf(b,n," shot_barrel_bad=%u shot_barrel_fixes=%u shot_barrel_fix=%s shot_barrel_why=%d shot_barrel_raw_dist=%.2f shot_gunpos0=%.2f,%.2f,%.2f",
+    int w2=snprintf(b,n," shot_barrel_bad=%u shot_barrel_fixes=%u shot_barrel_fix=%s shot_barrel_why=%d shot_barrel_raw_dist=%.2f shot_gunpos0=%.2f,%.2f,%.2f"
+        " spread_n=%u spread_skill=%.1f spread_per=%.1f spread_cone=%.3f spread_off=%.3f spread_scale=%.2f",
         g_shot_barrel_bad,g_shot_barrel_fixes,g_shot_barrel_fix,g_shot_barrel_why,g_shot_barrel_raw_dist,
-        g_shot_gunpos0.x,g_shot_gunpos0.y,g_shot_gunpos0.z);
+        g_shot_gunpos0.x,g_shot_gunpos0.y,g_shot_gunpos0.z,
+        g_spread_n,g_spread_skill,g_spread_per,g_spread_cone,g_spread_off,g_cfg_spread_scale);
     return (size_t)w0+(size_t)w+(w2<0?0:(size_t)w2<n?(size_t)w2:n-1);
 }
 static int combat_gun_create(void *pc,void *gun) {
@@ -713,6 +753,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
          * physics shapes only, the visual mesh point can sit outside them at the silhouette. */
         Vec3 shot_aim=aim;g_shot_phys_point=0;
         if (intended && g_combat_camera_hit.shape) {shot_aim=g_combat_camera_hit.position;g_shot_phys_point=1;}
+        combat_apply_spread(pc,&shot_aim);   /* PT15: skill cone; the bolt collides on its own, intended stays the aimed char */
         Vec3 saved_pos;int moved=combat_shot_prepare(gun,pc,intended,&shot_aim,&saved_pos);
         g_shot_mat=combat_gun_has_material(gun);unsigned spawns0=g_wound_spawn_dispatch;
         g_combat_dispatch_tid=GetCurrentThreadId();g_combat_dispatch=1;
