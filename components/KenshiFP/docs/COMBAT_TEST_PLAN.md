@@ -50,10 +50,6 @@ Visual camera collision, body visibility and ADS alignment require screenshots/i
 Wrapper `tests/ingame/fp-controls.sh` (fixture kah-fpxbow: Axima crossbow player, Malzin mate, Skaera hostile; usage in its header). Input enters through `fp_keys press|native` (same tick path as the physical buttons) and `fp_combat input`; evidence is `fp_keys state` counters, `fp_combat state` (wih, fp_ui_state, actual_shots, ammo), `fp_camera state|probe`, `fp_melee state`, `where`/`hp`, KenshiFP.log. Not yet run in game.
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| FS01 | Free swing (LMB drawn melee, no target, no fight) | free_swings+1, fs_prog_max>0.5, fs_ends+1, fs_faults=0, fs_dead=0, no native fight started, mate hp unchanged |
-| FB01 | Free block out of combat | aimed at the sky, `fp_melee state` active=0: ui_state=blocking while RMB held, free_block_frames rising, back to ready after release |
-| FF01 | Ranged free fire (fp_combat on) | aimed at the sky, `fp_combat input 1 1 0`: actual_shots+1, ammo-1; reload (`fp_combat input 1 0 1`, the adapter path of R+RMB): reload_starts+1, ammo back up. Physical R+RMB mapping: Shay |
-| HUD01 | HUD state label follows the native state | fp_ui_state / hud_text: holstered -> ready (after R) -> swinging (free swing) -> blocking (RMB) -> aiming (crossbow drawn + RMB); hud_text = ui_state with hud_shown=1. Visual: label look/position/tint (screenshot/Shay) |
 Visual rows (screenshot or Shay's eye, MASTER section 2): K01 native-walk marker, the K03 context-menu visuals, the HUD01 label look.
 
 ## Gate 1c: FP stealth attacks (KenshiFP 7B8175EF+)
