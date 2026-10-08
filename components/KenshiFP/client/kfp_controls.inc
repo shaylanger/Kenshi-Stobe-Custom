@@ -863,9 +863,29 @@ static volatile LONG g_fpc_ctl_click_req;
 static unsigned g_fpc_ctl_offers,g_fpc_ctl_switches,g_fpc_ctl_menu_seen;
 static char g_fpc_ctl_name[48]="none",g_fpc_ctl_last[48]="none";
 static const char *g_fpc_ctl_via="none",*g_fpc_ctl_src="none";
-static void *fpc_ctl_menu_target(void *gw,void *ctl) {
+static unsigned char (*fpc_ctl_getvis(void))(void *) {
     static unsigned char (*getvis)(void *);static int res;
     if (!res) {res=1;HMODULE mg=GetModuleHandleA(MYGUI_DLL);getvis=mg?(unsigned char (*)(void *))GetProcAddress(mg,FPC_SYM_WGETVIS):NULL;}
+    return getvis;
+}
+/* PT06/PT20 diagnostics: the game's menu visibility as the Control button sees it (cache byte) and the menu widgets'
+ * own flags (bit0 menu1, bit1 menu2; -1 unknown), refreshed every frame for `fp_keys ctl` */
+static int g_fpc_ctl_vis=-1,g_fpc_ctl_mw=-1;
+static int fpc_ctx_widget_bits(void *gw) {
+    unsigned char (*getvis)(void *)=fpc_ctl_getvis();
+    void *pi=fpc_player_interface(gw);
+    if (!getvis || !readable(pi,0x200)) return -1;
+    int bits=0;
+    for (int i=0;i<2;++i) {
+        void *m=*(void **)((uintptr_t)pi+FPC_PI_CTXMENU+0x48+8*i);
+        if (!readable(m,0xC8)) continue;
+        void *mw=*(void **)((uintptr_t)m+8);
+        if (readable(mw,8) && getvis(mw)) bits|=1<<i;
+    }
+    return bits;
+}
+static void *fpc_ctl_menu_target(void *gw,void *ctl) {
+    unsigned char (*getvis)(void *)=fpc_ctl_getvis();
     void *pi=fpc_player_interface(gw);
     if (!readable(pi,0x200)) return NULL;
     for (int i=0;i<2;++i) {
@@ -887,6 +907,7 @@ static void fpc_ctl_menu_update(void *gw) {
     guard_arm();
     int vis=g_fp_mode && gw && RVA_CTXMENU_VISIBLE && readable((void *)(g_base+RVA_CTXMENU_VISIBLE),1) &&
         *(unsigned char *)(g_base+RVA_CTXMENU_VISIBLE);
+    g_fpc_ctl_vis=vis;g_fpc_ctl_mw=g_fp_mode&&gw?fpc_ctx_widget_bits(gw):-1;
     void *ctl=vis?fp_controlled_char(gw):NULL;
     void *t=vis&&ctl?fpc_ctl_menu_target(gw,ctl):NULL;
     static int lmb_prev;int lmb=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0,released=lmb_prev&&!lmb;lmb_prev=lmb;
@@ -935,7 +956,7 @@ static void fpc_ctl_menu_update(void *gw) {
 }
 static void fpc_ctl_request(void) {InterlockedExchange(&g_fpc_ctl_click_req,1);}
 static size_t fpc_ctl_text(char *b,size_t n) {
-    return (size_t)snprintf(b,n,"ctl shown=%d dead=%d target=%s src=%s offers=%u switches=%u last=%s via=%s",
+    return (size_t)snprintf(b,n,"ctl shown=%d dead=%d target=%s src=%s offers=%u switches=%u last=%s via=%s menu_vis=%d menu_widgets=%d",
         g_fpc_ctl_shown,g_fpc_ctl_dead,g_fpc_ctl_target?g_fpc_ctl_name:"none",g_fpc_ctl_src,g_fpc_ctl_offers,g_fpc_ctl_switches,
-        g_fpc_ctl_last,g_fpc_ctl_via);
+        g_fpc_ctl_last,g_fpc_ctl_via,g_fpc_ctl_vis,g_fpc_ctl_mw);
 }
