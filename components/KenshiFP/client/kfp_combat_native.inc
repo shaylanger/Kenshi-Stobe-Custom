@@ -540,6 +540,17 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         *(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT):NULL;
     void *ranged=combat_virtual(pc,0x3d0);
     void *weapon=ranged?((void *(*)(void *))ranged)(pc):NULL;
+    /* PT11/PT12 (Shay 2026-10-07): the ranged adapter runs only while the ranged weapon is in hands. Holstered
+     * (nothing in hands) or a melee weapon in hands = the melee adapter, exactly like a char without a crossbow:
+     * RMB never draws/reloads a holstered crossbow and never sheathes a drawn sword ("wrong_weapon"); R draws. */
+    void *wih_now=char_valid(pc)&&readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
+    /* (harness `fp_combat input` keeps the old aim-draws-the-holstered-crossbow path so the R-series ranged rows
+     * stay runnable; the player's physical input never takes it) */
+    if (char_valid(pc) && weapon && wih_now!=weapon && !(g_combat_injection && !wih_now)) {
+        combat_release();memset(&g_combat_observed,0,sizeof(g_combat_observed));
+        g_combat_why=wih_now?"melee_in_hands":"ranged_holstered";fp_melee_manual_tick(gw,pc,input.aim,input.fire,dt);
+        g_guard_armed=0;return;
+    }
     if (char_valid(pc) && !weapon) {
         /* No ranged weapon: the melee adapter owns this actor's native swings. */
         combat_release();memset(&g_combat_observed,0,sizeof(g_combat_observed));

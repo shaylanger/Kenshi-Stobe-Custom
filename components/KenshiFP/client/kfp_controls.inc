@@ -517,7 +517,10 @@ static void fp_controls_tick(void *gw,float dt) {
     fpc_ctx_relock_step();
     void *wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
     void *ranged=combat_virtual(pc,0x3d0);
-    g_fpc_ranged=ranged&&((void *(*)(void *))ranged)(pc)!=NULL;
+    /* PT11/PT12: "ranged" = the ranged weapon is the one in hands, not merely carried (a drawn sword with a
+     * crossbow on the back is melee: LMB swings, RMB blocks) */
+    void *rw=ranged?((void *(*)(void *))ranged)(pc):NULL;
+    g_fpc_ranged=rw!=NULL && wih==rw;
     g_fpc_drawn=wih!=NULL||g_fpc_fists;g_fpc_wih=wih;
     int phys_ok=g_cursor_hidden && !g_ui_open && game_has_focus();
     int in[FPC_NBTN],edge[FPC_NBTN],rel[FPC_NBTN];
