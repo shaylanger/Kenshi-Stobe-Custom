@@ -14323,6 +14323,7 @@ static GameData *FindTestInboxItemData(GameWorld *world, const std::string &name
 // NPC is doing, faction, trader) are read here and sent with the request; the server
 // adds stored deals/goals/relationship/learned facts. No LLM call.
 static unsigned int g_npcPanelTargetSerial = 0;
+static bool g_npcPanelFollowsChat = true; // item 146: false when opened by the hotkey
 static std::string g_npcPanelTargetName;
 static unsigned int g_npcPanelSpeakerSerial = 0;
 static std::string g_npcPanelSpeakerName;
@@ -14453,6 +14454,7 @@ static bool NpcPanelOpenFor(GameWorld *world, Character *speaker, Character *tar
                             const char *why) {
   if (!target || (uintptr_t)target <= 0x1000 || target == speaker)
     return false;
+  g_npcPanelFollowsChat = true; // any open follows the chat; the hotkey clears it after
   try {
     g_npcPanelTargetSerial = target->getHandle().serial;
     g_npcPanelTargetName = target->getName();
@@ -14488,6 +14490,29 @@ static bool NpcPanelOpenForSelection(GameWorld *world, Character *sel, const cha
     return false;
   }
   return NpcPanelOpenFor(world, speaker, target, why);
+}
+
+// Item 146: the hotkey shows the SELECTED character's card (squad member or NPC), seen by
+// the FP-controlled character, else by the nearest other squad member.
+namespace Stobe { namespace UI { Character *StobeFpControlledCharacter(GameWorld *world); } }
+static bool NpcPanelOpenForSelected(GameWorld *world, Character *sel, const char *why) {
+  if (!sel || (uintptr_t)sel <= 0x1000)
+    return false;
+  Character *viewer = nullptr;
+  try {
+    viewer = Stobe::UI::StobeFpControlledCharacter(world);
+    if (!viewer || viewer == sel)
+      viewer = sel->isPlayerCharacter()
+                   ? ResolveNearestSquadmateTargetForSelection(world, sel)
+                   : ResolveNearestPlayerSpeakerForTarget(world, sel);
+  } catch (...) {
+    return false;
+  }
+  if (viewer == sel)
+    viewer = nullptr;
+  Log(std::string("NPC_PANEL: ") + why + " selected='" + sel->getName() + "' viewer='" +
+      (viewer ? viewer->getName() : std::string("")) + "'");
+  return NpcPanelOpenFor(world, viewer, sel, why);
 }
 
 // The chat window's current target and speaking character, if a chat is open.
@@ -14544,7 +14569,7 @@ static void NpcPanelTick(GameWorld *world, Character *sel) {
   if (!Stobe::UI::IsNpcPanelOpen())
     return;
   Character *speaker = nullptr, *target = nullptr;
-  if (NpcPanelPair(world, sel, speaker, target)) {
+  if (g_npcPanelFollowsChat && NpcPanelPair(world, sel, speaker, target)) {
     std::string speakerName;
     try {
       speakerName = speaker ? speaker->getName() : std::string("");
@@ -15577,9 +15602,11 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
         Stobe::UI::CloseNpcPanelUI();
       } else {
         Character *chatSpeaker = nullptr, *chatTarget = nullptr;
-        if (NpcPanelPair(world, sel, chatSpeaker, chatTarget))
+        if (NpcPanelOpenForSelected(world, sel, "hotkey_selected")) {
+          g_npcPanelFollowsChat = false; // stays on the selected character
+        } else if (NpcPanelPair(world, sel, chatSpeaker, chatTarget)) {
           NpcPanelOpenFor(world, chatSpeaker, chatTarget, "hotkey_chat");
-        else if (!NpcPanelOpenForSelection(world, sel, "hotkey"))
+        } else if (!NpcPanelOpenForSelection(world, sel, "hotkey"))
           Log("NPC_PANEL: hotkey pressed but no conversation target");
       }
     }
@@ -15628,6 +15655,23 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
         } else {
           chatTarget = sel;
           chatSpeaker = ResolveNearestPlayerSpeakerForTarget(world, chatTarget);
+        }
+        // Item 147: in first person the controlled character speaks; a selected squad
+        // mate is who she talks to (same rule as the stobe_say ui path, item 136).
+        Character *fpSpeaker = StobeFpControlledCharacter(world);
+        if (fpSpeaker && fpSpeaker != chatSpeaker) {
+          bool selIsPlayer = false;
+          try {
+            selIsPlayer = sel->isPlayerCharacter();
+          } catch (...) {
+          }
+          chatSpeaker = fpSpeaker;
+          if (selIsPlayer && sel != fpSpeaker)
+            chatTarget = sel;
+          else if (!chatTarget || chatTarget == fpSpeaker)
+            chatTarget = ResolveNearestNpcTargetForSelection(world, chatSpeaker);
+          Log("CHAT_OPEN: FP-controlled speaker '" + fpSpeaker->getName() + "' target='" +
+              (chatTarget ? chatTarget->getName() : std::string("")) + "'");
         }
 
         if (chatTarget && !IsAliveConsciousCharacterForTargeting(chatTarget)) {
@@ -15703,7 +15747,8 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
             chatTarget ? ToString(chatTarget->getHandle().serial) : "";
         CreateChatUI(targetName, pName, targetSerial);
         Log("UI: CreateChatUI done target=" +
-            (targetName.empty() ? std::string("<none>") : targetName));
+            (targetName.empty() ? std::string("<none>") : targetName) +
+            " speaker=" + pName);
       } else {
         Character *chatSpeaker =
             thisptr->playerCharacters.size() > 0 ? thisptr->playerCharacters[0]
