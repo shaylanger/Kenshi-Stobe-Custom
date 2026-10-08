@@ -11,8 +11,10 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
   kenshi-key.ps1 + CS rows switch to key_inject by themselves. **Shay playing: `kenshi-ctl.ps1 launch -Play`.**
   Verified in game (5090 L/M): CS01-CS08, K rows 14/14 (K01 first 5090 PASS), ctl-on 10/10 with the game unfocused.
 - KenshiFP manual combat ON by default + F10 toggle + rebindable keys (7b85f67) validated both rigs.
-- C05-KO (obstacle redo 8965bc3), C05-STAIRS (namesake handle a1414c4): 4080 bm51h 30/30, closed. C04-TAKE 5090
-  ctl-off: test measured the mate walk too late (da96d77); take refusal reasons logged (ffad4e4). Batch N confirms.
+- C05-KO (8965bc3), C05-STAIRS (a1414c4), C04-TAKE (da96d77, ffad4e4), C05-INTERIOR (refused trace holds the last
+  distance, 799c3f9): all closed on the 4080 (bm51h 30/30, bm51i, bm51j 40/40). 4080 idle, lock released.
+- **5090 next time Shay frees it:** install KenshiFP 76CF7E8A (still 07376F24 there; Kenshi closed), then run the NP
+  rows below.
 - NP5/NP11/NP12 (NPC bio LLM rows): DeepInfra credit is back (Shay); run on the 5090 when Shay says it is free (Stobe +
   server only there; Shay is using the 5090 meanwhile, all other testing on the 4080). List line:
   `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12`.
@@ -35,7 +37,7 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 
 ## Builds installed
 - 5090: Stobe 3EF4CCEE (NPC biography card), KenshiFP 07376F24 (ffad4e4 + isolation a8dc8bc), PG BAFB8C31 (Normal), harness EF425B2D (input isolation f10996c); server live `stobe` 055e0c5.
-- 4080: KenshiFP F8223BCC (m51 bm51h), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
+- 4080: KenshiFP 76CF7E8A (799c3f9 C05-INTERIOR; bm51j 40/40), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
 - **STOBE / REL:** all automated rows PASS; open items only in `STOBE_full_test_plan.md` (D: fixed, awaiting in-game
