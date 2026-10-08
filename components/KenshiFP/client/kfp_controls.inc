@@ -776,6 +776,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_free_toggle,g_free_key_toggles,g_free_key_refocus,g_free_load_resets,g_fpc_rmb_free_swallowed);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
+static void fpc_nctl_install(void);   /* PT24, end of file */
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
     return -1;
@@ -823,7 +824,7 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
     }
     if ((argc==2||argc==3) && !_stricmp(argv[1],"ctl")) {   /* PT20: ctl = Control button state; ctl click = queue its action */
         if (argc==3) {if (_stricmp(argv[2],"click")) {r->append(r,"ctl [click]");return KAH_ERROR;} fpc_ctl_request();}
-        char b[300];fpc_ctl_text(b,sizeof b);r->append(r,b);return KAH_OK;
+        char b[600];fpc_ctl_text(b,sizeof b);r->append(r,b);return KAH_OK;
     }
     if (argc==3 && !_stricmp(argv[1],"swallow")) {
         g_fpc_swallow=!_stricmp(argv[2],"on");r->append(r,g_fpc_swallow?"swallow=1":"swallow=0");return KAH_OK;
@@ -888,6 +889,7 @@ static void fp_controls_init(void) {
      g_fpc_ctxupd_addr=match?(unsigned long long)rva:0;
      logline("[controls] ContextMenu::update by RVA +0x%llx (build %d gog %d) prologue=%d hook=%d; export=%p (+0x%llx, unused)",
              (unsigned long long)rva,g_build,g_gog,match,g_fpc_ctxupd_hook_ok,cux,cux?(unsigned long long)((uintptr_t)cux-g_base):0ULL);}
+    fpc_nctl_install();   /* PT24: Control inside the game's own context menu */
     if (!g_fpc_startanim) g_fpc_fs_dead=1;
     logline("[controls] playerControl=%p hook=%d select=%p ctxmenu=%p addOrder=%p attack=%p isEnemy=%p anim=%p choose=%p progress=%p end=%p startanim=%p",
         pcf,g_fpc_hook_ok,(void *)g_fpc_select,(void *)g_fpc_ctxmenu,(void *)g_fpc_addorder,(void *)g_fpc_attack,(void *)g_fpc_isenemy,
@@ -1026,6 +1028,104 @@ static void *fpc_ctl_menu_target(void *gw,void *ctl) {
     if (char_valid(rt) && rt!=ctl && fp_char_in_squad(gw,rt)) {g_fpc_ctl_src="right_target";return rt;}
     return NULL;
 }
+/* PT24 (Shay 2026-10-08): "Control" must be an entry of the game's own RMB context menu (Trade, Follow, Bodyguard,
+ * Pickup ...), not a separate button. The menu: ContextMenu::showContextMenu fills its order list (lektor<TaskType>,
+ * +8 count, +0x10 data) and calls ContextMenuGUI::show(list, name, offset) (1.0.65 0x7a7440 / 1.0.68 0x7a7fe0), which
+ * drops ids PlayerInterface::isOrderValidForSelection refuses (any id while no restricted mode), captions each with
+ * the task-name function (std::string f(TaskType, RootObject*): 0x79a730 / 0x79b2d0; empty = no option), sorts them
+ * and makes one Button per id (user data = the id). A click (optionSelected 0x7a7370) calls
+ * PlayerInterface::newPlayerTaskSelectedCharacters(id, target hand, NULL, ZERO, false) (0x7f9ab0 / 0x7fa650) and
+ * hides the menu. KenshiFP: in FP, with the menu on a squad mate other than the controlled char, show gets a COPY of
+ * the list plus FPC_TASK_CONTROL (the game's own list is untouched), the name function answers "Control" for it, and
+ * the task call for it queues the control switch (run post-frame in fpc_ctl_menu_update). Hooks by RVA + prologue
+ * check (build 65/68; GOG/other: none -> the old KFPControlBtn widget stays as the fallback). */
+#define FPC_TASK_CONTROL 0x4B4643   /* not a TaskType (they end below 0x130) */
+typedef void (*fpc_guishow_t)(void *gui,const void *orders,const void *name,unsigned char offset);
+typedef void *(*fpc_taskname_t)(void *out,int task,void *obj);
+typedef void (*fpc_newtask_t)(void *pi,int task,const void *h,void *bld,const void *pos,unsigned char add);
+static fpc_guishow_t g_fpc_gshow_orig;
+static fpc_taskname_t g_fpc_tname_orig;
+static fpc_newtask_t g_fpc_ntask_orig;
+static int g_fpc_nctl_hooks;   /* bit0 show, bit1 task name, bit2 task call: 7 = native option on */
+static unsigned g_fpc_nctl_injected,g_fpc_nctl_captions,g_fpc_nctl_clicks,g_fpc_nctl_refused;
+static void *g_fpc_nctl_target,*g_fpc_nctl_gui;   /* the menu the option was put into (last show) */
+static void *volatile g_fpc_nctl_req;             /* chosen from the menu: switch to this char post-frame */
+static char g_fpc_nctl_name[48]="none";
+static void *fpc_nctl_mate(const void *h) {     /* a squad mate (not the controlled char) behind a hand, else NULL */
+    void *gw=g_gw_cache;
+    if (!g_fp_mode || !gw || !h || !readable((void *)h,0x20) || !g_combat_hand_character) return NULL;
+    if (*(const int *)((uintptr_t)h+HAND_IDS)!=1) return NULL;          /* hand type: a character */
+    void *c=g_combat_hand_character((void *)h),*ctl=fp_controlled_char(gw);
+    return (ctl && char_valid(c) && c!=ctl && fp_char_in_squad(gw,c))?c:NULL;
+}
+static void fpc_guishow_hook(void *gui,const void *orders,const void *name,unsigned char off) {
+    void *t=readable(gui,0xD0)?fpc_nctl_mate((void *)((uintptr_t)gui+0xA8)):NULL;   /* contextMenuTarget */
+    g_fpc_nctl_gui=gui;g_fpc_nctl_target=t;
+    if (t && readable((void *)orders,0x18)) {
+        unsigned n=*(const unsigned *)((uintptr_t)orders+8);
+        const int *d=*(int *const *)((uintptr_t)orders+0x10);
+        static int buf[128];unsigned char cp[0x18];
+        if (n<127 && (n==0 || readable((void *)d,4*n))) {
+            int have=0;
+            for (unsigned i=0;i<n;++i) {buf[i]=d[i];if (d[i]==FPC_TASK_CONTROL) have=1;}
+            if (!have) buf[n++]=FPC_TASK_CONTROL;
+            memcpy(cp,orders,0x18);*(unsigned *)(cp+8)=n;*(int **)(cp+0x10)=buf;
+            ++g_fpc_nctl_injected;fpc_name(t,g_fpc_nctl_name,sizeof g_fpc_nctl_name);
+            logline("[controls] Control option added to the game's context menu on %s (%u options)",g_fpc_nctl_name,n);
+            g_fpc_gshow_orig(gui,cp,name,off);return;
+        }
+    }
+    g_fpc_gshow_orig(gui,orders,name,off);
+}
+static void *fpc_taskname_hook(void *out,int task,void *obj) {
+    if (task==FPC_TASK_CONTROL && out) {   /* MSVC 2010 std::string: SSO buffer [16], size +0x10, capacity +0x18 */
+        unsigned char *s=(unsigned char *)out;memset(s,0,0x20);memcpy(s,"Control",8);
+        *(size_t *)(s+0x10)=7;*(size_t *)(s+0x18)=15;++g_fpc_nctl_captions;return out;
+    }
+    return g_fpc_tname_orig(out,task,obj);
+}
+static void fpc_newtask_hook(void *pi,int task,const void *h,void *bld,const void *pos,unsigned char add) {
+    if (task!=FPC_TASK_CONTROL) {g_fpc_ntask_orig(pi,task,h,bld,pos,add);return;}
+    void *c=fpc_nctl_mate(h);           /* never reaches the game: not a real task */
+    if (c) {g_fpc_nctl_req=c;++g_fpc_nctl_clicks;}
+    else {++g_fpc_nctl_refused;logline("[controls] Control option chosen but the target is no squad mate now: ignored");}
+}
+static void fpc_nctl_install(void) {
+    static const unsigned char p_show[28]={0x48,0x8b,0xc4,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,0x48,0x8d,
+                                          0xa8,0xe8,0xfc,0xff,0xff,0x48,0x81,0xec,0xe0,0x03,0x00,0x00};
+    static const unsigned char p_name[21]={0x40,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x48,0x8d,0xac,0x24,0x80,0xe1,0xff,0xff,
+                                          0xb8,0x80,0x1f,0x00,0x00};
+    static const unsigned char p_task[26]={0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x6c,0x24,0x18,0x56,0x57,0x41,0x54,0x48,0x83,
+                                          0xec,0x40,0x49,0x8b,0xe8,0x48,0x8b,0xf1,0x8b,0xfa};
+    uintptr_t rs=0,rn=0,rt=0;
+    if (!g_gog && g_build==65) {rs=0x7a7440u;rn=0x79a730u;rt=0x7f9ab0u;}
+    if (!g_gog && g_build==68) {rs=0x7a7fe0u;rn=0x79b2d0u;rt=0x7fa650u;}
+    void *fs=rs?(void *)(g_base+rs):NULL,*fn=rn?(void *)(g_base+rn):NULL,*ft=rt?(void *)(g_base+rt):NULL;
+    int ms=fs && readable(fs,28) && !memcmp(fs,p_show,28);
+    int mn=fn && readable(fn,21) && !memcmp(fn,p_name,21);
+    int mt=ft && readable(ft,26) && !memcmp(ft,p_task,26);
+    if (ms && mn && mt) {   /* all three or none: a half-installed set would show an option nobody handles */
+        if (install_hook(fn,(void *)fpc_taskname_hook,(void **)&g_fpc_tname_orig)) g_fpc_nctl_hooks|=2;
+        if (install_hook(ft,(void *)fpc_newtask_hook,(void **)&g_fpc_ntask_orig)) g_fpc_nctl_hooks|=4;
+        if (g_fpc_nctl_hooks==6 && install_hook(fs,(void *)fpc_guishow_hook,(void **)&g_fpc_gshow_orig)) g_fpc_nctl_hooks|=1;
+    }
+    logline("[controls] native Control option: build %d gog %d show +0x%llx(%d) name +0x%llx(%d) task +0x%llx(%d) hooks=%d%s",
+            g_build,g_gog,(unsigned long long)rs,ms,(unsigned long long)rn,mn,(unsigned long long)rt,mt,g_fpc_nctl_hooks,
+            g_fpc_nctl_hooks==7?"":" -> fallback: separate Control button");
+}
+static int fpc_ctl_switch_to(void *gw,void *t,const char *via) {   /* PT20/PT24: control t, select her, close the menu */
+    char nm[48];fpc_name(t,nm,sizeof nm);
+    if (!fp_control_pin(gw,t)) {logline("[controls] Control -> %s refused (pin failed)",nm);return 0;}
+    void *pi=fpc_player_interface(gw);
+    if (g_fpc_select && pi) g_fpc_select(pi,t,0);
+    static void (*hide)(void *);static int hres;
+    if (!hres) {hres=1;hide=(void (*)(void *))fpc_klib(FPC_SYM_HIDECTX);}
+    if (hide) hide(gw);
+    ++g_fpc_ctl_switches;g_fpc_ctl_via=via;strcpy(g_fpc_ctl_last,nm);
+    if (g_fpc_ctx_freed) {g_free_toggle=0;g_fpc_ctx_freed=0;}   /* back to look mode on the new body */
+    logline("[controls] Control -> %s via=%s",g_fpc_ctl_last,g_fpc_ctl_via);
+    return 1;
+}
 static void fpc_ctl_menu_update(void *gw) {
     if (g_fpc_ctl_dead || !g_gui_getinstance || !g_gui_createwidget || !g_widget_setvisible || g_guard_armed) return;
     if (setjmp(g_guard_jb)) {g_guard_armed=0;g_fpc_ctl_dead=1;logline("[controls] Control button FAULTED; disabled");return;}
@@ -1035,6 +1135,16 @@ static void fpc_ctl_menu_update(void *gw) {
     g_fpc_ctl_vis=vis;g_fpc_ctl_mw=g_fp_mode&&gw?fpc_ctx_widget_bits(gw):-1;
     void *ctl=vis?fp_controlled_char(gw):NULL;
     void *t=vis&&ctl?fpc_ctl_menu_target(gw,ctl):NULL;
+    if (g_fpc_nctl_hooks==7) {   /* PT24: the option lives in the game's menu; no own widget */
+        void *req=g_fpc_nctl_req;g_fpc_nctl_req=NULL;
+        if (req && g_fp_mode && gw && char_valid(req) && fp_char_in_squad(gw,req)) fpc_ctl_switch_to(gw,req,"menu");
+        if (g_fpc_ctl_shown) {g_widget_setvisible(g_fpc_ctl_btn,0);g_fpc_ctl_shown=0;}
+        int offered=t && t==g_fpc_nctl_target;   /* the option is in the open menu for this mate */
+        if (offered && t!=g_fpc_ctl_target) {++g_fpc_ctl_offers;fpc_name(t,g_fpc_ctl_name,sizeof g_fpc_ctl_name);}
+        g_fpc_ctl_target=offered?t:NULL;
+        if (InterlockedExchange(&g_fpc_ctl_click_req,0) && offered) fpc_ctl_switch_to(gw,t,"harness");   /* TEST ONLY */
+        g_guard_armed=0;return;
+    }
     static int lmb_prev;int lmb=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0,released=lmb_prev&&!lmb;lmb_prev=lmb;
     if (!t) {
         if (g_fpc_ctl_shown) {g_widget_setvisible(g_fpc_ctl_btn,0);g_fpc_ctl_shown=0;}
@@ -1065,23 +1175,16 @@ static void fpc_ctl_menu_update(void *gw) {
     if (!g_fpc_ctl_shown) {g_widget_setvisible(g_fpc_ctl_btn,1);g_fpc_ctl_shown=1;}
     int harness=InterlockedExchange(&g_fpc_ctl_click_req,0)!=0;
     if (harness || (released && widget_clicked(g_fpc_ctl_btn))) {
-        void *pi=fpc_player_interface(gw);
-        if (fp_control_pin(gw,t)) {
-            if (g_fpc_select && pi) g_fpc_select(pi,t,0);
-            static void (*hide)(void *);static int hres;
-            if (!hres) {hres=1;hide=(void (*)(void *))fpc_klib(FPC_SYM_HIDECTX);}
-            if (hide) hide(gw);
-            ++g_fpc_ctl_switches;g_fpc_ctl_via=harness?"harness":"click";strcpy(g_fpc_ctl_last,g_fpc_ctl_name);
-            g_widget_setvisible(g_fpc_ctl_btn,0);g_fpc_ctl_shown=0;g_fpc_ctl_target=NULL;
-            if (g_fpc_ctx_freed) {g_free_toggle=0;g_fpc_ctx_freed=0;}   /* back to look mode on the new body */
-            logline("[controls] Control -> %s via=%s",g_fpc_ctl_last,g_fpc_ctl_via);
-        } else logline("[controls] Control -> %s refused (pin failed)",g_fpc_ctl_name);
+        if (fpc_ctl_switch_to(gw,t,harness?"harness":"click")) {g_widget_setvisible(g_fpc_ctl_btn,0);g_fpc_ctl_shown=0;g_fpc_ctl_target=NULL;}
     }
     g_guard_armed=0;
 }
 static void fpc_ctl_request(void) {InterlockedExchange(&g_fpc_ctl_click_req,1);}
 static size_t fpc_ctl_text(char *b,size_t n) {
-    return (size_t)snprintf(b,n,"ctl shown=%d dead=%d target=%s src=%s offers=%u switches=%u last=%s via=%s menu_vis=%d menu_widgets=%d",
-        g_fpc_ctl_shown,g_fpc_ctl_dead,g_fpc_ctl_target?g_fpc_ctl_name:"none",g_fpc_ctl_src,g_fpc_ctl_offers,g_fpc_ctl_switches,
-        g_fpc_ctl_last,g_fpc_ctl_via,g_fpc_ctl_vis,g_fpc_ctl_mw);
+    int native=g_fpc_nctl_hooks==7,shown=native?g_fpc_ctl_target!=NULL:g_fpc_ctl_shown;
+    return (size_t)snprintf(b,n,"ctl shown=%d dead=%d target=%s src=%s offers=%u switches=%u last=%s via=%s menu_vis=%d menu_widgets=%d"
+        " native=%d native_hooks=%d native_injected=%u native_captions=%u native_clicks=%u native_refused=%u native_target=%s button=%d",
+        shown,g_fpc_ctl_dead,g_fpc_ctl_target?g_fpc_ctl_name:"none",g_fpc_ctl_src,g_fpc_ctl_offers,g_fpc_ctl_switches,
+        g_fpc_ctl_last,g_fpc_ctl_via,g_fpc_ctl_vis,g_fpc_ctl_mw,native,g_fpc_nctl_hooks,g_fpc_nctl_injected,g_fpc_nctl_captions,
+        g_fpc_nctl_clicks,g_fpc_nctl_refused,g_fpc_nctl_target?g_fpc_nctl_name:"none",g_fpc_ctl_btn!=NULL);
 }
