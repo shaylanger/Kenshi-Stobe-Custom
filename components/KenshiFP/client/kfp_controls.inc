@@ -623,6 +623,7 @@ static void fp_controls_tick(void *gw,float dt) {
     g_fpc_ui_state=fpc_ui_state(pc,in[FPC_RMB]);
     g_guard_armed=0;
 }
+static unsigned g_fpc_hud_flashes,g_fpc_hud_silent;   /* PT01/PT03 */
 static void *g_fpc_hud;static const char *g_fpc_hud_text;static int g_fpc_hud_shown;static unsigned g_fpc_hud_changes;
 /* HUD01 (4080 b41): a free swing (~0.5 s) ends between two harness polls (~0.6 s each), so the live hud_text
  * never read SWINGING. hud_hist = the last 8 captions the HUD widget was really set to, "<hud_changes>:<state>"
@@ -763,7 +764,6 @@ static int g_fpc_hud_dead;
  * states (swinging/blocking/recovering/staggered/aiming) never show text: the animation and view carry them.
  * hud_hist still records every state change (evidence); hud_shown says whether the label is on screen now. */
 #define FPC_HUD_FLASH_MS 1500.0
-static unsigned g_fpc_hud_flashes,g_fpc_hud_silent;
 static int fpc_hud_texted(const char *st) {
     return !strcmp(st,"holstered")||!strcmp(st,"ready")||!strcmp(st,"reloading")||!strcmp(st,"down");
 }
