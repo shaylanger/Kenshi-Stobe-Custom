@@ -24,12 +24,12 @@ namespace {
 const char *const kCommands[][2] = {
     {"ping", "stobe_ping"},
     {"mode", "stobe_mode <mode>"},
-    {"say", "stobe_say <target|@nearest|@selected> <text>"},
+    {"say", "stobe_say <target|@nearest|@selected> <text> [ui] (ui: as the chat window Send, no speaker override)"},
     {"state", "stobe_state <target>"},
     {"give_cats", "stobe_give_cats <1..1000000>"},
     {"give_item", "stobe_give_item <name> [count]"},
     {"shopprice", "stobe_shopprice <trader> [player]"},
-    {"npcinfo", "stobe_npcinfo <open <target> [speaker]|chat|read|refresh|close> (read: key gen loaded portrait tex bio_state text)"}, // NPC info panel
+    {"npcinfo", "stobe_npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|read|refresh|close> (read: key gen loaded portrait tex bio_state text)"}, // NPC info panel
     {"drawn", "stobe_drawn <status|draw <char>|sheathe <char>|hold <char> on|off|reset|set <key> <value>|pair <npc>>"}, // drawn-weapon reactions
 };
 

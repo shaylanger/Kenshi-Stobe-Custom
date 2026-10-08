@@ -14655,6 +14655,17 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
       SyncInventoryForCharacter(target, true, "test_inbox");
     }
     InterruptTtsPlayback();
+    // Items 135/136 tests: `say <target> <text> ui` = the chat window's Send button (no speaker
+    // override), so the speaker is resolved the way a typed chat resolves it (FP char first).
+    if (f.size() >= 5 && f[4] == "ui" && !narratorMode) {
+      Log("TEST_INBOX: say_ui id=" + f[0] + " mode=" + mode + " target=" + targetName +
+          " text=" + f[3]);
+      Stobe::UI::g_chatTargetNameStr = targetName;
+      Stobe::UI::g_chatTargetHandleStr = targetSerial;
+      Stobe::UI::SubmitChatTextForCurrentContext(f[3], false);
+      ok = true;
+      return "target=" + targetName + " serial=" + targetSerial + " mode=" + mode + " ui=1";
+    }
     Log("TEST_INBOX: say id=" + f[0] + " mode=" + mode + " speaker=" +
         speakerName + " target=" + targetName + " text=" + f[3]);
     SubmitVoiceChatText(f[3], speakerName, speakerSerial, targetName,
@@ -14681,6 +14692,39 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
       ok = true;
       return "open key=" + Stobe::UI::NpcPanelKey() +
              " gen=" + ToString(Stobe::UI::NpcPanelGeneration());
+    }
+    if (sub == "chatwith") { // Item 135 tests: open the chat window on <target> as the chat hotkey does
+      if (f.size() < 4)
+        return "usage: npcinfo chatwith <target> [speaker]";
+      Character *target = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!target)
+        return "target not found: " + f[3];
+      Character *asker = speaker;
+      if (f.size() >= 5 && !f[4].empty()) {
+        asker = ResolveTestInboxTarget(world, sel, speaker, f[4]);
+        if (!asker)
+          return "speaker not found: " + f[4];
+      }
+      if (Stobe::UI::g_chatWindow)
+        Stobe::UI::CloseChatUI();
+      std::string tn, an, ts;
+      try {
+        tn = target->getName();
+        an = asker ? asker->getName() : std::string("");
+        ts = ToString(target->getHandle().serial);
+      } catch (...) {
+        return "could not read target/speaker";
+      }
+      Stobe::UI::CreateChatUI(tn, an, ts);
+      Log("TEST_INBOX: npcinfo chatwith target=" + tn + " speaker=" + an);
+      ok = Stobe::UI::g_chatWindow != nullptr;
+      return ok ? "chat open target=" + tn + " serial=" + ts + " speaker=" + an : "chat window did not open";
+    }
+    if (sub == "chatclose") {
+      if (Stobe::UI::g_chatWindow)
+        Stobe::UI::CloseChatUI();
+      ok = true;
+      return "chat closed";
     }
     if (sub == "chat") { // same path as the chat window's Info button
       Stobe::UI::g_npcPanelOpenRequest = true;
@@ -14710,7 +14754,7 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
              " " + Stobe::UI::NpcPanelStatus() +
              " text=" + NpcPanelOneLine(text);
     }
-    return "usage: npcinfo <open <target> [speaker]|chat|read|refresh|close>";
+    return "usage: npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|read|refresh|close>";
   }
   if (cmd == "drawn") // drawn-weapon reactions: status/draw/sheathe/hold/reset/set/pair
     return Stobe::DrawnWeapon::TestCommand(world, sel, f, ok, &ResolveTestInboxTargetForDrawn);
