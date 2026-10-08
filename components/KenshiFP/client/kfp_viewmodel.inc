@@ -44,12 +44,12 @@ static VmPose g_vm_pose[2][VM_NT] = {
       VP( 1.9f,-1.4f, 3.2f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (aim = ready) */
       VP( 1.9f,-1.4f, 3.2f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (reload = ready) */
       VP( 1.4f,-0.6f, 3.0f,  -1.00f, 0.05f, 0.20f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view */
-    { VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.15f, 1.00f,    0.0f, 1.0f, 0.0f),     /* crossbow ready: right, angled in, whole bow (grip handle too) above the HUD */
+    { VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.12f, 1.00f,    0.0f, 1.0f, 0.0f),     /* crossbow ready: right, angled in, whole bow (grip handle too) above the HUD */
       VP( 0.30f,-1.25f,2.4f,  0.00f, 0.00f, 1.00f,    0.0f, 1.0f, 0.0f),     /* aim: seen from behind, stock up from the bottom centre, limbs level, the
                                                                               * bolt line converging on the crosshair (the old cheek pose 0.05,-0.95,1.4
                                                                               * showed only a big open hand under the limbs: grip behind the near clip) */
       VP( 1.5f,-1.0f, 2.8f,  -0.30f,-0.25f, 0.92f,    0.3f, 1.0f, 0.0f),     /* reload: lowered + canted, not in the face */
-      VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.15f, 1.00f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
+      VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.12f, 1.00f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
 /* sword swing key poses (the path starts at the pose the swing began from and ends at the ready pose) */
 /* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
 #define VM_SWK 5
@@ -66,8 +66,8 @@ static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.28f, 0.38f, 0.47f, 0.58f, 0.78f,
 static int   g_vm_ax[2][2] = { { 2, 3 }, { 2, -1 } }; /* crossbow up = -X: the native aim holds it so (bolt above the grip) */  /* [class][f,u]: prop-local axis 1..3 = X,Y,Z, <0 = negative (probed in game) */
 static int   g_vm_whand[2] = { 1, 1 };                /* [class] weapon hand: 0 = L (Prop1), 1 = R (Prop2) */
 static Vec3  g_vm_rest = { -2.6f, -5.5f, 1.2f };      /* off-hand rest (one-handed melee), camera numbers */
-static Vec3  g_vm_sup = { 4.8f, -0.5f, 0.4f };        /* aim: off-hand under the fore-stock, f,u,s weapon numbers (s = left);
-                                                        * arm near full reach so the forearm stays thin, from the bottom left */
+static Vec3  g_vm_sup = { 3.6f, -0.5f, 0.4f };        /* aim: off-hand under the fore-stock, f,u,s weapon numbers (s = left);
+                                                        * within reach of the bent arm (4.8 was 1.1 dm out of reach: oerr), from the bottom left */
 /* elbow pole [class][L,R], camera numbers; ranged R points out right so the forearm stays out of the aim view */
 static Vec3  g_vm_pole[2][2] = { { { -0.8f, -1.0f, -0.4f }, { 0.8f, -1.0f, -0.4f } },
                                  { { -0.5f, -1.5f, 0.0f }, { 1.2f, -1.2f, -0.2f } } };
