@@ -142,6 +142,7 @@ if want NP5; then # disclosed fact from a real chat turn, shown, kept over save 
 fi
 
 if want NP6; then # renamed NPC keeps deals/facts (same serial/storage id)
+  bash "$SC" trust "$TRADER" 60 Fond friend >/dev/null 2>&1   # own setup: Fond was only set by NP3 (m55: NP5 NP6 alone -> Neutral)
   new="Abia Panelcheck"
   stobe-auto setname "$TRADER" "$new" >/dev/null; sleep 4
   TSN=$(serial_of "$new")
