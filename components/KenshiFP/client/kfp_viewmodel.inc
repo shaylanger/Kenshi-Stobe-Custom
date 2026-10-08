@@ -47,12 +47,21 @@ static VmPose g_vm_pose[2][VM_NT] = {
       VP( 2.8f,-1.05f,4.0f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (reload = ready) */
       VP( 2.2f,-0.35f,4.0f,  -1.00f, 0.08f, 0.22f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view in front of
                                                                               * the face (hilt upper right, Chivalry 2 parry); was chest-high (y -0.8) */
-    { VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.12f, 1.00f,    0.0f, 1.0f, 0.0f),     /* crossbow ready: right, angled in, whole bow (grip handle too) above the HUD */
-      VP( 0.30f,-1.25f,2.4f,  0.00f, 0.00f, 1.00f,    0.0f, 1.0f, 0.0f),     /* aim: seen from behind, stock up from the bottom centre, limbs level, the
-                                                                              * bolt line converging on the crosshair (the old cheek pose 0.05,-0.95,1.4
-                                                                              * showed only a big open hand under the limbs: grip behind the near clip) */
-      VP( 1.5f,-1.0f, 2.8f,  -0.30f,-0.25f, 0.92f,    0.3f, 1.0f, 0.0f),     /* reload: lowered + canted, not in the face */
-      VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.12f, 1.00f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
+    /* crossbow (Chivalry 2 reference, 2026-10-08): the right hand is either wholly in front of the 3 dm near clip (ready,
+     * reload: grip z >= 4.4, the hand shows the hold) or wholly behind it (aim: grip at the eye plane, no hand/arm in view,
+     * the glove shards at z 2.0-2.8 are gone). Model measured 2026-10-08 (3 grip depths): limbs 3.87 f + 1.0 u, half
+     * span 3.2 dm, bolt tip ~5.85 f + 1.0 u (the old 5.0/0.84/1.7 numbers were wrong). The spring routes every
+     * hidden <-> visible change below the view (vm_xwp) so the hand never crosses the near plane on screen. */
+    { VP( 2.6f,-0.8f, 4.4f,  -0.30f,-0.25f, 0.92f,    0.0f, 1.0f, 0.0f),     /* ready: low carry at the right hip, nose down-left 15 deg, limbs
+                                                                              * just below the centre (y/z ~ -0.1); grip bottom y/z -0.29 keeps the whole
+                                                                              * bow above the HUD line -0.33 (at y -1.5 the hand sat under it, PT28) */
+      VP( 0.00f,-1.80f,0.10f, 0.00f, 0.00f, 1.00f,    0.0f, 1.0f, 0.0f),     /* aim: grip at the eye plane (hand/arm hidden), limbs at z ~4 span
+                                                                              * ~65 % of the half width, level, lower third (y/z -0.2), bolt tip at
+                                                                              * -0.16 just under the crosshair (Chivalry 2 photo: tip ~ -0.17) */
+      VP( 1.6f,-1.1f, 4.8f,  -0.40f,-0.30f, 0.87f,   -0.915f,0.19f,-0.356f), /* reload: lowered, nose down-left 25 deg, rolled ~70 deg to the left so
+                                                                              * the top faces the eye (u is orthogonal to f: the old 0.15,0.75,-0.5
+                                                                              * was nearly anti-parallel and ended top-up-and-away, uz +0.28, PT28) */
+      VP( 2.6f,-0.8f, 4.4f,  -0.30f,-0.25f, 0.92f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
 /* sword swing key poses (the path starts at the pose the swing began from and ends at the ready pose) */
 /* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
 #define VM_SWK 5
@@ -70,8 +79,9 @@ static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.28f, 0.38f, 0.47f, 0.58f, 0.78f,
 static int   g_vm_ax[2][2] = { { 2, 3 }, { 2, -1 } }; /* crossbow up = -X: the native aim holds it so (bolt above the grip) */  /* [class][f,u]: prop-local axis 1..3 = X,Y,Z, <0 = negative (probed in game) */
 static int   g_vm_whand[2] = { 1, 1 };                /* [class] weapon hand: 0 = L (Prop1), 1 = R (Prop2) */
 static Vec3  g_vm_rest = { -2.6f, -5.5f, 1.2f };      /* off-hand rest (one-handed melee), camera numbers */
-static Vec3  g_vm_sup = { 3.6f, -0.5f, 0.4f };        /* aim: off-hand under the fore-stock, f,u,s weapon numbers (s = left);
-                                                        * within reach of the bent arm (4.8 was 1.1 dm out of reach: oerr), from the bottom left */
+static Vec3  g_vm_sup = { 1.6f, -0.5f, 0.4f };        /* aim: off-hand under the fore-stock, f,u,s weapon numbers (s = left);
+                                                        * within reach of the bent arm (4.8 was 1.1 dm out of reach: oerr); 1.6 keeps the
+                                                        * fingers behind the near clip in the eye-plane aim (3.6 put the glove at z 3.4) */
 /* elbow pole [class][L,R], camera numbers; ranged R points out right so the forearm stays out of the aim view */
 static Vec3  g_vm_pole[2][2] = { { { -0.8f, -1.0f, -0.4f }, { 0.8f, -1.0f, -0.4f } },
                                  { { -0.5f, -1.5f, 0.0f }, { 1.2f, -1.2f, -0.2f } } };
@@ -90,7 +100,12 @@ static VmPose g_vm_low[2] = {
                                                                                  * down: the native draw blade points forward, its tip flashed in at y/z -0.55, s8 71) */
     { { 1.5f,-4.0f, 2.0f }, { -0.20f,-0.60f, 0.77f }, {  0.0f, 1.0f, 0.0f } } };  /* crossbow */
 static float g_vm_kick_t = -1.0f, g_vm_kick_rise = 0.06f;   /* fire kick: time since the shot; rise (ease-out) then smooth return */
-static float g_vm_rl_t; static float g_vm_rl_per = 1.3f, g_vm_rl_amp = 1.6f;  /* reload: time in reload, spanning cycle period */
+static float g_vm_rl_t; static float g_vm_rl_per = 1.3f, g_vm_rl_amp = 1.0f;  /* reload: time in reload, spanning cycle period (amp 1.6 dipped the hand behind the HUD) */
+/* ranged near-plane routing: while the current grip and the target grip lie on different sides of the near clip (zc),
+ * the spring heads for a waypoint below the view (y g_vm_xwp_y, z = zc -/+ g_vm_xwp_dz on the target's side) so the hand
+ * and the stock cross the near plane under the bottom edge; once both are on the same side the real target takes over.
+ * Reads as a dip-and-raise (ready -> aim, aim -> reload), like raising a crossbow from a low carry. */
+static int   g_vm_xwp_on = 1; static float g_vm_xwp_y = -3.6f, g_vm_xwp_dz = 1.0f; static int g_vm_xwp;
 static Quat  g_vm_plc; static int g_vm_pl_n;           /* prop local: candidate for a lasting native change */
 static float g_vm_fire_t;
 static int   g_vm_ti = -1;                     /* weapon pose state of the last update (VM_*) */
@@ -152,7 +167,7 @@ static int   g_vm_have_written[2];
  * near plane outside the view); the upper arm (behind the near plane / outside the view) takes whatever length
  * reaches that elbow. Direction closest to g_vm_elbd (camera numbers, wrist -> elbow) that keeps every cut off
  * screen. Weight fades out with the zoom-out distance (the body is seen from behind there). */
-static int   g_vm_elb[2] = { 1, 0 };                 /* [class] on */
+static int   g_vm_elb[2] = { 1, 1 };                 /* [class] on (ranged too: the ready arm leaves at the right edge) */
 static Vec3  g_vm_elbd = { 0.60f, -0.50f, -0.62f };  /* preferred wrist -> elbow direction (lower right, back) */
 static float g_vm_elb_fx = 1.245f, g_vm_elb_fy = 0.700f, g_vm_elb_m = 0.45f, g_vm_elb_zc = 3.0f, g_vm_elb_zoom = 4.0f;
 static float g_vm_elb_stmax = 3.0f, g_vm_elb_tau = 0.04f;
@@ -884,6 +899,14 @@ static void vm_frame_core(void *pc, int body_down)
             }
         } else {
             float om = g_vm_phase != VMP_NORMAL ? g_vm_om_draw : 1.8f / (ti == VM_RELOAD ? g_vm_tau_rl : g_vm_tau);
+            g_vm_xwp = 0;
+            if (g_vm_class == 1 && g_vm_xwp_on && g_vm_phase == VMP_NORMAL) {
+                float zc = g_vm_elb_zc; int hc = g_vm_cur.p.z < zc, ht = tgt.p.z < zc;
+                if (hc != ht) {
+                    tgt.p = vm_v(0.5f * (g_vm_cur.p.x + tgt.p.x), g_vm_xwp_y, ht ? zc - g_vm_xwp_dz : zc + g_vm_xwp_dz);
+                    g_vm_xwp = 1; om = 1.8f / g_vm_tau;
+                }
+            }
             vm_pose_spring(&g_vm_cur, &g_vm_vel, tgt, om, adt);
         }
         /* fire kick (ranged) */
@@ -1018,6 +1041,9 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "lowerdur")) { if (x >= 0 && x < 2) g_vm_lower_dur = x; return 1; }
     else if (!strcmp(k, "kickrise")) { if (x > 0.005f && x < 1) g_vm_kick_rise = x; return 1; }
     else if (!strcmp(k, "kickdur"))  { if (x > 0.02f && x < 2) g_vm_kick_dur = x; return 1; }
+    else if (!strcmp(k, "xwp"))     { g_vm_xwp_on = x > 0.5f; return 1; }
+    else if (!strcmp(k, "xwpy"))    { if (x < 0 && x > -10) g_vm_xwp_y = x; return 1; }
+    else if (!strcmp(k, "xwpdz"))   { if (x > 0 && x < 5) g_vm_xwp_dz = x; return 1; }
     else if (!strcmp(k, "rlper"))   { if (x > 0.2f && x < 5) g_vm_rl_per = x; return 1; }
     else if (!strcmp(k, "rlamp"))   { if (x >= 0 && x < 3) g_vm_rl_amp = x; return 1; }
     else if (!strcmp(k, "tau"))    { if (x > 0.005f && x < 2) g_vm_tau = x; return 1; }
@@ -1141,7 +1167,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         "sw_ratio=%.2f sw_elev=%.1f,%.1f sw_az=%.1f,%.1f kicks=%d kick=%.2f fire=%.2f mp=%.2f,%.2f,%.2f mf=%.2f,%.2f,%.2f mu=%.2f,%.2f,%.2f tp=%.2f,%.2f,%.2f tf=%.2f,%.2f,%.2f "
         "near=%d calls=%lu applied=%lu reuse=%lu ikfail=%lu frames=%lu zoom=%.2f "
         "pl=%d,%d plq0=%.3f,%.3f,%.3f,%.3f plp0=%.3f,%.3f,%.3f plq1=%.3f,%.3f,%.3f,%.3f plp1=%.3f,%.3f,%.3f phase=%d hpend=%d hprog=%.2f "
-        "omode=%d oerr=%.2f Lsh=%.2f,%.2f,%.2f Lel=%.2f,%.2f,%.2f Lwr=%.2f,%.2f,%.2f Rsh=%.2f,%.2f,%.2f Rel=%.2f,%.2f,%.2f Rwr=%.2f,%.2f,%.2f stretch=%.2f,%.2f st_max=%.2f,%.2f elb=%d,%d,%.2f elbe=%.2f,%.2f,%.2f",
+        "omode=%d oerr=%.2f Lsh=%.2f,%.2f,%.2f Lel=%.2f,%.2f,%.2f Lwr=%.2f,%.2f,%.2f Rsh=%.2f,%.2f,%.2f Rel=%.2f,%.2f,%.2f Rwr=%.2f,%.2f,%.2f stretch=%.2f,%.2f st_max=%.2f,%.2f elb=%d,%d,%.2f elbe=%.2f,%.2f,%.2f xwp=%d",
         g_cfg_vm, g_vm_hooked, g_vm_dead, g_vm_state, g_vm_hold, g_vm_w, g_vm_class ? "ranged" : "melee",
         g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_basis_ok,
         g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_melee, g_vm_tilt_cur,
@@ -1157,7 +1183,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         g_vm_mj[0][2].x, g_vm_mj[0][2].y, g_vm_mj[0][2].z, g_vm_mj[1][0].x, g_vm_mj[1][0].y, g_vm_mj[1][0].z,
         g_vm_mj[1][1].x, g_vm_mj[1][1].y, g_vm_mj[1][1].z, g_vm_mj[1][2].x, g_vm_mj[1][2].y, g_vm_mj[1][2].z,
         g_vm_st_last[0], g_vm_st_last[1], g_vm_st_max[0], g_vm_st_max[1],
-        g_vm_elb[g_vm_class ? 1 : 0], g_vm_elb_ok, g_vm_elb_w, g_vm_elbe.x, g_vm_elbe.y, g_vm_elbe.z);
+        g_vm_elb[g_vm_class ? 1 : 0], g_vm_elb_ok, g_vm_elb_w, g_vm_elbe.x, g_vm_elbe.y, g_vm_elbe.z, g_vm_xwp);
     r->append(r, b);
     return KAH_OK;
 }
