@@ -339,6 +339,13 @@ PY
 fi
 
 if want NP12; then # second refresh: cache hit, no LLM call
+  if ! want NP11; then # own setup (m65: NP12 alone had no conversation -> bio_state=empty): talk, let the bio generate
+    talk "$SN" "Hello $SN. Tell me about yourself, where are you from?" 22
+    talk "$SN" "What work did you do before you came out here?" 22
+    popen "$SN" "$PLAYER" >/dev/null; pbio "$SS" "$PLAYER" >/dev/null
+    for i in $(seq 1 20); do [ "$(field "$(pread)" bio_state)" = cached ] && break; sleep 2; done
+    log "NP12 setup: bio_state=$(field "$(pread)" bio_state) after 2 lines"
+  fi
   stobe-auto speed 0 >/dev/null; sleep 2
   popen "$SN" "$PLAYER" >/dev/null; pbio "$SS" "$PLAYER" >/dev/null
   h0=$(since_srv | grep -a -c "NPC_BIO: cache hit .*\"npc\":\"$SN\""); c0=$(llm_count); b0=$(bio_llm_count)
