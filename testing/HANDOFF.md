@@ -1,18 +1,20 @@
-# Current state (m60, 2026-10-08)
+# Current state (m60+, 2026-10-08, Shay playtest round 2)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-08 m60, coordinator; loop finished, Kenshi closed)
-- Shay's 2026-10-07 playtest rows: STOBE 135-145 all confirmed (m54-m56); FP Gate 6 all automated rows confirmed
-  (PT06 m58/m59, PT20 m59+m60 3/3). Left: PT04 + PT17 = Shay decisions/looks (final summary sent 2026-10-08).
-- No helpers running, no batch running. gfx-mods are OFF (automated-run state); before Shay plays:
-  `bash C:/KenshiModding/tools/automation/gfx-mods.sh on`.
-- /root/KenshiFP commits are not pushed (only remote = linguine2552); the snapshot in components/KenshiFP is the pushed copy.
-- Open Shay decisions: PT04 walk speed (FP W 12.5 u/s vs vanilla run 54.1), R with sword+bow follows the orders-panel
-  ranged toggle (vanilla) vs always melee, PT10 reach, PT20 portrait menu, viewmodel look (PT17 montage
-  `C:\KenshiTestRuns\m55-5090-am-montage.jpg`), 2-hander tilt untested (no 2-hander in fixtures), m51 questions
-  (backstory tier, kenshi-click.ps1), STT confirm.
+## Right now (2026-10-08 after m60, coordinator)
+- Shay's 2026-10-08 playtest reopened work (rows: STOBE 146/147, FP PT04 (= vanilla speeds), PT23-PT29). RULE (memory
+  repro-shays-exact-steps): a row passes only when the wrapper replays Shay's exact steps; visual rows need screenshots
+  of every state zoomed in AND out.
+- Helpers running (3, ok while the viewmodel rework is a big build):
+  1. Stobe fixer: 146 bio panel target, 147 "/" chat speaker -> wrapper tests/ingame/stobe/STOBE-BIO-CHAT-HOTKEYS.sh.
+  2. KenshiFP controls fixer (/root/KenshiFP main): PT23 speed burst (0.5x -> 1x -> speed up), PT24 Control inside the
+     native context menu, PT25 first load in FP, PT04 FP speeds = non-FP; rows in fp-playtest.sh.
+  3. KenshiFP viewmodel rework on the 4080 (worktree /root/KenshiFP-vm, branch viewmodel): PT26 smooth swing, PT27
+     horizontal block, PT28 crossbow all states, PT29 zoom-out pose; screens C:\KenshiTestRunsm-rework\.
+- Next: install their builds on the 5090 (Kenshi closed now), one batch with all new rows, fix, loop, then ONE summary.
+- Shay decisions taken 2026-10-08: PT04 FP speeds = the game's non-FP speeds; R with sword+bow follows the ranged toggle.
 
 ## Before m52 (2026-10-07 m51 end, coordinator handing over to a new agent)
 - **Shay is playing on the 5090: do not launch, stop or install anything there until Shay says it is free.** Kenshi on
