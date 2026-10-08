@@ -129,6 +129,13 @@ static int   g_vm_have_t;
 /* bone write bookkeeping: [side][0 ua,1 fa,2 ha] */
 static Quat  g_vm_bq[2][3], g_vm_wq[2][3];
 static int   g_vm_have_written[2];
+/* upper-arm stretch (W1): a walking game hitch (one 0.1 s anim step) swings the shoulder ~2 dm back while the eye
+ * stays ahead, so the weapon grip fell out of reach for that frame and jumped toward the camera. As FP viewmodel
+ * rigs do, the UPPER arm (behind / below the view) lengthens just enough to keep the hand on its target; the
+ * visible forearm and hand keep their length. g_vm_stretch = max upper-arm factor (1 = off). */
+static float g_vm_stretch = 1.6f, g_vm_st_last[2] = { 1.0f, 1.0f }, g_vm_st_max[2] = { 1.0f, 1.0f };
+static Vec3  g_vm_fpn[2], g_vm_fpw[2]; static int g_vm_fpw_on[2];
+static int   g_vm_hitch_ms, g_vm_hitch_per, g_vm_hitch_n;   /* test: forced game hitch (ms) every N frames (0 = once) */
 static unsigned char g_vm_nm_arm[2][32], g_vm_nm_fore[2][32], g_vm_nm_hand[2][32], g_vm_nm_prop[2][32];
 static unsigned char g_vm_nm_clav[2][32], g_vm_nm_spine[32];
 /* native (pre-IK) snapshot from the hook, skeleton space: prop pos/ori, hand pos/ori per side */
@@ -164,7 +171,7 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; } VmRec;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; } VmRec;
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
 static int g_vm_rp = -1, g_vm_rp_t;          /* replay frame (-1 off), 1 = commanded pose */
@@ -316,6 +323,11 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
     float L1 = vm_len(vm_sub(E, S)), L2 = vm_len(vm_sub(H, E));
     if (L1 < 1e-4f || L2 < 1e-4f) return 0;
     Vec3 d = vm_sub(Ht, S); float D = vm_len(d);
+    float st = 1.0f;
+    if (g_vm_stretch > 1.0f && g_oldnode_setpos && w > 0.001f) {
+        float need = D / 0.995f - L2;                     /* upper-arm length that reaches the target */
+        if (need > L1) { st = fminf(need / L1, g_vm_stretch); st = 1.0f + (st - 1.0f) * fminf(w, 1.0f); L1 *= st; }
+    }
     Vec3 n = D > 1e-5f ? vm_mul(d, 1.0f / D) : vm_norm(vm_sub(H, S));
     float dmin = fabsf(L1 - L2) + 0.02f * (L1 + L2), dmax = (L1 + L2) * 0.995f;
     if (D < dmin) D = dmin; if (D > dmax) D = dmax;
@@ -350,6 +362,12 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
         g_vm_wq[side][j] = q;
     }
     g_vm_have_written[side] = 1;
+    g_vm_st_last[side] = st; if (st > g_vm_st_max[side]) g_vm_st_max[side] = st;
+    if (st > 1.0001f) {                                   /* forearm bone local position = upper-arm length */
+        Vec3 fp = vm_mul(g_vm_fpn[side], st);
+        g_oldnode_setpos(fa, &fp); g_oldnode_needupd(fa, 1);
+        g_vm_fpw[side] = fp; g_vm_fpw_on[side] = 1;
+    }
     return 1;
 }
 
@@ -424,6 +442,14 @@ static void vm_apply(void *skel)
                 q = g_vm_bq[i][j]; g_oldnode_setori(b[i][j], &q); g_oldnode_needupd(b[i][j], 1); g_vm_reuse++;
             }
             g_vm_bq[i][j] = q;
+        }
+        {   const Vec3 *fpp = g_oldnode_getpos(b[i][1]);
+            if (!readable((void *)fpp, 12)) return;
+            Vec3 fp = *fpp;
+            if (g_vm_fpw_on[i] && g_oldnode_setpos && !memcmp(&fp, &g_vm_fpw[i], sizeof(Vec3))) {
+                fp = g_vm_fpn[i]; g_oldnode_setpos(b[i][1], &fp); g_oldnode_needupd(b[i][1], 1);
+            }
+            g_vm_fpw_on[i] = 0; g_vm_fpn[i] = fp; g_vm_st_last[i] = 1.0f;
         }
     }
     /* native snapshot */
@@ -590,7 +616,7 @@ static void vm_frame_core(void *pc, int body_down)
         void *anim = readable((void *)((uintptr_t)pc + CHAR_ANIM), 8) ? *(void **)((uintptr_t)pc + CHAR_ANIM) : NULL;
         skel = readable(anim, ANIM_SKELETON + 8) ? *(void **)((uintptr_t)anim + ANIM_SKELETON) : NULL;
     }
-    if (skel != g_vm_skel) { g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_w = 0.0f; g_vm_wl = 0.0f; g_vm_phase = VMP_NORMAL; g_vm_have_cur = 0; g_vm_have_t = 0; g_vm_have_orel = 0; g_vm_have_oc = 0; g_vm_have_pl[0] = g_vm_have_pl[1] = 0; }
+    if (skel != g_vm_skel) { g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_fpw_on[0] = g_vm_fpw_on[1] = 0; g_vm_w = 0.0f; g_vm_wl = 0.0f; g_vm_phase = VMP_NORMAL; g_vm_have_cur = 0; g_vm_have_t = 0; g_vm_have_orel = 0; g_vm_have_oc = 0; g_vm_have_pl[0] = g_vm_have_pl[1] = 0; }
     g_vm_skel = skel;
     if (!skel) return;
 
@@ -800,6 +826,9 @@ static void vm_frame(void *pc, int body_down)
             if (per - el > 0.002) Sleep(1); }
         prev = now;
     }
+    if (g_vm_hitch_ms > 0 && ++g_vm_hitch_n >= (g_vm_hitch_per > 0 ? g_vm_hitch_per : 1)) {   /* test: game hitch */
+        g_vm_hitch_n = 0; Sleep((DWORD)g_vm_hitch_ms); if (g_vm_hitch_per <= 0) g_vm_hitch_ms = 0;
+    }
     vm_frame_core(pc, body_down);
     if (g_vm_rec_on && g_vm_rn < VM_RECN) {
         VmRec *q = &g_vm_rec[g_vm_rn++]; LARGE_INTEGER now, fq; QueryPerformanceCounter(&now); QueryPerformanceFrequency(&fq);
@@ -814,20 +843,21 @@ static void vm_frame(void *pc, int body_down)
         q->eye = g_vm_eye; q->rt = g_vm_rt; q->up = g_vm_up; q->fw = g_vm_fw;
         q->rootf = g_vm_root_f; q->roota = g_vm_root_a; q->napp = (unsigned)g_vm_napply;
         q->phase = (unsigned char)g_vm_phase; q->wih = (unsigned char)g_vm_wih;
+        q->stch = g_vm_st_last[g_vm_whand[g_vm_class] ? 1 : 0];
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
 }
 static int vm_rec_dump(const char *path)
 {
     FILE *fo = fopen(path, "w"); if (!fo) return -1;
-    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih\n");
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
                 q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
         const Vec3 *v[] = { &q->out.p, &q->out.f, &q->out.u, &q->oc, &q->mp, &q->mf, &q->mu,
                             &q->mj[0][0], &q->mj[0][1], &q->mj[0][2], &q->mj[1][0], &q->mj[1][1], &q->mj[1][2], &q->eye, &q->rt, &q->up, &q->fw };
         for (int k = 0; k < 17; k++) fprintf(fo, k == 13 ? " | %.4f,%.4f,%.4f" : " %.4f,%.4f,%.4f", v[k]->x, v[k]->y, v[k]->z);
-        fprintf(fo, " | %.4f,%.4f,%.4f %.4f,%.4f,%.4f %u %d %d\n", q->rootf.x, q->rootf.y, q->rootf.z, q->roota.x, q->roota.y, q->roota.z, q->napp, q->phase, q->wih); }
+        fprintf(fo, " | %.4f,%.4f,%.4f %.4f,%.4f,%.4f %u %d %d %.3f\n", q->rootf.x, q->rootf.y, q->rootf.z, q->roota.x, q->roota.y, q->roota.z, q->napp, q->phase, q->wih, q->stch); }
     fclose(fo); return g_vm_rn;
 }
 
@@ -885,6 +915,10 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "tauw"))   { if (x > 0.005f && x < 3) g_vm_tau_w = x; return 1; }
     else if (!strcmp(k, "swclock")) { g_vm_sw_clock = x != 0.0f; return 1; }
     else if (!strcmp(k, "sw_dur")) { if (x > 0.05f && x <= 12) g_vm_sw_dur = x; return 1; }
+    else if (!strcmp(k, "stretch")) { if (x >= 1 && x <= 2.5f) g_vm_stretch = x; return 1; }
+    else if (!strcmp(k, "stmax"))   { g_vm_st_max[0] = g_vm_st_max[1] = 1.0f; return 1; }
+    else if (!strcmp(k, "hitch"))   { g_vm_hitch_ms = x >= 0 && x <= 500 ? (int)x : 0; g_vm_hitch_n = 0; return 1; }
+    else if (!strcmp(k, "hitchper")) { g_vm_hitch_per = x >= 0 && x <= 10000 ? (int)x : 0; return 1; }
     else if (!strcmp(k, "fpscap")) { g_vm_fpscap = x >= 5 && x <= 1000 ? x : 0.0f; return 1; }
     if (!fp) return 0;
     *fp = x; return 1;
@@ -968,7 +1002,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         "sw_ratio=%.2f sw_elev=%.1f,%.1f sw_az=%.1f,%.1f kicks=%d kick=%.2f fire=%.2f mp=%.2f,%.2f,%.2f mf=%.2f,%.2f,%.2f mu=%.2f,%.2f,%.2f tp=%.2f,%.2f,%.2f tf=%.2f,%.2f,%.2f "
         "near=%d calls=%lu applied=%lu reuse=%lu ikfail=%lu frames=%lu zoom=%.2f "
         "pl=%d,%d plq0=%.3f,%.3f,%.3f,%.3f plp0=%.3f,%.3f,%.3f plq1=%.3f,%.3f,%.3f,%.3f plp1=%.3f,%.3f,%.3f phase=%d hpend=%d hprog=%.2f "
-        "omode=%d oerr=%.2f Lsh=%.2f,%.2f,%.2f Lel=%.2f,%.2f,%.2f Lwr=%.2f,%.2f,%.2f Rsh=%.2f,%.2f,%.2f Rel=%.2f,%.2f,%.2f Rwr=%.2f,%.2f,%.2f",
+        "omode=%d oerr=%.2f Lsh=%.2f,%.2f,%.2f Lel=%.2f,%.2f,%.2f Lwr=%.2f,%.2f,%.2f Rsh=%.2f,%.2f,%.2f Rel=%.2f,%.2f,%.2f Rwr=%.2f,%.2f,%.2f stretch=%.2f,%.2f st_max=%.2f,%.2f",
         g_cfg_vm, g_vm_hooked, g_vm_dead, g_vm_state, g_vm_hold, g_vm_w, g_vm_class ? "ranged" : "melee",
         g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_basis_ok,
         g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_melee, g_vm_tilt_cur,
@@ -982,7 +1016,8 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         g_vm_phase, g_fpc_holster_pending, g_fpc_holster_prog, g_vm_omode, g_vm_oerr,
         g_vm_mj[0][0].x, g_vm_mj[0][0].y, g_vm_mj[0][0].z, g_vm_mj[0][1].x, g_vm_mj[0][1].y, g_vm_mj[0][1].z,
         g_vm_mj[0][2].x, g_vm_mj[0][2].y, g_vm_mj[0][2].z, g_vm_mj[1][0].x, g_vm_mj[1][0].y, g_vm_mj[1][0].z,
-        g_vm_mj[1][1].x, g_vm_mj[1][1].y, g_vm_mj[1][1].z, g_vm_mj[1][2].x, g_vm_mj[1][2].y, g_vm_mj[1][2].z);
+        g_vm_mj[1][1].x, g_vm_mj[1][1].y, g_vm_mj[1][1].z, g_vm_mj[1][2].x, g_vm_mj[1][2].y, g_vm_mj[1][2].z,
+        g_vm_st_last[0], g_vm_st_last[1], g_vm_st_max[0], g_vm_st_max[1]);
     r->append(r, b);
     return KAH_OK;
 }
