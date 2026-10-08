@@ -42,7 +42,11 @@ pbio() {
 }
 # learned: the WHAT YOU'VE LEARNED section of a read text
 learned() { sed -E "s/.*WHAT YOU'VE LEARNED \| //; s/ \| +\| DEALINGS WITH.*//"; }
+# NP5: NPC_BIO lines for the trader (phase-2 bio request done: generated|cache hit|throttled|llm returned nothing)
+bio_lines() { since_srv | grep -a -c -E "NPC_BIO: .*\"npc\":\"$TRADER\""; }
 field() { echo "$1" | grep -oE " $2=[^ ]*" | head -1 | cut -d= -f2; }
+# NP12 (m63): bio prompts only - a late relationship_eval from NP11's chat lines also writes to the prompt log
+bio_llm_count() { grep -a -c "'event_type' => 'npc_bio'" "$CTX" 2>/dev/null || echo 0; }
 llm_count() { echo "$(PSQLQ "SELECT COUNT(*) FROM audit_llm")/$(wc -l < "$CTX" 2>/dev/null || echo 0)"; }
 
 stobe-auto select "$PLAYER" >/dev/null
@@ -130,7 +134,11 @@ if want NP5; then # disclosed fact from a real chat turn, shown, kept over save 
   else
     # the fact feeds the bio (or the "They told you:" list while no bio exists); the learned section must be
     # filled before and stay the same (cached, no new LLM call) after save + reload of the same save
-    popen "$TRADER" "$PLAYER" >/dev/null; t=$(pbio "$TS" "$PLAYER" | ptext); l1=$(echo "$t" | learned)
+    # m64: the first reply is the cached bio + bio_stale=1 (new dialogue); the DLL then asks for the new bio
+    # (phase 2, one NPC_BIO line) and shows it -> read l1 only after that line, else the pre-fact bio is compared
+    nb0=$(bio_lines); popen "$TRADER" "$PLAYER" >/dev/null; t=$(pbio "$TS" "$PLAYER" | ptext)
+    for i in $(seq 1 20); do [ "$(bio_lines)" -gt "$nb0" ] && { sleep 3; t=$(pread | ptext); break; }; sleep 2; done
+    l1=$(echo "$t" | learned)
     stobe-auto save kah-npcpanel-r >/dev/null; sleep 5
     stobe-auto load kah-npcpanel-r >/dev/null; sleep 5; timeout 300 stobe-auto wait-world >/dev/null 2>&1
     TS2=""; for i in $(seq 1 15); do TS2=$(serial_of "$TRADER"); [ -n "$TS2" ] && break; sleep 2; done
@@ -144,13 +152,17 @@ fi
 if want NP6; then # renamed NPC keeps deals/facts (same serial/storage id)
   bash "$SC" trust "$TRADER" 60 Fond friend >/dev/null 2>&1   # own setup: Fond was only set by NP3 (m55: NP5 NP6 alone -> Neutral)
   new="Abia Panelcheck"
-  stobe-auto setname "$TRADER" "$new" >/dev/null; sleep 4
+  # m63: the harness setname bypassed Stobe's rename (the server then split the NPC into a second, relationship-less
+  # row); rename the way the player does: Stobe's Rename NPC window (rename.php keeps the identity)
+  rn=$(stobe-auto stobe_npcinfo rename "$TRADER" "$new" 2>&1 | tail -1); log "NP6 rename: $rn"; sleep 4
   TSN=$(serial_of "$new")
   popen "$new" "$PLAYER" >/dev/null; t=$(pbio "${TSN:-x}" "$PLAYER" | ptext)
   nf=$(PSQLQ "SELECT COUNT(*) FROM stobe_npc_learned_fact WHERE npc_storage_id='hand_$TSN' AND lower(learner_name)=lower('$PLAYER')")
   if [ "$TSN" = "$TS" ] && echo "$t" | grep -q "^$new" && { [ "${nf:-0}" = 0 ] || [ "$(echo "$t" | learned)" != "$EMPTYBIO" ]; } && echo "$t" | grep -q "Fond"; then
     verdict NP6 "PASS renamed to '$new', same serial $TSN, facts ($nf) and relationship kept"
-  else verdict NP6 "FAIL serial $TS -> ${TSN:-none} facts=$nf text: ${t:0:240}"; fi
+  else verdict NP6 "FAIL serial $TS -> ${TSN:-none} facts=$nf rename='${rn:0:120}' text: ${t:0:240}"; fi
+  # rename back (same window path) so later rows and runs find the trader by its fixture name
+  rb=$(stobe-auto stobe_npcinfo rename "$new" "$TRADER" 2>&1 | tail -1); log "NP6 rename back: $rb"; sleep 3
   stobe-auto setname "$new" "$TRADER" >/dev/null
 fi
 
@@ -171,7 +183,11 @@ if want NP7; then # deal states: in progress + outstanding + deadline, then brok
     ok1=""; t=""
     for i in $(seq 1 20); do
       stobe-auto stobe_npcinfo refresh >/dev/null; sleep 3; t=$(pread | ptext)
-      echo "$t" | grep -q -F "Outstanding: $PLAYER owes $DN ${amt:-100} Cats" && echo "$t" | grep -q -F "Agreed, in progress" && { ok1=1; break; }
+      # m64: term_state can still be empty right after the accept (amt="") and the price may differ from the ask:
+      # take the amount the panel shows and check it against the term amount once the state exists
+      shown=$(echo "$t" | grep -oE "Outstanding: $PLAYER owes $DN [0-9]+ Cats" | grep -oE "[0-9]+ Cats" | cut -d" " -f1)
+      [ -n "$amt" ] || amt=$(PSQLQ "SELECT e->>'amount' FROM stobe_social_contract, jsonb_array_elements(term_state) e WHERE contract_id='$id' AND e->>'kind'='GIVE_CATS' LIMIT 1")
+      [ -n "$shown" ] && [ "$shown" = "$amt" ] && echo "$t" | grep -q -F "Agreed, in progress" && { ok1=1; break; }
       deal_line "$DN" | grep -q -E "BREACHED|COMPLETE|CANCELLED" && break
     done
     st1=$(deal_field "$id" status); dl=$(echo "$t" | grep -oE "Deadline: [^|]*")
@@ -187,7 +203,7 @@ if want NP7; then # deal states: in progress + outstanding + deadline, then brok
     case "$st2" in BREACHED_PLAYER) lab="Broken by $PLAYER" ;; BREACHED_NPC) lab="Broken by $DN" ;; COMPLETE) lab="Completed" ;; EXPIRED) lab="Expired" ;; *) lab="$st2" ;; esac
     if [ -n "$ok1" ] && [ -n "$dl" ] && echo "$t2" | grep -q -F -- "$lab"; then
       verdict NP7 "PASS deal $id in progress ($st1): outstanding ${amt:-?} Cats, '$dl'; then $st2 -> panel '$lab'"
-    else verdict NP7 "FAIL deal $id first=$st1 ok1=${ok1:-0} dl='$dl' then=$st2 want '$lab'; text: $(echo "$t2" | grep -oE 'DEALINGS WITH.*RIGHT NOW' | cut -c1-260)"; fi
+    else verdict NP7 "FAIL deal $id first=$st1 ok1=${ok1:-0} shown=${shown:-none} amt=${amt:-none} dl='$dl' then=$st2 want '$lab'; text: $(echo "$t2" | grep -oE 'DEALINGS WITH.*RIGHT NOW' | cut -c1-260)"; fi
   fi
 fi
 
@@ -325,12 +341,12 @@ fi
 if want NP12; then # second refresh: cache hit, no LLM call
   stobe-auto speed 0 >/dev/null; sleep 2
   popen "$SN" "$PLAYER" >/dev/null; pbio "$SS" "$PLAYER" >/dev/null
-  h0=$(since_srv | grep -a -c "NPC_BIO: cache hit .*\"npc\":\"$SN\""); c0=$(llm_count)
+  h0=$(since_srv | grep -a -c "NPC_BIO: cache hit .*\"npc\":\"$SN\""); c0=$(llm_count); b0=$(bio_llm_count)
   stobe-auto stobe_npcinfo refresh >/dev/null; sleep 4; stobe-auto stobe_npcinfo refresh >/dev/null; sleep 4
-  r=$(pread); c1=$(llm_count); h1=$(since_srv | grep -a -c "NPC_BIO: cache hit .*\"npc\":\"$SN\"")
-  if [ "$(field "$r" bio_state)" = cached ] && [ "$h1" -ge $((h0 + 2)) ] && [ "$c0" = "$c1" ]; then
-    verdict NP12 "PASS 2 refreshes: bio_state=cached, cache-hit log $h0 -> $h1, llm $c0 -> $c1"
-  else verdict NP12 "FAIL bio_state=$(field "$r" bio_state) cache-hit log $h0 -> $h1 llm $c0 -> $c1"; fi
+  r=$(pread); c1=$(llm_count); b1=$(bio_llm_count); h1=$(since_srv | grep -a -c "NPC_BIO: cache hit .*\"npc\":\"$SN\"")
+  if [ "$(field "$r" bio_state)" = cached ] && [ "$h1" -ge $((h0 + 2)) ] && [ "$b0" = "$b1" ]; then
+    verdict NP12 "PASS 2 refreshes: bio_state=cached, cache-hit log $h0 -> $h1, bio llm prompts $b0 -> $b1 (all llm $c0 -> $c1)"
+  else verdict NP12 "FAIL bio_state=$(field "$r" bio_state) cache-hit log $h0 -> $h1 bio llm prompts $b0 -> $b1 (all llm $c0 -> $c1)"; fi
   stobe-auto speed 1 >/dev/null
 fi
 [ -n "$SH" ] && put_away "$SH"
