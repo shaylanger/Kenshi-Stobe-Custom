@@ -83,7 +83,8 @@ if want 135; then
   fp_take "$PLAYER" || setup_fail 135 "could not take FP control of $PLAYER ($(A fp_control state | cut -c1-160))"
   A select "$MATE" >/dev/null; wait_for 6 selected_is "$MATE" || setup_fail 135 "cannot select $MATE"
   ctl_is "$PLAYER" || setup_fail 135 "selecting $MATE moved FP control off $PLAYER ($(A fp_control state | cut -c1-160))"
-  r=$(A stobe_npcinfo chatwith "$MATE" "$T3")
+  # m61: right after the recruit the name lookup (character update list) can miss T3: bounded poll
+  for _ in 1 2 3 4 5; do r=$(A stobe_npcinfo chatwith "$MATE" "$T3"); case "$r" in *"speaker not found"*) sleep 2 ;; *) break ;; esac; done
   case "$r" in *"chat open"*"speaker=$T3"*) ;; *) setup_fail 135 "chatwith $MATE as $T3 failed: $(echo "$r" | tail -1 | cut -c1-140)" ;; esac
   sleep 1
   A input_isolation status | grep -q "isolation=on" || { A input_isolation on >/dev/null; ISO_SET=1; sleep 1; }
