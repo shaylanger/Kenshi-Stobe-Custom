@@ -174,6 +174,10 @@ if want clear; then
 fi
 stobe-auto speed 1 >/dev/null
 
+# SOCIAL_SPAR consent is a relationship log line (stobeLogRelationshipInfo -> relationship_worker.log), not stobeserver.log (m55)
+REL_LOG=/var/www/html/StobeServer/log/relationship_worker.log
+rel_count() { local n; n=$(grep -a -c -F -- "$1" "$REL_LOG" 2>/dev/null); echo "${n:-0}"; }
+
 # --- 141 spar: she rejoins the squad when the fight is stopped
 # 141 (deterministic): NEG_TEST_INJECT puts Attack@<player> into her reply to the spar line (before any parsing),
 #   so the real path runs: spar recorded (SOCIAL_SPAR consent why=attack), "enough, stop" -> STOP_FIGHT guard
@@ -183,11 +187,11 @@ for r141 in 141 141-live; do
 if want "$r141" && ensure_squad "$r141"; then
   reset_mate
   heal_start "$PLAYER $MATE"
-  m=$(st_mark); c0=$(srv_count "SOCIAL_SPAR consent"); s0=$(srv_count "Spar stopped by the player"); f0=$(fired 141)
+  m=$(st_mark); c0=$(rel_count "SOCIAL_SPAR consent"); s0=$(srv_count "Spar stopped by the player"); f0=$(fired 141)
   [ "$r141" = 141 ] && inject_on 141 "$MATE" chat "[{\"action\":\"Attack\",\"target\":\"{player}\",\"message\":\"Alright, guard yourself.\"}]"
   say_mate "$MATE, let's spar. Attack me, come on." 20
   sw_off
-  left=$(st_since "$m" | grep -a -c "ATTACK@$PLAYER"); inj=$(( $(fired 141) - f0 )); cons=$(( $(srv_count "SOCIAL_SPAR consent") - c0 ))
+  left=$(st_since "$m" | grep -a -c "ATTACK@$PLAYER"); inj=$(( $(fired 141) - f0 )); cons=$(( $(rel_count "SOCIAL_SPAR consent") - c0 ))
   sleep 8
   say_mate "Enough $MATE, stop, we're done sparring." 25
   wait_for 30 bash -c "tail -n +$(( m + 1 )) '$L' | grep -a -q 'spar rejoin npc=$MATE'"
