@@ -1,30 +1,37 @@
 # Current state (m51, 2026-10-07)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
-Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
+Run logs: `archive/test-run-2026-10-07-m51.md` (m51, newest), `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-06-m50.md` (m50, 4080 FP batches b27+). Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-07 m51 end, coordinator)
-- **Input isolation (Shay 2026-10-07): DONE.** `kenshi-ctl.ps1 launch` = background run by default: game window on
-  `-Monitor` (default `$env:KENSHI_MONITOR` else DISPLAY1), never activated, harness input isolation ON (real keys/mouse
-  ignored, cursor never clipped/moved, game keeps running unfocused; escape Ctrl+Alt+Shift+F12 at the game window).
-  Tests inject input: `stobe-auto key_inject|mouse_inject`, `input_isolation on|off|status` (harness f10996c, e617d36);
-  kenshi-key.ps1 + CS rows switch to key_inject by themselves. **Shay playing: `kenshi-ctl.ps1 launch -Play`.**
-  Verified in game (5090 L/M): CS01-CS08, K rows 14/14 (K01 first 5090 PASS), ctl-on 10/10 with the game unfocused.
-- KenshiFP manual combat ON by default + F10 toggle + rebindable keys (7b85f67) validated both rigs.
-- C05-KO (8965bc3), C05-STAIRS (a1414c4), C04-TAKE (da96d77, ffad4e4), C05-INTERIOR (refused trace holds the last
-  distance, 799c3f9): all closed on the 4080 (bm51h 30/30, bm51i, bm51j 40/40). 4080 idle, lock released.
-- **5090 next time Shay frees it:** install KenshiFP 76CF7E8A (still 07376F24 there; Kenshi closed) and Stobe B056BDF0
-  (e4e4f3a: push-to-talk after a save load always gave "Speech transcription failed.", the voice worker kept the
-  main-menu playthrough epoch; confirm: push-to-talk after a load -> stobe.log `STT_UPLOAD: completed`, no `dropped`),
-  then run the NP rows below.
-- NP5/NP11/NP12 + NP13/NP14 (NPC bio LLM rows; NP13/14 = backstory confided at Devoted+, server bf31d12, setting NPC_BIO_BACKSTORY_MIN_TIER): DeepInfra credit is back (Shay); run on the 5090 when Shay says it is free (Stobe +
-  server only there; Shay is using the 5090 meanwhile, all other testing on the 4080). List line:
-  `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12 NP13 NP14`.
-- Product note for Shay: once FP walk is pinned on a rock, the order fallback doesn't walk around it either.
+## Right now (2026-10-07 m51 end, coordinator handing over to a new agent)
+- **Shay is playing on the 5090: do not launch, stop or install anything there until Shay says it is free.** Kenshi on
+  the 5090 is Shay's (`-Play`), gfx-mods ON. 4080 idle, Kenshi closed, lock released.
+- **Nothing automated is left on the 4080.** All FP rows closed (C05-KO 8965bc3, C05-STAIRS a1414c4, C04-TAKE da96d77/
+  ffad4e4, C05-INTERIOR 799c3f9: bm51h 30/30, bm51i, bm51j 40/40); FS01/FB01/FF01/HUD01 deleted from COMBAT_TEST_PLAN.
+- **Last 5090 round (one launch, when Shay frees it; Kenshi closed, `gfx-mods.sh off --hdtex` first, `on` after):**
+  1. install KenshiFP 76CF7E8A (5090 still 07376F24) + Stobe B056BDF0 (`C:\StobeBuild\out\Stobe.dll`, built from e4e4f3a).
+  2. KenshiFP confirm: one fp-control ctl-off set (C05-INTERIOR on the 5090).
+  3. NPC bio LLM rows: `npc-llm | kah-npcpanel | Shay | Malzin | 1800 | STOBE-NPCPANEL.sh NP5 NP11 NP12 NP13 NP14`
+     (NP13/14 = hidden backstory confided at Devoted+, server bf31d12, setting `general_settings.NPC_BIO_BACKSTORY_MIN_TIER`
+     default Devoted; NP13/14 set Apothecary Abia's tier with `scenarios.sh trust`, may write a test backstory into the
+     shared `stobe` DB, end at Fond 60). Probe DeepInfra first (one chat line; server log must show no `http_code":402`).
+  4. STT confirm (e4e4f3a): push-to-talk after a save load gave "Speech transcription failed." every time (voice worker
+     thread kept the main-menu playthrough epoch, upload silently dropped). Needs Parakeet (`wsl-voice.sh stt start`):
+     after a load, push-to-talk -> stobe.log `STT_UPLOAD: completed`, never `STT_UPLOAD: dropped`. Can't speak into a
+     mic from a test: drive it with a WAV/loopback or ask Shay to confirm while playing.
+  Then log in `archive/test-run-2026-10-07-m51.md` (or a new m52 log), delete passed rows, update this section.
+- **DeepInfra:** returned 402 (out of credit) for all chat from ~19:15 2026-10-07 (Malzin said "..."); Shay fixed the
+  billing. If NPCs answer "..." again, grep the server log for `"http_code":402` first.
+- **Open for Shay (ask once, don't block):** (a) backstory reveal at Devoted+ (default) or Bonded only (one
+  general_settings row, no deploy); (b) untracked `tools/automation/kenshi-click.ps1` (a helper added a key_inject switch):
+  commit or leave.
+- **Final summary to Shay still owed after the last 5090 round:** F10 manual combat toggle for his feel test, NPC bio via
+  `\` (now with confided backstory at Devoted+), input isolation (`kenshi-ctl.ps1 launch` background / `-Play`), STT fix,
+  product note: once FP walk is pinned on a rock the order fallback doesn't walk around it either.
 - Gotchas: detached WSL batches via `bash -s` heredoc (the `bash -c '... &'` form silently never ran, again m51 L);
   never `unload` a char that is still someone's fight/order target (crash exe+268A68); after a PC restart start the
   WSL stack (/etc/start_env) and Steam (`D:\Steam\steam.exe -silent`); 4080 desktop locked -> `fp_keys focus on`;
-  Defender-probe new DLLs on the 4080.
+  Defender-probe new DLLs on the 4080; don't run Windows `python` from Git Bash (hangs on stdin).
 
 ## The mods and what each one owns (after the m49 decoupling)
 - **Stobe.dll** (`/root/STOBE-src`, snapshot `components/STOBE`): chat/LLM bridge to the Stobe server, negotiation/deals,
@@ -38,7 +45,7 @@ Run logs: `archive/test-run-2026-10-06-m49.md` (m49), `archive/test-run-2026-10-
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe 3EF4CCEE (NPC biography card), KenshiFP 07376F24 (ffad4e4 + isolation a8dc8bc), PG BAFB8C31 (Normal), harness EF425B2D (input isolation f10996c); server live `stobe` bf31d12.
+- 5090: Stobe 3EF4CCEE (NPC biography card; B056BDF0 STT fix built, not installed), KenshiFP 07376F24 (ffad4e4 + isolation a8dc8bc), PG BAFB8C31 (Normal), harness EF425B2D (input isolation f10996c); server live `stobe` bf31d12.
 - 4080: KenshiFP 76CF7E8A (799c3f9 C05-INTERIOR; bm51j 40/40), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
