@@ -248,6 +248,13 @@ if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
       # m65: the weapon drawn in the save was sheathed by the char's AI while the mate settled (drawn=0 at the RMB):
       # look_drawn redraws it with a physical R and must have drawn=1 at the RMB, else it is the 'look' phase again
       if [ $ph = look_drawn ] && ! kis drawn 1; then draw_to 1 || { OK=0; EV+=" $ph: setup: physical R did not draw (drawn=$(ks drawn))"; continue; }; EV+=" redrawn_by_R=1"; fi
+      # m66a: the redraw takes ~2 s and her AI drifted again (moved=3.00 on an RMB the game never saw: mouse_keys_swallowed
+      # rose, drawn_melee_block): she must stand still again right before the RMB (HOLD_POSITION, bounded 12 s)
+      if [ $ph = look_drawn ]; then ST=0; for _ in 1 2 3; do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 1 && { ST=1; break; }; done
+        if [ $ST = 0 ]; then A order "$MT" HOLD_POSITION >/dev/null; EV+=" resettled_by=hold"
+          for _ in $(seq 12); do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 1 && { ST=1; break; }; done; fi
+        [ $ST = 0 ] && { OK=0; EV+=" $ph: setup: $MT moving again after the redraw"; continue; }
+        kis drawn 1 || { OK=0; EV+=" $ph: setup: weapon sheathed again while $MT resettled (drawn=$(ks drawn))"; continue; }; fi
       P0=$(pos "$MT"); K0=$(A fp_keys state); mclick right 150; sleep 0.4; mdown right; sleep 1.2; mup right; sleep 3
       K=$(A fp_keys state); DM=$(d2 "$P0" "$(pos "$MT")")
       SW0=$(( $(fld rmb_swallowed <<<"$K0") + $(fld mouse_keys_swallowed <<<"$K0") )); SW1=$(( $(fld rmb_swallowed <<<"$K") + $(fld mouse_keys_swallowed <<<"$K") ))
