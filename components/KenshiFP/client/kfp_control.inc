@@ -264,3 +264,10 @@ static int kah_fp_move(const char *id,int argc,const char *const *argv,KAH_Reply
     else snprintf(b,sizeof(b),"keys released");
     r->append(r,b); return KAH_OK;
 }
+
+/* Stobe items 135/136: the character KenshiFP controls in first person (NULL when FP mode is off), so Stobe chat
+ * speaks as it and the NPC panel observes from it. Stobe accepts only a squad member (ChatBox.cpp). */
+__declspec(dllexport) void *KenshiFP_ControlledCharacter(void)
+{
+    return g_fp_mode ? fp_controlled_char(g_gw_cache) : NULL;
+}
