@@ -1280,6 +1280,7 @@ static int fpc_key_owned(unsigned dik);
 static int fpc_key_bound_any(unsigned dik);
 static void fpc_key_note_swallow(unsigned dik);
 static int fpc_suppress_sheathe(void *pc);
+static int g_fpc_own_sheathe;   /* kfp_controls.inc: our own (R) sheathe in progress, never suppressed */
 static void fp_controls_tick(void *gw,float dt);
 static void fp_controls_init(void);
 static int kah_fp_keys(const char *,int,const char *const *,KAH_Reply *,void *);
@@ -7876,7 +7877,8 @@ typedef void (*sheathe_t)(void *pc);
 static sheathe_t g_sheathe_orig;
 static void hooked_sheathe(void *pc)
 {
-    if (g_aim_mode && pc && pc == g_fp_control_actor) {
+    /* PT18 (m69): our own R sheathe passes; aim + R holsters */
+    if (g_aim_mode && pc && pc == g_fp_control_actor && !g_fpc_own_sheathe) {
         static int cnt;
         if ((++cnt % 60) == 1) logline("[aim] suppressed AI sheathe (x%d)", cnt);
         return;

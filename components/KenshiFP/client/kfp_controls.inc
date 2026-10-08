@@ -420,6 +420,15 @@ static void fpc_unheld_set(void *pc) {
     g_fpc_unheld_actor=pc;g_fpc_redraw_ms=0;
     combat_draw_hook_install(pc);   /* lazy drawWeapon guard (kfp_combat_native.inc) also carries the PT25 refusal */
 }
+/* PT18 (m69, aim + R left the bow drawn): our own sheathe on the controlled char. A live manual crossbow aim (RMB
+ * held) is ended first: the aim-mode sheathe suppressor (hooked_sheathe) swallowed the sheathe and the aim's native
+ * ranged-combat mode keeps the bow raised. Once the bow is out of hand the combat adapter stays on ranged_holstered
+ * (RMB never re-draws a holstered crossbow, PT11). */
+static unsigned g_fpc_holster_aim_ends;
+static void fpc_own_sheathe(void *pc,void **vt) {
+    if (g_aim_mode && pc==g_combat_pc) {combat_release();++g_fpc_holster_aim_ends;logline("[controls] R holster ends the manual aim first");}
+    g_fpc_own_sheathe=1;((void (*)(void *))vt[0x2D0/8])(pc);g_fpc_own_sheathe=0;
+}
 static void *g_fpc_holster_pc,*g_fpc_holster_wih;static double g_fpc_holster_t0;
 static unsigned g_fpc_holster_done,g_fpc_holster_cancels;
 /* end the lowering window: sheathe=1 issues the game's sheathe on the char (if it still holds that weapon) */
@@ -430,7 +439,7 @@ static void fpc_holster_end(int sheathe,const char *why) {
         void **vt=readable(pc,8)?*(void ***)pc:NULL;
         void *wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
         if (pc==g_fpc_hold_actor) g_fpc_hold_actor=NULL;
-        if (wih && readable((void *)((uintptr_t)vt+0x2D0),8)) {g_fpc_own_sheathe=1;((void (*)(void *))vt[0x2D0/8])(pc);g_fpc_own_sheathe=0;
+        if (wih && readable((void *)((uintptr_t)vt+0x2D0),8)) {fpc_own_sheathe(pc,vt);
             if (!g_is_down && g_fp_mode) fpc_unheld_set(pc);}
         g_fpc_holster_prog=1.0f;++g_fpc_holster_done;
     } else {g_fpc_holster_prog=0;++g_fpc_holster_cancels;}
@@ -462,7 +471,7 @@ static void fpc_draw_toggle(void *pc) {
     }
     if (wih || g_fpc_fists) {
         g_fpc_hold_actor=NULL;g_fpc_fists=0;
-        if (wih) {g_fpc_own_sheathe=1;((void (*)(void *))vt[0x2D0/8])(pc);g_fpc_own_sheathe=0;fpc_unheld_set(pc);}
+        if (wih) {fpc_own_sheathe(pc,vt);fpc_unheld_set(pc);}
         ++g_fpc_r_holsters;logline("[controls] R holster");return;
     }
     /* PT02 (Shay 2026-10-07, Full-Base Beaks with a sword: "R ready (unarmed)"): getThePreferredWeapon can answer
@@ -738,7 +747,7 @@ static void fp_controls_tick(void *gw,float dt) {
         else if (fpc_now_ms()-g_fpc_redraw_ms>=1000.0) {
             void **svt=readable(pc,8)?*(void ***)pc:NULL;
             g_fpc_redraw_ms=fpc_now_ms();
-            if (readable((void *)((uintptr_t)svt+0x2D0),8)) {g_fpc_own_sheathe=1;((void (*)(void *))svt[0x2D0/8])(pc);g_fpc_own_sheathe=0;}
+            if (readable((void *)((uintptr_t)svt+0x2D0),8)) fpc_own_sheathe(pc,svt);
             if (g_fpc_redraws_undone<8) logline("[controls] weapon %p back in hand after an R holster (not by R, not fighting): sheathed again",wih);
             ++g_fpc_redraws_undone;
             wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
@@ -846,6 +855,11 @@ static void fp_controls_tick(void *gw,float dt) {
 static unsigned g_fpc_hud_flashes,g_fpc_hud_silent;   /* PT01/PT03 */
 static void *g_fpc_hud;static const char *g_fpc_hud_text;static int g_fpc_hud_shown;static unsigned g_fpc_hud_changes;
 static unsigned g_fpc_hud_flash_cut;   /* PT01 (m67) */
+/* PT01 (m69): the last flash as drawn, independent of when a test samples: hud_changes seq, text, ms it stayed on
+ * screen (widget's own getVisible confirmed); hud_native_vis = that flag now (-1 unknown); guard_skips = frames the
+ * HUD update was skipped (crash guard busy) */
+static unsigned g_fpc_hud_flash_seq,g_fpc_hud_guard_skips;static const char *g_fpc_hud_flash_text="none";
+static double g_fpc_hud_flash_vis_ms;static int g_fpc_hud_native_vis=-1;
 /* HUD01 (4080 b41): a free swing (~0.5 s) ends between two harness polls (~0.6 s each), so the live hud_text
  * never read SWINGING. hud_hist = the last 8 captions the HUD widget was really set to, "<hud_changes>:<state>"
  * (sequence = g_fpc_hud_changes after that change), so a test can prove what the HUD showed after an input. */
@@ -868,7 +882,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u ctx_why=%s ctx_tap_refused=%u speed_guard=%d speed_fixed=%u speed_synced=%u speed_target=%.2f speed_idx=%d speed_peak_input=%.2f speed_fix_run=%u free=%d free_toggles=%u free_refocus=%u free_load_resets=%u rmb_free_swallowed=%u gui_hook=%d gui_swallowed=%u gui_rel_swallowed=%u holster_pending=%d holster_prog=%.2f holster_delay=%.2f holster_done=%u holster_cancels=%u unheld=%d draws_refused=%u redraws_undone=%u hud_hide_why=%s hud_flash_cut=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u ctx_why=%s ctx_tap_refused=%u speed_guard=%d speed_fixed=%u speed_synced=%u speed_target=%.2f speed_idx=%d speed_peak_input=%.2f speed_fix_run=%u free=%d free_toggles=%u free_refocus=%u free_load_resets=%u rmb_free_swallowed=%u gui_hook=%d gui_swallowed=%u gui_rel_swallowed=%u holster_pending=%d holster_prog=%.2f holster_delay=%.2f holster_done=%u holster_cancels=%u unheld=%d draws_refused=%u redraws_undone=%u hud_hide_why=%s hud_flash_cut=%u hud_flash=%u:%s:%.0f hud_native_vis=%d hud_guard_skips=%u holster_aim_ends=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -884,7 +898,8 @@ static size_t fpc_state(char *b,size_t n) {
         g_free_toggle,g_free_key_toggles,g_free_key_refocus,g_free_load_resets,g_fpc_rmb_free_swallowed,
         g_fpc_gui_hook,g_fpc_gui_swallowed,g_fpc_gui_rel_swallowed,
         g_fpc_holster_pending,g_fpc_holster_prog,g_fpc_holster_delay,g_fpc_holster_done,g_fpc_holster_cancels,
-        g_fpc_unheld_actor!=NULL,g_fpc_draws_refused,g_fpc_redraws_undone,g_fpc_hud_hide_why,g_fpc_hud_flash_cut);
+        g_fpc_unheld_actor!=NULL,g_fpc_draws_refused,g_fpc_redraws_undone,g_fpc_hud_hide_why,g_fpc_hud_flash_cut,
+        g_fpc_hud_flash_seq,g_fpc_hud_flash_text,g_fpc_hud_flash_vis_ms,g_fpc_hud_native_vis,g_fpc_hud_guard_skips,g_fpc_holster_aim_ends);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
 static void fpc_nctl_install(void);   /* PT24, end of file */
@@ -954,7 +969,7 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         g_fpc_sneak_clicks=g_fpc_sneak_attacks=g_fpc_sneak_ko=g_fpc_sneak_failed=g_fpc_sneak_timeout=0;g_fpc_sneak_t=g_fpc_sneak_pc=NULL;
         g_fpc_sneak_path=g_fpc_sneak_result="none";strcpy(g_fpc_sneak_target,"none");g_fpc_sneak_aware=g_fpc_sneak_aware_any=-1;
         g_fpc_sneak_chance=-1.0f;g_fpc_sneak_elapsed=0;
-        g_fpc_fs_prog_max=0;g_fpc_gui_swallowed=g_fpc_gui_rel_swallowed=0;g_fpc_holster_done=g_fpc_holster_cancels=0;g_fpc_draws_refused=g_fpc_redraws_undone=g_fpc_hud_flash_cut=0;g_fpc_last_task=-1;strcpy(g_fpc_last_select,"none");strcpy(g_fpc_last_target,"none");
+        g_fpc_fs_prog_max=0;g_fpc_gui_swallowed=g_fpc_gui_rel_swallowed=0;g_fpc_holster_done=g_fpc_holster_cancels=0;g_fpc_draws_refused=g_fpc_redraws_undone=g_fpc_hud_flash_cut=g_fpc_hud_guard_skips=g_fpc_holster_aim_ends=0;g_fpc_last_task=-1;strcpy(g_fpc_last_select,"none");strcpy(g_fpc_last_target,"none");
         g_fpc_swallow=1;for (int b=0;b<FPC_NBTN;++b) g_fpc_inj_until[b]=0;
         r->append(r,"counters reset, swallow=1");return KAH_OK;
     }
@@ -1014,6 +1029,7 @@ static void fp_controls_init(void) {
  * tinted per state). Post-frame from fp_gui_update; a faulting MyGUI call disables only the label. */
 #define FPC_SYM_TEXTALIGN "?setTextAlign@TextBox@MyGUI@@UEAAXAEBUAlign@2@@Z"
 #define FPC_SYM_TEXTCOLOUR "?setTextColour@TextBox@MyGUI@@UEAAXAEBVColour@2@@Z"
+#define FPC_SYM_WGETVIS_HUD "?getVisible@Widget@MyGUI@@QEBA_NXZ"
 static int g_fpc_hud_dead;
 /* PT01/PT03 (Shay 2026-10-07): the label flashes for FPC_HUD_FLASH_MS after a state change only, and the combat
  * states (swinging/blocking/recovering/staggered/aiming) never show text: the animation and view carry them.
@@ -1024,10 +1040,10 @@ static int fpc_hud_texted(const char *st) {
 }
 static void fpc_hud_update(int show) {
     static double change_ms;
-    if (g_fpc_hud_dead || !g_widget_setvisible) return;
+    if (g_fpc_hud_dead || !g_widget_setvisible) {g_fpc_hud_hide_why=g_fpc_hud_dead?"hud_faulted":"no_setvisible";return;}
     if (!show) {if (g_fpc_hud && g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,0);g_fpc_hud_shown=0;++g_fpc_hud_flash_cut;
                     logline("[controls] state HUD flash hidden early: %s",g_fpc_hud_hide_why);}return;}
-    if (g_guard_armed) return;
+    if (g_guard_armed) {++g_fpc_hud_guard_skips;g_fpc_hud_hide_why="guard_busy";return;}
     if (setjmp(g_guard_jb)) {g_guard_armed=0;g_fpc_hud_dead=1;logline("[controls] state HUD FAULTED; disabled");return;}
     guard_arm();
     if (!g_fpc_hud && g_gui_getinstance && g_gui_createwidget) {
@@ -1066,12 +1082,19 @@ static void fpc_hud_update(int show) {
             else if (!strcmp(st,"staggered")||!strcmp(st,"down")) {c[0]=1;c[1]=0.3f;c[2]=0.3f;}
             if (colour) colour(g_fpc_hud,c);
             g_fpc_hud_text=st;++g_fpc_hud_changes;change_ms=fpc_now_ms();
-            if (fpc_hud_texted(st)) ++g_fpc_hud_flashes; else ++g_fpc_hud_silent;
+            if (fpc_hud_texted(st)) {++g_fpc_hud_flashes;g_fpc_hud_flash_seq=g_fpc_hud_changes;g_fpc_hud_flash_text=st;g_fpc_hud_flash_vis_ms=0;}
+            else ++g_fpc_hud_silent;
             g_fpc_hud_hist[g_fpc_hud_changes%FPC_HUD_HIST]=st;g_fpc_hud_hist_seq[g_fpc_hud_changes%FPC_HUD_HIST]=g_fpc_hud_changes;
         }
-        int vis=fpc_hud_texted(st) && fpc_now_ms()-change_ms<FPC_HUD_FLASH_MS;
+        double age=fpc_now_ms()-change_ms;
+        int vis=fpc_hud_texted(st) && age<FPC_HUD_FLASH_MS;
         if (vis!=g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,vis);g_fpc_hud_shown=vis;}
-    }
+        static unsigned char (*getvis)(void *);static int gres;
+        if (!gres) {gres=1;HMODULE mg=GetModuleHandleA(MYGUI_DLL);getvis=mg?(unsigned char (*)(void *))GetProcAddress(mg,FPC_SYM_WGETVIS_HUD):NULL;}
+        g_fpc_hud_native_vis=getvis?(getvis(g_fpc_hud)!=0):-1;
+        if (vis && g_fpc_hud_native_vis!=0 && g_fpc_hud_flash_seq==g_fpc_hud_changes) g_fpc_hud_flash_vis_ms=age;
+        g_fpc_hud_hide_why=!fpc_hud_texted(st)?"silent_state":!vis?"flash_over":!g_fpc_hud_native_vis?"native_hidden":"none";
+    } else g_fpc_hud_hide_why="no_widget";
     g_guard_armed=0;
 }
 /* Camera pull-back collision (kfp_view.inc): the aim physics trace (0x087f9e07) from the eye backwards;

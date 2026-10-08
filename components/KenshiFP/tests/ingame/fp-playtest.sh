@@ -41,7 +41,7 @@
 #            speed_clicks +N, gui_hook=1 and gui_swallowed +N (no press reached the GUI)
 #  PT11      bow only, holstered, manual combat physical: RMB hold -> nothing drawn (drawn=0 wih=0), combat draws and
 #            reload_starts unchanged, fp_combat why=ranged_holstered
-#  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts, ammo same)
+#  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts, ammo same), still holstered after RMB up
 #  PT15      3 manual shots (injected aim/fire): spread_n +3, spread_cone = formula from spread_skill/spread_per,
 #            spread_off <= cone, "[combat] spread" log lines
 #  PT02      sword only (bow unequipped), physical R: drawn=1 wih!=0 r_path!=unarmed, log "R draw ... path="
@@ -610,9 +610,9 @@ toggles 1; take "$MT" >/dev/null; take "$SH" >/dev/null
 # ---- PT18: R only draws/holsters the crossbow ----
 if want PT18; then if [ $BOWOK = 0 ]; then row PT18 FAIL "setup: no crossbow on $SH"; else
   draw_to 0; sky; C0=$(A fp_combat state); D0=$(ks r_draws); rkey; waitf 4 kis drawn 1; waitf 6 kis ranged 1; sleep 2; C1=$(A fp_combat state); K1=$(A fp_keys state)
-  mdown right; sleep 1; waitf 12 csis reloading 0; C2=$(A fp_combat state); H0=$(ks r_holsters); rkey; waitf 4 kis drawn 0; sleep 0.8; C3=$(A fp_combat state); K3=$(A fp_keys state); mup right; sleep 0.5
-  ev="R draw: r_draws $D0->$(fld r_draws <<<"$K1") ranged=$(fld ranged <<<"$K1") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C1") (2 s, no aim) | aim+R: drawn=$(fld drawn <<<"$K3") r_holsters $H0->$(fld r_holsters <<<"$K3") reload_starts $(fld reload_starts <<<"$C2")->$(fld reload_starts <<<"$C3") ammo $(fld ammo <<<"$C2")->$(fld ammo <<<"$C3")"
-  ok=1; [ "$(fld drawn <<<"$K1")" = 1 ] && [ "$(fld ranged <<<"$K1")" = 1 ] && [ "$(fld reload_starts <<<"$C1")" = "$(fld reload_starts <<<"$C0")" ] || ok=0
+  mdown right; sleep 1; waitf 12 csis reloading 0; C2=$(A fp_combat state); H0=$(ks r_holsters); rkey; waitf 4 kis drawn 0; sleep 0.8; C3=$(A fp_combat state); K3=$(A fp_keys state); mup right; sleep 0.5; K4=$(A fp_keys state)
+  ev="R draw: r_draws $D0->$(fld r_draws <<<"$K1") ranged=$(fld ranged <<<"$K1") reload_starts $(fld reload_starts <<<"$C0")->$(fld reload_starts <<<"$C1") (2 s, no aim) | aim+R: drawn=$(fld drawn <<<"$K3") aim_ends=$(fld holster_aim_ends <<<"$K3") r_holsters $H0->$(fld r_holsters <<<"$K3") reload_starts $(fld reload_starts <<<"$C2")->$(fld reload_starts <<<"$C3") ammo $(fld ammo <<<"$C2")->$(fld ammo <<<"$C3") | RMB up: drawn=$(fld drawn <<<"$K4")"
+  ok=1; [ "$(fld drawn <<<"$K4")" = 0 ] || ok=0; [ "$(fld drawn <<<"$K1")" = 1 ] && [ "$(fld ranged <<<"$K1")" = 1 ] && [ "$(fld reload_starts <<<"$C1")" = "$(fld reload_starts <<<"$C0")" ] || ok=0
   [ "$(fld drawn <<<"$K3")" = 0 ] && [ "$(fld r_holsters <<<"$K3")" = $((H0+1)) ] && [ "$(fld reload_starts <<<"$C3")" = "$(fld reload_starts <<<"$C2")" ] && [ "$(fld ammo <<<"$C3")" = "$(fld ammo <<<"$C2")" ] || ok=0
   judge PT18 $ok "$ev"; fi; fi
 
@@ -646,7 +646,7 @@ toggles 1; take "$SH" >/dev/null
 
 # ---- PT02 (+ PT01): R with a sword only ----
 if want PT02 || want PT01; then if [ $MELEE = 0 ]; then mfail PT02 PT01; else draw_to 0; sky; sleep 2; K0=$(A fp_keys state)
-  rkey; K1=$(A fp_keys state); waitf 4 kis drawn 1; K2=$(A fp_keys state); sleep 2.6; K3=$(A fp_keys state)
+  RT0=$(date +%s%N); rkey; K1=$(A fp_keys state); RT1=$(date +%s%N); waitf 4 kis drawn 1; K2=$(A fp_keys state); sleep 2.6; K3=$(A fp_keys state)
   RL=$(kfplines | grep '\[controls\] R \(draw\|ready\)' | tail -1 | cut -c1-120)
   # m53: the weapon was already out before R (bandit fight: r_draws 1->1, no flash): that is setup, not a verdict
   if [ "$(fld drawn <<<"$K0")" != 0 ]; then rows_fail "weapon not holstered before R (drawn=$(fld drawn <<<"$K0") ui_state=$(fld ui_state <<<"$K0"))" PT02 PT01
@@ -656,9 +656,14 @@ if want PT02 || want PT01; then if [ $MELEE = 0 ]; then mfail PT02 PT01; else dr
     judge PT02 $ok "$ev"; fi
   if want PT01; then
     # shown within the flash (K1 ~0.4 s / K2 after the draw), hidden 2.6 s later while still ready
+    # m69: K1 can land after the 1.5 s flash (R->K1 is 2 harness round trips + 0.35 s; rk1_ms shows it), so the DLL's
+    # own record of the last flash also proves it: hud_flash=<seq>:<text>:<ms on screen, widget getVisible confirmed>,
+    # a new seq after K0's hud_changes, text ready, on screen >= 1000 ms; at K3 hidden by the flash timer (flash_over)
     SHOWN=0; for s in "$K1" "$K2"; do [ "$(fld hud_shown <<<"$s")" = 1 ] && [ "$(fld hud_text <<<"$s")" = ready ] && SHOWN=1; done
-    ev="before R: ui_state=$(fld ui_state <<<"$K0") | after R: hud_text=$(fld hud_text <<<"$K1")/$(fld hud_text <<<"$K2") hud_shown=$(fld hud_shown <<<"$K1")/$(fld hud_shown <<<"$K2") | +2.6 s: ui_state=$(fld ui_state <<<"$K3") hud_shown=$(fld hud_shown <<<"$K3") hud_flashes $(fld hud_flashes <<<"$K0")->$(fld hud_flashes <<<"$K3") hud_flash_cut $(fld hud_flash_cut <<<"$K0")->$(fld hud_flash_cut <<<"$K3") hide_why=$(fld hud_hide_why <<<"$K2") hist=$(fld hud_hist <<<"$K3")"
-    ok=1; [ $SHOWN = 1 ] && [ "$(fld ui_state <<<"$K3")" = ready ] && [ "$(fld hud_shown <<<"$K3")" = 0 ] && inc "$(fld hud_flashes <<<"$K0")" "$(fld hud_flashes <<<"$K3")" || ok=0
+    HF=$(fld hud_flash <<<"$K3"); HFS=${HF%%:*}; HFR=${HF#*:}; HFT=${HFR%%:*}; HFM=${HFR#*:}
+    [ -n "$HFS" ] && [ "$HFS" -gt "$(fld hud_changes <<<"$K0")" ] 2>/dev/null && [ "$HFT" = ready ] && [ "${HFM%.*}" -ge 1000 ] 2>/dev/null && SHOWN=1
+    ev="before R: ui_state=$(fld ui_state <<<"$K0") | after R (rk1_ms=$(( (RT1-RT0)/1000000 ))): hud_text=$(fld hud_text <<<"$K1")/$(fld hud_text <<<"$K2") hud_shown=$(fld hud_shown <<<"$K1")/$(fld hud_shown <<<"$K2") native_vis=$(fld hud_native_vis <<<"$K1")/$(fld hud_native_vis <<<"$K2") hide_why=$(fld hud_hide_why <<<"$K1")/$(fld hud_hide_why <<<"$K2") | +2.6 s: ui_state=$(fld ui_state <<<"$K3") hud_shown=$(fld hud_shown <<<"$K3") hide_why=$(fld hud_hide_why <<<"$K3") hud_flash=$HF (changes0=$(fld hud_changes <<<"$K0")) hud_flashes $(fld hud_flashes <<<"$K0")->$(fld hud_flashes <<<"$K3") hud_flash_cut $(fld hud_flash_cut <<<"$K0")->$(fld hud_flash_cut <<<"$K3") guard_skips=$(fld hud_guard_skips <<<"$K3") hist=$(fld hud_hist <<<"$K3")"
+    ok=1; [ $SHOWN = 1 ] && [ "$(fld ui_state <<<"$K3")" = ready ] && [ "$(fld hud_shown <<<"$K3")" = 0 ] && [ "$(fld hud_hide_why <<<"$K3")" = flash_over ] && inc "$(fld hud_flashes <<<"$K0")" "$(fld hud_flashes <<<"$K3")" || ok=0
     judge PT01 $ok "$ev"; fi; fi; fi; fi
 
 # ---- PT03: no text while blocking / swinging ----
