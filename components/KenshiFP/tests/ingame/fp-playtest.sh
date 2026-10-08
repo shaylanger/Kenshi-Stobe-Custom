@@ -35,7 +35,10 @@
 #  PT05      evidence: physical LMB click on TimeSpeedButton2 (x1 while at x1), RTS and FP free cursor: speed_clicks rise,
 #            speed_peak_click / long frames / [speed] log lines; FAIL only if the spike shows (peak > SPIKE_MAX)
 #  PT23      Shay's speed steps x0.5 -> 1x -> speed up, physical clicks on TimeSpeedButton3/2/4 then keys 2/1/3, RTS and FP:
-#            game-time rate per real second around every input <= SPIKE_MAX x the speed, speed up after 1x = x2, speed_guard=1
+#            game-time rate per real second around every input <= SPIKE_MAX x the speed, speed up after 1x = x2, speed_guard=1;
+#            lmb (m65): at x1 in FP look mode, weapon drawn by physical R, the hidden cursor parked on the speed-up button
+#            (TimeSpeedButton4): PT23_LMB_N (8) physical LMB attacks -> game speed still x1, speed_changes same,
+#            speed_clicks +N, gui_hook=1 and gui_swallowed +N (no press reached the GUI)
 #  PT11      bow only, holstered, manual combat physical: RMB hold -> nothing drawn (drawn=0 wih=0), combat draws and
 #            reload_starts unchanged, fp_combat why=ranged_holstered
 #  PT18      bow drawn by physical R: no reload without aim; aim (RMB held) + R = holster only (reload_starts, ammo same)
@@ -508,11 +511,28 @@ pt23_step() { local how=$1 what=$2 n k s0 S=() i r
         for (i=2;i<=NR;i++) { dt=t[i]-t[i-1]; if (dt<=0) continue; q=(h[i]-h[i-1])/dt/base/ref; if (q>mx) mx=q }
         printf "%s %.2f %d", s1, mx, (mx>lim) }')
   read -r ST_S1 ST_MAX ST_BAD <<<"$r"; ST_EV="$what($how) x$s0->x$ST_S1 max_rate=${ST_MAX}x"; }
-if want PT23; then mode off; A speed 1 >/dev/null; sleep 1.5; OK=1; EV=""
+# pt23_lmb: the m65 bug: each FP LMB attack's release clicked the GUI button under the hidden cursor (the speed-up
+# button the clicks above left it on) -> x1->x2->x5->...->x500. Sets LOK (1 = speed untouched) and LEV.
+PT23_LMB_N=${PT23_LMB_N:-8}
+pt23_lmb() { local K0 K S0 S1 i BXY=""; LOK=1; mode off; A speed 1 >/dev/null; sleep 0.5
+  spd_btn 4 && BXY=$BTN_XY; take "$SH" >/dev/null; menu_close; draw_to 1; sky; sleep 1.2
+  [ -n "$BXY" ] || { spd_btn 4 && BXY=$BTN_XY; }
+  [ -n "$BXY" ] && A mouse_inject at $BXY >/dev/null; sleep 0.3
+  K0=$(A fp_keys state); S0=$(spd_now)
+  if [ -z "$BXY" ] || [ "$(fld drawn <<<"$K0")" != 1 ] || ! cursor_ok || [ "$(fps free)" = 1 ] || ! feq "$S0" 1; then LOK=0
+    LEV="lmb: setup: speed_up_button=${BXY:-not_found} drawn=$(fld drawn <<<"$K0") cursor_hidden=$(fps cursor_hidden) free=$(fps free) speed=x$S0"
+  else for i in $(seq 1 "$PT23_LMB_N"); do mclick left 80; sleep 0.9; done; sleep 0.5
+    K=$(A fp_keys state); S1=$(spd_now)
+    LEV="lmb: $PT23_LMB_N physical LMB at x$S0 (FP look, drawn ranged=$(fld ranged <<<"$K0"), hidden cursor on TimeSpeedButton4 $BXY): speed x$S0->x$S1 speed_now=$(fld speed_now <<<"$K") speed_changes $(fld speed_changes <<<"$K0")->$(fld speed_changes <<<"$K") speed_clicks $(fld speed_clicks <<<"$K0")->$(fld speed_clicks <<<"$K") gui_hook=$(fld gui_hook <<<"$K") gui_swallowed $(fld gui_swallowed <<<"$K0")->$(fld gui_swallowed <<<"$K") free_swings $(fld free_swings <<<"$K0")->$(fld free_swings <<<"$K")"
+    feq "$S1" 1 && [ "$(fld speed_changes <<<"$K")" = "$(fld speed_changes <<<"$K0")" ] || LOK=0
+    ge "$(fld speed_clicks <<<"$K")" $(( $(fld speed_clicks <<<"$K0") + PT23_LMB_N )) || LOK=0
+    [ "$(fld gui_hook <<<"$K")" = 1 ] && ge "$(fld gui_swallowed <<<"$K")" $(( $(fld gui_swallowed <<<"$K0") + PT23_LMB_N )) || LOK=0; fi
+  draw_to 0; A speed 1 >/dev/null; mode off; }
+if want PT23; then pt23_lmb; mode off; A speed 1 >/dev/null; sleep 1.5; OK=1; EV=""
   K=$(A fp_keys state); GUARD=$(fld speed_guard <<<"$K")
   b1=$(gh); sleep 3; b2=$(gh)
   BASE=$(awk -v a="$b1" -v b="$b2" 'BEGIN{split(a,p," ");split(b,q," "); d=q[1]-p[1]; if (d>0 && q[2]>p[2]) printf "%.8f", (q[2]-p[2])/d; else print 0}')
-  if [ "$GUARD" != 1 ] || [ "$BASE" = 0 ]; then row PT23 FAIL "setup/product: speed_guard=$GUARD (RE_Kenshi index or custom speeds not found: grep '[speed] RE_Kenshi' KenshiFP.log) base_rate=$BASE h/s [$b1 | $b2]"
+  if [ "$GUARD" != 1 ] || [ "$BASE" = 0 ]; then row PT23 FAIL "setup/product: speed_guard=$GUARD (RE_Kenshi index or custom speeds not found: grep '[speed] RE_Kenshi' KenshiFP.log) base_rate=$BASE h/s [$b1 | $b2] | $LEV"
   else for v in rts:click rts:key fp:click fp:key; do where_=${v%%:*}; how=${v##*:}
       if [ $where_ = rts ]; then mode off; else take "$SH" >/dev/null; [ $how = click ] && { altkey; waitf 3 bash -c "stobe-auto fp_state | grep -q 'free=1'"; }; fi
       A speed 1 >/dev/null; sleep 1; K0=$(A fp_keys state); L0=$(wc -l < "$KFPLOG"); SEQ=""; j=0
@@ -525,7 +545,8 @@ if want PT23; then mode off; A speed 1 >/dev/null; sleep 1.5; OK=1; EV=""
       EV+="$v: ${SEQ}fixed $(fld speed_fixed <<<"$K0")->$(fld speed_fixed <<<"$K") synced $(fld speed_synced <<<"$K0")->$(fld speed_synced <<<"$K") fix_run=$(fld speed_fix_run <<<"$K") | "
       tail -n +"$((L0+1))" "$KFPLOG" | tr -d '\r' | grep '\[speed\]' | head -40 > "$OUT/pt23-$where_-$how-speed.txt"
       menu_close; done
-    judge PT23 $OK "base=${BASE}h/s spike_max=$SPIKE_MAX ${EV% | } logs=$OUT/pt23-*-speed.txt"; fi
+    [ "$LOK" = 1 ] || OK=0
+    judge PT23 $OK "$LEV | base=${BASE}h/s spike_max=$SPIKE_MAX ${EV% | } logs=$OUT/pt23-*-speed.txt"; fi
   A speed 1 >/dev/null; take "$SH" >/dev/null; fi
 
 # ---- weapon rows: mate behind the shooter, manual combat on (physical input) ----

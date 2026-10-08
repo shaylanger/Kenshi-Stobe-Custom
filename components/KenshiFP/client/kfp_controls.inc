@@ -241,6 +241,39 @@ static void fpc_playercontrol_hook(void *pi,void *ihp) {
     }
     vis_out_prev=vis_out;
 }
+/* PT23/PT26 (m65): every FP LMB attack stepped the game speed up one notch (1->2->5->...->500). The OIS mouse
+ * events still reach MyGUI (MainListener::mousePressed/Released -> InputManager::injectMousePress/Release) at the
+ * hidden cursor's last position; when that sits on the speed-up button (TimeSpeedButton, RE_Kenshi custom speeds
+ * idx+1) every release clicks it. While FP owns the cursor (look mode, cursor hidden, no UI) no mouse press goes
+ * to the GUI; a release is kept from the GUI exactly when its press was (latched per button). Moves pass. */
+typedef char (*fpc_gui_mouse_t)(void *im,int x,int y,int id);
+static fpc_gui_mouse_t g_fpc_gui_press_orig,g_fpc_gui_release_orig;
+static int g_fpc_gui_hook,g_fpc_gui_latch[8];
+static unsigned g_fpc_gui_swallowed,g_fpc_gui_rel_swallowed,g_fpc_gui_logs;
+static char fpc_gui_press_hook(void *im,int x,int y,int id) {
+    int b=id&7;
+    if (g_fp_mode && g_fpc_swallow && fpc_owns_mouse()) {
+        g_fpc_gui_latch[b]=1;++g_fpc_gui_swallowed;
+        if (g_fpc_gui_logs<12) {++g_fpc_gui_logs;logline("[controls] FP look: mouse %d press at %d,%d kept from the GUI (hidden cursor)",id,x,y);}
+        return 1;
+    }
+    g_fpc_gui_latch[b]=0;
+    return g_fpc_gui_press_orig(im,x,y,id);
+}
+static char fpc_gui_release_hook(void *im,int x,int y,int id) {
+    int b=id&7;
+    if (g_fpc_gui_latch[b]) {g_fpc_gui_latch[b]=0;++g_fpc_gui_rel_swallowed;return 1;}
+    return g_fpc_gui_release_orig(im,x,y,id);
+}
+static void fpc_gui_mouse_install(HMODULE mygui) {
+    void *p=GetProcAddress(mygui,"?injectMousePress@InputManager@MyGUI@@QEAA_NHHUMouseButton@2@@Z");
+    void *r=GetProcAddress(mygui,"?injectMouseRelease@InputManager@MyGUI@@QEAA_NHHUMouseButton@2@@Z");
+    int ok=p && r && install_hook(p,(void *)fpc_gui_press_hook,(void **)&g_fpc_gui_press_orig);
+    ok=ok && install_hook(r,(void *)fpc_gui_release_hook,(void **)&g_fpc_gui_release_orig);
+    g_fpc_gui_hook=ok;
+    logline(ok?"[controls] MyGUI injectMousePress/Release hooks installed (FP look clicks never reach the GUI)"
+              :"[controls] MyGUI injectMousePress/Release hooks FAILED (FP clicks can hit GUI buttons)");
+}
 /* InputHandler::keyDownEvent mouse codes ((btn+1)<<12: 0x1000 mouse_select, 0x2000 mouse_command, 0x3000
  * mouse_rotate) feed the vanilla command queue next to playerControl's flags. PT07/PT21 (Shay 2026-10-07): with a
  * squad mate selected the RMB command still gave her a move order and LMB still selected; FP owns all three while
@@ -760,7 +793,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u ctx_why=%s ctx_tap_refused=%u speed_guard=%d speed_fixed=%u speed_synced=%u speed_target=%.2f speed_idx=%d speed_peak_input=%.2f speed_fix_run=%u free=%d free_toggles=%u free_refocus=%u free_load_resets=%u rmb_free_swallowed=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u ctx_why=%s ctx_tap_refused=%u speed_guard=%d speed_fixed=%u speed_synced=%u speed_target=%.2f speed_idx=%d speed_peak_input=%.2f speed_fix_run=%u free=%d free_toggles=%u free_refocus=%u free_load_resets=%u rmb_free_swallowed=%u gui_hook=%d gui_swallowed=%u gui_rel_swallowed=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -773,7 +806,8 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_ctx_hook_ok,g_fpc_ctx_game_shows,g_fpc_ctx_game_hides,g_fpc_ctx_reshow_blocked,g_fpc_ctx_closes,g_fpc_ctx_close_where,
         g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva,g_fpc_ctxupd_hook_ok,g_fpc_ctxupd_addr,g_fpc_ctxupd_calls,g_fpc_ctxupd_fed,g_fpc_ctxupd_req,g_fpc_ctx_why,g_fpc_ctx_tap_refused,
         g_spd_custom == 1 && g_spd_reidx != NULL,g_spd_fixed,g_spd_synced,g_spd_target,g_spd_reidx ? *g_spd_reidx : -1,g_spd_peak_input,g_spd_fix_run_max,
-        g_free_toggle,g_free_key_toggles,g_free_key_refocus,g_free_load_resets,g_fpc_rmb_free_swallowed);
+        g_free_toggle,g_free_key_toggles,g_free_key_refocus,g_free_load_resets,g_fpc_rmb_free_swallowed,
+        g_fpc_gui_hook,g_fpc_gui_swallowed,g_fpc_gui_rel_swallowed);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
 static void fpc_nctl_install(void);   /* PT24, end of file */
@@ -839,7 +873,7 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         g_fpc_sneak_clicks=g_fpc_sneak_attacks=g_fpc_sneak_ko=g_fpc_sneak_failed=g_fpc_sneak_timeout=0;g_fpc_sneak_t=g_fpc_sneak_pc=NULL;
         g_fpc_sneak_path=g_fpc_sneak_result="none";strcpy(g_fpc_sneak_target,"none");g_fpc_sneak_aware=g_fpc_sneak_aware_any=-1;
         g_fpc_sneak_chance=-1.0f;g_fpc_sneak_elapsed=0;
-        g_fpc_fs_prog_max=0;g_fpc_last_task=-1;strcpy(g_fpc_last_select,"none");strcpy(g_fpc_last_target,"none");
+        g_fpc_fs_prog_max=0;g_fpc_gui_swallowed=g_fpc_gui_rel_swallowed=0;g_fpc_last_task=-1;strcpy(g_fpc_last_select,"none");strcpy(g_fpc_last_target,"none");
         g_fpc_swallow=1;for (int b=0;b<FPC_NBTN;++b) g_fpc_inj_until[b]=0;
         r->append(r,"counters reset, swallow=1");return KAH_OK;
     }

@@ -9055,6 +9055,7 @@ __declspec(dllexport) void dllStartPlugin(void)
                                           (void **)&g_pm_setpointer_orig);
             logline(spok ? "MyGUI setPointer hook installed (hide default cursor)"
                          : "MyGUI setPointer hook FAILED");
+            fpc_gui_mouse_install(mygui);   /* PT23/PT26: FP look clicks never reach GUI buttons */
         } else {
             logline("MyGUIEngine_x64.dll not found — cursor hide disabled");
         }
