@@ -1304,6 +1304,11 @@ static unsigned g_kl_installs, g_kl_eaten; /* CS05 path 2: OIS front key listene
 static volatile int   g_fpc_holster_pending;
 static volatile float g_fpc_holster_prog;
 static float g_fpc_holster_delay = 0.3f;     /* fp_keys set holster_delay <s> (0..2), 0 = instant (old behaviour) */
+/* PT25 (m67): an R holster sticks out of a fight (kfp_controls.inc): drawWeapon on that char is refused until R draws,
+ * a fight starts, control switches or FP goes off; our own draws clear it first (fpc_unheld_clear). */
+static int  fpc_suppress_draw(void *pc);
+static void fpc_unheld_clear(const char *why);
+static const char *g_fpc_hud_hide_why = "none";   /* PT01 (m67): what hid the state HUD flash last (kfp_controls.inc) */
 static void kfp_front_listener_tick(void);
 static int kfp_front_listener_on(void);
 #include "kfp_bound_toggle.h"
@@ -7207,6 +7212,7 @@ static void fp_gui_update(void)
             if (g_black_ov)  g_widget_setvisible(g_black_ov, 0);
             if (g_sneak_icon) g_widget_setvisible(g_sneak_icon, 0);
         }
+        g_fpc_hud_hide_why = "fp_off";
         fpc_hud_update(0);
         fpc_ctl_menu_update(g_gw_cache);   /* PT20: hides the Control button outside FP */
         g_down_blend = 0.0f;   /* reset the KO fade so re-entering FP doesn't flash */
@@ -7229,7 +7235,10 @@ static void fp_gui_update(void)
     }
     if (g_crosshair && g_widget_setvisible)
         g_widget_setvisible(g_crosshair, (g_pointer_default && !g_ui_open) ? 1 : 0);
-    fpc_hud_update(g_cfg_state_hud && g_crosshair && g_pointer_default && !g_ui_open);
+    /* PT01 (m67): the state flash no longer hides behind a contextual pointer (g_pointer_default=0: the native icon
+     * replaces our crosshair, the label under it stays); hud_hide_why names what hid it last */
+    g_fpc_hud_hide_why = !g_cfg_state_hud ? "setting" : !g_crosshair ? "no_crosshair" : g_ui_open ? "ui_open" : "none";
+    fpc_hud_update(g_cfg_state_hud && g_crosshair && !g_ui_open);
     fpc_ctl_menu_update(g_gw_cache);       /* PT20: "Control" next to the native context menu on a squad mate */
 
     /* Screen-space sneak eye: shown only while sneaking (state set per-frame from

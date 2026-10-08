@@ -484,6 +484,7 @@ static unsigned g_combat_draw_refused;
 static char combat_draw_weapon_hook(void *pc,void *item,void *str) {
     if (pc && pc==g_combat_pc && g_combat_enabled && g_fp_mode && g_combat_control.aimed &&
         g_combat_weapon && item!=g_combat_weapon) {++g_combat_draw_refused;return 0;}
+    if (fpc_suppress_draw(pc)) return 0;   /* PT25: R-holstered out of a fight stays holstered */
     return g_combat_draw_orig(pc,item,str);
 }
 static void combat_draw_hook_install(void *pc) {
@@ -663,6 +664,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
                 unsigned char str[32];make_mstr(str,"");
                 void *draw=combat_virtual(pc,0x3d8);
                 int keep=g_aim_mode;g_aim_mode=0;   /* the draw may sheathe internally */
+                fpc_unheld_clear("manual combat draw");
                 char ok=draw?((char (*)(void *,void *,void *))draw)(pc,weapon,str):0;
                 g_aim_mode=keep;
                 if (ok) {
@@ -724,6 +726,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     if (action&KFP_ACT_RAISE) {
         unsigned char str[32];make_mstr(str,"");
         void *draw=combat_virtual(pc,0x3d8);
+        fpc_unheld_clear("manual combat raise");
         if (draw && ((char (*)(void *,void *,void *))draw)(pc,weapon,str)) {
             g_combat_setup(rc,NULL,35); /* STAT_CROSSBOWS */
             *(void **)((uintptr_t)rc+RC_GUN)=gun;

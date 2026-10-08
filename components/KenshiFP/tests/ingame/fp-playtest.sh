@@ -233,7 +233,7 @@ if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
     # pinned next to the player, unpinned and must stand still (2 samples 1 s apart < 1 u, max 8 s) before the RMB.
     DRAWN25=$(ks drawn); EV+=" drawn_at_load=$DRAWN25"; PH25="look free"; [ "$DRAWN25" = 1 ] && PH25="look_drawn look free"
     for ph in $PH25; do
-      [ $ph = look ] && [ "$(ks drawn)" = 1 ] && { draw_to 0 || { OK=0; EV+=" | look: physical R did not holster (drawn=$(ks drawn))"; continue; }; }
+      [ $ph = look ] && [ "$(ks drawn)" = 1 ] && { draw_to 0 || { OK=0; EV+=" | look: physical R did not holster (drawn=$(ks drawn) unheld=$(ks unheld) draws_refused=$(ks draws_refused) redraws_undone=$(ks redraws_undone) holster_done=$(ks holster_done))"; continue; }; }
       [ $ph = free ] && { altkey; waitf 3 kis free 1 || { OK=0; EV+=" | free: Left Alt did not free the cursor (free=$(ks free))"; continue; }
                           A mouse_inject at $((SW/2)) $((SHH*7/10)) >/dev/null; sleep 0.3; }
       A pin "$MT" at "$SH" dist 25 face "$SH" >/dev/null; sleep 1; A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}; A select "$MT" >/dev/null
@@ -657,7 +657,7 @@ if want PT02 || want PT01; then if [ $MELEE = 0 ]; then mfail PT02 PT01; else dr
   if want PT01; then
     # shown within the flash (K1 ~0.4 s / K2 after the draw), hidden 2.6 s later while still ready
     SHOWN=0; for s in "$K1" "$K2"; do [ "$(fld hud_shown <<<"$s")" = 1 ] && [ "$(fld hud_text <<<"$s")" = ready ] && SHOWN=1; done
-    ev="before R: ui_state=$(fld ui_state <<<"$K0") | after R: hud_text=$(fld hud_text <<<"$K1")/$(fld hud_text <<<"$K2") hud_shown=$(fld hud_shown <<<"$K1")/$(fld hud_shown <<<"$K2") | +2.6 s: ui_state=$(fld ui_state <<<"$K3") hud_shown=$(fld hud_shown <<<"$K3") hud_flashes $(fld hud_flashes <<<"$K0")->$(fld hud_flashes <<<"$K3") hist=$(fld hud_hist <<<"$K3")"
+    ev="before R: ui_state=$(fld ui_state <<<"$K0") | after R: hud_text=$(fld hud_text <<<"$K1")/$(fld hud_text <<<"$K2") hud_shown=$(fld hud_shown <<<"$K1")/$(fld hud_shown <<<"$K2") | +2.6 s: ui_state=$(fld ui_state <<<"$K3") hud_shown=$(fld hud_shown <<<"$K3") hud_flashes $(fld hud_flashes <<<"$K0")->$(fld hud_flashes <<<"$K3") hud_flash_cut $(fld hud_flash_cut <<<"$K0")->$(fld hud_flash_cut <<<"$K3") hide_why=$(fld hud_hide_why <<<"$K2") hist=$(fld hud_hist <<<"$K3")"
     ok=1; [ $SHOWN = 1 ] && [ "$(fld ui_state <<<"$K3")" = ready ] && [ "$(fld hud_shown <<<"$K3")" = 0 ] && inc "$(fld hud_flashes <<<"$K0")" "$(fld hud_flashes <<<"$K3")" || ok=0
     judge PT01 $ok "$ev"; fi; fi; fi; fi
 
