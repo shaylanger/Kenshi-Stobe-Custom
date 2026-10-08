@@ -69,6 +69,22 @@ static int g_fpc_ctx_freed, g_fpc_ctx_relock;   /* context menu freed the cursor
 static int g_fpc_ctx_skip_rrel, g_fpc_ctx_hold_done;   /* PT06: menu opened on an RMB hold (its own release must not relock) */
 static unsigned g_fpc_ctx_hold_opens, g_fpc_ctx_tap_opens;
 static double g_fpc_ctx_ms;
+static unsigned g_fpc_ctx_keep_frames;   /* PT06/PT20: frames the FP menu was kept open (RMB fed as held) */
+static unsigned char (*fpc_ctl_getvis(void))(void *);
+/* PT06/PT20 (m54): the game's ContextMenu::update (called at the end of playerControl) keeps the menu only while the
+ * button that opened it is held: ContextMenu+0 = "opened with RMB held" (showContextMenu copies InputHandler mRight);
+ * set -> hidden once mRight reads 0, clear -> hidden once mLeft reads 0. Vanilla = hold RMB, release over an option.
+ * FP menus must stay open after the release until an option / Control / Esc / a click elsewhere, so the FP menu is
+ * marked "RMB-opened" and, while it is visible and FP holds the freed cursor for it, playerControl sees RMB held
+ * (no press/release edges: the game's own last-RMB byte, written next to the visible cache byte, is kept in step). */
+static int fpc_ctx_menu_visible(void *pi) {
+    unsigned char (*getvis)(void *)=fpc_ctl_getvis();
+    if (!getvis || !readable(pi,FPC_PI_CTXMENU+0x50)) return 0;
+    void *m=*(void **)((uintptr_t)pi+FPC_PI_CTXMENU+0x48);          /* ContextMenu::menuGUI (what isVisible reads) */
+    if (!readable(m,0x10)) return 0;
+    void *mw=*(void **)((uintptr_t)m+8);
+    return readable(mw,8) && getvis(mw);
+}
 /* free swing (no target, not fighting): native attack animation only */
 static void *g_fpc_fs_anim,*g_fpc_fs_tech;
 static double g_fpc_fs_start_ms, g_fpc_recover_until_ms;
@@ -139,6 +155,7 @@ static void fpc_playercontrol_hook(void *pi,void *ihp) {
     }
     unsigned char saved[8];memcpy(saved,f,8);
     int own=fpc_owns_mouse() && g_fpc_swallow;
+    int keep=g_fpc_ctx_freed && g_fpc_swallow && fpc_ctx_menu_visible(pi);   /* PT06/PT20: FP menu stays open */
     int clear[2];
     clear[1]=own || (g_fpc_ctx_freed && g_fpc_swallow);   /* RMB: never a native walk/menu in FP (PT21: also under the FP menu) */
     clear[0]=own;                                   /* PT07: LMB never selects in FP (drawn or holstered) */
@@ -150,6 +167,11 @@ static void fpc_playercontrol_hook(void *pi,void *ihp) {
             if (b) ++g_fpc_rmb_swallowed; else ++g_fpc_lmb_swallowed;
         }
         if (!saved[b] && !saved[4+b]) g_fpc_latch[b]=0;
+    }
+    if (keep) {f[1]=f[3]=1;f[5]=f[7]=0;++g_fpc_ctx_keep_frames;}
+    if (keep || clear[1] || g_fpc_latch[1]) {                       /* playerControl's own last-RMB byte: no edges */
+        unsigned char *lastr=RVA_CTXMENU_VISIBLE?(unsigned char *)(g_base+RVA_CTXMENU_VISIBLE+1):NULL;
+        if (lastr && readable(lastr,1)) *lastr=f[1];
     }
     g_fpc_pc_orig(pi,ihp);
     memcpy(f,saved,8);                              /* other consumers see the real state */
@@ -598,6 +620,7 @@ static void fp_controls_tick(void *gw,float dt) {
             void *pi=fpc_player_interface(gw);
             if (t && readable(pi,FPC_PI_CTXMENU+8)) {
                 g_fpc_ctxmenu((void *)((uintptr_t)pi+FPC_PI_CTXMENU),1,t);++g_fpc_ctx_opens;
+                *(unsigned char *)((uintptr_t)pi+FPC_PI_CTXMENU)=1;   /* PT06/PT20: RMB-opened (kept while fed held) */
                 g_free_toggle=1;g_fpc_ctx_freed=1;g_fpc_ctx_relock=0;g_fpc_ctx_ms=now;g_fpc_ctx_skip_rrel=hold_open;
                 if (hold_open) ++g_fpc_ctx_hold_opens; else ++g_fpc_ctx_tap_opens;
                 fpc_name(t,g_fpc_last_target,sizeof g_fpc_last_target);
@@ -655,7 +678,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -664,7 +687,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
         g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
-        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self,g_fpc_hud_flashes,g_fpc_hud_silent,g_fp_carried,g_is_down,g_spd_changes,g_spd_long_frames,g_spd_clicks,g_spd_peak_click,g_spd_last);
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self,g_fpc_hud_flashes,g_fpc_hud_silent,g_fp_carried,g_is_down,g_spd_changes,g_spd_long_frames,g_spd_clicks,g_spd_peak_click,g_spd_last,g_fpc_ctx_keep_frames);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
 static int fpc_btn_index(const char *s) {
