@@ -85,6 +85,29 @@ static int fpc_ctx_menu_visible(void *pi) {
     void *mw=*(void **)((uintptr_t)m+8);
     return readable(mw,8) && getvis(mw);
 }
+/* PT06/PT20 (m55: menu gone 1-2 frames after the FP open, ctx_keep stuck at 2). ContextMenu::showContextMenu(true)
+ * (1.0.65 0x7a6020) rebuilds the menu, copies the live mRight into ContextMenu+0 and, with no selected character,
+ * requests a hide (+0x58, applied by ContextMenu::update); vanilla PlayerInterface also re-shows the menu for the
+ * hovered object after its own RMB-hold timer (0x80029d). While the FP menu is up, a game re-show is swallowed (FP
+ * already opened it); a game hide (option click / order handlers) goes through and its caller is recorded. */
+static fpc_ctxmenu_t g_fpc_ctx_orig;
+static int g_fpc_ctx_own,g_fpc_ctx_hook_ok;
+static unsigned g_fpc_ctx_game_shows,g_fpc_ctx_game_hides,g_fpc_ctx_reshow_blocked,g_fpc_ctx_closes;
+static unsigned long long g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva;
+static const char *g_fpc_ctx_close_where="none";
+static void fpc_ctxmenu_hook(void *cm,unsigned char show,void *obj) {
+    if (!g_fpc_ctx_own && g_fp_mode && g_fpc_ctx_freed) {
+        unsigned long long ra=(unsigned long long)((uintptr_t)__builtin_return_address(0)-g_base);
+        void *pi=(void *)((uintptr_t)cm-FPC_PI_CTXMENU);
+        if (show) {
+            ++g_fpc_ctx_game_shows;g_fpc_ctx_reshow_rva=ra;
+            if (fpc_ctx_menu_visible(pi)) {
+                ++g_fpc_ctx_reshow_blocked;logline("[controls] ctx menu: game re-show swallowed (caller +0x%llx)",ra);return;
+            }
+        } else {++g_fpc_ctx_game_hides;g_fpc_ctx_hide_rva=ra;logline("[controls] ctx menu: game hide (caller +0x%llx)",ra);}
+    }
+    g_fpc_ctx_orig(cm,show,obj);
+}
 /* free swing (no target, not fighting): native attack animation only */
 static void *g_fpc_fs_anim,*g_fpc_fs_tech;
 static double g_fpc_fs_start_ms, g_fpc_recover_until_ms;
@@ -155,7 +178,15 @@ static void fpc_playercontrol_hook(void *pi,void *ihp) {
     }
     unsigned char saved[8];memcpy(saved,f,8);
     int own=fpc_owns_mouse() && g_fpc_swallow;
-    int keep=g_fpc_ctx_freed && g_fpc_swallow && fpc_ctx_menu_visible(pi);   /* PT06/PT20: FP menu stays open */
+    int vis_in=g_fpc_ctx_freed && fpc_ctx_menu_visible(pi);
+    int keep=vis_in && g_fpc_swallow;                 /* PT06/PT20: FP menu stays open */
+    unsigned char *cmb=(unsigned char *)((uintptr_t)pi+FPC_PI_CTXMENU);
+    int flag0=readable(cmb,0x60)?cmb[0]:-1,req58=readable(cmb,0x60)?cmb[0x58]:-1;
+    static int vis_out_prev;
+    if (g_fpc_ctx_freed && vis_out_prev && !vis_in) {   /* closed between two playerControl calls */
+        ++g_fpc_ctx_closes;g_fpc_ctx_close_where="outside_pc";
+        logline("[controls] ctx menu closed outside playerControl (keep_frames=%u last_game_hide=+0x%llx)",g_fpc_ctx_keep_frames,g_fpc_ctx_hide_rva);
+    }
     int clear[2];
     clear[1]=own || (g_fpc_ctx_freed && g_fpc_swallow);   /* RMB: never a native walk/menu in FP (PT21: also under the FP menu) */
     clear[0]=own;                                   /* PT07: LMB never selects in FP (drawn or holstered) */
@@ -168,13 +199,20 @@ static void fpc_playercontrol_hook(void *pi,void *ihp) {
         }
         if (!saved[b] && !saved[4+b]) g_fpc_latch[b]=0;
     }
-    if (keep) {f[1]=f[3]=1;f[5]=f[7]=0;++g_fpc_ctx_keep_frames;}
+    if (keep) {f[1]=f[3]=1;f[5]=f[7]=0;++g_fpc_ctx_keep_frames;if (flag0==0) cmb[0]=1;}   /* +0: RMB-opened (a re-show copies mRight) */
     if (keep || clear[1] || g_fpc_latch[1]) {                       /* playerControl's own last-RMB byte: no edges */
         unsigned char *lastr=RVA_CTXMENU_VISIBLE?(unsigned char *)(g_base+RVA_CTXMENU_VISIBLE+1):NULL;
         if (lastr && readable(lastr,1)) *lastr=f[1];
     }
     g_fpc_pc_orig(pi,ihp);
     memcpy(f,saved,8);                              /* other consumers see the real state */
+    int vis_out=g_fpc_ctx_freed && fpc_ctx_menu_visible(pi);
+    if (vis_in && !vis_out) {                        /* ContextMenu::update hid it */
+        ++g_fpc_ctx_closes;g_fpc_ctx_close_where=req58==1?"pc_hide_request":keep?"pc_kept":"pc_button";
+        logline("[controls] ctx menu closed in playerControl (%s) flag0=%d req58=%d keep=%d mR=%d mL=%d keep_frames=%u last_game_hide=+0x%llx",
+                g_fpc_ctx_close_where,flag0,req58,keep,saved[1],saved[0],g_fpc_ctx_keep_frames,g_fpc_ctx_hide_rva);
+    }
+    vis_out_prev=vis_out;
 }
 /* InputHandler::keyDownEvent mouse codes ((btn+1)<<12: 0x1000 mouse_select, 0x2000 mouse_command, 0x3000
  * mouse_rotate) feed the vanilla command queue next to playerControl's flags. PT07/PT21 (Shay 2026-10-07): with a
@@ -619,7 +657,7 @@ static void fp_controls_tick(void *gw,float dt) {
             if (!t) t=fpc_pick_object();                    /* PT08: buildings/objects get their menu too */
             void *pi=fpc_player_interface(gw);
             if (t && readable(pi,FPC_PI_CTXMENU+8)) {
-                g_fpc_ctxmenu((void *)((uintptr_t)pi+FPC_PI_CTXMENU),1,t);++g_fpc_ctx_opens;
+                g_fpc_ctx_own=1;g_fpc_ctxmenu((void *)((uintptr_t)pi+FPC_PI_CTXMENU),1,t);g_fpc_ctx_own=0;++g_fpc_ctx_opens;
                 *(unsigned char *)((uintptr_t)pi+FPC_PI_CTXMENU)=1;   /* PT06/PT20: RMB-opened (kept while fed held) */
                 g_free_toggle=1;g_fpc_ctx_freed=1;g_fpc_ctx_relock=0;g_fpc_ctx_ms=now;g_fpc_ctx_skip_rrel=hold_open;
                 if (hold_open) ++g_fpc_ctx_hold_opens; else ++g_fpc_ctx_tap_opens;
@@ -678,7 +716,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -687,7 +725,9 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
         g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
-        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self,g_fpc_hud_flashes,g_fpc_hud_silent,g_fp_carried,g_is_down,g_spd_changes,g_spd_long_frames,g_spd_clicks,g_spd_peak_click,g_spd_last,g_fpc_ctx_keep_frames);
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self,g_fpc_hud_flashes,g_fpc_hud_silent,g_fp_carried,g_is_down,g_spd_changes,g_spd_long_frames,g_spd_clicks,g_spd_peak_click,g_spd_last,g_fpc_ctx_keep_frames,
+        g_fpc_ctx_hook_ok,g_fpc_ctx_game_shows,g_fpc_ctx_game_hides,g_fpc_ctx_reshow_blocked,g_fpc_ctx_closes,g_fpc_ctx_close_where,
+        g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
 static int fpc_btn_index(const char *s) {
@@ -786,6 +826,9 @@ static void fp_controls_init(void) {
         (void *)g_fpc_kochance,(void *)g_fpc_uncon,(void *)g_fpc_dead);
     void *pcf=fpc_klib_real(FPC_SYM_PLAYERCONTROL);
     g_fpc_hook_ok=pcf && fpc_input_handler() && install_hook(pcf,(void *)fpc_playercontrol_hook,(void **)&g_fpc_pc_orig);
+    {void *cmf=fpc_klib_real(FPC_SYM_CTXMENU);
+     g_fpc_ctx_hook_ok=cmf && install_hook(cmf,(void *)fpc_ctxmenu_hook,(void **)&g_fpc_ctx_orig);
+     logline("[controls] showContextMenu=%p hook=%d",cmf,g_fpc_ctx_hook_ok);}
     if (!g_fpc_startanim) g_fpc_fs_dead=1;
     logline("[controls] playerControl=%p hook=%d select=%p ctxmenu=%p addOrder=%p attack=%p isEnemy=%p anim=%p choose=%p progress=%p end=%p startanim=%p",
         pcf,g_fpc_hook_ok,(void *)g_fpc_select,(void *)g_fpc_ctxmenu,(void *)g_fpc_addorder,(void *)g_fpc_attack,(void *)g_fpc_isenemy,
