@@ -14,6 +14,19 @@ static void *combat_hit_char(const CombatRayHit *hit) {
         memcmp((void *)((uintptr_t)pc+CHAR_HANDLE+HAND_IDS),hit->ids,sizeof(hit->ids)))return NULL;
     return pc;
 }
+/* PT08: any other handled object a physics hit belongs to (building, item, ...: hand::getRootObject on the hit's ids);
+ * NULL for characters (ids[0]==1, combat_hit_char), terrain/NULL_ITEM (11) and unresolved handles. */
+static void *combat_hit_root(const CombatRayHit *hit) {
+    static void *(*getroot)(const void *);static int res;
+    if (!res) {res=1;HMODULE k=GetModuleHandleA("KenshiLib.dll");
+        getroot=k?(void *(*)(const void *))GetProcAddress(k,"?getRootObject@hand@@QEBAPEAVRootObject@@XZ"):NULL;}
+    if (!hit||!hit->shape||hit->ids[0]==1||hit->ids[0]==11||hit->ids[0]>64||!getroot||!g_combat_hit_ctor)return NULL;
+    union {uint64_t alignment;unsigned char bytes[0x60];} raw={0};
+    g_combat_hit_ctor(raw.bytes,0,1,-99.0f);
+    memcpy(raw.bytes+0x38,hit->ids,sizeof(hit->ids));
+    void *o=getroot(raw.bytes+0x30);
+    return readable(o,8)?o:NULL;
+}
 static void *combat_ray_target(const CombatRayHit *hit,void *shooter) {
     void *pc=combat_hit_char(hit);
     return pc==shooter?NULL:pc;
