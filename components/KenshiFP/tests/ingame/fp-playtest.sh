@@ -384,7 +384,10 @@ if want PT15; then if [ $BOWOK = 0 ]; then row PT15 FAIL "setup: no crossbow on 
   # m53: aiming a HOLSTERED crossbow does nothing by design (PT11, why=holstered), so draw it with R first
   draw_to 1; waitf 6 kis ranged 1
   aim_at "$SH" "$MT" 13; look "$(awk -v y="$(cam yaw)" 'BEGIN{printf "%.4f", y+3.14159}')" 0.05   # away from the mate, at the ground ahead
-  A fp_combat input 1 0 0 >/dev/null; waitf 8 csis armed 1; SL0=$(kfplines | grep -c '\[combat\] spread'); C0=$(A fp_combat state); SHOTS=0; WHY=""
+  # m54: the controller arms only after one idle input frame (a no_focus/UI release resets it; an aim already
+  # held never arms: armed=0, shot_ready never 1), so publish idle input first, then aim
+  A fp_combat input 0 0 0 >/dev/null; waitf 4 csis armed 1 || note "SETUP PT15 not armed after idle input (why=$(cs why))"
+  A fp_combat input 1 0 0 >/dev/null; waitf 8 csis aimed 1; SL0=$(kfplines | grep -c '\[combat\] spread'); C0=$(A fp_combat state); SHOTS=0; WHY=""
   for _ in 1 2 3; do waitf 20 csis shot_ready 1 || { WHY="shot_ready never 1 (ammo=$(cs ammo) has_ammo=$(cs has_ammo) reloading=$(cs reloading) why=$(cs why) drawn=$(ks drawn) ranged=$(ks ranged))"; break; }
     S=$(cs actual_shots); A fp_combat input 1 1 0 >/dev/null; waitf 3 csge actual_shots $((S+1)) && SHOTS=$((SHOTS+1)); A fp_combat input 1 0 0 >/dev/null; sleep 0.4; done
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; C1=$(A fp_combat state); SL1=$(kfplines | grep -c '\[combat\] spread')

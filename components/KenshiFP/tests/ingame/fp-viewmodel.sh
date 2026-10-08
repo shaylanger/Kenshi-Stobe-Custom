@@ -202,7 +202,9 @@ if want PT13; then if [ $BOWOK = 0 ]; then row PT13 FAIL "setup: no crossbow on 
   waitf 5 vm_on ready; R1=$(vm_on ready && echo 1 || echo 0); E1=$(vev); shot xbow-ready
   T1=$(vfld tilt); M1=$(vfld melee)
   look "$(cam yaw)" 0.05; mdown right; waitf 4 vm_on aiming; R2=$(vm_on aiming && echo 1 || echo 0); E2=$(vev); shot xbow-aim; mup right; sleep 0.4
-  A fp_combat input 1 0 0 >/dev/null; waitf 8 csis armed 1; RL=0
+  # m54: the controller arms only after one idle input frame (an aim already held never arms), so idle first
+  A fp_combat input 0 0 0 >/dev/null; waitf 4 csis armed 1 || note "SETUP PT13 not armed after idle input (why=$(cs why))"
+  A fp_combat input 1 0 0 >/dev/null; waitf 8 csis aimed 1; RL=0
   if waitf 20 csis shot_ready 1; then S=$(cs actual_shots); A fp_combat input 1 1 0 >/dev/null; waitf 3 csge actual_shots $((S+1))
     A fp_combat input 1 0 0 >/dev/null; waitf 8 vm_is reloading && { RL=1; sleep 0.5; shot xbow-reload; }; fi
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null
