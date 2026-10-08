@@ -44,10 +44,11 @@ static VmPose g_vm_pose[2][VM_NT] = {
       VP( 1.9f,-1.4f, 3.2f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (aim = ready) */
       VP( 1.9f,-1.4f, 3.2f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (reload = ready) */
       VP( 1.4f,-0.6f, 3.0f,  -1.00f, 0.05f, 0.20f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view */
-    { VP( 1.7f,-1.1f, 2.8f,  -0.05f,-0.08f, 1.00f,    0.0f, 1.0f, 0.0f),     /* crossbow ready (low right, forward) */
-      VP( 0.1f,-0.6f, 1.8f,   0.00f, 0.00f, 1.00f,    0.0f, 1.0f, 0.0f),     /* aim: stock at the shoulder, bolt at the crosshair */
+    { VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.15f, 1.00f,    0.0f, 1.0f, 0.0f),     /* crossbow ready: right, angled in, whole bow (grip handle too) above the HUD */
+      VP( 0.05f,-0.95f,1.4f,  0.00f, 0.00f, 1.00f,    0.0f, 1.0f, 0.0f),     /* aim: stock at the cheek, the string/limb centre (0.84 above the grip) on the
+                                                                              * crosshair; grip + top magazine behind the near clip (3) */
       VP( 1.5f,-1.0f, 2.8f,  -0.30f,-0.25f, 0.92f,    0.3f, 1.0f, 0.0f),     /* reload: lowered + canted, not in the face */
-      VP( 1.7f,-1.1f, 2.8f,  -0.05f,-0.08f, 1.00f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
+      VP( 1.7f,-0.30f,2.8f,  -0.25f,-0.15f, 1.00f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
 /* sword swing key poses (the path starts at the pose the swing began from and ends at the ready pose) */
 /* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
 #define VM_SWK 4
@@ -57,15 +58,20 @@ static VmPose g_vm_swk[VM_SWK] = {
     VP( 0.3f,-0.05f,3.0f,  -0.92f, 0.02f, 0.38f,    0.00f,-1.00f, 0.05f),  /* strike: blade sweeps flat across the center (in view) */
     VP(-0.4f,-0.25f,2.8f,  -0.90f,-0.18f, 0.40f,    0.20f,-0.95f,-0.05f) };/* follow-through left, blade still in view above the HUD */
 static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.17f, 0.36f, 0.50f, 0.62f, 1.0f };  /* key times (start, keys, end) */
-static int   g_vm_ax[2][2] = { { 2, 3 }, { 2, 1 } };  /* [class][f,u]: prop-local axis 1..3 = X,Y,Z, <0 = negative (probed in game) */
+static int   g_vm_ax[2][2] = { { 2, 3 }, { 2, -1 } }; /* crossbow up = -X: the native aim holds it so (bolt above the grip) */  /* [class][f,u]: prop-local axis 1..3 = X,Y,Z, <0 = negative (probed in game) */
 static int   g_vm_whand[2] = { 1, 1 };                /* [class] weapon hand: 0 = L (Prop1), 1 = R (Prop2) */
 static Vec3  g_vm_rest = { -2.6f, -5.5f, 1.2f };      /* off-hand rest (one-handed melee), camera numbers */
-static Vec3  g_vm_sup = { 2.5f, -0.6f, 0.0f };        /* off-hand support on the crossbow: f,u,s weapon numbers */
+static Vec3  g_vm_sup = { 4.8f, -0.5f, 0.4f };        /* aim: off-hand under the fore-stock, f,u,s weapon numbers (s = left);
+                                                        * arm near full reach so the forearm stays thin, from the bottom left */
 /* elbow pole [class][L,R], camera numbers; ranged R points out right so the forearm stays out of the aim view */
 static Vec3  g_vm_pole[2][2] = { { { -0.8f, -1.0f, -0.4f }, { 0.8f, -1.0f, -0.4f } },
-                                 { { -0.6f, -1.0f, -0.2f }, { 1.0f, -0.5f, -0.3f } } };
+                                 { { -0.5f, -1.5f, 0.0f }, { 1.2f, -1.2f, -0.2f } } };
 static float g_vm_fire_hold = 0.35f;                  /* after a shot: keep the aim pose this long before reloading */
 static float g_vm_fire_t;
+static int   g_vm_ti = -1;                     /* weapon pose state of the last update (VM_*) */
+static Quat  g_vm_plq; static Vec3 g_vm_plp; static int g_vm_have_pl;  /* crossbow prop local outside reload */
+static float g_vm_oerr;                       /* measured off-hand wrist - its target, dm (PT28) */
+static Vec3  g_vm_oc; static int g_vm_have_oc;   /* off-hand target (smoothed), camera numbers */
 static float g_vm_off_near = 3.5f;                    /* native off-hand within this of the weapon grip = 2-handed */
 static float g_vm_aim_dist = 400.0f;                  /* aim: the bolt converges on the crosshair at this range */
 static float g_vm_tau = 0.08f, g_vm_tau_rl = 0.15f, g_vm_tau_w = 0.12f;
@@ -102,6 +108,7 @@ static Quat  g_vm_orel; static int g_vm_have_orel;   /* off-hand ori relative to
 static Vec3  g_vm_oprel; static int g_vm_off_near_now;
 /* diag (camera numbers / degrees) */
 static float g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_he[2], g_vm_ha[2];
+static Vec3  g_vm_mj[2][3];                  /* measured [L,R][shoulder,elbow,wrist] camera numbers (PT28 arm-in-view check) */
 static Vec3  g_vm_mp, g_vm_mf, g_vm_mu;     /* measured weapon grip + forward + up (edge / crossbow top), camera numbers */
 static float g_vm_tilt_cur;                 /* compat: blade rise above the view plane (deg) */
 static int   g_vm_hand = 1;                 /* compat (state print): weapon hand of the current class */
@@ -311,7 +318,18 @@ static void vm_apply(void *skel)
     const Quat *lpq = g_oldnode_getori(b[wh][3]); const Vec3 *lpp = g_oldnode_getpos(b[wh][3]);
     const Vec3 *hs = g_oldnode_getdscale ? g_oldnode_getdscale(b[wh][2]) : NULL;
     Vec3 sc = readable((void *)hs, 12) ? *hs : vm_v(1, 1, 1), lp = *lpp;
-    Quat Qh = quat_norm(quat_mul(Qp, quat_conj(*lpq)));
+    Quat lq = *lpq;
+    /* crossbow reload: the native anim moves the prop off the hand (bow down to the stirrup, up to 4 dm away), so
+     * the hand could not bring it to the reload pose (it flew through the view). Keep the prop on the hand as in
+     * the ready/aim holds (last local seen outside reload). */
+    if (g_vm_class == 1) {
+        if (g_vm_ti != VM_RELOAD) { g_vm_plq = lq; g_vm_plp = lp; g_vm_have_pl = 1; }
+        else if (g_vm_have_pl && g_oldnode_setpos) {
+            lq = g_vm_plq; lp = g_vm_plp;
+            g_oldnode_setori(b[wh][3], &lq); g_oldnode_setpos(b[wh][3], &lp); g_oldnode_needupd(b[wh][3], 1);
+        }
+    }
+    Quat Qh = quat_norm(quat_mul(Qp, quat_conj(lq)));
     Vec3 Ph = vm_sub(g_vm_tp, quat_rotvec(Qh, vm_v(lp.x*sc.x, lp.y*sc.y, lp.z*sc.z)));
     /* off-hand */
     Vec3 Po = g_vm_op; Quat Qo = g_vm_nhq[oh]; int keep = 1;
@@ -414,6 +432,7 @@ static void vm_frame(void *pc, int body_down)
         g_vm_shots0 = g_combat_actual_shots;
     }
     if (g_vm_fire_t > 0.0f) { g_vm_fire_t -= dt; if (ti == VM_RELOAD || ti == VM_READY) ti = VM_AIM; }
+    g_vm_ti = ti;
     g_vm_state = st; g_vm_hold = hold;
 
     void *skel = NULL;
@@ -421,12 +440,12 @@ static void vm_frame(void *pc, int body_down)
         void *anim = readable((void *)((uintptr_t)pc + CHAR_ANIM), 8) ? *(void **)((uintptr_t)pc + CHAR_ANIM) : NULL;
         skel = readable(anim, ANIM_SKELETON + 8) ? *(void **)((uintptr_t)anim + ANIM_SKELETON) : NULL;
     }
-    if (skel != g_vm_skel) { g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_w = 0.0f; g_vm_have_cur = 0; g_vm_have_t = 0; g_vm_have_orel = 0; }
+    if (skel != g_vm_skel) { g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_w = 0.0f; g_vm_have_cur = 0; g_vm_have_t = 0; g_vm_have_orel = 0; g_vm_have_oc = 0; g_vm_have_pl = 0; }
     g_vm_skel = skel;
     if (!skel) return;
 
     /* measure (world = game coords): clavicles + spine in world and skeleton space, both props in world */
-    Vec3 cw[2], spw, cs[2], sps, pw[2];
+    Vec3 cw[2], spw, cs[2], sps, pw[2], jw[2][3];
     int ok = 1;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; ok = 0; }
     else {
@@ -434,6 +453,9 @@ static void vm_frame(void *pc, int body_down)
         for (int i = 0; i < 2; i++) {
             g_get_bone_world(pc, &pw[i], g_vm_nm_prop[i]);
             g_get_bone_world(pc, &cw[i], g_vm_nm_clav[i]);
+            g_get_bone_world(pc, &jw[i][0], g_vm_nm_arm[i]);
+            g_get_bone_world(pc, &jw[i][1], g_vm_nm_fore[i]);
+            g_get_bone_world(pc, &jw[i][2], g_vm_nm_hand[i]);
             void *cb = g_skel_getbone(skel, g_vm_nm_clav[i]);
             const Vec3 *d = readable(cb, 8) ? g_oldnode_getdpos(cb) : NULL;
             if (!readable((void *)d, 12)) ok = 0; else cs[i] = *d;
@@ -486,6 +508,8 @@ static void vm_frame(void *pc, int body_down)
         g_vm_hand = wh;
         for (int i = 0; i < 2; i++) { Vec3 c = vm_w2c_dir(vm_sub(pw[i], g_vm_eye)); g_vm_he[i] = vm_elev_of(c); g_vm_ha[i] = vm_az_of(c); }
         g_vm_mp = vm_w2c_dir(vm_sub(pw[wh], g_vm_eye));
+        for (int i = 0; i < 2; i++) for (int k = 0; k < 3; k++) g_vm_mj[i][k] = vm_w2c_dir(vm_sub(jw[i][k], g_vm_eye));
+        g_vm_oerr = g_vm_have_oc ? vm_len(vm_sub(g_vm_mj[!wh][2], g_vm_oc)) : -1.0f;
         g_vm_elev = vm_elev_of(g_vm_mp); g_vm_az = vm_az_of(g_vm_mp);
         void *pb = g_skel_getbone(skel, g_vm_nm_prop[wh]);
         const Quat *q = readable(pb, 8) ? g_oldnode_getdori(pb) : NULL;
@@ -498,7 +522,7 @@ static void vm_frame(void *pc, int body_down)
 
     float wt = on ? 1.0f : 0.0f;
     g_vm_w += (wt - g_vm_w) * (dt / (dt + g_vm_tau_w));
-    if (!on && g_vm_w < 0.01f) { g_vm_w = 0.0f; g_vm_have_cur = 0; g_vm_swing = 0; return; }
+    if (!on && g_vm_w < 0.01f) { g_vm_w = 0.0f; g_vm_have_cur = 0; g_vm_have_oc = 0; g_vm_swing = 0; return; }
     if (on) g_vm_class = cls;
     if (hold || ti < 0) { if (!on) goto targets; return; }
 
@@ -571,11 +595,18 @@ static void vm_frame(void *pc, int body_down)
         g_vm_tp = vm_w2s_pos(vm_c2w_pos(out.p));
         g_vm_tf = vm_norm(vm_w2s_dir(vm_c2w_dir(out.f)));
         g_vm_tu = vm_norm(vm_w2s_dir(vm_c2w_dir(out.u)));
-        if (g_vm_class == 1) {   /* support point on the crossbow: f,u,s weapon numbers */
+        /* off-hand: under the fore-stock (support point, f,u,s weapon numbers) while aiming a crossbow; otherwise
+         * the rest point out of view (the arm can't reach the fore-stock in the low ready/reload holds and a hand
+         * floating under the bow looked broken). The target glides between the two (no snap). */
+        Vec3 oc = g_vm_rest; g_vm_omode = 0;
+        if (g_vm_class == 1 && ti == VM_AIM) {
             Vec3 s = vm_cross(out.f, out.u);
-            Vec3 c = vm_add(out.p, vm_add(vm_add(vm_mul(out.f, g_vm_sup.x), vm_mul(out.u, g_vm_sup.y)), vm_mul(s, g_vm_sup.z)));
-            g_vm_op = vm_w2s_pos(vm_c2w_pos(c)); g_vm_omode = 1;
-        } else { g_vm_op = vm_w2s_pos(vm_c2w_pos(g_vm_rest)); g_vm_omode = 0; }
+            oc = vm_add(out.p, vm_add(vm_add(vm_mul(out.f, g_vm_sup.x), vm_mul(out.u, g_vm_sup.y)), vm_mul(s, g_vm_sup.z)));
+            g_vm_omode = 1;
+        }
+        if (!g_vm_have_oc) { g_vm_oc = oc; g_vm_have_oc = 1; }
+        else g_vm_oc = vm_add(g_vm_oc, vm_mul(vm_sub(oc, g_vm_oc), dt / (dt + g_vm_tau)));
+        g_vm_op = vm_w2s_pos(vm_c2w_pos(g_vm_oc));
     }
 targets:
     for (int i = 0; i < 2; i++) g_vm_tpole[i] = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_pole[g_vm_class][i])));
@@ -647,7 +678,7 @@ static int vm_ini(const char *line)
 static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
 {
     (void)id; (void)u;
-    char b[1400];
+    char b[1800];
     const char *a = argc > 1 ? argv[1] : "state";
     if (!strcmp(a, "on"))  { g_cfg_vm = 1; g_vm_dead = 0; }
     else if (!strcmp(a, "off")) g_cfg_vm = 0;
@@ -692,7 +723,8 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         "vm on=%d hooked=%d dead=%d state=%s hold=%d w=%.2f class=%s elev=%.1f az=%.1f target=%.1f,%.1f basis=%d "
         "hand=%c lh=%.1f,%.1f rh=%.1f,%.1f melee=%d tilt=%.1f swing=%d swu=%.2f swings=%d sw_maxstep=%.1f "
         "sw_ratio=%.2f sw_elev=%.1f,%.1f sw_az=%.1f,%.1f kicks=%d kick=%.2f fire=%.2f mp=%.2f,%.2f,%.2f mf=%.2f,%.2f,%.2f mu=%.2f,%.2f,%.2f tp=%.2f,%.2f,%.2f tf=%.2f,%.2f,%.2f "
-        "near=%d calls=%lu applied=%lu reuse=%lu ikfail=%lu frames=%lu zoom=%.2f",
+        "near=%d calls=%lu applied=%lu reuse=%lu ikfail=%lu frames=%lu zoom=%.2f "
+        "omode=%d oerr=%.2f Lsh=%.2f,%.2f,%.2f Lel=%.2f,%.2f,%.2f Lwr=%.2f,%.2f,%.2f Rsh=%.2f,%.2f,%.2f Rel=%.2f,%.2f,%.2f Rwr=%.2f,%.2f,%.2f",
         g_cfg_vm, g_vm_hooked, g_vm_dead, g_vm_state, g_vm_hold, g_vm_w, g_vm_class ? "ranged" : "melee",
         g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_basis_ok,
         g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_melee, g_vm_tilt_cur,
@@ -700,7 +732,10 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         g_vm_sw_emin, g_vm_sw_emax, g_vm_sw_amin, g_vm_sw_amax,
         g_vm_kicks, g_vm_kick, g_vm_fire_t, g_vm_mp.x, g_vm_mp.y, g_vm_mp.z, g_vm_mf.x, g_vm_mf.y, g_vm_mf.z, g_vm_mu.x, g_vm_mu.y, g_vm_mu.z,
         g_vm_cur.p.x, g_vm_cur.p.y, g_vm_cur.p.z, g_vm_cur.f.x, g_vm_cur.f.y, g_vm_cur.f.z,
-        g_vm_off_near_now, g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_ikfail, g_vm_frames, g_view.applied);
+        g_vm_off_near_now, g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_ikfail, g_vm_frames, g_view.applied, g_vm_omode, g_vm_oerr,
+        g_vm_mj[0][0].x, g_vm_mj[0][0].y, g_vm_mj[0][0].z, g_vm_mj[0][1].x, g_vm_mj[0][1].y, g_vm_mj[0][1].z,
+        g_vm_mj[0][2].x, g_vm_mj[0][2].y, g_vm_mj[0][2].z, g_vm_mj[1][0].x, g_vm_mj[1][0].y, g_vm_mj[1][0].z,
+        g_vm_mj[1][1].x, g_vm_mj[1][1].y, g_vm_mj[1][1].z, g_vm_mj[1][2].x, g_vm_mj[1][2].y, g_vm_mj[1][2].z);
     r->append(r, b);
     return KAH_OK;
 }
