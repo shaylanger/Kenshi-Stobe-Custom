@@ -20,11 +20,11 @@ results labelled "-4080"). Never compare performance across machines.
 
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
-| Stobe.dll | `7A8997FD` (goal/action logic moved in from KenshiFP + NPC info panel; 2026-10-06 m49) | - |
-| KenshiFP.dll | `8469D760` both rigs (melee chase fallback gets the AttackState via CombatClass::getState; 2026-10-07 m50) | - |
+| Stobe.dll | `3EF4CCEE` (NPC biography card; 5090 only, no Stobe on the 4080) | - |
+| KenshiFP.dll | 5090 `07376F24` (take reasons ffad4e4 + isolation), 4080 `76CF7E8A` (C05-INTERIOR 799c3f9, 2026-10-07 m51) | 5090: `76CF7E8A` when Shay frees it |
 | ProfessionGearProgression.dll | `BAFB8C31` (Normal; verified 2026-10-05) | - |
-| AutomationHarness.dll | `2995EE5E` (both rigs, 2026-10-06) | - |
-| Server (live) | `stobe` 0295a3a (14-A3 "no promises" hedge fix; earlier: NPC panel player_view 2596ef2) | - |
+| AutomationHarness.dll | 5090 `EF425B2D` (input isolation f10996c/e617d36), 4080 `24BE3AEC` | - |
+| Server (live) | `stobe` 055e0c5 | - |
 
 ## 1. Open automated rows
 
