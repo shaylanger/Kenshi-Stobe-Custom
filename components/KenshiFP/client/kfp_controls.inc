@@ -134,8 +134,8 @@ static void fpc_playercontrol_hook(void *pi,void *ihp) {
     unsigned char saved[8];memcpy(saved,f,8);
     int own=fpc_owns_mouse() && g_fpc_swallow;
     int clear[2];
-    clear[1]=own;                                   /* RMB: never a native walk/menu in FP */
-    clear[0]=own && g_fpc_drawn;                    /* LMB: native select only while holstered */
+    clear[1]=own || (g_fpc_ctx_freed && g_fpc_swallow);   /* RMB: never a native walk/menu in FP (PT21: also under the FP menu) */
+    clear[0]=own;                                   /* PT07: LMB never selects in FP (drawn or holstered) */
     for (int b=0;b<2;++b) {
         int any=f[b]||f[2+b]||f[4+b]||f[6+b];
         if (clear[b] && (f[b]||f[4+b])) g_fpc_latch[b]=1;
@@ -147,6 +147,17 @@ static void fpc_playercontrol_hook(void *pi,void *ihp) {
     }
     g_fpc_pc_orig(pi,ihp);
     memcpy(f,saved,8);                              /* other consumers see the real state */
+}
+/* InputHandler::keyDownEvent mouse codes ((btn+1)<<12: 0x1000 mouse_select, 0x2000 mouse_command, 0x3000
+ * mouse_rotate) feed the vanilla command queue next to playerControl's flags. PT07/PT21 (Shay 2026-10-07): with a
+ * squad mate selected the RMB command still gave her a move order and LMB still selected; FP owns all three while
+ * it owns the cursor, and RMB also while the FP context menu holds the freed cursor (a second RMB = no order). */
+static unsigned g_fpc_mouse_keys_swallowed;
+static int fpc_mouse_key_swallow(int key) {
+    if (key!=0x1000 && key!=0x2000 && key!=0x3000) return 0;
+    if (!g_fp_mode || !g_fpc_hook_ok || !g_fpc_swallow) return 0;
+    if (fpc_owns_mouse() || (key==0x2000 && g_fpc_ctx_freed)) {++g_fpc_mouse_keys_swallowed;return 1;}
+    return 0;
 }
 /* CameraClass::update: FP swallows the native MMB rotate (yaw/pitch restored after the call). */
 static int fpc_cam_pre(void *cam,float *yaw,float *pitch) {
@@ -572,7 +583,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -581,7 +592,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
         g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
-        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh);
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
@@ -637,7 +648,7 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
     if (argc==2 && !_stricmp(argv[1],"reset")) {
         g_fpc_mmb_selects=g_fpc_mmb_none=g_fpc_ctx_opens=g_fpc_ctx_none=g_fpc_rmb_swallowed=g_fpc_lmb_swallowed=g_fpc_mmb_cam_frames=0;
         g_fpc_r_draws=g_fpc_r_holsters=g_fpc_r_draw_fail=g_fpc_engages=g_fpc_free_swings=g_fpc_fs_faults=g_fpc_fs_notech=g_fpc_fs_ends=0;
-        g_fpc_free_block_frames=g_fpc_block_checks=g_fpc_native_injected=g_fpc_sheathe_kept=g_fpc_lmb_clicks=g_fpc_r_keys_swallowed=0;
+        g_fpc_free_block_frames=g_fpc_block_checks=g_fpc_native_injected=g_fpc_sheathe_kept=g_fpc_lmb_clicks=g_fpc_r_keys_swallowed=g_fpc_mouse_keys_swallowed=0;
         g_fpc_sneak_clicks=g_fpc_sneak_attacks=g_fpc_sneak_ko=g_fpc_sneak_failed=g_fpc_sneak_timeout=0;g_fpc_sneak_t=g_fpc_sneak_pc=NULL;
         g_fpc_sneak_path=g_fpc_sneak_result="none";strcpy(g_fpc_sneak_target,"none");g_fpc_sneak_aware=g_fpc_sneak_aware_any=-1;
         g_fpc_sneak_chance=-1.0f;g_fpc_sneak_elapsed=0;

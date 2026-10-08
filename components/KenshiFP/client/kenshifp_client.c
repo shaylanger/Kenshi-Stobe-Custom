@@ -7176,8 +7176,10 @@ static char hooked_keypressed(void *lst, void *evt)
  * caller in the log (bounded) so that path is identified. Mouse codes ((btn+1)<<12) pass. */
 typedef void (*ih_keydown_t)(void *ih, int key);
 static ih_keydown_t g_ih_keydown_orig;
+static int fpc_mouse_key_swallow(int key);   /* kfp_controls.inc */
 static void hooked_ih_keydown(void *ih, int key)
 {
+    if (fpc_mouse_key_swallow(key)) return;   /* PT07/PT21: FP owns the mouse commands */
     if (key > 0 && key < 0x100 && g_fp_mode && fpc_key_bound_any((unsigned)key)) {
         int owned = fpc_key_owned((unsigned)key);
         if (g_ih_leak_logs < 16) {
