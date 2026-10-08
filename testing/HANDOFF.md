@@ -1,19 +1,21 @@
-# Current state (m60+, 2026-10-08, Shay playtest round 2)
+# Current state (m66, 2026-10-08, Shay playtest round 2)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-08 after m60, coordinator)
-- Shay's 2026-10-08 playtest reopened work (rows: STOBE 146/147, FP PT04 (= vanilla speeds), PT23-PT29). RULE (memory
+## Right now (2026-10-08 m66, coordinator)
+- Shay's 2026-10-08 playtest round 2: rows STOBE 146/147 (done), NP1-14, FP PT04, PT17, PT23-PT29. RULE (memory
   repro-shays-exact-steps): a row passes only when the wrapper replays Shay's exact steps; visual rows need screenshots
-  of every state zoomed in AND out.
-- Helpers running (3, ok while the viewmodel rework is a big build):
-  1. Stobe fixer: 146 bio panel target, 147 "/" chat speaker -> wrapper tests/ingame/stobe/STOBE-BIO-CHAT-HOTKEYS.sh.
-  2. KenshiFP controls fixer (/root/KenshiFP main): PT23 speed burst (0.5x -> 1x -> speed up), PT24 Control inside the
-     native context menu, PT25 first load in FP, PT04 FP speeds = non-FP; rows in fp-playtest.sh.
-  3. KenshiFP viewmodel rework on the 4080 (worktree /root/KenshiFP-vm, branch viewmodel): PT26 smooth swing, PT27
-     horizontal block, PT28 crossbow all states, PT29 zoom-out pose; screens C:\KenshiTestRunsm-rework\.
-- Next: install their builds on the 5090 (Kenshi closed now), one batch with all new rows, fix, loop, then ONE summary.
+  of every state zoomed in AND out. Run log `archive/test-run-2026-10-08-m61.md` (m61-m66).
+- Confirmed m64-m66: NP1-NP14, PT05, PT06, PT13, PT14, PT19-PT21, PT23 (+ LMB speed bug fixed: KenshiFP 1EACB71D blocks
+  MyGUI presses while FP owns the cursor), PT24 (Control inside the native menu), PT27, PT29 (pre-rework).
+- Open: PT25/PT20/PT04 rerun with setup fixes e6bf66e/b771d8d (batch m66c, frozen scripts C:\KenshiTestRuns\m66c);
+  PT26/PT28 + Shay's NEW ORDER (2026-10-08): review EVERY frame of every FP combat animation (attack, recover, block,
+  aim, fire, reload, ready, draw/holster, transitions; sword + crossbow) vs other FP games (Skyrim/KCD/Chivalry),
+  fluid, no frame jumps, readable, correct grip/orientation; fix and redo the full every-frame pass until nothing is
+  left. Owner: viewmodel agent on the 4080 (handoff C:\Users\Shay\AppData\Local\Temp\claude\C--KenshiModding\
+  vm-handoff-review.md; predecessor vm-handoff-pt28b.md); coordinator reviews its montages itself before accepting.
+- Installed 5090: Stobe B45194AD, KenshiFP 1EACB71D, harness FA9C3EFB, server 4722ddd. gfx-mods OFF (on before Shay plays).
 - Shay decisions taken 2026-10-08: PT04 FP speeds = the game's non-FP speeds; R with sword+bow follows the ranged toggle.
 
 ## Before m52 (2026-10-07 m51 end, coordinator handing over to a new agent)
