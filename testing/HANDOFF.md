@@ -3,7 +3,21 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-08 m67, coordinator)
+## Right now (2026-10-08 ~17:15 after m72, coordinator)
+- **Launch rule (Shay, 2026-10-08, CLAUDE.md "Test launches on the 5090"):** test launches are windowed 1600x900, background,
+  isolation on, DISPLAY2 preferred (m72 ran exclusive-fullscreen and interrupted Shay; killed). `kenshi-ctl.ps1 cfg status`
+  shows the mode; `gfx-mods.sh on` / `-Play` restore Shay's full screen 2560x1440 (saved in C:\KenshiTestRuns\kenshi.cfg.play).
+- **Running (fable agents, started ~17:10):** sword viewmodel agent on the 5090 (lock owner `vm-sword`, clone
+  /root/KenshiFP-sw, handoff vm-handoff-sword.md) and crossbow viewmodel agent on the 4080 (lock `rig4080`, clone
+  /root/KenshiFP-vm, handoff vm-handoff-xbow.md); shared rules + Chivalry 2 reference (Shay's photo
+  `reference photos/crossbow aiming.PNG`) in vm-handoff-review.md / vm-shared.md (temp dir). Coordinator batches take
+  turns with the sword agent via the game lock.
+- **Next coordinator batch m73 (5090, when the lock is free):** PT18, PT31, PT11, PT25 (KenshiFP 2546C194 = main 9da5bf9
+  installed; main is now 614adb0+, rebuild/install before m73) + viewmodel rows PT13,PT14,PT26-PT30 after the agents merge.
+  m72 dir C:\KenshiTestRuns\m72 (killed early; rerun as m73 with fresh frozen scripts). Run log m67-m71 in
+  `archive/test-run-2026-10-08-m61.md`. m71: PASS PT25 PT11 PT31 PT15 PT02 PT01 PT13 PT14 PT27 PT26 PT30; FAIL PT18
+  (measurement, fixed 9da5bf9, unconfirmed), PT28/PT29 (viewmodel agents).
+- Final step of this round: close Kenshi, `gfx-mods.sh on` (restores full screen too), ONE summary to Shay.
 - Shay's 2026-10-08 playtest round 2: rows STOBE 146/147 (done), NP1-14, FP PT04, PT17, PT23-PT29. RULE (memory
   repro-shays-exact-steps): a row passes only when the wrapper replays Shay's exact steps; visual rows need screenshots
   of every state zoomed in AND out. Run log `archive/test-run-2026-10-08-m61.md` (m61-m66).
