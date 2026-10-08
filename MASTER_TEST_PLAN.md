@@ -35,8 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | open: PT04, PT17, PT23-PT29 (Shay 2026-10-08 playtest) |
-| STOBE 146 147 | Shay 2026-10-08: bio panel on the selected NPC, "/" chat speaker = FP char (`STOBE_full_test_plan.md` D) | kah-npcpanel | open |
+| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | open: PT17 (Shay), PT26, PT28 (+ PT27/PT29 recheck) and Shay's every-frame FP animation review (2026-10-08, 4080 viewmodel agent); PT04/PT23/PT24/PT25 PASS m66 |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
