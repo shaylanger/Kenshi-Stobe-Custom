@@ -12,7 +12,9 @@
 # Run in WSL with Kenshi in the world on a kah-fpxbow copy (Axima = crossbow player, Malzin = mate, Skaera = hostile).
 # Rows (one `RESULT PTxx PASS|FAIL <evidence>` each, log path on FAILs):
 #  PT25      (runs first: LOADS the save) load with FP on, no toggle: RMB tap+hold on the ground with the mate selected =
-#            mate does not move, MMB on the mate selects; same after a Left Alt free cursor; no "FP mode toggled" line
+#            mate (unpinned, standing still first) does not move and a swallow counter rises; drawn at load: once as
+#            loaded (RMB = aim), then holstered by a physical R; MMB on the mate selects; same after a Left Alt free
+#            cursor; no "FP mode toggled" line
 #  PT22+PT07 holstered physical LMB on the mate: selection/inspected unchanged, mouse_keys_swallowed rises, no stats
 #            window (`ui lbSkills`), no "opened the clicked member's details" log line
 #  PT06      holstered physical RMB HOLD on the mate: ctx_hold_opens+1, ctx_freed=1, menu still open after the release
@@ -222,15 +224,25 @@ if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
     EV+=" fp_mode=1 controlled=$HC cursor_hidden=$(fps cursor_hidden) free=$(ks free) load_resets=$(ks free_load_resets) toggles_since_load=$TOG"
     [ "$TOG" = 0 ] || OK=0
     ctl_is "$MT" && { OK=0; EV+=" setup: $MT is the controlled char"; }
-    for ph in look free; do
+    # m63: the save loads with the crossbow DRAWN (RMB = aim, not a ground click) and Malzin still walking after the load
+    # (where samples moved ~45 u before any input): both phases ran on an invalid setup. Now: drawn at load -> one
+    # phase as loaded (look_drawn), then holster with a physical R (no FP toggle) for the ground RMB (look); the mate is
+    # pinned next to the player, unpinned and must stand still (2 samples 1 s apart < 1 u, max 8 s) before the RMB.
+    DRAWN25=$(ks drawn); EV+=" drawn_at_load=$DRAWN25"; PH25="look free"; [ "$DRAWN25" = 1 ] && PH25="look_drawn look free"
+    for ph in $PH25; do
+      [ $ph = look ] && [ "$(ks drawn)" = 1 ] && { draw_to 0 || { OK=0; EV+=" | look: physical R did not holster (drawn=$(ks drawn))"; continue; }; }
       [ $ph = free ] && { altkey; waitf 3 kis free 1 || { OK=0; EV+=" | free: Left Alt did not free the cursor (free=$(ks free))"; continue; }
                           A mouse_inject at $((SW/2)) $((SHH*7/10)) >/dev/null; sleep 0.3; }
-      A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}; A select "$MT" >/dev/null; sleep 1
-      [ $ph = look ] && look "$(cam yaw)" 0.45
+      A pin "$MT" at "$SH" dist 25 face "$SH" >/dev/null; sleep 1; A pin "$MT" off >/dev/null; PINNED=${PINNED/ $MT/}; A select "$MT" >/dev/null
+      ST=0; for _ in 1 2 3 4 5 6 7 8; do Q0=$(pos "$MT"); sleep 1; lt "$(d2 "$Q0" "$(pos "$MT")")" 1 && { ST=1; break; }; done
+      if [ $ST = 0 ]; then OK=0; EV+=" | $ph: setup: $MT never stood still after unpin ($(d2 "$Q0" "$(pos "$MT")") u/s)"; continue; fi
+      [ $ph != free ] && look "$(cam yaw)" 0.45
       P0=$(pos "$MT"); K0=$(A fp_keys state); mclick right 150; sleep 0.4; mdown right; sleep 1.2; mup right; sleep 3
       K=$(A fp_keys state); DM=$(d2 "$P0" "$(pos "$MT")")
-      EV+=" | $ph: $MT selected, RMB tap+hold on the ground: moved=$DM rmb_swallowed $(fld rmb_swallowed <<<"$K0")->$(fld rmb_swallowed <<<"$K") rmb_free_swallowed $(fld rmb_free_swallowed <<<"$K0")->$(fld rmb_free_swallowed <<<"$K")"
-      lt "$DM" "$STILL_MAX" || OK=0
+      SW0=$(( $(fld rmb_swallowed <<<"$K0") + $(fld mouse_keys_swallowed <<<"$K0") )); SW1=$(( $(fld rmb_swallowed <<<"$K") + $(fld mouse_keys_swallowed <<<"$K") ))
+      EV+=" | $ph: $MT still, selected, RMB tap+hold on the ground (drawn=$(fld drawn <<<"$K0")): moved=$DM rmb_swallowed $(fld rmb_swallowed <<<"$K0")->$(fld rmb_swallowed <<<"$K") mouse_keys_swallowed $(fld mouse_keys_swallowed <<<"$K0")->$(fld mouse_keys_swallowed <<<"$K") rmb_free_swallowed $(fld rmb_free_swallowed <<<"$K0")->$(fld rmb_free_swallowed <<<"$K") ctx_why=$(fld ctx_why <<<"$K")"
+      lt "$DM" "$STILL_MAX" && [ "$SW1" -gt "$SW0" ] || OK=0   # the RMB arrived (a swallow counter rose) and gave no walk order
+      [ $ph = look_drawn ] && continue
       [ $ph = free ] && { altkey; waitf 3 kis free 0 || { OK=0; EV+=" free stuck on"; A fp_state free off >/dev/null; }; waitf 4 cursor_ok; }
       menu_close
       A pin "$MT" at "$SH" dist 25 face "$SH" | grep -q '^pinned' && PINNED+=" $MT"; sleep 1
