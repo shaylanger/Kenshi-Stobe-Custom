@@ -3,7 +3,50 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-08 ~17:15 after m72, coordinator)
+## Right now (2026-10-08 ~19:10, coordinator handing off to session kenshimodding-46 at Shay's request)
+- **Task:** Shay's FP viewmodel order (every-frame review of all FP combat animations, sword + crossbow, vs Chivalry 2;
+  verbatim + Amendments 1/2 in `C:\Users\Shay\AppData\Local\Temp\claude\C--KenshiModding\vm-shared.md`), under the launch
+  rule below. Method = Amendment 2: fast path per weapon now, ONE deferred final sweep on the final merged DLL.
+- **Status:** SWORD fast path DONE and clean (progress file `vm-progress-sword.md`: PT14/PT26/PT27 PASS on BA4025B2,
+  sheet `C:\KenshiTestRuns\vm-rework\f2_swing_in.jpg`, rec vmrec-f2; merged: /root/KenshiFP main 5e7f4de, snapshot 1fc0e57
+  pushed; final DLL KenshiFP **BECA3BB0 installed on the 5090** by install-dll.ps1). CROSSBOW fast path IN PROGRESS on the
+  4080 (agent handoff `vm-handoff-xbow-3.md`, progress `vm-progress-xbow.md`): fire/kick, reload and reload->aim every-frame
+  sheets all OK on build 30B2D5EF (installed on the 4080 only); LEFT: review the transition sheets xt-714..853 / xa1-193-252
+  (background render job on this PC, log `C:\KenshiTestRuns\vm-rework\xsheets.log`, last line = ALLDONE when finished),
+  run `ROWS=PT28,PT29 bash C:/KenshiTestRuns/vm-rework/run4080.sh` (must PASS, never weaken), commit per vm-shared protocol
+  (prepared msgs vm-msg-xbow.txt / vm-msg-wrap.txt, planfix3.py in the temp dir), `FASTPATH DONE crossbow <sha8>`. Then:
+  ff-merge to /root/KenshiFP main, rebuild = ONE DLL for both rigs, install (5090 install-dll.ps1, 4080 inst4), deferred
+  final sweep per Amendment 2 (sword sweep recipe + tools in `vm-handoff-sword-3.md`; PT18/PT31/PT11/PT25 last on the
+  5090, fp-playtest now sets the test focus switch 18b57a9), restore the 4080 (stop, delete kah-fpxbow, harness 24BE3AEC
+  back, ctl.ps1 release). Final: close Kenshi, `gfx-mods.sh on` (also restores full screen + VSync), ONE summary to Shay.
+- **Running right now:** nothing on the 5090 (Kenshi NOT running: the sword agent stopped it after FASTPATH DONE and
+  released the lock; game lock FREE). 4080: Kenshi RUNNING (kah-fpxbow, crossbow drawn, KenshiFP 30B2D5EF, harness
+  52C24941), lock owner rig4080 held for the crossbow successor. No batch, no wakers/cron, no live subagents (both viewmodel
+  agents reported and ended; spawn a FRESH crossbow agent from vm-handoff-xbow-3.md, model fable per Shay, budget note:
+  they hit ~200k tokens in 20-30 min, so insist on small reads and an early handoff). Sheet render job may still be running
+  (xsheets.log).
+- **Installed:** 5090 Stobe 85A731C7 (HANDOFF said B45194AD; not changed by me this session: verify who installed it),
+  KenshiFP BECA3BB0 (per the sword agent, game path + Vortex), harness FA9C3EFB, server 4722ddd. 4080 KenshiFP 30B2D5EF
+  (iteration build, not main), harness 52C24941 (restore 24BE3AEC at the end). Built, not installed anywhere: none besides
+  30B2D5EF's source being uncommitted (below). gfx-mods OFF; kenshi.cfg in TEST mode (windowed 1600x900, VSync=No; Shay's
+  values saved in C:\KenshiTestRuns\kenshi.cfg.play).
+- **Uncommitted/unpushed:** C:\KenshiModding main == origin (1af9dc3) except `components/KenshiFP/tests/ingame/
+  fp-viewmodel.sh` (crossbow agent's PT28 measured-limit edit, intended, commit with its FASTPATH) and the usual not-mine
+  files (ACTIVE_CONTEXT.md, *_CONTEXT.md, kah-*-wt, tools/*.py). Harness repo pushed (bc53d38). /root/KenshiFP main 5e7f4de
+  clean (local only, never pushed); /root/KenshiFP-sw = main; /root/KenshiFP-vm branch viewmodel = 614adb0 + UNCOMMITTED
+  client/kfp_viewmodel.inc (= build 30B2D5EF: crossbow fixes, to commit then rebase on main 5e7f4de). Server live tree
+  4722ddd clean; ss-merge 36 dirty files and /root/STOBE-src 28 dirty files were NOT touched this session (pre-existing).
+- **Open bugs/tickets:** none new for the fixer. m73 playtest: PT25/PT11 PASS, PT18/PT31 setup FAIL (no_focus, fixed in the
+  wrapper 18b57a9, rerun in the sweep; log C:\KenshiTestRuns\m73\fp-playtest\log.txt). Crossbow agent open items: near clip
+  caps the aim limb span at ~65 % of the half width (Chivalry photo ~90 %, accepted); one black-plane render artefact seen
+  once on the 4080 (not reproduced). Sword: deep draw pose (5e7f4de) not yet visually verified (sweep item).
+- **Decisions waiting on Shay:** none. **Gotchas this session:** DISPLAY2 drops out of the monitor list intermittently
+  (launcher falls back to the first screen; the window ended on DISPLAY1/3 at times: Shay said the monitor doesn't matter,
+  windowed + background does); `kenshi-ctl.ps1 background` (harness) re-places + drops the foreground; VSync=Yes made the
+  background game run at refresh/3 (22 fps) -> cfg test sets VSync=No; fp_vm replay recordings live in memory (lost on
+  relaunch); harness screenshot won't overwrite an existing file; relaunch4 doesn't stop Kenshi first.
+
+## Earlier today (2026-10-08 ~17:15 after m72, coordinator)
 - **Launch rule (Shay, 2026-10-08, CLAUDE.md "Test launches on the 5090"):** test launches are windowed 1600x900, background,
   isolation on, DISPLAY2 preferred (m72 ran exclusive-fullscreen and interrupted Shay; killed). `kenshi-ctl.ps1 cfg status`
   shows the mode; `gfx-mods.sh on` / `-Play` restore Shay's full screen 2560x1440 (saved in C:\KenshiTestRuns\kenshi.cfg.play).
