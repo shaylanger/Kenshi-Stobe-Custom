@@ -13,6 +13,7 @@
 #   139-cancel "cancel the bread" -> CANCELLED and her job count back to the start value (every job the goal added removed)
 #   139-clear  two goals + one manual job, "clear all your tasks, goals and jobs" -> no live goal, GOAL_CLEARJOBS line, jobs=0
 #   141      spar: "let's spar, attack me" -> she fights <player>; "enough, stop" -> stobe.log `spar rejoin ... in_faction_after=1`
+#            (NEG_TEST_INJECT gives her reply Attack@<player>; row 141-live, not default, = same without injection)
 #   142      <player> hurt, she has a medkit: "patch me up" -> stobe_goals.log `FIRST_AID verify ... result=healed|treating`
 # fixture: Testing-Save-Full-Base (copy kah-fullbase); squad Beaks + Avarek. reset: fresh load of the copy
 # needs: Stobe 8AF6F9B5+ (m52), StobeServer 331f845+, harness with jobs/clearjobs/protect/attack/ko/spawn
@@ -21,12 +22,13 @@
 set -u
 export PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}"
 . "$(dirname "$0")/stobe-fight-lib.sh"
+. "$(dirname "$0")/stobe-switch-lib.sh"
 ROWS="${ROWS:-137 140 fight 138 pause switch cancel clear 141 142}"
 MOD=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe
 STW=$MOD/stobe_work_goal.status
 CTL=$MOD/stobe_work_goal.control
 CAT=$MOD/stobe_production_catalog.txt
-trap 'raid_guard_stop; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
+trap 'sw_off; raid_guard_stop; heal_stop; stobe-auto speed 0 >/dev/null 2>&1' EXIT
 want() { case " $ROWS " in *" $1 "*) return 0 ;; esac; return 1; }
 gl_mark() { grep -a -c "" "$KFP" 2>/dev/null || echo 0; }
 gl_since() { tail -n +"$(( $1 + 1 ))" "$KFP"; }
@@ -173,20 +175,32 @@ fi
 stobe-auto speed 1 >/dev/null
 
 # --- 141 spar: she rejoins the squad when the fight is stopped
-if want 141 && ensure_squad 141; then
+# 141 (deterministic): NEG_TEST_INJECT puts Attack@<player> into her reply to the spar line (before any parsing),
+#   so the real path runs: spar recorded (SOCIAL_SPAR consent why=attack), "enough, stop" -> STOP_FIGHT guard
+#   (not injected), Stobe `spar rejoin ... in_faction_after=1`, server squad synced.
+# 141-live (not in the default ROWS): same without injection = does the model start the spar by itself.
+for r141 in 141 141-live; do
+if want "$r141" && ensure_squad "$r141"; then
   reset_mate
   heal_start "$PLAYER $MATE"
-  m=$(st_mark)
+  m=$(st_mark); c0=$(srv_count "SOCIAL_SPAR consent"); s0=$(srv_count "Spar stopped by the player"); f0=$(fired 141)
+  [ "$r141" = 141 ] && inject_on 141 "$MATE" chat "[{\"action\":\"Attack\",\"target\":\"{player}\",\"message\":\"Alright, guard yourself.\"}]"
   say_mate "$MATE, let's spar. Attack me, come on." 20
-  left=$(st_since "$m" | grep -a -c "ATTACK@$PLAYER")
+  sw_off
+  left=$(st_since "$m" | grep -a -c "ATTACK@$PLAYER"); inj=$(( $(fired 141) - f0 )); cons=$(( $(srv_count "SOCIAL_SPAR consent") - c0 ))
   sleep 8
   say_mate "Enough $MATE, stop, we're done sparring." 25
+  wait_for 30 bash -c "tail -n +$(( m + 1 )) '$L' | grep -a -q 'spar rejoin npc=$MATE'"
   rj=$(st_since "$m" | grep -a "spar rejoin npc=$MATE" | tail -1 | cut -c1-200)
-  if echo "$rj" | grep -q "in_faction_after=1" && srv_squad_synced; then verdict 141 "PASS $rj"
-  elif [ "$left" = 0 ]; then verdict 141 "FAIL she never attacked (no ATTACK@$PLAYER); live-model miss, rerun or inject"
-  else verdict 141 "FAIL rejoin='${rj}' squad_synced=$(srv_squad_synced && echo 1 || echo 0)"; fi
+  stp=$(( $(srv_count "Spar stopped by the player") - s0 ))
+  ev="inject_fired=$inj attack_lines=$left spar_consent=$cons stop_fight_sent=$stp"
+  if [ "$r141" = 141 ] && [ "$inj" -lt 1 ]; then verdict 141 "SETUP FAIL NEG_TEST_INJECT did not fire on her spar reply ($ev)"
+  elif echo "$rj" | grep -q "in_faction_after=1" && srv_squad_synced && [ "$cons" -ge 1 ]; then verdict "$r141" "PASS $ev; $rj"
+  elif [ "$left" = 0 ]; then verdict "$r141" "FAIL she never attacked (no ATTACK@$PLAYER; $ev)"
+  else verdict "$r141" "FAIL $ev rejoin='${rj}' squad_synced=$(srv_squad_synced && echo 1 || echo 0)"; fi
   heal_stop
 fi
+done
 
 # --- 142 first aid really treats
 if want 142 && ensure_squad 142; then
