@@ -6,10 +6,12 @@
 #  PT14  sword (bow off, sword from the mate): R draw -> ready on target, melee=1, tilt >= 20; RMB held -> blocking on
 #        the block target; physical LMB -> a new "[vm] swing" log line with u_end >= 0.5; test pose sw_pose 0 / 1 ->
 #        target = the ready target (the swing path starts and ends at the ready pose)
-#  PT28  crossbow like Skyrim/KCD, each state zoomed in AND out: ready (low right, forward, top up), aim (grip near
-#        center <=2.3 dm from the eye = stock at the shoulder, top up = limbs horizontal, bolt <=2 deg off the
-#        crosshair at AIMD), fire (physical LMB: kicks + "[vm] fire" line; frozen kick_pose 1 = muzzle climb, grip stays >= 1.2 dm from the eye), reload
-#        (lowered >=10 deg, pointing forward: not in the face)
+#  PT28  crossbow like Skyrim/KCD, each state zoomed in AND out: ready (low right, forward, top up, whole crossbow
+#        above the HUD line: lowest projected body point y/z >= -0.33), aim (grip near center <=2.3 dm from the eye =
+#        stock at the cheek, top up = limbs horizontal, bolt <=2 deg off the crosshair at AIMD, projected bolt tip
+#        within |x|<=0.06, -0.08..0.02 NDC of the centre, off-hand on the fore-stock support point, arm_cov<=0.15 = no
+#        forearm blob bottom centre), fire (physical LMB: kicks + "[vm] fire" line; frozen kick_pose 1 = muzzle climb
+#        0..0.4 NDC, grip within 0.5 dm of the aim hold), reload (lowered >=10 deg, pointing forward: not in the face)
 #  PT27  sword block: blade horizontal across the view (|mf.x|>=0.85, |mf.y|<=0.2) zoomed in and out
 #  PT26  sword swing: frozen frame sequence sw_pose 0.1..0.9 (screens + targets) and NSW (3) physical LMB swings:
 #        each "[vm] swing" line u_end=1, frames>=8, ratio (max/median blade deg/s, frame-time independent)<=RATIO_MAX
@@ -231,13 +233,13 @@ if want PT13; then if [ $BOWOK = 0 ]; then row PT13 FAIL "setup: no crossbow on 
 
 # ---- PT26-PT29 helpers: measured weapon pose in camera numbers (x right, y up, z forward, dm from the UNZOOMED eye):
 # mp = grip, mf = blade/bolt direction, mu = edge / crossbow top (fp_vm state, KenshiFP viewmodel 2026-10-08+) ----
-declare -A VMP VMF VMU VST
+declare -A VMP VMF VMU VST VSL
 ZO=${ZO:-25}; ZO_TOL=${ZO_TOL:-0.3}; RATIO_MAX=${RATIO_MAX:-3.0}; AIMD=${AIMD:-400}; ZTAGS=""; ZW=0
 zd_ok() { awk -v d="$(cam actual_distance)" -v w="$ZW" 'BEGIN{exit !(d!="" && (w==0 ? d<1 : d>=w*0.6))}'; }
 # zoom <dist>: fp_camera distance, wait until the camera really sits there (collision may shorten it: >= 60%)
 zoom() { local r; ZW=$1; A fp_camera distance "$1" >/dev/null; waitf 4 zd_ok; r=$?; sleep 0.6; return $r; }
 # cap <tag>: record state/mp/mf/mu + screenshot vm-<tag>.png
-cap() { local V; V=$(A fp_vm state); VST[$1]=$(fld state <<<"$V"); VMP[$1]=$(fld mp <<<"$V"); VMF[$1]=$(fld mf <<<"$V"); VMU[$1]=$(fld mu <<<"$V")
+cap() { local V; V=$(A fp_vm state); VSL[$1]=$V; VST[$1]=$(fld state <<<"$V"); VMP[$1]=$(fld mp <<<"$V"); VMF[$1]=$(fld mf <<<"$V"); VMU[$1]=$(fld mu <<<"$V")
   shot "$1"; case "$1" in *-zo) sleep 0.7; shot "$1-b";; esac  # zoomed out: a 2nd shot (4080: intermittent black screen-space boxes)
   note "CAP $1 $(grep -oE '\b(state|mp|mf|mu|elev|az|target|fire|kicks)=[^ ]*' <<<"$V" | tr '\n' ' ')"; }
 # cap2 <tag>: cap zoomed in, then (PT29 wanted) at distance $ZO as <tag>-zo, back to 0
@@ -248,6 +250,34 @@ vq() { awk -v P="${VMP[$2]}" -v F="${VMF[$2]}" -v U="${VMU[$2]}" "BEGIN{if(P==\"
   split(P,p,\",\");split(F,f,\",\");split(U,u,\",\");px=p[1];py=p[2];pz=p[3];fx=f[1];fy=f[2];fz=f[3];ux=u[1];uy=u[2];uz=u[3]
   el=atan2(py,pz)*57.2958; az=atan2(px,pz)*57.2958; exit !($1)}"; }
 pev() { echo "$1:${VST[$1]} mp=${VMP[$1]} mf=${VMF[$1]} mu=${VMU[$1]}"; }
+# xbgeo <tag>: crossbow (Oldworld Bow MkI, repeating) screen geometry from the captured state line. Body model in grip
+# axes (f = bolt, u = top, s = f x u, dm): bolt tip 5.85f+0.84u, limb ends 5.0f+0.84u+-1.7s, fore-stock 4.8f, grip
+# handle 0..0.3f-0.45u, magazine 0.3f+1.3u, stock 0..-3.9f at +0.3u. Screen: 1920x1080, half-FOV tan 0.70 (v) /
+# 1.245 (h), HUD line y/z=-0.33, near clip 3 world units (points closer than NEAR=2.5 dm are not drawn).
+# Prints "tx ty bmin cov omode oerr": bolt tip NDC, lowest on-screen body point y/z, arm_cov = upper arm + forearm
+# area (radius 0.5 dm) inside the bottom-centre zone |x/z|<=0.436, -0.45<=y/z<=-0.05 / zone area (Lsh..Rwr joints).
+xbgeo() { awk -v L="${VSL[$1]}" -v NEAR=2.5 -v R=0.5 '
+  function g(k,  m){ if(match(" " L, " " k "=[^ ]*")){ m=substr(" " L,RSTART+1,RLENGTH-1); sub(/^[^=]*=/,"",m); return m } return "" }
+  function pt(a,b,c){ n++; X[n]=p[1]+a*f[1]+b*u[1]+c*s[1]; Y[n]=p[2]+a*f[2]+b*u[2]+c*s[2]; Z[n]=p[3]+a*f[3]+b*u[3]+c*s[3] }
+  function seg(a,b,  i,t,x,y,z,xs,ys,in_,px,py,pin){ pin=0; for(i=0;i<=40;i++){ t=i/40
+     x=a[1]+(b[1]-a[1])*t; y=a[2]+(b[2]-a[2])*t; z=a[3]+(b[3]-a[3])*t; in_=0
+     if(z>=NEAR){ xs=x/z; ys=y/z; in_=(xs>=-0.436&&xs<=0.436&&ys>=-0.45&&ys<=-0.05) }
+     if(in_&&pin) area+=sqrt((xs-px)^2+(ys-py)^2)/0.7 * 2*R/z/0.7
+     pin=in_; px=xs; py=ys } }
+  BEGIN{ if(g("mp")==""||g("mf")==""||g("mu")=="") { print "x x x x x x"; exit }
+   split(g("mp"),p,","); split(g("mf"),f,","); split(g("mu"),u,",")
+   s[1]=f[2]*u[3]-f[3]*u[2]; s[2]=f[3]*u[1]-f[1]*u[3]; s[3]=f[1]*u[2]-f[2]*u[1]
+   n=0; pt(5.85,0.84,0); pt(5.0,0.84,1.7); pt(5.0,0.84,-1.7); pt(4.8,0,0); pt(0,-0.45,0); pt(0.3,-0.45,0); pt(0.3,1.3,0)
+   for(t=0;t>=-3.9;t-=0.3) pt(t,0.3,0)
+   tx=X[1]/Z[1]/1.245; ty=Y[1]/Z[1]/0.7; miny=9
+   for(i=1;i<=n;i++){ if(Z[i]<NEAR) continue; xs=X[i]/Z[i]; ys=Y[i]/Z[i]; if(xs<-1.245||xs>1.245||ys<-0.7) continue; if(ys<miny) miny=ys }
+   area=0; cov="x"; for(si=1;si<=2;si++){ sd=si==1?"L":"R"; split(g(sd "sh"),S,","); split(g(sd "el"),E,","); split(g(sd "wr"),W,",")
+     if(S[3]==""||E[3]==""||W[3]=="") { area=-1; break } seg(S,E); seg(E,W) }
+   if(area>=0) cov=sprintf("%.3f", area/(0.872/0.7*0.4/0.7))
+   om=g("omode"); oe=g("oerr"); printf "%.3f %.3f %.3f %s %s %s\n", tx, ty, miny, cov, om==""?"x":om, oe==""?"x":oe }'; }
+# xq "<awk condition>" <tag>: condition over tx ty bmin cov om oe (xbgeo numbers)
+xq() { local G; G=$(xbgeo "$2"); awk -v G="$G" "BEGIN{split(G,v,\" \"); for(i=1;i<=6;i++) if(v[i]==\"x\") exit 1
+  tx=v[1]+0;ty=v[2]+0;bmin=v[3]+0;cov=v[4]+0;om=v[5]+0;oe=v[6]+0; exit !($1)}"; }
 kfpn() { kfplines | grep -c "$1"; }
 
 # ---- PT28: crossbow held like Skyrim/KCD (ready / aim / fire / reload, each zoomed in AND out for PT29) ----
@@ -269,14 +299,21 @@ else
       waitf 4 vm_is reloading; sleep 1.5; cap xbow-reload-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
   mup right; sleep 0.4
   ok=1; why=""
-  { [ "${VST[xbow-ready]}" = ready ] && vq "fz>=0.9 && uy>=0.9 && el<=-10 && el>=-40 && az>=10" xbow-ready; } || { ok=0; why+=" ready"; }
-  # aim: stock at the shoulder (grip near center, close), limbs horizontal (top up), bolt on the crosshair (<=2 deg)
-  { [ "${VST[xbow-aim]}" = aiming ] && vq "fz>=0.99 && uy>=0.95 && px*px<=0.25 && pz<=2.3 && el>=-25 && \
-      (-fx*px - fy*py + fz*($AIMD-pz)) / sqrt(px*px+py*py+($AIMD-pz)^2) >= 0.99939" xbow-aim; } || { ok=0; why+=" aim"; }
-  { vq "fy>=0.05 && pz>=1.2" xbow-fire && [ "$K1" -gt "$K0" ] && [ "$F1" -gt "$F0" ]; } || { ok=0; why+=" fire(kicks $K0->$K1 lines $F0->$F1)"; }
+  # ready: low right, forward, top up, the whole crossbow above the HUD line (lowest on-screen body point y/z >= -0.33)
+  { [ "${VST[xbow-ready]}" = ready ] && vq "fz>=0.9 && uy>=0.9 && az>=10" xbow-ready && xq "bmin>=-0.33" xbow-ready; } || { ok=0; why+=" ready"; }
+  # aim (zoomed in and out): stock at the cheek (grip near center, close), limbs horizontal (top up), bolt on the
+  # crosshair (<=2 deg at AIMD), bolt tip projected within a few % of the screen centre (sight just below it), off-hand
+  # on the support point under the fore-stock (omode=1, oerr<=0.5 dm), no forearm/sleeve blob bottom centre (arm_cov<=0.15)
+  for t in xbow-aim xbow-aim-zo; do [ "$t" = xbow-aim ] || [ -n "${VSL[$t]}" ] || continue
+    { [ "${VST[$t]}" = aiming ] && vq "fz>=0.99 && uy>=0.95 && px*px<=0.25 && pz<=2.3 &&       (-fx*px - fy*py + fz*($AIMD-pz)) / sqrt(px*px+py*py+($AIMD-pz)^2) >= 0.99939" $t &&       xq "tx<=0.06 && tx>=-0.06 && ty>=-0.08 && ty<=0.02 && om==1 && oe<=0.5 && cov<=0.15" $t; } || { ok=0; why+=" $t"; }; done
+  # fire (frozen kick_pose 1 = kick peak): muzzle climbs (fy>=0.05, tip 0..0.4 above centre, |x|<=0.1), the grip stays
+  # within 0.5 dm of the aim hold (not in the face); live LMB: kicks + "[vm] fire" line
+  AZ=$(awk -v P="${VMP[xbow-aim]}" 'BEGIN{split(P,p,",");print p[3]-0.5}')
+  { vq "fy>=0.05 && pz>=$AZ" xbow-fire && xq "tx<=0.1 && tx>=-0.1 && ty>=0 && ty<=0.4" xbow-fire && [ "$K1" -gt "$K0" ] && [ "$F1" -gt "$F0" ]; } || { ok=0; why+=" fire(kicks $K0->$K1 lines $F0->$F1)"; }
   # reload: lowered and pointing forward (not raised into the face)
   { [ "${VST[xbow-reload]}" = reloading ] && vq "el<=-10 && fz>=0.8 && pz>=2.0" xbow-reload; } || { ok=0; why+=" reload"; }
-  judge PT28 $ok "$(pev xbow-ready) | $(pev xbow-aim) | $(pev xbow-fire) kicks=$K0->$K1 | $(pev xbow-reload)${why:+ | bad:$why}"
+  GEO="geo(tx ty bmin cov om oe) ready=[$(xbgeo xbow-ready)] aim=[$(xbgeo xbow-aim)] aim-zo=[$(xbgeo xbow-aim-zo)] fire=[$(xbgeo xbow-fire)]"
+  judge PT28 $ok "$(pev xbow-ready) | $(pev xbow-aim) | $(pev xbow-fire) kicks=$K0->$K1 | $(pev xbow-reload) | $GEO${why:+ | bad:$why}"
   draw_to 0; fi; fi
 
 # ---- PT14: sword ready / block / swing / arc ----
