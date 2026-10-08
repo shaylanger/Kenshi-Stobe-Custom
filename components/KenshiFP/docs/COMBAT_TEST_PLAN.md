@@ -112,8 +112,15 @@ Most of these broke under combined actions (toggle FP off/on, two weapons, squad
 needs a compound scenario (several actions in a row, toggles between them), not one isolated action.
 | ID | Problem (Shay) | Want / log evidence | State (KenshiFP commit) |
 |---|---|---|---|
-| PT04 | Movement feels far too fast with no athletics gear | find out: KenshiFP drive speed, PG athletics accel hook (f212cbc), time scale; compare vs vanilla run speed with the same char | measured m54: FP W 12.5 u/s vs vanilla run 54.1 u/s; Shay decision (target speed) |
+| PT04 | Movement feels far too fast with no athletics gear | Shay 2026-10-08: FP walk/run = exactly the speeds the game uses outside FP mode for the same char/state | measured m54 FP W 12.5 u/s vs vanilla run 54.1; open: match vanilla speeds, test measures FP vs non-FP same char |
 | PT17 | FP combat view/animations overall | coordinator plays it on the 4080 (screenshots), compares with other FP melee/crossbow games, then fixes | coordinator on the 4080, not in the wrapper |
+| PT23 | (was PT05, reported again 2026-10-08) Changing game speed briefly runs at ~10x-100x before settling. Shay's steps: speed 0.5x -> click the 1x button -> click speed-up (also any speed-up click) | no burst: game time advances at the chosen rate from the first frame (measure game-time delta per real-time sample right after each click) | open |
+| PT24 | Control is a separate new button; must be an entry inside the existing context menu (Trade, Follow, Bodyguard, Pickup ...) | "Control" listed as an option of the game's own RMB context menu on a squad mate | open |
+| PT25 | First load in FP mode: mouse buttons wrong until FP off/on (RMB issued move orders to squad mates not controlled, MMB did nothing) | correct FP controls right after loading a save already in FP mode, no toggle | open (m54 PT09 tested toggles only) |
+| PT26 | Sword attack animation glitchy/stuttery/choppy, "game breaking every swing" | smooth full swing top->bottom / right->left, no snaps; verify with frame sequence (screenshots or per-frame pose log) of a whole swing | open |
+| PT27 | Sword block: blade must turn sideways (horizontal across the view) like the base game / other sword games | block pose = blade horizontal in view, FP zoomed in and out; screenshots | open |
+| PT28 | Crossbow held like a sword (attached to the hand, rotated 90 deg); aim pose off screen (zoomed out: aimed directly right, bow vertical); reload too close to the face; no reload screenshot | crossbow like other FP crossbow games: stock to shoulder, limbs horizontal, bolt pointing at the crosshair when aiming; ready/aim/reload/fire all checked FP zoomed in AND zoomed out with screenshots of every state | open |
+| PT29 | Zoomed out in FP: sword hangs at the side, arms look broken/locked down | zooming out only moves the camera: same hold/pose as zoomed in (all weapon states), screenshots both | open |
 
 ## Visual/user checks
 ADS alignment and reload readability; zoom/body/clipping; attack/block responsiveness; tactical enjoyment and high-skill limb precision.

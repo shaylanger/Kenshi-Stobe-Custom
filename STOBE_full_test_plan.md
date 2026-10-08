@@ -12,7 +12,10 @@ This list holds **only** open items. Everything fixed and confirmed is gone (his
 Fixed and confirmed items are deleted (run log line). Full history of each row below: `git log -p STOBE_full_test_plan.md`. Where each is confirmed: `MASTER_TEST_PLAN.md` section 3.
 
 
-(none open: 135-145 confirmed in game m54-m56)
+| # | Bug | Fix / state |
+|---|---|---|
+| 146 | (135 reported again 2026-10-08) NPC bio/info panel shows the wrong person. Shay's steps: own character selected + bio hotkey -> Malzin's bio; Malzin selected/targeted -> his own bio. Want: the panel shows the NPC he has selected/targeted. | open (m55 "pass" used the chat Info button path, not his steps) |
+| 147 | (136 reported again 2026-10-08) Squad NPC selected + "/" opens chat: speaker is the selected NPC, not the FP-controlled character. Want: speaker = controlled char. | open (m54 "pass" used stobe_say ui, not the "/" hotkey) |
 
 ## E. Design questions and features
 
