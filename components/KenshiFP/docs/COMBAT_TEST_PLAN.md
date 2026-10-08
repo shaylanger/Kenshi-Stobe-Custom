@@ -112,28 +112,13 @@ Most of these broke under combined actions (toggle FP off/on, two weapons, squad
 needs a compound scenario (several actions in a row, toggles between them), not one isolated action.
 | ID | Problem (Shay) | Want / log evidence | State (KenshiFP commit) |
 |---|---|---|---|
-| PT01 | "Holstered"/"Ready" text stays on screen | show 1-2 s only on a change of state | fixed 59f2c69+408eeec, wrapper `tests/ingame/fp-playtest.sh` (hud flash/hidden) |
-| PT02 | R out of combat doesn't draw, no animation | Full-Base Beaks with a sword logged `R ready (unarmed)` (20:10, 20:28): weapon not found -> nothing drawn | fixed 1976ec6, wrapper `tests/ingame/fp-playtest.sh` (sword only: r_path) |
-| PT03 | Swinging/blocking text | no text; animation + view must make the state obvious | fixed 59f2c69+408eeec, wrapper `tests/ingame/fp-playtest.sh` (hud_shown=0 block/swing) |
-| PT04 | Movement feels far too fast with no athletics gear | find out: KenshiFP drive speed, PG athletics accel hook (f212cbc), time scale; compare vs vanilla run speed with the same char | no fix yet: wrapper `tests/ingame/fp-playtest.sh` MEASURES FP drive vs vanilla run/walk (numbers only) |
-| PT05 | Clicking a time-scale button (even 1 -> 1) runs ~10x for a moment | no speed spike | not fixed (KenshiFP writes no speed on clicks): evidence hook 74b3408 (speed_*), wrapper `tests/ingame/fp-playtest.sh` clicks TimeSpeedButton2 RTS + FP |
+| PT04 | Movement feels far too fast with no athletics gear | find out: KenshiFP drive speed, PG athletics accel hook (f212cbc), time scale; compare vs vanilla run speed with the same char | measured m54: FP W 12.5 u/s vs vanilla run 54.1 u/s; Shay decision (target speed) |
 | PT06 | Hold-RMB context menu doesn't work any more | menu opens on hold | fixed 1a70eb1, wrapper `tests/ingame/fp-playtest.sh` |
-| PT07 | LMB still selects with "LMB select" set off | no select | fixed 53ec597, wrapper `tests/ingame/fp-playtest.sh` |
-| PT08 | MMB selects NPCs only, not buildings | buildings selectable/interactable | fixed acc8e7e, wrapper `tests/ingame/fp-playtest.sh` |
-| PT09 | Fresh load: controls fine; after FP off -> on they break (PT06-PT08) | state survives any number of FP toggles | no repro; wrapper `tests/ingame/fp-playtest.sh` re-checks after 3 FP toggles + control switch |
-| PT10 | Weapon drawn + LMB on a far NPC facing away -> he turns and attacks though never hit; LMB on squad mate Avarek started a fight (20:11) | log `LMB engage <npc> task=5 hostile=1` (61x Yorin, 15x Morvek): LMB must swing, not give a native attack order to whoever is under the crosshair; never on squad mates | fixed 76a8d15, wrapper `tests/ingame/fp-playtest.sh` (mate in reach + far NPC) |
-| PT11 | Holstered crossbow: RMB still starts a reload | RMB does nothing combat-related while holstered (menus/interaction work) | fixed 0ff8e80, wrapper `tests/ingame/fp-playtest.sh` |
 | PT12 | Crossbow + sword: block during a sword attack pulls the crossbow and reloads | block uses the drawn melee weapon only | fixed 0ff8e80, wrapper `tests/ingame/fp-playtest.sh` (block out of combat; under attack not automated) |
 | PT13 | Crossbow not visible in FP (out of FOV) | whole crossbow visible; raised on aim; reload clearly visible | coordinator (viewmodel), not in the wrapper |
-| PT14 | Sword mostly invisible; can't tell block/swing/stagger | weapon + arms readable in each state | coordinator (viewmodel), not in the wrapper |
 | PT15 | Crossbow far too accurate (skill 2: 70-80% head hits where aimed) | spread like vanilla Kenshi (skill/perception); supersedes the 2026-10-06 Gate 3 "manual may beat the dice" call; log: most `wound spatial` hits part=0 head | fixed 095837f, wrapper `tests/ingame/fp-playtest.sh` (cone vs formula; head-hit rate vs vanilla still a visual/balance check) |
-| PT16 | KO'd + carried in FP: looks like standing on the carrier's shoulders | proper carried pose/camera | fixed 71dffe0, wrapper `tests/ingame/fp-playtest.sh` (carried=1 down=1 + screenshot; camera look: visual) |
 | PT17 | FP combat view/animations overall | coordinator plays it on the 4080 (screenshots), compares with other FP melee/crossbow games, then fixes | coordinator on the 4080, not in the wrapper |
-| PT18 | R with a holstered crossbow reloads it; R with a loaded crossbow also acts | R only draws/holsters; never reloads | fixed f883a8f, wrapper `tests/ingame/fp-playtest.sh` |
-| PT19 | No way to clear an NPC selection | MMB/LMB on ground/sky -> selection back to the controlled char | fixed acc8e7e, wrapper `tests/ingame/fp-playtest.sh` |
 | PT20 | No way to switch which squad member you control in FP | squad bar right-click menu -> "Control" | fixed 968a5f6, wrapper `tests/ingame/fp-playtest.sh` (FP RMB menu path via fp_keys ctl click; squad-bar portrait path not automated) |
-| PT21 | Selected squad mate + RMB = move order for them | same as with the controlled char selected | fixed 53ec597, wrapper `tests/ingame/fp-playtest.sh` |
-| PT22 | LMB on Avarek opens her stats in FP (bug 79 behaviour, `look-at click: opened the clicked member's details`) | no stats window | fixed 74a58ab, wrapper `tests/ingame/fp-playtest.sh` |
 
 ## Visual/user checks
 ADS alignment and reload readability; zoom/body/clipping; attack/block responsiveness; tactical enjoyment and high-skill limb precision.
