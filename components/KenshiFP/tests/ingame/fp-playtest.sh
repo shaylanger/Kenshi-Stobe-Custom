@@ -242,11 +242,15 @@ if want PT25; then SAVE=${SAVE:-$(A status | fld save)}; OK=1; EV="save=$SAVE"
       if [ $ST = 0 ]; then OK=0; EV+=" | $ph: setup: $MT never stood still after unpin + HOLD_POSITION ($(d2 "$Q0" "$(pos "$MT")") u/s)"; continue; fi
       EV+=" | $ph: settled_by=$SET"
       [ $ph != free ] && look "$(cam yaw)" 0.45
+      # m65: the weapon drawn in the save was sheathed by the char's AI while the mate settled (drawn=0 at the RMB):
+      # look_drawn redraws it with a physical R and must have drawn=1 at the RMB, else it is the 'look' phase again
+      if [ $ph = look_drawn ] && ! kis drawn 1; then draw_to 1 || { OK=0; EV+=" $ph: setup: physical R did not draw (drawn=$(ks drawn))"; continue; }; EV+=" redrawn_by_R=1"; fi
       P0=$(pos "$MT"); K0=$(A fp_keys state); mclick right 150; sleep 0.4; mdown right; sleep 1.2; mup right; sleep 3
       K=$(A fp_keys state); DM=$(d2 "$P0" "$(pos "$MT")")
       SW0=$(( $(fld rmb_swallowed <<<"$K0") + $(fld mouse_keys_swallowed <<<"$K0") )); SW1=$(( $(fld rmb_swallowed <<<"$K") + $(fld mouse_keys_swallowed <<<"$K") ))
       EV+=" $MT still, selected, RMB tap+hold on the ground (drawn=$(fld drawn <<<"$K0")): moved=$DM rmb_swallowed $(fld rmb_swallowed <<<"$K0")->$(fld rmb_swallowed <<<"$K") mouse_keys_swallowed $(fld mouse_keys_swallowed <<<"$K0")->$(fld mouse_keys_swallowed <<<"$K") rmb_free_swallowed $(fld rmb_free_swallowed <<<"$K0")->$(fld rmb_free_swallowed <<<"$K") ctx_why=$(fld ctx_why <<<"$K")"
       lt "$DM" "$STILL_MAX" && [ "$SW1" -gt "$SW0" ] || OK=0   # the RMB arrived (a swallow counter rose) and gave no walk order
+      [ $ph = look_drawn ] && [ "$(fld drawn <<<"$K0")" != 1 ] && { OK=0; EV+=" look_drawn: weapon not drawn at the RMB"; }
       [ $ph = look_drawn ] && continue
       [ $ph = free ] && { altkey; waitf 3 kis free 0 || { OK=0; EV+=" free stuck on"; A fp_state free off >/dev/null; }; waitf 4 cursor_ok; }
       menu_close
@@ -313,7 +317,8 @@ ctl_menu() { menu_close; draw_to 0; pick_on "$1" "$2" || return 1; CTL_DRAWN=$(k
 ctl_opt() { A ui control | tr -d '\r' | tr '|' '\n' | grep -E "^ *[^ ]+ 'Control' -?[0-9]+,-?[0-9]+ [0-9]+x[0-9]+ *$" | grep -v '^ *KFPControlBtn ' | head -1 |
   sed -E "s/^ *([^ ]+) 'Control' (-?[0-9]+),(-?[0-9]+) ([0-9]+)x([0-9]+).*/\2 \3 \4 \5 \1/"; }
 # opt_col <x> <w>: other visible captioned widgets in that column (the game's other options of the same menu)
-opt_col() { { A ui option; A ui button; A ui value; } | tr -d '\r' | tr '|' '\n' | grep -E "'[^']+' $1,-?[0-9]+ ${2}x[0-9]+ *$" | grep -v "'Control' " | sort -u | wc -l; }
+# (harness `ui tree`, KAH e520c10+; m65: the options are unnamed '-' widgets, `ui <filter>` never listed them)
+opt_col() { { A ui tree Control up 2; A ui tree Control up 3; } | tr -d '\r' | tr '|' '\n' | grep -E "'[^']+' $1,-?[0-9]+ ${2}x[0-9]+ *$" | grep -v "'Control' " | sort -u | wc -l; }
 # ctl_opt_click: PHYSICAL left click (virtual cursor + DirectInput button) on the centre of the 'Control' option
 ctl_opt_click() { local o x y w h; o=$(ctl_opt); [ -n "$o" ] || return 1; read -r x y w h _ <<<"$o"
   A mouse_inject at $((x + w/2)) $((y + h/2)) >/dev/null; sleep 0.3; mclick left 80; }
@@ -338,9 +343,10 @@ if want PT24; then ctl_is "$SH" || take "$SH" >/dev/null
   if ! ctl_menu "$SH" "$MT"; then rows_fail "no menu with Control on $MT after a holstered RMB tap: $(A fp_keys ctl)" PT24
   else C1=$(A fp_keys ctl); S0=$(fld switches <<<"$C1"); O=$(ctl_opt); NC=0; OX=""; OW=""
     [ -n "$O" ] && { read -r OX _ OW _ _ <<<"$O"; NC=$(opt_col "$OX" "$OW"); }
+    A screenshot pt24-menu >/dev/null; OPTS=$(A ui tree Control up 2 | tr -d '\r' | grep -oE "'[^']+'" | tr '\n' ',' | cut -c1-200)
     KB=$(A ui kfpcontrolbtn all | tr -d '\r' | tr '|' '\n' | grep -E "^ *KFPControlBtn " | grep -vc " hidden *$")
     ctl_opt_click; waitf 3 ctl_is "$MT"; C2=$(A fp_keys ctl); TO=$(ctl_is "$MT" && echo 1 || echo 0)
-    ev="[native=$(fld native <<<"$C1") hooks=$(fld native_hooks <<<"$C1") shown=$(fld shown <<<"$C1") native_target=$(fld native_target <<<"$C1") injected=$(fld native_injected <<<"$C1") captions=$(fld native_captions <<<"$C1")] option='${O:-none}' same_column_options=$NC kfpbtn_visible=$KB | click: switches $S0->$(fld switches <<<"$C2") via=$(fld via <<<"$C2") native_clicks $(fld native_clicks <<<"$C1")->$(fld native_clicks <<<"$C2") is_mate=$TO menu_vis_after=$(fld menu_vis <<<"$C2") log=$(kfplines | grep -c 'Control option added to the game.s context menu')"
+    ev="[native=$(fld native <<<"$C1") hooks=$(fld native_hooks <<<"$C1") shown=$(fld shown <<<"$C1") native_target=$(fld native_target <<<"$C1") injected=$(fld native_injected <<<"$C1") captions=$(fld native_captions <<<"$C1")] option='${O:-none}' same_column_options=$NC menu_entries=[$OPTS] shot=<harness mod folder>/shots/pt24-menu.png kfpbtn_visible=$KB | click: switches $S0->$(fld switches <<<"$C2") via=$(fld via <<<"$C2") native_clicks $(fld native_clicks <<<"$C1")->$(fld native_clicks <<<"$C2") is_mate=$TO menu_vis_after=$(fld menu_vis <<<"$C2") log=$(kfplines | grep -c 'Control option added to the game.s context menu')"
     ok=1; [ "$(fld native <<<"$C1")" = 1 ] && [ "$(fld native_hooks <<<"$C1")" = 7 ] && [ "$(fld shown <<<"$C1")" = 1 ] && [ "$(fld native_target <<<"$C1")" = "$(uname_ "$MTN")" ] || ok=0
     [ -n "$O" ] && [ "$NC" -ge 1 ] && [ "$KB" = 0 ] || ok=0
     [ "$(fld switches <<<"$C2")" = $((S0+1)) ] && [ "$(fld via <<<"$C2")" = menu ] && [ "$TO" = 1 ] && [ "$(fld menu_vis <<<"$C2")" = 0 ] || ok=0
@@ -419,11 +425,14 @@ axis_yaw() { case "$1" in +x) echo 1.5708;; -x) echo 4.7124;; +z) echo 0;; -z) e
 # van_rate <walk|run> <dist> <lead s>: vanilla move order along $AX from home, steady rate -> VR
 van_rate() { local P0 bg; mode off; A teleport "$SH" $HOME >/dev/null; sleep 1.5; P0=$(pos "$SH")
   ( A walktime "$SH" "$2" "$AX" "$1" > "$OUT/pt04-walk-$1.txt" ) & bg=$!
-  sleep "$3"; VR=$(psamp 6 "$(awk -v d="$2" 'BEGIN{print d-40}')" "$P0" | slope); wait "$bg"; VRW=$(cut -c1-120 "$OUT/pt04-walk-$1.txt"); }
+  sleep "$3"; VR=$(psamp 6 "$(awk -v d="$2" 'BEGIN{print d-40}')" "$P0" | slope); wait "$bg"; VRW=$(cut -c1-120 "$OUT/pt04-walk-$1.txt")
+  VLAT=$(lat "$P0" "$(pos "$SH")"); VDONE=$(grep -oE 'walked [0-9.]+' <<<"$VRW" | cut -d' ' -f2); }
+# lat <start> <end>: sideways offset from the axis $AX (a path that left the straight line = an obstacle on it)
+lat() { awk -v a="$1" -v b="$2" -v ax="$AX" 'BEGIN{split(a,p," ");split(b,q," "); d=(ax ~ /x/)?q[3]-p[3]:q[1]-p[1]; printf "%.1f", d<0?-d:d}'; }
 # fp_rate <lead s>: FP on, physical W held along $AX from home, steady rate -> FR, KenshiFP meter -> FM
 fp_rate() { local P0; A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; look "$(axis_yaw "$AX")" 0
-  P0=$(pos "$SH"); A key_inject w down >/dev/null; sleep "$1"; FR=$(psamp 6 100000 "$P0" | slope); A key_inject w up >/dev/null; sleep 1.2
-  FM=$(A fp_move state); }
+  P0=$(pos "$SH"); A key_inject w down >/dev/null; sleep "$1"; FR=$(psamp 6 "${2:-100000}" "$P0" | slope); FLAT=$(lat "$P0" "$(pos "$SH")")
+  A key_inject w up >/dev/null; sleep 1.2; FM=$(A fp_move state); }
 within() { awk -v a="$1" -v b="$2" -v t="$PT04_TOL" 'BEGIN{exit !(a!="" && b!="" && b+0>0 && (a-b)/b<=t && (b-a)/b<=t)}'; }
 if want PT04; then take "$SH" >/dev/null; A teleport "$SH" $HOME >/dev/null; sleep 1.5
   SPN=$(ks speed_now); ATH=$(A stat "$SH" athletics | grep -o 'base=[^ ]*\|effective=[^ ]*' | tr '\n' ' ')
@@ -433,15 +442,22 @@ if want PT04; then take "$SH" >/dev/null; A teleport "$SH" $HOME >/dev/null; sle
     row PT04 FAIL "setup: native run never started on any axis from $HOME: $SH mover [$MVS] ${VWERR:0:160}"
   elif [ "$SPN" != "1.00" ] && [ "$SPN" != "1.0" ] && [ "$SPN" != "1" ]; then row PT04 FAIL "setup: game speed $SPN, not 1 (rates are real time)"
   else
-    van_rate run 500 1.0; VRUN=$VR; VRUNW=$VRW; G0=$(fld gait_restores <<<"$(A fp_move state)")
-    fp_rate 1.5; FRUN=$FR; FMRUN=$FM
-    van_rate walk 150 1.5; VWALK=$VR; VWALKW=$VRW
-    fp_rate 2.0; FWALK=$FR; FMWALK=$FM
+    # m64/m65: on -x a wall stands ~205 u from home: vanilla `walktime run 500` never started (no path) and FP run hit
+    # it after ~2 s (x stuck, sliding sideways, rate 11.8 u/s while the meter peaked at 112 = vanilla top speed). The
+    # run axis must carry a full vanilla run of 500 u in a straight line (walked >= 450, sideways < 25), and the FP run
+    # samples stop at 420 u from the start (inside the proven clear stretch).
+    AXT=""; VRUN=""; G0=$(fld gait_restores <<<"$(A fp_move state)")
+    for AX in -x +x -z +z; do van_rate run 500 1.0; AXT+=" $AX:rate=${VR:-none},walked=${VDONE:-0},side=$VLAT"
+      if [ -n "$VR" ] && awk -v w="${VDONE:-0}" -v l="$VLAT" 'BEGIN{exit !(w+0>=450 && l+0<25)}'; then VRUN=$VR; VRUNW=$VRW; break; fi; done
+    [ -n "$VRUN" ] || { AX=""; VRUNW="no clear 500 u run axis:$AXT"; }
+    [ -n "$AX" ] && { fp_rate 1.0 420; FRUN=$FR; FMRUN=$FM; FLATRUN=$FLAT; }
+    [ -n "$AX" ] && { van_rate walk 150 1.5; VWALK=$VR; VWALKW=$VRW; }
+    [ -n "$AX" ] && { fp_rate 2.0 420; FWALK=$FR; FMWALK=$FM; }
     mode off; vwalk 20 run >/dev/null; take "$SH" >/dev/null       # hand the char its run order back
     g() { fld "$1" <<<"$2"; }
-    ev="axis $AX | run: vanilla $VRUN u/s FP $FRUN u/s (FP gait=$(g gait "$FMRUN") vanilla_order=$(g vanilla_order "$FMRUN") meter rate_avg=$(g rate_avg "$FMRUN") mv_max=$(g mv_max "$FMRUN") after release mv_so=$(g mv_so "$FMRUN"))"
+    ev="axis $AX | run: vanilla $VRUN u/s FP $FRUN u/s (FP gait=$(g gait "$FMRUN") vanilla_order=$(g vanilla_order "$FMRUN") meter rate_avg=$(g rate_avg "$FMRUN") rate_peak=$(g rate_peak "$FMRUN") sideways=$FLATRUN mv_max=$(g mv_max "$FMRUN") after release mv_so=$(g mv_so "$FMRUN"))"
     ev="$ev | walk: vanilla $VWALK u/s FP $FWALK u/s (FP gait=$(g gait "$FMWALK") meter rate_avg=$(g rate_avg "$FMWALK") mv_walk=$(g mv_walk "$FMWALK") after release mv_so=$(g mv_so "$FMWALK"))"
-    ev="$ev | gait_restores $G0->$(g gait_restores "$FMWALK") | tol $PT04_TOL | athletics $ATH | walktime run [$VRUNW] walk [$VWALKW]"
+    ev="$ev | gait_restores $G0->$(g gait_restores "$FMWALK") | tol $PT04_TOL | athletics $ATH | axes$AXT | walktime run [$VRUNW] walk [$VWALKW]"
     if [ -z "$VRUN" ] || [ -z "$VWALK" ] || [ -z "$FRUN" ] || [ -z "$FWALK" ]; then row PT04 FAIL "setup: too few steady samples: $ev"
     else ok=1; within "$FRUN" "$VRUN" && within "$FWALK" "$VWALK" || ok=0
       [ "$(g gait "$FMRUN")" = run ] && [ "$(g gait "$FMWALK")" = walk ] && [ "$(g mv_so "$FMRUN")" = run ] && [ "$(g mv_so "$FMWALK")" = walk ] || ok=0
