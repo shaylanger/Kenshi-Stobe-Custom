@@ -79,6 +79,7 @@ static unsigned g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_ctx_opens,g_fpc_ctx_none,
     g_fpc_lmb_clicks,g_fpc_r_keys_swallowed,g_fpc_ticks;
 static float g_fpc_fs_prog, g_fpc_fs_prog_max;
 static int g_fpc_last_task=-1;
+static const char *g_fpc_r_path="none";   /* PT02: which lookup found the weapon R drew */
 static unsigned g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused;static float g_fpc_lmb_dist=-1;static const char *g_fpc_lmb_why="none";
 static char g_fpc_last_select[48]="none", g_fpc_last_target[48]="none";
 static const char *g_fpc_ui_state="off";
@@ -284,11 +285,25 @@ static void fpc_draw_toggle(void *pc) {
         if (wih) {g_fpc_own_sheathe=1;((void (*)(void *))vt[0x2D0/8])(pc);g_fpc_own_sheathe=0;}
         ++g_fpc_r_holsters;logline("[controls] R holster");return;
     }
+    /* PT02 (Shay 2026-10-07, Full-Base Beaks with a sword: "R ready (unarmed)"): getThePreferredWeapon can answer
+     * NULL out of combat; fall back to the equipped primary/secondary weapon (Inventory, Character+0x2E8), then the
+     * ranged weapon, before going unarmed. g_fpc_r_path names the path that found it. */
+    static void *(*inv_primary)(void *),*(*inv_secondary)(void *);static int inv_res;
+    if (!inv_res) {inv_res=1;
+        inv_primary=(void *(*)(void *))fpc_klib("?getPrimaryWeapon@Inventory@@QEAAPEAVWeapon@@XZ");
+        inv_secondary=(void *(*)(void *))fpc_klib("?getSecondaryWeapon@Inventory@@QEAAPEAVWeapon@@XZ");}
+    const char *path="preferred";
     void *w=((void *(*)(void *))vt[0x3C8/8])(pc);
-    if (!w) {g_fpc_fists=1;g_fpc_hold_actor=pc;++g_fpc_r_draws;logline("[controls] R ready (unarmed)");return;}
+    void *inv=readable((void *)((uintptr_t)pc+0x2E8),8)?*(void **)((uintptr_t)pc+0x2E8):NULL;
+    if (!w && inv_primary && readable(inv,8)) {w=inv_primary(inv);path="primary";}
+    if (!w && inv_secondary && readable(inv,8)) {w=inv_secondary(inv);path="secondary";}
+    if (!w && readable((void *)((uintptr_t)vt+0x3D0),8)) {w=((void *(*)(void *))vt[0x3D0/8])(pc);path="ranged";}
+    if (!w) {g_fpc_fists=1;g_fpc_hold_actor=pc;++g_fpc_r_draws;g_fpc_r_path="unarmed";
+             logline("[controls] R ready (unarmed) inv=%p primary=%d secondary=%d",inv,inv_primary!=NULL,inv_secondary!=NULL);return;}
+    g_fpc_r_path=path;
     unsigned char empty[32];make_mstr(empty,"");
-    ((char (*)(void *,void *,void *))vt[0x3D8/8])(pc,w,empty);
-    g_fpc_hold_actor=pc;++g_fpc_r_draws;logline("[controls] R draw weapon %p",w);
+    char ok=((char (*)(void *,void *,void *))vt[0x3D8/8])(pc,w,empty);
+    g_fpc_hold_actor=pc;++g_fpc_r_draws;logline("[controls] R draw weapon %p path=%s ok=%d",w,path,(int)ok);
 }
 /* LMB drawn on a character: start (or retarget) the attack with the game's own order. */
 static void fpc_engage(void *gw,void *pc,void *t,int ranged) {
@@ -616,7 +631,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -625,7 +640,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_free_block_frames,g_fpc_block_checks,g_fpc_native_injected,g_fpc_ticks,
         g_fpc_hud!=NULL,g_fpc_hud_shown,g_fpc_hud_text?g_fpc_hud_text:"none",g_fpc_hud_changes,g_test_focus,
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
-        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused);
+        g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path);
 }
 static int fpc_btn_index(const char *s) {
     for (int b=0;b<FPC_NBTN;++b) if (!_stricmp(s,g_fpc_btn_names[b])) return b;
