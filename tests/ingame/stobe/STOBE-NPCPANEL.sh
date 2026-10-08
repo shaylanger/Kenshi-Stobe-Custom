@@ -110,15 +110,23 @@ PY
 fi
 
 if want NP5; then # disclosed fact from a real chat turn, shown, kept over save + reload
+  # setup: an earlier run's injected fact would make the new one a duplicate (ON CONFLICT DO NOTHING)
+  PSQLQ "DELETE FROM stobe_npc_learned_fact WHERE npc_storage_id='hand_$TS' AND fact LIKE 'grew up in a farming village and trained as an apothecary%'" >/dev/null
   f0=$(PSQLQ "SELECT COUNT(*) FROM stobe_npc_learned_fact WHERE npc_storage_id='hand_$TS' AND lower(learner_name)=lower('$PLAYER')")
   stobe-auto teleport "$PLAYER" "$TRADER" dist 3 >/dev/null
+  # deterministic (StobeServer 9c0fc10+): the evaluator reply after her turn gets a "disclosed" fact via
+  # NEG_TEST_INJECT context relationship; it only fires if the real gate decided to evaluate this turn.
+  # NP5_LIVE=1: no injection (does the evaluator model extract a fact by itself).
+  injf0=$(fired NP5)
+  [ "${NP5_LIVE:-0}" = 1 ] || inject_on NP5 "$TRADER" relationship '[{"disclosed":[{"fact":"grew up in a farming village and trained as an apothecary","category":"background"}]}]'
   talk "$TRADER" "Tell me about yourself. Where did you grow up, and what work did you do before you ended up here?" 25
   f1=$f0
   for i in $(seq 1 20); do f1=$(PSQLQ "SELECT COUNT(*) FROM stobe_npc_learned_fact WHERE npc_storage_id='hand_$TS' AND lower(learner_name)=lower('$PLAYER')"); [ "${f1:-0}" -gt "${f0:-0}" ] && break; sleep 3; done
+  injn=$(( $(fired NP5) - injf0 )); sw_off
   said=$(since_stobe | grep -a -F "NPC_SAY: $TRADER|" | tail -1 | sed -E "s/.*NPC_SAY: $TRADER\|([0-9]+: )?//" | cut -c1-220)
   fact=$(PSQLQ "SELECT fact FROM stobe_npc_learned_fact WHERE npc_storage_id='hand_$TS' AND lower(learner_name)=lower('$PLAYER') ORDER BY id DESC LIMIT 1")
   if [ "${f1:-0}" -le "${f0:-0}" ]; then
-    verdict NP5 "FAIL no fact recorded (facts $f0 -> $f1); reply: $said; srv: $(since_srv | grep -a -E 'NPC_FACTS|Relationship evaluation|relationship_eval' | tail -2 | cut -c1-200)"
+    verdict NP5 "FAIL no fact recorded (facts $f0 -> $f1, inject_fired=$injn$( [ "${NP5_LIVE:-0}" = 1 ] || [ "$injn" -ge 1 ] || echo ': evaluator never ran for her turn')); reply: $said; srv: $(since_srv | grep -a -E 'NPC_FACTS|Relationship evaluation|relationship_eval' | tail -2 | cut -c1-200)"
   else
     # the fact feeds the bio (or the "They told you:" list while no bio exists); the learned section must be
     # filled before and stay the same (cached, no new LLM call) after save + reload of the same save
@@ -128,7 +136,7 @@ if want NP5; then # disclosed fact from a real chat turn, shown, kept over save 
     TS2=""; for i in $(seq 1 15); do TS2=$(serial_of "$TRADER"); [ -n "$TS2" ] && break; sleep 2; done
     popen "$TRADER" "$PLAYER" >/dev/null; r2=$(pbio "${TS2:-$TS}" "$PLAYER"); ok2=$?; t2=$(echo "$r2" | ptext); l2=$(echo "$t2" | learned)
     if [ "$ok2" = 0 ] && [ -n "$TS2" ] && [ -n "$l1" ] && [ "$l1" != "$EMPTYBIO" ] && [ "$l1" = "$l2" ]; then
-      verdict NP5 "PASS fact '$fact' recorded ($f0 -> $f1), learned='${l1:0:140}', same after save+reload (serial $TS -> ${TS2:-?}, $(field "$r2" bio_state)); reply: ${said:0:100}"
+      verdict NP5 "PASS fact '$fact' recorded ($f0 -> $f1, inject_fired=$injn), learned='${l1:0:140}', same after save+reload (serial $TS -> ${TS2:-?}, $(field "$r2" bio_state)); reply: ${said:0:100}"
     else verdict NP5 "FAIL fact '$fact' learned before='${l1:0:160}' after reload(ok=$ok2 serial=${TS2:-none} $(field "$r2" bio_state))='${l2:0:160}'"; fi
   fi
 fi

@@ -5,6 +5,8 @@
 #                              structured reply gets these fields for the next matching turns (one step per turn).
 #                              Placeholders {player} {npc} {weapon} {worn}. Server log `NEG_TEST_INJECT fired (test switch, row N)`.
 #                              Context react = the drawn-weapon reaction turn (StobeServer 055e0c5+, STOBE-DRAWN.sh).
+#                              Context relationship = the relationship evaluator's JSON after her turn, e.g. {"disclosed":[...]}
+#                              (StobeServer 9c0fc10+, STOBE-NPCPANEL.sh NP5; fires only if the real gate evaluates the turn).
 #   NEG_TEST_FORCE_INITIATIVE  JSON {row, kind surrender|assist, npc, queue_as_old_name}: the next initiative check for
 #                              that NPC queues the offer without health/cooldown gates; one-shot.
 #                              Server log `NEG_TEST_FORCE_INITIATIVE fired (test switch, row N)`.
