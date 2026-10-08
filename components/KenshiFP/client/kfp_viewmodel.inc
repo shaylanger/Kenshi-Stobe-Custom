@@ -127,6 +127,20 @@ static const char *g_fpc_ui_state;          /* tentative decl; defined in kfp_co
 static unsigned g_combat_actual_shots;      /* tentative decl; defined in kfp_combat_native.inc */
 static Vec3 g_vm_s2w[3]; static Vec3 g_vm_w2s[3]; static float g_vm_scale = 1.0f;   /* skel<->world map (rows) */
 static Vec3 g_vm_cms, g_vm_cmw;
+/* ---- per-frame recorder + frozen replay (every-frame animation review) ----
+ * fp_vm rec on|off|dump <file>: one record per camera frame (vm_frame): time, dt, ui state, pose state, class, blend
+ * w, swing u, kick, off-hand mode, the commanded pose (out) + off-hand target, the measured weapon pose and both
+ * arms' shoulder/elbow/wrist (camera numbers; measured in frame n = what frame n-1 rendered).
+ * fp_vm replay <n> [t]|off: holds recorded frame n on screen (w=1): the measured pose of n (= record n+1's
+ * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
+typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
+                 float w, swu, prog, kick, fire, yaw, pitch, zoom;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; } VmRec;
+#define VM_RECN 6000
+static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
+static int g_vm_rp = -1, g_vm_rp_t;          /* replay frame (-1 off), 1 = commanded pose */
+static float g_vm_fpscap;                    /* test: cap the frame rate (Hz, 0 off) */
+static VmPose g_vm_out; static float g_vm_kick_eff, g_vm_dt;
 
 static void vm_names(void)
 {
@@ -400,7 +414,7 @@ static float vm_elev_of(Vec3 c) { return atan2f(c.y, c.z) * 57.29578f; }
 static float vm_az_of(Vec3 c)   { return atan2f(c.x, c.z) * 57.29578f; }
 
 /* Per camera frame, after the eye/orientation are final. */
-static void vm_frame(void *pc, int body_down)
+static void vm_frame_core(void *pc, int body_down)
 {
     static LARGE_INTEGER f, last;
     LARGE_INTEGER now; QueryPerformanceCounter(&now);
@@ -408,6 +422,7 @@ static void vm_frame(void *pc, int body_down)
     float dt = last.QuadPart ? (float)(now.QuadPart - last.QuadPart) / (float)f.QuadPart : 0.0f;
     last = now;
     if (dt > 0.1f) dt = 0.1f;
+    g_vm_dt = dt;
     if (!g_vm_hooked || g_vm_dead) return;
     vm_names();
     g_vm_frames++;
@@ -520,6 +535,19 @@ static void vm_frame(void *pc, int body_down)
         }
     }
 
+    if (g_vm_rp >= 0 && g_vm_rp < g_vm_rn) {            /* frozen replay of a recorded frame */
+        const VmRec *q = &g_vm_rec[g_vm_rp], *nx = g_vm_rp + 1 < g_vm_rn ? &g_vm_rec[g_vm_rp + 1] : q;
+        int whq = g_vm_whand[q->cls] ? 1 : 0;
+        VmPose out = q->out; Vec3 oc = q->oc;
+        if (!g_vm_rp_t) { out.p = nx->mp; out.f = nx->mf; out.u = nx->mu; oc = nx->mj[!whq][2]; }
+        out = vm_pose_norm(out);
+        g_vm_class = q->cls; g_vm_ti = q->ti; g_vm_w = 1.0f; g_vm_omode = q->omode; g_vm_cur = out; g_vm_have_cur = 1;
+        g_vm_tp = vm_w2s_pos(vm_c2w_pos(out.p));
+        g_vm_tf = vm_norm(vm_w2s_dir(vm_c2w_dir(out.f)));
+        g_vm_tu = vm_norm(vm_w2s_dir(vm_c2w_dir(out.u)));
+        g_vm_oc = oc; g_vm_have_oc = 1; g_vm_op = vm_w2s_pos(vm_c2w_pos(oc));
+        goto targets;
+    }
     float wt = on ? 1.0f : 0.0f;
     g_vm_w += (wt - g_vm_w) * (dt / (dt + g_vm_tau_w));
     if (!on && g_vm_w < 0.01f) { g_vm_w = 0.0f; g_vm_have_cur = 0; g_vm_have_oc = 0; g_vm_swing = 0; return; }
@@ -591,6 +619,7 @@ static void vm_frame(void *pc, int body_down)
             out.f = vm_add(out.f, vm_v(0, g_vm_kick_up * e, 0)); out = vm_pose_norm(out);
         }
         g_vm_target_e = vm_elev_of(out.p); g_vm_target_a = vm_az_of(out.p);
+        g_vm_out = out; g_vm_kick_eff = k;
         /* -> skeleton space */
         g_vm_tp = vm_w2s_pos(vm_c2w_pos(out.p));
         g_vm_tf = vm_norm(vm_w2s_dir(vm_c2w_dir(out.f)));
@@ -611,6 +640,47 @@ static void vm_frame(void *pc, int body_down)
 targets:
     for (int i = 0; i < 2; i++) g_vm_tpole[i] = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_pole[g_vm_class][i])));
     g_vm_have_t = g_vm_have_cur;
+}
+
+static void vm_frame(void *pc, int body_down)
+{
+    if (g_vm_fpscap > 0.5f) {                   /* test: low frame rate (choppiness shows there) */
+        static LARGE_INTEGER fq, prev; LARGE_INTEGER now;
+        if (!fq.QuadPart) QueryPerformanceFrequency(&fq);
+        double per = 1.0 / g_vm_fpscap;
+        for (;;) { QueryPerformanceCounter(&now);
+            double el = prev.QuadPart ? (double)(now.QuadPart - prev.QuadPart) / (double)fq.QuadPart : per;
+            if (el >= per) break;
+            if (per - el > 0.002) Sleep(1); }
+        prev = now;
+    }
+    vm_frame_core(pc, body_down);
+    if (g_vm_rec_on && g_vm_rn < VM_RECN) {
+        VmRec *q = &g_vm_rec[g_vm_rn++]; LARGE_INTEGER now, fq; QueryPerformanceCounter(&now); QueryPerformanceFrequency(&fq);
+        q->t = (float)((double)(now.QuadPart - g_vm_rec_t0.QuadPart) / (double)fq.QuadPart); q->dt = g_vm_dt;
+        snprintf(q->st, sizeof(q->st), "%s", g_vm_state ? g_vm_state : "?");
+        q->ti = (signed char)g_vm_ti; q->cls = (unsigned char)g_vm_class; q->swing = (unsigned char)g_vm_swing;
+        q->omode = (unsigned char)g_vm_omode; q->on = g_vm_have_t && g_vm_w > 0.001f;
+        q->w = g_vm_w; q->swu = g_vm_swu; q->prog = g_fpc_fs_prog; q->kick = g_vm_kick_eff; q->fire = g_vm_fire_t;
+        q->yaw = g_yaw * 57.29578f; q->pitch = g_pitch * 57.29578f; q->zoom = g_view.applied;
+        q->out = g_vm_out; q->oc = g_vm_oc; q->mp = g_vm_mp; q->mf = g_vm_mf; q->mu = g_vm_mu;
+        memcpy(q->mj, g_vm_mj, sizeof(q->mj));
+        q->eye = g_vm_eye; q->rt = g_vm_rt; q->up = g_vm_up; q->fw = g_vm_fw;
+        if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
+    }
+}
+static int vm_rec_dump(const char *path)
+{
+    FILE *fo = fopen(path, "w"); if (!fo) return -1;
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world)\n");
+    for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
+        fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
+                q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
+        const Vec3 *v[] = { &q->out.p, &q->out.f, &q->out.u, &q->oc, &q->mp, &q->mf, &q->mu,
+                            &q->mj[0][0], &q->mj[0][1], &q->mj[0][2], &q->mj[1][0], &q->mj[1][1], &q->mj[1][2], &q->eye, &q->rt, &q->up, &q->fw };
+        for (int k = 0; k < 17; k++) fprintf(fo, k == 13 ? " | %.4f,%.4f,%.4f" : " %.4f,%.4f,%.4f", v[k]->x, v[k]->y, v[k]->z);
+        fputc('\n', fo); }
+    fclose(fo); return g_vm_rn;
 }
 
 /* ---- tuning ---- */
@@ -657,6 +727,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "taurl"))  { if (x > 0.005f && x < 3) g_vm_tau_rl = x; return 1; }
     else if (!strcmp(k, "tauw"))   { if (x > 0.005f && x < 3) g_vm_tau_w = x; return 1; }
     else if (!strcmp(k, "sw_dur")) { if (x > 0.05f && x <= 12) g_vm_sw_dur = x; return 1; }
+    else if (!strcmp(k, "fpscap")) { g_vm_fpscap = x >= 5 && x <= 1000 ? x : 0.0f; return 1; }
     if (!fp) return 0;
     *fp = x; return 1;
 }
@@ -689,6 +760,20 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
                          "sw_dur sw_pose(-1 off) kick_pose(-1 off) kick_<xyz> kick_up swlog");
             return KAH_ERROR;
         }
+    } else if (!strcmp(a, "rec") && argc > 2) {
+        if (!strcmp(argv[2], "on")) { if (!g_vm_rec) g_vm_rec = (VmRec *)calloc(VM_RECN, sizeof(VmRec)); if (!g_vm_rec) { r->append(r, "rec: no memory"); return KAH_ERROR; } g_vm_rn = 0; QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1; }
+        else if (!strcmp(argv[2], "off")) g_vm_rec_on = 0;
+        else if (!strcmp(argv[2], "dump") && argc > 3) { int n = vm_rec_dump(argv[3]);
+            snprintf(b, sizeof(b), "rec dump %s frames=%d", argv[3], n); r->append(r, b); return n < 0 ? KAH_ERROR : KAH_OK; }
+        snprintf(b, sizeof(b), "rec on=%d frames=%d", g_vm_rec_on, g_vm_rn); r->append(r, b); return KAH_OK;
+    } else if (!strcmp(a, "replay") && argc > 2) {
+        if (!strcmp(argv[2], "off")) g_vm_rp = -1;
+        else { int n = atoi(argv[2]); if (n < 0 || n >= g_vm_rn) { r->append(r, "replay: no such frame"); return KAH_ERROR; }
+               g_vm_rp_t = argc > 3 && argv[3][0] == 't'; g_vm_rp = n; }
+        const VmRec *q = g_vm_rp >= 0 ? &g_vm_rec[g_vm_rp] : NULL;
+        if (q) snprintf(b, sizeof(b), "replay %d st=%s ti=%d cls=%d w=%.2f swu=%.3f kick=%.2f t=%.3f", g_vm_rp, q->st, q->ti, q->cls, q->w, q->swu, q->kick, q->t);
+        else snprintf(b, sizeof(b), "replay off");
+        r->append(r, b); return KAH_OK;
     } else if (!strcmp(a, "probe")) {
         /* native (pre-IK) prop + hand axes of both sides in camera numbers */
         int n = snprintf(b, sizeof(b), "probe nat=%d scale=%.3f", g_vm_nat_ok, g_vm_scale);
@@ -718,7 +803,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
                  g_vm_pole[0][1].x, g_vm_pole[0][1].y, g_vm_pole[0][1].z, g_vm_pole[1][0].x, g_vm_pole[1][0].y, g_vm_pole[1][0].z,
                  g_vm_pole[1][1].x, g_vm_pole[1][1].y, g_vm_pole[1][1].z);
         r->append(r, b); return KAH_OK;
-    } else if (strcmp(a, "state")) { r->append(r, "usage: fp_vm state|probe|dump|on|off|set <key> <value>"); return KAH_ERROR; }
+    } else if (strcmp(a, "state")) { r->append(r, "usage: fp_vm state|probe|dump|on|off|set <key> <value>|rec on|off|dump <file>|replay <n> [t]|off"); return KAH_ERROR; }
     snprintf(b, sizeof(b),
         "vm on=%d hooked=%d dead=%d state=%s hold=%d w=%.2f class=%s elev=%.1f az=%.1f target=%.1f,%.1f basis=%d "
         "hand=%c lh=%.1f,%.1f rh=%.1f,%.1f melee=%d tilt=%.1f swing=%d swu=%.2f swings=%d sw_maxstep=%.1f "
