@@ -12,8 +12,13 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
   /root/KenshiFP-vm, handoff vm-handoff-xbow.md); shared rules + Chivalry 2 reference (Shay's photo
   `reference photos/crossbow aiming.PNG`) in vm-handoff-review.md / vm-shared.md (temp dir). Coordinator batches take
   turns with the sword agent via the game lock.
-- **Next coordinator batch m73 (5090, when the lock is free):** PT18, PT31, PT11, PT25 (KenshiFP 2546C194 = main 9da5bf9
-  installed; main is now 614adb0+, rebuild/install before m73) + viewmodel rows PT13,PT14,PT26-PT30 after the agents merge.
+- **Shay's process changes (17:30, "do all of these"):** (1) the sword agent runs PT18/PT31/PT11/PT25 (fp-playtest) inside
+  its own session, m73 = viewmodel rows only; (2) agents batch all fixes per weapon -> one build -> one full every-frame
+  pass (second pass only on a finding); (3) sheets reviewed by the coordinator as they appear via vm-progress-sword.md /
+  vm-progress-xbow.md (temp dir), PT26/PT28 accepted from numeric tables + sheets; (4) 40 fps pass only, fpscap 20 only
+  for borderline frames; (5) agents take each other's unclaimed items when a rig frees up (CLAIM lines in the progress files).
+- **Next coordinator batch m73 (5090, when the lock is free):** viewmodel rows PT13,PT14,PT26-PT30 after the agents merge
+  (KenshiFP main 614adb0+ rebuilt/installed by the sword agent; record its sha8 here).
   m72 dir C:\KenshiTestRuns\m72 (killed early; rerun as m73 with fresh frozen scripts). Run log m67-m71 in
   `archive/test-run-2026-10-08-m61.md`. m71: PASS PT25 PT11 PT31 PT15 PT02 PT01 PT13 PT14 PT27 PT26 PT30; FAIL PT18
   (measurement, fixed 9da5bf9, unconfirmed), PT28/PT29 (viewmodel agents).
