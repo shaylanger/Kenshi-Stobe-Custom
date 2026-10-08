@@ -223,23 +223,28 @@ static int kah_fp_control(const char *id,int argc,const char *const *argv,KAH_Re
 /* fp_move <keys wasd|none> [ms] | state: bounded harness WASD hold (TEST ONLY). */
 static int kah_fp_move(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id; (void)u;
-    char b[480];
+    char b[900];
     if (argc==2 && !_stricmp(argv[1],"state")) {
         LONG k=g_kah_move_keys; LONG left=(LONG)((DWORD)g_kah_move_until-GetTickCount());
-        int rc_mode=-1,mv_mode=-1;   /* C05-KO diag: native ranged combat mode / CharMovement mode (0x378) */
+        int rc_mode=-1,mv_mode=-1,mv_so=-1;   /* C05-KO diag: native ranged combat mode / CharMovement mode (0x378) */
         {void *pc=g_fp_mode?fp_controlled_char(g_gw_cache):NULL;
          void *rc=char_valid(pc)&&readable((void *)((uintptr_t)pc+CHAR_RANGEDCOMBAT),8)?*(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT):NULL;
          void *mv=char_valid(pc)&&readable((void *)((uintptr_t)pc+CHAR_MOVEMENT),8)?*(void **)((uintptr_t)pc+CHAR_MOVEMENT):NULL;
          if (readable((void *)((uintptr_t)rc+RC_COMBATMODE),1)) rc_mode=*(unsigned char *)((uintptr_t)rc+RC_COMBATMODE);
-         if (readable((void *)((uintptr_t)mv+0x378),4)) mv_mode=*(int *)((uintptr_t)mv+0x378);}
+         if (readable((void *)((uintptr_t)mv+0x378),4)) mv_mode=*(int *)((uintptr_t)mv+0x378);
+         if (readable((void *)((uintptr_t)mv+0x20),4)) mv_so=*(int *)((uintptr_t)mv+0x20);}
         if (!k || left<0) { k=0; left=0; }
         snprintf(b,sizeof(b),"keys=%s%s%s%s left_ms=%ld moving=%d direct_drive=%d dm_active=%d move_speed=%.2f"
             " is_down=%d ui_moveblock=%d fp_mode=%d prone=%d in_bed=%d head_above=%.2f stuck_frames=%d pinned=%d"
-            " downed=%d ko=%d rc_mode=%d mv_mode=%d stale_ends=%u",
+            " downed=%d ko=%d rc_mode=%d mv_mode=%d stale_ends=%u"
+            " gait=%s vanilla_order=%s holding=%d mv_so=%s mv_max=%.1f mv_des=%.1f mv_walk=%.1f mv_cur=%.1f"
+            " rate_avg=%.1f rate_t=%.2f rate_win=%.1f rate_peak=%.1f hold_t=%.2f hold_dist=%.1f gait_holds=%u gait_restores=%u",
             (k&1)?"w":"",(k&2)?"s":"",(k&4)?"a":"",(k&8)?"d":"",(long)left,g_was_moving,g_was_direct,
             (int)g_dm_active,g_move_speed,g_is_down,g_ui_moveblock,!!g_fp_mode,g_dbg_prone,g_dbg_in_bed,
             g_head_above,g_stuck_frames,g_stuck_frames>KFP_STUCK_PINNED_FRAMES,g_dbg_downed,g_dbg_ko,
-            rc_mode,mv_mode,g_combat_stale_ends);
+            rc_mode,mv_mode,g_combat_stale_ends,
+            gait_name(g_gm_gait),gait_name(g_gm_vso),g_dm_vso>=0,gait_name(mv_so),g_gm_max,g_gm_des,g_gm_walk,g_gm_cur,
+            g_gm_t1>0.0f?g_gm_dist1/g_gm_t1:0.0f,g_gm_t1,g_gm_winrate,g_gm_peak,g_gm_t,g_gm_dist,g_gm_holds,g_gm_restores);
         r->append(r,b); return KAH_OK;
     }
     if (argc<2 || argc>3) {

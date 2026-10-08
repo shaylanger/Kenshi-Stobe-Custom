@@ -1452,6 +1452,22 @@ static Vec3  g_dm_motion;          /* dir * speed for manualMovement (facing-loc
 static int   g_dm_speed;           /* MoveSpeed: 0 walk / 1 jog / 2 run */
 static volatile LONG g_dm_active;  /* WASD held, direct drive on */
 static float g_speed_scale = 0.6f; /* scrollwheel throttle: walk (low) .. run (high) */
+/* PT04 (Shay 2026-10-08: FP walk/run = the speeds the game uses outside FP for the same char/state): the drive uses
+ * the character's OWN speed order (the gait a right-click order gets: run by default, walk/grouped if set), captured
+ * when a hold starts and written back when it ends (the old drive left the char on JOG = ~half the vanilla run).
+ * Meter: horizontal position rate per GAME second of the hold (rate_avg from 1 s in = steady state). */
+static int   g_dm_vso = -1;        /* vanilla speed order of the driven char (-1 = no hold) */
+static void *g_dm_vso_pc;
+static int   g_gm_gait = -1, g_gm_vso = -1;   /* last hold: gait driven / vanilla order */
+static float g_gm_t, g_gm_dist, g_gm_dist1, g_gm_t1, g_gm_win, g_gm_wint, g_gm_winrate, g_gm_peak;
+static float g_gm_max, g_gm_des, g_gm_walk, g_gm_cur;
+static Vec3  g_gm_last; static int g_gm_have; static LARGE_INTEGER g_gm_qpc;
+static unsigned g_gm_holds, g_gm_restores;
+static const char *gait_name(int so)
+{
+    static const char *const n[] = { "walk", "jog", "run", "grouped", "no_change" };
+    return so >= 0 && so < 5 ? n[so] : "none";
+}
 /* True-FP facing lock: body faces the CAMERA (not the movement direction) so WASD
  * produces real strafe/backpedal locomotion; while idle the body stays planted until
  * the camera deviates past the turn-in-place threshold, then swivels at a fixed rate
@@ -4891,6 +4907,63 @@ static void fp_down_trace(void *pc, int body_down, int ko)
     g_down_prev = body_down;
 }
 
+static void fp_gait_read(void *mv)
+{
+    g_gm_max  = readable((void *)((uintptr_t)mv + MV_MAX_SPEED), 4) ? *(float *)((uintptr_t)mv + MV_MAX_SPEED) : -1.0f;
+    g_gm_des  = readable((void *)((uintptr_t)mv + MV_DESIRED_SPEED), 4) ? *(float *)((uintptr_t)mv + MV_DESIRED_SPEED) : -1.0f;
+    g_gm_walk = readable((void *)((uintptr_t)mv + MV_WALK_SPEED), 4) ? *(float *)((uintptr_t)mv + MV_WALK_SPEED) : -1.0f;
+    g_gm_cur  = readable((void *)((uintptr_t)mv + MV_CURRENT_SPEED), 4) ? *(float *)((uintptr_t)mv + MV_CURRENT_SPEED) : -1.0f;
+}
+/* PT04: hand the char its vanilla speed order back (pc must be live: a freed CharMovement still passes readable()). */
+static void fp_gait_restore(void *pc, const char *why)
+{
+    if (g_dm_vso < 0) return;
+    int vso = g_dm_vso; void *vpc = g_dm_vso_pc;
+    g_dm_vso = -1; g_dm_vso_pc = NULL;
+    if (g_gm_t > 0.0f)
+        logline("[move] gait hold end (%s): drove %s (vanilla order %s) %.2f game s, %.1f u, rate_avg=%.1f u/s (from 1 s)"
+                " peak_win=%.1f | mover max=%.1f desired=%.1f walk=%.1f current=%.1f", why, gait_name(g_gm_gait),
+                gait_name(g_gm_vso), g_gm_t, g_gm_dist, g_gm_t1 > 0.0f ? g_gm_dist1 / g_gm_t1 : 0.0f, g_gm_peak,
+                g_gm_max, g_gm_des, g_gm_walk, g_gm_cur);
+    if (!pc || pc != vpc || !char_valid(pc)) return;   /* actor gone/changed: forget only */
+    void *mv = fp_char_mover(pc);
+    if (!readable(mv, 8) || !readable((void *)((uintptr_t)mv + MV_SPEEDORDERS), 4)) return;
+    void **vt = *(void ***)mv;
+    if (!in_module(vt) || !in_module(vt[MV_SETSPEED_SLOT])) return;
+    *(int *)((uintptr_t)mv + MV_SPEEDORDERS) = vso;
+    ((void (*)(void *, int))vt[MV_SETSPEED_SLOT])(mv, vso);
+    ++g_gm_restores;
+}
+/* PT04 meter: called every direct-drive frame (start = first frame of a hold). */
+static void fp_gait_meter(void *gw, void *pc, void *mv, int start)
+{
+    LARGE_INTEGER now, fq; QueryPerformanceCounter(&now); QueryPerformanceFrequency(&fq);
+    Vec3 p; int have = char_position(pc, &p);
+    float fs = (gw && readable((void *)((uintptr_t)gw + GW_FRAMESPEED), 4)) ? *(float *)((uintptr_t)gw + GW_FRAMESPEED) : 1.0f;
+    if (start) {
+        g_gm_t = g_gm_dist = g_gm_dist1 = g_gm_t1 = g_gm_win = g_gm_wint = g_gm_winrate = g_gm_peak = 0.0f;
+        g_gm_gait = g_dm_speed; g_gm_vso = g_dm_vso; ++g_gm_holds;
+        fp_gait_read(mv);
+        logline("[move] gait hold start: drive %s (vanilla order %s) | mover max=%.1f desired=%.1f walk=%.1f",
+                gait_name(g_dm_speed), gait_name(g_dm_vso), g_gm_max, g_gm_des, g_gm_walk);
+    } else if (g_gm_have && have) {
+        float rdt = (float)(now.QuadPart - g_gm_qpc.QuadPart) / (float)fq.QuadPart;
+        float gdt = rdt * (fs > 0.0f && fs < 1000.0f ? fs : 1.0f);
+        float dx = p.x - g_gm_last.x, dz = p.z - g_gm_last.z, d = sqrtf(dx * dx + dz * dz);
+        if (rdt > 0.0f && rdt < 0.5f && d < 400.0f) {     /* a hitch / teleport is not a gait sample */
+            g_gm_t += gdt; g_gm_dist += d;
+            if (g_gm_t > 1.0f) { g_gm_t1 += gdt; g_gm_dist1 += d; }
+            g_gm_win += d; g_gm_wint += gdt;
+            if (g_gm_wint >= 0.5f) {
+                g_gm_winrate = g_gm_win / g_gm_wint;
+                if (g_gm_winrate > g_gm_peak) g_gm_peak = g_gm_winrate;
+                g_gm_win = g_gm_wint = 0.0f;
+            }
+        }
+        fp_gait_read(mv);
+    }
+    g_gm_qpc = now; g_gm_last = p; g_gm_have = have;
+}
 /* C04-TAKE: why direct drive is refused while movement keys are held for the controlled actor.
  * Logged on a reason change, else at most every 2 s; a NULL reason (drive engaged / no keys)
  * re-arms it. */
@@ -4915,6 +4988,7 @@ static int fp_move_keys_held(void)
 static void fp_movement(void *gw, float dt)
 {
     if (!g_fp_mode || !g_charmove_setdest) {
+        if (g_dm_vso >= 0) fp_gait_restore(fp_controlled_char(gw), "fp off");
         InterlockedExchange(&g_dm_active, 0);   /* FP off mid-hold: stand down */
         InterlockedExchange(&g_face_active, 0);
         g_face_have = 0; g_face_turning = 0;
@@ -4966,6 +5040,7 @@ static void fp_movement(void *gw, float dt)
             fp_mover_clear_direct(dmv, MV_MOVEMODE, MV_DESIREDMOTION, 0);
             g_was_direct = 0;
         }
+        fp_gait_restore(pc, "body down / falling");
         /* Facing state: cleared ONLY for the ragdoll tiers (the body tumbles,
          * its final yaw is genuinely unknown). The walk-off/jump arc keeps the
          * body on its feet with its committed facing -- clearing g_face_have
@@ -5008,6 +5083,7 @@ static void fp_movement(void *gw, float dt)
                     *(int *)((uintptr_t)mv + MV_MOVEMODE) = 0;   /* MOVE_NORMAL */
                 }
                 g_was_direct = 0;
+                fp_gait_restore(pc, "keys released");
                 /* Belt-and-suspenders: if a Task_Move somehow re-appeared during
                  * the hold, replace it with stop-here so releasing WASD leaves us
                  * where we stopped instead of resuming an old destination. */
@@ -5221,7 +5297,16 @@ static void fp_movement(void *gw, float dt)
                 ((void (*)(void *))mvvt[MV_HALT_SLOT])(mv);
             /* speed tiers: the scrollwheel throttle covers walk..jog only; SPRINT (tier
              * 2) is a held modifier key (default Left Shift) -- classic FP controls */
-            int spd = g_speed_scale < 0.4f ? 0 : 1;
+            /* PT04: the char's own vanilla gait (speed order outside FP), captured at the hold start; walk only
+             * from the wheel throttle (wheel_speed mode), the sprint key = the vanilla run (never faster) */
+            int gstart = 0;
+            if (g_dm_vso >= 0 && g_dm_vso_pc != pc) fp_gait_restore(NULL, "controlled char changed");
+            if (g_dm_vso < 0) {
+                int so = readable((void *)((uintptr_t)mv + MV_SPEEDORDERS), 4) ? *(int *)((uintptr_t)mv + MV_SPEEDORDERS) : 2;
+                g_dm_vso = (so >= 0 && so <= 3) ? so : 2; g_dm_vso_pc = pc; gstart = 1;
+            }
+            int spd = g_dm_vso;
+            if (g_cfg_wheel && !g_cfg_camera_zoom && g_speed_scale < 0.4f) spd = 0;
             if (g_cfg_key_sprint && (GetAsyncKeyState(g_cfg_key_sprint) & 0x8000))
                 spd = 2;
             /* Publish the intent; the CharMovement::update hook enforces it
@@ -5282,6 +5367,7 @@ static void fp_movement(void *gw, float dt)
             /* MOVE_DIRECTION skips the game's own athletics/strength XP tick --
              * run it ourselves so WASD trains like click-move. */
             award_move_xp(pc, mv, dt);
+            fp_gait_meter(gw, pc, mv, gstart);
             return;
         }
     }
@@ -5297,6 +5383,7 @@ static void fp_movement(void *gw, float dt)
         }
         g_was_direct = 0;
     }
+    fp_gait_restore(pc, "drive refused mid-hold");
 
     /* Speed from the scrollwheel throttle (down = walk, up = run). */
     float dist = MOVE_NEAR + g_speed_scale * (MOVE_FAR - MOVE_NEAR);

@@ -23,7 +23,9 @@
 #  PT08      next to a building: physical MMB on it -> mmb_objects+1; holstered RMB tap on it -> ctx menu on it
 #  PT09      after 3 more FP off/on cycles + a control switch: hook=1 fault=0 swallow=1; MMB still selects the mate,
 #            RMB tap still opens the menu, LMB still doesn't select
-#  PT04      MEASURE only: FP W-drive speed vs vanilla run/walk (walktime) and runspeed numbers; PASS = measured
+#  PT04      FP walk/run speed = vanilla: same char, spot and axis; vanilla run order -> physical W held in FP
+#            (gait=run), vanilla walk order -> W in FP (gait=walk); steady `where` rate FP vs vanilla within PT04_TOL
+#            (5%), the char's order handed back after each hold (fp_move state mv_so/gait_restores); game speed 1
 #  PT05      evidence: physical LMB click on TimeSpeedButton2 (x1 while at x1), RTS and FP free cursor: speed_clicks rise,
 #            speed_peak_click / long frames / [speed] log lines; FAIL only if the spike shows (peak > SPIKE_MAX)
 #  PT23      Shay's speed steps x0.5 -> 1x -> speed up, physical clicks on TimeSpeedButton3/2/4 then keys 2/1/3, RTS and FP:
@@ -43,7 +45,7 @@
 # Not here: PT13/PT14/PT17 (viewmodel: coordinator), PT15 head-hit rate vs vanilla (needs a target series: visual/
 # balance call), PT16 camera look (screenshot).
 # Usage: fp-playtest.sh [player] [mate] [hostile] [outdir] (defaults: $PLAYER/$MATE or Axima/Malzin, Skaera,
-# /tmp/fp-playtest). Env: ROWS (space/comma list), KFPLOG, STILL_MAX (3), SPIKE_MAX (1.5), FAR_NPC, SAVE (PT25: save to
+# /tmp/fp-playtest). Env: ROWS (space/comma list), KFPLOG, STILL_MAX (3), SPIKE_MAX (1.5), PT04_TOL (0.05), FAR_NPC, SAVE (PT25: save to
 # load, default the current one from `status`).
 # Leaves the fixture changed (player KO'd/carried, Skaera KO'd, items moved): reload it after.
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-playtest}
@@ -355,19 +357,51 @@ VWERR=""; MVS=""
 vwalk() { local ax r; VW=""; for ax in -x +x -z +z; do A teleport "$SH" $HOME >/dev/null; sleep 1.5; r=$(A walktime "$SH" "$1" "$ax" "$2")
     case "$r" in *" walked "*) VW="axis=$ax $(grep -o 'speed=[^ ]*\|top_speed=[^ ]*' <<<"$r" | tr '\n' ' ')"; return 0;; esac
     VWERR="$2 $ax: $(cut -c1-90 <<<"$r")"; done; return 1; }
-# ---- PT04: MEASURE walk/run speed (FP drive vs vanilla), no pass/fail on the numbers ----
-if want PT04; then take "$SH" >/dev/null; A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null
-  aim_at "$SH" "$MT" 13; look "$(awk -v y="$(cam yaw)" 'BEGIN{printf "%.4f", y+3.14159}')" 0   # away from the mate
-  ATH=$(A stat "$SH" athletics | grep -o 'base=[^ ]*\|effective=[^ ]*' | tr '\n' ' ')
-  A fp_move w 6000 >/dev/null; sleep 1.5; P1=$(pos "$SH"); t1=$(date +%s.%N); RS=$(A runspeed "$SH" | cut -c1-200); sleep 3; P2=$(pos "$SH"); t2=$(date +%s.%N); A fp_move none >/dev/null
-  FPV=$(awk -v d="$(d2 "$P1" "$P2")" -v a="$t1" -v b="$t2" 'BEGIN{printf "%.1f", d/(b-a)}')
-  # vanilla timed walks (m53: -x 150 "stopped short" and -z 100 "never started" at the fixture home, a known stuck
-  # spot, see fp-control.sh native_walk): every axis from home until one walks; none -> movers diag in the FAIL
-  sleep 1; mode off; vwalk 80 run; WR=$VW; vwalk 60 walk; WW=$VW; take "$SH" >/dev/null
-  if [ -z "$WR" ] || [ -z "$WW" ]; then A fp_keys movers >/dev/null; sleep 0.3
-    MVS=$(A fp_keys movers show | awk -v w="$SHN mode=" 'BEGIN{RS=" [|] "} index($0,w)==1{print; exit}' | cut -c1-160); fi
-  if [ -z "$WR" ] || [ "$FPV" = 0.0 ]; then row PT04 FAIL "setup: no measurement (fp=$FPV u/s run=[$WR] walk=[$WW]) native walk never started on any axis from $HOME: $SH mover [$MVS] ${VWERR:0:160}"
-  else row PT04 PASS "MEASURE only: fp_W_drive=$FPV u/s (real time, speed 1) [runspeed during W: $RS] | vanilla run [$WR] walk [$WW] | athletics $ATH"; fi
+# ---- PT04: FP walk/run speed = the vanilla speed of the same char/state (within PT04_TOL, 5%) ----
+# Shay's steps: in FP, hold W (physical key) and walk/run; outside FP the same char gets a move order. One method on
+# both sides: `where` samples during steady motion (after the start-up), each stamped at the middle of its call,
+# least-squares slope of distance vs time; same char, same start spot, same axis (the first axis a vanilla run walks).
+# State: vanilla run order (walktime run) -> FP W must drive gait=run; vanilla walk order (walktime walk) -> FP W must
+# drive gait=walk; the char's order is handed back after each hold (gait_restores rises, mv_so = the vanilla order).
+PT04_TOL=${PT04_TOL:-0.05}
+# psamp <n> <dist cap> <start pos>: n where samples of $SH, prints "t d" rows (t = mid-call seconds, d = XZ from start)
+psamp() { local i a b P; for i in $(seq 1 "$1"); do a=$(date +%s.%N); P=$(pos "$SH"); b=$(date +%s.%N)
+    awk -v a="$a" -v b="$b" -v d="$(d2 "$3" "$P")" -v cap="$2" 'BEGIN{if (d+0 < cap+0) printf "%.4f %.2f\n", (a+b)/2, d}'; done; }
+# slope: least squares over "t d" rows (needs >=3 rows spanning >=1 s), "" if not enough
+slope() { awk '{t[NR]=$1; d[NR]=$2} END{if (NR<3 || t[NR]-t[1]<1) exit; for(i=1;i<=NR;i++){st+=t[i];sd+=d[i]} mt=st/NR; md=sd/NR
+    for(i=1;i<=NR;i++){n+=(t[i]-mt)*(d[i]-md); q+=(t[i]-mt)^2} if (q>0) printf "%.2f", n/q}'; }
+axis_yaw() { case "$1" in +x) echo 1.5708;; -x) echo 4.7124;; +z) echo 0;; -z) echo 3.1416;; esac; }
+# van_rate <walk|run> <dist> <lead s>: vanilla move order along $AX from home, steady rate -> VR
+van_rate() { local P0 bg; mode off; A teleport "$SH" $HOME >/dev/null; sleep 1.5; P0=$(pos "$SH")
+  ( A walktime "$SH" "$2" "$AX" "$1" > "$OUT/pt04-walk-$1.txt" ) & bg=$!
+  sleep "$3"; VR=$(psamp 6 "$(awk -v d="$2" 'BEGIN{print d-40}')" "$P0" | slope); wait "$bg"; VRW=$(cut -c1-120 "$OUT/pt04-walk-$1.txt"); }
+# fp_rate <lead s>: FP on, physical W held along $AX from home, steady rate -> FR, KenshiFP meter -> FM
+fp_rate() { local P0; A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; look "$(axis_yaw "$AX")" 0
+  P0=$(pos "$SH"); A key_inject w down >/dev/null; sleep "$1"; FR=$(psamp 6 100000 "$P0" | slope); A key_inject w up >/dev/null; sleep 1.2
+  FM=$(A fp_move state); }
+within() { awk -v a="$1" -v b="$2" -v t="$PT04_TOL" 'BEGIN{exit !(a!="" && b!="" && b+0>0 && (a-b)/b<=t && (b-a)/b<=t)}'; }
+if want PT04; then take "$SH" >/dev/null; A teleport "$SH" $HOME >/dev/null; sleep 1.5
+  SPN=$(ks speed_now); ATH=$(A stat "$SH" athletics | grep -o 'base=[^ ]*\|effective=[^ ]*' | tr '\n' ' ')
+  mode off; AX=""; vwalk 80 run && AX=$(grep -o 'axis=[^ ]*' <<<"$VW" | cut -d= -f2)
+  if [ -z "$AX" ]; then A fp_keys movers >/dev/null; sleep 0.3
+    MVS=$(A fp_keys movers show | awk -v w="$SHN mode=" 'BEGIN{RS=" [|] "} index($0,w)==1{print; exit}' | cut -c1-160)
+    row PT04 FAIL "setup: native run never started on any axis from $HOME: $SH mover [$MVS] ${VWERR:0:160}"
+  elif [ "$SPN" != "1.00" ] && [ "$SPN" != "1.0" ] && [ "$SPN" != "1" ]; then row PT04 FAIL "setup: game speed $SPN, not 1 (rates are real time)"
+  else
+    van_rate run 500 1.0; VRUN=$VR; VRUNW=$VRW; G0=$(fld gait_restores <<<"$(A fp_move state)")
+    fp_rate 1.5; FRUN=$FR; FMRUN=$FM
+    van_rate walk 150 1.5; VWALK=$VR; VWALKW=$VRW
+    fp_rate 2.0; FWALK=$FR; FMWALK=$FM
+    mode off; vwalk 20 run >/dev/null; take "$SH" >/dev/null       # hand the char its run order back
+    g() { fld "$1" <<<"$2"; }
+    ev="axis $AX | run: vanilla $VRUN u/s FP $FRUN u/s (FP gait=$(g gait "$FMRUN") vanilla_order=$(g vanilla_order "$FMRUN") meter rate_avg=$(g rate_avg "$FMRUN") mv_max=$(g mv_max "$FMRUN") after release mv_so=$(g mv_so "$FMRUN"))"
+    ev="$ev | walk: vanilla $VWALK u/s FP $FWALK u/s (FP gait=$(g gait "$FMWALK") meter rate_avg=$(g rate_avg "$FMWALK") mv_walk=$(g mv_walk "$FMWALK") after release mv_so=$(g mv_so "$FMWALK"))"
+    ev="$ev | gait_restores $G0->$(g gait_restores "$FMWALK") | tol $PT04_TOL | athletics $ATH | walktime run [$VRUNW] walk [$VWALKW]"
+    if [ -z "$VRUN" ] || [ -z "$VWALK" ] || [ -z "$FRUN" ] || [ -z "$FWALK" ]; then row PT04 FAIL "setup: too few steady samples: $ev"
+    else ok=1; within "$FRUN" "$VRUN" && within "$FWALK" "$VWALK" || ok=0
+      [ "$(g gait "$FMRUN")" = run ] && [ "$(g gait "$FMWALK")" = walk ] && [ "$(g mv_so "$FMRUN")" = run ] && [ "$(g mv_so "$FMWALK")" = walk ] || ok=0
+      [ "$(g holding "$FMWALK")" = 0 ] && inc "$G0" "$(g gait_restores "$FMWALK")" || ok=0
+      judge PT04 $ok "$ev"; fi; fi
   A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null; fi
 
 # ---- PT05: time-scale button click evidence (RTS, then FP free cursor) ----

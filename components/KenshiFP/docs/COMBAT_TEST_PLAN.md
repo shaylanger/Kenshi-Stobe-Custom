@@ -112,7 +112,7 @@ Most of these broke under combined actions (toggle FP off/on, two weapons, squad
 needs a compound scenario (several actions in a row, toggles between them), not one isolated action.
 | ID | Problem (Shay) | Want / log evidence | State (KenshiFP commit) |
 |---|---|---|---|
-| PT04 | Movement feels far too fast with no athletics gear | Shay 2026-10-08: FP walk/run = exactly the speeds the game uses outside FP mode for the same char/state | measured m54 FP W 12.5 u/s vs vanilla run 54.1; open: match vanilla speeds, test measures FP vs non-FP same char |
+| PT04 | Movement feels far too fast with no athletics gear | Shay 2026-10-08: FP walk/run = exactly the speeds the game uses outside FP mode for the same char/state | m54 FP W 12.5 u/s (drive forced JOG) vs vanilla run 110 top; fix /root/KenshiFP 7dc8c90 (FP W = the char's own vanilla speed order, handed back after the hold); fp-playtest PT04 = FP vs vanilla steady rate within 5% (run + walk), awaiting batch |
 | PT17 | FP combat view/animations overall | coordinator plays it on the 4080 (screenshots), compares with other FP melee/crossbow games, then fixes | coordinator on the 4080, not in the wrapper |
 | PT23 | (was PT05, reported again 2026-10-08) Changing game speed briefly runs at ~10x-100x before settling. Shay's steps: speed 0.5x -> click the 1x button -> click speed-up (also any speed-up click) | no burst: game time advances at the chosen rate from the first frame (measure game-time delta per real-time sample right after each click) | open |
 | PT24 | Control is a separate new button; must be an entry inside the existing context menu (Trade, Follow, Bodyguard, Pickup ...) | "Control" listed as an option of the game's own RMB context menu on a squad mate | open |
