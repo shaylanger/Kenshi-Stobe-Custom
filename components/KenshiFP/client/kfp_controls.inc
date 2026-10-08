@@ -1090,6 +1090,31 @@ static void fpc_newtask_hook(void *pi,int task,const void *h,void *bld,const voi
     if (c) {g_fpc_nctl_req=c;++g_fpc_nctl_clicks;}
     else {++g_fpc_nctl_refused;logline("[controls] Control option chosen but the target is no squad mate now: ignored");}
 }
+/* PT24 (m64): the function's bytes in the exe file on disk at rva (another mod's hook, e.g. Stobe's KenshiLib hook
+ * on newPlayerTaskSelectedCharacters, replaces the in-memory prologue with a jmp; the file still proves the RVA). */
+static int fpc_disk_match(uintptr_t rva,const unsigned char *pat,size_t n) {
+    char path[MAX_PATH];
+    if (!GetModuleFileNameA(NULL,path,sizeof path)) return 0;
+    const unsigned char *b=(const unsigned char *)g_base;
+    if (!readable((void *)b,0x400) || b[0]!='M' || b[1]!='Z') return 0;
+    const unsigned char *nt=b+*(const int *)(b+0x3c);
+    if (!readable((void *)nt,0x200)) return 0;
+    unsigned ns=*(const unsigned short *)(nt+6),so=*(const unsigned short *)(nt+20);
+    const unsigned char *sec=nt+24+so;
+    long off=-1;
+    for (unsigned i=0;i<ns && i<64;++i) {
+        const unsigned char *h=sec+40*i;
+        if (!readable((void *)h,40)) return 0;
+        unsigned vs=*(const unsigned *)(h+8),va=*(const unsigned *)(h+12),raw=*(const unsigned *)(h+20);
+        if (rva>=va && rva+n<=(uintptr_t)va+vs) {off=(long)(rva-va+raw);break;}
+    }
+    if (off<0) return 0;
+    FILE *fp=fopen(path,"rb");
+    if (!fp) return 0;
+    unsigned char buf[64];int ok=n<=sizeof buf && fseek(fp,off,SEEK_SET)==0 && fread(buf,1,n,fp)==n && !memcmp(buf,pat,n);
+    fclose(fp);
+    return ok;
+}
 static void fpc_nctl_install(void) {
     static const unsigned char p_show[28]={0x48,0x8b,0xc4,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,0x48,0x8d,
                                           0xa8,0xe8,0xfc,0xff,0xff,0x48,0x81,0xec,0xe0,0x03,0x00,0x00};
@@ -1104,6 +1129,10 @@ static void fpc_nctl_install(void) {
     int ms=fs && readable(fs,28) && !memcmp(fs,p_show,28);
     int mn=fn && readable(fn,21) && !memcmp(fn,p_name,21);
     int mt=ft && readable(ft,26) && !memcmp(ft,p_task,26);
+    /* 2 = already hooked in memory (jmp), the exe file has the expected bytes: KenshiLib::AddHook chains */
+    if (fs && !ms && fpc_disk_match(rs,p_show,28)) ms=2;
+    if (fn && !mn && fpc_disk_match(rn,p_name,21)) mn=2;
+    if (ft && !mt && fpc_disk_match(rt,p_task,26)) mt=2;
     if (ms && mn && mt) {   /* all three or none: a half-installed set would show an option nobody handles */
         if (install_hook(fn,(void *)fpc_taskname_hook,(void **)&g_fpc_tname_orig)) g_fpc_nctl_hooks|=2;
         if (install_hook(ft,(void *)fpc_newtask_hook,(void **)&g_fpc_ntask_orig)) g_fpc_nctl_hooks|=4;
