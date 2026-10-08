@@ -17,13 +17,13 @@
 #   142      <player> hurt, she has a medkit: "patch me up" -> stobe_goals.log `FIRST_AID verify ... result=healed|treating`
 # fixture: Testing-Save-Full-Base (copy kah-fullbase); squad Beaks + Avarek. reset: fresh load of the copy
 # needs: Stobe 8AF6F9B5+ (m52), StobeServer 331f845+, harness with jobs/clearjobs/protect/attack/ko/spawn
-# usage: [PLAYER=Beaks] [MATE=Avarek] [ROWS="137 140 fight 138 pause switch cancel clear 141 142"] STOBE-144-interrupt-resume-fullbase.sh
+# usage: [PLAYER=Beaks] [MATE=Avarek] [ROWS="137 140 fight 138 pause switch cancel clear 143 141 142"] STOBE-144-interrupt-resume-fullbase.sh
 # output: one `RESULT <row> PASS|FAIL <evidence>` per row (rows after a failed goal start are FAIL "no goal")
 set -u
 export PLAYER="${PLAYER:-Beaks}" MATE="${MATE:-Avarek}"
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
-ROWS="${ROWS:-137 140 fight 138 pause switch cancel clear 141 142}"
+ROWS="${ROWS:-137 140 fight 138 pause switch cancel clear 143 141 142}"
 MOD=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe
 STW=$MOD/stobe_work_goal.status
 CTL=$MOD/stobe_work_goal.control
@@ -171,6 +171,23 @@ if want clear; then
   l2=$(live_ids | wc -l); j2=$(jobs_of "$MATE")
   if [ "$l1" -ge 1 ] && [ "$l2" = 0 ] && [ "${j2:-9}" = 0 ] && [ -n "$cj" ]; then verdict 139-clear "PASS live goals $l1 -> 0, jobs $j1 -> 0; $cj"
   else verdict 139-clear "FAIL live goals $l1 -> $l2, jobs $j1 -> $j2, clearjobs='$cj'"; fi
+fi
+# --- 143 (live model): an ended bread goal is not dragged into unrelated talk (server 331f845 ended-goal prompt rule)
+#   own goal: start "1 bread", cancel it, then two backstory questions; PASS = both replies arrive, neither mentions bread.
+if want 143; then
+  reset_mate
+  g143=$(start_goal "$MATE, make me 1 bread.")
+  [ -n "$g143" ] && { say_mate "$MATE, cancel the bread, stop that work." 20; wait_for 30 state_is "$g143" CANCELLED; }
+  if [ -z "$g143" ] || [ "$(state_of "$g143")" != CANCELLED ]; then verdict 143 "SETUP FAIL bread goal '${g143}' not started/cancelled ($(state_of "$g143"))"
+  else
+    m=$(st_mark)
+    say_mate "$MATE, tell me about yourself. Where did you grow up?" 25
+    say_mate "What did you do before you joined us, $MATE?" 25
+    rp=$(st_since "$m" | grep -a "Queuing SAY for $MATE:" | sed "s/.*Queuing SAY for $MATE: //")
+    n=$(printf '%s\n' "$rp" | grep -c .); b=$(printf '%s\n' "$rp" | grep -i -c "bread\|bak")
+    if [ "$n" -ge 2 ] && [ "$b" = 0 ]; then verdict 143 "PASS $n reply lines, none mention bread (goal $g143 CANCELLED): $(printf '%s ' "$rp" | cut -c1-160)"
+    else verdict 143 "FAIL replies=$n bread_mentions=$b: $(printf '%s ' "$rp" | cut -c1-300)"; fi
+  fi
 fi
 stobe-auto speed 1 >/dev/null
 
