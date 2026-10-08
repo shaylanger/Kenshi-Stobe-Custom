@@ -20,8 +20,8 @@ results labelled "-4080"). Never compare performance across machines.
 
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
-| Stobe.dll | `3EF4CCEE` (NPC biography card; 5090 only, no Stobe on the 4080) | - |
-| KenshiFP.dll | 5090 `07376F24` (take reasons ffad4e4 + isolation), 4080 `76CF7E8A` (C05-INTERIOR 799c3f9, 2026-10-07 m51) | 5090: `76CF7E8A` when Shay frees it |
+| Stobe.dll | `B056BDF0` (5090 only, no Stobe on the 4080) | `8AF6F9B5` (items 135-145) |
+| KenshiFP.dll | 5090 `76CF7E8A` (m52), 4080 `DD5FA352` (PT fixes + viewmodel WIP) | 5090: PT fixes build (m53) |
 | ProfessionGearProgression.dll | `BAFB8C31` (Normal; verified 2026-10-05) | - |
 | AutomationHarness.dll | 5090 `EF425B2D` (input isolation f10996c/e617d36), 4080 `24BE3AEC` | - |
 | Server (live) | `stobe` 055e0c5 | - |
@@ -37,7 +37,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 |---|---|---|---|
 | STOBE 135-145 | Shay playtest 2026-10-07, Stobe/server half: panel target, FP speaker, bread chain, resume/clear goals, goal panel position, spar truce + heal deal, literal LLM, interrupt/resume compound tests (`STOBE_full_test_plan.md` D) | Full-Base, kah-* | todo |
 | FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | todo |
-| NP5 NP11 NP12 NP13 NP14 | NPC panel (`STOBE-NPCPANEL.sh "NP5 NP11 NP12 NP13 NP14"`): fact kept over reload, bio after chat, bio cache hit; NP13 bio uses the hidden backstory (confided) at Devoted+ (bio_backstory=1), NP14 not below (server bf31d12) | kah-npcpanel | 5090 last round |
+| NP5 NP11 NP12 NP13 NP14 | NPC panel (`STOBE-NPCPANEL.sh "NP5 NP11 NP12 NP13 NP14"`): fact kept over reload, bio after chat, bio cache hit; NP13 bio uses the hidden backstory (confided) at Devoted+ (bio_backstory=1), NP14 not below (server bf31d12) | kah-npcpanel | rerun m53 (m52 setup fail: libs not copied) |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
