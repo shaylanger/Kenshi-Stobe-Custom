@@ -9,9 +9,6 @@
 # Screenshots (vm-*.png, harness shots dir) are listed in a NOTE line: PT17 (overall look) is judged from them.
 # Usage: fp-viewmodel.sh [player] [mate] [hostile] [outdir]. Env: ROWS, KFPLOG, VM_TOL (4).
 # Leaves the fixture changed (a shot fired, items moved): reload it after.
-# Usage: fp-playtest.sh [player] [mate] [hostile] [outdir] (defaults: $PLAYER/$MATE or Axima/Malzin, Skaera,
-# /tmp/fp-playtest). Env: ROWS (space/comma list), KFPLOG, STILL_MAX (3), SPIKE_MAX (1.5), FAR_NPC.
-# Leaves the fixture changed (player KO'd/carried, Skaera KO'd, items moved): reload it after.
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-viewmodel}
 KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
 STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
@@ -38,7 +35,28 @@ waitf() { local end=$((SECONDS+$1)); shift; while [ $SECONDS -lt $end ]; do "$@"
 uname_() { tr ' =' '__' <<<"$1"; }
 kfplines() { tail -n +"$((LN0+1))" "$KFPLOG" 2>/dev/null | tr -d '\r'; }       # KenshiFP.log since the test start
 RESULTS=()
-row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
+# ---- world raids (m53: a Dust Bandits squad attacked Axima/Malzin mid-run: stagger flips in PT01/PT03, PT10 fight=1,
+# PT15/PT18 native ranged combat). Raiders within 1500 are knocked out at setup and every 10 s (as stobe-fight-lib.sh
+# calm_raiders; the fixture hostile $TG and the PT10 far NPC are kept), and a row during which a non-squad character
+# attacked the squad (stobe.log `[EVENT] combat: X -> <squad>`) is `FAIL setup: hostile ... attacking`, never judged.
+SLOG=${SLOG:-$KDIR/RE_Kenshi/mods/Stobe/stobe.log}; STOBELIB=${STOBELIB:-/mnt/c/KenshiModding/tests/ingame/stobe/stobe-fight-lib.sh}
+[ -r "$STOBELIB" ] && eval "$(grep -E '^RAID_(RE|FILTER)=' "$STOBELIB")"
+RAID_RE=${RAID_RE:-Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Hill Marauders|Black Dragon Ninjas|Berserkers|Cannibals|Fogmen}
+RAID_FILTER=${RAID_FILTER:-[band of bones]|[kral|[dust bandits]|[hungry bandits]|[starving bandits]|[hill marauders]|[black dragon ninjas]|[berserkers]|[cannibals]|[fogmen]}
+KEEP=""; KEEPN=(); RAIDG=""; SL0=0; SHN=""; MTN=""   # KEEPN: grep -e args for kept attackers ($TG, PT10 far NPC)
+sweep() { local lines h n=0
+  lines=$(stobe-auto chars 1500 "$RAID_FILTER" 2>/dev/null | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n' | sed 's/^ *//' \
+    | grep -E "\[(${RAID_RE})\]" | grep -v -E ' (KO|DEAD)( |$)' | grep -v -E "^(${SH}|${MT}) #")
+  for h in $(grep -oE '#[0-9]+/[0-9]+' <<<"$lines"); do case " $KEEP " in *" $h "*) continue;; esac
+    stobe-auto ko "$h" 21600 >/dev/null 2>&1 && n=$((n+1)); done; echo "$n"; }
+slog_n() { [ -r "$SLOG" ] && wc -l < "$SLOG" || echo 0; }
+# hostile_hit: the last `combat: X -> <player|mate>` since the previous row by anyone outside the squad / KEEP names
+hostile_hit() { [ -r "$SLOG" ] && [ -n "$SHN" ] || return 0
+  tail -n +"$((SL0+1))" "$SLOG" 2>/dev/null | tr -d '\r' | grep -a -F -e "-> $SHN (" -e "-> $MTN (" | grep -a 'EVENT\] combat: ' \
+    | grep -a -v -F -e "combat: $SHN (" -e "combat: $MTN (" "${KEEPN[@]}" | tail -1 | sed 's/.*combat: //' | cut -c1-110; }
+row() { local res=$2 ev=$3 hh; hh=$(hostile_hit)
+  case "$ev" in setup:*) ;; *) [ -n "$hh" ] && { res=FAIL; ev="setup: hostile attacking the squad during the row ($hh) | $ev"; };; esac
+  RESULTS+=("RESULT $1 $res $ev"); echo "RESULT $1 $res $ev" >> "$LOG"; SL0=$(slog_n); }
 judge() { if [ "$2" = 1 ]; then row "$1" PASS "$3"; else row "$1" FAIL "$3"; fi; }
 finish() { for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done; }
 # setup_fail <reason>: every wanted row not yet reported gets `FAIL setup: <reason>`
@@ -85,7 +103,12 @@ csge() { ge "$(cs "$1")" "$2"; }
 
 # ---- equipment (as fp-controls.sh: the fixture player carries a crossbow only; melee comes from the mate) ----
 weapons() { A inv "$SH" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | grep -v -i -x -F "${BOWN:-@@}"; }
-bow_now() { A rangedinfo "$SH" | fld bow; }
+# bow_now: the full bow name (`rangedinfo` prints `bow=<name with spaces> has_ammo=...`; m53: `fld bow` cut it to
+# "Oldworld" and every later unequip/pickup/equip by name missed)
+bow_now() { local r; r=$(A rangedinfo "$SH"); case "$r" in *" bow=none"*) echo none;; *" bow="*) sed -n 's/.* bow=\(.*\) has_ammo=.*/\1/p' <<<"$r" | head -1;; *) echo none;; esac; }
+# href <unequip reply>: the item's `#serial/index` (pickup by handle: exact, any distance)
+href() { local i s; i=$(grep -o 'h\.index=[0-9]*' <<<"$1" | head -1 | cut -d= -f2); s=$(grep -o 'h\.serial=[0-9]*' <<<"$1" | head -1 | cut -d= -f2)
+  [ -n "$i" ] && [ -n "$s" ] && echo "#$s/$i"; }
 arm_melee() { local w r; while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A equip "$SH" "$w")
   case "$r" in equipped*) WEP=$w; return 0;; esac; done <<<"$(weapons)"; return 1; }
 GIVEN=""
@@ -96,15 +119,19 @@ give_melee() { local w r; [ -n "$(weapons)" ] && return 0
   case "$r" in transferred*) ;; *) r=$(A unequip "$MT" "$w")
     case "$r" in *ground*) r=$(A pickup "$SH" "$w" now);; *) r=$(A transfer "$MT" "$SH" "$w");; esac;; esac
   note "SETUP give_melee $w from $MT: $(cut -c1-120 <<<"$r")"; [ -n "$(weapons)" ] && GIVEN=$w; }
-# bow_off: unequip the bow; a full inventory drops it: the mate parks it (BOW_DROPPED=2) or it stays on the ground (1)
-BOW_DROPPED=0
-bow_off() { local r; [ "$(bow_now)" = none ] && return 0; r=$(A unequip "$SH" "$(bow_now)")
-  case "$r" in *ground*) BOW_DROPPED=1; r=$(A pickup "$MT" "$BOWN" now); note "SETUP bow parked on $MT: $(cut -c1-120 <<<"$r")"
-    case "$r" in *ERROR*) ;; *) BOW_DROPPED=2;; esac;; esac; [ "$(bow_now)" = none ]; }
-bow_on() { [ "$(bow_now)" != none ] && return 0; [ -n "$BOWN" ] || return 1
-  [ "$BOW_DROPPED" = 2 ] && { note "SETUP bow back from $MT: $(A transfer "$MT" "$SH" "$BOWN" | cut -c1-120)"; BOW_DROPPED=0; }
-  [ "$BOW_DROPPED" = 1 ] && { note "SETUP bow pickup: $(A pickup "$SH" "$BOWN" now | cut -c1-120)"; BOW_DROPPED=0; }
-  A equip "$SH" "$BOWN" | grep -q '^equipped'; }
+# bow_off: unequip the bow. The fixture player's main inventory holds no long weapon (m53: bow and katana both went
+# "-> ground"), and the mate's back slot has her own bow, so a dropped bow stays on the ground next to the player
+# (BOW_DROPPED=1, handle BOWREF; harness f4ab9f6+ remembers unequip drops and scans CROSSBOW items for pickup)
+BOW_DROPPED=0; BOWREF=""
+bow_off() { local r; [ "$(bow_now)" = none ] && return 0; r=$(A unequip "$SH" "$BOWN")
+  case "$r" in *"-> ground"*) BOW_DROPPED=1; BOWREF=$(href "$r"); note "SETUP bow on the ground next to $SH ($BOWREF)";; esac
+  [ "$(bow_now)" = none ]; }
+bow_back() { [ "$(bow_now)" != none ]; }
+# bow_on: pickup by handle (`now` = giveItem: the game puts it on the free back slot = equipped), else equip by name
+bow_on() { bow_back && return 0; [ -n "$BOWN" ] || return 1
+  if [ "$BOW_DROPPED" = 1 ]; then note "SETUP bow pickup: $(A pickup "$SH" "${BOWREF:-$BOWN}" now | cut -c1-140)"
+    waitf 15 bow_back && { BOW_DROPPED=0; return 0; }; fi
+  A equip "$SH" "$BOWN" | grep -q '^equipped' && BOW_DROPPED=0; bow_back; }
 draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
 
 # ---- restore on exit ----
@@ -115,8 +142,10 @@ cleanup() { A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/nul
   [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
   for c in $PINNED; do A pin "$c" off >/dev/null; done
   [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
-  [ -n "$WEP" ] && A unequip "$SH" "$WEP" >/dev/null; [ -n "$BOWN" ] && bow_on >/dev/null
-  [ -n "$GIVEN" ] && A transfer "$SH" "$MT" "$GIVEN" >/dev/null
+  [ -n "$RAIDG" ] && kill "$RAIDG" 2>/dev/null
+  # the melee weapon goes back to the mate (an unequip with no room drops it: she picks it up by handle)
+  local wr=""; [ -n "$WEP" ] && wr=$(A unequip "$SH" "$WEP"); [ -n "$BOWN" ] && bow_on >/dev/null
+  if [ -n "$GIVEN" ]; then case "$wr" in *"-> ground"*) A pickup "$MT" "$(href "$wr")" now >/dev/null;; *) A transfer "$SH" "$MT" "$GIVEN" >/dev/null;; esac; fi
   for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
   A select "$SH" >/dev/null; A fp_control take >/dev/null
   A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
@@ -142,9 +171,14 @@ A speed 1 hold >/dev/null; A fp_move none >/dev/null; A fp_keys reset >/dev/null
 for c in "$SH" "$MT"; do A protect "$c" on >/dev/null; done
 PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/dev/null
 TGH=""; if A where "$TG" | grep -q 'pos='; then TGH=$(A where "$TG" | grep -oE '#[0-9]+/[0-9]+' | head -1)
-  A pin "$TGH" at "$SH" dist 600 >/dev/null && PINNED+=" $TGH"; fi
+  A pin "$TGH" at "$SH" dist 600 >/dev/null && PINNED+=" $TGH"; KEEP+=" $TGH"; KEEPN+=(-e "combat: $(live_name "$TGH") ("); fi
+RK=$(sweep); note "SETUP raid sweep: knocked out $RK raiders within 1500 (kept:$KEEP)"; [ "$RK" -gt 0 ] 2>/dev/null && sleep 3
 take "$SH" || setup_fail "could not take $SH ($(A fp_control state | cut -c1-160))"
 A fp_camera distance 0 >/dev/null
+H0=$(ctl controlled); HOME=$(pos "$SH"); MTN=$(live_name "$MT"); SHN=$(live_name "$SH")
+note "SETUP sh=$SH($SHN) mt=$MT($MTN) tg=$TG$TGH bow='$BOWN' auto_reload=$AR0 home=$HOME controlled=$H0 iso_set=$ISO_SET kfplog_from=$LN0"
+( while sleep 10; do kill -0 $$ 2>/dev/null || exit 0; n=$(sweep); [ "$n" = 0 ] || echo "RAID sweep $(date +%H:%M:%S): knocked out $n" >> "$LOG"; done ) </dev/null >/dev/null 2>&1 &
+RAIDG=$!; SL0=$(slog_n)
 
 # ---- viewmodel ----
 VM_TOL=${VM_TOL:-4}; SHOTS=""
