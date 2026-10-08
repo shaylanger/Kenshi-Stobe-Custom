@@ -35,6 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
+| NP5 NP11 NP12 NP13 NP14 | NPC panel (`STOBE-NPCPANEL.sh "NP5 NP11 NP12 NP13 NP14"`): fact kept over reload, bio after chat, bio cache hit; NP13 bio uses the hidden backstory (confided) at Devoted+ (bio_backstory=1), NP14 not below (server bf31d12) | kah-npcpanel | 5090 last round |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay

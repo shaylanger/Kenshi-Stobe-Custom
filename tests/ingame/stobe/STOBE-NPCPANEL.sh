@@ -5,16 +5,18 @@
 #         backstory, disclosed fact recorded from a real chat turn and kept over save+reload, renamed NPC keeps its
 #         info, deal states (in progress, outstanding payment, deadline, broken), agreed goal status matches the
 #         goal row, in-game portrait shown, basics + empty bio on a fresh NPC, bio filled after a conversation,
-#         bio cache hit on refresh (no LLM call).
+#         bio cache hit on refresh (no LLM call), bio uses the hidden backstory (confided) at Devoted+ (NP13,
+#         StobeServer bf31d12+) and not below (NP14): checked on the server's bio_backstory field, the
+#         stobe_npc_bio.backstory_included row and the NPC_BIO log line, never on the prose.
 # fixture: Crafting base (Shay + Malzin, Apothecary Abia in town), on a kah-* copy (kah-npcpanel)
-# usage: bash STOBE-NPCPANEL.sh [rows]   rows = space list of NP1..NP12 (default all)
+# usage: bash STOBE-NPCPANEL.sh [rows]   rows = space list of NP1..NP14 (default all)
 # verify: one RESULT line per row; panel text is read back through `stobe_npcinfo read` (what the window shows:
 #         header lines, then ABOUT THEM / WHAT YOU'VE LEARNED / DEALINGS WITH <speaker> / RIGHT NOW).
 set -u
 . "$(dirname "$0")/stobe-fight-lib.sh"
 . "$(dirname "$0")/stobe-switch-lib.sh"
 sw_trap
-ROWS="${1:-NP1 NP2 NP3 NP4 NP5 NP6 NP7 NP8 NP9 NP10 NP11 NP12}"
+ROWS="${1:-NP1 NP2 NP3 NP4 NP5 NP6 NP7 NP8 NP9 NP10 NP11 NP12 NP13 NP14}"
 EMPTYBIO="You don't know much about them yet. Talk to them to learn more."
 want() { case " $ROWS " in *" $1 "*) return 0 ;; esac; return 1; }
 PSQLQ() { (cd /tmp && sudo -u postgres psql -d stobe -At -c "$1" 2>/dev/null); }
@@ -205,6 +207,64 @@ if want NP9; then # the card shows the target's in-game portrait (PortraitManage
     verdict NP9 "PASS portrait=1 tex=$(field "$r" tex) log '$pl'"
   else verdict NP9 "FAIL read portrait=$(field "$r" portrait) tex=$(field "$r" tex) log '${pl:-none}'"; fi
 fi
+
+# NP13/NP14: the bio may use the hidden backstory only at tier NPC_BIO_BACKSTORY_MIN_TIER (default Devoted) or higher.
+SRV_URL="${SRV_URL:-http://127.0.0.1:8081/StobeServer/ai_npcs.php}"
+NP_BACKSTORY="Born in Shark to a family of salt traders, she left after her mother died of dust fever and learned herbal medicine from a Hub doctor named Orrin."
+# srv_view <serial> <name> <speaker>: the card's machine fields as the server returns them (bio=0 + why=periodic: no LLM call, no log)
+srv_view() {
+  curl -s -m 15 -X POST -H 'Content-Type: application/json' \
+    -d "{\"action\":\"player_view\",\"storage_id\":\"hand_$1\",\"serial\":$1,\"name\":\"$2\",\"speaker\":\"$3\",\"why\":\"periodic\"}" "$SRV_URL" |
+    python3 -c 'import json,sys
+try: d = json.load(sys.stdin)
+except Exception: d = {}
+print(" bio_backstory=%s bio_state=%s" % (d.get("bio_backstory", "-"), d.get("bio_state", "-")))'
+}
+bs_row() { PSQLQ "SELECT backstory_included FROM stobe_npc_bio WHERE npc_storage_id='hand_$TS' AND lower(learner_name)=lower('$PLAYER')"; }
+bs_log() { since_srv | grep -a -c -E "NPC_BIO: (generated|cache hit) backstory=$1 .*\"npc\":\"$TRADER\""; }
+if want NP13 || want NP14; then # setup: the trader needs a stored (hidden) backstory
+  stobe-auto stobe_npcinfo close >/dev/null
+  bw=$(PSQLQ "SELECT length(coalesce(backstory,'')) FROM core_npc WHERE metadata->>'storage_id'='hand_$TS' ORDER BY updated_at DESC LIMIT 1")
+  if [ "${bw:-0}" -lt 40 ]; then
+    PSQLQ "UPDATE core_npc_master SET backstory='$NP_BACKSTORY' WHERE lower(name)=lower('$TRADER')" >/dev/null
+    bw=$(PSQLQ "SELECT length(coalesce(backstory,'')) FROM core_npc WHERE metadata->>'storage_id'='hand_$TS' ORDER BY updated_at DESC LIMIT 1")
+    log "NP13/14: $TRADER had no backstory, test backstory set ($bw chars)"
+  fi
+  [ "${bw:-0}" -ge 40 ] || setup_fail NP13 "$TRADER (hand_$TS) has no stored backstory and setting one failed (len=${bw:-none})"
+  PSQLQ "DELETE FROM general_settings WHERE id='NPC_BIO_BACKSTORY_MIN_TIER' RETURNING value" | grep -q . && log "NP13/14: removed a NPC_BIO_BACKSTORY_MIN_TIER override (default Devoted)"
+  # below the tier a bio is only written from what the NPC said to this speaker: make sure there is one line (NP14)
+  nl=$(PSQLQ "SELECT COUNT(*) FROM eventlog WHERE type IN ('chat','rechat') AND people LIKE '%|hand_$TS\"%' AND people LIKE '%\"$PLAYER|%'")
+  if [ "${nl:-0}" -eq 0 ]; then
+    stobe-auto teleport "$PLAYER" "$TRADER" dist 3 >/dev/null
+    talk "$TRADER" "Hello there. How is business today?" 22
+    nl=$(PSQLQ "SELECT COUNT(*) FROM eventlog WHERE type IN ('chat','rechat') AND people LIKE '%|hand_$TS\"%' AND people LIKE '%\"$PLAYER|%'")
+  fi
+  [ "${nl:-0}" -ge 1 ] || setup_fail NP14 "$TRADER said nothing to $PLAYER (no chat line for the bio)"
+fi
+
+if want NP13; then # Devoted: bio regenerated with the confided backstory
+  bash "$SC" trust "$TRADER" 85 Devoted friend >/dev/null 2>&1
+  g0=$(bs_log 1)
+  popen "$TRADER" "$PLAYER" >/dev/null; r=$(pbio "$TS" "$PLAYER")
+  g1=$(bs_log 1); v=$(srv_view "$TS" "$TRADER" "$PLAYER"); row=$(bs_row)
+  if [ "$(field "$v" bio_backstory)" = 1 ] && [ "$row" = 1 ] && [ "$g1" -gt "$g0" ]; then
+    verdict NP13 "PASS Devoted(85): bio_backstory=1, backstory_included=1, NPC_BIO backstory=1 log $g0 -> $g1, panel bio_state=$(field "$r" bio_state)"
+  else verdict NP13 "FAIL Devoted(85):$v row=${row:-none} NPC_BIO backstory=1 log $g0 -> $g1 panel bio_state=$(field "$r" bio_state) learned='$(echo "$r" | ptext | learned | cut -c1-160)'"; fi
+  stobe-auto stobe_npcinfo close >/dev/null
+fi
+
+if want NP14; then # back below Devoted: confided bio hidden at once, regenerated without the backstory
+  bash "$SC" trust "$TRADER" 20 Acquaintance friend >/dev/null 2>&1
+  v0=$(srv_view "$TS" "$TRADER" "$PLAYER")
+  g0=$(bs_log 0)
+  popen "$TRADER" "$PLAYER" >/dev/null; r=$(pbio "$TS" "$PLAYER")
+  g1=$(bs_log 0); v=$(srv_view "$TS" "$TRADER" "$PLAYER"); row=$(bs_row)
+  if [ "$(field "$v0" bio_backstory)" = 0 ] && [ "$(field "$v" bio_backstory)" = 0 ] && [ "$row" = 0 ] && [ "$g1" -gt "$g0" ]; then
+    verdict NP14 "PASS Acquaintance(20): bio_backstory=0 before+after regen, backstory_included=0, NPC_BIO backstory=0 log $g0 -> $g1, panel bio_state=$(field "$r" bio_state)"
+  else verdict NP14 "FAIL Acquaintance(20): before:$v0 after:$v row=${row:-none} NPC_BIO backstory=0 log $g0 -> $g1 panel bio_state=$(field "$r" bio_state)"; fi
+  stobe-auto stobe_npcinfo close >/dev/null
+fi
+if want NP13 || want NP14; then bash "$SC" trust "$TRADER" 60 Fond friend >/dev/null 2>&1; fi
 
 SN=""; SS=""; SH=""
 if want NP10 || want NP11 || want NP12; then # a fresh stranger: no conversation, no record yet
