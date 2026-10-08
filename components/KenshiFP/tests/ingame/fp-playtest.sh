@@ -167,13 +167,14 @@ bow_on() { bow_back && return 0; [ -n "$BOWN" ] || return 1
 draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
 
 # ---- restore on exit ----
-FP0=""; DIST0=""; AR0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
+FP0=""; DIST0=""; AR0=""; PASSIVE0=""; RANGED0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
 cleanup() { A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/null; A fp_move none >/dev/null
   A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null
   [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
   for c in $PINNED; do A pin "$c" off >/dev/null; done
   [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
+  [ -n "$RANGED0" ] && A combatmode "$SH" ranged "$([ "$RANGED0" = 1 ] && echo on || echo off)" >/dev/null
   [ -n "$RAIDG" ] && kill "$RAIDG" 2>/dev/null
   # the melee weapon goes back to the mate (an unequip with no room drops it: she picks it up by handle)
   local wr=""; [ -n "$WEP" ] && wr=$(A unequip "$SH" "$WEP"); [ -n "$BOWN" ] && bow_on >/dev/null
@@ -454,8 +455,10 @@ if want PT10; then if [ $MELEE = 0 ]; then mfail PT10; else draw_to 1; waitf 10 
 # ---- PT12: sword drawn + crossbow carried: RMB/LMB stay melee ----
 if want PT12; then if [ $MELEE = 0 ]; then mfail PT12; elif [ -z "$BOWN" ]; then row PT12 FAIL "setup: no crossbow"; else
   draw_to 0; bow_on || note "SETUP PT12 bow would not re-equip"; A equip "$SH" "$WEP" >/dev/null
+  # m54: R draws the game's preferred weapon, which follows the orders-panel ranged toggle (vanilla; ranged=1 drew
+  # the bow). The row needs the sword in hands with the bow equipped: ranged off for this row, restored on exit.
+  RANGED0=$(A combatmode "$SH" | fld ranged); A combatmode "$SH" ranged off >/dev/null
   toggles 1; take "$SH" >/dev/null; sky; rkey; waitf 4 kis drawn 1; sleep 0.5
-  if [ "$(ks ranged)" = 1 ]; then rkey; waitf 4 kis drawn 0; rkey; waitf 4 kis drawn 1; sleep 0.5; fi
   if [ "$(bow_now)" = none ] || [ "$(ks ranged)" != 0 ] || [ "$(ks drawn)" != 1 ]; then row PT12 FAIL "setup: need sword drawn + bow equipped (bow=$(bow_now) drawn=$(ks drawn) ranged=$(ks ranged) r_path=$(ks r_path))"
   else waitf 10 not_fight; W0=$(ks wih); C0=$(A fp_combat state); K0=$(A fp_keys state)
     mdown right; sleep 0.8; K1=$(A fp_keys state); C1=$(A fp_combat state); sleep 0.7; mup right; sleep 1
