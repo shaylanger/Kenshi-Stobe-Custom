@@ -117,6 +117,7 @@ static unsigned char *fpc_input_handler(void);
 static fpc_ctxupd_t g_fpc_ctxupd_orig;
 static int g_fpc_ctxupd_hook_ok;
 static unsigned g_fpc_ctxupd_calls,g_fpc_ctxupd_fed,g_fpc_ctxupd_req;
+static unsigned long long g_fpc_ctxupd_addr;   /* RVA the update hook sits on (0 = none) */
 static void fpc_ctxupdate_hook(void *cm) {
     ++g_fpc_ctxupd_calls;
     unsigned char *ih=fpc_input_handler(),*c=(unsigned char *)cm;
@@ -738,7 +739,7 @@ static size_t fpc_state(char *b,size_t n) {
         "free_swings=%u fs_active=%d fs_prog=%.3f fs_prog_max=%.3f fs_ends=%u fs_notech=%u fs_faults=%u fs_dead=%d "
         "free_block_frames=%u block_checks=%u native_injected=%u ticks=%u hud=%d hud_shown=%d hud_text=%s hud_changes=%u test_focus=%d "
         "sneak=%d sneak_clicks=%u sneak_attacks=%u sneak_ko=%u sneak_failed=%u sneak_timeout=%u sneak_path=%s sneak_target=%s "
-        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u",
+        "sneak_aware=%d sneak_aware_any=%d sneak_chance=%.3f sneak_result=%s sneak_elapsed_ms=%.0f hud_hist=%s mouse_keys_swallowed=%u ctx_hold_opens=%u ctx_tap_opens=%u lmb_why=%s lmb_dist=%.1f lmb_squad_refused=%u lmb_far_refused=%u r_path=%s mmb_objects=%u mmb_self=%u hud_flashes=%u hud_silent=%u carried=%d down=%d speed_changes=%u speed_long_frames=%u speed_clicks=%u speed_peak_click=%.2f speed_now=%.2f ctx_keep=%u ctx_hook=%d ctx_game_shows=%u ctx_game_hides=%u ctx_reshow_blocked=%u ctx_closes=%u ctx_close_where=%s ctx_hide_rva=0x%llx ctx_reshow_rva=0x%llx ctx_upd_hook=%d ctx_upd_rva=0x%llx ctx_upd_calls=%u ctx_upd_fed=%u ctx_upd_req=%u",
         g_fpc_hook_ok,g_fpc_fault,g_fpc_swallow,g_fp_mode,g_fpc_drawn,(unsigned long long)(uintptr_t)g_fpc_wih,g_fpc_ranged,g_fpc_fists,g_fpc_hold_actor!=NULL,g_fpc_ui_state,
         g_fpc_input[0],g_fpc_input[1],g_fpc_input[2],g_fpc_input[3],
         g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_last_select,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_ctx_freed,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
@@ -749,7 +750,7 @@ static size_t fpc_state(char *b,size_t n) {
         g_fpc_sneak_now,g_fpc_sneak_clicks,g_fpc_sneak_attacks,g_fpc_sneak_ko,g_fpc_sneak_failed,g_fpc_sneak_timeout,g_fpc_sneak_path,
         g_fpc_sneak_target,g_fpc_sneak_aware,g_fpc_sneak_aware_any,g_fpc_sneak_chance,g_fpc_sneak_result,g_fpc_sneak_elapsed,hh,g_fpc_mouse_keys_swallowed,g_fpc_ctx_hold_opens,g_fpc_ctx_tap_opens,g_fpc_lmb_why,g_fpc_lmb_dist,g_fpc_lmb_squad_refused,g_fpc_lmb_far_refused,g_fpc_r_path,g_fpc_mmb_objects,g_fpc_mmb_self,g_fpc_hud_flashes,g_fpc_hud_silent,g_fp_carried,g_is_down,g_spd_changes,g_spd_long_frames,g_spd_clicks,g_spd_peak_click,g_spd_last,g_fpc_ctx_keep_frames,
         g_fpc_ctx_hook_ok,g_fpc_ctx_game_shows,g_fpc_ctx_game_hides,g_fpc_ctx_reshow_blocked,g_fpc_ctx_closes,g_fpc_ctx_close_where,
-        g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva,g_fpc_ctxupd_hook_ok,g_fpc_ctxupd_calls,g_fpc_ctxupd_fed,g_fpc_ctxupd_req);
+        g_fpc_ctx_hide_rva,g_fpc_ctx_reshow_rva,g_fpc_ctxupd_hook_ok,g_fpc_ctxupd_addr,g_fpc_ctxupd_calls,g_fpc_ctxupd_fed,g_fpc_ctxupd_req);
 }
 static size_t fpc_ctl_text(char *b,size_t n);static void fpc_ctl_request(void);   /* PT20, end of file */
 static int fpc_btn_index(const char *s) {
@@ -851,9 +852,19 @@ static void fp_controls_init(void) {
     {void *cmf=fpc_klib_real(FPC_SYM_CTXMENU);
      g_fpc_ctx_hook_ok=cmf && install_hook(cmf,(void *)fpc_ctxmenu_hook,(void **)&g_fpc_ctx_orig);
      logline("[controls] showContextMenu=%p hook=%d",cmf,g_fpc_ctx_hook_ok);
-     void *cuf=fpc_klib_real("?update@ContextMenu@@QEAAXXZ");
-     g_fpc_ctxupd_hook_ok=cuf && install_hook(cuf,(void *)fpc_ctxupdate_hook,(void **)&g_fpc_ctxupd_orig);
-     logline("[controls] ContextMenu::update=%p hook=%d",cuf,g_fpc_ctxupd_hook_ok);}
+     /* m57: the KenshiLib export ?update@ContextMenu@@QEAAXXZ never ran (upd_calls=0) while the hide still came from
+      * +0x7abd66, so hook by RVA: the function holding the hide call (Steam 1.0.65 0x7abd20 = RE_Kenshi exe
+      * disassembly; Steam 1.0.68 0x7ac8c0, same 16-byte prologue found by byte search), only if the prologue
+      * matches (push rbx; sub rsp,20; mov rbx,rcx; mov rcx,[rcx+48]; test rcx,rcx). GOG: no RVA, no hook. */
+     static const unsigned char pro[16]={0x40,0x53,0x48,0x83,0xEC,0x20,0x48,0x8B,0xD9,0x48,0x8B,0x49,0x48,0x48,0x85,0xC9};
+     void *cux=fpc_klib_real("?update@ContextMenu@@QEAAXXZ");
+     uintptr_t rva=g_gog?0:g_build==65?0x7abd20u:g_build==68?0x7ac8c0u:0;
+     void *cuf=rva?(void *)(g_base+rva):NULL;
+     int match=cuf && readable(cuf,16) && !memcmp(cuf,pro,16);
+     g_fpc_ctxupd_hook_ok=match && install_hook(cuf,(void *)fpc_ctxupdate_hook,(void **)&g_fpc_ctxupd_orig);
+     g_fpc_ctxupd_addr=match?(unsigned long long)rva:0;
+     logline("[controls] ContextMenu::update by RVA +0x%llx (build %d gog %d) prologue=%d hook=%d; export=%p (+0x%llx, unused)",
+             (unsigned long long)rva,g_build,g_gog,match,g_fpc_ctxupd_hook_ok,cux,cux?(unsigned long long)((uintptr_t)cux-g_base):0ULL);}
     if (!g_fpc_startanim) g_fpc_fs_dead=1;
     logline("[controls] playerControl=%p hook=%d select=%p ctxmenu=%p addOrder=%p attack=%p isEnemy=%p anim=%p choose=%p progress=%p end=%p startanim=%p",
         pcf,g_fpc_hook_ok,(void *)g_fpc_select,(void *)g_fpc_ctxmenu,(void *)g_fpc_addorder,(void *)g_fpc_attack,(void *)g_fpc_isenemy,
