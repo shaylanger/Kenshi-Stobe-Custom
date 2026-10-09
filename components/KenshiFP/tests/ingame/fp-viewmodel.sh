@@ -104,7 +104,8 @@ for i in range(1,N-1):
     nvis+=1
     if b['w']>=0.999 and b['ph']==0: errmax=max(errmax,ln(sub(b['rp'],b['op'])))
     if b['cls']==1 and b['st']=='reloading' and b['rlt']>=0.4: rlz=min(rlz,b['rp'][2])
-    if not a['vis'] or b['dt']>0.07: continue          # entering the view / game hitch frame (motion is per time)
+    if not a['vis'] or max(a['dt'],b['dt'],c['dt'])>0.07: continue   # entering the view / game hitch frame or next to one (motion is
+                                                       # per time; a hitch neighbour's step averages over a peak, PT17 m77 f228)
     if b['kick']>0 and a['kick']==0: continue          # fire kick onset: an impulse by design (sharp kick)
     tipmax=max(tipmax,b['tipd']); dfmax=max(dfmax,b['df'])
     cv=c['vis']
