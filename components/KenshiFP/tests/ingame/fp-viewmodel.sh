@@ -26,7 +26,9 @@
 #        sword draw/2 swings/block/swing->block/holster; the embedded vmcheck flags any on-screen frame whose tip step
 #        (>0.15 dm) or blade/top rotation (>3 deg) is > 2.5x both neighbours' (dt-scaled; hitch frames dt>0.07 and the
 #        fire-kick onset impulse excepted); PASS = 0 flags, weapon within 0.35 dm of the commanded pose, the weapon
-#        enters (draw) and leaves (holster) the hand below the view, crossbow reload grip z >= 2.0 (not in the face)
+#        enters (draw) and leaves (holster) the hand below the view, crossbow reload grip z >= 2.0 (not in the face),
+#        and no near-plane cut (PT17): cut=0, no rendered frame where the 3 dm near clip slices an arm tube (upper arm,
+#        forearm r 0.45, hand r 0.35, from the recorded joints) at a point inside the screen (hollow / cut-off limb)
 #  PT29  zoom out (fp_camera distance ZO=25) keeps the hold: every captured state's grip within ZO_TOL (0.3) dm and
 #        blade within 5 deg of the zoomed-in capture (xbow ready/aim/fire/reload, sword ready/block/swing 0.42)
 # Screenshots (vm-*.png, harness shots dir) are listed in a NOTE line: PT17 (overall look) is judged from them.
@@ -58,7 +60,7 @@ for line in open(sys.argv[1]):
     if line.startswith('#') or '|' not in line: continue
     pa=line.split('|'); h=pa[0].split(); v=[V(x) for x in pa[1].split()]
     r=dict(t=float(h[1]),dt=float(h[2]),st=h[3],cls=int(h[5]),w=float(h[7]),kick=float(h[11]),fire=float(h[12]),op=v[0],mp=v[4],mf=v[5],mu=v[6],
-           cam=[V(x) for x in pa[2].split()] if len(pa)>2 else None,ph=0,wih=1)
+           cam=[V(x) for x in pa[2].split()] if len(pa)>2 else None,ph=0,wih=1,j=v[7:13] if len(v)>=13 else None)
     if len(pa)>3:
         x=pa[3].split()
         if len(x)>=5: r['ph']=int(x[3]); r['wih']=int(x[4])
@@ -67,8 +69,25 @@ def remap(c,a,b,pos):
     if a['cam'] is None or b['cam'] is None: return c
     e,rt,up,fw=b['cam']; w=add(add(mul(rt,c[0]),mul(up,c[1])),mul(fw,c[2])); w=add(w,e) if pos else w
     e,rt,up,fw=a['cam']; d=sub(w,e) if pos else w; return (dot(d,rt),dot(d,up),dot(d,fw))
+# near-plane cut (PT17): the 3 dm near clip slices an arm tube (joints shoulder-elbow-wrist r 0.45, hand wrist->grip
+# x1.4 r 0.35; cross-section along z slant-corrected) at a point inside the screen = a hollow / cut-off limb in view
+ZC,RF,RH=3.0,0.45,0.35
+def cutseg(P,Q,r):
+    d=sub(Q,P); L=ln(d)
+    if L<1e-4: return False
+    dz=abs(d[2])/L; rz=r*math.sqrt(max(0.0,1-dz*dz))+0.02; pp=P
+    for k in range(41):
+        p=add(P,mul(d,k/40.0))
+        if (abs(p[2]-ZC)<rz or (k and (p[2]-ZC)*(pp[2]-ZC)<0)) and min(1.245-abs(p[0]/ZC),0.70-abs(p[1]/ZC))>0.02: return True
+        pp=p
+    return False
+cuts=[]
 for i in range(len(F)-1):
     a,b=F[i],F[i+1]; a['rp']=remap(b['mp'],a,b,1); a['rf']=remap(b['mf'],a,b,0); a['ru']=remap(b['mu'],a,b,0)
+    if a['w']>=0.01 and b['j']:
+        J=[remap(x,a,b,1) for x in b['j']]; W=J[5]
+        segs=((J[3],J[4],RF),(J[4],W,RF),(W,add(W,mul(sub(a['rp'],W),1.4)),RH),(J[0],J[1],RF),(J[1],J[2],RF))
+        if any(cutseg(P,Q,r) for P,Q,r in segs): cuts.append('%d:%s'%(i,a['st']))
 F=F[:-1]; N=len(F)
 BL={0:8.0,1:5.85}
 def tip(r): return add(add(r['rp'],mul(r['rf'],BL[r['cls']])),mul(r['ru'],0.84 if r['cls']==1 else 0))
@@ -101,8 +120,10 @@ for i in range(1,N):
 if sys.argv[2]=='swing': ok=N>=20 and nvis>=15 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout)
 else: ok=N>=200 and nvis>=100 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout) and len(inout)>=2
 if sys.argv[2]=='xbow': ok=ok and rlz>=2.0
+ok=ok and not cuts
 fps=1/sorted(r['dt'] for r in F)[N//2]
-print("ok=%d frames=%d vis=%d fps=%.0f flags=%d%s errmax=%.2f tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,len(flags),
+print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
+      len(cuts),(' ['+' '.join(cuts[:6])+']') if cuts else '',len(flags),
       (' ['+' '.join(flags[:6])+']') if flags else '',errmax,tipmax,dfmax,','.join(inout) or 'none',
       (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else ''))
 VMCHECK
