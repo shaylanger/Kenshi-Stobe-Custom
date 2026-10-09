@@ -9,7 +9,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - **Open (fixer #6, lock owner fixer-pt30, state in `%TEMP%\claude\C--KenshiModding\wr\HANDOFF-sword-wrist.md`):** PT30-FLIP (1 blade-roll jump at first wind-up after draw, ~2/5 runs);
   PT32 native free swing ends after ~2 frames (no visible attack at zoom 25); blade foreshortened into the screen at strike/follow-through vs the old sweep (coordinator review);
   5090 window renders 938x475 instead of 1600x900. PT33 open palm at wind-up (native finger pose) = Shay-look row. Sheets `C:\KenshiTestRuns\vm-rework\`.
-- 4080 Defender exclusions done (Shay). Open question to Shay: relax RAM rules now that the PC has 48 GB.
+- 4080 Defender exclusions done (Shay). RAM rules stay as they are (Shay 2026-10-09: WSL 8 GB cap is enough, measured 1.1 GB used / 6.8 GB available; voice services stay off).
 
 ## Earlier (2026-10-08 m77): PT17 viewmodel rework DONE, nothing running
 - **PT17 final KenshiFP 0750f26a** (/root/KenshiFP 04bf8c2, local, unpushed like the 60 before it; snapshot 25748e5):
