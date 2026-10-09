@@ -136,6 +136,7 @@ static void fpc_ctxupdate_hook(void *cm) {
 /* free swing (no target, not fighting): native attack animation only */
 static void *g_fpc_fs_anim,*g_fpc_fs_tech;
 static double g_fpc_fs_start_ms, g_fpc_recover_until_ms;
+static int g_fpc_fs_live, g_fpc_fs_steps; static float g_fpc_fs_pmin;   /* free swing seen running (progress < 0.999) */
 /* evidence counters */
 static unsigned g_fpc_mmb_selects,g_fpc_mmb_none,g_fpc_ctx_opens,g_fpc_ctx_none,g_fpc_rmb_swallowed,g_fpc_lmb_swallowed,
     g_fpc_mmb_cam_frames,g_fpc_r_draws,g_fpc_r_holsters,g_fpc_r_draw_fail,g_fpc_engages,g_fpc_free_swings,g_fpc_fs_faults,
@@ -626,7 +627,7 @@ static void fpc_free_swing(void *pc) {
     if (!(isfinite(spd)&&spd>0.2f&&spd<4.0f)) spd=1.0f;
     unsigned char empty[32];make_mstr(empty,"");
     g_fpc_startanim(anim,tech,spd,empty);
-    g_fpc_fs_anim=anim;g_fpc_fs_tech=tech;g_fpc_fs_start_ms=fpc_now_ms();g_fpc_fs_prog=0;
+    g_fpc_fs_anim=anim;g_fpc_fs_tech=tech;g_fpc_fs_start_ms=fpc_now_ms();g_fpc_fs_prog=0;g_fpc_fs_live=0;g_fpc_fs_steps=0;g_fpc_fs_pmin=9.0f;
     ++g_fpc_free_swings;
 }
 static void fpc_free_swing_step(void *pc) {
@@ -634,8 +635,12 @@ static void fpc_free_swing_step(void *pc) {
     void *anim=char_valid(pc)?g_fpc_getanim(pc):NULL;
     double el=fpc_now_ms()-g_fpc_fs_start_ms;
     float p=anim==g_fpc_fs_anim?g_fpc_progress(anim,g_fpc_fs_tech):1.0f;
-    if (isfinite(p)) {g_fpc_fs_prog=p;if (p>g_fpc_fs_prog_max) g_fpc_fs_prog_max=p;}
-    if (anim!=g_fpc_fs_anim || !isfinite(p) || p>=0.999f || el>3000.0) {
+    ++g_fpc_fs_steps;
+    if (isfinite(p)) {g_fpc_fs_prog=p;if (p>g_fpc_fs_prog_max) g_fpc_fs_prog_max=p;if (p<g_fpc_fs_pmin) g_fpc_fs_pmin=p;if (p<0.999f) g_fpc_fs_live=1;}
+    /* the start tick (and a frame or two after) still reports the old progress (1.01): wait until it runs */
+    if (anim!=g_fpc_fs_anim || !isfinite(p) || (p>=0.999f && (g_fpc_fs_live || el>600.0)) || el>3000.0) {
+        logline("[controls] free swing end: %.0f ms steps=%d pmin=%.3f live=%d why=%s",el,g_fpc_fs_steps,g_fpc_fs_pmin,g_fpc_fs_live,
+            anim!=g_fpc_fs_anim?"anim":!isfinite(p)?"nan":el>3000.0?"timeout":g_fpc_fs_live?"done":"never_ran");
         if (anim==g_fpc_fs_anim && g_fpc_endanim) g_fpc_endanim(anim);
         g_fpc_fs_tech=NULL;g_fpc_fs_anim=NULL;++g_fpc_fs_ends;g_fpc_recover_until_ms=fpc_now_ms()+300.0;
     }
