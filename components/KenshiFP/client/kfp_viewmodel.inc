@@ -110,7 +110,7 @@ static float g_vm_rl_t; static float g_vm_rl_per = 1.3f, g_vm_rl_amp = 1.0f;  /*
  * the spring heads for a waypoint below the view (y g_vm_xwp_y, z = zc -/+ g_vm_xwp_dz on the target's side) so the hand
  * and the stock cross the near plane under the bottom edge; once both are on the same side the real target takes over.
  * Reads as a dip-and-raise (ready -> aim, aim -> reload), like raising a crossbow from a low carry. */
-static int   g_vm_xwp_on = 1; static float g_vm_xwp_y = -3.6f, g_vm_xwp_dz = 1.0f; static int g_vm_xwp;
+static int   g_vm_xwp_on = 1; static float g_vm_xwp_y = -3.6f, g_vm_xwp_dz = 1.0f, g_vm_xwp_tol = 0.8f; static int g_vm_xwp;
 static Quat  g_vm_plc; static int g_vm_pl_n;           /* prop local: candidate for a lasting native change */
 static float g_vm_fire_t;
 static int   g_vm_ti = -1;                     /* weapon pose state of the last update (VM_*) */
@@ -913,8 +913,12 @@ static void vm_frame_core(void *pc, int body_down)
             if (g_vm_class == 1 && g_vm_xwp_on && g_vm_phase == VMP_NORMAL) {
                 float zc = g_vm_elb_zc; int hc = g_vm_cur.p.z < zc, ht = tgt.p.z < zc;
                 if (hc != ht) {
-                    tgt.p = vm_v(0.5f * (g_vm_cur.p.x + tgt.p.x), g_vm_xwp_y, ht ? zc - g_vm_xwp_dz : zc + g_vm_xwp_dz);
-                    g_vm_xwp = 1; om = 1.8f / g_vm_tau;
+                    /* two stages (PT17): first straight down at the current depth, then across the plane down there; a
+                     * diagonal path crossed z 3.0-3.55 (the arm tube band) at y/z -0.5..-0.7: forearm cut open at the bottom edge */
+                    int low = g_vm_cur.p.y < g_vm_xwp_y + g_vm_xwp_tol;
+                    float wz = low ? (ht ? zc - g_vm_xwp_dz : zc + g_vm_xwp_dz) : g_vm_cur.p.z;
+                    tgt.p = vm_v(0.5f * (g_vm_cur.p.x + tgt.p.x), g_vm_xwp_y, wz);
+                    g_vm_xwp = 1 + !low; om = 1.8f / g_vm_tau;
                 }
             }
             vm_pose_spring(&g_vm_cur, &g_vm_vel, tgt, om, adt);
@@ -1054,6 +1058,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "kickdur"))  { if (x > 0.02f && x < 2) g_vm_kick_dur = x; return 1; }
     else if (!strcmp(k, "xwp"))     { g_vm_xwp_on = x > 0.5f; return 1; }
     else if (!strcmp(k, "xwpy"))    { if (x < 0 && x > -10) g_vm_xwp_y = x; return 1; }
+    else if (!strcmp(k, "xwptol"))  { if (x >= 0 && x < 5) g_vm_xwp_tol = x; return 1; }
     else if (!strcmp(k, "xwpdz"))   { if (x > 0 && x < 5) g_vm_xwp_dz = x; return 1; }
     else if (!strcmp(k, "rlper"))   { if (x > 0.2f && x < 5) g_vm_rl_per = x; return 1; }
     else if (!strcmp(k, "rlamp"))   { if (x >= 0 && x < 3) g_vm_rl_amp = x; return 1; }
