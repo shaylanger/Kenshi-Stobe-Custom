@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fp-viewmodel.sh: KenshiFP Gate 6 viewmodel rows PT13/PT14/PT26-PT30 (COMBAT_TEST_PLAN.md) on a kah-fpxbow copy
 # (Axima = crossbow player, Malzin = mate with a melee weapon). Helpers + setup are fp-playtest.sh's (same build).
-#  PT13  crossbow: physical R draw -> fp_vm state=ready, hand within VM_TOL deg of the ready target, melee=0, |tilt|<8;
+#  PT13  crossbow: physical R draw -> fp_vm state=ready, hand within VM_TOL deg of the ready target, melee=0, tilt -27..-6 (PT28 low carry);
 #        RMB held -> state=aiming on the aim target; one injected shot -> state=reloading seen
 #  PT14  sword (bow off, sword from the mate): R draw -> ready on target, melee=1, tilt >= 20; RMB held -> blocking on
 #        the block target; physical LMB -> a new "[vm] swing" log line with u_end >= 0.5; test pose sw_pose 0 / 1 ->
@@ -57,7 +57,7 @@ F=[]
 for line in open(sys.argv[1]):
     if line.startswith('#') or '|' not in line: continue
     pa=line.split('|'); h=pa[0].split(); v=[V(x) for x in pa[1].split()]
-    r=dict(t=float(h[1]),dt=float(h[2]),st=h[3],cls=int(h[5]),w=float(h[7]),kick=float(h[11]),op=v[0],mp=v[4],mf=v[5],mu=v[6],
+    r=dict(t=float(h[1]),dt=float(h[2]),st=h[3],cls=int(h[5]),w=float(h[7]),kick=float(h[11]),fire=float(h[12]),op=v[0],mp=v[4],mf=v[5],mu=v[6],
            cam=[V(x) for x in pa[2].split()] if len(pa)>2 else None,ph=0,wih=1)
     if len(pa)>3:
         x=pa[3].split()
@@ -77,13 +77,14 @@ for i,r in enumerate(F):
     r['vis']=r['wih']!=0 and (onscr(r['rp']) or onscr(tip(r)))
     p=F[i-1] if i else r
     r['tipd']=ln(sub(tip(r),tip(p))); r['df']=ang(r['rf'],p['rf']); r['du']=ang(r['ru'],p['ru'])
+    tl=r['t'] if (r['st']!='reloading' or r['fire']>0 or r['kick']>0 or i==0) else tl; r['rlt']=r['t']-tl   # s since the post-shot aim hold ended (reload blend-in excluded)
 flags=[]; errmax=0.0; rlz=99.0; nvis=0; tipmax=0.0; dfmax=0.0
 for i in range(1,N-1):
     a,b,c=F[i-1],F[i],F[i+1]
     if not b['vis']: continue
     nvis+=1
     if b['w']>=0.999 and b['ph']==0: errmax=max(errmax,ln(sub(b['rp'],b['op'])))
-    if b['cls']==1 and b['st']=='reloading' and b['kick']==0: rlz=min(rlz,b['rp'][2])
+    if b['cls']==1 and b['st']=='reloading' and b['rlt']>=0.4: rlz=min(rlz,b['rp'][2])
     if not a['vis'] or b['dt']>0.07: continue          # entering the view / game hitch frame (motion is per time)
     if b['kick']>0 and a['kick']==0: continue          # fire kick onset: an impulse by design (sharp kick)
     tipmax=max(tipmax,b['tipd']); dfmax=max(dfmax,b['df'])
@@ -282,7 +283,7 @@ vfld() { A fp_vm state | fld "$1"; }
 # vm_on <state>: vm in that state with the hand within VM_TOL deg of its target
 vm_on() { local V; V=$(A fp_vm state); [ -z "$1" ] || [ "$(fld state <<<"$V")" = "$1" ] || return 1
   awk -v t="$(fld target <<<"$V")" -v e="$(fld elev <<<"$V")" -v a="$(fld az <<<"$V")" -v k="$VM_TOL" \
-    'BEGIN{split(t,x,","); de=e-x[1]; da=a-x[2]; if(de<0)de=-de; if(da<0)da=-da; exit !(e!="" && t!="" && de<=k && da<=k)}'; }
+    'BEGIN{split(t,x,","); if(e==""||t=="") exit 1; r=3.14159265/180; c=sin(e*r)*sin(x[1]*r)+cos(e*r)*cos(x[1]*r)*cos((a-x[2])*r); if(c>1)c=1; exit !(atan2(sqrt(1-c*c),c)/r<=k)}'; }   # angle between hand and target directions (az is meaningless near the poles: PT28 aim hold elev -87)
 vm_is() { [ "$(vfld state)" = "$1" ]; }
 vev() { A fp_vm state | grep -oE '\b(state|elev|az|target|melee|tilt|swing|swu|swings)=[^ ]*' | tr '\n' ' '; }
 shot() { local p; p=$(A screenshot "vm-$1" | grep -oE '[^ ]*\.png' | head -1); SHOTS+=" ${p##*[\/]}"; }
@@ -295,6 +296,7 @@ if want PT13; then if [ $BOWOK = 0 ]; then row PT13 FAIL "setup: no crossbow on 
   draw_to 1 || note "SETUP PT13: R did not draw (drawn=$(ks drawn))"
   waitf 5 vm_on ready; R1=$(vm_on ready && echo 1 || echo 0); E1=$(vev); shot xbow-ready
   T1=$(vfld tilt); M1=$(vfld melee)
+  waitf 10 csis loaded 1 || note "SETUP PT13: bow not loaded before the aim (reloading=$(cs reloading))"   # fresh load: auto-reload after the draw
   look "$(cam yaw)" 0.05; mdown right; waitf 4 vm_on aiming; R2=$(vm_on aiming && echo 1 || echo 0); E2=$(vev); shot xbow-aim; mup right; sleep 0.4
   # m54: the controller arms only after one idle input frame (an aim already held never arms), so idle first
   EN0=$(cs enabled); A fp_combat on >/dev/null   # m55: why=off, the controller was never enabled here (fp-playtest enables it itself)
@@ -304,7 +306,8 @@ if want PT13; then if [ $BOWOK = 0 ]; then row PT13 FAIL "setup: no crossbow on 
     A fp_combat input 1 0 0 >/dev/null; waitf 8 vm_is reloading && { RL=1; sleep 0.5; shot xbow-reload; }; fi
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null
   ev="ready: $E1| aim: $E2| reload_seen=$RL"
-  ok=1; [ "$R1" = 1 ] && [ "$M1" = 0 ] && awk -v t="$T1" 'BEGIN{exit !(t!="" && t<8 && t>-8)}' && [ "$R2" = 1 ] && [ $RL = 1 ] || ok=0
+  # tilt band = the PT28 ready spec (low carry, nose 6..27 deg down; was |tilt|<8 for the pre-Chivalry level carry)
+  ok=1; [ "$R1" = 1 ] && [ "$M1" = 0 ] && awk -v t="$T1" 'BEGIN{exit !(t!="" && t<=-6 && t>=-27)}' && [ "$R2" = 1 ] && [ $RL = 1 ] || ok=0
   judge PT13 $ok "$ev"; draw_to 0; fi; fi
 
 # ---- PT26-PT29 helpers: measured weapon pose in camera numbers (x right, y up, z forward, dm from the UNZOOMED eye):
@@ -376,19 +379,25 @@ vmrec() { local f="$KDIR/vmrec-$1.txt"; rm -f "$f"; A fp_vm rec dump "vmrec-$1.t
 if want PT28 || want PT29; then if [ $BOWOK = 0 ] || [ "$(bow_now)" = none ]; then rows_fail "no crossbow on $SH" PT28
 else
   A fp_combat physical >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 0 >/dev/null; zoom 0
+  # m76: run without PT13 the controller stayed off (why=off) and the live click never fired; enable it here too
+  # (arm with one injected idle frame like PT13, then back to the physical mouse: `input` overrides it, aimed stayed 0)
+  [ -z "$EN0" ] && EN0=$(cs enabled); A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
+  waitf 4 csis armed 1 || note "SETUP PT28 not armed after idle input (why=$(cs why))"; A fp_combat physical >/dev/null
   draw_to 1 || note "SETUP PT28: R did not draw (drawn=$(ks drawn))"
   waitf 20 vm_on ready || note "SETUP PT28: not ready on target after draw ($(vev))"
   look "$(cam yaw)" 0.05; cap2 xbow-ready
   mdown right; waitf 20 vm_on aiming; cap2 xbow-aim
   A fp_vm set kick_pose 1 >/dev/null; sleep 0.5; cap2 xbow-fire; A fp_vm set kick_pose -1 >/dev/null; sleep 0.5
   # live shot zoomed in: kick + "[vm] fire" line, then the reload pose
-  K0=$(vfld kicks); F0=$(kfpn '\[vm\] fire'); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K0" ]'
-  K1=$(vfld kicks); F1=$(kfpn '\[vm\] fire'); shot xbow-fire-live
+  waitf 10 csis loaded 1 || note "SETUP PT28: bow not loaded before the live shot (reloading=$(cs reloading) reload_left=$(cs reload_left))"   # PT13's reload may still run
+  K0=$(vfld kicks); F0=$(kfpn '\[vm\] fire'); mclick left
+  # capture first: a harness call takes ~1.3 s here and the reload lasts ~6 s; kicks/fire lines are read afterwards
   waitf 4 vm_is reloading || note "SETUP PT28: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload reloading
+  K1=$(vfld kicks); F1=$(kfpn '\[vm\] fire'); shot xbow-reload-live   # screenshot after the capture (~4.5 s in the background)
   # live shot zoomed out (PT29 reload pair: same delay after the shot)
   if want PT29; then waitf 25 vm_is aiming || note "SETUP PT28: not aiming again after reload ($(vev))"
-    if zoom "$ZO"; then K2=$(vfld kicks); mclick left; waitf 3 eval '[ "$(vfld kicks)" -gt "$K2" ]'; shot xbow-fire-live-zo
-      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload-zo reloading; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
+    if zoom "$ZO"; then waitf 10 csis loaded 1 || note "SETUP PT29: bow not loaded before the zoomed-out shot"; mclick left
+      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload-zo reloading; shot xbow-reload-live-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
   mup right; sleep 0.4; A fp_vm set rlamp 1.0 >/dev/null
   ok=1; why=""
   # ready: low carry right (grip >=4 dm ahead, az>=15), nose 6..27 deg down, top up, the whole crossbow above the HUD line
