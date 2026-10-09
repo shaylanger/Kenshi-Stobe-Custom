@@ -2,6 +2,7 @@
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
+- **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
 ## Right now (2026-10-09 m78): sword wrist fold FIXED, fixer #6 on PT30-FLIP / PT32 / blade look
 - **Wrist fix** KenshiFP C7586828 (/root/KenshiFP ad419c0, local only) on both rigs; snapshots 51d9720, 27ab2ed, 2773fd3; VMQUICK row c49adda/62f0917; plan 306390a.
