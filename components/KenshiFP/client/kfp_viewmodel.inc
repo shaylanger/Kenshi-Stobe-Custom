@@ -200,6 +200,7 @@ static float g_vm_elb_keep = 1.5f, g_vm_elb_rate = 1750.0f, g_vm_elb_dmax = 24.0
 static int   g_vm_elb_la = 1, g_vm_elb_lah = 8, g_vm_fut_n, g_vm_la_n, g_vm_la_c[VM_LAH]; static unsigned g_vm_fid, g_vm_la_fid = 0xffffffffu;
 static float g_vm_elb_lama = 12.0f, g_vm_elb_lawm = 0.1f, g_vm_sw_ur;
 static VmPose g_vm_fut[VM_LAH]; static Vec3 g_vm_la_e[VM_LAH][VM_LAA * 7]; static float g_vm_la_cc[VM_LAH][VM_LAA * 7];
+static int   g_vm_wrlwarm = 1;   /* roll refinement starts from last frame's roll (PT30) */
 static float g_vm_wrl = 2.2f, g_vm_wrlmin = 2.6f, g_vm_wrllag = 6.0f, g_vm_rs, g_vm_rsv, g_vm_rs_lag; static int g_vm_have_rs;   /* roll jerk limit (0 = off) */
 static unsigned g_vm_pk[4];   /* wrist picks: within the rate step, 2x, 4x, anywhere */   /* + max pick speed deg/s, max cone offset deg */   /* wrist fix: weight of the previous elbow in the straight-wrist pick (no flips) */
 static Vec3  g_vm_pick; static int g_vm_pick_ok;   /* wrist fix: this frame's elbow pick (camera space), made with the blade roll */
@@ -607,6 +608,10 @@ static void vm_apply(void *skel)
         g_vm_pick_ok = 0;
         if (g_vm_wroll > 0.0f) {   /* aim at this frame's preferred elbow (the wrist moves with the roll: refine twice) */
             Vec3 f = vm_norm(g_vm_tf); Quat Qp0 = Qp; float pst = 0.0f;
+            if (g_vm_wrlwarm && g_vm_wrl > 0.0f && g_vm_have_rs) {   /* warm start from last frame's roll */
+                float h0 = 0.5f * g_vm_rs; pst = g_vm_rs;
+                Qp = quat_norm(quat_mul((Quat){ cosf(h0), f.x * sinf(h0), f.y * sinf(h0), f.z * sinf(h0) }, Qp0));
+            }
             for (int it = 0; it < 2; it++) {
                 Quat Qh0 = quat_norm(quat_mul(Qp, quat_conj(lq))); Vec3 dc;
                 Vec3 Ph0 = vm_sub(g_vm_tp, quat_rotvec(Qh0, vm_v(lp.x*sc.x, lp.y*sc.y, lp.z*sc.z)));
@@ -1325,6 +1330,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "elblawm")) { if (x >= 0 && x < 10) g_vm_elb_lawm = x; return 1; }
     else if (!strcmp(k, "wrl"))     { if (x >= 0 && x < 20) { g_vm_wrl = x; g_vm_have_rs = 0; } return 1; }
     else if (!strcmp(k, "wrlmin"))  { if (x >= 0 && x < 90) g_vm_wrlmin = x; return 1; }
+    else if (!strcmp(k, "wrlwarm")) { g_vm_wrlwarm = x > 0.5f; return 1; }
     else if (!strcmp(k, "wrllag"))  { if (x >= 0 && x < 180) g_vm_wrllag = x; return 1; }
     else if (!strcmp(k, "elbptau")) { if (x >= 0 && x < 1) g_vm_elb_ptau = x; return 1; }
     else if (!strcmp(k, "elbkeep")) { if (x >= 0 && x < 20) g_vm_elb_keep = x; return 1; }
