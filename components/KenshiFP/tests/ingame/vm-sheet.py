@@ -2,7 +2,8 @@
 """vm-sheet.py <out.jpg> <manifest.tsv> [--cols N] [--width W] [--split DIR]
 Labelled contact sheet from a manifest (one shot per line: row<TAB>label<TAB>png path). Rows keep their first-seen
 order; each row wraps after --cols tiles (default: the longest row). --split DIR also writes one sheet per row as
-DIR/final-<weapon>-zoom<z>.jpg (row "sword zoom 25" -> final-sword-zoom25.jpg). Missing shots become grey tiles."""
+DIR/final-<weapon>-zoom<z>.jpg (row "sword zoom 25" -> final-sword-zoom25.jpg; full-size frames, 3 per line, VMQ_TILE=
+width). Missing shots become grey tiles."""
 import sys, os, re
 
 def wp(path):   # Windows python under Git Bash (4080 rig): /c/... -> c:/...
@@ -59,7 +60,8 @@ def main():
         for r, items in rows:
             w = r.split()
             name = 'final-%s-zoom%s.jpg' % (w[0], w[-1]) if len(w) >= 3 and w[1] == 'zoom' else r.replace(' ', '-') + '.jpg'
-            sheet(os.path.join(split, name), [(r, items)], len(items), 800)
+            # full-resolution frames (Shay 2026-10-09: sheets must be judgeable), 3 per line
+            sheet(os.path.join(split, name), [(r, items)], min(3, len(items)), int(os.environ.get('VMQ_TILE', '1602')))
     print(out)
 
 main()

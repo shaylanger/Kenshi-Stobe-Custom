@@ -129,8 +129,26 @@ if sys.argv[2]=='zo':
             if c: bad.setdefault(k,[]).append('%d:%s'%(i,r['st']))
     N=len(Z); fails={k:v for k,v in bad.items() if len(v)>0.03*N}
     ok=N>=30 and not fails
-    print("ok=%d zo_frames=%d zf_max=%.2f head_min=%.2f torso_min=%.2f vis_min=%.3f pts_min=%d wb_max=%.1f elb_max=%.2f bad=%s" % (ok,N,mx['zf'],mn['hd'],
-          mn['tor'],mn["vis"],mn["npt"],mx["wb"],mx['elb'],','.join('%s:%d/%d@%s'%(k,len(v),N,v[0]) for k,v in sorted(bad.items())) or 'none'))
+    # sword arm motion (m78, Shay: at zoom 25 block / swings showed no animation, right arm hanging at the hip: wrist-minus-
+    # shoulder stayed at one value through the block, each swing lasted 2 frames): per block run (st blocking) and per swing
+    # run (swing flag), the max displacement of the right wrist relative to the right shoulder from the mean of the last 5
+    # ready frames before it; every segment must reach ARM_MIN (1.0 dm), the RESULT prints the per-segment values
+    AMIN=float(os.environ.get('ARM_MIN','1.0')); arm=[]; ready=[]; seg=None
+    def rel(r): return sub(r['j'][5],r['j'][3])
+    for r in Z+[None]:
+        k=None if r is None or r['cls']!=0 else ('blk' if r['st']=='blocking' else 'sw' if r['sw'] else None)
+        if seg and k!=seg[0]:
+            ref=seg[2]; arm.append((seg[0],max(ln(sub(x,ref)) for x in seg[1]),len(seg[1]))); seg=None
+        if r is None: break
+        if k and seg is None and ready:
+            R=ready[-5:]; seg=(k,[],mul((sum(x[0] for x in R),sum(x[1] for x in R),sum(x[2] for x in R)),1.0/len(R)))
+        if k and seg: seg[1].append(rel(r))
+        if r['cls']==0 and r['st']=='ready' and not r['sw']: ready.append(rel(r))
+    if any(r['cls']==0 for r in Z):
+        if not arm or any(a[1]<AMIN for a in arm): ok=False
+    atxt=(' arm=%s(min %.1f)'%(','.join('%s%.2f/%df'%(a[0],a[1],a[2]) for a in arm) or 'none',AMIN)) if any(r['cls']==0 for r in Z) else ''
+    print("ok=%d zo_frames=%d zf_max=%.2f head_min=%.2f torso_min=%.2f vis_min=%.3f pts_min=%d wb_max=%.1f elb_max=%.2f bad=%s%s" % (ok,N,mx['zf'],mn['hd'],
+          mn['tor'],mn["vis"],mn["npt"],mx["wb"],mx['elb'],','.join('%s:%d/%d@%s'%(k,len(v),N,v[0]) for k,v in sorted(bad.items())) or 'none',atxt))
     sys.exit(0)
 F=[r for r in F if r['zoom']<0.5]   # zoom-0 checks: the viewmodel frames only
 def remap(c,a,b,pos):
@@ -490,13 +508,35 @@ vmrec() { local f="$KDIR/vmrec-$1.txt"; rm -f "$f"; A fp_vm rec dump "vmrec-$1.t
 SHOTD=${SHOTD:-$KDIR/mods/AutomationHarness/shots}; SHEETPY=${SHEETPY:-$(dirname "$0")/vm-sheet.py}; MAN="$OUT/vmq-manifest.tsv"
 snap() { local p; p=$(A screenshot "vmq-$2" | grep -oE '[^ ]*\.png' | head -1); printf '%s\t%s\t%s\n' "$1" "$3" "$SHOTD/vmq-$2.png" >> "$MAN"; }
 moving() { A fp_move w "${1:-1500}" >/dev/null; }
+# every segment starts on one open-ground spot of the FP-crossbow fixture outside the walled base, facing yaw 0 (+z) with
+# a level look (Shay 2026-10-09: every sheet so far had the char next to a wall, the blade hidden; the walk drifts by
+# run), then a clearance check: 13 horizontal rays (-90..90 deg around the facing, 15 deg steps) at 1.6 m above the
+# ground must not hit anything within VMQ_CLEAR game units (100 = 10 m; ground rises ~16 m ahead) or the row
+# setup_fails (VMQ_SPOT=0: off; VMQ_SPOT_P="x y z" another spot)
+vmq_spot() { [ "${VMQ_SPOT:-1}" = 1 ] || return 0; local p r x y z a d bad=""
+  p=${VMQ_SPOT_P:-"-54100 669.2 7300"}; read -r x y z <<<"$p"
+  r=$(A teleport "$SH" $p); grep -q 'moved=1' <<<"$r" || setup_fail "VMQUICK teleport $SH $p: $(cut -c1-120 <<<"$r")"; sleep 1; look 0 0.05
+  # the spot is outside the base walls: roaming raiders came in during the m78 f7 run (Hungry Bandit -> Axima)
+  r=$(sweep); [ "${r:-0}" -gt 0 ] 2>/dev/null && { note "SETUP VMQUICK spot raid sweep: knocked out $r"; sleep 2; }
+  for a in -90 -75 -60 -45 -30 -15 0 15 30 45 60 75 90; do
+    d=$(A fp_camera ray "$x" "$(awk -v y="$y" 'BEGIN{print y+16}')" "$z" $(awk -v a="$a" 'BEGIN{t=a*3.14159265/180; printf "%.4f 0 %.4f", sin(t), cos(t)}') "${VMQ_CLEAR:-100}" | grep -o 'd=[0-9.]*' | cut -d= -f2)
+    [ -n "$d" ] && bad+=" ${a}deg:$d"; done
+  [ -z "$bad" ] || setup_fail "VMQUICK spot $p not clear within ${VMQ_CLEAR:-100} (hits$bad)"; note "VMQUICK spot $p clear (13 rays, ${VMQ_CLEAR:-100})"; }
 vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
+  vmq_spot
   zoom "$Z" || note "SETUP VMQUICK zoom $Z failed (actual_distance=$(cam actual_distance))"
+  # zoomed out: camera yawed round to the side/front (fp_camera orbit, the body keeps facing +z): seen from behind the
+  # arm and weapon motion is hidden by the body
+  [ "$Z" = 0 ] || A fp_camera orbit "${VMQ_ORBIT:-2.36}" >/dev/null
   draw_to 0; sleep 0.6; look "$(cam yaw)" 0.05; A fp_vm rec on >/dev/null; sleep 0.3
   rkey; sleep 0.15; snap "$row" "$t-draw" draw
   if [ "$W" = crossbow ]; then waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" ready
     moving 1600; sleep 0.7; snap "$row" "$t-walk" walk; sleep 1; A fp_move none >/dev/null; sleep 0.4
-    waitf 10 csis loaded 1; mdown right; waitf 5 vm_is aiming; sleep 0.8; snap "$row" "$t-aim" aim
+    # a fresh fixture bow is unloaded (m78 f7: ammo=0, the RMB ran the reload, every aim/fire/reload tile was wrong):
+    # prime it with one RMB reload first, the aim/fire/reload tiles need a loaded bow
+    waitf 10 csis loaded 1 || { note "SETUP VMQUICK $t bow not loaded (ammo=$(cs ammo)): priming reload"; mdown right; waitf 15 csis loaded 1; mup right
+      waitf 6 vm_is ready; sleep 0.8; csis loaded 1 || setup_fail "VMQUICK $t crossbow would not load (ammo=$(cs ammo) reloading=$(cs reloading))"; }
+    mdown right; waitf 5 vm_is aiming; sleep 0.8; snap "$row" "$t-aim" aim
     mclick left 60; snap "$row" "$t-fire" fire; waitf 4 vm_is reloading; sleep 1.2; snap "$row" "$t-reload" reload
     sleep 2; snap "$row" "$t-reload2" "reload 2"; waitf 10 vm_is aiming; mup right; sleep 0.8
   else waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" ready
@@ -515,7 +555,7 @@ vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
   rkey; sleep 0.12; snap "$row" "$t-holster" holster; sleep 2.2
   A fp_vm rec off >/dev/null; r=$(vmrec "q-$t" "$([ "$Z" = 0 ] && { [ "$W" = crossbow ] && echo xbow || echo seg; } || echo zo)")
   VQR+=" $t: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
-  [ "$Z" = 0 ] || { [ "$W" = crossbow ] && P29X=$r || P29S=$r; }; }
+  [ "$Z" = 0 ] || { A fp_camera orbit 0 >/dev/null; [ "$W" = crossbow ] && P29X=$r || P29S=$r; }; }
 P29X=""; P29S=""
 if want VMQUICK; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
   [ "${VMQ_BEFORE:-0}" = 1 ] && { A fp_vm set wfix 0 >/dev/null; A fp_vm set zfade 0 >/dev/null; }
