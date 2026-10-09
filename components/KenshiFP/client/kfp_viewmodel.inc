@@ -201,7 +201,8 @@ static int   g_vm_elb_la = 1, g_vm_elb_lah = 8, g_vm_fut_n, g_vm_la_n, g_vm_la_c
 static float g_vm_elb_lama = 12.0f, g_vm_elb_lawm = 0.1f, g_vm_sw_ur;
 static VmPose g_vm_fut[VM_LAH]; static Vec3 g_vm_la_e[VM_LAH][VM_LAA * 7]; static float g_vm_la_cc[VM_LAH][VM_LAA * 7];
 static Vec3  g_vm_rbe = { -0.740f, -0.546f, 0.392f };   /* PT30-FLIP: swing-ready elbow branch, output-pose frame (f,u,f x u) */
-static float g_vm_rbw = 2.0f, g_vm_rbwr = 0.5f;          /* its weight in the elbow pick while drawing / at ready (0 = off) */
+static float g_vm_rbw = 0.5f, g_vm_rbwr = 0.5f;          /* its weight in the elbow pick while drawing / at ready (0 = off); 2.0 while
+                                                          * drawing spun the blade ~260 deg over 0.6 s after every draw (m78 f8) */
 static int   g_vm_wrlwarm = 1;   /* roll refinement starts from last frame's roll (PT30) */
 static float g_vm_wrl = 2.2f, g_vm_wrlmin = 2.6f, g_vm_wrllag = 6.0f, g_vm_rs, g_vm_rsv, g_vm_rs_lag; static int g_vm_have_rs;   /* roll jerk limit (0 = off) */
 static unsigned g_vm_pk[4];   /* wrist picks: within the rate step, 2x, 4x, anywhere */   /* + max pick speed deg/s, max cone offset deg */   /* wrist fix: weight of the previous elbow in the straight-wrist pick (no flips) */
