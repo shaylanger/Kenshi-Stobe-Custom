@@ -60,3 +60,10 @@ static void make_mstr(unsigned char *b32, const char *s) { memset(b32, 0, 32); s
 static void *make_mstr_long(unsigned char *b32, const char *s) { make_mstr(b32, s); return b32; }
 static int install_hook(void *t, void *d, void **o) { (void)t; (void)d; (void)o; return 1; }
 static int char_position(void *c, Vec3 *out);
+
+/* scene-node map (KenshiFP X1 "mapnode", newer sources): the body entity's scene node. Offline world = skeleton
+ * space, so the node is the identity (wired in kfpvm_replay.c). Unused by older sources. */
+typedef Quat *(*node_getdori_t)(void *node, Quat *ret); static node_getdori_t g_node_getdori_v;
+typedef Vec3 *(*node_getdvec_t)(void *node, Vec3 *ret); static node_getdvec_t g_node_getdpos_v, g_node_getdscale_v;
+typedef void *(*get_parent_scenenode_t)(void *movable); static get_parent_scenenode_t g_get_parent_scenenode;
+static int g_anim_ent_off = -1;

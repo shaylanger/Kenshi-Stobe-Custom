@@ -17,5 +17,6 @@ for p in "${PATCHES[@]}"; do case "$p" in
   *.py) python3 "$p" "$B/client" ;;
   *) (cd "$B" && patch -s -p1 < "$p") ;; esac; done
 python3 "$HERE/extract_helpers.py" "$B/client/kenshifp_client.c" "$B/gen_helpers.h" quat_mul quat_conj quat_norm quat_slerp quat_rotvec
-gcc -O2 -std=gnu11 -w -I"$B" -I"$B/client" -I"$HERE" -o "$OUT" "$HERE/kfpvm_replay.c" -lm
+DEFS=""; grep -q "g_vm_elb_cb" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ELB_CB"
+gcc -O2 -std=gnu11 -w $DEFS -I"$B" -I"$B/client" -I"$HERE" -o "$OUT" "$HERE/kfpvm_replay.c" -lm
 echo "built $OUT"
