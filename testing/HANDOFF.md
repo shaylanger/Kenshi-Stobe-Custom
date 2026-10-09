@@ -3,7 +3,17 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-08 ~23:40, m76 successor): FP viewmodel deferred sweep DONE, nothing running
+## Right now (2026-10-08 m77): PT17 viewmodel rework DONE, nothing running
+- **PT17 final KenshiFP 0750f26a** (/root/KenshiFP 04bf8c2, local, unpushed like the 60 before it; snapshot 25748e5):
+  sword + crossbow near-plane cuts 423/247 -> 0. 5090 run on 0750f26a: PT13/14/26/27/29/30 PASS (PT30 cut=0 both).
+  PT28 fire step FAIL twice on the 5090: native combat `why=no_focus` (game_has_focus/GUI focus/held modifier) while
+  the desktop was in use; not this build (delta = sword low pose; PT28 PASS on the 4080). Open: rerun PT28 unattended.
+- Installed: 5090 KenshiFP **0750F26A**, Stobe 85A731C7, harness FA9C3EFB; 4080 KenshiFP BDE84F7F, harness 24BE3AEC.
+  **4080 Windows Defender quarantines 0750f26a** (ML false positive, ThreatID 2147731849): needs Shay's exclusion
+  decision (C:\KAH + Kenshi mods folder); the permission checker blocks agents from Defender work.
+- Rigs: both Kenshi closed, locks free; 5090 gfx mods on + full screen restored. Sheets `C:\KenshiTestRuns\vm-rework\pt17-*.jpg`.
+
+## Earlier (2026-10-08 ~23:40, m76 successor): FP viewmodel deferred sweep DONE
 - **Shay (m75): run every 4080 + 5090 step truly in parallel** (two background jobs at once; memory `parallel-rigs`).
 - **Sweep on final DLL KenshiFP C2692485: every row PASS** (PT11/13/14/18/25/26/27/28/29/30/31 + sword/crossbow
   holds, fire, zoom-out, draw/holster). All FAILs were test bugs, fixed in `fp-viewmodel.sh`: vm_on = great-circle angle
