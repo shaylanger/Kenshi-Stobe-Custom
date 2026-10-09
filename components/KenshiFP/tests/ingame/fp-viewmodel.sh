@@ -49,7 +49,7 @@ SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}
 KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; PY=${PY:-python3}; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
 STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
 ROWS=${ROWS:-"PT13 PT14 PT26 PT27 PT28 PT29 PT30"}; ROWS=${ROWS//,/ }
-mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
+mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"; rm -f "$LOG.sweepc"
 cat > "$OUT/vmcheck.py" <<'VMCHECK'
 import sys, math, os
 # vmcheck.py <rec.txt> <xbow|sword|seg|swing|zo>: every-frame viewmodel check of an fp_vm rec dump (PT30); seg = sword without the draw+holster pair (VMQUICK splits around the frozen poses). Prints one line:
@@ -251,9 +251,18 @@ SLOG=${SLOG:-$KDIR/RE_Kenshi/mods/Stobe/stobe.log}; STOBELIB=${STOBELIB:-/mnt/c/
 RAID_RE=${RAID_RE:-Band of Bones|Kral.s Chosen|Dust Bandits|Hungry Bandits|Starving Bandits|Hill Marauders|Black Dragon Ninjas|Berserkers|Cannibals|Fogmen}
 RAID_FILTER=${RAID_FILTER:-[band of bones]|[kral|[dust bandits]|[hungry bandits]|[starving bandits]|[hill marauders]|[black dragon ninjas]|[berserkers]|[cannibals]|[fogmen]}
 KEEP=""; KEEPN=(); RAIDG=""; SL0=0; SHN=""; MTN=""   # KEEPN: grep -e args for kept attackers ($TG, PT10 far NPC)
-sweep() { local lines h n=0
-  lines=$(stobe-auto chars 1500 "$RAID_FILTER" 2>/dev/null | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n' | sed 's/^ *//' \
-    | grep -E "\[(${RAID_RE})\]" | grep -v -E ' (KO|DEAD)( |$)' | grep -v -E "^(${SH}|${MT}) #")
+# raiders_near [x z r]: live (not KO/dead) raider lines; with x z r only those within r of (x,z), else within 1500 of the
+# player (`chars` measures from the first squad member, Shay at the base, so a far capture spot gets x z r: m78 f7b a
+# Dust Bandit outside the 1500 circle around Shay attacked Axima at the VMQUICK spot)
+raiders_near() { local cr=1500; [ -n "$3" ] && cr=4000
+  stobe-auto chars "$cr" "$RAID_FILTER|!ko|!dead" 2>/dev/null | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n' | sed 's/^ *//' \
+    | grep -E "\[(${RAID_RE})\]" | grep -v -E ' (KO|DEAD)( |$)' | grep -v -E "^(${SH}|${MT}) #" \
+    | { if [ -n "$3" ]; then awk -v x="$1" -v z="$2" -v r="$3" '{ if (match($0,/pos=[-0-9.]+,[-0-9.]+,[-0-9.]+/)) {
+          split(substr($0,RSTART+4,RLENGTH-4),p,","); d=sqrt((p[1]-x)^2+(p[3]-z)^2); if (d<r) printf "%s sd=%.0f\n", $0, d } }'; else cat; fi; }; }
+# sweep: knock out raiders near the player, or (file $LOG.sweepc = "x z r", written by vmq_spot) near the capture spot
+sweep() { local lines h n=0 cx="" cz="" cr=""
+  [ -r "$LOG.sweepc" ] && read -r cx cz cr < "$LOG.sweepc"
+  lines=$(raiders_near $cx $cz $cr)
   for h in $(grep -oE '#[0-9]+/[0-9]+' <<<"$lines"); do case " $KEEP " in *" $h "*) continue;; esac
     stobe-auto ko "$h" 21600 >/dev/null 2>&1 && n=$((n+1)); done; echo "$n"; }
 slog_n() { [ -r "$SLOG" ] && wc -l < "$SLOG" || echo 0; }
@@ -513,17 +522,27 @@ moving() { A fp_move w "${1:-1500}" >/dev/null; }
 # run), then a clearance check: 13 horizontal rays (-90..90 deg around the facing, 15 deg steps) at 1.6 m above the
 # ground must not hit anything within VMQ_CLEAR game units (100 = 10 m; ground rises ~16 m ahead) or the row
 # setup_fails (VMQ_SPOT=0: off; VMQ_SPOT_P="x y z" another spot)
-vmq_spot() { [ "${VMQ_SPOT:-1}" = 1 ] || return 0; local p r x y z a d bad=""
+vmq_spot() { [ "${VMQ_SPOT:-1}" = 1 ] || return 0; local p r x y z a d bad="" fy=${1:-0}
   p=${VMQ_SPOT_P:-"-54100 669.2 7300"}; read -r x y z <<<"$p"
-  r=$(A teleport "$SH" $p); grep -q 'moved=1' <<<"$r" || setup_fail "VMQUICK teleport $SH $p: $(cut -c1-120 <<<"$r")"; sleep 1; look 0 0.05
-  # the spot is outside the base walls: roaming raiders came in during the m78 f7 run (Hungry Bandit -> Axima)
-  r=$(sweep); [ "${r:-0}" -gt 0 ] 2>/dev/null && { note "SETUP VMQUICK spot raid sweep: knocked out $r"; sleep 2; }
+  r=$(A teleport "$SH" $p); grep -q 'moved=1' <<<"$r" || setup_fail "VMQUICK teleport $SH $p: $(cut -c1-120 <<<"$r")"; sleep 1; look "$(awk -v d="$fy" 'BEGIN{printf "%.4f", d*3.14159265/180}')" 0.05
+  # the spot is outside the base walls: roaming raiders came in during the m78 f7/f7b runs (Hungry/Dust Bandit -> Axima).
+  # An attack on the squad since the last segment fails the row (the first segment: since setup, before the spot sweep,
+  # ignored); raiders within VMQ_SWEEP_R (1500) of the spot are knocked out (also by the 10 s background sweep from now
+  # on), then any live raider within VMQ_HOSTILE_R (1000 = 100 m) of the spot is a setup_fail
+  if [ -n "$VQSPOT1" ]; then r=$(hostile_hit); [ -z "$r" ] || setup_fail "hostile attacked the squad during the previous VMQUICK segment ($r)"; fi
+  VQSPOT1=1; echo "$x $z ${VMQ_SWEEP_R:-1500}" > "$LOG.sweepc"
+  r=$(sweep); [ "${r:-0}" -gt 0 ] 2>/dev/null && { note "SETUP VMQUICK spot raid sweep: knocked out $r"; sleep 2; r=$(sweep); }
+  r=$(raiders_near "$x" "$z" "${VMQ_HOSTILE_R:-1000}" | cut -c1-70 | tr '\n' ';')
+  [ -z "$r" ] || setup_fail "VMQUICK spot $p: live raiders within ${VMQ_HOSTILE_R:-1000} after the sweep: $r"
+  SL0=$(slog_n)
   for a in -90 -75 -60 -45 -30 -15 0 15 30 45 60 75 90; do
-    d=$(A fp_camera ray "$x" "$(awk -v y="$y" 'BEGIN{print y+16}')" "$z" $(awk -v a="$a" 'BEGIN{t=a*3.14159265/180; printf "%.4f 0 %.4f", sin(t), cos(t)}') "${VMQ_CLEAR:-100}" | grep -o 'd=[0-9.]*' | cut -d= -f2)
+    d=$(A fp_camera ray "$x" "$(awk -v y="$y" 'BEGIN{print y+16}')" "$z" $(awk -v a="$a" -v fy="$fy" 'BEGIN{t=(a+fy)*3.14159265/180; printf "%.4f 0 %.4f", sin(t), cos(t)}') "${VMQ_CLEAR:-100}" | grep -o 'd=[0-9.]*' | cut -d= -f2)
     [ -n "$d" ] && bad+=" ${a}deg:$d"; done
   [ -z "$bad" ] || setup_fail "VMQUICK spot $p not clear within ${VMQ_CLEAR:-100} (hits$bad)"; note "VMQUICK spot $p clear (13 rays, ${VMQ_CLEAR:-100})"; }
 vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
-  vmq_spot
+  # zoomed out: the body faces the base (yaw 180) so the camera orbited round to its front looks out over open ground
+  # (m78 f8: facing +z the zoom-25 frames had the base wall in the background)
+  vmq_spot "$([ "$Z" = 0 ] && echo 0 || echo "${VMQ_ZO_YAW:-180}")"
   zoom "$Z" || note "SETUP VMQUICK zoom $Z failed (actual_distance=$(cam actual_distance))"
   # zoomed out: camera yawed round to the side/front (fp_camera orbit, the body keeps facing +z): seen from behind the
   # arm and weapon motion is hidden by the body
