@@ -100,7 +100,10 @@ static int   g_vm_phase; static float g_vm_ph_t, g_vm_wl, g_vm_lower_dur = 0.30f
 static VmPose g_vm_low[2] = {
     { { 1.6f,-5.0f, 2.0f }, { -0.20f,-0.75f, 0.63f }, { -0.5f, 0.0f, 0.85f } },   /* sword: grip + blade below the view (deep, blade
                                                                                  * down: the native draw blade points forward, its tip flashed in at y/z -0.55, s8 71) */
-    { { 1.5f,-4.0f, 2.0f }, { -0.20f,-0.60f, 0.77f }, {  0.0f, 1.0f, 0.0f } } };  /* crossbow */
+    { { 1.5f,-4.5f, 4.4f }, { -0.20f,-0.60f, 0.77f }, {  0.0f, 1.0f, 0.0f } } };  /* crossbow: below the view at the ready depth
+                                                                                 * (PT17: at z 2.0 the hand sat behind the 3 dm near clip while the bow
+                                                                                 * rose into view = a bow floating without a hand; now the draw/holster
+                                                                                 * is a straight rise/drop with the hand in front of the plane) */
 static float g_vm_kick_t = -1.0f, g_vm_kick_rise = 0.06f;   /* fire kick: time since the shot; rise (ease-out) then smooth return */
 static float g_vm_rl_t; static float g_vm_rl_per = 1.3f, g_vm_rl_amp = 1.0f;  /* reload: time in reload, spanning cycle period (amp 1.6 dipped the hand behind the HUD) */
 /* ranged near-plane routing: while the current grip and the target grip lie on different sides of the near clip (zc),
@@ -1000,7 +1003,7 @@ static int vm_rec_dump(const char *path)
 /* ---- tuning ---- */
 static float *vm_vec_field(Vec3 *v, char c) { return c == 'x' ? &v->x : c == 'y' ? &v->y : c == 'z' ? &v->z : NULL; }
 /* keys: <m|r>_<state>_<p|f|u><x|y|z>, sw<1..4>_<p|f|u><x|y|z>, swu<1..4>, ax_<m|r>_<f|u>, hand_<m|r>,
- * rest_<xyz>, sup_<xyz>, pole<m|r><L|R>_<xyz>, fire_hold, offnear, aimdist, tau, taurl, tauw, twist, sw_dur, sw_pose, kick_pose,
+ * low_<m|r>_<p|f|u><x|y|z>, rest_<xyz>, sup_<xyz>, pole<m|r><L|R>_<xyz>, fire_hold, offnear, aimdist, tau, taurl, tauw, twist, sw_dur, sw_pose, kick_pose,
  * kick_<xyz>, kick_up, swlog */
 static float *vm_pose_field(VmPose *p, const char *k)   /* k = "px" etc */
 {
@@ -1015,7 +1018,8 @@ static int vm_set(const char *k, float x)
         int c = k[0] == 'r';
         for (int i = 0; i < VM_NT; i++) { size_t n = strlen(g_vm_tname[i]);
             if (!strncmp(k + 2, g_vm_tname[i], n) && k[2+n] == '_') { fp = vm_pose_field(&g_vm_pose[c][i], k + 3 + n); break; } }
-    } else if (!strncmp(k, "sw", 2) && k[2] >= '1' && k[2] <= '0' + VM_SWK && k[3] == '_') fp = vm_pose_field(&g_vm_swk[k[2]-'1'], k + 4);
+    } else if (!strncmp(k, "low_", 4) && (k[4] == 'm' || k[4] == 'r') && k[5] == '_') fp = vm_pose_field(&g_vm_low[k[4] == 'r'], k + 6);
+    else if (!strncmp(k, "sw", 2) && k[2] >= '1' && k[2] <= '0' + VM_SWK && k[3] == '_') fp = vm_pose_field(&g_vm_swk[k[2]-'1'], k + 4);
     else if (!strncmp(k, "swu", 3) && k[3] >= '1' && k[3] <= '0' + VM_SWK && !k[4]) fp = &g_vm_swk_u[k[3]-'0'];
     else if (!strncmp(k, "ax_", 3) && (k[3] == 'm' || k[3] == 'r') && k[4] == '_' && (k[5] == 'f' || k[5] == 'u')) {
         int c = x < 0 ? -(int)(-x + 0.5f) : (int)(x + 0.5f); if (c == 0 || c < -3 || c > 3) return 0;
