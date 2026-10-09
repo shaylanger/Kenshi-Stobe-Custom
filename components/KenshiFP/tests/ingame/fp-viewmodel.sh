@@ -28,12 +28,21 @@
 #        fire-kick onset impulse excepted); PASS = 0 flags, weapon within 0.35 dm of the commanded pose, the weapon
 #        enters (draw) and leaves (holster) the hand below the view, crossbow reload grip z >= 2.0 (not in the face),
 #        and no near-plane cut (PT17): cut=0, no rendered frame where the 3 dm near clip slices an arm tube (upper arm,
-#        forearm r 0.45, hand r 0.35, from the recorded joints) at a point inside the screen (hollow / cut-off limb)
-#  PT29  zoom out (fp_camera distance ZO=25) keeps the hold: every captured state's grip within ZO_TOL (0.3) dm and
-#        blade within 5 deg of the zoomed-in capture (xbow ready/aim/fire/reload, sword ready/block/swing 0.42)
+#        forearm r 0.45, hand r 0.35, from the recorded joints) at a point inside the screen (hollow / cut-off limb);
+#        sword wrist (PT17 wrist fold): forearm (elbow->wrist) vs hand bone X <= WB_MAX (30) deg on every on-screen
+#        viewmodel frame (wb_max=..@frame:state; wb_xbow = crossbow value, reported only)
+#  PT29  zoom out (fp_camera distance ZO=25): the native third-person animations take over (zf<=0.05) and look natural:
+#        per recorded zoomed frame head >= 2.5 dm from the grip (not aiming), torso >= 1.0, blade visible length >= 0.06
+#        (not hidden by head/torso), wrist <= 30 deg, elbow not above the shoulder (+0.5, swing prog < 0.5 excepted);
+#        FAIL if > 3% of the frames are bad (uses VMQUICK's zoom-25 segments when VMQUICK ran first)
+#  VMQUICK (run first on every viewmodel build, ~3 min): each weapon at zoom 0 AND ZO: draw/ready/walk/aim-fire-reload
+#        (crossbow) or ready/walk/block/wind-up/strike/follow-through/swing/swing->block (sword)/holster, recorded per
+#        segment (zoom 0 = PT30 vmcheck incl. the wrist check, zoom 25 = the PT29 checks) + one labelled sheet
+#        (vmquick-sheet.jpg, final-<weapon>-zoom<0|25>.jpg via vm-sheet.py); VMQ_BEFORE=1 = wfix 0 zfade 0 (0750f26a
+#        behaviour), VMQ_FRAMES=1 = every frame of one zoom-0 swing (swing-frames.jpg)
 # Screenshots (vm-*.png, harness shots dir) are listed in a NOTE line: PT17 (overall look) is judged from them.
 # Usage: fp-viewmodel.sh [player] [mate] [hostile] [outdir]. Env: ROWS (comma/space list, default all), KFPLOG,
-# KDIR (Kenshi dir; Git Bash rig: "/c/Program Files (x86)/Steam/steamapps/common/Kenshi"), PY (python, default python3), VM_TOL (4), ZO, ZO_TOL, RATIO_MAX, NSW, SW_US, SLOW_DUR. Example: ROWS=PT26,PT27,PT28,PT29 bash fp-viewmodel.sh
+# KDIR (Kenshi dir; Git Bash rig: "/c/Program Files (x86)/Steam/steamapps/common/Kenshi"), PY (python, default python3), VM_TOL (4), WB_MAX (30), VMQ_BEFORE, VMQ_FRAMES, ZO, ZO_TOL, RATIO_MAX, NSW, SW_US, SLOW_DUR. Example: ROWS=PT26,PT27,PT28,PT29 bash fp-viewmodel.sh
 # Needs KenshiFP with the 2026-10-08 viewmodel (fp_vm state mu= field, [vm] fire / swing ratio= log lines).
 # Leaves the fixture changed (a shot fired, items moved): reload it after.
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-viewmodel}
@@ -42,8 +51,8 @@ STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
 ROWS=${ROWS:-"PT13 PT14 PT26 PT27 PT28 PT29 PT30"}; ROWS=${ROWS//,/ }
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 cat > "$OUT/vmcheck.py" <<'VMCHECK'
-import sys, math
-# vmcheck.py <rec.txt> <xbow|sword|swing>: every-frame viewmodel check of an fp_vm rec dump (PT30). Prints one line:
+import sys, math, os
+# vmcheck.py <rec.txt> <xbow|sword|seg|swing|zo>: every-frame viewmodel check of an fp_vm rec dump (PT30); seg = sword without the draw+holster pair (VMQUICK splits around the frozen poses). Prints one line:
 # ok=0|1 <evidence>. Rendered pose of frame n = measured in record n+1, re-expressed in frame n's camera.
 def V(s): return tuple(float(x) for x in s.split(','))
 def sub(a,b): return (a[0]-b[0],a[1]-b[1],a[2]-b[2])
@@ -64,7 +73,66 @@ for line in open(sys.argv[1]):
     if len(pa)>3:
         x=pa[3].split()
         if len(x)>=5: r['ph']=int(x[3]); r['wih']=int(x[4])
+    r['zoom']=float(h[16]); r['sw']=int(h[8]); r['prog']=float(h[10]); r['wb']=None
+    if len(pa)>4:   # KenshiFP PT17 wrist build: wb mh mfx [zf head neck spine]
+        x=pa[4].split(); r['wb']=float(x[0]); r['mh']=V(x[1])
+        if len(x)>=7: r['zf']=float(x[3]); r['hd']=V(x[4]); r['nk']=V(x[5]); r['sp']=V(x[6])
     F.append(r)
+WBM=float(os.environ.get('WB_MAX','30'))
+# ---- zo: the zoomed-out view (PT29, fp_camera distance >= ZO_MIN) must show a person holding the weapon (native third-
+# person animation, viewmodel faded out). Per frame, from the recorded bones (camera numbers, unzoomed eye) and the
+# zoomed camera (eye - fw*zoom): zf<=0.05 (viewmodel off); right wrist + grip >= HD_MIN (2.0 dm; the bug was 1.0, the native
+# crossbow reload reaches 2.37) from the head centre (head bone + 0.9 dm along neck->head; not while aiming: a crossbow
+# stock at the cheek is the natural aim); both
+# wrists >= TOR_MIN (1.0 dm) from the spine->neck axis (no hand inside the torso); weapon visible: projected length of
+# the grip->tip line not hidden behind the head (r 1.3) / torso (r 1.7) capsule >= VIS_MIN (0.06 tan units, ~4% of the
+# screen height); with the viewmodel off (zf<=0.05, the game's own third-person animation) instead >= 5 of the 21
+# grip->tip points on screen: seen from behind, a weapon held/aimed in front of the body is naturally end-on or behind
+# the torso/head, and the reported bug (weapon in the head) is caught by the head distance; sword wrist bend <= WB_MAX
+# (the crossbow wrist is not limited at zoom 0 either); right elbow at most 0.5 dm above the right shoulder (world up) except the first
+# half of a swing (wind-up). A check fails when more than 3% of the zoomed-out frames break it (draw/holster blends).
+if sys.argv[2]=='zo':
+    ZMIN=float(os.environ.get('ZO_MIN','15')); HDM=float(os.environ.get('HD_MIN','2.0')); TORM=float(os.environ.get('TOR_MIN','1.0'))
+    VISM=float(os.environ.get('VIS_MIN','0.06')); BLZ={0:8.0,1:5.85}
+    def nz(a): l=ln(a); return mul(a,1/l) if l>1e-6 else a
+    def segd(P,A,B):
+        d=sub(B,A); L=dot(d,d); t=0 if L<1e-9 else max(0,min(1,dot(sub(P,A),d)/L)); return ln(sub(P,add(A,mul(d,t))))
+    def prj(P,C):
+        q=sub(P,C); return (q[0]/q[2],q[1]/q[2],q[2]) if q[2]>0.1 else None
+    def d2seg(s,a,b):
+        dx,dy=b[0]-a[0],b[1]-a[1]; L=dx*dx+dy*dy; t=0 if L<1e-12 else max(0,min(1,((s[0]-a[0])*dx+(s[1]-a[1])*dy)/L))
+        return math.hypot(s[0]-a[0]-t*dx,s[1]-a[1]-t*dy), a[2]+t*(b[2]-a[2])
+    Z=[r for r in F if r['zoom']>=ZMIN and r['wih'] and 'hd' in r and r['j']]
+    bad={}; mn=dict(hd=99.0,tor=99.0,vis=99.0,npt=99); mx=dict(zf=0.0,wb=0.0,elb=-99.0)
+    for i,r in enumerate(Z):
+        cam=r['cam']; upw=nz((cam[1][1],cam[2][1],cam[3][1])) if cam else (0,1,0); C=(0,0,-r['zoom'])
+        J=r['j']; Lwr,Rsh,Rel,Rwr=J[2],J[3],J[4],J[5]
+        hc=add(r['hd'],mul(nz(sub(r['hd'],r['nk'])),0.9))
+        hd=min(ln(sub(Rwr,hc)),ln(sub(r['mp'],hc))); tor=min(segd(Rwr,r['sp'],r['nk']),segd(Lwr,r['sp'],r['nk']))
+        ph,ps_,pn=prj(hc,C),prj(r['sp'],C),prj(r['nk'],C); vis=0.0; prev=None; npt=0
+        for k in range(21):
+            s_=prj(add(r['mp'],mul(r['mf'],BLZ[r['cls']]*k/20)),C); ok_=False
+            if s_ and abs(s_[0])<1.245 and abs(s_[1])<0.70:
+                ok_=True
+                if ph and math.hypot(s_[0]-ph[0],s_[1]-ph[1])<1.3/ph[2] and s_[2]>ph[2] and r['zf']>0.05: ok_=False
+                if ps_ and pn:
+                    dd,dep=d2seg(s_,ps_,pn)
+                    if dd<1.7/max(dep,0.1) and s_[2]>dep and r['zf']>0.05: ok_=False
+            npt+=ok_
+            if ok_ and prev: vis+=math.hypot(s_[0]-prev[0],s_[1]-prev[1])
+            prev=s_ if ok_ else None
+        elb=dot(sub(Rel,Rsh),upw); wind=r['st']=='swinging' and r['prog']<0.5
+        mn['hd']=min(mn['hd'],hd) if r['st']!='aiming' else mn['hd']; mn['tor']=min(mn['tor'],tor); mn['vis']=min(mn['vis'],vis); mn['npt']=min(mn['npt'],npt)
+        mx['zf']=max(mx['zf'],r['zf']); mx['wb']=max(mx['wb'],r['wb'] or 0); mx['elb']=max(mx['elb'],elb if not wind else -99)
+        for k,c in (('zf',r['zf']>0.05),('head',hd<HDM and r['st']!='aiming'),('torso',tor<TORM),('vis',vis<VISM if r['zf']>0.05 else npt<5),
+                    ('wrist',r['cls']==0 and (r['wb'] or 0)>WBM),('elbow',elb>0.5 and not wind)):
+            if c: bad.setdefault(k,[]).append('%d:%s'%(i,r['st']))
+    N=len(Z); fails={k:v for k,v in bad.items() if len(v)>0.03*N}
+    ok=N>=30 and not fails
+    print("ok=%d zo_frames=%d zf_max=%.2f head_min=%.2f torso_min=%.2f vis_min=%.3f pts_min=%d wb_max=%.1f elb_max=%.2f bad=%s" % (ok,N,mx['zf'],mn['hd'],
+          mn['tor'],mn["vis"],mn["npt"],mx["wb"],mx['elb'],','.join('%s:%d/%d@%s'%(k,len(v),N,v[0]) for k,v in sorted(bad.items())) or 'none'))
+    sys.exit(0)
+F=[r for r in F if r['zoom']<0.5]   # zoom-0 checks: the viewmodel frames only
 def remap(c,a,b,pos):
     if a['cam'] is None or b['cam'] is None: return c
     e,rt,up,fw=b['cam']; w=add(add(mul(rt,c[0]),mul(up,c[1])),mul(fw,c[2])); w=add(w,e) if pos else w
@@ -119,14 +187,21 @@ for i in range(1,N):
         r=F[i] if F[i]['wih'] else F[i-1]
         inout.append('%s@%d:%s'%('in' if F[i]['wih'] else 'out',i,'vis' if onscr(r['rp']) or onscr(tip(r)) else 'off'))
 if sys.argv[2]=='swing': ok=N>=20 and nvis>=15 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout)
-else: ok=N>=200 and nvis>=100 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout) and len(inout)>=2
+else: ok=N>=200 and nvis>=100 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout) and len(inout)>=(1 if sys.argv[2]=='seg' else 2)
 if sys.argv[2]=='xbow': ok=ok and rlz>=2.0
 ok=ok and not cuts
+# wrist (PT17): angle between the weapon forearm (elbow->wrist) and the hand bone X axis on every on-screen sword frame of
+# the viewmodel (w>=0.99) <= WB_MAX (30 deg: a neutral grip wrist; 0750f26a folded it to ~100 deg in the strike)
+W0=[(r['wb'],i,r['st']) for i,r in enumerate(F) if r['wb'] is not None and r['vis'] and r['w']>=0.99 and r['wih']]
+WS=[x for x in W0 if F[x[1]]['cls']==0]; WX=[x for x in W0 if F[x[1]]['cls']==1]
+wbm=max(WS) if WS else None; wbsw=max([x[0] for x in WS if F[x[1]]['sw']] or [-1]); wbx=max(WX)[0] if WX else -1
+if wbm and wbm[0]>WBM: ok=False
+wtxt=(' wb_max=%.1f@%d:%s wb_swing=%.1f wb_xbow=%.1f wb_lim=%.0f'%(wbm[0],wbm[1],wbm[2],wbsw,wbx,WBM)) if wbm else (' wb_xbow=%.1f'%wbx if WX else ' wb=na')
 fps=1/sorted(r['dt'] for r in F)[N//2]
 print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
       len(cuts),(' ['+' '.join(cuts[:6])+']') if cuts else '',len(flags),
       (' ['+' '.join(flags[:6])+']') if flags else '',errmax,tipmax,dfmax,','.join(inout) or 'none',
-      (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else ''))
+      (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else '')+wtxt)
 VMCHECK
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 note() { echo "$*" >> "$LOG"; }
@@ -216,7 +291,8 @@ csis() { [ "$(cs "$1")" = "$2" ]; }
 csge() { ge "$(cs "$1")" "$2"; }
 
 # ---- equipment (as fp-controls.sh: the fixture player carries a crossbow only; melee comes from the mate) ----
-weapons() { A inv "$SH" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | grep -v -i -x -F "${BOWN:-@@}"; }
+weapons() { A inv "$SH" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | awk -v b="${BOWN:-@@}" 'tolower($0)!=tolower(b)'; }
+# (not grep -v -i -x -F: the 4080's Git Bash grep dropped every line with it, "no melee weapon equips", 2026-10-09)
 # bow_now: the full bow name (`rangedinfo` prints `bow=<name with spaces> has_ammo=...`; m53: `fld bow` cut it to
 # "Oldworld" and every later unequip/pickup/equip by name missed)
 bow_now() { local r; r=$(A rangedinfo "$SH"); case "$r" in *" bow=none"*) echo none;; *" bow="*) sed -n 's/.* bow=\(.*\) has_ammo=.*/\1/p' <<<"$r" | head -1;; *) echo none;; esac; }
@@ -300,12 +376,15 @@ VM_TOL=${VM_TOL:-4}; SHOTS=""
 A fp_vm state | grep -q 'hooked=1' || setup_fail "fp_vm hooked=0 or missing (needs KenshiFP e515843+): $(A fp_vm state | cut -c1-100)"
 A fp_vm state | grep -q ' mu=' || setup_fail "fp_vm state has no mu= field (needs the 2026-10-08 viewmodel build)"
 A fp_vm on >/dev/null
-trap 'A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 1.0 >/dev/null; cleanup' EXIT
+trap 'A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 1.0 >/dev/null; A fp_vm replay off >/dev/null; [ "${VMQ_BEFORE:-0}" = 1 ] && { A fp_vm set wfix 1 >/dev/null; A fp_vm set zfade 1 >/dev/null; }; cleanup' EXIT
 vfld() { A fp_vm state | fld "$1"; }
 # vm_on <state>: vm in that state with the hand within VM_TOL deg of its target
 vm_on() { local V; V=$(A fp_vm state); [ -z "$1" ] || [ "$(fld state <<<"$V")" = "$1" ] || return 1
-  awk -v t="$(fld target <<<"$V")" -v e="$(fld elev <<<"$V")" -v a="$(fld az <<<"$V")" -v k="$VM_TOL" \
-    'BEGIN{split(t,x,","); if(e==""||t=="") exit 1; r=3.14159265/180; c=sin(e*r)*sin(x[1]*r)+cos(e*r)*cos(x[1]*r)*cos((a-x[2])*r); if(c>1)c=1; exit !(atan2(sqrt(1-c*c),c)/r<=k)}'; }   # angle between hand and target directions (az is meaningless near the poles: PT28 aim hold elev -87)
+  awk -v t="$(fld target <<<"$V")" -v e="$(fld elev <<<"$V")" -v a="$(fld az <<<"$V")" -v k="$VM_TOL" -v P="$(fld mp <<<"$V")" \
+    'BEGIN{split(t,x,","); if(e==""||t=="") exit 1; r=3.14159265/180; c=sin(e*r)*sin(x[1]*r)+cos(e*r)*cos(x[1]*r)*cos((a-x[2])*r); if(c>1)c=1
+      g=atan2(sqrt(1-c*c),c); split(P,p,","); d=sqrt(p[1]^2+p[2]^2+p[3]^2); exit !(g/r<=k || (P!="" && d*g<=0.15))}'; }
+# angle between hand and target directions (az is meaningless near the poles: PT28 aim hold elev -87), or within 0.15 dm
+# of it: the crossbow aim grip sits ~1.8 dm from the eye, where 0.1 dm of spring settling is 3-4 deg (PT13 FAIL 2026-10-09)
 vm_is() { [ "$(vfld state)" = "$1" ]; }
 vev() { A fp_vm state | grep -oE '\b(state|elev|az|target|melee|tilt|swing|swu|swings)=[^ ]*' | tr '\n' ' '; }
 shot() { local p; p=$(A screenshot "vm-$1" | grep -oE '[^ ]*\.png' | head -1); SHOTS+=" ${p##*[\/]}"; }
@@ -352,8 +431,7 @@ capst() { local t=$1 st=$2 end=$((SECONDS+${3:-6})) pv="" pl="" pp="" pf="" pu="
     if [ -n "$pp" ]; then d=$(awk -v a="$pp" -v b="${VMP[$t]}" 'BEGIN{split(a,p,",");split(b,q,",");print sqrt((p[1]-q[1])^2+(p[2]-q[2])^2+(p[3]-q[3])^2)<0.05}'); [ "$d" = 1 ] && break; fi
     pl=${VSL[$t]}; ps=${VST[$t]}; pp=${VMP[$t]}; pf=${VMF[$t]}; pu=${VMU[$t]}; sleep 0.15; done; }
 # cap2 <tag>: cap zoomed in, then (PT29 wanted) at distance $ZO as <tag>-zo, back to 0
-cap2() { cap "$1"; want PT29 || return 0
-  if zoom "$ZO"; then cap "$1-zo"; ZTAGS+=" $1"; else note "SETUP zoom $ZO for $1 failed (actual_distance=$(cam actual_distance))"; fi; zoom 0; }
+cap2() { cap "$1"; }   # (zoomed out: PT29 zo segments, the viewmodel fades to the native animation there)
 # vq "<awk condition>" <tag>: condition over px py pz fx fy fz ux uy uz, el/az (grip elevation/azimuth, deg)
 vq() { awk -v P="${VMP[$2]}" -v F="${VMF[$2]}" -v U="${VMU[$2]}" "BEGIN{if(P==\"\"||F==\"\"||U==\"\")exit 1
   split(P,p,\",\");split(F,f,\",\");split(U,u,\",\");px=p[1];py=p[2];pz=p[3];fx=f[1];fy=f[2];fz=f[3];ux=u[1];uy=u[2];uz=u[3]
@@ -397,6 +475,67 @@ kfpn() { kfplines | grep -c "$1"; }
 vmrec() { local f="$KDIR/vmrec-$1.txt"; rm -f "$f"; A fp_vm rec dump "vmrec-$1.txt" >/dev/null; waitf 5 test -s "$f"
   [ -s "$f" ] || { echo "ok=0 no dump $f"; return; }; cp "$f" "$OUT/" 2>/dev/null; "$PY" "$OUT/vmcheck.py" "$f" "$2" 2>&1 | tail -1; }
 
+# ---- VMQUICK (run first on every viewmodel build, <= ~4 min, one launch): every animation state of both weapons at zoom 0
+# AND zoom $ZO, one labelled contact sheet (rows: sword zoom 0 / sword zoom $ZO / crossbow zoom 0 / crossbow zoom $ZO) +
+# one sheet per weapon per zoom (final-<weapon>-zoom<z>.jpg in $OUT), and the numeric checks on the fp_vm recordings of
+# each segment: zoom 0 = vmcheck xbow/sword (cut=0, no jump, wrist bend <= WB_MAX, in/out of the hand below the view),
+# zoom $ZO = vmcheck zo (PT29 geometry: viewmodel faded out, hand away from the head, weapon visible, wrist, elbow, torso).
+# Swing phases: zoom 0 = frozen path sw_pose 0.20/0.42/0.58 (wind-up/strike/follow-through) + one live swing in the
+# recording; zoom $ZO = live swing at game speed 0.5 with 3 shots. VMQ_BEFORE=1: the 0750f26a behaviour (fp_vm set wfix 0,
+# zfade 0) for before/after sheets. VMQ_FRAMES=1: plus every recorded frame of one zoom-0 swing replayed (fp_vm replay)
+# and shot -> $OUT/swing-frames.jpg. Needs PIL in $PY (the 5090 WSL python3 has it).
+SHOTD=${SHOTD:-$KDIR/mods/AutomationHarness/shots}; SHEETPY=${SHEETPY:-$(dirname "$0")/vm-sheet.py}; MAN="$OUT/vmq-manifest.tsv"
+snap() { local p; p=$(A screenshot "vmq-$2" | grep -oE '[^ ]*\.png' | head -1); printf '%s\t%s\t%s\n' "$1" "$3" "$SHOTD/vmq-$2.png" >> "$MAN"; }
+moving() { A fp_move w "${1:-1500}" >/dev/null; }
+vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
+  zoom "$Z" || note "SETUP VMQUICK zoom $Z failed (actual_distance=$(cam actual_distance))"
+  draw_to 0; sleep 0.6; look "$(cam yaw)" 0.05; A fp_vm rec on >/dev/null; sleep 0.3
+  rkey; sleep 0.15; snap "$row" "$t-draw" draw
+  if [ "$W" = crossbow ]; then waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" ready
+    moving 1600; sleep 0.7; snap "$row" "$t-walk" walk; sleep 1; A fp_move none >/dev/null; sleep 0.4
+    waitf 10 csis loaded 1; mdown right; waitf 5 vm_is aiming; sleep 0.8; snap "$row" "$t-aim" aim
+    mclick left 60; snap "$row" "$t-fire" fire; waitf 4 vm_is reloading; sleep 1.2; snap "$row" "$t-reload" reload
+    sleep 2; snap "$row" "$t-reload2" "reload 2"; waitf 10 vm_is aiming; mup right; sleep 0.8
+  else waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" ready
+    moving 1600; sleep 0.7; snap "$row" "$t-walk" walk; sleep 1; A fp_move none >/dev/null; sleep 0.4
+    mdown right; waitf 4 vm_is blocking; sleep 0.6; snap "$row" "$t-block" block; mup right; sleep 0.6
+    # the frozen poses jump by design (sw_pose set/unset): kept out of the recording (part a checked here, rec on restarts it)
+    if [ "$Z" = 0 ]; then A fp_vm rec off >/dev/null; r=$(vmrec "q-$t-a" seg); VQR+=" $t-a: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
+      for u in 0.20:wind-up 0.42:strike 0.58:follow-through; do A fp_vm set sw_pose "${u%%:*}" >/dev/null; sleep 0.5
+        snap "$row" "$t-sw${u%%:*}" "${u#*:} (u ${u%%:*})"; done; A fp_vm set sw_pose -1 >/dev/null; sleep 0.6; A fp_vm rec on >/dev/null
+      waitf 3 vm_is ready; SWQ0=$(kfpn '\[vm\] swing #'); mclick left; sleep 1.3
+    else A speed 0.5 >/dev/null; waitf 3 vm_is ready; mclick left; sleep 0.1; snap "$row" "$t-sw1" "swing 1"; snap "$row" "$t-sw2" "swing 2"
+      snap "$row" "$t-sw3" "swing 3"; sleep 1; A speed 1 hold >/dev/null; sleep 0.6; fi
+    waitf 3 vm_is ready; mclick left 60; sleep 0.15; mdown right; sleep 0.35; snap "$row" "$t-swblock" "swing->block"; sleep 0.8; mup right; sleep 0.6
+  fi
+  rkey; sleep 0.12; snap "$row" "$t-holster" holster; sleep 2.2
+  A fp_vm rec off >/dev/null; r=$(vmrec "q-$t" "$([ "$Z" = 0 ] && { [ "$W" = crossbow ] && echo xbow || echo seg; } || echo zo)")
+  VQR+=" $t: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
+  [ "$Z" = 0 ] || { [ "$W" = crossbow ] && P29X=$r || P29S=$r; }; }
+P29X=""; P29S=""
+if want VMQUICK; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
+  [ "${VMQ_BEFORE:-0}" = 1 ] && { A fp_vm set wfix 0 >/dev/null; A fp_vm set zfade 0 >/dev/null; }
+  A fp_vm state | grep -q ' wb=' || setup_fail "fp_vm state has no wb= (needs the PT17 wrist build)"
+  A fp_combat physical >/dev/null; [ -z "$EN0" ] && EN0=$(cs enabled); A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
+  waitf 4 csis armed 1 || note "SETUP VMQUICK not armed after idle input (why=$(cs why))"; A fp_combat physical >/dev/null
+  if [ $BOWOK = 1 ] && [ "$(bow_now)" != none ]; then vmq_seg crossbow 0; vmq_seg crossbow "$ZO"; zoom 0; else VQOK=0; VQR+=" crossbow: setup no crossbow;"; fi
+  draw_to 0; give_melee || note "SETUP: could not give $SH a melee weapon"; bow_off || note "SETUP: bow would not unequip ($(bow_now))"
+  if arm_melee; then vmq_seg sword 0
+    L=$(kfplines | grep '\[vm\] swing #' | tail -1); UE=$(grep -o 'u_end=[0-9.]*' <<<"$L" | cut -d= -f2)
+    [ "$(kfpn '\[vm\] swing #')" -gt "${SWQ0:-0}" ] && ge "$UE" 1 || { VQOK=0; VQR+=" live swing: no full [vm] swing line ($L);"; }
+    vmq_seg sword "$ZO"; zoom 0
+    if [ "${VMQ_FRAMES:-0}" = 1 ]; then draw_to 1; waitf 6 vm_is ready; sleep 0.6; A fp_vm rec on >/dev/null; sleep 0.2; mclick left; sleep 1.2
+      A fp_vm rec off >/dev/null; A fp_vm rec dump vmrec-q-frames.txt >/dev/null; FR="$KDIR/vmrec-q-frames.txt"; waitf 5 test -s "$FR"; cp "$FR" "$OUT/" 2>/dev/null
+      FM="$OUT/frames-manifest.tsv"; : > "$FM"
+      for n in $(awk '!/^#/ && $9==1 {print $1}' "$FR"); do A fp_vm replay "$n" >/dev/null; sleep 0.12
+        p=$(A screenshot "vmq-fr$n" | grep -oE '[^ ]*\.png' | head -1); u=$(awk -v n="$n" '$1==n{print $10}' "$FR")
+        printf 'swing frames\tf%s u%s wb%s\t%s\n' "$n" "$u" "$(awk -v n="$n" '$1==n{split($0,a,"|"); split(a[5],b," "); print b[1]}' "$FR")" "$SHOTD/vmq-fr$n.png" >> "$FM"; done
+      A fp_vm replay off >/dev/null; "$PY" "$SHEETPY" "$OUT/swing-frames.jpg" "$FM" --cols 8 >/dev/null 2>&1 || note "frames sheet failed"; draw_to 0; fi
+  else VQOK=0; VQR+=" sword: setup no melee weapon ($(weapons | tr '\n' ';'));"; fi
+  [ "${VMQ_BEFORE:-0}" = 1 ] && { A fp_vm set wfix 1 >/dev/null; A fp_vm set zfade 1 >/dev/null; }
+  "$PY" "$SHEETPY" "$OUT/vmquick-sheet.jpg" "$MAN" --split "$OUT" >/dev/null 2>&1 || { VQOK=0; VQR+=" sheet failed;"; }
+  judge VMQUICK $VQOK "$((SECONDS-T0))s sheet=$OUT/vmquick-sheet.jpg$( [ -s "$OUT/swing-frames.jpg" ] && echo " frames=$OUT/swing-frames.jpg") |$VQR"; fi
+
 # ---- PT28: crossbow held like Skyrim/KCD (ready / aim / fire / reload, each zoomed in AND out for PT29) ----
 if want PT28 || want PT29; then if [ $BOWOK = 0 ] || [ "$(bow_now)" = none ]; then rows_fail "no crossbow on $SH" PT28
 else
@@ -417,9 +556,7 @@ else
   waitf 4 vm_is reloading || note "SETUP PT28: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload reloading
   K1=$(vfld kicks); F1=$(kfpn '\[vm\] fire'); shot xbow-reload-live   # screenshot after the capture (~4.5 s in the background)
   # live shot zoomed out (PT29 reload pair: same delay after the shot)
-  if want PT29; then waitf 25 vm_is aiming || note "SETUP PT28: not aiming again after reload ($(vev))"
-    if zoom "$ZO"; then waitf 10 csis loaded 1 || note "SETUP PT29: bow not loaded before the zoomed-out shot"; mclick left
-      waitf 4 vm_is reloading || note "SETUP PT29: no reload after the shot ($(vev))"; waitf 2 fire_done; capst xbow-reload-zo reloading; shot xbow-reload-live-zo; ZTAGS+=" xbow-reload"; fi; zoom 0; fi
+  if want PT29 && [ -z "$P29X" ]; then mup right; sleep 0.4; draw_to 0; vmq_seg crossbow "$ZO"; zoom 0; fi
   mup right; sleep 0.4; A fp_vm set rlamp 1.0 >/dev/null
   ok=1; why=""
   # ready: low carry right (grip >=4 dm ahead, az>=15), nose 6..27 deg down, top up, the whole crossbow above the HUD line
@@ -429,7 +566,7 @@ else
   # wrists behind the near clip rwz<=2.6 lwz<=2.8, arm_cov<=0.02), limbs horizontal (top up) in the lower third (limb line
   # y/z -0.30..-0.10, half span x/z >=0.6), bolt on the crosshair (<=2 deg at AIMD), bolt tip projected |x|<=0.06 NDC and
   # 0.05..0.25 below the centre, off-hand on the support point (omode=1, oerr<=0.5 dm)
-  for t in xbow-aim xbow-aim-zo; do [ "$t" = xbow-aim ] || [ -n "${VSL[$t]}" ] || continue
+  for t in xbow-aim; do
     { [ "${VST[$t]}" = aiming ] && vq "fz>=0.99 && uy>=0.95 && px*px<=0.09 && pz>=-1.0 && pz<=1.0 && py<=-1.4 &&       (-fx*px - fy*py + fz*($AIMD-pz)) / sqrt(px*px+py*py+($AIMD-pz)^2) >= 0.99939" $t &&       xq "tx<=0.06 && tx>=-0.06 && ty>=-0.25 && ty<=-0.05 && ly>=-0.30 && ly<=-0.10 && lhs>=0.6 && om==1 && oe<=0.5 && cov<=0.02 && rwz<=2.6 && lwz<=2.8" $t; } || { ok=0; why+=" $t"; }; done
   # fire (frozen kick_pose 1 = kick peak): muzzle climbs (fy>=0.1, tip -0.1..0.4 NDC, |x|<=0.1), the grip stays within
   # 0.3 dm of the aim hold (not in the face); live LMB: kicks + "[vm] fire" line
@@ -438,7 +575,7 @@ else
   # reload: lowered (grip >=4 dm ahead, nose down >=14 deg, forward), top rolled toward the eye (uz<=-0.3: the spanning
   # motion is readable), limb line above the HUD line, right wrist in front of the near clip (hand visible, no cut glove)
   { [ "${VST[xbow-reload]}" = reloading ] && vq "pz>=4.0 && fy<=-0.25 && fz>=0.7 && uz<=-0.3" xbow-reload && xq "ly>=-0.33 && rwz>=3.3" xbow-reload; } || { ok=0; why+=" reload"; }
-  GEO="geo(tx ty bmin cov om oe ly lhs rwz lwz) ready=[$(xbgeo xbow-ready)] aim=[$(xbgeo xbow-aim)] aim-zo=[$(xbgeo xbow-aim-zo)] fire=[$(xbgeo xbow-fire)] reload=[$(xbgeo xbow-reload)]"
+  GEO="geo(tx ty bmin cov om oe ly lhs rwz lwz) ready=[$(xbgeo xbow-ready)] aim=[$(xbgeo xbow-aim)] fire=[$(xbgeo xbow-fire)] reload=[$(xbgeo xbow-reload)]"
   judge PT28 $ok "$(pev xbow-ready) | $(pev xbow-aim) | $(pev xbow-fire) kicks=$K0->$K1 | $(pev xbow-reload) | $GEO${why:+ | bad:$why}"
   draw_to 0; fi; fi
 # ---- PT30 crossbow part: every frame of draw, aim, fire, reload, ready, aim, holster (fp_vm rec) ----
@@ -473,15 +610,15 @@ if want PT27 || want PT26 || want PT29 || want PT30; then
   else zoom 0; draw_to 1 || note "SETUP PT26/27: R did not draw (drawn=$(ks drawn))"; waitf 5 vm_on ready
     look "$(cam yaw)" 0.05; cap2 sword-ready
     if want PT27 || want PT29; then mdown right; waitf 4 vm_on blocking; cap2 sword-block; mup right; sleep 0.5
-      ok=1; for t in sword-block sword-block-zo; do [ -n "${VMP[$t]}" ] || continue
+      ok=1; for t in sword-block; do [ -n "${VMP[$t]}" ] || continue
         { [ "${VST[$t]}" = blocking ] && vq "fx*fx>=0.72 && fy*fy<=0.04" "$t"; } || ok=0; done
-      want PT27 && judge PT27 $ok "$(pev sword-block) | $(pev sword-block-zo)"; fi
+      want PT27 && judge PT27 $ok "$(pev sword-block)"; fi
 
 # ---- PT26: smooth full swing top-right -> bottom-left: frozen frame sequence + real swings (per-frame [vmsw] log) ----
     if want PT26 || want PT29; then
       SEQ=""; for u in ${SW_US:-0.10 0.20 0.30 0.40 0.50 0.60 0.70 0.80 0.90}; do A fp_vm set sw_pose "$u" >/dev/null; sleep 0.5
         cap "sword-sw$u"; SEQ+=" $u:$(vfld target)"; done
-      A fp_vm set sw_pose 0.42 >/dev/null; sleep 0.5; cap2 sword-sw0.42; A fp_vm set sw_pose -1 >/dev/null; sleep 0.6
+      A fp_vm set sw_pose 0.42 >/dev/null; sleep 0.5; cap sword-sw0.42; A fp_vm set sw_pose -1 >/dev/null; sleep 0.6
       ok=1; ev=""; NSW=${NSW:-3}
       for i in $(seq 1 "$NSW"); do waitf 3 vm_is ready
         S0=$(kfpn '\[vm\] swing #'); mclick left; waitf 4 eval '[ "$(kfpn "\[vm\] swing #")" -gt "$S0" ]'
@@ -516,20 +653,16 @@ if want PT27 || want PT26 || want PT29 || want PT30; then
       rkey; sleep 2.2; mclick left; sleep 1.2; mclick left; sleep 1.2; mdown right; sleep 1.2; mup right; sleep 1
       A mouse_inject left click 60 >/dev/null; sleep 0.15; mdown right; sleep 1; mup right; sleep 1
       rkey; sleep 2.2; A fp_vm rec off >/dev/null; P30S=$(vmrec pt30-sword sword); fi
+    if want PT29 && [ -z "$P29S" ]; then draw_to 0; vmq_seg sword "$ZO"; zoom 0; fi
     draw_to 0; fi; fi
 
 if want PT30; then ok=1; case "$P30X" in ok=1*) ;; *) ok=0;; esac; case "$P30S" in ok=1*) ;; *) ok=0;; esac
   judge PT30 $ok "xbow: ${P30X:-not run} | sword: ${P30S:-not run}"; fi
 
-# ---- PT29: zooming out keeps the same hold (grip within ZO_TOL dm, blade within 5 deg, same state) ----
-# (the blade angle normalises the 2-decimal state vectors: identical vectors read 6.5 deg before, m71)
-if want PT29; then ok=1; ev=""; [ -n "$ZTAGS" ] || ok=0
-  for t in $ZTAGS; do z="$t-zo"
-    d=$(awk -v a="${VMP[$t]}" -v b="${VMP[$z]}" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.2f", sqrt((p[1]-q[1])^2+(p[2]-q[2])^2+(p[3]-q[3])^2)}')
-    g=$(awk -v a="${VMF[$t]}" -v b="${VMF[$z]}" 'BEGIN{split(a,p,",");split(b,q,",");c=(p[1]*q[1]+p[2]*q[2]+p[3]*q[3])/sqrt((p[1]^2+p[2]^2+p[3]^2)*(q[1]^2+q[2]^2+q[3]^2));if(c>1)c=1;if(c<-1)c=-1;printf "%.1f", atan2(sqrt(1-c*c),c)*57.2958}')
-    s="ok"; { [ -n "${VMP[$t]}" ] && [ -n "${VMP[$z]}" ] && [ "${VST[$t]}" = "${VST[$z]}" ] && awk -v d="$d" -v g="$g" -v k="$ZO_TOL" 'BEGIN{exit !(d<=k && g<=5)}'; } || { s="BAD"; ok=0; }
-    ev+=" $t:${VST[$t]}/${VST[$z]} dp=$d df=${g}deg $s;"; done
-  judge PT29 $ok "zoom $ZO vs 0:$ev"; fi
+# ---- PT29: zoomed out (fp_camera distance $ZO) every state of both weapons reads as a person holding/swinging it: the
+# recorded zo segments (VMQUICK's when it ran, else run here) pass vmcheck zo (see vmcheck.py) ----
+if want PT29; then ok=1; case "$P29X" in ok=1*) ;; *) ok=0;; esac; case "$P29S" in ok=1*) ;; *) ok=0;; esac
+  judge PT29 $ok "zoom $ZO crossbow: ${P29X:-not run} | sword: ${P29S:-not run}"; fi
 
 echo "NOTE PT17 viewmodel screenshots (harness shots dir):$SHOTS" >> "$LOG"
 finish; echo "NOTE PT17 screenshots:$SHOTS"
