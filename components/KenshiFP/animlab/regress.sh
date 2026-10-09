@@ -1,5 +1,5 @@
 #!/bin/bash
-# regress.sh -- phase-1 (REPLAY) regression of the animation lab; run in WSL before every animlab commit.
+# regress.sh -- regression (phase 1 REPLAY, 2 METRICS, 3 VISUAL) of the animation lab; run in WSL before every animlab commit.
 #   1. harness offline tests (tests/animlab, synthetic data)
 #   2. faithfulness gate: vmq-f8c recordings (made with workspace commit 6c9516b) replayed through the 6c9516b solver:
 #      sword-z0-a + crossbow-z0 must PASS (steady states; docs/animlab/USAGE.md "Faithfulness gate")
@@ -37,5 +37,14 @@ for g in "6c9516b vmrec-q-crossbow-z0.txt 345 1097" "cur vmrec-q-sword-z0-a.txt 
   case "$r" in "RESULT faithful-drive PASS"*) ok "$r";; *) bad "drive gate $1 $2: $r";; esac; done
 r=$(cd "$W" && python3 "$L/metricslab.py" run "$HERE/motions/dualwield-alternate.json" --adapter "$BLD/kfpvm_drive_cur" --body vmrec-q-sword-z0-a.txt --body-frame 100 --out /tmp/al-dw --args=--quiet --quiet 2>&1 | tail -1)
 case "$r" in "RESULT dualwield-alternate PASS"*) ok "$r";; *) bad "dual-wield example: $r";; esac
+# ---- phase 3 (VISUAL LAB): harness tools/animlab/visual + visual.json ----
+#   7. visual offline tests (synthetic Ogre binaries); 8. real game assets (skipped when the install is missing): the
+#      dual-wield pose rendered with both katanas, posed hand X axes must match the solver's (< 1 deg, both sides)
+python3 "$HARN/tests/animlab/test_visual.py" >/tmp/al-unit3.txt 2>&1 && ok visual-tests || { bad visual-tests; tail -5 /tmp/al-unit3.txt; }
+GD=$(python3 -c "import json,os;c=json.load(open('$HERE/visual.json'));print(os.environ.get('ANIMLAB_GAME_DIR',c['game_dir']))")
+if [ -d "$GD/data" ]; then
+  r=$(python3 "$L/visual/render.py" still /tmp/al-dw/pose.txt --config "$HERE/visual.json" --weapons R,L --frame 30 --size 320x180 -o /tmp/al-vis.png 2>&1 | tail -1)
+  if echo "$r" | python3 -c "import sys,re;e=[float(x) for x in re.findall(r\"'[LR]': ([0-9.]+)\",sys.stdin.read())];sys.exit(not(len(e)==2 and max(e)<1))"; then ok "visual dual-wield still: $r"; else bad "visual dual-wield still: $r"; fi
+else echo "REGRESS SKIP visual game assets ($GD missing)"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
