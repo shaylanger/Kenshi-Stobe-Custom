@@ -40,12 +40,12 @@ typedef struct { Vec3 p, f, u; } VmPose;
 /* [class 0 = melee, 1 = ranged][state] */
 static VmPose g_vm_pose[2][VM_NT] = {
     /* calibrated in game 2026-10-08 (FOV 70 vertical; the HUD covers y/z < ~-0.33; arm reach ~4.5 dm) */
-    /* sword: grips at z >= 4 so the wrist (~0.5 behind the grip) stays in front of the 3 dm near clip (at z 2.8-3.2 the
+    /* sword: grips at z >= 4.6 (PT17: 4.0 left the wrist at z 3.4, the arm mesh sliced open by the plane) so the wrist (~0.5 behind the grip) stays in front of the 3 dm near clip (at z 2.8-3.2 the
      * cuff was cut off mid-screen: floating glove, C2); ready raised clear of the HUD buttons (C4) */
-    { VP( 2.8f,-1.05f,4.0f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* sword ready: blade up-forward, right */
-      VP( 2.8f,-1.05f,4.0f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (aim = ready) */
-      VP( 2.8f,-1.05f,4.0f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (reload = ready) */
-      VP( 2.2f,-0.35f,4.0f,  -1.00f, 0.08f, 0.22f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view in front of
+    { VP( 2.8f,-1.05f,4.6f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* sword ready: blade up-forward, right */
+      VP( 2.8f,-1.05f,4.6f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (aim = ready) */
+      VP( 2.8f,-1.05f,4.6f,  -0.35f, 0.85f, 0.40f,   -0.5f, 0.0f, 0.85f),    /* (reload = ready) */
+      VP( 2.2f,-0.35f,4.6f,  -1.00f, 0.08f, 0.22f,    0.0f, 0.3f, 1.0f) },   /* sword block: blade across the view in front of
                                                                               * the face (hilt upper right, Chivalry 2 parry); was chest-high (y -0.8) */
     /* crossbow (Chivalry 2 reference, 2026-10-08): the right hand is either wholly in front of the 3 dm near clip (ready,
      * reload: grip z >= 4.4, the hand shows the hold) or wholly behind it (aim: grip at the eye plane, no hand/arm in view,
@@ -62,16 +62,18 @@ static VmPose g_vm_pose[2][VM_NT] = {
                                                                               * the top faces the eye (u is orthogonal to f: the old 0.15,0.75,-0.5
                                                                               * was nearly anti-parallel and ended top-up-and-away, uz +0.28, PT28) */
       VP( 2.6f,-0.8f, 4.4f,  -0.30f,-0.25f, 0.92f,    0.0f, 1.0f, 0.0f) } }; /* (block = ready) */
-/* sword swing key poses (the path starts at the pose the swing began from and ends at the ready pose) */
+/* sword swing key poses, 0.6 dm deeper and the strike/follow-through 0.45-0.5 dm lower than before PT17: a centred wrist
+ * at the old height left the forearm no way off the bottom edge before the near plane (elbow search failed, cut cuff).
+ * (the path starts at the pose the swing began from and ends at the ready pose) */
 /* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
 #define VM_SWK 5
 static VmPose g_vm_swk[VM_SWK] = {
-    VP( 3.0f, 0.5f, 4.0f,   0.22f, 0.88f, 0.22f,   -0.20f,-0.40f, 0.30f),  /* wind-up, raised top right, blade cocked back-right (out at the
+    VP( 3.0f, 0.5f, 4.6f,   0.22f, 0.88f, 0.22f,   -0.20f,-0.40f, 0.30f),  /* wind-up, raised top right, blade cocked back-right (out at the
                                                                             * top-right corner), arm in from the right edge */
-    VP( 1.3f, 0.0f, 4.2f,  -0.55f, 0.45f, 0.70f,   -0.30f,-1.20f, 0.45f),  /* strike: blade diagonal up-left */
-    VP( 0.4f,-0.1f, 4.2f,  -0.92f, 0.02f, 0.38f,    0.00f,-1.00f, 0.05f),  /* strike: blade sweeps flat across the center (in view) */
-    VP(-0.6f,-0.4f, 4.0f,  -0.90f,-0.18f, 0.40f,    0.20f,-0.95f,-0.05f),  /* follow-through left, blade still in view above the HUD */
-    VP( 0.9f,-1.55f,4.0f,  -0.55f, 0.30f, 0.78f,    0.10f,-0.90f, 0.40f) };/* recovery: dips low (grip just above the HUD) back to the guard,
+    VP( 1.3f,-0.45f,4.8f,  -0.55f, 0.45f, 0.70f,   -0.30f,-1.20f, 0.45f),  /* strike: blade diagonal up-left */
+    VP( 0.4f,-0.6f, 4.8f,  -0.92f, 0.02f, 0.38f,    0.00f,-1.00f, 0.05f),  /* strike: blade sweeps flat across the center (in view) */
+    VP(-0.6f,-0.9f, 4.6f,  -0.90f,-0.18f, 0.40f,    0.20f,-0.95f,-0.05f),  /* follow-through left, blade still in view above the HUD */
+    VP( 0.9f,-1.55f,4.6f,  -0.55f, 0.30f, 0.78f,    0.10f,-0.90f, 0.40f) };/* recovery: dips low (grip just above the HUD) back to the guard,
                                                                             * no second sweep across the view */
 /* key times (start, keys, end), own clock over g_vm_sw_dur: anticipation (slower wind-up) ~30%, fast strike across
  * ~20%, follow-through decel, low recovery to the guard (reference: 1H melee 0.4-0.8 s, Chivalry/KCD-style) */
@@ -170,6 +172,9 @@ static int   g_vm_have_written[2];
 static int   g_vm_elb[2] = { 1, 1 };                 /* [class] on (ranged too: the ready arm leaves at the right edge) */
 static Vec3  g_vm_elbd = { 0.60f, -0.50f, -0.62f };  /* preferred wrist -> elbow direction (lower right, back) */
 static float g_vm_elb_fx = 1.245f, g_vm_elb_fy = 0.700f, g_vm_elb_m = 0.45f, g_vm_elb_zc = 3.0f, g_vm_elb_zoom = 4.0f;
+static float g_vm_elb_r = 0.55f;   /* arm mesh radius (forearm + gauntlet), dm: the near plane slices the TUBE, not its axis. With
+                                    * only the axis kept in front, the plane cut the near side of the glove/forearm open on screen
+                                    * (hollow arch, dark inside + lit rim: PT17 sword follow-through f3i_434-440, ready cuff) */
 static float g_vm_elb_stmax = 3.0f, g_vm_elb_tau = 0.04f;
 static Vec3  g_vm_elbe; static int g_vm_have_elbe, g_vm_elb_ok; static float g_vm_elb_w, g_vm_elb_wz;
 static float g_vm_stretch = 1.6f, g_vm_st_last[2] = { 1.0f, 1.0f }, g_vm_st_max[2] = { 1.0f, 1.0f };
@@ -641,12 +646,14 @@ static int vm_elb_out(Vec3 x)   /* camera point outside the view frustum by the 
 /* wrist W, elbow candidate E, shoulder S (camera numbers): every near-plane cut / end of the visible arm off screen */
 static int vm_elb_pass(Vec3 W, Vec3 E, Vec3 S, float L1n)
 {
-    float zc = g_vm_elb_zc, le = vm_len(vm_sub(E, S));
+    float zc = g_vm_elb_zc, zt = g_vm_elb_zc + g_vm_elb_r, le = vm_len(vm_sub(E, S));
     if (le > L1n * g_vm_elb_stmax || le < L1n * 0.4f) return 0;
-    if (W.z <= zc) return 1;                                  /* hand itself behind the near plane: nothing to fix */
-    if (E.z < zc) return vm_elb_out(vm_lerp(W, E, (W.z - zc) / (W.z - E.z)));
+    if (W.z <= zc - g_vm_elb_r) return 1;                    /* hand wholly behind the near plane: nothing drawn */
+    if (W.z < zt && !vm_elb_out(W)) return 0;                /* hand sliced by the near plane in view: no elbow fixes it */
+    /* the arm surface (axis z - radius) must stay in front of the plane until the arm is off screen */
+    if (E.z < zt) return W.z < zt || vm_elb_out(vm_lerp(W, E, (W.z - zt) / (W.z - E.z)));
     if (!vm_elb_out(E)) return 0;
-    if (S.z < zc) return vm_elb_out(vm_lerp(E, S, (E.z - zc) / (E.z - S.z)));
+    if (S.z < zt) return vm_elb_out(vm_lerp(E, S, (E.z - zt) / (E.z - S.z)));
     return 1;
 }
 /* weapon-hand elbow target (skeleton space) for the arm-from-the-edge mode; returns its weight (0 = natural IK) */
@@ -1058,6 +1065,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "elbdz"))   { g_vm_elbd.z = x; return 1; }
     else if (!strcmp(k, "elbm"))    { if (x >= 0 && x < 3) g_vm_elb_m = x; return 1; }
     else if (!strcmp(k, "elbzc"))   { if (x >= 0 && x < 10) g_vm_elb_zc = x; return 1; }
+    else if (!strcmp(k, "elbr"))    { if (x >= 0 && x < 2) g_vm_elb_r = x; return 1; }
     else if (!strcmp(k, "elbtau"))  { if (x > 0.001f && x < 1) g_vm_elb_tau = x; return 1; }
     else if (!strcmp(k, "stmax"))   { g_vm_st_max[0] = g_vm_st_max[1] = 1.0f; return 1; }
     else if (!strcmp(k, "hitch"))   { g_vm_hitch_ms = x >= 0 && x <= 500 ? (int)x : 0; g_vm_hitch_n = 0; return 1; }
