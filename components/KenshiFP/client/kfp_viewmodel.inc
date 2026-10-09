@@ -266,7 +266,8 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; } VmRec;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz;
+                 unsigned char nok; Vec3 nj[2][3], nhx[2], nhy[2], nlp[2]; Quat nlq[2]; } VmRec;   /* native pose of this frame's apply (animlab) */
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
 static int g_vm_rp = -1, g_vm_rp_t;          /* replay frame (-1 off), 1 = commanded pose */
@@ -503,7 +504,7 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
  * landed off by one frame of root motion (walking: weapon 1-3 dm off, jumping with the gait) and by the torso
  * snap at a swing start. Mapping at apply time pins the weapon to the camera. */
 static int vm_basis(Vec3 lat, Vec3 up, Vec3 e[3]);
-static Vec3 vm_c2w_pos(Vec3 c); static Vec3 vm_c2w_dir(Vec3 c);
+static Vec3 vm_c2w_pos(Vec3 c); static Vec3 vm_c2w_dir(Vec3 c); static Vec3 vm_w2c_dir(Vec3 w);
 static void *g_vm_pc; static int g_vm_applymap = 1, g_vm_in_map, g_vm_wih; static unsigned long g_vm_napply;
 static Vec3 g_vm_root_f, g_vm_root_a;
 static int char_position(void *c, Vec3 *out);
@@ -534,6 +535,9 @@ static int vm_map_node(void *pc, Vec3 cms, Vec3 cmw_meas)
     g_vm_scale = sn.x; g_vm_cms = cms; g_vm_cmw = cmw;
     return 1;
 }
+/* animlab: native (pre-IK) pose snapshot of the current apply, written into the current record after the re-map */
+static Vec3 g_vm_rn_sj[2][3], g_vm_rn_lp[2]; static Quat g_vm_rn_lq[2];
+static void vm_rec_native(void);
 static int vm_map(void *pc, void *skel)
 {
     Vec3 cw[2], spw, cs[2], sps, ew[3], es[3];
@@ -624,6 +628,9 @@ static void vm_apply(void *skel)
         if (!readable((void *)hq, 16) || !readable((void *)lpq, 16) || !readable((void *)hp, 12) || !readable((void *)lpp, 12)) return;
         Vec3 sc = readable((void *)hs, 12) ? *hs : vm_v(1, 1, 1), lp = *lpp;
         g_vm_nhq[i] = *hq; g_vm_nhp[i] = *hp;
+        g_vm_rn_lp[i] = lp; g_vm_rn_lq[i] = *lpq; g_vm_rn_sj[i][2] = *hp;
+        {   const Vec3 *u0 = g_oldnode_getdpos(b[i][0]), *f0 = g_oldnode_getdpos(b[i][1]);
+            if (readable((void *)u0, 12) && readable((void *)f0, 12)) { g_vm_rn_sj[i][0] = *u0; g_vm_rn_sj[i][1] = *f0; } }
         {   const Vec3 *us = g_oldnode_getdscale ? g_oldnode_getdscale(b[i][0]) : NULL;
             float k = readable((void *)us, 12) ? us->x : 1.0f;
             g_vm_b0[i] = b[i][0]; g_vm_l1n[i] = vm_len(g_vm_fpn[i]) * k; }
@@ -635,7 +642,7 @@ static void vm_apply(void *skel)
     if (!g_vm_have_t || we <= 0.001f) return;
     if (g_vm_applymap && g_vm_pc && !g_vm_in_map) {      /* re-map the targets with this update's root + torso */
         g_vm_in_map = 1;
-        if (vm_map(g_vm_pc, skel)) { vm_targets(); g_vm_napply++; }
+        if (vm_map(g_vm_pc, skel)) { vm_targets(); g_vm_napply++; vm_rec_native(); }
         char_position(g_vm_pc, &g_vm_root_a);
         g_vm_in_map = 0;
     }
@@ -1017,6 +1024,7 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
 }
 /* weapon-hand elbow target (skeleton space) for the arm-from-the-edge mode; returns its weight (0 = natural IK) */
 static Vec3 g_vm_elb_cb; static int g_vm_have_cb; static float g_vm_elb_hyst = 0.05f, g_vm_elb_slow = 0.35f, g_vm_elb_small = 4.0f;
+static float g_vm_xwalign = 1.0f;   /* X5: ranged elbow direction pulled onto -hand X (straight wrist) */
 static float vm_elbow(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *Et)
 {
     g_vm_elb_w = 0.0f;
@@ -1034,6 +1042,8 @@ static float vm_elbow(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *Et)
         g_vm_pick_ok = 0;
         if (pr == 2) direct = 1;
     }
+    if (g_vm_class == 1 && g_vm_xwalign > 0.0f && vm_len(g_vm_mh) > 0.5f)
+        d0 = vm_norm(vm_lerp(d0, vm_mul(g_vm_mh, -1.0f), fminf(g_vm_xwalign, 1.0f)));
     Vec3 best = d0;
     int ok = direct || vm_elb_pass(W, vm_add(W, vm_mul(d0, L2)), S, L1n);
     if (!ok) {   /* coarse search: passing direction closest to d0 (elbow right of / below the wrist, not ahead) */
@@ -1418,10 +1428,38 @@ static void vm_frame(void *pc, int body_down)
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
 }
+static void vm_rec_native(void)
+{
+    if (!g_vm_rec || !g_vm_rec_on || g_vm_rn <= 0) return;
+    VmRec *q = &g_vm_rec[g_vm_rn - 1];
+    for (int i = 0; i < 2; i++) {
+        for (int k = 0; k < 3; k++)
+            q->nj[i][k] = vm_w2c_dir(vm_sub(vm_add(g_vm_cmw, vm_s2w_dir(vm_sub(g_vm_rn_sj[i][k], g_vm_cms))), g_vm_eye));
+        q->nhx[i] = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(g_vm_nhq[i], vm_v(1, 0, 0)))));
+        q->nhy[i] = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(g_vm_nhq[i], vm_v(0, 1, 0)))));
+        q->nlp[i] = g_vm_rn_lp[i]; q->nlq[i] = g_vm_rn_lq[i];
+    }
+    q->nok = 1;
+}
+/* animlab: every successful fp_vm set / ini vm_ key, with the record index it happened at */
+#define VM_SETLOG 512
+static struct { int ep, f; char k[28]; float v; } g_vm_setlog[VM_SETLOG]; static int g_vm_setn, g_vm_rec_ep;
+static void vm_setlog(const char *k, float x)
+{
+    int i = g_vm_setn < VM_SETLOG ? g_vm_setn : VM_SETLOG - 1;   /* full: the last slot keeps the newest */
+    g_vm_setlog[i].ep = g_vm_rec_ep; g_vm_setlog[i].f = g_vm_rec_on ? g_vm_rn : -1; g_vm_setlog[i].v = x;
+    snprintf(g_vm_setlog[i].k, sizeof(g_vm_setlog[i].k), "%s", k);
+    if (g_vm_setn < VM_SETLOG) g_vm_setn++;
+}
+static int vm_set(const char *k, float x);
+static int vm_set_logged(const char *k, float x) { int ok = vm_set(k, x); if (ok) vm_setlog(k, x); return ok; }
 static int vm_rec_dump(const char *path)
 {
     FILE *fo = fopen(path, "w"); if (!fo) return -1;
-    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine\n");
+    fprintf(fo, "# build %s %s\n", __DATE__, __TIME__);
+    for (int i = 0; i < g_vm_setn; i++)
+        fprintf(fo, "# set %d %s %g\n", g_vm_setlog[i].ep == g_vm_rec_ep ? g_vm_setlog[i].f : -1, g_vm_setlog[i].k, g_vm_setlog[i].v);
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
                 q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
@@ -1429,9 +1467,16 @@ static int vm_rec_dump(const char *path)
                             &q->mj[0][0], &q->mj[0][1], &q->mj[0][2], &q->mj[1][0], &q->mj[1][1], &q->mj[1][2], &q->eye, &q->rt, &q->up, &q->fw };
         for (int k = 0; k < 17; k++) fprintf(fo, k == 13 ? " | %.4f,%.4f,%.4f" : " %.4f,%.4f,%.4f", v[k]->x, v[k]->y, v[k]->z);
         fprintf(fo, " | %.4f,%.4f,%.4f %.4f,%.4f,%.4f %u %d %d %.3f", q->rootf.x, q->rootf.y, q->rootf.z, q->roota.x, q->roota.y, q->roota.z, q->napp, q->phase, q->wih, q->stch);
-        fprintf(fo, " | %.1f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.3f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f\n", q->wb, q->mh.x, q->mh.y, q->mh.z,
+        fprintf(fo, " | %.1f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.3f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->wb, q->mh.x, q->mh.y, q->mh.z,
                 q->mfx.x, q->mfx.y, q->mfx.z, q->zf, q->hd.x, q->hd.y, q->hd.z, q->nk.x, q->nk.y, q->nk.z, q->sp.x, q->sp.y, q->sp.z,
-                q->hy.x, q->hy.y, q->hy.z, q->hz.x, q->hz.y, q->hz.z); }
+                q->hy.x, q->hy.y, q->hy.z, q->hz.x, q->hz.y, q->hz.z);
+        if (q->nok) {   /* native group */
+            fprintf(fo, " | 1");
+            for (int a = 0; a < 2; a++) for (int k = 0; k < 3; k++) fprintf(fo, " %.4f,%.4f,%.4f", q->nj[a][k].x, q->nj[a][k].y, q->nj[a][k].z);
+            for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->nhx[a].x, q->nhx[a].y, q->nhx[a].z, q->nhy[a].x, q->nhy[a].y, q->nhy[a].z);
+            for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.5f,%.5f,%.5f,%.5f", q->nlp[a].x, q->nlp[a].y, q->nlp[a].z, q->nlq[a].w, q->nlq[a].x, q->nlq[a].y, q->nlq[a].z);
+        }
+        fputc('\n', fo); }
     fclose(fo); return g_vm_rn;
 }
 
@@ -1519,6 +1564,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "nearclip")) { if (x >= 0 && x <= 10) g_vm_nc = x; return 1; }
     else if (!strcmp(k, "l1fix")) { g_vm_l1fix = x != 0; return 1; }
     else if (!strcmp(k, "fptol")) { g_vm_fptol = x != 0; return 1; }
+    else if (!strcmp(k, "xwalign")) { if (x >= 0 && x <= 1) g_vm_xwalign = x; return 1; }
     else if (!strcmp(k, "mapnode")) { g_vm_mapnode = x != 0; g_vm_map_resmax = 0; g_vm_have_moff = 0; return 1; }
     else if (!strcmp(k, "stdb")) { if (x >= 0 && x <= 0.5f) g_vm_stdb = x; return 1; }
     else if (!strcmp(k, "stretch")) { if (x >= 1 && x <= 2.5f) g_vm_stretch = x; return 1; }
@@ -1573,7 +1619,7 @@ static int vm_ini(const char *line)
     memcpy(key, line + 3, n); key[n] = 0;
     while (n && (key[n-1] == ' ' || key[n-1] == '\t')) key[--n] = 0;
     fv = (float)atof(eq + 1);
-    return vm_set(key, fv);
+    return vm_set_logged(key, fv);
 }
 
 static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
@@ -1584,14 +1630,14 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
     if (!strcmp(a, "on"))  { g_cfg_vm = 1; g_vm_dead = 0; }
     else if (!strcmp(a, "off")) g_cfg_vm = 0;
     else if (!strcmp(a, "set") && argc > 3) {
-        if (!vm_set(argv[2], (float)atof(argv[3]))) {
+        if (!vm_set_logged(argv[2], (float)atof(argv[3]))) {
             r->append(r, "keys: <m|r>_<ready|aim|reload|block>_<p|f|u><x|y|z> sw<1-4>_<p|f|u><x|y|z> swu<1-4> ax_<m|r>_<f|u> (+-1..3) "
                          "hand_m hand_r rest_<xyz> sup_<xyz> pole<m|r><L|R>_<xyz> fire_hold offnear aimdist twist tau taurl tauw "
                          "sw_dur sw_pose(-1 off) kick_pose(-1 off) kick_<xyz> kick_up swlog");
             return KAH_ERROR;
         }
     } else if (!strcmp(a, "rec") && argc > 2) {
-        if (!strcmp(argv[2], "on")) { if (!g_vm_rec) g_vm_rec = (VmRec *)calloc(VM_RECN, sizeof(VmRec)); if (!g_vm_rec) { r->append(r, "rec: no memory"); return KAH_ERROR; } g_vm_rn = 0; QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1; }
+        if (!strcmp(argv[2], "on")) { if (!g_vm_rec) g_vm_rec = (VmRec *)calloc(VM_RECN, sizeof(VmRec)); if (!g_vm_rec) { r->append(r, "rec: no memory"); return KAH_ERROR; } g_vm_rn = 0; g_vm_rec_ep++; QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1; }
         else if (!strcmp(argv[2], "off")) g_vm_rec_on = 0;
         else if (!strcmp(argv[2], "dump") && argc > 3) { int n = vm_rec_dump(argv[3]);
             snprintf(b, sizeof(b), "rec dump %s frames=%d", argv[3], n); r->append(r, b); return n < 0 ? KAH_ERROR : KAH_OK; }
