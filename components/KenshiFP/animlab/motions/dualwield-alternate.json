@@ -1,0 +1,19 @@
+{
+ "name": "dualwield-alternate",
+ "comment": "Dual wielding (DUAL_WIELDING_MOD_IMPLEMENTATION_BRIEF.md v1 rule: one click = one strike, hands alternate): both blades up in guard, right diagonal cut, back to guard, left diagonal cut (mirror), back to guard. Camera numbers of the body frame (x right, y up, z forward, dm).",
+ "fps": 60, "interp": "spline", "hold": 0.2,
+ "hands": {
+  "R": {"weapon": "sword", "keys": [
+    {"t": 0.00, "label": "guard",   "p": [2.45, -0.20, 5.00], "f": [-0.12, 0.90, 0.42], "u": [-0.54, -0.53, 0.65]},
+    {"t": 0.30, "label": "R-windup","p": [3.40,  0.40, 4.60], "f": [0.15, 0.95, -0.20], "u": [-0.70, -0.10, 0.70]},
+    {"t": 0.55, "label": "R-cut",   "p": [0.40, -2.20, 6.00], "f": [-0.75, -0.20, 0.62], "u": [-0.30, -0.95, -0.05]},
+    {"t": 0.85, "label": "R-recover","p": [2.45, -0.20, 5.00], "f": [-0.12, 0.90, 0.42], "u": [-0.54, -0.53, 0.65]},
+    {"t": 1.70, "label": "guard2",  "p": [2.45, -0.20, 5.00], "f": [-0.12, 0.90, 0.42], "u": [-0.54, -0.53, 0.65]}]},
+  "L": {"weapon": "sword", "keys": [
+    {"t": 0.00, "label": "guard",   "p": [-2.45, -0.20, 5.00], "f": [0.12, 0.90, 0.42], "u": [0.54, -0.53, 0.65]},
+    {"t": 0.85, "label": "L-windup0","p": [-2.45, -0.20, 5.00], "f": [0.12, 0.90, 0.42], "u": [0.54, -0.53, 0.65]},
+    {"t": 1.15, "label": "L-windup","p": [-3.40,  0.40, 4.60], "f": [-0.15, 0.95, -0.20], "u": [0.70, -0.10, 0.70]},
+    {"t": 1.40, "label": "L-cut",   "p": [-0.40, -2.20, 6.00], "f": [0.75, -0.20, 0.62], "u": [0.30, -0.95, -0.05]},
+    {"t": 1.70, "label": "L-recover","p": [-2.45, -0.20, 5.00], "f": [0.12, 0.90, 0.42], "u": [0.54, -0.53, 0.65]}]}
+ }
+}

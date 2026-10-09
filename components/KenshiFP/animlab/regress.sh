@@ -25,5 +25,17 @@ bash "$HERE/build.sh" "${P[@]}" --out "$BLD/kfpvm_cur" >/tmp/al-build2.txt 2>&1 
 "$BLD/kfpvm_cur" "$W/vmrec-q-crossbow-z0.txt" /tmp/al-rt1.txt --quiet >/dev/null
 (python3 "$L/animlab.py" gate /tmp/al-rt1.txt --adapter "$BLD/kfpvm_cur" --args=--quiet) >/tmp/al-rt.txt 2>&1
 if grep -q "GATE PASS" /tmp/al-rt.txt && grep -E "^reload\(info\)" /tmp/al-rt.txt | head -1 | awk '{exit !($4=="0.00" && $5=="0.00")}'; then ok "native round trip (reload exact)"; else bad "native round trip"; sed -n 1,6p /tmp/al-rt.txt; fi
+# ---- phase 2 (METRICS LAB): drive adapter (kfpvm_drive.c) + tools/animlab/metricslab.py ----
+#   4. metricslab offline tests; 5. drive gate: the game's rendered weapon pose as the target on a still-body segment
+#      must give the game's arm (crossbow-z0 345-1097 with its own source 6c9516b; sword-z0-a 83-232 with the current
+#      source, see STATUS.md: the 6c9516b frozen-replay path does not reproduce the sword wrist); 6. dual-wield example PASS
+python3 "$HARN/tests/animlab/test_metricslab.py" >/tmp/al-unit2.txt 2>&1 && ok metricslab-tests || { bad metricslab-tests; tail -5 /tmp/al-unit2.txt; }
+bash "$HERE/build.sh" --rev 6c9516b --drive --out "$BLD/kfpvm_drive_6c9516b" >/tmp/al-build3.txt 2>&1 || { bad build-drive-6c9516b; tail -5 /tmp/al-build3.txt; }
+bash "$HERE/build.sh" "${P[@]}" --drive --out "$BLD/kfpvm_drive_cur" >/tmp/al-build4.txt 2>&1 || { bad build-drive-current; tail -5 /tmp/al-build4.txt; }
+for g in "6c9516b vmrec-q-crossbow-z0.txt 345 1097" "cur vmrec-q-sword-z0-a.txt 83 232"; do set -- $g
+  r=$(cd "$W" && python3 "$L/metricslab.py" faithful "$2" "$3" "$4" --adapter "$BLD/kfpvm_drive_$1" --args=--quiet --out /tmp/al-faith 2>&1 | tail -1)
+  case "$r" in "RESULT faithful-drive PASS"*) ok "$r";; *) bad "drive gate $1 $2: $r";; esac; done
+r=$(cd "$W" && python3 "$L/metricslab.py" run "$HERE/motions/dualwield-alternate.json" --adapter "$BLD/kfpvm_drive_cur" --body vmrec-q-sword-z0-a.txt --body-frame 100 --out /tmp/al-dw --args=--quiet --quiet 2>&1 | tail -1)
+case "$r" in "RESULT dualwield-alternate PASS"*) ok "$r";; *) bad "dual-wield example: $r";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
