@@ -98,8 +98,11 @@ static float g_vm_om_draw = 16.0f;                     /* draw rise / holster lo
 enum { VMP_NORMAL, VMP_DRAW, VMP_LOWER };
 static int   g_vm_phase; static float g_vm_ph_t, g_vm_wl, g_vm_lower_dur = 0.30f;
 static VmPose g_vm_low[2] = {
-    { { 1.6f,-5.0f, 2.0f }, { -0.20f,-0.75f, 0.63f }, { -0.5f, 0.0f, 0.85f } },   /* sword: grip + blade below the view (deep, blade
-                                                                                 * down: the native draw blade points forward, its tip flashed in at y/z -0.55, s8 71) */
+    { { 1.6f,-7.0f, 4.2f }, { -0.20f,-0.75f, 0.63f }, { -0.5f, 0.0f, 0.85f } },   /* sword: grip + blade below the view (blade
+                                                                                 * down: the native draw blade points forward, its tip flashed in at y/z -0.55, s8 71).
+                                                                                 * PT17: in front of the near clip (was z 2.0: the holster drop crossed the arm tube band
+                                                                                 * at y/z -0.55, forearm cut open, PT30 cut=1); y -7 so the blade tip is off the bottom
+                                                                                 * edge when the sheathe takes the sword after the 0.3 s lowering (y -5.5: tip at -0.65) */
     { { 1.5f,-4.5f, 4.4f }, { -0.20f,-0.60f, 0.77f }, {  0.0f, 1.0f, 0.0f } } };  /* crossbow: below the view at the ready depth
                                                                                  * (PT17: at z 2.0 the hand sat behind the 3 dm near clip while the bow
                                                                                  * rose into view = a bow floating without a hand; now the draw/holster
