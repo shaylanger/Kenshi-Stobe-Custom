@@ -279,7 +279,7 @@
 #define OGRE_SETNEARCLIP_SYM "?setNearClipDistance@Frustum@Ogre@@UEAAXM@Z"
 #define OGRE_GETNEARCLIP_SYM "?getNearClipDistance@Frustum@Ogre@@UEBAMXZ"
 #define OGRE_GETFARCLIP_SYM  "?getFarClipDistance@Frustum@Ogre@@UEBAMXZ"  /* diag: near/far ratio */
-#define FP_NEARCLIP       (g_cfg_nearclip) /* world units; clip very-near geometry
+#define FP_NEARCLIP       (vm_nearclip(g_cfg_nearclip)) /* world units; clip very-near geometry
                                     * (own head/hair edges) a tiny bit; tune */
 
 /* ---- MyGUI cursor (hide the default arrow, keep contextual sword/speech) ----

@@ -48,6 +48,17 @@ static fpc_attack_t g_fpc_attack;
 static fpc_isenemy_t g_fpc_isenemy;
 static fpc_getanim_t g_fpc_getanim;
 static fpc_choose_t g_fpc_choose;
+/* PT34: native third-person combat stance / free swing kept running (zoom 25 showed hanging arms) */
+#define FPC_SYM_RUNANIM "?runCombatAnimation@AnimationClass@@QEAAXPEAVCombatTechniqueData@@MV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z"
+#define FPC_SYM_SETCM "?setCombatMode@AnimationClass@@QEAAX_N@Z"
+#define FPC_SYM_SETCMU "?setCombatModeUpperIdle@AnimationClass@@QEAAX_N@Z"
+typedef void (*fpc_setcm_t)(void *anim,unsigned char on);
+static fpc_startanim_t g_fpc_runanim; static fpc_setcm_t g_fpc_setcm,g_fpc_setcmu;
+#define FPC_SYM_CHOOSEBLOCK "?chooseBlock@CharStats@@QEAAPEAVCombatTechniqueData@@W4CutDirection@@MW4CutOrigination@@PEAVCharacter@@@Z"
+typedef void *(*fpc_chooseblock_t)(void *stats,int dir,float skill,int from,void *opp);
+static fpc_chooseblock_t g_fpc_chooseblock; static void *g_fpc_fb_tech,*g_fpc_fb_anim; static double g_fpc_fb_t0;
+static int g_fpc_fb_on=1, g_fpc_fb_dir=1, g_fpc_fb_org=0; static float g_fpc_fb_f=50.0f, g_fpc_fb_hspd=0.0f; static float g_fpc_fb_hold=0.45f; static unsigned g_fpc_fb_starts,g_fpc_fb_none;
+static int g_fpc_fs_run=1,g_fpc_cmode=3; static float g_fpc_fs_spd=1.0f; static void *g_fpc_cm_anim; static unsigned g_fpc_cm_sets,g_fpc_fs_runs;
 static fpc_progress_t g_fpc_progress;
 static fpc_endanim_t g_fpc_endanim;
 static fpc_startanim_t g_fpc_startanim;
@@ -626,7 +637,7 @@ static void fpc_free_swing(void *pc) {
     float spd=*(float *)((uintptr_t)stats+STATS_ATTACK_SPEED);
     if (!(isfinite(spd)&&spd>0.2f&&spd<4.0f)) spd=1.0f;
     unsigned char empty[32];make_mstr(empty,"");
-    g_fpc_startanim(anim,tech,spd,empty);
+    g_fpc_startanim(anim,tech,spd,empty);g_fpc_fs_spd=spd;
     g_fpc_fs_anim=anim;g_fpc_fs_tech=tech;g_fpc_fs_start_ms=fpc_now_ms();g_fpc_fs_prog=0;g_fpc_fs_live=0;g_fpc_fs_steps=0;g_fpc_fs_pmin=9.0f;
     ++g_fpc_free_swings;
 }
@@ -636,11 +647,15 @@ static void fpc_free_swing_step(void *pc) {
     double el=fpc_now_ms()-g_fpc_fs_start_ms;
     float p=anim==g_fpc_fs_anim?g_fpc_progress(anim,g_fpc_fs_tech):1.0f;
     ++g_fpc_fs_steps;
+    if (g_fpc_fs_steps<=12) logline("[controls] free swing step %d: %.0f ms p=%.3f same_anim=%d",g_fpc_fs_steps,el,p,anim==g_fpc_fs_anim);
+    if (g_fpc_fs_run && g_fpc_runanim && anim==g_fpc_fs_anim && isfinite(p) && el<6000.0 && !(p>=0.999f && g_fpc_fs_live)) {
+        unsigned char e2[32];make_mstr(e2,"");g_fpc_runanim(anim,g_fpc_fs_tech,g_fpc_fs_spd,e2);++g_fpc_fs_runs;
+        float p2=g_fpc_progress(anim,g_fpc_fs_tech);if (isfinite(p2)) p=p2;}
     if (isfinite(p)) {g_fpc_fs_prog=p;if (p>g_fpc_fs_prog_max) g_fpc_fs_prog_max=p;if (p<g_fpc_fs_pmin) g_fpc_fs_pmin=p;if (p<0.999f) g_fpc_fs_live=1;}
     /* the start tick (and a frame or two after) still reports the old progress (1.01): wait until it runs */
-    if (anim!=g_fpc_fs_anim || !isfinite(p) || (p>=0.999f && (g_fpc_fs_live || el>600.0)) || el>3000.0) {
+    if (anim!=g_fpc_fs_anim || !isfinite(p) || (p>=0.999f && (g_fpc_fs_live || el>600.0)) || el>6000.0) {
         logline("[controls] free swing end: %.0f ms steps=%d pmin=%.3f live=%d why=%s",el,g_fpc_fs_steps,g_fpc_fs_pmin,g_fpc_fs_live,
-            anim!=g_fpc_fs_anim?"anim":!isfinite(p)?"nan":el>3000.0?"timeout":g_fpc_fs_live?"done":"never_ran");
+            anim!=g_fpc_fs_anim?"anim":!isfinite(p)?"nan":el>6000.0?"timeout":g_fpc_fs_live?"done":"never_ran");
         if (anim==g_fpc_fs_anim && g_fpc_endanim) g_fpc_endanim(anim);
         g_fpc_fs_tech=NULL;g_fpc_fs_anim=NULL;++g_fpc_fs_ends;g_fpc_recover_until_ms=fpc_now_ms()+300.0;
     }
@@ -655,6 +670,30 @@ static void fpc_free_block(void *pc) {
     int state=*(int *)((uintptr_t)cc+CC_STATE),dead=*(unsigned char *)((uintptr_t)cc+CC_DEADTIME);
     if (*(unsigned char *)((uintptr_t)cc+CC_ACTIVE) && g_melee_check_block && state!=MELEE_CHOP && state!=MELEE_BLOCK &&
         state!=MELEE_STUMBLE && !dead && g_melee_check_block(cc,0.5f,0.5f)) ++g_fpc_block_checks;
+}
+/* PT34: RMB out of a fight = the native block technique on the third-person body (zoom 25 showed the ready stance only) */
+static void fpc_free_block_anim(void *pc,int held) {
+    if (!g_fpc_getanim || !g_fpc_startanim || !g_fpc_progress || !g_fpc_runanim) return;
+    void *anim=char_valid(pc)?g_fpc_getanim(pc):NULL;
+    if (held && g_fpc_fb_on && !g_fpc_fb_tech && !g_fpc_fs_tech && g_fpc_chooseblock && readable(anim,8) && !fpc_in_fight(pc)) {
+        void *cc=g_melee_get_combat?g_melee_get_combat(pc):NULL;
+        void *stats=readable(cc,0x2b8)?*(void **)((uintptr_t)cc+CC_STATS):NULL;
+        void *tech=readable(stats,8)?g_fpc_chooseblock(stats,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org,pc):NULL;
+        if (!readable(tech,TECH_ANIM_SPEED+4)) {++g_fpc_fb_none;return;}
+        unsigned char e[32];make_mstr(e,"");g_fpc_startanim(anim,tech,1.0f,e);
+        g_fpc_fb_tech=tech;g_fpc_fb_anim=anim;g_fpc_fb_t0=fpc_now_ms();++g_fpc_fb_starts;
+        logline("[controls] PT34 free block start tech=%p dir=%d f=%.1f org=%d",tech,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org);
+    }
+    if (!g_fpc_fb_tech) return;
+    double el=fpc_now_ms()-g_fpc_fb_t0;
+    if (anim!=g_fpc_fb_anim) {g_fpc_fb_tech=NULL;g_fpc_fb_anim=NULL;logline("[controls] PT34 free block lost (anim)");return;}
+    float p=g_fpc_progress(anim,g_fpc_fb_tech);
+    if (!isfinite(p) || (!held && (p>=0.999f || el>6000.0))) {
+        if (g_fpc_endanim) g_fpc_endanim(anim);
+        logline("[controls] PT34 free block end: %.0f ms p=%.3f",el,p);g_fpc_fb_tech=NULL;g_fpc_fb_anim=NULL;return;
+    }
+    if (held ? p<g_fpc_fb_hold : 1) {unsigned char e[32];make_mstr(e,"");g_fpc_runanim(anim,g_fpc_fb_tech,1.0f,e);}
+    else if (g_fpc_fb_hspd>0.0f) {unsigned char e[32];make_mstr(e,"");g_fpc_runanim(anim,g_fpc_fb_tech,g_fpc_fb_hspd,e);}
 }
 /* HUD / harness state from the real native state. */
 static const char *fpc_ui_state(void *pc,int rmb) {
@@ -852,6 +891,15 @@ static void fp_controls_tick(void *gw,float dt) {
         }
         if (g_fpc_fs_tech) {phase=1;fpc_free_swing_step(pc);phase=0;}
         if (g_fpc_drawn && !g_fpc_ranged && in[FPC_RMB]) fpc_free_block(pc);
+        fpc_free_block_anim(pc,g_fpc_drawn && !g_fpc_ranged && in[FPC_RMB]);
+        if (g_fpc_setcm && g_fpc_getanim) {   /* PT34: third-person combat stance while a melee weapon is drawn out of a fight */
+            void *an=g_fpc_getanim(pc);int want=g_fpc_cmode && g_fpc_drawn && !g_fpc_ranged && !fpc_in_fight(pc) && readable(an,8);
+            if (want) {if (g_fpc_cmode&1) g_fpc_setcm(an,1);if ((g_fpc_cmode&2) && g_fpc_setcmu) g_fpc_setcmu(an,1);
+                       if (g_fpc_cm_anim!=an) logline("[controls] PT34 combat stance on (cmode=%d)",g_fpc_cmode);g_fpc_cm_anim=an;++g_fpc_cm_sets;}
+            else if (g_fpc_cm_anim && g_fpc_cm_anim==an && !fpc_in_fight(pc)) {g_fpc_setcm(an,0);if (g_fpc_setcmu) g_fpc_setcmu(an,0);
+                       g_fpc_cm_anim=NULL;logline("[controls] PT34 combat stance off");}
+            else if (g_fpc_cm_anim && g_fpc_cm_anim!=an) g_fpc_cm_anim=NULL;
+        }
     }
     fpc_sneak_watch();
     g_fpc_ui_state=fpc_ui_state(pc,in[FPC_RMB]);
@@ -957,6 +1005,14 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         if (argc==3) {if (_stricmp(argv[2],"click")) {r->append(r,"ctl [click]");return KAH_ERROR;} fpc_ctl_request();}
         char b[600];fpc_ctl_text(b,sizeof b);r->append(r,b);return KAH_OK;
     }
+    if (argc==4 && !_stricmp(argv[1],"set") && (!_stricmp(argv[2],"fs_run") || !_stricmp(argv[2],"cmode") || !_stricmp(argv[2],"fb_on") || !_stricmp(argv[2],"blk_hold") || !_stricmp(argv[2],"blk_dir") || !_stricmp(argv[2],"blk_org") || !_stricmp(argv[2],"blk_f") || !_stricmp(argv[2],"blk_hspd"))) {   /* PT34 switches */
+        int v=atoi(argv[3]);if (!_stricmp(argv[2],"fs_run")) g_fpc_fs_run=v!=0;else if (!_stricmp(argv[2],"cmode")) g_fpc_cmode=v&3;
+        else if (!_stricmp(argv[2],"fb_on")) g_fpc_fb_on=v!=0;else if (!_stricmp(argv[2],"blk_dir")) g_fpc_fb_dir=v;else if (!_stricmp(argv[2],"blk_org")) g_fpc_fb_org=v;
+        else if (!_stricmp(argv[2],"blk_f")) g_fpc_fb_f=(float)atof(argv[3]);else if (!_stricmp(argv[2],"blk_hspd")) {float f=(float)atof(argv[3]);if (f>=0.0f && f<=1.0f) g_fpc_fb_hspd=f;}else {float f=(float)atof(argv[3]);if (f>=0.0f && f<=1.0f) g_fpc_fb_hold=f;}
+        char b[200];snprintf(b,sizeof b,"fs_run=%d cmode=%d fb_on=%d blk_hold=%.2f fb_starts=%u fb_none=%u cm_sets=%u fs_runs=%u run=%p setcm=%p",g_fpc_fs_run,g_fpc_cmode,
+            g_fpc_fb_on,g_fpc_fb_hold,g_fpc_fb_starts,g_fpc_fb_none,g_fpc_cm_sets,g_fpc_fs_runs,
+            (void *)g_fpc_runanim,(void *)g_fpc_setcm);r->append(r,b);return KAH_OK;
+    }
     if (argc==4 && !_stricmp(argv[1],"set") && !_stricmp(argv[2],"holster_delay")) {
         float v=(float)atof(argv[3]);if (v<0.0f) v=0.0f;if (v>2.0f) v=2.0f;g_fpc_holster_delay=v;
         char b[48];snprintf(b,sizeof b,"holster_delay=%.2f",v);r->append(r,b);return KAH_OK;
@@ -1001,6 +1057,9 @@ static void fp_controls_init(void) {
     g_fpc_progress=(fpc_progress_t)fpc_klib(FPC_SYM_PROGRESS);
     g_fpc_endanim=(fpc_endanim_t)fpc_klib(FPC_SYM_ENDANIM);
     fpc_resolve_startanim();
+    g_fpc_runanim=(fpc_startanim_t)fpc_klib(FPC_SYM_RUNANIM);g_fpc_setcm=(fpc_setcm_t)fpc_klib(FPC_SYM_SETCM);g_fpc_setcmu=(fpc_setcm_t)fpc_klib(FPC_SYM_SETCMU);
+    g_fpc_chooseblock=(fpc_chooseblock_t)fpc_klib(FPC_SYM_CHOOSEBLOCK);
+    logline("[controls] PT34: runanim=%p setcm=%p setcmu=%p",(void *)g_fpc_runanim,(void *)g_fpc_setcm,(void *)g_fpc_setcmu);
     g_fpc_sensory=(fpc_sensory_t)fpc_klib(FPC_SYM_SENSORY);g_fpc_aware=(fpc_aware_t)fpc_klib(FPC_SYM_AWARE);
     g_fpc_kochance=(fpc_kochance_t)fpc_klib(FPC_SYM_KOCHANCE);
     g_fpc_uncon=(fpc_cbool_t)fpc_klib(FPC_SYM_UNCON);g_fpc_dead=(fpc_cbool_t)fpc_klib(FPC_SYM_DEAD);

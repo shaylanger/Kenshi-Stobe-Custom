@@ -108,6 +108,8 @@ static VmPose g_vm_low[2] = {
                                                                                  * rose into view = a bow floating without a hand; now the draw/holster
                                                                                  * is a straight rise/drop with the hand in front of the plane) */
 static float g_vm_kick_t = -1.0f, g_vm_kick_rise = 0.06f;   /* fire kick: time since the shot; rise (ease-out) then smooth return */
+static int g_vm_rlnat = 1; static float g_vm_rlw, g_vm_rltr = 0.5f, g_vm_rlblend = 0.2f, g_vm_rl_dy = 0.0f;
+static Vec3 g_vm_rl_p0; static int g_vm_have_rl0;   /* X3 native reload: weight, bow start pos (skeleton) */
 static float g_vm_rl_t; static float g_vm_rl_per = 1.3f, g_vm_rl_amp = 1.0f;  /* reload: time in reload, spanning cycle period (amp 1.6 dipped the hand behind the HUD) */
 /* ranged near-plane routing: while the current grip and the target grip lie on different sides of the near clip (zc),
  * the spring heads for a waypoint below the view (y g_vm_xwp_y, z = zc -/+ g_vm_xwp_dz on the target's side) so the hand
@@ -152,6 +154,9 @@ static const char *g_vm_state = "off";
 static unsigned long g_vm_calls, g_vm_applied, g_vm_reuse, g_vm_frames, g_vm_ikfail;
 static float g_vm_w;                        /* blend native -> viewmodel, 0..1 */
 static int   g_vm_class;                    /* 0 melee, 1 ranged (last on state) */
+static int g_vm_eclamp = 1, g_vm_eclamp_n; static float g_vm_ectol = 0.0f, g_vm_eclamp_eye;
+static float g_vm_nc = 1.5f;               /* X2: near plane while the ranged viewmodel is shown (0 = off) */
+static float vm_nearclip(float base) { return (g_vm_nc > 0.0f && g_vm_class == 1 && g_vm_w > 0.01f && base > g_vm_nc) ? g_vm_nc : base; }
 static int   g_vm_melee;
 static VmPose g_vm_cur;                     /* current weapon pose (camera numbers) */
 static int   g_vm_have_cur;
@@ -193,6 +198,16 @@ static float g_vm_elb_r = 0.55f;   /* arm mesh radius (forearm + gauntlet), dm: 
                                     * only the axis kept in front, the plane cut the near side of the glove/forearm open on screen
                                     * (hollow arch, dark inside + lit rim: PT17 sword follow-through f3i_434-440, ready cuff) */
 static float g_vm_elb_stmax = 3.0f, g_vm_elb_tau = 0.04f;
+/* swing->block cap (Shay 2026-10-09, option-stretch.jpg): ready and block keep the full cap g_vm_elb_stmax; only the block
+ * entered by aborting a swing (the high-elbow moment, upper-arm stretch 2.87) gets the cap g_vm_swb_cap, blended in/out
+ * over g_vm_swb_tau s (no pop). g_vm_swb = that block is on, g_vm_swb_w = blend 0..1, vm_stmax() = the cap in use. */
+static float g_vm_swb_cap = 1.3f, g_vm_swb_tau = 0.12f, g_vm_swb_trig = 99.0f, g_vm_s2_want, g_vm_swb_w; static int g_vm_swb;
+static float vm_stmax(void) { return g_vm_elb_stmax + (fminf(g_vm_swb_cap, g_vm_elb_stmax) - g_vm_elb_stmax) * g_vm_swb_w; }
+/* S1 (Shay 2026-10-09): the sword edge never faces the camera. kappa = grip constant (hand X -> edge, about the blade),
+ * edge_tol = largest allowed cos(edge, wrist->eye). S2: re-seed the elbow pick on entering block / ready. */
+static int   g_vm_edge = 1, g_vm_have_ekap, g_vm_reseed_on = 1, g_vm_rsmode = -1, g_vm_edge_nok;
+static float g_vm_edge_tol = 0.0f, g_vm_ekap, g_vm_edge_pred, g_vm_reseed, g_vm_reseed_dur = 0.25f, g_vm_reseed_tau = 0.05f;
+static float g_vm_hroll = 0.0f;   /* option A (Shay decision 2026-10-09): extra sword hand+blade roll about the blade, deg (0 = off) */
 static float g_vm_elb_keep = 1.5f, g_vm_elb_rate = 1750.0f, g_vm_elb_dmax = 24.0f, g_vm_elb_ptau = 0.03f;
 /* wrist look-ahead (PT30): predicted output poses of the next frames + coarse DP over their passing elbows */
 #define VM_LAH 12
@@ -208,6 +223,7 @@ static float g_vm_wrl = 2.2f, g_vm_wrlmin = 2.6f, g_vm_wrllag = 6.0f, g_vm_rs, g
 static unsigned g_vm_pk[4];   /* wrist picks: within the rate step, 2x, 4x, anywhere */   /* + max pick speed deg/s, max cone offset deg */   /* wrist fix: weight of the previous elbow in the straight-wrist pick (no flips) */
 static Vec3  g_vm_pick; static int g_vm_pick_ok;   /* wrist fix: this frame's elbow pick (camera space), made with the blade roll */
 static Vec3  g_vm_elbe; static int g_vm_have_elbe, g_vm_elb_ok; static float g_vm_elb_w, g_vm_elb_wz;
+static float g_vm_l1n[2]; static void *g_vm_b0[2]; static int g_vm_l1fix = 1;
 static float g_vm_stretch = 1.6f, g_vm_st_last[2] = { 1.0f, 1.0f }, g_vm_st_max[2] = { 1.0f, 1.0f };
 static Vec3  g_vm_fpn[2], g_vm_fpw[2]; static int g_vm_fpw_on[2];
 static int   g_vm_hitch_ms, g_vm_hitch_per, g_vm_hitch_n;   /* test: forced game hitch (ms) every N frames (0 = once) */
@@ -395,6 +411,14 @@ static Vec3 vm_w2s_dir(Vec3 v) { return vm_mul(vm_v(vm_dot(v, g_vm_w2s[0]), vm_d
 static Vec3 vm_s2w_dir(Vec3 v) { return vm_mul(vm_v(vm_dot(v, g_vm_s2w[0]), vm_dot(v, g_vm_s2w[1]), vm_dot(v, g_vm_s2w[2])), g_vm_scale); }
 static Vec3 vm_w2s_pos(Vec3 p) { return vm_add(g_vm_cms, vm_w2s_dir(vm_sub(p, g_vm_cmw))); }
 
+/* upper-arm length (skeleton space) from the native forearm offset; derived positions may carry last frame's stretch */
+static float vm_l1(void *ua, const Vec3 *ps, const Vec3 *pe)
+{
+    float d = vm_len(vm_sub(*pe, *ps));
+    if (!g_vm_l1fix) return d;
+    for (int i = 0; i < 2; i++) if (g_vm_l1n[i] > 1e-4f && g_vm_b0[i] == ua) return g_vm_l1n[i];
+    return d;
+}
 /* two-bone IK on one arm, skeleton space. Ht/Qt = hand bone target (derived pos/ori); keep_ori = keep the
  * hand's native derived orientation instead of Qt. Writes local orientations blended by w. */
 static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int keep_ori, Vec3 pole, float w,
@@ -408,7 +432,7 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
         || !readable((void *)ps, 12) || !readable((void *)pe, 12) || !readable((void *)ph, 12)) return 0;
     Quat Dc = *pc, Dua = *pua, Dfa = *pfa, Dh = *pha; Vec3 S = *ps, E = *pe, H = *ph;
     if (keep_ori) Qt = Dh;
-    float L1 = vm_len(vm_sub(E, S)), L2 = vm_len(vm_sub(H, E));
+    float L1 = vm_l1(ua, ps, pe), L2 = vm_len(vm_sub(H, E));
     if (L1 < 1e-4f || L2 < 1e-4f) return 0;
     Vec3 d = vm_sub(Ht, S); float D = vm_len(d);
     float st = 1.0f;
@@ -425,10 +449,10 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
     pp = vm_norm(pp);
     Vec3 E2 = vm_add(S, vm_add(vm_mul(n, a), vm_mul(pp, h))), H2 = vm_add(S, vm_mul(n, D));
     if (Et && ew > 0.001f) {   /* elbow target (arm from the screen edge): upper arm S -> elbow at any length */
-        float L1n = vm_len(vm_sub(E, S));
+        float L1n = vm_l1(ua, ps, pe);
         Vec3 Ew = vm_lerp(E2, *Et, fminf(ew, 1.0f));
         Vec3 de = vm_sub(Ew, S); float le = vm_len(de);
-        float s2 = le / L1n; if (s2 > g_vm_elb_stmax) s2 = g_vm_elb_stmax; if (s2 < 0.4f) s2 = 0.4f;
+        float s2 = le / L1n; if (side == 1) g_vm_s2_want = s2; if (s2 > vm_stmax()) s2 = vm_stmax(); if (s2 < 0.4f) s2 = 0.4f;
         E2 = vm_add(S, vm_mul(vm_norm(de), L1n * s2));
         H2 = vm_add(E2, vm_mul(vm_norm(vm_sub(Ht, E2)), L2));
         st = 1.0f + (s2 - 1.0f) * fminf(w, 1.0f);
@@ -560,6 +584,9 @@ static void vm_apply(void *skel)
         if (!readable((void *)hq, 16) || !readable((void *)lpq, 16) || !readable((void *)hp, 12) || !readable((void *)lpp, 12)) return;
         Vec3 sc = readable((void *)hs, 12) ? *hs : vm_v(1, 1, 1), lp = *lpp;
         g_vm_nhq[i] = *hq; g_vm_nhp[i] = *hp;
+        {   const Vec3 *us = g_oldnode_getdscale ? g_oldnode_getdscale(b[i][0]) : NULL;
+            float k = readable((void *)us, 12) ? us->x : 1.0f;
+            g_vm_b0[i] = b[i][0]; g_vm_l1n[i] = vm_len(g_vm_fpn[i]) * k; }
         g_vm_npq[i] = quat_norm(quat_mul(*hq, *lpq));
         g_vm_npp[i] = vm_add(*hp, quat_rotvec(*hq, vm_v(lp.x*sc.x, lp.y*sc.y, lp.z*sc.z)));
     }
@@ -577,6 +604,7 @@ static void vm_apply(void *skel)
     Quat Qp = quat_norm(quat_mul(vm_frame_quat(g_vm_tf, g_vm_tu),
                                  quat_conj(vm_frame_quat(vm_axis(g_vm_ax[g_vm_class][0]), vm_axis(g_vm_ax[g_vm_class][1])))));
     const Quat *lpq = g_oldnode_getori(b[wh][3]); const Vec3 *lpp = g_oldnode_getpos(b[wh][3]);
+    float rlr = (g_vm_rlnat && g_vm_class == 1) ? g_vm_rlw : 0.0f; rlr = rlr * rlr * (3.0f - 2.0f * rlr);
     const Vec3 *hs = g_oldnode_getdscale ? g_oldnode_getdscale(b[wh][2]) : NULL;
     Vec3 sc = readable((void *)hs, 12) ? *hs : vm_v(1, 1, 1), lp = *lpp;
     Quat lq = *lpq;
@@ -601,7 +629,9 @@ static void vm_apply(void *skel)
             }
         }
         if (frz && g_vm_have_pl[pc_] && g_oldnode_setpos && we >= 0.5f) {
+            Quat lqn = lq; Vec3 lpn = lp;
             lq = g_vm_plq[pc_]; lp = g_vm_plp[pc_];
+            if (rlr > 0.0f) { lq = quat_norm(quat_slerp(lq, lqn, rlr)); lp = vm_lerp(lp, lpn, rlr); }   /* X3: native prop local */
             if (g_vm_groll[pc_] != 0.0f) {
                 float h = g_vm_groll[pc_] * 0.0087266f; Vec3 ax = vm_axis(g_vm_ax[pc_][0]);
                 lq = quat_norm(quat_mul(lq, (Quat){ cosf(h), ax.x * sinf(h), ax.y * sinf(h), ax.z * sinf(h) }));
@@ -647,8 +677,36 @@ static void vm_apply(void *skel)
             } else g_vm_have_rs = 0;
         }
     }
+    if (g_vm_class == 0 && g_vm_eclamp) {   /* S1: the edge never faces the camera */
+        Vec3 bf = vm_norm(quat_rotvec(Qp, vm_axis(g_vm_ax[0][0]))), be = quat_rotvec(Qp, vm_axis(g_vm_ax[0][1]));
+        Vec3 to = vm_norm(vm_sub(vm_w2s_pos(vm_c2w_pos(vm_v(0, 0, 0))), g_vm_tp));
+        Vec3 tp_ = vm_sub(to, vm_mul(bf, vm_dot(to, bf))), ep = vm_sub(be, vm_mul(bf, vm_dot(be, bf)));
+        float lt = vm_len(tp_), le_ = vm_len(ep);
+        if (lt > 1e-3f && le_ > 1e-3f) {
+            tp_ = vm_mul(tp_, 1.0f / lt); ep = vm_mul(ep, 1.0f / le_);
+            float c = vm_dot(ep, tp_) * lt, tol = g_vm_ectol;
+            g_vm_eclamp_eye = c;
+            if (c > tol && lt > fabsf(tol)) {
+                float th0 = atan2f(vm_dot(bf, vm_cross(tp_, ep)), vm_dot(tp_, ep));   /* edge angle from the eye dir */
+                float thw = acosf(fmaxf(-1.0f, fminf(1.0f, tol / lt)));             /* allowed |angle| >= thw */
+                float d = (th0 >= 0.0f ? thw : -thw) - th0, h = 0.5f * d;
+                Qp = quat_norm(quat_mul((Quat){ cosf(h), bf.x * sinf(h), bf.y * sinf(h), bf.z * sinf(h) }, Qp));
+                g_vm_eclamp_n++;
+            }
+        }
+    }
     Quat Qh = quat_norm(quat_mul(Qp, quat_conj(lq)));
     Vec3 Ph = vm_sub(g_vm_tp, quat_rotvec(Qh, vm_v(lp.x*sc.x, lp.y*sc.y, lp.z*sc.z)));
+    if (g_vm_class == 0 && g_vm_hroll != 0.0f) {   /* option A: roll the hand (and the blade with it) about the forearm axis at the wrist: palm turns, wrist stays straight, the blade moves */
+        Vec3 hx = vm_norm(quat_rotvec(Qh, vm_v(1, 0, 0))); float h = g_vm_hroll * 0.0087266f;
+        Qh = quat_norm(quat_mul((Quat){ cosf(h), hx.x * sinf(h), hx.y * sinf(h), hx.z * sinf(h) }, Qh)); }
+    if (g_vm_class == 0) {   /* S1: grip constant kappa = angle about the blade from the hand X axis to the edge */
+        Quat Qpf = quat_norm(quat_mul(Qh, lq));
+        Vec3 bf = vm_norm(quat_rotvec(Qpf, vm_axis(g_vm_ax[0][0]))), be = quat_rotvec(Qpf, vm_axis(g_vm_ax[0][1]));
+        Vec3 hx = quat_rotvec(Qh, vm_v(1, 0, 0));
+        Vec3 hp = vm_sub(hx, vm_mul(bf, vm_dot(hx, bf))), ep = vm_sub(be, vm_mul(bf, vm_dot(be, bf)));
+        if (vm_len(hp) > 1e-3f && vm_len(ep) > 1e-3f) { g_vm_ekap = atan2f(vm_dot(bf, vm_cross(hp, ep)), vm_dot(hp, ep)); g_vm_have_ekap = 1; }
+    }
     /* off-hand */
     Vec3 Po = g_vm_op; Quat Qo = g_vm_nhq[oh]; int keep = 1;
     {   Vec3 dn = vm_sub(g_vm_nhp[oh], g_vm_npp[wh]);
@@ -661,6 +719,18 @@ static void vm_apply(void *skel)
          * native 2-handed grip (last seen near) */
         if (g_vm_omode && g_vm_have_orel) { Qo = quat_norm(quat_mul(Qp, g_vm_orel)); keep = 0; }
     }
+    if (rlr > 0.0f) {   /* X3: native two-hand reload moved into view: bow at the hold point (+ rltr of its native travel) */
+        const Vec3 *pS = g_oldnode_getdpos(b[wh][0]);
+        Vec3 S0 = readable((void *)pS, 12) ? *pS : g_vm_nhp[wh];
+        Vec3 vn = vm_sub(g_vm_nhp[wh], S0);
+        if (!g_vm_have_rl0) { g_vm_rl_p0 = vn; g_vm_have_rl0 = 1; }
+        Vec3 vt = vm_sub(Ph, S0);
+        if (g_vm_scale > 1e-6f) vt = vm_add(vt, vm_w2s_dir(vm_c2w_dir(vm_v(0.0f, g_vm_rl_dy, 0.0f))));
+        Quat R = vm_fromto(vm_lerp(vn, g_vm_rl_p0, 1.0f - g_vm_rltr), vt);
+        Ph = vm_lerp(Ph, vm_add(S0, quat_rotvec(R, vn)), rlr); Qh = quat_norm(quat_slerp(Qh, quat_norm(quat_mul(R, g_vm_nhq[wh])), rlr));
+        Vec3 Pon = vm_add(S0, quat_rotvec(R, vm_sub(g_vm_nhp[oh], S0))); Quat Qon = quat_norm(quat_mul(R, g_vm_nhq[oh]));
+        Po = vm_lerp(Po, Pon, rlr); Qo = quat_norm(quat_slerp(keep ? g_vm_nhq[oh] : Qo, Qon, rlr)); keep = 0;
+    } else g_vm_have_rl0 = 0;
     {   Vec3 Et; float ew = vm_elbow(b[wh][0], b[wh][1], b[wh][2], Ph, &Et);
         if (!vm_ik(wh, b[wh][0], b[wh][1], b[wh][2], Ph, Qh, 0, g_vm_tpole[wh], we, &Et, ew)) g_vm_ikfail++; }
     if (!vm_ik(oh, b[oh][0], b[oh][1], b[oh][2], Po, Qo, keep, g_vm_tpole[oh], we, NULL, 0.0f)) g_vm_ikfail++;
@@ -726,7 +796,7 @@ static int vm_elb_out(Vec3 x)   /* camera point outside the view frustum by the 
 static int vm_elb_pass(Vec3 W, Vec3 E, Vec3 S, float L1n)
 {
     float zc = g_vm_elb_zc, zt = g_vm_elb_zc + g_vm_elb_r, le = vm_len(vm_sub(E, S));
-    if (le > L1n * g_vm_elb_stmax || le < L1n * 0.4f) return 0;
+    if (le > L1n * vm_stmax() || le < L1n * 0.4f) return 0;
     if (W.z <= zc - g_vm_elb_r) return 1;                    /* hand wholly behind the near plane: nothing drawn */
     if (W.z < zt && !vm_elb_out(W)) return 0;                /* hand sliced by the near plane in view: no elbow fixes it */
     /* the arm surface (axis z - radius) must stay in front of the plane until the arm is off screen */
@@ -754,12 +824,22 @@ static float vm_cone_dev(Vec3 e, Vec3 f, float th, float band)   /* radians outs
 /* melee wrist fix: preferred wrist -> elbow direction (camera space) for the wrist at Ph (skeleton space): g_vm_elbd
  * blended with the natural shoulder/elbow IK elbow (g_vm_elb_nat), kept on the straight-wrist cone around the blade.
  * Shared by the blade roll (vm_apply) and vm_elbow so both aim at the same elbow. 0 = bones unreadable / not melee. */
+/* S1: cos(edge, wrist->eye) for the wrist -> elbow candidate e (camera numbers), blade fb, wrist W (eye = origin) */
+static float g_vm_edgesgn = -1.0f, g_vm_edge_pen = 4.0f;
+static float vm_edge_eye(Vec3 e, Vec3 fb, Vec3 W)
+{
+    Vec3 a = vm_mul(e, -1.0f), pa = vm_sub(a, vm_mul(fb, vm_dot(a, fb)));
+    if (vm_len(pa) < 1e-4f || vm_len(W) < 1e-4f) return -1.0f;
+    pa = vm_norm(pa);
+    Vec3 ed = vm_add(vm_mul(pa, cosf(g_vm_ekap)), vm_mul(vm_cross(fb, pa), sinf(g_vm_ekap)));
+    return -g_vm_edgesgn * vm_dot(ed, vm_norm(W));
+}
 static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
 {
     if (!(g_vm_wfix && g_vm_class == 0)) return 0;
     const Vec3 *ps = g_oldnode_getdpos(ua), *pe = g_oldnode_getdpos(fa), *ph = g_oldnode_getdpos(ha);
     if (!readable((void *)ps, 12) || !readable((void *)pe, 12) || !readable((void *)ph, 12)) return 0;
-    float L1n = vm_len(vm_sub(*pe, *ps)) * g_vm_scale, L2 = vm_len(vm_sub(*ph, *pe)) * g_vm_scale;
+    float L1n = vm_l1(ua, ps, pe) * g_vm_scale, L2 = vm_len(vm_sub(*ph, *pe)) * g_vm_scale;
     if (L1n < 0.1f || L2 < 0.1f) return 0;
     Vec3 W = vm_s2c_pos(Ph), S = vm_s2c_pos(*ps), d0 = vm_norm(g_vm_elbd);
     Vec3 fb = vm_norm(vm_w2c_dir(vm_s2w_dir(g_vm_tf)));
@@ -783,11 +863,14 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
      * and reappear elsewhere: the offset region bridges it with a bent-but-legal wrist instead of a jump).
      * 2 = passing pick, 1 = preference only (vm_elbow searches). */
     Vec3 ax = vm_mul(fb, -1.0f), u1 = vm_norm(vm_cross(ax, fabsf(ax.y) < 0.9f ? vm_v(0, 1, 0) : vm_v(1, 0, 0))), u2 = vm_cross(ax, u1);
-    Vec3 kp = g_vm_have_elbe ? g_vm_elbe : pref; float kw = g_vm_have_elbe ? g_vm_elb_keep : 0.0f;
+    Vec3 kp = g_vm_have_elbe ? g_vm_elbe : pref; float kw = g_vm_have_elbe && g_vm_reseed <= 0.0f ? g_vm_elb_keep : 0.0f;
+    int eg = g_vm_edge && g_vm_have_ekap, eonly = 0;   /* S1 */
     float stepc = g_vm_have_elbe ? cosf(fminf(3.0f, g_vm_elb_rate * 0.0174533f * fminf(fmaxf(g_vm_dt, 0.004f), g_vm_maxdt))) : -2.0f;
     float sstep = g_vm_have_elbe ? fminf(3.0f, g_vm_elb_rate * 0.0174533f * fminf(fmaxf(g_vm_dt, 0.004f), g_vm_maxdt)) : 3.0f;
     float tc[3] = { stepc, cosf(fminf(3.1f, 2.0f * sstep)), cosf(fminf(3.1f, 4.0f * sstep)) };
     float tb[4] = { -1e9f, -1e9f, -1e9f, -1e9f }, ta[4] = { 0 }, td[4] = { 0 };
+    float tbo[4] = { -1e9f, -1e9f, -1e9f, -1e9f }, tao[4] = { 0 }, tdo[4] = { 0 };   /* S1: edge-away candidates only */
+    if (g_vm_reseed > 0.0f) tc[0] = tc[1] = tc[2] = -2.0f;   /* S2: global pick */
     float bl = -1e9f, bg = -1e9f, la = 0, ld = 0, ga = 0, gd = 0; int nd = (int)(g_vm_elb_dmax / 4.0f);
     /* look-ahead (PT30): the passing band can switch sides within one frame (end of the strike), a causal pick then
      * jumps (blade roll 75 deg in one frame). Passing directions of the next frames (wrist / blade predicted from
@@ -795,7 +878,7 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
      * backward minimax DP (max over continuations of the min step cosine); the pick below pays for a best
      * continuation step above g_vm_elb_lama deg. Once per frame (the roll refinement calls twice). */
     int lan = 0;
-    if (g_vm_elb_la && g_vm_have_elbe && g_vm_fut_n > 0) {
+    if (g_vm_elb_la && g_vm_have_elbe && g_vm_fut_n > 0 && g_vm_reseed <= 0.0f) {
         if (g_vm_la_fid != g_vm_fid) {
             g_vm_la_fid = g_vm_fid; g_vm_la_n = 0;
             VmPose o0 = g_vm_out; Vec3 s0 = vm_cross(o0.f, o0.u), dw = vm_sub(W, o0.p);
@@ -804,13 +887,15 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
                 VmPose o = g_vm_fut[k]; Vec3 sk = vm_cross(o.f, o.u);
                 Vec3 Wk = vm_add(o.p, vm_add(vm_add(vm_mul(o.f, ol.x), vm_mul(o.u, ol.y)), vm_mul(sk, ol.z)));
                 Vec3 ak = vm_mul(vm_norm(o.f), -1.0f), v1 = vm_norm(vm_cross(ak, fabsf(ak.y) < 0.9f ? vm_v(0, 1, 0) : vm_v(1, 0, 0))), v2 = vm_cross(ak, v1);
-                int n = 0;
+                int n = 0, no = 0; static unsigned char okf[VM_LAA * 7]; Vec3 fk = vm_norm(o.f);
                 for (int i = 0; i < VM_LAA; i++) for (int j = -3; j <= 3; j++) {
                     float phi = i * (6.2831853f / VM_LAA), t = th + j * 0.1396263f;
                     if (t < 0.0f || fabsf(j * 8.0f) > g_vm_elb_dmax + 1e-3f) continue;
                     Vec3 e = vm_add(vm_mul(ak, cosf(t)), vm_mul(vm_add(vm_mul(v1, cosf(phi)), vm_mul(v2, sinf(phi))), sinf(t)));
-                    if (vm_elb_pass(Wk, vm_add(Wk, vm_mul(e, L2)), S, L1n)) g_vm_la_e[k][n++] = e;
+                    if (vm_elb_pass(Wk, vm_add(Wk, vm_mul(e, L2)), S, L1n)) {
+                        okf[n] = !eg || vm_edge_eye(e, fk, Wk) <= g_vm_edge_tol; no += okf[n]; g_vm_la_e[k][n++] = e; }
                 }
+                if (no > 0 && no < n) { int m = 0; for (int c = 0; c < n; c++) if (okf[c]) g_vm_la_e[k][m++] = g_vm_la_e[k][c]; n = m; }   /* S1 */
                 if (!n) break;
                 g_vm_la_c[k] = n; g_vm_la_n = k + 1;
             }
@@ -847,8 +932,12 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
             Vec3 e = vm_add(vm_mul(ax, cosf(t)), vm_mul(vm_add(vm_mul(u1, cosf(phi)), vm_mul(u2, sinf(phi))), sinf(t)));
             Vec3 E = vm_add(W, vm_mul(e, L2));
             if (!vm_elb_pass(W, E, S, L1n)) continue;
+            float ee = eg ? vm_edge_eye(e, fb, W) : -1.0f;
+            int eok = !eg || ee <= g_vm_edge_tol;   /* S1 */
+            if (eonly && !eok) continue;
             float sc = vm_dot(e, pref) + kw * vm_dot(e, kp) - 0.5f * fabsf(vm_len(vm_sub(E, S)) - L1n) / L1n
-                     - 3.0f * fmaxf(0.0f, fabsf(dd) - 0.1396263f) + rbw * vm_dot(e, rbe);
+                     - 3.0f * fmaxf(0.0f, fabsf(dd) - 0.1396263f) + rbw * vm_dot(e, rbe)
+                     - g_vm_edge_pen * fmaxf(0.0f, ee - g_vm_edge_tol);   /* S1: least edge-facing fallback */
             if (lan) {   /* worst step on the best path: from the previous pick, then the predicted frames */
                 float g = vm_dot(e, kp), gb = -2.0f;
                 for (int b2 = 0; b2 < g_vm_la_c[0]; b2++) { float d = fminf(vm_dot(e, g_vm_la_e[0][b2]), g_vm_la_cc[0][b2]); if (d > gb) gb = d; }
@@ -856,7 +945,12 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
                 sc -= g_vm_elb_lawm * fmaxf(0.0f, acosf(fmaxf(-1.0f, fminf(1.0f, g))) * 57.29578f - g_vm_elb_lama);
             }
             {   float kd = vm_dot(e, kp); int ti = kd >= tc[0] ? 0 : kd >= tc[1] ? 1 : kd >= tc[2] ? 2 : 3;
-                if (sc > tb[ti]) { tb[ti] = sc; ta[ti] = phi; td[ti] = dd; }   }
+                if (sc > tb[ti]) { tb[ti] = sc; ta[ti] = phi; td[ti] = dd; }
+                if (eok && sc > tbo[ti]) { tbo[ti] = sc; tao[ti] = phi; tdo[ti] = dd; }   }
+        }
+        if (!pass && eg) {   /* S1: an edge-away elbow passes -> only those (refine pass too) */
+            int any = 0; for (int q = 0; q < 4; q++) any |= tbo[q] > -1e8f;
+            if (any) { for (int q = 0; q < 4; q++) { tb[q] = tbo[q]; ta[q] = tao[q]; td[q] = tdo[q]; } eonly = 1; } else g_vm_edge_nok++;
         }
         if (!pass) {   /* refine around the best of the nearest non-empty tier */
             int ti = 0; while (ti < 3 && tb[ti] <= -1e8f) ti++;
@@ -868,22 +962,28 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
     if (bl <= -1e8f) return 1;
     {   float phi = la, t = th + ld; (void)bg; (void)ga; (void)gd;
         Vec3 e = vm_norm(vm_add(vm_mul(ax, cosf(t)), vm_mul(vm_add(vm_mul(u1, cosf(phi)), vm_mul(u2, sinf(phi))), sinf(t))));
+        if (g_vm_have_elbe && g_vm_reseed > 0.0f && g_vm_reseed_tau > 0.0f) {   /* S2: glide to the re-seeded pick */
+            float sa = 1.0f - expf(-fminf(fmaxf(g_vm_dt, 0.004f), g_vm_maxdt) / g_vm_reseed_tau);
+            Vec3 es = vm_lerp(kp, e, sa); if (vm_len(es) > 1e-3f) e = vm_norm(es);
+        } else
         if (g_vm_have_elbe && g_vm_elb_ptau > 0.0f) {   /* low-pass the pick when the smoothed direction passes too */
             float sa = 1.0f - expf(-fminf(fmaxf(g_vm_dt, 0.004f), g_vm_maxdt) / g_vm_elb_ptau);
             Vec3 es = vm_norm(vm_lerp(kp, e, sa));
             if (vm_elb_pass(W, vm_add(W, vm_mul(es, L2)), S, L1n) && vm_cone_dev(es, fb, th, g_vm_elb_dmax * 0.0174533f) <= 0.0f) e = es;
         }
+        if (eg) g_vm_edge_pred = vm_edge_eye(e, fb, W);
         *d0o = e;   }
     return 2;
 }
 /* weapon-hand elbow target (skeleton space) for the arm-from-the-edge mode; returns its weight (0 = natural IK) */
+static Vec3 g_vm_elb_cb; static int g_vm_have_cb; static float g_vm_elb_hyst = 0.05f, g_vm_elb_slow = 0.35f, g_vm_elb_small = 4.0f;
 static float vm_elbow(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *Et)
 {
     g_vm_elb_w = 0.0f;
     if (!g_vm_elb[g_vm_class ? 1 : 0]) { g_vm_have_elbe = 0; return 0.0f; }
     const Vec3 *ps = g_oldnode_getdpos(ua), *pe = g_oldnode_getdpos(fa), *ph = g_oldnode_getdpos(ha);
     if (!readable((void *)ps, 12) || !readable((void *)pe, 12) || !readable((void *)ph, 12)) return 0.0f;
-    float L1n = vm_len(vm_sub(*pe, *ps)) * g_vm_scale, L2 = vm_len(vm_sub(*ph, *pe)) * g_vm_scale;
+    float L1n = vm_l1(ua, ps, pe) * g_vm_scale, L2 = vm_len(vm_sub(*ph, *pe)) * g_vm_scale;
     if (L1n < 0.1f || L2 < 0.1f) return 0.0f;
     Vec3 W = vm_s2c_pos(Ph), S = vm_s2c_pos(*ps), d0 = vm_norm(g_vm_elbd);
     int wf = g_vm_wfix && g_vm_class == 0, direct = 0; Vec3 fb = vm_v(0, 0, 1); float th = 0.0f, band = 0.0f;
@@ -905,6 +1005,12 @@ static float vm_elbow(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *Et)
             float dd = vm_dot(e, d0) - (wf ? 2.0f * vm_cone_dev(e, fb, th, band) : 0.0f);
             if (dd > bd && vm_elb_pass(W, vm_add(W, vm_mul(e, L2)), S, L1n)) { bd = dd; best = e; }
         }
+        if (bd > -99.0f && g_vm_have_cb && g_vm_elb_hyst > 0.0f) {   /* X1: hysteresis on the grid winner */
+            Vec3 e = g_vm_elb_cb;
+            float dd = vm_dot(e, d0) - (wf ? 2.0f * vm_cone_dev(e, fb, th, band) : 0.0f);
+            if (dd >= bd - g_vm_elb_hyst && vm_elb_pass(W, vm_add(W, vm_mul(e, L2)), S, L1n)) best = e;
+        }
+        g_vm_have_cb = bd > -99.0f; if (g_vm_have_cb) g_vm_elb_cb = best;
         if (bd > -99.0f) {   /* refine on the arc d0 -> best: the passing direction nearest d0 (continuous) */
             float lo = 0.0f, hi = 1.0f;
             for (int k = 0; k < 14; k++) { float mid = 0.5f * (lo + hi); Vec3 e = vm_norm(vm_lerp(d0, best, mid));
@@ -914,7 +1020,10 @@ static float vm_elbow(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *Et)
     }
     g_vm_elb_ok = ok;
     {   /* smooth the direction (the search can step); exact first frame */
-        float a = g_vm_have_elbe ? 1.0f - expf(-fminf(g_vm_dt, g_vm_maxdt) / g_vm_elb_tau) : 1.0f;
+        float tau = g_vm_elb_tau;
+        if (g_vm_have_elbe && g_vm_elb_slow > tau && acosf(fmaxf(-1.0f, fminf(1.0f, vm_dot(g_vm_elbe, best)))) < g_vm_elb_small * 0.0174533f)
+            tau = g_vm_elb_slow;   /* X1: small toggles glide */
+        float a = g_vm_have_elbe ? 1.0f - expf(-fminf(g_vm_dt, g_vm_maxdt) / tau) : 1.0f;
         if (wf && direct) a = 1.0f;   /* the wrist pick moves continuously (rate-limited): exact, the roll aims at it */
         g_vm_elbe = g_vm_have_elbe ? vm_norm(vm_lerp(g_vm_elbe, best, a)) : best; g_vm_have_elbe = 1;
     }
@@ -963,6 +1072,12 @@ static void vm_frame_core(void *pc, int body_down)
     if (g_vm_fire_t > 0.0f) { g_vm_fire_t -= dt; if (ti == VM_RELOAD || ti == VM_READY) ti = VM_AIM; }
     g_vm_ti = ti;
     g_vm_state = st; g_vm_hold = hold;
+    {   /* S2: entering block / ready (incl. recovering) re-seeds the elbow pick */
+        int m = !on || g_vm_class != 0 ? -1 : ti == VM_BLOCK ? 2 : ti == VM_READY && !want_swing ? 1 : 0;
+        if (m != g_vm_rsmode && m > 0 && g_vm_reseed_on) g_vm_reseed = g_vm_reseed_dur;
+        else if (g_vm_reseed > 0.0f) g_vm_reseed -= dt;
+        g_vm_rsmode = m;
+    }
 
     void *skel = NULL;
     if (pc) {
@@ -1087,11 +1202,14 @@ static void vm_frame_core(void *pc, int body_down)
         if (ti == VM_RELOAD && g_vm_class == 1 && g_vm_phase != VMP_LOWER) {
             g_vm_rl_t += adt;
             float c = g_vm_rl_t < 0.45f ? 0.0f : 0.5f - 0.5f * cosf(6.2831853f * (g_vm_rl_t - 0.45f) / g_vm_rl_per);
-            c *= g_vm_rl_amp;
+            c *= g_vm_rlnat ? 0.0f : g_vm_rl_amp;
             tgt.p = vm_add(tgt.p, vm_mul(vm_v(-0.10f, -0.25f, -0.35f), c));
             tgt.f = vm_add(tgt.f, vm_mul(vm_v(0.0f, -0.18f, 0.0f), c));
             tgt = vm_pose_norm(tgt);
         } else g_vm_rl_t = 0.0f;
+        {   int rlon = ti == VM_RELOAD && g_vm_class == 1 && g_vm_phase == VMP_NORMAL && on;
+            g_vm_rlw += (rlon ? 1.0f : -1.0f) * adt / fmaxf(g_vm_rlblend, 0.01f);
+            g_vm_rlw = g_vm_rlw < 0.0f ? 0.0f : g_vm_rlw > 1.0f ? 1.0f : g_vm_rlw; }
         if (g_vm_phase == VMP_DRAW) {                    /* hold below the view until the blend is done, then rise */
             if (g_vm_w < 0.98f) tgt = vm_draw_low(g_vm_class);
             else if (g_vm_ph_t > 0.9f) g_vm_phase = VMP_NORMAL;
@@ -1108,6 +1226,15 @@ static void vm_frame_core(void *pc, int body_down)
         if (g_vm_swing && (ti != VM_READY || g_vm_class != 0)) {     /* block / weapon change aborts the swing */
             logline("[vm] swing #%d aborted at u=%.2f (state=%s)", g_vm_swings, g_vm_swu, st); g_vm_swing = 0;
         }
+        /* swing->block high elbow (option-stretch.jpg: the block after a swing settles on the high elbow solution, upper-arm
+         * stretch 2.87, elbow 5 dm above the shoulder; a plain block from ready is the low one, 2.03): latched for the rest
+         * of the block once the uncapped elbow target wants more than g_vm_swb_trig, so the plain block and ready keep
+         * the full cap and stay as they are */
+        if (ti != VM_BLOCK || g_vm_class != 0) g_vm_swb = 0;
+        else if (!g_vm_swb && g_vm_s2_want > g_vm_swb_trig) {
+            g_vm_swb = 1; logline("[vm] swing->block high elbow: stretch %.2f > %.2f, elbow cap %.2f (state=%s)", g_vm_s2_want, g_vm_swb_trig, g_vm_swb_cap, st);
+        }
+        g_vm_swb_w = g_vm_swb_tau > 1e-3f ? fminf(1.0f, fmaxf(0.0f, g_vm_swb_w + (g_vm_swb ? 1.0f : -1.0f) * dt / g_vm_swb_tau)) : (float)g_vm_swb;
         if (g_vm_swing) {
             VmPose sw_prev = g_vm_cur;
             g_vm_swt += dt;
@@ -1329,6 +1456,10 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "zfade"))   { g_vm_zfade = x > 0.5f; return 1; }
     else if (!strcmp(k, "zf0"))     { if (x >= 0 && x < 50) g_vm_zf0 = x; return 1; }
     else if (!strcmp(k, "zf1"))     { if (x >= 0 && x < 50) g_vm_zf1 = x; return 1; }
+    else if (!strcmp(k, "rlnat"))   { g_vm_rlnat = x != 0; return 1; }
+    else if (!strcmp(k, "rltr"))    { if (x >= 0 && x <= 1) g_vm_rltr = x; return 1; }
+    else if (!strcmp(k, "rlblend")) { if (x >= 0 && x <= 2) g_vm_rlblend = x; return 1; }
+    else if (!strcmp(k, "rl_dy"))   { if (x >= -5 && x <= 5) g_vm_rl_dy = x; return 1; }
     else if (!strcmp(k, "rlper"))   { if (x > 0.2f && x < 5) g_vm_rl_per = x; return 1; }
     else if (!strcmp(k, "rlamp"))   { if (x >= 0 && x < 3) g_vm_rl_amp = x; return 1; }
     else if (!strcmp(k, "tau"))    { if (x > 0.005f && x < 2) g_vm_tau = x; return 1; }
@@ -1336,7 +1467,26 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "tauw"))   { if (x > 0.005f && x < 3) g_vm_tau_w = x; return 1; }
     else if (!strcmp(k, "swclock")) { g_vm_sw_clock = x != 0.0f; return 1; }
     else if (!strcmp(k, "sw_dur")) { if (x > 0.05f && x <= 12) g_vm_sw_dur = x; return 1; }
+    else if (!strcmp(k, "edgeclamp")) { g_vm_eclamp = x != 0; return 1; }
+    else if (!strcmp(k, "edgectol")) { if (x >= -1 && x <= 1) g_vm_ectol = x; return 1; }
+    else if (!strcmp(k, "edgepen")) { if (x >= 0 && x <= 50) g_vm_edge_pen = x; return 1; }
+    else if (!strcmp(k, "edgesgn")) { g_vm_edgesgn = x < 0 ? -1.0f : 1.0f; return 1; }
+    else if (!strcmp(k, "elbslow")) { if (x >= 0 && x <= 2) g_vm_elb_slow = x; return 1; }
+    else if (!strcmp(k, "elbsmall")) { if (x >= 0 && x <= 30) g_vm_elb_small = x; return 1; }
+    else if (!strcmp(k, "elbhyst")) { if (x >= 0 && x <= 1) g_vm_elb_hyst = x; return 1; }
+    else if (!strcmp(k, "nearclip")) { if (x >= 0 && x <= 10) g_vm_nc = x; return 1; }
+    else if (!strcmp(k, "l1fix")) { g_vm_l1fix = x != 0; return 1; }
     else if (!strcmp(k, "stretch")) { if (x >= 1 && x <= 2.5f) g_vm_stretch = x; return 1; }
+    else if (!strcmp(k, "hroll"))   { if (x > -360 && x < 360) g_vm_hroll = x; return 1; }
+    else if (!strcmp(k, "swbcap"))   { if (x >= 0.4f && x <= 5.0f) g_vm_swb_cap = x; return 1; }   /* elbow stretch cap in the swing->block pose only */
+    else if (!strcmp(k, "edge"))      { g_vm_edge = x > 0.5f; return 1; }   /* S1 edge-away elbow pick */
+    else if (!strcmp(k, "edgetol"))   { if (x >= -1.0f && x <= 1.0f) g_vm_edge_tol = x; return 1; }
+    else if (!strcmp(k, "reseed"))    { g_vm_reseed_on = x > 0.5f; return 1; }   /* S2 */
+    else if (!strcmp(k, "reseeddur")) { if (x >= 0.0f && x <= 2.0f) g_vm_reseed_dur = x; return 1; }
+    else if (!strcmp(k, "reseedtau")) { if (x >= 0.0f && x <= 1.0f) g_vm_reseed_tau = x; return 1; }
+    else if (!strcmp(k, "swbtrig"))  { if (x >= 1.0f && x <= 5.0f) g_vm_swb_trig = x; return 1; }
+    else if (!strcmp(k, "swbtau"))   { if (x >= 0.0f && x <= 1.0f) g_vm_swb_tau = x; return 1; }
+    else if (!strcmp(k, "elbstmax")) { if (x >= 0.4f && x <= 5.0f) g_vm_elb_stmax = x; return 1; }   /* upper-arm stretch cap of the elbow target (option B, Shay 2026-10-09) */
     else if (!strcmp(k, "elb"))     { g_vm_elb[0] = ((int)x) & 1; g_vm_elb[1] = (((int)x) >> 1) & 1; return 1; }
     else if (!strcmp(k, "elbdx"))   { g_vm_elbd.x = x; return 1; }
     else if (!strcmp(k, "elbdy"))   { g_vm_elbd.y = x; return 1; }
@@ -1467,7 +1617,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         "sw_ratio=%.2f sw_elev=%.1f,%.1f sw_az=%.1f,%.1f kicks=%d kick=%.2f fire=%.2f mp=%.2f,%.2f,%.2f mf=%.2f,%.2f,%.2f mu=%.2f,%.2f,%.2f tp=%.2f,%.2f,%.2f tf=%.2f,%.2f,%.2f "
         "near=%d calls=%lu applied=%lu reuse=%lu ikfail=%lu frames=%lu zoom=%.2f "
         "pl=%d,%d plq0=%.3f,%.3f,%.3f,%.3f plp0=%.3f,%.3f,%.3f plq1=%.3f,%.3f,%.3f,%.3f plp1=%.3f,%.3f,%.3f phase=%d hpend=%d hprog=%.2f "
-        "omode=%d oerr=%.2f Lsh=%.2f,%.2f,%.2f Lel=%.2f,%.2f,%.2f Lwr=%.2f,%.2f,%.2f Rsh=%.2f,%.2f,%.2f Rel=%.2f,%.2f,%.2f Rwr=%.2f,%.2f,%.2f stretch=%.2f,%.2f st_max=%.2f,%.2f elb=%d,%d,%.2f elbe=%.2f,%.2f,%.2f xwp=%d wb=%.1f mh=%.2f,%.2f,%.2f zf=%.2f wfix=%d pk=%u,%u,%u,%u hd=%.2f,%.2f,%.2f nk=%.2f,%.2f,%.2f sp=%.2f,%.2f,%.2f",
+        "omode=%d oerr=%.2f Lsh=%.2f,%.2f,%.2f Lel=%.2f,%.2f,%.2f Lwr=%.2f,%.2f,%.2f Rsh=%.2f,%.2f,%.2f Rel=%.2f,%.2f,%.2f Rwr=%.2f,%.2f,%.2f stretch=%.2f,%.2f st_max=%.2f,%.2f elb=%d,%d,%.2f elbe=%.2f,%.2f,%.2f xwp=%d wb=%.1f mh=%.2f,%.2f,%.2f zf=%.2f wfix=%d pk=%u,%u,%u,%u hd=%.2f,%.2f,%.2f nk=%.2f,%.2f,%.2f sp=%.2f,%.2f,%.2f swb=%d,%.2f,%.2f,%.2f edge=%d,%.1f,%.2f,%d rsd=%.2f",
         g_cfg_vm, g_vm_hooked, g_vm_dead, g_vm_state, g_vm_hold, g_vm_w, g_vm_class ? "ranged" : "melee",
         g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_basis_ok,
         g_vm_hand ? 'R' : 'L', g_vm_he[0], g_vm_ha[0], g_vm_he[1], g_vm_ha[1], g_vm_melee, g_vm_tilt_cur,
@@ -1484,7 +1634,8 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         g_vm_mj[1][1].x, g_vm_mj[1][1].y, g_vm_mj[1][1].z, g_vm_mj[1][2].x, g_vm_mj[1][2].y, g_vm_mj[1][2].z,
         g_vm_st_last[0], g_vm_st_last[1], g_vm_st_max[0], g_vm_st_max[1],
         g_vm_elb[g_vm_class ? 1 : 0], g_vm_elb_ok, g_vm_elb_w, g_vm_elbe.x, g_vm_elbe.y, g_vm_elbe.z, g_vm_xwp, g_vm_wb, g_vm_mh.x, g_vm_mh.y, g_vm_mh.z, g_vm_zf, g_vm_wfix, g_vm_pk[0], g_vm_pk[1], g_vm_pk[2], g_vm_pk[3],
-        g_vm_mhd.x, g_vm_mhd.y, g_vm_mhd.z, g_vm_mnk.x, g_vm_mnk.y, g_vm_mnk.z, g_vm_msp.x, g_vm_msp.y, g_vm_msp.z);
+        g_vm_mhd.x, g_vm_mhd.y, g_vm_mhd.z, g_vm_mnk.x, g_vm_mnk.y, g_vm_mnk.z, g_vm_msp.x, g_vm_msp.y, g_vm_msp.z, g_vm_swb, g_vm_swb_w, vm_stmax(), g_vm_s2_want,
+        g_vm_edge && g_vm_have_ekap, g_vm_ekap * 57.29578f, g_vm_edge_pred, g_vm_edge_nok, g_vm_reseed);
     r->append(r, b);
     return KAH_OK;
 }
