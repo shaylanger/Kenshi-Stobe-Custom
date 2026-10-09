@@ -16,7 +16,8 @@ and starts with harness input isolation ON: real keys/mouse ignored, cursor
 never clipped, input only via `stobe-auto key_inject|mouse_inject` (kenshi-key.ps1 /
 kenshi-click.ps1 switch to those by themselves), game keeps running unfocused.
 -Play: a normal launch for Shay (no monitor move, focus allowed, isolation off).
-Also: monitors | place [-Monitor x] | window (which monitor, who has the focus).
+Also: monitors | place [-Monitor x] | window (which monitor, who has the focus) | fit (render at the
+kenshi.cfg Video Mode size: checks a harness screenshot, resizes the window; also run after every launch).
 
 Windowed test runs (Shay, 2026-10-08: m72 ran exclusive-fullscreen on DISPLAY2 and
 interrupted him): every non -Play launch first sets kenshi.cfg to Full Screen=No,
@@ -115,6 +116,52 @@ if ($Command -in @('launch', 'stop', 'restart')) {
   }
 }
 
+# Render size (2026-10-09: on the 5090 the windowed game rendered at 958x510 although kenshi.cfg says 1600x900: the
+# window lands on DISPLAY2 at 150% while the primary runs 250%, Windows rescales the window of the DPI-aware game and
+# Ogre resizes its back buffer to the new client; screenshots/sheets were tiny). Measure what the game renders (harness
+# screenshot size) and resize the window, without moving or activating it, until the back buffer is the Video Mode size.
+function Fit-RenderSize {
+  if (-not ('KenshiFit' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class KenshiFit {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int w, int hh, uint f);
+  [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
+  // window and client size in physical pixels; scale the client by (sx, sy) when sx > 0 (SWP_NOMOVE 0x2|NOZORDER|NOACTIVATE)
+  public static string Fit(IntPtr h, double sx, double sy) {
+    IntPtr old = IntPtr.Zero; try { old = SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch (EntryPointNotFoundException) { }
+    try {
+      RECT w, c; GetWindowRect(h, out w); GetClientRect(h, out c);
+      int ww = w.R - w.L, wh = w.B - w.T, cw = c.R - c.L, ch = c.B - c.T;
+      if (sx > 0) SetWindowPos(h, IntPtr.Zero, 0, 0, ww + (int)Math.Round(cw * (sx - 1)), wh + (int)Math.Round(ch * (sy - 1)), 0x0002 | 0x0004 | 0x0010);
+      return "window " + ww + "x" + wh + " client " + cw + "x" + ch;
+    } finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
+  }
+}
+'@
+  }
+  $vm = (Get-Content $Cfg | Where-Object { $_ -match '^Video Mode=' }) -replace '^Video Mode=\s*', ''
+  if ($vm -notmatch '^(\d+)\s*x\s*(\d+)') { "render size: no Video Mode in $Cfg"; return }
+  $ww = [int]$Matches[1]; $wh = [int]$Matches[2]
+  $p = Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  if (-not $p) { 'render size: no game window'; return }
+  foreach ($i in 1..3) {
+    $r = wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- stobe-auto screenshot kctl-size 2>&1 | Out-String
+    $m = [regex]::Match($r, '\((\d+)x(\d+)\)')
+    if (-not $m.Success) { "render size: no screenshot ($($r.Trim()))"; return }
+    $sw = [int]$m.Groups[1].Value; $sh = [int]$m.Groups[2].Value
+    if ($sw -eq $ww -and $sh -eq $wh) { "render size: ${sw}x${sh} ok ($([KenshiFit]::Fit($p.MainWindowHandle, 0, 0)))"; return }
+    $before = [KenshiFit]::Fit($p.MainWindowHandle, $ww / $sw, $wh / $sh)
+    "render size: ${sw}x${sh}, want ${ww}x${wh}: resized ($before)"
+    Start-Sleep -Seconds 2
+  }
+  "render size: STILL WRONG after 3 resizes"
+}
+if ($Command -eq 'fit') { Fit-RenderSize; exit 0 }
+
 $bg = @{}
 if (-not $Play) { $bg = @{ Monitor = $Monitor; Background = $true; Isolate = $true } }
 if ($Command -in @('launch', 'restart')) {
@@ -147,5 +194,7 @@ if ($rc -eq 0 -and -not $Play -and $Command -in @('launch', 'restart')) {
     $last = & $ctl background -Monitor $Monitor -Kenshi $Kenshi
   }
   "background: $last"
+  Fit-RenderSize
+  "background after the resize: $(& $ctl background -Monitor $Monitor -Kenshi $Kenshi)"
 }
 exit $rc
