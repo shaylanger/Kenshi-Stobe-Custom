@@ -21,9 +21,9 @@ results labelled "-4080"). Never compare performance across machines.
 | Component | Installed (5090) | Install at the next restart |
 |---|---|---|
 | Stobe.dll | `B056BDF0` (5090 only, no Stobe on the 4080) | `8AF6F9B5` (items 135-145) |
-| KenshiFP.dll | 5090 `76CF7E8A` (m52), 4080 `DD5FA352` (PT fixes + viewmodel WIP) | 5090: PT fixes build (m53) |
+| KenshiFP.dll | `C2692485` on both rigs (m76, final viewmodel build) | - |
 | ProfessionGearProgression.dll | `BAFB8C31` (Normal; verified 2026-10-05) | - |
-| AutomationHarness.dll | 5090 `EF425B2D` (input isolation f10996c/e617d36), 4080 `24BE3AEC` | - |
+| AutomationHarness.dll | 5090 `FA9C3EFB`, 4080 `24BE3AEC` | - |
 | Server (live) | `stobe` 055e0c5 | - |
 
 ## 1. Open automated rows
@@ -35,7 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | open: PT17 (Shay), PT26, PT28 (+ PT27/PT29 recheck) and Shay's every-frame FP animation review (2026-10-08, 4080 viewmodel agent); PT04/PT23/PT24/PT25 PASS m66 |
+| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | PT17 (coordinator look), PT26-PT29 + viewmodel deferred sweep PASS m76 on KenshiFP C2692485 (`archive/test-run-2026-10-08-m76.md`); open for Shay: feel (crossbow reload hold ~70 deg roll); PT04/PT23/PT24/PT25 PASS m66 |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
