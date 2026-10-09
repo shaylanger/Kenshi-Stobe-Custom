@@ -224,6 +224,8 @@ static unsigned g_vm_pk[4];   /* wrist picks: within the rate step, 2x, 4x, anyw
 static Vec3  g_vm_pick; static int g_vm_pick_ok;   /* wrist fix: this frame's elbow pick (camera space), made with the blade roll */
 static Vec3  g_vm_elbe; static int g_vm_have_elbe, g_vm_elb_ok; static float g_vm_elb_w, g_vm_elb_wz;
 static float g_vm_l1n[2]; static void *g_vm_b0[2]; static int g_vm_l1fix = 1;
+static int g_vm_fptol = 1; static float g_vm_stdb = 0.0f, g_vm_st_prev[2] = { 1.0f, 1.0f };
+static unsigned long g_vm_fp_exact, g_vm_fp_near, g_vm_fp_nat, g_vm_fp_long;
 static float g_vm_stretch = 1.6f, g_vm_st_last[2] = { 1.0f, 1.0f }, g_vm_st_max[2] = { 1.0f, 1.0f };
 static Vec3  g_vm_fpn[2], g_vm_fpw[2]; static int g_vm_fpw_on[2];
 static int   g_vm_hitch_ms, g_vm_hitch_per, g_vm_hitch_n;   /* test: forced game hitch (ms) every N frames (0 = once) */
@@ -438,7 +440,9 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
     float st = 1.0f;
     if (g_vm_stretch > 1.0f && g_oldnode_setpos && w > 0.001f) {
         float need = D / 0.995f - L2;                     /* upper-arm length that reaches the target */
-        if (need > L1) { st = fminf(need / L1, g_vm_stretch); st = 1.0f + (st - 1.0f) * fminf(w, 1.0f); L1 *= st; }
+        if (need > L1) { st = fminf(need / L1, g_vm_stretch); st = 1.0f + (st - 1.0f) * fminf(w, 1.0f);
+            if (g_vm_stdb > 0.0f && fabsf(st - g_vm_st_prev[side]) < g_vm_stdb) st = g_vm_st_prev[side];
+            g_vm_st_prev[side] = st; L1 *= st; }
     }
     Vec3 n = D > 1e-5f ? vm_mul(d, 1.0f / D) : vm_norm(vm_sub(H, S));
     float dmin = fabsf(L1 - L2) + 0.02f * (L1 + L2), dmax = (L1 + L2) * 0.995f;
@@ -503,6 +507,33 @@ static Vec3 vm_c2w_pos(Vec3 c); static Vec3 vm_c2w_dir(Vec3 c);
 static void *g_vm_pc; static int g_vm_applymap = 1, g_vm_in_map, g_vm_wih; static unsigned long g_vm_napply;
 static Vec3 g_vm_root_f, g_vm_root_a;
 static int char_position(void *c, Vec3 *out);
+static int g_vm_mapnode = 1, g_vm_have_moff; static Vec3 g_vm_moff; static float g_vm_map_res, g_vm_map_resmax; static unsigned long g_vm_map_node_n, g_vm_map_fb_n;
+/* X1: exact map from the body entity's scene node: world = Pn + Qn * (Sn * skel). Returns 1 when used. */
+static int vm_map_node(void *pc, Vec3 cms, Vec3 cmw_meas)
+{
+    if (!g_vm_mapnode || !g_node_getdori_v || !g_node_getdpos_v || !g_node_getdscale_v || !g_get_parent_scenenode || g_anim_ent_off < 0) return 0;
+    void *anim = readable((void *)((uintptr_t)pc + CHAR_ANIM), 8) ? *(void **)((uintptr_t)pc + CHAR_ANIM) : NULL;
+    if (!readable((void *)((uintptr_t)anim + g_anim_ent_off), 8)) return 0;
+    void *ent = *(void **)((uintptr_t)anim + g_anim_ent_off);
+    if (!readable(ent, 0x100)) return 0;
+    void *node = g_get_parent_scenenode(ent);
+    if (!readable(node, 0x100)) return 0;
+    Quat q; Vec3 pn, sn; g_node_getdori_v(node, &q); g_node_getdpos_v(node, &pn); g_node_getdscale_v(node, &sn);
+    q = quat_norm(q);
+    if (sn.x < 1e-4f || fabsf(sn.y - sn.x) > 1e-3f * sn.x || fabsf(sn.z - sn.x) > 1e-3f * sn.x) return 0;
+    Vec3 c[3] = { quat_rotvec(q, vm_v(1, 0, 0)), quat_rotvec(q, vm_v(0, 1, 0)), quat_rotvec(q, vm_v(0, 0, 1)) };
+    Vec3 cmo = vm_add(pn, vm_mul(quat_rotvec(q, cms), sn.x)), off = vm_sub(cmw_meas, cmo);
+    g_vm_map_res = g_vm_have_moff ? vm_len(vm_sub(off, g_vm_moff)) : 0.0f;
+    if (!g_vm_have_moff || g_vm_map_res > 0.05f) { g_vm_moff = off; g_vm_have_moff = 1; }   /* origin shift / first frame */
+    else if (g_vm_map_res > g_vm_map_resmax) g_vm_map_resmax = g_vm_map_res;
+    Vec3 cmw = vm_add(cmo, g_vm_moff);
+    for (int k = 0; k < 3; k++) {
+        g_vm_w2s[k] = c[k];
+        g_vm_s2w[k] = vm_v(k == 0 ? c[0].x : k == 1 ? c[0].y : c[0].z, k == 0 ? c[1].x : k == 1 ? c[1].y : c[1].z, k == 0 ? c[2].x : k == 1 ? c[2].y : c[2].z);
+    }
+    g_vm_scale = sn.x; g_vm_cms = cms; g_vm_cmw = cmw;
+    return 1;
+}
 static int vm_map(void *pc, void *skel)
 {
     Vec3 cw[2], spw, cs[2], sps, ew[3], es[3];
@@ -533,6 +564,7 @@ static int vm_map(void *pc, void *skel)
         }
     }
     g_vm_cms = cms; g_vm_cmw = cmw;
+    if (vm_map_node(pc, cms, cmw)) g_vm_map_node_n++; else g_vm_map_fb_n++;
     return 1;
 }
 /* commanded pose (camera numbers: g_vm_out, off-hand g_vm_oc, poles) -> skeleton-space IK targets */
@@ -570,7 +602,15 @@ static void vm_apply(void *skel)
         {   const Vec3 *fpp = g_oldnode_getpos(b[i][1]);
             if (!readable((void *)fpp, 12)) return;
             Vec3 fp = *fpp;
-            if (g_vm_fpw_on[i] && g_oldnode_setpos && !memcmp(&fp, &g_vm_fpw[i], sizeof(Vec3))) {
+            int ours = g_vm_fpw_on[i] && !memcmp(&fp, &g_vm_fpw[i], sizeof(Vec3));
+            if (ours) g_vm_fp_exact++;
+            else if (g_vm_fpw_on[i] && g_vm_fptol) {   /* X1: our write came back changed by float noise, or a stale stretched pos: never adopt it as native */
+                float lw = vm_len(g_vm_fpw[i]), ln = vm_len(g_vm_fpn[i]), lf = vm_len(fp);
+                if (vm_len(vm_sub(fp, g_vm_fpw[i])) <= 1e-3f * fmaxf(lw, 1e-3f)) { ours = 1; g_vm_fp_near++; }
+                else if (ln > 1e-4f && lf > ln * 1.01f && vm_dot(fp, g_vm_fpn[i]) > 0.999f * lf * ln) { ours = 1; g_vm_fp_long++; }
+                else g_vm_fp_nat++;
+            }
+            if (ours && g_oldnode_setpos) {
                 fp = g_vm_fpn[i]; g_oldnode_setpos(b[i][1], &fp); g_oldnode_needupd(b[i][1], 1);
             }
             g_vm_fpw_on[i] = 0; g_vm_fpn[i] = fp; g_vm_st_last[i] = 1.0f;
@@ -1049,6 +1089,8 @@ static void vm_frame_core(void *pc, int body_down)
     if (!g_vm_hooked || g_vm_dead) return;
     vm_names();
     g_vm_frames++;
+    if (g_vm_class == 1 && g_vm_frames % 600 == 0) logline("X1 fp exact=%lu near=%lu long=%lu nat=%lu st=%.4f,%.4f fpn=%.4f,%.4f map node=%lu fb=%lu res=%.4f resmax=%.4f",
+        g_vm_fp_exact, g_vm_fp_near, g_vm_fp_long, g_vm_fp_nat, g_vm_st_last[0], g_vm_st_last[1], vm_len(g_vm_fpn[0]), vm_len(g_vm_fpn[1]), g_vm_map_node_n, g_vm_map_fb_n, g_vm_map_res, g_vm_map_resmax);
 
     const char *st = g_fpc_ui_state ? g_fpc_ui_state : "off";
     int ti = -1, hold = 0, on = 1, want_swing = 0;
@@ -1476,6 +1518,9 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "elbhyst")) { if (x >= 0 && x <= 1) g_vm_elb_hyst = x; return 1; }
     else if (!strcmp(k, "nearclip")) { if (x >= 0 && x <= 10) g_vm_nc = x; return 1; }
     else if (!strcmp(k, "l1fix")) { g_vm_l1fix = x != 0; return 1; }
+    else if (!strcmp(k, "fptol")) { g_vm_fptol = x != 0; return 1; }
+    else if (!strcmp(k, "mapnode")) { g_vm_mapnode = x != 0; g_vm_map_resmax = 0; g_vm_have_moff = 0; return 1; }
+    else if (!strcmp(k, "stdb")) { if (x >= 0 && x <= 0.5f) g_vm_stdb = x; return 1; }
     else if (!strcmp(k, "stretch")) { if (x >= 1 && x <= 2.5f) g_vm_stretch = x; return 1; }
     else if (!strcmp(k, "hroll"))   { if (x > -360 && x < 360) g_vm_hroll = x; return 1; }
     else if (!strcmp(k, "swbcap"))   { if (x >= 0.4f && x <= 5.0f) g_vm_swb_cap = x; return 1; }   /* elbow stretch cap in the swing->block pose only */

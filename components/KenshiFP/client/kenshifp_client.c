@@ -1118,6 +1118,8 @@ typedef const Vec3 *(*oldnode_getdpos_t)(void *node);   /* skeleton-space derive
 static oldnode_getdpos_t g_oldnode_getdpos;
 typedef Vec3 *(*node_getdpos_upd_t)(void *node, Vec3 *ret);  /* FORCES transform recompute */
 static node_getdpos_upd_t g_node_getdpos_upd;
+typedef Quat *(*node_getdori_t)(void *node, Quat *ret); static node_getdori_t g_node_getdori_v;   /* X1 */
+typedef Vec3 *(*node_getdvec_t)(void *node, Vec3 *ret); static node_getdvec_t g_node_getdpos_v, g_node_getdscale_v;
 typedef const Quat *(*oldnode_getori_t)(void *node);           /* const Quaternion& (LOCAL) */
 typedef void (*oldnode_setori_t)(void *node, const Quat *q);   /* setOrientation(LOCAL) */
 typedef void (*oldnode_needupd_t)(void *node, char force);     /* needUpdate(bool) */
@@ -8840,6 +8842,9 @@ __declspec(dllexport) void dllStartPlugin(void)
         g_oldnode_getdori = (oldnode_getdori_t)GetProcAddress(ogre, OGRE_OLDNODE_GETDORI_SYM);
         g_oldnode_getdpos = (oldnode_getdpos_t)GetProcAddress(ogre, OGRE_OLDNODE_GETDPOS_SYM);
         g_node_getdpos_upd = (node_getdpos_upd_t)GetProcAddress(ogre, OGRE_GETDPOS_UPD_SYM);
+        g_node_getdori_v = (node_getdori_t)GetProcAddress(ogre, "?_getDerivedOrientation@Node@Ogre@@QEBA?AVQuaternion@2@XZ");
+        g_node_getdpos_v = (node_getdvec_t)GetProcAddress(ogre, "?_getDerivedPosition@Node@Ogre@@QEBA?AVVector3@2@XZ");
+        g_node_getdscale_v = (node_getdvec_t)GetProcAddress(ogre, "?_getDerivedScale@Node@Ogre@@QEBA?AVVector3@2@XZ");
         g_oldnode_getori  = (oldnode_getori_t)GetProcAddress(ogre, OGRE_OLDNODE_GETORI_SYM);
         g_oldnode_setori  = (oldnode_setori_t)GetProcAddress(ogre, OGRE_OLDNODE_SETORI_SYM);
         g_oldnode_needupd = (oldnode_needupd_t)GetProcAddress(ogre, OGRE_OLDNODE_NEEDUPD_SYM);
