@@ -112,13 +112,14 @@ Most of these broke under combined actions (toggle FP off/on, two weapons, squad
 needs a compound scenario (several actions in a row, toggles between them), not one isolated action.
 | ID | Problem (Shay) | Want / log evidence | State (KenshiFP commit) |
 |---|---|---|---|
+| PT17 | FP view/animations must look right next to Chivalry 2 (no clipped or hollow limbs, nothing floating) | full-res every-frame review, open ground (no wall in view), side by side with Chivalry 2 references for sword + crossbow | OPEN m76 on C2692485: (1) sword swing follow-through f3i_434-440: forearm shows as a hollow arch near the camera (likely near-plane cut through the arm mesh); (2) crossbow fire sheet x20 shot next to a pillar covering half the view (redo in open ground); (3) crossbow draw xd17_56-57: bow swings in at an odd angle with no hand visible (floating) |
 
 ## Visual/user checks
 ADS alignment and reload readability; zoom/body/clipping; attack/block responsiveness; tactical enjoyment and high-skill limb precision.
 Keep these separate from automated mechanical results. No finite suite guarantees absence of all bugs.
 
 ## Current state
-PASS m76 (2026-10-08, final KenshiFP C2692485, evidence `archive/test-run-2026-10-08-m76.md`): Gate 6 PT17 (coordinator look vs Chivalry 2), PT26, PT27, PT28, PT29 + the Amendment 2 deferred sweep; Gate 6 has no open automated rows (feel checks stay in MASTER section 2).
+PASS m76 (KenshiFP C2692485, `archive/test-run-2026-10-08-m76.md`): PT27, PT29 and the numeric sweep rows. REOPENED by Shay's visual question (2026-10-08): PT17/PT26/PT28 visual review, see Gate 6.
 PASS (evidence in `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-10-06-m49.md`, `C:\KenshiTestRuns\fp-combat\results\merged-1\RESULT.txt`): P01, P02, C00, B14/B14-frame, R01-R09 and R13 (both rigs again on the decoupled KenshiFP FE26573F, m49), R11 (both rigs), FP-EYE (`fp-eye-drift.sh`: the FP eye no longer rises while aiming; both rigs m49), S04 (both rigs; 5090 overshoot = native-AI baseline per S04-CTRL), M00-M07 (4080), R12 subset (pause, FP off, actor swap), S02 for ranged (P01 FP off/on A/B), S01 (= decoupling DC1-DC5: Stobe goals/actions work with the KenshiFP DLL absent, m49).
 Reconfirmed m50 (`archive/test-run-2026-10-06-m50.md`): R10 + R10-CTRL (4080 b33), R12-UI/KO/SWAP/SPEED/LOAD (4080 b36b), R14, R15, R16, S03 (5090 B), M08-UI/KO/LOAD/UNARMED/CROWD/ACTOR/LIMB (4080 b37, KenshiFP 29DEC0D2). Also PASS m50: C01, C02, C03, C04-TAKE, C04-FALLBACK (4080 b36b); controls K01, K03, Z01, Z01-INT, DOWN01 (4080 b37; rows deleted above).
 Also PASS m50 on KenshiFP 44458ACE (NavMesh-crash fix fc60924; 5090 P/Q): stealth ST01, ST02, ST03; ranged R01-R06 + R12 subset again (free-aim fix); C01, C03, C04-TAKE, C04-FALLBACK, C05-KO, C05-INVALID, C05-LOAD, C05-INTERIOR; no crash, no weld jump.

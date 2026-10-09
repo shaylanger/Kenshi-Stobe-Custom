@@ -35,7 +35,7 @@ Status: `todo` / `rerun <batch>` / `FAIL <run> -> item` / `PASS` (then delete th
 
 | ID | What | Save | Status |
 |---|---|---|---|
-| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | PT17 (coordinator look), PT26-PT29 + viewmodel deferred sweep PASS m76 on KenshiFP C2692485 (`archive/test-run-2026-10-08-m76.md`); open for Shay: feel (crossbow reload hold ~70 deg roll); PT04/PT23/PT24/PT25 PASS m66 |
+| FP PT01-PT22 | Shay playtest 2026-10-07, FP half: HUD text, draw, controls after FP toggle, LMB engage, crossbow RMB/R/block, weapon visibility, spread, carried pose, squad control (`COMBAT_TEST_PLAN.md` Gate 6) | kah-fpxbow, Full-Base | PT27/PT29 + numeric viewmodel sweep PASS m76 (C2692485); PT17 visual review REOPENED (sword forearm hollow/clipped in swing follow-through, crossbow fire sheet blocked by a pillar, crossbow floats during draw); feel for Shay: crossbow reload hold ~70 deg roll; PT04/PT23/PT24/PT25 PASS m66 |
 | PG rows | open: D4 athletics feel (Shay, section 2); 135-141/155/238/277 Shay-only (section 2); 256 deferred | 5090, 4080 | all automated PG rows PASS-live/offline (PG INGAME_STATUS.md); D1-D3, D5-D8 done (run log m41) |
 
 ## 2. Requires Shay
