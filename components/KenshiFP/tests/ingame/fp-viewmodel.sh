@@ -33,11 +33,11 @@
 #        blade within 5 deg of the zoomed-in capture (xbow ready/aim/fire/reload, sword ready/block/swing 0.42)
 # Screenshots (vm-*.png, harness shots dir) are listed in a NOTE line: PT17 (overall look) is judged from them.
 # Usage: fp-viewmodel.sh [player] [mate] [hostile] [outdir]. Env: ROWS (comma/space list, default all), KFPLOG,
-# VM_TOL (4), ZO, ZO_TOL, RATIO_MAX, NSW, SW_US, SLOW_DUR. Example: ROWS=PT26,PT27,PT28,PT29 bash fp-viewmodel.sh
+# KDIR (Kenshi dir; Git Bash rig: "/c/Program Files (x86)/Steam/steamapps/common/Kenshi"), PY (python, default python3), VM_TOL (4), ZO, ZO_TOL, RATIO_MAX, NSW, SW_US, SLOW_DUR. Example: ROWS=PT26,PT27,PT28,PT29 bash fp-viewmodel.sh
 # Needs KenshiFP with the 2026-10-08 viewmodel (fp_vm state mu= field, [vm] fire / swing ratio= log lines).
 # Leaves the fixture changed (a shot fired, items moved): reload it after.
 SH=${1:-${PLAYER:-Axima}}; MT=${2:-${MATE:-Malzin}}; TG=${3:-${HOSTILE:-Skaera}}; OUT=${4:-/tmp/fp-viewmodel}
-KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
+KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; PY=${PY:-python3}; KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}
 STILL_MAX=${STILL_MAX:-3}; SPIKE_MAX=${SPIKE_MAX:-1.5}; FAR_NPC=${FAR_NPC:-}
 ROWS=${ROWS:-"PT13 PT14 PT26 PT27 PT28 PT29 PT30"}; ROWS=${ROWS//,/ }
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
@@ -394,7 +394,7 @@ kfpn() { kfplines | grep -c "$1"; }
 # vmrec <name> <xbow|sword|swing>: dump the fp_vm recording to $KDIR/vmrec-<name>.txt (copied to $OUT) and print
 # vmcheck's one-line verdict (ok=0|1 frames vis fps flags errmax tipd_max df_max wih in/out [reload_zmin])
 vmrec() { local f="$KDIR/vmrec-$1.txt"; rm -f "$f"; A fp_vm rec dump "vmrec-$1.txt" >/dev/null; waitf 5 test -s "$f"
-  [ -s "$f" ] || { echo "ok=0 no dump $f"; return; }; cp "$f" "$OUT/" 2>/dev/null; python3 "$OUT/vmcheck.py" "$f" "$2" 2>&1 | tail -1; }
+  [ -s "$f" ] || { echo "ok=0 no dump $f"; return; }; cp "$f" "$OUT/" 2>/dev/null; "$PY" "$OUT/vmcheck.py" "$f" "$2" 2>&1 | tail -1; }
 
 # ---- PT28: crossbow held like Skyrim/KCD (ready / aim / fire / reload, each zoomed in AND out for PT29) ----
 if want PT28 || want PT29; then if [ $BOWOK = 0 ] || [ "$(bow_now)" = none ]; then rows_fail "no crossbow on $SH" PT28
