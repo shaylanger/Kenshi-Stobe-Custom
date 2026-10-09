@@ -3,7 +3,15 @@ This file + CLAUDE.md are the whole state: there are no separate handoff files a
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 
-## Right now (2026-10-08 m77): PT17 viewmodel rework DONE, nothing running
+## Right now (2026-10-09 m78): sword wrist fold FIXED, fixer #6 on PT30-FLIP / PT32 / blade look
+- **Wrist fix** KenshiFP C7586828 (/root/KenshiFP ad419c0, local only) on both rigs; snapshots 51d9720, 27ab2ed, 2773fd3; VMQUICK row c49adda/62f0917; plan 306390a.
+  Sword wrist bend 108.7 -> <=24 deg (limit 30); zoom 25 no longer glues hands to the head. VMQUICK PASS (5090); 4080 final rows PT13/14/26-30 PASS; 5090 all PASS except PT30.
+- **Open (fixer #6, lock owner fixer-pt30, state in `%TEMP%\claude\C--KenshiModding\wr\HANDOFF-sword-wrist.md`):** PT30-FLIP (1 blade-roll jump at first wind-up after draw, ~2/5 runs);
+  PT32 native free swing ends after ~2 frames (no visible attack at zoom 25); blade foreshortened into the screen at strike/follow-through vs the old sweep (coordinator review);
+  5090 window renders 938x475 instead of 1600x900. PT33 open palm at wind-up (native finger pose) = Shay-look row. Sheets `C:\KenshiTestRuns\vm-rework\`.
+- 4080 Defender exclusions done (Shay). Open question to Shay: relax RAM rules now that the PC has 48 GB.
+
+## Earlier (2026-10-08 m77): PT17 viewmodel rework DONE, nothing running
 - **PT17 final KenshiFP 0750f26a** (/root/KenshiFP 04bf8c2, local, unpushed like the 60 before it; snapshot 25748e5):
   sword + crossbow near-plane cuts 423/247 -> 0. 5090 run on 0750f26a: PT13/14/26/27/29/30 PASS (PT30 cut=0 both).
   PT28 PASS on a rerun with the desktop unattended (two earlier FAILs = why=no_focus while the 5090 was in use).
