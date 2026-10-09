@@ -4351,7 +4351,8 @@ static void fp_camera_override(void *gw)
 
         /* World look orientation q = q_yaw(Y) * q_pitch(X); no roll. Ogre camera
          * looks down -Z at identity. DERIVED (world) with normal inheritance. */
-        float qy = cosf(g_yaw * 0.5f),   sqy = sinf(g_yaw * 0.5f);
+        float oyaw = g_yaw + (g_view.applied > 0.001f ? g_view_orbit : 0.0f);   /* test orbit (zoomed out) */
+        float qy = cosf(oyaw * 0.5f),   sqy = sinf(oyaw * 0.5f);
         float qp = cosf(g_pitch * 0.5f), sqp = sinf(g_pitch * 0.5f);
         Quat q = { qy * qp, qy * sqp, sqy * qp, -sqy * sqp };
 

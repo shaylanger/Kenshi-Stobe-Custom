@@ -1,6 +1,7 @@
 /* Camera zoom keeps direct-control ownership; native+visual static collision.
  * Floating-origin calibration uses the pre-offset anchor, never the orbit eye. */
 static Vec3 g_view_anchor, g_view_written;
+static float g_view_orbit;   /* test: zoomed-out camera yaw offset around the head (fp_camera orbit), radians */
 /* combat physics trace past characters (kfp_controls.inc, after the trace bindings): wall distance or -1 */
 static float fp_view_trace_wall(const Vec3 *from,const Vec3 *dir,float range);
 static unsigned g_view_trace_blocks;
@@ -36,10 +37,10 @@ static void fp_view_apply(Vec3 *eye) {
     if (!g_have_t || !RVA_RAYCAST || !RVA_GROUND_NOHIT || g_view_collision_dead) {
         g_view.applied=0; g_view.collision_known=0; g_view_written=*eye; g_view_apply_ret=3; return;
     }
-    float cp=cosf(g_pitch);
-    Vec3 dir={-sinf(g_yaw)*cp,sinf(g_pitch),-cosf(g_yaw)*cp};
-    Vec3 right={cosf(g_yaw),0,-sinf(g_yaw)};
-    Vec3 up={-sinf(g_yaw)*sinf(g_pitch),-cp,-cosf(g_yaw)*sinf(g_pitch)};
+    float cp=cosf(g_pitch), oy=g_yaw+g_view_orbit;
+    Vec3 dir={-sinf(oy)*cp,sinf(g_pitch),-cosf(oy)*cp};
+    Vec3 right={cosf(oy),0,-sinf(oy)};
+    Vec3 up={-sinf(oy)*sinf(g_pitch),-cp,-cosf(oy)*sinf(g_pitch)};
     const float sides[5][2]={{0,0},{.18f,0},{-.18f,0},{0,.18f},{0,-.18f}};
     float allowed=wanted;
     void *old_perch_node=g_mr_perch_node;
@@ -101,6 +102,11 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         }
         g_yaw=yaw;g_pitch=pitch;
         r->append(r,"look requested through normal camera update; verify actual state next frame");return KAH_OK;
+    }
+    if (argc==3 && !_stricmp(argv[1],"orbit")) {
+        char *end; errno=0; float o=strtof(argv[2],&end);
+        if (errno || end==argv[2] || *end || !isfinite(o) || fabsf(o)>6.283186f) { r->append(r,"orbit must be finite radians -2pi..2pi"); return KAH_ERROR; }
+        g_view_orbit=o; r->append(r,"orbit set (zoomed out only)"); return KAH_OK;
     }
     if (argc==3 && !_stricmp(argv[1],"distance")) {
         char *end; errno=0; float d=strtof(argv[2],&end);
@@ -196,7 +202,7 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         r->append(r,b); return KAH_OK;
     }
     if (argc!=2 || _stricmp(argv[1],"state")) {
-        r->append(r,"usage: fp_camera state|probe|distance <0..60>|wheel <-2400..2400>|look <yaw radians> <pitch radians>|ray x y z dx dy dz [range] [mask]|floors cx cz half step ytop ybot"); return KAH_ERROR;
+        r->append(r,"usage: fp_camera state|probe|distance <0..60>|wheel <-2400..2400>|look <yaw radians> <pitch radians>|orbit <radians>|ray x y z dx dy dz [range] [mask]|floors cx cz half step ytop ybot"); return KAH_ERROR;
     }
     Vec3 actual={0},fresh={0}; int have_actual=0,have_fresh=0;
     if (g_fp_mode && g_have_eye && g_fp_control_actor && g_ogre_ready && g_node_get_dpos && g_view_have_anchor) {
