@@ -180,5 +180,32 @@ if [ -f "$RB1" ] && [ -f "$RB2" ] && bash "$HERE/build.sh" --rev f41f862 --patch
     b=$(python3 "$L/animlab.py" branch /tmp/al-rb1.txt --ref "$W/f14-e0.txt" | cut -c1-120)
     case "$b" in "branch PASS"*) ok "ready branch fix on $r: $b";; *) bad "ready branch fix on $r: $b";; esac; done
 else echo "REGRESS INFO ready branch fix kfp-rb-single.py + kfp-rb-camup.py not built (missing or committed: check the snapshot instead)"; fi
+# 20. crossbow READY commanded->rendered 0.69 dm (miss, cause found by lab #11): in game the solver's cached native upper-arm
+#     length g_vm_l1n (|fpn| * derived scale .x, l1fix since 484c8bc) is ~0.87 x the rendered one, so the upper arm stretches
+#     15% too much and elbow/wrist/hand/prop overshoot along it. Lab key l1k (patches/l1-scale.py) emulates it: vmq-85a7
+#     crossbow ready grip game-vs-replay median must be > 0.5 dm at l1k 1 and < 0.2 at l1k 0.871 (@69bc401 = its build);
+#     vmq-85a7 sword plain gate FAIL at l1k 1, PASS at l1k 0.86 (@f41f862).
+XB=/mnt/c/KenshiTestRuns/vmq-85a7/vmrec-q-crossbow-z0.txt
+if [ -f "$XB" ] && bash "$HERE/build.sh" --rev 69bc401 --patch "$HERE/patches/l1-scale.py" --out "$BLD/kfpvm_l1k85" >/tmp/al-build11.txt 2>&1 \
+   && bash "$HERE/build.sh" --rev f41f862 --patch "$HERE/patches/l1-scale.py" --out "$BLD/kfpvm_l1k" >/tmp/al-build12.txt 2>&1; then
+  for k in 1 0.871; do "$BLD/kfpvm_l1k85" "$XB" /tmp/al-l1k-$k.txt --quiet --set l1k=$k >/dev/null 2>&1; done
+  m=$(cd "$L" && python3 - "$XB" <<'PY'
+import sys, recfmt, metrics as M
+from recfmt import sub, ln
+G = recfmt.parse(sys.argv[1]); PG = M.frame_metrics(G); out = []
+for k in ('1', '0.871'):
+    R = recfmt.parse('/tmp/al-l1k-%s.txt' % k); PR = M.frame_metrics(R)
+    d = sorted(ln(sub(PG[i]['mp'], PR[i]['mp'])) for i in range(min(len(PG), len(PR))) if PG[i]['state'] == 'ready' == PR[i]['state'])
+    out.append('%.2f' % d[len(d) // 2])
+print(' '.join(out))
+PY
+)
+  set -- $m
+  if python3 -c "import sys; sys.exit(0 if float('$1') > 0.5 and float('$2') < 0.2 else 1)" 2>/dev/null; then ok "miss crossbow READY 0.69 reproduced + modelled: ready grip game-replay median l1k1 $1 dm, l1k0.871 $2 dm"
+  else bad "crossbow READY l1 model: median l1k1 '$1' l1k0.871 '$2'"; fi
+  for k in 1 0.86; do "$BLD/kfpvm_l1k" "$W/vmq85a7-sw.txt" /tmp/al-l1ks.txt --quiet --set l1k=$k >/dev/null 2>&1
+    g=$(python3 "$L/animlab.py" compare "$W/vmq85a7-sw.txt" /tmp/al-l1ks.txt | grep '^GATE' | cut -c1-110)
+    case "$k:$g" in "1:GATE FAIL"*|"0.86:GATE PASS"*) ok "sword ready vs game, l1k $k: $g";; *) bad "sword ready vs game, l1k $k: $g";; esac; done
+else echo "REGRESS INFO l1 model: recording or build missing"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
