@@ -45,6 +45,14 @@ for l in res:
     rows.setdefault(p[1] if len(p) > 1 else '?', []).append(l)
 if not res:
     fails.append('no RESULT line (exit %s): %s' % (rc, (outp.strip().splitlines() or [''])[-1][:120]))
+# every row a ROWS=<a,b,...> selector asks for must end in its own RESULT line (op-pt1 2026-10-10: a skipped row printed
+# nothing; "no RESULT line" is a script bug)
+m = re.search(r'(?:^|\s)ROWS=(?:"([^"]*)"|\'([^\']*)\'|(\S+))', cmd)
+if m and res:
+    want = next(g for g in m.groups() if g is not None)
+    for r in [x for x in re.split(r'[,\s]+', want) if x]:
+        if r not in rows:
+            fails.append('no RESULT line for requested row %s (ROWS=%s)' % (r, want))
 for r, ls in rows.items():
     if len(ls) > 1:
         fails.append('%d RESULT lines for %s' % (len(ls), r))

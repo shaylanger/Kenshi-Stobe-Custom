@@ -213,6 +213,31 @@ def sched(s, t, tag, **kv):
         s['tl'].append([t, k, v, tag])
 
 
+_VMP, _VMSW = None, None
+
+
+def vm_pose(cls, st):
+    """real `fp_vm state` reply for <class>/<state> (vm_poses.json: picked from game outbox.txt nearest PT PASS captures)"""
+    global _VMP
+    if _VMP is None:
+        try:
+            _VMP = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vm_poses.json')))
+        except (OSError, ValueError):
+            _VMP = {}
+    return _VMP.get('%s/%s' % (cls, st))
+
+
+def vmsw_frames():
+    global _VMSW
+    if _VMSW is None:
+        try:
+            _VMSW = [l.strip() for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vmsw_swing.txt'))
+                     if l.strip() and not l.startswith('#')]
+        except OSError:
+            _VMSW = []
+    return _VMSW
+
+
 def kfplog(t, text):
     import time as _t
     os.makedirs(dr.KDIR, exist_ok=True)
@@ -298,7 +323,7 @@ def press(s, btn, ms, now):
     if btn == 'rmb':
         if fp['melee']:
             busy = fp['ui_state'] == 'swinging'
-            sched(s, now + 0.1, 'rmb', ui_state='blocking', vm='block', hud_text='block')
+            sched(s, now + 0.1, 'rmb', ui_state='blocking', vm='blocking', hud_text='block')
             sched(s, end + 0.15, 'rmb', ui_state='ready', vm='ready', hud_text='ready')
             if busy:
                 kfplog(now + 0.1, "E4 free swing cut by block")
@@ -306,11 +331,11 @@ def press(s, btn, ms, now):
         else:
             t = now + 0.1
             if not fp['loaded']:
-                sched(s, t, 'rmb', ui_state='reloading', hud_text='reloading', vm='reload')
+                sched(s, t, 'rmb', ui_state='reloading', hud_text='reloading', vm='reloading')
                 t += 2.0
                 sched(s, t, 'rmb', loaded=1, hud_text='loaded')
             if t < end:
-                sched(s, t + 0.05, 'rmb', ui_state='aiming', vm='aim', hud_text='aiming')
+                sched(s, t + 0.05, 'rmb', ui_state='aiming', vm='aiming', hud_text='aiming')
             sched(s, max(end, t) + 0.1, 'rmb', ui_state='ready', vm='ready', hud_text='ready')
     elif btn == 'lmb':
         if fp['melee'] and fp.get('weapon') == 'fists':
@@ -319,7 +344,7 @@ def press(s, btn, ms, now):
             tn = ['badpunch', 'ma chudan', 'ma 2strike', 'shoteiL'][max(fs['force'], 0) % 4]
             kfplog(now + 0.05, "[vm] fist swing tech='%s' table=%s fallback=0" % (tn, tn.split()[0]))
         if fp['melee']:
-            sched(s, now + 0.05, 'lmb', ui_state='swinging', vm='swing')
+            sched(s, now + 0.05, 'lmb', ui_state='swinging', vm='swinging')
             sched(s, now + 1.1, 'lmb', ui_state='ready', vm='ready')
             kfplog(now + 0.05, "free swing start live=1")
             # KenshiFP: native free swing counted (fp_keys free_swings) + viewmodel swing lines (kfp_viewmodel.inc)
@@ -334,10 +359,17 @@ def press(s, btn, ms, now):
                     if mask & (1 << j):
                         s['vm_next'] = (j + 1) % 4; k = j; break
             kfplog(now + 0.05, '[vm] swing #%d stroke %d (mask 0x%x force %d)' % (n, k, mask, force))
+            t = now + 0.05
+            for fl in vmsw_frames():
+                t += float(re.search(r'dt=([0-9.]+)', fl).group(1)); kfplog(t, '[vmsw] #%d %s' % (n, fl))
             kfplog(now + 1.1, '[vm] swing #%d 1.05s u_end=1.00 prog=1.00 frames=63 maxstep=4.0 rate_max=300 rate_med=150 '
                               'ratio=2.00 elev=-10.0..20.0 az=-30.0..40.0' % n)
         elif fp['ui_state'] == 'aiming' and fp['loaded']:
             sched(s, now + 0.05, 'lmb', loaded=0, hud_text='reload')
+            # auto reload while RMB stays held (KenshiFP crossbow: aim -> reload pose -> aim again when loaded)
+            sched(s, now + 0.6, 'rmb', ui_state='reloading', vm='reloading', hud_text='reloading')
+            sched(s, now + 4.6, 'shot', loaded=1)
+            sched(s, now + 4.65, 'rmb', ui_state='aiming', vm='aiming', hud_text='aiming')
             kfplog(now + 0.05, 'crossbow fired')
             n = s['vm_kicks'] = s.get('vm_kicks', 0) + 1
             s['shots'] = s.get('shots', 0) + 1
@@ -616,6 +648,21 @@ def fp_combat_melee(s, a, now):
         m['inj_cmds'] += 1; m['inj_aim'] += aim; m['inj'] = 1
         pf, pa = m['fire'], m['aim']
         m['fire'], m['aim'] = fire, aim
+        fp = s['fp']
+        if fp['drawn'] and not fp['melee'] and m['on'] and m['armed']:   # crossbow: aim hold / fire edge / auto reload
+            if aim and not pa:
+                sched(s, now + 0.1, 'cin', ui_state='aiming', vm='aiming', hud_text='aiming')
+            if fire and not pf and aim and fp['loaded']:
+                fp['loaded'] = 0; s['shots'] = s.get('shots', 0) + 1
+                n = s['vm_kicks'] = s.get('vm_kicks', 0) + 1
+                kfplog(now + 0.05, 'crossbow fired')
+                kfplog(now + 0.05, '[vm] fire #%d: aim pose held 0.80s + kick (state=aiming)' % n)
+                sched(s, now + 0.9, 'cin', ui_state='reloading', vm='reloading', hud_text='reloading')
+                sched(s, now + 2.9, 'cin', loaded=1, ui_state='aiming', vm='aiming', hud_text='aiming')
+            if not aim and pa:
+                s['tl'] = [e for e in s['tl'] if not (e[3] == 'cin' and e[0] > now and e[1] != 'loaded')]
+                sched(s, now + 0.1, 'cin', ui_state='ready', vm='ready', hud_text='ready')
+            return True, 'combat input published; same controller/native gates as physical input'
         if m['on'] and not m['armed'] and not fire and not aim:
             m['armed'] = 1
         elif owned(s):
@@ -974,8 +1021,14 @@ def handle(s, cmd, a, now, sp):
         s['fpmode'] = want
         return True, 'FP mode toggling ON (next frame; log [input] FP mode toggled)' if want else 'FP mode toggling OFF (next frame)'
     if cmd == 'fp_state':
+        if len(a) > 1 and a[0] == 'free':   # Alt free-cursor toggle (fp-playtest PT21/PT01 look mode)
+            s['fp_free'] = 1 if a[1] == 'on' else 0
+            return True, 'free=%d' % s['fp_free']
+        # look mode: FP on + no free cursor = cursor hidden (fp-playtest setup checks cursor_hidden=1)
         return True, kfpreply.render('fpstate', fp_mode=s.get('fpmode', 0), control=1 if s['fpchar'] else 0,
-                                     controlled=1 if s['fpchar'] else 0, ui_why='none', active=s.get('fpmode', 0))
+                                     controlled=1 if s['fpchar'] else 0, ui_why='none', active=s.get('fpmode', 0),
+                                     cursor_hidden=1 if s.get('fpmode', 0) and not s.get('fp_free', 0) else 0,
+                                     free=s.get('fp_free', 0))
     if cmd == 'spawn':   # Commands.cpp spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m] ...
         tpl, fac = a[0], a[1]
         at = list(s['chars'][s['selected']]['pos'])
@@ -1049,7 +1102,23 @@ def handle(s, cmd, a, now, sp):
         if sub == 'set' and len(a) > 2 and a[1] == 'fist_tech':
             s.setdefault('fist', dict(force=-1, swings=0, ikfail=0))['force'] = int(float(a[2]))
             return True, 'fp_vm set fist_tech=%s' % a[2]
+        if sub == 'set' and len(a) > 2 and a[1] in ('sw_pose', 'kick_pose'):
+            s[a[1]] = float(a[2])
+            return True, 'fp_vm %s ok' % ' '.join(a)
         if sub == 'state':
+            cls = 'melee' if fp['melee'] or not fp['drawn'] else 'ranged'
+            st = fp['vm'] if s.get('sw_pose', -1) < 0 else 'ready'
+            if st == 'aiming' and s.get('kick_pose', -1) >= 0.5:
+                st = 'aiming-kick'   # frozen kick peak (PT28 fire)
+            real = vm_pose(cls, st)
+            if real and fp['drawn']:
+                # a real KenshiFP reply for this weapon class + state (PT13/14/26/27/28 judge these numbers); live counters
+                # (swings, kicks, frames, zoom, fire hold) from the fake game
+                for k, v in (('on', s.get('vm_on', 1)), ('state', fp['vm']), ('swings', s.get('vm_swings', 0)),
+                             ('kicks', s.get('vm_kicks', 0)), ('frames', int(now * 60) % 100000),
+                             ('zoom', '%.2f' % s['cam']['dist']), ('fire', '0.00')):
+                    real = re.sub(r' %s=\S*' % k, ' %s=%s' % (k, v), real, count=1)
+                return True, real
             return True, kfpreply.render('vm', on=s.get('vm_on', 1), hooked=1, state=fp['vm'], w='1.00' if fp['drawn'] else '0.00',
                                          **{'class': 'melee' if fp['melee'] or not fp['drawn'] else 'ranged'}, melee=fp['melee'],
                                          swings=s.get('vm_swings', 0), kicks=s.get('vm_kicks', 0), frames=int(now * 60) % 100000, zoom='%.2f' % s['cam']['dist'],
