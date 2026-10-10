@@ -288,8 +288,13 @@ static Vec3 *fk_node_pos(void *n, Vec3 *r) { (void)n; *r = vm_v(0, 0, 0); return
 static Vec3 *fk_node_scale(void *n, Vec3 *r) { (void)n; *r = vm_v(1, 1, 1); return r; }
 
 static void reply_append(KAH_Reply *r, const char *t) { (void)r; (void)t; }   /* a set's reply is a state dump: unused */
+static void reply_print(KAH_Reply *r, const char *t) { (void)r; fprintf(stderr, "%s", t); }
 static int do_set(const char *kv)
 {
+    if (!strcmp(kv, "state")) {   /* --set-at N:state = print the plugin's `fp_vm state` line at frame N (stderr) */
+        const char *av[2] = { "fp_vm", "state" }; KAH_Reply rp = { NULL, reply_print };
+        int q = g_al_quiet; g_al_quiet = 1; kah_fp_vm("animlab", 2, av, &rp, NULL); g_al_quiet = q; fputc('\n', stderr); return 1;
+    }
     char k[128]; const char *eq = strchr(kv, '='); if (!eq || eq - kv >= (int)sizeof k) return 0;
     memcpy(k, kv, eq - kv); k[eq - kv] = 0;
     const char *argv[4] = { "fp_vm", "set", k, eq + 1 }; KAH_Reply rp = { NULL, reply_append };
