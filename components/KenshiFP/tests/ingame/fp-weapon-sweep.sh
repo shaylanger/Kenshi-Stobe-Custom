@@ -36,8 +36,7 @@ PF_ROW=WEAPONSWEEP-$NAME; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-prefligh
 pf_begin "$PF_ROW"
 [ -s "$WCAT" ] || pf_fail "weapon catalog $WCAT missing (animlab.py weapons --catalog writes it next to sweep.list)"
 # ---- setup once
-A load kah-fpxbow | cut -c1-80; sleep 8
-for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" && break; done
+pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)
 A speed 1 hold >/dev/null; A chatter off >/dev/null
 A pin Malzin at -53900 633 6850 >/dev/null; A pin $HOLD at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null

@@ -44,8 +44,7 @@ load_xbow(){ [ "$(loaded)" -ge 1 ] && return 0
   while [ $SECONDS -lt $e ] && [ "$(loaded)" -lt 1 ]; do sleep 0.3; done
   A fp_keys release rmb >/dev/null; sleep 1.0; [ "$(loaded)" = 1 ]; }
 # ---- preflight: fresh load, pins, area clean, day + sky, take spot, hat
-A load kah-fpxbow | cut -c1-80; sleep 8
-for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" && break; done
+pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)
 A speed 1 hold >/dev/null
 A chatter off >/dev/null   # no NPC bark text in frame (dryrun chatter check); cleanup turns it back on
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
