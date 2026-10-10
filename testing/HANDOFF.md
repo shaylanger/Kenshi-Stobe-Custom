@@ -12,10 +12,6 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
   batch at once (VMQUICK clean rerun, blkH, fists after lab-path fix, finger A/B).
 - Start with `tools/automation/session-start.ps1`; respawn every agent not DONE as a FRESH agent from its status/handoff
   file in `C:\KenshiTestRuns\agents\` (all were told to write STOPPED-CONTEXT + handoff at 13:36).
-- **FIRST JOB for the next coordinator (Shay asked "why did it sit idle?"):** the 5090 sat idle ~13:31-13:36 after
-  op-b4 ended: rig-health.sh said BUSY because Kenshi was open, the lock held and inflight\5090-operator still pointed
-  at a DONE batch. Fix rig-health.sh (+ the Stop hook) to report IDLE when every inflight marker's out dir has DONE for
-  > 3 min and no new batch started; make operators replace their marker when a batch ends.
 - Agents (roles per CLAUDE.md "Speed plan"): `kfp-fixer` (build+lab owner of /root/KenshiFP; installed 5090 + staged
   4080: KenshiFP 3FA97555 = refit5 + ready-wrist cap + fists-na1 + hand_scale + own-name-tag hide; helper e6-climb2
   refitting strokes 0+3), `5090-operator` (lock owner 5090; op-b4 DONE: VMQUICK z0/crossbow PASS, z25 sword FAIL hand

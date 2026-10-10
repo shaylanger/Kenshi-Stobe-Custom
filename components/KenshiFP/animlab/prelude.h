@@ -48,6 +48,8 @@ static get_bone_world_t g_get_bone_world; static skel_getbone_t g_skel_getbone;
 static oldnode_getdori_t g_oldnode_getdori; static oldnode_getdpos_t g_oldnode_getdpos; static oldnode_getori_t g_oldnode_getori;
 static oldnode_setori_t g_oldnode_setori; static oldnode_needupd_t g_oldnode_needupd; static oldnode_getparent_t g_oldnode_getparent;
 static oldnode_setpos_t g_oldnode_setpos; static oldnode_getpos_t g_oldnode_getpos; static oldnode_getdscale_t g_oldnode_getdscale;
+typedef void (*oldnode_setscale_t)(void *node, const Vec3 *scale);   /* HAND-SCALE test switch: NULL offline (no-op) */
+static oldnode_setscale_t g_oldnode_setscale;
 typedef char (*ent_getvisible_t)(void *movable);   /* Ogre::MovableObject::getVisible (bolt visibility, newer source); NULL offline */
 static ent_getvisible_t g_ent_getvisible;
 /* local/world node setters + local getPosition (vm_bolt_measure, newer source); NULL offline */

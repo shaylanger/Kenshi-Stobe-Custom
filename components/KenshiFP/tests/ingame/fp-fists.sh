@@ -17,6 +17,8 @@ OUT=$1; TI=$2; REPS=${3:-3}; LABD=${4:-${CR:-/mnt/c}/KenshiTestRuns/fists-cand}
 TN=(badpunch ma_chudan ma_2strike shoteiL); TA=("badpunch" "ma chudan" "ma 2strike" "shoteiL")
 case "$TI" in [0-3]) ;; *) echo "RESULT FIST-? FAIL setup: technique '$TI' not 0-3 (usage: fp-fists.sh <out> <0-3> [reps] [lab dir])"; exit 2;; esac
 T=${TN[$TI]}; N=fist-$T; ROW=FIST-$T
+# fists-cand (published for Shay) carries keys.json + sheets, not pose.txt: fall back to the lab output of the same version (WSL rig)
+[ -f "$LABD/$T/pose.txt" ] || { V=$(head -1 "$LABD/VERSION.txt" 2>/dev/null | tr -dc A-Za-z0-9._-); [ -n "$V" ] && [ -f "/root/animlab-work/fists/$V/$T/pose.txt" ] && LABD=/root/animlab-work/fists/$V; }
 [ -n "$OUT" ] || { echo "RESULT $ROW FAIL setup: no out dir"; exit 2; }
 export KAH_OWNER=${KAH_OWNER:-$([ "${RIG:-5090}" = 4080 ] && echo rig4080 || echo fists)}
 SH=Axima; SPOT="-54100 669.2 7300"
@@ -85,7 +87,7 @@ SW1=$(fist | fld swings); IK1=$(fist | fld ikfail)
 # ---- verdict
 ok=1
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
-echo "$TC" | grep -q "RESULT PASS" || ok=0
+echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESULT take PASS"
 tail -n +$((LOG0+1)) "$KDIR/KenshiFP.log" | grep -o "\[vm\] fist swing tech='[^']*' table=[^ ]* fallback=[0-9]" > "$N.swings.txt"
 NS=$(wc -l < "$N.swings.txt"); NG=$(grep -c "tech='${TA[$TI]}' table=${TA[$TI]%% *}.* fallback=0" "$N.swings.txt")
 [ "$NS" -ge "$REPS" ] && [ "$NG" = "$NS" ] || ok=0

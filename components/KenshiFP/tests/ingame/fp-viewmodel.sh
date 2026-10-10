@@ -598,7 +598,10 @@ vmq_spot() { [ "${VMQ_SPOT:-1}" = 1 ] || return 0; local p r x y z a d bad="" fy
   for a in -90 -75 -60 -45 -30 -15 0 15 30 45 60 75 90; do
     d=$(A fp_camera ray "$x" "$(awk -v y="$y" 'BEGIN{print y+16}')" "$z" $(awk -v a="$a" -v fy="$fy" 'BEGIN{t=(a+fy)*3.14159265/180; printf "%.4f 0 %.4f", sin(t), cos(t)}') "${VMQ_CLEAR:-100}" | grep -o 'd=[0-9.]*' | cut -d= -f2)
     [ -n "$d" ] && bad+=" ${a}deg:$d"; done
-  [ -z "$bad" ] || setup_fail "VMQUICK spot $p not clear within ${VMQ_CLEAR:-100} (hits$bad)"; note "VMQUICK spot $p clear (13 rays, ${VMQ_CLEAR:-100})"; }
+  [ -z "$bad" ] || setup_fail "VMQUICK spot $p not clear within ${VMQ_CLEAR:-100} (hits$bad)"; note "VMQUICK spot $p clear (13 rays, ${VMQ_CLEAR:-100})"
+  # op-b4: "Malzin is attacking!" during VMQUICK shook the body (tipd flags = setup, not the build): take-preflight area
+  # check per segment (no non-squad char within TAKE_R, nobody down, no new combat message) or setup_fail (VMQ_PF=0: off)
+  [ "${VMQ_PF:-1}" = 1 ] && pf_area "$SH" "$MT|Shay|$TG"; }
 vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
   # zoomed out: the body faces the base (yaw 180) so the camera orbited round to its front looks out over open ground
   # (m78 f8: facing +z the zoom-25 frames had the base wall in the background)
@@ -648,6 +651,11 @@ vmq_gate() { [ "${VMQ_GATE:-1}" = 1 ] || return 0; local G=/mnt/c/KenshiModding/
   case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
   row VMQUICK FAIL "animlab gate FAIL, fix the lab FAIL / the returned miss before filming (${l#RESULT ANIMLAB-REGRESS })"; return 1; }
 if want VMQUICK && vmq_gate; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
+  # take preflight (Shay 2026-10-10 game-take discipline): pin + KO every live non-squad NPC within 6000 of the spot
+  # default on only for a VMQUICK-only run: pf_clean also knocks out the fixture hostile $TG that later rows aim at
+  [ -n "$VMQ_PF" ] || { [ "$ROWS" = VMQUICK ] && VMQ_PF=1 || VMQ_PF=0; }
+  if [ "$VMQ_PF" = 1 ]; then PF_ROW=VMQUICK; . "$(dirname "$0")/take-preflight.sh"; pf_fail(){ setup_fail "$*"; }
+    read -r _px _py _pz <<<"${VMQ_SPOT_P:-"-54100 669.2 7300"}"; note "$(pf_clean "$_px" "$_pz" "${VMQ_PF_R:-6000}")"; sleep 2; fi
   [ "${VMQ_BEFORE:-0}" = 1 ] && { A fp_vm set wfix 0 >/dev/null; A fp_vm set zfade 0 >/dev/null; }
   A fp_vm state | grep -q ' wb=' || setup_fail "fp_vm state has no wb= (needs the PT17 wrist build)"
   A fp_combat physical >/dev/null; [ -z "$EN0" ] && EN0=$(cs enabled); A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
