@@ -684,6 +684,13 @@ static void fpc_free_block(void *pc) {
         state!=MELEE_STUMBLE && !dead && g_melee_check_block(cc,0.5f,0.5f)) ++g_fpc_block_checks;
 }
 /* PT34: RMB out of a fight = the native block technique on the third-person body (zoom 25 showed the ready stance only) */
+static int g_fpc_fb_mode=3,g_fpc_fb_state_set,g_fpc_fb_state_old;static void *g_fpc_fb_cc;
+static void fpc_fb_run(void *anim,void *tech) {   /* S3: runCombatAnimation like native blockState (blk_mode bits 2/4) */
+    unsigned char e[32];make_mstr(e,(g_fpc_fb_mode&2)?" override":"");
+    float sp=1.0f;if (g_fpc_fb_mode&4) {float m=*(float *)((uintptr_t)tech+TECH_ANIM_SPEED);if (isfinite(m)&&m>0.0f&&m<10.0f) sp=m;}
+    g_fpc_runanim(anim,tech,sp,e);
+}
+static int g_fpc_fb_live,g_fpc_fb_steps;static float g_fpc_fb_pmin=9.0f;static unsigned g_fpc_fb_lives;
 static void fpc_free_block_anim(void *pc,int held) {
     if (!g_fpc_getanim || !g_fpc_startanim || !g_fpc_progress || !g_fpc_runanim) return;
     void *anim=char_valid(pc)?g_fpc_getanim(pc):NULL;
@@ -692,19 +699,29 @@ static void fpc_free_block_anim(void *pc,int held) {
         void *stats=readable(cc,0x2b8)?*(void **)((uintptr_t)cc+CC_STATS):NULL;
         void *tech=readable(stats,8)?g_fpc_chooseblock(stats,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org,pc):NULL;
         if (!readable(tech,TECH_ANIM_SPEED+4)) {++g_fpc_fb_none;return;}
-        unsigned char e[32];make_mstr(e,"");g_fpc_startanim(anim,tech,1.0f,e);
-        g_fpc_fb_tech=tech;g_fpc_fb_anim=anim;g_fpc_fb_t0=fpc_now_ms();++g_fpc_fb_starts;
+        if (!(g_fpc_fb_mode&1)) {unsigned char e[32];make_mstr(e,"");g_fpc_startanim(anim,tech,1.0f,e);}
+        else fpc_fb_run(anim,tech);
+        if ((g_fpc_fb_mode&8) && readable(cc,0x2b8)) {g_fpc_fb_cc=cc;g_fpc_fb_state_old=*(int *)((uintptr_t)cc+CC_STATE);*(int *)((uintptr_t)cc+CC_STATE)=MELEE_BLOCK;g_fpc_fb_state_set=1;}
+        logline("[controls] S3 block tech: mode=%d spd=%.3f f2c=%d f2d=%d f40=%.3f",g_fpc_fb_mode,*(float *)((uintptr_t)tech+TECH_ANIM_SPEED),
+                *(unsigned char *)((uintptr_t)tech+0x2c),*(unsigned char *)((uintptr_t)tech+0x2d),*(float *)((uintptr_t)tech+0x40));
+        g_fpc_fb_tech=tech;g_fpc_fb_anim=anim;g_fpc_fb_t0=fpc_now_ms();++g_fpc_fb_starts;g_fpc_fb_live=0;g_fpc_fb_steps=0;g_fpc_fb_pmin=9.0f;
         logline("[controls] PT34 free block start tech=%p dir=%d f=%.1f org=%d",tech,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org);
     }
     if (!g_fpc_fb_tech) return;
     double el=fpc_now_ms()-g_fpc_fb_t0;
     if (anim!=g_fpc_fb_anim) {g_fpc_fb_tech=NULL;g_fpc_fb_anim=NULL;logline("[controls] PT34 free block lost (anim)");return;}
     float p=g_fpc_progress(anim,g_fpc_fb_tech);
-    if (!isfinite(p) || (!held && (p>=0.999f || el>6000.0))) {
+    if (isfinite(p) && p<0.999f) {if (!g_fpc_fb_live) ++g_fpc_fb_lives;g_fpc_fb_live=1;if (p<g_fpc_fb_pmin) g_fpc_fb_pmin=p;}
+    if (++g_fpc_fb_steps<=10) logline("[controls] S3 free block step %d: %.0f ms p=%.3f live=%d held=%d",g_fpc_fb_steps,el,p,g_fpc_fb_live,held);
+    /* the start tick (and a frame or two after) still reports the old progress (1.01): run it until it is live */
+    if (!isfinite(p) || (!held && ((p>=0.999f && (g_fpc_fb_live || el>600.0)) || el>6000.0))) {
         if (g_fpc_endanim) g_fpc_endanim(anim);
-        logline("[controls] PT34 free block end: %.0f ms p=%.3f",el,p);g_fpc_fb_tech=NULL;g_fpc_fb_anim=NULL;return;
+        logline("[controls] PT34 free block end: %.0f ms p=%.3f pmin=%.3f live=%d",el,p,g_fpc_fb_pmin,g_fpc_fb_live);g_fpc_fb_tech=NULL;g_fpc_fb_anim=NULL;
+        if (g_fpc_fb_state_set && readable(g_fpc_fb_cc,0x2b8) && *(int *)((uintptr_t)g_fpc_fb_cc+CC_STATE)==MELEE_BLOCK) *(int *)((uintptr_t)g_fpc_fb_cc+CC_STATE)=g_fpc_fb_state_old;
+        g_fpc_fb_state_set=0;return;
     }
-    if (held ? p<g_fpc_fb_hold : 1) {unsigned char e[32];make_mstr(e,"");g_fpc_runanim(anim,g_fpc_fb_tech,1.0f,e);}
+    if ((g_fpc_fb_mode&1) && held) fpc_fb_run(anim,g_fpc_fb_tech);   /* native style: run every frame while held */
+    else if (held ? (!g_fpc_fb_live || p<g_fpc_fb_hold) : 1) fpc_fb_run(anim,g_fpc_fb_tech);
     else if (g_fpc_fb_hspd>0.0f) {unsigned char e[32];make_mstr(e,"");g_fpc_runanim(anim,g_fpc_fb_tech,g_fpc_fb_hspd,e);}
 }
 /* HUD / harness state from the real native state. */
@@ -1021,12 +1038,12 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         if (argc==3) {if (_stricmp(argv[2],"click")) {r->append(r,"ctl [click]");return KAH_ERROR;} fpc_ctl_request();}
         char b[600];fpc_ctl_text(b,sizeof b);r->append(r,b);return KAH_OK;
     }
-    if (argc==4 && !_stricmp(argv[1],"set") && (!_stricmp(argv[2],"fs_run") || !_stricmp(argv[2],"cmode") || !_stricmp(argv[2],"fb_on") || !_stricmp(argv[2],"blk_hold") || !_stricmp(argv[2],"blk_dir") || !_stricmp(argv[2],"blk_org") || !_stricmp(argv[2],"blk_f") || !_stricmp(argv[2],"blk_hspd"))) {   /* PT34 switches */
+    if (argc==4 && !_stricmp(argv[1],"set") && (!_stricmp(argv[2],"fs_run") || !_stricmp(argv[2],"cmode") || !_stricmp(argv[2],"fb_on") || !_stricmp(argv[2],"blk_hold") || !_stricmp(argv[2],"blk_dir") || !_stricmp(argv[2],"blk_org") || !_stricmp(argv[2],"blk_f") || !_stricmp(argv[2],"blk_hspd") || !_stricmp(argv[2],"blk_mode"))) {   /* PT34 switches */
         int v=atoi(argv[3]);if (!_stricmp(argv[2],"fs_run")) g_fpc_fs_run=v!=0;else if (!_stricmp(argv[2],"cmode")) g_fpc_cmode=v&3;
-        else if (!_stricmp(argv[2],"fb_on")) g_fpc_fb_on=v!=0;else if (!_stricmp(argv[2],"blk_dir")) g_fpc_fb_dir=v;else if (!_stricmp(argv[2],"blk_org")) g_fpc_fb_org=v;
+        else if (!_stricmp(argv[2],"fb_on")) g_fpc_fb_on=v!=0;else if (!_stricmp(argv[2],"blk_mode")) g_fpc_fb_mode=v;else if (!_stricmp(argv[2],"blk_dir")) g_fpc_fb_dir=v;else if (!_stricmp(argv[2],"blk_org")) g_fpc_fb_org=v;
         else if (!_stricmp(argv[2],"blk_f")) g_fpc_fb_f=(float)atof(argv[3]);else if (!_stricmp(argv[2],"blk_hspd")) {float f=(float)atof(argv[3]);if (f>=0.0f && f<=1.0f) g_fpc_fb_hspd=f;}else {float f=(float)atof(argv[3]);if (f>=0.0f && f<=1.0f) g_fpc_fb_hold=f;}
-        char b[200];snprintf(b,sizeof b,"fs_run=%d cmode=%d fb_on=%d blk_hold=%.2f fb_starts=%u fb_none=%u cm_sets=%u fs_runs=%u run=%p setcm=%p",g_fpc_fs_run,g_fpc_cmode,
-            g_fpc_fb_on,g_fpc_fb_hold,g_fpc_fb_starts,g_fpc_fb_none,g_fpc_cm_sets,g_fpc_fs_runs,
+        char b[200];snprintf(b,sizeof b,"fs_run=%d cmode=%d fb_on=%d blk_hold=%.2f fb_starts=%u fb_none=%u fb_lives=%u fb_pmin=%.3f cm_sets=%u fs_runs=%u run=%p setcm=%p",g_fpc_fs_run,g_fpc_cmode,
+            g_fpc_fb_on,g_fpc_fb_hold,g_fpc_fb_starts,g_fpc_fb_none,g_fpc_fb_lives,g_fpc_fb_pmin,g_fpc_cm_sets,g_fpc_fs_runs,
             (void *)g_fpc_runanim,(void *)g_fpc_setcm);r->append(r,b);return KAH_OK;
     }
     if (argc==4 && !_stricmp(argv[1],"set") && !_stricmp(argv[2],"holster_delay")) {
