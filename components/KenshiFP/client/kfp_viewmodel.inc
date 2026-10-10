@@ -224,6 +224,11 @@ static float g_vm_rbcos = 0.5f, g_vm_rbpen = 20.0f;      /* single ready branch:
 static float g_vm_rbw = 0.5f, g_vm_rbwr = 0.5f;          /* its weight in the elbow pick while drawing / at ready (0 = off); 2.0 while
                                                           * drawing spun the blade ~260 deg over 0.6 s after every draw (m78 f8) */
 static int   g_vm_wrlwarm = 1;   /* roll refinement starts from last frame's roll (PT30) */
+static int   g_vm_hinge = 1;     /* E5: melee arm bone roll from the elbow hinge, not inherited from the native anim */
+#define VM_HCAP 30
+static int   g_vm_hcap_n[2]; static Vec3 g_vm_hl[2][2];   /* captured local hinge axis [side][upper arm, forearm] (sum) */
+static float g_vm_hdev[2][2], g_vm_htw_max[2]; static unsigned long g_vm_hfix_n;
+static Vec3  g_vm_mhua, g_vm_mhfa;   /* measured weapon-arm bone hinge axes (camera numbers), rec group H */
 static float g_vm_wrl = 2.2f, g_vm_wrlmin = 2.6f, g_vm_wrllag = 6.0f, g_vm_rs, g_vm_rsv, g_vm_rs_lag; static int g_vm_have_rs;   /* roll jerk limit (0 = off) */
 static unsigned g_vm_pk[4];   /* wrist picks: within the rate step, 2x, 4x, anywhere */   /* + max pick speed deg/s, max cone offset deg */   /* wrist fix: weight of the previous elbow in the straight-wrist pick (no flips) */
 static Vec3  g_vm_pick; static int g_vm_pick_ok;   /* wrist fix: this frame's elbow pick (camera space), made with the blade roll */
@@ -327,7 +332,7 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa;
                  unsigned char nok; Vec3 nj[2][3], nhx[2], nhy[2], nlp[2]; Quat nlq[2]; } VmRec;   /* native pose of this frame's apply (animlab) */
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
@@ -378,6 +383,17 @@ static Quat vm_frame_quat(Vec3 a, Vec3 b)
     else if (m11 > m22) { float s = sqrtf(1.0f + m11 - m00 - m22) * 2.0f; q = (Quat){ (m02-m20)/s, (m01+m10)/s, 0.25f*s, (m12+m21)/s }; }
     else { float s = sqrtf(1.0f + m22 - m00 - m11) * 2.0f; q = (Quat){ (m10-m01)/s, (m02+m20)/s, (m12+m21)/s, 0.25f*s }; }
     return quat_norm(q);
+}
+static Quat vm_axang(Vec3 ax, float a) { float s = sinf(0.5f * a); return (Quat){ cosf(0.5f * a), ax.x*s, ax.y*s, ax.z*s }; }
+static Quat vm_fromto(Vec3 a, Vec3 b);
+/* E5: roll D about `axis` so its local hinge hl lies along ht (both taken perpendicular to the axis) */
+static Quat vm_align_roll(Quat D, Vec3 hl, Vec3 axis, Vec3 ht)
+{
+    Vec3 cur = quat_rotvec(D, hl);
+    Vec3 a = vm_sub(cur, vm_mul(axis, vm_dot(cur, axis))), b = vm_sub(ht, vm_mul(axis, vm_dot(ht, axis)));
+    if (vm_len(a) < 1e-3f || vm_len(b) < 1e-3f) return D;
+    a = vm_norm(a); b = vm_norm(b);
+    return quat_norm(quat_mul(vm_axang(axis, atan2f(vm_dot(vm_cross(a, b), axis), vm_dot(a, b))), D));
 }
 static Quat vm_fromto(Vec3 a, Vec3 b)
 {
@@ -528,6 +544,21 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
     if (!readable((void *)pc, 16) || !readable((void *)pua, 16) || !readable((void *)pfa, 16) || !readable((void *)pha, 16)
         || !readable((void *)ps, 12) || !readable((void *)pe, 12) || !readable((void *)ph, 12)) return 0;
     Quat Dc = *pc, Dua = *pua, Dfa = *pfa, Dh = *pha; Vec3 S = *ps, E = *pe, H = *ph;
+    int hg = g_vm_hinge && g_vm_class == 0;
+    if (hg) {   /* E5: local elbow hinge of each bone from the native pose (elbow bent > ~24 deg) */
+        Vec3 u1 = vm_sub(E, S), u2 = vm_sub(H, E), hn = vm_cross(u1, u2);
+        if (vm_len(hn) > 0.4f * vm_len(u1) * vm_len(u2)) {
+            hn = vm_norm(hn);
+            Vec3 l[2] = { quat_rotvec(quat_conj(Dua), hn), quat_rotvec(quat_conj(Dfa), hn) };
+            for (int k = 0; k < 2; k++) {
+                if (g_vm_hcap_n[side] < VM_HCAP) g_vm_hl[side][k] = vm_add(g_vm_hl[side][k], l[k]);
+                else { float d = acosf(fmaxf(-1.0f, fminf(1.0f, vm_dot(l[k], vm_norm(g_vm_hl[side][k]))))) * 57.29578f;
+                       if (d > g_vm_hdev[side][k]) g_vm_hdev[side][k] = d; }
+            }
+            if (g_vm_hcap_n[side] < VM_HCAP) g_vm_hcap_n[side]++;
+        }
+    }
+    int hok = hg && g_vm_hcap_n[side] >= VM_HCAP;
     if (keep_ori) Qt = Dh;
     float L1 = vm_l1(ua, ps, pe), L2 = vm_len(vm_sub(H, E));
     if (L1 < 1e-4f || L2 < 1e-4f) return 0;
@@ -562,15 +593,25 @@ static int vm_ik(int side, void *ua, void *fa, void *ha, Vec3 Ht, Quat Qt, int k
     Vec3 v = quat_rotvec(r1, vm_sub(H, E));
     Quat r2 = vm_fromto(v, vm_sub(H2, E2));
     Quat Dfa2 = quat_norm(quat_mul(r2, quat_mul(r1, Dfa)));
+    if (hok) {   /* E5: both bones rolled onto the target bend plane (deterministic, native-independent) */
+        Vec3 ht = vm_cross(vm_sub(E2, S), vm_sub(H2, E2));
+        if (vm_len(ht) > 1e-4f) {
+            ht = vm_norm(ht);
+            Dua2 = vm_align_roll(Dua2, vm_norm(g_vm_hl[side][0]), vm_norm(vm_sub(E2, S)), ht);
+            Dfa2 = vm_align_roll(Dfa2, vm_norm(g_vm_hl[side][1]), vm_norm(vm_sub(H2, E2)), ht);
+            g_vm_hfix_n++;
+        }
+    }
     {   /* forearm takes a share of the wrist twist (about the forearm bone) */
         const Quat *plh = g_oldnode_getori(ha);
-        Quat Lh = readable((void *)plh, 16) ? *plh : (Quat){ 1, 0, 0, 0 };
+        Quat Lh = (!hok && readable((void *)plh, 16)) ? *plh : (Quat){ 1, 0, 0, 0 };
         Quat want = quat_mul(Qt, quat_conj(Lh));
         Quat dl = quat_norm(quat_mul(want, quat_conj(Dfa2)));
         Vec3 ax = vm_norm(vm_sub(H2, E2));
         float pr = dl.x*ax.x + dl.y*ax.y + dl.z*ax.z;
         Quat tw = quat_norm((Quat){ dl.w, ax.x*pr, ax.y*pr, ax.z*pr });
         if (tw.w < 0) tw = (Quat){ -tw.w, -tw.x, -tw.y, -tw.z };
+        if (hok) { float ta = 2.0f * acosf(fminf(1.0f, tw.w)) * 57.29578f; if (ta > g_vm_htw_max[side]) g_vm_htw_max[side] = ta; }
         tw = quat_slerp((Quat){ 1, 0, 0, 0 }, tw, g_vm_twist);
         Dfa2 = quat_norm(quat_mul(tw, Dfa2));
     }
@@ -1472,6 +1513,13 @@ static void vm_frame_core(void *pc, int body_down)
                 g_vm_mhy = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*hq, vm_v(0, 1, 0)))));   /* PT33: palm-facing measure */
                 g_vm_mhz = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*hq, vm_v(0, 0, 1))))); }
             if (readable((void *)fq, 16)) g_vm_mfx = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*fq, vm_v(1, 0, 0)))));
+            {   /* E5: rendered elbow-hinge axis of the upper arm / forearm bone (captured local hinge, else local Z) */
+                void *ub = g_skel_getbone(skel, g_vm_nm_arm[wh]); const Quat *uq = readable(ub, 8) ? g_oldnode_getdori(ub) : NULL;
+                int hc = g_vm_hcap_n[wh] >= VM_HCAP;
+                Vec3 hu = hc ? vm_norm(g_vm_hl[wh][0]) : vm_v(0, 0, 1), hf = hc ? vm_norm(g_vm_hl[wh][1]) : vm_v(0, 0, 1);
+                g_vm_mhua = readable((void *)uq, 16) ? vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*uq, hu)))) : vm_v(0, 0, 0);
+                g_vm_mhfa = readable((void *)fq, 16) ? vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*fq, hf)))) : vm_v(0, 0, 0);
+            }
             g_vm_wb = acosf(fmaxf(-1.0f, fminf(1.0f, vm_dot(vm_norm(vm_sub(g_vm_mj[wh][2], g_vm_mj[wh][1])), g_vm_mh)))) * 57.29578f;
         }
     }
@@ -1702,7 +1750,7 @@ static void vm_frame(void *pc, int body_down)
         q->rootf = g_vm_root_f; q->roota = g_vm_root_a; q->napp = (unsigned)g_vm_napply;
         q->phase = (unsigned char)g_vm_phase; q->wih = (unsigned char)g_vm_wih;
         q->stch = g_vm_st_last[g_vm_whand[g_vm_class] ? 1 : 0];
-        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp;
+        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa;
         if (g_vm_brec) g_vm_brec[g_vm_rn - 1] = g_vm_bolt;
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
@@ -1746,7 +1794,7 @@ static int vm_rec_dump(const char *path)
     fprintf(fo, "# build %s %s\n", __DATE__, __TIME__);
     for (int i = 0; i < g_vm_setn; i++)
         fprintf(fo, "# set %d %s %g\n", g_vm_setlog[i].ep == g_vm_rec_ep ? g_vm_setlog[i].f : -1, g_vm_setlog[i].k, g_vm_setlog[i].v);
-    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR\n");
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm)\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
                 q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
@@ -1763,6 +1811,7 @@ static int vm_rec_dump(const char *path)
             for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->nhx[a].x, q->nhx[a].y, q->nhx[a].z, q->nhy[a].x, q->nhy[a].y, q->nhy[a].z);
             for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.5f,%.5f,%.5f,%.5f", q->nlp[a].x, q->nlp[a].y, q->nlp[a].z, q->nlq[a].w, q->nlq[a].x, q->nlq[a].y, q->nlq[a].z);
         }
+        fprintf(fo, " | H %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->hua.x, q->hua.y, q->hua.z, q->hfa.x, q->hfa.y, q->hfa.z);   /* E5 hinge axes */
         fputc('\n', fo); }
     fclose(fo); return g_vm_rn;
 }
@@ -1909,6 +1958,9 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "wrl"))     { if (x >= 0 && x < 20) { g_vm_wrl = x; g_vm_have_rs = 0; } return 1; }
     else if (!strcmp(k, "wrlmin"))  { if (x >= 0 && x < 90) g_vm_wrlmin = x; return 1; }
     else if (!strcmp(k, "wrlwarm")) { g_vm_wrlwarm = x > 0.5f; return 1; }
+    else if (!strcmp(k, "hinge"))   { g_vm_hinge = x > 0.5f; return 1; }
+    else if (!strcmp(k, "hinge_reset")) { memset(g_vm_hcap_n, 0, sizeof(g_vm_hcap_n)); memset(g_vm_hl, 0, sizeof(g_vm_hl));
+                                          memset(g_vm_hdev, 0, sizeof(g_vm_hdev)); memset(g_vm_htw_max, 0, sizeof(g_vm_htw_max)); return 1; }
     else if (!strcmp(k, "wrllag"))  { if (x >= 0 && x < 180) g_vm_wrllag = x; return 1; }
     else if (!strcmp(k, "elbptau")) { if (x >= 0 && x < 1) g_vm_elb_ptau = x; return 1; }
     else if (!strcmp(k, "rbw"))     { if (x >= 0 && x < 20) g_vm_rbw = x; return 1; }
@@ -2023,6 +2075,13 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
             }
         }
         r->append(r, b); return KAH_OK;
+    } else if (!strcmp(a, "hinge")) {   /* E5 */
+        char hb[400]; Vec3 a0 = vm_norm(g_vm_hl[0][0]), a1 = vm_norm(g_vm_hl[0][1]), b0 = vm_norm(g_vm_hl[1][0]), b1 = vm_norm(g_vm_hl[1][1]);
+        snprintf(hb, sizeof(hb), "hinge on=%d cap=%d,%d L_ua=%.3f,%.3f,%.3f L_fa=%.3f,%.3f,%.3f R_ua=%.3f,%.3f,%.3f R_fa=%.3f,%.3f,%.3f "
+                 "dev_deg=%.1f,%.1f,%.1f,%.1f twist_max=%.1f,%.1f fixes=%lu", g_vm_hinge, g_vm_hcap_n[0], g_vm_hcap_n[1],
+                 a0.x, a0.y, a0.z, a1.x, a1.y, a1.z, b0.x, b0.y, b0.z, b1.x, b1.y, b1.z,
+                 g_vm_hdev[0][0], g_vm_hdev[0][1], g_vm_hdev[1][0], g_vm_hdev[1][1], g_vm_htw_max[0], g_vm_htw_max[1], g_vm_hfix_n);
+        r->append(r, hb); return KAH_OK;
     } else if (!strcmp(a, "probe")) {
         /* native (pre-IK) prop + hand axes of both sides in camera numbers */
         int n = snprintf(b, sizeof(b), "probe nat=%d scale=%.3f", g_vm_nat_ok, g_vm_scale);
