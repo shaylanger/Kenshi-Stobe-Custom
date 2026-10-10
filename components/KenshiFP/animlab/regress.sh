@@ -330,5 +330,15 @@ else echo "REGRESS INFO zoomband: VMQUICK z25 rec missing"; fi
 for x in old:FAIL fix:PASS; do g=/mnt/c/KenshiTestRuns/vid/vmrec-zoom-sweep-${x%%:*}.txt; [ -f "$g" ] && cp -n "$g" "$W/"
   f=$W/vmrec-zoom-sweep-${x%%:*}.txt; [ -f "$f" ] || { echo "REGRESS INFO zoomband: $(basename "$f") not recorded yet"; continue; }
   r=$(python3 "$L/animlab.py" zoomband "$f"); case "$r" in "zoomband ${x##*:}"*) ok "zoomband $(basename "$f"): $r";; *) bad "zoomband $(basename "$f") want ${x##*:}: $r";; esac; done
+# 27. ticket A 2026-10-10 (Shay): the Windows mouse cursor showed in sword-z25-block.mp4 (~7 s, 12-16 s, 35-36 s).
+#     harness tools/animlab/frames.py cursor (arrow shape at any cursor size, full-res frames at 5 fps; takecheck.py runs it
+#     on every --video take) must FAIL that video with spans at 7 / 12-16 / 34-37 s and PASS turret-fp.mp4 (no cursor).
+[ -f "$TV/turret-fp.mp4" ] || cp /mnt/c/KenshiTestRuns/f36/turret-fp.mp4 "$TV/" 2>/dev/null
+[ -f "$TV/sword-z25-block-f36.mp4" ] || cp /mnt/c/KenshiTestRuns/f36/sword-z25-block.mp4 "$TV/sword-z25-block-f36.mp4" 2>/dev/null
+if [ -f "$TV/sword-z25-block-f36.mp4" ]; then r=$(python3 "$L/frames.py" cursor "$TV/sword-z25-block-f36.mp4" --name sword-z25-block)
+  case "$r" in *"FAIL cursor"*"at=7."*"12."*"-16."*"3"[3-6]"."*) ok "cursor miss: $r";; *) bad "cursor miss: $r";; esac
+else echo "REGRESS INFO cursor: sword-z25-block-f36.mp4 missing"; fi
+[ -f "$TV/turret-fp.mp4" ] && { r=$(python3 "$L/frames.py" cursor "$TV/turret-fp.mp4" --name turret-fp)
+  case "$r" in *"PASS cursor"*) ok "no-cursor video $r";; *) bad "no-cursor video $r";; esac; }
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
