@@ -4,7 +4,12 @@ starting here needs nothing else. Keep it current: update this section at every 
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
-## Right now (2026-10-10 ~13:40, m91 coordinator handed off at context limit)
+## Right now (2026-10-10 ~13:45, m92 coordinator)
+- m92: all 8 agents respawned fresh from their status files. Idle-detection FIRST JOB done (c06bc0f):
+  `rig5090-state.ps1` -> rig-health `RIG IDLE-GAME` + Stop-hook block when Kenshi/lock is up but every marked batch
+  has DONE > 3 min; run-batch.sh deletes the marker naming its out dir at DONE. build-pipeline DONE (kfp-pipeline.sh
+  ready, 7f82678; first -Staged install happens at each rig's next restart). 5090-operator told to launch its next
+  batch at once (VMQUICK clean rerun, blkH, fists after lab-path fix, finger A/B).
 - Start with `tools/automation/session-start.ps1`; respawn every agent not DONE as a FRESH agent from its status/handoff
   file in `C:\KenshiTestRuns\agents\` (all were told to write STOPPED-CONTEXT + handoff at 13:36).
 - **FIRST JOB for the next coordinator (Shay asked "why did it sit idle?"):** the 5090 sat idle ~13:31-13:36 after
