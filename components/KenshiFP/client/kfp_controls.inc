@@ -57,7 +57,12 @@ static fpc_startanim_t g_fpc_runanim; static fpc_setcm_t g_fpc_setcm,g_fpc_setcm
 #define FPC_SYM_CHOOSEBLOCK "?chooseBlock@CharStats@@QEAAPEAVCombatTechniqueData@@W4CutDirection@@MW4CutOrigination@@PEAVCharacter@@@Z"
 typedef void *(*fpc_chooseblock_t)(void *stats,int dir,float skill,int from,void *opp);
 static fpc_chooseblock_t g_fpc_chooseblock; static void *g_fpc_fb_tech,*g_fpc_fb_anim; static double g_fpc_fb_t0;
-static int g_fpc_fb_on=1, g_fpc_fb_dir=1, g_fpc_fb_org=0; static float g_fpc_fb_f=50.0f, g_fpc_fb_hspd=0.0f; static float g_fpc_fb_hold=0.45f; static unsigned g_fpc_fb_starts,g_fpc_fb_none;
+static int g_fpc_fb_on=1, g_fpc_fb_dir=0, g_fpc_fb_org=1;
+/* ticket B: free block technique allow list (animation names, comma separated, "*" = any); the first entry is the
+ * fallback when 8 picks miss. kfx-b6 survey: only 'st' raises the blade (+42 deg); 'block left upper' / 't' hang it. */
+static char g_fpc_fb_allow[160]="st", g_fpc_fb_name[48];
+static void *g_fpc_fb_seen[4]; static char g_fpc_fb_seen_nm[4][48]; static unsigned g_fpc_fb_repicks,g_fpc_fb_forced;
+ static float g_fpc_fb_f=50.0f, g_fpc_fb_hspd=0.0f; static float g_fpc_fb_hold=0.45f; static unsigned g_fpc_fb_starts,g_fpc_fb_none;
 static int g_fpc_fs_run=1,g_fpc_cmode=3; static float g_fpc_fs_spd=1.0f; static void *g_fpc_cm_anim; static unsigned g_fpc_cm_sets,g_fpc_fs_runs;
 static fpc_progress_t g_fpc_progress;
 static fpc_endanim_t g_fpc_endanim;
@@ -691,13 +696,36 @@ static void fpc_fb_run(void *anim,void *tech) {   /* S3: runCombatAnimation like
     g_fpc_runanim(anim,tech,sp,e);
 }
 static int g_fpc_fb_live,g_fpc_fb_steps;static float g_fpc_fb_pmin=9.0f;static unsigned g_fpc_fb_lives;
+static void fpc_tech_name(void *tech,char *out,size_t n) {   /* CombatTechniqueData::animation (std::string at +0x0, data at +0x8) */
+    out[0]='\0';if (!readable(tech,0x30)) return;read_mstring((char *)tech+8,out,n);
+    for (const char *c=out;*c;c++) if (*c<0x20||*c>0x7e) {out[0]='\0';break;}
+    if (!out[0]) {read_mstring(tech,out,n);for (const char *c=out;*c;c++) if (*c<0x20||*c>0x7e) {out[0]='\0';break;}}
+}
+static int fpc_fb_allow_idx(const char *nm) {   /* index in the allow list, -1 = not allowed; "*" or empty = any (0) */
+    if (!g_fpc_fb_allow[0] || !strcmp(g_fpc_fb_allow,"*")) return 0;
+    const char *p=g_fpc_fb_allow;int i=0;size_t l=strlen(nm);
+    while (*p) {const char *e=strchr(p,',');size_t k=e?(size_t)(e-p):strlen(p);if (l && k==l && !_strnicmp(p,nm,l)) return i;if (!e) break;p=e+1;++i;}
+    return -1;
+}
+static void *fpc_fb_pick(void *stats,void *pc) {   /* ticket B: re-pick until allowed, else the best allowed seen */
+    void *tech=NULL;char nm[48];int k;
+    for (k=0;k<8;k++) {
+        tech=g_fpc_chooseblock(stats,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org,pc);
+        if (!readable(tech,TECH_ANIM_SPEED+4)) return NULL;
+        fpc_tech_name(tech,nm,sizeof nm);int i=fpc_fb_allow_idx(nm);
+        if (i>=0) {if (i<4) {g_fpc_fb_seen[i]=tech;snprintf(g_fpc_fb_seen_nm[i],48,"%s",nm);}g_fpc_fb_repicks+=k;snprintf(g_fpc_fb_name,sizeof g_fpc_fb_name,"%s",nm);return tech;}
+    }
+    g_fpc_fb_repicks+=k;
+    for (k=0;k<4;k++) if (g_fpc_fb_seen[k]) {++g_fpc_fb_forced;snprintf(g_fpc_fb_name,sizeof g_fpc_fb_name,"%s",g_fpc_fb_seen_nm[k]);return g_fpc_fb_seen[k];}
+    fpc_tech_name(tech,g_fpc_fb_name,sizeof g_fpc_fb_name);return tech;   /* nothing allowed seen yet: the last pick */
+}
 static void fpc_free_block_anim(void *pc,int held) {
     if (!g_fpc_getanim || !g_fpc_startanim || !g_fpc_progress || !g_fpc_runanim) return;
     void *anim=char_valid(pc)?g_fpc_getanim(pc):NULL;
     if (held && g_fpc_fb_on && !g_fpc_fb_tech && !g_fpc_fs_tech && g_fpc_chooseblock && readable(anim,8) && !fpc_in_fight(pc)) {
         void *cc=g_melee_get_combat?g_melee_get_combat(pc):NULL;
         void *stats=readable(cc,0x2b8)?*(void **)((uintptr_t)cc+CC_STATS):NULL;
-        void *tech=readable(stats,8)?g_fpc_chooseblock(stats,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org,pc):NULL;
+        void *tech=readable(stats,8)?fpc_fb_pick(stats,pc):NULL;
         if (!readable(tech,TECH_ANIM_SPEED+4)) {++g_fpc_fb_none;return;}
         if (!(g_fpc_fb_mode&1)) {unsigned char e[32];make_mstr(e,"");g_fpc_startanim(anim,tech,1.0f,e);}
         else fpc_fb_run(anim,tech);
@@ -705,7 +733,7 @@ static void fpc_free_block_anim(void *pc,int held) {
         logline("[controls] S3 block tech: mode=%d spd=%.3f f2c=%d f2d=%d f40=%.3f",g_fpc_fb_mode,*(float *)((uintptr_t)tech+TECH_ANIM_SPEED),
                 *(unsigned char *)((uintptr_t)tech+0x2c),*(unsigned char *)((uintptr_t)tech+0x2d),*(float *)((uintptr_t)tech+0x40));
         g_fpc_fb_tech=tech;g_fpc_fb_anim=anim;g_fpc_fb_t0=fpc_now_ms();++g_fpc_fb_starts;g_fpc_fb_live=0;g_fpc_fb_steps=0;g_fpc_fb_pmin=9.0f;
-        logline("[controls] PT34 free block start tech=%p dir=%d f=%.1f org=%d",tech,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org);
+        logline("[controls] PT34 free block start tech=%p anim='%s' dir=%d f=%.1f org=%d repicks=%u forced=%u",tech,g_fpc_fb_name,g_fpc_fb_dir,g_fpc_fb_f,g_fpc_fb_org,g_fpc_fb_repicks,g_fpc_fb_forced);
     }
     if (!g_fpc_fb_tech) return;
     double el=fpc_now_ms()-g_fpc_fb_t0;
@@ -1038,11 +1066,15 @@ static int kah_fp_keys(const char *id,int argc,const char *const *argv,KAH_Reply
         if (argc==3) {if (_stricmp(argv[2],"click")) {r->append(r,"ctl [click]");return KAH_ERROR;} fpc_ctl_request();}
         char b[600];fpc_ctl_text(b,sizeof b);r->append(r,b);return KAH_OK;
     }
+    if (argc==4 && !_stricmp(argv[1],"set") && !_stricmp(argv[2],"blk_allow")) {   /* ticket B: free block technique names */
+        snprintf(g_fpc_fb_allow,sizeof g_fpc_fb_allow,"%s",argv[3]);memset(g_fpc_fb_seen,0,sizeof g_fpc_fb_seen);
+        char b[220];snprintf(b,sizeof b,"blk_allow=%s",g_fpc_fb_allow);r->append(r,b);return KAH_OK;
+    }
     if (argc==4 && !_stricmp(argv[1],"set") && (!_stricmp(argv[2],"fs_run") || !_stricmp(argv[2],"cmode") || !_stricmp(argv[2],"fb_on") || !_stricmp(argv[2],"blk_hold") || !_stricmp(argv[2],"blk_dir") || !_stricmp(argv[2],"blk_org") || !_stricmp(argv[2],"blk_f") || !_stricmp(argv[2],"blk_hspd") || !_stricmp(argv[2],"blk_mode"))) {   /* PT34 switches */
         int v=atoi(argv[3]);if (!_stricmp(argv[2],"fs_run")) g_fpc_fs_run=v!=0;else if (!_stricmp(argv[2],"cmode")) g_fpc_cmode=v&3;
         else if (!_stricmp(argv[2],"fb_on")) g_fpc_fb_on=v!=0;else if (!_stricmp(argv[2],"blk_mode")) g_fpc_fb_mode=v;else if (!_stricmp(argv[2],"blk_dir")) g_fpc_fb_dir=v;else if (!_stricmp(argv[2],"blk_org")) g_fpc_fb_org=v;
         else if (!_stricmp(argv[2],"blk_f")) g_fpc_fb_f=(float)atof(argv[3]);else if (!_stricmp(argv[2],"blk_hspd")) {float f=(float)atof(argv[3]);if (f>=0.0f && f<=1.0f) g_fpc_fb_hspd=f;}else {float f=(float)atof(argv[3]);if (f>=0.0f && f<=1.0f) g_fpc_fb_hold=f;}
-        char b[200];snprintf(b,sizeof b,"fs_run=%d cmode=%d fb_on=%d blk_hold=%.2f fb_starts=%u fb_none=%u fb_lives=%u fb_pmin=%.3f cm_sets=%u fs_runs=%u run=%p setcm=%p",g_fpc_fs_run,g_fpc_cmode,
+        char b[400];snprintf(b,sizeof b,"fb_tech='%s' fb_repicks=%u fb_forced=%u blk_dir=%d blk_org=%d fs_run=%d cmode=%d fb_on=%d blk_hold=%.2f fb_starts=%u fb_none=%u fb_lives=%u fb_pmin=%.3f cm_sets=%u fs_runs=%u run=%p setcm=%p",g_fpc_fb_name,g_fpc_fb_repicks,g_fpc_fb_forced,g_fpc_fb_dir,g_fpc_fb_org,g_fpc_fs_run,g_fpc_cmode,
             g_fpc_fb_on,g_fpc_fb_hold,g_fpc_fb_starts,g_fpc_fb_none,g_fpc_fb_lives,g_fpc_fb_pmin,g_fpc_cm_sets,g_fpc_fs_runs,
             (void *)g_fpc_runanim,(void *)g_fpc_setcm);r->append(r,b);return KAH_OK;
     }
