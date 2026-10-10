@@ -50,6 +50,12 @@ A teleport $SH $SPOT >/dev/null; sleep 2; A health $SH 100 >/dev/null
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null
 BOWN=$(A rangedinfo $SH | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//'); [ "$BOWN" = none ] && BOWN=""
 echo "setup ok: bow=${BOWN:-none} list=$LIST catalog=$WCAT"
+# give probe (2026-10-10 wm5090-2: the harness weapon factory refused every weapon, 18 takes failed one by one): the row's first
+# weapon must be creatable, else the whole row stops here with one setup FAIL (a dry run can't see a real factory refusal)
+PSID=$(awk -F'|' -v s="${WSTART:-1}" '$1!~/^(#|$)/{k++; if(k==s){print $1; exit}}' "$LIST")
+if [ -n "$PSID" ] && ! A inv $SH | grep -q "$PSID"; then
+  r=$(A give $SH "$PSID" 1); echo "$r" | grep -q " got 1/" || pf_fail "give probe $PSID (weapon factory): $(echo "$r" | cut -c1-140)"
+fi
 # ---- one weapon (subshell: pf_fail ends only this weapon)
 take(){   # k sid name type animcls ammo
   local k=$1 sid=$2 nm=$3 ty=$4 ac=$5 am=$6 slug D N T0 FP
