@@ -5,11 +5,11 @@
 # RESULT is reused, so a failed take can be fixed and rerun alone (give its name as an argument to run only that one).
 # Labels burned in, concatenated to <final mp4> (default C:\KenshiTestRuns\vm-rework\zoom-sweep.mp4) only when all six
 # passed. Prints one RESULT line per take and ONE last line for the video.
-OUT=$1; FINAL=${2:-/mnt/c/KenshiTestRuns/vm-rework/zoom-sweep.mp4}; shift 2 2>/dev/null; ONLY="$*"
+OUT=$1; FINAL=${2:-${CR:-/mnt/c}/KenshiTestRuns/vm-rework/zoom-sweep.mp4}; shift 2 2>/dev/null; ONLY="$*"
 [ -n "$OUT" ] || { echo "usage: fp-zoom-sweep-video.sh <out dir> [final mp4] [take names...]"; exit 2; }
 HERE=$(dirname "$(readlink -f "$0")")
-FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
-mkdir -p "$OUT"; cd "$OUT" || exit 2; cp -n /mnt/c/Windows/Fonts/arialbd.ttf . 2>/dev/null
+FFX=${FFX:-${CR:-/mnt/c}/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
+mkdir -p "$OUT"; cd "$OUT" || exit 2; cp -n ${CR:-/mnt/c}/Windows/Fonts/arialbd.ttf . 2>/dev/null
 TAKES="zs-xbow-switch-on:switch:on:xbow zs-sword-switch-on:switch:on:sword zs-xbow-switch-off:switch:off:xbow zs-sword-switch-off:switch:off:sword zs-xbow-fade-on:fade:on:xbow zs-sword-fade-on:fade:on:sword"
 ok=1; parts=()
 for t in $TAKES; do IFS=: read n mode hat w <<< "$t"
@@ -17,7 +17,7 @@ for t in $TAKES; do IFS=: read n mode hat w <<< "$t"
     grep -q "^RESULT ZOOMSWEEP-$n PASS" "$n.out" 2>/dev/null || timeout 900 bash "$HERE/fp-zoom-sweep.sh" "$OUT" "$n" "$mode" "$hat" "$w" > "$n.out" 2>&1
   fi
   r=$(grep '^RESULT' "$n.out" 2>/dev/null | tail -1); echo "${r:-RESULT ZOOMSWEEP-$n FAIL not run}"
-  echo "$r" | grep -q " PASS " || { ok=0; continue; }
+  echo "$r" | grep -q "^RESULT ZOOMSWEEP-$n PASS" || { ok=0; continue; }   # not " PASS ": the inner "take PASS" matched FAILED takes
   # labels burned in (0.8 s display lag)
   python3 - "$n" <<'PY'
 import sys

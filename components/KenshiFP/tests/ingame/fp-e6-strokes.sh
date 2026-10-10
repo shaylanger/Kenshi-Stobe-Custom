@@ -8,17 +8,19 @@
 OUT=$1; N=$2; STROKES=${3:-0 1 2}; REPS=${4:-2}
 [ -n "$OUT" ] && [ -n "$N" ] || { echo "usage: fp-e6-strokes.sh <out dir> <name> [strokes] [reps]"; exit 2; }
 export KAH_OWNER=${KAH_OWNER:-kfp-fixer}
-mkdir -p "$OUT"; cd "$OUT" || exit 2
+mkdir -p "$OUT" 2>/dev/null; cd "$OUT" 2>/dev/null || { echo "RESULT E6-$N FAIL setup: out dir $OUT not usable"; exit 2; }
 SH=Axima; SPOT="-54190 633 4380"
-HARN=/mnt/c/KenshiModding/Kenshi-Automation-Harness; HERE=/mnt/c/KenshiModding/components/KenshiFP; L=$HARN/tools/animlab
-FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
-KDIR=/mnt/d/Steam/steamapps/common/Kenshi; SHOTS=$KDIR/mods/AutomationHarness/shots
+HARN=${CR:-/mnt/c}/KenshiModding/Kenshi-Automation-Harness; HERE=${CR:-/mnt/c}/KenshiModding/components/KenshiFP; L=$HARN/tools/animlab
+FFX=${FFX:-${CR:-/mnt/c}/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
+KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; SHOTS=$KDIR/mods/AutomationHarness/shots
 SNAME=(diagonal backhand overhead rising)
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 st(){ A fp_vm state | fld state; }
 waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }
-fail(){ echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; exit 1; }
+fail(){ PF_DONE=1; echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; exit 1; }
+PF_ROW=E6-$N; PF_ON_FAIL='A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; [ -n "$_TS_RUN" ] \&\& take_sample_stop'; . $HERE/tests/ingame/take-preflight.sh
+pf_begin "$PF_ROW"   # RESULT guard (shared preflight: take-preflight.sh)
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
 ready(){ [ "$(st)" = ready ] || { [ "$(st)" = holstered ] || { A key_inject r tap 120 >/dev/null; waitst holstered 6; }; A key_inject r tap 120 >/dev/null; waitst ready 6; }; }
 # ---- setup: fresh load, pins, daytime, take spot, katana, hostiles, sky
@@ -27,6 +29,7 @@ for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" &&
 A speed 1 hold >/dev/null; A kill "Hungry Bandit" >/dev/null
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
+pf_rig; pf_display
 h=$(A time | grep -o 'time=[0-9]*'); h=$((10#${h#time=}))
 if [ $h -lt 10 ] || [ $h -gt 13 ]; then A speed 50 hold >/dev/null; for i in $(seq 1 200); do sleep 2; h=$(A time | grep -o 'time=[0-9]*'); h=$((10#${h#time=})); [ $h -ge 10 ] && [ $h -le 13 ] && break; done; A speed 1 hold >/dev/null; fi
 A teleport $SH $SPOT >/dev/null; sleep 2
@@ -69,5 +72,5 @@ for s in $STROKES; do for c in inline metrics churn blade; do
   echo "$r" | grep -q " PASS" || ok=0
 done; done
 SK=$(python3 $L/animlab.py stroke --overhead 2 "$N.vmrec.txt" 2>&1 | grep '^stroke ' | head -1); echo "$SK" >> "$N.lab.txt"; echo "$SK" | grep -q "^stroke PASS" || ok=0
-SW=$(grep -o "\[vm\] swing #[0-9]* stroke [0-9]" $KDIR/KenshiFP.log | tail -$(( $(echo $STROKES | wc -w) * REPS )) | awk '{print $NF}' | tr '\n' ',')
-echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"
+SW=$(grep -o "\[vm\] swing #[0-9]* stroke [0-9]" "$KDIR/KenshiFP.log" | tail -$(( $(echo $STROKES | wc -w) * REPS )) | awk '{print $NF}' | tr '\n' ',')
+PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"

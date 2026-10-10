@@ -15,11 +15,11 @@
 OUT=$1; N=$2; MODE=${3:-switch}; HAT=${4:-on}; WPN=${5:-xbow}
 [ -n "$OUT" ] && [ -n "$N" ] && { [ "$WPN" = xbow ] || [ "$WPN" = sword ]; } || { echo "usage: fp-zoom-sweep.sh <out dir> <name> <switch|fade> <hat on|off> <xbow|sword>"; exit 2; }
 export KAH_OWNER=${KAH_OWNER:-kfp-fixer}
-mkdir -p "$OUT"; cd "$OUT" || exit 2
+mkdir -p "$OUT" 2>/dev/null; cd "$OUT" 2>/dev/null || { echo "RESULT ZOOMSWEEP-$N FAIL setup: out dir $OUT not usable"; exit 2; }
 SH=Axima; SPOT="-54190 633 4380"
-HARN=/mnt/c/KenshiModding/Kenshi-Automation-Harness; HERE=/mnt/c/KenshiModding/components/KenshiFP; L=$HARN/tools/animlab
-FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
-KDIR=/mnt/d/Steam/steamapps/common/Kenshi
+HARN=${CR:-/mnt/c}/KenshiModding/Kenshi-Automation-Harness; HERE=${CR:-/mnt/c}/KenshiModding/components/KenshiFP; L=$HARN/tools/animlab
+FFX=${FFX:-${CR:-/mnt/c}/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
+KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 st(){ A fp_vm state | fld state; }
@@ -27,13 +27,15 @@ loaded(){ local l; l=$(A fp_combat state | fld loaded); echo "${l:-0}"; }
 waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }
 FIFO=/tmp/kfp-$N.ffin
 cleanup(){ [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; rm -f "$FIFO"; }
-fail(){ cleanup; echo "RESULT ZOOMSWEEP-$N FAIL $*"; exit 1; }
+fail(){ cleanup; PF_DONE=1; echo "RESULT ZOOMSWEEP-$N FAIL $*"; exit 1; }
 PF_ROW=ZOOMSWEEP-$N; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
+pf_begin "$PF_ROW"   # RESULT guard: an exit without a RESULT line prints a FAIL setup line
 keep(){ A inv "$1" | grep -q "\"name\":\"$2\"" || echo "picked up $2: $(A pickup "$1" "$2" radius 60 | cut -c1-50)"; }
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
 sweep(){ A fp_camera distance 0 >/dev/null; sleep 0.8
   for w in -120 -120 -120 -120 -120 0 120 120 120 120 0; do [ $w = 0 ] && { sleep 1; continue; }; A fp_camera wheel $w >/dev/null
-    echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') wheel $w $(A fp_camera state | grep -o 'target=[0-9.]*\|applied=[0-9.]*\|band_hidden=[0-9]' | tr '\n' ' ')" >> "$N.whl"; sleep "${SL:-1.3}"; done; }
+    q=; awk -v s="${SL:-1.3}" 'BEGIN{exit !(s>=0.5)}' && q=$(A fp_camera state | grep -o 'target=[0-9.]*\|applied=[0-9.]*\|band_hidden=[0-9]' | tr '\n' ' ')   # walk sweep SL<0.5: no state query (kept the harness busy: takecheck cover gaps, kfx-b5)
+    echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') wheel $w $q" >> "$N.whl"; sleep "${SL:-1.3}"; done; }
 place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.05 >/dev/null; sleep 1; }
 # hold RMB until a bolt is in (fp_combat loaded>=1), release, verify loaded=1 (on camera, labelled)
 load_xbow(){ [ "$(loaded)" -ge 1 ] && return 0
@@ -47,7 +49,8 @@ for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" &&
 A speed 1 hold >/dev/null
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take | grep -q -i "ok\|took\|fp\|transferred" || echo "fp_control take: $(A fp_control take | cut -c1-60)"
-pf_clean ${SPOT%% *} $(echo $SPOT | cut -d' ' -f3) 3000
+pf_rig; pf_display
+pf_clean ${SPOT%% *} $(echo $SPOT | cut -d' ' -f3) 6000   # 3000 let Dust Bandits reach the take (kfx-b5 xbow-fade-on)
 pf_day
 A teleport $SH $SPOT >/dev/null; sleep 2
 if [ "$HAT" = off ]; then A unequip $SH "Iron Hat" >/dev/null; sleep 0.5; A pickup Malzin "Iron Hat" near $SH radius 60 now >/dev/null
@@ -111,4 +114,4 @@ WH=$(awk '{for(i=1;i<=NF;i++) if($i ~ /^applied=/){split($i,a,"="); if(a[2]>0.65
 ok=1; for r in "$TC" "$CU" "$OG"; do echo "$r" | grep -q "PASS" || ok=0; done
 [ -n "$ZB" ] && { echo "$ZB" | grep -q "PASS" || ok=0; }
 [ "$MODE" = fade ] && { echo "$BAND" | grep -q "band_hidden=1" || ok=0; }
-echo "RESULT ZOOMSWEEP-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] cursor=[$CU] openground=[$OG] zoomband=[$ZB] in_band_wheel_samples=$WH band6dm=[$BAND] len=$(cat "$N.video-len.txt") log=$OUT/$N.lab"
+PF_DONE=1; echo "RESULT ZOOMSWEEP-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] cursor=[$CU] openground=[$OG] zoomband=[$ZB] in_band_wheel_samples=$WH band6dm=[$BAND] len=$(cat "$N.video-len.txt") log=$OUT/$N.lab"
