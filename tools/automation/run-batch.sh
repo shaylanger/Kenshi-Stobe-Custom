@@ -21,6 +21,10 @@
 # next row's save (at most RECOVER=2 times, NOTE line); after that the rest of the batch is skipped.
 # Memory: before every row the Windows commit headroom is checked; below MIN_COMMIT_GB (default 3) Kenshi is
 # restarted first (NOTE line). m22: Kenshi crashed on a NULL texture allocation with the commit charge at its limit.
+# Dry-run gate (Speed plan 1, Shay 2026-10-10): before the game is touched the whole list runs through
+# tools/automation/dryrun.sh (fake game, seconds per row; output <out>/dryrun.txt + <out>/dryrun/); any dry-run FAIL
+# refuses the batch (one `RESULT <row> FAIL dryrun: ...` line per failing row + BATCH REFUSED, then DONE).
+# --no-dryrun "<reason>" skips the gate (NOTE line with the reason): only for a dry-run bug, logged for take-dryrun.
 # Rigs: runs on the 5090 (WSL) and on the 4080 (Git Bash, via C:\KAH\itrun.ps1; rig-env.sh paths, game control through
 # C:\KAH\ctl.ps1 -Owner $KAH_OWNER). Relative scripts are looked up in tests/ingame/stobe, then components/KenshiFP/tests/ingame.
 # The running row's `timeout` pid is in <out>/step.pid: rig-runner.ps1 kills a stuck step with it (row FAIL, batch goes on).
@@ -31,9 +35,9 @@ KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 A=$CR/KenshiModding/tools/automation; T=$CR/KenshiModding/tests/ingame/stobe; KT=$CR/KenshiModding/components/KenshiFP/tests/ingame
 CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'; CTLO=()
 [ "${RIG:-5090}" = 4080 ] && { CTL='C:\KAH\ctl.ps1'; CTLO=(-Owner "${KAH_OWNER:-rig4080}"); }
-LAUNCH=""; STOP=0; RESUME=0
-while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; *) break ;; esac; done
-L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] <list-file> <out-dir>}"; O="${2:?out-dir}"
+LAUNCH=""; STOP=0; RESUME=0; NODRY=""
+while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; *) break ;; esac; done
+L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] [--no-dryrun <reason>] <list-file> <out-dir>}"; O="${2:?out-dir}"
 mkdir -p "$O"; rm -f "$O/DONE" "$O/GAMEDONE"
 # Batch end: DONE + drop every inflight marker naming this out dir, so idle detection (rig5090-state.ps1) sees the
 # slot free at once (Shay 2026-10-10: a marker left on a DONE batch kept the 5090 reading BUSY).
@@ -98,6 +102,20 @@ prepare() {  # prepare <save> <player> <mate>
 D="$O/done.txt"   # names of the tests that ran to the end (any result); --resume skips them
 if [ "$RESUME" = 1 ]; then say "BATCH RESUME $(date '+%F %H:%M') list=$L done=$(wc -l <"$D" 2>/dev/null || echo 0)"
 else : > "$S"; : > "$R"; : > "$D"; say "BATCH START $(date '+%F %H:%M') list=$L"; fi
+if [ -n "$NODRY" ]; then say "NOTE dryrun gate skipped (--no-dryrun): $NODRY"
+else
+  DRO=$(bash "$A/dryrun.sh" --out "$O/dryrun" "$L" 2>&1); DRC=$?
+  printf '%s
+' "$DRO" > "$O/dryrun.txt"
+  say "$(printf '%s
+' "$DRO" | grep '^DRYRUN-SUMMARY' | tail -1 | cut -c1-300)"
+  if [ "$DRC" != 0 ]; then
+    printf '%s
+' "$DRO" | grep '^DRYRUN [^ ]* FAIL' | while IFS= read -r l; do n=$(awk '{print $2}' <<<"$l"); say "RESULT $n FAIL dryrun: $(cut -c1-400 <<<"${l#DRYRUN $n FAIL }")"; done
+    say "BATCH REFUSED $(date '+%F %H:%M'): the list failed tools/automation/dryrun.sh ($O/dryrun.txt); fix the scripts and restart (a dry-run bug: --no-dryrun \"<reason>\")"
+    finish; exit 1
+  fi
+fi
 if [ -n "$LAUNCH" ]; then
   stobe-say on >/dev/null 2>&1
   launch "$LAUNCH"

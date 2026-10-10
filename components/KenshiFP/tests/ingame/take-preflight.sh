@@ -112,6 +112,12 @@ pf_loaded(){
 #   pf_open (extended)         the same clip also fails on a mouse cursor (frames.py cursor) and dark/black frames (YAVG)
 #   pf_all <me> <x> <z> <weapon> [allow]   everything above in order: rig, display, day, clean, area, weapon, open
 pf_result(){ echo "RESULT ${PF_ROW:-take} $1 $2"; PF_DONE=1; }
+# pf_game_done: call once the take no longer needs the game (recording stopped, game-state evidence/dumps copied), BEFORE
+# the offline analysis (takecheck/frames/animlab/review-pack). Under run-batch.sh ($GAME_DONE_FILE set) the batch then goes
+# on with the next row while this script finishes its analysis in the background (Shay 2026-10-10: the game sat idle 5 min
+# during a take's lab checks). From here on the script must not touch the game: PF_ON_FAIL (game cleanup) is dropped.
+# Multi-take scripts call it only after the LAST take (earlier takes' analysis can run in the background: cmd & ... wait).
+pf_game_done(){ PF_ON_FAIL=""; [ -n "${GAME_DONE_FILE:-}" ] && : > "$GAME_DONE_FILE"; echo "pf_game_done: game part over, analysis next"; return 0; }
 pf_begin(){ PF_ROW=$1; PF_DONE=""; trap '_pf_rc=$?; [ -n "$PF_DONE" ] || echo "RESULT ${PF_ROW:-take} FAIL setup: take script ended without a RESULT line (exit $_pf_rc)"' EXIT; }
 pf_outdir(){ mkdir -p "$1" 2>/dev/null; [ -d "$1" ] || pf_fail "out dir $1 is not a directory (mkdir failed)"
   ( : > "$1/.pf-w" ) 2>/dev/null && rm -f "$1/.pf-w" || pf_fail "out dir $1 not writable"; echo "pf_outdir ok: $1"; }

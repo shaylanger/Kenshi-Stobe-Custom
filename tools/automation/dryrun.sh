@@ -53,6 +53,8 @@ one() {
   norec=""; [[ " $cmd " =~ [[:space:]]DRYRUN_NOREC=1[[:space:]] ]] && norec=--norec
   local sbx=/mnt/c/KenshiTestRuns/dryrun-sbx/$name; [ "$rig" = 4080 ] && sbx=/c/KenshiTestRuns/dryrun-sbx/$name
   cmd="${cmd//\{OUT\}/$sbx}"
+  # {CR} = POSIX root of C: on the rig (rig-runner.ps1 queue lists): /mnt/c on the 5090, /c on the 4080
+  if [ "$rig" = 4080 ]; then cmd="${cmd//\{CR\}//c}"; else cmd="${cmd//\{CR\}//mnt/c}"; fi
   dir=$OUT/$name; rm -rf "$dir"; mkdir -p "$dir"
   script=$(for w in $cmd; do [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue; echo "$w"; break; done)
   case "$script" in /*) ;; *) [ -e "/mnt/c/KenshiModding/tests/ingame/stobe/$script" ] && script=/mnt/c/KenshiModding/tests/ingame/stobe/$script ;; esac

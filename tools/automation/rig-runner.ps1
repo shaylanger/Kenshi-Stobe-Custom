@@ -209,7 +209,7 @@ function Start-Batch($f) {
             }
         }
         Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
-        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 WSLENV=KAH_OWNER`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --stop $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`n"
+        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 WSLENV=KAH_OWNER`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --stop --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`n"
         [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
         Set-Content (Join-Path $runs 'inflight\runner-5090') $outP
         Wsl @('bash', "$outP/.start.sh") | Out-Null
@@ -235,7 +235,7 @@ function Start-Batch($f) {
         $o = Ssh4Bash @('/c/KAH/bin/stobe-auto', 'input_isolation', 'on'); Log "4080 isolation: $($o -join ' ')"
         Set-Content (Join-Path $runs 'inflight\4080-runner') "4080:C:\KenshiTestRuns\$outN"
         # itrun -Cmd must be one token (ssh joins the args with spaces): a start script in the out dir
-        [IO.File]::WriteAllText((Join-Path $tmp '.start.sh'), "#!/bin/bash`nexport KAH_OWNER=$owner4`nexec bash $outP/.run-batch.sh $outP/list.txt $outP`n")
+        [IO.File]::WriteAllText((Join-Path $tmp '.start.sh'), "#!/bin/bash`nexport KAH_OWNER=$owner4`nexec bash $outP/.run-batch.sh --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP`n")
         $null = Scp4 @((Join-Path $tmp '.start.sh')) "C:/KenshiTestRuns/$outN/"
         $o = Ssh4Ps 'C:\KAH\itrun.ps1' @('-Log', "C:\KenshiTestRuns\$outN.itrun.out", '-Cmd', "$outP/.start.sh")
         Log "4080 itrun: $($o -join ' ')"
@@ -255,13 +255,12 @@ function Probe([string]$outP, [string]$act = '') {
     $h = @{}; foreach ($kv in ($l.Substring(6) -split ' ')) { $p = $kv -split '=', 2; if ($p.Count -eq 2) { $h[$p[0]] = $p[1] } }
     $h
 }
-function Finish-Batch([string[]]$c, [string]$how) {
+function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch]$Tail) {
     $run, $outW, $outP, $own, $t0, $name, $tmp = $c
     $sumL = Join-Path "$qd\done" "$name.SUMMARY.txt"
     if ($Rig -eq '4080' -and -not $Fake) {
         & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/SUMMARY.txt" $sumL 2>$null
-        Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null
-        Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue
+        if (-not $Tail) { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue }
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     } else { Copy-Item (Join-Path $outW 'SUMMARY.txt') $sumL -ErrorAction SilentlyContinue }
     $sum = if (Test-Path $sumL) { Get-Content $sumL } else { @() }
@@ -270,7 +269,7 @@ function Finish-Batch([string[]]$c, [string]$how) {
     $dest = if ($how -eq 'DONE') { "$qd\done" } else { "$qd\failed" }
     Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue
     Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL")
-    Remove-Item $curF -ErrorAction SilentlyContinue
+    Remove-Item $file -ErrorAction SilentlyContinue
     Log "$how $name pass=$np fail=$nf out=$where"
     Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). Judge it, queue the next list."
 }
@@ -281,14 +280,27 @@ if ($Rig -eq '4080' -and -not $Fake) {
     $null = Ssh @('mkdir', 'C:\KAH\runner')
     if (-not (Scp4 @("$auto\rig4080\staged-state.ps1") 'C:/KAH/runner/')) { Log 'could not copy staged-state.ps1 to the 4080 (unreachable?)' }
 }
-$idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null
+$idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}
 while ($true) {
     try {
+        # batches past their game part (GAMEDONE) whose background analyses still run: finish them when DONE
+        foreach ($tf in @(Get-ChildItem $rd -Filter "$Rig.tail.*" -File -ErrorAction SilentlyContinue)) {
+            $tc = @(Get-Content $tf.FullName); $tp = if ($Fake) { @{ done = '1' } } else { Probe $tc[2] }
+            if ($tp -and $tp.done -eq '1') { Finish-Batch $tc 'DONE' $tf.FullName -Tail }
+            elseif ($tp -and $tp.alive -eq '0') { Alert "batch $($tc[5]) died in its background analyses (no DONE)"; Finish-Batch $tc 'DIED' $tf.FullName -Tail }
+        }
         if (Test-Path $curF) {
             $c = @(Get-Content $curF)
             $p = if ($Fake) { @{ done = '1' } } else { Probe $c[2] }
             if (-not $p) { Log "probe failed for $($c[5])"; if ($Rig -eq '4080') { if (-not $unreach) { $unreach = Get-Date } elseif (((Get-Date) - $unreach).TotalMinutes -ge 10) { Alert "4080 unreachable for 10 min during $($c[5])" } } }
             elseif ($p.done -eq '1') { $unreach = $null; ClearAlert; Finish-Batch $c 'DONE'; $condSince = $null; $hits = @{}; continue }
+            elseif ($p.gamedone -eq '1') {
+                # game part over (Kenshi stopped on the 5090 by --stop): free the rig now, collect the analyses later
+                Move-Item $curF (Join-Path $rd "$Rig.tail.$($c[5])") -Force
+                if ($Rig -eq '4080') { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue }
+                else { Remove-Item (Join-Path $runs 'inflight\runner-5090') -ErrorAction SilentlyContinue }
+                Log "GAMEDONE $($c[5]): rig free, background analyses continue"; ClearAlert; $condSince = $null; $hits = @{}; $anaSince = $null; continue
+            }
             elseif ($p.alive -eq '0') { Alert "batch $($c[5]) died without DONE (run-batch.sh process gone)"; Finish-Batch $c 'DIED'; continue }
             else {
                 $unreach = $null
@@ -297,6 +309,15 @@ while ($true) {
                        elseif ($p.gh -eq '-') { 'harness not answering' } elseif ($p.phase -ne 'world' -and $p.launched -eq '1') { "not in the world ($($p.phase))" }
                        elseif ($lastGh -and $p.gh -eq $lastGh) { "game time stuck at $($p.gh) h (paused?)" } else { $null }
                 $lastGh = $p.gh
+                # game idle while the row analyses in the foreground (no recording): ALERT + note, once per row
+                if ($p.ana -eq '1') {
+                    if (-not $anaSince) { $anaSince = Get-Date }
+                    if (((Get-Date) - $anaSince).TotalMinutes -ge $StuckMin -and -not $anaWarned["$($c[5])/$($p.step)"]) {
+                        $anaWarned["$($c[5])/$($p.step)"] = 1
+                        Alert "$($c[5]) row $($p.step): the game sits idle $([int]((Get-Date) - $anaSince).TotalMinutes) min while the row runs its lab analysis in the foreground. The take script must call pf_game_done (take-preflight.sh) after its game part so run-batch.sh moves on."
+                        Note $c[3] "row $($p.step) of $($c[5]) left the game idle >= $StuckMin min during its offline analysis: add pf_game_done (take-preflight.sh) after the recording/game evidence in that script."
+                    }
+                } else { $anaSince = $null }
                 if (-not $why) { $condSince = $null; if ([int]$p.age -lt 120) { ClearAlert } }
                 else {
                     if (-not $condSince) { $condSince = Get-Date }
@@ -316,8 +337,17 @@ while ($true) {
             $reason = IdleReason
             $f = NextList
             $s = if ($Fake) { 'IDLE' } elseif ($Rig -eq '5090') { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig5090-state.ps1" 2>$null | Select-Object -First 1) } else { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig4080-state.ps1" -Fresh 2>$null | Select-Object -First 1) }
-            $other = ($s -like 'BUSY*') -and ($s -notlike 'BUSY between*')   # someone else's job (an agent's batch) holds the rig
-            if ($Rig -eq '5090' -and -not $Fake -and -not $other) { $other = [bool]((Wsl @('pgrep', '-f', 'run-batch.sh')) -match '^\d+$') }
+            # someone else's job holds the rig: a running batch/marker (BUSY), but not "BUSY between batches" (the last one is
+            # DONE: start at once) and not a 4080 Kenshi left open with no job (taken after IdleMin)
+            $open4 = ($Rig -eq '4080' -and $s -like 'BUSY kenshi=yes*')
+            $other = ($s -like 'BUSY*') -and ($s -notlike 'BUSY between*') -and -not $open4
+            if ($Rig -eq '5090' -and -not $Fake -and -not $other) {
+                # a run-batch.sh still in its game part (no GAMEDONE in its out dir, the last argument)
+                foreach ($l in @(Wsl @('pgrep', '-af', 'run-batch.sh') | Where-Object { $_ -match '^\d+ .*run-batch\.sh' })) {
+                    $o = ($l.Trim() -split '\s+')[-1]
+                    if ($o -match '^/mnt/c/') { $ow = 'C:\' + ($o.Substring(7) -replace '/', '\'); if (-not (Test-Path (Join-Path $ow 'GAMEDONE')) -and -not (Test-Path (Join-Path $ow 'DONE'))) { $other = $true } } else { $other = $true }
+                }
+            }
             if ($other -or $s -like 'UNREACHABLE*') { $idleSince = $null }
             elseif (-not $idleSince) { $idleSince = Get-Date }
             $idleFor = if ($idleSince) { ((Get-Date) - $idleSince).TotalMinutes } else { 0 }
@@ -328,7 +358,9 @@ while ($true) {
             elseif ($other) { State "rig busy with other work ($s)$(if ($f) { "; next $($f.Name)" })" }
             elseif ($f) {
                 # the rig is free: start at once if Kenshi is closed / we own it, else after IdleMin of an idle open game
-                $ours = $Fake -or ($s -eq 'IDLE') -or ($s -like 'IDLE kenshi=no*') -or ($idleFor -ge $IdleMin)
+                # free rig with a list waiting: start at once (the previous batch is DONE/GAMEDONE or Kenshi is closed);
+                # only a 4080 Kenshi left open with no job waits IdleMin (someone may be using it by hand)
+                $ours = $Fake -or -not $open4 -or ($idleFor -ge $IdleMin)
                 if ($Rig -eq '5090' -and -not $Fake) { $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) { $ours = $true } }
                 if ($ours) { $unreach = $null; $alerted = $false; $idleSince = $null; $lastGh = $null; $condSince = $null; $hits = @{}; if (Start-Batch $f) { continue } }
                 else { State "waiting for idle rig ($s), $($f.Name) next in $([int]($IdleMin - $idleFor)) min" }

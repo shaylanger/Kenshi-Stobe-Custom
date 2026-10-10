@@ -6,12 +6,14 @@
 #   crash=1: a Kenshi crash dump newer than the batch start (RE_Kenshi's handler can leave the game alive on a hidden dialog)
 #   stallmin: a STALL_MIN=<min> word in the row's command (list.txt in the out dir) = the row may sit still that long
 #   launched=0: no row has started yet (launch / first load: the runner allows more time)
+#   gamedone=1: <out>/GAMEDONE (every row past its game part; background analyses may still run): the rig is free
+#   ana=1: the running row analyses in the foreground while nothing records = game idle (5090 only)
 #   alive=0: the run-batch.sh process (batch.pid; 4080: its Windows pid) is gone without DONE (killed/crashed batch)
 # kill-step: TERM the running row's `timeout` (pid in <out>/step.pid, written by run-batch.sh): that row FAILs, the batch
 #            goes on with the next row. kill-game: also kill kenshi_x64 (crashed game; run-batch.sh relaunches it).
 set -u
 O=${1:?usage: rig-runner-probe.sh <out-dir> [kill-step|kill-game]}; act=${2:-}
-if grep -qi microsoft /proc/version 2>/dev/null; then KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; else . /c/KenshiModding/tools/automation/rig-env.sh >/dev/null 2>&1; KD=$KDIR; fi
+if grep -qi microsoft /proc/version 2>/dev/null; then KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; else RIG=${RIG:-}; . /c/KenshiModding/tools/automation/rig-env.sh >/dev/null 2>&1; KD=$KDIR; fi
 if [ "$act" = kill-step ] || [ "$act" = kill-game ]; then
   [ "$act" = kill-game ] && taskkill.exe //F //IM kenshi_x64.exe </dev/null >/dev/null 2>&1
   if [ -f "$O/step.pid" ]; then read -r p n w < "$O/step.pid"
@@ -39,4 +41,14 @@ sm=-; if [ "$step" != - ] && [ -f "$O/list.txt" ]; then
 al=1; if [ -f "$O/batch.pid" ] && [ $done = 0 ]; then read -r bp bw < "$O/batch.pid"
   if [ -n "${bw:-}" ]; then tasklist.exe //NH //FI "PID eq $bw" </dev/null 2>/dev/null | grep -q " $bw " || al=0; else kill -0 "$bp" 2>/dev/null || al=0; fi; fi
 la=0; grep -a -q -E '^[0-9]{2}:[0-9]{2} .*: (prepare|run) ' "$O/batch.log" 2>/dev/null && la=1
-echo "PROBE done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al"
+gd=0; [ -f "$O/GAMEDONE" ] && gd=1
+# ana=1: the running row (step) is doing offline analysis in the foreground (a lab tool with RESULT_LOG=<out>/<step>.txt
+# runs) and nothing records: the game sits unused (Shay 2026-10-10: that counts as idle; the row should call pf_game_done)
+ana=0
+if [ "$step" != - ] && grep -qi microsoft /proc/version 2>/dev/null; then
+  for p in $(pgrep -f 'takecheck\.py|frames\.py|animlab\.py|review-pack\.py|fist-take-check\.py|vm-sheet\.py|labcheck' 2>/dev/null); do
+    tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qxF "RESULT_LOG=$O/$step.txt" && { ana=1; break; }
+  done
+  [ $ana = 1 ] && tasklist.exe </dev/null 2>/dev/null | grep -qi '^ffmpeg.exe' && ana=0
+fi
+echo "PROBE done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"
