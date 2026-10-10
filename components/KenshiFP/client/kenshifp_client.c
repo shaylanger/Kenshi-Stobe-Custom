@@ -879,6 +879,9 @@ static int g_cfg_key_attack = 0x01, g_cfg_key_block = 0x02, g_cfg_key_select = 0
            g_cfg_key_interact = 0x02, g_cfg_key_draw = 0x52;
 static int   g_cfg_sneak_eye = 1;   /* show the screen-space sneak eye in FP */
 static int   g_cfg_stealth_arrows = 0; /* show the world-space 3D stealth arrows in FP (0 = hidden, default) */
+static int   g_cfg_zoom_switch = 1;   /* 1 = wheel hard switch eye <-> tp_min_dm, 0 = old 2-8 dm crossfade path (Shay to choose) */
+static float g_cfg_tp_min_dm = 16.0f;   /* zoom wheel: nearest third-person distance (dm); the band below it is skipped, Z1 */
+static float g_cfg_head_show_dm = 16.0f; /* zoom camera: head stays hidden below this distance (dm), Z1 */
 static int   g_cfg_hide_head   = 1;    /* always hide the player's head mesh in FP (not just FF) */
 static unsigned g_cfg_head_mask = 0x200;      /* hiddenMask head bit: teal row-0 part-map paint = bit 9. This
                                         * hides head vertices WITHOUT touching Bip01 Head (bone-
@@ -1274,6 +1277,7 @@ static int install_hook(void *,void *,void **);
 static int kah_fp_combat(const char *,int,const char *const *,KAH_Reply *,void *);
 static void fp_view_input(void);
 static int fp_view_is_eye(void);
+static int fp_view_head_near(void);
 static int kah_fp_camera(const char *,int,const char *const *,KAH_Reply *,void *);
 static void *fp_controlled_char(void *gw);
 static int fp_char_in_squad(void *gw, void *pc);
@@ -6302,7 +6306,7 @@ static void headgear_set_hidden(void *app, int hide, int logit)
         int slot = -1;
         int haveslot = gd_int_field(gd, "attach slot", &slot);
         int keyhead = !haveslot && (!strcmp(kn, "hair") || !strcmp(kn, "beard")
-                   || !strcmp(kn, "hat") || !strcmp(kn, "eyes") || !strcmp(kn, "face"));
+                   || !strcmp(kn, "hat") || !strcmp(kn, "head") || !strcmp(kn, "eyes") || !strcmp(kn, "face"));
         int slothead = haveslot && slot >= 0 && slot <= 31
                     && ((g_cfg_headgear_slots >> slot) & 1u);
         if (!slothead && !keyhead) {
@@ -6436,7 +6440,7 @@ static int set_head_disabled(void *pc, int disable)
 static void hooked_update_hidden(void *app)
 {
     g_update_hidden_orig(app);
-    if (g_head_dead || !g_cfg_hide_head || !g_fp_mode || !fp_view_is_eye() || !app || app != g_player_app) return;
+    if (g_head_dead || !g_cfg_hide_head || !g_fp_mode || !fp_view_head_near() || !app || app != g_player_app) return;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_head_dead = 1;
         logline("[head] updateHiddenParts hook FAULTED -- head-hide disabled"); return; }
     guard_arm();
@@ -6461,7 +6465,7 @@ static void fp_head_visibility(void *gw)
     float speed = readable((void *)((uintptr_t)gw + GW_FRAMESPEED), 4)
         ? *(float *)((uintptr_t)gw + GW_FRAMESPEED) : 1.0f;
     void *pc = fp_controlled_char(gw);
-    int want = g_fp_mode && fp_view_is_eye() && pc && (g_cfg_hide_head || speed > 1.05f);
+    int want = g_fp_mode && fp_view_head_near() && pc && (g_cfg_hide_head || speed > 1.05f);
     if (want) {
         if (g_head_hidden && g_head_hidden_char && g_head_hidden_char != pc) {
             /* char switched: restore the old head -- only if that character is still a
@@ -6665,6 +6669,9 @@ static void load_ini(void)
         else if (ini_int(line, "screen_status", &v))      g_cfg_screen_status = !!v;
         else if (ini_int(line, "hide_head", &v))          g_cfg_hide_head = !!v;
         else if (ini_int(line, "head_hide_mask", &v))     g_cfg_head_mask = (unsigned)v;
+        else if (ini_int(line, "zoom_switch", &v))        g_cfg_zoom_switch = !!v;
+        else if (ini_int(line, "tp_min_dm", &v))          g_cfg_tp_min_dm = (float)(v < 0 ? 0 : v > 60 ? 60 : v);
+        else if (ini_int(line, "head_show_dm", &v))       g_cfg_head_show_dm = (float)(v < 0 ? 0 : v > 60 ? 60 : v);
         else if (ini_int(line, "hide_headgear", &v))      g_cfg_hide_headgear = !!v;
         else if (ini_int(line, "headgear_slots", &v))     g_cfg_headgear_slots = (unsigned)v;
         else if (ini_int(line, "auto_floors", &v))        g_cfg_auto_floors = !!v;

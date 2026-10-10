@@ -10,6 +10,12 @@ static unsigned g_view_apply_n, g_view_trace_err, g_view_hold_n, g_view_refuse_s
 static float g_view_trace_last=-1; static int g_view_apply_ret=-1;
 static int g_view_have_anchor, g_view_collision_dead;
 static volatile LONG g_view_injected_wheel;
+/* Z1 hard switch: a wheel step that lands between the eye and tp_min_dm goes to tp_min_dm (out) or the eye (in) */
+static float fp_view_snap(float was,float t) {
+    float lo=KFP_VIEW_EYE_LIMIT, hi=g_cfg_tp_min_dm;
+    if (!g_cfg_zoom_switch || t==was || hi<=lo || t<lo || t>=hi) return t;
+    return t>was ? hi : 0.0f;
+}
 static void fp_view_input(void) {
     LONG wheel=InterlockedExchange(&g_wheel_accum,0);
     LONG injected=InterlockedExchange(&g_view_injected_wheel,0);
@@ -17,7 +23,7 @@ static void fp_view_input(void) {
     wheel+=injected; /* explicit harness injection follows the same zoom math */
     g_dbg_wheel=(int)wheel;
     if (!g_fp_mode || g_ui_open) return; /* discard UI/focus wheels */
-    if (g_cfg_camera_zoom) kfp_view_wheel(&g_view,(int)wheel);
+    if (g_cfg_camera_zoom) { float was=g_view.target; kfp_view_wheel(&g_view,(int)wheel); g_view.target=fp_view_snap(was,g_view.target); }
     else if (g_cfg_wheel) {
         g_speed_scale+=(float)wheel*(0.15f/120.0f);
         if (g_speed_scale<0.15f) g_speed_scale=0.15f;
@@ -26,6 +32,10 @@ static void fp_view_input(void) {
 }
 static int fp_view_is_eye(void) {
     return !g_cfg_camera_zoom || kfp_view_is_eye(&g_view);
+}
+/* Z1: the zoom camera orbits the head, so the head/hat would fill the screen until it is far enough away */
+static int fp_view_head_near(void) {
+    return fp_view_is_eye() || g_view.applied < g_cfg_head_show_dm;
 }
 static void fp_view_apply(Vec3 *eye) {
     g_view_anchor=*eye; g_view_have_anchor=1; ++g_view_apply_n;
@@ -102,6 +112,12 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         }
         g_yaw=yaw;g_pitch=pitch;
         r->append(r,"look requested through normal camera update; verify actual state next frame");return KAH_OK;
+    }
+    if (argc==3 && !_stricmp(argv[1],"zoommode")) {
+        if (!_stricmp(argv[2],"switch")) g_cfg_zoom_switch=1;
+        else if (!_stricmp(argv[2],"fade")) g_cfg_zoom_switch=0;
+        else { r->append(r,"zoommode switch|fade"); return KAH_ERROR; }
+        r->append(r,g_cfg_zoom_switch?"zoommode=switch (wheel: eye <-> tp_min_dm)":"zoommode=fade (wheel: 2-8 dm crossfade)"); return KAH_OK;
     }
     if (argc==3 && !_stricmp(argv[1],"orbit")) {
         char *end; errno=0; float o=strtof(argv[2],&end);
