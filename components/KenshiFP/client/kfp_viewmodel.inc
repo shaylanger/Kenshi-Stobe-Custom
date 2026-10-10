@@ -70,11 +70,11 @@ static VmPose g_vm_pose[2][VM_NT] = {
 /* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
 #define VM_SWK 5
 static VmPose g_vm_swk[VM_SWK] = {
-    VP( 3.0f, 0.5f, 4.6f,   0.22f, 0.88f, 0.22f,   -0.20f,-0.40f, 0.30f),  /* wind-up, raised top right, blade cocked back-right (out at the
+    VP(2.819f,-0.014f,4.233f,-0.116f,0.563f,-0.212f,-0.473f,0.494f,0.439f) /* E1 inline */,  /* wind-up, raised top right, blade cocked back-right (out at the
                                                                             * top-right corner), arm in from the right edge */
-    VP( 1.3f,-0.45f,4.8f,  -0.55f, 0.45f, 0.70f,   -0.30f,-1.20f, 0.45f),  /* strike: blade diagonal up-left */
-    VP( 0.4f,-0.6f, 4.8f,  -0.92f, 0.02f, 0.38f,    0.00f,-1.00f, 0.05f),  /* strike: blade sweeps flat across the center (in view) */
-    VP(-0.6f,-0.9f, 4.6f,  -0.90f,-0.18f, 0.40f,    0.20f,-0.95f,-0.05f),  /* follow-through left, blade still in view above the HUD */
+    VP(1.447f,0.022f,4.694f,-0.158f,0.697f,0.197f,-0.239f,-1.966f,0.591f) /* E1 inline */,  /* strike: blade diagonal up-left */
+    VP(1.514f,-1.246f,5.296f,-0.739f,0.371f,0.431f,0.340f,-0.993f,0.926f) /* E1 inline */,  /* strike: blade sweeps flat across the center (in view) */
+    VP(-0.155f,-1.265f,5.886f,-0.657f,0.170f,0.465f,-1.226f,-1.376f,-0.143f) /* E1 inline */,  /* follow-through left, blade still in view above the HUD */
     VP( 0.9f,-1.55f,4.6f,  -0.55f, 0.30f, 0.78f,    0.10f,-0.90f, 0.40f) };/* recovery: dips low (grip just above the HUD) back to the guard,
                                                                             * no second sweep across the view */
 /* key times (start, keys, end), own clock over g_vm_sw_dur: anticipation (slower wind-up) ~30%, fast strike across
@@ -442,6 +442,39 @@ static VmPose vm_swing_at(VmPose start, VmPose end, float u)
     return vm_pose_norm(r);
 }
 
+/* E1: edge leads the arc. Lead weight g_vm_swlw (0..1) is read by the apply (fades out wfix roll + S1 clamp). */
+static float g_vm_e1cap = 47.2f;   /* E1: max lead roll deviation from the straight-wrist roll, deg */
+static float g_vm_e1w0 = -1.0f, g_vm_e1hr = 0.152f, g_vm_e1hs = -1.0f; static int g_vm_e1hold = 1;   /* E1: no hand roll in the wind-up */
+static int   g_vm_swlead = 1; static float g_vm_swl_se = 0.47f, g_vm_swl_in = 0.227f, g_vm_swl_out = 0.2f, g_vm_swlw;
+static float vm_sstep(float a, float b, float x) { float t = fmaxf(0.0f, fminf(1.0f, (x - a) / fmaxf(b - a, 1e-4f))); return t * t * (3.0f - 2.0f * t); }
+static float g_vm_e1inl = 0.709f, g_vm_e1ia = 0.050f, g_vm_e1ib = 0.759f;   /* E1: blade in line with the forearm in the swing */
+static float g_vm_e1wal = 0.465f;   /* E1: elbow azimuth toward the straight-wrist side in the swing */
+static float vm_e1inl_w(void) { if (!g_vm_swing) return 0.0f;
+    return vm_sstep(0.0f, g_vm_e1ia, g_vm_swu) * (1.0f - vm_sstep(g_vm_e1ib, 1.0f, g_vm_swu)); }
+static float vm_e1inl_th(float th) { if (!g_vm_swing || g_vm_e1inl <= 0.0f) return th;
+    float w = vm_sstep(0.0f, g_vm_e1ia, g_vm_swu) * (1.0f - vm_sstep(g_vm_e1ib, 1.0f, g_vm_swu)); return th * (1.0f - g_vm_e1inl * w); }
+static Vec3  vm_swtip(VmPose p) { return vm_add(p.p, vm_mul(p.f, 4.0f)); }
+static VmPose vm_swing_atl(VmPose start, VmPose end, float u, float *wout)
+{
+    VmPose r = vm_swing_at(start, end, u);
+    float w = 0.0f;
+    if (g_vm_swlead && u > 0.0f && u < 1.0f) {
+        float w0_ = g_vm_e1w0 >= 0.0f ? g_vm_e1w0 : g_vm_swk_u[1];   /* E1: the lead starts at the wind-up end */
+        w = vm_sstep(w0_, w0_ + g_vm_swl_in, u) * (1.0f - vm_sstep(g_vm_swl_se + 0.06f, g_vm_swl_se + 0.06f + g_vm_swl_out, u));
+        float wu = g_vm_swk_u[1], d = 0.03f; Vec3 dir;
+        if (u < wu) dir = vm_sub(vm_swtip(vm_swing_at(start, end, g_vm_swl_se)), vm_swtip(r));
+        else dir = vm_sub(vm_swtip(vm_swing_at(start, end, fminf(1.0f, u + d))), vm_swtip(vm_swing_at(start, end, fmaxf(0.0f, u - d))));
+        Vec3 f = r.f, lp = vm_sub(dir, vm_mul(f, vm_dot(dir, f))), up = vm_sub(r.u, vm_mul(f, vm_dot(r.u, f)));
+        if (w > 0.0f && vm_len(lp) > 1e-4f && vm_len(up) > 1e-4f) {
+            lp = vm_norm(lp); up = vm_norm(up);
+            float a = atan2f(vm_dot(f, vm_cross(up, lp)), vm_dot(up, lp)) * w;   /* rotate u about f toward the lead */
+            r.u = vm_add(vm_mul(up, cosf(a)), vm_mul(vm_cross(f, up), sinf(a)));
+        } else w = 0.0f;
+    }
+    if (wout) *wout = w;
+    return r;
+}
+
 /* critically damped spring toward t: x(t) = t + (d + (v0 + om d) t) e^-om t (exact for a constant target) */
 static void vm_spring3(Vec3 *x, Vec3 *v, Vec3 t, float om, float dt)
 {
@@ -774,6 +807,18 @@ static void vm_apply(void *skel)
                 float psi = atan2f(vm_dot(f, vm_cross(hp, ap)), vm_dot(hp, ap)) * fminf(g_vm_wroll, 1.0f) * 0.5f;   /* half angle */
                 Qp = quat_norm(quat_mul((Quat){ cosf(psi), f.x * sinf(psi), f.y * sinf(psi), f.z * sinf(psi) }, Qp)); pst += 2.0f * psi;
             }
+            {   static float e1h_; static int e1hv_;   /* E1: hold the wfix roll through the wind-up, release gradually */
+                if (g_vm_swing && g_vm_e1hold) {
+                    if (!e1hv_) { e1h_ = g_vm_have_rs ? g_vm_rs : pst; e1hv_ = 1; }
+                    float hs_ = g_vm_e1hs >= 0.0f ? g_vm_e1hs : g_vm_swk_u[1], hw_ = 1.0f - vm_sstep(hs_, hs_ + g_vm_e1hr, g_vm_swu), d_ = pst - e1h_;
+                    while (d_ > 3.14159265f) d_ -= 6.2831853f; while (d_ < -3.14159265f) d_ += 6.2831853f;
+                    if (hw_ > 0.0f) { pst = e1h_ + d_ * (1.0f - hw_); float h_ = 0.5f * pst;
+                        Qp = quat_norm(quat_mul((Quat){ cosf(h_), f.x * sinf(h_), f.y * sinf(h_), f.z * sinf(h_) }, Qp0)); }
+                } else e1hv_ = 0; }
+            if (g_vm_swing && g_vm_swlw > 0.0f) { float k_ = 1.0f - g_vm_swlw; { float pw_ = pst; while (pw_ > 3.14159265f) pw_ -= 6.2831853f; while (pw_ < -3.14159265f) pw_ += 6.2831853f;
+                float dv_ = (1.0f - k_) * pw_, cp_ = g_vm_e1cap * 0.0174533f; dv_ = fmaxf(-cp_, fminf(cp_, dv_)); pst = pw_ - dv_; k_ = 1.0f; }
+                Qp = Qp0;   /* E1: authored lead roll, at most e1cap deg off the straight wrist */
+                if (k_ > 0.0f) { float h_ = 0.5f * pst; Vec3 f_ = vm_norm(g_vm_tf); Qp = quat_norm(quat_mul((Quat){ cosf(h_), f_.x * sinf(h_), f_.y * sinf(h_), f_.z * sinf(h_) }, Qp0)); } }
             if (g_vm_wrl > 0.0f) {   /* roll jerk limit (PT30): each step at most wrl x the last one (min wrlmin deg), lag <= wrllag deg */
                 float dtc = fminf(fmaxf(g_vm_dt, 0.004f), g_vm_maxdt);
                 if (!g_vm_have_rs) { g_vm_rs = pst; g_vm_rsv = 0.0f; g_vm_have_rs = 1; g_vm_rs_lag = 0.0f; }
@@ -797,7 +842,7 @@ static void vm_apply(void *skel)
             if (c > tol && lt > fabsf(tol)) {
                 float th0 = atan2f(vm_dot(bf, vm_cross(tp_, ep)), vm_dot(tp_, ep));   /* edge angle from the eye dir */
                 float thw = acosf(fmaxf(-1.0f, fminf(1.0f, tol / lt)));             /* allowed |angle| >= thw */
-                float d = (th0 >= 0.0f ? thw : -thw) - th0, h = 0.5f * d;
+                float d = (th0 >= 0.0f ? thw : -thw) - th0, h = 0.5f * d * (g_vm_swing ? 1.0f - g_vm_swlw : 1.0f);   /* E1: no clamp while the edge leads */
                 Qp = quat_norm(quat_mul((Quat){ cosf(h), bf.x * sinf(h), bf.y * sinf(h), bf.z * sinf(h) }, Qp));
                 g_vm_eclamp_n++;
             }
@@ -1099,7 +1144,7 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
     if (L1n < 0.1f || L2 < 0.1f) return 0;
     Vec3 W = vm_s2c_pos(Ph), S = vm_s2c_pos(*ps), d0 = vm_norm(g_vm_elbd);
     Vec3 fb = vm_norm(vm_w2c_dir(vm_s2w_dir(g_vm_tf)));
-    float th = acosf(fmaxf(-1.0f, fminf(1.0f, g_vm_hcos))), band = g_vm_wband * 0.0174533f;
+    float th = vm_e1inl_th(acosf(fmaxf(-1.0f, fminf(1.0f, g_vm_hcos)))), band = g_vm_wband * 0.0174533f;
     Vec3 dv = vm_sub(W, S); float D = vm_len(dv);
     if (D > 1e-3f && g_vm_elb_nat > 0.0f) {   /* natural elbow: two-bone IK shoulder -> wrist, elbow toward the pole */
         Vec3 n = vm_mul(dv, 1.0f / D), pole = g_vm_pole[0][g_vm_whand[0] ? 1 : 0];
@@ -1111,6 +1156,8 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
             d0 = vm_norm(vm_lerp(d0, vm_norm(vm_sub(En, W)), g_vm_elb_nat));
         }
     }
+    if (g_vm_e1wal > 0.0f && vm_len(g_vm_mh) > 0.5f) {   /* E1: elbow on the hand side of the cone (less ulnar bend) */
+        float ww = g_vm_e1wal * vm_e1inl_w(); if (ww > 0.0f) d0 = vm_norm(vm_lerp(d0, vm_mul(g_vm_mh, -1.0f), ww)); }
     Vec3 pref = vm_cone(d0, fb, th, band);
     *d0o = pref;
     /* wrist-straight elbows that pass the near-plane / view-edge rule (vm_elb_pass): forearm at th + dd from the blade
@@ -1247,7 +1294,7 @@ static float vm_elbow(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *Et)
     int wf = g_vm_wfix && g_vm_class == 0, direct = 0; Vec3 fb = vm_v(0, 0, 1); float th = 0.0f, band = 0.0f;
     if (wf) {
         fb = vm_norm(vm_w2c_dir(vm_s2w_dir(g_vm_tf)));
-        th = acosf(fmaxf(-1.0f, fminf(1.0f, g_vm_hcos))); band = g_vm_wband * 0.0174533f;
+        th = vm_e1inl_th(acosf(fmaxf(-1.0f, fminf(1.0f, g_vm_hcos)))); band = g_vm_wband * 0.0174533f;
         Vec3 dp; int pr = g_vm_pick_ok ? 2 : vm_elb_pref(ua, fa, ha, Ph, &dp); if (g_vm_pick_ok) dp = g_vm_pick; if (pr) d0 = dp;
         g_vm_pick_ok = 0;
         if (pr == 2) direct = 1;
@@ -1505,6 +1552,7 @@ static void vm_frame_core(void *pc, int body_down)
             g_vm_sw_maxstep = 0.0f; g_vm_sw_n = 0; g_vm_sw_prevf = g_vm_cur.f;
             g_vm_sw_emin = g_vm_sw_amin = 999.0f; g_vm_sw_emax = g_vm_sw_amax = -999.0f;
         }
+        if (!g_vm_swing) g_vm_swlw = 0.0f;
         if (g_vm_swing && (ti != VM_READY || g_vm_class != 0)) {     /* block / weapon change aborts the swing */
             logline("[vm] swing #%d aborted at u=%.2f (state=%s)", g_vm_swings, g_vm_swu, st); g_vm_swing = 0;
         }
@@ -1527,7 +1575,7 @@ static void vm_frame_core(void *pc, int body_down)
                     : fminf(1.0f, g_vm_swu + adt / g_vm_sw_dur);
             g_vm_sw_ur = adt > 1e-4f && !posed ? fmaxf(0.0f, (u - g_vm_swu) / adt) : 0.0f;
             g_vm_swu = u;
-            g_vm_cur = vm_swing_at(g_vm_sw0, tgt, u);
+            g_vm_cur = vm_swing_atl(g_vm_sw0, tgt, u, &g_vm_swlw);
             if (adt > 1e-4f) {                            /* carried into the spring when the swing ends / is cut */
                 g_vm_vel.p = vm_mul(vm_sub(g_vm_cur.p, sw_prev.p), 1.0f / adt);
                 g_vm_vel.f = vm_mul(vm_sub(g_vm_cur.f, sw_prev.f), 1.0f / adt);
@@ -1597,7 +1645,7 @@ static void vm_frame_core(void *pc, int body_down)
             VmPose c = g_vm_cur, v = g_vm_vel; int sw = g_vm_swing; float sl = g_vm_plfix & 2 ? g_vm_plsl[0] : 0.0f;
             if (sw && posed) ur = 0.0f;
             for (int k = 0; k < g_vm_elb_lah && k < VM_LAH; k++) {
-                if (sw) { VmPose cp = c; u = fminf(1.0f, u + ur * pdt); c = vm_swing_at(g_vm_sw0, tgt, u);
+                if (sw) { VmPose cp = c; u = fminf(1.0f, u + ur * pdt); c = vm_swing_atl(g_vm_sw0, tgt, u, NULL);
                     v.p = vm_mul(vm_sub(c.p, cp.p), 1.0f / pdt); v.f = vm_mul(vm_sub(c.f, cp.f), 1.0f / pdt); v.u = vm_mul(vm_sub(c.u, cp.u), 1.0f / pdt);
                     if (u >= 1.0f) sw = 0; }
                 else vm_pose_spring(&c, &v, tgt, om, pdt);
@@ -1809,6 +1857,19 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "swclock")) { g_vm_sw_clock = x != 0.0f; return 1; }
     else if (!strcmp(k, "sw_dur")) { if (x > 0.05f && x <= 12) g_vm_sw_dur = x; return 1; }
     else if (!strcmp(k, "edgeclamp")) { g_vm_eclamp = x != 0; return 1; }
+    else if (!strcmp(k, "e1wal")) { g_vm_e1wal = fmaxf(0.0f, fminf(1.0f, x)); return 1; }
+    else if (!strcmp(k, "e1inl")) { g_vm_e1inl = fmaxf(0.0f, fminf(0.9f, x)); return 1; }
+    else if (!strcmp(k, "e1ia")) { g_vm_e1ia = fmaxf(0.01f, fminf(0.5f, x)); return 1; }
+    else if (!strcmp(k, "e1ib")) { g_vm_e1ib = fmaxf(0.5f, fminf(0.99f, x)); return 1; }
+    else if (!strcmp(k, "e1w0")) { g_vm_e1w0 = fminf(0.9f, x); return 1; }
+    else if (!strcmp(k, "e1hold")) { g_vm_e1hold = x != 0; return 1; }
+    else if (!strcmp(k, "e1hs")) { g_vm_e1hs = fminf(0.95f, x); return 1; }
+    else if (!strcmp(k, "e1hr")) { g_vm_e1hr = fmaxf(0.0f, fminf(0.5f, x)); return 1; }
+    else if (!strcmp(k, "e1cap")) { g_vm_e1cap = fmaxf(0.0f, fminf(180.0f, x)); return 1; }
+    else if (!strcmp(k, "swlead")) { g_vm_swlead = x != 0; return 1; }
+    else if (!strcmp(k, "swlse")) { if (x > 0.1f && x < 0.95f) g_vm_swl_se = x; return 1; }
+    else if (!strcmp(k, "swlin")) { if (x >= 0.0f && x < 0.5f) g_vm_swl_in = x; return 1; }
+    else if (!strcmp(k, "swlout")) { if (x >= 0.01f && x < 0.6f) g_vm_swl_out = x; return 1; }
     else if (!strcmp(k, "edgectol")) { if (x >= -1 && x <= 1) g_vm_ectol = x; return 1; }
     else if (!strcmp(k, "edgepen")) { if (x >= 0 && x <= 50) g_vm_edge_pen = x; return 1; }
     else if (!strcmp(k, "edgesgn")) { g_vm_edgesgn = x < 0 ? -1.0f : 1.0f; return 1; }
