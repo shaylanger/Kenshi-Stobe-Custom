@@ -6,7 +6,7 @@
 # Shay = squad mate used as the ally in the arc; a Tech Hunters Hungry Bandit is spawned as the neutral).
 # Rows (COMBAT_TEST_PLAN.md):
 #   SWA-OFF  ini swing_hits_all=0: N clicks with target, ally and neutral pinned inside the swing arc -> the target loses
-#            flesh, ally and neutral lose none; fp_melee swing_all widened stays 0
+#            flesh, the ally loses none (neutral hits are vanilla, reported only: SWA-NATIVE); widened stays 0
 #   SWA-ON   ini swing_hits_all=1: clicks until each of the three has lost flesh (max N) -> all three hit; widened >= 1,
 #            zone_targets > 1 while swinging; the neutral's reaction is whatever the game does (logged, not judged)
 # Evidence: flesh per character (`hp`) before/after each swing, `fp_melee swing_all` counters, `fp_melee state`
@@ -118,7 +118,8 @@ if [ -n "${SWA_NATIVE:-}" ]; then
   phase SWA-NATIVE 0 && row SWA-NATIVE PASS "native baseline (no swing_all hooks): $PEV"; finish; exit 0; fi
 # ---- SWA-OFF: only the target ----
 if phase SWA-OFF 0; then
-  if [ $HIT_T -ge 1 ] && [ $HIT_A = 0 ] && [ $HIT_N = 0 ] && [ "$(sw widened)" = 0 ]; then row SWA-OFF PASS "$PEV"; else row SWA-OFF FAIL "$PEV"; fi; fi
+  # neutral hits are vanilla behaviour (SWA-NATIVE op-swanat 2026-10-10: no hooks, neutral hit 3/8): OFF = native = no ally hit, nothing widened
+  if [ $HIT_T -ge 1 ] && [ $HIT_A = 0 ] && [ "$(sw widened)" = 0 ]; then row SWA-OFF PASS "$PEV (neutral hits = vanilla)"; else row SWA-OFF FAIL "$PEV"; fi; fi
 # ---- SWA-ON: target, ally and neutral ----
 if phase SWA-ON 1; then
   echo "SWA-ON neutral after: $(A where "$NE" | cut -c1-160)" >> "$LOG"
