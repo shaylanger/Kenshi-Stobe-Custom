@@ -1210,7 +1210,10 @@ def main(argv):
         return 0
     cmd, a = argv[0], argv[1:]
     sp = spec()
-    dr.advance(LAT)
+    # the call's latency is a virtual WAIT, not a global clock jump: a background call (take_mark's `sync_flash &`) used
+    # to push every other process 0.3 s ahead, so the foreground press landed 0.6-0.7 s after its label (ctl-blk claim
+    # FAILs, 2026-10-10); concurrent calls overlap like requests answered in the same harness poll
+    dr.vwait(LAT)
     with dr.Lock():
         s = load_state()
         now = dr.vnow()
