@@ -5,6 +5,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
 ## Right now (2026-10-10 ~13:45, m92 coordinator)
+- **REMIND SHAY when this FP/animation work ends (he asked):** STOBE server is OFF since 15:40 (no LLM credits); turn it back on with `wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/stobe-server.sh on` (also restarts by itself at the next WSL start). Also `gfx-mods.sh on` before he plays.
 - m92: all 8 agents respawned fresh from their status files. Idle-detection FIRST JOB done (c06bc0f):
   `rig5090-state.ps1` -> rig-health `RIG IDLE-GAME` + Stop-hook block when Kenshi/lock is up but every marked batch
   has DONE > 3 min; run-batch.sh deletes the marker naming its out dir at DONE. build-pipeline DONE (kfp-pipeline.sh
