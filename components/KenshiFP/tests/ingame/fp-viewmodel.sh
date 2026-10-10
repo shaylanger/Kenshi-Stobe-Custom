@@ -594,7 +594,7 @@ vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
     if [ "$Z" = 0 ]; then A fp_vm rec off >/dev/null; r=$(vmrec "q-$t-a" seg); VQR+=" $t-a: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
       for u in 0.20:wind-up 0.42:strike 0.58:follow-through; do A fp_vm set sw_pose "${u%%:*}" >/dev/null; sleep 0.5
         snap "$row" "$t-sw${u%%:*}" "${u#*:} (u ${u%%:*})"; done; A fp_vm set sw_pose -1 >/dev/null; sleep 0.6; A fp_vm rec on >/dev/null
-      waitf 3 vm_is ready; SWQ0=$(kfpn '\[vm\] swing #'); lswing; sleep 1.3
+      waitf 3 vm_is ready; SWQ0=$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end='); lswing; waitf 4 eval '[ "$(kfpn "\[vm\] swing #[0-9]* [0-9.]*s u_end=")" -gt "${SWQ0:-0}" ]'
     else A speed 0.5 >/dev/null; waitf 3 vm_is ready; lswing; sleep 0.1; snap "$row" "$t-sw1" "swing 1"; snap "$row" "$t-sw2" "swing 2"
       snap "$row" "$t-sw3" "swing 3"; sleep 1; A speed 1 hold >/dev/null; sleep 0.6; fi
     waitf 3 vm_is ready; lswing 60; sleep 0.15; mdown right; sleep 0.35; snap "$row" "$t-swblock" "swing->block"; sleep 0.8; mup right; sleep 0.6
@@ -605,7 +605,18 @@ vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
   VQR+=" $t: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
   [ "$Z" = 0 ] || { A fp_camera orbit 0 >/dev/null; [ "$W" = crossbow ] && P29X=$r || P29S=$r; }; }
 P29X=""; P29S=""
-if want VMQUICK; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
+# animlab gate before every VMQUICK (components/KenshiFP/animlab/gate.sh: every lab check on the whole evidence corpus +
+# E6 pool + mutation tests + flips vs the baseline, offline): uses the cached result for the current /root/KenshiFP source
+# + lab + corpus (run `gate.sh` right after the build, ~2 min), else runs it here. A FAIL fails VMQUICK before filming.
+# VMQ_GATE=0 skips (lab-only debugging; never for a build review).
+vmq_gate() { [ "${VMQ_GATE:-1}" = 1 ] || return 0; local G=/mnt/c/KenshiModding/components/KenshiFP/animlab/gate.sh h f l
+  h=$(bash "$G" hash); f=/root/animlab-gate/result-$h.txt
+  [ -s "$f" ] || { note "VMQUICK: animlab gate for source $h not run yet: running it now (offline)"; bash "$G" >/dev/null 2>&1; }
+  l=$(head -1 "$f" 2>/dev/null); l=${l:-RESULT ANIMLAB-REGRESS FAIL no gate result for $h}
+  RESULTS+=("$l"); echo "$l" >> "$LOG"
+  case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
+  row VMQUICK FAIL "animlab gate FAIL, fix the lab FAIL / the returned miss before filming (${l#RESULT ANIMLAB-REGRESS })"; return 1; }
+if want VMQUICK && vmq_gate; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
   [ "${VMQ_BEFORE:-0}" = 1 ] && { A fp_vm set wfix 0 >/dev/null; A fp_vm set zfade 0 >/dev/null; }
   A fp_vm state | grep -q ' wb=' || setup_fail "fp_vm state has no wb= (needs the PT17 wrist build)"
   A fp_combat physical >/dev/null; [ -z "$EN0" ] && EN0=$(cs enabled); A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
@@ -613,8 +624,8 @@ if want VMQUICK; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
   if [ $BOWOK = 1 ] && [ "$(bow_now)" != none ]; then vmq_seg crossbow 0; vmq_seg crossbow "$ZO"; zoom 0; else VQOK=0; VQR+=" crossbow: setup no crossbow;"; fi
   draw_to 0; give_melee || note "SETUP: could not give $SH a melee weapon"; bow_off || note "SETUP: bow would not unequip ($(bow_now))"
   if arm_melee; then vmq_seg sword 0
-    L=$(kfplines | grep '\[vm\] swing #' | tail -1); UE=$(grep -o 'u_end=[0-9.]*' <<<"$L" | cut -d= -f2)
-    [ "$(kfpn '\[vm\] swing #')" -gt "${SWQ0:-0}" ] && ge "$UE" 1 || { VQOK=0; VQR+=" live swing: no full [vm] swing line ($L);"; }
+    L=$(kfplines | grep '\[vm\] swing #[0-9]* [0-9.]*s u_end=' | tail -1); UE=$(grep -o 'u_end=[0-9.]*' <<<"$L" | cut -d= -f2)
+    [ "$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end=')" -gt "${SWQ0:-0}" ] && ge "$UE" 1 || { VQOK=0; VQR+=" live swing: no full [vm] swing line ($L);"; }
     vmq_seg sword "$ZO"; zoom 0
     if [ "${VMQ_FRAMES:-0}" = 1 ]; then draw_to 1; waitf 6 vm_is ready; sleep 0.6; A fp_vm rec on >/dev/null; sleep 0.2; lswing; sleep 1.2
       A fp_vm rec off >/dev/null; A fp_vm rec dump vmrec-q-frames.txt >/dev/null; FR="$KDIR/vmrec-q-frames.txt"; waitf 5 test -s "$FR"; cp "$FR" "$OUT/" 2>/dev/null
@@ -683,10 +694,10 @@ if want PT14; then draw_to 0
     draw_to 1 || note "SETUP PT14: R did not draw (drawn=$(ks drawn))"
     waitf 5 vm_on ready; waitf 3 tilt_ge 20; R1=$(vm_on ready && echo 1 || echo 0); E1=$(vev); M1=$(vfld melee); T1=$(vfld tilt); shot sword-ready
     look "$(cam yaw)" 0.05; mdown right; waitf 4 vm_on blocking; R2=$(vm_on blocking && echo 1 || echo 0); E2=$(vev); shot sword-block; mup right; sleep 0.5
-    SW0=$(kfplines | grep -c '\[vm\] swing'); lswing; waitf 4 eval '[ "$(kfplines | grep -c "\[vm\] swing")" -gt "$SW0" ]'
-    SWL=$(kfplines | grep '\[vm\] swing' | tail -1); [ "$(kfplines | grep -c '\[vm\] swing')" -gt "$SW0" ] || SWL=""
+    SW0=$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end='); lswing; waitf 4 eval '[ "$(kfpn "\[vm\] swing #[0-9]* [0-9.]*s u_end=")" -gt "$SW0" ]'
+    SWL=$(kfplines | grep '\[vm\] swing #[0-9]* [0-9.]*s u_end=' | tail -1); [ "$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end=')" -gt "$SW0" ] || SWL=""
     UE=$(grep -o 'u_end=[0-9.]*' <<<"$SWL" | cut -d= -f2)
-    RT=$(fld target <<<"$E1")
+    RT=$(fld target <<<"$E1"); waitf 3 vm_is ready
     A fp_vm set sw_pose 0 >/dev/null; sleep 1; P0=$(vm_on "" && echo 1 || echo 0); T0=$(vfld target); shot sword-swing0
     A fp_vm set sw_pose 0.5 >/dev/null; sleep 1; shot sword-swing05
     A fp_vm set sw_pose 1 >/dev/null; sleep 1; P1=$(vm_on "" && echo 1 || echo 0); TE=$(vfld target); shot sword-swing1
@@ -713,8 +724,8 @@ if want PT27 || want PT26 || want PT29 || want PT30; then
       A fp_vm set sw_pose 0.42 >/dev/null; sleep 0.5; cap sword-sw0.42; A fp_vm set sw_pose -1 >/dev/null; sleep 0.6
       ok=1; ev=""; NSW=${NSW:-3}
       for i in $(seq 1 "$NSW"); do waitf 3 vm_is ready
-        S0=$(kfpn '\[vm\] swing #'); lswing; waitf 4 eval '[ "$(kfpn "\[vm\] swing #")" -gt "$S0" ]'
-        L=$(kfplines | grep '\[vm\] swing #' | tail -1); [ "$(kfpn '\[vm\] swing #')" -gt "$S0" ] || { ok=0; ev+=" swing$i: no [vm] swing line;"; continue; }
+        S0=$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end='); lswing; waitf 4 eval '[ "$(kfpn "\[vm\] swing #[0-9]* [0-9.]*s u_end=")" -gt "$S0" ]'
+        L=$(kfplines | grep '\[vm\] swing #[0-9]* [0-9.]*s u_end=' | tail -1); [ "$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end=')" -gt "$S0" ] || { ok=0; ev+=" swing$i: no [vm] swing line;"; continue; }
         n=$(grep -oE 'swing #[0-9]+' <<<"$L" | grep -oE '[0-9]+')
         # order: the highest grip frame (wind-up, top) comes before the leftmost one (follow-through)
         ORD=$(kfplines | grep "\[vmsw\] #$n " | sed 's/.*meas=\([^ ]*\).*/\1/' | awk -F, '{e=atan2($2,$3); a=atan2($1,$3)
