@@ -467,7 +467,10 @@ if want PT13; then if [ $BOWOK = 0 ]; then row PT13 FAIL "setup: no crossbow on 
   draw_to 1 || note "SETUP PT13: R did not draw (drawn=$(ks drawn))"
   waitf 5 vm_on ready; R1=$(vm_on ready && echo 1 || echo 0); E1=$(vev); shot xbow-ready
   T1=$(vfld tilt); M1=$(vfld melee)
-  waitf 10 csis loaded 1 || note "SETUP PT13: bow not loaded before the aim (reloading=$(cs reloading))"   # fresh load: auto-reload after the draw
+  # fresh load: auto-reload after the draw; else (4080 kah-fpxbow copy: ammo 0 loaded 0 at setup, PT13 aimed an unloaded bow
+  # and caught the reload) prime one RMB reload like VMQUICK; a bow that will not load is a setup fail, never judged
+  waitf 10 csis loaded 1 || { note "SETUP PT13 bow not loaded (ammo=$(cs ammo)): priming reload"; mdown right; waitf 15 csis loaded 1; mup right
+    waitf 6 vm_is ready; sleep 0.8; csis loaded 1 || setup_fail "PT13 crossbow would not load (ammo=$(cs ammo) reloading=$(cs reloading))"; }
   look "$(cam yaw)" 0.05; mdown right; waitf 4 vm_on aiming; R2=$(vm_on aiming && echo 1 || echo 0); E2=$(vev); shot xbow-aim; mup right; sleep 0.4
   # m54: the controller arms only after one idle input frame (an aim already held never arms), so idle first
   EN0=$(cs enabled); A fp_combat on >/dev/null   # m55: why=off, the controller was never enabled here (fp-playtest enables it itself)
