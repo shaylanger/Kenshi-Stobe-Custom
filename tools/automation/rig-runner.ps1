@@ -370,6 +370,15 @@ while ($true) {
                         Note $c[3] "row $($p.step) of $($c[5]) left the game idle >= $StuckMin min during its offline analysis: add pf_game_done (take-preflight.sh) after the recording/game evidence in that script."
                     }
                 } else { $anaSince = $null }
+                # game idle between rows (Shay 2026-10-10: no rig idle > 2 min): Kenshi up, no row running, out dir still for
+                # >= StuckMin: ALERT + note once per gap (no kill: run-batch.sh may be doing excerpts/waits; stuck rules still apply)
+                if ($p.kenshi -eq '1' -and $p.launched -eq '1' -and $p.step -eq '-' -and [int]$p.age -ge $StuckMin * 60) {
+                    if (-not $noRowWarned) {
+                        $noRowWarned = $true
+                        Alert "$($c[5]): game idle, Kenshi up but no row running and the out dir unchanged $([int]([int]$p.age / 60)) min (run-batch.sh between rows?)"
+                        Note $c[3] "$($c[5]) on ${Rig}: the game sat idle >= $StuckMin min between rows (no row running, no output). Check batch.log."
+                    }
+                } elseif ($p.step -ne '-') { $noRowWarned = $false }
                 if (-not $why) { $condSince = $null; if ([int]$p.age -lt 120) { ClearAlert } }
                 else {
                     if (-not $condSince) { $condSince = Get-Date }

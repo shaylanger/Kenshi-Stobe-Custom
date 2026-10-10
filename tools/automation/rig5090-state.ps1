@@ -40,9 +40,12 @@ foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -
     # a C: scratch dir without batch.log) are not 5090 game work
     if ($m.Name -ne $owner -and -not ($win -and (Test-Path -LiteralPath (Join-Path $win 'batch.log')))) { continue }
     if ($m.LastWriteTime -gt $last) { $last = $m.LastWriteTime }
-    if ($m.LastWriteTime -gt $now.AddMinutes(-$GraceMin)) { $busy += "$($m.Name)(touched)"; continue }
+    # zero grace (2026-10-10): a marker whose out dir has DONE (or GAMEDONE: game part over) is finished at once, however
+    # recently it was touched; only a marker without a finished out dir keeps the rig BUSY for GraceMin after a touch
+    $fin = $win -and ((Test-Path -LiteralPath (Join-Path $win 'DONE')) -or (Test-Path -LiteralPath (Join-Path $win 'GAMEDONE')))
+    if (-not $fin -and $m.LastWriteTime -gt $now.AddMinutes(-$GraceMin)) { $busy += "$($m.Name)(touched)"; continue }
     if ($win -and (Test-Path -LiteralPath $win -PathType Container)) {
-        $d = Join-Path $win 'DONE'
+        $d = Join-Path $win 'DONE'; if (-not (Test-Path -LiteralPath $d)) { $d = Join-Path $win 'GAMEDONE' }
         if (Test-Path -LiteralPath $d) {
             $t = (Get-Item -LiteralPath $d).LastWriteTime
             if ($t -gt $last) { $last = $t }
