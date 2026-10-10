@@ -60,7 +60,8 @@ case "$r" in "RESULT faithful-drive FAIL"*) ok "miss elbow-branch reproduced (co
 #  11. miss E1 "edge leads the arc": metrics arc gate (stroke frames after the wind-up: edge_arc >= 0.7 on >= 85%, swing
 #      wb_max <= 30). The game recording f14/e0 (back of the blade first) must FAIL; the current solver replaying it must
 #      FAIL too while the source has no edge lead (g_vm_swlead). The pending E1 patch (+ patches/e1-lead-variants.py
-#      defaults) is reported as INFO (2026-10-09: arc_ok 1.00 but wb_max 107 = the lead folds the wrist).
+#      defaults) is reported as INFO (2026-10-09: arc_ok 1.00 but wb_max 107 = the lead folds the wrist); the E1 candidate
+#      pending-fixes/kfp-e1-keys.py must PASS with wb_max <= 50.
 [ -f "$W/f14-e0.txt" ] || cp /mnt/c/KenshiTestRuns/f14/e0.txt "$W/f14-e0.txt" 2>/dev/null || bad "missing recording f14/e0.txt"
 r=$(python3 "$L/animlab.py" metrics "$W/f14-e0.txt" | grep '^arc ')
 case "$r" in "arc FAIL"*) ok "miss E1 reproduced (game f14-e0): $r";; *) bad "miss E1 game f14-e0 not failing: ${r:-no arc line}";; esac
@@ -73,6 +74,15 @@ else case "$r" in "arc FAIL"*) ok "miss E1 reproduced (replay f14-e0, current so
     "$BLD/kfpvm_e1v" "$W/f14-e0.txt" /tmp/al-e1v.txt --quiet >/dev/null 2>&1
     echo "REGRESS INFO E1 patch kfp-e1-swlead.py replay f14-e0: $(python3 "$L/animlab.py" metrics /tmp/al-e1v.txt | grep '^arc ')"
   else echo "REGRESS INFO E1 patch not built (missing or does not apply)"; fi
+  # E1 candidate (lab hill climb, 2026-10-09): swlead + rollcap + re-authored strike keys must pass the arc gate with the
+  # wrist no worse than the current swing (wb_max <= 50) on e0 and on f13/sw0 (not used by the climb)
+  E1K=/mnt/c/KenshiModding/pending-fixes/kfp-e1-keys.py
+  if [ -f "$E1K" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1K" --out "$BLD/kfpvm_e1k" >/tmp/al-build7.txt 2>&1; then
+    [ -f "$W/f13-sw0.txt" ] || cp /mnt/c/KenshiTestRuns/f13/sw0.txt "$W/f13-sw0.txt" 2>/dev/null
+    for r in f14-e0 f13-sw0; do "$BLD/kfpvm_e1k" "$W/$r.txt" /tmp/al-e1k.txt --quiet >/dev/null 2>&1
+      r2=$(python3 "$L/animlab.py" metrics /tmp/al-e1k.txt --wb-max 50 | grep '^arc ')
+      case "$r2" in "arc PASS"*) ok "E1 candidate kfp-e1-keys.py on $r: $r2";; *) bad "E1 candidate kfp-e1-keys.py on $r: ${r2:-no arc line}";; esac; done
+  else echo "REGRESS INFO E1 candidate kfp-e1-keys.py not built (missing or does not apply)"; fi
 fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
