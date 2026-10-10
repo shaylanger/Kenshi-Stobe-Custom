@@ -1,7 +1,7 @@
 /* kfpvm_drive.c -- animation lab phase 2 (METRICS LAB): drive KenshiFP's real viewmodel solver with AUTHORED targets.
  *
  * Usage: kfpvm_drive <body_rec.txt> <frames.txt> <out.txt> [--body-frame N] [--side R|L] [--calib L1R,L2R,L1L,L2L,K]
- *                    [--set key=value]... [--no-lookahead] [--quiet]
+ *                    [--set key=value]... [--no-lookahead] [--cold-elbow] [--quiet]
  *   body_rec.txt  a game recording (`fp_vm rec dump`); record N gives the body: camera (eye, yaw, pitch), torso, shoulders,
  *                 the native arm pose and (from the whole recording, as in the replay) the arm lengths + prop scale.
  *   frames.txt    authored per-frame targets (written by tools/animlab/metricslab.py from a motion file), lines:
@@ -60,10 +60,11 @@ int main(int argc, char **argv)
     *(void **)(g_pc + CHAR_ANIM) = g_anim; *(void **)(g_anim + ANIM_SKELETON) = (void *)g_b;
     g_anim_ent_off = 0x10; *(void **)(g_anim + 0x10) = g_ent;
     g_get_parent_scenenode = fk_parent_node; g_node_getdori_v = fk_node_ori; g_node_getdpos_v = fk_node_pos; g_node_getdscale_v = fk_node_scale;
-    int bf = -1, left = 0, la = 1; const char *cl_set[256]; int ncl = 0;
+    int bf = -1, left = 0, la = 1, seed_elb = 1; const char *cl_set[256]; int ncl = 0;
     for (int a = 4; a < argc; a++) {
         if (!strcmp(argv[a], "--quiet")) g_al_quiet = 1;
         else if (!strcmp(argv[a], "--no-lookahead")) la = 0;
+        else if (!strcmp(argv[a], "--cold-elbow")) seed_elb = 0;
         else if (!strcmp(argv[a], "--body-frame") && a + 1 < argc) bf = atoi(argv[++a]);
         else if (!strcmp(argv[a], "--side") && a + 1 < argc) left = argv[++a][0] == 'L';
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl < 256) cl_set[ncl++] = argv[++a]; }
@@ -100,6 +101,15 @@ int main(int argc, char **argv)
     unsigned long g_vm_eclamp_n = 0;   /* older solver sources have no edge-clamp counter */
 #endif
     unsigned long ik0 = g_vm_ikfail, ec0 = g_vm_eclamp_n;
+    if (!left && seed_elb && bf + 1 < RN) {   /* elbow branch history: start on the game's recorded elbow side (as warm_start) */
+        Vec3 dd = vm_sub(f3(R[bf + 1].v[11]), f3(R[bf + 1].v[12]));
+        g_vm_skel = g_b;   /* else the first vm_frame sees a new skeleton and resets the elbow state */
+        if (vm_len(dd) > 1e-3f) { g_vm_elbe = vm_norm(dd); g_vm_have_elbe = 1;
+#ifdef AL_HAVE_ELB_CB
+            g_vm_elb_cb = g_vm_elbe; g_vm_have_cb = 1;
+#endif
+        }
+    }
     g_al_clock = 0;
     for (int i = 0; i < DN; i++) {
         const Drv *d = &D[i];

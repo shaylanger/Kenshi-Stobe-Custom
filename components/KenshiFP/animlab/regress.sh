@@ -28,11 +28,11 @@ if grep -q "GATE PASS" /tmp/al-rt.txt && grep -E "^reload\(info\)" /tmp/al-rt.tx
 # ---- phase 2 (METRICS LAB): drive adapter (kfpvm_drive.c) + tools/animlab/metricslab.py ----
 #   4. metricslab offline tests; 5. drive gate: the game's rendered weapon pose as the target on a still-body segment
 #      must give the game's arm (crossbow-z0 345-1097 with its own source 6c9516b; sword-z0-a 83-232 with the current
-#      source, see STATUS.md: the 6c9516b frozen-replay path does not reproduce the sword wrist); 6. dual-wield example PASS
+#      source and with 6c9516b: the drive seeds the elbow branch from the recording, see STATUS.md); 6. dual-wield example PASS
 python3 "$HARN/tests/animlab/test_metricslab.py" >/tmp/al-unit2.txt 2>&1 && ok metricslab-tests || { bad metricslab-tests; tail -5 /tmp/al-unit2.txt; }
 bash "$HERE/build.sh" --rev 6c9516b --drive --out "$BLD/kfpvm_drive_6c9516b" >/tmp/al-build3.txt 2>&1 || { bad build-drive-6c9516b; tail -5 /tmp/al-build3.txt; }
 bash "$HERE/build.sh" "${P[@]}" --drive --out "$BLD/kfpvm_drive_cur" >/tmp/al-build4.txt 2>&1 || { bad build-drive-current; tail -5 /tmp/al-build4.txt; }
-for g in "6c9516b vmrec-q-crossbow-z0.txt 345 1097" "cur vmrec-q-sword-z0-a.txt 83 232"; do set -- $g
+for g in "6c9516b vmrec-q-crossbow-z0.txt 345 1097" "cur vmrec-q-sword-z0-a.txt 83 232" "6c9516b vmrec-q-sword-z0-a.txt 83 232"; do set -- $g
   r=$(cd "$W" && python3 "$L/metricslab.py" faithful "$2" "$3" "$4" --adapter "$BLD/kfpvm_drive_$1" --args=--quiet --out /tmp/al-faith 2>&1 | tail -1)
   case "$r" in "RESULT faithful-drive PASS"*) ok "$r";; *) bad "drive gate $1 $2: $r";; esac; done
 r=$(cd "$W" && python3 "$L/metricslab.py" run "$HERE/motions/dualwield-alternate.json" --adapter "$BLD/kfpvm_drive_cur" --body vmrec-q-sword-z0-a.txt --body-frame 100 --out /tmp/al-dw --args=--quiet --quiet 2>&1 | tail -1)
@@ -53,5 +53,9 @@ bash "$HERE/build.sh" "${P[@]}" --patch "$HERE/patches/left-hand-mirror.py" --dr
 rm -rf /tmp/al-dwm; (cd "$W" && python3 "$L/metricslab.py" run "$HERE/motions/dualwield-sync-mirror.json" --adapter "$BLD/kfpvm_drive_lhm" --body vmrec-q-sword-z0.txt --body-frame 541 --out /tmp/al-dwm --args=--quiet --quiet >/dev/null 2>&1)
 r=$(awk '/^[LR]:/ && !/\*all/ {s=substr($1,1,1); seg=substr($1,3); sub(/^[LR]-/,"",seg); v[s,seg]=$4; segs[seg]=1} END{n=0; d=0; for (g in segs) {n++; x=v["L",g]-v["R",g]; if (x<0) x=-x; if (x>d) d=x}; printf "segments=%d max_wb_diff=%.2f", n, d}' /tmp/al-dwm/report.txt 2>/dev/null)
 case "$r" in *"max_wb_diff=0.0"[0-5]*) ok "mirror L==R $r";; *) bad "mirror L==R ${r:-no report}";; esac
+#  10. miss "sword elbow branch drift": 6c9516b has no S2 re-seed, so its elbow branch is history-dependent; a cold drive
+#      (--cold-elbow) must land on the other branch (elbow95 ~5 dm) = the lab reproduces the miss; seeded = PASS (step 5)
+r=$(cd "$W" && python3 "$L/metricslab.py" faithful vmrec-q-sword-z0-a.txt 83 232 --adapter "$BLD/kfpvm_drive_6c9516b" "--args=--quiet --cold-elbow" --out /tmp/al-faith 2>&1 | tail -1)
+case "$r" in "RESULT faithful-drive FAIL"*) ok "miss elbow-branch reproduced (cold @6c9516b): ${r#RESULT faithful-drive }";; *) bad "miss elbow-branch not reproduced: $r";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
