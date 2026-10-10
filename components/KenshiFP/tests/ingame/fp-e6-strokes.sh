@@ -6,6 +6,7 @@
 # animlab per stroke (inline, metrics/arc, churn, blade) and `stroke --overhead 2`.
 # Output in <out dir>: <name>.mp4 .lab .ev.txt .vmrec.txt .lab.txt; last line: RESULT E6-<name> PASS|FAIL <evidence>
 OUT=$1; N=$2; STROKES=${3:-0 1 2}; REPS=${4:-2}
+case "$STROKES" in *[!0-9[:space:]]*|"") echo "RESULT E6-$N FAIL setup: strokes '$STROKES' not a digit list (run-batch passes quotes literally: kfx-b7)"; exit 2;; esac
 [ -n "$OUT" ] && [ -n "$N" ] || { echo "usage: fp-e6-strokes.sh <out dir> <name> [strokes] [reps]"; exit 2; }
 export KAH_OWNER=${KAH_OWNER:-kfp-fixer}
 mkdir -p "$OUT" 2>/dev/null; cd "$OUT" 2>/dev/null || { echo "RESULT E6-$N FAIL setup: out dir $OUT not usable"; exit 2; }
@@ -18,7 +19,7 @@ A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 st(){ A fp_vm state | fld state; }
 waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }
-fail(){ PF_DONE=1; echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; exit 1; }
+fail(){ PF_DONE=1; echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; A chatter on >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; exit 1; }
 PF_ROW=E6-$N; PF_ON_FAIL='A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; [ -n "$_TS_RUN" ] \&\& take_sample_stop'; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard (shared preflight: take-preflight.sh)
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
@@ -26,7 +27,7 @@ ready(){ [ "$(st)" = ready ] || { [ "$(st)" = holstered ] || { A key_inject r ta
 # ---- setup: fresh load, pins, daytime, take spot, katana, hostiles, sky
 A load kah-fpxbow | cut -c1-80; sleep 8
 for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" && break; done
-A speed 1 hold >/dev/null; A kill "Hungry Bandit" >/dev/null
+A speed 1 hold >/dev/null; A kill "Hungry Bandit" >/dev/null; A chatter off >/dev/null   # no NPC bark text (takecheck overlay)
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
 pf_rig; pf_display
@@ -73,4 +74,4 @@ for s in $STROKES; do for c in inline metrics churn blade; do
 done; done
 SK=$(python3 $L/animlab.py stroke --overhead 2 "$N.vmrec.txt" 2>&1 | grep '^stroke ' | head -1); echo "$SK" >> "$N.lab.txt"; echo "$SK" | grep -q "^stroke PASS" || ok=0
 SW=$(grep -o "\[vm\] swing #[0-9]* stroke [0-9]" "$KDIR/KenshiFP.log" | tail -$(( $(echo $STROKES | wc -w) * REPS )) | awk '{print $NF}' | tr '\n' ',')
-PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"
+A chatter on >/dev/null; PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"
