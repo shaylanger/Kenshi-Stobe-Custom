@@ -6,7 +6,7 @@
 #   IDLE-OK <reason>  idle with a reason recorded (kenshi-ctl.ps1 idle "<reason>", < 60 min old)
 #   IDLE              Kenshi closed, lock free
 # Markers: C:\KenshiTestRuns\inflight\<name>, first line = out dir (/mnt/c/... or C:\...) of the running batch.
-# 4080-* markers and markers naming a WSL-only path (/root/...) or plain text are not 5090 game work (offline jobs),
+# Game work = the lock owner's marker or a run-batch out dir (has batch.log); 4080-* and offline/lab markers are ignored,
 # except a plain marker of the lock owner, which counts while < 30 min old (an operator between list and launch).
 param([int]$GraceMin = 3)
 $runs = 'C:\KenshiTestRuns'
@@ -31,12 +31,15 @@ if ($kenshiP -and $kenshiP.StartTime -and (-not $last -or $kenshiP.StartTime -gt
 $busy = @(); $done = @()
 foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue)) {
     if ($m.Name -like '4080-*' -or $m.LastWriteTime -lt $now.AddHours(-6)) { continue }
-    if ($m.LastWriteTime -gt $last) { $last = $m.LastWriteTime }
     $p = ((Get-Content -LiteralPath $m.FullName -TotalCount 1 -ErrorAction SilentlyContinue) -as [string])
     $p = if ($p) { $p.Trim() } else { '' }
     $win = $null
     if ($p -match '^/mnt/([a-z])/(.*)$') { $win = ($Matches[1].ToUpper() + ':\' + ($Matches[2] -replace '/', '\')) }
     elseif ($p -match '^[A-Za-z]:[\\/]') { $win = $p }
+    # game work = the lock owner's marker or a run-batch out dir (batch.log); lab/offline jobs (WSL path, plain text,
+    # a C: scratch dir without batch.log) are not 5090 game work
+    if ($m.Name -ne $owner -and -not ($win -and (Test-Path -LiteralPath (Join-Path $win 'batch.log')))) { continue }
+    if ($m.LastWriteTime -gt $last) { $last = $m.LastWriteTime }
     if ($m.LastWriteTime -gt $now.AddMinutes(-$GraceMin)) { $busy += "$($m.Name)(touched)"; continue }
     if ($win -and (Test-Path -LiteralPath $win -PathType Container)) {
         $d = Join-Path $win 'DONE'
