@@ -21,7 +21,7 @@ T=${TN[$TI]}; N=fist-$T; ROW=FIST-$T
 [ -f "$LABD/$T/pose.txt" ] || { V=$(head -1 "$LABD/VERSION.txt" 2>/dev/null | tr -dc A-Za-z0-9._-); [ -n "$V" ] && [ -f "/root/animlab-work/fists/$V/$T/pose.txt" ] && LABD=/root/animlab-work/fists/$V; }
 [ -n "$OUT" ] || { echo "RESULT $ROW FAIL setup: no out dir"; exit 2; }
 export KAH_OWNER=${KAH_OWNER:-$([ "${RIG:-5090}" = 4080 ] && echo rig4080 || echo fists)}
-SH=Axima; SPOT="-54100 669.2 7300"
+SH=Axima; SPOT=${FIST_SPOT:-"-54100 669.2 7300"}   # FIST_SPOT/FIST_LOOK: another open spot (4080: palm fronds at look 0 tripped the overlay check, fist4080b)
 HERE=${CR:-/mnt/c}/KenshiModding/components/KenshiFP; L=${CR:-/mnt/c}/KenshiModding/Kenshi-Automation-Harness/tools/animlab
 FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
 KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
@@ -60,7 +60,7 @@ b=$(A rangedinfo $SH | sed -n 's/.* bow=\(.*\) has_ammo=.*/\1/p' | head -1)
 sleep 1
 b=$(A rangedinfo $SH | sed -n 's/.* bow=\(.*\) has_ammo=.*/\1/p' | head -1)
 [ -z "$b" ] || [ "$b" = none ] || pf_fail "crossbow $b still equipped on $SH after unequip (R would draw it, not fists)"
-A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 0 0.05 >/dev/null; sleep 1
+A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look ${FIST_LOOK:-0} 0.05 >/dev/null; sleep 1
 pf_area $SH "Malzin|Shay"
 pf_ready
 f=$(fist); [ "$(fld on <<<"$f")" = 1 ] && [ "$(fld fists <<<"$f")" = 1 ] && [ "$(fld wih <<<"$f")" = 0 ] \
