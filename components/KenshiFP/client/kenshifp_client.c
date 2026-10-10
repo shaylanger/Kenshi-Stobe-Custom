@@ -8903,6 +8903,56 @@ static klib_addhook_t g_klib_addhook;
 #define KLIB_ADDHOOK_SYM "?AddHook@KenshiLib@@YA?AW4HookStatus@1@PEAX0PEAPEAX@Z"
 #endif
 
+/* FP-OWN-NAMETAG (op-b1 blkG 2026-10-10): the game's CharacterNameTag of the FP character ("[name]", selected
+ * style) showed over the zoom-25 view while RMB was held. CharacterNameTag::update (vt[1]) shows the tag widget
+ * whenever the tag's visible flag (+0x8, Character::setNameTagVisible) is on; after it ran, hide the FP character's
+ * own tag (hand +0x28 = the player; widget = wrapper +0x58 -> +0x8, vt+0x18 = setVisible, the game's hidden branch).
+ * Other characters' tags are untouched; FP off = the game re-shows it on the next update. */
+typedef void (*ntag_update_t)(void *tag);
+static ntag_update_t g_ntag_update_orig;
+static unsigned g_ntag_hidden, g_ntag_logs;
+static void hooked_ntag_update(void *tag)
+{
+    g_ntag_update_orig(tag);
+    if (!g_fp_mode) return;
+    unsigned char *b = (unsigned char *)tag;
+    if (!readable(b, 0x60) || !lbl_hand_is_player(b + 0x28)) return;
+    static void *last_tag; static unsigned char last_vis;
+    unsigned char vis = b[0x08];
+    if (tag != last_tag) { last_tag = tag; last_vis = 0; }
+    void *wrap = *(void **)(b + 0x58);
+    if (!readable(wrap, 0x10)) { last_vis = vis; return; }
+    void *w = *(void **)((uintptr_t)wrap + 8);
+    void **vt = readable(w, 8) ? *(void ***)w : NULL;
+    if (!readable(vt, 0x20)) { last_vis = vis; return; }
+    ((void (*)(void *, char))vt[3])(w, 0);
+    ++g_ntag_hidden;
+    if (vis && !last_vis && g_ntag_logs < 40) {
+        ++g_ntag_logs;
+        logline("[nametag] FP own name tag hidden: game flag 0->1 (sel=%d ui=%s rmb=%d hidden_frames=%u)",
+                b[0x21], g_fpc_ui_state, g_fpc_input[FPC_RMB], g_ntag_hidden);
+    }
+    last_vis = vis;
+}
+/* CharacterNameTag::update sits 0x6c0 below FloatingProgressBar::update in every known build (1.0.68 0x6e8100,
+ * 1.0.65 0x6e7960); the prologue (incl. `cmp qword [rcx+0x58],0` at +0x35) is unique in both Steam exes. */
+static void ntag_hook_install(void)
+{
+    static const unsigned char sig[] = {
+        0x48,0x8b,0xc4,0x55,0x48,0x8d,0x68,0xd8,0x48,0x81,0xec,0x20,0x01,0x00,0x00,0x48,0xc7,0x44,0x24,0x50,
+        0xfe,0xff,0xff,0xff,0x48,0x89,0x58,0x10,0x48,0x89,0x70,0x18,0x48,0x89,0x78,0x20,0x48,0x8b,0x05 };
+    static const unsigned char tail[] = { 0x48,0x33,0xc4,0x48,0x89,0x45,0x10,0x48,0x8b,0xd9,0x48,0x83,0x79,0x58,0x00 };
+    if (!g_rva.PBAR_UPDATE) { logline("nametag hook skipped: no PBAR_UPDATE RVA for this build"); return; }
+    unsigned long long rva = (unsigned long long)g_rva.PBAR_UPDATE - 0x6c0;
+    unsigned char *p = (unsigned char *)(g_base + rva);
+    if (!readable(p, 0x40) || memcmp(p, sig, sizeof sig) || memcmp(p + 0x2b, tail, sizeof tail)) {
+        logline("nametag hook skipped: CharacterNameTag::update signature mismatch at +0x%llx", rva); return;
+    }
+    int ok = install_hook(p, (void *)hooked_ntag_update, (void **)&g_ntag_update_orig);
+    logline(ok ? "nametag hook installed (FP own name tag hidden) at +0x%llx"
+               : "nametag hook FAILED at +0x%llx", rva);
+}
+
 static int install_hook(void *target, void *detour, void **original)
 {
 #ifdef KFP_RE_PLUGIN
@@ -9348,6 +9398,7 @@ __declspec(dllexport) void dllStartPlugin(void)
             } else {
                 logline("FloatingProgressBar::update RVA unset -- % bar stays world-anchored");
             }
+            ntag_hook_install();   /* FP-OWN-NAMETAG: the FP character's own name tag stays hidden in FP */
         }
 
         /* MyGUI cursor: resolve + hook setPointer to hide the default arrow. */
