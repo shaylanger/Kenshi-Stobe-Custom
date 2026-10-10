@@ -16,7 +16,7 @@ FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg
 KDIR=/mnt/d/Steam/steamapps/common/Kenshi; KLOG=$KDIR/KenshiFP.log
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 FIFO=/tmp/kfp-$N.ffin
-cleanup(){ [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; rm -f "$FIFO"; }
+cleanup(){ [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A chatter on >/dev/null; rm -f "$FIFO"; }
 PF_ROW=BLOCKGUARD-$N; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
@@ -24,7 +24,7 @@ place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A f
 # ---- preflight
 A load kah-fpxbow | cut -c1-80; sleep 8
 for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" && break; done
-A speed 1 hold >/dev/null
+A speed 1 hold >/dev/null; A chatter off >/dev/null   # no NPC bark text over the take (takecheck overlay)
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
 pf_rig; pf_display
@@ -49,15 +49,15 @@ T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Tassilo|Shay"
 for o in 2.3 3.0; do
   A fp_camera orbit $o >/dev/null; lab "Zoom 25, view orbit $o: ready stance (katana drawn)"; sleep 2.5
   for k in $(seq 1 $REPS); do
-    lab "RMB held: block guard (press $k)"; A fp_keys press rmb 2500 >/dev/null; sleep 2.6
-    lab "RMB released: back to ready"; sleep 2.0
+    lab "RMB held: block guard (press $k)"; A fp_keys press rmb 2500 >/dev/null; sleep 2.3   # label ends before the release (kfx-b7: the guard left 0.15 s before a 2.6 s label)
+    lab "RMB released: back to ready"; sleep 2.3
   done
   lab "LMB: free swing"; A fp_keys press lmb 80 >/dev/null; sleep 2.4
   lab "LMB then RMB 0.35 s later: swing cut into block"; A fp_keys press lmb 80 >/dev/null; sleep 0.35; A fp_keys press rmb 2200 >/dev/null; sleep 2.3
   lab "RMB released: back to ready"; sleep 2.0
 done
 lab end; echo q >&7; exec 7>&-; take_sample_stop; _TS_RUN=; wait $FP; FP=; rm -f "$FIFO"
-A fp_camera distance 0 >/dev/null
+A fp_camera distance 0 >/dev/null; A chatter on >/dev/null
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-blk-$N.txt"; A fp_vm rec dump "vmrec-blk-$N.txt" >/dev/null; sleep 2; cp "$KDIR/vmrec-blk-$N.txt" "$N.vmrec.txt" 2>/dev/null || echo "note: no vmrec dump"
 tail -n +$((L0 + 1)) "$KLOG" | grep -o "free block start tech=[0-9A-Fa-f]* anim='[^']*'.*" > "$N.techs.txt"
 NP=$(wc -l < "$N.techs.txt")
