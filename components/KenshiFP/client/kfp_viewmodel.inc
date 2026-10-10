@@ -239,7 +239,14 @@ static float g_vm_elb_stmax = 3.0f, g_vm_elb_tau = 0.04f;
  * entered by aborting a swing (the high-elbow moment, upper-arm stretch 2.87) gets the cap g_vm_swb_cap, blended in/out
  * over g_vm_swb_tau s (no pop). g_vm_swb = that block is on, g_vm_swb_w = blend 0..1, vm_stmax() = the cap in use. */
 static float g_vm_swb_cap = 1.3f, g_vm_swb_tau = 0.12f, g_vm_swb_trig = 99.0f, g_vm_s2_want, g_vm_swb_w; static int g_vm_swb;
-static float vm_stmax(void) { return g_vm_elb_stmax + (fminf(g_vm_swb_cap, g_vm_elb_stmax) - g_vm_elb_stmax) * g_vm_swb_w; }
+/* READY-WRIST (VMQUICK 07886691): a game hitch moves the shoulder ~2 dm back; in sword ready the elbow target may then
+ * stretch the upper arm to g_vm_elb_strdy instead of popping the elbow sideways (normal ready frames stay below 2.7) */
+static float g_vm_elb_strdy = 3.5f;
+static float vm_stmax(void) {
+    float c = g_vm_elb_stmax;
+    if (g_vm_class == 0 && g_vm_state && !strcmp(g_vm_state, "ready") && g_vm_elb_strdy > c) c = g_vm_elb_strdy;
+    return c + (fminf(g_vm_swb_cap, c) - c) * g_vm_swb_w;
+}
 /* S1 (Shay 2026-10-09): the sword edge never faces the camera. kappa = grip constant (hand X -> edge, about the blade),
  * edge_tol = largest allowed cos(edge, wrist->eye). S2: re-seed the elbow pick on entering block / ready. */
 static int   g_vm_edge = 1, g_vm_have_ekap, g_vm_reseed_on = 1, g_vm_rsmode = -1, g_vm_edge_nok;
@@ -1985,6 +1992,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "reseedtau")) { if (x >= 0.0f && x <= 1.0f) g_vm_reseed_tau = x; return 1; }
     else if (!strcmp(k, "swbtrig"))  { if (x >= 1.0f && x <= 5.0f) g_vm_swb_trig = x; return 1; }
     else if (!strcmp(k, "swbtau"))   { if (x >= 0.0f && x <= 1.0f) g_vm_swb_tau = x; return 1; }
+    else if (!strcmp(k, "elbstrdy")) { if (x >= 0.4f && x <= 5.0f) g_vm_elb_strdy = x; return 1; }   /* READY-WRIST: sword ready stretch cap */
     else if (!strcmp(k, "elbstmax")) { if (x >= 0.4f && x <= 5.0f) g_vm_elb_stmax = x; return 1; }   /* upper-arm stretch cap of the elbow target (option B, Shay 2026-10-09) */
     else if (!strcmp(k, "elb"))     { g_vm_elb[0] = ((int)x) & 1; g_vm_elb[1] = (((int)x) >> 1) & 1; return 1; }
     else if (!strcmp(k, "elbdx"))   { g_vm_elbd.x = x; return 1; }
