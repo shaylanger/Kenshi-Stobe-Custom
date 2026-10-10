@@ -106,7 +106,7 @@ pf_area(){ local me=$1 allow=${2:-} ev=/tmp/pf-area.$$ bad
 pf_weapon(){ pf_ready; [ "$1" = crossbow ] && pf_loaded; return 0; }
 pf_rig(){ local s sz
   # 4080 capture preflight (quser session Active + non-black grab) lives in tools/automation/rig-env.sh (owner 4080-filming)
-  if declare -F rig_preflight >/dev/null; then rig_preflight "${PF_ROW:-take}" || pf_fail "${RIG:-5090} capture preflight failed (rig_preflight)"; fi
+  if declare -F rig_preflight >/dev/null; then rig_preflight "${PF_ROW:-take}" || { [ -n "$PF_ON_FAIL" ] && eval "$PF_ON_FAIL"; PF_DONE=1; exit 1; }; fi   # it prints its own RESULT line
   [ -x "$PF_FFX" ] || [ -f "$PF_FFX" ] || pf_fail "ffmpeg $PF_FFX missing"
   s=$(PF_A screenshot pf-rig); echo "$s" | grep -qi 'error\|timeout' && pf_fail "harness screenshot failed: $(echo "$s" | head -1 | cut -c1-100)"
   sleep 0.5; sz=$(python3 -c "from PIL import Image; im=Image.open('$PF_SHOTS/pf-rig.png'); print('%dx%d' % im.size)" 2>/dev/null)
