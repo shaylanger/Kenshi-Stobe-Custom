@@ -37,10 +37,17 @@ the out dir changed for as long: kill the row's step (crash: kill the game; run-
 note to the owner; a second hit on the same row kills the game. Batch process gone without DONE: list -> failed\.
 Queue empty (or 4080 unreachable with lists waiting) for >= 2 min: ALERT-<rig>.txt + note to the coordinator (rig-health.sh
 and the Stop hook block on ALERT files); the ALERT clears when the rig works again.
-Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur.
+Filler: both queues empty -> a COPY of the least recently started eligible queue\filler\*.list (needs: met by the installed
+build, never installs; not running on the other rig; not benched) runs; rotation in runner\filler-rotation.tsv.
+No relaunch gap: Kenshi stays up between lists (5090 always, 4080 when a next list is queued); run-batch.sh --reuse loads
+the save in place; Kenshi is stopped only for a DLL install. Fast setup FAIL: a list with no PASS whose RESULTs are all
+setup/dryrun FAILs (or none / aborted) within -FastMin (15) min, or 3 instant setup FAILs in a row, writes the sticky
+ALERT-<rig>-setup.txt (Stop hook; delete once handled, expires in 30 min); the runner goes on with the next list.
+Stale queue\running\<rig>__* entries (no <rig>.cur/.tail naming them, no live run-batch.sh) are removed each tick.
+Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60)
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
@@ -66,7 +73,9 @@ if ($Status) {
         $up = if (PidAlive $r) { 'up' } elseif (Test-Path (StopFlag $r)) { "STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()) (rig-runner.ps1 -Start -Rig $r)" } else { 'DOWN' }
         "runner $r ${up}: $st | queued $r=$n"
     }
-    "queued any=$(@(Get-ChildItem "$qd\any" -Filter *.list -File -ErrorAction SilentlyContinue).Count)"
+    "queued any=$(@(Get-ChildItem "$qd\any" -Filter *.list -File -ErrorAction SilentlyContinue).Count) filler=$(@(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue).Count)"
+    if (Test-Path "$rd\filler-rotation.tsv") { Get-Content "$rd\filler-rotation.tsv" | ForEach-Object { $p = $_ -split "`t"; "  filler $($p[0]) last=$($p[1]) rig=$($p[2])$(if ($p.Count -ge 4 -and $p[3]) { " benched-until=$($p[3]) ($($p[4]))" })" } }
+    Get-ChildItem $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { "  $($_.Name): $((Get-Content $_.FullName -Raw).Trim())" }
     exit 0
 }
 if ($Start) { $Ensure = $true; $Force = $true }
@@ -100,6 +109,32 @@ function Note([string]$who, [string]$m) {
 }
 function Alert([string]$m) { Set-Content $alertF "ALERT $Rig $((Get-Date).ToString('HH:mm')) $m"; Log "ALERT $m" }
 function ClearAlert { if (Test-Path $alertF) { Remove-Item $alertF -ErrorAction SilentlyContinue; Log 'alert cleared' } }
+# sticky alert for setup-FAIL idling: NOT cleared when the next list starts (else the Stop hook never sees it); expires after 30 min
+$fastF = Join-Path $(if ($Fake) { $rd } else { $runs }) "ALERT-$Rig-setup.txt"
+function FastAlert([string]$m) { Set-Content $fastF "ALERT $Rig $((Get-Date).ToString('HH:mm')) $m"; Log "ALERT(setup) $m" }
+$script:keep4080 = $false
+# queue\running\ entries of this rig that no runner file (<rig>.cur / <rig>.tail.*) names and no live run-batch.sh runs:
+# leftovers of a killed loop (2026-10-10). Filler copies are deleted, other lists go to failed\ (owner noted).
+function CleanRunning {
+    $refs = @(Get-ChildItem $rd -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "$Rig.cur" -or $_.Name -like "$Rig.tail.*" } | ForEach-Object { (Get-Content $_.FullName -TotalCount 1) })
+    $rb = $null
+    foreach ($r in @(Get-ChildItem "$qd\running" -Filter "${Rig}__*" -File -ErrorAction SilentlyContinue)) {
+        if ($refs -contains $r.FullName) { continue }
+        $base = [IO.Path]::GetFileNameWithoutExtension(($r.Name -replace "^${Rig}__(filler__)?", ''))
+        $outN = Header $r.FullName 'out'; if (-not $outN) { $outN = $base }
+        if ($Rig -eq '5090' -and -not $Fake) {
+            if ($null -eq $rb) { $rb = @(Wsl @('pgrep', '-af', 'run-batch.sh') | Where-Object { $_ -match '^\d+ .*run-batch\.sh' }) }
+            if (@($rb | Where-Object { $_ -match [regex]::Escape("/$outN") }).Count) { continue }   # a live batch on it: leave it
+        }
+        $own = Header $r.FullName 'owner'; if (-not $own) { $own = 'coordinator' }
+        if ($r.Name -like '*__filler__*') { Remove-Item -LiteralPath $r.FullName -ErrorAction SilentlyContinue; Log "STALE running\$($r.Name) (filler copy) removed"; continue }
+        $nm = $r.Name -replace "^${Rig}__", ''; $dst = Join-Path "$qd\failed" $nm
+        Move-Item -LiteralPath $r.FullName $dst -Force -ErrorAction SilentlyContinue
+        Set-Content "$dst.result" "STALE $Rig $(Get-Date -Format s) running\ entry with no runner state and no live run-batch.sh (loop killed mid-start?)"
+        Log "STALE running\$($r.Name) -> failed\"
+        Note $own "list $nm sat in queue\running\ with no live batch (stale; moved to queue\failed\). Requeue it if it still needs to run."
+    }
+}
 function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | ForEach-Object { "$_" } }
 function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
 function Ssh([string[]]$a) { & ssh.exe -n -o BatchMode=yes -o ConnectTimeout=10 4080 @a 2>&1 | ForEach-Object { "$_" } }
@@ -123,16 +158,74 @@ function NoDryRows([string]$path) {
         $null = $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)'; $Matches[1].TrimEnd(':') -split '[/,]' | Where-Object { $_ } })
 }
 # FILLER (Shay 2026-10-10: rigs must never sit idle): queue\filler\ is a shared rotating regression backlog, used only when
-# queue\<rig>\ and queue\any\ are empty (checked between lists, never preempts); oldest first (LastWriteTime); a filler list
-# that finishes goes back to the END of queue\filler\ (touched), its result to queue\done\; a dryrun FAIL drops it (failed\).
-function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\, then filler\ if both empty)
-    $real = @(RealLists); if ($real.Count) { return $real }
-    foreach ($f in @(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime, Name)) {
+# queue\<rig>\ and queue\any\ are empty (checked between lists, never preempts). A filler list is COPIED (never consumed) to
+# running\<rig>__filler__<name>; rotation state runner\filler-rotation.tsv (name, last start, rig, benched until, why):
+# least recently started first. Skipped: lists the other rig is running, benched lists (dryrun FAIL, fast setup FAIL, died:
+# 3 h), lists whose "needs:" the installed build doesn't meet (a filler never installs a DLL: no restart, no downgrade).
+$rotF = Join-Path $rd 'filler-rotation.tsv'
+function RotRead { $h = @{}; if (Test-Path $rotF) { foreach ($l in Get-Content $rotF) { $p = @($l -split "`t"); if ($p.Count -ge 2 -and $p[0]) { while ($p.Count -lt 5) { $p += '' }; $h[$p[0]] = $p } } }; $h }
+function RotSet([string]$name, [hashtable]$set) {   # both rig loops write it: retry on a sharing clash
+    for ($i = 0; $i -lt 5; $i++) {
+        try {
+            $h = RotRead; $p = if ($h[$name]) { [string[]]$h[$name] } else { [string[]]@($name, '', '', '', '') }
+            foreach ($k in $set.Keys) { $p[[int]$k] = ([string]$set[$k]) -replace "[`t`r`n]", ' ' }
+            $h[$name] = $p
+            [IO.File]::WriteAllLines($rotF, [string[]]@($h.Keys | Sort-Object | ForEach-Object { $h[$_] -join "`t" })); return
+        } catch { Start-Sleep -Milliseconds 300 }
+    }
+    Log "could not write $rotF"
+}
+function Bench([string]$name, [double]$hours, [string]$why) { RotSet $name @{ 3 = (Get-Date).AddHours($hours).ToString('s'); 4 = $why }; Log "FILLER bench $name ${hours}h: $why" }
+$kfpDst5 = 'C:\Users\Shay\AppData\Roaming\Vortex\kenshi\mods\KenshiFP RE V0.6.1 2063 1 2026-08-30T19-04Z mloL06QcG\KenshiFP\KenshiFP.dll'
+$harn5 = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll'
+$script:instCache = $null; $script:instAt = [datetime]::MinValue
+function InstalledHashes {   # @{ K = KenshiFP sha8; H = harness sha8 } installed on this rig (4080: ssh, cached 3 min)
+    if ($script:instCache -and ((Get-Date) - $script:instAt).TotalMinutes -lt 3) { return $script:instCache }
+    $r = @{ K = '?'; H = '?' }
+    if ($Fake) {   # fake rig: runner\fake\installed.txt "K=<sha8> H=<sha8>"
+        $t = if (Test-Path "$rd\installed.txt") { Get-Content "$rd\installed.txt" -Raw } else { '' }
+        if ($t -match 'K=(\w+)') { $r.K = $Matches[1].ToUpper() }; if ($t -match 'H=(\w+)') { $r.H = $Matches[1].ToUpper() }
+    } elseif ($Rig -eq '5090') {
+        $r.K = (Get-FileHash $kfpDst5).Hash.Substring(0, 8); $r.H = (Get-FileHash $harn5).Hash.Substring(0, 8)
+    } else {
+        $a = Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @() | Select-Object -Last 1; if ($a -match 'installed=(\w{8})') { $r.K = $Matches[1].ToUpper() }
+        $b = Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-Harness') | Select-Object -Last 1; if ($b -match 'HARNESS (\w{8})') { $r.H = $Matches[1].ToUpper() }
+    }
+    $script:instCache = $r; $script:instAt = Get-Date; $r
+}
+function FillerUnmet([string]$path) {   # why the installed build doesn't meet the list's "needs:", or $null
+    $need = Header $path 'needs'; if (-not $need) { return $null }
+    $ih = InstalledHashes
+    if ($need -match 'KenshiFP\s+(\w{8})\b' -and $ih.K -ne $Matches[1].ToUpper()) { return "needs KenshiFP $($Matches[1]), installed $($ih.K)" }
+    if ($need -match 'Harness\s+(\w{8})\b' -and $ih.H -ne $Matches[1].ToUpper()) { return "needs Harness $($Matches[1]), installed $($ih.H)" }
+    $null
+}
+$script:fillerSkips = @(); $script:skipNoted = @{}
+function FillerLists {   # eligible filler lists for this rig, least recently started first
+    $rot = RotRead; $now = Get-Date; $skips = @()
+    $busy = @(Get-ChildItem "$qd\running" -File -ErrorAction SilentlyContinue | ForEach-Object { if ($_.Name -match '__filler__(.+)$') { $Matches[1] } })
+    $c = foreach ($f in @(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue)) {
         $want = Header $f.FullName 'rig'
         if ($want -and $want -ne $Rig) { continue }
         if ($Rig -eq '4080' -and (StobeRows $f.FullName)) { continue }
+        if ($busy -contains $f.Name) { continue }
+        $p = $rot[$f.Name]
+        if ($p -and $p[3] -and ([datetime]$p[3]) -gt $now) { $skips += "$($f.Name) benched until $(([datetime]$p[3]).ToString('HH:mm')) ($($p[4]))"; continue }
+        $u = FillerUnmet $f.FullName
+        if (-not $u -and (CachedVerdict $f) -eq 'FAIL') { Bench $f.Name 3 'dry run FAIL'; Note $(if ($o = Header $f.FullName 'owner') { $o } else { 'coordinator' }) "filler $($f.Name) fails dryrun.sh: benched 3 h (runner\predry\ has the output). Fix the list."; $u = 'dry run FAIL (benched)' }
+        if ($u) {
+            $skips += "$($f.Name) $u"
+            if (-not $script:skipNoted["$($f.Name)|$u"]) { $script:skipNoted["$($f.Name)|$u"] = 1; Log "FILLER skip $($f.Name): $u" }
+            continue
+        }
         $f
     }
+    $script:fillerSkips = $skips
+    @($c) | Sort-Object @{ e = { $p = $rot[$_.Name]; if ($p -and $p[1]) { [datetime]$p[1] } else { [datetime]::MinValue } } }, Name
+}
+function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\, then filler\ if both empty)
+    $real = @(RealLists); if ($real.Count) { return $real }
+    FillerLists
 }
 function RealLists {
     foreach ($src in "$qd\$Rig", "$qd\any") {
@@ -152,6 +245,7 @@ function Fail-List([string]$runPath, [string]$name, [string]$own, [string]$why, 
     Move-Item -LiteralPath $runPath $dst -Force -ErrorAction SilentlyContinue
     Set-Content "$dst.result" (@("FAILED $Rig $(Get-Date -Format s) $why") + $detail)
     Log "FAILED $name : $why"
+    if ((Split-Path $runPath -Leaf) -like '*__filler__*') { Bench $name 3 $why }
     Note $own "list $name NOT run ($why); details $dst.result. Fix it and put it back into queue\$Rig\ (or any\)."
 }
 # installed vs staged KenshiFP; returns $null (nothing to do) or the sha8 to install
@@ -161,7 +255,7 @@ function StagedWanted([string]$need) {
     if ($Rig -eq '5090') {
         $f = Get-ChildItem "$sd\KenshiFP-*.dll" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if (-not $f) { return $null }
-        $dst = 'C:\Users\Shay\AppData\Roaming\Vortex\kenshi\mods\KenshiFP RE V0.6.1 2063 1 2026-08-30T19-04Z mloL06QcG\KenshiFP\KenshiFP.dll'
+        $dst = $kfpDst5
         $h = $f.BaseName.Substring(9)
         if ((Get-FileHash $dst).Hash.Substring(0, 8) -eq $h) { return $null }
         if ($need -or $f.LastWriteTime -gt (Get-Item $dst).LastWriteTime) { return $h }
@@ -236,6 +330,7 @@ function CachedVerdict($f) {   # PASS | FAIL | PENDING | $null for a queued list
 function PickList {
     $ls = @(QueuedLists); if (-not $ls.Count) { return $null }
     if ($ls.Count -eq 1) { return $ls[0] }
+    if ($ls[0].DirectoryName -like '*\filler') { return $ls[0] }   # filler: strict rotation (a cached-PASS preference starved the rest)
     $v = @{}; foreach ($l in $ls) { $v[$l.Name] = CachedVerdict $l }
     $x = $ls | Where-Object { $v[$_.Name] -eq 'FAIL' } | Select-Object -First 1; if ($x) { return $x }
     $x = $ls | Where-Object { $v[$_.Name] -eq 'PASS' } | Select-Object -First 1; if ($x) { if ($x.Name -ne $ls[0].Name -and $script:lastPick -ne $x.Name) { $script:lastPick = $x.Name; Log "pick $($x.Name) (dry run PASS cached) before $($ls[0].Name) ($(if ($v[$ls[0].Name]) { $v[$ls[0].Name] } else { 'not dry-run yet' }))" }; return $x }
@@ -244,7 +339,7 @@ function PickList {
 function PreDryNext {
     # one background dry run per rig at a time: the first queued list (FIFO) whose verdict is not cached yet
     if (@(Get-ChildItem $pdd -Filter "$Rig-*.pid" -File -ErrorAction SilentlyContinue | Where-Object { PreDryRunning $_.BaseName }).Count) { return }
-    foreach ($f in @(QueuedLists)) {
+    foreach ($f in @(@(RealLists) + @(FillerLists))) {   # filler too: its first pick then starts on a cached verdict
         $key = DryKey $f.FullName
         if (Test-Path (Join-Path $pdd "$key.rc")) { continue }   # PASS or FAIL cached for this exact state
         PreDryStart $f.FullName $key; break
@@ -256,10 +351,13 @@ function PreDryNext {
 function Start-Batch($f) {
     $name = $f.Name; $filler = $f.DirectoryName -like '*\filler'
     $run = Join-Path "$qd\running" "${Rig}__$(if ($filler) { 'filler__' })$name"
-    try { Move-Item -LiteralPath $f.FullName $run -ErrorAction Stop } catch { Log "could not take $name (another runner?)"; return $false }
+    if ($filler) {   # copy, never consume: the backlog stays whole; rotation state records the start
+        if (Test-Path $run) { Log "could not take filler $name (already running here)"; return $false }
+        Copy-Item -LiteralPath $f.FullName $run; RotSet $name @{ 1 = (Get-Date).ToString('s'); 2 = $Rig }
+    } else { try { Move-Item -LiteralPath $f.FullName $run -ErrorAction Stop } catch { Log "could not take $name (another runner?)"; return $false } }
     $own = Header $run 'owner'; if (-not $own) { $own = 'coordinator' }
     $outN = Header $run 'out'; if (-not $outN) { $outN = "$($f.BaseName)-$(Get-Date -Format 'MMdd-HHmm')" }
-    if ($filler) { $outN = "$outN-$(Get-Date -Format 'MMdd-HHmm')"; Log "FILLER $name (queue\$Rig\ and any\ empty) owner=$own" }
+    if ($filler) { if (Header $run 'out') { $outN = "$outN-$(Get-Date -Format 'MMdd-HHmm')" }; Log "FILLER $name (queue\$Rig\ and any\ empty) owner=$own" }
     $outN = $outN -replace '[^A-Za-z0-9_.-]', '_'
     $launch = Header $run 'launch'
     if (-not $launch) { $s = (((Rows $run | Select-Object -First 1) -split '\|')[1]); if ($s) { $launch = $s.Trim() } }
@@ -302,7 +400,7 @@ function Start-Batch($f) {
     $need = Header $run 'needs'
     $needK = if ($need -match 'KenshiFP\s+(\S+)') { $Matches[1] } elseif ($need -match 'staged-latest') { 'staged-latest' } else { $null }
     $needH = if ($need -match 'Harness\s+(\w{8})') { $Matches[1].ToUpper() } else { $null }
-    $inst = StagedWanted $needK
+    $inst = if ($filler) { $null } else { StagedWanted $needK }   # filler: runs on the installed build (needs checked at pick)
     if ($Rig -eq '5090') {
         $env:KAH_OWNER = $owner5
         $lk = Join-Path $runs 'game.lock'
@@ -337,7 +435,16 @@ function Start-Batch($f) {
     } else {
         $lk = (Ssh4Ps 'C:\KAH\ctl.ps1' @('lock') | Select-Object -First 1)
         if ($lk -and $lk -ne 'free' -and $lk.Trim() -ne $owner4) { Fail-List $run $name $own "4080 lock held by $lk" @(); Remove-Item $curF; return $true }
-        $k = Ssh @('tasklist', '/nh'); if (($k -join ' ') -match 'kenshi_x64') { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }
+        # no relaunch gap (2026-10-10): the previous list left Kenshi up for this one (keep4080): run-batch.sh --reuse loads
+        # the save in place, unless a DLL must be installed (stop + launch as before)
+        $reuse = $false
+        $k = Ssh @('tasklist', '/nh')
+        if (($k -join ' ') -match 'kenshi_x64') {
+            $hOk = (-not $needH) -or ((Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-Harness') | Select-Object -Last 1) -match $needH)
+            if ($script:keep4080 -and -not $inst -and $hOk) { $reuse = $true; Log "REUSE $name : 4080 Kenshi stays up, $launch loads in place (no DLL install needed)" }
+            else { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }
+        }
+        $script:keep4080 = $false
         if ($inst) {
             $o = Ssh4Ps 'C:\KAH\inst-staged.ps1' @('-Hash', $inst); Log "4080 install KenshiFP $inst : $($o -join ' / ')"
             if (-not ($o -match 'installed')) { Fail-List $run $name $own "4080 KenshiFP $inst install failed" $o; Remove-Item $curF; return $true }
@@ -355,12 +462,15 @@ function Start-Batch($f) {
         $ok = Scp4 @((Join-Path $tmp 'list.txt'), (Join-Path $tmp '.run-batch.sh')) "C:/KenshiTestRuns/$outN/"
         $ok = $ok -and (Scp4 @("$auto\rig-runner-probe.sh", "$auto\batch-excerpts.sh", "$auto\batch-health.sh", "$auto\rig-env.sh") 'C:/KenshiModding/tools/automation/')
         if (-not $ok) { Fail-List $run $name $own '4080 copy (scp) failed' @(); Remove-Item $curF; return $true }
-        $o = Ssh4Ps 'C:\KAH\kcfg.ps1' @('test'); Log "4080 kcfg: $($o -join ' / ')"
-        $o = Ssh4Ps 'C:\KAH\ctl.ps1' @('launch', '-Save', $launch, '-Owner', $owner4); Log "4080 launch $launch : $(($o | Select-Object -Last 3) -join ' / ')"
+        if (-not $reuse) {
+            $o = Ssh4Ps 'C:\KAH\kcfg.ps1' @('test'); Log "4080 kcfg: $($o -join ' / ')"
+            $o = Ssh4Ps 'C:\KAH\ctl.ps1' @('launch', '-Save', $launch, '-Owner', $owner4); Log "4080 launch $launch : $(($o | Select-Object -Last 3) -join ' / ')"
+        }
         $o = Ssh4Bash @('/c/KAH/bin/stobe-auto', 'input_isolation', 'on'); Log "4080 isolation: $($o -join ' ')"
+        $rl = if ($reuse) { "--launch $launch --reuse " } else { '' }
         Set-Content (Join-Path $runs 'inflight\4080-runner') "4080:C:\KenshiTestRuns\$outN"
         # itrun -Cmd must be one token (ssh joins the args with spaces): a start script in the out dir
-        [IO.File]::WriteAllText((Join-Path $tmp '.start.sh'), "#!/bin/bash`nexport KAH_OWNER=$owner4`nexec bash $outP/.run-batch.sh --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP`n")
+        [IO.File]::WriteAllText((Join-Path $tmp '.start.sh'), "#!/bin/bash`nexport KAH_OWNER=$owner4`nexec bash $outP/.run-batch.sh $rl--no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP`n")
         $null = Scp4 @((Join-Path $tmp '.start.sh')) "C:/KenshiTestRuns/$outN/"
         $o = Ssh4Ps 'C:\KAH\itrun.ps1' @('-Log', "C:\KenshiTestRuns\$outN.itrun.out", '-Cmd', "$outP/.start.sh")
         Log "4080 itrun: $($o -join ' ')"
@@ -396,17 +506,32 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     $sumL = Join-Path "$qd\done" "$name.SUMMARY.txt"
     if ($Rig -eq '4080' -and -not $Fake) {
         & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/SUMMARY.txt" $sumL 2>$null
-        if (-not $Tail) { if ($how -ne 'LOST') { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }; Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue }
+        if (-not $Tail) {
+            if ($how -eq 'DONE' -and @(QueuedLists).Count) { $script:keep4080 = $true; Log "4080 Kenshi stays up for the next list" }
+            elseif ($how -ne 'LOST') { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; $script:keep4080 = $false }
+            Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue
+        }
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     } else { Copy-Item (Join-Path $outW 'SUMMARY.txt') $sumL -ErrorAction SilentlyContinue }
     $sum = if (Test-Path $sumL) { Get-Content $sumL } else { @() }
     $nf = @($sum | Where-Object { $_ -match '^RESULT \S+ FAIL' }).Count; $np = @($sum | Where-Object { $_ -match '^RESULT \S+ PASS' }).Count
     $where = if ($Rig -eq '4080' -and -not $Fake) { "4080:C:\KenshiTestRuns\$(Split-Path $outP -Leaf)" } else { $outW }
     $dest = if ($how -eq 'DONE') { "$qd\done" } else { "$qd\failed" }
-    if ((Split-Path $run -Leaf) -like '*__filler__*' -and $how -eq 'DONE') {   # rotate: back to the end of the filler queue
-        $back = Join-Path "$qd\filler" $name; Move-Item -LiteralPath $run $back -Force -ErrorAction SilentlyContinue
-        (Get-Item -LiteralPath $back -ErrorAction SilentlyContinue).LastWriteTime = Get-Date; Log "FILLER $name back to the end of queue\filler\"
-    } else { Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue }
+    $isFill = (Split-Path $run -Leaf) -like '*__filler__*'
+    if ($isFill -and $how -eq 'DONE') { Remove-Item -LiteralPath $run -ErrorAction SilentlyContinue }   # a copy: the original stays in filler\
+    else { Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue; if ($isFill) { Bench $name 3 "$how $Why" } }
+    # fast setup FAIL = idle (Shay 2026-10-10): nothing passed, every RESULT is a setup/dryrun FAIL (or none / batch aborted)
+    # within FastMin: sticky ALERT-<rig>-setup.txt (the Stop hook blocks on it; deleted by hand once handled, or after 30 min)
+    $dur = try { ((Get-Date) - [datetime]$t0).TotalMinutes } catch { 999 }
+    $nset = @($sum | Where-Object { $_ -match '^RESULT \S+ FAIL (setup|dryrun)' }).Count
+    $abort = @($sum | Where-Object { $_ -match '^BATCH (ABORTED|REFUSED)' }).Count
+    if ($how -ne 'LOST' -and $np -eq 0 -and $dur -lt $FastMin -and ($abort -or $nf -eq 0 -or $nset -eq $nf)) {
+        $fw = "list $name ended in $([int]$dur) min with no PASS ($nf FAIL, $nset setup/dryrun$(if ($abort) { ', batch aborted' })): the rig was effectively idle"
+        FastAlert "$fw. SUMMARY $sumL. Fix the setup or pull the list, then delete this file."
+        Note $own "$fw on ${Rig}. Fix the setup (RESULT lines in $sumL) before requeueing."
+        if ($own -ne 'coordinator') { Note 'coordinator' "$fw on $Rig (owner $own)." }
+        if ($isFill -and $how -eq 'DONE') { Bench $name 3 'fast setup FAIL' }
+    }
     Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL$(if ($Why) { " why=$Why" })")
     Remove-Item $file -ErrorAction SilentlyContinue
     Log "$how $name pass=$np fail=$nf out=$where$(if ($Why) { " ($Why)" })"
@@ -424,6 +549,8 @@ $idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted =
 while ($true) {
     if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {
+        if ((Test-Path $fastF) -and (Get-Item $fastF).LastWriteTime -lt (Get-Date).AddMinutes(-30)) { Remove-Item $fastF -ErrorAction SilentlyContinue; Log 'setup alert expired (30 min)' }
+        try { CleanRunning } catch { Log "cleanrunning error: $($_.Exception.Message)" }
         if ((Test-Path $curF) -and -not $Fake) { try { PreDryNext } catch { Log "predry error: $($_.Exception.Message)" } }
         # batches past their game part (GAMEDONE) whose background analyses still run: finish them when DONE
         foreach ($tf in @(Get-ChildItem $rd -Filter "$Rig.tail.*" -File -ErrorAction SilentlyContinue)) {
@@ -470,7 +597,11 @@ while ($true) {
             elseif ($p.gamedone -eq '1') {
                 # game part over (Kenshi stopped on the 5090 by --stop): free the rig now, collect the analyses later
                 Move-Item $curF (Join-Path $rd "$Rig.tail.$($c[5])") -Force
-                if ($Rig -eq '4080') { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue }
+                if ($Rig -eq '4080') {
+                    if (@(QueuedLists).Count) { $script:keep4080 = $true; Log "4080 Kenshi stays up for the next list" }   # no relaunch gap
+                    else { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; $script:keep4080 = $false }
+                    Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue
+                }
                 else { Remove-Item (Join-Path $runs 'inflight\runner-5090') -ErrorAction SilentlyContinue }
                 Log "GAMEDONE $($c[5]): rig free, background analyses continue"; ClearAlert; $condSince = $null; $hits = @{}; $anaSince = $null; continue
             }
@@ -499,7 +630,7 @@ while ($true) {
                 # instant setup-FAIL streak = idle (Shay 2026-10-10): >= 3 rows in a row FAILed setup < 90 s apart: ALERT + notes once per batch
                 if ($p.setupstreak -match '^\d+$' -and [int]$p.setupstreak -ge 3 -and -not $anaWarned["$($c[5])/setup"]) {
                     $anaWarned["$($c[5])/setup"] = 1
-                    Alert "$($c[5]): $($p.setupstreak) rows in a row FAILed setup within seconds: the rig is effectively idle. Fix the setup or pull the list."
+                    FastAlert "$($c[5]): $($p.setupstreak) rows in a row FAILed setup within seconds: the rig is effectively idle. Fix the setup or pull the list, then delete this file."
                     Note $c[3] "$($c[5]) on ${Rig}: $($p.setupstreak) rows in a row FAILed setup within seconds (counts as idle). Check the RESULT lines and fix the setup / requeue."
                     Note 'coordinator' "$($c[5]) on ${Rig} (owner $($c[3])): $($p.setupstreak) instant setup FAILs in a row: the rig is effectively idle."
                 }
@@ -556,12 +687,15 @@ while ($true) {
                 # only a 4080 Kenshi left open with no job waits IdleMin (someone may be using it by hand)
                 $ours = $Fake -or -not $open4 -or ($idleFor -ge $IdleMin)
                 if ($Rig -eq '5090' -and -not $Fake) { $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) { $ours = $true } }
+                if ($script:keep4080) { $ours = $true }   # the open 4080 game is the one we kept up for this list
                 if ($ours) { $unreach = $null; $alerted = $false; $idleSince = $null; $lastGh = $null; $condSince = $null; $hits = @{}; if (Start-Batch $f) { continue } }
                 else { State "waiting for idle rig ($s), $($f.Name) next in $([int]($IdleMin - $idleFor)) min" }
             } else {
                 State "queue empty ($s)"
                 if ($idleFor -ge $IdleMin -and -not $alerted) {
-                    Alert "$Rig idle $([int]$idleFor) min and its queue is empty (queue\$Rig\ and queue\any\ have no *.list). Put the next batch list there now, or record kenshi-ctl.ps1 idle$(if ($Rig -eq '4080') { '4080' }) `"<reason>`"."
+                    $fs = if ($script:fillerSkips.Count) { " Filler skipped: $($script:fillerSkips -join '; ')." } else { ' queue\filler\ has nothing for this rig.' }
+                    Alert "$Rig idle $([int]$idleFor) min and its queue is empty (queue\$Rig\ and queue\any\ have no *.list).$fs Put the next batch list there now, or record kenshi-ctl.ps1 idle$(if ($Rig -eq '4080') { '4080' }) `"<reason>`"."
+                    if ($Rig -eq '4080' -and $script:keep4080 -and -not $Fake) { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; $script:keep4080 = $false; Log '4080 Kenshi stopped (queue empty)' }
                     Note 'coordinator' "$Rig idle and queue empty: write the next list into queue\$Rig\ (or any\)."
                     $alerted = $true
                     if ($Rig -eq '4080' -and -not $Fake -and $s -like 'IDLE kenshi=no*') { Ssh4Ps 'C:\KAH\kcfg.ps1' @('play') | Out-Null }
