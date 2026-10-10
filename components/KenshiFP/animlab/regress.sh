@@ -296,5 +296,16 @@ for d in "$TK"/ok-*; do [ -f "$d/labels.txt" ] || continue
   v=(); [ -f "$d/video-len.txt" ] && v=(--video-len "$(cut -d' ' -f1 "$d/video-len.txt")")
   r=$(python3 "$L/takecheck.py" --labels "$d/labels.txt" --ev "$d/ev.txt" --rules "$TR" "${v[@]}" --name "$(basename "$d")" | tail -1)
   case "$r" in "RESULT "*" PASS"*) ok "fixed take $r";; *) bad "fixed take $r";; esac; done
+# 24. miss 2026-10-10 sword-z25-block.mp4 (steep slope fills the frame for the first half, setup check had passed):
+#     harness tools/animlab/frames.py openground (sky share of the scene band >= 0.08 on >= 90% of frames at 2 fps) must
+#     FAIL that video (closed 0-17.5 s) and PASS the open-ground videos anim-sword-e6 / anim-xbow-z25 (copies in $W/takes/videos).
+python3 "$HARN/tests/animlab/test_frames.py" >/tmp/al-frames-unit.txt 2>&1 && ok "frames unit tests" || { bad "frames unit tests"; tail -5 /tmp/al-frames-unit.txt; }
+TV=$W/takes/videos; mkdir -p "$TV"
+for f in sword-z25-block anim-sword-e6 anim-xbow-z25; do [ -f "$TV/$f.mp4" ] || cp "/mnt/c/KenshiTestRuns/vm-rework/$f.mp4" "$TV/" 2>/dev/null; done
+if [ -f "$TV/sword-z25-block.mp4" ]; then r=$(python3 "$L/frames.py" openground "$TV/sword-z25-block.mp4" --name sword-z25-block)
+  case "$r" in *"FAIL openground"*"closed=0.0-"*) ok "miss open ground on frames: $r";; *) bad "miss open ground on frames: $r";; esac
+else echo "REGRESS INFO openground: sword-z25-block.mp4 missing"; fi
+for f in anim-sword-e6 anim-xbow-z25; do [ -f "$TV/$f.mp4" ] || continue; r=$(python3 "$L/frames.py" openground "$TV/$f.mp4" --name $f)
+  case "$r" in *"PASS openground"*) ok "open-ground video $r";; *) bad "open-ground video $r";; esac; done
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
