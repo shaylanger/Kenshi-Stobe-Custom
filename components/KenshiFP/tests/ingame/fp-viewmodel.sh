@@ -88,7 +88,8 @@ def native(r): return r['w']*r.get('zf',1.0)<=0.05 or r.get('na')==1
 # Shay 2026-10-10 spec-videos: the current sword swing wrist (~36-41 deg) is accepted: swing frames are held to WB_SWING
 # (50, = lab R8 swing limit, arc.wb); ready/guard/other frames keep WB_MAX (30).
 WBS=float(os.environ.get('WB_SWING','50'))
-def wblim(r): return WBS if r.get('sw') else WBM
+def swf(r): return bool(r.get('sw')) or r.get('st')=='swinging'   # PT30 4080: a 'swinging'-state recovery frame (recorder sw=0) was judged as held
+def wblim(r): return WBS if swf(r) else WBM
 # ---- zo: the zoomed-out view (PT29, fp_camera distance >= ZO_MIN) must show a person holding the weapon (native third-
 # person animation, viewmodel faded out). Per frame, from the recorded bones (camera numbers, unzoomed eye) and the
 # zoomed camera (eye - fw*zoom): zf<=0.05 (viewmodel off); right wrist + grip >= HD_MIN (2.0 dm; the bug was 1.0, the native
@@ -269,15 +270,18 @@ elif _req: moves.append('ready:MISSING'); ok=False
 # the viewmodel (w>=0.99) <= WB_MAX (30 deg: a neutral grip wrist; 0750f26a folded it to ~100 deg in the strike)
 W0=[(r['wb'],i,r['st']) for i,r in enumerate(F) if r['wb'] is not None and r['vis'] and r['w']>=0.99 and r['wih'] and not native(r)]
 WS=[x for x in W0 if F[x[1]]['cls']==0]; WX=[x for x in W0 if F[x[1]]['cls']==1]
-wbm=max(WS) if WS else None; wbsw=max([x[0] for x in WS if F[x[1]]['sw']] or [-1]); wbx=max(WX)[0] if WX else -1
-wbh=max([x for x in WS if not F[x[1]]['sw']] or [None]); wbm=wbh   # held (non-swing) frames vs WB_MAX
-if (wbh and wbh[0]>WBM) or wbsw>WBS: ok=False
+wbm=max(WS) if WS else None; wbsw=max([x[0] for x in WS if swf(F[x[1]])] or [-1]); wbx=max(WX)[0] if WX else -1
+wbh=max([x for x in WS if not swf(F[x[1]])] or [None]); wbm=wbh   # held (non-swing) frames vs WB_MAX
+why=[]
+if wbh and wbh[0]>WBM: why.append('wb_held')
+if wbsw>WBS: why.append('wb_swing')
+if why: ok=False
 wtxt=(' wb_max=%.1f@%d:%s wb_swing=%.1f wb_xbow=%.1f wb_lim=%.0f/%.0f'%(wbm[0],wbm[1],wbm[2],wbsw,wbx,WBM,WBS)) if wbm else ((' wb_swing=%.1f wb_lim=%.0f/%.0f'%(wbsw,WBM,WBS)) if WS else (' wb_xbow=%.1f'%wbx if WX else ' wb=na'))
 fps=1/sorted(r['dt'] for r in F)[N//2]
 print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f@%s err_raw=%.2f tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
       len(cuts),(' ['+' '.join(cuts[:6])+']') if cuts else '',len(flags),
       (' ['+' '.join(flags[:6])+']') if flags else '',errmax,errat,err0,tipmax,dfmax,','.join(inout) or 'none',
-      (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else '')+wtxt+(' moves='+','.join(moves) if moves else ''))
+      (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else '')+wtxt+(' moves='+','.join(moves) if moves else '')+((' why='+','.join(why)) if why else ''))
 VMCHECK
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 note() { echo "$*" >> "$LOG"; }
