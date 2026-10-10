@@ -55,7 +55,7 @@ take(){   # k sid name type animcls ammo
   slug=$(echo "$nm" | tr -c 'A-Za-z0-9\n' '_' | cut -c1-24)${VMSET:+-ref}
   D="$OUT/$(printf %03d $k)-$slug"; mkdir -p "$D"; cd "$D" || { echo "RESULT WEAPON-$slug FAIL setup: dir $D"; return; }
   N=take; PF_ROW=WEAPON-$slug; PF_DONE=""
-  PF_ON_FAIL='A fp_keys release rmb >/dev/null; A fp_camera distance 0 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop'
+  PF_ON_FAIL='A fp_keys release rmb >/dev/null; A fp_camera distance 0 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { touch "$N.stop"; wait $FP; FP=; }'
   lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
   place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.02 >/dev/null; sleep 1; }
   # preflight: weapon in hand
@@ -80,9 +80,10 @@ take(){   # k sid name type animcls ammo
   fi
   pf_open 2
   # take
-  : > "$N.lab"; FIFO=/tmp/kfp-ws-$$.ffin; rm -f "$FIFO"; mkfifo "$FIFO" || pf_fail "mkfifo"
-  "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 120 -i "title=$TITLE" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" < "$FIFO" & FP=$!
-  exec 7>"$FIFO"
+  : > "$N.lab"; rm -f "$N.stop"
+  # recorder stopped by "q" through a plain pipe (stop file): a native ffmpeg on the 4080 (Git Bash) never reads q from
+  # an MSYS fifo and would run the full -t 120 past the end label (dryrun.sh --rig 4080; same fix as fp-fists.sh 08bd7d5)
+  ( while [ ! -f "$N.stop" ]; do sleep 0.1; done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 120 -i "title=$TITLE" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" & FP=$!
   . $HERE/animlab/take-sample.sh
   A fp_vm rec on >/dev/null
   T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|$HOLD|Shay"; sleep 1
@@ -102,7 +103,7 @@ take(){   # k sid name type animcls ammo
     lab "R: draw"; A key_inject r tap 120 >/dev/null; pf_waitst ready 6; sleep 0.3
     lab "Back to ready stance"; sleep 1.5
   done
-  lab end; echo q >&7; exec 7>&-; take_sample_stop; _TS_RUN=; wait $FP; rm -f "$FIFO"
+  lab end; touch "$N.stop"; take_sample_stop; _TS_RUN=; wait $FP; FP=; rm -f "$N.stop"
   A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null
   A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-ws-$slug.txt"; A fp_vm rec dump "vmrec-ws-$slug.txt" >/dev/null; sleep 2
   cp "$KDIR/vmrec-ws-$slug.txt" "$N.vmrec.txt" 2>/dev/null; rm -f "$KDIR/vmrec-ws-$slug.txt"
