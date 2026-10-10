@@ -103,6 +103,8 @@ def main():
     sheets = []
     n = 0
     for s in range(0, int(dur) + 1, 16):           # 16 frames (4x4) at 1 fps per sheet
+        if s and dur - s < 1.0:                     # a tail < 1 s holds no 1 fps frame: ffmpeg writes nothing and fails the pack
+            break
         n += 1
         name = f'whole-{n:02d}.jpg'
         sheet(video, name, float(s), min(16.0, dur - s), 1, 4, 4, f'1 fps  {s}-{min(s + 16, dur):.0f} s  {os.path.basename(video)}')
