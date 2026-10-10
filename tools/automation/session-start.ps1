@@ -58,6 +58,10 @@ foreach ($m in $inf) {
         else { "  still running (no DONE): start a waker on it" }
     }
 }
+'=== stale test leftovers (testruns-sweep.ps1; delete or -Keep <path> "<reason>") ==='
+$sw = @(& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'testruns-sweep.ps1') 2>$null)
+$sw | Select-Object -Last 1
+$sw | Where-Object { $_ -like 'STALE*' } | Select-Object -First 20
 $rv = Join-Path $runs 'review-verdicts.tsv'
 if (Test-Path -LiteralPath $rv) { '=== newest review verdicts ==='; Get-Content -LiteralPath $rv -Tail 8 }
 ''

@@ -142,4 +142,12 @@ foreach ($rig in '5090', '4080') {
 if ($miss.Count) {
     Block-Stop ('kenshi-waker-guard: no ready queue for rig(s) ' + ($miss -join ', ') + '. Shay''s rule (2026-10-10): the next batch for each rig is written BEFORE the current one ends, so the rig goes straight on. Write C:\KenshiTestRuns\queue\<rig>.next (line 1 owner, then the run-batch list path / job steps), or one line "none: <reason>" if there is truly nothing; it must be < 6 h old.')
 }
+
+# --- test leftovers (Shay 2026-10-10: "stuff ... is left around and never cleaned up; we need it cleaned or it will never go away") ---
+# testruns-sweep.ps1 check: exit 1 when an item in C:\KenshiTestRuns / 4080 C:\KAH + C:\KenshiTestRuns / WSL /root/animlab-work
+# or a leaked /tmp/animlab-* dir is off the keep-list, not named by running work and older than 24 h.
+$sw = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\testruns-sweep.ps1') check 2>$null
+if ($LASTEXITCODE -eq 1) {
+    Block-Stop ('kenshi-waker-guard: test/automation leftovers older than 24 h are lying around (' + (($sw | Select-Object -First 8) -join ' | ') + '). Shay''s rule: clean up after every batch/review. Delete what is judged (corpus.sh add anything a lab check or Misses row cites first), or record why it stays: & C:\KenshiModding\tools\automation\testruns-sweep.ps1 -Keep <path> "<reason>" (good 7 days). Full list: testruns-sweep.ps1.')
+}
 exit 0
