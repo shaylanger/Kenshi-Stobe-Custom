@@ -187,6 +187,13 @@ for i in range(len(F)-1):
         if any(cutseg(P,Q,r,ZCS.get(a['cls'],3.0)) for P,Q,r in segs): cuts.append('%d:%s'%(i,a['st']))
 F=F[:-1]; N=len(F)
 DTH=max(0.045,3.0*sorted(r["dt"] for r in F)[len(F)//2]) if F else 0.07   # hitch: > 3x the median frame time (0.055 s frames at ~70 fps under load also jump; was a fixed 0.07)
+# PT30-FLIP: the solver advances its animation by min(dt, maxdt) (KenshiFP g_vm_maxdt 0.05 s), so a long frame moves the
+# weapon by maxdt of animation; neighbour rates are per animation step (raw dt flagged a strike onset next to a 0.1 s hitch)
+MXDT=float(os.environ.get('VM_MAXDT','0.05'))
+for line in open(sys.argv[1]):
+    x=line.split()
+    if line.startswith('# set') and len(x)>=5 and x[3]=='maxdt': MXDT=float(x[4])
+def adt(r): return max(min(r['dt'],MXDT),1e-4)
 BL={0:8.0,1:5.85}
 def tip(r): return add(add(r['rp'],mul(r['rf'],BL[r['cls']])),mul(r['ru'],0.84 if r['cls']==1 else 0))
 def onscr(c): return c[2]>=2.5 and abs(c[1])/c[2]<0.70 and abs(c[0])/c[2]<1.245
@@ -213,7 +220,7 @@ for i in range(1,N-1):
     tipmax=max(tipmax,b['tipd']); dfmax=max(dfmax,b['df'])
     cv=c['vis']
     for k,lim in (('tipd',0.15),('df',3.0),('du',3.0)):   # neighbours scaled to this frame's dt (per-time rates)
-        nb=max(a[k]*b['dt']/max(a['dt'],1e-4),(c[k]*b['dt']/max(c['dt'],1e-4)) if cv else 0)
+        nb=max(a[k]*adt(b)/adt(a),(c[k]*adt(b)/adt(c)) if cv else 0)
         if b[k]>lim and b[k]>2.5*nb: flags.append('%d:%s=%.2f/%.2f'%(i,k,b[k],nb))
 # the weapon enters the hand (draw) and leaves it (holster) below the view, never in sight
 inout=[]
