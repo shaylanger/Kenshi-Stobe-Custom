@@ -660,6 +660,15 @@ static void fpc_free_swing_step(void *pc) {
         g_fpc_fs_tech=NULL;g_fpc_fs_anim=NULL;++g_fpc_fs_ends;g_fpc_recover_until_ms=fpc_now_ms()+300.0;
     }
 }
+/* E4: block pressed during a free swing ends the swing now (no recover) so the block starts the same tick */
+static unsigned g_fpc_fs_cuts;
+static void fpc_free_swing_cut(void *pc) {
+    void *anim=char_valid(pc)?g_fpc_getanim(pc):NULL;
+    double el=fpc_now_ms()-g_fpc_fs_start_ms;
+    if (anim==g_fpc_fs_anim && g_fpc_endanim) g_fpc_endanim(anim);
+    ++g_fpc_fs_cuts;if (g_fpc_fs_cuts<=20) logline("[controls] E4 free swing cut by block: %.0f ms p=%.3f (x%u)",el,g_fpc_fs_prog,g_fpc_fs_cuts);
+    g_fpc_fs_tech=NULL;g_fpc_fs_anim=NULL;++g_fpc_fs_ends;g_fpc_recover_until_ms=0;
+}
 /* RMB drawn melee: block request whenever held (fighting: the native reactive block check;
  * the manual adapter does the same for its owned fighter). */
 static void fpc_free_block(void *pc) {
@@ -891,6 +900,7 @@ static void fp_controls_tick(void *gw,float dt) {
             else if (!fpc_in_fight(pc)) {phase=1;fpc_free_swing(pc);phase=0;}
             if (strcmp(why,"engage")) logline("[controls] LMB no engage (%s dist=%.1f): free swing",why,g_fpc_lmb_dist);
         }
+        if (g_fpc_fs_tech && g_fpc_drawn && !g_fpc_ranged && in[FPC_RMB]) {phase=1;fpc_free_swing_cut(pc);phase=0;}
         if (g_fpc_fs_tech) {phase=1;fpc_free_swing_step(pc);phase=0;}
         if (g_fpc_drawn && !g_fpc_ranged && in[FPC_RMB]) fpc_free_block(pc);
         fpc_free_block_anim(pc,g_fpc_drawn && !g_fpc_ranged && in[FPC_RMB]);
