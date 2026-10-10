@@ -57,5 +57,22 @@ case "$r" in *"max_wb_diff=0.0"[0-5]*) ok "mirror L==R $r";; *) bad "mirror L==R
 #      (--cold-elbow) must land on the other branch (elbow95 ~5 dm) = the lab reproduces the miss; seeded = PASS (step 5)
 r=$(cd "$W" && python3 "$L/metricslab.py" faithful vmrec-q-sword-z0-a.txt 83 232 --adapter "$BLD/kfpvm_drive_6c9516b" "--args=--quiet --cold-elbow" --out /tmp/al-faith 2>&1 | tail -1)
 case "$r" in "RESULT faithful-drive FAIL"*) ok "miss elbow-branch reproduced (cold @6c9516b): ${r#RESULT faithful-drive }";; *) bad "miss elbow-branch not reproduced: $r";; esac
+#  11. miss E1 "edge leads the arc": metrics arc gate (stroke frames after the wind-up: edge_arc >= 0.7 on >= 85%, swing
+#      wb_max <= 30). The game recording f14/e0 (back of the blade first) must FAIL; the current solver replaying it must
+#      FAIL too while the source has no edge lead (g_vm_swlead). The pending E1 patch (+ patches/e1-lead-variants.py
+#      defaults) is reported as INFO (2026-10-09: arc_ok 1.00 but wb_max 107 = the lead folds the wrist).
+[ -f "$W/f14-e0.txt" ] || cp /mnt/c/KenshiTestRuns/f14/e0.txt "$W/f14-e0.txt" 2>/dev/null || bad "missing recording f14/e0.txt"
+r=$(python3 "$L/animlab.py" metrics "$W/f14-e0.txt" | grep '^arc ')
+case "$r" in "arc FAIL"*) ok "miss E1 reproduced (game f14-e0): $r";; *) bad "miss E1 game f14-e0 not failing: ${r:-no arc line}";; esac
+"$BLD/kfpvm_cur" "$W/f14-e0.txt" /tmp/al-e1base.txt --quiet >/dev/null 2>&1
+r=$(python3 "$L/animlab.py" metrics /tmp/al-e1base.txt | grep '^arc ')
+if grep -q g_vm_swlead /root/animlab-kfp-src/client/kfp_viewmodel.inc; then echo "REGRESS INFO E1 current source (has swlead) replay f14-e0: $r"
+else case "$r" in "arc FAIL"*) ok "miss E1 reproduced (replay f14-e0, current solver): $r";; *) bad "miss E1 replay not failing: ${r:-no arc line}";; esac
+  E1P=/mnt/c/KenshiModding/pending-fixes/kfp-e1-swlead.py
+  if [ -f "$E1P" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1P" --patch "$HERE/patches/e1-lead-variants.py" --out "$BLD/kfpvm_e1v" >/tmp/al-build6.txt 2>&1; then
+    "$BLD/kfpvm_e1v" "$W/f14-e0.txt" /tmp/al-e1v.txt --quiet >/dev/null 2>&1
+    echo "REGRESS INFO E1 patch kfp-e1-swlead.py replay f14-e0: $(python3 "$L/animlab.py" metrics /tmp/al-e1v.txt | grep '^arc ')"
+  else echo "REGRESS INFO E1 patch not built (missing or does not apply)"; fi
+fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
