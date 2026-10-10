@@ -14,6 +14,9 @@ file paths of outputs, the build hashes involved, and what you want back.
 > open ground, area clean; a failed check = `RESULT <row> FAIL setup: <reason>`, no unchanged retry); every wrapper prints
 > one RESULT line; a pose/stroke set is filmed only after it passes the animlab offline; short single-purpose takes, no
 > multi-try loops. Before your current batch ends, write your rig's next batch into `C:\KenshiTestRuns\queue\<rig>.next`.
+> Takes run on either rig via the rig layer (RIG=5090|4080). Fix offline in the animlab first; any flaw the lab passed =
+> Misses row in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`. Every video you hand over comes as a review pack
+> (`tools/automation/review-pack.py`, INDEX.txt path + lab results), never a bare mp4.
 
 ## STOBE fixer
 You are the **STOBE fixer**, a helper subagent of the coordinator session that runs Kenshi tests (it owns the
