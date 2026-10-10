@@ -23,7 +23,7 @@ This file is the high-level map of the native/game-side customizations. It is in
 
 ### Negotiation, deals and payments
 - Real hand-overs for deals (items, Cats with `@topup`/`@exact` purse modes), surrender/truce deals, pay-later and breach detection backed by game evidence.
-- Relationship-based shop pricing hook (`ShopPriceHook.h`, `ShopPricing.h`; interface in `pending-fixes/relationship-pricing-interface.md`).
+- Relationship-based shop pricing hook (`ShopPriceHook.h`, `ShopPricing.h`; interface in `docs/RELATIONSHIP_PRICING_INTERFACE.md`).
 
 ### Combat/truce and event behavior
 - Added custom combat/truce handling needed by negotiated ceasefires, including stand-down behavior for relevant faction allies.
