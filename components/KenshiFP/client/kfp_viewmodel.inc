@@ -85,17 +85,17 @@ static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.28f, 0.38f, 0.47f, 0.58f, 0.78f,
 static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
     {   /* 1 backhand: wind-up top-left, sweep across to the bottom right; refit 3: blade sweeps flat right-down in view
          * (strike/follow mf.z <= 0.6, was 0.95 = a stub pointing into the screen), no edge flip in the recovery */
-        VP(-1.564f, 0.174f, 4.330f, -0.066f, 0.798f, 0.161f, -0.371f, -0.088f, 1.514f),
-        VP(-1.044f, 0.028f, 4.666f, -0.097f, 0.895f, 0.446f, 0.235f, -0.178f, 0.555f),
-        VP(-0.300f, -0.900f, 5.200f, 0.720f, 0.450f, 0.520f, 4.282f, -6.446f, -0.350f),
-        VP(1.650f, -1.800f, 5.600f, 0.850f, 0.080f, 0.520f, 0.967f, -3.670f, -1.017f),
-        VP(2.000f, -2.000f, 4.900f, 0.780f, -0.150f, 0.580f, 0.050f, -1.000f, -0.100f) },
+        VP(-1.564f, 0.174f, 4.330f, -0.026f, 0.946f, 0.322f, -0.321f, -0.277f, 0.905f),
+        VP(-1.044f, 0.028f, 4.666f, 0.160f, 0.830f, 0.534f, 0.516f, -0.319f, 0.795f),
+        VP(-0.356f, -0.442f, 5.791f, 0.546f, 0.379f, 0.748f, 0.648f, -0.759f, 0.054f),
+        VP(1.745f, -2.325f, 5.831f, 0.893f, 0.089f, 0.442f, 0.144f, -0.967f, -0.208f),
+        VP(2.239f, -1.572f, 4.471f, 0.815f, -0.095f, 0.571f, -0.024f, -0.997f, -0.075f) },
     {   /* 2 overhead: blade raised over the head, chops down right of the eye line with the blade tilted (length stays in view, flat keeps facing the camera: no edge-on roll, no wind-up snap; E6 review) */
-        VP(1.362f, -0.705f, 3.931f, -0.414f, 1.277f, -0.011f, -0.645f, -0.456f, 1.257f),
-        VP(1.400f, -0.300f, 4.600f, -0.335f, 1.082f, 0.151f, -0.702f, -0.749f, 1.167f),   /* refit 3: strike top lower (blade in view) */
-        VP(1.345f, -0.711f, 5.459f, -0.300f, 0.850f, 0.450f, 0.412f, -1.197f, 0.159f),    /* refit 3: blade upright on screen */
-        VP(1.359f, -2.467f, 5.287f, -0.300f, 0.750f, 0.550f, -1.013f, -0.873f, -0.737f),
-        VP(0.800f, -2.400f, 6.800f, -0.300f, 0.600f, 0.740f, 0.244f, -0.872f, 1.021f) },   /* follow-through ends low-centre, forward (was flat left) */
+        VP(1.362f, -0.705f, 3.931f, -0.308f, 0.951f, -0.008f, -0.434f, -0.307f, 0.847f),
+        VP(1.400f, -0.300f, 4.600f, -0.339f, 0.911f, 0.233f, -0.452f, -0.482f, 0.751f),   /* refit 3: strike top lower (blade in view) */
+        VP(1.345f, -0.711f, 5.459f, -0.298f, 0.844f, 0.447f, 0.381f, -0.924f, 0.043f),    /* refit 3: blade upright on screen */
+        VP(1.359f, -2.467f, 5.287f, -0.216f, 0.739f, 0.638f, -0.695f, -0.495f, -0.522f),
+        VP(0.800f, -2.400f, 6.800f, -0.279f, 0.724f, 0.631f, 0.179f, -0.639f, 0.748f) },   /* follow-through ends low-centre, forward (was flat left) */
     {   /* 3 rising: low left, up across to the top right */
         VP(-1.668f, -2.305f, 3.883f, -0.351f, -0.043f, -0.131f, 0.857f, -0.302f, 1.676f),
         VP(1.124f, -1.662f, 4.995f, -1.486f, -0.039f, -0.061f, 0.818f, 0.286f, 0.769f),
