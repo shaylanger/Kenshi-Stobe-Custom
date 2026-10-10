@@ -23,7 +23,8 @@ static void fp_view_input(void) {
     wheel+=injected; /* explicit harness injection follows the same zoom math */
     g_dbg_wheel=(int)wheel;
     if (!g_fp_mode || g_ui_open) return; /* discard UI/focus wheels */
-    if (g_cfg_camera_zoom) { float was=g_view.target; kfp_view_wheel(&g_view,(int)wheel); g_view.target=fp_view_snap(was,g_view.target); }
+    if (g_cfg_camera_zoom) { float was=g_view.target; kfp_view_wheel(&g_view,(int)wheel); g_view.target=fp_view_snap(was,g_view.target);
+        if (g_cfg_zoom_switch && was<KFP_VIEW_EYE_LIMIT && g_view.target>=g_cfg_tp_min_dm) g_view.applied=g_view.target; } /* Z1: jump, no headless ease-out */
     else if (g_cfg_wheel) {
         g_speed_scale+=(float)wheel*(0.15f/120.0f);
         if (g_speed_scale<0.15f) g_speed_scale=0.15f;

@@ -19,7 +19,8 @@ static float kfp_view_next(const KfpView *v,float dt) {
     if (target<=v->applied) return target; /* fast zoom-in, never ease through a wall */
     if (!isfinite(dt) || dt<=0) dt=1.0f/60.0f;
     if (dt>0.1f) dt=0.1f;
-    return v->applied+(target-v->applied)*(1.0f-expf(-dt/0.08f));
+    float next=v->applied+(target-v->applied)*(1.0f-expf(-dt/0.08f));
+    return target-next<0.01f ? target : next; /* Z1: float easing stalls just below the target (15.999998 < head_show_dm 16) */
 }
 /* C05-INTERIOR: the native wall trace sometimes refuses a query (scene busy) instead of answering hit/miss.
  * A refused frame proves nothing about the wall, so it must not ease the camera outward through it (the

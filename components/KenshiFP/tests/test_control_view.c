@@ -125,6 +125,7 @@ int main(void){
     u.applied=d;u.applied=kfp_view_next(&u,1.0f/60.0f);assert(fabsf(u.applied-x)<.0001f);
     v.applied=.1f;assert(kfp_view_is_eye(&v));v.applied=2;assert(!kfp_view_is_eye(&v));
     v.target=NAN;assert(kfp_view_next(&v,.01f)==0);
+    { KfpView z={16,0,0,0}; for(int i=0;i<600;i++) z.applied=kfp_view_next(&z,1.0f/60.0f); assert(z.applied==16.0f); } /* Z1 ease reaches the switch distance */
     {   /* C05-INTERIOR: a refused trace frame never eases past the last applied distance */
         KfpView p={30,6.61f,1,1};unsigned st=0;int b=0;
         float a=kfp_view_hold(&p,12.932f,&b,1,&st,3);assert(a==6.61f && b==1 && st==1);   /* refused: hold, stay blocked */
