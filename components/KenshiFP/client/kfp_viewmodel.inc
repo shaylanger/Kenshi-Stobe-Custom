@@ -1151,7 +1151,8 @@ static void vm_bolt_measure(int cls)
     {   /* C3 gate: the bolt node in the (post-IK) Prop2 bone frame = against the rendered crossbow mesh: must stay constant */
         Vec3 wp, bw; Quat wq, bq;
         Vec3 bs;
-        if (vm_prop_ogre_world(g_vm_pin_prop, &wp, &wq) && vm_node_world_u(nd, &bw, &bq, &bs)) {
+        void *pp = g_vm_skel && g_skel_getbone ? g_skel_getbone(g_vm_skel, g_vm_nm_prop[1]) : NULL;   /* fresh: a cached bone can be freed (T6 crash) */
+        if (vm_prop_ogre_world(pp, &wp, &wq) && vm_node_world_u(nd, &bw, &bq, &bs)) {
             g_vm_bolt.sl = quat_rotvec(quat_conj(wq), vm_sub(bw, wp));
             float c = fabsf(wq.w*bq.w + wq.x*bq.x + wq.y*bq.y + wq.z*bq.z); g_vm_bolt.sa = 2.0f * acosf(fminf(1.0f, c)) * 57.29578f;
         }
@@ -1478,7 +1479,7 @@ static void vm_frame_core(void *pc, int body_down)
         void *anim = readable((void *)((uintptr_t)pc + CHAR_ANIM), 8) ? *(void **)((uintptr_t)pc + CHAR_ANIM) : NULL;
         skel = readable(anim, ANIM_SKELETON + 8) ? *(void **)((uintptr_t)anim + ANIM_SKELETON) : NULL;
     }
-    if (skel != g_vm_skel) { g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_fpw_on[0] = g_vm_fpw_on[1] = 0; g_vm_w = 0.0f; g_vm_wl = 0.0f; g_vm_phase = VMP_NORMAL; g_vm_have_cur = 0; g_vm_have_t = 0; g_vm_have_orel = 0; g_vm_have_oc = 0; g_vm_have_pl[0] = g_vm_have_pl[1] = 0; }
+    if (skel != g_vm_skel) { g_vm_pin_prop = NULL; g_vm_pin_bp = NULL; g_vm_have_written[0] = g_vm_have_written[1] = 0; g_vm_fpw_on[0] = g_vm_fpw_on[1] = 0; g_vm_w = 0.0f; g_vm_wl = 0.0f; g_vm_phase = VMP_NORMAL; g_vm_have_cur = 0; g_vm_have_t = 0; g_vm_have_orel = 0; g_vm_have_oc = 0; g_vm_have_pl[0] = g_vm_have_pl[1] = 0; }
     g_vm_skel = skel;
     if (!skel) return;
 
