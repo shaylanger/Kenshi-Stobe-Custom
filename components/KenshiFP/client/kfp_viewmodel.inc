@@ -85,11 +85,11 @@ static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.28f, 0.38f, 0.47f, 0.58f, 0.78f,
 static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
     {   /* 1 backhand: wind-up top-left, sweep across to the bottom right; refit 3: blade sweeps flat right-down in view
          * (strike/follow mf.z <= 0.6, was 0.95 = a stub pointing into the screen), no edge flip in the recovery */
-        VP(-1.564f, 0.174f, 4.330f, -0.026f, 0.946f, 0.322f, -0.321f, -0.277f, 0.905f),
-        VP(-1.044f, 0.028f, 4.666f, 0.160f, 0.830f, 0.534f, 0.516f, -0.319f, 0.795f),
-        VP(-0.356f, -0.442f, 5.791f, 0.546f, 0.379f, 0.748f, 0.648f, -0.759f, 0.054f),
-        VP(1.745f, -2.325f, 5.831f, 0.893f, 0.089f, 0.442f, 0.144f, -0.967f, -0.208f),
-        VP(2.239f, -1.572f, 4.471f, 0.815f, -0.095f, 0.571f, -0.024f, -0.997f, -0.075f) },
+        VP(-1.054f, -0.616f, 4.580f, -0.225f, 1.220f, 0.519f, -0.261f, -0.379f, 0.999f),
+        VP(-1.513f, -0.171f, 4.802f, 0.033f, 1.064f, 0.621f, 0.482f, -0.490f, 0.887f),
+        VP(-0.422f, -0.384f, 5.308f, 0.632f, 0.448f, 0.663f, 0.642f, -0.989f, 0.231f),
+        VP(1.969f, -2.201f, 5.628f, 0.979f, 0.070f, 0.528f, -0.104f, -1.101f, -0.247f),
+        VP(2.386f, -1.360f, 4.052f, 0.925f, -0.070f, 0.574f, 0.090f, -0.846f, -0.243f) },
     {   /* 2 overhead: blade raised over the head, chops down right of the eye line with the blade tilted (length stays in view, flat keeps facing the camera: no edge-on roll, no wind-up snap; E6 review) */
         VP(1.362f, -0.705f, 3.931f, -0.308f, 0.951f, -0.008f, -0.434f, -0.307f, 0.847f),
         VP(1.400f, -0.300f, 4.600f, -0.339f, 0.911f, 0.233f, -0.452f, -0.482f, 0.751f),   /* refit 3: strike top lower (blade in view) */
