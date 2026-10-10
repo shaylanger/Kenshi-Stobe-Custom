@@ -219,7 +219,8 @@ static float g_vm_elb_keep = 1.5f, g_vm_elb_rate = 1750.0f, g_vm_elb_dmax = 24.0
 static int   g_vm_elb_la = 1, g_vm_elb_lah = 8, g_vm_fut_n, g_vm_la_n, g_vm_la_c[VM_LAH]; static unsigned g_vm_fid, g_vm_la_fid = 0xffffffffu;
 static float g_vm_elb_lama = 12.0f, g_vm_elb_lawm = 0.1f, g_vm_sw_ur;
 static VmPose g_vm_fut[VM_LAH]; static Vec3 g_vm_la_e[VM_LAH][VM_LAA * 7]; static float g_vm_la_cc[VM_LAH][VM_LAA * 7];
-static Vec3  g_vm_rbe = { -0.740f, -0.546f, 0.392f };   /* PT30-FLIP: swing-ready elbow branch, output-pose frame (f,u,f x u) */
+static Vec3  g_vm_rbe = { -0.741f, -0.462f, 0.487f };   /* PT30-FLIP: swing-ready elbow branch A, frame (f, camera up off f, f x up) */
+static float g_vm_rbcos = 0.5f, g_vm_rbpen = 20.0f;      /* single ready branch: hard penalty off the A side */
 static float g_vm_rbw = 0.5f, g_vm_rbwr = 0.5f;          /* its weight in the elbow pick while drawing / at ready (0 = off); 2.0 while
                                                           * drawing spun the blade ~260 deg over 0.6 s after every draw (m78 f8) */
 static int   g_vm_wrlwarm = 1;   /* roll refinement starts from last frame's roll (PT30) */
@@ -1121,7 +1122,7 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
     Vec3 rbe = vm_v(0, 0, 0); float rbw = 0.0f;
     if (!g_vm_swing && g_vm_ti == VM_READY) {
         rbw = g_vm_phase == VMP_DRAW ? g_vm_rbw : g_vm_phase == VMP_NORMAL ? g_vm_rbwr : 0.0f;
-        Vec3 of = vm_norm(g_vm_out.f), ou = vm_norm(g_vm_out.u), os = vm_cross(of, ou);
+        Vec3 of = vm_norm(g_vm_out.f), ou = vm_norm(vm_sub(vm_v(0, 1, 0), vm_mul(of, of.y))), os = vm_cross(of, ou);
         rbe = vm_norm(vm_add(vm_add(vm_mul(of, g_vm_rbe.x), vm_mul(ou, g_vm_rbe.y)), vm_mul(os, g_vm_rbe.z)));
     }
     for (int pass = 0; pass < 2; pass++) {
@@ -1140,7 +1141,8 @@ static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o)
             if (eonly && !eok) continue;
             float sc = vm_dot(e, pref) + kw * vm_dot(e, kp) - 0.5f * fabsf(vm_len(vm_sub(E, S)) - L1n) / L1n
                      - 3.0f * fmaxf(0.0f, fabsf(dd) - 0.1396263f) + rbw * vm_dot(e, rbe)
-                     - g_vm_edge_pen * fmaxf(0.0f, ee - g_vm_edge_tol);   /* S1: least edge-facing fallback */
+                     - g_vm_edge_pen * fmaxf(0.0f, ee - g_vm_edge_tol)    /* S1: least edge-facing fallback */
+                     - (rbw > 0.0f ? g_vm_rbpen * fmaxf(0.0f, g_vm_rbcos - vm_dot(e, rbe)) : 0.0f);   /* ready: branch A only */
             if (lan) {   /* worst step on the best path: from the previous pick, then the predicted frames */
                 float g = vm_dot(e, kp), gb = -2.0f;
                 for (int b2 = 0; b2 < g_vm_la_c[0]; b2++) { float d = fminf(vm_dot(e, g_vm_la_e[0][b2]), g_vm_la_cc[0][b2]); if (d > gb) gb = d; }
@@ -1790,6 +1792,8 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "elbptau")) { if (x >= 0 && x < 1) g_vm_elb_ptau = x; return 1; }
     else if (!strcmp(k, "rbw"))     { if (x >= 0 && x < 20) g_vm_rbw = x; return 1; }
     else if (!strcmp(k, "rbwr"))    { if (x >= 0 && x < 20) g_vm_rbwr = x; return 1; }
+    else if (!strcmp(k, "rbcos"))   { if (x >= -1 && x <= 1) g_vm_rbcos = x; return 1; }
+    else if (!strcmp(k, "rbpen"))   { if (x >= 0 && x < 1000) g_vm_rbpen = x; return 1; }
     else if (!strcmp(k, "elbkeep")) { if (x >= 0 && x < 20) g_vm_elb_keep = x; return 1; }
     else if (!strcmp(k, "elbtau"))  { if (x > 0.001f && x < 1) g_vm_elb_tau = x; return 1; }
     else if (!strcmp(k, "stmax"))   { g_vm_st_max[0] = g_vm_st_max[1] = 1.0f; return 1; }
