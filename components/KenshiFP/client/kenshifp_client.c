@@ -6724,6 +6724,8 @@ static void hooked_cam_update(void *cam, char controlEnabled)
      * the override there crashed the title screen. */
     if (!g_fp_mode && !g_ovr_prev) return;
     if (g_gw_cache) fp_camera_override(g_gw_cache);   /* fresh eye/ori, mid-frame */
+    /* Z1: band entered/left by this apply -> hide/show before this frame renders (post-frame was one frame late) */
+    if (g_gw_cache && fp_view_band() != g_gear_all) fp_head_visibility(g_gw_cache);
     if (!g_fp_mode || !g_have_eye) return;
     if (!readable(cam, CC_FREECAM + 1)) return;
     if (*(unsigned char *)((uintptr_t)cam + CC_FREECAM)) return;   /* free-cam: hands off */
