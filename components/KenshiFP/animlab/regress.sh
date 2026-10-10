@@ -340,6 +340,26 @@ if [ -f "$TV/sword-z25-block-f36.mp4" ]; then r=$(python3 "$L/frames.py" cursor 
 else echo "REGRESS INFO cursor: sword-z25-block-f36.mp4 missing"; fi
 [ -f "$TV/turret-fp.mp4" ] && { r=$(python3 "$L/frames.py" cursor "$TV/turret-fp.mp4" --name turret-fp)
   case "$r" in *"PASS cursor"*) ok "no-cursor video $r";; *) bad "no-cursor video $r";; esac; }
+# 28. CLASS "random native variant per occurrence" (Misses 2026-10-10): (a) E6 kfx-b2 e6fix (KenshiFP F0595751): the
+#     offline prediction replayed one old rec (one native swing per stroke, arc 1.00) and the game take failed stroke 1
+#     arc 0.62: the native attack variant changes the rendered stroke. `animlab.py pool` replays every native swing of the
+#     corpus pool with the stroke forced: F059 stroke 1 must FAIL arc (take 0.35); refit4 (kfpvm_r4) arc PASS (0.97).
+#     (b) free block: chooseBlock picks the technique per press: the game rec vmq-f059 sword-z25 press 0 hangs (-75 deg):
+#     guard FAIL, the 4080 rec of the same build PASS, survey table FAIL, block pool FAIL (take 0.67).
+CP=/mnt/c/KenshiTestRuns/corpus/pools
+if [ -f "$CP/sword-swing/pool.list" ] && [ -x "$BLD/kfpvm_f059" ]; then
+  r=$(python3 "$L/animlab.py" pool @"$CP/sword-swing/pool.list" --adapter "$BLD/kfpvm_f059" --stroke 1 --checks arc --keep /tmp/al-pool | tail -1)
+  case "$r" in "pool stroke 1 FAIL"*"arc:take=0."[0-8]*) ok "pool miss F059 stroke 1: ${r:0:120}";; *) bad "pool miss F059 stroke 1: $r";; esac
+  [ -x "$BLD/kfpvm_r4" ] && { r=$(python3 "$L/animlab.py" pool @"$CP/sword-swing/pool.list" --adapter "$BLD/kfpvm_r4" --stroke 1 --checks arc --keep /tmp/al-pool4 | tail -1)
+    case "$r" in "pool stroke 1 PASS"*) ok "pool refit4 stroke 1 arc: ${r:0:120}";; *) bad "pool refit4 stroke 1 arc: $r";; esac; }
+else echo "REGRESS INFO pool: corpus sword-swing or kfpvm_f059 missing"; fi
+B=$CP/block-guard
+if [ -f "$B/pool.list" ]; then
+  r=$(python3 "$L/animlab.py" guard "$B/q-sword-z25-f059.txt"); case "$r" in "guard FAIL"*"press0@frame468"*) ok "guard hanging press: $r";; *) bad "guard hanging press: $r";; esac
+  r=$(python3 "$L/animlab.py" guard "$B/q-sword-z25-f059-4080.txt"); case "$r" in "guard PASS"*) ok "guard raised presses: ${r:0:80}";; *) bad "guard raised: $r";; esac
+  r=$(python3 "$L/animlab.py" guard "$B/blk-table.tsv"); case "$r" in "guard FAIL presses=45 hanging=14"*) ok "guard survey: ${r:0:80}";; *) bad "guard survey: ${r:0:200}";; esac
+  r=$(python3 "$L/animlab.py" pool @"$B/pool.list" --motion block); case "$r" in "pool block FAIL"*) ok "block pool: ${r:0:120}";; *) bad "block pool: $r";; esac
+else echo "REGRESS INFO block pool: corpus block-guard missing"; fi
 # P4. phase 4 (NATIVE, harness tools/animlab/native.py + visual/ogre.py animations): unit tests (synthetic Ogre animations,
 #     sampling, trajectory stabilisation, left grip mirror, solver grip offset, keyed viewmodel path + key fit, FCS v17
 #     header) and, with the game install: 174 animations on the male skeleton, the catalogue (unarmed techniques), `run` of
