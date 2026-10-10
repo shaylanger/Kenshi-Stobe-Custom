@@ -38,6 +38,7 @@ static float g_combat_last_reload_timer=-1;
  * RELOAD but the native start (0x437940) left rc+0x80 at 0; has_ammo = Character vt+0x178(gun ammo type
  * gun+0x58) = the native "carries a matching round" test (main inventory, then backpack); -1 = not checked. */
 static unsigned g_combat_reload_refused;
+static unsigned g_combat_holster_rl_cancels;   /* X6: stale reload flags cleared while the bow was out of hand */
 static int g_combat_has_ammo=-1;
 static void *g_combat_ammo_type;
 #define GUN_AMMO_TYPE 0x58
@@ -619,6 +620,12 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     /* (harness `fp_combat input` keeps the old aim-draws-the-holstered-crossbow path so the R-series ranged rows
      * stay runnable; the player's physical input never takes it) */
     if (char_valid(pc) && weapon && wih_now!=weapon && !(g_combat_injection && !wih_now)) {
+        /* X6: a reload interrupted by the holster leaves rc+0x80 set; the draw then resumed it as the
+         * native full-body reload. Out of hand = no reload. */
+        if (readable(rc,0x88) && *(void **)((uintptr_t)rc+RC_ME)==pc && *(unsigned char *)((uintptr_t)rc+0x80)) {
+            *(unsigned char *)((uintptr_t)rc+0x80)=0;*(float *)((uintptr_t)rc+0x78)=0.0f;++g_combat_holster_rl_cancels;
+            if (g_combat_holster_rl_cancels<8) logline("[combat] X6 reload cancelled: crossbow out of hand mid-reload (x%u)",g_combat_holster_rl_cancels);
+        }
         combat_release();memset(&g_combat_observed,0,sizeof(g_combat_observed));
         g_combat_why=wih_now?"melee_in_hands":"ranged_holstered";fp_melee_manual_tick(gw,pc,input.aim,input.fire,dt);
         g_guard_armed=0;return;
@@ -927,6 +934,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u reload_emits=%u reload_refused=%u has_ammo=%d ammo_type=%p gun_setups=%u aim_stalls=%u aim_stall_why=%s loaded=%d loaded_max=%d item_gun=%p ctl_shots=%u",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots,
          g_combat_control.reloads,g_combat_reload_refused,g_combat_has_ammo,g_combat_ammo_type,g_combat_gun_setups,g_combat_aim_stalls,g_combat_aim_stall_why,
          g_combat_loaded,g_combat_loaded_max,g_combat_item_gun,g_fp_ctl_shoot_calls);}
+        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," holster_rl_cancels=%u",g_combat_holster_rl_cancels);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
          snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_gate=%s last_reject_native=%d last_reject_latched=%d last_reject_dip_s=%.3f last_reject_dt=%.3f last_reject_hold=%d last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
            g_combat_inj_cmds,g_combat_inj_aim_cmds,g_combat_control.last_reject_aim,j->aim_ready,j->shot_ready,j->ammo,j->reloading,g_combat_rej_close,g_combat_rej_timer,
