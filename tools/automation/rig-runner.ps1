@@ -300,6 +300,10 @@ function Start-Batch($f) {
             $hh = (Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-InstallHarness', $needH) | Select-Object -Last 1); Log "4080 harness (need $needH, installs C:\KAH\staged\AutomationHarness-$needH.dll if present): $hh"
             if ($hh -notmatch $needH) { Fail-List $run $name $own "4080 needs Harness $needH, installed $hh" @(); Remove-Item $curF; return $true }
         }
+        # take scripts + lab modules on the 4080 = this tree (rig4080/setup.sh; Kenshi closed here, no 4080 take running):
+        # without it the 4080 ran stale scripts (zsfist4080 fists lab: "No module named recfmt", 2026-10-10)
+        $so = & 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/rig4080/setup.sh" 2>&1 | ForEach-Object { "$_" }
+        Log "4080 sync: $(($so | Select-Object -Last 1))"
         $null = Ssh @('mkdir', "C:\KenshiTestRuns\$outN")
         Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
         $ok = Scp4 @((Join-Path $tmp 'list.txt'), (Join-Path $tmp '.run-batch.sh')) "C:/KenshiTestRuns/$outN/"
