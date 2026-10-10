@@ -15,6 +15,8 @@ static double g_al_clock;   /* virtual seconds */
 static int QueryPerformanceCounter(LARGE_INTEGER *x) { x->QuadPart = (long long)(g_al_clock * 1e7 + 0.5); return 1; }
 static int QueryPerformanceFrequency(LARGE_INTEGER *x) { x->QuadPart = 10000000; return 1; }
 static void Sleep(DWORD ms) { (void)ms; }
+typedef unsigned long long ULONGLONG;   /* X4 reload sync (kfp_viewmodel.inc g_x4_ms) */
+static ULONGLONG GetTickCount64(void) { return (ULONGLONG)(g_al_clock * 1000.0 + 0.5); }
 static void *GetProcAddress(HMODULE m, const char *s) { (void)m; (void)s; return NULL; }
 static HMODULE GetModuleHandleA(const char *s) { (void)s; return NULL; }
 
