@@ -17,11 +17,10 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
   - `pt30-flip` STOPPED-CONTEXT: frame 158 = vmcheck hitch bug (patch pending-fixes/kfp-pt30-flip.py); corrected check
     finds a REAL follow-through edge roll snap at frame 284 (E1 lead in vm_swing_atl, u .58-.98). Decision: ship vmcheck
     patch with the solver fix (coordinator default), not alone.
-  - `animlab-loop` STOPPED-CONTEXT: corpus C:\KenshiTestRuns\corpus (MANIFEST.tsv, protected), gate.sh wired before
-    VMQUICK (no baseline yet: run `gate.sh --update-baseline` after the maintainer commits), mutate.py 10/13 caught (3 gaps
-    -> maintainer Misses rows: 1-frame roll mid-stroke, 1-frame position jump, popup overlay), SETUP_MISSES.md, ledger.py
-    (table not in STATUS yet; ~2% lab-first), backfill.sh needs an n/a filter; extended take-preflight staged in
-    %TEMP%\claude\C--KenshiModding\alloop\ (merge .add onto current take-preflight.sh, wire into take scripts).
+  - `animlab-loop` DONE (m91): extended take-preflight installed (8352239, 19d4b25; pf_rig -> rig_preflight), backfill n/a
+    filter (e42aca6), ledger table in STATUS (harness 8f900db: 46 flaws, lab-first 2%), gate baseline PASS
+    (corpus\gate-baseline.tsv, mutations 10/13). Left: take-script wiring uncommitted in kfp-fixer's files (told fixer);
+    backfill finds (cursor at 1280,720, guard vs pool, sword-pool manifest rows) + re-baseline -> animlab-maintainer.
   - `animlab-maintainer`: was RUNNING (class audit; UNCOMMITTED per-swing moves/arc/inline change FAILS Shay-accepted
     f28/f23 per taste set -> recalibrate before commit; label-leads-screen + NPC-speech overlay misses from T6 review).
   - `4080-filming` STOPPED-CONTEXT: rig layer done (6ffe60b, eeab981). Proof take not rerun. Take bugs: s3prep2 drew the
@@ -34,9 +33,8 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
     alarms -> Misses; spec.py; unarmed spec), `fists` (4 candidates C:\KenshiTestRuns\fists-cand\ +
     /root/animlab-work/fists/cand; lab PASS; unarmed spec PASS except shoteiL inferred U6 wind-up 0.05 dm above eye;
     NOT yet coordinator-reviewed; unarmed body game rec spec agents\fists.need-rec.md -> 4080 queue).
-- Waiting on Shay: (1) PT26/PT28 specs follow accepted poses or not (sheets shown); (2) PT29 native frames exempt from the
-  wrist limit or NA1 retarget; (3) batched unarmed inferred rules U1/U2/U4/U6/U10/U11/U14/U16 + E6 stroke-0 snap (R17);
-  (4) closing RDP once the virtual display is READY. Shay decided: half-open hand OK; palm strikes -> straight-wrist punches.
+- Waiting on Shay: (1) PT26/PT28 specs follow accepted poses or not (stills confused Shay: agent spec-videos builds side-by-side
+  videos C:\KenshiTestRuns\spec-videos\ to show him instead); 4080 virtual display LIVE (Shay ran keep-display-on.bat 2026-10-10, session 2 on console, gdigrab LIVE); he must rerun it each time he leaves RDP; 4080-filming told to start the proof take. Shay decided: half-open hand OK; palm strikes -> straight-wrist punches. Shay decided 2026-10-10 (m91): native animation frames are EXEMPT from the wrist-bend limit (PT29 + lab wrist checks; told kfp-fixer + animlab-maintainer). Shay 2026-10-10: unarmed inferred rules (U1/U2/U4/U6/U10/U11/U14/U16) + R17 are NOT his to judge: the native in-game animations decide (agent animlab-spec resolves each against native measurements).
 - T6 turret-fp.mp4: coordinator review FAIL (labels lead the screen 0.4-0.5 s; NPC speech text overlays; possible 1-frame
   barrel sliver at 59.125); fixer has the list. Review pack C:\KenshiTestRuns\review\t6 (built with --offset 0.8).
 - Nothing is ready for Shay as a video.
