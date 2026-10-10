@@ -62,7 +62,7 @@ gap() { awk -v a="$(pos "$FI")" -v b="$(pos "$1")" 'BEGIN{split(a,p,",");split(b
 # phase <row> <setting>: clicks; per click every victim healed to 100, flesh before/after; HIT_<who> counts
 phase() { local rowname=$1 on=$2 i who S0 z zones="" swung=0 n=$NCLICK
   setini swing_hits_all "$on"
-  [ "$(sw setting)" = "$on" ] || { row "$rowname" FAIL "setup: ini swing_hits_all=$on not live ($(A fp_melee swing_all))"; return 1; }
+  [ -n "${SWA_NATIVE:-}" ] || [ "$(sw setting)" = "$on" ] || { row "$rowname" FAIL "setup: ini swing_hits_all=$on not live ($(A fp_melee swing_all))"; return 1; }
   A fp_melee swing_all reset >/dev/null; HIT_T=0; HIT_A=0; HIT_N=0
   for i in $(seq 1 "$n"); do
     for who in "$TG" "$AL" "$NE"; do A health "$who" 100 >/dev/null; done
@@ -85,7 +85,7 @@ A status | grep -q phase=world || setup_fail "not in world"
 for c in "$FI" "$TG" "$AL"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not found"; done
 [ -f "$INI" ] || setup_fail "KenshiFP.ini missing ($INI)"
 INI_BAK=$(mktemp); cat "$INI" > "$INI_BAK"
-[ "$(sw ready)" = 1 ] || setup_fail "swing_all hooks not ready ($(A fp_melee swing_all | head -1); KenshiFP build without kfp-swing-hits-all?)"
+[ -n "${SWA_NATIVE:-}" ] || [ "$(sw ready)" = 1 ] || setup_fail "swing_all hooks not ready ($(A fp_melee swing_all | head -1); KenshiFP build without kfp-swing-hits-all?)"
 BOWN=$(A rangedinfo "$FI" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//')
 [ "$(A rangedinfo "$FI" | fld bow)" = none ] || A unequip "$FI" "$(A rangedinfo "$FI" | fld bow)" >/dev/null
 arm_melee || setup_fail "$FI has no melee weapon that equips"
@@ -112,6 +112,10 @@ PS=$(A where "$FI" | grep -o '#[0-9]*' | head -1 | tr -d '#')
 A fp_melee passive "$PS" | grep -q "passive on" || setup_fail "fp_melee passive $PS refused"
 echo "SETUP fighter=$FI wep=$WEP target=$TG ally=$AL neutral=$NE ($SP)" >> "$LOG"
 
+# ---- SWA_NATIVE=1 (build WITHOUT kfp-swing-hits-all): native baseline, does vanilla melee hit the neutral/ally in the arc?
+#      (op-swa2: SWA-OFF neutral hit 2x with zone_targets=2 natively). PASS = recorded; the hit counts are the evidence.
+if [ -n "${SWA_NATIVE:-}" ]; then
+  phase SWA-NATIVE 0 && row SWA-NATIVE PASS "native baseline (no swing_all hooks): $PEV"; finish; exit 0; fi
 # ---- SWA-OFF: only the target ----
 if phase SWA-OFF 0; then
   if [ $HIT_T -ge 1 ] && [ $HIT_A = 0 ] && [ $HIT_N = 0 ] && [ "$(sw widened)" = 0 ]; then row SWA-OFF PASS "$PEV"; else row SWA-OFF FAIL "$PEV"; fi; fi
