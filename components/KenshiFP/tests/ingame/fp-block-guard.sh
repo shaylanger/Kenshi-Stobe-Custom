@@ -49,7 +49,7 @@ T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Tassilo|Shay"
 for o in 2.3 3.0; do
   A fp_camera orbit $o >/dev/null; lab "Zoom 25, view orbit $o: ready stance (katana drawn)"; sleep 2.5
   for k in $(seq 1 $REPS); do
-    lab "RMB held: block guard (press $k)"; A fp_keys press rmb 2500 >/dev/null; sleep 2.0   # label ends before the release (kfx-b7/b8: ui_state left blocking 2.15 s after the label)
+    lab "RMB held: block guard (press $k)"; A fp_keys press rmb 2500 >/dev/null; sleep 2.2   # release label ~0.2-0.5 s before the real release (op-blkK: blocking left 2.33-2.9 s after the hold label; with sleep 2.0 the ready switch came 0.3-0.7 s after the release label, past takecheck grace 0.6; kfx-b7/b8 saw 2.15)
     lab "RMB released: back to ready"; sleep 2.6
   done
   lab "LMB: free swing"; A fp_keys press lmb 80 >/dev/null; sleep 2.4
