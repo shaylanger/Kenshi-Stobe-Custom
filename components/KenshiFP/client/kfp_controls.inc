@@ -1149,8 +1149,11 @@ static void fpc_hud_update(int show) {
     }
     if (g_fpc_hud) {
         const char *st=g_fpc_ui_state?g_fpc_ui_state:"off";
-        if (st!=g_fpc_hud_text) {
-            char up[24];size_t i=0;for(;st[i]&&i+1<sizeof up;++i) up[i]=(char)toupper((unsigned char)st[i]);up[i]=0;
+        static char tur_[32],tur_last_[32];int tur=g_tur_pc!=NULL,tur_chg=0;   /* T6: turret state replaces the hand-weapon state */
+        if (tur) {fp_turret_hud(tur_,sizeof tur_);tur_chg=strcmp(tur_,tur_last_)!=0;st=tur_;}
+        if (st!=g_fpc_hud_text || tur_chg) {
+            if (tur) memcpy(tur_last_,tur_,sizeof tur_last_); else tur_last_[0]=0;
+            char up[32];size_t i=0;for(;st[i]&&i+1<sizeof up;++i) up[i]=(char)toupper((unsigned char)st[i]);up[i]=0;
             caption_set(g_fpc_hud,up,g_textbox_setcap);
             static void (*colour)(void *,const float *);static int cres;
             if (!cres) {HMODULE mg=GetModuleHandleA(MYGUI_DLL);cres=1;
@@ -1162,20 +1165,24 @@ static void fpc_hud_update(int show) {
             else if (!strcmp(st,"blocking")) {c[0]=0.4f;c[1]=0.7f;c[2]=1;}
             else if (!strcmp(st,"aiming")) {c[0]=0.4f;c[1]=1;c[2]=0.5f;}
             else if (!strcmp(st,"staggered")||!strcmp(st,"down")) {c[0]=1;c[1]=0.3f;c[2]=0.3f;}
+            if (tur) {if (!strcmp(st,"loaded")) {c[0]=0.4f;c[1]=1;c[2]=0.5f;}
+                      else if (!strncmp(st,"reload",6)) {c[0]=1;c[1]=0.9f;c[2]=0.3f;}
+                      else {c[0]=1;c[1]=0.3f;c[2]=0.3f;}}
             if (colour) colour(g_fpc_hud,c);
-            g_fpc_hud_text=st;++g_fpc_hud_changes;change_ms=fpc_now_ms();
-            if (fpc_hud_texted(st)) {++g_fpc_hud_flashes;g_fpc_hud_flash_seq=g_fpc_hud_changes;g_fpc_hud_flash_text=st;g_fpc_hud_flash_vis_ms=0;}
+            if (tur) st=g_tur_nopower?"turret_no_power":g_tur_rl_left>=0.0f?"turret_reload":g_tur_ammo>0?"turret_loaded":"turret_empty";
+            g_fpc_hud_text=tur?tur_:st;++g_fpc_hud_changes;change_ms=fpc_now_ms();
+            if (tur || fpc_hud_texted(st)) {++g_fpc_hud_flashes;g_fpc_hud_flash_seq=g_fpc_hud_changes;g_fpc_hud_flash_text=st;g_fpc_hud_flash_vis_ms=0;}
             else ++g_fpc_hud_silent;
             g_fpc_hud_hist[g_fpc_hud_changes%FPC_HUD_HIST]=st;g_fpc_hud_hist_seq[g_fpc_hud_changes%FPC_HUD_HIST]=g_fpc_hud_changes;
         }
         double age=fpc_now_ms()-change_ms;
-        int vis=fpc_hud_texted(st) && age<FPC_HUD_FLASH_MS;
+        int vis=tur || (fpc_hud_texted(st) && age<FPC_HUD_FLASH_MS);   /* T6: turret state stays up while seated */
         if (vis!=g_fpc_hud_shown) {g_widget_setvisible(g_fpc_hud,vis);g_fpc_hud_shown=vis;}
         static unsigned char (*getvis)(void *);static int gres;
         if (!gres) {gres=1;HMODULE mg=GetModuleHandleA(MYGUI_DLL);getvis=mg?(unsigned char (*)(void *))GetProcAddress(mg,FPC_SYM_WGETVIS_HUD):NULL;}
         g_fpc_hud_native_vis=getvis?(getvis(g_fpc_hud)!=0):-1;
         if (vis && g_fpc_hud_native_vis!=0 && g_fpc_hud_flash_seq==g_fpc_hud_changes) g_fpc_hud_flash_vis_ms=age;
-        g_fpc_hud_hide_why=!fpc_hud_texted(st)?"silent_state":!vis?"flash_over":!g_fpc_hud_native_vis?"native_hidden":"none";
+        g_fpc_hud_hide_why=tur?"none":!fpc_hud_texted(st)?"silent_state":!vis?"flash_over":!g_fpc_hud_native_vis?"native_hidden":"none";
     } else g_fpc_hud_hide_why="no_widget";
     g_guard_armed=0;
 }

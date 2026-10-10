@@ -48,6 +48,14 @@ static int g_tur_cfg_gunupd=1;        /* T4: GunClass::update (vt+0x10) each fra
                                          * sent every harpoon along it into the world (diag 2026-10-09: aimdir 0,-0.02,1 vs target -x) */
 static unsigned g_tur_gunupd_calls;
 static int g_tur_nopower;
+static int g_tur_ammo=-1;   /* T6: last ammo count seen by the tick (HUD) */
+/* T6: turret HUD text (lower case; the HUD upper-cases it): loaded / reload <s> / no power */
+static void fp_turret_hud(char *b,size_t n) {
+    if (g_tur_nopower) snprintf(b,n,"no power");
+    else if (g_tur_rl_left>=0.0f) snprintf(b,n,"reload %.1f",g_tur_rl_left);
+    else if (g_tur_ammo>0) snprintf(b,n,"loaded");
+    else snprintf(b,n,"empty");
+}
 static void fp_turret_shot_diag(void *gun,void *me,void *target,int stat,const Vec3 *aimpos,const char *tag) {
     void **vt=readable(gun,0x130)?*(void ***)gun:NULL;
     if (!readable(vt,0x68)) return;
@@ -128,7 +136,7 @@ static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
     int nopower=0;{void **vt=*(void ***)gun;if (readable(vt,0xF0)) nopower=((char (*)(void *))vt[0xE8/8])(gun)!=0;}
     if (nopower!=g_tur_nopower) {g_tur_nopower=nopower;logline("[turret] power %s",nopower?"OUT: reload paused, LMB refused":"back");}
     /* T3 reload */
-    int *am=(int *)((uintptr_t)gun+GUN_AMMO);
+    int *am=(int *)((uintptr_t)gun+GUN_AMMO);g_tur_ammo=*am;
     float *rls=(float *)((uintptr_t)gun+TUR_GUN_RLSTATE);
     if (*am<=0 && g_tur_rl_left<0.0f) {
         static float (*rltime)(void *,float);static int res;

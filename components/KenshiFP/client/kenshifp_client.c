@@ -1264,6 +1264,7 @@ static int kah_fp_melee(const char *,int,const char *const *,KAH_Reply *,void *)
 static int fp_combat_suppress_shot(void *,void *);
 /* T2-T5 FP turret control (kfp_turret.inc) */
 static void fp_turret_shot_diag(void *,void *,void *,int,const Vec3 *,const char *);
+static void fp_turret_hud(char *b,size_t n);static int g_tur_ammo,g_tur_nopower;static float g_tur_rl_left;   /* T6 (kfp_turret.inc) */
 static void *g_tur_pc,*g_tur_rc,*g_tur_gun,*g_tur_harp;static int g_tur_dispatch;static int g_tur_ui_fire;static unsigned g_tur_updt_suppressed,g_tur_r_ignored;
 static int fp_turret_tick(void *,void *,void *,float);static void fp_turret_drop(const char *);static int fp_turret_suppress_shot(void *);
 static int kah_fp_turret(const char *,int,const char *const *,KAH_Reply *,void *);
@@ -7314,7 +7315,23 @@ static void fp_gui_update(void)
         }
     }
     if (g_crosshair && g_widget_setvisible)
-        g_widget_setvisible(g_crosshair, (g_pointer_default && !g_ui_open) ? 1 : 0);
+        g_widget_setvisible(g_crosshair, ((g_pointer_default || g_tur_pc) && !g_ui_open) ? 1 : 0);   /* T6: always on a turret */
+    {   /* T6: twice the crosshair size while manning a turret (re-applied when the view size changes) */
+        static void (*coord)(void *, int, int, int, int);
+        static int cres, lbig = -1, lw, lh;
+        if (!cres) {
+            HMODULE mg = GetModuleHandleA(MYGUI_DLL);
+            cres = 1;
+            coord = mg ? (void (*)(void *, int, int, int, int))GetProcAddress(mg, "?setCoord@Widget@MyGUI@@QEAAXHHHH@Z") : NULL;
+        }
+        int big = g_tur_pc != NULL, vw, vh;
+        kfp_view_size(&vw, &vh);
+        if (g_crosshair && coord && (big != lbig || vw != lw || vh != lh)) {
+            int sz = big ? CROSSHAIR_SIZE * 2 : CROSSHAIR_SIZE;
+            lbig = big; lw = vw; lh = vh;
+            coord(g_crosshair, vw / 2 - sz / 2, vh / 2 - sz / 2, sz, sz);
+        }
+    }
     /* PT01 (m67): the state flash no longer hides behind a contextual pointer (g_pointer_default=0: the native icon
      * replaces our crosshair, the label under it stays); hud_hide_why names what hid it last */
     g_fpc_hud_hide_why = !g_cfg_state_hud ? "setting" : !g_crosshair ? "no_crosshair" : g_ui_open ? "ui_open" : "none";
@@ -7839,6 +7856,11 @@ static gun_shoot_t g_gun_shoot_orig;
 static void hooked_gun_shoot(void *gun, void *me, void *target, int stat, const Vec3 *aimpos)
 {
     if (fp_combat_suppress_shot(gun,me)) return;
+    if (stat == 11 && g_fp_mode && me && me == g_fp_control_actor && !g_tur_dispatch) {   /* T6: no native turret shot by the FP actor (e.g. the frame it sits down) */
+        static int nlog;
+        if (nlog < 8) { ++nlog; logline("[turret] native turret shot by the FP actor dropped (target=%p)", target); }
+        return;
+    }
     if (me && me == g_fp_control_actor) ++g_fp_ctl_shoot_calls;
     Vec3 aim;
     if (g_fp_mode && g_cfg_freeaim && !g_aim_mode && me && me == g_fp_control_actor && !(g_tur_pc && me == g_tur_pc) && fp_aim_point(&aim)) {   /* T4: the turret module aims its own shots */
