@@ -31,7 +31,7 @@ fail(){ cleanup; PF_DONE=1; echo "RESULT ZOOMSWEEP-$N FAIL $*"; exit 1; }
 PF_ROW=ZOOMSWEEP-$N; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard: an exit without a RESULT line prints a FAIL setup line
 keep(){ A inv "$1" | grep -q "\"name\":\"$2\"" || echo "picked up $2: $(A pickup "$1" "$2" radius 60 | cut -c1-50)"; }
-T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
+T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
 sweep(){ A fp_camera distance 0 >/dev/null; sleep 0.8
   for w in -120 -120 -120 -120 -120 0 120 120 120 120 0; do [ $w = 0 ] && { sleep 1; continue; }; A fp_camera wheel $w >/dev/null
     q=; awk -v s="${SL:-1.3}" 'BEGIN{exit !(s>=0.5)}' && q=$(A fp_camera state | grep -o 'target=[0-9.]*\|applied=[0-9.]*\|band_hidden=[0-9]' | tr '\n' ' ')   # walk sweep SL<0.5: no state query (kept the harness busy: takecheck cover gaps, kfx-b5)

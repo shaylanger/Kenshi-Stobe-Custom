@@ -19,7 +19,7 @@ FIFO=/tmp/kfp-$N.ffin
 cleanup(){ [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A chatter on >/dev/null; rm -f "$FIFO"; }
 PF_ROW=BLOCKGUARD-$N; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard
-T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
+T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
 place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.02 >/dev/null; sleep 1; }
 # ---- preflight
 pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)

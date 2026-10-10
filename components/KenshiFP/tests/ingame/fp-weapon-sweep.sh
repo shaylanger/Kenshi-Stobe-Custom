@@ -63,7 +63,7 @@ take(){   # k sid name type animcls ammo
   D="$OUT/$(printf %03d $k)-$slug"; mkdir -p "$D"; cd "$D" || { echo "RESULT WEAPON-$slug FAIL setup: dir $D"; return; }
   N=take; PF_ROW=WEAPON-$slug; PF_DONE=""
   PF_ON_FAIL='A fp_keys release rmb >/dev/null; A fp_camera distance 0 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { touch "$N.stop"; wait $FP; FP=; }'
-  lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
+  lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
   place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.02 >/dev/null; sleep 1; }
   # preflight: weapon in hand
   if ! A inv $SH | grep -qF "\"$nm\""; then

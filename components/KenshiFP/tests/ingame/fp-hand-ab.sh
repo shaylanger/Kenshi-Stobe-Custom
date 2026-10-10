@@ -44,7 +44,7 @@ ready; [ "$(st)" = ready ] || pf_fail "katana not ready (state=$(st))"
 pf_nofight; sleep 1.5
 pf_open 3
 . $HERE/animlab/take-sample.sh
-T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
+T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
 take(){ # $1 = A|B, $2 $3 = scale
   N=hand-$1
   r=$(A fp_vm set hand_scale $2 $3); grep -q "hand_scale along=" <<<"$r" || { restore; pf_result FAIL "hand_scale $2 $3 not taken: $(cut -c1-80 <<<"$r")"; exit 1; }

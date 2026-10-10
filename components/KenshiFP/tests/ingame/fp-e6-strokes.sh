@@ -22,7 +22,7 @@ waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(st)" = "$1
 fail(){ PF_DONE=1; echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; A chatter on >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; exit 1; }
 PF_ROW=E6-$N; PF_ON_FAIL='A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; [ -n "$_TS_RUN" ] \&\& take_sample_stop'; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard (shared preflight: take-preflight.sh)
-T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
+T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
 ready(){ [ "$(st)" = ready ] || { [ "$(st)" = holstered ] || { A key_inject r tap 120 >/dev/null; waitst holstered 6; }; A key_inject r tap 120 >/dev/null; waitst ready 6; }; }
 # ---- setup: fresh load, pins, daytime, take spot, katana, hostiles, sky
 pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)

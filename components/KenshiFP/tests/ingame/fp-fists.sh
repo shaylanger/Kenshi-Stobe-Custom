@@ -34,7 +34,7 @@ PF_ROW=$ROW; PF_ON_FAIL='restore; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$
 pf_begin "$ROW"
 pf_outdir "$OUT"; cd "$OUT" || pf_fail "cd $OUT"
 [ -f "$LABD/$T/pose.txt" ] && [ -f "$LABD/$T/keys.json" ] || pf_fail "lab candidate $LABD/$T (pose.txt + keys.json) missing: the take is lab-gated"
-T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
+T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
 # ---- setup: fresh load, squad out of frame, time, spot, raiders, unarmed
 pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)
 A speed 1 hold >/dev/null; A kill "Hungry Bandit" >/dev/null; A chatter off >/dev/null
