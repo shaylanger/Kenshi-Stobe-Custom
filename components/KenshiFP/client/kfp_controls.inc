@@ -808,6 +808,8 @@ static void fp_controls_tick(void *gw,float dt) {
         if (edge[b]) g_fpc_down_ms[b]=now;
         g_fpc_prev[b]=in[b];g_fpc_input[b]=in[b];
     }
+    g_cn_ui_aim=g_fpc_ranged&&g_fpc_drawn&&in[FPC_RMB]; g_cn_ui_fire=g_fpc_ranged&&g_fpc_drawn&&in[FPC_LMB];   /* C1 */
+    g_vm_aim_want=in[FPC_RMB]||(g_combat_injection&&g_combat_injected.aim);   /* C4 */
     {   /* PT20 (m58): an RMB press the controls never see (UI open / no focus) is logged once per press */
         static int raw_prev;int raw=fpc_button(FPC_RMB,phys_ok);
         if (raw && !raw_prev && g_ui_open) logline("[controls] RMB press ignored: ui_open=1 (phys_ok=%d)",phys_ok);
@@ -902,7 +904,7 @@ static void fp_controls_tick(void *gw,float dt) {
         }
     }
     fpc_sneak_watch();
-    g_fpc_ui_state=fpc_ui_state(pc,in[FPC_RMB]);
+    g_fpc_ui_state=fpc_ui_state(pc,in[FPC_RMB]||(g_combat_injection&&g_combat_injected.aim));   /* C1: injected aim shows too */
     g_guard_armed=0;
 }
 static unsigned g_fpc_hud_flashes,g_fpc_hud_silent;   /* PT01/PT03 */

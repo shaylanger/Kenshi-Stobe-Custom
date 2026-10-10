@@ -9,6 +9,7 @@ static KfpCombatController g_combat_control;
 static KfpCombatObservation g_combat_observed;
 static KfpCombatInput g_combat_injected;
 static int g_combat_injection, g_combat_enabled, g_combat_native_ready;
+static int g_cn_ui_aim, g_cn_ui_fire;   /* C1: the FP controls' RMB/LMB with ranged in hands (physical + harness injected) */
 /* `fp_combat input` commands received (all / with aim=1): a wrapper compares them with the inputs it sent itself, so
  * a second harness client on the rig (4080 b24+b25: two runners at once) shows up as foreign input. */
 static unsigned g_combat_inj_cmds, g_combat_inj_aim_cmds;
@@ -565,6 +566,9 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     else if (game_has_focus()) {
         input.aim=(GetAsyncKeyState(g_cfg_key_block)&0x8000)!=0;
         input.fire=(GetAsyncKeyState(g_cfg_key_attack)&0x8000)!=0;
+    }
+    if (!g_combat_injection) {   /* C1: also the controls' buttons (harness input while the game is in the background) */
+        input.aim|=g_cn_ui_aim; input.fire|=g_cn_ui_fire;
         /* PT18 (Shay 2026-10-07): the draw key only draws/holsters (kfp_controls.inc); reload is automatic
          * (auto_reload while aiming an empty crossbow), never aim+R */
         input.reload=0;

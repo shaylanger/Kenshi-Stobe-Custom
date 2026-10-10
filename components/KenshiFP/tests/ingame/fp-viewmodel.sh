@@ -68,7 +68,7 @@ F=[]
 for line in open(sys.argv[1]):
     if line.startswith('#') or '|' not in line: continue
     pa=line.split('|'); h=pa[0].split(); v=[V(x) for x in pa[1].split()]
-    r=dict(t=float(h[1]),dt=float(h[2]),st=h[3],cls=int(h[5]),w=float(h[7]),kick=float(h[11]),fire=float(h[12]),op=v[0],mp=v[4],mf=v[5],mu=v[6],
+    r=dict(t=float(h[1]),dt=float(h[2]),st=h[3],ti=int(h[4]),cls=int(h[5]),w=float(h[7]),kick=float(h[11]),fire=float(h[12]),op=v[0],mp=v[4],mf=v[5],mu=v[6],
            cam=[V(x) for x in pa[2].split()] if len(pa)>2 else None,ph=0,wih=1,j=v[7:13] if len(v)>=13 else None)
     if len(pa)>3:
         x=pa[3].split()
@@ -156,9 +156,10 @@ def remap(c,a,b,pos):
     e,rt,up,fw=b['cam']; w=add(add(mul(rt,c[0]),mul(up,c[1])),mul(fw,c[2])); w=add(w,e) if pos else w
     e,rt,up,fw=a['cam']; d=sub(w,e) if pos else w; return (dot(d,rt),dot(d,up),dot(d,fw))
 # near-plane cut (PT17): the 3 dm near clip slices an arm tube (joints shoulder-elbow-wrist r 0.45, hand wrist->grip
-# x1.4 r 0.35; cross-section along z slant-corrected) at a point inside the screen = a hollow / cut-off limb in view
-ZC,RF,RH=3.0,0.45,0.35
-def cutseg(P,Q,r):
+# x1.4 r 0.35; cross-section along z slant-corrected) at a point inside the screen = a hollow / cut-off limb in view.
+# The plane is the game's: 3 dm, 1.5 dm while the ranged viewmodel is shown (X2, KenshiFP g_vm_nc; env VM_NC_R).
+RF,RH=0.45,0.35; ZCS={0:3.0,1:float(os.environ.get('VM_NC_R','1.5'))}
+def cutseg(P,Q,r,ZC=3.0):
     d=sub(Q,P); L=ln(d)
     if L<1e-4: return False
     dz=abs(d[2])/L; rz=r*math.sqrt(max(0.0,1-dz*dz))+0.02; pp=P
@@ -173,8 +174,9 @@ for i in range(len(F)-1):
     if a['w']>=0.01 and b['j']:
         J=[remap(x,a,b,1) for x in b['j']]; W=J[5]
         segs=((J[3],J[4],RF),(J[4],W,RF),(W,add(W,mul(sub(a['rp'],W),1.4)),RH),(J[0],J[1],RF),(J[1],J[2],RF))
-        if any(cutseg(P,Q,r) for P,Q,r in segs): cuts.append('%d:%s'%(i,a['st']))
+        if any(cutseg(P,Q,r,ZCS.get(a['cls'],3.0)) for P,Q,r in segs): cuts.append('%d:%s'%(i,a['st']))
 F=F[:-1]; N=len(F)
+DTH=max(0.045,3.0*sorted(r["dt"] for r in F)[len(F)//2]) if F else 0.07   # hitch: > 3x the median frame time (0.055 s frames at ~70 fps under load also jump; was a fixed 0.07)
 BL={0:8.0,1:5.85}
 def tip(r): return add(add(r['rp'],mul(r['rf'],BL[r['cls']])),mul(r['ru'],0.84 if r['cls']==1 else 0))
 def onscr(c): return c[2]>=2.5 and abs(c[1])/c[2]<0.70 and abs(c[0])/c[2]<1.245
@@ -183,14 +185,18 @@ for i,r in enumerate(F):
     p=F[i-1] if i else r
     r['tipd']=ln(sub(tip(r),tip(p))); r['df']=ang(r['rf'],p['rf']); r['du']=ang(r['ru'],p['ru'])
     tl=r['t'] if (r['st']!='reloading' or r['fire']>0 or r['kick']>0 or i==0) else tl; r['rlt']=r['t']-tl   # s since the post-shot aim hold ended (reload blend-in excluded)
-flags=[]; errmax=0.0; rlz=99.0; nvis=0; tipmax=0.0; dfmax=0.0
+flags=[]; errmax=0.0; errat="-"; t2=-9.0; rlz=99.0; nvis=0; tipmax=0.0; dfmax=0.0
 for i in range(1,N-1):
     a,b,c=F[i-1],F[i],F[i+1]
     if not b['vis']: continue
     nvis+=1
-    if b['w']>=0.999 and b['ph']==0: errmax=max(errmax,ln(sub(b['rp'],b['op'])))
-    if b['cls']==1 and b['st']=='reloading' and b['rlt']>=0.4: rlz=min(rlz,b['rp'][2])
-    if not a['vis'] or max(a['dt'],b['dt'],c['dt'])>0.07: continue   # entering the view / game hitch frame or next to one (motion is
+    if b["st"]=="reloading" and b["ti"]==2: t2=b["t"]
+    if b["w"]>=0.999 and b["ph"]==0 and b["t"]-t2>0.25:   # X3 native reload (ti 2 + its 0.2 s rlblend fade-out): hand = native crank
+                                                       # (C4c clamps), not op; checked by cut/reload_zmin/moves instead
+        e=ln(sub(b["rp"],b["op"]))
+        if e>errmax: errmax=e; errat="%d:%s"%(i,b["st"])
+    if b['cls']==1 and b['st']=='reloading' and b['ti']==2 and b['rlt']>=0.4: rlz=min(rlz,b['rp'][2])
+    if not a['vis'] or max(a['dt'],b['dt'],c['dt'])>DTH: continue   # entering the view / game hitch frame or next to one (motion is
                                                        # per time; a hitch neighbour's step averages over a peak, PT17 m77 f228)
     if b['kick']>0 and a['kick']==0: continue          # fire kick onset: an impulse by design (sharp kick)
     tipmax=max(tipmax,b['tipd']); dfmax=max(dfmax,b['df'])
@@ -208,6 +214,28 @@ if sys.argv[2]=='swing': ok=N>=20 and nvis>=15 and not flags and errmax<=0.35 an
 else: ok=N>=200 and nvis>=100 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout) and len(inout)>=(1 if sys.argv[2]=='seg' else 2)
 if sys.argv[2]=='xbow': ok=ok and rlz>=2.0
 ok=ok and not cuts
+# C1 (Shay 2026-10-09: the crossbow aim stayed in the ready pose and the row still passed): every state that should move
+# the weapon must VISIBLY differ from ready (viewmodel up, w>=0.99): grip (mp) displacement >= MOVE_DM (1.0 dm) or blade/stock
+# angle >= MOVE_DEG (15 deg) from the median ready pose; held states (aiming, blocking) by their median pose, paths (swing,
+# reloading) by their largest frame. Required states: xbow aiming + reloading, sword/seg blocking + swing. A required state
+# that never shows or does not move fails the row (moves=... lists state:dm/deg, MISSING or STILL).
+MOVE_DM,MOVE_DEG=1.0,15.0
+def _med(xs): xs=sorted(xs); return xs[len(xs)//2]
+def _mpose(rs): return (tuple(_med([r['mp'][k] for r in rs]) for k in range(3)),tuple(_med([r['mf'][k] for r in rs]) for k in range(3)))
+_up=[r for r in F if r['w']>=0.99 and r['wih'] and r['mp'] is not None]
+_rd=[r for r in _up if r['st']=='ready' and not r['sw']]
+_req={'xbow':('aiming','reloading'),'sword':('blocking','swing'),'seg':('blocking','swing')}.get(sys.argv[2],())
+moves=[]
+if _req and _rd:
+    rp_,rf_=_mpose(_rd)
+    for k in _req:
+        rs=[r for r in _up if (r['sw'] if k=='swing' else r['st']==k and not r['sw'])]
+        if not rs: moves.append(k+':MISSING'); ok=False; continue
+        if k in ('aiming','blocking'): pp,ff=_mpose(rs); d,g=ln(sub(pp,rp_)),ang(ff,rf_)
+        else: d=max(ln(sub(r['mp'],rp_)) for r in rs); g=max(ang(r['mf'],rf_) for r in rs)
+        still=d<MOVE_DM and g<MOVE_DEG; ok=ok and not still
+        moves.append('%s:%.1fdm/%.0fdeg%s'%(k,d,g,':STILL' if still else ''))
+elif _req: moves.append('ready:MISSING'); ok=False
 # wrist (PT17): angle between the weapon forearm (elbow->wrist) and the hand bone X axis on every on-screen sword frame of
 # the viewmodel (w>=0.99) <= WB_MAX (30 deg: a neutral grip wrist; 0750f26a folded it to ~100 deg in the strike)
 W0=[(r['wb'],i,r['st']) for i,r in enumerate(F) if r['wb'] is not None and r['vis'] and r['w']>=0.99 and r['wih']]
@@ -216,10 +244,10 @@ wbm=max(WS) if WS else None; wbsw=max([x[0] for x in WS if F[x[1]]['sw']] or [-1
 if wbm and wbm[0]>WBM: ok=False
 wtxt=(' wb_max=%.1f@%d:%s wb_swing=%.1f wb_xbow=%.1f wb_lim=%.0f'%(wbm[0],wbm[1],wbm[2],wbsw,wbx,WBM)) if wbm else (' wb_xbow=%.1f'%wbx if WX else ' wb=na')
 fps=1/sorted(r['dt'] for r in F)[N//2]
-print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
+print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f@%s tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
       len(cuts),(' ['+' '.join(cuts[:6])+']') if cuts else '',len(flags),
-      (' ['+' '.join(flags[:6])+']') if flags else '',errmax,tipmax,dfmax,','.join(inout) or 'none',
-      (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else '')+wtxt)
+      (' ['+' '.join(flags[:6])+']') if flags else '',errmax,errat,tipmax,dfmax,','.join(inout) or 'none',
+      (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else '')+wtxt+(' moves='+','.join(moves) if moves else ''))
 VMCHECK
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 note() { echo "$*" >> "$LOG"; }
