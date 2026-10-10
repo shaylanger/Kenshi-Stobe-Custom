@@ -294,6 +294,9 @@ while ($true) {
             $p = if ($Fake) { @{ done = '1' } } else { Probe $c[2] }
             if (-not $p) { Log "probe failed for $($c[5])"; if ($Rig -eq '4080') { if (-not $unreach) { $unreach = Get-Date } elseif (((Get-Date) - $unreach).TotalMinutes -ge 10) { Alert "4080 unreachable for 10 min during $($c[5])" } } }
             elseif ($p.done -eq '1') { $unreach = $null; ClearAlert; Finish-Batch $c 'DONE'; $condSince = $null; $hits = @{}; continue }
+            elseif ($p.started -eq '0' -and ((Get-Date) - [datetime]$c[4]).TotalMinutes -ge 3) {
+                Alert "batch $($c[5]) never started (no batch.pid 3 min after the start command)"; Finish-Batch $c 'DIED'; continue
+            }
             elseif ($p.gamedone -eq '1') {
                 # game part over (Kenshi stopped on the 5090 by --stop): free the rig now, collect the analyses later
                 Move-Item $curF (Join-Path $rd "$Rig.tail.$($c[5])") -Force

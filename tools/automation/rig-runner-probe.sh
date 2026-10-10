@@ -51,4 +51,5 @@ if [ "$step" != - ] && grep -qi microsoft /proc/version 2>/dev/null; then
   done
   [ $ana = 1 ] && tasklist.exe </dev/null 2>/dev/null | grep -qi '^ffmpeg.exe' && ana=0
 fi
-echo "PROBE done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"
+st=0; [ -f "$O/batch.pid" ] && st=1
+echo "PROBE started=$st done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"
