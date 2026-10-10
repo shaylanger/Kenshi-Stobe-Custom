@@ -305,7 +305,7 @@ if ($Rig -eq '4080' -and -not $Fake) {
     $null = Ssh @('mkdir', 'C:\KAH\runner')
     if (-not (Scp4 @("$auto\rig4080\staged-state.ps1") 'C:/KAH/runner/')) { Log 'could not copy staged-state.ps1 to the 4080 (unreachable?)' }
 }
-$idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}; $probeFail = 0
+$idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}; $probeFail = 0; $deadHits = @{}
 while ($true) {
     if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {
@@ -313,7 +313,12 @@ while ($true) {
         foreach ($tf in @(Get-ChildItem $rd -Filter "$Rig.tail.*" -File -ErrorAction SilentlyContinue)) {
             $tc = @(Get-Content $tf.FullName); $tp = if ($Fake) { @{ done = '1' } } else { Probe $tc[2] }
             if ($tp -and $tp.done -eq '1') { Finish-Batch $tc 'DONE' $tf.FullName -Tail }
-            elseif ($tp -and $tp.alive -eq '0') { Alert "batch $($tc[5]) died in its background analyses (no DONE)"; Finish-Batch $tc 'DIED' $tf.FullName -Tail }
+            elseif ($tp -and $tp.alive -eq '0') {   # DIED only after 3 probes with the pid gone and still no DONE (DONE lands as run-batch exits)
+                $k = "tail/$($tc[5])"; $deadHits[$k] = 1 + [int]$deadHits[$k]
+                if (Test-Path (Join-Path $tc[1] 'DONE')) { Finish-Batch $tc 'DONE' $tf.FullName -Tail; $deadHits.Remove($k) }
+                elseif ($deadHits[$k] -ge 3) { Alert "batch $($tc[5]) died in its background analyses (no DONE, pid gone 3 probes)"; Finish-Batch $tc 'DIED' $tf.FullName -Tail -Why 'run-batch.sh gone without DONE after GAMEDONE'; $deadHits.Remove($k) }
+                else { Log "tail $($tc[5]): run-batch.sh pid gone, no DONE yet ($($deadHits[$k])/3)" }
+            } elseif ($tp) { $deadHits.Remove("tail/$($tc[5])") }
         }
         if (Test-Path $curF) {
             $c = @(Get-Content $curF)
@@ -353,7 +358,12 @@ while ($true) {
                 else { Remove-Item (Join-Path $runs 'inflight\runner-5090') -ErrorAction SilentlyContinue }
                 Log "GAMEDONE $($c[5]): rig free, background analyses continue"; ClearAlert; $condSince = $null; $hits = @{}; $anaSince = $null; continue
             }
-            elseif ($p.alive -eq '0') { Alert "batch $($c[5]) died without DONE (run-batch.sh process gone)"; Finish-Batch $c 'DIED' -Why 'run-batch.sh process gone without DONE'; continue }
+            elseif ($p.alive -eq '0') {
+                $k = "cur/$($c[5])"; $deadHits[$k] = 1 + [int]$deadHits[$k]
+                if (Test-Path (Join-Path $c[1] 'DONE')) { $deadHits.Remove($k); Finish-Batch $c 'DONE'; continue }
+                if ($deadHits[$k] -ge 3) { $deadHits.Remove($k); Alert "batch $($c[5]) died without DONE (run-batch.sh process gone 3 probes)"; Finish-Batch $c 'DIED' -Why 'run-batch.sh process gone without DONE'; continue }
+                Log "$($c[5]): run-batch.sh pid gone, no DONE yet ($($deadHits[$k])/3)"
+            }
             else {
                 $unreach = $null
                 $lim = if ($p.launched -eq '0') { 15 } elseif ($p.stallmin -match '^\d+$') { [int]$p.stallmin } else { $StuckMin }

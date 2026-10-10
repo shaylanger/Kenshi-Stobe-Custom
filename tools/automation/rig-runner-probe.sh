@@ -40,6 +40,8 @@ sm=-; if [ "$step" != - ] && [ -f "$O/list.txt" ]; then
   sm=$(awk -F'|' -v n="$step" '{g=$1; gsub(/^[ \t]+|[ \t]+$/, "", g)} g==n {print $NF}' "$O/list.txt" | grep -oE 'STALL_MIN=[0-9]+' | head -1 | cut -d= -f2); sm=${sm:--}; fi
 al=1; if [ -f "$O/batch.pid" ] && [ $done = 0 ]; then read -r bp bw < "$O/batch.pid"
   if [ -n "${bw:-}" ]; then tasklist.exe //NH //FI "PID eq $bw" </dev/null 2>/dev/null | grep -q " $bw " || al=0; else kill -0 "$bp" 2>/dev/null || al=0; fi; fi
+# race (op-b8 2026-10-10): DONE is written as run-batch.sh exits; re-read it after the pid check, else done=0 alive=0
+[ $al = 0 ] && [ -f "$O/DONE" ] && { done=1; al=1; }
 la=0; grep -a -q -E '^[0-9]{2}:[0-9]{2} .*: (prepare|run) ' "$O/batch.log" 2>/dev/null && la=1
 gd=0; [ -f "$O/GAMEDONE" ] && gd=1
 # ana=1: the running row (step) is doing offline analysis in the foreground (a lab tool with RESULT_LOG=<out>/<step>.txt
