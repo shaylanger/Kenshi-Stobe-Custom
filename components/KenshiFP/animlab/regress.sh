@@ -255,5 +255,23 @@ E6B=/mnt/c/KenshiTestRuns/vid/vmrec-anim-anim-e6b2.txt
 if [ -f "$E6B" ]; then cp -n "$E6B" "$W/e6-anim-b2.txt"; fi
 if [ -f "$W/e6-anim-b2.txt" ]; then for s in 1 2; do b=$(python3 "$L/animlab.py" --only-stroke $s blade "$W/e6-anim-b2.txt" | cut -c1-150)
   case "$b" in "blade PASS"*) ok "E6 refit game rec stroke $s blade: $b";; *) bad "E6 refit game rec stroke $s blade: $b";; esac; done; fi
+# 22. misses E6 "stroke 1 foreshortened / stroke 2 overhead reads diagonal" (coordinator review 2026-10-10 of
+#     vm-rework/anim-sword-e6.mp4, KenshiFP A2C2E8AC = rec e6-anim-b2): inline + blade passed both. `animlab.py stroke
+#     --overhead 2` (on-screen blade length >= 240 px over u .40-.78; overhead tilt <= 35 deg and middle path <= 20 deg from
+#     vertical) must FAIL stroke 1 (len) and stroke 2 (tilt) there; the approved stroke-0 game swings (f28-sword-z0c,
+#     vmq85a7-sw, f23-sword-z0d) must PASS. E6F = game rec of the stroke 1/2 fix (fixer): must PASS.
+if [ -f "$W/e6-anim-b2.txt" ]; then
+  s=$(python3 "$L/animlab.py" stroke --overhead 2 "$W/e6-anim-b2.txt" | cut -c1-400)
+  case "$s" in "stroke FAIL"*"(stroke1):len="*":BAD"*"(stroke2):"*"tilt="*":BAD"*) ok "miss E6 stroke 1 len + stroke 2 overhead: $(echo "$s" | cut -c1-200)";; *) bad "miss E6 stroke: $s";; esac
+  s=$(python3 "$L/animlab.py" --only-stroke 0 stroke --overhead 2 "$W/e6-anim-b2.txt" | cut -c1-150)
+  case "$s" in "stroke PASS"*) ok "E6 approved stroke 0: $s";; *) bad "E6 approved stroke 0: $s";; esac
+else echo "REGRESS INFO E6 stroke: e6-anim-b2 missing"; fi
+for f in f28-sword-z0c vmq85a7-sw f23-sword-z0d; do [ -f "$W/$f.txt" ] || continue
+  s=$(python3 "$L/animlab.py" stroke --overhead 2 "$W/$f.txt" | cut -c1-120)
+  case "$s" in "stroke PASS"*) ok "approved game swing $f: $s";; *) bad "approved game swing $f: $s";; esac; done
+E6F=/mnt/c/KenshiTestRuns/vid/vmrec-e6-fix.txt
+if [ -f "$E6F" ]; then cp -n "$E6F" "$W/e6-fix.txt"; fi
+if [ -f "$W/e6-fix.txt" ]; then s=$(python3 "$L/animlab.py" stroke --overhead 2 "$W/e6-fix.txt" | cut -c1-300)
+  case "$s" in "stroke PASS"*) ok "E6 stroke fix game rec: $s";; *) bad "E6 stroke fix game rec: $s";; esac; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
