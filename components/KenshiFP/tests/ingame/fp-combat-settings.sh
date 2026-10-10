@@ -10,7 +10,9 @@
 #  CS01 DEFAULT   fresh launch: manual_combat=1 enabled=1, binds 0x01/0x02/0x04/0x02/0x52, "[combat] manual combat on (setting)"
 #  CS02 TOGGLE    ini manual_combat=0 -> enabled=0; =1 -> enabled=1
 #  CS03 DRAW      key_draw=']' (0xDD): pressing ']' toggles draw/holster (r_draws+r_holsters rises)
-#  CS04 ATTACK    key_attack='[' (0xDB), drawn, aimed at the sky: pressing '[' = an attack click (lmb_clicks+1)
+#  CS04 ATTACK    key_attack='[' (0xDB), drawn, aimed at the sky: pressing '[' = an attack click (lmb_clicks+1); a ranged
+#                 weapon in hands (PT10: no attack click/order) = the adapter shot while the block button holds the aim
+#                 (actual_shots+1; an empty bow auto-reloads while aiming)
 #  CS05 INTERACT  key_interact=';' (0xBA, own key), aimed at the sky: pressing ';' runs the interact pick (ctx_none+1)
 #  (CS05 also: FP stays active, game freecam 0, cursor hidden: ';' is vanilla toggle_fps_camera)
 #  CS06 SELECT    key_select=''' (0xDE), aimed at the sky: pressing ''' runs the select pick (mmb_none+1)
@@ -96,8 +98,21 @@ yaw=$(A fp_camera state | fld yaw); A fp_camera look "${yaw:-0}" -0.9 >/dev/null
 # m51 L: the game re-holstered the crossbow (drawn 1->0) between the look and the press: re-draw right before it
 drawn_is 1 || { key 0xDD 150; waitf 4 drawn_is 1; }
 drawn_is 1 || setup_fail "weapon holstered again before the CS04 press"
-c0=$(ks lmb_clicks); key 0xDB 120; waitf 3 cnt_up lmb_clicks "$c0"; c1=$(ks lmb_clicks)
-judge CS04 $([ "${c1:-0}" -gt "${c0:-0}" ] && echo 1 || echo 0) "attack=$(bd attack) lmb_clicks $c0->$c1 drawn=$(ks drawn)"
+# rg-01 (2026-10-10): since PT10 (099cfd1) a ranged weapon in hands never counts lmb_clicks, the bound attack key fires
+# the adapter shot instead, which needs the aim up (block button held) and a loaded bow (auto reload while aiming)
+cs() { A fp_combat state | fld "$1"; }
+csge() { local v; v=$(cs "$1"); [ -n "$v" ] && [ "$v" -ge "$2" ] 2>/dev/null; }
+if [ "$(ks ranged)" = 1 ]; then
+  AR0=$(cs auto_reload); A fp_combat autoreload 1 >/dev/null
+  S0=$(cs actual_shots); A fp_keys press rmb 15000 >/dev/null
+  if ! waitf 12 csge shot_ready 1; then
+    row CS04 FAIL "setup: crossbow never shot_ready while aiming (enabled=$(cs enabled) aimed=$(cs aimed) ammo=$(cs ammo) has_ammo=$(cs has_ammo) loaded=$(cs loaded) why=$(cs why))"
+  else key 0xDB 120; waitf 3 csge actual_shots $((S0+1)); S1=$(cs actual_shots)
+    judge CS04 $([ "${S1:-0}" -gt "${S0:-0}" ] && echo 1 || echo 0) "attack=$(bd attack) ranged=1 actual_shots $S0->$S1 drawn=$(ks drawn)"; fi
+  A fp_keys release rmb >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null; sleep 0.3
+else
+  c0=$(ks lmb_clicks); key 0xDB 120; waitf 3 cnt_up lmb_clicks "$c0"; c1=$(ks lmb_clicks)
+  judge CS04 $([ "${c1:-0}" -gt "${c0:-0}" ] && echo 1 || echo 0) "attack=$(bd attack) lmb_clicks $c0->$c1 drawn=$(ks drawn)"; fi
 
 # ---- CS05: interact on its own key ';' ----
 setini key_interact 186; waitf 4 bis interact 0xBA
