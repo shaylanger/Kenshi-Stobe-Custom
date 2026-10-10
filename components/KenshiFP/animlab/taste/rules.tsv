@@ -12,7 +12,7 @@ R4	all	no arm churn: elbow/forearm must not swing out and back while the weapon 
 R5	sword	same swing input -> same forearm roll (no forearm flip mid-stroke)	E5 (Shay review anim-sword-z0 swing 3)	shay	hinge	covered	needs >= 3 swings from ready
 R6	sword	ready pose stable: no sudden ~90 deg roll mid-walk, one ready branch	E3	shay	branch	covered	--ref a known-good recording of the same build
 R7	sword	sharp edge never faces the camera at rest (ready/walk/block)	S1	shay	restedge	covered	new (spec.py restedge, p05 of edge cos >= 0)
-R8	all	wrist bend: holds <= 30 deg (PT30), swings <= 50 (Shay accepted wb36)	PT17-W, PT30, X3, X5, c6a1eda	shay	wrist,arc.wb,vmcheck.wrist	partial	vmcheck.wrist gates swings at 30 too (FAILs Shay-accepted f28); spec.py wrist splits holds/swings
+R8	all	wrist bend: holds <= 30 deg (PT30), swings <= 50 (Shay accepted wb36); solver-posed frames only, native-animation frames exempt (Shay 2026-10-10)	PT17-W, PT30, X3, X5, c6a1eda, Shay 2026-10-10	shay	wrist,arc.wb,vmcheck.wrist	partial	vmcheck.wrist gates swings at 30 too (FAILs Shay-accepted f28); spec.py wrist splits holds/swings, skips native frames (metrics.NATIVE_STATES)
 R9	all	every state visibly plays: pose moves vs ready (aim, block, reload, swing)	memory state-must-visibly-play; C1	shay	moves	covered	unarmed U3
 R10	crossbow	stock low (<= 25% from the bottom in ready), crossbow orientation unchanged	C2, C2b accepted (13bca46)	shay	stock	covered	--ref f14-xb0 (d40b6ad-era orientation)
 R11	crossbow	bolt and strings rigid on the crossbow	C3	shay	bolt	covered	needs the .bolt sidecar
