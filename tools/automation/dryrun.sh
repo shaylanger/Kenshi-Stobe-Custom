@@ -100,7 +100,9 @@ else
   done 3<"$L"
   wait
   for i in $(seq 1 $k); do v=$(cat "$VD/$i" 2>/dev/null); [ -n "$v" ] || continue; echo "$v"
-    case "$v" in "DRYRUN "*" PASS"*) pass=$((pass+1)) ;; "DRYRUN "*" SKIP"*) skip=$((skip+1)) ;; *) fail=$((fail+1)) ;; esac; done
+    # verdict = the 3rd word ("DRYRUN <row> FAIL ... RESULT take PASS ..." matched the old "DRYRUN * PASS*" glob: a FAIL
+    # row counted as pass, 2026-10-10 td-t6)
+    case "$(cut -d' ' -f3 <<<"$v")" in PASS) pass=$((pass+1)) ;; SKIP) skip=$((skip+1)) ;; *) fail=$((fail+1)) ;; esac; done
   rm -rf "$VD"
 fi
 W=""; [ $((pass + fail)) = 0 ] && { W=" WARN=0-rows-checked"; echo "DRYRUN-WARN 0 rows checked (every row skipped: nodryrun / Stobe static / --only): this list is NOT dry-run"; }
