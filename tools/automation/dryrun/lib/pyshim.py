@@ -55,7 +55,16 @@ def sampler(a):
     hist = sorted(s['hist'], key=lambda e: e[0])
     w = kahstub.world(s, end)
     lines, t = [], start
+    # fixture "stall": [offset s after the sampler start, length s]: the harness answered nothing (blkH 1.5 s hole)
+    st = None
+    try:
+        st = json.load(open(os.environ['DR_FIXTURE_JSON'])).get('stall')
+    except (KeyError, OSError, ValueError):
+        pass
     while t <= end + 1e-6:
+        if st and start + st[0] <= t < start + st[0] + st[1]:
+            t += dt
+            continue
         v = {}
         for e in hist:
             if e[0] > t:

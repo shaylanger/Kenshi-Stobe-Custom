@@ -5,7 +5,7 @@
 #                spot judged by the lab (pf_open: frames.py openground + cursor + overlay + luma) before saving
 #   day          saved at 10:00-10:59 game time, so every take that loads it starts in daylight with >2 h of the
 #                10-13 h window left (pf_day stays in the takes as the guard)
-#   no raiders   every non-squad NPC within 6000 (60 m) of the spot killed (not KO: KO'd raiders wake up), checked by
+#   no raiders   every non-squad NPC within 9000 (90 m: also covers the block-guard spot -54190,4380) of the spot killed (not KO: KO'd raiders wake up), checked by
 #                pf_area (3 sampler rounds near=0 down=0 msgs=0) before saving
 #   squad        Malzin / Shay / Tassilo parked 4.5 m behind the spot (out of the zoom-0 frame), Axima holding the
 #                Chisa Katana and the Oldworld Bow MkI (crossbow) with the crossbow loaded; weapons holstered in the save
@@ -47,16 +47,16 @@ r=$(A teleport $SH $SPOT); grep -q 'moved=1' <<<"$r" || pf_fail "teleport $SH $S
 for p in "Malzin -53900 633 6850" "Shay -53980 640 6850" "Tassilo -53940 640 6850"; do
   set -- $p; A teleport $1 $2 $3 $4 | grep -q 'moved=1' || pf_fail "teleport $1 $2 $3 $4 failed"; done
 sleep 2
-# ---- no raiders: kill (not KO) every live non-squad NPC within 6000 of the spot
+# ---- no raiders: kill (not KO) every live non-squad NPC within 9000 of the spot
 n=0
-{ A chars 6000; for f in "Starving" "Dust Bandits" "Hungry" "Outlaws" "Marauder" "Shinobi"; do A chars 6000 "$f"; done; } 2>/dev/null \
+{ A chars 9000; for f in "Starving" "Dust Bandits" "Hungry" "Outlaws" "Marauder" "Shinobi"; do A chars 9000 "$f"; done; } 2>/dev/null \
   | sed "s/^[0-9]* within [0-9.]*: //" | sed 's/ | /\n/g' | grep -v "\[Nameless\]\| DEAD" \
   | sed -n 's/.*\(#[0-9]*\/[0-9]*\) .* pos=\([-0-9.]*\),[-0-9.]*,\([-0-9.]*\).*/\1 \2 \3/p' | sort -u > kill.txt
 while read -r id x z; do
-  d=$(awk -v x=$x -v z=$z -v a=$X -v b=$Z 'BEGIN{printf "%d", sqrt((x-a)^2+(z-b)^2)}'); [ "$d" -lt 6000 ] || continue
+  d=$(awk -v x=$x -v z=$z -v a=$X -v b=$Z 'BEGIN{printf "%d", sqrt((x-a)^2+(z-b)^2)}'); [ "$d" -lt 9000 ] || continue
   A kill "$id" >/dev/null; n=$((n + 1))
 done < kill.txt
-echo "killed $n non-squad NPCs within 6000"; sleep 3
+echo "killed $n non-squad NPCs within 9000"; sleep 3
 pf_area $SH "Malzin|Shay|Tassilo"
 # ---- weapons: katana from Malzin to Axima, both equipped, crossbow loaded, then holstered
 A unequip Malzin "Chisa Katana" >/dev/null; A inv Malzin | grep -q '"name":"Chisa Katana"' && A transfer Malzin $SH "Chisa Katana" >/dev/null
@@ -71,6 +71,9 @@ A combatmode $SH ranged off >/dev/null
 # ---- open ground on the spot (zoom 0, the take view)
 A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 0 0.05 >/dev/null; sleep 1
 pf_open 3
+# the zoom-25 side view most takes film too (name tags / bark text of the parked squad would show here)
+A fp_camera distance 25 >/dev/null; A fp_camera orbit 2.3 >/dev/null; sleep 2; pf_open 2
+A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null
 pf_area $SH "Malzin|Shay|Tassilo"
 # ---- save + copy
 TM=$(A time | grep -o 'time=[0-9:]*' | cut -d= -f2)

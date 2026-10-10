@@ -12,6 +12,8 @@
 #   pf_nofight                 melee drawn: a short RMB press must start the out-of-fight free block (KenshiFP.log
 #                              'free block start'); none = the character is in a fight (native block, free swing/block off)
 #   pf_fail <reason>           print the RESULT line and exit 1 (runs PF_ON_FAIL first if set)
+#   pf_load [save]             load the FP studio fixture kah-fpstudio (else kah-fpxbow) and wait for the world
+#   pf_latency [n] [max]       harness round trip <= max s (1.0) over n calls (game hitch = sampler gaps), in pf_all
 PF_A(){ stobe-auto "$@" </dev/null 2>&1; }
 # Git Bash (4080 rig) has no wslpath: cygpath does the same
 command -v wslpath >/dev/null 2>&1 || wslpath(){ [ "$1" = -w ] && shift; cygpath -w "$1"; }
@@ -139,4 +141,20 @@ pf_rig(){ local s sz
   [ "$sz" = "${RES_W:-1600}x${RES_H:-900}" ] || pf_fail "game renders at ${sz:-?} not ${RES_W:-1600}x${RES_H:-900} (kenshi-ctl.ps1 fit)"
   echo "pf_rig ok: ${RIG:-5090} render $sz"; }
 pf_all(){ local me=$1 x=$2 z=$3 w=$4 allow=${5:-}
-  pf_rig; pf_display; pf_day; pf_clean "$x" "$z"; pf_area "$me" "$allow"; pf_weapon "$w"; pf_open 3; }
+  pf_rig; pf_display; pf_day; pf_clean "$x" "$z"; pf_area "$me" "$allow"; pf_weapon "$w"; pf_latency; pf_open 3; }
+# pf_load [save]: load the FP studio fixture kah-fpstudio (Speed plan 6: open ground, day, no raiders, Axima with katana +
+# loaded crossbow; built by fp-studio-fixture.sh, C:\KenshiTestFixtures\FP-studio) or, on a rig where it is not installed,
+# kah-fpxbow (PF_SAVE=<save> or the argument forces one); waits for the world, else RESULT FAIL setup
+pf_load(){ local s=${1:-${PF_SAVE:-}} d="${CR:-/mnt/c}/Users/Shay/AppData/Local/kenshi/save" i
+  [ -n "$s" ] || { [ -d "$d/kah-fpstudio" ] && s=kah-fpstudio || s=kah-fpxbow; }
+  PF_A load "$s" | cut -c1-80; sleep 8
+  for i in $(seq 1 60); do sleep 3; PF_A wait-world | grep -qE "phase=world|ready" && break; done
+  PF_A status | grep -q phase=world || pf_fail "save $s did not reach the world"
+  PF_SAVE_LOADED=$s; echo "pf_load ok: $s"; }
+# pf_latency [n] [max s]: harness round trip of n (8) quick calls; one slower than max (1.0 s) = the game is hitching
+# (blkH 2026-10-10: a 1.5 s hole in the take sampler failed takecheck cover); stops the take before filming
+pf_latency(){ local n=${1:-8} mx=${2:-1.0} i t0 t1 w=0
+  for i in $(seq 1 "$n"); do t0=$(date +%s.%N); PF_A fp_vm state >/dev/null; t1=$(date +%s.%N)
+    w=$(awk -v a="$t0" -v b="$t1" -v w="$w" 'BEGIN{d=b-a; printf "%.2f", (d>w?d:w)}'); done
+  awk -v w="$w" -v m="$mx" 'BEGIN{exit !(w <= m)}' || pf_fail "harness round trip up to ${w} s (> ${mx} s): game hitching, the take sampler would leave gaps"
+  echo "pf_latency ok: max ${w} s over $n calls"; }
