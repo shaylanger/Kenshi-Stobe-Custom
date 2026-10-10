@@ -19,7 +19,7 @@ What it adds (client/kfp_viewmodel.inc, client/kfp_controls.inc):
   re-picks the native technique until it is that table's; -1 = native choice), fp_vm fist (state: on, tech, table, fallback, u, n, targets, measured
   wrists), one log line per swing "[vm] fist swing tech='..' table=.. fallback=..".
 Tables: animlab native.py fists on the unarmed FP body (vmrec-fist-z0-a.txt frame 100, 4080 2026-10-10), harness
-d988203 (v4: R wind-up chamber on screen); regenerate with the lab and re-run this generator when the lab tables change.
+d988203 (v4: R wind-up chamber on screen); regenerate with the lab and re-run components/KenshiFP/animlab/fists-gen-patch.py when the lab tables change.
 """
 import os, sys
 
