@@ -1,0 +1,76 @@
+# KenshiFP taste set: Shay's (and the coordinator's) accept/reject decisions as labelled recordings/videos. Paths relative to
+# the corpus root (C:\KenshiTestRuns\corpus, protected; registered in its MANIFEST.tsv as check "taste:<rule>").
+# Columns: id path rule label source opts evidence. Format + weights: Kenshi-Automation-Harness tools/animlab/taste.py.
+# Rerun: bash components/KenshiFP/animlab/taste/run.sh
+id	path	rule	label	source	opts	evidence
+t01	rec/f14-e0.txt	R1	reject	shay		E1/E2 Shay review (edge opposite the strike, wind-up flip), build Oct 9 18:21; Misses "E1 edge leads"; archive m76 E1 rows
+t02	rec/f13-sw0.txt	R1	reject	shay-sym		pre-E1 build, same swing (Misses E1 inline cites f13\sw0)
+t03	rec/vmrec-q-sword-z0.txt	R1	reject	shay-sym		vmq-f8c 419D164F, pre-E1 swing
+t04	rec/vmq85a7-sw.txt	R1	reject	shay-sym		85A74C9B, pre-E1 swing
+t05	rec/f23-sword-z0d.txt	R1	accept	shay		c6a1eda "E1 lab variant wb36, Shay's pick" (9E5422A6)
+t06	rec/f28-sword-z0c.txt	R1	accept	shay		3912d09 "sword zoom 0 accepted by Shay" (E334DB71, "looks good")
+t07	rec/e6-anim.txt	R1	accept	shay	pre=--only-stroke 0	E6 stroke 0 = the approved diagonal (Misses E6 baseline exception)
+t08	rec/f14-e0.txt	R2	reject	shay		Shay e1.PNG / e1 part 2.png vs Chivalry (memory sword-inline-with-forearm)
+t09	rec/f13-sw0.txt	R2	reject	shay-sym		Misses "E1 inline" cites f13\sw0
+t10	rec/f23-sword-z0d.txt	R2	accept	shay		c6a1eda wb36 inline pick
+t11	rec/f28-sword-z0c.txt	R2	accept	shay		3912d09
+t12	rec/e6-anim.txt	R2	accept	shay	pre=--only-stroke 0	approved stroke 0
+t13	rec/f14-e0.txt	R3	reject	shay		E1 wind-up peak flip ~180 deg (m76 E1 row)
+t14	rec/e1k-cand-f14e0.txt	R3	reject	shay		E1 candidate kfp-e1-keys rejected (e1-compare.mp4) + Shay add-on "NO hand roll in the wind-up"; replay of f14-e0 via /root/animlab-build/kfpvm_e1k (reconstruction, built Oct 9 21:03)
+t15	rec/vmq85a7-sw.txt	R3	reject	shay-sym		85A74C9B pre-E1 wind-up roll
+t16	rec/f23-sword-z0d.txt	R3	accept	shay		c6a1eda
+t17	rec/f28-sword-z0c.txt	R3	accept	shay		3912d09
+t18	rec/e6-anim.txt	R3	accept	shay	pre=--only-stroke 0	approved stroke 0
+t19	rec/e1k-cand-f14e0.txt	R4	reject	shay		E1 candidate rejected: forearm swings out right and back while the sword barely moves (memory no-arm-churn)
+t20	rec/f23-sword-z0d.txt	R4	accept	shay		c6a1eda
+t21	rec/f28-sword-z0c.txt	R4	accept	shay		3912d09
+t22	rec/e6-anim.txt	R4	accept	shay	pre=--only-stroke 0	approved stroke 0
+t23	rec/f23-sword-z0d.txt	R5	reject	shay		E5 swing 3 forearm flip (reference photos swing3_rotated)
+t24	rec/f28-sword-z0c.txt	R5	accept	shay		3912d09 (E5 hinge fix)
+t25	rec/f13-sw0.txt	R6	reject	shay-sym		E3 sudden ready roll = two ready branches (edge 155 deg apart); fixed by rb-single + rb-camup
+t26	rec/vmrec-q-sword-z0.txt	R6	reject	shay-sym	refopt=--ref {root}/rec/vmrec-q-sword-z0-a.txt	same build, ready on the other branch than its sister recording z0-a
+t27	rec/f23-sword-z0d.txt	R6	accept	shay		c6a1eda
+t28	rec/f28-sword-z0c.txt	R6	accept	shay		3912d09
+t29	rec/f13-sw0.txt	R7	reject	shay-sym		S1 edge toward the camera at rest
+t30	rec/vmrec-q-sword-z0.txt	R7	reject	shay-sym		S1 edge toward the camera (ready edge cos -0.92)
+t31	rec/f23-sword-z0d.txt	R7	accept	shay		c6a1eda
+t32	rec/f28-sword-z0c.txt	R7	accept	shay		3912d09
+t33	rec/f28-sword-z0c.txt	R8	accept	shay	mode=sword	3912d09 (swing wb 37.8)
+t34	rec/f23-sword-z0d.txt	R8	accept	shay	mode=sword;checks=arc.wb,vmcheck.wrist	wb36 picked knowingly (Misses "E1 wb36"); ready max not part of the pick
+t35	rec/vmrec-q-crossbow-z0.txt	R8	reject	shay-sym	mode=xbow	X5 crossbow ready wrist 62-75 (here 93)
+t36	rec/f14-xb0.txt	R8	reject	shay-sym	mode=xbow	X5 ready wrist (75)
+t37	rec/f14-xb0.txt	R9	reject	shay		C1 aim did not play: "How did this aim issue pass the fixer? This is a clear failure" (memory state-must-visibly-play)
+t38	rec/vmq125c-crossbow-z0.txt	R9	accept	shay-fix		C1 fix, crossbow accepted 13bca46
+t39	rec/f28-sword-z0c.txt	R9	accept	shay		3912d09
+t40	rec/f16-c2a.txt	R10	reject	shay	refopt=--ref {root}/rec/f14-xb0.txt	C2 stock too high (66-76 %)
+t41	rec/f16-c2c.txt	R10	reject	shay	refopt=--ref {root}/rec/f14-xb0.txt	C2 first fix rotated the crossbow 24.5 deg (Shay)
+t42	rec/vmrec-q-crossbow-z0.txt	R10	reject	shay-sym	refopt=--ref {root}/rec/f14-xb0.txt	pre-C2 stock 63 %
+t43	rec/vmq125c-crossbow-z0.txt	R10	accept	shay-fix	refopt=--ref {root}/rec/f14-xb0.txt	C2 fixed, accepted 13bca46 (C2b)
+t44	rec/vmq85a7-xb.txt	R10	accept	shay-fix	refopt=--ref {root}/rec/f14-xb0.txt	C2 FIXED 85A74C9B
+t45	rec/f16-r0.txt	R11	reject	shay-sym		C3 bolt moves on the crossbow (pin off)
+t46	rec/f16-r1.txt	R11	accept	shay-fix		C3 pin on (kfp-c3-boltpin), crossbow accepted 13bca46
+t47	rec/vmrec-q-crossbow-z0.txt	R12	reject	shay		X1 shake; Misses X1 cites this recording
+t48	rec/vmq85a7-xb.txt	R12	accept	shay-fix		node-map era, crossbow accepted 13bca46
+t49	rec/vmq125c-crossbow-z0.txt	R12	accept	shay-fix		node-map era, crossbow accepted 13bca46
+t50	rec/f14-xb0.txt	R13	reject	shay-sym	mode=xbow	C4 bow pulled into the chest / near plane in the reload (cut 122)
+t51	rec/vmq85a7-xb.txt	R13	reject	shay-sym	mode=xbow	C4 PARTIAL in 85A74C9B (reload cut)
+t52	rec/f28-sword-z0c.txt	R13	accept	shay	mode=sword	3912d09
+t53	rec/f23-sword-z0d.txt	R13	accept	shay	mode=sword	c6a1eda
+t54	rec/vmrec-q-crossbow-z25.txt	R14	accept	coord		X7 removed as accepted (26c677c; reviewer not recorded)
+t55	takes/videos/sword-z25-block.mp4	R15	reject	coord	checks=openground	slope fills the frame 0-17.5 s (Misses open ground)
+t56	takes/videos/sword-z25-block.mp4	R15	reject	coord	checks=cursor	cursor parked in frame the whole take (Misses cursor row)
+t57	takes/videos/sword-z25-block-f36.mp4	R15	reject	shay	checks=cursor	Shay ticket A: cursor at ~7 s, 12-16 s, 35-36 s
+t58	takes/videos/turret-fp.mp4	R15	accept	coord		T6 coordinator-reviewed 1 fps + 5 fps
+t59	takes/videos/anim-sword-e6.mp4	R15	accept	coord		E6 video coordinator-reviewed (open ground)
+t60	takes/videos/anim-xbow-z25.mp4	R15	accept	coord	checks=openground	X7 accepted
+t61	takes/videos/anim-xbow-z25.mp4	R15	superseded	coord	checks=cursor	accepted before Shay's cursor rule (ticket A, 2026-10-10); lab FAILS cursor 0-6.6 s
+t62	rec/e6-anim.txt	R17	reject	coord	pre=--only-stroke 2;checks=blade.snap,blade.seen	Misses E6 stroke 2 wind-up snap + end-on frame
+t63	rec/e6-anim-b2.txt	R17	reject	coord	pre=--only-stroke 1;checks=stroke.len	Misses E6 stroke 1 foreshortened (coordinator review)
+t64	rec/e6-anim-b2.txt	R17	reject	coord	pre=--only-stroke 2;ohopt=--overhead 2;checks=stroke.oh	Misses E6 stroke 2 overhead read as a diagonal
+t65	rec/e6-anim.txt	R17	accept	shay	pre=--only-stroke 0	approved stroke 0 (documented baseline exception for blade seen)
+t66	rec/f28-sword-z0c.txt	R17	accept	shay		3912d09 all swings = stroke 0
+t67	kept/blk-survey_blk-table.tsv	R18	open	coord		hanging native block guards: Shay's call pending
+t68	takes/t6old	R20	reject	coord	vlen=53.00	T6 turret-fp combat/bystanders, labels unverified
+t69	takes/t6rev	R20	reject	coord	vlen=59.00	T6 refilm "crossbow back" while holstered, video 7.5 s past the end
+t70	-	U12	rule	shay		Shay 2026-10-10: half-open hand accepted, no fist-closed check (decision; no recording to score)
+t71	-	U17	rule	shay		Shay 2026-10-10: palm-heel -> straight-wrist punch, wrist <= 30; native palm strike not kept (scored once a native palm-strike candidate exists: reject exemplar)

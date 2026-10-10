@@ -1,0 +1,46 @@
+# KenshiFP standing pose/presentation rules -> lab checks (spec-first). Read by Kenshi-Automation-Harness tools/animlab/spec.py
+# (map / run / unarmed) and taste.py. Columns: id class rule source owner checks status note.
+# owner: shay = Shay said it (memory / plan row "Problem (Shay)" / his review); coord = coordinator review verdict; inferred =
+# nobody confirmed it yet (question for Shay, batched via the coordinator; never treated as his rule).
+# status: covered = an automatic check gates it; partial = gated only in part (see note); missing = no check; out-of-reach = no
+# check possible with the data we record (note says why).
+id	class	rule	source	owner	checks	status	note
+R1	sword	edge lines up at the stroke start and leads through the stroke (wind-up may be off)	memory sword-edge-leads-arc; E1/E2	shay	arc.edge	covered	stroke frames u .28-.58 only
+R2	sword	blade roughly in line with the forearm; shoulder/elbow drive the arc, wrist little	memory sword-inline-with-forearm; Misses E1 inline	shay	inline	covered
+R3	sword	no hand/forearm roll in the wind-up; no sudden wrist/blade roll	memory sword-edge-leads-arc; E1 wind-up flip	shay	churn.roll	covered
+R4	all	no arm churn: elbow/forearm must not swing out and back while the weapon barely moves	memory no-arm-churn	shay	churn.rev	covered	sword recordings; unarmed U9
+R5	sword	same swing input -> same forearm roll (no forearm flip mid-stroke)	E5 (Shay review anim-sword-z0 swing 3)	shay	hinge	covered	needs >= 3 swings from ready
+R6	sword	ready pose stable: no sudden ~90 deg roll mid-walk, one ready branch	E3	shay	branch	covered	--ref a known-good recording of the same build
+R7	sword	sharp edge never faces the camera at rest (ready/walk/block)	S1	shay	restedge	covered	new (spec.py restedge, p05 of edge cos >= 0)
+R8	all	wrist bend: holds <= 30 deg (PT30), swings <= 50 (Shay accepted wb36)	PT17-W, PT30, X3, X5, c6a1eda	shay	wrist,arc.wb,vmcheck.wrist	partial	vmcheck.wrist gates swings at 30 too (FAILs Shay-accepted f28); spec.py wrist splits holds/swings
+R9	all	every state visibly plays: pose moves vs ready (aim, block, reload, swing)	memory state-must-visibly-play; C1	shay	moves	covered	unarmed U3
+R10	crossbow	stock low (<= 25% from the bottom in ready), crossbow orientation unchanged	C2, C2b accepted (13bca46)	shay	stock	covered	--ref f14-xb0 (d40b6ad-era orientation)
+R11	crossbow	bolt and strings rigid on the crossbow	C3	shay	bolt	covered	needs the .bolt sidecar
+R12	crossbow	no shake in still poses (aim)	X1	shay	stilljit	partial	new absolute check (aim jit_p95 <= 1.5 px), calibrated on 3 recordings; the replay-relative `compare` jitter line needs a build-matched solver
+R13	all	no clipped or hollow limbs (near-plane cut)	PT17, X2, C4	shay	vmcheck.cut	covered	vmcheck (fp-viewmodel.sh) on the zoom-0 frames; unarmed U7
+R14	all	zoom 25 looks natural: hand away from the head, weapon visible, wrist limit	memory zoomout-every-build; PT29	shay	vmcheck.zo	partial	vmcheck zo only (PT29); `animlab.py` has no zoom-25 judgement (Misses X7 row OPEN); no Shay-labelled z25 recording
+R15	all	every frame judgeable: open ground, nothing solid in frame, full res, no cursor	memory screenshots-must-be-judgeable; ticket A	shay	openground,cursor	covered	videos (frames.py)
+R16	all	review before handing over: every frame reviewed, flaws fixed first	memory review-before-handing-over	shay	-	out-of-reach	process rule (coordinator), not a property of a recording
+R17	sword	blade reads on screen: no one-frame snap at the wind-up top, never end-on, full length, overhead descends vertically	E6 coordinator reviews (Misses E6 rows)	coord	blade.snap,blade.seen,stroke.len,stroke.oh	covered	stroke 0 = documented baseline exception (Shay-approved stroke fails snap/seen)
+R18	sword	block guard not hanging (blade not straight down, hilt not at the face)	Misses z25 block guard	coord	guard	covered	whether the native hanging guard is acceptable is Shay's call (open)
+R19	all	zoom crossfade band: no own headless torso / floating hand between eye and head-show distance	Z1 coordinator review	coord	zoomband	covered	no game recording of the fail case yet
+R20	all	take labels match game state; no combat / bystanders; video ends at the end label	T6 coordinator review	coord	takecheck	covered	takes only
+R21	sword	hand grips the hilt (no open palm, fingers wrapped)	PT33	shay	-	out-of-reach	recordings hold no finger bones; the visual lab renders fingers in the bind pose
+R22	all	do not enlarge the arm / change framing to match Chivalry; only the movement matters	memory sword-inline-with-forearm	shay	-	out-of-reach	a negative design rule: nothing to measure (framing changes show up as stock/stroke regressions)
+U1	unarmed	guard: both fists on screen at rest (zoom 0)	NA1 plan row (coordinator)	inferred	spec:U1	covered
+U2	unarmed	every technique returns to the guard	NA1 plan row (coordinator)	inferred	spec:U2	covered
+U3	unarmed	the technique visibly plays (fist moves >= 1 dm from the guard)	memory state-must-visibly-play	shay	spec:U3	covered
+U4	unarmed	a punch drives toward the screen centre	NA1 plan row (coordinator)	inferred	spec:U4	covered
+U5	unarmed	no hand at / above / behind the eye (forearm/fist >= 2.5 dm from the eye, <= eye level +0.5 dm)	PT29 hands at the head (Shay), NA1 row	shay	spec:U5	covered	thresholds 2.5 / +0.5 dm are the lab's (native.py fists)
+U6	unarmed	wind-up stays below eye level	NA1 brief (coordinator)	inferred	spec:U6	covered
+U7	unarmed	no near-plane cut of forearm/fist	PT17 (Shay)	shay	spec:U7	covered
+U8	unarmed	wrist bend <= 30 deg	PT17-W / PT30 (Shay)	shay	spec:U8	covered
+U9	unarmed	no arm churn	memory no-arm-churn	shay	spec:U9	covered	same limits as the sword churn (450 px within 0.4 s, fist <= 250 px)
+U10	unarmed	punch driven by shoulder/elbow, not the wrist (wrist share of fist motion <= 0.6)	sword-inline-with-forearm (sword rule, Shay) carried over	inferred	spec:U10	covered
+U11	unarmed	no sudden fist roll (<= 30 deg per 33 ms)	sword roll rules (Shay) carried over; threshold inferred	inferred	spec:U11	covered
+U12	unarmed	the game's half-open hand is accepted: no fist-closed check (skeletons have no finger bones)	Shay 2026-10-10 (via coordinator)	shay	-	dropped	decision, nothing to gate; replaces the inferred "fist closed" rule
+U13	unarmed	zoom 25 = the native third-person animation, unchanged	NA1 plan row; zoomout-every-build (Shay)	shay	vmcheck.zo	partial	only after an in-game build (game recording + VMQUICK sheet); offline: native.py sheet-z25
+U14	unarmed	kicks / headbutt / flykick: guard holds, the camera reads the move	NA1 plan row (coordinator)	inferred	-	missing	no kick candidate format yet (camera motion is not in pose.txt)
+U15	unarmed	solver reaches every key (no IK failure)	lab	coord	spec:U15	covered
+U16	unarmed	block raises the guard	NA1 plan row (coordinator)	inferred	-	missing	no block candidate yet
+U17	unarmed	palm-heel techniques become straight-wrist punches (wrist <= 30 deg); native palm strikes are not kept	Shay 2026-10-10 (via coordinator)	shay	spec:U17	covered	spec.py unarmed: candidates named shotei*/palm* get U17 (wb_max <= 30 every frame)

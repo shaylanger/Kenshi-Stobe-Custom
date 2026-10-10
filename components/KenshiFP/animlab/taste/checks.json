@@ -1,0 +1,33 @@
+{
+ "vars": {
+  "V": "/tmp/kfp-vmcheck.py",
+  "TR": "/mnt/c/KenshiModding/components/KenshiFP/animlab/take-rules.txt"
+ },
+ "checks": {
+  "arc.edge":     {"cmd": "python3 {L}/animlab.py {pre} metrics {rec}", "line": "^arc ", "num": ["arc_ok", "min", 0.85]},
+  "arc.wb":       {"cmd": "python3 {L}/animlab.py {pre} metrics {rec}", "line": "^arc ", "num": ["wb_max", "max", 50]},
+  "moves":        {"cmd": "python3 {L}/animlab.py {pre} metrics {rec}", "line": "^moves ", "fail": "^moves FAIL"},
+  "churn.rev":    {"cmd": "python3 {L}/animlab.py {pre} churn {rec}", "line": "^churn ", "fail": "rev=[^ ]*:BAD"},
+  "churn.roll":   {"cmd": "python3 {L}/animlab.py {pre} churn {rec}", "line": "^churn ", "fail": "windup_roll=[^ ]*:BAD"},
+  "inline":       {"cmd": "python3 {L}/animlab.py {pre} inline {rec}", "line": "^inline ", "fail": "^inline FAIL"},
+  "hinge":        {"cmd": "python3 {L}/animlab.py {pre} hinge {rec}", "line": "^hinge ", "fail": "^hinge FAIL"},
+  "branch":       {"cmd": "python3 {L}/animlab.py branch {rec} {refopt}", "line": "^branch ", "fail": "^branch FAIL"},
+  "blade.snap":   {"cmd": "python3 {L}/animlab.py {pre} blade {rec}", "line": "^blade ", "fail": "snap=[^ ]*:BAD"},
+  "blade.seen":   {"cmd": "python3 {L}/animlab.py {pre} blade {rec}", "line": "^blade ", "fail": "seen=[^ ]*:BAD"},
+  "stroke.len":   {"cmd": "python3 {L}/animlab.py {pre} stroke {rec} {ohopt}", "line": "^stroke ", "fail": "len=[^ ]*:BAD"},
+  "stroke.oh":    {"cmd": "python3 {L}/animlab.py {pre} stroke {rec} {ohopt}", "line": "^stroke ", "fail": "(tilt|path)=[^ ]*:BAD|overhead n/a:BAD"},
+  "guard":        {"cmd": "python3 {L}/animlab.py guard {rec}", "line": "^guard ", "fail": "^guard FAIL"},
+  "zoomband":     {"cmd": "python3 {L}/animlab.py zoomband {rec}", "line": "^zoomband ", "fail": "^zoomband FAIL"},
+  "stock":        {"cmd": "python3 {L}/animlab.py stock {rec} {refopt}", "line": "^stock ", "fail": "^stock FAIL"},
+  "bolt":         {"cmd": "python3 {L}/animlab.py bolt {rec}", "line": "^bolt ", "fail": "^bolt FAIL"},
+  "restedge":     {"cmd": "python3 {L}/spec.py restedge {rec}", "line": "^restedge ", "fail": "^restedge FAIL"},
+  "stilljit":     {"cmd": "python3 {L}/spec.py stilljit {rec} --states aim", "line": "^stilljit ", "fail": "^stilljit FAIL"},
+  "wrist":        {"cmd": "python3 {L}/spec.py wrist {rec}", "line": "^wrist ", "fail": "^wrist FAIL"},
+  "vmcheck.cut":  {"cmd": "python3 {V} {rec} {mode}", "line": "^ok=", "num": ["cut", "max", 0]},
+  "vmcheck.wrist":{"cmd": "python3 {V} {rec} {mode}", "line": "^ok=", "num": ["wb_max", "max", 30]},
+  "vmcheck.zo":   {"cmd": "python3 {V} {rec} zo", "line": "^ok=", "fail": "^ok=0"},
+  "openground":   {"cmd": "python3 {L}/frames.py openground {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
+  "cursor":       {"cmd": "python3 {L}/frames.py cursor {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
+  "takecheck":    {"cmd": "python3 {L}/takecheck.py --labels {rec}/labels.txt --ev {rec}/ev.txt --rules {TR} --video-len {vlen} --name t", "line": "^RESULT ", "fail": " FAIL"}
+ }
+}
