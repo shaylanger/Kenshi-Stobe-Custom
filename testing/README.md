@@ -15,6 +15,26 @@ Only the coordinator drives the game (exception since 2026-10-05: the FP combat 
 `FP_COMBAT_COORDINATION_CONTEXT.md`). The REL builder role ended when REL went live (m18). The lock is `C:\KenshiTestRuns\game.lock`
 (`tools/automation/kenshi-ctl.ps1 lock|release`); launch/stop/restart refuse if someone else holds it.
 
+## Rig runners (Shay 2026-10-10: a script runs each rig, not an agent)
+
+- `tools/automation/rig-runner.ps1` runs one hidden daemon per rig (5090 local, 4080 over ssh), started by
+  `session-start.ps1` (`-Ensure`; `-Status`, `-Stop`). It replaces rig-watchdog.ps1 (now a shim).
+- Work = `*.list` files (run-batch.sh format + header comments, see the script header) in
+  `C:\KenshiTestRuns\queue\5090\`, `queue\4080\`, `queue\any\` (Stobe rows go to the 5090 only); FIFO by name.
+- Per batch: list -> `queue\running\`, install the wanted/newest staged KenshiFP (Kenshi stopped, SHA checked),
+  dryrun.sh the list, run a snapshot of run-batch.sh from the out dir (editing run-batch.sh never kills a batch),
+  `queue\done\<list>` + `.result` + `.SUMMARY.txt`, a note to the list owner, next list at once. Failures before the
+  game (dryrun, install, missing save) -> `queue\failed\<list>.result` + note; the runner goes on.
+- Recording/analysis split: a take calls `pf_game_done` after its game part; run-batch.sh starts the next row while
+  the take's checks finish in the background; `<out>/GAMEDONE` frees the rig for the next batch, `DONE` comes after
+  every analysis.
+- Every 60 s during a batch (`rig-runner-probe.sh`): stuck (Kenshi gone/crashed, not in the world, harness silent,
+  game time frozen) >= 2 min with no out-dir change -> the row's step is killed (second hit: the game), ALERT, note;
+  game idle while a row analyses in the foreground -> ALERT + note (add pf_game_done); empty queue >= 2 min -> ALERT +
+  note to the coordinator. `rig-health.sh` and the Stop hook block on `ALERT-*.txt`; it clears when the rig works.
+- Pause a rig: `kenshi-ctl.ps1 idle "<reason>"` / `idle4080 "<reason>"` (60 min). Lock owners: `runner-5090`, `rig4080`.
+- Offline lab jobs run through `tools/automation/labnice.sh` (nice 15, ionice idle, nproc/2 slots in total).
+
 ## The loop
 
 1. Feature agents write **in-game scenario files** (format: `stobe-auto run --help`,

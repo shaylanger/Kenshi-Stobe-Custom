@@ -13,13 +13,16 @@ file paths of outputs, the build hashes involved, and what you want back.
 > Game takes (CLAUDE.md "Game-take discipline"): preflight before recording (day verified, weapon ready/crossbow loaded,
 > open ground, area clean; a failed check = `RESULT <row> FAIL setup: <reason>`, no unchanged retry); every wrapper prints
 > one RESULT line; a pose/stroke set is filmed only after it passes the animlab offline; short single-purpose takes, no
-> multi-try loops. Before your current batch ends, write your rig's next batch into `C:\KenshiTestRuns\queue\<rig>.next`.
+> multi-try loops. A take script calls `pf_game_done` (take-preflight.sh) right after its last recording/game evidence,
+> before its offline checks, so run-batch.sh moves the game on while the checks finish in the background.
 > Takes run on either rig via the rig layer (RIG=5090|4080). Fix offline in the animlab first; any flaw the lab passed =
 > Misses row in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`. Every video you hand over comes as a review pack
 > (`tools/automation/review-pack.py`, INDEX.txt path + lab results), never a bare mp4.
 > Rigs are run by scripts, not agents (CLAUDE.md "Rig uptime + process"): put each next batch as a list file into
-> `C:\KenshiTestRuns\queue\<5090|4080|any>\` (or a `run: <out> | <command>` line in `queue\<rig>.next` until the runner
-> daemons are live) BEFORE the current one ends; never let a rig idle/pause > 2 min, never queue "wait for build".
+> `C:\KenshiTestRuns\queue\<5090|4080|any>\` BEFORE the current one ends (format: header of `tools/automation/rig-runner.ps1`);
+> never launch Kenshi or run-batch.sh on a rig yourself, never let a rig idle/pause > 2 min, never queue "wait for build"
+> (the runner installs the newest staged build). Offline lab jobs (climb, gate, regress, pool, pipeline, builds) run
+> through `tools/automation/labnice.sh` (nice 15, capped slots) so takes and their checks keep the CPU.
 > Stay lean: read RESULT lines and excerpts, one review sheet at a time; hand long judging (frame-by-frame review, log
 > digging) to a short-lived helper agent that returns one verdict line.
 
@@ -57,3 +60,16 @@ read `AGENTS.md`, `docs/COMMANDS.md`, `docs/EXTENDING.md`). Never launch Kenshi 
 `cmd /d /c "call C:\KenshiModding\Kenshi-Automation-Harness\build.bat"`; tests: `cmd /d /c "call …\tests\run_tests.bat"`.
 Commit with `git -c user.email=shaylanger2@gmail.com -c user.name=shaylanger`, push. Task: <feature/bug with harness.log
 lines>. Report commits, DLL SHA256, tests.
+
+## Rig operator (5090-operator / 4080-filming): judges results, writes lists; the runner runs the rig
+> You don't run the rig: `tools/automation/rig-runner.ps1` (one daemon per rig) does. Your loop: (1) keep the next batches
+> queued as list files in `C:\KenshiTestRuns\queue\<rig>\` (or `queue\any\` for rows either rig can run), FIFO by file name
+> (`20-<what>.list`), each a run-batch.sh list with header comments `# owner: <you>`, `# out: <dir>`, `# launch: <save>`,
+> `# needs: KenshiFP <sha8>|staged-latest` / `# needs: Harness <sha8>`, `# nodryrun: <row> <reason>` (fake-game gap only),
+> `{CR}` for the C: root and `{OUT}` for the out dir in rows, `STALL_MIN=<min>` in a row that may legitimately sit paused
+> without output. Check a list by hand first: `wsl -d DwemerAI4Skyrim3 -u root -- bash /mnt/c/KenshiModding/tools/automation/dryrun.sh --rig <rig> <list>`.
+> (2) Read `C:\KenshiTestRuns\agents\<you>.note-from-rig-runner`: started / DONE (pass/fail + `queue\done\<list>.SUMMARY.txt`)
+> / FAILED (dryrun/install, `queue\failed\<list>.result`) / stuck row killed / game idle during foreground analysis.
+> (3) Judge DONE batches (RESULT lines, FAIL excerpts, review packs), record verdicts, write the follow-up lists.
+> Status: `rig-runner.ps1 -Status`; pause a rig only with `kenshi-ctl.ps1 idle|idle4080 "<reason>"` (60 min).
+
