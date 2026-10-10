@@ -46,6 +46,14 @@ static get_bone_world_t g_get_bone_world; static skel_getbone_t g_skel_getbone;
 static oldnode_getdori_t g_oldnode_getdori; static oldnode_getdpos_t g_oldnode_getdpos; static oldnode_getori_t g_oldnode_getori;
 static oldnode_setori_t g_oldnode_setori; static oldnode_needupd_t g_oldnode_needupd; static oldnode_getparent_t g_oldnode_getparent;
 static oldnode_setpos_t g_oldnode_setpos; static oldnode_getpos_t g_oldnode_getpos; static oldnode_getdscale_t g_oldnode_getdscale;
+typedef char (*ent_getvisible_t)(void *movable);   /* Ogre::MovableObject::getVisible (bolt visibility, newer source); NULL offline */
+static ent_getvisible_t g_ent_getvisible;
+/* local/world node setters + local getPosition (vm_bolt_measure, newer source); NULL offline */
+typedef void (*node_set_pos_t)(void *node, const Vec3 *v); typedef void (*node_set_ori_t)(void *node, const Quat *q);
+typedef void (*node_set_dori_t)(void *node, const Quat *q); typedef void (*node_set_dpos_t)(void *node, const Vec3 *v);
+typedef const Vec3 *(*node_get_pos_t)(void *node);
+static node_set_pos_t g_node_set_pos; static node_set_ori_t g_node_set_ori; static node_set_dori_t g_node_set_dori;
+static node_set_dpos_t g_node_set_dpos; static node_get_pos_t g_node_get_pos;
 
 /* game state the viewmodel reads (set per frame by the replay) */
 static float g_yaw, g_pitch, g_tx, g_tz;

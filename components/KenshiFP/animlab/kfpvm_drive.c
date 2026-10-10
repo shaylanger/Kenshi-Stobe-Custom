@@ -9,7 +9,8 @@
  *                 p/f/u = the weapon prop pose of the solved side (f toward the tip, u = edge / up axis),
  *                 o = off-hand position target ("nan,nan,nan" = the solver's rest point, mirrored for --side L).
  *   --side L      solve the LEFT hand as the weapon hand (`fp_vm set hand_m 0`, Prop1) with the prop local mirrored
- *                 (biped mirror: position z and quaternion x,y negated; see docs/animlab/USAGE.md phase 2).
+ *                 (biped mirror: position z and quaternion x,y negated) and the grip roll mirrored (groll -> 180 - groll for
+ *                 the sword; --set groll takes the RIGHT-hand value); see docs/animlab/USAGE.md phase 2.
  *   out.txt       one line per frame, camera numbers of the body frame, after the apply (what the frame renders):
  *                   i t | Lsh Lel Lwr LhandX LpropP LpropF LpropU | Rsh Rel Rwr RhandX RpropP RpropF RpropU |
  *                   stL stR ikfail eclamp | eye rt up fw (world)
@@ -80,6 +81,12 @@ int main(int argc, char **argv)
         g_vm_pldp[cls].z = -g_vm_pldp[cls].z; g_vm_pldq[cls].x = -g_vm_pldq[cls].x; g_vm_pldq[cls].y = -g_vm_pldq[cls].y;
     }
     for (int s = 0; s < ncl; s++) if (!do_set(cl_set[s])) return 2;
+    if (left) {   /* grip roll: mirrored (f,u) targets flip the prop axis perpendicular to both (t), the bone mirror flips z: the
+                     * left local = Sz.(local.roll(g)).St = mirrored local . roll(180 - g) (t != z) or roll(-g) (t == z) about f */
+        int a0 = abs(g_vm_ax[cls][0]), t = 6 - a0 - abs(g_vm_ax[cls][1]);
+        if (a0 == 3) fprintf(stderr, "kfpvm_drive: --side L with the blade on prop z: grip mirror not exact\n");
+        else g_vm_groll[cls] = (t == 3 ? 0.0f : 180.0f) - g_vm_groll[cls];
+    }
     printf("calib %.4f,%.4f,%.4f,%.4f,%.4f\n", C_L1[1], C_L2[1], C_L1[0], C_L2[0], C_K);
     const Rin *r = &R[bf];
     g_nat = bf + 1; g_cls_fill[0] = cls; g_vm_class = cls;

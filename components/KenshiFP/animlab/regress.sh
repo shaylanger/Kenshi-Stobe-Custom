@@ -46,5 +46,12 @@ if [ -d "$GD/data" ]; then
   r=$(python3 "$L/visual/render.py" still /tmp/al-dw/pose.txt --config "$HERE/visual.json" --weapons R,L --frame 30 --size 320x180 -o /tmp/al-vis.png 2>&1 | tail -1)
   if echo "$r" | python3 -c "import sys,re;e=[float(x) for x in re.findall(r\"'[LR]': ([0-9.]+)\",sys.stdin.read())];sys.exit(not(len(e)==2 and max(e)<1))"; then ok "visual dual-wield still: $r"; else bad "visual dual-wield still: $r"; fi
 else echo "REGRESS SKIP visual game assets ($GD missing)"; fi
+#   9. mirror check: the left weapon hand (adapter grip mirror + patches/left-hand-mirror.py) on a symmetric body must
+#      reproduce the right hand exactly (motions/dualwield-sync-mirror.json, sword-z0 frame 541: wb per segment L == R)
+bash "$HERE/build.sh" "${P[@]}" --patch "$HERE/patches/left-hand-mirror.py" --drive --out "$BLD/kfpvm_drive_lhm" >/tmp/al-build5.txt 2>&1 || { bad build-drive-lhm; tail -5 /tmp/al-build5.txt; }
+[ -f "$W/vmrec-q-sword-z0.txt" ] || cp /mnt/c/KenshiTestRuns/vmq-f8c/vmrec-q-sword-z0.txt "$W/" 2>/dev/null
+rm -rf /tmp/al-dwm; (cd "$W" && python3 "$L/metricslab.py" run "$HERE/motions/dualwield-sync-mirror.json" --adapter "$BLD/kfpvm_drive_lhm" --body vmrec-q-sword-z0.txt --body-frame 541 --out /tmp/al-dwm --args=--quiet --quiet >/dev/null 2>&1)
+r=$(awk '/^[LR]:/ && !/\*all/ {s=substr($1,1,1); seg=substr($1,3); sub(/^[LR]-/,"",seg); v[s,seg]=$4; segs[seg]=1} END{n=0; d=0; for (g in segs) {n++; x=v["L",g]-v["R",g]; if (x<0) x=-x; if (x>d) d=x}; printf "segments=%d max_wb_diff=%.2f", n, d}' /tmp/al-dwm/report.txt 2>/dev/null)
+case "$r" in *"max_wb_diff=0.0"[0-5]*) ok "mirror L==R $r";; *) bad "mirror L==R ${r:-no report}";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
