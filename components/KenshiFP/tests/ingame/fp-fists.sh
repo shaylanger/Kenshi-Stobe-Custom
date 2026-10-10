@@ -29,7 +29,7 @@ A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 fist(){ A fp_vm fist; }
 restore(){ A fp_vm set fist_tech -1 >/dev/null; A chatter on >/dev/null; }
-PF_ROW=$ROW; PF_ON_FAIL='restore; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }'
+PF_ROW=$ROW; PF_ON_FAIL='restore; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { touch "$N.stop"; wait $FP; }'
 . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$ROW"
 pf_outdir "$OUT"; cd "$OUT" || pf_fail "cd $OUT"
@@ -63,10 +63,11 @@ pf_open 3
 A fp_vm set fist_tech $TI >/dev/null
 f=$(fist); [ "$(fld force <<<"$f")" = "$TI" ] || pf_fail "fp_vm set fist_tech $TI not taken: $(cut -c1-80 <<<"$f")"
 # ---- take
-: > "$N.lab"; rm -f "/tmp/kfp-$N.ffin"; mkfifo "/tmp/kfp-$N.ffin"
+: > "$N.lab"; rm -f "$N.stop"
 SW0=$(fist | fld swings); IK0=$(fist | fld ikfail); LOG0=$(wc -l < "$KDIR/KenshiFP.log")
-"$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 120 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
-exec 7>"/tmp/kfp-$N.ffin"
+# recorder stopped by "q" through a plain pipe (stop file): a native ffmpeg on the 4080 (Git Bash) never reads q from
+# an MSYS fifo and would run the full -t 120 past the end label (found by tools/automation/dryrun.sh --rig 4080)
+( while [ ! -f "$N.stop" ]; do sleep 0.1; done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 120 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" & FP=$!
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null
 T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Shay"; sleep 1
@@ -78,7 +79,7 @@ for r in $(seq 1 $REPS); do
   e=$((SECONDS+3)); while [ $SECONDS -lt $e ]; do u=$(fist | fld u); UMAX=$(awk -v a="$UMAX" -v b="${u:-0}" 'BEGIN{print (b>a?b:a)}'); sleep 0.15; done
 done
 lab "Guard"; sleep 1.5
-lab end; echo q >&7; exec 7>&-; take_sample_stop; wait $FP; FP=
+lab end; touch "$N.stop"; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-$N.txt"; A fp_vm rec dump "vmrec-$N.txt" >/dev/null; sleep 2
 cp "$KDIR/vmrec-$N.txt" "$N.vmrec.txt" || { restore; pf_result FAIL "no vmrec dump"; exit 1; }
 restore
