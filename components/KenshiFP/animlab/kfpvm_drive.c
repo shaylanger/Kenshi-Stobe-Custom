@@ -143,6 +143,12 @@ int main(int argc, char **argv)
         }
         fprintf(o, " %.4f %.4f %lu %lu |", g_vm_st_last[0], g_vm_st_last[1], g_vm_ikfail - ik0, g_vm_eclamp_n - ec0);
         for (int k = 13; k < 17; k++) pv(o, f3(r->v[k]));
+        {   /* group 5 (phase 4): weapon-arm bone hinge axes = the rig's local -Y of the upper arm / forearm (game rig:
+             * `fp_vm hinge` 0,-1,0 for all four bones), camera numbers; the recording checks' rec group H */
+            int wh = left ? 0 : 1;
+            fprintf(o, " | H");
+            pv(o, w2c(r, quat_rotvec(g_b[B_UA_L + wh].dq, vm_v(0, -1, 0)), 0)); pv(o, w2c(r, quat_rotvec(g_b[B_FA_L + wh].dq, vm_v(0, -1, 0)), 0));
+        }
         fputc('\n', o);
     }
     fclose(o);

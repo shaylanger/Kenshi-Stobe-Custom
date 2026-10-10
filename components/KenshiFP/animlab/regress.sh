@@ -340,5 +340,20 @@ if [ -f "$TV/sword-z25-block-f36.mp4" ]; then r=$(python3 "$L/frames.py" cursor 
 else echo "REGRESS INFO cursor: sword-z25-block-f36.mp4 missing"; fi
 [ -f "$TV/turret-fp.mp4" ] && { r=$(python3 "$L/frames.py" cursor "$TV/turret-fp.mp4" --name turret-fp)
   case "$r" in *"PASS cursor"*) ok "no-cursor video $r";; *) bad "no-cursor video $r";; esac; }
+# P4. phase 4 (NATIVE, harness tools/animlab/native.py + visual/ogre.py animations): unit tests (synthetic Ogre animations,
+#     sampling, trajectory stabilisation, left grip mirror, solver grip offset, keyed viewmodel path + key fit, FCS v17
+#     header) and, with the game install: 174 animations on the male skeleton, the catalogue (unarmed techniques), `run` of
+#     a katana technique (adapt + drive + recording checks -> RESULT line) and `fists` (unarmed key tables) complete.
+python3 "$HARN/tests/animlab/test_native.py" >/tmp/al-native-unit.txt 2>&1 && ok "native unit tests" || { bad "native unit tests"; tail -5 /tmp/al-native-unit.txt; }
+NC=$HERE/native.json
+if [ -f "/mnt/d/Steam/steamapps/common/Kenshi/data/character/meshes/male_skeleton/male_skeleton.skeleton" ]; then
+  n=$(python3 "$L/native.py" list --config "$NC" | tail -1 | awk '{print $1}'); [ "$n" = 174 ] && ok "native list: $n animations" || bad "native list: $n animations (want 174)"
+  python3 "$L/native.py" catalog --config "$NC" -o /tmp/al-cat.md >/tmp/al-cat.txt 2>&1
+  grep -q "| ma Double punch mid | ma chudan |" /tmp/al-cat.md && ok "native catalog: $(cat /tmp/al-cat.txt)" || { bad "native catalog"; tail -3 /tmp/al-cat.txt; }
+  r=$(cd "$W" && python3 "$L/native.py" run --config "$NC" "chop down" --weapon katana --adapter "$BLD/kfpvm_drive_cur" --body vmrec-q-sword-z0-a.txt --body-frame 100 --out /tmp/al-p4run --no-video 2>&1 | tail -1)
+  case "$r" in "RESULT native-chop_down "*) ok "native run (info, a raw native clip is not an FP swing): ${r:0:160}";; *) bad "native run: $r";; esac
+  r=$(cd "$W" && python3 "$L/native.py" fists --config "$NC" "ma chudan" --adapter "$BLD/kfpvm_drive_cur" --body vmrec-q-sword-z0-a.txt --body-frame 100 --out /tmp/al-p4fist --no-video 2>&1 | grep "^RESULT")
+  case "$r" in "RESULT fist-ma_chudan "*) [ -s /tmp/al-p4fist/fist_keys.inc ] && ok "native fists (info): ${r:0:160}" || bad "native fists: no key tables";; *) bad "native fists: $r";; esac
+else echo "REGRESS INFO native: game install missing"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail

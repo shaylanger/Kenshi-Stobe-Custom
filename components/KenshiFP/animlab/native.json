@@ -1,0 +1,28 @@
+{
+ "comment": "KenshiFP config for the phase-4 native lab (tools/animlab/native.py). Paths relative to game_dir (ANIMLAB_GAME_DIR overrides); assets are read at run time, never copied. bones/prop_* = visual.json (KenshiFP prop target convention: f = prop +Y, u = prop +Z for class 0). eye_from_head = head bone in FP camera numbers when no body recording is given (vmq sword-z0-a frame 100: -0.0,-1.50,-0.72). Weapon meshes attach to the prop bone in its local frame (Kenshi tag point): Prop2 = right hand, Prop1 = left.",
+ "game_dir": "/mnt/d/Steam/steamapps/common/Kenshi",
+ "skeleton": "data/character/meshes/male_skeleton/male_skeleton.skeleton",
+ "body_meshes": ["data/character/meshes/human/human_male.mesh"],
+ "game_data": ["data/gamedata.base", "data/Newwworld.mod", "data/rebirth.mod"],
+ "head_bone": "Bip01 Head",
+ "eye_from_head": [0.0, -1.50, -0.72],
+ "bones": {"L": ["Bip01 L Clavicle", "Bip01 L UpperArm", "Bip01 L Forearm", "Bip01 L Hand", "Bip01 Prop1"],
+           "R": ["Bip01 R Clavicle", "Bip01 R UpperArm", "Bip01 R Forearm", "Bip01 R Hand", "Bip01 Prop2"]},
+ "prop_axes": [[2, 3], [2, -1]],
+ "prop_local_q": {"0": [0.600, 0.267, 0.724, -0.211], "1": [0.656, 0.195, 0.084, -0.725]},
+ "prop_roll_deg": {"0": 60, "1": 0},
+ "prop_mirror": {"L": {"q_sign": [1, -1, -1, 1], "roll_sign": -1, "roll_add": 180}},
+ "weapons": {
+   "katana": {"mesh": "data/items/weapons/mesh/katana05.mesh", "bone": "Bip01 Prop2", "class": 0, "blade": 8.0, "hands": "R"},
+   "plank": {"mesh": "data/items/weapons/mesh/flint02.mesh", "bone": "Bip01 Prop2", "class": 0, "blade": 11.0, "hands": "RL"},
+   "fragment_axe": {"mesh": "data/items/weapons/mesh/flint01.mesh", "bone": "Bip01 Prop2", "class": 0, "blade": 11.0, "hands": "RL"},
+   "club": {"mesh": "data/items/weapons/mesh/blunt01.mesh", "bone": "Bip01 Prop2", "class": 0, "blade": 6.0, "hands": "R"},
+   "cleaver": {"mesh": "data/items/weapons/mesh/chopper01.mesh", "bone": "Bip01 Prop2", "class": 0, "blade": 9.0, "hands": "RL"},
+   "naginata": {"mesh": "data/items/weapons/mesh/polearm01.mesh", "bone": "Bip01 Prop2", "class": 0, "blade": 14.0, "hands": "RL"},
+   "sabre": {"mesh": "data/items/weapons/mesh/sabre01.mesh", "bone": "Bip01 Prop2", "class": 0, "blade": 7.0, "hands": "R"}
+ },
+ "default_weapon": {"unarmed": "none", "heavy weapons": "plank", "hackers": "cleaver", "blunt": "club", "polearm": "naginata",
+                    "katanas": "katana", "sabre": "sabre", "*": "katana"},
+ "fov_3p": 0.45,
+ "colors": [[205, 160, 130], [190, 195, 205]]
+}
