@@ -87,11 +87,22 @@ static void *fp_turret_of(void *pc) {
  * yaw change since mount, measured from the eye->pivot bearing then, so the view stays behind the barrel. */
 static int g_tur_eye_set,g_tur_eye_held;static float g_tur_eye_yaw0,g_tur_eye_last,g_tur_eye_hold;static unsigned g_tur_eye_calls;
 static float g_tur_eye_f,g_tur_eye_s,g_tur_eye_u;static int g_tur_eye_fixed;static float g_tur_eye_cf,g_tur_eye_cs,g_tur_eye_cu;
+/* T6 leave: the native unassigns the operator ~0.6 s after W while she already walks off; the gun lock ends on the first
+ * frame she moves (feet speed or distance from the mount spot), so the view cuts to her eye, never her own back */
+static int g_tur_eye_left;static float g_tur_eye_mx,g_tur_eye_mz;static unsigned g_tur_eye_leave_cuts;
+static float g_tur_leave_dm=0.8f,g_tur_leave_speed=4.0f;static unsigned long long g_tur_eye_t0,g_tur_eye_tleft;
 static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
     if (!g_tur_pc||!g_tur_bld||!g_tur_gun||!readable((char *)g_tur_bld+TUR_CUR_DIR,12)||!readable((char *)g_tur_gun+0xE4,12)) return;
     const Vec3 *cd=(const Vec3 *)((uintptr_t)g_tur_bld+TUR_CUR_DIR),*pv=(const Vec3 *)((uintptr_t)g_tur_gun+0xE4);
     if (!isfinite(cd->x)||!isfinite(cd->z)||cd->x*cd->x+cd->z*cd->z<1e-4f||!isfinite(pv->x)||!isfinite(pv->z)) return;
     Vec3 cw;if (!co||!char_position(g_tur_pc,&cw)) return;
+    {   unsigned long long now=GetTickCount64();
+        if (g_tur_eye_left) {if (now-g_tur_eye_tleft<2500) return; g_tur_eye_left=0;g_tur_eye_set=0;}   /* still manning: lock again */
+        if (g_tur_eye_set && now-g_tur_eye_t0<1000) {g_tur_eye_mx=cw.x;g_tur_eye_mz=cw.z;}       /* settling into the seat */
+        else if (g_tur_eye_set) {float mx=cw.x-g_tur_eye_mx,mz=cw.z-g_tur_eye_mz,md=sqrtf(mx*mx+mz*mz);
+            if (md>g_tur_leave_dm || g_move_speed>g_tur_leave_speed) {g_tur_eye_left=1;g_tur_eye_tleft=now;++g_tur_eye_leave_cuts;
+                logline("[turret] operator moving off (moved=%.2f dm feet=%.1f): eye back on the character",md,g_move_speed);return;}}
+    }
     float rx=co->x-cw.x,rz=co->z-cw.z;   /* eye is in Ogre space (floating origin), the gun pivot in world space */
     float px=pv->x+rx,pz=pv->z+rz;
     float dx=e->x-px,dz=e->z-pz;if (!g_tur_eye_set && (dx*dx+dz*dz<1e-2f||dx*dx+dz*dz>4e4f)) return;   /* eye not near this gun */
@@ -100,7 +111,7 @@ static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
     if (g_tur_nopower && g_tur_eye_set) {if (!g_tur_eye_held) {g_tur_eye_held=1;g_tur_eye_hold=g_tur_eye_last;} yaw=g_tur_eye_hold;}
     else {g_tur_eye_held=0;g_tur_eye_last=yaw;}
     float sy=sinf(yaw),cy=cosf(yaw);   /* gun frame: forward (sy,cy), side (cy,-sy) */
-    if (!g_tur_eye_set) {g_tur_eye_yaw0=atan2f(-dx,-dz);g_tur_eye_set=1;
+    if (!g_tur_eye_set) {g_tur_eye_yaw0=atan2f(-dx,-dz);g_tur_eye_set=1;g_tur_eye_mx=cw.x;g_tur_eye_mz=cw.z;g_tur_eye_t0=GetTickCount64();
         g_tur_eye_cf=dx*sy+dz*cy;g_tur_eye_cs=dx*cy-dz*sy;g_tur_eye_cu=e->y-pv->y;
         logline("[turret] eye locked to the gun: gun_yaw=%.3f captured fwd=%.1f side=%.1f up=%.1f%s",yaw,g_tur_eye_cf,g_tur_eye_cs,g_tur_eye_cu,g_tur_eye_fixed?" (fixed offset in use)":"");}
     float f=g_tur_eye_fixed?g_tur_eye_f:g_tur_eye_cf,sd=g_tur_eye_fixed?g_tur_eye_s:g_tur_eye_cs,u=g_tur_eye_fixed?g_tur_eye_u:g_tur_eye_cu;
@@ -108,7 +119,7 @@ static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
 }
 static void fp_turret_drop(const char *why) {
     if (g_tur_pc) {++g_tur_leaves;logline("[turret] FP turret control ends (%s)",why);}
-    g_tur_pc=g_tur_rc=NULL;g_tur_bld=NULL;g_tur_rl_left=-1.0f;g_tur_why=why;g_tur_aim_valid=0;g_tur_eye_set=0;g_tur_eye_held=0;
+    g_tur_pc=g_tur_rc=NULL;g_tur_bld=NULL;g_tur_rl_left=-1.0f;g_tur_why=why;g_tur_aim_valid=0;g_tur_eye_set=0;g_tur_eye_held=0;g_tur_eye_left=0;
 }
 /* Returns 1 while the FP-controlled char mans a turret (the caller then skips the hand-weapon adapters). */
 static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
@@ -251,14 +262,14 @@ static int kah_fp_turret(const char *id,int argc,const char *const *argv,KAH_Rep
         }
     }
     snprintf(b,sizeof b,"turret on=%d why=%s name=%s ammo=%d/%d reload_left=%.2f reload_max=%.2f rl_state=%.2f aim_valid=%d aim=%.1f,%.1f,%.1f "
-             "cur_dir=%.3f,%.3f,%.3f aim_err_deg=%.1f enters=%u leaves=%u frames=%u shots=%u refused=%u refuse_why=%s reloads=%u "
+             "cur_dir=%.3f,%.3f,%.3f aim_err_deg=%.1f enters=%u leaves=%u leave_cuts=%u eye_left=%d frames=%u shots=%u refused=%u refuse_why=%s reloads=%u "
              "r_ignored=%u native_shots_suppressed=%u ai_updates_suppressed=%u last_target=%d gun_pos=%.1f,%.1f,%.1f harp_char=%u harp_target=%u harp_world=%u gunaim=%d last_target_pos=%.1f,%.1f,%.1f",
              g_tur_pc!=NULL,g_tur_why,g_tur_pc?g_tur_name:"-",
              gun?*(int *)((uintptr_t)gun+GUN_AMMO):-1,gun?*(int *)((uintptr_t)gun+TUR_GUN_MAX):-1,
              g_tur_rl_left,g_tur_rl_max,gun?*(float *)((uintptr_t)gun+TUR_GUN_RLSTATE):-1.0f,g_tur_aim_valid,g_tur_aim.x,g_tur_aim.y,g_tur_aim.z,
              bld?((Vec3 *)((uintptr_t)bld+TUR_CUR_DIR))->x:0,bld?((Vec3 *)((uintptr_t)bld+TUR_CUR_DIR))->y:0,
              bld?((Vec3 *)((uintptr_t)bld+TUR_CUR_DIR))->z:0,rd,
-             g_tur_enters,g_tur_leaves,g_tur_frames,g_tur_shots,g_tur_shot_refused,g_tur_refuse_why,g_tur_reloads,
+             g_tur_enters,g_tur_leaves,g_tur_eye_leave_cuts,g_tur_eye_left,g_tur_frames,g_tur_shots,g_tur_shot_refused,g_tur_refuse_why,g_tur_reloads,
              g_tur_r_ignored,g_tur_native_suppressed,g_tur_updt_suppressed,g_tur_last_target!=NULL,gun?((Vec3 *)((uintptr_t)gun+0xE4))->x:0,gun?((Vec3 *)((uintptr_t)gun+0xE4))->y:0,gun?((Vec3 *)((uintptr_t)gun+0xE4))->z:0,g_tur_harp_char,g_tur_harp_target,g_tur_harp_world,g_tur_cfg_gunaim,gun?((Vec3 *)((uintptr_t)gun+0x118))->x:0,gun?((Vec3 *)((uintptr_t)gun+0x118))->y:0,gun?((Vec3 *)((uintptr_t)gun+0x118))->z:0);
     if (bld) {
         void *h=*(void **)((uintptr_t)bld+0x498);
