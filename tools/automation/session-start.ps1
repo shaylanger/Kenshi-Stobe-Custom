@@ -39,6 +39,11 @@ foreach ($a in $ag) {
 $k = if (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue) { 'running' } else { 'closed' }
 $lock = if (Test-Path -LiteralPath (Join-Path $runs 'game.lock')) { (Get-Content -Raw -LiteralPath (Join-Path $runs 'game.lock')).Trim() } else { 'free' }
 "kenshi: $k | game.lock: $lock"
+# Ready queue per rig (Shay 2026-10-10): the next batch for each rig, written before the current one ends
+foreach ($rig in '5090', '4080') {
+    $q = Join-Path $runs "queue\$rig.next"
+    if (Test-Path -LiteralPath $q) { "queue $rig (since $(Get-Date (Get-Item -LiteralPath $q).LastWriteTime -Format 'MM-dd HH:mm')): $(((Get-Content -LiteralPath $q) -join ' / '))" } else { "queue ${rig}: MISSING (write it before the current batch ends)" }
+}
 $inf = @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue)
 if (-not $inf.Count) { 'inflight markers: none' }
 foreach ($m in $inf) {

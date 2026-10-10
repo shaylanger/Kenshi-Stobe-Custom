@@ -128,4 +128,18 @@ $r4 = & powershell -NoProfile -File (Join-Path $PSScriptRoot '..\rig4080-state.p
 if ($r4 -like 'IDLE kenshi=no*') {
     Block-Stop ('kenshi-waker-guard: the 4080 is idle (Kenshi closed there, no C:\KenshiTestRuns\inflight\4080-* marker, no reason recorded). Shay''s rule: use BOTH rigs, in parallel, without being told. Start a 4080 job now (PG rows, harness rows, KenshiFP combat/viewmodel rows, or split off part of the current 5090 work) via the 4080 operator agent and touch C:\KenshiTestRuns\inflight\4080-<job> while it runs; or record a one-line reason with: & C:\KenshiModding\tools\automation\kenshi-ctl.ps1 idle4080 "<reason>" (good for 60 min). State: tools\automation\rig4080-state.ps1 -Fresh.')
 }
+
+# --- ready queue per rig (Shay 2026-10-10: a rig must go straight on to its next job, not wait for planning) ---
+# C:\KenshiTestRuns\queue\<rig>.next = the NEXT batch for that rig, written while the current one runs: line 1 = owner,
+# then the run-batch.sh list path or the job steps; or one line "none: <reason>". Must be < 6 h old. Delete/replace it
+# the moment that batch starts (and write the one after).
+$qdir = Join-Path $runs 'queue'
+$miss = @()
+foreach ($rig in '5090', '4080') {
+    $q = Join-Path $qdir "$rig.next"
+    if (-not ((Test-Path -LiteralPath $q) -and (Get-Item -LiteralPath $q).Length -gt 0 -and (Get-Item -LiteralPath $q).LastWriteTime -gt (Get-Date).AddHours(-6))) { $miss += $rig }
+}
+if ($miss.Count) {
+    Block-Stop ('kenshi-waker-guard: no ready queue for rig(s) ' + ($miss -join ', ') + '. Shay''s rule (2026-10-10): the next batch for each rig is written BEFORE the current one ends, so the rig goes straight on. Write C:\KenshiTestRuns\queue\<rig>.next (line 1 owner, then the run-batch list path / job steps), or one line "none: <reason>" if there is truly nothing; it must be < 6 h old.')
+}
 exit 0

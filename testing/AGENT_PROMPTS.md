@@ -10,6 +10,10 @@ file paths of outputs, the build hashes involved, and what you want back.
 > at start and after every milestone, and with DONE or FAILED plus the final result paths before your final report.
 > Write any handoff to `C:\KenshiTestRuns\agents\<name>.handoff.md` (not your scratchpad). Long work (game rows,
 > sweeps, renders) runs as a detached `run-batch.sh` job, with its out dir written into `C:\KenshiTestRuns\inflight\<name>`.
+> Game takes (CLAUDE.md "Game-take discipline"): preflight before recording (day verified, weapon ready/crossbow loaded,
+> open ground, area clean; a failed check = `RESULT <row> FAIL setup: <reason>`, no unchanged retry); every wrapper prints
+> one RESULT line; a pose/stroke set is filmed only after it passes the animlab offline; short single-purpose takes, no
+> multi-try loops. Before your current batch ends, write your rig's next batch into `C:\KenshiTestRuns\queue\<rig>.next`.
 
 ## STOBE fixer
 You are the **STOBE fixer**, a helper subagent of the coordinator session that runs Kenshi tests (it owns the
