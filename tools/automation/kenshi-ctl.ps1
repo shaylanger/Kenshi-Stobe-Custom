@@ -169,6 +169,24 @@ public static class KenshiFit {
   "render size: STILL WRONG after 3 resizes"
 }
 if ($Command -eq 'fit') { Fit-RenderSize; exit 0 }
+# postlaunch (run-batch.sh after it kills the stuck launch proxy, which also killed the re-place/fit below: 2026-10-10
+# studio-fixture rendered 798x413 on DISPLAY1): re-place on the test monitor + fit, verify, up to 3 rounds; exit 1 if wrong
+if ($Command -eq 'postlaunch') {
+  $ctl = 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1'
+  $mons = & $ctl monitors -Kenshi $Kenshi
+  $want = '\\.\' + ($Monitor -replace '^\\\\\.\\', '').ToUpper()
+  if ($mons -notmatch [regex]::Escape($want) + ' ') { $Monitor = ((@($mons -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ }))[0] -split ' ')[0]; $want = $Monitor }
+  foreach ($i in 1..3) {
+    $b = & $ctl background -Monitor $Monitor -Kenshi $Kenshi
+    $fit = @(Fit-RenderSize) -join ' / '
+    $w = (& $ctl window -Kenshi $Kenshi 2>&1 | Out-String).Trim()
+    $onMon = $w -match [regex]::Escape(($want -replace '^\\\\\.\\', '')) ; $okSize = $fit -match 'ok \('
+    if ($onMon -and $okSize) { "postlaunch ok (round $i): $fit; $w"; exit 0 }
+    "postlaunch round ${i}: $fit; $w"
+    Start-Sleep -Seconds 3
+  }
+  "postlaunch FAIL: game not at the Video Mode size on $want after 3 rounds"; exit 1
+}
 
 $bg = @{}
 if (-not $Play) { $bg = @{ Monitor = $Monitor; Background = $true; Isolate = $true } }

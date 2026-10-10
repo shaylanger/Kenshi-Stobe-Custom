@@ -70,6 +70,8 @@ launch() {
     sleep 3
   done
   pkill -f "kenshi-ctl.ps1 launch" 2>/dev/null; wait 2>/dev/null
+  # the killed proxy never ran kenshi-ctl's re-place + render fit (studio-fixture 2026-10-10: 798x413 on DISPLAY1): do it now
+  [ "${RIG:-5090}" = 4080 ] || { sleep 5; timeout 180 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" postlaunch </dev/null 2>&1 | tr -d '\r' >> "$O/launch.out"; }
   tail -3 "$O/launch.out"
 }
 reload() {   # reload <save> <player>; 1 = the game didn't come back
