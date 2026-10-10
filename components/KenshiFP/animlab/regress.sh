@@ -130,5 +130,16 @@ r=$(cd "$W" && python3 "$L/metricslab.py" faithful vmrec-q-sword-z0.txt 0 520 --
 case "$r" in *"faithful-drive FAIL"*) ok "miss elbow drift reproduced (rendered targets): $r";; *) bad "miss elbow drift not reproduced: $r";; esac
 r=$(cd "$W" && python3 "$L/metricslab.py" faithful vmrec-q-sword-z0.txt 0 520 --commanded --adapter "$BLD/kfpvm_drive_6c9516b" --args=--quiet --out /tmp/al-faith 2>&1 | tail -1)
 case "$r" in *"faithful-drive PASS"*) ok "elbow drift fixed (commanded targets): $r";; *) bad "elbow drift with commanded targets: $r";; esac
+#  17. miss E1 "arm churn + hand roll in the wind-up" (Shay rejected the kfp-e1-keys candidate video): `animlab.py churn`
+#      (rev = visible forearm end out-and-back px within 0.4 s with the grip within 250 px, gate 450; windup_roll = hand
+#      roll about the forearm from the first swing frame to u 0.28, gate 15 deg). Game vmq-f8c sword-z0 must PASS
+#      (rev ~98, roll ~10); the candidate kfp-e1-keys.py replaying f14-e0 must FAIL both (rev ~556, roll ~159).
+r=$(python3 "$L/animlab.py" churn "$W/vmrec-q-sword-z0.txt")
+case "$r" in "churn PASS"*) ok "churn game vmq-f8c sword-z0: $r";; *) bad "churn game vmq-f8c sword-z0: ${r:-no churn line}";; esac
+if [ -x "$BLD/kfpvm_e1k" ] && [ -f /mnt/c/KenshiModding/pending-fixes/kfp-e1-keys.py ]; then
+  "$BLD/kfpvm_e1k" "$W/f14-e0.txt" /tmp/al-e1kc.txt --quiet >/dev/null 2>&1
+  r=$(python3 "$L/animlab.py" churn /tmp/al-e1kc.txt)
+  case "$r" in "churn FAIL rev="*":BAD@"*"windup_roll="*":BAD"*) ok "miss E1 churn reproduced (kfp-e1-keys candidate, f14-e0): $r";; *) bad "miss E1 churn not reproduced: ${r:-no churn line}";; esac
+else echo "REGRESS INFO E1 churn: candidate kfp-e1-keys.py not built"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
