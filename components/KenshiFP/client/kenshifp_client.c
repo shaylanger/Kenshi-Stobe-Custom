@@ -1265,6 +1265,7 @@ static int fp_combat_suppress_shot(void *,void *);
 /* T2-T5 FP turret control (kfp_turret.inc) */
 static void fp_turret_shot_diag(void *,void *,void *,int,const Vec3 *,const char *);
 static void fp_turret_hud(char *b,size_t n);static int g_tur_ammo,g_tur_nopower;static float g_tur_rl_left;   /* T6 (kfp_turret.inc) */
+static void fp_turret_eye(Vec3 *eye,const Vec3 *centerOgre);   /* T6: eye orbits the gun pivot with the turret yaw (kfp_turret.inc) */
 static void *g_tur_pc,*g_tur_rc,*g_tur_gun,*g_tur_harp;static int g_tur_dispatch;static int g_tur_ui_fire;static unsigned g_tur_updt_suppressed,g_tur_r_ignored;
 static int fp_turret_tick(void *,void *,void *,float);static void fp_turret_drop(const char *);static int fp_turret_suppress_shot(void *);
 static int kah_fp_turret(const char *,int,const char *const *,KAH_Reply *,void *);
@@ -4349,6 +4350,7 @@ static void fp_camera_override(void *gw)
              * visible at high game speed. Input smoothness comes from
              * DirectInput now, not from damping the eye path. */
 
+            if (g_tur_pc) fp_turret_eye(&eyeW,&centerW);   /* T6: ride with the turret */
             fp_view_apply(&eyeW); /* distance/collision after calibrated eye anchor */
             g_dbg_center_y = centerW.y; g_dbg_eye_y = eyeW.y;   /* for tuning */
             /* [fdbg] eye trace, every camera frame while airborne: this is the

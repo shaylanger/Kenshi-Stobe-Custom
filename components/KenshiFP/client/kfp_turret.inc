@@ -82,9 +82,26 @@ static void *fp_turret_of(void *pc) {
     if (!readable(gun,0x130) || *(void **)((uintptr_t)gun+TUR_GUN_BACK)!=b) return NULL;
     return b;
 }
+/* T6 (2026-10-10 video: aiming right swung the barrel out of the view): the operator stands still while the gun
+ * turns about its pivot, so the eye (on her head) stayed put. Rotate the eye about the gun pivot by the turret's
+ * yaw change since mount, measured from the eye->pivot bearing then, so the view stays behind the barrel. */
+static int g_tur_eye_set;static float g_tur_eye_yaw0;static unsigned g_tur_eye_calls;
+static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
+    if (!g_tur_pc||!g_tur_bld||!g_tur_gun||!readable((char *)g_tur_bld+TUR_CUR_DIR,12)||!readable((char *)g_tur_gun+0xE4,12)) return;
+    const Vec3 *cd=(const Vec3 *)((uintptr_t)g_tur_bld+TUR_CUR_DIR),*pv=(const Vec3 *)((uintptr_t)g_tur_gun+0xE4);
+    if (!isfinite(cd->x)||!isfinite(cd->z)||cd->x*cd->x+cd->z*cd->z<1e-4f||!isfinite(pv->x)||!isfinite(pv->z)) return;
+    Vec3 cw;if (!co||!char_position(g_tur_pc,&cw)) return;
+    float rx=co->x-cw.x,rz=co->z-cw.z;   /* eye is in Ogre space (floating origin), the gun pivot in world space */
+    float px=pv->x+rx,pz=pv->z+rz;
+    float dx=e->x-px,dz=e->z-pz;if (dx*dx+dz*dz<1e-2f||dx*dx+dz*dz>4e4f) return;   /* eye not near this gun */
+    float yaw=atan2f(cd->x,cd->z);
+    if (!g_tur_eye_set) {g_tur_eye_yaw0=atan2f(-dx,-dz);g_tur_eye_set=1;logline("[turret] eye rides the gun: bearing0=%.3f gun_yaw=%.3f eye_off=%.1f,%.1f rebase=%.1f,%.1f",g_tur_eye_yaw0,yaw,dx,dz,rx,rz);}
+    float d=yaw-g_tur_eye_yaw0,c=cosf(d),s=sinf(d);
+    e->x=px+dx*c+dz*s;e->z=pz+dz*c-dx*s;++g_tur_eye_calls;
+}
 static void fp_turret_drop(const char *why) {
     if (g_tur_pc) {++g_tur_leaves;logline("[turret] FP turret control ends (%s)",why);}
-    g_tur_pc=g_tur_rc=NULL;g_tur_bld=NULL;g_tur_rl_left=-1.0f;g_tur_why=why;g_tur_aim_valid=0;
+    g_tur_pc=g_tur_rc=NULL;g_tur_bld=NULL;g_tur_rl_left=-1.0f;g_tur_why=why;g_tur_aim_valid=0;g_tur_eye_set=0;
 }
 /* Returns 1 while the FP-controlled char mans a turret (the caller then skips the hand-weapon adapters). */
 static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
