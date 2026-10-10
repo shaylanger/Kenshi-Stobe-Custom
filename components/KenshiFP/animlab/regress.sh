@@ -94,11 +94,15 @@ case "$r" in "jitter FAIL"*) ok "miss X1 reproduced (crossbow-z0 @6c9516b): $r";
 bash "$HERE/build.sh" --rev d40b6ad --out "$BLD/kfpvm_d40b6ad" >/tmp/al-build8.txt 2>&1 || bad build-d40b6ad
 r=$("$BLD/kfpvm_d40b6ad" "$W/f14-xb0.txt" /tmp/al-x1b.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare "$W/f14-xb0.txt" /tmp/al-x1b.txt | grep '^jitter ')
 case "$r" in "jitter PASS"*) ok "X1 fixed build (f14-xb0, node-map solver d40b6ad): $r";; *) bad "X1 jitter on f14-xb0: ${r:-no jitter line}";; esac
-#  13. miss C3 "bolt jitter on walk": `animlab.py bolt` (game recording + its <rec>.bolt sidecar: the loaded bolt's origin in
-#      the weapon frame must stay within 0.1 dm of its median, per-frame step <= 0.05 dm). f16/c3a (walk, build 18:55) must FAIL.
-for f in c3a.txt c3a.txt.bolt; do [ -f "$W/f16-$f" ] || cp "/mnt/c/KenshiTestRuns/f16/$f" "$W/f16-$f" 2>/dev/null || bad "missing recording f16/$f"; done
-r=$(python3 "$L/animlab.py" bolt "$W/f16-c3a.txt")
-case "$r" in "bolt FAIL ready:"*) ok "miss C3 reproduced (f16-c3a): $r";; *) bad "miss C3 not reproduced: ${r:-no bolt line}";; esac
+#  13. miss C3 "bolt jitter on walk": `animlab.py bolt` (game recording + its <rec>.bolt sidecar: the bolt node in the
+#      post-IK Prop2 frame (column group 5 "sl", builds with the C3 pin code) must stay within 0.1 dm of its median,
+#      per-frame step <= 0.05 dm; group 1 "bl" uses mp, measured at another time: false drift, only a fallback).
+#      f16/r0 (pin off) must FAIL, f16/r1 (pin on, KenshiFP F8041381) must PASS.
+for f in r0.txt r0.txt.bolt r1.txt r1.txt.bolt; do [ -f "$W/f16-$f" ] || cp "/mnt/c/KenshiTestRuns/f16/$f" "$W/f16-$f" 2>/dev/null || bad "missing recording f16/$f"; done
+r=$(python3 "$L/animlab.py" bolt "$W/f16-r0.txt")
+case "$r" in "bolt FAIL ready:"*src=sl) ok "miss C3 reproduced (f16-r0, pin off): $r";; *) bad "miss C3 not reproduced: ${r:-no bolt line}";; esac
+r=$(python3 "$L/animlab.py" bolt "$W/f16-r1.txt")
+case "$r" in "bolt PASS ready:"*src=sl) ok "C3 fixed (f16-r1, pin on): $r";; *) bad "C3 pin on f16-r1: ${r:-no bolt line}";; esac
 #  14. miss C1 "aim pose did not play" (combat layer read real keys only; fixed by the fp_combat input path): `animlab.py
 #      metrics` moves line. f14/xb0 (pre-fix, game st never 'aim') must FAIL aim:MISSING; vmq-125c crossbow-z0 (build
 #      Oct 9 19:32:36, post-fix) must PASS.
