@@ -10,6 +10,8 @@
 #   pf_loaded                  crossbow loaded: RMB held until fp_combat loaded>=1, released, loaded=1 verified
 #   pf_fail <reason>           print the RESULT line and exit 1 (runs PF_ON_FAIL first if set)
 PF_A(){ stobe-auto "$@" </dev/null 2>&1; }
+# Git Bash (4080 rig) has no wslpath: cygpath does the same
+command -v wslpath >/dev/null 2>&1 || wslpath(){ [ "$1" = -w ] && shift; cygpath -w "$1"; }
 PF_FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
 PF_SHOTS=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/mods/AutomationHarness/shots   # rig layer: tools/automation/rig-env.sh
 PF_LAB=${CR:-/mnt/c}/KenshiModding/Kenshi-Automation-Harness/tools/animlab
