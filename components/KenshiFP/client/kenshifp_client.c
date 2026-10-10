@@ -4568,6 +4568,37 @@ static void fp_camera_override(void *gw)
  * to the game's own handlers instead of being hijacked. (Declarations hoisted
  * above get_head_quat, which also uses the guard.) */
 
+static void kfp_mod_off(DWORD64 a, char *b, size_t n)
+{
+    HMODULE m = NULL; char path[MAX_PATH];
+    if (a && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                (LPCSTR)(uintptr_t)a, &m) && m && GetModuleFileNameA(m, path, sizeof path)) {
+        const char *sl = strrchr(path, 92);
+        snprintf(b, n, "%s+0x%llX", sl ? sl + 1 : path, (unsigned long long)(a - (DWORD64)(uintptr_t)m));
+    } else snprintf(b, n, "0x%llX", (unsigned long long)a);
+}
+/* crash trace: unwind the faulting thread (RtlVirtualUnwind over .pdata; a frame without unwind info, e.g. a
+ * call to a garbage address, is treated as a leaf: return address at [rsp]) and log module+offset per frame. */
+static void kfp_crash_trace(EXCEPTION_POINTERS *ep)
+{
+    static char line[2400]; char m[128];
+    CONTEXT c = *ep->ContextRecord; EXCEPTION_RECORD *er = ep->ExceptionRecord;
+    kfp_mod_off(c.Rip, m, sizeof m);
+    int k = snprintf(line, sizeof line, "[crash] code=%08lX tid=%lu rip=%s info=%llX,%llX rcx=%llX rdx=%llX stack:",
+                     er->ExceptionCode, GetCurrentThreadId(), m,
+                     (unsigned long long)(er->NumberParameters > 0 ? er->ExceptionInformation[0] : 0),
+                     (unsigned long long)(er->NumberParameters > 1 ? er->ExceptionInformation[1] : 0),
+                     (unsigned long long)c.Rcx, (unsigned long long)c.Rdx);
+    for (int i = 0; i < 48 && c.Rip && k < (int)sizeof line - 160; i++) {
+        DWORD64 ib = 0; PRUNTIME_FUNCTION f = RtlLookupFunctionEntry(c.Rip, &ib, NULL);
+        if (!f) { if (!readable((void *)(uintptr_t)c.Rsp, 8)) break; c.Rip = *(DWORD64 *)(uintptr_t)c.Rsp; c.Rsp += 8; }
+        else { PVOID hd = NULL; DWORD64 ef = 0; RtlVirtualUnwind(0 /* UNW_FLAG_NHANDLER */, ib, c.Rip, f, &c, &hd, &ef, NULL); }
+        if (!c.Rip) break;
+        kfp_mod_off(c.Rip, m, sizeof m); k += snprintf(line + k, sizeof line - k, " < %s", m);
+    }
+    logline("%s", line);
+}
+
 static LONG CALLBACK veh_guard(EXCEPTION_POINTERS *ep)
 {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -4579,6 +4610,11 @@ static LONG CALLBACK veh_guard(EXCEPTION_POINTERS *ep)
          || code == EXCEPTION_DATATYPE_MISALIGNMENT)) {
         g_guard_armed = 0;
         longjmp(g_guard_jb, 1);
+    }
+    if (code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_ILLEGAL_INSTRUCTION || code == EXCEPTION_PRIV_INSTRUCTION) {
+        static DWORD64 seen[64]; static volatile LONG nseen; DWORD64 rip = ep->ContextRecord->Rip; int dup = 0;
+        for (LONG i = 0; i < nseen && i < 64; i++) if (seen[i] == rip) { dup = 1; break; }
+        if (!dup && nseen < 64) { seen[InterlockedIncrement(&nseen) - 1] = rip; kfp_crash_trace(ep); }   /* unguarded fault: log where, once per fault address */
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
