@@ -331,9 +331,13 @@ row() { local res=$2 ev=$3 hh; hh=$(hostile_hit)
   case "$ev" in setup:*) ;; *) [ -n "$hh" ] && { res=FAIL; ev="setup: hostile attacking the squad during the row ($hh) | $ev"; };; esac
   RESULTS+=("RESULT $1 $res $ev"); echo "RESULT $1 $res $ev" >> "$LOG"; SL0=$(slog_n); }
 judge() { if [ "$2" = 1 ]; then row "$1" PASS "$3"; else row "$1" FAIL "$3"; fi; }
-finish() { for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done; }
+# finish [why]: every requested row ends in exactly one RESULT line (op-pt1 ticket 2026-10-10): a row no path judged gets
+# a FAIL naming the gap, so a skipped row is never silent; runs once (cleanup calls it for an early exit)
+finish() { local r; [ -n "$FINISHED" ] && return 0; FINISHED=1
+  for r in $ROWS; do printf '%s\n' "${RESULTS[@]}" | grep -q "^RESULT $r " || row "$r" FAIL "${1:-no verdict: no script path judged this row (script bug)}"; done
+  for r in "${RESULTS[@]}"; do case "$r" in *FAIL*) echo "$r log=$LOG";; *) echo "$r";; esac; done; }
 # setup_fail <reason>: every wanted row not yet reported gets `FAIL setup: <reason>`
-setup_fail() { local r; for r in $ROWS; do printf '%s\n' "${RESULTS[@]}" | grep -q "^RESULT $r " || row "$r" FAIL "setup: $1"; done; finish; exit 1; }
+setup_fail() { finish "setup: $1"; exit 1; }
 # rows_fail <reason> <rows...>: the listed wanted rows fail on a setup reason
 rows_fail() { local why=$1 r; shift; for r in "$@"; do want "$r" && row "$r" FAIL "setup: $why"; done; }
 
@@ -412,8 +416,9 @@ bow_on() { bow_back && return 0; [ -n "$BOWN" ] || return 1
 draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
 
 # ---- restore on exit ----
-FP0=""; DIST0=""; AR0=""; EN0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
-cleanup() { A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/null; A fp_move none >/dev/null
+FINISHED=""; FP0=""; DIST0=""; AR0=""; EN0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
+cleanup() { local rc=$?; [ -n "$FINISHED" ] || finish "no verdict: the script exited early (exit $rc) before judging this row"
+  A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/null; A fp_move none >/dev/null
   A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null; [ "$EN0" = 0 ] && A fp_combat off >/dev/null
   [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
@@ -601,7 +606,9 @@ vmq_spot() { [ "${VMQ_SPOT:-1}" = 1 ] || return 0; local p r x y z a d bad="" fy
   [ -z "$bad" ] || setup_fail "VMQUICK spot $p not clear within ${VMQ_CLEAR:-100} (hits$bad)"; note "VMQUICK spot $p clear (13 rays, ${VMQ_CLEAR:-100})"
   # op-b4: "Malzin is attacking!" during VMQUICK shook the body (tipd flags = setup, not the build): take-preflight area
   # check per segment (no non-squad char within TAKE_R, nobody down, no new combat message) or setup_fail (VMQ_PF=0: off)
-  [ "${VMQ_PF:-1}" = 1 ] && pf_area "$SH" "$MT|Shay|$TG"; }
+  # VMQ_PF is 1 only where take-preflight.sh was sourced (VMQUICK); PT29 calls vmq_seg without it (dryrun 2026-10-10:
+  # "pf_area: command not found" on every PT29 segment)
+  if [ "${VMQ_PF:-0}" = 1 ]; then pf_area "$SH" "$MT|Shay|$TG"; fi; }
 vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
   # zoomed out: the body faces the base (yaw 180) so the camera orbited round to its front looks out over open ground
   # (m78 f8: facing +z the zoom-25 frames had the base wall in the background)
@@ -743,7 +750,7 @@ else
   # on 719BE071 vmrec-pt30-xbow reloading frames p5..p95: pz 2.64..4.05, fy 0.00..0.60, fz 0.58..0.99, uz -0.69..-0.05
   { [ "${VST[xbow-reload]}" = reloading ] && vq "pz>=2.5 && fy>=-0.05 && fz>=0.55 && uz<=0.0" xbow-reload && xq "ly>=-0.33 && rwz>=3.0 && lwz>=3.0" xbow-reload; } || { ok=0; why+=" reload"; }
   GEO="geo(tx ty bmin cov om oe ly lhs rwz lwz) ready=[$(xbgeo xbow-ready)] aim=[$(xbgeo xbow-aim)] fire=[$(xbgeo xbow-fire)] reload=[$(xbgeo xbow-reload)]"
-  judge PT28 $ok "$(pev xbow-ready) | $(pev xbow-aim) | $(pev xbow-fire) kicks=$K0->$K1 | $(pev xbow-reload) | $GEO${why:+ | bad:$why}"
+  want PT28 && judge PT28 $ok "$(pev xbow-ready) | $(pev xbow-aim) | $(pev xbow-fire) kicks=$K0->$K1 | $(pev xbow-reload) | $GEO${why:+ | bad:$why}"
   draw_to 0; fi; fi
 # ---- PT30 crossbow part: every frame of draw, aim, fire, reload, ready, aim, holster (fp_vm rec) ----
 if want PT30; then if [ $BOWOK = 0 ] || [ "$(bow_now)" = none ]; then P30X="ok=0 setup: no crossbow on $SH"
