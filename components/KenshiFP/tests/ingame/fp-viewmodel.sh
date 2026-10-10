@@ -184,7 +184,7 @@ for i,r in enumerate(F):
     r['vis']=r['wih']!=0 and (onscr(r['rp']) or onscr(tip(r)))
     p=F[i-1] if i else r
     r['tipd']=ln(sub(tip(r),tip(p))); r['df']=ang(r['rf'],p['rf']); r['du']=ang(r['ru'],p['ru'])
-    tl=r['t'] if (r['st']!='reloading' or r['fire']>0 or r['kick']>0 or i==0) else tl; r['rlt']=r['t']-tl   # s since the post-shot aim hold ended (reload blend-in excluded)
+    tl=r['t'] if (r['st']!='reloading' or r['op'][2]<1.0 or r['fire']>0 or r['kick']>0 or i==0) else tl; r['rlt']=r['t']-tl   # s since the post-shot aim hold ended (reload blend-in excluded)
 flags=[]; errmax=0.0; errat="-"; t2=-9.0; rlz=99.0; nvis=0; tipmax=0.0; dfmax=0.0
 for i in range(1,N-1):
     a,b,c=F[i-1],F[i],F[i+1]
@@ -196,6 +196,7 @@ for i in range(1,N-1):
         e=ln(sub(b["rp"],b["op"]))
         if e>errmax: errmax=e; errat="%d:%s"%(i,b["st"])
     if b['cls']==1 and b['st']=='reloading' and b['ti']==2 and b['rlt']>=0.4: rlz=min(rlz,b['rp'][2])
+    # C4d: rlt also restarts while a reload from ready holds the AIM pose (op z<1, at the eye) for the native raise
     if not a['vis'] or max(a['dt'],b['dt'],c['dt'])>DTH: continue   # entering the view / game hitch frame or next to one (motion is
                                                        # per time; a hitch neighbour's step averages over a peak, PT17 m77 f228)
     if b['kick']>0 and a['kick']==0: continue          # fire kick onset: an impulse by design (sharp kick)

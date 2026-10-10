@@ -111,7 +111,9 @@ static VmPose g_vm_low[2] = {
                                                                                  * is a straight rise/drop with the hand in front of the plane) */
 static float g_vm_kick_t = -1.0f, g_vm_kick_rise = 0.06f;   /* fire kick: time since the shot; rise (ease-out) then smooth return */
 static int g_vm_rlnat = 1; static float g_vm_rlw, g_vm_rltr = 0.5f, g_vm_rlblend = 0.2f, g_vm_rl_dy = 0.0f;
-static Vec3 g_vm_rl_p0; static int g_vm_have_rl0; static unsigned g_vm_rlcone_n; static float g_vm_rlcone = 20.0f; static int g_vm_rlwait = 1; static float g_vm_rlmin = 0.72f, g_vm_xwpm = 1.0f;   /* C4c: X3 hand within rlcone deg of the target ray */   /* X3 native reload: weight, bow start pos (skeleton) */
+static Vec3 g_vm_rl_p0; static int g_vm_have_rl0; static unsigned g_vm_rlcone_n; static float g_vm_rlcone = 20.0f; static int g_vm_rlwait = 1; static float g_vm_rlmin = 0.72f, g_vm_xwpm = 1.0f;
+static int g_vm_rl_natok, g_vm_have_rlvp, g_vm_rl_wait, g_vm_rl_go; static Vec3 g_vm_rl_vprev;
+static float g_vm_rlfwd = 0.85f, g_vm_rlrise = -0.5f, g_vm_rlstill = 3.0f, g_vm_rlto = 1.0f;   /* C4d: X3 waits for the native raise */   /* C4c: X3 hand within rlcone deg of the target ray */   /* X3 native reload: weight, bow start pos (skeleton) */
 static float g_vm_rl_t; static float g_vm_rl_per = 1.3f, g_vm_rl_amp = 1.0f;  /* reload: time in reload, spanning cycle period (amp 1.6 dipped the hand behind the HUD) */
 /* ranged near-plane routing: while the current grip and the target grip lie on different sides of the near clip (zc),
  * the spring heads for a waypoint below the view (y g_vm_xwp_y, z = zc -/+ g_vm_xwp_dz on the target's side) so the hand
@@ -787,6 +789,13 @@ static void vm_apply(void *skel)
          * native 2-handed grip (last seen near) */
         if (g_vm_omode && g_vm_have_orel) { Qo = quat_norm(quat_mul(Qp, g_vm_orel)); keep = 0; }
     }
+    if (g_vm_class == 1) {   /* C4d: native weapon hand forward, raised and still (a reload from ready first raises the bow) */
+        const Vec3 *pS_ = g_oldnode_getdpos(b[wh][0]);
+        Vec3 v_ = vm_sub(g_vm_nhp[wh], readable((void *)pS_, 12) ? *pS_ : g_vm_nhp[wh]); float l_ = vm_len(v_);
+        float sp_ = g_vm_have_rlvp ? vm_len(vm_sub(v_, g_vm_rl_vprev)) / fmaxf(g_vm_dt, 0.004f) : 1e9f;
+        g_vm_rl_natok = l_ > 1e-5f && v_.z / l_ > g_vm_rlfwd && v_.y / l_ > g_vm_rlrise && sp_ < g_vm_rlstill;
+        g_vm_rl_vprev = v_; g_vm_have_rlvp = 1;
+    } else g_vm_have_rlvp = 0;
     if (rlr > 0.0f) {   /* X3: native two-hand reload moved into view: bow at the hold point (+ rltr of its native travel) */
         const Vec3 *pS = g_oldnode_getdpos(b[wh][0]);
         Vec3 S0 = readable((void *)pS, 12) ? *pS : g_vm_nhp[wh];
@@ -1401,7 +1410,11 @@ static void vm_frame_core(void *pc, int body_down)
 
     {   VmPose tgt;
         if (g_vm_phase == VMP_LOWER || ti < 0) tgt = vm_pose_norm(g_vm_low[g_vm_class]);
-        else tgt = vm_pose_norm(g_vm_pose[g_vm_class][ti]);
+        else {   /* C4d: while the X3 blend waits for the native raise, hold the aim pose (raise with the native) */
+            if (ti == VM_RELOAD && g_vm_class == 1) { if (g_vm_rl_natok || g_vm_rlw > 0.0f || g_vm_rl_t > g_vm_rlto) g_vm_rl_go = 1; } else g_vm_rl_go = 0;   /* latched per reload */
+            g_vm_rl_wait = ti == VM_RELOAD && g_vm_class == 1 && g_vm_rlnat && !g_vm_rl_go;
+            tgt = vm_pose_norm(g_vm_pose[g_vm_class][g_vm_rl_wait ? VM_AIM : ti]);
+        }
         if (g_vm_class == 1 && ti == VM_AIM && g_vm_phase != VMP_LOWER) {   /* bolt converges on the crosshair */
             Vec3 b = tgt.p; tgt.f = vm_norm(vm_v(-b.x, -b.y, g_vm_aim_dist - b.z));
             tgt = vm_pose_norm(tgt);
@@ -1417,7 +1430,8 @@ static void vm_frame_core(void *pc, int body_down)
             tgt = vm_pose_norm(tgt);
         } else g_vm_rl_t = 0.0f;
         {   int rlon = ti == VM_RELOAD && g_vm_class == 1 && g_vm_phase == VMP_NORMAL && on
-                       && !(g_vm_rlwait && g_vm_cur.p.z < g_vm_elb_zc + g_vm_xwpm);   /* C4c: native reload only past the crossing */
+                       && !(g_vm_rlwait && g_vm_cur.p.z < g_vm_elb_zc + g_vm_xwpm)
+                       && g_vm_rl_go;   /* C4d: not during the native raise (latched once the native is up) */   /* C4c: native reload only past the crossing */
             g_vm_rlw += (rlon ? 1.0f : -1.0f) * adt / fmaxf(g_vm_rlblend, 0.01f);
             g_vm_rlw = g_vm_rlw < 0.0f ? 0.0f : g_vm_rlw > 1.0f ? 1.0f : g_vm_rlw; }
         if (g_vm_phase == VMP_DRAW) {                    /* hold below the view until the blend is done, then rise */
@@ -1715,6 +1729,10 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "rlend"))   { g_vm_rlend = x != 0; return 1; }
     else if (!strcmp(k, "boltpin")) { g_vm_boltpin = (int)x; return 1; }
     else if (!strcmp(k, "rltr"))    { if (x >= 0 && x <= 1) g_vm_rltr = x; return 1; }
+    else if (!strcmp(k, "rlfwd"))   { if (x >= -1 && x <= 1) g_vm_rlfwd = x; return 1; }
+    else if (!strcmp(k, "rlrise"))  { if (x >= -1 && x <= 1) g_vm_rlrise = x; return 1; }
+    else if (!strcmp(k, "rlstill")) { if (x >= 0 && x <= 1000) g_vm_rlstill = x; return 1; }
+    else if (!strcmp(k, "rlto"))    { if (x >= 0 && x <= 10) g_vm_rlto = x; return 1; }
     else if (!strcmp(k, "rlmin"))   { if (x >= 0 && x <= 2) g_vm_rlmin = x; return 1; }
     else if (!strcmp(k, "xwpm"))    { if (x >= 0 && x <= 4) g_vm_xwpm = x; return 1; }
     else if (!strcmp(k, "rlwait"))  { g_vm_rlwait = x > 0.5f; return 1; }
