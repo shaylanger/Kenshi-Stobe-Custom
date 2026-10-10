@@ -1241,6 +1241,9 @@ static void *g_head_hidden_char;        /* the exact character whose head we hid
 static void *g_gear_hid[16];  /* the mesh entities WE hid, so the restore is exact and we
                                * never re-show something the game had hidden on its own */
 static int   g_gear_n;
+static unsigned g_gear_vf[16]; /* each hidden entity's original visibility flags (restored on show) */
+typedef unsigned (*ent_getvf_t)(void *); typedef void (*ent_setvf_t)(void *, unsigned);
+static ent_getvf_t g_ent_getvf; static ent_setvf_t g_ent_setvf;
 static void *g_gear_pc;       /* character whose worn items headgear_set_hidden walks (hand-bone lookup) */
 static void *g_gear_wlast[16]; static unsigned char g_gear_wstate[16]; static int g_gear_wn;   /* holster diag */
 static get_bone_world_t g_get_bone_world;   /* Character::getBoneWorldPosition */
@@ -6264,6 +6267,11 @@ static void gearnode_key(void *node, char *out, size_t outsz)
 #define GD_TYPE        0x50   /* GameData::type (itemType) */
 #define ITYPE_WEAPON   2
 #define ITYPE_CROSSBOW 107
+static void gear_show(void *mesh, unsigned vf)
+{
+    g_ent_setvisible(mesh, 1);
+    if (g_ent_setvf) g_ent_setvf(mesh, vf);
+}
 static int gear_item_type(void *gd)
 {
     return readable(gd, GD_TYPE + 4) ? *(int *)((uintptr_t)gd + GD_TYPE) : -1;
@@ -6331,10 +6339,11 @@ static void headgear_set_hidden(void *app, int hide, int logit)
      * The PREVIOUS pass's list is snapshotted first: re-assert passes diff against it
      * to catch the game re-showing or replacing an entity we hid (field diagnosis:
      * facial hair reported visible after a clean hide pass). */
-    void *prev[16]; int prevn = 0;
+    void *prev[16]; unsigned prevvf[16]; int prevn = 0;
     if (hide) {
         prevn = g_gear_n;
         memcpy(prev, g_gear_hid, sizeof prev);
+        memcpy(prevvf, g_gear_vf, sizeof prevvf);
         g_gear_n = 0;
     }
     void *node = bk[nb];
@@ -6368,9 +6377,10 @@ static void headgear_set_hidden(void *app, int hide, int logit)
         }
         if (!slothead && !keyhead && !holstered) {
             /* a weapon we hid while holstered is now in hand (drawn), or this is the restore pass */
-            void **lst = hide ? prev : g_gear_hid; int ln = hide ? prevn : g_gear_n;
+            void **lst = hide ? prev : g_gear_hid; unsigned *lvf = hide ? prevvf : g_gear_vf;
+            int ln = hide ? prevn : g_gear_n;
             for (int j = 0; j < ln && j < 16; j++)
-                if (lst[j] == mesh) { g_ent_setvisible(mesh, 1); break; }
+                if (lst[j] == mesh) { gear_show(mesh, lvf[j]); break; }
             if (logit) logline("[head] gear key=\"%s\" item=%p slot=%d mesh=%p -> kept (not head-covering, slots=0x%x)",
                                kn, item, slot, mesh, g_cfg_headgear_slots);
             continue;
@@ -6390,15 +6400,19 @@ static void headgear_set_hidden(void *app, int hide, int logit)
                             kn, mesh, wasours, vis);
                 }
             }
+            unsigned vf = g_ent_getvf ? g_ent_getvf(mesh) : 0;
+            for (int j = 0; j < prevn && j < 16; j++)
+                if (prev[j] == mesh) { vf = prevvf[j]; break; }   /* ours: keep the ORIGINAL flags */
             g_ent_setvisible(mesh, 0);
-            if (g_gear_n < (int)(sizeof g_gear_hid / sizeof g_gear_hid[0]))
-                g_gear_hid[g_gear_n++] = mesh;
+            if (g_ent_setvf) g_ent_setvf(mesh, 0);
+            if (g_gear_n < (int)(sizeof g_gear_hid / sizeof g_gear_hid[0])) {
+                g_gear_vf[g_gear_n] = vf; g_gear_hid[g_gear_n++] = mesh; }
             nhid++;
             if (logit) logline("[head] gear key=\"%s\" item=%p slot=%d mesh=%p -> hidden",
                                kn, item, slot, mesh);
         } else if (!gamehides || holstered) {
             for (int j = 0; j < g_gear_n; j++)
-                if (g_gear_hid[j] == mesh) { g_ent_setvisible(mesh, 1); nhid++; break; }
+                if (g_gear_hid[j] == mesh) { gear_show(mesh, g_gear_vf[j]); nhid++; break; }
         }
     }
     if (!hide) g_gear_n = 0;
@@ -6445,8 +6459,8 @@ static int kah_fp_gear(const char *id, int argc, const char *const *argv, KAH_Re
         for (int j = 0; j < g_gear_n; j++) if (g_gear_hid[j] == mesh) ours = 1;
         Vec3 v = {0, 0, 0}; void *sn = (mesh && g_get_parent_scenenode) ? g_get_parent_scenenode(mesh) : NULL;
         if (readable(sn, 8) && g_node_getdpos_v) g_node_getdpos_v(sn, &v);
-        k += snprintf(b + k, sizeof b - k, " | %s type=%d mesh=%p vis=%d ours=%d node=%.2f,%.2f,%.2f hand=%.2f",
-                      kn, gear_item_type(gd), mesh, vis, ours, v.x, v.y, v.z, mesh ? gear_hand_dist(mesh) : 99.0f);
+        k += snprintf(b + k, sizeof b - k, " | %s type=%d mesh=%p vis=%d vf=%x ours=%d node=%.2f,%.2f,%.2f hand=%.2f",
+                      kn, gear_item_type(gd), mesh, vis, (mesh && g_ent_getvf) ? g_ent_getvf(mesh) : 0u, ours, v.x, v.y, v.z, mesh ? gear_hand_dist(mesh) : 99.0f);
     }
     g_guard_armed = 0;
     r->append(r, b);
@@ -9039,6 +9053,8 @@ __declspec(dllexport) void dllStartPlugin(void)
         g_node_get_pos  = (node_get_pos_t)GetProcAddress(ogre, OGRE_GETPOS_SYM);
         g_ent_setvisible = (ent_setvisible_t)GetProcAddress(ogre, OGRE_SETVISIBLE_SYM);
         g_ent_getvisible = (ent_getvisible_t)GetProcAddress(ogre, OGRE_GETVISIBLE_SYM);
+        g_ent_getvf = (ent_getvf_t)GetProcAddress(ogre, "?getVisibilityFlags@MovableObject@Ogre@@QEBAIXZ");
+        g_ent_setvf = (ent_setvf_t)GetProcAddress(ogre, "?setVisibilityFlags@MovableObject@Ogre@@QEAAXI@Z");
         g_disable_bone  = (disable_bone_t)GetProcAddress(ogre, OGRE_DISABLEBONE_SYM);
         g_skel_getbone  = (skel_getbone_t)GetProcAddress(ogre, OGRE_GETBONE_SYM);
         g_oldnode_getdori = (oldnode_getdori_t)GetProcAddress(ogre, OGRE_OLDNODE_GETDORI_SYM);
