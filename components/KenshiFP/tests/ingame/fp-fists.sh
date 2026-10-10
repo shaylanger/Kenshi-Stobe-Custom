@@ -28,7 +28,11 @@ KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 fist(){ A fp_vm fist; }
-restore(){ A fp_vm set fist_tech -1 >/dev/null; A chatter on >/dev/null; }
+restore(){ A fp_vm set fist_tech -1 >/dev/null; A chatter on >/dev/null; [ -n "$MA0" ] && A setstat $SH martial_arts "$MA0" >/dev/null; }
+# op-fist1/fist4080e: the force never landed for ma chudan / ma 2strike: CharStats::chooseAttack only offers techniques whose
+# min/max skill window (game data, native.py catalog) holds the actor's Martial Arts (Axima ~15-20: shoteiL + badpunch only).
+# Windows: badpunch -1000..20, ma chudan 35+, ma 2strike 25+, shoteiL 15+ -> set MA inside the forced technique's window.
+MA_FOR=(10 40 30 18)
 PF_ROW=$ROW; PF_ON_FAIL='restore; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { touch "$N.stop"; wait $FP; }'
 . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$ROW"
@@ -66,6 +70,9 @@ pf_ready
 f=$(fist); [ "$(fld on <<<"$f")" = 1 ] && [ "$(fld fists <<<"$f")" = 1 ] && [ "$(fld wih <<<"$f")" = 0 ] \
   || pf_fail "fist mode not on after R (want on=1 fists=1 wih=0): $(cut -c1-120 <<<"$f")"
 pf_open 3
+MA0=$(A stat $SH martial_arts | grep -o 'base=[0-9.]*' | cut -d= -f2); [ -n "$MA0" ] || pf_fail "stat $SH martial_arts unreadable"
+A setstat $SH martial_arts ${MA_FOR[$TI]} >/dev/null
+ma=$(A stat $SH martial_arts | grep -o 'base=[0-9.]*' | cut -d= -f2); [ "${ma%.*}" = "${MA_FOR[$TI]}" ] || pf_fail "martial_arts ${MA_FOR[$TI]} not set (base=$ma): forced technique out of its skill window"
 A fp_vm set fist_tech $TI >/dev/null
 f=$(fist); [ "$(fld force <<<"$f")" = "$TI" ] || pf_fail "fp_vm set fist_tech $TI not taken: $(cut -c1-80 <<<"$f")"
 # ---- take
