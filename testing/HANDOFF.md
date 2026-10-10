@@ -33,7 +33,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - kfp-swinghit (started ~15:10, Shay order): FP melee hits every character in the swing area (allies + neutrals) as a KenshiFP settings toggle; patch pending-fixes/kfp-swing-hits-all.py via kfp-pipeline, test row fp-swing-hits-all for the operators.
 - e6-climb2 DONE: strokes 0+3 refit (pool 0.00 -> 1.00, du jump gone), patch pending-fixes/kfp-e6-strokes03-refit.py. kfp-fixer respawned ~15:15 to build z1-band-prevm + e6-strokes03-refit via kfp-pipeline, stage both rigs, then VMQUICK + E6 take.
 - Shay decided (15:30): two-handed weapons are held two-handed in FP; agent kfp-twohand builds it (spec+lab checks first, patch kfp-two-hand.py via pipeline).
-- Waiting for Shay: nothing.
+- Waiting for Shay: should katanas/sabres/hackers/blunt weapons also be two-handed in FP (the game holds them two-handed in their native stances; only "guard 1h" is one-handed)? For now only heavy + polearm get two hands.
   takes, weapon-matrix risk report.
 
 ## Earlier (2026-10-10 ~11:45, m90 coordinator handed off at context limit)
