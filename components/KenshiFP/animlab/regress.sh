@@ -442,8 +442,12 @@ done < "$CORPUS/MANIFEST.tsv"
 FP_=/mnt/c/KenshiModding/pending-fixes/kfp-fists-na1.py
 if [ -f "$FP_" ] || grep -q g_vm_fist_on /root/KenshiFP/client/kfp_viewmodel.inc 2>/dev/null; then
   [ -f "$FP_" ] || FP_=/dev/null
+  # the tree carries ONE lab-checked table set: v5 (kfp-fist-hud, HUD lift + reach comp) or v4 (u22); the code must
+  # replay exactly one of them (a v5 tree vs v4 keys failed as a false BREAK in run-comb-1535-x1)
+  r5=$(bash "$HERE/fist-equiv.sh" "$CORPUS/fists/pass-20261010-v5" "$FP_" | tail -1)
   r=$(bash "$HERE/fist-equiv.sh" "$CORPUS/fists/pass-20261010-u22" "$FP_" | tail -1)
-  case "$r" in "RESULT FIST-EQUIV PASS"*) ok "fist-equiv v4: ${r:0:140}";; *) bad "fist-equiv v4: $r";; esac
+  case "$r5|$r" in "RESULT FIST-EQUIV PASS"*) ok "fist-equiv: tables=v5 ${r5:0:130}";; *"|RESULT FIST-EQUIV PASS"*) ok "fist-equiv: tables=v4 ${r:0:130}";;
+    *) bad "fist-equiv: matches neither v5 nor v4 lab tables: v5 ${r5:0:120} | v4 ${r:0:120}";; esac
   r=$(bash "$HERE/fist-equiv.sh" "$CORPUS/fists/fail-20261010-u22" "$FP_" | tail -1)
   case "$r" in "RESULT FIST-EQUIV FAIL"*) ok "fist-equiv v3 mismatch caught: ${r:0:100}";; *) bad "fist-equiv v3 (want FAIL): $r";; esac
 else echo "REGRESS INFO fist-equiv: no fists patch / source"; fi
