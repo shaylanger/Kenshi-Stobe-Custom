@@ -13,10 +13,26 @@
 #   <t> world near=<other chars within TAKE_R m (default 20) of the fp char> nearest=<m> down=<dead/KO> msgs=<new> [msg=..]
 # Allowed = '|'-separated substrings of a `chars` entry (the dummy target's handle, a test mate): they never count.
 # Squad members (the fp character's faction) never count either.
+# Sync flashes (T6 label lag, 2026-10-10): take_sample_start shows sync flash 0 at T0 (harness `sync_flash`: full-view
+# magenta, TAKE_FLASH_MS default 150 ms), and `take_mark` (call it in the script's lab(), right after the label line,
+# not for `end`) shows the next one. Each writes `<t> mark sync=<n>` (send time) to the ev file; takecheck.py --video
+# pairs them with the flashes in the video (frames.py syncmarks) and FAILs a label whose flash is > 0.15 s off the T0
+# offset or missing. A harness without sync_flash: one `<t> mark sync_off=no-sync_flash` line, take_mark does nothing.
+#   lab(){ echo "$(awk ... ) $*" >> "$N.lab"; take_mark "$*"; }
 _TS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_ts_now() { awk -v a="$(date +%s.%N)" -v b="$_TS_T0" 'BEGIN{printf "%.2f", a-b}'; }
 take_sample_start() {
-  _TS_RUN=/tmp/take-sample-run.$$; : > "$1"; touch "$_TS_RUN"
+  _TS_RUN=/tmp/take-sample-run.$$; : > "$1"; touch "$_TS_RUN"; _TS_EV=$1; _TS_T0=$2; _TS_MN=0
+  local t r; t=$(_ts_now); r=$(stobe-auto sync_flash "${TAKE_FLASH_MS:-150}" 0 </dev/null 2>&1)
+  case "$r" in *"sync_flash n=0"*) _TS_MOK=1; echo "$t mark sync=0" >> "$1";;
+    *) _TS_MOK=0; echo "$t mark sync_off=no-sync_flash" >> "$1";; esac
   KAH_DIR="${KAH_DIR:-D:\\Steam\\steamapps\\common\\Kenshi\\mods\\AutomationHarness}" \
     python3 "$_TS_DIR/take_sample.py" "$1" "$2" "$3" "${4:-}" --run "$_TS_RUN" 2>>"$1.err" & _TS_P=$!
+}
+take_mark() {   # take_mark "<label>": sync flash for the label just written (none for `end`: the video stops there);
+  # no-op outside a sampled take or without harness sync_flash
+  [ "${_TS_MOK:-0}" = 1 ] && [ -e "${_TS_RUN:-/nonexistent}" ] && [ "${1:-}" != end ] || return 0
+  _TS_MN=$((_TS_MN + 1)); echo "$(_ts_now) mark sync=$_TS_MN" >> "$_TS_EV"
+  stobe-auto sync_flash "${TAKE_FLASH_MS:-150}" "$_TS_MN" </dev/null >/dev/null 2>&1 &
 }
 take_sample_stop() { rm -f "$_TS_RUN"; wait "$_TS_P" 2>/dev/null; }
