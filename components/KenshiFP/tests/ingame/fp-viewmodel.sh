@@ -182,7 +182,7 @@ cuts=[]
 for i in range(len(F)-1):
     a,b=F[i],F[i+1]; a['rp']=remap(b['mp'],a,b,1); a['rf']=remap(b['mf'],a,b,0); a['ru']=remap(b['mu'],a,b,0)
     if a['w']>=0.01 and b['j']:
-        J=[remap(x,a,b,1) for x in b['j']]; W=J[5]
+        J=[remap(x,a,b,1) for x in b['j']]; W=J[5]; a['rj']=J
         segs=((J[3],J[4],RF),(J[4],W,RF),(W,add(W,mul(sub(a['rp'],W),1.4)),RH),(J[0],J[1],RF),(J[1],J[2],RF))
         if any(cutseg(P,Q,r,ZCS.get(a['cls'],3.0)) for P,Q,r in segs): cuts.append('%d:%s'%(i,a['st']))
 F=F[:-1]; N=len(F)
@@ -202,6 +202,7 @@ for i,r in enumerate(F):
     p=F[i-1] if i else r
     r['tipd']=ln(sub(tip(r),tip(p))); r['df']=ang(r['rf'],p['rf']); r['du']=ang(r['ru'],p['ru'])
     tl=r['t'] if (r['st']!='reloading' or r['op'][2]<1.0 or r['fire']>0 or r['kick']>0 or i==0) else tl; r['rlt']=r['t']-tl   # s since the post-shot aim hold ended (reload blend-in excluded)
+L1K=float(os.environ.get("VM_L1K","0.871")); err0=0.0
 flags=[]; errmax=0.0; errat="-"; t2=-9.0; rlz=99.0; nvis=0; tipmax=0.0; dfmax=0.0
 for i in range(1,N-1):
     a,b,c=F[i-1],F[i],F[i+1]
@@ -210,8 +211,17 @@ for i in range(1,N-1):
     if b["st"]=="reloading" and b["ti"]==2: t2=b["t"]
     if b["w"]>=0.999 and b["ph"]==0 and b["t"]-t2>0.25:   # X3 native reload (ti 2 + its 0.2 s rlblend fade-out): hand = native crank
                                                        # (C4c clamps), not op; checked by cut/reload_zmin/moves instead
-        e=ln(sub(b["rp"],b["op"]))
-        if e>errmax: errmax=e; errat="%d:%s"%(i,b["st"])
+        # L1-MODEL (coordinator 2026-10-10): the game solves the arm with its cached native upper-arm length (~L1K = 0.871 x
+        # the rendered one; animlab l1-scale model, true-L1 fix not shipped: it moves every Shay-approved pose 0.3-0.9 dm), so
+        # the rendered elbow/wrist/hand/prop sit (1-L1K) x the rendered shoulder->elbow further along the upper arm than the
+        # commanded target. errmax = rendered grip minus that predicted offset vs commanded = the real solver error.
+        # rendered pose = the next record remapped: across a game hitch (this or the next frame > DTH) it is not this frame's
+        # pose (kfx-b7a3 crossbow frame 739, dt 0.100: 1.1-1.5 dm on one frame, 0.11-0.13 around it) -> not judged
+        ov=mul(sub(b['rj'][4],b['rj'][3]),1.0-L1K) if b.get('rj') else (0.0,0.0,0.0)
+        e=ln(sub(sub(b["rp"],ov),b["op"])); e0=ln(sub(b["rp"],b["op"]))
+        if max(b['dt'],c['dt'])<=DTH:
+            err0=max(err0,e0)
+            if e>errmax: errmax=e; errat="%d:%s"%(i,b["st"])
     if b['cls']==1 and b['st']=='reloading' and b['ti']==2 and b['rlt']>=0.4: rlz=min(rlz,b['rp'][2])
     # C4d: rlt also restarts while a reload from ready holds the AIM pose (op z<1, at the eye) for the native raise
     if not a['vis'] or max(a['dt'],b['dt'],c['dt'])>DTH: continue   # entering the view / game hitch frame or next to one (motion is
@@ -263,9 +273,9 @@ wbh=max([x for x in WS if not F[x[1]]['sw']] or [None]); wbm=wbh   # held (non-s
 if (wbh and wbh[0]>WBM) or wbsw>WBS: ok=False
 wtxt=(' wb_max=%.1f@%d:%s wb_swing=%.1f wb_xbow=%.1f wb_lim=%.0f/%.0f'%(wbm[0],wbm[1],wbm[2],wbsw,wbx,WBM,WBS)) if wbm else ((' wb_swing=%.1f wb_lim=%.0f/%.0f'%(wbsw,WBM,WBS)) if WS else (' wb_xbow=%.1f'%wbx if WX else ' wb=na'))
 fps=1/sorted(r['dt'] for r in F)[N//2]
-print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f@%s tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
+print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f@%s err_raw=%.2f tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
       len(cuts),(' ['+' '.join(cuts[:6])+']') if cuts else '',len(flags),
-      (' ['+' '.join(flags[:6])+']') if flags else '',errmax,errat,tipmax,dfmax,','.join(inout) or 'none',
+      (' ['+' '.join(flags[:6])+']') if flags else '',errmax,errat,err0,tipmax,dfmax,','.join(inout) or 'none',
       (' reload_zmin=%.2f'%rlz) if sys.argv[2]=='xbow' else '')+wtxt+(' moves='+','.join(moves) if moves else ''))
 VMCHECK
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
