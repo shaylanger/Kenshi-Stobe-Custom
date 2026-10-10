@@ -7,8 +7,9 @@
 #        the block target; physical LMB -> a new "[vm] swing" log line with u_end >= 0.5; test pose sw_pose 0 / 1 ->
 #        target = the ready target (the swing path starts and ends at the ready pose)
 #  PT28  crossbow like Chivalry 2 (reference photos/crossbow aiming.PNG), each state zoomed in AND out: ready (low
-#        carry right: grip >=4 dm ahead, az>=15, nose 6..27 deg down, top up, whole crossbow above the HUD line: lowest
-#        projected body point y/z >= -0.33, limb line below the centre, right wrist in front of the near clip rwz>=3.3),
+#        carry right: grip >=4 dm ahead, az>=15, nose 6..27 deg down, top up, low carry mostly behind the bottom bar (Shay
+#        2026-10-10 spec-videos: keep r_ready_py -4.0): lowest projected body point y/z >= -0.70, bolt tip y >= -0.80 NDC,
+#        limb line below the centre, right wrist in front of the near clip rwz>=3.3),
 #        aim (grip at the eye plane |z|<=1, |x|<=0.3, low (y<=-1.4): nothing of the hands drawn (wrists behind the near
 #        clip: rwz<=2.6, lwz<=2.8, arm_cov<=0.02), bolt <=2 deg off the crosshair at AIMD, projected bolt tip within
 #        |x|<=0.06 NDC and 0.05..0.25 below the centre, limb line y/z -0.30..-0.10 (lower third) with half span x/z >=0.6,
@@ -665,9 +666,11 @@ else
   if want PT29 && [ -z "$P29X" ]; then mup right; sleep 0.4; draw_to 0; vmq_seg crossbow "$ZO"; zoom 0; fi
   mup right; sleep 0.4; A fp_vm set rlamp 1.0 >/dev/null
   ok=1; why=""
-  # ready: low carry right (grip >=4 dm ahead, az>=15), nose 6..27 deg down, top up, the whole crossbow above the HUD line
-  # (lowest on-screen body point y/z >= -0.33), limb line below the centre, right wrist in front of the near clip (no cut glove)
-  { [ "${VST[xbow-ready]}" = ready ] && vq "fz>=0.85 && fy<=-0.1 && fy>=-0.45 && uy>=0.9 && az>=15 && pz>=4.0" xbow-ready && xq "bmin>=-0.33 && ly<=-0.05 && rwz>=3.3" xbow-ready; } || { ok=0; why+=" ready"; }
+  # ready: low carry right (grip >=4 dm ahead, az>=15), nose 6..27 deg down, top up, mostly behind the bottom bar (Shay
+  # 2026-10-10 spec-videos keeps the low carry r_ready_py -4.0: accepted bmin -0.55, tip y -0.61; was bmin>=-0.33 "whole
+  # crossbow above the HUD"): lowest body point y/z >= -0.70, bolt tip y >= -0.80, limb line below the centre, right wrist
+  # in front of the near clip (no cut glove)
+  { [ "${VST[xbow-ready]}" = ready ] && vq "fz>=0.85 && fy<=-0.1 && fy>=-0.45 && uy>=0.9 && az>=15 && pz>=4.0" xbow-ready && xq "bmin>=-0.70 && ty>=-0.80 && ly<=-0.05 && rwz>=3.3" xbow-ready; } || { ok=0; why+=" ready"; }
   # aim (zoomed in and out), Chivalry 2 hold: grip at the eye plane (|z|<=1, |x|<=0.3, y<=-1.4) so NO hand is drawn (both
   # wrists behind the near clip rwz<=2.6 lwz<=2.8, arm_cov<=0.02), limbs horizontal (top up) in the lower third (limb line
   # y/z -0.30..-0.10, half span x/z >=0.6), bolt on the crosshair (<=2 deg at AIMD), bolt tip projected |x|<=0.06 NDC and
