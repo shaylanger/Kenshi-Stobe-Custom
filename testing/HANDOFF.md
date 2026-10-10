@@ -31,7 +31,8 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - kfp-fixer (14:55): 3FA97555 source all committed (38bc1f3..a978e96); op-b4: name-tag fix confirmed, ready-wrist confirmed, E6 stroke 1 PASS in game, blkH FAIL = take sampler gap. New build KenshiFP 12323A9C (+ z1-band-prevm) gated + staged both rigs; 4080 installs it and refilms the zoom fade takes; commit z1-band-prevm after 0 leak frames. kfp-fixer DONE: respawn it when e6-climb2 hands in its strokes 0+3 patch (then pipeline --patches z1-band-prevm,<e6>).
 - kfp-swinghit (started ~15:10, Shay order): FP melee hits every character in the swing area (allies + neutrals) as a KenshiFP settings toggle; patch pending-fixes/kfp-swing-hits-all.py via kfp-pipeline, test row fp-swing-hits-all for the operators.
 - e6-climb2 DONE: strokes 0+3 refit (pool 0.00 -> 1.00, du jump gone), patch pending-fixes/kfp-e6-strokes03-refit.py. kfp-fixer respawned ~15:15 to build z1-band-prevm + e6-strokes03-refit via kfp-pipeline, stage both rigs, then VMQUICK + E6 take.
-- Waiting for Shay: should heavy weapons + polearms be held two-handed in FP (34 weapons; lab rule is inferred, not his)?
+- Shay decided (15:30): two-handed weapons are held two-handed in FP; agent kfp-twohand builds it (spec+lab checks first, patch kfp-two-hand.py via pipeline).
+- Waiting for Shay: nothing.
   takes, weapon-matrix risk report.
 
 ## Earlier (2026-10-10 ~11:45, m90 coordinator handed off at context limit)
