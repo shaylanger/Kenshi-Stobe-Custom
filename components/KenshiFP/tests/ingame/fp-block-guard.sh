@@ -22,8 +22,7 @@ pf_begin "$PF_ROW"   # RESULT guard
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
 place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.02 >/dev/null; sleep 1; }
 # ---- preflight
-A load kah-fpxbow | cut -c1-80; sleep 8
-for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" && break; done
+pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)
 A speed 1 hold >/dev/null; A chatter off >/dev/null   # no NPC bark text over the take (takecheck overlay)
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
@@ -64,6 +63,7 @@ tail -n +$((L0 + 1)) "$KLOG" | grep -o "free block start tech=[0-9A-Fa-f]* anim=
 NP=$(wc -l < "$N.techs.txt")
 BAD=$(grep -o "anim='[^']*'" "$N.techs.txt" | sed "s/anim='//; s/'$//" | while read -r a; do echo ",$ALLOW," | grep -qi ",$a," || echo "$a"; done | sort | uniq -c | tr '\n' ' ')
 TECHS=$(grep -o "anim='[^']*'" "$N.techs.txt" | sort | uniq -c | tr -s ' ' | tr '\n' ' ')
+pf_game_done   # game evidence collected: under run-batch.sh the next row starts while the checks below run
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
 CU=$(python3 $L/frames.py cursor "$N.mp4" 2>&1 | tail -1)

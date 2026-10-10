@@ -21,34 +21,42 @@
 # next row's save (at most RECOVER=2 times, NOTE line); after that the rest of the batch is skipped.
 # Memory: before every row the Windows commit headroom is checked; below MIN_COMMIT_GB (default 3) Kenshi is
 # restarted first (NOTE line). m22: Kenshi crashed on a NULL texture allocation with the commit charge at its limit.
+# Rigs: runs on the 5090 (WSL) and on the 4080 (Git Bash, via C:\KAH\itrun.ps1; rig-env.sh paths, game control through
+# C:\KAH\ctl.ps1 -Owner $KAH_OWNER). Relative scripts are looked up in tests/ingame/stobe, then components/KenshiFP/tests/ingame.
+# The running row's `timeout` pid is in <out>/step.pid: rig-runner.ps1 kills a stuck step with it (row FAIL, batch goes on).
+# rig-runner.ps1 runs a snapshot copy of this file from the out dir, so editing it never kills a running batch.
 set -u
-A=/mnt/c/KenshiModding/tools/automation; T=/mnt/c/KenshiModding/tests/ingame/stobe
-CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'
+if grep -qi microsoft /proc/version 2>/dev/null; then CR=/mnt/c; else RIG=${RIG:-}; . /c/KenshiModding/tools/automation/rig-env.sh; fi   # the 4080 Git Bash mounts /mnt/c too
+KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
+A=$CR/KenshiModding/tools/automation; T=$CR/KenshiModding/tests/ingame/stobe; KT=$CR/KenshiModding/components/KenshiFP/tests/ingame
+CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'; CTLO=()
+[ "${RIG:-5090}" = 4080 ] && { CTL='C:\KAH\ctl.ps1'; CTLO=(-Owner "${KAH_OWNER:-rig4080}"); }
 LAUNCH=""; STOP=0; RESUME=0
 while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; *) break ;; esac; done
 L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] <list-file> <out-dir>}"; O="${2:?out-dir}"
-mkdir -p "$O"; rm -f "$O/DONE"
+mkdir -p "$O"; rm -f "$O/DONE" "$O/GAMEDONE"
 # Batch end: DONE + drop every inflight marker naming this out dir, so idle detection (rig5090-state.ps1) sees the
 # slot free at once (Shay 2026-10-10: a marker left on a DONE batch kept the 5090 reading BUSY).
-finish() { touch "$O/DONE"; local m oa; oa=$(cd "$O" && pwd); for m in /mnt/c/KenshiTestRuns/inflight/*; do [ -f "$m" ] || continue
+finish() { touch "$O/DONE"; local m oa; oa=$(cd "$O" && pwd); for m in $CR/KenshiTestRuns/inflight/*; do [ -f "$m" ] || continue
   case "$(head -1 "$m" | tr -d '\r' | sed 's:/*$::')" in "$O"|"$oa") rm -f "$m" ;; esac; done; }
 exec >>"$O/batch.log" 2>&1
+echo "$$ $(cat /proc/$$/winpid 2>/dev/null)" > "$O/batch.pid"   # rig-runner-probe.sh: is this batch still alive (4080: Windows pid)
 S="$O/SUMMARY.txt"; R="$O/ranges.tsv"
 # same order as LOGS in batch-excerpts.sh
-LOGPATHS="/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log /mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log /mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log /var/www/html/StobeServer/log/stobeserver.log /var/www/html/StobeServer/log/php_error.log /mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe_goals.log"
-STOBELOG=/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe/stobe.log
+LOGPATHS="$KD/RE_Kenshi/mods/Stobe/stobe.log $KD/KenshiFP.log $KD/mods/AutomationHarness/harness.log /var/www/html/StobeServer/log/stobeserver.log /var/www/html/StobeServer/log/php_error.log $KD/RE_Kenshi/mods/Stobe/stobe_goals.log"
+STOBELOG=$KD/RE_Kenshi/mods/Stobe/stobe.log
 
 say() { echo "$*" | tee -a "$S"; }
 offsets() { local p; for p in $LOGPATHS; do stat -c %s "$p" 2>/dev/null || echo 0; done | paste -sd'\t'; }
 world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
 # timeout: the WSL powershell proxy can hang after a launch (pipe held by Kenshi, m23); launch output lines
 # are printed before it hangs, so killing it after 420 s loses nothing
-ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" </dev/null | tr -d '\r'; }
+ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" "${CTLO[@]}" </dev/null | tr -d '\r'; }
 # launch <save>: the proxy often never exits after a launch (m32: 3 of 5 launches sat the full 420 s although
 # the game was in the world in 10 s) and its output arrives only when it exits: run it in the background, wait
 # for its exit or the harness log written by THIS launch (kenshi-ctl deletes the old one) to show the autoload,
 # kill the stuck proxy, then wait for the world
-HLOG=/mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness/harness.log
+HLOG=$KD/mods/AutomationHarness/harness.log
 launch() {
   local t0 i; t0=$(date +%s)
   ctl launch -Save "$1" > "$O/launch.out" 2>&1 &
@@ -69,7 +77,7 @@ memline() {  # "<free-commit-GB> <kenshi-private-GB>" (kenshi "-" when not runni
   powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select-Object -First 1; "{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
 ,' | tail -1
 }
-kenshi_up() { tasklist.exe /FI "IMAGENAME eq kenshi_x64.exe" /NH </dev/null 2>/dev/null | grep -qi kenshi_x64; }
+kenshi_up() { tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; }   # no /FI args: Git Bash would mangle them
 relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = auto-home); 1 = it didn't come back
   local s="$1"; case "$s" in home|-) s=auto-home ;; esac
   recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"
@@ -96,55 +104,14 @@ if [ -n "$LAUNCH" ]; then
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }
 fi
 pass=0; fail=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
-while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tools (powershell, tasklist) eat stdin
-  line="${line%%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
-  IFS='|' read -r name save player mate to cmd <<<"$line"
-  t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
-  name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
-  cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
-  if [ "$RESUME" = 1 ] && grep -qxF "$name" "$D" 2>/dev/null; then echo "$(date +%H:%M) $name: ran before, skipped (--resume)"; continue; fi
-  read -r freec kpriv <<<"$(memline)"
-  echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
-  if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
-  if [ "$dead" = 1 ] && [ "$recovered" -lt "$RECOVER" ]; then
-    if relaunch "$save" "game dead before $name (commit free ${freec:-?} GB)"; then dead=0; else say "NOTE relaunch failed"; fi
-  elif [ "$dead" = 0 ] && [ -n "${freec:-}" ] && [ "$recovered" -lt "$RECOVER" ] && awk -v f="$freec" -v m="$MIN_COMMIT_GB" 'BEGIN{exit !(f+0 < m+0)}'; then
-    relaunch "$save" "commit free $freec GB < $MIN_COMMIT_GB GB (kenshi private $kpriv GB)" || { say "NOTE relaunch failed"; dead=1; }
-  fi
-  if [ "$dead" = 1 ]; then say "RESULT $name FAIL skipped: game not responding"; fail=$((fail + 1)); continue; fi
-  echo "$(date +%H:%M) $name: prepare $save"
-  if ! prepare "$save" "$player" "$mate"; then
-    say "RESULT $name FAIL game not responding after loading $save (rest of the batch skipped)"
-    fail=$((fail + 1)); dead=1; continue
-  fi
-  # split the command: VAR=value words, then the script and its arguments
-  read -r -a words <<<"$cmd"; envs=(); i=0
-  while [ $i -lt ${#words[@]} ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do envs+=("${words[$i]}"); i=$((i + 1)); done
-  script="${words[$i]:-}"; args=("${words[@]:$((i + 1))}")
-  case "$script" in /*) ;; *) [ -e "$T/$script" ] && script="$T/$script" ;; esac
-  case "$script" in
-    *.sh) run=(bash "$script" "${args[@]}") ;;
-    *.txt) if [ "$player" = Shay ] && [ "$mate" = Malzin ]; then run=(stobe-auto run "$script" --csv "$O/$name.csv" "${args[@]}")
-           else run=(bash "$T/run-as.sh" "$script" "$player" "$mate" --csv "$O/$name.csv" "${args[@]}"); fi ;;
-    *) run=("$script" "${args[@]}") ;;
-  esac
-  before=$(offsets); sl=$(stat -c %s "$STOBELOG" 2>/dev/null || echo 0)
-  # m41: fullbase-guard only calms raiders once after the load; raids that arrive later in a long row (gate-90
-  # farming: Hill Marauders pulled Beaks off the farm) need the lib's raid_guard sweep for the whole row.
-  # The lib's EXIT trap pauses the game, so the guard subshell clears it.
-  rg=""
-  if [ "$save" = kah-fullbase ] && [ "${NO_RAID_GUARD:-0}" != 1 ]; then
-    ( export PLAYER="$player" MATE="$mate"; . "$T/stobe-fight-lib.sh"; trap - EXIT
-      trap 'raid_guard_stop; exit 0' TERM; raid_guard_start; while :; do sleep 5 & wait $!; done )       >/dev/null 2>>"$O/$name.raids" </dev/null &
-    rg=$!
-  fi
-  echo "$(date +%H:%M) $name: run ${run[*]}"
-  env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null
-  rc=$?
-  [ -n "$rg" ] && { kill "$rg" 2>/dev/null; wait "$rg" 2>/dev/null; }
-  stobe-auto speed 0 >/dev/null 2>&1
-  printf '%s\t%s\t' "$name" "$save" >>"$R"; paste <(echo "$before" | tr '\t' '\n') <(offsets | tr '\t' '\n') | paste -sd'\t' >>"$R"
-  # result lines: the test's own RESULT lines, else built from VERDICT / scenario summary / exit code
+# Recording and analysis split (Shay 2026-10-10: the 5090 game sat idle 5 min while a take's lab checks ran): a row script
+# calls pf_game_done (take-preflight.sh: touches $GAME_DONE_FILE) once it no longer uses the game; the batch then goes on
+# with the next row while that script finishes its analysis in the background (normal priority). Its RESULT lines are
+# collected when it exits. <out>/GAMEDONE = every row is past its game part (Kenshi stopped with --stop; rig-runner may
+# start the next batch); DONE only after every background analysis has ended.
+PEND=()   # "pid|name|save|player|mate|out|timeout|stobe-log offset" of rows analysing in the background
+row_result() {  # row_result <name> <save> <player> <mate> <out> <timeout> <rc> <stobe-log offset>
+  local name=$1 save=$2 player=$3 mate=$4 out=$5 to=$6 rc=$7 sl=$8 res v s bad ex hit
   res=$(grep -a '^RESULT ' "$out")
   if [ -z "$res" ]; then
     if [ $rc = 124 ]; then res="RESULT $name FAIL timed out after ${to}s"
@@ -173,6 +140,71 @@ RESULT $name FAIL wrapper did not complete (exit $rc)"
   # combat/knockout/death toward the squad while the test ran: a note (fight tests cause it on purpose)
   hit=$(tail -c +"$((sl + 1))" "$STOBELOG" 2>/dev/null | grep -a -E "\[EVENT\] (combat[^]]*-> ($player|$mate) \(|knockout: ($player|$mate) |death: ($player|$mate) )" | head -2 | cut -c1-160 | paste -sd';')
   [ -n "$hit" ] && say "NOTE $name: combat/KO toward the squad: $hit"
+}
+collect() {  # collect [wait]: RESULT lines of background analyses that ended (wait: wait for all of them)
+  local i p rc n sv pl mt ou tt slv keep=()
+  for i in "${PEND[@]}"; do p=${i%%|*}
+    if [ "${1:-}" = wait ] || ! kill -0 "$p" 2>/dev/null; then
+      wait "$p"; rc=$?; IFS='|' read -r _ n sv pl mt ou tt slv <<<"$i"
+      echo "$(date +%H:%M) $n: background analysis ended (exit $rc)"; row_result "$n" "$sv" "$pl" "$mt" "$ou" "$tt" "$rc" "$slv"
+    else keep+=("$i"); fi
+  done
+  PEND=(${keep[@]+"${keep[@]}"})
+}
+while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tools (powershell, tasklist) eat stdin
+  line="${line%%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
+  IFS='|' read -r name save player mate to cmd <<<"$line"
+  t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
+  name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
+  cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
+  if [ "$RESUME" = 1 ] && grep -qxF "$name" "$D" 2>/dev/null; then echo "$(date +%H:%M) $name: ran before, skipped (--resume)"; continue; fi
+  read -r freec kpriv <<<"$(memline)"
+  echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
+  if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
+  if [ "$dead" = 1 ] && [ "$recovered" -lt "$RECOVER" ]; then
+    if relaunch "$save" "game dead before $name (commit free ${freec:-?} GB)"; then dead=0; else say "NOTE relaunch failed"; fi
+  elif [ "$dead" = 0 ] && [ -n "${freec:-}" ] && [ "$recovered" -lt "$RECOVER" ] && awk -v f="$freec" -v m="$MIN_COMMIT_GB" 'BEGIN{exit !(f+0 < m+0)}'; then
+    relaunch "$save" "commit free $freec GB < $MIN_COMMIT_GB GB (kenshi private $kpriv GB)" || { say "NOTE relaunch failed"; dead=1; }
+  fi
+  if [ "$dead" = 1 ]; then say "RESULT $name FAIL skipped: game not responding"; fail=$((fail + 1)); continue; fi
+  echo "$(date +%H:%M) $name: prepare $save"
+  if ! prepare "$save" "$player" "$mate"; then
+    say "RESULT $name FAIL game not responding after loading $save (rest of the batch skipped)"
+    fail=$((fail + 1)); dead=1; continue
+  fi
+  # split the command: VAR=value words, then the script and its arguments
+  read -r -a words <<<"$cmd"; envs=(); i=0
+  while [ $i -lt ${#words[@]} ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do envs+=("${words[$i]}"); i=$((i + 1)); done
+  script="${words[$i]:-}"; args=("${words[@]:$((i + 1))}")
+  case "$script" in /*) ;; *) if [ -e "$T/$script" ]; then script="$T/$script"; elif [ -e "$KT/$script" ]; then script="$KT/$script"; fi ;; esac
+  case "$script" in
+    *.sh) run=(bash "$script" "${args[@]}") ;;
+    *.txt) if [ "$player" = Shay ] && [ "$mate" = Malzin ]; then run=(stobe-auto run "$script" --csv "$O/$name.csv" "${args[@]}")
+           else run=(bash "$T/run-as.sh" "$script" "$player" "$mate" --csv "$O/$name.csv" "${args[@]}"); fi ;;
+    *) run=("$script" "${args[@]}") ;;
+  esac
+  before=$(offsets); sl=$(stat -c %s "$STOBELOG" 2>/dev/null || echo 0)
+  # m41: fullbase-guard only calms raiders once after the load; raids that arrive later in a long row (gate-90
+  # farming: Hill Marauders pulled Beaks off the farm) need the lib's raid_guard sweep for the whole row.
+  # The lib's EXIT trap pauses the game, so the guard subshell clears it.
+  rg=""
+  if [ "$save" = kah-fullbase ] && [ "${NO_RAID_GUARD:-0}" != 1 ]; then
+    ( export PLAYER="$player" MATE="$mate"; . "$T/stobe-fight-lib.sh"; trap - EXIT
+      trap 'raid_guard_stop; exit 0' TERM; raid_guard_start; while :; do sleep 5 & wait $!; done )       >/dev/null 2>>"$O/$name.raids" </dev/null &
+    rg=$!
+  fi
+  echo "$(date +%H:%M) $name: run ${run[*]}"
+  gd="$O/.gamedone.$name"; rm -f "$gd"
+  env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" GAME_DONE_FILE="$gd" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null &
+  sp=$!; echo "$sp $name $(cat /proc/$sp/winpid 2>/dev/null)" > "$O/step.pid"
+  bg=0; while kill -0 "$sp" 2>/dev/null; do [ -f "$gd" ] && { bg=1; break; }; sleep 2; done
+  rm -f "$O/step.pid"; rc=0; [ $bg = 0 ] && { wait "$sp"; rc=$?; }
+  [ -n "$rg" ] && { kill "$rg" 2>/dev/null; wait "$rg" 2>/dev/null; }
+  stobe-auto speed 0 >/dev/null 2>&1
+  printf '%s\t%s\t' "$name" "$save" >>"$R"; paste <(echo "$before" | tr '\t' '\n') <(offsets | tr '\t' '\n') | paste -sd'\t' >>"$R"
+  if [ $bg = 1 ]; then echo "$(date +%H:%M) $name: game part done, analysis goes on in the background (pid $sp)"; PEND+=("$sp|$name|$save|$player|$mate|$out|$to|$sl")
+  else row_result "$name" "$save" "$player" "$mate" "$out" "$to" "$rc" "$sl"; fi
+  collect
   # m37: a crashed/killed Kenshi = dead now, no 4.5 min of waits on a game that is gone (the next row relaunches)
   if kenshi_up; then
     world 120 || { sleep 30; world 120 || { say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1; }; }
@@ -180,5 +212,7 @@ RESULT $name FAIL wrapper did not complete (exit $rc)"
 done 3<"$L"
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
 [ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
+touch "$O/GAMEDONE"; [ ${#PEND[@]} -gt 0 ] && echo "$(date +%H:%M) game part done; waiting for ${#PEND[@]} background analyses"
+collect wait
 say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail"
 finish

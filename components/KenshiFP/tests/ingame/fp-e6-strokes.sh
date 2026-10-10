@@ -25,8 +25,7 @@ pf_begin "$PF_ROW"   # RESULT guard (shared preflight: take-preflight.sh)
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
 ready(){ [ "$(st)" = ready ] || { [ "$(st)" = holstered ] || { A key_inject r tap 120 >/dev/null; waitst holstered 6; }; A key_inject r tap 120 >/dev/null; waitst ready 6; }; }
 # ---- setup: fresh load, pins, daytime, take spot, katana, hostiles, sky
-A load kah-fpxbow | cut -c1-80; sleep 8
-for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" && break; done
+pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)
 A speed 1 hold >/dev/null; A kill "Hungry Bandit" >/dev/null; A chatter off >/dev/null   # no NPC bark text (takecheck overlay)
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
