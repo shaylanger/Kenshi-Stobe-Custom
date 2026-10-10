@@ -14,6 +14,13 @@
 #   pf_fail <reason>           print the RESULT line and exit 1 (runs PF_ON_FAIL first if set)
 #   pf_load [save]             load the FP studio fixture kah-fpstudio (else kah-fpxbow) and wait for the world
 #   pf_latency [n] [max]       harness round trip <= max s (1.0) over n calls (game hitch = sampler gaps), in pf_all
+# Non-exiting checks for multi-row scripts (return 1 and set PF_WHY; the caller prints its own setup FAIL lines):
+#   pf_melee_arm <who>         equip a melee weapon (ranged one unequipped first); none -> give PF_MELEE_GIVE (default
+#                              Guardless Katana, sid 923-gamedata.base) and equip it; sets PF_WEP (op-comb2: a row before
+#                              had loaded kah-fpstudio where Malzin carries only a crossbow -> "no melee weapon")
+#   pf_awake <who>...          heal to 100 and `wake` everyone KO (op-swa4: a swing knocked the neutral out, `health 100`
+#                              keeps the KO, a KO ragdoll ignores pin -> "pin refused off=10.2"); fails if still KO after 3 s
+#   pf_pin <who> <pin args>    pin, then wait up to 3 s for the per-frame put-back to land within 1.5 m; reason has off + KO
 PF_A(){ stobe-auto "$@" </dev/null 2>&1; }
 # Git Bash (4080 rig) has no wslpath: cygpath does the same
 command -v wslpath >/dev/null 2>&1 || wslpath(){ [ "$1" = -w ] && shift; cygpath -w "$1"; }
@@ -164,3 +171,26 @@ pf_latency(){ local n=${1:-8} mx=${2:-1.0} i t0 t1 w=0
     w=$(awk -v a="$t0" -v b="$t1" -v w="$w" 'BEGIN{d=b-a; printf "%.2f", (d>w?d:w)}'); done
   awk -v w="$w" -v m="$mx" 'BEGIN{exit !(w <= m)}' || pf_fail "harness round trip up to ${w} s (> ${mx} s): game hitching, the take sampler would leave gaps"
   echo "pf_latency ok: max ${w} s over $n calls"; }
+# ---- non-exiting checks (PF_WHY = reason) ----
+pf_melee_arm(){ local who=$1 bow w r g ws
+  bow=$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')
+  [ -n "$bow" ] && PF_A unequip "$who" "$bow" >/dev/null
+  ws=$(PF_A inv "$who" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | grep -v -i -x -F "${bow:-@@}")
+  for w in "" "give"; do
+    if [ "$w" = give ]; then g=${PF_MELEE_GIVE:-923-gamedata.base}
+      r=$(PF_A give "$who" "$g" 1 | head -1); echo "$r" | grep -q ' got 1/' || { PF_WHY="$who has no melee weapon (carries: ${ws:-none}; ranged: ${bow:-none}) and give $g failed: $(cut -c1-90 <<<"$r")"; return 1; }
+      ws=$(echo "$r" | sed -n 's/^.* got [0-9]*\/[0-9]* \(.*\) (now [0-9]*)$/\1/p'); [ -n "$ws" ] || ws=${PF_MELEE_GIVE_NAME:-Guardless Katana}; fi
+    while IFS= read -r w2; do [ -n "$w2" ] || continue; r=$(PF_A equip "$who" "$w2")
+      case "$r" in equipped*) PF_WEP=$w2; echo "pf_melee_arm ok: $who $w2${g:+ (given)}"; return 0;; esac; done <<<"$ws"
+  done; PF_WHY="$who: no melee weapon equips (given ${g:-}: $(cut -c1-90 <<<"$r"))"; return 1; }
+pf_ko(){ PF_A hp "$1" | grep -q ' KO '; }
+pf_awake(){ local c i; for c in "$@"; do [ -n "$c" ] || continue; PF_A health "$c" 100 >/dev/null; pf_ko "$c" || continue
+    PF_A wake "$c" >/dev/null; for i in $(seq 1 12); do sleep 0.25; pf_ko "$c" || break; done
+    pf_ko "$c" && { PF_WHY="$c stays knocked out after wake ($(PF_A hp "$c" | cut -c1-80))"; return 1; }; done; return 0; }
+pf_pin(){ local who=$1 r at p i off; shift; r=$(PF_A pin "$who" "$@"); grep -q '^pinned' <<<"$r" && return 0
+  at=$(grep -o ' at [-0-9.]*,[-0-9.]*,[-0-9.]* ' <<<"$r" | head -1 | sed 's/^ at //; s/ $//')
+  [ -n "$at" ] || { PF_WHY="pin $who refused: $(cut -c1-100 <<<"$r")"; return 1; }
+  for i in $(seq 1 12); do sleep 0.25; p=$(PF_A where "$who" | grep -o 'pos=[^ ]*' | cut -d= -f2)
+    off=$(awk -v a="$p" -v b="$at" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.1f", sqrt((p[1]-q[1])^2+(p[3]-q[3])^2)}')
+    awk -v o="$off" 'BEGIN{exit !(o<=1.5)}' && return 0; done
+  PF_WHY="pin $who stays off=$off from $at$(pf_ko "$who" && echo ' (KO: a ragdoll ignores pin)')"; return 1; }

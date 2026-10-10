@@ -16,6 +16,8 @@ ctl-blk-night  | night  | 5090 | PASS                                           
 ctl-blk-combat | combat | 5090 | PASS                                           | blk | - | Axima | Malzin | 900 | $KT/fp-block-guard.sh {OUT}/blk blkH
 ctl-clean-4080 | combat | 4080 | PASS                                           | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp clean
 ctl-studio     | -      | 5090 | PASS                                           | studio | - | Axima | Malzin | 900 | $KT/fp-studio-fixture.sh {OUT}/studio
+ctl-swa-ko     | swing-ko | 5090 | PASS                                         | swa | - | Malzin | Shay | 900 | $KT/fp-swing-hits-all.sh Malzin Skaera Shay {OUT}/swa
+ctl-swa-nomelee | no-melee | 5090 | PASS                                        | swa | - | Malzin | Shay | 900 | $KT/fp-swing-hits-all.sh Malzin Skaera Shay {OUT}/swa
 bug-night      | night  | 5090 | FAIL:filmed at night                           | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp bare
 bug-combat     | combat | 5090 | FAIL:hostiles within 30 m.*popup               | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp bare
 bug-popup      | combat | 5090 | FAIL:setup: foreign overlay                    | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp popup

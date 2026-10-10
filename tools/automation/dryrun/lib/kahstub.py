@@ -127,6 +127,7 @@ def new_state(save):
              fp=dict(drawn=0, melee=0, loaded=1, ui_state='holstered', hud_text='holstered', vm='holstered'),
              tl=[], hist=[], rec=dict(on=0, t=0), keys={}, sets={}, zoom_switch=1, bandhide=1,
              turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0), fight=int(f.get('fight', 0)),
+             swing_ko=int(f.get('swing_ko', 0)),
              iso=0 if os.environ.get('RIG') == '4080' or os.environ.get('DRYRUN_ISO') == 'off' else 1)
     # iso: 5090 kenshi-ctl launch turns input isolation on; the 4080 C:\KAH\ctl.ps1 launch does not (b4080c setup FAIL)
     t = dr.vnow()
@@ -519,6 +520,12 @@ def do_click(s, t):
             extra.append(c)
     on = ini_get('swing_hits_all')
     hit = [tg] + (extra if on else [])
+    if s.get('swing_ko'):
+        # op-swa4 (fixture swing_ko): vanilla melee also hits a neutral in the zone, and one katana hit on a defence-1
+        # Hungry Bandit knocks him out; `health 100` keeps the KO (only `wake` stands him up)
+        for c in extra:
+            if c['name'] not in s['squad'] and not c.get('protected'):
+                c['ko'] = 1
     for c in hit:
         if not c.get('protected'):
             fl = flesh_of(c)
@@ -788,8 +795,12 @@ def handle(s, cmd, a, now, sp):
                 face = char(s, a[a.index('face') + 1])
                 if not face:
                     return False, 'no character %s' % a[a.index('face') + 1]
-            c['pos'] = at
             pins.append(nm)
+            if s.get('swing_ko') and c.get('ko'):
+                # op-swa4 (fixture swing_ko): a KO ragdoll ignores teleport; the real pin answers ERROR with the miss
+                return False, 'pinned %s at %.1f,%.1f,%.1f off=10.2%s pins=%d' % (nm, at[0], at[1], at[2],
+                                                                                ' facing ' + face['name'] if face else '', len(pins))
+            c['pos'] = at
             return True, 'pinned %s at %.1f,%.1f,%.1f off=0.0%s pins=%d' % (nm, at[0], at[1], at[2],
                                                                            ' facing ' + face['name'] if face else '', len(pins))
         if cmd == 'ko':

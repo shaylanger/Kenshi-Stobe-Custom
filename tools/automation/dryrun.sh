@@ -16,6 +16,8 @@
 # run-batch.sh calls this before every batch and refuses a list that fails (override: --no-dryrun "<reason>").
 # --fixture night|combat|<file.json>: replay a world that broke real takes (dryrun/fixtures/*.json: game at 22 h; bandit
 # group + "X is attacking!" popup at the spot); a row must fix it in its preflight or stop with a setup FAIL before filming.
+# swing-ko: a melee swing knocks the neutral out and a KO character cannot be pinned (op-swa4); no-melee: Malzin carries
+# only a crossbow (op-comb2).
 # Self-test (replayed 2026-10-10 bugs must FAIL, current scripts must PASS): tools/automation/dryrun/selftest.sh
 set -u
 H=/mnt/c/KenshiModding/tools/automation; D=$H/dryrun
