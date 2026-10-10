@@ -1,16 +1,29 @@
-# Current state (m66, 2026-10-08, Shay playtest round 2)
+# Current state (m87, 2026-10-10)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
-## Right now (2026-10-09 m78): sword wrist fold FIXED, fixer #6 on PT30-FLIP / PT32 / blade look
+## Right now (2026-10-10 m87): FP viewmodel/turret work DONE, nothing running, waiting on Shay
+- Kenshi closed, lock free, no inflight, 5090 idle recorded ("awaiting Shay's decisions"). Fixers #1-#44 (lock owner fixer-pt30) finished; their log `%TEMP%\claude\C--KenshiModding\wr\HANDOFF-sword-wrist.md`.
+- Videos, all coordinator-reviewed, in `C:\KenshiTestRuns\vm-rework\`: anim-sword-e6, sword-z25-block, turret-fp (T6, 86fa1ca), zoom-sweep (Z1, 276e1fc). Scripts to re-render them: `C:\KenshiTestRuns\vidscripts\` (f24/f26/f36/f38 helpers).
+- Waiting on Shay (COMBAT_TEST_PLAN rows): Z1 zoommode switch (default) or fade; E6 default stroke mask (now 0x1 = diagonal only; stroke 3 stays off); T6 turret look/feel.
+- Harness bugs seen (not fixed): give+pickup leaves a ghost crossbow mesh; `teleport "#handle"` ignores the handle and moves the selected char; `chars` centres on the player. No `unpin` command (pins drop on relaunch).
+- Gotchas: the display sleeps after 60 min without input -> gdigrab records black; run a SetThreadExecutionState(ES_DISPLAY_REQUIRED|ES_CONTINUOUS) keeper while filming. Files written from WSL show skewed mtimes in Git Bash: check freshness from inside WSL. `setsid nohup ... &` inside a one-shot `wsl.exe bash -c` died with the call here; run long WSL jobs as a background Bash-tool call instead.
+
+## Earlier (2026-10-09 m78): sword wrist fold FIXED, fixer #6 on PT30-FLIP / PT32 / blade look
 - **Wrist fix** KenshiFP C7586828 (/root/KenshiFP ad419c0, local only) on both rigs; snapshots 51d9720, 27ab2ed, 2773fd3; VMQUICK row c49adda/62f0917; plan 306390a.
   Sword wrist bend 108.7 -> <=24 deg (limit 30); zoom 25 no longer glues hands to the head. VMQUICK PASS (5090); 4080 final rows PT13/14/26-30 PASS; 5090 all PASS except PT30.
 - **Open (fixer #6, lock owner fixer-pt30, state in `%TEMP%\claude\C--KenshiModding\wr\HANDOFF-sword-wrist.md`):** PT30-FLIP (1 blade-roll jump at first wind-up after draw, ~2/5 runs);
   PT32 native free swing ends after ~2 frames (no visible attack at zoom 25); blade foreshortened into the screen at strike/follow-through vs the old sweep (coordinator review);
   5090 window renders 938x475 instead of 1600x900. PT33 open palm at wind-up (native finger pose) = Shay-look row. Sheets `C:\KenshiTestRuns\vm-rework\`.
 - 4080 Defender exclusions done (Shay). RAM rules stay as they are (Shay 2026-10-09: WSL 8 GB cap is enough, measured 1.1 GB used / 6.8 GB available; voice services stay off).
+
+## Dual wield research checkpoint (2026-10-09; documentation only)
+- Updated `DUAL_WIELDING_MOD_IMPLEMENTATION_BRIEF.md` with static follow-up: candidate source/reuse status, pinned Blender 4.2 exporter and official rig templates, back/hip/main inventory distinction, public KEP source hook audit, and existing VMQUICK/PT29/PT30 recorder/checker gaps for two blades.
+- Inactive references under `tools/research/dual-wield-reference/`: animation-toolchain archives and KEP source at `08bb145c9b360bbfd2117c57b9104c5d2c18624e`; excluded from source control.
+- User explicitly authorized research only, stopping before building/testing. No mod enabled, game driven, harness changed or lock acquired. `fixer-pt30` ownership and ongoing FP work were left intact.
+- Next dual wield phase: candidate fixture evaluation and animation exporter round trip, when authorized; read the brief for exact gates. Existing body checks must cover both weapon hands before accepting dual poses.
 
 ## Earlier (2026-10-08 m77): PT17 viewmodel rework DONE, nothing running
 - **PT17 final KenshiFP 0750f26a** (/root/KenshiFP 04bf8c2, local, unpushed like the 60 before it; snapshot 25748e5):
@@ -172,7 +185,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - **Stobe server** (WSL `/var/www/html/StobeServer`, branch `stobe`): LLM prompts, deal engine, relationship evaluation.
 
 ## Builds installed
-- 5090: Stobe C8020701, KenshiFP D7BFCDF4 (252fde6), harness 52C24941, PG BAFB8C31 (Normal); server live `stobe` 9c0fc10.
+- 5090 (2026-10-10): KenshiFP 3A059220 (3b65503), harness FF567966, PG BAFB8C31, Stobe RE_Kenshi 85A731C7 (mods\Stobe copy B45194AD); server live `stobe` last recorded 9c0fc10.
 - 4080: KenshiFP 76CF7E8A (799c3f9 C05-INTERIOR; bm51j 40/40), PG BAFB8C31, harness 24BE3AEC (no Stobe there). Rig notes: local `handoff/4080-test-rig.md`.
 
 ## Status per mod
