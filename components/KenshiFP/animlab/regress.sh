@@ -118,5 +118,13 @@ r=$(python3 "$L/animlab.py" stock "$W/f16-c2c.txt" --ref "$W/f14-xb0.txt")
 case "$r" in "stock FAIL"*"ori:"*":BAD") ok "miss C2 rotation reproduced (f16-c2c): $r";; *) bad "miss C2 rotation not reproduced: ${r:-no stock line}";; esac
 r=$(python3 "$L/animlab.py" stock "$W/vmq125c-crossbow-z0.txt" --ref "$W/f14-xb0.txt")
 case "$r" in "stock PASS"*ori:*) ok "C2 fixed build (vmq-125c crossbow-z0): $r";; *) bad "C2 fixed build stock: ${r:-no stock line}";; esac
+#  16. miss "sword elbow drift on long drives": faithful-drive with the RENDERED pose as the target (default) drifts to the
+#      other elbow branch at the end of every swing (the rendered swing tail differs from what the game's solver was
+#      commanded) and never comes back: sword-z0 0-520 @6c9516b seeded FAIL elbow95 ~5.2. Driving the COMMANDED pose
+#      (--commanded, what the game solver got) tracks the game through the swings: PASS. Long replays do not drift.
+r=$(cd "$W" && python3 "$L/metricslab.py" faithful vmrec-q-sword-z0.txt 0 520 --adapter "$BLD/kfpvm_drive_6c9516b" --args=--quiet --out /tmp/al-faith 2>&1 | tail -1)
+case "$r" in *"faithful-drive FAIL"*) ok "miss elbow drift reproduced (rendered targets): $r";; *) bad "miss elbow drift not reproduced: $r";; esac
+r=$(cd "$W" && python3 "$L/metricslab.py" faithful vmrec-q-sword-z0.txt 0 520 --commanded --adapter "$BLD/kfpvm_drive_6c9516b" --args=--quiet --out /tmp/al-faith 2>&1 | tail -1)
+case "$r" in *"faithful-drive PASS"*) ok "elbow drift fixed (commanded targets): $r";; *) bad "elbow drift with commanded targets: $r";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
