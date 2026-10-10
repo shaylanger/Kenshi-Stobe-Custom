@@ -408,5 +408,28 @@ E6V=$W/kept/kfx-b2_e6_e6fix.mp4; [ -f "$E6V" ] || E6V=$CORPUS/kept/kfx-b2_e6_e6f
 if [ -f "$E6V" ]; then r=$(python3 "$L/frames.py" overlay "$E6V" --name e6fix)
   case "$r" in *"PASS overlay"*) ok "no-overlay video $r";; *) bad "no-overlay video $r";; esac
 else echo "REGRESS INFO overlay: kept/kfx-b2_e6_e6fix.mp4 missing"; fi
+# 32. Shay 2026-10-10 spec videos (taste t84-t89): crossbow reload = the two-hand upright native reload (rlnat 1); the
+#     scripted nose-down reload (rlnat 0) is rejected. `animlab.py reload` (every reload: median bow up.y >= .5, nose
+#     elevation >= -10 deg) must FAIL the rlnat 0 replay + the pre-C2 game rec and PASS the accepted replay; spec.py wrist
+#     exempts the native reload and holds the swing limit 50 between the accepted (38) and rejected (74) swing replays.
+SR=$CORPUS/rec
+if [ -f "$SR/spec-xbow-A.txt" ] && [ -f "$SR/spec-xbow-reload-rl0.txt" ]; then
+  for f in spec-xbow-A:PASS spec-xbow-reload-rl0:FAIL vmrec-q-crossbow-z0:FAIL; do n=${f%%:*} w=${f##*:}
+    r=$(python3 "$L/animlab.py" reload "$SR/$n.txt" | tail -1)
+    case "$r" in "reload $w "*) ok "reload $n: ${r:0:120}";; *) bad "reload $n (want $w): $r";; esac; done
+  for f in spec-swing-A:PASS spec-swing-B:FAIL; do n=${f%%:*} w=${f##*:}
+    r=$(python3 "$L/spec.py" wrist "$SR/$n.txt" | tail -1)
+    case "$r" in "wrist $w "*) ok "wrist $n: ${r:0:120}";; *) bad "wrist $n (want $w): $r";; esac; done
+else echo "REGRESS INFO reload: corpus spec-xbow recs missing"; fi
+# 33. fists (unarmed spec): every corpus fists/*/<tech>/pose.txt row of check spec-unarmed must give its manifest verdict
+#     (FAIL pairs: claw / palm-up reach U19-U21; R fist off screen in its wind-up U22, review 2026-10-10).
+nf=0
+while IFS=$'	' read -r name kind check expect rest; do
+  case "$name:$kind:$check" in fists/*/pose.txt:rec:spec-unarmed) ;; *) continue;; esac
+  [ -f "$CORPUS/$name" ] || continue; nf=$((nf+1))
+  r=$(python3 "$L/spec.py" unarmed "$CORPUS/$name" | tail -1)
+  case "$r" in "RESULT spec-unarmed-"*" $expect "*) ;; *) bad "fists spec $name (want $expect): ${r:0:160}";; esac
+done < "$CORPUS/MANIFEST.tsv"
+[ $nf -gt 0 ] && ok "fists spec-unarmed corpus rows: $nf as expected" || echo "REGRESS INFO fists: no corpus spec-unarmed rows"
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail

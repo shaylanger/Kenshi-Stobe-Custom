@@ -36,7 +36,7 @@ t30	rec/vmrec-q-sword-z0.txt	R7	reject	shay-sym		S1 edge toward the camera (read
 t31	rec/f23-sword-z0d.txt	R7	accept	shay		c6a1eda
 t32	rec/f28-sword-z0c.txt	R7	accept	shay		3912d09
 t33	rec/f28-sword-z0c.txt	R8	accept	shay	mode=sword	3912d09 (swing wb 37.8)
-t34	rec/f23-sword-z0d.txt	R8	accept	shay	mode=sword;checks=arc.wb,vmcheck.wrist	wb36 picked knowingly (Misses "E1 wb36"); ready max not part of the pick
+t34	rec/f23-sword-z0d.txt	R8	accept	shay	mode=sword;checks=arc.wb,vmcheck.wswing	wb36 picked knowingly (Misses "E1 wb36"); ready max not part of the pick
 t35	rec/vmrec-q-crossbow-z0.txt	R8	reject	shay-sym	mode=xbow	X5 crossbow ready wrist 62-75 (here 93)
 t36	rec/f14-xb0.txt	R8	reject	shay-sym	mode=xbow	X5 ready wrist (75)
 t37	rec/f14-xb0.txt	R9	reject	shay		C1 aim did not play: "How did this aim issue pass the fixer? This is a clear failure" (memory state-must-visibly-play)
@@ -78,3 +78,9 @@ t80	takes/videos/turret-fp.mp4	R15	reject	coord	checks=overlay	coordinator overl
 t81	takes/videos/sword-z25-block-f36.mp4	R15	reject	coord	checks=overlay	[Malzin] name tag over the scene 12.5-13.5 / 33-35.5 s (maintainer review 2026-10-10, overlay class)
 t82	kept/kfx-b2_e6_e6fix.mp4	R15	accept	coord	checks=overlay	E6 e6fix take: no speech/tags/popups (maintainer review 2026-10-10)
 t83	takes/videos/anim-sword-e6.mp4	R15	superseded	coord	checks=overlay	accepted before the overlay rule; lab FAILS overlay (NPC chatter line top-left 0-5.5 s)
+t84	rec/spec-swing-A.txt	R8	accept	shay	mode=sword	spec video swing-wrist.mp4 LEFT (wrist ~40) accepted 2026-10-10; lab replay of f28 with the installed settings
+t85	rec/spec-swing-B.txt	R8	reject	shay	mode=sword	swing-wrist.mp4 RIGHT (wrist fix off, ~70) rejected 2026-10-10; replay --set e1inl=0 e1wal=0 e1hold=0 e1cap=180
+t86	rec/spec-xbow-A.txt	R10	accept	shay	refopt=--ref {root}/rec/f14-xb0.txt	spec video xbow-ready.mp4 LEFT (low carry r_ready_py -4.0) accepted 2026-10-10; replay of vmq125c
+t87	rec/spec-xbow-ready-hi.txt	R10	reject	shay	refopt=--ref {root}/rec/f14-xb0.txt	xbow-ready.mp4 RIGHT (high carry r_ready_py -0.8) rejected 2026-10-10
+t88	rec/spec-xbow-A.txt	R23	accept	shay		spec video xbow-reload.mp4 LEFT (two-hand upright reload, rlnat 1) accepted 2026-10-10
+t89	rec/spec-xbow-reload-rl0.txt	R23	reject	shay		xbow-reload.mp4 RIGHT (nose-down reload, rlnat 0) rejected 2026-10-10
