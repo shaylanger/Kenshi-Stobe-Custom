@@ -43,6 +43,8 @@ def item_name(ref):
 SPOT = (-54190.0, 633.0, 4380.0)
 # ranged weapon names (crossbows: "Oldworld Bow", "Eagle's Cross", "Toothpick", "Spring Bow", "Harpoon"); "Paladin's Cross" is a sword
 RANGED = re.compile(r"(?i)\bbow\b|crossbow|harpoon|toothpick|eagle'?s cross|spring")
+# worn gear (not a weapon); whole words: "Ronin Hatchet" is an axe, not a hat (wm-g8 drew the bow)
+ARMOR = re.compile(r"(?i)\b(hat|helmet|armou?r|shirt|boots|pants|coat|vest|cap|mask|shoes|gloves)\b")
 
 
 def fixture(save):
@@ -140,7 +142,9 @@ def settle(s, now):
             keep.append(e)
     s['tl'] = keep
     if s['speed'] >= 2 and not s['paused']:
-        s['hour'] = (s['hour'] + (now - s['hour_vt']) * s['speed'] / 120.0) % 24
+        h = s['hour'] + (now - s['hour_vt']) * s['speed'] / 120.0
+        s['day'] = s.get('day', 12) + int(h // 24)
+        s['hour'] = h % 24
     s['hour_vt'] = now
     mtick(s, now)
 
@@ -233,7 +237,7 @@ def weapon_drawn(s, c):
     """the weapon R draws: ranged when the char has one equipped and its ranged mode isn't off (kah-fpxbow Malzin with
     katana + bow drew the bow: 4080 proof take 1)"""
     rng = [w for w in c['eq'] if RANGED.search(w)]
-    mel = [w for w in c['eq'] if not RANGED.search(w) and not re.search(r'(?i)hat|armour|shirt|boots|pants', w)]
+    mel = [w for w in c['eq'] if not RANGED.search(w) and not ARMOR.search(w)]
     if rng and c.get('ranged') is not False:
         return rng[0], 0
     if mel:
@@ -637,8 +641,9 @@ def handle(s, cmd, a, now, sp):
         s['last_saved'] = a[0]
         return True, 'saving %s' % a[0]
     if cmd == 'time':
-        h = s['hour']
-        return True, 'day=12 time=%02d:%02d speed=%g' % (int(h), int((h % 1) * 60), s['speed'])
+        h, d = s['hour'], s.get('day', 12)   # WorldCommands.inc time
+        return True, 'game_hours=%.4f day=%d time=%02d:%02d speed=%.1f paused=%d' % (
+            d * 24 + h, d, int(h), int((h % 1) * 60), s['speed'], s['paused'])
     if cmd == 'speed':
         try:
             v = float(a[0])
@@ -805,7 +810,7 @@ def handle(s, cmd, a, now, sp):
         its = []
         for i in sorted(set(c['items']), key=c['items'].index):
             d = dict(name=i, count=c['items'].count(i), equipped=i in c['eq'])
-            if not re.search(r'(?i)hat|helmet|armour|shirt|boots|pants|coat', i):
+            if not ARMOR.search(i):
                 d['weapon_model'] = i.lower().replace(' ', '_')
             its.append(d)
         return True, '%s items=%d %s' % (line(c), len(its), json.dumps(its, separators=(',', ':')))
@@ -868,7 +873,7 @@ def handle(s, cmd, a, now, sp):
                 if it in o['items'] and it not in o['eq']:
                     o['items'].remove(it); break
             c['items'].append(it)
-        if cmd == 'pickup' and re.search(r'(?i)hat|helmet|armour|shirt|boots', it) and it not in c['eq']:
+        if cmd == 'pickup' and ARMOR.search(it) and it not in c['eq']:
             c['eq'].append(it)
         return True, '%s %s %s' % (cmd, c['name'], it)
     if cmd == 'screenshot':
