@@ -110,6 +110,7 @@ static void wound_drop(WoundShot *s) {
 static void *wound_spawn_hook(void *a,void *b,void *c,void *d) {
     void *h=g_wound_spawn_orig(a,b,c,d);
     ++g_wound_spawn_any;
+    if (g_tur_dispatch && h) g_tur_harp=h;   /* T4: the FP turret shot's harpoon (kfp_turret.inc tracks its flight) */
     if (g_combat_dispatch && GetCurrentThreadId()==g_combat_dispatch_tid) ++g_wound_spawn_dispatch;
     if (!h) return h;
     if (g_wound_live) wound_drop(wound_find(h));     /* pooled address reused */

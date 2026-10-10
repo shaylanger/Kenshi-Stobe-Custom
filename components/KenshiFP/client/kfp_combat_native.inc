@@ -89,9 +89,11 @@ static uintptr_t combat_unique_signature(const char *sig);
 #include "kfp_combat_input.inc"
 #include "kfp_combat_wound.inc"
 static void combat_rc_hook(void *rc,float dt,const void *a,const void *b) {
+    if (g_tur_rc && rc==g_tur_rc) {++g_tur_updt_suppressed;return;}   /* T4: the FP char mans the turret, not the AI */
     if (!combat_owned_rc(rc)) g_combat_rc_orig(rc,dt,a,b);
 }
 static void combat_mt_hook(void *rc,float dt) {
+    if (g_tur_rc && rc==g_tur_rc) {++g_tur_updt_suppressed;return;}
     if (!combat_owned_rc(rc)) g_combat_mt_orig(rc,dt);
 }
 static void combat_end_hook(void *rc) {
@@ -111,6 +113,7 @@ static int fp_combat_own_animupd(void *rc) {
     ++g_combat_anim_suppressed;return 1;
 }
 static int fp_combat_suppress_shot(void *gun,void *pc) {
+    if (fp_turret_suppress_shot(pc)) return 1;
     if (combat_owned_rc(g_combat_rc) && pc==g_combat_pc) {
         if (!g_combat_dispatch || GetCurrentThreadId()!=g_combat_dispatch_tid || gun!=g_combat_gun) {++g_combat_suppressed;return 1;}
     }
@@ -595,7 +598,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
             if (setjmp(g_guard_jb)) {g_guard_armed=0;g_combat_fault=1;return;}
             guard_arm();combat_release();g_guard_armed=0;
         }
-        fp_melee_release();
+        fp_melee_release();if (g_tur_pc) fp_turret_drop("fp/manual combat off");
         g_combat_why=!g_combat_enabled?"off":!g_combat_native_ready?"native_unready":g_combat_fault?"fault":"fp_off";
         memset(&g_combat_observed,0,sizeof(g_combat_observed));return;
     }
@@ -613,6 +616,10 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     g_combat_state_pc=pc;
     void *rc=char_valid(pc)&&readable((void *)((uintptr_t)pc+CHAR_RANGEDCOMBAT),8)?
         *(void **)((uintptr_t)pc+CHAR_RANGEDCOMBAT):NULL;
+    if (fp_turret_tick(gw,pc,rc,dt)) {   /* T2-T5: manning a turret = the turret module owns aim/reload/fire */
+        combat_release();fp_melee_release();memset(&g_combat_observed,0,sizeof(g_combat_observed));
+        g_combat_why="turret";g_guard_armed=0;return;
+    }
     void *ranged=combat_virtual(pc,0x3d0);
     void *weapon=ranged?((void *(*)(void *))ranged)(pc):NULL;
     combat_read_loaded(weapon);

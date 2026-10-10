@@ -1262,6 +1262,10 @@ static void fp_melee_hold_ground(void *);
 static void fp_melee_observe_swing(void *,float);
 static int kah_fp_melee(const char *,int,const char *const *,KAH_Reply *,void *);
 static int fp_combat_suppress_shot(void *,void *);
+/* T2-T5 FP turret control (kfp_turret.inc) */
+static void *g_tur_pc,*g_tur_rc,*g_tur_gun,*g_tur_harp;static int g_tur_dispatch;static int g_tur_ui_fire;static unsigned g_tur_updt_suppressed,g_tur_r_ignored;
+static int fp_turret_tick(void *,void *,void *,float);static void fp_turret_drop(const char *);static int fp_turret_suppress_shot(void *);
+static int kah_fp_turret(const char *,int,const char *const *,KAH_Reply *,void *);
 static unsigned g_fp_ctl_shoot_calls;   /* PT18: GunClass::shoot calls (not suppressed) by the FP-controlled char */
 static int install_hook(void *,void *,void **);
 static int kah_fp_combat(const char *,int,const char *const *,KAH_Reply *,void *);
@@ -2421,6 +2425,7 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_move", "fp_move <wasd|none> [ms] | state (TEST ONLY WASD hold)", kah_fp_move, NULL)
           + g_kah.registerCommand("fp_camera", "fp_camera state|probe|distance <0..60>|wheel <delta>|look <yaw radians> <pitch radians>|ray x y z dx dy dz [range] [mask]|floors cx cz half step ytop ybot", kah_fp_camera, NULL)
           + g_kah.registerCommand("fp_combat", "fp_combat on|off|state|aim (read-only)|physical|input <aim> <fire> <reload>", kah_fp_combat, NULL)
+          + g_kah.registerCommand("fp_turret", "fp_turret [state] (FP turret control: aim, reload, shots)", kah_fp_turret, NULL)
           + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL)
           + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|swallow on|off|focus on|off (TEST)|reset", kah_fp_keys, NULL)
           + g_kah.registerCommand("fp_vm", "fp_vm state|probe|dump|on|off|set <key> <v>", kah_fp_vm, NULL);
@@ -7768,7 +7773,7 @@ static void hooked_gun_shoot(void *gun, void *me, void *target, int stat, const 
     if (fp_combat_suppress_shot(gun,me)) return;
     if (me && me == g_fp_control_actor) ++g_fp_ctl_shoot_calls;
     Vec3 aim;
-    if (g_fp_mode && g_cfg_freeaim && !g_aim_mode && me && me == g_fp_control_actor && fp_aim_point(&aim)) {
+    if (g_fp_mode && g_cfg_freeaim && !g_aim_mode && me && me == g_fp_control_actor && !(g_tur_pc && me == g_tur_pc) && fp_aim_point(&aim)) {   /* T4: the turret module aims its own shots */
         aimpos = &aim;
         static int logged;
         if (!logged) { logged = 1; logline("[freeaim] projectile override LIVE"); }
@@ -7897,6 +7902,7 @@ static void hooked_sheathe(void *pc)
 #include "kfp_melee_observe.inc"
 #include "kfp_combat_melee.inc"
 #include "kfp_controls.inc"
+#include "kfp_turret.inc"
 
 /* CharMovement::update hook: re-assert the player's direct-drive intent
  * IMMEDIATELY BEFORE the engine consumes movement state -- combat AI (and the

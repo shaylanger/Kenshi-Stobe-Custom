@@ -469,6 +469,9 @@ static void fpc_holster_tick(void *pc,void *wih) {
     g_fpc_holster_prog=p<0.0f?0.0f:p;
 }
 static void fpc_draw_toggle(void *pc) {
+    if (g_tur_pc && pc==g_tur_pc) {   /* T5: R drew the own crossbow on the turret and the holster took her off it */
+        ++g_tur_r_ignored;logline("[controls] R ignored: manning a turret (W/A/S/D leaves it)");return;
+    }
     void **vt=readable(pc,8)?*(void ***)pc:NULL;
     if (!readable((void *)((uintptr_t)vt+0x3D8),8)) {++g_fpc_r_draw_fail;return;}
     void *wih=readable((void *)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS),8)?*(void **)((uintptr_t)pc+CHAR_WEAPON_IN_HANDS):NULL;
@@ -818,6 +821,7 @@ static void fp_controls_tick(void *gw,float dt) {
         g_fpc_prev[b]=in[b];g_fpc_input[b]=in[b];
     }
     g_cn_ui_aim=g_fpc_ranged&&g_fpc_drawn&&in[FPC_RMB]; g_cn_ui_fire=g_fpc_ranged&&g_fpc_drawn&&in[FPC_LMB];   /* C1 */
+    g_tur_ui_fire=in[FPC_LMB];   /* T4: LMB fires a manned turret */
     g_vm_aim_want=in[FPC_RMB]||(g_combat_injection&&g_combat_injected.aim);   /* C4 */
     {   /* PT20 (m58): an RMB press the controls never see (UI open / no focus) is logged once per press */
         static int raw_prev;int raw=fpc_button(FPC_RMB,phys_ok);
