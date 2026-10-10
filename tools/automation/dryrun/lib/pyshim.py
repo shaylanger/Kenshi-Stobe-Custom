@@ -53,7 +53,8 @@ def sampler(a):
         kahstub.settle(s, end)
         kahstub.save_state(s)
     hist = sorted(s['hist'], key=lambda e: e[0])
-    w = kahstub.world(s, end)
+    allow = [x for x in (pos[3] if len(pos) > 3 else '').split('|') if x]
+    w = kahstub.world(s, end, allow)
     lines, t = [], start
     # fixture "stall": [offset s after the sampler start, length s]: the harness answered nothing (blkH 1.5 s hole)
     st = None

@@ -188,7 +188,7 @@ def item_by_ref(s, ref):
     return ref
 
 
-def world(s, now=None):
+def world(s, now=None, allow=()):
     """what a camera would show right now (bug-replay fixtures: dryrun/fixtures/*.json): game hour + night, hostile NPCs
     (not squad, not Nameless, not KO) within 30 m of the FP / selected character, the popup a fight near the spot puts on
     screen ("<name> is attacking!", fixture "fight": 1). Read by fakeexe (recordings), pyshim (sampler, frames.py)."""
@@ -197,11 +197,16 @@ def world(s, now=None):
         h = (h + (now - s.get('hour_vt', now)) * s['speed'] / 120.0) % 24
     me = s['chars'].get(s.get('fpchar') or s.get('selected'), {}).get('pos')
     host, near = [], []
+    rel = s.get('relations', {})
     for n, c in s['chars'].items():
         if me is None or n in s['squad'] or c.get('fac') == 'Nameless' or c.get('ko'):
             continue
+        # take_sample.py's allow list (names / #ids, e.g. the T6 dummy) is not counted as "near" (real sampler too)
+        if n in allow or c.get('name') in allow or c.get('id') in allow or any(c.get('id', '').startswith(x + '/') for x in allow):
+            continue
         d = sum((c['pos'][i] - me[i]) ** 2 for i in range(3)) ** 0.5
-        if d < 3000:
+        # hostile = a faction at war with the player (relation < 0; `relation <npc> 20` makes a neutral dummy, T6)
+        if d < 3000 and rel.get(c['fac'], -50.0 if 'Bandit' in c['fac'] else 0.0) < 0:
             host.append(n)
         if d < 2000:
             near.append(n)
