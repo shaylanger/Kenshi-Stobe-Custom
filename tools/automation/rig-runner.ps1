@@ -6,7 +6,9 @@ write list files and judge results. Replaces rig-watchdog.ps1 (now a shim to thi
 Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 4080 over ssh):
   rig-runner.ps1 -Ensure                 start the 5090 and 4080 loops if not running (session-start.ps1 does this)
   rig-runner.ps1 -Status                 one line per rig + queue counts
-  rig-runner.ps1 -Stop [-Rig 5090|4080]  stop the loop(s) (a running batch keeps running; a restarted loop re-adopts it)
+  rig-runner.ps1 -Stop [-Rig 5090|4080]  stop the loop(s) and keep them stopped (<rig>.stopped: -Ensure skips it; a
+                                         running batch keeps running; a restarted loop re-adopts it only if it is its own)
+  rig-runner.ps1 -Start [-Rig 5090|4080] clear the stopped flag and start (= -Ensure -Force)
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
   -Fake: test mode on a fake game: queue/runner dirs under C:\KenshiTestRuns\runner\fake\, no lock/install/launch, the
          "batch" is dryrun.sh over the list (writes DONE + SUMMARY.txt); tests pickup, FIFO, gating, done/failed, alerts.
@@ -37,7 +39,7 @@ Queue empty (or 4080 unreachable with lists waiting) for >= 2 min: ALERT-<rig>.t
 and the Stop hook block on ALERT files); the ALERT clears when the rig works again.
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur.
 #>
-param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Status, [switch]$Fake,
+param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Force, [switch]$Status, [switch]$Fake,
       [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
@@ -46,9 +48,13 @@ foreach ($d in $rd, "$qd\5090", "$qd\4080", "$qd\any", "$qd\running", "$qd\done"
 $distro = 'DwemerAI4Skyrim3'
 function PidAlive([string]$r) { $f = Join-Path $rd "$r.pid"; if (Test-Path $f) { $p = [int](Get-Content $f -Raw); return [bool](Get-Process -Id $p -ErrorAction SilentlyContinue) } $false }
 
+# -Stop persists (2026-10-10: session-start's -Ensure restarted a loop the coordinator had just stopped): <rig>.stopped
+# makes -Ensure skip that rig until -Start (or -Ensure -Force); a loop that sees the flag exits at its next tick.
+function StopFlag([string]$r) { Join-Path $rd "$r.stopped" }
 if ($Stop) {
     foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080') })) {
-        if (PidAlive $r) { Stop-Process -Id ([int](Get-Content (Join-Path $rd "$r.pid") -Raw)) -Force; "stopped runner $r" } else { "runner $r not running" }
+        Set-Content (StopFlag $r) "$(Get-Date -Format s) by $(if ($env:KAH_OWNER) { $env:KAH_OWNER } else { 'coordinator' })"
+        if (PidAlive $r) { Stop-Process -Id ([int](Get-Content (Join-Path $rd "$r.pid") -Raw)) -Force; "stopped runner $r (stays stopped: rig-runner.ps1 -Start -Rig $r)" } else { "runner $r not running (marked stopped)" }
         Remove-Item (Join-Path $rd "$r.pid") -ErrorAction SilentlyContinue
     }
     exit 0
@@ -57,14 +63,20 @@ if ($Status) {
     foreach ($r in '5090', '4080') {
         $st = if (Test-Path "$rd\$r.state") { (Get-Content "$rd\$r.state" -Raw).Trim() } else { '-' }
         $n = @(Get-ChildItem "$qd\$r" -Filter *.list -File -ErrorAction SilentlyContinue).Count
-        "runner $r $(if (PidAlive $r) { 'up' } else { 'DOWN' }): $st | queued $r=$n"
+        $up = if (PidAlive $r) { 'up' } elseif (Test-Path (StopFlag $r)) { "STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()) (rig-runner.ps1 -Start -Rig $r)" } else { 'DOWN' }
+        "runner $r ${up}: $st | queued $r=$n"
     }
     "queued any=$(@(Get-ChildItem "$qd\any" -Filter *.list -File -ErrorAction SilentlyContinue).Count)"
     exit 0
 }
+if ($Start) { $Ensure = $true; $Force = $true }
 if ($Ensure) {
-    foreach ($r in '5090', '4080') {
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080') })) {
         if (PidAlive $r) { "runner $r running pid=$(Get-Content (Join-Path $rd "$r.pid") -Raw)"; continue }
+        if (Test-Path (StopFlag $r)) {
+            if (-not $Force) { "runner $r STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()): not started (rig-runner.ps1 -Start -Rig $r)"; continue }
+            Remove-Item (StopFlag $r) -ErrorAction SilentlyContinue
+        }
         $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Rig', $r) + $(if ($Fake) { @('-Fake') } else { @() })
         $p = Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList $a
         "runner $r started pid=$($p.Id)"
@@ -73,6 +85,7 @@ if ($Ensure) {
 }
 if (-not $Rig) { Get-Content $PSCommandPath -TotalCount 40; exit 2 }
 if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
+if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
 Set-Content (Join-Path $rd "$Rig.pid") $PID
 
 # ---------------------------------------------------------------- helpers
@@ -255,12 +268,23 @@ function Probe([string]$outP, [string]$act = '') {
     $h = @{}; foreach ($kv in ($l.Substring(6) -split ' ')) { $p = $kv -split '=', 2; if ($p.Count -eq 2) { $h[$p[0]] = $p[1] } }
     $h
 }
-function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch]$Tail) {
+function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch]$Tail, [string]$Why = '') {
     $run, $outW, $outP, $own, $t0, $name, $tmp = $c
+    if ($how -ne 'DONE' -and -not $Tail -and -not $Fake) {
+        # a dead/lost batch gives the rig back: marker, lock (only if ours), and a game it left open (DIED only, not LOST)
+        if ($Rig -eq '5090') {
+            Remove-Item (Join-Path $runs 'inflight\runner-5090') -ErrorAction SilentlyContinue
+            $lk = Join-Path $runs 'game.lock'
+            if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) {
+                if ($how -eq 'DIED' -and (Get-Process kenshi_x64 -ErrorAction SilentlyContinue)) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
+                Remove-Item $lk -ErrorAction SilentlyContinue; Log "lock released ($how $name)"
+            }
+        }   # 4080: stopped (DIED) / marker removed below
+    }
     $sumL = Join-Path "$qd\done" "$name.SUMMARY.txt"
     if ($Rig -eq '4080' -and -not $Fake) {
         & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/SUMMARY.txt" $sumL 2>$null
-        if (-not $Tail) { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue }
+        if (-not $Tail) { if ($how -ne 'LOST') { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }; Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue }
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     } else { Copy-Item (Join-Path $outW 'SUMMARY.txt') $sumL -ErrorAction SilentlyContinue }
     $sum = if (Test-Path $sumL) { Get-Content $sumL } else { @() }
@@ -268,10 +292,11 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     $where = if ($Rig -eq '4080' -and -not $Fake) { "4080:C:\KenshiTestRuns\$(Split-Path $outP -Leaf)" } else { $outW }
     $dest = if ($how -eq 'DONE') { "$qd\done" } else { "$qd\failed" }
     Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue
-    Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL")
+    Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL$(if ($Why) { " why=$Why" })")
     Remove-Item $file -ErrorAction SilentlyContinue
-    Log "$how $name pass=$np fail=$nf out=$where"
-    Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). Judge it, queue the next list."
+    Log "$how $name pass=$np fail=$nf out=$where$(if ($Why) { " ($Why)" })"
+    $more = if ($how -eq 'DONE') { 'Judge it, queue the next list.' } else { "The list is in queue\failed\ ($Why): fix or requeue it." }
+    Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). $more"
 }
 
 # ---------------------------------------------------------------- loop
@@ -280,8 +305,9 @@ if ($Rig -eq '4080' -and -not $Fake) {
     $null = Ssh @('mkdir', 'C:\KAH\runner')
     if (-not (Scp4 @("$auto\rig4080\staged-state.ps1") 'C:/KAH/runner/')) { Log 'could not copy staged-state.ps1 to the 4080 (unreachable?)' }
 }
-$idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}
+$idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}; $probeFail = 0
 while ($true) {
+    if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {
         # batches past their game part (GAMEDONE) whose background analyses still run: finish them when DONE
         foreach ($tf in @(Get-ChildItem $rd -Filter "$Rig.tail.*" -File -ErrorAction SilentlyContinue)) {
@@ -292,10 +318,33 @@ while ($true) {
         if (Test-Path $curF) {
             $c = @(Get-Content $curF)
             $p = if ($Fake) { @{ done = '1' } } else { Probe $c[2] }
-            if (-not $p) { Log "probe failed for $($c[5])"; if ($Rig -eq '4080') { if (-not $unreach) { $unreach = Get-Date } elseif (((Get-Date) - $unreach).TotalMinutes -ge 10) { Alert "4080 unreachable for 10 min during $($c[5])" } } }
+            if ($p) { $probeFail = 0 } else { $probeFail++ }
+            # ownership (2026-10-10 phantom: a restarted loop adopted the coordinator's hand run in the same out dir and held
+            # the lock): the batch.pid seen first must be written within 10 min of our start command; later it must not change
+            $foreign = $null
+            if ($p -and $p.started -eq '1' -and $p.bpid -and $p.bpid -ne '-' -and $p.bmt -match '^\d+$') {   # old probe copies (4080): no bpid
+                $tok = "$($p.bpid)@$($p.bmt)"
+                if ($c.Count -ge 8 -and $c[7]) { if ($c[7] -ne $tok) { $foreign = "batch.pid is now $tok, ours was $($c[7])" } }
+                else {
+                    $t0e = ([DateTimeOffset][datetime]$c[4]).ToUnixTimeSeconds(); $d = [long]$p.bmt - $t0e
+                    if ($d -lt -30 -or $d -gt 600) { $foreign = "batch.pid ($tok) written $d s from our start: not our batch" }
+                    else { Add-Content $curF $tok; $c += $tok }
+                }
+            }
+            if ($foreign) { Alert "batch $($c[5]): out dir taken over by another run ($foreign); runner lets it go"; Finish-Batch $c 'LOST' -Why "out dir taken over by another run-batch ($foreign); not killed"; $condSince = $null; $hits = @{}; continue }
+            if (-not $p) {
+                Log "probe failed for $($c[5]) ($probeFail)"
+                if ($Rig -eq '4080') { if (-not $unreach) { $unreach = Get-Date } elseif (((Get-Date) - $unreach).TotalMinutes -ge 10) { Alert "4080 unreachable for 10 min during $($c[5])" } }
+                elseif ($probeFail -ge 3) {
+                    # 5090 probe broken 3 ticks: decide from Windows (DONE file, a run-batch.sh on this out dir) instead of waiting forever
+                    $rb = @(Wsl @('pgrep', '-af', 'run-batch.sh') | Where-Object { $_ -match [regex]::Escape($c[2]) })
+                    if (Test-Path (Join-Path $c[1] 'DONE')) { Finish-Batch $c 'DONE'; $probeFail = 0; continue }
+                    if (-not $rb) { Alert "batch $($c[5]): probe failed $probeFail ticks and no run-batch.sh runs on $($c[2])"; Finish-Batch $c 'DIED' -Why "probe failed $probeFail ticks, no run-batch.sh process, no DONE"; $probeFail = 0; continue }
+                }
+            }
             elseif ($p.done -eq '1') { $unreach = $null; ClearAlert; Finish-Batch $c 'DONE'; $condSince = $null; $hits = @{}; continue }
             elseif ($p.started -eq '0' -and ((Get-Date) - [datetime]$c[4]).TotalMinutes -ge 3) {
-                Alert "batch $($c[5]) never started (no batch.pid 3 min after the start command)"; Finish-Batch $c 'DIED'; continue
+                Alert "batch $($c[5]) never started (no batch.pid 3 min after the start command)"; Finish-Batch $c 'DIED' -Why 'never started (no batch.pid 3 min after the start command)'; continue
             }
             elseif ($p.gamedone -eq '1') {
                 # game part over (Kenshi stopped on the 5090 by --stop): free the rig now, collect the analyses later
@@ -304,7 +353,7 @@ while ($true) {
                 else { Remove-Item (Join-Path $runs 'inflight\runner-5090') -ErrorAction SilentlyContinue }
                 Log "GAMEDONE $($c[5]): rig free, background analyses continue"; ClearAlert; $condSince = $null; $hits = @{}; $anaSince = $null; continue
             }
-            elseif ($p.alive -eq '0') { Alert "batch $($c[5]) died without DONE (run-batch.sh process gone)"; Finish-Batch $c 'DIED'; continue }
+            elseif ($p.alive -eq '0') { Alert "batch $($c[5]) died without DONE (run-batch.sh process gone)"; Finish-Batch $c 'DIED' -Why 'run-batch.sh process gone without DONE'; continue }
             else {
                 $unreach = $null
                 $lim = if ($p.launched -eq '0') { 15 } elseif ($p.stallmin -match '^\d+$') { [int]$p.stallmin } else { $StuckMin }

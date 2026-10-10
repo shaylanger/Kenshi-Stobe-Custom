@@ -23,7 +23,7 @@ if [ "$act" = kill-step ] || [ "$act" = kill-game ]; then
   exit 0
 fi
 done=0; [ -f "$O/DONE" ] && done=1
-now=$(date +%s); nf=$(find "$O" -type f ! -name step.pid -printf '%T@\n' 2>/dev/null | sort -n | tail -1); age=$(( now - ${nf%%.*} )); [ -n "$nf" ] || age=0
+now=$(date +%s); nf=$(find "$O" -type f ! -name step.pid -printf '%T@\n' 2>/dev/null | sort -n | tail -1); nf=${nf%%.*}; age=$(( now - ${nf:-$now} ))   # no file/dir: age 0 (an empty $nf aborted the probe: "probe failed" forever)
 if tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then k=1; else k=0; fi
 gh=-; ph=-
 if [ $k = 1 ]; then
@@ -51,5 +51,6 @@ if [ "$step" != - ] && grep -qi microsoft /proc/version 2>/dev/null; then
   done
   [ $ana = 1 ] && tasklist.exe </dev/null 2>/dev/null | grep -qi '^ffmpeg.exe' && ana=0
 fi
-st=0; [ -f "$O/batch.pid" ] && st=1
-echo "PROBE started=$st done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"
+st=0; bpid=-; bmt=0; [ -f "$O/batch.pid" ] && { st=1; read -r bpid _ < "$O/batch.pid"; bmt=$(stat -c %Y "$O/batch.pid"); }
+# bpid/bmt: which run-batch.sh owns the out dir (the runner refuses to adopt a batch someone else started there)
+echo "PROBE bpid=${bpid:--} bmt=$bmt started=$st done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"
