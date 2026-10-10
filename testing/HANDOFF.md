@@ -1,10 +1,26 @@
-# Current state (m87, 2026-10-10)
+# Current state (m90, 2026-10-10)
 This file + CLAUDE.md are the whole state: there are no separate handoff files any more (deleted 2026-10-06). Any agent
 starting here needs nothing else. Keep it current: update this section at every milestone, before a session ends.
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
-## Right now (2026-10-10 m87): FP viewmodel/turret work DONE, nothing running, waiting on Shay
+## Right now (2026-10-10 ~11:10, m90 coordinator): viewmodel refilm round, 4 agents, both rigs busy
+- Start with `tools/automation/session-start.ps1` (agent status files in `C:\KenshiTestRuns\agents\`, queues in `queue\`).
+- Agents (respawn any not DONE from its status/handoff file): `kfp-fixer` (5090, lock kfp-fixer, batch kfx-b3: zoom-sweep
+  video; then ONE build = free-block raised guard (228c60/2245b0 only, default blk_dir 0/org 1) + ticket A cursor fix ->
+  VMQUICK -> short preflighted lab-gated takes; also implementing take preflight/RESULT lines/split takes),
+  `4080-vm-rows` (vm-sheet.py path fix + numeric fp-viewmodel rows on F0595751; next: make the 4080 a full filming rig via
+  a rig layer, status name 4080-filming), `animlab-builder` (phase 4 native anims -> tag animlab-p4 -> fist candidates),
+  `animlab-maintainer` (misses: free-block per-press guard, E6 kfx-b2 lab-vs-game, fb_lives=0; lab agreement report).
+- Installed: KenshiFP F0595751 on BOTH rigs; harness FF567966 on both (4080 updated 11:00).
+- Ticket B DONE (4080 survey, `C:\KenshiTestRuns\blk-survey\`): blk_dir/org only bias chooseBlock's random native
+  technique; 228c60/2245b0 raised (coordinator-reviewed), 223090/226e50/227e90 hang, 223cc0 low (rejected for free block).
+- kfx-b2 (11:51-11:56 WSL clock): zoom-sweep video FAIL (4 takes failed), E6 game rec FAIL 4 lab checks, T6 take ran but
+  no RESULT line (fixer renders+checks it). Nothing is ready for Shay; every video needs a review pack + coordinator review.
+- New tooling this session: 4080 idle guard (rig4080-state.ps1, Stop hook, idle4080), per-rig ready queue (Stop hook),
+  review-pack.py; rules in CLAUDE.md "Game-take discipline" (8 points) and "Subagents" (no fixed cap).
+
+## Earlier (2026-10-10 m87): FP viewmodel/turret work DONE, nothing running, waiting on Shay
 - Kenshi closed, lock free, no inflight, 5090 idle recorded ("awaiting Shay's decisions"). Fixers #1-#44 (lock owner fixer-pt30) finished; their log `%TEMP%\claude\C--KenshiModding\wr\HANDOFF-sword-wrist.md`.
 - Videos, all coordinator-reviewed, in `C:\KenshiTestRuns\vm-rework\`: anim-sword-e6, sword-z25-block, turret-fp (T6, 86fa1ca), zoom-sweep (Z1, 276e1fc). Scripts to re-render them: `C:\KenshiTestRuns\vidscripts\` (f24/f26/f36/f38 helpers).
 - Waiting on Shay (COMBAT_TEST_PLAN rows): Z1 zoommode switch (default) or fade; E6 default stroke mask (now 0x1 = diagonal only; stroke 3 stays off); T6 turret look/feel.
