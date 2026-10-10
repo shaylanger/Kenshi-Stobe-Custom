@@ -280,6 +280,43 @@ static void *vm_gun_ammo(void *gun, int i, unsigned *cnt)
     return readable(a[i], 8) ? a[i] : NULL;
 }
 static int g_vm_rlend = 1, g_vm_rl_empty, g_vm_rl_cut;   /* C4: reload pose ends when loaded again */
+/* X4 v2: reload clip time follows the native reload timer (set by kfp_combat_native.inc each owned frame) */
+static float g_x4_q = -1.0f, g_x4_left = -1.0f, g_x4_lead = 0.35f, g_x4_end = 0.98f, g_x4_last_t, g_x4_last_len; static ULONGLONG g_x4_ms;
+static int g_x4_led, g_x4_clip = 0, g_x4_log, g_x4_hits_frame; static unsigned g_x4_sets, g_x4_scans; static char g_x4_names[600];
+typedef void *(*x4_eiter_t)(const void *set, void *ret);
+typedef const void *(*x4_name_t)(const void *st);
+typedef float (*x4_getf_t)(const void *st);
+typedef void (*x4_setf_t)(void *st, float v);
+typedef char (*x4_getb_t)(const void *st);
+static x4_eiter_t g_x4_eiter; static x4_name_t g_x4_name; static x4_getf_t g_x4_len, g_x4_tpos, g_x4_wgt; static x4_setf_t g_x4_settpos; static x4_getb_t g_x4_en;
+static int x4_fresh(void) { return g_x4_q >= 0.0f && GetTickCount64() - g_x4_ms < 250; }   /* reload sync active this frame */
+static int x4_live(void) { return g_x4_clip && x4_fresh(); }   /* experimental clip time override (x4clip 1) */
+static const char *x4_str(const void *s) { const unsigned char *m = (const unsigned char *)s;
+    return *(const size_t *)(m + 0x18) >= 16 ? *(const char *const *)m : (const char *)m; }
+static void x4_pre(const void *set)
+{
+    if (!g_x4_eiter || !g_x4_name || !g_x4_len || !g_x4_settpos || !set) return;
+    int live = x4_live();
+    if (!live && !g_x4_log) return;
+    void *it[8] = { 0 }; g_x4_eiter(set, it);   /* ConstVectorIterator<list>: mBegin, mCurrent, mEnd (list node ptrs) */
+    void *p = it[0], *e = it[2]; int n = 0, hits = 0, ln = 0; char nb[sizeof g_x4_names]; nb[0] = 0;
+    g_x4_scans++;
+    while (p && p != e && n < 24) {
+        void *st = *(void **)((char *)p + 0x10); p = *(void **)p; n++;
+        if (!readable(st, 0x40)) break;
+        const char *nm = x4_str(g_x4_name(st)); float len = g_x4_len(st);
+        if (ln < (int)sizeof nb - 80)
+            ln += snprintf(nb + ln, sizeof nb - ln, "%s%.40s:%.2f/%.2f/w%.2f", n > 1 ? ";" : "", nm, g_x4_tpos ? g_x4_tpos(st) : -1.0f, len, g_x4_wgt ? g_x4_wgt(st) : -1.0f);
+        if (live && strstr(nm, "reload") && len > 0.05f) {
+            float t = fminf(1.0f, fmaxf(0.0f, g_x4_q)) * len * g_x4_end;
+            g_x4_settpos(st, t); g_x4_sets++; hits++; g_x4_last_t = t; g_x4_last_len = len;
+        }
+    }
+    g_x4_hits_frame = hits;
+    memcpy(g_x4_names, nb, sizeof nb);
+    if (g_x4_log && (g_x4_scans % 15) == 0) logline("[x4] q=%.3f live=%d hits=%d anims %s", g_x4_q, live, hits, g_x4_names);
+}
+
 static Vec3 g_vm_s2w[3]; static Vec3 g_vm_w2s[3]; static float g_vm_scale = 1.0f;   /* skel<->world map (rows) */
 static Vec3 g_vm_cms, g_vm_cmw;
 /* ---- per-frame recorder + frozen replay (every-frame animation review) ----
@@ -828,6 +865,13 @@ static void vm_apply(void *skel)
 
 static void hooked_vm_setanim(void *skel, const void *set, float w, const void *bmap)
 {
+    if (skel && skel == g_vm_skel && !g_vm_dead && (g_x4_log || x4_live())) {   /* X4 v2: before the native pose */
+        jmp_buf saved; memcpy(saved, g_guard_jb, sizeof(jmp_buf));
+        int was = g_guard_armed; DWORD wtid = g_guard_tid;
+        if (setjmp(g_guard_jb)) { g_x4_eiter = NULL; logline("[x4] reload clip sync FAULTED -- disabled"); }
+        else { guard_arm(); x4_pre(set); }
+        memcpy(g_guard_jb, saved, sizeof(jmp_buf)); g_guard_tid = wtid; g_guard_armed = was;
+    }
     g_vm_setanim_orig(skel, set, w, bmap);
     if (!skel || skel != g_vm_skel || g_vm_dead) return;
     g_vm_calls++;
@@ -853,6 +897,14 @@ static void vm_install(HMODULE ogre)
         || !g_oldnode_getpos) {
         logline("[vm] viewmodel unavailable (setAnimationState=%p)", t); return;
     }
+    g_x4_eiter = (x4_eiter_t)GetProcAddress(ogre, "?getEnabledAnimationStateIterator@AnimationStateSet@Ogre@@QEBA?AV?$ConstVectorIterator@V?$list@PEAVAnimationState@Ogre@@V?$STLAllocator@PEAVAnimationState@Ogre@@V?$CategorisedAllocPolicy@$0A@@2@@2@@std@@@2@XZ");
+    g_x4_name = (x4_name_t)GetProcAddress(ogre, "?getAnimationName@AnimationState@Ogre@@QEBAAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ");
+    g_x4_len = (x4_getf_t)GetProcAddress(ogre, "?getLength@AnimationState@Ogre@@QEBAMXZ");
+    g_x4_tpos = (x4_getf_t)GetProcAddress(ogre, "?getTimePosition@AnimationState@Ogre@@QEBAMXZ");
+    g_x4_wgt = (x4_getf_t)GetProcAddress(ogre, "?getWeight@AnimationState@Ogre@@QEBAMXZ");
+    g_x4_settpos = (x4_setf_t)GetProcAddress(ogre, "?setTimePosition@AnimationState@Ogre@@QEAAXM@Z");
+    logline("[x4] reload clip sync %s (iter=%p name=%p len=%p set=%p)", g_x4_eiter && g_x4_name && g_x4_len && g_x4_settpos ? "ready" : "UNAVAILABLE",
+            (void *)g_x4_eiter, (void *)g_x4_name, (void *)g_x4_len, (void *)g_x4_settpos);
     g_vm_hooked = install_hook(t, (void *)hooked_vm_setanim, (void **)&g_vm_setanim_orig);
     logline(g_vm_hooked ? "[vm] viewmodel hook installed (Skeleton::setAnimationState, IK)"
                         : "[vm] viewmodel hook FAILED");
@@ -1275,7 +1327,11 @@ static void vm_frame_core(void *pc, int body_down)
      * hold): leave the reload pose now, straight into aim (RMB held) or ready */
     if (ti == VM_RELOAD && g_vm_class == 1) {
         if (g_combat_loaded == 0) g_vm_rl_empty = 1;
-        if (g_vm_rlend && g_vm_rl_empty && g_combat_loaded > 0) {
+        if (x4_fresh() && g_x4_left >= 0.0f && g_x4_left < g_x4_lead) {   /* X4: hand back to aim/ready so the pose arrives as the native timer ends */
+            if (!g_x4_led) logline("[vm] X4 reload pose hands back %.2fs before the reload timer ends (q=%.3f), -> %s", g_x4_left, g_x4_q, g_vm_aim_want ? "aim" : "ready");
+            g_x4_led = 1; ti = g_vm_aim_want ? VM_AIM : VM_READY;
+        } else g_x4_led = 0;
+        if (g_vm_rlend && g_vm_rl_empty && g_combat_loaded > 0 && !x4_fresh()) {   /* X4: reload sync live -> the pose ends with the state (timer end) */
             if (!g_vm_rl_cut) logline("[vm] C4 reload pose ends: loaded=%d (state=%s), -> %s", g_combat_loaded, st, g_vm_aim_want ? "aim" : "ready");
             g_vm_rl_cut = 1; ti = g_vm_aim_want ? VM_AIM : VM_READY;
         }
@@ -1729,6 +1785,10 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "zf1"))     { if (x >= 0 && x < 50) g_vm_zf1 = x; return 1; }
     else if (!strcmp(k, "rlnat"))   { g_vm_rlnat = x != 0; return 1; }
     else if (!strcmp(k, "rlend"))   { g_vm_rlend = x != 0; return 1; }
+    else if (!strcmp(k, "x4clip"))  { g_x4_clip = x != 0; return 1; }
+    else if (!strcmp(k, "x4end"))   { if (x < 0.5f || x > 1.0f) return 0; g_x4_end = x; return 1; }
+    else if (!strcmp(k, "x4log"))   { g_x4_log = x != 0; return 1; }
+    else if (!strcmp(k, "x4lead"))  { if (x < 0.0f || x > 2.0f) return 0; g_x4_lead = x; return 1; }
     else if (!strcmp(k, "boltpin")) { g_vm_boltpin = (int)x; return 1; }
     else if (!strcmp(k, "rltr"))    { if (x >= 0 && x <= 1) g_vm_rltr = x; return 1; }
     else if (!strcmp(k, "rlfwd"))   { if (x >= -1 && x <= 1) g_vm_rlfwd = x; return 1; }
@@ -1931,6 +1991,10 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
                  g_vm_pole[0][1].x, g_vm_pole[0][1].y, g_vm_pole[0][1].z, g_vm_pole[1][0].x, g_vm_pole[1][0].y, g_vm_pole[1][0].z,
                  g_vm_pole[1][1].x, g_vm_pole[1][1].y, g_vm_pole[1][1].z);
         r->append(r, b); return KAH_OK;
+    } else if (!strcmp(a, "anims")) {   /* X4 v2 */
+        char xb[800]; snprintf(xb, sizeof xb, "x4 clip=%d live=%d q=%.3f end=%.2f sets=%u scans=%u hits=%d last_t=%.3f last_len=%.3f anims=%s",
+            g_x4_clip, x4_live(), g_x4_q, g_x4_end, g_x4_sets, g_x4_scans, g_x4_hits_frame, g_x4_last_t, g_x4_last_len, g_x4_names);
+        r->append(r, xb); return KAH_OK;
     } else if (strcmp(a, "state")) { r->append(r, "usage: fp_vm state|probe|dump|on|off|set <key> <value>|rec on|off|dump <file>|replay <n> [t]|off"); return KAH_ERROR; }
     snprintf(b, sizeof(b),
         "vm on=%d hooked=%d dead=%d state=%s hold=%d w=%.2f class=%s elev=%.1f az=%.1f target=%.1f,%.1f basis=%d "

@@ -38,6 +38,9 @@ static float g_combat_last_reload_timer=-1;
  * RELOAD but the native start (0x437940) left rc+0x80 at 0; has_ammo = Character vt+0x178(gun ammo type
  * gun+0x58) = the native "carries a matching round" test (main inventory, then backpack); -1 = not checked. */
 static unsigned g_combat_reload_refused;
+static int g_cfg_rl_sync = 1; static float g_cfg_rl_len = 0.0f, g_cfg_rl_fixed = 0.0f;   /* X4 */
+static float g_rl_p, g_rl_s = 1.0f, g_rl_max;
+static int g_cfg_rl_mask = 1; static unsigned g_rl_masked;   /* X4 v3 */
 static unsigned g_combat_holster_rl_cancels;   /* X6: stale reload flags cleared while the bow was out of hand */
 static int g_combat_has_ammo=-1;
 static void *g_combat_ammo_type;
@@ -736,7 +739,27 @@ static void fp_manual_combat_tick(void *gw,float dt) {
             o.reloading=*(unsigned char *)((uintptr_t)rc+0x80);o.ammo=*(int *)((uintptr_t)gun+GUN_AMMO);
             {unsigned char *vis=(unsigned char *)((uintptr_t)pc+CHAR_ONSCREEN),vis0=*vis;
              if (!vis0) {*vis=1;++g_combat_vis_forced;}
-             g_ranged_animupd_orig(rc,o.dt,&aim,(input.aim||o.reloading)?pc:NULL);
+             float adt=o.dt;
+             if (o.reloading && g_cfg_rl_sync) {   /* X4: reload animation progress follows the native timer */
+                 float tl=*(float *)((uintptr_t)rc+0x78),mx=*(float *)((uintptr_t)rc+0x74);
+                 if (!before) g_rl_p=0.0f;
+                 g_rl_max=mx;
+                 if (g_cfg_rl_fixed>0.0f) g_rl_s=g_cfg_rl_fixed;
+                 else if (g_cfg_rl_len>0.0f && isfinite(tl) && tl>0.02f) g_rl_s=fminf(4.0f,fmaxf(0.1f,g_cfg_rl_len*(1.0f-g_rl_p)/tl));
+                 else g_rl_s=1.0f;
+                 adt=o.dt*g_rl_s;if (g_cfg_rl_len>0.0f) g_rl_p=fminf(1.0f,g_rl_p+adt/g_cfg_rl_len);
+             } else if (!o.reloading) {g_rl_p=0.0f;g_rl_s=1.0f;}
+             if (o.reloading && g_cfg_rl_mask) {   /* X4 v2: reload clip progress = native timer progress (kfp_viewmodel.inc x4_pre) */
+                 float tl2=*(float *)((uintptr_t)rc+0x78),mx2=*(float *)((uintptr_t)rc+0x74);
+                 if (isfinite(tl2) && isfinite(mx2) && mx2>0.05f) {g_x4_q=1.0f-fminf(1.0f,fmaxf(0.0f,tl2/mx2));g_x4_left=tl2;g_x4_ms=GetTickCount64();}
+             } else g_x4_q=-1.0f;
+             {int *am=(int *)((uintptr_t)gun+GUN_AMMO),a0=*am,mask=o.reloading&&g_cfg_rl_mask&&a0>0;
+              /* X4 v3: the native reload clip runs on gun reloadState over the whole reload timer but is stopped as soon
+               * as the bolt is in (numShotsCurrent>0, ~half way): hide the ammo from the anim update while still reloading
+               * so the clip plays to its end = the end of the native reload timer */
+              if (mask) {*am=0;++g_rl_masked;}
+              g_ranged_animupd_orig(rc,adt,&aim,(input.aim||o.reloading)?pc:NULL);
+              if (mask) *am=a0;}
              *vis=vis0;}
             fp_combat_probe_animation(rc,(input.aim||o.reloading)?pc:NULL);
             float *timer=(float *)((uintptr_t)rc+0x70);
@@ -897,6 +920,12 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         if (!g_combat_native_ready || g_combat_fault) {r->append(r,"native bindings/hooks unavailable or faulted");return KAH_ERROR;}
         g_combat_enabled=1;r->append(r,"manual ownership requested; release all combat buttons to arm");return KAH_OK;
     }
+    if (argc==3 && (!_stricmp(argv[1],"rlsync")||!_stricmp(argv[1],"rllen")||!_stricmp(argv[1],"rlscale"))) {   /* X4 */
+        float x=(float)atof(argv[2]);char b[96];
+        if (!_stricmp(argv[1],"rlsync")) {g_cfg_rl_sync=x!=0.0f;g_cfg_rl_mask=x==1.0f;} /* X4 v3: rlsync 1 = sync + mask, 2 = sync only, 0 = off */ else if (!_stricmp(argv[1],"rllen")) {if (x<0||x>30) {r->append(r,"rllen 0..30");return KAH_ERROR;} g_cfg_rl_len=x;}
+        else {if (x<0||x>10) {r->append(r,"rlscale 0..10");return KAH_ERROR;} g_cfg_rl_fixed=x;}
+        snprintf(b,sizeof(b),"rlsync=%d rllen=%.3f rlscale=%.3f",g_cfg_rl_sync,g_cfg_rl_len,g_cfg_rl_fixed);r->append(r,b);return KAH_OK;
+    }
     if (argc==3 && !_stricmp(argv[1],"autoreload")) {
         if (strcmp(argv[2],"0")&&strcmp(argv[2],"1")) {r->append(r,"autoreload must be 0 or 1");return KAH_ERROR;}
         g_cfg_combat_auto_reload=atoi(argv[2]);
@@ -934,6 +963,7 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," fp_ui_state=%s fire_pending=%d pending_shots=%u reload_emits=%u reload_refused=%u has_ammo=%d ammo_type=%p gun_setups=%u aim_stalls=%u aim_stall_why=%s loaded=%d loaded_max=%d item_gun=%p ctl_shots=%u",g_fpc_ui_state?g_fpc_ui_state:"off",g_combat_control.fire_pending,g_combat_control.pending_shots,
          g_combat_control.reloads,g_combat_reload_refused,g_combat_has_ammo,g_combat_ammo_type,g_combat_gun_setups,g_combat_aim_stalls,g_combat_aim_stall_why,
          g_combat_loaded,g_combat_loaded_max,g_combat_item_gun,g_fp_ctl_shoot_calls);}
+        {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," rl_max=%.3f rl_scale=%.3f rl_p=%.3f rl_len=%.3f rl_sync=%d rl_mask=%d rl_masked=%u",g_rl_max,g_rl_s,g_rl_p,g_cfg_rl_len,g_cfg_rl_sync,g_cfg_rl_mask,g_rl_masked);}
         {size_t l=strlen(b);snprintf(b+l,sizeof(b)-l," holster_rl_cancels=%u",g_combat_holster_rl_cancels);}
         {size_t l=strlen(b);const KfpCombatObservation *j=&g_combat_control.last_reject;
          snprintf(b+l,sizeof(b)-l," inj_cmds=%u inj_aim_cmds=%u last_reject=%d/%d/%d/%d/%d/%.4f/%.4f last_reject_why=%s last_reject_gate=%s last_reject_native=%d last_reject_latched=%d last_reject_dip_s=%.3f last_reject_dt=%.3f last_reject_hold=%d last_reject_have_aim=%d last_reject_truce=%d last_reject_allowed=%d ready_native=%d ready_bridged=%u ready_latched=%d unconscious=%d ko_timer=%.2f",
