@@ -27,7 +27,8 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
   spec videos: keep current swing wrist, low crossbow carry, two-hand reload; PG finished/standalone; kenshi-click.ps1
   kept injected-only; leave KenshiDualWield/, dual-wield brief, big mod ideas, reference photos, tools/research.
   Coordinator: true-L1 grip fix NOT shipped (moves accepted poses); errmax check to compare vs game-L1 model instead.
-- Waiting for Shay: nothing. Next for him: in-game finger A/B video (after the operator films + reviews it), fists
+- weapon-matrix DONE (e35b110, harness 57066a7): lab 47/126 FAIL; lists components/KenshiFP/animlab/weapons/batch-5090.list + batch-4080.list (78 gated + 5 confirm). Blocked on: dryrun.sh fake give/equip replies (note to take-dryrun) and a harness install with MakeWeapon (next harness build from main, with sync_flash). 4080 needs the same weapon mods.
+- Waiting for Shay: should heavy weapons + polearms be held two-handed in FP (34 weapons; lab rule is inferred, not his)?
   takes, weapon-matrix risk report.
 
 ## Earlier (2026-10-10 ~11:45, m90 coordinator handed off at context limit)
