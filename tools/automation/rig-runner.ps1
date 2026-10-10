@@ -209,7 +209,7 @@ function Start-Batch($f) {
             }
         }
         Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
-        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 WSLENV=KAH_OWNER`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --stop --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`n"
+        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 WSLENV=KAH_OWNER`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --stop --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
         [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
         Set-Content (Join-Path $runs 'inflight\runner-5090') $outP
         Wsl @('bash', "$outP/.start.sh") | Out-Null
