@@ -57,6 +57,12 @@ rig_preflight() {
     if ! echo "$q" | grep -q ' Active '; then
       echo "RESULT $row FAIL setup: 4080 session not active (quser: $(echo $q | tr -s ' '))"; return 1
     fi
+    # C:\KAH\display-check.ps1 (4080-display agent): virtual display + desktop grab in the session; must say LIVE
+    # (needs Shay's keep-display-on.bat run in his RDP session)
+    q=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\display-check.ps1' 2>&1 | tr -d '\r' | grep 'gdigrab frame')
+    if ! echo "$q" | grep -q '=> LIVE'; then
+      echo "RESULT $row FAIL setup: 4080 session not active (display-check: ${q#--- })"; return 1
+    fi
   fi
   luma=$("$FFX" -hide_banner -loglevel error -f gdigrab -draw_mouse 0 -i "title=$WIN_TITLE" -frames:v 1 \
     -vf "scale=1:1:flags=area,format=gray" -f rawvideo - 2>/dev/null | od -An -tu1 | tr -d ' \n')
