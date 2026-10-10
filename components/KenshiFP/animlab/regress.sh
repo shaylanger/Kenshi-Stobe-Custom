@@ -165,11 +165,12 @@ else echo "REGRESS INFO E1 inline candidate kfp-e1-inline.py not built (missing 
 #     (first after the draw) and f14-e0 runs 87/495 from ready branch B (elbow 5.1,-4.1,5.0, edge ~100 deg off A): `animlab.py
 #     branch` must FAIL them; game f14-e0 + vmq85a7 PASS (one branch). Fix: kfp-rb-single.py (fixer #21) + kfp-rb-camup.py
 #     (A reference in a frame that doesn't roll with the edge) must PASS all three against the game f14-e0 ready.
+#     kfpvm_rb0 is built --no-l1: B only exists in the old lab model (l1k 1); with the game L1 model it never shows (step 20).
 #     Game f13-sw0 = INFO (older build: the game itself alternates two ready branches, edge 155 deg apart).
 for r in f14-e0 vmq85a7-sw; do b=$(python3 "$L/animlab.py" branch "$W/$r.txt" | cut -c1-120)
   case "$b" in "branch PASS"*) ok "ready branch game $r: $b";; *) bad "ready branch game $r: $b";; esac; done
 echo "REGRESS INFO ready branch game f13-sw0: $(python3 "$L/animlab.py" branch "$W/f13-sw0.txt" | cut -d' ' -f1-2)"
-if bash "$HERE/build.sh" --rev f41f862 --out "$BLD/kfpvm_rb0" >/tmp/al-build9.txt 2>&1; then
+if bash "$HERE/build.sh" --rev f41f862 --no-l1 --out "$BLD/kfpvm_rb0" >/tmp/al-build9.txt 2>&1; then
   for r in f13-sw0 f14-e0; do "$BLD/kfpvm_rb0" "$W/$r.txt" /tmp/al-rb0.txt --quiet >/dev/null 2>&1
     b=$(python3 "$L/animlab.py" branch /tmp/al-rb0.txt | cut -c1-160)
     case "$b" in "branch FAIL"*":BAD"*) ok "miss ready branch B reproduced (replay $r @f41f862): $b";; *) bad "ready branch B not caught on $r @f41f862: $b";; esac; done
