@@ -33,7 +33,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - **4080:** runner loop up, running queue\4080\10-zsfade.list (zoom fade refilm on the newest build) -> C:\KenshiTestRuns\zsfade4080 (4080 side); owner 4080-filming judges (0 leaked band frames expected).
 - Results today: op-b7 DONE (VMQUICK, E6 e6r7 FAIL 2 lab FAILs, blkJ, T6 turret take) not yet judged; op-b6 fists FAIL (overlay setup x2, ma_2strike no swing, shoteiL off-screen); build-pipeline + weapon-matrix + e6-climb2 + kfp-swinghit + animlab-maintainer DONE. Combined build line (agent build-line): C00ADF99 installed on the 5090.
 - New today: rig-watchdog/rig-runner (queue folders queue\5090|4080|any, ALERT files block the Stop hook), stobe-server.sh, CLAUDE.md "Rig uptime + process" + "STOBE server off" rules, swing_hits_all ini toggle (default OFF, patch kfp-swing-hits-all.py, rows SWA-OFF/ON), two-hand spec R24-R29 + lab checks (pose fit running, patch kfp-two-hand.py pending).
-- Waiting for Shay: should katanas/sabres/hackers/blunt also be two-handed in FP (game holds them two-handed natively)? Asked 15:02. Also: was the small game window on DISPLAY1 him (asked)?
+- DECIDED (Shay 10-10, memory fp-two-handed-weapons): katanas/sabres/hackers/blunt two-handed in FP only if an easy adaptation, else one-handed. Also: was the small game window on DISPLAY1 him (asked)?
 ## Earlier (2026-10-10 ~11:45, m90 coordinator handed off at context limit)
 - Start with `tools/automation/session-start.ps1` (agent status/handoff files in `C:\KenshiTestRuns\agents\`, queues in
   `queue\5090.next` / `4080.next`, inflight markers). Respawn each agent not DONE as a FRESH agent from its handoff file.
