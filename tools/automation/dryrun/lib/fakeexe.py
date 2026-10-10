@@ -202,6 +202,25 @@ def ffmpeg(name, a):
     src = 'frame.png' if ext in ('.png', '.jpg', '.jpeg', '.bmp') else 'take.mp4'
     shutil.copyfile(os.path.join(dr.CANNED, src), dpath)
     ln = sidecar_len(ins[0][1])
+    if ln:   # cuts: input -ss / -t, output -t, a trim=<start>:<end> / trim=end=<e> filter (T6 render -t 56.5, zsv trim)
+        def num(x):
+            try:
+                return float(x)
+            except (TypeError, ValueError):
+                return None
+        io = ins[0][2]
+        ss = num(io.get('-ss')) or num(opts.get('-ss')) or 0.0
+        ln = max(0.0, ln - ss)
+        for t in (num(io.get('-t')), num(opts.get('-t'))):
+            if t is not None:
+                ln = min(ln, t)
+        m = re.search(r'trim=(?:end=)?([\d.]+)?:?([\d.]+)?', vf)
+        if m:
+            a0, b0 = num(m.group(1)), num(m.group(2))
+            if 'trim=end=' in vf and a0 is not None:
+                ln = min(ln, a0)
+            elif b0 is not None:
+                ln = min(ln, b0 - (a0 or 0.0))
     if ln and src == 'take.mp4':
         json.dump(dict(start=0, end=ln, len=ln, how='copy'), open(dpath + '.drrec', 'w'))
     dr.log('ffmpeg', 'convert %s -> %s' % (os.path.basename(ins[0][1]), dest))

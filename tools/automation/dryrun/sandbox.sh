@@ -40,6 +40,8 @@ w stobe-auto kahstub.py; w python3 pyshim.py; w python pyshim.py
 for t in ffmpeg ffprobe ffmpeg.exe ffprobe.exe powershell.exe quser.exe tasklist.exe cmd.exe taskkill.exe schtasks.exe wsl.exe stobe-say sleep date; do
   printf '#!/bin/sh\nexec /usr/bin/python3 /dryrun/lib/fakeexe.py --as %s "$@"\n' "$t" > "$B/$t"; chmod +x "$B/$t"
 done
+# sleep/date: the C build of the same virtual clock (lib/drclock.c, built by dryrun.sh): no python start per poll sleep
+[ -x /root/.cache/kah-dryrun/drclock ] && { cp /root/.cache/kah-dryrun/drclock "$B/sleep"; cp /root/.cache/kah-dryrun/drclock "$B/date"; }
 cp "$B/stobe-auto" "$R/usr/local/bin/stobe-auto"; cp "$B/stobe-say" "$R/usr/local/bin/stobe-say"
 if [ "$RIG" = 4080 ]; then
   printf '#!/bin/sh\nexec /usr/bin/python3 /dryrun/lib/fakeexe.py --as cygpath "$@"\n' > "$B/cygpath"; chmod +x "$B/cygpath"
@@ -60,7 +62,7 @@ BASEPATH=/dryrun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bi
 EXTRA=(); [ "$RIG" = 4080 ] && EXTRA=(RIG=4080)
 chroot "$R" /usr/bin/env -i HOME=/root LANG=C.UTF-8 PATH=$BASEPATH DR_BASE_PATH=$BASEPATH DR_STATE=/drstate DR_RIG="$RIG" \
   DR_KDIR="$KD" DR_CANNED=/dryrun/canned DR_SPEC=/drstate/spec.tsv DR_SAVES=/drstate/saves.txt DR_SAVE="${SAVE#-}" \
-  DR_NAME="$NAME" DR_SAVEARG="$SAVE" PLAYER="$PLAYER" MATE="$MATE" DR_TO="$TO" DR_CMD="$CMD" ${DR_FIXTURE_JSON:+DR_FIXTURE_JSON=$DR_FIXTURE_JSON} \
+  DR_NAME="$NAME" DR_SAVEARG="$SAVE" PLAYER="$PLAYER" MATE="$MATE" DR_TO="$TO" DR_CMD="$CMD" ${DR_FIXTURE_JSON:+DR_FIXTURE_JSON=$DR_FIXTURE_JSON} ${DR_IDLE:+DR_IDLE=$DR_IDLE} ${DR_PROF:+DR_PROF=1} \
   "${EXTRA[@]}" /bin/bash /dryrun/row.sh
 rc=$?
 # files the row wrote on C: (label files, outputs) for the analyzer, as paths in the rig's form
@@ -75,6 +77,6 @@ done
 grep -E '\.(lab|txt|out|log|csv|tsv)$' "$ROWOUT/written.txt" | head -400 | while IFS= read -r f; do
   [ "$(stat -c %s "$R$f" 2>/dev/null || echo 9999999)" -lt 400000 ] && { mkdir -p "$ROWOUT/files$(dirname "$f")"; cp "$R$f" "$ROWOUT/files$f"; }
 done
-cp "$R/drstate/"{calls.log,flags.log,recordings.jsonl,labels.list} "$ROWOUT/" 2>/dev/null
+cp "$R/drstate/"{calls.log,flags.log,recordings.jsonl,labels.list,prof} "$ROWOUT/" 2>/dev/null
 [ -f "$R/drstate/labels.list" ] && while IFS= read -r f; do cp "$R$f" "$ROWOUT/labels/$(echo "$f" | tr '/ ' '__')" 2>/dev/null; done < "$R/drstate/labels.list"
 exit $rc

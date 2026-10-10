@@ -36,6 +36,9 @@ if [ ! -s "$C/canned/frame.png" ] || [ ! -s "$C/canned/take.mp4" ] || [ ! -s "$C
   /usr/bin/ffmpeg -hide_banner -loglevel error -y -f lavfi -i "color=c=0x4e7283:s=1600x900" -frames:v 1 "$C/canned/frame.png"
   /usr/bin/ffmpeg -hide_banner -loglevel error -y -f lavfi -i "testsrc=s=1600x900:r=10:d=2" -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$C/canned/take.mp4"
 fi
+# fast sleep/date (lib/drclock.c); falls back to the python fakeexe ones if no C compiler
+if [ ! -x "$C/drclock" ] || [ "$D/lib/drclock.c" -nt "$C/drclock" ]; then
+  gcc -O2 -o "$C/drclock.$$" "$D/lib/drclock.c" 2>/dev/null && mv -f "$C/drclock.$$" "$C/drclock" || rm -f "$C/drclock.$$"; fi
 python3 "$D/lib/gen_spec.py" "$C/spec.tsv" >/dev/null || { echo "DRYRUN-SUMMARY FAIL command spec generation failed"; exit 2; }
 ls /mnt/c/Users/Shay/AppData/Local/kenshi/save > "$C/saves.txt" 2>/dev/null
 [ -n "$OUT" ] || OUT=/mnt/c/KenshiTestRuns/dryrun/$(basename "${L:-row}" .list | tr -c 'A-Za-z0-9_.\n-' _)-$(date +%m%d-%H%M%S)
@@ -77,10 +80,27 @@ one() {
 if [ -n "$ROW" ]; then one "$ROW"
 else
   [ -f "$L" ] || { echo "DRYRUN-SUMMARY FAIL list $L missing"; exit 2; }
+  # "# nodryrun: <row>[/<row>,...] <reason>" (rig-runner.ps1 leaves those rows out): SKIP with the reason
+  declare -A NODRY=()
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*#[[:space:]]*nodryrun[[:space:]]*:[[:space:]]*([^[:space:]]+)[[:space:]]*(.*)$ ]] || continue
+    for n in $(tr '/,' '  ' <<<"${BASH_REMATCH[1]%:}"); do NODRY[$n]=${BASH_REMATCH[2]:-no reason given}; done
+  done < <(tr -d '\r' < "$L")
+  # rows run in parallel (each has its own sandbox; DR_JOBS, default 4), verdicts printed in list order
+  VD=$OUT/.verdicts; rm -rf "$VD"; mkdir -p "$VD"; k=0
+  grep -q 'RIG=4080' "$L" || [ "$RIG" = 4080 ] && { FETCHED=1; bash "$D/fetch4080.sh" >&2; }
   while IFS= read -r line <&3 || [ -n "$line" ]; do
     line="${line%%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
-    one "$line"
+    k=$((k+1)); n=$(t "${line%%|*}")
+    if [ -n "${NODRY[$n]:-}" ]; then echo "DRYRUN $n SKIP nodryrun: ${NODRY[$n]}" > "$VD/$k"; continue; fi
+    while [ "$(jobs -rp | wc -l)" -ge "${DR_JOBS:-4}" ]; do wait -n; done
+    ( one "$line" > "$VD/$k" ) &
   done 3<"$L"
+  wait
+  for i in $(seq 1 $k); do v=$(cat "$VD/$i" 2>/dev/null); [ -n "$v" ] || continue; echo "$v"
+    case "$v" in "DRYRUN "*" PASS"*) pass=$((pass+1)) ;; "DRYRUN "*" SKIP"*) skip=$((skip+1)) ;; *) fail=$((fail+1)) ;; esac; done
+  rm -rf "$VD"
 fi
-echo "DRYRUN-SUMMARY pass=$pass fail=$fail skip=$skip rig=$RIG${FIX:+ fixture=$(basename "$FIX" .json)} out=$OUT"
+W=""; [ $((pass + fail)) = 0 ] && { W=" WARN=0-rows-checked"; echo "DRYRUN-WARN 0 rows checked (every row skipped: nodryrun / Stobe static / --only): this list is NOT dry-run"; }
+echo "DRYRUN-SUMMARY pass=$pass fail=$fail skip=$skip rig=$RIG${FIX:+ fixture=$(basename "$FIX" .json)} out=$OUT$W"
 [ "$fail" = 0 ]

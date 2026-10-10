@@ -43,6 +43,27 @@ def item_name(ref):
 SPOT = (-54190.0, 633.0, 4380.0)
 # ranged weapon names (crossbows: "Oldworld Bow", "Eagle's Cross", "Toothpick", "Spring Bow", "Harpoon"); "Paladin's Cross" is a sword
 RANGED = re.compile(r"(?i)\bbow\b|crossbow|harpoon|toothpick|eagle'?s cross|spring")
+_RN = []
+
+
+def is_ranged(name):
+    """a crossbow/bow: by name (RANGED) or typed crossbow in the weapon-matrix lists (mod crossbows like "Ranger",
+    wm-76: the stub said class=melee)"""
+    if RANGED.search(name):
+        return True
+    if not _RN:
+        rn = set()
+        if os.path.isdir(WEAPON_LISTS):
+            for fn in os.listdir(WEAPON_LISTS):
+                if fn.endswith(('.list', '.tsv', '.txt')):
+                    for l in open(os.path.join(WEAPON_LISTS, fn), errors='replace'):
+                        f = l.rstrip('\r\n').split('|')
+                        if len(f) >= 3 and f[2].strip().lower() in ('crossbow', 'bow', 'ranged'):
+                            rn.add(f[1].strip().lower())
+        _RN.append(rn)
+    return name.strip().lower() in _RN[0]
+
+
 # worn gear (not a weapon); whole words: "Ronin Hatchet" is an axe, not a hat (wm-g8 drew the bow)
 ARMOR = re.compile(r"(?i)\b(hat|helmet|armou?r|shirt|boots|pants|coat|vest|cap|mask|shoes|gloves)\b")
 
@@ -236,8 +257,8 @@ def line(c, me=None):
 def weapon_drawn(s, c):
     """the weapon R draws: ranged when the char has one equipped and its ranged mode isn't off (kah-fpxbow Malzin with
     katana + bow drew the bow: 4080 proof take 1)"""
-    rng = [w for w in c['eq'] if RANGED.search(w)]
-    mel = [w for w in c['eq'] if not RANGED.search(w) and not ARMOR.search(w)]
+    rng = [w for w in c['eq'] if is_ranged(w)]
+    mel = [w for w in c['eq'] if not is_ranged(w) and not ARMOR.search(w)]
     if rng and c.get('ranged') is not False:
         return rng[0], 0
     if mel:
@@ -777,7 +798,7 @@ def handle(s, cmd, a, now, sp):
         c = need_char(0)
         if not c:
             return False, 'no character %s' % (a[0] if a else '')
-        bows = [w for w in c['eq'] if RANGED.search(w)]
+        bows = [w for w in c['eq'] if is_ranged(w)]
         r = '%s turret_hand={none} turret_valid=0 turret_live=0 bow=%s' % (line(c), bows[0] if bows else 'none')
         if bows:
             r += ' has_ammo=1 gun_active=0 shots=1/1 ammo_type=Bolts gun_user={none} reload_state=0'
@@ -842,7 +863,7 @@ def handle(s, cmd, a, now, sp):
             c['eq'].remove(it)
             if s['fpchar'] == c['name'] and fp['drawn'] and fp.get('weapon') == it:
                 sched(s, now + 0.2, 'r', drawn=0, ui_state='holstered', hud_text='holstered', vm='holstered')
-            return True, 'unequipped (%s -> main) %s' % ('back' if RANGED.search(it) else 'hip', desc_item(s, it))
+            return True, 'unequipped (%s -> main) %s' % ('back' if is_ranged(it) else 'hip', desc_item(s, it))
         return True, desc_item(s, it)
     if cmd == 'transfer':
         c, o = need_char(0), need_char(1)

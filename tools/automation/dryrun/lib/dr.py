@@ -64,9 +64,10 @@ def advance_to(t):
             _write_offset(_offset() + d)
 
 
-def busy(samples=4):
-    """True if another process in the sandbox (own pid namespace) is running: the foreground is between two waits
-    (bash forking the next command, a tool starting). Sampled a few times: a fork/exec gap shows up as 'R'."""
+def busy(samples=2):
+    """True if another process in the sandbox (own pid namespace) is running, in disk wait or blocked on the clock lock:
+    the foreground is between two waits (bash forking the next command, a tool starting, a sleeper registering).
+    Called with the clock lock held (vwait), so a sleeper can't register unseen between two samples."""
     me = os.getpid()
     for i in range(samples):
         for p in os.listdir('/proc'):
@@ -74,53 +75,65 @@ def busy(samples=4):
                 continue
             try:
                 st = open('/proc/%s/stat' % p).read()
+                if st[st.rindex(')') + 2] in 'RD':
+                    return True
+                if 'lock' in open('/proc/%s/wchan' % p).read():
+                    return True
             except OSError:
                 continue
-            if st[st.rindex(')') + 2] in 'RD':
-                return True
-        time.sleep(0.004)
+        time.sleep(0.002)
     return False
 
 
-def vwait(d, idle=0.06):
-    """virtual sleep: a discrete-event wait. Every waiter (sleep, a time-limited recording) registers its wake time;
-    the clock only jumps to the EARLIEST registered wake time, and only after the clock was idle for `idle` s of real time
-    (nobody else made a harness call / slept meanwhile). So a background `( sleep 15; ... ) &` wakes when the foreground
-    has used up 15 virtual seconds, not 15 s early (zoom-sweep's re-press), and concurrent loops interleave like in
-    the game."""
+def _min_wake(sd):
+    mins = []
+    for n in os.listdir(sd):
+        pid = int(n.split('.')[0])
+        if not os.path.exists('/proc/%d' % pid):
+            try:
+                os.remove(os.path.join(sd, n))
+            except OSError:
+                pass
+            continue
+        try:
+            mins.append(float(open(os.path.join(sd, n)).read() or 'inf'))
+        except (OSError, ValueError):
+            pass
+    return min(mins) if mins else float('inf')
+
+
+def vwait(d, idle=None):
+    """virtual sleep: a discrete-event wait. Every waiter (sleep, a time-limited recording) registers its wake time
+    (under the clock lock); the clock only jumps to the EARLIEST registered wake time, when the clock was idle for `idle` s
+    of real time and, with the lock held, nobody else runs (busy). So a background `( sleep 15; ... ) &` wakes when the
+    foreground has used up 15 virtual seconds, not 15 s early (zoom-sweep's re-press), and concurrent loops interleave
+    like in the game. Same protocol as the C sleep/date (lib/drclock.c)."""
     if d <= 0:
         return
-    wake = vnow() + d
+    if idle is None:   # was 0.06 s: the locked busy check holds the clock while anyone runs (DR_IDLE overrides)
+        idle = float(os.environ.get('DR_IDLE', '0.003'))
     sd = os.path.join(ST, 'sleepers')
     os.makedirs(sd, exist_ok=True)
-    me = os.path.join(sd, '%d.%d' % (os.getpid(), int(time.time() * 1e6) % 1000000))
-    with open(me, 'w') as f:
-        f.write('%.6f' % wake)
+    with Lock():
+        wake = vnow() + d
+        me = os.path.join(sd, '%d.%d' % (os.getpid(), int(time.time() * 1e6) % 1000000))
+        with open(me, 'w') as f:
+            f.write('%.6f' % wake)
     try:
         last, t_idle = clock_mtime(), time.time()
         while vnow() < wake:
-            time.sleep(0.005)
+            time.sleep(0.003)
             m = clock_mtime()
             if m != last:
                 last, t_idle = m, time.time()
                 continue
-            if time.time() - t_idle < idle:
+            if time.time() - t_idle < idle or wake > _min_wake(sd) + 1e-6:
                 continue
-            mins = []
-            for n in os.listdir(sd):
-                pid = int(n.split('.')[0])
-                if not os.path.exists('/proc/%d' % pid):
-                    try:
-                        os.remove(os.path.join(sd, n))
-                    except OSError:
-                        pass
-                    continue
-                try:
-                    mins.append(float(open(os.path.join(sd, n)).read() or 'inf'))
-                except (OSError, ValueError):
-                    pass
-            if (not mins or wake <= min(mins) + 1e-6) and not busy():
-                advance_to(wake)
+            with Lock():
+                go = wake <= _min_wake(sd) + 1e-6 and clock_mtime() == last and not busy()
+                if go:
+                    advance_to(wake)
+            if go:
                 break
     finally:
         try:
