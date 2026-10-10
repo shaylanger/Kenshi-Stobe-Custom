@@ -38,12 +38,12 @@ while [ ! -e "$PR/buildwatch.stop" ]; do
     elif [ -n "$(find "$IFD" -maxdepth 1 -name 'kfp-pipeline-*' -mmin -180 2>/dev/null)" ]; then :   # a run is in flight (markers > 3 h = dead run, ignored)
     else
       R=$PR/run-watch-$(date +%m%d-%H%M); log "change $last -> $f (quiet ${age}s): kfp-pipeline --combined -> $R"
-      bash "$ME/labnice.sh" -s 3 bash "$ME/kfp-pipeline.sh" --combined --out "$R" > "$PR/buildwatch.run.log" 2>&1 < /dev/null
+      bash "$ME/labnice.sh" -s 3 bash "$ME/kfp-pipeline.sh" --combined --out "$R" > "$PR/buildwatch.run.log" 2>&1 < /dev/null 8>&-
       res=$(grep -h '^PIPELINE ' "$PR/buildwatch.run.log" | tail -1); log "${res:-PIPELINE ? no final line (log $PR/buildwatch.run.log)}"
       echo "$(date '+%F %T') ${res:-PIPELINE ? no final line}" > /mnt/c/KenshiTestRuns/staged/KenshiFP-pipeline.last
       last=$f; echo "$f" > "$PR/buildwatch.fp"   # the state that was built (fp before the run: a change during it rebuilds)
     fi
   fi
-  sleep "$POLL"
+  sleep "$POLL" 8>&-   # children must not inherit the lock fd (an orphaned sleep kept it after a kill)
 done
 log "stop (buildwatch.stop)"; rm -f "$PR/buildwatch.stop" "$PR/buildwatch.pid"
