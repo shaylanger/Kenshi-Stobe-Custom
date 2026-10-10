@@ -6,7 +6,8 @@
 #   pf_clean <x> <z> [R]       pin + knock out every live non-squad NPC within R (default 3000) of x,z (Nameless kept)
 #   pf_open [secs]             open ground: a short gdigrab clip judged by the lab (frames.py openground), no mouse cursor
 #                              (frames.py cursor), no dark/black frames (ffmpeg signalstats YAVG >= PF_MIN_YAVG, default 35)
-#   pf_ready                   drawn weapon in ready stance (R toggles), verified with fp_vm state
+#   pf_iso                     harness input isolation on (injected keys/mouse need it), verified
+#   pf_ready                   pf_iso, then drawn weapon in ready stance (R toggles), verified with fp_vm state
 #   pf_loaded                  crossbow loaded: RMB held until fp_combat loaded>=1, released, loaded=1 verified
 #   pf_nofight                 melee drawn: a short RMB press must start the out-of-fight free block (KenshiFP.log
 #                              'free block start'); none = the character is in a fight (native block, free swing/block off)
@@ -70,7 +71,16 @@ pf_nofight(){   # kfx-b10 blkF: bandits/turrets beyond pf_clean put Axima in a f
 }
 pf_st(){ PF_A fp_vm state | grep -o ' state=[^ ]*' | head -1 | cut -d= -f2; }
 pf_waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(pf_st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }
+# harness input isolation on (key_inject/mouse_inject are rejected without it; the 4080 ctl.ps1 launch does not
+# turn it on: b4080c zs-xbow-switch-on/xbow-fade-on "weapon not ready (state=holstered)", harness.log "input isolation is off")
+pf_iso(){
+  PF_A input_isolation status | grep -q 'isolation=on' && return 0
+  PF_A input_isolation on >/dev/null
+  PF_A input_isolation status | grep -q 'isolation=on' || pf_fail "input isolation would not turn on (key_inject/mouse_inject need it)"
+  echo "pf_iso ok: input isolation turned on"
+}
 pf_ready(){
+  pf_iso
   [ "$(pf_st)" = ready ] && { echo "pf_ready ok"; return 0; }
   [ "$(pf_st)" = holstered ] || { PF_A key_inject r tap 120 >/dev/null; pf_waitst holstered 6; }
   PF_A key_inject r tap 120 >/dev/null; pf_waitst ready 6 || pf_fail "weapon not ready (state=$(pf_st))"

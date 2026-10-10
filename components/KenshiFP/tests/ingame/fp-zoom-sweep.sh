@@ -26,7 +26,7 @@ st(){ A fp_vm state | fld state; }
 loaded(){ local l; l=$(A fp_combat state | fld loaded); echo "${l:-0}"; }
 waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }
 FIFO=/tmp/kfp-$N.ffin
-cleanup(){ [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; rm -f "$FIFO"; }
+cleanup(){ [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A chatter on >/dev/null; rm -f "$FIFO"; }
 fail(){ cleanup; PF_DONE=1; echo "RESULT ZOOMSWEEP-$N FAIL $*"; exit 1; }
 PF_ROW=ZOOMSWEEP-$N; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard: an exit without a RESULT line prints a FAIL setup line
@@ -47,6 +47,7 @@ load_xbow(){ [ "$(loaded)" -ge 1 ] && return 0
 A load kah-fpxbow | cut -c1-80; sleep 8
 for i in $(seq 1 60); do sleep 3; A wait-world | grep -qE "phase=world|ready" && break; done
 A speed 1 hold >/dev/null
+A chatter off >/dev/null   # no NPC bark text in frame (dryrun chatter check); cleanup turns it back on
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take | grep -q -i "ok\|took\|fp\|transferred" || echo "fp_control take: $(A fp_control take | cut -c1-60)"
 pf_rig; pf_display
