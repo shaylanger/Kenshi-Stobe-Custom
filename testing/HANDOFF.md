@@ -4,21 +4,42 @@ starting here needs nothing else. Keep it current: update this section at every 
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
-## Right now (2026-10-10 ~11:10, m90 coordinator): viewmodel refilm round, 4 agents, both rigs busy
-- Start with `tools/automation/session-start.ps1` (agent status files in `C:\KenshiTestRuns\agents\`, queues in `queue\`).
-- Agents (respawn any not DONE from its status/handoff file): `kfp-fixer` (5090, lock kfp-fixer, batch kfx-b3: zoom-sweep
-  video; then ONE build = free-block raised guard (228c60/2245b0 only, default blk_dir 0/org 1) + ticket A cursor fix ->
-  VMQUICK -> short preflighted lab-gated takes; also implementing take preflight/RESULT lines/split takes),
-  `4080-vm-rows` (vm-sheet.py path fix + numeric fp-viewmodel rows on F0595751; next: make the 4080 a full filming rig via
-  a rig layer, status name 4080-filming), `animlab-builder` (phase 4 native anims -> tag animlab-p4 -> fist candidates),
-  `animlab-maintainer` (misses: free-block per-press guard, E6 kfx-b2 lab-vs-game, fb_lives=0; lab agreement report).
-- Installed: KenshiFP F0595751 on BOTH rigs; harness FF567966 on both (4080 updated 11:00).
-- Ticket B DONE (4080 survey, `C:\KenshiTestRuns\blk-survey\`): blk_dir/org only bias chooseBlock's random native
-  technique; 228c60/2245b0 raised (coordinator-reviewed), 223090/226e50/227e90 hang, 223cc0 low (rejected for free block).
-- kfx-b2 (11:51-11:56 WSL clock): zoom-sweep video FAIL (4 takes failed), E6 game rec FAIL 4 lab checks, T6 take ran but
-  no RESULT line (fixer renders+checks it). Nothing is ready for Shay; every video needs a review pack + coordinator review.
-- New tooling this session: 4080 idle guard (rig4080-state.ps1, Stop hook, idle4080), per-rig ready queue (Stop hook),
-  review-pack.py; rules in CLAUDE.md "Game-take discipline" (8 points) and "Subagents" (no fixed cap).
+## Right now (2026-10-10 ~11:45, m90 coordinator handed off at context limit): many agents stopped, read their handoffs
+- Start with `tools/automation/session-start.ps1` (agent status/handoff files in `C:\KenshiTestRuns\agents\`, queues in
+  `queue\5090.next` / `4080.next`, inflight markers). Respawn each agent not DONE as a FRESH agent from its handoff file.
+- Agents and state:
+  - `kfp-fixer` (5090, holds game lock `kfp-fixer`, marker inflight\kfp-fixer -> its batch out dir; installed KenshiFP
+    E816CBB1 = F0595751 + ticket B allow-list + (inactive) stroke1 refit4): asked to stop at the handoff; read
+    kfp-fixer.status/.handoff.md. Queue: ticket B allow-list is WRONG ('block left upper' hangs) -> name survey + fix;
+    E6 refit4 pool-climbed patch pending-fixes/kfp-e6-strokes12-refit4.py (pool stroke1 0.95 marginal) -> inline/churn;
+    ONE batched build (ticket B + E6 if gates pass + `# src` rec header + pending-fixes/kfp-test-swing-end-line.py
+    (committed 8a47297?) + kfp-pt30-flip.py vmcheck patch) -> animlab gate -> VMQUICK -> 4080 numeric rows -> takes.
+  - `pt30-flip` STOPPED-CONTEXT: frame 158 = vmcheck hitch bug (patch pending-fixes/kfp-pt30-flip.py); corrected check
+    finds a REAL follow-through edge roll snap at frame 284 (E1 lead in vm_swing_atl, u .58-.98). Decision: ship vmcheck
+    patch with the solver fix (coordinator default), not alone.
+  - `animlab-loop` STOPPED-CONTEXT: corpus C:\KenshiTestRuns\corpus (MANIFEST.tsv, protected), gate.sh wired before
+    VMQUICK (no baseline yet: run `gate.sh --update-baseline` after the maintainer commits), mutate.py 10/13 caught (3 gaps
+    -> maintainer Misses rows: 1-frame roll mid-stroke, 1-frame position jump, popup overlay), SETUP_MISSES.md, ledger.py
+    (table not in STATUS yet; ~2% lab-first), backfill.sh needs an n/a filter; extended take-preflight staged in
+    %TEMP%\claude\C--KenshiModding\alloop\ (merge .add onto current take-preflight.sh, wire into take scripts).
+  - `animlab-maintainer`: was RUNNING (class audit; UNCOMMITTED per-swing moves/arc/inline change FAILS Shay-accepted
+    f28/f23 per taste set -> recalibrate before commit; label-leads-screen + NPC-speech overlay misses from T6 review).
+  - `4080-filming` STOPPED-CONTEXT: rig layer done (6ffe60b, eeab981). Proof take not rerun. Take bugs: s3prep2 drew the
+    crossbow not the katana (require melee=1), s3render3 end+1.3 s (use +0.5); capture preflight (quser Active +
+    non-black grab) not written. 4080 kenshi.cfg left in test mode (restore `kcfg.ps1 play` when done).
+  - `4080-display` (virtual display driver + keep-display-on.bat for Shay): read its status/handoff; when READY tell
+    Shay to double-click keep-display-on.bat in RDP instead of closing RDP. Shay's RDP session 2 is Active.
+  - DONE: `kfp-regress` (no product regression; PT26/28 specs predate accepted poses; side-by-sides
+    C:\KenshiTestRuns\spec-compare\*.jpg reviewed + shown to Shay), `animlab-spec` (taste set 71 rows, 0 misses, 6 false
+    alarms -> Misses; spec.py; unarmed spec), `fists` (4 candidates C:\KenshiTestRuns\fists-cand\ +
+    /root/animlab-work/fists/cand; lab PASS; unarmed spec PASS except shoteiL inferred U6 wind-up 0.05 dm above eye;
+    NOT yet coordinator-reviewed; unarmed body game rec spec agents\fists.need-rec.md -> 4080 queue).
+- Waiting on Shay: (1) PT26/PT28 specs follow accepted poses or not (sheets shown); (2) PT29 native frames exempt from the
+  wrist limit or NA1 retarget; (3) batched unarmed inferred rules U1/U2/U4/U6/U10/U11/U14/U16 + E6 stroke-0 snap (R17);
+  (4) closing RDP once the virtual display is READY. Shay decided: half-open hand OK; palm strikes -> straight-wrist punches.
+- T6 turret-fp.mp4: coordinator review FAIL (labels lead the screen 0.4-0.5 s; NPC speech text overlays; possible 1-frame
+  barrel sliver at 59.125); fixer has the list. Review pack C:\KenshiTestRuns\review\t6 (built with --offset 0.8).
+- Nothing is ready for Shay as a video.
 
 ## Earlier (2026-10-10 m87): FP viewmodel/turret work DONE, nothing running, waiting on Shay
 - Kenshi closed, lock free, no inflight, 5090 idle recorded ("awaiting Shay's decisions"). Fixers #1-#44 (lock owner fixer-pt30) finished; their log `%TEMP%\claude\C--KenshiModding\wr\HANDOFF-sword-wrist.md`.
