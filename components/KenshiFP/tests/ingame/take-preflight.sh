@@ -109,7 +109,9 @@ pf_rig(){ local s sz
   if declare -F rig_preflight >/dev/null; then rig_preflight "${PF_ROW:-take}" || { [ -n "$PF_ON_FAIL" ] && eval "$PF_ON_FAIL"; PF_DONE=1; exit 1; }; fi   # it prints its own RESULT line
   [ -x "$PF_FFX" ] || [ -f "$PF_FFX" ] || pf_fail "ffmpeg $PF_FFX missing"
   s=$(PF_A screenshot pf-rig); echo "$s" | grep -qi 'error\|timeout' && pf_fail "harness screenshot failed: $(echo "$s" | head -1 | cut -c1-100)"
-  sleep 0.5; sz=$(python3 -c "from PIL import Image; im=Image.open('$PF_SHOTS/pf-rig.png'); print('%dx%d' % im.size)" 2>/dev/null)
+  # Windows python on the 4080 (Git Bash) gets no path conversion inside -c: hand it the C:/ form
+  s=$PF_SHOTS/pf-rig.png; command -v cygpath >/dev/null 2>&1 && s=$(cygpath -m "$s")
+  sleep 0.5; sz=$(python3 -c "from PIL import Image; im=Image.open('$s'); print('%dx%d' % im.size)" 2>/dev/null)
   [ "$sz" = "${RES_W:-1600}x${RES_H:-900}" ] || pf_fail "game renders at ${sz:-?} not ${RES_W:-1600}x${RES_H:-900} (kenshi-ctl.ps1 fit)"
   echo "pf_rig ok: ${RIG:-5090} render $sz"; }
 pf_all(){ local me=$1 x=$2 z=$3 w=$4 allow=${5:-}
