@@ -14,8 +14,9 @@
 #        clip: rwz<=2.6, lwz<=2.8, arm_cov<=0.02), bolt <=2 deg off the crosshair at AIMD, projected bolt tip within
 #        |x|<=0.06 NDC and 0.05..0.25 below the centre, limb line y/z -0.30..-0.10 (lower third) with half span x/z >=0.6,
 #        off-hand on the support point), fire (physical LMB: kicks + "[vm] fire" line; frozen kick_pose 1 = muzzle climb
-#        tip -0.1..0.4 NDC, grip within 0.3 dm of the aim hold), reload (grip >=4 dm ahead, nose down >=14 deg, top
-#        rolled toward the eye uz<=-0.3, limb line above the HUD line, right wrist in front of the near clip)
+#        tip -0.1..0.4 NDC, grip within 0.3 dm of the aim hold), reload (Shay 2026-10-10 spec-videos keeps the two-hand
+#        crank, bow upright: grip >=2.5 dm ahead, nose level or up fy>=-0.05, fz>=0.55, top toward the eye uz<=0, limb
+#        line above the HUD line, both wrists in front of the near clip rwz,lwz>=3.0)
 #  PT27  sword block: blade horizontal across the view (|mf.x|>=0.85, |mf.y|<=0.2) zoomed in and out
 #  PT26  sword swing: frozen frame sequence sw_pose 0.1..0.9 (screens + targets) and NSW (3) physical LMB swings:
 #        each "[vm] swing" line u_end=1, frames>=8, readable phases from the [vmsw] lines (wind-up 15-50% of the frames,
@@ -681,9 +682,11 @@ else
   # 0.3 dm of the aim hold (not in the face); live LMB: kicks + "[vm] fire" line
   AZ=$(awk -v P="${VMP[xbow-aim]}" 'BEGIN{split(P,p,",");print p[3]-0.3}')
   { vq "fy>=0.1 && pz>=$AZ" xbow-fire && xq "tx<=0.1 && tx>=-0.1 && ty>=-0.1 && ty<=0.4" xbow-fire && [ "$K1" -gt "$K0" ] && [ "$F1" -gt "$F0" ]; } || { ok=0; why+=" fire(kicks $K0->$K1 lines $F0->$F1)"; }
-  # reload: lowered (grip >=4 dm ahead, nose down >=14 deg, forward), top rolled toward the eye (uz<=-0.3: the spanning
-  # motion is readable), limb line above the HUD line, right wrist in front of the near clip (hand visible, no cut glove)
-  { [ "${VST[xbow-reload]}" = reloading ] && vq "pz>=4.0 && fy<=-0.25 && fz>=0.7 && uz<=-0.3" xbow-reload && xq "ly>=-0.33 && rwz>=3.3" xbow-reload; } || { ok=0; why+=" reload"; }
+  # reload: the accepted two-hand crank, bow upright (Shay 2026-10-10 spec-videos; rlnat 1; was "nose down >=14 deg"
+  # fy<=-0.25, pz>=4, uz<=-0.3): grip >=2.5 dm ahead, nose level or up (fy>=-0.05), forward (fz>=0.55), top toward the eye
+  # (uz<=0), limb line above the HUD line, both wrists in front of the near clip (hands visible, no cut glove). Calibrated
+  # on 719BE071 vmrec-pt30-xbow reloading frames p5..p95: pz 2.64..4.05, fy 0.00..0.60, fz 0.58..0.99, uz -0.69..-0.05
+  { [ "${VST[xbow-reload]}" = reloading ] && vq "pz>=2.5 && fy>=-0.05 && fz>=0.55 && uz<=0.0" xbow-reload && xq "ly>=-0.33 && rwz>=3.0 && lwz>=3.0" xbow-reload; } || { ok=0; why+=" reload"; }
   GEO="geo(tx ty bmin cov om oe ly lhs rwz lwz) ready=[$(xbgeo xbow-ready)] aim=[$(xbgeo xbow-aim)] fire=[$(xbgeo xbow-fire)] reload=[$(xbgeo xbow-reload)]"
   judge PT28 $ok "$(pev xbow-ready) | $(pev xbow-aim) | $(pev xbow-fire) kicks=$K0->$K1 | $(pev xbow-reload) | $GEO${why:+ | bad:$why}"
   draw_to 0; fi; fi
