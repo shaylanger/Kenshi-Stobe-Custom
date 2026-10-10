@@ -161,5 +161,24 @@ if [ -f "$E1I" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1I" --out "$BLD/k
     if [ $r = f13-sw0 ]; then echo "REGRESS INFO E1 inline candidate on $r (first swing from ready branch B): $all"
     else case "$all" in "inline PASS | arc PASS"*"| churn PASS"*) ok "E1 inline candidate on $r: $all";; *) bad "E1 inline candidate on $r: $all";; esac; fi; done
 else echo "REGRESS INFO E1 inline candidate kfp-e1-inline.py not built (missing or does not apply)"; fi
+# 19. sword ready elbow branch (lab #11 2026-10-09): replays of the 74A481A8 solver (f41f862 snapshot) start f13-sw0 swing 1
+#     (first after the draw) and f14-e0 runs 87/495 from ready branch B (elbow 5.1,-4.1,5.0, edge ~100 deg off A): `animlab.py
+#     branch` must FAIL them; game f14-e0 + vmq85a7 PASS (one branch). Fix: kfp-rb-single.py (fixer #21) + kfp-rb-camup.py
+#     (A reference in a frame that doesn't roll with the edge) must PASS all three against the game f14-e0 ready.
+#     Game f13-sw0 = INFO (older build: the game itself alternates two ready branches, edge 155 deg apart).
+for r in f14-e0 vmq85a7-sw; do b=$(python3 "$L/animlab.py" branch "$W/$r.txt" | cut -c1-120)
+  case "$b" in "branch PASS"*) ok "ready branch game $r: $b";; *) bad "ready branch game $r: $b";; esac; done
+echo "REGRESS INFO ready branch game f13-sw0: $(python3 "$L/animlab.py" branch "$W/f13-sw0.txt" | cut -d' ' -f1-2)"
+if bash "$HERE/build.sh" --rev f41f862 --out "$BLD/kfpvm_rb0" >/tmp/al-build9.txt 2>&1; then
+  for r in f13-sw0 f14-e0; do "$BLD/kfpvm_rb0" "$W/$r.txt" /tmp/al-rb0.txt --quiet >/dev/null 2>&1
+    b=$(python3 "$L/animlab.py" branch /tmp/al-rb0.txt | cut -c1-160)
+    case "$b" in "branch FAIL"*":BAD"*) ok "miss ready branch B reproduced (replay $r @f41f862): $b";; *) bad "ready branch B not caught on $r @f41f862: $b";; esac; done
+else bad "build @f41f862 (ready branch)"; fi
+RB1=/mnt/c/KenshiModding/pending-fixes/kfp-rb-single.py; RB2=/mnt/c/KenshiModding/pending-fixes/kfp-rb-camup.py
+if [ -f "$RB1" ] && [ -f "$RB2" ] && bash "$HERE/build.sh" --rev f41f862 --patch "$HERE/patches/rb-single-root.py" --patch "$RB2" --out "$BLD/kfpvm_rb1" >/tmp/al-build10.txt 2>&1; then
+  for r in f13-sw0 f14-e0 vmq85a7-sw; do "$BLD/kfpvm_rb1" "$W/$r.txt" /tmp/al-rb1.txt --quiet >/dev/null 2>&1
+    b=$(python3 "$L/animlab.py" branch /tmp/al-rb1.txt --ref "$W/f14-e0.txt" | cut -c1-120)
+    case "$b" in "branch PASS"*) ok "ready branch fix on $r: $b";; *) bad "ready branch fix on $r: $b";; esac; done
+else echo "REGRESS INFO ready branch fix kfp-rb-single.py + kfp-rb-camup.py not built (missing or committed: check the snapshot instead)"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
