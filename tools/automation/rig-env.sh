@@ -47,3 +47,23 @@ else
 fi
 export FFX="$CR/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe"
 case ":$PATH:" in *":${FFX%/*}:"*) ;; *) export PATH="$PATH:${FFX%/*}";; esac
+# rig_preflight <row>: capture preflight, run before any recording (rec.sh calls it). 4080: Shay's desktop session must be
+# Active in quser (a disconnected/locked session records black). Both rigs: a 1-frame gdigrab of $WIN_TITLE averaged to
+# one gray pixel must have luma >= ${PF_MIN_LUMA:-8}. Failure prints `RESULT <row> FAIL setup: ...` and returns 1.
+rig_preflight() {
+  local row=${1:-take} q luma
+  if [ "$RIG" = 4080 ]; then
+    q=$(/c/Windows/System32/quser.exe 2>/dev/null | grep -i shay)
+    if ! echo "$q" | grep -q ' Active '; then
+      echo "RESULT $row FAIL setup: 4080 session not active (quser: $(echo $q | tr -s ' '))"; return 1
+    fi
+  fi
+  luma=$("$FFX" -hide_banner -loglevel error -f gdigrab -draw_mouse 0 -i "title=$WIN_TITLE" -frames:v 1 \
+    -vf "scale=1:1:flags=area,format=gray" -f rawvideo - 2>/dev/null | od -An -tu1 | tr -d ' \n')
+  if [ -z "$luma" ] || [ "$luma" -lt "${PF_MIN_LUMA:-8}" ]; then
+    if [ "$RIG" = 4080 ]; then echo "RESULT $row FAIL setup: 4080 session not active (test grab luma=${luma:-none})"
+    else echo "RESULT $row FAIL setup: capture black (test grab luma=${luma:-none})"; fi
+    return 1
+  fi
+  return 0
+}
