@@ -47,6 +47,7 @@ static int g_tur_cfg_gunupd=1;        /* T4: GunClass::update (vt+0x10) each fra
                                          * native caller, so in FP the gun kept its load-time +z orientation and getAimDir/shoot
                                          * sent every harpoon along it into the world (diag 2026-10-09: aimdir 0,-0.02,1 vs target -x) */
 static unsigned g_tur_gunupd_calls;
+static int g_tur_nopower;
 static void fp_turret_shot_diag(void *gun,void *me,void *target,int stat,const Vec3 *aimpos,const char *tag) {
     void **vt=readable(gun,0x130)?*(void ***)gun:NULL;
     if (!readable(vt,0x68)) return;
@@ -121,6 +122,11 @@ static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
         if (trace && readable(vt,0x68)) {Vec3 d;((Vec3 *(*)(void *,Vec3 *,const Vec3 *))vt[0x60/8])(gun,&d,&aim);trace(gun,&d,1);++g_tur_trace_calls;}
     }
     if (g_tur_cfg_drive && g_tur_update_real && gdt>0.0f) {++g_tur_drive_calls;g_tur_update_real(b);}
+    /* Power (native check 2026-10-09: cutting the power made the AI operator leave within 3 s and the reload stopped;
+     * an unpowered turret is not manned and does not turn): GunClassTurret::isOutOfPower (vt+0xE8) pauses the FP
+     * reload and refuses LMB, so FP can't do what the native game can't. */
+    int nopower=0;{void **vt=*(void ***)gun;if (readable(vt,0xF0)) nopower=((char (*)(void *))vt[0xE8/8])(gun)!=0;}
+    if (nopower!=g_tur_nopower) {g_tur_nopower=nopower;logline("[turret] power %s",nopower?"OUT: reload paused, LMB refused":"back");}
     /* T3 reload */
     int *am=(int *)((uintptr_t)gun+GUN_AMMO);
     float *rls=(float *)((uintptr_t)gun+TUR_GUN_RLSTATE);
@@ -133,7 +139,7 @@ static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
         g_tur_rl_max=g_tur_rl_left=t;*rls=0.0f;
         logline("[turret] reload starts: %.2f s (skill01 %.3f, native %s, min %.2f max %.2f)",t,s01,rltime?"calculateReloadTime":"lerp",lo,hi);
     }
-    if (g_tur_rl_left>=0.0f) {
+    if (g_tur_rl_left>=0.0f && !nopower) {
         g_tur_rl_left-=gdt;
         *rls=g_tur_rl_max>0?fminf(1.0f,fmaxf(0.0f,1.0f-g_tur_rl_left/g_tur_rl_max)):1.0f;
         if (g_tur_rl_left<=0.0f) {
@@ -165,7 +171,7 @@ static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
     /* T4 fire */
     int fire=g_combat_injection?g_combat_injected.fire:g_tur_ui_fire;
     if (fire && !g_tur_prev_fire) {
-        const char *why=*am<=0||g_tur_rl_left>=0.0f?"reloading":!g_tur_aim_valid?"no_aim":gdt<=0.0f?"paused":NULL;
+        const char *why=*am<=0||g_tur_rl_left>=0.0f?"reloading":nopower?"no_power":!g_tur_aim_valid?"no_aim":gdt<=0.0f?"paused":NULL;
         if (why) {++g_tur_shot_refused;g_tur_refuse_why=why;logline("[turret] LMB refused: %s",why);}
         else {
             int before=*am;
@@ -224,10 +230,10 @@ static int kah_fp_turret(const char *id,int argc,const char *const *argv,KAH_Rep
         float v368=NAN,v3c0=NAN,asp=gun?*(float *)((uintptr_t)gun+0x14):NAN;
         if (readable(vt,0x3c8)) {v368=((float (*)(void *))vt[0x368/8])(bld);v3c0=((float (*)(void *))vt[0x3c0/8])(bld);}
         n=strlen(b);snprintf(b+n,sizeof b-n," gun_aimspeed=%.3f v368=%.3f v3c0=%.3f",asp,v368,v3c0);n=strlen(b);
-        snprintf(b+n,sizeof b-n," dbg160=%d dbg228=%p speed464=%.3f hinge=%p hinge8=%p aimdist448=%.2f rot4b4=%d drive=%d drive_calls=%u operate=%d operate_calls=%u trace=%d trace_calls=%u gunupd=%d gunupd_calls=%u",
+        snprintf(b+n,sizeof b-n," dbg160=%d dbg228=%p speed464=%.3f hinge=%p hinge8=%p aimdist448=%.2f rot4b4=%d drive=%d drive_calls=%u operate=%d operate_calls=%u trace=%d trace_calls=%u gunupd=%d gunupd_calls=%u no_power=%d",
                  *(unsigned char *)((uintptr_t)bld+0x160),*(void **)((uintptr_t)bld+0x228),*(float *)((uintptr_t)bld+0x464),h,
                  readable(h,0x10)?*(void **)((uintptr_t)h+8):NULL,*(float *)((uintptr_t)bld+0x448),*(int *)((uintptr_t)bld+0x4B4),
-                 g_tur_cfg_drive,g_tur_drive_calls,g_tur_cfg_operate,g_tur_operate_calls,g_tur_cfg_trace,g_tur_trace_calls,g_tur_cfg_gunupd,g_tur_gunupd_calls);
+                 g_tur_cfg_drive,g_tur_drive_calls,g_tur_cfg_operate,g_tur_operate_calls,g_tur_cfg_trace,g_tur_trace_calls,g_tur_cfg_gunupd,g_tur_gunupd_calls,g_tur_nopower);
     }
     r->append(r,b);return KAH_OK;
 }
