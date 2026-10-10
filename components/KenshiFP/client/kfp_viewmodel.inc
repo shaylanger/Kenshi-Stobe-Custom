@@ -70,12 +70,12 @@ static VmPose g_vm_pose[2][VM_NT] = {
 /* u = edge, leads the motion (about the difference of the neighbouring keys' blade directions) */
 #define VM_SWK 5
 static VmPose g_vm_swk[VM_SWK] = {
-    VP(2.819f,-0.014f,4.233f,-0.116f,0.563f,-0.212f,-0.473f,0.494f,0.439f) /* E1 inline */,  /* wind-up, raised top right, blade cocked back-right (out at the
+    VP(3.121f,0.312f,3.946f,-0.261f,0.875f,-0.127f,-0.473f,0.494f,0.439f) /* E1 inline */,  /* wind-up, raised top right, blade cocked back-right (out at the
                                                                             * top-right corner), arm in from the right edge */
-    VP(1.447f,0.022f,4.694f,-0.158f,0.697f,0.197f,-0.239f,-1.966f,0.591f) /* E1 inline */,  /* strike: blade diagonal up-left */
-    VP(1.514f,-1.246f,5.296f,-0.739f,0.371f,0.431f,0.340f,-0.993f,0.926f) /* E1 inline */,  /* strike: blade sweeps flat across the center (in view) */
-    VP(-0.155f,-1.265f,5.886f,-0.657f,0.170f,0.465f,-1.226f,-1.376f,-0.143f) /* E1 inline */,  /* follow-through left, blade still in view above the HUD */
-    VP( 0.9f,-1.55f,4.6f,  -0.55f, 0.30f, 0.78f,    0.10f,-0.90f, 0.40f) };/* recovery: dips low (grip just above the HUD) back to the guard,
+    VP(1.501f,-0.058f,4.647f,-0.097f,0.601f,0.139f,-0.239f,-1.966f,0.591f) /* E1 inline */,  /* strike: blade diagonal up-left */
+    VP(1.153f,-1.053f,5.019f,-0.282f,0.630f,0.358f,0.340f,-0.993f,0.926f) /* E1 inline */,  /* strike: blade sweeps flat across the center (in view) */
+    VP(-0.067f,-1.319f,6.560f,-0.734f,0.552f,0.705f,-1.226f,-1.376f,-0.143f) /* E1 inline */,  /* follow-through left, blade still in view above the HUD */
+    VP(1.807f,-1.262f,5.861f,-0.915f,0.408f,0.316f,-0.028f,-0.906f,0.522f) };/* recovery: dips low (grip just above the HUD) back to the guard,
                                                                             * no second sweep across the view */
 /* key times (start, keys, end), own clock over g_vm_sw_dur: anticipation (slower wind-up) ~30%, fast strike across
  * ~20%, follow-through decel, low recovery to the guard (reference: 1H melee 0.4-0.8 s, Chivalry/KCD-style) */
