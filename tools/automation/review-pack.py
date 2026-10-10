@@ -17,7 +17,9 @@ The review stays complete (whole length at 1 fps + dense frames at every switch)
 import argparse, os, re, shutil, subprocess, sys
 
 FFMPEG = '/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe'
-FFPROBE = FFMPEG.replace('ffmpeg.exe', 'ffprobe.exe')
+if not os.path.exists(FFMPEG) and shutil.which('ffmpeg'):   # 4080 rig (Windows python, ffmpeg on PATH; fist4080f had no pack)
+    FFMPEG = shutil.which('ffmpeg')
+FFPROBE = FFMPEG.replace('ffmpeg.exe', 'ffprobe.exe') if FFMPEG.endswith('ffmpeg.exe') else (shutil.which('ffprobe') or 'ffprobe')
 KEYS = ('ui_state', 'hud_text', 'loaded', 'fp_ui_state')
 
 
@@ -97,7 +99,7 @@ def main():
         if re.match(r'^(whole|sw)-.*\.jpg$', f):
             os.remove(f)
     if not os.path.exists('f.ttf'):
-        shutil.copy('/mnt/c/Windows/Fonts/arialbd.ttf', 'f.ttf')
+        shutil.copy('/mnt/c/Windows/Fonts/arialbd.ttf' if os.path.exists('/mnt/c/Windows') else r'C:\Windows\Fonts\arialbd.ttf', 'f.ttf')
     dur = duration(video)
     idx = [f'video {video}  length {dur:.1f} s', '']
     sheets = []
