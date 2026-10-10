@@ -149,5 +149,17 @@ for r in f14-e0 f13-sw0; do r2=$(python3 "$L/animlab.py" inline "$W/$r.txt")
   case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduced (game $r): ${r2%% follow:*}";; *) bad "miss E1 inline game $r not failing: ${r2:-no inline line}";; esac; done
 r2=$(python3 "$L/animlab.py" inline /tmp/al-e1base.txt)
 case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduced (replay f14-e0, current solver): ${r2%% follow:*}";; *) bad "miss E1 inline current replay not failing: ${r2:-no inline line}";; esac
+#      E1 inline candidate pending-fixes/kfp-e1-inline.py (al10 hill climb) must PASS inline + arc (stroke, wb <= 50) +
+#      churn --stroke on f14-e0 and vmq-85a7 sword-z0; f13-sw0 = INFO (its first swing starts from the replay-only ready
+#      branch B after the draw: no wind-up roll allowed, so the edge cannot line up; STATUS "E1 INLINE STATE").
+E1I=/mnt/c/KenshiModding/pending-fixes/kfp-e1-inline.py
+[ -f "$W/vmq85a7-sw.txt" ] || cp /mnt/c/KenshiTestRuns/vmq-85a7/vmrec-q-sword-z0.txt "$W/vmq85a7-sw.txt" 2>/dev/null
+if [ -f "$E1I" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1I" --out "$BLD/kfpvm_e1inl" >/tmp/al-build8.txt 2>&1; then
+  for r in f14-e0 vmq85a7-sw f13-sw0; do "$BLD/kfpvm_e1inl" "$W/$r.txt" /tmp/al-e1i.txt --quiet >/dev/null 2>&1
+    a1=$(python3 "$L/animlab.py" inline /tmp/al-e1i.txt | cut -d' ' -f1-2); a2=$(python3 "$L/animlab.py" metrics /tmp/al-e1i.txt --wb-max 50 | grep '^arc ' | cut -d' ' -f1-3)
+    a3=$(python3 "$L/animlab.py" churn --stroke /tmp/al-e1i.txt | cut -d' ' -f1-5); all="$a1 | $a2 | $a3"
+    if [ $r = f13-sw0 ]; then echo "REGRESS INFO E1 inline candidate on $r (first swing from ready branch B): $all"
+    else case "$all" in "inline PASS | arc PASS"*"| churn PASS"*) ok "E1 inline candidate on $r: $all";; *) bad "E1 inline candidate on $r: $all";; esac; fi; done
+else echo "REGRESS INFO E1 inline candidate kfp-e1-inline.py not built (missing or does not apply)"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
