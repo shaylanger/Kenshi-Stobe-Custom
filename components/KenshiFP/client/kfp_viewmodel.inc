@@ -83,18 +83,19 @@ static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.28f, 0.38f, 0.47f, 0.58f, 0.78f,
 /* E6: more strokes, same key times (wind-up, strike x2, follow-through, recovery); stroke 0 = g_vm_swk above */
 #define VM_NSTROKE 4
 static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
-    {   /* 1 backhand: wind-up top-left, sweep across to the bottom right */
+    {   /* 1 backhand: wind-up top-left, sweep across to the bottom right; refit 3: blade sweeps flat right-down in view
+         * (strike/follow mf.z <= 0.6, was 0.95 = a stub pointing into the screen), no edge flip in the recovery */
         VP(-1.564f, 0.174f, 4.330f, -0.066f, 0.798f, 0.161f, -0.371f, -0.088f, 1.514f),
         VP(-1.044f, 0.028f, 4.666f, -0.097f, 0.895f, 0.446f, 0.235f, -0.178f, 0.555f),
-        VP(-0.586f, -1.080f, 5.125f, 0.316f, 0.523f, 1.191f, 1.013f, -1.825f, 0.802f),
-        VP(1.116f, -1.331f, 5.767f, 0.508f, 0.176f, 0.487f, -0.578f, -0.476f, 0.757f),
-        VP(1.272f, -1.540f, 4.507f, -0.023f, 0.313f, 0.916f, 0.534f, -0.619f, -0.788f) },
+        VP(-0.300f, -0.900f, 5.200f, 0.720f, 0.450f, 0.520f, 4.282f, -6.446f, -0.350f),
+        VP(1.650f, -1.800f, 5.600f, 0.850f, 0.080f, 0.520f, 0.967f, -3.670f, -1.017f),
+        VP(2.000f, -2.000f, 4.900f, 0.780f, -0.150f, 0.580f, 0.050f, -1.000f, -0.100f) },
     {   /* 2 overhead: blade raised over the head, chops down right of the eye line with the blade tilted (length stays in view, flat keeps facing the camera: no edge-on roll, no wind-up snap; E6 review) */
         VP(1.362f, -0.705f, 3.931f, -0.414f, 1.277f, -0.011f, -0.645f, -0.456f, 1.257f),
-        VP(1.396f, 0.342f, 4.577f, -0.335f, 1.082f, 0.151f, -0.702f, -0.749f, 1.167f),
-        VP(1.345f, -0.711f, 5.459f, -0.673f, 1.290f, 0.732f, 0.412f, -1.197f, 0.159f),
-        VP(1.359f, -2.467f, 5.287f, -0.505f, 0.882f, 0.552f, -1.013f, -0.873f, -0.737f),
-        VP(1.057f, -2.540f, 7.100f, -1.095f, 0.507f, 0.583f, 0.244f, -0.872f, 1.021f) },
+        VP(1.400f, -0.300f, 4.600f, -0.335f, 1.082f, 0.151f, -0.702f, -0.749f, 1.167f),   /* refit 3: strike top lower (blade in view) */
+        VP(1.345f, -0.711f, 5.459f, -0.300f, 0.850f, 0.450f, 0.412f, -1.197f, 0.159f),    /* refit 3: blade upright on screen */
+        VP(1.359f, -2.467f, 5.287f, -0.300f, 0.750f, 0.550f, -1.013f, -0.873f, -0.737f),
+        VP(0.800f, -2.400f, 6.800f, -0.300f, 0.600f, 0.740f, 0.244f, -0.872f, 1.021f) },   /* follow-through ends low-centre, forward (was flat left) */
     {   /* 3 rising: low left, up across to the top right */
         VP(-1.668f, -2.305f, 3.883f, -0.351f, -0.043f, -0.131f, 0.857f, -0.302f, 1.676f),
         VP(1.124f, -1.662f, 4.995f, -1.486f, -0.039f, -0.061f, 0.818f, 0.286f, 0.769f),
