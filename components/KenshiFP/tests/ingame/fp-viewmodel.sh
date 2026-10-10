@@ -660,8 +660,15 @@ if want VMQUICK && vmq_gate; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
   A fp_vm state | grep -q ' wb=' || setup_fail "fp_vm state has no wb= (needs the PT17 wrist build)"
   A fp_combat physical >/dev/null; [ -z "$EN0" ] && EN0=$(cs enabled); A fp_combat on >/dev/null; A fp_combat input 0 0 0 >/dev/null
   waitf 4 csis armed 1 || note "SETUP VMQUICK not armed after idle input (why=$(cs why))"; A fp_combat physical >/dev/null
+  # op-b5: a katana left in the hands by an earlier take made R draw it (fp_combat why=melee_in_hands), the bow never
+  # loaded: put every melee weapon away first (dropped ones are picked up again by handle before the sword segments)
+  MELREFS=""; if [ "$(cs why)" = melee_in_hands ]; then draw_to 0
+    while IFS= read -r w; do [ -n "$w" ] || continue; r=$(A unequip "$SH" "$w")
+      case "$r" in *"-> ground"*) MELREFS+=" $(href "$r")";; esac; note "SETUP VMQUICK melee off: $w: $(cut -c1-80 <<<"$r")"; done <<<"$(weapons)"
+    A fp_combat input 0 0 0 >/dev/null; sleep 1; [ "$(cs why)" = melee_in_hands ] && setup_fail "VMQUICK: melee weapon still in $SH's hands before the crossbow segments"; fi
   if [ $BOWOK = 1 ] && [ "$(bow_now)" != none ]; then vmq_seg crossbow 0; vmq_seg crossbow "$ZO"; zoom 0; else VQOK=0; VQR+=" crossbow: setup no crossbow;"; fi
-  draw_to 0; give_melee || note "SETUP: could not give $SH a melee weapon"; bow_off || note "SETUP: bow would not unequip ($(bow_now))"
+  draw_to 0; for r in $MELREFS; do note "SETUP VMQUICK melee pickup $r: $(A pickup "$SH" "$r" now | cut -c1-80)"; done
+  give_melee || note "SETUP: could not give $SH a melee weapon"; bow_off || note "SETUP: bow would not unequip ($(bow_now))"
   if arm_melee; then vmq_seg sword 0
     L=$(kfplines | grep '\[vm\] swing #[0-9]* [0-9.]*s u_end=' | tail -1); UE=$(grep -o 'u_end=[0-9.]*' <<<"$L" | cut -d= -f2)
     [ "$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end=')" -gt "${SWQ0:-0}" ] && ge "$UE" 1 || { VQOK=0; VQR+=" live swing: no full [vm] swing line ($L);"; }
