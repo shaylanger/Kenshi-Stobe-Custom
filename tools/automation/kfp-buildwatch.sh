@@ -7,7 +7,7 @@
 # pipelines at once: waits while any kfp-pipeline run holds an inflight marker (C:\KenshiTestRuns\inflight\kfp-pipeline-*).
 #
 # Start (once; it refuses a second copy):
-#   wsl -d DwemerAI4Skyrim3 -u root -- setsid nohup bash /mnt/c/KenshiModding/tools/automation/kfp-buildwatch.sh > /dev/null 2>&1 &
+#   wsl -d DwemerAI4Skyrim3 -u root -- setsid nohup nice -n 15 bash /mnt/c/KenshiModding/tools/automation/kfp-buildwatch.sh > /dev/null 2>&1 &
 # Seed: kfp-buildwatch.sh --seed  (the current state counts as built: after a manual --combined run of it)
 # Stop: touch /root/kfp-pipeline/buildwatch.stop  (or kill the pid in /root/kfp-pipeline/buildwatch.pid)
 # Status: tail /root/kfp-pipeline/buildwatch.log (one line per decision; each build ends with its PIPELINE line);
@@ -38,7 +38,7 @@ while [ ! -e "$PR/buildwatch.stop" ]; do
     elif [ -n "$(find "$IFD" -maxdepth 1 -name 'kfp-pipeline-*' -mmin -180 2>/dev/null)" ]; then :   # a run is in flight (markers > 3 h = dead run, ignored)
     else
       R=$PR/run-watch-$(date +%m%d-%H%M); log "change $last -> $f (quiet ${age}s): kfp-pipeline --combined -> $R"
-      bash "$ME/kfp-pipeline.sh" --combined --out "$R" > "$PR/buildwatch.run.log" 2>&1 < /dev/null
+      bash "$ME/labnice.sh" -s 3 bash "$ME/kfp-pipeline.sh" --combined --out "$R" > "$PR/buildwatch.run.log" 2>&1 < /dev/null
       res=$(grep -h '^PIPELINE ' "$PR/buildwatch.run.log" | tail -1); log "${res:-PIPELINE ? no final line (log $PR/buildwatch.run.log)}"
       echo "$(date '+%F %T') ${res:-PIPELINE ? no final line}" > /mnt/c/KenshiTestRuns/staged/KenshiFP-pipeline.last
       last=$f; echo "$f" > "$PR/buildwatch.fp"   # the state that was built (fp before the run: a change during it rebuilds)
