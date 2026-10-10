@@ -1238,10 +1238,11 @@ static void guard_arm(void)
 }
 static int g_head_hidden;               /* our head-hide state (>1x fast-forward) */
 static void *g_head_hidden_char;        /* the exact character whose head we hid */
-static void *g_gear_hid[16];  /* the mesh entities WE hid, so the restore is exact and we
+#define GEAR_MAX 32
+static void *g_gear_hid[GEAR_MAX];  /* the mesh entities WE hid, so the restore is exact and we
                                * never re-show something the game had hidden on its own */
 static int   g_gear_n;
-static unsigned g_gear_vf[16]; /* each hidden entity's original visibility flags (restored on show) */
+static unsigned g_gear_vf[GEAR_MAX]; /* each hidden entity's original visibility flags (restored on show) */
 typedef unsigned (*ent_getvf_t)(void *); typedef void (*ent_setvf_t)(void *, unsigned);
 static ent_getvf_t g_ent_getvf; static ent_setvf_t g_ent_setvf;
 static void *g_gear_pc;       /* character whose worn items headgear_set_hidden walks (hand-bone lookup) */
@@ -6297,18 +6298,70 @@ static float gear_hand_dist(void *mesh)
     return best;
 }
 #define GEAR_HAND_M 0.20f
+/* The other objects that make up a weapon (crossbow limbs, string, loaded bolt): every movable
+ * object on the item mesh's scene node and on that node's child nodes (2 levels), mesh excluded.
+ * Refuses (returns 0) when the node carries more than 8 objects (not a per-item node).
+ * CALLER MUST hold the VEH guard. */
+#define SN_ATT_BEGIN 0xF8
+#define SN_ATT_END   0x100
+#define ND_CH_BEGIN  0x18
+#define ND_CH_END    0x20
+static int gear_node_objs(void *sn, void *skip, void **out, int n, int max, int depth)
+{
+    if (!readable(sn, SN_ATT_END + 8)) return n;
+    void **b = *(void ***)((uintptr_t)sn + SN_ATT_BEGIN), **e = *(void ***)((uintptr_t)sn + SN_ATT_END);
+    size_t cnt = (b && e >= b) ? (size_t)(e - b) : 0;
+    if (cnt > 8) return -1;
+    if (cnt && !readable(b, cnt * sizeof(void *))) return n;
+    for (size_t i = 0; i < cnt && n < max; i++)
+        if (b[i] && b[i] != skip && readable(b[i], 8)) out[n++] = b[i];
+    if (depth <= 0 || !readable(sn, ND_CH_END + 8)) return n;
+    void **cb = *(void ***)((uintptr_t)sn + ND_CH_BEGIN), **ce = *(void ***)((uintptr_t)sn + ND_CH_END);
+    size_t cc = (cb && ce >= cb) ? (size_t)(ce - cb) : 0;
+    if (cc > 8 || (cc && !readable(cb, cc * sizeof(void *)))) return n;
+    for (size_t i = 0; i < cc && n < max; i++) {
+        int r = gear_node_objs(cb[i], skip, out, n, max, depth - 1);
+        if (r < 0) return -1;
+        n = r;
+    }
+    return n;
+}
+/* Safety: refuse (0) when the node is shared with any other worn item (body/armour node) or a
+ * collected object is another worn item's mesh -- only a weapon's own node may be swept. */
+static int gear_parts(void *app, void *mesh, void **out, int max)
+{
+    if (!g_get_parent_scenenode || !readable(app, APP_ITEM_BUCKETS + 8)) return 0;
+    void *sn = g_get_parent_scenenode(mesh);
+    if (!readable(sn, 8)) return 0;
+    int n = gear_node_objs(sn, mesh, out, 0, max, 2);
+    if (n <= 0) return 0;
+    size_t nb = *(size_t *)((uintptr_t)app + APP_ITEM_NBUCK);
+    void **bk = *(void ***)((uintptr_t)app + APP_ITEM_BUCKETS);
+    if (!nb || nb > 0x10000 || !readable(bk, (nb + 1) * sizeof(void *))) return 0;
+    void *node = bk[nb];
+    for (int i = 0; node && i < 256; i++, node = *(void **)((uintptr_t)node + MAPN_NEXT)) {
+        if (!readable(node, MAPN_VALUE + 8)) return 0;
+        void *item = *(void **)((uintptr_t)node + MAPN_VALUE);
+        if (!readable(item, ITEM_MESH + 8)) continue;
+        void *m = *(void **)((uintptr_t)item + ITEM_MESH);
+        if (!m || m == mesh || !readable(m, 8)) continue;
+        if (g_get_parent_scenenode(m) == sn) return 0;
+        for (int q = 0; q < n; q++) if (out[q] == m) return 0;
+    }
+    return n;
+}
 static int g_gear_wdiag;      /* capped holster/hand transition log lines */
-static void gear_weap_note(const char *kn, void *mesh, int type, float hd, int holstered)
+static void gear_weap_note(const char *kn, void *mesh, int type, float hd, int holstered, int nparts)
 {
     for (int j = 0; j < g_gear_wn; j++)
         if (g_gear_wlast[j] == mesh) {
             if (g_gear_wstate[j] != holstered && g_gear_wdiag < 60) { g_gear_wdiag++;
-                logline("[head] weapon key=\"%s\" mesh=%p type=%d handDist=%.2f -> %s", kn, mesh, type, hd, holstered ? "holstered (hidden)" : "in hand (shown)"); }
+                logline("[head] weapon key=\"%s\" mesh=%p type=%d handDist=%.2f parts=%d -> %s", kn, mesh, type, hd, nparts, holstered ? "holstered (hidden)" : "in hand (shown)"); }
             g_gear_wstate[j] = (unsigned char)holstered; return;
         }
     if (g_gear_wn < 16) { g_gear_wlast[g_gear_wn] = mesh; g_gear_wstate[g_gear_wn++] = (unsigned char)holstered; }
     if (g_gear_wdiag < 60) { g_gear_wdiag++;
-        logline("[head] weapon key=\"%s\" mesh=%p type=%d handDist=%.2f -> %s (new)", kn, mesh, type, hd, holstered ? "holstered (hidden)" : "in hand (shown)"); }
+        logline("[head] weapon key=\"%s\" mesh=%p type=%d handDist=%.2f parts=%d -> %s (new)", kn, mesh, type, hd, nparts, holstered ? "holstered (hidden)" : "in hand (shown)"); }
 }
 
 /* Hide (hide=1) or restore (hide=0) the player's head-covering worn items.
@@ -6339,7 +6392,7 @@ static void headgear_set_hidden(void *app, int hide, int logit)
      * The PREVIOUS pass's list is snapshotted first: re-assert passes diff against it
      * to catch the game re-showing or replacing an entity we hid (field diagnosis:
      * facial hair reported visible after a clean hide pass). */
-    void *prev[16]; unsigned prevvf[16]; int prevn = 0;
+    void *prev[GEAR_MAX]; unsigned prevvf[GEAR_MAX]; int prevn = 0;
     if (hide) {
         prevn = g_gear_n;
         memcpy(prev, g_gear_hid, sizeof prev);
@@ -6370,17 +6423,22 @@ static void headgear_set_hidden(void *app, int hide, int logit)
                     && ((g_cfg_headgear_slots >> slot) & 1u);
         int gtype = gear_item_type(gd);
         int holstered = 0;
+        void *parts[12]; int np = 0;
         if (!slothead && !keyhead && (gtype == ITYPE_WEAPON || gtype == ITYPE_CROSSBOW)) {
             float hd = gear_hand_dist(mesh);
             holstered = hd > GEAR_HAND_M && strcmp(kn, "hands") != 0;   /* "hands" = drawn; its node can lag a frame */
-            if (hide) gear_weap_note(kn, mesh, gtype, hd, holstered);
+            np = gear_parts(app, mesh, parts, 12);
+            if (hide) gear_weap_note(kn, mesh, gtype, hd, holstered, np);
         }
         if (!slothead && !keyhead && !holstered) {
             /* a weapon we hid while holstered is now in hand (drawn), or this is the restore pass */
             void **lst = hide ? prev : g_gear_hid; unsigned *lvf = hide ? prevvf : g_gear_vf;
             int ln = hide ? prevn : g_gear_n;
-            for (int j = 0; j < ln && j < 16; j++)
+            for (int j = 0; j < ln && j < GEAR_MAX; j++)
                 if (lst[j] == mesh) { gear_show(mesh, lvf[j]); break; }
+            for (int q = 0; q < np; q++)   /* its limbs/string/bolt too */
+                for (int j = 0; j < ln && j < GEAR_MAX; j++)
+                    if (lst[j] == parts[q]) { gear_show(parts[q], lvf[j]); break; }
             if (logit) logline("[head] gear key=\"%s\" item=%p slot=%d mesh=%p -> kept (not head-covering, slots=0x%x)",
                                kn, item, slot, mesh, g_cfg_headgear_slots);
             continue;
@@ -6391,7 +6449,7 @@ static void headgear_set_hidden(void *app, int hide, int logit)
              * game re-created the entity). Capped; the re-hide below cures both. */
             if (prevn > 0 && g_gear_diag < 12 && !holstered) {
                 int wasours = 0;
-                for (int j = 0; j < prevn && j < 16; j++)
+                for (int j = 0; j < prevn && j < GEAR_MAX; j++)
                     if (prev[j] == mesh) { wasours = 1; break; }
                 int vis = g_ent_getvisible ? (g_ent_getvisible(mesh) != 0) : -1;
                 if (vis == 1 || !wasours) {
@@ -6400,19 +6458,24 @@ static void headgear_set_hidden(void *app, int hide, int logit)
                             kn, mesh, wasours, vis);
                 }
             }
-            unsigned vf = g_ent_getvf ? g_ent_getvf(mesh) : 0;
-            for (int j = 0; j < prevn && j < 16; j++)
-                if (prev[j] == mesh) { vf = prevvf[j]; break; }   /* ours: keep the ORIGINAL flags */
-            g_ent_setvisible(mesh, 0);
-            if (g_ent_setvf) g_ent_setvf(mesh, 0);
-            if (g_gear_n < (int)(sizeof g_gear_hid / sizeof g_gear_hid[0])) {
-                g_gear_vf[g_gear_n] = vf; g_gear_hid[g_gear_n++] = mesh; }
+            for (int q = -1; q < np; q++) {   /* the mesh, then a holstered weapon's other parts */
+                void *ent = q < 0 ? mesh : parts[q];
+                unsigned vf = g_ent_getvf ? g_ent_getvf(ent) : 0;
+                for (int j = 0; j < prevn && j < GEAR_MAX; j++)
+                    if (prev[j] == ent) { vf = prevvf[j]; break; }   /* ours: keep the ORIGINAL flags */
+                g_ent_setvisible(ent, 0);
+                if (g_ent_setvf) g_ent_setvf(ent, 0);
+                if (g_gear_n < GEAR_MAX) { g_gear_vf[g_gear_n] = vf; g_gear_hid[g_gear_n++] = ent; }
+            }
             nhid++;
             if (logit) logline("[head] gear key=\"%s\" item=%p slot=%d mesh=%p -> hidden",
                                kn, item, slot, mesh);
         } else if (!gamehides || holstered) {
             for (int j = 0; j < g_gear_n; j++)
                 if (g_gear_hid[j] == mesh) { gear_show(mesh, g_gear_vf[j]); nhid++; break; }
+            for (int q = 0; q < np; q++)
+                for (int j = 0; j < g_gear_n; j++)
+                    if (g_gear_hid[j] == parts[q]) { gear_show(parts[q], g_gear_vf[j]); break; }
         }
     }
     if (!hide) g_gear_n = 0;
@@ -6459,8 +6522,10 @@ static int kah_fp_gear(const char *id, int argc, const char *const *argv, KAH_Re
         for (int j = 0; j < g_gear_n; j++) if (g_gear_hid[j] == mesh) ours = 1;
         Vec3 v = {0, 0, 0}; void *sn = (mesh && g_get_parent_scenenode) ? g_get_parent_scenenode(mesh) : NULL;
         if (readable(sn, 8) && g_node_getdpos_v) g_node_getdpos_v(sn, &v);
-        k += snprintf(b + k, sizeof b - k, " | %s type=%d mesh=%p vis=%d vf=%x ours=%d node=%.2f,%.2f,%.2f hand=%.2f",
-                      kn, gear_item_type(gd), mesh, vis, (mesh && g_ent_getvf) ? g_ent_getvf(mesh) : 0u, ours, v.x, v.y, v.z, mesh ? gear_hand_dist(mesh) : 99.0f);
+        void *pt[12]; int np = mesh ? gear_parts(app, mesh, pt, 12) : 0, npv = 0;
+        for (int q = 0; q < np; q++) if (g_ent_getvisible && g_ent_getvisible(pt[q])) npv++;
+        k += snprintf(b + k, sizeof b - k, " | %s type=%d mesh=%p vis=%d vf=%x ours=%d node=%.2f,%.2f,%.2f hand=%.2f parts=%d partsVis=%d",
+                      kn, gear_item_type(gd), mesh, vis, (mesh && g_ent_getvf) ? g_ent_getvf(mesh) : 0u, ours, v.x, v.y, v.z, mesh ? gear_hand_dist(mesh) : 99.0f, np, npv);
     }
     g_guard_armed = 0;
     r->append(r, b);
