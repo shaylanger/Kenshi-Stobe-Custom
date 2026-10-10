@@ -85,6 +85,16 @@ for root, tag in ((a.kfp, 'KenshiFP'), (a.stobe, 'Stobe')):
         if tail.lstrip().startswith(('<', '[')):   # "fp_move <wasd|none> [ms]": a free first argument
             open_any = True
         add(nm, tag, usage, subs=None if (open_any or not subs) else subs, minargs=0)
+# 3b. pending KenshiFP patches (pending-fixes/kfp-*.py, built into the staged DLL by kfp-pipeline.sh before they are
+# committed to /root/KenshiFP): a first-argument literal the patch compares argv[1] against counts for the registered
+# command the patch text names it with ("fp_melee swing_all [reset]" -> fp_melee gets swing_all)
+PEND = '/mnt/c/KenshiModding/pending-fixes'
+for f in sorted(glob.glob(os.path.join(PEND, 'kfp-*.py'))):
+    t = open(f, encoding='utf-8', errors='replace').read()
+    for lit in set(re.findall(CMP % r'argv\[1\]', t)):
+        for nm in set(re.findall(r'\b([a-z_][a-z0-9_]*) %s\b' % re.escape(lit[1]), t)):
+            if nm in spec and 'KenshiFP' in spec[nm]['src'] and spec[nm]['subs'] is not None:
+                add(nm, 'pending:' + os.path.basename(f), subs={lit[1]})
 # 4. kah.py client-side commands
 for nm, mn in (('on', 0), ('off', 0), ('autoload', 1), ('wait-world', 0), ('wait-game', 1), ('run', 1), ('help', 0)):
     add(nm, 'kah.py', minargs=mn)

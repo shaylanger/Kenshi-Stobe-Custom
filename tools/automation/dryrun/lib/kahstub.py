@@ -97,6 +97,7 @@ def seed_gate():
 
 def new_state(save):
     seed_gate()
+    ensure_ini()
     f = fixture(save)
     s = dict(save=save, chars=f['chars'], squad=f['squad'], hour=f['hour'], hour_vt=dr.vnow(), speed=1.0, paused=0,
              selected=f['squad'][0], fpchar=None, chatter='on', cursor=[800, 450], cam=dict(dist=0, orbit=0, yaw=0, pitch=0),
@@ -141,6 +142,7 @@ def settle(s, now):
     if s['speed'] >= 2 and not s['paused']:
         s['hour'] = (s['hour'] + (now - s['hour_vt']) * s['speed'] / 120.0) % 24
     s['hour_vt'] = now
+    mtick(s, now)
 
 
 def desc_item(s, it):
@@ -333,6 +335,265 @@ def fpkeys_state(s):
                     for k in FPKEYS_FIELDS)
 
 
+# ---------------- KenshiFP.ini + manual melee fight (fp_combat on/input, fp_melee, hp flesh) ----------------
+def ini_path():
+    return os.path.join(dr.KDIR, 'mods', 'KenshiFP', 'KenshiFP.ini')
+
+
+def ensure_ini():
+    """the sandbox Kenshi dir starts empty: put the installed KenshiFP.ini there (snapshot in kfp_formats.json _ini,
+    gen_kfp_formats.py) so scripts that edit it in place (fp-swing-hits-all.sh setini) find it like on the rig"""
+    p = ini_path()
+    if not os.path.exists(p) and kfpreply._F.get('_ini'):
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'w') as f:
+            f.write(kfpreply._F['_ini'])
+
+
+def ini_get(key, default=0):
+    """KenshiFP hot-reloads edited ini values (~0.5 s): read the file at every use"""
+    try:
+        for l in open(ini_path(), errors='replace'):
+            k, _, v = l.strip().partition('=')
+            if k == key:
+                return int(float(v))
+    except (OSError, ValueError):
+        pass
+    return default
+
+
+REACH = 25.0          # dm: a native melee swing reaches the target / others in the zone (pin dist 12 = in reach)
+SWING_LEN = 1.1       # s CHOP per native swing; clicks inside it are rejected (M02 native pace)
+
+
+def serial(c):
+    return int(c['id'][1:].split('/')[0])
+
+
+def flat(a, b):
+    return ((a['pos'][0] - b['pos'][0]) ** 2 + (a['pos'][2] - b['pos'][2]) ** 2) ** 0.5
+
+
+def flesh_of(c):
+    return c.setdefault('flesh', [100.0] * 7)
+
+
+def melee(s):
+    return s.setdefault('melee', dict(on=0, armed=0, inj=0, fire=0, aim=0, passive=0, tgt=None, swings=0, clicks=0,
+                                      rejected=0, oor=0, expired=0, blocks=0, block_ok=0, ai_ref=0.0, ab_ref=0.0,
+                                      pas_ref=0.0, sw_t=-1e9, spam=None, fc=0, forced=0.0, cdrops=0, cswings=0, lat=0,
+                                      maxlat=0, hits=0, zt=0, ends=0, swtime=0.0, slack_n=0, min_slack=0.0, min_gap=0.0,
+                                      last_len=0.0, t=None, inj_cmds=0, inj_aim=0, ever=0,
+                                      sha=dict(swings=0, widened=0, last_zone=0, last_extra=0, skipped_off=0,
+                                               skipped_unowned=0)))
+
+
+def fighter(s):
+    return s['chars'].get(s['fpchar']) if s.get('fpchar') else None
+
+
+def fight_target(s):
+    """the native fight of the controlled fighter (set by `attack` either way), live while both stand"""
+    m, f = melee(s), fighter(s)
+    t = s['chars'].get(m['tgt']) if m['tgt'] else None
+    if not f or not t or t.get('ko') or f.get('ko'):
+        return None
+    return t
+
+
+def owned(s):
+    m = melee(s)
+    return bool(m['on'] and m['armed'] and fighter(s))
+
+
+def mstate(s, now):
+    """native CombatClass state: 0 CHOP (swing), 1 BLOCK, 4 WAIT, 11 chase lock (force_chase)"""
+    m = melee(s)
+    if now - m['sw_t'] < SWING_LEN:
+        return 0
+    if not fight_target(s):
+        return 4
+    if m['aim'] and owned(s):
+        return 1
+    return 11 if m['fc'] and owned(s) else 4
+
+
+def do_click(s, t):
+    """one LMB press edge on the manual melee path (kfp_combat_melee.inc): native swing when legal and in reach"""
+    m, f = melee(s), fighter(s)
+    m['clicks'] += 1
+    if not owned(s):
+        return
+    tg = fight_target(s)
+    if not tg or t - m['sw_t'] < SWING_LEN or m['aim']:
+        m['rejected'] += 1
+        return
+    if flat(f, tg) > REACH:
+        m['oor'] += 1          # pending click times out out of reach: no swing, no approach (M06)
+        return
+    if m['sw_t'] > 0:
+        gap = t - m['sw_t']
+        m['ends'] += 1; m['swtime'] += SWING_LEN; m['last_len'] = SWING_LEN
+        m['min_gap'] = gap if m['slack_n'] == 0 else min(m['min_gap'], gap)
+        m['min_slack'] = gap - SWING_LEN if m['slack_n'] == 0 else min(m['min_slack'], gap - SWING_LEN)
+        m['slack_n'] += 1
+    m['swings'] += 1; m['sw_t'] = t; m['lat'] = 85; m['maxlat'] = max(m['maxlat'], 85)
+    if m['fc']:
+        m['cdrops'] += 1; m['cswings'] += 1
+    # impact: the target always; with swing_hits_all=1 every other character in the swing zone (pending
+    # kfp-swing-hits-all: attackImpactCheck widened to allies/neutrals)
+    dx, dz = tg['pos'][0] - f['pos'][0], tg['pos'][2] - f['pos'][2]
+    L = max((dx * dx + dz * dz) ** 0.5, 1.0)
+    extra = []
+    for n, c in s['chars'].items():
+        if c is f or c is tg or c.get('ko'):
+            continue
+        ex, ez = c['pos'][0] - f['pos'][0], c['pos'][2] - f['pos'][2]
+        d = (ex * ex + ez * ez) ** 0.5
+        if 0 < d <= REACH and (ex * dx + ez * dz) / (d * L) >= 0.5:    # within 60 deg of the swing line
+            extra.append(c)
+    on = ini_get('swing_hits_all')
+    hit = [tg] + (extra if on else [])
+    for c in hit:
+        if not c.get('protected'):
+            fl = flesh_of(c)
+            fl[1] -= 12.0
+    m['hits'] += 1; m['zt'] = len(hit)
+    st = f.setdefault('stats', {})
+    st['attack'] = st.get('attack', 10.0) + 0.15
+    sh = m['sha']
+    sh['swings'] += 1; sh['last_zone'] = len(hit); sh['last_extra'] = len(extra) if on else 0
+    if on and extra:
+        sh['widened'] += 1
+        kfplog(t, '[melee] swing_all: zone=%u extra=%u (allies/neutrals in the swing area)' % (len(hit), len(extra)))
+    if not on:
+        sh['skipped_off'] += 1
+
+
+def mtick(s, now):
+    """advance the melee model to now: arming, AI initiative refused while owned, the target's attacks (refused by
+    passive / auto-block refused with RMB up), force_chase frames, `fp_melee spam` clicks at their own times"""
+    m = melee(s)
+    t0 = m['t'] if m['t'] is not None else now
+    dt = max(0.0, now - t0)
+    m['t'] = now
+    if m['on'] and not m['armed'] and not m['fire'] and not m['aim']:
+        m['armed'] = 1
+    tg, f = fight_target(s), fighter(s)
+    if owned(s) and tg:
+        m['ai_ref'] += dt / 1.5
+        if flat(f, tg) <= 3 * REACH:
+            if m['passive'] == serial(f):
+                m['pas_ref'] += dt / 2.0
+            elif not m['aim']:
+                m['ab_ref'] += dt / 2.5
+        if m['fc'] and now - m['sw_t'] >= SWING_LEN:
+            m['forced'] += dt * 60
+    sp = m['spam']
+    if sp:
+        while sp['done'] < sp['n'] and sp['t0'] + sp['done'] * sp['p'] / 1000.0 <= now:
+            do_click(s, sp['t0'] + sp['done'] * sp['p'] / 1000.0)
+            sp['done'] += 1
+        if sp['done'] >= sp['n']:
+            m['spam'] = None
+
+
+def fp_melee_cmd(s, a, now):
+    m = melee(s)
+    sub = a[0] if a else 'state'
+    if sub == 'passive' and len(a) == 2:
+        if a[1].lower() == 'off':
+            m['passive'] = 0
+            return True, 'passive off'
+        if not a[1].isdigit() or int(a[1]) == 0:
+            return False, 'usage: fp_melee passive <serial>|off'
+        m['passive'] = int(a[1])
+        return True, 'passive on: AI attacks aimed at that serial are refused'
+    if sub == 'spam' and len(a) in (2, 3):
+        if len(a) == 2 and a[1].lower() == 'off':
+            m['spam'] = None
+            return True, 'spam off'
+        n, p = int(a[1]) if a[1].isdigit() else 0, int(a[2]) if len(a) == 3 and a[2].isdigit() else (200 if len(a) == 2 else 0)
+        if not 1 <= n <= 1000 or not 20 <= p <= 5000:
+            return False, 'usage: fp_melee spam <clicks 1-1000> [period_ms 20-5000, default 200] | fp_melee spam off'
+        m['spam'] = dict(n=n, p=p, t0=now, done=0)
+        return True, 'spam on: %d clicks every %d ms' % (n, p)
+    if sub == 'force_chase' and len(a) == 2:
+        if a[1].lower() not in ('on', 'off'):
+            return False, 'usage: fp_melee force_chase on|off'
+        m['fc'] = 1 if a[1].lower() == 'on' else 0
+        return True, 'force_chase on: owned fighter forced into the native chase lock (state 11) each tick' if m['fc'] else 'force_chase off'
+    if sub == 'swing_all':
+        if len(a) == 2:
+            if a[1].lower() != 'reset':
+                return False, 'usage: fp_melee swing_all [reset]'
+            m['sha'] = dict(swings=0, widened=0, last_zone=0, last_extra=0, skipped_off=0, skipped_unowned=0)
+        return True, kfpreply.render('swingall', setting=ini_get('swing_hits_all'), ready=1, owned=1 if owned(s) else 0,
+                                     **m['sha'])
+    if sub != 'state' or len(a) > 2:
+        dr.flag('NOTE', 'fp_melee %s answered generically' % ' '.join(a))
+        return True, 'fp_melee %s ok (dryrun)' % ' '.join(a)
+    f = char(s, a[1]) if len(a) == 2 else fighter(s)
+    if not f:
+        return False, 'controlled actor unavailable' if len(a) == 1 else 'character not found'
+    me = f is fighter(s)
+    tg = fight_target(s) if me else None
+    st = mstate(s, now) if me else 4
+    why = 'init' if not m['ever'] else ('arming' if m['on'] and not m['armed'] else ('ok' if m['on'] else 'init'))
+    th = '#%s' % tg['id'][1:] if tg else '#0/0'
+    base = kfpreply.render('melee', actor='%x' % (0x7ff600000000 + serial(f)), controlled=1 if me else 0,
+                           combat='%x' % (0x7ff700000000 + serial(f)), active=1 if tg else 0, state=st,
+                           next=0 if st == 0 else 4, target_h=th, zone_targets=m['zt'] if me and tg else 0,
+                           threats=1 if tg else 0, frame_dt='0.016667')
+    sl = m['spam']
+    app = kfpreply.render('meleeapp', manual_ready=1, owned=1 if owned(s) else 0, why=why, armed=m['armed'], pending=0,
+                          clicks=m['clicks'], swings=m['swings'], ai_refused=int(m['ai_ref']), rejected=m['rejected'],
+                          blocks=m['blocks'], block_ok=m['block_ok'], autoblock_refused=int(m['ab_ref']),
+                          out_of_reach=m['oor'], passive=1 if m['passive'] else 0, passive_refused=int(m['pas_ref']),
+                          chase_drops=m['cdrops'], chase_swings=m['cswings'], force_chase=m['fc'],
+                          forced_chase=int(m['forced']), expired=m['expired'], last_latency_ms=m['lat'],
+                          max_latency_ms=m['maxlat'], spam_left=(sl['n'] - sl['done']) if sl else 0,
+                          swing_ends=m['ends'], swing_time='%.3f' % m['swtime'], last_swing_len='%.3f' % m['last_len'],
+                          min_swing_gap='%.3f' % m['min_gap'], slack_n=m['slack_n'],
+                          min_swing_slack='%.3f' % m['min_slack'], in_aim=m['aim'], in_fire=m['fire'],
+                          injection=m['inj'], inj_cmds=m['inj_cmds'], inj_aim_cmds=m['inj_aim'], melee_hits=m['hits'],
+                          melee_cut='%.1f' % (12.0 * m['hits']), wounds_any=m['hits'], focus=0, prone=0, unconscious=0,
+                          ko_timer='0.0', st_found=1, st_vt=1, get_state=1, last_reject='-' if not m['rejected'] else 'chop')
+    return True, base + ' ' + app
+
+
+def fp_combat_melee(s, a, now):
+    """fp_combat on/off/physical/input (kfp_combat_native.inc replies); input edges drive the melee model"""
+    m = melee(s)
+    sub = a[0]
+    if sub == 'on' and len(a) == 1:
+        m['on'] = 1; m['ever'] = 1; m['armed'] = 0; s['combat_on'] = 1
+        mtick(s, now)
+        return True, 'manual ownership requested; release all combat buttons to arm'
+    if sub == 'off' and len(a) == 1:
+        m['on'] = 0; m['armed'] = 0; m['inj'] = 0; s['combat_on'] = 0
+        return True, 'manual ownership release requested'
+    if sub == 'physical' and len(a) == 1:
+        m['inj'] = 0; m['fire'] = 0; m['aim'] = 0
+        return True, 'physical combat input restored'
+    if sub == 'input' and len(a) == 4:
+        if any(x not in ('0', '1') for x in a[1:]):
+            return False, 'input values must be 0 or 1'
+        aim, fire = int(a[1]), int(a[2])
+        m['inj_cmds'] += 1; m['inj_aim'] += aim; m['inj'] = 1
+        pf, pa = m['fire'], m['aim']
+        m['fire'], m['aim'] = fire, aim
+        if m['on'] and not m['armed'] and not fire and not aim:
+            m['armed'] = 1
+        elif owned(s):
+            if aim and not pa and fight_target(s):
+                m['blocks'] += 1; m['block_ok'] += 1
+            if fire and not pf:
+                do_click(s, now)
+        return True, 'combat input published; same controller/native gates as physical input'
+    return None
+
+
 def handle(s, cmd, a, now, sp):
     """returns (ok, reply)"""
     def need_char(i):
@@ -419,17 +680,80 @@ def handle(s, cmd, a, now, sp):
         c = need_char(0)
         if not c:
             return False, 'no character %s' % (a[0] if a else '')
-        if cmd == 'pin' and 'at' in a:
-            i = a.index('at')
-            xyz = a[i + 1:i + 4]
-            if len(xyz) == 3 and all(re.match(r'^-?[\d.]+$', v) for v in xyz):
-                c['pos'] = [float(v) for v in xyz]
+        nm = c['name']
+        if cmd == 'pin':   # harness BalanceCommands.inc pin
+            pins = s.setdefault('pins', [])
+            was = nm in pins
+            if was:
+                pins.remove(nm)
+            if len(a) > 1 and a[1].lower() == 'off':
+                return True, ('unpinned %s put_back=0' % nm) if was else '%s was not pinned' % nm
+            at = list(c['pos'])
+            if 'at' in a:
+                i = a.index('at')
+                xyz = a[i + 1:i + 4]
+                if len(xyz) == 3 and all(re.match(r'^-?[\d.]+$', v) for v in xyz):
+                    at = [float(v) for v in xyz]
+                else:
+                    o = char(s, a[i + 1]) if len(a) > i + 1 else None
+                    if not o:
+                        dr.flag('FAIL', 'pin: at "%s" is no character / x y z' % ' '.join(a[i + 1:i + 2]))
+                        return False, 'no character %s' % ' '.join(a[i + 1:i + 2])
+                    at = list(o['pos'])
+            if 'dist' in a:
+                at[0] += float(a[a.index('dist') + 1])
+            face = None
+            if 'face' in a:
+                face = char(s, a[a.index('face') + 1])
+                if not face:
+                    return False, 'no character %s' % a[a.index('face') + 1]
+            c['pos'] = at
+            pins.append(nm)
+            return True, 'pinned %s at %.1f,%.1f,%.1f off=0.0%s pins=%d' % (nm, at[0], at[1], at[2],
+                                                                           ' facing ' + face['name'] if face else '', len(pins))
         if cmd == 'ko':
             c['ko'] = 1
+            return True, 'knocked out %s for %.1f s' % (nm, float(a[1]) if len(a) > 1 else 30.0)
         if cmd == 'wake':
             c['ko'] = 0
         if cmd == 'kill':
             c['ko'] = 2
+            c['flesh'] = [-200.0] * 7
+            return True, 'killed %s (body parts at -200%%)' % nm
+        if cmd == 'health':
+            pct = float(a[1])
+            c['flesh'] = [100.0 * pct / 100.0] * 7
+            return True, 'set every body part of %s to %.1f%%' % (nm, pct)
+        if cmd == 'hp' and len(a) == 1:   # Commands.cpp hp: per body part flesh/max
+            fl = flesh_of(c)
+            w = min(fl) / 100.0
+            return True, '%s worst=%d%% blood=100.0/100.0%s parts %s' % (
+                nm, int(w * 100), ' KO' if c['ko'] else '', ' '.join('%d:%.1f/100.0' % (i, v) for i, v in enumerate(fl)))
+        if cmd == 'protect':
+            c['protected'] = len(a) > 1 and a[1].lower() == 'on'
+            return True, '%s protect=%s' % (nm, 'on' if c['protected'] else 'off')
+        if cmd == 'setstat' and len(a) >= 3:
+            st = c.setdefault('stats', {})
+            b = st.get(a[1], 10.0)
+            st[a[1]] = float(a[2])
+            return True, '%s %s %.1f -> %.1f' % (nm, a[1], b, st[a[1]])
+        if cmd == 'stat' and len(a) >= 2 and a[1] != 'all':
+            v = c.get('stats', {}).get(a[1], 10.0)
+            return True, '%s %s base=%.1f effective=%.1f mod=1.000 hunger=1.000 wounds=1.000 dark=1.000 robot=1.000 ' \
+                         'weather=1.000 gear=1.000 light=1.000' % (nm, a[1], v, v)
+        if cmd == 'relation' and len(a) >= 2:
+            b = s.setdefault('relations', {}).get(c['fac'], -50.0 if 'Bandit' in c['fac'] else 0.0)
+            s['relations'][c['fac']] = float(a[1])
+            return True, '%s <-> Nameless: %.1f -> %.1f' % (c['fac'], b, float(a[1]))
+        if cmd == 'attack':   # Commands.cpp attack <attacker> <target>: a native fight between them
+            o = need_char(1)
+            if not o:
+                return False, 'no character %s' % a[1]
+            if s.get('fpchar') in (c['name'], o['name']):
+                melee(s)['tgt'] = o['name'] if s['fpchar'] == c['name'] else c['name']
+            return True, '%s attacks %s' % (nm, o['name'])
+        if cmd == 'hunger':
+            return True, '%s hunger 100.0%s' % (nm, (' -> %.1f' % float(a[1])) if len(a) > 1 else '')
         return True, '%s %s ok' % (cmd, c['name'])
     if cmd == 'sync_flash':   # harness d2a9ff2: full-frame marker for label sync (take-sample.sh take_mark)
         ms = int(a[0]) if a and a[0].isdigit() else 120
@@ -481,9 +805,20 @@ def handle(s, cmd, a, now, sp):
         c = need_char(0)
         if not c or len(a) < 2:
             return False, 'no character'
-        it = item_name(' '.join(a[1:]))
+        # Commands.cpp FindInventoryItem: stringID or exact name (case-insensitive), else a unique substring
+        want = ' '.join(a[1:])
+        it = item_name(want)
         if it not in c['items']:
-            return False, 'no item %s on %s' % (it, c['name'])
+            low = [i for i in dict.fromkeys(c['items']) if i.lower() == it.lower()]
+            part = [i for i in dict.fromkeys(c['items']) if it.lower() in i.lower()]
+            if low:
+                it = low[0]
+            elif len(part) > 1:
+                return False, 'ambiguous inventory item: %s' % want
+            elif part:
+                it = part[0]
+            else:
+                return False, 'no inventory item matching: %s' % want
         if cmd == 'equip':
             if it not in c['eq']:
                 c['eq'].append(it)
@@ -594,6 +929,41 @@ def handle(s, cmd, a, now, sp):
             s['picks'] = s.get('picks', 0) + 1
             return True, 'pick requested'
         return True, fpkeys_state(s)
+    if cmd == 'fp_melee':
+        return fp_melee_cmd(s, a, now)
+    if cmd == 'fp_mode':
+        if not a or a[0].lower() not in ('on', 'off'):
+            return False, 'usage: fp_mode on|off'
+        want = 1 if a[0].lower() == 'on' else 0
+        if want == s.get('fpmode', 0):
+            return True, 'FP mode already ON' if want else 'FP mode already OFF'
+        s['fpmode'] = want
+        return True, 'FP mode toggling ON (next frame; log [input] FP mode toggled)' if want else 'FP mode toggling OFF (next frame)'
+    if cmd == 'fp_state':
+        return True, kfpreply.render('fpstate', fp_mode=s.get('fpmode', 0), control=1 if s['fpchar'] else 0,
+                                     controlled=1 if s['fpchar'] else 0, ui_why='none', active=s.get('fpmode', 0))
+    if cmd == 'spawn':   # Commands.cpp spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m] ...
+        tpl, fac = a[0], a[1]
+        at = list(s['chars'][s['selected']]['pos'])
+        if 'near' in a:
+            o = char(s, a[a.index('near') + 1])
+            if not o:
+                return False, 'no character %s' % a[a.index('near') + 1]
+            at = list(o['pos'])
+        n = int(a[a.index('count') + 1]) if 'count' in a else 1
+        d = float(a[a.index('dist') + 1]) if 'dist' in a else 0.0
+        made = []
+        for _ in range(n):
+            sr = 100 + 2 * len([k for k in s['chars'] if '#' in k])
+            key = '%s#%d' % (tpl, sr)
+            s['chars'][key] = dict(id='#%d/%d' % (sr, sr + 1), fac=fac, pos=[at[0] + d, at[1], at[2]], items=[], eq=[],
+                                   ko=0, ranged=None, name=tpl)
+            made.append('%s #%d/%d race=Greenlander' % (tpl, sr, sr + 1))
+        return True, 'spawned %d/%d %s: %s' % (n, n, tpl, ', '.join(made))
+    if cmd == 'fp_combat' and a:
+        r = fp_combat_melee(s, a, now)
+        if r is not None:
+            return r
     if cmd == 'fp_combat':
         sub = a[0] if a else 'state'
         if sub == 'state':
