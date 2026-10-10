@@ -18,6 +18,8 @@
 # Per weapon dir <out>/<k>-<slug>/: take.mp4 take.lab take.ev.txt take.vmrec.txt lab.txt review/ ; per weapon one line
 #   RESULT WEAPON-<slug> PASS|FAIL <evidence>          and last  RESULT WEAPONSWEEP-<name> PASS|FAIL pass=<n>/<m>
 # The weapon is unequipped and handed to Tassilo after its take; the original bow goes back on the back slot at the end.
+# VMSET="<key> <value>" (e.g. "twomask 0"): reference takes (old look for side-by-side videos): fp_vm set before each take,
+#   slug suffix -ref, PASS = recorded + takecheck/cursor/openground (no matrix / 2H checks); VMRESET (default "twomask 264") at the end.
 OUT=$1; LIST=$2; NAME=${3:-sweep}
 [ -n "$OUT" ] && [ -n "$LIST" ] || { echo "usage: fp-weapon-sweep.sh <out dir> <list> [name]"; exit 2; }
 export KAH_OWNER=${KAH_OWNER:-weapon-matrix}
@@ -50,7 +52,7 @@ echo "setup ok: bow=${BOWN:-none} list=$LIST catalog=$WCAT"
 # ---- one weapon (subshell: pf_fail ends only this weapon)
 take(){   # k sid name type animcls ammo
   local k=$1 sid=$2 nm=$3 ty=$4 ac=$5 am=$6 slug D N T0 FP
-  slug=$(echo "$nm" | tr -c 'A-Za-z0-9\n' '_' | cut -c1-24)
+  slug=$(echo "$nm" | tr -c 'A-Za-z0-9\n' '_' | cut -c1-24)${VMSET:+-ref}
   D="$OUT/$(printf %03d $k)-$slug"; mkdir -p "$D"; cd "$D" || { echo "RESULT WEAPON-$slug FAIL setup: dir $D"; return; }
   N=take; PF_ROW=WEAPON-$slug; PF_DONE=""
   PF_ON_FAIL='A fp_keys release rmb >/dev/null; A fp_camera distance 0 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop'
@@ -69,8 +71,9 @@ take(){   # k sid name type animcls ammo
   cl=$(A fp_vm state | fld class); want=$([ "$ty" = crossbow ] && echo ranged || echo melee)
   case "$cl" in $want|$([ "$ty" = crossbow ] && echo 1 || echo 0)) ;; *) pf_fail "fp_vm class=$cl, want $want ($nm in hand?)";; esac
   [ "$ty" = crossbow ] && pf_loaded
+  if [ -n "$VMSET" ]; then r=$(A fp_vm set $VMSET); echo "$r" | grep -q "keys:\|ERROR" && pf_fail "fp_vm set $VMSET: $r"; sleep 0.5; fi
   # kfp-two-hand builds (state has 2h=): the category KenshiFP read must be the catalog's item class, 2H on exactly for 3/8
-  st2=$(A fp_vm state); if [ "$ty" != crossbow ] && echo "$st2" | grep -q ' 2h='; then
+  st2=$(A fp_vm state); if [ -z "$VMSET" ] && [ "$ty" != crossbow ] && echo "$st2" | grep -q ' 2h='; then
     wc_=$(python3 -c "import json,sys; print(next((w['cls'] for w in json.load(open(sys.argv[1]))['weapons'] if w['sid']==sys.argv[2]), -1))" "$WCAT" "$sid" 2>/dev/null)
     c2=$(echo "$st2" | fld cat); h2=$(echo "$st2" | fld 2h); w2=$([ "$wc_" = 3 ] || [ "$wc_" = 8 ] && echo 1 || echo 0)
     [ "$c2" = "$wc_" ] && [ "$h2" = "$w2" ] || pf_fail "2H state cat=$c2 2h=$h2, catalog class $wc_ wants 2h=$w2"
@@ -115,7 +118,7 @@ take(){   # k sid name type animcls ammo
   printf '%s\n' "takecheck $TC" "cursor $CU" "openground $OG" "matrix $WM" "$MV" > lab.txt
   python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --ts "$N.ev.txt" --labels "$N.lab" --lab lab.txt > review.log 2>&1
   ok=1; for r in "$TC" "$CU" "$OG" "$MV"; do echo "$r" | grep -q "PASS" || ok=0; done
-  echo "$WM" | grep -q "^WEAPON [^ ]* PASS" || ok=0
+  [ -n "$VMSET" ] || echo "$WM" | grep -q "^WEAPON [^ ]* PASS" || ok=0
   [ -s "$N.vmrec.txt" ] || ok=0
   # hand the weapon on (keeps the inventory free; the next take starts clean)
   A key_inject r tap 120 >/dev/null; pf_waitst holstered 6
@@ -134,6 +137,6 @@ while IFS='|' read -r sid nm ty ac am; do
   cd "$OUT"
 done < "$LIST"
 # ---- restore
-cleanup; A combatmode $SH ranged off >/dev/null
+cleanup; A combatmode $SH ranged off >/dev/null; [ -n "$VMSET" ] && A fp_vm set ${VMRESET:-twomask 264} >/dev/null
 [ -n "$BOWN" ] && { A inv $SH | grep -qF "\"$BOWN\"" || A transfer $HOLD $SH "$BOWN" >/dev/null; A equip $SH "$BOWN" >/dev/null; }
 pf_result "$([ $np = $n ] && [ $n -gt 0 ] && echo PASS || echo FAIL)" "pass=$np/$n list=$LIST out=$OUT"
