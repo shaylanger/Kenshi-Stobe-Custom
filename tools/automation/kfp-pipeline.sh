@@ -46,8 +46,8 @@
 #            N>=3). The gate pools EVERY stroke with key tables (0..VM_NSTROKE-1) + corpus pool/strokes.tsv. Mutations
 #            only on 'all'.
 #            Delta ($RUN/delta.tsv): per patch, alone (base -> +P) and in-set (set minus P -> all): every gate verdict
-#            flip and every pool take rate change >= 0.02 (s<n>.take_all / arc / blade / stroke). BREAK = PASS->FAIL or a
-#            drop >= --drop in-set (e.g. "DELTA kfp-pt30-flip in-set s1.take_all 0.95 -> 0.64 BREAK").
+#            flip and every pool take rate change >= 0.02 (s<n>.take_all / arc / blade / stroke). BREAK = PASS->FAIL, a check
+#            new in the patch's tree that FAILs there (the patch ships a check it fails), or a drop >= --drop in-set (e.g. "DELTA kfp-pt30-flip in-set s1.take_all 0.95 -> 0.64 BREAK").
 #   5 stage  on PASS: C:\KenshiTestRuns\staged\KenshiFP-<sha8>.dll (+ .txt manifest) + KenshiFP-latest.txt, same on the
 #            4080 in C:\KAH\staged (+ C:\KAH\inst-staged.ps1), SHA256 checked on both sides, all other staged KenshiFP
 #            DLLs removed; queue\5090.next / 4080.next get ONE "staged-build: KenshiFP" line (older ones replaced).
@@ -249,11 +249,11 @@ compare() { awk -F'\t' -v p="$1" -v k="$2" -v dr="$DROP" 'NR==FNR {a[$1]=$2; nex
           if (a[x] ~ /^[0-9.]+$/ && b[x] ~ /^[0-9.]+$/) { d=b[x]-a[x]; if (d>=0.02 || d<=-0.02) {
               f=(d<=-dr ? (k=="alone" ? "drop" : "BREAK") : (d<0 ? "drop" : "gain")); printf "%s\t%s\t%s\t%s\t%s\t%+.2f\t%s\n", p, k, x, a[x], b[x], d, f } }
           else if (a[x]!=b[x]) print p "\t" k "\t" x "\t" a[x] "\t" b[x] "\t-\t" (a[x]=="PASS" && b[x]=="FAIL" ? (k=="alone" ? "flip" : "BREAK") : (a[x]=="FAIL" && b[x]=="PASS" ? "fix" : "changed")) }
-        for (x in b) if (!(x in a)) print p "\t" k "\t" x "\t-\t" b[x] "\t-\tnew" }' "$RUN/metrics-$3.tsv" "$RUN/metrics-$4.tsv" | sort -t$'\t' -k3,3; }
+        for (x in b) if (!(x in a)) print p "\t" k "\t" x "\t-\t" b[x] "\t-\t" (b[x] ~ /^FAIL/ && x != "" ? (k=="in-set" ? "BREAK" : "newfail") : "new") }' "$RUN/metrics-$3.tsv" "$RUN/metrics-$4.tsv" | sort -t$'\t' -k3,3; }
 printf 'patch\tcompare\tkey\tbefore\tafter\tdelta\tflag\n' > "$D"
 if [ $N -ge 1 ]; then compare SET set base all >> "$D"
   for p in "${S[@]}"; do n=$(pname "$p"); [ $N -ge 2 ] && compare "$n" alone base "+$n" >> "$D"; compare "$n" in-set "${CTX[$n]}" all >> "$D"; done; fi
-awk -F'\t' 'NR>1 && $2!="set" && $7 ~ /BREAK|drop|flip|GONE/ {print "DELTA " $1 " " $2 " " $3 " " $4 " -> " $5 " " $7}' "$D" | head -40 | tee -a "$RUN/pipeline.log"
+awk -F'\t' 'NR>1 && $2!="set" && $7 ~ /BREAK|drop|flip|GONE|newfail/ {print "DELTA " $1 " " $2 " " $3 " " $4 " -> " $5 " " $7}' "$D" | head -40 | tee -a "$RUN/pipeline.log"
 # --- verdict --------------------------------------------------------------------------------------------------------
 for l in "${labels[@]}"; do e=$(grep -A3 -E '^REGRESS FAIL build-(current|drive-current)' "$RUN/gate-$l/regress.txt" 2>/dev/null | grep -m1 -E 'error|FAIL' | cut -c1-200)
   [ -z "$e" ] || die lab-build "tree $l: the lab adapter does not build from this source, pools/deltas invalid: $e"; done
