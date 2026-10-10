@@ -8,6 +8,8 @@
 #                              (frames.py cursor), no dark/black frames (ffmpeg signalstats YAVG >= PF_MIN_YAVG, default 35)
 #   pf_ready                   drawn weapon in ready stance (R toggles), verified with fp_vm state
 #   pf_loaded                  crossbow loaded: RMB held until fp_combat loaded>=1, released, loaded=1 verified
+#   pf_nofight                 melee drawn: a short RMB press must start the out-of-fight free block (KenshiFP.log
+#                              'free block start'); none = the character is in a fight (native block, free swing/block off)
 #   pf_fail <reason>           print the RESULT line and exit 1 (runs PF_ON_FAIL first if set)
 PF_A(){ stobe-auto "$@" </dev/null 2>&1; }
 # Git Bash (4080 rig) has no wslpath: cygpath does the same
@@ -45,16 +47,26 @@ pf_clean(){
   echo "pf_clean ok: $n NPCs pinned + KO within $R of $TX,$TZ"
 }
 pf_open(){
-  local s=${1:-2} f=/tmp/pf-open.$$.mp4 r
+  local s=${1:-2} f=/tmp/pf-open.$$.mp4 r o
+  # park the virtual cursor in the top-right corner (sky): hovering a character shows its "[name]" tag (kfx-b9 blkE overlay)
+  PF_A mouse_inject at "${PF_PARK_X:-1595}" "${PF_PARK_Y:-4}" >/dev/null 2>&1
   ( cd /tmp && "$PF_FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t "$s" -i "$PF_TITLE" -c:v libx264 -preset veryfast -pix_fmt yuv420p "$(wslpath -w $f)" ) </dev/null
   [ -s "$f" ] || pf_fail "open-ground clip not recorded"
   r=$(python3 $PF_LAB/frames.py openground "$f" 2>&1 | tail -1)
-  local c y; c=$(python3 $PF_LAB/frames.py cursor "$f" --name pf 2>&1 | tail -1)
+  local c y; c=$(python3 $PF_LAB/frames.py cursor "$f" --name pf 2>&1 | tail -1); o=$(python3 $PF_LAB/frames.py overlay "$f" --name pf 2>&1 | tail -1)
   y=$(ffmpeg -hide_banner -nostdin -i "$f" -vf "fps=2,signalstats,metadata=print:key=lavfi.signalstats.YAVG" -f null - 2>&1 | grep -o 'YAVG=[0-9.]*' | cut -d= -f2 | sort -n | head -1); rm -f "$f"
   echo "$r" | grep -q "PASS" || pf_fail "open ground: $r"
   echo "$c" | grep -q "PASS" || pf_fail "mouse cursor in frame: $c"
+  echo "$o" | grep -q "FAIL" && pf_fail "foreign overlay in frame (name tag / bark text / popup): $o"
   awk -v y="${y:-0}" -v m="${PF_MIN_YAVG:-35}" 'BEGIN{exit !(y >= m)}' || pf_fail "dark/black frames (min luma ${y:-?} < ${PF_MIN_YAVG:-35}): night, or the display asleep"
-  echo "pf_open ok: $r | $c | min luma $y"
+  echo "pf_open ok: $r | $c | $o | min luma $y"
+}
+pf_nofight(){   # kfx-b10 blkF: bandits/turrets beyond pf_clean put Axima in a fight, RMB gave the native fight block (presses=0)
+  local k=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/KenshiFP.log l n
+  l=$(wc -l < "$k"); PF_A fp_keys press rmb 700 >/dev/null; sleep 1.5
+  n=$(tail -n +$((l + 1)) "$k" | grep -c "free block start")
+  [ "${n:-0}" -ge 1 ] || pf_fail "character in a fight: RMB gave no out-of-fight free block (KenshiFP.log)"
+  echo "pf_nofight ok: free block started"
 }
 pf_st(){ PF_A fp_vm state | grep -o ' state=[^ ]*' | head -1 | cut -d= -f2; }
 pf_waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(pf_st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }

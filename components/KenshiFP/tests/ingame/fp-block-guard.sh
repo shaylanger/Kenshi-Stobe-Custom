@@ -28,7 +28,7 @@ A speed 1 hold >/dev/null; A chatter off >/dev/null   # no NPC bark text over th
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
 pf_rig; pf_display
-pf_clean -54190 4380 3000
+pf_clean -54190 4380 6000   # 3000 left bandits that started a fight (kfx-b10 blkF)
 pf_day
 A teleport $SH $SPOT >/dev/null; sleep 2; A health $SH 100 >/dev/null
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null; A combatmode $SH ranged off >/dev/null
@@ -36,6 +36,7 @@ A unequip Malzin "Chisa Katana" >/dev/null; A inv Malzin | grep -q "\"name\":\"C
 A inv $SH | grep -q "\"name\":\"Chisa Katana\"" || A pickup $SH "Chisa Katana" radius 80 >/dev/null
 A equip $SH "Chisa Katana" >/dev/null; sleep 1; place; pf_ready
 A fp_keys set blk_allow "$ALLOW" | grep -q "blk_allow=" || pf_fail "fp_keys set blk_allow not supported by this KenshiFP build"
+pf_nofight; sleep 1.5
 A fp_camera distance 25 >/dev/null; A fp_camera orbit 2.3 >/dev/null; sleep 2; pf_open 2
 echo "setup ok: $(A fp_keys set blk_hold 0.45 | grep -o "fb_tech=[^ ]* \|blk_dir=[0-9]* blk_org=[0-9]*" | tr '\n' ' ')"
 # ---- take
@@ -49,8 +50,8 @@ T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Tassilo|Shay"
 for o in 2.3 3.0; do
   A fp_camera orbit $o >/dev/null; lab "Zoom 25, view orbit $o: ready stance (katana drawn)"; sleep 2.5
   for k in $(seq 1 $REPS); do
-    lab "RMB held: block guard (press $k)"; A fp_keys press rmb 2500 >/dev/null; sleep 2.3   # label ends before the release (kfx-b7: the guard left 0.15 s before a 2.6 s label)
-    lab "RMB released: back to ready"; sleep 2.3
+    lab "RMB held: block guard (press $k)"; A fp_keys press rmb 2500 >/dev/null; sleep 2.0   # label ends before the release (kfx-b7/b8: ui_state left blocking 2.15 s after the label)
+    lab "RMB released: back to ready"; sleep 2.6
   done
   lab "LMB: free swing"; A fp_keys press lmb 80 >/dev/null; sleep 2.4
   lab "LMB then RMB 0.35 s later: swing cut into block"; A fp_keys press lmb 80 >/dev/null; sleep 0.35; A fp_keys press rmb 2200 >/dev/null; sleep 2.3
