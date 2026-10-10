@@ -300,7 +300,15 @@ def press(s, btn, ms, now):
             # KenshiFP: native free swing counted (fp_keys free_swings) + viewmodel swing lines (kfp_viewmodel.inc)
             s['free_swings'] = s.get('free_swings', 0) + 1
             n = s['vm_swings'] = s.get('vm_swings', 0) + 1
-            kfplog(now + 0.05, '[vm] swing #%d stroke 0 (mask 0x1 force -1)' % n)
+            # kfp_viewmodel.inc vm_stroke_pick: forced stroke, else round robin over the `strokes` mask
+            force, mask = s.get('vm_force', -1), s.get('vm_strokes', 1)
+            k = force if 0 <= force < 4 else 0
+            if not 0 <= force < 4:
+                for i in range(4):
+                    j = (s.get('vm_next', 0) + i) % 4
+                    if mask & (1 << j):
+                        s['vm_next'] = (j + 1) % 4; k = j; break
+            kfplog(now + 0.05, '[vm] swing #%d stroke %d (mask 0x%x force %d)' % (n, k, mask, force))
             kfplog(now + 1.1, '[vm] swing #%d 1.05s u_end=1.00 prog=1.00 frames=63 maxstep=4.0 rate_max=300 rate_med=150 '
                               'ratio=2.00 elev=-10.0..20.0 az=-30.0..40.0' % n)
         elif fp['ui_state'] == 'aiming' and fp['loaded']:
@@ -981,7 +989,7 @@ def handle(s, cmd, a, now, sp):
         sub = a[0] if a else 'state'
         if sub == 'rec' and len(a) > 1:
             if a[1] == 'on':
-                s['rec'] = dict(on=1, t=now)
+                s['rec'] = dict(on=1, t=now, sw0=s.get('vm_swings', 0), k0=s.get('vm_kicks', 0))
             elif a[1] == 'off':
                 s['rec']['on'] = 0
             elif a[1] == 'dump' and len(a) > 2:
@@ -989,7 +997,9 @@ def handle(s, cmd, a, now, sp):
                 p = os.path.join(dr.KDIR, a[2])
                 os.makedirs(os.path.dirname(p), exist_ok=True)
                 with open(p, 'w') as f:
-                    f.write('# dryrun canned vm rec frames=%d\n' % n)
+                    # swings/kicks recorded: the canned lab tools (pyshim) answer per weapon like the real ones
+                    f.write('# dryrun canned vm rec frames=%d swings=%d kicks=%d\n' % (
+                        n, s.get('vm_swings', 0) - s['rec'].get('sw0', 0), s.get('vm_kicks', 0) - s['rec'].get('k0', 0)))
                 dr.jappend('recordings.jsonl', dict(kind='vmrec', t=now, file=a[2], frames=n))
                 if n == 0:
                     dr.flag('NOTE', 'fp_vm rec dump %s with 0 frames (rec on never sent?)' % a[2])
@@ -1003,6 +1013,13 @@ def handle(s, cmd, a, now, sp):
                 fs['ikfail'], 0.9 if fp['ui_state'] == 'swinging' else 0.0)
         if sub == 'set' and len(a) > 3 and a[1] == 'hand_scale':   # pending-fixes/kfp-hand-scale.py build
             return True, 'hand_scale along=%.3f across=%.3f' % (float(a[2]), float(a[3]))
+        if sub == 'set' and len(a) > 2 and a[1] in ('stroke', 'strokes'):   # E6 (kfp_viewmodel.inc vm_set_logged)
+            x = int(float(a[2]))
+            if a[1] == 'stroke' and -1 <= x < 4:
+                s['vm_force'] = x
+            elif a[1] == 'strokes' and 0 <= x < 16:
+                s['vm_strokes'] = x; s['vm_next'] = 0
+            return True, 'fp_vm %s ok' % ' '.join(a)
         if sub == 'set' and len(a) > 2 and a[1] == 'fist_tech':
             s.setdefault('fist', dict(force=-1, swings=0, ikfail=0))['force'] = int(float(a[2]))
             return True, 'fp_vm set fist_tech=%s' % a[2]

@@ -128,15 +128,26 @@ def canned(tool, a):
            'overlay': 'RESULT %s PASS overlay frames=4 overlay_frames=0' % name}.get(sub, 'RESULT %s PASS %s (dryrun canned)' % (name, sub)))
         return 0
     if tool == 'animlab.py':
+        a = list(a)
+        while a and a[0] == '--only-stroke':   # the one top-level option (animlab.py main): before the subcommand
+            a = a[2:]
         sub = a[0] if a else ''
         if not check_files(tool, [x for x in a[1:2] if not x.startswith('-')]):
             p('%s FAIL input missing' % sub); return 1
+        rec = a[1] if len(a) > 1 and not a[1].startswith('-') else ''
+        try:   # kahstub's canned rec dump header: "# dryrun canned vm rec frames=<n> swings=<n> kicks=<n>"
+            hdr = open(rec, errors='replace').readline() if rec else ''
+        except OSError:
+            hdr = ''
+        sw = re.search(r'swings=(\d+)', hdr)
         if sub == 'weapons':   # weapon_matrix.py line format: WEAPON <sid> PASS <cls>/<anim cls> <name> [<source>] <checks>
             sid = (opt(a, '--only') or 'dryrun-weapon').replace(' ', '_')
             p('WEAPON %s PASS dryrun/dryrun %s [dryrun] recs=ok(canned)' % (sid, sid))
             return 0
-        if sub == 'metrics':   # animlab.py cmd_metrics: state table, then "moves PASS|FAIL <per state>"
+        if sub == 'metrics':   # animlab.py cmd_metrics: state table, "moves PASS|FAIL <per state>", "arc ..." with swings
             p('state  n\nready  10 (dryrun canned)\nmoves PASS ready=ok(canned)')
+            if sw and int(sw.group(1)) > 0:
+                p('arc PASS swing=ok(canned)')
             return 0
         p('guard PASS presses=12 hanging=0 (dryrun canned)' if sub == 'guard' else '%s PASS (dryrun canned)' % sub)
         return 0
