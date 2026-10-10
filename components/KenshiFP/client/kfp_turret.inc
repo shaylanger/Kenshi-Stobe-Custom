@@ -85,7 +85,8 @@ static void *fp_turret_of(void *pc) {
 /* T6 (2026-10-10 video: aiming right swung the barrel out of the view): the operator stands still while the gun
  * turns about its pivot, so the eye (on her head) stayed put. Rotate the eye about the gun pivot by the turret's
  * yaw change since mount, measured from the eye->pivot bearing then, so the view stays behind the barrel. */
-static int g_tur_eye_set;static float g_tur_eye_yaw0;static unsigned g_tur_eye_calls;
+static int g_tur_eye_set,g_tur_eye_held;static float g_tur_eye_yaw0,g_tur_eye_last,g_tur_eye_hold;static unsigned g_tur_eye_calls;
+static float g_tur_eye_f,g_tur_eye_s,g_tur_eye_u;static int g_tur_eye_fixed;static float g_tur_eye_cf,g_tur_eye_cs,g_tur_eye_cu;
 static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
     if (!g_tur_pc||!g_tur_bld||!g_tur_gun||!readable((char *)g_tur_bld+TUR_CUR_DIR,12)||!readable((char *)g_tur_gun+0xE4,12)) return;
     const Vec3 *cd=(const Vec3 *)((uintptr_t)g_tur_bld+TUR_CUR_DIR),*pv=(const Vec3 *)((uintptr_t)g_tur_gun+0xE4);
@@ -93,15 +94,21 @@ static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
     Vec3 cw;if (!co||!char_position(g_tur_pc,&cw)) return;
     float rx=co->x-cw.x,rz=co->z-cw.z;   /* eye is in Ogre space (floating origin), the gun pivot in world space */
     float px=pv->x+rx,pz=pv->z+rz;
-    float dx=e->x-px,dz=e->z-pz;if (dx*dx+dz*dz<1e-2f||dx*dx+dz*dz>4e4f) return;   /* eye not near this gun */
+    float dx=e->x-px,dz=e->z-pz;if (!g_tur_eye_set && (dx*dx+dz*dz<1e-2f||dx*dx+dz*dz>4e4f)) return;   /* eye not near this gun */
     float yaw=atan2f(cd->x,cd->z);
-    if (!g_tur_eye_set) {g_tur_eye_yaw0=atan2f(-dx,-dz);g_tur_eye_set=1;logline("[turret] eye rides the gun: bearing0=%.3f gun_yaw=%.3f eye_off=%.1f,%.1f rebase=%.1f,%.1f",g_tur_eye_yaw0,yaw,dx,dz,rx,rz);}
-    float d=yaw-g_tur_eye_yaw0,c=cosf(d),s=sinf(d);
-    e->x=px+dx*c+dz*s;e->z=pz+dz*c-dx*s;++g_tur_eye_calls;
+    /* unpowered: the gun may still drift to its rest pose; the eye keeps the last powered yaw */
+    if (g_tur_nopower && g_tur_eye_set) {if (!g_tur_eye_held) {g_tur_eye_held=1;g_tur_eye_hold=g_tur_eye_last;} yaw=g_tur_eye_hold;}
+    else {g_tur_eye_held=0;g_tur_eye_last=yaw;}
+    float sy=sinf(yaw),cy=cosf(yaw);   /* gun frame: forward (sy,cy), side (cy,-sy) */
+    if (!g_tur_eye_set) {g_tur_eye_yaw0=atan2f(-dx,-dz);g_tur_eye_set=1;
+        g_tur_eye_cf=dx*sy+dz*cy;g_tur_eye_cs=dx*cy-dz*sy;g_tur_eye_cu=e->y-pv->y;
+        logline("[turret] eye locked to the gun: gun_yaw=%.3f captured fwd=%.1f side=%.1f up=%.1f%s",yaw,g_tur_eye_cf,g_tur_eye_cs,g_tur_eye_cu,g_tur_eye_fixed?" (fixed offset in use)":"");}
+    float f=g_tur_eye_fixed?g_tur_eye_f:g_tur_eye_cf,sd=g_tur_eye_fixed?g_tur_eye_s:g_tur_eye_cs,u=g_tur_eye_fixed?g_tur_eye_u:g_tur_eye_cu;
+    e->x=px+f*sy+sd*cy;e->z=pz+f*cy-sd*sy;e->y=pv->y+u;++g_tur_eye_calls;
 }
 static void fp_turret_drop(const char *why) {
     if (g_tur_pc) {++g_tur_leaves;logline("[turret] FP turret control ends (%s)",why);}
-    g_tur_pc=g_tur_rc=NULL;g_tur_bld=NULL;g_tur_rl_left=-1.0f;g_tur_why=why;g_tur_aim_valid=0;g_tur_eye_set=0;
+    g_tur_pc=g_tur_rc=NULL;g_tur_bld=NULL;g_tur_rl_left=-1.0f;g_tur_why=why;g_tur_aim_valid=0;g_tur_eye_set=0;g_tur_eye_held=0;
 }
 /* Returns 1 while the FP-controlled char mans a turret (the caller then skips the hand-weapon adapters). */
 static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
@@ -123,8 +130,9 @@ static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
     /* T2 aim */
     if (!g_tur_update_real) {static int res;if (!res) {res=1;g_tur_update_real=(void (*)(void *))fpc_klib_real("?update@TurretBuilding@@UEAAXXZ");
                              logline("[turret] TurretBuilding::update %p",(void *)g_tur_update_real);}}
+    int unp=0;{void **vt=readable(gun,8)?*(void ***)gun:NULL;if (readable(vt,0xF0)) unp=((char (*)(void *))vt[0xE8/8])(gun)!=0;}
     Vec3 aim;g_tur_aim_valid=combat_camera_aim(&aim);
-    if (g_tur_aim_valid) {
+    if (g_tur_aim_valid && !unp) {
         /* GunClass::aimAt (vtable +0x28): for GunClassTurret it aims the building AND stores the gun's lastTarget
          * (+0x118), which getAimDir (used by shoot) pitches the shot toward; a bare +0x4A8 store left lastTarget
          * stale and every FP harpoon flew into the ground ~150 ms out. */
@@ -132,21 +140,21 @@ static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
         if (g_tur_cfg_gunaim && readable(vt,0x30)) {((void (*)(void *,const Vec3 *))vt[0x28/8])(gun,&aim);++g_tur_gunaim_calls;}
         else *(Vec3 *)((uintptr_t)b+TUR_AIM_TARGET)=aim;
         g_tur_aim=aim;++g_tur_aim_writes;}
-    if (g_tur_cfg_operate && gdt>0.0f) {
+    if (g_tur_cfg_operate && gdt>0.0f && !unp) {
         static void (*op)(void *,void *,float);static int res;
         if (!res) {res=1;op=(void (*)(void *,void *,float))fpc_klib("?operate@TurretBuilding@@UEAAXPEAVCharacter@@M@Z");
                    logline("[turret] TurretBuilding::operate %s",op?"bound":"MISSING");}
         if (op) {op(b,pc,gdt);++g_tur_operate_calls;}
     }
-    if (g_tur_cfg_gunupd && g_tur_aim_valid) {void **vt=*(void ***)gun;if (readable(vt,0x18)) {((void (*)(void *,const Vec3 *))vt[0x10/8])(gun,&aim);++g_tur_gunupd_calls;}}
-    if (g_tur_cfg_trace && g_tur_aim_valid) {
+    if (g_tur_cfg_gunupd && g_tur_aim_valid && !unp) {void **vt=*(void ***)gun;if (readable(vt,0x18)) {((void (*)(void *,const Vec3 *))vt[0x10/8])(gun,&aim);++g_tur_gunupd_calls;}}
+    if (g_tur_cfg_trace && g_tur_aim_valid && !unp) {
         static void *(*trace)(void *,const Vec3 *,char);static int res;
         if (!res) {res=1;trace=(void *(*)(void *,const Vec3 *,char))fpc_klib("?trace@GunClass@@QEAAAEAVphysHit@@AEBVVector3@Ogre@@_N@Z");
                    logline("[turret] GunClass::trace %s",trace?"bound":"MISSING");}
         void **vt=*(void ***)gun;
         if (trace && readable(vt,0x68)) {Vec3 d;((Vec3 *(*)(void *,Vec3 *,const Vec3 *))vt[0x60/8])(gun,&d,&aim);trace(gun,&d,1);++g_tur_trace_calls;}
     }
-    if (g_tur_cfg_drive && g_tur_update_real && gdt>0.0f) {++g_tur_drive_calls;g_tur_update_real(b);}
+    if (g_tur_cfg_drive && g_tur_update_real && gdt>0.0f && !unp) {++g_tur_drive_calls;g_tur_update_real(b);}
     /* Power (native check 2026-10-09: cutting the power made the AI operator leave within 3 s and the reload stopped;
      * an unpowered turret is not manned and does not turn): GunClassTurret::isOutOfPower (vt+0xE8) pauses the FP
      * reload and refuses LMB, so FP can't do what the native game can't. */
@@ -225,6 +233,10 @@ static int kah_fp_turret(const char *id,int argc,const char *const *argv,KAH_Rep
     if (argc>=3 && !_stricmp(argv[1],"operate")) {g_tur_cfg_operate=atoi(argv[2])!=0;r->append(r,g_tur_cfg_operate?"turret operate 1":"turret operate 0");return KAH_OK;}
     if (argc>=3 && !_stricmp(argv[1],"gunupd")) {g_tur_cfg_gunupd=atoi(argv[2])!=0;r->append(r,g_tur_cfg_gunupd?"turret gunupd 1":"turret gunupd 0");return KAH_OK;}
     if (argc>=3 && !_stricmp(argv[1],"trace")) {g_tur_cfg_trace=atoi(argv[2])!=0;r->append(r,g_tur_cfg_trace?"turret trace 1":"turret trace 0");return KAH_OK;}
+    if (argc>=3 && !_stricmp(argv[1],"eye")) {   /* T6: fixed eye offset in the gun frame, or off = capture at mount */
+        char b[160];if (argc>=5) {g_tur_eye_f=(float)atof(argv[2]);g_tur_eye_s=(float)atof(argv[3]);g_tur_eye_u=(float)atof(argv[4]);g_tur_eye_fixed=1;} else g_tur_eye_fixed=0;
+        snprintf(b,sizeof b,"turret eye fixed=%d fwd=%.1f side=%.1f up=%.1f captured=%.1f,%.1f,%.1f",g_tur_eye_fixed,g_tur_eye_f,g_tur_eye_s,g_tur_eye_u,g_tur_eye_cf,g_tur_eye_cs,g_tur_eye_cu);
+        r->append(r,b);return KAH_OK;}
     if (argc>=3 && !_stricmp(argv[1],"drive")) {g_tur_cfg_drive=atoi(argv[2])!=0;r->append(r,g_tur_cfg_drive?"turret drive 1":"turret drive 0");return KAH_OK;}
     char b[1400];void *gun=g_tur_pc?g_tur_gun:NULL;
     if (gun && !readable(gun,0x130)) gun=NULL;
