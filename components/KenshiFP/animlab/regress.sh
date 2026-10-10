@@ -238,5 +238,22 @@ PY
     g=$(python3 "$L/animlab.py" compare "$W/vmq85a7-sw.txt" /tmp/al-l1ks.txt | grep '^GATE' | cut -c1-110)
     case "$k:$g" in "1:GATE FAIL"*|"0.86:GATE PASS"*) ok "sword ready vs game, l1k $k: $g";; *) bad "sword ready vs game, l1k $k: $g";; esac; done
 else echo "REGRESS INFO l1 model: recording or build missing"; fi
+# 21. misses E6 "stroke 2 wind-up snap" + "end-on blade frame" (anim-e6 video, KenshiFP 9DA35EE0, fixer #33): `animlab.py
+#     blade` (sword rotation per 33 ms video frame after the wind-up top <= 22 deg; per-frame visible blade = screen length x
+#     |flat . view ray| over u .45-.95 >= 0.05) must FAIL stroke 2 (snap + seen); stroke 1 PASS. BASELINE EXCEPTION stroke 0:
+#     seen FAIL (same one-frame end-on at 3.68 s; Shay accepted stroke 0, not to be changed): checked to stay the known value. E6B = game rec of the
+#     stroke 2 refit: strokes 1 and 2 must PASS (snap + seen), stroke 0 = the baseline exception.
+E6R=/mnt/c/KenshiTestRuns/vid/vmrec-anim-anim-e6.txt
+if [ -f "$E6R" ]; then cp -n "$E6R" "$W/e6-anim.txt"; fi
+if [ -f "$W/e6-anim.txt" ]; then
+  for s in 0 1 2; do b=$(python3 "$L/animlab.py" --only-stroke $s blade "$W/e6-anim.txt" | cut -c1-150)
+    case "$s:$b" in "2:blade FAIL"*"snap="*":BAD"*"seen="*":BAD"*|"1:blade PASS"*) ok "miss E6 blade stroke $s: $b";;
+      "0:blade FAIL"*"seen=0.0"*":BAD"*) ok "E6 blade stroke 0 BASELINE EXCEPTION (Shay accepted, unchanged): $b";;
+      *) bad "miss E6 blade stroke $s: $b";; esac; done
+else echo "REGRESS INFO E6 blade: recording missing"; fi
+E6B=/mnt/c/KenshiTestRuns/vid/vmrec-anim-anim-e6b2.txt
+if [ -f "$E6B" ]; then cp -n "$E6B" "$W/e6-anim-b2.txt"; fi
+if [ -f "$W/e6-anim-b2.txt" ]; then for s in 1 2; do b=$(python3 "$L/animlab.py" --only-stroke $s blade "$W/e6-anim-b2.txt" | cut -c1-150)
+  case "$b" in "blade PASS"*) ok "E6 refit game rec stroke $s blade: $b";; *) bad "E6 refit game rec stroke $s blade: $b";; esac; done; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail

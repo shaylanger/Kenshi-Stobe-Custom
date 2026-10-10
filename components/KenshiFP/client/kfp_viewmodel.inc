@@ -89,12 +89,12 @@ static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
         VP(-0.586f, -1.080f, 5.125f, 0.316f, 0.523f, 1.191f, 1.013f, -1.825f, 0.802f),
         VP(1.116f, -1.331f, 5.767f, 0.508f, 0.176f, 0.487f, -0.578f, -0.476f, 0.757f),
         VP(1.272f, -1.540f, 4.507f, -0.023f, 0.313f, 0.916f, 0.534f, -0.619f, -0.788f) },
-    {   /* 2 overhead: blade raised over the head, chops down right of the eye line with the blade tilted (length stays in view, E6 review) */
-        VP(0.726f, -0.553f, 4.093f, -0.150f, 1.105f, -0.511f, -0.655f, 0.221f, 1.085f),
-        VP(0.850f, 0.220f, 5.114f, -0.501f, 1.266f, 0.344f, 0.038f, -0.695f, 0.154f),
-        VP(1.330f, -1.133f, 5.259f, -0.568f, 1.320f, 0.919f, 0.155f, -1.528f, -0.316f),
-        VP(1.183f, -1.817f, 5.277f, -0.325f, 0.688f, 0.811f, -0.286f, -0.666f, -1.216f),
-        VP(0.757f, -1.439f, 5.020f, -0.766f, 0.217f, 1.249f, -0.043f, -0.612f, 1.098f) },
+    {   /* 2 overhead: blade raised over the head, chops down right of the eye line with the blade tilted (length stays in view, flat keeps facing the camera: no edge-on roll, no wind-up snap; E6 review) */
+        VP(1.362f, -0.705f, 3.931f, -0.414f, 1.277f, -0.011f, -0.645f, -0.456f, 1.257f),
+        VP(1.396f, 0.342f, 4.577f, -0.335f, 1.082f, 0.151f, -0.702f, -0.749f, 1.167f),
+        VP(1.345f, -0.711f, 5.459f, -0.673f, 1.290f, 0.732f, 0.412f, -1.197f, 0.159f),
+        VP(1.359f, -2.467f, 5.287f, -0.505f, 0.882f, 0.552f, -1.013f, -0.873f, -0.737f),
+        VP(1.057f, -2.540f, 7.100f, -1.095f, 0.507f, 0.583f, 0.244f, -0.872f, 1.021f) },
     {   /* 3 rising: low left, up across to the top right */
         VP(-1.668f, -2.305f, 3.883f, -0.351f, -0.043f, -0.131f, 0.857f, -0.302f, 1.676f),
         VP(1.124f, -1.662f, 4.995f, -1.486f, -0.039f, -0.061f, 0.818f, 0.286f, 0.769f),
