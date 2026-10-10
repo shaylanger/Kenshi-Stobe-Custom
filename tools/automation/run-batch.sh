@@ -28,6 +28,10 @@ LAUNCH=""; STOP=0; RESUME=0
 while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; *) break ;; esac; done
 L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] <list-file> <out-dir>}"; O="${2:?out-dir}"
 mkdir -p "$O"; rm -f "$O/DONE"
+# Batch end: DONE + drop every inflight marker naming this out dir, so idle detection (rig5090-state.ps1) sees the
+# slot free at once (Shay 2026-10-10: a marker left on a DONE batch kept the 5090 reading BUSY).
+finish() { touch "$O/DONE"; local m oa; oa=$(cd "$O" && pwd); for m in /mnt/c/KenshiTestRuns/inflight/*; do [ -f "$m" ] || continue
+  case "$(head -1 "$m" | tr -d '\r' | sed 's:/*$::')" in "$O"|"$oa") rm -f "$m" ;; esac; done; }
 exec >>"$O/batch.log" 2>&1
 S="$O/SUMMARY.txt"; R="$O/ranges.tsv"
 # same order as LOGS in batch-excerpts.sh
@@ -89,7 +93,7 @@ else : > "$S"; : > "$R"; : > "$D"; say "BATCH START $(date '+%F %H:%M') list=$L"
 if [ -n "$LAUNCH" ]; then
   stobe-say on >/dev/null 2>&1
   launch "$LAUNCH"
-  world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; touch "$O/DONE"; exit 1; }
+  world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }
 fi
 pass=0; fail=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
 while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tools (powershell, tasklist) eat stdin
@@ -177,4 +181,4 @@ done 3<"$L"
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
 [ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
 say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail"
-touch "$O/DONE"
+finish

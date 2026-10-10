@@ -123,6 +123,15 @@ if (-not $kenshi -and -not $lock) {
     }
 }
 
+# --- 5090 game slot idle while Kenshi is open / the lock is held? (Shay 2026-10-10: op-b4 had written DONE, the
+# marker still pointed at it, and everything read BUSY for 5 min) ---
+if ($kenshi -or $lock) {
+    $g = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\rig5090-state.ps1') | Select-Object -First 1) -as [string]
+    if ($g -like 'IDLE-GAME*') {
+        Block-Stop ('kenshi-waker-guard: the 5090 game slot is idle: ' + $g + '. Have the lock owner start its next batch (queue\5090.next) and replace its inflight marker with the new out dir, or record a reason with kenshi-ctl.ps1 idle "<reason>".')
+    }
+}
+
 # --- 4080 idle? (Shay 2026-10-10: it sat idle a whole day while the 5090 worked; nothing looked at it) ---
 $r4 = & powershell -NoProfile -File (Join-Path $PSScriptRoot '..\rig4080-state.ps1') 2>$null | Select-Object -First 1
 if ($r4 -like 'IDLE kenshi=no*') {
