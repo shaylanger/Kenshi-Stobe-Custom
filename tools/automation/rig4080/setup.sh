@@ -11,11 +11,13 @@
 set -e
 M=/c/KenshiModding; R=/c/KenshiTestRuns; H=4080; HERE=$M/tools/automation/rig4080
 SAVES=""; [ "$1" = --saves ] && { SAVES=$2; shift 2; }
-ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab 2>NUL & exit 0'
+ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab 2>NUL & exit 0'
 scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" $H:C:/KAH/
 scp -q "$HERE/python3" $H:C:/KAH/bin/python3
 scp -q "$M/tools/automation/rig-env.sh" $H:C:/KenshiModding/tools/automation/
 scp -q "$M"/components/KenshiFP/animlab/*.sh "$M"/components/KenshiFP/animlab/*.py "$M"/components/KenshiFP/animlab/*.txt $H:C:/KenshiModding/components/KenshiFP/animlab/
+# weapon sweep lists + catalogue (wm4080-diag: "list sweep-gated.list missing")
+scp -q "$M"/components/KenshiFP/animlab/weapons/*.list "$M"/components/KenshiFP/animlab/weapons/*.json $H:C:/KenshiModding/components/KenshiFP/animlab/weapons/
 scp -q "$M"/components/KenshiFP/tests/ingame/*.sh "$M"/components/KenshiFP/tests/ingame/*.py $H:C:/KenshiModding/components/KenshiFP/tests/ingame/
 scp -q "$M/Kenshi-Automation-Harness/client/kah.py" $H:C:/KenshiModding/Kenshi-Automation-Harness/client/
 scp -q "$M"/Kenshi-Automation-Harness/tools/animlab/*.py $H:C:/KenshiModding/Kenshi-Automation-Harness/tools/animlab/
