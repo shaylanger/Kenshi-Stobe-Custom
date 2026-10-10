@@ -53,6 +53,12 @@ if [ "$step" != - ] && grep -qi microsoft /proc/version 2>/dev/null; then
   done
   [ $ana = 1 ] && tasklist.exe </dev/null 2>/dev/null | grep -qi '^ffmpeg.exe' && ana=0
 fi
+# setupstreak: trailing run of rows that FAILed setup within 90 s of the previous row's end (row out file mtime): a list of
+# instant setup failures keeps the rig "busy" while the game does nothing (Shay 2026-10-10)
+ss=0; pe=$(stat -c %Y "$O/list.txt" 2>/dev/null || echo 0)
+while read -r _ rn rv rest; do e=$(stat -c %Y "$O/$rn.txt" 2>/dev/null || echo "$pe")
+  if [ "$rv" = FAIL ] && [[ "$rest" == setup* ]] && [ $((e - pe)) -lt 90 ]; then ss=$((ss + 1)); else ss=0; fi; pe=$e
+done < <(grep -a '^RESULT ' "$O/batch.log" 2>/dev/null)
 st=0; bpid=-; bmt=0; [ -f "$O/batch.pid" ] && { st=1; read -r bpid _ < "$O/batch.pid"; bmt=$(stat -c %Y "$O/batch.pid"); }
 # bpid/bmt: which run-batch.sh owns the out dir (the runner refuses to adopt a batch someone else started there)
-echo "PROBE bpid=${bpid:--} bmt=$bmt started=$st done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"
+echo "PROBE setupstreak=$ss bpid=${bpid:--} bmt=$bmt started=$st done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"

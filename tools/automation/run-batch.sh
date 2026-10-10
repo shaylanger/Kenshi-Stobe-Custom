@@ -35,8 +35,10 @@ KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 A=$CR/KenshiModding/tools/automation; T=$CR/KenshiModding/tests/ingame/stobe; KT=$CR/KenshiModding/components/KenshiFP/tests/ingame
 CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'; CTLO=()
 [ "${RIG:-5090}" = 4080 ] && { CTL='C:\KAH\ctl.ps1'; CTLO=(-Owner "${KAH_OWNER:-rig4080}"); }
-LAUNCH=""; STOP=0; RESUME=0; NODRY=""
-while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; *) break ;; esac; done
+LAUNCH=""; STOP=0; RESUME=0; NODRY=""; REUSE=0
+# --reuse (rig-runner, 2026-10-10 no relaunch gap): with --launch, a game that is already up and in the world loads <save>
+# in place (stobe-auto load) instead of a stop + relaunch; launches as usual when Kenshi is not running / not answering
+while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --reuse) REUSE=1; shift ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; *) break ;; esac; done
 L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] [--no-dryrun <reason>] <list-file> <out-dir>}"; O="${2:?out-dir}"
 mkdir -p "$O"; rm -f "$O/DONE" "$O/GAMEDONE"
 # Batch end: DONE + drop every inflight marker naming this out dir, so idle detection (rig5090-state.ps1) sees the
@@ -118,7 +120,12 @@ else
     finish; exit 1
   fi
 fi
-if [ -n "$LAUNCH" ]; then
+if [ -n "$LAUNCH" ] && [ "$REUSE" = 1 ] && kenshi_up && timeout 30 stobe-auto status </dev/null 2>/dev/null | grep -q "phase=world"; then
+  p1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f3 | tr -d " \r")
+  say "NOTE reuse: Kenshi already up, loading $LAUNCH in place (no relaunch)"
+  stobe-say on >/dev/null 2>&1
+  if ! reload "$LAUNCH" "${p1:-Shay}"; then say "NOTE reuse: in-place load failed, relaunching"; launch "$LAUNCH"; world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }; fi
+elif [ -n "$LAUNCH" ]; then
   stobe-say on >/dev/null 2>&1
   launch "$LAUNCH"
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }

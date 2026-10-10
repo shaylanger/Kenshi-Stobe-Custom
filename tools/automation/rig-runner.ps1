@@ -44,7 +44,7 @@ param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [swit
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
-foreach ($d in $rd, "$qd\5090", "$qd\4080", "$qd\any", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
+foreach ($d in $rd, "$qd\5090", "$qd\4080", "$qd\any", "$qd\filler", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $distro = 'DwemerAI4Skyrim3'
 function PidAlive([string]$r) { $f = Join-Path $rd "$r.pid"; if (Test-Path $f) { $p = [int](Get-Content $f -Raw); return [bool](Get-Process -Id $p -ErrorAction SilentlyContinue) } $false }
 
@@ -122,7 +122,19 @@ function NoDryRows([string]$path) {
     @(Get-Content $path | Where-Object { $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)' } | ForEach-Object {
         $null = $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)'; $Matches[1].TrimEnd(':') -split '[/,]' | Where-Object { $_ } })
 }
-function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\)
+# FILLER (Shay 2026-10-10: rigs must never sit idle): queue\filler\ is a shared rotating regression backlog, used only when
+# queue\<rig>\ and queue\any\ are empty (checked between lists, never preempts); oldest first (LastWriteTime); a filler list
+# that finishes goes back to the END of queue\filler\ (touched), its result to queue\done\; a dryrun FAIL drops it (failed\).
+function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\, then filler\ if both empty)
+    $real = @(RealLists); if ($real.Count) { return $real }
+    foreach ($f in @(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime, Name)) {
+        $want = Header $f.FullName 'rig'
+        if ($want -and $want -ne $Rig) { continue }
+        if ($Rig -eq '4080' -and (StobeRows $f.FullName)) { continue }
+        $f
+    }
+}
+function RealLists {
     foreach ($src in "$qd\$Rig", "$qd\any") {
         foreach ($f in @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
             if ($src -like '*\any') {
@@ -242,10 +254,12 @@ function PreDryNext {
 
 # ---------------------------------------------------------------- start a batch
 function Start-Batch($f) {
-    $name = $f.Name; $run = Join-Path "$qd\running" "${Rig}__$name"
+    $name = $f.Name; $filler = $f.DirectoryName -like '*\filler'
+    $run = Join-Path "$qd\running" "${Rig}__$(if ($filler) { 'filler__' })$name"
     try { Move-Item -LiteralPath $f.FullName $run -ErrorAction Stop } catch { Log "could not take $name (another runner?)"; return $false }
     $own = Header $run 'owner'; if (-not $own) { $own = 'coordinator' }
     $outN = Header $run 'out'; if (-not $outN) { $outN = "$($f.BaseName)-$(Get-Date -Format 'MMdd-HHmm')" }
+    if ($filler) { $outN = "$outN-$(Get-Date -Format 'MMdd-HHmm')"; Log "FILLER $name (queue\$Rig\ and any\ empty) owner=$own" }
     $outN = $outN -replace '[^A-Za-z0-9_.-]', '_'
     $launch = Header $run 'launch'
     if (-not $launch) { $s = (((Rows $run | Select-Object -First 1) -split '\|')[1]); if ($s) { $launch = $s.Trim() } }
@@ -294,7 +308,14 @@ function Start-Batch($f) {
         $lk = Join-Path $runs 'game.lock'
         if (Test-Path $lk) { $h = (Get-Content $lk -TotalCount 1).Trim(); if ($h -ne $owner5) { Log "lock taken over from $h"; Note $h "the 5090 was idle >= $IdleMin min: rig-runner took the game lock over (now $owner5). Queue your next batches as list files in queue\5090\ instead of launching yourself." } }
         Set-Content $lk @($owner5, (Get-Date -Format s)) -Encoding utf8
-        if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
+        # no relaunch gap (2026-10-10): the previous batch leaves Kenshi up (no --stop); stop it only for a DLL install,
+        # else run-batch.sh --reuse loads the save in place
+        $hd = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll'
+        $hInst = $needH -and (Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH
+        if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) {
+            if ($inst -or $hInst) { Log "stop Kenshi for the install (KenshiFP $inst$(if ($hInst) { ", Harness $needH" }))"; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
+            else { Log "REUSE $name : Kenshi stays up, $launch loads in place (no DLL install needed)" }
+        }
         if ($inst) {
             $o = & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\install-dll.ps1" KenshiFP -Staged -Hash $inst 2>&1 | ForEach-Object { "$_" }
             Log "install KenshiFP $inst : $($o -join ' / ')"
@@ -309,7 +330,7 @@ function Start-Batch($f) {
             }
         }
         Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
-        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 WSLENV=KAH_OWNER`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --stop --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
+        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 WSLENV=KAH_OWNER`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --reuse --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
         [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
         Set-Content (Join-Path $runs 'inflight\runner-5090') $outP
         Wsl @('bash', "$outP/.start.sh") | Out-Null
@@ -382,7 +403,10 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     $nf = @($sum | Where-Object { $_ -match '^RESULT \S+ FAIL' }).Count; $np = @($sum | Where-Object { $_ -match '^RESULT \S+ PASS' }).Count
     $where = if ($Rig -eq '4080' -and -not $Fake) { "4080:C:\KenshiTestRuns\$(Split-Path $outP -Leaf)" } else { $outW }
     $dest = if ($how -eq 'DONE') { "$qd\done" } else { "$qd\failed" }
-    Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue
+    if ((Split-Path $run -Leaf) -like '*__filler__*' -and $how -eq 'DONE') {   # rotate: back to the end of the filler queue
+        $back = Join-Path "$qd\filler" $name; Move-Item -LiteralPath $run $back -Force -ErrorAction SilentlyContinue
+        (Get-Item -LiteralPath $back -ErrorAction SilentlyContinue).LastWriteTime = Get-Date; Log "FILLER $name back to the end of queue\filler\"
+    } else { Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue }
     Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL$(if ($Why) { " why=$Why" })")
     Remove-Item $file -ErrorAction SilentlyContinue
     Log "$how $name pass=$np fail=$nf out=$where$(if ($Why) { " ($Why)" })"
@@ -472,6 +496,13 @@ while ($true) {
                         Note $c[3] "row $($p.step) of $($c[5]) left the game idle >= $StuckMin min during its offline analysis: add pf_game_done (take-preflight.sh) after the recording/game evidence in that script."
                     }
                 } else { $anaSince = $null }
+                # instant setup-FAIL streak = idle (Shay 2026-10-10): >= 3 rows in a row FAILed setup < 90 s apart: ALERT + notes once per batch
+                if ($p.setupstreak -match '^\d+$' -and [int]$p.setupstreak -ge 3 -and -not $anaWarned["$($c[5])/setup"]) {
+                    $anaWarned["$($c[5])/setup"] = 1
+                    Alert "$($c[5]): $($p.setupstreak) rows in a row FAILed setup within seconds: the rig is effectively idle. Fix the setup or pull the list."
+                    Note $c[3] "$($c[5]) on ${Rig}: $($p.setupstreak) rows in a row FAILed setup within seconds (counts as idle). Check the RESULT lines and fix the setup / requeue."
+                    Note 'coordinator' "$($c[5]) on ${Rig} (owner $($c[3])): $($p.setupstreak) instant setup FAILs in a row: the rig is effectively idle."
+                }
                 # game idle between rows (Shay 2026-10-10: no rig idle > 2 min): Kenshi up, no row running, out dir still for
                 # >= StuckMin: ALERT + note once per gap (no kill: run-batch.sh may be doing excerpts/waits; stuck rules still apply)
                 if ($p.kenshi -eq '1' -and $p.launched -eq '1' -and $p.step -eq '-' -and [int]$p.age -ge $StuckMin * 60) {
@@ -535,8 +566,11 @@ while ($true) {
                     $alerted = $true
                     if ($Rig -eq '4080' -and -not $Fake -and $s -like 'IDLE kenshi=no*') { Ssh4Ps 'C:\KAH\kcfg.ps1' @('play') | Out-Null }
                     # give the 5090 lock back when the runner has nothing to do (it takes it again with the next list)
-                    if ($Rig -eq '5090' -and -not $Fake -and -not (Get-Process kenshi_x64 -ErrorAction SilentlyContinue)) {
-                        $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) { Remove-Item $lk; Log 'lock released (queue empty)' } }
+                    if ($Rig -eq '5090' -and -not $Fake) {
+                        $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) {
+                            # batches no longer --stop: close the game the runner left up, then release
+                            if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null; Log 'Kenshi stopped (queue empty)' }
+                            Remove-Item $lk; Log 'lock released (queue empty)' } }
                 }
             }
         }
