@@ -79,6 +79,9 @@ for line in open(sys.argv[1]):
         if len(x)>=7: r['zf']=float(x[3]); r['hd']=V(x[4]); r['nk']=V(x[5]); r['sp']=V(x[6])
     F.append(r)
 WBM=float(os.environ.get('WB_MAX','30'))
+# Shay 2026-10-10: frames that play the NATIVE animation (viewmodel weight w*zf <= 0.05 = the game's own pose, or an NA1
+# native-retarget frame, rec field na=1) are exempt from the wrist-bend limit; it holds for solver-posed frames only.
+def native(r): return r['w']*r.get('zf',1.0)<=0.05 or r.get('na')==1
 # ---- zo: the zoomed-out view (PT29, fp_camera distance >= ZO_MIN) must show a person holding the weapon (native third-
 # person animation, viewmodel faded out). Per frame, from the recorded bones (camera numbers, unzoomed eye) and the
 # zoomed camera (eye - fw*zoom): zf<=0.05 (viewmodel off); right wrist + grip >= HD_MIN (2.0 dm; the bug was 1.0, the native
@@ -123,9 +126,9 @@ if sys.argv[2]=='zo':
             prev=s_ if ok_ else None
         elb=dot(sub(Rel,Rsh),upw); wind=r['st']=='swinging' and r['prog']<0.5
         mn['hd']=min(mn['hd'],hd) if r['st']!='aiming' else mn['hd']; mn['tor']=min(mn['tor'],tor); mn['vis']=min(mn['vis'],vis); mn['npt']=min(mn['npt'],npt)
-        mx['zf']=max(mx['zf'],r['zf']); mx['wb']=max(mx['wb'],r['wb'] or 0); mx['elb']=max(mx['elb'],elb if not wind else -99)
+        mx['zf']=max(mx['zf'],r['zf']); mx['wb']=max(mx['wb'],(r['wb'] or 0) if not native(r) else 0); mx['elb']=max(mx['elb'],elb if not wind else -99)
         for k,c in (('zf',r['zf']>0.05),('head',hd<HDM and r['st']!='aiming'),('torso',tor<TORM),('vis',vis<VISM if r['zf']>0.05 else npt<5),
-                    ('wrist',r['cls']==0 and (r['wb'] or 0)>WBM),('elbow',elb>0.5 and not wind)):
+                    ('wrist',r['cls']==0 and (r['wb'] or 0)>WBM and not native(r)),('elbow',elb>0.5 and not wind)):
             if c: bad.setdefault(k,[]).append('%d:%s'%(i,r['st']))
     N=len(Z); fails={k:v for k,v in bad.items() if len(v)>0.03*N}
     ok=N>=30 and not fails
@@ -239,7 +242,7 @@ if _req and _rd:
 elif _req: moves.append('ready:MISSING'); ok=False
 # wrist (PT17): angle between the weapon forearm (elbow->wrist) and the hand bone X axis on every on-screen sword frame of
 # the viewmodel (w>=0.99) <= WB_MAX (30 deg: a neutral grip wrist; 0750f26a folded it to ~100 deg in the strike)
-W0=[(r['wb'],i,r['st']) for i,r in enumerate(F) if r['wb'] is not None and r['vis'] and r['w']>=0.99 and r['wih']]
+W0=[(r['wb'],i,r['st']) for i,r in enumerate(F) if r['wb'] is not None and r['vis'] and r['w']>=0.99 and r['wih'] and not native(r)]
 WS=[x for x in W0 if F[x[1]]['cls']==0]; WX=[x for x in W0 if F[x[1]]['cls']==1]
 wbm=max(WS) if WS else None; wbsw=max([x[0] for x in WS if F[x[1]]['sw']] or [-1]); wbx=max(WX)[0] if WX else -1
 if wbm and wbm[0]>WBM: ok=False
