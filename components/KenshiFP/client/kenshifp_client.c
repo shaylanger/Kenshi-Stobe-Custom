@@ -3421,6 +3421,7 @@ static int ini_int(const char *line, const char *key, int *out);
 static int ini_float(const char *line, const char *key, float *out);
 #include "kfp_viewmodel.inc" /* PT13/14/17: weapon-in-view arm raise */
 
+static void fp_head_visibility(void *gw);   /* Z1 band hide before vm_frame */
 static void fp_camera_override(void *gw)
 {
     if (!g_ogre_ready) return;
@@ -4502,6 +4503,8 @@ static void fp_camera_override(void *gw)
         }
         g_node_set_dori(node, &q);
         g_last_ori = q; g_have_eye = 1;    /* mid-frame re-assert now armed */
+        /* Z1: band entered/left by this frame's fp_view_apply -> hide before the viewmodel solves/records it */
+        if (fp_view_band() != g_gear_all) fp_head_visibility(gw);
         vm_frame(g_fp_control_actor, g_fp_control_actor ? fp_body_down(g_fp_control_actor) : 1);
 
         /* FOV: capture default once, then force the FP FOV each frame. */
