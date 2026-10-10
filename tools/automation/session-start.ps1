@@ -35,18 +35,25 @@ foreach ($a in $ag) {
     Get-Content -LiteralPath $a.FullName | Select-Object -First 12
 }
 
-'=== rig watchdog (rig-watchdog.ps1: auto-starts queue run: lines when a rig is idle >= 2 min) ==='
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-watchdog.ps1') -Ensure
+'=== rig runners (rig-runner.ps1: one daemon per rig runs the queue\<rig>\ and queue\any\ list files; ALERT on idle/stuck) ==='
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Ensure
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Status
 Get-ChildItem 'C:\KenshiTestRuns' -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }
 '=== in flight ==='
 $k = if (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue) { 'running' } else { 'closed' }
 $lock = if (Test-Path -LiteralPath (Join-Path $runs 'game.lock')) { (Get-Content -Raw -LiteralPath (Join-Path $runs 'game.lock')).Trim() } else { 'free' }
 "kenshi: $k | game.lock: $lock"
-# Ready queue per rig (Shay 2026-10-10): the next batch for each rig, written before the current one ends
+# Ready queue per rig (Shay 2026-10-10): the next batch lists for each rig, queued before the current one ends
+foreach ($rig in '5090', '4080', 'any', 'running') {
+    $l = @(Get-ChildItem -LiteralPath (Join-Path $runs "queue\$rig") -Filter '*.list' -File -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object Name)
+    "queue\${rig}: $(if ($l.Count) { $l -join ', ' } else { 'empty' })"
+}
 foreach ($rig in '5090', '4080') {
     $q = Join-Path $runs "queue\$rig.next"
-    if (Test-Path -LiteralPath $q) { "queue $rig (since $(Get-Date (Get-Item -LiteralPath $q).LastWriteTime -Format 'MM-dd HH:mm')): $(((Get-Content -LiteralPath $q) -join ' / '))" } else { "queue ${rig}: MISSING (write it before the current batch ends)" }
+    if (Test-Path -LiteralPath $q) { "queue\$rig.next (old note file, since $(Get-Date (Get-Item -LiteralPath $q).LastWriteTime -Format 'MM-dd HH:mm')): $(((Get-Content -LiteralPath $q -TotalCount 3) -join ' / '))" }
 }
+$dn = @(Get-ChildItem -LiteralPath (Join-Path $runs 'queue\done'), (Join-Path $runs 'queue\failed') -Filter '*.result' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 5)
+foreach ($d in $dn) { "result $($d.Name): $(Get-Content -LiteralPath $d.FullName -TotalCount 1)" }
 $inf = @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue)
 if (-not $inf.Count) { 'inflight markers: none' }
 foreach ($m in $inf) {

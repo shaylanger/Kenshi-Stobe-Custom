@@ -123,16 +123,16 @@ if (-not $kenshi -and -not $lock) {
     }
 }
 
-# --- watchdog alerts (rig-watchdog.ps1: a rig idle/paused >= 2 min and no queue run: line to start) ---
+# --- rig-runner alerts (rig-runner.ps1: a rig idle >= 2 min with an empty queue, a stuck/killed row, a dead batch) ---
 $alerts = @(Get-ChildItem -LiteralPath $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw).Trim() })
-if ($alerts.Count) { Block-Stop ('kenshi-waker-guard: ' + ($alerts -join ' | ') + ' Shay''s rule (2026-10-10): no rig idle or paused > 2 min. Start the next batch on that rig now (or have its owner do it) and keep a run: line in its queue file.') }
+if ($alerts.Count) { Block-Stop ('kenshi-waker-guard: ' + ($alerts -join ' | ') + ' Shay''s rule (2026-10-10): no rig idle or paused > 2 min. The rig runners (rig-runner.ps1 -Status) run whatever list files are in C:\KenshiTestRuns\queue\<rig>\ or queue\any\: put the next batch list there now (or record kenshi-ctl.ps1 idle/idle4080 "<reason>"); for a stuck/dead batch read the owner note and the batch SUMMARY. The ALERT clears itself once the rig works again.') }
 
 # --- 5090 game slot idle while Kenshi is open / the lock is held? (Shay 2026-10-10: op-b4 had written DONE, the
 # marker still pointed at it, and everything read BUSY for 5 min) ---
 if ($kenshi -or $lock) {
     $g = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\rig5090-state.ps1') | Select-Object -First 1) -as [string]
     if ($g -like 'IDLE-GAME*') {
-        Block-Stop ('kenshi-waker-guard: the 5090 game slot is idle: ' + $g + '. Have the lock owner start its next batch (queue\5090.next) and replace its inflight marker with the new out dir, or record a reason with kenshi-ctl.ps1 idle "<reason>".')
+        Block-Stop ('kenshi-waker-guard: the 5090 game slot is idle: ' + $g + '. Queue the next list in C:\KenshiTestRuns\queue\5090\ (rig-runner.ps1 starts it within 2 min and takes the lock over), or record a reason with kenshi-ctl.ps1 idle "<reason>".')
     }
 }
 
@@ -143,17 +143,20 @@ if ($r4 -like 'IDLE kenshi=no*' -or $r4 -like 'IDLE-GAME*') {
 }
 
 # --- ready queue per rig (Shay 2026-10-10: a rig must go straight on to its next job, not wait for planning) ---
-# C:\KenshiTestRuns\queue\<rig>.next = the NEXT batch for that rig, written while the current one runs: line 1 = owner,
-# then the run-batch.sh list path or the job steps; or one line "none: <reason>". Must be < 6 h old. Delete/replace it
-# the moment that batch starts (and write the one after).
+# Since rig-runner.ps1 (2026-10-10): a ready batch = a *.list file in C:\KenshiTestRuns\queue\<rig>\ or queue\any\ (the
+# rig's runner takes it the moment the current batch ends). Nothing queued: queue\<rig>.next whose FIRST line is
+# "none: <reason>" (< 6 h old) records why.
 $qdir = Join-Path $runs 'queue'
 $miss = @()
+$anyN = @(Get-ChildItem -LiteralPath (Join-Path $qdir 'any') -Filter '*.list' -File -ErrorAction SilentlyContinue).Count
 foreach ($rig in '5090', '4080') {
+    if ($anyN -or @(Get-ChildItem -LiteralPath (Join-Path $qdir $rig) -Filter '*.list' -File -ErrorAction SilentlyContinue).Count) { continue }
     $q = Join-Path $qdir "$rig.next"
-    if (-not ((Test-Path -LiteralPath $q) -and (Get-Item -LiteralPath $q).Length -gt 0 -and (Get-Item -LiteralPath $q).LastWriteTime -gt (Get-Date).AddHours(-6))) { $miss += $rig }
+    if ((Test-Path -LiteralPath $q) -and (Get-Item -LiteralPath $q).LastWriteTime -gt (Get-Date).AddHours(-6) -and ((Get-Content -LiteralPath $q -TotalCount 1) -as [string]) -match '^\s*none:') { continue }
+    $miss += $rig
 }
 if ($miss.Count) {
-    Block-Stop ('kenshi-waker-guard: no ready queue for rig(s) ' + ($miss -join ', ') + '. Shay''s rule (2026-10-10): the next batch for each rig is written BEFORE the current one ends, so the rig goes straight on. Write C:\KenshiTestRuns\queue\<rig>.next (line 1 owner, then the run-batch list path / job steps), or one line "none: <reason>" if there is truly nothing; it must be < 6 h old.')
+    Block-Stop ('kenshi-waker-guard: no ready batch queued for rig(s) ' + ($miss -join ', ') + '. Shay''s rule (2026-10-10): the next batch for each rig is queued BEFORE the current one ends, so the rig runner goes straight on. Put the next run-batch.sh list file into C:\KenshiTestRuns\queue\<rig>\ (or queue\any\ for work either rig can do; header comments: owner/launch/needs, see rig-runner.ps1), or write C:\KenshiTestRuns\queue\<rig>.next with first line "none: <reason>" if there is truly nothing (< 6 h old).')
 }
 
 # --- test leftovers (Shay 2026-10-10: "stuff ... is left around and never cleaned up; we need it cleaned or it will never go away") ---

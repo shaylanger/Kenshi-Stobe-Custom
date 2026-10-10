@@ -60,5 +60,5 @@ if ($last -and $last -gt $now.AddMinutes(-$GraceMin)) { "BUSY between batches (l
 if ($reason) { "IDLE-OK $reason"; exit 0 }
 $k = if ($kenshiP) { 'kenshi=yes' } else { 'kenshi=no' }
 $ago = if ($last) { [int]($now - $last).TotalMinutes } else { -1 }
-"IDLE-GAME $k lock=$owner no batch running for ${ago} min ($($done -join ' ')): launch queue\5090.next or record kenshi-ctl.ps1 idle `"<reason>`""
+"IDLE-GAME $k lock=$owner no batch running for ${ago} min ($($done -join ' ')): queue a list in queue\5090\ (rig-runner.ps1 starts it) or record kenshi-ctl.ps1 idle `"<reason>`""
 exit 0

@@ -35,7 +35,7 @@ if (-not $Fresh -and (Test-Path -LiteralPath $cache) -and (Get-Item -LiteralPath
     $k = if ($LASTEXITCODE -ne 0 -or -not $out) { 'UNREACHABLE' } elseif ($out -match 'kenshi_x64') { 'BUSY kenshi=yes' } else { 'IDLE kenshi=no' }
     Set-Content -LiteralPath $cache -Value $k -Encoding ascii
 }
-if ($allDone -and $k -like 'BUSY kenshi=yes*') { $k = "IDLE-GAME kenshi=yes all marker jobs DONE ($($mk -join ',')): start the next 4080 batch (queue\4080.next)" }
+if ($allDone -and $k -like 'BUSY kenshi=yes*') { $k = "IDLE-GAME kenshi=yes all marker jobs DONE ($($mk -join ',')): queue a list in queue\4080\ (rig-runner.ps1 starts it)" }
 if ($k -like 'IDLE*') {
     $f = Join-Path $runs 'rig4080.idle'
     if ((Test-Path -LiteralPath $f) -and (Get-Item -LiteralPath $f).LastWriteTime -gt (Get-Date).AddMinutes(-60)) {

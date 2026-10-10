@@ -9,7 +9,7 @@
 # Markers: touch C:\KenshiTestRuns\inflight\<name> when starting a subagent / rig job / detached batch; delete when done.
 set -u
 R=/mnt/c/KenshiTestRuns; [ -d "$R" ] || R=/c/KenshiTestRuns
-# Watchdog alerts (rig-watchdog.ps1: a rig idle/paused >= 2 min with no queue run: line) come first
+# Rig-runner alerts (rig-runner.ps1: a rig idle >= 2 min with an empty queue, a stuck/killed row, a dead batch) come first
 for a in "$R"/ALERT-*.txt; do [ -f "$a" ] && { tr -d '\r' < "$a"; al=1; }; done; [ -n "${al:-}" ] && exit 1
 if tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then k=yes; else k=no; fi
 lock=free; [ -f "$R/game.lock" ] && lock=$(head -1 "$R/game.lock" | tr -d '\r')
