@@ -203,6 +203,7 @@ REC_CHECKS = {
 VID_CHECKS = {
     'cursor': lambda p: verdict_word(run(['python3', os.path.join(L, 'frames.py'), 'cursor', p, '--name', 'mut']), 'RESULT '),
     'openground': lambda p: verdict_word(run(['python3', os.path.join(L, 'frames.py'), 'openground', p, '--name', 'mut']), 'RESULT '),
+    'overlay': lambda p: verdict_word(run(['python3', os.path.join(L, 'frames.py'), 'overlay', p, '--name', 'mut']), 'RESULT '),
 }
 
 
@@ -222,7 +223,7 @@ MUTS = [
     ('vid-cursor-overlay', 'vid', 'takes/videos/anim-sword-e6.mp4', v_cursor, ['cursor']),
     ('vid-dark-night', 'vid', 'takes/videos/anim-sword-e6.mp4', v_dark, ['openground']),
     ('vid-black-frames', 'vid', 'takes/videos/anim-sword-e6.mp4', v_black, 'ALL'),
-    ('vid-popup-overlay', 'vid', 'takes/videos/anim-sword-e6.mp4', v_popup, 'ALL'),
+    ('vid-popup-overlay', 'vid', 'kept/kfx-b2_e6_e6fix.mp4', v_popup, ['overlay']),   # anim-sword-e6 shows NPC chatter text
     ('take-label-state-mismatch', 'take', 'takes/ok-e6fix', t_label, ['takecheck']),
     ('take-video-past-end', 'take', 'takes/ok-e6fix', t_end, ['takecheck']),
     ('take-bystander', 'take', 'takes/ok-e6fix', t_near, ['takecheck']),
@@ -244,6 +245,8 @@ def main():
     for mid, kind, base, edit, checks in MUTS:
         if only and mid not in only: continue
         src = os.path.join(a.work, base)
+        if not os.path.exists(src):   # corpus files the regress sync does not copy (kept/...): read them in place
+            src = os.path.join(CORPUS, base)
         if not os.path.exists(src):
             res[mid] = 'BASEFAIL'; print('MUT %s BASEFAIL - base %s missing' % (mid, base)); continue
         if kind == 'rec':

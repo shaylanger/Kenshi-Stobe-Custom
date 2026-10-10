@@ -60,8 +60,8 @@ t54	rec/vmrec-q-crossbow-z25.txt	R14	accept	coord		X7 removed as accepted (26c67
 t55	takes/videos/sword-z25-block.mp4	R15	reject	coord	checks=openground	slope fills the frame 0-17.5 s (Misses open ground)
 t56	takes/videos/sword-z25-block.mp4	R15	reject	coord	checks=cursor	cursor parked in frame the whole take (Misses cursor row)
 t57	takes/videos/sword-z25-block-f36.mp4	R15	reject	shay	checks=cursor	Shay ticket A: cursor at ~7 s, 12-16 s, 35-36 s
-t58	takes/videos/turret-fp.mp4	R15	accept	coord		T6 coordinator-reviewed 1 fps + 5 fps
-t59	takes/videos/anim-sword-e6.mp4	R15	accept	coord		E6 video coordinator-reviewed (open ground)
+t58	takes/videos/turret-fp.mp4	R15	accept	coord	checks=openground,cursor	T6 coordinator-reviewed 1 fps + 5 fps
+t59	takes/videos/anim-sword-e6.mp4	R15	accept	coord	checks=openground,cursor	E6 video coordinator-reviewed (open ground)
 t60	takes/videos/anim-xbow-z25.mp4	R15	accept	coord	checks=openground	X7 accepted
 t61	takes/videos/anim-xbow-z25.mp4	R15	superseded	coord	checks=cursor	accepted before Shay's cursor rule (ticket A, 2026-10-10); lab FAILS cursor 0-6.6 s
 t62	rec/e6-anim.txt	R17	superseded	coord	pre=--only-stroke 2;checks=blade.snap,blade.seen	superseded by native rule R17 (coordinator reject 10-10 predates native reference; stroke 2 refit passes anyway); was: Misses E6 stroke 2 wind-up snap + end-on frame
@@ -74,3 +74,7 @@ t68	takes/t6old	R20	reject	coord	vlen=53.00	T6 turret-fp combat/bystanders, labe
 t69	takes/t6rev	R20	reject	coord	vlen=59.00	T6 refilm "crossbow back" while holstered, video 7.5 s past the end
 t70	-	U12	rule	shay		Shay 2026-10-10: half-open hand accepted, no fist-closed check (decision; no recording to score)
 t71	-	U17	rule	shay		Shay 2026-10-10: palm-heel -> straight-wrist punch, wrist <= 30; native palm strike not kept (scored once a native palm-strike candidate exists: reject exemplar)
+t80	takes/videos/turret-fp.mp4	R15	reject	coord	checks=overlay	coordinator overlay ticket 2026-10-10: NPC speech bars 0-0.5/9-10/21-27/46-53 s, Tassilo name tag, damage numbers
+t81	takes/videos/sword-z25-block-f36.mp4	R15	reject	coord	checks=overlay	[Malzin] name tag over the scene 12.5-13.5 / 33-35.5 s (maintainer review 2026-10-10, overlay class)
+t82	kept/kfx-b2_e6_e6fix.mp4	R15	accept	coord	checks=overlay	E6 e6fix take: no speech/tags/popups (maintainer review 2026-10-10)
+t83	takes/videos/anim-sword-e6.mp4	R15	superseded	coord	checks=overlay	accepted before the overlay rule; lab FAILS overlay (NPC chatter line top-left 0-5.5 s)

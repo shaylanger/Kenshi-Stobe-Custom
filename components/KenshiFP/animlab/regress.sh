@@ -396,5 +396,17 @@ if [ -f "/mnt/d/Steam/steamapps/common/Kenshi/data/character/meshes/male_skeleto
   r=$(cd "$W" && python3 "$L/native.py" fists --config "$NC" "ma chudan" --adapter "$BLD/kfpvm_drive_cur" --body vmrec-q-sword-z0-a.txt --body-frame 100 --out /tmp/al-p4fist --no-video 2>&1 | grep "^RESULT")
   case "$r" in "RESULT fist-ma_chudan "*) [ -s /tmp/al-p4fist/fist_keys.inc ] && ok "native fists (info): ${r:0:160}" || bad "native fists: no key tables";; *) bad "native fists: $r";; esac
 else echo "REGRESS INFO native: game install missing"; fi
+# 31. CLASS foreign overlay (Misses 2026-10-10 "foreign overlay", class of the cursor miss): nothing drawn over the scene but
+#     the take's own label/HUD. harness frames.py overlay (text lines: outlined name tags / damage numbers and text on flat
+#     dark panels; flat UI panels with straight edges; baseline = the take's own HUD, zones = centred label band + bottom UI)
+#     must FAIL turret-fp.mp4 (NPC speech bars 0-0.5 / 9 / 46-53 s), sword-z25-block-f36.mp4 ([Malzin] name tag 12.5-13.5 s)
+#     and PASS kfx-b2 e6fix.mp4 (clean take); takecheck.py runs it on every --video take.
+for f in turret-fp sword-z25-block-f36; do [ -f "$TV/$f.mp4" ] || { echo "REGRESS INFO overlay: $f.mp4 missing"; continue; }
+  r=$(python3 "$L/frames.py" overlay "$TV/$f.mp4" --name $f)
+  case "$f:$r" in turret-fp:*"FAIL overlay"*"text-panel"*"46."*|sword-z25-block-f36:*"FAIL overlay"*"12.5-13.5s(text"*) ok "overlay miss: ${r:0:170}";; *) bad "overlay miss: $r";; esac; done
+E6V=$W/kept/kfx-b2_e6_e6fix.mp4; [ -f "$E6V" ] || E6V=$CORPUS/kept/kfx-b2_e6_e6fix.mp4   # corpus sync skips kept/
+if [ -f "$E6V" ]; then r=$(python3 "$L/frames.py" overlay "$E6V" --name e6fix)
+  case "$r" in *"PASS overlay"*) ok "no-overlay video $r";; *) bad "no-overlay video $r";; esac
+else echo "REGRESS INFO overlay: kept/kfx-b2_e6_e6fix.mp4 missing"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail

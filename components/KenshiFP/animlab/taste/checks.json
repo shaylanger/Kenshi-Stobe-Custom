@@ -28,6 +28,7 @@
   "vmcheck.zo":   {"cmd": "python3 {V} {rec} zo", "line": "^ok=", "fail": "^ok=0"},
   "openground":   {"cmd": "python3 {L}/frames.py openground {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
   "cursor":       {"cmd": "python3 {L}/frames.py cursor {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
+  "overlay":      {"cmd": "python3 {L}/frames.py overlay {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
   "takecheck":    {"cmd": "python3 {L}/takecheck.py --labels {rec}/labels.txt --ev {rec}/ev.txt --rules {TR} --video-len {vlen} --name t", "line": "^RESULT ", "fail": " FAIL"}
  }
 }
