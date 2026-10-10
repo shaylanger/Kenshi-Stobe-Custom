@@ -20,7 +20,8 @@
 #  PT27  sword block: blade horizontal across the view (|mf.x|>=0.85, |mf.y|<=0.2) zoomed in and out
 #  PT26  sword swing: frozen frame sequence sw_pose 0.1..0.9 (screens + targets) and NSW (3) physical LMB swings:
 #        each "[vm] swing" line u_end=1, frames>=8, readable phases from the [vmsw] lines (wind-up 15-50% of the frames,
-#        strike mean blade speed >= 2x the wind-up; frame jumps = recorder vmcheck below; ratio only reported),
+#        strike mean blade speed >= 1.2x the wind-up (Shay 2026-10-10 spec-videos: current swings accepted; their
+#        strike/wind-up ratio is 1.23-2.2 in the log measure, 1.58-2.7 on accepted f28/f23 recs; was 2x); frame jumps = recorder vmcheck below; ratio only reported),
 #        grip rises to elev>=0 (wind-up in view) and crosses to az<=-5 from az>=20, highest frame before the
 #        leftmost ([vmsw] per-frame log) = top-right -> bottom-left; plus one LMB swing recorded every frame
 #        (fp_vm rec): no frame-to-frame jump on screen (vmcheck swing mode, see PT30)
@@ -84,6 +85,10 @@ WBM=float(os.environ.get('WB_MAX','30'))
 # Shay 2026-10-10: frames that play the NATIVE animation (viewmodel weight w*zf <= 0.05 = the game's own pose, or an NA1
 # native-retarget frame, rec field na=1) are exempt from the wrist-bend limit; it holds for solver-posed frames only.
 def native(r): return r['w']*r.get('zf',1.0)<=0.05 or r.get('na')==1
+# Shay 2026-10-10 spec-videos: the current sword swing wrist (~36-41 deg) is accepted: swing frames are held to WB_SWING
+# (50, = lab R8 swing limit, arc.wb); ready/guard/other frames keep WB_MAX (30).
+WBS=float(os.environ.get('WB_SWING','50'))
+def wblim(r): return WBS if r.get('sw') else WBM
 # ---- zo: the zoomed-out view (PT29, fp_camera distance >= ZO_MIN) must show a person holding the weapon (native third-
 # person animation, viewmodel faded out). Per frame, from the recorded bones (camera numbers, unzoomed eye) and the
 # zoomed camera (eye - fw*zoom): zf<=0.05 (viewmodel off); right wrist + grip >= HD_MIN (2.0 dm; the bug was 1.0, the native
@@ -130,7 +135,7 @@ if sys.argv[2]=='zo':
         mn['hd']=min(mn['hd'],hd) if r['st']!='aiming' else mn['hd']; mn['tor']=min(mn['tor'],tor); mn['vis']=min(mn['vis'],vis); mn['npt']=min(mn['npt'],npt)
         mx['zf']=max(mx['zf'],r['zf']); mx['wb']=max(mx['wb'],(r['wb'] or 0) if not native(r) else 0); mx['elb']=max(mx['elb'],elb if not wind else -99)
         for k,c in (('zf',r['zf']>0.05),('head',hd<HDM and r['st']!='aiming'),('torso',tor<TORM),('vis',vis<VISM if r['zf']>0.05 else npt<5),
-                    ('wrist',r['cls']==0 and (r['wb'] or 0)>WBM and not native(r)),('elbow',elb>0.5 and not wind)):
+                    ('wrist',r['cls']==0 and (r['wb'] or 0)>wblim(r) and not native(r)),('elbow',elb>0.5 and not wind)):
             if c: bad.setdefault(k,[]).append('%d:%s'%(i,r['st']))
     N=len(Z); fails={k:v for k,v in bad.items() if len(v)>0.03*N}
     ok=N>=30 and not fails
@@ -247,8 +252,9 @@ elif _req: moves.append('ready:MISSING'); ok=False
 W0=[(r['wb'],i,r['st']) for i,r in enumerate(F) if r['wb'] is not None and r['vis'] and r['w']>=0.99 and r['wih'] and not native(r)]
 WS=[x for x in W0 if F[x[1]]['cls']==0]; WX=[x for x in W0 if F[x[1]]['cls']==1]
 wbm=max(WS) if WS else None; wbsw=max([x[0] for x in WS if F[x[1]]['sw']] or [-1]); wbx=max(WX)[0] if WX else -1
-if wbm and wbm[0]>WBM: ok=False
-wtxt=(' wb_max=%.1f@%d:%s wb_swing=%.1f wb_xbow=%.1f wb_lim=%.0f'%(wbm[0],wbm[1],wbm[2],wbsw,wbx,WBM)) if wbm else (' wb_xbow=%.1f'%wbx if WX else ' wb=na')
+wbh=max([x for x in WS if not F[x[1]]['sw']] or [None]); wbm=wbh   # held (non-swing) frames vs WB_MAX
+if (wbh and wbh[0]>WBM) or wbsw>WBS: ok=False
+wtxt=(' wb_max=%.1f@%d:%s wb_swing=%.1f wb_xbow=%.1f wb_lim=%.0f/%.0f'%(wbm[0],wbm[1],wbm[2],wbsw,wbx,WBM,WBS)) if wbm else ((' wb_swing=%.1f wb_lim=%.0f/%.0f'%(wbsw,WBM,WBS)) if WS else (' wb_xbow=%.1f'%wbx if WX else ' wb=na'))
 fps=1/sorted(r['dt'] for r in F)[N//2]
 print("ok=%d frames=%d vis=%d fps=%.0f cut=%d%s flags=%d%s errmax=%.2f@%s tipd_max=%.2f df_max=%.1f wih=%s%s" % (ok,N,nvis,fps,
       len(cuts),(' ['+' '.join(cuts[:6])+']') if cuts else '',len(flags),
@@ -746,7 +752,7 @@ if want PT27 || want PT26 || want PT29 || want PT30; then
            if(n>1){d=f[1]*p[1]+f[2]*p[2]+f[3]*p[3]; l=sqrt((f[1]^2+f[2]^2+f[3]^2)*(p[1]^2+p[2]^2+p[3]^2)); c=l>0?d/l:1; c=c>1?1:(c<-1?-1:c)
              r[n]=atan2(sqrt(1-c*c),c)*57.29578/(pd>1e-4?pd:1e-4)} pd=g($0,"dt")+0; p[1]=f[1];p[2]=f[2];p[3]=f[3]}
           END{w=0;wn=0;for(i=2;i<=ie;i++){w+=r[i];wn++} s=0;sn=0;for(i=ie+1;i<=ia;i++){s+=r[i];sn++}
-            w=wn?w/wn:0; s=sn?s/sn:0; fr=n?ie/n:0; ok=(n>=8 && fr>=0.15 && fr<=0.5 && s>=2*w && s>0)
+            w=wn?w/wn:0; s=sn?s/sn:0; fr=n?ie/n:0; ok=(n>=8 && fr>=0.15 && fr<=0.5 && s>=1.2*w && s>0)
             printf "%s wind=%.0f strike=%.0f windup=%.0f%%\n", ok?"phases":"BADPHASES", w, s, fr*100}')
         if ! awk -v l="$L" -v rm="$RATIO_MAX" 'BEGIN{
             if(!match(l,/u_end=[0-9.]+/))exit 1; u=substr(l,RSTART+6,RLENGTH-6)+0
