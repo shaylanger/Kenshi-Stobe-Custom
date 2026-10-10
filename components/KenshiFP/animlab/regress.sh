@@ -307,5 +307,14 @@ if [ -f "$TV/sword-z25-block.mp4" ]; then r=$(python3 "$L/frames.py" openground 
 else echo "REGRESS INFO openground: sword-z25-block.mp4 missing"; fi
 for f in anim-sword-e6 anim-xbow-z25; do [ -f "$TV/$f.mp4" ] || continue; r=$(python3 "$L/frames.py" openground "$TV/$f.mp4" --name $f)
   case "$r" in *"PASS openground"*) ok "open-ground video $r";; *) bad "open-ground video $r";; esac; done
+# 25. miss 2026-10-10 sword-z25-block.mp4 orbit 3.0: block guard blade hanging straight down, hilt at the face. `animlab.py
+#     guard` (median blade elevation over block frames >= -60 deg, world frame) PASSES the VMQUICK z25/z0 block recs (35 / 4 deg).
+#     The take had no vm rec: Z25O (a rec of the old hanging guard) must FAIL, Z25F (the fixed guard) must PASS; until they
+#     exist the miss is only covered by the unit test.
+for f in vmrec-q-sword-z25 f28-sword-z0c; do [ -f "$W/$f.txt" ] || continue; r=$(python3 "$L/animlab.py" guard "$W/$f.txt")
+  case "$r" in "guard PASS"*) ok "guard $f: $r";; *) bad "guard $f: $r";; esac; done
+for x in old:FAIL fix:PASS; do g=/mnt/c/KenshiTestRuns/vid/vmrec-z25-block-${x%%:*}.txt; [ -f "$g" ] && cp -n "$g" "$W/"
+  f=$W/vmrec-z25-block-${x%%:*}.txt; [ -f "$f" ] || { echo "REGRESS INFO guard: $(basename "$f") not recorded yet"; continue; }
+  r=$(python3 "$L/animlab.py" guard "$f"); case "$r" in "guard ${x##*:}"*) ok "guard $(basename "$f"): $r";; *) bad "guard $(basename "$f") want ${x##*:}: $r";; esac; done
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
