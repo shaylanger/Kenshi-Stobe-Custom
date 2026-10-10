@@ -69,6 +69,12 @@ take(){   # k sid name type animcls ammo
   cl=$(A fp_vm state | fld class); want=$([ "$ty" = crossbow ] && echo ranged || echo melee)
   case "$cl" in $want|$([ "$ty" = crossbow ] && echo 1 || echo 0)) ;; *) pf_fail "fp_vm class=$cl, want $want ($nm in hand?)";; esac
   [ "$ty" = crossbow ] && pf_loaded
+  # kfp-two-hand builds (state has 2h=): the category KenshiFP read must be the catalog's item class, 2H on exactly for 3/8
+  st2=$(A fp_vm state); if [ "$ty" != crossbow ] && echo "$st2" | grep -q ' 2h='; then
+    wc_=$(python3 -c "import json,sys; print(next((w['cls'] for w in json.load(open(sys.argv[1]))['weapons'] if w['sid']==sys.argv[2]), -1))" "$WCAT" "$sid" 2>/dev/null)
+    c2=$(echo "$st2" | fld cat); h2=$(echo "$st2" | fld 2h); w2=$([ "$wc_" = 3 ] || [ "$wc_" = 8 ] && echo 1 || echo 0)
+    [ "$c2" = "$wc_" ] && [ "$h2" = "$w2" ] || pf_fail "2H state cat=$c2 2h=$h2, catalog class $wc_ wants 2h=$w2"
+  fi
   pf_open 2
   # take
   : > "$N.lab"; FIFO=/tmp/kfp-ws-$$.ffin; rm -f "$FIFO"; mkfifo "$FIFO" || pf_fail "mkfifo"

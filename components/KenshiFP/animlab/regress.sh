@@ -471,5 +471,23 @@ if [ -f "$PT" ] && [ -f "$VMS" ]; then
     r=$(python3 "$L/animlab.py" spike "$p" | tail -1)
     case "$r" in "spike $w "*) ok "spike $(basename $p .txt): ${r:0:140}";; *) bad "spike $(basename $p .txt) (want $w): ${r:0:200}";; esac; done
 else echo "REGRESS INFO pt30: corpus pt30-sword.txt or fp-viewmodel.sh missing"; fi
+# 37. two-handed weapons (kfp-two-hand, Shay 2026-10-10; rules R24-R27): (a) the lab catches the one-handed hold: the corpus
+#     game recording q-sword-z0-a (katana pose, off hand parked) judged with the Plank and Naginata meshes must FAIL twohand;
+#     (b) when the source has the 2H path (g_vm_2hw), every heavy-weapon / polearm representative replayed as the game solves it
+#     (weapon_matrix: --set wcat/wpom/wtip per weapon) must PASS twohand, twosp, near and vis (strict for 2H); arc/seen = INFO.
+WJ=/mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/weapons.json; ZR=$CORPUS/agree/rec/q-sword-z0-a-f059.txt
+if [ -f "$WJ" ] && [ -f "$ZR" ]; then
+  r=$(python3 "$L/animlab.py" weapons --run --weapons-json "$WJ" --recs "$ZR" --only "Plank,Naginata" -o /tmp/al-2h-a 2>&1 | grep '^WEAPON')
+  [ "$(echo "$r" | grep -c 'twohand=FAIL')" = 2 ] && ok "2H one-handed hold caught: twohand FAIL Plank + Naginata (q-sword-z0-a)" \
+    || bad "2H one-handed hold not caught: $(echo "$r" | cut -c1-200 | tr '\n' ';')"
+  if grep -q g_vm_2hw "$BLD/kfpvm_cur.d/client/kfp_viewmodel.inc" 2>/dev/null; then
+    ONLY2=$(python3 -c "import json; print(','.join(w['sid'] for w in json.load(open('$WJ'))['weapons'] if w['cls'] in (3, 8) and w.get('representative') and w.get('mesh_path')))")
+    python3 "$L/animlab.py" weapons --run --weapons-json "$WJ" --adapter "$BLD/kfpvm_cur" --only "$ONLY2" -o /tmp/al-2h-b > /tmp/al-2h-b.txt 2>&1
+    nw=$(grep -c '^WEAPON ' /tmp/al-2h-b.txt); bw=$(grep '^WEAPON ' /tmp/al-2h-b.txt | grep -E 'twohand=FAIL|twosp=FAIL|near=FAIL|vis=FAIL|no-recordings' | awk '{print $2}' | tr '\n' ',')
+    info=$(grep '^WEAPON ' /tmp/al-2h-b.txt | grep -cE 'arc=FAIL|seen=FAIL')
+    [ "$nw" -gt 0 ] && [ -z "$bw" ] && ok "2H weapons hold two-handed: $nw heavy/polearm representatives twohand+twosp+near+vis (arc/seen FAIL on $info: info)" \
+      || bad "2H weapons: $nw judged, failing twohand/twosp/near/vis: ${bw:-none judged}"
+  else echo "REGRESS INFO 2H: the source has no two-hand path (kfp-two-hand not applied)"; fi
+else echo "REGRESS INFO 2H: weapons.json or corpus q-sword-z0-a missing"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
