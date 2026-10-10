@@ -6,8 +6,12 @@ DIR/final-<weapon>-zoom<z>.jpg (row "sword zoom 25" -> final-sword-zoom25.jpg; f
 width). Missing shots become grey tiles."""
 import sys, os, re
 
-def wp(path):   # Windows python under Git Bash (4080 rig): /c/... -> c:/...
-    return re.sub(r'^/([a-zA-Z])/', r':/', path) if os.name == 'nt' else path
+def wp(path):   # any rig path form -> this python's form: Windows python (4080 Git Bash) wants c:/..., WSL python /mnt/c/...
+    m = re.match(r'^(?:/mnt)?/([a-zA-Z])(/.*)?$', path) or re.match(r'^([a-zA-Z]):[/\\](.*)$', path)
+    if not m: return path
+    d, rest = m.group(1).lower(), (m.group(2) or '').replace('\\', '/').lstrip('/')
+    return d + ':/' + rest if os.name == 'nt' else '/mnt/' + d + '/' + rest
+
 from PIL import Image, ImageDraw, ImageFont
 
 def font(sz):
