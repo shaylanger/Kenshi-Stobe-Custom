@@ -431,5 +431,15 @@ while IFS=$'	' read -r name kind check expect rest; do
   case "$r" in "RESULT spec-unarmed-"*" $expect "*) ;; *) bad "fists spec $name (want $expect): ${r:0:160}";; esac
 done < "$CORPUS/MANIFEST.tsv"
 [ $nf -gt 0 ] && ok "fists spec-unarmed corpus rows: $nf as expected" || echo "REGRESS INFO fists: no corpus spec-unarmed rows"
+# 34. fists lab = game: the KenshiFP fist path (vm_fist_at, fists patch applied to a copy, or already in the source)
+#     must replay the lab's key tables (corpus fists/pass-20261010-u22 keys.json) -> PASS; the v3 tables -> FAIL.
+FP_=/mnt/c/KenshiModding/pending-fixes/kfp-fists-na1.py
+if [ -f "$FP_" ] || grep -q g_vm_fist_on /root/KenshiFP/client/kfp_viewmodel.inc 2>/dev/null; then
+  [ -f "$FP_" ] || FP_=/dev/null
+  r=$(bash "$HERE/fist-equiv.sh" "$CORPUS/fists/pass-20261010-u22" "$FP_" | tail -1)
+  case "$r" in "RESULT FIST-EQUIV PASS"*) ok "fist-equiv v4: ${r:0:140}";; *) bad "fist-equiv v4: $r";; esac
+  r=$(bash "$HERE/fist-equiv.sh" "$CORPUS/fists/fail-20261010-u22" "$FP_" | tail -1)
+  case "$r" in "RESULT FIST-EQUIV FAIL"*) ok "fist-equiv v3 mismatch caught: ${r:0:100}";; *) bad "fist-equiv v3 (want FAIL): $r";; esac
+else echo "REGRESS INFO fist-equiv: no fists patch / source"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail

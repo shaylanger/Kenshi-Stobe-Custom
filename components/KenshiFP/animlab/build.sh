@@ -2,6 +2,7 @@
 # build.sh [--sync] [--src <client dir> | --rev <KenshiModding git rev (components/KenshiFP/client snapshot)>] [--patch <file.patch|file.py>]... [--out <binary>] [--drive]
 # Builds the offline KenshiFP viewmodel replay (kfpvm_replay) in WSL against a COPY of the KenshiFP client source.
 #   --no-l1  leave out the game L1 model (patches/l1-scale.py, l1k 0.871 = the game's short cached upper arm; default ON for the replay, off for --drive)
+#   --main   build another main in this dir (kfpvm_fist.c, fist-equiv.sh)
 #   --drive  build the phase-2 drive adapter (kfpvm_drive.c: authored targets, metricslab.py) instead of the replay
 #   --sync   refresh the copy /root/animlab-kfp-src/client from /root/KenshiFP/client first (read-only use)
 #   --patch  apply a variant to a private copy before compiling (.patch = patch -p1 from the client dir's parent,
@@ -11,6 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC=/root/animlab-kfp-src/client; OUT=/root/animlab-build/kfpvm_replay; PATCHES=(); MAIN=kfpvm_replay.c
 while [ $# -gt 0 ]; do case "$1" in
   --drive) MAIN=kfpvm_drive.c; shift;;
+  --main) MAIN="$2"; shift 2;;   # another harness main in this dir (kfpvm_fist.c: fist-equiv.sh)
   --no-l1) NOL1=1; shift;;
   --sync) mkdir -p /root/animlab-kfp-src && rsync -a --delete /root/KenshiFP/client/ /root/animlab-kfp-src/client/; shift;;
   --src) SRC="$2"; shift 2;;
