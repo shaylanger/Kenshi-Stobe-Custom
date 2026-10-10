@@ -1160,6 +1160,9 @@ def handle(s, cmd, a, now, sp):
         return True, 'fp_camera %s ok' % ' '.join(a)
     tu = s['turret']
     if cmd == 'order' and len(a) > 1 and a[1].upper() == 'USE_TURRET':
+        js = os.environ.get('DR_FIXTURE_JSON')
+        if js and os.path.exists(js) and json.load(open(js)).get('noseat'):   # fixtures/noseat.json: the order never seats
+            return True, 'order %s USE_TURRET ok' % a[0]
         tu['on'] = 1; tu['enters'] += 1
         sched(s, now + 1.0, 'turret', hud_text='loaded' if tu['ammo'] else 'reloading', ui_state='turret', vm='holstered')
         return True, 'order %s USE_TURRET ok' % a[0]
