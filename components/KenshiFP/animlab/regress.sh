@@ -86,11 +86,18 @@ else case "$r" in "arc FAIL"*) ok "miss E1 reproduced (replay f14-e0, current so
 fi
 #  12. miss X1 "crossbow jitter / jitter under-reported": `animlab.py compare` jitter line (game jit_p95 > 1 px may be at
 #      most 2.5x the replay's, swings skipped). vmq-f8c crossbow-z0 (pre-e948f86 bone-world map) replayed by its own
-#      solver 6c9516b must FAIL (ready x4.2, reload x6.6); f14/xb0 (node map) replayed by the current solver must PASS.
+#      solver 6c9516b must FAIL (ready x4.2, reload x6.6); f14/xb0 (node map) replayed by d40b6ad (first node-map snapshot)
+#      must PASS (pinned: the live source's replay jitter moves, 2026-10-09 it dropped to 0.59 = x2.8).
 r=$(cd "$W" && "$BLD/kfpvm_6c9516b" vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt | grep '^jitter ')
 case "$r" in "jitter FAIL"*) ok "miss X1 reproduced (crossbow-z0 @6c9516b): $r";; *) bad "miss X1 not reproduced: ${r:-no jitter line}";; esac
 [ -f "$W/f14-xb0.txt" ] || cp /mnt/c/KenshiTestRuns/f14/xb0.txt "$W/f14-xb0.txt" 2>/dev/null || bad "missing recording f14/xb0.txt"
-r=$("$BLD/kfpvm_cur" "$W/f14-xb0.txt" /tmp/al-x1b.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare "$W/f14-xb0.txt" /tmp/al-x1b.txt | grep '^jitter ')
-case "$r" in "jitter PASS"*) ok "X1 fixed build (f14-xb0, current solver): $r";; *) bad "X1 jitter on f14-xb0: ${r:-no jitter line}";; esac
+bash "$HERE/build.sh" --rev d40b6ad --out "$BLD/kfpvm_d40b6ad" >/tmp/al-build8.txt 2>&1 || bad build-d40b6ad
+r=$("$BLD/kfpvm_d40b6ad" "$W/f14-xb0.txt" /tmp/al-x1b.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare "$W/f14-xb0.txt" /tmp/al-x1b.txt | grep '^jitter ')
+case "$r" in "jitter PASS"*) ok "X1 fixed build (f14-xb0, node-map solver d40b6ad): $r";; *) bad "X1 jitter on f14-xb0: ${r:-no jitter line}";; esac
+#  13. miss C3 "bolt jitter on walk": `animlab.py bolt` (game recording + its <rec>.bolt sidecar: the loaded bolt's origin in
+#      the weapon frame must stay within 0.1 dm of its median, per-frame step <= 0.05 dm). f16/c3a (walk, build 18:55) must FAIL.
+for f in c3a.txt c3a.txt.bolt; do [ -f "$W/f16-$f" ] || cp "/mnt/c/KenshiTestRuns/f16/$f" "$W/f16-$f" 2>/dev/null || bad "missing recording f16/$f"; done
+r=$(python3 "$L/animlab.py" bolt "$W/f16-c3a.txt")
+case "$r" in "bolt FAIL ready:"*) ok "miss C3 reproduced (f16-c3a): $r";; *) bad "miss C3 not reproduced: ${r:-no bolt line}";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
