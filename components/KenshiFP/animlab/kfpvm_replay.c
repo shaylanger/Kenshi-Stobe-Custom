@@ -269,6 +269,10 @@ static void fk_native(void *skel, const void *set, float w, const void *bmap) { 
  * from before the recording: start from record 0 (pose, blend, phase, off-hand target, elbow direction) instead of a
  * cold draw. Roll / swing history is not recorded: those settle within the first frames (gate: --skip). */
 static int g_warm = 1, g_napp_mode = 1, g_skipped;
+/* --fist <anim>: NA1 fist take (fp-fists.sh): the game's unarmed fist path (vm_fist_apply) with the swing clock of the
+ * recording; every swinging stretch (or clock restart) is a new swing of technique <anim> (g_fpc_fs_tech/_name, set by
+ * kfp_controls.inc in the game). Needs a client source with the fist code (VM_NFIST). */
+static const char *g_fist_anim; static char g_fist_mk[256]; static int g_fist_k = -1;
 static void warm_start(void)
 {
     const Rin *r = &R[0], *n1 = &R[1]; int c = r->cls ? 1 : 0;
@@ -338,6 +342,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--bw-lag")) g_bw_lag = 1;
         else if (!strcmp(argv[a], "--up-roll")) g_up_roll = 1;
         else if (!strcmp(argv[a], "--hinge-capture")) g_hcap_live = 1;
+        else if (!strcmp(argv[a], "--fist") && a + 1 < argc) g_fist_anim = argv[++a];
         else if (!strcmp(argv[a], "--abs-world")) ;
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl_set < 256) cl_set[ncl_set++] = argv[++a]; }
         else if (!strcmp(argv[a], "--set-at") && a + 1 < argc) { if (nsa < 256) sets_at[nsa++] = argv[++a]; }
@@ -380,6 +385,14 @@ int main(int argc, char **argv)
         g_combat_actual_shots = shots;
         { int lower = r->phase == VMP_LOWER; int ons = strcmp(r->st, "holstered") && strcmp(r->st, "down") && strcmp(r->st, "off") && strcmp(r->st, "none");
           g_fpc_holster_pending = lower && ons; }
+#ifdef VM_NFIST
+        if (g_fist_anim) {
+            int sw = !strcmp(r->st, "swinging");
+            if (sw && (!i || strcmp(R[i - 1].st, "swinging") || r->prog < R[i - 1].prog - 0.3f)) g_fist_k = (g_fist_k + 1) & 255;
+            g_fpc_fists = 1; g_fpc_fs_tech = sw && g_fist_k >= 0 ? (void *)&g_fist_mk[g_fist_k] : NULL;
+            snprintf(g_fpc_fs_name, sizeof g_fpc_fs_name, "%s", g_fist_anim);
+        }
+#endif
         g_cls_fill[0] = cf[i];
         *(void **)(g_pc + CHAR_WEAPON_IN_HANDS) = r->wih ? (cf[i] ? (void *)&g_wep_ranged : (void *)&g_wep_melee) : NULL;
         vm_frame(g_pc, 0);
