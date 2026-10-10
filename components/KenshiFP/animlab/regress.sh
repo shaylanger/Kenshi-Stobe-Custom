@@ -374,6 +374,13 @@ if [ -f "$AL/kfp-fblock-live0.log" ]; then
     r=$(cd "$AL" && python3 "$L/takecheck.py" --labels whole-log.labels --ev none.ev --rules none.rules --kfplog $f.log --name $f | tail -1)
     case "$r" in "RESULT $f $want"*) ok "animlive $r";; *) bad "animlive want $want: $r";; esac; done
 else echo "REGRESS INFO animlive: corpus logs missing"; fi
+# 30. lab agreement (the lab must predict the game): `animlab.py agree` replays every game rec of the corpus manifest through
+#     its build's solver and runs every check on both. 2026-10-10 baseline: 15 disagreements in 6 classes (STATUS Misses
+#     "agree:" rows). More disagreements than the baseline = FAIL (a lab or build change broke agreement).
+AG=/mnt/c/KenshiTestRuns/corpus/agree/agree.list
+if [ -f "$AG" ]; then r=$(cd "$(dirname "$AG")" && python3 "$L/animlab.py" agree "$AG" --keep /tmp/al-agree 2>&1 | grep '^agree ')
+  n=${r##*disagreements=}; n=${n%% *}; [ -n "$n" ] && [ "$n" -le 15 ] && ok "agree (baseline 15): ${r:0:200}" || bad "agree: $r"
+else echo "REGRESS INFO agree: corpus manifest missing"; fi
 # P4. phase 4 (NATIVE, harness tools/animlab/native.py + visual/ogre.py animations): unit tests (synthetic Ogre animations,
 #     sampling, trajectory stabilisation, left grip mirror, solver grip offset, keyed viewmodel path + key fit, FCS v17
 #     header) and, with the game install: 174 animations on the male skeleton, the catalogue (unarmed techniques), `run` of
