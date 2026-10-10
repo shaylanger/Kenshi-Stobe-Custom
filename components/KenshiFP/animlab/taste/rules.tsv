@@ -1,6 +1,7 @@
 # KenshiFP standing pose/presentation rules -> lab checks (spec-first). Read by Kenshi-Automation-Harness tools/animlab/spec.py
 # (map / run / unarmed) and taste.py. Columns: id class rule source owner checks status note.
-# owner: shay = Shay said it (memory / plan row "Problem (Shay)" / his review); coord = coordinator review verdict; inferred =
+# owner: shay = Shay said it (memory / plan row "Problem (Shay)" / his review); coord = coordinator review verdict; native = shape and
+# thresholds measured on the game's own animations (Shay 2026-10-10: "use the native in-game animations to guide you"); inferred =
 # nobody confirmed it yet (question for Shay, batched via the coordinator; never treated as his rule).
 # status: covered = an automatic check gates it; partial = gated only in part (see note); missing = no check; out-of-reach = no
 # check possible with the data we record (note says why).
@@ -21,26 +22,26 @@ R13	all	no clipped or hollow limbs (near-plane cut)	PT17, X2, C4	shay	vmcheck.cu
 R14	all	zoom 25 looks natural: hand away from the head, weapon visible, wrist limit	memory zoomout-every-build; PT29	shay	vmcheck.zo	partial	vmcheck zo only (PT29); `animlab.py` has no zoom-25 judgement (Misses X7 row OPEN); no Shay-labelled z25 recording
 R15	all	every frame judgeable: open ground, nothing solid in frame, full res, no cursor	memory screenshots-must-be-judgeable; ticket A	shay	openground,cursor	covered	videos (frames.py)
 R16	all	review before handing over: every frame reviewed, flaws fixed first	memory review-before-handing-over	shay	-	out-of-reach	process rule (coordinator), not a property of a recording
-R17	sword	blade reads on screen: no one-frame snap at the wind-up top, never end-on, full length, overhead descends vertically	E6 coordinator reviews (Misses E6 rows)	coord	blade.snap,blade.seen,stroke.len,stroke.oh	covered	stroke 0 = documented baseline exception (Shay-approved stroke fails snap/seen)
+R17	sword	blade reads on screen: wind-up-top rotation within the native rate, end-on in the follow-through at most two video frames, full length, overhead descends vertically	native reference (snap, end-on: game katana attacks, Shay 2026-10-10); E6 coordinator reviews (len, overhead)	native	blade.snap,blade.seen,stroke.len,stroke.oh	covered	spec.py blade: snap <= 32 deg/33 ms (native downward combo 32 @x1.2, chop down 15, bigchopv2 14, heavy downcut 10, desperate attack 7; chop left 47 starts at the top = engine crossfade, not counted); end-on (seen < 0.05 on screen) <= 67 ms (native bigchopv2 67, desperate attack 33). No stroke-0 exception needed: stroke 0 snap 20-26, end-on 12-30 ms PASS. len/overhead stay coord
 R18	sword	block guard not hanging (blade not straight down, hilt not at the face)	Misses z25 block guard	coord	guard	covered	whether the native hanging guard is acceptable is Shay's call (open)
 R19	all	zoom crossfade band: no own headless torso / floating hand between eye and head-show distance	Z1 coordinator review	coord	zoomband	covered	no game recording of the fail case yet
 R20	all	take labels match game state; no combat / bystanders; video ends at the end label	T6 coordinator review	coord	takecheck	covered	takes only
 R21	sword	hand grips the hilt (no open palm, fingers wrapped)	PT33	shay	-	out-of-reach	recordings hold no finger bones; the visual lab renders fingers in the bind pose
 R22	all	do not enlarge the arm / change framing to match Chivalry; only the movement matters	memory sword-inline-with-forearm	shay	-	out-of-reach	a negative design rule: nothing to measure (framing changes show up as stock/stroke regressions)
-U1	unarmed	guard: both fists on screen at rest (zoom 0)	NA1 plan row (coordinator)	inferred	spec:U1	covered
-U2	unarmed	every technique returns to the guard	NA1 plan row (coordinator)	inferred	spec:U2	covered
+U1	unarmed	guard: both fists on screen at rest (zoom 0), below the eye line	native reference: ma idle1 stance hands below the eye (wrists y -3.7 / -8.5 dm, all clip starts -3.1..-3.8); on-screen = FP visibility (U3/R9, Shay)	native	spec:U1	covered	native guard is below the FP view (y/z -2.0 R, -3.2 L); FP keeps the native 'below the eye' shape, lifted onto the screen
+U2	unarmed	every technique returns to the guard (last key = guard, <= 0.5 dm)	native reference: clips end 0.4-3.5 dm off their start (arms vs chest) and the engine crossfades back to the stance; the FP key set has no crossfade	native	spec:U2	covered	badpunch end-start 1.5/3.5, chudan 2.6/1.9, 2strike 0.5/0.4, shoteiL 0.4/0.6 dm (L/R)
 U3	unarmed	the technique visibly plays (fist moves >= 1 dm from the guard)	memory state-must-visibly-play	shay	spec:U3	covered
-U4	unarmed	a punch drives toward the screen centre	NA1 plan row (coordinator)	inferred	spec:U4	covered
+U4	unarmed	a punch drives toward the screen centre, at or below the centre line	native reference: striking fists land at |x/z| <= 0.29, y/z -0.28..-0.09 (badpunch L, chudan L/R, 2strike R, shoteiL L)	native	spec:U4	covered	limits |x/z| <= 0.30, y/z -0.35..+0.05
 U5	unarmed	no hand at / above / behind the eye (forearm/fist >= 2.5 dm from the eye, <= eye level +0.5 dm)	PT29 hands at the head (Shay), NA1 row	shay	spec:U5	covered	thresholds 2.5 / +0.5 dm are the lab's (native.py fists)
-U6	unarmed	wind-up stays below eye level	NA1 brief (coordinator)	inferred	spec:U6	covered
+U6	unarmed	wind-up never rises above the strike (wrist/fist highest at the strike)	native reference: every native striking hand is highest AT the strike; wind-up stays 0.62-2.64 dm below it	native	spec:U6	covered	was 'wind-up below eye level' (inferred); limit rise <= 0.1 dm; hands at the head stay U5 (Shay)
 U7	unarmed	no near-plane cut of forearm/fist	PT17 (Shay)	shay	spec:U7	covered
 U8	unarmed	wrist bend <= 30 deg	PT17-W / PT30 (Shay)	shay	spec:U8	covered
 U9	unarmed	no arm churn	memory no-arm-churn	shay	spec:U9	covered	same limits as the sword churn (450 px within 0.4 s, fist <= 250 px)
-U10	unarmed	punch driven by shoulder/elbow, not the wrist (wrist share of fist motion <= 0.6)	sword-inline-with-forearm (sword rule, Shay) carried over	inferred	spec:U10	covered
-U11	unarmed	no sudden fist roll (<= 30 deg per 33 ms)	sword roll rules (Shay) carried over; threshold inferred	inferred	spec:U11	covered
+U10	unarmed	punch driven by shoulder/elbow, not the wrist (wrist share of fist motion <= 0.45)	native reference: native striking hands 0.04-0.41 (straight punches 0.04-0.25, palm strikes 0.40/0.41)	native	spec:U10	covered	was 0.6 (inferred)
+U11	unarmed	no sudden fist roll (<= 40 deg per 33 ms on straight-wrist frames)	native reference: native fist roll on straight-wrist frames (wb <= 30) up to 36.5 deg/33 ms (2strike L; badpunch 23, shoteiL 27.5, chudan 5)	native	spec:U11	covered	was 30 on every frame (inferred); bent-wrist frames skipped (prop axis tilts without a roll; U8 judges the bend)
 U12	unarmed	the game's half-open hand is accepted: no fist-closed check (skeletons have no finger bones)	Shay 2026-10-10 (via coordinator)	shay	-	dropped	decision, nothing to gate; replaces the inferred "fist closed" rule
 U13	unarmed	zoom 25 = the native third-person animation, unchanged	NA1 plan row; zoomout-every-build (Shay)	shay	vmcheck.zo	partial	only after an in-game build (game recording + VMQUICK sheet); offline: native.py sheet-z25
-U14	unarmed	kicks / headbutt / flykick: guard holds, the camera reads the move	NA1 plan row (coordinator)	inferred	-	missing	no kick candidate format yet (camera motion is not in pose.txt)
+U14	unarmed	kicks: the arms move with the body (no held guard), the camera follows the head; headbutt: the guard holds while the head moves	native reference: kicklow/megakick/flykick/flyknee wrists travel 6.4-9.5 dm vs the chest, head 9.6-44 dm; headbutt wrists <= 1.8 dm, head 10.7 dm	native	-	missing	was 'guard holds' (inferred, contradicted by the native kicks); no kick candidate format yet (camera motion is not in pose.txt)
 U15	unarmed	solver reaches every key (no IK failure)	lab	coord	spec:U15	covered
-U16	unarmed	block raises the guard	NA1 plan row (coordinator)	inferred	-	missing	no block candidate yet
+U16	unarmed	unarmed has no block: the defence is the native dodge back (guard kept at its height, the view moves back)	native reference: game data has no unarmed block technique (dodgeback/dodgefall/dodgefly only); dodgeback wrists dy -0.7..+0.4 dm (L 1.6, R 4.8 dm travel), head 17 dm back	native	-	missing	was 'block raises the guard' (inferred, no native counterpart); no dodge candidate yet
 U17	unarmed	palm-heel techniques become straight-wrist punches (wrist <= 30 deg); native palm strikes are not kept	Shay 2026-10-10 (via coordinator)	shay	spec:U17	covered	spec.py unarmed: candidates named shotei*/palm* get U17 (wb_max <= 30 every frame)

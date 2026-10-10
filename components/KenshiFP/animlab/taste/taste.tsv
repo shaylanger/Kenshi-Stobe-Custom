@@ -67,7 +67,7 @@ t61	takes/videos/anim-xbow-z25.mp4	R15	superseded	coord	checks=cursor	accepted b
 t62	rec/e6-anim.txt	R17	reject	coord	pre=--only-stroke 2;checks=blade.snap,blade.seen	Misses E6 stroke 2 wind-up snap + end-on frame
 t63	rec/e6-anim-b2.txt	R17	reject	coord	pre=--only-stroke 1;checks=stroke.len	Misses E6 stroke 1 foreshortened (coordinator review)
 t64	rec/e6-anim-b2.txt	R17	reject	coord	pre=--only-stroke 2;ohopt=--overhead 2;checks=stroke.oh	Misses E6 stroke 2 overhead read as a diagonal
-t65	rec/e6-anim.txt	R17	accept	shay	pre=--only-stroke 0	approved stroke 0 (documented baseline exception for blade seen)
+t65	rec/e6-anim.txt	R17	accept	shay	pre=--only-stroke 0	approved stroke 0 (native-reference blade check: passes with no exception)
 t66	rec/f28-sword-z0c.txt	R17	accept	shay		3912d09 all swings = stroke 0
 t67	kept/blk-survey_blk-table.tsv	R18	open	coord		hanging native block guards: Shay's call pending
 t68	takes/t6old	R20	reject	coord	vlen=53.00	T6 turret-fp combat/bystanders, labels unverified
