@@ -32,7 +32,7 @@ restore(){ A fp_vm set fist_tech -1 >/dev/null; A chatter on >/dev/null; [ -n "$
 # op-fist1/fist4080e: the force never landed for ma chudan / ma 2strike: CharStats::chooseAttack only offers techniques whose
 # min/max skill window (game data, native.py catalog) holds the actor's Martial Arts (Axima ~15-20: shoteiL + badpunch only).
 # Windows: badpunch -1000..20, ma chudan 35+, ma 2strike 25+, shoteiL 15+ -> set MA inside the forced technique's window.
-MA_FOR=(10 40 30 18)
+MA_FOR=(10 70 60 18)   # 2strike/chudan well inside their windows: the unarmed encumbrance penalty may not show in stat effective
 PF_ROW=$ROW; PF_ON_FAIL='restore; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { touch "$N.stop"; wait $FP; }'
 . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$ROW"
