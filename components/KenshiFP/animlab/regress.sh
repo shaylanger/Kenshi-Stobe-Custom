@@ -448,12 +448,28 @@ if [ -f "$FP_" ] || grep -q g_vm_fist_on /root/KenshiFP/client/kfp_viewmodel.inc
   case "$r" in "RESULT FIST-EQUIV FAIL"*) ok "fist-equiv v3 mismatch caught: ${r:0:100}";; *) bad "fist-equiv v3 (want FAIL): $r";; esac
 else echo "REGRESS INFO fist-equiv: no fists patch / source"; fi
 # 35. fists game take vs lab (fist-take-check.py, fp-fists.sh): the native unarmed rec (no fists patch) must FAIL
-#     against the v4 lab candidate; a patched take (corpus row, pending until the first take) must PASS.
-FX=$CORPUS/fists/pass-20261010-u22/ma_chudan
+#     against the v5 lab candidate (pass-20261010-u23); a patched take (corpus row, pending until the first take) must PASS.
+FX=$CORPUS/fists/pass-20261010-u23/ma_chudan   # v5 tables (pending-fixes/kfp-fist-hud.py) since 2026-10-10
 for f in rec/vmrec-fist-z0-a.txt:FAIL takes/fist-ma_chudan/fist-ma_chudan.vmrec.txt:PASS; do n=${f%%:*} w=${f##*:}
   [ -f "$CORPUS/$n" ] || { echo "REGRESS INFO fistgame: $n not in the corpus yet"; continue; }
   r=$(python3 "$HERE/fist-take-check.py" "$CORPUS/$n" "$FX" | tail -1)
   case "$r" in "fistgame $w "*) ok "fistgame $n: ${r:0:120}";; *) bad "fistgame $n (want $w): $r";; esac; done
+# 35b. FIST-shoteiL op-b6 (fist-offset 2026-10-10, harness Misses "FIST-shoteiL game take"): the 5090 take vs the v4
+#     candidate must FAIL with swing 3 (another native technique under the arms) excluded and hud FAIL (fists under the
+#     game HUD); the game's fist path replayed on that take (kfpvm_replay --fist, game L1 model) with the v5 tables
+#     (pending-fixes/kfp-fist-hud.py, or already in the source) must keep the wrists clear of the HUD: hud PASS.
+OB=$CORPUS/rec/fist-shoteiL-opb6.vmrec.txt; OS=$CORPUS/rec/fist-shoteiL-opb6.swings.txt
+if [ -f "$OB" ] && [ -f "$OS" ]; then
+  r=$(python3 "$HERE/fist-take-check.py" "$OB" "$CORPUS/fists/pass-20261010-u22/shoteiL" --swings "$OS")
+  case "$r" in *"verified 2; excluded: swing 3 body"*"fistgame FAIL"*"hud=FAIL"*) ok "fistgame op-b6 shoteiL v4: swing 3 excluded, hud FAIL";;
+    *) bad "fistgame op-b6 shoteiL v4 (want FAIL, swing 3 excluded, hud=FAIL): $(echo "$r" | tail -1)";; esac
+  FH=/mnt/c/KenshiModding/pending-fixes/kfp-fist-hud.py; PA=(); [ -s "$FH" ] && PA=(--patch "$FH")
+  if bash "$HERE/build.sh" --src /root/KenshiFP/client "${PA[@]}" --out /tmp/al-fisthud > /tmp/al-fisthud.log 2>&1      && /tmp/al-fisthud "$OB" /tmp/al-fisthud.rec --fist shoteiL --apply-all --quiet > /dev/null; then
+    r=$(python3 "$HERE/fist-take-check.py" /tmp/al-fisthud.rec "$CORPUS/fists/pass-20261010-u23/shoteiL" --swings "$OS" | grep "^hud")
+    case "$r" in "hud     PASS"*) ok "fist path replay v5 on op-b6: ${r:0:120}";; *) bad "fist path replay v5 on op-b6 (want hud PASS): $r";; esac
+  else bad "fist path replay build/run failed (/tmp/al-fisthud.log)"; fi
+  rm -rf /tmp/al-fisthud /tmp/al-fisthud.d /tmp/al-fisthud.rec /tmp/al-fisthud.log
+else echo "REGRESS INFO fistgame op-b6: not in the corpus"; fi
 # 36. PT30 follow-ups (harness Misses 2026-10-10 "PT30-FLIP vmcheck time base" + "PT30 follow-through edge roll spikes"):
 #     (a) fp-viewmodel.sh's vmcheck (extracted from the script) on the 4080 game rec pt30-sword (corpus pools/sword-swing):
 #         the strike onset next to the 0.1 s hitch (frame 158) must NOT be flagged, the follow-through roll (284) must be;
