@@ -12,7 +12,7 @@
 #   - nested calls (LABNICE_SLOT already set, e.g. gate.sh inside kfp-pipeline.sh) just run: no second slot, no deadlock
 #   - thread caps for numpy/BLAS (OMP/OPENBLAS/MKL/NUMEXPR_NUM_THREADS=N) unless already set
 set -u
-D=/tmp/labnice; mkdir -p "$D"; SLOTS=${LABNICE_SLOTS:-$(( $(nproc) / 2 ))}; [ "$SLOTS" -ge 1 ] || SLOTS=1
+D=/tmp/labnice; mkdir -p "$D"; SLOTS=${LABNICE_SLOTS:-$(( $(nproc --all) / 2 ))}; [ "$SLOTS" -ge 1 ] || SLOTS=1   # --all: nproc honours OMP_NUM_THREADS
 if [ "${1:-}" = --status ]; then
   n=0; for i in $(seq 1 "$SLOTS"); do exec {f}>"$D/slot.$i"; flock -n "$f" || n=$((n + 1)); exec {f}>&-; done
   echo "labnice: $n/$SLOTS slots in use"; exit 0
