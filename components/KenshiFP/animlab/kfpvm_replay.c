@@ -4,6 +4,8 @@
  *                     [--cold] [--apply-all] [--quiet]
  *   --no-native  ignore the recording's native-pose group (use the post-IK skeleton of the next record)
  *   --no-rec-sets  ignore the recording's `# set` lines
+ *   --hinge-capture  E5 hinge captured from the replayed frames (default: pre-captured 0,-1,0 like the game rig)
+ *   --up-roll  old arm bone roll model (local Y nearest camera up); default: local Y = -(native bend normal) = the game rig
  *   --apply-all  apply on every frame (default: only where the recording's napply counter shows the game applied)
  *   rec.txt  an `fp_vm rec dump` file from the game (per camera frame: inputs + the measured skeleton)
  *   out.txt  the replay's own `fp_vm rec dump` (same format, written by the plugin's vm_rec_dump), so every metric
@@ -217,6 +219,7 @@ static void calibrate(void)
 static int g_nat;   /* record whose measured skeleton stands in for the native pose */
 static int g_napp_rec = -1;   /* record whose recorded native group drives the current apply (-1 = none) */
 static int g_use_native = 1, g_nat_used;
+static int g_up_roll, g_hcap_live; static Vec3 g_rig_hn[2]; static int g_rig_have[2];   /* bone roll model (set_native) */
 static int g_cls_fill[2];
 static void set_native(int i)
 {
@@ -234,10 +237,17 @@ static void set_native(int i)
         Vec3 S = J[s][0], E = J[s][1], W = J[s][2];
         if (nr) { S = c2w(nr, nr->nj[s][0], 1); E = c2w(nr, nr->nj[s][1], 1); W = c2w(nr, nr->nj[s][2], 1); }
         fk_place(B_CLAV_L + s, vm_lerp(nk, S, 0.35f), QI, one);
-        Quat qua = q_xref(vm_sub(E, S), up);
+        /* bone roll (the native roll is not recorded): the game rig's upper arm / forearm bend about local -Y (E5 capture
+         * `fp_vm hinge` in game: L_ua = L_fa = R_ua = R_fa = 0,-1,0), so local Y = -(bend normal) when the elbow is bent,
+         * else the last bent frame's normal; --up-roll = the old synthetic roll (Y nearest camera up) */
+        Vec3 rref = up;
+        if (!g_up_roll) { Vec3 hn = vm_cross(vm_sub(E, S), vm_sub(W, E));
+            if (vm_len(hn) > 0.1f * vm_len(vm_sub(E, S)) * vm_len(vm_sub(W, E))) { g_rig_hn[s] = vm_norm(hn); g_rig_have[s] = 1; }
+            if (g_rig_have[s]) rref = vm_mul(g_rig_hn[s], -1.0f); }
+        Quat qua = q_xref(vm_sub(E, S), rref);
         fk_place(B_UA_L + s, S, qua, one);
         Vec3 En = nr ? E : vm_add(S, vm_mul(vm_norm(vm_sub(E, S)), C_L1[s]));
-        Quat qfa = q_xref(vm_sub(W, E), up);
+        Quat qfa = q_xref(vm_sub(W, E), rref);
         fk_place(B_FA_L + s, En, qfa, one);
         Vec3 Hn = nr ? W : vm_add(En, vm_mul(vm_norm(vm_sub(W, E)), C_L2[s]));
         Quat qh = qfa;
@@ -305,7 +315,7 @@ static int do_set(const char *kv)
 
 int main(int argc, char **argv)
 {
-    if (argc < 3) { fprintf(stderr, "usage: kfpvm_replay <rec.txt> <out.txt> [--calib L1R,L2R,L1L,L2L,K] [--set k=v]... [--set-at frame:k=v]... [--quiet] [--abs-world] [--bw-lag]\n"); return 2; }
+    if (argc < 3) { fprintf(stderr, "usage: kfpvm_replay <rec.txt> <out.txt> [--calib L1R,L2R,L1L,L2L,K] [--set k=v]... [--set-at frame:k=v]... [--quiet] [--abs-world] [--bw-lag] [--up-roll]\n"); return 2; }
     const char *sets_at[256], *cl_set[256]; int nsa = 0, ncl_set = 0;
     for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "--abs-world")) g_abs_world = 1;
     if (load_rec(argv[1]) < 2) { fprintf(stderr, "kfpvm_replay: no frames in %s\n", argv[1]); return 1; }
@@ -326,6 +336,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--no-rec-sets")) g_use_rsets = 0;
         else if (!strcmp(argv[a], "--no-native")) g_use_native = 0;
         else if (!strcmp(argv[a], "--bw-lag")) g_bw_lag = 1;
+        else if (!strcmp(argv[a], "--up-roll")) g_up_roll = 1;
+        else if (!strcmp(argv[a], "--hinge-capture")) g_hcap_live = 1;
         else if (!strcmp(argv[a], "--abs-world")) ;
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl_set < 256) cl_set[ncl_set++] = argv[++a]; }
         else if (!strcmp(argv[a], "--set-at") && a + 1 < argc) { if (nsa < 256) sets_at[nsa++] = argv[++a]; }
@@ -346,6 +358,13 @@ int main(int argc, char **argv)
     g_vm_class = cf[0]; g_cls_fill[0] = cf[0];
     g_nat = 0; set_native(0);
     if (g_warm && R[0].w > 0.001f && RN > 1) warm_start();
+#ifdef AL_HAVE_HINGE
+    /* E5: the game captured its local elbow hinge long before any recording (first 30 bent-elbow frames after load) and
+     * the rig gives 0,-1,0 for every bone (`fp_vm hinge`): start captured, like the game (--hinge-capture / --up-roll =
+     * capture from the replayed frames instead) */
+    if (!g_hcap_live && !g_up_roll) for (int s = 0; s < 2; s++) { g_vm_hcap_n[s] = VM_HCAP;
+        for (int k = 0; k < 2; k++) g_vm_hl[s][k] = vm_v(0, -(float)VM_HCAP, 0); }
+#endif
     g_vm_rec = calloc(VM_RECN, sizeof(VmRec)); g_vm_rn = 0; g_al_clock = 0; QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1;
     unsigned shots = 0; int n = RN < VM_RECN ? RN : VM_RECN;
     for (int i = 0; i < n; i++) {

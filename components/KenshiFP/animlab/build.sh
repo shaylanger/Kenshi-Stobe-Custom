@@ -24,5 +24,6 @@ for p in "${PATCHES[@]}"; do case "$p" in
 python3 "$HERE/extract_helpers.py" "$B/client/kenshifp_client.c" "$B/gen_helpers.h" quat_mul quat_conj quat_norm quat_slerp quat_rotvec
 DEFS=""; grep -q "g_vm_elb_cb" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ELB_CB"
 grep -q "g_vm_eclamp_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ECLAMP"
+grep -q "g_vm_hcap_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_HINGE"
 gcc -O2 -std=gnu11 -w $DEFS -I"$B" -I"$B/client" -I"$HERE" -o "$OUT" "$HERE/$MAIN" -lm
 echo "built $OUT"

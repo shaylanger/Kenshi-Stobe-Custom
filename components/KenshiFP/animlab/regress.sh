@@ -95,6 +95,23 @@ case "$r" in "arc PASS"*) ok "E1 wb36 game f23-sword-z0d: $r";; *) bad "E1 wb36 
 for x in f27-h0a f27-h1a; do [ -f "$W/$x.txt" ] || cp /mnt/c/KenshiTestRuns/vid/vmrec-$x.txt "$W/$x.txt" 2>/dev/null || bad "missing recording vid/vmrec-$x.txt"; done
 for x in f23-sword-z0d:FAIL f27-h0a:FAIL f27-h1a:PASS; do r=$(python3 "$L/animlab.py" hinge "$W/${x%%:*}.txt")
   case "$r" in "hinge ${x##*:}"*) ok "E5 hinge ${x%%:*}: $r";; *) bad "E5 hinge ${x%%:*} (want ${x##*:}): ${r:-no hinge line}";; esac; done
+#  11d. miss "E5 hinge replay vs game": the replay's fake arm bones had a synthetic roll (local Y nearest camera up) and the
+#      replay captured its own hinge from it, so its forearm roll sat ~60 deg off the game (f28-sword-z0c, game PASS dev 11,
+#      replay FAIL dev 157). Model: the game rig's arm bones bend about local -Y (in-game `fp_vm hinge`: 0,-1,0 for all four)
+#      and the game captured long before the recording. Replay @830c781 (E334DB71 source) must PASS hinge + faith (per-frame
+#      forearm roll median <= 5 deg vs the game), --up-roll (old model) must FAIL faith; the pre-fix z0d replayed through its
+#      own solver (c6a1eda) and through 830c781 with hinge 0 must FAIL hinge (flip reproduced), with hinge 1 PASS.
+[ -f "$W/f28-sword-z0c.txt" ] || cp /mnt/c/KenshiTestRuns/vid/vmrec-anim-f28-sword-z0c.txt "$W/f28-sword-z0c.txt" 2>/dev/null || bad "missing recording vid/vmrec-anim-f28-sword-z0c.txt"
+if bash "$HERE/build.sh" --rev 830c781 --out "$BLD/kfpvm_e5r" >/tmp/al-build-e5.txt 2>&1 && bash "$HERE/build.sh" --rev c6a1eda --out "$BLD/kfpvm_c6" >/tmp/al-build-c6.txt 2>&1; then
+  for m in rig:PASS up-roll:FAIL; do a=; [ "${m%%:*}" = up-roll ] && a=--up-roll
+    "$BLD/kfpvm_e5r" "$W/f28-sword-z0c.txt" /tmp/al-e5-$m.txt --quiet $a >/dev/null 2>&1
+    r=$(python3 "$L/animlab.py" hinge /tmp/al-e5-$m.txt --vs "$W/f28-sword-z0c.txt" | cut -c1-260)
+    case "$r" in "hinge ${m##*:}"*) ok "E5 hinge replay f28-sword-z0c (${m%%:*}): $r";; *) bad "E5 hinge replay f28-sword-z0c (${m%%:*}, want ${m##*:}): ${r:-no hinge line}";; esac; done
+  for m in c6:FAIL h0:FAIL h1:PASS; do case "${m%%:*}" in c6) b="$BLD/kfpvm_c6"; a=;; h0) b="$BLD/kfpvm_e5r"; a="--set hinge=0";; h1) b="$BLD/kfpvm_e5r"; a=;; esac
+    "$b" "$W/f23-sword-z0d.txt" /tmp/al-z0d-$m.txt --quiet $a >/dev/null 2>&1
+    r=$(python3 "$L/animlab.py" hinge /tmp/al-z0d-$m.txt | cut -c1-200)
+    case "$r" in "hinge ${m##*:}"*) ok "E5 hinge replay z0d (${m%%:*}): $r";; *) bad "E5 hinge replay z0d (${m%%:*}, want ${m##*:}): ${r:-no hinge line}";; esac; done
+else bad "E5 hinge replay builds"; tail -3 /tmp/al-build-e5.txt /tmp/al-build-c6.txt; fi
 #  12. miss X1 "crossbow jitter / jitter under-reported": `animlab.py compare` jitter line (game jit_p95 > 1 px may be at
 #      most 2.5x the replay's, swings skipped). vmq-f8c crossbow-z0 (pre-e948f86 bone-world map) replayed by its own
 #      solver 6c9516b must FAIL (ready x4.2, reload x6.6); f14/xb0 (node map) replayed by d40b6ad (first node-map snapshot)
