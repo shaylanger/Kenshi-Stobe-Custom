@@ -134,10 +134,11 @@ if sys.argv[2]=='zo':
         elb=dot(sub(Rel,Rsh),upw); wind=r['st']=='swinging' and r['prog']<0.5
         mn['hd']=min(mn['hd'],hd) if r['st']!='aiming' else mn['hd']; mn['tor']=min(mn['tor'],tor); mn['vis']=min(mn['vis'],vis); mn['npt']=min(mn['npt'],npt)
         mx['zf']=max(mx['zf'],r['zf']); mx['wb']=max(mx['wb'],(r['wb'] or 0) if not native(r) else 0); mx['elb']=max(mx['elb'],elb if not wind else -99)
-        for k,c in (('zf',r['zf']>0.05),('head',hd<HDM and r['st']!='aiming'),('torso',tor<TORM),('vis',vis<VISM if r['zf']>0.05 else npt<5),
-                    ('wrist',r['cls']==0 and (r['wb'] or 0)>wblim(r) and not native(r)),('elbow',elb>0.5 and not wind)):
+        nat=native(r)   # zf~0: Kenshi's own third-person animation (viewmodel faded out): elbow/head are info only (op-comb2)
+        for k,c in (('zf',r['zf']>0.05),('head' if not nat else 'nat_head',hd<HDM and r['st']!='aiming'),('torso',tor<TORM),('vis',vis<VISM if r['zf']>0.05 else npt<5),
+                    ('wrist',r['cls']==0 and (r['wb'] or 0)>wblim(r) and not nat),('elbow' if not nat else 'nat_elbow',elb>0.5 and not wind)):
             if c: bad.setdefault(k,[]).append('%d:%s'%(i,r['st']))
-    N=len(Z); fails={k:v for k,v in bad.items() if len(v)>0.03*N}
+    N=len(Z); fails={k:v for k,v in bad.items() if len(v)>0.03*N and not k.startswith('nat_')}
     ok=N>=30 and not fails
     # sword arm motion (m78, Shay: at zoom 25 block / swings showed no animation, right arm hanging at the hip: wrist-minus-
     # shoulder stayed at one value through the block, each swing lasted 2 frames): per block run (st blocking) and per swing
@@ -239,7 +240,7 @@ for i in range(1,N):
         r=F[i] if F[i]['wih'] else F[i-1]
         inout.append('%s@%d:%s'%('in' if F[i]['wih'] else 'out',i,'vis' if onscr(r['rp']) or onscr(tip(r)) else 'off'))
 if sys.argv[2]=='swing': ok=N>=20 and nvis>=15 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout)
-else: ok=N>=200 and nvis>=100 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout) and len(inout)>=(1 if sys.argv[2]=='seg' else 2)
+else: ok=N>=200 and nvis>=100 and not flags and errmax<=0.35 and all(x.endswith('off') for x in inout) and len(inout)>=(1 if sys.argv[2] in ('seg','sega') else 2)
 if sys.argv[2]=='xbow': ok=ok and rlz>=2.0
 ok=ok and not cuts
 # C1 (Shay 2026-10-09: the crossbow aim stayed in the ready pose and the row still passed): every state that should move
@@ -252,7 +253,7 @@ def _med(xs): xs=sorted(xs); return xs[len(xs)//2]
 def _mpose(rs): return (tuple(_med([r['mp'][k] for r in rs]) for k in range(3)),tuple(_med([r['mf'][k] for r in rs]) for k in range(3)))
 _up=[r for r in F if r['w']>=0.99 and r['wih'] and r['mp'] is not None]
 _rd=[r for r in _up if r['st']=='ready' and not r['sw']]
-_req={'xbow':('aiming','reloading'),'sword':('blocking','swing'),'seg':('blocking','swing')}.get(sys.argv[2],())
+_req={'xbow':('aiming','reloading'),'sword':('blocking','swing'),'seg':('blocking','swing'),'sega':('blocking',)}.get(sys.argv[2],())   # sega: VMQUICK part a (no swing in it by design)
 moves=[]
 if _req and _rd:
     rp_,rf_=_mpose(_rd)
@@ -618,9 +619,10 @@ vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
   # arm and weapon motion is hidden by the body
   [ "$Z" = 0 ] || A fp_camera orbit "${VMQ_ORBIT:-2.36}" >/dev/null
   draw_to 0; sleep 0.6; look "$(cam yaw)" 0.05; A fp_vm rec on >/dev/null; sleep 0.3
-  rkey; sleep 0.15; snap "$row" "$t-draw" draw
-  if [ "$W" = crossbow ]; then waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" ready
-    moving 1600; sleep 0.7; snap "$row" "$t-walk" walk; sleep 1; A fp_move none >/dev/null; sleep 0.4
+  XL=""; [ "$W" = crossbow ] && [ "$Z" = 0 ] && XL=" (approved low carry: bow mostly under the HUD)"
+  rkey; sleep 0.15; snap "$row" "$t-draw" "draw$XL"
+  if [ "$W" = crossbow ]; then waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" "ready$XL"
+    moving 1600; sleep 0.7; snap "$row" "$t-walk" "walk$XL"; sleep 1; A fp_move none >/dev/null; sleep 0.4
     # a fresh fixture bow is unloaded (m78 f7: ammo=0, the RMB ran the reload, every aim/fire/reload tile was wrong):
     # prime it with one RMB reload first, the aim/fire/reload tiles need a loaded bow
     waitf 10 csis loaded 1 || { note "SETUP VMQUICK $t bow not loaded (ammo=$(cs ammo)): priming reload"; mdown right; waitf 15 csis loaded 1; mup right
@@ -628,11 +630,11 @@ vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
     mdown right; waitf 5 vm_is aiming; sleep 0.8; snap "$row" "$t-aim" aim
     mclick left 60; snap "$row" "$t-fire" fire; waitf 4 vm_is reloading; sleep 1.2; snap "$row" "$t-reload" reload
     sleep 2; snap "$row" "$t-reload2" "reload 2"; waitf 10 vm_is aiming; mup right; sleep 0.8
-  else waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" ready
-    moving 1600; sleep 0.7; snap "$row" "$t-walk" walk; sleep 1; A fp_move none >/dev/null; sleep 0.4
+  else waitf 6 vm_is ready; sleep 0.8; snap "$row" "$t-ready" "ready$XL"
+    moving 1600; sleep 0.7; snap "$row" "$t-walk" "walk$XL"; sleep 1; A fp_move none >/dev/null; sleep 0.4
     FSQ0=$(ks free_swings); mdown right; waitf 4 vm_is blocking; sleep 0.6; snap "$row" "$t-block" block; mup right; sleep 0.6
     # the frozen poses jump by design (sw_pose set/unset): kept out of the recording (part a checked here, rec on restarts it)
-    if [ "$Z" = 0 ]; then A fp_vm rec off >/dev/null; r=$(vmrec "q-$t-a" seg); VQR+=" $t-a: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
+    if [ "$Z" = 0 ]; then A fp_vm rec off >/dev/null; r=$(vmrec "q-$t-a" sega); VQR+=" $t-a: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
       for u in 0.20:wind-up 0.42:strike 0.58:follow-through; do A fp_vm set sw_pose "${u%%:*}" >/dev/null; sleep 0.5
         snap "$row" "$t-sw${u%%:*}" "${u#*:} (u ${u%%:*})"; done; A fp_vm set sw_pose -1 >/dev/null; sleep 0.6; A fp_vm rec on >/dev/null
       waitf 3 vm_is ready; SWQ0=$(kfpn '\[vm\] swing #[0-9]* [0-9.]*s u_end='); lswing; waitf 4 eval '[ "$(kfpn "\[vm\] swing #[0-9]* [0-9.]*s u_end=")" -gt "${SWQ0:-0}" ]'
@@ -641,7 +643,7 @@ vmq_seg() { local W=$1 Z=$2 row="$1 zoom $2" t="$1-z$2" r
     waitf 3 vm_is ready; lswing 60; sleep 0.15; mdown right; sleep 0.35; snap "$row" "$t-swblock" "swing->block"; sleep 0.8; mup right; sleep 0.6
     FSQ1=$(ks free_swings); [ "${FSQ1:-0}" -ge "$(( ${FSQ0:-0} + 2 ))" ] || { VQOK=0; VQR+=" $t: native free swings ${FSQ0}->${FSQ1} (want +2: swing + swing->block);"; }
   fi
-  rkey; sleep 0.12; snap "$row" "$t-holster" holster; sleep 2.2
+  rkey; sleep 0.12; snap "$row" "$t-holster" "holster$XL"; sleep 2.2
   A fp_vm rec off >/dev/null; r=$(vmrec "q-$t" "$([ "$Z" = 0 ] && { [ "$W" = crossbow ] && echo xbow || echo seg; } || echo zo)")
   VQR+=" $t: $r;"; case "$r" in ok=1*) ;; *) VQOK=0;; esac
   [ "$Z" = 0 ] || { A fp_camera orbit 0 >/dev/null; [ "$W" = crossbow ] && P29X=$r || P29S=$r; }; }
@@ -651,6 +653,13 @@ P29X=""; P29S=""
 # + lab + corpus (run `gate.sh` right after the build, ~2 min), else runs it here. A FAIL fails VMQUICK before filming.
 # VMQ_GATE=0 skips (lab-only debugging; never for a build review).
 vmq_gate() { [ "${VMQ_GATE:-1}" = 1 ] || return 0; local G=/mnt/c/KenshiModding/components/KenshiFP/animlab/gate.sh h f l
+  # op-comb2: the installed DLL is the staged combined build -> its own pipeline gate (base /root/KenshiFP lacks the pending patches)
+  local SL=${VMQ_STAGED:-/mnt/c/KenshiTestRuns/staged/KenshiFP-latest.txt} ID="$KDIR/mods/KenshiFP/KenshiFP.dll" sr
+  if [ -s "$SL" ] && [ -f "$ID" ] && [ "$(awk 'NR==1{print $4}' "$SL")" = "$(sha256sum "$ID" | cut -d' ' -f1)" ]; then
+    sr=$(awk '$1=="run"{print $2}' "$SL"); l=$(head -1 "$sr/gate-all/RESULT.txt" 2>/dev/null)
+    if [ -n "$l" ]; then note "VMQUICK: gate of the installed combined build $(awk 'NR==1{print $2}' "$SL") ($sr/gate-all)"
+      RESULTS+=("$l"); echo "$l" >> "$LOG"; case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
+      row VMQUICK FAIL "animlab gate FAIL on the installed combined build (${l#RESULT ANIMLAB-REGRESS })"; return 1; fi; fi
   h=$(bash "$G" hash); f=/root/animlab-gate/result-$h.txt
   # no cached result: the gate runs in the BACKGROUND (nice 15) while VMQUICK films; vmq_gate_wait judges it after the
   # game part (rig-runner 2026-10-10: a foreground gate left the 5090 game idle ~2 min before op-b8 filmed)

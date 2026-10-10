@@ -64,7 +64,9 @@ SW=$(grep -o "\[vm\] swing #[0-9]* stroke [0-9]" "$KDIR/KenshiFP.log" | tail -$(
 A fp_vm set stroke -1 >/dev/null; A chatter on >/dev/null   # restore before the game is released (op-b7: blkJ inherited stroke 3)
 pf_game_done   # game part over: under run-batch.sh the next row starts while the checks below run
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
-TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
+# full takecheck output kept in $N.takecheck.txt; the RESULT carries the last line + every failing check line (op-comb2: "sync FAIL" without detail)
+python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" > "$N.takecheck.txt" 2>&1
+TC=$(tail -1 "$N.takecheck.txt"); TCB=$(grep -E "^[a-z]+ FAIL " "$N.takecheck.txt" | cut -c1-160 | tr '\n' ';')
 ok=1; echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESULT take PASS" (dryrun: E6 always FAILed on this)
 : > "$N.lab.txt"
 for s in $STROKES; do for c in inline metrics churn blade; do
@@ -76,4 +78,4 @@ for s in $STROKES; do for c in inline metrics churn blade; do
   echo "$r" | grep -q " PASS" || ok=0
 done; done
 SK=$(python3 $L/animlab.py stroke --overhead 2 "$N.vmrec.txt" 2>&1 | grep '^stroke ' | head -1); echo "$SK" >> "$N.lab.txt"; echo "$SK" | grep -q "^stroke PASS" || ok=0
-PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"
+PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC${TCB:+ bad: $TCB}] (detail $OUT/$N.takecheck.txt) strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"
