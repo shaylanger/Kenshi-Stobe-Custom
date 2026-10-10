@@ -5,8 +5,8 @@
 #   1. corpus.sh verify (every pinned file present, sha unchanged)
 #   2. regress.sh in an EMPTY work dir filled only from the corpus (all FAIL-old/PASS-new pairs, replays of the current
 #      /root/KenshiFP source); a REGRESS FAIL, or an INFO saying a corpus file is missing, fails the gate
-#   3. E6 swing pool (`animlab.py pool` over corpus pools/sword-swing/pool-all.list, maintainer's E6 gate) on the current source's adapter for every stroke enabled in
-#      its default mask (g_vm_strokes in kfp_viewmodel.inc) + strokes listed in corpus pool/strokes.tsv
+#   3. E6 swing pool (`animlab.py pool` over corpus pools/sword-swing/pool-all.list, maintainer's E6 gate) on the current source's adapter for every stroke
+#      with key tables (0..VM_NSTROKE-1 in kfp_viewmodel.inc) + its default mask + strokes listed in corpus pool/strokes.tsv
 #   4. mutation tests (mutate.py): every check must FAIL its own synthetic corruption of known-good corpus material
 #   5. flips vs the last accepted baseline (corpus gate-baseline.tsv): any PASS that became FAIL or stopped running
 #      (a fixed miss coming back, a check silently skipped) fails the gate
@@ -34,9 +34,13 @@ rm -rf "$W"; mkdir -p "$W"
 ANIMLAB_WORK=$W bash "$HERE/regress.sh" > "$OUT/regress.txt" 2>&1
 grep -q '^REGRESS FAIL' "$OUT/regress.txt" && { fail=1; why+=(regress); }
 if grep -E '^REGRESS INFO' "$OUT/regress.txt" | grep -viE 'not built|not recorded yet' | grep -qiE 'missing|recording or build'; then fail=1; why+=(corpus-file-missing); fi
-# 3. E6 pool for each enabled stroke
+# 3. E6 pool for EVERY stroke that has key tables (0 .. VM_NSTROKE-1 in kfp_viewmodel.inc), not only the default mask:
+#    gate coverage class (Misses 2026-10-10): the pt30 change dropped stroke 1 take_all 0.95 -> 0.64 and passed the gate
+#    because only mask stroke 0 was pooled (game take kfx-b9 e6r4 confirmed the snap). Strokes are switched on at run time
+#    (fp_vm set strokes), so every stroke the source can play is pooled; corpus pool/strokes.tsv adds extra adapter args.
 mask=$(grep -o 'static int g_vm_strokes = 0x[0-9a-fA-F]*' "$SRC/client/kfp_viewmodel.inc" 2>/dev/null | grep -o '0x.*'); mask=$((${mask:-0x1}))
-strokes=$(for n in 0 1 2 3 4 5 6 7; do [ $(( (mask >> n) & 1 )) = 1 ] && echo $n; done; awk '!/^#/ && NF {print $1}' "$C/pool/strokes.tsv" 2>/dev/null)
+nstk=$(grep -o '#define VM_NSTROKE [0-9]*' "$SRC/client/kfp_viewmodel.inc" 2>/dev/null | awk '{print $3}'); nstk=${nstk:-1}
+strokes=$(for n in $(seq 0 $((nstk - 1))); do echo $n; done; for n in 0 1 2 3 4 5 6 7; do [ $(( (mask >> n) & 1 )) = 1 ] && echo $n; done; awk '!/^#/ && NF {print $1}' "$C/pool/strokes.tsv" 2>/dev/null)
 PR=""; : > "$OUT/pool.txt"
 for s in $(echo "$strokes" | sort -un); do
   xa=$(awk -v s=$s '!/^#/ && $1==s {$1=""; print}' "$C/pool/strokes.tsv" 2>/dev/null)
