@@ -141,5 +141,13 @@ if [ -x "$BLD/kfpvm_e1k" ] && [ -f /mnt/c/KenshiModding/pending-fixes/kfp-e1-key
   r=$(python3 "$L/animlab.py" churn /tmp/al-e1kc.txt)
   case "$r" in "churn FAIL rev="*":BAD@"*"windup_roll="*":BAD"*) ok "miss E1 churn reproduced (kfp-e1-keys candidate, f14-e0): $r";; *) bad "miss E1 churn not reproduced: ${r:-no churn line}";; esac
 else echo "REGRESS INFO E1 churn: candidate kfp-e1-keys.py not built"; fi
+#  18. miss E1 "blade ~90 deg to the forearm, wrist-driven" (Shay 2026-10-09, reference photos e1*.png vs Chivalry):
+#      `animlab.py inline` (wind-up + stroke: forearm-blade angle median <= 30, max <= 40 deg, on screen max <= 40; stroke
+#      wrist share of the tip motion <= 0.6). The game recordings f14/e0 and f13/sw0 and the current solver replaying e0
+#      must FAIL (stroke ~50/62 deg, wrist share ~0.9-1.0).
+for r in f14-e0 f13-sw0; do r2=$(python3 "$L/animlab.py" inline "$W/$r.txt")
+  case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduced (game $r): ${r2%% follow:*}";; *) bad "miss E1 inline game $r not failing: ${r2:-no inline line}";; esac; done
+r2=$(python3 "$L/animlab.py" inline /tmp/al-e1base.txt)
+case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduced (replay f14-e0, current solver): ${r2%% follow:*}";; *) bad "miss E1 inline current replay not failing: ${r2:-no inline line}";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
