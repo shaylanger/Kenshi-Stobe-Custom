@@ -634,6 +634,8 @@ static void fpc_sneak_probe(void *pc) {
     g_fpc_sneak_probe.enemy_tp=t?fpc_char_isenemy(t,pc):-1;g_fpc_sneak_probe.enemy_pt=t?fpc_char_isenemy(pc,t):-1;
     if (t) fpc_name(t,g_fpc_sneak_probe.name,sizeof g_fpc_sneak_probe.name); else strcpy(g_fpc_sneak_probe.name,"none");
 }
+static void fpc_tech_name(void *tech,char *out,size_t n);
+static char g_fpc_fs_name[48];   /* NA1: free-swing technique animation (fist tables) */
 static void fpc_free_swing(void *pc) {
     if (g_fpc_fs_dead || g_fpc_fs_tech || !g_fpc_getanim || !g_fpc_choose || !g_fpc_startanim || !g_fpc_progress) return;
     void *cc=g_melee_get_combat?g_melee_get_combat(pc):NULL;
@@ -642,10 +644,16 @@ static void fpc_free_swing(void *pc) {
     if (!readable(stats,STATS_ATTACK_SPEED+4) || !readable(anim,8)) {++g_fpc_fs_notech;return;}
     void *tech=g_fpc_choose(stats,5.0f,30.0f,NULL,1);
     if (!readable(tech,TECH_ANIM_SPEED+4)) {++g_fpc_fs_notech;return;}
+    if (g_fpc_fists && g_vm_fist_force>=0 && g_vm_fist_force<VM_NFIST) {   /* NA1 take rows: re-pick until the forced technique */
+        char nm[48];int k;for (k=0;k<48;k++) {fpc_tech_name(tech,nm,sizeof nm);if (!strcmp(nm,g_vm_fist_tech[g_vm_fist_force].anim)) break;
+            void *t2=g_fpc_choose(stats,5.0f,30.0f,tech,1);if (readable(t2,TECH_ANIM_SPEED+4)) tech=t2;}
+        if (k==48) logline("[vm] fist force: '%s' not picked in 48 tries (got '%s')",g_vm_fist_tech[g_vm_fist_force].anim,nm);
+    }
     float spd=*(float *)((uintptr_t)stats+STATS_ATTACK_SPEED);
     if (!(isfinite(spd)&&spd>0.2f&&spd<4.0f)) spd=1.0f;
     unsigned char empty[32];make_mstr(empty,"");
     g_fpc_startanim(anim,tech,spd,empty);g_fpc_fs_spd=spd;
+    fpc_tech_name(tech,g_fpc_fs_name,sizeof g_fpc_fs_name);
     g_fpc_fs_anim=anim;g_fpc_fs_tech=tech;g_fpc_fs_start_ms=fpc_now_ms();g_fpc_fs_prog=0;g_fpc_fs_live=0;g_fpc_fs_steps=0;g_fpc_fs_pmin=9.0f;
     ++g_fpc_free_swings;
 }
