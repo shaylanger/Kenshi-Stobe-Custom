@@ -101,7 +101,7 @@ static int fp_char_in_squad(void *gw,void *pc) {
  * render ~40 s later. The new world rebuilds every appearance, so nothing to restore. */
 static void fp_head_forget_world(void) {
     g_head_hidden=0; g_head_hidden_char=NULL; g_player_app=NULL;
-    g_head_params=NULL; g_head_params_mat=NULL; g_gear_n=0;
+    g_head_params=NULL; g_head_params_mat=NULL; g_gear_n=0; g_gear_pc=NULL; g_gear_wn=0;
 }
 /* C05-KO (2026-10-06): standing MOVE_DIRECTION drive is only valid on a character in
  * the normal prone state (0) who is not down. KO/crippled/play-dead route to the order

@@ -1238,9 +1238,11 @@ static void guard_arm(void)
 }
 static int g_head_hidden;               /* our head-hide state (>1x fast-forward) */
 static void *g_head_hidden_char;        /* the exact character whose head we hid */
-static void *g_gear_hid[8];   /* the mesh entities WE hid, so the restore is exact and we
+static void *g_gear_hid[16];  /* the mesh entities WE hid, so the restore is exact and we
                                * never re-show something the game had hidden on its own */
 static int   g_gear_n;
+static void *g_gear_pc;       /* character whose worn items headgear_set_hidden walks (hand-bone lookup) */
+static void *g_gear_wlast[16]; static unsigned char g_gear_wstate[16]; static int g_gear_wn;   /* holster diag */
 static get_bone_world_t g_get_bone_world;   /* Character::getBoneWorldPosition */
 static unsigned char g_head_bone[32];   /* MSVC std::string "Bip01 Head" (SSO) */
 static int g_ogre_ready;
@@ -2415,6 +2417,7 @@ static int kah_fp_state(const char *id, int argc, const char *const *argv, KAH_R
 }
 
 static int kah_fp_vm(const char *, int, const char *const *, KAH_Reply *, void *);  /* kfp_viewmodel.inc */
+static int kah_fp_gear(const char *, int, const char *const *, KAH_Reply *, void *);
 static void kah_bridge_tick(void)
 {
     if (g_kah_connected) return;
@@ -2435,7 +2438,8 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_turret", "fp_turret [state] (FP turret control: aim, reload, shots)", kah_fp_turret, NULL)
           + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL)
           + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|swallow on|off|focus on|off (TEST)|reset", kah_fp_keys, NULL)
-          + g_kah.registerCommand("fp_vm", "fp_vm state|probe|dump|on|off|set <key> <v>", kah_fp_vm, NULL);
+          + g_kah.registerCommand("fp_vm", "fp_vm state|probe|dump|on|off|set <key> <v>", kah_fp_vm, NULL)
+          + g_kah.registerCommand("fp_gear", "fp_gear (read-only: worn items key/type/visible/hand distance/hidden by us)", kah_fp_gear, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
 }
@@ -6253,6 +6257,52 @@ static void gearnode_key(void *node, char *out, size_t outsz)
     memcpy(out, k, len); out[len] = 0;
 }
 
+/* Z1 holstered weapons: Kenshi keeps a weapon in the worn-item map while it hangs on the back/hip
+ * (key "back" for the crossbow). Near the FP camera it fills the view (crossbow limbs over the
+ * sword view, the stock over a quarter of the turret view), so it hides with the head. The weapon
+ * IN HAND is told apart by where its scene node sits: on a hand prop bone (Bip01 Prop1/2). */
+#define GD_TYPE        0x50   /* GameData::type (itemType) */
+#define ITYPE_WEAPON   2
+#define ITYPE_CROSSBOW 107
+static int gear_item_type(void *gd)
+{
+    return readable(gd, GD_TYPE + 4) ? *(int *)((uintptr_t)gd + GD_TYPE) : -1;
+}
+/* distance (m) from the mesh's scene node to the nearer hand prop bone; 99 = unknown.
+ * CALLER MUST hold the VEH guard. */
+static float gear_hand_dist(void *mesh)
+{
+    if (!g_get_parent_scenenode || !g_node_getdpos_v || !g_get_bone_world || !g_gear_pc) return 99.0f;
+    void *sn = g_get_parent_scenenode(mesh);
+    if (!readable(sn, 8)) return 99.0f;
+    static unsigned char nm[2][32]; static int init;
+    if (!init) { make_mstr(nm[0], "Bip01 Prop1"); make_mstr(nm[1], "Bip01 Prop2"); init = 1; }
+    Vec3 v; g_node_getdpos_v(sn, &v);
+    float best = 99.0f;
+    for (int i = 0; i < 2; i++) {
+        Vec3 b; g_get_bone_world(g_gear_pc, &b, nm[i]);
+        float dx = v.x - b.x, dy = v.y - b.y, dz = v.z - b.z, d1 = sqrtf(dx * dx + dy * dy + dz * dz);
+        dx -= g_tx; dz -= g_tz; float d2 = sqrtf(dx * dx + dy * dy + dz * dz);   /* Ogre vs game frame */
+        if (d1 < best) best = d1;
+        if (d2 < best) best = d2;
+    }
+    return best;
+}
+#define GEAR_HAND_M 0.20f
+static int g_gear_wdiag;      /* capped holster/hand transition log lines */
+static void gear_weap_note(const char *kn, void *mesh, int type, float hd, int holstered)
+{
+    for (int j = 0; j < g_gear_wn; j++)
+        if (g_gear_wlast[j] == mesh) {
+            if (g_gear_wstate[j] != holstered && g_gear_wdiag < 60) { g_gear_wdiag++;
+                logline("[head] weapon key=\"%s\" mesh=%p type=%d handDist=%.2f -> %s", kn, mesh, type, hd, holstered ? "holstered (hidden)" : "in hand (shown)"); }
+            g_gear_wstate[j] = (unsigned char)holstered; return;
+        }
+    if (g_gear_wn < 16) { g_gear_wlast[g_gear_wn] = mesh; g_gear_wstate[g_gear_wn++] = (unsigned char)holstered; }
+    if (g_gear_wdiag < 60) { g_gear_wdiag++;
+        logline("[head] weapon key=\"%s\" mesh=%p type=%d handDist=%.2f -> %s (new)", kn, mesh, type, hd, holstered ? "holstered (hidden)" : "in hand (shown)"); }
+}
+
 /* Hide (hide=1) or restore (hide=0) the player's head-covering worn items.
  * CALLER MUST hold the VEH guard. */
 static void headgear_set_hidden(void *app, int hide, int logit)
@@ -6281,7 +6331,7 @@ static void headgear_set_hidden(void *app, int hide, int logit)
      * The PREVIOUS pass's list is snapshotted first: re-assert passes diff against it
      * to catch the game re-showing or replacing an entity we hid (field diagnosis:
      * facial hair reported visible after a clean hide pass). */
-    void *prev[8]; int prevn = 0;
+    void *prev[16]; int prevn = 0;
     if (hide) {
         prevn = g_gear_n;
         memcpy(prev, g_gear_hid, sizeof prev);
@@ -6309,7 +6359,18 @@ static void headgear_set_hidden(void *app, int hide, int logit)
                    || !strcmp(kn, "hat") || !strcmp(kn, "head") || !strcmp(kn, "eyes") || !strcmp(kn, "face"));
         int slothead = haveslot && slot >= 0 && slot <= 31
                     && ((g_cfg_headgear_slots >> slot) & 1u);
-        if (!slothead && !keyhead) {
+        int gtype = gear_item_type(gd);
+        int holstered = 0;
+        if (!slothead && !keyhead && (gtype == ITYPE_WEAPON || gtype == ITYPE_CROSSBOW)) {
+            float hd = gear_hand_dist(mesh);
+            holstered = hd > GEAR_HAND_M && strcmp(kn, "hands") != 0;   /* "hands" = drawn; its node can lag a frame */
+            if (hide) gear_weap_note(kn, mesh, gtype, hd, holstered);
+        }
+        if (!slothead && !keyhead && !holstered) {
+            /* a weapon we hid while holstered is now in hand (drawn), or this is the restore pass */
+            void **lst = hide ? prev : g_gear_hid; int ln = hide ? prevn : g_gear_n;
+            for (int j = 0; j < ln && j < 16; j++)
+                if (lst[j] == mesh) { g_ent_setvisible(mesh, 1); break; }
             if (logit) logline("[head] gear key=\"%s\" item=%p slot=%d mesh=%p -> kept (not head-covering, slots=0x%x)",
                                kn, item, slot, mesh, g_cfg_headgear_slots);
             continue;
@@ -6318,9 +6379,9 @@ static void headgear_set_hidden(void *app, int hide, int logit)
             /* re-assert diagnostics: an entity we hid last pass reading visible again
              * (the game flipped it back), or a mesh pointer we have never seen (the
              * game re-created the entity). Capped; the re-hide below cures both. */
-            if (prevn > 0 && g_gear_diag < 12) {
+            if (prevn > 0 && g_gear_diag < 12 && !holstered) {
                 int wasours = 0;
-                for (int j = 0; j < prevn && j < 8; j++)
+                for (int j = 0; j < prevn && j < 16; j++)
                     if (prev[j] == mesh) { wasours = 1; break; }
                 int vis = g_ent_getvisible ? (g_ent_getvisible(mesh) != 0) : -1;
                 if (vis == 1 || !wasours) {
@@ -6335,7 +6396,7 @@ static void headgear_set_hidden(void *app, int hide, int logit)
             nhid++;
             if (logit) logline("[head] gear key=\"%s\" item=%p slot=%d mesh=%p -> hidden",
                                kn, item, slot, mesh);
-        } else if (!gamehides) {
+        } else if (!gamehides || holstered) {
             for (int j = 0; j < g_gear_n; j++)
                 if (g_gear_hid[j] == mesh) { g_ent_setvisible(mesh, 1); nhid++; break; }
         }
@@ -6356,6 +6417,40 @@ static void headgear_apply(void *app, int hide, int logit)
     guard_arm();
     headgear_set_hidden(app, hide, logit);
     g_guard_armed = 0;
+}
+
+/* fp_gear: read-only dump of the worn-item map (key, item type, mesh visible, scene node world,
+ * distance to the hand prop bones, hidden by us). */
+static int kah_fp_gear(const char *id, int argc, const char *const *argv, KAH_Reply *r, void *u)
+{
+    (void)id; (void)argc; (void)argv; (void)u;
+    char b[1600]; int k = 0;
+    void *app = g_player_app;
+    k += snprintf(b + k, sizeof b - k, "app=%p pc=%p near=%d headHidden=%d ourHid=%d", app, g_gear_pc, fp_view_head_near(), g_head_hidden, g_gear_n);
+    if (!app || !readable(app, APP_ITEM_BUCKETS + 8)) { r->append(r, b); return KAH_OK; }
+    if (setjmp(g_guard_jb)) { g_guard_armed = 0; r->append(r, "fp_gear: fault"); return KAH_ERROR; }
+    guard_arm();
+    if (g_gear_pc && g_get_bone_world) { Vec3 h; g_get_bone_world(g_gear_pc, &h, g_head_bone);
+        k += snprintf(b + k, sizeof b - k, " head=%.2f,%.2f,%.2f t=%.1f,%.1f", h.x, h.y, h.z, g_tx, g_tz); }
+    size_t nb = *(size_t *)((uintptr_t)app + APP_ITEM_NBUCK);
+    void **bk = *(void ***)((uintptr_t)app + APP_ITEM_BUCKETS);
+    void *node = (nb && nb <= 0x10000 && readable(bk, (nb + 1) * sizeof(void *))) ? bk[nb] : NULL;
+    for (int i = 0; node && i < 32 && k < (int)sizeof b - 200; i++, node = *(void **)((uintptr_t)node + MAPN_NEXT)) {
+        if (!readable(node, MAPN_VALUE + 8)) break;
+        void *item = *(void **)((uintptr_t)node + MAPN_VALUE);
+        if (!readable(item, ITEM_MESH + 8)) continue;
+        void *gd = *(void **)((uintptr_t)item + ITEM_GAMEDATA), *mesh = *(void **)((uintptr_t)item + ITEM_MESH);
+        char kn[48]; gearnode_key(node, kn, sizeof kn);
+        int vis = (mesh && g_ent_getvisible) ? (g_ent_getvisible(mesh) != 0) : -1, ours = 0;
+        for (int j = 0; j < g_gear_n; j++) if (g_gear_hid[j] == mesh) ours = 1;
+        Vec3 v = {0, 0, 0}; void *sn = (mesh && g_get_parent_scenenode) ? g_get_parent_scenenode(mesh) : NULL;
+        if (readable(sn, 8) && g_node_getdpos_v) g_node_getdpos_v(sn, &v);
+        k += snprintf(b + k, sizeof b - k, " | %s type=%d mesh=%p vis=%d ours=%d node=%.2f,%.2f,%.2f hand=%.2f",
+                      kn, gear_item_type(gd), mesh, vis, ours, v.x, v.y, v.z, mesh ? gear_hand_dist(mesh) : 99.0f);
+    }
+    g_guard_armed = 0;
+    r->append(r, b);
+    return KAH_OK;
 }
 
 /* Set the body material's "hiddenMask" shader constant to maskval. CALLER MUST hold the
@@ -6412,6 +6507,7 @@ static int set_head_disabled(void *pc, int disable)
     if (!readable(anim, ANIM_APPEARANCE + 8)) return 0;
     void *app = *(void **)((uintptr_t)anim + ANIM_APPEARANCE);
     g_player_app = app;   /* cache so the updateHiddenParts hook knows which appearance is ours */
+    g_gear_pc = pc;       /* hand prop bones for the holstered-weapon test */
     static int dbg; int logit = (dbg == 0); if (logit) dbg = 1;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_head_dead = 1;
         logline("head-mask FAULTED -- head-hide disabled"); return 0; }
