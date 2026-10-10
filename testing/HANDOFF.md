@@ -26,22 +26,22 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
   - `4080-filming` STOPPED-CONTEXT: rig layer done (6ffe60b, eeab981). Proof take not rerun. Take bugs: s3prep2 drew the
     crossbow not the katana (require melee=1), s3render3 end+1.3 s (use +0.5); capture preflight (quser Active +
     non-black grab) not written. 4080 kenshi.cfg left in test mode (restore `kcfg.ps1 play` when done).
-  - `4080-display` (virtual display driver + keep-display-on.bat for Shay): read its status/handoff; when READY tell
-    Shay to double-click keep-display-on.bat in RDP instead of closing RDP. Shay's RDP session 2 is Active.
+  - `4080-display` DONE (handoff deleted by cleanup-audit): VDD MttVDD installed; Shay double-clicks
+    C:\KAH\keep-display-on.bat (desktop copy) in RDP after every reconnect; check `ssh 4080 'powershell -ExecutionPolicy Bypass -File C:\KAH\display-check.ps1'` (LIVE = ok).
   - DONE: `kfp-regress` (no product regression; PT26/28 specs predate accepted poses; side-by-sides
-    C:\KenshiTestRuns\spec-compare\*.jpg reviewed + shown to Shay), `animlab-spec` (taste set 71 rows, 0 misses, 6 false
+    spec-compare\*.jpg reviewed + shown to Shay; deleted after Shay's spec-video decisions), `animlab-spec` (taste set 71 rows, 0 misses, 6 false
     alarms -> Misses; spec.py; unarmed spec), `fists` (4 candidates C:\KenshiTestRuns\fists-cand\ +
     /root/animlab-work/fists/cand; lab PASS; unarmed spec PASS except shoteiL inferred U6 wind-up 0.05 dm above eye;
     NOT yet coordinator-reviewed; unarmed body game rec spec agents\fists.need-rec.md -> 4080 queue).
 - Waiting on Shay: nothing. Spec videos C:\KenshiTestRuns\spec-videos\ all DECIDED 2026-10-10: keep current swing wrist
   (~40; PT26/PT30/R8 swing limits recalibrate to accepted), current two-hand reload and current low ready carry (PT28 reload spec -> kfp-fixer, taste rows -> maintainer); 4080 virtual display LIVE (Shay ran keep-display-on.bat 2026-10-10, session 2 on console, gdigrab LIVE); he must rerun it each time he leaves RDP; 4080-filming told to start the proof take. Shay decided: half-open hand OK; palm strikes -> straight-wrist punches. Shay decided 2026-10-10 (m91): native animation frames are EXEMPT from the wrist-bend limit (PT29 + lab wrist checks; told kfp-fixer + animlab-maintainer). Shay 2026-10-10: unarmed inferred rules (U1/U2/U4/U6/U10/U11/U14/U16) + R17 are NOT his to judge: the native in-game animations decide (agent animlab-spec resolves each against native measurements).
 - T6 turret-fp.mp4: coordinator review FAIL (labels lead the screen 0.4-0.5 s; NPC speech text overlays; possible 1-frame
-  barrel sliver at 59.125); fixer has the list. Review pack C:\KenshiTestRuns\review\t6 (built with --offset 0.8).
+  barrel sliver at 59.125); fixer has the list. Review pack review\t6 deleted (verdict text in review-verdicts.tsv).
 - Nothing is ready for Shay as a video.
 
 ## Earlier (2026-10-10 m87): FP viewmodel/turret work DONE, nothing running, waiting on Shay
 - Kenshi closed, lock free, no inflight, 5090 idle recorded ("awaiting Shay's decisions"). Fixers #1-#44 (lock owner fixer-pt30) finished; their log `%TEMP%\claude\C--KenshiModding\wr\HANDOFF-sword-wrist.md`.
-- Videos, all coordinator-reviewed, in `C:\KenshiTestRuns\vm-rework\`: anim-sword-e6, sword-z25-block, turret-fp (T6, 86fa1ca), zoom-sweep (Z1, 276e1fc). Scripts to re-render them: `C:\KenshiTestRuns\vidscripts\` (f24/f26/f36/f38 helpers).
+- Videos, all coordinator-reviewed, were in `vm-rework\` (deleted 10-10 by cleanup-audit; copies in `C:\KenshiTestRuns\corpus\takes\videos\` + `corpus\kept\vm-rework_*`): anim-sword-e6, sword-z25-block, turret-fp (T6, 86fa1ca), zoom-sweep (Z1, 276e1fc). Scripts to re-render them: `C:\KenshiTestRuns\vidscripts\` (f24/f26/f36/f38 helpers).
 - Waiting on Shay (COMBAT_TEST_PLAN rows): Z1 zoommode switch (default) or fade; E6 default stroke mask (now 0x1 = diagonal only; stroke 3 stays off); T6 turret look/feel.
 - Harness bugs seen (not fixed): give+pickup leaves a ghost crossbow mesh; `teleport "#handle"` ignores the handle and moves the selected char; `chars` centres on the player. No `unpin` command (pins drop on relaunch).
 - Gotchas: the display sleeps after 60 min without input -> gdigrab records black; run a SetThreadExecutionState(ES_DISPLAY_REQUIRED|ES_CONTINUOUS) keeper while filming. Files written from WSL show skewed mtimes in Git Bash: check freshness from inside WSL. `setsid nohup ... &` inside a one-shot `wsl.exe bash -c` died with the call here; run long WSL jobs as a background Bash-tool call instead.
