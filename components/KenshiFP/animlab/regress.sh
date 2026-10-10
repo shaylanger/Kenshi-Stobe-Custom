@@ -58,7 +58,7 @@ case "$r" in *"max_wb_diff=0.0"[0-5]*) ok "mirror L==R $r";; *) bad "mirror L==R
 r=$(cd "$W" && python3 "$L/metricslab.py" faithful vmrec-q-sword-z0-a.txt 83 232 --adapter "$BLD/kfpvm_drive_6c9516b" "--args=--quiet --cold-elbow" --out /tmp/al-faith 2>&1 | tail -1)
 case "$r" in "RESULT faithful-drive FAIL"*) ok "miss elbow-branch reproduced (cold @6c9516b): ${r#RESULT faithful-drive }";; *) bad "miss elbow-branch not reproduced: $r";; esac
 #  11. miss E1 "edge leads the arc": metrics arc gate (stroke frames after the wind-up: edge_arc >= 0.7 on >= 85%, swing
-#      wb_max <= 30). The game recording f14/e0 (back of the blade first) must FAIL; the current solver replaying it must
+#      wb_max <= 50, default since 2026-10-09). The game recording f14/e0 (back of the blade first) must FAIL; the current solver replaying it must
 #      FAIL too while the source has no edge lead (g_vm_swlead). The pending E1 patch (+ patches/e1-lead-variants.py
 #      defaults) is reported as INFO (2026-10-09: arc_ok 1.00 but wb_max 107 = the lead folds the wrist); the E1 candidate
 #      pending-fixes/kfp-e1-keys.py must PASS with wb_max <= 50.
@@ -80,10 +80,15 @@ else case "$r" in "arc FAIL"*) ok "miss E1 reproduced (replay f14-e0, current so
   if [ -f "$E1K" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1K" --out "$BLD/kfpvm_e1k" >/tmp/al-build7.txt 2>&1; then
     [ -f "$W/f13-sw0.txt" ] || cp /mnt/c/KenshiTestRuns/f13/sw0.txt "$W/f13-sw0.txt" 2>/dev/null
     for r in f14-e0 f13-sw0; do "$BLD/kfpvm_e1k" "$W/$r.txt" /tmp/al-e1k.txt --quiet >/dev/null 2>&1
-      r2=$(python3 "$L/animlab.py" metrics /tmp/al-e1k.txt --wb-max 50 | grep '^arc ')
+      r2=$(python3 "$L/animlab.py" metrics /tmp/al-e1k.txt | grep '^arc ')
       case "$r2" in "arc PASS"*) ok "E1 candidate kfp-e1-keys.py on $r: $r2";; *) bad "E1 candidate kfp-e1-keys.py on $r: ${r2:-no arc line}";; esac; done
   else echo "REGRESS INFO E1 candidate kfp-e1-keys.py not built (missing or does not apply)"; fi
 fi
+#  11b. E1 wb36 accepted (Shay 2026-10-09): the game recording of the approved swing (KenshiFP 9E5422A6, f23 anim-sword-z0:
+#      4 swings incl. the first after a draw, wb_max 36) must PASS the arc gate at the default wrist limit (50).
+[ -f "$W/f23-sword-z0d.txt" ] || cp /mnt/c/KenshiTestRuns/vid/vmrec-anim-f23-sword-z0d.txt "$W/f23-sword-z0d.txt" 2>/dev/null || bad "missing recording vid/vmrec-anim-f23-sword-z0d.txt"
+r=$(python3 "$L/animlab.py" metrics "$W/f23-sword-z0d.txt" | grep '^arc ')
+case "$r" in "arc PASS"*) ok "E1 wb36 game f23-sword-z0d: $r";; *) bad "E1 wb36 game f23-sword-z0d: ${r:-no arc line}";; esac
 #  12. miss X1 "crossbow jitter / jitter under-reported": `animlab.py compare` jitter line (game jit_p95 > 1 px may be at
 #      most 2.5x the replay's, swings skipped). vmq-f8c crossbow-z0 (pre-e948f86 bone-world map) replayed by its own
 #      solver 6c9516b must FAIL (ready x4.2, reload x6.6); f14/xb0 (node map) replayed by d40b6ad (first node-map snapshot)
@@ -148,7 +153,9 @@ else echo "REGRESS INFO E1 churn: candidate kfp-e1-keys.py not built"; fi
 for r in f14-e0 f13-sw0; do r2=$(python3 "$L/animlab.py" inline "$W/$r.txt")
   case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduced (game $r): ${r2%% follow:*}";; *) bad "miss E1 inline game $r not failing: ${r2:-no inline line}";; esac; done
 r2=$(python3 "$L/animlab.py" inline /tmp/al-e1base.txt)
-case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduced (replay f14-e0, current solver): ${r2%% follow:*}";; *) bad "miss E1 inline current replay not failing: ${r2:-no inline line}";; esac
+if grep -q g_vm_swlead /root/animlab-kfp-src/client/kfp_viewmodel.inc; then   # E1 merged (c6a1eda wb36): the current solver must PASS
+  case "$r2" in "inline PASS"*) ok "E1 inline fixed in the current solver (replay f14-e0): ${r2%% follow:*}";; *) bad "E1 inline current replay: ${r2:-no inline line}";; esac
+else case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduced (replay f14-e0, current solver): ${r2%% follow:*}";; *) bad "miss E1 inline current replay not failing: ${r2:-no inline line}";; esac; fi
 #      E1 inline candidate pending-fixes/kfp-e1-inline.py (al10 hill climb) must PASS inline + arc (stroke, wb <= 50) +
 #      churn --stroke on f14-e0 and vmq-85a7 sword-z0; f13-sw0 = INFO (its first swing starts from the replay-only ready
 #      branch B after the draw: no wind-up roll allowed, so the edge cannot line up; STATUS "E1 INLINE STATE").
@@ -156,7 +163,7 @@ E1I=/mnt/c/KenshiModding/pending-fixes/kfp-e1-inline.py
 [ -f "$W/vmq85a7-sw.txt" ] || cp /mnt/c/KenshiTestRuns/vmq-85a7/vmrec-q-sword-z0.txt "$W/vmq85a7-sw.txt" 2>/dev/null
 if [ -f "$E1I" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1I" --out "$BLD/kfpvm_e1inl" >/tmp/al-build8.txt 2>&1; then
   for r in f14-e0 vmq85a7-sw f13-sw0; do "$BLD/kfpvm_e1inl" "$W/$r.txt" /tmp/al-e1i.txt --quiet >/dev/null 2>&1
-    a1=$(python3 "$L/animlab.py" inline /tmp/al-e1i.txt | cut -d' ' -f1-2); a2=$(python3 "$L/animlab.py" metrics /tmp/al-e1i.txt --wb-max 50 | grep '^arc ' | cut -d' ' -f1-3)
+    a1=$(python3 "$L/animlab.py" inline /tmp/al-e1i.txt | cut -d' ' -f1-2); a2=$(python3 "$L/animlab.py" metrics /tmp/al-e1i.txt | grep '^arc ' | cut -d' ' -f1-3)
     a3=$(python3 "$L/animlab.py" churn --stroke /tmp/al-e1i.txt | cut -d' ' -f1-5); all="$a1 | $a2 | $a3"
     if [ $r = f13-sw0 ]; then echo "REGRESS INFO E1 inline candidate on $r (first swing from ready branch B): $all"
     else case "$all" in "inline PASS | arc PASS"*"| churn PASS"*) ok "E1 inline candidate on $r: $all";; *) bad "E1 inline candidate on $r: $all";; esac; fi; done
