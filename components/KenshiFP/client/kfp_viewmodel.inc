@@ -263,6 +263,7 @@ static int   g_vm_hcap_n[2]; static Vec3 g_vm_hl[2][2];   /* captured local hing
 static float g_vm_hdev[2][2], g_vm_htw_max[2]; static unsigned long g_vm_hfix_n;
 static Vec3  g_vm_mhua, g_vm_mhfa;   /* measured weapon-arm bone hinge axes (camera numbers), rec group H */
 static float g_vm_wrl = 2.2f, g_vm_wrlmin = 2.6f, g_vm_wrllag = 6.0f, g_vm_rs, g_vm_rsv, g_vm_rs_lag; static int g_vm_have_rs;   /* roll jerk limit (0 = off) */
+static int g_vm_writ = 4; static float g_vm_wrdmp = 0.5f;   /* PT30: wfix roll refinement steps and their damping */
 static unsigned g_vm_pk[4];   /* wrist picks: within the rate step, 2x, 4x, anywhere */   /* + max pick speed deg/s, max cone offset deg */   /* wrist fix: weight of the previous elbow in the straight-wrist pick (no flips) */
 static Vec3  g_vm_pick; static int g_vm_pick_ok;   /* wrist fix: this frame's elbow pick (camera space), made with the blade roll */
 static Vec3  g_vm_elbe; static int g_vm_have_elbe, g_vm_elb_ok; static float g_vm_elb_w, g_vm_elb_wz;
@@ -512,7 +513,8 @@ static VmPose vm_swing_atl(VmPose start, VmPose end, float u, float *wout)
         w = vm_sstep(w0_, w0_ + g_vm_swl_in, u) * (1.0f - vm_sstep(g_vm_swl_se + 0.06f, g_vm_swl_se + 0.06f + g_vm_swl_out, u));
         float wu = g_vm_swk_u[1], d = 0.03f; Vec3 dir;
         if (u < wu) dir = vm_sub(vm_swtip(vm_swing_at(start, end, g_vm_swl_se)), vm_swtip(r));
-        else dir = vm_sub(vm_swtip(vm_swing_at(start, end, fminf(1.0f, u + d))), vm_swtip(vm_swing_at(start, end, fmaxf(0.0f, u - d))));
+        else { float uc_ = fminf(u, g_vm_swl_se + 0.06f);   /* PT30: the follow-through keeps the strike's lead tangent (the tip path turns at the strike-end key: the lead flipped sign while it faded) */
+            dir = vm_sub(vm_swtip(vm_swing_at(start, end, fminf(1.0f, uc_ + d))), vm_swtip(vm_swing_at(start, end, fmaxf(0.0f, uc_ - d)))); }
         Vec3 f = r.f, lp = vm_sub(dir, vm_mul(f, vm_dot(dir, f))), up = vm_sub(r.u, vm_mul(f, vm_dot(r.u, f)));
         if (w > 0.0f && vm_len(lp) > 1e-4f && vm_len(up) > 1e-4f) {
             lp = vm_norm(lp); up = vm_norm(up);
@@ -868,7 +870,7 @@ static void vm_apply(void *skel)
                 float h0 = 0.5f * g_vm_rs; pst = g_vm_rs;
                 Qp = quat_norm(quat_mul((Quat){ cosf(h0), f.x * sinf(h0), f.y * sinf(h0), f.z * sinf(h0) }, Qp0));
             }
-            for (int it = 0; it < 2; it++) {
+            for (int it = 0; it < g_vm_writ; it++) {   /* PT30: damped refinement (each step x wrdmp): the 2-step loop overshot back and forth */
                 Quat Qh0 = quat_norm(quat_mul(Qp, quat_conj(lq))); Vec3 dc;
                 Vec3 Ph0 = vm_sub(g_vm_tp, quat_rotvec(Qh0, vm_v(lp.x*sc.x, lp.y*sc.y, lp.z*sc.z)));
                 int pr = vm_elb_pref(b[wh][0], b[wh][1], b[wh][2], Ph0, &dc);
@@ -879,6 +881,7 @@ static void vm_apply(void *skel)
                 Vec3 hp = vm_sub(hx, vm_mul(f, vm_dot(hx, f))), ap = vm_sub(a, vm_mul(f, vm_dot(a, f)));
                 if (vm_len(hp) < 1e-3f || vm_len(ap) < 1e-3f) break;
                 float psi = atan2f(vm_dot(f, vm_cross(hp, ap)), vm_dot(hp, ap)) * fminf(g_vm_wroll, 1.0f) * 0.5f;   /* half angle */
+                psi *= g_vm_wrdmp;
                 Qp = quat_norm(quat_mul((Quat){ cosf(psi), f.x * sinf(psi), f.y * sinf(psi), f.z * sinf(psi) }, Qp)); pst += 2.0f * psi;
             }
             {   static float e1h_; static int e1hv_;   /* E1: hold the wfix roll through the wind-up, release gradually */
@@ -2005,6 +2008,8 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "hinge_reset")) { memset(g_vm_hcap_n, 0, sizeof(g_vm_hcap_n)); memset(g_vm_hl, 0, sizeof(g_vm_hl));
                                           memset(g_vm_hdev, 0, sizeof(g_vm_hdev)); memset(g_vm_htw_max, 0, sizeof(g_vm_htw_max)); return 1; }
     else if (!strcmp(k, "wrllag"))  { if (x >= 0 && x < 180) g_vm_wrllag = x; return 1; }
+    else if (!strcmp(k, "writ"))    { if (x >= 1 && x <= 8) g_vm_writ = (int)x; return 1; }
+    else if (!strcmp(k, "wrdmp"))   { if (x > 0 && x <= 1) g_vm_wrdmp = x; return 1; }
     else if (!strcmp(k, "elbptau")) { if (x >= 0 && x < 1) g_vm_elb_ptau = x; return 1; }
     else if (!strcmp(k, "rbw"))     { if (x >= 0 && x < 20) g_vm_rbw = x; return 1; }
     else if (!strcmp(k, "rbwr"))    { if (x >= 0 && x < 20) g_vm_rbwr = x; return 1; }
