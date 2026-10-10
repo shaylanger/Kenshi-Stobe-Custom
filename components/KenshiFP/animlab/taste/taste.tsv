@@ -64,7 +64,7 @@ t58	takes/videos/turret-fp.mp4	R15	accept	coord		T6 coordinator-reviewed 1 fps +
 t59	takes/videos/anim-sword-e6.mp4	R15	accept	coord		E6 video coordinator-reviewed (open ground)
 t60	takes/videos/anim-xbow-z25.mp4	R15	accept	coord	checks=openground	X7 accepted
 t61	takes/videos/anim-xbow-z25.mp4	R15	superseded	coord	checks=cursor	accepted before Shay's cursor rule (ticket A, 2026-10-10); lab FAILS cursor 0-6.6 s
-t62	rec/e6-anim.txt	R17	reject	coord	pre=--only-stroke 2;checks=blade.snap,blade.seen	Misses E6 stroke 2 wind-up snap + end-on frame
+t62	rec/e6-anim.txt	R17	superseded	coord	pre=--only-stroke 2;checks=blade.snap,blade.seen	superseded by native rule R17 (coordinator reject 10-10 predates native reference; stroke 2 refit passes anyway); was: Misses E6 stroke 2 wind-up snap + end-on frame
 t63	rec/e6-anim-b2.txt	R17	reject	coord	pre=--only-stroke 1;checks=stroke.len	Misses E6 stroke 1 foreshortened (coordinator review)
 t64	rec/e6-anim-b2.txt	R17	reject	coord	pre=--only-stroke 2;ohopt=--overhead 2;checks=stroke.oh	Misses E6 stroke 2 overhead read as a diagonal
 t65	rec/e6-anim.txt	R17	accept	shay	pre=--only-stroke 0	approved stroke 0 (native-reference blade check: passes with no exception)
