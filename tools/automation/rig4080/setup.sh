@@ -8,19 +8,37 @@
 #     (no mp4, no raw frames)
 #  4. --saves: copy those save folders from this PC's %LOCALAPPDATA%\kenshi\save to the 4080's (replaces them)
 # Kenshi may run on the 4080 meanwhile (no DLL is touched). Never run while a 4080 take is running (it replaces its scripts).
-set -e
+#  --defer <file>: repo-relative paths (one per line) NOT to copy: files a still-running 4080 background analysis uses
+#    (rig-runner.ps1 computes it; they sync at a later boundary). Every skipped file prints "DEFERRED <path>".
+#  --dry: print what would be copied (COPY <path> / DEFERRED <path>), no ssh/scp (rig-runner -Fake test).
+# A failed copy prints "SCPFAIL <dest>: <files>" and the sync goes on (was: set -e aborted the rest, 2026-10-10 17:42).
 M=/c/KenshiModding; R=/c/KenshiTestRuns; H=4080; HERE=$M/tools/automation/rig4080
-SAVES=""; [ "$1" = --saves ] && { SAVES=$2; shift 2; }
-ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab 2>NUL & exit 0'
-scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" $H:C:/KAH/
-scp -q "$HERE/python3" $H:C:/KAH/bin/python3
-scp -q "$M/tools/automation/rig-env.sh" "$M/tools/automation/review-pack.py" $H:C:/KenshiModding/tools/automation/
-scp -q "$M"/components/KenshiFP/animlab/*.sh "$M"/components/KenshiFP/animlab/*.py "$M"/components/KenshiFP/animlab/*.txt $H:C:/KenshiModding/components/KenshiFP/animlab/
+SAVES=""; DEFER=""; DRY=0
+while :; do case "$1" in --saves) SAVES=$2; shift 2 ;; --defer) DEFER=$2; shift 2 ;; --dry) DRY=1; shift ;; *) break ;; esac; done
+[ -n "$DEFER" ] && [ ! -f "$DEFER" ] && DEFER=""
+run() { if [ $DRY = 1 ]; then :; else "$@"; fi; }
+# cp_to <dest> <files...>: scp the files that exist and aren't deferred
+cp_to() {
+  local d=$1 f rel keep=(); shift
+  for f in "$@"; do
+    [ -f "$f" ] || continue; rel=${f#$M/}
+    if [ -n "$DEFER" ] && tr -d '' < "$DEFER" | grep -qxF "$rel"; then echo "DEFERRED $rel"; continue; fi
+    keep+=("$f")
+  done
+  [ ${#keep[@]} -eq 0 ] && return 0
+  if [ $DRY = 1 ]; then for f in "${keep[@]}"; do echo "COPY ${f#$M/}"; done; return 0; fi
+  scp -q "${keep[@]}" "$H:$d" || echo "SCPFAIL $d: ${keep[*]#$M/}"
+}
+run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab 2>NUL & exit 0'
+run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" $H:C:/KAH/
+run scp -q "$HERE/python3" $H:C:/KAH/bin/python3
+cp_to C:/KenshiModding/tools/automation/ "$M/tools/automation/rig-env.sh" "$M/tools/automation/review-pack.py"
+cp_to C:/KenshiModding/components/KenshiFP/animlab/ "$M"/components/KenshiFP/animlab/*.sh "$M"/components/KenshiFP/animlab/*.py "$M"/components/KenshiFP/animlab/*.txt
 # weapon sweep lists + catalogue (wm4080-diag: "list sweep-gated.list missing")
-scp -q "$M"/components/KenshiFP/animlab/weapons/*.list "$M"/components/KenshiFP/animlab/weapons/*.json $H:C:/KenshiModding/components/KenshiFP/animlab/weapons/
-scp -q "$M"/components/KenshiFP/tests/ingame/*.sh "$M"/components/KenshiFP/tests/ingame/*.py $H:C:/KenshiModding/components/KenshiFP/tests/ingame/
-scp -q "$M/Kenshi-Automation-Harness/client/kah.py" $H:C:/KenshiModding/Kenshi-Automation-Harness/client/
-scp -q "$M"/Kenshi-Automation-Harness/tools/animlab/*.py $H:C:/KenshiModding/Kenshi-Automation-Harness/tools/animlab/
+cp_to C:/KenshiModding/components/KenshiFP/animlab/weapons/ "$M"/components/KenshiFP/animlab/weapons/*.list "$M"/components/KenshiFP/animlab/weapons/*.json
+cp_to C:/KenshiModding/components/KenshiFP/tests/ingame/ "$M"/components/KenshiFP/tests/ingame/*.sh "$M"/components/KenshiFP/tests/ingame/*.py
+cp_to C:/KenshiModding/Kenshi-Automation-Harness/client/ "$M/Kenshi-Automation-Harness/client/kah.py"
+cp_to C:/KenshiModding/Kenshi-Automation-Harness/tools/animlab/ "$M"/Kenshi-Automation-Harness/tools/animlab/*.py
 for d in "$@"; do
   ssh $H "mkdir C:\\KenshiTestRuns\\$d 2>NUL & exit 0"
   ( cd "$R/$d" && ls | grep -E '\.(sh|py|txt|awk|ttf)$' | grep -v -E '^(ts|s3ts|ev|s3ev)\.txt' | tr '\n' '\0' | xargs -0 -r -I{} scp -q {} "$H:C:/KenshiTestRuns/$d/" )
@@ -29,4 +47,4 @@ for s in $SAVES; do
   ssh $H "powershell -NoProfile -Command \"Remove-Item -Recurse -Force \$env:LOCALAPPDATA\\kenshi\\save\\$s -EA 0\"" || true
   scp -q -r "/c/Users/Shay/AppData/Local/kenshi/save/$s" "$H:AppData/Local/kenshi/save/"
 done
-echo "4080 rig synced: helpers, repo files, run dirs [$*], saves [$SAVES]"
+echo "4080 rig synced$( [ $DRY = 1 ] && echo " (DRY)"): helpers, repo files$( [ -n "$DEFER" ] && echo " ($(grep -c . "$DEFER") deferred)"), run dirs [$*], saves [$SAVES]"

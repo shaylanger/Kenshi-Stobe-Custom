@@ -118,6 +118,57 @@ function ClearAlert { if (Test-Path $alertF) { Remove-Item $alertF -ErrorAction 
 $fastF = Join-Path $(if ($Fake) { $rd } else { $runs }) "ALERT-$Rig-setup.txt"
 function FastAlert([string]$m) { Set-Content $fastF "ALERT $Rig $((Get-Date).ToString('HH:mm')) $m"; Log "ALERT(setup) $m" }
 $script:keep4080 = [bool]$Keep4080   # -Keep4080: handed over by a -Restart with the 4080 game kept up
+# 4080 deferred sync (coordinator 2026-10-10: never overwrite a script a running batch executes): at a list start every take
+# script is synced except those a still-running 4080 process (background analyses after GAMEDONE, anything else) uses:
+# the repo files in the running command lines (C:\KAH\runner\procpaths.ps1) + every synced file they reference, transitively
+# (basename; python "import x"/"from x"). Deferred files (runner\4080.deferred) sync at the next list start where nothing uses
+# them. A new list that needs a deferred file runs on the 4080's old copy: runner\4080.oldcopy.<list> -> its result line.
+function SyncCandidates {   # repo-relative path -> full path, the files rig4080/setup.sh copies
+    $m = 'C:\KenshiModding'; $h = @{}
+    $g = @("$m\tools\automation\rig-env.sh", "$m\tools\automation\review-pack.py", "$m\Kenshi-Automation-Harness\client\kah.py") +
+         @(Get-ChildItem "$m\components\KenshiFP\animlab\*" -File -Include *.sh, *.py, *.txt -ErrorAction SilentlyContinue | ForEach-Object FullName) +
+         @(Get-ChildItem "$m\components\KenshiFP\animlab\weapons\*" -File -Include *.list, *.json -ErrorAction SilentlyContinue | ForEach-Object FullName) +
+         @(Get-ChildItem "$m\components\KenshiFP\tests\ingame\*" -File -Include *.sh, *.py -ErrorAction SilentlyContinue | ForEach-Object FullName) +
+         @(Get-ChildItem "$m\Kenshi-Automation-Harness\tools\animlab\*.py" -File -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    foreach ($f in $g) { if (Test-Path -LiteralPath $f -PathType Leaf) { $h[($f.Substring($m.Length + 1) -replace '\\', '/')] = $f } }
+    $h
+}
+function UsedClosure([string]$text, [hashtable]$cand, [switch]$SeedsOnly) {   # synced files named in $text, plus everything they reference
+    $seen = @{}; $todo = New-Object Collections.Queue
+    foreach ($mm in [regex]::Matches($text, 'KenshiModding[\\/]+([^\s"''|;,)]+)')) { $r = $mm.Groups[1].Value -replace '\\', '/' -replace '/+', '/'; if ($cand.ContainsKey($r) -and -not $seen[$r]) { $seen[$r] = 1; $todo.Enqueue($r) } }
+    if ($SeedsOnly) { return @($seen.Keys | Sort-Object) }
+    $byBase = @{}; foreach ($k in $cand.Keys) { $b = Split-Path $k -Leaf; if (-not $byBase[$b]) { $byBase[$b] = @() }; $byBase[$b] += $k }
+    while ($todo.Count) {
+        $r = $todo.Dequeue(); $t = try { [IO.File]::ReadAllText($cand[$r]) } catch { '' }
+        foreach ($b in $byBase.Keys) {
+            $hit = $t.Contains($b) -and $t -match "(?<![\w.-])$([regex]::Escape($b))(?![\w-])"
+            if (-not $hit -and $b -like '*.py') { $st = [regex]::Escape($b.Substring(0, $b.Length - 3)); $hit = $t -match "(?m)^\s*(import|from)\s+([\w.]+\s*,\s*)*$st\b" }
+            if ($hit) { foreach ($k in $byBase[$b]) { if (-not $seen[$k]) { $seen[$k] = 1; $todo.Enqueue($k) } } }
+        }
+    }
+    @($seen.Keys | Sort-Object)
+}
+function Sync4080([string]$name, [string]$listText) {
+    $cand = SyncCandidates
+    $cl = if ($Fake) { if (Test-Path "$rd\fake-procs.txt") { @(Get-Content "$rd\fake-procs.txt") } else { @() } } else { @(Ssh4Ps 'C:\KAH\runner\procpaths.ps1' @()) }
+    if (-not $Fake -and -not ($cl -contains 'PROCPATHS-END')) { Log "4080 sync SKIPPED: 4080 process list unreadable ($(($cl | Select-Object -Last 1)); nothing overwritten, the 4080 keeps its current scripts"; return }
+    $defer = @(UsedClosure ($cl -join "`n") $cand)
+    $df = Join-Path $rd '4080.deferred'
+    $prev = if (Test-Path $df) { @(Get-Content $df | Where-Object { $_ }) } else { @() }
+    foreach ($x in $defer) { Log "4080 sync DEFERRED $x (used by a running 4080 process)" }
+    foreach ($x in $prev) { if ($defer -notcontains $x) { Log "4080 sync $x synced now (was deferred)" } }
+    [IO.File]::WriteAllText($df, (($defer -join "`n") + $(if ($defer.Count) { "`n" } else { '' })))
+    $dfp = '/c/' + ($df.Substring(3) -replace '\\', '/')
+    $so = & 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/rig4080/setup.sh $(if ($Fake) { '--dry ' })--defer $dfp" 2>&1 | ForEach-Object { "$_" }
+    foreach ($l in $so) { if ($l -match '^SCPFAIL') { Log "4080 sync: $l" } }
+    Log "4080 sync: $(($so | Select-Object -Last 1))$(if ($Fake) { " copies=$(@($so | Where-Object { $_ -like 'COPY *' }).Count)" })"
+    $old = @(UsedClosure $listText $cand | Where-Object { $defer -contains $_ })
+    $of = Join-Path $rd "4080.oldcopy.$name"
+    if ($old.Count) {
+        $dir = @(UsedClosure $listText $cand -SeedsOnly | Where-Object { $defer -contains $_ } | ForEach-Object { Split-Path $_ -Leaf })
+        Set-Content $of "$($old.Count) files ($(if ($dir.Count) { ($dir -join ',') + ' + ' })the files they use; full list in runner\4080.log)"; Log "4080 $name runs on the 4080's OLD copy of: $($old -join ', ') (in use by a running analysis)" }
+    else { Remove-Item $of -ErrorAction SilentlyContinue }
+}
 # queue\running\ entries of this rig that no runner file (<rig>.cur / <rig>.tail.*) names and no live run-batch.sh runs:
 # leftovers of a killed loop (2026-10-10). Filler copies are deleted, other lists go to failed\ (owner noted).
 function CleanRunning {
@@ -396,6 +447,7 @@ function Start-Batch($f) {
         Fail-List $run $name $own "dryrun failed: $sum" @($dr | Where-Object { $_ -match '^DRYRUN .* FAIL' }); Remove-Item $curF; return $true
     }
     if ($Fake) {   # fake batch: the dryrun result is the batch result
+        if ($Rig -eq '4080') { Sync4080 $name (($txt -join "`n")) }   # deferred-sync planning against runner\fake\fake-procs.txt (setup.sh --dry)
         Set-Content (Join-Path $outW 'SUMMARY.txt') (@("BATCH START $(Get-Date -Format 'yyyy-MM-dd HH:mm') list=$name (fake)") + @($dr | Where-Object { $_ -like 'DRYRUN *' } | ForEach-Object { $_ -replace '^DRYRUN (\S+) (PASS|FAIL|SKIP)', 'RESULT $1 $2' }) + "BATCH END $(Get-Date -Format 'yyyy-MM-dd HH:mm') (fake)")
         New-Item -ItemType File (Join-Path $outW 'DONE') -Force | Out-Null
         Note $own "started $name (fake) out=$outW"; return $true
@@ -458,10 +510,9 @@ function Start-Batch($f) {
             $hh = (Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-InstallHarness', $needH) | Select-Object -Last 1); Log "4080 harness (need $needH, installs C:\KAH\staged\AutomationHarness-$needH.dll if present): $hh"
             if ($hh -notmatch $needH) { Fail-List $run $name $own "4080 needs Harness $needH, installed $hh" @(); Remove-Item $curF; return $true }
         }
-        # take scripts + lab modules on the 4080 = this tree (rig4080/setup.sh; Kenshi closed here, no 4080 take running):
-        # without it the 4080 ran stale scripts (zsfist4080 fists lab: "No module named recfmt", 2026-10-10)
-        $so = & 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/rig4080/setup.sh" 2>&1 | ForEach-Object { "$_" }
-        Log "4080 sync: $(($so | Select-Object -Last 1))"
+        # take scripts + lab modules on the 4080 = this tree (rig4080/setup.sh): without it the 4080 ran stale scripts
+        # (zsfist4080 fists lab: "No module named recfmt", 2026-10-10); files a running analysis uses are deferred (Sync4080)
+        Sync4080 $name (($txt -join "`n"))
         $null = Ssh @('mkdir', "C:\KenshiTestRuns\$outN")
         Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
         $ok = Scp4 @((Join-Path $tmp 'list.txt'), (Join-Path $tmp '.run-batch.sh')) "C:/KenshiTestRuns/$outN/"
@@ -537,7 +588,8 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
         if ($own -ne 'coordinator') { Note 'coordinator' "$fw on $Rig (owner $own)." }
         if ($isFill -and $how -eq 'DONE') { Bench $name 3 'fast setup FAIL' }
     }
-    Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL$(if ($Why) { " why=$Why" })")
+    $ocf = Join-Path $rd "$Rig.oldcopy.$name"; $oc = if (Test-Path $ocf) { (Get-Content $ocf -Raw).Trim() } else { '' }; Remove-Item $ocf -ErrorAction SilentlyContinue
+    Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL$(if ($Why) { " why=$Why" })$(if ($oc) { " oldcopy=$oc (ran on the 4080's old copy: in use by a running analysis at the start)" })")
     Remove-Item $file -ErrorAction SilentlyContinue
     Log "$how $name pass=$np fail=$nf out=$where$(if ($Why) { " ($Why)" })"
     $more = if ($how -eq 'DONE') { 'Judge it, queue the next list.' } else { "The list is in queue\failed\ ($Why): fix or requeue it." }
@@ -548,7 +600,7 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
 Log "start pid=$PID fake=$Fake idle>=${IdleMin}m stuck>=${StuckMin}m tick=${TickSec}s"
 if ($Rig -eq '4080' -and -not $Fake) {
     $null = Ssh @('mkdir', 'C:\KAH\runner')
-    if (-not (Scp4 @("$auto\rig4080\staged-state.ps1") 'C:/KAH/runner/')) { Log 'could not copy staged-state.ps1 to the 4080 (unreachable?)' }
+    if (-not (Scp4 @("$auto\rig4080\staged-state.ps1", "$auto\rig4080\procpaths.ps1") 'C:/KAH/runner/')) { Log 'could not copy staged-state.ps1/procpaths.ps1 to the 4080 (unreachable?)' }
 }
 $idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}; $probeFail = 0; $deadHits = @{}
 while ($true) {
