@@ -4,38 +4,14 @@ starting here needs nothing else. Keep it current: update this section at every 
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
-## Right now (2026-10-10 ~13:45, m92 coordinator)
+## Right now (2026-10-10 ~15:10, m92 coordinator handed off at context limit)
 - **REMIND SHAY when this FP/animation work ends (he asked):** STOBE server is OFF since 15:40 (no LLM credits); turn it back on with `wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/stobe-server.sh on` (also restarts by itself at the next WSL start). Also `gfx-mods.sh on` before he plays.
-- m92: all 8 agents respawned fresh from their status files. Idle-detection FIRST JOB done (c06bc0f):
-  `rig5090-state.ps1` -> rig-health `RIG IDLE-GAME` + Stop-hook block when Kenshi/lock is up but every marked batch
-  has DONE > 3 min; run-batch.sh deletes the marker naming its out dir at DONE. build-pipeline DONE (kfp-pipeline.sh
-  ready, 7f82678; first -Staged install happens at each rig's next restart). 5090-operator told to launch its next
-  batch at once (VMQUICK clean rerun, blkH, fists after lab-path fix, finger A/B).
-- Start with `tools/automation/session-start.ps1`; respawn every agent not DONE as a FRESH agent from its status/handoff
-  file in `C:\KenshiTestRuns\agents\` (all were told to write STOPPED-CONTEXT + handoff at 13:36).
-- Agents (roles per CLAUDE.md "Speed plan"): `kfp-fixer` (build+lab owner of /root/KenshiFP; installed 5090 + staged
-  4080: KenshiFP 3FA97555 = refit5 + ready-wrist cap + fists-na1 + hand_scale + own-name-tag hide; helper e6-climb2
-  refitting strokes 0+3), `5090-operator` (lock owner 5090; op-b4 DONE: VMQUICK z0/crossbow PASS, z25 sword FAIL hand
-  at head + blade hidden (real, PT29 class) + combat popup; E6 e6r5 2 lab FAILs; blkH guard PASS but row FAIL; fists
-  0/1 setup FAIL = lab-gate path bug; told to launch next batch fists 0..3 + in-game finger A/B (hand_scale 1 1 vs
-  0.70 0.85, spec-videos style) before stopping), `4080-filming` (zoom sweep + T6 on 4080; must install 3FA97555 for
-  the name-tag fix), `animlab-maintainer` (standing; next: sync-flash label check for T6), `build-pipeline`
-  (kfp-pipeline.sh written, testing; -Staged install done), `take-dryrun` (dryrun.sh fake game works, building bug
-  fixtures; must cover the 4080 Git Bash env; then studio fixture), `weapon-matrix` (catalog 160 weapons: 41 base, 119
-  UWE mod; KenshiFP per-class coverage + lab weapon_matrix.py running; harness give-weapon patch built in a worktree,
-  not installed; then game sweep).
-- Decided today (Shay): native frames exempt from wrist limit; native in-game animations decide inferred pose rules;
-  spec videos: keep current swing wrist, low crossbow carry, two-hand reload; PG finished/standalone; kenshi-click.ps1
-  kept injected-only; leave KenshiDualWield/, dual-wield brief, big mod ideas, reference photos, tools/research.
-  Coordinator: true-L1 grip fix NOT shipped (moves accepted poses); errmax check to compare vs game-L1 model instead.
-- weapon-matrix DONE (e35b110, harness 57066a7): lab 47/126 FAIL; lists components/KenshiFP/animlab/weapons/batch-5090.list + batch-4080.list (78 gated + 5 confirm). Blocked on: dryrun.sh fake give/equip replies (note to take-dryrun) and a harness install with MakeWeapon (next harness build from main, with sync_flash). 4080 needs the same weapon mods.
-- kfp-fixer (14:55): 3FA97555 source all committed (38bc1f3..a978e96); op-b4: name-tag fix confirmed, ready-wrist confirmed, E6 stroke 1 PASS in game, blkH FAIL = take sampler gap. New build KenshiFP 12323A9C (+ z1-band-prevm) gated + staged both rigs; 4080 installs it and refilms the zoom fade takes; commit z1-band-prevm after 0 leak frames. kfp-fixer DONE: respawn it when e6-climb2 hands in its strokes 0+3 patch (then pipeline --patches z1-band-prevm,<e6>).
-- kfp-swinghit (started ~15:10, Shay order): FP melee hits every character in the swing area (allies + neutrals) as a KenshiFP settings toggle; patch pending-fixes/kfp-swing-hits-all.py via kfp-pipeline, test row fp-swing-hits-all for the operators.
-- e6-climb2 DONE: strokes 0+3 refit (pool 0.00 -> 1.00, du jump gone), patch pending-fixes/kfp-e6-strokes03-refit.py. kfp-fixer respawned ~15:15 to build z1-band-prevm + e6-strokes03-refit via kfp-pipeline, stage both rigs, then VMQUICK + E6 take.
-- Shay decided (15:30): two-handed weapons are held two-handed in FP; agent kfp-twohand builds it (spec+lab checks first, patch kfp-two-hand.py via pipeline).
-- Waiting for Shay: should katanas/sabres/hackers/blunt weapons also be two-handed in FP (the game holds them two-handed in their native stances; only "guard 1h" is one-handed)? For now only heavy + polearm get two hands.
-  takes, weapon-matrix risk report.
-
+- Start with `tools/automation/session-start.ps1`; respawn every agent not DONE as a FRESH agent from its status/handoff (all 7 told to write STOPPED-CONTEXT + handoff at ~15:08): `rig-runner`, `5090-operator`, `kfp-fixer`, `4080-filming`, `take-dryrun`, `build-line`, `kfp-twohand`.
+- **5090 (urgent):** op-swa (swing-hits-all SWA rows) launched BY HAND by the coordinator at ~15:07 (marker inflight\5090-coordinator, list C:\KenshiTestRuns\op-swa.list, out C:\KenshiTestRuns\op-swa; KenshiFP C00ADF99 = combined build installed by the runner). The 5090 rig-runner LOOP IS STOPPED (`rig-runner.ps1 -Stop -Rig 5090`): it reported "running 10-swa.list" with no run-batch process (probe failed 15:05). Restart it (`rig-runner.ps1 -Ensure`) once rig-runner fixed: phantom-running bug, post-launch window fit (studio-fixture FAILed setup: game at 798x413, window on DISPLAY1), zero grace when the previous DONE exists, game-idle detection, background take analysis (TOP PRIORITY: the game must never wait for analysis; WSL load 60/32 starved take checks; lab jobs must run nice 15, max 16 workers). queue\running\5090__10-swa.list is stale (delete after op-swa is judged). queue\5090 still holds the next lists.
+- **4080:** runner loop up, running queue\4080\10-zsfade.list (zoom fade refilm on the newest build) -> C:\KenshiTestRuns\zsfade4080 (4080 side); owner 4080-filming judges (0 leaked band frames expected).
+- Results today: op-b7 DONE (VMQUICK, E6 e6r7 FAIL 2 lab FAILs, blkJ, T6 turret take) not yet judged; op-b6 fists FAIL (overlay setup x2, ma_2strike no swing, shoteiL off-screen); build-pipeline + weapon-matrix + e6-climb2 + kfp-swinghit + animlab-maintainer DONE. Combined build line (agent build-line): C00ADF99 installed on the 5090.
+- New today: rig-watchdog/rig-runner (queue folders queue\5090|4080|any, ALERT files block the Stop hook), stobe-server.sh, CLAUDE.md "Rig uptime + process" + "STOBE server off" rules, swing_hits_all ini toggle (default OFF, patch kfp-swing-hits-all.py, rows SWA-OFF/ON), two-hand spec R24-R29 + lab checks (pose fit running, patch kfp-two-hand.py pending).
+- Waiting for Shay: should katanas/sabres/hackers/blunt also be two-handed in FP (game holds them two-handed natively)? Asked 15:02. Also: was the small game window on DISPLAY1 him (asked)?
 ## Earlier (2026-10-10 ~11:45, m90 coordinator handed off at context limit)
 - Start with `tools/automation/session-start.ps1` (agent status/handoff files in `C:\KenshiTestRuns\agents\`, queues in
   `queue\5090.next` / `4080.next`, inflight markers). Respawn each agent not DONE as a FRESH agent from its handoff file.
