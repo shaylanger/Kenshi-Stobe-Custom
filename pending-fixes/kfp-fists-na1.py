@@ -15,7 +15,8 @@ What it adds (client/kfp_viewmodel.inc, client/kfp_controls.inc):
   fist apply: the lab sets wroll=0 edgeclamp=0 wfix=0 hroll=0 e1inl=0 hinge=0 elb=0).
 - Camera near clip lowered to g_vm_nc (1.5) while the fists are shown, as the crossbow (X2): the lab's nearcut for the
   fists is 2.0 against it.
-- Commands: fp_vm set fist_ua 0|1 (default 1), fp_vm fist (state: on, tech, table, fallback, u, n, targets, measured
+- Commands: fp_vm set fist_ua 0|1 (default 1), fp_vm set fist_tech <table index 0-3 | -1> (take rows: the free swing
+  re-picks the native technique until it is that table's; -1 = native choice), fp_vm fist (state: on, tech, table, fallback, u, n, targets, measured
   wrists), one log line per swing "[vm] fist swing tech='..' table=.. fallback=..".
 Tables: animlab native.py fists on the unarmed FP body (vmrec-fist-z0-a.txt frame 100, 4080 2026-10-10), harness
 d988203 (v4: R wind-up chamber on screen); regenerate with the lab and re-run this generator when the lab tables change.
@@ -140,6 +141,7 @@ static const VmFistTech g_vm_fist_tech[] = {
 };
 #define VM_NFIST ((int)(sizeof g_vm_fist_tech / sizeof g_vm_fist_tech[0]))
 static char  g_fpc_fs_name[48];             /* tentative decl; set in kfp_controls.inc (free-swing technique animation) */
+static int   g_vm_fist_force = -1;          /* fp_vm set fist_tech i: free swings re-pick until table i's technique (-1 native) */
 static int   g_vm_fist_ti = -1, g_vm_fist_fb; static float g_vm_fist_u; static unsigned long g_vm_fist_n, g_vm_fist_sw;
 static const void *g_vm_fist_tech_p;        /* the free-swing tech the current table belongs to */
 static VmPose g_vm_fist_cur[2];             /* this frame's targets [L, R], camera numbers */
@@ -212,14 +214,15 @@ FLAG_OLD = "        g_vm_melee = wih && wih != rw; g_vm_wih = wih != NULL;\n"
 FLAG_NEW = FLAG_OLD + "        g_vm_fist_on = g_vm_fist_ua && !wih && g_fpc_fists;   /* NA1: unarmed ready stance (R with nothing to draw) */\n"
 
 SET_OLD = '    else if (!strcmp(k, "hinge"))   { g_vm_hinge = x > 0.5f; return 1; }\n'
-SET_NEW = SET_OLD + '    else if (!strcmp(k, "fist_ua")) { g_vm_fist_ua = x != 0.0f; return 1; }   /* NA1 fists */\n'
+SET_NEW = SET_OLD + ('    else if (!strcmp(k, "fist_ua")) { g_vm_fist_ua = x != 0.0f; return 1; }   /* NA1 fists */\n'
+                     '    else if (!strcmp(k, "fist_tech")) { g_vm_fist_force = (x >= 0.0f && x < VM_NFIST) ? (int)x : -1; return 1; }   /* NA1: force a technique (take rows), -1 = native */\n')
 
 Q_OLD = '    } else if (!strcmp(a, "hinge")) {   /* E5 */\n'
 Q_NEW = r"""    } else if (!strcmp(a, "fist")) {   /* NA1 fists state (camera numbers, dm) */
         char fb[700]; const VmPose *L = &g_vm_fist_cur[0], *R = &g_vm_fist_cur[1];
-        snprintf(fb, sizeof fb, "fist ua=%d on=%d fists=%d wih=%d tech='%s' table=%s fallback=%d u=%.3f swings=%lu n=%lu w=%.2f zf=%.2f state=%s "
+        snprintf(fb, sizeof fb, "fist ua=%d force=%d on=%d fists=%d wih=%d tech='%s' table=%s fallback=%d u=%.3f swings=%lu n=%lu w=%.2f zf=%.2f state=%s "
             "tL=%.2f,%.2f,%.2f tR=%.2f,%.2f,%.2f wrL=%.2f,%.2f,%.2f wrR=%.2f,%.2f,%.2f elL=%.2f,%.2f,%.2f elR=%.2f,%.2f,%.2f ikfail=%lu",
-            g_vm_fist_ua, g_vm_fist_on, g_fpc_fists, g_vm_wih, g_vm_fist_tech_p ? g_fpc_fs_name : "-",
+            g_vm_fist_ua, g_vm_fist_force, g_vm_fist_on, g_fpc_fists, g_vm_wih, g_vm_fist_tech_p ? g_fpc_fs_name : "-",
             g_vm_fist_tech_p ? g_vm_fist_tech[g_vm_fist_ti].anim : "guard", g_vm_fist_fb, g_vm_fist_u, g_vm_fist_sw, g_vm_fist_n,
             g_vm_w, g_vm_zf, g_vm_state ? g_vm_state : "?", L->p.x, L->p.y, L->p.z, R->p.x, R->p.y, R->p.z,
             g_vm_mj[0][2].x, g_vm_mj[0][2].y, g_vm_mj[0][2].z, g_vm_mj[1][2].x, g_vm_mj[1][2].y, g_vm_mj[1][2].z,
@@ -236,6 +239,13 @@ patch(os.path.join(C, 'kfp_viewmodel.inc'), [
 patch(os.path.join(C, 'kfp_controls.inc'), [
     ("static void fpc_free_swing(void *pc) {\n",
      "static void fpc_tech_name(void *tech,char *out,size_t n);\nstatic char g_fpc_fs_name[48];   /* NA1: free-swing technique animation (fist tables) */\nstatic void fpc_free_swing(void *pc) {\n"),
+    ("    if (!readable(tech,TECH_ANIM_SPEED+4)) {++g_fpc_fs_notech;return;}\n",
+     "    if (!readable(tech,TECH_ANIM_SPEED+4)) {++g_fpc_fs_notech;return;}\n"
+     "    if (g_fpc_fists && g_vm_fist_force>=0 && g_vm_fist_force<VM_NFIST) {   /* NA1 take rows: re-pick until the forced technique */\n"
+     "        char nm[48];int k;for (k=0;k<48;k++) {fpc_tech_name(tech,nm,sizeof nm);if (!strcmp(nm,g_vm_fist_tech[g_vm_fist_force].anim)) break;\n"
+     "            void *t2=g_fpc_choose(stats,5.0f,30.0f,tech,1);if (readable(t2,TECH_ANIM_SPEED+4)) tech=t2;}\n"
+     "        if (k==48) logline(\"[vm] fist force: '%s' not picked in 48 tries (got '%s')\",g_vm_fist_tech[g_vm_fist_force].anim,nm);\n"
+     "    }\n"),
     ("    g_fpc_fs_anim=anim;g_fpc_fs_tech=tech;g_fpc_fs_start_ms",
      "    fpc_tech_name(tech,g_fpc_fs_name,sizeof g_fpc_fs_name);\n    g_fpc_fs_anim=anim;g_fpc_fs_tech=tech;g_fpc_fs_start_ms")])
 

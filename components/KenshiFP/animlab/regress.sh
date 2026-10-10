@@ -441,5 +441,12 @@ if [ -f "$FP_" ] || grep -q g_vm_fist_on /root/KenshiFP/client/kfp_viewmodel.inc
   r=$(bash "$HERE/fist-equiv.sh" "$CORPUS/fists/fail-20261010-u22" "$FP_" | tail -1)
   case "$r" in "RESULT FIST-EQUIV FAIL"*) ok "fist-equiv v3 mismatch caught: ${r:0:100}";; *) bad "fist-equiv v3 (want FAIL): $r";; esac
 else echo "REGRESS INFO fist-equiv: no fists patch / source"; fi
+# 35. fists game take vs lab (fist-take-check.py, fp-fists.sh): the native unarmed rec (no fists patch) must FAIL
+#     against the v4 lab candidate; a patched take (corpus row, pending until the first take) must PASS.
+FX=$CORPUS/fists/pass-20261010-u22/ma_chudan
+for f in rec/vmrec-fist-z0-a.txt:FAIL takes/fist-ma_chudan/fist-ma_chudan.vmrec.txt:PASS; do n=${f%%:*} w=${f##*:}
+  [ -f "$CORPUS/$n" ] || { echo "REGRESS INFO fistgame: $n not in the corpus yet"; continue; }
+  r=$(python3 "$HERE/fist-take-check.py" "$CORPUS/$n" "$FX" | tail -1)
+  case "$r" in "fistgame $w "*) ok "fistgame $n: ${r:0:120}";; *) bad "fistgame $n (want $w): $r";; esac; done
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
