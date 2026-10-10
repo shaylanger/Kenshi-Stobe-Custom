@@ -16,8 +16,7 @@
 set -u
 PR=/root/kfp-pipeline; PF=/mnt/c/KenshiModding/pending-fixes; LIVE=/root/KenshiFP; IFD=/mnt/c/KenshiTestRuns/inflight
 LOG=$PR/buildwatch.log; QUIET=${QUIET:-600}; POLL=${POLL:-120}; ME=/mnt/c/KenshiModding/tools/automation
-mkdir -p "$PR"; exec 8> "$PR/buildwatch.lock"; flock -n 8 || { echo "kfp-buildwatch: already running (pid $(cat "$PR/buildwatch.pid" 2>/dev/null))"; exit 0; }
-echo $$ > "$PR/buildwatch.pid"; rm -f "$PR/buildwatch.stop"
+mkdir -p "$PR"
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 # fingerprint of everything that goes into the combined DLL; newest mtime for the quiet check
 fp() { { ls "$PF"/kfp-*.py "$PF"/kfp-*.patch 2>/dev/null | LC_ALL=C sort | xargs -r sha256sum
@@ -27,6 +26,8 @@ newest() { { stat -c %Y "$PF"/kfp-*.py "$PF"/kfp-*.patch 2>/dev/null; find "$LIV
              ! -name '*.o' ! -name '*.dll' ! -name '*.log' -printf '%T@\n' 2>/dev/null | cut -d. -f1; } | sort -n | tail -1; }
 # --seed: record the current state as built (e.g. right after a manual --combined run of it) and exit
 [ "${1:-}" = --seed ] && { fp > "$PR/buildwatch.fp"; log "seeded fp $(cat "$PR/buildwatch.fp")"; exit 0; }
+mkdir -p "$PR"; exec 8> "$PR/buildwatch.lock"; flock -n 8 || { echo "kfp-buildwatch: already running (pid $(cat "$PR/buildwatch.pid" 2>/dev/null))"; exit 0; }
+echo $$ > "$PR/buildwatch.pid"; rm -f "$PR/buildwatch.stop"
 log "start pid $$ quiet=${QUIET}s poll=${POLL}s"
 last=$(cat "$PR/buildwatch.fp" 2>/dev/null)
 while [ ! -e "$PR/buildwatch.stop" ]; do
