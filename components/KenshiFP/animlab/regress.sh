@@ -89,6 +89,12 @@ fi
 [ -f "$W/f23-sword-z0d.txt" ] || cp /mnt/c/KenshiTestRuns/vid/vmrec-anim-f23-sword-z0d.txt "$W/f23-sword-z0d.txt" 2>/dev/null || bad "missing recording vid/vmrec-anim-f23-sword-z0d.txt"
 r=$(python3 "$L/animlab.py" metrics "$W/f23-sword-z0d.txt" | grep '^arc ')
 case "$r" in "arc PASS"*) ok "E1 wb36 game f23-sword-z0d: $r";; *) bad "E1 wb36 game f23-sword-z0d: ${r:-no arc line}";; esac
+#  11c. E5 swing-3 forearm flip (Shay 2026-10-09): the IK took the arm bones' roll from the native attack variant. `animlab.py
+#      hinge` (same input -> same bone roll across swings from ready) must FAIL on f23-sword-z0d (swing 3) and on the E5 build's
+#      game rec with the fix off (f27-h0a, fp_vm set hinge 0), and PASS with it on (f27-h1a: 8 swings from ready).
+for x in f27-h0a f27-h1a; do [ -f "$W/$x.txt" ] || cp /mnt/c/KenshiTestRuns/vid/vmrec-$x.txt "$W/$x.txt" 2>/dev/null || bad "missing recording vid/vmrec-$x.txt"; done
+for x in f23-sword-z0d:FAIL f27-h0a:FAIL f27-h1a:PASS; do r=$(python3 "$L/animlab.py" hinge "$W/${x%%:*}.txt")
+  case "$r" in "hinge ${x##*:}"*) ok "E5 hinge ${x%%:*}: $r";; *) bad "E5 hinge ${x%%:*} (want ${x##*:}): ${r:-no hinge line}";; esac; done
 #  12. miss X1 "crossbow jitter / jitter under-reported": `animlab.py compare` jitter line (game jit_p95 > 1 px may be at
 #      most 2.5x the replay's, swings skipped). vmq-f8c crossbow-z0 (pre-e948f86 bone-world map) replayed by its own
 #      solver 6c9516b must FAIL (ready x4.2, reload x6.6); f14/xb0 (node map) replayed by d40b6ad (first node-map snapshot)
