@@ -1827,6 +1827,11 @@ static int vm_rec_dump(const char *path)
             fclose(fb); }
     }
     FILE *fo = fopen(path, "w"); if (!fo) return -1;
+#ifndef KFP_HAVE_SELF_SHA   /* animlab adapter (no DLL) */
+#define KFP_SRC_REV "lab"
+#define kfp_self_sha8() "lab"
+#endif
+    fprintf(fo, "# src %s %s\n", KFP_SRC_REV, kfp_self_sha8());
     fprintf(fo, "# build %s %s\n", __DATE__, __TIME__);
     for (int i = 0; i < g_vm_setn; i++)
         fprintf(fo, "# set %d %s %g\n", g_vm_setlog[i].ep == g_vm_rec_ep ? g_vm_setlog[i].f : -1, g_vm_setlog[i].k, g_vm_setlog[i].v);

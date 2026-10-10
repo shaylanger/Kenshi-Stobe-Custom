@@ -1523,6 +1523,27 @@ static Vec3 g_last_dest;           /* last issued move-order target (for the re-
 static int  g_have_dest;
 static int g_dbg_wheel;
 static HINSTANCE g_hinst;
+#ifndef KFP_SRC_REV
+#define KFP_SRC_REV "unknown"
+#endif
+#define KFP_HAVE_SELF_SHA 1
+#include <bcrypt.h>
+static const char *kfp_self_sha8(void) {   /* SHA256 (first 8 hex, upper) of the loaded DLL file, cached; "?" on error */
+    static char out[12];
+    if (out[0]) return out;
+    snprintf(out, sizeof out, "?");
+    wchar_t pw[MAX_PATH]; DWORD n = GetModuleFileNameW(g_hinst, pw, MAX_PATH); if (!n || n >= MAX_PATH) return out;
+    HANDLE f = CreateFileW(pw, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return out;
+    BCRYPT_ALG_HANDLE a = NULL; BCRYPT_HASH_HANDLE h = NULL; unsigned char d[32], buf[65536]; DWORD r; int ok = 0;
+    if (BCryptOpenAlgorithmProvider(&a, BCRYPT_SHA256_ALGORITHM, NULL, 0) == 0 && BCryptCreateHash(a, &h, NULL, 0, NULL, 0, 0) == 0) {
+        ok = 1;
+        while (ReadFile(f, buf, sizeof buf, &r, NULL) && r) if (BCryptHashData(h, buf, r, 0) != 0) { ok = 0; break; }
+        if (ok && BCryptFinishHash(h, d, 32, 0) == 0) snprintf(out, sizeof out, "%02X%02X%02X%02X", d[0], d[1], d[2], d[3]);
+    }
+    if (h) BCryptDestroyHash(h); if (a) BCryptCloseAlgorithmProvider(a, 0); CloseHandle(f);
+    return out;
+}
 static volatile LONG g_wheel_accum;  /* wheel (±120/notch) accumulated by the DI poll thread */
 static float g_last_move_dir;      /* heading of last issued destination (radians) */
 static int g_last_move_keys;       /* WASD bitmask of last issued destination */

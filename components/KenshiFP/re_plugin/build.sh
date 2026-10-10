@@ -15,9 +15,13 @@ cd "$(dirname "$0")"
 SRC=../client/kenshifp_client.c
 # version metadata (legitimacy signal for AV ML) -> COFF object
 x86_64-w64-mingw32-windres -DKFP_RE_BUILD -I .. ../client/kenshifp.rc -O coff -o kenshifp_res.o
-x86_64-w64-mingw32-gcc -O2 -shared -static-libgcc -DKFP_RE_PLUGIN -o KenshiFP.dll \
+# source revision for the vm recording header (# src): workspace HEAD, -mod when the live client differs from the snapshot
+WS=/mnt/c/KenshiModding; REV=$(git -C "$WS" rev-parse --short HEAD 2>/dev/null || echo unknown)
+diff -rq ../client "$WS/components/KenshiFP/client" >/dev/null 2>&1 || REV="$REV-mod"
+x86_64-w64-mingw32-gcc -O2 -shared -static-libgcc -DKFP_RE_PLUGIN -DKFP_SRC_REV="\"$REV\"" -o KenshiFP.dll \
     "$SRC" kenshifp_res.o plugin.def \
-    -lkernel32 -ldinput8 -ldxguid -lwinmm -lm
+    -lkernel32 -ldinput8 -ldxguid -lwinmm -lbcrypt -lm
+echo "src rev $REV"
 echo "built KenshiFP.dll (RE_Kenshi plugin, KenshiLib::AddHook, no MinHook)"
 x86_64-w64-mingw32-objdump -p KenshiFP.dll | grep -i "startPlugin" | head -1
 # Refresh the packaging/mod copy so zips + deploys never ship a stale DLL.
