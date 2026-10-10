@@ -55,6 +55,10 @@ if ($mode -eq 'pre') {
 
 if ($mode -ne 'stop') { exit 0 }
 if ($in.stop_hook_active) { exit 0 }
+# Context-limit handoff done (handoff-ready.ps1 wrote the marker in the last 30 min): the next session owns the
+# in-flight work, so this one may end without a waker.
+$hr = 'C:\KenshiTestRuns\handoff.ready'
+if ((Test-Path -LiteralPath $hr) -and ((Get-Item -LiteralPath $hr).LastWriteTime -gt (Get-Date).AddMinutes(-30))) { exit 0 }
 
 # --- what is in flight ---
 $kenshi = $null -ne (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue)
