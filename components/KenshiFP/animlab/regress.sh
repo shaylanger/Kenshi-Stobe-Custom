@@ -99,5 +99,13 @@ case "$r" in "jitter PASS"*) ok "X1 fixed build (f14-xb0, node-map solver d40b6a
 for f in c3a.txt c3a.txt.bolt; do [ -f "$W/f16-$f" ] || cp "/mnt/c/KenshiTestRuns/f16/$f" "$W/f16-$f" 2>/dev/null || bad "missing recording f16/$f"; done
 r=$(python3 "$L/animlab.py" bolt "$W/f16-c3a.txt")
 case "$r" in "bolt FAIL ready:"*) ok "miss C3 reproduced (f16-c3a): $r";; *) bad "miss C3 not reproduced: ${r:-no bolt line}";; esac
+#  14. miss C1 "aim pose did not play" (combat layer read real keys only; fixed by the fp_combat input path): `animlab.py
+#      metrics` moves line. f14/xb0 (pre-fix, game st never 'aim') must FAIL aim:MISSING; vmq-125c crossbow-z0 (build
+#      Oct 9 19:32:36, post-fix) must PASS.
+[ -f "$W/vmq125c-crossbow-z0.txt" ] || cp /mnt/c/KenshiTestRuns/vmq-125c/vmrec-q-crossbow-z0.txt "$W/vmq125c-crossbow-z0.txt" 2>/dev/null || bad "missing recording vmq-125c/vmrec-q-crossbow-z0.txt"
+r=$(python3 "$L/animlab.py" metrics "$W/f14-xb0.txt" | grep '^moves ')
+case "$r" in "moves FAIL aim:MISSING"*) ok "miss C1 reproduced (f14-xb0): $r";; *) bad "miss C1 not reproduced: ${r:-no moves line}";; esac
+r=$(python3 "$L/animlab.py" metrics "$W/vmq125c-crossbow-z0.txt" | grep '^moves ')
+case "$r" in "moves PASS"*aim:*) ok "C1 fixed build (vmq-125c crossbow-z0): $r";; *) bad "C1 fixed build moves: ${r:-no moves line}";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
