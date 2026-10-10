@@ -186,7 +186,7 @@ function Start-Batch($f) {
 
     # stop Kenshi, install the wanted staged KenshiFP, check the harness
     $need = Header $run 'needs'
-    $needK = if ($need -match 'KenshiFP\s+(\S+)') { $Matches[1] } else { $null }
+    $needK = if ($need -match 'KenshiFP\s+(\S+)') { $Matches[1] } elseif ($need -match 'staged-latest') { 'staged-latest' } else { $null }
     $needH = if ($need -match 'Harness\s+(\w{8})') { $Matches[1].ToUpper() } else { $null }
     $inst = StagedWanted $needK
     if ($Rig -eq '5090') {
@@ -315,7 +315,7 @@ while ($true) {
         } else {
             $reason = IdleReason
             $f = NextList
-            $s = if ($Fake) { 'IDLE' } elseif ($Rig -eq '5090') { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig5090-state.ps1" | Select-Object -First 1) } else { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig4080-state.ps1" -Fresh | Select-Object -First 1) }
+            $s = if ($Fake) { 'IDLE' } elseif ($Rig -eq '5090') { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig5090-state.ps1" 2>$null | Select-Object -First 1) } else { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig4080-state.ps1" -Fresh 2>$null | Select-Object -First 1) }
             $other = ($s -like 'BUSY*') -and ($s -notlike 'BUSY between*')   # someone else's job (an agent's batch) holds the rig
             if ($Rig -eq '5090' -and -not $Fake -and -not $other) { $other = [bool]((Wsl @('pgrep', '-f', 'run-batch.sh')) -match '^\d+$') }
             if ($other -or $s -like 'UNREACHABLE*') { $idleSince = $null }

@@ -53,7 +53,7 @@ foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -
     }
 }
 # newest finished batch anywhere in C:\KenshiTestRuns (run-batch.sh deletes its marker at DONE, so markers alone lose the end time)
-$nd = Get-ChildItem -LiteralPath $runs -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'DONE') -ErrorAction SilentlyContinue } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$nd = Get-ChildItem -LiteralPath $runs -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'DONE') -ErrorAction SilentlyContinue } | Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($nd -and $nd.LastWriteTime -gt $last) { $last = $nd.LastWriteTime; $done += "last DONE $(Split-Path $nd.DirectoryName -Leaf)@$($nd.LastWriteTime.ToString('HH:mm'))" }
 if ($busy.Count) { "BUSY $($busy -join ' ')"; exit 0 }
 if ($last -and $last -gt $now.AddMinutes(-$GraceMin)) { "BUSY between batches (last change $($last.ToString('HH:mm')))"; exit 0 }
