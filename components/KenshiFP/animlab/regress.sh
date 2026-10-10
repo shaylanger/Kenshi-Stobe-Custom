@@ -273,5 +273,28 @@ E6F=/mnt/c/KenshiTestRuns/vid/vmrec-e6-fix.txt
 if [ -f "$E6F" ]; then cp -n "$E6F" "$W/e6-fix.txt"; fi
 if [ -f "$W/e6-fix.txt" ]; then s=$(python3 "$L/animlab.py" stroke --overhead 2 "$W/e6-fix.txt" | cut -c1-300)
   case "$s" in "stroke PASS"*) ok "E6 stroke fix game rec: $s";; *) bad "E6 stroke fix game rec: $s";; esac; fi
+# 23. take checks (Misses 2026-10-10, coordinator review of vm-rework/*.mp4): harness tools/animlab/takecheck.py with
+#     take-rules.txt; evidence from take-sample.sh (labels vs live ui_state/hud_text/loaded over each label's whole
+#     segment, loaded before an aim label, combat messages, bystanders near the fp character, video length vs `end`).
+#     Archived takes (copied to $W/takes, never from the live C:\KenshiTestRuns\f36 which is refilmed in place):
+#     t6old = vm-rework/turret-fp.mp4 (08:38) labels+ev, t6rev = the reviewed refilm f36 (10:03 labels/ev, video 59.00 s):
+#     both FAIL (no sampled state / msgs / bystanders; refilm: "crossbow back" vs hud_text=holstered, video +7.5 s past end).
+#     TAKEOK = a take recorded with take-sample.sh after the fixes: must PASS.
+python3 "$HARN/tests/animlab/test_takecheck.py" >/tmp/al-take-unit.txt 2>&1 && ok "takecheck unit tests" || { bad "takecheck unit tests"; tail -5 /tmp/al-take-unit.txt; }
+TK=$W/takes; TR=$HERE/take-rules.txt
+if [ -f "$TK/t6rev/labels.txt" ]; then
+  r=$(python3 "$L/takecheck.py" --labels "$TK/t6rev/labels.txt" --ev "$TK/t6rev/ev.txt" --rules "$TR" --video-len 59.00 --name t6-refilm)
+  if echo "$r" | grep -q '^claim FAIL "W: leaves.*crossbow back)" wants hud_text=ready.*hud_text=holstered at 50.63' \
+     && echo "$r" | grep -q '^end FAIL video 59.00 s vs end label 51.51.*+7.49 s past' && echo "$r" | grep -q '^forbid FAIL near>0: key near never sampled' \
+     && echo "$r" | grep -q '^RESULT t6-refilm FAIL'; then ok "miss T6 refilm take: label vs HUD + video past end + no bystander evidence"
+  else bad "miss T6 refilm take: $(echo "$r" | tail -1 | cut -c1-200)"; fi
+  r=$(python3 "$L/takecheck.py" --labels "$TK/t6old/labels.txt" --ev "$TK/t6old/ev.txt" --rules "$TR" --video-len 53.00 --name t6-old | tail -1)
+  case "$r" in "RESULT t6-old FAIL"*"claim:W: leaves"*"forbid-unsampled:msgs"*) ok "miss T6 old take (combat during the take unproven, READY back unverified): $(echo "$r" | cut -c1-120)";;
+    *) bad "miss T6 old take: $r";; esac
+else echo "REGRESS INFO takes: $TK missing"; fi
+for d in "$TK"/ok-*; do [ -f "$d/labels.txt" ] || continue
+  v=(); [ -f "$d/video-len.txt" ] && v=(--video-len "$(cut -d' ' -f1 "$d/video-len.txt")")
+  r=$(python3 "$L/takecheck.py" --labels "$d/labels.txt" --ev "$d/ev.txt" --rules "$TR" "${v[@]}" --name "$(basename "$d")" | tail -1)
+  case "$r" in "RESULT "*" PASS"*) ok "fixed take $r";; *) bad "fixed take $r";; esac; done
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail

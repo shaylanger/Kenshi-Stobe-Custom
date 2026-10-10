@@ -1,0 +1,28 @@
+# take-rules.txt -- what a labelled KenshiFP video take must prove (harness tools/animlab/takecheck.py; evidence from
+# take-sample.sh). Misses 2026-10-10 (coordinator frame-by-frame review of C:\KenshiTestRuns\vm-rework\*.mp4):
+#   zoom-sweep "Crossbow aim (RMB)" showed a reload (unloaded crossbow): claim aiming + pre loaded
+#   turret-fp "crossbow READY back" true for ~1 s / HUD said HOLSTERED: claims hold over the whole label segment
+#   turret-fp combat ("Tassilo is attacking!", blood pool), bystanders walking into frame: forbid messages / near
+#   turret-fp video ~7 s past the `end` label: end check (takecheck --video)
+set grace 0.6
+set maxgap 1.0
+set endslack 1.0
+# evidence must cover the whole take
+cover ui_state,near,msgs
+# label claims (label regex, case-insensitive) -> live state over the whole segment
+claim "(?i)crossbow (ready )?back|back to ready|ready stance" ui_state=ready
+claim "(?i)\baim\b.*\(RMB\)|\(RMB\).*\baim\b|crossbow aim" ui_state=aiming
+pre "(?i)\baim\b.*\(RMB\)|\(RMB\).*\baim\b|crossbow aim" loaded>=1
+claim "(?i)block guard|RMB held: block" ui_state=blocking
+claim "(?i)^reloading|reloading:" hud_text~^reload
+claim "(?i)\bLOADED\b" hud_text=loaded
+claim "(?i)NO POWER" hud_text~^no
+claim "(?i)\bholster(ed)?\b" ui_state=holstered
+# nothing else may happen in the take
+forbid msgs>0
+forbid near>0
+forbid down>0
+forbid ui_state=down|staggered
+# the HUD text must agree with ready/holstered claims too (turret-fp refilm: label "crossbow back", HUD HOLSTERED)
+claim "(?i)crossbow (ready )?back|back to ready|ready stance" hud_text=ready
+claim "(?i)\bholster(ed)?\b" hud_text=holstered
