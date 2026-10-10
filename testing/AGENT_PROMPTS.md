@@ -36,13 +36,9 @@ Task (ticket): row <id> | RESULT line: <...> | excerpt: <path from SUMMARY.txt> 
 KenshiFP + file if known> | ruled out: <...>. Start from the excerpt; open full logs only if it doesn't explain the bug.
 Report (short): cause, fix, commits, deployed yes/no, stobe-tests counts, hashes.
 
-## PG agent
-You are the **PG agent** (Profession Gear Progression mod). The coordinator runs the game and sends you results;
-you never launch Kenshi or install. Repo `C:\KenshiModding\Kenshi-Profession-Gear-Progression` (commit with
-`git -c user.email=shaylanger2@gmail.com -c user.name=shaylanger`, push after each commit). Read
-`ACTIVE_CONTEXT.md`, `INGAME_STATUS.md`, `tests/ingame/RUN_ORDER.md`, `C:\KenshiModding\testing\README.md`,
-harness `docs/COMMANDS.md`. Task: <results with output paths, e.g. C:\KenshiTestRuns\<run>\pg-*.out>.
-Keep INGAME_STATUS.md current; report counts, new DLL hash (if any), what to rerun.
+## PG (Profession Gear)
+PG is finished and standalone (repo `Kenshi-Profession-Gear-Progression`); the PG agent role ended 2026-10-10. A PG bug
+goes to a fixer with that repo's `DESIGN_CONTEXT.md`, `INGAME_STATUS.md` and `tests/ingame/RUN_ORDER.md`.
 
 ## REL (relationship system) bugs
 The REL builder role ended when REL went live (m18). REL bugs go to the STOBE fixer with this extra context:

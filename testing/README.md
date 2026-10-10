@@ -9,7 +9,6 @@ The master list is `C:\KenshiModding\MASTER_TEST_PLAN.md` (the coordinator is th
 | Role | Owns | May | Must not |
 |---|---|---|---|
 | **Coordinator** (main session) | Kenshi, installs, fixtures, `MASTER_TEST_PLAN.md`, run logs, STOBE + KenshiFP + harness fixes, merging REL into live | launch/stop Kenshi, install DLLs, deploy the live server, start helper subagents | - |
-| **PG agent** | `Kenshi-Profession-Gear-Progression` repo (own git) | edit/build/test PG offline, write PG in-game scenario files, commit + push PG | launch Kenshi, install DLLs, touch the game folder, edit the master plan |
 | Helper subagents | whatever the coordinator assigns | that task only | anything above unless told |
 
 Only the coordinator drives the game (exception since 2026-10-05: the FP combat session, lock owner `fpcombat`, see
