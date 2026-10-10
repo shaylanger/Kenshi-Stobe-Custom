@@ -80,8 +80,12 @@ place; pf_open 2
 echo "setup ok: mode=$MODE hat=$HAT weapon=$WPN loaded=$(loaded) state=$(st)"
 # ---- take
 : > "$N.lab"; : > "$N.whl"; rm -f "$FIFO"; mkfifo "$FIFO" || pf_fail "mkfifo $FIFO"
-"$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p "$N.mp4" < "$FIFO" & FP=$!
-exec 7>"$FIFO"
+# 4080 (Git Bash): a native ffmpeg never reads "q" from an MSYS fifo (the take ran the full -t 400): there "q" goes
+# through a plain pipe from a loop that waits for the stop flag file $N.stop (tested: clean stop, valid mp4)
+ZS_PIPE=""; [ "${RIG:-5090}" = 4080 ] && { ZS_PIPE=1; rm -f "$N.stop"; }
+if [ -n "$ZS_PIPE" ]; then ( i=0; while [ ! -f "$N.stop" ] && [ $i -lt 4100 ]; do sleep 0.1; i=$((i+1)); done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p "$N.mp4" & FP=$!
+else "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p "$N.mp4" < "$FIFO" & FP=$!; fi
+if [ -n "$ZS_PIPE" ]; then exec 7>/dev/null; else exec 7>"$FIFO"; fi
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null
 T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Tassilo|Shay"; sleep 1
@@ -103,7 +107,8 @@ if [ "$MODE" = fade ]; then
   place; A fp_camera distance 6 >/dev/null; sleep 0.6; lab "Camera held at 6 dm (wall pull-in case): no own body or weapon in view"
   BAND=$(A fp_camera state | grep -o 'applied=[0-9.]*\|band_hidden=[0-9]' | tr '\n' ' '); sleep 2.5; A fp_camera distance 0 >/dev/null; sleep 1
 fi
-lab end; echo q >&7; exec 7>&-; take_sample_stop; _TS_RUN=; wait $FP; FP=; rm -f "$FIFO"
+lab end; echo q >&7; [ -n "$ZS_PIPE" ] && touch "$N.stop"; exec 7>&-; take_sample_stop; _TS_RUN=; wait $FP; FP=; rm -f "$FIFO"
+rm -f "$N.stop"
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-zs-$N.txt"; A fp_vm rec dump "vmrec-zs-$N.txt" >/dev/null; sleep 2; cp "$KDIR/vmrec-zs-$N.txt" "$N.vmrec.txt" 2>/dev/null || echo "note: no vmrec dump"
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
