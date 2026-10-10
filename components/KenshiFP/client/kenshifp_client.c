@@ -2654,11 +2654,30 @@ static int lbl_hand_is_player(const unsigned char *hnd)
     return any != 0;
 }
 
+/* Size of the game's render view (client area of the Ogre window); MyGUI coordinates are in this space.
+ * Falls back to the desktop size if the window isn't found. Windowed / below-desktop resolutions need this:
+ * SM_CXSCREEN put the crosshair outside a 1600x900 window. */
+static void kfp_view_size(int *w, int *h)
+{
+    static HWND hw;
+    RECT r;
+    if (!hw || !IsWindow(hw)) {
+        HWND f = FindWindowA("OgreD3D11Wnd", NULL);
+        DWORD pid = 0;
+        if (f) GetWindowThreadProcessId(f, &pid);
+        hw = (f && pid == GetCurrentProcessId()) ? f : NULL;
+    }
+    if (hw && GetClientRect(hw, &r) && r.right - r.left > 64 && r.bottom - r.top > 64) {
+        *w = r.right - r.left; *h = r.bottom - r.top; return;
+    }
+    *w = GetSystemMetrics(SM_CXSCREEN); *h = GetSystemMetrics(SM_CYSCREEN);
+    if (*w <= 0) *w = 1920;
+    if (*h <= 0) *h = 1080;
+}
+
 static void lbl_screen_center(int *cx, int *cy)
 {
-    *cx = GetSystemMetrics(SM_CXSCREEN); *cy = GetSystemMetrics(SM_CYSCREEN);
-    if (*cx <= 0) *cx = 1920;
-    if (*cy <= 0) *cy = 1080;
+    kfp_view_size(cx, cy);
 }
 
 static void hooked_slabel_update(void *label)
@@ -5639,8 +5658,10 @@ static void ensure_crosshair(void)
     unsigned char type[32], skin[32], layer[32], name[32], tex[32];
     make_mstr(type, "ImageBox"); make_mstr(skin, "ImageBox"); make_mstr(layer, "Pointer");
     make_mstr(name, "FPCrosshair"); make_mstr(tex, "crosshair.png");
+    int vw, vh;
+    kfp_view_size(&vw, &vh);
     void *w = g_gui_createwidget(gui, type, skin,
-                                 cx / 2 - CROSSHAIR_SIZE / 2, cy / 2 - CROSSHAIR_SIZE / 2,
+                                 vw / 2 - CROSSHAIR_SIZE / 2, vh / 2 - CROSSHAIR_SIZE / 2,
                                  CROSSHAIR_SIZE, CROSSHAIR_SIZE, 0 /*Align::Center*/, layer, name);
     if (readable(w, 8)) {
         g_imgbox_setimage(w, tex);
@@ -7110,7 +7131,8 @@ static void settings_ensure_window(void *gui)
     unsigned char ty[32], sk[32], nm[32], lay[32];
     make_mstr(ty, "Window"); make_mstr(sk, "Kenshi_WindowCX");
     make_mstr(nm, "KFPSettingsWin"); make_mstr(lay, "Window");
-    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    int sw, sh;
+    kfp_view_size(&sw, &sh);
     /* dynamic height: fit all rows + the reset button + window chrome
      * (toggles are laid out in two columns) */
     int content_bottom = 14 + FN(g_fsets) * 30 + 10 + ((FN(g_tsets) + 1) / 2) * 30 + 10 + ((FN(g_ksets) + 1) / 2) * 30 + 8 + 32;
@@ -7233,6 +7255,16 @@ static void fp_gui_update(void)
     }
     prev_fp = 1;
     ensure_crosshair();                    /* create (post-frame = safe) */
+    if (g_crosshair && g_widget_setpos) {  /* follow the view size (window resized / other monitor) */
+        static int lw, lh;
+        int vw, vh;
+        kfp_view_size(&vw, &vh);
+        if (vw != lw || vh != lh) {
+            lw = vw; lh = vh;
+            g_widget_setpos(g_crosshair, vw / 2 - CROSSHAIR_SIZE / 2, vh / 2 - CROSSHAIR_SIZE / 2);
+            logline("[gui] view %dx%d: crosshair centred", vw, vh);
+        }
+    }
 
     /* crosshair tint (deferred from the setPointer hook) + visibility */
     if (g_crosshair && g_imgbox_setimage) {
@@ -7266,9 +7298,8 @@ static void fp_gui_update(void)
             /* Live X/Y offset from the F10 panel / ini, relative to the default
              * position just above the crosshair. */
             if (g_widget_setpos) {
-                int scx = GetSystemMetrics(SM_CXSCREEN), scy = GetSystemMetrics(SM_CYSCREEN);
-                if (scx <= 0) scx = 1920;
-                if (scy <= 0) scy = 1080;
+                int scx, scy;
+                kfp_view_size(&scx, &scy);
                 int sw_px = SNEAK_ICON_SIZE, sh_px = SNEAK_ICON_SIZE * 27 / 38;
                 int bx = scx / 2 - sw_px / 2, by = scy / 2 - sh_px - 18;   /* default pos */
                 g_widget_setpos(g_sneak_icon, bx + (int)g_cfg_sneak_x, by + (int)g_cfg_sneak_y);

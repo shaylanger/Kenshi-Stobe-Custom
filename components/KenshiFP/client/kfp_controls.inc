@@ -1128,9 +1128,7 @@ static void fpc_hud_update(int show) {
     guard_arm();
     if (!g_fpc_hud && g_gui_getinstance && g_gui_createwidget) {
         void *gui=g_gui_getinstance();
-        int cx=GetSystemMetrics(SM_CXSCREEN),cy=GetSystemMetrics(SM_CYSCREEN);
-        if (cx<=0) cx=1920;
-        if (cy<=0) cy=1080;
+        int cx,cy;kfp_view_size(&cx,&cy);
         unsigned char t[32],sk[32],l[32],n[32];
         make_mstr(t,"TextBox");make_mstr(l,"Pointer");make_mstr(n,"FPUiState");
         void *skh=make_mstr_long(sk,"Kenshi_GenericTextBoxFlat");
@@ -1144,6 +1142,10 @@ static void fpc_hud_update(int show) {
             g_fpc_hud=w;g_fpc_hud_text=NULL;
             logline("[controls] state HUD widget %p",w);
         }
+    }
+    if (g_fpc_hud && g_widget_setpos) {   /* label follows the view size like the crosshair */
+        static int lw,lh;int vw,vh;kfp_view_size(&vw,&vh);
+        if (vw!=lw||vh!=lh) {lw=vw;lh=vh;g_widget_setpos(g_fpc_hud,vw/2-90,vh/2+20);}
     }
     if (g_fpc_hud) {
         const char *st=g_fpc_ui_state?g_fpc_ui_state:"off";
@@ -1411,7 +1413,7 @@ static void fpc_ctl_menu_update(void *gw) {
     }
     if (t!=g_fpc_ctl_target) {   /* a new menu target: place the button left of the cursor (the menu opens to its right) */
         g_fpc_ctl_target=t;++g_fpc_ctl_offers;fpc_name(t,g_fpc_ctl_name,sizeof g_fpc_ctl_name);
-        int x=GetSystemMetrics(SM_CXSCREEN)/2-160,y=GetSystemMetrics(SM_CYSCREEN)/2;
+        int x,y;kfp_view_size(&x,&y);x=x/2-160;y/=2;
         POINT p;HWND fg=GetForegroundWindow();DWORD pid=0;
         if (fg) GetWindowThreadProcessId(fg,&pid);
         if (pid==GetCurrentProcessId() && GetCursorPos(&p) && ScreenToClient(fg,&p)) {x=p.x-160;y=p.y;}
