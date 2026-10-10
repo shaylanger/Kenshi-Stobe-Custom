@@ -3,8 +3,21 @@
 # with a per-patch delta -> staged DLL for both rigs. Never touches /root/KenshiFP (kfp-fixer owns it). No game.
 #
 # Usage (inside WSL DwemerAI4Skyrim3 as root; start long runs detached: setsid nohup bash kfp-pipeline.sh ... > log 2>&1 &):
-#   kfp-pipeline.sh [--base live|rev:<KenshiModding rev>|dir:<tree root>] [--revert <patch>]...
-#                   [--patches <p1,p2,..> | --all-pending] [--jobs N] [--drop 0.05] [--no-stage] [--no-4080] [--keep] [--out DIR]
+#   kfp-pipeline.sh [--combined] [--base live|rev:<KenshiModding rev>|dir:<tree root>] [--revert <patch>]...
+#                   [--patches <p1,p2,..> | --all-pending] [--exclude <p1,..>] [--jobs N] [--drop 0.05] [--stage|--no-stage]
+#                   [--no-4080] [--keep] [--out DIR]
+# ONE BUILD LINE (Shay 2026-10-10): rigs never choose between builds. The default run (no --patches/--all-pending) is
+#   --combined = base + EVERY pending-fixes/kfp-* patch; a patch that conflicts in the set or BREAKs in-set is left out
+#   (named in the final line as excluded=<p>:<why>) and the run repeats without it (new run dir <run>-x<k>), so the rest
+#   still ships. Gate failures that fail identically on the base (gate "flipped" keys that flip on base too, e.g. pool s1
+#   while a known refit is pending) are KNOWN-BASE: reported (known-base=...), never blocking; only a gate failure the
+#   patches cause (BREAK in delta.tsv, or a new flip/mutation miss on 'all') blocks. Staging (any mode) makes the build
+#   THE build: C:\KenshiTestRuns\staged\KenshiFP-latest.txt (+ C:\KAH\staged on the 4080) names it, every other staged
+#   KenshiFP-*.dll on both rigs is deleted, older "staged-build: KenshiFP" queue lines are replaced by one new line.
+#   install-dll.ps1 KenshiFP -Staged [-Rig 4080] installs the latest pointer. --patches/--all-pending runs are trial builds:
+#   they don't stage unless --stage is given. Watcher: kfp-buildwatch.sh reruns --combined when pending-fixes/kfp-* or
+#   /root/KenshiFP change (10 min quiet). Each run holds C:\KenshiTestRuns\inflight\kfp-pipeline-<run> while it runs.
+#   --exclude   leave these patches out (combined re-runs use it; env KFP_EXCL_NOTE carries the reasons)
 #   --base      live (default) = /root/KenshiFP incl. its uncommitted working tree; rev: = components/KenshiFP snapshot at a
 #               KenshiModding git rev; dir: = any tree root (client/, re_plugin/, tests/)
 #   --revert    take a patch that is already IN the base back out first (to measure it as a pending patch): its diff is made
@@ -17,6 +30,7 @@
 #   --jobs      gate runs in parallel (default 3; each gate's pool already uses every core)
 #   --drop      take-rate drop that counts as a break in the per-patch delta (default 0.05)
 #   --stage-from <run dir>  only stage that run's DLL (after a FAIL the coordinator accepted, e.g. a baseline change)
+#   --stage     stage a --patches/--all-pending run (default only for --combined and --stage-from)
 #   --no-stage  stop after the verdict; --no-4080: stage on the 5090 only; --keep: keep the scratch trees
 #   env KFP_STAGED / KFP_QUEUE / KFP_STAGED_4080 override the staging dirs (tests)
 # Stages:
@@ -34,11 +48,12 @@
 #            Delta ($RUN/delta.tsv): per patch, alone (base -> +P) and in-set (set minus P -> all): every gate verdict
 #            flip and every pool take rate change >= 0.02 (s<n>.take_all / arc / blade / stroke). BREAK = PASS->FAIL or a
 #            drop >= --drop in-set (e.g. "DELTA kfp-pt30-flip in-set s1.take_all 0.95 -> 0.64 BREAK").
-#   5 stage  on PASS: C:\KenshiTestRuns\staged\KenshiFP-<sha8>.dll (+ .txt manifest), same on the 4080 in C:\KAH\staged
-#            (+ C:\KAH\inst-staged.ps1), SHA256 checked on both sides; a line naming the build is appended to
-#            queue\5090.next and queue\4080.next. Install at each rig's next restart (Kenshi closed):
+#   5 stage  on PASS: C:\KenshiTestRuns\staged\KenshiFP-<sha8>.dll (+ .txt manifest) + KenshiFP-latest.txt, same on the
+#            4080 in C:\KAH\staged (+ C:\KAH\inst-staged.ps1), SHA256 checked on both sides, all other staged KenshiFP
+#            DLLs removed; queue\5090.next / 4080.next get ONE "staged-build: KenshiFP" line (older ones replaced).
+#            Install at each rig's next restart (Kenshi closed):
 #              5090: install-dll.ps1 KenshiFP -Staged          4080: install-dll.ps1 KenshiFP -Staged -Rig 4080
-# Output: one final line  PIPELINE PASS <sha8> patches=<..> gate=<summary> run=<dir>
+# Output: one final line  PIPELINE PASS <sha8> patches=<..> [excluded=..] [known-base=..] gate=<summary> run=<dir>
 #                     or  PIPELINE FAIL <stage> <reason> delta=<delta.tsv> run=<dir>     (exit 0 / 1)
 # Lab on the 4080 CPU: not used. The pool runs the Linux adapter binary (needs Linux); the 4080 has Windows Python 3.13 +
 # numpy 2.3.4 but its only WSL distro is the (stopped) LLM stack, and it has 12 logical cores vs 32 here, so a gate there
@@ -46,22 +61,35 @@
 set -u
 # run from a private copy: editing this file while a run is in flight must not change the running script
 if [ -z "${KFP_PIPELINE_COPY:-}" ]; then c=$(mktemp /tmp/kfp-pipeline.XXXXXX); cp "$0" "$c"; KFP_PIPELINE_COPY=$c exec bash "$c" "$@"; fi
-trap 'rm -f "$KFP_PIPELINE_COPY"' EXIT
+IFL=""; trap 'rm -f "$KFP_PIPELINE_COPY" $IFL' EXIT
 WS=/mnt/c/KenshiModding; PF=$WS/pending-fixes; LIVE=/root/KenshiFP; PR=/root/kfp-pipeline
 LABK=$WS/components/KenshiFP/animlab; LABH=$WS/Kenshi-Automation-Harness/tools/animlab
 STAGED=${KFP_STAGED:-/mnt/c/KenshiTestRuns/staged}; QD=${KFP_QUEUE:-/mnt/c/KenshiTestRuns/queue}; R4DIR=${KFP_STAGED_4080:-'C:\KAH\staged'}
 SSH=/mnt/c/Windows/System32/OpenSSH/ssh.exe; SCP=/mnt/c/Windows/System32/OpenSSH/scp.exe
-BASE=live; REVERTS=(); PLIST=""; ALLP=0; JOBS=3; DROP=0.05; STAGE=1; R4080=1; KEEP=0; RUN=""; SFROM=""
+BASE=live; REVERTS=(); PLIST=""; ALLP=0; JOBS=3; DROP=0.05; STAGE=""; R4080=1; KEEP=0; RUN=""; SFROM=""; COMB=0; EXCL=""
+KA=()   # args a combined re-run keeps
 while [ $# -gt 0 ]; do case "$1" in
-  --base) BASE=$2; shift;; --revert) REVERTS+=("$2"); shift;; --patches) PLIST=$2; shift;; --all-pending) ALLP=1;;
-  --jobs) JOBS=$2; shift;; --drop) DROP=$2; shift;; --no-stage) STAGE=0;; --no-4080) R4080=0;; --keep) KEEP=1;;
-  --out) RUN=$2; shift;; --stage-from) SFROM=$2; shift;; -h|--help) sed -n '2,40p' "$0"; exit 0;;
+  --base) BASE=$2; KA+=("$1" "$2"); shift;; --revert) REVERTS+=("$2"); KA+=("$1" "$2"); shift;; --patches) PLIST=$2; shift;;
+  --all-pending) ALLP=1;; --combined) COMB=1;; --exclude) EXCL=$2; shift;; --stage) STAGE=1; KA+=("$1");;
+  --jobs) JOBS=$2; KA+=("$1" "$2"); shift;; --drop) DROP=$2; KA+=("$1" "$2"); shift;; --no-stage) STAGE=0; KA+=("$1");;
+  --no-4080) R4080=0; KA+=("$1");; --keep) KEEP=1; KA+=("$1");;
+  --out) RUN=$2; shift;; --stage-from) SFROM=$2; shift;; -h|--help) sed -n '2,60p' "$0"; exit 0;;
   *) echo "kfp-pipeline: unknown arg $1"; exit 2;; esac; shift; done
+[ -z "$PLIST" ] && [ $ALLP = 0 ] && [ -z "$SFROM" ] && COMB=1   # default = the one combined build line
+[ $COMB = 1 ] && { [ -n "$PLIST" ] && { echo "kfp-pipeline: --combined takes every pending patch (use --exclude, not --patches)"; exit 2; }; ALLP=1; }
+STAGE=${STAGE:-$COMB}; EXNOTE=${KFP_EXCL_NOTE:-}
 [ "$(id -u)" = 0 ] || { echo "PIPELINE FAIL setup run as root in WSL (needs unshare/mount)"; exit 1; }
 [ -n "$SFROM" ] && { RUN=$SFROM; KEEP=1; }
 RUN=${RUN:-$PR/run-$(date +%m%d-%H%M%S)}; mkdir -p "$RUN"/{diffs,logs,snap}; D=$RUN/delta.tsv
+IFL=/mnt/c/KenshiTestRuns/inflight/kfp-pipeline-$(basename "$RUN"); [ -n "${KFP_STAGED:-}" ] && IFL=""   # tests: no marker
+[ -n "$IFL" ] && { mkdir -p "$(dirname "$IFL")"; echo "$RUN" > "$IFL"; }
 say() { echo "$*" | tee -a "$RUN/pipeline.log"; }
-die() { say "PIPELINE FAIL $1 $2 delta=$D run=$RUN"; cleanup; exit 1; }
+die() { say "PIPELINE FAIL $1 $2${EXNOTE:+ excluded=$EXNOTE} delta=$D run=$RUN"; cleanup; exit 1; }
+# rerun_without <names> <why>: combined mode leaves these patches out and repeats the run (the rest still ships)
+rerun_without() { local ex=${EXCL:+$EXCL,}$1 k=1 n; for n in ${1//,/ }; do EXNOTE="${EXNOTE:+$EXNOTE;}$n:$2"; done
+  while [ -e "${RUN%-x*}-x$k" ]; do k=$((k+1)); done
+  say "COMBINED leaving out $1 ($2); rerun -> ${RUN%-x*}-x$k"; cleanup; rm -f $IFL
+  KFP_EXCL_NOTE=$EXNOTE exec bash "$KFP_PIPELINE_COPY" --combined "${KA[@]}" --exclude "$ex" --out "${RUN%-x*}-x$k"; }
 cleanup() { [ $KEEP = 1 ] && return; rm -rf "$RUN"/tree-* "$RUN"/ns-* "$RUN"/snap "$RUN"/base "$RUN"/pre-*
   ls -dt "$PR"/run-* 2>/dev/null | tail -n +6 | xargs -r rm -rf; }   # keep the newest 5 runs (small: logs, gate outputs)
 # stage_dll <dll> <patches> <gate note>: copy to $STAGED (+ manifest) and the 4080 (SHA checked), queue lines; sets ST
@@ -70,15 +98,21 @@ stage_dll() { local dll=$1 pn=$2 note=$3 sha h sd ql rh; sha=$(sha256sum "$dll" 
   [ "$(sha256sum "$sd" | cut -d' ' -f1)" = "$sha" ] || die stage "5090 copy sha mismatch"
   printf 'KenshiFP %s sha256 %s\nstaged %s by kfp-pipeline (%s)\nbase %s reverted=%s\npatches %s\ngate %s\nrun %s\n' "$h" "$sha" "$(date '+%F %T')" "$note" \
     "$BASE" "$(for r in "${REVERTS[@]}"; do printf '%s,' "$(pname "$r")"; done)" "$pn" "$(head -1 "$RUN/gate-all/RESULT.txt" 2>/dev/null)" "$RUN" > "${sd%.dll}.txt"
-  ls -t "$STAGED"/KenshiFP-*.dll | tail -n +5 | while read -r o; do rm -f "$o" "${o%.dll}.txt"; done   # keep the newest 4
+  { printf 'KenshiFP %s sha256 %s\npatches %s\n' "$h" "$sha" "$pn"; printf 'excluded %s\nknown-base %s\n' "${EXNOTE:-none}" "${KB:-none}"
+    printf 'staged %s by kfp-pipeline (%s)\nrun %s\n' "$(date '+%F %T')" "$note" "$RUN"; } > "$STAGED/KenshiFP-latest.txt.new"
+  mv -f "$STAGED/KenshiFP-latest.txt.new" "$STAGED/KenshiFP-latest.txt"   # line 1 = THE build every rig installs
+  for o in "$STAGED"/KenshiFP-*.dll; do [ "$o" = "$sd" ] || rm -f "$o" "${o%.dll}.txt"; done   # superseded: one build only
   ST=5090; ql="staged-build: KenshiFP $h ($(date '+%F %H:%M') kfp-pipeline, patches=$pn, $note)"
+  for q in "$QD/5090.next" "$QD/4080.next"; do [ -f "$q" ] && sed -i '/^staged-build: KenshiFP /d' "$q"; done
   echo "$ql -> before the next batch (Kenshi closed): install-dll.ps1 KenshiFP -Staged" >> "$QD/5090.next"
   if [ $R4080 = 1 ]; then
     if timeout 60 "$SSH" -n 4080 "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force $R4DIR | Out-Null\"" > /dev/null \
-       && timeout 300 "$SCP" -q < /dev/null "$(wslpath -w "$sd")" "$(wslpath -w "${sd%.dll}.txt")" "4080:${R4DIR//\\//}/" \
+       && timeout 300 "$SCP" -q < /dev/null "$(wslpath -w "$sd")" "$(wslpath -w "${sd%.dll}.txt")" "$(wslpath -w "$STAGED/KenshiFP-latest.txt")" "4080:${R4DIR//\\//}/" \
        && timeout 60 "$SCP" -q < /dev/null "$(wslpath -w "$WS/tools/automation/rig4080/inst-staged.ps1")" 4080:C:/KAH/; then
       rh=$(timeout 60 "$SSH" -n 4080 "powershell -NoProfile -Command \"(Get-FileHash $R4DIR\KenshiFP-$h.dll).Hash\"" | tr -d '\r\n' | tr A-F a-f)
-      if [ "$rh" = "$sha" ]; then ST="5090,4080"; echo "$ql -> before the next batch (Kenshi closed): install-dll.ps1 KenshiFP -Staged -Rig 4080 (or on the 4080: C:\KAH\inst-staged.ps1)" >> "$QD/4080.next"
+      if [ "$rh" = "$sha" ]; then ST="5090,4080"
+        timeout 60 "$SSH" -n 4080 "powershell -NoProfile -Command \"Get-ChildItem $R4DIR\\KenshiFP-*.dll,$R4DIR\\KenshiFP-*.txt | Where-Object { \$_.Name -notlike 'KenshiFP-$h.*' -and \$_.Name -ne 'KenshiFP-latest.txt' } | Remove-Item -Force\"" > /dev/null || say "STAGE 4080 could not remove superseded builds"
+        echo "$ql -> before the next batch (Kenshi closed): install-dll.ps1 KenshiFP -Staged -Rig 4080 (or on the 4080: C:\KAH\inst-staged.ps1)" >> "$QD/4080.next"
       else say "STAGE 4080 sha mismatch (${rh:-none}): not staged there"; fi
     else say "STAGE 4080 unreachable: not staged there"; fi
   fi
@@ -134,7 +168,9 @@ say "BASE $BASE ok ($(cd "$B/client" && cat *.c *.inc *.h 2>/dev/null | sha256su
 cp -a "$LABK" "$RUN/snap/kfp"; cp -a "$LABH" "$RUN/snap/harness"; rm -rf "$RUN"/snap/*/__pycache__
 # --- 2 patch --------------------------------------------------------------------------------------------------------
 P=()
-if [ $ALLP = 1 ]; then while read -r f; do P+=("$f"); done < <(ls "$PF"/kfp-*.py "$PF"/kfp-*.patch 2>/dev/null | LC_ALL=C sort)
+if [ $ALLP = 1 ]; then while read -r f; do case ",$EXCL," in *",$(pname "$f"),"*|*",$(pname "$f" | sed 's/^kfp-//'),"*) continue;; esac; P+=("$f")
+  done < <(ls "$PF"/kfp-*.py "$PF"/kfp-*.patch 2>/dev/null | LC_ALL=C sort)
+  [ -n "$EXCL" ] && say "PATCH excluded: $EXCL"
 else IFS=, read -ra L_ <<< "$PLIST"; for n in "${L_[@]}"; do [ -n "$n" ] || continue; p=$(resolve "$n") || die patch "not found: $n"; P+=("$p"); done; fi
 S=(); bad=""; skip=""
 printf 'patch\tstatus\tdetail\n' > "$RUN/patches.tsv"
@@ -162,6 +198,7 @@ if ! f=$(apply_set "$T_ALL" "${S[@]}"); then
   i=0; for p in "${S[@]}"; do [ "$(pname "$p")" = "$f" ] && break; i=$((i+1)); done; pairs=""
   for q in "${S[@]:0:$i}"; do apply_set "$RUN/tree-pair" "$q" "${S[$i]}" > /dev/null || pairs="$pairs $(pname "$q")+$f"; done
   rm -rf "$RUN/tree-pair"
+  [ $COMB = 1 ] && rerun_without "$f" "set-conflict${pairs:+(${pairs# })}"
   die patch "set fails at $f: ${pairs:+conflicting pair(s):$pairs}${pairs:-no single pair fails, conflicts with the combination of the earlier patches}"
 fi
 say "PATCH set ok: ${N} pending ($(for p in "${S[@]}"; do printf '%s ' "$(pname "$p")"; done))"
@@ -221,11 +258,23 @@ GL=$(cat "$RUN/gate-all/RESULT.txt" 2>/dev/null | head -1)
 [ -n "$GL" ] || die gate "no gate result for the full set (log $RUN/logs/gate-all.txt)"
 GS="$(echo "$GL" | awk '{print $3}') $(echo "$GL" | grep -o 'pool=[^ ]*\( s[0-9]*:[A-Z]*\)*' | tr ' ' ',') $(echo "$GL" | grep -o 'flipped=[^ ]*')"
 br=$(awk -F'\t' 'NR>1 && $7=="BREAK" {printf "%s %s %s->%s; ", $1, $3, $4, $5}' "$D")
+if [ -n "$br" ] && [ $COMB = 1 ]; then cu=$(awk -F'\t' 'NR>1 && $7=="BREAK" && $1!="SET" {print $1}' "$D" | sort -u | paste -sd,)
+  [ -n "$cu" ] && rerun_without "$cu" "BREAK"; fi
 [ -z "$br" ] || die delta "${br%; } (gate: $GS)"
-[ "$(cat "$RUN/logs/gate-all.rc")" = 0 ] || die gate "$(echo "$GL" | grep -o 'why=[^ ]*') ($GS)"
+# known-base: a gate FAIL on 'all' whose only cause is baseline flips that the base gate shows identically is not the
+# patches' doing (the delta above already blocks every flip a patch causes): report it, don't block staging
+KB=""
+if [ "$(cat "$RUN/logs/gate-all.rc")" != 0 ]; then
+  why=$(echo "$GL" | grep -o 'why=[^ ]*' | cut -d= -f2); fa=$(echo "$GL" | grep -o 'flipped=[^ ]*' | cut -d= -f2-)
+  if [ $N -ge 1 ]; then fb=$(head -1 "$RUN/gate-base/RESULT.txt" 2>/dev/null | grep -o 'flipped=[^ ]*' | cut -d= -f2-); else fb=$fa; fi
+  newf=$(comm -23 <(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | sort -u) <(echo "$fb" | tr ';' '\n' | sort -u) | paste -sd';')
+  if [ "$why" = flipped ] && [ -z "$newf" ]; then KB=$(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | paste -sd';')
+    say "GATE known-base failures (fail identically on base, non-blocking): $KB"
+  else die gate "why=$why${newf:+ new-flips=$newf} ($GS)"; fi
+fi
 PN=$(for p in "${S[@]}"; do printf '%s,' "$(pname "$p")"; done); PN=${PN%,}; PN=${PN:-none}
 # --- 5 stage --------------------------------------------------------------------------------------------------------
-ST=unstaged; [ $STAGE = 1 ] && stage_dll "$DLL" "$PN" "gate PASS"
+ST=unstaged; [ $STAGE = 1 ] && stage_dll "$DLL" "$PN" "gate PASS$([ $COMB = 1 ] && echo ' combined')${KB:+ known-base}"
 cleanup
-say "PIPELINE PASS $H patches=$PN${skip:+ skipped=${skip# }} gate=${GS// /,} staged=$ST run=$RUN"
+say "PIPELINE PASS $H patches=$PN${skip:+ skipped=${skip# }}${EXNOTE:+ excluded=$EXNOTE}${KB:+ known-base=$KB} gate=${GS// /,} staged=$ST run=$RUN"
 exit 0

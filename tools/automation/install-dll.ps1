@@ -6,8 +6,9 @@ install-dll.ps1 Stobe|KenshiFP|Harness|ProfessionGear: install the freshly built
   ProfessionGear  Kenshi-Profession-Gear-Progression\out\ProfessionGearProgression.dll -> Kenshi\mods\ProfessionGearProgression\
   Harness   Kenshi-Automation-Harness\out\AutomationHarness.dll -> Kenshi\mods\AutomationHarness\
 
-  KenshiFP -Staged [-Hash <sha8>]  the newest (or named) build kfp-pipeline.sh staged: C:\KenshiTestRuns\staged\KenshiFP-<sha8>.dll
-           -Rig 4080                 same on the 4080 over ssh (runs C:\KAH\inst-staged.ps1 there: newest C:\KAH\staged\KenshiFP-*.dll)
+  KenshiFP -Staged [-Hash <sha8>]  THE build kfp-pipeline.sh staged (C:\KenshiTestRuns\staged\KenshiFP-latest.txt line 1; else the
+                                     newest), or the named one: C:\KenshiTestRuns\staged\KenshiFP-<sha8>.dll
+           -Rig 4080                 same on the 4080 over ssh (runs C:\KAH\inst-staged.ps1 there: C:\KAH\staged\KenshiFP-latest.txt)
 
 No backup copies: git is the history. Prints old and new SHA256 (first 8).
 #>
@@ -24,6 +25,8 @@ if ($Staged -or $Rig -eq '4080') {
     exit 0
   }
   $f = Get-ChildItem 'C:\KenshiTestRuns\staged\KenshiFP-*.dll' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+  # one build line: KenshiFP-latest.txt (written by kfp-pipeline.sh) names THE build; never pick by date when it exists
+  if (-not $Hash -and (Test-Path 'C:\KenshiTestRuns\staged\KenshiFP-latest.txt')) { $Hash = ((Get-Content 'C:\KenshiTestRuns\staged\KenshiFP-latest.txt' -TotalCount 1) -split ' ')[1] }
   if ($Hash) { $f = $f | Where-Object { $_.BaseName -eq "KenshiFP-$($Hash.ToUpper())" } }
   $f = $f | Select-Object -First 1
   if (-not $f) { throw 'no staged KenshiFP build in C:\KenshiTestRuns\staged (run kfp-pipeline.sh)' }
