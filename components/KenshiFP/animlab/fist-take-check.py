@@ -19,6 +19,8 @@ motion's hold: the old dur = last pose time skewed every lab frame by 20%, op-b6
 """
 import sys, os, json, math, argparse
 HARN = os.environ.get('ANIMLAB_DIR', '/mnt/c/KenshiModding/Kenshi-Automation-Harness/tools/animlab')
+if not os.path.isdir(HARN):   # 4080 (Windows python, no /mnt/c): the harness tree next to this repo
+    HARN = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'Kenshi-Automation-Harness', 'tools', 'animlab')
 sys.path.insert(0, HARN)
 import recfmt, spec
 
