@@ -37,10 +37,10 @@ while IFS='|' read -r name fix rig exp row; do
   n=$((n + 1))
   args=(--rig "$rig" --out "$OUT/$name"); [ "$fix" != - ] && args+=(--fixture "$fix")
   v=$(bash $H/dryrun.sh "${args[@]}" --row "$row" 2>/dev/null | grep '^DRYRUN ' | head -1)
-  ok=0
+  ok=0; vw=$(cut -d' ' -f3 <<<"$v")   # the verdict word only ("... FAIL ... guard PASS" is a FAIL)
   case "$exp" in
-    PASS) [[ "$v" == *" PASS "* ]] && ok=1 ;;
-    FAIL:*) [[ "$v" == *" FAIL "* ]] && echo "$v" | grep -qE "${exp#FAIL:}" && ok=1 ;;
+    PASS) [ "$vw" = PASS ] && ok=1 ;;
+    FAIL:*) [ "$vw" = FAIL ] && echo "$v" | grep -qE "${exp#FAIL:}" && ok=1 ;;
   esac
   [ $ok = 1 ] && st=ok || { st=WRONG; bad="$bad $name"; }
   echo "SELFTEST $name $st expect=$exp got: ${v:0:260}"
