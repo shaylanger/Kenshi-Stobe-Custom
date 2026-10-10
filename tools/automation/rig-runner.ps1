@@ -117,7 +117,12 @@ function Header([string]$path, [string]$key) {
 }
 function Rows([string]$path) { @(Get-Content $path | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
 function StobeRows([string]$path) { @(Rows $path | Where-Object { ($_ -split '\|')[-1] -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)' }).Count -gt 0 }
-function NextList {
+# rows left out of the dry run: "# nodryrun: <row>[/<row>,...] <reason>" (several lines allowed; "SWA/T6 rows: ..." = SWA + T6)
+function NoDryRows([string]$path) {
+    @(Get-Content $path | Where-Object { $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)' } | ForEach-Object {
+        $null = $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)'; $Matches[1].TrimEnd(':') -split '[/,]' | Where-Object { $_ } })
+}
+function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\)
     foreach ($src in "$qd\$Rig", "$qd\any") {
         foreach ($f in @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
             if ($src -like '*\any') {
@@ -125,11 +130,11 @@ function NextList {
                 if ($want -and $want -ne $Rig) { continue }
                 if ($Rig -eq '4080' -and (StobeRows $f.FullName)) { continue }
             }
-            return $f
+            $f
         }
     }
-    $null
 }
+function NextList { QueuedLists | Select-Object -First 1 }
 function Fail-List([string]$runPath, [string]$name, [string]$own, [string]$why, [string[]]$detail) {
     $dst = Join-Path "$qd\failed" $name
     Move-Item -LiteralPath $runPath $dst -Force -ErrorAction SilentlyContinue
@@ -164,7 +169,7 @@ $pdd = Join-Path $rd 'predry'; New-Item -ItemType Directory -Force $pdd | Out-Nu
 function DryListText([string]$path) {
     $cr = if ($Rig -eq '5090') { '/mnt/c' } else { '/c' }
     $txt = (Get-Content $path) -replace '\{CR\}', $cr
-    $skip = @(Get-Content $path | Where-Object { $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)' } | ForEach-Object { $null = $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)'; $Matches[1] })
+    $skip = NoDryRows $path
     $drl = $txt | Where-Object { $r = $_; if ($r -match '^\s*(#|$)') { return $true }; -not ($skip -contains (($r -split '\|')[0].Trim())) }
     ($drl -join "`n") + "`n"
 }
@@ -204,14 +209,34 @@ function PreDryWait([string]$key, [int]$sec) {
     }
     $true
 }
-function PreDryNext {
-    # one background dry run per rig at a time: the next list this rig would take, if its verdict is not cached yet
-    $f = NextList; if (-not $f) { return }
-    if (@(Get-ChildItem $pdd -Filter "$Rig-*.pid" -File -ErrorAction SilentlyContinue | Where-Object { PreDryRunning $_.BaseName }).Count) { return }
+function CachedVerdict($f) {   # PASS | FAIL | PENDING | $null for a queued list file
     $key = DryKey $f.FullName
-    if (Test-Path (Join-Path $pdd "$key.rc")) { return }
-    if (Test-Path (Join-Path $pdd "$key.out")) { return }   # last result was a FAIL for this exact state: Start-Batch re-runs it
-    PreDryStart $f.FullName $key
+    $rc = Join-Path $pdd "$key.rc"
+    if (Test-Path $rc) {
+        $sum = @(Get-Content (Join-Path $pdd "$key.out") -ErrorAction SilentlyContinue | Where-Object { $_ -like 'DRYRUN-SUMMARY*' })[-1]
+        if ((Get-Content $rc -Raw).Trim() -eq '0' -and $sum -cmatch '^DRYRUN-SUMMARY pass=\d+ fail=0 ') { return 'PASS' } else { return 'FAIL' }
+    }
+    if (PreDryRunning $key) { return 'PENDING' }
+    $null
+}
+# which list to start at a boundary (2026-10-10: the 5090 sat 5 min while the FIFO head dry-ran and then FAILED):
+# a list whose cached verdict is FAIL first (fails at once, owner noted), else the first cached PASS, else the FIFO head
+function PickList {
+    $ls = @(QueuedLists); if (-not $ls.Count) { return $null }
+    if ($ls.Count -eq 1) { return $ls[0] }
+    $v = @{}; foreach ($l in $ls) { $v[$l.Name] = CachedVerdict $l }
+    $x = $ls | Where-Object { $v[$_.Name] -eq 'FAIL' } | Select-Object -First 1; if ($x) { return $x }
+    $x = $ls | Where-Object { $v[$_.Name] -eq 'PASS' } | Select-Object -First 1; if ($x) { if ($x.Name -ne $ls[0].Name -and $script:lastPick -ne $x.Name) { $script:lastPick = $x.Name; Log "pick $($x.Name) (dry run PASS cached) before $($ls[0].Name) ($(if ($v[$ls[0].Name]) { $v[$ls[0].Name] } else { 'not dry-run yet' }))" }; return $x }
+    $ls[0]
+}
+function PreDryNext {
+    # one background dry run per rig at a time: the first queued list (FIFO) whose verdict is not cached yet
+    if (@(Get-ChildItem $pdd -Filter "$Rig-*.pid" -File -ErrorAction SilentlyContinue | Where-Object { PreDryRunning $_.BaseName }).Count) { return }
+    foreach ($f in @(QueuedLists)) {
+        $key = DryKey $f.FullName
+        if (Test-Path (Join-Path $pdd "$key.rc")) { continue }   # PASS or FAIL cached for this exact state
+        PreDryStart $f.FullName $key; break
+    }
     Get-ChildItem $pdd -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-12) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -234,7 +259,7 @@ function Start-Batch($f) {
     New-Item -ItemType Directory -Force $tmp | Out-Null
     $txt = (Get-Content $run) -replace '\{CR\}', $cr
     [IO.File]::WriteAllText((Join-Path $tmp 'list.txt'), (($txt -join "`n") + "`n"))
-    $skip = @(Get-Content $run | Where-Object { $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)' } | ForEach-Object { $null = $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)'; $Matches[1] })
+    $skip = NoDryRows $run
     $drl = $txt | Where-Object { $r = $_; if ($r -match '^\s*(#|$)') { return $true }; -not ($skip -contains (($r -split '\|')[0].Trim())) }
     [IO.File]::WriteAllText((Join-Path $tmp 'list.dryrun.txt'), (($drl -join "`n") + "`n"))
     Set-Content $curF @($run, $outW, $outP, $own, (Get-Date -Format s), $name, $tmp)
@@ -249,7 +274,7 @@ function Start-Batch($f) {
     $drc = if (Test-Path (Join-Path $pdd "$key.rc")) { [int]((Get-Content (Join-Path $pdd "$key.rc") -Raw).Trim()) } else { 124 }
     $sum = ($dr | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1)
     Log "dryrun $name $(if ($cached) { '(cached, pre-run in the background)' } else { '(now)' }) key=$key rc=$drc : $sum"
-    if ($drc -ne 0) { Remove-Item (Join-Path $pdd "$key.rc") -ErrorAction SilentlyContinue }   # a FAIL is re-run next time
+    # a FAIL stays cached: the key changes with the list or any script it runs, so the same state would fail again
     if ($drc -ne 0 -or $sum -cnotmatch '^DRYRUN-SUMMARY pass=\d+ fail=0 ') {   # dryrun.sh exits 1 on any FAIL row
         Fail-List $run $name $own "dryrun failed: $sum" @($dr | Where-Object { $_ -match '^DRYRUN .* FAIL' }); Remove-Item $curF; return $true
     }
@@ -473,7 +498,7 @@ while ($true) {
             }
         } else {
             $reason = IdleReason
-            $f = NextList
+            $f = PickList
             $s = if ($Fake) { 'IDLE' } elseif ($Rig -eq '5090') { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig5090-state.ps1" 2>$null | Select-Object -First 1) } else { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig4080-state.ps1" -Fresh 2>$null | Select-Object -First 1) }
             # someone else's job holds the rig: a running batch/marker (BUSY), but not "BUSY between batches" (the last one is
             # DONE: start at once) and not a 4080 Kenshi left open with no job (taken after IdleMin)
