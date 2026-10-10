@@ -198,6 +198,7 @@ REC_CHECKS = {
     'churn': lambda p: verdict_word(run(al('churn', p)), 'churn '),
     'churn-stroke1': lambda p: verdict_word(run(al('--only-stroke', '1', 'churn', '--stroke', p)), 'churn '),
     'stroke': lambda p: verdict_word(run(al('stroke', '--overhead', '2', p)), 'stroke '),
+    'spike': lambda p: verdict_word(run(al('spike', p)), 'spike '),
     'metrics-any': lambda p: (('FAIL' if any(' FAIL' in l[:40] for l in run(al('metrics', p)).splitlines()) else 'PASS'), 'metrics'),
 }
 VID_CHECKS = {
@@ -218,7 +219,7 @@ MUTS = [
     ('rec-wrist-over-limit', 'rec', 'f23-sword-z0d.txt', m_wrist, ['arc']),
     ('rec-hanging-blade', 'rec', 'f28-sword-z0c.txt', m_hanging, ['guard']),
     ('rec-endon-blade-frame', 'rec', 'e6-anim-b2.txt', m_endon, ['blade1']),
-    ('rec-one-frame-snap', 'rec', 'e6-anim-b2.txt', m_snap, ['blade1', 'churn-stroke1']),
+    ('rec-one-frame-snap', 'rec', 'e6-anim-b2.txt', m_snap, ['blade1', 'churn-stroke1', 'spike']),
     ('rec-one-frame-jump', 'rec', 'f28-sword-z0c.txt', m_jump, 'ALL'),
     ('vid-cursor-overlay', 'vid', 'takes/videos/anim-sword-e6.mp4', v_cursor, ['cursor']),
     ('vid-dark-night', 'vid', 'takes/videos/anim-sword-e6.mp4', v_dark, ['openground']),

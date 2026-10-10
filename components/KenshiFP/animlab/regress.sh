@@ -448,5 +448,22 @@ for f in rec/vmrec-fist-z0-a.txt:FAIL takes/fist-ma_chudan/fist-ma_chudan.vmrec.
   [ -f "$CORPUS/$n" ] || { echo "REGRESS INFO fistgame: $n not in the corpus yet"; continue; }
   r=$(python3 "$HERE/fist-take-check.py" "$CORPUS/$n" "$FX" | tail -1)
   case "$r" in "fistgame $w "*) ok "fistgame $n: ${r:0:120}";; *) bad "fistgame $n (want $w): $r";; esac; done
+# 36. PT30 follow-ups (harness Misses 2026-10-10 "PT30-FLIP vmcheck time base" + "PT30 follow-through edge roll spikes"):
+#     (a) fp-viewmodel.sh's vmcheck (extracted from the script) on the 4080 game rec pt30-sword (corpus pools/sword-swing):
+#         the strike onset next to the 0.1 s hitch (frame 158) must NOT be flagged, the follow-through roll (284) must be;
+#     (b) `animlab.py spike` (one-frame snap / flick / grip jump, class roll spike): FAIL pt30-sword at 284 (step 77) and the
+#         taste-rejected f14-e0 (wind-up snap); PASS the Shay-accepted f28-sword-z0c, e6-anim, spec-swing-A.
+PT=$CORPUS/pools/sword-swing/pt30-sword.txt; VMS=/mnt/c/KenshiModding/components/KenshiFP/tests/ingame/fp-viewmodel.sh
+if [ -f "$PT" ] && [ -f "$VMS" ]; then
+  sed -n "/^cat > \"\$OUT\/vmcheck.py\" <<'VMCHECK'/,/^VMCHECK/p" "$VMS" | sed '1d;$d' > /tmp/al-vmcheck.py
+  r=$(python3 /tmp/al-vmcheck.py "$PT" sword)
+  case "$r" in *" 158:"*|*"[158:"*) bad "vmcheck PT30-FLIP: frame 158 flagged: ${r:0:200}";;
+    *"284:du="*) ok "vmcheck PT30-FLIP: 158 not flagged, 284 flagged: $(echo "$r" | grep -o 'flags=[^]]*]')";;
+    *) bad "vmcheck PT30-FLIP: 284 not flagged: ${r:0:200}";; esac
+  for f in "$PT:FAIL" "$CORPUS/rec/f14-e0.txt:FAIL" "$CORPUS/rec/f28-sword-z0c.txt:PASS" "$CORPUS/rec/e6-anim.txt:PASS" "$CORPUS/rec/spec-swing-A.txt:PASS"; do
+    p=${f%:*} w=${f##*:}; [ -f "$p" ] || { echo "REGRESS INFO spike: $p missing"; continue; }
+    r=$(python3 "$L/animlab.py" spike "$p" | tail -1)
+    case "$r" in "spike $w "*) ok "spike $(basename $p .txt): ${r:0:140}";; *) bad "spike $(basename $p .txt) (want $w): ${r:0:200}";; esac; done
+else echo "REGRESS INFO pt30: corpus pt30-sword.txt or fp-viewmodel.sh missing"; fi
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
