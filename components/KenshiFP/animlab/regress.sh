@@ -316,5 +316,19 @@ for f in vmrec-q-sword-z25 f28-sword-z0c; do [ -f "$W/$f.txt" ] || continue; r=$
 for x in old:FAIL fix:PASS; do g=/mnt/c/KenshiTestRuns/vid/vmrec-z25-block-${x%%:*}.txt; [ -f "$g" ] && cp -n "$g" "$W/"
   f=$W/vmrec-z25-block-${x%%:*}.txt; [ -f "$f" ] || { echo "REGRESS INFO guard: $(basename "$f") not recorded yet"; continue; }
   r=$(python3 "$L/animlab.py" guard "$f"); case "$r" in "guard ${x##*:}"*) ok "guard $(basename "$f"): $r";; *) bad "guard $(basename "$f") want ${x##*:}: $r";; esac; done
+# 26. miss 2026-10-10 zoom-sweep.mp4 Z1 crossfade 2-8 dm (own headless torso/shoulders, floating hand, oversized hand on the
+#     stock): `animlab.py zoomband` (no own neck/spine/shoulder in the view of the zoom camera between the eye and head_show
+#     16 dm; elbows/wrists too once the viewmodel fades). The zoom sweep had no vm rec: geometry checked on the REAL body of
+#     VMQUICK crossbow-z25 with its camera distance rewritten to 5 dm (FAIL) vs as recorded at 25 dm and crossbow-z0 (PASS).
+#     ZSO = a zoom-sweep rec of the old fade (must FAIL), ZSF = after the fix (must PASS).
+if [ -f "$W/vmrec-q-crossbow-z25.txt" ]; then
+  sed -E 's/^([0-9]+( [^ |]+){15}) [0-9.]+ \|/\1 5.00 |/' "$W/vmrec-q-crossbow-z25.txt" > /tmp/al-zb5.txt
+  r=$(python3 "$L/animlab.py" zoomband /tmp/al-zb5.txt); case "$r" in "zoomband FAIL"*"nk("*) ok "zoomband real body at 5 dm: $(echo "$r" | cut -c1-150)";; *) bad "zoomband 5 dm: $r";; esac
+  for f in vmrec-q-crossbow-z25 vmrec-q-crossbow-z0 vmrec-q-sword-z25; do r=$(python3 "$L/animlab.py" zoomband "$W/$f.txt")
+    case "$r" in "zoomband PASS"*) ok "zoomband $f: $r";; *) bad "zoomband $f: $r";; esac; done
+else echo "REGRESS INFO zoomband: VMQUICK z25 rec missing"; fi
+for x in old:FAIL fix:PASS; do g=/mnt/c/KenshiTestRuns/vid/vmrec-zoom-sweep-${x%%:*}.txt; [ -f "$g" ] && cp -n "$g" "$W/"
+  f=$W/vmrec-zoom-sweep-${x%%:*}.txt; [ -f "$f" ] || { echo "REGRESS INFO zoomband: $(basename "$f") not recorded yet"; continue; }
+  r=$(python3 "$L/animlab.py" zoomband "$f"); case "$r" in "zoomband ${x##*:}"*) ok "zoomband $(basename "$f"): $r";; *) bad "zoomband $(basename "$f") want ${x##*:}: $r";; esac; done
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
