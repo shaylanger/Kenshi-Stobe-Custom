@@ -53,7 +53,14 @@ s=sys.stdin.read(); j=s.split(' items=',1)[1].split(' ',1)[1] if ' items=' in s 
 try: it=json.loads(j)
 except Exception: it=[]
 print(' '.join(x['name'].replace(' ','_') for x in it if x.get('equipped') and x.get('weapon_model')))" 2>/dev/null); do A unequip $SH "${w//_/ }" >/dev/null; done
+# op-b5 fist0: the fixture crossbow (no weapon_model in inv JSON) stayed on the back and R drew it (wih=1): unequip it too
+b=$(A rangedinfo $SH | sed -n 's/.* bow=\(.*\) has_ammo=.*/\1/p' | head -1)
+[ -n "$b" ] && [ "$b" != none ] && A unequip $SH "$b" >/dev/null
+# b4080c fists 2/3: after the unequip KenshiFP's R still drew the bow from the inventory (class=ranged, wih=1): move it to Malzin
+[ -n "$b" ] && [ "$b" != none ] && { A transfer $SH Malzin "$b" >/dev/null; A inv $SH | grep -q "\"name\":\"$b\"" && pf_fail "$b still in $SH's inventory after transfer to Malzin (R would draw it, not fists)"; }
 sleep 1
+b=$(A rangedinfo $SH | sed -n 's/.* bow=\(.*\) has_ammo=.*/\1/p' | head -1)
+[ -z "$b" ] || [ "$b" = none ] || pf_fail "crossbow $b still equipped on $SH after unequip (R would draw it, not fists)"
 A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 0 0.05 >/dev/null; sleep 1
 pf_area $SH "Malzin|Shay"
 pf_ready
@@ -84,6 +91,8 @@ A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-$N.txt"; A fp_vm rec dump "vmrec-
 cp "$KDIR/vmrec-$N.txt" "$N.vmrec.txt" || { restore; pf_result FAIL "no vmrec dump"; exit 1; }
 restore
 SW1=$(fist | fld swings); IK1=$(fist | fld ikfail)
+# op-b5 fist1: a stray char in the ikfail value broke $(( )) at the RESULT line (no RESULT): digits only
+IK0=$(tr -dc 0-9 <<<"$IK0"); IK1=$(tr -dc 0-9 <<<"$IK1"); SW0=$(tr -dc 0-9 <<<"$SW0"); SW1=$(tr -dc 0-9 <<<"$SW1")
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
 # ---- verdict
 ok=1
