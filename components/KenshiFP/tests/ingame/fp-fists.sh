@@ -73,6 +73,16 @@ pf_open 3
 MA0=$(A stat $SH martial_arts | grep -o 'base=[0-9.]*' | cut -d= -f2); [ -n "$MA0" ] || pf_fail "stat $SH martial_arts unreadable"
 A setstat $SH martial_arts ${MA_FOR[$TI]} >/dev/null
 ma=$(A stat $SH martial_arts | grep -o 'base=[0-9.]*' | cut -d= -f2); [ "${ma%.*}" = "${MA_FOR[$TI]}" ] || pf_fail "martial_arts ${MA_FOR[$TI]} not set (base=$ma): forced technique out of its skill window"
+# 4080 fist4080f (2E66CB37, MA base 30 for ma 2strike, window 25+): the picks still included badpunch (max skill 20) =
+# the skill chooseAttack sees is the EFFECTIVE one (gear/encumbrance/medical modifiers), not the base: raise the base
+# until the effective level sits inside the window (badpunch: lower it), else stop the take
+MA_LO=(-1000 35 25 15); MA_HI=(20 999 999 999); mab=${MA_FOR[$TI]}
+for _i in 1 2 3 4 5 6 7 8 9; do me=$(A stat $SH martial_arts | grep -o 'effective=[-0-9.]*' | cut -d= -f2); me=${me%.*}; [ -n "$me" ] || break
+  if [ "$me" -lt "$(( ${MA_LO[$TI]} + 3 ))" ] && [ "$mab" -lt 100 ]; then mab=$(( mab + 10 > 100 ? 100 : mab + 10 ))
+  elif [ "$me" -gt "$(( ${MA_HI[$TI]} - 3 ))" ] && [ "$mab" -gt 0 ]; then mab=$(( mab - 10 < 0 ? 0 : mab - 10 )); else break; fi
+  A setstat $SH martial_arts $mab >/dev/null; done
+[ -n "$me" ] && { [ "$me" -ge "${MA_LO[$TI]}" ] && [ "$me" -le "${MA_HI[$TI]}" ] || pf_fail "martial_arts effective $me (base $mab) outside the forced technique's window ${MA_LO[$TI]}..${MA_HI[$TI]}"; }
+echo "martial_arts base $mab effective ${me:-?} (window ${MA_LO[$TI]}..${MA_HI[$TI]})"
 A fp_vm set fist_tech $TI >/dev/null
 f=$(fist); [ "$(fld force <<<"$f")" = "$TI" ] || pf_fail "fp_vm set fist_tech $TI not taken: $(cut -c1-80 <<<"$f")"
 # ---- take
@@ -100,6 +110,9 @@ SW1=$(fist | fld swings); IK1=$(fist | fld ikfail)
 # op-b5 fist1: a stray char in the ikfail value broke $(( )) at the RESULT line (no RESULT): digits only
 IK0=$(tr -dc 0-9 <<<"$IK0"); IK1=$(tr -dc 0-9 <<<"$IK1"); SW0=$(tr -dc 0-9 <<<"$SW0"); SW1=$(tr -dc 0-9 <<<"$SW1")
 tail -n +$((LOG0+1)) "$KDIR/KenshiFP.log" | grep -o "\[vm\] fist swing tech='[^']*' table=.* fallback=[0-9]" > "$N.swings.txt"
+# 4080 fist4080f: the force miss line ("not picked in 96 tries (seen: ...)") was lost with the session log: keep it
+tail -n +$((LOG0+1)) "$KDIR/KenshiFP.log" | grep -o "\[vm\] fist force: .*" > "$N.force.txt"
+FM=$(head -1 "$N.force.txt" | cut -c1-200)
 pf_game_done   # game part over (vmrec copied, restore done, KenshiFP.log read): run-batch.sh starts the next row
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
 # ---- verdict
@@ -113,4 +126,4 @@ FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" --swings
 echo "$FG" | grep -q "^fistgame PASS" || ok=0
 python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --labels "$N.lab" --lab "$N.lab.txt" "$N.swings.txt" > review.log 2>&1
 [ -f review/INDEX.txt ] || ok=0
-pf_result "$([ $ok = 1 ] && echo PASS || echo FAIL)" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") rig=${RIG:-5090}"
+pf_result "$([ $ok = 1 ] && echo PASS || echo FAIL)" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") rig=${RIG:-5090}"
