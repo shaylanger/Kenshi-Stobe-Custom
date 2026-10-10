@@ -9,6 +9,7 @@ Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 40
   rig-runner.ps1 -Stop [-Rig 5090|4080]  stop the loop(s) and keep them stopped (<rig>.stopped: -Ensure skips it; a
                                          running batch keeps running; a restarted loop re-adopts it only if it is its own)
   rig-runner.ps1 -Start [-Rig 5090|4080] clear the stopped flag and start (= -Ensure -Force)
+  rig-runner.ps1 -Restart [-Rig X]       deploy an edited rig-runner.ps1: the loop re-spawns itself at its next list boundary
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
   -Fake: test mode on a fake game: queue/runner dirs under C:\KenshiTestRuns\runner\fake\, no lock/install/launch, the
          "batch" is dryrun.sh over the list (writes DONE + SUMMARY.txt); tests pickup, FIFO, gating, done/failed, alerts.
@@ -46,7 +47,7 @@ ALERT-<rig>-setup.txt (Stop hook; delete once handled, expires in 30 min); the r
 Stale queue\running\<rig>__* entries (no <rig>.cur/.tail naming them, no live run-batch.sh) are removed each tick.
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
-param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Force, [switch]$Status, [switch]$Fake,
+param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
       [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
@@ -76,6 +77,10 @@ if ($Status) {
     "queued any=$(@(Get-ChildItem "$qd\any" -Filter *.list -File -ErrorAction SilentlyContinue).Count) filler=$(@(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue).Count)"
     if (Test-Path "$rd\filler-rotation.tsv") { Get-Content "$rd\filler-rotation.tsv" | ForEach-Object { $p = $_ -split "`t"; "  filler $($p[0]) last=$($p[1]) rig=$($p[2])$(if ($p.Count -ge 4 -and $p[3]) { " benched-until=$($p[3]) ($($p[4]))" })" } }
     Get-ChildItem $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { "  $($_.Name): $((Get-Content $_.FullName -Raw).Trim())" }
+    exit 0
+}
+if ($Restart) {   # deploy a new rig-runner.ps1 at the next list boundary (never mid-batch): the loop re-spawns itself there
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
     exit 0
 }
 if ($Start) { $Ensure = $true; $Force = $true }
@@ -112,7 +117,7 @@ function ClearAlert { if (Test-Path $alertF) { Remove-Item $alertF -ErrorAction 
 # sticky alert for setup-FAIL idling: NOT cleared when the next list starts (else the Stop hook never sees it); expires after 30 min
 $fastF = Join-Path $(if ($Fake) { $rd } else { $runs }) "ALERT-$Rig-setup.txt"
 function FastAlert([string]$m) { Set-Content $fastF "ALERT $Rig $((Get-Date).ToString('HH:mm')) $m"; Log "ALERT(setup) $m" }
-$script:keep4080 = $false
+$script:keep4080 = [bool]$Keep4080   # -Keep4080: handed over by a -Restart with the 4080 game kept up
 # queue\running\ entries of this rig that no runner file (<rig>.cur / <rig>.tail.*) names and no live run-batch.sh runs:
 # leftovers of a killed loop (2026-10-10). Filler copies are deleted, other lists go to failed\ (owner noted).
 function CleanRunning {
@@ -659,6 +664,12 @@ while ($true) {
                 State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND: $why" })"
             }
         } else {
+            if (Test-Path (Join-Path $rd "$Rig.restart")) {   # list boundary: hand over to a fresh copy of the (new) script
+                Remove-Item (Join-Path $rd "$Rig.restart"), (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue
+                $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Rig', $Rig, '-Force') + $(if ($Fake) { @('-Fake') } else { @() }) + $(if ($script:keep4080) { @('-Keep4080') } else { @() })
+                $np = Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList $a
+                Log "restart at the list boundary: new loop pid=$($np.Id)$(if ($script:keep4080) { ' (4080 Kenshi kept up for the next list)' })"; exit 0
+            }
             $reason = IdleReason
             $f = PickList
             $s = if ($Fake) { 'IDLE' } elseif ($Rig -eq '5090') { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig5090-state.ps1" 2>$null | Select-Object -First 1) } else { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig4080-state.ps1" -Fresh 2>$null | Select-Object -First 1) }
