@@ -84,5 +84,13 @@ else case "$r" in "arc FAIL"*) ok "miss E1 reproduced (replay f14-e0, current so
       case "$r2" in "arc PASS"*) ok "E1 candidate kfp-e1-keys.py on $r: $r2";; *) bad "E1 candidate kfp-e1-keys.py on $r: ${r2:-no arc line}";; esac; done
   else echo "REGRESS INFO E1 candidate kfp-e1-keys.py not built (missing or does not apply)"; fi
 fi
+#  12. miss X1 "crossbow jitter / jitter under-reported": `animlab.py compare` jitter line (game jit_p95 > 1 px may be at
+#      most 2.5x the replay's, swings skipped). vmq-f8c crossbow-z0 (pre-e948f86 bone-world map) replayed by its own
+#      solver 6c9516b must FAIL (ready x4.2, reload x6.6); f14/xb0 (node map) replayed by the current solver must PASS.
+r=$(cd "$W" && "$BLD/kfpvm_6c9516b" vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt | grep '^jitter ')
+case "$r" in "jitter FAIL"*) ok "miss X1 reproduced (crossbow-z0 @6c9516b): $r";; *) bad "miss X1 not reproduced: ${r:-no jitter line}";; esac
+[ -f "$W/f14-xb0.txt" ] || cp /mnt/c/KenshiTestRuns/f14/xb0.txt "$W/f14-xb0.txt" 2>/dev/null || bad "missing recording f14/xb0.txt"
+r=$("$BLD/kfpvm_cur" "$W/f14-xb0.txt" /tmp/al-x1b.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare "$W/f14-xb0.txt" /tmp/al-x1b.txt | grep '^jitter ')
+case "$r" in "jitter PASS"*) ok "X1 fixed build (f14-xb0, current solver): $r";; *) bad "X1 jitter on f14-xb0: ${r:-no jitter line}";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail

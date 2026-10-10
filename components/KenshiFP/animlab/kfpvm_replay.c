@@ -34,6 +34,9 @@ typedef struct {
 static struct { int f; char kv[96]; } g_rsets[1024]; static int g_nrsets, g_use_rsets = 1;
 static Rin *R; static int RN;
 static D3 g_org;
+/* --abs-world (X1 miss): keep the recorded absolute world positions (no origin shift), so world math runs in float32 at
+ * the game's magnitudes (floating-origin quantisation of the bone-world map in sources before the node map, e948f86) */
+static int g_abs_world;
 
 static int parse3(const char *s, D3 *o) { return sscanf(s, "%lf,%lf,%lf", &o->x, &o->y, &o->z) == 3; }
 static int load_rec(const char *path)
@@ -85,7 +88,7 @@ static int load_rec(const char *path)
         RN++;
     }
     fclose(f);
-    if (RN) g_org = R[0].v[13];
+    if (RN && !g_abs_world) g_org = R[0].v[13];
     for (int i = 0; i < RN; i++) { R[i].v[13].x -= g_org.x; R[i].v[13].y -= g_org.y; R[i].v[13].z -= g_org.z; }
     return RN;
 }
@@ -297,8 +300,9 @@ static int do_set(const char *kv)
 
 int main(int argc, char **argv)
 {
-    if (argc < 3) { fprintf(stderr, "usage: kfpvm_replay <rec.txt> <out.txt> [--calib L1R,L2R,L1L,L2L,K] [--set k=v]... [--set-at frame:k=v]... [--quiet]\n"); return 2; }
+    if (argc < 3) { fprintf(stderr, "usage: kfpvm_replay <rec.txt> <out.txt> [--calib L1R,L2R,L1L,L2L,K] [--set k=v]... [--set-at frame:k=v]... [--quiet] [--abs-world] [--bw-lag]\n"); return 2; }
     const char *sets_at[256], *cl_set[256]; int nsa = 0, ncl_set = 0;
+    for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "--abs-world")) g_abs_world = 1;
     if (load_rec(argv[1]) < 2) { fprintf(stderr, "kfpvm_replay: no frames in %s\n", argv[1]); return 1; }
     /* plugin wiring */
     g_get_bone_world = fk_bone_world; g_skel_getbone = fk_getbone; g_oldnode_getdori = fk_getdori; g_oldnode_getdpos = fk_getdpos;
@@ -317,6 +321,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--no-rec-sets")) g_use_rsets = 0;
         else if (!strcmp(argv[a], "--no-native")) g_use_native = 0;
         else if (!strcmp(argv[a], "--bw-lag")) g_bw_lag = 1;
+        else if (!strcmp(argv[a], "--abs-world")) ;
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl_set < 256) cl_set[ncl_set++] = argv[++a]; }
         else if (!strcmp(argv[a], "--set-at") && a + 1 < argc) { if (nsa < 256) sets_at[nsa++] = argv[++a]; }
         else if (!strcmp(argv[a], "--calib") && a + 1 < argc) {
