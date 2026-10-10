@@ -60,3 +60,34 @@ ranged path; no weapon in hands + `fp_fists` runs the NA1 unarmed path.
    vanilla set only.
 7. Crossbows: one tuned path; bolt geometry is measured per gun in game, so the 7 crossbows mostly differ by size
    (Eagle's Cross 15.2 dm vs ~10 dm).
+
+## Lab result per weapon (matrix 2026-10-10, 126 representatives)
+
+Per weapon: 47 FAIL, 22 PASS, 56 REF-FAIL (fails only checks the reference Chisa Katana / Oldworld Bow also fails = no worse
+than what is already accepted), 1 not judged (Tooth Pick crossbow: mesh not resolved). FAIL by class: polearm 18, heavy
+weapons 16, blunt 6, katanas 2 (Ronin Blade near, Wafer Blade arc), hackers 2 (Crescent near, Mother's Lament arc+vis),
+crossbow 2 (Eagle's Cross near, Spring Bat vis), sabre 1 (Claymore near). By check: twohand 31, vis 28, near 17, arc 8.
+
+Lists (game takes are lab-gated):
+- `sweep-gated.list` (78: PASS + REF-FAIL, reference first) -> `batch-5090.list` (rows wm-g1..g4 = weapons 1-40 + wm-confirm)
+  and `batch-4080.list` (wm-g5..g8 = 41-78), 10 weapons per row, ~15 min each.
+- `sweep-held.list` (48): no game take until the viewmodel handles the class (rerun `animlab.py weapons --run` after a fix).
+- `sweep-confirm.list` (5 lab FAILs, one per failure class: Buster Sword twohand, Naginata near+twohand+vis, Iron Stick vis,
+  Pickaxe arc, Eagle's Cross near): expected FAIL; a game PASS or another failure = a lab Misses row.
+
+## Risk report for Shay (which weapons will likely look wrong in FP)
+
+1. **Heavy weapons and polearms (34 weapons, all of them): high risk.** FP holds them in one hand with the katana pose;
+   the game holds them with both hands. Expect a greatsword/polearm floating from one fist, the off hand missing. Fix =
+   a two-hand grip path (off hand on the handle, like the crossbow fore-stock support). Question for Shay: should FP
+   heavy/polearm be two-handed? (the lab's `twohand` rule is inferred, not yet your rule.)
+2. **Long weapons (polearms, Nodachi/Plank-size, Wafer Blade, Crusher, Mother's Lament): high risk.** Ready/block poses
+   are katana-sized, so most of a 15-25 dm blade is off screen and the block puts it off the left edge; long handles behind
+   the grip reach into the camera (near-clip cut). Fix = per-length pose scaling (blade length is unused by the solver).
+3. **Blunt weapons (clubs, maces, hammers): medium risk.** The katana edge rules (edge leads the arc, grip roll 60 deg) are
+   applied to round heads: harmless for a club, odd for a hammer/pickaxe whose head points sideways (Pickaxe arc FAIL).
+4. **Sabres, hackers, short katanas: low risk.** Same path as the tuned katana; sizes close to it; most PASS or match the
+   reference. Weapons playing another class's animations (37 overrides) swing with that class's timing only.
+5. **Mod-specific:** UWE Crab Maul is modelled along Z (held sideways); animation mods (Great Anims, More Combat
+   Animation, UWE) add techniques the lab's vanilla reference does not hold, so native-reference checks cannot judge them.
+6. **Crossbows: low risk** except size: Eagle's Cross (15 dm) cut by the near clip, Spring Bat partly off screen.

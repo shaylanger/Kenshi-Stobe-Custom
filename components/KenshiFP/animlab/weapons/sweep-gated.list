@@ -1,0 +1,80 @@
+# lab-gated sweep rows (lab matrix 2026-10-10 PASS or only REF-FAIL = fails no check the reference katana/bow passes): 78 weapons, reference first
+# sid|name|type|anim class|ammo   (fp-weapon-sweep.sh; WSTART/WCOUNT slices)
+5022626-Universal Wasteland Expansion.mod|Chisa Katana|melee|katanas|
+53643-rebirth.mod|Oldworld Bow MkII|crossbow|crossbow|Bolts [Regulars]
+923-gamedata.base|Guardless Katana|melee|katanas|
+922-gamedata.base|Nodachi|melee|katanas|
+474-gamedata.base|Topper|melee|sabre|
+1020-gamedata.base|Wakizashi|melee|katanas|
+5022625-Universal Wasteland Expansion.mod|Chokuto|melee|sabre|
+55401-ArkWeaponPack.mod|Dagger|melee|katanas|
+1533514-Black Dragon Ninjas.mod|Dragon Ninja Blade "Death"|melee|katanas|
+5022617-Universal Wasteland Expansion.mod|Flat Topper|melee|sabre|
+55407-ArkWeaponPack.mod|Kama|melee|katanas|
+5022623-Universal Wasteland Expansion.mod|Kodachi|melee|katanas|
+55419-ArkWeaponPack.mod|Kriss|melee|katanas|
+1535170-Hiver_Expansion.mod|Leaf Chopper|melee|katanas|
+2757863-BanditWeaponExpansion.mod|Makeshift Razor|melee|katanas|
+55418-ArkWeaponPack.mod|Sickle|melee|katanas|
+5022618-Universal Wasteland Expansion.mod|Tachi|melee|katanas|
+55422-ArkWeaponPack.mod|Training Sword|melee|blunt|
+475-gamedata.base|Bull Chopper|melee|sabre|
+52305-rebirth.mod|Desert Sabre|melee|sabre|
+901-gamedata.base|Longsword|melee|katanas|
+55395-ArkWeaponPack.mod|Bastard Sword|melee|sabre|
+55763-ArkWeaponPack-CORE.mod|Broad Sword|melee|sabre|
+1535191-Hiver_Expansion.mod|Cross Beak Sword|melee|sabre|
+2757864-BanditWeaponExpansion.mod|Crude Chopper|melee|sabre|
+1535186-ShriekingBandit_Expansion.mod|Disk Sabre|melee|sabre|
+55405-ArkWeaponPack.mod|Flamberge|melee|sabre|
+2758974-HN Ascended.mod|Holy Flamberge|melee|sabre|
+2758970-HN Ascended.mod|Holy Kopesh|melee|sabre|
+55408-ArkWeaponPack.mod|Kopesh|melee|sabre|
+5022622-Universal Wasteland Expansion.mod|Looped Sabre|melee|sabre|
+55411-ArkWeaponPack.mod|Machete|melee|sabre|
+5007300-NorthernWarriorMod.mod|Northern Broadsword|melee|blunt|
+2757888-WeaponExpansion_Ronin.mod|Ronin Sabre|melee|sabre|
+5022620-Universal Wasteland Expansion.mod|Seafarer Cutlass|melee|katanas|
+2758975-HN Ascended.mod|Short Horse Chopper|melee|sabre|
+55421-ArkWeaponPack.mod|Short Sword|melee|sabre|
+5038945-Universal Wasteland Expansion.mod|Training Sabre|melee|blunt|
+56135-ArkWeaponPack-CORE.mod|Tribal Axe|melee|sabre|
+2759323-Minor Factions Expansion.mod|Zangetsu|melee|katanas|
+52295-rebirth.mod|Iron Club|melee|blunt|
+5022627-Universal Wasteland Expansion.mod|Battle Club|melee|sabre|
+1535159-Hiver_Expansion.mod|Bone Hammer|melee|blunt|
+1535157-Hiver_Expansion.mod|Femur Club|melee|blunt|
+1535158-Hiver_Expansion.mod|Fibula Club|melee|blunt|
+55413-ArkWeaponPack.mod|Hammer|melee|blunt|
+2758972-HN Ascended.mod|Holy Mace|melee|blunt|
+55410-ArkWeaponPack.mod|Metal Junk|melee|blunt|
+55409-ArkWeaponPack.mod|Metal Pipe|melee|blunt|
+1535190-Hiver_Expansion.mod|Puncture Club|melee|blunt|
+55423-ArkWeaponPack.mod|Sledgehammer|melee|blunt|
+1535286-Cannibal_Expansion.mod|Spiked Mace|melee|blunt|
+55414-ArkWeaponPack.mod|Tribal Bludgeon|melee|blunt|
+55415-ArkWeaponPack.mod|Tribal Bone|melee|blunt|
+56132-ArkWeaponPack-CORE.mod|Tribal Jaw Axe|melee|blunt|
+1535184-ShriekingBandit_Expansion.mod|Tumourous Club|melee|blunt|
+55424-ArkWeaponPack.mod|Wrench|melee|blunt|
+5022624-Universal Wasteland Expansion.mod|Garru Chopper|melee|hackers|
+5038946-Universal Wasteland Expansion.mod|Training Plank|melee|blunt|
+478-gamedata.base|Long Cleaver|melee|hackers|
+52299-rebirth.mod|Paladin's Cross|melee|hackers|
+55393-ArkWeaponPack.mod|Axe|melee|hackers|
+55396-ArkWeaponPack.mod|Battle Axe|melee|hackers|
+1535185-ShriekingBandit_Expansion.mod|Beaked Cleaver|melee|blunt|
+1535160-Hiver_Expansion.mod|Bone Hacker|melee|blunt|
+2757858-BanditWeaponExpansion.mod|Fanged Club|melee|blunt|
+1535436-Mist Ghouls.mod|Forked Cleaver|melee|blunt|
+5029056-Universal Wasteland Expansion.mod|Inhuman Cleaver|melee|sabre|
+5007341-NorthernWarriorMod.mod|Northern Axe|melee|hackers|
+5022621-Universal Wasteland Expansion.mod|Offset Blade|melee|katanas|
+2757887-WeaponExpansion_Ronin.mod|Ronin Hatchet|melee|hackers|
+55622-ArkWeaponPack.mod|Southern Axe|melee|hackers|
+5022619-Universal Wasteland Expansion.mod|Stunted Cleaver|melee|hackers|
+5038943-Universal Wasteland Expansion.mod|Training Cleaver|melee|blunt|
+56134-ArkWeaponPack-CORE.mod|Tribal Sword|melee|hackers|
+95724-Dialogue.mod|Junkbow|crossbow|crossbow|Bolts [Toothpicks]
+65870-rebirth.mod|Oldworld Bow MkI|crossbow|crossbow|Bolts [Regulars]
+66169-Newwworld.mod|Ranger|crossbow|crossbow|Bolts [Regulars]

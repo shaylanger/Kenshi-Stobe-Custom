@@ -1,0 +1,7 @@
+# weapon sweep, 5090 half (weapon-matrix 2026-10-10). Needs harness with MakeWeapon (57066a7+) installed; save kah-fpxbow (script loads it).
+# run-batch.sh <this> <out>; each row = 10 weapons, ~15 min, own RESULT WEAPON-* lines + RESULT WEAPONSWEEP-<name>.
+wm-g1 | - | Axima | Malzin | 2400 | WSTART=1 WCOUNT=10 bash /mnt/c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g1 /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g1
+wm-g2 | - | Axima | Malzin | 2400 | WSTART=11 WCOUNT=10 bash /mnt/c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g2 /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g2
+wm-g3 | - | Axima | Malzin | 2400 | WSTART=21 WCOUNT=10 bash /mnt/c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g3 /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g3
+wm-g4 | - | Axima | Malzin | 2400 | WSTART=31 WCOUNT=10 bash /mnt/c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g4 /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g4
+wm-confirm | - | Axima | Malzin | 1500 | bash /mnt/c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-confirm /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-confirm.list wm-confirm

@@ -1,0 +1,50 @@
+# held: lab FAIL (no game take until the viewmodel handles the class; regenerate after a KenshiFP change: animlab.py weapons --run)
+# twohand = inferred rule (heavy/polearm native grips are two-handed), awaiting Shay; vis/near/arc = standing checks
+2757885-WeaponExpansion_Ronin.mod|Ronin Blade|melee|katanas|  # lab FAIL near
+1535194-ShriekingBandit_Expansion.mod|Wafer Blade|melee|katanas|  # lab FAIL arc
+55398-ArkWeaponPack.mod|Claymore|melee|sabre|  # lab FAIL near
+2064-gamedata.base|Iron Stick|melee|blunt|  # lab FAIL vis
+55629-ArkWeaponPack.mod|Crusher|melee|blunt|  # lab FAIL vis
+55406-ArkWeaponPack.mod|Pickaxe|melee|blunt|  # lab FAIL arc
+1535171-Hiver_Expansion.mod|Ring Mace|melee|blunt|  # lab FAIL vis
+55417-ArkWeaponPack.mod|Shovel|melee|blunt|  # lab FAIL vis
+55630-ArkWeaponPack.mod|Spiked Crusher|melee|blunt|  # lab FAIL vis
+56729-Dialogue.mod|Bull Horn Axe|melee|heavy weapons|  # lab FAIL arc,twohand
+55624-ArkWeaponPack.mod|Brutal Axe|melee|heavy weapons|  # lab FAIL near,twohand,vis
+55397-ArkWeaponPack.mod|Buster Sword|melee|heavy weapons|  # lab FAIL twohand
+5007859-HTDCrabRaiderPlus.mod|Crab Maul|melee|polearm|  # lab FAIL twohand,vis
+55402-ArkWeaponPack.mod|Double Axe|melee|heavy weapons|  # lab FAIL twohand,vis
+55627-ArkWeaponPack.mod|Gigant Mace|melee|heavy weapons|  # lab FAIL twohand,vis
+1535288-Cannibal_Expansion.mod|Grand Meat Hammer|melee|heavy weapons|  # lab FAIL twohand,vis
+1535287-Cannibal_Expansion.mod|Head Lopper|melee|heavy weapons|  # lab FAIL twohand
+55403-ArkWeaponPack.mod|Leviathanslayer|melee|heavy weapons|  # lab FAIL twohand
+1535196-ShriekingBandit_Expansion.mod|Madmans Greatclub|melee|heavy weapons|  # lab FAIL arc,near,twohand,vis
+5007299-NorthernWarriorMod.mod|Northern Battleaxe|melee|heavy weapons|  # lab FAIL twohand
+5007367-NorthernWarriorMod.mod|Northern Greatsword|melee|heavy weapons|  # lab FAIL arc,near,twohand
+2757886-WeaponExpansion_Ronin.mod|Ronin Greatsword|melee|heavy weapons|  # lab FAIL twohand
+1535184-Hiver_Expansion.mod|Serrated Greatsword|melee|heavy weapons|  # lab FAIL twohand
+2757865-BanditWeaponExpansion.mod|Tenderizer|melee|heavy weapons|  # lab FAIL twohand
+55628-ArkWeaponPack.mod|Warhammer|melee|heavy weapons|  # lab FAIL twohand
+55399-ArkWeaponPack.mod|Crescent|melee|hackers|  # lab FAIL near
+1535435-Mist Ghouls.mod|Mother's Lament|melee|blunt|  # lab FAIL arc,vis
+66290-Newwworld.mod|Eagle's Cross|crossbow|crossbow|Bolts [Longs]  # lab FAIL near
+95764-rebirth.mod|Spring Bat|crossbow|crossbow|Bolts [Heavies]  # lab FAIL vis
+52308-rebirth.mod|Naginata|melee|polearm|  # lab FAIL near,twohand,vis
+55394-ArkWeaponPack.mod|Bardiche|melee|polearm|  # lab FAIL near,twohand,vis
+2757861-BanditWeaponExpansion.mod|Bladed Staff|melee|polearm|  # lab FAIL twohand,vis
+1535161-Hiver_Expansion.mod|Bone Polearm|melee|polearm|  # lab FAIL twohand,vis
+1535169-Hiver_Expansion.mod|Crescent Glaive|melee|polearm|  # lab FAIL near,twohand,vis
+55404-ArkWeaponPack.mod|Enslaver|melee|polearm|  # lab FAIL twohand,vis
+55623-ArkWeaponPack.mod|Fork|melee|polearm|  # lab FAIL twohand
+1535189-Hiver_Expansion.mod|Gutter Pike|melee|polearm|  # lab FAIL near,twohand,vis
+5008406-HTDCrabRaiderPlus.mod|Man Slayer|melee|polearm|  # lab FAIL near,twohand,vis
+1535289-Cannibal_Expansion.mod|Meat Hook|melee|polearm|  # lab FAIL near,twohand,vis
+5007358-NorthernWarriorMod.mod|Northern Spear|melee|blunt|  # lab FAIL near,vis
+2757889-WeaponExpansion_Ronin.mod|Ronin Talons|melee|polearm|  # lab FAIL twohand
+55416-ArkWeaponPack.mod|Scythe|melee|polearm|  # lab FAIL twohand
+55420-ArkWeaponPack.mod|Spear|melee|polearm|  # lab FAIL near,twohand,vis
+1535195-ShriekingBandit_Expansion.mod|Split Blade Polearm|melee|sabre|  # lab FAIL arc,near,vis
+5038947-Universal Wasteland Expansion.mod|Training Staff|melee|blunt|  # lab FAIL vis
+56133-ArkWeaponPack-CORE.mod|Tribal Spear|melee|polearm|  # lab FAIL twohand,vis
+55625-ArkWeaponPack.mod|Trident|melee|polearm|  # lab FAIL arc,near,twohand,vis
+66534-Newwworld.mod|Tooth Pick|crossbow|crossbow|Bolts [Toothpicks]  # not judged: no matrix row (mesh not resolved), lab first

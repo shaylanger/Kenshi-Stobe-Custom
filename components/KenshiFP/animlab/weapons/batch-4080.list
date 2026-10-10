@@ -1,0 +1,6 @@
+# weapon sweep, 4080 half (weapon-matrix 2026-10-10). Needs harness with MakeWeapon (57066a7+) installed on the 4080 and the same weapon mods
+# as the 5090 load order (a weapon whose mod is missing fails its give = RESULT FAIL setup). Lock rig4080; save kah-fpxbow (4080 copy).
+wm-g5 | - | Axima | Malzin | 2400 | RIG=4080 WSTART=41 WCOUNT=10 bash /c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g5 /c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g5
+wm-g6 | - | Axima | Malzin | 2400 | RIG=4080 WSTART=51 WCOUNT=10 bash /c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g6 /c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g6
+wm-g7 | - | Axima | Malzin | 2400 | RIG=4080 WSTART=61 WCOUNT=10 bash /c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g7 /c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g7
+wm-g8 | - | Axima | Malzin | 2400 | RIG=4080 WSTART=71 WCOUNT=10 bash /c/KenshiModding/components/KenshiFP/tests/ingame/fp-weapon-sweep.sh {OUT}/wm-g8 /c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-gated.list wm-g8
