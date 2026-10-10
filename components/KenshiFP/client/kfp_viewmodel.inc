@@ -80,6 +80,37 @@ static VmPose g_vm_swk[VM_SWK] = {
 /* key times (start, keys, end), own clock over g_vm_sw_dur: anticipation (slower wind-up) ~30%, fast strike across
  * ~20%, follow-through decel, low recovery to the guard (reference: 1H melee 0.4-0.8 s, Chivalry/KCD-style) */
 static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.28f, 0.38f, 0.47f, 0.58f, 0.78f, 1.0f };
+/* E6: more strokes, same key times (wind-up, strike x2, follow-through, recovery); stroke 0 = g_vm_swk above */
+#define VM_NSTROKE 4
+static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
+    {   /* 1 backhand: wind-up top-left, sweep across to the bottom right */
+        VP(-1.564f, 0.174f, 4.330f, -0.066f, 0.798f, 0.161f, -0.371f, -0.088f, 1.514f),
+        VP(-1.044f, 0.028f, 4.666f, -0.097f, 0.895f, 0.446f, 0.235f, -0.178f, 0.555f),
+        VP(-0.586f, -1.080f, 5.125f, 0.316f, 0.523f, 1.191f, 1.013f, -1.825f, 0.802f),
+        VP(1.116f, -1.331f, 5.767f, 0.508f, 0.176f, 0.487f, -0.578f, -0.476f, 0.757f),
+        VP(1.272f, -1.540f, 4.507f, -0.023f, 0.313f, 0.916f, 0.534f, -0.619f, -0.788f) },
+    {   /* 2 overhead: blade back over the head, down through the middle */
+        VP(0.916f, 0.247f, 3.830f, -0.124f, 0.784f, -0.640f, -0.519f, 0.560f, 1.062f),
+        VP(0.900f, 0.300f, 5.000f, -0.203f, 0.788f, 0.203f, -0.034f, -0.436f, 0.926f),
+        VP(0.722f, -0.574f, 5.193f, -0.474f, 0.949f, 0.884f, 0.452f, -1.018f, -0.125f),
+        VP(0.719f, -1.611f, 5.598f, -0.041f, 0.107f, 1.229f, -0.381f, -0.867f, -0.887f),
+        VP(1.145f, -1.781f, 5.062f, -0.522f, -0.035f, 0.934f, 0.042f, -0.914f, 0.960f) },
+    {   /* 3 rising: low left, up across to the top right */
+        VP(-1.668f, -2.305f, 3.883f, -0.351f, -0.043f, -0.131f, 0.857f, -0.302f, 1.676f),
+        VP(1.124f, -1.662f, 4.995f, -1.486f, -0.039f, -0.061f, 0.818f, 0.286f, 0.769f),
+        VP(1.122f, -0.083f, 5.204f, -0.466f, 0.373f, 0.138f, 0.347f, 2.017f, -0.969f),
+        VP(2.535f, -0.377f, 4.885f, -1.275f, 0.753f, 0.648f, 0.075f, -0.318f, -0.595f),
+        VP(0.639f, -1.735f, 4.517f, -0.232f, 0.255f, 0.320f, -0.886f, -0.113f, -0.542f) } };
+static VmPose *g_vm_swkp = g_vm_swk;   /* keys of the current swing's stroke */
+static int g_vm_strokes = 0x1, g_vm_stroke_force = -1, g_vm_stroke = 0, g_vm_stroke_next = 0;
+static VmPose *vm_stroke_keys(int n) { return n <= 0 || n >= VM_NSTROKE ? g_vm_swk : g_vm_swk_alt[n - 1]; }
+static int vm_stroke_pick(void)
+{
+    if (g_vm_stroke_force >= 0 && g_vm_stroke_force < VM_NSTROKE) return g_vm_stroke_force;
+    for (int i = 0; i < VM_NSTROKE; i++) { int n = (g_vm_stroke_next + i) % VM_NSTROKE;
+        if (g_vm_strokes & (1 << n)) { g_vm_stroke_next = (n + 1) % VM_NSTROKE; return n; } }
+    return 0;
+}
 static int   g_vm_ax[2][2] = { { 2, 3 }, { 2, -1 } }; /* crossbow up = -X: the native aim holds it so (bolt above the grip) */  /* [class][f,u]: prop-local axis 1..3 = X,Y,Z, <0 = negative (probed in game) */
 static int   g_vm_whand[2] = { 1, 1 };                /* [class] weapon hand: 0 = L (Prop1), 1 = R (Prop2) */
 static Vec3  g_vm_rest = { -2.6f, -5.5f, 1.2f };      /* off-hand rest (one-handed melee), camera numbers */
@@ -332,7 +363,7 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa; signed char stroke;
                  unsigned char nok; Vec3 nj[2][3], nhx[2], nhy[2], nlp[2]; Quat nlq[2]; } VmRec;   /* native pose of this frame's apply (animlab) */
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
@@ -439,7 +470,7 @@ static Vec3 vm_cr(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, float t0, float t1, float 
 /* swing path at u in [0,1]: start pose -> keys -> end pose */
 static VmPose vm_swing_at(VmPose start, VmPose end, float u)
 {
-    VmPose k[VM_SWK + 2]; k[0] = start; for (int i = 0; i < VM_SWK; i++) k[i+1] = vm_pose_norm(g_vm_swk[i]); k[VM_SWK+1] = end;
+    VmPose k[VM_SWK + 2]; k[0] = start; for (int i = 0; i < VM_SWK; i++) k[i+1] = vm_pose_norm(g_vm_swkp[i]); k[VM_SWK+1] = end;
     const float *t = g_vm_swk_u; int n = VM_SWK + 2;
     if (u <= 0.0f) return vm_pose_norm(start);
     if (u >= 1.0f) return vm_pose_norm(end);
@@ -1597,6 +1628,8 @@ static void vm_frame_core(void *pc, int body_down)
         static int prev_ws; int ws_edge = want_swing && !prev_ws; prev_ws = want_swing;
         if (g_vm_class == 0 && (ws_edge || posed) && !g_vm_swing && ti == VM_READY && g_vm_phase != VMP_LOWER) {
             g_vm_swing = 1; g_vm_swt = 0.0f; g_vm_swu = 0.0f; g_vm_sw0 = posed ? tgt : g_vm_cur; g_vm_swings += !posed;
+            g_vm_stroke = posed ? (g_vm_stroke_force >= 0 ? g_vm_stroke_force : 0) : vm_stroke_pick(); g_vm_swkp = vm_stroke_keys(g_vm_stroke);   /* E6 */
+            if (!posed) logline("[vm] swing #%d stroke %d (mask 0x%x force %d)", g_vm_swings, g_vm_stroke, g_vm_strokes, g_vm_stroke_force);
             g_vm_sw_maxstep = 0.0f; g_vm_sw_n = 0; g_vm_sw_prevf = g_vm_cur.f;
             g_vm_sw_emin = g_vm_sw_amin = 999.0f; g_vm_sw_emax = g_vm_sw_amax = -999.0f;
         }
@@ -1750,7 +1783,7 @@ static void vm_frame(void *pc, int body_down)
         q->rootf = g_vm_root_f; q->roota = g_vm_root_a; q->napp = (unsigned)g_vm_napply;
         q->phase = (unsigned char)g_vm_phase; q->wih = (unsigned char)g_vm_wih;
         q->stch = g_vm_st_last[g_vm_whand[g_vm_class] ? 1 : 0];
-        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa;
+        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa; q->stroke = (signed char)(g_vm_swing ? g_vm_stroke : -1);
         if (g_vm_brec) g_vm_brec[g_vm_rn - 1] = g_vm_bolt;
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
@@ -1794,7 +1827,7 @@ static int vm_rec_dump(const char *path)
     fprintf(fo, "# build %s %s\n", __DATE__, __TIME__);
     for (int i = 0; i < g_vm_setn; i++)
         fprintf(fo, "# set %d %s %g\n", g_vm_setlog[i].ep == g_vm_rec_ep ? g_vm_setlog[i].f : -1, g_vm_setlog[i].k, g_vm_setlog[i].v);
-    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm)\n");
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm) stroke (E6, -1 = no swing)\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
                 q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
@@ -1811,7 +1844,7 @@ static int vm_rec_dump(const char *path)
             for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->nhx[a].x, q->nhx[a].y, q->nhx[a].z, q->nhy[a].x, q->nhy[a].y, q->nhy[a].z);
             for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.5f,%.5f,%.5f,%.5f", q->nlp[a].x, q->nlp[a].y, q->nlp[a].z, q->nlq[a].w, q->nlq[a].x, q->nlq[a].y, q->nlq[a].z);
         }
-        fprintf(fo, " | H %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->hua.x, q->hua.y, q->hua.z, q->hfa.x, q->hfa.y, q->hfa.z);   /* E5 hinge axes */
+        fprintf(fo, " | H %.4f,%.4f,%.4f %.4f,%.4f,%.4f %d", q->hua.x, q->hua.y, q->hua.z, q->hfa.x, q->hfa.y, q->hfa.z, q->stroke);   /* E5 hinge axes */
         fputc('\n', fo); }
     fclose(fo); return g_vm_rn;
 }
@@ -1835,7 +1868,7 @@ static int vm_set(const char *k, float x)
         for (int i = 0; i < VM_NT; i++) { size_t n = strlen(g_vm_tname[i]);
             if (!strncmp(k + 2, g_vm_tname[i], n) && k[2+n] == '_') { fp = vm_pose_field(&g_vm_pose[c][i], k + 3 + n); break; } }
     } else if (!strncmp(k, "low_", 4) && (k[4] == 'm' || k[4] == 'r') && k[5] == '_') fp = vm_pose_field(&g_vm_low[k[4] == 'r'], k + 6);
-    else if (!strncmp(k, "sw", 2) && k[2] >= '1' && k[2] <= '0' + VM_SWK && k[3] == '_') fp = vm_pose_field(&g_vm_swk[k[2]-'1'], k + 4);
+    else if (!strncmp(k, "sw", 2) && k[2] >= '1' && k[2] <= '0' + VM_SWK && k[3] == '_') fp = vm_pose_field(&vm_stroke_keys(g_vm_stroke_force)[k[2]-'1'], k + 4);
     else if (!strncmp(k, "swu", 3) && k[3] >= '1' && k[3] <= '0' + VM_SWK && !k[4]) fp = &g_vm_swk_u[k[3]-'0'];
     else if (!strncmp(k, "ax_", 3) && (k[3] == 'm' || k[3] == 'r') && k[4] == '_' && (k[5] == 'f' || k[5] == 'u')) {
         int c = x < 0 ? -(int)(-x + 0.5f) : (int)(x + 0.5f); if (c == 0 || c < -3 || c > 3) return 0;
@@ -1959,6 +1992,8 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "wrlmin"))  { if (x >= 0 && x < 90) g_vm_wrlmin = x; return 1; }
     else if (!strcmp(k, "wrlwarm")) { g_vm_wrlwarm = x > 0.5f; return 1; }
     else if (!strcmp(k, "hinge"))   { g_vm_hinge = x > 0.5f; return 1; }
+    else if (!strcmp(k, "strokes")) { if (x >= 0 && x < (1 << VM_NSTROKE)) { g_vm_strokes = (int)x; g_vm_stroke_next = 0; } return 1; }
+    else if (!strcmp(k, "stroke"))  { if (x >= -1 && x < VM_NSTROKE) g_vm_stroke_force = (int)x; return 1; }
     else if (!strcmp(k, "hinge_reset")) { memset(g_vm_hcap_n, 0, sizeof(g_vm_hcap_n)); memset(g_vm_hl, 0, sizeof(g_vm_hl));
                                           memset(g_vm_hdev, 0, sizeof(g_vm_hdev)); memset(g_vm_htw_max, 0, sizeof(g_vm_htw_max)); return 1; }
     else if (!strcmp(k, "wrllag"))  { if (x >= 0 && x < 180) g_vm_wrllag = x; return 1; }
@@ -2102,7 +2137,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         for (int c = 0; c < 2; c++) for (int i = 0; i < VM_NT; i++) { VmPose *p = &g_vm_pose[c][i];
             n += snprintf(b + n, sizeof(b) - n, "%c_%s p=%.2f,%.2f,%.2f f=%.2f,%.2f,%.2f u=%.2f,%.2f,%.2f | ", c ? 'r' : 'm', g_vm_tname[i],
                           p->p.x, p->p.y, p->p.z, p->f.x, p->f.y, p->f.z, p->u.x, p->u.y, p->u.z); }
-        for (int i = 0; i < VM_SWK; i++) { VmPose *p = &g_vm_swk[i];
+        for (int i = 0; i < VM_SWK; i++) { VmPose *p = &vm_stroke_keys(g_vm_stroke_force)[i];
             n += snprintf(b + n, sizeof(b) - n, "sw%d@%.2f p=%.2f,%.2f,%.2f f=%.2f,%.2f,%.2f u=%.2f,%.2f,%.2f | ", i + 1, g_vm_swk_u[i+1],
                           p->p.x, p->p.y, p->p.z, p->f.x, p->f.y, p->f.z, p->u.x, p->u.y, p->u.z); }
         snprintf(b + n, sizeof(b) - n, "ax m=%d,%d r=%d,%d hand m=%d r=%d rest=%.1f,%.1f,%.1f sup=%.1f,%.1f,%.1f polemR=%.1f,%.1f,%.1f polerL=%.1f,%.1f,%.1f polerR=%.1f,%.1f,%.1f",
