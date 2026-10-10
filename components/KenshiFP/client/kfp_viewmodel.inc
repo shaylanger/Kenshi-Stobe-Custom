@@ -101,6 +101,7 @@ static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
         VP(1.122f, -0.083f, 5.204f, -0.466f, 0.373f, 0.138f, 0.347f, 2.017f, -0.969f),
         VP(2.535f, -0.377f, 4.885f, -1.275f, 0.753f, 0.648f, 0.075f, -0.318f, -0.595f),
         VP(0.639f, -1.735f, 4.517f, -0.232f, 0.255f, 0.320f, -0.886f, -0.113f, -0.542f) } };
+static unsigned char g_vm_band_hidden;   /* Z1: set by fp_head_visibility (band hide active), recorded per frame */
 static VmPose *g_vm_swkp = g_vm_swk;   /* keys of the current swing's stroke */
 static int g_vm_strokes = 0x1, g_vm_stroke_force = -1, g_vm_stroke = 0, g_vm_stroke_next = 0;
 static VmPose *vm_stroke_keys(int n) { return n <= 0 || n >= VM_NSTROKE ? g_vm_swk : g_vm_swk_alt[n - 1]; }
@@ -363,7 +364,7 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa; signed char stroke;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa; signed char stroke; unsigned char bh;
                  unsigned char nok; Vec3 nj[2][3], nhx[2], nhy[2], nlp[2]; Quat nlq[2]; } VmRec;   /* native pose of this frame's apply (animlab) */
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
@@ -1784,7 +1785,7 @@ static void vm_frame(void *pc, int body_down)
         q->rootf = g_vm_root_f; q->roota = g_vm_root_a; q->napp = (unsigned)g_vm_napply;
         q->phase = (unsigned char)g_vm_phase; q->wih = (unsigned char)g_vm_wih;
         q->stch = g_vm_st_last[g_vm_whand[g_vm_class] ? 1 : 0];
-        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa; q->stroke = (signed char)(g_vm_swing ? g_vm_stroke : -1);
+        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa; q->stroke = (signed char)(g_vm_swing ? g_vm_stroke : -1); q->bh = g_vm_band_hidden;
         if (g_vm_brec) g_vm_brec[g_vm_rn - 1] = g_vm_bolt;
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
@@ -1828,7 +1829,7 @@ static int vm_rec_dump(const char *path)
     fprintf(fo, "# build %s %s\n", __DATE__, __TIME__);
     for (int i = 0; i < g_vm_setn; i++)
         fprintf(fo, "# set %d %s %g\n", g_vm_setlog[i].ep == g_vm_rec_ep ? g_vm_setlog[i].f : -1, g_vm_setlog[i].k, g_vm_setlog[i].v);
-    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm) stroke (E6, -1 = no swing)\n");
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm) stroke (E6, -1 = no swing) band_hidden (Z1: whole body hidden by the zoom band hide)\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
                 q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
@@ -1845,7 +1846,7 @@ static int vm_rec_dump(const char *path)
             for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->nhx[a].x, q->nhx[a].y, q->nhx[a].z, q->nhy[a].x, q->nhy[a].y, q->nhy[a].z);
             for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.5f,%.5f,%.5f,%.5f", q->nlp[a].x, q->nlp[a].y, q->nlp[a].z, q->nlq[a].w, q->nlq[a].x, q->nlq[a].y, q->nlq[a].z);
         }
-        fprintf(fo, " | H %.4f,%.4f,%.4f %.4f,%.4f,%.4f %d", q->hua.x, q->hua.y, q->hua.z, q->hfa.x, q->hfa.y, q->hfa.z, q->stroke);   /* E5 hinge axes */
+        fprintf(fo, " | H %.4f,%.4f,%.4f %.4f,%.4f,%.4f %d %d", q->hua.x, q->hua.y, q->hua.z, q->hfa.x, q->hfa.y, q->hfa.z, q->stroke, q->bh);   /* E5 hinge axes */
         fputc('\n', fo); }
     fclose(fo); return g_vm_rn;
 }

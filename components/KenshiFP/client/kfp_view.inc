@@ -10,10 +10,11 @@ static unsigned g_view_apply_n, g_view_trace_err, g_view_hold_n, g_view_refuse_s
 static float g_view_trace_last=-1; static int g_view_apply_ret=-1;
 static int g_view_have_anchor, g_view_collision_dead;
 static volatile LONG g_view_injected_wheel;
-/* Z1 hard switch: a wheel step that lands between the eye and tp_min_dm goes to tp_min_dm (out) or the eye (in) */
+/* Z1: a wheel step that lands between the eye and tp_min_dm goes to tp_min_dm (out) or the eye (in), both modes:
+ * switch jumps there, fade eases the camera out (the body is hidden on the way, fp_view_band) */
 static float fp_view_snap(float was,float t) {
     float lo=KFP_VIEW_EYE_LIMIT, hi=g_cfg_tp_min_dm;
-    if (!g_cfg_zoom_switch || t==was || hi<=lo || t<lo || t>=hi) return t;
+    if (t==was || hi<=lo || t<lo || t>=hi) return t;
     return t>was ? hi : 0.0f;
 }
 static void fp_view_input(void) {
@@ -37,6 +38,11 @@ static int fp_view_is_eye(void) {
 /* Z1: the zoom camera orbits the head, so the head/hat would fill the screen until it is far enough away */
 static int fp_view_head_near(void) {
     return fp_view_is_eye() || g_view.applied < g_cfg_head_show_dm;
+}
+/* Z1 band: the camera sits between the eye and head_show_dm (fade easing out, or a wall pulled it in). The whole
+ * character + held weapon hide there, so no headless torso / floating hand / half-faded viewmodel is on screen. */
+static int fp_view_band(void) {
+    return g_cfg_band_hide && g_fp_mode && !fp_view_is_eye() && g_view.applied < g_cfg_head_show_dm;
 }
 static void fp_view_apply(Vec3 *eye) {
     g_view_anchor=*eye; g_view_have_anchor=1; ++g_view_apply_n;
@@ -118,7 +124,11 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         if (!_stricmp(argv[2],"switch")) g_cfg_zoom_switch=1;
         else if (!_stricmp(argv[2],"fade")) g_cfg_zoom_switch=0;
         else { r->append(r,"zoommode switch|fade"); return KAH_ERROR; }
-        r->append(r,g_cfg_zoom_switch?"zoommode=switch (wheel: eye <-> tp_min_dm)":"zoommode=fade (wheel: 2-8 dm crossfade)"); return KAH_OK;
+        r->append(r,g_cfg_zoom_switch?"zoommode=switch (wheel: eye <-> tp_min_dm)":"zoommode=fade (wheel: eye <-> tp_min_dm, eased out, body hidden in between)"); return KAH_OK;
+    }
+    if (argc==3 && !_stricmp(argv[1],"bandhide")) {
+        if (!strcmp(argv[2],"0")||!strcmp(argv[2],"1")) { g_cfg_band_hide=argv[2][0]=='1'; r->append(r,g_cfg_band_hide?"bandhide=1":"bandhide=0"); return KAH_OK; }
+        r->append(r,"bandhide 0|1"); return KAH_ERROR;
     }
     if (argc==3 && !_stricmp(argv[1],"orbit")) {
         char *end; errno=0; float o=strtof(argv[2],&end);
@@ -262,8 +272,8 @@ static int kah_fp_camera(const char *id,int argc,const char *const *argv,KAH_Rep
         have_actual&&g_have_t?actual.x-g_tx:0,have_actual&&g_have_t?actual.y:0,
         have_actual&&g_have_t?actual.z-g_tz:0,(double)g_face_yaw,g_face_have);
     {   size_t n=strlen(b);
-        snprintf(b+n,sizeof(b)-n," apply_n=%u cam_hb=%ld trace_err=%u trace_last=%.2f apply_ret=%d hold_n=%u refuse_streak=%u",
-            g_view_apply_n,(long)g_cam_heartbeat,g_view_trace_err,g_view_trace_last,g_view_apply_ret,g_view_hold_n,g_view_refuse_streak);
+        snprintf(b+n,sizeof(b)-n," apply_n=%u cam_hb=%ld trace_err=%u trace_last=%.2f apply_ret=%d hold_n=%u refuse_streak=%u band=%d band_hidden=%d zoom_switch=%d",
+            g_view_apply_n,(long)g_cam_heartbeat,g_view_trace_err,g_view_trace_last,g_view_apply_ret,g_view_hold_n,g_view_refuse_streak,fp_view_band(),g_gear_all,g_cfg_zoom_switch);
     }
     if (g_view_have_anchor) {
         size_t n=strlen(b);

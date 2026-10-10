@@ -882,6 +882,10 @@ static int   g_cfg_stealth_arrows = 0; /* show the world-space 3D stealth arrows
 static int   g_cfg_zoom_switch = 1;   /* 1 = wheel hard switch eye <-> tp_min_dm, 0 = old 2-8 dm crossfade path (Shay to choose) */
 static float g_cfg_tp_min_dm = 16.0f;   /* zoom wheel: nearest third-person distance (dm); the band below it is skipped, Z1 */
 static float g_cfg_head_show_dm = 16.0f; /* zoom camera: head stays hidden below this distance (dm), Z1 */
+static int   g_cfg_band_hide = 1;     /* Z1: whole character + held weapon hidden while the zoom camera is between the eye
+                                       * and head_show_dm (fade ease-out, wall pull-in): no headless torso / half-faded hands */
+static unsigned g_cfg_body_mask = 0xFFFFFFFFu; /* hiddenMask for the band hide (every hide group) */
+static int   g_gear_all;              /* band hide latched by fp_head_visibility: mask = body mask, every worn entity hidden */
 static int   g_cfg_hide_head   = 1;    /* always hide the player's head mesh in FP (not just FF) */
 static unsigned g_cfg_head_mask = 0x200;      /* hiddenMask head bit: teal row-0 part-map paint = bit 9. This
                                         * hides head vertices WITHOUT touching Bip01 Head (bone-
@@ -1284,6 +1288,7 @@ static int kah_fp_combat(const char *,int,const char *const *,KAH_Reply *,void *
 static void fp_view_input(void);
 static int fp_view_is_eye(void);
 static int fp_view_head_near(void);
+static int fp_view_band(void);
 static int kah_fp_camera(const char *,int,const char *const *,KAH_Reply *,void *);
 static void *fp_controlled_char(void *gw);
 static int fp_char_in_squad(void *gw, void *pc);
@@ -6370,7 +6375,7 @@ static void headgear_set_hidden(void *app, int hide, int logit)
 {
     /* NB: the config gate applies to HIDING only -- a restore must always be able to run,
      * or turning the F10 toggle off would strand the gear invisible. */
-    if (g_gear_dead || !g_ent_setvisible || (hide && !g_cfg_hide_headgear)) return;
+    if (g_gear_dead || !g_ent_setvisible || (hide && !g_cfg_hide_headgear && !g_gear_all)) return;
     if (!readable(app, APP_ITEM_BUCKETS + 8)) return;
     size_t nb = *(size_t *)((uintptr_t)app + APP_ITEM_NBUCK);
     size_t n  = *(size_t *)((uintptr_t)app + APP_ITEM_COUNT);
@@ -6419,8 +6424,8 @@ static void headgear_set_hidden(void *app, int hide, int logit)
         int haveslot = gd_int_field(gd, "attach slot", &slot);
         int keyhead = !haveslot && (!strcmp(kn, "hair") || !strcmp(kn, "beard")
                    || !strcmp(kn, "hat") || !strcmp(kn, "head") || !strcmp(kn, "eyes") || !strcmp(kn, "face"));
-        int slothead = haveslot && slot >= 0 && slot <= 31
-                    && ((g_cfg_headgear_slots >> slot) & 1u);
+        int slothead = g_gear_all || (haveslot && slot >= 0 && slot <= 31
+                    && ((g_cfg_headgear_slots >> slot) & 1u));   /* band: every worn entity */
         int gtype = gear_item_type(gd);
         int holstered = 0;
         void *parts[12]; int np = 0;
@@ -6430,6 +6435,8 @@ static void headgear_set_hidden(void *app, int hide, int logit)
             np = gear_parts(app, mesh, parts, 12);
             if (hide) gear_weap_note(kn, mesh, gtype, hd, holstered, np);
         }
+        if (g_gear_all && hide && !np && (gtype == ITYPE_WEAPON || gtype == ITYPE_CROSSBOW))
+            np = gear_parts(app, mesh, parts, 12);   /* band: the weapon in hand goes with its limbs/string/bolt */
         if (!slothead && !keyhead && !holstered) {
             /* a weapon we hid while holstered is now in hand (drawn), or this is the restore pass */
             void **lst = hide ? prev : g_gear_hid; unsigned *lvf = hide ? prevvf : g_gear_vf;
@@ -6488,7 +6495,7 @@ static void headgear_set_hidden(void *app, int hide, int logit)
  * instead of taking the game down with it. */
 static void headgear_apply(void *app, int hide, int logit)
 {
-    if (g_gear_dead || !g_ent_setvisible || !app || (hide && !g_cfg_hide_headgear)) return;
+    if (g_gear_dead || !g_ent_setvisible || !app || (hide && !g_cfg_hide_headgear && !g_gear_all)) return;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_gear_dead = 1;
         logline("[head] headgear hide FAULTED -- headgear hide disabled for this session"); return; }
     guard_arm();
@@ -6596,7 +6603,7 @@ static int set_head_disabled(void *pc, int disable)
      * per-vertex bake CLAMPS head UVs (v<0) to that row at mesh load, so bit 9 == "head".
      * Hiding = set ONLY that bit; restoring = let the game recompute its vanilla mask. */
     if (disable) {
-        apply_head_mask(app, (int)g_cfg_head_mask, logit);
+        apply_head_mask(app, (int)(g_gear_all ? g_cfg_body_mask : g_cfg_head_mask), logit);
     } else {
         if (g_update_hidden_orig) g_update_hidden_orig(app);
         else apply_head_mask(app, 0, 0);
@@ -6615,13 +6622,13 @@ static int set_head_disabled(void *pc, int disable)
 static void hooked_update_hidden(void *app)
 {
     g_update_hidden_orig(app);
-    if (g_head_dead || !g_cfg_hide_head || !g_fp_mode || !fp_view_head_near() || !app || app != g_player_app) return;
+    if (g_head_dead || (!g_cfg_hide_head && !g_gear_all) || !g_fp_mode || !fp_view_head_near() || !app || app != g_player_app) return;
     if (setjmp(g_guard_jb)) { g_guard_armed = 0; g_head_dead = 1;
         logline("[head] updateHiddenParts hook FAULTED -- head-hide disabled"); return; }
     guard_arm();
     /* the game just recomputed+uploaded its own mask -- re-add the head bit on top.
      * (The vanilla armor hide-bits are lost while head-hide is on; restored on FP exit.) */
-    apply_head_mask(app, (int)g_cfg_head_mask, 0);
+    apply_head_mask(app, (int)(g_gear_all ? g_cfg_body_mask : g_cfg_head_mask), 0);
     g_guard_armed = 0;
     /* The same rebuild re-creates/re-shows worn item entities (equip changes, LOD, race
      * rebuilds), so re-hide the head-slot gear right after the game is done with it. */
@@ -6640,8 +6647,12 @@ static void fp_head_visibility(void *gw)
     float speed = readable((void *)((uintptr_t)gw + GW_FRAMESPEED), 4)
         ? *(float *)((uintptr_t)gw + GW_FRAMESPEED) : 1.0f;
     void *pc = fp_controlled_char(gw);
-    int want = g_fp_mode && fp_view_head_near() && pc && (g_cfg_hide_head || speed > 1.05f);
+    int band = fp_view_band();
+    int want = g_fp_mode && fp_view_head_near() && pc && (g_cfg_hide_head || speed > 1.05f || band);
     if (want) {
+        int bandchg = band != g_gear_all;
+        g_gear_all = band; g_vm_band_hidden = (unsigned char)band;
+        if (bandchg) { static int nlog; if (nlog++ < 400) logline("[head] band hide %s (applied=%.2f dm)", band ? "on" : "off", g_view.applied); }
         if (g_head_hidden && g_head_hidden_char && g_head_hidden_char != pc) {
             /* char switched: restore the old head -- only if that character is still a
              * live squad member (a freed one must never reach updateHiddenParts) */
@@ -6652,16 +6663,18 @@ static void fp_head_visibility(void *gw)
         /* Apply ONLY on transition -- manuallyControlled persists our scale, and
          * re-latching it every frame is what made the head spin. */
         if (!g_head_hidden && set_head_disabled(pc, 1)) { g_head_hidden = 1; g_head_hidden_char = pc; }
+        else if (g_head_hidden && bandchg) set_head_disabled(pc, 1);   /* Z1 band in/out: body mask + all gear <-> head only */
         /* Re-assert the GEAR hide every frame while active: the game can re-show or
          * re-create hair/beard entities through paths that never touch
          * updateHiddenParts (field report: facial hair back after a clean hide).
          * The walk is a handful of nodes; transitions are logged (capped) inside. */
-        else if (g_head_hidden && g_cfg_hide_headgear && g_player_app)
+        else if (g_head_hidden && (g_cfg_hide_headgear || g_gear_all) && g_player_app)
             headgear_apply(g_player_app, 1, 0);
         /* The F10 "Hide headgear" toggle can go off while the head stays hidden -- put the
          * worn head gear back immediately instead of stranding it invisible until FP exit. */
-        if (!g_cfg_hide_headgear && g_gear_n > 0) headgear_apply(g_player_app, 0, 0);
+        if (!g_cfg_hide_headgear && !g_gear_all && g_gear_n > 0) headgear_apply(g_player_app, 0, 0);
     } else if (g_head_hidden) {
+        g_gear_all = 0; g_vm_band_hidden = 0;
         void *hc = g_head_hidden_char ? g_head_hidden_char : pc;
         if (fp_char_in_squad(gw, hc)) set_head_disabled(hc, 0);
         else fp_head_forget_world();   /* gone (load/unload): nothing live to restore */
@@ -6845,6 +6858,8 @@ static void load_ini(void)
         else if (ini_int(line, "hide_head", &v))          g_cfg_hide_head = !!v;
         else if (ini_int(line, "head_hide_mask", &v))     g_cfg_head_mask = (unsigned)v;
         else if (ini_int(line, "zoom_switch", &v))        g_cfg_zoom_switch = !!v;
+        else if (ini_int(line, "band_hide", &v))          g_cfg_band_hide = !!v;
+        else if (ini_int(line, "body_hide_mask", &v))     g_cfg_body_mask = (unsigned)v;
         else if (ini_int(line, "tp_min_dm", &v))          g_cfg_tp_min_dm = (float)(v < 0 ? 0 : v > 60 ? 60 : v);
         else if (ini_int(line, "head_show_dm", &v))       g_cfg_head_show_dm = (float)(v < 0 ? 0 : v > 60 ? 60 : v);
         else if (ini_int(line, "hide_headgear", &v))      g_cfg_hide_headgear = !!v;
