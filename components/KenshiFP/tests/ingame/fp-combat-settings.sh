@@ -19,7 +19,7 @@
 # Visual parts (Shay): the panel layout, the "Press a key..." capture by click.
 # Usage: fp-combat-settings.sh [player] [mate] [outdir]. Env: KFPLOG, INI.
 SH=${1:-Axima}; MT=${2:-Malzin}; OUT=${3:-/tmp/fp-combat-settings}
-KDIR=/mnt/d/Steam/steamapps/common/Kenshi
+KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 KFPLOG=${KFPLOG:-$KDIR/KenshiFP.log}; INI=${INI:-$KDIR/mods/KenshiFP/KenshiFP.ini}
 KEY='C:\KenshiModding\tools\automation\kenshi-key.ps1'
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"

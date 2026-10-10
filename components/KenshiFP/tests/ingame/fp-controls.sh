@@ -33,7 +33,7 @@
 # Leaves the fixture changed (Skaera/neutral KO, relations, player moved/KO'd): reload it after.
 SH=${1:-Axima}; MT=${2:-Malzin}; TG=${3:-Skaera}; OUT=${4:-/tmp/fp-controls}
 MOVE_MIN=${MOVE_MIN:-10}; STILL_MAX=${STILL_MAX:-3}; DOWN_MAX=${DOWN_MAX:-40}; NEUTRAL=${NEUTRAL:-}; NEUTRAL_REL=${NEUTRAL_REL:-20}
-INTERIOR=${INTERIOR:-}; KFPLOG=${KFPLOG:-/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log}
+INTERIOR=${INTERIOR:-}; KFPLOG=${KFPLOG:-${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/KenshiFP.log}
 ROWS=${ROWS:-"K01 K02 K03 K06 K04 FB01 FS01 K05 HUD01 FF01 Z01 DOWN01 Z01-INT"}
 ROWS=${ROWS//,/ }   # run-batch.sh splits on spaces: allow ROWS=K01,K03
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"

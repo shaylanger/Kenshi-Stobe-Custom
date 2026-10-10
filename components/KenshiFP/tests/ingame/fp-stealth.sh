@@ -20,7 +20,7 @@
 # KFPLOG (/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log). Leaves the fixture changed (spawned NPCs left KO'd): reload it after.
 SH=${1:-Axima}; MT=${2:-Malzin}; OUT=${3:-/tmp/fp-stealth}
 SKILL=${SKILL:-100}; NEUTRAL_REL=${NEUTRAL_REL:-20}; ST_WAIT=${ST_WAIT:-30}; ROWS=${ROWS:-"ST01 ST02 ST03"}
-KFPLOG=${KFPLOG:-/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log}
+KFPLOG=${KFPLOG:-${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/KenshiFP.log}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
 fld() { grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
