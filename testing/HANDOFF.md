@@ -28,6 +28,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
   kept injected-only; leave KenshiDualWield/, dual-wield brief, big mod ideas, reference photos, tools/research.
   Coordinator: true-L1 grip fix NOT shipped (moves accepted poses); errmax check to compare vs game-L1 model instead.
 - weapon-matrix DONE (e35b110, harness 57066a7): lab 47/126 FAIL; lists components/KenshiFP/animlab/weapons/batch-5090.list + batch-4080.list (78 gated + 5 confirm). Blocked on: dryrun.sh fake give/equip replies (note to take-dryrun) and a harness install with MakeWeapon (next harness build from main, with sync_flash). 4080 needs the same weapon mods.
+- kfp-fixer (14:55): 3FA97555 source all committed (38bc1f3..a978e96); op-b4: name-tag fix confirmed, ready-wrist confirmed, E6 stroke 1 PASS in game, blkH FAIL = take sampler gap. New build KenshiFP 12323A9C (+ z1-band-prevm) gated + staged both rigs; 4080 installs it and refilms the zoom fade takes; commit z1-band-prevm after 0 leak frames. kfp-fixer DONE: respawn it when e6-climb2 hands in its strokes 0+3 patch (then pipeline --patches z1-band-prevm,<e6>).
 - Waiting for Shay: should heavy weapons + polearms be held two-handed in FP (34 weapons; lab rule is inferred, not his)?
   takes, weapon-matrix risk report.
 
