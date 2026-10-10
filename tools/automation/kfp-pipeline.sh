@@ -59,6 +59,9 @@
 # numpy 2.3.4 but its only WSL distro is the (stopped) LLM stack, and it has 12 logical cores vs 32 here, so a gate there
 # would be slower and would mean starting that distro. Not worth it; the 5090 runs the gates in parallel instead.
 set -u
+# offline lab job (Shay 2026-10-10: the game never waits for analysis): the whole pipeline (build, gate, regress, frames,
+# ffmpeg) runs at nice 15 / ionice idle; every child inherits it (run-comb-1535-x1 ran its gate at nice 0, load 28/32)
+renice -n 15 -p $$ >/dev/null 2>&1; ionice -c 3 -p $$ >/dev/null 2>&1
 # run from a private copy: editing this file while a run is in flight must not change the running script
 if [ -z "${KFP_PIPELINE_COPY:-}" ]; then c=$(mktemp /tmp/kfp-pipeline.XXXXXX); cp "$0" "$c"; KFP_PIPELINE_COPY=$c exec bash "$c" "$@"; fi
 IFL=""; trap 'rm -f "$KFP_PIPELINE_COPY" $IFL' EXIT
