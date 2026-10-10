@@ -98,7 +98,7 @@ IK0=$(tr -dc 0-9 <<<"$IK0"); IK1=$(tr -dc 0-9 <<<"$IK1"); SW0=$(tr -dc 0-9 <<<"$
 ok=1
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
 echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESULT take PASS"
-tail -n +$((LOG0+1)) "$KDIR/KenshiFP.log" | grep -o "\[vm\] fist swing tech='[^']*' table=[^ ]* fallback=[0-9]" > "$N.swings.txt"
+tail -n +$((LOG0+1)) "$KDIR/KenshiFP.log" | grep -o "\[vm\] fist swing tech='[^']*' table=.* fallback=[0-9]" > "$N.swings.txt"
 NS=$(wc -l < "$N.swings.txt"); NG=$(grep -c "tech='${TA[$TI]}' table=${TA[$TI]%% *}.* fallback=0" "$N.swings.txt")
 [ "$NS" -ge "$REPS" ] && [ "$NG" = "$NS" ] || ok=0
 [ "${IK1:-0}" = "${IK0:-0}" ] || ok=0
