@@ -917,6 +917,27 @@ static void vm_fist_apply(void *b[2][4], float we)
     g_vm_fist_n++; g_vm_applied++;
 }
 
+/* HAND-SCALE test switch (fp_vm set hand_scale <along> <across>): hand bones scaled, prop child compensated */
+static float g_vm_hs_a = 1.0f, g_vm_hs_c = 1.0f; static int g_vm_hs_live[2]; static Vec3 g_vm_hs_nat[2], g_vm_hs_wr[2];
+static void vm_hand_scale(void *skel)
+{
+    if (!g_oldnode_setscale || !g_oldnode_setpos || !g_oldnode_getpos || !g_skel_getbone) return;
+    int on = fabsf(g_vm_hs_a - 1.0f) > 1e-4f || fabsf(g_vm_hs_c - 1.0f) > 1e-4f;
+    for (int i = 0; i < 2; i++) {
+        if (!on && !g_vm_hs_live[i]) continue;
+        void *hb = g_skel_getbone(skel, g_vm_nm_hand[i]), *pb = g_skel_getbone(skel, g_vm_nm_prop[i]);
+        if (!readable(hb, 8) || !readable(pb, 8)) continue;
+        const Vec3 *lp = g_oldnode_getpos(pb); if (!readable((void *)lp, 12)) continue;
+        Vec3 cur = *lp;   /* native local unless it is still our last write (bone not re-posed this frame) */
+        if (!g_vm_hs_live[i] || vm_len(vm_sub(cur, g_vm_hs_wr[i])) > 1e-5f) g_vm_hs_nat[i] = cur;
+        Vec3 hs = { on ? g_vm_hs_a : 1.0f, on ? g_vm_hs_c : 1.0f, on ? g_vm_hs_c : 1.0f };
+        Vec3 ps = { 1.0f / hs.x, 1.0f / hs.y, 1.0f / hs.z };
+        Vec3 np = { g_vm_hs_nat[i].x * ps.x, g_vm_hs_nat[i].y * ps.y, g_vm_hs_nat[i].z * ps.z };
+        g_oldnode_setscale(hb, &hs); g_oldnode_setscale(pb, &ps); g_oldnode_setpos(pb, &np);
+        g_vm_hs_wr[i] = np; g_vm_hs_live[i] = on;
+    }
+}
+
 /* Runs inside setAnimationState, after the original posed the skeleton. */
 static float vm_elbow(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *Et);
 static int vm_elb_pref(void *ua, void *fa, void *ha, Vec3 Ph, Vec3 *d0o);
@@ -1172,7 +1193,7 @@ static void hooked_vm_setanim(void *skel, const void *set, float w, const void *
         g_vm_dead = 1; g_vm_w = 0.0f;
         logline("[vm] apply FAULTED -- viewmodel disabled");
     } else {
-        guard_arm(); vm_apply(skel);
+        guard_arm(); vm_apply(skel); vm_hand_scale(skel);
     }
     memcpy(g_guard_jb, saved, sizeof(jmp_buf));
     g_guard_tid = wtid; g_guard_armed = was;
@@ -2172,6 +2193,8 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "wrlmin"))  { if (x >= 0 && x < 90) g_vm_wrlmin = x; return 1; }
     else if (!strcmp(k, "wrlwarm")) { g_vm_wrlwarm = x > 0.5f; return 1; }
     else if (!strcmp(k, "hinge"))   { g_vm_hinge = x > 0.5f; return 1; }
+    else if (!strcmp(k, "hand_sa")) { if (x >= 0.3f && x <= 2.0f) g_vm_hs_a = x; return 1; }   /* HAND-SCALE along the hand */
+    else if (!strcmp(k, "hand_sc")) { if (x >= 0.3f && x <= 2.0f) g_vm_hs_c = x; return 1; }   /* HAND-SCALE across */
     else if (!strcmp(k, "fist_ua")) { g_vm_fist_ua = x != 0.0f; return 1; }   /* NA1 fists */
     else if (!strcmp(k, "fist_tech")) { g_vm_fist_force = (x >= 0.0f && x < VM_NFIST) ? (int)x : -1; return 1; }   /* NA1: force a technique (take rows), -1 = native */
     else if (!strcmp(k, "strokes")) { if (x >= 0 && x < (1 << VM_NSTROKE)) { g_vm_strokes = (int)x; g_vm_stroke_next = 0; } return 1; }
@@ -2217,6 +2240,11 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
     const char *a = argc > 1 ? argv[1] : "state";
     if (!strcmp(a, "on"))  { g_cfg_vm = 1; g_vm_dead = 0; }
     else if (!strcmp(a, "off")) g_cfg_vm = 0;
+    else if (!strcmp(a, "set") && argc > 3 && !strcmp(argv[2], "hand_scale")) {   /* HAND-SCALE: <along> [<across>] */
+        float sa = (float)atof(argv[3]), sc = argc > 4 ? (float)atof(argv[4]) : sa;
+        vm_set_logged("hand_sa", sa); vm_set_logged("hand_sc", sc);
+        char hb[96]; snprintf(hb, sizeof hb, "hand_scale along=%.3f across=%.3f", g_vm_hs_a, g_vm_hs_c); r->append(r, hb);
+    }
     else if (!strcmp(a, "set") && argc > 3) {
         if (!vm_set_logged(argv[2], (float)atof(argv[3]))) {
             r->append(r, "keys: <m|r>_<ready|aim|reload|block>_<p|f|u><x|y|z> sw<1-4>_<p|f|u><x|y|z> swu<1-4> ax_<m|r>_<f|u> (+-1..3) "
