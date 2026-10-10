@@ -22,7 +22,8 @@
 #  FB01        RMB held drawn, aimed at the sky, out of combat: blocking while held, ready after release
 #  FS01        LMB drawn melee, no target, no fight: free swing started and ended (fs_prog_max>0.5), no fault, mate hp same
 #  FF01        crossbow, fp_combat on, aimed at the sky: one shot (actual_shots+1, ammo-1); adapter reload: ammo back up
-#  HUD01       ui_state/hud_text sampled: holstered, ready, swinging, blocking, aiming (hud_text=ui_state, hud_shown=1)
+#  HUD01       ui_state/hud_text sampled: holstered, ready, swinging, blocking, aiming (hud_text=ui_state); label per PT01/PT03:
+#              texted states (holstered/ready) flashed (hud_shown=1 or hud_flash=<seq>:<state>:<ms>0>), combat states silent (hud_shown=0)
 #  Z01         distance 60 outdoors: applied >= 59, actual ~ applied, blocked=0 (probe trace= as evidence)
 #  DOWN01      KO with fp_move w held: within DOWN_MAX of the KO spot while down and after, no `[down] position jump`,
 #              `[down] held fp_move keys dropped` logged, fp_move keys empty while down
@@ -115,8 +116,16 @@ draw_to() { kis drawn "$1" && return 0; A fp_keys press r 120 >/dev/null; waitf 
 # HUD samples: hud <expected>: fp_keys snapshot; HUDS += "exp:ui/hud_text/shown"; HUDOK=0 on a mismatch
 HUDS=""; HUDOK=1; HUDN=0
 hud() { hud_eval "$1" "$(A fp_keys state)"; }
+# hud_vis_ok <expected> <s>: PT01/PT03 (Shay 2026-10-07): holstered/ready/reloading/down flash the label for 1.5 s after
+# the change (shown now, or the widget's own last flash record hud_flash=<seq>:<state>:<ms visible> names this state with
+# ms>0); swinging/blocking/aiming never show text (hud_shown must be 0). rg-01 2026-10-10: the old rule wanted shown=1 always.
+hud_vis_ok() { local h f; h=$(fld hud_shown <<<"$2"); f=$(fld hud_flash <<<"$2")
+  case "$1" in holstered|ready|reloading|down) [ "$h" = 1 ] && return 0
+      awk -v f="$f" -v e="$1" 'BEGIN{n=split(f,a,":"); exit !(n>=3 && a[2]==e && a[3]+0>0)}';;
+    *) [ "$h" = 0 ];; esac; }
 hud_eval() { local s=$2 u t h; u=$(fld ui_state <<<"$s"); t=$(fld hud_text <<<"$s"); h=$(fld hud_shown <<<"$s")
-  HUDS+="$1:$u/$t/$h "; HUDN=$((HUDN+1)); [ "$u" = "$1" ] && [ "$t" = "$u" ] && [ "$h" = 1 ] && [ "$(fld hud <<<"$s")" = 1 ] || HUDOK=0; }
+  HUDS+="$1:$u/$t/shown=$h/flash=$(fld hud_flash <<<"$s") "; HUDN=$((HUDN+1))
+  [ "$u" = "$1" ] && [ "$t" = "$u" ] && hud_vis_ok "$1" "$s" && [ "$(fld hud <<<"$s")" = 1 ] || HUDOK=0; }
 # hud_poll <expected> <s> [since]: snapshots until ui_state and hud_text both match (bounded), then judge THAT snapshot
 # (4080 b39: a separate sample after the wait came ~0.6 s later, after a short free swing had already ended)
 # [since] = hud_changes before the input: 4080 b41 the ~0.5 s free swing still fell between two polls (~0.6 s each);
@@ -126,13 +135,17 @@ hud_seen() { fld hud_hist <<<"$3" | tr , ' ' | awk -v s="$2" -v e="$1" '{for(i=1
 hud_poll() { local s end=$((SECONDS+$2)); while :; do s=$(A fp_keys state)
   [ "$(fld ui_state <<<"$s")" = "$1" ] && [ "$(fld hud_text <<<"$s")" = "$1" ] && break
   if [ -n "$3" ] && hud_seen "$1" "$3" "$s"; then HUDS+="$1:hist[$(fld hud_hist <<<"$s")]/$(fld hud_shown <<<"$s") "; HUDN=$((HUDN+1))
-    [ "$(fld hud_shown <<<"$s")" = 1 ] && [ "$(fld hud <<<"$s")" = 1 ] || HUDOK=0; return; fi
+    hud_vis_ok "$1" "$s" && [ "$(fld hud <<<"$s")" = 1 ] || HUDOK=0; return; fi
   [ $SECONDS -ge $end ] && break; sleep 0.1; done
   hud_eval "$1" "$s"; }
 
+# CE0: manual combat runtime switch at start; cleanup puts it back (rg-01 2026-10-10: cleanup always left it OFF, so the
+# next test on the same launch, fp-combat-settings CS01, found enabled=0 although the default is on)
+CE0=$(cs enabled)
 FP0=$(fps fp_mode); DIST0=$(cam target); AR0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""
 cleanup() { A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null; A fp_keys focus off >/dev/null
             A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
+            [ "$CE0" = 1 ] && A fp_combat on >/dev/null
             [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null
             [ "$(fps free)" = 1 ] && A fp_state free off >/dev/null
             for c in $PINNED; do A pin "$c" off >/dev/null; done
