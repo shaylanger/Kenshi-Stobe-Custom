@@ -156,6 +156,65 @@ function StagedWanted([string]$need) {
     $null
 }
 
+# ---------------------------------------------------------------- background pre-dry-run (2026-10-10: the 4080 sat with
+# Kenshi closed 2.5 min while the next list dry-ran after DONE). While a batch runs, the next queued list for this rig is
+# dry-run in the background; Start-Batch uses the cached verdict. Key = rig + the dry-run list text + name/size/mtime of
+# the dry-run tool, the take scripts/libs, the lab tools and every file a row names: any change = stale = run again.
+$pdd = Join-Path $rd 'predry'; New-Item -ItemType Directory -Force $pdd | Out-Null
+function DryListText([string]$path) {
+    $cr = if ($Rig -eq '5090') { '/mnt/c' } else { '/c' }
+    $txt = (Get-Content $path) -replace '\{CR\}', $cr
+    $skip = @(Get-Content $path | Where-Object { $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)' } | ForEach-Object { $null = $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)'; $Matches[1] })
+    $drl = $txt | Where-Object { $r = $_; if ($r -match '^\s*(#|$)') { return $true }; -not ($skip -contains (($r -split '\|')[0].Trim())) }
+    ($drl -join "`n") + "`n"
+}
+function DryKey([string]$path) {
+    $t = DryListText $path
+    $files = @(Get-ChildItem "$auto\dryrun" -Recurse -File -Include *.sh, *.py, *.json -ErrorAction SilentlyContinue) +
+             @(Get-ChildItem "$auto\dryrun.sh", "$auto\run-batch.sh", "$auto\rig-env.sh" -ErrorAction SilentlyContinue) +
+             @(Get-ChildItem 'C:\KenshiModding\components\KenshiFP\tests\ingame' -File -Filter *.sh -ErrorAction SilentlyContinue) +
+             @(Get-ChildItem 'C:\KenshiModding\components\KenshiFP\animlab' -File -Include *.py, *.sh -Recurse -Depth 0 -ErrorAction SilentlyContinue) +
+             @(Get-ChildItem 'C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab' -File -Filter *.py -ErrorAction SilentlyContinue)
+    foreach ($m in [regex]::Matches($t, '(?:/mnt/c|/c)(/[^\s''"|;]+)')) {
+        $w = 'C:' + ($m.Groups[1].Value -replace '/', '\'); if (Test-Path -LiteralPath $w -PathType Leaf) { $files += Get-Item -LiteralPath $w }
+    }
+    $sb = New-Object Text.StringBuilder; $null = $sb.Append("$Rig`n$t")
+    foreach ($f in ($files | Sort-Object FullName -Unique)) { $null = $sb.Append("$($f.FullName)|$($f.Length)|$($f.LastWriteTimeUtc.Ticks)`n") }
+    $h = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($sb.ToString()))
+    $Rig + '-' + (($h[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')
+}
+function PreDryRunning([string]$key) { $p = Join-Path $pdd "$key.pid"; (Test-Path $p) -and -not (Test-Path (Join-Path $pdd "$key.rc")) -and [bool](Get-Process -Id ([int](Get-Content $p -Raw)) -ErrorAction SilentlyContinue) }
+function PreDryStart([string]$path, [string]$key) {
+    $d = Join-Path $pdd $key; New-Item -ItemType Directory -Force $d | Out-Null
+    [IO.File]::WriteAllText((Join-Path $d 'list.dryrun.txt'), (DryListText $path))
+    $dw = WslPath $d; $pw = WslPath $pdd
+    Remove-Item (Join-Path $pdd "$key.rc"), (Join-Path $pdd "$key.out") -ErrorAction SilentlyContinue
+    [IO.File]::WriteAllText((Join-Path $d 'run.sh'), "#!/bin/bash`ncd /`nnice -n 15 timeout 1200 bash $(WslPath $auto)/dryrun.sh --rig $Rig --out $dw/dryrun $dw/list.dryrun.txt > $pw/$key.out.tmp 2>&1`nrc=`$?`nmv $pw/$key.out.tmp $pw/$key.out; echo `$rc > $pw/$key.rc`n")
+    if ($Fake) { $null = Wsl @('bash', "$dw/run.sh"); return }
+    $p = Start-Process wsl.exe -WindowStyle Hidden -PassThru -ArgumentList @('-d', $distro, '-u', 'root', '--cd', '/', '--', 'bash', "$dw/run.sh")
+    Set-Content (Join-Path $pdd "$key.pid") $p.Id
+    Log "predry start $(Split-Path $path -Leaf) key=$key"
+}
+function PreDryWait([string]$key, [int]$sec) {
+    $t0 = Get-Date
+    while (-not (Test-Path (Join-Path $pdd "$key.rc"))) {
+        if (((Get-Date) - $t0).TotalSeconds -ge $sec) { return $false }
+        if (-not (PreDryRunning $key) -and -not (Test-Path (Join-Path $pdd "$key.rc"))) { Start-Sleep 2; if (-not (Test-Path (Join-Path $pdd "$key.rc"))) { return $false } }
+        Start-Sleep -Seconds 2
+    }
+    $true
+}
+function PreDryNext {
+    # one background dry run per rig at a time: the next list this rig would take, if its verdict is not cached yet
+    $f = NextList; if (-not $f) { return }
+    if (@(Get-ChildItem $pdd -Filter "$Rig-*.pid" -File -ErrorAction SilentlyContinue | Where-Object { PreDryRunning $_.BaseName }).Count) { return }
+    $key = DryKey $f.FullName
+    if (Test-Path (Join-Path $pdd "$key.rc")) { return }
+    if (Test-Path (Join-Path $pdd "$key.out")) { return }   # last result was a FAIL for this exact state: Start-Batch re-runs it
+    PreDryStart $f.FullName $key
+    Get-ChildItem $pdd -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-12) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # ---------------------------------------------------------------- start a batch
 function Start-Batch($f) {
     $name = $f.Name; $run = Join-Path "$qd\running" "${Rig}__$name"
@@ -182,12 +241,15 @@ function Start-Batch($f) {
     State "starting $name -> $outW (owner $own)"; Log "START $name owner=$own out=$outW launch=$launch"
     ClearAlert
 
-    # dry run (seconds; fake game)
-    $tw = WslPath $tmp
-    $dr = Wsl @('timeout', '1200', 'bash', "$(WslPath $auto)/dryrun.sh", '--rig', $Rig, '--out', "$tw/dryrun", "$tw/list.dryrun.txt")
+    # dry run (fake game): the verdict cached by the background pre-dry-run while the previous batch ran, else run it now
+    $key = DryKey $run
+    $cached = Test-Path (Join-Path $pdd "$key.rc")
+    if (-not $cached) { if (-not (PreDryRunning $key)) { PreDryStart $run $key }; $null = PreDryWait $key 1200 }
+    $dr = if (Test-Path (Join-Path $pdd "$key.out")) { @(Get-Content (Join-Path $pdd "$key.out")) } else { @() }
+    $drc = if (Test-Path (Join-Path $pdd "$key.rc")) { [int]((Get-Content (Join-Path $pdd "$key.rc") -Raw).Trim()) } else { 124 }
     $sum = ($dr | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1)
-    Log "dryrun $name : $sum"
-    $drc = $LASTEXITCODE
+    Log "dryrun $name $(if ($cached) { '(cached, pre-run in the background)' } else { '(now)' }) key=$key rc=$drc : $sum"
+    if ($drc -ne 0) { Remove-Item (Join-Path $pdd "$key.rc") -ErrorAction SilentlyContinue }   # a FAIL is re-run next time
     if ($drc -ne 0 -or $sum -cnotmatch '^DRYRUN-SUMMARY pass=\d+ fail=0 ') {   # dryrun.sh exits 1 on any FAIL row
         Fail-List $run $name $own "dryrun failed: $sum" @($dr | Where-Object { $_ -match '^DRYRUN .* FAIL' }); Remove-Item $curF; return $true
     }
@@ -309,6 +371,7 @@ $idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted =
 while ($true) {
     if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {
+        if ((Test-Path $curF) -and -not $Fake) { try { PreDryNext } catch { Log "predry error: $($_.Exception.Message)" } }
         # batches past their game part (GAMEDONE) whose background analyses still run: finish them when DONE
         foreach ($tf in @(Get-ChildItem $rd -Filter "$Rig.tail.*" -File -ErrorAction SilentlyContinue)) {
             $tc = @(Get-Content $tf.FullName); $tp = if ($Fake) { @{ done = '1' } } else { Probe $tc[2] }
