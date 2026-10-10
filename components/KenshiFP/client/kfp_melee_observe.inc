@@ -2,6 +2,7 @@
  * until coordinator traces prove animation/recovery timing on this executable. */
 typedef void *(*melee_get_combat_t)(void *);
 static melee_get_combat_t g_melee_get_combat;
+static int fp_swing_all_cmd(int argc,const char *const *argv,KAH_Reply *r);   /* kfp_combat_swingall.inc */
 static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Reply *r,void *u) {
     (void)id;(void)u;
     if(argc==3 && !_stricmp(argv[1],"passive")) {
@@ -25,6 +26,7 @@ static int kah_fp_melee(const char *id,int argc,const char *const *argv,KAH_Repl
         fp_melee_click_legal_start((unsigned)ms);
         char b[96];snprintf(b,sizeof(b),"click_legal armed: one click at the first legal frame within %lu ms",ms);r->append(r,b);return KAH_OK;
     }
+    if(argc>=2 && argc<=3 && !_stricmp(argv[1],"swing_all")) return fp_swing_all_cmd(argc,argv,r);
     if(argc==3 && !_stricmp(argv[1],"force_chase")) {
         int on=!_stricmp(argv[2],"on");
         if(!on && _stricmp(argv[2],"off")) {r->append(r,"usage: fp_melee force_chase on|off");return KAH_ERROR;}

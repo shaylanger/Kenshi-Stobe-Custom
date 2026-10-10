@@ -879,6 +879,9 @@ static int g_cfg_key_attack = 0x01, g_cfg_key_block = 0x02, g_cfg_key_select = 0
            g_cfg_key_interact = 0x02, g_cfg_key_draw = 0x52;
 static int   g_cfg_sneak_eye = 1;   /* show the screen-space sneak eye in FP */
 static int   g_cfg_stealth_arrows = 0; /* show the world-space 3D stealth arrows in FP (0 = hidden, default) */
+static int   g_cfg_swing_hits_all = 0; /* swing_hits_all: a manual FP melee swing hits every valid character in the
+                                        * native swing area (squad + neutrals too), not only enemies + the target.
+                                        * Default OFF: friendly fire on by default would change vanilla play */
 static int   g_cfg_zoom_switch = 1;   /* 1 = wheel hard switch eye <-> tp_min_dm, 0 = old 2-8 dm crossfade path (Shay to choose) */
 static float g_cfg_tp_min_dm = 16.0f;   /* zoom wheel: nearest third-person distance (dm); the band below it is skipped, Z1 */
 static float g_cfg_head_show_dm = 16.0f; /* zoom camera: head stays hidden below this distance (dm), Z1 */
@@ -6880,6 +6883,7 @@ static void load_ini(void)
         else if (ini_float(line, "exit_camera_zoom", &fv)) { if (fv >= -500 && fv <= 500) g_cfg_exit_zoom = fv; }
         else if (ini_int(line, "sneak_eye", &v))          g_cfg_sneak_eye = !!v;
         else if (ini_int(line, "stealth_arrows", &v))     g_cfg_stealth_arrows = !!v;
+        else if (ini_int(line, "swing_hits_all", &v))     g_cfg_swing_hits_all = !!v;
         else if (ini_int(line, "screen_status", &v))      g_cfg_screen_status = !!v;
         else if (ini_int(line, "hide_head", &v))          g_cfg_hide_head = !!v;
         else if (ini_int(line, "head_hide_mask", &v))     g_cfg_head_mask = (unsigned)v;
@@ -7020,6 +7024,7 @@ static void save_ini(void)
     fprintf(f, "key_free_cursor=%d\n",  g_cfg_key_free);
     fprintf(f, "key_sprint=%d\n",       g_cfg_key_sprint);
     fprintf(f, "manual_combat=%d\n",    g_cfg_manual_combat);
+    fprintf(f, "swing_hits_all=%d\n",   g_cfg_swing_hits_all);
     fprintf(f, "key_attack=%d\n",       g_cfg_key_attack);
     fprintf(f, "key_block=%d\n",        g_cfg_key_block);
     fprintf(f, "key_select=%d\n",       g_cfg_key_select);
@@ -7170,6 +7175,7 @@ static tset_t g_tsets[] = {
     { "Hide headgear",   &g_cfg_hide_headgear, 1, 0 },
     { "Auto floors",     &g_cfg_auto_floors, 1, 0 },
     { "Manual combat",   &g_cfg_manual_combat, 1, 0 },
+    { "Swing hits all",  &g_cfg_swing_hits_all, 0, 0 },
 };
 /* key-bind rows: click the button, then press a key or mouse button (Esc cancels) */
 typedef struct { const char *label; int *cfg, def; void *btn; } kset_t;
@@ -8218,6 +8224,7 @@ static void hooked_sheathe(void *pc)
 #include "kfp_melee_observe.inc"
 #include "kfp_combat_melee.inc"
 #include "kfp_controls.inc"
+#include "kfp_combat_swingall.inc" /* setting swing_hits_all */
 #include "kfp_turret.inc"
 
 /* CharMovement::update hook: re-assert the player's direct-drive intent
@@ -9317,6 +9324,7 @@ __declspec(dllexport) void dllStartPlugin(void)
             fp_melee_observe_init();
             fp_melee_manual_init();
             fp_controls_init();
+            fp_swing_all_init();
             void *fd = (void *)(g_base + RVA_FACE_DIR);
             int fdok = install_hook(fd, (void *)hooked_face_direction,
                                     (void **)&g_face_dir_orig);
