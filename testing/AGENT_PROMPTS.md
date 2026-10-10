@@ -17,6 +17,11 @@ file paths of outputs, the build hashes involved, and what you want back.
 > Takes run on either rig via the rig layer (RIG=5090|4080). Fix offline in the animlab first; any flaw the lab passed =
 > Misses row in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`. Every video you hand over comes as a review pack
 > (`tools/automation/review-pack.py`, INDEX.txt path + lab results), never a bare mp4.
+> Rigs are run by scripts, not agents (CLAUDE.md "Rig uptime + process"): put each next batch as a list file into
+> `C:\KenshiTestRuns\queue\<5090|4080|any>\` (or a `run: <out> | <command>` line in `queue\<rig>.next` until the runner
+> daemons are live) BEFORE the current one ends; never let a rig idle/pause > 2 min, never queue "wait for build".
+> Stay lean: read RESULT lines and excerpts, one review sheet at a time; hand long judging (frame-by-frame review, log
+> digging) to a short-lived helper agent that returns one verdict line.
 
 ## STOBE fixer
 You are the **STOBE fixer**, a helper subagent of the coordinator session that runs Kenshi tests (it owns the
