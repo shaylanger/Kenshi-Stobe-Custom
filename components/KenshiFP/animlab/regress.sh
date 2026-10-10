@@ -107,5 +107,16 @@ r=$(python3 "$L/animlab.py" metrics "$W/f14-xb0.txt" | grep '^moves ')
 case "$r" in "moves FAIL aim:MISSING"*) ok "miss C1 reproduced (f14-xb0): $r";; *) bad "miss C1 not reproduced: ${r:-no moves line}";; esac
 r=$(python3 "$L/animlab.py" metrics "$W/vmq125c-crossbow-z0.txt" | grep '^moves ')
 case "$r" in "moves PASS"*aim:*) ok "C1 fixed build (vmq-125c crossbow-z0): $r";; *) bad "C1 fixed build moves: ${r:-no moves line}";; esac
+#  15. miss C2 "crossbow stock too high" + "C2 fix rotated the crossbow" (Shay): `animlab.py stock` (stock top line
+#      mp - k*mf + 1.45*mu, highest visible point p95 <= 25% of the screen from the bottom in ready; --ref: ready forward/up
+#      within 3 deg of f14/xb0, the d40b6ad-era pose). f16/c2a (build 18:21, 67%) FAILs the height, f16/c2c (18:21,
+#      rotated 24.5 deg) FAILs the orientation, vmq-125c crossbow-z0 (19:32) PASSes both.
+for f in c2a.txt c2c.txt; do [ -f "$W/f16-$f" ] || cp "/mnt/c/KenshiTestRuns/f16/$f" "$W/f16-$f" 2>/dev/null || bad "missing recording f16/$f"; done
+r=$(python3 "$L/animlab.py" stock "$W/f16-c2a.txt" --ref "$W/f14-xb0.txt")
+case "$r" in "stock FAIL ready:"*":BAD ori:"*) ok "miss C2 height reproduced (f16-c2a): $r";; *) bad "miss C2 height not reproduced: ${r:-no stock line}";; esac
+r=$(python3 "$L/animlab.py" stock "$W/f16-c2c.txt" --ref "$W/f14-xb0.txt")
+case "$r" in "stock FAIL"*"ori:"*":BAD") ok "miss C2 rotation reproduced (f16-c2c): $r";; *) bad "miss C2 rotation not reproduced: ${r:-no stock line}";; esac
+r=$(python3 "$L/animlab.py" stock "$W/vmq125c-crossbow-z0.txt" --ref "$W/f14-xb0.txt")
+case "$r" in "stock PASS"*ori:*) ok "C2 fixed build (vmq-125c crossbow-z0): $r";; *) bad "C2 fixed build stock: ${r:-no stock line}";; esac
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
