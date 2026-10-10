@@ -38,6 +38,29 @@ static void (*g_tur_update_real)(void *);
 static int g_tur_cfg_gunaim=1;static unsigned g_tur_gunaim_calls;
 static int g_tur_cfg_operate=1;       /* T2: call TurretBuilding::operate(me,dt) each frame (sets currentAimSpeed; the native caller is the AI turret job) */
 static unsigned g_tur_operate_calls;
+static int g_tur_cfg_trace=1;         /* T4: GunClass::trace(getAimDir(aim)) each frame like the native AI's line-of-fire check:
+                                         * it keeps gun->tracer (+0x80) current, and shoot() moves the spawn out of the own
+                                         * building (getBarrelPosForTrace) only when that tracer hit it */
+static unsigned g_tur_trace_calls;
+static int g_tur_cfg_gunupd=1;        /* T4: GunClass::update (vt+0x10) each frame: copies the turret node's world position and
+                                         * orientation into the gun (+0xE4/+0xF0); the AI's updateT (suppressed here) is its only
+                                         * native caller, so in FP the gun kept its load-time +z orientation and getAimDir/shoot
+                                         * sent every harpoon along it into the world (diag 2026-10-09: aimdir 0,-0.02,1 vs target -x) */
+static unsigned g_tur_gunupd_calls;
+static void fp_turret_shot_diag(void *gun,void *me,void *target,int stat,const Vec3 *aimpos,const char *tag) {
+    void **vt=readable(gun,0x130)?*(void ***)gun:NULL;
+    if (!readable(vt,0x68)) return;
+    Vec3 bp={0},bt={0},ad={0};((Vec3 *(*)(void *,Vec3 *))vt[0x48/8])(gun,&bp);
+    ((Vec3 *(*)(void *,Vec3 *,float))vt[0x50/8])(gun,&bt,1.0f);
+    if (aimpos) ((Vec3 *(*)(void *,Vec3 *,const Vec3 *))vt[0x60/8])(gun,&ad,aimpos);
+    void *tr=*(void **)((uintptr_t)gun+0x80);void *ph=readable(tr,0x10)?*(void **)((uintptr_t)tr+8):NULL;
+    int own=-1,hit=-1;Vec3 hp={0};
+    if (readable(ph,0x80)) {own=((char (*)(void *,void *))vt[0x58/8])(gun,ph)?1:0;hit=((unsigned char *)ph)[7];hp=*(Vec3 *)((uintptr_t)ph+8);}
+    logline("[turret] %s diag %s me=%p target=%p stat=%d fp=%d aim=%.1f,%.1f,%.1f barrel=%.1f,%.1f,%.1f barrel_tr=%.1f,%.1f,%.1f aimdir=%.3f,%.3f,%.3f "
+            "tracer=%p hit=%d hitpos=%.1f,%.1f,%.1f own_bld=%d lastTarget=%.1f,%.1f,%.1f",tag,g_tur_dispatch?"FP":"native",me,target,stat,g_tur_dispatch,
+            aimpos?aimpos->x:0,aimpos?aimpos->y:0,aimpos?aimpos->z:0,bp.x,bp.y,bp.z,bt.x,bt.y,bt.z,ad.x,ad.y,ad.z,tr,hit,hp.x,hp.y,hp.z,own,
+            ((Vec3 *)((uintptr_t)gun+0x118))->x,((Vec3 *)((uintptr_t)gun+0x118))->y,((Vec3 *)((uintptr_t)gun+0x118))->z);
+}
 
 static void *fp_turret_of(void *pc) {
     static void *(*getbld)(void *);static int res;
@@ -88,6 +111,14 @@ static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
         if (!res) {res=1;op=(void (*)(void *,void *,float))fpc_klib("?operate@TurretBuilding@@UEAAXPEAVCharacter@@M@Z");
                    logline("[turret] TurretBuilding::operate %s",op?"bound":"MISSING");}
         if (op) {op(b,pc,gdt);++g_tur_operate_calls;}
+    }
+    if (g_tur_cfg_gunupd && g_tur_aim_valid) {void **vt=*(void ***)gun;if (readable(vt,0x18)) {((void (*)(void *,const Vec3 *))vt[0x10/8])(gun,&aim);++g_tur_gunupd_calls;}}
+    if (g_tur_cfg_trace && g_tur_aim_valid) {
+        static void *(*trace)(void *,const Vec3 *,char);static int res;
+        if (!res) {res=1;trace=(void *(*)(void *,const Vec3 *,char))fpc_klib("?trace@GunClass@@QEAAAEAVphysHit@@AEBVVector3@Ogre@@_N@Z");
+                   logline("[turret] GunClass::trace %s",trace?"bound":"MISSING");}
+        void **vt=*(void ***)gun;
+        if (trace && readable(vt,0x68)) {Vec3 d;((Vec3 *(*)(void *,Vec3 *,const Vec3 *))vt[0x60/8])(gun,&d,&aim);trace(gun,&d,1);++g_tur_trace_calls;}
     }
     if (g_tur_cfg_drive && g_tur_update_real && gdt>0.0f) {++g_tur_drive_calls;g_tur_update_real(b);}
     /* T3 reload */
@@ -161,6 +192,8 @@ static int kah_fp_turret(const char *id,int argc,const char *const *argv,KAH_Rep
     (void)id;(void)u;
     if (argc>=3 && !_stricmp(argv[1],"gunaim")) {g_tur_cfg_gunaim=atoi(argv[2])!=0;r->append(r,g_tur_cfg_gunaim?"turret gunaim 1":"turret gunaim 0");return KAH_OK;}
     if (argc>=3 && !_stricmp(argv[1],"operate")) {g_tur_cfg_operate=atoi(argv[2])!=0;r->append(r,g_tur_cfg_operate?"turret operate 1":"turret operate 0");return KAH_OK;}
+    if (argc>=3 && !_stricmp(argv[1],"gunupd")) {g_tur_cfg_gunupd=atoi(argv[2])!=0;r->append(r,g_tur_cfg_gunupd?"turret gunupd 1":"turret gunupd 0");return KAH_OK;}
+    if (argc>=3 && !_stricmp(argv[1],"trace")) {g_tur_cfg_trace=atoi(argv[2])!=0;r->append(r,g_tur_cfg_trace?"turret trace 1":"turret trace 0");return KAH_OK;}
     if (argc>=3 && !_stricmp(argv[1],"drive")) {g_tur_cfg_drive=atoi(argv[2])!=0;r->append(r,g_tur_cfg_drive?"turret drive 1":"turret drive 0");return KAH_OK;}
     char b[1400];void *gun=g_tur_pc?g_tur_gun:NULL;
     if (gun && !readable(gun,0x130)) gun=NULL;
@@ -191,10 +224,10 @@ static int kah_fp_turret(const char *id,int argc,const char *const *argv,KAH_Rep
         float v368=NAN,v3c0=NAN,asp=gun?*(float *)((uintptr_t)gun+0x14):NAN;
         if (readable(vt,0x3c8)) {v368=((float (*)(void *))vt[0x368/8])(bld);v3c0=((float (*)(void *))vt[0x3c0/8])(bld);}
         n=strlen(b);snprintf(b+n,sizeof b-n," gun_aimspeed=%.3f v368=%.3f v3c0=%.3f",asp,v368,v3c0);n=strlen(b);
-        snprintf(b+n,sizeof b-n," dbg160=%d dbg228=%p speed464=%.3f hinge=%p hinge8=%p aimdist448=%.2f rot4b4=%d drive=%d drive_calls=%u operate=%d operate_calls=%u",
+        snprintf(b+n,sizeof b-n," dbg160=%d dbg228=%p speed464=%.3f hinge=%p hinge8=%p aimdist448=%.2f rot4b4=%d drive=%d drive_calls=%u operate=%d operate_calls=%u trace=%d trace_calls=%u gunupd=%d gunupd_calls=%u",
                  *(unsigned char *)((uintptr_t)bld+0x160),*(void **)((uintptr_t)bld+0x228),*(float *)((uintptr_t)bld+0x464),h,
                  readable(h,0x10)?*(void **)((uintptr_t)h+8):NULL,*(float *)((uintptr_t)bld+0x448),*(int *)((uintptr_t)bld+0x4B4),
-                 g_tur_cfg_drive,g_tur_drive_calls,g_tur_cfg_operate,g_tur_operate_calls);
+                 g_tur_cfg_drive,g_tur_drive_calls,g_tur_cfg_operate,g_tur_operate_calls,g_tur_cfg_trace,g_tur_trace_calls,g_tur_cfg_gunupd,g_tur_gunupd_calls);
     }
     r->append(r,b);return KAH_OK;
 }

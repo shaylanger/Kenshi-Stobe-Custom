@@ -1263,6 +1263,7 @@ static void fp_melee_observe_swing(void *,float);
 static int kah_fp_melee(const char *,int,const char *const *,KAH_Reply *,void *);
 static int fp_combat_suppress_shot(void *,void *);
 /* T2-T5 FP turret control (kfp_turret.inc) */
+static void fp_turret_shot_diag(void *,void *,void *,int,const Vec3 *,const char *);
 static void *g_tur_pc,*g_tur_rc,*g_tur_gun,*g_tur_harp;static int g_tur_dispatch;static int g_tur_ui_fire;static unsigned g_tur_updt_suppressed,g_tur_r_ignored;
 static int fp_turret_tick(void *,void *,void *,float);static void fp_turret_drop(const char *);static int fp_turret_suppress_shot(void *);
 static int kah_fp_turret(const char *,int,const char *const *,KAH_Reply *,void *);
@@ -7778,6 +7779,7 @@ static void hooked_gun_shoot(void *gun, void *me, void *target, int stat, const 
         static int logged;
         if (!logged) { logged = 1; logline("[freeaim] projectile override LIVE"); }
     }
+    if (stat==11) fp_turret_shot_diag(gun,me,target,stat,aimpos,"shoot");   /* T4: native vs FP turret shot */
     fp_combat_probe_shot(gun, me, target, stat, KFP_EV_SHOT_BEFORE);
     g_gun_shoot_orig(gun, me, target, stat, aimpos);
     fp_combat_probe_shot(gun, me, target, stat, KFP_EV_SHOT_AFTER);
