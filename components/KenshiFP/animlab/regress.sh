@@ -399,11 +399,17 @@ else echo "REGRESS INFO native: game install missing"; fi
 # 31. CLASS foreign overlay (Misses 2026-10-10 "foreign overlay", class of the cursor miss): nothing drawn over the scene but
 #     the take's own label/HUD. harness frames.py overlay (text lines: outlined name tags / damage numbers and text on flat
 #     dark panels; flat UI panels with straight edges; baseline = the take's own HUD, zones = centred label band + bottom UI)
-#     must FAIL turret-fp.mp4 (NPC speech bars 0-0.5 / 9 / 46-53 s), sword-z25-block-f36.mp4 ([Malzin] name tag 12.5-13.5 s)
+#     must FAIL turret-fp.mp4 (NPC speech bars 0-0.5 / 9 / 46-53 s), sword-z25-block-f36.mp4 ([Malzin] name tag 0-40.5 s)
 #     and PASS kfx-b2 e6fix.mp4 (clean take); takecheck.py runs it on every --video take.
 for f in turret-fp sword-z25-block-f36; do [ -f "$TV/$f.mp4" ] || { echo "REGRESS INFO overlay: $f.mp4 missing"; continue; }
   r=$(python3 "$L/frames.py" overlay "$TV/$f.mp4" --name $f)
-  case "$f:$r" in turret-fp:*"FAIL overlay"*"text-panel"*"46."*|sword-z25-block-f36:*"FAIL overlay"*"12.5-13.5s(text"*) ok "overlay miss: ${r:0:170}";; *) bad "overlay miss: $r";; esac; done
+  case "$f:$r" in turret-fp:*"FAIL overlay"*"text-panel"*"46."*|sword-z25-block-f36:*"FAIL overlay"*"0.0-40.5s(text"*) ok "overlay miss: ${r:0:170}";; *) bad "overlay miss: $r";; esac; done
+# 31b. persistent name tag (5090-operator 2026-10-10, op-probe plain/none, op-b1 blkG): the [Axima] tag shows in EVERY frame;
+#      the old text baseline (cells in >= 40% of frames = own HUD) hid it. Every sampled frame must be flagged.
+for f in op-probe-plain op-probe-none; do [ -f "$TV/$f.mp4" ] || [ -f "$CORPUS/takes/videos/$f.mp4" ] || { echo "REGRESS INFO overlay: $f.mp4 missing"; continue; }
+  v=$TV/$f.mp4; [ -f "$v" ] || v=$CORPUS/takes/videos/$f.mp4
+  r=$(python3 "$L/frames.py" overlay "$v" --name $f)
+  case "$r" in *"FAIL overlay frames=6 overlay_frames=6:BAD"*) ok "persistent tag $f: ${r:0:150}";; *) bad "persistent tag $f: $r";; esac; done
 E6V=$W/kept/kfx-b2_e6_e6fix.mp4; [ -f "$E6V" ] || E6V=$CORPUS/kept/kfx-b2_e6_e6fix.mp4   # corpus sync skips kept/
 if [ -f "$E6V" ]; then r=$(python3 "$L/frames.py" overlay "$E6V" --name e6fix)
   case "$r" in *"PASS overlay"*) ok "no-overlay video $r";; *) bad "no-overlay video $r";; esac
