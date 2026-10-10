@@ -35,6 +35,9 @@ foreach ($a in $ag) {
     Get-Content -LiteralPath $a.FullName | Select-Object -First 12
 }
 
+'=== rig watchdog (rig-watchdog.ps1: auto-starts queue run: lines when a rig is idle >= 2 min) ==='
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-watchdog.ps1') -Ensure
+Get-ChildItem 'C:\KenshiTestRuns' -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }
 '=== in flight ==='
 $k = if (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue) { 'running' } else { 'closed' }
 $lock = if (Test-Path -LiteralPath (Join-Path $runs 'game.lock')) { (Get-Content -Raw -LiteralPath (Join-Path $runs 'game.lock')).Trim() } else { 'free' }

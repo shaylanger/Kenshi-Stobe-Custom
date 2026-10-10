@@ -123,6 +123,10 @@ if (-not $kenshi -and -not $lock) {
     }
 }
 
+# --- watchdog alerts (rig-watchdog.ps1: a rig idle/paused >= 2 min and no queue run: line to start) ---
+$alerts = @(Get-ChildItem -LiteralPath $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw).Trim() })
+if ($alerts.Count) { Block-Stop ('kenshi-waker-guard: ' + ($alerts -join ' | ') + ' Shay''s rule (2026-10-10): no rig idle or paused > 2 min. Start the next batch on that rig now (or have its owner do it) and keep a run: line in its queue file.') }
+
 # --- 5090 game slot idle while Kenshi is open / the lock is held? (Shay 2026-10-10: op-b4 had written DONE, the
 # marker still pointed at it, and everything read BUSY for 5 min) ---
 if ($kenshi -or $lock) {
@@ -134,7 +138,7 @@ if ($kenshi -or $lock) {
 
 # --- 4080 idle? (Shay 2026-10-10: it sat idle a whole day while the 5090 worked; nothing looked at it) ---
 $r4 = & powershell -NoProfile -File (Join-Path $PSScriptRoot '..\rig4080-state.ps1') 2>$null | Select-Object -First 1
-if ($r4 -like 'IDLE kenshi=no*') {
+if ($r4 -like 'IDLE kenshi=no*' -or $r4 -like 'IDLE-GAME*') {
     Block-Stop ('kenshi-waker-guard: the 4080 is idle (Kenshi closed there, no C:\KenshiTestRuns\inflight\4080-* marker, no reason recorded). Shay''s rule: use BOTH rigs, in parallel, without being told. Start a 4080 job now (PG rows, harness rows, KenshiFP combat/viewmodel rows, or split off part of the current 5090 work) via the 4080 operator agent and touch C:\KenshiTestRuns\inflight\4080-<job> while it runs; or record a one-line reason with: & C:\KenshiModding\tools\automation\kenshi-ctl.ps1 idle4080 "<reason>" (good for 60 min). State: tools\automation\rig4080-state.ps1 -Fresh.')
 }
 

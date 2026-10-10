@@ -8,7 +8,7 @@
 # Markers: C:\KenshiTestRuns\inflight\<name>, first line = out dir (/mnt/c/... or C:\...) of the running batch.
 # Game work = the lock owner's marker or a run-batch out dir (has batch.log); 4080-* and offline/lab markers are ignored,
 # except a plain marker of the lock owner, which counts while < 30 min old (an operator between list and launch).
-param([int]$GraceMin = 3)
+param([int]$GraceMin = 2)
 $runs = 'C:\KenshiTestRuns'
 $now = Get-Date
 $kenshiP = Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue | Select-Object -First 1
