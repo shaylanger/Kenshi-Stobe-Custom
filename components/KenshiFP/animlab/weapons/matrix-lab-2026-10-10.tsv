@@ -1,0 +1,1196 @@
+sid	name	source	class	anim_class	verdict	rec	check	ok	detail
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1313/1328
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+923-gamedata.base	Guardless Katana	base:gamedata.base	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+922-gamedata.base	Nodachi	base:gamedata.base	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.1
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.55,n=59
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+474-gamedata.base	Topper	base:gamedata.base	katanas	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.84/0.85,arc_p05=0.58,n=57
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.71,n=48
+1020-gamedata.base	Wakizashi	base:gamedata.base	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+5022626-Universal Wasteland Expansion.mod	Chisa Katana	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022625-Universal Wasteland Expansion.mod	Chokuto	Universal Wasteland Expansion	katanas	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+5022625-Universal Wasteland Expansion.mod	Chokuto	Universal Wasteland Expansion	katanas	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5022625-Universal Wasteland Expansion.mod	Chokuto	Universal Wasteland Expansion	katanas	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+5022625-Universal Wasteland Expansion.mod	Chokuto	Universal Wasteland Expansion	katanas	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022625-Universal Wasteland Expansion.mod	Chokuto	Universal Wasteland Expansion	katanas	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+5022625-Universal Wasteland Expansion.mod	Chokuto	Universal Wasteland Expansion	katanas	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.2
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.88/0.85,arc_p05=0.59,n=57
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1313/1328
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.64,n=48
+55401-ArkWeaponPack.mod	Dagger	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1533514-Black Dragon Ninjas.mod	Dragon Ninja Blade "Death"	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+1533514-Black Dragon Ninjas.mod	Dragon Ninja Blade "Death"	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+1533514-Black Dragon Ninjas.mod	Dragon Ninja Blade "Death"	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+1533514-Black Dragon Ninjas.mod	Dragon Ninja Blade "Death"	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1533514-Black Dragon Ninjas.mod	Dragon Ninja Blade "Death"	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+1533514-Black Dragon Ninjas.mod	Dragon Ninja Blade "Death"	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.0
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.56,n=58
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.70,n=52
+5022617-Universal Wasteland Expansion.mod	Flat Topper	Universal Wasteland Expansion	katanas	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.7
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.1
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.86/0.85,arc_p05=0.57,n=57
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.7
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.90/0.85,arc_p05=0.62,n=48
+55407-ArkWeaponPack.mod	Kama	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+5022623-Universal Wasteland Expansion.mod	Kodachi	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55419-ArkWeaponPack.mod	Kriss	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55419-ArkWeaponPack.mod	Kriss	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55419-ArkWeaponPack.mod	Kriss	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.1
+55419-ArkWeaponPack.mod	Kriss	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55419-ArkWeaponPack.mod	Kriss	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+55419-ArkWeaponPack.mod	Kriss	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.4
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=4.8
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.3
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+1535170-Hiver_Expansion.mod	Leaf Chopper	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.9
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.4
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.8
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+2757863-BanditWeaponExpansion.mod	Makeshift Razor	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.1
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	FAIL	e6fix.txt	near	FAIL	swing 8/200 cut%=2 eye=3.1
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	FAIL	spec-swing-A.txt	near	FAIL	swing 27/180 cut%=2 eye=3.3
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+2757885-WeaponExpansion_Ronin.mod	Ronin Blade	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.1
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.84/0.85,arc_p05=0.58,n=57
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.67,n=48
+55418-ArkWeaponPack.mod	Sickle	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+5022618-Universal Wasteland Expansion.mod	Tachi	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55422-ArkWeaponPack.mod	Training Sword	Universal Wasteland Expansion	katanas	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+55422-ArkWeaponPack.mod	Training Sword	Universal Wasteland Expansion	katanas	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55422-ArkWeaponPack.mod	Training Sword	Universal Wasteland Expansion	katanas	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55422-ArkWeaponPack.mod	Training Sword	Universal Wasteland Expansion	katanas	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55422-ArkWeaponPack.mod	Training Sword	Universal Wasteland Expansion	katanas	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+55422-ArkWeaponPack.mod	Training Sword	Universal Wasteland Expansion	katanas	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.1
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.76/0.85,arc_p05=0.51,n=59
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.0
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.66,n=54
+1535194-ShriekingBandit_Expansion.mod	Wafer Blade	Universal Wasteland Expansion	katanas	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.1
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1313/1328
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.71,n=48
+475-gamedata.base	Bull Chopper	base:gamedata.base	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.94/0.85,arc_p05=0.70,n=52
+52305-rebirth.mod	Desert Sabre	base:rebirth.mod	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+901-gamedata.base	Longsword	base:gamedata.base	sabre	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.8
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.3
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.56,n=58
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.7
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=50
+55395-ArkWeaponPack.mod	Bastard Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+55763-ArkWeaponPack-CORE.mod	Broad Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.5
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.0
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.55,n=59
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	FAIL	spec-swing-A.txt	near	FAIL	swing 12/180 cut%=2 eye=3.8
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+55398-ArkWeaponPack.mod	Claymore	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.8
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.2
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.7
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+1535191-Hiver_Expansion.mod	Cross Beak Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+2757864-BanditWeaponExpansion.mod	Crude Chopper	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.0
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.3
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.0
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+1535186-ShriekingBandit_Expansion.mod	Disk Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.8
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.3
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.8
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+55405-ArkWeaponPack.mod	Flamberge	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.8
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.2
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.56,n=58
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.8
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.70,n=50
+2758974-HN Ascended.mod	Holy Flamberge	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.86/0.85,arc_p05=0.58,n=57
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=48
+2758970-HN Ascended.mod	Holy Kopesh	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+55408-ArkWeaponPack.mod	Kopesh	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+5022622-Universal Wasteland Expansion.mod	Looped Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.7
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.71,n=48
+55411-ArkWeaponPack.mod	Machete	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.0
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.4
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.0
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+5007300-NorthernWarriorMod.mod	Northern Broadsword	Universal Wasteland Expansion	sabre	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.1
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.0
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+2757888-WeaponExpansion_Ronin.mod	Ronin Sabre	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+5022620-Universal Wasteland Expansion.mod	Seafarer Cutlass	Universal Wasteland Expansion	sabre	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.86/0.85,arc_p05=0.58,n=57
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1313/1328
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.69,n=48
+2758975-HN Ascended.mod	Short Horse Chopper	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.71,n=48
+55421-ArkWeaponPack.mod	Short Sword	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+5038945-Universal Wasteland Expansion.mod	Training Sabre	Universal Wasteland Expansion	sabre	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.0
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.88/0.85,arc_p05=0.59,n=57
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.65,n=48
+56135-ArkWeaponPack-CORE.mod	Tribal Axe	Universal Wasteland Expansion	sabre	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.69,n=54
+2759323-Minor Factions Expansion.mod	Zangetsu	Universal Wasteland Expansion	sabre	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+52295-rebirth.mod	Iron Club	base:rebirth.mod	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+52295-rebirth.mod	Iron Club	base:rebirth.mod	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+52295-rebirth.mod	Iron Club	base:rebirth.mod	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+52295-rebirth.mod	Iron Club	base:rebirth.mod	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+52295-rebirth.mod	Iron Club	base:rebirth.mod	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+52295-rebirth.mod	Iron Club	base:rebirth.mod	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+2064-gamedata.base	Iron Stick	base:gamedata.base	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.8
+2064-gamedata.base	Iron Stick	base:gamedata.base	blunt	blunt	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 29/474
+2064-gamedata.base	Iron Stick	base:gamedata.base	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+2064-gamedata.base	Iron Stick	base:gamedata.base	blunt	blunt	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+2064-gamedata.base	Iron Stick	base:gamedata.base	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.7
+2064-gamedata.base	Iron Stick	base:gamedata.base	blunt	blunt	FAIL	spec-swing-A.txt	vis	FAIL	ready 38/1328
+5022627-Universal Wasteland Expansion.mod	Battle Club	Universal Wasteland Expansion	blunt	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+5022627-Universal Wasteland Expansion.mod	Battle Club	Universal Wasteland Expansion	blunt	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+5022627-Universal Wasteland Expansion.mod	Battle Club	Universal Wasteland Expansion	blunt	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.0
+5022627-Universal Wasteland Expansion.mod	Battle Club	Universal Wasteland Expansion	blunt	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022627-Universal Wasteland Expansion.mod	Battle Club	Universal Wasteland Expansion	blunt	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+5022627-Universal Wasteland Expansion.mod	Battle Club	Universal Wasteland Expansion	blunt	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+1535159-Hiver_Expansion.mod	Bone Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+1535159-Hiver_Expansion.mod	Bone Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+1535159-Hiver_Expansion.mod	Bone Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+1535159-Hiver_Expansion.mod	Bone Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535159-Hiver_Expansion.mod	Bone Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+1535159-Hiver_Expansion.mod	Bone Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55629-ArkWeaponPack.mod	Crusher	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=6.0
+55629-ArkWeaponPack.mod	Crusher	Universal Wasteland Expansion	blunt	blunt	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	block 3/117
+55629-ArkWeaponPack.mod	Crusher	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.5
+55629-ArkWeaponPack.mod	Crusher	Universal Wasteland Expansion	blunt	blunt	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55629-ArkWeaponPack.mod	Crusher	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.9
+55629-ArkWeaponPack.mod	Crusher	Universal Wasteland Expansion	blunt	blunt	FAIL	spec-swing-A.txt	vis	FAIL	ready 20/1328
+1535157-Hiver_Expansion.mod	Femur Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.0
+1535157-Hiver_Expansion.mod	Femur Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+1535157-Hiver_Expansion.mod	Femur Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.0
+1535157-Hiver_Expansion.mod	Femur Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535157-Hiver_Expansion.mod	Femur Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.9
+1535157-Hiver_Expansion.mod	Femur Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+1535158-Hiver_Expansion.mod	Fibula Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+1535158-Hiver_Expansion.mod	Fibula Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+1535158-Hiver_Expansion.mod	Fibula Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+1535158-Hiver_Expansion.mod	Fibula Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535158-Hiver_Expansion.mod	Fibula Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+1535158-Hiver_Expansion.mod	Fibula Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.71,n=48
+55413-ArkWeaponPack.mod	Hammer	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2758972-HN Ascended.mod	Holy Mace	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.6
+2758972-HN Ascended.mod	Holy Mace	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+2758972-HN Ascended.mod	Holy Mace	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=4.9
+2758972-HN Ascended.mod	Holy Mace	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2758972-HN Ascended.mod	Holy Mace	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.6
+2758972-HN Ascended.mod	Holy Mace	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55410-ArkWeaponPack.mod	Metal Junk	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+55410-ArkWeaponPack.mod	Metal Junk	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+55410-ArkWeaponPack.mod	Metal Junk	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.3
+55410-ArkWeaponPack.mod	Metal Junk	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55410-ArkWeaponPack.mod	Metal Junk	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+55410-ArkWeaponPack.mod	Metal Junk	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55409-ArkWeaponPack.mod	Metal Pipe	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+55409-ArkWeaponPack.mod	Metal Pipe	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55409-ArkWeaponPack.mod	Metal Pipe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+55409-ArkWeaponPack.mod	Metal Pipe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55409-ArkWeaponPack.mod	Metal Pipe	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+55409-ArkWeaponPack.mod	Metal Pipe	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.4
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.5
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.86/0.85,arc_p05=0.55,n=57
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.3
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.61,n=47
+55406-ArkWeaponPack.mod	Pickaxe	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.8
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.0
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.7
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.94/0.85,arc_p05=0.70,n=52
+1535190-Hiver_Expansion.mod	Puncture Club	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 415/474
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	FAIL	e6fix.txt	vis	FAIL	ready 1129/1386
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	FAIL	spec-swing-A.txt	vis	FAIL	ready 1161/1328
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+1535171-Hiver_Expansion.mod	Ring Mace	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 464/474
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.4
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	FAIL	e6fix.txt	vis	FAIL	ready 1219/1386
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1272/1328
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+55417-ArkWeaponPack.mod	Shovel	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55423-ArkWeaponPack.mod	Sledgehammer	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+55423-ArkWeaponPack.mod	Sledgehammer	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55423-ArkWeaponPack.mod	Sledgehammer	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55423-ArkWeaponPack.mod	Sledgehammer	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55423-ArkWeaponPack.mod	Sledgehammer	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55423-ArkWeaponPack.mod	Sledgehammer	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55630-ArkWeaponPack.mod	Spiked Crusher	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=6.6
+55630-ArkWeaponPack.mod	Spiked Crusher	Universal Wasteland Expansion	blunt	blunt	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	block 0/117
+55630-ArkWeaponPack.mod	Spiked Crusher	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=7.1
+55630-ArkWeaponPack.mod	Spiked Crusher	Universal Wasteland Expansion	blunt	blunt	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55630-ArkWeaponPack.mod	Spiked Crusher	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=6.5
+55630-ArkWeaponPack.mod	Spiked Crusher	Universal Wasteland Expansion	blunt	blunt	FAIL	spec-swing-A.txt	vis	FAIL	block 1/226
+1535286-Cannibal_Expansion.mod	Spiked Mace	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+1535286-Cannibal_Expansion.mod	Spiked Mace	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+1535286-Cannibal_Expansion.mod	Spiked Mace	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+1535286-Cannibal_Expansion.mod	Spiked Mace	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535286-Cannibal_Expansion.mod	Spiked Mace	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.7
+1535286-Cannibal_Expansion.mod	Spiked Mace	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+55414-ArkWeaponPack.mod	Tribal Bludgeon	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.8
+55414-ArkWeaponPack.mod	Tribal Bludgeon	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55414-ArkWeaponPack.mod	Tribal Bludgeon	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+55414-ArkWeaponPack.mod	Tribal Bludgeon	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55414-ArkWeaponPack.mod	Tribal Bludgeon	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.7
+55414-ArkWeaponPack.mod	Tribal Bludgeon	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+55415-ArkWeaponPack.mod	Tribal Bone	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55415-ArkWeaponPack.mod	Tribal Bone	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55415-ArkWeaponPack.mod	Tribal Bone	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+55415-ArkWeaponPack.mod	Tribal Bone	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55415-ArkWeaponPack.mod	Tribal Bone	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+55415-ArkWeaponPack.mod	Tribal Bone	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.86/0.85,arc_p05=0.58,n=57
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.69,n=48
+56132-ArkWeaponPack-CORE.mod	Tribal Jaw Axe	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535184-ShriekingBandit_Expansion.mod	Tumourous Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+1535184-ShriekingBandit_Expansion.mod	Tumourous Club	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+1535184-ShriekingBandit_Expansion.mod	Tumourous Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+1535184-ShriekingBandit_Expansion.mod	Tumourous Club	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535184-ShriekingBandit_Expansion.mod	Tumourous Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.7
+1535184-ShriekingBandit_Expansion.mod	Tumourous Club	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.84/0.85,arc_p05=0.58,n=57
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.68,n=48
+55424-ArkWeaponPack.mod	Wrench	Universal Wasteland Expansion	blunt	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.1
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	swing 2/200 cut%=4 eye=3.3
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.78/0.85,arc_p05=0.53,n=59
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.67,n=54
+56729-Dialogue.mod	Bull Horn Axe	base:Dialogue.mod	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.0
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 32/474
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	near	FAIL	swing 7/200 cut%=13 eye=3.2
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	near	FAIL	swing 10/180 cut%=8 eye=3.9
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	vis	FAIL	ready 40/1328
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.70,n=52
+55624-ArkWeaponPack.mod	Brutal Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.5
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=4.7
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.5
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+55397-ArkWeaponPack.mod	Buster Sword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=6.8
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	block 0/117
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=8.1
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.55,n=59
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=6.7
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	FAIL	spec-swing-A.txt	vis	FAIL	block 0/226
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+5007859-HTDCrabRaiderPlus.mod	Crab Maul	Universal Wasteland Expansion	heavy weapons	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 52/474
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	vis	FAIL	ready 107/1386
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.55,n=59
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	vis	FAIL	ready 183/1328
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+55402-ArkWeaponPack.mod	Double Axe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+5022624-Universal Wasteland Expansion.mod	Garru Chopper	Universal Wasteland Expansion	heavy weapons	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.5
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 31/474
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=4.7
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.5
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	vis	FAIL	ready 39/1328
+55627-ArkWeaponPack.mod	Gigant Mace	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 37/474
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.2
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	vis	FAIL	ready 47/1328
+1535288-Cannibal_Expansion.mod	Grand Meat Hammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+1535287-Cannibal_Expansion.mod	Head Lopper	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.6
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.1
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.6
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+55403-ArkWeaponPack.mod	Leviathanslayer	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.7
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 22/474
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	near	FAIL	swing 10/200 cut%=5 eye=2.8
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.76/0.85,arc_p05=0.52,n=59
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	near	FAIL	swing 5/180 cut%=1 eye=4.1
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	vis	FAIL	ready 26/1328
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.66,n=54
+1535196-ShriekingBandit_Expansion.mod	Madmans Greatclub	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+5007299-NorthernWarriorMod.mod	Northern Battleaxe	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.3
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	near	FAIL	swing 10/200 cut%=1 eye=3.4
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.76/0.85,arc_p05=0.52,n=59
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	near	FAIL	swing 26/180 cut%=4 eye=3.3
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.67,n=54
+5007367-NorthernWarriorMod.mod	Northern Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.56,n=59
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1313/1328
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+2757886-WeaponExpansion_Ronin.mod	Ronin Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.4
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=4.8
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.4
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.87/0.85,arc_p05=0.68,n=54
+1535184-Hiver_Expansion.mod	Serrated Greatsword	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+2757865-BanditWeaponExpansion.mod	Tenderizer	Universal Wasteland Expansion	heavy weapons	heavy weapons	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=6.0
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+5038946-Universal Wasteland Expansion.mod	Training Plank	Universal Wasteland Expansion	heavy weapons	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55628-ArkWeaponPack.mod	Warhammer	Universal Wasteland Expansion	heavy weapons	heavy weapons	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+478-gamedata.base	Long Cleaver	base:gamedata.base	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.0
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.4
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.55,n=59
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.9
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+52299-rebirth.mod	Paladin's Cross	base:rebirth.mod	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.71,n=48
+55393-ArkWeaponPack.mod	Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+55396-ArkWeaponPack.mod	Battle Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.7
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+1535185-ShriekingBandit_Expansion.mod	Beaked Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535160-Hiver_Expansion.mod	Bone Hacker	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.5
+1535160-Hiver_Expansion.mod	Bone Hacker	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+1535160-Hiver_Expansion.mod	Bone Hacker	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+1535160-Hiver_Expansion.mod	Bone Hacker	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535160-Hiver_Expansion.mod	Bone Hacker	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+1535160-Hiver_Expansion.mod	Bone Hacker	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=3.3
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	FAIL	e6fix.txt	near	FAIL	swing 6/200 cut%=1 eye=2.4
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	FAIL	spec-swing-A.txt	near	FAIL	swing 26/180 cut%=2 eye=2.3
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+55399-ArkWeaponPack.mod	Crescent	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.83/0.85,arc_p05=0.57,n=58
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.71,n=49
+2757858-BanditWeaponExpansion.mod	Fanged Club	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+1535436-Mist Ghouls.mod	Forked Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.55,n=59
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+5029056-Universal Wasteland Expansion.mod	Inhuman Cleaver	Universal Wasteland Expansion	hackers	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 69/474
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	FAIL	e6fix.txt	vis	FAIL	ready 154/1386
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.53,n=59
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	FAIL	spec-swing-A.txt	vis	FAIL	ready 228/1328
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.67,n=54
+1535435-Mist Ghouls.mod	Mother's Lament	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.7
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+5007341-NorthernWarriorMod.mod	Northern Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	PASS	spec-swing-A.txt	vis	PASS	ready 1312/1328
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.98/0.85,arc_p05=0.70,n=51
+5022621-Universal Wasteland Expansion.mod	Offset Blade	Universal Wasteland Expansion	hackers	katanas	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.3
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	arc	PASS	swing:arc_ok=0.88/0.85,arc_p05=0.58,n=57
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.1
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.94/0.85,arc_p05=0.65,n=48
+2757887-WeaponExpansion_Ronin.mod	Ronin Hatchet	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.84/0.85,arc_p05=0.58,n=57
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.67,n=48
+55622-ArkWeaponPack.mod	Southern Axe	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 467/474
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.9
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.84/0.85,arc_p05=0.58,n=57
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1311/1328
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.92/0.85,arc_p05=0.67,n=48
+5022619-Universal Wasteland Expansion.mod	Stunted Cleaver	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.84/0.85,arc_p05=0.57,n=57
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.2
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	vis	PASS	ready 1313/1328
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.71,n=48
+5038943-Universal Wasteland Expansion.mod	Training Cleaver	Universal Wasteland Expansion	hackers	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.6
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=54
+56134-ArkWeaponPack-CORE.mod	Tribal Sword	Universal Wasteland Expansion	hackers	hackers	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+66290-Newwworld.mod	Eagle's Cross	base:Newwworld.mod	crossbow	crossbow	FAIL	q-crossbow-z0-f059.txt	near	FAIL	aim 169/182 cut%=13 eye=99.0
+66290-Newwworld.mod	Eagle's Cross	base:Newwworld.mod	crossbow	crossbow	PASS	q-crossbow-z0-f059.txt	vis	PASS	ready 1357/1357
+66290-Newwworld.mod	Eagle's Cross	base:Newwworld.mod	crossbow	crossbow	REF-FAIL	spec-xbow-A.txt	near	FAIL	aim 121/145 cut%=13 eye=99.0
+66290-Newwworld.mod	Eagle's Cross	base:Newwworld.mod	crossbow	crossbow	PASS	spec-xbow-A.txt	vis	PASS	ready 436/436
+95724-Dialogue.mod	Junkbow	base:rebirth.mod	crossbow	crossbow	REF-FAIL	q-crossbow-z0-f059.txt	near	FAIL	aim 167/182 cut%=7 eye=99.0
+95724-Dialogue.mod	Junkbow	base:rebirth.mod	crossbow	crossbow	PASS	q-crossbow-z0-f059.txt	vis	PASS	ready 1352/1357
+95724-Dialogue.mod	Junkbow	base:rebirth.mod	crossbow	crossbow	REF-FAIL	spec-xbow-A.txt	near	FAIL	aim 112/145 cut%=6 eye=99.0
+95724-Dialogue.mod	Junkbow	base:rebirth.mod	crossbow	crossbow	PASS	spec-xbow-A.txt	vis	PASS	ready 432/436
+65870-rebirth.mod	Oldworld Bow MkI	base:rebirth.mod	crossbow	crossbow	REF-FAIL	q-crossbow-z0-f059.txt	near	FAIL	aim 170/182 cut%=5 eye=99.0
+65870-rebirth.mod	Oldworld Bow MkI	base:rebirth.mod	crossbow	crossbow	PASS	q-crossbow-z0-f059.txt	vis	PASS	ready 1351/1357
+65870-rebirth.mod	Oldworld Bow MkI	base:rebirth.mod	crossbow	crossbow	REF-FAIL	spec-xbow-A.txt	near	FAIL	aim 113/145 cut%=6 eye=99.0
+65870-rebirth.mod	Oldworld Bow MkI	base:rebirth.mod	crossbow	crossbow	PASS	spec-xbow-A.txt	vis	PASS	ready 431/436
+53643-rebirth.mod	Oldworld Bow MkII	base:rebirth.mod	crossbow	crossbow	REF-FAIL	q-crossbow-z0-f059.txt	near	FAIL	aim 170/182 cut%=4 eye=99.0
+53643-rebirth.mod	Oldworld Bow MkII	base:rebirth.mod	crossbow	crossbow	PASS	q-crossbow-z0-f059.txt	vis	PASS	ready 1352/1357
+53643-rebirth.mod	Oldworld Bow MkII	base:rebirth.mod	crossbow	crossbow	REF-FAIL	spec-xbow-A.txt	near	FAIL	aim 115/145 cut%=5 eye=99.0
+53643-rebirth.mod	Oldworld Bow MkII	base:rebirth.mod	crossbow	crossbow	PASS	spec-xbow-A.txt	vis	PASS	ready 432/436
+66169-Newwworld.mod	Ranger	base:Newwworld.mod	crossbow	crossbow	REF-FAIL	q-crossbow-z0-f059.txt	near	FAIL	aim 167/182 cut%=6 eye=99.0
+66169-Newwworld.mod	Ranger	base:Newwworld.mod	crossbow	crossbow	PASS	q-crossbow-z0-f059.txt	vis	PASS	ready 1350/1357
+66169-Newwworld.mod	Ranger	base:Newwworld.mod	crossbow	crossbow	REF-FAIL	spec-xbow-A.txt	near	FAIL	aim 107/145 cut%=12 eye=99.0
+66169-Newwworld.mod	Ranger	base:Newwworld.mod	crossbow	crossbow	PASS	spec-xbow-A.txt	vis	PASS	ready 429/436
+95764-rebirth.mod	Spring Bat	base:rebirth.mod	crossbow	crossbow	REF-FAIL	q-crossbow-z0-f059.txt	near	FAIL	aim 167/182 cut%=6 eye=99.0
+95764-rebirth.mod	Spring Bat	base:rebirth.mod	crossbow	crossbow	FAIL	q-crossbow-z0-f059.txt	vis	FAIL	aim 35/182
+95764-rebirth.mod	Spring Bat	base:rebirth.mod	crossbow	crossbow	REF-FAIL	spec-xbow-A.txt	near	FAIL	aim 114/145 cut%=6 eye=99.0
+95764-rebirth.mod	Spring Bat	base:rebirth.mod	crossbow	crossbow	FAIL	spec-xbow-A.txt	vis	FAIL	aim 42/145
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.5
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 43/474
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	FAIL	e6fix.txt	near	FAIL	swing 7/200 cut%=27 eye=2.8
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 32/1386
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.4
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 113/1328
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+52308-rebirth.mod	Naginata	base:rebirth.mod	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.2
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 31/474
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	swing 2/200 cut%=2 eye=3.6
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	near	FAIL	swing 7/180 cut%=8 eye=3.8
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 37/1328
+55394-ArkWeaponPack.mod	Bardiche	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.6
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 29/474
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	swing 4/200 cut%=3 eye=3.0
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.5
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 37/1328
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+2757861-BanditWeaponExpansion.mod	Bladed Staff	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.9
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 38/474
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	swing 3/200 cut%=0 eye=3.0
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.8
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 48/1328
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.87/0.85,arc_p05=0.68,n=54
+1535161-Hiver_Expansion.mod	Bone Polearm	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.6
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 34/474
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	near	FAIL	swing 5/200 cut%=8 eye=2.9
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.5
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 41/1328
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.87/0.85,arc_p05=0.68,n=54
+1535169-Hiver_Expansion.mod	Crescent Glaive	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 39/474
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.4
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 50/1328
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.69,n=54
+55404-ArkWeaponPack.mod	Enslaver	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.6
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.7
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.81/0.85,arc_p05=0.56,n=59
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.5
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.91/0.85,arc_p05=0.69,n=53
+55623-ArkWeaponPack.mod	Fork	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.5
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 29/474
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	near	FAIL	swing 6/200 cut%=8 eye=2.9
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.4
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 35/1328
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.87/0.85,arc_p05=0.68,n=54
+1535189-Hiver_Expansion.mod	Gutter Pike	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.5
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 29/474
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	near	FAIL	swing 5/200 cut%=3 eye=2.9
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.5
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 36/1328
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.87/0.85,arc_p05=0.68,n=54
+5008406-HTDCrabRaiderPlus.mod	Man Slayer	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.6
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 28/474
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	near	FAIL	swing 5/200 cut%=11 eye=2.9
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.6
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 35/1328
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.69,n=54
+1535289-Cannibal_Expansion.mod	Meat Hook	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.8
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 24/474
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	FAIL	e6fix.txt	near	FAIL	swing 5/200 cut%=15 eye=3.0
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.54,n=59
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	PASS	spec-swing-A.txt	near	PASS	swing 2/180 cut%=1 eye=4.4
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	FAIL	spec-swing-A.txt	vis	FAIL	ready 30/1328
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.87/0.85,arc_p05=0.68,n=54
+5007358-NorthernWarriorMod.mod	Northern Spear	Universal Wasteland Expansion	polearm	blunt	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.6
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 469/474
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	swing 2/200 cut%=7 eye=3.1
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.55,n=59
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	swing 3/180 cut%=2 eye=4.1
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	vis	PASS	ready 1315/1328
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.89/0.85,arc_p05=0.68,n=54
+2757889-WeaponExpansion_Ronin.mod	Ronin Talons	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	vis	PASS	ready 468/474
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.6
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	vis	PASS	ready 1386/1386
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.79/0.85,arc_p05=0.56,n=58
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	vis	PASS	ready 1314/1328
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	arc	PASS	swing:arc_ok=0.96/0.85,arc_p05=0.70,n=52
+55416-ArkWeaponPack.mod	Scythe	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 29/474
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	swing 2/200 cut%=1 eye=3.6
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	near	FAIL	swing 8/180 cut%=11 eye=3.9
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 37/1328
+55420-ArkWeaponPack.mod	Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.5
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 237/474
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	FAIL	e6fix.txt	near	FAIL	swing 5/200 cut%=19 eye=2.9
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	FAIL	e6fix.txt	vis	FAIL	ready 1055/1386
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.78/0.85,arc_p05=0.53,n=59
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.5
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	FAIL	spec-swing-A.txt	vis	FAIL	ready 1086/1328
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.67,n=54
+1535195-ShriekingBandit_Expansion.mod	Split Blade Polearm	Universal Wasteland Expansion	polearm	sabre	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
+5038947-Universal Wasteland Expansion.mod	Training Staff	Universal Wasteland Expansion	polearm	blunt	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=4.8
+5038947-Universal Wasteland Expansion.mod	Training Staff	Universal Wasteland Expansion	polearm	blunt	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 19/474
+5038947-Universal Wasteland Expansion.mod	Training Staff	Universal Wasteland Expansion	polearm	blunt	PASS	e6fix.txt	near	PASS	swing 4/200 cut%=50 eye=3.0
+5038947-Universal Wasteland Expansion.mod	Training Staff	Universal Wasteland Expansion	polearm	blunt	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+5038947-Universal Wasteland Expansion.mod	Training Staff	Universal Wasteland Expansion	polearm	blunt	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=4.7
+5038947-Universal Wasteland Expansion.mod	Training Staff	Universal Wasteland Expansion	polearm	blunt	FAIL	spec-swing-A.txt	vis	FAIL	ready 24/1328
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.4
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 22/474
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.5
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	PASS	spec-swing-A.txt	near	PASS	ready 0/1328 cut%=0 eye=5.3
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 26/1328
+56133-ArkWeaponPack-CORE.mod	Tribal Spear	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	PASS	q-sword-z0-a-f059.txt	near	PASS	ready 0/474 cut%=0 eye=5.3
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	vis	FAIL	ready 28/474
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	q-sword-z0-a-f059.txt	twohand	FAIL	0/591(inferred)
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	PASS	e6fix.txt	near	PASS	ready 0/1386 cut%=0 eye=5.8
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	vis	FAIL	ready 0/1386
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	e6fix.txt	twohand	FAIL	0/1586(inferred)
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	arc	FAIL	swing:arc_ok=0.78/0.85,arc_p05=0.53,n=59
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	e6fix.txt	seen	FAIL	snap=23/22:BAD@swing0(frame272),u=0.35,t
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	near	FAIL	swing 5/180 cut%=6 eye=4.0
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	vis	FAIL	ready 34/1328
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	twohand	FAIL	0/1734(inferred)
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	FAIL	spec-swing-A.txt	arc	FAIL	swing:arc_ok=0.80/0.85,arc_p05=0.67,n=54
+55625-ArkWeaponPack.mod	Trident	Universal Wasteland Expansion	polearm	polearm	REF-FAIL	spec-swing-A.txt	seen	FAIL	snap=27/22:BAD@swing0(frame150),u=0.36,t
