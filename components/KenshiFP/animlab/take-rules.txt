@@ -7,6 +7,9 @@
 set grace 0.6
 set maxgap 1.0
 set endslack 1.0
+# recorder tail (E6 op-e6c +2.1 s): the end check uses the measured T0 sync-flash offset; a real tail > endslack is cut
+# at end + 0.3 s in place before judging (only with a measured offset)
+set trim 1
 # evidence must cover the whole take
 cover ui_state,near,msgs
 # label claims (label regex, case-insensitive) -> live state over the whole segment
