@@ -9,7 +9,11 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HARN=/mnt/c/KenshiModding/Kenshi-Automation-Harness; L=$HARN/tools/animlab
-W=/root/animlab-work; BLD=/root/animlab-build; mkdir -p "$W" "$BLD"
+W=${ANIMLAB_WORK:-/root/animlab-work}; BLD=/root/animlab-build; mkdir -p "$W" "$BLD"
+# evidence corpus (C:\KenshiTestRuns\corpus, corpus.sh, protected from cleanup): every recording/take/video below is
+# synced into $W first (cp -n: never overwrites); the C:\KenshiTestRuns copy lines below are legacy fallbacks.
+CORPUS=${ANIMLAB_CORPUS:-/mnt/c/KenshiTestRuns/corpus}
+[ -f "$CORPUS/MANIFEST.tsv" ] && bash "$HERE/corpus.sh" sync "$W" || echo "REGRESS INFO corpus $CORPUS missing"
 fail=0; ok() { echo "REGRESS PASS $*"; }; bad() { echo "REGRESS FAIL $*"; fail=1; }
 for f in sword-z0-a crossbow-z0; do
   [ -f "$W/vmrec-q-$f.txt" ] || cp "/mnt/c/KenshiTestRuns/vmq-f8c/vmrec-q-$f.txt" "$W/" 2>/dev/null || bad "missing recording vmrec-q-$f.txt"
@@ -216,7 +220,7 @@ else echo "REGRESS INFO ready branch fix kfp-rb-single.py + kfp-rb-camup.py not 
 #     15% too much and elbow/wrist/hand/prop overshoot along it. Lab key l1k (patches/l1-scale.py) emulates it: vmq-85a7
 #     crossbow ready grip game-vs-replay median must be > 0.5 dm at l1k 1 and < 0.2 at l1k 0.871 (@69bc401 = its build);
 #     vmq-85a7 sword plain gate FAIL at l1k 1, PASS at l1k 0.86 (@f41f862).
-XB=/mnt/c/KenshiTestRuns/vmq-85a7/vmrec-q-crossbow-z0.txt
+XB=$W/vmq85a7-xb.txt   # corpus rec/vmq85a7-xb.txt (was vmq-85a7/vmrec-q-crossbow-z0.txt, cleaned up: step skipped)
 if [ -f "$XB" ] && bash "$HERE/build.sh" --rev 69bc401 --patch "$HERE/patches/l1-scale.py" --out "$BLD/kfpvm_l1k85" >/tmp/al-build11.txt 2>&1 \
    && bash "$HERE/build.sh" --rev f41f862 --patch "$HERE/patches/l1-scale.py" --out "$BLD/kfpvm_l1k" >/tmp/al-build12.txt 2>&1; then
   for k in 1 0.871; do "$BLD/kfpvm_l1k85" "$XB" /tmp/al-l1k-$k.txt --quiet --set l1k=$k >/dev/null 2>&1; done
@@ -360,6 +364,16 @@ if [ -f "$B/pool.list" ]; then
   r=$(python3 "$L/animlab.py" guard "$B/blk-table.tsv"); case "$r" in "guard FAIL presses=45 hanging=14"*) ok "guard survey: ${r:0:80}";; *) bad "guard survey: ${r:0:200}";; esac
   r=$(python3 "$L/animlab.py" pool @"$B/pool.list" --motion block); case "$r" in "pool block FAIL"*) ok "block pool: ${r:0:120}";; *) bad "block pool: $r";; esac
 else echo "REGRESS INFO block pool: corpus block-guard missing"; fi
+# 29. miss 2026-10-10 fb_lives 0 (CLASS: a native animation the take relies on never ran): KenshiFP free block progress
+#     stayed 1.010 (pmin 9.000, fb_lives 0) over 90+ presses while the body showed the block pose; no rec/evidence key shows
+#     it. takecheck --kfplog judges the PT34 / free swing end lines: the 2026-10-10 10:30 log (4 blocks live=0) FAILS,
+#     a free-swing log (61 ends live=1) PASSES.
+AL=/mnt/c/KenshiTestRuns/corpus/logs/animlive
+if [ -f "$AL/kfp-fblock-live0.log" ]; then
+  for x in kfp-fblock-live0:FAIL kfp-fswing-live1:PASS; do f=${x%%:*}; want=${x##*:}
+    r=$(cd "$AL" && python3 "$L/takecheck.py" --labels whole-log.labels --ev none.ev --rules none.rules --kfplog $f.log --name $f | tail -1)
+    case "$r" in "RESULT $f $want"*) ok "animlive $r";; *) bad "animlive want $want: $r";; esac; done
+else echo "REGRESS INFO animlive: corpus logs missing"; fi
 # P4. phase 4 (NATIVE, harness tools/animlab/native.py + visual/ogre.py animations): unit tests (synthetic Ogre animations,
 #     sampling, trajectory stabilisation, left grip mirror, solver grip offset, keyed viewmodel path + key fit, FCS v17
 #     header) and, with the game install: 174 animations on the male skeleton, the catalogue (unarmed techniques), `run` of
