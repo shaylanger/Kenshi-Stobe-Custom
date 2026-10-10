@@ -32,6 +32,7 @@ FFX=${FFX:-${CR:-/mnt/c}/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan
 KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; TITLE=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}
 WCAT=${WCAT:-$(dirname "$LIST")/weapons.json}
 A(){ stobe-auto "$@" </dev/null 2>&1; }
+NI=; command -v nice >/dev/null 2>&1 && NI="nice -n 15"   # offline lab checks at low priority (CLAUDE.md rig uptime 5)
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 cleanup(){ A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A chatter on >/dev/null; }
 PF_ROW=WEAPONSWEEP-$NAME; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
@@ -107,37 +108,52 @@ take(){   # k sid name type animcls ammo
   A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null
   A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-ws-$slug.txt"; A fp_vm rec dump "vmrec-ws-$slug.txt" >/dev/null; sleep 2
   cp "$KDIR/vmrec-ws-$slug.txt" "$N.vmrec.txt" 2>/dev/null; rm -f "$KDIR/vmrec-ws-$slug.txt"
-  "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
-  TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
-  CU=$(python3 $L/frames.py cursor "$N.mp4" 2>&1 | tail -1)
-  OG=$(python3 $L/frames.py openground "$N.mp4" 2>&1 | tail -1)
-  WM=""; MV=""
-  if [ -s "$N.vmrec.txt" ]; then
-    WM=$(python3 $L/animlab.py weapons --run --weapons-json "$WCAT" --only "$sid" --recs "$N.vmrec.txt" -o wm 2>&1 | grep '^WEAPON ' | head -1)
-    MV=$(python3 $L/animlab.py metrics "$N.vmrec.txt" 2>&1 | grep '^moves ' | head -1)
-  fi
-  printf '%s\n' "takecheck $TC" "cursor $CU" "openground $OG" "matrix $WM" "$MV" > lab.txt
-  python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --ts "$N.ev.txt" --labels "$N.lab" --lab lab.txt > review.log 2>&1
-  ok=1; for r in "$TC" "$CU" "$OG" "$MV"; do echo "$r" | grep -q "PASS" || ok=0; done
-  [ -n "$VMSET" ] || echo "$WM" | grep -q "^WEAPON [^ ]* PASS" || ok=0
-  [ -s "$N.vmrec.txt" ] || ok=0
   # hand the weapon on (keeps the inventory free; the next take starts clean)
   A key_inject r tap 120 >/dev/null; pf_waitst holstered 6
   A unequip $SH "$sid" >/dev/null; A transfer $SH $HOLD "$sid" >/dev/null
-  PF_DONE=1; echo "RESULT WEAPON-$slug $([ $ok = 1 ] && echo PASS || echo FAIL) sid=$sid class=$ac matrix=[$(echo "$WM" | cut -d' ' -f6- | cut -c1-260)] moves=[$(echo "$MV" | cut -c1-80)] takecheck=[$TC] cursor=[$CU] openground=[$OG] review=$D/review/INDEX.txt len=$(cat "$N.video-len.txt" 2>/dev/null)"
+  # offline checks in the background (no game use) while the next weapon records (Shay 2026-10-10: the game never waits
+  # for analysis); the sweep collects $D/result.txt after the last take. Own stdout/stderr = file: the caller's $( ) returns now.
+  PF_ON_FAIL=""; PF_DONE=1
+  ( analyse > "$D/analysis.log" 2>&1 ) </dev/null >/dev/null 2>&1 &
+  echo "TAKE-RECORDED $D"
+}
+analyse(){   # runs in $D with take()'s variables; writes the weapon's RESULT line to $D/result.txt
+  "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
+  TC=$($NI python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
+  CU=$($NI python3 $L/frames.py cursor "$N.mp4" 2>&1 | tail -1)
+  OG=$($NI python3 $L/frames.py openground "$N.mp4" 2>&1 | tail -1)
+  WM=""; MV=""
+  if [ -s "$N.vmrec.txt" ]; then
+    WM=$($NI python3 $L/animlab.py weapons --run --weapons-json "$WCAT" --only "$sid" --recs "$N.vmrec.txt" -o wm 2>&1 | grep '^WEAPON ' | head -1)
+    MV=$($NI python3 $L/animlab.py metrics "$N.vmrec.txt" 2>&1 | grep '^moves ' | head -1)
+  fi
+  printf '%s\n' "takecheck $TC" "cursor $CU" "openground $OG" "matrix $WM" "$MV" > lab.txt
+  $NI python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --ts "$N.ev.txt" --labels "$N.lab" --lab lab.txt > review.log 2>&1
+  ok=1; for r in "$TC" "$CU" "$OG" "$MV"; do echo "$r" | grep -q "PASS" || ok=0; done
+  [ -n "$VMSET" ] || echo "$WM" | grep -q "^WEAPON [^ ]* PASS" || ok=0
+  [ -s "$N.vmrec.txt" ] || ok=0
+  echo "RESULT WEAPON-$slug $([ $ok = 1 ] && echo PASS || echo FAIL) sid=$sid class=$ac matrix=[$(echo "$WM" | cut -d' ' -f6- | cut -c1-260)] moves=[$(echo "$MV" | cut -c1-80)] takecheck=[$TC] cursor=[$CU] openground=[$OG] review=$D/review/INDEX.txt len=$(cat "$N.video-len.txt" 2>/dev/null)" > "$D/result.tmp" && mv "$D/result.tmp" "$D/result.txt"
 }
 # ---- sweep
-k=0; n=0; np=0; S=${WSTART:-1}; C=${WCOUNT:-9999}
+PEND=(); k=0; n=0; np=0; S=${WSTART:-1}; C=${WCOUNT:-9999}
 while IFS='|' read -r sid nm ty ac am; do
   case "$sid" in ''|'#'*) continue;; esac
   k=$((k + 1)); [ $k -lt $S ] && continue; [ $k -ge $((S + C)) ] && break
   n=$((n + 1))
-  r=$( (take "$k" "$sid" "$nm" "$ty" "$ac" "$am") 2>&1 | tee -a "$OUT/sweep.log" | grep '^RESULT WEAPON-' | tail -1)
+  r=$( (take "$k" "$sid" "$nm" "$ty" "$ac" "$am") 2>&1 | tee -a "$OUT/sweep.log" | grep -E '^(RESULT WEAPON-|TAKE-RECORDED )' | tail -1)
   [ -n "$r" ] || r="RESULT WEAPON-$(echo "$nm" | tr -c 'A-Za-z0-9\n' '_' | cut -c1-24) FAIL setup: take ended without a RESULT line"
-  echo "$r"; echo "$r" | grep -q "^RESULT [^ ]* PASS" && np=$((np + 1))
+  case "$r" in TAKE-RECORDED*) PEND+=("${r#TAKE-RECORDED }");; *) echo "$r"; echo "$r" | grep -q "^RESULT [^ ]* PASS" && np=$((np + 1));; esac
   cd "$OUT"
 done < "$LIST"
 # ---- restore
 cleanup; A combatmode $SH ranged off >/dev/null; [ -n "$VMSET" ] && A fp_vm set ${VMRESET:-twomask 264} >/dev/null
 [ -n "$BOWN" ] && { A inv $SH | grep -qF "\"$BOWN\"" || A transfer $HOLD $SH "$BOWN" >/dev/null; A equip $SH "$BOWN" >/dev/null; }
+pf_game_done   # game part over (every weapon recorded, restore done): run-batch.sh starts the next row
+# ---- collect the background analyses (each writes <dir>/result.txt; 20 min cap for all)
+END=$((SECONDS + ${WS_ANALYSE_MAX:-1200}))
+for d in "${PEND[@]}"; do
+  while [ ! -s "$d/result.txt" ] && [ $SECONDS -lt $END ]; do sleep 2; done
+  r=$(cat "$d/result.txt" 2>/dev/null); [ -n "$r" ] || r="RESULT WEAPON-${d##*/} FAIL analysis: no result.txt (timeout; log $d/analysis.log)"
+  echo "$r" | tee -a "$OUT/sweep.log"; echo "$r" | grep -q "^RESULT [^ ]* PASS" && np=$((np + 1))
+done
 pf_result "$([ $np = $n ] && [ $n -gt 0 ] && echo PASS || echo FAIL)" "pass=$np/$n list=$LIST out=$OUT"

@@ -645,11 +645,19 @@ P29X=""; P29S=""
 # VMQ_GATE=0 skips (lab-only debugging; never for a build review).
 vmq_gate() { [ "${VMQ_GATE:-1}" = 1 ] || return 0; local G=/mnt/c/KenshiModding/components/KenshiFP/animlab/gate.sh h f l
   h=$(bash "$G" hash); f=/root/animlab-gate/result-$h.txt
-  [ -s "$f" ] || { note "VMQUICK: animlab gate for source $h not run yet: running it now (offline)"; bash "$G" >/dev/null 2>&1; }
+  # no cached result: the gate runs in the BACKGROUND (nice 15) while VMQUICK films; vmq_gate_wait judges it after the
+  # game part (rig-runner 2026-10-10: a foreground gate left the 5090 game idle ~2 min before op-b8 filmed)
+  [ -s "$f" ] || { note "VMQUICK: animlab gate for source $h not run yet: running it in the background while filming"
+    VMQ_GATE_F=$f; VMQ_GATE_H=$h; nice -n 15 bash "$G" >"$OUT/animlab-gate.log" 2>&1 </dev/null & VMQ_GATE_PID=$!; return 0; }
   l=$(head -1 "$f" 2>/dev/null); l=${l:-RESULT ANIMLAB-REGRESS FAIL no gate result for $h}
   RESULTS+=("$l"); echo "$l" >> "$LOG"
   case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
   row VMQUICK FAIL "animlab gate FAIL, fix the lab FAIL / the returned miss before filming (${l#RESULT ANIMLAB-REGRESS })"; return 1; }
+# vmq_gate_wait: after filming, the background gate's result (no-op when the cached result was used); 1 = gate FAILed
+vmq_gate_wait() { [ -n "${VMQ_GATE_PID:-}" ] || return 0; wait "$VMQ_GATE_PID" 2>/dev/null; VMQ_GATE_PID=
+  local l; l=$(head -1 "$VMQ_GATE_F" 2>/dev/null); l=${l:-RESULT ANIMLAB-REGRESS FAIL no gate result for $VMQ_GATE_H (log $OUT/animlab-gate.log)}
+  RESULTS+=("$l"); echo "$l" >> "$LOG"; case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
+  VQR+=" animlab gate FAIL (ran while filming: ${l#RESULT ANIMLAB-REGRESS });"; return 1; }
 if want VMQUICK && vmq_gate; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
   # take preflight (Shay 2026-10-10 game-take discipline): pin + KO every live non-squad NPC within 6000 of the spot
   # default on only for a VMQUICK-only run: pf_clean also knocks out the fixture hostile $TG that later rows aim at
@@ -682,7 +690,13 @@ if want VMQUICK && vmq_gate; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
       A fp_vm replay off >/dev/null; "$PY" "$SHEETPY" "$OUT/swing-frames.jpg" "$FM" --cols 8 >/dev/null 2>&1 || note "frames sheet failed"; draw_to 0; fi
   else VQOK=0; VQR+=" sword: setup no melee weapon ($(weapons | tr '\n' ';'));"; fi
   [ "${VMQ_BEFORE:-0}" = 1 ] && { A fp_vm set wfix 1 >/dev/null; A fp_vm set zfade 1 >/dev/null; }
+  # VMQUICK alone: the game part ends here (restore now, EXIT trap off), the sheet is built offline while run-batch.sh
+  # starts the next row (pf_game_done, Shay 2026-10-10); hostile hits are read now, not later (the next row writes stobe.log)
+  if [ "$ROWS" = VMQUICK ]; then A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 1.0 >/dev/null; A fp_vm replay off >/dev/null
+    cleanup; trap - EXIT; HH_PRE=$(hostile_hit); hostile_hit() { echo "$HH_PRE"; }
+    if declare -F pf_game_done >/dev/null; then pf_game_done; else [ -n "${GAME_DONE_FILE:-}" ] && : > "$GAME_DONE_FILE"; echo "pf_game_done: game part over, analysis next"; fi; fi
   "$PY" "$SHEETPY" "$OUT/vmquick-sheet.jpg" "$MAN" --split "$OUT" >/dev/null 2>&1 || { VQOK=0; VQR+=" sheet failed;"; }
+  vmq_gate_wait || VQOK=0
   judge VMQUICK $VQOK "$((SECONDS-T0))s sheet=$OUT/vmquick-sheet.jpg$( [ -s "$OUT/swing-frames.jpg" ] && echo " frames=$OUT/swing-frames.jpg") |$VQR"; fi
 
 # ---- PT28: crossbow held like Skyrim/KCD (ready / aim / fire / reload, each zoomed in AND out for PT29) ----

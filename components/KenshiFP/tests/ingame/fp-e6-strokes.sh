@@ -30,10 +30,9 @@ A speed 1 hold >/dev/null; A kill "Hungry Bandit" >/dev/null; A chatter off >/de
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
 pf_rig; pf_display
-h=$(A time | grep -o 'time=[0-9]*'); h=$((10#${h#time=}))
-if [ $h -lt 10 ] || [ $h -gt 13 ]; then A speed 50 hold >/dev/null; for i in $(seq 1 200); do sleep 2; h=$(A time | grep -o 'time=[0-9]*'); h=$((10#${h#time=})); [ $h -ge 10 ] && [ $h -le 13 ] && break; done; A speed 1 hold >/dev/null; fi
+pf_clean -54190 4380 6000   # hostiles near the spot (shared preflight; was a hand-rolled bandit kill)
+pf_day       # verified daytime (was a hand-rolled speed-50 loop with no final check)
 A teleport $SH $SPOT >/dev/null; sleep 2
-for s in $(A chars 5000 | tr '|' '\n' | grep -E "Bandits|Outlaws|Hungry|Bandit" | grep -v " KO\| DEAD" | grep -o "#[0-9]*/[0-9]*"); do A kill "$s" >/dev/null; done
 for c in $SH Malzin; do A health $c 100 >/dev/null; done
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null; A combatmode $SH ranged off >/dev/null
 A inv $SH | grep -q '"name":"Chisa Katana"' || { A unequip Malzin "Chisa Katana" >/dev/null; A transfer Malzin $SH "Chisa Katana" >/dev/null; A pickup $SH "Chisa Katana" radius 80 >/dev/null; }
@@ -44,6 +43,7 @@ sky=$("$FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$SHOTS/e6-skyck.p
 A fp_camera look 3.14 0.05 >/dev/null; ready; [ "$(st)" = ready ] || fail "setup: katana not ready (state=$(st))"
 A fp_vm state | grep -q 'class=melee\|class=0' || echo "note: $(A fp_vm state | grep -o 'class=[a-z0-9]*' | head -1)"
 A fp_vm set strokes 15 >/dev/null
+pf_nofight; pf_open 2   # cursor parked in the sky + open ground/overlay check before filming (op-b8 e6r7: cover:ui_state/near/msgs)
 # ---- take
 : > "$N.lab"; rm -f "/tmp/kfp-$N.ffin"; mkfifo "/tmp/kfp-$N.ffin"
 "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
@@ -60,17 +60,20 @@ done
 A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; sleep 0.5
 lab end; echo q >&7; exec 7>&-; take_sample_stop; wait $FP; FP=
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-e6-$N.txt"; A fp_vm rec dump "vmrec-e6-$N.txt" >/dev/null; sleep 2; cp "$KDIR/vmrec-e6-$N.txt" "$N.vmrec.txt" || fail "no vmrec dump"
+SW=$(grep -o "\[vm\] swing #[0-9]* stroke [0-9]" "$KDIR/KenshiFP.log" | tail -$(( $(echo $STROKES | wc -w) * REPS )) | awk '{print $NF}' | tr '\n' ',')
+A fp_vm set stroke -1 >/dev/null; A chatter on >/dev/null   # restore before the game is released (op-b7: blkJ inherited stroke 3)
+pf_game_done   # game part over: under run-batch.sh the next row starts while the checks below run
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
-ok=1; echo "$TC" | grep -q "RESULT PASS" || ok=0
+ok=1; echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESULT take PASS" (dryrun: E6 always FAILed on this)
 : > "$N.lab.txt"
 for s in $STROKES; do for c in inline metrics churn blade; do
-  r=$(python3 $L/animlab.py --only-stroke $s $c "$N.vmrec.txt" 2>&1 | grep -E "^(inline|arc|churn|blade) " | head -1)
+  x=; [ $c = churn ] && x=--stroke   # churn also gates the stroke-start roll (maintainer ask)
+  r=$(python3 $L/animlab.py --only-stroke $s $c $x "$N.vmrec.txt" 2>&1 | grep -E "^(inline|arc|churn|blade) " | head -1)
   echo "stroke $s $r" >> "$N.lab.txt"
   # stroke 0 blade snap/seen = documented baseline exception (approved stroke, keys untouched)
   [ "$s" = 0 ] && [ "${r%% *}" = blade ] && continue
   echo "$r" | grep -q " PASS" || ok=0
 done; done
 SK=$(python3 $L/animlab.py stroke --overhead 2 "$N.vmrec.txt" 2>&1 | grep '^stroke ' | head -1); echo "$SK" >> "$N.lab.txt"; echo "$SK" | grep -q "^stroke PASS" || ok=0
-SW=$(grep -o "\[vm\] swing #[0-9]* stroke [0-9]" "$KDIR/KenshiFP.log" | tail -$(( $(echo $STROKES | wc -w) * REPS )) | awk '{print $NF}' | tr '\n' ',')
-A chatter on >/dev/null; PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"
+PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"

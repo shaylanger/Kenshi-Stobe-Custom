@@ -92,16 +92,17 @@ restore
 SW1=$(fist | fld swings); IK1=$(fist | fld ikfail)
 # op-b5 fist1: a stray char in the ikfail value broke $(( )) at the RESULT line (no RESULT): digits only
 IK0=$(tr -dc 0-9 <<<"$IK0"); IK1=$(tr -dc 0-9 <<<"$IK1"); SW0=$(tr -dc 0-9 <<<"$SW0"); SW1=$(tr -dc 0-9 <<<"$SW1")
+tail -n +$((LOG0+1)) "$KDIR/KenshiFP.log" | grep -o "\[vm\] fist swing tech='[^']*' table=.* fallback=[0-9]" > "$N.swings.txt"
+pf_game_done   # game part over (vmrec copied, restore done, KenshiFP.log read): run-batch.sh starts the next row
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
 # ---- verdict
 ok=1
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
 echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESULT take PASS"
-tail -n +$((LOG0+1)) "$KDIR/KenshiFP.log" | grep -o "\[vm\] fist swing tech='[^']*' table=.* fallback=[0-9]" > "$N.swings.txt"
 NS=$(wc -l < "$N.swings.txt"); NG=$(grep -c "tech='${TA[$TI]}' table=${TA[$TI]%% *}.* fallback=0" "$N.swings.txt")
 [ "$NS" -ge "$REPS" ] && [ "$NG" = "$NS" ] || ok=0
 [ "${IK1:-0}" = "${IK0:-0}" ] || ok=0
-FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" 2>&1 | tee "$N.lab.txt" | tail -1)
+FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" --swings "$N.swings.txt" 2>&1 | tee "$N.lab.txt" | tail -1)
 echo "$FG" | grep -q "^fistgame PASS" || ok=0
 python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --labels "$N.lab" --lab "$N.lab.txt" "$N.swings.txt" > review.log 2>&1
 [ -f review/INDEX.txt ] || ok=0

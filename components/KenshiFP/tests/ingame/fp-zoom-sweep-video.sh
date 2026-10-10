@@ -11,11 +11,21 @@ HERE=$(dirname "$(readlink -f "$0")")
 FFX=${FFX:-${CR:-/mnt/c}/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
 mkdir -p "$OUT"; cd "$OUT" || exit 2; cp -n ${CR:-/mnt/c}/Windows/Fonts/arialbd.ttf . 2>/dev/null
 TAKES="zs-xbow-switch-on:switch:on:xbow zs-sword-switch-on:switch:on:sword zs-xbow-switch-off:switch:off:xbow zs-sword-switch-off:switch:off:sword zs-xbow-fade-on:fade:on:xbow zs-sword-fade-on:fade:on:sword"
-ok=1; parts=()
+# Takes: each fp-zoom-sweep.sh prints "pf_game_done:" once its recording is over; the next take starts then while the
+# earlier take's offline checks finish in the background (the game never waits for analysis). The inner scripts get no
+# GAME_DONE_FILE (that would free the game for run-batch.sh mid-video); this wrapper signals it after the last take.
+GDF=${GAME_DONE_FILE:-}
 for t in $TAKES; do IFS=: read n mode hat w <<< "$t"
   if [ -z "$ONLY" ] || [[ " $ONLY " == *" $n "* ]]; then
-    grep -q "^RESULT ZOOMSWEEP-$n PASS" "$n.out" 2>/dev/null || timeout 900 bash "$HERE/fp-zoom-sweep.sh" "$OUT" "$n" "$mode" "$hat" "$w" > "$n.out" 2>&1
+    grep -q "^RESULT ZOOMSWEEP-$n PASS" "$n.out" 2>/dev/null && continue
+    GAME_DONE_FILE= timeout 900 bash "$HERE/fp-zoom-sweep.sh" "$OUT" "$n" "$mode" "$hat" "$w" > "$n.out" 2>&1 </dev/null &
+    p=$!; while kill -0 $p 2>/dev/null && ! grep -q "^pf_game_done:" "$n.out" 2>/dev/null; do sleep 1; done
   fi
+done
+[ -n "$GDF" ] && : > "$GDF"; echo "pf_game_done: game part over (all takes recorded), analysis + video next"
+wait
+ok=1; parts=()
+for t in $TAKES; do IFS=: read n mode hat w <<< "$t"
   r=$(grep '^RESULT' "$n.out" 2>/dev/null | tail -1); echo "${r:-RESULT ZOOMSWEEP-$n FAIL not run}"
   echo "$r" | grep -q "^RESULT ZOOMSWEEP-$n PASS" || { ok=0; continue; }   # not " PASS ": the inner "take PASS" matched FAILED takes
   # labels burned in (0.8 s display lag)
@@ -34,4 +44,5 @@ done
 [ $ok = 1 ] || { echo "RESULT ZOOMSWEEP-VIDEO FAIL not all six takes passed (see $OUT/*.out)"; exit 1; }
 : > zcat.txt; for p in "${parts[@]}"; do echo "file '$p'" >> zcat.txt; done
 mkdir -p "$(dirname "$FINAL")"
-"$FFX" -hide_banner -loglevel error -y -f concat -safe 0 -i zcat.txt -c copy "$FINAL" && echo "RESULT ZOOMSWEEP-VIDEO PASS $FINAL" || echo "RESULT ZOOMSWEEP-VIDEO FAIL concat"
+FW=$FINAL; command -v wslpath >/dev/null 2>&1 && FW=$(wslpath -w "$FINAL")   # ffmpeg.exe is Windows: no /mnt paths (dryrun)
+"$FFX" -hide_banner -loglevel error -y -f concat -safe 0 -i zcat.txt -c copy "$FW" && echo "RESULT ZOOMSWEEP-VIDEO PASS $FINAL" || echo "RESULT ZOOMSWEEP-VIDEO FAIL concat"

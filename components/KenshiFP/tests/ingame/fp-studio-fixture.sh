@@ -82,6 +82,7 @@ for i in $(seq 1 40); do sleep 1; A status | grep -q "last_saved=$SAVE\b" && bre
 A status | grep -q "last_saved=$SAVE\b" || pf_fail "save $SAVE not confirmed (status: $(A status | cut -c1-120))"
 sleep 5
 [ -d "$SAVES/$SAVE" ] || pf_fail "save folder $SAVES/$SAVE missing after save"
-rm -rf "$FIX.new"; cp -r "$SAVES/$SAVE" "$FIX.new" && rm -rf "$FIX" && mv "$FIX.new" "$FIX" || pf_fail "copy to $FIX failed"
 restore
+pf_game_done   # game part over (save confirmed on disk): run-batch.sh starts the next row while the fixture copy runs
+rm -rf "$FIX.new"; cp -r "$SAVES/$SAVE" "$FIX.new" && rm -rf "$FIX" && mv "$FIX.new" "$FIX" || pf_fail "copy to $FIX failed"
 pf_result PASS "save=$SAVE time=$TM killed=$n spot=$X,$Z fixture=$FIX files=$(find "$FIX" -type f | wc -l)"

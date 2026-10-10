@@ -110,6 +110,8 @@ fi
 lab end; echo q >&7; [ -n "$ZS_PIPE" ] && touch "$N.stop"; exec 7>&-; take_sample_stop; _TS_RUN=; wait $FP; FP=; rm -f "$FIFO"
 rm -f "$N.stop"
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-zs-$N.txt"; A fp_vm rec dump "vmrec-zs-$N.txt" >/dev/null; sleep 2; cp "$KDIR/vmrec-zs-$N.txt" "$N.vmrec.txt" 2>/dev/null || echo "note: no vmrec dump"
+A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A chatter on >/dev/null   # restore before the game is released (was only done on fail)
+pf_game_done   # game part over (recording stopped, vmrec copied): run-batch.sh starts the next row
 "$FFX" -hide_banner -i "$N.mp4" 2>&1 | grep -o 'Duration: [0-9:.]*' | awk -F'[: ]' '{print $3*3600+$4*60+$5}' > "$N.video-len.txt"
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
 CU=$(python3 $L/frames.py cursor "$N.mp4" 2>&1 | tail -1)

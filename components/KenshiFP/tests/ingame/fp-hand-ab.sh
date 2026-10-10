@@ -59,12 +59,14 @@ take(){ # $1 = A|B, $2 $3 = scale
   lab "RMB held: block"; A fp_keys press rmb 2400 >/dev/null; sleep 2.0
   lab "RMB released: ready"; sleep 2.6
   lab end; echo q >&7; exec 7>&-; take_sample_stop; _TS_RUN=; wait $FP; FP=; rm -f "/tmp/kfp-$N.ffin"
-  TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
-  echo "takecheck $1: $TC"; echo "$TC" > "$N.tc.txt"
+  ( TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
+    echo "takecheck $1: $TC"; echo "$TC" > "$N.tc.txt" ) &   # checks run in the background while the next side records
 }
 take A 1 1
 take B "$HA" "$HC"
 restore
+pf_game_done   # game part over (both sides recorded, hand scale restored): run-batch.sh starts the next row
+wait   # background takechecks of both sides
 # weapon place at ready, A vs B (must match: prop compensated)
 WA=$(grep -o ' mp=[^ ]* mf=[^ ]*' hand-A.state.txt | head -1); WB=$(grep -o ' mp=[^ ]* mf=[^ ]*' hand-B.state.txt | head -1)
 # ---- side by side: label each half, normal speed then 4x slower (spec-videos layout)
