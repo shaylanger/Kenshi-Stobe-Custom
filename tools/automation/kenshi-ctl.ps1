@@ -98,6 +98,14 @@ if ($Command -eq 'idle') {
   Set-Content -Path $f -Value "$Owner $(Get-Date -Format 'yyyy-MM-dd HH:mm') $Mode" -Encoding utf8
   "idle reason recorded (60 min): $Mode"; exit 0
 }
+if ($Command -eq 'idle4080') {
+  # Shay 2026-10-10: same as `idle` for the 4080 (the Stop hook blocks while the 4080 is idle with no reason < 60 min).
+  $f = 'C:\KenshiTestRuns\rig4080.idle'
+  if ($Mode -eq 'status' -or -not $Mode) { if (Test-Path $f) { "$((Get-Item $f).LastWriteTime.ToString('HH:mm')) $(Get-Content $f -Raw)".Trim() } else { 'no 4080 idle reason recorded' }; exit 0 }
+  if ($Mode -eq 'clear') { Remove-Item $f -Force -ErrorAction SilentlyContinue; 'cleared'; exit 0 }
+  Set-Content -Path $f -Value "$Owner $(Get-Date -Format 'yyyy-MM-dd HH:mm') $Mode" -Encoding utf8
+  "4080 idle reason recorded (60 min): $Mode"; exit 0
+}
 if ($Command -eq 'release') {
   if (Test-Path $LockFile) {
     $held = (Get-Content $LockFile -TotalCount 1).Trim()
