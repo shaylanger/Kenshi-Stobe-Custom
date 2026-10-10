@@ -4,7 +4,32 @@ starting here needs nothing else. Keep it current: update this section at every 
 Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `...-m56.md`, `...-m55.md`, `...-m54.md`. Open rows: `MASTER_TEST_PLAN.md`.
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
-## Right now (2026-10-10 ~11:45, m90 coordinator handed off at context limit): many agents stopped, read their handoffs
+## Right now (2026-10-10 ~13:40, m91 coordinator handed off at context limit)
+- Start with `tools/automation/session-start.ps1`; respawn every agent not DONE as a FRESH agent from its status/handoff
+  file in `C:\KenshiTestRuns\agents\` (all were told to write STOPPED-CONTEXT + handoff at 13:36).
+- **FIRST JOB for the next coordinator (Shay asked "why did it sit idle?"):** the 5090 sat idle ~13:31-13:36 after
+  op-b4 ended: rig-health.sh said BUSY because Kenshi was open, the lock held and inflight\5090-operator still pointed
+  at a DONE batch. Fix rig-health.sh (+ the Stop hook) to report IDLE when every inflight marker's out dir has DONE for
+  > 3 min and no new batch started; make operators replace their marker when a batch ends.
+- Agents (roles per CLAUDE.md "Speed plan"): `kfp-fixer` (build+lab owner of /root/KenshiFP; installed 5090 + staged
+  4080: KenshiFP 3FA97555 = refit5 + ready-wrist cap + fists-na1 + hand_scale + own-name-tag hide; helper e6-climb2
+  refitting strokes 0+3), `5090-operator` (lock owner 5090; op-b4 DONE: VMQUICK z0/crossbow PASS, z25 sword FAIL hand
+  at head + blade hidden (real, PT29 class) + combat popup; E6 e6r5 2 lab FAILs; blkH guard PASS but row FAIL; fists
+  0/1 setup FAIL = lab-gate path bug; told to launch next batch fists 0..3 + in-game finger A/B (hand_scale 1 1 vs
+  0.70 0.85, spec-videos style) before stopping), `4080-filming` (zoom sweep + T6 on 4080; must install 3FA97555 for
+  the name-tag fix), `animlab-maintainer` (standing; next: sync-flash label check for T6), `build-pipeline`
+  (kfp-pipeline.sh written, testing; -Staged install done), `take-dryrun` (dryrun.sh fake game works, building bug
+  fixtures; must cover the 4080 Git Bash env; then studio fixture), `weapon-matrix` (catalog 160 weapons: 41 base, 119
+  UWE mod; KenshiFP per-class coverage + lab weapon_matrix.py running; harness give-weapon patch built in a worktree,
+  not installed; then game sweep).
+- Decided today (Shay): native frames exempt from wrist limit; native in-game animations decide inferred pose rules;
+  spec videos: keep current swing wrist, low crossbow carry, two-hand reload; PG finished/standalone; kenshi-click.ps1
+  kept injected-only; leave KenshiDualWield/, dual-wield brief, big mod ideas, reference photos, tools/research.
+  Coordinator: true-L1 grip fix NOT shipped (moves accepted poses); errmax check to compare vs game-L1 model instead.
+- Waiting for Shay: nothing. Next for him: in-game finger A/B video (after the operator films + reviews it), fists
+  takes, weapon-matrix risk report.
+
+## Earlier (2026-10-10 ~11:45, m90 coordinator handed off at context limit)
 - Start with `tools/automation/session-start.ps1` (agent status/handoff files in `C:\KenshiTestRuns\agents\`, queues in
   `queue\5090.next` / `4080.next`, inflight markers). Respawn each agent not DONE as a FRESH agent from its handoff file.
 - Agents and state:
