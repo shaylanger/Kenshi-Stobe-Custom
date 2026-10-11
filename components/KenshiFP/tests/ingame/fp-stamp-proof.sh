@@ -32,6 +32,9 @@ python3 "$L/stamp.py" $V --name STAMP-PROOF --out stamp-table.tsv --labels $LB -
 R=$(grep '^RESULT ' stamp.txt | tail -1)
 miss=$(grep -c 'MISSING' stamp.txt); tcs=$(grep -ci 'stamp' $TC e6.txt 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}')
 rest=${R#RESULT STAMP-PROOF }; rest=${rest#PASS }; rest=${rest#FAIL }
+# FP payload (KenshiFP kfp-frame-stamp): share of decoded frames with a fresh mod payload (flags bit 0); info only
+pl=$(awk -F'\t' 'NR>1 && $3==1 {n++; if ($7 % 2 == 1) f++} END{printf "%.2f", n ? f/n : 0}' stamp-table.tsv 2>/dev/null)
+rest="$rest payload=${pl:-0}"
 ok=1; why=
 case "$R" in "RESULT STAMP-PROOF PASS"*) ;; *) ok=0; why="decoder FAIL;";; esac
 [ -s stamp.log ] || { ok=0; why="$why no harness stamp log;"; }
