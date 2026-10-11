@@ -3,7 +3,8 @@
 # open ground, e.g. save kah-fpstudio):  CAPPROOF | kah-fpstudio | Axima | Malzin | 300 | bash {CR}/KenshiModding/tools/automation/capture-proof.sh {OUT}/capproof
 # Proves window capture is occlusion-proof: the game window is covered by an opaque magenta window (cover-window.ps1:
 # topmost, never activated, exactly over the client area); then
-#   control  a 1 s ffmpeg gdigrab clip must be magenta (the cover works; this is what failed the 5090 takes)
+#   control  a 1 s gdigrab grab of the SCREEN AREA under the cover must be magenta (cover-window.ps1 also checks it is the
+#            top window at 9 points, COVERFAIL <why> otherwise); a gdigrab title= clip is only reported (title=rgb)
 #   wgc      a ${2:-3} s clip through ffx-cap.sh (KAH_CAPTURE=wgc) must be the game: frames.py openground PASS, not
 #            magenta, size = the game's render size, length within 0.5 s of the asked length, h264
 # One line: RESULT CAPPROOF PASS|FAIL <evidence>. With PASS on the 5090, `echo wgc > C:\KenshiTestRuns\capture.default`
@@ -30,12 +31,21 @@ pf_rig; pf_day
 CW=$(wslpath -w "$H/cover-window.ps1")
 powershell.exe -NoProfile -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','$CW','-Seconds','$((SECS + 25))','-Title','\"$TITLE\"'" </dev/null >/dev/null 2>&1
 [ -n "$DRY" ] && echo 'COVER 0,0 1600x900' > "$CR/KenshiTestRuns/cover-window.state"
-for i in $(seq 1 40); do [ -f "$CR/KenshiTestRuns/cover-window.state" ] && break; sleep 0.25; done
+for i in $(seq 1 80); do [ -f "$CR/KenshiTestRuns/cover-window.state" ] && break; sleep 0.25; done
 [ -f "$CR/KenshiTestRuns/cover-window.state" ] || pf_fail "cover window did not open"
-cov=$(cat "$CR/KenshiTestRuns/cover-window.state" | tr -d '\r'); sleep 1.5
-( cd /tmp && "$REALF" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t 1 -i "title=$TITLE" -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p "$(wslpath -w "$OUT/control-gdigrab.mp4")" ) </dev/null
+cov=$(cat "$CR/KenshiTestRuns/cover-window.state" | tr -d '\r')
+case "$cov" in "COVER "*) ;; *) pf_fail "cover not up: $cov" ;; esac
+sleep 1
+# control: the SCREEN AREA under the cover (inset 8 px), physical desktop pixels (cover-window.ps1 is per-monitor DPI aware)
+read -r cx cy cw ch <<<"$(echo "$cov" | sed -E 's/^COVER (-?[0-9]+),(-?[0-9]+) ([0-9]+)x([0-9]+).*/\1 \2 \3 \4/')"
+( cd /tmp && "$REALF" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -offset_x $((cx + 8)) -offset_y $((cy + 8)) \
+    -video_size $(( (cw - 16) / 2 * 2 ))x$(( (ch - 16) / 2 * 2 )) -t 1 -i desktop -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
+    "$(wslpath -w "$OUT/control-gdigrab.mp4")" ) </dev/null
 c=$(rgb "$OUT/control-gdigrab.mp4")
-magenta "$c" want || pf_fail "cover not effective: the gdigrab control clip is rgb($c), not magenta ($cov)"
+# info only: a gdigrab title= clip (89b: it read the game's own surface, rgb 103 102 94, not the cover)
+( cd /tmp && "$REALF" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t 0.5 -i "title=$TITLE" -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p "$(wslpath -w "$OUT/control-title.mp4")" ) </dev/null
+ct=$(rgb "$OUT/control-title.mp4" 2>/dev/null)
+magenta "$c" want || pf_fail "cover not effective: the screen grab of the cover area is rgb($c), not magenta ($cov)"
 t0=$(date +%s)
 ( cd /tmp && KAH_CAPTURE=wgc FFX_REAL="$REALF" "$CAPF" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t "$SECS" \
     -i "title=$TITLE" $(venc_args 23) "$(wslpath -w "$OUT/wgc.mp4")" ) </dev/null 2> "$OUT/wgc.err"
@@ -50,5 +60,5 @@ magenta "$w" && why="$why wgc clip is magenta (rgb $w);"
 [ -n "$DRY" ] || echo "$og" | grep -q PASS || why="$why openground: $og;"
 [ -n "$DRY" ] || awk -v d="${dur:-0}" -v s="$SECS" 'BEGIN{exit !(d >= s-0.5 && d <= s+0.5)}' || why="$why length ${dur}s for ${SECS}s;"
 [ -n "$DRY" ] || [ "${wd}x${ht}" = "${RES_W:-1600}x${RES_H:-900}" ] || why="$why size ${wd}x${ht} != render ${RES_W:-1600}x${RES_H:-900};"
-if [ -z "$why" ]; then pf_result PASS "covered ($cov) gdigrab rgb($c) magenta; wgc rgb($w) $og | $pr| out=$OUT"
-else pf_result FAIL "$why gdigrab rgb($c) | $pr| out=$OUT"; fi
+if [ -z "$why" ]; then pf_result PASS "covered ($cov) screen rgb($c) magenta, title=rgb($ct); wgc rgb($w) $og | $pr| out=$OUT"
+else pf_result FAIL "$why screen rgb($c) title=rgb($ct) | $pr| out=$OUT"; fi
