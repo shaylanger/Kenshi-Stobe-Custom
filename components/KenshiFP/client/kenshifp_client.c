@@ -1870,6 +1870,8 @@ static int stobe_fight_truce_active(void)
     return on;
 }
 
+static void kfp_stamp_frame(int vm);   /* frame-stamp: harness per-frame video sync payload (end of file) */
+
 /* M1 camera lock. Runs every frame. While FP is on, re-assert followObject on
  * the selected character so the camera tracks it and any vanilla pan that
  * cleared the follow is immediately overridden. On the FP->off edge, release. */
@@ -1879,6 +1881,7 @@ static void camera_lock(void *gw)
     if (!readable(cam, CC_FREECAM + 1)) return;
 
     kah_bridge_tick();
+    kfp_stamp_frame(0);   /* frame-stamp: FP off / no view this frame still reports its state */
 
     static void *followed;                  /* the actor the FP camera followed last frame */
     if (g_fp_mode) {
@@ -4532,6 +4535,7 @@ static void fp_camera_override(void *gw)
         /* Z1: band entered/left by this frame's fp_view_apply -> hide before the viewmodel solves/records it */
         if (fp_vis_stale()) fp_head_visibility(gw);
         vm_frame(g_fp_control_actor, g_fp_control_actor ? fp_body_down(g_fp_control_actor) : 1);
+        kfp_stamp_frame(1);   /* frame-stamp: the state this frame's pose was solved for */
 
         /* FOV: capture default once, then force the FP FOV each frame. */
         void *ogre_cam = *(void **)((uintptr_t)cam + CC_CAMERA);
@@ -8332,6 +8336,43 @@ static void hooked_sheathe(void *pc)
 #include "kfp_controls.inc"
 #include "kfp_combat_swingall.inc" /* setting swing_hits_all */
 #include "kfp_turret.inc"
+
+/* frame-stamp (Shay 2026-10-10): payload of the harness `stamp` code (layout in tools/animlab/stamp.py).
+ * Runs only while the harness stamp is on; one pointer check per frame otherwise. */
+unsigned g_kfp_stamp_tabhash;   /* live tables: hash of the active table set (14 low bits shown) */
+static unsigned g_kfp_stamp_seq;
+static void kfp_stamp_frame(int vm)
+{
+    if (!g_kah_connected || !g_kah.stampOn || !g_kah.stampSet || !g_kah.stampOn()) return;
+    static const char *const names[] = {"off", "none", "down", "holstered", "reloading", "aiming", "ready",
+                                        "swinging", "staggered", "recovering", "blocking"};
+    const char *st = g_fpc_ui_state ? g_fpc_ui_state : "off";
+    unsigned ui = 31, i;
+    if (!g_fp_mode) ui = 0;
+    else if (g_tur_pc != NULL && !g_tur_eye_left)   /* T6: same turret state the HUD shows */
+        ui = g_tur_nopower ? 11 : g_tur_rl_left >= 0.0f ? 12 : g_tur_ammo > 0 ? 13 : 14;
+    else for (i = 0; i < sizeof(names) / sizeof(names[0]); i++) if (!strcmp(st, names[i])) { ui = i; break; }
+    unsigned stroke = (g_vm_swing && g_vm_stroke >= 0 && g_vm_stroke < 7) ? (unsigned)g_vm_stroke + 1 : 0;
+    unsigned view = 0;
+    if (g_fp_mode) {
+        int freecam = 0;
+        if (g_base) { void *cam = *(void **)(g_base + RVA_CAM_INSTANCE);
+            if (readable(cam, CC_FREECAM + 1)) freecam = *(unsigned char *)((uintptr_t)cam + CC_FREECAM) != 0; }
+        view = freecam ? 3 : fp_view_is_eye() ? 1 : 2;
+    }
+    float d = g_view.applied;
+    unsigned zb = d <= 0.001f ? 0 : d < 2 ? 1 : d < 5 ? 2 : d < 10 ? 3 : d < 20 ? 4 : d < 30 ? 5 : d < 45 ? 6 : 7;
+    unsigned wc = g_vm_fist_on ? 2 : g_vm_class == 1 ? 1 : 0;
+    unsigned von = (g_vm_have_t && g_vm_w > 0.001f) ? 1 : 0;
+    unsigned tab = g_kfp_stamp_tabhash & 0x3fff;
+    if (vm) ++g_kfp_stamp_seq;
+    unsigned lo = (ui & 31) | (stroke & 7) << 5 | ((unsigned)g_vm_phase & 3) << 8 | (view & 3) << 10 | (zb & 7) << 12 |
+                  (wc & 7) << 15 | von << 18 | (tab & 63) << 19 | (g_kfp_stamp_seq & 127) << 25;
+    unsigned ld = g_combat_loaded <= 0 ? 0 : g_combat_loaded >= 3 ? 3 : (unsigned)g_combat_loaded;
+    unsigned hi = ld | ((unsigned)g_vm_swings & 15) << 2 | (g_vm_hold ? 1u : 0u) << 6 | (g_ui_open ? 1u : 0u) << 7 |
+                  (tab >> 6) << 8;
+    g_kah.stampSet(lo, hi);
+}
 
 /* CharMovement::update hook: re-assert the player's direct-drive intent
  * IMMEDIATELY BEFORE the engine consumes movement state -- combat AI (and the
