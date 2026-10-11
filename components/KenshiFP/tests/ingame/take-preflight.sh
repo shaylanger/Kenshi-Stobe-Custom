@@ -29,6 +29,26 @@
 #                              wait <= 8 s for active=0; PF_WHY otherwise (rg-04 M08-ACTOR 2026-10-11: Dust Bandits on Axima)
 #   pf_pin <who> <pin args>    pin, then wait up to 3 s for the per-frame put-back to land within 1.5 m; reason has off + KO
 PF_A(){ stobe-auto "$@" </dev/null 2>&1; }
+# Dead-game abort for every script that sources this file (fp-rowsel.sh gd_note, generalised): stobe-auto is wrapped, so
+# the script's own A() gets it too. PF_GD_MAX (6) harness replies in a row of "is Kenshi running?" / "inbox locked by
+# another client" signal the main shell, which prints `RESULT <PF_ROW|KAH_ROW|take> FAIL setup: game not responding` and
+# exits at once; after that every stobe-auto call returns that reply without calling the game, so EXIT cleanups end in
+# seconds (a hung game used to burn the full row timeout). Works inside $(...) subshells (counter file + kill $$).
+# Scripts using fp-rowsel.sh keep its own per-row abort (gd_note defined = not counted here, only the fast return).
+PF_GD_MAX=${PF_GD_MAX:-6}; PF_GD_FILE=$(mktemp 2>/dev/null || echo "/tmp/pf-gd.$$"); : > "$PF_GD_FILE"; PF_GD_PID=$$
+stobe-auto(){ local r rc
+  if [ -n "${GD_DEAD:-}" ] || [ "$(wc -l < "$PF_GD_FILE" 2>/dev/null || echo 0)" -ge "$PF_GD_MAX" ]; then
+    echo "ERROR: game not responding (dead-game abort; is Kenshi running?)"; return 1; fi
+  r=$(command stobe-auto "$@" 2>&1); rc=$?; [ -n "$r" ] && printf '%s\n' "$r"
+  declare -F gd_note >/dev/null && return $rc
+  case "$r" in *"is Kenshi running?"*|*"inbox locked by another client"*)
+      echo "$* | $(head -1 <<<"$r" | cut -c1-80)" >> "$PF_GD_FILE"
+      [ "$(wc -l < "$PF_GD_FILE")" -ge "$PF_GD_MAX" ] && kill -USR1 "$PF_GD_PID" 2>/dev/null;;
+    *) [ -s "$PF_GD_FILE" ] && : > "$PF_GD_FILE";; esac; return $rc; }
+pf_gd_abort(){ trap - USR1; local last; last=$(tail -1 "$PF_GD_FILE" 2>/dev/null)
+  [ -n "${LOG:-}" ] && echo "GAME NOT RESPONDING: $PF_GD_MAX harness calls in a row got no answer; last: $last" >> "$LOG"
+  PF_DONE=1; echo "RESULT ${PF_ROW:-${KAH_ROW:-take}} FAIL setup: game not responding ($PF_GD_MAX harness calls without an answer, last: $last)${LOG:+ log=$LOG}"; exit 1; }
+declare -F gd_note >/dev/null || trap pf_gd_abort USR1
 # Git Bash (4080 rig) has no wslpath: cygpath does the same
 command -v wslpath >/dev/null 2>&1 || wslpath(){ [ "$1" = -w ] && shift; cygpath -w "$1"; }
 PF_FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
