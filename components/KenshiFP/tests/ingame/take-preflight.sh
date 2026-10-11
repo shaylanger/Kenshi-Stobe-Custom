@@ -55,7 +55,7 @@ pf_day(){
 }
 pf_clean(){
   local TX=$1 TZ=$2 R=${3:-3000} n=0
-  { PF_A chars 6000; for f in "Starving" "Dust Bandits" "Hungry" "Outlaws" "Marauder" "Shinobi"; do PF_A chars 6000 "$f"; done; } 2>/dev/null \
+  { [ "${PF_CLEAN_RAIDERS:-0}" = 1 ] || PF_A chars 6000; for f in "Starving" "Dust Bandits" "Hungry" "Outlaws" "Marauder" "Shinobi"; do PF_A chars 6000 "$f"; done; } 2>/dev/null \
     | sed "s/^[0-9]* within [0-9.]*: //" | sed 's/ | /\n/g' | grep -v "\[Nameless\]\| KO\| DEAD" \
     | { if [ -n "${PF_CLEAN_KEEP:-}" ]; then grep -v -E "^ *(${PF_CLEAN_KEEP}) (\[|#)"; else cat; fi; } \
     | sed -n 's/.*\(#[0-9]*\/[0-9]*\) .* pos=\([-0-9.]*\),[-0-9.]*,\([-0-9.]*\).*/\1 \2 \3/p' | sort -u > /tmp/pf-clean.$$
@@ -113,7 +113,7 @@ pf_calm(){ local who=$1 s th kh k i p x z; shift; PF_WHY=""
     case " $kh " in *" $th "*) PF_WHY="$who fights a keep target $th"; return 1;; esac
     if [ $i = 1 ]; then p=$(PF_A where "$who" | grep -o 'pos=[^ ]*' | cut -d= -f2); x=${p%%,*}; z=${p##*,}
       echo "pf_calm: $who in a fight with $th, clearing raiders around it"
-      [ -n "$x" ] && PF_CLEAN_KEEP=$(IFS='|'; echo "$*") pf_clean "$x" "$z" 3000; fi
+      [ -n "$x" ] && PF_CLEAN_RAIDERS=1 PF_CLEAN_KEEP=$(IFS='|'; echo "$*") pf_clean "$x" "$z" 3000; fi
     PF_A pin "$th" at "$who" dist 600 >/dev/null; PF_A ko "$th" 900 >/dev/null
     sleep 1.5; done
   PF_WHY="$who still in a fight (active=1 target_h=$th) after clearing raiders + its attacker"; return 1; }

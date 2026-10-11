@@ -210,8 +210,10 @@ if [ -n "$N2" ] && [ "$sw" -ge 3 ] && [ "$OW" = 1 ] && [ "$W" = ok ]; then row M
 # ai_refused is one global counter and counts the CONTROLLED actor's refused AI swings: the new controlled actor must be in
 # no fight of its own (5090 33-rg04 2026-10-11: a Dust Bandit fought Axima, ai_refused 3258->3277 with Malzin released and
 # fighting). pf_calm clears it before the window; a fight that starts during the window is a setup FAIL, not a product one.
+# pf_calm runs while the fighter is still owned (5090 41-m08-confirm2: run after the handover, its 43-NPC sweep let the
+# released AI knock Skaera out before the window, active=0 flesh 700->700); raiders only (PF_CLEAN_RAIDERS), then ready.
+if ! pf_calm "$OT" "$TG" >> "$LOG"; then row M08-ACTOR FAIL "setup: $PF_WHY"; else
 ready 15; A select "$OT" >/dev/null; A fp_control take >/dev/null; sleep 1
-if ! pf_calm "$OT" "$TG" >> "$LOG"; then take; row M08-ACTOR FAIL "setup: $PF_WHY"; else
 A health "$TG" 100 >/dev/null; sleep 0.3; R0=$(ms ai_refused); H0=$(flesh "$TG"); AG=$(gap); sleep 10; R1=$(ms ai_refused); H1=$(flesh "$TG"); s=$(A fp_melee state "$FI"); OW=$(echo "$s" | fld owned)
 FIS="controlled=$(echo "$s" | fld controlled) state=$(echo "$s" | fld state) active=$(echo "$s" | fld active) attacking=$(echo "$s" | fld attacking) target_h=$(echo "$s" | fld target_h)"
 o=$(A fp_melee state "$OT"); OTA=$(echo "$o" | fld active); OTS="$OT active=$OTA target_h=$(echo "$o" | fld target_h)"
