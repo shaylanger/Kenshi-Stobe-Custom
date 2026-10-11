@@ -14,7 +14,9 @@ Queue: C:\KenshiTestRuns\queue\4080b\*.list first (FIFO by numeric prefix); own 
   - list-rigcheck.sh --fix <list> 4080 OK, dryrun.sh --rig 4080 PASS (run here, at nice 0).
   Lists that break a rule go to queue\failed\ (+ .result naming the rule); the owner gets a note.
 Admission (before every launch of instance 2): 4080 GPU memory free >= 4 GB (nvidia-smi over ssh), RAM free >= 6 GB, no
-  ALERT-4080-tdr.txt / ALERT-4080b-tdr.txt, and lane 4080 is not running a crossbow list (TDR isolation: a TDR during such a
+  ALERT-4080-tdr.txt / ALERT-4080b-tdr.txt, and lane 4080 is not running a crossbow list (a fire/reload row or the header
+  "# tdr-isolate: yes", which this lane also never takes; a running lane-4080b batch is ended and requeued, an idle instance 2
+  stopped, the moment lane 4080 starts one) (TDR isolation: a TDR during such a
   list must be the crossbow's). Not admitted = the list waits (state "waiting: <why>").
 Per list: instance 2 down -> kenshi-instance.ps1 sync -Instance 2 (DLLs/mods/cfgs = instance 1's; all kah-* saves), kcfg.ps1
   test -Instance 2 (window 800x600, gfx low), frame cap 30 (framecap.txt), ctl.ps1 launch -Instance 2 -Save <launch>
@@ -50,6 +52,7 @@ function LaneReject([string[]]$lines) {   # $null = the lane may run this list, 
     $g = @($lines | Where-Object { $_ -match '^\s*#\s*gfx:\s*(\S+)' } | ForEach-Object { $Matches[1].ToLower() } | Select-Object -First 1)
     if (-not $g -or $g[0] -ne 'low') { return 'not "# gfx: low" (filming/full-gfx lists stay on lane 4080)' }
     if ($lines -match '^\s*#\s*rig:\s*5090') { return '"# rig: 5090"' }
+    if (IsoHeader $lines) { return '"# tdr-isolate: yes" (crossbow/turret TDR isolation: lane 4080 only)' }
     $rows = LaneRows $lines
     if (-not $rows.Count) { return 'no rows' }
     foreach ($r in $rows) {
@@ -65,6 +68,10 @@ function FireRow([string]$r) {
     $c = $f[-1] -replace '(?i)kah-fpxbow', 'kah-SAVE' -replace '(?i)\w*no-?(xbow|fire|shot|reload)\w*', 'GUARD'
     if ($c -match $FireRx) { return $Matches[1] }; if ($id -match '^(?i)(XB|T6|VMQ)') { return $id }; $null
 }
+# "# tdr-isolate: yes" (xbow-escalate 2026-10-11): a list whose rows fire/reload the crossbow or a turret through scripts the
+# FireRx words miss (fp-manual-ranged/hits/anatomy, fp-controls K, fp-turret-rows T3): lane 4080 only, lane 4080b holds.
+function IsoHeader([string[]]$lines) { [bool](@($lines | Where-Object { $_ -match '^\s*#\s*tdr-isolate:\s*yes' }).Count) }
+function IsoList([string[]]$lines) { if (IsoHeader $lines) { return $true }; foreach ($l in LaneRows $lines) { if (FireRow $l) { return $true } }; $false }
 function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr, [bool]$xbow1) {   # $null = may launch instance 2
     if ($tdr) { return 'TDR alert present' }
     if ($xbow1) { return 'lane 4080 runs a crossbow list (TDR isolation)' }
@@ -88,6 +95,7 @@ if ($SelfTest) {
         @('ranged list', @($low, 'R | s | a | b | 1 | bash x/fp-ranged.sh'), 'crossbow guard'),
         @('XB row id', @($low, 'XBRLD | s | a | b | 1 | bash x/fp-thing.sh'), 'crossbow guard'),
         @('stobe row', @($low, 'S1 | s | a | b | 1 | bash {CR}/KenshiModding/tests/ingame/stobe/STOBE-X.sh'), 'Stobe row'),
+        @('tdr-isolate list (fp-controls K: no crossbow word in the row)', @($low, '# tdr-isolate: yes', 'K | kah-fpxbow | a | b | 1 | bash x/fp-controls.sh'), '"# tdr-isolate: yes"'),
         @('save name + WS_NOXBOW guard are not crossbow work', @($low, 'W | kah-fpxbow | a | b | 1 | WS_NOXBOW=1 PF_SAVE=kah-fpxbow bash x/fp-weapon-sweep.sh'), '')
     )
     foreach ($c in $cases) { $n++; $g = [string](LaneReject $c[1]); $ok = if ($c[2]) { $g -like "$($c[2])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b list $($c[0]): got '$g'" }
@@ -99,6 +107,10 @@ if ($SelfTest) {
             @('turret fire take', 'TT | kah-fpturret | a | b | 900 | bash {CR}/x/fp-turret-take.sh {OUT}/T6', $true),
             @('crossbow reload row', 'R1 | kah-fpxbow | a | b | 900 | bash {CR}/x/fp-xbow-reload.sh {OUT}/R1', $true))
     foreach ($c in $fc) { $n++; $g = [bool](FireRow $c[1]); $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b TDR isolation $($c[0]): fire=$g" }
+    $ic = @(@('tdr-isolate header, no fire word', @('# tdr-isolate: yes', 'K | kah-fpxbow | a | b | 1 | bash x/fp-controls.sh'), $true),
+            @('fire row, no header', @('XC | kah-fpxbow | a | b | 1 | bash x/fp-xbow-tdrconfirm.sh'), $true),
+            @('melee list', @('# gfx: low', 'M | kah-fpxbow | a | b | 1 | bash x/fp-manual-melee.sh'), $false))
+    foreach ($c in $ic) { $n++; $g = [bool](IsoList $c[1]); $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b isolation list $($c[0]): iso=$g" }
     $n++; $t = @(LaneTdrFilter @('1000|Display|4101|reset', '1100|nvlddmkm|153|err', '1200|disk|153|io', '900|Display|4101|old', 'ssh: connect timed out') 950)
     $ok = ($t | ForEach-Object { ($_ -split '\|')[0] }) -join ',' -eq '1000,1100'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b TDR filter: $($t -join ' ; ')"
     "LANE4080B-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
@@ -148,7 +160,7 @@ function TdrEvents([long]$since) {
 }
 # TDR isolation (FireRow above; coordinator m102: "turret-nofire" or a WS_NOXBOW melee sweep must not hold the lane)
 function Xbow1 {   # lane 4080's running list has a crossbow/turret fire or reload row (TDR isolation)
-    foreach ($r in @(Get-ChildItem "$qd\running" -Filter '4080__*' -File -ErrorAction SilentlyContinue)) { foreach ($l in LaneRows @(Get-Content $r.FullName)) { if (FireRow $l) { return $true } } }
+    foreach ($r in @(Get-ChildItem "$qd\running" -Filter '4080__*' -File -ErrorAction SilentlyContinue)) { if (IsoList @(Get-Content $r.FullName)) { return $true } }
     $false
 }
 function QSort { @($input) | Sort-Object @{ e = { if ($_.Name -match '^(\d+)') { [long]$matches[1] } else { [long]::MaxValue } } }, @{ e = { -join ($_.Name.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) } } }
@@ -193,6 +205,13 @@ while ($true) {
         $outN = $cur[1]; $t0 = [long]$cur[2]; $own = $cur[3]; $name = $cur[5]; $outP = "/c/KenshiTestRuns/$outN"
         if (Test-Path $tdr1) { TdrStop "lane 4080 TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outN }
         $h = @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)); if ($h.Count) { TdrStop "TDR (GPU driver reset) on the 4080 during lane $Lane list $name : $($h[0])" $outN }
+        if (Xbow1) {   # TDR isolation: lane 4080 started a crossbow/turret list -> end this batch now, requeue the list for later
+            $o = Probe $outP 'end-batch' "lane $Lane TDR isolation: lane 4080 runs a crossbow/turret list"; Stop2 'TDR isolation'
+            $back = Join-Path "$qd\$Lane" $name; Move-Item -LiteralPath $cur[0] $back -Force -ErrorAction SilentlyContinue
+            Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue
+            Log "ISOLATION end-batch $name (requeued $back): $o"; Note $own "lane $Lane ended $name (lane 4080 runs a crossbow/turret list, TDR isolation); requeued in queue\$Lane, reruns after it"
+            $idleSince = Get-Date; continue
+        }
         $p = Probe $outP
         if ($p -and $p.done -eq '1') {
             $tmp = Join-Path $rd "$Lane-$outN"; New-Item -ItemType Directory -Force $tmp | Out-Null
@@ -220,6 +239,9 @@ while ($true) {
     }
     $tdrOn = (Test-Path $tdr1) -or (Test-Path $tdrF)
     if ($tdrOn) { $rm = Remote; if ($rm.k2) { Stop2 'TDR alert' }; State 'waiting: TDR alert present (no instance 2 launch)'; Start-Sleep $TickSec; continue }
+    if (Xbow1) {   # TDR isolation: no instance 2 beside lane 4080's crossbow/turret list (stop an idle one too)
+        $rm = Remote; if ($rm.k2) { Stop2 'TDR isolation' }; State 'waiting: lane 4080 runs a crossbow list (TDR isolation)'; Start-Sleep $TickSec; continue
+    }
     $f = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
     $rm = $null
     if (-not $f) {
