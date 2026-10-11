@@ -12,6 +12,9 @@
 set -u
 O="${1:?usage: batch-health.sh <out-dir> [stall-minutes]}"; STALL_MIN="${2:-20}"
 [ -f "$O/DONE" ] && { echo "HEALTH DONE $(tail -1 "$O/SUMMARY.txt" 2>/dev/null)"; exit 0; }
+# memory guard (rig-lane2.ps1): a batch waiting at a row boundary on <out>/HOLD (RAM short; run-batch.sh wrote
+# "NOTE hh:mm HOLD before <row>" as its last HOLD line) is healthy, not stalled; a row still running under HOLD is checked as usual
+if [ -f "$O/HOLD" ] && grep -a 'HOLD' "$O/SUMMARY.txt" 2>/dev/null | tail -1 | grep -q 'HOLD before'; then echo "HEALTH OK held: $(head -1 "$O/HOLD" | tr -d '\r')"; exit 0; fi
 # multi-instance: an out dir with .instance (rig-runner lane 5090b) belongs to install copy n (its harness, game dir, pids)
 if [ -f "$O/.instance" ]; then n_=$(tr -dc 0-9 <"$O/.instance"); if [ "${n_:-1}" -ge 2 ] 2>/dev/null; then export KAH_INSTANCE=$n_ KENSHI_DIR=/mnt/d/KenshiInst/$n_ KAH_DIR="D:\\KenshiInst\\$n_\\mods\\AutomationHarness"; fi; fi
 # kenshi_pids (multi-instance 2026-10-11): kenshi_x64 PIDs of THIS install only: KAH_INSTANCE=n>=2 = D:\KenshiInst\<n>, else

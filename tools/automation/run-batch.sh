@@ -39,6 +39,7 @@
 # NOTE line); DIALOG_GUARD=0 in a row's command turns both off.
 # <out>/PREEMPT (rig-runner: a filler gives way to a real list): the batch stops at the next row boundary (BATCH PREEMPTED
 # line + NOTE with the rows not run), then GAMEDONE / background analyses / BATCH END / DONE as usual.
+# <out>/HOLD (rig-lane2.ps1 memory guard): the batch waits at the next row boundary while it exists (NOTE on hold + resume).
 # Row env (setup-speed 2026-10-11): every row also gets KAH_ROW=<name> (take-preflight.sh names its setup-FAIL RESULT line
 # after it) and RELAUNCH_FILE=<out>/.relaunch.<name>. A row that leaves a reason in that file (take-preflight.sh
 # pf_combat_on: fp_combat on still refused = a latched native fault only a game restart clears; 40-rangedrows lost 15 rows
@@ -327,6 +328,13 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
   cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
   if [ "$RESUME" = 1 ] && grep -qxF "$name" "$D" 2>/dev/null; then echo "$(date +%H:%M) $name: ran before, skipped (--resume)"; continue; fi
+  # memory guard (rig-lane2.ps1, lane-5090c 2026-10-11): <out>/HOLD = RAM is short, wait at this row boundary until the
+  # lane removes it (RAM free again) or a PREEMPT arrives; one NOTE line on hold and on resume
+  if [ -f "$O/HOLD" ] && [ ! -f "$O/PREEMPT" ]; then
+    say "NOTE $(date +%H:%M) HOLD before $name: $(head -1 "$O/HOLD" 2>/dev/null | tr -d '\r')"
+    while [ -f "$O/HOLD" ] && [ ! -f "$O/PREEMPT" ]; do sleep 15; done
+    say "NOTE $(date +%H:%M) HOLD released before $name"
+  fi
   # rig-runner preemption (a filler gives way to real work): <out>/PREEMPT = stop at this row boundary; the running row has
   # its RESULT line, the rest are listed as not run (not in done.txt: --resume would run them), GAMEDONE/DONE as usual
   if [ -z "$PRE" ] && [ -f "$O/PREEMPT" ]; then PRE=$(head -1 "$O/PREEMPT" | tr -d '\r'); PRE=${PRE:-preempted}; say "BATCH PREEMPTED $(date '+%F %H:%M') before $name: $PRE"; fi
