@@ -2,6 +2,22 @@
 # row.sh (inside the dry-run sandbox, see sandbox.sh): prepare the row like run-batch.sh does, run its command, wait for
 # detached children (4080 itrun jobs), print the exit code. Output -> /drout/out.txt
 cd /root
+# fork server (lib/forksrv.py + lib/forkcli.c, speed-scout 2026-10-11): every stobe-auto call forks a preloaded kahstub
+# instead of starting python (~30 -> ~9 ms per call, ~3000 calls in a crossbow row); DR_NOFORK=1 or the file /root/.cache/kah-dryrun/nofork = off. Any failure =
+# the plain python wrappers sandbox.sh wrote stay in place.
+FSP=""
+if [ -z "${DR_NOFORK:-}" ] && [ ! -e /root/.cache/kah-dryrun/nofork ] && [ -f /dryrun/lib/forksrv.py ] && [ -f /dryrun/lib/forkcli.c ]; then
+  FC=/root/.cache/kah-dryrun/forkcli
+  cmp -s /dryrun/lib/forkcli.c /root/.cache/kah-dryrun/forkcli.c && [ -x "$FC" ] || { FC=/drstate/forkcli; gcc -O2 -o "$FC" /dryrun/lib/forkcli.c 2>/dev/null || FC=""; }
+  if [ -n "$FC" ]; then
+    /usr/bin/python3 /dryrun/lib/forksrv.py /drstate/fork.sock /dryrun/lib/kahstub.py > /drstate/forksrv.out 2>&1 < /dev/null & FSP=$!
+    for _ in $(seq 150); do grep -q READY /drstate/forksrv.out 2>/dev/null && break; /bin/sleep 0.02; done
+    if grep -q READY /drstate/forksrv.out 2>/dev/null; then
+      for w in /dryrun/bin/stobe-auto /usr/local/bin/stobe-auto; do printf '#!/bin/sh\nexec %s /dryrun/lib/kahstub.py "$@"\n' "$FC" > "$w"; done
+    else kill "$FSP" 2>/dev/null; FSP=""; fi
+  fi
+fi
+echo "forksrv: $([ -n "$FSP" ] && echo "on ($FC)" || echo off) $(head -c 200 /drstate/forksrv.out 2>/dev/null | grep -v READY)" > /drout/fork.txt
 echo "$(date +%s.%N)" > /drstate/t0; export DR_T0=$(cat /drstate/t0)
 O=/drout/out.txt
 {
@@ -54,3 +70,4 @@ if [ -f /drstate/children.jsonl ]; then
     echo "--- itrun child log $l"; cat "$l" 2>/dev/null; done >> "$O"
 fi
 echo "$rc" > /drout/rc.txt
+[ -n "$FSP" ] && kill "$FSP" 2>/dev/null
