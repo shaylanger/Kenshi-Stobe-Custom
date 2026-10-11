@@ -24,7 +24,7 @@ Memory guard (every tick, all lanes): RAM free < 4 GB -> the highest lane with a
   stops it at once when RAM free < 4 GB.
 Frame cap: lanes run at $Fps (30) fps: KAH_FPS for kenshi-gfx.ps1 at launch + framecap.txt of the copy rewritten every tick
   (the harness rereads it every second). Window: every tick the lane's window is placed at DISPLAY2.left + slot*(window width + 10), top (no room = left where it is),
-  HWND_NOTOPMOST, never activated, shrunk to the video mode (800x600: Ogre only accepts listed DXGI modes; 640x360 fell back to 4096x2160, m102) if far larger; never on the primary screen (the Samsung).
+  HWND_NOTOPMOST, never activated, shrunk to the video mode (1024x768: Kenshi replaced 640x360 + 1024x576 (not DXGI modes) and 800x600 (a DXGI mode: Kenshi's minimum?) with the screen's largest mode, m102) if far larger; never on the primary screen (the Samsung).
 Per list: if instance n is not running: kenshi-instance.ps1 sync -Instance n -Saves <launch save> (DLLs/mods/cfgs = what
   instance 1 has installed; the lane never installs anything itself); if it runs but instance 1's KenshiFP/harness DLL differs
   from the copy's, instance n is stopped and synced. Then run-batch.sh (snapshot in the out dir, lock game-n.lock owner
@@ -43,7 +43,7 @@ Files: runner\<lane>.{pid,log,state,cur,stopped,restart}; ALERT-<lane>-tdr.txt.
 param([switch]$SelfTest, [switch]$Fake, [ValidateSet('5090b', '5090c')][string]$Lane = '5090b', [int]$TickSec = 30, [int]$MinGpuMB = 6144,
       [int]$MinRamMB = 7168, [int]$HoldRamMB = 4096, [int]$KillRamMB = 2048, [int]$MaxCpuPct = 85, [int]$Fps = 30,
       [int]$StallMin = 10, [int]$IdleStopMin = 5, [int]$SlotPitch = 0,
-      [string]$VideoMode = '800 x 600', [string]$Monitor = 'DISPLAY2')   # extra lanes: small windows side by side on DISPLAY2 (lane A films on DISPLAY1, Shay 14:28/14:31)
+      [string]$VideoMode = '1024 x 768', [string]$Monitor = 'DISPLAY2')   # extra lanes: small windows side by side on DISPLAY2 (lane A films on DISPLAY1, Shay 14:28/14:31)
 # lane table: instance (D:\KenshiInst\<n>), window slot on $Monitor, CPU admission (a third game only while the CPU has room)
 $Lanes = [ordered]@{ '5090b' = @{ Inst = 2; Slot = 0; Cpu = $false }; '5090c' = @{ Inst = 3; Slot = 1; Cpu = $true } }
 $Inst = $Lanes[$Lane].Inst; $Slot = $Lanes[$Lane].Slot
@@ -130,7 +130,7 @@ if ($SelfTest) {
     # render size (agreerec-i2 m102: 640x360 is no DXGI mode, Ogre fell back to 4096x2160 and pf_rig expected 1600x900):
     # the lane's video mode is a listed display mode, and rig-env.sh hands the takes that size as RES_W x RES_H
     $n++; $modes = @(Get-CimInstance CIM_VideoControllerResolution -ErrorAction SilentlyContinue | ForEach-Object { "$($_.HorizontalResolution) x $($_.VerticalResolution)" } | Select-Object -Unique)
-    $ok = -not $modes.Count -or $modes -contains $VideoMode; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane video mode '$VideoMode' is a listed display mode ($($modes.Count) listed)"
+    $vw = [int]($VideoMode -split " x ")[0]; $ok = ($vw -ge 1024) -and (-not $modes.Count -or $modes -contains $VideoMode); if (-not $ok) { $bad++ }; "$(if ($ok) { "ok  " } else { "FAIL" }) lane video mode $VideoMode is a listed display mode ($($modes.Count) listed) and >= 1024 wide (800x600 fell back to 4096x2160)"
     foreach ($c in @(@("KAH_VIDEO_MODE='$VideoMode' KAH_GFX=low", ($VideoMode -replace ' ', '')), @('KAH_GFX=low', '1280x720'), @('KAH_GFX=full', '1600x900'))) {
         $n++; $g = (& 'C:\Program Files\Git\bin\bash.exe' -c "export $($c[0]); source /c/KenshiModding/tools/automation/rig-env.sh >/dev/null 2>&1; echo `${RES_W}x`${RES_H}" 2>&1 | Select-Object -Last 1)
         $ok = "$g" -eq $c[1]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) rig-env.sh RES for $($c[0]): got '$g' want '$($c[1])'"
