@@ -34,6 +34,8 @@ typedef struct {
     int phase, wih; float stch; unsigned napp; int has_napp;
     int has5; float wb; D3 mh, mfx; float zf; D3 hd, nk, sp, hy, hz; int has_hyz;
     int nok; D3 nj[2][3], nhx[2], nhy[2], nlp[2]; double nlq[2][4];   /* native (pre-IK) pose of this frame's apply */
+    int nax[2]; D3 nux[2], nuy[2], nfx[2], nfy[2];   /* native upper-arm / forearm X/Y axes (kfp-fist-recnative), nax = present */
+    int nl1ok; double nl1[2], nsc; D3 nhs[2];        /* solver's cached upper-arm length (dm), g_vm_scale, hand derived scale */
 } Rin;
 /* `# set <frame> <key> <value>` lines of the recording (frame -1 = before it started) */
 static struct { int f; char kv[96]; } g_rsets[1024]; static int g_nrsets, g_use_rsets = 1;
@@ -77,8 +79,8 @@ static int load_rec(const char *path)
             if (nx >= 9) { parse3(x[7], &r->hy); parse3(x[8], &r->hz); r->has_hyz = 1; }
         }
         if (ng > 5) {   /* native group (KenshiFP rec-native patch): nok, 6 joints, hand X/Y axes L R, prop local L R */
-            char *x[24]; int nx = 0;
-            for (tok = strtok_r(grp[5], " \t\n", &sv); tok && nx < 24; tok = strtok_r(NULL, " \t\n", &sv)) x[nx++] = tok;
+            char *x[32]; int nx = 0;
+            for (tok = strtok_r(grp[5], " \t\n", &sv); tok && nx < 32; tok = strtok_r(NULL, " \t\n", &sv)) x[nx++] = tok;
             if (nx >= 15 && atoi(x[0]) == 1) {
                 int ok = 1;
                 for (int s = 0; s < 2; s++) {
@@ -88,6 +90,15 @@ static int load_rec(const char *path)
                     ok &= sscanf(x[12 + 2 * s], "%lf,%lf,%lf,%lf", &r->nlq[s][0], &r->nlq[s][1], &r->nlq[s][2], &r->nlq[s][3]) == 4;
                 }
                 r->nok = ok;
+                if (ok && nx >= 23) for (int s = 0; s < 2; s++) {   /* kfp-fist-recnative: native bone roll (0,0,0 = unreadable) */
+                    int a = parse3(x[15 + 2 * s], &r->nux[s]) & parse3(x[16 + 2 * s], &r->nuy[s])
+                          & parse3(x[19 + 2 * s], &r->nfx[s]) & parse3(x[20 + 2 * s], &r->nfy[s]);
+                    r->nax[s] = a && r->nux[s].x * r->nux[s].x + r->nux[s].y * r->nux[s].y + r->nux[s].z * r->nux[s].z > 0.5
+                                  && r->nfx[s].x * r->nfx[s].x + r->nfx[s].y * r->nfx[s].y + r->nfx[s].z * r->nfx[s].z > 0.5;
+                }
+                if (ok && nx >= 27)
+                    r->nl1ok = sscanf(x[23], "%lf,%lf", &r->nl1[0], &r->nl1[1]) == 2 && sscanf(x[24], "%lf", &r->nsc) == 1
+                               && parse3(x[25], &r->nhs[0]) && parse3(x[26], &r->nhs[1]) && r->nl1[0] > 0 && r->nl1[1] > 0;
             }
         }
         RN++;
@@ -222,6 +233,7 @@ static void calibrate(void)
 static int g_nat;   /* record whose measured skeleton stands in for the native pose */
 static int g_napp_rec = -1;   /* record whose recorded native group drives the current apply (-1 = none) */
 static int g_use_native = 1, g_nat_used;
+static int g_rec_roll = 1, g_roll_used, g_l1_used;   /* --no-rec-roll: ignore recorded native bone roll (bend-normal model instead) */
 static int g_up_roll, g_hcap_live; static Vec3 g_rig_hn[2]; static int g_rig_have[2];   /* bone roll model (set_native) */
 static int g_cls_fill[2];
 static void set_native(int i)
@@ -248,9 +260,15 @@ static void set_native(int i)
             if (vm_len(hn) > 0.1f * vm_len(vm_sub(E, S)) * vm_len(vm_sub(W, E))) { g_rig_hn[s] = vm_norm(hn); g_rig_have[s] = 1; }
             if (g_rig_have[s]) rref = vm_mul(g_rig_hn[s], -1.0f); }
         Quat qua = q_xref(vm_sub(E, S), rref);
+        Quat qfa = q_xref(vm_sub(W, E), rref);
+        if (nr && nr->nax[s] && g_rec_roll) {   /* recorded native bone roll (kfp-fist-recnative): exact rig orientation */
+            Vec3 X = vm_norm(c2w(nr, nr->nux[s], 0)), Y = vm_norm(c2w(nr, nr->nuy[s], 0));
+            qua = q_axes(X, Y, vm_norm(vm_cross(X, Y)));
+            X = vm_norm(c2w(nr, nr->nfx[s], 0)); Y = vm_norm(c2w(nr, nr->nfy[s], 0));
+            qfa = q_axes(X, Y, vm_norm(vm_cross(X, Y))); g_roll_used++;
+        }
         fk_place(B_UA_L + s, S, qua, one);
         Vec3 En = nr ? E : vm_add(S, vm_mul(vm_norm(vm_sub(E, S)), C_L1[s]));
-        Quat qfa = q_xref(vm_sub(W, E), rref);
         fk_place(B_FA_L + s, En, qfa, one);
         Vec3 Hn = nr ? W : vm_add(En, vm_mul(vm_norm(vm_sub(W, E)), C_L2[s]));
         Quat qh = qfa;
@@ -263,6 +281,11 @@ static void set_native(int i)
         pb->ls = one;
     }
     if (nr) g_nat_used++;
+#ifdef AL_HAVE_L1REC
+    /* recorded solver upper-arm length (kfp-fist-recnative) replaces the fitted l1k model (--no-rec-roll: off too) */
+    for (int s = 0; s < 2; s++) g_al_l1n_rec[s] = nr && nr->nl1ok && g_rec_roll ? (float)nr->nl1[s] : 0.0f;
+    if (nr && nr->nl1ok && g_rec_roll) g_l1_used++;
+#endif
     fk_update();
 }
 static void fk_native(void *skel, const void *set, float w, const void *bmap) { (void)skel; (void)set; (void)w; (void)bmap; set_native(g_nat); }
@@ -363,6 +386,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[a], "--quiet")) g_al_quiet = 1;
         else if (!strcmp(argv[a], "--cold")) g_warm = 0;
         else if (!strcmp(argv[a], "--apply-all")) g_napp_mode = 0;
+        else if (!strcmp(argv[a], "--no-rec-roll")) g_rec_roll = 0;
         else if (!strcmp(argv[a], "--no-rec-sets")) g_use_rsets = 0;
         else if (!strcmp(argv[a], "--no-native")) g_use_native = 0;
         else if (!strcmp(argv[a], "--bw-lag")) g_bw_lag = 1;
@@ -476,6 +500,6 @@ int main(int argc, char **argv)
     }
     if (pdf) { fprintf(pdf, "# end done\n"); fclose(pdf); }
     int w = vm_rec_dump(argv[2]);
-    printf("frames %d written %d skipped_applies %d native_applies %d rec_sets %d\n", n, w, g_skipped, g_nat_used, g_nrsets);
+    printf("frames %d written %d skipped_applies %d native_applies %d roll_applies %d l1_applies %d rec_sets %d\n", n, w, g_skipped, g_nat_used, g_roll_used, g_l1_used, g_nrsets);
     return w > 0 ? 0 : 1;
 }
