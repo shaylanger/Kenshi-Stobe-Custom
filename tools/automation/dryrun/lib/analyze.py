@@ -12,6 +12,11 @@ import json, os, re, sys
 
 d, name, rig, cmd = sys.argv[1:5]
 norec = '--norec' in sys.argv
+# --verdicts (row word DRYRUN_VERDICTS=1 or "# dryrun: verdicts" in the script): the fake game can't play this row's product
+# states (inventory UI, walk speeds, KenshiFP states it doesn't model), so a script-reported FAIL is a note, not a FAIL.
+# Everything else is still judged (unknown commands, bad args, shell errors, missing files, RESULT present + unique per row).
+# Replaces "# nodryrun:" rows that checked nothing at all (speed-scout 2026-10-11: ~100 list starts with 0 rows checked).
+verdicts = '--verdicts' in sys.argv
 R = lambda f: os.path.join(d, f)
 
 
@@ -61,7 +66,7 @@ for r, ls in rows.items():
         fails.append('%d RESULT lines for %s' % (len(ls), r))
 for l in res:
     if re.match(r'^RESULT \S+ FAIL', l):
-        fails.append('script reported: ' + l[:200])
+        (notes if verdicts else fails).append('script reported: ' + l[:200])
 # recordings
 recs = []
 for l in read('recordings.jsonl').splitlines():

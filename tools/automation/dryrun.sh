@@ -12,6 +12,8 @@
 # --rig 4080 (or a RIG=4080 word in the row's command) emulates the 4080: Git Bash paths (/c/..., no /mnt), no wslpath,
 # Windows python, native ffmpeg that ignores 'q' on a fifo, rows run like C:\KAH\itrun.ps1 (fresh login shell +
 # rig-env.sh). DRYRUN_NOREC=1 in a row (or "# dryrun: norec" in its script) = a row that legitimately records nothing.
+# DRYRUN_VERDICTS=1 in a row (or "# dryrun: verdicts" in its script): the fake game can't play the row's product states,
+# its script-reported RESULT FAILs are notes; everything else is judged (use it instead of "# nodryrun:", which checks nothing).
 # Rows running Stobe wrappers (tests/ingame/stobe, *.txt scenarios) get static checks only (SKIP + bash -n).
 # run-batch.sh calls this before every batch and refuses a list that fails (override: --no-dryrun "<reason>").
 # --fixture night|combat|<file.json>: replay a world that broke real takes (dryrun/fixtures/*.json: game at 22 h; bandit
@@ -83,6 +85,8 @@ one() {
   case "$script" in /*) ;; *) [ -e "/mnt/c/KenshiModding/tests/ingame/stobe/$script" ] && script=/mnt/c/KenshiModding/tests/ingame/stobe/$script ;; esac
   local real=${script/#\/c\//\/mnt\/c\/}
   [ -f "$real" ] && grep -q '^# *dryrun: *norec' "$real" && norec=--norec
+  local verd=""; [[ " $cmd " =~ [[:space:]]DRYRUN_VERDICTS=1[[:space:]] ]] && verd=--verdicts
+  [ -f "$real" ] && grep -q '^# *dryrun: *verdicts' "$real" && verd=--verdicts
   case "$real" in
     */tests/ingame/stobe/*|*.txt)
       if [ ! -e "$real" ]; then echo "DRYRUN $name FAIL script $script missing log=$dir"; fail=$((fail+1)); return; fi
@@ -91,7 +95,7 @@ one() {
   esac
   [ "$rig" = 4080 ] && [ -z "${FETCHED:-}" ] && { FETCHED=1; bash "$D/fetch4080.sh" >&2; }
   unshare --mount --pid --fork --propagation private bash "$D/sandbox.sh" "$rig" "$dir" "$name" "$save" "$player" "$mate" "${DR_ROW_TIMEOUT:-240}" "$cmd" > "$dir/sandbox.txt" 2>&1
-  local v; v=$(python3 "$D/lib/analyze.py" "$dir" "$name" "$rig" "$cmd" $norec)
+  local v; v=$(python3 "$D/lib/analyze.py" "$dir" "$name" "$rig" "$cmd" $norec $verd)
   grep -q '^DRYRUN .* FAIL sandbox' "$dir/sandbox.txt" && v=$(grep -m1 '^DRYRUN' "$dir/sandbox.txt")
   echo "$v"
   case "$v" in "DRYRUN $name PASS"*) pass=$((pass+1)) ;; *) fail=$((fail+1)) ;; esac
