@@ -339,7 +339,7 @@ MUTS = [
     ('take-bystander', 'take', 'takes/ok-e6fix', t_near, ['takecheck']),
     ('take-combat-message', 'take', 'takes/ok-e6fix', t_msgs, ['takecheck']),
     ('rec-s3-windup-blade-off', 'rec', 'rec/e6s3-3f1a-5090.txt', m_s3_windup_off, ['inline-stroke3', 'pool-inline-stroke3']),
-    ('rec-path-late-drift', 'rec', 'ab2h-5090.txt', m_path_drift, ['path-stroke1']),
+    ('rec-path-late-drift', 'rec', 'rec/ab2h-5090.txt', m_path_drift, ['path-stroke1']),
     ('src-2hl-stroke0', 'src', 'src/KenshiFP-e6mask3-c4ee493.client.tar.gz', s_2hl_stroke0, ['stroke-cycle']),
 ]
 

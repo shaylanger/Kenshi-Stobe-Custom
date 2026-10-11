@@ -84,6 +84,6 @@ t86	rec/spec-xbow-A.txt	R10	accept	shay	refopt=--ref {root}/rec/f14-xb0.txt	spec
 t87	rec/spec-xbow-ready-hi.txt	R10	reject	shay	refopt=--ref {root}/rec/f14-xb0.txt	xbow-ready.mp4 RIGHT (high carry r_ready_py -0.8) rejected 2026-10-10
 t88	rec/spec-xbow-A.txt	R23	accept	shay		spec video xbow-reload.mp4 LEFT (two-hand upright reload, rlnat 1) accepted 2026-10-10
 t89	rec/spec-xbow-reload-rl0.txt	R23	reject	shay		xbow-reload.mp4 RIGHT (nose-down reload, rlnat 0) rejected 2026-10-10
-t90	pt17like-ect055-5090.txt	R30	reject	shay-sym	pre=--only-stroke 0	PT17 (same stroke keys as this take) stroke 0 rejected by Shay 2026-10-11: stops mid-screen, odd movement at the end
-t91	pt17like-ect055-5090.txt	R30	reject	shay-sym	pre=--only-stroke 3	PT17 stroke 3 rejected by Shay 2026-10-11: straight for 60-70 %, then slides perpendicular and ends tip at screen centre ("/|")
-t92	pt17like-ect055-5090.txt	R30	accept	shay-sym	pre=--only-stroke 1	PT17 stroke 1 (backhand) accepted (Shay 2026-10-11, scope 16:27: s1 accepted as it is; path info for s1)
+t90	rec/pt17like-ect055-5090.txt	R30	reject	shay-sym	pre=--only-stroke 0	PT17 (same stroke keys as this take) stroke 0 rejected by Shay 2026-10-11: stops mid-screen, odd movement at the end
+t91	rec/pt17like-ect055-5090.txt	R30	reject	shay-sym	pre=--only-stroke 3	PT17 stroke 3 rejected by Shay 2026-10-11: straight for 60-70 %, then slides perpendicular and ends tip at screen centre ("/|")
+t92	rec/pt17like-ect055-5090.txt	R30	accept	shay-sym	pre=--only-stroke 1	PT17 stroke 1 (backhand) accepted (Shay 2026-10-11, scope 16:27: s1 accepted as it is; path info for s1)
