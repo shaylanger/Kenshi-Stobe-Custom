@@ -9,6 +9,8 @@
 venc_args() {
   local crf=${1:-18} x264p=${2:-veryfast} ff=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
   local c="${TMPDIR:-/tmp}/kah-venc.${RIG:-5090}" enc=""
+  # /etc/kah-no-gpu (WSL host file, set after the 2026-10-11 BSOD): no GPU encoder, libx264 only
+  [ -e /etc/kah-no-gpu ] && [ -z "$VENC" ] && local VENC=x264
   case "${VENC:-auto}" in
     x264) enc=x264 ;;
     nvenc) enc=nvenc ;;
