@@ -408,6 +408,10 @@ while ($true) {
     $pv = PreDry $src 0 1200
     $sum = @($pv.Lines | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1)
     Log "dryrun $name : $($pv.V) $sum"
+    # 17:21 114a: the pre-dry run left no verdict (none) and the list went to failed\ after 4 good dry runs; none/PENDING = retry
+    # the next tick (up to 3 times), only PASS starts and only FAIL (or a 4th none) drops it
+    if ($pv.V -in @('none', 'PENDING')) { if (-not $script:pdRetry) { $script:pdRetry = @{} }; $script:pdRetry[$name] = 1 + [int]$script:pdRetry[$name]
+        if ($script:pdRetry[$name] -le 3) { if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue }; State "dry run of $name gave no verdict ($($pv.V)), retry $($script:pdRetry[$name])/3"; Start-Sleep $TickSec; continue } }
     if ($pv.V -ne 'PASS') { Drop "dryrun $($pv.V): $sum $(@($pv.Lines | Where-Object { $_ -match '^DRYRUN .* FAIL' } | Select-Object -First 2) -join ' | ')"; continue }
     $launch = @($txt | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
     $launch = if ($launch) { $launch[0] } else { ((LaneRows $txt)[0] -split '\|')[1].Trim() }
