@@ -251,6 +251,14 @@ pf_ranged_inj(){ local who=$1 e w r bow ws
     PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.5
     [ "$(pf_cs why)" = melee_in_hands ] && { PF_WHY="melee weapon still in $who's hands after R + unequip (why=melee_in_hands)"; return 1; }
     echo "pf_ranged_inj: melee weapon put away"; fi
+  # xbf-hits-r11 R11 (5090, after a save load with the katana drawn): R tap holstered the katana (no unequip), the injected
+  # aim drew + loaded the crossbow (why=ok), on release the adapter said melee_in_hands with the crossbow in hands
+  # (the katana stays equipped). Second pass: unequip every non-crossbow weapon, then arm again.
+  local pass; for pass in 1 2; do
+  [ $pass = 2 ] && { bow=$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')
+    ws=$(PF_A inv "$who" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | grep -v -i -x -F "${bow:-@@}")
+    while IFS= read -r w; do [ -n "$w" ] && PF_A unequip "$who" "$w" >/dev/null; done <<<"$ws"; sleep 1
+    echo "pf_ranged_inj: melee_in_hands after arming, unequipped: $(tr '\n' ',' <<<"$ws")"; }
   e=$((SECONDS+3)); while [ $SECONDS -lt $e ] && [ "$(pf_cs armed)" != 1 ]; do PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.3; done
   if [ "$(pf_cs armed)" != 1 ] || [ "$(pf_cs loaded)" != 1 ]; then   # holstered and/or empty: an injected aim draws + auto-reloads
     PF_A fp_combat input 1 0 0 >/dev/null; e=$((SECONDS+14)); r=0
@@ -260,6 +268,7 @@ pf_ranged_inj(){ local who=$1 e w r bow ws
         r=1; PF_A fp_combat input 1 0 1 >/dev/null; sleep 0.3; PF_A fp_combat input 1 0 0 >/dev/null; fi
       sleep 0.3; done
     PF_A fp_combat input 0 0 0 >/dev/null; sleep 1; fi
+  [ "$(pf_cs why)" = melee_in_hands ] || break; done
   [ "$(pf_cs armed)" = 1 ] && [ "$(pf_cs loaded)" = 1 ] || { PF_WHY="crossbow not drawn+loaded (armed=$(pf_cs armed) loaded=$(pf_cs loaded) reloading=$(pf_cs reloading) why=$(pf_cs why))"; return 1; }
   echo "pf_ranged_inj ok: armed=1 loaded=1"; }
 pf_ko(){ PF_A hp "$1" | grep -q ' KO '; }
