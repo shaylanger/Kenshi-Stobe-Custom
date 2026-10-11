@@ -29,6 +29,8 @@
 # C:\KAH\ctl.ps1 -Owner $KAH_OWNER). Relative scripts are looked up in tests/ingame/stobe, then components/KenshiFP/tests/ingame.
 # The running row's `timeout` pid is in <out>/step.pid: rig-runner.ps1 kills a stuck step with it (row FAIL, batch goes on).
 # rig-runner.ps1 runs a snapshot copy of this file from the out dir, so editing it never kills a running batch.
+# <out>/PREEMPT (rig-runner: a filler gives way to a real list): the batch stops at the next row boundary (BATCH PREEMPTED
+# line + NOTE with the rows not run), then GAMEDONE / background analyses / BATCH END / DONE as usual.
 set -u
 if grep -qi microsoft /proc/version 2>/dev/null; then CR=/mnt/c; else RIG=${RIG:-}; . /c/KenshiModding/tools/automation/rig-env.sh; fi   # the 4080 Git Bash mounts /mnt/c too
 KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
@@ -130,7 +132,7 @@ elif [ -n "$LAUNCH" ]; then
   launch "$LAUNCH"
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }
 fi
-pass=0; fail=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
+PRE=""; NOTRUN=(); pass=0; fail=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
 # Recording and analysis split (Shay 2026-10-10: the 5090 game sat idle 5 min while a take's lab checks ran): a row script
 # calls pf_game_done (take-preflight.sh: touches $GAME_DONE_FILE) once it no longer uses the game; the batch then goes on
 # with the next row while that script finishes its analysis in the background (normal priority). Its RESULT lines are
@@ -185,6 +187,10 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
   cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
   if [ "$RESUME" = 1 ] && grep -qxF "$name" "$D" 2>/dev/null; then echo "$(date +%H:%M) $name: ran before, skipped (--resume)"; continue; fi
+  # rig-runner preemption (a filler gives way to real work): <out>/PREEMPT = stop at this row boundary; the running row has
+  # its RESULT line, the rest are listed as not run (not in done.txt: --resume would run them), GAMEDONE/DONE as usual
+  if [ -z "$PRE" ] && [ -f "$O/PREEMPT" ]; then PRE=$(head -1 "$O/PREEMPT" | tr -d ''); PRE=${PRE:-preempted}; say "BATCH PREEMPTED $(date '+%F %H:%M') before $name: $PRE"; fi
+  if [ -n "$PRE" ]; then NOTRUN+=("$name"); continue; fi
   read -r freec kpriv <<<"$(memline)"
   echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
   if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
@@ -237,6 +243,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
     world 120 || { sleep 30; world 120 || { say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1; }; }
   else dead=1; fi
 done 3<"$L"
+[ -n "$PRE" ] && say "NOTE preempted: not run: ${NOTRUN[*]}"
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
 [ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
 touch "$O/GAMEDONE"; [ ${#PEND[@]} -gt 0 ] && echo "$(date +%H:%M) game part done; waiting for ${#PEND[@]} background analyses"
