@@ -231,7 +231,10 @@ pf_recwarn(){ local w; w=$(grep -oE 'rec-warn=[^] ]+' <<<"$1" | sed 's/^rec-warn
 # on with the next row while this script finishes its analysis in the background (Shay 2026-10-10: the game sat idle 5 min
 # during a take's lab checks). From here on the script must not touch the game: PF_ON_FAIL (game cleanup) is dropped.
 # Multi-take scripts call it only after the LAST take (earlier takes' analysis can run in the background: cmd & ... wait).
-pf_game_done(){ PF_ON_FAIL=""; [ -n "${GAME_DONE_FILE:-}" ] && : > "$GAME_DONE_FILE"; echo "pf_game_done: game part over, analysis next"; return 0; }
+# PF_PRE_DONE (sword-judge 2026-10-11): a command run right BEFORE the game is released (e.g. fp-e6-tables.sh LT_RESET=1
+# `fp_tables reset`). A cleanup after the background analysis raced the next row: it reset that row's freshly loaded
+# tables (105f s3hold/s3cont filmed the compiled tables: rec hash 38943ca5 after load 1ab6f7f3).
+pf_game_done(){ [ -n "${PF_PRE_DONE:-}" ] && { eval "$PF_PRE_DONE"; PF_PRE_DONE=""; : > "${PF_PRE_DONE_MARK:-/dev/null}"; }; PF_ON_FAIL=""; [ -n "${GAME_DONE_FILE:-}" ] && : > "$GAME_DONE_FILE"; echo "pf_game_done: game part over, analysis next"; return 0; }
 pf_begin(){ PF_ROW=$1; PF_DONE=""; trap '_pf_rc=$?; [ -n "$PF_DONE" ] || echo "RESULT ${PF_ROW:-take} FAIL setup: take script ended without a RESULT line (exit $_pf_rc)"' EXIT; }
 pf_outdir(){ mkdir -p "$1" 2>/dev/null; [ -d "$1" ] || pf_fail "out dir $1 is not a directory (mkdir failed)"
   ( : > "$1/.pf-w" ) 2>/dev/null && rm -f "$1/.pf-w" || pf_fail "out dir $1 not writable"; echo "pf_outdir ok: $1"; }

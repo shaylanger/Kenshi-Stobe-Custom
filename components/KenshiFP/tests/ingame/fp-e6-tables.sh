@@ -11,6 +11,10 @@ r=$(stobe-auto fp_tables load "$W" </dev/null 2>&1)
 echo "$r" | grep -q ' bad=0' && echo "$r" | grep -q 'hash=' || { echo "RESULT E6-$N FAIL setup: fp_tables load $W: $(echo "$r" | tr '\n' ' ' | cut -c1-160)"; exit 1; }
 echo "note: tables loaded: $(echo "$r" | grep -o 'hash=[0-9a-f]*' | head -1) file=$W"
 set -- "$1" "$2" "${@:4}"
+# LT_RESET=1: reset BEFORE the game is released (pf_game_done runs PF_PRE_DONE), never after the background analysis (it
+# raced the next row's fp_tables load, 105f); the trailing reset only covers takes that stopped before pf_game_done.
+MK=$(mktemp); rm -f "$MK"
+[ "${LT_RESET:-0}" = 1 ] && export PF_PRE_DONE="stobe-auto fp_tables reset </dev/null >/dev/null 2>&1" PF_PRE_DONE_MARK="$MK"
 bash "$HERE/fp-e6-strokes.sh" "$@"; rc=$?
-[ "${LT_RESET:-0}" = 1 ] && stobe-auto fp_tables reset </dev/null >/dev/null 2>&1
+[ "${LT_RESET:-0}" = 1 ] && [ ! -e "$MK" ] && stobe-auto fp_tables reset </dev/null >/dev/null 2>&1; rm -f "$MK"
 exit $rc
