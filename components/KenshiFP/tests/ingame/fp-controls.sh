@@ -190,16 +190,30 @@ sleep 1; draw_to 0 || setup_fail "$SH weapon would not holster (drawn=$(ks drawn
 echo "SETUP sh=$SH mt=$MT#$MTID tg=$TG$TGH bow='$BOWN' auto_reload=$AR0 home=$HOME controlled=$H0" >> "$LOG"
 
 # ---- K01: native RMB walk swallowed; control: swallow off ----
-if want K01; then ui_clear; look "$(cam yaw)" 0.5
-  S0=$(ks rmb_swallowed); N0=$(ks native_injected); P0=$(pos "$SH"); A fp_keys native rmb 20 >/dev/null; sleep 3
-  S1=$(ks rmb_swallowed); N1=$(ks native_injected); DON=$(d2 "$P0" "$(pos "$SH")")
-  A fp_keys swallow off >/dev/null; P0=$(pos "$SH"); A fp_keys native rmb 20 >/dev/null; sleep 4
-  S2=$(ks rmb_swallowed); DOFF=$(d2 "$P0" "$(pos "$SH")"); A fp_keys swallow on >/dev/null
-  A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null
-  ev="swallow_on: rmb_swallowed $S0->$S1 injected $N0->$N1 moved=$DON | swallow_off: rmb_swallowed $S1->$S2 moved=$DOFF"
-  ok=1; [ $((S1-S0)) -ge 1 ] && [ "$S2" = "$S1" ] && [ $((N1-N0)) -ge 20 ] || ok=0; lt "$DON" "$STILL_MAX" || ok=0
-  if [ $ok = 1 ] && ! ge "$DOFF" "$MOVE_MIN"; then row K01 FAIL "inconclusive: the control (swallow off) native RMB did not move him either (cursor ground point unknown): $ev"
-  else judge K01 $ok "$ev"; fi; fi
+# Setup first (5090 31-rg01 2026-10-11: K01 "inconclusive", the control RMB moved him 0.00 at the unchecked camera yaw;
+# passes at other spots moved 30-43): the crosshair must rest on open ground (fp_keys pick: result=none, hit 15-120 ahead,
+# up to 6 yaws 60 deg apart; the pinned mate stands 2.5 m in front) and the CONTROL (swallow off) must move him there
+# (up to 3 ground points) before the swallow_on half is judged at that same point; else RESULT K01 FAIL setup.
+k01_ground() { local k y PK; for k in 0 1 2 3 4 5; do y=$(awk -v a="${1:-0}" -v k=$k 'BEGIN{printf "%.4f", a+k*1.0472}')
+    look "$y" 0.5; A fp_keys pick >/dev/null; sleep 0.3; PK=$(A fp_keys pick show)
+    K01PK="result=$(fld result <<<"$PK") hit_dist=$(fld hit_dist <<<"$PK")"
+    [ "$(fld result <<<"$PK")" = none ] && ge "$(fld hit_dist <<<"$PK")" 15 && lt "$(fld hit_dist <<<"$PK")" 120 && { K01Y=$y; return 0; }
+  done; return 1; }
+if want K01; then ui_clear; Y=$(cam yaw); Y=${Y:-0}; K01OK=0; KT=0; DOFF=""
+  while [ $KT -lt 3 ]; do KT=$((KT+1)); k01_ground "$Y" || break
+    SA=$(ks rmb_swallowed); A fp_keys swallow off >/dev/null; P0=$(pos "$SH"); A fp_keys native rmb 20 >/dev/null; sleep 4
+    SB=$(ks rmb_swallowed); DOFF=$(d2 "$P0" "$(pos "$SH")"); A fp_keys swallow on >/dev/null
+    A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null
+    echo "K01 control try $KT: yaw=$K01Y $K01PK moved=$DOFF" >> "$LOG"
+    ge "$DOFF" "$MOVE_MIN" && { K01OK=1; break; }; Y=$(awk -v a="$K01Y" 'BEGIN{printf "%.4f", a+1.0472}'); done
+  if [ $K01OK = 0 ]; then row K01 FAIL "setup: no open ground point where the control (swallow off) native RMB moves $SH (tries=$KT, last pick $K01PK moved=${DOFF:-none})"
+  else look "$K01Y" 0.5
+    S0=$(ks rmb_swallowed); N0=$(ks native_injected); P0=$(pos "$SH"); A fp_keys native rmb 20 >/dev/null; sleep 3
+    S1=$(ks rmb_swallowed); N1=$(ks native_injected); DON=$(d2 "$P0" "$(pos "$SH")")
+    A teleport "$SH" $HOME >/dev/null; sleep 1.5; take "$SH" >/dev/null
+    ev="ground yaw=$K01Y $K01PK | swallow_off (control, try $KT): rmb_swallowed $SA->$SB moved=$DOFF | swallow_on: rmb_swallowed $S0->$S1 injected $N0->$N1 moved=$DON"
+    ok=1; [ $((S1-S0)) -ge 1 ] && [ "$SB" = "$SA" ] && [ $((N1-N0)) -ge 20 ] || ok=0; lt "$DON" "$STILL_MAX" || ok=0
+    judge K01 $ok "$ev"; fi; fi
 
 # ---- K02: MMB select the mate, no camera rotate ----
 if want K02; then ui_clear; aim_at "$MT" 13; Y0=$(cam yaw); M0=$(ks mmb_selects); C0=$(ks mmb_cam_frames)

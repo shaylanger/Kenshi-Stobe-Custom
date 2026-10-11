@@ -13,6 +13,8 @@
 #             conversation (5090 20-rg04 M08 Dust Bandit); passes only with the batch dialog guard (tools/automation/dialog-guard.sh)
 #   actor     (--fixture raider-on-mate, DRYRUN_NOREC=1) control handed to Axima, whom a Dust Bandit fights (5090 33-rg04
 #             M08-ACTOR): pf_calm clears the raider, ai_refused stays flat -> PASS; actor-bare without pf_calm -> FAIL
+#   rmb-bare  (--fixture rmb-blocked, DRYRUN_NOREC=1) the old K01 control: native RMB at the unchecked yaw, crosshair on
+#             the mate -> no walk -> FAIL (5090 31-rg01 K01); fp-controls.sh ROWS=K01 in the same world -> PASS
 #   noiso     R sent with key_inject without pf_iso and no ready check (b4080c xbow takes filmed holstered: the 4080
 #             launch leaves input isolation off); run with --rig 4080
 #   (fixture stall: a 1.5 s hole in the take sampler, blkH; caught by takecheck cover, before filming by pf_latency)
@@ -46,6 +48,19 @@ if [ "$MODE" = actor ] || [ "$MODE" = actor-bare ]; then
   o=$(A fp_melee state $SH | grep -o ' active=[^ ]* \| target_h=[^ ]*' | tr -d '\n')
   if [ "$r1" = "$r0" ]; then pf_result PASS "ai_refused $r0->$r1 with $SH controlled ($o)"
   else pf_result FAIL "ai_refused rose $r0->$r1 with $SH controlled: her own fight ($o)"; fi
+  exit 0
+fi
+if [ "$MODE" = rmb-bare ]; then
+  # fixture rmb-blocked (5090 31-rg01 K01 2026-10-11): the old K01 order, native RMB control at the unchecked camera yaw
+  # with no open-ground check; the crosshair is on the mate there, so the control walks nowhere (fp-controls.sh K01 now
+  # finds open ground with fp_keys pick and proves the control moves first: selftest ctl-k01)
+  A select $SH >/dev/null; A fp_control take >/dev/null; y=$(A fp_camera state | grep -o '\byaw=[^ ]*' | head -1 | cut -d= -f2)
+  A fp_camera look "${y:-0}" 0.5 >/dev/null; p0=$(A where $SH | grep -o 'pos=[^ ]*' | cut -d= -f2)
+  A fp_keys swallow off >/dev/null; A fp_keys native rmb 20 >/dev/null; sleep 4; A fp_keys swallow on >/dev/null
+  p1=$(A where $SH | grep -o 'pos=[^ ]*' | cut -d= -f2)
+  m=$(awk -v a="$p0" -v b="$p1" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.2f", sqrt((q[1]-p[1])^2+(q[3]-p[3])^2)}')
+  if awk -v m="$m" 'BEGIN{exit !(m >= 10)}'; then pf_result PASS "control moved=$m"
+  else pf_result FAIL "control (swallow off) native RMB did not move $SH (moved=$m, no open-ground check)"; fi
   exit 0
 fi
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }

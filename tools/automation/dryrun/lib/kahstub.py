@@ -10,7 +10,8 @@ model (fixture squad, inventories, drawn weapon, block/aim/reload timeline, came
   NOTE  known commands the stub only answers generically
 Each call advances the virtual clock by DR_LATENCY (default 0.3 s: one 250 ms harness poll + client start).
 """
-import json, os, re, sys
+import json
+import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dr  # noqa: E402
 import kfpreply  # noqa: E402
@@ -135,6 +136,7 @@ def new_state(save):
              # fixtures/spawn-hostile.json (23-rg02 ST02/ST03): spawns of these templates/factions ('*' = all) read
              # isEnemy=1 whatever the relation; sneak_aware_lag: see sneak_aware
              spawn_hostile=f.get('spawn_hostile', []), sneak_aware_lag=float(f.get('sneak_aware_lag', 0)),
+             pick_blocked=f.get("pick_blocked", []),
              # fixtures/dialog.json (2026-10-10 20-rg04 M08): NPC conversations that open the dialogue window `at` s after
              # the load and stay open until `dialog close` (KenshiFP fp_state ui_open=1 ui_why=panels meanwhile)
              dlg=[dict(e, vt=dr.vnow() + float(e.get('at', 0)), closed=0) for e in f.get('dialog', [])],
@@ -490,7 +492,8 @@ def fpkeys_state(s):
     v = dict(hook=1, fp=1 if s['fpchar'] else 0, drawn=f['drawn'], wih=0 if w in (None, 'fists') else 1,
              ranged=0 if f['melee'] else 1, fists=1 if w == 'fists' else 0, ui_state=f['ui_state'], hud=1, hud_shown=1,
              hud_text=f['hud_text'], hud_changes=3, speed_now='%.2f' % s.get('speed', 1), speed_target='%.2f' % s.get('speed', 1),
-             speed_guard=1, ctx_hook=1, gui_hook=1, hud_native_vis=0, ticks=1000, free_swings=s.get('free_swings', 0))
+             speed_guard=1, ctx_hook=1, gui_hook=1, hud_native_vis=0, ticks=1000, free_swings=s.get('free_swings', 0),
+             swallow=s.get('swallow', 1), rmb_swallowed=s.get('rmb_swallowed', 0), native_injected=s.get('native_injected', 0))
     sk, me = s.get('sk', {}), s['chars'].get(s.get('fpchar') or '') or {}
     v.update(sneak=me.get('sneak', 0), sneak_clicks=sk.get('clicks', 0), sneak_attacks=sk.get('attacks', 0),
              sneak_path=sk.get('path', 'none'), sneak_result=sk.get('result', 'none'), engages=sk.get('engages', 0),
@@ -716,8 +719,10 @@ def fp_melee_cmd(s, a, now):
         dr.flag('NOTE', 'fp_melee %s answered generically' % ' '.join(a))
         return True, 'fp_melee %s ok (dryrun)' % ' '.join(a)
     f = char(s, a[1]) if len(a) == 2 else fighter(s)
+    if not f and len(a) == 1:   # nobody controlled yet (fp-controls.sh setup probe runs before the take): an idle state
+        return True, kfpreply.render('melee', controlled=0, active=0, state=4, target_h='#0/0', frame_dt='0.016667')
     if not f:
-        return False, 'controlled actor unavailable' if len(a) == 1 else 'character not found'
+        return False, 'character not found'
     me = f is fighter(s)
     tg = fight_target(s) if me else own_fight(s, f)
     st = mstate(s, now) if me else 4
@@ -1186,7 +1191,8 @@ def handle(s, cmd, a, now, sp):
         if sub == 'ctl':
             return True, kfpreply.render('ctl', target='none', src='none', last='none', via='none', native_target='none')
         if sub == 'pick' and len(a) > 1 and a[1] == 'show':
-            return True, kfpreply.render('pick', n=s.get('picks', 0), result=s.get('pick', 'none'))
+            return True, kfpreply.render('pick', n=s.get('picks', 0), result=s.get('pick', 'none'),
+                                         hit_dist='%.2f' % s.get('pick_hit', 0.0))
         if sub == 'pick':
             s['picks'] = s.get('picks', 0) + 1
             # crosshair = the nearest standing non-squad character within 3 m of the FP character (a pinned row target)
@@ -1194,8 +1200,33 @@ def handle(s, cmd, a, now, sp):
             near = sorted((flat(me, c), k) for k, c in s["chars"].items()
                           if k not in s["squad"] and not c.get("ko") and flat(me, c) <= 30) if me else []
             s['pick_t'] = near[0][1] if near else None
-            s['pick'] = uname(s['chars'][s['pick_t']]['name']) if near else 'terrain'
+            s['pick'] = uname(s['chars'][s['pick_t']]['name']) if near else 'none'   # KenshiFP: result=none off characters
+            s['pick_hit'] = near[0][0] if near else 30.0   # open ground ~3 m ahead at pitch 0.5 (5090 K01 moved 30-43)
+            # fixture pick_blocked [[yaw_lo, yaw_hi, name], ...]: that character fills the crosshair at those camera yaws
+            # (fixture rmb-blocked: 5090 31-rg01 K01, the control native RMB at the unchecked yaw moved him 0.00)
+            y = (s['cam']['yaw'] + math.pi) % (2 * math.pi) - math.pi
+            for lo, hi, nm in s.get('pick_blocked', []):
+                if lo <= y <= hi:
+                    s['pick_t'], s['pick'], s['pick_hit'] = None, uname(nm), 25.0
             return True, 'pick requested'
+        if sub == 'swallow' and len(a) > 1:
+            s['swallow'] = 0 if a[1] == 'off' else 1
+            return True, 'swallow=%d' % s['swallow']
+        if sub == 'native' and len(a) > 1 and a[1] == 'rmb':
+            # native RMB walk order at the crosshair: swallowed in FP (rmb_swallowed n+1), else a walk to the open ground
+            # point under it; a character under it (fixture pick_blocked) = no walk
+            n = int(a[2]) if len(a) > 2 and a[2].isdigit() else 1
+            s['native_injected'] = s.get('native_injected', 0) + n
+            if s.get('swallow', 1):
+                s['rmb_swallowed'] = s.get('rmb_swallowed', 0) + n + 1
+            else:
+                y = s['cam']['yaw']
+                y_ = (y + math.pi) % (2 * math.pi) - math.pi
+                blocked = any(lo <= y_ <= hi for lo, hi, _ in s.get('pick_blocked', []))
+                me = s['chars'].get(s.get('fpchar') or '')
+                if me and not blocked:
+                    me['pos'][0] += 30.0 * math.sin(y); me['pos'][2] += 30.0 * math.cos(y)
+            return True, 'native flags queued (playerControl input)'
         if sub == 'sneak' and len(a) > 1 and a[1] == 'show':
             t = crosshair(s)
             me = s['chars'].get(s.get('fpchar') or '') or {}
@@ -1460,6 +1491,8 @@ def handle(s, cmd, a, now, sp):
         tu['on'] = 0; tu['leaves'] += 1
         sched(s, now + 0.6, 'turret', hud_text='holstered', ui_state='holstered', vm='holstered', drawn=0)
         return True, 'fp_move %s' % a[0]
+    if cmd == 'fp_move' and (not a or a[0] == 'state'):   # fp-controls.sh setup probe (rg-01 K rows: "KenshiFP has no fp_move")
+        return True, 'keys=none held=0'
     if cmd == 'fp_gear':   # kfp fp_gear: worn-item map, one '|' entry per slot ('hands' = the drawn weapon's own entity)
         h = (' | hands type=107 mesh=0000000305beeca0 vis=1 vf=4 ours=0 node=-100.43,660.83,98.16 hand=0.00 parts=3 partsVis=3'
              if fp['drawn'] else '')
