@@ -31,7 +31,9 @@ $args2 = "-NoProfile -ExecutionPolicy Bypass -File C:\KAH\tools\kenshi-ctl.ps1 $
 $wrap = "C:\KenshiTestRuns\ctl-run-$($id.Substring(0, 12)).cmd"
 # instance >= 2: inst-window.ps1 (desktop session) parks its windows right of the screen + retitles "[i<n>]" while it runs
 $watch = if ($Instance -ge 2 -and $Command -in 'launch', 'restart' -and (Test-Path 'C:\KAH\inst-window.ps1')) { "@start `"`" /b powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\KAH\inst-window.ps1 -Instance $Instance`r`n" } else { '' }
-Set-Content $wrap "$watch@powershell $args2 > `"$out`" 2>&1`r`n@echo __DONE__>> `"$out`"" -Encoding ASCII
+# SteamNoOverlayUIDrawing=1: the game (inherits it) loads Steam's overlay renderer but draws no overlay UI, so no
+# "Access Steam features from the overlay" toast in takes (SETUP_MISSES Z1, steam-popup 2026-10-11); Steam itself untouched
+Set-Content $wrap "@set SteamNoOverlayUIDrawing=1`r`n$watch@powershell $args2 > `"$out`" 2>&1`r`n@echo __DONE__>> `"$out`"" -Encoding ASCII
 $tn = "KAH_ctl_$($id.Substring(0, 12))"
 schtasks /create /tn $tn /tr "`"$wrap`"" /sc once /st 23:59 /it /f | Out-Null
 schtasks /run /tn $tn | Out-Null
