@@ -17,6 +17,9 @@
 #     /tmp/labnice/held.<pid>), SIGCONT when the recording ends. LABNICE_REC_SLOTS=0 = old rule: every job pauses/waits.
 #   - slots are taken all-or-nothing (no partial holds: deadlock fix), after 300 s whatever is free (>= 1)
 #   - while recording a request above LABNICE_REC_SLOTS starts at once with that many (LABNICE_J sized down)
+#   - -p (priority, the ONE KenshiFP build line only: kfp-pipeline/kfp-buildwatch): may also take the reserve slots
+#     LABNICE_SLOTS+1..+LABNICE_RESERVE (default 6), tried first, so staging never queues behind climbers/sweeps holding
+#     16/16 (2026-10-11: run-bl-1011-1838 waited with WSL load 16/32); while a take records it gets the normal budget
 #   - selftest: labnice-selftest.sh (WSL, private LAB_D/LAB_RECDIR; recording flag, stale flags, no pause before held file)
 set -u
 if [ -e /mnt/c/KenshiTestRuns/uncapped.on ]; then RD=20; SD=$(( $(nproc --all) - 4 )); else RD=12; SD=$(( $(nproc --all) / 2 )); fi   # uncapped.on (Shay 2026-10-11: PC free, use it fully): 28/20 slots, else 16/12
@@ -31,7 +34,8 @@ if [ "${1:-}" = --renice ]; then
     for q in $p $(pgrep -P "$p"); do renice -n 15 -p "$q" >/dev/null 2>&1; ionice -c 3 -p "$q" >/dev/null 2>&1; done; echo "reniced $p"
   done; exit 0
 fi
-N=1; [ "${1:-}" = -s ] && { N=$2; shift 2; }
+N=1; PRIO=0; RES=${LABNICE_RESERVE:-6}
+while :; do case "${1:-}" in -s) N=$2; shift 2;; -p) PRIO=1; shift;; *) break;; esac; done
 [ $# -ge 1 ] || { sed -n '2,15p' "$0"; exit 2; }
 [ "$N" -gt "$SLOTS" ] && N=$SLOTS
 # held slots for lab-recpause.sh (recording budget): written FIRST, before anything else can run (fix 2026-10-11: a job
@@ -61,7 +65,8 @@ if [ -z "${LABNICE_SLOT:-}" ]; then
     fds=(); LIM=$SLOTS
     [ "$RECS" -gt 0 ] && [ "$RECS" -lt "$SLOTS" ] && [ -f "$ME/lab-recpause.sh" ] && bash "$ME/lab-recpause.sh" --recording && LIM=$RECS
     NW=$N; [ "$NW" -gt "$LIM" ] && NW=$LIM
-    for i in $(seq 1 "$LIM"); do
+    ord=$(seq 1 "$LIM"); [ $PRIO = 1 ] && [ "$LIM" = "$SLOTS" ] && [ "$RES" -gt 0 ] && ord="$(seq $((SLOTS + 1)) $((SLOTS + RES))) $ord"
+    for i in $ord; do
       [ ${#got[@]} -ge "$NW" ] && break
       exec {f}>"$D/slot.$i"; if flock -n "$f"; then got+=("$i"); fds+=("$f"); else exec {f}>&-; fi
     done

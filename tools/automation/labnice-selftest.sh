@@ -31,6 +31,13 @@ sleep 4
 LAB_RECMAX=3 bash "$DIR/lab-recpause.sh" --recording; ok $([ $? = 1 ] && echo 1) "ffmpeg gdigrab running > LAB_RECMAX is stale"
 r=$(LAB_RECMAX=3 job 16); ok $([[ "$r" =~ ^J=16\ t=[012]$ ]] && echo 1) "stale ffmpeg: -s 16 starts at once with 16 ($r)"
 kill $FPID 2>/dev/null; FPID=
+# -p (build line): with all 16 slots held it starts at once on the reserve; a normal job still waits
+LAB_NODAEMON=1 bash "$DIR/labnice.sh" -s 16 sleep 8 & HP=$!; sleep 1
+r=$(t0=$(date +%s); LAB_NODAEMON=1 timeout 20 bash "$DIR/labnice.sh" -p -s 6 bash -c 'echo "$LABNICE_J $LABNICE_SLOT"' 2>/dev/null | tail -1; echo " t=$(( $(date +%s) - t0 ))")
+ok $([[ "$(echo $r)" =~ ^6\ 17\ 18\ 19\ 20\ 21\ 22\ t=[01]$ ]] && echo 1) "-p -s 6 with 16/16 held: reserve slots at once ($(echo $r))"
+r=$(LAB_NODAEMON=1 LABNICE_PARTIAL=999 timeout 3 bash "$DIR/labnice.sh" -s 1 echo ran 2>/dev/null)
+ok $([ -z "$r" ] && echo 1) "normal -s 1 with 16/16 held waits (no reserve)"
+kill $HP 2>/dev/null; pkill -f "sleep 8" -P $HP 2>/dev/null; wait $HP 2>/dev/null
 
 # daemon cases (private daemon; jobs with LAB_NODAEMON so they don't start another one)
 bash "$DIR/lab-recpause.sh" & DPID=$!; sleep 1
