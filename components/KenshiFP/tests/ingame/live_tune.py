@@ -155,8 +155,8 @@ def fill_spec(spec, x0):
         s['x0'] = v
         if s['step'] is None:
             s['step'] = max(0.05, 0.15 * abs(v))
-        if s['lo'] is None:
-            s['lo'] = v - 4 * s['step']
+        if s['lo'] is None:   # a positive scalar stays positive (the game rejects e.g. elbhyst < 0: bad=1)
+            s['lo'] = v - 4 * s['step'] if ('.' in s['lhs'] or v <= 0) else max(v - 4 * s['step'], 0.0)
         if s['hi'] is None:
             s['hi'] = v + 4 * s['step']
         s['x0'] = min(max(v, s['lo']), s['hi'])
@@ -213,7 +213,9 @@ def tune(a):
         write_variant(vf, base_lines, spec, x, cid)
         o = run_eval(a.eval_cmd, ['--eval', vf, cid] + ([str(cycles)] if cycles else []), a.eval_timeout)
         m = re.search(r'^EVAL OK hash=(\S+) rec=(.+)$', o, re.M)
-        if not m:
+        if not m and 'EVAL FAIL load' in o:   # value out of the game's range: a bad point, not a setup failure
+            sc, d = 500.0, dict(rejected=(o.strip().splitlines() or [''])[-1][:160])
+        elif not m:
             sc, d = 1000.0, dict(miss='eval: ' + (o.strip().splitlines() or ['no output'])[-1][:160])
         else:
             sc, d = score_rec(m.group(2).strip(), a.stroke, tools, a.vmcheck)
@@ -237,7 +239,7 @@ def tune(a):
                      maxevals=a.budget, bounds=[(s['lo'], s['hi']) for s in spec], workers=1, round_to=1e-4,
                      log=lambda *q: None)
     # confirm: the 2 best (and base) again with more cycles; winner = best worst-case
-    ranked = sorted([h for h in st['hist'] if 'miss' not in h[3]], key=lambda h: h[0])
+    ranked = sorted([h for h in st['hist'] if 'miss' not in h[3] and 'rejected' not in h[3]], key=lambda h: h[0])
     cands, seen = [], set()
     for h in ranked:
         k = tuple(round(v, 4) for v in h[2])
