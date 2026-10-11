@@ -208,7 +208,7 @@ else echo "REGRESS INFO E1 inline candidate kfp-e1-inline.py not built (missing 
 for r in f14-e0 vmq85a7-sw; do b=$(python3 "$L/animlab.py" branch "$W/$r.txt" | cut -c1-120)
   case "$b" in "branch PASS"*) ok "ready branch game $r: $b";; *) bad "ready branch game $r: $b";; esac; done
 echo "REGRESS INFO ready branch game f13-sw0: $(python3 "$L/animlab.py" branch "$W/f13-sw0.txt" | cut -d' ' -f1-2)"
-if bash "$HERE/build.sh" --rev f41f862 --no-l1 --out "$BLD/kfpvm_rb0" >/tmp/al-build9.txt 2>&1; then
+if bash "$HERE/build.sh" --rev f41f862 --no-l1 --no-hoff --out "$BLD/kfpvm_rb0" >/tmp/al-build9.txt 2>&1; then
   for r in f13-sw0 f14-e0; do rp "$BLD/kfpvm_rb0" "$W/$r.txt" /tmp/al-rb0.txt --quiet >/dev/null 2>&1
     b=$(python3 "$L/animlab.py" branch /tmp/al-rb0.txt | cut -c1-160)
     case "$b" in "branch FAIL"*":BAD"*) ok "miss ready branch B reproduced (replay $r @f41f862): $b";; *) bad "ready branch B not caught on $r @f41f862: $b";; esac; done
@@ -494,10 +494,13 @@ if [ -f "$OB" ] && [ -f "$OS" ]; then
   r=$(python3 "$HERE/fist-take-check.py" "$OB" "$CORPUS/fists/pass-20261010-u22/shoteiL" --swings "$OS")
   case "$r" in *"verified 2; excluded: swing 3 body"*"fistgame FAIL"*"hud=FAIL"*) ok "fistgame op-b6 shoteiL v4: swing 3 excluded, hud FAIL";;
     *) bad "fistgame op-b6 shoteiL v4 (want FAIL, swing 3 excluded, hud=FAIL): $(echo "$r" | tail -1)";; esac
-  FH=/mnt/c/KenshiModding/pending-fixes/kfp-fist-hud.py; PA=(); [ -s "$FH" ] && PA=(--patch "$FH")
-  if bash "$HERE/build.sh" --src /root/KenshiFP/client "${PA[@]}" --out /tmp/al-fisthud > /tmp/al-fisthud.log 2>&1      && /tmp/al-fisthud "$OB" /tmp/al-fisthud.rec --fist shoteiL --apply-all --quiet > /dev/null; then
+  FH=/mnt/c/KenshiModding/pending-fixes/kfp-fist-hud.py; [ -s "$FH" ] || FH=/mnt/c/KenshiModding/pending-fixes/hold/kfp-fist-hud.py   # held since native fists (kfp-fist-native, Shay 2026-10-10 18:20)
+  PA=(); [ -s "$FH" ] && PA=(--patch "$FH")
+  if bash "$HERE/build.sh" --src /root/KenshiFP/client "${PA[@]}" --out /tmp/al-fisthud > /tmp/al-fisthud.log 2>&1      && /tmp/al-fisthud "$OB" /tmp/al-fisthud.rec --fist shoteiL --apply-all --quiet $(grep -q g_vm_fist_nat /tmp/al-fisthud.d/client/kfp_viewmodel.inc 2>/dev/null && echo --set fist_native=0) > /dev/null; then
     r=$(python3 "$HERE/fist-take-check.py" /tmp/al-fisthud.rec "$CORPUS/fists/pass-20261010-u23/shoteiL" --swings "$OS" | grep "^hud")
-    case "$r" in "hud     PASS"*) ok "fist path replay v5 on op-b6: ${r:0:120}";; *) bad "fist path replay v5 on op-b6 (want hud PASS): $r";; esac
+    case "$r" in "hud     PASS"*) ok "fist path replay v5 on op-b6: ${r:0:120}";;
+      *) if [ "${FH%/hold/*}" != "$FH" ]; then echo "REGRESS INFO fist path replay v5 on op-b6 (v5 tables held, native fists ship): $r"
+         else bad "fist path replay v5 on op-b6 (want hud PASS): $r"; fi;; esac
   else bad "fist path replay build/run failed (/tmp/al-fisthud.log)"; fi
   rm -rf /tmp/al-fisthud /tmp/al-fisthud.d /tmp/al-fisthud.rec /tmp/al-fisthud.log
 else echo "REGRESS INFO fistgame op-b6: not in the corpus"; fi
