@@ -487,11 +487,15 @@ function RigCheck([string]$path, [switch]$Fix) {
     if ($v -ne 'UNKNOWN') { Set-Content $cf $v }
     $v
 }
+# Queue order (speed-audit 2026-10-11): numeric prefix as a number, then the rest ORDINAL ('-' < digits < letters), so
+# 65-x < 65a-x < 65b-x < 66-x and 9-x < 10-x. Sort-Object Name compared culture-aware (hyphen ignored: 65-rg03 ran after
+# 65b-xbf and 65a-xbf), so lists queued as a sequence ran out of order.
+function QSort { @($input) | Sort-Object @{ e = { if ($_.Name -match '^(\d+)') { [long]$matches[1] } else { [long]::MaxValue } } }, @{ e = { -join ($_.Name.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) } } }
 function RealLists {
     $other = if ($Rig -eq '5090') { '4080' } else { '5090' }
     $n = 0
     foreach ($src in "$qd\$Rig", "$qd\any") {
-        foreach ($f in @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        foreach ($f in @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort)) {
             if ($src -like '*\any') {
                 $want = Header $f.FullName 'rig'
                 if ($want -and $want -ne $Rig) { continue }
@@ -518,7 +522,7 @@ function RealLists {
     # work stealing: the other rig is busy and its own folder has a rig-neutral list this rig can run
     $busy = @(Get-ChildItem "$qd\running" -Filter "${other}__*" -File -ErrorAction SilentlyContinue).Count -or (Test-Path (Join-Path $rd "$other.cur"))
     if (-not $busy) { return }
-    $h = Get-ChildItem "$qd\$other" -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1
+    $h = Get-ChildItem "$qd\$other" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
     if (-not $h -or (Header $h.FullName 'rig') -or ($Rig -eq '4080' -and (StobeRows $h.FullName))) { return }
     if ((RigCheck $h.FullName) -ne 'OK') { return }
     $h
