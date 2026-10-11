@@ -33,6 +33,9 @@ if ("$hdr" -match 'not a valid field|Invalid') { $q = $q -replace ',clocks_event
 & nvidia-smi.exe "--query-gpu=$q" --format=csv 2>&1 | Select-Object -First 1 | Add-Content $f
 function Tls { [DateTime]::UtcNow.AddHours(-6).ToString('yyyy-MM-dd HH:mm:ss') }   # timeline time = the 5090 clock on every rig (Central, DST off = UTC-6; the 4080 runs Pacific)
 $tlf = Join-Path $d 'timeline.tsv'; $ps = ProcSet
+# ~3 MB/day with lab GPU jobs: rotate over 10 MB, keep rotated files 3 days
+if ((Test-Path $tlf) -and (Get-Item $tlf).Length -gt 10MB) { Move-Item $tlf (Join-Path $d "timeline-$(Get-Date -Format MMdd-HHmm).tsv") -ErrorAction SilentlyContinue }
+Get-ChildItem $d -Filter 'timeline-*.tsv' | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) } | Remove-Item -ErrorAction SilentlyContinue
 foreach ($k in @($ps.Keys | Sort-Object)) { try { Add-Content $tlf "$(Tls)`t$Rig`t$($ps[$k])`tproc-running`t$k (gpulog start)" } catch {} }
 while ($true) {
     & nvidia-smi.exe "--query-gpu=$q" --format=csv,noheader 2>&1 | Add-Content $f
