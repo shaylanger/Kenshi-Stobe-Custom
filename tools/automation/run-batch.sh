@@ -92,6 +92,13 @@ if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check
   printf 'fp_combat on refused after 7 tries (native_ready=0 fault=4; latched)\r\nsecond\n' > "$rq"
   st "relaunch_req: first line, CR stripped" "$(relaunch_req "$rq")" "fp_combat on refused after 7 tries (native_ready=0 fault=4; latched)"
   rm -f "$tf" "$rq"
+  # lanes (lane-5090c 2026-10-11): launch() kills only its own proxy tree, never another lane's launch by name
+  st "launch: no pkill by name of kenshi-ctl.ps1" "$(grep -c '^[^#]*pkill -f .*kenshi-ctl' "$0")" "0"
+  ( exec -a "kenshi-ctl.ps1 launch otherlane" sleep 30 ) & ol=$!
+  ( sleep 30 | cat ) & lp=$!; sleep 0.3
+  pkill -P $lp 2>/dev/null; kill $lp 2>/dev/null; wait $lp 2>/dev/null
+  st "launch: own proxy tree killed, the other lane's launch alive" "$(kill -0 $lp 2>/dev/null && echo own-alive || echo own-gone):$(kill -0 $ol 2>/dev/null && echo other-alive || echo other-gone)" "own-gone:other-alive"
+  kill $ol 2>/dev/null; wait $ol 2>/dev/null
   echo "RUNBATCH-SELFTEST $([ $st_bad = 0 ] && echo PASS || echo "FAIL $st_bad") $st_n cases"; exit $((st_bad > 0))
 fi
 while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --reuse) REUSE=1; shift ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; *) break ;; esac; done
