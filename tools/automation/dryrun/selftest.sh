@@ -59,6 +59,9 @@ while IFS='|' read -r name fix rig exp row; do
   [ $ok = 1 ] && st=ok || { st=WRONG; bad="$bad $name"; }
   echo "SELFTEST $name $st expect=$exp got: ${v:0:260}"
 done <<<"$CASES"
+# orphaned row processes (killtree 2026-10-11): run-batch.sh's row-reaper sweep/kill on fake orphans under a private root
+n=$((n + 1)); rr=$(bash $H/row-reaper.sh selftest 2>&1 | tail -1); echo "SELFTEST row-reaper $([[ "$rr" == *PASS* ]] && echo ok || echo WRONG) got: $rr"
+[[ "$rr" == *PASS* ]] || bad="$bad row-reaper"
 echo "RESULT DRYRUN-SELFTEST $([ -z "$bad" ] && echo PASS || echo FAIL) cases=$n bad=[${bad# }] out=$OUT"
 [ -z "$bad" ] && rm -rf "$OUT"
 [ -z "$bad" ]

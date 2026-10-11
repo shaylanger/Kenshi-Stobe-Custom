@@ -224,6 +224,11 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
     relaunch "$save" "commit free $freec GB < $MIN_COMMIT_GB GB (kenshi private $kpriv GB)" || { say "NOTE relaunch failed"; dead=1; }
   fi
   if [ "$dead" = 1 ]; then say "RESULT $name FAIL skipped: game not responding"; fail=$((fail + 1)); continue; fi
+  # leftover game drivers of earlier rows/batches (killtree 2026-10-11: a runner-killed 4080 crossbow row kept running 42 min
+  # and sent fp_combat aim inputs into three later batches): kill them before the row loads its save (row-reaper.sh)
+  if [ -f "$A/row-reaper.sh" ]; then
+    while IFS= read -r l; do case "$l" in NOTE*) say "${l/NOTE /NOTE $name: }" ;; NEUTRAL*) echo "$l" ;; esac; done < <(bash "$A/row-reaper.sh" sweep "$O" 2>&1 </dev/null)
+  fi
   echo "$(date +%H:%M) $name: prepare $save"
   if ! prepare "$save" "$player" "$mate"; then
     say "RESULT $name FAIL game not responding after loading $save (rest of the batch skipped)"
@@ -266,6 +271,11 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ] && { bash "$A/dialog-guard.sh" watch "$sp" "$dgl" >/dev/null 2>&1 </dev/null & dgw=$!; }
   bg=0; while kill -0 "$sp" 2>/dev/null; do [ -f "$gd" ] && { bg=1; break; }; sleep 2; done
   rm -f "$O/step.pid"; rc=0; [ $bg = 0 ] && { wait "$sp"; rc=$?; }
+  # the row is over (or its step was killed: rig-runner kill-step / a hand taskkill): nothing of it may keep driving the
+  # game. timeout's process group (MSYS/WSL pids), then every process naming the row dir (Windows tree walks miss MSYS forks)
+  if [ $bg = 0 ]; then kill -TERM -- "-$sp" 2>/dev/null
+    [ -f "$A/row-reaper.sh" ] && { kr=$(bash "$A/row-reaper.sh" kill "$O/$name" 2>&1 </dev/null | grep '^REAPED' | wc -l); [ "$kr" -gt 0 ] && say "NOTE $name: $kr leftover process(es) of the row killed after it ended (rc=$rc)"; }
+  fi
   [ -n "$rg" ] && { kill "$rg" 2>/dev/null; wait "$rg" 2>/dev/null; }
   [ -n "$dgw" ] && { kill "$dgw" 2>/dev/null; wait "$dgw" 2>/dev/null; }
   [ -s "$dgl" ] && say "NOTE $name: dialog guard closed $(grep -c 'DIALOG GUARD: closed' "$dgl") conversation(s) mid-row, stuck $(grep -c 'DIALOG GUARD: stuck' "$dgl"): $(awk '{sub(/^[^ ]+ DIALOG GUARD: /,""); print}' "$dgl" | sort -u | head -3 | paste -sd';' | cut -c1-200) (clicks during it were refused: check the row's ui_open gates)"

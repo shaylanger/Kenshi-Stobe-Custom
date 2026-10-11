@@ -19,6 +19,9 @@ if [ "$act" = kill-step ] || [ "$act" = kill-game ]; then
   if [ -f "$O/step.pid" ]; then read -r p n w < "$O/step.pid"
     if [ -n "${w:-}" ]; then taskkill.exe //F //T //PID "$w" </dev/null >/dev/null 2>&1 && echo "KILLED step $n winpid $w" || echo "KILL failed winpid $w ($n)"   # 4080: other msys session
     else kill -TERM "$p" 2>/dev/null && echo "KILLED step $n pid $p" || echo "KILL failed pid $p ($n)"; fi
+    # every other process of the row (killtree 2026-10-11: taskkill /T missed the MSYS forks of 59-hits-r09b HIT, which
+    # kept aiming the crossbow for 42 min into later batches): match the row dir in the command lines
+    R=$(dirname "$0")/row-reaper.sh; [ -f "$R" ] && echo "REAPED $(bash "$R" kill "$O/$n" </dev/null 2>&1 | grep -c '^REAPED') more process(es) of $n"
   else echo "KILL no step.pid in $O"; fi
   exit 0
 fi
