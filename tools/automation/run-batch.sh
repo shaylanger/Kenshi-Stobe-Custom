@@ -148,6 +148,7 @@ PRE=""; NOTRUN=(); pass=0; fail=0; recwarn=0; dead=0; recovered=0; RECOVER=${REC
 # with the next row while that script finishes its analysis in the background (normal priority). Its RESULT lines are
 # collected when it exits. <out>/GAMEDONE = every row is past its game part (Kenshi stopped with --stop; rig-runner may
 # start the next batch); DONE only after every background analysis has ended.
+declare -A ROWSEC=()   # row -> seconds it held the game (rows.tsv 3rd column)
 PEND=()   # "pid|name|save|player|mate|out|timeout|stobe-log offset" of rows analysing in the background
 row_result() {  # row_result <name> <save> <player> <mate> <out> <timeout> <rc> <stobe-log offset>
   local name=$1 save=$2 player=$3 mate=$4 out=$5 to=$6 rc=$7 sl=$8 res v s bad ex hit
@@ -177,7 +178,8 @@ RESULT $name FAIL wrapper did not complete (exit $rc)"
   fi
   echo "$res" | tee -a "$S"; echo "$name" >>"$D"
   # rows.tsv: one status per list row (rig-runner's filler ledger: a row reruns only when its build/script changed or it failed)
-  if grep -qE '^RESULT [^ ]+ FAIL' <<<"$res"; then printf '%s\tFAIL\n' "$name"; else printf '%s\tPASS\n' "$name"; fi >>"$O/rows.tsv"
+  # 3rd column: seconds the row held the game (its pre-row checks to the end of its game part; speed-audit 2026-10-11)
+  if grep -qE '^RESULT [^ ]+ FAIL' <<<"$res"; then printf '%s\tFAIL\t%s\n' "$name" "${ROWSEC[$name]:-}"; else printf '%s\tPASS\t%s\n' "$name" "${ROWSEC[$name]:-}"; fi >>"$O/rows.tsv"
   # count by the row's status word (3rd field): a PASS row quoting an inner "RESULT take FAIL" counted as both (tur-b-2)
   # PASS-REC = pass with a recording warning (only sampler gaps / video length / sync lag failed; takecheck.py)
   pass=$((pass + $(grep -cE '^RESULT [^ ]+ PASS(-REC)? ' <<<"$res"))); fail=$((fail + $(grep -cE '^RESULT [^ ]+ FAIL' <<<"$res")))
@@ -218,7 +220,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   # row_split (2026-10-10): quotes group a value with spaces; shell operators are refused here, before the save loads
   if ! row_split "$cmd"; then say "RESULT $name FAIL list: $ROWERR"; fail=$((fail + 1)); continue; fi
   read -r freec kpriv <<<"$(memline)"
-  echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
+  rs0=$SECONDS; echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
   if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
   if [ "$dead" = 1 ] && [ "$recovered" -lt "$RECOVER" ]; then
     if relaunch "$save" "game dead before $name (commit free ${freec:-?} GB)"; then dead=0; else say "NOTE relaunch failed"; fi
@@ -272,7 +274,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   sp=$!; echo "$sp $name $(cat /proc/$sp/winpid 2>/dev/null)" > "$O/step.pid"
   [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ] && { bash "$A/dialog-guard.sh" watch "$sp" "$dgl" >/dev/null 2>&1 </dev/null & dgw=$!; }
   bg=0; while kill -0 "$sp" 2>/dev/null; do [ -f "$gd" ] && { bg=1; break; }; sleep 2; done
-  rm -f "$O/step.pid"; rc=0; [ $bg = 0 ] && { wait "$sp"; rc=$?; }
+  rm -f "$O/step.pid"; rc=0; [ $bg = 0 ] && { wait "$sp"; rc=$?; }; ROWSEC[$name]=$((SECONDS - rs0))
   # the row is over (or its step was killed: rig-runner kill-step / a hand taskkill): nothing of it may keep driving the
   # game. timeout's process group (MSYS/WSL pids), then every process naming the row dir (Windows tree walks miss MSYS forks)
   if [ $bg = 0 ]; then kill -TERM -- "-$sp" 2>/dev/null
