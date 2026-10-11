@@ -112,8 +112,8 @@ def load(path):
     for l in open(path):
         if l.startswith('#') or '|' not in l: continue
         g = l.split(' | '); h = g[0].split()
-        if len(h) < 4 or len(g) < 4: continue
-        try: v = [float(x) for grp in (g[1], g[3]) for tok in grp.split() for x in tok.split(',')]
+        if len(h) < 4 or len(g) < 2: continue   # g[1] = viewmodel-local arm/weapon vectors (g[3] is world position: a moving character is not a pose change)
+        try: v = [float(x) for grp in (g[1],) for tok in grp.split() for x in tok.split(',')]
         except ValueError: continue
         s = acc.setdefault(h[3], [0, None]); s[0] += 1
         s[1] = v if s[1] is None else [a + b for a, b in zip(s[1], v)]
