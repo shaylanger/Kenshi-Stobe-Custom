@@ -47,8 +47,10 @@ $maxAge = if ($allDone) { -1 } else { -3 }
 if (-not $Fresh -and (Test-Path -LiteralPath $cache) -and (Get-Item -LiteralPath $cache).LastWriteTime -gt (Get-Date).AddMinutes($maxAge)) {
     $k = (Get-Content -LiteralPath $cache -Raw).Trim()
 } else {
-    $out = & ssh -o BatchMode=yes -o ConnectTimeout=5 4080 'tasklist /nh' 2>$null
-    $k = if ($LASTEXITCODE -ne 0 -or -not $out) { 'UNREACHABLE' } elseif ($out -match 'kenshi_x64') { 'BUSY kenshi=yes' } else { 'IDLE kenshi=no' }
+    # instance 1 only (multi-instance-4080): lane 4080b's second game (C:\KenshiInst\<n>) must not hide an idle lane 4080
+    $q1 = "if (@(Get-CimInstance Win32_Process -Filter `"Name='kenshi_x64.exe'`" | Where-Object { -not `$_.ExecutablePath -or `$_.ExecutablePath -notlike '*\KenshiInst\*' }).Count) { 'K1 yes' } else { 'K1 no' }"
+    $out = & ssh -o BatchMode=yes -o ConnectTimeout=5 4080 "powershell -NoProfile -EncodedCommand $([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($q1)))" 2>$null
+    $k = if ($LASTEXITCODE -ne 0 -or -not ($out -match '^K1 ')) { 'UNREACHABLE' } elseif ($out -match '^K1 yes') { 'BUSY kenshi=yes' } else { 'IDLE kenshi=no' }
     Set-Content -LiteralPath $cache -Value $k -Encoding ascii
 }
 if ($allDone -and $k -like 'BUSY kenshi=yes*') { $k = "IDLE-GAME kenshi=yes all marker jobs DONE ($($mk -join ',')): queue a list in queue\4080\ (rig-runner.ps1 starts it)" }
