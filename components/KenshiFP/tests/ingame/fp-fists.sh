@@ -91,6 +91,8 @@ echo "martial_arts base $mab effective ${me:-?} (window ${MA_LO[$TI]}..${MA_HI[$
 A fp_vm set fist_tech $TI >/dev/null
 f=$(fist); [ "$(fld force <<<"$f")" = "$TI" ] || pf_fail "fp_vm set fist_tech $TI not taken: $(cut -c1-80 <<<"$f")"
 A fp_vm set fist_native $NAT >/dev/null
+# FIST_VMSET=fn_k,0.4,fn_ymax,0.25 = live native-fist tunables for this take (DLL statics persist across rows: set all swept keys)
+set -- ${FIST_VMSET//,/ }; while [ $# -ge 2 ]; do A fp_vm set $1 $2 >/dev/null; shift 2; done
 [ "$NAT" = 1 ] && { [ "$(fist | fld nat)" = 1 ] || pf_fail "native fists not on (fp_vm fist has no nat=1): install a build with pending-fixes/kfp-fist-native.py"; }
 # ---- take
 : > "$N.lab"; rm -f "$N.stop"
@@ -106,7 +108,8 @@ lab "Technique ${TA[$TI]} (LMB) x$REPS"
 UMAX=0
 for r in $(seq 1 $REPS); do
   A fp_keys press lmb 60 >/dev/null
-  e=$((SECONDS+3)); while [ $SECONDS -lt $e ]; do f=$(fist); echo "$f" >> "$N.fist.txt"; u=$(fld u <<<"$f"); UMAX=$(awk -v a="$UMAX" -v b="${u:-0}" 'BEGIN{print (b>a?b:a)}'); sleep 0.15; done
+  # native techniques can run > 3 s (fist4080p: a press inside one was dropped)
+  e=$((SECONDS+(NAT==1?5:3))); while [ $SECONDS -lt $e ]; do f=$(fist); echo "$f" >> "$N.fist.txt"; u=$(fld u <<<"$f"); UMAX=$(awk -v a="$UMAX" -v b="${u:-0}" 'BEGIN{print (b>a?b:a)}'); sleep 0.15; done
 done
 lab "Guard"; sleep 1.5; fist >> "$N.fist.txt"
 lab end; touch "$N.stop"; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"
@@ -154,4 +157,4 @@ fi
 echo "$FG" | grep -qE "^fist(game|native) PASS" || ok=0
 python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --labels "$N.lab" --lab "$N.lab.txt" "$N.swings.txt" > review.log 2>&1
 [ -f review/INDEX.txt ] || ok=0
-pf_result "$(pf_grade $ok "$TC")" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") rig=${RIG:-5090}$(pf_recwarn "$TC")"
+pf_result "$(pf_grade $ok "$TC")" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") ${FIST_VMSET:+vmset=[$FIST_VMSET] }rig=${RIG:-5090}$(pf_recwarn "$TC")"
