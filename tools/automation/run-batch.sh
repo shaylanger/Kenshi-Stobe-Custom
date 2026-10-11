@@ -73,6 +73,22 @@ tdr_check() { local h; TDR_HIT=""; h=$(tdr_events "$1" | tdr_filter "$1"); [ -n 
   TDR_HIT="$(wc -l <<<"$h" | tr -d ' ') event(s), latest: $(head -1 <<<"$h")"; return 1; }
 # relaunch_req <file>: the reason a row left in its RELAUNCH_FILE (empty = none)
 relaunch_req() { [ -s "$1" ] && head -1 "$1" | tr -d '\r' | cut -c1-200; return 0; }
+# Lane relaunch (coordinator 2026-10-11 16:20: 5090 lane A lost 5 single-row lists in a row to setup FAIL 'uibox x16,y330'
+# = tutorial popups on a game launched before tutorials=0; the row's RELAUNCH_FILE request died with each batch and the next
+# list reused the same game). Per lane (RIG + KAH_INSTANCE) under $CR/KenshiTestRuns/runner:
+#   relaunch-lane.<lane>   a relaunch request left at batch end (last row asked, or 2 batches in a row failed every row on
+#                          the same setup reason); the next batch with --launch stops the running game and launches fresh
+#   setupfail-lane.<lane>  the previous batch's setup signature (all its rows FAIL setup with this reason)
+# setup_sig <summary>: the batch's setup-FAIL signature (the first row's reason, digits dropped) when it has >= 1 RESULT
+# line and every one is "FAIL setup:", else empty
+setup_sig() { awk '/^RESULT /{n++; if ($3 != "FAIL" || $4 != "setup:") bad=1; else if (!sig) { s=$0; sub(/^RESULT [^ ]+ FAIL setup: */, "", s); sub(/ (out|excerpt)=.*/, "", s); gsub(/[0-9]+/, "#", s); sig=substr(s, 1, 160) } }
+  END { if (n && !bad) print sig }' "$1" 2>/dev/null; }
+# lane_after <sig> <relreq> <relrow> <lrf> <lsf>: write the lane files at batch end; prints the NOTE text (empty = none)
+lane_after() { local sig=$1 rr=$2 rrow=$3 lrf=$4 lsf=$5 prev=""
+  [ -s "$lsf" ] && prev=$(head -1 "$lsf" | tr -d '\r')
+  if [ -n "$rr" ]; then echo "row $rrow asked: $rr" > "$lrf"; echo "relaunch request kept for the next batch on this lane: row $rrow: $rr"
+  elif [ -n "$sig" ] && [ "$sig" = "$prev" ]; then echo "2 batches in a row failed every row on setup: $sig" > "$lrf"; echo "2nd batch in a row with every row FAIL setup ($sig): the next batch on this lane relaunches"; fi
+  if [ -n "$sig" ]; then echo "$sig" > "$lsf"; else rm -f "$lsf"; fi; }
 if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check + relaunch request on fixed cases
   st_bad=0; st_n=0; tf=$(mktemp); rq=$(mktemp)
   st() { st_n=$((st_n + 1)); if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2' want '$3'"; st_bad=$((st_bad + 1)); fi; }
@@ -92,6 +108,25 @@ if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check
   printf 'fp_combat on refused after 7 tries (native_ready=0 fault=4; latched)\r\nsecond\n' > "$rq"
   st "relaunch_req: first line, CR stripped" "$(relaunch_req "$rq")" "fp_combat on refused after 7 tries (native_ready=0 fault=4; latched)"
   rm -f "$tf" "$rq"
+  # lane relaunch: setup signature + lane files (5 single-row lists lost to tutorial popups on one reused game)
+  sf=$(mktemp); ld=$(mktemp -d)
+  printf '%s\n' 'BATCH START x' 'RESULT E6-a FAIL setup: foreign overlay in frame (uibox x16,y330) out=/a/b excerpt=/c' > "$sf"
+  st "setup_sig: all rows FAIL setup -> reason, digits dropped, out= cut" "$(setup_sig "$sf")" "foreign overlay in frame (uibox x#,y#)"
+  printf '%s\n' 'RESULT E6-b FAIL setup: foreign overlay in frame (uibox x16,y331) out=/x' >> "$sf"
+  st "setup_sig: 2 setup FAIL rows -> first row's reason" "$(setup_sig "$sf")" "foreign overlay in frame (uibox x#,y#)"
+  printf '%s\n' 'RESULT r2 PASS ok' >> "$sf"; st "setup_sig: a PASS row -> empty" "$(setup_sig "$sf")" ""
+  printf '%s\n' 'RESULT r1 FAIL best=1.4' > "$sf"; st "setup_sig: a product FAIL -> empty" "$(setup_sig "$sf")" ""
+  : > "$sf"; st "setup_sig: no RESULT lines -> empty" "$(setup_sig "$sf")" ""
+  lane_after "" "tutorial hint popups on screen" "E6-a" "$ld/r" "$ld/s" >/dev/null
+  st "lane_after: last row's relaunch request persists" "$(cat "$ld/r" 2>/dev/null)" "row E6-a asked: tutorial hint popups on screen"
+  rm -f "$ld/r"; lane_after "overlay (uibox x#,y#)" "" "" "$ld/r" "$ld/s" >/dev/null
+  st "lane_after: 1st setup-FAIL batch = signature only, no request" "$(cat "$ld/s"):$([ -e "$ld/r" ] && echo req || echo none)" "overlay (uibox x#,y#):none"
+  lane_after "overlay (uibox x#,y#)" "" "" "$ld/r" "$ld/s" >/dev/null
+  st "lane_after: 2nd identical setup-FAIL batch = relaunch request" "$(cut -c1-24 "$ld/r" 2>/dev/null)" "2 batches in a row faile"
+  rm -f "$ld/r"; lane_after "" "" "" "$ld/r" "$ld/s" >/dev/null
+  st "lane_after: a clean batch clears the signature" "$([ -e "$ld/s" ] && echo kept || echo cleared):$([ -e "$ld/r" ] && echo req || echo none)" "cleared:none"
+  st "lane relaunch wired: start consumes, end writes" "$(grep -c '^# LANE RELAUNCH \(START\|END\):' "$0")" "2"
+  rm -rf "$sf" "$ld"
   # lanes (lane-5090c 2026-10-11): launch() kills only its own proxy tree, never another lane's launch by name
   st "launch: no pkill by name of kenshi-ctl.ps1" "$(grep -c '^[^#]*pkill -f .*kenshi-ctl' "$0")" "0"
   ( exec -a "kenshi-ctl.ps1 launch otherlane" sleep 30 ) & ol=$!
@@ -254,6 +289,15 @@ case "$LAUNCH" in kah-fpxbow|kah-fpstudio)
     [ "$t1" != kah-fpxbow ] && [ "$t1" != "$LAUNCH" ] && { LT=$t1; say "NOTE launch save $LT instead of $LAUNCH (row 1's pf_load loads it; one load)"; } ;;
   esac ;;
 esac
+# LANE RELAUNCH START: a relaunch request an earlier batch on this lane left (setup_sig / lane_after above) = stop the running
+# game, so the launch below starts fresh instead of reusing it
+LANEK="${RIG:-5090}-i${KAH_INSTANCE:-1}"; LRD="$CR/KenshiTestRuns/runner"; mkdir -p "$LRD" 2>/dev/null
+LRF="$LRD/relaunch-lane.$LANEK"; LSF="$LRD/setupfail-lane.$LANEK"
+if [ -n "$LAUNCH" ] && [ -s "$LRF" ]; then
+  if kenshi_up; then say "NOTE lane relaunch ($LANEK): $(relaunch_req "$LRF"): stopping the running game, fresh launch"; ctl stop | tail -1
+    for _ in $(seq 30); do kenshi_up || break; sleep 2; done; kenshi_up && say "NOTE lane relaunch: the game is still up after stop"
+  fi; rm -f "$LRF"
+fi
 if [ -n "$LAUNCH" ] && [ "$REUSE" = 1 ] && kenshi_up && timeout 30 stobe-auto status </dev/null 2>/dev/null | grep -q "phase=world"; then
   p1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f3 | tr -d " \r")
   say "NOTE reuse: Kenshi already up, loading $LT in place (no relaunch)"
@@ -446,6 +490,10 @@ done 3<"$L"
 [ -n "$PRE" ] && say "NOTE $([ "$PRE" = TDR ] && echo 'TDR stop' || echo preempted): not run: ${NOTRUN[*]}"
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
 [ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
+# LANE RELAUNCH END: before GAMEDONE (the runner starts the next list on it): keep the last row's request / 2nd identical
+# all-setup-FAIL batch -> relaunch-lane.<lane> (rows still analysing in the background passed their game part: not setup)
+lsig=""; [ ${#PEND[@]} -eq 0 ] && lsig=$(setup_sig "$S")
+ln=$(lane_after "$lsig" "$relreq" "$relrow" "$LRF" "$LSF"); [ -n "$ln" ] && say "NOTE $ln"
 touch "$O/GAMEDONE"; [ ${#PEND[@]} -gt 0 ] && echo "$(date +%H:%M) game part done; waiting for ${#PEND[@]} background analyses"
 collect wait
 say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail recwarn=$recwarn"
