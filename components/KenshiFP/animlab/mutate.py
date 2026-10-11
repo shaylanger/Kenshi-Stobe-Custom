@@ -134,7 +134,7 @@ def ff(args):
 
 def v_cursor(src, dst):
     arrow_png()
-    ff(['-i', src, '-i', ARROW, '-filter_complex', "[0][1]overlay=820:430:enable='between(t,3,6)'", '-c:v', 'libx264', '-preset', 'ultrafast', dst])
+    ff(['-i', src, '-i', ARROW, '-filter_complex', "[0][1]overlay=x=main_w*41/80:y=main_h*43/90:enable='between(t,3,6)'", '-c:v', 'libx264', '-preset', 'ultrafast', dst])
 
 
 def v_dark(src, dst):

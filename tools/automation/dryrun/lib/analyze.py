@@ -82,9 +82,10 @@ for v in vids:
         if v.get('hostiles'):
             fails.append('recording %s with hostiles within 30 m of the take spot (%s)%s: pf_clean + pf_area before filming' % (
                 f, ', '.join(v['hostiles'][:3]), ' and popup "%s" in frame' % v['popup'] if v.get('popup') else ''))
-        c = v.get('cursor') or [800, 450]
-        if not (c[1] <= 40 or c[0] <= 20 or c[0] >= 1580 or c[1] >= 880):
-            fails.append('recording %s without the cursor parked at the edge (hover name tag): mouse_inject at 1595 4 / pf_open' % os.path.basename(v['file']))
+        rw, rh = int(os.environ.get('RES_W') or 1600), int(os.environ.get('RES_H') or 900)   # render size (rig-env.sh)
+        c = v.get('cursor') or [rw // 2, rh // 2]
+        if not (c[1] <= 40 or c[0] <= 20 or c[0] >= rw - 20 or c[1] >= rh - 20):
+            fails.append('recording %s without the cursor parked at the edge (hover name tag): mouse_inject at %d 4 / pf_open' % (os.path.basename(v['file']), rw - 5))
 # labels
 vmax = max([v['len'] for v in vids] or [0])
 ld = R('labels')

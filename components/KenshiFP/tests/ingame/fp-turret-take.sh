@@ -26,7 +26,7 @@ tq(){ A turret "Harpoon Turret" radius 3000 | grep -o "loaded=[^ ]* reloading=[^
 fail(){ A chatter on >/dev/null; echo "RESULT $ROW FAIL setup: $*"; exit 1; }
 hour(){ local h; h=$(A time | grep -o 'time=[0-9]*'); echo $((10#${h#time=})); }
 dayck(){ local h; h=$(hour); if [ "$h" -lt 10 ] || [ "$h" -gt 13 ]; then A speed 50 hold >/dev/null; for i in $(seq 1 200); do sleep 2; h=$(hour); [ "$h" -ge 10 ] && [ "$h" -le 13 ] && break; done; A speed 1 hold >/dev/null; fi; echo "$(A time | cut -c1-60)"; }
-skyck(){ A fp_camera look 0 0.05 >/dev/null; sleep 1; A screenshot skyck >/dev/null; ( cd "$KDIR/mods/AutomationHarness/shots" && "$FFX" -hide_banner -loglevel error -y -i skyck.png -vf "crop=1600:120:0:30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 ) | awk '{print "SKY", $1, $2, $3, ($3 > $1+25 ? "clear" : "hazy")}'; }
+skyck(){ A fp_camera look 0 0.05 >/dev/null; sleep 1; A screenshot skyck >/dev/null; ( cd "$KDIR/mods/AutomationHarness/shots" && "$FFX" -hide_banner -loglevel error -y -i skyck.png -vf "crop=iw:ih*2/15:0:ih/30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 ) | awk '{print "SKY", $1, $2, $3, ($3 > $1+25 ? "clear" : "hazy")}'; }
 clean(){   # m88: knock out + pin every live non-squad NPC within R of the turret, so nobody walks/talks into the take
   local R=${R:-3000}
   { A chars 6000; for f in "Starving" "Dust Bandits" "Hungry" "Outlaws" "Marauder" "Shinobi"; do A chars 6000 "$f"; done; } 2>/dev/null | sed "s/^[0-9]* within [0-9.]*: //" | sed 's/ | /\n/g' | grep -v "\[Nameless\]\| KO\| DEAD" | sed -n 's/.*\(#[0-9]*\/[0-9]*\) .* pos=\([-0-9.]*\),[-0-9.]*,\([-0-9.]*\).*/\1 \2 \3/p' | sort -u | while read id x z; do
@@ -85,7 +85,7 @@ steps(){
   ev(){ echo "$(awk -v a=$(date +%s.%N) -v b=$T0 "BEGIN{printf \"%.2f\", a-b}") $1 $(ft | cut -c1-120) | $(A fp_keys state | grep -o 'hud_text=[^ ]*') | $(A hp "$D" | cut -c1-70)" >> $E; }
   now(){ awk -v a=$(date +%s.%N) -v b=$T0 "BEGIN{printf \"%.2f\", a-b}"; }
   . $M/components/KenshiFP/animlab/take-sample.sh; take_sample_start $PWD/ts.txt "$T0" $SH "$D"
-  A fp_combat physical >/dev/null; A mouse_inject at 1595 4 >/dev/null   # park the virtual cursor (name tag / interact icon at centre)
+  A fp_combat physical >/dev/null; A mouse_inject at $(( ${RES_W:-1600} - 5 )) 4 >/dev/null   # park the virtual cursor (name tag / interact icon at centre)
   lab "Standing next to the turret (no turret state)"; A fp_camera look 0.22 -0.075 >/dev/null; ev stand; sleep 3.5
   lab "Seat: $SH mans the Harpoon Turret"; A order $SH USE_TURRET building "Harpoon Turret" >/dev/null
   notseated(){ ev "$1"; echo "$1 ($(ft | cut -c1-120))" > setup_fail.txt; lab end; take_sample_stop; exit 3; }
@@ -104,7 +104,7 @@ steps(){
   lab end; take_sample_stop; python3 $TI/fp-take-labels.py snap labels.txt ts.txt
 }
 # recorder (rec.sh): stopped by "q" through a plain pipe once the steps end (+2.5 s tail); 300 s is only a safety cap
-rm -f rec.stop; A mouse_inject at 1595 4 >/dev/null   # park the virtual cursor in the sky before recording (hover name tag, take-dryrun)
+rm -f rec.stop; A mouse_inject at $(( ${RES_W:-1600} - 5 )) 4 >/dev/null   # park the virtual cursor in the sky before recording (hover name tag, take-dryrun)
 ( while [ ! -f rec.stop ]; do sleep 0.1; done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" $(venc_args 20 veryfast) t6raw.mp4 &
 FP=$!; sleep 0.8; ( steps ); RC=$?; sleep 2.5; touch rec.stop; wait $FP; rm -f rec.stop
 A chatter on >/dev/null
@@ -120,7 +120,7 @@ E2=$(awk '$2=="end"{print $1+0.5}' labels.txt)
 rm -f filt.txt; RF="RESULT render FAIL mkfilt"
 if python3 $TI/fp-take-labels.py filt labels.txt ${LAG:-1.25} filt.txt; then
   F=$(tr -d '\n' < filt.txt)
-  "$FFX" -hide_banner -loglevel error -y -i t6raw.mp4 -t ${E2:-59} -filter_complex "[0:v]split[a][b];[b]crop=256:144:672:378,scale=640:360:flags=lanczos,drawbox=c=yellow:t=3,drawtext=fontfile=arialbd.ttf:fontsize=22:fontcolor=yellow:x=10:y=10:text='centre x2.5'[z];[a][z]overlay=W-w-12:110,$F" $(venc_args 18 medium) turret-fp.mp4 && RF="" || RF="RESULT render FAIL ffmpeg"
+  "$FFX" -hide_banner -loglevel error -y -i t6raw.mp4 -t ${E2:-59} -filter_complex "[0:v]split[a][b];[b]crop=iw*0.16:ih*0.16:iw*0.42:ih*0.42,scale=640:360:flags=lanczos,drawbox=c=yellow:t=3,drawtext=fontfile=arialbd.ttf:fontsize=22:fontcolor=yellow:x=10:y=10:text='centre zoom'[z];[a][z]overlay=W-w-12:110,$F" $(venc_args 18 medium) turret-fp.mp4 && RF="" || RF="RESULT render FAIL ffmpeg"
 fi
 C=$( { python3 $HL/takecheck.py --labels labels.txt --ev ts.txt --rules $M/components/KenshiFP/animlab/take-rules.txt --video turret-fp.mp4 2>&1 | tail -15; python3 $HL/frames.py openground turret-fp.mp4 2>&1 | tail -3; } | grep "^RESULT" | tr '\n' ' ')
 CU=$(python3 $HL/frames.py cursor turret-fp.mp4 2>&1 | tail -1)

@@ -66,7 +66,7 @@ fi
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
 A load kah-fpxbow >/dev/null; A wait-world >/dev/null
 A speed 1 hold >/dev/null; A chatter off >/dev/null; A select $SH >/dev/null; A fp_control take >/dev/null
-A teleport $SH $SPOT >/dev/null; A mouse_inject at 1595 4 >/dev/null
+A teleport $SH $SPOT >/dev/null; A mouse_inject at $(( ${RES_W:-1600} - 5 )) 4 >/dev/null
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null; A combatmode $SH ranged off >/dev/null
 case $MODE in
   bare) ;;

@@ -37,7 +37,8 @@ import numpy as np  # noqa: E402
 import frames as FR  # noqa: E402
 
 ALL = ('nowindow', 'black', 'frozen', 'menu', 'overlay', 'cursor')
-OW, OH = FR.OW, FR.OH
+OW, OH = int(os.environ.get('RES_W') or FR.OW), int(os.environ.get('RES_H') or FR.OH)   # live grabs: the render size
+#   (rig-env.sh; any resolution); replays judge the video at its own size. Masks follow each frame's shape.
 BLACK_LUMA = 8.0
 FROZEN_DL, FROZEN_S = 0.6, 60.0
 MENU_S, LOADING_S = 90.0, 180.0
@@ -51,8 +52,16 @@ class Judge:
         self.checks, self.every = set(checks), every
         self.prev, self.still_since = None, None
         self.pbase = collections.deque(maxlen=BASE_N)
-        self.Z = FR.zone_mask(FR.OV_ZONES)
-        self.Zs = FR.zone_mask([FR.STAMP_ZONE])
+        self.shape = self.Z = self.Zs = None
+
+    def masks(self, f):
+        """(overlay zones, stamp corner) cell masks for f's size (FR.ov_zones; stamp = 8 game px cells), once per size"""
+        if self.shape != f.shape[:2]:
+            self.shape = f.shape[:2]
+            self.Z = FR.zone_mask(FR.ov_zones(self.shape[1], self.shape[0]), self.shape[1], self.shape[0])
+            self.Zs = FR.zone_mask([FR.stamp_zone(8.0, self.shape[1], self.shape[0])], self.shape[1], self.shape[0])
+            self.pbase.clear()
+        return self.Z, self.Zs
 
     def judge(self, t, f, phase=None):
         """list of (check, what) for frame f (OHxOWx3 int, or None = no frame) at t s; phase = (name, since_s) or None"""
@@ -68,7 +77,8 @@ class Judge:
             return out
         if FR.is_flash(f):   # harness sync_flash marker frame
             return out
-        FR.blank_stamp(f)    # frame stamp corner changes every frame
+        FR.blank_stamp(f)    # frame stamp corner changes every frame (blacked out: no text/panel/cursor there)
+        fh, fw = f.shape[:2]
         g = f.mean(-1)
         luma = float(g.mean())
         if luma < BLACK_LUMA:
@@ -76,8 +86,8 @@ class Judge:
                 out.append(('black', 'luma=%.1f' % luma))
             self.prev = self.still_since = None
             return out
-        small = g.reshape(OH // 10, 10, OW // 10, 10).mean((1, 3))
-        if self.prev is not None and float(np.abs(small - self.prev).mean()) < FROZEN_DL:
+        small = g[:fh // 10 * 10, :fw // 10 * 10].reshape(fh // 10, 10, fw // 10, 10).mean((1, 3))
+        if self.prev is not None and self.prev.shape == small.shape and float(np.abs(small - self.prev).mean()) < FROZEN_DL:
             if self.still_since is None:
                 self.still_since = t - self.every
             if 'frozen' in self.checks and t - self.still_since >= FROZEN_S:
@@ -90,15 +100,16 @@ class Judge:
             P = np.zeros_like(T)
             for x0, y0, x1, y1 in FR.panel_rects(*FR.flat_cells(f)):
                 P[y0:y1, x0:x1] = True
-            T, A, P = T & ~self.Zs, A & ~self.Zs, P & ~self.Zs
             bp = (np.mean(self.pbase, 0) >= FR.OV_BASE_PANEL) if len(self.pbase) >= BASE_MIN else np.zeros_like(P)
             self.pbase.append(P)
-            fo = T & ~self.Z
+            Z, Zs = self.masks(f)
+            T, A, P = T & ~Zs, A & ~Zs, P & ~Zs
+            fo = T & ~Z
             ln = fo[:, :-2] & fo[:, 1:-1] & fo[:, 2:]
-            pa = P & ~bp & ~self.Z
+            pa = P & ~bp & ~Z
             if ln.any():
                 ys, xs = np.nonzero(ln)
-                kind = 'text-panel' if (A & ~self.Z)[ys, xs + 1].any() else 'text'
+                kind = 'text-panel' if (A & ~Z)[ys, xs + 1].any() else 'text'
                 out.append(('overlay', '%s x%d,y%d (%d cells)' % (kind, xs.min() * FR.CW, ys.min() * FR.CH, int(fo.sum()))))
             elif pa.sum() >= 12:
                 ys, xs = np.nonzero(pa)
@@ -108,7 +119,7 @@ class Judge:
             if c:
                 out.append(('cursor', 'arrow x%d,y%d' % (c[0][0], c[0][1])))
             else:
-                k = [(x, y) for x, y in FR.find_kcursor(f) if abs(x - OW / 2) > FR.KC_CENTRE or abs(y - OH / 2) > FR.KC_CENTRE]
+                k = [(x, y) for x, y in FR.find_kcursor(f) if abs(x - fw / 2) > FR.KC_CENTRE or abs(y - fh / 2) > FR.KC_CENTRE]
                 if k:
                     out.append(('cursor', 'kenshi cursor x%d,y%d' % k[0]))
         return out
@@ -264,7 +275,7 @@ def watch(a):
 def replay(a):
     J, L = Judge(a.checks.split(','), a.every), Log(a.out, a.name, False)
     t = 0.0
-    for t, f in FR.iter_frames_full(a.video, 1.0 / a.every, size=(OW, OH)):
+    for t, f in FR.iter_frames_full(a.video, 1.0 / a.every):
         L.sample(t, f, J.judge(t, f), '-')
     L.finish(t, 'end-of-video')
 

@@ -10,6 +10,40 @@ CANNED = os.environ.get('DR_CANNED', '/dryrun/canned')
 DISTRO = os.environ.get('DR_DISTRO', 'DwemerAI4Skyrim3')
 
 
+def res():
+    """(w, h) the game renders at: env RES_W/RES_H, else rig-env.sh's value (RES_W=N or RES_W=${RES_W:-N}), else 1600x900.
+    The fake game's screenshots / grabs / answers use it, so take scripts are dry-run at the size they will film."""
+    w, h = os.environ.get('RES_W'), os.environ.get('RES_H')
+    if not (w and h):
+        try:
+            t = open(os.path.join(CR, 'KenshiModding/tools/automation/rig-env.sh'), encoding='utf-8').read()
+            mw = re.search(r'RES_W=(?:\$\{RES_W:-)?(\d+)', t)
+            mh = re.search(r'RES_H=(?:\$\{RES_H:-)?(\d+)', t)
+            w, h = w or (mw and mw.group(1)), h or (mh and mh.group(1))
+        except OSError:
+            pass
+    try:
+        return int(w or 1600), int(h or 900)
+    except ValueError:
+        return 1600, 900
+
+
+def canned_image(name, dest):
+    """copy canned image <name> (made at 1600x900 by dryrun.sh) to dest, resized to res() when that differs"""
+    import shutil
+    src = os.path.join(CANNED, name)
+    rw, rh = res()
+    try:
+        from PIL import Image
+        im = Image.open(src)
+        if im.size != (rw, rh):
+            im.convert('RGB').resize((rw, rh)).save(dest)
+            return
+    except Exception:
+        pass
+    shutil.copyfile(src, dest)
+
+
 _depth = [0, None]
 
 

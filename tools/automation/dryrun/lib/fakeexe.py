@@ -171,7 +171,7 @@ def ffmpeg(name, a):
         return 0
     if dest in ('-', 'pipe:', 'pipe:1'):
         m = re.search(r'scale=(\d+):(\d+)', vf)
-        w, h = (int(m.group(1)), int(m.group(2))) if m else (1600, 900)
+        w, h = (int(m.group(1)), int(m.group(2))) if m else dr.res()
         if 'crop=' in vf and not m:
             w, h = 1, 1
         gray = 'gray' in vf or opts.get('-pix_fmt') == 'gray'
@@ -268,7 +268,7 @@ def powershell(a):
             if sub == 'focus':
                 dr.flag('FAIL', 'kenshi-ctl.ps1 focus: tests never focus the game (Shay\'s screen)')
             if sub == 'window':
-                out('kenshi window: monitor=DISPLAY2 1600x900 foreground=explorer'); return 0
+                out('kenshi window: monitor=DISPLAY2 %dx%d foreground=explorer' % dr.res()); return 0
             if sub == 'ontop':   # take-preflight pf_ontop (capture-fix 2026-10-11)
                 m = next((x for x in rest[rest.index(sub) + 1:] if not x.startswith('-')), 'check')
                 out('ontop %s: topmost=True unoccluded' % m if m != 'off' else 'ontop off: topmost=False'); return 0
@@ -278,7 +278,7 @@ def powershell(a):
         if base == 'display-keeper.ps1':
             out('KEEPER RUNNING age=5' if '-status' in [x.lower() for x in rest] else 'keeper started'); return 0
         if base == 'display-check.ps1':
-            out('--- gdigrab frame 1600x900 luma=96 => LIVE'); return 0
+            out('--- gdigrab frame %dx%d luma=96 => LIVE' % dr.res()); return 0
         if base == 'itrun.ps1':
             kv = {rest[j].lower(): rest[j + 1] for j in range(len(rest) - 1) if rest[j].startswith('-')}
             return itrun(kv.get('-cmd', ''), kv.get('-log', ''))
