@@ -153,6 +153,30 @@ def m_path_drift(lines):   # PT17 "/|": in the last part of every stroke-1 swing
     return lines
 
 
+
+def m_windup_popin(lines):   # Shay 17:25 "no pop-in": the first stroke-3 swing's wind-up frames (u < .28) show the stroke-start pose (blade off screen) -> the blade jumps out of mid-screen in one frame instead of being carried off
+    wind = swing_frames(lines, 0.0, 0.279, stroke='3')
+    st = swing_frames(lines, 0.28, 0.40, stroke='3')
+    assert wind and st, 'm_windup_popin: no stroke-3 swing'
+    src = lines[st[0]].split(' | ')
+    for i in wind:
+        g = lines[i].split(' | ')
+        for k in (MP, MF, MU):
+            setvec(g, 1, k, getvec(src, 1, k))
+        lines[i] = ' | '.join(g)
+    return lines
+
+
+def m_sweep_frozen(lines):   # Shay 17:05 minimum angular sweep: the first stroke-1 swing's blade keeps one direction through the stroke (u .28-.78; grip path unchanged) -> the tip slides, the blade does not turn
+    fr = swing_frames(lines, 0.25, 0.85, stroke='1')   # P[i] shows frame i+1's pose: cover one frame either side
+    assert fr, 'm_sweep_frozen: no stroke-1 swing'
+    src = lines[fr[len(fr) // 2]].split(' | ')
+    for i in fr:
+        g = lines[i].split(' | ')
+        setvec(g, 1, MF, getvec(src, 1, MF)); setvec(g, 1, MU, getvec(src, 1, MU))
+        lines[i] = ' | '.join(g)
+    return lines
+
 # ---------------- source edits (kind 'src': base = a corpus source snapshot tarball, edit(client dir)) ----------------
 def s_2hl_stroke0(d):   # E6 default stroke cycle: the light-2H class drops out of the cycle (kfp-e6-default-mask v1 + kfp-2h-light = 6E7C0363)
     p = os.path.join(d, 'kfp_viewmodel.inc'); t = open(p).read()
@@ -359,7 +383,20 @@ def _pool_inline_s3(p):   # the gate pool's per-swing inline path (metrics.swing
     return verdict_word(run(['python3', '-c', code, p]), 'poolinl ')
 
 
-REC_CHECKS['path-stroke1'] = lambda p: verdict_word(run(al('path', '--stroke', '1', '--gate-info', '--edge', '0.2', p)), 'path ')   # stroke 1 gated for the mutation (info in the gate; edge .2: s1 ends at .13-.16)
+REC_CHECKS['path-stroke1'] = lambda p: _path_rule('1', 'late')(p)   # the late-drift rule of stroke 1 (gated for the mutation); was the whole path verdict: BASEFAIL once span/ctr (Shay 17:05) fail the accepted s1
+def _path_rule(stroke, rule):   # one swing rule of `animlab.py path` (sweep= / wexit=) on one stroke (gated for the mutation)
+    def f(p):
+        out = run(al('path', '--stroke', stroke, '--gate-info', p))
+        segs = [(l, (lambda r: r if rule == 'wexit' else r.split(',')[0])(l.split(',' + rule + '=', 1)[1] if (',' + rule + '=') in l else l.split(' ' + rule + '=', 1)[1]))
+                for l in out.splitlines() if l.startswith('pathsw') and (rule + '=') in l]   # wexit: its tokens run to the line end
+        bad = [l for l, sg in segs if ':BAD' in sg]
+        n = sum(1 for l in out.splitlines() if l.startswith('pathsw'))
+        return ('FAIL' if bad or not n else 'PASS'), (bad[0] if bad else 'pathsw n=%d %s ok' % (n, rule))
+    return f
+
+
+REC_CHECKS['path-sweep-stroke1'] = _path_rule('1', 'sweep')
+REC_CHECKS['path-wexit-stroke3'] = _path_rule('3', 'wexit')
 REC_CHECKS['inline-stroke3'] = lambda p: verdict_word(run(al('--only-stroke', '3', 'inline', p)), 'inline ')
 REC_CHECKS['pool-inline-stroke3'] = _pool_inline_s3
 SC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stroke-cycle.py')
@@ -421,6 +458,8 @@ MUTS = [
     ('take-combat-message', 'take', 'takes/ok-e6fix', t_msgs, ['takecheck']),
     ('rec-s3-windup-blade-off', 'rec', 'rec/e6s3-3f1a-5090.txt', m_s3_windup_off, ['inline-stroke3', 'pool-inline-stroke3']),
     ('rec-path-late-drift', 'rec', 'rec/ab2h-5090.txt', m_path_drift, ['path-stroke1']),
+    ('rec-windup-popin', 'rec', 'rec/ab2h-5090.txt', m_windup_popin, ['path-wexit-stroke3']),
+    ('rec-sweep-frozen', 'rec', 'rec/ab2h-5090.txt', m_sweep_frozen, ['path-sweep-stroke1']),
     ('src-2hl-stroke0', 'src', 'src/KenshiFP-e6mask3-c4ee493.client.tar.gz', s_2hl_stroke0, ['stroke-cycle']),
 ]
 
