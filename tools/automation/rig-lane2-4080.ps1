@@ -348,7 +348,11 @@ while ($true) {
         } else { State "running $name -> 4080:C:\KenshiTestRuns\$outN (probe: no answer)" }
         Start-Sleep $TickSec; continue
     }
-    if (Test-Path (Join-Path $rd "$Lane.restart")) {   # rig-runner.ps1 -Restart: re-spawn at the list boundary
+    # rig-runner.ps1 -Restart: re-spawn at the list boundary, only if the runner scripts parse (runner-parse-ok.ps1: else this
+    # old loop keeps running + ALERT-<lane>-restart.txt, the flag stays)
+    $pk = if (Test-Path (Join-Path $rd "$Lane.restart")) { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\runner-parse-ok.ps1" -Rig $Lane 2>&1 | Select-Object -Last 1) } else { '' }
+    if ($pk -and $pk -notlike 'PARSE OK*' -and $script:parseLogged -ne $pk) { $script:parseLogged = $pk; Log "restart refused, old loop keeps running: $pk" }
+    if ($pk -like 'PARSE OK*') {
         Remove-Item (Join-Path $rd "$Lane.restart"), (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue
         Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$auto\rig-runner.ps1", '-Rig', $Lane); Log 'restart: re-spawned'; exit 0
     }

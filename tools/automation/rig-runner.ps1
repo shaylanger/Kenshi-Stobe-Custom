@@ -160,6 +160,11 @@ function NeverStartedAct([datetime]$t0, [datetime]$loopStart, [datetime]$now, [b
 # fast setup FAIL list: 'alert' (sticky ALERT-<rig>-setup.txt, Stop hook) only when nothing else is queued (the rig idles) or
 # $max fast lists came in a row; else 'note' (owner note, the next list starts at once)
 function FastAlertAct([int]$queued, [int]$streak, [int]$max) { if ($queued -le 0 -or $streak -ge $max) { 'alert' } else { 'note' } }
+# deferred start (speed-scout 2026-10-11: 96/97/98-*-4080 FAILED "kenshi still running" at install within 50 s of a gfx stop;
+# three lists lost, owners had to requeue by hand): an install / lock / copy / needs precondition that fails at the list
+# start puts the list back into its queue folder for a retry after a backoff (2, 4, 6, 8 min) instead of failed\; the
+# $max-th failure in a row fails it. Pure: @('defer', <minutes>) | @('fail').
+function DeferAct([int]$tries, [int]$max) { if ($tries -ge $max) { @('fail') } else { @('defer', [Math]::Min(2 * $tries, 10)) } }
 # Tick wait (turret-fp 2026-10-11: DONE noticed up to 60 s late, mean ~40 s/list over 6 lists): sleep up to $TickSec, but
 # wake as soon as something NEW appears: the running batch's <out>\DONE or GAMEDONE (5090: local Test-Path every 2 s;
 # 4080: one ssh Test-Path every 15 s), or a new list in queue\<rig>\ / any\ while nothing runs. Only a file that was not
@@ -262,6 +267,15 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     # fast FAIL routing (coordinator m102): one fast list with more queued = owner note; idle rig or a streak = sticky ALERT
     foreach ($c in @(@('fast list, 3 more queued', 3, 1, 'note'), @('fast list, nothing queued (rig idles)', 0, 1, 'alert'), @('2nd fast list in a row', 2, 2, 'alert'))) {
         $g = FastAlertAct $c[1] $c[2] 2; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) fast-FAIL $($c[0]): got '$g' want '$($c[3])'" }
+    # deferred start: tries 1..4 defer with a growing backoff, the 5th fails the list
+    foreach ($c in @(@(1, 'defer 2'), @(2, 'defer 4'), @(4, 'defer 8'), @(5, 'fail'))) {
+        $g = (DeferAct $c[0] 5) -join ' '; $ok = $g -eq $c[1]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) defer-start try $($c[0]): got '$g' want '$($c[1])'" }
+    # pre-respawn parse guard (coordinator m102: a live edit that did not parse would have killed every runner at -Restart)
+    $pt = Join-Path $env:TEMP "rr-parse-$PID"; New-Item -ItemType Directory -Force $pt | Out-Null; Set-Content "$pt\bad.ps1" 'Write-Host "x $name: y"'
+    $g1 = [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\runner-parse-ok.ps1" -Rig selftest -Files "$pt\bad.ps1" -AlertDir $pt 2>&1 | Select-Object -Last 1)
+    $g2 = [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\runner-parse-ok.ps1" -Rig selftest -AlertDir $pt 2>&1 | Select-Object -Last 1)
+    $ok = $g1 -like 'PARSE FAIL bad.ps1:1 *' -and $g2 -eq 'PARSE OK' -and -not (Test-Path "$pt\ALERT-selftest-restart.txt"); if (-not $ok) { $bad++ }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) restart parse guard: bad file '$g1', live files '$g2'"; Remove-Item -Recurse -Force $pt -ErrorAction SilentlyContinue
     # 4080 sync covers every helper a synced script names (rg-02 1011-0927: fp-control.sh's fp-yaw-free.awk never synced)
     $sc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --check' 2>&1 | ForEach-Object { "$_" })
     $ok = $LASTEXITCODE -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync helper closure: $(($sc | Select-Object -First 3) -join ' / ')"
@@ -332,6 +346,15 @@ if ($Status) {
     "queued any=$(@(Get-ChildItem "$qd\any" -Filter *.list -File -ErrorAction SilentlyContinue).Count) filler=$(@(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue).Count)"
     if (Test-Path "$rd\filler-rotation.tsv") { Get-Content "$rd\filler-rotation.tsv" | ForEach-Object { $p = $_ -split "`t"; "  filler $($p[0]) last=$($p[1]) rig=$($p[2])$(if ($p.Count -ge 4 -and $p[3]) { " benched-until=$($p[3]) ($($p[4]))" })" } }
     Get-ChildItem $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { "  $($_.Name): $((Get-Content $_.FullName -Raw).Trim())" }
+    # which lane took each list (lab-calibrate2): running\ entries (<lane>__<list>) + the newest .result lines (DONE|FAILED|DIED <lane>)
+    Get-ChildItem "$qd\running" -File -ErrorAction SilentlyContinue | ForEach-Object { if ($_.Name -match '^([^_]+)__(filler__)?(.+)$') { "  running $($Matches[1]) $(if ($Matches[2]) { '(filler) ' })$($Matches[3]) since $($_.LastWriteTime.ToString('HH:mm'))" } }
+    $dfs = ReadShared (Join-Path $rd 'deferred.tsv')
+    if ($dfs) { foreach ($l in @($dfs -split "`r?`n" | Where-Object { $_ })) { $p = @($l -split "`t"); if ($p.Count -ge 4) { "  deferred $($p[0]) try $($p[1]) retry $(try { ([datetime]$p[2]).ToString('HH:mm') } catch { '?' }): $($p[3])" } } }
+    @(Get-ChildItem "$qd\done", "$qd\failed" -Filter '*.result' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 10) | ForEach-Object {
+        $h = [string](Get-Content $_.FullName -TotalCount 1)
+        $w = @($h -split ' '); $pf = if ($h -match 'pass=(\d+) fail=(\d+)') { " pass=$($Matches[1]) fail=$($Matches[2])" } else { $t = ($w | Select-Object -Skip 3) -join ' '; " $($t.Substring(0, [Math]::Min(80, $t.Length)))" }
+        "  $($_.LastWriteTime.ToString('HH:mm')) $($w[0]) by $($w[1]) $($_.BaseName)$pf"
+    }
     exit 0
 }
 if ($Restart) {   # deploy a new rig-runner.ps1 at the next list boundary (never mid-batch): the loop re-spawns itself there
@@ -667,9 +690,10 @@ function RigCheck([string]$path, [switch]$Fix) {
 function QSort { @($input) | Sort-Object @{ e = { if ($_.Name -match '^(\d+)') { [long]$matches[1] } else { [long]::MaxValue } } }, @{ e = { -join ($_.Name.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) } } }
 function RealLists {
     $other = if ($Rig -eq '5090') { '4080' } else { '5090' }
-    $n = 0
+    $n = 0; $script:defH = DefRead
     foreach ($src in "$qd\$Rig", "$qd\any") {
         foreach ($f in @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort)) {
+            if (DefWaiting $f.Name) { continue }   # deferred start: waits for its retry time
             if ($src -like '*\any') {
                 $want = Header $f.FullName 'rig'
                 if ($want -and $want -ne $Rig) { continue }
@@ -697,7 +721,7 @@ function RealLists {
     $busy = @(Get-ChildItem "$qd\running" -Filter "${other}__*" -File -ErrorAction SilentlyContinue).Count -or (Test-Path (Join-Path $rd "$other.cur"))
     if (-not $busy) { return }
     $h = Get-ChildItem "$qd\$other" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
-    if (-not $h -or (Header $h.FullName 'rig') -or ($Rig -eq '4080' -and (StobeRows $h.FullName))) { return }
+    if (-not $h -or (DefWaiting $h.Name) -or (Header $h.FullName 'rig') -or ($Rig -eq '4080' -and (StobeRows $h.FullName))) { return }
     if ((RigCheck $h.FullName) -ne 'OK') { return }
     $h
 }
@@ -709,6 +733,24 @@ function Fail-List([string]$runPath, [string]$name, [string]$own, [string]$why, 
     Log "FAILED $name : $why"
     if ((Split-Path $runPath -Leaf) -like '*__filler__*') { Bench $name 3 $why }
     Note $own "list $name NOT run ($why); details $dst.result. Fix it and put it back into queue\$Rig\ (or any\)."
+}
+# deferred start (DeferAct): runner\deferred.tsv = name <tab> tries <tab> retry-after <tab> why; RealLists skips a list until
+# its retry time; a list that starts clears its entry
+$defF = Join-Path $rd 'deferred.tsv'; $DeferMax = 5
+function DefRead { $h = @{}; foreach ($l in @((ReadShared $defF) -split "`r?`n")) { $p = @($l -split "`t"); if ($p.Count -ge 4 -and $p[0]) { $h[$p[0]] = $p } }; $h }
+function DefWrite($h) { $null = WriteShared $defF ((@($h.Values | Where-Object { [datetime]$_[2] -gt (Get-Date).AddHours(-6) } | ForEach-Object { $_ -join "`t" }) -join "`r`n") + "`r`n") }
+function DefWaiting([string]$name) { if (-not $script:defH) { return $false }; $e = $script:defH[$name]; $e -and [datetime]$e[2] -gt (Get-Date) }
+function DefClear([string]$name) { $h = DefRead; if ($h.ContainsKey($name)) { $h.Remove($name); DefWrite $h; Log "deferred ${name}: started, entry cleared" } }
+function Defer-List([string]$runPath, [string]$name, [string]$own, [string]$why, [string[]]$detail, $src) {
+    if ((Split-Path $runPath -Leaf) -like '*__filler__*') { return (Fail-List $runPath $name $own $why $detail) }   # filler never installs; its original stays in filler\
+    $h = DefRead; $tries = 1 + $(if ($h[$name]) { [int]$h[$name][1] } else { 0 })
+    $a = DeferAct $tries $DeferMax
+    if ($a[0] -eq 'fail') { $h.Remove($name); DefWrite $h; return (Fail-List $runPath $name $own "$why (start deferred $($tries - 1)x, still failing)" $detail) }
+    $back = Join-Path $src.DirectoryName $name
+    Move-Item -LiteralPath $runPath $back -Force -ErrorAction SilentlyContinue
+    $h[$name] = @($name, $tries, (Get-Date).AddMinutes($a[1]).ToString('s'), ($why -replace "[`t`r`n]", ' ')); DefWrite $h
+    Log "DEFERRED $name (try $tries/$DeferMax, retry in $($a[1]) min, back in $(Split-Path $src.DirectoryName -Leaf)\): $why$(if ($detail) { " | $(($detail | Select-Object -First 2) -join ' / ')" })"
+    if ($tries -eq 1) { Note $own "list $name start deferred ($why): the runner retries it in $($a[1]) min (up to $DeferMax tries), nothing to do unless it fails." }
 }
 # ---------------------------------------------------------------- staged builds (2026-10-10: "# needs: KenshiFP <sha>" failed
 # at install twice because kfp-pipeline had replaced that sha). "# needs: KenshiFP latest" = the newest staged build,
@@ -1072,7 +1114,7 @@ function Start-Batch($f) {
     $reuseOk = if ($Rig -eq '5090') { [bool](K1Procs) -and (RunningGfx) -eq $gfx -and -not ($needH -and (Get-FileHash 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll').Hash.Substring(0, 8) -ne $needH) }
                else { [bool]$script:keep4080 -and (RunningGfx) -eq $gfx }
     $inst = if ($filler) { $null } else { StagedWanted $needK $reuseOk }   # filler: runs on the installed build (needs checked at pick)
-    if ($inst -eq 'FAIL') { Fail-List $run $name $own $script:instWhy @(); Remove-Item $curF; return $true }
+    if ($inst -eq 'FAIL') { Defer-List $run $name $own $script:instWhy @() $f; Remove-Item $curF; return $true }
     # "# gfx: low" (res-graphics, Shay 22:05: rows that don't film run at lowest graphics in a small window): the running game
     # is reused only when its mode matches (runner\<rig>.gfx), else relaunched; the launch reads KAH_GFX (5090) / kcfg -Gfx (4080)
     $gfx = if ((Header $run 'gfx') -match '^low\b') { 'low' } else { 'full' }
@@ -1087,7 +1129,11 @@ function Start-Batch($f) {
         $hInst = $needH -and (Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH
         if (K1Procs) {
             $rg = RunningGfx
-            if ($inst -or $hInst) { Log "stop Kenshi for the install (KenshiFP $inst$(if ($hInst) { ", Harness $needH" }))"; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
+            if ($inst -or $hInst) {   # stop AND wait for the exit (an install right after a bare stop raced the exit, m102 15:20)
+                $kr = KillGame { [bool](K1Procs) } { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop 2>&1 } { foreach ($k in K1Procs) { & taskkill.exe /F /T /PID $k.Id 2>&1 } } 30
+                Log "stop Kenshi for the install (KenshiFP $inst$(if ($hInst) { ", Harness $needH" })): $($kr[0])"
+                if ($kr[0] -eq 'ALIVE') { Defer-List $run $name $own "Kenshi did not exit for the install: $($kr[1])" @() $f; Remove-Item $curF; return $true }
+            }
             elseif ($rg -ne $gfx) { Log "stop Kenshi: the list wants gfx $gfx, the running game has $rg (relaunch)"; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
             else { Log "REUSE $name : Kenshi stays up, $launch loads in place (no DLL install needed, gfx $gfx)" }
         }
@@ -1095,7 +1141,7 @@ function Start-Batch($f) {
         if ($inst) {
             $o = & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\install-dll.ps1" KenshiFP -Staged -Hash $inst 2>&1 | ForEach-Object { "$_" }
             Log "install KenshiFP $inst : $($o -join ' / ')"
-            if ($LASTEXITCODE -ne 0 -or -not ($o -match 'installed')) { Fail-List $run $name $own "KenshiFP $inst install failed" $o; Remove-Item $curF; return $true }
+            if ($LASTEXITCODE -ne 0 -or -not ($o -match 'installed')) { Defer-List $run $name $own "KenshiFP $inst install failed" $o $f; Remove-Item $curF; return $true }
         }
         if ($needH) {
             $hd = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll'
@@ -1103,7 +1149,7 @@ function Start-Batch($f) {
                 $sh = Join-Path $runs "staged\AutomationHarness-$needH.dll"   # staged copy first (out\ is shared by every harness builder)
                 $o = if ((Test-Path $sh) -and (Get-FileHash $sh).Hash.Substring(0, 8) -eq $needH -and -not (K1Procs)) { Copy-Item $sh $hd -Force; "copied $sh" }
                      else { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\install-dll.ps1" Harness 2>&1 | ForEach-Object { "$_" } }
-                if ((Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH) { Fail-List $run $name $own "needs Harness $needH, installed $((Get-FileHash $hd).Hash.Substring(0, 8)) (build out has another hash)" $o; Remove-Item $curF; return $true }
+                if ((Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH) { Defer-List $run $name $own "needs Harness $needH, installed $((Get-FileHash $hd).Hash.Substring(0, 8)) (build out has another hash)" $o $f; Remove-Item $curF; return $true }
                 Log "install Harness $needH"
             }
         }
@@ -1114,7 +1160,7 @@ function Start-Batch($f) {
         Wsl @('bash', "$outP/.start.sh") | Out-Null
     } else {
         $lk = (Ssh4Ps 'C:\KAH\ctl.ps1' @('lock') | Select-Object -First 1)
-        if ($lk -and $lk -ne 'free' -and $lk.Trim() -ne $owner4) { Fail-List $run $name $own "4080 lock held by $lk" @(); Remove-Item $curF; return $true }
+        if ($lk -and $lk -ne 'free' -and $lk.Trim() -ne $owner4) { Defer-List $run $name $own "4080 lock held by $lk" @() $f; Remove-Item $curF; return $true }
         # no relaunch gap (2026-10-10): the previous list left Kenshi up for this one (keep4080): run-batch.sh --reuse loads
         # the save in place, unless a DLL must be installed (stop + launch as before)
         $reuse = $false
@@ -1126,13 +1172,18 @@ function Start-Batch($f) {
             else { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }
         }
         $script:keep4080 = $false; Set-Content $gfxF $gfx
+        if ($inst -and -not $reuse) {   # the stop above returns before the exit: wait for it (m102 15:20: 3 lists FAILED at install)
+            $kr = KillGame { (K1on4080) -ne 'no' } { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4, '-TimeoutSec', '90') } { Kill1on4080 } 30
+            if ($kr[0] -ne 'gone') { Log "4080 stop for the install: $($kr[0])" }
+            if ($kr[0] -eq 'ALIVE') { Defer-List $run $name $own "4080 Kenshi did not exit for the install: $($kr[1])" @() $f; Remove-Item $curF; return $true }
+        }
         if ($inst) {
             $o = Ssh4Ps 'C:\KAH\inst-staged.ps1' @('-Hash', $inst); Log "4080 install KenshiFP $inst : $($o -join ' / ')"
-            if (-not ($o -match 'installed')) { Fail-List $run $name $own "4080 KenshiFP $inst install failed" $o; Remove-Item $curF; return $true }
+            if (-not ($o -match 'installed')) { Defer-List $run $name $own "4080 KenshiFP $inst install failed" $o $f; Remove-Item $curF; return $true }
         }
         if ($needH) {
             $hh = (Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-InstallHarness', $needH) | Select-Object -Last 1); Log "4080 harness (need $needH, installs C:\KAH\staged\AutomationHarness-$needH.dll if present): $hh"
-            if ($hh -notmatch $needH) { Fail-List $run $name $own "4080 needs Harness $needH, installed $hh" @(); Remove-Item $curF; return $true }
+            if ($hh -notmatch $needH) { Defer-List $run $name $own "4080 needs Harness $needH, installed $hh" @() $f; Remove-Item $curF; return $true }
         }
         # take scripts + lab modules on the 4080 = this tree (rig4080/setup.sh): without it the 4080 ran stale scripts
         # (zsfist4080 fists lab: "No module named recfmt", 2026-10-10); files a running analysis uses are deferred (Sync4080)
@@ -1141,7 +1192,7 @@ function Start-Batch($f) {
         Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
         $ok = Scp4 @((Join-Path $tmp 'list.txt'), (Join-Path $tmp '.run-batch.sh')) "C:/KenshiTestRuns/$outN/"
         $ok = $ok -and (Scp4 @("$auto\rig-runner-probe.sh", "$auto\batch-excerpts.sh", "$auto\batch-health.sh", "$auto\rig-env.sh", "$auto\dialog-guard.sh", "$auto\row-reaper.sh") 'C:/KenshiModding/tools/automation/')
-        if (-not $ok) { Fail-List $run $name $own '4080 copy (scp) failed' @(); Remove-Item $curF; return $true }
+        if (-not $ok) { Defer-List $run $name $own '4080 copy (scp) failed' @() $f; Remove-Item $curF; return $true }
         if (-not $reuse) {
             $ga = if ((Select-String -LiteralPath "$auto\rig4080\kcfg.ps1" -Pattern '\$Gfx\b' -Quiet -ErrorAction SilentlyContinue)) { @('-Gfx', $gfx) } else { @() }   # res-graphics' -Gfx low|full once kcfg.ps1 has it
             $o = Ssh4Ps 'C:\KAH\kcfg.ps1' (@('test') + $ga); Log "4080 kcfg$(if ($ga) { " gfx $gfx" }): $($o -join ' / ')"
@@ -1156,7 +1207,7 @@ function Start-Batch($f) {
         $o = Ssh4Ps 'C:\KAH\itrun.ps1' @('-Log', "C:\KenshiTestRuns\$outN.itrun.out", '-Cmd', "$outP/.start.sh")
         Log "4080 itrun: $($o -join ' ')"
     }
-    State "running $name -> $outW (owner $own)"
+    State "running $name -> $outW (owner $own)"; DefClear $name
     Note $own "started $name on ${Rig}: out=$(if ($Rig -eq '4080') { "4080:C:\KenshiTestRuns\$outN" } else { $outW }) (launch $launch$(if ($inst) { ", KenshiFP $inst installed" }))."
     $true
 }
@@ -1531,7 +1582,11 @@ while ($true) {
                 State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND($(if ($condSince) { [int]((Get-Date) - $condSince).TotalMinutes } else { 0 })m/$($lim)m): $why" })$(if ($script:preempted["$($c[5])|$($c[1])"]) { ' PREEMPTED: ends after this row' })"
             }
         } else {
-            if (Test-Path (Join-Path $rd "$Rig.restart")) {   # list boundary: hand over to a fresh copy of the (new) script
+            # list boundary: hand over to a fresh copy of the (new) script, only if it parses (runner-parse-ok.ps1: a broken
+            # live edit keeps this old loop running + ALERT-<rig>-restart.txt, the flag stays for the next boundary)
+            $pk = if (Test-Path (Join-Path $rd "$Rig.restart")) { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\runner-parse-ok.ps1" -Rig $Rig -AlertDir $(if ($Fake) { $rd } else { $runs }) 2>&1 | Select-Object -Last 1) } else { '' }
+            if ($pk -and $pk -notlike 'PARSE OK*' -and $script:parseLogged -ne $pk) { $script:parseLogged = $pk; Log "restart refused, old loop keeps running: $pk" }
+            if ($pk -like 'PARSE OK*') {
                 Remove-Item (Join-Path $rd "$Rig.restart"), (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue
                 $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Rig', $Rig, '-Force') + $(if ($Fake) { @('-Fake') } else { @() }) + $(if ($script:keep4080) { @('-Keep4080') } else { @() })
                 $np = Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList $a
