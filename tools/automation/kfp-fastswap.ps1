@@ -145,7 +145,7 @@ $logOut = "$env:TEMP\kfp-fastswap-$Instance.out"
 # only this launch's harness.log counts (kenshi-ctl deletes it too, but the polls below start before it does)
 Remove-Item "$H\harness.log" -ErrorAction SilentlyContinue
 if (Test-Path "$H\harness.log") { Fail "old harness.log still held open ($H): is a game still running?" }
-$script:fgLock = [KfpFs.U]::LockSetForegroundWindow(1); Say "foreground lock $(if ($script:fgLock) { ON } else { not taken })"
+$script:fgLock = [KfpFs.U]::LockSetForegroundWindow(1); Say "foreground lock $(if ($script:fgLock) { 'ON' } else { 'not taken' })"
 $p = Start-Process powershell -ArgumentList $la -NoNewWindow -PassThru -RedirectStandardOutput $logOut -RedirectStandardError "$logOut.err"
 $null = $p.Handle   # cache the process handle: without it a -PassThru process reports ExitCode $null after it exits (read as a failure)
 $hStart = $null; $menu = $false; $sig = $false
