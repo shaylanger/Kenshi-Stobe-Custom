@@ -253,7 +253,9 @@ SPR=""; # Shek first: a Hive drone's idle bob moves its neck 14.4<->16.9 dm with
 # aimed-part shots can't be placed (5090 b8: 2 head shots landed as chest; mapping consistent 5/5); hive/skeleton only as fallback
 # xbf-hits2 (5090): both Shek specs failed their 20 rerolls (rolled Hive), the Hive drone never read upright -> no shots:
 # the Shek specs get 4 calls each (80 rolls) before the Hive fallback
-for spec in 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek|hive' 'Drifter|shek|hive|skeleton'; do
+# xbf-r11b (5090): all 100 rolls of both templates were Hive again (pose_unstable, then R11 timed out at 1800 s): the
+# Shek-only template 'Shek Warrior' (gamedata.base) goes right after the first two rolls, ahead of the reroll pile
+for spec in 'Hungry Bandit|shek' 'Drifter|shek' 'Shek Warrior|shek' 'Shek Warrior|shek' 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek|hive' 'Drifter|shek|hive|skeleton'; do
   t=${spec%%|*}; rf=${spec#*|}
   SPR=$(A spawn "$t" Drifters near "$SH" dist 30 count 1 race "$rf"); grep -q '^spawned 1/1' <<<"$SPR" && break; SPR=""; done
 if [ -z "$SPR" ]; then row R11-RACE SETUP "FAIL no Shek/Hive/Skeleton spawn: $(tail -1 "$LOG" | cut -c1-200)"
