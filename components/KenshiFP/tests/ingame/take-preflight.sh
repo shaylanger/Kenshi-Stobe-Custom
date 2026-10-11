@@ -262,8 +262,12 @@ pf_ranged_inj(){ local who=$1 e w r bow ws
     # xbf-hit3 (5090, after a reused game + in-place load): melee_in_hands with NO other weapon (inventory = the crossbow
     # only; the in-hands pointer != the ranged virtual's item): unequip + equip the crossbow itself to rebuild its slot
     if [ -z "$(tr -d '\n' <<<"$ws")" ] && [ -n "$bow" ] && [ "$bow" != none ]; then
-      PF_A unequip "$who" "$bow" >/dev/null; sleep 0.5; r=$(PF_A equip "$who" "$bow"); sleep 1
-      echo "pf_ranged_inj: no other weapon, crossbow re-equipped: $(cut -c1-80 <<<"$r")"; fi; }
+      r=$(PF_A unequip "$who" "$bow"); sleep 0.5
+      # xbf-hit4: a small main inventory sends it to the ground ("back -> ground"): pick it up at once (giveItem puts it
+      # back in the free weapon slot or the inventory), then equip unless it already reads as the ranged weapon
+      case "$r" in *ground*) r=$(PF_A pickup "$who" "$bow" now); sleep 0.5;; esac
+      [ "$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')" = "$bow" ] || r=$(PF_A equip "$who" "$bow"); sleep 1
+      echo "pf_ranged_inj: no other weapon, crossbow re-equipped: $(cut -c1-80 <<<"$r") bow_now=$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')"; fi; }
   e=$((SECONDS+3)); while [ $SECONDS -lt $e ] && [ "$(pf_cs armed)" != 1 ]; do PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.3; done
   if [ "$(pf_cs armed)" != 1 ] || [ "$(pf_cs loaded)" != 1 ]; then   # holstered and/or empty: an injected aim draws + auto-reloads
     PF_A fp_combat input 1 0 0 >/dev/null; e=$((SECONDS+14)); r=0
