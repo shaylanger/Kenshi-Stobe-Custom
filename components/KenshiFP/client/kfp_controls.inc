@@ -724,6 +724,17 @@ static void *fpc_fb_pick(void *stats,void *pc) {   /* ticket B: re-pick until al
         if (i>=0) {if (i<4) {g_fpc_fb_seen[i]=tech;snprintf(g_fpc_fb_seen_nm[i],48,"%s",nm);}g_fpc_fb_repicks+=k;snprintf(g_fpc_fb_name,sizeof g_fpc_fb_name,"%s",nm);return tech;}
     }
     g_fpc_fb_repicks+=k;
+    if (!g_fpc_fb_seen[0] && !g_fpc_fb_seen[1] && !g_fpc_fb_seen[2] && !g_fpc_fb_seen[3]) {   /* fresh load: discovery sweep */
+        static const float ff[3]={50.0f,20.0f,90.0f}; static int missed; int found=0;
+        for (k=0;k<64 && !found;k++) {
+            void *t2=g_fpc_chooseblock(stats,k&3,ff[(k>>3)%3],(k>>2)&1,pc);char n2[48];int i;
+            if (!readable(t2,TECH_ANIM_SPEED+4)) continue;
+            fpc_tech_name(t2,n2,sizeof n2);i=fpc_fb_allow_idx(n2);
+            if (i>=0 && i<4) {g_fpc_fb_seen[i]=t2;snprintf(g_fpc_fb_seen_nm[i],48,"%s",n2);found=1;}
+        }
+        g_fpc_fb_repicks+=k;
+        if (!found && !missed++) logline("[controls] free block: no allowed technique in a 64-pick discovery sweep");
+    }
     for (k=0;k<4;k++) if (g_fpc_fb_seen[k]) {++g_fpc_fb_forced;snprintf(g_fpc_fb_name,sizeof g_fpc_fb_name,"%s",g_fpc_fb_seen_nm[k]);return g_fpc_fb_seen[k];}
     fpc_tech_name(tech,g_fpc_fb_name,sizeof g_fpc_fb_name);return tech;   /* nothing allowed seen yet: the last pick */
 }
