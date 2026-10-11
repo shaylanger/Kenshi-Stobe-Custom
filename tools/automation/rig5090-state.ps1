@@ -11,7 +11,7 @@
 param([int]$GraceMin = 2)
 $runs = 'C:\KenshiTestRuns'
 $now = Get-Date
-# instance 1 only (multi-instance 2026-10-11): the lane-5090b game (D:\KenshiInst\<n>), its marker runner-5090b and its out
+# instance 1 only (multi-instance 2026-10-11): the lane-5090b|5090c games (D:\KenshiInst\<n>), their markers runner-5090b|c and its out
 # dirs (.instance file) are a separate game slot and never make the main 5090 slot BUSY or idle
 $kenshiP = Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue | Where-Object { $_.Path -notlike 'D:\KenshiInst\*' } | Select-Object -First 1
 $lockFile = Join-Path $runs 'game.lock'
@@ -32,7 +32,7 @@ if (-not $kenshiP -and -not $owner) {
 if ($kenshiP -and $kenshiP.StartTime -and (-not $last -or $kenshiP.StartTime -gt $last)) { $last = $kenshiP.StartTime }
 $busy = @(); $done = @()
 foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue)) {
-    if ($m.Name -like '4080-*' -or $m.Name -eq 'runner-5090b' -or $m.LastWriteTime -lt $now.AddHours(-6)) { continue }
+    if ($m.Name -like '4080-*' -or $m.Name -match '^runner-5090[b-z]$' -or $m.LastWriteTime -lt $now.AddHours(-6)) { continue }
     $p = ((Get-Content -LiteralPath $m.FullName -TotalCount 1 -ErrorAction SilentlyContinue) -as [string])
     $p = if ($p) { $p.Trim() } else { '' }
     $win = $null

@@ -23,6 +23,8 @@ if (-not $Kenshi) {
 $scfg = "$Kenshi\settings.cfg"; $kcfg = "$Kenshi\kenshi.cfg"
 $capF = "$Kenshi\mods\AutomationHarness\framecap.txt"
 # no -Fps: 60, or uncapped while C:\KenshiTestRuns\uncapped.on exists (Shay 2026-10-11: PC free, use it fully; delete the file to cap again)
+# KAH_FPS=<n> (rig-lane2.ps1: non-filming lanes 5090b/5090c run at 30 fps, lane-5090c 2026-10-11) replaces the default when no -Fps
+if ($Fps -lt 0 -and $env:KAH_FPS -match '^\d+$') { $Fps = [int]$env:KAH_FPS }
 if ($Fps -lt 0) { $Fps = if (Test-Path 'C:\KenshiTestRuns\uncapped.on') { 0 } else { 60 } }
 $save = 'C:\KenshiTestRuns\settings.gfx.play'; $applied = 'C:\KenshiTestRuns\gfx.applied'
 # a multi-instance install copy (kenshi-instance.ps1, has instance.txt) keeps its own state next to its game, never instance 1's
