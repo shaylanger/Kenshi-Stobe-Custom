@@ -14,6 +14,7 @@ static int g_cn_ui_aim, g_cn_ui_fire;   /* C1: the FP controls' RMB/LMB with ran
  * a second harness client on the rig (4080 b24+b25: two runners at once) shows up as foreign input. */
 static unsigned g_combat_inj_cmds, g_combat_inj_aim_cmds;
 static int g_combat_fault, g_combat_dispatch;
+static unsigned g_combat_faults; static ULONGLONG g_combat_fault_t;   /* FAULTRETRY: tick faults, time of the last one */
 static DWORD g_combat_dispatch_tid;
 static uint32_t g_combat_actor_ids[5];
 static void *g_combat_pc, *g_combat_rc, *g_combat_weapon, *g_combat_gun;
@@ -88,6 +89,21 @@ static uintptr_t combat_unique_signature(const char *sig);
 #include "kfp_combat_body.inc"
 #include "kfp_combat_input.inc"
 #include "kfp_combat_wound.inc"
+/* XBMESH (kfp-xbow-drawsec): drawWeapon(item, lastSection) needs the item's own sheath section (Item::inventorySection
+ * @0xE8, e.g. "back"/"hip"); "" sets weaponInHands but leaves the mesh on the sheath (crossbow without its stock in FP,
+ * PT14 for melee). Fills the by-value std::string temp. */
+static unsigned g_combat_draw_nosec;
+static int g_combat_drawexp;   /* XBDEXP test switch (fp_combat drawexp) */
+static void *g_combat_draw_req;   /* XBDEXP 64: R draw requested from the FP controls tick */
+static void *g_fpc_hold_actor;   /* tentative decl; defined in kfp_controls.inc (XBHOLD: the R draw's anti-sheathe hold) */
+static void kfp_draw_section(void *item,unsigned char *out32,char *sec,size_t secn) {
+    sec[0]=0;const unsigned char *ss=(const unsigned char *)((uintptr_t)item+0xE8);
+    if (readable((void *)ss,32)) {size_t sl=*(size_t *)(ss+0x10),cap=*(size_t *)(ss+0x18);
+        const char *sp=cap>15?(readable(*(void **)ss,1)?*(const char **)ss:NULL):(const char *)ss;
+        if (sp && sl<secn && (cap<=15 || readable((void *)sp,sl+1))) {memcpy(sec,sp,sl);sec[sl]=0;}}
+    if (!sec[0]) ++g_combat_draw_nosec;
+    if (strlen(sec)>15) make_mstr_long(out32,sec); else make_mstr(out32,sec);
+}
 static void combat_rc_hook(void *rc,float dt,const void *a,const void *b) {
     if (g_tur_rc && rc==g_tur_rc) {++g_tur_updt_suppressed;return;}   /* T4: the FP char mans the turret, not the AI */
     if (!combat_owned_rc(rc)) g_combat_rc_orig(rc,dt,a,b);
@@ -593,6 +609,9 @@ static void fp_manual_combat_tick(void *gw,float dt) {
                 g_combat_observed.allowed,g_combat_observed.running,g_combat_gun);
         }
     }
+    if (g_combat_fault && g_combat_fault_t && g_combat_faults<=3 && GetTickCount64()-g_combat_fault_t>=2000) {
+        g_combat_fault=0;g_combat_fault_t=0;logline("[combat] native call fault cleared after 2 s (retry %u/3)",g_combat_faults);
+    }
     if (!g_combat_enabled || !g_combat_native_ready || g_combat_fault || !g_fp_mode) {
         if (g_combat_rc) {
             if (setjmp(g_guard_jb)) {g_guard_armed=0;g_combat_fault=1;return;}
@@ -608,8 +627,8 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     if (setjmp(g_guard_jb)) {
         g_mr_perch_node=saved_perch_node;g_mr_perch_cache=saved_perch_cache;
         g_guard_armed=0;g_combat_fault=1;g_combat_dispatch=0;g_combat_dispatch_tid=0;g_aim_mode=0;
-        g_combat_pc=NULL;g_combat_rc=NULL;g_combat_gun=NULL;
-        logline("[combat] native call fault; manual ownership disabled");return;
+        g_combat_pc=NULL;g_combat_rc=NULL;g_combat_gun=NULL;++g_combat_faults;g_combat_fault_t=GetTickCount64();
+        logline("[combat] native call fault #%u; manual ownership disabled%s",g_combat_faults,g_combat_faults<=3?" (retry in 2 s)":"");return;
     }
     guard_arm();
     void *pc=fp_controlled_char(gw);
@@ -701,7 +720,7 @@ static void fp_manual_combat_tick(void *gw,float dt) {
         if (g_combat_draw_cd>0) g_combat_draw_cd-=dt;
         if (g_combat_control.aimed || (action&KFP_ACT_RAISE)) {
             combat_draw_hook_install(pc);
-            *(unsigned char *)((uintptr_t)rc+RC_COMBATMODE)=1;*(int *)((uintptr_t)rc+RC_STATE_OFF)=3;
+            if (!(g_combat_drawexp&32) || (g_combat_wih && g_combat_draw_cd<=0)) {*(unsigned char *)((uintptr_t)rc+RC_COMBATMODE)=1;*(int *)((uintptr_t)rc+RC_STATE_OFF)=3;}
             if (g_combat_wih && g_combat_wih!=weapon) {
                 g_combat_why="wrong_weapon";
                 if (g_combat_draw_cd<=0 && g_sheathe_orig) {g_sheathe_orig(pc);++g_combat_sheathes;g_combat_draw_cd=0.5f;}
@@ -716,15 +735,22 @@ static void fp_manual_combat_tick(void *gw,float dt) {
                     ++g_combat_gun_setups;
                 }
             } else if (g_combat_draw_cd<=0) {
-                unsigned char str[32];make_mstr(str,"");
+                unsigned char str[32];char sec[32];kfp_draw_section(weapon,str,sec,sizeof sec);
                 void *draw=combat_virtual(pc,0x3d8);
                 int keep=g_aim_mode;g_aim_mode=0;   /* the draw may sheathe internally */
                 fpc_unheld_clear("manual combat draw");
-                char ok=draw?((char (*)(void *,void *,void *))draw)(pc,weapon,str):0;
+                unsigned char xm0=*(unsigned char *)((uintptr_t)rc+RC_COMBATMODE);int xs0=*(int *)((uintptr_t)rc+RC_STATE_OFF);
+                if (g_combat_drawexp&2) *(unsigned char *)((uintptr_t)rc+RC_COMBATMODE)=0;
+                if (g_combat_drawexp&8) *(int *)((uintptr_t)rc+RC_STATE_OFF)=0;
+                char ok=(g_combat_drawexp&64)?(g_combat_draw_req=pc,(char)1):(draw?((char (*)(void *,void *,void *))draw)(pc,weapon,str):0);
+                if (g_combat_drawexp&2) *(unsigned char *)((uintptr_t)rc+RC_COMBATMODE)=xm0;
+                if (g_combat_drawexp&8) *(int *)((uintptr_t)rc+RC_STATE_OFF)=xs0;
+                if (g_combat_drawexp) logline("[combat] XBDEXP draw mask=%d mode0=%d state0=%d ok=%d",g_combat_drawexp,(int)xm0,xs0,(int)ok);
                 g_aim_mode=keep;
+                if (g_combat_draws<8) logline("[combat] crossbow draw section='%s' ok=%d",sec,(int)ok);
                 if (ok) {
-                    g_combat_setup(rc,NULL,35); /* STAT_CROSSBOWS */
-                    ++g_combat_draws;g_aim_mode=1;g_combat_why="drawing";g_combat_draw_cd=1.0f;
+                    if (!(g_combat_drawexp&1)) g_combat_setup(rc,NULL,35); /* STAT_CROSSBOWS */
+                    ++g_combat_draws;g_aim_mode=1;g_combat_why="drawing";g_combat_draw_cd=1.0f;g_fpc_hold_actor=pc;
                 } else {g_combat_control.aimed=0;g_combat_why="draw_failed";}
             } else g_combat_why="drawing";
         }
@@ -799,11 +825,12 @@ static void fp_manual_combat_tick(void *gw,float dt) {
     combat_note_reject(rej0,closeness,timer,have_aim,"ok");
     g_combat_observed=o;
     if (action&KFP_ACT_RAISE) {
-        unsigned char str[32];make_mstr(str,"");
+        unsigned char str[32];char sec[32];kfp_draw_section(weapon,str,sec,sizeof sec);
         void *draw=combat_virtual(pc,0x3d8);
         fpc_unheld_clear("manual combat raise");
         if (draw && ((char (*)(void *,void *,void *))draw)(pc,weapon,str)) {
             g_combat_setup(rc,NULL,35); /* STAT_CROSSBOWS */
+            g_fpc_hold_actor=pc;   /* XBHOLD */
             *(void **)((uintptr_t)rc+RC_GUN)=gun;
             g_aim_mode=1;
         } else {g_combat_control.aimed=0;}
@@ -932,6 +959,9 @@ static int kah_fp_combat(const char *id,int argc,const char *const *argv,KAH_Rep
         if (!_stricmp(argv[1],"rlsync")) {g_cfg_rl_sync=x!=0.0f;g_cfg_rl_mask=x==1.0f;} /* X4 v3: rlsync 1 = sync + mask, 2 = sync only, 0 = off */ else if (!_stricmp(argv[1],"rllen")) {if (x<0||x>30) {r->append(r,"rllen 0..30");return KAH_ERROR;} g_cfg_rl_len=x;}
         else {if (x<0||x>10) {r->append(r,"rlscale 0..10");return KAH_ERROR;} g_cfg_rl_fixed=x;}
         snprintf(b,sizeof(b),"rlsync=%d rllen=%.3f rlscale=%.3f",g_cfg_rl_sync,g_cfg_rl_len,g_cfg_rl_fixed);r->append(r,b);return KAH_OK;
+    }
+    if (argc==3 && !_stricmp(argv[1],"drawexp")) {   /* XBDEXP test switch */
+        char b[48];g_combat_drawexp=atoi(argv[2]);snprintf(b,sizeof b,"drawexp=%d",g_combat_drawexp);r->append(r,b);return KAH_OK;
     }
     if (argc==3 && !_stricmp(argv[1],"autoreload")) {
         if (strcmp(argv[2],"0")&&strcmp(argv[2],"1")) {r->append(r,"autoreload must be 0 or 1");return KAH_ERROR;}

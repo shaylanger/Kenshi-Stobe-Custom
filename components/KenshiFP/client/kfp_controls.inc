@@ -473,6 +473,7 @@ static void fpc_holster_tick(void *pc,void *wih) {
     if (p>=1.0f || el>2.5) {fpc_holster_end(1,"lowered");return;}
     g_fpc_holster_prog=p<0.0f?0.0f:p;
 }
+static void *g_combat_draw_req;   /* tentative decl; defined in kfp_combat_native.inc (XBDEXP 64) */
 static void fpc_draw_toggle(void *pc) {
     if (g_tur_pc && pc==g_tur_pc) {   /* T5: R drew the own crossbow on the turret and the holster took her off it */
         ++g_tur_r_ignored;logline("[controls] R ignored: manning a turret (W/A/S/D leaves it)");return;
@@ -907,6 +908,7 @@ static void fp_controls_tick(void *gw,float dt) {
     if (g_fpc_sneak_req) {g_fpc_sneak_req=0;fpc_sneak_probe(pc);}           /* fp_keys sneak (test) */
     if (!g_is_down && g_fpc_hook_ok) {
         if (edge[FPC_R]) fpc_draw_toggle(pc);   /* PT18: R only draws/holsters, also with RMB held */
+        else if (g_combat_draw_req && g_combat_draw_req==pc) {g_combat_draw_req=NULL;logline("[controls] XBDEXP adapter draw via the R draw");fpc_draw_toggle(pc);}
         /* MMB: the character under the crosshair, else (PT08) the building/object, else (PT19) the selection goes
          * back to the controlled char (ground/sky = clear an NPC selection) */
         if (edge[FPC_MMB] && g_fpc_select) {

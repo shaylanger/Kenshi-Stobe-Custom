@@ -344,6 +344,8 @@ static unsigned g_combat_actual_shots;      /* tentative decl; defined in kfp_co
 static int g_combat_loaded;                  /* tentative decl; defined in kfp_combat_native.inc (bolts in the gun, -1 unknown) */
 static int g_vm_aim_want;                    /* C4: RMB / injected aim held (set by kfp_controls.inc) */
 static void *g_combat_item_gun;              /* tentative decl; defined in kfp_combat_native.inc (crossbow item's GunClass) */
+static void *g_combat_weapon;               /* tentative decl; defined in kfp_combat_native.inc (XBPIN) */
+static int   g_fpc_ranged;                  /* tentative decl; defined in kfp_controls.inc (XBPIN2) */
 /* C3: the loaded bolt = GunClass ammoObjects[0] (own scene node); measured per frame in the weapon (prop) frame */
 typedef struct { unsigned char ok, vis; Vec3 bl, bx, by, bz, sl; float sa; } VmBolt;   /* sl/sa: bolt parent node vs the drawn-string node (crossbow), node frame */
 static int g_vm_pin_mode, g_vm_pin_have_rel; static void *g_vm_pin_bp, *g_vm_pin_prop; static Vec3 g_vm_pin_lp, g_vm_pin_relp; static Quat g_vm_pin_relq = { 1, 0, 0, 0 }; static unsigned g_vm_pin_n, g_vm_pin_game;
@@ -1421,11 +1423,54 @@ static int vm_prop_ogre_world(void *prop, Vec3 *wp, Quat *wq)
     if (!readable((void *)p, 12) || !readable((void *)q, 16)) return 0;
     return vm_skel2ogre(*p, *q, wp, wq);
 }
+/* XBPIN3: no gun node (parts directly on the character node cn): pin every part node as under a virtual gun node at the prop */
+#define VM_FLAT_N 6
+static void *g_vm_flat_nd[VM_FLAT_N]; static Vec3 g_vm_flat_rp[VM_FLAT_N], g_vm_flat_lw[VM_FLAT_N]; static Quat g_vm_flat_rq[VM_FLAT_N];
+static int g_vm_flat_next; static unsigned g_vm_flat_n, g_vm_flat_learn;
+static void vm_gun_pin_flat(void *gun, void *cn, void *prop)
+{
+    Vec3 wp, Cp, Cs; Quat wq, Cq; void *nds[VM_FLAT_N]; int n = 0; unsigned cnt = 0;
+    if (!g_vm_node_getori || !g_get_parent_scenenode) { g_vm_pin_mode = 38; return; }
+    if (!vm_prop_ogre_world(prop, &wp, &wq)) { g_vm_pin_mode = 4; return; }
+    if (!vm_node_world_u(cn, &Cp, &Cq, &Cs) || Cs.x < 1e-6f) { g_vm_pin_mode = 5; return; }
+    for (int s = 0; s < 2; s++) {
+        void *o = readable((void *)((uintptr_t)gun + 0x100 + 8 * s), 8) ? *(void **)((uintptr_t)gun + 0x100 + 8 * s) : NULL;
+        void *nd = readable(o, 8) ? g_get_parent_scenenode(o) : NULL;
+        if (readable(nd, 8) && g_vm_node_getparent(nd) == cn) nds[n++] = nd;
+    }
+    vm_gun_ammo(gun, 0, &cnt);
+    for (int i = 0; i < (int)cnt && i < 4 && n < VM_FLAT_N; i++) {
+        void *o = vm_gun_ammo(gun, i, NULL), *nd = o ? g_get_parent_scenenode(o) : NULL; int dup = 0;
+        for (int j = 0; j < n; j++) dup |= nds[j] == nd;
+        if (!dup && readable(nd, 8) && g_vm_node_getparent(nd) == cn) nds[n++] = nd;
+    }
+    if (!n) { g_vm_pin_mode = 39; return; }
+    for (int j = 0; j < n; j++) {
+        void *nd = nds[j]; int k = -1; Vec3 lp0; g_vm_ngpos_v(nd, &lp0);
+        for (int i = 0; i < VM_FLAT_N; i++) if (g_vm_flat_nd[i] == nd) k = i;
+        if (k < 0 || memcmp(&lp0, &g_vm_flat_lw[k], sizeof(Vec3)) != 0) {   /* new node or the game wrote it: learn its local */
+            if (k < 0) { k = g_vm_flat_next; g_vm_flat_next = (g_vm_flat_next + 1) % VM_FLAT_N; g_vm_flat_nd[k] = nd; }
+            Quat lq0 = { 1, 0, 0, 0 }; g_vm_node_getori(nd, &lq0);
+            g_vm_flat_rp[k] = lp0; g_vm_flat_rq[k] = quat_norm(lq0); g_vm_flat_learn++;
+        }
+        Vec3 P = vm_add(wp, quat_rotvec(wq, vm_mul(g_vm_flat_rp[k], Cs.x))); Quat Q = quat_norm(quat_mul(wq, g_vm_flat_rq[k]));
+        Vec3 lp = vm_mul(quat_rotvec(quat_conj(Cq), vm_sub(P, Cp)), 1.0f / Cs.x); Quat lq = quat_norm(quat_mul(quat_conj(Cq), Q));
+        g_node_set_pos(nd, &lp); g_node_set_ori(nd, &lq); g_vm_ngpos_v(nd, &g_vm_flat_lw[k]);
+    }
+    g_vm_flat_n++; g_vm_pin_mode = 37; g_vm_pin_n++;
+}
 /* C3 pin: gun node (parent of the bolt + string nodes) = post-IK Prop2 world * rel. Called at the end of vm_apply. */
 static void vm_gun_pin(void *prop, Vec3 natp, Quat natq)
 {
     g_vm_pin_mode = 0; g_vm_pin_prop = prop;
     void *gun = g_combat_item_gun; if (!g_vm_boltpin || !gun) return;
+    {   /* XBPIN: only the crossbow in hands (a holstered bow's nodes are the sheath/body hierarchy) */
+        void *wih = g_vm_pc && readable((void *)((uintptr_t)g_vm_pc + CHAR_WEAPON_IN_HANDS), 8) ? *(void **)((uintptr_t)g_vm_pc + CHAR_WEAPON_IN_HANDS) : NULL;
+        /* XBPIN2 (xbmesh-v6 review, 7C886329: B/D aim showed a compact, far bow without its bolt = pin skipped):
+         * a crossbow in hands is enough (wih == the adapter's weapon OR the FP controls see the ranged weapon drawn) */
+        if (!wih || (wih != g_combat_weapon && !g_fpc_ranged)) {
+            static void *lw; if (wih && wih != lw) { lw = wih; logline("[vm] XBPIN skip: wih=%p combat_weapon=%p fpc_ranged=%d", wih, g_combat_weapon, g_fpc_ranged); }
+            g_vm_pin_mode = 35; return; } }
     vm_bolt_syms();
     void *so = readable((void *)((uintptr_t)gun + 0x100), 8) ? *(void **)((uintptr_t)gun + 0x100) : NULL;
     void *sn = readable(so, 8) && g_get_parent_scenenode ? g_get_parent_scenenode(so) : NULL;
@@ -1436,6 +1481,7 @@ static void vm_gun_pin(void *prop, Vec3 natp, Quat natq)
     if (!readable(sn, 8)) { g_vm_pin_mode = 31; return; }
     if (!readable(bp, 8)) { g_vm_pin_mode = 32; return; }
     if (!readable(pb, 8)) { g_vm_pin_mode = 33; return; }
+    if (!readable(g_vm_node_getparent(pb), 8)) { if (g_vm_boltpin == 1) vm_gun_pin_flat(gun, bp, prop); else g_vm_pin_mode = 36; return; }   /* XBPIN3: bp = the char node, no gun node */
     Vec3 lp0; g_vm_ngpos_v(bp, &lp0);
     int game = bp != g_vm_pin_bp || memcmp(&lp0, &g_vm_pin_lp, sizeof(Vec3)) != 0;   /* the node holds the game's value, not our last write */
     if (game) g_vm_pin_game++;

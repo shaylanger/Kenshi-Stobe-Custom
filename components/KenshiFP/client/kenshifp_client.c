@@ -4695,6 +4695,11 @@ static LONG CALLBACK veh_guard(EXCEPTION_POINTERS *ep)
          || code == EXCEPTION_INT_OVERFLOW || code == EXCEPTION_ARRAY_BOUNDS_EXCEEDED
          || code == EXCEPTION_DATATYPE_MISALIGNMENT)) {
         g_guard_armed = 0;
+        {   /* FAULTRETRY: name the faulting native call (first 16 distinct addresses) */
+            static DWORD64 gseen[16]; static int ngseen; DWORD64 grip = ep->ContextRecord->Rip; int gdup = 0;
+            for (int i = 0; i < ngseen; i++) if (gseen[i] == grip) { gdup = 1; break; }
+            if (!gdup && ngseen < 16) { gseen[ngseen++] = grip; logline("[guard] guarded fault code=%08lX (trace follows)", (unsigned long)code); kfp_crash_trace(ep); }
+        }
         longjmp(g_guard_jb, 1);
     }
     if (code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_ILLEGAL_INSTRUCTION || code == EXCEPTION_PRIV_INSTRUCTION) {
