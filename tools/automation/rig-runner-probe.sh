@@ -10,12 +10,17 @@
 #   ana=1: the running row analyses in the foreground while nothing records = game idle (5090 only)
 #   alive=0: the run-batch.sh process (batch.pid; 4080: its Windows pid) is gone without DONE (killed/crashed batch)
 # kill-step: TERM the running row's `timeout` (pid in <out>/step.pid, written by run-batch.sh): that row FAILs, the batch
-#            goes on with the next row. kill-game: also kill kenshi_x64 (crashed game; run-batch.sh relaunches it).
+#            goes on with the next row. kill-game: also kill kenshi_x64 (crashed game; run-batch.sh relaunches it);
+#            prints "GAMEKILL ok|failed" (the runner verifies and stops the game itself if it is still there).
 set -u
 O=${1:?usage: rig-runner-probe.sh <out-dir> [kill-step|kill-game]}; act=${2:-}
 if grep -qi microsoft /proc/version 2>/dev/null; then KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; else RIG=${RIG:-}; . /c/KenshiModding/tools/automation/rig-env.sh >/dev/null 2>&1; KD=$KDIR; fi
 if [ "$act" = kill-step ] || [ "$act" = kill-game ]; then
-  [ "$act" = kill-game ] && taskkill.exe //F //IM kenshi_x64.exe </dev/null >/dev/null 2>&1
+  # kill-game (2026-10-11): "//F //IM" is Git Bash syntax; WSL (5090) passed it literally, taskkill refused it and the
+  # hung game kept running (5090 07:16, 08:41). MSYS_NO_PATHCONV=1 + /F works in both shells; the runner then verifies
+  # the game is gone and stops it itself (kenshi-ctl.ps1 stop / 4080 ctl.ps1 stop) if not.
+  if [ "$act" = kill-game ]; then
+    MSYS_NO_PATHCONV=1 taskkill.exe /F /T /IM kenshi_x64.exe </dev/null >/dev/null 2>&1 && echo "GAMEKILL ok" || echo "GAMEKILL failed"; fi
   if [ -f "$O/step.pid" ]; then read -r p n w < "$O/step.pid"
     if [ -n "${w:-}" ]; then taskkill.exe //F //T //PID "$w" </dev/null >/dev/null 2>&1 && echo "KILLED step $n winpid $w" || echo "KILL failed winpid $w ($n)"   # 4080: other msys session
     else kill -TERM "$p" 2>/dev/null && echo "KILLED step $n pid $p" || echo "KILL failed pid $p ($n)"; fi

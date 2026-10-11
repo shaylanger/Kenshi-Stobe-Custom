@@ -44,7 +44,9 @@ the out dir changed for as long; while a row runs, Kenshi gone / crash / harness
 >= max(that, -HardMin 5) is stuck even if the row keeps writing its log (2026-10-11 4080 R11 hang; harness silent =
 kill-game). State line "COND(<held>m/<lim>m): <why>" (rig-health.sh: RIG STALL once held >= lim). -SelfTest checks the
 rule on fixed cases. On a stuck hit: kill the row's step (crash: kill the game; run-batch.sh relaunches), ALERT-<rig>.txt,
-note to the owner; a second hit on the same row kills the game. Batch process gone without DONE: list -> failed\.
+note to the owner; a second hit on the same row kills the game. kill-game is verified: if kenshi_x64 is still there
+after the probe's taskkill, the runner stops it (5090 kenshi-ctl.ps1 stop as runner-5090, 4080 ctl.ps1 stop -Owner
+rig4080, then taskkill /F /T) and logs "kill-game ... gone|stopped|forced|ALIVE" (ALIVE = still running, in the ALERT). Batch process gone without DONE: list -> failed\.
 Queue empty (or 4080 unreachable with lists waiting) for >= 2 min: ALERT-<rig>.txt + note to the coordinator (rig-health.sh
 and the Stop hook block on ALERT files); the ALERT clears when the rig works again.
 Filler: both queues empty -> a COPY of the least recently started eligible queue\filler\*.list (needs: met by the installed
@@ -82,6 +84,19 @@ function StuckAct([hashtable]$p, [string]$why, [double]$held, [int]$lim, [int]$p
     $act = if ($p.crash -eq '1' -or $prevHits -ge 1 -or $p.step -eq '-' -or ($hard -and $why -like 'harness not answering*')) { 'kill-game' } else { 'kill-step' }
     @($act, $(if ($hard) { 'hard' } else { 'soft' }))
 }
+# Game kill after a kill-game hit (2026-10-11: the probe's taskkill never worked from WSL and a TDR-hung kenshi_x64 kept
+# running until the coordinator stopped it). Pure (-SelfTest feeds fake blocks): $alive = is kenshi_x64 still there,
+# $stop = the rig's normal stop (5090 kenshi-ctl.ps1 stop as runner-5090, 4080 ctl.ps1 stop -Owner rig4080), $force =
+# taskkill /F /T. Waits up to $waitSec after each step. Returns @('gone'|'stopped'|'forced'|'ALIVE', detail).
+function KillGame([scriptblock]$alive, [scriptblock]$stop, [scriptblock]$force, [int]$waitSec = 20) {
+    $gone = { param($s) $end = (Get-Date).AddSeconds($s); do { if (-not (& $alive)) { return $true }; if ($s -gt 0) { Start-Sleep 2 } } while ((Get-Date) -lt $end); $false }
+    if (& $gone 0) { return @('gone', 'game gone after the probe kill') }
+    $o = (@(& $stop) | ForEach-Object { "$_" } | Where-Object { $_ }) -join ' / '
+    if (& $gone $waitSec) { return @('stopped', "game stopped by the rig stop ($o)") }
+    $f = (@(& $force) | ForEach-Object { "$_" } | Where-Object { $_ }) -join ' / '
+    if (& $gone $waitSec) { return @('forced', "game killed by taskkill after the rig stop failed ($o; $f)") }
+    @('ALIVE', "game STILL RUNNING after the rig stop ($o) and taskkill ($f)")
+}
 if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cases (no side effects)
     $cases = @(
         @('R11 4080 hang: harness silent 6 min, row log written 10 s ago', @{ step = 'R11'; age = '10'; crash = '0' }, 'harness not answering', 6, 2, 0, 'kill-game hard'),
@@ -95,7 +110,18 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
         @('no condition', @{ step = 'R5'; age = '900'; crash = '0' }, '', 9, 2, 0, ''))
     $bad = 0
     foreach ($c in $cases) { $g = (StuckAct $c[1] $c[2] $c[3] $c[4] $c[5]) -join ' '; $ok = $g -eq $c[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) $($c[0]): got '$g' want '$($c[6])'" }
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count) cases"; exit [int]($bad -gt 0)
+    # kill-game must really stop the game: fake game that dies after N calls of stop/force (0 = never)
+    $kg = @(
+        @('kill-game: probe taskkill worked', 0, 0, 0, 'gone'),
+        @('kill-game: probe kill failed (WSL //F, 5090 07:16/08:41), rig stop ends the hung game', 1, 0, 0, 'stopped'),
+        @('kill-game: rig stop fails, taskkill fallback ends it', 2, 0, 0, 'forced'),
+        @('kill-game: game survives everything -> ALIVE (alert)', 9, 0, 0, 'ALIVE'))
+    foreach ($c in $kg) {
+        $script:kgLeft = $c[1]
+        $g = (KillGame { $script:kgLeft -gt 0 } { $script:kgLeft--; 'stop' } { $script:kgLeft--; 'force' } 0)[0]
+        $ok = $g -eq $c[4]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) $($c[0]): got '$g' want '$($c[4])'"
+    }
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
@@ -1146,6 +1172,19 @@ while ($true) {
                     if ($sa) {
                         $hits[$key] = 1 + [int]$hits[$key]; $act = $sa[0]
                         $r = Probe $c[2] $act
+                        if ($act -eq 'kill-game' -and -not $Fake) {   # verify the game is gone; stop it the rig's way if not
+                            $kr = if ($Rig -eq '5090') {
+                                KillGame { [bool](Get-Process kenshi_x64 -ErrorAction SilentlyContinue) } `
+                                         { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop 2>&1 } `
+                                         { & taskkill.exe /F /T /IM kenshi_x64.exe 2>&1 } 20
+                            } else {   # ssh failure counts as alive (never report a game we can't see as gone)
+                                KillGame { $t = @(Ssh @('tasklist')); if (-not ($t -match 'Image Name|^System')) { $true } else { [bool]($t -match 'kenshi_x64') } } `
+                                         { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4, '-TimeoutSec', '90') } `
+                                         { Ssh @('taskkill', '/F', '/T', '/IM', 'kenshi_x64.exe') } 20
+                            }
+                            $r = "$r; GAME $($kr[0]): $($kr[1])"; Log "kill-game $($c[5]) row $($p.step): $($kr[0]) ($($kr[1]))"
+                            if ($kr[0] -eq 'ALIVE') { $r += ' -- kenshi_x64 still running: stop it by hand (TDR hang?)' }
+                        }
                         $od = if ($sa[1] -eq 'hard') { "hard: held >= $([Math]::Max($lim, $HardMin)) min whatever the out dir does (last write $([int]$p.age) s ago)" } else { "out dir unchanged $([int]([int]$p.age / 60)) min" }
                         Alert "$($c[5]) stuck $([int]$held) min ($why; $od, row $($p.step)): $act -> $r"
                         Note $c[3] "$($c[5]) row $($p.step) was stuck ($why); I did $act ($r). The batch goes on; check that row."
