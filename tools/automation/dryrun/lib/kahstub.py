@@ -457,7 +457,7 @@ def press(s, btn, ms, now):
             s['free_swings'] = s.get('free_swings', 0) + 1
             n = s['vm_swings'] = s.get('vm_swings', 0) + 1
             # kfp_viewmodel.inc vm_stroke_pick: forced stroke, else round robin over the `strokes` mask
-            force, mask = s.get('vm_force', -1), s.get('vm_strokes', 1)
+            force, mask = s.get('vm_force', -1), s.get('vm_strokes', 0xF)   # shipped default 0xF since kfp-e6-default-mask (2195FC36)
             k = force if 0 <= force < 4 else 0
             if not 0 <= force < 4:
                 for i in range(4):
@@ -1018,7 +1018,7 @@ def handle(s, cmd, a, now, sp):
         ms = int(a[0]) if a and a[0].isdigit() else 120
         n = int(a[1]) if len(a) > 1 and a[1].isdigit() else 0
         dr.log('sync', 'flash n=%d ms=%d' % (n, ms))
-        return True, 'sync_flash n=%d ms=%d view=1600x900' % (n, ms)
+        return True, 'sync_flash n=%d ms=%d view=%dx%d' % ((n, ms) + dr.res())
     if cmd == 'stamp':   # harness 0c6c695: per-frame sync code (take-sample.sh TAKE_STAMP=1)
         on = bool(a) and a[0] == 'on'
         if a and a[0] in ('on', 'off'):
@@ -1146,12 +1146,11 @@ def handle(s, cmd, a, now, sp):
             nm += '.png'
         d = os.path.join(dr.KDIR, 'mods', 'AutomationHarness', 'shots')
         os.makedirs(d, exist_ok=True)
-        import shutil
         dark = world(s, now)['night'] and os.path.exists(os.path.join(dr.CANNED, 'frame-night.png'))
-        shutil.copyfile(os.path.join(dr.CANNED, 'frame-night.png' if dark else 'frame.png'), os.path.join(d, nm))
+        dr.canned_image('frame-night.png' if dark else 'frame.png', os.path.join(d, nm))   # at the render size dr.res()
         dr.jappend('recordings.jsonl', dict(kind='screenshot', t=now, file=nm))
         dr.advance(0.3)
-        return True, 'screenshot shots\\%s 1600x900' % nm
+        return True, 'screenshot shots\\%s %dx%d' % ((nm,) + dr.res())
     if cmd == 'input_isolation':
         if a and a[0] in ('on', 'off'):
             s['iso'] = 1 if a[0] == 'on' else 0

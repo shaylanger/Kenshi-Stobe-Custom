@@ -3,7 +3,7 @@
 # E6 review take: katana drawn at zoom 0 on open ground (kah-fpxbow take spot, daytime, clear sky), each scripted stroke
 # forced in turn (`fp_vm set stroke n`) and swung <reps> times under a "Stroke n: <name>" label (strokes may be given
 # comma-separated, "0,1,2,3": run-batch passes no quotes). CYCLE=<n> first swings n times with NO force and the game's own
-# stroke mask (shipped behaviour: `[vm] swing #k stroke s (mask ..)` must cycle; CYCLE_EXPECT=0,1,2,3 = exact order).
+# stroke mask (shipped behaviour: `[vm] swing #k stroke s (mask ..)` must cycle; CYCLE_EXPECT=0,1,2,3 = exactly these strokes, any order: the cycle position survives a reload).
 # The stroke mask itself is never changed (force only overrides it; was set to 15 and "restored" to 0x1, which undid
 # the shipped default).
 # Evidence: take-sample.sh + takecheck.py, fp_vm rec dump judged by the
@@ -100,7 +100,7 @@ CYR=; if [ "$CYCLE" -gt 0 ]; then   # cycle: every swing logged, no stroke repea
   want=$(( CYCLE < pc ? CYCLE : pc ))
   if [ $(tr ',' '\n' <<<"$CY" | grep -c .) -ne $CYCLE ]; then CYR="cycle FAIL logged=[$CY] want $CYCLE swings"; ok=0
   elif [ $nd -lt $want ]; then CYR="cycle FAIL logged=[$CY] distinct $nd < $want (mask $CYM)"; ok=0
-  elif [ -n "$CYCLE_EXPECT" ] && [ "$CY" != "${CYCLE_EXPECT}" ]; then CYR="cycle FAIL logged=[$CY] expected [$CYCLE_EXPECT] (mask $CYM)"; ok=0
+  elif [ -n "$CYCLE_EXPECT" ] && [ "$(tr , '\n' <<<"$CY" | sort -u | paste -sd,)" != "$(tr , '\n' <<<"$CYCLE_EXPECT" | sort -u | paste -sd,)" ]; then CYR="cycle FAIL logged=[$CY] want the set [$CYCLE_EXPECT] (mask $CYM)"; ok=0
   else CYR="cycle PASS logged=[$CY] mask $CYM"; fi; echo "$CYR" >> "$N.lab.txt"; fi
 SK=$(python3 $L/animlab.py stroke --overhead 2 "$N.vmrec.txt" 2>&1 | grep '^stroke ' | head -1); echo "$SK" >> "$N.lab.txt"; echo "$SK" | grep -q "^stroke PASS" || ok=0
 PF_DONE=1; echo "RESULT E6-$N $(pf_grade $ok "$TC") takecheck=[$TC${TCB:+ bad: $TCB}] (detail $OUT/$N.takecheck.txt) strokes_logged=$SW${CYR:+ $CYR} $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")$(pf_recwarn "$TC")"
