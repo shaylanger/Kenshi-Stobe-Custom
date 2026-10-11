@@ -59,6 +59,12 @@ function LaneReject([string[]]$lines) {   # $null = the lane may run this list, 
     }
     $null
 }
+$FireRx = '(?i)(fire|reload|shoot|shot|tdr|rangedtest|vmquick|xbr-|fp-e6-xbow|turret-take)'
+function FireRow([string]$r) {
+    $f = @($r -split '\|'); $id = $f[0].Trim()
+    $c = $f[-1] -replace '(?i)kah-fpxbow', 'kah-SAVE' -replace '(?i)\w*no-?(xbow|fire|shot|reload)\w*', 'GUARD'
+    if ($c -match $FireRx) { return $Matches[1] }; if ($id -match '^(?i)(XB|T6|VMQ)') { return $id }; $null
+}
 function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr, [bool]$xbow1) {   # $null = may launch instance 2
     if ($tdr) { return 'TDR alert present' }
     if ($xbow1) { return 'lane 4080 runs a crossbow list (TDR isolation)' }
@@ -87,6 +93,12 @@ if ($SelfTest) {
     foreach ($c in $cases) { $n++; $g = [string](LaneReject $c[1]); $ok = if ($c[2]) { $g -like "$($c[2])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b list $($c[0]): got '$g'" }
     $ad = @(@(9000, 20000, $false, $false, ''), @(3000, 20000, $false, $false, '4080 GPU'), @(9000, 5000, $false, $false, '4080 RAM'), @(9000, 20000, $true, $false, 'TDR'), @(9000, 20000, $false, $true, 'lane 4080 runs a crossbow'))
     foreach ($a in $ad) { $n++; $g = [string](LaneAdmit $a[0] $a[1] $a[2] $a[3]); $ok = if ($a[4]) { $g -like "$($a[4])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b admit gpu=$($a[0]) ram=$($a[1]) tdr=$($a[2]) xbow1=$($a[3]): got '$g'" }
+    $fc = @(@('turret nofire row (no shot, no reload)', 'TN | kah-fpturret | a | b | 600 | bash {CR}/x/fp-turret-nofire.sh {OUT}/TN', $false),
+            @('melee sweep with WS_NOXBOW on the xbow fixture', 'wm-2hlb | kah-fpxbow | Axima | Malzin | 900 | RIG=4080 WS_NOXBOW=1 PF_SAVE=kah-fpxbow bash {CR}/x/fp-weapon-sweep.sh {OUT}/wm', $false),
+            @('crossbow TDR confirm', 'XC | kah-fpxbow | a | b | 900 | bash {CR}/x/fp-xbow-tdrconfirm.sh {OUT}/XC', $true),
+            @('turret fire take', 'TT | kah-fpturret | a | b | 900 | bash {CR}/x/fp-turret-take.sh {OUT}/T6', $true),
+            @('crossbow reload row', 'R1 | kah-fpxbow | a | b | 900 | bash {CR}/x/fp-xbow-reload.sh {OUT}/R1', $true))
+    foreach ($c in $fc) { $n++; $g = [bool](FireRow $c[1]); $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b TDR isolation $($c[0]): fire=$g" }
     $n++; $t = @(LaneTdrFilter @('1000|Display|4101|reset', '1100|nvlddmkm|153|err', '1200|disk|153|io', '900|Display|4101|old', 'ssh: connect timed out') 950)
     $ok = ($t | ForEach-Object { ($_ -split '\|')[0] }) -join ',' -eq '1000,1100'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b TDR filter: $($t -join ' ; ')"
     "LANE4080B-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
@@ -134,8 +146,9 @@ function TdrEvents([long]$since) {
     $cmd = "`$s=[DateTimeOffset]::FromUnixTimeSeconds($since).LocalDateTime; Get-WinEvent -FilterHashtable @{LogName='System'; Id=4101,153; StartTime=`$s} -ErrorAction SilentlyContinue | ForEach-Object { '{0}|{1}|{2}|{3}' -f ([DateTimeOffset]`$_.TimeCreated).ToUnixTimeSeconds(), `$_.ProviderName, `$_.Id, (([string]`$_.Message -replace '\s+',' ') -replace '\|','/') }"
     @(Ssh4Enc $cmd)
 }
-function Xbow1 {   # lane 4080's running list names crossbow work (TDR isolation)
-    foreach ($r in @(Get-ChildItem "$qd\running" -Filter '4080__*' -File -ErrorAction SilentlyContinue)) { foreach ($l in LaneRows @(Get-Content $r.FullName)) { if (XbowRow $l) { return $true } } }
+# TDR isolation (FireRow above; coordinator m102: "turret-nofire" or a WS_NOXBOW melee sweep must not hold the lane)
+function Xbow1 {   # lane 4080's running list has a crossbow/turret fire or reload row (TDR isolation)
+    foreach ($r in @(Get-ChildItem "$qd\running" -Filter '4080__*' -File -ErrorAction SilentlyContinue)) { foreach ($l in LaneRows @(Get-Content $r.FullName)) { if (FireRow $l) { return $true } } }
     $false
 }
 function QSort { @($input) | Sort-Object @{ e = { if ($_.Name -match '^(\d+)') { [long]$matches[1] } else { [long]::MaxValue } } }, @{ e = { -join ($_.Name.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) } } }
@@ -229,6 +242,7 @@ while ($true) {
     if (-not $rm.ok) { State "waiting: 4080 unreachable ($name queued)"; Start-Sleep $TickSec; continue }
     $up = $rm.k2 -gt 0
     if (-not $up) { $why = LaneAdmit $rm.gpu $rm.ram $false (Xbow1); if ($why) { State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
+    State "checking $name (list-rigcheck, dry run)"
     $lp = (($f.FullName -replace '\\', '/') -replace '^C:', '/c')
     $rc = @(& $gitBash -lc "bash /c/KenshiModding/tools/automation/list-rigcheck.sh --quiet --fix '$lp' 4080" 2>&1 | ForEach-Object { "$_" }) | Select-Object -Last 1
     if ($rc -like 'NO *') { Fail $f.FullName $name $own "cannot run on the 4080: $($rc.Substring(3))"; continue }
@@ -253,12 +267,13 @@ while ($true) {
     Set-Content $curF @($run, $outN, $t0, $own, (Get-Date -Format s), $name); Set-Content (Join-Path $runs "inflight\runner-$Lane") "4080:C:\KenshiTestRuns\$outN"
     State "starting $name -> 4080:C:\KenshiTestRuns\$outN"
     if ($up -and $rm.dll1 -ne $rm.dll2) { Log "instance 1 has other DLLs ($($rm.dll1)) than instance 2 ($($rm.dll2)): stop + sync"; Stop2 'DLL sync'; $up = $false }
+    State "starting $name : script sync, instance 2 $(if ($up) { 'reuse' } else { 'sync + launch' })"
     SyncList $run
     if (-not $up) {
         $sy = @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('sync', '-Instance', "$Inst", '-Saves', $launch))
         Log "instance sync: $(@($sy | Where-Object { $_ -like 'sync instance*' }) -join ' ')"
         if (-not ($sy -match '^sync instance')) { Fail $run $name $own "instance 2 sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
-        $o = Ssh @('cmd', '/c', "set `"KAH_VIDEO_MODE=$VideoMode`"&& powershell -NoProfile -ExecutionPolicy Bypass -File C:\KAH\kcfg.ps1 test -Instance $Inst -Gfx low")
+        $o = Ssh4Enc "`$env:KAH_VIDEO_MODE='$VideoMode'; & C:\KAH\kcfg.ps1 test -Instance $Inst -Gfx low"
         Log "kcfg: $($o -join ' / ')"
         $null = Ssh4Enc "Set-Content '$K2\mods\AutomationHarness\framecap.txt' '$Fps' -Encoding Ascii"
         $o = Ctl2 @('launch', '-Save', $launch); Log "launch $launch : $(($o | Select-Object -Last 3) -join ' / ')"
@@ -266,6 +281,8 @@ while ($true) {
     } else {
         $sy = @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('save', $launch, '-Instance', "$Inst")); Log "save copy: $(($sy | Select-Object -Last 1))"
     }
+    $o = Ssh4Bash @('-c', "'grep -q KAH_DIR:- /c/KAH/bin/stobe-auto && echo SHIM-OK'")
+    if (-not ($o -match 'SHIM-OK')) { Fail $run $name $own "C:\KAH\bin\stobe-auto ignores KAH_DIR (would drive lane 4080's game): run rig4080/setup.sh"; Stop2 'shim'; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
     $o = Ssh4Bash @('-c', "'export KAH_INSTANCE=$Inst; . /c/KenshiModding/tools/automation/rig-env.sh; /c/KAH/bin/stobe-auto input_isolation on'"); Log "isolation: $($o -join ' ')"
     $tmp = Join-Path $rd "$Lane-$outN"; New-Item -ItemType Directory -Force $tmp | Out-Null
     [IO.File]::WriteAllText((Join-Path $tmp 'list.txt'), ((((Get-Content $run) -replace '\{CR\}', '/c') -join "`n") + "`n"))

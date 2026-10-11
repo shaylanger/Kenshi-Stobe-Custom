@@ -117,7 +117,7 @@ run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" $H:C:/KA
 # copier, and the harness kenshi-ctl.ps1 that only sees the game of the install it is given (the old copy killed both games)
 run scp -q "$HERE/ctl.ps1" "$HERE/inst-window.ps1" "$HERE/../kenshi-instance.ps1" $H:C:/KAH/
 run scp -q "$M/Kenshi-Automation-Harness/tools/kenshi-ctl.ps1" "$M/Kenshi-Automation-Harness/tools/Win32Ui.cs" "$M/Kenshi-Automation-Harness/tools/WindowCapture.cs" $H:C:/KAH/tools/
-run scp -q "$HERE/python3" $H:C:/KAH/bin/python3
+run scp -q "$HERE/python3" "$HERE/stobe-auto" $H:C:/KAH/bin/   # stobe-auto honours KAH_DIR (lane 4080b)
 for d in "${NEWD[@]}"; do w=$(echo "$d" | tr / '\\'); run ssh $H "mkdir C:\\KenshiModding\\$w 2>NUL & exit 0"; done   # list-closure dirs outside the fixed sets
 for i in "${!SETD[@]}"; do cp_to "C:/KenshiModding/${SETD[$i]}/" ${SETF[$i]}; done
 for d in "$@"; do

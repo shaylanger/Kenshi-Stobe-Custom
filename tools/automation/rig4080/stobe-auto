@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# C:\KAH\bin\stobe-auto (4080 rig; deployed by rig4080/setup.sh): harness client. KAH_DIR from the environment wins
+# (rig-env.sh sets it; lane 4080b: KAH_INSTANCE=2 -> C:\KenshiInst\2\mods\AutomationHarness). The old shim hard-coded
+# instance 1, so lane 4080b's first batch drove lane 4080's game (multi-instance-4080 2026-10-11).
+export KAH_DIR="${KAH_DIR:-C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\AutomationHarness}"
+exec python C:/KAH/client/kah.py "$@"
