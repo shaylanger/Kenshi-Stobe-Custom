@@ -243,10 +243,17 @@ eye_dist() { local c t; c=$(A fp_camera state); read -r t <<<"$(pos "$1")"
 # upright <npc>: wait (<= ~10 s) until the npc stands again: head bone within 1 dm of the tallest head seen (REFH) on two
 # reads in a row. A bolt staggers / knocks the target down; a lying body reads stable too, so fresh_bones aimed at the low
 # pose and the target stood up before the bolt arrived (4080 b19 Shek: head bone 21.0, 22.0, 11.9, 13.5 dm; aimed_part 2/6)
-REFH=""; upright() { local k h p=""; for k in $(seq 1 14); do
+# xbr-r11b (5090, harness steady: blocked=12 stumbles, combat_ended=19): the steady Shek stood at head 14.0-15.4 the whole
+# row, but ONE early read of 16.65 made the max-based REFH call every impact DISTURBED (8 of 13 hits, aimed parts all
+# right). REFH is now the MEDIAN of every head read of the row (the max was an outlier), settled = two reads in a row
+# within 0.5 dm of each other, >= REFH-1.0 and >= 0.6 x the tallest read (a lying body fails); UPH = the head read then, the pose the aim is
+# placed for. Impact check below: impact head within 1 dm of UPH (pose unchanged between aim and impact, as R08).
+REFH=""; UPH=""; HREADS=""; upright() { local k h p=""; for k in $(seq 1 14); do
     if bones_of "$1"; then h=$(grep -o '\bbones=[^ ]*' <<<"$BREPLY" | cut -d= -f2 | cut -d, -f1)
-      if [ -n "$h" ] && [ "$h" != nan ]; then REFH=$(awk -v a="${REFH:-0}" -v b="$h" 'BEGIN{print (b>a)?b:a}')
-        if awk -v h="$h" -v r="$REFH" 'BEGIN{exit !(h>=r-1.0)}'; then [ -n "$p" ] && return 0; p=1; else p=""; fi; fi; fi
+      if [ -n "$h" ] && [ "$h" != nan ]; then HREADS+="$h "
+        REFH=$(tr ' ' '\n' <<<"$HREADS" | grep . | sort -n | awk '{a[NR]=$1} END{print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}'); HMAX=$(tr ' ' '\n' <<<"$HREADS" | grep . | sort -n | tail -1)
+        if awk -v h="$h" -v r="$REFH" -v q="${p:-x}" -v m="$HMAX" 'BEGIN{exit !(h>=r-1.0 && h>=0.6*m && (q=="x" || (h-q<=0.5 && q-h<=0.5)))}'; then
+          [ -n "$p" ] && { UPH=$h; return 0; }; p=$h; else p=""; fi; fi; fi
     sleep 0.7; done; return 1; }
 # ---- R11-RACE: a Shek or Hive Hungry Bandit (spawn race filter), pinned at 30 dm ----
 SPR=""; # Shek first: a Hive drone's idle bob moves its neck 14.4<->16.9 dm within ~1 s, more than its 1 dm head band, so
@@ -275,7 +282,7 @@ else
   BAIM=""; for _ in 1 2 3; do bones_of "$SPAWN" && AIMR=$BREPLY && [ "$(on_target "$SPAWN")" = 1 ] && break; BAIM=""; sleep 1; done
   read -r AH AC AL <<<"$BAIM"
   if [ -z "$AL" ]; then row R11-RACE SETUP "FAIL no bone reply with the ray on $SRACE $SPAWN fp_lost=$FPLOST (last aim: $(cut -c1-220 <<<"$BREPLY"))"
-  else hits=0; cons=0; good=0; total=0; fb=""; ev=""; ontg=0; nofp=0; tooclose=0; nup=0; REFH=; shots=0; disturbed=0
+  else hits=0; cons=0; good=0; total=0; fb=""; ev=""; ontg=0; nofp=0; tooclose=0; nup=0; REFH=; UPH=; HREADS=; shots=0; disturbed=0
     # aim at bone points (bpt), not feet column + height: the body can stand 3-5 dm sideways of its feet (jit_bone)
     for spec in "head 1 0 skull" "chest 2 1 chest" "legs 3 5,6 thigh_r"; do read -r name col want bone <<<"$spec"
       # counted shots: the target upright at impact (impact head bone >= REFH-1.0); a crouched/staggered impact (5090
@@ -288,7 +295,7 @@ else
           [ "$(eye_dist "$SPAWN")" -lt 15 ] && { tooclose=$((tooclose+1)); ev+="$name:too_close=$(eye_dist "$SPAWN"); "; continue; }; fi
         # not upright: no shot (retaken) for the first 2 tries of a part, then shoot anyway (a bobbing Hive never reads
         # upright twice: xbf-hits2 had 2 shots in 20 min); the impact check below still drops a disturbed impact
-        upright "$SPAWN" || { nup=$((nup+1)); pnu=$((pnu+1)); [ $pnu -le 2 ] && { ev+="$name:not_upright(no shot); "; continue; }; }
+        UPH=""; upright "$SPAWN" || { nup=$((nup+1)); pnu=$((pnu+1)); [ $pnu -le 2 ] && { ev+="$name:not_upright(no shot); "; continue; }; }
         fresh_bones "$SPAWN" && ht=$(cut -d' ' -f"$col" <<<"$BAIM") || ht=$(cut -d' ' -f"$col" <<<"$AH $AC $AL")
         q=""; [ -n "$BAIM" ] && q=$(bpt "$AIMR" "$bone")   # fresh_bones left AIMR = an on-target reply when BAIM is set
         if [ -n "$q" ]; then aim_pt "$SPAWN" $q; else aim_at "$SPAWN" "$ht"; fi
@@ -296,8 +303,8 @@ else
         [ "$S_FP" = 0 ] && nofp=$((nofp+1)); [ "$S_ON" = 1 ] && ontg=$((ontg+1))
         [ "$J" = hit ] && { hits=$((hits+1)); [ "$JC" = 1 ] && cons=$((cons+1)); [ "$JS" = 0 ] && fb+="$(gf last_fallback "$W1"),"; }
         ih=$(gf last_bones "$W1" | cut -d, -f1)
-        if [ "$J" = hit ] && [ -n "$REFH" ] && awk -v h="$ih" -v r="$REFH" 'BEGIN{exit !(h!="nan" && h!="" && h<r-1.0)}'; then
-          disturbed=$((disturbed+1)); ev+="$name:DISTURBED(impact_head=$ih ref=$REFH; retaken) aim_h=$ht jit_h=${JIT_H:-none} on_target=$S_ON $JD; "; continue; fi
+        if [ "$J" = hit ] && [ -n "${UPH:-$REFH}" ] && awk -v h="$ih" -v r="${UPH:-$REFH}" 'BEGIN{exit !(h!="nan" && h!="" && (h<r-1.0 || h>r+1.0))}'; then
+          disturbed=$((disturbed+1)); ev+="$name:DISTURBED(impact_head=$ih aim_head=${UPH:-none} ref=$REFH; retaken) aim_h=$ht jit_h=${JIT_H:-none} on_target=$S_ON $JD; "; continue; fi
         valid=$((valid+1)); total=$((total+1))
         for w in ${want//,/ }; do [[ ",${S_HURT[0]}" == *",$w("* ]] && { good=$((good+1)); break; }; done
         ev+="$name:aim_h=$ht jit_h=${JIT_H:-none} on_target=$S_ON $JD; "; done; done
