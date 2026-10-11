@@ -130,6 +130,28 @@ def m_s3_windup_off(lines):   # E6 stroke 3 wind-up: blade turned 25 deg off the
     return lines
 
 
+def m_path_drift(lines):   # PT17 "/|": in the last part of every stroke-1 swing (u .58-.78) the blade slides sideways without rotating, ramping to 30 % of the path extent perpendicular to the stroke
+    W, H, TX, TY = 1600.0, 900.0, 1.245, 0.70
+    scr = lambda g: (lambda c: (W / 2 + W / 2 * (c[0] / c[2]) / TX, H / 2 - H / 2 * (c[1] / c[2]) / TY))(
+        tuple(getvec(g, 1, MP)[k] + 8.0 * getvec(g, 1, MF)[k] for k in range(3)))
+    sw, cur = [], None
+    for i, g, t in frames(lines):   # every stroke-1 swing (by swing counter t[8])
+        if len(t) > 9 and t[3].startswith('swing') and stroke_of(g) == '1' and 0.28 <= float(t[9]) <= 0.78:
+            if cur is None or cur[0] != t[8]:
+                cur = (t[8], []); sw.append(cur)
+            cur[1].append((i, float(t[9])))
+    for _, fr in sw:
+        a, b = scr(lines[fr[0][0]].split(' | ')), scr(lines[fr[-1][0]].split(' | '))
+        dx, dy = b[0] - a[0], b[1] - a[1]; n = math.hypot(dx, dy) or 1.0
+        px, py = -dy / n * 0.30 * n, dx / n * 0.30 * n   # perpendicular, px at full ramp
+        for i, u in fr:
+            r = min(1.0, max(0.0, (u - 0.58) / 0.20))
+            if r <= 0: continue
+            g = lines[i].split(' | '); mp = getvec(g, 1, MP); z = mp[2] + 8.0 * getvec(g, 1, MF)[2]
+            setvec(g, 1, MP, (mp[0] + r * px / (W / 2) * TX * z, mp[1] - r * py / (H / 2) * TY * z, mp[2])); lines[i] = ' | '.join(g)
+    return lines
+
+
 # ---------------- source edits (kind 'src': base = a corpus source snapshot tarball, edit(client dir)) ----------------
 def s_2hl_stroke0(d):   # E6 default stroke cycle: the light-2H class drops out of the cycle (kfp-e6-default-mask v1 + kfp-2h-light = 6E7C0363)
     p = os.path.join(d, 'kfp_viewmodel.inc'); t = open(p).read()
@@ -184,6 +206,22 @@ def v_black(src, dst):
 def v_popup(src, dst):
     ff(['-i', src, '-vf', "drawbox=x=iw*0.3:y=ih*0.3:w=iw*0.4:h=ih*0.35:color=0x404040:t=fill:enable='between(t,2,8)',"
         "drawbox=x=iw*0.3:y=ih*0.3:w=iw*0.4:h=ih*0.05:color=0xc8c8c8:t=fill:enable='between(t,2,8)'", '-c:v', 'libx264', '-preset', 'ultrafast', dst])
+
+
+def v_hintbox(src, dst):   # Misses 2026-10-10 tutorial hint popups: 4 stacked dark boxes, flat fill, dim text, left edge
+    vf = []
+    for k in range(4):
+        y = 350 + 28 * k
+        vf += ['drawbox=x=0:y=%d:w=200:h=24:color=0x121212:t=fill' % y, 'drawbox=x=0:y=%d:w=198:h=20:color=0x2a2a2a:t=fill' % (y + 2),
+               'drawbox=x=30:y=%d:w=110:h=4:color=0x616161:t=fill' % (y + 9)]
+    ff(['-i', src, '-vf', ','.join(vf), '-c:v', 'libx264', '-preset', 'ultrafast', dst])
+
+
+def v_toast(src, dst):     # steam-popup 2026-10-11: blue-grey toast with white text, bottom right (HUD band), 2-8 s
+    en = ":enable='between(t,2,8)'"
+    vf = ['drawbox=x=iw-330:y=ih-110:w=300:h=70:color=0x141821:t=fill' + en]
+    vf += ['drawbox=x=iw-290:y=ih-%d:w=220:h=5:color=0xe6e6e6:t=fill%s' % (95 - 18 * k, en) for k in range(3)]
+    ff(['-i', src, '-vf', ','.join(vf), '-c:v', 'libx264', '-preset', 'ultrafast', dst])
 
 
 def t_label(d):     # label says block guard while the game shows the katana ready
@@ -246,6 +284,7 @@ def _pool_inline_s3(p):   # the gate pool's per-swing inline path (metrics.swing
     return verdict_word(run(['python3', '-c', code, p]), 'poolinl ')
 
 
+REC_CHECKS['path-stroke1'] = lambda p: verdict_word(run(al('path', '--stroke', '1', '--gate-info', '--edge', '0.2', p)), 'path ')   # stroke 1 gated for the mutation (info in the gate; edge .2: s1 ends at .13-.16)
 REC_CHECKS['inline-stroke3'] = lambda p: verdict_word(run(al('--only-stroke', '3', 'inline', p)), 'inline ')
 REC_CHECKS['pool-inline-stroke3'] = _pool_inline_s3
 SC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stroke-cycle.py')
@@ -293,11 +332,14 @@ MUTS = [
     ('vid-dark-night', 'vid', 'takes/videos/anim-sword-e6.mp4', v_dark, ['openground']),
     ('vid-black-frames', 'vid', 'takes/videos/anim-sword-e6.mp4', v_black, 'ALL'),
     ('vid-popup-overlay', 'vid', 'kept/kfx-b2_e6_e6fix.mp4', v_popup, ['overlay']),   # anim-sword-e6 shows NPC chatter text
+    ('vid-hint-popups', 'vid', 'kept/kfx-b2_e6_e6fix.mp4', v_hintbox, ['overlay']),   # frames.py ui_boxes
+    ('vid-steam-toast', 'vid', 'kept/kfx-b2_e6_e6fix.mp4', v_toast, ['overlay']),   # frames.py toast_cells
     ('take-label-state-mismatch', 'take', 'takes/ok-e6fix', t_label, ['takecheck']),
     ('take-video-past-end', 'take', 'takes/ok-e6fix', t_end, ['takecheck']),
     ('take-bystander', 'take', 'takes/ok-e6fix', t_near, ['takecheck']),
     ('take-combat-message', 'take', 'takes/ok-e6fix', t_msgs, ['takecheck']),
     ('rec-s3-windup-blade-off', 'rec', 'rec/e6s3-3f1a-5090.txt', m_s3_windup_off, ['inline-stroke3', 'pool-inline-stroke3']),
+    ('rec-path-late-drift', 'rec', 'ab2h-5090.txt', m_path_drift, ['path-stroke1']),
     ('src-2hl-stroke0', 'src', 'src/KenshiFP-e6mask3-c4ee493.client.tar.gz', s_2hl_stroke0, ['stroke-cycle']),
 ]
 
