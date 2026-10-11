@@ -525,7 +525,10 @@ while ($true) {
     }
     $outN = @($txt | Where-Object { $_ -match '^\s*#\s*out:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
     $outN = if ($outN) { "$($outN[0])-i$Inst$(if ($fill) { '-' + (Get-Date -Format MMdd-HHmm) })" } else { "$([IO.Path]::GetFileNameWithoutExtension($name))-i$Inst-$(Get-Date -Format MMdd-HHmm)" }
-    $outW = Join-Path $runs $outN; $outP = WslPath $outW; New-Item -ItemType Directory -Force $outW | Out-Null
+    # never reuse an old out dir: a "# out:" name made a requeued film list start in its old dir, whose PREEMPT (CAPPROOF
+    # FAIL) ended the new batch at once, a loop every 30 s (16:04, lane 5090c fistbzany-i3); -2, -3 ... like rig-runner.ps1
+    $outW = Join-Path $runs $outN; $i = 2; while (Test-Path $outW) { $outW = Join-Path $runs "$outN-$i"; $i++ }
+    $outP = WslPath $outW; New-Item -ItemType Directory -Force $outW | Out-Null
     if ($fill) { $run = $runPre; Set-Content (Join-Path $outW 'rowmeta.tsv') $fill.Meta } else { $run = Join-Path "$qd\running" "${Lane}__$name"; Move-Item -LiteralPath $f.FullName $run -Force }
     Set-Content $gfxF $want
     $capF = Join-Path $rd "$Lane.capproof"; $capS = "$((Get-Content $capF -TotalCount 1 -ErrorAction SilentlyContinue))"
