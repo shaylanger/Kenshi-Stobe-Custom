@@ -5,6 +5,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
 - **Animation lab (offline KenshiFP viewmodel replay/metrics/render, 2026-10-09):** state and resume pointer in `Kenshi-Automation-Harness/docs/animlab/STATUS.md`; KenshiFP adapter in `components/KenshiFP/animlab/`.
 
 ## Right now (2026-10-11 03:32, m98 coordinator)
+- **06:20 4080 rg-04 melee 6/7 FAIL = foreign harness input** (fp_combat aim=1 inputs the wrapper never sent; no agent touched the game): likely an orphaned input-holder from a killed crossbow step (runner kill 05:30 / manual taskkill). Agent killtree: kill whole row process set + leftover-process guard before each row. Runner preempt-key fix 62eabdb (restart at boundary).
 - **05:58 VMQUICK PASS on the XBPIN3 build** (61-vmq-xbpin3, 5090; coordinator review PASS, sheet C:KenshiTestRunsmq-xbpin3mqmquick-sheet.jpg). rg-02 stealth all setup FAIL on the 4080 only (13/13 on 5090) -> agent stealth-4080.
 - **05:31 runner StuckAct verified live:** 59-hits-r09b HIT harness silent 5 min -> runner killed game + step itself (ALERT 05:30). 59 preempted on the 4080 (crossbow rows 5090 only).
 - **05:35 4080 TDR AGAIN with mods off** (04:24:23 4080 clock, first crossbow fire of 59-hits-r09b; history: 10-06 x2, 10-11 02:41 03:06 04:24): driver/hardware, intermittent. Crossbow-firing rows 5090 ONLY until Shay decides (filler rg-03/rg-05 got `# rig: 5090`; xbow-finish told). Shay question: 4080 TdrDelay registry (admin + reboot) or driver update.
