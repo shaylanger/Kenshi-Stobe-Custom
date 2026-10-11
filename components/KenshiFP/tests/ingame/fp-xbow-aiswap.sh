@@ -44,6 +44,12 @@ HOOK0=$(cs draw_hook); W0=$(cs wih)
 
 # ---- XSW: hold the aim, sample every second ----
 inp 1 0 0; waitfor 5 aimed 1 || setup_fail "not aimed after 5 s (why=$(cs why))"
+# XSW_SHOOT=1: fire one bolt at the target first (110 R03: the swap came after R02/R04 shots, with the fixture's turret
+# firing at the target; XSW without a shot kept the crossbow 2/2 at 15 and 8, so combat is the trigger)
+SHOTS=0; if [ "${XSW_SHOOT:-0}" = 1 ]; then
+  waitfor 10 shot_ready 1 || setup_fail "not shot_ready (why=$(cs why) ammo=$(cs ammo))"
+  s0=$(cs actual_shots); inp 1 1 0; sleep 0.5; inp 1 0 0; SHOTS=$(( $(cs actual_shots) - s0 ))
+  [ "$SHOTS" -ge 1 ] || setup_fail "the trigger did not fire (actual_shots $s0 -> $(cs actual_shots))"; fi
 SW=-1; SWWHY=; t=0
 while [ $t -lt "$SECS" ]; do
   sleep 1; t=$((t+1)); s=$(A fp_combat state); y=$(fld why <<<"$s"); w=$(fld wih <<<"$s")
@@ -52,6 +58,6 @@ done
 HOOK1=$(cs draw_hook); REF=$(cs draw_refused)
 inp 0 0 0
 pf_game_done 2>/dev/null || true
-ev="hold=${SECS}s target=$TG dist=$DIST draw_hook start=$HOOK0 end=$HOOK1 draw_refused=$REF"
+ev="hold=${SECS}s target=$TG dist=$DIST shots_first=$SHOTS draw_hook start=$HOOK0 end=$HOOK1 draw_refused=$REF"
 if [ "$SW" = -1 ]; then echo "RESULT $ROW PASS $ev: crossbow kept the whole hold (why=ok) log=$LOG"
 else echo "RESULT $ROW FAIL $ev: AI swapped at ${SW}s: $SWWHY log=$LOG"; fi
