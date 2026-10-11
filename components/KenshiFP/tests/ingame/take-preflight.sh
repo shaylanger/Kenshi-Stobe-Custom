@@ -58,6 +58,24 @@ pf_clean(){
   done < /tmp/pf-clean.$$; rm -f /tmp/pf-clean.$$
   echo "pf_clean ok: $n NPCs pinned + KO within $R of $TX,$TZ"
 }
+pf_clear(){   # per take in a multi-take sweep (kfp-twohand 03-twohand refilm 3, 2026-10-10: a dust storm rolled in after take 2:
+  # Naginata filmed in it (openground sky 0 from 3 s), Warhammer/Heavy Polearm stopped by pf_open): pf_day only checks once
+  # at the sweep start. Waits (50x, bounded) until the hour is 10-13 AND the sky is clear (blue > red+25), else FAIL setup.
+  local i h rgb ok=0
+  for i in $(seq 1 ${PF_CLEAR_TRIES:-150}); do
+    h=$(pf_hour); rgb=""
+    if [ "$h" -ge 10 ] && [ "$h" -le 13 ]; then
+      PF_A screenshot pf-sky >/dev/null; sleep 0.5
+      rgb=$("$PF_FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$PF_SHOTS/pf-sky.png")" -vf "crop=1600:120:0:30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1)
+      if echo "$rgb" | awk 'NF==3{exit !($3 > $1+25)} {exit 1}'; then ok=1; break; fi
+    fi
+    [ $i = 1 ] && { echo "pf_clear: waiting at 50x (hour $h, sky rgb$(echo $rgb))"; PF_A speed 50 hold >/dev/null; }
+    sleep 2
+  done
+  [ $i -gt 1 ] && PF_A speed 1 hold >/dev/null
+  [ $ok = 1 ] || pf_fail "weather/time: no clear sky at 10-13 h after ${PF_CLEAR_TRIES:-150} polls (hour $h, sky rgb$(echo $rgb); dust storm?)"
+  echo "pf_clear ok: ${h} h, sky rgb$(echo $rgb)$([ $i -gt 1 ] && echo " after $i polls")"
+}
 pf_open(){
   local s=${1:-2} f=/tmp/pf-open.$$.mp4 r o
   # park the virtual cursor in the top-right corner (sky): hovering a character shows its "[name]" tag (kfx-b9 blkE overlay)

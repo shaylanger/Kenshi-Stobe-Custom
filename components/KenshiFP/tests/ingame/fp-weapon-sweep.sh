@@ -93,6 +93,7 @@ take(){   # k sid name type animcls ammo
       case "$pm2" in -*|'') pf_fail "2H weapon mesh not read (pom=$pm2)";; esac
     fi
   fi
+  pf_clear; place
   pf_open 2
   # take
   : > "$N.lab"; rm -f "$N.stop"
