@@ -6,7 +6,8 @@ Kenshi must be closed. Copied to C:\KAH\ by kfp-pipeline.sh on every staging (so
 param([string]$Hash = '')
 $ErrorActionPreference = 'Stop'
 $dst = 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\KenshiFP\KenshiFP.dll'
-if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { 'kenshi still running: close it first'; exit 1 }
+# only instance 1's game blocks: a lane-2+ game (C:\KenshiInst\<n>, lane 4080b) holds its own DLL copies (m102: 4080b's game failed every 4080 install)
+if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -notlike 'C:\KenshiInst\*' }) { 'kenshi still running: close it first'; exit 1 }
 $f = Get-ChildItem 'C:\KAH\staged\KenshiFP-*.dll' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
 # one build line: KenshiFP-latest.txt names THE build (kfp-pipeline.sh); never pick by date when it exists
 if (-not $Hash -and (Test-Path 'C:\KAH\staged\KenshiFP-latest.txt')) { $Hash = ((Get-Content 'C:\KAH\staged\KenshiFP-latest.txt' -TotalCount 1) -split ' ')[1] }
