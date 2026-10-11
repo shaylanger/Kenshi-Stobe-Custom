@@ -11,7 +11,7 @@ $k = 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi'
 if ($InstallHarness) {
     $src = "C:\KAH\staged\AutomationHarness-$($InstallHarness.ToUpper()).dll"; $hd = "$k\mods\AutomationHarness\AutomationHarness.dll"
     if ((Get-FileHash $hd).Hash.Substring(0, 8) -ne $InstallHarness.ToUpper() -and (Test-Path $src) -and
-        (Get-FileHash $src).Hash.Substring(0, 8) -eq $InstallHarness.ToUpper() -and -not (Get-Process kenshi_x64 -ErrorAction SilentlyContinue)) {
+        (Get-FileHash $src).Hash.Substring(0, 8) -eq $InstallHarness.ToUpper() -and -not (Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { -not $_.Path -or $_.Path -notlike '*KenshiInst*' })) {
         Copy-Item $src $hd -Force }
     $Harness = $true
 }
