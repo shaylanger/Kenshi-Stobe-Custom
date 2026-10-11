@@ -42,7 +42,7 @@ Files: runner\<lane>.{pid,log,state,cur,stopped,restart}; ALERT-<lane>-tdr.txt.
 #>
 param([switch]$SelfTest, [switch]$Fake, [ValidateSet('5090b', '5090c')][string]$Lane = '5090b', [int]$TickSec = 30, [int]$MinGpuMB = 6144,
       [int]$MinRamMB = 7168, [int]$HoldRamMB = 4096, [int]$KillRamMB = 2048, [int]$MaxCpuPct = 85, [int]$Fps = 30,
-      [int]$StallMin = 10, [int]$IdleStopMin = 5, [int]$SlotPitch = 0, [int]$FilmAfterMin = 2, [string]$FilmMode = '1600 x 900',
+      [int]$StallMin = 10, [int]$IdleStopMin = 5, [int]$SlotPitch = 0, [int]$FilmAfterMin = 2, [string]$FilmMode = '1600 x 900', [string]$FilmMonitor = 'DISPLAY1',
       [string]$VideoMode = '1024 x 768', [string]$Monitor = 'DISPLAY2')   # extra lanes: small windows side by side on DISPLAY2 (lane A films on DISPLAY1, Shay 14:28/14:31)
 # lane table: instance (D:\KenshiInst\<n>), window slot on $Monitor, CPU admission (a third game only while the CPU has room)
 $Lanes = [ordered]@{ '5090b' = @{ Inst = 2; Slot = 0; Cpu = $false; Film = $true }; '5090c' = @{ Inst = 3; Slot = 1; Cpu = $true; Film = $true } }
@@ -50,7 +50,8 @@ $Lanes = [ordered]@{ '5090b' = @{ Inst = 2; Slot = 0; Cpu = $false; Film = $true
 # with no gfx-low work for $FilmAfterMin min takes filming lists (full gfx, $FilmMode, topmost on its own screen spot) from
 # queue\5090 / any; an idle lane stops its game while another films; gfx-low work always comes first again. Takes record
 # with Windows Graphics Capture (capture.default = wgc, capture-fix 15:25: covered windows film fine), so filming lanes may
-# overlap and are pinned topmost only under gdigrab. A lane's first filming list (per lane, until it passes) starts with a
+# overlap and are pinned topmost only under gdigrab. Filming lanes sit on $FilmMonitor (DISPLAY1, with lane A: WGC films a
+# covered window), never DISPLAY2: DISPLAY2's scaling made lane 5090b's 1600x900 game a 960x540 capture (CAPPROOF FAIL 15:33). A lane's first filming list (per lane, until it passes) starts with a
 # CAPPROOF row (capture-proof.sh on the lane's own window); CAPPROOF FAIL = no more film mode on that lane (note to coordinator).
 $Inst = $Lanes[$Lane].Inst; $Slot = $Lanes[$Lane].Slot
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
@@ -58,6 +59,7 @@ $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # ---------------------------------------------------------------- pure rules (-SelfTest)
 function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
 function CapMode { $m = "$((Get-Content 'C:\KenshiTestRuns\capture.default' -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if ($env:KAH_CAPTURE) { $m = $env:KAH_CAPTURE }; if ($m) { $m } else { 'gdigrab' } }
+function LaneMon { if ($script:film) { $FilmMonitor } else { $Monitor } }
 function Pin { [bool]$script:film -and (CapMode) -ne 'wgc' }   # topmost only while filming with gdigrab (screen area)
 function LaneGfx([string[]]$lines) { $g = @($lines | Where-Object { $_ -match '^\s*#\s*gfx:\s*(\S+)' } | ForEach-Object { $Matches[1].ToLower() } | Select-Object -First 1); if ($g -and $g[0] -eq 'low') { 'low' } else { 'full' } }
 function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the lane may run this list, else why not ($film: a filming lane in film mode)
@@ -187,7 +189,7 @@ function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | Fo
 function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
 function K2Procs { @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$K2\*" }) }
 function Ctl2([string[]]$a) {   # workspace kenshi-ctl.ps1 on instance $Inst as runner-<lane>
-    $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = $(if ($script:film) { 'full' } else { 'low' }); $env:KAH_VIDEO_MODE = $VideoMode; $env:KENSHI_MONITOR = $Monitor; $env:KAH_FPS = "$(if ($script:film) { 60 } else { $Fps })"
+    $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = $(if ($script:film) { 'full' } else { 'low' }); $env:KAH_VIDEO_MODE = $VideoMode; $env:KENSHI_MONITOR = (LaneMon); $env:KAH_FPS = "$(if ($script:film) { 60 } else { $Fps })"
     if ($script:film) { $env:KAH_LANE_FILM = '1' } else { Remove-Item env:KAH_LANE_FILM -ErrorAction SilentlyContinue }
     try { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" @a 2>&1 | ForEach-Object { "$_" } } finally { Remove-Item env:KAH_INSTANCE, env:KAH_GFX, env:KAH_VIDEO_MODE, env:KENSHI_MONITOR, env:KAH_FPS -ErrorAction SilentlyContinue }
 }
@@ -256,7 +258,7 @@ public static class LaneWin {
 function PlaceWin {
     $k = K2Procs | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if (-not $k) { return }
     $vm = [regex]::Match($(if ($script:film) { $FilmMode } else { $VideoMode }), '(\d+)\s*x\s*(\d+)'); if (-not $vm.Success) { return }
-    $r = [LaneWin]::Place($k.MainWindowHandle, $Monitor, $(if ($script:film) { 0 } else { $Slot }), $SlotPitch, [int]$vm.Groups[1].Value, [int]$vm.Groups[2].Value, (Pin))
+    $r = [LaneWin]::Place($k.MainWindowHandle, (LaneMon), $(if ($script:film) { 0 } else { $Slot }), $SlotPitch, [int]$vm.Groups[1].Value, [int]$vm.Groups[2].Value, (Pin))
     if ($r -ne 'ok' -and $r -ne $script:lastPlace) { Log "window: $r" }; $script:lastPlace = $r
 }
 $script:lastPlace = ''; $script:film = $false
@@ -331,6 +333,9 @@ while ($true) {
         if (Test-Path $tdr1) { TdrStop "lane A TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outW }
         $h = @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)); if ($h.Count) { TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
         Retitle; PlaceWin; CapFps
+        if ($script:film -and -not (Test-Path (Join-Path $outW 'PREEMPT')) -and (Select-String -Path (Join-Path $outW 'SUMMARY.txt') -Pattern '^RESULT CAPPROOF FAIL' -Quiet -ErrorAction SilentlyContinue)) {
+            Set-Content (Join-Path $outW 'PREEMPT') "CAPPROOF FAIL on lane $Lane : list back to queue\5090"; Set-Content (Join-Path $outW '.requeue') '5090'; Log "CAPPROOF FAIL: $name preempted, back to queue\5090 at DONE"
+        }
         $holdF = Join-Path $outW 'HOLD'; $ram = RamFreeMB
         switch (MemGuardAct $Lane $ram (LaneActs)) {
             'hold' { Set-Content $holdF "ram free $ram MB < $HoldRamMB (lane $Lane memory guard $(Get-Date -Format HH:mm))"; Log "HOLD $name : ram free $ram MB"; Note $own "lane $Lane holds $name at the next row boundary: RAM free $ram MB < $HoldRamMB" }
@@ -346,7 +351,9 @@ while ($true) {
             $sum = Join-Path $outW 'SUMMARY.txt'; $sl = if (Test-Path $sum) { @(Get-Content $sum) } else { @() }
             $p = @($sl | Where-Object { $_ -match '^RESULT \S+ PASS' }).Count; $f = @($sl | Where-Object { $_ -match '^RESULT \S+ FAIL' }).Count
             if ((Split-Path $cur[0] -Leaf) -like '*__filler__*') { $lg = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-runner.ps1" -Rig 5090 -LedgerFrom $outW -LedgerList $name 2>&1 | ForEach-Object { "$_" }); Log "ledger: $($lg | Select-Object -Last 1)" }
-            $dst = Join-Path "$qd\done" $name; Move-Item -LiteralPath $cur[0] $dst -Force -ErrorAction SilentlyContinue
+            $rq = "$((Get-Content (Join-Path $outW '.requeue') -TotalCount 1 -ErrorAction SilentlyContinue))".Trim()
+            if ($rq) { Move-Item -LiteralPath $cur[0] (Join-Path "$qd\$rq" $name) -Force -ErrorAction SilentlyContinue; Log "REQUEUED $name to queue\$rq"; Note $own "lane $Lane gave $name back to queue\$rq (CAPPROOF FAIL on its window; $outW)" }
+            $dst = Join-Path "$qd\done" $name; if (-not $rq) { Move-Item -LiteralPath $cur[0] $dst -Force -ErrorAction SilentlyContinue }
             if (Test-Path $sum) { Copy-Item $sum "$dst.SUMMARY.txt" -Force }
             Set-Content "$dst.result" "DONE $Lane start=$([DateTimeOffset]::FromUnixTimeSeconds($t0).LocalDateTime.ToString('s')) end=$(Get-Date -Format s) out=$outW pass=$p fail=$f summary=$dst.SUMMARY.txt"
             $cp = @($sl | Where-Object { $_ -match '^RESULT CAPPROOF (PASS|FAIL)' } | Select-Object -Last 1)
@@ -422,7 +429,7 @@ while ($true) {
     Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
     $rl = if ($up) { '--reuse ' } else { '' }
     $ev = if ($film) { "KAH_GFX=full KAH_FPS=60 KAH_LANE_FILM=1" } else { "KAH_GFX=low KAH_VIDEO_MODE='$VideoMode' KAH_FPS=$Fps" }
-    $st = "#!/bin/bash`nexport KAH_OWNER=$owner $ev KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' KENSHI_MONITOR=$Monitor WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE:KAH_VIDEO_MODE:KENSHI_MONITOR:KAH_FPS:KAH_LANE_FILM`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
+    $st = "#!/bin/bash`nexport KAH_OWNER=$owner $ev KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' KENSHI_MONITOR=$(LaneMon) WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE:KAH_VIDEO_MODE:KENSHI_MONITOR:KAH_FPS:KAH_LANE_FILM`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
     [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
     $t0 = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     Set-Content $curF @($run, $outW, $t0, $own, (Get-Date -Format s), $name); Set-Content (Join-Path $runs "inflight\runner-$Lane") $outP
