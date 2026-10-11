@@ -72,6 +72,11 @@ foreach ($m in $inf) {
 $sw = @(& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'testruns-sweep.ps1') 2>$null)
 $sw | Select-Object -Last 1
 $sw | Where-Object { $_ -like 'STALE*' } | Select-Object -First 20
+'=== WSL services (cache-trim is (re)started here; STOBE server must be off for non-STOBE work) ==='
+# speed-scout 2026-10-11: after the 13:31 BSOD reboot the WSL start left cache-trim off (its start line sat after
+# start_env's shutdown 'read'; vmmem kept ~6 GB of page cache) and the STOBE server ON during FP work (LLM credits)
+$wslq = 'bash /mnt/c/KenshiModding/tools/automation/wsl-cache-trim.sh start | tail -1; bash /mnt/c/KenshiModding/tools/automation/stobe-server.sh status 2>&1 | tail -2'
+@(& wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c $wslq 2>&1) | ForEach-Object { "  $_" }
 $rv = Join-Path $runs 'review-verdicts.tsv'
 if (Test-Path -LiteralPath $rv) { '=== newest review verdicts ==='; Get-Content -LiteralPath $rv -Tail 8 }
 ''
