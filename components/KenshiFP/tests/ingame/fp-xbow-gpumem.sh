@@ -25,7 +25,11 @@ inp() { A fp_combat input "$1" "$2" "$3" >/dev/null; }
 waitfor() { local end=$((SECONDS+$1)); while [ $SECONDS -lt $end ]; do [ "$(cs "$2")" = "$3" ] && return 0; sleep 0.2; done; return 1; }
 NVSMI=$(command -v nvidia-smi.exe || ls /mnt/c/Windows/System32/nvidia-smi.exe /c/Windows/System32/nvidia-smi.exe 2>/dev/null | head -1)
 nvmem() { "$NVSMI" --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d '\r '; }
-TDRCHK=$(wslpath -w "$(cd "$(dirname "$0")/../../../../tools/automation" && pwd)/gpu-tdr-check.ps1")
+TDRF="$(cd "$(dirname "$0")/../../../../tools/automation" && pwd)/gpu-tdr-check.ps1"
+# tdrcheck <minutes>: "TDR NONE" or "TDR <n> last=<t>" (gpu-tdr-check.ps1; an inline query where the rig lacks the script)
+tdrcheck() { if [ -f "$TDRF" ]; then powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$TDRF")" -Minutes "$1"
+  else powershell.exe -NoProfile -Command "\$e=Get-WinEvent -FilterHashtable @{LogName='System'; Id=4101,153; StartTime=(Get-Date).AddMinutes(-$1)} -ErrorAction SilentlyContinue | Where-Object { \$_.ProviderName -in 'nvlddmkm','Display' }; if (\$e) { 'TDR {0} last={1}' -f @(\$e).Count, @(\$e)[0].TimeCreated.ToString('HH:mm:ss') } else { 'TDR NONE' }"
+  fi | tr -d '\r' | tail -1; }
 T0=$(date +%s)
 
 # ---- GPU memory sampler (PowerShell, every 2 s until the stop file) ----
@@ -59,7 +63,7 @@ A where "$SH" | grep -q 'pos=' || pf_fail "shooter $SH not found"
 A where "$TG" | grep -q 'pos=' || pf_fail "target $TG not found"
 [ "$(A rangedinfo "$SH" | fld bow)" != none ] || pf_fail "$SH has no ranged weapon"
 [ -n "$NVSMI" ] || { echo "GPUMEM: nvidia-smi not found, nvsmi column empty (Kenshi counters still gate)" >> "$LOG"; NVSMI=true; }
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TDRCHK" -Minutes 5 | tr -d '\r' | tail -1 | grep -q 'TDR NONE' || pf_fail "a TDR in the 5 min before the row (stale device?)"
+tdrcheck 5 | grep -q 'TDR NONE' || pf_fail "a TDR in the 5 min before the row (stale device?)"
 A protect "$SH" on >/dev/null
 A pin "$TG" at "$SH" dist $DIST face "$SH" >/dev/null
 A protect "$TG" on >/dev/null
@@ -97,7 +101,7 @@ done
 inp 0 0 0
 : > "$STOPF"; sleep 3; kill $SPID 2>/dev/null
 MIN=$(( ($(date +%s)-T0)/60 + 2 ))
-TDR=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TDRCHK" -Minutes $MIN | tr -d '\r' | tail -1)
+TDR=$(tdrcheck $MIN)
 pf_game_done
 
 # ---- verdict ----
