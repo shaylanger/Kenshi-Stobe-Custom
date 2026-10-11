@@ -5,18 +5,22 @@
 # Usage (inside WSL DwemerAI4Skyrim3 as root; start long runs detached: setsid nohup bash kfp-pipeline.sh ... > log 2>&1 &):
 #   kfp-pipeline.sh [--combined] [--base live|rev:<KenshiModding rev>|dir:<tree root>] [--revert <patch>]...
 #                   [--patches <p1,p2,..> | --all-pending] [--exclude <p1,..>] [--jobs N] [--drop 0.05] [--stage|--no-stage]
-#                   [--no-4080] [--keep] [--out DIR]
+#                   [--no-4080] [--keep] [--per-patch] [--out DIR]
+# COMBINED-FIRST (Shay 2026-10-10, build cycle ~1 h -> ~10 min): the gate runs only 'base' and 'all' first. When 'all'
+#   shows no SET regression vs base (no BREAK/newfail row base->all, gate FAIL only from known-base flips) it is staged
+#   right away. Only when it fails are the per-patch trees (+P alone, -P set minus P) gated to name the breaking patch
+#   (BREAK logic below, combined re-run without it). --per-patch (env KFP_PER_PATCH=1) always gates every tree (old mode).
 # ONE BUILD LINE (Shay 2026-10-10): rigs never choose between builds. The default run (no --patches/--all-pending) is
 #   --combined = base + EVERY pending-fixes/kfp-* patch; a patch that conflicts in the set or BREAKs in-set is left out
 #   (named in the final line as excluded=<p>:<why>) and the run repeats without it (new run dir <run>-x<k>), so the rest
 #   still ships. Gate failures that fail identically on the base (gate "flipped" keys that flip on base too, e.g. pool s1
 #   while a known refit is pending) are KNOWN-BASE: reported (known-base=...), never blocking; only a gate failure the
 #   patches cause (BREAK in delta.tsv, or a new flip/mutation miss on 'all') blocks. Staging (any mode) makes the build
-#   THE build: C:\KenshiTestRuns\staged\KenshiFP-latest.txt (+ C:\KAH\staged on the 4080) names it, every other staged
-#   KenshiFP-*.dll on both rigs is deleted, older "staged-build: KenshiFP" queue lines are replaced by one new line.
+#   THE build: C:\KenshiTestRuns\staged\KenshiFP-latest.txt (+ C:\KAH\staged on the 4080) names it, staged KenshiFP-*.dll
+#   older than THE build and the one before it are deleted on both rigs (newest 2 kept), older "staged-build: KenshiFP" queue lines are replaced by one new line.
 #   install-dll.ps1 KenshiFP -Staged [-Rig 4080] installs the latest pointer. --patches/--all-pending runs are trial builds:
 #   they don't stage unless --stage is given. Watcher: kfp-buildwatch.sh reruns --combined when pending-fixes/kfp-* or
-#   /root/KenshiFP change (10 min quiet). Each run holds C:\KenshiTestRuns\inflight\kfp-pipeline-<run> while it runs.
+#   /root/KenshiFP change (90 s quiet). Each run holds C:\KenshiTestRuns\inflight\kfp-pipeline-<run> while it runs.
 #   --exclude   leave these patches out (combined re-runs use it; env KFP_EXCL_NOTE carries the reasons)
 #   --base      live (default) = /root/KenshiFP incl. its uncommitted working tree; rev: = components/KenshiFP snapshot at a
 #               KenshiModding git rev; dir: = any tree root (client/, re_plugin/, tests/)
@@ -42,15 +46,15 @@
 #   4 gate   components/KenshiFP/animlab/gate.sh, unchanged, in a private mount namespace per tree: the tree is bind-mounted
 #            on /root/KenshiFP, /root/animlab-build is an overlay, /root/animlab-{kfp-src,gate,work} empty private dirs, /tmp is private, the lab scripts
 #            (animlab/ + harness tools/animlab) and fp-viewmodel.sh are a snapshot taken at the start. So runs are parallel,
-#            consistent and leave nothing behind. Trees gated: base, all, +P (each patch alone, N>=2), -P (set minus P,
+#            consistent and leave nothing behind. Trees gated: base + all; only when they regress (or --per-patch): +P (alone, N>=2), -P (set minus P,
 #            N>=3). The gate pools EVERY stroke with key tables (0..VM_NSTROKE-1) + corpus pool/strokes.tsv. Mutations
 #            only on 'all'.
 #            Delta ($RUN/delta.tsv): per patch, alone (base -> +P) and in-set (set minus P -> all): every gate verdict
 #            flip and every pool take rate change >= 0.02 (s<n>.take_all / arc / blade / stroke). BREAK = PASS->FAIL, a check
 #            new in the patch's tree that FAILs there (the patch ships a check it fails), or a drop >= --drop in-set (e.g. "DELTA kfp-pt30-flip in-set s1.take_all 0.95 -> 0.64 BREAK").
 #   5 stage  on PASS: C:\KenshiTestRuns\staged\KenshiFP-<sha8>.dll (+ .txt manifest) + KenshiFP-latest.txt, same on the
-#            4080 in C:\KAH\staged (+ C:\KAH\inst-staged.ps1), SHA256 checked on both sides, all other staged KenshiFP
-#            DLLs removed; queue\5090.next / 4080.next get ONE "staged-build: KenshiFP" line (older ones replaced).
+#            4080 in C:\KAH\staged (+ C:\KAH\inst-staged.ps1), SHA256 checked on both sides, staged KenshiFP DLLs
+#            older than the previous build removed (newest 2 kept); queue\5090.next / 4080.next get ONE "staged-build: KenshiFP" line (older ones replaced).
 #            Install at each rig's next restart (Kenshi closed):
 #              5090: install-dll.ps1 KenshiFP -Staged          4080: install-dll.ps1 KenshiFP -Staged -Rig 4080
 # Output: one final line  PIPELINE PASS <sha8> patches=<..> [excluded=..] [known-base=..] gate=<summary> run=<dir>
@@ -70,13 +74,14 @@ LABK=$WS/components/KenshiFP/animlab; LABH=$WS/Kenshi-Automation-Harness/tools/a
 STAGED=${KFP_STAGED:-/mnt/c/KenshiTestRuns/staged}; QD=${KFP_QUEUE:-/mnt/c/KenshiTestRuns/queue}; R4DIR=${KFP_STAGED_4080:-'C:\KAH\staged'}
 SSH=/mnt/c/Windows/System32/OpenSSH/ssh.exe; SCP=/mnt/c/Windows/System32/OpenSSH/scp.exe
 BASE=live; REVERTS=(); PLIST=""; ALLP=0; JOBS=3; DROP=0.05; STAGE=""; R4080=1; KEEP=0; RUN=""; SFROM=""; COMB=0; EXCL=""
+PERP=${KFP_PER_PATCH:-0}   # 1 = always gate the per-patch trees (old mode); 0 = combined-first (per-patch only on a failure)
 KA=()   # args a combined re-run keeps
 while [ $# -gt 0 ]; do case "$1" in
   --base) BASE=$2; KA+=("$1" "$2"); shift;; --revert) REVERTS+=("$2"); KA+=("$1" "$2"); shift;; --patches) PLIST=$2; shift;;
   --all-pending) ALLP=1;; --combined) COMB=1;; --exclude) EXCL=$2; shift;; --stage) STAGE=1; KA+=("$1");;
   --jobs) JOBS=$2; KA+=("$1" "$2"); shift;; --drop) DROP=$2; KA+=("$1" "$2"); shift;; --no-stage) STAGE=0; KA+=("$1");;
-  --no-4080) R4080=0; KA+=("$1");; --keep) KEEP=1; KA+=("$1");;
-  --out) RUN=$2; shift;; --stage-from) SFROM=$2; shift;; -h|--help) sed -n '2,60p' "$0"; exit 0;;
+  --no-4080) R4080=0; KA+=("$1");; --keep) KEEP=1; KA+=("$1");; --per-patch) PERP=1; KA+=("$1");;
+  --out) RUN=$2; shift;; --stage-from) SFROM=$2; shift;; -h|--help) sed -n '2,64p' "$0"; exit 0;;
   *) echo "kfp-pipeline: unknown arg $1"; exit 2;; esac; shift; done
 [ -z "$PLIST" ] && [ $ALLP = 0 ] && [ -z "$SFROM" ] && COMB=1   # default = the one combined build line
 [ $COMB = 1 ] && { [ -n "$PLIST" ] && { echo "kfp-pipeline: --combined takes every pending patch (use --exclude, not --patches)"; exit 2; }; ALLP=1; }
@@ -104,7 +109,8 @@ stage_dll() { local dll=$1 pn=$2 note=$3 sha h sd ql rh; sha=$(sha256sum "$dll" 
   { printf 'KenshiFP %s sha256 %s\npatches %s\n' "$h" "$sha" "$pn"; printf 'excluded %s\nknown-base %s\n' "${EXNOTE:-none}" "${KB:-none}"
     printf 'staged %s by kfp-pipeline (%s)\nrun %s\n' "$(date '+%F %T')" "$note" "$RUN"; } > "$STAGED/KenshiFP-latest.txt.new"
   mv -f "$STAGED/KenshiFP-latest.txt.new" "$STAGED/KenshiFP-latest.txt"   # line 1 = THE build every rig installs
-  for o in "$STAGED"/KenshiFP-*.dll; do [ "$o" = "$sd" ] || rm -f "$o" "${o%.dll}.txt"; done   # superseded: one build only
+  # superseded: keep THE build + the one before it (lists still naming the previous build can install it), drop older ones
+  ls -t "$STAGED"/KenshiFP-*.dll 2>/dev/null | grep -vxF "$sd" | tail -n +2 | while read -r o; do rm -f "$o" "${o%.dll}.txt"; done
   ST=5090; ql="staged-build: KenshiFP $h ($(date '+%F %H:%M') kfp-pipeline, patches=$pn, $note)"
   for q in "$QD/5090.next" "$QD/4080.next"; do [ -f "$q" ] && sed -i '/^staged-build: KenshiFP /d' "$q"; done
   echo "$ql -> before the next batch (Kenshi closed): install-dll.ps1 KenshiFP -Staged" >> "$QD/5090.next"
@@ -114,7 +120,7 @@ stage_dll() { local dll=$1 pn=$2 note=$3 sha h sd ql rh; sha=$(sha256sum "$dll" 
        && timeout 60 "$SCP" -q < /dev/null "$(wslpath -w "$WS/tools/automation/rig4080/inst-staged.ps1")" 4080:C:/KAH/; then
       rh=$(timeout 60 "$SSH" -n 4080 "powershell -NoProfile -Command \"(Get-FileHash $R4DIR\KenshiFP-$h.dll).Hash\"" | tr -d '\r\n' | tr A-F a-f)
       if [ "$rh" = "$sha" ]; then ST="5090,4080"
-        timeout 60 "$SSH" -n 4080 "powershell -NoProfile -Command \"Get-ChildItem $R4DIR\\KenshiFP-*.dll,$R4DIR\\KenshiFP-*.txt | Where-Object { \$_.Name -notlike 'KenshiFP-$h.*' -and \$_.Name -ne 'KenshiFP-latest.txt' } | Remove-Item -Force\"" > /dev/null || say "STAGE 4080 could not remove superseded builds"
+        timeout 60 "$SSH" -n 4080 "powershell -NoProfile -Command \"Get-ChildItem $R4DIR\\KenshiFP-*.dll | Where-Object { \$_.Name -notlike 'KenshiFP-$h.*' } | Sort-Object LastWriteTime -Descending | Select-Object -Skip 1 | ForEach-Object { Remove-Item -Force -ErrorAction SilentlyContinue \$_.FullName, (\$_.FullName -replace '[.]dll\$','.txt') }\"" > /dev/null || say "STAGE 4080 could not remove superseded builds"
         echo "$ql -> before the next batch (Kenshi closed): install-dll.ps1 KenshiFP -Staged -Rig 4080 (or on the 4080: C:\KAH\inst-staged.ps1)" >> "$QD/4080.next"
       else say "STAGE 4080 sha mismatch (${rh:-none}): not staged there"; fi
     else say "STAGE 4080 unreachable: not staged there"; fi
@@ -213,10 +219,7 @@ cp "$DLL" "$RUN/KenshiFP-$H.dll"; say "BUILD KenshiFP $H"
 declare -A TREE CTX
 TREE[all]=$T_ALL
 if [ $N -ge 1 ]; then TREE[base]=$B; fi
-if [ $N -ge 2 ]; then for p in "${S[@]}"; do n=$(pname "$p"); apply_set "$RUN/tree-+$n" "$p" > /dev/null; TREE[+$n]=$RUN/tree-+$n; done; fi
-if [ $N -ge 3 ]; then for p in "${S[@]}"; do n=$(pname "$p"); r=(); for q in "${S[@]}"; do [ "$q" = "$p" ] || r+=("$q"); done
-  apply_set "$RUN/tree--$n" "${r[@]}" > /dev/null; TREE[-$n]=$RUN/tree--$n; done; fi
-for p in "${S[@]}"; do n=$(pname "$p")
+for p in "${S[@]}"; do n=$(pname "$p")   # CTX[P] = the tree P's in-set compare starts from
   if [ $N = 1 ]; then CTX[$n]=base; elif [ $N = 2 ]; then for q in "${S[@]}"; do [ "$q" = "$p" ] || CTX[$n]=+$(pname "$q"); done; else CTX[$n]=-$n; fi; done
 gate_ns() {  # <label> <tree>
   local l=$1 t=$2 ns=$RUN/ns-$1 o=$RUN/gate-$1 mut=--no-mutate; [ "$1" = all ] && mut=""
@@ -233,16 +236,20 @@ gate_ns() {  # <label> <tree>
     set +e; bash "$WS/components/KenshiFP/animlab/gate.sh" --out "$O" $MUT' > "$RUN/logs/gate-$l.txt" 2>&1
   echo $? > "$RUN/logs/gate-$l.rc"; rm -rf "$ns"
 }
-labels=(all); for k in "${!TREE[@]}"; do [ "$k" = all ] || labels+=("$k"); done
-say "GATE ${#labels[@]} trees (${labels[*]}), $JOBS at a time"
-for l in "${labels[@]}"; do while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done; gate_ns "$l" "${TREE[$l]}" & done; wait
 # metrics <label> -> key \t value  (gate verdict keys + pool take rates per stroke)
 metrics() { local o=$RUN/gate-$1; [ -f "$o/verdicts.tsv" ] && cat "$o/verdicts.tsv"
   [ -f "$o/pool.txt" ] && awk '$1=="pool" && $2=="stroke" {s=$3; for (i=5;i<=NF;i++) { f=$i
       if (f ~ /^take_all=/) { split(f,a,"="); print "s" s ".take_all\t" a[2] }
       else if (f ~ /^[a-z]+:take=/) { split(f,a,":"); split(a[2],b,"="); split(b[2],c,"/"); print "s" s "." a[1] "\t" c[1] } } }' "$o/pool.txt"; }
-for l in "${labels[@]}"; do metrics "$l" > "$RUN/metrics-$l.tsv"; g=$(cat "$RUN/gate-$l/RESULT.txt" 2>/dev/null | head -1)
-  say "GATE $l rc=$(cat "$RUN/logs/gate-$l.rc") ${g:-no RESULT (log $RUN/logs/gate-$l.txt)}" | cut -c1-400; done
+# run_gates <label...>: gate these trees ($JOBS at a time), metrics + one line each; a tree whose lab adapter doesn't
+# build from its source makes every pool/delta invalid: fail right there (no per-patch round on top of it)
+labels=()   # every label gated in this run
+run_gates() { local l e g; say "GATE $# trees ($*), $JOBS at a time"
+  for l in "$@"; do while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done; gate_ns "$l" "${TREE[$l]}" & done; wait
+  for l in "$@"; do labels+=("$l"); metrics "$l" > "$RUN/metrics-$l.tsv"; g=$(cat "$RUN/gate-$l/RESULT.txt" 2>/dev/null | head -1)
+    say "GATE $l rc=$(cat "$RUN/logs/gate-$l.rc") ${g:-no RESULT (log $RUN/logs/gate-$l.txt)}" | cut -c1-400; done
+  for l in "$@"; do e=$(grep -A3 -E '^REGRESS FAIL build-(current|drive-current)' "$RUN/gate-$l/regress.txt" 2>/dev/null | grep -m1 -E 'error|FAIL' | cut -c1-200)
+    [ -z "$e" ] || die lab-build "tree $l: the lab adapter does not build from this source, pools/deltas invalid: $e"; done; }
 # compare <patch> <kind> <before label> <after label> -> delta rows
 compare() { awk -F'\t' -v p="$1" -v k="$2" -v dr="$DROP" 'NR==FNR {a[$1]=$2; next} {b[$1]=$2}
   END { for (x in a) { if (!(x in b)) { if (a[x]=="PASS") print p "\t" k "\t" x "\t" a[x] "\t-\t-\tGONE"; continue }
@@ -250,13 +257,36 @@ compare() { awk -F'\t' -v p="$1" -v k="$2" -v dr="$DROP" 'NR==FNR {a[$1]=$2; nex
               f=(d<=-dr ? (k=="alone" ? "drop" : "BREAK") : (d<0 ? "drop" : "gain")); printf "%s\t%s\t%s\t%s\t%s\t%+.2f\t%s\n", p, k, x, a[x], b[x], d, f } }
           else if (a[x]!=b[x]) print p "\t" k "\t" x "\t" a[x] "\t" b[x] "\t-\t" (a[x]=="PASS" && b[x]=="FAIL" ? (k=="alone" ? "flip" : "BREAK") : (a[x]=="FAIL" && b[x]=="PASS" ? "fix" : "changed")) }
         for (x in b) if (!(x in a)) print p "\t" k "\t" x "\t-\t" b[x] "\t-\t" (b[x] ~ /^FAIL/ && x != "" ? (k=="in-set" ? "BREAK" : "newfail") : "new") }' "$RUN/metrics-$3.tsv" "$RUN/metrics-$4.tsv" | sort -t$'\t' -k3,3; }
+# kb_eval: a gate-all FAIL whose only cause is baseline flips the base gate shows identically = KNOWN-BASE (sets KB,
+# non-blocking); anything else sets GB (the blocking reason; nores = no RESULT). The delta blocks every flip a patch causes.
+kb_eval() { local gl why fa fb newf; KB=""; GB=""; [ "$(cat "$RUN/logs/gate-all.rc" 2>/dev/null)" = 0 ] && return 0
+  gl=$(head -1 "$RUN/gate-all/RESULT.txt" 2>/dev/null); [ -n "$gl" ] || { GB=nores; return 0; }
+  why=$(echo "$gl" | grep -o 'why=[^ ]*' | cut -d= -f2); fa=$(echo "$gl" | grep -o 'flipped=[^ ]*' | cut -d= -f2-)
+  if [ $N -ge 1 ]; then fb=$(head -1 "$RUN/gate-base/RESULT.txt" 2>/dev/null | grep -o 'flipped=[^ ]*' | cut -d= -f2-); else fb=$fa; fi
+  newf=$(comm -23 <(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | sort -u) <(echo "$fb" | tr ';' '\n' | sort -u) | paste -sd';')
+  if [ "$why" = flipped ] && [ -z "$newf" ]; then KB=$(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | paste -sd';')
+  else GB="why=$why${newf:+ new-flips=$newf}"; fi; }
+# round 1 (combined-first): base + all only. Round 2: the per-patch trees, only when round 1 shows a regression vs base
+# (or --per-patch), so the breaking patch can be named and left out.
+first=(all); [ $N -ge 1 ] && first+=(base); run_gates "${first[@]}"
+PPG=0; ff=""
+if [ $N -ge 2 ]; then
+  if [ $PERP = 1 ]; then ff="--per-patch"
+  else sr=$(compare SET set base all | awk -F'\t' '$7=="BREAK" || $7=="newfail" {printf "%s %s->%s %s; ", $3, $4, $5, $7}')
+    [ -n "$sr" ] && ff="set: ${sr%; }"; kb_eval; case "$GB" in ""|nores) ;; *) ff="${ff:+$ff; }gate: $GB";; esac; fi
+  if [ -n "$ff" ]; then say "COMBINED-FIRST per-patch round (${ff})" | cut -c1-600; pl=()
+    for p in "${S[@]}"; do n=$(pname "$p"); apply_set "$RUN/tree-+$n" "$p" > /dev/null; TREE[+$n]=$RUN/tree-+$n; pl+=("+$n"); done
+    if [ $N -ge 3 ]; then for p in "${S[@]}"; do n=$(pname "$p"); r=(); for q in "${S[@]}"; do [ "$q" = "$p" ] || r+=("$q"); done
+      apply_set "$RUN/tree--$n" "${r[@]}" > /dev/null; TREE[-$n]=$RUN/tree--$n; pl+=("-$n"); done; fi
+    run_gates "${pl[@]}"; PPG=1
+  else say "COMBINED-FIRST all-pending clean vs base: per-patch round skipped"; fi
+fi
 printf 'patch\tcompare\tkey\tbefore\tafter\tdelta\tflag\n' > "$D"
 if [ $N -ge 1 ]; then compare SET set base all >> "$D"
-  for p in "${S[@]}"; do n=$(pname "$p"); [ $N -ge 2 ] && compare "$n" alone base "+$n" >> "$D"; compare "$n" in-set "${CTX[$n]}" all >> "$D"; done; fi
+  for p in "${S[@]}"; do n=$(pname "$p"); [ $PPG = 1 ] && compare "$n" alone base "+$n" >> "$D"
+    if [ $N = 1 ] || [ $PPG = 1 ]; then compare "$n" in-set "${CTX[$n]}" all >> "$D"; fi; done; fi
 awk -F'\t' 'NR>1 && $2!="set" && $7 ~ /BREAK|drop|flip|GONE|newfail/ {print "DELTA " $1 " " $2 " " $3 " " $4 " -> " $5 " " $7}' "$D" | head -40 | tee -a "$RUN/pipeline.log"
 # --- verdict --------------------------------------------------------------------------------------------------------
-for l in "${labels[@]}"; do e=$(grep -A3 -E '^REGRESS FAIL build-(current|drive-current)' "$RUN/gate-$l/regress.txt" 2>/dev/null | grep -m1 -E 'error|FAIL' | cut -c1-200)
-  [ -z "$e" ] || die lab-build "tree $l: the lab adapter does not build from this source, pools/deltas invalid: $e"; done
 GL=$(cat "$RUN/gate-all/RESULT.txt" 2>/dev/null | head -1)
 [ -n "$GL" ] || die gate "no gate result for the full set (log $RUN/logs/gate-all.txt)"
 GS="$(echo "$GL" | awk '{print $3}') $(echo "$GL" | grep -o 'pool=[^ ]*\( s[0-9]*:[A-Z]*\)*' | tr ' ' ',') $(echo "$GL" | grep -o 'flipped=[^ ]*')"
@@ -264,17 +294,8 @@ br=$(awk -F'\t' 'NR>1 && $7=="BREAK" {printf "%s %s %s->%s; ", $1, $3, $4, $5}' 
 if [ -n "$br" ] && [ $COMB = 1 ]; then cu=$(awk -F'\t' 'NR>1 && $7=="BREAK" && $1!="SET" {print $1}' "$D" | sort -u | paste -sd,)
   [ -n "$cu" ] && rerun_without "$cu" "BREAK"; fi
 [ -z "$br" ] || die delta "${br%; } (gate: $GS)"
-# known-base: a gate FAIL on 'all' whose only cause is baseline flips that the base gate shows identically is not the
-# patches' doing (the delta above already blocks every flip a patch causes): report it, don't block staging
-KB=""
-if [ "$(cat "$RUN/logs/gate-all.rc")" != 0 ]; then
-  why=$(echo "$GL" | grep -o 'why=[^ ]*' | cut -d= -f2); fa=$(echo "$GL" | grep -o 'flipped=[^ ]*' | cut -d= -f2-)
-  if [ $N -ge 1 ]; then fb=$(head -1 "$RUN/gate-base/RESULT.txt" 2>/dev/null | grep -o 'flipped=[^ ]*' | cut -d= -f2-); else fb=$fa; fi
-  newf=$(comm -23 <(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | sort -u) <(echo "$fb" | tr ';' '\n' | sort -u) | paste -sd';')
-  if [ "$why" = flipped ] && [ -z "$newf" ]; then KB=$(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | paste -sd';')
-    say "GATE known-base failures (fail identically on base, non-blocking): $KB"
-  else die gate "why=$why${newf:+ new-flips=$newf} ($GS)"; fi
-fi
+kb_eval; [ -z "$GB" ] || die gate "$GB ($GS)"
+[ -n "$KB" ] && say "GATE known-base failures (fail identically on base, non-blocking): $KB"
 PN=$(for p in "${S[@]}"; do printf '%s,' "$(pname "$p")"; done); PN=${PN%,}; PN=${PN:-none}
 # --- 5 stage --------------------------------------------------------------------------------------------------------
 ST=unstaged; [ $STAGE = 1 ] && stage_dll "$DLL" "$PN" "gate PASS$([ $COMB = 1 ] && echo ' combined')${KB:+ known-base}"
