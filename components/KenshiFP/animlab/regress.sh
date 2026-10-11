@@ -407,7 +407,7 @@ else echo "REGRESS INFO native: game install missing"; fi
 #     and PASS kfx-b2 e6fix.mp4 (clean take); takecheck.py runs it on every --video take.
 for f in turret-fp sword-z25-block-f36; do [ -f "$TV/$f.mp4" ] || { echo "REGRESS INFO overlay: $f.mp4 missing"; continue; }
   r=$(python3 "$L/frames.py" overlay "$TV/$f.mp4" --name $f)
-  case "$f:$r" in turret-fp:*"FAIL overlay"*"text-panel"*"46."*|sword-z25-block-f36:*"FAIL overlay"*"0.0-40.5s(text"*) ok "overlay miss: ${r:0:170}";; *) bad "overlay miss: $r";; esac; done
+  case "$f:$r" in turret-fp:*"FAIL overlay"*"text-panel"*"(uibox x16,y330)"*|sword-z25-block-f36:*"FAIL overlay"*"0.0-40.5s(text"*) ok "overlay miss: ${r:0:170}";; *) bad "overlay miss: $r";; esac; done
 # 31b. persistent name tag (5090-operator 2026-10-10, op-probe plain/none, op-b1 blkG): the [Axima] tag shows in EVERY frame;
 #      the old text baseline (cells in >= 40% of frames = own HUD) hid it. Every sampled frame must be flagged.
 for f in op-probe-plain op-probe-none; do [ -f "$TV/$f.mp4" ] || [ -f "$CORPUS/takes/videos/$f.mp4" ] || { echo "REGRESS INFO overlay: $f.mp4 missing"; continue; }
@@ -418,6 +418,23 @@ E6V=$W/kept/kfx-b2_e6_e6fix.mp4; [ -f "$E6V" ] || E6V=$CORPUS/kept/kfx-b2_e6_e6f
 if [ -f "$E6V" ]; then r=$(python3 "$L/frames.py" overlay "$E6V" --name e6fix)
   case "$r" in *"PASS overlay"*) ok "no-overlay video $r";; *) bad "no-overlay video $r";; esac
 else echo "REGRESS INFO overlay: kept/kfx-b2_e6_e6fix.mp4 missing"; fi
+# 31c. CLASS foreign overlay, framed UI boxes + toasts + stills (Misses 2026-10-10 "tutorial hint popups", steam-popup
+#      2026-10-11): frames.py ui_boxes (hint/notification popups, never baselined) FAIL the 94 hint-popup take for its whole
+#      length, its X buttons are no Kenshi cursor (find_kcursor junction rule), the Z1 HUD strip is no arrow cursor
+#      (find_cursor widening head), and a contact sheet with a Steam toast FAILs `overlay --sheet` (toast_cells), its pair PASSes.
+HP=$CORPUS/zs-sword-switch-on-hintpopups-94.mp4
+if [ -f "$HP" ]; then r=$(python3 "$L/frames.py" overlay "$HP" --name hint94)
+  case "$r" in *"FAIL overlay frames="*"overlay_frames="*"0.0-55.0s(uibox"*) ok "hint popups uibox: ${r:0:150}";; *) bad "hint popups uibox: $r";; esac
+  r=$(python3 "$L/frames.py" cursor "$HP" --name hint94)
+  case "$r" in *"PASS cursor"*) ok "hint popup X buttons no cursor: $r";; *) bad "hint popup X buttons read as cursor: $r";; esac
+else echo "REGRESS INFO overlay: hint popup take missing"; fi
+HS=$CORPUS/takes/videos/z1-zs-sword-fade-on-hudstrip.mp4
+[ -f "$HS" ] && { r=$(python3 "$L/frames.py" cursor "$HS" --name hudstrip)
+  case "$r" in *"PASS cursor"*) ok "HUD strip no cursor: $r";; *) bad "HUD strip read as cursor: $r";; esac; }
+for s in z1-zf1-ready:FAIL z1-zf0-block:FAIL z1-zf0-swing:PASS; do f=$CORPUS/takes/stills/${s%:*}.sheet.jpg
+  [ -f "$f" ] || { echo "REGRESS INFO still overlay: ${s%:*} missing"; continue; }
+  r=$(python3 "$L/frames.py" overlay "$f" --sheet --name ${s%:*})
+  case "${s#*:}:$r" in FAIL:*"FAIL overlay"*"(toast"*|PASS:*"PASS overlay"*) ok "still overlay ${s%:*}: ${r:0:120}";; *) bad "still overlay ${s%:*} (want ${s#*:}): $r";; esac; done
 # 32. Shay 2026-10-10 spec videos (taste t84-t89): crossbow reload = the two-hand upright native reload (rlnat 1); the
 #     scripted nose-down reload (rlnat 0) is rejected. `animlab.py reload` (every reload: median bow up.y >= .5, nose
 #     elevation >= -10 deg) must FAIL the rlnat 0 replay + the pre-C2 game rec and PASS the accepted replay; spec.py wrist

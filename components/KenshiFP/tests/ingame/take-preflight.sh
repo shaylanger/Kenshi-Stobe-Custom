@@ -142,6 +142,11 @@ pf_open(){
   y=$(ffmpeg -hide_banner -nostdin -i "$f" -vf "fps=2,signalstats,metadata=print:key=lavfi.signalstats.YAVG" -f null - 2>&1 | grep -o 'YAVG=[0-9.]*' | cut -d= -f2 | sort -n | head -1); rm -f "$f"
   echo "$r" | grep -q "PASS" || pf_fail "open ground: $r"
   echo "$c" | grep -q "PASS" || pf_fail "mouse cursor in frame: $c"
+  # a ui box in the left hint column (x<40) = Kenshi tutorial hint popups (Prospecting / How to research ...): the game was
+  # launched before kenshi-ctl's tutorials=0 (54a22ec) and they never go away on a reused game (sword-judge 2026-10-11: 3 lists,
+  # 5 rows lost to 'uibox x16,y330' on the 14:59 lane-A instance) -> ask run-batch.sh for a relaunch before the next row.
+  if echo "$o" | grep -q "FAIL" && echo "$o" | grep -Eq 'uibox x([0-9]|[1-3][0-9]),'; then
+    [ -n "${RELAUNCH_FILE:-}" ] && echo "tutorial hint popups on screen (game launched before tutorials=0): $o" > "$RELAUNCH_FILE"; fi
   echo "$o" | grep -q "FAIL" && pf_fail "foreign overlay in frame (name tag / bark text / popup): $o"
   awk -v y="${y:-0}" -v m="${PF_MIN_YAVG:-35}" 'BEGIN{exit !(y >= m)}' || pf_fail "dark/black frames (min luma ${y:-?} < ${PF_MIN_YAVG:-35}): night, or the display asleep"
   echo "pf_open ok: $r | $c | $o | min luma $y"
