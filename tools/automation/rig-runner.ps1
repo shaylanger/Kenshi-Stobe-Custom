@@ -368,7 +368,7 @@ function CleanRunning {
         $base = [IO.Path]::GetFileNameWithoutExtension(($r.Name -replace "^${Rig}__(filler__)?", ''))
         $outN = Header $r.FullName 'out'; if (-not $outN) { $outN = $base }
         if ($Rig -eq '5090' -and -not $Fake) {
-            if ($null -eq $rb) { $rb = @(Wsl @('pgrep', '-af', 'run-batch.sh') | Where-Object { $_ -match '^\d+ .*run-batch\.sh' }) }
+            if ($null -eq $rb) { $rb = @(Wsl @('bash', '/mnt/c/KenshiModding/tools/automation/lane-batches.sh') | Where-Object { $_ -match '^\d+ .*run-batch\.sh' }) }
             if (@($rb | Where-Object { $_ -match [regex]::Escape("/$outN") }).Count) { continue }   # a live batch on it: leave it
         }
         $own = Header $r.FullName 'owner'; if (-not $own) { $own = 'coordinator' }
@@ -1344,7 +1344,7 @@ while ($true) {
             $other = ($s -like 'BUSY*') -and ($s -notlike 'BUSY between*') -and -not $open4
             if ($Rig -eq '5090' -and -not $Fake -and -not $other) {
                 # a run-batch.sh still in its game part (no GAMEDONE in its out dir, the last argument)
-                foreach ($l in @(Wsl @('pgrep', '-af', 'run-batch.sh') | Where-Object { $_ -match '^\d+ .*run-batch\.sh' })) {
+                foreach ($l in @(Wsl @('bash', '/mnt/c/KenshiModding/tools/automation/lane-batches.sh') | Where-Object { $_ -match '^\d+ .*run-batch\.sh' })) {
                     $o = ($l.Trim() -split '\s+')[-1]
                     if ($o -match '^/mnt/c/') { $ow = 'C:\' + ($o.Substring(7) -replace '/', '\'); if (-not (Test-Path (Join-Path $ow 'GAMEDONE')) -and -not (Test-Path (Join-Path $ow 'DONE'))) { $other = $true } } else { $other = $true }
                 }
