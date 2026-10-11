@@ -4,6 +4,9 @@
 #   oldlaunch  the pre-2026-10-11 run-batch.sh launch(): stop, kenshi-ctl launch in the background, 3 s polls for the
 #              autoload line, sleep 5, kill proxy, sleep 5, postlaunch, stobe-auto wait-world (2 s polls)
 #   fast       tools/automation/kfp-fastswap.ps1 -Keep -NoInstall (save the game, kill, relaunch into it, event waits)
+#   newlaunch  the current run-batch.sh launch() (stop, background kenshi-ctl launch, 1 s autoload polls, world, kill proxy,
+#              postlaunch): what the runner does after a DLL install today
+#   swap       kfp-fastswap.ps1 -NoInstall -Save <save> (kill, relaunch, event waits): what the runner would do instead
 #   oldload  the old in-place load (load, sleep 12, wait-world, sleep 10, select)
 #   newload  the patched in-place load (load, 0.5 s world polls, select retry)
 # Prints exactly one line: RESULT FS-<mode> PASS|FAIL seconds=<s> <detail>
@@ -35,6 +38,22 @@ case "$MODE" in
     l=$(grep '^FASTSWAP' "$OUT/fast.out" | tail -1)
     case "$l" in "FASTSWAP OK"*) echo "RESULT FS-fast PASS seconds=$(el) ${l#FASTSWAP OK }" ;;
       *) echo "RESULT FS-fast FAIL seconds=$(el) ${l:-no FASTSWAP line} (log $OUT/fast.out)" ;; esac ;;
+  newlaunch)
+    ps1 "$CTLW" stop > "$OUT/stop.out"
+    t1=$(date +%s)
+    ps1 "$CTLW" launch -Save "$SAVE" > "$OUT/launch.out" &
+    for i in $(seq 1 140); do kill -0 $! 2>/dev/null || break
+      [ -f "$HLOG" ] && [ "$(stat -c %Y "$HLOG")" -ge "$t1" ] && grep -a -q "KAH: autoload $SAVE" "$HLOG" && break; sleep 1; done
+    kill -0 $! 2>/dev/null && wait_world_new 120
+    kill $! 2>/dev/null; wait 2>/dev/null
+    ps1 "$CTLW" postlaunch >> "$OUT/launch.out"
+    if wait_world_new 300; then echo "RESULT FS-newlaunch PASS seconds=$(el) save=$SAVE instance=$I (current run-batch launch path)"
+    else echo "RESULT FS-newlaunch FAIL seconds=$(el) world not reached (log $OUT/launch.out)"; fi ;;
+  swap)
+    ps1 'C:\KenshiModding	oolsutomation\kfp-fastswap.ps1' -NoInstall -Save "$SAVE" -Instance "$I" > "$OUT/swap.out"
+    l=$(grep '^FASTSWAP' "$OUT/swap.out" | tail -1)
+    case "$l" in "FASTSWAP OK"*" stop="*) echo "RESULT FS-swap PASS seconds=$(el) ${l#FASTSWAP OK }" ;;
+      *) echo "RESULT FS-swap FAIL seconds=$(el) ${l:-no FASTSWAP line} (log $OUT/swap.out)" ;; esac ;;
   oldload)
     stobe-auto load "$SAVE" >/dev/null 2>&1; sleep 12
     wait_world_old 300 && { sleep 10; stobe-auto select Malzin >/dev/null 2>&1; echo "RESULT FS-oldload PASS seconds=$(el) save=$SAVE"; } \
