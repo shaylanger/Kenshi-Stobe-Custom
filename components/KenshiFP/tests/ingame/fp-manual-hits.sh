@@ -191,8 +191,12 @@ for spec in "head 1 0" "chest 2 1" "legs 3 5,6"; do
       pm=$(awk -v b="$(grep -o '\bbones=[^ ]*' <<<"$tr8" | cut -d= -f2)" -v a="$(grep -o '\baim=[-0-9.,]*' <<<"$tr8" | cut -d= -f2)" \
         -v mn="$MBN" -v mh="$MAH" -v c="$col" -v h="$ht" 'BEGIN{split(b,B,","); split(a,A,","); if (B[3]=="" || A[c]=="") { print "nobones"; exit }
           e=(c==1)?mh+(B[3]-mn):A[c]; tol=(c==1)?1.3:0.8; d=B[3]-mn; x=h-e
-          if (d>0.5||d<-0.5||x>tol||x<-tol) printf "neck%+.2f,h%+.2f", d, x; else print "ok"}')
-      [ "$pm" = ok ] && { cnt=1; break; }; disturbed=$((disturbed+1)); GD+="$name:${h:-miss}($pm);"; done
+          if (d>0.5||d<-0.5||x>tol||x<-tol) printf "%sneck%+.2f,h%+.2f", (x<=tol&&x>=-tol)?"rebase:":"", d, x; else print "ok"}')
+      [ "$pm" = ok ] && { cnt=1; break; }; disturbed=$((disturbed+1)); GD+="$name:${h:-miss}($pm);"
+      # rg03-confirm3 (7C886329): the head baseline was read while she still recovered from R07's hit (neck 15.24), then
+      # all 9 head tries stood upright (neck +1.71, aim height on her: h+0.00): a lasting pose change, not a stagger at the
+      # trigger -> re-measure the baseline once per part and retake (the trigger-pose check itself is unchanged)
+      case $pm in rebase:*) [ "$REB" = "$name" ] || { REB=$name; measure_r08; GD+="rebased;"; };; esac; done
     [ "$cnt" = 1 ] || continue
     oc=none; exp=$want
     # arm on the line to the aim point at the trigger: the aimed part (core wins on its silhouette, kfp_wound_from_bones)
@@ -228,11 +232,16 @@ aim_victim() { local v; v=$(A fp_combat aim | fld id4); case "$v" in "$BLID") ec
 place_bl
 # low-spread (crossbows/perception 100) and up to 3 shots: PASS = some shot hurts the blocker, none ever hurts the target
 A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/null
+# rg03-confirm3 (7C886329): blocker and target pinned within melee reach fought each other (Malzin chest stun 12 + arms,
+# Skaera chest -3.5/stun 2.1; the one bolt impact logged was Malzin's head): both passive for R09, restored after
+PB0=$(A combatmode "$BL" | fld passive); A combatmode "$TG" passive on >/dev/null; A combatmode "$BL" passive on >/dev/null
 EFF=1; aim_at "$TG" 12.5; r9=""; hitb=0; hitt=0
 for _ in 1 2 3; do aim_at "$TG" 12.5; av=$(aim_victim); [ "$av" = blocker ] || { place_bl; aim_at "$TG" 12.5; av=$(aim_victim); }
   r9+="aim=$av "; read -r ok h <<<"$(shot "$BL" "$TG")"; hb=${h%%|*}; ht=${h#*|}; [ "$h" = not_ready ] && { hb=""; ht=""; }
   r9+="shot=$ok blocker=${hb:-none} target=${ht:-none}; "; [ -n "$hb" ] && hitb=1; [ -n "$ht" ] && hitt=1; [ $hitb = 1 ] && break; done
 A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >/dev/null
+case "$PV0" in 1|on|true) A combatmode "$TG" passive on >/dev/null;; *) A combatmode "$TG" passive off >/dev/null;; esac
+case "$PB0" in 1|on|true) A combatmode "$BL" passive on >/dev/null;; *) A combatmode "$BL" passive off >/dev/null;; esac
 ev="$BL between, $TG behind: ${r9%; }"
 if [ $hitb = 1 ] && [ $hitt = 0 ]; then row R09 PASS "$ev"; else row R09 FAIL "$ev"; fi
 A protect "$BL" off >/dev/null; A protect "$TG" off >/dev/null; A pin "$BL" off >/dev/null; A pin "$TG" off >/dev/null
