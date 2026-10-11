@@ -84,9 +84,10 @@ function FireRow([string]$r) {
 # "# tdr-isolate: yes" (xbow-escalate 2026-10-11): a list whose rows fire/reload the crossbow or a turret through scripts the
 # FireRx words miss (fp-manual-ranged/hits/anatomy, fp-controls K, fp-turret-rows T3): lane 4080 only, lane 4080b holds.
 # Crossbow in parallel on both 4080 lanes (Shay 2026-10-11 17:00: "if we crash then we just run one at a time"): while
-# C:\KenshiTestRunsunner 80b.xbow-parallel exists, lane 4080b takes crossbow/tdr-isolate lists and does not hold
+# C:\KenshiTestRuns\runner\4080b.xbow-parallel exists, lane 4080b takes crossbow/tdr-isolate lists and does not hold
 # for lane 4080's crossbow list; the TDR guard still stops the lane, and the coordinator deletes the file after a TDR.
-function XbPar { Test-Path -LiteralPath (Join-Path $runs 'runner 80b.xbow-parallel') }
+$script:XbParTest = $null   # -SelfTest pins the switch ($false/$true) so the real file never changes the cases
+function XbPar { if ($null -ne $script:XbParTest) { return $script:XbParTest }; Test-Path -LiteralPath (Join-Path $runs 'runner\4080b.xbow-parallel') }
 function IsoHeader([string[]]$lines) { [bool](@($lines | Where-Object { $_ -match '^\s*#\s*tdr-isolate:\s*yes' }).Count) }
 function IsoList([string[]]$lines) { if (IsoHeader $lines) { return $true }; foreach ($l in LaneRows $lines) { if (FireRow $l) { return $true } }; $false }
 function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr, [bool]$xbow1) {   # $null = may launch instance 2
@@ -110,7 +111,7 @@ function LaneTdrFilter([string[]]$lines, [long]$since) {
     @($lines | Where-Object { $q = "$_" -split '\|', 4; $q.Count -ge 3 -and $q[0] -match '^\d+$' -and [long]$q[0] -ge $since -and $q[2] -in '4101', '153' -and $q[1] -match '^(nvlddmkm|display)$' })
 }
 if ($SelfTest) {
-    $bad = 0; $n = 0
+    $bad = 0; $n = 0; $script:XbParTest = $false
     $low = '# gfx: low'
     $cases = @(
         @('melee gfx low', @($low, 'M | kah-fpxbow | Malzin | Axima | 1200 | DRYRUN_NOREC=1 bash {CR}/x/fp-manual-melee.sh Malzin Skaera {OUT}/M'), ''),
@@ -165,6 +166,10 @@ if ($SelfTest) {
     $n++; $tf = Join-Path $env:TEMP "lane4080b-claim-$PID"; Remove-Item $tf -ErrorAction SilentlyContinue; $w = 0
     foreach ($i in 1, 2) { try { $fs = [IO.File]::Open($tf, 'CreateNew', 'Write', 'None'); $fs.Close(); $w++ } catch { } }
     Remove-Item $tf -ErrorAction SilentlyContinue; $ok = $w -eq 1; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b filler claim: two lanes claim one list, $w win(s)"
+    $script:XbParTest = $true   # runner\4080b.xbow-parallel present: crossbow / tdr-isolate lists admitted, no hold for lane 4080
+    $n++; $g = [string](LaneReject @('# gfx: low', '# tdr-isolate: yes', 'XC | kah-fpxbow | a | b | 1 | bash x/fp-xbow-tdrconfirm.sh {OUT}/XC') $false); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: tdr-isolate crossbow list admitted: got '$g'"
+    $n++; $g = [string](LaneAdmit 9000 20000 $false $true); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: no hold while lane 4080 runs crossbow: got '$g'"
+    $script:XbParTest = $false
     "LANE4080B-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
 
@@ -362,7 +367,7 @@ while ($true) {
     }
     $tdrOn = (Test-Path $tdr1) -or (Test-Path $tdrF)
     if ($tdrOn) { $rm = Remote; if ($rm.k2) { Stop2 'TDR alert' }; State 'waiting: TDR alert present (no instance 2 launch)'; Start-Sleep $TickSec; continue }
-    if (Xbow1) {   # TDR isolation: no instance 2 beside lane 4080's crossbow/turret list (stop an idle one too)
+    if ((Xbow1) -and -not (XbPar)) {   # TDR isolation (off while the xbow-parallel switch exists): no instance 2 beside lane 4080's crossbow/turret list (stop an idle one too)
         $rm = Remote; if ($rm.k2) { Stop2 'TDR isolation' }; State 'waiting: lane 4080 runs a crossbow list (TDR isolation)'; Start-Sleep $TickSec; continue
     }
     $f = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
