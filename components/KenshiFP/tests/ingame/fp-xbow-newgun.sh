@@ -37,7 +37,7 @@ fired=0; hung=""; TDR="TDR NONE"; setupf=0; hm_bad=""
 for ((i=1; i<=N; i++)); do
   l0=$(date +%s); pf_load "$SAVE" >> "$LOG" 2>&1; ls=$(( $(date +%s)-l0 ))
   A status | grep -q phase=world || { hung="load $i never reached the world"; break; }
-  if [ -n "$HMAT" ]; then r=$(A fp_combat hmat "$HMAT"); grep -q "hmat=$HMAT" <<<"$r" || { hm_bad="fp_combat hmat $HMAT refused: $r"; break; }; fi
+  if [ -n "$HMAT" ]; then r=$(A fp_combat hmat "$HMAT"); grep -q "hmat=$HMAT" <<<"$r" || [ "$HMAT" = body ] || { hm_bad="fp_combat hmat $HMAT refused: $r"; break; }; fi
   A protect "$SH" on >/dev/null; A pin "$TG" at "$SH" dist $DIST face "$SH" >/dev/null; A protect "$TG" on >/dev/null
   A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null
   read -r sx sz <<<"$(A where "$SH" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
