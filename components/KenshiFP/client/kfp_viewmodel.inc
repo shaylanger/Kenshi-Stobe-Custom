@@ -507,6 +507,7 @@ static VmPose vm_swing_at(VmPose start, VmPose end, float u)
 }
 
 /* E1: edge leads the arc. Lead weight g_vm_swlw (0..1) is read by the apply (fades out wfix roll + S1 clamp). */
+static int g_vm_e1rel = 1;   /* lead release: fade-out releases swlw x the capped offset (not the cap of swlw x roll) */
 static float g_vm_e1cap = 47.2f;   /* E1: max lead roll deviation from the straight-wrist roll, deg */
 static float g_vm_e1w0 = -1.0f, g_vm_e1hr = 0.152f, g_vm_e1hs = -1.0f; static int g_vm_e1hold = 1;   /* E1: no hand roll in the wind-up */
 static int   g_vm_swlead = 1; static float g_vm_swl_se = 0.47f, g_vm_swl_in = 0.227f, g_vm_swl_out = 0.2f, g_vm_swlw;
@@ -1085,7 +1086,8 @@ static void vm_apply(void *skel)
                         Qp = quat_norm(quat_mul((Quat){ cosf(h_), f.x * sinf(h_), f.y * sinf(h_), f.z * sinf(h_) }, Qp0)); }
                 } else e1hv_ = 0; }
             if (g_vm_swing && g_vm_swlw > 0.0f) { float k_ = 1.0f - g_vm_swlw; { float pw_ = pst; while (pw_ > 3.14159265f) pw_ -= 6.2831853f; while (pw_ < -3.14159265f) pw_ += 6.2831853f;
-                float dv_ = (1.0f - k_) * pw_, cp_ = g_vm_e1cap * 0.0174533f; dv_ = fmaxf(-cp_, fminf(cp_, dv_)); pst = pw_ - dv_; k_ = 1.0f; }
+                float dv_ = (1.0f - k_) * pw_, cp_ = g_vm_e1cap * 0.0174533f; dv_ = fmaxf(-cp_, fminf(cp_, dv_));
+                if (g_vm_e1rel && g_vm_swu > g_vm_swl_se + 0.06f) dv_ = (1.0f - k_) * fmaxf(-cp_, fminf(cp_, pw_));   /* smooth release (VMQUICK du 15.9 at u .70) */ pst = pw_ - dv_; k_ = 1.0f; }
                 Qp = Qp0;   /* E1: authored lead roll, at most e1cap deg off the straight wrist */
                 if (k_ > 0.0f) { float h_ = 0.5f * pst; Vec3 f_ = vm_norm(g_vm_tf); Qp = quat_norm(quat_mul((Quat){ cosf(h_), f_.x * sinf(h_), f_.y * sinf(h_), f_.z * sinf(h_) }, Qp0)); } }
             if (g_vm_wrl > 0.0f) {   /* roll jerk limit (PT30): each step at most wrl x the last one (min wrlmin deg), lag <= wrllag deg */
@@ -2151,6 +2153,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "e1hold")) { g_vm_e1hold = x != 0; return 1; }
     else if (!strcmp(k, "e1hs")) { g_vm_e1hs = fminf(0.95f, x); return 1; }
     else if (!strcmp(k, "e1hr")) { g_vm_e1hr = fmaxf(0.0f, fminf(0.5f, x)); return 1; }
+    else if (!strcmp(k, "e1rel")) { g_vm_e1rel = x != 0.0f; return 1; }
     else if (!strcmp(k, "e1cap")) { g_vm_e1cap = fmaxf(0.0f, fminf(180.0f, x)); return 1; }
     else if (!strcmp(k, "swlead")) { g_vm_swlead = x != 0; return 1; }
     else if (!strcmp(k, "swlse")) { if (x > 0.1f && x < 0.95f) g_vm_swl_se = x; return 1; }
