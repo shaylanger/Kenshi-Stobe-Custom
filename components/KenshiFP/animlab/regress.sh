@@ -382,8 +382,14 @@ else echo "REGRESS INFO animlive: corpus logs missing"; fi
 #     its build's solver and runs every check on both. 2026-10-10 baseline: 16 disagreements in 7 classes (15 + spike on pt30-sword, game step 77 vs replay 56; STATUS Misses
 #     "agree:" rows). More disagreements than the baseline = FAIL (a lab or build change broke agreement).
 AG=/mnt/c/KenshiTestRuns/corpus/agree/agree.list
-if [ -f "$AG" ]; then r=$(cd "$(dirname "$AG")" && python3 "$L/animlab.py" agree "$AG" --keep /tmp/al-agree 2>&1 | grep '^agree ')
-  n=${r##*disagreements=}; n=${n%% *}; [ -n "$n" ] && [ "$n" -le 16 ] && ok "agree (baseline 16): ${r:0:200}" || bad "agree: $r"
+#     No `agree ...` line (crash/kill) = retry once, then `agree: INFRA ...` with the output tail: kfp-pipeline treats
+#     INFRA as a lab infrastructure error (re-gate), never a patch break (an empty FAIL cut 13 patches, 2026-10-11).
+agree_run() { (cd "$(dirname "$AG")" && python3 "$L/animlab.py" agree "$AG" --keep /tmp/al-agree 2>&1; echo "agree-rc=$?"); }
+if [ -f "$AG" ]; then ao=$(agree_run); r=$(echo "$ao" | grep '^agree ')
+  [ -n "$r" ] || { echo "REGRESS INFO agree: no result line ($(echo "$ao" | grep -v '^ *$' | tail -3 | tr '\n' '|' | cut -c1-300)); retrying once"; ao=$(agree_run); r=$(echo "$ao" | grep '^agree '); }
+  n=${r##*disagreements=}; n=${n%% *}
+  if [ -z "$r" ]; then bad "agree: INFRA no result twice: $(echo "$ao" | grep -v '^ *$' | tail -2 | tr '\n' '|' | cut -c1-200)"
+  elif [ -n "$n" ] && [ "$n" -le 16 ]; then ok "agree (baseline 16): ${r:0:200}"; else bad "agree: $r"; fi
 else echo "REGRESS INFO agree: corpus manifest missing"; fi
 # P4. phase 4 (NATIVE, harness tools/animlab/native.py + visual/ogre.py animations): unit tests (synthetic Ogre animations,
 #     sampling, trajectory stabilisation, left grip mirror, solver grip offset, keyed viewmodel path + key fit, FCS v17
