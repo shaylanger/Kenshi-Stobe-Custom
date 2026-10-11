@@ -186,7 +186,7 @@ FRESH="$O/.fresh-load"; rm -f "$FRESH"
 load_target() {
   local s="$1" w sc="" ps=""
   case "$s" in kah-fpxbow|kah-fpstudio) ;; *) echo "$s"; return ;; esac
-  for w in "${WORDS[@]}"; do case "$w" in PF_SAVE=*) ps=${w#PF_SAVE=} ;; [A-Za-z_]*=*) ;; *) sc=$w; break ;; esac; done
+  for w in "${WORDS[@]}"; do case "$w" in PF_SAVE=*) ps=${w#PF_SAVE=} ;; [A-Za-z_]*=*|bash|sh) ;; *) sc=$w; break ;; esac; done
   case "$sc" in /*) ;; *) [ -e "$KT/$sc" ] && sc="$KT/$sc" ;; esac
   grep -qE '^[[:space:]]*pf_load([[:space:]]|$)' "$sc" 2>/dev/null || { echo "$s"; return; }
   if [ -n "$ps" ]; then echo "$ps"; elif [ -d "$CR/Users/Shay/AppData/Local/kenshi/save/kah-fpstudio" ]; then echo kah-fpstudio; else echo kah-fpxbow; fi

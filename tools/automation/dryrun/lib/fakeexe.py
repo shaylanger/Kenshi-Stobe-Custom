@@ -262,6 +262,8 @@ def powershell(a):
             sys.stderr.write('The argument \'%s\' to the -File parameter does not exist.\n' % f); return 1
         sub = next((x for x in rest if not x.startswith('-')), '')
         dr.log('powershell', '%s %s' % (base, ' '.join(rest)))
+        if base == 'kfp-fastswap.ps1':   # fast restart (hotswap2 2026-10-11): the fake game is always "back in the world"
+            out('FASTSWAP OK total=0.0 stop=0.0 install=0.0 menu=0.0 world=0.0 dll=FAKE save=kah-swap instance=1 (dryrun)'); return 0
         if base == 'kenshi-ctl.ps1':
             if sub == 'focus':
                 dr.flag('FAIL', 'kenshi-ctl.ps1 focus: tests never focus the game (Shay\'s screen)')
