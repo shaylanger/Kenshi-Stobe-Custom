@@ -13,7 +13,7 @@
 #   The balance numbers (miss rates with Wilson 95% CIs, part distribution, shots/seconds to leg-disabled and KO per
 #   aim) are printed in the RESULT line and `$OUT/balance.txt`; they are observations, not pass/fail.
 # Usage: fp-manual-limbs.sh [shooter] [target] [outdir] [shots_per_aim] [dist_dm] [incap_cap] [legmin]
-# Ends with one `RESULT R16 PASS|FAIL <evidence>` (`RESULT R16 SETUP FAIL <reason>` when setup fails).
+# Ends with one `RESULT R16 PASS|FAIL <evidence>` (`RESULT R16 FAIL setup: <reason>` when setup fails).
 SH=${1:-Axima}; TG=${2:-Skaera}; OUT=${3:-/tmp/fp-manual-limbs}; N=${4:-15}; DIST=${5:-50}; INCAP=${6:-12}; LEGMIN=${7:-0.6}
 MINHITS=5
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
@@ -30,7 +30,9 @@ minleg() { awk -v a="$1" 'BEGIN{split(a,x," ");printf "%.1f", (x[6]<x[7])?x[6]:x
 isko() { A hp "$1" | grep -q ' KO '; }
 speed() { A runspeed "$1" | fld movement_speed; }
 wilson() { awk -v k="$1" -v n="$2" 'BEGIN{if(n==0){print "n/a";exit};p=k/n;z=1.96;d=1+z*z/n;c=(p+z*z/(2*n))/d;h=z*sqrt(p*(1-p)/n+z*z/(4*n*n))/d;printf "%.2f[%.2f,%.2f]",p,c-h,c+h}'; }
-setup_fail() { echo "RESULT R16 SETUP FAIL $1 log=$LOG"; exit 1; }
+SETUP_ROWS="R16"   # rg03-fix: setup failures name every row ("RESULT R16 SETUP FAIL" was not the RESULT format)
+setup_fail() { local r; for r in $SETUP_ROWS; do echo "RESULT $r FAIL setup: $1 log=$LOG"; done; exit 1; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_ranged_inj (weapon state), its calls logged
 FP0=$(A fp_state | fld fp_mode)
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             A protect "$TG" on >/dev/null; A health "$TG" 100 >/dev/null; A pin "$TG" off >/dev/null; A protect "$TG" off >/dev/null
@@ -84,7 +86,8 @@ A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >
 A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $SH"
 A fp_combat autoreload 1 >/dev/null
 A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
-inp 0 0 0; waitfor 3 armed 1 || setup_fail "adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
+# weapon state (rg05 31-confirm R11: why=melee_in_hands, never armed): no melee in hands, crossbow drawn + loaded
+inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 BR=""; for _ in 1 2 3; do aim_at "$TG" 12; BR=$(A fp_combat aim); grep -q '\baim=[-0-9.]*,' <<<"$BR" && break; BR=""; sleep 0.5; done
 read -r AH AC AL <<<"$(grep -o '\baim=[-0-9.,]*' <<<"$BR" | cut -d= -f2 | tr , ' ')"
 [ -n "$AL" ] || setup_fail "no bone reply from fp_combat aim at $TG ($(tail -1 "$LOG" | cut -c1-160))"
@@ -128,7 +131,7 @@ BAL="miss legs=$MISSL torso=$MISST | parts(0..6) legs_aim=[${DIST_P[legs]}] tors
 echo "$SKL | $BAL" > "$OUT/balance.txt"
 MECH="fp_lost=$FPLOST fp_not_retaken=$NOFP leg_aim hits=${HITS[legs]}/${FIRED[legs]} on_leg=${LEGH[legs]} rate=$LRL torso_aim hits=${HITS[torso]}/${FIRED[torso]} on_leg=${LEGH[torso]} rate=$LRT legmin=$LEGMIN leg_flesh incap ${LEG0[legs]}->${LEG1[legs]} fault=$(cs fault)"
 ev="$SKL | $MECH | $BAL"
-if [ "$NOFP" -gt 0 ]; then R="RESULT R16 SETUP FAIL FP control lost and not re-taken on $NOFP shots | $ev log=$LOG"
+if [ "$NOFP" -gt 0 ]; then R="RESULT R16 FAIL setup: FP control lost and not re-taken on $NOFP shots | $ev log=$LOG"
 elif [ "${HITS[legs]}" -ge "$MINHITS" ] && awk -v l="$LRL" -v t="$LRT" -v m="$LEGMIN" -v a="${LEG0[legs]}" -v b="${LEG1[legs]}" \
      'BEGIN{exit !(l>=m && l>t && b<a-0.5)}' && [ "$(cs fault)" = 0 ]; then R="RESULT R16 PASS $ev"
 else R="RESULT R16 FAIL $ev log=$LOG"; fi

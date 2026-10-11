@@ -45,7 +45,9 @@ wst() { A fp_combat state | grep -o '\b\(fault\|wound_fault\|wound_spatial\|woun
 dist2() { awk -v a="$1" -v b="$2" 'BEGIN{split(a,x," ");split(b,y," ");printf "%.1f", sqrt((x[1]-y[1])^2+(x[3]-y[3])^2)}'; }
 RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
-setup_fail() { echo "RESULT R11 SETUP FAIL $1 log=$LOG"; exit 1; }
+SETUP_ROWS="R11-MOVE R11-RACE R11-LIMB"   # rg03-fix: setup failures name every row ("RESULT R11 SETUP FAIL" was not a row verdict)
+setup_fail() { local r; for r in $SETUP_ROWS; do echo "RESULT $r FAIL setup: $1 log=$LOG"; done; exit 1; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_ranged_inj (weapon state), its calls logged
 FP0=$(A fp_state | fld fp_mode)
 BLK0=$(A combatmode "$BL" | fld block)
 SK0=$(A stat "$SH" crossbows | grep -o 'base=[0-9.]*' | cut -d= -f2); PE0=$(A stat "$SH" perception | grep -o 'base=[0-9.]*' | cut -d= -f2)
@@ -187,7 +189,8 @@ A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >
 A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $SH"
 A fp_combat autoreload 1 >/dev/null
 A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
-inp 0 0 0; waitfor 3 armed 1 || setup_fail "adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
+# weapon state (rg05 31-confirm R11: why=melee_in_hands, never armed): no melee in hands, crossbow drawn + loaded
+inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 [ "$(cs wound_ready)" = 1 ] || setup_fail "wound routing not ready (wound_ready=$(cs wound_ready) wound_enabled=$(cs wound_enabled))"
 TGRACE=$(A chars 3000 "$TG" | grep -o 'race=[^|]*' | head -1 | cut -d= -f2 | sed 's/ *$//')
 lowspread; A fp_combat wound reset >/dev/null; ui_guard_setup
