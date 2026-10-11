@@ -1616,6 +1616,11 @@ static float vm_elev_of(Vec3 c) { return atan2f(c.y, c.z) * 57.29578f; }
 static float vm_az_of(Vec3 c)   { return atan2f(c.x, c.z) * 57.29578f; }
 
 /* Per camera frame, after the eye/orientation are final. */
+/* zoom fade weight of the arm IK from this frame's applied distance (also set by fp_view_switch_pre BEFORE the
+ * camera weld's animation update, where vm_apply reads it: a switch frame must not use last frame's weight) */
+static void vm_zf_update(void)
+{   float a = g_vm_zf1 > g_vm_zf0 ? (g_view.applied - g_vm_zf0) / (g_vm_zf1 - g_vm_zf0) : 0.0f;
+    a = a < 0 ? 0 : a > 1 ? 1 : a; g_vm_zf = g_vm_zfade ? 1.0f - a * a * (3.0f - 2.0f * a) : 1.0f; }
 static void vm_frame_core(void *pc, int body_down)
 {
     static LARGE_INTEGER f, last;
@@ -1711,8 +1716,7 @@ static void vm_frame_core(void *pc, int body_down)
     g_vm_up = vm_v(sy*sp, cp, cy*sp);
     g_vm_rt = vm_cross(g_vm_fw, g_vm_up);
     g_vm_mhd = vm_w2c_dir(vm_sub(bw[0], g_vm_eye)); g_vm_mnk = vm_w2c_dir(vm_sub(bw[1], g_vm_eye)); g_vm_msp = vm_w2c_dir(vm_sub(bw[2], g_vm_eye));
-    {   float a = g_vm_zf1 > g_vm_zf0 ? (g_view.applied - g_vm_zf0) / (g_vm_zf1 - g_vm_zf0) : 0.0f;
-        a = a < 0 ? 0 : a > 1 ? 1 : a; g_vm_zf = g_vm_zfade ? 1.0f - a * a * (3.0f - 2.0f * a) : 1.0f; }
+    vm_zf_update();
 
     int cls = 0;
     {   void *wih = readable((void *)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS), 8) ? *(void **)((uintptr_t)pc + CHAR_WEAPON_IN_HANDS) : NULL;

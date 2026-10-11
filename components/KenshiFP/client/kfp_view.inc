@@ -10,6 +10,7 @@ static unsigned g_view_apply_n, g_view_trace_err, g_view_hold_n, g_view_refuse_s
 static float g_view_trace_last=-1; static int g_view_apply_ret=-1;
 static int g_view_have_anchor, g_view_collision_dead;
 static volatile LONG g_view_injected_wheel;
+static int g_view_jump;   /* Z1 switch: eye -> tp_min_dm jump pending, applied by fp_view_switch_pre (same frame as visibility + arm weight) */
 /* Z1: a wheel step that lands between the eye and tp_min_dm goes to tp_min_dm (out) or the eye (in), both modes:
  * switch jumps there, fade eases the camera out (the body is hidden on the way, fp_view_band) */
 static float fp_view_snap(float was,float t) {
@@ -25,7 +26,7 @@ static void fp_view_input(void) {
     g_dbg_wheel=(int)wheel;
     if (!g_fp_mode || g_ui_open) return; /* discard UI/focus wheels */
     if (g_cfg_camera_zoom) { float was=g_view.target; kfp_view_wheel(&g_view,(int)wheel); g_view.target=fp_view_snap(was,g_view.target);
-        if (g_cfg_zoom_switch && was<KFP_VIEW_EYE_LIMIT && g_view.target>=g_cfg_tp_min_dm) g_view.applied=g_view.target; } /* Z1: jump, no headless ease-out */
+        if (g_cfg_zoom_switch && was<KFP_VIEW_EYE_LIMIT && g_view.target>=g_cfg_tp_min_dm) g_view_jump=1; } /* Z1: jump, no headless ease-out (mid-frame, fp_view_switch_pre) */
     else if (g_cfg_wheel) {
         g_speed_scale+=(float)wheel*(0.15f/120.0f);
         if (g_speed_scale<0.15f) g_speed_scale=0.15f;

@@ -3426,6 +3426,25 @@ static int ini_float(const char *line, const char *key, float *out);
 #include "kfp_viewmodel.inc" /* PT13/14/17: weapon-in-view arm raise */
 
 static void fp_head_visibility(void *gw);   /* Z1 band hide before vm_frame */
+/* Z1: the mid-frame visibility pass is due when the band OR the head-near state changed since the last pass
+ * (switch mode jumps over the band, so only head-near flips there) */
+static int g_vis_near = -1;
+static int fp_vis_stale(void) {
+    int n = fp_view_head_near(), chg = n != g_vis_near;
+    g_vis_near = n;
+    return chg || fp_view_band() != g_gear_all;
+}
+/* Z1 switch, atomic: runs at the start of the camera pass, before the camera weld's forced animation update (vm_apply
+ * reads g_vm_zf there): distance, visibility and arm weight change together, in one rendered frame */
+static void fp_view_switch_pre(void *gw)
+{
+    if (!g_cfg_camera_zoom) { g_view_jump = 0; return; }
+    float t = kfp_view_clamp(g_view.target);
+    if (g_view_jump) { g_view_jump = 0; if (t >= g_cfg_tp_min_dm) g_view.applied = t; }
+    else if (t < g_view.applied) g_view.applied = t;   /* zoom-in: fp_view_apply snaps there too (never eases inward) */
+    vm_zf_update();
+    if (fp_vis_stale()) fp_head_visibility(gw);
+}
 static void fp_camera_override(void *gw)
 {
     if (!g_ogre_ready) return;
@@ -3463,6 +3482,7 @@ static void fp_camera_override(void *gw)
     }
     /* Only drive the override while FP is on AND not in free-cam mode. */
     int active = g_fp_mode && fp_controlled_char(gw) && !*(unsigned char *)((uintptr_t)cam + CC_FREECAM);
+    if (active) fp_view_switch_pre(gw);   /* Z1: zoom switch lands before the camera weld's animation update */
 
     {   /* [map-bug diag] log every state flip that can knock us out of FP */
         static int pa = -1, pf = -1, po = -1, pm = -1;
@@ -4509,7 +4529,7 @@ static void fp_camera_override(void *gw)
         g_node_set_dori(node, &q);
         g_last_ori = q; g_have_eye = 1;    /* mid-frame re-assert now armed */
         /* Z1: band entered/left by this frame's fp_view_apply -> hide before the viewmodel solves/records it */
-        if (fp_view_band() != g_gear_all) fp_head_visibility(gw);
+        if (fp_vis_stale()) fp_head_visibility(gw);
         vm_frame(g_fp_control_actor, g_fp_control_actor ? fp_body_down(g_fp_control_actor) : 1);
 
         /* FOV: capture default once, then force the FP FOV each frame. */
@@ -6733,7 +6753,12 @@ static void hooked_cam_update(void *cam, char controlEnabled)
     if (!g_fp_mode && !g_ovr_prev) return;
     if (g_gw_cache) fp_camera_override(g_gw_cache);   /* fresh eye/ori, mid-frame */
     /* Z1: band entered/left by this apply -> hide/show before this frame renders (post-frame was one frame late) */
-    if (g_gw_cache && fp_view_band() != g_gear_all) fp_head_visibility(g_gw_cache);
+    if (g_gw_cache && fp_vis_stale()) fp_head_visibility(g_gw_cache);
+    /* Z1 (kfp-zhat-rehide): the game re-shows the worn hat entity every frame (REASSERT visible=1 on every post-frame
+     * pass) -> fade-band brim shards in front of the camera, brim slivers at the eye on a switch frame. Re-hide right
+     * before this frame renders, not only post-frame. */
+    if (g_gw_cache && g_fp_mode && g_head_hidden && (g_cfg_hide_headgear || g_gear_all) && g_player_app)
+        headgear_apply(g_player_app, 1, 0);
     if (!g_fp_mode || !g_have_eye) return;
     if (!readable(cam, CC_FREECAM + 1)) return;
     if (*(unsigned char *)((uintptr_t)cam + CC_FREECAM)) return;   /* free-cam: hands off */
