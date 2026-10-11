@@ -32,7 +32,8 @@ setup_fail() { local r; for r in $SETUP_ROWS; do echo "RESULT $r FAIL setup: $1 
 . "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_ranged_inj (weapon state), its calls logged
 FP0=$(A fp_state | fld fp_mode)
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
-            A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
+            A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null
+            [ -n "$BLBOW_OFF" ] && A equip "$BL" "$BLBOW" >/dev/null; :; }
 trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 
 # aim_at <npc> <height dm>: point the FP camera at the npc's feet + height
@@ -66,8 +67,14 @@ shot() { local s0 b=() v r=""; s0=$(cs actual_shots)
   inp 1 0 0; sleep 2.5
   local i=0; for v in "$@"; do r+="$(hurt "${b[$i]}" "$(parts "$v")")|"; i=$((i+1)); A protect "$v" on >/dev/null; done
   inp 1 0 0; waitfor 6 reloading 0 >/dev/null
-  # foreign bolts (attacker != the owned FP shooter) that landed during this shot: one count per shot in foreign.txt
-  A fp_melee wounds | tr '|' '\n' | grep ' bolt' | grep -v '(owned)' | grep -c . >> "$OUT/foreign.txt"
+  # foreign bolts (attacker != the owned FP shooter) that landed during this shot ON THIS ROW'S NPCs: one count per shot in
+  # foreign.txt. The ring is global (xbf-hits2 counted far-off world fights): relevant victims = every aim-ray victim of
+  # this run (target; blocker in R09) + the victims of this shot's owned bolts. Matching lines go to foreign-lines.txt.
+  local w keep fl l wv; w=$(A fp_melee wounds | tr '|' '\n' | grep ' bolt')
+  keep=" $(grep -o '\bvictim=[0-9a-f]*' "$OUT/aims.txt" | cut -d= -f2 | grep -v '^0*$' | sort -u | tr '\n' ' ')$(grep '(owned)' <<<"$w" | grep -o '\bv=[0-9a-f]*' | cut -d= -f2 | tr '\n' ' ')"
+  fl=$(grep -v '(owned)' <<<"$w" | while read -r l; do wv=$(grep -o '\bv=[0-9a-f]*' <<<"$l" | cut -d= -f2)
+    [ -n "$wv" ] && [[ "$keep" == *" $wv "* ]] && echo "$l"; done)
+  [ -n "$fl" ] && echo "$fl" >> "$OUT/foreign-lines.txt"; grep -c . <<<"$fl" >> "$OUT/foreign.txt"
   echo "$ok ${r%|}"; }
 
 # ---- setup ----
@@ -255,6 +262,12 @@ cb_full; A setstat "$SH" perception 100 >/dev/null
 # rg03-confirm3 (7C886329): blocker and target pinned within melee reach fought each other (Malzin chest stun 12 + arms,
 # Skaera chest -3.5/stun 2.1; the one bolt impact logged was Malzin's head): both passive for R09, restored after
 PB0=$(A combatmode "$BL" | fld passive); A combatmode "$TG" passive on >/dev/null; A combatmode "$BL" passive on >/dev/null
+# xbf-hits2: Skaera's foreign bolt wounds were credited a=<Malzin> with him in block+passive. His ranged weapon goes to his
+# main inventory for R09 (re-equipped after, and in cleanup): a foreign bolt still credited to him without a bow = native
+# pass-through attribution (product, KenshiFP wound hook), not him shooting
+BLBOW=$(A rangedinfo "$BL" | sed -n 's/.*\bbow=\(.*\) has_ammo=.*/\1/p'); [ "$BLBOW" = none ] && BLBOW=""; BLB="none"
+if [ -n "$BLBOW" ]; then A unequip "$BL" "$BLBOW" >/dev/null; BLBOW_OFF=1
+  [ "$(A rangedinfo "$BL" | sed -n 's/.*\bbow=\(.*\) has_ammo=.*/\1/p')" = none ] && BLB=removed || BLB="still_armed"; fi
 EFF=1; aim_at "$TG" 12.5; r9=""; hitb=0; hitt=0
 for _ in 1 2 3; do aim_at "$TG" 12.5; av=$(aim_victim); [ "$av" = blocker ] || { place_bl; aim_at "$TG" 12.5; av=$(aim_victim); }
   A fp_melee wounds reset >/dev/null
@@ -263,9 +276,13 @@ for _ in 1 2 3; do aim_at "$TG" 12.5; av=$(aim_victim); [ "$av" = blocker ] || {
 A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >/dev/null
 case "$PV0" in 1|on|true) A combatmode "$TG" passive on >/dev/null;; *) A combatmode "$TG" passive off >/dev/null;; esac
 case "$PB0" in 1|on|true) A combatmode "$BL" passive on >/dev/null;; *) A combatmode "$BL" passive off >/dev/null;; esac
-ev="$BL between, $TG behind: ${r9%; }"
+[ -n "$BLBOW_OFF" ] && { A equip "$BL" "$BLBOW" >/dev/null; BLBOW_OFF=""; }
+ev="$BL between, $TG behind: ${r9%; } blocker_bow=$BLB"
 FOR9=$(awk '{s+=$1} END{print s+0}' "$OUT/foreign.txt" 2>/dev/null); ev+=" foreign_bolts=$FOR9"
-if [ "$FOR9" -gt 0 ]; then row R09 SETUP "FAIL reason=foreign_shooter: $FOR9 bolt wounds from another attacker during the shots: $ev"
+[ "$FOR9" -gt 0 ] && ev+=" foreign=$(tail -n "$FOR9" "$OUT/foreign-lines.txt" | grep -o '\bv=[0-9a-f]* a=[0-9a-f]*' | tr ' \n' ',;') aim_victims=$(grep -o '\bvictim=[0-9a-f]*' "$OUT/aims.txt" | cut -d= -f2 | sort -u | tr '\n' ',')"
+# a foreign bolt credited to the blocker after his bow was removed: the attribution is the product bug, not setup
+if [ "$FOR9" -gt 0 ] && [ "$BLB" = removed ]; then row R09 FAIL "reason=foreign_attribution: $FOR9 bolt wounds credited to another attacker while $BL had no ranged weapon: $ev"
+elif [ "$FOR9" -gt 0 ]; then row R09 SETUP "FAIL reason=foreign_shooter: $FOR9 bolt wounds from another attacker during the shots: $ev"
 elif [ $hitb = 1 ] && [ $hitt = 0 ]; then row R09 PASS "$ev"; else row R09 FAIL "$ev"; fi
 case "$BLK0" in 1|on|true) ;; *) A combatmode "$BL" block off >/dev/null;; esac
 case "$BPV0" in 1|on|true) ;; *) A combatmode "$BL" passive off >/dev/null;; esac
