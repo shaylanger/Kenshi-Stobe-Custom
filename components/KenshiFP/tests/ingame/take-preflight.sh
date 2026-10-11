@@ -285,6 +285,9 @@ pf_ranged_inj(){ local who=$1 e w r bow ws
       sleep 0.3; done
     PF_A fp_combat input 0 0 0 >/dev/null; sleep 1; fi
   [ "$(pf_cs why)" = melee_in_hands ] || break; done
+  # xbr-hit-r10 R10 (5090): after the aim release the adapter read why=ui_open armed=0 for ~1 s (4 reads), then armed=1
+  # loaded=1 why=ok: the single read below caught the transient. Bounded poll (3 s) before judging.
+  e=$((SECONDS+3)); while [ $SECONDS -lt $e ] && ! { [ "$(pf_cs armed)" = 1 ] && [ "$(pf_cs loaded)" = 1 ]; }; do sleep 0.3; done
   [ "$(pf_cs armed)" = 1 ] && [ "$(pf_cs loaded)" = 1 ] || { PF_WHY="crossbow not drawn+loaded (armed=$(pf_cs armed) loaded=$(pf_cs loaded) reloading=$(pf_cs reloading) why=$(pf_cs why))"; return 1; }
   echo "pf_ranged_inj ok: armed=1 loaded=1"; }
 pf_ko(){ PF_A hp "$1" | grep -q ' KO '; }
