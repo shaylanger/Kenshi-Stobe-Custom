@@ -1,0 +1,8 @@
+# weapon-reel 4080 part (2026-10-11): classes missing from existing takes (Katana/Longsword/Machete reused from twohand-light-b-5090)
+# sid|name|type|anim class|ammo
+5022626-Universal Wasteland Expansion.mod|Chisa Katana|melee|katanas|
+52295-rebirth.mod|Iron Club|melee|blunt|
+478-gamedata.base|Long Cleaver|melee|hackers|
+55397-ArkWeaponPack.mod|Buster Sword|melee|heavy weapons|
+477-gamedata.base|Fragment Axe|melee|heavy weapons|
+52308-rebirth.mod|Naginata|melee|polearm|
