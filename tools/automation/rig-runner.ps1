@@ -86,7 +86,7 @@ cause). run-batch.sh checks after every row itself too (<out>\TDR). -Fake: runne
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '5090b', '5090c', '4080b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [string]$Resolve = '', [string]$DryKeyOf = '',
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [string]$Resolve = '', [string]$DryKeyOf = '', [string]$FillerRows = '', [string]$LedgerFrom = '', [string]$LedgerList = '',
       [int]$HardMin = 5, [switch]$SelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # Stuck decision (pure; -SelfTest checks it). Soft: condition held >= lim AND out dir unchanged >= lim. Hard (2026-10-11,
@@ -284,7 +284,7 @@ if ($Ensure) {
     exit 0
 }
 if (-not $Rig) { Get-Content $PSCommandPath -TotalCount 40; exit 2 }
-if (-not $Resolve -and -not $DryKeyOf) {
+if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFrom) {
     if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
     if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
     Set-Content (Join-Path $rd "$Rig.pid") $PID
@@ -1195,6 +1195,23 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). $more"
 }
 
+# filler on change for the extra game lanes (rig-lane2.ps1, lane-5090c 2026-10-11: lanes 5090b/5090c sat idle while
+# queue\filler held gfx-low lists): the same ledger rule as this loop, from outside it.
+#   -Rig 5090 -FillerRows <list>   "#build<TAB>K<TAB>H" then "ROW<TAB><hash><TAB><row line>" per row changed since its last PASS
+#   -Rig 5090 -LedgerFrom <out> -LedgerList <name>   record <out>\rows.tsv against <out>\rowmeta.tsv in the ledger
+if ($FillerRows) {
+    $ih = InstalledHashes; "#build`t$($ih.K)`t$($ih.H)"
+    $chg = ChangedRows (Resolve-Path -LiteralPath $FillerRows).Path (Split-Path $FillerRows -Leaf)
+    foreach ($k in $chg.Keys) { "ROW`t$(RowHash $k)`t$k" }
+    exit 0
+}
+if ($LedgerFrom) {
+    $meta = @(Get-Content (Join-Path $LedgerFrom 'rowmeta.tsv') -ErrorAction SilentlyContinue); if ($meta.Count -lt 1) { 'LEDGER none: no rowmeta.tsv'; exit 1 }
+    $b = $meta[0] -split "`t"; $mh = @{}; foreach ($m in $meta | Select-Object -Skip 1) { $q = $m -split "`t"; $mh[$q[0]] = $q[1] }
+    $upd = @{}; foreach ($l in @(Get-Content (Join-Path $LedgerFrom 'rows.tsv') -ErrorAction SilentlyContinue)) { $q = $l -split "`t"; if ($q.Count -ge 2 -and $mh.ContainsKey($q[0])) { $upd["$LedgerList|$($q[0])"] = @($b[1], $b[2], $mh[$q[0]], $q[1]) } }
+    if ($upd.Count) { LedSet $upd }; "LEDGER $LedgerList $(($upd.Keys | ForEach-Object { "$(($_ -split '\|')[1])=$($upd[$_][3])" }) -join ' ')"
+    exit 0
+}
 if ($DryKeyOf) {   # rig-runner.ps1 -Rig <rig> -DryKeyOf <list>: the pre-dry-run key + the files it hashes + cached verdict
     DryKey (Resolve-Path -LiteralPath $DryKeyOf).Path -Show
     $k = DryKey (Resolve-Path -LiteralPath $DryKeyOf).Path; $rcf = Join-Path $pdd "$k.rc"
