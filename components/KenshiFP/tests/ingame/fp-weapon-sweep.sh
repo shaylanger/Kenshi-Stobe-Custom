@@ -49,6 +49,14 @@ pf_day
 A teleport $SH $SPOT >/dev/null; sleep 2; A health $SH 100 >/dev/null
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null
 BOWN=$(A rangedinfo $SH | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//'); [ "$BOWN" = none ] && BOWN=""
+# crash safety (2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): WS_NOXBOW=1 = no crossbow equipped on anyone
+# in the scene for the whole sweep (unequipped here, never re-equipped at the end; crossbow rows in the list are skipped)
+if [ "${WS_NOXBOW:-0}" = 1 ]; then
+  BOWN=""
+  for c in $SH Malzin $HOLD Shay; do A inv $c | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | grep -iE 'bow|toothpick|harpoon|eagle' | sort -u | while read -r b; do A unequip $c "$b" >/dev/null; done; done; sleep 1
+  for c in $SH Malzin $HOLD Shay; do A inv $c | grep -o '"name":"[^"]*","equipped":true' | grep -iqE 'bow|toothpick|harpoon|eagle' && pf_fail "crossbow still equipped on $c (crash-safety quarantine)"; done
+fi
+[ "${WS_TWO_LIGHT:-0}" = 1 ] && export AL_TWO_LIGHT=1
 echo "setup ok: bow=${BOWN:-none} list=$LIST catalog=$WCAT"
 # give_w <sid>: harness give; on "no room" (04-twohand-b 2026-10-11: the studio fixture's Axima wears katana on the hip +
 # bow on the back, a 10x1 polearm fits neither and harness give frees only a worn weapon of the item's slot type) unequip
@@ -98,7 +106,16 @@ take(){   # k sid name type animcls ammo
   # the takes filmed with cat=-1): the category KenshiFP read must be the catalog's item class, 2H on exactly for 3/8
   st2=$(A fp_vm probe); if [ -z "$VMSET" ] && [ "$ty" != crossbow ] && echo "$st2" | grep -q ' 2h='; then
     wc_=$(python3 -c "import json,sys; print(next((w['cls'] for w in json.load(open(sys.argv[1]))['weapons'] if w['sid']==sys.argv[2]), -1))" "$WCAT" "$sid" 2>/dev/null)
-    c2=$(echo "$st2" | fld cat); h2=$(echo "$st2" | fld 2h); w2=$([ "$wc_" = 3 ] || [ "$wc_" = 8 ] && echo 1 || echo 0)
+    w2=$([ "$wc_" = 3 ] || [ "$wc_" = 8 ] && echo 1 || echo 0)
+    # WS_TWO_LIGHT=1 (kfp-2h-light builds): katanas/sabre/blunt/hackers (0/1/2/4) are 2H once the mesh dims are read, only
+    # with >= 1.9 dm handle behind the grip and >= 10 dm pommel to tip (g_vm_2hroom / g_vm_2hlmin); the lab judge models it
+    # too (weapon_matrix AL_TWO_LIGHT=1, exported below)
+    if [ "${WS_TWO_LIGHT:-0}" = 1 ] && case "$wc_" in 0|1|2|4) true;; *) false;; esac; then
+      for _ in 1 2 3 4 5 6; do case "$(echo "$st2" | fld pom)" in -*|'') sleep 1; st2=$(A fp_vm probe);; *) break;; esac; done
+      w2=$(echo "$st2" | awk '{for(i=1;i<=NF;i++){split($i,kv,"="); v[kv[1]]=kv[2]}} END{print (v["pom"]>=1.9 && v["tip"]>0 && v["pom"]+v["tip"]>=10) ? 1 : 0}')
+      echo "2H light rule: $(echo "$st2" | grep -o ' 2h=.*') -> want 2h=$w2" >&2
+    fi
+    c2=$(echo "$st2" | fld cat); h2=$(echo "$st2" | fld 2h)
     [ "$c2" = "$wc_" ] && [ "$h2" = "$w2" ] || pf_fail "2H state cat=$c2 2h=$h2, catalog class $wc_ wants 2h=$w2"
     # the off-hand grip needs the weapon mesh extent (refilm 2 2026-10-10: pom/tip -1 for every weapon, Warhammer off hand
     # left the handle): a 2H weapon whose mesh was not read stops the take (KenshiFP retries for ~5 s after the draw)
@@ -174,6 +191,7 @@ analyse(){   # runs in $D with take()'s variables; writes the weapon's RESULT li
 # ---- sweep
 PEND=(); k=0; n=0; np=0; S=${WSTART:-1}; C=${WCOUNT:-9999}
 while IFS='|' read -r sid nm ty ac am; do
+  [ "${WS_NOXBOW:-0}" = 1 ] && [ "$ty" = crossbow ] && { echo "NOTE skipped crossbow $nm (WS_NOXBOW crash-safety quarantine)"; continue; }
   case "$sid" in ''|'#'*) continue;; esac
   k=$((k + 1)); [ $k -lt $S ] && continue; [ $k -ge $((S + C)) ] && break
   n=$((n + 1))

@@ -1,0 +1,8 @@
+# kfp-2h-light confirm (twohand-fix 2026-10-11): one weapon per class; light classes 2H only with >=1.9 dm handle behind the grip + >=10 dm long
+# sid|name|type|anim class|ammo
+476-gamedata.base|Katana|melee|katanas|
+901-gamedata.base|Longsword|melee|katanas|
+1535171-Hiver_Expansion.mod|Ring Mace|melee|blunt|
+478-gamedata.base|Long Cleaver|melee|hackers|
+55397-ArkWeaponPack.mod|Buster Sword|melee|heavy weapons|
+55411-ArkWeaponPack.mod|Machete|melee|sabre|
