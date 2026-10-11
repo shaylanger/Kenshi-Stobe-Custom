@@ -127,7 +127,14 @@ if (-not $kenshi -and -not $lock) {
 }
 
 # --- rig-runner alerts (rig-runner.ps1: a rig idle >= 2 min with an empty queue, a stuck/killed row, a dead batch) ---
-$alerts = @(Get-ChildItem -LiteralPath $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw).Trim() })
+# A TDR alert (ALERT-<lane>-tdr.txt) stays until Shay clears the cause, so it would block every Stop forever: once the
+# coordinator stopped that rig and told Shay, it writes TDR-REPORTED-<rig>.txt (newer than the alert, what Shay was told);
+# then that alert no longer blocks (m103 2026-10-11: the 5090 TDR at 16:35 locked the hook).
+$alerts = @(Get-ChildItem -LiteralPath $runs -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | Where-Object {
+    if ($_.Name -notmatch '^ALERT-(.+)-tdr\.txt$') { return $true }
+    $ack = Join-Path $runs ('TDR-REPORTED-' + ($Matches[1] -replace '[bc]$', '') + '.txt')
+    -not ((Test-Path -LiteralPath $ack) -and (Get-Item -LiteralPath $ack).LastWriteTime -ge $_.LastWriteTime)
+} | ForEach-Object { (Get-Content -LiteralPath $_.FullName -Raw).Trim() })
 if ($alerts.Count) { Block-Stop ('kenshi-waker-guard: ' + ($alerts -join ' | ') + ' Shay''s rule (2026-10-10): no rig idle or paused > 2 min. The rig runners (rig-runner.ps1 -Status) run whatever list files are in C:\KenshiTestRuns\queue\<rig>\ or queue\any\: put the next batch list there now (or record kenshi-ctl.ps1 idle/idle4080 "<reason>"); for a stuck/dead batch read the owner note and the batch SUMMARY. The ALERT clears itself once the rig works again.') }
 
 # --- 5090 game slot idle while Kenshi is open / the lock is held? (Shay 2026-10-10: op-b4 had written DONE, the
