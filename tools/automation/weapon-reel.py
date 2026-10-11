@@ -80,7 +80,7 @@ def main():
                 vf.append(f"drawtext=fontfile={fnt}:textfile={cf}:fontsize=30:fontcolor=yellow:borderw=3:bordercolor=black:"
                           f"x=(w-tw)/2:y=60:enable='between(t,{ca:.2f},{cb:.2f})'")
         seg = os.path.join(tmp, f's{i:02d}.mp4')
-        cmd = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-ss', f'{t0:.2f}', '-i', vid, '-t', f'{dur:.2f}', '-an',
+        cmd = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-ss', f'{t0:.2f}', '-i', vid, '-t', f'{dur:.2f}', '-an',
                '-vf', ','.join(vf)] + enc + ['-pix_fmt', 'yuv420p', seg]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode and enc[1] == 'h264_nvenc':
@@ -98,7 +98,7 @@ def main():
     lst = os.path.join(tmp, 'list.txt')
     open(lst, 'w').write(''.join(f"file '{s}'\n" for s in segs))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    r = subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', lst,
+    r = subprocess.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', lst,
                         '-c', 'copy', '-movflags', '+faststart', a.out], capture_output=True, text=True)
     if r.returncode:
         print(f'RESULT WEAPONREEL FAIL concat: {r.stderr.strip()[-300:]}'); sys.exit(1)
@@ -108,7 +108,7 @@ def main():
     with open(base + '.segments.tsv', 'w') as f:
         f.write('i\tweapon\tclass\ttake\ttake_t0\ttake_t1\treel_t0\treel_t1\n' + '\n'.join(rows) + '\n')
     shutil.rmtree(tmp, ignore_errors=True)
-    print(f'RESULT WEAPONREEL PASS segments={len(segs)}/{n} length={t_reel:.1f}s enc={enc[1]} out={a.out}')
+    print(f'RESULT WEAPONREEL {"PASS" if len(segs) == n else "FAIL"} segments={len(segs)}/{n} length={t_reel:.1f}s enc={enc[1]} out={a.out}')
 
 
 if __name__ == '__main__':
