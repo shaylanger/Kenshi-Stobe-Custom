@@ -1534,6 +1534,14 @@ def main(argv):
         print('kah dryrun stub')
         return 0
     cmd, a = argv[0], argv[1:]
+    if cmd == 'many':   # kah.py client-side batch (speed-scout 2026-10-11): each argument = one command line, one reply line each
+        import shlex
+        subs = [shlex.split(c) for c in a if c.strip()]
+        if not subs:
+            dr.flag('FAIL', 'many: no commands')
+            print('ERROR: many: no commands' + chr(13))
+            return 1
+        return 0 if all([main(c) == 0 for c in subs]) else 1
     sp = spec()
     # the call's latency is a virtual WAIT, not a global clock jump: a background call (take_mark's `sync_flash &`) used
     # to push every other process 0.3 s ahead, so the foreground press landed 0.6-0.7 s after its label (ctl-blk claim

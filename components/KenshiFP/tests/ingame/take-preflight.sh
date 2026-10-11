@@ -82,12 +82,18 @@ pf_clean(){
   { [ "${PF_CLEAN_RAIDERS:-0}" = 1 ] || PF_A chars 6000; for f in "Starving" "Dust Bandits" "Hungry" "Outlaws" "Marauder" "Shinobi"; do PF_A chars 6000 "$f"; done; } 2>/dev/null \
     | sed "s/^[0-9]* within [0-9.]*: //" | sed 's/ | /\n/g' | grep -v "\[Nameless\]\| KO\| DEAD" \
     | { if [ -n "${PF_CLEAN_KEEP:-}" ]; then grep -v -E "^ *(${PF_CLEAN_KEEP}) (\[|#)"; else cat; fi; } \
-    | sed -n 's/.*\(#[0-9]*\/[0-9]*\) .* pos=\([-0-9.]*\),[-0-9.]*,\([-0-9.]*\).*/\1 \2 \3/p' | sort -u > /tmp/pf-clean.$$
+    | sed -n 's/.*\(#[0-9]*\/[0-9]*\) .* pos=\([-0-9.]*\),[-0-9.]*,\([-0-9.]*\).*/\1 \2 \3/p' | sort -u -k1,1 > /tmp/pf-clean.$$
+  # one id once (sort -k1,1: an NPC listed by two faction queries moved between them and was pinned + KOed twice), and
+  # all pins + KOs in ONE harness round trip (`many`, speed-scout 2026-10-11: ~40 single calls took ~20 s per row);
+  # a client without `many` (answer count wrong) falls back to one call each
+  local ids=() mc=() id x z d
   while read id x z; do
     d=$(awk -v x=$x -v z=$z -v a=$TX -v b=$TZ 'BEGIN{printf "%d", sqrt((x-a)^2+(z-b)^2)}')
     [ "$d" -lt "$R" ] || continue
-    PF_A pin "$id" >/dev/null; PF_A ko "$id" 900 >/dev/null; n=$((n+1))
+    ids+=("$id"); mc+=("pin $id" "ko $id 900"); n=$((n+1))
   done < /tmp/pf-clean.$$; rm -f /tmp/pf-clean.$$
+  if [ $n -gt 0 ] && [ "$(PF_A many "${mc[@]}" | wc -l)" != "${#mc[@]}" ]; then
+    for id in "${ids[@]}"; do PF_A pin "$id" >/dev/null; PF_A ko "$id" 900 >/dev/null; done; fi
   echo "pf_clean ok: $n NPCs pinned + KO within $R of $TX,$TZ"
 }
 pf_clear(){   # per take in a multi-take sweep (kfp-twohand 03-twohand refilm 3, 2026-10-10: a dust storm rolled in after take 2:
@@ -250,8 +256,15 @@ pf_all(){ local me=$1 x=$2 z=$3 w=$4 allow=${5:-}
 # kah-fpxbow (PF_SAVE=<save> or the argument forces one); waits for the world, else RESULT FAIL setup
 pf_load(){ local s=${1:-${PF_SAVE:-}} d="${CR:-/mnt/c}/Users/Shay/AppData/Local/kenshi/save" i
   [ -n "$s" ] || { [ -d "$d/kah-fpstudio" ] && s=kah-fpstudio || s=kah-fpxbow; }
-  PF_A load "$s" | cut -c1-80; sleep 8
-  for i in $(seq 1 60); do sleep 3; PF_A wait-world | grep -qE "phase=world|ready" && break; done
+  # run-batch.sh just loaded this very save for this row (KAH_FRESH=<out>/.fresh-load "<save> <epoch>", written by its
+  # prepare, removed after every row; speed-scout 2026-10-11: every take row loaded twice, ~30 s): use it, once
+  local fs ft
+  if [ -n "${KAH_FRESH:-}" ] && read -r fs ft < "$KAH_FRESH" 2>/dev/null && [ "$fs" = "$s" ] && [ $(( $(date +%s) - ${ft:-0} )) -lt "${PF_FRESH_MAX:-300}" ] \
+     && PF_A status | grep -q phase=world; then
+    rm -f "$KAH_FRESH"; PF_SAVE_LOADED=$s; echo "pf_load ok: $s (loaded by run-batch $(( $(date +%s) - ft )) s ago, no second load)"; return 0; fi
+  # the harness reports phase=loading from the load reply on: no fixed wait needed (was sleep 8 + 3 s polls)
+  PF_A load "$s" | cut -c1-80; sleep 2
+  for i in $(seq 1 60); do PF_A wait-world | grep -qE "phase=world|ready" && break; sleep 1; done
   PF_A status | grep -q phase=world || pf_fail "save $s did not reach the world"
   PF_SAVE_LOADED=$s; echo "pf_load ok: $s"; }
 # pf_latency [n] [max s]: harness round trip of n (8) quick calls; one slower than max (1.0 s) = the game is hitching

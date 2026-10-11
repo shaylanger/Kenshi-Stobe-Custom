@@ -96,7 +96,7 @@ for f in sorted(glob.glob(os.path.join(PEND, 'kfp-*.py'))):
             if nm in spec and 'KenshiFP' in spec[nm]['src'] and spec[nm]['subs'] is not None:
                 add(nm, 'pending:' + os.path.basename(f), subs={lit[1]})
 # 4. kah.py client-side commands
-for nm, mn in (('on', 0), ('off', 0), ('autoload', 1), ('wait-world', 0), ('wait-game', 1), ('run', 1), ('help', 0)):
+for nm, mn in (('on', 0), ('off', 0), ('autoload', 1), ('wait-world', 0), ('wait-game', 1), ('run', 1), ('many', 1), ('help', 0)):
     add(nm, 'kah.py', minargs=mn)
 with open(a.out, 'w') as o:
     for nm in sorted(spec):
