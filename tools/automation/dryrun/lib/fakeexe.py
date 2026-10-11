@@ -277,6 +277,8 @@ def powershell(a):
         if base == 'itrun.ps1':
             kv = {rest[j].lower(): rest[j + 1] for j in range(len(rest) - 1) if rest[j].startswith('-')}
             return itrun(kv.get('-cmd', ''), kv.get('-log', ''))
+        if base == 'gpu-tdr-check.ps1':
+            out('TDR NONE'); return 0
         if base in ('kenshi-key.ps1', 'kenshi-click.ps1'):
             dr.flag('NOTE', '%s %s (injected input helper)' % (base, ' '.join(rest)))
             out('ok'); return 0
