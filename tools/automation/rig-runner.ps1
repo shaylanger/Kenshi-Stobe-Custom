@@ -525,7 +525,10 @@ function FillerLists {   # eligible filler lists for this rig, least recently st
     @($c) | Sort-Object @{ e = { $p = $rot[$_.Name]; if ($p -and $p[1]) { [datetime]$p[1] } else { [datetime]::MinValue } } }, Name
 }
 function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\, then filler\ if both empty)
-    $real = @(RealLists); if ($real.Count) { return $real }
+    $real = @(RealLists)
+    # lane A prefers filming lists while lane 5090b (second game, rig-lane2.ps1) is up: it takes the "# gfx: low" ones itself
+    if ($Rig -eq '5090' -and $real.Count -gt 1 -and (PidAlive '5090b')) { $real = @(@($real | Where-Object { (Header $_.FullName 'gfx') -ne 'low' }) + @($real | Where-Object { (Header $_.FullName 'gfx') -eq 'low' })) }
+    if ($real.Count) { return $real }
     FillerLists
 }
 # EITHER RIG TAKES ANY LIST (Shay 2026-10-10 21:30; speed-parity's list-rigcheck.sh): RigCheck = can this list run on this

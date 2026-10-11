@@ -151,6 +151,15 @@ while ($true) {
     }
     if ((Test-Path $tdr1) -or (Test-Path $tdrF)) { Stop2 'TDR alert'; State 'waiting: TDR alert present (no instance 2 launch)'; Start-Sleep $TickSec; continue }
     $f = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
+    # own folder empty: take the first lane-eligible list (gfx low, crossbow guard, no Stobe, no "# rig: 4080") from queue\5090
+    # then queue\any (coordinator 14:35: no lane idles while the other has a backlog), only if instance 2 may run now; the
+    # list is first moved into queue\5090b (one rename: lane A can't take it at the same time)
+    if (-not $f -and ((K2Procs) -or -not (LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF))))) {
+        foreach ($src in "$qd\5090", "$qd\any") {
+            $c = @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Where-Object { $t = @(Get-Content $_.FullName); -not (LaneReject $t) -and -not ($t -match '^\s*#\s*rig:\s*4080') }) | Select-Object -First 1
+            if ($c) { try { Move-Item -LiteralPath $c.FullName (Join-Path "$qd\$Lane" $c.Name) -ErrorAction Stop; Log "STEAL $($c.Name) from $src (lane B eligible, own folder empty)"; $f = Get-Item (Join-Path "$qd\$Lane" $c.Name); break } catch { } }
+        }
+    }
     if (-not $f) {
         if ((K2Procs) -and ((Get-Date) - $idleSince).TotalMinutes -ge $IdleStopMin) { Stop2 "queue empty $IdleStopMin min" }
         State "idle: queue\$Lane empty$(if (K2Procs) { ' (instance 2 up)' })"; Start-Sleep $TickSec; continue
