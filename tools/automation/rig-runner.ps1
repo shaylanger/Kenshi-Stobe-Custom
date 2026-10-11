@@ -1027,7 +1027,9 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
         }   # 4080: stopped (DIED) / marker removed below
     }
     $sumL = Join-Path "$qd\done" "$name.SUMMARY.txt"
-    if ((Split-Path $run -Leaf) -like '*__filler__*' -and (Test-Path (Join-Path $tmp 'rowmeta.tsv'))) {   # filler ledger
+    # a 4080 list that ran on OLD copies of deferred scripts (Sync4080) proved nothing about the current scripts' hashes
+    if ((Split-Path $run -Leaf) -like '*__filler__*' -and (Test-Path (Join-Path $rd "$Rig.oldcopy.$name"))) { Log "ledger $name : not recorded (ran on the 4080's old copy of deferred scripts)" }
+    elseif ((Split-Path $run -Leaf) -like '*__filler__*' -and (Test-Path (Join-Path $tmp 'rowmeta.tsv'))) {   # filler ledger
         try {
             $rt = Join-Path $tmp 'rows.tsv'
             if ($Rig -eq '4080' -and -not $Fake) { & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/rows.tsv" $rt 2>$null }
