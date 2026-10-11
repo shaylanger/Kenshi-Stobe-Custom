@@ -351,6 +351,32 @@ function Steal4080([bool]$film) {
     Note $own "lane $Lane took $($c.Name) from queue\4080 (the 4080 was busy): it runs on the 5090 with RIG=5090; result in queue\done as usual."
     Get-Item $dst
 }
+# pre-dry-run ahead (lane-5090c 2026-10-11: every lane list spent ~90 s in run-batch's inline dry run at the boundary):
+# while a batch runs, the list this lane would take next (own folder head, else the first eligible queue\5090 / any list)
+# gets its dry run in the background through lane A's cache (rig-runner.ps1 -Rig 5090 -PreDryOf, same key, nice 15; at
+# most one call per 2 min). At the start a cached PASS = run-batch --no-dryrun, a cached FAIL fails the list at once,
+# else the lane waits up to 2 min for it (nice 0) and falls back to run-batch's own dry run.
+function PeekNext {
+    $c = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1; if ($c) { return $c }
+    foreach ($film in @(@($false) + @(if ($Lanes[$Lane].Film) { $true }))) {
+        foreach ($src in "$qd\5090", "$qd\any") {
+            $c = @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Where-Object { $t = @(Get-Content $_.FullName); -not (LaneReject $t $film) -and ($film -eq ((LaneGfx $t) -ne 'low')) }) | Select-Object -First 1
+            if ($c) { return $c }
+        }
+    }
+    $null
+}
+function LanePreDry([string]$path, [int]$nice, [int]$wait = 0) {   # PASS | FAIL | PENDING | none
+    $o = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-runner.ps1" -Rig 5090 -PreDryOf $path -PreDryNice $nice -PreDryWaitSec $wait 2>&1 | ForEach-Object { "$_" })
+    $l = @($o | Where-Object { $_ -like 'PREDRY *' }) | Select-Object -First 1
+    if ("$l" -match '^PREDRY \S+ (\S+)') { $Matches[1] } else { 'none' }
+}
+function PreDryAhead {
+    if ($script:pdAt -and ((Get-Date) - $script:pdAt).TotalSeconds -lt 120) { return }
+    $script:pdAt = Get-Date; $n = PeekNext; if (-not $n) { return }
+    $v = LanePreDry $n.FullName 15
+    if ($script:pdLog -ne "$($n.Name) $v") { $script:pdLog = "$($n.Name) $v"; Log "predry ahead $($n.Name): $v" }
+}
 # a gfx-low filler list with changed rows (rig-runner.ps1 -FillerRows: same ledger as lane A; cached 5 min per list), not
 # benched, not running anywhere: claimed by creating running\<lane>__filler__<name> (CreateNew: one lane wins)
 $script:fillCache = @{}
@@ -433,6 +459,7 @@ while ($true) {
         if ($hl -match '^HEALTH STALL') { if (-not $stall) { $stall = Get-Date }; if (((Get-Date) - $stall).TotalMinutes -ge $StallMin) {
                 $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane stall: $hl"); Log "STALL end-batch: $hl / $(($o | Select-Object -Last 1))"; Stop2 'stall'; $stall = $null } }
         else { $stall = $null }
+        PreDryAhead
         State "running $name -> $outW ($(if ($stall) { "STALL since $($stall.ToString('HH:mm')): " })$hl)"
         Start-Sleep $TickSec; continue
     }
@@ -470,6 +497,12 @@ while ($true) {
     $own = @($txt | Where-Object { $_ -match '^\s*#\s*owner:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1); $own = if ($own) { $own[0] } else { 'coordinator' }
     $film = $Lanes[$Lane].Film -and (LaneGfx $txt) -ne 'low'
     $why = LaneReject $txt $film; if ($why) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue; Log "filler $name not eligible: $why" } else { Fail $f.FullName $name $own $why }; continue }
+    $noDry = $false
+    if (-not $fill) {
+        $v = LanePreDry $f.FullName 0 120
+        if ($v -eq 'FAIL') { Fail $f.FullName $name $own 'dry run FAIL (cached: rig-runner.ps1 -Rig 5090 -PreDryOf <list> shows the DRYRUN FAIL lines)'; continue }
+        $noDry = $v -eq 'PASS'; Log "predry $name : $v$(if ($noDry) { ' (run-batch skips its dry run)' })"
+    }
     $script:film = $film
     $up = [bool](K2Procs)
     $gfxF = Join-Path $rd "$Lane.gfx"; $want = if ($film) { 'full' } else { 'low' }
@@ -502,6 +535,7 @@ while ($true) {
     Set-Content (Join-Path $outW '.instance') "$Inst"
     Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
     $rl = if ($up) { '--reuse ' } else { '' }
+    if ($noDry) { $rl += "--no-dryrun 'lane $Lane predry PASS cached' " }
     $ev = if ($film) { "KAH_GFX=full KAH_FPS=60 KAH_LANE_FILM=1" } else { "KAH_GFX=low KAH_VIDEO_MODE='$VideoMode' KAH_FPS=$Fps" }
     $st = "#!/bin/bash`nexport KAH_OWNER=$owner $ev KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' KENSHI_MONITOR=$(LaneMon) WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE:KAH_VIDEO_MODE:KENSHI_MONITOR:KAH_FPS:KAH_LANE_FILM`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
     [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
