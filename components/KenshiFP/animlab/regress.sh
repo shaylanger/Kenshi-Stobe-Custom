@@ -20,6 +20,9 @@ for f in sword-z0-a crossbow-z0; do
   [ -f "$W/vmrec-q-$f.txt" ] || cp "/mnt/c/KenshiTestRuns/vmq-f8c/vmrec-q-$f.txt" "$W/" 2>/dev/null || bad "missing recording vmrec-q-$f.txt"
 done
 python3 "$HARN/tests/animlab/test_animlab.py" >/tmp/al-unit.txt 2>&1 && ok unit-tests || { bad unit-tests; tail -5 /tmp/al-unit.txt; }
+# autoreview selftest (auto-review open item 1): every corpus row autoreview:<check> (FAIL caught at its at= frames, PASS clean)
+r=$(cd "$L" && nice -n 15 python3 autoreview.py selftest --corpus "$CORPUS" --workers 6 2>&1 | tail -1)
+case "$r" in "RESULT AUTOREVIEW-SELFTEST PASS"*) ok "$r";; *) bad "autoreview selftest: $r (python3 $L/autoreview.py selftest)";; esac
 bash "$HERE/build.sh" --rev 6c9516b --out "$BLD/kfpvm_6c9516b" >/tmp/al-build1.txt 2>&1 || { bad build-6c9516b; tail -5 /tmp/al-build1.txt; }
 (cd "$W" && python3 "$L/animlab.py" gate vmrec-q-sword-z0-a.txt vmrec-q-crossbow-z0.txt --adapter "$BLD/kfpvm_6c9516b" --args=--quiet --quiet) >/tmp/al-gate.txt 2>&1 \
   && ok "gate $(grep -o 'GATE PASS [^ ]* frames=[0-9]*' /tmp/al-gate.txt | tr '\n' ' ')" || { bad gate; grep GATE /tmp/al-gate.txt; }
