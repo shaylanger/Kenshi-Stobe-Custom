@@ -26,7 +26,10 @@ hurt() { awk -v a="$1" -v b="$2" 'BEGIN{n=split(a,x," ");split(b,y," ");s="";for
 skill() { A rangedinfo "$SH" | grep -o 'crossbows=[0-9.]*' | cut -d= -f2; }       # 4 decimals
 RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
-setup_fail() { echo "RESULT SETUP FAIL $1 log=$LOG"; exit 1; }
+# a setup failure fails every row of this script by name (rg03 2026-10-11: "RESULT SETUP" hid R10/HIT in the summary)
+SETUP_ROWS="R13 R07 R08 R09"
+setup_fail() { local r; for r in $SETUP_ROWS; do echo "RESULT $r FAIL setup: $1 log=$LOG"; done; exit 1; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_ranged_inj (weapon state), its calls logged
 FP0=$(A fp_state | fld fp_mode)
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
@@ -81,7 +84,8 @@ A fp_control take >/dev/null
 A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $SH"
 A fp_combat autoreload 1 >/dev/null
 A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
-inp 0 0 0; waitfor 3 armed 1 || setup_fail "adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
+# weapon state (rg03 R10/HIT: melee left in the hands; R01: empty crossbow): no melee in hands, crossbow drawn + loaded
+inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 
 # ---- R13 raise outside native ranged combat: holstered crossbow, aim -> drawn by the adapter -> shot-ready ----
 for _ in $(seq 1 30); do [ "$(cs why)" = holstered ] && break; inp 0 0 0; sleep 0.5; done   # wait for the AI combat to end

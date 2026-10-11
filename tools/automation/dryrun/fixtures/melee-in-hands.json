@@ -1,0 +1,134 @@
+{
+ "chars": {
+  "Shay": {
+   "id": "#10/11",
+   "fac": "Nameless",
+   "pos": [
+    -53890.0,
+    633.0,
+    6850.0
+   ],
+   "items": [
+    "Iron Hat"
+   ],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Shay"
+  },
+  "Malzin": {
+   "id": "#12/13",
+   "fac": "Nameless",
+   "pos": [
+    -54170.0,
+    633.0,
+    4390.0
+   ],
+   "items": [
+    "Chisa Katana",
+    "Oldworld Bow MkII"
+   ],
+   "eq": [
+    "Chisa Katana",
+    "Oldworld Bow MkII"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Malzin"
+  },
+  "Axima": {
+   "id": "#14/15",
+   "fac": "Nameless",
+   "pos": [
+    -54190.0,
+    633.0,
+    4380.0
+   ],
+   "items": [
+    "Oldworld Bow MkI",
+    "Iron Hat",
+    "Chisa Katana"
+   ],
+   "eq": [
+    "Oldworld Bow MkI",
+    "Iron Hat",
+    "Chisa Katana"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Axima"
+  },
+  "Tassilo": {
+   "id": "#16/17",
+   "fac": "Nameless",
+   "pos": [
+    -53940.0,
+    633.0,
+    6850.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Tassilo"
+  },
+  "Skaera": {
+   "id": "#30/31",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -51590.0,
+    633.0,
+    4680.0
+   ],
+   "items": [
+    "Rusty Junk Sword"
+   ],
+   "eq": [
+    "Rusty Junk Sword"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Skaera"
+  },
+  "Hungry Bandit": {
+   "id": "#32/33",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -49690.0,
+    633.0,
+    3480.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Hungry Bandit"
+  },
+  "Dust Bandit": {
+   "id": "#34/35",
+   "fac": "Dust Bandits",
+   "pos": [
+    -59390.0,
+    633.0,
+    5580.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Dust Bandit"
+  }
+ },
+ "squad": [
+  "Shay",
+  "Malzin",
+  "Axima",
+  "Tassilo"
+ ],
+ "hour": 11.0,
+ "fight": 0,
+ "about": "rg03 2026-10-11 (21-rg03-ranged-rerun, 4080): R10/HIT ran with a melee weapon in Axima's hands (the AI drew it after the previous row's fp_combat off; fp_combat why=melee_in_hands, adapter never armed) and R01 with an EMPTY crossbow (the first aim auto-reloaded 6.1 s > the row's 5 s wait). The rows must clear both in their preflight (take-preflight.sh pf_ranged_inj) or stop with a setup FAIL per row",
+ "swing_ko": 0,
+ "xbow_empty": 1,
+ "melee_in_hands": "Chisa Katana"
+}

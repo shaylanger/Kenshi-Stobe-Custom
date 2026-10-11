@@ -20,7 +20,10 @@ waitfor() { local end=$((SECONDS+$1)); while [ $SECONDS -lt $end ]; do [ "$(cs "
 RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
 
-setup_fail() { echo "RESULT SETUP FAIL $1 log=$LOG"; cleanup; exit 1; }
+# a setup failure fails every row of this script by name (rg03 2026-10-11: "RESULT SETUP" hid R10/HIT in the summary)
+SETUP_ROWS="R01 R02 R03 R04 R05 R06 R12"
+setup_fail() { local r; for r in $SETUP_ROWS; do echo "RESULT $r FAIL setup: $1 log=$LOG"; done; cleanup; exit 1; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_ranged_inj (weapon state), its calls logged
 FP0=$(A fp_state | fld fp_mode)
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
@@ -43,7 +46,8 @@ read -r tx tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, 
 YAW=$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')
 A fp_camera look "$YAW" 0.02 >/dev/null
 A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
-inp 0 0 0; waitfor 3 armed 1 || setup_fail "adapter never armed (enabled=$(cs enabled) fault=$(cs fault))"
+# weapon state (rg03 R10/HIT: melee left in the hands; R01: empty crossbow): no melee in hands, crossbow drawn + loaded
+inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 [ "$(cs actor)" != 0 ] || setup_fail "adapter has no actor"
 
 # ---- R01 hold aim / release lower ----

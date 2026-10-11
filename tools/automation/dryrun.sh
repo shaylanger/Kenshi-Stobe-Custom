@@ -17,7 +17,8 @@
 # --fixture night|combat|<file.json>: replay a world that broke real takes (dryrun/fixtures/*.json: game at 22 h; bandit
 # group + "X is attacking!" popup at the spot); a row must fix it in its preflight or stop with a setup FAIL before filming.
 # swing-ko: a melee swing knocks the neutral out and a KO character cannot be pinned (op-swa4); no-melee: Malzin carries
-# only a crossbow (op-comb2).
+# only a crossbow (op-comb2); melee-in-hands: Axima starts with a katana drawn (fp_combat why=melee_in_hands) and an EMPTY
+# crossbow (rg03 R10/HIT/R01 2026-10-11); the ranged rows clear both with take-preflight.sh pf_ranged_inj.
 # xbow-empty: the crossbow comes up EMPTY and the first aim auto-reloads ~8 s before shot_ready (xbmesh-c); the stub's
 # ranged adapter also draws a holstered crossbow on fp_combat arm and answers fp_gear with a "hands" entry; it also sets
 # off_sheathes (xbmesh-c2): fp_combat off sheathes the drawn crossbow, so an unconditional R tap draws it again.
@@ -28,7 +29,7 @@ RIG=5090; OUT=""; ONLY=""; ROW=""; FIX=""
 while [ $# -gt 0 ]; do case "$1" in
   --rig) RIG=$2; shift 2 ;; --fixture) FIX=$2; shift 2 ;; --out) OUT=$2; shift 2 ;; --only) ONLY=$2; shift 2 ;; --row) ROW=$2; shift 2 ;; *) break ;; esac; done
 L=${1:-}
-[ -n "$L$ROW" ] || { sed -n '2,24p' "$0"; exit 2; }
+[ -n "$L$ROW" ] || { sed -n '2,25p' "$0"; exit 2; }
 if [ -n "$FIX" ]; then
   [ -f "$FIX" ] || FIX=$D/fixtures/$FIX.json
   [ -f "$FIX" ] || { echo "DRYRUN-SUMMARY FAIL fixture $FIX missing (dryrun/fixtures/*.json)"; exit 2; }

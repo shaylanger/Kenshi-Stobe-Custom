@@ -20,6 +20,11 @@
 #                              had loaded kah-fpstudio where Malzin carries only a crossbow -> "no melee weapon")
 #   pf_awake <who>...          heal to 100 and `wake` everyone KO (op-swa4: a swing knocked the neutral out, `health 100`
 #                              keeps the KO, a KO ragdoll ignores pin -> "pin refused off=10.2"); fails if still KO after 3 s
+#   pf_ranged_inj <who>        injected-input ranged rows (fp_combat on already sent): no melee weapon in the hands (rg03
+#                              R10/HIT 2026-10-10/11: why=melee_in_hands, the AI had drawn a melee weapon after the previous
+#                              row's fp_combat off; R tap, else unequip every melee weapon), crossbow drawn by an injected aim
+#                              (adapter armed), loaded (rg03 R01: an EMPTY bow auto-reloaded 6.1 s > the row's 5 s wait), aim
+#                              released; fails with PF_WHY (why/armed/loaded)
 #   pf_pin <who> <pin args>    pin, then wait up to 3 s for the per-frame put-back to land within 1.5 m; reason has off + KO
 PF_A(){ stobe-auto "$@" </dev/null 2>&1; }
 # Git Bash (4080 rig) has no wslpath: cygpath does the same
@@ -212,6 +217,30 @@ pf_melee_arm(){ local who=$1 bow w r g ws
     while IFS= read -r w2; do [ -n "$w2" ] || continue; r=$(PF_A equip "$who" "$w2")
       case "$r" in equipped*) PF_WEP=$w2; echo "pf_melee_arm ok: $who $w2${g:+ (given)}"; return 0;; esac; done <<<"$ws"
   done; PF_WHY="$who: no melee weapon equips (given ${g:-}: $(cut -c1-90 <<<"$r"))"; return 1; }
+pf_cs(){ PF_A fp_combat state | grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
+pf_ranged_inj(){ local who=$1 e w r bow ws
+  PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.5
+  if [ "$(pf_cs why)" = melee_in_hands ]; then
+    PF_A input_isolation on >/dev/null; PF_A key_inject r tap 120 >/dev/null
+    e=$((SECONDS+4)); while [ $SECONDS -lt $e ] && [ "$(pf_cs why)" = melee_in_hands ]; do sleep 0.3; done
+    if [ "$(pf_cs why)" = melee_in_hands ]; then
+      bow=$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')
+      ws=$(PF_A inv "$who" | sed 's/},{/}\n{/g' | grep '"weapon_model"' | sed 's/.*"name":"\([^"]*\)".*/\1/' | grep -v -i -x -F "${bow:-@@}")
+      while IFS= read -r w; do [ -n "$w" ] && PF_A unequip "$who" "$w" >/dev/null; done <<<"$ws"; sleep 1; fi
+    PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.5
+    [ "$(pf_cs why)" = melee_in_hands ] && { PF_WHY="melee weapon still in $who's hands after R + unequip (why=melee_in_hands)"; return 1; }
+    echo "pf_ranged_inj: melee weapon put away"; fi
+  e=$((SECONDS+3)); while [ $SECONDS -lt $e ] && [ "$(pf_cs armed)" != 1 ]; do PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.3; done
+  if [ "$(pf_cs armed)" != 1 ] || [ "$(pf_cs loaded)" != 1 ]; then   # holstered and/or empty: an injected aim draws + auto-reloads
+    PF_A fp_combat input 1 0 0 >/dev/null; e=$((SECONDS+14)); r=0
+    while [ $SECONDS -lt $e ]; do
+      [ "$(pf_cs armed)" = 1 ] && [ "$(pf_cs loaded)" = 1 ] && [ "$(pf_cs reloading)" = 0 ] && break
+      if [ $r = 0 ] && [ $((e-SECONDS)) -lt 11 ] && [ "$(pf_cs reloading)" = 0 ] && [ "$(pf_cs loaded)" != 1 ]; then   # auto reload off: one reload press
+        r=1; PF_A fp_combat input 1 0 1 >/dev/null; sleep 0.3; PF_A fp_combat input 1 0 0 >/dev/null; fi
+      sleep 0.3; done
+    PF_A fp_combat input 0 0 0 >/dev/null; sleep 1; fi
+  [ "$(pf_cs armed)" = 1 ] && [ "$(pf_cs loaded)" = 1 ] || { PF_WHY="crossbow not drawn+loaded (armed=$(pf_cs armed) loaded=$(pf_cs loaded) reloading=$(pf_cs reloading) why=$(pf_cs why))"; return 1; }
+  echo "pf_ranged_inj ok: armed=1 loaded=1"; }
 pf_ko(){ PF_A hp "$1" | grep -q ' KO '; }
 pf_awake(){ local c i; for c in "$@"; do [ -n "$c" ] || continue; PF_A health "$c" 100 >/dev/null; pf_ko "$c" || continue
     PF_A wake "$c" >/dev/null; for i in $(seq 1 12); do sleep 0.25; pf_ko "$c" || break; done

@@ -21,7 +21,10 @@ inp() { A fp_combat input "$1" "$2" "$3" >/dev/null; }
 waitfor() { local end=$((SECONDS+$1)); while [ $SECONDS -lt $end ]; do [ "$(cs "$2")" = "$3" ] && return 0; sleep 0.2; done; return 1; }
 RESULTS=()
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
-setup_fail() { echo "RESULT SETUP FAIL $1 log=$LOG"; exit 1; }
+# a setup failure fails every row of this script by name (rg03 2026-10-11: "RESULT SETUP" hid R10/HIT in the summary)
+SETUP_ROWS="R12-UI R12-KO R12-SWAP R12-SPEED R12-LOAD"
+setup_fail() { local r; for r in $SETUP_ROWS; do echo "RESULT $r FAIL setup: $1 log=$LOG"; done; exit 1; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_ranged_inj (weapon state), its calls logged
 FP0=$(A fp_state | fld fp_mode)
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null; A speed 1 >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
@@ -65,7 +68,8 @@ take
 A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $SH"
 A fp_combat autoreload 1 >/dev/null
 A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
-inp 0 0 0; waitfor 3 armed 1 || setup_fail "adapter never armed (why=$(cs why))"
+# weapon state (rg03 R10/HIT: melee left in the hands; R01: empty crossbow): no melee in hands, crossbow drawn + loaded
+inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 ready_held || setup_fail "never shot-ready (why=$(cs why))"
 
 # ---- R12-UI: inventory open while aiming, then trigger pressed + held -> no shot, why=ui_open; close with the trigger

@@ -124,7 +124,9 @@ def new_state(save):
     f = fixture(save)
     s = dict(save=save, chars=f['chars'], squad=f['squad'], hour=f['hour'], hour_vt=dr.vnow(), speed=1.0, paused=0,
              selected=f['squad'][0], fpchar=None, chatter='on', cursor=[800, 450], cam=dict(dist=0, orbit=0, yaw=0, pitch=0),
-             fp=dict(drawn=0, melee=0, loaded=0 if f.get('xbow_empty') else 1, ui_state='holstered', hud_text='holstered', vm='holstered'),
+             fp=(dict(drawn=1, melee=1, loaded=0 if f.get('xbow_empty') else 1, ui_state='ready', hud_text='ready', vm='ready',
+                      weapon=f['melee_in_hands']) if f.get('melee_in_hands') else
+                 dict(drawn=0, melee=0, loaded=0 if f.get('xbow_empty') else 1, ui_state='holstered', hud_text='holstered', vm='holstered')),
              tl=[], hist=[], rec=dict(on=0, t=0), keys={}, sets={}, zoom_switch=1, bandhide=1,
              turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0), fight=int(f.get('fight', 0)),
              swing_ko=int(f.get('swing_ko', 0)),
@@ -1272,11 +1274,13 @@ def handle(s, cmd, a, now, sp):
         sub = a[0] if a else 'state'
         if sub == 'state':
             rng = fp['drawn'] and not fp['melee']
+            # melee-in-hands fixture (rg03 R10/HIT): a melee weapon in the hands = the ranged adapter stands down
+            why = 'melee_in_hands' if fp['drawn'] and fp['melee'] and fp.get('weapon') not in (None, 'fists') else 'ok'
             return True, kfpreply.render('combat', enabled=s.get('combat_on', 1), native_ready=1, armed=1 if rng else 0,
                                          aimed=1 if fp['ui_state'] == 'aiming' else 0, anim_ready=1 if rng else 0,
-                                         shot_ready=1 if fp['ui_state'] == 'aiming' and fp['loaded'] else 0, ammo=1,
+                                         shot_ready=1 if fp['ui_state'] == 'aiming' and fp['loaded'] else 0, ammo=fp['loaded'],
                                          reloading=1 if fp['ui_state'] == 'reloading' else 0, actual_shots=s.get('shots', 0),
-                                         auto_reload=s.get('autoreload', 1), why='ok', fp_ui_state=fp['ui_state'],
+                                         auto_reload=s.get('autoreload', 1), why=why, fp_ui_state=fp['ui_state'],
                                          has_ammo=1, loaded=fp['loaded'], loaded_max=1)
         if sub == 'aim':
             return True, 'aim victim=00a1 (target=00a1) dist=12'
