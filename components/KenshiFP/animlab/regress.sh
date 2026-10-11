@@ -379,18 +379,56 @@ if [ -f "$AL/kfp-fblock-live0.log" ]; then
     case "$r" in "RESULT $f $want"*) ok "animlive $r";; *) bad "animlive want $want: $r";; esac; done
 else echo "REGRESS INFO animlive: corpus logs missing"; fi
 # 30. lab agreement (the lab must predict the game): `animlab.py agree` replays every game rec of the corpus manifest through
-#     its build's solver and runs every check on both. 2026-10-10 baseline: 16 disagreements in 7 classes (15 + spike on pt30-sword, game step 77 vs replay 56; STATUS Misses
-#     "agree:" rows). More disagreements than the baseline = FAIL (a lab or build change broke agreement).
+#     its build's solver and runs every check on both. Judged per disagreement (animlab-m-agree 2026-10-11; was a count
+#     limit "<= 16", which hid a swap and failed when a row carrying an already-known miss was added): every DISAGREE
+#     `<row> <check>` must be on the known list below (each an open STATUS Misses "agree:" row); a disagreement not on it
+#     = FAIL (a lab or build change broke agreement); a known one that no longer disagrees is printed (fixed=..., prune it).
+#     The verdict line keys on the fixed label "agree" (PASS and FAIL) so the gate baseline key never changes.
 AG=/mnt/c/KenshiTestRuns/corpus/agree/agree.list
+AGKNOWN='
+vmrec-q-sword-z0 gate
+f14-e0 gate
+f13-sw0 gate
+f13-sw0 branch
+f13-sw0 churn
+f14-xb0 gate
+e6fix gate
+e6fix inline[s0]
+e6fix blade[s1]
+e6fix stroke[s1]
+e6fix blade[s2]
+pt30-sword gate
+pt30-sword spike
+q-sword-z0-f059 gate
+q-sword-z25-f059 guard
+pt26-f059-4080 gate
+s1pt30-1333 inline[s3]
+s1pt30-1333#2 inline[s3]
+'
+#     known: 2026-10-10 baseline 16 (7 classes: gate tolerances on old builds, f13 branch/churn, e6fix strokes, pt30 spike game
+#     step 77 vs replay 56, q-z25 guard hanging); + s1pt30-1333 inline[s3] (sword-judge 2026-10-11, MANIFEST row "agree FAIL
+#     13334FFF": game s3 wind-up inline fb 31 FAIL vs exact-source replay 25 PASS = open lab miss), twice (plain + --tables row).
+#     Adapters named kfpvm_csrc-<TAG> are built here from the corpus source snapshot src/KenshiFP-<TAG>.client.tar.gz (build
+#     cache: same source = same binary), so no agree row depends on a hand-built binary that cannot be rebuilt.
+for t in $( [ -f "$AG" ] && awk '!/^#/ && NF {print $2}' "$AG" | grep -o 'kfpvm_csrc-[^/ ]*$' | sort -u); do n=${t#kfpvm_csrc-}; d=$(mktemp -d /tmp/al-csrc-XXXXXX)
+  if tar xzf "$CORPUS/src/KenshiFP-$n.client.tar.gz" -C "$d" 2>/dev/null && bash "$HERE/build.sh" --src "$d/client" --out "$d/kfpvm" > "$d/build.log" 2>&1; then
+    mv -f "$d/kfpvm" "$BLD/$t.tmp$$" && mv -f "$BLD/$t.tmp$$" "$BLD/$t"; rm -rf "$d"
+  else echo "REGRESS INFO agree: corpus source build $t failed (recording or build missing: $d/build.log)"; fi; done
 #     No `agree ...` line (crash/kill) = retry once, then `agree: INFRA ...` with the output tail: kfp-pipeline treats
 #     INFRA as a lab infrastructure error (re-gate), never a patch break (an empty FAIL cut 13 patches, 2026-10-11).
-agree_run() { (cd "$(dirname "$AG")" && python3 "$L/animlab.py" agree "$AG" --keep /tmp/al-agree 2>&1; echo "agree-rc=$?"); }
+AGK=$(mktemp -d /tmp/al-agree-XXXXXX)   # private keep dir: two gates outside a pipeline namespace never share replay files
+agree_run() { (cd "$(dirname "$AG")" && python3 "$L/animlab.py" agree "$AG" --keep "$AGK" 2>&1; echo "agree-rc=$?"); }
 if [ -f "$AG" ]; then ao=$(agree_run); r=$(echo "$ao" | grep '^agree ')
   [ -n "$r" ] || { echo "REGRESS INFO agree: no result line ($(echo "$ao" | grep -v '^ *$' | tail -3 | tr '\n' '|' | cut -c1-300)); retrying once"; ao=$(agree_run); r=$(echo "$ao" | grep '^agree '); }
-  n=${r##*disagreements=}; n=${n%% *}
+  seen=$(echo "$ao" | sed -n 's/^  DISAGREE \([^ ]*\) \([^:]*\):.*/\1 \2/p' | sort -u)
+  known=$(echo "$AGKNOWN" | grep -v '^ *$' | sort -u)
+  new=$(comm -23 <(echo "$seen" | grep -v '^$') <(echo "$known") | tr '\n' ';' | tr ' ' '_')
+  fixed=$(comm -13 <(echo "$seen" | grep -v '^$') <(echo "$known") | tr '\n' ';' | tr ' ' '_')
   if [ -z "$r" ]; then bad "agree: INFRA no result twice: $(echo "$ao" | grep -v '^ *$' | tail -2 | tr '\n' '|' | cut -c1-200)"
-  elif [ -n "$n" ] && [ "$n" -le 16 ]; then ok "agree (baseline 16): ${r:0:200}"; else bad "agree: $r"; fi
+  elif [ -z "$new" ]; then ok "agree: known=$(echo "$known" | wc -l) new=none fixed=${fixed:-none} ${r:0:160}"
+  else bad "agree: new=$new fixed=${fixed:-none} ${r:0:160}"; fi
 else echo "REGRESS INFO agree: corpus manifest missing"; fi
+rm -rf "$AGK"
 # P4. phase 4 (NATIVE, harness tools/animlab/native.py + visual/ogre.py animations): unit tests (synthetic Ogre animations,
 #     sampling, trajectory stabilisation, left grip mirror, solver grip offset, keyed viewmodel path + key fit, FCS v17
 #     header) and, with the game install: 174 animations on the male skeleton, the catalogue (unarmed techniques), `run` of
@@ -476,7 +514,7 @@ if [ -f "$FP_" ] || grep -q g_vm_fist_on /root/KenshiFP/client/kfp_viewmodel.inc
   case "$r5|$r" in "RESULT FIST-EQUIV PASS"*) ok "fist-equiv: tables=v5 ${r5:0:130}";; *"|RESULT FIST-EQUIV PASS"*) ok "fist-equiv: tables=v4 ${r:0:130}";;
     *) bad "fist-equiv: matches neither v5 nor v4 lab tables: v5 ${r5:0:120} | v4 ${r:0:120}";; esac
   r=$(bash "$HERE/fist-equiv.sh" "$CORPUS/fists/fail-20261010-u22" "$FP_" | tail -1)
-  case "$r" in "RESULT FIST-EQUIV FAIL"*) ok "fist-equiv v3 mismatch caught: ${r:0:100}";; *) bad "fist-equiv v3 (want FAIL): $r";; esac
+  case "$r" in "RESULT FIST-EQUIV FAIL"*) ok "fist-equiv v3 mismatch caught: ${r:0:100}";; *) bad "fist-equiv v3 mismatch caught: NOT caught (want FAIL): $r";; esac
 else echo "REGRESS INFO fist-equiv: no fists patch / source"; fi
 # 35. fists game take vs lab (fist-take-check.py, fp-fists.sh): the native unarmed rec (no fists patch) must FAIL
 #     against the v5 lab candidate (pass-20261010-u23); a patched take (corpus row, pending until the first take) must PASS.
