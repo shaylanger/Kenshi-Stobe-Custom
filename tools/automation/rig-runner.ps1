@@ -455,7 +455,27 @@ function Fail-List([string]$runPath, [string]$name, [string]$own, [string]$why, 
 # sees in runner\staged-history.tsv (fallback: the "PIPELINE PASS <sha> patches=" lines in /root/kfp-pipeline/*/pipeline.log).
 $stDir = if ($Fake) { Join-Path $rd 'staged' } else { Join-Path $runs 'staged' }
 $histF = Join-Path $rd 'staged-history.tsv'; $script:noPatches = @{}
-function HistRead { $h = @{}; foreach ($l in @((ReadShared $histF) -split "`r?`n")) { $p = $l -split "`t"; if ($p.Count -ge 2 -and $p[0]) { $h[$p[0]] = $p[1] } }; $h }
+# Patches that left the pending list were merged into the live base (/root/KenshiFP), so builds staged after that carry them
+# without naming them in their patches line (coordinator 2026-10-10: 8B3F339C "lacked" C0EC2BD0's committed e6/turret
+# patches). The runner notes when a pending-fixes/kfp-* name disappears (COMMITTED lines) and the Windows mtime of every
+# manifest (4th column): a patch counts as included when it is not pending any more and the build was staged after it left
+# (names gone before tracking began: when the build is newer than the pinned one).
+$pendDir = if ($Fake) { Join-Path $rd 'pending' } else { 'C:\KenshiModding\pending-fixes' }
+function HistLines { @((ReadShared $histF) -split "`r?`n" | Where-Object { $_ } | ForEach-Object { , @($_ -split "`t") }) }
+function HistRead { $h = @{}; foreach ($p in HistLines) { if ($p.Count -ge 2 -and $p[0] -and $p[0] -ne 'COMMITTED') { $h[$p[0]] = $p[1] } }; $h }
+function PendingNames { @(Get-ChildItem $pendDir -Filter 'kfp-*' -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.py', '.patch' } | ForEach-Object { $_.BaseName }) }
+function BuildTime([string]$sha) {   # Windows time the build was staged (manifest mtime), $null if unknown
+    $m = Join-Path $stDir "KenshiFP-$($sha.ToUpper()).txt"; if (Test-Path $m) { return (Get-Item $m).LastWriteTime }
+    foreach ($p in HistLines) { if ($p[0] -eq $sha.ToUpper() -and $p.Count -ge 4 -and $p[3]) { try { return [datetime]$p[3] } catch {} } }
+    $null
+}
+function InBase([string]$patch, [string]$want, [string]$have) {   # $patch (of build $want) merged into the base $have was built on?
+    if ((PendingNames) -contains $patch) { return $false }
+    $ht = BuildTime $have; if (-not $ht) { return $false }
+    $c = @(HistLines | Where-Object { $_[0] -eq 'COMMITTED' -and $_[1] -eq $patch } | ForEach-Object { try { [datetime]$_[2] } catch { $null } } | Where-Object { $_ }) | Sort-Object | Select-Object -Last 1
+    if ($c) { return ($c -le $ht) }
+    $wt = BuildTime $want; (-not $wt) -or ($ht -gt $wt)
+}
 function ManifestPatches([string]$path) {   # "patches a,b,c" line of a KenshiFP-*.txt manifest ('' = base build), $null if none
     $t = ReadShared $path; if ($null -eq $t) { return $null }
     $l = @($t -split "`r?`n" | Where-Object { $_ -match '^patches(\s|$)' })[0]; if ($null -eq $l) { return $null }
@@ -467,9 +487,13 @@ function StagedRecord {   # remember the patches of every staged manifest (cheap
         $sha = if ($m.Name -eq 'KenshiFP-latest.txt') { $l1 = (ReadShared $m.FullName); if ($l1 -match '^KenshiFP (\w{8})') { $Matches[1].ToUpper() } else { $null } } elseif ($m.BaseName -match '^KenshiFP-(\w{8})$') { $Matches[1].ToUpper() } else { $null }
         if (-not $sha -or $h.ContainsKey($sha)) { continue }
         $pp = ManifestPatches $m.FullName; if ($null -eq $pp) { continue }
-        $h[$sha] = $pp; $add += "$sha`t$pp`t$(Get-Date -Format s)"
+        $h[$sha] = $pp; $add += "$sha`t$pp`t$(Get-Date -Format s)`t$($m.LastWriteTime.ToString('s'))"
     }
-    if ($add.Count) { $null = WriteShared $histF (($add -join "`r`n") + "`r`n") -Append; foreach ($a in $add) { Log "staged-history + $(($a -split "`t")[0])" } }
+    # pending names that disappeared since the last tick = merged into the base now
+    $pf = Join-Path $rd 'pending-seen.txt'; $now = @(PendingNames)
+    if (Test-Path $pf) { foreach ($x in @(Get-Content $pf | Where-Object { $_ })) { if ($now -notcontains $x) { $add += "COMMITTED`t$x`t$(Get-Date -Format s)" } } }
+    Set-Content $pf $now
+    if ($add.Count) { $null = WriteShared $histF (($add -join "`r`n") + "`r`n") -Append; foreach ($a in $add) { $q = $a -split "`t"; Log "staged-history + $($q[0])$(if ($q[0] -eq 'COMMITTED') { " $($q[1])" })" } }
 }
 function PatchesOf([string]$sha) {   # patch list of a build (string, '' = base), $null if unknown
     $sha = $sha.ToUpper(); $m = Join-Path $stDir "KenshiFP-$sha.txt"
@@ -490,7 +514,7 @@ function LatestStaged {   # sha8 of THE staged build (KenshiFP-latest.txt line 1
 function Missing([string]$want, [string]$have) {   # patches of $want that $have lacks ($null = $have unknown)
     $hp = PatchesOf $have; $wp = PatchesOf $want; if ($null -eq $hp -or $null -eq $wp) { return $null }
     $hs = @($hp -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    $m = @(($wp -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $hs -notcontains $_ })
+    $m = @(($wp -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $hs -notcontains $_ -and -not (InBase $_ $want $have) })
     , $m   # keep an empty array an array (else PowerShell returns $null = "unknown")
 }
 # pinned sha8 -> the build to use: @{ sha = <sha8 or $null = keep the installed one>; why = <log text> } or @{ fail = <reason> }
