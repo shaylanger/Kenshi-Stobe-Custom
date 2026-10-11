@@ -55,7 +55,10 @@ arm; states B
 # phase D: R holster (own sheathe: bow on its back sheath), then fp_combat on + aim = the adapter's own draw of a
 # holstered crossbow (drawWeapon with the item's section, kfp-xbow-drawsec) -> same states; deterministic re-arm draw
 cleanup; pf_iso >/dev/null
-A key_inject r tap 120 >/dev/null; pf_waitst holstered 6 || pf_fail "R holster: state=$(pf_st)"; sleep 1.5
+# fp_combat off can already put the bow on its back sheath (xbmesh-c2: manual release -> native sheathe, then the R tap
+# DREW it: "R draw weapon ... section='back'" and state=ready): let it settle, R only while it is still in the hands
+sleep 3; [ "$(pf_st)" = holstered ] || { A key_inject r tap 120 >/dev/null; pf_waitst holstered 6 || pf_fail "R holster: state=$(pf_st)"; }
+EV+=" D-holstered:$(pf_st)"; sleep 1.5
 arm; states D
 KL=/mnt/d/Steam/steamapps/common/Kenshi/KenshiFP.log
 EV+=" drawlog=$(grep -a "crossbow draw section=" "$KL" 2>/dev/null | tail -1 | grep -o "section='[^']*' ok=[0-9]" | tr -d "' " )"
