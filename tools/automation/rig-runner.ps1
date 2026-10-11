@@ -25,7 +25,7 @@ format), taken FIFO by file name: the rig's own folder first, then any\ (lists w
   #                                        boundary (no header: the newest staged build if it is newer than the installed DLL)
   # needs: KenshiFP <sha8>                 that build; if staging replaced it, the newest staged build that includes every
   #                                        patch of it (manifest patches line, runner\staged-history.tsv), else the installed
-  #                                        one if it does, with a log line; fails only if none does. Harness <sha8> = must match
+  #                                        one if it does, with a log line; fails only if none does. Harness <sha8> = must match; no Harness pin = staged\AutomationHarness-latest.txt (installed at the boundary)
   #                                        (rig-runner.ps1 -Rig <rig> -Resolve "KenshiFP <sha8>|latest" shows the choice)
   # nodryrun: <row> <reason>  leave that row out of the dry run (fake-game gap); every other row must pass dryrun.sh
   # rig: 5090|4080            (any\ lists) only that rig takes it
@@ -718,6 +718,10 @@ function Start-Batch($f) {
     $need = Header $run 'needs'
     $needK = if ($need -match 'KenshiFP\s+(\S+)') { $Matches[1].TrimEnd(',', ';') } elseif ($need -match '(staged-)?latest') { 'latest' } else { $null }
     $needH = if ($need -match 'Harness\s+(\w{8})') { $Matches[1].ToUpper() } else { $null }
+    # no Harness pin: THE staged harness (staged\AutomationHarness-latest.txt, line 1 = sha8; res-graphics 2026-10-10: the
+    # FrameCap build must reach every list, the gaming throttle's 30 fps cap needs it), installed at this boundary
+    $hl = Join-Path $runs 'staged\AutomationHarness-latest.txt'
+    if (-not $needH -and (Test-Path $hl)) { $t = (Get-Content $hl -TotalCount 1); if ($t -match '^\s*(\w{8})') { $needH = $Matches[1].ToUpper() } }
     $inst = if ($filler) { $null } else { StagedWanted $needK }   # filler: runs on the installed build (needs checked at pick)
     if ($inst -eq 'FAIL') { Fail-List $run $name $own $script:instWhy @(); Remove-Item $curF; return $true }
     # "# gfx: low" (res-graphics, Shay 22:05: rows that don't film run at lowest graphics in a small window): the running game
@@ -747,7 +751,9 @@ function Start-Batch($f) {
         if ($needH) {
             $hd = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll'
             if ((Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH) {
-                $o = & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\install-dll.ps1" Harness 2>&1 | ForEach-Object { "$_" }
+                $sh = Join-Path $runs "staged\AutomationHarness-$needH.dll"   # staged copy first (out\ is shared by every harness builder)
+                $o = if ((Test-Path $sh) -and (Get-FileHash $sh).Hash.Substring(0, 8) -eq $needH -and -not (Get-Process kenshi_x64 -ErrorAction SilentlyContinue)) { Copy-Item $sh $hd -Force; "copied $sh" }
+                     else { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\install-dll.ps1" Harness 2>&1 | ForEach-Object { "$_" } }
                 if ((Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH) { Fail-List $run $name $own "needs Harness $needH, installed $((Get-FileHash $hd).Hash.Substring(0, 8)) (build out has another hash)" $o; Remove-Item $curF; return $true }
                 Log "install Harness $needH"
             }
