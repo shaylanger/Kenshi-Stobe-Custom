@@ -111,7 +111,9 @@ STOBELOG=$KD/RE_Kenshi/mods/Stobe/stobe.log
 say() { echo "$*" | tee -a "$S"; }
 offsets() { local p; for p in $LOGPATHS; do stat -c %s "$p" 2>/dev/null || echo 0; done | paste -sd'\t'; }
 # world <sec>: 0 once status says phase=world (0.5 s polls; stobe-auto wait-world polls every 2 s)
-world() { local end=$((SECONDS + ${1:-300})); while [ $SECONDS -lt $end ]; do timeout 15 stobe-auto status </dev/null 2>/dev/null | grep -q "phase=world" && return 0; sleep 0.5; done; return 1; }
+# fails at once while <out>/.noload exists (launch(): the harness autoload found no such save; m102 96-agree-rec sat 6 min
+# on the main menu because instance 2 lacked kah-fpstudio)
+world() { local end=$((SECONDS + ${1:-300})); while [ $SECONDS -lt $end ]; do [ -f "$O/.noload" ] && { echo "world: $(head -1 "$O/.noload")" >&2; return 1; }; timeout 15 stobe-auto status </dev/null 2>/dev/null | grep -q "phase=world" && return 0; sleep 0.5; done; return 1; }
 # world_live <sec>: 0 = in the world, 1 = Kenshi up but not in the world after <sec>, 2 = Kenshi gone (checked every 20 s)
 world_live() { local end=$((SECONDS + ${1:-120})); while [ $SECONDS -lt $end ]; do kenshi_up || return 2; world 20 && return 0; done; kenshi_up || return 2; return 1; }
 # timeout: the WSL powershell proxy can hang after a launch (pipe held by Kenshi, m23); launch output lines
@@ -123,17 +125,22 @@ ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CT
 # kill the stuck proxy, then wait for the world
 HLOG=$KD/mods/AutomationHarness/harness.log
 launch() {
-  local t0 i; t0=$(date +%s)
+  local t0 i lp; t0=$(date +%s); rm -f "$O/.noload"
   ctl launch -Save "$1" > "$O/launch.out" 2>&1 &
+  lp=$!
   for i in $(seq 1 140); do
     kill -0 $! 2>/dev/null || break
     [ -f "$HLOG" ] && [ "$(stat -c %Y "$HLOG")" -ge "$t0" ] && grep -a -q "KAH: autoload $1" "$HLOG" && break
     sleep 1
   done
+  # the autoload found no such save: say so now (world() fails at once) instead of waiting minutes on the main menu
+  if [ -f "$HLOG" ] && [ "$(stat -c %Y "$HLOG")" -ge "$t0" ] && grep -a "KAH: autoload $1" "$HLOG" | tail -1 | grep -q 'no save named'; then
+    echo "autoload $1 failed: no save named $1 in this install (copy it into its save folder)" > "$O/.noload"; say "NOTE $(date +%H:%M) launch: $(cat "$O/.noload")"; fi
   # fast launch (hotswap2 2026-10-11): no fixed sleeps; the save loads while the proxy finishes its foreground unlock +
   # re-place loop, then the proxy is killed once the world is in (or after 120 s) and postlaunch fits the window
-  kill -0 $! 2>/dev/null && world 120
-  pkill -f "kenshi-ctl.ps1 launch" 2>/dev/null; wait 2>/dev/null
+  kill -0 $lp 2>/dev/null && world 120
+  # only THIS launch's proxy (lanes 5090b/5090c run their own run-batch.sh in the same WSL: a pkill -f by name killed theirs too)
+  pkill -P $lp 2>/dev/null; kill $lp 2>/dev/null; wait $lp 2>/dev/null
   # the killed proxy never ran kenshi-ctl's re-place + render fit (studio-fixture 2026-10-10: 798x413 on DISPLAY1): do it now
   [ "${RIG:-5090}" = 4080 ] || { timeout 180 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" postlaunch </dev/null 2>&1 | tr -d '\r' >> "$O/launch.out"; }
   tail -3 "$O/launch.out"
