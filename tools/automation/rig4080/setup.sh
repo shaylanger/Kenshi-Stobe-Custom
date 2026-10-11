@@ -16,7 +16,8 @@
 # A failed copy prints "SCPFAIL <dest>: <files>" and the sync goes on (was: set -e aborted the rest, 2026-10-10 17:42).
 M=/c/KenshiModding; R=/c/KenshiTestRuns; H=4080; HERE=$M/tools/automation/rig4080
 SAVES=""; DEFER=""; DRY=0
-while :; do case "$1" in --saves) SAVES=$2; shift 2 ;; --saves-only) SAVES=$2; SAVESONLY=1; shift 2 ;; --defer) DEFER=$2; shift 2 ;; --dry) DRY=1; shift ;; *) break ;; esac; done
+WITH=()
+while :; do case "$1" in --with-list) WITH+=("$2"); shift 2 ;; --saves) SAVES=$2; shift 2 ;; --saves-only) SAVES=$2; SAVESONLY=1; shift 2 ;; --defer) DEFER=$2; shift 2 ;; --dry) DRY=1; shift ;; *) break ;; esac; done
 [ -n "$DEFER" ] && [ ! -f "$DEFER" ] && DEFER=""
 # The synced repo file sets (dest dir under C:\KenshiModding | files), the ONE definition used for copying, for --list
 # (rig-runner SyncCandidates, list-rigcheck.sh) and for --check. Script dirs sync EVERY helper type next to the scripts
@@ -37,6 +38,34 @@ addset Kenshi-Automation-Harness/client "$M/Kenshi-Automation-Harness/client/kah
 addset Kenshi-Automation-Harness/tools/animlab $(eval echo "$M/Kenshi-Automation-Harness/tools/animlab/*.{$HX}")
 # weapons --run (take RESULT matrix) imports visual/ogre.py: without it every 4080 sweep row read matrix=[] (twohand-4080 2026-10-10)
 addset Kenshi-Automation-Harness/tools/animlab/visual $(eval echo "$M/Kenshi-Automation-Harness/tools/animlab/visual/*.{$HX}")
+# List closure (speed-scout 2026-10-11; 89-capproof-4080 FAILED at start: capture-proof.sh names dryrun.sh, which no fixed
+# set synced): every repo file a 4080 list's rows run, plus the helpers they name by bare file name next to them
+# (transitively), syncs too, wherever it sits in the repo. Lists: the 4080's running lists (queue\running\4080*__*.list,
+# the runner moves a list there before its sync) + each --with-list <file> (list-rigcheck.sh asks before taking a list).
+# So a list never fails on the 4080 because a repo tool script is outside the fixed sets.
+declare -A FIXED=(); for i in "${!SETF[@]}"; do for f in ${SETF[$i]}; do FIXED[$f]=1; done; done
+list_closure(){
+  local L p q n d; local -A S=(); local todo=()
+  for L in "$@"; do [ -f "$L" ] || continue
+    for p in $(grep -vE '^\s*(#|$)' "$L" | awk -F'|' '{print $NF}' | grep -oE "(\{CR\}|/mnt/c|/c)/KenshiModding/[^ \"'|;)]+\.(sh|py|ps1|awk)"); do
+      p=${p//\{CR\}/\/c}; p=${p/#\/mnt\/c\//\/c\/}; [ -f "$p" ] && [ -z "${S[$p]:-}" ] || continue; S[$p]=1; todo+=("$p"); done
+  done
+  # the hand-picked tools/automation set is closed the same way (rig-env.sh -> kenshi-instance.ps1, batch-health.sh ->
+  # rig-lane2.ps1 were named but never synced: setup.sh --check / rig-runner -SelfTest failed)
+  for p in "${!FIXED[@]}"; do case "$p" in $M/tools/automation/*) [ -z "${S[$p]:-}" ] && { S[$p]=1; todo+=("$p"); } ;; esac; done
+  while [ ${#todo[@]} -gt 0 ]; do p=${todo[0]}; todo=("${todo[@]:1}"); d=$(dirname "$p")
+    case "$p" in *.sh|*.py|*.awk|*.ps1) ;; *) continue ;; esac
+    for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq)\b" "$p" | sort -u); do
+      q="$d/$n"; [ -f "$q" ] && [ -z "${S[$q]:-}" ] || continue; S[$q]=1; todo+=("$q"); done
+  done
+  for p in "${!S[@]}"; do case "$p" in $M/tools/automation/run-batch.sh|$M/tools/automation/kenshi-ctl.ps1|$M/tools/automation/rig-runner.ps1) ;; *) echo "$p" ;; esac; done
+}
+declare -A XD=(); NEWD=()
+for f in $(list_closure $R/queue/running/4080*__*.list "${WITH[@]}" | sort); do
+  [ -n "${FIXED[$f]:-}" ] && continue; d=$(dirname "${f#$M/}")
+  [ -n "${XD[$d]:-}" ] || NEWD+=("$d"); XD[$d]+="$f "
+done
+for d in "${NEWD[@]}"; do SETD+=("$d"); SETF+=("${XD[$d]}"); done
 synced_list(){ local i f; for i in "${!SETF[@]}"; do for f in ${SETF[$i]}; do echo "${f#$M/}"; done; done; }
 # --list: every repo-relative path the sync copies, one per line (no ssh)
 [ "${1:-}" = --list ] && { synced_list; exit 0; }
@@ -51,7 +80,13 @@ if [ "${1:-}" = --check ]; then
     for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq)\b" "$M/$f" | sort -u); do
       [ -f "$M/$d/$n" ] && [ -z "${IN[$d/$n]:-}" ] && { echo "UNSYNCED $d/$n (named in $f)"; bad=1; }
     done; done
-  [ $bad = 0 ] && echo "SYNCCHECK OK $(synced_list | wc -l) files"; exit $bad
+  # list closure case: a list row running a repo script outside the fixed sets syncs it + the sibling it names
+  # (89-capproof-4080: capture-proof.sh -> dryrun.sh)
+  t=$(mktemp); echo 'X | kah-fpstudio | A | B | 60 | bash {CR}/KenshiModding/tools/automation/capture-proof.sh {OUT}/x 3' > "$t"
+  lc=$(bash "$0" --with-list "$t" --list); rm -f "$t"
+  for f in tools/automation/capture-proof.sh tools/automation/dryrun.sh; do
+    echo "$lc" | grep -qxF "$f" || { echo "UNSYNCED $f (list-closure case: --with-list row script / its sibling)"; bad=1; }; done
+  [ $bad = 0 ] && echo "SYNCCHECK OK $(synced_list | wc -l) files + list closure"; exit $bad
 fi
 # --saves-only "<saves>": copy only those saves (list-rigcheck.sh --fix: a list's save missing on the 4080), nothing else
 if [ "${SAVESONLY:-0}" = 1 ]; then
@@ -79,6 +114,7 @@ cp_to() {
 run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual C:\KenshiModding\Kenshi-Automation-Harness\tools\wgccap\out 2>NUL & exit 0'
 run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" $H:C:/KAH/
 run scp -q "$HERE/python3" $H:C:/KAH/bin/python3
+for d in "${NEWD[@]}"; do w=$(echo "$d" | tr / '\\'); run ssh $H "mkdir C:\\KenshiModding\\$w 2>NUL & exit 0"; done   # list-closure dirs outside the fixed sets
 for i in "${!SETD[@]}"; do cp_to "C:/KenshiModding/${SETD[$i]}/" ${SETF[$i]}; done
 for d in "$@"; do
   ssh $H "mkdir C:\\KenshiTestRuns\\$d 2>NUL & exit 0"

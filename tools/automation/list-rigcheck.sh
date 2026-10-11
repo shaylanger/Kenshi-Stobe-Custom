@@ -72,7 +72,7 @@ if [ "$RIG" = 5090 ]; then
 else
   # ---- 4080 side
   # synced = in the sync's own file list (rig4080/setup.sh --list, one definition) or a run-batch helper rig-runner copies
-  declare -A SY=(); while read -r f; do SY[$M/$f]=1; done < <(bash $M/tools/automation/rig4080/setup.sh --list)
+  declare -A SY=(); while read -r f; do SY[$M/$f]=1; done < <(bash $M/tools/automation/rig4080/setup.sh --with-list "$L" --list)
   synced(){ [ -n "${SY[$1]:-}" ] && return 0; case "$1" in
     $M/tools/automation/run-batch.sh|$M/tools/automation/batch-excerpts.sh|$M/tools/automation/batch-health.sh) return 0 ;;
     *) return 1 ;; esac; }
