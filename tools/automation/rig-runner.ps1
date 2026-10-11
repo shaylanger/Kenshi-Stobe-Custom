@@ -92,7 +92,7 @@ cause). run-batch.sh checks after every row itself too (<out>\TDR). -Fake: runne
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '5090b', '5090c', '4080b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [int]$PreDryMin = 5, [string]$Resolve = '', [string]$DryKeyOf = '', [string]$FillerRows = '', [string]$LedgerFrom = '', [string]$LedgerList = '',
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [int]$PreDryMin = 5, [string]$Resolve = '', [string]$DryKeyOf = '', [string]$FillerRows = '', [string]$LedgerFrom = '', [string]$LedgerList = '', [string]$PreDryOf = '', [int]$PreDryNice = 15, [int]$PreDryWaitSec = 0,
       [int]$HardMin = 5, [switch]$SelfTest, [switch]$RowHashSelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # Stuck decision (pure; -SelfTest checks it). Soft: condition held >= lim AND out dir unchanged >= lim. Hard (2026-10-11,
@@ -353,7 +353,7 @@ if ($Ensure) {
     exit 0
 }
 if (-not $Rig) { Get-Content $PSCommandPath -TotalCount 40; exit 2 }
-if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFrom -and -not $RowHashSelfTest) {
+if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFrom -and -not $PreDryOf -and -not $RowHashSelfTest) {
     if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
     if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
     Set-Content (Join-Path $rd "$Rig.pid") $PID
@@ -1324,6 +1324,22 @@ if ($LedgerFrom) {
     $b = $meta[0] -split "`t"; $mh = @{}; foreach ($m in $meta | Select-Object -Skip 1) { $q = $m -split "`t"; $mh[$q[0]] = $q[1] }
     $upd = @{}; foreach ($l in @(Get-Content (Join-Path $LedgerFrom 'rows.tsv') -ErrorAction SilentlyContinue)) { $q = $l -split "`t"; if ($q.Count -ge 2 -and $mh.ContainsKey($q[0])) { $upd["$LedgerList|$($q[0])"] = @($b[1], $b[2], $mh[$q[0]], $q[1]) } }
     if ($upd.Count) { LedSet $upd }; "LEDGER $LedgerList $(($upd.Keys | ForEach-Object { "$(($_ -split '\|')[1])=$($upd[$_][3])" }) -join ' ')"
+    exit 0
+}
+# lane 4080b (rig-lane2-4080.ps1, multi-instance-4080 2026-10-11): a list's dry-run verdict through this rig's pre-dry-run
+# cache (same key as this loop: a list lane 4080 pre-dried runs on lane 4080b with no new dry run, and the reverse)
+#   -Rig 4080 -PreDryOf <list> [-PreDryNice 0|15] [-PreDryWaitSec n]   start it if not cached/running (nice 0 lifts a running
+#   one), wait up to n s; prints "PREDRY <key> PASS|FAIL|PENDING|none" + its DRYRUN-SUMMARY line + up to 2 DRYRUN FAIL lines
+if ($PreDryOf) {
+    $p = (Resolve-Path -LiteralPath $PreDryOf).Path; $k = DryKey $p
+    if (-not (Test-Path (Join-Path $pdd "$k.rc"))) {
+        if (-not (PreDryRunning $k)) { PreDryStart $p $k $PreDryNice }
+        elseif ($PreDryNice -eq 0 -and -not $Fake) { $null = Wsl @('bash', '-c', "for p in `$(pgrep -f 'predry/$k/run.sh'); do renice -n 0 -g `$p; done >/dev/null 2>&1; true") }
+        if ($PreDryWaitSec -gt 0) { $null = PreDryWait $k $PreDryWaitSec }
+    }
+    $v = CachedVerdict (Get-Item -LiteralPath $p); "PREDRY $k $(if ($v) { $v } else { 'none' })"
+    $o = @(Get-Content (Join-Path $pdd "$k.out") -ErrorAction SilentlyContinue)
+    @($o | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1) + @($o | Where-Object { $_ -match '^DRYRUN .* FAIL' } | Select-Object -First 2)
     exit 0
 }
 if ($DryKeyOf) {   # rig-runner.ps1 -Rig <rig> -DryKeyOf <list>: the pre-dry-run key + the files it hashes + cached verdict
