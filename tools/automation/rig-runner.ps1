@@ -1010,6 +1010,14 @@ function Preempt([string[]]$c, [string]$by) {
     Log "PREEMPT filler ${name}: $by is queued; the batch ends after its current row (killed if it runs $PreemptKillMin more min)"
     State "running $name (filler, preempted by ${by}: ends after the current row)"
 }
+# runner\rowtimes.tsv (speed-audit 2026-10-11): one line per finished row, kept across runs (done\ keeps only the newest
+# run of a list and out dirs get cleaned): end time, rig, list, row, PASS|FAIL, seconds it held the game (rows.tsv col 3)
+function RowTimes([string]$rowsTsv, [string]$list) {
+    try {
+        $ls = @(Get-Content -LiteralPath $rowsTsv -ErrorAction Stop | Where-Object { $_ } | ForEach-Object { "$(Get-Date -Format s)`t$Rig`t$list`t$_" })
+        if ($ls.Count) { $null = WriteShared (Join-Path $rd 'rowtimes.tsv') (($ls -join "`r`n") + "`r`n") -Append }
+    } catch { }
+}
 function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch]$Tail, [string]$Why = '') {
     # $c[0..6] only: a cur/tail file has an 8th line (the start token, Add-Content below); without the slice $tmp became a
     # 2-element array, the 4080 scp of rows.tsv got two targets and failed, so the filler ledger never recorded a 4080 row
@@ -1040,13 +1048,15 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     }
     if ($Rig -eq '4080' -and -not $Fake) {
         & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/SUMMARY.txt" $sumL 2>$null
+        $rtl = Join-Path $tmp 'rows.tsv'; if (-not (Test-Path $rtl)) { & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/rows.tsv" $rtl 2>$null }
+        RowTimes $rtl $name
         if (-not $Tail) {
             if ($how -eq 'DONE' -and @(QueuedLists).Count) { $script:keep4080 = $true; Log "4080 Kenshi stays up for the next list" }
             elseif ($how -ne 'LOST') { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; $script:keep4080 = $false }
             Remove-Item (Join-Path $runs 'inflight\4080-runner') -ErrorAction SilentlyContinue
         }
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-    } else { Copy-Item (Join-Path $outW 'SUMMARY.txt') $sumL -ErrorAction SilentlyContinue }
+    } else { Copy-Item (Join-Path $outW 'SUMMARY.txt') $sumL -ErrorAction SilentlyContinue; if (-not $Fake) { RowTimes (Join-Path $outW 'rows.tsv') $name } }
     $sum = if (Test-Path $sumL) { Get-Content $sumL } else { @() }
     $nf = @($sum | Where-Object { $_ -match '^RESULT \S+ FAIL' }).Count; $np = @($sum | Where-Object { $_ -match '^RESULT \S+ PASS' }).Count
     $where = if ($Rig -eq '4080' -and -not $Fake) { "4080:C:\KenshiTestRuns\$(Split-Path $outP -Leaf)" } else { $outW }
