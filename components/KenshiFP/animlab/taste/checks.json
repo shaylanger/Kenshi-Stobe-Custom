@@ -16,6 +16,7 @@
   "blade.seen":   {"cmd": "python3 {L}/spec.py blade {pre} {rec}", "line": "^blade ", "fail": "endon=[^ ]*:BAD"},
   "stroke.len":   {"cmd": "python3 {L}/animlab.py {pre} stroke {rec} {ohopt}", "line": "^stroke ", "fail": "len=[^ ]*:BAD"},
   "stroke.oh":    {"cmd": "python3 {L}/animlab.py {pre} stroke {rec} {ohopt}", "line": "^stroke ", "fail": "(tilt|path)=[^ ]*:BAD|overhead n/a:BAD"},
+  "path":         {"cmd": "python3 {L}/animlab.py {pre} path {rec}", "line": "^path ", "fail": "^path FAIL"},
   "guard":        {"cmd": "python3 {L}/animlab.py guard {rec}", "line": "^guard ", "fail": "^guard FAIL"},
   "zoomband":     {"cmd": "python3 {L}/animlab.py zoomband {rec}", "line": "^zoomband ", "fail": "^zoomband FAIL"},
   "stock":        {"cmd": "python3 {L}/animlab.py stock {rec} {refopt}", "line": "^stock ", "fail": "^stock FAIL"},

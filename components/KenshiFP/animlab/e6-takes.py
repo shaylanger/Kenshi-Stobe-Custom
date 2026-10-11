@@ -7,7 +7,7 @@ failed stroke-1 arc wb 53.2 > 50, and the pool had no inline check. Here every c
 `# set` lines (own strokes, own table values) and every stroke it plays gets its own verdict.
 Usage: e6-takes.py --adapter <kfpvm build> [--list <file>] [--args "<adapter args>"] [--name tag] [-j N]
   list (default corpus pools/e6-takes/takes.list): `<rec relative to the list> [adapter args]` (# comments)
-Prints `E6TAKE <rec> s<n> inline|arc PASS|FAIL <evidence>` per take x stroke x check, `RESULT E6-TAKES PASS|FAIL n=.. fail=..`
+Prints `E6TAKE <rec> s<n> inline|arc|path PASS|FAIL <evidence>` per take x stroke x check, `RESULT E6-TAKES PASS|FAIL n=.. fail=..`
 (exit 1 on any FAIL; the gate judges the verdict lines against its baseline). Replays + checks go through labcache."""
 import argparse, os, re, shlex, subprocess, sys, tempfile, shutil
 from concurrent.futures import ThreadPoolExecutor
@@ -58,7 +58,7 @@ def one(job):
         return name, [('-', 'replay', 'FAIL adapter rc=%d %s' % (rc, se[-200:].strip()))]
     res = []
     for s in strokes_of(out):
-        for c in ('inline', 'metrics'):
+        for c in ('inline', 'metrics', 'path'):   # path = E6 screen path (Shay 2026-10-11 PT17; new keys: non-blocking until the baseline holds a PASS)
             k, line = check(out, s, c)
             res.append((s, k, line[len(k) + 1:]))
     return name, res
