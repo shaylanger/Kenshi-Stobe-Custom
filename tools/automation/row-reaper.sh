@@ -91,12 +91,14 @@ do_sweep() {   # current out dir
 
 do_selftest() {
   local R="kahreap$$" T bad="" n=0
-  T=$(mktemp -d); mkdir -p "$T/$R/old" "$T/$R/cur" "$T/tests/ingame"
+  T=$(mktemp -d); mkdir -p "$T/$R/old" "$T/$R/cur" "$T/$R/laneb" "$T/tests/ingame"
   printf '#!/bin/bash\ntrap "exit 143" TERM\n( while :; do sleep 1; done ) &\nwhile :; do sleep 1; done\n' > "$T/tests/ingame/holder.sh"
   start() { nohup bash "$T/tests/ingame/holder.sh" "$1" x >/dev/null 2>&1 </dev/null & echo $!; }
   alive() { ROOT=$R procs | grep -qF "$T/$R/$1 x"; }
   : > "$T/$R/old/.gamedone.R2"; : > "$T/$R/old/batch.pid"; mkdir -p "$T/$R/predry"
   start "$T/$R/predry/R4" >/dev/null   # no batch.pid: a dry run, never swept
+  # laneb = another lane's batch still running (batch.pid names a live process, no DONE): its rows are never swept
+  local lb; lb=$(start "$T/$R/laneb/R5"); echo "$lb 0" > "$T/$R/laneb/batch.pid"
   start "$T/$R/old/R1" >/dev/null; start "$T/$R/old/R2" >/dev/null; start "$T/$R/cur/R3" >/dev/null; start "$T/$R/cur/R30" >/dev/null
   sleep 2
   chk() { n=$((n + 1)); if eval "$2"; then echo "SELFTEST $1 ok"; else echo "SELFTEST $1 WRONG"; bad="$bad $1"; fi; }
@@ -106,11 +108,12 @@ do_selftest() {
   chk sweep-keeps-gamedone 'alive old/R2'
   chk sweep-keeps-current 'alive cur/R3 && alive cur/R30'
   chk sweep-keeps-nonbatch 'alive predry/R4'
+  chk sweep-keeps-live-other-lane 'alive laneb/R5'
   o=$(REAPER_ROOT=$R REAPER_NEUTRAL=0 bash "$SELF" kill "$T/$R/cur/R3"); sleep 1
   chk kill-row '! alive cur/R3 && grep -q REAPED <<<"$o"'
   chk kill-boundary 'alive cur/R30 && alive old/R2'
   REAPER_ROOT=$R REAPER_NEUTRAL=0 bash "$SELF" kill "$T/$R/cur/R30" >/dev/null; REAPER_ROOT=$R REAPER_NEUTRAL=0 bash "$SELF" kill "$T/$R/old/R2" >/dev/null
-  REAPER_ROOT=$R REAPER_NEUTRAL=0 bash "$SELF" kill "$T/$R/predry/R4" >/dev/null; sleep 1
+  REAPER_ROOT=$R REAPER_NEUTRAL=0 bash "$SELF" kill "$T/$R/predry/R4" >/dev/null; REAPER_ROOT=$R REAPER_NEUTRAL=0 bash "$SELF" kill "$T/$R/laneb/R5" >/dev/null; sleep 1
   chk cleanup '! alive cur/R30 && ! alive old/R2 && ! alive predry/R4'
   rm -rf "$T"
   echo "RESULT ROW-REAPER-SELFTEST $([ -z "$bad" ] && echo PASS || echo FAIL) cases=$n bad=[${bad# }]"
