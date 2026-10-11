@@ -266,8 +266,10 @@ PB0=$(A combatmode "$BL" | fld passive); A combatmode "$TG" passive on >/dev/nul
 # main inventory for R09 (re-equipped after, and in cleanup): a foreign bolt still credited to him without a bow = native
 # pass-through attribution (product, KenshiFP wound hook), not him shooting
 BLBOW=$(A rangedinfo "$BL" | sed -n 's/.*\bbow=\(.*\) has_ammo=.*/\1/p'); [ "$BLBOW" = none ] && BLBOW=""; BLB="none"
+# rg03-0715: the unequip took (rangedinfo bow=none) but BLB said still_armed: a bow=none reply has no has_ammo= field,
+# so the bow= parse above gave "" there; check bow=none itself
 if [ -n "$BLBOW" ]; then A unequip "$BL" "$BLBOW" >/dev/null; BLBOW_OFF=1
-  [ "$(A rangedinfo "$BL" | sed -n 's/.*\bbow=\(.*\) has_ammo=.*/\1/p')" = none ] && BLB=removed || BLB="still_armed"; fi
+  A rangedinfo "$BL" | grep -q '\bbow=none ' && BLB=removed || BLB="still_armed"; fi
 EFF=1; aim_at "$TG" 12.5; r9=""; hitb=0; hitt=0
 for _ in 1 2 3; do aim_at "$TG" 12.5; av=$(aim_victim); [ "$av" = blocker ] || { place_bl; aim_at "$TG" 12.5; av=$(aim_victim); }
   A fp_melee wounds reset >/dev/null
