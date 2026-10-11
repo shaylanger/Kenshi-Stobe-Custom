@@ -34,7 +34,7 @@ param(
   [Parameter(Position = 0)][string]$Command = 'status',
   [string]$Save = '',
   [int]$TimeoutSec = 300,
-  [string]$Monitor = $(if ($env:KENSHI_MONITOR) { $env:KENSHI_MONITOR } else { 'DISPLAY2' }),
+  [string]$Monitor = $(if ($env:KENSHI_MONITOR) { $env:KENSHI_MONITOR } else { 'AUTO' }),
   [switch]$Play,
   [ValidateSet('', 'full', 'low')][string]$Gfx = '',
   [Parameter(Position = 1)][string]$Mode = 'status'
@@ -58,6 +58,13 @@ if ($Inst -ge 2) {
   if ($Play) { 'instance copies are for tests only: no -Play'; exit 1 }
 }
 $KahDir = "$Kenshi\mods\AutomationHarness"
+# AUTO = the first monitor that is NOT Shay's primary (2026-10-11: Windows renumbered the screens, DISPLAY2 became the
+# primary 2560x1440 and test games landed on Shay's screen, glitching through resize rounds)
+if ($Monitor -eq 'AUTO') {
+  $ml = @((& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' monitors -Kenshi $Kenshi) -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  $sec = @($ml | Where-Object { $_ -notmatch ' primary' })
+  $Monitor = if ($sec.Count) { ($sec[0] -split ' ')[0] } else { ($ml[0] -split ' ')[0] }
+}
 # VSync=No for tests: a windowed background game presents at refresh/3 with VSync on (22 fps on the 60 Hz DISPLAY2, 45 on a
 # 143 Hz one; GPU idle), too slow for the ~40 fps viewmodel passes (vm-sword 2026-10-08). Shay's value goes to the play copy.
 $TestCfg = @{ 'Full Screen' = 'No'; 'Video Mode' = '1600 x 900 @ 32-bit colour [0]'; 'VSync' = 'No' }

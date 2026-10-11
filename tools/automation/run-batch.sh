@@ -151,6 +151,12 @@ elif [ -n "$LAUNCH" ]; then
   launch "$LAUNCH"
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }
 fi
+# a window that never reached the Video Mode size keeps getting resized = a glitching screen (Shay 2026-10-11): stop, don't run rows on it
+if [ -f "$O/launch.out" ] && grep -q "postlaunch FAIL" "$O/launch.out"; then
+  say "BATCH ABORTED: game window not at the Video Mode size (postlaunch FAIL, see launch.out)"
+  [ "${RIG:-5090}" = 4080 ] || powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" stop </dev/null >/dev/null 2>&1
+  finish; exit 1
+fi
 PRE=""; NOTRUN=(); pass=0; fail=0; recwarn=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
 # Recording and analysis split (Shay 2026-10-10: the 5090 game sat idle 5 min while a take's lab checks ran): a row script
 # calls pf_game_done (take-preflight.sh: touches $GAME_DONE_FILE) once it no longer uses the game; the batch then goes on
