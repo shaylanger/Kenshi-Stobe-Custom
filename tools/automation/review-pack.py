@@ -12,6 +12,9 @@ Makes, in <out-dir>:
 Switches = changes of ui_state / hud_text / loaded / fp_ui_state on the `fp ...` lines of ts.txt, plus every label
 time (labels.txt `t text`); switches closer than 0.4 s are merged. --offset is added to ts/label times (video time =
 ts time + offset) when the recording started later than the sampler.
+Frame stamp (harness `stamp on`; --stamp auto|off, default auto): when the video carries the stamp, the switches come
+from it instead (harness tools/animlab/stamp.py): every ui_state / stroke / view / weapon class / loaded change at its
+exact video frame (with the game frame), every label at the frame its mark first shows; --ts/--offset are not needed.
 The review stays complete (whole length at 1 fps + dense frames at every switch); it just starts with no rendering pass.
 """
 import argparse, os, re, shutil, subprocess, sys
@@ -89,6 +92,7 @@ def main():
     ap.add_argument('--ts'); ap.add_argument('--labels'); ap.add_argument('--lab', nargs='*', default=[])
     ap.add_argument('--offset', type=float, default=0.0); ap.add_argument('--fps-switch', type=float, default=8.0)
     ap.add_argument('--pre', type=float, default=0.5); ap.add_argument('--post', type=float, default=1.0)
+    ap.add_argument('--stamp', choices=('auto', 'off'), default='auto', help='switches + labels from the frame stamp')
     a = ap.parse_args()
     video = os.path.abspath(a.video)
     a.ts = a.ts and os.path.abspath(a.ts); a.labels = a.labels and os.path.abspath(a.labels)
@@ -111,7 +115,26 @@ def main():
         name = f'whole-{n:02d}.jpg'
         sheet(video, name, float(s), min(16.0, dur - s), 1, 4, 4, f'1 fps  {s}-{min(s + 16, dur):.0f} s  {os.path.basename(video)}')
         sheets.append(name)
-    sw = switches(a.ts, a.labels, a.offset)
+    st_ev = None
+    if a.stamp == 'auto':
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..',
+                                            'Kenshi-Automation-Harness', 'tools', 'animlab'))
+            import stamp as stampmod
+            st_ev = stampmod.pack_events(video, a.labels)
+        except Exception as e:   # no numpy/ffmpeg here (4080 Windows python), or no stamp module: old switches
+            idx.append(f'stamp: not read ({type(e).__name__}: {e})')
+    if st_ev:
+        ev, stxt = st_ev
+        idx.append(f'{stxt}  (switches + labels from the frame stamp, exact frames)')
+        sw = []
+        for t, what in ev:
+            if sw and t - sw[-1][0] < 0.4:
+                sw[-1] = (sw[-1][0], sw[-1][1] + ' | ' + what)
+            else:
+                sw.append((t, what))
+    else:
+        sw = switches(a.ts, a.labels, a.offset)
     idx.append(f'switches ({len(sw)}; sheets at {a.fps_switch:g} fps from t-{a.pre:g} to t+{a.post:g} s):')
     nframes = int(round((a.pre + a.post) * a.fps_switch))
     cols = 4; rows = max(1, -(-nframes // cols))
