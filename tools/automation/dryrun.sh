@@ -48,6 +48,14 @@ mkdir -p "$OUT"
 # keep the newest 8 dry-run dirs
 ls -1dt /mnt/c/KenshiTestRuns/dryrun/*/ 2>/dev/null | tail -n +9 | xargs -r rm -rf
 t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
+# row_split <command>: the row's words as a shell would split them (quotes group a value with spaces: X="a b"), with no
+# expansion and no execution (rows are not run by a shell). Rejects (return 1, reason in ROWERR) shell operators and
+# expansions (; & | backtick $ ( ) < > backslash), a word starting with # and unbalanced quotes: a multi-step row goes in a .sh script.
+row_split() { ROWERR=""; WORDS=(); local re='[;&|`$()<>\]' f=$- r
+  [[ $1 =~ $re ]] && { ROWERR='shell operator/expansion in the command (one of ; & | ` $ ( ) < > \): rows are not run by a shell, put a multi-step row in a .sh script'; return 1; }
+  [[ " $1" =~ [[:space:]]# ]] && { ROWERR="a word starts with # in the command (would be dropped as a comment)"; return 1; }
+  set -f; eval "WORDS=($1)" 2>/dev/null; r=$?; [[ $f == *f* ]] || set +f
+  [ $r = 0 ] || { ROWERR="unbalanced quotes in the command"; WORDS=(); return 1; }; }
 pass=0; fail=0; skip=0
 one() {
   local line="$1" name save player mate to cmd rig norec dir script
@@ -61,8 +69,10 @@ one() {
   # {CR} = POSIX root of C: on the rig (rig-runner.ps1 queue lists): /mnt/c on the 5090, /c on the 4080
   if [ "$rig" = 4080 ]; then cmd="${cmd//\{CR\}//c}"; else cmd="${cmd//\{CR\}//mnt/c}"; fi
   dir=$OUT/$name; rm -rf "$dir"; mkdir -p "$dir"
+  # same split as run-batch.sh (quotes ok, shell operators refused): a row run-batch would refuse FAILs here
+  row_split "$cmd" || { echo "DRYRUN $name FAIL list: $ROWERR log=$dir"; fail=$((fail+1)); return; }
   # the script = first word that isn't VAR=val or a launcher (bash/sh/env/nice/timeout + its number): "bash x.sh" -> x.sh
-  script=$(for w in $cmd; do [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue; case "$w" in bash|sh|env|nice|timeout|-n|[0-9]*) continue;; esac; echo "$w"; break; done)
+  script=$(for w in "${WORDS[@]}"; do [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue; case "$w" in bash|sh|env|nice|timeout|-n|[0-9]*) continue;; esac; echo "$w"; break; done)
   case "$script" in /*) ;; *) [ -e "/mnt/c/KenshiModding/tests/ingame/stobe/$script" ] && script=/mnt/c/KenshiModding/tests/ingame/stobe/$script ;; esac
   local real=${script/#\/c\//\/mnt\/c\/}
   [ -f "$real" ] && grep -q '^# *dryrun: *norec' "$real" && norec=--norec

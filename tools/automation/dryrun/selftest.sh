@@ -4,6 +4,7 @@
 # reason, and that the clean controls (current take scripts, also in the bad worlds) PASS. Run it after every change to
 # dryrun.sh / dryrun/ / take-preflight.sh. Prints one line per case and a last line
 #   RESULT DRYRUN-SELFTEST PASS|FAIL cases=<n> bad=<names>
+# (bug-shellop / ctl-quoted: run-batch.sh row_split, rows are not run by a shell)
 # Cases: <name> | <fixture or -> | <rig> | <expect: PASS or FAIL:<regex the DRYRUN line must match>> | <batch row>
 set -u
 H=/mnt/c/KenshiModding/tools/automation; RP=$H/dryrun/fixtures/replay-take.sh
@@ -27,6 +28,9 @@ bug-early      | -      | 5090 | FAIL:REPLAY-early FAIL takecheck.*claim        
 bug-noiso      | -      | 4080 | FAIL:REPLAY-noiso FAIL takecheck.*claim        | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp noiso
 bug-stall      | stall  | 5090 | FAIL:REPLAY-clean FAIL takecheck.*cover        | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp clean
 bug-fistcand  | -      | 5090 | FAIL:setup: lab candidate .* missing           | fist0 | - | Axima | Malzin | 900 | FIST_NATIVE=0 $KT/fp-fists.sh {OUT}/fists 0 3 /tmp/no-fists-cand
+ctl-quoted     | -      | 5090 | PASS                                           | rp | - | Axima | Malzin | 120 | DRQ="a b c" $RP {OUT}/rp clean
+ctl-quoted-4080 | -     | 4080 | PASS                                           | rp | - | Axima | Malzin | 120 | RIG=4080 DRQ="a b c" $RP {OUT}/rp clean
+bug-shellop    | -      | 5090 | FAIL:list: shell operator                      | rp | - | Axima | Malzin | 120 | stobe-auto speed 1; $RP {OUT}/rp clean
 EOF
 )
 mkdir -p "$OUT"; n=0; bad=""

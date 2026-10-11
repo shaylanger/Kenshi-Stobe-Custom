@@ -39,9 +39,7 @@ if rc == '124':
     fails.append('row timed out in the dry run (a wait loop that never ends?)')
 # run-batch.sh splits the row command on spaces with no quote handling (read -r -a): FIST_SPOT="-54190 633 4380" became
 # FIST_SPOT="-54190 + a command "633" (fist4080c, 2026-10-10), while the sandbox ran it through a shell and passed
-if '"' in cmd or "'" in cmd:
-    fails.append('quotes in the row command: run-batch.sh splits it on spaces without quote handling (%s); pass '
-                 'space-free values (e.g. FIST_SPOT=-54190,633,4380) or put them in the script' % cmd[:80])
+# since 2026-10-10 run-batch.sh row_split handles quotes (dryrun.sh + row.sh split the same way): no quote check here
 # RESULT lines
 res =[l for l in outp.splitlines() if l.startswith('RESULT ')]
 rows = {}

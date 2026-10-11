@@ -11,7 +11,9 @@
 # List file: one test per line, "name | save | player | mate | timeout-seconds | command"; # comments, blank lines ok.
 #   save:    a save name (loaded, then `select <player>`); "home" = auto-home + scenarios.sh fresh + select Shay;
 #            kah-fullbase also runs fullbase-guard.sh after the load; "-" = keep the current world (no load)
-#   command: leading VAR=value words are exported (e.g. GROW=1); then a script and its arguments:
+#   command: leading VAR=value words are exported (e.g. GROW=1; quotes group a value with spaces: SPOT="1 2 3"); then a
+#            script and its arguments. Not run by a shell: ; & | ` $ ( ) < > backslash are refused (RESULT <row> FAIL list: ...;
+#            dryrun.sh refuses them too): a multi-step row goes in a .sh script.
 #            *.sh  -> bash <script> (relative paths are under tests/ingame/stobe)
 #            *.txt -> stobe-auto run <file> --csv <out>/<name>.csv (run-as.sh <file> <player> <mate> for other squads)
 #            {OUT} in the command becomes <out-dir>
@@ -189,6 +191,14 @@ collect() {  # collect [wait]: RESULT lines of background analyses that ended (w
   done
   PEND=(${keep[@]+"${keep[@]}"})
 }
+# row_split <command>: the row's words as a shell would split them (quotes group a value with spaces: X="a b"), with no
+# expansion and no execution (rows are not run by a shell). Rejects (return 1, reason in ROWERR) shell operators and
+# expansions (; & | backtick $ ( ) < > backslash), a word starting with # and unbalanced quotes: a multi-step row goes in a .sh script.
+row_split() { ROWERR=""; WORDS=(); local re='[;&|`$()<>\]' f=$- r
+  [[ $1 =~ $re ]] && { ROWERR='shell operator/expansion in the command (one of ; & | ` $ ( ) < > \): rows are not run by a shell, put a multi-step row in a .sh script'; return 1; }
+  [[ " $1" =~ [[:space:]]# ]] && { ROWERR="a word starts with # in the command (would be dropped as a comment)"; return 1; }
+  set -f; eval "WORDS=($1)" 2>/dev/null; r=$?; [[ $f == *f* ]] || set +f
+  [ $r = 0 ] || { ROWERR="unbalanced quotes in the command"; WORDS=(); return 1; }; }
 while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tools (powershell, tasklist) eat stdin
   line="${line%%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
   IFS='|' read -r name save player mate to cmd <<<"$line"
@@ -200,6 +210,8 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   # its RESULT line, the rest are listed as not run (not in done.txt: --resume would run them), GAMEDONE/DONE as usual
   if [ -z "$PRE" ] && [ -f "$O/PREEMPT" ]; then PRE=$(head -1 "$O/PREEMPT" | tr -d '\r'); PRE=${PRE:-preempted}; say "BATCH PREEMPTED $(date '+%F %H:%M') before $name: $PRE"; fi
   if [ -n "$PRE" ]; then NOTRUN+=("$name"); continue; fi
+  # row_split (2026-10-10): quotes group a value with spaces; shell operators are refused here, before the save loads
+  if ! row_split "$cmd"; then say "RESULT $name FAIL list: $ROWERR"; fail=$((fail + 1)); continue; fi
   read -r freec kpriv <<<"$(memline)"
   echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
   if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
@@ -215,7 +227,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
     fail=$((fail + 1)); dead=1; continue
   fi
   # split the command: VAR=value words, then the script and its arguments
-  read -r -a words <<<"$cmd"; envs=(); i=0
+  words=("${WORDS[@]}"); envs=(); i=0
   while [ $i -lt ${#words[@]} ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do envs+=("${words[$i]}"); i=$((i + 1)); done
   script="${words[$i]:-}"; args=("${words[@]:$((i + 1))}")
   case "$script" in /*) ;; *) if [ -e "$T/$script" ]; then script="$T/$script"; elif [ -e "$KT/$script" ]; then script="$KT/$script"; fi ;; esac

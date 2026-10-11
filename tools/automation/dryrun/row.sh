@@ -11,17 +11,18 @@ O=/drout/out.txt
     *) stobe-auto load "$DR_SAVEARG" | head -1; stobe-auto wait-world >/dev/null; stobe-auto select "$PLAYER" >/dev/null ;;
   esac
 } > /drout/prep.txt 2>&1
+# the row's words exactly like run-batch.sh's row_split (dryrun.sh already refused shell operators / bad quotes):
+# quotes group a value with spaces (FIST_SPOT="1 2 3"), no expansion; then VAR=value words, a script (+ args)
+set -f; eval "words=($DR_CMD)"; set +f; envs=(); i=0
+while [ $i -lt ${#words[@]} ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do envs+=("${words[$i]}"); i=$((i + 1)); done
+script="${words[$i]:-}"; args=("${words[@]:$((i + 1))}")
 if [ "$DR_RIG" = 4080 ]; then
-  # 4080 rows run like C:\KAH\itrun.ps1 runs them: a fresh Git Bash login shell, rig-env.sh sourced, stdin /dev/null
-  # Git Bash runs a script file without an exec bit (the sandbox C: is noexec): same here through an explicit bash
-  read -r -a w4 <<<"$DR_CMD"; j=0; while [[ "${w4[$j]:-}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do j=$((j + 1)); done
-  c4=$DR_CMD; [[ "${w4[$j]:-}" == *.sh ]] && c4="${w4[*]:0:$j} bash ${w4[*]:$j}"
-  run=(/bin/bash -c ". /c/KenshiModding/tools/automation/rig-env.sh; $c4")
+  # 4080 rows run like C:\KAH\itrun.ps1 + run-batch.sh run them: a fresh Git Bash login shell, rig-env.sh sourced, stdin
+  # /dev/null; Git Bash runs a script file without an exec bit (the sandbox C: is noexec): same here through an explicit bash
+  case "$script" in *.sh) set -- bash "$script" "${args[@]}" ;; *) set -- "$script" "${args[@]}" ;; esac
+  run=(/bin/bash -c '. /c/KenshiModding/tools/automation/rig-env.sh; exec env "$@"' _ "${envs[@]}" "$@")
 else
-  # 5090 rows: exactly run-batch.sh's split: VAR=value words, then a script (+ args); relative = tests/ingame/stobe
-  read -r -a words <<<"$DR_CMD"; envs=(); i=0
-  while [ $i -lt ${#words[@]} ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do envs+=("${words[$i]}"); i=$((i + 1)); done
-  script="${words[$i]:-}"; args=("${words[@]:$((i + 1))}")
+  # 5090 rows: relative = tests/ingame/stobe
   T=/mnt/c/KenshiModding/tests/ingame/stobe
   case "$script" in /*) ;; *) [ -e "$T/$script" ] && script="$T/$script" ;; esac
   case "$script" in
