@@ -56,7 +56,7 @@ aim_at() { local s t e; read -r sx sy sz <<<"$(pos "$SH")"; read -r tx ty tz <<<
 # shot <victim...>: one manual shot; prints "<shot 0|1> <hurt on victim1>|<hurt on victim2>..."
 shot() { local s0 b=() v r=""; s0=$(cs actual_shots)
   for v in "$@"; do A protect "$v" off >/dev/null; A health "$v" 100 >/dev/null; done; sleep 0.3
-  for v in "$@"; do b+=("$(parts "$v")"); done
+  for v in "$@"; do b+=("$(parts "$v")"); done; A fp_melee wounds reset >/dev/null
   ui_clear; inp 1 0 0
   waitfor 8 shot_ready 1 || { ui_clear && inp 0 0 0 && sleep 0.4 && inp 1 0 0 && waitfor 8 shot_ready 1; }   # fresh aim press: a dialogue holsters the bow (4080 b17) || { echo "0 not_ready"; return; }
   aim_at "$AIM_NPC" "$AIM_H"; waitfor 3 shot_ready 1                  # the shooter can step while aiming: re-aim
@@ -65,7 +65,10 @@ shot() { local s0 b=() v r=""; s0=$(cs actual_shots)
   while [ $SECONDS -lt $end ]; do [ "$(cs actual_shots)" != "$s0" ] && { ok=1; break; }; sleep 0.1; done
   inp 1 0 0; sleep 2.5
   local i=0; for v in "$@"; do r+="$(hurt "${b[$i]}" "$(parts "$v")")|"; i=$((i+1)); A protect "$v" on >/dev/null; done
-  inp 1 0 0; waitfor 6 reloading 0 >/dev/null; echo "$ok ${r%|}"; }
+  inp 1 0 0; waitfor 6 reloading 0 >/dev/null
+  # foreign bolts (attacker != the owned FP shooter) that landed during this shot: one count per shot in foreign.txt
+  A fp_melee wounds | tr '|' '\n' | grep ' bolt' | grep -v '(owned)' | grep -c . >> "$OUT/foreign.txt"
+  echo "$ok ${r%|}"; }
 
 # ---- setup ----
 A status | grep -q phase=world || setup_fail "not in world"
@@ -74,6 +77,12 @@ for c in "$SH" "$TG" "$BL"; do A where "$c" | grep -q 'pos=' || setup_fail "$c n
 A protect "$SH" on >/dev/null; A protect "$TG" on >/dev/null; A protect "$BL" on >/dev/null   # off only around each shot
 ui_guard_setup
 A pin "$BL" at "$SH" dist 400 >/dev/null
+# rg-03-ranged-1011-0523 (5090, R09 ring): wounds #1/#3 on Skaera were BOLTS with attacker = Malzin (a=<Malzin>, not owned):
+# the mate (ranged mode, crossbow) shot the hostile target from its 40 m pin during R08/R09 (passive alone did not stop
+# it), so "target hurt" and off-part R08 hits were his bolts. Mate in BLOCK mode (never attacks) + passive for the run,
+# restored at the end; every shot also counts foreign bolt wounds (attacker != the FP shooter) -> SETUP FAIL, not a verdict
+BLK0=$(A combatmode "$BL" | fld block); BPV0=$(A combatmode "$BL" | fld passive)
+A combatmode "$BL" block on >/dev/null; A combatmode "$BL" passive on >/dev/null
 # every other squad member far away + protected (a mate meleeing the target or standing in the line of fire spoils it)
 for m in $(A chars 3000 "[nameless]" | tr '|' '
 ' | sed -n 's/^[0-9]* within [0-9.]*: //; s/^ *//; s/ #.*//p'); do
@@ -175,7 +184,7 @@ free_aim() { local l r o; for l in $([ "$1" = 1 ] && echo "0 0.3 -0.3" || echo "
     o=$(occl "$r" "$2" "$l"); [ "$o" = none ] && return 0; done; AIM_LAT=0; aim_at "$TG" "$2"; }
 SK0=$(A stat "$SH" crossbows | grep -o 'base=[0-9.]*' | cut -d= -f2); PE0=$(A stat "$SH" perception | grep -o 'base=[0-9.]*' | cut -d= -f2)
 A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/null
-A fp_combat wound reset >/dev/null; r8=""; good=0; total=0; HS=""; nocc=0; disturbed=0; GD=""
+: > "$OUT/foreign.txt"; A fp_combat wound reset >/dev/null; r8=""; good=0; total=0; HS=""; nocc=0; disturbed=0; GD=""
 # the target is hostile and aggro since R07's hit: passive combat mode for R08 (restored after)
 PV0=$(A combatmode "$TG" | fld passive); A combatmode "$TG" passive on >/dev/null
 for spec in "head 1 0" "chest 2 1" "legs 3 5,6"; do
@@ -211,7 +220,9 @@ A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >
 case "$PV0" in 1|on|true) A combatmode "$TG" passive on >/dev/null;; *) A combatmode "$TG" passive off >/dev/null;; esac
 WS=$(A fp_combat wound | grep -o 'wound_ready=[0-9]*\|wound_spatial=[0-9]*\|wound_native_fallback=[0-9]*\|last_fallback=[a-z_]*' | tr '\n' ' ')
 ev="expected part hit $good/$total (arm-blocked $nocc: aimed part or [arm] counts): ${r8% } $BONES aim_h=$AH/$AC/$AL shot_h=${HS%,} pose_retaken=$disturbed${GD:+ [${GD%;}]} ${WS% } $(ui_summary)"
-if [ "$total" -lt 9 ]; then row R08 SETUP "FAIL reason=pose_moved: only $total of 9 shots with her pose at the trigger matching the aim: $ev"
+FOR8=$(awk '{s+=$1} END{print s+0}' "$OUT/foreign.txt" 2>/dev/null); : > "$OUT/foreign.txt"; ev+=" foreign_bolts=$FOR8"
+if [ "$FOR8" -gt 0 ]; then row R08 SETUP "FAIL reason=foreign_shooter: $FOR8 bolt wounds from another attacker during the shots: $ev"
+elif [ "$total" -lt 9 ]; then row R08 SETUP "FAIL reason=pose_moved: only $total of 9 shots with her pose at the trigger matching the aim: $ev"
 elif [ "$good" -ge $((total-1)) ]; then row R08 PASS "$ev"; else row R08 FAIL "$ev"; fi
 
 # ---- R09 intervening body: blocker halfway, aim at the target's chest through it ----
@@ -247,7 +258,11 @@ A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >
 case "$PV0" in 1|on|true) A combatmode "$TG" passive on >/dev/null;; *) A combatmode "$TG" passive off >/dev/null;; esac
 case "$PB0" in 1|on|true) A combatmode "$BL" passive on >/dev/null;; *) A combatmode "$BL" passive off >/dev/null;; esac
 ev="$BL between, $TG behind: ${r9%; }"
-if [ $hitb = 1 ] && [ $hitt = 0 ]; then row R09 PASS "$ev"; else row R09 FAIL "$ev"; fi
+FOR9=$(awk '{s+=$1} END{print s+0}' "$OUT/foreign.txt" 2>/dev/null); ev+=" foreign_bolts=$FOR9"
+if [ "$FOR9" -gt 0 ]; then row R09 SETUP "FAIL reason=foreign_shooter: $FOR9 bolt wounds from another attacker during the shots: $ev"
+elif [ $hitb = 1 ] && [ $hitt = 0 ]; then row R09 PASS "$ev"; else row R09 FAIL "$ev"; fi
+case "$BLK0" in 1|on|true) ;; *) A combatmode "$BL" block off >/dev/null;; esac
+case "$BPV0" in 1|on|true) ;; *) A combatmode "$BL" passive off >/dev/null;; esac
 A protect "$BL" off >/dev/null; A protect "$TG" off >/dev/null; A pin "$BL" off >/dev/null; A pin "$TG" off >/dev/null
 
 printf '%s\n' "${RESULTS[@]}" | while read -r l; do case "$l" in *FAIL*) echo "$l log=$LOG";; *) echo "$l";; esac; done
