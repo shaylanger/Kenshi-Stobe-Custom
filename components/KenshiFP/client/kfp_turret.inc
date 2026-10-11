@@ -91,6 +91,23 @@ static float g_tur_eye_f,g_tur_eye_s,g_tur_eye_u;static int g_tur_eye_fixed;stat
  * frame she moves (feet speed or distance from the mount spot), so the view cuts to her eye, never her own back */
 static int g_tur_eye_left;static float g_tur_eye_mx,g_tur_eye_mz;static unsigned g_tur_eye_leave_cuts;
 static float g_tur_leave_dm=0.8f,g_tur_leave_speed=4.0f;static unsigned long long g_tur_eye_t0,g_tur_eye_tleft;
+/* T6 leave blend (op-t6b: hard cut several m to the body eye): offset locked eye - body eye of the last locked frame,
+ * faded to 0 over TUR_BLEND_MS after the lock ends (fp_turret_eye_blend runs even after the native unassigns her) */
+#define TUR_BLEND_MS 350.0f
+static float g_tur_eye_d[3],g_tur_bl_d[3];static unsigned long long g_tur_eye_dt,g_tur_bl_t0;static int g_tur_bl_on;static unsigned g_tur_bl_n;
+static void fp_turret_blend_start(void) {
+    unsigned long long now=GetTickCount64();
+    if (!g_tur_eye_dt || now-g_tur_eye_dt>250) return;   /* no locked frame just now: nothing to blend from */
+    memcpy(g_tur_bl_d,g_tur_eye_d,sizeof g_tur_bl_d);g_tur_bl_t0=now;g_tur_bl_on=1;++g_tur_bl_n;g_tur_eye_dt=0;
+    logline("[turret] eye blend to the body: offset %.1f,%.1f,%.1f over %.0f ms",g_tur_bl_d[0],g_tur_bl_d[1],g_tur_bl_d[2],TUR_BLEND_MS);
+}
+static void fp_turret_eye_blend(Vec3 *e) {
+    if (!g_tur_bl_on) return;
+    float el=(float)(GetTickCount64()-g_tur_bl_t0);
+    if (!(el<TUR_BLEND_MS)) {g_tur_bl_on=0;return;}
+    float s=el/TUR_BLEND_MS,k=1.0f-s*s*(3.0f-2.0f*s);
+    e->x+=g_tur_bl_d[0]*k;e->y+=g_tur_bl_d[1]*k;e->z+=g_tur_bl_d[2]*k;
+}
 static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
     if (!g_tur_pc||!g_tur_bld||!g_tur_gun||!readable((char *)g_tur_bld+TUR_CUR_DIR,12)||!readable((char *)g_tur_gun+0xE4,12)) return;
     const Vec3 *cd=(const Vec3 *)((uintptr_t)g_tur_bld+TUR_CUR_DIR),*pv=(const Vec3 *)((uintptr_t)g_tur_gun+0xE4);
@@ -100,7 +117,7 @@ static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
         if (g_tur_eye_left) {if (now-g_tur_eye_tleft<2500) return; g_tur_eye_left=0;g_tur_eye_set=0;}   /* still manning: lock again */
         if (g_tur_eye_set && now-g_tur_eye_t0<1000) {g_tur_eye_mx=cw.x;g_tur_eye_mz=cw.z;}       /* settling into the seat */
         else if (g_tur_eye_set) {float mx=cw.x-g_tur_eye_mx,mz=cw.z-g_tur_eye_mz,md=sqrtf(mx*mx+mz*mz);
-            if (md>g_tur_leave_dm || g_move_speed>g_tur_leave_speed) {g_tur_eye_left=1;g_tur_eye_tleft=now;++g_tur_eye_leave_cuts;
+            if (md>g_tur_leave_dm || g_move_speed>g_tur_leave_speed) {g_tur_eye_left=1;g_tur_eye_tleft=now;++g_tur_eye_leave_cuts;fp_turret_blend_start();
                 logline("[turret] operator moving off (moved=%.2f dm feet=%.1f): eye back on the character",md,g_move_speed);return;}}
     }
     float rx=co->x-cw.x,rz=co->z-cw.z;   /* eye is in Ogre space (floating origin), the gun pivot in world space */
@@ -115,16 +132,31 @@ static void fp_turret_eye(Vec3 *e,const Vec3 *co) {
         g_tur_eye_cf=dx*sy+dz*cy;g_tur_eye_cs=dx*cy-dz*sy;g_tur_eye_cu=e->y-pv->y;
         logline("[turret] eye locked to the gun: gun_yaw=%.3f captured fwd=%.1f side=%.1f up=%.1f%s",yaw,g_tur_eye_cf,g_tur_eye_cs,g_tur_eye_cu,g_tur_eye_fixed?" (fixed offset in use)":"");}
     float f=g_tur_eye_fixed?g_tur_eye_f:g_tur_eye_cf,sd=g_tur_eye_fixed?g_tur_eye_s:g_tur_eye_cs,u=g_tur_eye_fixed?g_tur_eye_u:g_tur_eye_cu;
-    e->x=px+f*sy+sd*cy;e->z=pz+f*cy-sd*sy;e->y=pv->y+u;++g_tur_eye_calls;
+    {Vec3 b0=*e;e->x=px+f*sy+sd*cy;e->z=pz+f*cy-sd*sy;e->y=pv->y+u;++g_tur_eye_calls;
+     g_tur_eye_d[0]=e->x-b0.x;g_tur_eye_d[1]=e->y-b0.y;g_tur_eye_d[2]=e->z-b0.z;g_tur_eye_dt=GetTickCount64();g_tur_bl_on=0;}
 }
+static void *g_tur_off_bld;static float g_tur_off_mx,g_tur_off_mz;   /* T6: walked off while still assigned */
 static void fp_turret_drop(const char *why) {
+    if (g_tur_eye_set && !g_tur_eye_left) fp_turret_blend_start();   /* dropped while the eye was on the gun */
     if (g_tur_pc) {++g_tur_leaves;logline("[turret] FP turret control ends (%s)",why);}
     g_tur_pc=g_tur_rc=NULL;g_tur_bld=NULL;g_tur_rl_left=-1.0f;g_tur_why=why;g_tur_aim_valid=0;g_tur_eye_set=0;g_tur_eye_held=0;g_tur_eye_left=0;
 }
 /* Returns 1 while the FP-controlled char mans a turret (the caller then skips the hand-weapon adapters). */
 static int fp_turret_tick(void *gw,void *pc,void *rc,float dt) {
     void *b=char_valid(pc)?fp_turret_of(pc):NULL;
-    if (!b) {if (g_tur_pc) fp_turret_drop("left the turret"); else g_tur_why="not_on_turret";return 0;}
+    if (!b) {if (g_tur_pc) fp_turret_drop("left the turret"); else g_tur_why="not_on_turret";g_tur_off_bld=NULL;return 0;}
+    {   /* walked off while the native still has her assigned: FP control off until back at the mount spot */
+        Vec3 pw;float lim=2.0f*g_tur_leave_dm;
+        if (g_tur_pc==pc && g_tur_bld==b && g_tur_eye_left && GetTickCount64()-g_tur_eye_tleft>=1500 && char_position(pc,&pw)) {
+            float mx=pw.x-g_tur_eye_mx,mz=pw.z-g_tur_eye_mz;
+            if (mx*mx+mz*mz>lim*lim) {g_tur_off_bld=b;g_tur_off_mx=g_tur_eye_mx;g_tur_off_mz=g_tur_eye_mz;fp_turret_drop("walked off (native still assigned)");}
+        }
+        if (g_tur_off_bld==b) {
+            float mx=0,mz=0;if (char_position(pc,&pw)) {mx=pw.x-g_tur_off_mx;mz=pw.z-g_tur_off_mz;}
+            if (mx*mx+mz*mz>g_tur_leave_dm*g_tur_leave_dm) {g_tur_why="walked_off";return 0;}
+            g_tur_off_bld=NULL;
+        }
+    }
     void *gun=*(void **)((uintptr_t)b+TUR_GUN);
     if (g_tur_pc!=pc || g_tur_bld!=b) {
         if (g_tur_pc) fp_turret_drop("switched");

@@ -1206,7 +1206,7 @@ static void fpc_hud_update(int show) {
     }
     if (g_fpc_hud) {
         const char *st=g_fpc_ui_state?g_fpc_ui_state:"off";
-        static char tur_[32],tur_last_[32];int tur=g_tur_pc!=NULL,tur_chg=0;   /* T6: turret state replaces the hand-weapon state */
+        static char tur_[32],tur_last_[32];int tur=g_tur_pc!=NULL&&!g_tur_eye_left,tur_chg=0;   /* T6: turret state replaces the hand-weapon state (eye on the gun only) */
         if (tur) {fp_turret_hud(tur_,sizeof tur_);tur_chg=strcmp(tur_,tur_last_)!=0;st=tur_;}
         if (st!=g_fpc_hud_text || tur_chg) {
             if (tur) memcpy(tur_last_,tur_,sizeof tur_last_); else tur_last_[0]=0;
