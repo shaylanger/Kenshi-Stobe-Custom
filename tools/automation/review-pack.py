@@ -15,7 +15,13 @@ ts time + offset) when the recording started later than the sampler.
 Frame stamp (harness `stamp on`; --stamp auto|off, default auto): when the video carries the stamp, the switches come
 from it instead (harness tools/animlab/stamp.py): every ui_state / stroke / view / weapon class / loaded change at its
 exact video frame (with the game frame), every label at the frame its mark first shows; --ts/--offset are not needed.
-The review stays complete (whole length at 1 fps + dense frames at every switch); it just starts with no rendering pass.
+Auto-review (harness tools/animlab/autoreview.py; --autoreview auto|off, default auto; Shay 2026-10-10: judge only the
+frames the checks flag): image checks on EVERY frame (oneview at switches, fragments in the zoom fade band, occluder =
+arm/body across the lens, weapon complete vs references, overlay/cursor/openground) run first at nice 15 into
+<out-dir>/autoreview/ (flags.tsv + crops/ prev|FLAG|next at full resolution). When it ran, the pack holds only the flagged
+frames: one flag-NN-<t>-<check>.jpg sheet per flag (8 fps from t-0.25 to t+0.5) next to its crop, the switch list stays in
+INDEX.txt as text; no 1 fps / switch sheets. --full (or autoreview unavailable, e.g. the 4080's Windows python) = the
+complete pack as before (whole length at 1 fps + dense frames at every switch), plus the flags when there are any.
 """
 import argparse, os, re, shutil, subprocess, sys
 
@@ -86,6 +92,28 @@ def sheet(video, out, start, length, fps, cols, rows, title):
          '-i', win(video), '-vf', vf, '-frames:v', '1', '-q:v', '3', os.path.basename(out)])
 
 
+def autoreview(video, a):
+    """run autoreview.py (nice 15) into <out>/autoreview; (RESULT line, [(t, check, what, crop)]) or None if it can't run."""
+    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'Kenshi-Automation-Harness', 'tools', 'animlab',
+                        'autoreview.py')
+    if not os.path.exists(tool):
+        return None
+    out = os.path.join(a.out, 'autoreview')
+    shutil.rmtree(out, ignore_errors=True)
+    cmd = ([] if os.name == 'nt' else ['nice', '-n', '15']) + [sys.executable, tool, 'run', video, out, '--weapon', a.weapon]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    open('autoreview.log', 'w').write(r.stdout + r.stderr)
+    res = [l for l in r.stdout.splitlines() if l.startswith('RESULT ')]
+    if r.returncode or not res or not os.path.exists(os.path.join(out, 'flags.tsv')):
+        return None
+    flags = []
+    for line in open(os.path.join(out, 'flags.tsv')).read().splitlines()[1:]:
+        p = line.split('	')
+        if len(p) >= 4:
+            flags.append((float(p[1]), p[2], p[3], p[4] if len(p) > 4 else ''))
+    return res[-1], flags
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('video'); ap.add_argument('out')
@@ -93,6 +121,9 @@ def main():
     ap.add_argument('--offset', type=float, default=0.0); ap.add_argument('--fps-switch', type=float, default=8.0)
     ap.add_argument('--pre', type=float, default=0.5); ap.add_argument('--post', type=float, default=1.0)
     ap.add_argument('--stamp', choices=('auto', 'off'), default='auto', help='switches + labels from the frame stamp')
+    ap.add_argument('--autoreview', choices=('auto', 'off'), default='auto', help='per-frame image checks, sheets of flags only')
+    ap.add_argument('--weapon', default='auto', help='autoreview weapon class (fists|sword|crossbow|auto from the name)')
+    ap.add_argument('--full', action='store_true', help='complete pack (1 fps + switch sheets) even when autoreview ran')
     a = ap.parse_args()
     video = os.path.abspath(a.video)
     a.ts = a.ts and os.path.abspath(a.ts); a.labels = a.labels and os.path.abspath(a.labels)
@@ -100,15 +131,32 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     os.chdir(a.out)
     for f in os.listdir('.'):
-        if re.match(r'^(whole|sw)-.*\.jpg$', f):
+        if re.match(r'^(whole|sw|flag)-.*\.jpg$', f):
             os.remove(f)
     if not os.path.exists('f.ttf'):
         shutil.copy('/mnt/c/Windows/Fonts/arialbd.ttf' if os.path.exists('/mnt/c/Windows') else r'C:\Windows\Fonts\arialbd.ttf', 'f.ttf')
     dur = duration(video)
     idx = [f'video {video}  length {dur:.1f} s', '']
     sheets = []
+    ar = autoreview(video, a) if a.autoreview == 'auto' else None
+    full = a.full or ar is None
+    if ar is not None:
+        res, flags = ar
+        idx.append(f'autoreview: {res}')
+        if not full:
+            idx.append('pack = flagged frames only (judge these; --full for the 1 fps + switch sheets)')
+        for k, (t, check, what, crop) in enumerate(flags, 1):
+            name = f'flag-{k:02d}-{t:06.2f}-{check}.jpg'
+            st = max(0.0, t - 0.25)
+            if st < dur:
+                sheet(video, name, st, min(0.75, dur - st), 8, 3, 2, f'FLAG {t:.2f} s {check}: {what[:90]}')
+                sheets.append(name)
+            idx.append(f'  {t:7.2f}  {check:10s} {what[:160]}  -> {name}  crop {os.path.relpath(crop) if crop and os.path.exists(crop) else "-"}')
+        idx.append('')
+    else:
+        idx.append(f'autoreview: {"off" if a.autoreview == "off" else "not run (see autoreview.log)"}: complete pack')
     n = 0
-    for s in range(0, int(dur) + 1, 16):           # 16 frames (4x4) at 1 fps per sheet
+    for s in (range(0, int(dur) + 1, 16) if full else ()):           # 16 frames (4x4) at 1 fps per sheet
         if s and dur - s < 1.0:                     # a tail < 1 s holds no 1 fps frame: ffmpeg writes nothing and fails the pack
             break
         n += 1
@@ -139,6 +187,8 @@ def main():
     nframes = int(round((a.pre + a.post) * a.fps_switch))
     cols = 4; rows = max(1, -(-nframes // cols))
     for i, (t, what) in enumerate(sw, 1):
+        if not full:
+            idx.append(f'  {t:7.2f}  {what}'); continue
         st = max(0.0, t - a.pre)
         if st >= dur:
             idx.append(f'  {t:7.2f}  {what}  (after the video end, no sheet)'); continue
@@ -163,7 +213,9 @@ def main():
                 + ','.join(rw)]
     idx += ['', 'sheets: ' + ' '.join(sheets)]
     open('INDEX.txt', 'w').write('\n'.join(idx) + '\n')
-    print(f'RESULT REVIEWPACK PASS sheets={len(sheets)} switches={len(sw)} out={a.out}/INDEX.txt')
+    flagn = len(ar[1]) if ar is not None else '-'
+    print(f'RESULT REVIEWPACK PASS sheets={len(sheets)} switches={len(sw)} flags={flagn} '
+          f'pack={"full" if full else "flagged"} out={a.out}/INDEX.txt')
 
 
 if __name__ == '__main__':
