@@ -80,17 +80,16 @@ A fp_combat autoreload 1 >/dev/null
 bolts() { A inv "$SH" | grep -o '"name":"Bolts[^"]*","count":[0-9]*' | grep -o '[0-9]*$' | awk '{n+=$1} END{print n+0}'; }
 BOLTS=$(bolts)
 # top up so N shots really fire (66c 4080: 19 bolts in the fixture capped the row at 19 shots)
-need=$((N-BOLTS+5)); while [ "$BOLTS" -lt "$N" ] && [ $need -gt 0 ]; do   # give takes at most 50 per call
-  k=$((need>50?50:need)); echo "GPUMEM: give $SH Bolts [Regulars] $k: $(A give "$SH" "Bolts [Regulars]" $k)" >> "$LOG"; need=$((need-k)); done
-BOLTS=$(bolts)
+# the ammo slot holds ~20 bolts: refill 10 every 10 shots in the loop (66 5090: one give of 50 -> 1 arrived, rest no room)
+refill() { echo "GPUMEM: refill before shot $1: $(A give "$SH" "Bolts [Regulars]" 10)" >> "$LOG"; }
 [ "$BOLTS" -ge 10 ] || echo "GPUMEM: bolt count read $BOLTS (inv format?), firing N=$N; a dry bow shows as too few shots" >> "$LOG"
-[ "$BOLTS" -ge 10 ] && [ "$BOLTS" -lt "$N" ] && { echo "GPUMEM: $BOLTS bolts < $N shots, firing $BOLTS" >> "$LOG"; N=$BOLTS; }
 echo "GPUMEM setup ok: N=$N bolts=$BOLTS yaw=$YAW miss_yaw=$YAWM nvsmi0=$(nvmem)" | tee -a "$LOG"
 
 # ---- shots ----
 fired=0; hung=""
 for ((i=1; i<=N; i++)); do
   case $((i%3)) in 1) kind=hit; A fp_camera look "$YAW" 0.02 >/dev/null;; 2) kind=miss; A fp_camera look "$YAWM" -0.06 >/dev/null;; *) kind=sky; A fp_camera look "$YAWM" -0.9 >/dev/null;; esac
+  [ $((i%10)) = 0 ] && refill $i
   s0=$(cs actual_shots); [ -n "$s0" ] || { hung="no fp_combat answer before shot $i"; break; }
   inp 1 0 0; shot=0
   if waitfor 12 shot_ready 1; then
