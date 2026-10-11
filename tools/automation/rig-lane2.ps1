@@ -296,6 +296,10 @@ function DllHash([string]$root) {   # KenshiFP + harness DLLs the game loads (Vo
     @(Get-ChildItem "$root\mods" -Recurse -Include 'KenshiFP.dll', 'AutomationHarness.dll' -File -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName).Hash.Substring(0, 8))" }) -join ' '
 }
 function IsoA {   # lane A (rig-runner -Rig 5090) runs a TDR-isolation list (running\5090__*; lanes are running\5090b__ / 5090c__)
+    # Shay 2026-10-11 17:00 (speed): while C:/KenshiTestRuns/runner/<lane>.iso-off exists, this lane keeps running its own
+    # NON-crossbow lists beside lane A's crossbow list (the crossbow guard still refuses crossbow lists here; the TDR guard
+    # still stops the lane); the coordinator deletes the file after any TDR.
+    if (Test-Path -LiteralPath (Join-Path $runs "runner/$Lane.iso-off")) { return $false }
     foreach ($r in @(Get-ChildItem "$qd\running" -Filter '5090__*' -File -ErrorAction SilentlyContinue)) { if (IsoList @(Get-Content $r.FullName)) { return $true } }
     $false
 }
