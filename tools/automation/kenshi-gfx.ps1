@@ -14,7 +14,7 @@ sets Video Mode to the test size of the mode. The applied mode goes to C:\Kenshi
 only when a list's mode differs).
 #>
 param([Parameter(Position = 0)][ValidateSet('full', 'low', 'play', 'status')][string]$Mode = 'status',
-      [string]$Kenshi = '', [int]$Fps = 60)
+      [string]$Kenshi = '', [int]$Fps = -1)
 $ErrorActionPreference = 'Stop'
 if (-not $Kenshi) {
   $Kenshi = @('D:\Steam\steamapps\common\Kenshi', 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi') |
@@ -22,6 +22,8 @@ if (-not $Kenshi) {
 }
 $scfg = "$Kenshi\settings.cfg"; $kcfg = "$Kenshi\kenshi.cfg"
 $capF = "$Kenshi\mods\AutomationHarness\framecap.txt"
+# no -Fps: 60, or uncapped while C:\KenshiTestRuns\uncapped.on exists (Shay 2026-10-11: PC free, use it fully; delete the file to cap again)
+if ($Fps -lt 0) { $Fps = if (Test-Path 'C:\KenshiTestRuns\uncapped.on') { 0 } else { 60 } }
 $save = 'C:\KenshiTestRuns\settings.gfx.play'; $applied = 'C:\KenshiTestRuns\gfx.applied'
 # lowest graphics; gameplay-relevant ranges (npc range, objects view range) and visible gameplay (Blood, Dismemberment,
 # Show names, floaters) stay as they are so no row behaves differently
