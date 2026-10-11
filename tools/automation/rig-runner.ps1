@@ -1441,6 +1441,15 @@ if ($Rig -eq '4080' -and -not $Fake) {
 }
 $idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}; $probeFail = 0; $deadHits = @{}
 while ($true) {
+    # always-on TDR watch (speed-scout 2026-10-11): tdr-watch.ps1 for this rig every 60 s, detached so the tick never waits on
+    # Get-WinEvent/ssh; a hit writes $tdrF, seen below on the next tick
+    if (-not $Fake -and $Rig -in '5090', '4080' -and (-not $script:tdrWatchAt -or ((Get-Date) - $script:tdrWatchAt).TotalSeconds -ge 60)) {
+        $script:tdrWatchAt = Get-Date
+        try { Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$auto\tdr-watch.ps1", '-Rig', $Rig) | Out-Null } catch { Log "tdr-watch start error: $($_.Exception.Message)" }
+    }
+    # alert file present (from tdr-watch / rig-health) while a batch runs: the guard stops game + batch first (it exits the
+    # runner); before this the loop exited here and left the batch running unsupervised
+    if ((Test-Path $tdrF) -and (Test-Path $curF) -and -not $Fake) { try { $c0 = @(Get-Content $curF); TdrGuard $c0 (Probe $c0[2]) } catch { Log "tdr guard error: $($_.Exception.Message)" } }
     if (Test-Path $tdrF) { Set-Content (StopFlag $Rig) "$(Get-Date -Format s) by TDR guard: $tdrF exists"; Log "TDR alert $tdrF exists: no new list, exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED TDR (alert file)"; exit 0 }
     if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {
