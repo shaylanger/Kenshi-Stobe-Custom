@@ -13,7 +13,8 @@
  *   out.txt  the replay's own `fp_vm rec dump` (same format, written by the plugin's vm_rec_dump), so every metric
  *            script reads the game and the replay the same way
  *   --set    = `fp_vm set key value` before frame 0 (same keys, same parser: the plugin's kah_fp_vm)
- *   --tables <file>  live animation tables file (fp_tables format, kfp_tables.inc): after the recording's own sets, before --set
+ *   --tables <file>  live animation tables file (fp_tables format, kfp_tables.inc): after the recording's own sets, before --set;
+ *            the recording's `t.*` runtime values are re-applied after the load's reset unless the file names that row
  *   --calib  skeleton lengths (dm) + prop scale; default: measured from the recording (printed as "calib ...")
  *
  * Model: the game's per-frame order is camera callback (vm_frame: measure the skeleton the last apply left, build the
@@ -422,7 +423,22 @@ int main(int argc, char **argv)
     if (g_use_rsets) for (int s = 0; s < g_nrsets; s++) if (g_rsets[s].f < 0) do_set(g_rsets[s].kv);
 #ifdef KFP_TABLES
     if (tables) { int bad = kt_load(tables, 0); if (bad) { fprintf(stderr, "%s: --tables %s: %s\n", argv[0], tables, g_kt_err); return 2; }
-        printf("tables %08x %s\n", kt_hash(), tables); }
+        printf("tables %08x %s\n", kt_hash(), tables);
+        /* kt_load resets every table to the compiled values, which wiped the recording's own `# set -1 t.<row>.<i>` runtime
+         * values (e.g. t.plsl.0 = the katana's 2H grip slide at rec on): replay elbow p95 0.15 -> 0.84 dm, swing elbow max
+         * 0.65 -> 4.15 dm even for an EMPTY tables file (sword-judge 2026-10-11, swfix2-5090 s1pt30, 13334FFF). The game
+         * recomputes those per frame after an fp_tables load, so they are put back here unless the tables file names that
+         * row itself (`<row> =` or `<row>.<i> =`: the file's value wins). */
+        if (g_use_rsets) { FILE *tf = fopen(tables, "r"); char tl[4096], rows[64][48]; int nr = 0;
+            while (tf && nr < 64 && fgets(tl, sizeof tl, tf)) { char *a = tl; while (*a == ' ' || *a == '\t') a++;
+                if (*a == '#' || *a == ';' || !strchr(a, '=')) continue;
+                int n = 0; while (a[n] && a[n] != '=' && a[n] != '.' && a[n] != ' ' && a[n] != '\t' && n < 47) n++;
+                memcpy(rows[nr], a, n); rows[nr][n] = 0; nr++; }
+            if (tf) fclose(tf);
+            for (int s = 0; s < g_nrsets; s++) { const char *kv = g_rsets[s].kv; if (g_rsets[s].f >= 0 || strncmp(kv, "t.", 2)) continue;
+                const char *r = kv + 2; int n = 0; while (r[n] && r[n] != '.' && r[n] != '=') n++;
+                int named = 0; for (int j = 0; j < nr; j++) if ((int)strlen(rows[j]) == n && !strncmp(rows[j], r, n)) named = 1;
+                if (!named) do_set(kv); } } }
 #else
     if (tables) { fprintf(stderr, "%s: --tables needs a client source with kfp_tables.inc (kfp-live-tables)\n", argv[0]); return 2; }
 #endif
