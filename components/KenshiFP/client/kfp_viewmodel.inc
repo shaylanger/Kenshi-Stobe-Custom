@@ -292,6 +292,7 @@ static Vec3  g_vm_oprel; static int g_vm_off_near_now;
 static float g_vm_elev, g_vm_az, g_vm_target_e, g_vm_target_a, g_vm_he[2], g_vm_ha[2];
 static Vec3  g_vm_mj[2][3];                  /* measured [L,R][shoulder,elbow,wrist] camera numbers (PT28 arm-in-view check) */
 static Vec3  g_vm_mp, g_vm_mf, g_vm_mu;     /* measured weapon grip + forward + up (edge / crossbow top), camera numbers */
+static Vec3  g_vm_fhx[2], g_vm_fhy[2];   /* rec group F: measured hand X/Y axes, both hands (fist hand-orientation check U25) */
 static Vec3  g_vm_mh, g_vm_mfx, g_vm_mhy, g_vm_mhz; static float g_vm_wb;   /* measured weapon-hand bone X (toward the fingers) and forearm bone X,
                                                         * camera numbers; wrist bend = angle(elbow->wrist, hand X), deg (PT17) */
 static float g_vm_tilt_cur;                 /* compat: blade rise above the view plane (deg) */
@@ -377,7 +378,7 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa; signed char stroke; unsigned char bh;
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa; signed char stroke; unsigned char bh; Vec3 fhx[2], fhy[2];
                  unsigned char nok; Vec3 nj[2][3], nhx[2], nhy[2], nlp[2]; Quat nlq[2]; } VmRec;   /* native pose of this frame's apply (animlab) */
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
@@ -922,6 +923,69 @@ static void vm_fist_apply(void *b[2][4], float we)
     g_vm_fist_n++; g_vm_applied++;
 }
 
+/* Native fists (Shay 2026-10-10 18:20: FP fists = the game's own unarmed animations, no authored strokes). Both arms keep
+ * the native animation; each native wrist is moved into the view by one shift D (camera numbers), fitted while the
+ * stance is ready/blocking (native guard wrist -> guard point fn_g, block point fn_gb; L mirrored) and frozen while a
+ * technique runs: the punch/kick arm motion, timing and technique variety are the native ones, starting from the guard.
+ * Soft view clamp keeps the wrist on screen above the bottom HUD; hand orientation = native; usual two-bone IK. */
+static int   g_vm_fist_nat = 1;                 /* fp_vm set fist_native 0|1 (0 = NA1 key tables) */
+static Vec3  g_vm_fn_g = { 1.6f, -1.0f, 3.8f }, g_vm_fn_gb = { 0.9f, -0.4f, 3.6f };   /* R wrist guard / block point (dm) */
+static float g_vm_fn_tau = 0.35f, g_vm_fn_ymin = -0.30f, g_vm_fn_ymax = 0.10f, g_vm_fn_xmax = 0.60f, g_vm_fn_zmin = 4.2f;
+static float g_vm_fn_k = 0.15f;   /* fist4080r sweep: 0.15/ymax .10/zmin 4.2/xmax .60 = most contained set (lens PASS; A .40/.25 let the wrist reach the top third) */
+/* was 0.55: */   /* technique excursion scale (4080 fist4080n: full native kick/punch motion threw the arm across
+                                      * the lens, forearm cut by the near plane; 0.55 keeps the native motion readable) */
+static Vec3  g_vm_fn_D[2], g_vm_fn_nat[2], g_vm_fn_N0[2]; static int g_vm_fn_have[2], g_vm_fn_frz; static unsigned long g_vm_fn_clamp;
+static float g_vm_fn_kq = 0.25f;   /* technique hand-orientation follow (fist4080r: the native hand turned fingers-up / knuckles
+                                     * at the lens during kicks while the wrist stayed in place: guard hand ori + fn_kq x the native turn) */
+static Vec3  g_vm_fn_Gx[2], g_vm_fn_Gy[2]; static int g_vm_fn_hq[2];   /* guard hand X/Y axes (camera numbers) */
+static Vec3 vm_s2c_pos(Vec3 s);
+static void vm_fist_native_apply(void *b[2][4], float we)
+{
+    vm_fist_targets();   /* swing bookkeeping + "[vm] fist swing" log line (take rows); the key tables are not drawn */
+    const char *st = g_vm_state ? g_vm_state : "";
+    int blk = !strcmp(st, "blocking"), fit = !g_fpc_fs_tech && (blk || !strcmp(st, "ready"));
+    float a = 1.0f - expf(-fminf(g_vm_dt, g_vm_maxdt) / fmaxf(g_vm_fn_tau, 1e-3f));
+    int hg = g_vm_hinge; g_vm_hinge = 0; g_vm_fn_frz = !fit;
+    for (int i = 0; i < 2; i++) {   /* 0 = L, 1 = R */
+        Vec3 N = vm_s2c_pos(g_vm_nhp[i]); g_vm_fn_nat[i] = N;
+        Vec3 G = blk ? g_vm_fn_gb : g_vm_fn_g; if (!i) G.x = -G.x;
+        if (fit || !g_vm_fn_have[i]) {
+            Vec3 Dt = vm_sub(G, N);
+            g_vm_fn_D[i] = g_vm_fn_have[i] ? vm_lerp(g_vm_fn_D[i], Dt, a) : Dt; g_vm_fn_have[i] = 1; g_vm_fn_N0[i] = N;
+        }
+        /* frozen (technique): guard + fn_k x the native wrist motion since the last fitted frame */
+        Vec3 h = fit ? vm_add(N, g_vm_fn_D[i])
+                     : vm_add(vm_add(g_vm_fn_N0[i], g_vm_fn_D[i]), vm_mul(vm_sub(N, g_vm_fn_N0[i]), g_vm_fn_k)), h0 = h;
+        if (h.z < g_vm_fn_zmin) h.z = g_vm_fn_zmin;
+        {   float yl = g_vm_fn_ymin * h.z, yh = g_vm_fn_ymax * h.z, xl = g_vm_fn_xmax * h.z;
+            if (h.y < yl) h.y = yl; if (h.y > yh) h.y = yh; if (h.x > xl) h.x = xl; if (h.x < -xl) h.x = -xl; }
+        if (vm_len(vm_sub(h, h0)) > 1e-4f) g_vm_fn_clamp++;
+        g_vm_fist_cur[i].p = h; g_vm_fist_cur[i].f = vm_v(0, 0, 1); g_vm_fist_cur[i].u = vm_v(0, 1, 0);
+        Vec3 Ph = vm_w2s_pos(vm_c2w_pos(h));
+        Vec3 pole = vm_norm(vm_w2s_dir(vm_c2w_dir(g_vm_pole[0][i])));
+        Quat Qt = g_vm_nhq[i];
+        {   /* hand orientation: fitted (camera numbers) while ready/blocking, held at guard + fn_kq x the native turn in a technique */
+            Vec3 nx = quat_rotvec(Qt, vm_v(1, 0, 0)), ny = quat_rotvec(Qt, vm_v(0, 1, 0));
+            Vec3 cx = vm_norm(vm_w2c_dir(vm_s2w_dir(nx))), cy = vm_norm(vm_w2c_dir(vm_s2w_dir(ny)));
+            if (fit || !g_vm_fn_hq[i]) {
+                if (g_vm_fn_hq[i]) { g_vm_fn_Gx[i] = vm_norm(vm_lerp(g_vm_fn_Gx[i], cx, a)); g_vm_fn_Gy[i] = vm_norm(vm_lerp(g_vm_fn_Gy[i], cy, a)); }
+                else { g_vm_fn_Gx[i] = cx; g_vm_fn_Gy[i] = cy; g_vm_fn_hq[i] = 1; }
+            } else if (g_vm_fn_kq < 0.999f) {
+                Vec3 tx = vm_lerp(g_vm_fn_Gx[i], cx, g_vm_fn_kq), ty = vm_lerp(g_vm_fn_Gy[i], cy, g_vm_fn_kq);
+                if (vm_len(tx) < 1e-3f) tx = g_vm_fn_Gx[i];
+                tx = vm_norm(tx); ty = vm_sub(ty, vm_mul(tx, vm_dot(tx, ty)));
+                if (vm_len(ty) < 1e-3f) ty = vm_sub(g_vm_fn_Gy[i], vm_mul(tx, vm_dot(tx, g_vm_fn_Gy[i])));
+                Vec3 sx = vm_norm(vm_w2s_dir(vm_c2w_dir(tx))), sy = vm_norm(vm_w2s_dir(vm_c2w_dir(vm_norm(ty))));
+                Quat Rr = quat_mul(vm_frame_quat(sx, sy), quat_conj(vm_frame_quat(nx, ny)));
+                Qt = quat_norm(quat_mul(Rr, Qt));
+            }
+        }
+        if (!vm_ik(i, b[i][0], b[i][1], b[i][2], Ph, Qt, 0, pole, we, NULL, 0.0f)) g_vm_ikfail++;
+    }
+    g_vm_hinge = hg;
+    g_vm_fist_n++; g_vm_applied++;
+}
+
 /* HAND-SCALE test switch (fp_vm set hand_scale <along> <across>): hand bones scaled, prop child compensated */
 static float g_vm_hs_a = 1.0f, g_vm_hs_c = 1.0f; static int g_vm_hs_live[2]; static Vec3 g_vm_hs_nat[2], g_vm_hs_wr[2];
 static void vm_hand_scale(void *skel)
@@ -1001,7 +1065,8 @@ static void vm_apply(void *skel)
     }
     g_vm_nat_ok = 1;
     float we = g_vm_w * g_vm_zf;                         /* zoomed out: native animation (PT29) */
-    if (g_vm_fist_on) { if (we > 0.001f) vm_fist_apply(b, we); return; }   /* NA1 fists: both arms from the fist tables */
+    if (g_vm_fist_on) { if (we > 0.001f) { if (g_vm_fist_nat) vm_fist_native_apply(b, we); else vm_fist_apply(b, we); }
+                        else g_vm_fn_have[0] = g_vm_fn_have[1] = g_vm_fn_hq[0] = g_vm_fn_hq[1] = 0; return; }   /* fists: native unarmed anims in view (0: NA1 tables) */   /* NA1 fists: both arms from the fist tables */
     if (!g_vm_have_t || we <= 0.001f) return;
     if (g_vm_applymap && g_vm_pc && !g_vm_in_map) {      /* re-map the targets with this update's root + torso */
         g_vm_in_map = 1;
@@ -1757,6 +1822,10 @@ static void vm_frame_core(void *pc, int body_down)
                 g_vm_mhfa = readable((void *)fq, 16) ? vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*fq, hf)))) : vm_v(0, 0, 0);
             }
             g_vm_wb = acosf(fmaxf(-1.0f, fminf(1.0f, vm_dot(vm_norm(vm_sub(g_vm_mj[wh][2], g_vm_mj[wh][1])), g_vm_mh)))) * 57.29578f;
+            for (int hh = 0; hh < 2; hh++) {   /* rec group F */
+                void *b2 = g_skel_getbone(skel, g_vm_nm_hand[hh]); const Quat *q2 = readable(b2, 8) ? g_oldnode_getdori(b2) : NULL;
+                if (readable((void *)q2, 16)) { g_vm_fhx[hh] = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*q2, vm_v(1, 0, 0)))));
+                    g_vm_fhy[hh] = vm_norm(vm_w2c_dir(vm_s2w_dir(quat_rotvec(*q2, vm_v(0, 1, 0))))); } }
         }
     }
 
@@ -1988,7 +2057,7 @@ static void vm_frame(void *pc, int body_down)
         q->rootf = g_vm_root_f; q->roota = g_vm_root_a; q->napp = (unsigned)g_vm_napply;
         q->phase = (unsigned char)g_vm_phase; q->wih = (unsigned char)g_vm_wih;
         q->stch = g_vm_st_last[g_vm_whand[g_vm_class] ? 1 : 0];
-        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa; q->stroke = (signed char)(g_vm_swing ? g_vm_stroke : -1); q->bh = g_vm_band_hidden;
+        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa; q->stroke = (signed char)(g_vm_swing ? g_vm_stroke : -1); q->bh = g_vm_band_hidden; memcpy(q->fhx, g_vm_fhx, sizeof q->fhx); memcpy(q->fhy, g_vm_fhy, sizeof q->fhy);
         if (g_vm_brec) g_vm_brec[g_vm_rn - 1] = g_vm_bolt;
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
@@ -2055,6 +2124,8 @@ static int vm_rec_dump(const char *path)
             for (int a = 0; a < 2; a++) fprintf(fo, " %.4f,%.4f,%.4f %.5f,%.5f,%.5f,%.5f", q->nlp[a].x, q->nlp[a].y, q->nlp[a].z, q->nlq[a].w, q->nlq[a].x, q->nlq[a].y, q->nlq[a].z);
         }
         fprintf(fo, " | H %.4f,%.4f,%.4f %.4f,%.4f,%.4f %d %d", q->hua.x, q->hua.y, q->hua.z, q->hfa.x, q->hfa.y, q->hfa.z, q->stroke, q->bh);   /* E5 hinge axes */
+        fprintf(fo, " | F %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->fhx[0].x, q->fhx[0].y, q->fhx[0].z,
+                q->fhy[0].x, q->fhy[0].y, q->fhy[0].z, q->fhx[1].x, q->fhx[1].y, q->fhx[1].z, q->fhy[1].x, q->fhy[1].y, q->fhy[1].z);   /* hand axes L R */
         fputc('\n', fo); }
     fclose(fo); return g_vm_rn;
 }
@@ -2208,6 +2279,20 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "hand_sa")) { if (x >= 0.3f && x <= 2.0f) g_vm_hs_a = x; return 1; }   /* HAND-SCALE along the hand */
     else if (!strcmp(k, "hand_sc")) { if (x >= 0.3f && x <= 2.0f) g_vm_hs_c = x; return 1; }   /* HAND-SCALE across */
     else if (!strcmp(k, "fist_ua")) { g_vm_fist_ua = x != 0.0f; return 1; }   /* NA1 fists */
+    else if (!strcmp(k, "fist_native")) { g_vm_fist_nat = x != 0.0f; g_vm_fn_have[0] = g_vm_fn_have[1] = 0; return 1; }   /* native fists */
+    else if (!strcmp(k, "fn_gx")) fp = &g_vm_fn_g.x;
+    else if (!strcmp(k, "fn_gy")) fp = &g_vm_fn_g.y;
+    else if (!strcmp(k, "fn_gz")) fp = &g_vm_fn_g.z;
+    else if (!strcmp(k, "fn_gbx")) fp = &g_vm_fn_gb.x;
+    else if (!strcmp(k, "fn_gby")) fp = &g_vm_fn_gb.y;
+    else if (!strcmp(k, "fn_gbz")) fp = &g_vm_fn_gb.z;
+    else if (!strcmp(k, "fn_tau")) fp = &g_vm_fn_tau;
+    else if (!strcmp(k, "fn_ymin")) fp = &g_vm_fn_ymin;
+    else if (!strcmp(k, "fn_ymax")) fp = &g_vm_fn_ymax;
+    else if (!strcmp(k, "fn_xmax")) fp = &g_vm_fn_xmax;
+    else if (!strcmp(k, "fn_zmin")) fp = &g_vm_fn_zmin;
+    else if (!strcmp(k, "fn_k")) fp = &g_vm_fn_k;
+    else if (!strcmp(k, "fn_kq")) fp = &g_vm_fn_kq;
     else if (!strcmp(k, "fist_tech")) { g_vm_fist_force = (x >= 0.0f && x < VM_NFIST) ? (int)x : -1; return 1; }   /* NA1: force a technique (take rows), -1 = native */
     else if (!strcmp(k, "strokes")) { if (x >= 0 && x < (1 << VM_NSTROKE)) { g_vm_strokes = (int)x; g_vm_stroke_next = 0; } return 1; }
     else if (!strcmp(k, "stroke"))  { if (x >= -1 && x < VM_NSTROKE) g_vm_stroke_force = (int)x; return 1; }
@@ -2335,7 +2420,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         }
         r->append(r, b); return KAH_OK;
     } else if (!strcmp(a, "fist")) {   /* NA1 fists state (camera numbers, dm) */
-        char fb[700]; const VmPose *L = &g_vm_fist_cur[0], *R = &g_vm_fist_cur[1];
+        char fb[900]; const VmPose *L = &g_vm_fist_cur[0], *R = &g_vm_fist_cur[1];
         snprintf(fb, sizeof fb, "fist ua=%d force=%d on=%d fists=%d wih=%d tech='%s' table=%s fallback=%d u=%.3f swings=%lu n=%lu w=%.2f zf=%.2f state=%s "
             "tL=%.2f,%.2f,%.2f tR=%.2f,%.2f,%.2f wrL=%.2f,%.2f,%.2f wrR=%.2f,%.2f,%.2f elL=%.2f,%.2f,%.2f elR=%.2f,%.2f,%.2f ikfail=%lu",
             g_vm_fist_ua, g_vm_fist_force, g_vm_fist_on, g_fpc_fists, g_vm_wih, g_vm_fist_tech_p ? g_fpc_fs_name : "-",
@@ -2343,6 +2428,10 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
             g_vm_w, g_vm_zf, g_vm_state ? g_vm_state : "?", L->p.x, L->p.y, L->p.z, R->p.x, R->p.y, R->p.z,
             g_vm_mj[0][2].x, g_vm_mj[0][2].y, g_vm_mj[0][2].z, g_vm_mj[1][2].x, g_vm_mj[1][2].y, g_vm_mj[1][2].z,
             g_vm_mj[0][1].x, g_vm_mj[0][1].y, g_vm_mj[0][1].z, g_vm_mj[1][1].x, g_vm_mj[1][1].y, g_vm_mj[1][1].z, g_vm_ikfail);
+        {   size_t o = strlen(fb);   /* native fists */
+            snprintf(fb + o, sizeof fb - o, " nat=%d frz=%d natL=%.2f,%.2f,%.2f natR=%.2f,%.2f,%.2f clamp=%lu",
+                g_vm_fist_nat, g_vm_fn_frz, g_vm_fn_nat[0].x, g_vm_fn_nat[0].y, g_vm_fn_nat[0].z,
+                g_vm_fn_nat[1].x, g_vm_fn_nat[1].y, g_vm_fn_nat[1].z, g_vm_fn_clamp); }
         r->append(r, fb); return KAH_OK;
     } else if (!strcmp(a, "hinge")) {   /* E5 */
         char hb[400]; Vec3 a0 = vm_norm(g_vm_hl[0][0]), a1 = vm_norm(g_vm_hl[0][1]), b0 = vm_norm(g_vm_hl[1][0]), b1 = vm_norm(g_vm_hl[1][1]);
