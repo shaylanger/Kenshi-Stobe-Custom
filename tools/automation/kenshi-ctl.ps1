@@ -136,7 +136,37 @@ function Cfg-Status {
   $saved = if (Test-Path $CfgPlay) { (Get-Content $CfgPlay) -join '; ' } else { 'none' }
   "kenshi.cfg: $(if ($isTest) { 'TEST (windowed)' } else { 'PLAY' }) Full Screen=$($cur['Full Screen']) Video Mode=$($cur['Video Mode']); saved play values: $saved"
 }
+# tutorial hint popups off for tests (lane-5090c 2026-10-11: 'Prospecting / How to research ...' popups sat in every 5090
+# take; the 4080 does the same in rig4080/kcfg.ps1): settings.cfg tutorials=0 at every test launch (instance 1 + copies),
+# Shay's value saved once in $TutPlay, put back by -Play / cfg play (gfx-mods.sh on). Selftest: kenshi-ctl.ps1 tutsel.
+$TutPlay = if ($Inst -ge 2) { "$Kenshi\settings.tutorials.play" } else { 'C:\KenshiTestRuns\settings.tutorials.play' }
+function Tut-Lines([string[]]$lines, [string]$mode, [string]$saved) {   # pure: @{ Lines; Save = value to remember or ''; Value }
+  $cur = @($lines | Where-Object { $_ -like 'tutorials=*' } | Select-Object -First 1); $cur = if ($cur.Count) { $cur[0] } else { '' }
+  if ($mode -eq 'test') { $v = 'tutorials=0'; $sv = if (-not $saved -and $cur -and $cur -ne $v) { $cur } else { '' } }
+  else { $v = if ($saved) { $saved } else { $cur }; $sv = '' }
+  if (-not $v) { return @{ Lines = $lines; Save = $sv; Value = '' } }
+  $out = if ($cur) { @($lines | ForEach-Object { if ($_ -like 'tutorials=*') { $v } else { $_ } }) } else { @($lines) + @($v) }
+  @{ Lines = $out; Save = $sv; Value = $v }
+}
+function Tut-Apply([string]$mode) {
+  $f = "$Kenshi\settings.cfg"; if (-not (Test-Path $f)) { return "settings.cfg: none at $f" }
+  $saved = if (Test-Path $TutPlay) { "$(Get-Content $TutPlay -TotalCount 1)".Trim() } else { '' }
+  $r = Tut-Lines @(Get-Content $f) $mode $saved
+  if ($r.Save) { Set-Content $TutPlay $r.Save -Encoding Ascii }
+  if ($r.Value -and (@(Get-Content $f) -join "`n") -ne ($r.Lines -join "`n")) { Set-Content $f $r.Lines -Encoding Ascii }
+  if ($mode -eq 'play' -and (Test-Path $TutPlay)) { Remove-Item $TutPlay -Force }
+  "settings.cfg -> ${mode}: $($r.Value)"
+}
+if ($Command -eq 'tutsel') {   # kenshi-ctl.ps1 tutsel: selftest of the tutorials rule (pure, no files)
+  $bad = 0; $base = @('a=1', 'tutorials=1', 'b=2')
+  $cases = @(@('test saves Shay 1', $base, 'test', '', 'tutorials=0', 'tutorials=1'), @('test keeps an older save', $base, 'test', 'tutorials=1', 'tutorials=0', ''),
+             @('test on a 0 file saves nothing', @('tutorials=0'), 'test', '', 'tutorials=0', ''), @('play restores the save', @('a=1', 'tutorials=0'), 'play', 'tutorials=1', 'tutorials=1', ''),
+             @('test appends a missing key', @('a=1'), 'test', '', 'tutorials=0', ''))
+  foreach ($c in $cases) { $r = Tut-Lines $c[1] $c[2] $c[3]; $g = "$(@($r.Lines | Where-Object { $_ -like 'tutorials=*' }) -join ',')|$($r.Save)"; $w = "$($c[4])|$($c[5])"; $ok = $g -eq $w; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) $($c[0]): got '$g' want '$w'" }
+  "TUTSEL $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count) cases"; exit [int]($bad -gt 0)
+}
 function Cfg-Test {   # windowed for automated runs; remember Shay's values once (never overwrite them with test values)
+  Tut-Apply 'test'
   $cur = Get-CfgValues
   $isTest = $true; foreach ($k in $TestCfg.Keys) { if ($cur[$k] -ne $TestCfg[$k]) { $isTest = $false } }
   if ($isTest) { return "kenshi.cfg already windowed for tests" }
@@ -150,6 +180,7 @@ function Cfg-Test {   # windowed for automated runs; remember Shay's values once
 }
 function Cfg-Play {   # Shay's values back
   & $GfxPs play -Kenshi $Kenshi   # graphics + no frame cap (kenshi-gfx.ps1)
+  Tut-Apply 'play'
   if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { & $PSCommandPath ontop off | Out-Null }   # test topmost off
   if (-not (Test-Path $CfgPlay)) { return "kenshi.cfg: no saved play values ($CfgPlay), left as is: $(Cfg-Status)" }
   $want = @{}; foreach ($line in Get-Content $CfgPlay) { $i = $line.IndexOf('='); if ($i -gt 0) { $want[$line.Substring(0, $i)] = $line.Substring($i + 1) } }
