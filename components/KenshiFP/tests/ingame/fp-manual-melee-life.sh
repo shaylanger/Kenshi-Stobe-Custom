@@ -118,7 +118,7 @@ A health "$TG" 100 >/dev/null; A setstat "$TG" defence 1 >/dev/null; A setstat "
 take
 close || setup_fail "pin $TG in reach of $FI refused"
 A fp_control state | grep -q "control_ids=.*/$(A where "$FI" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $FI"
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+A fp_combat on | grep -q requested || setup_fail "fp_combat on refused (fault=$(A fp_combat state | grep -o " fault=[0-9]*" | head -1 | cut -d= -f2): fault=1 = KenshiFP latched a guarded native call fault, see KenshiFP.log \"[combat] native call fault\"; only a game relaunch clears it)"
 ready 20 || setup_fail "adapter not ready (why=$(ms why) armed=$(ms armed) manual_ready=$(ms manual_ready))"
 # no AI attack aimed at the fighter starts (test switch): no auto-block in manual mode, so its hits would stumble-lock the
 # fighter and reject the clicks (4080 batch 2); M03 switches it back on, it needs a real attacker
