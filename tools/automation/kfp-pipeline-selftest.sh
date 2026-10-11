@@ -57,4 +57,14 @@ for l in base -p1 -p2 -p3; do metrics $l > "$RUN/metrics-$l.tsv"; done
 ck "5 clean minus-one accepted" "$(clean_minus -p1 && echo y || echo n)" y
 ck "5 minus-one with new FAIL refused" "$(clean_minus -p2 && echo y || echo n)" n
 ck "5 minus-one with INFRA refused" "$(clean_minus -p3 && echo y || echo n)" n
+# 6 mutation-missed only from BASEFAIL (corpus recording missing) = known-base; a real MISSED blocks
+RB6='RESULT ANIMLAB-REGRESS FAIL fail=1 flipped=none why=regress,mutation-missed log=x'
+RUN=$T/r6; N=15
+mk $RUN base "$AGB" 'agree\tFAIL\n' "${RB6/,mutation-missed/}"
+mk $RUN all "$AGB" 'agree\tFAIL\n' "$RB6"
+printf 'MUT a CAUGHT x\nMUT rec-path-late-drift BASEFAIL - base ab2h-5090.txt missing\nRESULT MUTATIONS FAIL 18/19 missed=rec-path-late-drift known=none\n' > $RUN/gate-all/mutate.txt
+for l in base all; do metrics $l > "$RUN/metrics-$l.tsv"; done
+kb_eval; ck "6 BASEFAIL mutation known-base" "$GB|$(echo "$KB" | grep -o 'MUT-BASEFAIL:rec-path-late-drift')" "|MUT-BASEFAIL:rec-path-late-drift"
+printf 'MUT b MISSED chk x\nRESULT MUTATIONS FAIL 18/19 missed=b known=none\n' > $RUN/gate-all/mutate.txt
+kb_eval; ck "6 real missed mutation blocks" "$(echo "$GB" | grep -o 'mutation-missed')" "mutation-missed"
 [ $F = 0 ] && echo "SELFTEST kfp-pipeline PASS" || { echo "SELFTEST kfp-pipeline FAIL"; exit 1; }

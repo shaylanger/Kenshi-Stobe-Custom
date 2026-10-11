@@ -277,8 +277,14 @@ kb_eval() { local gl why fa fb newf; KB=""; GB=""; [ "$(cat "$RUN/logs/gate-all.
   # a FAIL key on 'all' that is not FAIL on base (or no base) = caused by the patches; mutation-missed only runs on 'all'
   nfk=""; [ $N -ge 1 ] && nfk=$( [ -f "$RUN/metrics-base.tsv" ] && awk -F'\t' 'NR==FNR {b[$1]=$2; next} $2=="FAIL" && b[$1]!="FAIL" {print $1}' \
       "$RUN/metrics-base.tsv" "$RUN/metrics-all.tsv" | paste -sd';' || echo "no-base")
+  # mutation-missed where every missed mutation is BASEFAIL (its base recording is missing from the corpus) = lab/corpus
+  # infrastructure, not a patch effect (run-bl-1011-1728: rec-path-late-drift, ab2h-5090.txt missing): known-base
+  mb=""; if echo ",$why," | grep -q ',mutation-missed,'; then
+    mm=$(grep -o '^RESULT MUTATIONS.*missed=[^ ]*' "$RUN/gate-all/mutate.txt" 2>/dev/null | sed 's/.*missed=//' | tr ',' ' ')
+    for m in $mm; do grep -qE "^MUT $m BASEFAIL( |$)" "$RUN/gate-all/mutate.txt" || { mb=""; break; }; mb="${mb:+$mb;}MUT-BASEFAIL:$m"; done
+    [ -n "$mb" ] && why=$(echo ",$why," | sed 's/,mutation-missed,/,/; s/^,//; s/,$//'); fi
   if [ -z "$newf" ] && [ -z "$nfk" ] && ! echo ",$why," | grep -qE ',(mutation-missed|corpus-file-missing),'; then
-    KB=$( { echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)'; awk -F'\t' '$2=="FAIL" {print "FAIL:" $1}' "$RUN/metrics-all.tsv"; } | tr ' ' '_' | paste -sd';')
+    KB=$( { echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)'; awk -F'\t' '$2=="FAIL" {print "FAIL:" $1}' "$RUN/metrics-all.tsv"; [ -n "$mb" ] && echo "$mb"; } | tr ' ' '_' | paste -sd';')
   else GB="why=$why${newf:+ new-flips=$newf}${nfk:+ new-fail=$nfk}"; fi; }
 # guard_cut <comma list>: excluding more than half the set needs a clear per-patch breaker (the patch alone flips/drops/
 # newfails vs base in $D); prints the list to leave out, or the refusal text + rc 1 (2026-10-11 a bogus key made all 14
