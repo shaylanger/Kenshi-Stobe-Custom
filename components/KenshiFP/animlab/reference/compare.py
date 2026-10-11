@@ -123,10 +123,11 @@ def ours_fists(T, a, L):
         ku = T.get('fist_%s_u' % tech)
         if not ku:
             continue
+        # row labels: pending-fixes/kfp-fist-rowlabels.py makes row 0 'R' (the C arrays hold the right hand first);
+        # dumps from builds before it name row 0 'L'. Tell them apart by the guard: the right fist sits at larger x.
+        old = pose(T, 'fist_guard.L')[0][0] > pose(T, 'fist_guard.R')[0][0]
         for side in 'LR':
-            # kfp_tables.inc names row 0 'L' (KT_RLR / KT_RLRN) but the C arrays hold R first (native.py writes R, L;
-            # kfp_viewmodel.inc g_vm_fist_guard comment /* R */): the dump's 'L' rows are the RIGHT hand
-            tr = 'L' if side == 'R' else 'R'
+            tr = ('L' if side == 'R' else 'R') if old else side
             keys = [pose(T, 'fist_%s.%s%d' % (tech, tr, i)) for i in range(len(ku) - 2)]
             g = pose(T, 'fist_guard.' + tr)
             rows, n0 = keyed_rows(g, keys, g, ku[1:-1], 1.0, 0)
