@@ -8,16 +8,22 @@ C:\KenshiTestRuns\settings.tutorials.play).
 Graphics + frame cap (Shay 2026-10-10 22:05): test also runs C:\KAH\kenshi-gfx.ps1 <-Gfx full|low> (default
 C:\KenshiTestRuns\gfx.want on the 4080, else full): 60 fps cap (harness framecap.txt), low = lowest graphics at 1024x576
 for lists that don't film; play = Shay's graphics back, no cap. Same script as the 5090 (tools/automation/kenshi-gfx.ps1).
+Multi-instance (lane 4080b, 2026-10-11): -Instance n >= 2 = the install copy C:\KenshiInst\<n>: test sets Full Screen=No,
+tutorials=0 and kenshi-gfx low (Video Mode = env KAH_VIDEO_MODE, e.g. '640 x 360'); play/status as usual (play values are
+only instance 1's). The "Kenshi is running" refusal only looks at the game of THIS install (instance 2 may run beside 1).
 #>
 param([Parameter(Position = 0)][ValidateSet('test', 'play', 'status')][string]$Mode = 'status',
-      [ValidateSet('', 'full', 'low')][string]$Gfx = '')
-$cfg = 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi\kenshi.cfg'; $save = 'C:\KenshiTestRuns\kenshi.cfg.play'
+      [ValidateSet('', 'full', 'low')][string]$Gfx = '', [int]$Instance = 1)
+$kroot = if ($Instance -ge 2) { "C:\KenshiInst\$Instance" } else { 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi' }
+$cfg = "$kroot\kenshi.cfg"; $save = if ($Instance -ge 2) { "$kroot\kenshi.cfg.play" } else { 'C:\KenshiTestRuns\kenshi.cfg.play' }
 $keys = 'Full Screen', 'Video Mode'
 $lines = Get-Content $cfg
 function val($k) { ($lines | Where-Object { $_ -like "$k=*" } | Select-Object -First 1) }
 $gfxPs = 'C:\KAH\kenshi-gfx.ps1'; $kdir = Split-Path $cfg
 if ($Mode -eq 'status') { "kenshi.cfg: $(val 'Full Screen'); $(val 'Video Mode'); play values saved: $(Test-Path $save)"; if (Test-Path $gfxPs) { & $gfxPs status -Kenshi $kdir }; exit 0 }
-if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { 'Kenshi is running: stop it first'; exit 1 }
+$kpre = $kroot.TrimEnd([char]92) + [char]92
+if (@(Get-CimInstance Win32_Process -Filter "Name='kenshi_x64.exe'" | Where-Object { -not $_.ExecutablePath -or $_.ExecutablePath.StartsWith($kpre, [StringComparison]::OrdinalIgnoreCase) }).Count) { 'Kenshi is running: stop it first'; exit 1 }
+if ($Instance -ge 2 -and $Mode -eq 'test' -and -not $Gfx) { $Gfx = 'low' }   # lane 4080b never films
 if ($Mode -eq 'test') {
   if (-not (Test-Path $save)) { $keys | ForEach-Object { val $_ } | Set-Content $save -Encoding ASCII }
   $new = @{ 'Full Screen' = 'Full Screen=No'; 'Video Mode' = 'Video Mode=1600 x 900 @ 32-bit colour [0]' }
@@ -28,7 +34,7 @@ if ($Mode -eq 'test') {
 $lines = $lines | ForEach-Object { $l = $_; foreach ($k in $keys) { if ($l -like "$k=*" -and $new[$k]) { $l = $new[$k] } }; $l }
 Set-Content $cfg $lines -Encoding ASCII
 if ($Mode -eq 'play') { Remove-Item $save -Force }
-$scfg = 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi\settings.cfg'; $tsave = 'C:\KenshiTestRuns\settings.tutorials.play'
+$scfg = "$kroot\settings.cfg"; $tsave = if ($Instance -ge 2) { "$kroot\settings.tutorials.play" } else { 'C:\KenshiTestRuns\settings.tutorials.play' }
 $sl = Get-Content $scfg; $cur = ($sl | Where-Object { $_ -like 'tutorials=*' } | Select-Object -First 1)
 if ($Mode -eq 'test') { if (-not (Test-Path $tsave)) { "$cur" | Set-Content $tsave -Encoding ASCII }; $tv = 'tutorials=0' }
 else { $tv = if (Test-Path $tsave) { (Get-Content $tsave | Select-Object -First 1) } else { $cur } }

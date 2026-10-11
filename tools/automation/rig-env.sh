@@ -29,13 +29,18 @@ if [ "$RIG" = 4080 ]; then
   export CR=/c
   export KDIR="/c/Program Files (x86)/Steam/steamapps/common/Kenshi"
   export KAH_DIR='C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\AutomationHarness'
+  # multi-instance lane 4080b: KAH_INSTANCE=n >= 2 = the install copy C:\KenshiInst\<n> (kenshi-instance.ps1: own harness
+  # inbox, logs, saves, lock game-<n>.lock); ctl.ps1 gets -Instance. Set unconditionally: itrun sources this file first.
+  if [ "${KAH_INSTANCE:-1}" -ge 2 ] 2>/dev/null; then
+    export KDIR=/c/KenshiInst/$KAH_INSTANCE KAH_DIR="C:\\KenshiInst\\$KAH_INSTANCE\\mods\\AutomationHarness"
+  fi
   export KAH_CLIENT='C:/KenshiModding/Kenshi-Automation-Harness/client'
   export KAH_OWNER=${KAH_OWNER:-rig4080}
   export PATH="/c/KAH/bin:$PATH"
   # animlab catalogs/configs hold WSL game paths; the lab maps them here (visual/ogre.py hostpath)
   export ANIMLAB_PATHMAP='mnt/d/Steam=C:/Program Files (x86)/Steam'   # no leading / (Git Bash would rewrite it for Windows python)
-  rig_launch() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\ctl.ps1' launch -Save "$1" -Owner "$KAH_OWNER"; }
-  rig_stop() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\ctl.ps1' stop -Owner "$KAH_OWNER"; }
+  rig_launch() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\ctl.ps1' launch -Save "$1" -Owner "$KAH_OWNER" -Instance "${KAH_INSTANCE:-1}"; }
+  rig_stop() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\ctl.ps1' stop -Owner "$KAH_OWNER" -Instance "${KAH_INSTANCE:-1}"; }
   rig_bg() { local log=$1; shift; powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\itrun.ps1' -Log "$(cygpath -w "$log")" -Cmd "$*"; }
 else
   export CR=/mnt/c

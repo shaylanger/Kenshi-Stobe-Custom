@@ -113,6 +113,10 @@ cp_to() {
 }
 run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual C:\KenshiModding\Kenshi-Automation-Harness\tools\wgccap\out 2>NUL & exit 0'
 run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" $H:C:/KAH/
+# lane 4080b (multi-instance-4080 2026-10-11): ctl.ps1 -Instance, inst-window.ps1 (parks/retitles instance n), the instance
+# copier, and the harness kenshi-ctl.ps1 that only sees the game of the install it is given (the old copy killed both games)
+run scp -q "$HERE/ctl.ps1" "$HERE/inst-window.ps1" "$HERE/../kenshi-instance.ps1" $H:C:/KAH/
+run scp -q "$M/Kenshi-Automation-Harness/tools/kenshi-ctl.ps1" "$M/Kenshi-Automation-Harness/tools/Win32Ui.cs" "$M/Kenshi-Automation-Harness/tools/WindowCapture.cs" $H:C:/KAH/tools/
 run scp -q "$HERE/python3" $H:C:/KAH/bin/python3
 for d in "${NEWD[@]}"; do w=$(echo "$d" | tr / '\\'); run ssh $H "mkdir C:\\KenshiModding\\$w 2>NUL & exit 0"; done   # list-closure dirs outside the fixed sets
 for i in "${!SETD[@]}"; do cp_to "C:/KenshiModding/${SETD[$i]}/" ${SETF[$i]}; done

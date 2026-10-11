@@ -56,7 +56,7 @@ if grep -qi microsoft /proc/version 2>/dev/null; then CR=/mnt/c; else RIG=${RIG:
 KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 A=$CR/KenshiModding/tools/automation; T=$CR/KenshiModding/tests/ingame/stobe; KT=$CR/KenshiModding/components/KenshiFP/tests/ingame
 CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'; CTLO=()
-[ "${RIG:-5090}" = 4080 ] && { CTL='C:\KAH\ctl.ps1'; CTLO=(-Owner "${KAH_OWNER:-rig4080}"); }
+[ "${RIG:-5090}" = 4080 ] && { CTL='C:\KAH\ctl.ps1'; CTLO=(-Owner "${KAH_OWNER:-rig4080}" -Instance "${KAH_INSTANCE:-1}"); }   # -Instance: lane 4080b (C:\KenshiInst\<n>)
 LAUNCH=""; STOP=0; RESUME=0; NODRY=""; REUSE=0
 # --reuse (rig-runner, 2026-10-10 no relaunch gap): with --launch, a game that is already up and in the world loads <save>
 # in place (stobe-auto load) instead of a stop + relaunch; launches as usual when Kenshi is not running / not answering
@@ -143,7 +143,7 @@ reload() {   # reload <save> <player>; 1 = the game didn't come back
   local i; for i in $(seq 1 20); do stobe-auto select "$2" >/dev/null 2>&1 && return 0; sleep 0.5; done; return 0
 }
 memline() {  # "<free-commit-GB> <kenshi-private-GB>" (kenshi "-" when not running)
-  powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $i=[int]$env:KAH_INSTANCE; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { if ($i -ge 2) { $_.Path -like "D:\KenshiInst\$i\*" } else { $_.Path -notlike "D:\KenshiInst\*" } } | Select-Object -First 1;"{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
+  powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $i=[int]$env:KAH_INSTANCE; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { if ($i -ge 2) { $_.Path -like "*\KenshiInst\$i\*" } else { $_.Path -notlike "*\KenshiInst\*" } } | Select-Object -First 1;"{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
 ,' | tail -1
 }
 # kenshi_pids (multi-instance 2026-10-11): kenshi_x64 PIDs of THIS install only: KAH_INSTANCE=n>=2 = D:\KenshiInst\<n>, else
