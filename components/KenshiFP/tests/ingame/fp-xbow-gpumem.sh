@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # fp-xbow-gpumem.sh: row GPUMEM (tdr-xbow 2026-10-11). The 5090 had a GPU TDR (nvlddmkm 153 + Display 4101) on FP
 # crossbow fire #50 of a launch (64-xbf-r11c R11, a miss shot aimed at nothing 25 m+ away); the 4080 had five, all right
-# after FP crossbow fire. This row fires N manual crossbow shots on kah-fpxbow, alternating HIT (aimed at the pinned,
+# after FP crossbow fire. This row fires N manual crossbow shots on kah-fpxbow, cycling HIT (aimed at the pinned,
 # protected target) and MISS (camera turned off the target, slightly up: the bolt flies into the distance, as the TDR
-# shot did), and records GPU memory around every shot:
+# shot did) and SKY (pitch -0.9 up, as the 4080 rg-01 K-row TDR during a reload), and records GPU memory per shot:
 #   shots.csv   n,kind,epoch,shot(1/0),actual_shots,nvsmi_used_MB (nvidia-smi right after the shot)
 #   mem.csv     epoch,adapter_dedicated_MB,kenshi_dedicated_MB,kenshi_shared_MB (PowerShell sampler, every 2 s)
 # PASS: >= 90% of N shots fired, no TDR during the row (gpu-tdr-check.ps1), the game answered after every shot, and
@@ -81,7 +81,7 @@ echo "GPUMEM setup ok: N=$N bolts=$BOLTS yaw=$YAW miss_yaw=$YAWM nvsmi0=$(nvmem)
 # ---- shots ----
 fired=0; hung=""
 for ((i=1; i<=N; i++)); do
-  if [ $((i%2)) = 1 ]; then kind=hit; A fp_camera look "$YAW" 0.02 >/dev/null; else kind=miss; A fp_camera look "$YAWM" -0.06 >/dev/null; fi
+  case $((i%3)) in 1) kind=hit; A fp_camera look "$YAW" 0.02 >/dev/null;; 2) kind=miss; A fp_camera look "$YAWM" -0.06 >/dev/null;; *) kind=sky; A fp_camera look "$YAWM" -0.9 >/dev/null;; esac
   s0=$(cs actual_shots); [ -n "$s0" ] || { hung="no fp_combat answer before shot $i"; break; }
   inp 1 0 0; shot=0
   if waitfor 12 shot_ready 1; then
