@@ -1,0 +1,11 @@
+# weapon-reel (2026-10-11): one representative per melee class for Shay's FP weapons review video (no crossbow/ranged:
+# NO PC CRASHES rule). 1H sword, 1H short blade, 1H blunt, hacker, light 2H katana, heavy (scaled), heavy (base), polearm.
+# sid|name|type|anim class|ammo
+5022626-Universal Wasteland Expansion.mod|Chisa Katana|melee|katanas|
+55411-ArkWeaponPack.mod|Machete|melee|sabre|
+52295-rebirth.mod|Iron Club|melee|blunt|
+478-gamedata.base|Long Cleaver|melee|hackers|
+476-gamedata.base|Katana|melee|katanas|
+55397-ArkWeaponPack.mod|Buster Sword|melee|heavy weapons|
+477-gamedata.base|Fragment Axe|melee|heavy weapons|
+52308-rebirth.mod|Naginata|melee|polearm|
