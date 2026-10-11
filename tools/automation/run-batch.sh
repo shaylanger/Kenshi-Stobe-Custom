@@ -197,8 +197,10 @@ prepare() {  # prepare <save> <player> <mate>
     home) reload auto-home Shay || return 1
           bash "$A/scenarios.sh" fresh >/dev/null 2>&1 </dev/null; stobe-auto select Shay >/dev/null 2>&1 ;;
     *) local tg; tg=$(load_target "$1"); [ "$tg" != "$1" ] && echo "$(date +%H:%M) prepare: $tg instead of $1 (the row script's pf_load loads $tg; one load, not two)"
-       reload "$tg" "$2" || return 1
-       echo "$tg $(date +%s)" > "$FRESH"
+       if [ -f "$FRESH" ] && read -r fs ft < "$FRESH" && [ "$fs" = "$tg" ] && [ $(( $(date +%s) - ${ft:-0} )) -lt 120 ]; then
+         echo "$(date +%H:%M) prepare: $tg was loaded $(( $(date +%s) - ft )) s ago by the batch start (no reload)"
+         local i; for i in $(seq 1 20); do stobe-auto select "$2" >/dev/null 2>&1 && break; sleep 0.5; done
+       else reload "$tg" "$2" || return 1; echo "$tg $(date +%s)" > "$FRESH"; fi
        [ "$1" = kah-fullbase ] && PLAYER="$2" MATE="$3" bash "$T/fullbase-guard.sh" >/dev/null 2>&1 </dev/null ;;
   esac
   return 0
@@ -221,17 +223,29 @@ else
     finish; exit 1
   fi
 fi
+# LT = the save row 1 really starts on: its script's pf_load target (load_target) when row 1 is on -/kah-fpxbow/kah-fpstudio
+# and the batch launches one of those two (speed-scout 2026-10-11: a launch on kah-fpxbow, then pf_load kah-fpstudio = 2 loads)
+LT=$LAUNCH
+case "$LAUNCH" in kah-fpxbow|kah-fpstudio)
+  l1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1); s1=$(cut -d"|" -f2 <<<"$l1" | tr -d " \r")
+  case "$s1" in -|kah-fpxbow|kah-fpstudio)
+    read -ra WORDS <<<"$(cut -d"|" -f6- <<<"$l1" | tr -d '\r')"; t1=$(load_target kah-fpxbow)
+    [ "$t1" != kah-fpxbow ] && [ "$t1" != "$LAUNCH" ] && { LT=$t1; say "NOTE launch save $LT instead of $LAUNCH (row 1's pf_load loads it; one load)"; } ;;
+  esac ;;
+esac
 if [ -n "$LAUNCH" ] && [ "$REUSE" = 1 ] && kenshi_up && timeout 30 stobe-auto status </dev/null 2>/dev/null | grep -q "phase=world"; then
   p1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f3 | tr -d " \r")
   say "NOTE reuse: Kenshi already up, loading $LAUNCH in place (no relaunch)"
   stobe-say on >/dev/null 2>&1
   s1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f2 | tr -d " \r")
   if [ -n "$s1" ] && [ "$s1" != "-" ]; then say "NOTE reuse: the first row loads its own save ($s1): no extra in-place load of $LAUNCH"   # speed-scout: was 2-3 loads
-  elif ! reload "$LAUNCH" "${p1:-Shay}"; then say "NOTE reuse: in-place load failed, relaunching"; launch "$LAUNCH"; world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }; fi
+  elif reload "$LT" "${p1:-Shay}"; then echo "$LT $(date +%s)" > "$FRESH"
+  else say "NOTE reuse: in-place load failed, relaunching"; launch "$LAUNCH"; world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }; fi
 elif [ -n "$LAUNCH" ]; then
   stobe-say on >/dev/null 2>&1
-  launch "$LAUNCH"
-  world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }
+  launch "$LT"
+  world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LT)"; finish; exit 1; }
+  echo "$LT $(date +%s)" > "$FRESH"
 fi
 # a window that never reached the Video Mode size keeps getting resized = a glitching screen (Shay 2026-10-11): stop, don't run rows on it
 if [ -f "$O/launch.out" ] && grep -q "postlaunch FAIL" "$O/launch.out"; then
