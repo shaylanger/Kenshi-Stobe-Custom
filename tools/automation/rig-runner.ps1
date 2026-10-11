@@ -9,6 +9,7 @@ Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 40
   rig-runner.ps1 -Stop [-Rig 5090|4080]  stop the loop(s) and keep them stopped (<rig>.stopped: -Ensure skips it; a
                                          running batch keeps running; a restarted loop re-adopts it only if it is its own)
   rig-runner.ps1 -Start [-Rig 5090|4080] clear the stopped flag and start (= -Ensure -Force)
+  rig-runner.ps1 -Rig X -DryKeyOf <list>  self-check: the pre-dry-run key, the files it content-hashes, the cached verdict
   rig-runner.ps1 -Restart [-Rig X]       deploy an edited rig-runner.ps1: the loop re-spawns itself at its next list boundary
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
   -Fake: test mode on a fake game: queue/runner dirs under C:\KenshiTestRuns\runner\fake\, no lock/install/launch, the
@@ -62,7 +63,7 @@ Stale queue\running\<rig>__* entries (no <rig>.cur/.tail naming them, no live ru
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '')
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '', [string]$DryKeyOf = '')
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
@@ -140,7 +141,7 @@ if ($Ensure) {
     exit 0
 }
 if (-not $Rig) { Get-Content $PSCommandPath -TotalCount 40; exit 2 }
-if (-not $Resolve) {
+if (-not $Resolve -and -not $DryKeyOf) {
     if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
     if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
     Set-Content (Join-Path $rd "$Rig.pid") $PID
@@ -562,9 +563,15 @@ function StagedWanted([string]$need) {
 
 # ---------------------------------------------------------------- background pre-dry-run (2026-10-10: the 4080 sat with
 # Kenshi closed 2.5 min while the next list dry-ran after DONE). While a batch runs, the next queued list for this rig is
-# dry-run in the background; Start-Batch uses the cached verdict. Key = rig + the dry-run list text + name/size/mtime of
-# the dry-run tool, the take scripts/libs, the lab tools and every file a row names: any change = stale = run again.
+# dry-run in the background; Start-Batch uses the cached verdict. Key = rig + the dry-run list text + the CONTENT hash of
+# the dry-run tool (dryrun.sh, dryrun\, run-batch.sh, rig-env.sh) and of only the files the list's rows use: every script
+# a row names (absolute {CR}/mnt/c/c paths, or bare names looked up like run-batch.sh) plus, recursively, every .sh/.py
+# those name (source/./bash/python3, any $VAR/ prefix: resolved by file name in the script's dir and the test/lab dirs)
+# and the local modules a .py imports. 2026-10-11: the old key used name/size/mtime of EVERY tests/ingame script, so
+# agents editing unrelated scripts restarted the pre-dry-run every minute. Content hashes are cached by path+size+mtime.
+# Self-check: rig-runner.ps1 -Rig <rig> -DryKeyOf <list> prints the key and the files it covers.
 $pdd = Join-Path $rd 'predry'; New-Item -ItemType Directory -Force $pdd | Out-Null
+$script:hashCache = @{}; $script:refCache = @{}; $script:nameIdx = $null; $script:nameIdxT = [datetime]::MinValue
 function DryListText([string]$path) {
     $cr = if ($Rig -eq '5090') { '/mnt/c' } else { '/c' }
     $txt = (Get-Content $path) -replace '\{CR\}', $cr
@@ -572,20 +579,79 @@ function DryListText([string]$path) {
     $drl = $txt | Where-Object { $r = $_; if ($r -match '^\s*(#|$)') { return $true }; -not ($skip -contains (($r -split '\|')[0].Trim())) }
     ($drl -join "`n") + "`n"
 }
-function DryKey([string]$path) {
-    $t = DryListText $path
-    $files = @(Get-ChildItem "$auto\dryrun" -Recurse -File -Include *.sh, *.py, *.json -ErrorAction SilentlyContinue) +
-             @(Get-ChildItem "$auto\dryrun.sh", "$auto\run-batch.sh", "$auto\rig-env.sh" -ErrorAction SilentlyContinue) +
-             @(Get-ChildItem 'C:\KenshiModding\components\KenshiFP\tests\ingame' -File -Filter *.sh -ErrorAction SilentlyContinue) +
-             @(Get-ChildItem 'C:\KenshiModding\components\KenshiFP\animlab' -File -Include *.py, *.sh -Recurse -Depth 0 -ErrorAction SilentlyContinue) +
-             @(Get-ChildItem 'C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab' -File -Filter *.py -ErrorAction SilentlyContinue)
-    foreach ($m in [regex]::Matches($t, '(?:/mnt/c|/c)(/[^\s''"|;]+)')) {
-        $w = 'C:' + ($m.Groups[1].Value -replace '/', '\'); if (Test-Path -LiteralPath $w -PathType Leaf) { $files += Get-Item -LiteralPath $w }
+function FileSha([IO.FileInfo]$f) {   # content hash, recomputed only when size/mtime change (a touch alone keeps the key)
+    $k = "$($f.FullName)|$($f.Length)|$($f.LastWriteTimeUtc.Ticks)"
+    if (-not $script:hashCache.ContainsKey($k)) {
+        if ($script:hashCache.Count -gt 4000) { $script:hashCache = @{} }
+        try { $b = [IO.File]::ReadAllBytes($f.FullName) } catch { $b = [Text.Encoding]::UTF8.GetBytes("unreadable $k") }
+        $script:hashCache[$k] = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($b)).Replace('-', '')
     }
+    $script:hashCache[$k]
+}
+function DryNameIndex {   # file name -> paths, over the dirs scripts/rows refer into (rebuilt at most every 60 s)
+    if ($script:nameIdx -and ((Get-Date) - $script:nameIdxT).TotalSeconds -lt 60) { return $script:nameIdx }
+    $idx = @{}
+    $dirs = @('C:\KenshiModding\tests\ingame\stobe', 'C:\KenshiModding\components\KenshiFP\tests\ingame', 'C:\KenshiModding\components\KenshiFP\animlab',
+              'C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab', $auto, 'C:\KenshiModding\tools')
+    foreach ($d in $dirs) {
+        foreach ($f in @(Get-ChildItem $d -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.sh', '.py', '.awk' })) {
+            $n = $f.Name.ToLowerInvariant(); if (-not $idx.ContainsKey($n)) { $idx[$n] = New-Object Collections.ArrayList }; $null = $idx[$n].Add($f.FullName)
+        }
+    }
+    $script:nameIdx = $idx; $script:nameIdxT = Get-Date; $idx
+}
+function DryWinPath([string]$p) {   # /mnt/c/x, /c/x, ${CR:-/mnt/c}/x, {CR}/x -> C:\x
+    $p = $p -replace '^\$\{CR:-/mnt/c\}', '/c' -replace '^\{CR\}', '/c' -replace '^/mnt/c/', '/c/'
+    if ($p -match '^/c(/.+)$') { return 'C:' + ($Matches[1] -replace '/', '\') }
+    $null
+}
+function DryFiles([string]$listText) {   # every file the list's rows use (closure), sorted full paths
+    $idx = DryNameIndex; $seen = @{}; $todo = New-Object Collections.Queue
+    $add = { param($w) if ($w -and -not $seen.ContainsKey($w.ToLowerInvariant()) -and (Test-Path -LiteralPath $w -PathType Leaf)) { $seen[$w.ToLowerInvariant()] = $w; $todo.Enqueue($w) } }
+    $byName = { param($n, $dir) $hit = $false
+        if ($dir) { $c = Join-Path $dir $n; if (Test-Path -LiteralPath $c -PathType Leaf) { & $add $c; $hit = $true } }
+        if (-not $hit -and $idx.ContainsKey($n.ToLowerInvariant())) { foreach ($c in $idx[$n.ToLowerInvariant()]) { & $add $c } } }
+    foreach ($w in @("$auto\dryrun.sh", "$auto\run-batch.sh", "$auto\rig-env.sh")) { & $add $w }
+    foreach ($f in @(Get-ChildItem "$auto\dryrun" -Recurse -File -Include *.sh, *.py, *.json -ErrorAction SilentlyContinue)) { & $add $f.FullName }
+    foreach ($r in ($listText -split "`n")) {
+        if ($r -match '^\s*(#|$)') { continue }
+        $cmd = ($r -split '\|', 6)[-1]
+        foreach ($m in [regex]::Matches($cmd, '(?:/mnt/c|/c)/[^\s''"|;)]+')) { & $add (DryWinPath $m.Value) }
+        foreach ($m in [regex]::Matches($cmd, '(?<![/\w.-])([A-Za-z0-9_.-]+\.(?:sh|py|awk))\b')) {   # bare: tests/ingame/stobe, then KenshiFP tests/ingame
+            $n = $m.Groups[1].Value; $hit = $false
+            foreach ($d in 'C:\KenshiModding\tests\ingame\stobe', 'C:\KenshiModding\components\KenshiFP\tests\ingame') { $c = Join-Path $d $n; if (-not $hit -and (Test-Path -LiteralPath $c -PathType Leaf)) { & $add $c; $hit = $true } }
+        }
+    }
+    $scanned = @{}
+    while ($todo.Count) {
+        $w = $todo.Dequeue(); if ($scanned.ContainsKey($w)) { continue }; $scanned[$w] = 1
+        if ($w -notmatch '\.(sh|py|awk)$') { continue }
+        $fi = Get-Item -LiteralPath $w -ErrorAction SilentlyContinue; if (-not $fi) { continue }; $dir = Split-Path $w
+        $ck = "$w|$($fi.Length)|$($fi.LastWriteTimeUtc.Ticks)"
+        if (-not $script:refCache.ContainsKey($ck)) {   # tokens per file version (abs paths, names, py imports), scanned once
+            if ($script:refCache.Count -gt 4000) { $script:refCache = @{} }
+            $t = try { [IO.File]::ReadAllText($w) } catch { '' }
+            $t = $t -replace '(?m)^\s*#.*$', '' -replace '(?m)\s#\s.*$', ''   # comments name scripts too (usage examples): skip them
+            $abs = @([regex]::Matches($t, '(?:\$\{CR:-/mnt/c\}|/mnt/c|/c)/[^\s''"|;)`]+\.(?:sh|py|awk)') | ForEach-Object { DryWinPath $_.Value })
+            $nms = @([regex]::Matches($t, '(?<![\w.-])([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:sh|py|awk))\b') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+            $imp = @(if ($w -like '*.py') { [regex]::Matches($t, '(?m)^\s*(?:from\s+([A-Za-z_]\w*)[\w.]*\s+import|import\s+([A-Za-z_]\w*))') | ForEach-Object { "$($_.Groups[1].Value)$($_.Groups[2].Value).py" } })
+            $script:refCache[$ck] = @{ abs = $abs; nms = $nms; imp = $imp }
+        }
+        $rc = $script:refCache[$ck]
+        foreach ($a in $rc.abs) { & $add $a }
+        foreach ($n in $rc.nms) { & $byName $n $dir }
+        foreach ($n in $rc.imp) { $c = Join-Path $dir $n; if (Test-Path -LiteralPath $c -PathType Leaf) { & $add $c } }
+    }
+    @($seen.Values | Sort-Object)
+}
+function DryKey([string]$path, [switch]$Show) {
+    $t = DryListText $path
+    $files = DryFiles $t
     $sb = New-Object Text.StringBuilder; $null = $sb.Append("$Rig`n$t")
-    foreach ($f in ($files | Sort-Object FullName -Unique)) { $null = $sb.Append("$($f.FullName)|$($f.Length)|$($f.LastWriteTimeUtc.Ticks)`n") }
+    foreach ($w in $files) { $fi = Get-Item -LiteralPath $w -ErrorAction SilentlyContinue; if ($fi) { $null = $sb.Append("$($w.ToLowerInvariant())|$(FileSha $fi)`n") } }
     $h = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($sb.ToString()))
-    $Rig + '-' + (($h[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')
+    $k = $Rig + '-' + (($h[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')
+    if ($Show) { "DRYKEY $k files=$($files.Count)"; $files | ForEach-Object { "  $_" } } else { $k }
 }
 function PreDryRunning([string]$key) { $p = Join-Path $pdd "$key.pid"; (Test-Path $p) -and -not (Test-Path (Join-Path $pdd "$key.rc")) -and [bool](Get-Process -Id ([int](Get-Content $p -Raw)) -ErrorAction SilentlyContinue) }
 function PreDryStart([string]$path, [string]$key) {
@@ -917,6 +983,12 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). $more"
 }
 
+if ($DryKeyOf) {   # rig-runner.ps1 -Rig <rig> -DryKeyOf <list>: the pre-dry-run key + the files it hashes + cached verdict
+    DryKey (Resolve-Path -LiteralPath $DryKeyOf).Path -Show
+    $k = DryKey (Resolve-Path -LiteralPath $DryKeyOf).Path; $rcf = Join-Path $pdd "$k.rc"
+    "CACHED $(if (Test-Path $rcf) { 'rc=' + (Get-Content $rcf -Raw).Trim() } elseif (PreDryRunning $k) { 'PENDING' } else { 'none' })"
+    exit 0
+}
 if ($Resolve) {   # rig-runner.ps1 -Rig <rig> -Resolve "KenshiFP <sha8>|latest" [-Fake]: what a list's needs: would install
     StagedRecord; $ik = (InstalledHashes).K
     if ($Resolve -match 'KenshiFP\s+(\w{8})\b') { $r = ResolvePinned $Matches[1] $ik; if ($r.fail) { "RESOLVE FAIL $($r.fail)" } else { "RESOLVE $(if ($r.sha) { "install $($r.sha)" } else { "keep installed $ik" }) : $($r.why)" } }
