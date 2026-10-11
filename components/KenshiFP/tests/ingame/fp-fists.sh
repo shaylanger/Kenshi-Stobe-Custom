@@ -144,16 +144,22 @@ import sys, re
 L = [l for l in open(sys.argv[1]) if 'fist ua=' in l]
 def v(l, k):
     m = re.search(' %s=([-0-9.]+),([-0-9.]+),([-0-9.]+)' % k, l); return tuple(map(float, m.groups())) if m else None
-on = n = 0; mv = 0.0; g = None
+on = n = 0; mv = 0.0; g = None; w0 = None; tr = 0.0; es = -1.0
 for l in L:
     w = [v(l, 'wrL'), v(l, 'wrR')]; nr = v(l, 'natR'); nl = v(l, 'natL')
     if None in w: continue
+    m = re.search(' es=([-0-9.]+),([-0-9.]+)', l)   # kfp-fist-strike: strike weight per hand (absent = older build)
+    if m: es = max(es, float(m.group(1)), float(m.group(2)))
+    if w0 is None: w0 = w   # first sample = ready guard: FP wrist travel from it (the strike crossing the view)
+    else: tr = max(tr, max(sum((a - b) ** 2 for a, b in zip(x, y)) ** 0.5 for x, y in zip(w, w0)))
     n += 1; on += all(p[2] > 1.0 and abs(p[0] / p[2]) <= 1.15 and -0.42 <= p[1] / p[2] <= 0.65 for p in w)
     if g is None and nr and nl: g = (nl, nr)
     elif g and nr and nl: mv = max(mv, max(sum((a - b) ** 2 for a, b in zip(x, y)) ** 0.5 for x, y in zip((nl, nr), g)))
 sh = on / n if n else 0
-ok = n >= 10 and sh >= 0.9 and mv >= 1.0
-print('fistnative %s samples=%d onscreen=%.2f native_move=%.2fdm' % ('PASS' if ok else 'FAIL', n, sh, mv))
+# NA1 (fists-fix): with the strike build (es present) a technique that extends an arm forward (es >= .5) must move the FP
+# wrist >= 0.6 dm from the guard (fsD2 on set D: punches barely moved, the fist never crossed the view)
+ok = n >= 10 and sh >= 0.9 and mv >= 1.0 and not (es >= 0.5 and tr < 0.6)
+print('fistnative %s samples=%d onscreen=%.2f native_move=%.2fdm fp_travel=%.2fdm strike=%s' % ('PASS' if ok else 'FAIL', n, sh, mv, tr, '%.2f' % es if es >= 0 else '-'))
 PY
 )
 # native fists: the per-frame vmrec checks too (lens U24: no arm across the lens; hand U25: hand orientation near the
