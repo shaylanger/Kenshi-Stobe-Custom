@@ -39,6 +39,18 @@
 # NOTE line); DIALOG_GUARD=0 in a row's command turns both off.
 # <out>/PREEMPT (rig-runner: a filler gives way to a real list): the batch stops at the next row boundary (BATCH PREEMPTED
 # line + NOTE with the rows not run), then GAMEDONE / background analyses / BATCH END / DONE as usual.
+# Row env (setup-speed 2026-10-11): every row also gets KAH_ROW=<name> (take-preflight.sh names its setup-FAIL RESULT line
+# after it) and RELAUNCH_FILE=<out>/.relaunch.<name>. A row that leaves a reason in that file (take-preflight.sh
+# pf_combat_on: fp_combat on still refused = a latched native fault only a game restart clears; 40-rangedrows lost 15 rows
+# to it) gets the game relaunched on the next row's save before that row (NOTE relaunch ...: row <name> asked ...; counts
+# against RECOVER), instead of every later row failing the same way.
+# TDR guard (2026-10-11 5090 BSOD; every GPU driver reset that day was on a crossbow frame; a TDR is a crash warning, never
+# noise): after every row (and once after the launch) the rig's Windows System log is read for nvlddmkm/Display events
+# 4101 or 153 since the last check. A hit = BATCH ABORTED ... TDR line, <out>/TDR (row, list, time, event), the game is
+# stopped, the rest of the list is not run (NOTE TDR stop: not run: ...); on the 5090 it also writes
+# C:\KenshiTestRuns\ALERT-5090-tdr.txt and stops the 5090 runner (rig-runner.ps1 -Stop -Rig 5090). rig-runner.ps1 reads
+# <out>/TDR + the event log itself (4080 too) and stops that rig's loop. TDR_FAKE=<file> replaces the event log with
+# "epoch|provider|id|message" lines (tests). Self-test: run-batch.sh --selftest (no game, no files; dryrun/selftest.sh runs it).
 set -u
 if grep -qi microsoft /proc/version 2>/dev/null; then CR=/mnt/c; else RIG=${RIG:-}; . /c/KenshiModding/tools/automation/rig-env.sh; fi   # the 4080 Git Bash mounts /mnt/c too
 KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
@@ -48,6 +60,39 @@ CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'; CTLO=()
 LAUNCH=""; STOP=0; RESUME=0; NODRY=""; REUSE=0
 # --reuse (rig-runner, 2026-10-10 no relaunch gap): with --launch, a game that is already up and in the world loads <save>
 # in place (stobe-auto load) instead of a stop + relaunch; launches as usual when Kenshi is not running / not answering
+# TDR guard (see header). tdr_events <since-epoch>: "epoch|provider|id|message" of System-log events 4101/153 since then
+tdr_events() {
+  if [ -n "${TDR_FAKE:-}" ]; then cat "$TDR_FAKE" 2>/dev/null; return 0; fi
+  timeout 60 powershell.exe -NoProfile -Command "\$s=[DateTimeOffset]::FromUnixTimeSeconds($1).LocalDateTime; Get-WinEvent -FilterHashtable @{LogName='System'; Id=4101,153; StartTime=\$s} -ErrorAction SilentlyContinue | ForEach-Object { '{0}|{1}|{2}|{3}' -f ([DateTimeOffset]\$_.TimeCreated).ToUnixTimeSeconds(), \$_.ProviderName, \$_.Id, (([string]\$_.Message -replace '\s+',' ') -replace '\|','/') }" </dev/null 2>/dev/null | tr -d '\r'
+}
+# tdr_filter <since-epoch>: only GPU driver resets (Display 4101 / nvlddmkm 4101|153; a disk's event 153 is not one)
+tdr_filter() { awk -F'|' -v s="$1" '$1+0 >= s+0 && ($3 == 4101 || $3 == 153) && tolower($2) ~ /^(nvlddmkm|display)$/ { print substr($0, 1, 240) }'; }
+# tdr_check <since-epoch>: 1 + TDR_HIT="<n> event(s), latest: <line>" on a hit, 0 = none
+tdr_check() { local h; TDR_HIT=""; h=$(tdr_events "$1" | tdr_filter "$1"); [ -n "$h" ] || return 0
+  TDR_HIT="$(wc -l <<<"$h" | tr -d ' ') event(s), latest: $(head -1 <<<"$h")"; return 1; }
+# relaunch_req <file>: the reason a row left in its RELAUNCH_FILE (empty = none)
+relaunch_req() { [ -s "$1" ] && head -1 "$1" | tr -d '\r' | cut -c1-200; return 0; }
+if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check + relaunch request on fixed cases
+  st_bad=0; st_n=0; tf=$(mktemp); rq=$(mktemp)
+  st() { st_n=$((st_n + 1)); if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2' want '$3'"; st_bad=$((st_bad + 1)); fi; }
+  printf '%s\n' "1000|Display|4101|Display driver nvlddmkm stopped responding and has successfully recovered." \
+    "1100|nvlddmkm|153|Error occurred on GPUID: 100" "1200|disk|153|The IO operation at logical block address 0x1 was retried." \
+    "900|Display|4101|old reset before the row" "1300|Microsoft-Windows-Kernel-Power|4101|other provider" > "$tf"
+  st "filter: Display 4101 + nvlddmkm 153 since 950, not disk 153 / older / other provider" "$(tdr_filter 950 <"$tf" | cut -d'|' -f1 | paste -sd,)" "1000,1100"
+  st "filter: nothing after the last GPU event" "$(tdr_filter 1101 <"$tf" | wc -l | tr -d ' ')" "0"
+  TDR_FAKE=$tf; tdr_check 950; st "check: hit returns 1" "$?" "1"
+  st "check: TDR_HIT names count + first event" "${TDR_HIT%%|*}" "2 event(s), latest: 1000"
+  tdr_check 1101; st "check: only a disk 153 later = no hit" "$?:$TDR_HIT" "0:"
+  printf '' > "$tf"; tdr_check 0; st "check: empty log = no hit" "$?" "0"
+  TDR_FAKE=/nonexistent/tdr; tdr_check 0; st "check: unreadable fake log = no hit (no false stop)" "$?" "0"
+  unset TDR_FAKE
+  : > "$rq"; st "relaunch_req: empty file = none" "$(relaunch_req "$rq")" ""
+  st "relaunch_req: missing file = none" "$(relaunch_req /nonexistent/rq)" ""
+  printf 'fp_combat on refused after 7 tries (native_ready=0 fault=4; latched)\r\nsecond\n' > "$rq"
+  st "relaunch_req: first line, CR stripped" "$(relaunch_req "$rq")" "fp_combat on refused after 7 tries (native_ready=0 fault=4; latched)"
+  rm -f "$tf" "$rq"
+  echo "RUNBATCH-SELFTEST $([ $st_bad = 0 ] && echo PASS || echo "FAIL $st_bad") $st_n cases"; exit $((st_bad > 0))
+fi
 while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --reuse) REUSE=1; shift ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; *) break ;; esac; done
 L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] [--no-dryrun <reason>] <list-file> <out-dir>}"; O="${2:?out-dir}"
 mkdir -p "$O"; rm -f "$O/DONE" "$O/GAMEDONE"
@@ -113,6 +158,20 @@ relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = a
   ctl stop >/dev/null 2>&1; stobe-say on >/dev/null 2>&1
   launch "$s" | tail -1; world 900
 }
+TDR_SINCE=$(date +%s)   # TDR guard: events from the batch start on (launch included)
+tdr_guard() {  # tdr_guard <row|launch>: 1 = GPU driver reset since the last check: batch stopped (header)
+  local now; now=$(date +%s); tdr_check "$((TDR_SINCE - 5))" && { TDR_SINCE=$now; return 0; }
+  local msg="TDR (GPU driver reset) on rig ${RIG:-5090} at/after $1 of $L: $TDR_HIT"
+  say "BATCH ABORTED $(date '+%F %H:%M'): $msg (rest of the list not run, game stopped)"
+  printf '%s\nrow=%s\nlist=%s\nout=%s\ntime=%s\n' "$msg" "$1" "$L" "$O" "$(date '+%F %H:%M:%S')" > "$O/TDR"
+  PRE=TDR
+  if [ "${RIG:-5090}" != 4080 ]; then
+    { echo "ALERT 5090 $(date +%H:%M) $msg. Runner stopped; delete this file only once Shay cleared the cause."; cat "$O/TDR"; } > "$([ -n "${TDR_FAKE:-}" ] && echo "$O" || echo "$CR/KenshiTestRuns")/ALERT-5090-tdr.txt"   # fake: into the out dir
+    [ -n "${TDR_FAKE:-}" ] || timeout 120 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\rig-runner.ps1' -Stop -Rig 5090 </dev/null 2>&1 | tr -d '\r' | tail -1
+  fi
+  [ -n "${TDR_FAKE:-}" ] || { kenshi_up && ctl stop | tail -1; }
+  return 1
+}
 prepare() {  # prepare <save> <player> <mate>
   case "$1" in
     -) return 0 ;;
@@ -157,7 +216,8 @@ if [ -f "$O/launch.out" ] && grep -q "postlaunch FAIL" "$O/launch.out"; then
   [ "${RIG:-5090}" = 4080 ] || powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" stop </dev/null >/dev/null 2>&1
   finish; exit 1
 fi
-PRE=""; NOTRUN=(); pass=0; fail=0; recwarn=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
+PRE=""; NOTRUN=(); pass=0; fail=0; recwarn=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}; relreq=""; relrow=""
+tdr_guard launch || true   # a reset during the launch/first load: no row runs (PRE=TDR)
 # Recording and analysis split (Shay 2026-10-10: the 5090 game sat idle 5 min while a take's lab checks ran): a row script
 # calls pf_game_done (take-preflight.sh: touches $GAME_DONE_FILE) once it no longer uses the game; the batch then goes on
 # with the next row while that script finishes its analysis in the background (normal priority). Its RESULT lines are
@@ -237,6 +297,12 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   read -r freec kpriv <<<"$(memline)"
   rs0=$SECONDS; echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
   if [ "$dead" = 0 ] && [ "${kpriv:-x}" = - ]; then dead=1; say "NOTE Kenshi is not running before $name"; fi
+  # a row asked for a fresh game (RELAUNCH_FILE: latched fp_combat fault): relaunch on this row's save first
+  if [ -n "$relreq" ] && [ "$dead" = 0 ]; then
+    if [ "$recovered" -lt "$RECOVER" ]; then relaunch "$save" "row $relrow asked for a relaunch: $relreq" || { say "NOTE relaunch failed"; dead=1; }
+    else say "NOTE $name: row $relrow asked for a relaunch ($relreq) but RECOVER=$RECOVER relaunches are used up: runs on the same game"; fi
+  fi
+  relreq=""; relrow=""
   if [ "$dead" = 1 ] && [ "$recovered" -lt "$RECOVER" ]; then
     if relaunch "$save" "game dead before $name (commit free ${freec:-?} GB)"; then dead=0; else say "NOTE relaunch failed"; fi
   elif [ "$dead" = 0 ] && [ -n "${freec:-}" ] && [ "$recovered" -lt "$RECOVER" ] && awk -v f="$freec" -v m="$MIN_COMMIT_GB" 'BEGIN{exit !(f+0 < m+0)}'; then
@@ -284,8 +350,8 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
     rg=$!
   fi
   echo "$(date +%H:%M) $name: run ${run[*]}"
-  gd="$O/.gamedone.$name"; rm -f "$gd"
-  env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" GAME_DONE_FILE="$gd" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null &
+  gd="$O/.gamedone.$name"; rm -f "$gd"; rlf="$O/.relaunch.$name"; rm -f "$rlf"
+  env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" GAME_DONE_FILE="$gd" KAH_ROW="$name" RELAUNCH_FILE="$rlf" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null &
   sp=$!; echo "$sp $name $(cat /proc/$sp/winpid 2>/dev/null)" > "$O/step.pid"
   [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ] && { bash "$A/dialog-guard.sh" watch "$sp" "$dgl" >/dev/null 2>&1 </dev/null & dgw=$!; }
   bg=0; while kill -0 "$sp" 2>/dev/null; do [ -f "$gd" ] && { bg=1; break; }; sleep 2; done
@@ -303,13 +369,15 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   if [ $bg = 1 ]; then echo "$(date +%H:%M) $name: game part done, analysis goes on in the background (pid $sp)"; PEND+=("$sp|$name|$save|$player|$mate|$out|$to|$sl")
   else row_result "$name" "$save" "$player" "$mate" "$out" "$to" "$rc" "$sl"; fi
   collect
+  relreq=$(relaunch_req "$rlf"); [ -n "$relreq" ] && { relrow=$name; say "NOTE $name: asked for a game relaunch before the next row: $relreq"; }
+  tdr_guard "row $name" || continue   # GPU driver reset: batch stopped, no liveness wait on the stopped game
   # m37: a crashed/killed Kenshi = dead now, no 4.5 min of waits on a game that is gone (the next row relaunches)
   # 2026-10-11 (67-xbr-r11-hit): the runner killed the hung game DURING these waits and the batch sat 4.5 min on a game that
   # was gone: world_live re-checks Kenshi every 20 s and returns 2 the moment it is gone (dead now, no NOTE: next row relaunches)
   lw=2; if kenshi_up; then world_live 120; lw=$?; [ $lw = 1 ] && { for _ in $(seq 15); do kenshi_up || break; sleep 2; done; world_live 120; lw=$?; }; fi
   case $lw in 0) ;; 2) dead=1 ;; *) say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1 ;; esac
 done 3<"$L"
-[ -n "$PRE" ] && say "NOTE preempted: not run: ${NOTRUN[*]}"
+[ -n "$PRE" ] && say "NOTE $([ "$PRE" = TDR ] && echo 'TDR stop' || echo preempted): not run: ${NOTRUN[*]}"
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
 [ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
 touch "$O/GAMEDONE"; [ ${#PEND[@]} -gt 0 ] && echo "$(date +%H:%M) game part done; waiting for ${#PEND[@]} background analyses"
