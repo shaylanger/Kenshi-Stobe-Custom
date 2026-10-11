@@ -5,7 +5,7 @@
 # Why (Shay 2026-10-10): T6 turret takes tur-b-2/tur-c FAILed only on recording checks (1.1 s sampler gap, short video,
 # label lag) at WSL load 60 from lab jobs; nice 15 alone does not keep the take's sampler/recorder on time.
 # Recording = a fresh marker C:\KenshiTestRuns\recording\5090* (< 30 min old; take scripts may touch/remove one) or a
-# running ffmpeg.exe gdigrab started from WSL (every 5090 take recorder, pf_open clips included; dry-run shims are not
+# running ffmpeg.exe gdigrab (< 30 min running; older = stale, ignored) started from WSL (every 5090 take recorder, pf_open clips included; dry-run shims are not
 # ffmpeg.exe). The 4080 records on its own CPU: its takes don't pause the 5090 lab.
 # While recording: SIGSTOP every process in every labnice.sh job tree (kfp-pipeline, gate, regress, climbers, ...) that
 # holds a slot above the recording budget; when it ends: SIGCONT. One lab CPU budget (Shay 2026-10-10, CLAUDE.md speed
@@ -17,35 +17,42 @@
 # Log: /tmp/labnice/recpause.log (PAUSE/RESUME lines).
 set -u
 D=${LAB_D:-/tmp/labnice}; mkdir -p "$D"; LOG=$D/recpause.log; ST=$D/recpause.stopped
-REC=${LAB_RECDIR:-/mnt/c/KenshiTestRuns/recording}; MAXPAUSE=${LAB_MAXPAUSE:-1800}; TICK=2; RECS=${LABNICE_REC_SLOTS:-12}
+REC=${LAB_RECDIR:-/mnt/c/KenshiTestRuns/recording}; MAXPAUSE=${LAB_MAXPAUSE:-1800}; TICK=${LAB_TICK:-2}; RECS=${LABNICE_REC_SLOTS:-12}
+RECMAX=${LAB_RECMAX:-1800}; GPAT=${LAB_GDIGRAB_PAT:-gdigrab}   # LAB_*: selftest overrides (labnice-selftest.sh)
 
 recording() {
-  find "$REC" -maxdepth 1 -name '5090*' -mmin -30 2>/dev/null | grep -q . && return 0
-  local p a0
-  for p in $(pgrep -f -- 'gdigrab'); do
+  # stale flags never count (fix 2026-10-11): a marker older than RECMAX s or an ffmpeg gdigrab running longer than
+  # RECMAX s (a take records minutes; an orphaned/stuck recorder is not a recording) is ignored
+  find "$REC" -maxdepth 1 -name '5090*' -newermt "-$RECMAX seconds" 2>/dev/null | grep -q . && return 0
+  local p a0 age
+  for p in $(pgrep -f -- "$GPAT"); do
     a0=$(tr '\0' '\n' < /proc/$p/cmdline 2>/dev/null | head -1)
-    case "${a0,,}" in *ffmpeg.exe) return 0 ;; esac
+    case "${a0,,}" in *ffmpeg.exe)
+      age=$(ps -o etimes= -p "$p" 2>/dev/null | tr -d ' '); [ -n "$age" ] && [ "$age" -le "$RECMAX" ] && return 0 ;;
+    esac
   done
   return 1
 }
 
 labpids() {   # every process below a labnice.sh root over the recording budget, minus .exe proxies and `timeout` subtrees
-  local roots r s ok allowed=""; roots=$(pgrep -f '(^|/)labnice\.sh( |$)' | tr '\n' ' ')
+  # budget: only roots whose held file (/tmp/labnice/held.<pid>) names a slot above RECS; no held file / "acquiring" =
+  # never paused (fix 2026-10-11: a just-started job had no held file yet, was paused as an "older labnice" and sat
+  # SIGSTOPped at 0/16 slots for the whole filming session). RECS=0: every root (old rule). No arg: every root (resume).
+  local roots r s over=""; roots=$(pgrep -f '(^|/)labnice\.sh( |$)' | tr '\n' ' ')
   [ -n "$roots" ] || return 0
   if [ "${1:-}" = budget ] && [ "$RECS" -gt 0 ]; then
-    for r in $roots; do [ -s "$D/held.$r" ] || continue; ok=1   # "acquiring" = waiting for slots, not paused
-      for s in $(cat "$D/held.$r"); do [ "$s" -gt "$RECS" ] 2>/dev/null && ok=0; done
-      [ $ok = 1 ] && allowed="$allowed $r"
+    for r in $roots; do [ -s "$D/held.$r" ] || continue
+      for s in $(cat "$D/held.$r" 2>/dev/null); do [ "$s" -gt "$RECS" ] 2>/dev/null && { over="$over $r"; break; }; done
     done
-  fi
-  ps -eo pid=,ppid=,comm=,args= | awk -v roots="$roots" -v allowed="$allowed" -v self=$$ '
-    { pid[NR]=$1; pp[$1]=$2; cm[$1]=$3; a0[$1]=$4 }
+    [ -n "$over" ] || return 0
+  else over=$roots; fi
+  ps -eo pid=,ppid=,comm=,args= | awk -v roots="$over" -v self=$$ '
+    { pid[NR]=$1; pp[$1]=$2; cm[$1]=$3; a0[$1]=$4; full[$1]=$0 }
     END { n=split(roots, r, " "); for (i=1;i<=n;i++) isroot[r[i]]=1
-      n=split(allowed, r, " "); for (i=1;i<=n;i++) isok[r[i]]=1
       for (k in pp) { p=k; keep=0; skip=0
         if (k==self) continue
-        while (p!="" && p+0>1) { if (cm[p]=="timeout") skip=1; if (isroot[p]) { keep=!isok[p]; break } p=pp[p] }
-        if (keep && !skip && tolower(a0[k]) !~ /\.exe$/ && cm[k] !~ /lab-recpause/) print k } }'
+        while (p!="" && p+0>1) { if (cm[p]=="timeout") skip=1; if (isroot[p]) { keep=1; break } p=pp[p] }
+        if (keep && !skip && tolower(a0[k]) !~ /\.exe$/ && full[k] !~ /lab-recpause/) print k } }'
 }
 
 resume() {
@@ -77,7 +84,14 @@ while :; do
     if [ $((now - since)) -gt "$MAXPAUSE" ]; then
       [ -s "$ST" ] && resume "paused > ${MAXPAUSE}s: recorder stuck? lab resumed until the recording ends"
     else
-      new=$(labpids budget | sort -u | comm -23 - <(sort -u "$ST" 2>/dev/null))
+      want=$(labpids budget | sort -u)
+      new=$(comm -23 <(echo "$want" | sed '/^$/d') <(sort -u "$ST" 2>/dev/null))
+      # stopped pids no longer over budget (slots given back, dead): resume now, not at the end of the recording
+      old=$(comm -13 <(echo "$want" | sed '/^$/d') <(sort -u "$ST" 2>/dev/null))
+      if [ -n "$old" ]; then
+        echo "$old" | xargs -r kill -CONT 2>/dev/null; comm -12 <(echo "$want" | sed '/^$/d') <(sort -u "$ST") > "$ST.tmp"; mv -f "$ST.tmp" "$ST"
+        echo "$(date '+%F %T') RESUME $(echo "$old" | wc -l) pids (no longer over budget)" >> "$LOG"
+      fi
       if [ -n "$new" ]; then
         echo "$new" | xargs -r kill -STOP 2>/dev/null; echo "$new" >> "$ST"
         echo "$(date '+%F %T') PAUSE $(echo "$new" | wc -l) pids (recording)" >> "$LOG"
