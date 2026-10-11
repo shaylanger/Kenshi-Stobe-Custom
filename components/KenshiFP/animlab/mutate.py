@@ -117,6 +117,27 @@ def m_jump(lines):         # one-frame 1.5 dm jump of weapon + right arm in read
     return lines
 
 
+def m_s3_windup_off(lines):   # E6 stroke 3 wind-up: blade turned 25 deg off the forearm line (in their plane) in every wind-up frame of the first stroke-3 swing
+    for i in swing_frames(lines, 0.0, 0.29, stroke='3'):
+        g = lines[i].split(' | ')
+        el, wr, f, u = getvec(g, 1, 11), getvec(g, 1, 12), getvec(g, 1, MF), getvec(g, 1, MU)
+        fa = tuple(wr[k] - el[k] for k in range(3))
+        ax = (fa[1] * f[2] - fa[2] * f[1], fa[2] * f[0] - fa[0] * f[2], fa[0] * f[1] - fa[1] * f[0])
+        n = math.sqrt(sum(x * x for x in ax))
+        if n < 1e-6: continue
+        ax = tuple(x / n for x in ax)
+        setvec(g, 1, MF, rot(f, ax, 25.0)); setvec(g, 1, MU, rot(u, ax, 25.0)); lines[i] = ' | '.join(g)
+    return lines
+
+
+# ---------------- source edits (kind 'src': base = a corpus source snapshot tarball, edit(client dir)) ----------------
+def s_2hl_stroke0(d):   # E6 default stroke cycle: the light-2H class drops out of the cycle (kfp-e6-default-mask v1 + kfp-2h-light = 6E7C0363)
+    p = os.path.join(d, 'kfp_viewmodel.inc'); t = open(p).read()
+    old = 'g_vm_2h && !g_vm_2hl && g_vm_stroke_force < 0'
+    assert t.count(old) == 1, 's_2hl_stroke0: anchor'
+    open(p, 'w').write(t.replace(old, 'g_vm_2h && g_vm_stroke_force < 0'))
+
+
 # ---------------- video / take edits ----------------
 ARROW = '/tmp/al-mut-arrow.png'
 
@@ -217,6 +238,29 @@ REC_CHECKS = {
     'fist-hand': lambda p: verdict_word(run(['python3', FTC, p, '-']), 'hand '),
     'metrics-any': lambda p: (('FAIL' if any(' FAIL' in l[:40] for l in run(al('metrics', p)).splitlines()) else 'PASS'), 'metrics'),
 }
+def _pool_inline_s3(p):   # the gate pool's per-swing inline path (metrics.swing_verdicts inline + pool_predict) on the rec as recorded
+    code = ('import sys; sys.path.insert(0, %r); import recfmt, metrics as M; r = recfmt.parse(sys.argv[1]); '
+            'V = [v for v in M.swing_verdicts(r.frames, M.frame_metrics(r), (), inline=True) if v["stroke"] == 3]; '
+            'ok, t = M.pool_predict(V, ("inline",), take=min(2, max(1, len([v for v in V if v["full"]])))); '
+            'print("poolinl", "PASS" if ok else "FAIL", " ".join(t))') % L
+    return verdict_word(run(['python3', '-c', code, p]), 'poolinl ')
+
+
+REC_CHECKS['inline-stroke3'] = lambda p: verdict_word(run(al('--only-stroke', '3', 'inline', p)), 'inline ')
+REC_CHECKS['pool-inline-stroke3'] = _pool_inline_s3
+SC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stroke-cycle.py')
+BUILD = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'build.sh')
+
+
+def _stroke_cycle(d):   # d = a client dir: build its replay adapter (build cache), run the E6 default stroke cycle check
+    out = os.path.join(os.path.dirname(d), 'kfpvm_' + os.path.basename(os.path.dirname(d)))
+    b = run(['bash', BUILD, '--src', d, '--out', out])
+    if not os.path.exists(out):
+        return 'NONE', 'build failed: ' + b.strip()[-150:]
+    return verdict_word(run(['python3', SC, '--adapter', out, '--src', d]), 'RESULT ')
+
+
+SRC_CHECKS = {'stroke-cycle': _stroke_cycle}
 VID_CHECKS = {
     'cursor': lambda p: verdict_word(run(['python3', os.path.join(L, 'frames.py'), 'cursor', p, '--name', 'mut']), 'RESULT '),
     'openground': lambda p: verdict_word(run(['python3', os.path.join(L, 'frames.py'), 'openground', p, '--name', 'mut']), 'RESULT '),
@@ -253,6 +297,8 @@ MUTS = [
     ('take-video-past-end', 'take', 'takes/ok-e6fix', t_end, ['takecheck']),
     ('take-bystander', 'take', 'takes/ok-e6fix', t_near, ['takecheck']),
     ('take-combat-message', 'take', 'takes/ok-e6fix', t_msgs, ['takecheck']),
+    ('rec-s3-windup-blade-off', 'rec', 'rec/e6s3-3f1a-5090.txt', m_s3_windup_off, ['inline-stroke3', 'pool-inline-stroke3']),
+    ('src-2hl-stroke0', 'src', 'src/KenshiFP-e6mask3-c4ee493.client.tar.gz', s_2hl_stroke0, ['stroke-cycle']),
 ]
 
 
@@ -307,6 +353,13 @@ def run_mut(a, mid, kind, src, edit, checks):
             pool = VID_CHECKS; dst = os.path.join(a.out, mid + '.mp4'); edit(src, dst)
             names = list(pool) if checks == 'ALL' else checks
             runc = lambda n, p: pool[n](p)
+        elif kind == 'src':   # base and mutant source trees extracted side by side, each built + checked (build/replay caches)
+            trees = []
+            for t in ('base', 'mut'):
+                d = os.path.join(a.out, mid + '-' + t); shutil.rmtree(d, ignore_errors=True); os.makedirs(d)
+                subprocess.run(['tar', 'xzf', src, '-C', d], check=True); trees.append(os.path.join(d, 'client'))
+            edit(trees[1]); src, dst = trees
+            names = checks; runc = lambda n, p: SRC_CHECKS[n](p)
         else:
             dst = os.path.join(a.out, mid); shutil.rmtree(dst, ignore_errors=True); shutil.copytree(src, dst); edit(dst)
             names = checks; runc = lambda n, p: take_check(p)
@@ -334,7 +387,7 @@ try:
 except ImportError:
     labcache = None
 DEPS = {'rec': ('animlab.py', 'metrics.py', 'recfmt.py', 'labcache.py'), 'vid': ('frames.py', 'framecache.py'),
-        'take': ('takecheck.py', 'frames.py', 'framecache.py')}
+        'take': ('takecheck.py', 'frames.py', 'framecache.py'), 'src': ('labcache.py',)}
 n_cached = [0]
 _ffv = []
 
@@ -357,6 +410,11 @@ def mut_key(mid, kind, base, checks, src):
     code = [[d, labcache.fhash(os.path.join(L, d))] for d in DEPS[kind] if os.path.exists(os.path.join(L, d))]
     if kind == 'rec':
         code.append(['fist-take-check.py', labcache.fhash(FTC)])
+    if kind == 'src':   # the check builds the adapter and replays: its main, headers, build script and the check script
+        H = os.path.dirname(os.path.abspath(__file__))
+        code += [[f, labcache.fhash(os.path.join(H, f))] for f in sorted(os.listdir(H)) if f.endswith(('.c', '.h')) or f in ('build.sh', 'stroke-cycle.py')]
+        code += [[f, labcache.fhash(os.path.join(H, 'patches', f))] for f in sorted(os.listdir(os.path.join(H, 'patches')))]
+        code.append(['stroke-cycle-table', labcache.fhash(os.path.join(CORPUS, 'pools/stroke-cycle/classes.tsv'))])
     return labcache.make_key('mutation', [mid, kind, base, checks, labcache.fhash(os.path.abspath(__file__)), code,
                                           labcache.fhash(RULES) if os.path.exists(RULES) else '', _ffv[0], mat, labcache.env_part()])
 

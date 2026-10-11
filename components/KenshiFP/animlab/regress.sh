@@ -544,5 +544,24 @@ if [ -f "$WJ" ] && [ -f "$ZR" ]; then
       || bad "2H weapons: $nw judged, failing twohand/twosp/near/vis: ${bw:-none judged}"
   else echo "REGRESS INFO 2H: the source has no two-hand path (kfp-two-hand not applied)"; fi
 else echo "REGRESS INFO 2H: weapons.json or corpus q-sword-z0-a missing"; fi
+# 38. E6 gate coverage (animlab-m-e6, Misses 2026-10-11 "E6 default stroke cycle" + "E6-s1pt30-s1"): the corpus source pairs
+#     of the gate's steps 3b/3c, each corpus source tarball built (build cache) and judged: stroke-cycle.py FAILs 6E7C0363
+#     (kfp-e6-default-mask v1 + kfp-2h-light: the 2H-light class picks only stroke 0) and PASSes e6mask3-c4ee493; e6-takes.py
+#     FAILs 13334FFF on s1pt30 stroke-1 arc (wb 53.2 > 50) and PASSes it with the corpus noclamp tables (48.8).
+e6src() { local n=$1 d=/tmp/al-e6src-$1; rm -rf "$d"; mkdir -p "$d"
+  [ -f "$CORPUS/src/KenshiFP-$n.client.tar.gz" ] && tar xzf "$CORPUS/src/KenshiFP-$n.client.tar.gz" -C "$d"     && bash "$HERE/build.sh" --src "$d/client" --out "$BLD/kfpvm_e6-$n" > /tmp/al-e6src-$n.log 2>&1; }
+for t in 6E7C0363:FAIL:fail=2hl e6mask3-c4ee493:PASS:fail=none; do n=${t%%:*} w=${t#*:}; w=${w%%:*} want=${t##*:}
+  if e6src "$n"; then r=$(python3 "$HERE/stroke-cycle.py" --adapter "$BLD/kfpvm_e6-$n" --src /tmp/al-e6src-$n/client 2>&1 | grep '^RESULT')
+    case "$r" in "RESULT STROKE-CYCLE $w classes="*" $want "*) ok "stroke-cycle $n: ${r:0:120}";; *) bad "stroke-cycle $n (want $w $want): ${r:0:160}";; esac
+  else echo "REGRESS INFO stroke-cycle $n: corpus source or build missing (/tmp/al-e6src-$n.log)"; fi; done
+if e6src 13334FFF; then
+  r=$(python3 "$HERE/e6-takes.py" --adapter "$BLD/kfpvm_e6-13334FFF" 2>&1 | grep -E '^RESULT|^E6TAKE s1pt30-1333 s1 arc')
+  case "$r" in *"s1pt30-1333 s1 arc FAIL"*"RESULT E6-TAKES FAIL"*) ok "e6-takes 13334FFF: s1pt30 s1 arc FAIL $(echo "$r" | grep -o 'wb_max=[0-9.]*' | head -1)";;
+    *) bad "e6-takes 13334FFF (want s1pt30 s1 arc FAIL): $(echo "$r" | tr '
+' ';' | cut -c1-200)";; esac
+  r=$(python3 "$HERE/e6-takes.py" --adapter "$BLD/kfpvm_e6-13334FFF" --args "--tables $CORPUS/pools/e6-takes/noclamp.tables" 2>&1 | grep '^E6TAKE s1pt30-1333 s1 arc')
+  case "$r" in *" arc PASS "*) ok "e6-takes 13334FFF noclamp tables: s1pt30 s1 arc PASS $(echo "$r" | grep -o 'wb_max=[0-9.]*')";; *) bad "e6-takes 13334FFF noclamp (want s1pt30 s1 arc PASS): ${r:0:160}";; esac
+else echo "REGRESS INFO e6-takes 13334FFF: corpus source or build missing (/tmp/al-e6src-13334FFF.log)"; fi
+rm -rf /tmp/al-e6src-*
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
