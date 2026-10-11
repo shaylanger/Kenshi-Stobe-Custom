@@ -64,7 +64,9 @@ run_sub i1 "$K1" "$KD1" & pa=$!
 run_sub i2 "$K2" "$KD2" & pb=$!
 sleep 30; g1=$(gpu); p1=$(procs); log "during: gpu=$g1 procs=$p1"
 wait $pa $pb
-r1=$(grep -h '^RESULT' "$OUT/i1/out.txt" | tail -1); r2=$(grep -h '^RESULT' "$OUT/i2/out.txt" | tail -1)
+# a sub-row may print several RESULT lines (CS01..CS0n): compare the per-row verdict sets
+vs() { grep -h '^RESULT' "$1" | awk '{print $2":"$3}' | sort -u | paste -sd' '; }
+r1=$(vs "$OUT/i1/out.txt"); r2=$(vs "$OUT/i2/out.txt")
 log "i1: $r1"; log "i2: $r2"; log "spans i1: $(tr '\n' ' ' < "$OUT/i1/span") i2: $(tr '\n' ' ' < "$OUT/i2/span")"
 s1a=$(awk '/^start/{print $2}' "$OUT/i1/span"); e1=$(awk '/^end/{print $2}' "$OUT/i1/span")
 s2a=$(awk '/^start/{print $2}' "$OUT/i2/span"); e2=$(awk '/^end/{print $2}' "$OUT/i2/span")
@@ -72,12 +74,13 @@ ov=$(( (e1 < e2 ? e1 : e2) - (s1a > s2a ? s1a : s2a) ))
 h1b=$(s1 time | gh); h2b=$(s2 time | gh); log "game hours after: i1=$h1b i2=$h2b"
 st1=$(s1 status); h1ok=$(echo "$st1" | grep -c 'phase=world')
 dh1=$(awk -v a="${h1a:-0}" -v b="${h1b:-0}" 'BEGIN{printf "%.3f", b-a}'); dh2=$(awk -v a="${h2a:-0}" -v b="${h2b:-0}" 'BEGIN{printf "%.3f", b-a}')
-v1=$(echo "$r1" | awk '{print $3}'); v2=$(echo "$r2" | awk '{print $3}')
-ev="launch=${tl}s overlap=${ov}s i1=${v1:-none}($((e1-s1a))s) i2=${v2:-none}($((e2-s2a))s) dgh i1=$dh1 i2=$dh2 gpu ${gpu0}->${g1} procs $p1 (i1 row: ${r1:0:120}) (i2 row: ${r2:0:120})"
+cnt() { local p f; p=$(echo "$1" | grep -o ':PASS[^ ]*' | wc -l); f=$(echo "$1" | grep -o ':FAIL' | wc -l); [ -n "$1" ] && echo "${p}P/${f}F"; }
+v1=$(cnt "$r1"); v2=$(cnt "$r2")
+ev="launch=${tl}s overlap=${ov}s i1=${v1:-none}($((e1-s1a))s) i2=${v2:-none}($((e2-s2a))s) dgh i1=$dh1 i2=$dh2 gpu ${gpu0}->${g1} procs $p1 (i1 rows: ${r1:0:160}) (i2 rows: ${r2:0:160})"
 cleanup
 [ "$h1ok" = 1 ] || fin FAIL "instance 1 left the world during the trial $ev"
 [ -n "$v1" ] && [ -n "$v2" ] || fin FAIL "a sub-row printed no RESULT line $ev"
 [ "$ov" -gt 30 ] || fin FAIL "the two rows did not overlap $ev"
 awk -v a="$dh1" -v b="$dh2" 'BEGIN{exit !(a>0 && b>0)}' || fin FAIL "game time did not advance on both $ev"
-[ "${v1%%-*}" = "${v2%%-*}" ] || fin FAIL "the two games disagree $ev"
+[ "$(echo "$r1" | sed 's/PASS-REC/PASS/g')" = "$(echo "$r2" | sed 's/PASS-REC/PASS/g')" ] || fin FAIL "the two games disagree $ev"
 fin PASS "$ev"
