@@ -887,6 +887,7 @@ static float g_cfg_tp_min_dm = 16.0f;   /* zoom wheel: nearest third-person dist
 static float g_cfg_head_show_dm = 16.0f; /* zoom camera: head stays hidden below this distance (dm), Z1 */
 static int   g_cfg_band_hide = 1;     /* Z1: whole character + held weapon hidden while the zoom camera is between the eye
                                        * and head_show_dm (fade ease-out, wall pull-in): no headless torso / half-faded hands */
+static float g_cfg_band_clip_dm = 5.0f; /* Z1 band: near clip = applied + this while the band hide is on (0 = off) */
 static unsigned g_cfg_body_mask = 0xFFFFFFFFu; /* hiddenMask for the band hide (every hide group) */
 static int   g_gear_all;              /* band hide latched by fp_head_visibility: mask = body mask, every worn entity hidden */
 static int   g_cfg_hide_head   = 1;    /* always hide the player's head mesh in FP (not just FF) */
@@ -4567,9 +4568,17 @@ static void fp_camera_override(void *gw)
                         g_cam_get_farclip ? g_cam_get_farclip(ogre_cam) : -1.0f,
                         g_cfg_nearclip);
             }
-            if (FP_NEARCLIP != g_nc_applied) {         /* write only on change (see FOV) */
-                g_cam_set_nearclip(ogre_cam, FP_NEARCLIP);
-                g_nc_applied = FP_NEARCLIP;
+            float nc = FP_NEARCLIP;
+            /* Z1 band (kfp-zband-clip): clip everything up to just past the own character, so no mask hole or
+             * re-shown worn piece can render while the camera eases through the band (camera sits applied dm
+             * behind the head along the view axis). */
+            if (g_cfg_band_clip_dm > 0.0f && fp_view_band()) {
+                float bn = g_view.applied + g_cfg_band_clip_dm;
+                if (bn > nc) nc = bn;
+            }
+            if (nc != g_nc_applied) {                  /* write only on change (see FOV) */
+                g_cam_set_nearclip(ogre_cam, nc);
+                g_nc_applied = nc;
             }
         }
     } else if (g_ovr_prev) {
@@ -6916,6 +6925,7 @@ static void load_ini(void)
         else if (ini_int(line, "head_hide_mask", &v))     g_cfg_head_mask = (unsigned)v;
         else if (ini_int(line, "zoom_switch", &v))        g_cfg_zoom_switch = !!v;
         else if (ini_int(line, "band_hide", &v))          g_cfg_band_hide = !!v;
+        else if (ini_int(line, "band_clip_dm", &v))       g_cfg_band_clip_dm = (float)(v < 0 ? 0 : v > 20 ? 20 : v);
         else if (ini_int(line, "body_hide_mask", &v))     g_cfg_body_mask = (unsigned)v;
         else if (ini_int(line, "tp_min_dm", &v))          g_cfg_tp_min_dm = (float)(v < 0 ? 0 : v > 60 ? 60 : v);
         else if (ini_int(line, "head_show_dm", &v))       g_cfg_head_show_dm = (float)(v < 0 ? 0 : v > 60 ? 60 : v);
