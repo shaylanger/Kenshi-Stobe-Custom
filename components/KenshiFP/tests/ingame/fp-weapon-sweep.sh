@@ -66,6 +66,8 @@ give_w(){ local r w ws
 # give probe (2026-10-10 wm5090-2: the harness weapon factory refused every weapon, 18 takes failed one by one): the row's first
 # weapon must be creatable, else the whole row stops here with one setup FAIL (a dry run can't see a real factory refusal)
 PSID=$(awk -F'|' -v s="${WSTART:-1}" '$1!~/^(#|$)/{k++; if(k==s){print $1; exit}}' "$LIST")
+# give next to $HOLD: a replaced weapon dropped on the ground lands there, not on the take spot (refilm 5)
+A teleport $SH $HOLD 3 >/dev/null; sleep 1
 if [ -n "$PSID" ] && ! A inv $SH | grep -q "$PSID"; then
   r=$(give_w "$PSID"); echo "$r" | grep -q " got 1/" || pf_fail "give probe $PSID (weapon factory): $(echo "$r" | cut -c1-400)"
 fi
@@ -140,6 +142,9 @@ take(){   # k sid name type animcls ammo
   cp "$KDIR/vmrec-ws-$slug.txt" "$N.vmrec.txt" 2>/dev/null; rm -f "$KDIR/vmrec-ws-$slug.txt"
   # hand the weapon on (keeps the inventory free; the next take starts clean)
   A key_inject r tap 120 >/dev/null; pf_waitst holstered 6
+  # unequip next to $HOLD: a long weapon that fits no main slot drops on the ground, and there it stays out of the
+  # take spot (refilm 5 2026-10-11: the dropped Naginata stood in the Warhammer frames with its hover name tag)
+  A teleport $SH $HOLD 3 >/dev/null; sleep 1
   A unequip $SH "$sid" >/dev/null; A transfer $SH $HOLD "$sid" >/dev/null
   # offline checks in the background (no game use) while the next weapon records (Shay 2026-10-10: the game never waits
   # for analysis); the sweep collects $D/result.txt after the last take. Own stdout/stderr = file: the caller's $( ) returns now.
