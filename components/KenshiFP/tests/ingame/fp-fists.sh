@@ -116,6 +116,7 @@ for r in $(seq 1 $REPS); do
     if [ "$NAT" = 1 ]; then case "$f" in *"tech='-'"*) [ $seen = 1 ] && [ $((SECONDS-s0)) -ge 1 ] && { sleep 0.3; break; };; *"tech='"*) seen=1;; esac; fi
     sleep 0.15; done
 done
+SWT=$(grep -o 'swings=[0-9]*' "$N.fist.txt" | tail -1 | tr -dc 0-9)   # counter after the technique presses (before block/z25)
 # NA1 open acceptance (fists-fix 2026-10-11), FIST_PHASES=block,z25 (default none): block raises the guard (RMB held: state
 # blocking, both FP wrists higher + nearer the centre than the ready guard; fn_gb vs fn_g) and zoom 25 plays the native
 # unarmed technique (zf <= .05 = viewmodel off, every LMB gives a "[controls] free swing end" that ran >= 400 ms, PT32 class).
@@ -153,7 +154,12 @@ pf_game_done   # game part over (vmrec copied, restore done, KenshiFP.log read):
 ok=1
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
 echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESULT take PASS"
-NS=$(wc -l < "$N.swings.txt"); NG=$(grep -c "tech='${TA[$TI]}' table=${TA[$TI]%% *}.* fallback=0" "$N.swings.txt")
+NS=$(wc -l < "$N.swings.txt")
+# fisthookany2 fh0 (2026-10-11): the log lost the 1st "[vm] fist swing" line while the fp_vm fist counter (swings=)
+# rose by 3 over the technique presses: count the larger of the two (counter = last technique sample - SW0)
+SWT=$(tr -dc 0-9 <<<"$SWT"); SWD=$(( ${SWT:-0} - ${SW0:-0} ))
+[ "$SWD" -gt "$NS" ] && [ "$SWD" -le $((REPS+2)) ] && { echo "swings: log lines $NS < counter delta $SWD: counter used"; NS=$SWD; }
+NG=$(grep -c "tech='${TA[$TI]}' table=${TA[$TI]%% *}.* fallback=0" "$N.swings.txt")
 # native fists (NAT=1): the game picks its own unarmed technique (fist4080n: NA1 names never picked natively): count swings only
 [ "$NS" -ge "$REPS" ] && { [ "$NAT" = 1 ] || [ "$NG" = "$NS" ]; } || ok=0
 [ "${IK1:-0}" = "${IK0:-0}" ] || ok=0
