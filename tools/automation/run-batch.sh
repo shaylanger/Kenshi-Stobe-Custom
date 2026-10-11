@@ -145,7 +145,11 @@ launch() {
     echo "autoload $1 failed: no save named $1 in this install (copy it into its save folder)" > "$O/.noload"; say "NOTE $(date +%H:%M) launch: $(cat "$O/.noload")"; fi
   # fast launch (hotswap2 2026-10-11): no fixed sleeps; the save loads while the proxy finishes its foreground unlock +
   # re-place loop, then the proxy is killed once the world is in (or after 120 s) and postlaunch fits the window
+  # window place + render fit while the save loads (hotswap2 2026-10-11: postlaunch after the world cost up to ~10 s when it
+  # had to resize; the final postlaunch below then only verifies: ~1.5 s when the window is already right)
+  local pp=""; [ "${RIG:-5090}" = 4080 ] || { timeout 120 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" postlaunch </dev/null 2>&1 | tr -d '\r' > "$O/launch.pre.out" & pp=$!; }
   kill -0 $lp 2>/dev/null && world 120
+  [ -n "$pp" ] && { wait $pp 2>/dev/null; sed 's/^/early /' "$O/launch.pre.out" >> "$O/launch.out"; rm -f "$O/launch.pre.out"; }
   # only THIS launch's proxy (lanes 5090b/5090c run their own run-batch.sh in the same WSL: a pkill -f by name killed theirs too)
   pkill -P $lp 2>/dev/null; kill $lp 2>/dev/null; wait $lp 2>/dev/null
   # the killed proxy never ran kenshi-ctl's re-place + render fit (studio-fixture 2026-10-10: 798x413 on DISPLAY1): do it now
@@ -252,7 +256,7 @@ case "$LAUNCH" in kah-fpxbow|kah-fpstudio)
 esac
 if [ -n "$LAUNCH" ] && [ "$REUSE" = 1 ] && kenshi_up && timeout 30 stobe-auto status </dev/null 2>/dev/null | grep -q "phase=world"; then
   p1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f3 | tr -d " \r")
-  say "NOTE reuse: Kenshi already up, loading $LAUNCH in place (no relaunch)"
+  say "NOTE reuse: Kenshi already up, loading $LT in place (no relaunch)"
   stobe-say on >/dev/null 2>&1
   s1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f2 | tr -d " \r")
   if [ -n "$s1" ] && [ "$s1" != "-" ]; then say "NOTE reuse: the first row loads its own save ($s1): no extra in-place load of $LAUNCH"   # speed-scout: was 2-3 loads
