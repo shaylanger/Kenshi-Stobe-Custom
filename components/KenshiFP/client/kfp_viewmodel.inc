@@ -176,6 +176,33 @@ static Quat  g_vm_plq[2]; static Vec3 g_vm_plp[2]; static int g_vm_have_pl[2];  
 static float g_vm_oerr;                       /* measured off-hand wrist - its target, dm (PT28) */
 static Vec3  g_vm_oc; static int g_vm_have_oc;   /* off-hand target (smoothed), camera numbers */
 static float g_vm_off_near = 3.5f;                    /* native off-hand within this of the weapon grip = 2-handed */
+/* 2H (kfp-two-hand, Shay 2026-10-10): heavy weapons (skill category 3) and polearms (8) are held with both hands.
+ * Native stances (animlab native.py): heavy guard6 off hand 2.54 dm behind the weapon hand (toward the pommel), polearm
+ * guard pole 5.03 dm ahead (toward the head); the game reads the category per weapon, the lab forces it (fp_vm set wcat). */
+static int   g_vm_wcat = -1, g_vm_wcat_force = -1;     /* skill category of the weapon in hands (-1 unknown) / forced */
+static int   g_vm_wdim_try;                             /* late dims reads left for this weapon (entity appears after the swap) */
+static void *g_vm_wcat_wih;                            /* weapon the category was read for */
+static int (*g_vm_wcat_fn)(void *wih);                  /* game reader (kenshifp_client.c); NULL offline */
+static unsigned g_vm_2h_mask = (1u << 3) | (1u << 8);  /* skill categories held two-handed */
+static int   g_vm_2h, g_vm_2hk;                        /* 2H active; kind 0 heavy, 1 polearm */
+static float g_vm_2hw;                                 /* 2H blend 0..1 */
+static float g_vm_2htau = 0.25f;                       /* blend time s */
+static float g_vm_2hsp[2] = { -1.93f, 3.32f };           /* off-hand wrist along the shaft from the weapon hand, dm (+ = toward the tip) */
+static Vec3  g_vm_2hpv = { 2.8f, -1.05f, 4.6f };       /* transform pivot: the melee ready grip */
+static Vec3  g_vm_2hr[2] = { { 9.62f, 1.25f, -18.75f }, { 54.03f, 25.50f, 33.22f } };   /* per kind: pitch (tip forward), yaw (tip right), roll deg */
+static Vec3  g_vm_2hd[2] = { { 1.07f, -2.72f, 0.51f }, { 0.61f, -2.89f, -2.51f } }; /* per kind: translation dm, camera numbers */
+static Vec3  g_vm_2hrb[2] = { { 8.68f, 58.35f, 6.55f }, { -39.08f, 69.56f, -20.53f } }; static Vec3 g_vm_2hdb[2] = { { 0.25f, 0.18f, -1.94f }, { -2.27f, -0.86f, 2.45f } };              /* per kind: extra rotation / translation while blocking (blade across the view) */
+static float g_vm_2hbw;                                /* block blend 0..1 (follows the target state) */
+static float g_vm_2hpl[2] = { 0.59f, 0.87f }, g_vm_2hbase; static int g_vm_2hpl_on;   /* grip slide while 2H (native grip: 0; katana plsl 1.0 left no
+                                                                     * room for the off hand on short handles), saved one-handed value */
+static float g_vm_2hroom = 1.9f;                      /* handle kept behind the weapon hand for the off hand (dm) */
+static float g_vm_wpom = -1.0f, g_vm_wtip = -1.0f;    /* weapon mesh: handle end behind / tip ahead of the grip, dm (-1 unknown) */
+static int (*g_vm_wdim_fn)(void *wih, float *pom, float *tip);   /* game reader (mesh bounds); NULL offline (fp_vm set wpom/wtip) */
+static float g_vm_2hnear = 7.0f;                     /* 2H: native off hand captured as the grip up to this far from the weapon hand */
+static float g_vm_2hperp = 1.5f;                       /* ... and only when its wrist is this close to the shaft (dm) */
+static float g_vm_2hpc = 0.6f;                          /* 2H off-hand wrist at most this far off the shaft axis (dm; the native capture
+                                                          * offset sat at the 1.5 clamp = the hand hovering beside the handle) */
+static void  vm_setlog(const char *k, float x);
 static float g_vm_aim_dist = 400.0f;                  /* aim: the bolt converges on the crosshair at this range */
 static float g_vm_tau = 0.08f, g_vm_tau_rl = 0.15f, g_vm_tau_w = 0.12f;
 static float g_vm_twist = 0.5f;                       /* share of the wrist twist the forearm takes */
@@ -757,6 +784,24 @@ static int vm_map(void *pc, void *skel)
     if (vm_map_node(pc, cms, cmw)) g_vm_map_node_n++; else g_vm_map_fb_n++;
     return 1;
 }
+static Vec3 vm_2h_rot(Vec3 v, Vec3 r)                  /* r = pitch, yaw, roll (rad): roll about z, pitch about x, yaw about y */
+{
+    float c, s, t;
+    c = cosf(r.z); s = sinf(r.z); t = v.x * c - v.y * s; v.y = v.x * s + v.y * c; v.x = t;
+    c = cosf(r.x); s = sinf(r.x); t = v.y * c - v.z * s; v.z = v.y * s + v.z * c; v.y = t;
+    c = cosf(r.y); s = sinf(r.y); t = v.x * c + v.z * s; v.z = -v.x * s + v.z * c; v.x = t;
+    return v;
+}
+static float vm_2h_wt(void) { float w = g_vm_2hw; return w * w * (3.0f - 2.0f * w); }
+static VmPose vm_2h_xf(VmPose o)                       /* the 2H class transform of a melee pose (identity one-handed) */
+{
+    if (g_vm_class != 0 || g_vm_2hw <= 0.0f) return o;
+    float w = vm_2h_wt(), b = g_vm_2hbw * g_vm_2hbw * (3.0f - 2.0f * g_vm_2hbw); int k = g_vm_2hk ? 1 : 0;
+    Vec3 r = vm_mul(vm_add(g_vm_2hr[k], vm_mul(g_vm_2hrb[k], b)), w * 0.01745329f);
+    o.p = vm_add(vm_add(g_vm_2hpv, vm_2h_rot(vm_sub(o.p, g_vm_2hpv), r)), vm_mul(vm_add(g_vm_2hd[k], vm_mul(g_vm_2hdb[k], b)), w));
+    o.f = vm_2h_rot(o.f, r); o.u = vm_2h_rot(o.u, r);
+    return o;
+}
 /* commanded pose (camera numbers: g_vm_out, off-hand g_vm_oc, poles) -> skeleton-space IK targets */
 static void vm_targets(void)
 {
@@ -1200,6 +1245,10 @@ static void vm_apply(void *skel)
     Vec3 Po = g_vm_op; Quat Qo = g_vm_nhq[oh]; int keep = 1;
     {   Vec3 dn = vm_sub(g_vm_nhp[oh], g_vm_npp[wh]);
         g_vm_off_near_now = g_vm_scale * vm_len(dn) < g_vm_off_near;
+        if (!g_vm_off_near_now && g_vm_2h && g_vm_class == 0 && g_vm_scale * vm_len(dn) < g_vm_2hnear) {
+            Vec3 rl = quat_rotvec(quat_conj(g_vm_npq[wh]), dn), ax = vm_axis(g_vm_ax[0][0]);
+            g_vm_off_near_now = g_vm_scale * vm_len(vm_sub(rl, vm_mul(ax, vm_dot(rl, ax)))) < g_vm_2hperp;
+        }
         if (g_vm_off_near_now) {
             g_vm_orel = quat_norm(quat_mul(quat_conj(g_vm_npq[wh]), g_vm_nhq[oh]));
             g_vm_oprel = quat_rotvec(quat_conj(g_vm_npq[wh]), dn); g_vm_have_orel = 1;
@@ -1207,6 +1256,11 @@ static void vm_apply(void *skel)
         /* ranged: the off-hand always holds the support point; its orientation follows the weapon as in the
          * native 2-handed grip (last seen near) */
         if (g_vm_omode && g_vm_have_orel) { Qo = quat_norm(quat_mul(Qp, g_vm_orel)); keep = 0; }
+        if (g_vm_omode && g_vm_have_orel && g_vm_class == 0 && g_vm_2hw > 0.0f) {   /* 2H: the native wrist offset from the shaft */
+            Vec3 ax = vm_axis(g_vm_ax[0][0]), pp = vm_sub(g_vm_oprel, vm_mul(ax, vm_dot(g_vm_oprel, ax)));
+            float lp_ = g_vm_scale * vm_len(pp); if (lp_ > g_vm_2hpc) pp = vm_mul(pp, g_vm_2hpc / lp_);
+            Po = vm_add(Po, vm_mul(quat_rotvec(Qp, pp), vm_2h_wt()));
+        }
     }
     if (g_vm_class == 1) {   /* C4d: native weapon hand forward, raised and still (a reload from ready first raises the bow) */
         const Vec3 *pS_ = g_oldnode_getdpos(b[wh][0]);
@@ -1790,6 +1844,19 @@ static void vm_frame_core(void *pc, int body_down)
         g_vm_melee = wih && wih != rw; g_vm_wih = wih != NULL;
         g_vm_fist_on = g_vm_fist_ua && !wih && g_fpc_fists;   /* NA1: unarmed ready stance (R with nothing to draw) */
         cls = (wih && wih == rw) ? 1 : 0;
+        if (wih != g_vm_wcat_wih) {
+            g_vm_wcat_wih = wih; g_vm_wdim_try = 300; g_vm_wcat = (wih && g_vm_wcat_fn) ? g_vm_wcat_fn(wih) : -1;
+            if (wih && g_vm_wdim_fn) { float pm = -1.0f, tp = -1.0f;
+                if (g_vm_wdim_fn(wih, &pm, &tp)) { g_vm_wpom = pm; g_vm_wtip = tp; } else g_vm_wpom = g_vm_wtip = -1.0f;
+                vm_setlog("wpom", g_vm_wpom); vm_setlog("wtip", g_vm_wtip); }
+            if (wih && g_vm_wcat_fn) { vm_setlog("wcat", (float)g_vm_wcat);
+                logline("VM2H weapon %p cat=%d 2h=%d pom=%.2f tip=%.2f", wih, g_vm_wcat, g_vm_wcat >= 0 && g_vm_wcat < 32 && ((g_vm_2h_mask >> g_vm_wcat) & 1u), g_vm_wpom, g_vm_wtip); }
+        } else if (wih && g_vm_wdim_fn && g_vm_wpom < 0.0f && g_vm_wdim_try > 0 && !(--g_vm_wdim_try % 10)
+                   && g_vm_wcat >= 0 && g_vm_wcat < 32 && ((g_vm_2h_mask >> g_vm_wcat) & 1u)) { float pm = -1.0f, tp = -1.0f;
+            if (g_vm_wdim_fn(wih, &pm, &tp)) { g_vm_wpom = pm; g_vm_wtip = tp; vm_setlog("wpom", pm); vm_setlog("wtip", tp);
+                logline("VM2H weapon %p dims late pom=%.2f tip=%.2f", wih, pm, tp); } }
+        {   int c_ = g_vm_wcat_force >= 0 ? g_vm_wcat_force : g_vm_wcat;
+            g_vm_2h = !cls && wih && c_ >= 0 && c_ < 32 && ((g_vm_2h_mask >> c_) & 1u); if (g_vm_2h) g_vm_2hk = c_ == 8 || (g_vm_wpom >= 0.0f && g_vm_wpom < 0.5f); }   /* no handle behind the hand (Crab Maul, native anim class polearm): held like a polearm */
     }
     /* measured: weapon grip (prop) + forward in camera numbers (post-IK of the last apply) */
     {   int wh = g_vm_whand[cls] ? 1 : 0;
@@ -1981,7 +2048,16 @@ static void vm_frame_core(void *pc, int body_down)
         if (g_vm_kick_t >= 0.0f) { g_vm_kick_t += adt; if (g_vm_kick_t > g_vm_kick_rise + g_vm_kick_dur) g_vm_kick_t = -1.0f; }
         g_vm_kick = vm_kick_env(g_vm_kick_t);
         float k = g_vm_kick_pose >= 0.0f ? g_vm_kick_pose : g_vm_kick;
-        VmPose out = g_vm_cur;
+        if (g_vm_wl <= 0.0f || g_vm_phase == VMP_DRAW) g_vm_2hw = g_vm_2h ? 1.0f : 0.0f;   /* weapon away / drawing: no blend */
+        else { g_vm_2hw += (g_vm_2h ? 1.0f : -1.0f) * adt / fmaxf(g_vm_2htau, 0.01f); g_vm_2hw = g_vm_2hw < 0.0f ? 0.0f : g_vm_2hw > 1.0f ? 1.0f : g_vm_2hw; }
+        g_vm_2hbw += (ti == VM_BLOCK ? 1.0f : -1.0f) * adt / fmaxf(g_vm_2htau, 0.01f); g_vm_2hbw = g_vm_2hbw < 0.0f ? 0.0f : g_vm_2hbw > 1.0f ? 1.0f : g_vm_2hbw;
+        if (g_vm_class == 0 && g_vm_2hw > 0.0f) {   /* 2H grip slide (one-handed: g_vm_plsl untouched) */
+            if (!g_vm_2hpl_on) { g_vm_2hbase = g_vm_plsl[0]; g_vm_2hpl_on = 1; }
+            float pl_ = g_vm_2hpl[g_vm_2hk ? 1 : 0];   /* heavy, short handles: the weapon hand chokes up so the off hand fits behind it */
+            if (!g_vm_2hk && g_vm_wpom > 0.0f && pl_ > g_vm_wpom - g_vm_2hroom) pl_ = g_vm_wpom - g_vm_2hroom;
+            g_vm_plsl[0] = g_vm_2hbase + (pl_ - g_vm_2hbase) * vm_2h_wt();
+        } else if (g_vm_2hpl_on) { g_vm_plsl[0] = g_vm_2hbase; g_vm_2hpl_on = 0; }
+        VmPose out = vm_2h_xf(g_vm_cur);
         if (k > 0.0f && g_vm_class == 1) {
             float e = fminf(1.0f, k);
             out.p = vm_add(out.p, vm_mul(g_vm_kick_p, e));
@@ -2004,7 +2080,7 @@ static void vm_frame_core(void *pc, int body_down)
                     v.p = vm_mul(vm_sub(c.p, cp.p), 1.0f / pdt); v.f = vm_mul(vm_sub(c.f, cp.f), 1.0f / pdt); v.u = vm_mul(vm_sub(c.u, cp.u), 1.0f / pdt);
                     if (u >= 1.0f) sw = 0; }
                 else vm_pose_spring(&c, &v, tgt, om, pdt);
-                VmPose o = c; if (sl != 0.0f) o.p = vm_add(o.p, vm_mul(o.f, sl));
+                VmPose o = vm_2h_xf(c); if (sl != 0.0f) o.p = vm_add(o.p, vm_mul(o.f, sl));
                 g_vm_fut[k] = o; g_vm_fut_n = k + 1;
             }
         }
@@ -2019,8 +2095,18 @@ static void vm_frame_core(void *pc, int body_down)
             oc = vm_add(out.p, vm_add(vm_add(vm_mul(out.f, g_vm_sup.x), vm_mul(out.u, g_vm_sup.y)), vm_mul(s, g_vm_sup.z)));
             g_vm_omode = 1;
         }
+        if (g_vm_class == 0 && g_vm_2hw > 0.0f) {   /* 2H: off-hand wrist on the shaft at the class spacing from the weapon hand
+                                                    * (out.p = prop origin, the hand sits plsl behind it) */
+            float sl2 = (g_vm_plfix & 2) ? g_vm_plsl[0] : 0.0f;
+            float al = g_vm_2hsp[g_vm_2hk ? 1 : 0] - sl2;   /* from the prop origin; kept on the handle / shaft when the mesh is known */
+            if (g_vm_wpom > 0.0f && al < 0.4f - g_vm_wpom) al = 0.4f - g_vm_wpom;
+            if (g_vm_wtip > 0.0f && al > 0.6f * g_vm_wtip - 0.4f) al = 0.6f * g_vm_wtip - 0.4f;
+            Vec3 on = vm_add(out.p, vm_mul(out.f, al));
+            oc = vm_lerp(oc, on, vm_2h_wt()); g_vm_omode = g_vm_2hw > 0.5f;
+        }
         if (!g_vm_have_oc) { g_vm_oc = oc; g_vm_ocv = vm_v(0, 0, 0); g_vm_have_oc = 1; }
         else vm_spring3(&g_vm_oc, &g_vm_ocv, oc, 1.8f / g_vm_tau, adt);
+        if (g_vm_class == 0 && g_vm_2hw >= 1.0f) { g_vm_oc = oc; g_vm_ocv = vm_v(0, 0, 0); }   /* 2H: no lag off the handle */
     }
 targets:
     vm_targets();
@@ -2166,6 +2252,24 @@ static int vm_set(const char *k, float x)
     else if (!strncmp(k, "kick_", 5) && k[5] && !k[6]) fp = vm_vec_field(&g_vm_kick_p, k[5]);
     else if (!strcmp(k, "kick_up")) fp = &g_vm_kick_up;
     else if (!strcmp(k, "kick_pose")) fp = &g_vm_kick_pose;
+    else if (!strcmp(k, "wcat"))    { g_vm_wcat_force = x < 0 ? -1 : (int)(x + 0.5f); return 1; }
+    else if (!strcmp(k, "twomask")) { g_vm_2h_mask = (unsigned)(x + 0.5f); return 1; }
+    else if (!strcmp(k, "twospH")) fp = &g_vm_2hsp[0];
+    else if (!strcmp(k, "twospP")) fp = &g_vm_2hsp[1];
+    else if (!strncmp(k, "twod", 4) && (k[4] == 'H' || k[4] == 'P') && k[5] == '_' && k[6] && !k[7]) fp = vm_vec_field(&g_vm_2hd[k[4] == 'P'], k[6]);
+    else if (!strncmp(k, "twor", 4) && (k[4] == 'H' || k[4] == 'P') && k[5] == '_' && k[6] && !k[7]) fp = vm_vec_field(&g_vm_2hr[k[4] == 'P'], k[6]);
+    else if (!strncmp(k, "twodb", 5) && (k[5] == 'H' || k[5] == 'P') && k[6] == '_' && k[7] && !k[8]) fp = vm_vec_field(&g_vm_2hdb[k[5] == 'P'], k[7]);
+    else if (!strncmp(k, "tworb", 5) && (k[5] == 'H' || k[5] == 'P') && k[6] == '_' && k[7] && !k[8]) fp = vm_vec_field(&g_vm_2hrb[k[5] == 'P'], k[7]);
+    else if (!strncmp(k, "twopv_", 6) && k[6] && !k[7]) fp = vm_vec_field(&g_vm_2hpv, k[6]);
+    else if (!strcmp(k, "twonear")) fp = &g_vm_2hnear;
+    else if (!strcmp(k, "twoplH"))  { if (x > -3 && x < 3) g_vm_2hpl[0] = x; return 1; }
+    else if (!strcmp(k, "twoplP"))  { if (x > -3 && x < 3) g_vm_2hpl[1] = x; return 1; }
+    else if (!strcmp(k, "wpom"))    fp = &g_vm_wpom;
+    else if (!strcmp(k, "tworoom")) fp = &g_vm_2hroom;
+    else if (!strcmp(k, "wtip"))    fp = &g_vm_wtip;
+    else if (!strcmp(k, "twoperp")) fp = &g_vm_2hperp;
+    else if (!strcmp(k, "twopc")) fp = &g_vm_2hpc;
+    else if (!strcmp(k, "twotau"))  fp = &g_vm_2htau;
     else if (!strcmp(k, "offnear")) fp = &g_vm_off_near;
     else if (!strcmp(k, "aimdist")) fp = &g_vm_aim_dist;
     else if (!strcmp(k, "twist")) fp = &g_vm_twist;
@@ -2453,7 +2557,8 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
             float dn = g_vm_scale * vm_len(vm_sub(g_vm_nhp[!i], g_vm_npp[i]));
             n += snprintf(b + n, sizeof(b) - n, " offdist=%.2f", dn);
         }
-        snprintf(b + n, sizeof(b) - n, " near=%d orel=%d", g_vm_off_near_now, g_vm_have_orel);
+        n += snprintf(b + n, sizeof(b) - n, " near=%d orel=%d", g_vm_off_near_now, g_vm_have_orel);
+        snprintf(b + n, sizeof(b) - n, " 2h=%d cat=%d k=%c w=%.2f pom=%.2f tip=%.2f", g_vm_2h, g_vm_wcat_force >= 0 ? g_vm_wcat_force : g_vm_wcat, g_vm_2hk ? 'p' : 'h', g_vm_2hw, g_vm_wpom, g_vm_wtip);
         r->append(r, b); return KAH_OK;
     } else if (!strcmp(a, "dump")) {
         int n = 0;

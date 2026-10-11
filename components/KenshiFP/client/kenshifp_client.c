@@ -6413,6 +6413,75 @@ static int gear_parts(void *app, void *mesh, void **out, int max)
     }
     return n;
 }
+/* 2H (kfp-two-hand): skill category of the weapon in hands (GameData int "skill category"; 3 heavy, 8 polearm) for the
+ * viewmodel's two-hand grip. Read-only node walk under its own VEH guard; the caller's guard state is saved and
+ * restored (the viewmodel calls it once per weapon change). -1 = unknown. */
+#define WEAPON_CATEGORY    0x234   /* Weapon::category (WeaponCategory: 0 katanas .. 3 heavy .. 8 polearms) */
+#define ROOTOBJ_DATA       0x40    /* RootObjectBase::data (GameData*) of a game object (Item, Character) */
+static int kfp_weapon_skillcat(void *wih)
+{
+    volatile int v = -1, ok = 0; jmp_buf save; LONG was = g_guard_armed; DWORD wt = g_guard_tid;
+    memcpy(save, g_guard_jb, sizeof(jmp_buf));
+    if (!setjmp(g_guard_jb)) {
+        guard_arm();
+        /* Weapon::category (WeaponCategory, KenshiLib Gear.h 0x234) = the item's "skill category"; fallback: the
+         * GameData int (RootObjectBase::data 0x40). NOT the appearance-item ITEM_GAMEDATA 0x78 (= RootObject::container
+         * on an Item: in game 2026-10-10 every weapon read -1, 2H never engaged). */
+        if (readable((char *)wih + WEAPON_CATEGORY, 4)) {
+            int c = *(int *)((uintptr_t)wih + WEAPON_CATEGORY);
+            if (c >= 0 && c < 22) { v = c; ok = 1; }
+        }
+        if (!ok && readable((char *)wih + ROOTOBJ_DATA, 8)) {
+            void *gd = *(void **)((uintptr_t)wih + ROOTOBJ_DATA); int c = -1;
+            if (gd_int_field(gd, "skill category", &c)) { v = c; ok = 1; }
+        }
+    }
+    g_guard_armed = 0; memcpy(g_guard_jb, save, sizeof(jmp_buf)); g_guard_tid = wt; g_guard_armed = was;
+    return ok ? v : -1;
+}
+/* 2H: the weapon mesh's extent along the blade axis (prop +Y): handle end behind (pom) and tip ahead of the grip, mesh
+ * units = dm (animlab weapons.py: katana05 tip 10.4); Item::mesh is the Ogre::Entity: Entity::getMesh -> Mesh::getBounds
+ * (AxisAlignedBox: min xyz, max xyz). Item scale fields are not applied (34 of the 48 heavy/polearm weapons are 1.0). */
+typedef const void *(*ent_getmesh_t)(const void *ent);
+typedef const float *(*mesh_bounds_t)(const void *mesh);
+static int kfp_weapon_dims(void *wih, float *pom, float *tip)
+{
+    static ent_getmesh_t getmesh; static mesh_bounds_t bounds; static int res;
+    if (!res) { HMODULE og = GetModuleHandleA("OgreMain_x64.dll"); res = 1;
+        if (og) { getmesh = (ent_getmesh_t)GetProcAddress(og, "?getMesh@Entity@Ogre@@QEBAAEBV?$SharedPtr@VMesh@Ogre@@@2@XZ");
+                  bounds = (mesh_bounds_t)GetProcAddress(og, "?getBounds@Mesh@Ogre@@QEBAAEBVAxisAlignedBox@2@XZ"); } }
+    if (!getmesh || !bounds) return 0;
+    volatile int ok = 0; volatile float pm = -1.0f, tp = -1.0f; jmp_buf save; LONG was = g_guard_armed; DWORD wt = g_guard_tid;
+    memcpy(save, g_guard_jb, sizeof(jmp_buf));
+    if (!setjmp(g_guard_jb)) {
+        guard_arm();
+        /* the drawn weapon's entity = the player AppearanceHuman's worn-item mesh (key "hands" when drawn; matched by
+         * the item's GameData, RootObjectBase::data 0x40). NOT Item::getEntity (vtable +0x318 = the dropped/physical
+         * entity: NULL in hand, every weapon read pom/tip -1 in game 2026-10-10 refilm 2, Warhammer off hand left the
+         * handle). Map layout as fp_gear / gear_parts. */
+        void *app = g_player_app, *ent = NULL; int bm = 0;
+        void *wgd = readable((char *)wih + ROOTOBJ_DATA, 8) ? *(void **)((uintptr_t)wih + ROOTOBJ_DATA) : NULL;
+        size_t nb = readable(app, APP_ITEM_BUCKETS + 8) ? *(size_t *)((uintptr_t)app + APP_ITEM_NBUCK) : 0;
+        void **bk = nb ? *(void ***)((uintptr_t)app + APP_ITEM_BUCKETS) : NULL;
+        void *node = (nb && nb <= 0x10000 && readable(bk, (nb + 1) * sizeof(void *))) ? bk[nb] : NULL;
+        for (int i = 0; node && i < 256 && readable(node, MAPN_VALUE + 8); i++, node = *(void **)((uintptr_t)node + MAPN_NEXT)) {
+            void *item = *(void **)((uintptr_t)node + MAPN_VALUE);
+            if (!readable(item, ITEM_MESH + 8)) continue;
+            void *gd = *(void **)((uintptr_t)item + ITEM_GAMEDATA), *mesh = *(void **)((uintptr_t)item + ITEM_MESH);
+            if (!mesh || !readable(mesh, 8) || gear_item_type(gd) != ITYPE_WEAPON) continue;
+            char kn[48]; gearnode_key(node, kn, sizeof kn);
+            int m = (wgd && gd == wgd ? 2 : 0) + (!strcmp(kn, "hands") ? 4 : 0);
+            if (m > bm) { bm = m; ent = mesh; }
+        }
+        const void *const *sp = readable(ent, 8) ? (const void *const *)getmesh(ent) : NULL;
+        const void *m = readable(sp, 8) ? *sp : NULL;
+        const float *b = readable(m, 8) ? bounds(m) : NULL;
+        if (readable(b, 24) && b[4] > 0.5f && b[4] < 60.0f && b[1] < b[4] && b[1] > -30.0f) { pm = -b[1]; tp = b[4]; ok = 1; }
+    }
+    g_guard_armed = 0; memcpy(g_guard_jb, save, sizeof(jmp_buf)); g_guard_tid = wt; g_guard_armed = was;
+    if (ok) { *pom = pm < 0.0f ? 0.0f : pm; *tip = tp; }
+    return ok;
+}
 static int g_gear_wdiag;      /* capped holster/hand transition log lines */
 static void gear_weap_note(const char *kn, void *mesh, int type, float hd, int holstered, int nparts)
 {
@@ -9154,6 +9223,8 @@ __declspec(dllexport) void dllStartPlugin(void)
                 stc ? "ARMED" : "sig NOT FOUND");
     }
     AddVectoredExceptionHandler(1, veh_guard);   /* crash guard for game-fn calls */
+    g_vm_wcat_fn = kfp_weapon_skillcat;          /* 2H: viewmodel reads the weapon skill category */
+    g_vm_wdim_fn = kfp_weapon_dims;              /* ... and the weapon mesh extent (handle / tip) */
     {
         HMODULE terr = GetModuleHandleA("Plugin_Terrain_x64.dll");
         if (terr) {
