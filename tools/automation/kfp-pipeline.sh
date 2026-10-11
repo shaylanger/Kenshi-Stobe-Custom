@@ -239,7 +239,15 @@ gate_ns() {  # <label> <tree>
   echo $? > "$RUN/logs/gate-$l.rc"; rm -rf "$ns"
 }
 # metrics <label> -> key \t value  (gate verdict keys + pool take rates per stroke)
-metrics() { local o=$RUN/gate-$1; [ -f "$o/verdicts.tsv" ] && cat "$o/verdicts.tsv"
+# >>> decide-fns (kfp-pipeline-selftest.sh sources this block)
+# metrics: keys normalized (a trailing ':' dropped: 'agree: ' with empty text keyed 'agree:' and counted as a new FAIL
+# for every patch, 2026-10-11 run-watch-1011-1606); a REGRESS FAIL whose text is empty or starts with INFRA (the check
+# produced no result: crash/kill/missing output) gets verdict INFRA = infrastructure, never a patch BREAK.
+metrics() { local o=$RUN/gate-$1; [ -f "$o/verdicts.tsv" ] && awk -F'\t' -v rf="$o/regress.txt" 'BEGIN {
+      while ((getline l < rf) > 0) { if (l !~ /^REGRESS FAIL /) continue; t=substr(l,14); sub(/[ \t\r]+$/,"",t); r="x"
+        i=index(t,": "); if (i) { k=substr(t,1,i-1); r=substr(t,i+2) } else if (t ~ /:$/) { k=substr(t,1,length(t)-1); r="" } else continue
+        gsub(/^[ \t]+|[ \t]+$/,"",r); gsub(/[0-9]+(\.[0-9]+)?/,"#",k); if (r=="" || r ~ /^INFRA/) inf[k]=1 } }
+    { k=$1; sub(/:$/,"",k); v=$2; if (v=="FAIL" && (k in inf)) v="INFRA"; print k "\t" v }' "$o/verdicts.tsv"
   [ -f "$o/pool.txt" ] && awk '$1=="pool" && $2=="stroke" {s=$3; for (i=5;i<=NF;i++) { f=$i
       if (f ~ /^take_all=/) { split(f,a,"="); print "s" s ".take_all\t" a[2] }
       else if (f ~ /^[a-z]+:take=/) { split(f,a,":"); split(a[2],b,"="); split(b[2],c,"/"); print "s" s "." a[1] "\t" c[1] } } }' "$o/pool.txt"; }
@@ -257,8 +265,8 @@ compare() { awk -F'\t' -v p="$1" -v k="$2" -v dr="$DROP" 'NR==FNR {a[$1]=$2; nex
   END { for (x in a) { if (!(x in b)) { if (a[x]=="PASS") print p "\t" k "\t" x "\t" a[x] "\t-\t-\tGONE"; continue }
           if (a[x] ~ /^[0-9.]+$/ && b[x] ~ /^[0-9.]+$/) { d=b[x]-a[x]; if (d>=0.02 || d<=-0.02) {
               f=(d<=-dr ? (k=="alone" ? "drop" : "BREAK") : (d<0 ? "drop" : "gain")); printf "%s\t%s\t%s\t%s\t%s\t%+.2f\t%s\n", p, k, x, a[x], b[x], d, f } }
-          else if (a[x]!=b[x]) print p "\t" k "\t" x "\t" a[x] "\t" b[x] "\t-\t" (a[x]=="PASS" && b[x]=="FAIL" ? (k=="alone" ? "flip" : "BREAK") : (a[x]=="FAIL" && b[x]=="PASS" ? "fix" : "changed")) }
-        for (x in b) if (!(x in a)) print p "\t" k "\t" x "\t-\t" b[x] "\t-\t" (b[x] ~ /^FAIL/ && x != "" ? (k=="in-set" ? "BREAK" : "newfail") : "new") }' "$RUN/metrics-$3.tsv" "$RUN/metrics-$4.tsv" | sort -t$'\t' -k3,3; }
+          else if (a[x]!=b[x]) print p "\t" k "\t" x "\t" a[x] "\t" b[x] "\t-\t" (a[x]=="INFRA" || b[x]=="INFRA" ? "infra" : a[x]=="PASS" && b[x]=="FAIL" ? (k=="alone" ? "flip" : "BREAK") : (a[x]=="FAIL" && b[x]=="PASS" ? "fix" : "changed")) }
+        for (x in b) if (!(x in a)) print p "\t" k "\t" x "\t-\t" b[x] "\t-\t" (b[x]=="INFRA" ? "infra" : b[x] ~ /^FAIL/ && x != "" ? (k=="in-set" ? "BREAK" : "newfail") : "new") }' "$RUN/metrics-$3.tsv" "$RUN/metrics-$4.tsv" | sort -t$'\t' -k3,3; }
 # kb_eval: a gate-all FAIL whose only cause is baseline flips the base gate shows identically = KNOWN-BASE (sets KB,
 # non-blocking); anything else sets GB (the blocking reason; nores = no RESULT). The delta blocks every flip a patch causes.
 kb_eval() { local gl why fa fb newf; KB=""; GB=""; [ "$(cat "$RUN/logs/gate-all.rc" 2>/dev/null)" = 0 ] && return 0
@@ -266,11 +274,31 @@ kb_eval() { local gl why fa fb newf; KB=""; GB=""; [ "$(cat "$RUN/logs/gate-all.
   why=$(echo "$gl" | grep -o 'why=[^ ]*' | cut -d= -f2); fa=$(echo "$gl" | grep -o 'flipped=[^ ]*' | cut -d= -f2-)
   if [ $N -ge 1 ]; then fb=$(head -1 "$RUN/gate-base/RESULT.txt" 2>/dev/null | grep -o 'flipped=[^ ]*' | cut -d= -f2-); else fb=$fa; fi
   newf=$(comm -23 <(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | sort -u) <(echo "$fb" | tr ';' '\n' | sort -u) | paste -sd';')
-  if [ "$why" = flipped ] && [ -z "$newf" ]; then KB=$(echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)' | paste -sd';')
-  else GB="why=$why${newf:+ new-flips=$newf}"; fi; }
+  # a FAIL key on 'all' that is not FAIL on base (or no base) = caused by the patches; mutation-missed only runs on 'all'
+  nfk=""; [ $N -ge 1 ] && nfk=$( [ -f "$RUN/metrics-base.tsv" ] && awk -F'\t' 'NR==FNR {b[$1]=$2; next} $2=="FAIL" && b[$1]!="FAIL" {print $1}' \
+      "$RUN/metrics-base.tsv" "$RUN/metrics-all.tsv" | paste -sd';' || echo "no-base")
+  if [ -z "$newf" ] && [ -z "$nfk" ] && ! echo ",$why," | grep -qE ',(mutation-missed|corpus-file-missing),'; then
+    KB=$( { echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)'; awk -F'\t' '$2=="FAIL" {print "FAIL:" $1}' "$RUN/metrics-all.tsv"; } | tr ' ' '_' | paste -sd';')
+  else GB="why=$why${newf:+ new-flips=$newf}${nfk:+ new-fail=$nfk}"; fi; }
+# guard_cut <comma list>: excluding more than half the set needs a clear per-patch breaker (the patch alone flips/drops/
+# newfails vs base in $D); prints the list to leave out, or the refusal text + rc 1 (2026-10-11 a bogus key made all 14
+# patches BREAK and the run built base + 1 patch, dropping the TDR guards)
+guard_cut() { local cu=$1 nc cl n; nc=$(echo "$cu" | tr ',' '\n' | grep -c .)
+  [ $((nc * 2)) -le $N ] && { echo "$cu"; return 0; }
+  cl=$(for n in ${cu//,/ }; do awk -F'\t' -v n="$n" '$1==n && $2=="alone" && $7 ~ /^(flip|drop|newfail)$/ {print n; exit}' "$D"; done | paste -sd,)
+  [ -n "$cl" ] && { echo "$cl"; return 0; }
+  echo "would exclude $nc/$N patches ($cu) with no per-patch breaker (none flips/drops alone vs base); not staged"; return 1; }
+# <<< decide-fns
 # round 1 (combined-first): base + all only. Round 2: the per-patch trees, only when round 1 shows a regression vs base
 # (or --per-patch), so the breaking patch can be named and left out.
 first=(all); [ $N -ge 1 ] && first+=(base); run_gates "${first[@]}"
+# INFRA (a check with no result) on a round-1 tree: re-gate those trees once (one gate, ~5 min) instead of 28 per-patch
+# trees; still INFRA = die infra (nothing staged, nothing excluded): a lab infrastructure bug, never a patch verdict
+infra_trees() { local l t=(); for l in "$@"; do grep -q $'\tINFRA$' "$RUN/metrics-$l.tsv" 2>/dev/null && t+=("$l"); done; echo "${t[@]}"; }
+it=$(infra_trees "${first[@]}")
+if [ -n "$it" ]; then say "INFRA no-result check(s) on tree(s) $it: $(cat $(for l in $it; do echo "$RUN/metrics-$l.tsv"; done) | awk -F'\t' '$2=="INFRA" {print $1}' | sort -u | paste -sd,); re-gating once"
+  for l in $it; do rm -rf "$RUN/gate-$l.infra1"; mv "$RUN/gate-$l" "$RUN/gate-$l.infra1"; done; run_gates $it
+  it=$(infra_trees $it); [ -z "$it" ] || die infra "check(s) gave no result twice on tree(s) $it (see $RUN/gate-*/regress.txt)"; fi
 PPG=0; ff=""
 if [ $N -ge 2 ]; then
   if [ $PERP = 1 ]; then ff="--per-patch"
@@ -294,6 +322,7 @@ GL=$(cat "$RUN/gate-all/RESULT.txt" 2>/dev/null | head -1)
 GS="$(echo "$GL" | awk '{print $3}') $(echo "$GL" | grep -o 'pool=[^ ]*\( s[0-9]*:[A-Z]*\)*' | tr ' ' ',') $(echo "$GL" | grep -o 'flipped=[^ ]*')"
 br=$(awk -F'\t' 'NR>1 && $7=="BREAK" {printf "%s %s %s->%s; ", $1, $3, $4, $5}' "$D")
 if [ -n "$br" ] && [ $COMB = 1 ]; then cu=$(awk -F'\t' 'NR>1 && $7=="BREAK" && $1!="SET" {print $1}' "$D" | sort -u | paste -sd,)
+  if [ -n "$cu" ]; then g=$(guard_cut "$cu") || die guard "$g"; [ "$g" = "$cu" ] || say "GUARD in-set BREAK on $cu; leaving out only the clear per-patch breakers: $g"; cu=$g; fi
   [ -n "$cu" ] && rerun_without "$cu" "BREAK"; fi
 [ -z "$br" ] || die delta "${br%; } (gate: $GS)"
 kb_eval; [ -z "$GB" ] || die gate "$GB ($GS)"
