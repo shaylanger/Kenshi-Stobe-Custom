@@ -19,6 +19,7 @@ import argparse, json, math, os, shutil, subprocess, sys
 L = '/mnt/c/KenshiModding/Kenshi-Automation-Harness/tools/animlab'
 CORPUS = os.environ.get('ANIMLAB_CORPUS', '/mnt/c/KenshiTestRuns/corpus')
 FTC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fist-take-check.py')
+FPC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fist-punch-check.py')
 RULES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'take-rules.txt')
 
 
@@ -178,6 +179,74 @@ def m_fist_hand(lines):     # U25: the right hand flips 90 deg (rec group F axes
     return lines
 
 
+# ---- fist "punch reads" (fist-punch-check.py C1-C9, Misses 2026-10-11 "fist punch read" NA1); base = the synthetic PASS
+#      rec/fist-punch-synth-pass-v2.txt (fist-punch-synth.py from fq0) until a game take passes
+def _punch_peaks(lines):
+    import tempfile
+    with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
+        f.write('\n'.join(lines)); p = f.name
+    out = run(['python3', FPC, p, '--peaks']); os.unlink(p)
+    return [(l.split()[1], float(l.split()[2]), float(l.split()[3]), tuple(float(x) for x in l.split()[4].split(',')))
+            for l in out.splitlines() if l.startswith('PEAK ')]
+
+
+def _paired(lines):
+    """(line index, groups, time of the frame its measured joints show = the previous record's clock)"""
+    prev = None
+    for i, g, t in frames(lines):
+        tr = float(t[1]); yield i, g, (prev if prev is not None else tr); prev = tr
+
+
+WRI = {'L': 9, 'R': 12}; SHI = {'L': 7, 'R': 10}
+
+
+def m_punch_small(lines):     # C1-C3: every punch's striking-wrist excursion from the guard scaled x0.3 (fq0's "moved a little bit")
+    for s, tp, t20, g in _punch_peaks(lines):
+        for i, gr, t in list(_paired(lines)):
+            if t20 - .3 <= t <= tp + .4:
+                w = getvec(gr, 1, WRI[s]); setvec(gr, 1, WRI[s], tuple(g[k] + .3 * (w[k] - g[k]) for k in range(3)))
+                lines[i] = ' | '.join(gr)
+    return lines
+
+
+def m_punch_reverse(lines):   # C5: the strike curve time-reversed around the peak (slow strike, snap back)
+    for s, tp, t20, g in _punch_peaks(lines):
+        P = [(i, gr, t) for i, gr, t in _paired(lines)]
+        W = [(t, getvec(gr, 1, WRI[s])) for i, gr, t in P]
+        for i, gr, t in P:
+            if tp - .35 <= t <= tp + .35:
+                tm = 2 * tp - t; w = min(W, key=lambda x: abs(x[0] - tm))[1]
+                setvec(gr, 1, WRI[s], w); lines[i] = ' | '.join(gr)
+    return lines
+
+
+def m_punch_nowindup(lines):  # C6: no wind-up: the pull toward the shoulder before every strike removed (frozen guard)
+    for s, tp, t20, g in _punch_peaks(lines):
+        for i, gr, t in list(_paired(lines)):
+            if t20 - .3 <= t <= t20:
+                w = getvec(gr, 1, WRI[s]); sh = getvec(gr, 1, SHI[s])
+                u = tuple(sh[k] - g[k] for k in range(3)); n = math.sqrt(sum(x * x for x in u)); u = tuple(x / n for x in u)
+                d = sum((w[k] - g[k]) * u[k] for k in range(3))
+                if d > 0:
+                    setvec(gr, 1, WRI[s], tuple(w[k] - d * u[k] for k in range(3))); lines[i] = ' | '.join(gr)
+    return lines
+
+
+def m_punch_hand90(lines):    # C7: the striking hand turned 90 deg (rec group F axes about camera x) around every strike
+    for s, tp, t20, g in _punch_peaks(lines):
+        j = 1 if s == 'L' else 3
+        for i, gr, t in list(_paired(lines)):
+            if t20 - .1 <= t <= tp + .2:
+                for k, x in enumerate(gr):
+                    tk = x.split()
+                    if tk[:1] == ['F']:
+                        for c in (j, j + 1):
+                            tk[c] = '%.4f,%.4f,%.4f' % rot(tuple(float(v) for v in tk[c].split(',')), (1.0, 0.0, 0.0), 90.0)
+                        gr[k] = ' '.join(tk)
+                lines[i] = ' | '.join(gr)
+    return lines
+
+
 def arrow_png():
     if os.path.exists(ARROW): return
     from PIL import Image, ImageDraw
@@ -274,6 +343,12 @@ REC_CHECKS = {
     'stroke': lambda p: verdict_word(run(al('stroke', '--overhead', '2', p)), 'stroke '),
     'spike': lambda p: verdict_word(run(al('spike', p)), 'spike '),
     'fist-hand': lambda p: verdict_word(run(['python3', FTC, p, '-']), 'hand '),
+    'punch-C1': lambda p: verdict_word(run(['python3', FPC, p]), 'C1 '),
+    'punch-C2': lambda p: verdict_word(run(['python3', FPC, p]), 'C2 '),
+    'punch-C3': lambda p: verdict_word(run(['python3', FPC, p]), 'C3 '),
+    'punch-C5': lambda p: verdict_word(run(['python3', FPC, p]), 'C5 '),
+    'punch-C6': lambda p: verdict_word(run(['python3', FPC, p]), 'C6 '),
+    'punch-C7': lambda p: verdict_word(run(['python3', FPC, p]), 'C7 '),
     'metrics-any': lambda p: (('FAIL' if any(' FAIL' in l[:40] for l in run(al('metrics', p)).splitlines()) else 'PASS'), 'metrics'),
 }
 def _pool_inline_s3(p):   # the gate pool's per-swing inline path (metrics.swing_verdicts inline + pool_predict) on the rec as recorded
@@ -328,6 +403,12 @@ MUTS = [
     ('rec-one-frame-snap', 'rec', 'e6-anim-b2.txt', m_snap, ['blade1', 'churn-stroke1', 'spike']),
     ('rec-one-frame-jump', 'rec', 'f28-sword-z0c.txt', m_jump, 'ALL'),
     ('rec-fist-hand-flip', 'rec', 'fist-u25-pass-replay-C2-kq025.rec', m_fist_hand, ['fist-hand']),
+    ('rec-fist-punch-small-C1', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_small, ['punch-C1']),
+    ('rec-fist-punch-small-C2', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_small, ['punch-C2']),
+    ('rec-fist-punch-small-C3', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_small, ['punch-C3']),
+    ('rec-fist-punch-reverse', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_reverse, ['punch-C5']),
+    ('rec-fist-punch-nowindup', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_nowindup, ['punch-C6']),
+    ('rec-fist-punch-hand90', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_hand90, ['punch-C7']),
     ('vid-cursor-overlay', 'vid', 'takes/videos/anim-sword-e6.mp4', v_cursor, ['cursor']),
     ('vid-dark-night', 'vid', 'takes/videos/anim-sword-e6.mp4', v_dark, ['openground']),
     ('vid-black-frames', 'vid', 'takes/videos/anim-sword-e6.mp4', v_black, 'ALL'),
@@ -452,6 +533,7 @@ def mut_key(mid, kind, base, checks, src):
     code = [[d, labcache.fhash(os.path.join(L, d))] for d in DEPS[kind] if os.path.exists(os.path.join(L, d))]
     if kind == 'rec':
         code.append(['fist-take-check.py', labcache.fhash(FTC)])
+        code.append(['fist-punch-check.py', labcache.fhash(FPC)])
     if kind == 'src':   # the check builds the adapter and replays: its main, headers, build script and the check script
         H = os.path.dirname(os.path.abspath(__file__))
         code += [[f, labcache.fhash(os.path.join(H, f))] for f in sorted(os.listdir(H)) if f.endswith(('.c', '.h')) or f in ('build.sh', 'stroke-cycle.py')]

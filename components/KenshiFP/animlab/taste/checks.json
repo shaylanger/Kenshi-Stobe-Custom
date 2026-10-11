@@ -1,7 +1,8 @@
 {
  "vars": {
   "V": "/tmp/kfp-vmcheck.py",
-  "TR": "/mnt/c/KenshiModding/components/KenshiFP/animlab/take-rules.txt"
+  "TR": "/mnt/c/KenshiModding/components/KenshiFP/animlab/take-rules.txt",
+  "FPC": "/mnt/c/KenshiModding/components/KenshiFP/animlab/fist-punch-check.py"
  },
  "checks": {
   "arc.edge":     {"cmd": "python3 {L}/animlab.py {pre} metrics {rec}", "line": "^arc ", "num": ["arc_ok", "min", 0.85]},
@@ -32,6 +33,7 @@
   "openground":   {"cmd": "python3 {L}/frames.py openground {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
   "cursor":       {"cmd": "python3 {L}/frames.py cursor {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
   "overlay":      {"cmd": "python3 {L}/frames.py overlay {rec} --name t", "line": "^RESULT ", "fail": " FAIL "},
-  "takecheck":    {"cmd": "python3 {L}/takecheck.py --labels {rec}/labels.txt --ev {rec}/ev.txt --rules {TR} --video-len {vlen} --name t", "line": "^RESULT ", "fail": " FAIL"}
+  "takecheck":    {"cmd": "python3 {L}/takecheck.py --labels {rec}/labels.txt --ev {rec}/ev.txt --rules {TR} --video-len {vlen} --name t", "line": "^RESULT ", "fail": " FAIL"},
+  "fistpunch":    {"cmd": "python3 {FPC} {rec}", "line": "^RESULT FIST-PUNCH ", "fail": " FAIL "}
  }
 }

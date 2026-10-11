@@ -87,3 +87,4 @@ t89	rec/spec-xbow-reload-rl0.txt	R23	reject	shay		xbow-reload.mp4 RIGHT (nose-do
 t90	rec/pt17like-ect055-5090.txt	R30	reject	shay-sym	pre=--only-stroke 0	PT17 (same stroke keys as this take) stroke 0 rejected by Shay 2026-10-11: stops mid-screen, odd movement at the end
 t91	rec/pt17like-ect055-5090.txt	R30	reject	shay-sym	pre=--only-stroke 3	PT17 stroke 3 rejected by Shay 2026-10-11: straight for 60-70 %, then slides perpendicular and ends tip at screen centre ("/|")
 t92	rec/pt17like-ect055-5090.txt	R30	accept	shay-sym	pre=--only-stroke 1	PT17 stroke 1 (backhand) accepted (Shay 2026-10-11, scope 16:27: s1 accepted as it is; path info for s1)
+t93	rec/fist-punch-fq0-badpunch.vmrec.txt	U26	reject	shay		Shay 2026-10-11 FP fists fq0 (5090 fist5090q/fq0, KenshiFP 3F1AD4F8): "the hands just moved a little bit and lacked any actual substance"; every older lab + take check PASSED it
