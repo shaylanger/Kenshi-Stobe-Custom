@@ -1423,7 +1423,17 @@ def handle(s, cmd, a, now, sp):
                   'elL=-2.50,-2.50,2.50 elR=2.50,-2.50,2.50 ikfail=%d') % (gx, gy, gx, gy, gx, gy + d * 0.3, gx, gy + d * 0.3, 3.8 + d, fs['ikfail'])
             if fs.get('nat'):
                 r += ' nat=1 frz=%d natL=-1.60,%.2f,3.80 natR=1.60,%.2f,%.2f clamp=0' % (1 if sw else 0, -1.0 + d * 0.3, -1.0 + d * 0.3, 3.8 + d)
+            if 'fp_on' in fs:   # kfp-fist-zpunch build: FP punch synthesizer fields
+                r += ' fp=%d fpe=0.00,0.00 fpev=%s fpn=%d' % (fs['fp_on'], fs.get('fpev', '-'), fs.get('fpn', 0))
             return True, r
+        if sub == 'set' and len(a) > 2 and a[1] in ('fp_on', 'fp_fire'):   # kfp-fist-zpunch build
+            fs = s.setdefault('fist', dict(force=-1, swings=0, ikfail=0))
+            if a[1] == 'fp_on':
+                fs['fp_on'] = 1 if float(a[2]) else 0
+            else:
+                v = int(float(a[2])); fs['fpn'] = fs.get('fpn', 0) + 1
+                fs['fpev'] = '%s-%s-fire' % ('LR'[v % 2], ['straight', 'hook', 'upper'][min(v // 2, 2)])
+            return True, 'fp_vm set %s=%s' % (a[1], a[2])
         if sub == 'set' and len(a) > 2 and a[1] == 'fist_native':   # kfp-fist-native build
             s.setdefault('fist', dict(force=-1, swings=0, ikfail=0))['nat'] = 1 if float(a[2]) else 0
             return True, 'fp_vm set fist_native=%s' % a[2]

@@ -32,7 +32,7 @@ KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 fist(){ A fp_vm fist; }
-restore(){ A fp_vm set fist_tech -1 >/dev/null; A chatter on >/dev/null; [ -n "$MA0" ] && A setstat $SH martial_arts "$MA0" >/dev/null; }
+restore(){ A fp_vm set fist_tech -1 >/dev/null; A fp_vm set fp_on 0 >/dev/null; A chatter on >/dev/null; [ -n "$MA0" ] && A setstat $SH martial_arts "$MA0" >/dev/null; }
 # op-fist1/fist4080e: the force never landed for ma chudan / ma 2strike: CharStats::chooseAttack only offers techniques whose
 # min/max skill window (game data, native.py catalog) holds the actor's Martial Arts (Axima ~15-20: shoteiL + badpunch only).
 # Windows: badpunch -1000..20, ma chudan 35+, ma 2strike 25+, shoteiL 15+ -> set MA inside the forced technique's window.
@@ -93,6 +93,8 @@ f=$(fist); [ "$(fld force <<<"$f")" = "$TI" ] || pf_fail "fp_vm set fist_tech $T
 A fp_vm set fist_native $NAT >/dev/null
 # FIST_VMSET=fn_k,0.4,fn_ymax,0.25 = live native-fist tunables for this take (DLL statics persist across rows: set all swept keys)
 set -- ${FIST_VMSET//,/ }; while [ $# -ge 2 ]; do A fp_vm set $1 $2 >/dev/null; shift 2; done
+if [[ ",${FIST_VMSET},${FIST_PHASES}," == *,fp_on,1,* || ",${FIST_PHASES}," == *,fire,* ]]; then   # FP punch synthesizer rows
+  [ "$(fist | fld fp)" = 1 ] || pf_fail "FP punch synthesizer not on (fp_vm fist has no fp=1): needs a build with pending-fixes/kfp-fist-zpunch.py + fp_on,1 in FIST_VMSET"; fi
 [ "$NAT" = 1 ] && { [ "$(fist | fld nat)" = 1 ] || pf_fail "native fists not on (fp_vm fist has no nat=1): install a build with pending-fixes/kfp-fist-native.py"; }
 # ---- take
 : > "$N.lab"; rm -f "$N.stop"
@@ -135,6 +137,12 @@ if [[ ",${FIST_PHASES}," == *,z25,* ]]; then
   for _r in 1 2; do A fp_keys press lmb 60 >/dev/null; for _i in $(seq 1 16); do fist >> "$N.z25.txt"; sleep 0.25; done; done
   ZL1=$(wc -l < "$KDIR/KenshiFP.log")
   A fp_camera distance 0 >/dev/null; sleep 1.5
+fi
+# FIST_PHASES fire (fists-redesign, kfp-fist-zpunch): one synthesized FP punch per type at the guard (fp_vm set fp_fire
+# 0..5 = L/R straight, L/R hook, L/R upper), deterministic, independent of which native technique the game picks
+if [[ ",${FIST_PHASES}," == *,fire,* ]]; then
+  FN=(L-straight R-straight L-hook R-hook L-upper R-upper)
+  for _v in 0 1 2 3 4 5; do lab "FP punch ${FN[$_v]} (fp_fire $_v)"; A fp_vm set fp_fire $_v >/dev/null; sleep 1.1; fist >> "$N.fist.txt"; done
 fi
 lab "Guard"; sleep 1.5; fist >> "$N.fist.txt"
 lab end; touch "$N.stop"; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"
@@ -195,6 +203,15 @@ else
 FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" --swings "$N.swings.txt" 2>&1 | tee "$N.lab.txt" | tail -1)
 fi
 echo "$FG" | grep -qE "^fist(game|native) PASS" || ok=0
+# punch read (fist-punch-check C1-C8 + hold, animlab-m-fistpunch): gates when the FP punch synthesizer is on (fp_on 1 in
+# FIST_VMSET, kfp-fist-zpunch) or FIST_PUNCH=1; punches found from the FP wrist (--detect fp: synthesized punches)
+if [ "${FIST_PUNCH:-0}" = 1 ] || [[ ",${FIST_VMSET}," == *,fp_on,1,* ]]; then
+  if grep -q "^# dryrun canned" "$N.vmrec.txt"; then PC="RESULT FIST-PUNCH PASS dryrun-canned"   # fake game: no real punch frames
+  else
+    PC=$(python3 $HERE/animlab/fist-punch-check.py "$N.vmrec.txt" --detect fp -v 2>&1 | tee -a "$N.lab.txt" | tail -1)
+  fi
+  echo "$PC" | grep -q "^RESULT FIST-PUNCH PASS" || ok=0; FG="$FG; ${PC#RESULT }"
+fi
 BZ=
 if [ -n "$FIST_PHASES" ]; then
   [ -n "$ZL0" ] && sed -n "$((ZL0+1)),${ZL1}p" "$KDIR/KenshiFP.log" | grep -o "free swing end: .*" > "$N.z25.log"

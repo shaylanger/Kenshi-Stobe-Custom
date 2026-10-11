@@ -43,6 +43,7 @@ TX, TY = 1.245, 0.70
 ap = argparse.ArgumentParser()
 ap.add_argument('rec'); ap.add_argument('--camera', action='store_true', help='C9 gates (camera impulse toggle shipped)')
 ap.add_argument('--only', default=''); ap.add_argument('-v', action='store_true')
+ap.add_argument('--detect', default='native', choices=('native', 'fp'), help='punch stretches from the native arm (es, default) or from the FP wrist itself (fp: measured wrist >= guard z + .8 dm, any state; synthesized FP punches kfp-fist-zpunch / fp_fire takes, whose timing does not follow the native es)')
 ap.add_argument('--peaks', action='store_true', help='also print PEAK <hand> <t_peak> <t20> <guard x,y,z> per punch (mutate.py / fist-punch-synth.py)')
 a = ap.parse_args()
 R = recfmt.parse(a.rec).frames
@@ -92,7 +93,10 @@ P = []
 for s in 'LR':
     run = None
     for k, f in enumerate(F):
-        on = f['st'] == 'swinging' and f['n'] is not None and es(f['n'], s) >= 0.5
+        if a.detect == 'fp':
+            on = G[s] is not None and f['m'][s + 'wr'][2] >= G[s][2] + 0.8
+        else:
+            on = f['st'] == 'swinging' and f['n'] is not None and es(f['n'], s) >= 0.5
         if on:
             run = [k, k] if run is None or k - run[1] > 3 else [run[0], k]
             if run[0] == k:
@@ -150,6 +154,7 @@ if ready:
         # jab vs hook from the NATIVE technique (the FP motion of a bad punch is itself a sideways swipe)
         kn = max((k for k in range(k0, k1 + 1) if F[k]['n'] and NG[s]), key=lambda k: es(F[k]['n'], s), default=None)
         nd = sub(F[kn]['n'][s + 'wr'], NG[s]) if kn is not None else dv
+        if a.detect == 'fp': nd = dv   # synthesized punch: its own path says jab or hook
         straight = abs(nd[2]) >= abs(nd[0]); lim = .150 if straight else .220
         rows['C4'].append((0 < st_ <= lim, -st_, '%s strike 20->90%% %.3f s (%s <= %.3f)' % (tag, st_, 'jab' if straight else 'hook', lim)))
         # C5 recovery asymmetry

@@ -8,6 +8,7 @@
  *   --up-roll  old arm bone roll model (local Y nearest camera up); default: local Y = -(native bend normal) = the game rig
  *   --posedump <out> [--pd-frames a,b,c-d]  per-bone pose (fp_posedump format, kfp-posedump writer vm_pd_write) of the
  *            replayed skeleton at those records (default: every record), written right after vm_frame like the game
+ *   --fist-names a,b,c  fist recording: technique name of each swing in order (cycled; fpc_fs_name per swing)
  *   --apply-all  apply on every frame (default: only where the recording's napply counter shows the game applied)
  *   rec.txt  an `fp_vm rec dump` file from the game (per camera frame: inputs + the measured skeleton)
  *   out.txt  the replay's own `fp_vm rec dump` (same format, written by the plugin's vm_rec_dump), so every metric
@@ -321,6 +322,7 @@ static int g_al_2hsnap;
  * recording; every swinging stretch (or clock restart) is a new swing of technique <anim> (g_fpc_fs_tech/_name, set by
  * kfp_controls.inc in the game). Needs a client source with the fist code (VM_NFIST). */
 static const char *g_fist_anim; static char g_fist_mk[256]; static int g_fist_k = -1;
+static char g_fist_names[1024]; static const char *g_fist_nm[64]; static int g_fist_nn;   /* --fist-names a,b,c: technique name per swing (cycled) */
 static void warm_start(void)
 {
     const Rin *r = &R[0], *n1 = &R[1]; int c = r->cls ? 1 : 0;
@@ -413,6 +415,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--up-roll")) g_up_roll = 1;
         else if (!strcmp(argv[a], "--hinge-capture")) g_hcap_live = 1;
         else if (!strcmp(argv[a], "--fist") && a + 1 < argc) g_fist_anim = argv[++a];
+        else if (!strcmp(argv[a], "--fist-names") && a + 1 < argc) {   /* per-swing technique names (zpunch tables) */
+            snprintf(g_fist_names, sizeof g_fist_names, "%s", argv[++a]); g_fist_anim = "auto";
+            for (char *t = strtok(g_fist_names, ","); t && g_fist_nn < 64; t = strtok(NULL, ",")) g_fist_nm[g_fist_nn++] = t; }
         else if (!strcmp(argv[a], "--abs-world")) ;
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl_set < 256) cl_set[ncl_set++] = argv[++a]; }
         else if (!strcmp(argv[a], "--posedump") && a + 1 < argc) pd_out = argv[++a];
@@ -506,7 +511,7 @@ int main(int argc, char **argv)
             int sw = !strcmp(r->st, "swinging");
             if (sw && (!i || strcmp(R[i - 1].st, "swinging") || r->prog < R[i - 1].prog - 0.3f)) g_fist_k = (g_fist_k + 1) & 255;
             g_fpc_fists = 1; g_fpc_fs_tech = sw && g_fist_k >= 0 ? (void *)&g_fist_mk[g_fist_k] : NULL;
-            snprintf(g_fpc_fs_name, sizeof g_fpc_fs_name, "%s", g_fist_anim);
+            snprintf(g_fpc_fs_name, sizeof g_fpc_fs_name, "%s", g_fist_nn && g_fist_k >= 0 ? g_fist_nm[g_fist_k % g_fist_nn] : g_fist_anim);
         }
 #endif
         g_cls_fill[0] = cf[i];
