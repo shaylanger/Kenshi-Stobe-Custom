@@ -2171,6 +2171,7 @@ static void vm_setlog(const char *k, float x)
     snprintf(g_vm_setlog[i].k, sizeof(g_vm_setlog[i].k), "%s", k);
     if (g_vm_setn < VM_SETLOG) g_vm_setn++;
 }
+static int kt_setkey(const char *k, float x); static void kt_rec_header(FILE *fo); static void kt_rec_mark(void);   /* kfp_tables.inc */
 static int vm_set(const char *k, float x);
 static int vm_set_logged(const char *k, float x) { int ok = vm_set(k, x); if (ok) vm_setlog(k, x); return ok; }
 static int vm_rec_dump(const char *path)
@@ -2192,6 +2193,7 @@ static int vm_rec_dump(const char *path)
     fprintf(fo, "# build %s %s\n", __DATE__, __TIME__);
     for (int i = 0; i < g_vm_setn; i++)
         fprintf(fo, "# set %d %s %g\n", g_vm_setlog[i].ep == g_vm_rec_ep ? g_vm_setlog[i].f : -1, g_vm_setlog[i].k, g_vm_setlog[i].v);
+    kt_rec_header(fo);   /* live tables: hash + the values that differed from the compiled ones at rec on */
     fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm) stroke (E6, -1 = no swing) band_hidden (Z1: whole body hidden by the zoom band hide)\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
@@ -2230,6 +2232,7 @@ static float *vm_pose_field(VmPose *p, const char *k)   /* k = "px" etc */
 static int vm_set(const char *k, float x)
 {
     float *fp = NULL;
+    if (k[0] == 't' && k[1] == '.') return kt_setkey(k + 2, x);   /* live tables: t.<table>.<key> (kfp_tables.inc) */
     if ((k[0] == 'm' || k[0] == 'r') && k[1] == '_') {
         int c = k[0] == 'r';
         for (int i = 0; i < VM_NT; i++) { size_t n = strlen(g_vm_tname[i]);
@@ -2455,7 +2458,7 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
         }
     } else if (!strcmp(a, "rec") && argc > 2) {
         if (!strcmp(argv[2], "on") && !g_vm_brec) g_vm_brec = (VmBolt *)calloc(VM_RECN, sizeof(VmBolt));
-        if (!strcmp(argv[2], "on")) { if (!g_vm_rec) g_vm_rec = (VmRec *)calloc(VM_RECN, sizeof(VmRec)); if (!g_vm_rec) { r->append(r, "rec: no memory"); return KAH_ERROR; } g_vm_rn = 0; g_vm_rec_ep++; QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1; }
+        if (!strcmp(argv[2], "on")) { if (!g_vm_rec) g_vm_rec = (VmRec *)calloc(VM_RECN, sizeof(VmRec)); if (!g_vm_rec) { r->append(r, "rec: no memory"); return KAH_ERROR; } g_vm_rn = 0; g_vm_rec_ep++; kt_rec_mark(); QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1; }
         else if (!strcmp(argv[2], "off")) g_vm_rec_on = 0;
         else if (!strcmp(argv[2], "dump") && argc > 3) { int n = vm_rec_dump(argv[3]);
             snprintf(b, sizeof(b), "rec dump %s frames=%d", argv[3], n); r->append(r, b); return n < 0 ? KAH_ERROR : KAH_OK; }
@@ -2607,3 +2610,5 @@ static int kah_fp_vm(const char *id, int argc, const char *const *argv, KAH_Repl
     r->append(r, b);
     return KAH_OK;
 }
+
+#include "kfp_tables.inc"   /* live animation tables: fp_tables.txt + harness fp_tables (kfp-live-tables) */

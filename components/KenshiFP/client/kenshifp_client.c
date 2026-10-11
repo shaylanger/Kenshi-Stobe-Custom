@@ -2455,6 +2455,7 @@ static int kah_fp_state(const char *id, int argc, const char *const *argv, KAH_R
 }
 
 static int kah_fp_vm(const char *, int, const char *const *, KAH_Reply *, void *);  /* kfp_viewmodel.inc */
+static int kah_fp_tables(const char *, int, const char *const *, KAH_Reply *, void *);  /* kfp_tables.inc */
 static int kah_fp_gear(const char *, int, const char *const *, KAH_Reply *, void *);
 static void kah_bridge_tick(void)
 {
@@ -2477,6 +2478,7 @@ static void kah_bridge_tick(void)
           + g_kah.registerCommand("fp_melee", "fp_melee state (read-only native melee)", kah_fp_melee, NULL)
           + g_kah.registerCommand("fp_keys", "fp_keys state|press <lmb|rmb|mmb|r> [ms]|release|native <lmb|rmb> [frames]|pick [show]|sneak [show]|movers [show]|swallow on|off|focus on|off (TEST)|reset", kah_fp_keys, NULL)
           + g_kah.registerCommand("fp_vm", "fp_vm state|probe|dump|on|off|set <key> <v>", kah_fp_vm, NULL)
+          + g_kah.registerCommand("fp_tables", "fp_tables state|list|reload [file]|load <file>|set <table> <key> <v..>|get <table> [key]|dump <file> [diff|defaults]|reset (live animation tables, reply hash=)", kah_fp_tables, NULL)
           + g_kah.registerCommand("fp_gear", "fp_gear (read-only: worn items key/type/visible/hand distance/hidden by us)", kah_fp_gear, NULL);
     g_kah.log("KenshiFP: first-person test commands registered");
     logline("[kah] connected to the automation harness: %d commands (fp_mode/fp_click/fp_putdown/fp_state)", n);
@@ -8093,6 +8095,7 @@ static void hooked_mainloop(void *gw, float time)
         fp_tick(gw);
     }
 
+    kt_tick();                    /* fp_tables.txt live animation tables (kfp-live-tables) */
     ini_hot_reload();             /* apply KenshiFP.ini edits without restart */
     fps_cap_wait();               /* optional user-configured frame limiter */
 }
