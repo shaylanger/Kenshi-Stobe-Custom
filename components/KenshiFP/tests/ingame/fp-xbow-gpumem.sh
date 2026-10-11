@@ -77,7 +77,10 @@ A fp_camera look "$YAW" 0.02 >/dev/null
 A fp_combat on | grep -q requested || pf_fail "fp_combat on refused"
 inp 0 0 0; pf_ranged_inj "$SH" || pf_fail "$PF_WHY"
 A fp_combat autoreload 1 >/dev/null
-BOLTS=$(A inv "$SH" | grep -o '"name":"Bolts[^"]*","count":[0-9]*' | grep -o '[0-9]*$' | awk '{n+=$1} END{print n+0}')
+bolts() { A inv "$SH" | grep -o '"name":"Bolts[^"]*","count":[0-9]*' | grep -o '[0-9]*$' | awk '{n+=$1} END{print n+0}'; }
+BOLTS=$(bolts)
+# top up so N shots really fire (66c 4080: 19 bolts in the fixture capped the row at 19 shots)
+[ "$BOLTS" -lt "$N" ] && { echo "GPUMEM: give $SH Bolts $((N-BOLTS+5)): $(A give "$SH" Bolts $((N-BOLTS+5)))" >> "$LOG"; BOLTS=$(bolts); }
 [ "$BOLTS" -ge 10 ] || echo "GPUMEM: bolt count read $BOLTS (inv format?), firing N=$N; a dry bow shows as too few shots" >> "$LOG"
 [ "$BOLTS" -ge 10 ] && [ "$BOLTS" -lt "$N" ] && { echo "GPUMEM: $BOLTS bolts < $N shots, firing $BOLTS" >> "$LOG"; N=$BOLTS; }
 echo "GPUMEM setup ok: N=$N bolts=$BOLTS yaw=$YAW miss_yaw=$YAWM nvsmi0=$(nvmem)" | tee -a "$LOG"
