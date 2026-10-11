@@ -77,6 +77,17 @@ A fp_camera look "$YAW" 0.02 >/dev/null
 A fp_combat on | grep -q requested || pf_fail "fp_combat on refused"
 inp 0 0 0; pf_ranged_inj "$SH" || pf_fail "$PF_WHY"
 A fp_combat autoreload 1 >/dev/null
+# GPUMEM_SKILL=full: crossbows base so the effective skill is >= 100 + perception 100, as R11/HIT (fp-manual-anatomy cb_full:
+# base 179.1 on Axima). Both 5090 TDRs (07:09, 08:34) were R11 shots at effective 100.3; GPUMEM at 30 never TDR'd.
+# GPUMEM_SKILL=<n>: crossbows base n. Restored on exit.
+SK0=$(A stat "$SH" crossbows | grep -o 'base=[0-9.]*' | cut -d= -f2); PE0=$(A stat "$SH" perception | grep -o 'base=[0-9.]*' | cut -d= -f2)
+if [ -n "$GPUMEM_SKILL" ]; then
+  if [ "$GPUMEM_SKILL" = full ]; then m=$(A stat "$SH" crossbows | grep -o 'mod=[0-9.]*' | cut -d= -f2)
+    sk=$(awk -v m="${m:-1}" 'BEGIN{if(!(m>0.05))m=1; v=100/m; if(v<100)v=100; printf "%.1f", v+0.5}'); A setstat "$SH" perception 100 >/dev/null
+  else sk=$GPUMEM_SKILL; fi
+  A setstat "$SH" crossbows "$sk" >/dev/null; skrest() { A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >/dev/null; }
+fi
+echo "GPUMEM skill: $(A stat "$SH" crossbows | grep -o 'base=[0-9.]* effective=[0-9.]*') (GPUMEM_SKILL=${GPUMEM_SKILL:-fixture})" >> "$LOG"
 bolts() { A inv "$SH" | grep -o '"name":"Bolts[^"]*","count":[0-9]*' | grep -o '[0-9]*$' | awk '{n+=$1} END{print n+0}'; }
 BOLTS=$(bolts)
 # top up so N shots really fire (66c 4080: 19 bolts in the fixture capped the row at 19 shots)
@@ -103,6 +114,7 @@ for ((i=1; i<=N; i++)); do
   if [ -z "$s1" ]; then hung="game silent after shot $i ($kind)"; break; fi
 done
 inp 0 0 0
+[ -n "$GPUMEM_SKILL" ] && [ -z "$hung" ] && skrest
 : > "$STOPF"; sleep 3; kill $SPID 2>/dev/null
 MIN=$(( ($(date +%s)-T0)/60 + 2 ))
 TDR=$(tdrcheck $MIN)
@@ -119,6 +131,7 @@ NV=$(awk -F, 'NR==2{a=$6} NR>1{b=$6} END{printf "%s->%s", a, b}' "$SCSV")
 PER=$(awk -v d="$DM" -v n="$fired" 'BEGIN{printf "%.2f", (n>0)?d/n:0}')
 ev="fired=$fired/$N kenshi_dedicated_MB=$M0->$M1 (+$DM, $PER/shot) nvsmi_used_MB=$NV $TDR${hung:+ hang='$hung'} csv=$SCSV mem=$MCSV"
 cleanup
+ev="$ev skill=${GPUMEM_SKILL:-fixture}"
 if [ "$TDR" != "TDR NONE" ] || [ -n "$hung" ]; then pf_result FAIL "$ev log=$LOG"
 elif [ "$fired" -lt $((N*9/10)) ]; then pf_result FAIL "too few shots: $ev log=$LOG"
 elif [ "${DM:-0}" -ge "$MEMMB" ]; then pf_result FAIL "GPU memory grew >= ${MEMMB} MB: $ev"
