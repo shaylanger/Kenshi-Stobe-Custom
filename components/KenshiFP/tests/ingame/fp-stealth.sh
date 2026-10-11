@@ -21,11 +21,13 @@
 # ST02_CANDS / ST03_CANDS: "<template>@<faction>;..." target candidates tried in order; the first spawn the probe reads
 # hostile=0 (PlayerInterface::isEnemy) is the row's target, every hostile one is retired at once (neutral_target, before the
 # long part). 5090 23-rg02 + 4080 b45: on kah-fpxbow every fresh Hungry Bandit read hostile=1 enemy_pt=1 from the first
-# probe (faction enemy=0, crime none): a game-side enemy flag on the spawn, the rows then FAILed setup only at the click.
+# probe (faction enemy=0, crime none), the rows then FAILed setup only at the click. 32-rg02 (all PASS): Hungry Bandit@Shek Kingdom
+# hostile (Shek Kingdom spawns always did), Drifter@Traders Guild neutral; after ST02 engaged it Traders Guild spawns read hostile, Drifters neutral:
+# the engaged faction stays an enemy (relation enemy=0->0 notwithstanding), so ST03 tries other factions than ST02 first.
 SH=${1:-Axima}; MT=${2:-Malzin}; OUT=${3:-/tmp/fp-stealth}
 SKILL=${SKILL:-100}; NEUTRAL_REL=${NEUTRAL_REL:-20}; ST_WAIT=${ST_WAIT:-30}; ROWS=${ROWS:-"ST01 ST02 ST03"}
-ST02_CANDS=${ST02_CANDS:-"Hungry Bandit@Shek Kingdom;Drifter@Traders Guild;Farmer@Shek Kingdom;Hungry Bandit@Tech Hunters"}
-ST03_CANDS=${ST03_CANDS:-"Hungry Bandit@${ST03_FACTION:-Traders Guild};Drifter@Traders Guild;Farmer@Shek Kingdom;Hungry Bandit@Drifters"}
+ST02_CANDS=${ST02_CANDS:-"Drifter@Traders Guild;Farmer@United Cities;Hungry Bandit@Shek Kingdom;Hungry Bandit@Tech Hunters"}
+ST03_CANDS=${ST03_CANDS:-"Hungry Bandit@${ST03_FACTION:-Drifters};Drifter@United Cities;Farmer@Tech Hunters;Farmer@Shek Kingdom"}
 KFPLOG=${KFPLOG:-${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/KenshiFP.log}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
