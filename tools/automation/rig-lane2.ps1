@@ -127,6 +127,14 @@ if ($SelfTest) {
     foreach ($c in $mg) { $n++; $g = [string](MemGuardAct $c[1] $c[2] $c[3]); $ok = $g -eq $c[4]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) memguard $($c[0]): got '$g' want '$($c[4])'" }
     $n++; $t = @(LaneTdrFilter @('1000|Display|4101|reset', '1100|nvlddmkm|153|err', '1200|disk|153|io', '900|Display|4101|old') 950)
     $ok = ($t | ForEach-Object { ($_ -split '\|')[0] }) -join ',' -eq '1000,1100'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 TDR filter: $($t -join ' ; ')"
+    # render size (agreerec-i2 m102: 640x360 is no DXGI mode, Ogre fell back to 4096x2160 and pf_rig expected 1600x900):
+    # the lane's video mode is a listed display mode, and rig-env.sh hands the takes that size as RES_W x RES_H
+    $n++; $modes = @(Get-CimInstance CIM_VideoControllerResolution -ErrorAction SilentlyContinue | ForEach-Object { "$($_.HorizontalResolution) x $($_.VerticalResolution)" } | Select-Object -Unique)
+    $ok = -not $modes.Count -or $modes -contains $VideoMode; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane video mode '$VideoMode' is a listed display mode ($($modes.Count) listed)"
+    foreach ($c in @(@("KAH_VIDEO_MODE='$VideoMode' KAH_GFX=low", ($VideoMode -replace ' ', '')), @('KAH_GFX=low', '1280x720'), @('KAH_GFX=full', '1600x900'))) {
+        $n++; $g = (& 'C:\Program Files\Git\bin\bash.exe' -c "export $($c[0]); source /c/KenshiModding/tools/automation/rig-env.sh >/dev/null 2>&1; echo `${RES_W}x`${RES_H}" 2>&1 | Select-Object -Last 1)
+        $ok = "$g" -eq $c[1]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) rig-env.sh RES for $($c[0]): got '$g' want '$($c[1])'"
+    }
     "LANE2-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
 
