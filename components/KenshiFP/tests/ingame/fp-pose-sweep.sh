@@ -27,7 +27,10 @@
 LIST=$1; shift || true
 HERE=$(cd "$(dirname "$0")" && pwd); OUTD=${4:-/tmp/fp-pose-sweep}; mkdir -p "$OUTD"
 TOOLS=${TOOLS:-$HERE/../../../../Kenshi-Automation-Harness/tools/animlab}; PYX=${PY:-python3}
-winp() { if command -v wslpath >/dev/null 2>&1; then wslpath -m "$1"; elif command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
+# Windows path for the game: /mnt/c/x (WSL) and /c/x (Git Bash, 4080) mapped by string (the 4080 dryrun stub and
+# wslpath on /c paths gave wrong paths, 2026-10-11); other paths through wslpath/cygpath.
+winp() { case "$1" in /mnt/[a-zA-Z]/*) local d=${1:5:1}; echo "${d^^}:/${1:7}";; /[a-zA-Z]/*) local d=${1:1:1}; echo "${d^^}:/${1:3}";;
+  *) if command -v wslpath >/dev/null 2>&1; then wslpath -m "$1"; elif command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi;; esac; }
 early() { echo "RESULT POSESWEEP FAIL setup: $*"; exit 1; }
 [ -r "$LIST" ] || early "no variants list ($LIST)"
 if ! "$PYX" -I "$TOOLS/fptables.py" expand "$LIST" "$OUTD/variants" > "$OUTD/expand.txt" 2>&1; then
