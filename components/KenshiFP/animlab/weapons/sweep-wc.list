@@ -1,0 +1,5 @@
+# weapon-classes 2026-10-11: heavy + polearm live-tables variants (WS_TABLES)
+# sid|name|type|anim class|ammo
+55397-ArkWeaponPack.mod|Buster Sword|melee|heavy weapons|
+477-gamedata.base|Fragment Axe|melee|heavy weapons|
+52308-rebirth.mod|Naginata|melee|polearm|

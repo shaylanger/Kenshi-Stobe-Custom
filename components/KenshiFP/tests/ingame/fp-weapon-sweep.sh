@@ -34,7 +34,7 @@ WCAT=${WCAT:-$(dirname "$LIST")/weapons.json}
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 NI=; command -v nice >/dev/null 2>&1 && NI="nice -n 15"   # offline lab checks at low priority (CLAUDE.md rig uptime 5)
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
-cleanup(){ A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A chatter on >/dev/null; }
+cleanup(){ [ -n "${WS_TABLES:-}" ] && A fp_tables reset >/dev/null; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A chatter on >/dev/null; }
 PF_ROW=WEAPONSWEEP-$NAME; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh; . $HERE/tests/ingame/take-preflight-cam.sh
 pf_begin "$PF_ROW"
 [ -s "$WCAT" ] || pf_fail "weapon catalog $WCAT missing (animlab.py weapons --catalog writes it next to sweep.list)"
@@ -57,7 +57,14 @@ if [ "${WS_NOXBOW:-0}" = 1 ]; then
   for c in $SH Malzin $HOLD Shay; do A inv $c | grep -o '"name":"[^"]*","equipped":true' | grep -iqE 'bow|toothpick|harpoon|eagle' && pf_fail "crossbow still equipped on $c (crash-safety quarantine)"; done
 fi
 [ "${WS_TWO_LIGHT:-0}" = 1 ] && export AL_TWO_LIGHT=1
-echo "setup ok: bow=${BOWN:-none} list=$LIST catalog=$WCAT"
+# WS_TABLES=<Windows path, e.g. C:/KenshiTestRuns/tables/x.txt> (weapon-classes 2026-10-11): film every weapon with a live-tables
+# variant (fp_tables load; reply hash= logged in the setup line; compiled values restored by fp_tables reset on exit)
+WSTH=
+if [ -n "${WS_TABLES:-}" ]; then
+  r=$(A fp_tables load "$WS_TABLES"); WSTH=$(grep -o 'hash=[0-9a-f]*' <<<"$r" | head -1 | cut -d= -f2)
+  { [ -n "$WSTH" ] && grep -q ' bad=0' <<<"$r"; } || pf_fail "fp_tables load $WS_TABLES: $(cut -c1-140 <<<"$r")"
+fi
+echo "setup ok: bow=${BOWN:-none} list=$LIST catalog=$WCAT${WS_TABLES:+ tables=$WS_TABLES hash=$WSTH}"
 # give_w <sid>: harness give; on "no room" (04-twohand-b 2026-10-11: the studio fixture's Axima wears katana on the hip +
 # bow on the back, a 10x1 polearm fits neither and harness give frees only a worn weapon of the item's slot type) unequip
 # every worn weapon (armour stays) and give once more; the repair is logged, a second refusal is the setup FAIL
