@@ -3,6 +3,7 @@
 #   Run in WSL after every KenshiFP viewmodel build, before VMQUICK (fp-viewmodel.sh runs it itself when no result for
 #   the current source exists). Fully offline (no game).
 #   1. corpus.sh verify (every pinned file present, sha unchanged)
+#   2b. agree-pose.sh: per-bone replay agreement of corpus/agree/pose.list recordings (exact source per DLL)
 #   2. regress.sh in an EMPTY work dir filled only from the corpus (all FAIL-old/PASS-new pairs, replays of the current
 #      /root/KenshiFP source); a REGRESS FAIL, or an INFO saying a corpus file is missing, fails the gate
 #   3. E6 swing pool (`animlab.py pool` over corpus pools/sword-swing/pool-all.list, maintainer's E6 gate) on the current source's adapter for every stroke
@@ -34,6 +35,10 @@ rm -rf "$W"; mkdir -p "$W"
 ANIMLAB_WORK=$W bash "$HERE/regress.sh" > "$OUT/regress.txt" 2>&1
 grep -q '^REGRESS FAIL' "$OUT/regress.txt" && { fail=1; why+=(regress); }
 if grep -E '^REGRESS INFO' "$OUT/regress.txt" | grep -viE 'not built|not recorded yet' | grep -qiE 'missing|recording or build'; then fail=1; why+=(corpus-file-missing); fi
+# 2b. replay agreement (lab-calibrate 2026-10-11): every corpus/agree/pose.list game recording, replayed by a lab built from
+#     the exact source of the DLL that recorded it, must match the game's arm joints per record within its tolerance
+bash "$HERE/agree-pose.sh" --out "$OUT/agree-pose" > "$OUT/agree-pose.txt" 2>&1 || { fail=1; why+=(agree-pose); }
+grep '^AGREE-POSE ' "$OUT/agree-pose.txt" | awk '{n=$3; sub(/:$/,"",n); print "AGREE-POSE", n, $2}' >> "$OUT/verdicts.raw"; rm -rf "$OUT/agree-pose"
 # 3. E6 pool for EVERY stroke that has key tables (0 .. VM_NSTROKE-1 in kfp_viewmodel.inc), not only the default mask:
 #    gate coverage class (Misses 2026-10-10): the pt30 change dropped stroke 1 take_all 0.95 -> 0.64 and passed the gate
 #    because only mask stroke 0 was pooled (game take kfx-b9 e6r4 confirmed the snap). Strokes are switched on at run time
