@@ -21,8 +21,12 @@ format), taken FIFO by file name: the rig's own folder first, then any\ (lists w
   # owner: <agent>            gets the notes (agents\<owner>.note-from-rig-runner); default coordinator
   # out: <name>               out dir C:\KenshiTestRuns\<name> (on that rig); default <list name>-<MMdd-HHmm>
   # launch: <save>            save to launch; default the first row's save ("home" -> auto-home); "-" rows need launch:
-  # needs: KenshiFP <sha8>|staged-latest   install that staged build (default: the newest staged build if it is newer
-  #                                        than the installed DLL); needs: Harness <sha8> = installed harness must match
+  # needs: KenshiFP latest                 (the default to write) install THE newest staged build, resolved at the batch
+  #                                        boundary (no header: the newest staged build if it is newer than the installed DLL)
+  # needs: KenshiFP <sha8>                 that build; if staging replaced it, the newest staged build that includes every
+  #                                        patch of it (manifest patches line, runner\staged-history.tsv), else the installed
+  #                                        one if it does, with a log line; fails only if none does. Harness <sha8> = must match
+  #                                        (rig-runner.ps1 -Rig <rig> -Resolve "KenshiFP <sha8>|latest" shows the choice)
   # nodryrun: <row> <reason>  leave that row out of the dry run (fake-game gap); every other row must pass dryrun.sh
   # rig: 5090|4080            (any\ lists) only that rig takes it
   {CR} in rows = POSIX root of C: on the rig (/mnt/c on the 5090, /c on the 4080); {OUT} = the out dir (run-batch.sh).
@@ -40,6 +44,9 @@ Queue empty (or 4080 unreachable with lists waiting) for >= 2 min: ALERT-<rig>.t
 and the Stop hook block on ALERT files); the ALERT clears when the rig works again.
 Filler: both queues empty -> a COPY of the least recently started eligible queue\filler\*.list (needs: met by the installed
 build, never installs; not running on the other rig; not benched) runs; rotation in runner\filler-rotation.tsv.
+A filler never blocks real work: a list arriving in queue\<rig>\ or any\ writes <out>\PREEMPT; run-batch.sh stops after the
+current row (BATCH PREEMPTED + rows not run in SUMMARY.txt), the copy goes to done\ (result "preempted"), the list starts.
+-Fake "# fakesec: <n>" header: the fake batch runs n s (tests preemption).
 No relaunch gap: Kenshi stays up between lists (5090 always, 4080 when a next list is queued); run-batch.sh --reuse loads
 the save in place; Kenshi is stopped only for a DLL install. Fast setup FAIL: a list with no PASS whose RESULTs are all
 setup/dryrun FAILs (or none / aborted) within -FastMin (15) min, or 3 instant setup FAILs in a row, writes the sticky
@@ -48,7 +55,7 @@ Stale queue\running\<rig>__* entries (no <rig>.cur/.tail naming them, no live ru
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15)
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '')
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
@@ -67,9 +74,37 @@ if ($Stop) {
     }
     exit 0
 }
+# shared-mode reads/writes (2026-10-10: a `tail -F` on 5090.log made every Add-Content fail silently for an hour, and the
+# state line went stale the same way): FileShare ReadWrite|Delete, a few retries
+function ReadShared([string]$p) {
+    for ($i = 0; $i -lt 5; $i++) {
+        try { $fs = [IO.File]::Open($p, 'Open', 'Read', 'ReadWrite, Delete'); try { return (New-Object IO.StreamReader($fs)).ReadToEnd() } finally { $fs.Close() } }
+        catch [IO.FileNotFoundException] { return $null } catch [IO.DirectoryNotFoundException] { return $null } catch { Start-Sleep -Milliseconds 200 }
+    }
+    $null
+}
+function WriteShared([string]$p, [string]$text, [switch]$Append) {
+    $b = [Text.Encoding]::UTF8.GetBytes($text)
+    for ($i = 0; $i -lt 10; $i++) {
+        try { $fs = [IO.File]::Open($p, $(if ($Append) { 'Append' } else { 'Create' }), 'Write', 'ReadWrite, Delete'); try { $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }; return $true }
+        catch { Start-Sleep -Milliseconds 200 }
+    }
+    $false
+}
 if ($Status) {
+    # the state line is cross-checked with the runner's current files (2026-10-10: -Status showed "running rg-05 ... 21:17"
+    # after the runner had moved on): <rig>.cur names the batch in its game part, <rig>.tail.* the ones still analysing
     foreach ($r in '5090', '4080') {
-        $st = if (Test-Path "$rd\$r.state") { (Get-Content "$rd\$r.state" -Raw).Trim() } else { '-' }
+        $st = ReadShared "$rd\$r.state"; $st = if ($st) { $st.Trim() } else { '-' }
+        $sf = Get-Item "$rd\$r.state" -ErrorAction SilentlyContinue
+        $cur = ReadShared "$rd\$r.cur"; $cl = if ($cur) { @($cur -split "`r?`n") } else { @() }
+        if ($cl.Count -ge 6 -and $cl[5]) {
+            if ($st -notmatch [regex]::Escape($cl[5])) { $st = "running $($cl[5]) since $(try { ([datetime]$cl[4]).ToString('HH:mm') } catch { '?' }) (state line stale: '$st')" }
+        } elseif ($st -match '^\d\d:\d\d (running|starting) ') { $st = "between lists (no batch in its game part; last state '$st')" }
+        $age = if ($sf) { [int]((Get-Date) - $sf.LastWriteTime).TotalMinutes } else { -1 }
+        if ($age -ge 3 -and (PidAlive $r)) { $st += " [state file $age min old: loop slow or stuck? see $r.log]" }
+        $tl = @(Get-ChildItem $rd -Filter "$r.tail.*" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name.Substring("$r.tail.".Length) })
+        if ($tl.Count) { $st += " | analysing: $($tl -join ', ')" }
         $n = @(Get-ChildItem "$qd\$r" -Filter *.list -File -ErrorAction SilentlyContinue).Count
         $up = if (PidAlive $r) { 'up' } elseif (Test-Path (StopFlag $r)) { "STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()) (rig-runner.ps1 -Start -Rig $r)" } else { 'DOWN' }
         "runner $r ${up}: $st | queued $r=$n"
@@ -98,16 +133,18 @@ if ($Ensure) {
     exit 0
 }
 if (-not $Rig) { Get-Content $PSCommandPath -TotalCount 40; exit 2 }
-if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
-if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
-Set-Content (Join-Path $rd "$Rig.pid") $PID
+if (-not $Resolve) {
+    if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
+    if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
+    Set-Content (Join-Path $rd "$Rig.pid") $PID
+}
 
 # ---------------------------------------------------------------- helpers
 $log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"
 $alertF = if ($Fake) { Join-Path $rd "ALERT-$Rig.txt" } else { Join-Path $runs "ALERT-$Rig.txt" }
 $owner4 = 'rig4080'; $owner5 = 'runner-5090'
-function Log([string]$m) { Add-Content $log "$((Get-Date).ToString('MM-dd HH:mm:ss')) $m" }
-function State([string]$m) { Set-Content $stateF "$((Get-Date).ToString('HH:mm')) $m" }
+function Log([string]$m) { if ($Resolve) { Write-Host "LOG $m"; return }; $null = WriteShared $log "$((Get-Date).ToString('MM-dd HH:mm:ss')) $m`r`n" -Append }
+function State([string]$m) { $null = WriteShared $stateF "$((Get-Date).ToString('HH:mm')) $m`r`n" }
 function Note([string]$who, [string]$m) {
     if ($Fake) { $who = "fake-$who" }
     Add-Content (Join-Path $runs "agents\$who.note-from-rig-runner") "$((Get-Date).ToString('MM-dd HH:mm')) rig-runner $Rig`: $m"
@@ -214,7 +251,7 @@ function NoDryRows([string]$path) {
         $null = $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)'; $Matches[1].TrimEnd(':') -split '[/,]' | Where-Object { $_ } })
 }
 # FILLER (Shay 2026-10-10: rigs must never sit idle): queue\filler\ is a shared rotating regression backlog, used only when
-# queue\<rig>\ and queue\any\ are empty (checked between lists, never preempts). A filler list is COPIED (never consumed) to
+# queue\<rig>\ and queue\any\ are empty (and preempted at the next row boundary once one is not: Preempt). A filler list is COPIED (never consumed) to
 # running\<rig>__filler__<name>; rotation state runner\filler-rotation.tsv (name, last start, rig, benched until, why):
 # least recently started first. Skipped: lists the other rig is running, benched lists (dryrun FAIL, fast setup FAIL, died:
 # 3 h), lists whose "needs:" the installed build doesn't meet (a filler never installs a DLL: no restart, no downgrade).
@@ -252,7 +289,10 @@ function InstalledHashes {   # @{ K = KenshiFP sha8; H = harness sha8 } installe
 function FillerUnmet([string]$path) {   # why the installed build doesn't meet the list's "needs:", or $null
     $need = Header $path 'needs'; if (-not $need) { return $null }
     $ih = InstalledHashes
-    if ($need -match 'KenshiFP\s+(\w{8})\b' -and $ih.K -ne $Matches[1].ToUpper()) { return "needs KenshiFP $($Matches[1]), installed $($ih.K)" }
+    if ($need -match 'KenshiFP\s+(\w{8})\b' -and $ih.K -ne $Matches[1].ToUpper()) {
+        $pin = $Matches[1].ToUpper(); $mi = if ($ih.K -ne '?') { Missing $pin $ih.K } else { $null }   # a filler never installs: the installed build must include the pinned one's patches
+        if ($null -eq $mi -or $mi.Count) { return "needs KenshiFP $pin, installed $($ih.K)$(if ($mi.Count) { " (lacks $($mi -join ','))" })" }
+    }
     if ($need -match 'Harness\s+(\w{8})\b' -and $ih.H -ne $Matches[1].ToUpper()) { return "needs Harness $($Matches[1]), installed $($ih.H)" }
     $null
 }
@@ -304,15 +344,85 @@ function Fail-List([string]$runPath, [string]$name, [string]$own, [string]$why, 
     if ((Split-Path $runPath -Leaf) -like '*__filler__*') { Bench $name 3 $why }
     Note $own "list $name NOT run ($why); details $dst.result. Fix it and put it back into queue\$Rig\ (or any\)."
 }
-# installed vs staged KenshiFP; returns $null (nothing to do) or the sha8 to install
+# ---------------------------------------------------------------- staged builds (2026-10-10: "# needs: KenshiFP <sha>" failed
+# at install twice because kfp-pipeline had replaced that sha). "# needs: KenshiFP latest" = the newest staged build,
+# resolved at the batch boundary. A pinned sha that is gone is served by the newest staged build if that build's patches
+# line includes every patch of the pinned one (else by the installed build if it does), with a log line; only otherwise
+# the list fails. The pipeline deletes superseded manifests, so the runner remembers sha -> patches of every manifest it
+# sees in runner\staged-history.tsv (fallback: the "PIPELINE PASS <sha> patches=" lines in /root/kfp-pipeline/*/pipeline.log).
+$stDir = if ($Fake) { Join-Path $rd 'staged' } else { Join-Path $runs 'staged' }
+$histF = Join-Path $rd 'staged-history.tsv'; $script:noPatches = @{}
+function HistRead { $h = @{}; foreach ($l in @((ReadShared $histF) -split "`r?`n")) { $p = $l -split "`t"; if ($p.Count -ge 2 -and $p[0]) { $h[$p[0]] = $p[1] } }; $h }
+function ManifestPatches([string]$path) {   # "patches a,b,c" line of a KenshiFP-*.txt manifest ('' = base build), $null if none
+    $t = ReadShared $path; if ($null -eq $t) { return $null }
+    $l = @($t -split "`r?`n" | Where-Object { $_ -match '^patches(\s|$)' })[0]; if ($null -eq $l) { return $null }
+    ($l -replace '^patches\s*', '').Trim()
+}
+function StagedRecord {   # remember the patches of every staged manifest (cheap: a few small files per tick)
+    $h = HistRead; $add = @()
+    foreach ($m in @(Get-ChildItem $stDir -Filter 'KenshiFP-*.txt' -File -ErrorAction SilentlyContinue)) {
+        $sha = if ($m.Name -eq 'KenshiFP-latest.txt') { $l1 = (ReadShared $m.FullName); if ($l1 -match '^KenshiFP (\w{8})') { $Matches[1].ToUpper() } else { $null } } elseif ($m.BaseName -match '^KenshiFP-(\w{8})$') { $Matches[1].ToUpper() } else { $null }
+        if (-not $sha -or $h.ContainsKey($sha)) { continue }
+        $pp = ManifestPatches $m.FullName; if ($null -eq $pp) { continue }
+        $h[$sha] = $pp; $add += "$sha`t$pp`t$(Get-Date -Format s)"
+    }
+    if ($add.Count) { $null = WriteShared $histF (($add -join "`r`n") + "`r`n") -Append; foreach ($a in $add) { Log "staged-history + $(($a -split "`t")[0])" } }
+}
+function PatchesOf([string]$sha) {   # patch list of a build (string, '' = base), $null if unknown
+    $sha = $sha.ToUpper(); $m = Join-Path $stDir "KenshiFP-$sha.txt"
+    if (Test-Path $m) { $pp = ManifestPatches $m; if ($null -ne $pp) { return $pp } }
+    $h = HistRead; if ($h.ContainsKey($sha)) { return $h[$sha] }
+    if ($Fake -or $script:noPatches[$sha]) { return $null }
+    $script:noPatches[$sha] = 1   # one pipeline-log lookup per unknown sha per loop
+    $g = @(Wsl @('bash', '-c', "grep -ho 'PIPELINE PASS $sha patches=[^ ]*' /root/kfp-pipeline/*/pipeline.log 2>/dev/null | tail -1"))
+    if ($g.Count -and $g[-1] -match "PIPELINE PASS $sha patches=(\S*)") { $pp = $Matches[1]; $null = WriteShared $histF "$sha`t$pp`t$(Get-Date -Format s) (pipeline.log)`r`n" -Append; return $pp }
+    $null
+}
+function LatestStaged {   # sha8 of THE staged build (KenshiFP-latest.txt line 1 if its DLL is there, else the newest DLL)
+    $l = ReadShared (Join-Path $stDir 'KenshiFP-latest.txt')
+    if ($l -match '^KenshiFP (\w{8})' -and (Test-Path (Join-Path $stDir "KenshiFP-$($Matches[1].ToUpper()).dll"))) { return $Matches[1].ToUpper() }
+    $f = Get-ChildItem (Join-Path $stDir 'KenshiFP-*.dll') -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($f) { return $f.BaseName.Substring(9).ToUpper() } $null
+}
+function Missing([string]$want, [string]$have) {   # patches of $want that $have lacks ($null = $have unknown)
+    $hp = PatchesOf $have; $wp = PatchesOf $want; if ($null -eq $hp -or $null -eq $wp) { return $null }
+    $hs = @($hp -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $m = @(($wp -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $hs -notcontains $_ })
+    , $m   # keep an empty array an array (else PowerShell returns $null = "unknown")
+}
+# pinned sha8 -> the build to use: @{ sha = <sha8 or $null = keep the installed one>; why = <log text> } or @{ fail = <reason> }
+function ResolvePinned([string]$pin, [string]$installed) {
+    $pin = $pin.ToUpper()
+    if ($installed -eq $pin) { return @{ sha = $null; why = "KenshiFP $pin is installed" } }
+    if (Test-Path (Join-Path $stDir "KenshiFP-$pin.dll")) { return @{ sha = $pin; why = "KenshiFP $pin staged" } }
+    if ($null -eq (PatchesOf $pin)) { return @{ fail = "needs KenshiFP ${pin}: no longer staged and its patch list is unknown (no manifest, not in runner\staged-history.tsv / pipeline logs); use '# needs: KenshiFP latest'" } }
+    $lat = LatestStaged
+    if ($lat) {
+        $miss = Missing $pin $lat
+        if ($null -ne $miss -and -not $miss.Count) { return @{ sha = $(if ($lat -eq $installed) { $null } else { $lat }); why = "needs KenshiFP $pin, which is no longer staged: the newest staged build $lat includes all its patches -> $(if ($lat -eq $installed) { 'already installed' } else { "installing $lat" })" } }
+    }
+    if ($installed -and $installed -ne '?') {
+        $mi = Missing $pin $installed
+        if ($null -ne $mi -and -not $mi.Count) { return @{ sha = $null; why = "needs KenshiFP $pin, which is no longer staged: the installed build $installed includes all its patches -> runs on it" } }
+    }
+    @{ fail = "needs KenshiFP ${pin}: no longer staged, and neither the newest staged build ($(if ($lat) { "$lat lacks: $((Missing $pin $lat) -join ',')" } else { 'none' })) nor the installed $installed includes all its patches" }
+}
+# installed vs staged KenshiFP; returns $null (nothing to do), the sha8 to install, or 'FAIL' ($script:instWhy = reason)
 function StagedWanted([string]$need) {
     $sd = if ($Rig -eq '5090') { "$runs\staged" } else { $null }
-    if ($need -and $need -notmatch 'staged-latest') { return $need.ToUpper() }
+    $script:instWhy = ''
+    if ($need -and $need -notmatch '^(staged-)?latest$') {
+        $script:instCache = $null; $ik = (InstalledHashes).K
+        $r = ResolvePinned $need $ik
+        if ($r.fail) { $script:instWhy = $r.fail; return 'FAIL' }
+        if ($r.why -notmatch ' is installed$| staged$') { Log $r.why }
+        return $r.sha
+    }
+    if ($Fake) { $l = LatestStaged; if ($l -and $l -ne (InstalledHashes).K -and $need) { return $l }; return $null }
     if ($Rig -eq '5090') {
-        $f = Get-ChildItem "$sd\KenshiFP-*.dll" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if (-not $f) { return $null }
+        $h = LatestStaged; if (-not $h) { return $null }   # THE build (KenshiFP-latest.txt), even if an older one is kept
+        $f = Get-Item "$sd\KenshiFP-$h.dll"
         $dst = $kfpDst5
-        $h = $f.BaseName.Substring(9)
         if ((Get-FileHash $dst).Hash.Substring(0, 8) -eq $h) { return $null }
         if ($need -or $f.LastWriteTime -gt (Get-Item $dst).LastWriteTime) { return $h }
         return $null
@@ -448,16 +558,24 @@ function Start-Batch($f) {
     }
     if ($Fake) {   # fake batch: the dryrun result is the batch result
         if ($Rig -eq '4080') { Sync4080 $name (($txt -join "`n")) }   # deferred-sync planning against runner\fake\fake-procs.txt (setup.sh --dry)
-        Set-Content (Join-Path $outW 'SUMMARY.txt') (@("BATCH START $(Get-Date -Format 'yyyy-MM-dd HH:mm') list=$name (fake)") + @($dr | Where-Object { $_ -like 'DRYRUN *' } | ForEach-Object { $_ -replace '^DRYRUN (\S+) (PASS|FAIL|SKIP)', 'RESULT $1 $2' }) + "BATCH END $(Get-Date -Format 'yyyy-MM-dd HH:mm') (fake)")
+        $res = @($dr | Where-Object { $_ -like 'DRYRUN *' } | ForEach-Object { $_ -replace '^DRYRUN (\S+) (PASS|FAIL|SKIP)', 'RESULT $1 $2' })
+        $fsec = Header $run 'fakesec'   # "# fakesec: <n>": the fake batch takes n s (first RESULT at once, the rest at the end; PREEMPT ends it)
+        if ($fsec -match '^\d+$') {
+            Set-Content (Join-Path $outW 'SUMMARY.txt') (@("BATCH START $(Get-Date -Format 'yyyy-MM-dd HH:mm') list=$name (fake, $fsec s)") + @($res | Select-Object -First 1))
+            Set-Content (Join-Path $outW 'fake.sec') @($fsec, (Get-Date -Format s)); Set-Content (Join-Path $outW 'fake.rest') @($res | Select-Object -Skip 1)
+            State "running $name -> $outW (owner $own, fake)"; Note $own "started $name (fake, $fsec s) out=$outW"; return $true
+        }
+        Set-Content (Join-Path $outW 'SUMMARY.txt') (@("BATCH START $(Get-Date -Format 'yyyy-MM-dd HH:mm') list=$name (fake)") + $res + "BATCH END $(Get-Date -Format 'yyyy-MM-dd HH:mm') (fake)")
         New-Item -ItemType File (Join-Path $outW 'DONE') -Force | Out-Null
         Note $own "started $name (fake) out=$outW"; return $true
     }
 
     # stop Kenshi, install the wanted staged KenshiFP, check the harness
     $need = Header $run 'needs'
-    $needK = if ($need -match 'KenshiFP\s+(\S+)') { $Matches[1] } elseif ($need -match 'staged-latest') { 'staged-latest' } else { $null }
+    $needK = if ($need -match 'KenshiFP\s+(\S+)') { $Matches[1].TrimEnd(',', ';') } elseif ($need -match '(staged-)?latest') { 'latest' } else { $null }
     $needH = if ($need -match 'Harness\s+(\w{8})') { $Matches[1].ToUpper() } else { $null }
     $inst = if ($filler) { $null } else { StagedWanted $needK }   # filler: runs on the installed build (needs checked at pick)
+    if ($inst -eq 'FAIL') { Fail-List $run $name $own $script:instWhy @(); Remove-Item $curF; return $true }
     if ($Rig -eq '5090') {
         $env:KAH_OWNER = $owner5
         $lk = Join-Path $runs 'game.lock'
@@ -546,6 +664,37 @@ function Probe([string]$outP, [string]$act = '') {
     $h = @{}; foreach ($kv in ($l.Substring(6) -split ' ')) { $p = $kv -split '=', 2; if ($p.Count -eq 2) { $h[$p[0]] = $p[1] } }
     $h
 }
+function FakeProbe([string[]]$c) {   # -Fake: a "# fakesec:" batch runs for n s and honours PREEMPT like run-batch.sh
+    $o = $c[1]; $fs = Join-Path $o 'fake.sec'
+    if ((Test-Path (Join-Path $o 'DONE')) -or -not (Test-Path $fs)) { return @{ done = '1' } }
+    $sec, $t0 = @(Get-Content $fs); $S = Join-Path $o 'SUMMARY.txt'
+    if (Test-Path (Join-Path $o 'PREEMPT')) {
+        Add-Content $S @("BATCH PREEMPTED $(Get-Date -Format 'yyyy-MM-dd HH:mm') before row 2: $((Get-Content (Join-Path $o 'PREEMPT') -TotalCount 1))", "NOTE preempted: not run: $((@(Get-Content (Join-Path $o 'fake.rest')) | ForEach-Object { ($_ -split ' ')[1] }) -join ' ')", "BATCH END $(Get-Date -Format 'yyyy-MM-dd HH:mm') (fake)")
+        New-Item -ItemType File (Join-Path $o 'DONE') -Force | Out-Null; return @{ done = '1' }
+    }
+    if (((Get-Date) - [datetime]$t0).TotalSeconds -ge [int]$sec) {
+        Add-Content $S (@(Get-Content (Join-Path $o 'fake.rest')) + "BATCH END $(Get-Date -Format 'yyyy-MM-dd HH:mm') (fake)"); New-Item -ItemType File (Join-Path $o 'DONE') -Force | Out-Null; return @{ done = '1' }
+    }
+    @{ done = '0'; gamedone = '0'; alive = '1'; started = '1'; kenshi = '1'; launched = '1'; phase = 'world'; gh = "$((Get-Date).Ticks)"; step = 'fake'; age = '0'; bpid = '-' }
+}
+# FILLER PREEMPTION (Shay 2026-10-10: a 40-min filler held the turret+sword refilms until the coordinator killed it by hand):
+# a real list in queue\<rig>\ or any\ while a filler runs -> <out>\PREEMPT; run-batch.sh ends the batch at the next row
+# boundary (the running row finishes its RESULT line; "BATCH PREEMPTED" + the rows not run in SUMMARY.txt; background
+# analyses still collected), touches GAMEDONE, and the runner starts the real list at once on the running Kenshi (--reuse).
+$script:preempted = @{}
+function Preempt([string[]]$c, [string]$by) {
+    $name = $c[5]; if ($script:preempted[$name]) { return }; $script:preempted[$name] = 1
+    $snap = if ($Rig -eq '4080' -and -not $Fake) { Join-Path $c[6] '.run-batch.sh' } else { Join-Path $c[1] '.run-batch.sh' }
+    if (-not $Fake -and -not (Select-String -LiteralPath $snap -Pattern 'PREEMPT' -SimpleMatch -Quiet -ErrorAction SilentlyContinue)) {
+        Log "PREEMPT $name for $by not possible: its run-batch.sh snapshot predates PREEMPT support (runs to its end)"; return }
+    $txt = "$by $(Get-Date -Format s)"
+    if ($Rig -eq '4080' -and -not $Fake) {
+        $lf = Join-Path $c[6] 'PREEMPT'; Set-Content $lf $txt
+        if (-not (Scp4 @($lf) "C:/KenshiTestRuns/$(Split-Path $c[2] -Leaf)/")) { $script:preempted.Remove($name); Log "PREEMPT ${name}: scp to the 4080 failed (retry next tick)"; return }
+    } else { Set-Content (Join-Path $c[1] 'PREEMPT') $txt }
+    Log "PREEMPT filler ${name}: $by is queued; the batch ends after its current row"
+    State "running $name (filler, preempted by ${by}: ends after the current row)"
+}
 function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch]$Tail, [string]$Why = '') {
     $run, $outW, $outP, $own, $t0, $name, $tmp = $c
     if ($how -ne 'DONE' -and -not $Tail -and -not $Fake) {
@@ -574,14 +723,17 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     $where = if ($Rig -eq '4080' -and -not $Fake) { "4080:C:\KenshiTestRuns\$(Split-Path $outP -Leaf)" } else { $outW }
     $dest = if ($how -eq 'DONE') { "$qd\done" } else { "$qd\failed" }
     $isFill = (Split-Path $run -Leaf) -like '*__filler__*'
-    if ($isFill -and $how -eq 'DONE') { Remove-Item -LiteralPath $run -ErrorAction SilentlyContinue }   # a copy: the original stays in filler\
+    $pre = @($sum | Where-Object { $_ -like 'BATCH PREEMPTED*' }) | Select-Object -First 1
+    if ($pre -and -not $Why) { $Why = "preempted: $(($pre -replace '^BATCH PREEMPTED \S+ \S+ ', '').Trim())" }
+    if ($isFill -and $how -eq 'DONE' -and $pre) { Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue }   # the copy -> done\ (preempted), filler\ keeps the original
+    elseif ($isFill -and $how -eq 'DONE') { Remove-Item -LiteralPath $run -ErrorAction SilentlyContinue }   # a copy: the original stays in filler\
     else { Move-Item -LiteralPath $run (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue; if ($isFill) { Bench $name 3 "$how $Why" } }
     # fast setup FAIL = idle (Shay 2026-10-10): nothing passed, every RESULT is a setup/dryrun FAIL (or none / batch aborted)
     # within FastMin: sticky ALERT-<rig>-setup.txt (the Stop hook blocks on it; deleted by hand once handled, or after 30 min)
     $dur = try { ((Get-Date) - [datetime]$t0).TotalMinutes } catch { 999 }
     $nset = @($sum | Where-Object { $_ -match '^RESULT \S+ FAIL (setup|dryrun)' }).Count
     $abort = @($sum | Where-Object { $_ -match '^BATCH (ABORTED|REFUSED)' }).Count
-    if ($how -ne 'LOST' -and $np -eq 0 -and $dur -lt $FastMin -and ($abort -or $nf -eq 0 -or $nset -eq $nf)) {
+    if ($how -ne 'LOST' -and -not $pre -and $np -eq 0 -and $dur -lt $FastMin -and ($abort -or $nf -eq 0 -or $nset -eq $nf)) {
         $fw = "list $name ended in $([int]$dur) min with no PASS ($nf FAIL, $nset setup/dryrun$(if ($abort) { ', batch aborted' })): the rig was effectively idle"
         FastAlert "$fw. SUMMARY $sumL. Fix the setup or pull the list, then delete this file."
         Note $own "$fw on ${Rig}. Fix the setup (RESULT lines in $sumL) before requeueing."
@@ -596,6 +748,13 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). $more"
 }
 
+if ($Resolve) {   # rig-runner.ps1 -Rig <rig> -Resolve "KenshiFP <sha8>|latest" [-Fake]: what a list's needs: would install
+    StagedRecord; $ik = (InstalledHashes).K
+    if ($Resolve -match 'KenshiFP\s+(\w{8})\b') { $r = ResolvePinned $Matches[1] $ik; if ($r.fail) { "RESOLVE FAIL $($r.fail)" } else { "RESOLVE $(if ($r.sha) { "install $($r.sha)" } else { "keep installed $ik" }) : $($r.why)" } }
+    else { $l = LatestStaged; "RESOLVE latest = $l (installed $ik)$(if ($l -and $l -ne $ik) { " -> install $l" } else { ' -> keep' })" }
+    exit 0
+}
+
 # ---------------------------------------------------------------- loop
 Log "start pid=$PID fake=$Fake idle>=${IdleMin}m stuck>=${StuckMin}m tick=${TickSec}s"
 if ($Rig -eq '4080' -and -not $Fake) {
@@ -608,6 +767,7 @@ while ($true) {
     try {
         if ((Test-Path $fastF) -and (Get-Item $fastF).LastWriteTime -lt (Get-Date).AddMinutes(-30)) { Remove-Item $fastF -ErrorAction SilentlyContinue; Log 'setup alert expired (30 min)' }
         try { CleanRunning } catch { Log "cleanrunning error: $($_.Exception.Message)" }
+        try { StagedRecord } catch { Log "staged-history error: $($_.Exception.Message)" }
         if ((Test-Path $curF) -and -not $Fake) { try { PreDryNext } catch { Log "predry error: $($_.Exception.Message)" } }
         # batches past their game part (GAMEDONE) whose background analyses still run: finish them when DONE
         foreach ($tf in @(Get-ChildItem $rd -Filter "$Rig.tail.*" -File -ErrorAction SilentlyContinue)) {
@@ -622,8 +782,12 @@ while ($true) {
         }
         if (Test-Path $curF) {
             $c = @(Get-Content $curF)
-            $p = if ($Fake) { @{ done = '1' } } else { Probe $c[2] }
+            $p = if ($Fake) { FakeProbe $c } else { Probe $c[2] }
             if ($p) { $probeFail = 0 } else { $probeFail++ }
+            # a filler in its game part gives way to real work at the next row boundary
+            if ($p -and $p.done -ne '1' -and $p.gamedone -ne '1' -and (Split-Path $c[0] -Leaf) -like '*__filler__*' -and -not $script:preempted[$c[5]] -and -not (IdleReason)) {
+                $rl = @(RealLists); if ($rl.Count) { Preempt $c $rl[0].Name }
+            }
             # ownership (2026-10-10 phantom: a restarted loop adopted the coordinator's hand run in the same out dir and held
             # the lock): the batch.pid seen first must be written within 10 min of our start command; later it must not change
             $foreign = $null
@@ -638,7 +802,7 @@ while ($true) {
             }
             if ($foreign) { Alert "batch $($c[5]): out dir taken over by another run ($foreign); runner lets it go"; Finish-Batch $c 'LOST' -Why "out dir taken over by another run-batch ($foreign); not killed"; $condSince = $null; $hits = @{}; continue }
             if (-not $p) {
-                Log "probe failed for $($c[5]) ($probeFail)"
+                Log "probe failed for $($c[5]) ($probeFail)"; State "running $($c[5]): probe failed $probeFail tick(s)"
                 if ($Rig -eq '4080') { if (-not $unreach) { $unreach = Get-Date } elseif (((Get-Date) - $unreach).TotalMinutes -ge 10) { Alert "4080 unreachable for 10 min during $($c[5])" } }
                 elseif ($probeFail -ge 3) {
                     # 5090 probe broken 3 ticks: decide from Windows (DONE file, a run-batch.sh on this out dir) instead of waiting forever
@@ -667,6 +831,7 @@ while ($true) {
                 if (Test-Path (Join-Path $c[1] 'DONE')) { $deadHits.Remove($k); Finish-Batch $c 'DONE'; continue }
                 if ($deadHits[$k] -ge 3) { $deadHits.Remove($k); Alert "batch $($c[5]) died without DONE (run-batch.sh process gone 3 probes)"; Finish-Batch $c 'DIED' -Why 'run-batch.sh process gone without DONE'; continue }
                 Log "$($c[5]): run-batch.sh pid gone, no DONE yet ($($deadHits[$k])/3)"
+                State "running $($c[5]): run-batch.sh process gone, no DONE yet (check $($deadHits[$k])/3, then DIED)"
             }
             else {
                 $unreach = $null
@@ -713,7 +878,7 @@ while ($true) {
                         $condSince = $null
                     }
                 }
-                State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND: $why" })"
+                State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND: $why" })$(if ($script:preempted[$c[5]]) { ' PREEMPTED: ends after this row' })"
             }
         } else {
             if (Test-Path (Join-Path $rd "$Rig.restart")) {   # list boundary: hand over to a fresh copy of the (new) script
