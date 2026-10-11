@@ -409,6 +409,10 @@ if ($Command -in @('launch', 'restart')) {
       $Monitor = Pick-Monitor $list (Get-ForbiddenMonitors) 'AUTO'; if (-not $Monitor) { 'REFUSED: no allowed screen'; exit 1 }; "test monitor $want is off: using $Monitor (windowed, background)"; $bg.Monitor = $Monitor
     }
     Cfg-Test
+    # instance copies (D:\KenshiInst\<n>) lack the HIGHDPIAWARE compat flag the main install's RE_Kenshi\kenshi_x64.exe has
+    # (HKCU AppCompatFlags\Layers): Windows DPI-virtualizes them and WGC captures their 1600x900 client as 800x450 (CAPPROOF
+    # FAIL on lanes 5090b/c film mode, 2026-10-11). Same layer per process via the environment the game inherits, no registry.
+    $env:__COMPAT_LAYER = 'HIGHDPIAWARE'
     if ($Command -eq 'restart') { & 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' stop -Kenshi $Kenshi | Out-Null }
     & $GfxPs (Gfx-Want) -Kenshi $Kenshi
   }
