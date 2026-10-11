@@ -37,7 +37,7 @@ $T = [ordered]@{}
 function Say([string]$m) { "{0,6:N1} {1}" -f $sw.Elapsed.TotalSeconds, $m }
 function Mark([string]$k) { $T[$k] = [math]::Round($sw.Elapsed.TotalSeconds, 1) }
 function Fail([string]$m) { "FASTSWAP FAIL $m (after $([math]::Round($sw.Elapsed.TotalSeconds,1)) s)"; exit 1 }
-function Procs { @(Get-CimInstance Win32_Process -Filter "Name='kenshi_x64.exe'" | Where-Object {
+function Procs { , @(Get-CimInstance Win32_Process -Filter "Name='kenshi_x64.exe'" | Where-Object {
     if ($Instance -ge 2) { $_.ExecutablePath -like "$K\*" } else { -not $_.ExecutablePath -or $_.ExecutablePath -notlike 'D:\KenshiInst\*' } }) }
 
 # --- native harness IPC (same protocol as client/kah.py: inbox.txt.lock, temp + rename, reply line in outbox.txt) ---
@@ -136,6 +136,9 @@ Mark 'install'
 $la = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Ctl, 'launch', '-Save', $Save, '-TimeoutSec', "$TimeoutSec")
 if ($Gfx) { $la += @('-Gfx', $Gfx) }
 $logOut = "$env:TEMP\kfp-fastswap-$Instance.out"
+# only this launch's harness.log counts (kenshi-ctl deletes it too, but the polls below start before it does)
+Remove-Item "$H\harness.log" -ErrorAction SilentlyContinue
+if (Test-Path "$H\harness.log") { Fail "old harness.log still held open ($H): is a game still running?" }
 $p = Start-Process powershell -ArgumentList $la -NoNewWindow -PassThru -RedirectStandardOutput $logOut -RedirectStandardError "$logOut.err"
 $hStart = $null; $menu = $false; $sig = $false
 while ($true) {
