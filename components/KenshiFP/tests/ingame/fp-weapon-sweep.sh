@@ -35,7 +35,7 @@ A(){ stobe-auto "$@" </dev/null 2>&1; }
 NI=; command -v nice >/dev/null 2>&1 && NI="nice -n 15"   # offline lab checks at low priority (CLAUDE.md rig uptime 5)
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 cleanup(){ A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A chatter on >/dev/null; }
-PF_ROW=WEAPONSWEEP-$NAME; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
+PF_ROW=WEAPONSWEEP-$NAME; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh; . $HERE/tests/ingame/take-preflight-cam.sh
 pf_begin "$PF_ROW"
 [ -s "$WCAT" ] || pf_fail "weapon catalog $WCAT missing (animlab.py weapons --catalog writes it next to sweep.list)"
 # ---- setup once
@@ -126,6 +126,8 @@ take(){   # k sid name type animcls ammo
     fi
   fi
   pf_clear; place
+  # zoom-25 camera line clear (SETUP_MISSES VMQUICK op-b6: trees between the orbit camera and the char), then back to zoom 0
+  A fp_camera distance 25 >/dev/null; A fp_camera orbit 2.3 >/dev/null; sleep 2; pf_camclear "zoom 25" 2.3; place
   pf_open 2
   # take
   : > "$N.lab"; rm -f "$N.stop"

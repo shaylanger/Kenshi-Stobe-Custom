@@ -37,6 +37,9 @@ A equip $SH "Chisa Katana" >/dev/null; sleep 1; place; pf_ready
 A fp_keys set blk_allow "$ALLOW" | grep -q "blk_allow=" || pf_fail "fp_keys set blk_allow not supported by this KenshiFP build"
 pf_nofight; sleep 1.5
 A fp_camera distance 25 >/dev/null; A fp_camera orbit 2.3 >/dev/null; sleep 2; pf_open 2
+# camera line clear at both filming orbits (SETUP_MISSES VMQUICK op-b6: trees between the zoom-25 camera and the char)
+. $HERE/tests/ingame/take-preflight-cam.sh; pf_camclear "zoom 25" 2.3; A fp_camera orbit 3.0 >/dev/null; sleep 1; pf_camclear "zoom 25" 3.0
+A fp_camera orbit 2.3 >/dev/null; sleep 1
 echo "setup ok: $(A fp_keys set blk_hold 0.45 | grep -o "fb_tech=[^ ]* \|blk_dir=[0-9]* blk_org=[0-9]*" | tr '\n' ' ')"
 # ---- take
 L0=$(wc -l < "$KLOG")

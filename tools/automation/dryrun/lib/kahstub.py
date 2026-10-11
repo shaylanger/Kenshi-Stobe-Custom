@@ -1474,6 +1474,21 @@ def handle(s, cmd, a, now, sp):
             return True, 'bandhide=%d' % s['bandhide']   # the real reply (kfp_view.inc), fp-zoomfade.sh greps it
         if sub == 'look' and s['turret']['on']:
             pass
+        if sub == 'orbit' and len(a) > 1 and float(a[1]) != 0 and 'camblock_yaw' not in s:
+            s['camblock_yaw'] = s['cam']['yaw'] + float(a[1])   # fixture camblock: the trees stand on the FIRST orbit camera line
+        if sub == 'probe':   # kfp_view.inc pull-back ray eye anchor -> camera per mask; fixture camblock: a tree at that distance
+            js = os.environ.get('DR_FIXTURE_JSON')
+            cb = json.load(open(js)).get('camblock') if js and os.path.exists(js) else None
+            # like the game, the probe casts along the LOOK yaw and ignores fp_camera orbit: it only sees the trees when the
+            # caller aimed it down the orbit line (orbit 0 + look yaw+orbit, take-preflight-cam.sh pf_camclear <label> <orbit>)
+            if cb and 'camblock_yaw' in s:
+                dy = (s['cam']['yaw'] - s['camblock_yaw'] + math.pi) % (2 * math.pi) - math.pi
+                if abs(dy) > 0.35:
+                    cb = None
+            me = s['chars'].get(s['fpchar'] or s['selected'], {}).get('pos', [0, 0, 0])
+            return True, 'probe from=%.1f,%.1f,%.1f yaw=%.4f cam=-1.00 all=%.2f mesh=%.2f trace=%.2f bits=%s' % (
+                me[0], me[1] + 19, me[2], s['cam']['yaw'], float(cb) if cb else -1.0, float(cb) if cb and cb <= 20 else -1.0,
+                s['cam']['dist'] + 1.0, '5:%.2f,' % float(cb) if cb and cb < 20 else '')
         if sub == 'state':
             me = s['chars'].get(s['fpchar'] or s['selected'], {}).get('pos', [0, 0, 0])
             d = s['cam']['dist']

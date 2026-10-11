@@ -17,6 +17,8 @@
 #             the mate -> no walk -> FAIL (5090 31-rg01 K01); fp-controls.sh ROWS=K01 in the same world -> PASS
 #   noiso     R sent with key_inject without pf_iso and no ready check (b4080c xbow takes filmed holstered: the 4080
 #             launch leaves input isolation off); run with --rig 4080
+#   camz25    clean take filmed at zoom 25 (orbit) after take-preflight-cam.sh pf_camclear: PASS in the open world, setup
+#             FAIL with --fixture camblock (VMQUICK op-b6 2026-10-10: thin trees between the orbit camera and the char)
 #   (fixture stall: a 1.5 s hole in the take sampler, blkH; caught by takecheck cover, before filming by pf_latency)
 OUT=$1; MODE=${2:-clean}; ROW=REPLAY-$MODE
 for d in /mnt/c /c; do [ -f $d/KenshiModding/tools/automation/rig-env.sh ] && { . $d/KenshiModding/tools/automation/rig-env.sh; break; }; done
@@ -77,6 +79,9 @@ A unequip Malzin "Chisa Katana" >/dev/null; A transfer Malzin $SH "Chisa Katana"
 A equip $SH "Chisa Katana" >/dev/null
 if [ "$MODE" = noiso ]; then A key_inject r tap 120 >/dev/null; sleep 1; else pf_ready; fi
 case $MODE in bare|noiso) ;; *) pf_open 2;; esac
+# camz25 (--fixture camblock): VMQUICK op-b6 trees between the zoom-25 orbit camera and the char; pf_camclear stops it
+if [ "$MODE" = camz25 ]; then . $HERE/tests/ingame/take-preflight-cam.sh; A fp_camera distance 25 >/dev/null
+  A fp_camera orbit 2.36 >/dev/null; pf_camclear "replay sword zoom 25" 2.36; fi
 : > "$N.lab"
 # recorder stopped with "q" through a plain pipe at the end label (a native ffmpeg ignores q on an MSYS fifo, 4080)
 { while [ ! -f "$N.stop" ]; do sleep 0.2; done; echo q; } | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 60 -i "$PF_TITLE" -c:v libx264 "$N.mp4" & FP=$!
