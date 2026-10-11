@@ -55,6 +55,12 @@ pf_gd_abort(){ trap - USR1; local last; last=$(tail -1 "$PF_GD_FILE" 2>/dev/null
 declare -F gd_note >/dev/null || trap pf_gd_abort USR1
 # Git Bash (4080 rig) has no wslpath: cygpath does the same
 command -v wslpath >/dev/null 2>&1 || wslpath(){ [ "$1" = -w ] && shift; cygpath -w "$1"; }
+# capture mode (capture-fix 2026-10-11; same rule as rig-env.sh kah_capture_mode): wgc = FFX goes through ffx-cap.sh
+# (Windows Graphics Capture of the window, occlusion-proof) for scripts that never sourced rig-env.sh (5090 rows)
+pf_capmode(){ local m=${KAH_CAPTURE:-}; [ -z "$m" ] && [ -f "${CR:-/mnt/c}/KenshiTestRuns/capture.default" ] && m=$(head -1 "${CR:-/mnt/c}/KenshiTestRuns/capture.default" | tr -d '\r '); echo "${m:-gdigrab}"; }
+if [ "$(pf_capmode)" = wgc ]; then case "${FFX:-}" in *ffx-cap.sh) ;; *)
+  export FFX_REAL=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
+  export FFX=${CR:-/mnt/c}/KenshiModding/tools/automation/ffx-cap.sh;; esac; fi
 PF_FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
 PF_SHOTS=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/mods/AutomationHarness/shots   # rig layer: tools/automation/rig-env.sh
 PF_LAB=${CR:-/mnt/c}/KenshiModding/Kenshi-Automation-Harness/tools/animlab
@@ -72,7 +78,7 @@ pf_day(){
   fi
   h=$(pf_hour); { [ "$h" -ge 10 ] && [ "$h" -le 13 ]; } || pf_fail "game time $h h, not 10-13 after 50x"
   PF_A screenshot pf-sky >/dev/null; sleep 0.5
-  local rgb; rgb=$("$PF_FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$PF_SHOTS/pf-sky.png")" -vf "crop=1600:120:0:30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1)
+  local rgb; rgb=$("$PF_FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$PF_SHOTS/pf-sky.png")" -vf "crop=iw:ih*2/15:0:ih/30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1)
   [ -n "$rgb" ] || pf_fail "sky check could not read the screenshot"
   echo "$rgb" | awk '{exit !($3 > $1+25)}' || pf_fail "sky not clear (rgb $rgb)"
   echo "pf_day ok: ${h} h, sky rgb$(echo $rgb)"
@@ -104,7 +110,7 @@ pf_clear(){   # per take in a multi-take sweep (kfp-twohand 03-twohand refilm 3,
     h=$(pf_hour); rgb=""
     if [ "$h" -ge 10 ] && [ "$h" -le 13 ]; then
       PF_A screenshot pf-sky >/dev/null; sleep 0.5
-      rgb=$("$PF_FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$PF_SHOTS/pf-sky.png")" -vf "crop=1600:120:0:30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1)
+      rgb=$("$PF_FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$PF_SHOTS/pf-sky.png")" -vf "crop=iw:ih*2/15:0:ih/30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1)
       if echo "$rgb" | awk 'NF==3{exit !($3 > $1+25)} {exit 1}'; then ok=1; break; fi
     fi
     [ $i = 1 ] && { echo "pf_clear: waiting at 50x (hour $h, sky rgb$(echo $rgb))"; PF_A speed 50 hold >/dev/null; }
@@ -120,7 +126,7 @@ pf_clear(){   # per take in a multi-take sweep (kfp-twohand 03-twohand refilm 3,
 # Skipped on the 4080 and with window capture (KAH_CAPTURE=wgc: tools/automation/ffx-cap.sh, occlusion-proof).
 pf_ontop(){ local r
   [ "${RIG:-5090}" = 4080 ] && return 0
-  [ "${KAH_CAPTURE:-}" = wgc ] && { echo "pf_ontop skip: window capture (wgc)"; return 0; }
+  [ "$(pf_capmode)" = wgc ] && { echo "pf_ontop skip: window capture (wgc)"; return 0; }
   r=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\kenshi-ctl.ps1' ontop on 2>&1 </dev/null | tr -d '\r' | grep '^ontop' | head -1)
   case "$r" in *unoccluded*) echo "pf_ontop ok: $r";; *"occluded by "*) pf_fail "window occluded by ${r#*occluded by }";;
     *) pf_fail "window topmost/occlusion check failed: ${r:-no answer}";; esac; }
@@ -128,7 +134,7 @@ pf_open(){
   local s=${1:-2} f=/tmp/pf-open.$$.mp4 r o
   pf_ontop
   # park the virtual cursor in the top-right corner (sky): hovering a character shows its "[name]" tag (kfx-b9 blkE overlay)
-  PF_A mouse_inject at "${PF_PARK_X:-1595}" "${PF_PARK_Y:-4}" >/dev/null 2>&1
+  PF_A mouse_inject at "${PF_PARK_X:-$(( ${RES_W:-1600} - 5 ))}" "${PF_PARK_Y:-4}" >/dev/null 2>&1
   ( cd /tmp && "$PF_FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t "$s" -i "$PF_TITLE" $(venc_args 23) "$(wslpath -w $f)" ) </dev/null
   [ -s "$f" ] || pf_fail "open-ground clip not recorded"
   r=$(python3 $PF_LAB/frames.py openground "$f" 2>&1 | tail -1)

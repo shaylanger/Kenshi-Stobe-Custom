@@ -53,6 +53,8 @@ else
 fi
 FD="$CM/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin"
 mkdir -p "$FD"; for e in ffmpeg.exe ffprobe.exe; do [ -e "$FD/$e" ] || : > "$FD/$e"; mount --bind "$B/$e" "$FD/$e"; done
+# window-capture wrapper (FFX in wgc mode, capture-fix 2026-10-11) = the fake ffmpeg too: it sees the same gdigrab args
+FC="$CM/KenshiModding/tools/automation/ffx-cap.sh"; [ -e "$FC" ] && mount --bind "$B/ffmpeg.exe" "$FC"
 cp "$HERE/row.sh" "$R/dryrun/row.sh"
 if [ "$RIG" = 4080 ]; then
   # the 4080's Git Bash /etc/fstab: C:/ on /mnt/c, C:/Program Files (x86)/Steam on /mnt/d/Steam (nothing else under /mnt/d)

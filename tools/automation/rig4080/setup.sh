@@ -26,7 +26,9 @@ shopt -s nullglob
 HX='sh,py,awk,ps1,txt,json,tsv,csv,list,sed,jq'
 SETD=(); SETF=()
 addset(){ local d=$1; shift; local f fs=""; for f in "$@"; do [ -f "$f" ] && fs+="$f "; done; SETD+=("$d"); SETF+=("$fs"); }
-addset tools/automation $M/tools/automation/{rig-env.sh,venc.sh,review-pack.py,dialog-guard.sh,row-reaper.sh,rig-runner-probe.sh,batch-excerpts.sh,batch-health.sh}
+addset tools/automation $M/tools/automation/{rig-env.sh,venc.sh,review-pack.py,dialog-guard.sh,row-reaper.sh,rig-runner-probe.sh,batch-excerpts.sh,batch-health.sh,ffx-cap.sh}
+# occlusion-proof window capture (capture-fix 2026-10-11): ffx-cap.sh runs it when KAH_CAPTURE / capture.default = wgc
+addset Kenshi-Automation-Harness/tools/wgccap/out "$M/Kenshi-Automation-Harness/tools/wgccap/out/wgccap.exe"
 addset components/KenshiFP/animlab $(eval echo "$M/components/KenshiFP/animlab/*.{$HX}")
 # weapon sweep lists + catalogue (wm4080-diag: "list sweep-gated.list missing")
 addset components/KenshiFP/animlab/weapons $(eval echo "$M/components/KenshiFP/animlab/weapons/*.{$HX}")
@@ -74,7 +76,7 @@ cp_to() {
   if [ $DRY = 1 ]; then for f in "${keep[@]}"; do echo "COPY ${f#$M/}"; done; return 0; fi
   scp -q "${keep[@]}" "$H:$d" || echo "SCPFAIL $d: ${keep[*]#$M/}"
 }
-run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual 2>NUL & exit 0'
+run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual C:\KenshiModding\Kenshi-Automation-Harness\tools\wgccap\out 2>NUL & exit 0'
 run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" $H:C:/KAH/
 run scp -q "$HERE/python3" $H:C:/KAH/bin/python3
 for i in "${!SETD[@]}"; do cp_to "C:/KenshiModding/${SETD[$i]}/" ${SETF[$i]}; done

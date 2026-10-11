@@ -1,4 +1,4 @@
-<#
+﻿<#
 kenshi-ctl.ps1 (workspace): the harness repo's kenshi-ctl.ps1 with this PC's
 paths; also archives stobe.log, KenshiFP.log and ProfessionGear.log/affixes
 (all reset or rewritten on launch).
@@ -329,6 +329,12 @@ public static class KenshiTop {
   $opid = [int]($o -split ' ')[0]; $pn = (Get-Process -Id $opid -ErrorAction SilentlyContinue).ProcessName
   "ontop ${what}: topmost=$t occluded by $(if ($pn) { $pn } else { "pid $opid" }) $($o.Substring($o.IndexOf(' ') + 1))"; return 1
 }
+# launch-time topmost only while takes record with gdigrab (screen area); window capture (wgc) needs no topmost
+function OnTop-IfGdi {
+  $m = $env:KAH_CAPTURE; if (-not $m -and (Test-Path 'C:\KenshiTestRuns\capture.default')) { $m = (Get-Content 'C:\KenshiTestRuns\capture.default' -TotalCount 1).Trim() }
+  if ($m -eq 'wgc') { return "ontop: skipped (capture=wgc)" }
+  @(Set-OnTop on)[0]
+}
 if ($Command -eq 'ontop') {
   $m = if ($Mode -in @('on', 'off', 'check')) { $Mode } else { 'check' }
   $r = @(Set-OnTop $m); $r[0..($r.Count - 2)]; exit $r[-1]
@@ -348,7 +354,7 @@ if ($Command -eq 'postlaunch') {
     $fit = @(Fit-RenderSize) -join ' / '
     $w = (& $ctl window -Kenshi $Kenshi 2>&1 | Out-String).Trim()
     $onMon = $w -match [regex]::Escape(($want -replace '^\\\\\.\\', '')) ; $okSize = $fit -match 'ok \('
-    if ($onMon -and $okSize) { "postlaunch ok (round $i): $fit; $w; $(@(Set-OnTop on)[0])"; exit 0 }
+    if ($onMon -and $okSize) { "postlaunch ok (round $i): $fit; $w; $(OnTop-IfGdi)"; exit 0 }
     "postlaunch round ${i}: $fit; $w"
     Start-Sleep -Seconds 3
   }
@@ -391,6 +397,6 @@ if ($rc -eq 0 -and -not $Play -and $Command -in @('launch', 'restart')) {
   "background: $last"
   Fit-RenderSize
   "background after the resize: $(& $ctl background -Monitor $Monitor -Kenshi $Kenshi)"
-  @(Set-OnTop on)[0]
+  OnTop-IfGdi
 }
 exit $rc
