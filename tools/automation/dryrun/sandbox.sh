@@ -46,7 +46,7 @@ cp "$B/stobe-auto" "$R/usr/local/bin/stobe-auto"; cp "$B/stobe-say" "$R/usr/loca
 if [ "$RIG" = 4080 ]; then
   printf '#!/bin/sh\nexec /usr/bin/python3 /dryrun/lib/fakeexe.py --as cygpath "$@"\n' > "$B/cygpath"; chmod +x "$B/cygpath"
   rm -f "$R/usr/bin/wslpath" "$R/bin/wslpath" 2>/dev/null
-  mkdir -p "$CM/KAH/bin"; for f in ctl.ps1 itrun.ps1 display-check.ps1 kcfg.ps1; do [ -e "$CM/KAH/$f" ] || echo "# dryrun placeholder" > "$CM/KAH/$f"; done
+  mkdir -p "$CM/KAH/bin"; for f in ctl.ps1 itrun.ps1 display-check.ps1 kcfg.ps1 kenshi-gfx.ps1; do [ -e "$CM/KAH/$f" ] || echo "# dryrun placeholder" > "$CM/KAH/$f"; done
   [ -e "$CM/Windows/System32/quser.exe" ] && mount --bind "$B/quser.exe" "$CM/Windows/System32/quser.exe"
 else
   printf '#!/bin/sh\nexec /usr/bin/python3 /dryrun/lib/fakeexe.py --as wslpath "$@"\n' > "$B/wslpath"; chmod +x "$B/wslpath"

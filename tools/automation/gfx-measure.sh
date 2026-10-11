@@ -7,7 +7,7 @@
 # Needs a harness with FrameCap (framecap.txt, Plugin.cpp 2026-10-10): checked from harness.log "KAH: frame cap".
 # PASS = cap 60 holds (avg fps <= 63) and speed-50 game time with the cap >= 90% of uncapped; one RESULT GFXM line.
 # Row line: GFXM | <save> | - | - | 1500 | STALL_MIN=20 bash {CR}/KenshiModding/tools/automation/gfx-measure.sh <save> {OUT}/GFXM
-set -u
+set -u; RIG=${RIG:-}   # rig-env.sh reads $RIG (unset under set -u = abort)
 . "$(dirname "$0")/rig-env.sh"
 SAVE=${1:?save}; OUT=${2:?out}; SEC=${3:-30}
 mkdir -p "$OUT"; LOG="$OUT/gfx-measure.log"; : > "$LOG"
@@ -33,7 +33,7 @@ relaunch() { rig_stop >> "$LOG" 2>&1; sleep 3; setgfx "$1" >> "$LOG"; KAH_GFX=$1
   [ "$RIG" = 4080 ] || ps 'C:\KenshiModding\tools\automation\kenshi-ctl.ps1' postlaunch >> "$LOG"; sleep 5; }
 
 A wait-world 300 | grep -q . || fail "setup: game not in the world"
-grep -q 'KAH: frame cap' "$KDIR/mods/AutomationHarness/harness.log" 2>/dev/null || { cap 60; sleep 2
+grep -q 'KAH: frame cap' "$KDIR/mods/AutomationHarness/harness.log" 2>/dev/null || { cap 60; sleep 2; A status >/dev/null
   grep -q 'KAH: frame cap' "$KDIR/mods/AutomationHarness/harness.log" || fail "setup: installed harness has no frame cap (no 'KAH: frame cap' in harness.log)"; }
 G0=$(ps 'C:\KenshiModding\tools\automation\kenshi-gfx.ps1' status 2>/dev/null | tail -1); [ "$RIG" = 4080 ] && G0=$(ps 'C:\KAH\kenshi-gfx.ps1' status | tail -1)
 echo "rig=$RIG start: $G0" >> "$LOG"

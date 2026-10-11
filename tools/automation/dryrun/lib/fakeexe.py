@@ -257,7 +257,7 @@ def powershell(a):
         base = re.split(r'[\\/]', f)[-1].lower()
         if prob:
             dr.flag('FAIL', 'powershell -File %s: %s' % (f, prob)); return 1
-        if not os.path.exists(p) and not (dr.RIG == '4080' and base in ('ctl.ps1', 'itrun.ps1', 'display-check.ps1', 'kcfg.ps1')):
+        if not os.path.exists(p) and not (dr.RIG == '4080' and base in ('ctl.ps1', 'itrun.ps1', 'display-check.ps1', 'kcfg.ps1', 'kenshi-gfx.ps1')):
             dr.flag('FAIL', 'powershell -File %s: script missing' % f)
             sys.stderr.write('The argument \'%s\' to the -File parameter does not exist.\n' % f); return 1
         sub = next((x for x in rest if not x.startswith('-')), '')

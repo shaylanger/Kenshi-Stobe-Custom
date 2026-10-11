@@ -696,6 +696,20 @@ def handle(s, cmd, a, now, sp):
             dr.flag('FAIL', '%s: no character "%s" in %s (fixture model)' % (cmd, a[i], s['save']))
         return c
     fp = s['fp']
+    # harness FrameCap (Plugin.cpp): framecap.txt re-read about once a second, every change logged "KAH: frame cap N fps|off";
+    # the fake game renders 60 fps capped, 140 uncapped (gfx-measure.sh GFXM)
+    try:
+        cap = int(open(os.path.join(dr.KDIR, 'mods', 'AutomationHarness', 'framecap.txt')).read().split()[0])
+    except (OSError, ValueError, IndexError):
+        cap = 0
+    if cap != s.get('fcap', 0):
+        s['fcap'] = cap
+        with open(os.path.join(dr.KDIR, 'mods', 'AutomationHarness', 'harness.log'), 'a') as f:
+            f.write('[dryrun] KAH: frame cap %s\n' % ('%d fps' % cap if cap > 0 else 'off'))
+    if cmd == 'fps':
+        v = float(cap) if 0 < cap < 140 else 140.0
+        return True, 'avg=%.1f min=%.1f worst_ms=%.1f frames=%d seconds=10.0%s' % (
+            v, v - 5, 1000.0 / (v - 5), int(v * 10), ' (reset)' if a[:1] == ['reset'] else '')
     if cmd in ('status', 'wait-world', 'wait-game'):
         return True, 'phase=world save=%s last_saved=%s paused=%d speed=%g squad=%d player=%s' % (
             s['save'], s.get('last_saved', s['save']), s['paused'], s['speed'], len(s['squad']), s['squad'][0])
