@@ -39,6 +39,12 @@ if [ "$RIG" = 4080 ]; then
   rig_bg() { local log=$1; shift; powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\itrun.ps1' -Log "$(cygpath -w "$log")" -Cmd "$*"; }
 else
   export CR=/mnt/c
+  # multi-instance (C:\KenshiTestRuns\multi-instance\PLAN.md): KAH_INSTANCE=n >= 2 = the install copy D:\KenshiInst\<n>
+  # (its own harness inbox, logs, saves, lock game-<n>.lock); kenshi-ctl.ps1 gets it through WSLENV. Unset/1 = as before.
+  if [ "${KAH_INSTANCE:-1}" -ge 2 ] 2>/dev/null; then
+    export KDIR=/mnt/d/KenshiInst/$KAH_INSTANCE KAH_DIR="D:\\KenshiInst\\$KAH_INSTANCE\\mods\\AutomationHarness"
+    export WSLENV="${WSLENV:+$WSLENV:}KAH_INSTANCE"
+  fi
   export KDIR=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
   export KAH_DIR=${KAH_DIR:-'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness'}
   export KAH_CLIENT=${KAH_CLIENT:-/mnt/c/KenshiModding/Kenshi-Automation-Harness/client}

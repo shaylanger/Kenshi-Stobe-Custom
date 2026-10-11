@@ -25,6 +25,8 @@ $capF = "$Kenshi\mods\AutomationHarness\framecap.txt"
 # no -Fps: 60, or uncapped while C:\KenshiTestRuns\uncapped.on exists (Shay 2026-10-11: PC free, use it fully; delete the file to cap again)
 if ($Fps -lt 0) { $Fps = if (Test-Path 'C:\KenshiTestRuns\uncapped.on') { 0 } else { 60 } }
 $save = 'C:\KenshiTestRuns\settings.gfx.play'; $applied = 'C:\KenshiTestRuns\gfx.applied'
+# a multi-instance install copy (kenshi-instance.ps1, has instance.txt) keeps its own state next to its game, never instance 1's
+if (Test-Path "$Kenshi\instance.txt") { $save = "$Kenshi\settings.gfx.play"; $applied = "$Kenshi\gfx.applied" }
 # lowest graphics; gameplay-relevant ranges (npc range, objects view range) and visible gameplay (Blood, Dismemberment,
 # Show names, floaters) stay as they are so no row behaves differently
 $Low = [ordered]@{

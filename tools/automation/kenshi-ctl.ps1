@@ -44,6 +44,20 @@ $LockFile = 'C:\KenshiTestRuns\game.lock'
 $Owner = if ($env:KAH_OWNER) { $env:KAH_OWNER } else { 'coordinator' }
 $Cfg = "$Kenshi\kenshi.cfg"
 $CfgPlay = 'C:\KenshiTestRuns\kenshi.cfg.play'
+$Archive = 'C:\KenshiTestRuns'
+# Multi-instance (C:\KenshiTestRuns\multi-instance\PLAN.md): $env:KAH_INSTANCE = n >= 2 drives the install copy
+# D:\KenshiInst\<n> (kenshi-instance.ps1 sync) with its own lock game-<n>.lock, cfg play copy and log archive; unset or 1 =
+# instance 1 exactly as before. The harness kenshi-ctl.ps1 only sees/stops the game of the -Kenshi it is given.
+$Inst = if ($env:KAH_INSTANCE -match '^\d+$') { [int]$env:KAH_INSTANCE } else { 1 }
+if ($Inst -ge 2) {
+  $Kenshi = "D:\KenshiInst\$Inst"
+  if (-not (Test-Path "$Kenshi\instance.txt")) { "instance $Inst not created: kenshi-instance.ps1 sync -Instance $Inst"; exit 1 }
+  $LockFile = "C:\KenshiTestRuns\game-$Inst.lock"
+  $Cfg = "$Kenshi\kenshi.cfg"; $CfgPlay = "$Kenshi\kenshi.cfg.play"
+  $Archive = "C:\KenshiTestRuns\multi-instance\inst$Inst"
+  if ($Play) { 'instance copies are for tests only: no -Play'; exit 1 }
+}
+$KahDir = "$Kenshi\mods\AutomationHarness"
 # VSync=No for tests: a windowed background game presents at refresh/3 with VSync on (22 fps on the 60 Hz DISPLAY2, 45 on a
 # 143 Hz one; GPU idle), too slow for the ~40 fps viewmodel passes (vm-sword 2026-10-08). Shay's value goes to the play copy.
 $TestCfg = @{ 'Full Screen' = 'No'; 'Video Mode' = '1600 x 900 @ 32-bit colour [0]'; 'VSync' = 'No' }
@@ -173,10 +187,10 @@ public static class KenshiFit {
   $vm = (Get-Content $Cfg | Where-Object { $_ -match '^Video Mode=' }) -replace '^Video Mode=\s*', ''
   if ($vm -notmatch '^(\d+)\s*x\s*(\d+)') { "render size: no Video Mode in $Cfg"; return }
   $ww = [int]$Matches[1]; $wh = [int]$Matches[2]
-  $p = Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  $p = Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and (-not $_.Path -or $_.Path -like "$Kenshi\*") } | Select-Object -First 1
   if (-not $p) { 'render size: no game window'; return }
   foreach ($i in 1..3) {
-    $r = wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- stobe-auto screenshot kctl-size 2>&1 | Out-String
+    $r = wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- env "KAH_DIR=$KahDir" stobe-auto screenshot kctl-size 2>&1 | Out-String
     $m = [regex]::Match($r, '\((\d+)x(\d+)\)')
     if (-not $m.Success) { "render size: no screenshot ($($r.Trim()))"; return }
     $sw = [int]$m.Groups[1].Value; $sh = [int]$m.Groups[2].Value
@@ -227,7 +241,7 @@ if ($Command -in @('launch', 'restart')) {
   }
 }
 & 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' $Command -Save $Save -TimeoutSec $TimeoutSec @bg `
-  -Kenshi $Kenshi -ArchiveRoot 'C:\KenshiTestRuns' `
+  -Kenshi $Kenshi -ArchiveRoot $Archive `
   -ExtraLogs @("$Kenshi\RE_Kenshi\mods\Stobe\stobe.log", "$Kenshi\KenshiFP.log", "$Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log",
                "$Kenshi\mods\ProfessionGearProgression\ProfessionGear.log",
                "$Kenshi\mods\ProfessionGearProgression\profession_gear_affixes.tsv")
