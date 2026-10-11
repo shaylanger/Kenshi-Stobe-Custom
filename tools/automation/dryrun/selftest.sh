@@ -26,7 +26,7 @@ bug-lag        | -      | 5090 | FAIL:REPLAY-lag FAIL takecheck                 
 bug-early      | -      | 5090 | FAIL:REPLAY-early FAIL takecheck.*claim        | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp early
 bug-noiso      | -      | 4080 | FAIL:REPLAY-noiso FAIL takecheck.*claim        | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp noiso
 bug-stall      | stall  | 5090 | FAIL:REPLAY-clean FAIL takecheck.*cover        | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp clean
-bug-fistcand  | -      | 5090 | FAIL:setup: lab candidate .* missing           | fist0 | - | Axima | Malzin | 900 | $KT/fp-fists.sh {OUT}/fists 0 3 /tmp/no-fists-cand
+bug-fistcand  | -      | 5090 | FAIL:setup: lab candidate .* missing           | fist0 | - | Axima | Malzin | 900 | FIST_NATIVE=0 $KT/fp-fists.sh {OUT}/fists 0 3 /tmp/no-fists-cand
 EOF
 )
 mkdir -p "$OUT"; n=0; bad=""
