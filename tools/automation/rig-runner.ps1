@@ -385,6 +385,11 @@ function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Subs
 function Ssh([string[]]$a) { & ssh.exe -n -o BatchMode=yes -o ConnectTimeout=10 4080 @a 2>&1 | ForEach-Object { "$_" } }
 function Ssh4Ps([string]$file, [string[]]$a) { Ssh (@('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $file) + $a) }
 function Ssh4Bash([string[]]$a) { Ssh (@('C:\PROGRA~1\Git\bin\bash.exe', '-l') + $a) }
+# lane 4080b (multi-instance-4080): the 4080 may run a second game (C:\KenshiInst\<n>); lane 4080 only sees / kills instance 1
+function Ssh4Enc([string]$ps) { Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ps))) }
+$k1Sel = "Get-CimInstance Win32_Process -Filter `"Name='kenshi_x64.exe'`" | Where-Object { -not `$_.ExecutablePath -or `$_.ExecutablePath -notlike '*\KenshiInst\*' }"
+function K1on4080 { $o = @(Ssh4Enc "if (@($k1Sel).Count) { 'K1 yes' } else { 'K1 no' }"); if ($o -match '^K1 yes') { 'yes' } elseif ($o -match '^K1 no') { 'no' } else { '' } }
+function Kill1on4080 { Ssh4Enc "$k1Sel | ForEach-Object { taskkill.exe /F /T /PID `$_.ProcessId 2>&1 }" }
 function Scp4([string[]]$src, [string]$dst) { & scp -q -o BatchMode=yes @src "4080:$dst" 2>&1 | ForEach-Object { "$_" }; $LASTEXITCODE -eq 0 }
 function IdleReason {   # a recorded pause; the runner's own "no changed work" is not one (real work starts at once)
     $f = Join-Path $(if ($Fake) { $rd } else { $runs }) "rig$Rig.idle"
@@ -990,8 +995,7 @@ function Start-Batch($f) {
         # no relaunch gap (2026-10-10): the previous list left Kenshi up for this one (keep4080): run-batch.sh --reuse loads
         # the save in place, unless a DLL must be installed (stop + launch as before)
         $reuse = $false
-        $k = Ssh @('tasklist', '/nh')
-        if (($k -join ' ') -match 'kenshi_x64') {
+        if ((K1on4080) -eq 'yes') {   # instance 1 only: lane 4080b's game (C:\KenshiInst\<n>) is not this lane's
             $hOk = (-not $needH) -or ((Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-Harness') | Select-Object -Last 1) -match $needH)
             $rg = RunningGfx
             if ($script:keep4080 -and -not $inst -and $hOk -and $rg -eq $gfx) { $reuse = $true; Log "REUSE $name : 4080 Kenshi stays up, $launch loads in place (no DLL install needed, gfx $gfx)" }
@@ -1313,9 +1317,9 @@ while ($true) {
                                          { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop 2>&1 } `
                                          { foreach ($k in K1Procs) { & taskkill.exe /F /T /PID $k.Id 2>&1 } } 20
                             } else {   # ssh failure counts as alive (never report a game we can't see as gone)
-                                KillGame { $t = @(Ssh @('tasklist')); if (-not ($t -match 'Image Name|^System')) { $true } else { [bool]($t -match 'kenshi_x64') } } `
+                                KillGame { (K1on4080) -ne 'no' } `
                                          { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4, '-TimeoutSec', '90') } `
-                                         { Ssh @('taskkill', '/F', '/T', '/IM', 'kenshi_x64.exe') } 20
+                                         { Kill1on4080 } 20   # instance 1 only (lane 4080b's game survives)
                             }
                             $r = "$r; GAME $($kr[0]): $($kr[1])"; Log "kill-game $($c[5]) row $($p.step): $($kr[0]) ($($kr[1]))"
                             if ($kr[0] -eq 'ALIVE') { $r += ' -- kenshi_x64 still running: stop it by hand (TDR hang?)' }
