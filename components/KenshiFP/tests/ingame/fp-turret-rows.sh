@@ -18,7 +18,7 @@ export KAH_OWNER=${KAH_OWNER:-$([ "${RIG:-5090}" = 4080 ] && echo rig4080 || ech
 SAVE=${TURRET_SAVE:-kah-fpturret-e}; TX=-54055; TZ=7300
 LOG=$PWD/$R.log; : > "$LOG"
 A(){ stobe-auto "$@" </dev/null 2>&1; }
-ft(){ A fp_turret | tr -d '\r' | tr ' ' '\n' | grep -E "^(on|why|ammo|reload_left|reload_max|aim_valid|cur_dir|aim_err_deg|shots|reloads|r_ignored|enters|leaves)=" | tr '\n' ' '; }
+ft(){ A fp_turret | tr -d '\r' | tr ' ' '\n' | grep -E "^(on|why|ammo|reload_left|reload_max|aim_valid|cur_dir|aim_err_deg|shots|reloads|r_ignored|draw_refused|enters|leaves)=" | tr '\n' ' '; }
 fv(){ ft | tr ' ' '\n' | grep "^$1=" | head -1 | cut -d= -f2; }
 say(){ echo "$*" >> "$LOG"; }
 done_(){ A chatter on >/dev/null; echo "RESULT $ROW $1 $2 log=$LOG"; exit 0; }
