@@ -18,6 +18,9 @@
 #   pf_melee_arm <who>         equip a melee weapon (ranged one unequipped first); none -> give PF_MELEE_GIVE (default
 #                              Guardless Katana, sid 923-gamedata.base) and equip it; sets PF_WEP (op-comb2: a row before
 #                              had loaded kah-fpstudio where Malzin carries only a crossbow -> "no melee weapon")
+#   pf_noxbow <who>...         crash safety (2026-10-11 BSOD, every TDR on a crossbow shot/reload frame): unequip every
+#                              crossbow-class item (name ~ bow|toothpick|harpoon|eagle) on the named chars (missing chars
+#                              skipped); returns 1 + PF_WHY if one is still equipped. Melee rows call it after arming.
 #   pf_awake <who>...          heal to 100 and `wake` everyone KO (op-swa4: a swing knocked the neutral out, `health 100`
 #                              keeps the KO, a KO ragdoll ignores pin -> "pin refused off=10.2"); fails if still KO after 3 s
 #   pf_ranged_inj <who>        injected-input ranged rows (fp_combat on already sent): no melee weapon in the hands (rg03
@@ -335,3 +338,13 @@ pf_pin(){ local who=$1 r at p i off; shift; r=$(PF_A pin "$who" "$@"); grep -q '
     off=$(awk -v a="$p" -v b="$at" 'BEGIN{split(a,p,",");split(b,q,",");printf "%.1f", sqrt((p[1]-q[1])^2+(p[3]-q[3])^2)}')
     awk -v o="$off" 'BEGIN{exit !(o<=1.5)}' && return 0; done
   PF_WHY="pin $who stays off=$off from $at$(pf_ko "$who" && echo ' (KO: a ragdoll ignores pin)')"; return 1; }
+PF_XBOW_RE='bow|toothpick|harpoon|eagle'
+pf_noxbow(){ local c b seen=" " left=""; PF_WHY=""
+  for c in "$@"; do [ -n "$c" ] || continue; case "$seen" in *" $c "*) continue;; esac; seen="$seen$c "
+    PF_A inv "$c" | grep -o '"name":"[^"]*","equipped":true' | cut -d'"' -f4 | grep -iE "$PF_XBOW_RE" | sort -u |
+      while IFS= read -r b; do PF_A unequip "$c" "$b" >/dev/null; done; done
+  sleep 1
+  for c in $seen; do b=$(PF_A inv "$c" | grep -o '"name":"[^"]*","equipped":true' | cut -d'"' -f4 | grep -iE "$PF_XBOW_RE" | paste -sd,)
+    [ -n "$b" ] && left="$left $c:$b"; done
+  [ -n "$left" ] && { PF_WHY="crossbow still equipped (crash-safety quarantine):$left"; return 1; }
+  echo "pf_noxbow ok: no crossbow equipped on$seen"; return 0; }

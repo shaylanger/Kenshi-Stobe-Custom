@@ -90,6 +90,7 @@ INI_BAK=$(mktemp); cat "$INI" > "$INI_BAK"
 [ -n "${SWA_NATIVE:-}" ] || [ "$(sw ready)" = 1 ] || setup_fail "swing_all hooks not ready ($(A fp_melee swing_all | head -1); KenshiFP build without kfp-swing-hits-all?)"
 # melee weapon independent of earlier rows (op-comb2: a kah-fpstudio row before left Malzin with a crossbow only)
 pf_melee_arm "$FI" || setup_fail "$PF_WHY"; WEP=$PF_WEP
+pf_noxbow "$FI" "$TG" "$AL" Axima Malzin Tassilo Shay || setup_fail "$PF_WHY"   # bow-free scene (crash-safety quarantine 2026-10-11 BSOD: no crossbow equipped on anyone, so nothing fires/reloads)
 pf_awake "$TG" "$AL" || setup_fail "$PF_WHY (target/ally must stand: wrong save? row needs kah-fpxbow)"
 A protect "$FI" on >/dev/null
 # every other squad member far away + protected, so only the fighter hits anyone in the arc

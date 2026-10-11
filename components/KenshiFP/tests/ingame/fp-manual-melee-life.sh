@@ -108,6 +108,7 @@ for c in "$FI" "$TG"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not fou
 [ "$(A rangedinfo "$FI" | fld bow)" = none ] || A unequip "$FI" "$(A rangedinfo "$FI" | fld bow)" >/dev/null
 BOWN=$(A rangedinfo "$FI" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//')
 arm_melee || setup_fail "$FI has no melee weapon that equips (inv weapons: $(weapons | tr '\n' ';'))"
+pf_noxbow "$FI" "$TG" "$OT" Axima Malzin Tassilo Shay || setup_fail "$PF_WHY"   # bow-free scene (crash-safety quarantine 2026-10-11 BSOD: no crossbow equipped on anyone, so nothing fires/reloads)
 A protect "$FI" on >/dev/null
 for m in $(A chars 3000 "[nameless]" | tr '|' '\n' | sed -n 's/^[0-9]* within [0-9.]*: //; s/^ *//; s/ #.*//p'); do
   case "$m" in "$FI") ;; *) A protect "$m" on >/dev/null; A pin "$m" at "$FI" dist 600 >/dev/null;; esac; done

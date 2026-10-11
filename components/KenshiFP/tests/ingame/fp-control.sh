@@ -241,6 +241,8 @@ if A where "$TG" | grep -q 'pos='; then A protect "$TG" off >/dev/null; A ko "$T
 for c in "$SH" "$MT"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not found"; done
 A fp_move state | grep -q '^keys=' || setup_fail "KenshiFP has no fp_move (needs 32905BE5+)"
 A fp_control state | grep -q 'take_presses=' || setup_fail "KenshiFP has no fp_control press (needs 32905BE5+)"
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }
+pf_noxbow "$SH" "$MT" "$TG" Axima Malzin Tassilo Shay || setup_fail "$PF_WHY"   # bow-free scene (crash-safety quarantine 2026-10-11 BSOD: no crossbow equipped on anyone, so nothing fires/reloads)
 . "$(dirname "$0")/fp-ui-guard.sh" 2>/dev/null || { ui_guard_setup() { :; }; ui_clear() { return 0; }; ui_summary() { echo "ui_guard=missing"; }; }
 # speed hold: the game paused itself (squad event) mid-run in b27 and froze a native walk at seconds=0.0
 A speed 1 hold >/dev/null; A fp_move none >/dev/null

@@ -88,7 +88,7 @@ cleanup() { A fp_keys reset >/dev/null; A fp_keys focus off >/dev/null; A stealt
             [ -n "$PASSIVE0" ] && A combatmode "$SH" passive "$([ "$PASSIVE0" = 1 ] && echo on || echo off)" >/dev/null
             [ -n "$ST0" ] && A setstat "$SH" stealth "$ST0" >/dev/null; [ -n "$AS0" ] && A setstat "$SH" assassination "$AS0" >/dev/null
             [ -n "$WEP" ] && A unequip "$SH" "$WEP" >/dev/null
-            [ "$BOW_DROPPED" = 1 ] && A pickup "$SH" "$BOWN" now >/dev/null; [ -n "$BOWN" ] && A equip "$SH" "$BOWN" >/dev/null
+            [ "$BOW_DROPPED" = 1 ] && A pickup "$SH" "$BOWN" now >/dev/null; [ -n "$BOWN" ] && [ -z "${NOXBOW:-}" ] && A equip "$SH" "$BOWN" >/dev/null
             for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
             A speed 1 >/dev/null; A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
 trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
@@ -116,6 +116,8 @@ A setstat "$SH" stealth "$SKILL" >/dev/null; A setstat "$SH" assassination "$SKI
 give_melee || echo "SETUP: could not give $SH a melee weapon" >> "$LOG"
 if [ "$(bow_now)" != none ]; then r=$(A unequip "$SH" "$(bow_now)"); case "$r" in *ground*) BOW_DROPPED=1;; esac; fi
 arm_melee || setup_fail "no melee weapon equips (inv weapons: $(weapons | tr '\n' ';'))"
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }
+NOXBOW=1; pf_noxbow "$SH" "$MT" Axima Malzin Tassilo Shay || setup_fail "$PF_WHY"   # bow-free scene (crash-safety quarantine 2026-10-11 BSOD: no crossbow equipped on anyone, so nothing fires/reloads)
 PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/dev/null
 # the mate stands 30 m ahead: an unaware target is pinned facing him (back to the player)
 A pin "$MT" at "$SH" dist 300 | grep -q '^pinned' && PINNED+=" $MT" || setup_fail "could not pin $MT 30 m ahead of $SH"

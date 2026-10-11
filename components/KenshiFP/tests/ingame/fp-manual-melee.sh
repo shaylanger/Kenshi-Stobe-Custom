@@ -57,6 +57,7 @@ for c in "$FI" "$TG"; do A where "$c" | grep -q 'pos=' || setup_fail "$c not fou
 BOWN=$(A rangedinfo "$FI" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//')
 [ "$(A rangedinfo "$FI" | fld bow)" = none ] || A unequip "$FI" "$(A rangedinfo "$FI" | fld bow)" >/dev/null
 arm_melee || setup_fail "$FI has no melee weapon that equips (inv weapons: $(weapons | tr '\n' ';'))"
+pf_noxbow "$FI" "$TG" Axima Malzin Tassilo Shay || setup_fail "$PF_WHY"   # bow-free scene (crash-safety quarantine 2026-10-11 BSOD: no crossbow equipped on anyone, so nothing fires/reloads)
 A protect "$FI" on >/dev/null                        # the fighter must survive; the target stays unprotected (hp deltas)
 # every other squad member far away + protected, so only the fighter hits the target
 for m in $(A chars 3000 "[nameless]" | tr '|' '
