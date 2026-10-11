@@ -64,6 +64,7 @@ function CapMode { $m = "$((Get-Content 'C:\KenshiTestRuns\capture.default' -Tot
 function LaneMon { if ($script:film) { $FilmMonitor } else { $Monitor } }
 function Pin { [bool]$script:film -and (CapMode) -ne 'wgc' }   # topmost only while filming with gdigrab (screen area)
 function LaneGfx([string[]]$lines) { $g = @($lines | Where-Object { $_ -match '^\s*#\s*gfx:\s*(\S+)' } | ForEach-Object { $Matches[1].ToLower() } | Select-Object -First 1); if ($g -and $g[0] -eq 'low') { 'low' } else { 'full' } }
+function Rig4080Copy([string[]]$lines) { @($lines | ForEach-Object { $_ -replace '\bRIG=4080\b', 'RIG=5090' }) }
 function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the lane may run this list, else why not ($film: a filming lane in film mode)
     if ($lines -match '^\s*#\s*rig:\s*4080') { return '"# rig: 4080" list' }
     if (IsoHeader $lines) { return '"# tdr-isolate: yes" (crossbow/turret TDR isolation: lane A only)' }
@@ -135,6 +136,7 @@ if ($SelfTest) {
         @('save name + WS_NOXBOW guard are not crossbow work', @($low, 'W | kah-fpxbow | a | b | 1 | WS_NOXBOW=1 PF_SAVE=kah-fpxbow bash x/fp-weapon-sweep.sh'), ''),
         @('tdr-isolate list (fp-controls K: no crossbow word)', @($low, '# tdr-isolate: yes', 'K | kah-fpxbow | a | b | 1 | bash x/fp-controls.sh'), '"# tdr-isolate: yes"')
     )
+    $g = (Rig4080Copy @('A | s | a | b | 1 | RIG=4080 bash x/fp-control.sh', 'B | s | a | b | 1 | XRIG=40801 bash y')) -join '/'; $n++; $ok = $g -eq 'A | s | a | b | 1 | RIG=5090 bash x/fp-control.sh/B | s | a | b | 1 | XRIG=40801 bash y'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) steal-4080 copy rewrites RIG=4080 only: $g"
     $cases += ,@('film lane takes a filming list', @('# gfx: full', 'F | s | a | b | 1 | bash x/fp-control.sh'), '', $true)
     $cases += ,@('film lane: crossbow guard still on', @('# gfx: full', 'F | s | a | b | 1 | bash x/fp-xbow-take.sh'), 'crossbow guard', $true)
     $cases += ,@('film lane: never a 4080 list', @('# gfx: full', '# rig: 4080', 'F | s | a | b | 1 | bash x/fp-control.sh'), '"# rig: 4080"', $true)
@@ -317,7 +319,37 @@ function StealList([bool]$film) {
         $c = @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Where-Object { $t = @(Get-Content $_.FullName); -not (LaneReject $t $film) -and ($film -eq ((LaneGfx $t) -ne 'low')) }) | Select-Object -First 1
         if ($c) { try { Move-Item -LiteralPath $c.FullName (Join-Path "$qd\$Lane" $c.Name) -ErrorAction Stop; Log "STEAL $(if ($film) { 'FILM ' })$($c.Name) from $src (own folder empty$(if ($film) { ", no gfx-low work $FilmAfterMin min" }))"; return Get-Item (Join-Path "$qd\$Lane" $c.Name) } catch { } }
     }
-    $null
+    Steal4080 $film
+}
+# steal from queue\4080 (coordinator m102: the 4080 had a backlog while lanes B/C idled): only while lane 4080 runs a list,
+# the head list this lane may run once its rows' hard-coded RIG=4080 become RIG=5090 (no "# rig: 4080" header) and
+# list-rigcheck.sh <copy> 5090 says OK (Git Bash; verdict cached per list + mtime). The converted copy goes to queue\<lane>
+# (header "# stolen-from: queue\4080 ..."), the original is removed, the owner gets a note.
+$script:rc4080 = @{}
+function Steal4080([bool]$film) {
+    if (-not @(Get-ChildItem "$qd\running" -Filter '4080__*' -File -ErrorAction SilentlyContinue).Count) { return $null }
+    $c = @(Get-ChildItem "$qd\4080" -Filter *.list -File -ErrorAction SilentlyContinue | QSort) | Select-Object -First 1
+    if (-not $c) { return $null }
+    $t = Rig4080Copy @(Get-Content $c.FullName)
+    if ((LaneReject $t $film) -or ($film -ne ((LaneGfx $t) -ne 'low'))) { return $null }
+    $k = "$($c.Name)|$($c.LastWriteTimeUtc.Ticks)"
+    if (-not $script:rc4080.ContainsKey($k)) {
+        $tmp = Join-Path $env:TEMP "steal4080-$PID-$($c.Name)"; [IO.File]::WriteAllLines($tmp, [string[]]$t)
+        $o = @(& 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/list-rigcheck.sh --quiet '$($tmp -replace '\\', '/')' 5090" 2>&1 | ForEach-Object { "$_" })
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+        $script:rc4080[$k] = if ($LASTEXITCODE -eq 0) { 'OK' } else { "NO $(($o | Select-Object -Last 1))" }
+        Log "steal-4080 check $($c.Name): $($script:rc4080[$k])"
+    }
+    if ($script:rc4080[$k] -ne 'OK') { return $null }
+    $claim = Join-Path "$qd\4080" "$($c.Name).stealing-$Lane"
+    try { Move-Item -LiteralPath $c.FullName $claim -ErrorAction Stop } catch { return $null }
+    $dst = Join-Path "$qd\$Lane" $c.Name
+    [IO.File]::WriteAllLines($dst, [string[]](@("# stolen-from: queue\4080 by lane $Lane $(Get-Date -Format s) (RIG=4080 -> RIG=5090, list-rigcheck 5090 OK)") + $t))
+    Remove-Item $claim -ErrorAction SilentlyContinue
+    $own = @($t | Where-Object { $_ -match '^\s*#\s*owner:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1); $own = if ($own) { $own[0] } else { 'coordinator' }
+    Log "STEAL $(if ($film) { 'FILM ' })$($c.Name) from queue\4080 (lane 4080 busy; RIG=4080 -> RIG=5090)"
+    Note $own "lane $Lane took $($c.Name) from queue\4080 (the 4080 was busy): it runs on the 5090 with RIG=5090; result in queue\done as usual."
+    Get-Item $dst
 }
 # a gfx-low filler list with changed rows (rig-runner.ps1 -FillerRows: same ledger as lane A; cached 5 min per list), not
 # benched, not running anywhere: claimed by creating running\<lane>__filler__<name> (CreateNew: one lane wins)
@@ -404,7 +436,11 @@ while ($true) {
         State "running $name -> $outW ($(if ($stall) { "STALL since $($stall.ToString('HH:mm')): " })$hl)"
         Start-Sleep $TickSec; continue
     }
-    if (Test-Path (Join-Path $rd "$Lane.restart")) {   # rig-runner.ps1 -Restart: re-spawn at the list boundary
+    # rig-runner.ps1 -Restart: re-spawn at the list boundary, only if the runner scripts parse (runner-parse-ok.ps1: else this
+    # old loop keeps running + ALERT-<lane>-restart.txt, the flag stays)
+    $pk = if (Test-Path (Join-Path $rd "$Lane.restart")) { [string](& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\runner-parse-ok.ps1" -Rig $Lane 2>&1 | Select-Object -Last 1) } else { '' }
+    if ($pk -and $pk -notlike 'PARSE OK*' -and $script:parseLogged -ne $pk) { $script:parseLogged = $pk; Log "restart refused, old loop keeps running: $pk" }
+    if ($pk -like 'PARSE OK*') {
         Remove-Item (Join-Path $rd "$Lane.restart"), (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue
         Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$auto\rig-runner.ps1", '-Rig', $Lane); Log 'restart: re-spawned'; exit 0
     }
