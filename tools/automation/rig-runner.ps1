@@ -995,7 +995,7 @@ function FakeProbe([string[]]$c) {   # -Fake: a "# fakesec:" batch runs for n s 
 # a real list in queue\<rig>\ or any\ while a filler runs -> <out>\PREEMPT; run-batch.sh ends the batch at the next row
 # boundary (the running row finishes its RESULT line; "BATCH PREEMPTED" + the rows not run in SUMMARY.txt; background
 # analyses still collected), touches GAMEDONE, and the runner starts the real list at once on the running Kenshi (--reuse).
-$script:preempted = @{}
+$script:preempted = @{}; $script:preemptAt = @{}; $script:preemptKilled = @{}; $PreemptKillMin = 2
 function Preempt([string[]]$c, [string]$by) {
     $name = $c[5]; $pk = "$name|$($c[1])"; if ($script:preempted[$pk]) { return }; $script:preempted[$pk] = 1   # keyed per run (out dir): a later run of the same filler can be preempted again
     $snap = if ($Rig -eq '4080' -and -not $Fake) { Join-Path $c[6] '.run-batch.sh' } else { Join-Path $c[1] '.run-batch.sh' }
@@ -1006,7 +1006,8 @@ function Preempt([string[]]$c, [string]$by) {
         $lf = Join-Path $c[6] 'PREEMPT'; Set-Content $lf $txt
         if (-not (Scp4 @($lf) "C:/KenshiTestRuns/$(Split-Path $c[2] -Leaf)/")) { $script:preempted.Remove($pk); Log "PREEMPT ${name}: scp to the 4080 failed (retry next tick)"; return }
     } else { Set-Content (Join-Path $c[1] 'PREEMPT') $txt }
-    Log "PREEMPT filler ${name}: $by is queued; the batch ends after its current row"
+    $script:preemptAt[$pk] = Get-Date
+    Log "PREEMPT filler ${name}: $by is queued; the batch ends after its current row (killed if it runs $PreemptKillMin more min)"
     State "running $name (filler, preempted by ${by}: ends after the current row)"
 }
 function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch]$Tail, [string]$Why = '') {
@@ -1119,6 +1120,16 @@ while ($true) {
             # a filler in its game part gives way to real work at the next row boundary
             if ($p -and $p.done -ne '1' -and $p.gamedone -ne '1' -and (Split-Path $c[0] -Leaf) -like '*__filler__*' -and -not $script:preempted["$($c[5])|$($c[1])"] -and -not (IdleReason)) {
                 $rl = @(RealLists); if ($rl.Count) { Preempt $c $rl[0].Name }
+            }
+            # preempt deadline (speed-audit 2026-10-11): real lists waited up to 8 min for a filler row to end (14 preempts =
+            # 48 min of waiting in 19 h): a filler row still running $PreemptKillMin min after PREEMPT is killed (kill-step:
+            # that row FAILs = stays eligible in the ledger, the batch ends at once, the real list starts on the same game)
+            $pk = "$($c[5])|$($c[1])"
+            if ($p -and $p.done -ne '1' -and $p.gamedone -ne '1' -and $script:preemptAt[$pk] -and -not $script:preemptKilled[$pk] -and
+                $p.step -and $p.step -ne '-' -and ((Get-Date) - $script:preemptAt[$pk]).TotalMinutes -ge $PreemptKillMin) {
+                $script:preemptKilled[$pk] = 1
+                $kr = if ($Fake) { 'fake' } else { Probe $c[2] 'kill-step' 'preempted' }
+                Log "PREEMPT $($c[5]): row $($p.step) still running $PreemptKillMin min after PREEMPT, killed so the real list starts now: $kr"
             }
             # ownership (2026-10-10 phantom: a restarted loop adopted the coordinator's hand run in the same out dir and held
             # the lock): the batch.pid seen first must be written within 10 min of our start command; later it must not change
