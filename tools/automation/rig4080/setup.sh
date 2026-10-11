@@ -24,7 +24,7 @@ while :; do case "$1" in --with-list) WITH+=("$2"); shift 2 ;; --saves) SAVES=$2
 # (sh py awk ps1 txt json tsv csv list sed jq): rg-02-control-stealth-1011-0927 fp-control.sh needs fp-yaw-free.awk,
 # which only *.sh|*.py globs never copied ("helper fp-yaw-free.awk missing").
 shopt -s nullglob
-HX='sh,py,awk,ps1,txt,json,tsv,csv,list,sed,jq'
+HX='sh,py,awk,ps1,txt,json,tsv,csv,list,sed,jq,spec'
 SETD=(); SETF=()
 addset(){ local d=$1; shift; local f fs=""; for f in "$@"; do [ -f "$f" ] && fs+="$f "; done; SETD+=("$d"); SETF+=("$fs"); }
 addset tools/automation $M/tools/automation/{rig-env.sh,venc.sh,review-pack.py,dialog-guard.sh,row-reaper.sh,rig-runner-probe.sh,batch-excerpts.sh,batch-health.sh,ffx-cap.sh}
@@ -47,7 +47,7 @@ declare -A FIXED=(); for i in "${!SETF[@]}"; do for f in ${SETF[$i]}; do FIXED[$
 list_closure(){
   local L p q n d; local -A S=(); local todo=()
   for L in "$@"; do [ -f "$L" ] || continue
-    for p in $(grep -vE '^\s*(#|$)' "$L" | awk -F'|' '{print $NF}' | grep -oE "(\{CR\}|/mnt/c|/c)/KenshiModding/[^ \"'|;)]+\.(sh|py|ps1|awk)"); do
+    for p in $(grep -vE '^\s*(#|$)' "$L" | awk -F'|' '{print $NF}' | grep -oE "(\{CR\}|/mnt/c|/c)/KenshiModding/[^ \"'|;)]+\.(sh|py|ps1|awk|spec|txt|json|tsv)"); do
       p=${p//\{CR\}/\/c}; p=${p/#\/mnt\/c\//\/c\/}; [ -f "$p" ] && [ -z "${S[$p]:-}" ] || continue; S[$p]=1; todo+=("$p"); done
   done
   # the hand-picked tools/automation set is closed the same way (rig-env.sh -> kenshi-instance.ps1, batch-health.sh ->
@@ -55,7 +55,7 @@ list_closure(){
   for p in "${!FIXED[@]}"; do case "$p" in $M/tools/automation/*) [ -z "${S[$p]:-}" ] && { S[$p]=1; todo+=("$p"); } ;; esac; done
   while [ ${#todo[@]} -gt 0 ]; do p=${todo[0]}; todo=("${todo[@]:1}"); d=$(dirname "$p")
     case "$p" in *.sh|*.py|*.awk|*.ps1) ;; *) continue ;; esac
-    for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq)\b" "$p" | sort -u); do
+    for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq|spec)\b" "$p" | sort -u); do
       q="$d/$n"; [ -f "$q" ] && [ -z "${S[$q]:-}" ] || continue; S[$q]=1; todo+=("$q"); done
   done
   for p in "${!S[@]}"; do case "$p" in $M/tools/automation/run-batch.sh|$M/tools/automation/kenshi-ctl.ps1|$M/tools/automation/rig-runner.ps1) ;; *) echo "$p" ;; esac; done
@@ -77,7 +77,7 @@ if [ "${1:-}" = --check ]; then
   # rig-runner.ps1 are 5090-side (the 4080 uses C:\KAH\ctl.ps1); animlab *.c/*.h build the lab in WSL on the 5090 only
   for f in tools/automation/run-batch.sh tools/automation/kenshi-ctl.ps1 tools/automation/rig-runner.ps1; do IN[$f]=1; done
   for f in $(synced_list); do case "$f" in *.sh|*.py|*.awk|*.ps1) ;; *) continue ;; esac; d=$(dirname "$f")
-    for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq)\b" "$M/$f" | sort -u); do
+    for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq|spec)\b" "$M/$f" | sort -u); do
       [ -f "$M/$d/$n" ] && [ -z "${IN[$d/$n]:-}" ] && { echo "UNSYNCED $d/$n (named in $f)"; bad=1; }
     done; done
   # list closure case: a list row running a repo script outside the fixed sets syncs it + the sibling it names
