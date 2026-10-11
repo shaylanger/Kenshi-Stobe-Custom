@@ -70,6 +70,13 @@ the save in place; Kenshi is stopped only for a DLL install. Fast setup FAIL: a 
 setup/dryrun FAILs (or none / aborted) within -FastMin (15) min, or 3 instant setup FAILs in a row, writes the sticky
 ALERT-<rig>-setup.txt (Stop hook; delete once handled, expires in 30 min); the runner goes on with the next list.
 Stale queue\running\<rig>__* entries (no <rig>.cur/.tail naming them, no live run-batch.sh) are removed each tick.
+TDR guard (2026-10-11 5090 BSOD; a TDR is a crash warning, never noise): every tick of a running batch the rig's Windows
+System log (5090 local, 4080 over ssh) is read for nvlddmkm/Display events 4101 or 153 since the batch started. A hit:
+ALERT-<rig>-tdr.txt (row, list, time, event), <out>\PREEMPT "TDR" (the batch stops at the row boundary), the game is
+stopped, note to the coordinator, <rig>.stopped set and the loop exits: the next list does not start. While
+ALERT-<rig>-tdr.txt exists a started loop exits at once (-Start does not override it; delete it only once Shay cleared the
+cause). run-batch.sh checks after every row itself too (<out>\TDR). -Fake: runner\fake\tdr.<rig> holds fake
+"epoch|provider|id|message" lines; -SelfTest checks the filter (+ run-batch.sh --selftest).
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
@@ -81,6 +88,11 @@ $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # errors to its log, so the out dir kept "changing"): a row is running and Kenshi gone / crashed / harness silent / game
 # time frozen held >= max(lim, HardMin) counts as stuck whatever the out dir does. A hard harness-silent hit kills the game
 # (a hung Kenshi never recovers by killing the row). Returns @(action, 'hard'|'soft') or $null.
+# TDR guard (2026-10-11 5090 BSOD): "epoch|provider|id|message" event lines -> the GPU driver resets among them since $since
+# (Display 4101 / nvlddmkm 4101|153; a disk's event 153 is not one). Pure: -SelfTest feeds fixed lines.
+function TdrFilter([string[]]$lines, [long]$since) {
+    @($lines | Where-Object { $q = "$_" -split '\|', 4; $q.Count -ge 3 -and $q[0] -match '^\d+$' -and [long]$q[0] -ge $since -and $q[2] -in '4101', '153' -and $q[1] -match '^(nvlddmkm|display)$' })
+}
 function StuckAct([hashtable]$p, [string]$why, [double]$held, [int]$lim, [int]$prevHits) {
     if (-not $why -or $held -lt $lim) { return $null }
     $hard = $p.step -ne '-' -and $why -match '^(Kenshi not running|Kenshi crashed|harness not answering|game time stuck)' -and $held -ge [Math]::Max($lim, $HardMin)
@@ -146,11 +158,19 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
         @('GAMEDONE written (rig already freed)', @{ kenshi = '0'; step = '-'; launched = '1'; left = '0'; gamedone = '1' }, 3, ''),
         @('first launch not done yet', @{ kenshi = '0'; step = '-'; launched = '0'; left = '2' }, 3, ''),
         @('Kenshi up between rows', @{ kenshi = '1'; step = '-'; launched = '1'; left = '0' }, 3, ''))
+    $tl = @('1000|Display|4101|Display driver nvlddmkm stopped responding and has successfully recovered.', '1100|nvlddmkm|153|', '1200|disk|153|The IO operation at logical block address 0x1 was retried.',
+            '900|Display|4101|old', '1300|Microsoft-Windows-Kernel-Power|4101|other provider', 'ssh: connect to host 4080 port 22: timed out')
+    $td = @(@('tdr: Display 4101 + nvlddmkm 153 since 950 (not disk 153 / older / other provider / ssh noise)', 950, '1000,1100'),
+            @('tdr: only a disk 153 after the last reset = no hit', 1101, ''), @('tdr: unreachable rig (ssh error only) = no hit', 0, ''))
+    foreach ($c in $td) { $in = if ($c[0] -like '*unreachable*') { @($tl[5]) } else { $tl }; $g = (@(TdrFilter $in $c[1]) | ForEach-Object { ($_ -split '\|')[0] }) -join ','
+        $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) $($c[0]): got '$g' want '$($c[2])'" }
+    $rb = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/run-batch.sh --selftest' 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 1)
+    $ok = "$rb" -like 'RUNBATCH-SELFTEST PASS*'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) run-batch.sh --selftest (TDR check + relaunch request): $rb"
     foreach ($c in $lg) { $g = [string](LingerAct $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) linger $($c[0]): got '$g' want '$($c[3])'" }
     # 4080 sync covers every helper a synced script names (rg-02 1011-0927: fp-control.sh's fp-yaw-free.awk never synced)
     $sc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --check' 2>&1 | ForEach-Object { "$_" })
     $ok = $LASTEXITCODE -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync helper closure: $(($sc | Select-Object -First 3) -join ' / ')"
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + 1) cases"; exit [int]($bad -gt 0)
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 2) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
@@ -239,6 +259,31 @@ $log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = J
 function RunningGfx { $g = ReadShared $gfxF; if ($g -and $g.Trim() -eq 'low') { 'low' } else { 'full' } }
 $alertF = if ($Fake) { Join-Path $rd "ALERT-$Rig.txt" } else { Join-Path $runs "ALERT-$Rig.txt" }
 $owner4 = 'rig4080'; $owner5 = 'runner-5090'
+# TDR guard (header): ALERT-<rig>-tdr.txt; while it exists the loop does not run (stop flag set again, exit)
+$tdrF = if ($Fake) { Join-Path $rd "ALERT-$Rig-tdr.txt" } else { Join-Path $runs "ALERT-$Rig-tdr.txt" }
+function TdrEvents([long]$since) {   # this rig's System-log 4101/153 events since $since (-Fake: runner\fake\tdr.<rig> lines)
+    if ($Fake) { $ff = Join-Path $rd "tdr.$Rig"; if (Test-Path $ff) { return @(Get-Content $ff) }; return @() }
+    $cmd = "`$s=[DateTimeOffset]::FromUnixTimeSeconds($since).LocalDateTime; Get-WinEvent -FilterHashtable @{LogName='System'; Id=4101,153; StartTime=`$s} -ErrorAction SilentlyContinue | ForEach-Object { '{0}|{1}|{2}|{3}' -f ([DateTimeOffset]`$_.TimeCreated).ToUnixTimeSeconds(), `$_.ProviderName, `$_.Id, (([string]`$_.Message -replace '\s+',' ') -replace '\|','/') }"
+    if ($Rig -eq '5090') { return @(& ([scriptblock]::Create($cmd)) | ForEach-Object { "$_" }) }
+    @(Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))))
+}
+function TdrGuard([string[]]$c, $p) {   # every tick of a running batch: any GPU driver reset since the batch started = stop the rig
+    $t0e = try { ([DateTimeOffset][datetime]$c[4]).ToUnixTimeSeconds() - 30 } catch { return }
+    $h = @(TdrFilter (TdrEvents $t0e) $t0e); if (-not $h.Count) { return }
+    $row = if ($p -and $p.step) { $p.step } else { '?' }
+    $m = "TDR (GPU driver reset) on rig $Rig during list $($c[5]) row $row (batch started $($c[4])): $($h.Count) event(s), latest: $(($h[0]).Substring(0, [Math]::Min(200, $h[0].Length)))"
+    Set-Content $tdrF @("ALERT $Rig $(Get-Date -Format HH:mm) $m", "Runner $Rig stopped and the next list does not start. A TDR is a crash warning (2026-10-11 BSOD). Delete this file only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Rig.", "list=$($c[5]) row=$row out=$($c[2]) time=$(Get-Date -Format s)")
+    Log "TDR $m"
+    $pre = "Set-Content 'C:\KenshiTestRuns\$(Split-Path $c[2] -Leaf)\PREEMPT' 'TDR'"
+    if ($Fake -or $Rig -eq '5090') { Set-Content (Join-Path $c[1] 'PREEMPT') 'TDR' } else { $null = Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($pre))) }
+    if (-not $Fake) {   # the batch stops at its next row boundary (PREEMPT, old run-batch snapshots too); the game stops now
+        if ($Rig -eq '5090') { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
+        else { $null = Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) }
+    }
+    Note 'coordinator' "$m. Runner $Rig STOPPED, game stopped, rest of the list not run; $tdrF. Do not restart the rig until Shay cleared it."
+    Set-Content (StopFlag $Rig) "$(Get-Date -Format s) by TDR guard: $m"
+    State "STOPPED TDR: $m"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; exit 0
+}
 function Log([string]$m) { if ($Resolve) { Write-Host "LOG $m"; return }; $null = WriteShared $log "$((Get-Date).ToString('MM-dd HH:mm:ss')) $m`r`n" -Append }
 function State([string]$m) { $null = WriteShared $stateF "$((Get-Date).ToString('HH:mm')) $m`r`n" }
 function Note([string]$who, [string]$m) {
@@ -1110,6 +1155,7 @@ if ($Rig -eq '4080' -and -not $Fake) {
 }
 $idleSince = $null; $condSince = $null; $lastGh = $null; $hits = @{}; $alerted = $false; $unreach = $null; $anaSince = $null; $anaWarned = @{}; $probeFail = 0; $deadHits = @{}
 while ($true) {
+    if (Test-Path $tdrF) { Set-Content (StopFlag $Rig) "$(Get-Date -Format s) by TDR guard: $tdrF exists"; Log "TDR alert $tdrF exists: no new list, exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED TDR (alert file)"; exit 0 }
     if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {
         if ((Test-Path $fastF) -and (Get-Item $fastF).LastWriteTime -lt (Get-Date).AddMinutes(-30)) { Remove-Item $fastF -ErrorAction SilentlyContinue; Log 'setup alert expired (30 min)' }
@@ -1131,6 +1177,7 @@ while ($true) {
             $c = @(Get-Content $curF)
             $p = if ($Fake) { FakeProbe $c } else { Probe $c[2] }
             if ($p) { $probeFail = 0 } else { $probeFail++ }
+            TdrGuard $c $p   # GPU driver reset since the batch started: alert, stop game + loop (exits)
             # a filler in its game part gives way to real work at the next row boundary
             if ($p -and $p.done -ne '1' -and $p.gamedone -ne '1' -and (Split-Path $c[0] -Leaf) -like '*__filler__*' -and -not $script:preempted["$($c[5])|$($c[1])"] -and -not (IdleReason)) {
                 $rl = @(RealLists); if ($rl.Count) { Preempt $c $rl[0].Name }
