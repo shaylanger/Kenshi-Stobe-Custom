@@ -422,7 +422,7 @@ draw_to() { kis drawn "$1" && return 0; rkey; waitf 4 kis drawn "$1"; }
 
 # ---- restore on exit ----
 FINISHED=""; FP0=""; DIST0=""; AR0=""; EN0=""; PASSIVE0=""; PINNED=""; WEP=""; BOWN=""; ISO_SET=0; LN0=0
-cleanup() { local rc=$?; [ -n "$FINISHED" ] || finish "no verdict: the script exited early (exit $rc) before judging this row"
+cleanup() { local rc=$?; [ -n "$FINISHED" ] || [ "${1:-}" = game-done ] || finish "no verdict: the script exited early (exit $rc) before judging this row"
   A mouse_inject right up >/dev/null; A mouse_inject left up >/dev/null; A fp_move none >/dev/null
   A fp_keys reset >/dev/null; A fp_keys swallow on >/dev/null
   A fp_combat input 0 0 0 >/dev/null; A fp_combat physical >/dev/null; [ -n "$AR0" ] && A fp_combat autoreload "$AR0" >/dev/null; [ "$EN0" = 0 ] && A fp_combat off >/dev/null
@@ -656,13 +656,26 @@ P29X=""; P29S=""
 # E6 pool + mutation tests + flips vs the baseline, offline): uses the cached result for the current /root/KenshiFP source
 # + lab + corpus (run `gate.sh` right after the build, ~2 min), else runs it here. A FAIL fails VMQUICK before filming.
 # VMQ_GATE=0 skips (lab-only debugging; never for a build review).
-vmq_gate() { [ "${VMQ_GATE:-1}" = 1 ] || return 0; local G=/mnt/c/KenshiModding/components/KenshiFP/animlab/gate.sh h f l
+# vmq_gate_ok <gate RESULT line> [known-base flips ;-list]: the kfp-pipeline acceptance rule (kb_eval): PASS, or a FAIL whose
+# only cause (why=flipped) is flips that are not regressions: FAIL->PASS fixes, and PASS->*/GONE: keys the base gate shows
+# identically (known-base). Any other cause (why=fail/pool/mutation/...) or a new PASS->/GONE: flip blocks.
+vmq_gate_ok() { local l=$1 kb=${2:-} why fa newf
+  case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; "RESULT ANIMLAB-REGRESS FAIL"*) ;; *) return 1;; esac
+  why=$(grep -o 'why=[^ ]*' <<<"$l" | cut -d= -f2); [ "$why" = flipped ] || return 1
+  fa=$(grep -o 'flipped=[^ ]*' <<<"$l" | cut -d= -f2-)
+  newf=$(comm -23 <(tr ';' '\n' <<<"$fa" | grep -E '^(PASS->|GONE:)' | sort -u) <(tr ';' '\n' <<<"$kb" | grep -v '^$' | sort -u) | paste -sd';')
+  [ -z "$newf" ]; }
+# the gate line goes to the log as a NOTE (not a RESULT: exactly one RESULT line per row; the VMQUICK line names the gate)
+vmq_gate_note() { note "VMQUICK gate: $1"; }
+vmq_gate() { [ "${VMQ_GATE:-1}" = 1 ] || return 0; local G=/mnt/c/KenshiModding/components/KenshiFP/animlab/gate.sh h f l kb
   # op-comb2: the installed DLL is the staged combined build -> its own pipeline gate (base /root/KenshiFP lacks the pending patches)
   local SL=${VMQ_STAGED:-/mnt/c/KenshiTestRuns/staged/KenshiFP-latest.txt} ID="$KDIR/mods/KenshiFP/KenshiFP.dll" sr
   if [ -s "$SL" ] && [ -f "$ID" ] && [ "$(awk 'NR==1{print $4}' "$SL")" = "$(sha256sum "$ID" | cut -d' ' -f1)" ]; then
     sr=$(awk '$1=="run"{print $2}' "$SL"); l=$(head -1 "$sr/gate-all/RESULT.txt" 2>/dev/null)
     if [ -n "$l" ]; then note "VMQUICK: gate of the installed combined build $(awk 'NR==1{print $2}' "$SL") ($sr/gate-all)"
-      RESULTS+=("$l"); echo "$l" >> "$LOG"; case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
+      # known-base = the staged file's "known-base" line + the flips of the pipeline's base gate (same as kb_eval)
+      kb="$(awk '$1=="known-base"{print $2}' "$SL");$(head -1 "$sr/gate-base/RESULT.txt" 2>/dev/null | grep -o 'flipped=[^ ]*' | cut -d= -f2-)"
+      vmq_gate_note "$l"; vmq_gate_ok "$l" "$kb" && { VQGATE="gate=combined-ok"; return 0; }
       row VMQUICK FAIL "animlab gate FAIL on the installed combined build (${l#RESULT ANIMLAB-REGRESS })"; return 1; fi; fi
   h=$(bash "$G" hash); f=/root/animlab-gate/result-$h.txt
   # no cached result: the gate runs in the BACKGROUND (nice 15) while VMQUICK films; vmq_gate_wait judges it after the
@@ -670,13 +683,12 @@ vmq_gate() { [ "${VMQ_GATE:-1}" = 1 ] || return 0; local G=/mnt/c/KenshiModding/
   [ -s "$f" ] || { note "VMQUICK: animlab gate for source $h not run yet: running it in the background while filming"
     VMQ_GATE_F=$f; VMQ_GATE_H=$h; nice -n 15 bash "$G" >"$OUT/animlab-gate.log" 2>&1 </dev/null & VMQ_GATE_PID=$!; return 0; }
   l=$(head -1 "$f" 2>/dev/null); l=${l:-RESULT ANIMLAB-REGRESS FAIL no gate result for $h}
-  RESULTS+=("$l"); echo "$l" >> "$LOG"
-  case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
+  vmq_gate_note "$l"; vmq_gate_ok "$l" && { VQGATE="gate=ok"; return 0; }
   row VMQUICK FAIL "animlab gate FAIL, fix the lab FAIL / the returned miss before filming (${l#RESULT ANIMLAB-REGRESS })"; return 1; }
 # vmq_gate_wait: after filming, the background gate's result (no-op when the cached result was used); 1 = gate FAILed
 vmq_gate_wait() { [ -n "${VMQ_GATE_PID:-}" ] || return 0; wait "$VMQ_GATE_PID" 2>/dev/null; VMQ_GATE_PID=
   local l; l=$(head -1 "$VMQ_GATE_F" 2>/dev/null); l=${l:-RESULT ANIMLAB-REGRESS FAIL no gate result for $VMQ_GATE_H (log $OUT/animlab-gate.log)}
-  RESULTS+=("$l"); echo "$l" >> "$LOG"; case "$l" in "RESULT ANIMLAB-REGRESS PASS"*) return 0;; esac
+  vmq_gate_note "$l"; vmq_gate_ok "$l" && { VQGATE="gate=ok"; return 0; }
   VQR+=" animlab gate FAIL (ran while filming: ${l#RESULT ANIMLAB-REGRESS });"; return 1; }
 if want VMQUICK && vmq_gate; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
   # take preflight (Shay 2026-10-10 game-take discipline): pin + KO every live non-squad NPC within 6000 of the spot
@@ -713,11 +725,11 @@ if want VMQUICK && vmq_gate; then VQOK=1; VQR=""; : > "$MAN"; T0=$SECONDS
   # VMQUICK alone: the game part ends here (restore now, EXIT trap off), the sheet is built offline while run-batch.sh
   # starts the next row (pf_game_done, Shay 2026-10-10); hostile hits are read now, not later (the next row writes stobe.log)
   if [ "$ROWS" = VMQUICK ]; then A fp_vm set sw_pose -1 >/dev/null; A fp_vm set kick_pose -1 >/dev/null; A fp_vm set rlamp 1.0 >/dev/null; A fp_vm replay off >/dev/null
-    cleanup; trap - EXIT; HH_PRE=$(hostile_hit); hostile_hit() { echo "$HH_PRE"; }
+    cleanup game-done; trap - EXIT; HH_PRE=$(hostile_hit); hostile_hit() { echo "$HH_PRE"; }
     if declare -F pf_game_done >/dev/null; then pf_game_done; else [ -n "${GAME_DONE_FILE:-}" ] && : > "$GAME_DONE_FILE"; echo "pf_game_done: game part over, analysis next"; fi; fi
   "$PY" "$SHEETPY" "$OUT/vmquick-sheet.jpg" "$MAN" --split "$OUT" >/dev/null 2>&1 || { VQOK=0; VQR+=" sheet failed;"; }
   vmq_gate_wait || VQOK=0
-  judge VMQUICK $VQOK "$((SECONDS-T0))s sheet=$OUT/vmquick-sheet.jpg$( [ -s "$OUT/swing-frames.jpg" ] && echo " frames=$OUT/swing-frames.jpg") |$VQR"; fi
+  judge VMQUICK $VQOK "$((SECONDS-T0))s sheet=$OUT/vmquick-sheet.jpg$( [ -s "$OUT/swing-frames.jpg" ] && echo " frames=$OUT/swing-frames.jpg")${VQGATE:+ $VQGATE} |$VQR"; fi
 
 # ---- PT28: crossbow held like Skyrim/KCD (ready / aim / fire / reload, each zoomed in AND out for PT29) ----
 if want PT28 || want PT29; then if [ $BOWOK = 0 ] || [ "$(bow_now)" = none ]; then rows_fail "no crossbow on $SH" PT28
