@@ -54,7 +54,9 @@ and the Stop hook block on ALERT files); the ALERT clears when the rig works aga
 Filler: both queues empty -> a COPY of the least recently started eligible queue\filler\*.list (needs: met by the installed
 build, never installs; not running on the other rig; not benched) runs; rotation in runner\filler-rotation.tsv.
 A filler never blocks real work: a list arriving in queue\<rig>\ or any\ writes <out>\PREEMPT; run-batch.sh stops after the
-current row (BATCH PREEMPTED + rows not run in SUMMARY.txt), the copy goes to done\ (result "preempted"), the list starts.
+current row (BATCH PREEMPTED + rows not run in SUMMARY.txt), the copy goes to done\ (result "preempted"), the list starts;
+a filler row still running 2 min after PREEMPT is killed (kill-step, row FAIL, stays eligible). Queue order: numeric
+prefix, then ordinal name (65- < 65a- < 65b- < 66-). runner\rowtimes.tsv: every finished row (rig, list, status, seconds).
 -Fake "# fakesec: <n>" header: the fake batch runs n s (tests preemption); runner\fake\fakefail.<row> = that row FAILs;
 runner\fake\rigno.<rig>.<list> = RIGCHECK NO there.
 Filler on change: a filler row runs only if it never passed, last FAILed, or the installed KenshiFP/Harness or its script
