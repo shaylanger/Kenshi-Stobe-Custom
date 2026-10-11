@@ -129,6 +129,9 @@ def new_state(save):
              turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0), fight=int(f.get('fight', 0)),
              swing_ko=int(f.get('swing_ko', 0)),
              off_sheathes=int(f.get('off_sheathes', 0)),
+             # fixtures/dialog.json (2026-10-10 20-rg04 M08): NPC conversations that open the dialogue window `at` s after
+             # the load and stay open until `dialog close` (KenshiFP fp_state ui_open=1 ui_why=panels meanwhile)
+             dlg=[dict(e, vt=dr.vnow() + float(e.get('at', 0)), closed=0) for e in f.get('dialog', [])],
              iso=0 if os.environ.get('RIG') == '4080' or os.environ.get('DRYRUN_ISO') == 'off' else 1)
     # iso: 5090 kenshi-ctl launch turns input isolation on; the 4080 C:\KAH\ctl.ps1 launch does not (b4080c setup FAIL)
     t = dr.vnow()
@@ -213,6 +216,14 @@ def world(s, now=None, allow=()):
             near.append(n)
     return dict(hour=round(h, 2), night=h < 6.5 or h >= 18.5, hostiles=host, near=near,
                 popup=('%s is attacking!' % host[0]) if host and s.get('fight') else None)
+
+
+def dlg_open(s, now):
+    """the fixture conversation open right now (opened, not closed by `dialog close`), else None"""
+    for d in s.get('dlg', []):
+        if d['vt'] <= now and not d['closed']:
+            return d
+    return None
 
 
 def sched(s, t, tag, **kv):
@@ -1078,13 +1089,25 @@ def handle(s, cmd, a, now, sp):
             return True, 'FP mode already ON' if want else 'FP mode already OFF'
         s['fpmode'] = want
         return True, 'FP mode toggling ON (next frame; log [input] FP mode toggled)' if want else 'FP mode toggling OFF (next frame)'
+    if cmd == 'dialog':   # harness `dialog [close]` (COMMANDS.md): the open conversation window
+        d = dlg_open(s, now)
+        if a[:1] == ['close']:
+            if not d:
+                return True, 'no dialogue open'
+            d['closed'] = 1
+            return True, 'dialogue with %s ended' % d['speaker']
+        if not d:
+            return True, 'open=0 visible=0 in_dialogue=0 speaker= player= ended=1'
+        return True, 'open=1 visible=1 in_dialogue=1 speaker=%s player=%s ended=0' % (d['speaker'], d.get('player', 'Shay'))
     if cmd == 'fp_state':
         if len(a) > 1 and a[0] == 'free':   # Alt free-cursor toggle (fp-playtest PT21/PT01 look mode)
             s['fp_free'] = 1 if a[1] == 'on' else 0
             return True, 'free=%d' % s['fp_free']
         # look mode: FP on + no free cursor = cursor hidden (fp-playtest setup checks cursor_hidden=1)
+        dl = dlg_open(s, now)
         return True, kfpreply.render('fpstate', fp_mode=s.get('fpmode', 0), control=1 if s['fpchar'] else 0,
-                                     controlled=1 if s['fpchar'] else 0, ui_why='none', active=s.get('fpmode', 0),
+                                     controlled=1 if s['fpchar'] else 0, ui_why='panels' if dl else 'none',
+                                     ui_open=1 if dl else 0, panels=('0x%03x' % 0x020) if dl else '0x000', active=s.get('fpmode', 0),
                                      cursor_hidden=1 if s.get('fpmode', 0) and not s.get('fp_free', 0) else 0,
                                      free=s.get('fp_free', 0))
     if cmd == 'spawn':   # Commands.cpp spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m] ...

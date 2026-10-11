@@ -9,6 +9,8 @@
 #   lag       "RMB held: block guard" label still claims blocking 2 s after the release (kfx-b7/b8 label lag)
 #   popup     pf_open without pf_clean: the combat popup is still on screen (op-b4 VMQUICK sword-z25 tile)
 #   early     "RMB held: block guard" stamped 1.5 s before the press (T6 labels stamped early)
+#   dialog    (--fixture dialog, DRYRUN_NOREC=1) polls fp_state 60 s: ui_open=1 for 6 s+ = stalled in an NPC
+#             conversation (5090 20-rg04 M08 Dust Bandit); passes only with the batch dialog guard (tools/automation/dialog-guard.sh)
 #   noiso     R sent with key_inject without pf_iso and no ready check (b4080c xbow takes filmed holstered: the 4080
 #             launch leaves input isolation off); run with --rig 4080
 #   (fixture stall: a 1.5 s hole in the take sampler, blkH; caught by takecheck cover, before filming by pf_latency)
@@ -21,6 +23,17 @@ A(){ stobe-auto "$@" </dev/null 2>&1; }
 PF_ROW=$ROW; . $HERE/tests/ingame/take-preflight.sh
 [ "$MODE" = noresult ] || pf_begin "$ROW"
 pf_outdir "$OUT"; cd "$OUT" || exit 2
+if [ "$MODE" = dialog ]; then
+  # fixture dialog (5090 20-rg04 M08): no load here (row.sh loaded the save; run-batch.sh / row.sh run the dialog guard
+  # around the row). A row that only polls KenshiFP: an open conversation keeps ui_open=1 (every click refused); a streak
+  # of 6 s or more = the row would have stalled
+  A select $SH >/dev/null; st=0; mx=0
+  for _ in $(seq 1 60); do sleep 1
+    if A fp_state | grep -q '\bui_open=1\b'; then st=$((st + 1)); [ $st -gt $mx ] && mx=$st; else st=0; fi; done
+  if [ $mx -ge 6 ]; then pf_result FAIL "stalled: ui_open=1 for ${mx}s ($(A dialog | tr -d '\r' | head -1)), every click refused"
+  else pf_result PASS "longest ui_open=1 streak ${mx}s (dialog guard closed the conversations)"; fi
+  exit 0
+fi
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }
 A load kah-fpxbow >/dev/null; A wait-world >/dev/null
 A speed 1 hold >/dev/null; A chatter off >/dev/null; A select $SH >/dev/null; A fp_control take >/dev/null

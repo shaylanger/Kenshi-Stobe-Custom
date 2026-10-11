@@ -42,7 +42,7 @@ cp_to() {
 run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual 2>NUL & exit 0'
 run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" $H:C:/KAH/
 run scp -q "$HERE/python3" $H:C:/KAH/bin/python3
-cp_to C:/KenshiModding/tools/automation/ "$M/tools/automation/rig-env.sh" "$M/tools/automation/venc.sh" "$M/tools/automation/review-pack.py"
+cp_to C:/KenshiModding/tools/automation/ "$M/tools/automation/rig-env.sh" "$M/tools/automation/venc.sh" "$M/tools/automation/review-pack.py" "$M/tools/automation/dialog-guard.sh"
 cp_to C:/KenshiModding/components/KenshiFP/animlab/ "$M"/components/KenshiFP/animlab/*.sh "$M"/components/KenshiFP/animlab/*.py "$M"/components/KenshiFP/animlab/*.txt "$M"/components/KenshiFP/animlab/*.json
 # weapon sweep lists + catalogue (wm4080-diag: "list sweep-gated.list missing")
 cp_to C:/KenshiModding/components/KenshiFP/animlab/weapons/ "$M"/components/KenshiFP/animlab/weapons/*.list "$M"/components/KenshiFP/animlab/weapons/*.json

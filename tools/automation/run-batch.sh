@@ -34,6 +34,9 @@
 # C:\KAH\ctl.ps1 -Owner $KAH_OWNER). Relative scripts are looked up in tests/ingame/stobe, then components/KenshiFP/tests/ingame.
 # The running row's `timeout` pid is in <out>/step.pid: rig-runner.ps1 kills a stuck step with it (row FAIL, batch goes on).
 # rig-runner.ps1 runs a snapshot copy of this file from the out dir, so editing it never kills a running batch.
+# Dialog guard (2026-10-10): before every row an open NPC conversation is closed (tools/automation/dialog-guard.sh check;
+# still open = RESULT <row> FAIL setup: dialog <speaker>), during the row a watcher closes new ones (<out>/<row>.dialogs,
+# NOTE line); DIALOG_GUARD=0 in a row's command turns both off.
 # <out>/PREEMPT (rig-runner: a filler gives way to a real list): the batch stops at the next row boundary (BATCH PREEMPTED
 # line + NOTE with the rows not run), then GAMEDONE / background analyses / BATCH END / DONE as usual.
 set -u
@@ -237,6 +240,15 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
            else run=(bash "$T/run-as.sh" "$script" "$player" "$mate" --csv "$O/$name.csv" "${args[@]}"); fi ;;
     *) run=("$script" "${args[@]}") ;;
   esac
+  # dialog guard (2026-10-10 20-rg04 M08: a Dust Bandit's talk left the dialogue window open, KenshiFP ui_open=1 refused
+  # every click, the row stalled until closed by hand): close an open conversation before the row (setup FAIL if it
+  # stays open) and watch for new ones during it (tools/automation/dialog-guard.sh; DIALOG_GUARD=0 in the command = off)
+  dgw=""; dgl="$O/$name.dialogs"; rm -f "$dgl"
+  if [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ]; then
+    dg=$(bash "$A/dialog-guard.sh" check 2>&1) || {
+      say "RESULT $name FAIL setup: dialog ${dg#DIALOG stuck } (before the row)"; fail=$((fail + 1)); continue; }
+    case "$dg" in "DIALOG closed"*) say "NOTE $name: preflight closed an open conversation (${dg#DIALOG closed })" ;; esac
+  fi
   before=$(offsets); sl=$(stat -c %s "$STOBELOG" 2>/dev/null || echo 0)
   # m41: fullbase-guard only calms raiders once after the load; raids that arrive later in a long row (gate-90
   # farming: Hill Marauders pulled Beaks off the farm) need the lib's raid_guard sweep for the whole row.
@@ -251,9 +263,12 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   gd="$O/.gamedone.$name"; rm -f "$gd"
   env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" GAME_DONE_FILE="$gd" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null &
   sp=$!; echo "$sp $name $(cat /proc/$sp/winpid 2>/dev/null)" > "$O/step.pid"
+  [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ] && { bash "$A/dialog-guard.sh" watch "$sp" "$dgl" >/dev/null 2>&1 </dev/null & dgw=$!; }
   bg=0; while kill -0 "$sp" 2>/dev/null; do [ -f "$gd" ] && { bg=1; break; }; sleep 2; done
   rm -f "$O/step.pid"; rc=0; [ $bg = 0 ] && { wait "$sp"; rc=$?; }
   [ -n "$rg" ] && { kill "$rg" 2>/dev/null; wait "$rg" 2>/dev/null; }
+  [ -n "$dgw" ] && { kill "$dgw" 2>/dev/null; wait "$dgw" 2>/dev/null; }
+  [ -s "$dgl" ] && say "NOTE $name: dialog guard closed $(grep -c 'DIALOG GUARD: closed' "$dgl") conversation(s) mid-row, stuck $(grep -c 'DIALOG GUARD: stuck' "$dgl"): $(awk '{sub(/^[^ ]+ DIALOG GUARD: /,""); print}' "$dgl" | sort -u | head -3 | paste -sd';' | cut -c1-200) (clicks during it were refused: check the row's ui_open gates)"
   stobe-auto speed 0 >/dev/null 2>&1
   printf '%s\t%s\t' "$name" "$save" >>"$R"; paste <(echo "$before" | tr '\t' '\n') <(offsets | tr '\t' '\n') | paste -sd'\t' >>"$R"
   if [ $bg = 1 ]; then echo "$(date +%H:%M) $name: game part done, analysis goes on in the background (pid $sp)"; PEND+=("$sp|$name|$save|$player|$mate|$out|$to|$sl")

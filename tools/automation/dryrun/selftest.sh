@@ -31,6 +31,8 @@ bug-stall      | stall  | 5090 | FAIL:REPLAY-clean FAIL takecheck.*cover        
 bug-fistcand  | -      | 5090 | FAIL:setup: lab candidate .* missing           | fist0 | - | Axima | Malzin | 900 | FIST_NATIVE=0 $KT/fp-fists.sh {OUT}/fists 0 3 /tmp/no-fists-cand
 ctl-quoted     | -      | 5090 | PASS                                           | rp | - | Axima | Malzin | 120 | DRQ="a b c" $RP {OUT}/rp clean
 ctl-quoted-4080 | -     | 4080 | PASS                                           | rp | - | Axima | Malzin | 120 | RIG=4080 DRQ="a b c" $RP {OUT}/rp clean
+ctl-dialog     | dialog | 5090 | PASS                                           | dlg | kah-fpxbow | Axima | Malzin | 120 | DRYRUN_NOREC=1 $RP {OUT}/rp dialog
+bug-dialog     | dialog | 5090 | FAIL:stalled: ui_open=1                        | dlg | kah-fpxbow | Axima | Malzin | 120 | DRYRUN_NOREC=1 DIALOG_GUARD=0 $RP {OUT}/rp dialog
 bug-shellop    | -      | 5090 | FAIL:list: shell operator                      | rp | - | Axima | Malzin | 120 | stobe-auto speed 1; $RP {OUT}/rp clean
 EOF
 )

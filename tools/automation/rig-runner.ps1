@@ -792,7 +792,7 @@ function Start-Batch($f) {
         $null = Ssh @('mkdir', "C:\KenshiTestRuns\$outN")
         Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
         $ok = Scp4 @((Join-Path $tmp 'list.txt'), (Join-Path $tmp '.run-batch.sh')) "C:/KenshiTestRuns/$outN/"
-        $ok = $ok -and (Scp4 @("$auto\rig-runner-probe.sh", "$auto\batch-excerpts.sh", "$auto\batch-health.sh", "$auto\rig-env.sh") 'C:/KenshiModding/tools/automation/')
+        $ok = $ok -and (Scp4 @("$auto\rig-runner-probe.sh", "$auto\batch-excerpts.sh", "$auto\batch-health.sh", "$auto\rig-env.sh", "$auto\dialog-guard.sh") 'C:/KenshiModding/tools/automation/')
         if (-not $ok) { Fail-List $run $name $own '4080 copy (scp) failed' @(); Remove-Item $curF; return $true }
         if (-not $reuse) {
             $ga = if ((Select-String -LiteralPath "$auto\rig4080\kcfg.ps1" -Pattern '\$Gfx\b' -Quiet -ErrorAction SilentlyContinue)) { @('-Gfx', $gfx) } else { @() }   # res-graphics' -Gfx low|full once kcfg.ps1 has it

@@ -30,8 +30,22 @@ else
     *) run=(env "${envs[@]}" "$script" "${args[@]}") ;;
   esac
 fi
-RESULT_LOG=/drout/out.txt timeout "$DR_TO" "${run[@]}" > "$O" 2>&1 < /dev/null
-rc=$?
+# dialog guard exactly like run-batch.sh (tools/automation/dialog-guard.sh): close an open conversation before the row
+# (still open = setup FAIL), watch during it; DIALOG_GUARD=0 in the row = off. The watcher polls the stub every 2 s, so it
+# only runs when the fixture has conversations (fixtures/dialog.json), else the check alone
+DG=/mnt/c/KenshiModding/tools/automation/dialog-guard.sh; [ -f "$DG" ] || DG=/c/KenshiModding/tools/automation/dialog-guard.sh
+dgw=""
+if [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$DG" ]; then
+  dg=$(bash "$DG" check 2>&1); dgr=$?; echo "dialog-guard check: $dg" >> /drout/prep.txt
+  if [ $dgr != 0 ]; then echo "RESULT ${DR_NAME:-row} FAIL setup: dialog ${dg#DIALOG stuck } (before the row)" > "$O"; echo 1 > /drout/rc.txt; exit 0; fi
+fi
+RESULT_LOG=/drout/out.txt timeout "$DR_TO" "${run[@]}" > "$O" 2>&1 < /dev/null &
+rp=$!
+if [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$DG" ] && grep -q '"dialog"' "${DR_FIXTURE_JSON:-/dev/null}" 2>/dev/null; then
+  bash "$DG" watch "$rp" /drout/dialogs.txt >/dev/null 2>&1 </dev/null & dgw=$!; fi
+wait "$rp"; rc=$?
+[ -n "$dgw" ] && { kill "$dgw" 2>/dev/null; wait "$dgw" 2>/dev/null; }
+[ -s /drout/dialogs.txt ] && echo "dialog guard: $(paste -sd';' /drout/dialogs.txt | cut -c1-300)" >> /drout/prep.txt
 # detached children (itrun): wait for them, their logs are part of the row
 if [ -f /drstate/children.jsonl ]; then
   e=$((SECONDS + DR_TO))
