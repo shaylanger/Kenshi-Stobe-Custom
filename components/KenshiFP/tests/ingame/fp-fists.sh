@@ -12,6 +12,10 @@
 # with the forced technique and fallback=0, then review-pack.py (1 fps + 8 fps around every label).
 # Output in <out dir>: fist-<tech>.{mp4,lab,ev.txt,vmrec.txt,lab.txt,video-len.txt} + review/; last line:
 #   RESULT FIST-<tech> PASS|FAIL <evidence>
+# FIST_NATIVE=1 (default; kfp-fist-native.py, Shay 2026-10-10 18:20): the FP fists show the game's own unarmed animation
+# moved into view, no key tables: no lab gate / fist-take-check; judged by the sampled `fp_vm fist` lines instead
+# (both measured wrists on screen above the HUD in >= 90% of samples, the native wrist moved >= 1 dm during the swings).
+# FIST_NATIVE=0 = the old NA1 key tables vs the lab candidate.
 for d in /mnt/c /c; do [ -f $d/KenshiModding/tools/automation/rig-env.sh ] && { . $d/KenshiModding/tools/automation/rig-env.sh; break; }; done
 OUT=$1; TI=$2; REPS=${3:-3}; LABD=${4:-${CR:-/mnt/c}/KenshiTestRuns/fists-cand}
 TN=(badpunch ma_chudan ma_2strike shoteiL); TA=("badpunch" "ma chudan" "ma 2strike" "shoteiL")
@@ -37,7 +41,8 @@ PF_ROW=$ROW; PF_ON_FAIL='restore; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$
 . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$ROW"
 pf_outdir "$OUT"; cd "$OUT" || pf_fail "cd $OUT"
-[ -f "$LABD/$T/pose.txt" ] && [ -f "$LABD/$T/keys.json" ] || pf_fail "lab candidate $LABD/$T (pose.txt + keys.json) missing: the take is lab-gated"
+NAT=${FIST_NATIVE:-1}
+[ "$NAT" = 1 ] || { [ -f "$LABD/$T/pose.txt" ] && [ -f "$LABD/$T/keys.json" ]; } || pf_fail "lab candidate $LABD/$T (pose.txt + keys.json) missing: the take is lab-gated"
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
 # ---- setup: fresh load, squad out of frame, time, spot, raiders, unarmed
 pf_load   # studio fixture kah-fpstudio where installed, else kah-fpxbow (take-preflight.sh; PF_SAVE=<save> forces one)
@@ -85,6 +90,8 @@ for _i in 1 2 3 4 5 6 7 8 9; do me=$(A stat $SH martial_arts | grep -o 'effectiv
 echo "martial_arts base $mab effective ${me:-?} (window ${MA_LO[$TI]}..${MA_HI[$TI]})"
 A fp_vm set fist_tech $TI >/dev/null
 f=$(fist); [ "$(fld force <<<"$f")" = "$TI" ] || pf_fail "fp_vm set fist_tech $TI not taken: $(cut -c1-80 <<<"$f")"
+A fp_vm set fist_native $NAT >/dev/null
+[ "$NAT" = 1 ] && { [ "$(fist | fld nat)" = 1 ] || pf_fail "native fists not on (fp_vm fist has no nat=1): install a build with pending-fixes/kfp-fist-native.py"; }
 # ---- take
 : > "$N.lab"; rm -f "$N.stop"
 SW0=$(fist | fld swings); IK0=$(fist | fld ikfail); LOG0=$(wc -l < "$KDIR/KenshiFP.log")
@@ -94,14 +101,14 @@ SW0=$(fist | fld swings); IK0=$(fist | fld ikfail); LOG0=$(wc -l < "$KDIR/Kenshi
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null
 T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Shay"; sleep 1
-lab "Fists ready (guard), zoom 0"; sleep 1.5
+lab "Fists ready (guard), zoom 0"; sleep 1; : > "$N.fist.txt"; fist >> "$N.fist.txt"; sleep 0.5
 lab "Technique ${TA[$TI]} (LMB) x$REPS"
 UMAX=0
 for r in $(seq 1 $REPS); do
   A fp_keys press lmb 60 >/dev/null
-  e=$((SECONDS+3)); while [ $SECONDS -lt $e ]; do u=$(fist | fld u); UMAX=$(awk -v a="$UMAX" -v b="${u:-0}" 'BEGIN{print (b>a?b:a)}'); sleep 0.15; done
+  e=$((SECONDS+3)); while [ $SECONDS -lt $e ]; do f=$(fist); echo "$f" >> "$N.fist.txt"; u=$(fld u <<<"$f"); UMAX=$(awk -v a="$UMAX" -v b="${u:-0}" 'BEGIN{print (b>a?b:a)}'); sleep 0.15; done
 done
-lab "Guard"; sleep 1.5
+lab "Guard"; sleep 1.5; fist >> "$N.fist.txt"
 lab end; touch "$N.stop"; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-$N.txt"; A fp_vm rec dump "vmrec-$N.txt" >/dev/null; sleep 2
 cp "$KDIR/vmrec-$N.txt" "$N.vmrec.txt" || { restore; pf_result FAIL "no vmrec dump"; exit 1; }
@@ -122,8 +129,28 @@ echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESUL
 NS=$(wc -l < "$N.swings.txt"); NG=$(grep -c "tech='${TA[$TI]}' table=${TA[$TI]%% *}.* fallback=0" "$N.swings.txt")
 [ "$NS" -ge "$REPS" ] && [ "$NG" = "$NS" ] || ok=0
 [ "${IK1:-0}" = "${IK0:-0}" ] || ok=0
+if [ "$NAT" = 1 ]; then   # native fists: on screen above the HUD + the native motion shows (sampled fp_vm fist lines)
+FG=$(python3 - "$N.fist.txt" <<'PY' 2>&1 | tee "$N.lab.txt" | tail -1
+import sys, re
+L = [l for l in open(sys.argv[1]) if 'fist ua=' in l]
+def v(l, k):
+    m = re.search(' %s=([-0-9.]+),([-0-9.]+),([-0-9.]+)' % k, l); return tuple(map(float, m.groups())) if m else None
+on = n = 0; mv = 0.0; g = None
+for l in L:
+    w = [v(l, 'wrL'), v(l, 'wrR')]; nr = v(l, 'natR'); nl = v(l, 'natL')
+    if None in w: continue
+    n += 1; on += all(p[2] > 1.0 and abs(p[0] / p[2]) <= 1.15 and -0.42 <= p[1] / p[2] <= 0.65 for p in w)
+    if g is None and nr and nl: g = (nl, nr)
+    elif g and nr and nl: mv = max(mv, max(sum((a - b) ** 2 for a, b in zip(x, y)) ** 0.5 for x, y in zip((nl, nr), g)))
+sh = on / n if n else 0
+ok = n >= 10 and sh >= 0.9 and mv >= 1.0
+print('fistnative %s samples=%d onscreen=%.2f native_move=%.2fdm' % ('PASS' if ok else 'FAIL', n, sh, mv))
+PY
+)
+else
 FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" --swings "$N.swings.txt" 2>&1 | tee "$N.lab.txt" | tail -1)
-echo "$FG" | grep -q "^fistgame PASS" || ok=0
+fi
+echo "$FG" | grep -qE "^fist(game|native) PASS" || ok=0
 python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --labels "$N.lab" --lab "$N.lab.txt" "$N.swings.txt" > review.log 2>&1
 [ -f review/INDEX.txt ] || ok=0
 pf_result "$([ $ok = 1 ] && echo PASS || echo FAIL)" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") rig=${RIG:-5090}"
