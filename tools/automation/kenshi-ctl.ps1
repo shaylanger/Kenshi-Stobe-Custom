@@ -109,6 +109,7 @@ function Cfg-Test {   # windowed for automated runs; remember Shay's values once
 }
 function Cfg-Play {   # Shay's values back
   & $GfxPs play -Kenshi $Kenshi   # graphics + no frame cap (kenshi-gfx.ps1)
+  if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { & $PSCommandPath ontop off | Out-Null }   # test topmost off
   if (-not (Test-Path $CfgPlay)) { return "kenshi.cfg: no saved play values ($CfgPlay), left as is: $(Cfg-Status)" }
   $want = @{}; foreach ($line in Get-Content $CfgPlay) { $i = $line.IndexOf('='); if ($i -gt 0) { $want[$line.Substring(0, $i)] = $line.Substring($i + 1) } }
   Set-CfgValues $want
@@ -229,6 +230,68 @@ public static class KenshiTitle {
   if ($t.EndsWith($tag)) { return "retitle: ok '$t'" }
   $null = [KenshiTitle]::SetWindowTextW($p.MainWindowHandle, $t + $tag); "retitle: set '$([KenshiTitle]::Get($p.MainWindowHandle))'"
 }
+# ontop [on|off|check] (capture-fix 2026-10-11: 5090 takes failed pf_open "openground open=0.00": ffmpeg gdigrab grabs the
+# SCREEN area of the background game window, so any window of Shay's covering it was filmed). on = HWND_TOPMOST with
+# SWP_NOACTIVATE|NOMOVE|NOSIZE (never focuses it, never takes input); off = HWND_NOTOPMOST (-Play / cfg play / gfx-mods on);
+# check = WindowFromPoint at 9 points inside the client rect must all be the game window, else exit 1 with
+# "occluded by <process> '<title>' at x,y". on also runs check. Window capture (KAH_CAPTURE=wgc) does not need any of this.
+function Set-OnTop([string]$what) {
+  if (-not ('KenshiTop' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class KenshiTop {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int w, int hh, uint f);
+  [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint f);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextW(IntPtr h, StringBuilder b, int n);
+  [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
+  public static bool Set(IntPtr h, bool top) {   // SWP_NOSIZE 1 | NOMOVE 2 | NOACTIVATE 0x10 | NOOWNERZORDER 0x200
+    return SetWindowPos(h, new IntPtr(top ? -1 : -2), 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200);
+  }
+  public static bool IsTop(IntPtr h) { return (GetWindowLong(h, -20) & 0x8) != 0; }   // WS_EX_TOPMOST
+  // "" = unoccluded, else "<pid> '<title>' at x,y" of the first covering top-level window
+  public static string Check(IntPtr h) {
+    IntPtr old = IntPtr.Zero; try { old = SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch (EntryPointNotFoundException) { }
+    try {
+      if (IsIconic(h)) return "0 'minimized' at -";
+      RECT c; GetClientRect(h, out c); int w = c.R - c.L, hh = c.B - c.T;
+      if (w < 8 || hh < 8) return "0 'empty client rect' at -";
+      foreach (double fy in new[] { 0.1, 0.5, 0.9 }) foreach (double fx in new[] { 0.1, 0.5, 0.9 }) {
+        POINT p = new POINT(); p.X = (int)(w * fx); p.Y = (int)(hh * fy); ClientToScreen(h, ref p);
+        IntPtr at = WindowFromPoint(p); IntPtr root = at == IntPtr.Zero ? IntPtr.Zero : GetAncestor(at, 2);
+        if (root != h) {
+          uint pid = 0; if (root != IntPtr.Zero) GetWindowThreadProcessId(root, out pid);
+          var b = new StringBuilder(128); if (root != IntPtr.Zero) GetWindowTextW(root, b, 128);
+          return pid + " '" + b + "' at " + p.X + "," + p.Y;
+        }
+      }
+      return "";
+    } finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
+  }
+}
+'@
+  }
+  $p = Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and (-not $_.Path -or $_.Path -like "$Kenshi\*") } | Select-Object -First 1
+  if (-not $p) { 'ontop: no game window'; return 1 }
+  $h = $p.MainWindowHandle
+  if ($what -eq 'off') { $null = [KenshiTop]::Set($h, $false); "ontop off: topmost=$([KenshiTop]::IsTop($h))"; return 0 }
+  if ($what -eq 'on') { $null = [KenshiTop]::Set($h, $true) }
+  $o = [KenshiTop]::Check($h); $t = [KenshiTop]::IsTop($h)
+  if (-not $o) { "ontop ${what}: topmost=$t unoccluded"; return 0 }
+  $opid = [int]($o -split ' ')[0]; $pn = (Get-Process -Id $opid -ErrorAction SilentlyContinue).ProcessName
+  "ontop ${what}: topmost=$t occluded by $(if ($pn) { $pn } else { "pid $opid" }) $($o.Substring($o.IndexOf(' ') + 1))"; return 1
+}
+if ($Command -eq 'ontop') {
+  $m = if ($Mode -in @('on', 'off', 'check')) { $Mode } else { 'check' }
+  $r = @(Set-OnTop $m); $r[0..($r.Count - 2)]; exit $r[-1]
+}
 if ($Command -eq 'retitle') { Set-InstTitle; exit 0 }
 if ($Command -eq 'fit') { Fit-RenderSize; exit 0 }
 # postlaunch (run-batch.sh after it kills the stuck launch proxy, which also killed the re-place/fit below: 2026-10-10
@@ -244,7 +307,7 @@ if ($Command -eq 'postlaunch') {
     $fit = @(Fit-RenderSize) -join ' / '
     $w = (& $ctl window -Kenshi $Kenshi 2>&1 | Out-String).Trim()
     $onMon = $w -match [regex]::Escape(($want -replace '^\\\\\.\\', '')) ; $okSize = $fit -match 'ok \('
-    if ($onMon -and $okSize) { "postlaunch ok (round $i): $fit; $w"; exit 0 }
+    if ($onMon -and $okSize) { "postlaunch ok (round $i): $fit; $w; $(@(Set-OnTop on)[0])"; exit 0 }
     "postlaunch round ${i}: $fit; $w"
     Start-Sleep -Seconds 3
   }
@@ -287,5 +350,6 @@ if ($rc -eq 0 -and -not $Play -and $Command -in @('launch', 'restart')) {
   "background: $last"
   Fit-RenderSize
   "background after the resize: $(& $ctl background -Monitor $Monitor -Kenshi $Kenshi)"
+  @(Set-OnTop on)[0]
 }
 exit $rc

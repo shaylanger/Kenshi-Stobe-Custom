@@ -267,6 +267,9 @@ def powershell(a):
                 dr.flag('FAIL', 'kenshi-ctl.ps1 focus: tests never focus the game (Shay\'s screen)')
             if sub == 'window':
                 out('kenshi window: monitor=DISPLAY2 1600x900 foreground=explorer'); return 0
+            if sub == 'ontop':   # take-preflight pf_ontop (capture-fix 2026-10-11)
+                m = next((x for x in rest[rest.index(sub) + 1:] if not x.startswith('-')), 'check')
+                out('ontop %s: topmost=True unoccluded' % m if m != 'off' else 'ontop off: topmost=False'); return 0
             if sub == 'idle':
                 out('rig5090.idle written'); return 0
             out('kenshi-ctl %s ok (dryrun)' % sub); return 0

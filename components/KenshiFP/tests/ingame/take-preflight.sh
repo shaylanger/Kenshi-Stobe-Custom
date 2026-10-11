@@ -6,6 +6,7 @@
 #   pf_clean <x> <z> [R]       pin + knock out every live non-squad NPC within R (default 3000) of x,z (Nameless kept)
 #   pf_open [secs]             open ground: a short gdigrab clip judged by the lab (frames.py openground), no mouse cursor
 #                              (frames.py cursor), no dark/black frames (ffmpeg signalstats YAVG >= PF_MIN_YAVG, default 35)
+#                              pf_ontop first: game window topmost (no focus) + unoccluded, else FAIL "window occluded by <p>"
 #   pf_iso                     harness input isolation on (injected keys/mouse need it), verified
 #   pf_ready                   pf_iso, then drawn weapon in ready stance (R toggles), verified with fp_vm state
 #   pf_loaded                  crossbow loaded: RMB held until fp_combat loaded>=1, released, loaded=1 verified
@@ -107,8 +108,19 @@ pf_clear(){   # per take in a multi-take sweep (kfp-twohand 03-twohand refilm 3,
   [ $ok = 1 ] || pf_fail "weather/time: no clear sky at 10-13 h after ${PF_CLEAR_TRIES:-150} polls (hour $h, sky rgb$(echo $rgb); dust storm?)"
   echo "pf_clear ok: ${h} h, sky rgb$(echo $rgb)$([ $i -gt 1 ] && echo " after $i polls")"
 }
+# pf_ontop: gdigrab films the SCREEN area of the game window (capture-fix 2026-10-11: Shay's windows over the background
+# game failed every 5090 take with "openground open=0.00"). Sets the game window topmost without activating it
+# (kenshi-ctl.ps1 ontop on) and checks 9 client points are the game window, else FAIL setup "window occluded by <process>".
+# Skipped on the 4080 and with window capture (KAH_CAPTURE=wgc: tools/automation/ffx-cap.sh, occlusion-proof).
+pf_ontop(){ local r
+  [ "${RIG:-5090}" = 4080 ] && return 0
+  [ "${KAH_CAPTURE:-}" = wgc ] && { echo "pf_ontop skip: window capture (wgc)"; return 0; }
+  r=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\kenshi-ctl.ps1' ontop on 2>&1 </dev/null | tr -d '\r' | grep '^ontop' | head -1)
+  case "$r" in *unoccluded*) echo "pf_ontop ok: $r";; *"occluded by "*) pf_fail "window occluded by ${r#*occluded by }";;
+    *) pf_fail "window topmost/occlusion check failed: ${r:-no answer}";; esac; }
 pf_open(){
   local s=${1:-2} f=/tmp/pf-open.$$.mp4 r o
+  pf_ontop
   # park the virtual cursor in the top-right corner (sky): hovering a character shows its "[name]" tag (kfx-b9 blkE overlay)
   PF_A mouse_inject at "${PF_PARK_X:-1595}" "${PF_PARK_Y:-4}" >/dev/null 2>&1
   ( cd /tmp && "$PF_FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t "$s" -i "$PF_TITLE" $(venc_args 23) "$(wslpath -w $f)" ) </dev/null
