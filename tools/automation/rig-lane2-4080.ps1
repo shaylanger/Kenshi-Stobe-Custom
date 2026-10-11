@@ -170,6 +170,8 @@ if ($SelfTest) {
     $n++; $g = [string](LaneReject @('# gfx: low', '# tdr-isolate: yes', 'XC | kah-fpxbow | a | b | 1 | bash x/fp-xbow-tdrconfirm.sh {OUT}/XC') $false); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: tdr-isolate crossbow list admitted: got '$g'"
     $n++; $g = [string](LaneAdmit 9000 20000 $false $true); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: no hold while lane 4080 runs crossbow: got '$g'"
     $script:XbParTest = $false
+    # source pin (17:19: the in-batch end-batch check lacked XbPar and killed 114a twice): every isolation `if ((Xbow1)` honours the switch
+    $n++; $src = @(Get-Content -LiteralPath $PSCommandPath | Where-Object { $_ -match '^\s*if \(+Xbow1\)' -and $_ -notmatch 'XbPar' }); $ok = $src.Count -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: every isolation check honours the switch ($($src.Count) without XbPar)"
     "LANE4080B-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
 
@@ -308,7 +310,7 @@ while ($true) {
         $outN = $cur[1]; $t0 = [long]$cur[2]; $own = $cur[3]; $name = $cur[5]; $outP = "/c/KenshiTestRuns/$outN"
         if (Test-Path $tdr1) { TdrStop "lane 4080 TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outN }
         $h = @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)); if ($h.Count) { TdrStop "TDR (GPU driver reset) on the 4080 during lane $Lane list $name : $($h[0])" $outN }
-        if (Xbow1) {   # TDR isolation: lane 4080 started a crossbow/turret list -> end this batch now, requeue the list for later
+        if ((Xbow1) -and -not (XbPar)) {   # TDR isolation (off while the xbow-parallel switch exists; 17:19 it ended 114a twice beside 116): lane 4080 started a crossbow/turret list -> end this batch now, requeue the list for later
             $o = Probe $outP 'end-batch' "lane $Lane TDR isolation: lane 4080 runs a crossbow/turret list"; Stop2 'TDR isolation'
             $back = Join-Path "$qd\$Lane" $name
             if ((Split-Path $cur[0] -Leaf) -like '*__filler__*') { Remove-Item -LiteralPath $cur[0] -ErrorAction SilentlyContinue; $back = 'filler claim released' } else { Move-Item -LiteralPath $cur[0] $back -Force -ErrorAction SilentlyContinue }
