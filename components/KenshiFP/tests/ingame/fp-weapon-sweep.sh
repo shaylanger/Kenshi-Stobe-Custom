@@ -79,8 +79,9 @@ take(){   # k sid name type animcls ammo
   case "$cl" in $want|$([ "$ty" = crossbow ] && echo 1 || echo 0)) ;; *) pf_fail "fp_vm class=$cl, want $want ($nm in hand?)";; esac
   [ "$ty" = crossbow ] && pf_loaded
   if [ -n "$VMSET" ]; then r=$(A fp_vm set $VMSET); echo "$r" | grep -q "keys:\|ERROR" && pf_fail "fp_vm set $VMSET: $r"; sleep 0.5; fi
-  # kfp-two-hand builds (state has 2h=): the category KenshiFP read must be the catalog's item class, 2H on exactly for 3/8
-  st2=$(A fp_vm state); if [ -z "$VMSET" ] && [ "$ty" != crossbow ] && echo "$st2" | grep -q ' 2h='; then
+  # kfp-two-hand builds (probe has 2h=; it is NOT in `fp_vm state`, so this check never ran in 03-twohand 2026-10-10 and
+  # the takes filmed with cat=-1): the category KenshiFP read must be the catalog's item class, 2H on exactly for 3/8
+  st2=$(A fp_vm probe); if [ -z "$VMSET" ] && [ "$ty" != crossbow ] && echo "$st2" | grep -q ' 2h='; then
     wc_=$(python3 -c "import json,sys; print(next((w['cls'] for w in json.load(open(sys.argv[1]))['weapons'] if w['sid']==sys.argv[2]), -1))" "$WCAT" "$sid" 2>/dev/null)
     c2=$(echo "$st2" | fld cat); h2=$(echo "$st2" | fld 2h); w2=$([ "$wc_" = 3 ] || [ "$wc_" = 8 ] && echo 1 || echo 0)
     [ "$c2" = "$wc_" ] && [ "$h2" = "$w2" ] || pf_fail "2H state cat=$c2 2h=$h2, catalog class $wc_ wants 2h=$w2"
@@ -102,7 +103,9 @@ take(){   # k sid name type animcls ammo
       lab "RMB released: back to ready"; sleep 2.2
     else
       for s in 1 2; do lab "LMB: free swing $s"; A fp_keys press lmb 60 >/dev/null; sleep 2.4; done
-      lab "RMB held: block guard"; A fp_keys press rmb 2200 >/dev/null; sleep 1.8
+      # block from ready (swing 2 may still recover) and label once RMB is down: blocking came 0.62 s after a pre-press label
+      # (takecheck grace 0.6; 03-twohand Katana/Naginata 2026-10-10); release label stays 1.8 s after the press
+      pf_waitst ready 3; A fp_keys press rmb 2200 >/dev/null; sleep 0.25; lab "RMB held: block guard"; sleep 1.55
       lab "RMB released: back to ready"; sleep 2.2
     fi
     lab "R: sheathe"; A key_inject r tap 120 >/dev/null; pf_waitst holstered 6; sleep 0.3
