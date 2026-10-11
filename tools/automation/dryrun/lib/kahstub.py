@@ -169,6 +169,11 @@ def settle(s, now):
     """apply scheduled transitions up to now (history keeps them for the sampler)"""
     keep = []
     for e in sorted(s['tl'], key=lambda e: e[0]):
+        # crossbow reload end (tag cinrl): held until a `fp_combat state` read has seen reloading=1 (real reload ~6 s,
+        # always observable; the stub's 2 s window was missed under load: XBMESH reload:not_seen flake), max 10 s
+        if e[0] <= now and e[3] == 'cinrl' and not s.get('rl_seen', 1) and now < s.get('rl_deadline', 0):
+            keep.append(e)
+            continue
         if e[0] <= now:
             if e[1] == '_ammo':
                 s['turret']['ammo'] = e[2]
@@ -787,9 +792,10 @@ def fp_combat_melee(s, a, now):
                 kfplog(now + 0.05, 'crossbow fired')
                 kfplog(now + 0.05, '[vm] fire #%d: aim pose held 0.80s + kick (state=aiming)' % n)
                 sched(s, now + 0.9, 'cin', ui_state='reloading', vm='reloading', hud_text='reloading')
-                sched(s, now + 2.9, 'cin', loaded=1, ui_state='aiming', vm='aiming', hud_text='aiming')
+                sched(s, now + 2.9, 'cinrl', loaded=1, ui_state='aiming', vm='aiming', hud_text='aiming')
+                s['rl_seen'] = 0; s['rl_deadline'] = now + 10.9
             if not aim and pa:
-                s['tl'] = [e for e in s['tl'] if not (e[3] == 'cin' and e[0] > now and e[1] != 'loaded')]
+                s['tl'] = [e for e in s['tl'] if not (e[3] in ('cin', 'cinrl') and (e[0] > now or e[3] == 'cinrl') and e[1] != 'loaded')]
                 sched(s, now + 0.1, 'cin', ui_state='ready', vm='ready', hud_text='ready')
             return True, 'combat input published; same controller/native gates as physical input'
         if m['on'] and not m['armed'] and not fire and not aim:
@@ -1318,6 +1324,8 @@ def handle(s, cmd, a, now, sp):
         sub = a[0] if a else 'state'
         if sub == 'state':
             rng = fp['drawn'] and not fp['melee']
+            if fp['ui_state'] == 'reloading':
+                s['rl_seen'] = 1
             # melee-in-hands fixture (rg03 R10/HIT): a melee weapon in the hands = the ranged adapter stands down
             why = 'melee_in_hands' if fp['drawn'] and fp['melee'] and fp.get('weapon') not in (None, 'fists') else 'ok'
             return True, kfpreply.render('combat', enabled=s.get('combat_on', 1), native_ready=1, armed=1 if rng else 0,
