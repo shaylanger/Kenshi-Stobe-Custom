@@ -1127,12 +1127,10 @@ def handle(s, cmd, a, now, sp):
         elif sub == 'dump' and len(a) > 1:
             head = 'dump %s rows=189 which=all ' % a[1]
             s.setdefault('tables_dumps', {})[a[1]] = t['hash']   # a later load of this dump restores its hash (dump == state)
-            fp = re.sub(r'^([A-Za-z]):[\/]', lambda m: '/mnt/%s/' % m.group(1).lower(), a[1]).replace('\', '/')
+            fp = re.sub(r'^([A-Za-z]):/', lambda m: '/mnt/%s/' % m.group(1).lower(), a[1].replace('\\', '/'))
             try:
                 with open(fp, 'w') as fo:
-                    fo.write('# KenshiFP fp_tables all hash=%s (dryrun stub)
-pose.m_ready = 0 0 0
-' % t['hash'])
+                    fo.write('# KenshiFP fp_tables all hash=%s (dryrun stub)\npose.m_ready = 0 0 0\n' % t['hash'])
             except OSError:
                 pass
         elif sub == 'get' and len(a) > 1:
@@ -1157,6 +1155,10 @@ pose.m_ready = 0 0 0
                     # swings/kicks recorded: the canned lab tools (pyshim) answer per weapon like the real ones
                     f.write('# dryrun canned vm rec frames=%d swings=%d kicks=%d\n' % (
                         n, s.get('vm_swings', 0) - s['rec'].get('sw0', 0), s.get('vm_kicks', 0) - s['rec'].get('k0', 0)))
+                    # one ready frame whose weapon point follows the live tables (fp-pose-sweep POSESWEEP-TABLES "pose moved")
+                    th = s.get('tables', {}).get('hash', 'efc48644')
+                    dy = 0.0 if th == 'efc48644' else 0.1 + int(th[:2], 16) / 255.0
+                    f.write('0 0.0 0.0167 ready 0 | 2.4509,%.4f,4.9990 | - | 0,0,0 0,0,0\n' % (-0.2021 - dy))
                 dr.jappend('recordings.jsonl', dict(kind='vmrec', t=now, file=a[2], frames=n))
                 if n == 0:
                     dr.flag('NOTE', 'fp_vm rec dump %s with 0 frames (rec on never sent?)' % a[2])
