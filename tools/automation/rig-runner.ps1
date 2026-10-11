@@ -804,12 +804,12 @@ function DryKey([string]$path, [switch]$Show) {
     if ($Show) { "DRYKEY $k files=$($files.Count)"; $files | ForEach-Object { "  $_" } } else { $k }
 }
 function PreDryRunning([string]$key) { $p = Join-Path $pdd "$key.pid"; (Test-Path $p) -and -not (Test-Path (Join-Path $pdd "$key.rc")) -and [bool](Get-Process -Id ([int](Get-Content $p -Raw)) -ErrorAction SilentlyContinue) }
-function PreDryStart([string]$path, [string]$key) {
+function PreDryStart([string]$path, [string]$key, [int]$Nice = 15) {   # Nice 0: the game waits for this one (speed-scout)
     $d = Join-Path $pdd $key; New-Item -ItemType Directory -Force $d | Out-Null
     [IO.File]::WriteAllText((Join-Path $d 'list.dryrun.txt'), (DryListText $path))
     $dw = WslPath $d; $pw = WslPath $pdd
     Remove-Item (Join-Path $pdd "$key.rc"), (Join-Path $pdd "$key.out") -ErrorAction SilentlyContinue
-    [IO.File]::WriteAllText((Join-Path $d 'run.sh'), "#!/bin/bash`ncd /`nnice -n 15 timeout 1200 bash $(WslPath $auto)/dryrun.sh --rig $Rig --out $dw/dryrun $dw/list.dryrun.txt > $pw/$key.out.tmp 2>&1`nrc=`$?`nmv $pw/$key.out.tmp $pw/$key.out; echo `$rc > $pw/$key.rc`n")
+    [IO.File]::WriteAllText((Join-Path $d 'run.sh'), "#!/bin/bash`ncd /`nnice -n $Nice timeout 1200 bash $(WslPath $auto)/dryrun.sh --rig $Rig --out $dw/dryrun $dw/list.dryrun.txt > $pw/$key.out.tmp 2>&1`nrc=`$?`nmv $pw/$key.out.tmp $pw/$key.out; echo `$rc > $pw/$key.rc`n")
     if ($Fake) { $null = Wsl @('bash', "$dw/run.sh"); return }
     $p = Start-Process wsl.exe -WindowStyle Hidden -PassThru -ArgumentList @('-d', $distro, '-u', 'root', '--cd', '/', '--', 'bash', "$dw/run.sh")
     Set-Content (Join-Path $pdd "$key.pid") $p.Id
@@ -904,7 +904,12 @@ function Start-Batch($f) {
     # dry run (fake game): the verdict cached by the background pre-dry-run while the previous batch ran, else run it now
     $key = DryKey $run
     $cached = Test-Path (Join-Path $pdd "$key.rc")
-    if (-not $cached) { if (-not (PreDryRunning $key)) { PreDryStart $run $key }; $null = PreDryWait $key 1200 }
+    # not cached = the rig idles until it ends (2026-10-11: 58 s for one row at nice 15 behind lab climbs, WSL load 50):
+    # run it at nice 0, and lift a background one already running for this key to nice 0 too (speed-scout)
+    if (-not $cached) {
+        if (-not (PreDryRunning $key)) { PreDryStart $run $key 0 }
+        elseif (-not $Fake) { $null = Wsl @('bash', '-c', "for p in `$(pgrep -f 'predry/$key/run.sh'); do renice -n 0 -g `$p; done >/dev/null 2>&1; true") }
+        $null = PreDryWait $key 1200 }
     $dr = if (Test-Path (Join-Path $pdd "$key.out")) { @(Get-Content (Join-Path $pdd "$key.out")) } else { @() }
     $drc = if (Test-Path (Join-Path $pdd "$key.rc")) { [int]((Get-Content (Join-Path $pdd "$key.rc") -Raw).Trim()) } else { 124 }
     $sum = ($dr | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1)
