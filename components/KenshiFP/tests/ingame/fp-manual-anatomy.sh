@@ -251,7 +251,9 @@ REFH=""; upright() { local k h p=""; for k in $(seq 1 14); do
 # ---- R11-RACE: a Shek or Hive Hungry Bandit (spawn race filter), pinned at 30 dm ----
 SPR=""; # Shek first: a Hive drone's idle bob moves its neck 14.4<->16.9 dm within ~1 s, more than its 1 dm head band, so
 # aimed-part shots can't be placed (5090 b8: 2 head shots landed as chest; mapping consistent 5/5); hive/skeleton only as fallback
-for spec in 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek|hive' 'Drifter|shek|hive|skeleton'; do
+# xbf-hits2 (5090): both Shek specs failed their 20 rerolls (rolled Hive), the Hive drone never read upright -> no shots:
+# the Shek specs get 4 calls each (80 rolls) before the Hive fallback
+for spec in 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek|hive' 'Drifter|shek|hive|skeleton'; do
   t=${spec%%|*}; rf=${spec#*|}
   SPR=$(A spawn "$t" Drifters near "$SH" dist 30 count 1 race "$rf"); grep -q '^spawned 1/1' <<<"$SPR" && break; SPR=""; done
 if [ -z "$SPR" ]; then row R11-RACE SETUP "FAIL no Shek/Hive/Skeleton spawn: $(tail -1 "$LOG" | cut -c1-200)"
@@ -271,13 +273,15 @@ else
     for spec in "head 1 0 skull" "chest 2 1 chest" "legs 3 5,6 thigh_r"; do read -r name col want bone <<<"$spec"
       # counted shots: the target upright at impact (impact head bone >= REFH-1.0); a crouched/staggered impact (5090
       # fp-5090-11: head bone 16.6-17.0 vs 18.0 standing, aims placed for the upright pose) is retaken for aimed_part
-      valid=0; tries=0; while [ "$valid" -lt "$NRACE" ] && [ "$tries" -lt $((NRACE*4)) ]; do tries=$((tries+1))
+      valid=0; tries=0; pnu=0; while [ "$valid" -lt "$NRACE" ] && [ "$tries" -lt $((NRACE*4)) ]; do tries=$((tries+1))
         # aim height from the spawn's pose right now (settled), not the one read before the first shot
         # the spawn drifts inside its pin (4080 b16: 4 dm from the eye, a ray to the knee hits the capsule top): re-pin
         # at 30 dm when the eye is under 15 dm away; still too close = no shot, the row is a setup failure (too_close)
         if [ "$(eye_dist "$SPAWN")" -lt 15 ]; then A pin "$SPAWN" at "$SH" dist 30 face "$SH" >/dev/null; sleep 1.5
           [ "$(eye_dist "$SPAWN")" -lt 15 ] && { tooclose=$((tooclose+1)); ev+="$name:too_close=$(eye_dist "$SPAWN"); "; continue; }; fi
-        upright "$SPAWN" || { nup=$((nup+1)); ev+="$name:not_upright(no shot); "; continue; }
+        # not upright: no shot (retaken) for the first 2 tries of a part, then shoot anyway (a bobbing Hive never reads
+        # upright twice: xbf-hits2 had 2 shots in 20 min); the impact check below still drops a disturbed impact
+        upright "$SPAWN" || { nup=$((nup+1)); pnu=$((pnu+1)); [ $pnu -le 2 ] && { ev+="$name:not_upright(no shot); "; continue; }; }
         fresh_bones "$SPAWN" && ht=$(cut -d' ' -f"$col" <<<"$BAIM") || ht=$(cut -d' ' -f"$col" <<<"$AH $AC $AL")
         q=""; [ -n "$BAIM" ] && q=$(bpt "$AIMR" "$bone")   # fresh_bones left AIMR = an on-target reply when BAIM is set
         if [ -n "$q" ]; then aim_pt "$SPAWN" $q; else aim_at "$SPAWN" "$ht"; fi
