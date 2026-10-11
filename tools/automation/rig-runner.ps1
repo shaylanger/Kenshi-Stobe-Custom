@@ -72,8 +72,9 @@ steals the head of the busy other rig's folder (no "# rig:" header, OK here). "#
 is reused only in the same mode (runner\<rig>.gfx), else relaunched with KAH_GFX (5090) / kcfg.ps1 -Gfx (4080).
 No relaunch gap: Kenshi stays up between lists (5090 always, 4080 when a next list is queued); run-batch.sh --reuse loads
 the save in place; Kenshi is stopped only for a DLL install. Fast setup FAIL: a list with no PASS whose RESULTs are all
-setup/dryrun FAILs (or none / aborted) within -FastMin (15) min, or 3 instant setup FAILs in a row, writes the sticky
-ALERT-<rig>-setup.txt (Stop hook; delete once handled, expires in 30 min); the runner goes on with the next list.
+setup/dryrun FAILs (or none / aborted) within -FastMin (15) min notes its owner ("ALERT(setup, <rig>)") and the next list
+starts at once; the sticky ALERT-<rig>-setup.txt (Stop hook; delete once handled, expires in 30 min) is written only when
+nothing else is queued, after -FastStreak (2) such lists in a row, or after 3 instant setup FAILs in a row inside a list.
 Stale queue\running\<rig>__* entries (no <rig>.cur/.tail naming them, no live run-batch.sh) are removed each tick.
 TDR guard (2026-10-11 5090 BSOD; a TDR is a crash warning, never noise): every tick of a running batch the rig's Windows
 System log (5090 local, 4080 over ssh) is read for nvlddmkm/Display events 4101 or 153 since the batch started. A hit:
@@ -191,6 +192,9 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
             @('requeued 1 h ago = fail', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $false, 1, 'fail'),
             @('filler copy = fail (filler\ keeps the original)', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $true, 99, 'fail'))
     foreach ($c in $ns) { $g = [string](NeverStartedAct $c[1] $c[2] $c[3] $c[4] $c[5]); $ok = $g -eq $c[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) never-started $($c[0]): got '$g' want '$($c[6])'" }
+    # fast FAIL routing (coordinator m102): one fast list with more queued = owner note; idle rig or a streak = sticky ALERT
+    foreach ($c in @(@('fast list, 3 more queued', 3, 1, 'note'), @('fast list, nothing queued (rig idles)', 0, 1, 'alert'), @('2nd fast list in a row', 2, 2, 'alert'))) {
+        $g = FastAlertAct $c[1] $c[2] 2; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) fast-FAIL $($c[0]): got '$g' want '$($c[3])'" }
     # 4080 sync covers every helper a synced script names (rg-02 1011-0927: fp-control.sh's fp-yaw-free.awk never synced)
     $sc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --check' 2>&1 | ForEach-Object { "$_" })
     $ok = $LASTEXITCODE -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync helper closure: $(($sc | Select-Object -First 3) -join ' / ')"
@@ -1206,6 +1210,7 @@ if ($Resolve) {   # rig-runner.ps1 -Rig <rig> -Resolve "KenshiFP <sha8>|latest" 
 
 # ---------------------------------------------------------------- loop
 $script:loopStart = Get-Date
+$script:fastStreak = 0
 Log "start pid=$PID fake=$Fake idle>=${IdleMin}m stuck>=${StuckMin}m tick=${TickSec}s"
 if ($Rig -eq '4080' -and -not $Fake) {
     $null = Ssh @('mkdir', 'C:\KAH\runner')
