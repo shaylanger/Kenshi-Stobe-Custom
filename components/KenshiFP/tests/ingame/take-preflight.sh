@@ -379,3 +379,14 @@ pf_noxbow(){ local c b seen=" " left=""; PF_WHY=""
     [ -n "$b" ] && left="$left $c:$b"; done
   [ -n "$left" ] && { PF_WHY="crossbow still equipped (crash-safety quarantine):$left"; return 1; }
   echo "pf_noxbow ok: no crossbow equipped on$seen"; return 0; }
+# Step timing (speed-scout 2026-10-11, coordinator m102 "measure list START -> first row and cut it"): every pf_* step
+# prints "PFTIME <step> <ms>" when it returns, so row logs show where the ~25 s of preflight per take goes
+# (grep -h '^PFTIME' <out>/*.txt | awk '{s[$2]+=$3; n[$2]++} END {for (k in s) print k, n[k], s[k]/n[k]}').
+# PF_PROFILE=0 turns it off. A step that ends the take (pf_fail -> exit) prints nothing.
+if [ "${PF_PROFILE:-1}" = 1 ] && [ -z "${_PF_PROFILED:-}" ]; then _PF_PROFILED=1
+  for _f in pf_load pf_rig pf_display pf_day pf_clean pf_area pf_weapon pf_ready pf_loaded pf_latency pf_open pf_nofight pf_noxbow pf_calm pf_clear pf_iso pf_melee_arm pf_combat_on; do
+    declare -F "$_f" >/dev/null || continue
+    eval "$(declare -f "$_f" | sed "1s/^$_f /_pft_$_f /")"
+    eval "$_f(){ local _t=\${EPOCHREALTIME/./} _r; _pft_$_f \"\$@\"; _r=\$?; echo \"PFTIME $_f \$(( (\${EPOCHREALTIME/./} - _t) / 1000 ))\"; return \$_r; }"
+  done; unset _f
+fi
