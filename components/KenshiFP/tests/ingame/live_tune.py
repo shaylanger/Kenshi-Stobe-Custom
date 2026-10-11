@@ -16,7 +16,7 @@ An optimizer (harness optim.py: CMA-ES / Nelder-Mead, early stop at score 0) pro
 Spec lines (# comments): <lhs> [step|auto] [lo|auto] [hi|auto]   lhs = live-tables key (`wrl`, `swk_alt.s1_k2.ux`).
 x0 = the value in the running game (live-tune.sh --get). auto step = max(0.05, 0.15 |x0|); auto bounds = x0 -+ 4 steps.
 Score (0 = every gate passes, lower is better):
-  s1    10 x sum over solver-posed frames of max(0, 0.02 - edge cos)     (edge faces the camera, S1; +1 = faces away)
+  s1    10 x sum over solver-posed frames of max(0, 0.02 - edge cos) per 2 swings (edge faces the camera, S1; +1 = away)
   flip  3 x elbow one-frame jumps (step > 0.6 dm and > 2.5 x both neighbours, per 1/30 s)   (PT30-FLIP)
         + 3 x vmcheck flags (PT30 du/df/tipd jumps)
   wb    (wrist bend over the vmcheck limit: 30 held / 50 swing) / 5     (PT17-W)
@@ -58,7 +58,9 @@ def score_rec(rec, stroke, tools, vmcheck=None, gate=True):
         return 1000.0, d
     # S1: edge toward the camera
     ed = [(P[i]['edge'], i) for i in solver]
-    s1 = sum(max(0.0, 0.02 - e) for e, _ in ed)
+    nsw = max(1, len(M.swings(F, P)))   # per-swing (x2) so a 3-cycle confirm compares with a 1-cycle candidate
+    d['swings'] = nsw
+    s1 = sum(max(0.0, 0.02 - e) for e, _ in ed) * 2.0 / nsw
     d['edge_min'] = '%.3f@%d:%s' % (min(ed)[0], min(ed)[1], P[min(ed)[1]]['state'])
     d['edge_bad'] = sum(1 for e, _ in ed if e < 0.02)
     # PT30-FLIP: elbow one-frame jumps (scaled to 1/30 s)
