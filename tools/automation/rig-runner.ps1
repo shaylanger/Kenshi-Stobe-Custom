@@ -553,7 +553,7 @@ function Header([string]$path, [string]$key) {
     if ($l) { $null = $l -match "^\s*#\s*$key\s*:\s*(.+?)\s*$"; return $Matches[1] } $null
 }
 function Rows([string]$path) { @(Get-Content $path | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
-function StobeRows([string]$path) { @(Rows $path | Where-Object { ($_ -split '\|')[-1] -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)' }).Count -gt 0 }
+function StobeRows([string]$path) { @(Rows $path | Where-Object { (($_ -split '\|')[-1] -replace '\S+=\S+', '') -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)' }).Count -gt 0 }
 # rows left out of the dry run: "# nodryrun: <row>[/<row>,...] <reason>" (several lines allowed; "SWA/T6 rows: ..." = SWA + T6)
 function NoDryRows([string]$path) {
     @(Get-Content $path | Where-Object { $_ -match '^\s*#\s*nodryrun\s*:\s*(\S+)' } | ForEach-Object {

@@ -73,7 +73,7 @@ function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the la
     if (-not $rows.Count) { return 'no rows' }
     foreach ($r in $rows) {
         $f = @($r -split '\|'); $cmd = $f[-1]; $id = $f[0].Trim()
-        if ($cmd -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (lane 2 has no Stobe server path)" }
+        if (($cmd -replace '\S+=\S+', '') -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (lane 2 has no Stobe server path)" }
         $x = XbowRow $r; if ($x) { return "crossbow guard: row $id names crossbow/ranged/turret work ($x)" }
     }
     $null

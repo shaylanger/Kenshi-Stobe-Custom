@@ -70,7 +70,7 @@ function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the la
     if (-not $rows.Count) { return 'no rows' }
     foreach ($r in $rows) {
         $id = (@($r -split '\|'))[0].Trim()
-        if ((@($r -split '\|'))[-1] -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (no Stobe on the 4080)" }
+        if (((@($r -split '\|'))[-1] -replace '\S+=\S+', '') -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (no Stobe on the 4080)" }
         $x = XbowRow $r; if ($x -and -not (XbPar)) { return "crossbow guard: row $id names crossbow/ranged/turret work ($x)" }
     }
     $null
