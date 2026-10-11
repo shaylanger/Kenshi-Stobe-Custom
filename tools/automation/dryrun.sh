@@ -50,6 +50,9 @@ fi
 # fast sleep/date (lib/drclock.c); falls back to the python fakeexe ones if no C compiler
 if [ ! -x "$C/drclock" ] || [ "$D/lib/drclock.c" -nt "$C/drclock" ]; then
   gcc -O2 -o "$C/drclock.$$" "$D/lib/drclock.c" 2>/dev/null && mv -f "$C/drclock.$$" "$C/drclock" || rm -f "$C/drclock.$$"; fi
+# fork-server client (lib/forkcli.c, row.sh): built once here; row.sh uses it when $C/forkcli.c matches (else gcc per row)
+if ! cmp -s "$D/lib/forkcli.c" "$C/forkcli.c" || [ ! -x "$C/forkcli" ]; then
+  gcc -O2 -o "$C/forkcli.$$" "$D/lib/forkcli.c" 2>/dev/null && mv -f "$C/forkcli.$$" "$C/forkcli" && cp "$D/lib/forkcli.c" "$C/forkcli.c" || rm -f "$C/forkcli.$$"; fi
 python3 "$D/lib/gen_spec.py" "$C/spec.tsv" >/dev/null || { echo "DRYRUN-SUMMARY FAIL command spec generation failed"; exit 2; }
 ls /mnt/c/Users/Shay/AppData/Local/kenshi/save > "$C/saves.txt" 2>/dev/null
 [ -n "$OUT" ] || OUT=/mnt/c/KenshiTestRuns/dryrun/$(basename "${L:-row}" .list | tr -c 'A-Za-z0-9_.\n-' _)-$(date +%m%d-%H%M%S)

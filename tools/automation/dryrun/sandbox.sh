@@ -64,7 +64,7 @@ BASEPATH=/dryrun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bi
 EXTRA=(); [ "$RIG" = 4080 ] && EXTRA=(RIG=4080)
 chroot "$R" /usr/bin/env -i HOME=/root LANG=C.UTF-8 PATH=$BASEPATH DR_BASE_PATH=$BASEPATH DR_STATE=/drstate DR_RIG="$RIG" \
   DR_KDIR="$KD" DR_CANNED=/dryrun/canned DR_SPEC=/drstate/spec.tsv DR_SAVES=/drstate/saves.txt DR_SAVE="${SAVE#-}" \
-  DR_NAME="$NAME" DR_SAVEARG="$SAVE" PLAYER="$PLAYER" MATE="$MATE" DR_TO="$TO" DR_CMD="$CMD" ${DR_FIXTURE_JSON:+DR_FIXTURE_JSON=$DR_FIXTURE_JSON} ${DR_IDLE:+DR_IDLE=$DR_IDLE} ${DR_PROF:+DR_PROF=1} \
+  DR_NAME="$NAME" DR_SAVEARG="$SAVE" PLAYER="$PLAYER" MATE="$MATE" DR_TO="$TO" DR_CMD="$CMD" ${DR_FIXTURE_JSON:+DR_FIXTURE_JSON=$DR_FIXTURE_JSON} ${DR_IDLE:+DR_IDLE=$DR_IDLE} ${DR_PROF:+DR_PROF=1} ${DR_FORK:+DR_FORK=1} ${DR_NOFORK:+DR_NOFORK=1} \
   "${EXTRA[@]}" /bin/bash /dryrun/row.sh
 rc=$?
 # files the row wrote on C: (label files, outputs) for the analyzer, as paths in the rig's form

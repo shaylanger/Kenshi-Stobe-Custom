@@ -3,10 +3,10 @@
 # detached children (4080 itrun jobs), print the exit code. Output -> /drout/out.txt
 cd /root
 # fork server (lib/forksrv.py + lib/forkcli.c, speed-scout 2026-10-11): every stobe-auto call forks a preloaded kahstub
-# instead of starting python (~30 -> ~9 ms per call, ~3000 calls in a crossbow row); DR_NOFORK=1 or the file /root/.cache/kah-dryrun/nofork = off. Any failure =
+# instead of starting python (~30 -> ~9 ms per call, ~3000 calls in a crossbow row); DR_NOFORK=1 or the file /root/.cache/kah-dryrun/nofork = off (DR_FORK=1 = on despite the file: selftest). Any failure =
 # the plain python wrappers sandbox.sh wrote stay in place.
 FSP=""
-if [ -z "${DR_NOFORK:-}" ] && [ ! -e /root/.cache/kah-dryrun/nofork ] && [ -f /dryrun/lib/forksrv.py ] && [ -f /dryrun/lib/forkcli.c ]; then
+if [ -z "${DR_NOFORK:-}" ] && { [ -n "${DR_FORK:-}" ] || [ ! -e /root/.cache/kah-dryrun/nofork ]; } && [ -f /dryrun/lib/forksrv.py ] && [ -f /dryrun/lib/forkcli.c ]; then
   FC=/root/.cache/kah-dryrun/forkcli
   cmp -s /dryrun/lib/forkcli.c /root/.cache/kah-dryrun/forkcli.c && [ -x "$FC" ] || { FC=/drstate/forkcli; gcc -O2 -o "$FC" /dryrun/lib/forkcli.c 2>/dev/null || FC=""; }
   if [ -n "$FC" ]; then
