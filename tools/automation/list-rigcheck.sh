@@ -17,6 +17,8 @@
 # --fix (4080): copy a save that exists on the 5090 but not on the 4080 (rig4080/setup.sh --saves-only), then recheck.
 # Output: WARN lines, then one line  RIGCHECK <rig> OK <list>  |  RIGCHECK <rig> NO <list>: <reason>; <reason>...
 # Exit 0 = OK, 1 = NO, 2 = usage / 4080 unreachable (reason printed; the caller treats it as "can't tell", not NO).
+# WSL has no /c: every path below is /c/... (Git Bash); in WSL every script read as "missing" (false NO, e6-variety 2026-10-11)
+[ -d /c/KenshiModding ] || { echo "list-rigcheck: run from Git Bash (no /c here; WSL gives false NO results)" >&2; exit 2; }
 FIX=0; Q=0
 while :; do case "$1" in --fix) FIX=1; shift ;; --quiet) Q=1; shift ;; *) break ;; esac; done
 L=$1; RIG=$2
