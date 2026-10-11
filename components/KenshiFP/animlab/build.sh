@@ -34,5 +34,13 @@ python3 "$HERE/extract_helpers.py" "$B/client/kenshifp_client.c" "$B/gen_helpers
 DEFS=""; grep -q "g_vm_elb_cb" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ELB_CB"
 grep -q "g_vm_eclamp_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ECLAMP"
 grep -q "g_vm_hcap_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_HINGE"
-gcc -O2 -std=gnu11 -w $DEFS -I"$B" -I"$B/client" -I"$HERE" -o "$OUT" "$HERE/$MAIN" -lm
+# build cache (labcache.py, Shay 2026-10-10 CPU cut): key = content of every compile input (patched client copy +
+# generated helpers, the harness mains/headers here, -D flags, gcc version), not paths: the same source built under
+# another name or in another pipeline tree restores the same binary, so its replays hit the result cache too.
+LC=/mnt/c/KenshiModding/Kenshi-Automation-Harness/tools/animlab/labcache.py
+if [ -f "$LC" ] && [ "${ANIMLAB_CACHE:-1}" != 0 ]; then
+  { (cd "$B" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum); (cd "$HERE" && sha256sum ./*.c ./*.h); echo "main=$MAIN defs=$DEFS"; gcc --version | head -1; } > "$B.inputs"
+  python3 "$LC" run --nocmd --tag "build-gcc" --in "$B.inputs" --out "$OUT" -- gcc -O2 -std=gnu11 -w $DEFS -I"$B" -I"$B/client" -I"$HERE" -o "$OUT" "$HERE/$MAIN" -lm
+  rm -f "$B.inputs"; [ -x "$OUT" ] || chmod +x "$OUT" 2>/dev/null
+else gcc -O2 -std=gnu11 -w $DEFS -I"$B" -I"$B/client" -I"$HERE" -o "$OUT" "$HERE/$MAIN" -lm; fi
 echo "built $OUT"

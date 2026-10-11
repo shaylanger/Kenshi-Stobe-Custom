@@ -9,6 +9,7 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HARN=/mnt/c/KenshiModding/Kenshi-Automation-Harness; L=$HARN/tools/animlab
+rp() { python3 "$L/labcache.py" replay "$@"; }   # adapter replay through the result cache (labcache.py: content-keyed, ANIMLAB_CACHE=0 off)
 W=${ANIMLAB_WORK:-/root/animlab-work}; BLD=/root/animlab-build; mkdir -p "$W" "$BLD"
 # evidence corpus (C:\KenshiTestRuns\corpus, corpus.sh, protected from cleanup): every recording/take/video below is
 # synced into $W first (cp -n: never overwrites); the C:\KenshiTestRuns copy lines below are legacy fallbacks.
@@ -26,7 +27,7 @@ mkdir -p /root/animlab-kfp-src && rsync -a --delete /root/KenshiFP/client/ /root
 P=(); grep -q vm_rec_native /root/animlab-kfp-src/client/kfp_viewmodel.inc || P=(--patch /mnt/c/KenshiModding/pending-fixes/kfp-rec-native-meta.py)
 if [ ${#P[@]} -gt 0 ] && [ ! -f "${P[1]}" ]; then bad "rec-native patch script missing and source not patched"; P=(); fi
 bash "$HERE/build.sh" "${P[@]}" --out "$BLD/kfpvm_cur" >/tmp/al-build2.txt 2>&1 || { bad build-current; tail -5 /tmp/al-build2.txt; }
-"$BLD/kfpvm_cur" "$W/vmrec-q-crossbow-z0.txt" /tmp/al-rt1.txt --quiet >/dev/null
+rp "$BLD/kfpvm_cur" "$W/vmrec-q-crossbow-z0.txt" /tmp/al-rt1.txt --quiet >/dev/null
 (python3 "$L/animlab.py" gate /tmp/al-rt1.txt --adapter "$BLD/kfpvm_cur" --args=--quiet) >/tmp/al-rt.txt 2>&1
 if grep -q "GATE PASS" /tmp/al-rt.txt && grep -E "^reload\(info\)" /tmp/al-rt.txt | head -1 | awk '{exit !($4=="0.00" && $5=="0.00")}'; then ok "native round trip (reload exact)"; else bad "native round trip"; sed -n 1,6p /tmp/al-rt.txt; fi
 # ---- phase 2 (METRICS LAB): drive adapter (kfpvm_drive.c) + tools/animlab/metricslab.py ----
@@ -69,13 +70,13 @@ case "$r" in "RESULT faithful-drive FAIL"*) ok "miss elbow-branch reproduced (co
 [ -f "$W/f14-e0.txt" ] || cp /mnt/c/KenshiTestRuns/f14/e0.txt "$W/f14-e0.txt" 2>/dev/null || bad "missing recording f14/e0.txt"
 r=$(python3 "$L/animlab.py" metrics "$W/f14-e0.txt" | grep '^arc ')
 case "$r" in "arc FAIL"*) ok "miss E1 reproduced (game f14-e0): $r";; *) bad "miss E1 game f14-e0 not failing: ${r:-no arc line}";; esac
-"$BLD/kfpvm_cur" "$W/f14-e0.txt" /tmp/al-e1base.txt --quiet >/dev/null 2>&1
+rp "$BLD/kfpvm_cur" "$W/f14-e0.txt" /tmp/al-e1base.txt --quiet >/dev/null 2>&1
 r=$(python3 "$L/animlab.py" metrics /tmp/al-e1base.txt | grep '^arc ')
 if grep -q g_vm_swlead /root/animlab-kfp-src/client/kfp_viewmodel.inc; then echo "REGRESS INFO E1 current source (has swlead) replay f14-e0: $r"
 else case "$r" in "arc FAIL"*) ok "miss E1 reproduced (replay f14-e0, current solver): $r";; *) bad "miss E1 replay not failing: ${r:-no arc line}";; esac
   E1P=/mnt/c/KenshiModding/pending-fixes/kfp-e1-swlead.py
   if [ -f "$E1P" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1P" --patch "$HERE/patches/e1-lead-variants.py" --out "$BLD/kfpvm_e1v" >/tmp/al-build6.txt 2>&1; then
-    "$BLD/kfpvm_e1v" "$W/f14-e0.txt" /tmp/al-e1v.txt --quiet >/dev/null 2>&1
+    rp "$BLD/kfpvm_e1v" "$W/f14-e0.txt" /tmp/al-e1v.txt --quiet >/dev/null 2>&1
     echo "REGRESS INFO E1 patch kfp-e1-swlead.py replay f14-e0: $(python3 "$L/animlab.py" metrics /tmp/al-e1v.txt | grep '^arc ')"
   else echo "REGRESS INFO E1 patch not built (missing or does not apply)"; fi
   # E1 candidate (lab hill climb, 2026-10-09): swlead + rollcap + re-authored strike keys must pass the arc gate with the
@@ -83,7 +84,7 @@ else case "$r" in "arc FAIL"*) ok "miss E1 reproduced (replay f14-e0, current so
   E1K=/mnt/c/KenshiModding/pending-fixes/kfp-e1-keys.py
   if [ -f "$E1K" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1K" --out "$BLD/kfpvm_e1k" >/tmp/al-build7.txt 2>&1; then
     [ -f "$W/f13-sw0.txt" ] || cp /mnt/c/KenshiTestRuns/f13/sw0.txt "$W/f13-sw0.txt" 2>/dev/null
-    for r in f14-e0 f13-sw0; do "$BLD/kfpvm_e1k" "$W/$r.txt" /tmp/al-e1k.txt --quiet >/dev/null 2>&1
+    for r in f14-e0 f13-sw0; do rp "$BLD/kfpvm_e1k" "$W/$r.txt" /tmp/al-e1k.txt --quiet >/dev/null 2>&1
       r2=$(python3 "$L/animlab.py" metrics /tmp/al-e1k.txt | grep '^arc ')
       case "$r2" in "arc PASS"*) ok "E1 candidate kfp-e1-keys.py on $r: $r2";; *) bad "E1 candidate kfp-e1-keys.py on $r: ${r2:-no arc line}";; esac; done
   else echo "REGRESS INFO E1 candidate kfp-e1-keys.py not built (missing or does not apply)"; fi
@@ -108,11 +109,11 @@ for x in f23-sword-z0d:FAIL f27-h0a:FAIL f27-h1a:PASS; do r=$(python3 "$L/animla
 [ -f "$W/f28-sword-z0c.txt" ] || cp /mnt/c/KenshiTestRuns/vid/vmrec-anim-f28-sword-z0c.txt "$W/f28-sword-z0c.txt" 2>/dev/null || bad "missing recording vid/vmrec-anim-f28-sword-z0c.txt"
 if bash "$HERE/build.sh" --rev 830c781 --out "$BLD/kfpvm_e5r" >/tmp/al-build-e5.txt 2>&1 && bash "$HERE/build.sh" --rev c6a1eda --out "$BLD/kfpvm_c6" >/tmp/al-build-c6.txt 2>&1; then
   for m in rig:PASS up-roll:FAIL; do a=; [ "${m%%:*}" = up-roll ] && a=--up-roll
-    "$BLD/kfpvm_e5r" "$W/f28-sword-z0c.txt" /tmp/al-e5-$m.txt --quiet $a >/dev/null 2>&1
+    rp "$BLD/kfpvm_e5r" "$W/f28-sword-z0c.txt" /tmp/al-e5-$m.txt --quiet $a >/dev/null 2>&1
     r=$(python3 "$L/animlab.py" hinge /tmp/al-e5-$m.txt --vs "$W/f28-sword-z0c.txt" | cut -c1-260)
     case "$r" in "hinge ${m##*:}"*) ok "E5 hinge replay f28-sword-z0c (${m%%:*}): $r";; *) bad "E5 hinge replay f28-sword-z0c (${m%%:*}, want ${m##*:}): ${r:-no hinge line}";; esac; done
   for m in c6:FAIL h0:FAIL h1:PASS; do case "${m%%:*}" in c6) b="$BLD/kfpvm_c6"; a=;; h0) b="$BLD/kfpvm_e5r"; a="--set hinge=0";; h1) b="$BLD/kfpvm_e5r"; a=;; esac
-    "$b" "$W/f23-sword-z0d.txt" /tmp/al-z0d-$m.txt --quiet $a >/dev/null 2>&1
+    rp "$b" "$W/f23-sword-z0d.txt" /tmp/al-z0d-$m.txt --quiet $a >/dev/null 2>&1
     r=$(python3 "$L/animlab.py" hinge /tmp/al-z0d-$m.txt | cut -c1-200)
     case "$r" in "hinge ${m##*:}"*) ok "E5 hinge replay z0d (${m%%:*}): $r";; *) bad "E5 hinge replay z0d (${m%%:*}, want ${m##*:}): ${r:-no hinge line}";; esac; done
 else bad "E5 hinge replay builds"; tail -3 /tmp/al-build-e5.txt /tmp/al-build-c6.txt; fi
@@ -120,11 +121,11 @@ else bad "E5 hinge replay builds"; tail -3 /tmp/al-build-e5.txt /tmp/al-build-c6
 #      most 2.5x the replay's, swings skipped). vmq-f8c crossbow-z0 (pre-e948f86 bone-world map) replayed by its own
 #      solver 6c9516b must FAIL (ready x4.2, reload x6.6); f14/xb0 (node map) replayed by d40b6ad (first node-map snapshot)
 #      must PASS (pinned: the live source's replay jitter moves, 2026-10-09 it dropped to 0.59 = x2.8).
-r=$(cd "$W" && "$BLD/kfpvm_6c9516b" vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt | grep '^jitter ')
+r=$(cd "$W" && rp "$BLD/kfpvm_6c9516b" vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare vmrec-q-crossbow-z0.txt /tmp/al-x1a.txt | grep '^jitter ')
 case "$r" in "jitter FAIL"*) ok "miss X1 reproduced (crossbow-z0 @6c9516b): $r";; *) bad "miss X1 not reproduced: ${r:-no jitter line}";; esac
 [ -f "$W/f14-xb0.txt" ] || cp /mnt/c/KenshiTestRuns/f14/xb0.txt "$W/f14-xb0.txt" 2>/dev/null || bad "missing recording f14/xb0.txt"
 bash "$HERE/build.sh" --rev d40b6ad --out "$BLD/kfpvm_d40b6ad" >/tmp/al-build8.txt 2>&1 || bad build-d40b6ad
-r=$("$BLD/kfpvm_d40b6ad" "$W/f14-xb0.txt" /tmp/al-x1b.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare "$W/f14-xb0.txt" /tmp/al-x1b.txt | grep '^jitter ')
+r=$(rp "$BLD/kfpvm_d40b6ad" "$W/f14-xb0.txt" /tmp/al-x1b.txt --quiet >/dev/null 2>&1; python3 "$L/animlab.py" compare "$W/f14-xb0.txt" /tmp/al-x1b.txt | grep '^jitter ')
 case "$r" in "jitter PASS"*) ok "X1 fixed build (f14-xb0, node-map solver d40b6ad): $r";; *) bad "X1 jitter on f14-xb0: ${r:-no jitter line}";; esac
 #  13. miss C3 "bolt jitter on walk": `animlab.py bolt` (game recording + its <rec>.bolt sidecar: the bolt node in the
 #      post-IK Prop2 frame (column group 5 "sl", builds with the C3 pin code) must stay within 0.1 dm of its median,
@@ -169,7 +170,7 @@ case "$r" in *"faithful-drive PASS"*) ok "elbow drift fixed (commanded targets):
 r=$(python3 "$L/animlab.py" churn "$W/vmrec-q-sword-z0.txt")
 case "$r" in "churn PASS"*) ok "churn game vmq-f8c sword-z0: $r";; *) bad "churn game vmq-f8c sword-z0: ${r:-no churn line}";; esac
 if [ -x "$BLD/kfpvm_e1k" ] && [ -f /mnt/c/KenshiModding/pending-fixes/kfp-e1-keys.py ]; then
-  "$BLD/kfpvm_e1k" "$W/f14-e0.txt" /tmp/al-e1kc.txt --quiet >/dev/null 2>&1
+  rp "$BLD/kfpvm_e1k" "$W/f14-e0.txt" /tmp/al-e1kc.txt --quiet >/dev/null 2>&1
   r=$(python3 "$L/animlab.py" churn /tmp/al-e1kc.txt)
   case "$r" in "churn FAIL rev="*":BAD@"*"windup_roll="*":BAD"*) ok "miss E1 churn reproduced (kfp-e1-keys candidate, f14-e0): $r";; *) bad "miss E1 churn not reproduced: ${r:-no churn line}";; esac
 else echo "REGRESS INFO E1 churn: candidate kfp-e1-keys.py not built"; fi
@@ -189,7 +190,7 @@ else case "$r2" in "inline FAIL"*"stroke:"*":BAD"*) ok "miss E1 inline reproduce
 E1I=/mnt/c/KenshiModding/pending-fixes/kfp-e1-inline.py
 [ -f "$W/vmq85a7-sw.txt" ] || cp /mnt/c/KenshiTestRuns/vmq-85a7/vmrec-q-sword-z0.txt "$W/vmq85a7-sw.txt" 2>/dev/null
 if [ -f "$E1I" ] && bash "$HERE/build.sh" "${P[@]}" --patch "$E1I" --out "$BLD/kfpvm_e1inl" >/tmp/al-build8.txt 2>&1; then
-  for r in f14-e0 vmq85a7-sw f13-sw0; do "$BLD/kfpvm_e1inl" "$W/$r.txt" /tmp/al-e1i.txt --quiet >/dev/null 2>&1
+  for r in f14-e0 vmq85a7-sw f13-sw0; do rp "$BLD/kfpvm_e1inl" "$W/$r.txt" /tmp/al-e1i.txt --quiet >/dev/null 2>&1
     a1=$(python3 "$L/animlab.py" inline /tmp/al-e1i.txt | cut -d' ' -f1-2); a2=$(python3 "$L/animlab.py" metrics /tmp/al-e1i.txt | grep '^arc ' | cut -d' ' -f1-3)
     a3=$(python3 "$L/animlab.py" churn --stroke /tmp/al-e1i.txt | cut -d' ' -f1-5); all="$a1 | $a2 | $a3"
     if [ $r = f13-sw0 ]; then echo "REGRESS INFO E1 inline candidate on $r (first swing from ready branch B): $all"
@@ -205,13 +206,13 @@ for r in f14-e0 vmq85a7-sw; do b=$(python3 "$L/animlab.py" branch "$W/$r.txt" | 
   case "$b" in "branch PASS"*) ok "ready branch game $r: $b";; *) bad "ready branch game $r: $b";; esac; done
 echo "REGRESS INFO ready branch game f13-sw0: $(python3 "$L/animlab.py" branch "$W/f13-sw0.txt" | cut -d' ' -f1-2)"
 if bash "$HERE/build.sh" --rev f41f862 --no-l1 --out "$BLD/kfpvm_rb0" >/tmp/al-build9.txt 2>&1; then
-  for r in f13-sw0 f14-e0; do "$BLD/kfpvm_rb0" "$W/$r.txt" /tmp/al-rb0.txt --quiet >/dev/null 2>&1
+  for r in f13-sw0 f14-e0; do rp "$BLD/kfpvm_rb0" "$W/$r.txt" /tmp/al-rb0.txt --quiet >/dev/null 2>&1
     b=$(python3 "$L/animlab.py" branch /tmp/al-rb0.txt | cut -c1-160)
     case "$b" in "branch FAIL"*":BAD"*) ok "miss ready branch B reproduced (replay $r @f41f862): $b";; *) bad "ready branch B not caught on $r @f41f862: $b";; esac; done
 else bad "build @f41f862 (ready branch)"; fi
 RB1=/mnt/c/KenshiModding/pending-fixes/kfp-rb-single.py; RB2=/mnt/c/KenshiModding/pending-fixes/kfp-rb-camup.py
 if [ -f "$RB1" ] && [ -f "$RB2" ] && bash "$HERE/build.sh" --rev f41f862 --patch "$HERE/patches/rb-single-root.py" --patch "$RB2" --out "$BLD/kfpvm_rb1" >/tmp/al-build10.txt 2>&1; then
-  for r in f13-sw0 f14-e0 vmq85a7-sw; do "$BLD/kfpvm_rb1" "$W/$r.txt" /tmp/al-rb1.txt --quiet >/dev/null 2>&1
+  for r in f13-sw0 f14-e0 vmq85a7-sw; do rp "$BLD/kfpvm_rb1" "$W/$r.txt" /tmp/al-rb1.txt --quiet >/dev/null 2>&1
     b=$(python3 "$L/animlab.py" branch /tmp/al-rb1.txt --ref "$W/f14-e0.txt" | cut -c1-120)
     case "$b" in "branch PASS"*) ok "ready branch fix on $r: $b";; *) bad "ready branch fix on $r: $b";; esac; done
 else echo "REGRESS INFO ready branch fix kfp-rb-single.py + kfp-rb-camup.py not built (missing or committed: check the snapshot instead)"; fi
@@ -223,7 +224,7 @@ else echo "REGRESS INFO ready branch fix kfp-rb-single.py + kfp-rb-camup.py not 
 XB=$W/vmq85a7-xb.txt   # corpus rec/vmq85a7-xb.txt (was vmq-85a7/vmrec-q-crossbow-z0.txt, cleaned up: step skipped)
 if [ -f "$XB" ] && bash "$HERE/build.sh" --rev 69bc401 --patch "$HERE/patches/l1-scale.py" --out "$BLD/kfpvm_l1k85" >/tmp/al-build11.txt 2>&1 \
    && bash "$HERE/build.sh" --rev f41f862 --patch "$HERE/patches/l1-scale.py" --out "$BLD/kfpvm_l1k" >/tmp/al-build12.txt 2>&1; then
-  for k in 1 0.871; do "$BLD/kfpvm_l1k85" "$XB" /tmp/al-l1k-$k.txt --quiet --set l1k=$k >/dev/null 2>&1; done
+  for k in 1 0.871; do rp "$BLD/kfpvm_l1k85" "$XB" /tmp/al-l1k-$k.txt --quiet --set l1k=$k >/dev/null 2>&1; done
   m=$(cd "$L" && python3 - "$XB" <<'PY'
 import sys, recfmt, metrics as M
 from recfmt import sub, ln
@@ -238,7 +239,7 @@ PY
   set -- $m
   if python3 -c "import sys; sys.exit(0 if float('$1') > 0.5 and float('$2') < 0.2 else 1)" 2>/dev/null; then ok "miss crossbow READY 0.69 reproduced + modelled: ready grip game-replay median l1k1 $1 dm, l1k0.871 $2 dm"
   else bad "crossbow READY l1 model: median l1k1 '$1' l1k0.871 '$2'"; fi
-  for k in 1 0.86; do "$BLD/kfpvm_l1k" "$W/vmq85a7-sw.txt" /tmp/al-l1ks.txt --quiet --set l1k=$k >/dev/null 2>&1
+  for k in 1 0.86; do rp "$BLD/kfpvm_l1k" "$W/vmq85a7-sw.txt" /tmp/al-l1ks.txt --quiet --set l1k=$k >/dev/null 2>&1
     g=$(python3 "$L/animlab.py" compare "$W/vmq85a7-sw.txt" /tmp/al-l1ks.txt | grep '^GATE' | cut -c1-110)
     case "$k:$g" in "1:GATE FAIL"*|"0.86:GATE PASS"*) ok "sword ready vs game, l1k $k: $g";; *) bad "sword ready vs game, l1k $k: $g";; esac; done
 else echo "REGRESS INFO l1 model: recording or build missing"; fi

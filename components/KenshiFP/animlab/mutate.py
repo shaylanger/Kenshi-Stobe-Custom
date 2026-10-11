@@ -14,7 +14,7 @@ Usage: mutate.py --work <dir with the corpus synced (gate.sh work dir)> [--out D
 Prints one `MUT <id> CAUGHT|MISSED|KNOWN|FIXED|BASEFAIL <check> <detail>` line per mutation and
 `RESULT MUTATIONS PASS|FAIL <caught>/<n> missed=<ids> known=<ids>`.
 """
-import argparse, math, os, shutil, subprocess, sys
+import argparse, json, math, os, shutil, subprocess, sys
 
 L = '/mnt/c/KenshiModding/Kenshi-Automation-Harness/tools/animlab'
 CORPUS = os.environ.get('ANIMLAB_CORPUS', '/mnt/c/KenshiTestRuns/corpus')
@@ -250,6 +250,30 @@ def main():
             src = os.path.join(CORPUS, base)
         if not os.path.exists(src):
             res[mid] = 'BASEFAIL'; print('MUT %s BASEFAIL - base %s missing' % (mid, base)); continue
+        key = mut_key(mid, kind, base, checks, src)
+        hit = cache_get(key)
+        if hit is not None:   # same mutation code, same base material, same check code: the stored verdict (labcache)
+            caught, base_bad, det, names = hit['caught'], hit['base_bad'], hit['det'], hit['names']
+            for vl in hit.get('vlines', []) if a.v else []:
+                print(vl)
+            n_cached[0] += 1
+        else:
+            caught, base_bad, det, names, vlines = run_mut(a, mid, kind, src, edit, checks)
+            cache_put(key, dict(caught=caught, base_bad=base_bad, det=det, names=names, vlines=vlines))
+        if len(base_bad) == len(names): st = 'BASEFAIL'
+        elif caught: st = 'FIXED' if mid in known else 'CAUGHT'
+        else: st = 'KNOWN' if mid in known else 'MISSED'
+        res[mid] = st
+        print('MUT %s %s %s %s' % (mid, st, ','.join(caught) or ('/'.join(names) if checks != 'ALL' else 'any'), ' '.join(det)))
+    n = len(res); c = sum(1 for v in res.values() if v in ('CAUGHT', 'FIXED'))
+    missed = [k for k, v in res.items() if v in ('MISSED', 'BASEFAIL')]; kn = [k for k, v in res.items() if v == 'KNOWN']
+    print('RESULT MUTATIONS %s %d/%d missed=%s known=%s cached=%d' % ('PASS' if not missed else 'FAIL', c, n, ','.join(missed) or 'none', ','.join(kn) or 'none', n_cached[0]))
+    return 0 if not missed else 1
+
+
+def run_mut(a, mid, kind, src, edit, checks):
+    vlines = []
+    if True:
         if kind == 'rec':
             pool = REC_CHECKS; dst = os.path.join(a.out, mid + '.txt')
             open(dst, 'w').write('\n'.join(edit(read_rec(src))))
@@ -270,16 +294,68 @@ def main():
             mv, ml = runc(n, dst)
             det.append('%s=%s' % (n, mv))
             if mv == 'FAIL': caught.append(n)
-            if a.v: print('   %s %s: base %s | mutant %s' % (mid, n, bl[:110], ml[:160]))
-        if len(base_bad) == len(names): st = 'BASEFAIL'
-        elif caught: st = 'FIXED' if mid in known else 'CAUGHT'
-        else: st = 'KNOWN' if mid in known else 'MISSED'
-        res[mid] = st
-        print('MUT %s %s %s %s' % (mid, st, ','.join(caught) or ('/'.join(names) if checks != 'ALL' else 'any'), ' '.join(det)))
-    n = len(res); c = sum(1 for v in res.values() if v in ('CAUGHT', 'FIXED'))
-    missed = [k for k, v in res.items() if v in ('MISSED', 'BASEFAIL')]; kn = [k for k, v in res.items() if v == 'KNOWN']
-    print('RESULT MUTATIONS %s %d/%d missed=%s known=%s' % ('PASS' if not missed else 'FAIL', c, n, ','.join(missed) or 'none', ','.join(kn) or 'none'))
-    return 0 if not missed else 1
+            vl = '   %s %s: base %s | mutant %s' % (mid, n, bl[:110], ml[:160]); vlines.append(vl)
+            if a.v: print(vl)
+    return caught, base_bad, det, list(names), vlines
+
+
+# ---------------- result cache (labcache.py; Shay 2026-10-10 CPU cut) ----------------
+# A mutation's verdict depends only on this file (edits + check wiring), its base material and the code of the checks it
+# runs: rec -> animlab.py/metrics.py/recfmt.py, vid -> frames.py/framecache.py, take -> takecheck.py/frames.py/framecache.py
+# (+ take-rules.txt, ffmpeg version). So a gate reruns only the mutations whose check code or material changed; the KenshiFP
+# source under test plays no part. ANIMLAB_CACHE=0 recomputes all, =verify recomputes and compares.
+sys.path.insert(0, L)
+try:
+    import labcache
+except ImportError:
+    labcache = None
+DEPS = {'rec': ('animlab.py', 'metrics.py', 'recfmt.py', 'labcache.py'), 'vid': ('frames.py', 'framecache.py'),
+        'take': ('takecheck.py', 'frames.py', 'framecache.py')}
+n_cached = [0]
+_ffv = []
+
+
+def mut_key(mid, kind, base, checks, src):
+    if labcache is None:
+        return None
+    if not _ffv:
+        try:
+            _ffv.append(subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, universal_newlines=True).stdout.split(chr(10))[0])
+        except OSError:
+            _ffv.append('')
+    mat = []
+    if os.path.isdir(src):
+        for root, dirs, files in os.walk(src):
+            dirs.sort()
+            mat += [[os.path.relpath(os.path.join(root, f), src), labcache.fhash(os.path.join(root, f))] for f in sorted(files)]
+    else:
+        mat = [labcache.fhash(src)]
+    code = [[d, labcache.fhash(os.path.join(L, d))] for d in DEPS[kind] if os.path.exists(os.path.join(L, d))]
+    return labcache.make_key('mutation', [mid, kind, base, checks, labcache.fhash(os.path.abspath(__file__)), code,
+                                          labcache.fhash(RULES) if os.path.exists(RULES) else '', _ffv[0], mat, labcache.env_part()])
+
+
+def cache_get(key):
+    if key is None or labcache.mode() != '1':
+        return None
+    m = labcache._load(key)
+    if m is None:
+        return None
+    try:
+        return json.loads(m['stdout'])
+    except (KeyError, ValueError):
+        return None
+
+
+def cache_put(key, val):
+    if key is None or labcache.mode() == '0':
+        return
+    if labcache.mode() == 'verify':
+        m = labcache._load(key)
+        if m is not None:
+            labcache._verify(key, m, 0, json.dumps(val, sort_keys=True), '', {})
+        return
+    labcache._store(key, dict(rc=0, stdout=json.dumps(val, sort_keys=True), stderr='', outs=[], what='mutation'), {})
 
 
 if __name__ == '__main__':
