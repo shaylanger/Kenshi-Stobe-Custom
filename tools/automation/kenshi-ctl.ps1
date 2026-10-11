@@ -332,7 +332,7 @@ public static class KenshiTop {
 # launch-time topmost only while takes record with gdigrab (screen area); window capture (wgc) needs no topmost
 function OnTop-IfGdi {
   # instance n >= 2 = a non-filming lane (5090b/5090c): never topmost (93-fastswap-bench-i2 1011-1447 pinned lane B over DISPLAY2)
-  if ($Inst -ge 2) { return "ontop: skipped (instance $Inst does not film)" }
+  if ($Inst -ge 2 -and $env:KAH_LANE_FILM -ne '1') { return "ontop: skipped (instance $Inst does not film)" }   # KAH_LANE_FILM=1: lane 5090b in film mode
   $m = $env:KAH_CAPTURE; if (-not $m -and (Test-Path 'C:\KenshiTestRuns\capture.default')) { $m = (Get-Content 'C:\KenshiTestRuns\capture.default' -TotalCount 1).Trim() }
   if ($m -eq 'wgc') { return "ontop: skipped (capture=wgc)" }
   @(Set-OnTop on)[0]

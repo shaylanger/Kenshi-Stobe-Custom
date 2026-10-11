@@ -42,18 +42,27 @@ Files: runner\<lane>.{pid,log,state,cur,stopped,restart}; ALERT-<lane>-tdr.txt.
 #>
 param([switch]$SelfTest, [switch]$Fake, [ValidateSet('5090b', '5090c')][string]$Lane = '5090b', [int]$TickSec = 30, [int]$MinGpuMB = 6144,
       [int]$MinRamMB = 7168, [int]$HoldRamMB = 4096, [int]$KillRamMB = 2048, [int]$MaxCpuPct = 85, [int]$Fps = 30,
-      [int]$StallMin = 10, [int]$IdleStopMin = 5, [int]$SlotPitch = 0,
+      [int]$StallMin = 10, [int]$IdleStopMin = 5, [int]$SlotPitch = 0, [int]$FilmAfterMin = 2, [string]$FilmMode = '1600 x 900',
       [string]$VideoMode = '1024 x 768', [string]$Monitor = 'DISPLAY2')   # extra lanes: small windows side by side on DISPLAY2 (lane A films on DISPLAY1, Shay 14:28/14:31)
 # lane table: instance (D:\KenshiInst\<n>), window slot on $Monitor, CPU admission (a third game only while the CPU has room)
-$Lanes = [ordered]@{ '5090b' = @{ Inst = 2; Slot = 0; Cpu = $false }; '5090c' = @{ Inst = 3; Slot = 1; Cpu = $true } }
+$Lanes = [ordered]@{ '5090b' = @{ Inst = 2; Slot = 0; Cpu = $false; Film = $true }; '5090c' = @{ Inst = 3; Slot = 1; Cpu = $true; Film = $true } }
+# film mode (Shay 15:20 "if we run out of lower graphics work, stop lane 3 and make lane 2 higher graphics"): a Film lane
+# with no gfx-low work for $FilmAfterMin min takes filming lists (full gfx, $FilmMode, topmost on its own screen spot) from
+# queue\5090 / any; an idle lane stops its game while another films; gfx-low work always comes first again. Takes record
+# with Windows Graphics Capture (capture.default = wgc, capture-fix 15:25: covered windows film fine), so filming lanes may
+# overlap and are pinned topmost only under gdigrab. A lane's first filming list (per lane, until it passes) starts with a
+# CAPPROOF row (capture-proof.sh on the lane's own window); CAPPROOF FAIL = no more film mode on that lane (note to coordinator).
 $Inst = $Lanes[$Lane].Inst; $Slot = $Lanes[$Lane].Slot
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 
 # ---------------------------------------------------------------- pure rules (-SelfTest)
 function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
-function LaneReject([string[]]$lines) {   # $null = the lane may run this list, else why not
-    $g = @($lines | Where-Object { $_ -match '^\s*#\s*gfx:\s*(\S+)' } | ForEach-Object { $Matches[1].ToLower() } | Select-Object -First 1)
-    if (-not $g -or $g[0] -ne 'low') { return 'not "# gfx: low" (filming/full-gfx lists stay on lane 1)' }
+function CapMode { $m = "$((Get-Content 'C:\KenshiTestRuns\capture.default' -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if ($env:KAH_CAPTURE) { $m = $env:KAH_CAPTURE }; if ($m) { $m } else { 'gdigrab' } }
+function Pin { [bool]$script:film -and (CapMode) -ne 'wgc' }   # topmost only while filming with gdigrab (screen area)
+function LaneGfx([string[]]$lines) { $g = @($lines | Where-Object { $_ -match '^\s*#\s*gfx:\s*(\S+)' } | ForEach-Object { $Matches[1].ToLower() } | Select-Object -First 1); if ($g -and $g[0] -eq 'low') { 'low' } else { 'full' } }
+function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the lane may run this list, else why not ($film: a filming lane in film mode)
+    if ($lines -match '^\s*#\s*rig:\s*4080') { return '"# rig: 4080" list' }
+    if (-not $film -and (LaneGfx $lines) -ne 'low') { return 'not "# gfx: low" (filming/full-gfx lists stay on lane 1)' }
     $rows = LaneRows $lines
     if (-not $rows.Count) { return 'no rows' }
     foreach ($r in $rows) {
@@ -73,6 +82,13 @@ function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr, [int]$cpuPct = 
 }
 # memory guard decision for lane $me. $act = @{ lane = @{ Active = bool; Held = bool } } of every lane in $Lanes.
 # returns 'hold' | 'release' | 'kill' | '' (nothing). Higher instance gives way first; lower instance resumes first.
+# filler list skip rule for a lane: $null = may claim, else why not ($q = its filler-rotation.tsv row, $running = names in queue\running)
+function FillerSkip([string]$name, [string[]]$lines, $q, [string[]]$running, [datetime]$now) {
+    $w = LaneReject $lines; if ($w) { return $w }
+    if ($q -and $q.Count -ge 4 -and $q[3] -and ([datetime]$q[3]) -gt $now) { return "benched until $($q[3])" }
+    if (@($running | Where-Object { $_ -like "*__filler__$name" }).Count) { return 'running on another lane/rig' }
+    $null
+}
 function MemGuardAct([string]$me, [int]$ramFreeMB, $act) {
     $mi = $Lanes[$me].Inst; $a = $act[$me]; if (-not $a -or -not $a.Active) { return '' }
     $higher = @($Lanes.Keys | Where-Object { $Lanes[$_].Inst -gt $mi -and $act[$_] -and $act[$_].Active })
@@ -99,7 +115,11 @@ if ($SelfTest) {
         @('stobe row', @($low, 'S1 | s | a | b | 1 | bash {CR}/KenshiModding/tests/ingame/stobe/STOBE-X.sh'), 'Stobe row'),
         @('save name + WS_NOXBOW guard are not crossbow work', @($low, 'W | kah-fpxbow | a | b | 1 | WS_NOXBOW=1 PF_SAVE=kah-fpxbow bash x/fp-weapon-sweep.sh'), '')
     )
-    foreach ($c in $cases) { $n++; $g = [string](LaneReject $c[1]); $ok = if ($c[2]) { $g -like "$($c[2])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 list $($c[0]): got '$g'" }
+    $cases += ,@('film lane takes a filming list', @('# gfx: full', 'F | s | a | b | 1 | bash x/fp-control.sh'), '', $true)
+    $cases += ,@('film lane: crossbow guard still on', @('# gfx: full', 'F | s | a | b | 1 | bash x/fp-xbow-take.sh'), 'crossbow guard', $true)
+    $cases += ,@('film lane: never a 4080 list', @('# gfx: full', '# rig: 4080', 'F | s | a | b | 1 | bash x/fp-control.sh'), '"# rig: 4080"', $true)
+    $cases += ,@('low lane: never a 4080 list', @($low, '# rig: 4080', 'F | s | a | b | 1 | bash x/fp-control.sh'), '"# rig: 4080"')
+    foreach ($c in $cases) { $n++; $g = [string](LaneReject $c[1] ([bool]($c.Count -ge 4 -and $c[3]))); $ok = if ($c[2]) { $g -like "$($c[2])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 list $($c[0]): got '$g'" }
     $ad = @(@(20000, 20000, $false, -1, ''), @(5000, 20000, $false, -1, 'GPU'), @(20000, 6000, $false, -1, 'RAM'), @(20000, 7500, $false, -1, ''), @(20000, 20000, $true, -1, 'TDR'),
             @(20000, 20000, $false, 50, ''), @(20000, 20000, $false, 90, 'CPU'))
     foreach ($a in $ad) { $n++; $g = [string](LaneAdmit $a[0] $a[1] $a[2] $a[3]); $ok = if ($a[4]) { $g -like "$($a[4])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 admit gpu=$($a[0]) ram=$($a[1]) tdr=$($a[2]) cpu=$($a[3]): got '$g'" }
@@ -107,6 +127,21 @@ if ($SelfTest) {
     $n++; $ins = @($Lanes.Values | ForEach-Object { $_.Inst }); $sl = @($Lanes.Values | ForEach-Object { $_.Slot })
     $ok = (@($ins | Select-Object -Unique).Count -eq $ins.Count) -and (@($sl | Select-Object -Unique).Count -eq $sl.Count) -and -not @($ins | Where-Object { $_ -lt 2 }).Count -and $Lanes['5090b'].Inst -eq 2 -and $Lanes['5090c'].Inst -eq 3 -and $Lanes['5090c'].Cpu
     if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane table: $(($Lanes.Keys | ForEach-Object { "$_=i$($Lanes[$_].Inst)/slot$($Lanes[$_].Slot)" }) -join ' ')"
+    # filler pick (coordinator 15:15: lanes idled while queue\filler had gfx-low lists): skip rule + one lane per list
+    $fr = @(
+        @('gfx-low filler free', 'rg-04.list', @($low, 'M | s | a | b | 1 | bash x/fp-manual-melee.sh'), $null, @(), ''),
+        @('filming filler', 'rg-01.list', @('M | s | a | b | 1 | bash x/fp-control.sh'), $null, @(), 'not "# gfx: low"'),
+        @('crossbow filler', 'rg-03.list', @($low, 'R | s | a | b | 1 | bash x/fp-ranged.sh'), $null, @(), 'crossbow guard'),
+        @('benched filler', 'rg-04.list', @($low, 'M | s | a | b | 1 | bash x/m.sh'), @('rg-04.list', 'x', '5090', '2099-01-01T00:00:00', 'dry run FAIL'), @(), 'benched'),
+        @('bench expired', 'rg-04.list', @($low, 'M | s | a | b | 1 | bash x/m.sh'), @('rg-04.list', 'x', '5090', '2000-01-01T00:00:00', 'old'), @(), ''),
+        @('lane A runs it', 'rg-04.list', @($low, 'M | s | a | b | 1 | bash x/m.sh'), $null, @('5090__filler__rg-04.list'), 'running'),
+        @('lane 5090c runs it', 'rg-04.list', @($low, 'M | s | a | b | 1 | bash x/m.sh'), $null, @('5090c__filler__rg-04.list'), 'running'),
+        @('other filler running only', 'rg-04.list', @($low, 'M | s | a | b | 1 | bash x/m.sh'), $null, @('5090b__filler__rg-02.list'), '')
+    )
+    foreach ($c in $fr) { $n++; $g = [string](FillerSkip $c[1] $c[2] $c[3] $c[4] (Get-Date)); $ok = if ($c[5]) { $g -like "$($c[5])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) filler $($c[0]): got '$g'" }
+    $n++; $tf = Join-Path $env:TEMP "lane2-claim-$PID"; Remove-Item $tf -ErrorAction SilentlyContinue; $w = 0
+    foreach ($i in 1, 2) { try { $fs = [IO.File]::Open($tf, 'CreateNew', 'Write', 'None'); $fs.Close(); $w++ } catch { } }
+    Remove-Item $tf -ErrorAction SilentlyContinue; $ok = $w -eq 1; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) filler claim: two lanes claim one list, $w win(s)"
     # memory guard: which lane holds / releases / is killed (B = 5090b, C = 5090c; a = active, h = held)
     function A([bool]$ba, [bool]$bh, [bool]$ca, [bool]$ch) { @{ '5090b' = @{ Active = $ba; Held = $bh }; '5090c' = @{ Active = $ca; Held = $ch } } }
     $mg = @(
@@ -152,7 +187,8 @@ function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | Fo
 function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
 function K2Procs { @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$K2\*" }) }
 function Ctl2([string[]]$a) {   # workspace kenshi-ctl.ps1 on instance $Inst as runner-<lane>
-    $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = 'low'; $env:KAH_VIDEO_MODE = $VideoMode; $env:KENSHI_MONITOR = $Monitor; $env:KAH_FPS = "$Fps"
+    $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = $(if ($script:film) { 'full' } else { 'low' }); $env:KAH_VIDEO_MODE = $VideoMode; $env:KENSHI_MONITOR = $Monitor; $env:KAH_FPS = "$(if ($script:film) { 60 } else { $Fps })"
+    if ($script:film) { $env:KAH_LANE_FILM = '1' } else { Remove-Item env:KAH_LANE_FILM -ErrorAction SilentlyContinue }
     try { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" @a 2>&1 | ForEach-Object { "$_" } } finally { Remove-Item env:KAH_INSTANCE, env:KAH_GFX, env:KAH_VIDEO_MODE, env:KENSHI_MONITOR, env:KAH_FPS -ErrorAction SilentlyContinue }
 }
 function Stop2([string]$why) { if (K2Procs) { $o = Ctl2 @('stop'); Log "instance $Inst stopped ($why): $(($o | Select-Object -Last 1))"; if (K2Procs) { foreach ($k in K2Procs) { & taskkill.exe /F /T /PID $k.Id 2>&1 | Out-Null }; Log "instance $Inst force-killed" } } }
@@ -175,7 +211,7 @@ function LaneActs {
     $r
 }
 # frame cap of this lane's copy (harness rereads framecap.txt every second): $Fps, written only when different
-function CapFps { if ($Fps -gt 0) { $cf = "$K2\mods\AutomationHarness\framecap.txt"; if ((Test-Path (Split-Path $cf)) -and "$((Get-Content $cf -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -ne "$Fps") { Set-Content $cf "$Fps" -Encoding Ascii; Log "framecap $Fps written ($cf)" } } }
+function CapFps { $Fps = if ($script:film) { 60 } else { $Fps }; if ($Fps -gt 0) { $cf = "$K2\mods\AutomationHarness\framecap.txt"; if ((Test-Path (Split-Path $cf)) -and "$((Get-Content $cf -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -ne "$Fps") { Set-Content $cf "$Fps" -Encoding Ascii; Log "framecap $Fps written ($cf)" } } }
 # window: DISPLAY2.left + slot*pitch, top; HWND_NOTOPMOST, no activate; shrink to the video mode if far larger; never on
 # the primary screen (the Samsung, Shay 14:31). Physical pixels (per-monitor DPI v2 thread).
 if (-not ('LaneWin' -as [type])) {
@@ -193,7 +229,7 @@ public static class LaneWin {
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
   [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
-  public static string Place(IntPtr h, string dev, int slot, int pitch, int cw, int ch) {
+  public static string Place(IntPtr h, string dev, int slot, int pitch, int cw, int ch, bool pin) {
     IntPtr old = IntPtr.Zero; try { old = SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch (EntryPointNotFoundException) { }
     try {
       MI found = new MI(); bool ok = false; string want = @"\\.\" + dev.ToUpper();
@@ -208,10 +244,10 @@ public static class LaneWin {
       int x = found.mon.L + slot * (pitch > 0 ? pitch : ww + 10), y = found.mon.T;
       if (x + ww > found.mon.R || y + wh > found.mon.B) return "place: no room for slot " + slot + " (" + ww + "x" + wh + " at " + x + " on " + dev + "): left where it is";
       bool top = (GetWindowLong(h, -20) & 0x8) != 0;
-      if (w.L == x && w.T == y && !big && !top) return "ok";
+      if (w.L == x && w.T == y && !big && top == pin) return "ok";
       uint fl = 0x10 | 0x200 | (big ? 0u : 0x1u);   // NOACTIVATE | NOOWNERZORDER | (NOSIZE unless shrinking)
-      SetWindowPos(h, new IntPtr(-2), x, y, cw + bw, ch + bh, fl);
-      return "placed at " + x + "," + y + (big ? " shrunk from client " + (c.R - c.L) + "x" + (c.B - c.T) + " to " + cw + "x" + ch : "") + (top ? " (was topmost)" : "");
+      SetWindowPos(h, new IntPtr(pin ? -1 : -2), x, y, cw + bw, ch + bh, fl);   // filming lane: topmost (gdigrab films the screen area)
+      return "placed at " + x + "," + y + (big ? " shrunk from client " + (c.R - c.L) + "x" + (c.B - c.T) + " to " + cw + "x" + ch : "") + (top != pin ? (pin ? " (pinned topmost: filming)" : " (was topmost)") : "");
     } finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
   }
 }
@@ -219,11 +255,11 @@ public static class LaneWin {
 }
 function PlaceWin {
     $k = K2Procs | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if (-not $k) { return }
-    $vm = [regex]::Match($VideoMode, '(\d+)\s*x\s*(\d+)'); if (-not $vm.Success) { return }
-    $r = [LaneWin]::Place($k.MainWindowHandle, $Monitor, $Slot, $SlotPitch, [int]$vm.Groups[1].Value, [int]$vm.Groups[2].Value)
+    $vm = [regex]::Match($(if ($script:film) { $FilmMode } else { $VideoMode }), '(\d+)\s*x\s*(\d+)'); if (-not $vm.Success) { return }
+    $r = [LaneWin]::Place($k.MainWindowHandle, $Monitor, $(if ($script:film) { 0 } else { $Slot }), $SlotPitch, [int]$vm.Groups[1].Value, [int]$vm.Groups[2].Value, (Pin))
     if ($r -ne 'ok' -and $r -ne $script:lastPlace) { Log "window: $r" }; $script:lastPlace = $r
 }
-$script:lastPlace = ''
+$script:lastPlace = ''; $script:film = $false
 function TdrEvents([long]$since) {
     $s = [DateTimeOffset]::FromUnixTimeSeconds($since).LocalDateTime
     @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = 4101, 153; StartTime = $s } -ErrorAction SilentlyContinue | ForEach-Object { '{0}|{1}|{2}|{3}' -f ([DateTimeOffset]$_.TimeCreated).ToUnixTimeSeconds(), $_.ProviderName, $_.Id, (([string]$_.Message -replace '\s+', ' ') -replace '\|', '/') })
@@ -237,7 +273,7 @@ function Fail([string]$path, [string]$name, [string]$own, [string]$why) {
     Set-Content "$dst.result" "FAILED $Lane $(Get-Date -Format s) $why"; Log "FAILED $name : $why"
     Note $own "list $name NOT run on lane $Lane ($why); $dst.result."
 }
-function Retitle { if (K2Procs) { $o = Ctl2 @('retitle'); if ("$o" -match 'set') { Log "$o"; $t = Ctl2 @('ontop', 'off'); Log "lane B window not pinned: $t" } } }   # lane B = non-filming: never topmost
+function Retitle { if (K2Procs) { $o = Ctl2 @('retitle'); if ("$o" -match 'set') { Log "$o"; $t = Ctl2 @('ontop', $(if (Pin) { 'on' } else { 'off' })); Log "lane $Lane window $(if (Pin) { 'pinned (filming, gdigrab)' } else { 'not pinned' }): $t" } } }   # topmost only while filming
 function TdrStop([string]$m, [string]$out) {
     Set-Content $tdrF @("ALERT $Lane $(Get-Date -Format HH:mm) $m", "Lane $Lane stopped (instance $Inst). A TDR is a crash warning (2026-10-11 BSOD). Delete only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Lane.")
     if ($out) { Set-Content (Join-Path $out 'PREEMPT') 'TDR' -ErrorAction SilentlyContinue }
@@ -245,7 +281,47 @@ function TdrStop([string]$m, [string]$out) {
     Set-Content $stopF "$(Get-Date -Format s) by TDR guard: $m"; State "STOPPED TDR: $m"; Remove-Item (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue; exit 0
 }
 
+# steal the first list from queue\5090 then queue\any that this lane may run ($film = filming lists, not gfx-low ones)
+function StealList([bool]$film) {
+    foreach ($src in "$qd\5090", "$qd\any") {
+        $c = @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Where-Object { $t = @(Get-Content $_.FullName); -not (LaneReject $t $film) -and ($film -eq ((LaneGfx $t) -ne 'low')) }) | Select-Object -First 1
+        if ($c) { try { Move-Item -LiteralPath $c.FullName (Join-Path "$qd\$Lane" $c.Name) -ErrorAction Stop; Log "STEAL $(if ($film) { 'FILM ' })$($c.Name) from $src (own folder empty$(if ($film) { ", no gfx-low work $FilmAfterMin min" }))"; return Get-Item (Join-Path "$qd\$Lane" $c.Name) } catch { } }
+    }
+    $null
+}
+# a gfx-low filler list with changed rows (rig-runner.ps1 -FillerRows: same ledger as lane A; cached 5 min per list), not
+# benched, not running anywhere: claimed by creating running\<lane>__filler__<name> (CreateNew: one lane wins)
+$script:fillCache = @{}
+function PickFiller {
+    $rot = @{}; foreach ($l in @(Get-Content (Join-Path $rd 'filler-rotation.tsv') -ErrorAction SilentlyContinue)) { $q = @($l -split "`t"); if ($q[0]) { $rot[$q[0]] = $q } }
+    foreach ($fl in @(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue | QSort)) {
+        $t = @(Get-Content $fl.FullName)
+        if (FillerSkip $fl.Name $t $rot[$fl.Name] @(Get-ChildItem "$qd\running" -File -ErrorAction SilentlyContinue | ForEach-Object Name) (Get-Date)) { continue }
+        $c = $script:fillCache[$fl.Name]
+        if (-not $c -or ((Get-Date) - $c.At).TotalMinutes -ge 5 -or $c.Stamp -ne $fl.LastWriteTimeUtc.Ticks) {
+            $o = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-runner.ps1" -Rig 5090 -FillerRows $fl.FullName 2>&1 | ForEach-Object { "$_" })
+            $c = @{ At = Get-Date; Stamp = $fl.LastWriteTimeUtc.Ticks; Build = @($o | Where-Object { $_ -like "#build`t*" } | Select-Object -First 1); Rows = @($o | Where-Object { $_ -like "ROW`t*" }) }
+            $script:fillCache[$fl.Name] = $c
+        }
+        if (-not $c.Rows.Count -or -not $c.Build.Count) { continue }
+        $run = Join-Path "$qd\running" "${Lane}__filler__$($fl.Name)"
+        try { $fs = [IO.File]::Open($run, 'CreateNew', 'Write', 'None'); $fs.Close() } catch { continue }
+        $rows = @($c.Rows | ForEach-Object { ($_ -split "`t", 3)[2] })
+        Set-Content $run (@($t | Where-Object { $_ -match '^\s*(#|$)' }) + $rows)
+        $meta = @($c.Build[0]) + @($c.Rows | ForEach-Object { $q = $_ -split "`t", 3; "$(($q[2] -split '\|')[0].Trim())`t$($q[1])" })
+        $script:fillCache.Remove($fl.Name)
+        Log "FILLER $($fl.Name) claimed: $($rows.Count) changed row(s) ($((@($rows | ForEach-Object { ($_ -split '\|')[0].Trim() })) -join ', '))"
+        return @{ Run = $run; Name = $fl.Name; Meta = $meta }
+    }
+    $null
+}
+# another lane is filming now (its .gfx says full and it has a batch): an idle lane stops its game to give it the PC
+function OtherLaneFilming { foreach ($l in $Lanes.Keys) { if ($l -ne $Lane -and (Test-Path (Join-Path $rd "$l.cur")) -and "$((Get-Content (Join-Path $rd "$l.gfx") -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -eq 'full') { return $true } }; $false }
+
 Log "lane $Lane up pid=$PID"
+$noLowSince = $null
+# re-adopt: a running batch of this lane keeps its mode (runner\<lane>.gfx = full while it films)
+$script:film = (Test-Path $curF) -and "$((Get-Content (Join-Path $rd "$Lane.gfx") -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -eq 'full'
 $idleSince = Get-Date; $stall = $null
 while ($true) {
     if (Test-Path $stopF) { Log 'stopped flag: exit'; Remove-Item (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue; exit 0 }
@@ -269,9 +345,12 @@ while ($true) {
             Remove-Item $holdF -ErrorAction SilentlyContinue
             $sum = Join-Path $outW 'SUMMARY.txt'; $sl = if (Test-Path $sum) { @(Get-Content $sum) } else { @() }
             $p = @($sl | Where-Object { $_ -match '^RESULT \S+ PASS' }).Count; $f = @($sl | Where-Object { $_ -match '^RESULT \S+ FAIL' }).Count
+            if ((Split-Path $cur[0] -Leaf) -like '*__filler__*') { $lg = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-runner.ps1" -Rig 5090 -LedgerFrom $outW -LedgerList $name 2>&1 | ForEach-Object { "$_" }); Log "ledger: $($lg | Select-Object -Last 1)" }
             $dst = Join-Path "$qd\done" $name; Move-Item -LiteralPath $cur[0] $dst -Force -ErrorAction SilentlyContinue
             if (Test-Path $sum) { Copy-Item $sum "$dst.SUMMARY.txt" -Force }
             Set-Content "$dst.result" "DONE $Lane start=$([DateTimeOffset]::FromUnixTimeSeconds($t0).LocalDateTime.ToString('s')) end=$(Get-Date -Format s) out=$outW pass=$p fail=$f summary=$dst.SUMMARY.txt"
+            $cp = @($sl | Where-Object { $_ -match '^RESULT CAPPROOF (PASS|FAIL)' } | Select-Object -Last 1)
+            if ($cp) { Set-Content (Join-Path $rd "$Lane.capproof") "$($Matches[1]) $(Get-Date -Format s) $outW"; if ($cp[0] -match 'FAIL') { Note 'coordinator' "lane $Lane CAPPROOF FAIL ($outW): film mode off for this lane until $Lane.capproof is deleted" } }
             Log "DONE $name pass=$p fail=$f"; Note $own "lane $Lane finished $name : pass=$p fail=$f, $dst.SUMMARY.txt"
             Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; $idleSince = Get-Date; $stall = $null; continue
         }
@@ -288,26 +367,33 @@ while ($true) {
         Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$auto\rig-runner.ps1", '-Rig', $Lane); Log 'restart: re-spawned'; exit 0
     }
     if ((Test-Path $tdr1) -or (Test-Path $tdrF)) { Stop2 'TDR alert'; State "waiting: TDR alert present (no instance $Inst launch)"; Start-Sleep $TickSec; continue }
+    # pick (lane-5090c 2026-10-11): own folder head; else the first gfx-low list from queue\5090 then queue\any (coordinator
+    # 14:35: no lane idles while another has a backlog; moved into queue\<lane> first: one rename, lane A can't take it too);
+    # else a gfx-low filler list with rows changed since their last PASS (rig-runner.ps1 ledger; claimed as
+    # running\<lane>__filler__<name>, so lane A and the other lanes skip it); else, on a Film lane after $FilmAfterMin min with
+    # none of that, a filming list from queue\5090 / any (film mode). Only while instance $Inst may run now.
     $f = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
-    # own folder empty: take the first lane-eligible list (gfx low, crossbow guard, no Stobe, no "# rig: 4080") from queue\5090
-    # then queue\any (coordinator 14:35: no lane idles while the other has a backlog), only if instance $Inst may run now; the
-    # list is first moved into queue\<lane> (one rename: lane A can't take it at the same time)
-    if (-not $f -and ((K2Procs) -or -not (LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 3)))) {
-        foreach ($src in "$qd\5090", "$qd\any") {
-            $c = @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Where-Object { $t = @(Get-Content $_.FullName); -not (LaneReject $t) -and -not ($t -match '^\s*#\s*rig:\s*4080') }) | Select-Object -First 1
-            if ($c) { try { Move-Item -LiteralPath $c.FullName (Join-Path "$qd\$Lane" $c.Name) -ErrorAction Stop; Log "STEAL $($c.Name) from $src (lane $Lane eligible, own folder empty)"; $f = Get-Item (Join-Path "$qd\$Lane" $c.Name); break } catch { } }
-        }
-    }
-    if (-not $f) {
+    $fill = $null; $film = $false
+    $admit = (K2Procs) -or -not (LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 3))
+    if (-not $f -and $admit) { $f = StealList $false }
+    if (-not $f -and $admit) { $fill = PickFiller }
+    if ($f -or $fill) { $noLowSince = $null } elseif (-not $noLowSince) { $noLowSince = Get-Date }
+    if (-not $f -and -not $fill -and $admit -and $Lanes[$Lane].Film -and "$((Get-Content (Join-Path $rd "$Lane.capproof") -TotalCount 1 -ErrorAction SilentlyContinue))" -notlike 'FAIL*' -and ((Get-Date) - $noLowSince).TotalMinutes -ge $FilmAfterMin) { $f = StealList $true }
+    if (-not $f -and -not $fill) {
         if ((K2Procs) -and (RamFreeMB) -lt $HoldRamMB) { Stop2 "idle and RAM free $(RamFreeMB) MB < $HoldRamMB" }
+        if ((K2Procs) -and (OtherLaneFilming)) { Stop2 'idle while lane 5090b films (Shay 15:20: stop lane 3 for it)' }
         if ((K2Procs) -and ((Get-Date) - $idleSince).TotalMinutes -ge $IdleStopMin) { Stop2 "queue empty $IdleStopMin min" }
-        State "idle: queue\$Lane empty$(if (K2Procs) { " (instance $Inst up)" })"; Start-Sleep $TickSec; continue
+        State "idle: no work for lane $Lane (own folder, queue\5090/any gfx-low, changed filler$(if ($Lanes[$Lane].Film) { ', filming after ' + $FilmAfterMin + ' min' }))$(if (K2Procs) { " (instance $Inst up)" })"; Start-Sleep $TickSec; continue
     }
-    $txt = @(Get-Content $f.FullName); $name = $f.Name
+    if ($fill) { $runPre = $fill.Run; $name = $fill.Name; $txt = @(Get-Content $runPre) } else { $runPre = $null; $txt = @(Get-Content $f.FullName); $name = $f.Name }
     $own = @($txt | Where-Object { $_ -match '^\s*#\s*owner:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1); $own = if ($own) { $own[0] } else { 'coordinator' }
-    $why = LaneReject $txt; if ($why) { Fail $f.FullName $name $own $why; continue }
+    $film = $Lanes[$Lane].Film -and (LaneGfx $txt) -ne 'low'
+    $why = LaneReject $txt $film; if ($why) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue; Log "filler $name not eligible: $why" } else { Fail $f.FullName $name $own $why }; continue }
+    $script:film = $film
     $up = [bool](K2Procs)
-    if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 30); if ($why) { State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
+    $gfxF = Join-Path $rd "$Lane.gfx"; $want = if ($film) { 'full' } else { 'low' }
+    if ($up -and "$((Get-Content $gfxF -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -ne $want) { Stop2 "gfx switch to $want"; $up = $false }
+    if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 30); if ($why) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue }; State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
     $launch = @($txt | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
     $launch = if ($launch) { $launch[0] } else { ((LaneRows $txt)[0] -split '\|')[1].Trim() }
     # every kah-* test save, not only the list's header one (Shay 2026-10-11: all lanes can use all saves at the same time).
@@ -318,24 +404,29 @@ while ($true) {
     if (-not $up) {
         $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" sync -Instance $Inst -Saves ($saves -join ',') 2>&1 | ForEach-Object { "$_" })
         Log "sync: $(($sy | Select-Object -Last 2) -join ' / ')"
-        if (-not ($sy -match "save $launch ->")) { Fail $f.FullName $name $own "instance $Inst sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; continue }
+        if (-not ($sy -match "save $launch ->")) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue; Log "filler $name : sync failed"; continue }; Fail $f.FullName $name $own "instance $Inst sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; continue }
     } else {
         $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" save ($saves -join ',') -Instance $Inst 2>&1 | ForEach-Object { "$_" }); Log "save copy: $(($sy | Select-Object -Last 1))"
     }
     $outN = @($txt | Where-Object { $_ -match '^\s*#\s*out:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
-    $outN = if ($outN) { "$($outN[0])-i$Inst" } else { "$($f.BaseName)-i$Inst-$(Get-Date -Format MMdd-HHmm)" }
+    $outN = if ($outN) { "$($outN[0])-i$Inst$(if ($fill) { '-' + (Get-Date -Format MMdd-HHmm) })" } else { "$([IO.Path]::GetFileNameWithoutExtension($name))-i$Inst-$(Get-Date -Format MMdd-HHmm)" }
     $outW = Join-Path $runs $outN; $outP = WslPath $outW; New-Item -ItemType Directory -Force $outW | Out-Null
-    $run = Join-Path "$qd\running" "${Lane}__$name"; Move-Item -LiteralPath $f.FullName $run -Force
-    Set-Content (Join-Path $outW 'list.txt') ((Get-Content $run) -replace '\{CR\}', '/mnt/c');   # {CR} = /mnt/c (as rig-runner.ps1 does)
+    if ($fill) { $run = $runPre; Set-Content (Join-Path $outW 'rowmeta.tsv') $fill.Meta } else { $run = Join-Path "$qd\running" "${Lane}__$name"; Move-Item -LiteralPath $f.FullName $run -Force }
+    Set-Content $gfxF $want
+    $capF = Join-Path $rd "$Lane.capproof"; $capS = "$((Get-Content $capF -TotalCount 1 -ErrorAction SilentlyContinue))"
+    $ll = @(Get-Content $run)
+    if ($film -and $capS -notlike 'PASS*') { $ll = @($ll | Where-Object { $_ -match '^\s*(#|$)' }) + @("CAPPROOF | kah-fpstudio | Axima | Malzin | 300 | bash {CR}/KenshiModding/tools/automation/capture-proof.sh {OUT}/capproof 3") + @(LaneRows $ll); Log "film: CAPPROOF row first (lane window never proven yet)" }
+    Set-Content (Join-Path $outW 'list.txt') ($ll -replace '\{CR\}', '/mnt/c');   # {CR} = /mnt/c (as rig-runner.ps1 does)
     Set-Content (Join-Path $outW '.instance') "$Inst"
     Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
     $rl = if ($up) { '--reuse ' } else { '' }
-    $st = "#!/bin/bash`nexport KAH_OWNER=$owner KAH_GFX=low KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' KAH_VIDEO_MODE='$VideoMode' KENSHI_MONITOR=$Monitor KAH_FPS=$Fps WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE:KAH_VIDEO_MODE:KENSHI_MONITOR:KAH_FPS`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
+    $ev = if ($film) { "KAH_GFX=full KAH_FPS=60 KAH_LANE_FILM=1" } else { "KAH_GFX=low KAH_VIDEO_MODE='$VideoMode' KAH_FPS=$Fps" }
+    $st = "#!/bin/bash`nexport KAH_OWNER=$owner $ev KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' KENSHI_MONITOR=$Monitor WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE:KAH_VIDEO_MODE:KENSHI_MONITOR:KAH_FPS:KAH_LANE_FILM`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
     [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
     $t0 = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     Set-Content $curF @($run, $outW, $t0, $own, (Get-Date -Format s), $name); Set-Content (Join-Path $runs "inflight\runner-$Lane") $outP
     Wsl @('bash', "$outP/.start.sh") | Out-Null
-    Log "START $name -> $outW (launch $launch$(if ($up) { ', reuse' }), gpu free $(GpuFreeMB) MB, ram free $(RamFreeMB) MB)"; Note $own "lane $Lane started $name : out=$outW"
+    Log "START $(if ($fill) { 'FILLER ' })$(if ($film) { 'FILM ' })$name -> $outW (launch $launch$(if ($up) { ', reuse' }), gpu free $(GpuFreeMB) MB, ram free $(RamFreeMB) MB)"; Note $own "lane $Lane started $name : out=$outW"
     State "running $name -> $outW (launching instance $Inst)"
     # retitle as soon as instance $Inst has a window (lane 1 filming captures by exact title), up to 4 min
     for ($i = 0; $i -lt 80 -and -not (Test-Path (Join-Path $outW 'DONE')); $i++) { $k = K2Procs | Where-Object { $_.MainWindowHandle -ne 0 }; if ($k) { Retitle; PlaceWin; if ((Ctl2 @('retitle')) -match 'ok') { break } }; Start-Sleep 3 }
