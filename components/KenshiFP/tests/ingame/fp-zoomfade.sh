@@ -64,6 +64,10 @@ pf_open 2                                                                  # zoo
 A fp_camera bandhide "$BH" >/dev/null; zoom 0 >/dev/null
 # ---- take: one sweep per state, rec dumped in chunks of $CHUNK steps (recorder holds 6000 frames)
 printf 'state\td\tapplied\tzf\tband_hidden\tvm_state\n' > "$N.steps.tsv"; CK=""
+# screenshot, waited for (bounded 3 s) and retaken once: zf1-swing d=17 (93-z1-zoomfade) left a grey sheet tile
+shot(){ local e; rm -f "$SHOTS/$1.png"; for _ in 1 2; do A screenshot "$1" >/dev/null; e=$((SECONDS+3))
+  while [ ! -s "$SHOTS/$1.png" ] && [ $SECONDS -lt $e ]; do sleep 0.2; done; [ -s "$SHOTS/$1.png" ] && return 0; done
+  echo "shot $1 missing" >> "$N.steps.err"; }
 dump(){ local f="vmrec-zf-$N-$1-c$2.txt"; A fp_vm rec off >/dev/null; rm -f "$KDIR/$f"; A fp_vm rec dump "$f" >/dev/null
   local e=$((SECONDS+6)); while [ ! -s "$KDIR/$f" ] && [ $SECONDS -lt $e ]; do sleep 0.3; done
   cp "$KDIR/$f" "$N-$1-c$2.vmrec.txt" 2>/dev/null && rm -f "$KDIR/$f" && echo "$N-$1-c$2.vmrec.txt"; }
@@ -79,7 +83,7 @@ for S in $STATES; do
     i=$((i+1)); ap=$(zoom "$d")
     if [ $S = swing ]; then waitst ready 4; A fp_keys press lmb 60 >/dev/null; sleep 0.55; else sleep 0.45; fi
     V=$(A fp_vm state); zf=$(fld zf <<<"$V"); vs=$(fld state <<<"$V"); bh=$(A fp_camera state | fld band_hidden)
-    sn="zf-$N-$S-$i"; A screenshot "$sn" >/dev/null
+    sn="zf-$N-$S-$i"; shot "$sn"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$S" "$d" "$ap" "$zf" "$bh" "$vs" >> "$N.steps.tsv"
     printf '%s\t%s\t%s\n' "$S bandhide $BH (orbit $ORB)" "d=$d zf=$zf $([ "$bh" = 1 ] && echo hidden) $vs" "$SHOTS/$sn.png" >> "$N-$S.man"
     [ $S = swing ] && { sleep 0.3; waitst ready 5; }
