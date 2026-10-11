@@ -251,6 +251,10 @@ for spec in 'Hungry Bandit|shek' 'Drifter|shek' 'Hungry Bandit|shek|hive' 'Drift
 if [ -z "$SPR" ]; then row R11-RACE SETUP "FAIL no Shek/Hive/Skeleton spawn: $(tail -1 "$LOG" | cut -c1-200)"
 else
   SPAWN=$(grep -o '#[0-9]*/[0-9]*' <<<"$SPR" | head -1); SRACE=$(grep -o 'race=[^,]*' <<<"$SPR" | head -1 | cut -d= -f2 | sed 's/ *rerolls.*//; s/ *$//')
+  # 54-r11-hits + 55-tdr-confirm (5090 CE098A22, 4080): the hostile Shek fought back from its pin (combat stance, hit
+  # reactions): impact head 13.5-16.7 vs 18.5 upright on 9 of 14 shots, not_upright=6 -> pose_unstable SETUP FAIL on both
+  # rigs. Passive combat mode for the row (as R08 / XBMESH) and no shot while it is not upright (that try is retaken)
+  A combatmode "$SPAWN" passive on >/dev/null
   A protect "$SPAWN" on >/dev/null; A pin "$SPAWN" at "$SH" dist 30 face "$SH" >/dev/null; A pin "$TG" at "$SH" dist 500 >/dev/null; sleep 1.5
   # bones from the spawn itself: the ray must be on it (id4 = its serial), else the reply is another body's
   BAIM=""; for _ in 1 2 3; do bones_of "$SPAWN" && AIMR=$BREPLY && [ "$(on_target "$SPAWN")" = 1 ] && break; BAIM=""; sleep 1; done
@@ -261,13 +265,13 @@ else
     for spec in "head 1 0 skull" "chest 2 1 chest" "legs 3 5,6 thigh_r"; do read -r name col want bone <<<"$spec"
       # counted shots: the target upright at impact (impact head bone >= REFH-1.0); a crouched/staggered impact (5090
       # fp-5090-11: head bone 16.6-17.0 vs 18.0 standing, aims placed for the upright pose) is retaken for aimed_part
-      valid=0; tries=0; while [ "$valid" -lt "$NRACE" ] && [ "$tries" -lt $((NRACE*3)) ]; do tries=$((tries+1))
+      valid=0; tries=0; while [ "$valid" -lt "$NRACE" ] && [ "$tries" -lt $((NRACE*4)) ]; do tries=$((tries+1))
         # aim height from the spawn's pose right now (settled), not the one read before the first shot
         # the spawn drifts inside its pin (4080 b16: 4 dm from the eye, a ray to the knee hits the capsule top): re-pin
         # at 30 dm when the eye is under 15 dm away; still too close = no shot, the row is a setup failure (too_close)
         if [ "$(eye_dist "$SPAWN")" -lt 15 ]; then A pin "$SPAWN" at "$SH" dist 30 face "$SH" >/dev/null; sleep 1.5
           [ "$(eye_dist "$SPAWN")" -lt 15 ] && { tooclose=$((tooclose+1)); ev+="$name:too_close=$(eye_dist "$SPAWN"); "; continue; }; fi
-        upright "$SPAWN" || nup=$((nup+1))
+        upright "$SPAWN" || { nup=$((nup+1)); ev+="$name:not_upright(no shot); "; continue; }
         fresh_bones "$SPAWN" && ht=$(cut -d' ' -f"$col" <<<"$BAIM") || ht=$(cut -d' ' -f"$col" <<<"$AH $AC $AL")
         q=""; [ -n "$BAIM" ] && q=$(bpt "$AIMR" "$bone")   # fresh_bones left AIMR = an on-target reply when BAIM is set
         if [ -n "$q" ]; then aim_pt "$SPAWN" $q; else aim_at "$SPAWN" "$ht"; fi
