@@ -267,7 +267,14 @@ pf_ranged_inj(){ local who=$1 e w r bow ws
       # back in the free weapon slot or the inventory), then equip unless it already reads as the ranged weapon
       case "$r" in *ground*) r=$(PF_A pickup "$who" "$bow" now); sleep 0.5;; esac
       [ "$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')" = "$bow" ] || r=$(PF_A equip "$who" "$bow"); sleep 1
-      echo "pf_ranged_inj: no other weapon, crossbow re-equipped: $(cut -c1-80 <<<"$r") bow_now=$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')"; fi; }
+      echo "pf_ranged_inj: no other weapon, crossbow re-equipped: $(cut -c1-80 <<<"$r") bow_now=$(PF_A rangedinfo "$who" | grep -o ' bow=[^=]* has_ammo' | sed 's/^ bow=//; s/ has_ammo$//')"; fi
+    # rg03-0715 R10 (xbow-rows): with NO other weapon the hands still held a non-inventory object (wih=270e534e0, not the
+    # crossbow 270e53f10) after the re-equip; the injected aim never draws while something is in hands (armed=0 for 14 s).
+    # R holsters it (as at the start: wih=0, armed=1 why=holstered), so the arming below starts from holstered.
+    if [ "$(pf_cs why)" = melee_in_hands ]; then local wih0; wih0=$(pf_cs wih)
+      PF_A input_isolation on >/dev/null; PF_A key_inject r tap 120 >/dev/null
+      e=$((SECONDS+4)); while [ $SECONDS -lt $e ] && [ "$(pf_cs why)" = melee_in_hands ]; do sleep 0.3; done
+      echo "pf_ranged_inj: R tap after the re-equip: wih $wih0 -> $(pf_cs wih) why=$(pf_cs why)"; fi; }
   e=$((SECONDS+3)); while [ $SECONDS -lt $e ] && [ "$(pf_cs armed)" != 1 ]; do PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.3; done
   if [ "$(pf_cs armed)" != 1 ] || [ "$(pf_cs loaded)" != 1 ]; then   # holstered and/or empty: an injected aim draws + auto-reloads
     PF_A fp_combat input 1 0 0 >/dev/null; e=$((SECONDS+14)); r=0
