@@ -1346,7 +1346,7 @@ while ($true) {
                 # a run-batch.sh still in its game part (no GAMEDONE in its out dir, the last argument)
                 foreach ($l in @(Wsl @('bash', '/mnt/c/KenshiModding/tools/automation/lane-batches.sh') | Where-Object { $_ -match '^\d+ .*run-batch\.sh' })) {
                     $o = ($l.Trim() -split '\s+')[-1]
-                    if ($o -match '^/mnt/c/') { $ow = 'C:\' + ($o.Substring(7) -replace '/', '\'); if (-not (Test-Path (Join-Path $ow 'GAMEDONE')) -and -not (Test-Path (Join-Path $ow 'DONE')) -and -not (Test-Path (Join-Path $ow '.instance'))) { $other = $true }   # .instance = lane 5090b's batch (its own game): not lane A's business } else { $other = $true }
+                    if ($o -match '^/mnt/c/') { $ow = 'C:\' + ($o.Substring(7) -replace '/', '\'); if (-not (Test-Path (Join-Path $ow 'GAMEDONE')) -and -not (Test-Path (Join-Path $ow 'DONE')) -and -not (Test-Path (Join-Path $ow '.instance'))) { $other = $true } } else { $other = $true }   # .instance = lane 5090b's batch (its own game): not lane A's business
                 }
             }
             if ($other -or $s -like 'UNREACHABLE*') { $idleSince = $null }
