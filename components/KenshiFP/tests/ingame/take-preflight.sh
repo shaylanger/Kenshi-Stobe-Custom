@@ -119,6 +119,15 @@ pf_loaded(){
 #   pf_open (extended)         the same clip also fails on a mouse cursor (frames.py cursor) and dark/black frames (YAVG)
 #   pf_all <me> <x> <z> <weapon> [allow]   everything above in order: rig, display, day, clean, area, weapon, open
 pf_result(){ echo "RESULT ${PF_ROW:-take} $1 $2"; PF_DONE=1; }
+# PASS-REC (Shay 2026-10-10, no refilms caused only by PC load): takecheck.py prints `RESULT take PASS-REC .. rec-warn=<x>`
+# when only RECORDING checks failed (sampler gaps, video length, sync lag) and no state is hidden; product checks decide.
+#   pf_grade <ok 0|1> "<check RESULT lines>"   -> PASS | PASS-REC | FAIL   (ok = every product check of the wrapper)
+#   pf_recwarn "<check RESULT lines>"          -> " rec-warn=a,b" or nothing (append at the END of the RESULT line)
+# Row line: echo "RESULT <row> $(pf_grade $ok "$TC") <evidence>$(pf_recwarn "$TC")"
+pf_grade(){ if [ "$1" != 1 ] || grep -qE 'RESULT [^ ]+ FAIL' <<<"$2"; then echo FAIL
+            elif grep -qE 'RESULT [^ ]+ PASS-REC' <<<"$2"; then echo PASS-REC; else echo PASS; fi; }
+pf_recwarn(){ local w; w=$(grep -oE 'rec-warn=[^] ]+' <<<"$1" | sed 's/^rec-warn=//' | tr ',' '\n' | awk 'NF && !s[$0]++' | paste -sd,)
+              [ -n "$w" ] && echo " rec-warn=$w"; return 0; }
 # pf_game_done: call once the take no longer needs the game (recording stopped, game-state evidence/dumps copied), BEFORE
 # the offline analysis (takecheck/frames/animlab/review-pack). Under run-batch.sh ($GAME_DONE_FILE set) the batch then goes
 # on with the next row while this script finishes its analysis in the background (Shay 2026-10-10: the game sat idle 5 min

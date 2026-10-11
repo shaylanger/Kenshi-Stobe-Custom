@@ -141,7 +141,7 @@ analyse(){   # runs in $D with take()'s variables; writes the weapon's RESULT li
   ok=1; for r in "$TC" "$CU" "$OG" "$MV"; do echo "$r" | grep -q "PASS" || ok=0; done
   [ -n "$VMSET" ] || echo "$WM" | grep -q "^WEAPON [^ ]* PASS" || ok=0
   [ -s "$N.vmrec.txt" ] || ok=0
-  echo "RESULT WEAPON-$slug $([ $ok = 1 ] && echo PASS || echo FAIL) sid=$sid class=$ac matrix=[$(echo "$WM" | cut -d' ' -f6- | cut -c1-260)] moves=[$(echo "$MV" | cut -c1-80)] takecheck=[$TC] cursor=[$CU] openground=[$OG] review=$D/review/INDEX.txt len=$(cat "$N.video-len.txt" 2>/dev/null)" > "$D/result.tmp" && mv "$D/result.tmp" "$D/result.txt"
+  echo "RESULT WEAPON-$slug $(pf_grade $ok "$TC") sid=$sid class=$ac matrix=[$(echo "$WM" | cut -d' ' -f6- | cut -c1-260)] moves=[$(echo "$MV" | cut -c1-80)] takecheck=[$TC] cursor=[$CU] openground=[$OG] review=$D/review/INDEX.txt len=$(cat "$N.video-len.txt" 2>/dev/null)$(pf_recwarn "$TC")" > "$D/result.tmp" && mv "$D/result.tmp" "$D/result.txt"
 }
 # ---- sweep
 PEND=(); k=0; n=0; np=0; S=${WSTART:-1}; C=${WCOUNT:-9999}

@@ -133,6 +133,11 @@ def main():
             idx.append(f'  {f}: MISSING')
     if not a.lab:
         idx.append('  none given (a pack without lab results is not ready for review)')
+    # PASS-REC (takecheck.py): product checks passed, only recording checks failed; the sheets show what was recorded
+    rw = sorted({w for l in idx for m in re.finditer(r'rec-warn=(\S+)', l) for w in m.group(1).strip(']').split(',') if w})
+    if rw:
+        idx += ['', 'recording warnings (PASS-REC: judged on what was recorded; sampler gaps / video length / sync lag): '
+                + ','.join(rw)]
     idx += ['', 'sheets: ' + ' '.join(sheets)]
     open('INDEX.txt', 'w').write('\n'.join(idx) + '\n')
     print(f'RESULT REVIEWPACK PASS sheets={len(sheets)} switches={len(sw)} out={a.out}/INDEX.txt')

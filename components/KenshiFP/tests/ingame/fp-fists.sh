@@ -154,4 +154,4 @@ fi
 echo "$FG" | grep -qE "^fist(game|native) PASS" || ok=0
 python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --labels "$N.lab" --lab "$N.lab.txt" "$N.swings.txt" > review.log 2>&1
 [ -f review/INDEX.txt ] || ok=0
-pf_result "$([ $ok = 1 ] && echo PASS || echo FAIL)" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") rig=${RIG:-5090}"
+pf_result "$(pf_grade $ok "$TC")" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") rig=${RIG:-5090}$(pf_recwarn "$TC")"

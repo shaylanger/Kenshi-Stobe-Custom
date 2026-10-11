@@ -71,4 +71,4 @@ OG=$(python3 $L/frames.py openground "$N.mp4" 2>&1 | tail -1)
 GU=$([ -s "$N.vmrec.txt" ] && python3 $L/animlab.py guard "$N.vmrec.txt" 2>&1 | grep '^guard' | head -1)
 ok=1; for r in "$TC" "$CU" "$OG" "$GU"; do echo "$r" | grep -q "PASS" || ok=0; done
 [ "$NP" -ge $((2 * REPS + 2)) ] || ok=0; [ -z "$BAD" ] || ok=0
-PF_DONE=1; echo "RESULT BLOCKGUARD-$N $([ $ok = 1 ] && echo PASS || echo FAIL) presses=$NP techs=[$TECHS] not_allowed=[$BAD] guard=[$GU] takecheck=[$TC] cursor=[$CU] openground=[$OG] len=$(cat "$N.video-len.txt") log=$OUT/$N.lab"
+PF_DONE=1; echo "RESULT BLOCKGUARD-$N $(pf_grade $ok "$TC") presses=$NP techs=[$TECHS] not_allowed=[$BAD] guard=[$GU] takecheck=[$TC] cursor=[$CU] openground=[$OG] len=$(cat "$N.video-len.txt") log=$OUT/$N.lab$(pf_recwarn "$TC")"

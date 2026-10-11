@@ -78,4 +78,4 @@ for s in $STROKES; do for c in inline metrics churn blade; do
   echo "$r" | grep -q " PASS" || ok=0
 done; done
 SK=$(python3 $L/animlab.py stroke --overhead 2 "$N.vmrec.txt" 2>&1 | grep '^stroke ' | head -1); echo "$SK" >> "$N.lab.txt"; echo "$SK" | grep -q "^stroke PASS" || ok=0
-PF_DONE=1; echo "RESULT E6-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC${TCB:+ bad: $TCB}] (detail $OUT/$N.takecheck.txt) strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")"
+PF_DONE=1; echo "RESULT E6-$N $(pf_grade $ok "$TC") takecheck=[$TC${TCB:+ bad: $TCB}] (detail $OUT/$N.takecheck.txt) strokes_logged=$SW $(grep -c FAIL "$N.lab.txt") lab FAILs (see $OUT/$N.lab.txt) len=$(cat "$N.video-len.txt")$(pf_recwarn "$TC")"

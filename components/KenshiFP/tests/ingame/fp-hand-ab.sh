@@ -80,4 +80,4 @@ FONT="C\\:/Windows/Fonts/arial.ttf"
 [a][b]hstack,split[n][s0];[s0]setpts=4*PTS,drawtext=fontfile='$FONT':text='4x slower':x=w-200:y=h-50:fontsize=30:fontcolor=white:box=1:boxcolor=black@0.6[s];[n][s]concat=n=2:v=1" \
  -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p hand-ab.mp4 || { pf_result FAIL "compose failed"; exit 1; }
 ok=1; for s in A B; do grep -q 'RESULT PASS\|take PASS' hand-$s.tc.txt || ok=0; done
-PF_DONE=1; echo "RESULT $ROW $([ $ok = 1 ] && echo PASS || echo FAIL) scaleB=$HA,$HC weaponA=[$WA] weaponB=[$WB] takecheckA=[$(cat hand-A.tc.txt)] takecheckB=[$(cat hand-B.tc.txt)] video=$OUT/hand-ab.mp4"
+PF_DONE=1; echo "RESULT $ROW $(pf_grade $ok "$(cat hand-A.tc.txt hand-B.tc.txt)") scaleB=$HA,$HC weaponA=[$WA] weaponB=[$WB] takecheckA=[$(cat hand-A.tc.txt)] takecheckB=[$(cat hand-B.tc.txt)] video=$OUT/hand-ab.mp4$(pf_recwarn "$(cat hand-A.tc.txt hand-B.tc.txt)")"

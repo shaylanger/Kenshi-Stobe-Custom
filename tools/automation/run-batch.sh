@@ -4,6 +4,9 @@
 # Start it detached, then check in every 5 min with batch-health.sh <out-dir> (one line: OK / STALL / DONE):
 #   wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c 'setsid nohup bash /mnt/c/KenshiModding/tools/automation/run-batch.sh --launch auto-home --stop /mnt/c/KenshiTestRuns/m20/list.txt /mnt/c/KenshiTestRuns/m20/out >/dev/null 2>&1 </dev/null &'  (</dev/null: else the job dies when wsl.exe exits)
 # Done when <out-dir>/DONE exists. Then: cat SUMMARY.txt; for a FAIL open only its excerpt (excerpt=...).
+# Row status = the 3rd word of its RESULT line: PASS, PASS-REC (pass with a recording warning, `rec-warn=<checks>` at the
+# end: only sampler gaps / video length / sync lag failed, product checks passed; takecheck.py) or FAIL. BATCH END counts
+# pass (incl. PASS-REC) / fail / recwarn.
 #
 # List file: one test per line, "name | save | player | mate | timeout-seconds | command"; # comments, blank lines ok.
 #   save:    a save name (loaded, then `select <player>`); "home" = auto-home + scenarios.sh fresh + select Shay;
@@ -132,7 +135,7 @@ elif [ -n "$LAUNCH" ]; then
   launch "$LAUNCH"
   world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }
 fi
-PRE=""; NOTRUN=(); pass=0; fail=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
+PRE=""; NOTRUN=(); pass=0; fail=0; recwarn=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}
 # Recording and analysis split (Shay 2026-10-10: the 5090 game sat idle 5 min while a take's lab checks ran): a row script
 # calls pf_game_done (take-preflight.sh: touches $GAME_DONE_FILE) once it no longer uses the game; the batch then goes on
 # with the next row while that script finishes its analysis in the background (normal priority). Its RESULT lines are
@@ -155,17 +158,21 @@ row_result() {  # row_result <name> <save> <player> <mate> <out> <timeout> <rc> 
     else res="RESULT $name FAIL no RESULT/VERDICT line (exit $rc): $(tail -1 "$out" | cut -c1-150)"; fi
   fi
   # Partial row successes never hide a killed/timed-out wrapper.
-  if [ $rc -ne 0 ] && ! grep -q ' FAIL' <<<"$res"; then
+  if [ $rc -ne 0 ] && ! grep -qE '^RESULT [^ ]+ FAIL' <<<"$res"; then
     res="$res
 RESULT $name FAIL wrapper did not complete (exit $rc)"
   fi
-  res=$(cut -c1-300 <<<"$res")
-  if grep -q ' FAIL' <<<"$res"; then
+  # long evidence is cut at 300 chars, but a trailing rec-warn=<x> (PASS-REC) survives the cut
+  res=$(awk '{ w=""; if (match($0, / rec-warn=[^ ]+$/)) { w=substr($0, RSTART); $0=substr($0, 1, RSTART-1) } print substr($0, 1, 300) w }' <<<"$res")
+  if grep -qE '^RESULT [^ ]+ FAIL' <<<"$res"; then
     ex=$(bash "$A/batch-excerpts.sh" "$O" "$name" 2>/dev/null)
-    res=$(sed "/ FAIL/{/ log=/!s|\$| out=$out|;s|\$|${ex:+ excerpt=$ex}|}" <<<"$res")
+    res=$(sed "/^RESULT [^ ]* FAIL/{/ log=/!s|\$| out=$out|;s|\$|${ex:+ excerpt=$ex}|}" <<<"$res")
   fi
   echo "$res" | tee -a "$S"; echo "$name" >>"$D"
-  pass=$((pass + $(grep -c ' PASS' <<<"$res"))); fail=$((fail + $(grep -c ' FAIL' <<<"$res")))
+  # count by the row's status word (3rd field): a PASS row quoting an inner "RESULT take FAIL" counted as both (tur-b-2)
+  # PASS-REC = pass with a recording warning (only sampler gaps / video length / sync lag failed; takecheck.py)
+  pass=$((pass + $(grep -cE '^RESULT [^ ]+ PASS(-REC)? ' <<<"$res"))); fail=$((fail + $(grep -cE '^RESULT [^ ]+ FAIL' <<<"$res")))
+  recwarn=$((recwarn + $(grep -cE '^RESULT [^ ]+ PASS-REC ' <<<"$res")))
   # combat/knockout/death toward the squad while the test ran: a note (fight tests cause it on purpose)
   hit=$(tail -c +"$((sl + 1))" "$STOBELOG" 2>/dev/null | grep -a -E "\[EVENT\] (combat[^]]*-> ($player|$mate) \(|knockout: ($player|$mate) |death: ($player|$mate) )" | head -2 | cut -c1-160 | paste -sd';')
   [ -n "$hit" ] && say "NOTE $name: combat/KO toward the squad: $hit"
@@ -248,5 +255,5 @@ done 3<"$L"
 [ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
 touch "$O/GAMEDONE"; [ ${#PEND[@]} -gt 0 ] && echo "$(date +%H:%M) game part done; waiting for ${#PEND[@]} background analyses"
 collect wait
-say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail"
+say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail recwarn=$recwarn"
 finish

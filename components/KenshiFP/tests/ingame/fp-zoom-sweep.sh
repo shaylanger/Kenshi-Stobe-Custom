@@ -121,4 +121,4 @@ WH=$(awk '{for(i=1;i<=NF;i++) if($i ~ /^applied=/){split($i,a,"="); if(a[2]>0.65
 ok=1; for r in "$TC" "$CU" "$OG"; do echo "$r" | grep -q "PASS" || ok=0; done
 [ -n "$ZB" ] && { echo "$ZB" | grep -q "PASS" || ok=0; }
 [ "$MODE" = fade ] && { echo "$BAND" | grep -q "band_hidden=1" || ok=0; }
-PF_DONE=1; echo "RESULT ZOOMSWEEP-$N $([ $ok = 1 ] && echo PASS || echo FAIL) takecheck=[$TC] cursor=[$CU] openground=[$OG] zoomband=[$ZB] in_band_wheel_samples=$WH band6dm=[$BAND] len=$(cat "$N.video-len.txt") log=$OUT/$N.lab"
+PF_DONE=1; echo "RESULT ZOOMSWEEP-$N $(pf_grade $ok "$TC") takecheck=[$TC] cursor=[$CU] openground=[$OG] zoomband=[$ZB] in_band_wheel_samples=$WH band6dm=[$BAND] len=$(cat "$N.video-len.txt") log=$OUT/$N.lab$(pf_recwarn "$TC")"
