@@ -1,5 +1,5 @@
 #!/bin/bash
-# rig4080/setup.sh [--saves "kah-a kah-b"] [run dirs...]: make the 4080 a filming rig / refresh it (run on the 5090, Git Bash).
+# rig4080/setup.sh [--saves "kah-a kah-b"] [--saves-only "kah-a"] [run dirs...]: make the 4080 a filming rig / refresh it (run on the 5090, Git Bash).
 #  1. helpers -> C:\KAH: itrun.ps1 (desktop-session runner), kcfg.ps1 (windowed 1600x900 test cfg), bin\python3 shim
 #  2. the repo files takes use -> the same paths under C:\KenshiModding on the 4080: tools/automation/rig-env.sh,
 #     components/KenshiFP/animlab (scripts, rules), components/KenshiFP/tests/ingame/*.sh|*.py,
@@ -14,8 +14,18 @@
 # A failed copy prints "SCPFAIL <dest>: <files>" and the sync goes on (was: set -e aborted the rest, 2026-10-10 17:42).
 M=/c/KenshiModding; R=/c/KenshiTestRuns; H=4080; HERE=$M/tools/automation/rig4080
 SAVES=""; DEFER=""; DRY=0
-while :; do case "$1" in --saves) SAVES=$2; shift 2 ;; --defer) DEFER=$2; shift 2 ;; --dry) DRY=1; shift ;; *) break ;; esac; done
+while :; do case "$1" in --saves) SAVES=$2; shift 2 ;; --saves-only) SAVES=$2; SAVESONLY=1; shift 2 ;; --defer) DEFER=$2; shift 2 ;; --dry) DRY=1; shift ;; *) break ;; esac; done
 [ -n "$DEFER" ] && [ ! -f "$DEFER" ] && DEFER=""
+# --saves-only "<saves>": copy only those saves (list-rigcheck.sh --fix: a list's save missing on the 4080), nothing else
+if [ "${SAVESONLY:-0}" = 1 ]; then
+  for s in $SAVES; do [ -d "/c/Users/Shay/AppData/Local/kenshi/save/$s" ] || { echo "SAVEFAIL $s: not on the 5090"; continue; }
+    [ $DRY = 1 ] && { echo "COPY save $s"; continue; }
+    [ -n "$s" ] || continue   # never an empty name: the Remove-Item path would be the whole save dir
+    ssh $H "powershell -NoProfile -Command \"Remove-Item -Recurse -Force \$env:LOCALAPPDATA\\kenshi\\save\\$s -EA 0\"" || true
+    scp -q -r "/c/Users/Shay/AppData/Local/kenshi/save/$s" "$H:AppData/Local/kenshi/save/" || echo "SAVEFAIL $s: scp"
+  done
+  echo "4080 saves synced$( [ $DRY = 1 ] && echo " (DRY)"): [$SAVES]"; exit 0
+fi
 run() { if [ $DRY = 1 ]; then :; else "$@"; fi; }
 # cp_to <dest> <files...>: scp the files that exist and aren't deferred
 cp_to() {
