@@ -40,6 +40,7 @@ file paths of outputs, the build hashes involved, and what you want back.
 > looping the trigger); every lost rig minute -> a tooling fix + selftest the same hour; both rigs unless a rig defect is
 > proven; numeric list prefixes, never edit a script a queued/running list uses; short rows with progress timeouts; open
 > mocap/Kenshi animations as reference, never ripped game assets; end your report with the next speed-up you noticed.
+> Speed is your standing job (Shay 2026-10-11): watch your processes for snags and fix each at its root the same hour so it can't recur; optimize every part you touch; build any tool/harness/injector/switch that makes us faster; name the next speed-up in every report.
 > GPU + load sharing (Shay 2026-10-11): put any computation that runs as fast or faster on a GPU there (CuPy, NVDEC/NVENC; RTX 5090 + the 4080 PC), spread lab jobs over both PCs, never leave a GPU idle while the CPU is maxed; fix any slowdown you hit in your own work the same hour.
 
 ## STOBE fixer
