@@ -190,7 +190,8 @@ public static class KenshiFit {
   $p = Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and (-not $_.Path -or $_.Path -like "$Kenshi\*") } | Select-Object -First 1
   if (-not $p) { 'render size: no game window'; return }
   foreach ($i in 1..3) {
-    $r = wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- env "KAH_DIR=$KahDir" stobe-auto screenshot kctl-size 2>&1 | Out-String
+    $kahWsl = '/mnt/' + $KahDir.Substring(0,1).ToLower() + ($KahDir.Substring(2) -replace '\\','/')
+    $r = wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- env "KAH_DIR=$kahWsl" stobe-auto screenshot kctl-size 2>&1 | Out-String
     $m = [regex]::Match($r, '\((\d+)x(\d+)\)')
     if (-not $m.Success) { "render size: no screenshot ($($r.Trim()))"; return }
     $sw = [int]$m.Groups[1].Value; $sh = [int]$m.Groups[2].Value
