@@ -9,6 +9,7 @@ OUT=$1; FINAL=${2:-${CR:-/mnt/c}/KenshiTestRuns/vm-rework/zoom-sweep.mp4}; shift
 [ -n "$OUT" ] || { echo "usage: fp-zoom-sweep-video.sh <out dir> [final mp4] [take names...]"; exit 2; }
 HERE=$(dirname "$(readlink -f "$0")")
 FFX=${FFX:-${CR:-/mnt/c}/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
+for _d in ${CR:-/mnt/c} /mnt/c /c; do [ -f $_d/KenshiModding/tools/automation/venc.sh ] && { . $_d/KenshiModding/tools/automation/venc.sh; break; }; done   # venc_args (h264_nvenc, libx264 fallback)
 mkdir -p "$OUT"; cd "$OUT" || exit 2; cp -n ${CR:-/mnt/c}/Windows/Fonts/arialbd.ttf . 2>/dev/null
 TAKES="zs-xbow-switch-on:switch:on:xbow zs-sword-switch-on:switch:on:sword zs-xbow-switch-off:switch:off:xbow zs-sword-switch-off:switch:off:sword zs-xbow-fade-on:fade:on:xbow zs-sword-fade-on:fade:on:sword"
 # Takes: each fp-zoom-sweep.sh prints "pf_game_done:" once its recording is over; the next take starts then while the
@@ -39,7 +40,7 @@ for i in range(len(rows) - 1):
 open(n + '.filt', 'w').write(','.join(out))
 PY
   e=$(awk '/ end$/{print $1+0.8}' "$n.lab")
-  "$FFX" -hide_banner -loglevel error -y -i "$n.mp4" -filter_complex "[0:v]$(cat "$n.filt"),trim=0:$e,setpts=PTS-STARTPTS[v]" -map "[v]" -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -r 30 "${n}_cut.mp4" && parts+=("${n}_cut.mp4") || ok=0
+  "$FFX" -hide_banner -loglevel error -y -i "$n.mp4" -filter_complex "[0:v]$(cat "$n.filt"),trim=0:$e,setpts=PTS-STARTPTS[v]" -map "[v]" $(venc_args 18 medium) -r 30 "${n}_cut.mp4" && parts+=("${n}_cut.mp4") || ok=0
 done
 [ $ok = 1 ] || { echo "RESULT ZOOMSWEEP-VIDEO FAIL not all six takes passed (see $OUT/*.out)"; exit 1; }
 : > zcat.txt; for p in "${parts[@]}"; do echo "file '$p'" >> zcat.txt; done

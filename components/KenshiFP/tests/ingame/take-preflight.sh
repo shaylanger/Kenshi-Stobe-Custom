@@ -27,6 +27,8 @@ command -v wslpath >/dev/null 2>&1 || wslpath(){ [ "$1" = -w ] && shift; cygpath
 PF_FFX=${FFX:-/mnt/c/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe}
 PF_SHOTS=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/mods/AutomationHarness/shots   # rig layer: tools/automation/rig-env.sh
 PF_LAB=${CR:-/mnt/c}/KenshiModding/Kenshi-Automation-Harness/tools/animlab
+for _d in ${CR:-/mnt/c} /mnt/c /c; do [ -f $_d/KenshiModding/tools/automation/venc.sh ] && { . $_d/KenshiModding/tools/automation/venc.sh; break; }; done   # venc_args: h264_nvenc, libx264 fallback
+type venc_args >/dev/null 2>&1 || venc_args(){ echo "-c:v libx264 -preset ${2:-veryfast} -crf ${1:-18} -pix_fmt yuv420p"; }
 PF_TITLE="title=Kenshi 1.0.65 - x64 (Newland)"
 pf_fail(){ [ -n "$PF_ON_FAIL" ] && eval "$PF_ON_FAIL"; PF_DONE=1; echo "RESULT ${PF_ROW:-take} FAIL setup: $*"; exit 1; }
 pf_hour(){ local h; h=$(PF_A time | grep -o 'time=[0-9]*'); h=${h#time=}; echo $((10#${h:-0})); }
@@ -60,7 +62,7 @@ pf_open(){
   local s=${1:-2} f=/tmp/pf-open.$$.mp4 r o
   # park the virtual cursor in the top-right corner (sky): hovering a character shows its "[name]" tag (kfx-b9 blkE overlay)
   PF_A mouse_inject at "${PF_PARK_X:-1595}" "${PF_PARK_Y:-4}" >/dev/null 2>&1
-  ( cd /tmp && "$PF_FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t "$s" -i "$PF_TITLE" -c:v libx264 -preset veryfast -pix_fmt yuv420p "$(wslpath -w $f)" ) </dev/null
+  ( cd /tmp && "$PF_FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t "$s" -i "$PF_TITLE" $(venc_args 23) "$(wslpath -w $f)" ) </dev/null
   [ -s "$f" ] || pf_fail "open-ground clip not recorded"
   r=$(python3 $PF_LAB/frames.py openground "$f" 2>&1 | tail -1)
   local c y; c=$(python3 $PF_LAB/frames.py cursor "$f" --name pf 2>&1 | tail -1); o=$(python3 $PF_LAB/frames.py overlay "$f" --name pf 2>&1 | tail -1)

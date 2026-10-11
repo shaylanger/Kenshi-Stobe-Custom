@@ -170,7 +170,7 @@ $script:keep4080 = [bool]$Keep4080   # -Keep4080: handed over by a -Restart with
 # them. A new list that needs a deferred file runs on the 4080's old copy: runner\4080.oldcopy.<list> -> its result line.
 function SyncCandidates {   # repo-relative path -> full path, the files rig4080/setup.sh copies
     $m = 'C:\KenshiModding'; $h = @{}
-    $g = @("$m\tools\automation\rig-env.sh", "$m\tools\automation\review-pack.py", "$m\Kenshi-Automation-Harness\client\kah.py") +
+    $g = @("$m\tools\automation\rig-env.sh", "$m\tools\automation\venc.sh", "$m\tools\automation\review-pack.py", "$m\Kenshi-Automation-Harness\client\kah.py") +
          @(Get-ChildItem "$m\components\KenshiFP\animlab\*" -File -Include *.sh, *.py, *.txt -ErrorAction SilentlyContinue | ForEach-Object FullName) +
          @(Get-ChildItem "$m\components\KenshiFP\animlab\weapons\*" -File -Include *.list, *.json -ErrorAction SilentlyContinue | ForEach-Object FullName) +
          @(Get-ChildItem "$m\components\KenshiFP\tests\ingame\*" -File -Include *.sh, *.py -ErrorAction SilentlyContinue | ForEach-Object FullName) +

@@ -105,7 +105,7 @@ steps(){
 }
 # recorder (rec.sh): stopped by "q" through a plain pipe once the steps end (+2.5 s tail); 300 s is only a safety cap
 rm -f rec.stop; A mouse_inject at 1595 4 >/dev/null   # park the virtual cursor in the sky before recording (hover name tag, take-dryrun)
-( while [ ! -f rec.stop ]; do sleep 0.1; done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p t6raw.mp4 &
+( while [ ! -f rec.stop ]; do sleep 0.1; done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" $(venc_args 20 veryfast) t6raw.mp4 &
 FP=$!; sleep 0.8; ( steps ); RC=$?; sleep 2.5; touch rec.stop; wait $FP; rm -f rec.stop
 A chatter on >/dev/null
 L=$(tail -n +$((LOGN+1)) "$KDIR/KenshiFP.log" 2>/dev/null | grep "harpoon hit\|harpoon still" | tail -1); echo "take: ${L:15:90}"
@@ -120,7 +120,7 @@ E2=$(awk '$2=="end"{print $1+0.5}' labels.txt)
 rm -f filt.txt; RF="RESULT render FAIL mkfilt"
 if python3 $TI/fp-take-labels.py filt labels.txt ${LAG:-1.25} filt.txt; then
   F=$(tr -d '\n' < filt.txt)
-  "$FFX" -hide_banner -loglevel error -y -i t6raw.mp4 -t ${E2:-59} -filter_complex "[0:v]split[a][b];[b]crop=256:144:672:378,scale=640:360:flags=lanczos,drawbox=c=yellow:t=3,drawtext=fontfile=arialbd.ttf:fontsize=22:fontcolor=yellow:x=10:y=10:text='centre x2.5'[z];[a][z]overlay=W-w-12:110,$F" -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p turret-fp.mp4 && RF="" || RF="RESULT render FAIL ffmpeg"
+  "$FFX" -hide_banner -loglevel error -y -i t6raw.mp4 -t ${E2:-59} -filter_complex "[0:v]split[a][b];[b]crop=256:144:672:378,scale=640:360:flags=lanczos,drawbox=c=yellow:t=3,drawtext=fontfile=arialbd.ttf:fontsize=22:fontcolor=yellow:x=10:y=10:text='centre x2.5'[z];[a][z]overlay=W-w-12:110,$F" $(venc_args 18 medium) turret-fp.mp4 && RF="" || RF="RESULT render FAIL ffmpeg"
 fi
 C=$( { python3 $HL/takecheck.py --labels labels.txt --ev ts.txt --rules $M/components/KenshiFP/animlab/take-rules.txt --video turret-fp.mp4 2>&1 | tail -15; python3 $HL/frames.py openground turret-fp.mp4 2>&1 | tail -3; } | grep "^RESULT" | tr '\n' ' ')
 CU=$(python3 $HL/frames.py cursor turret-fp.mp4 2>&1 | tail -1)

@@ -46,7 +46,7 @@ A fp_vm set strokes 15 >/dev/null
 pf_nofight; pf_open 2   # cursor parked in the sky + open ground/overlay check before filming (op-b8 e6r7: cover:ui_state/near/msgs)
 # ---- take
 : > "$N.lab"; rm -f "/tmp/kfp-$N.ffin"; mkfifo "/tmp/kfp-$N.ffin"
-"$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
+"$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=Kenshi 1.0.65 - x64 (Newland)" $(venc_args 18 veryfast) "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
 exec 7>"/tmp/kfp-$N.ffin"
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null

@@ -47,6 +47,8 @@ else
 fi
 export FFX="$CR/Users/Shay/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.0.1-full_build/bin/ffmpeg.exe"
 case ":$PATH:" in *":${FFX%/*}:"*) ;; *) export PATH="$PATH:${FFX%/*}";; esac
+# venc_args <crf> [x264-preset]: take recorder encoder args (h264_nvenc on both rigs, libx264 fallback; venc.sh header)
+. "$(dirname "${BASH_SOURCE[0]}")/venc.sh"
 # rig_preflight <row>: capture preflight, run before any recording (rec.sh calls it). 4080: Shay's desktop session must be
 # Active in quser (a disconnected/locked session records black). Both rigs: a 1-frame gdigrab of $WIN_TITLE averaged to
 # one gray pixel must have luma >= ${PF_MIN_LUMA:-8}. Failure prints `RESULT <row> FAIL setup: ...` and returns 1.

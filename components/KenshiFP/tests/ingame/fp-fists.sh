@@ -99,7 +99,7 @@ set -- ${FIST_VMSET//,/ }; while [ $# -ge 2 ]; do A fp_vm set $1 $2 >/dev/null; 
 SW0=$(fist | fld swings); IK0=$(fist | fld ikfail); LOG0=$(wc -l < "$KDIR/KenshiFP.log")
 # recorder stopped by "q" through a plain pipe (stop file): a native ffmpeg on the 4080 (Git Bash) never reads q from
 # an MSYS fifo and would run the full -t 120 past the end label (found by tools/automation/dryrun.sh --rig 4080)
-( while [ ! -f "$N.stop" ]; do sleep 0.1; done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 120 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" & FP=$!
+( while [ ! -f "$N.stop" ]; do sleep 0.1; done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 120 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" $(venc_args 18 veryfast) "$N.mp4" & FP=$!
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null
 T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Shay"; sleep 1

@@ -83,8 +83,8 @@ echo "setup ok: mode=$MODE hat=$HAT weapon=$WPN loaded=$(loaded) state=$(st)"
 # 4080 (Git Bash): a native ffmpeg never reads "q" from an MSYS fifo (the take ran the full -t 400): there "q" goes
 # through a plain pipe from a loop that waits for the stop flag file $N.stop (tested: clean stop, valid mp4)
 ZS_PIPE=""; [ "${RIG:-5090}" = 4080 ] && { ZS_PIPE=1; rm -f "$N.stop"; }
-if [ -n "$ZS_PIPE" ]; then ( i=0; while [ ! -f "$N.stop" ] && [ $i -lt 4100 ]; do sleep 0.1; i=$((i+1)); done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p "$N.mp4" & FP=$!
-else "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p "$N.mp4" < "$FIFO" & FP=$!; fi
+if [ -n "$ZS_PIPE" ]; then ( i=0; while [ ! -f "$N.stop" ] && [ $i -lt 4100 ]; do sleep 0.1; i=$((i+1)); done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" $(venc_args 20 veryfast) "$N.mp4" & FP=$!
+else "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" $(venc_args 20 veryfast) "$N.mp4" < "$FIFO" & FP=$!; fi
 if [ -n "$ZS_PIPE" ]; then exec 7>/dev/null; else exec 7>"$FIFO"; fi
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null

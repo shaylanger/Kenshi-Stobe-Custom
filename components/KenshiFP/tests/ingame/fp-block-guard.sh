@@ -41,7 +41,7 @@ echo "setup ok: $(A fp_keys set blk_hold 0.45 | grep -o "fb_tech=[^ ]* \|blk_dir
 # ---- take
 L0=$(wc -l < "$KLOG")
 : > "$N.lab"; rm -f "$FIFO"; mkfifo "$FIFO" || pf_fail "mkfifo $FIFO"
-"$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" < "$FIFO" & FP=$!
+"$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 400 -i "title=Kenshi 1.0.65 - x64 (Newland)" $(venc_args 18 veryfast) "$N.mp4" < "$FIFO" & FP=$!
 exec 7>"$FIFO"
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null

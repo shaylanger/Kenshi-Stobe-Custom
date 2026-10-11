@@ -51,7 +51,7 @@ take(){ # $1 = A|B, $2 $3 = scale
   echo "side $1: $r"
   A fp_camera look 3.14 0.05 >/dev/null; ready; sleep 1.5; A fp_vm state > "$N.state.txt"
   : > "$N.lab"; rm -f "/tmp/kfp-$N.ffin"; mkfifo "/tmp/kfp-$N.ffin"
-  "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 60 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
+  "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 60 -i "title=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}" $(venc_args 18 veryfast) "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
   exec 7>"/tmp/kfp-$N.ffin"
   T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Tassilo|Shay"; sleep 1
   lab "Katana ready, hand_scale $2 $3"; sleep 2.5
@@ -78,6 +78,6 @@ FONT="C\\:/Windows/Fonts/arial.ttf"
  "[0:v]trim=0:$D,setpts=PTS-STARTPTS,scale=960:540,drawtext=fontfile='$FONT':text='LEFT  current hand (1.00 x 1.00)':x=20:y=20:fontsize=30:fontcolor=yellow:box=1:boxcolor=black@0.6[a];\
 [1:v]trim=0:$D,setpts=PTS-STARTPTS,scale=960:540,drawtext=fontfile='$FONT':text='RIGHT  smaller hand ($HA along x $HC across)':x=20:y=20:fontsize=30:fontcolor=yellow:box=1:boxcolor=black@0.6[b];\
 [a][b]hstack,split[n][s0];[s0]setpts=4*PTS,drawtext=fontfile='$FONT':text='4x slower':x=w-200:y=h-50:fontsize=30:fontcolor=white:box=1:boxcolor=black@0.6[s];[n][s]concat=n=2:v=1" \
- -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p hand-ab.mp4 || { pf_result FAIL "compose failed"; exit 1; }
+ $(venc_args 18 veryfast) hand-ab.mp4 || { pf_result FAIL "compose failed"; exit 1; }
 ok=1; for s in A B; do grep -q 'RESULT PASS\|take PASS' hand-$s.tc.txt || ok=0; done
 PF_DONE=1; echo "RESULT $ROW $(pf_grade $ok "$(cat hand-A.tc.txt hand-B.tc.txt)") scaleB=$HA,$HC weaponA=[$WA] weaponB=[$WB] takecheckA=[$(cat hand-A.tc.txt)] takecheckB=[$(cat hand-B.tc.txt)] video=$OUT/hand-ab.mp4$(pf_recwarn "$(cat hand-A.tc.txt hand-B.tc.txt)")"
