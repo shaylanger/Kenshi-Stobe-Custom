@@ -13,6 +13,7 @@ Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 40
   rig-runner.ps1 -SelfTest               check the stuck rule on fixed probe cases (no side effects; run after editing it)
   rig-runner.ps1 -Restart [-Rig X]       deploy an edited rig-runner.ps1: the loop re-spawns itself at its next list boundary
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
+  -Rig 4080b                             lane 4080b = a 2nd Kenshi (instance 2, C:\KenshiInst\2) on the 4080, over ssh (rig-lane2-4080.ps1 header)
   -Rig 5090b|5090c                       lanes 5090b/5090c = a 2nd/3rd Kenshi (instance 2/3, D:\KenshiInst\<n>) on the 5090 beside lane 1: queue\<lane>\ only,
                                          gfx-low, crossbow-guarded, admission GPU free >= 6 GB + RAM free >= 8 GB, own TDR guard; loop in
                                          rig-lane2.ps1 (header). -Ensure/-Start/-Stop/-Status/-Restart/-SelfTest include it. Lane 1 sees and kills only
@@ -83,8 +84,8 @@ cause). run-batch.sh checks after every row itself too (<out>\TDR). -Fake: runne
 "epoch|provider|id|message" lines; -SelfTest checks the filter (+ run-batch.sh --selftest).
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
-param([ValidateSet('5090', '4080', '5090b', '5090c', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '', [string]$DryKeyOf = '',
+param([ValidateSet('5090', '4080', '5090b', '5090c', '4080b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [string]$Resolve = '', [string]$DryKeyOf = '',
       [int]$HardMin = 5, [switch]$SelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # Stuck decision (pure; -SelfTest checks it). Soft: condition held >= lim AND out dir unchanged >= lim. Hard (2026-10-11,
@@ -134,6 +135,9 @@ function NeverStartedAct([datetime]$t0, [datetime]$loopStart, [datetime]$now, [b
     if (($now - $t0).TotalMinutes -lt 3 -and -not ($t0 -lt $loopStart -and ($now - $loopStart).TotalSeconds -ge 90)) { return 'wait' }
     if (-not $filler -and $requeuedAgoH -ge 2) { 'requeue' } else { 'fail' }
 }
+# fast setup FAIL list: 'alert' (sticky ALERT-<rig>-setup.txt, Stop hook) only when nothing else is queued (the rig idles) or
+# $max fast lists came in a row; else 'note' (owner note, the next list starts at once)
+function FastAlertAct([int]$queued, [int]$streak, [int]$max) { if ($queued -le 0 -or $streak -ge $max) { 'alert' } else { 'note' } }
 if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cases (no side effects)
     $cases = @(
         @('R11 4080 hang: harness silent 6 min, row log written 10 s ago', @{ step = 'R11'; age = '10'; crash = '0' }, 'harness not answering', 6, 2, 0, 'kill-game hard'),
@@ -193,6 +197,8 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     # lane 5090b (second game instance, rig-lane2.ps1): list eligibility (gfx low, crossbow guard, no Stobe), admission, TDR filter
     $l2 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l2[-1]) -like 'LANE2-SELFTEST PASS*'; if (-not $ok) { $bad++; $l2 | Where-Object { $_ -like 'FAIL*' } }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 5090b rig-lane2.ps1 -SelfTest: $($l2[-1])"
+    $l4 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2-4080.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l4[-1]) -like 'LANE4080B-SELFTEST PASS*'; if (-not $ok) { $bad++; $l4 | Where-Object { $_ -like 'FAIL*' } }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 4080b rig-lane2-4080.ps1 -SelfTest: $($l4[-1])"
     $ms = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" monsel 2>&1 | ForEach-Object { "$_" }); $ok = $ms[-1] -like 'MONSEL PASS*'; if (-not $ok) { $bad++ }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) screen rule (kenshi-ctl.ps1 monsel: never the Samsung SNY05D1): $($ms[-1])"
     "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 4) cases"; exit [int]($bad -gt 0)
@@ -208,7 +214,7 @@ function PidAlive([string]$r) { $f = Join-Path $rd "$r.pid"; if (Test-Path $f) {
 # makes -Ensure skip that rig until -Start (or -Ensure -Force); a loop that sees the flag exits at its next tick.
 function StopFlag([string]$r) { Join-Path $rd "$r.stopped" }
 if ($Stop) {
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c') })) {
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c', '4080b') })) {
         Set-Content (StopFlag $r) "$(Get-Date -Format s) by $(if ($env:KAH_OWNER) { $env:KAH_OWNER } else { 'coordinator' })"
         if (PidAlive $r) { Stop-Process -Id ([int](Get-Content (Join-Path $rd "$r.pid") -Raw)) -Force; "stopped runner $r (stays stopped: rig-runner.ps1 -Start -Rig $r)" } else { "runner $r not running (marked stopped)" }
         Remove-Item (Join-Path $rd "$r.pid") -ErrorAction SilentlyContinue
@@ -235,7 +241,7 @@ function WriteShared([string]$p, [string]$text, [switch]$Append) {
 if ($Status) {
     # the state line is cross-checked with the runner's current files (2026-10-10: -Status showed "running rg-05 ... 21:17"
     # after the runner had moved on): <rig>.cur names the batch in its game part, <rig>.tail.* the ones still analysing
-    foreach ($r in '5090', '4080', '5090b', '5090c') {
+    foreach ($r in '5090', '4080', '5090b', '5090c', '4080b') {
         $st = ReadShared "$rd\$r.state"; $st = if ($st) { $st.Trim() } else { '-' }
         $sf = Get-Item "$rd\$r.state" -ErrorAction SilentlyContinue
         $cur = ReadShared "$rd\$r.cur"; $cl = if ($cur) { @($cur -split "`r?`n") } else { @() }
@@ -256,12 +262,12 @@ if ($Status) {
     exit 0
 }
 if ($Restart) {   # deploy a new rig-runner.ps1 at the next list boundary (never mid-batch): the loop re-spawns itself there
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c', '4080b') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
     exit 0
 }
 if ($Start) { $Ensure = $true; $Force = $true }
 if ($Ensure) {
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c') })) {
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c', '4080b') })) {
         if (PidAlive $r) { "runner $r running pid=$(Get-Content (Join-Path $rd "$r.pid") -Raw)"; continue }
         if (Test-Path (StopFlag $r)) {
             if (-not $Force) { "runner $r STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()): not started (rig-runner.ps1 -Start -Rig $r)"; continue }
@@ -281,6 +287,8 @@ if (-not $Resolve -and -not $DryKeyOf) {
 }
 # lanes 5090b/5090c = the 2nd/3rd game instance on the 5090 (D:\KenshiInst\2|3): their own small loop (rig-lane2.ps1 header)
 if ($Rig -in '5090b', '5090c') { & "$auto\rig-lane2.ps1" -Lane $Rig -Fake:$Fake -TickSec ([Math]::Min($TickSec, 30)); exit 0 }
+# lane 4080b = the 2nd game instance on the 4080 (C:\KenshiInst\2), driven over ssh (rig-lane2-4080.ps1 header)
+if ($Rig -eq '4080b') { & "$auto\rig-lane2-4080.ps1" -TickSec ([Math]::Min($TickSec, 30)); exit 0 }
 
 # ---------------------------------------------------------------- helpers
 $log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"; $gfxF = Join-Path $rd "$Rig.gfx"
@@ -549,6 +557,8 @@ function QueuedLists {   # every list this rig may take, FIFO order (own folder 
     $real = @(RealLists)
     # lane A prefers filming lists while lane 5090b or 5090c (extra games, rig-lane2.ps1) is up: they take the "# gfx: low" ones
     if ($Rig -eq '5090' -and $real.Count -gt 1 -and ((PidAlive '5090b') -or (PidAlive '5090c'))) { $real = @(@($real | Where-Object { (Header $_.FullName 'gfx') -ne 'low' }) + @($real | Where-Object { (Header $_.FullName 'gfx') -eq 'low' })) }
+    # lane 4080 likewise while lane 4080b (rig-lane2-4080.ps1) is up
+    if ($Rig -eq '4080' -and $real.Count -gt 1 -and (PidAlive '4080b')) { $real = @(@($real | Where-Object { (Header $_.FullName 'gfx') -ne 'low' }) + @($real | Where-Object { (Header $_.FullName 'gfx') -eq 'low' })) }
     if ($real.Count) { return $real }
     FillerLists
 }
@@ -1161,11 +1171,18 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     $abort = @($sum | Where-Object { $_ -match '^BATCH (ABORTED|REFUSED)' }).Count
     if ($how -ne 'LOST' -and -not $pre -and $np -eq 0 -and $dur -lt $FastMin -and ($abort -or $nf -eq 0 -or $nset -eq $nf)) {
         $fw = "list $name ended in $([int]$dur) min with no PASS ($nf FAIL, $nset setup/dryrun$(if ($abort) { ', batch aborted' })): the rig was effectively idle"
-        FastAlert "$fw. SUMMARY $sumL. Fix the setup or pull the list, then delete this file."
-        Note $own "$fw on ${Rig}. Fix the setup (RESULT lines in $sumL) before requeueing."
-        if ($own -ne 'coordinator') { Note 'coordinator' "$fw on $Rig (owner $own)." }
+        # one fast list while more work is queued = the owner's problem, not an idle rig: note only, the next list starts at
+        # once (coordinator m102: 89b-capproof, 92-e6, 99-fastswap each raised the blocking ALERT though the rig went on);
+        # sticky ALERT only when the rig would really idle (nothing queued) or $FastStreak fast lists came in a row
+        $script:fastStreak++
+        $fa = FastAlertAct (@(QueuedLists).Count) $script:fastStreak $FastStreak
+        if ($fa -eq 'alert') { FastAlert "$fw. SUMMARY $sumL. Fix the setup or pull the list, then delete this file." }
+        else { Log "fast FAIL $name (streak $($script:fastStreak)/$FastStreak, more queued): owner noted, no ALERT" }
+        Note $own "ALERT(setup, $Rig): $fw on ${Rig}. Fix the setup (RESULT lines in $sumL) before requeueing."
+        if ($own -ne 'coordinator' -and $fa -eq 'alert') { Note 'coordinator' "$fw on $Rig (owner $own)." }
         if ($isFill -and $how -eq 'DONE') { Bench $name 3 'fast setup FAIL' }
     }
+    elseif ($np -gt 0) { $script:fastStreak = 0 }
     $ocf = Join-Path $rd "$Rig.oldcopy.$name"; $oc = if (Test-Path $ocf) { (Get-Content $ocf -Raw).Trim() } else { '' }; Remove-Item $ocf -ErrorAction SilentlyContinue
     Set-Content (Join-Path $dest "$name.result") @("$how $Rig start=$t0 end=$(Get-Date -Format s) out=$where pass=$np fail=$nf summary=$sumL$(if ($Why) { " why=$Why" })$(if ($oc) { " oldcopy=$oc (ran on the 4080's old copy: in use by a running analysis at the start)" })")
     Remove-Item $file -ErrorAction SilentlyContinue
