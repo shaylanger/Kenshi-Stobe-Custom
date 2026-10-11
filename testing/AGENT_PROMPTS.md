@@ -40,6 +40,10 @@ file paths of outputs, the build hashes involved, and what you want back.
 > looping the trigger); every lost rig minute -> a tooling fix + selftest the same hour; both rigs unless a rig defect is
 > proven; numeric list prefixes, never edit a script a queued/running list uses; short rows with progress timeouts; open
 > mocap/Kenshi animations as reference, never ripped game assets; end your report with the next speed-up you noticed.
+> Never block (Shay 2026-10-11, a blocking question froze the coordinator 10:51-12:37): never use AskUserQuestion or
+> wait on any answer; put questions in your report/final text and keep working on everything else. Other games' FP
+> animations are fair DESIGN reference by observation (public gameplay footage, dev talks, articles: write down
+> timings/framing numbers + the source URL), never by extracting their files.
 
 ## STOBE fixer
 You are the **STOBE fixer**, a helper subagent of the coordinator session that runs Kenshi tests (it owns the
