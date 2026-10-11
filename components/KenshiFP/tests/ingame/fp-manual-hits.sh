@@ -215,7 +215,10 @@ if [ "$total" -lt 9 ]; then row R08 SETUP "FAIL reason=pose_moved: only $total o
 elif [ "$good" -ge $((total-1)) ]; then row R08 PASS "$ev"; else row R08 FAIL "$ev"; fi
 
 # ---- R09 intervening body: blocker halfway, aim at the target's chest through it ----
-A pin "$TG" off >/dev/null; A pin "$TG" at "$SH" dist 50 face "$SH" >/dev/null
+# 4 runs on 2 rigs (r11-hits-4080, 55-tdr): one bolt wound (Malzin) but Skaera ~3.5 flesh + 2.1 stun on a random part =
+# native knock-back/collision of the hit blocker pinned ~0.75 m in front of her (KenshiFP's wound hook only forwards the
+# native victim). Target at 10 m (was 5 m): the blocker stays at the same ray fraction, ~1.5 m from her.
+A pin "$TG" off >/dev/null; A pin "$TG" at "$SH" dist 100 face "$SH" >/dev/null
 read -r sx sy sz <<<"$(pos "$SH")"; read -r tx ty tz <<<"$(pos "$TG")"
 # the blocker goes halfway along the EYE->target line: the FP eye sits ~4 dm aside of the feet, so a feet midpoint left
 # the ray ~2 dm beside the blocker (5090 b8: the aim ray's victim was the target, all bolts hit it)
@@ -237,7 +240,8 @@ A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/n
 PB0=$(A combatmode "$BL" | fld passive); A combatmode "$TG" passive on >/dev/null; A combatmode "$BL" passive on >/dev/null
 EFF=1; aim_at "$TG" 12.5; r9=""; hitb=0; hitt=0
 for _ in 1 2 3; do aim_at "$TG" 12.5; av=$(aim_victim); [ "$av" = blocker ] || { place_bl; aim_at "$TG" 12.5; av=$(aim_victim); }
-  r9+="aim=$av "; read -r ok h <<<"$(shot "$BL" "$TG")"; hb=${h%%|*}; ht=${h#*|}; [ "$h" = not_ready ] && { hb=""; ht=""; }
+  A fp_melee wounds reset >/dev/null
+  r9+="aim=$av "; read -r ok h <<<"$(shot "$BL" "$TG")"; wr=$(A fp_melee wounds); r9+="ring=$(grep -o ' bolt' <<<"$wr" | wc -l)bolt/$(grep -o 'wounds=[0-9]*' <<<"$wr" | cut -d= -f2)wounds "; hb=${h%%|*}; ht=${h#*|}; [ "$h" = not_ready ] && { hb=""; ht=""; }
   r9+="shot=$ok blocker=${hb:-none} target=${ht:-none}; "; [ -n "$hb" ] && hitb=1; [ -n "$ht" ] && hitt=1; [ $hitb = 1 ] && break; done
 A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >/dev/null
 case "$PV0" in 1|on|true) A combatmode "$TG" passive on >/dev/null;; *) A combatmode "$TG" passive off >/dev/null;; esac
