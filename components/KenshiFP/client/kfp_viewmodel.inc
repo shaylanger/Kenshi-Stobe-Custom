@@ -97,11 +97,11 @@ static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
         VP(1.359f, -2.467f, 5.287f, -0.216f, 0.739f, 0.638f, -0.695f, -0.495f, -0.522f),
         VP(0.800f, -2.400f, 6.800f, -0.279f, 0.724f, 0.631f, 0.179f, -0.639f, 0.748f) },   /* follow-through ends low-centre, forward (was flat left) */
     {   /* 3 rising: low left, up across to the top right */
-        VP(-1.668f, -2.305f, 3.883f, -0.351f, -0.043f, -0.131f, 0.857f, -0.302f, 1.676f),
-        VP(1.124f, -1.662f, 4.995f, -1.486f, -0.039f, -0.061f, 0.818f, 0.286f, 0.769f),
-        VP(1.122f, -0.083f, 5.204f, -0.466f, 0.373f, 0.138f, 0.347f, 2.017f, -0.969f),
-        VP(2.535f, -0.377f, 4.885f, -1.275f, 0.753f, 0.648f, 0.075f, -0.318f, -0.595f),
-        VP(0.639f, -1.735f, 4.517f, -0.232f, 0.255f, 0.320f, -0.886f, -0.113f, -0.542f) } };
+        VP(-1.482f, -2.076f, 3.632f, -1.187f, -0.228f, -0.182f, 1.099f, -0.522f, 1.655f),
+        VP(-0.198f, -1.326f, 4.379f, -1.873f, -0.056f, -0.042f, 0.187f, 0.412f, 1.335f),
+        VP(0.787f, -1.149f, 4.830f, -0.832f, 0.108f, 0.257f, 0.698f, 2.424f, -0.516f),
+        VP(2.697f, -0.449f, 4.843f, -1.383f, 0.975f, 0.534f, 0.690f, -0.640f, -0.433f),
+        VP(0.413f, -1.440f, 4.210f, 0.032f, 0.134f, 0.214f, -0.565f, -0.356f, -1.371f) } };
 static unsigned char g_vm_band_hidden;   /* Z1: set by fp_head_visibility (band hide active), recorded per frame */
 static VmPose *g_vm_swkp = g_vm_swk;   /* keys of the current swing's stroke */
 static int g_vm_strokes = 0x1, g_vm_stroke_force = -1, g_vm_stroke = 0, g_vm_stroke_next = 0;
