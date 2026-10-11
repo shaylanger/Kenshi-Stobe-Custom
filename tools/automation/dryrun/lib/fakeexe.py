@@ -141,7 +141,10 @@ def ffmpeg(name, a):
     ins = []
     for o, p in inputs:
         if o.get('-f') == 'gdigrab':
-            if p != WIN_TITLE:
+            # a desktop REGION grab (-offset_x/-offset_y/-video_size all given) is deliberate: capture-proof.sh's control
+            # films the screen area under its cover window; a bare 'desktop' (whole screen) still fails
+            region = p == 'desktop' and all(k in o for k in ('-offset_x', '-offset_y', '-video_size'))
+            if p != WIN_TITLE and not region:
                 dr.flag('FAIL', 'gdigrab input "%s" is not the game window (%s)' % (p, WIN_TITLE))
             if str(o.get('-draw_mouse', '1')) != '0':
                 dr.flag('FAIL', 'gdigrab without -draw_mouse 0: the mouse cursor gets into the recording')
