@@ -30,6 +30,10 @@ format), taken FIFO by file name: the rig's own folder first, then any\ (lists w
   # launch: <save>            save to launch; default the first row's save ("home" -> auto-home); "-" rows need launch:
   # needs: KenshiFP latest                 (the default to write) install THE newest staged build, resolved at the batch
   #                                        boundary (no header: the newest staged build if it is newer than the installed DLL)
+  # needs: KenshiFP any                    run on the installed build while the running game can be reused (same gfx); the
+  #                                        newest staged build comes with the next natural restart (cuts 40-60 s relaunches)
+  # needs: KenshiFP +<patch>[,<patch>]     a fix's confirm list: the build must contain those kfp-pipeline patches; installs
+  #                                        the newest staged build only if the installed one lacks one
   # needs: KenshiFP <sha8>                 that build; if staging replaced it, the newest staged build that includes every
   #                                        patch of it (manifest patches line, runner\staged-history.tsv), else the installed
   #                                        one if it does, with a log line; fails only if none does. Harness <sha8> = must match; no Harness pin = staged\AutomationHarness-latest.txt (installed at the boundary)
@@ -131,6 +135,21 @@ function LingerAct([hashtable]$p, [double]$goneMin) {
     if ($goneMin -ge 2) { return 'rows left' }
     $null
 }
+# lazy install (hotswap2 2026-10-11: cold relaunch 40-60 s vs in-place load 8 s; ~20 install restarts/day/rig):
+# "# needs: KenshiFP any" = run on the installed build while the game can be reused (same gfx), take the newest staged build
+# at the next natural restart; "# needs: KenshiFP +<patch>[,<patch>]" = the build must contain those patches (a fix's
+# confirm list): install only if the installed one lacks one. Returns @{ sha = <sha8 to install or $null>; fail = <why> }.
+function LazyNeed([string]$need, [bool]$reusable, [string]$installed, $instP, [string]$lat, $latP) {
+    $newer = if ($lat -and $lat -ne $installed) { $lat } else { $null }
+    if (-not $reusable) { return @{ sha = $newer } }   # the game (re)starts anyway: newest staged build, free
+    if ($need -eq 'any') { return @{ sha = $null } }
+    $want = @($need.TrimStart('+') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $has = { param($csv) if ($null -eq $csv) { return $false }; $l = @($csv -split ',' | ForEach-Object { $_.Trim() }); -not @($want | Where-Object { $l -notcontains $_ }).Count }
+    if (& $has $instP) { return @{ sha = $null } }
+    if ($newer -and (& $has $latP)) { return @{ sha = $newer } }
+    if ($null -eq $instP -and $newer) { return @{ sha = $newer } }   # installed patch list unknown: the newest staged build
+    @{ fail = "needs KenshiFP +$($want -join ','): neither the installed build ($installed) nor the newest staged ($lat) has them all" }
+}
 # batch with no batch.pid yet: 'wait' | 'requeue' (no row ran: back into queue\<rig>\, once per 2 h, not a filler copy) | 'fail'.
 # Judged 3 min after the start command, or 90 s into this runner process when an earlier runner issued the start
 # (speed-scout 2026-10-11: a runner restart 1 s after the 4080 start of 90-fists-ini-4080 killed it; 3 idle min, list lost).
@@ -194,6 +213,13 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
             @('requeued 1 h ago = fail', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $false, 1, 'fail'),
             @('filler copy = fail (filler\ keeps the original)', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $true, 99, 'fail'))
     foreach ($c in $ns) { $g = [string](NeverStartedAct $c[1] $c[2] $c[3] $c[4] $c[5]); $ok = $g -eq $c[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) never-started $($c[0]): got '$g' want '$($c[6])'" }
+    # lazy install (hotswap2): any / +patch keep a reusable game on its build; a needed patch or a restart installs the newest
+    $lz = @(@('any, game reusable', 'any', $true, 'AAAA0001', 'p1', 'BBBB0002', 'p1,p2', 'sha='),
+            @('any, game must restart', 'any', $false, 'AAAA0001', 'p1', 'BBBB0002', 'p1,p2', 'sha=BBBB0002'),
+            @('+p1 installed has it', '+p1', $true, 'AAAA0001', 'p1', 'BBBB0002', 'p1,p2', 'sha='),
+            @('+p2 only staged has it', '+p2', $true, 'AAAA0001', 'p1', 'BBBB0002', 'p1,p2', 'sha=BBBB0002'),
+            @('+p3 nobody has it', '+p3', $true, 'AAAA0001', 'p1', 'BBBB0002', 'p1,p2', 'fail'))
+    foreach ($c in $lz) { $r = LazyNeed $c[1] $c[2] $c[3] $c[4] $c[5] $c[6]; $g = if ($r.fail) { 'fail' } else { "sha=$($r.sha)" }; $ok = $g -eq $c[7]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lazy-install $($c[0]): got '$g' want '$($c[7])'" }
     # fast FAIL routing (coordinator m102): one fast list with more queued = owner note; idle rig or a streak = sticky ALERT
     foreach ($c in @(@('fast list, 3 more queued', 3, 1, 'note'), @('fast list, nothing queued (rig idles)', 0, 1, 'alert'), @('2nd fast list in a row', 2, 2, 'alert'))) {
         $g = FastAlertAct $c[1] $c[2] 2; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) fast-FAIL $($c[0]): got '$g' want '$($c[3])'" }
@@ -723,9 +749,16 @@ function ResolvePinned([string]$pin, [string]$installed) {
     @{ fail = "needs KenshiFP ${pin}: no longer staged, and neither the newest staged build ($(if ($lat) { "$lat lacks: $((Missing $pin $lat) -join ',')" } else { 'none' })) nor the installed $installed includes all its patches" }
 }
 # installed vs staged KenshiFP; returns $null (nothing to do), the sha8 to install, or 'FAIL' ($script:instWhy = reason)
-function StagedWanted([string]$need) {
+function StagedWanted([string]$need, [bool]$reusable = $false) {
     $sd = if ($Rig -eq '5090') { "$runs\staged" } else { $null }
     $script:instWhy = ''
+    if ($need -match '^(any|\+\S+)$') {
+        $script:instCache = $null; $ik = (InstalledHashes).K; $lat = LatestStaged
+        $r = LazyNeed $need $reusable $ik $(if ($ik -and $ik -ne '?') { PatchesOf $ik } else { $null }) $lat $(if ($lat) { PatchesOf $lat } else { $null })
+        if ($r.fail) { $script:instWhy = $r.fail; return 'FAIL' }
+        if (-not $r.sha -and $lat -and $lat -ne $ik) { Log "lazy install: KenshiFP $need runs on the installed $ik (staged $lat waits for the next restart)" }
+        return $r.sha
+    }
     if ($need -and $need -notmatch '^(staged-)?latest$') {
         $script:instCache = $null; $ik = (InstalledHashes).K
         $r = ResolvePinned $need $ik
@@ -980,7 +1013,11 @@ function Start-Batch($f) {
     # FrameCap build must reach every list, the gaming throttle's 30 fps cap needs it), installed at this boundary
     $hl = Join-Path $runs 'staged\AutomationHarness-latest.txt'
     if (-not $needH -and (Test-Path $hl)) { $t = (Get-Content $hl -TotalCount 1); if ($t -match '^\s*(\w{8})') { $needH = $Matches[1].ToUpper() } }
-    $inst = if ($filler) { $null } else { StagedWanted $needK }   # filler: runs on the installed build (needs checked at pick)
+    $gfx = if ((Header $run 'gfx') -match '^low\b') { 'low' } else { 'full' }
+    # the running game can serve this list in place (same gfx, no harness install): lazy needs (any / +patch) keep it up
+    $reuseOk = if ($Rig -eq '5090') { [bool](K1Procs) -and (RunningGfx) -eq $gfx -and -not ($needH -and (Get-FileHash 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll').Hash.Substring(0, 8) -ne $needH) }
+               else { [bool]$script:keep4080 -and (RunningGfx) -eq $gfx }
+    $inst = if ($filler) { $null } else { StagedWanted $needK $reuseOk }   # filler: runs on the installed build (needs checked at pick)
     if ($inst -eq 'FAIL') { Fail-List $run $name $own $script:instWhy @(); Remove-Item $curF; return $true }
     # "# gfx: low" (res-graphics, Shay 22:05: rows that don't film run at lowest graphics in a small window): the running game
     # is reused only when its mode matches (runner\<rig>.gfx), else relaunched; the launch reads KAH_GFX (5090) / kcfg -Gfx (4080)
