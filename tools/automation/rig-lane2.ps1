@@ -1,0 +1,188 @@
+<#
+rig-lane2.ps1: the second game lane on one rig (multi-instance, C:\KenshiTestRuns\multi-instance\PLAN.md; agent
+multi-instance-c 2026-10-11). Lane "5090b" = Kenshi instance 2 (install copy D:\KenshiInst\2, kenshi-instance.ps1) on the
+5090, beside the main lane's game (instance 1). Started and controlled through rig-runner.ps1 (-Rig 5090b; -Ensure /
+-Start / -Stop / -Status / -Restart / -SelfTest include it), never run by hand except -SelfTest.
+
+Queue: C:\KenshiTestRuns\queue\5090b\*.list only (run-batch.sh list format, FIFO by numeric prefix). A list is taken only if
+  - "# gfx: low" (no recording / screenshot / pixel checks: two games share one window title class and one test monitor;
+    filming stays on lane 1), and no Stobe rows (STOBE-*, tests/ingame/stobe, *.txt);
+  - crossbow guard (NO PC CRASHES, 2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): no row command names
+    a crossbow/ranged/turret/reload script or switch (fp-xbow*, crossbow, ranged, turret, reload, XB* rows, VMQUICK).
+  Lists that break a rule go to queue\failed\ (+ .result naming the rule); the owner gets a note.
+Admission (checked before every launch of instance 2): dedicated GPU memory free >= 6 GB (nvidia-smi) AND RAM free >= 8 GB,
+  no ALERT-5090-tdr.txt / ALERT-5090b-tdr.txt. Not admitted = the list waits (state "waiting: <why>"), nothing is launched.
+Per list: if instance 2 is not running: kenshi-instance.ps1 sync -Instance 2 -Saves <launch save> (DLLs/mods/cfgs = what
+  instance 1 has installed; the lane never installs anything itself); if it runs but instance 1's KenshiFP/harness DLL differs
+  from the copy's, instance 2 is stopped and synced. Then run-batch.sh (snapshot in the out dir, lock game-2.lock owner
+  runner-5090b, KAH_INSTANCE=2, KAH_GFX=low, --launch <save> [--reuse]) detached; out dir C:\KenshiTestRuns\<list>-i2-<MMdd-HHmm>
+  with .instance (=2, so rig-runner-probe.sh / batch-health.sh / kenshi_pids see only instance 2); inflight marker
+  runner-5090b. Window: instance 2 is retitled "<title> [i2]" (kenshi-ctl.ps1 retitle) as soon as it has a window and every
+  tick, so lane 1's gdigrab title= capture never grabs it.
+Every tick (30 s) of a batch: TDR guard = System-log nvlddmkm/Display 4101|153 since the batch started (same rule as
+  rig-runner.ps1 TdrFilter) or an ALERT-5090-tdr.txt from lane 1 -> PREEMPT TDR, instance 2 stopped, ALERT-5090b-tdr.txt,
+  5090b.stopped, loop exits (lane 1's own guard stops instance 1 on the same events: one GPU). batch-health.sh STALL held
+  >= 10 min -> rig-runner-probe.sh end-batch + instance 2 stopped. DONE -> queue\done\<list> + .result + .SUMMARY.txt.
+  Queue empty 5 min -> instance 2 stopped (frees ~4 GB RAM / 2.5 GB VRAM).
+Files: runner\5090b.{pid,log,state,cur,stopped,restart}; ALERT-5090b-tdr.txt.
+  rig-lane2.ps1 -SelfTest   eligibility + admission + TDR filter on fixed cases (no side effects)
+#>
+param([switch]$SelfTest, [switch]$Fake, [int]$TickSec = 30, [int]$MinGpuMB = 6144, [int]$MinRamMB = 8192, [int]$StallMin = 10, [int]$IdleStopMin = 5)
+$Lane = '5090b'; $Inst = 2
+$runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
+
+# ---------------------------------------------------------------- pure rules (-SelfTest)
+function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
+function LaneReject([string[]]$lines) {   # $null = the lane may run this list, else why not
+    $g = @($lines | Where-Object { $_ -match '^\s*#\s*gfx:\s*(\S+)' } | ForEach-Object { $Matches[1].ToLower() } | Select-Object -First 1)
+    if (-not $g -or $g[0] -ne 'low') { return 'not "# gfx: low" (filming/full-gfx lists stay on lane 1)' }
+    $rows = LaneRows $lines
+    if (-not $rows.Count) { return 'no rows' }
+    foreach ($r in $rows) {
+        $f = @($r -split '\|'); $cmd = $f[-1]; $id = $f[0].Trim()
+        if ($cmd -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (lane 2 has no Stobe server path)" }
+        $c = $cmd -replace '(?i)kah-fpxbow', 'kah-SAVE' -replace '(?i)\w*noxbow\w*', 'GUARD'   # the melee fixture's save name and the WS_NOXBOW / pf_noxbow guard are not crossbow work
+        if ($c -match '(?i)(xbow|crossbow|ranged|turret|reload|\bbolt|vmquick|fp-e6-xbow)' -or $id -match '^(?i)(XB|T6|VMQ)') { return "crossbow guard: row $id names crossbow/ranged/turret work ($($Matches[1]))" }
+    }
+    $null
+}
+function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr) {   # $null = may launch instance 2
+    if ($tdr) { return 'TDR alert present' }
+    if ($gpuFreeMB -lt $MinGpuMB) { return "GPU memory free $gpuFreeMB MB < $MinGpuMB" }
+    if ($ramFreeMB -lt $MinRamMB) { return "RAM free $ramFreeMB MB < $MinRamMB" }
+    $null
+}
+function LaneTdrFilter([string[]]$lines, [long]$since) {
+    @($lines | Where-Object { $q = "$_" -split '\|', 4; $q.Count -ge 3 -and $q[0] -match '^\d+$' -and [long]$q[0] -ge $since -and $q[2] -in '4101', '153' -and $q[1] -match '^(nvlddmkm|display)$' })
+}
+if ($SelfTest) {
+    $bad = 0; $n = 0
+    $low = '# gfx: low'
+    $cases = @(
+        @('melee gfx low', @($low, 'M | kah-fpxbow | Malzin | Axima | 1200 | DRYRUN_NOREC=1 bash {CR}/x/fp-manual-melee.sh Malzin Skaera {OUT}/M'), ''),
+        @('no gfx header', @('M | kah-fpxbow | Malzin | Axima | 1200 | bash x/fp-manual-melee.sh'), 'not "# gfx: low"'),
+        @('gfx full', @('# gfx: full', 'M | s | a | b | 1 | bash x/fp-control.sh'), 'not "# gfx: low"'),
+        @('crossbow script', @($low, 'XC | kah-fpxbow | a | b | 1 | bash x/fp-xbow-tdrconfirm.sh {OUT}/XC'), 'crossbow guard'),
+        @('turret row', @($low, 'T1 | s | a | b | 1 | bash x/fp-turret-take.sh'), 'crossbow guard'),
+        @('ranged list', @($low, 'R | s | a | b | 1 | bash x/fp-ranged.sh'), 'crossbow guard'),
+        @('XB row id', @($low, 'XBRLD | s | a | b | 1 | bash x/fp-thing.sh'), 'crossbow guard'),
+        @('stobe row', @($low, 'S1 | s | a | b | 1 | bash {CR}/KenshiModding/tests/ingame/stobe/STOBE-X.sh'), 'Stobe row'),
+        @('save name + WS_NOXBOW guard are not crossbow work', @($low, 'W | kah-fpxbow | a | b | 1 | WS_NOXBOW=1 PF_SAVE=kah-fpxbow bash x/fp-weapon-sweep.sh'), '')
+    )
+    foreach ($c in $cases) { $n++; $g = [string](LaneReject $c[1]); $ok = if ($c[2]) { $g -like "$($c[2])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 list $($c[0]): got '$g'" }
+    $ad = @(@(20000, 20000, $false, ''), @(5000, 20000, $false, 'GPU'), @(20000, 6000, $false, 'RAM'), @(20000, 20000, $true, 'TDR'))
+    foreach ($a in $ad) { $n++; $g = [string](LaneAdmit $a[0] $a[1] $a[2]); $ok = if ($a[3]) { $g -like "$($a[3])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 admit gpu=$($a[0]) ram=$($a[1]) tdr=$($a[2]): got '$g'" }
+    $n++; $t = @(LaneTdrFilter @('1000|Display|4101|reset', '1100|nvlddmkm|153|err', '1200|disk|153|io', '900|Display|4101|old') 950)
+    $ok = ($t | ForEach-Object { ($_ -split '\|')[0] }) -join ',' -eq '1000,1100'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 TDR filter: $($t -join ' ; ')"
+    "LANE2-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
+}
+
+# ---------------------------------------------------------------- loop (started by rig-runner.ps1 -Rig 5090b)
+$rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
+$qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
+foreach ($d in "$qd\$Lane", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
+$log = Join-Path $rd "$Lane.log"; $stateF = Join-Path $rd "$Lane.state"; $curF = Join-Path $rd "$Lane.cur"
+$stopF = Join-Path $rd "$Lane.stopped"; $tdrF = Join-Path $runs "ALERT-$Lane-tdr.txt"; $tdr1 = Join-Path $runs 'ALERT-5090-tdr.txt'
+$owner = "runner-$Lane"; $K2 = "D:\KenshiInst\$Inst"; $K1 = 'D:\Steam\steamapps\common\Kenshi'; $distro = 'DwemerAI4Skyrim3'
+function Log([string]$m) { Add-Content $log "$((Get-Date).ToString('MM-dd HH:mm:ss')) $m" -ErrorAction SilentlyContinue }
+function State([string]$m) { Set-Content $stateF "$((Get-Date).ToString('HH:mm')) $m" -ErrorAction SilentlyContinue }
+function Note([string]$who, [string]$m) { Add-Content (Join-Path $runs "agents\$who.note-from-rig-runner") "$((Get-Date).ToString('MM-dd HH:mm')) rig-runner $Lane`: $m" -ErrorAction SilentlyContinue }
+function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | ForEach-Object { "$_" } }
+function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
+function K2Procs { @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$K2\*" }) }
+function Ctl2([string[]]$a) {   # workspace kenshi-ctl.ps1 on instance 2 as runner-5090b
+    $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = 'low'
+    try { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" @a 2>&1 | ForEach-Object { "$_" } } finally { Remove-Item env:KAH_INSTANCE, env:KAH_GFX -ErrorAction SilentlyContinue }
+}
+function Stop2([string]$why) { if (K2Procs) { $o = Ctl2 @('stop'); Log "instance 2 stopped ($why): $(($o | Select-Object -Last 1))"; if (K2Procs) { foreach ($k in K2Procs) { & taskkill.exe /F /T /PID $k.Id 2>&1 | Out-Null }; Log 'instance 2 force-killed' } } }
+function GpuFreeMB { try { [int]((& nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | Select-Object -First 1).Trim()) } catch { 0 } }
+function RamFreeMB { [int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB) }
+function TdrEvents([long]$since) {
+    $s = [DateTimeOffset]::FromUnixTimeSeconds($since).LocalDateTime
+    @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = 4101, 153; StartTime = $s } -ErrorAction SilentlyContinue | ForEach-Object { '{0}|{1}|{2}|{3}' -f ([DateTimeOffset]$_.TimeCreated).ToUnixTimeSeconds(), $_.ProviderName, $_.Id, (([string]$_.Message -replace '\s+', ' ') -replace '\|', '/') })
+}
+function DllHash([string]$root) {   # KenshiFP + harness DLLs the game loads (Vortex links resolved by Get-FileHash)
+    @(Get-ChildItem "$root\mods" -Recurse -Include 'KenshiFP.dll', 'AutomationHarness.dll' -File -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName).Hash.Substring(0, 8))" }) -join ' '
+}
+function QSort { @($input) | Sort-Object @{ e = { if ($_.Name -match '^(\d+)') { [long]$matches[1] } else { [long]::MaxValue } } }, @{ e = { -join ($_.Name.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) } } }
+function Fail([string]$path, [string]$name, [string]$own, [string]$why) {
+    $dst = Join-Path "$qd\failed" $name; Move-Item -LiteralPath $path $dst -Force -ErrorAction SilentlyContinue
+    Set-Content "$dst.result" "FAILED $Lane $(Get-Date -Format s) $why"; Log "FAILED $name : $why"
+    Note $own "list $name NOT run on lane $Lane ($why); $dst.result."
+}
+function Retitle { if (K2Procs) { $o = Ctl2 @('retitle'); if ("$o" -match 'set') { Log "$o" } } }
+function TdrStop([string]$m, [string]$out) {
+    Set-Content $tdrF @("ALERT $Lane $(Get-Date -Format HH:mm) $m", "Lane $Lane stopped (instance 2). A TDR is a crash warning (2026-10-11 BSOD). Delete only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Lane.")
+    if ($out) { Set-Content (Join-Path $out 'PREEMPT') 'TDR' -ErrorAction SilentlyContinue }
+    Stop2 'TDR'; Log "TDR $m"; Note 'coordinator' "$m. Lane $Lane STOPPED, instance 2 stopped."
+    Set-Content $stopF "$(Get-Date -Format s) by TDR guard: $m"; State "STOPPED TDR: $m"; Remove-Item (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue; exit 0
+}
+
+Log "lane $Lane up pid=$PID"
+$idleSince = Get-Date; $stall = $null
+while ($true) {
+    if (Test-Path $stopF) { Log 'stopped flag: exit'; Remove-Item (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue; exit 0 }
+    $cur = if (Test-Path $curF) { @(Get-Content $curF) } else { @() }   # runPath, outW, start(s), list name, owner
+    if ($cur.Count -ge 5) {
+        $outW = $cur[1]; $t0 = [long]$cur[2]; $name = $cur[3]; $own = $cur[4]
+        if (Test-Path $tdr1) { TdrStop "lane 1 TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outW }
+        $h = @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)); if ($h.Count) { TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
+        Retitle
+        if (Test-Path (Join-Path $outW 'DONE')) {
+            $sum = Join-Path $outW 'SUMMARY.txt'; $sl = if (Test-Path $sum) { @(Get-Content $sum) } else { @() }
+            $p = @($sl | Where-Object { $_ -match '^RESULT \S+ PASS' }).Count; $f = @($sl | Where-Object { $_ -match '^RESULT \S+ FAIL' }).Count
+            $dst = Join-Path "$qd\done" $name; Move-Item -LiteralPath $cur[0] $dst -Force -ErrorAction SilentlyContinue
+            if (Test-Path $sum) { Copy-Item $sum "$dst.SUMMARY.txt" -Force }
+            Set-Content "$dst.result" "DONE $Lane start=$([DateTimeOffset]::FromUnixTimeSeconds($t0).LocalDateTime.ToString('s')) end=$(Get-Date -Format s) out=$outW pass=$p fail=$f summary=$dst.SUMMARY.txt"
+            Log "DONE $name pass=$p fail=$f"; Note $own "lane $Lane finished $name : pass=$p fail=$f, $dst.SUMMARY.txt"
+            Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; $idleSince = Get-Date; $stall = $null; continue
+        }
+        $hl = (Wsl @('bash', "$(WslPath $auto)/batch-health.sh", (WslPath $outW)) | Select-Object -Last 1)
+        if ($hl -match '^HEALTH STALL') { if (-not $stall) { $stall = Get-Date }; if (((Get-Date) - $stall).TotalMinutes -ge $StallMin) {
+                $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane stall: $hl"); Log "STALL end-batch: $hl / $(($o | Select-Object -Last 1))"; Stop2 'stall'; $stall = $null } }
+        else { $stall = $null }
+        State "running $name -> $outW ($(if ($stall) { "STALL since $($stall.ToString('HH:mm')): " })$hl)"
+        Start-Sleep $TickSec; continue
+    }
+    if (Test-Path (Join-Path $rd "$Lane.restart")) {   # rig-runner.ps1 -Restart: re-spawn at the list boundary
+        Remove-Item (Join-Path $rd "$Lane.restart"), (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue
+        Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$auto\rig-runner.ps1", '-Rig', $Lane); Log 'restart: re-spawned'; exit 0
+    }
+    if ((Test-Path $tdr1) -or (Test-Path $tdrF)) { Stop2 'TDR alert'; State 'waiting: TDR alert present (no instance 2 launch)'; Start-Sleep $TickSec; continue }
+    $f = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
+    if (-not $f) {
+        if ((K2Procs) -and ((Get-Date) - $idleSince).TotalMinutes -ge $IdleStopMin) { Stop2 "queue empty $IdleStopMin min" }
+        State "idle: queue\$Lane empty$(if (K2Procs) { ' (instance 2 up)' })"; Start-Sleep $TickSec; continue
+    }
+    $txt = @(Get-Content $f.FullName); $name = $f.Name
+    $own = @($txt | Where-Object { $_ -match '^\s*#\s*owner:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1); $own = if ($own) { $own[0] } else { 'coordinator' }
+    $why = LaneReject $txt; if ($why) { Fail $f.FullName $name $own $why; continue }
+    $up = [bool](K2Procs)
+    if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)); if ($why) { State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
+    $launch = @($txt | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
+    $launch = if ($launch) { $launch[0] } else { ((LaneRows $txt)[0] -split '\|')[1].Trim() }
+    if ($up -and (DllHash $K1) -ne (DllHash $K2)) { Log "instance 1 has other DLLs ($(DllHash $K1)) than instance 2 ($(DllHash $K2)): stop + sync"; Stop2 'DLL sync'; $up = $false }
+    if (-not $up) {
+        $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" sync -Instance $Inst -Saves $launch 2>&1 | ForEach-Object { "$_" })
+        Log "sync: $(($sy | Select-Object -Last 2) -join ' / ')"
+        if (-not ($sy -match "save $launch ->")) { Fail $f.FullName $name $own "instance 2 sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; continue }
+    } else {
+        $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" save $launch -Instance $Inst 2>&1 | ForEach-Object { "$_" }); Log "save copy: $(($sy | Select-Object -Last 1))"
+    }
+    $outN = @($txt | Where-Object { $_ -match '^\s*#\s*out:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
+    $outN = if ($outN) { "$($outN[0])-i2" } else { "$($f.BaseName)-i2-$(Get-Date -Format MMdd-HHmm)" }
+    $outW = Join-Path $runs $outN; $outP = WslPath $outW; New-Item -ItemType Directory -Force $outW | Out-Null
+    $run = Join-Path "$qd\running" "${Lane}__$name"; Move-Item -LiteralPath $f.FullName $run -Force
+    Copy-Item $run (Join-Path $outW 'list.txt') -Force; Set-Content (Join-Path $outW '.instance') "$Inst"
+    Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
+    $rl = if ($up) { '--reuse ' } else { '' }
+    $st = "#!/bin/bash`nexport KAH_OWNER=$owner KAH_GFX=low KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
+    [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
+    $t0 = [DateTimeOffset]::Now.ToUnixTimeSeconds()
+    Set-Content $curF @($run, $outW, $t0, $name, $own); Set-Content (Join-Path $runs "inflight\runner-$Lane") $outP
+    Wsl @('bash', "$outP/.start.sh") | Out-Null
+    Log "START $name -> $outW (launch $launch$(if ($up) { ', reuse' }), gpu free $(GpuFreeMB) MB, ram free $(RamFreeMB) MB)"; Note $own "lane $Lane started $name : out=$outW"
+    State "running $name -> $outW (launching instance 2)"
+    # retitle as soon as instance 2 has a window (lane 1 filming captures by exact title), up to 4 min
+    for ($i = 0; $i -lt 80 -and -not (Test-Path (Join-Path $outW 'DONE')); $i++) { $k = K2Procs | Where-Object { $_.MainWindowHandle -ne 0 }; if ($k) { Retitle; if ((Ctl2 @('retitle')) -match 'ok') { break } }; Start-Sleep 3 }
+}

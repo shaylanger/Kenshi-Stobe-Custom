@@ -209,6 +209,27 @@ public static class KenshiFit {
   }
   "render size: STILL WRONG after 3 resizes"
 }
+# retitle (multi-instance lane 5090b, 2026-10-11): instance n >= 2 gets the window title "<title> [i<n>]" so a filming row
+# on instance 1 (ffmpeg gdigrab title=..., exact match) never captures instance 2's window. Instance 1: no-op.
+function Set-InstTitle {
+  if ($Inst -lt 2) { return 'retitle: instance 1 (no-op)' }
+  if (-not ('KenshiTitle' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class KenshiTitle {
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool SetWindowTextW(IntPtr h, string t);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, StringBuilder b, int n);
+  public static string Get(IntPtr h) { var b = new StringBuilder(256); GetWindowTextW(h, b, 256); return b.ToString(); }
+}
+'@
+  }
+  $p = Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Path -like "$Kenshi\*" } | Select-Object -First 1
+  if (-not $p) { return 'retitle: no game window' }
+  $t = [KenshiTitle]::Get($p.MainWindowHandle); $tag = " [i$Inst]"
+  if ($t.EndsWith($tag)) { return "retitle: ok '$t'" }
+  $null = [KenshiTitle]::SetWindowTextW($p.MainWindowHandle, $t + $tag); "retitle: set '$([KenshiTitle]::Get($p.MainWindowHandle))'"
+}
+if ($Command -eq 'retitle') { Set-InstTitle; exit 0 }
 if ($Command -eq 'fit') { Fit-RenderSize; exit 0 }
 # postlaunch (run-batch.sh after it kills the stuck launch proxy, which also killed the re-place/fit below: 2026-10-10
 # studio-fixture rendered 798x413 on DISPLAY1): re-place on the test monitor + fit, verify, up to 3 rounds; exit 1 if wrong
@@ -217,6 +238,7 @@ if ($Command -eq 'postlaunch') {
   $mons = & $ctl monitors -Kenshi $Kenshi
   $want = '\\.\' + ($Monitor -replace '^\\\\\.\\', '').ToUpper()
   if ($mons -notmatch [regex]::Escape($want) + ' ') { $Monitor = ((@($mons -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ }))[0] -split ' ')[0]; $want = $Monitor }
+  if ($Inst -ge 2) { Set-InstTitle }
   foreach ($i in 1..3) {
     $b = & $ctl background -Monitor $Monitor -Kenshi $Kenshi
     $fit = @(Fit-RenderSize) -join ' / '

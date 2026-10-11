@@ -13,6 +13,10 @@ Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 40
   rig-runner.ps1 -SelfTest               check the stuck rule on fixed probe cases (no side effects; run after editing it)
   rig-runner.ps1 -Restart [-Rig X]       deploy an edited rig-runner.ps1: the loop re-spawns itself at its next list boundary
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
+  -Rig 5090b                             lane 5090b = a SECOND Kenshi (instance 2, D:\KenshiInst\2) on the 5090 beside lane 1: queue\5090b\ only,
+                                         gfx-low, crossbow-guarded, admission GPU free >= 6 GB + RAM free >= 8 GB, own TDR guard; loop in
+                                         rig-lane2.ps1 (header). -Ensure/-Start/-Stop/-Status/-Restart/-SelfTest include it. Lane 1 sees and kills only
+                                         instance 1 (K1Procs: path not under D:\KenshiInst).
   -Fake: test mode on a fake game: queue/runner dirs under C:\KenshiTestRuns\runner\fake\, no lock/install/launch, the
          "batch" is dryrun.sh over the list (writes DONE + SUMMARY.txt); tests pickup, FIFO, gating, done/failed, alerts.
   Pause a rig (no new batch, no alert): kenshi-ctl.ps1 idle "<reason>" / idle4080 "<reason>" (60 min), as before.
@@ -79,7 +83,7 @@ cause). run-batch.sh checks after every row itself too (<out>\TDR). -Fake: runne
 "epoch|provider|id|message" lines; -SelfTest checks the filter (+ run-batch.sh --selftest).
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
-param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
+param([ValidateSet('5090', '4080', '5090b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
       [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '', [string]$DryKeyOf = '',
       [int]$HardMin = 5, [switch]$SelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
@@ -170,19 +174,23 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     # 4080 sync covers every helper a synced script names (rg-02 1011-0927: fp-control.sh's fp-yaw-free.awk never synced)
     $sc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --check' 2>&1 | ForEach-Object { "$_" })
     $ok = $LASTEXITCODE -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync helper closure: $(($sc | Select-Object -First 3) -join ' / ')"
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 2) cases"; exit [int]($bad -gt 0)
+    # lane 5090b (second game instance, rig-lane2.ps1): list eligibility (gfx low, crossbow guard, no Stobe), admission, TDR filter
+    $l2 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l2[-1]) -like 'LANE2-SELFTEST PASS*'; if (-not $ok) { $bad++; $l2 | Where-Object { $_ -like 'FAIL*' } }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 5090b rig-lane2.ps1 -SelfTest: $($l2[-1])"
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 3) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
 foreach ($d in $rd, "$qd\5090", "$qd\4080", "$qd\any", "$qd\filler", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $distro = 'DwemerAI4Skyrim3'
+function K1Procs { @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -notlike 'D:\KenshiInst\*' }) }   # instance 1 only (lane 5090b runs D:\KenshiInst\2)
 function PidAlive([string]$r) { $f = Join-Path $rd "$r.pid"; if (Test-Path $f) { $p = [int](Get-Content $f -Raw); return [bool](Get-Process -Id $p -ErrorAction SilentlyContinue) } $false }
 
 # -Stop persists (2026-10-10: session-start's -Ensure restarted a loop the coordinator had just stopped): <rig>.stopped
 # makes -Ensure skip that rig until -Start (or -Ensure -Force); a loop that sees the flag exits at its next tick.
 function StopFlag([string]$r) { Join-Path $rd "$r.stopped" }
 if ($Stop) {
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080') })) {
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b') })) {
         Set-Content (StopFlag $r) "$(Get-Date -Format s) by $(if ($env:KAH_OWNER) { $env:KAH_OWNER } else { 'coordinator' })"
         if (PidAlive $r) { Stop-Process -Id ([int](Get-Content (Join-Path $rd "$r.pid") -Raw)) -Force; "stopped runner $r (stays stopped: rig-runner.ps1 -Start -Rig $r)" } else { "runner $r not running (marked stopped)" }
         Remove-Item (Join-Path $rd "$r.pid") -ErrorAction SilentlyContinue
@@ -209,7 +217,7 @@ function WriteShared([string]$p, [string]$text, [switch]$Append) {
 if ($Status) {
     # the state line is cross-checked with the runner's current files (2026-10-10: -Status showed "running rg-05 ... 21:17"
     # after the runner had moved on): <rig>.cur names the batch in its game part, <rig>.tail.* the ones still analysing
-    foreach ($r in '5090', '4080') {
+    foreach ($r in '5090', '4080', '5090b') {
         $st = ReadShared "$rd\$r.state"; $st = if ($st) { $st.Trim() } else { '-' }
         $sf = Get-Item "$rd\$r.state" -ErrorAction SilentlyContinue
         $cur = ReadShared "$rd\$r.cur"; $cl = if ($cur) { @($cur -split "`r?`n") } else { @() }
@@ -230,12 +238,12 @@ if ($Status) {
     exit 0
 }
 if ($Restart) {   # deploy a new rig-runner.ps1 at the next list boundary (never mid-batch): the loop re-spawns itself there
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
     exit 0
 }
 if ($Start) { $Ensure = $true; $Force = $true }
 if ($Ensure) {
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080') })) {
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b') })) {
         if (PidAlive $r) { "runner $r running pid=$(Get-Content (Join-Path $rd "$r.pid") -Raw)"; continue }
         if (Test-Path (StopFlag $r)) {
             if (-not $Force) { "runner $r STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()): not started (rig-runner.ps1 -Start -Rig $r)"; continue }
@@ -253,6 +261,8 @@ if (-not $Resolve -and -not $DryKeyOf) {
     if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
     Set-Content (Join-Path $rd "$Rig.pid") $PID
 }
+# lane 5090b = the second game instance on the 5090 (D:\KenshiInst\2): its own small loop (rig-lane2.ps1 header)
+if ($Rig -eq '5090b') { & "$auto\rig-lane2.ps1" -Fake:$Fake -TickSec ([Math]::Min($TickSec, 30)); exit 0 }
 
 # ---------------------------------------------------------------- helpers
 $log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"; $gfxF = Join-Path $rd "$Rig.gfx"
@@ -937,7 +947,7 @@ function Start-Batch($f) {
         # else run-batch.sh --reuse loads the save in place
         $hd = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll'
         $hInst = $needH -and (Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH
-        if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) {
+        if (K1Procs) {
             $rg = RunningGfx
             if ($inst -or $hInst) { Log "stop Kenshi for the install (KenshiFP $inst$(if ($hInst) { ", Harness $needH" }))"; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
             elseif ($rg -ne $gfx) { Log "stop Kenshi: the list wants gfx $gfx, the running game has $rg (relaunch)"; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
@@ -953,7 +963,7 @@ function Start-Batch($f) {
             $hd = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll'
             if ((Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH) {
                 $sh = Join-Path $runs "staged\AutomationHarness-$needH.dll"   # staged copy first (out\ is shared by every harness builder)
-                $o = if ((Test-Path $sh) -and (Get-FileHash $sh).Hash.Substring(0, 8) -eq $needH -and -not (Get-Process kenshi_x64 -ErrorAction SilentlyContinue)) { Copy-Item $sh $hd -Force; "copied $sh" }
+                $o = if ((Test-Path $sh) -and (Get-FileHash $sh).Hash.Substring(0, 8) -eq $needH -and -not (K1Procs)) { Copy-Item $sh $hd -Force; "copied $sh" }
                      else { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\install-dll.ps1" Harness 2>&1 | ForEach-Object { "$_" } }
                 if ((Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH) { Fail-List $run $name $own "needs Harness $needH, installed $((Get-FileHash $hd).Hash.Substring(0, 8)) (build out has another hash)" $o; Remove-Item $curF; return $true }
                 Log "install Harness $needH"
@@ -1076,7 +1086,7 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
             Remove-Item (Join-Path $runs 'inflight\runner-5090') -ErrorAction SilentlyContinue
             $lk = Join-Path $runs 'game.lock'
             if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) {
-                if ($how -eq 'DIED' -and (Get-Process kenshi_x64 -ErrorAction SilentlyContinue)) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
+                if ($how -eq 'DIED' -and (K1Procs)) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
                 Remove-Item $lk -ErrorAction SilentlyContinue; Log "lock released ($how $name)"
             }
         }   # 4080: stopped (DIED) / marker removed below
@@ -1289,9 +1299,9 @@ while ($true) {
                         $r = Probe $c[2] $act
                         if ($act -eq 'kill-game' -and -not $Fake) {   # verify the game is gone; stop it the rig's way if not
                             $kr = if ($Rig -eq '5090') {
-                                KillGame { [bool](Get-Process kenshi_x64 -ErrorAction SilentlyContinue) } `
+                                KillGame { [bool](K1Procs) } `
                                          { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop 2>&1 } `
-                                         { & taskkill.exe /F /T /IM kenshi_x64.exe 2>&1 } 20
+                                         { foreach ($k in K1Procs) { & taskkill.exe /F /T /PID $k.Id 2>&1 } } 20
                             } else {   # ssh failure counts as alive (never report a game we can't see as gone)
                                 KillGame { $t = @(Ssh @('tasklist')); if (-not ($t -match 'Image Name|^System')) { $true } else { [bool]($t -match 'kenshi_x64') } } `
                                          { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4, '-TimeoutSec', '90') } `
@@ -1354,7 +1364,7 @@ while ($true) {
                 if ($idleFor -ge $IdleMin -and -not $Fake) {   # give the rig back as the empty-queue path does (no IDLE-GAME block)
                     if ($Rig -eq '4080' -and $script:keep4080) { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; $script:keep4080 = $false; Log '4080 Kenshi stopped (no changed work)' }
                     if ($Rig -eq '5090') { $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) {
-                        if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null; Log 'Kenshi stopped (no changed work)' }
+                        if (K1Procs) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null; Log 'Kenshi stopped (no changed work)' }
                         Remove-Item $lk; Log 'lock released (no changed work)' } }
                 }
             } else {
@@ -1370,7 +1380,7 @@ while ($true) {
                     if ($Rig -eq '5090' -and -not $Fake) {
                         $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) {
                             # batches no longer --stop: close the game the runner left up, then release
-                            if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null; Log 'Kenshi stopped (queue empty)' }
+                            if (K1Procs) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null; Log 'Kenshi stopped (queue empty)' }
                             Remove-Item $lk; Log 'lock released (queue empty)' } }
                 }
             }
