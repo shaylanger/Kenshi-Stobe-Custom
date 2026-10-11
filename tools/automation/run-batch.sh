@@ -188,7 +188,9 @@ load_target() {
   case "$s" in kah-fpxbow|kah-fpstudio) ;; *) echo "$s"; return ;; esac
   for w in "${WORDS[@]}"; do case "$w" in PF_SAVE=*) ps=${w#PF_SAVE=} ;; [A-Za-z_]*=*|bash|sh) ;; *) sc=$w; break ;; esac; done
   case "$sc" in /*) ;; *) [ -e "$KT/$sc" ] && sc="$KT/$sc" ;; esac
-  grep -qE '^[[:space:]]*pf_load([[:space:]]|$)' "$sc" 2>/dev/null || { echo "$s"; return; }
+  # a wrapper that ends in `exec bash ".../<take>.sh"` (fp-s1pt30-confirm.sh -> fp-e6-strokes.sh): look at that script
+  local nx; nx=$(grep -oE '^[[:space:]]*exec bash "?[^" ]*/[A-Za-z0-9_.-]+\.sh' "$sc" 2>/dev/null | head -1 | sed 's|.*/||')
+  grep -qE '^[[:space:]]*pf_load([[:space:]]|$)' "$sc" 2>/dev/null || { [ -n "$nx" ] && grep -qE '^[[:space:]]*pf_load([[:space:]]|$)' "$KT/$nx" 2>/dev/null; } || { echo "$s"; return; }
   if [ -n "$ps" ]; then echo "$ps"; elif [ -d "$CR/Users/Shay/AppData/Local/kenshi/save/kah-fpstudio" ]; then echo kah-fpstudio; else echo kah-fpxbow; fi
 }
 prepare() {  # prepare <save> <player> <mate>
