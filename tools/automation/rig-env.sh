@@ -26,7 +26,8 @@ _rig_detect() {
 export RIG=$(_rig_detect)
 export WIN_TITLE="Kenshi 1.0.65 - x64 (Newland)" RES_W=1600 RES_H=900
 # 5090 instance n >= 2 (extra game lanes; the 4080 lane 4080b does not retitle) is retitled "<title> [i<n>]" (kenshi-ctl.ps1 retitle): its takes capture that window
-if [ "$RIG" != 4080 ] && [[ "${KAH_INSTANCE:-1}" =~ ^[2-9]$ ]]; then export WIN_TITLE="$WIN_TITLE [i$KAH_INSTANCE]"; fi
+# instance n >= 2 is retitled "<title> [i<n>]" (5090: kenshi-ctl.ps1 retitle; 4080: C:\KAH\inst-window.ps1): takes capture that window
+if [[ "${KAH_INSTANCE:-1}" =~ ^[2-9]$ ]]; then export WIN_TITLE="$WIN_TITLE [i$KAH_INSTANCE]"; fi
 # gfx-low games render smaller (kenshi-gfx.ps1 low: env KAH_VIDEO_MODE, e.g. lanes 5090b/5090c '800 x 600', else 1280 x 720;
 # lane-5090c 2026-10-11: agreerec-i2 FAILed pf_rig "renders at 4096x2160 not 1600x900"): takes and pf_rig judge that size
 if [[ "${KAH_VIDEO_MODE:-}" =~ ^([0-9]+)\ x\ ([0-9]+)$ ]]; then export RES_W=${BASH_REMATCH[1]} RES_H=${BASH_REMATCH[2]}

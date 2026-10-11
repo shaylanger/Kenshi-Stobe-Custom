@@ -8,7 +8,8 @@ next to every `launch|restart -Instance n` (n >= 2). Every second while the game
   - the game window title gets " [i<n>]" (lane 1's take scripts capture by the exact title "Kenshi 1.0.65 - x64 (Newland)";
     two windows with that title = the capture may pick instance n).
 Exits 60 s after the instance's game is gone, or after 10 min if it never appeared. One watcher per instance (mutex).
-Log: C:\KenshiTestRuns\inst-window-<n>.log (one line per change).
+Log: C:\KenshiTestRuns\inst-window-<n>.log (one line per change). C:\KenshiTestRuns\inst-window-<n>.pos ("x,y", read every
+pass) overrides -X/-Y: lane 4080b puts its window on the screen (0,0, not topmost) while it films (WGC films covered windows).
   inst-window.ps1 -Instance 2 [-X 1920 -Y 0] [-Once]   (-Once: one pass, print what it did; for checks over itrun)
 #>
 param([int]$Instance = 2, [int]$X = 1920, [int]$Y = 0, [switch]$Once)
@@ -48,6 +49,8 @@ Log "watcher up pid=$PID instance=$Instance park=$X,$Y"
 while ($true) {
   $pids = [uint32[]]@(Get-CimInstance Win32_Process -Filter "Name='kenshi_x64.exe'" -ErrorAction SilentlyContinue |
       Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { [uint32]$_.ProcessId })
+  $pf = "C:\KenshiTestRuns\inst-window-$Instance.pos"
+  if (Test-Path $pf) { $pq = "$((Get-Content $pf -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -split ','; if ($pq.Count -eq 2 -and $pq[0] -match '^-?\d+$' -and $pq[1] -match '^-?\d+$') { $X = [int]$pq[0]; $Y = [int]$pq[1] } }
   if ($pids.Count) {
     $seen = Get-Date; $gone = $null
     foreach ($h in [KInstWin]::Of($pids)) {
