@@ -85,6 +85,13 @@ take(){   # k sid name type animcls ammo
     wc_=$(python3 -c "import json,sys; print(next((w['cls'] for w in json.load(open(sys.argv[1]))['weapons'] if w['sid']==sys.argv[2]), -1))" "$WCAT" "$sid" 2>/dev/null)
     c2=$(echo "$st2" | fld cat); h2=$(echo "$st2" | fld 2h); w2=$([ "$wc_" = 3 ] || [ "$wc_" = 8 ] && echo 1 || echo 0)
     [ "$c2" = "$wc_" ] && [ "$h2" = "$w2" ] || pf_fail "2H state cat=$c2 2h=$h2, catalog class $wc_ wants 2h=$w2"
+    # the off-hand grip needs the weapon mesh extent (refilm 2 2026-10-10: pom/tip -1 for every weapon, Warhammer off hand
+    # left the handle): a 2H weapon whose mesh was not read stops the take (KenshiFP retries for ~5 s after the draw)
+    if [ "$w2" = 1 ]; then
+      pm2=$(echo "$st2" | fld pom)   # empty = a build without the dims reader in probe: fails too
+      for _ in 1 2 3 4 5 6; do case "$pm2" in -*|'') sleep 1; pm2=$(A fp_vm probe | fld pom);; *) break;; esac; done
+      case "$pm2" in -*|'') pf_fail "2H weapon mesh not read (pom=$pm2)";; esac
+    fi
   fi
   pf_open 2
   # take

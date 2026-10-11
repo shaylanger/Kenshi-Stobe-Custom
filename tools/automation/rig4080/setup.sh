@@ -39,16 +39,18 @@ cp_to() {
   if [ $DRY = 1 ]; then for f in "${keep[@]}"; do echo "COPY ${f#$M/}"; done; return 0; fi
   scp -q "${keep[@]}" "$H:$d" || echo "SCPFAIL $d: ${keep[*]#$M/}"
 }
-run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab 2>NUL & exit 0'
+run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual 2>NUL & exit 0'
 run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" $H:C:/KAH/
 run scp -q "$HERE/python3" $H:C:/KAH/bin/python3
 cp_to C:/KenshiModding/tools/automation/ "$M/tools/automation/rig-env.sh" "$M/tools/automation/venc.sh" "$M/tools/automation/review-pack.py"
-cp_to C:/KenshiModding/components/KenshiFP/animlab/ "$M"/components/KenshiFP/animlab/*.sh "$M"/components/KenshiFP/animlab/*.py "$M"/components/KenshiFP/animlab/*.txt
+cp_to C:/KenshiModding/components/KenshiFP/animlab/ "$M"/components/KenshiFP/animlab/*.sh "$M"/components/KenshiFP/animlab/*.py "$M"/components/KenshiFP/animlab/*.txt "$M"/components/KenshiFP/animlab/*.json
 # weapon sweep lists + catalogue (wm4080-diag: "list sweep-gated.list missing")
 cp_to C:/KenshiModding/components/KenshiFP/animlab/weapons/ "$M"/components/KenshiFP/animlab/weapons/*.list "$M"/components/KenshiFP/animlab/weapons/*.json
 cp_to C:/KenshiModding/components/KenshiFP/tests/ingame/ "$M"/components/KenshiFP/tests/ingame/*.sh "$M"/components/KenshiFP/tests/ingame/*.py
 cp_to C:/KenshiModding/Kenshi-Automation-Harness/client/ "$M/Kenshi-Automation-Harness/client/kah.py"
 cp_to C:/KenshiModding/Kenshi-Automation-Harness/tools/animlab/ "$M"/Kenshi-Automation-Harness/tools/animlab/*.py
+# weapons --run (take RESULT matrix) imports visual/ogre.py: without it every 4080 sweep row read matrix=[] (twohand-4080 2026-10-10)
+cp_to C:/KenshiModding/Kenshi-Automation-Harness/tools/animlab/visual/ "$M"/Kenshi-Automation-Harness/tools/animlab/visual/*.py
 for d in "$@"; do
   ssh $H "mkdir C:\\KenshiTestRuns\\$d 2>NUL & exit 0"
   ( cd "$R/$d" && ls | grep -E '\.(sh|py|txt|awk|ttf)$' | grep -v -E '^(ts|s3ts|ev|s3ev)\.txt' | tr '\n' '\0' | xargs -0 -r -I{} scp -q {} "$H:C:/KenshiTestRuns/$d/" )

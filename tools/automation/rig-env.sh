@@ -32,6 +32,8 @@ if [ "$RIG" = 4080 ]; then
   export KAH_CLIENT='C:/KenshiModding/Kenshi-Automation-Harness/client'
   export KAH_OWNER=${KAH_OWNER:-rig4080}
   export PATH="/c/KAH/bin:$PATH"
+  # animlab catalogs/configs hold WSL game paths; the lab maps them here (visual/ogre.py hostpath)
+  export ANIMLAB_PATHMAP='mnt/d/Steam=C:/Program Files (x86)/Steam'   # no leading / (Git Bash would rewrite it for Windows python)
   rig_launch() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\ctl.ps1' launch -Save "$1" -Owner "$KAH_OWNER"; }
   rig_stop() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\ctl.ps1' stop -Owner "$KAH_OWNER"; }
   rig_bg() { local log=$1; shift; powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\itrun.ps1' -Log "$(cygpath -w "$log")" -Cmd "$*"; }
