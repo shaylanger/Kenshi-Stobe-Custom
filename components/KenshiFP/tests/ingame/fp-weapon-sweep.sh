@@ -50,11 +50,24 @@ A teleport $SH $SPOT >/dev/null; sleep 2; A health $SH 100 >/dev/null
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null
 BOWN=$(A rangedinfo $SH | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_ammo$//'); [ "$BOWN" = none ] && BOWN=""
 echo "setup ok: bow=${BOWN:-none} list=$LIST catalog=$WCAT"
+# give_w <sid>: harness give; on "no room" (04-twohand-b 2026-10-11: the studio fixture's Axima wears katana on the hip +
+# bow on the back, a 10x1 polearm fits neither and harness give frees only a worn weapon of the item's slot type) unequip
+# every worn weapon (armour stays) and give once more; the repair is logged, a second refusal is the setup FAIL
+give_w(){ local r w ws
+  r=$(A give $SH "$1" 1)
+  if echo "$r" | grep -q "no room"; then
+    ws=$(A inv $SH | grep -o '"name":"[^"]*","count":[0-9]*,"equipped":true' | sed 's/^"name":"\([^"]*\)".*/\1/' |
+         grep -viE '(^| )(hat|helmet|armou?r|shirt|boots|pants|coat|vest|cap|mask|shoes|gloves|backpack|bag)( |$)')
+    while IFS= read -r w; do [ -n "$w" ] && A unequip $SH "$w" >/dev/null; done <<< "$ws"
+    echo "give repair: no room for $1, unequipped worn weapons: $(echo "$ws" | tr '\n' ',')" >&2
+    r=$(A give $SH "$1" 1)
+  fi
+  echo "$r"; }
 # give probe (2026-10-10 wm5090-2: the harness weapon factory refused every weapon, 18 takes failed one by one): the row's first
 # weapon must be creatable, else the whole row stops here with one setup FAIL (a dry run can't see a real factory refusal)
 PSID=$(awk -F'|' -v s="${WSTART:-1}" '$1!~/^(#|$)/{k++; if(k==s){print $1; exit}}' "$LIST")
 if [ -n "$PSID" ] && ! A inv $SH | grep -q "$PSID"; then
-  r=$(A give $SH "$PSID" 1); echo "$r" | grep -q " got 1/" || pf_fail "give probe $PSID (weapon factory): $(echo "$r" | cut -c1-400)"
+  r=$(give_w "$PSID"); echo "$r" | grep -q " got 1/" || pf_fail "give probe $PSID (weapon factory): $(echo "$r" | cut -c1-400)"
 fi
 # ---- one weapon (subshell: pf_fail ends only this weapon)
 take(){   # k sid name type animcls ammo
@@ -67,7 +80,7 @@ take(){   # k sid name type animcls ammo
   place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.02 >/dev/null; sleep 1; }
   # preflight: weapon in hand
   if ! A inv $SH | grep -qF "\"$nm\""; then
-    r=$(A give $SH "$sid" 1); echo "$r" | grep -q " got 1/" || pf_fail "give $sid: $(echo "$r" | cut -c1-400)"
+    r=$(give_w "$sid"); echo "$r" | grep -q " got 1/" || pf_fail "give $sid: $(echo "$r" | cut -c1-400)"
   fi
   if [ "$ty" = crossbow ]; then
     [ -n "$am" ] && { A give $SH "$am" 10 | grep -q " got " || pf_fail "give ammo $am"; }

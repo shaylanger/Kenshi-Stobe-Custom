@@ -129,6 +129,7 @@ def new_state(save):
              turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0), fight=int(f.get('fight', 0)),
              swing_ko=int(f.get('swing_ko', 0)),
              off_sheathes=int(f.get('off_sheathes', 0)),
+             give_noroom=f.get('give_noroom'),
              # fixtures/dialog.json (2026-10-10 20-rg04 M08): NPC conversations that open the dialogue window `at` s after
              # the load and stay open until `dialog close` (KenshiFP fp_state ui_open=1 ui_why=panels meanwhile)
              dlg=[dict(e, vt=dr.vnow() + float(e.get('at', 0)), closed=0) for e in f.get('dialog', [])],
@@ -998,6 +999,13 @@ def handle(s, cmd, a, now, sp):
         if n < 1 or n > 50:
             return False, 'count must be 1..50'
         it = item_name(a[1])
+        # fixtures/studio-noroom.json (04-twohand-b 2026-10-11): a long weapon fits no section while a blocker (the
+        # studio Axima's bow on the back) is worn; real give moves only a worn weapon of the item's slot type
+        nr = s.get('give_noroom') or {}
+        if it in nr.get('items', []) and any(b in c['eq'] for b in nr.get('blockers', [])):
+            return False, ('ERROR: no room for %s in %s\'s inventory (%d already there) item=10x1 slot=0 '
+                           'hip:7x1,lim=0,n=1,room=0 back:12x1,lim=0,n=1,room=0 main:6x8,lim=0,n=0,room=0'
+                           % (it, c['name'], c['items'].count(it)))
         c['items'] += [it] * n
         return True, '%s got %d/%d %s (now %d)' % (c['name'], n, n, it, c['items'].count(it))
     if cmd in ('pickup', 'give'):
