@@ -41,6 +41,7 @@ grep -q "g_vm_hcap_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_HIN
 grep -q "g_vm_2htau" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_2H"   # warm start snaps the 2H blend (lab-calibrate)
 grep -q "g_vm_2hbw" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_2HB"
 grep -q "vm_pd_write" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_POSEDUMP"
+grep -q "g_al_hoff" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_HOFF"   # recorded hand scale replaces it (lab-calibrate2)
 grep -q "g_al_l1n_rec" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_L1REC"   # recorded solver upper-arm length (lab-calibrate2)   # kfp-posedump: kfpvm_replay --posedump
 # build cache (labcache.py, Shay 2026-10-10 CPU cut): key = content of every compile input (patched client copy +
 # generated helpers, the harness mains/headers here, -D flags, gcc version), not paths: the same source built under

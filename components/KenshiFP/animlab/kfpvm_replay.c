@@ -235,6 +235,11 @@ static int g_nat;   /* record whose measured skeleton stands in for the native p
 static int g_napp_rec = -1;   /* record whose recorded native group drives the current apply (-1 = none) */
 static int g_use_native = 1, g_nat_used;
 static int g_rec_roll = 1, g_roll_used, g_l1_used;   /* --no-rec-roll: ignore recorded native bone roll (bend-normal model instead) */
+static int g_rec_hs = 1, g_hs_used;   /* hand derived scale = the recorded one (kfp-fist-recnative v2 `hs`), else uniform C_K;
+ * --no-rec-hs (or --no-rec-roll) = the old model. lab-calibrate2 2026-10-11: the game's weapon hand is NON-uniformly scaled
+ * (Axima 0.914,1.058,0.914), so Ph = tp - Qh*(lp*sc) sits off the uniform-C_K hand: that was the fitted hand-offset model
+ * (patches/hand-offset.py, 0.19,0.02,-0.10 dm hand frame). With the recorded scale the hoff model is switched off
+ * (agree take ag1 3F1AD4F8: median 0.103 -> 0.002 dm, blocking elbow 0.30 -> 0.03 dm). */
 static int g_up_roll, g_hcap_live; static Vec3 g_rig_hn[2]; static int g_rig_have[2];   /* bone roll model (set_native) */
 static int g_cls_fill[2];
 static void set_native(int i)
@@ -275,7 +280,13 @@ static void set_native(int i)
         Quat qh = qfa;
         if (nr) { Vec3 X = vm_norm(c2w(nr, nr->nhx[s], 0)), Y = vm_norm(c2w(nr, nr->nhy[s], 0)); qh = q_axes(X, Y, vm_norm(vm_cross(X, Y))); }
         else if (s == 1 && r->has_hyz) qh = q_axes(vm_norm(c2w(r, r->mh, 0)), vm_norm(c2w(r, r->hy, 0)), vm_norm(c2w(r, r->hz, 0)));
-        fk_place(B_HA_L + s, Hn, qh, vm_v(C_K, C_K, C_K));
+        Vec3 hsc = vm_v(C_K, C_K, C_K);
+        if (g_rec_hs && g_rec_roll && nr && nr->nl1ok) { hsc = f3(nr->nhs[s]); g_hs_used++;
+#ifdef AL_HAVE_HOFF
+            g_al_hoff[0] = g_al_hoff[1] = vm_v(0, 0, 0);   /* the fitted offset was this scale: never both */
+#endif
+        }
+        fk_place(B_HA_L + s, Hn, qh, hsc);
         Bone *pb = &g_b[B_PROP1 + s]; int c = g_cls_fill[0];
         if (nr) { pb->lp = f3(nr->nlp[s]); pb->lq = quat_norm((Quat){ (float)nr->nlq[s][0], (float)nr->nlq[s][1], (float)nr->nlq[s][2], (float)nr->nlq[s][3] }); }
         else { pb->lp = g_vm_pldp[c]; pb->lq = quat_norm(g_vm_pldq[c]); }
@@ -388,6 +399,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--cold")) g_warm = 0;
         else if (!strcmp(argv[a], "--apply-all")) g_napp_mode = 0;
         else if (!strcmp(argv[a], "--no-rec-roll")) g_rec_roll = 0;
+        else if (!strcmp(argv[a], "--no-rec-hs")) g_rec_hs = 0;
         else if (!strcmp(argv[a], "--no-rec-sets")) g_use_rsets = 0;
         else if (!strcmp(argv[a], "--no-native")) g_use_native = 0;
         else if (!strcmp(argv[a], "--bw-lag")) g_bw_lag = 1;
@@ -516,6 +528,6 @@ int main(int argc, char **argv)
     }
     if (pdf) { fprintf(pdf, "# end done\n"); fclose(pdf); }
     int w = vm_rec_dump(argv[2]);
-    printf("frames %d written %d skipped_applies %d native_applies %d roll_applies %d l1_applies %d rec_sets %d\n", n, w, g_skipped, g_nat_used, g_roll_used, g_l1_used, g_nrsets);
+    printf("frames %d written %d skipped_applies %d native_applies %d roll_applies %d l1_applies %d hs_applies %d rec_sets %d\n", n, w, g_skipped, g_nat_used, g_roll_used, g_l1_used, g_hs_used, g_nrsets);
     return w > 0 ? 0 : 1;
 }
