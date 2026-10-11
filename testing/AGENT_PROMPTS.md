@@ -23,6 +23,11 @@ file paths of outputs, the build hashes involved, and what you want back.
 > never launch Kenshi or run-batch.sh on a rig yourself, never let a rig idle/pause > 2 min, never queue "wait for build"
 > (the runner installs the newest staged build). Offline lab jobs (climb, gate, regress, pool, pipeline, builds) run
 > through `tools/automation/labnice.sh` (nice 15, capped slots) so takes and their checks keep the CPU.
+> Speed + resource plan (CLAUDE.md "Speed + resource plan"): lists say `# needs: KenshiFP latest` (never pin a sha);
+> drop rig-neutral takes into `queue\any\` (check with `tools/automation/list-rigcheck.sh <list> <rig>`); tune poses/strokes
+> through the live tables file + `fp_tables` (no rebuild) and rebuild only for code changes; a take whose only failures are
+> recording checks is PASS-REC (no refilm); judge only frames the auto-review flags; read decoded frames from the shared
+> frame cache (never decode a video yourself); lab work goes through the result cache and the one lab CPU budget.
 > Stay lean: read RESULT lines and excerpts, one review sheet at a time; hand long judging (frame-by-frame review, log
 > digging) to a short-lived helper agent that returns one verdict line.
 
