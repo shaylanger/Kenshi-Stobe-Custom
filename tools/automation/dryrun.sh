@@ -18,6 +18,8 @@
 # group + "X is attacking!" popup at the spot); a row must fix it in its preflight or stop with a setup FAIL before filming.
 # swing-ko: a melee swing knocks the neutral out and a KO character cannot be pinned (op-swa4); no-melee: Malzin carries
 # only a crossbow (op-comb2).
+# xbow-empty: the crossbow comes up EMPTY and the first aim auto-reloads ~8 s before shot_ready (xbmesh-c); the stub's
+# ranged adapter also draws a holstered crossbow on fp_combat arm and answers fp_gear with a "hands" entry.
 # Self-test (replayed 2026-10-10 bugs must FAIL, current scripts must PASS): tools/automation/dryrun/selftest.sh
 set -u
 H=/mnt/c/KenshiModding/tools/automation; D=$H/dryrun

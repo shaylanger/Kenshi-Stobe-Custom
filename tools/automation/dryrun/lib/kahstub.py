@@ -124,7 +124,7 @@ def new_state(save):
     f = fixture(save)
     s = dict(save=save, chars=f['chars'], squad=f['squad'], hour=f['hour'], hour_vt=dr.vnow(), speed=1.0, paused=0,
              selected=f['squad'][0], fpchar=None, chatter='on', cursor=[800, 450], cam=dict(dist=0, orbit=0, yaw=0, pitch=0),
-             fp=dict(drawn=0, melee=0, loaded=1, ui_state='holstered', hud_text='holstered', vm='holstered'),
+             fp=dict(drawn=0, melee=0, loaded=0 if f.get('xbow_empty') else 1, ui_state='holstered', hud_text='holstered', vm='holstered'),
              tl=[], hist=[], rec=dict(on=0, t=0), keys={}, sets={}, zoom_switch=1, bandhide=1,
              turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0), fight=int(f.get('fight', 0)),
              swing_ko=int(f.get('swing_ko', 0)),
@@ -662,7 +662,11 @@ def fp_combat_melee(s, a, now):
         m['fire'], m['aim'] = fire, aim
         fp = s['fp']
         if fp['drawn'] and not fp['melee'] and m['on'] and m['armed']:   # crossbow: aim hold / fire edge / auto reload
-            if aim and not pa:
+            if aim and not pa and not fp['loaded'] and s.get('autoreload', 1):
+                # xbow_empty fixture (xbmesh-c): an empty bow auto-reloads on the first aim; shot_ready came ~8.2 s later
+                sched(s, now + 0.1, 'cin', ui_state='reloading', vm='reloading', hud_text='reloading')
+                sched(s, now + 8.3, 'cin', loaded=1, ui_state='aiming', vm='aiming', hud_text='aiming')
+            elif aim and not pa:
                 sched(s, now + 0.1, 'cin', ui_state='aiming', vm='aiming', hud_text='aiming')
             if fire and not pf and aim and fp['loaded']:
                 fp['loaded'] = 0; s['shots'] = s.get('shots', 0) + 1
@@ -682,6 +686,13 @@ def fp_combat_melee(s, a, now):
                 m['blocks'] += 1; m['block_ok'] += 1
             if fire and not pf:
                 do_click(s, now)
+        c = s['chars'].get(s['fpchar'] or s['selected'])
+        if (m['on'] and m['armed'] and not fp['drawn'] and c and any(is_ranged(e) for e in c.get('eq', []))
+                and not any(e[1] == 'drawn' and e[3] == 'cin' and e[0] > now for e in s['tl'])):
+            # the ranged adapter draws a holstered crossbow itself (kfp_combat_native.inc holstered draw)
+            w, _ = weapon_drawn(s, c)
+            sched(s, now + 0.5, 'cin', drawn=1, melee=0, ui_state='ready', hud_text='ready' if fp['loaded'] else 'reload',
+                  vm='ready', weapon=w)
         return True, 'combat input published; same controller/native gates as physical input'
     return None
 
@@ -1103,17 +1114,29 @@ def handle(s, cmd, a, now, sp):
             if f == '-':
                 return False, 'fp_tables reload: no file (give a path)'
             import zlib
-            t.update(file=f, hash='%08x' % zlib.crc32(f.encode()), changed=1, loaded=1)
+            t.update(file=f, hash=s.get('tables_dumps', {}).get(f) or '%08x' % zlib.crc32(f.encode()), changed=1, loaded=1)
             head = 'tables loaded file=%s lines=1 bad=0 ' % f
         elif sub == 'reset':
-            t.update(hash='efc48644', changed=0)
+            t.update(hash='efc48644', changed=0, last_set={})
             head = 'reset to compiled values '
         elif sub == 'set' and len(a) > 3:
             import zlib
             t.update(hash='%08x' % zlib.crc32((t['hash'] + ' '.join(a)).encode()), changed=t['changed'] + 1)
+            t.setdefault('last_set', {})[a[1] + ' ' + a[2]] = ' '.join(a[3:])
             head = 'set %s[0..0] ' % a[1]
         elif sub == 'dump' and len(a) > 1:
             head = 'dump %s rows=189 which=all ' % a[1]
+            s.setdefault('tables_dumps', {})[a[1]] = t['hash']   # a later load of this dump restores its hash (dump == state)
+            fp = re.sub(r'^([A-Za-z]):[\/]', lambda m: '/mnt/%s/' % m.group(1).lower(), a[1]).replace('\', '/')
+            try:
+                with open(fp, 'w') as fo:
+                    fo.write('# KenshiFP fp_tables all hash=%s (dryrun stub)
+pose.m_ready = 0 0 0
+' % t['hash'])
+            except OSError:
+                pass
+        elif sub == 'get' and len(a) > 1:
+            head = '%s[0] %s | ' % (a[1], t.get('last_set', {}).get(a[1] + ' ' + (a[2] if len(a) > 2 else ''), '0'))
         elif sub not in ('state', 'list', 'get'):
             return False, 'usage: fp_tables state|list|reload [file]|load <file>|set <table> <key> <v..>|get <table> [key]|dump <file> [diff|defaults]|reset'
         s['tables'] = t
@@ -1243,6 +1266,10 @@ def handle(s, cmd, a, now, sp):
         tu['on'] = 0; tu['leaves'] += 1
         sched(s, now + 0.6, 'turret', hud_text='holstered', ui_state='holstered', vm='holstered', drawn=0)
         return True, 'fp_move %s' % a[0]
+    if cmd == 'fp_gear':   # kfp fp_gear: worn-item map, one '|' entry per slot ('hands' = the drawn weapon's own entity)
+        h = (' | hands type=107 mesh=0000000305beeca0 vis=1 vf=4 ours=0 node=-100.43,660.83,98.16 hand=0.00 parts=3 partsVis=3'
+             if fp['drawn'] else '')
+        return True, 'app=0000000262c5a290 pc=0000000262c59460 near=1 headHidden=1 ourHid=1' + h +             ' | head type=3 mesh=00000002ad1b38d0 vis=0 vf=0 ours=1 node=-97.62,646.07,93.75 hand=12.64 parts=0 partsVis=0'
     if cmd in ('fp_state', 'fp_melee', 'fp_turret', 'fp_gear', 'fp_mode', 'fp_move', 'fp_combat_probe'):
         return True, '%s fp=%d drawn=%d ui_state=%s' % (cmd, 1 if s['fpchar'] else 0, fp['drawn'], fp['ui_state'])
     if cmd == 'messages':
