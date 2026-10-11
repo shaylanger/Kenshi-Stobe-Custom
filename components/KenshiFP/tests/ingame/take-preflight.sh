@@ -259,7 +259,7 @@ pf_load(){ local s=${1:-${PF_SAVE:-}} d="${CR:-/mnt/c}/Users/Shay/AppData/Local/
   # run-batch.sh just loaded this very save for this row (KAH_FRESH=<out>/.fresh-load "<save> <epoch>", written by its
   # prepare, removed after every row; speed-scout 2026-10-11: every take row loaded twice, ~30 s): use it, once
   local fs ft
-  if [ -n "${KAH_FRESH:-}" ] && read -r fs ft < "$KAH_FRESH" 2>/dev/null && [ "$fs" = "$s" ] && [ $(( $(date +%s) - ${ft:-0} )) -lt "${PF_FRESH_MAX:-300}" ] \
+  if [ -n "${KAH_FRESH:-}" ] && read -r fs ft < "$KAH_FRESH" 2>/dev/null && [ "$fs" = "$s" ] && [ $(( $(date +%s) - ${ft:-0} )) -lt "${PF_FRESH_MAX:-120}" ] \
      && PF_A status | grep -q phase=world; then
     rm -f "$KAH_FRESH"; PF_SAVE_LOADED=$s; echo "pf_load ok: $s (loaded by run-batch $(( $(date +%s) - ft )) s ago, no second load)"; return 0; fi
   # the harness reports phase=loading from the load reply on: no fixed wait needed (was sleep 8 + 3 s polls)
