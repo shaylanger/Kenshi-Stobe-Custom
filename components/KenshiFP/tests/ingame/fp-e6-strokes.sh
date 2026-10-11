@@ -19,7 +19,7 @@ A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 st(){ A fp_vm state | fld state; }
 waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }
-fail(){ PF_DONE=1; echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; A chatter on >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; wait $FP; }; exit 1; }
+fail(){ PF_DONE=1; echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; A chatter on >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; [ -n "$E6_PIPE" ] && touch "$N.stop"; wait $FP; }; exit 1; }
 PF_ROW=E6-$N; PF_ON_FAIL='A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; [ -n "$_TS_RUN" ] \&\& take_sample_stop'; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard (shared preflight: take-preflight.sh)
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
@@ -43,14 +43,18 @@ for c in $SH Malzin Tassilo Shay; do A inv $c | grep -o '"name":"[^"]*","equippe
 A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 0 0.05 >/dev/null; sleep 1; A screenshot e6-skyck >/dev/null
 sky=$("$FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$SHOTS/e6-skyck.png")" -vf "crop=1600:120:0:30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 | awk '{print ($3 > $1+25 ? "clear" : "hazy")}')
 [ "$sky" = clear ] || fail "setup: sky $sky"
-A fp_camera look 3.14 0.05 >/dev/null; ready; [ "$(st)" = ready ] || fail "setup: katana not ready (state=$(st))"
+A fp_camera look 3.14 0.05 >/dev/null; pf_iso; ready; [ "$(st)" = ready ] || fail "setup: katana not ready (state=$(st))"
 cl_=$(A fp_vm state | grep -o "class=[a-z0-9]*" | head -1); case "$cl_" in *xbow*|*ranged*|*bow*) A key_inject r tap 120 >/dev/null; fail "setup: drawn weapon $cl_ (crash-safety: sword only)";; esac; echo "note: $cl_"
 A fp_vm set strokes 15 >/dev/null
 pf_nofight; pf_open 2   # cursor parked in the sky + open ground/overlay check before filming (op-b8 e6r7: cover:ui_state/near/msgs)
 # ---- take
 : > "$N.lab"; rm -f "/tmp/kfp-$N.ffin"; mkfifo "/tmp/kfp-$N.ffin"
-"$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=Kenshi 1.0.65 - x64 (Newland)" $(venc_args 18 veryfast) "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
-exec 7>"/tmp/kfp-$N.ffin"
+# 4080 (Git Bash): a native ffmpeg never reads "q" from an MSYS fifo -> stop it through a plain pipe (fp-zoom-sweep.sh ZS_PIPE)
+E6_PIPE=""; [ "${RIG:-5090}" = 4080 ] && { E6_PIPE=1; rm -f "$N.stop"; }
+if [ -n "$E6_PIPE" ]; then ( i=0; while [ ! -f "$N.stop" ] && [ $i -lt 3100 ]; do sleep 0.1; i=$((i+1)); done; echo q ) | "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=Kenshi 1.0.65 - x64 (Newland)" $(venc_args 18 veryfast) "$N.mp4" & FP=$!
+  exec 7>/dev/null
+else "$FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -t 300 -i "title=Kenshi 1.0.65 - x64 (Newland)" $(venc_args 18 veryfast) "$N.mp4" < "/tmp/kfp-$N.ffin" & FP=$!
+  exec 7>"/tmp/kfp-$N.ffin"; fi
 . $HERE/animlab/take-sample.sh
 A fp_vm rec on >/dev/null
 T0=$(date +%s.%N); take_sample_start "$N.ev.txt" "$T0" $SH "Malzin|Tassilo|Shay"; sleep 1
@@ -61,7 +65,7 @@ for s in $STROKES; do
   for r in $(seq 1 $REPS); do A fp_keys press lmb 60 >/dev/null; sleep 2.4; done
 done
 A fp_vm set stroke -1 >/dev/null; A fp_vm set strokes 1 >/dev/null; sleep 0.5
-lab end; echo q >&7; exec 7>&-; take_sample_stop; wait $FP; FP=
+lab end; echo q >&7; [ -n "$E6_PIPE" ] && touch "$N.stop"; exec 7>&-; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-e6-$N.txt"; A fp_vm rec dump "vmrec-e6-$N.txt" >/dev/null; sleep 2; cp "$KDIR/vmrec-e6-$N.txt" "$N.vmrec.txt" || fail "no vmrec dump"
 SW=$(grep -o "\[vm\] swing #[0-9]* stroke [0-9]" "$KDIR/KenshiFP.log" | tail -$(( $(echo $STROKES | wc -w) * REPS )) | awk '{print $NF}' | tr '\n' ',')
 A fp_vm set stroke -1 >/dev/null; A chatter on >/dev/null   # restore before the game is released (op-b7: blkJ inherited stroke 3)
