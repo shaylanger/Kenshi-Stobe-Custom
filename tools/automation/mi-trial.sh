@@ -7,7 +7,7 @@
 #   same time -> instance 1 still healthy, game time advanced on both, the two row results agree -> stop instance 2.
 # Prints exactly one `RESULT MI-TRIAL PASS|FAIL <evidence>` line; sub-row output goes to files (their RESULT lines are
 # not echoed, so SUMMARY.txt counts one row). Instance 2 is always stopped on exit. Env: MI_SAVE (kah-fpxbow),
-# MI_PLAYER (Axima), MI_MATE (Malzin), MI_ROW (fp-combat-settings.sh), MI_MIN_COMMIT_GB (16).
+# MI_PLAYER (Axima), MI_MATE (Malzin), MI_ROW (fp-combat-settings.sh), MI_MIN_COMMIT_GB (16), MI_SKIP (CS01).
 set -u
 OUT=${1:?usage: mi-trial.sh <out-dir>}; mkdir -p "$OUT"; LOG=$OUT/mi-trial.log; : > "$LOG"
 A=/mnt/c/KenshiModding/tools/automation; KT=/mnt/c/KenshiModding/components/KenshiFP/tests/ingame
@@ -65,7 +65,10 @@ run_sub i2 "$K2" "$KD2" & pb=$!
 sleep 30; g1=$(gpu); p1=$(procs); log "during: gpu=$g1 procs=$p1"
 wait $pa $pb
 # a sub-row may print several RESULT lines (CS01..CS0n): compare the per-row verdict sets
-vs() { grep -h '^RESULT' "$1" | awk '{print $2":"$3}' | sort -u | paste -sd' '; }
+# MI_SKIP (default CS01): sub-rows that only hold on a FRESH launch (CS01 = defaults before any fp_combat on); instance 1
+# is the runner's reused game (run-batch --reuse), so they can't agree by design (trial 2026-10-11: CS01 FAIL i1 / PASS i2)
+SKIP=" ${MI_SKIP-CS01} "
+vs() { grep -h '^RESULT' "$1" | awk '{print $2":"$3}' | sort -u | while IFS= read -r x; do case "$SKIP" in *" ${x%%:*} "*) ;; *) echo "$x";; esac; done | paste -sd' '; }
 r1=$(vs "$OUT/i1/out.txt"); r2=$(vs "$OUT/i2/out.txt")
 log "i1: $r1"; log "i2: $r2"; log "spans i1: $(tr '\n' ' ' < "$OUT/i1/span") i2: $(tr '\n' ' ' < "$OUT/i2/span")"
 s1a=$(awk '/^start/{print $2}' "$OUT/i1/span"); e1=$(awk '/^end/{print $2}' "$OUT/i1/span")
