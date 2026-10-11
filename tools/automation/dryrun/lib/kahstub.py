@@ -129,7 +129,7 @@ def new_state(save):
                       weapon=f['melee_in_hands']) if f.get('melee_in_hands') else
                  dict(drawn=0, melee=0, loaded=0 if f.get('xbow_empty') else 1, ui_state='holstered', hud_text='holstered', vm='holstered')),
              tl=[], hist=[], rec=dict(on=0, t=0), keys={}, sets={}, zoom_switch=1, bandhide=1,
-             turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0), fight=int(f.get('fight', 0)),
+             turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0, r_ignored=0, reloads=0, rl_end=None, rl_pause=None), fight=int(f.get('fight', 0)),
              swing_ko=int(f.get('swing_ko', 0)),
              off_sheathes=int(f.get('off_sheathes', 0)),
              give_noroom=f.get('give_noroom'),
@@ -177,6 +177,7 @@ def settle(s, now):
         if e[0] <= now:
             if e[1] == '_ammo':
                 s['turret']['ammo'] = e[2]
+                s['turret']['reloads'] = s['turret'].get('reloads', 0) + 1
                 continue
             s['fp'][e[1]] = e[2]
             s['hist'].append(e[:3])
@@ -379,6 +380,9 @@ def press(s, btn, ms, now):
         return 'no fp character'
     c = s['chars'][s['fpchar']]
     end = now + ms / 1000.0
+    if btn == 'r' and s.get('turret', {}).get('on'):   # T5 (KenshiFP 11e3b79): R while seated is ignored (no personal bow)
+        s['turret']['r_ignored'] = s['turret'].get('r_ignored', 0) + 1
+        return 'r ignored (on turret)'
     if btn == 'r':
         if fp['drawn']:
             sched(s, now + 0.6, 'r', drawn=0, ui_state='holstered', hud_text='holstered', vm='holstered')
@@ -1464,6 +1468,7 @@ def handle(s, cmd, a, now, sp):
             s['zoom_switch'] = 1 if a[1] == 'switch' else 0
         if sub == 'bandhide' and len(a) > 1:
             s['bandhide'] = int(float(a[1]))
+            return True, 'bandhide=%d' % s['bandhide']   # the real reply (kfp_view.inc), fp-zoomfade.sh greps it
         if sub == 'look' and s['turret']['on']:
             pass
         if sub == 'state':
@@ -1487,10 +1492,14 @@ def handle(s, cmd, a, now, sp):
         return True, 'order %s USE_TURRET ok' % a[0]
     if cmd == 'power' and len(a) > 1:
         if a[1] in ('off', 'unsupply', 'drain'):
+            if tu.get('rl_end') is not None and tu.get('rl_pause') is None:   # T3: no power pauses the reload
+                tu['rl_pause'] = max(0.0, tu['rl_end'] - now)
             tu['power'] = 0
             if tu['on']:
                 sched(s, now + 0.05, 'turret', hud_text='no power')
         elif a[1] in ('on', 'supply', 'charge'):
+            if tu.get('rl_pause') is not None:
+                tu['rl_end'] = now + tu['rl_pause']; tu['rl_pause'] = None
             tu['power'] = 1
             if tu['on']:
                 sched(s, now + 0.05, 'turret', hud_text='loaded' if tu['ammo'] else 'reloading')
@@ -1499,8 +1508,24 @@ def handle(s, cmd, a, now, sp):
         return True, '%s loaded=%d reloading=%d on_turret=%d has_power=%d aim_target=Tassilo aim_err_deg=0.4 fired=%d ranged=YES' % (
             a[0] if a else 'turret', tu['ammo'], 0 if tu['ammo'] else 1, tu['on'], tu['power'], tu['shots'])
     if cmd == 'fp_turret':
-        return True, 'on=%d why=- ammo=%d/1 reload_left=0 reload_max=6 rl_state=0 aim_valid=1 aim=1 aim_err_deg=0.4 shots=%d refused=0 enters=%d leaves=%d' % (
-            tu['on'], tu['ammo'], tu['shots'], tu['enters'], tu['leaves'])
+        if a and a[0] == 'unload':   # kfp-turret-unload test switch: empty the gun without firing, the T3 reload starts
+            if not tu['on']:
+                return True, 'turret unload refused: not on a turret'
+            was = tu['ammo']; tu['ammo'] = 0; tu['rl_end'] = now + 6.0; tu['rl_pause'] = None
+            if not tu['power']:
+                tu['rl_pause'] = 6.0
+            return True, 'turret unload ammo %d -> 0' % was
+        if tu.get('rl_end') is not None:
+            left = tu['rl_pause'] if tu.get('rl_pause') is not None else tu['rl_end'] - now
+            if left <= 0:
+                tu['ammo'] = 1; tu['reloads'] = tu.get('reloads', 0) + 1; tu['rl_end'] = None; left = -1.0
+        else:
+            left = -1.0
+        y = s['cam']['yaw']
+        return True, ('on=%d why=%s ammo=%d/1 reload_left=%.2f reload_max=6 rl_state=0 aim_valid=1 aim=1 cur_dir=%.3f,0.000,%.3f '
+                      'aim_err_deg=0.4 shots=%d refused=0 reloads=%d r_ignored=%d enters=%d leaves=%d') % (
+            tu['on'], '-' if tu['power'] else 'no_power', tu['ammo'], left, math.sin(y), math.cos(y), tu['shots'],
+            tu.get('reloads', 0), tu.get('r_ignored', 0), tu['enters'], tu['leaves'])
     if cmd == 'fp_combat' and a and a[0] == 'aim':
         return True, 'aim victim=00a1 (target=00a1) dist=12'
     if cmd == 'fp_move' and a and a[0] not in ('none', 'state') and tu['on']:

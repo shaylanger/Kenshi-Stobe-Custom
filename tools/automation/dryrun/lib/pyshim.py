@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dr  # noqa: E402
 
 REAL = '/usr/bin/python3'
-CANNED_TOOLS = ('frames.py', 'animlab.py', 'fist-take-check.py', 'review-pack.py', 'vmcheck.py', 'stamp.py')
+CANNED_TOOLS = ('frames.py', 'animlab.py', 'fist-take-check.py', 'review-pack.py', 'vmcheck.py', 'stamp.py', 'zoomfade-check.py')
 
 
 def p(s):
@@ -158,6 +158,17 @@ def canned(tool, a):
                 p('arc PASS swing=ok(canned)')
             return 0
         p('guard PASS presses=12 hanging=0 (dryrun canned)' if sub == 'guard' else '%s PASS (dryrun canned)' % sub)
+        return 0
+    if tool == 'zoomfade-check.py':   # fp-zoomfade.sh (Z1): <rec[,rec...]> <state> <steps> [--bandhide b]; every chunk dump must exist
+        recs = [x for x in (a[0] if a else '').split(',') if x]
+        if not recs or not check_files(tool, recs):
+            p('zoomfade %s FAIL no rec dump (dryrun)' % (a[1] if len(a) > 1 else '?')); return 1
+        n = 0
+        for r in recs:
+            m = re.search(r'frames=(\d+)', open(r, errors='replace').readline()); n += int(m.group(1)) if m else 0
+        if n == 0:
+            p('zoomfade %s FAIL steps=0 (dryrun: empty rec dumps: fp_vm rec on never sent?)' % a[1]); return 1
+        p('zoomfade %s PASS steps=%d/%d frames=%d chunks=%d bad=none (dryrun canned)' % (a[1], len(a[2].split()), len(a[2].split()), n, len(recs)))
         return 0
     if tool == 'vmcheck.py':   # fp-viewmodel.sh's every-frame check of an fp_vm rec dump (a lab verdict, canned here)
         if not check_files(tool, a[:1]):
