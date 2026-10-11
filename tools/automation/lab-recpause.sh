@@ -17,7 +17,7 @@
 # Log: /tmp/labnice/recpause.log (PAUSE/RESUME lines).
 set -u
 D=${LAB_D:-/tmp/labnice}; mkdir -p "$D"; LOG=$D/recpause.log; ST=$D/recpause.stopped
-REC=${LAB_RECDIR:-/mnt/c/KenshiTestRuns/recording}; MAXPAUSE=${LAB_MAXPAUSE:-1800}; TICK=${LAB_TICK:-2}; RECS=${LABNICE_REC_SLOTS:-12}
+REC=${LAB_RECDIR:-/mnt/c/KenshiTestRuns/recording}; MAXPAUSE=${LAB_MAXPAUSE:-1800}; TICK=${LAB_TICK:-2}; RD=12; [ -e /mnt/c/KenshiTestRuns/uncapped.on ] && RD=20; RECS=${LABNICE_REC_SLOTS:-$RD}   # uncapped.on (Shay 2026-10-11): 20 while recording
 RECMAX=${LAB_RECMAX:-1800}; GPAT=${LAB_GDIGRAB_PAT:-gdigrab}   # LAB_*: selftest overrides (labnice-selftest.sh)
 
 recording() {

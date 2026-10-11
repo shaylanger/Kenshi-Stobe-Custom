@@ -19,7 +19,8 @@
 #   - while recording a request above LABNICE_REC_SLOTS starts at once with that many (LABNICE_J sized down)
 #   - selftest: labnice-selftest.sh (WSL, private LAB_D/LAB_RECDIR; recording flag, stale flags, no pause before held file)
 set -u
-D=${LAB_D:-/tmp/labnice}; mkdir -p "$D"; RECS=${LABNICE_REC_SLOTS:-12}; SLOTS=${LABNICE_SLOTS:-$(( $(nproc --all) / 2 ))}; [ "$SLOTS" -ge 1 ] || SLOTS=1   # --all: nproc honours OMP_NUM_THREADS
+if [ -e /mnt/c/KenshiTestRuns/uncapped.on ]; then RD=20; SD=$(( $(nproc --all) - 4 )); else RD=12; SD=$(( $(nproc --all) / 2 )); fi   # uncapped.on (Shay 2026-10-11: PC free, use it fully): 28/20 slots, else 16/12
+D=${LAB_D:-/tmp/labnice}; mkdir -p "$D"; RECS=${LABNICE_REC_SLOTS:-$RD}; SLOTS=${LABNICE_SLOTS:-$SD}; [ "$SLOTS" -ge 1 ] || SLOTS=1   # --all: nproc honours OMP_NUM_THREADS
 if [ "${1:-}" = --status ]; then
   n=0; for i in $(seq 1 "$SLOTS"); do exec {f}>"$D/slot.$i"; flock -n "$f" || n=$((n + 1)); exec {f}>&-; done
   echo "labnice: $n/$SLOTS slots in use"; exit 0
