@@ -25,7 +25,9 @@ file paths of outputs, the build hashes involved, and what you want back.
 > through `tools/automation/labnice.sh` (nice 15, capped slots) so takes and their checks keep the CPU.
 > Speed + resource plan (CLAUDE.md "Speed + resource plan"): lists say `# needs: KenshiFP latest` (never pin a sha);
 > drop rig-neutral takes into `queue\any\` (check with `tools/automation/list-rigcheck.sh <list> <rig>`); tune poses/strokes
-> through the live tables file + `fp_tables` (no rebuild) and rebuild only for code changes; a take whose only failures are
+> through the live tables file + `fp_tables` (no rebuild; `components/KenshiFP/docs/LIVE_TABLES.md`: fp_tables.txt format,
+> lab `--tables`/`kfpvm_tables`, variant sweeps with `tests/ingame/fp-pose-sweep.sh`, log the reply's hash= with each take)
+> and rebuild only for code changes; a take whose only failures are
 > recording checks is PASS-REC (no refilm); judge only frames the auto-review flags; read decoded frames from the shared
 > frame cache (never decode a video yourself); lab work goes through the result cache and the one lab CPU budget.
 > Waiting (Shay 2026-10-10): wait with `tools/automation/wait-event.ps1` (WSL: `wait-event.sh`), never a loop of ls/wsl/ssh

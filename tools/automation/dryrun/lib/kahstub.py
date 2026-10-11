@@ -1080,6 +1080,31 @@ def handle(s, cmd, a, now, sp):
         if sub == 'aim':
             return True, 'aim victim=00a1 (target=00a1) dist=12'
         return True, 'fp_combat %s ok' % ' '.join(a)
+    if cmd == 'fp_tables':   # KenshiFP live animation tables (pending-fixes/kfp-live-tables.py, kfp_tables.inc reply format)
+        sub = a[0] if a else 'state'
+        t = s.setdefault('tables', dict(hash='efc48644', file='-', changed=0, loaded=0))
+        head = ''
+        if sub in ('load', 'reload'):
+            f = a[1] if len(a) > 1 else t['file']
+            if f == '-':
+                return False, 'fp_tables reload: no file (give a path)'
+            import zlib
+            t.update(file=f, hash='%08x' % zlib.crc32(f.encode()), changed=1, loaded=1)
+            head = 'tables loaded file=%s lines=1 bad=0 ' % f
+        elif sub == 'reset':
+            t.update(hash='efc48644', changed=0)
+            head = 'reset to compiled values '
+        elif sub == 'set' and len(a) > 3:
+            import zlib
+            t.update(hash='%08x' % zlib.crc32((t['hash'] + ' '.join(a)).encode()), changed=t['changed'] + 1)
+            head = 'set %s[0..0] ' % a[1]
+        elif sub == 'dump' and len(a) > 1:
+            head = 'dump %s rows=189 which=all ' % a[1]
+        elif sub not in ('state', 'list', 'get'):
+            return False, 'usage: fp_tables state|list|reload [file]|load <file>|set <table> <key> <v..>|get <table> [key]|dump <file> [diff|defaults]|reset'
+        s['tables'] = t
+        return True, head + 'tables hash=%s default=%d changed=%d file=%s loaded=%d lines=%d bad=0' % (
+            t['hash'], 0 if t['changed'] else 1, t['changed'], t['file'], t['loaded'], t['loaded'])
     if cmd == 'fp_vm':
         sub = a[0] if a else 'state'
         if sub == 'rec' and len(a) > 1:
@@ -1235,7 +1260,7 @@ def main(argv):
         now = dr.vnow()
         settle(s, now)
         bad = None
-        if sp and cmd not in sp:
+        if sp and cmd not in sp and cmd != 'fp_tables':   # fp_tables: pending kfp-live-tables (stub below) until it is in the base
             bad = 'unknown command "%s" (not in harness COMMANDS.md/src, KenshiFP or Stobe registerCommand)' % cmd
         elif cmd in sp:
             d = sp[cmd]

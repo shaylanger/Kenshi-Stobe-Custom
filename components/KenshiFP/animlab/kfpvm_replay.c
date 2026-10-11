@@ -11,6 +11,7 @@
  *   out.txt  the replay's own `fp_vm rec dump` (same format, written by the plugin's vm_rec_dump), so every metric
  *            script reads the game and the replay the same way
  *   --set    = `fp_vm set key value` before frame 0 (same keys, same parser: the plugin's kah_fp_vm)
+ *   --tables <file>  live animation tables file (fp_tables format, kfp_tables.inc): after the recording's own sets, before --set
  *   --calib  skeleton lengths (dm) + prop scale; default: measured from the recording (printed as "calib ...")
  *
  * Model: the game's per-frame order is camera callback (vm_frame: measure the skeleton the last apply left, build the
@@ -49,7 +50,7 @@ static int load_rec(const char *path)
         if (!strncmp(line, "# set ", 6) && g_nrsets < 1024) {
             int fr; char k[64]; float v;
             if (sscanf(line + 6, "%d %63s %f", &fr, k, &v) == 3) {
-                g_rsets[g_nrsets].f = fr; snprintf(g_rsets[g_nrsets].kv, sizeof g_rsets[0].kv, "%s=%g", k, v); g_nrsets++; }
+                g_rsets[g_nrsets].f = fr; snprintf(g_rsets[g_nrsets].kv, sizeof g_rsets[0].kv, "%s=%.9g", k, v); g_nrsets++; }
             continue; }
         if (line[0] == '#' || !strchr(line, '|')) continue;
         if (RN == cap) { cap *= 2; R = realloc(R, sizeof(Rin) * cap); }
@@ -320,7 +321,7 @@ static int do_set(const char *kv)
 int main(int argc, char **argv)
 {
     if (argc < 3) { fprintf(stderr, "usage: kfpvm_replay <rec.txt> <out.txt> [--calib L1R,L2R,L1L,L2L,K] [--set k=v]... [--set-at frame:k=v]... [--quiet] [--abs-world] [--bw-lag] [--up-roll]\n"); return 2; }
-    const char *sets_at[256], *cl_set[256]; int nsa = 0, ncl_set = 0;
+    const char *sets_at[256], *cl_set[256], *tables = NULL; int nsa = 0, ncl_set = 0;
     for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "--abs-world")) g_abs_world = 1;
     if (load_rec(argv[1]) < 2) { fprintf(stderr, "kfpvm_replay: no frames in %s\n", argv[1]); return 1; }
     /* plugin wiring */
@@ -345,6 +346,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--fist") && a + 1 < argc) g_fist_anim = argv[++a];
         else if (!strcmp(argv[a], "--abs-world")) ;
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl_set < 256) cl_set[ncl_set++] = argv[++a]; }
+        else if (!strcmp(argv[a], "--tables") && a + 1 < argc) tables = argv[++a];   /* live tables file (fp_tables format) */
         else if (!strcmp(argv[a], "--set-at") && a + 1 < argc) { if (nsa < 256) sets_at[nsa++] = argv[++a]; }
         else if (!strcmp(argv[a], "--calib") && a + 1 < argc) {
             if (sscanf(argv[++a], "%f,%f,%f,%f,%f", &C_L1[1], &C_L2[1], &C_L1[0], &C_L2[0], &C_K) != 5) { fprintf(stderr, "bad --calib\n"); return 2; }
@@ -353,6 +355,12 @@ int main(int argc, char **argv)
     }
     /* the recording's own `# set -1` lines (settings live before it started) come first, --set after them wins */
     if (g_use_rsets) for (int s = 0; s < g_nrsets; s++) if (g_rsets[s].f < 0) do_set(g_rsets[s].kv);
+#ifdef KFP_TABLES
+    if (tables) { int bad = kt_load(tables, 0); if (bad) { fprintf(stderr, "%s: --tables %s: %s\n", argv[0], tables, g_kt_err); return 2; }
+        printf("tables %08x %s\n", kt_hash(), tables); }
+#else
+    if (tables) { fprintf(stderr, "%s: --tables needs a client source with kfp_tables.inc (kfp-live-tables)\n", argv[0]); return 2; }
+#endif
     for (int s = 0; s < ncl_set; s++) if (!do_set(cl_set[s])) return 2;
     if (!g_have_calib) calibrate();
     printf("calib %.4f,%.4f,%.4f,%.4f,%.4f\n", C_L1[1], C_L2[1], C_L1[0], C_L2[0], C_K);

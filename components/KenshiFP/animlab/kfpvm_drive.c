@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     *(void **)(g_pc + CHAR_ANIM) = g_anim; *(void **)(g_anim + ANIM_SKELETON) = (void *)g_b;
     g_anim_ent_off = 0x10; *(void **)(g_anim + 0x10) = g_ent;
     g_get_parent_scenenode = fk_parent_node; g_node_getdori_v = fk_node_ori; g_node_getdpos_v = fk_node_pos; g_node_getdscale_v = fk_node_scale;
-    int bf = -1, left = 0, la = 1, seed_elb = 1; const char *cl_set[256]; int ncl = 0;
+    int bf = -1, left = 0, la = 1, seed_elb = 1; const char *cl_set[256], *tables = NULL; int ncl = 0;
     for (int a = 4; a < argc; a++) {
         if (!strcmp(argv[a], "--quiet")) g_al_quiet = 1;
         else if (!strcmp(argv[a], "--no-lookahead")) la = 0;
@@ -68,6 +68,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--body-frame") && a + 1 < argc) bf = atoi(argv[++a]);
         else if (!strcmp(argv[a], "--side") && a + 1 < argc) left = argv[++a][0] == 'L';
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl < 256) cl_set[ncl++] = argv[++a]; }
+        else if (!strcmp(argv[a], "--tables") && a + 1 < argc) tables = argv[++a];   /* live tables file (fp_tables format) */
         else if (!strcmp(argv[a], "--calib") && a + 1 < argc) {
             if (sscanf(argv[++a], "%f,%f,%f,%f,%f", &C_L1[1], &C_L2[1], &C_L1[0], &C_L2[0], &C_K) != 5) { fprintf(stderr, "bad --calib\n"); return 2; }
             g_have_calib = 1; }
@@ -81,6 +82,12 @@ int main(int argc, char **argv)
         char kv[32]; snprintf(kv, sizeof kv, "%s=0", cls ? "hand_r" : "hand_m"); do_set(kv);
         g_vm_pldp[cls].z = -g_vm_pldp[cls].z; g_vm_pldq[cls].x = -g_vm_pldq[cls].x; g_vm_pldq[cls].y = -g_vm_pldq[cls].y;
     }
+#ifdef KFP_TABLES
+    if (tables) { int bad = kt_load(tables, 0); if (bad) { fprintf(stderr, "%s: --tables %s: %s\n", argv[0], tables, g_kt_err); return 2; }
+        printf("tables %08x %s\n", kt_hash(), tables); }
+#else
+    if (tables) { fprintf(stderr, "%s: --tables needs a client source with kfp_tables.inc (kfp-live-tables)\n", argv[0]); return 2; }
+#endif
     for (int s = 0; s < ncl; s++) if (!do_set(cl_set[s])) return 2;
     if (left) {   /* grip roll: mirrored (f,u) targets flip the prop axis perpendicular to both (t), the bone mirror flips z: the
                      * left local = Sz.(local.roll(g)).St = mirrored local . roll(180 - g) (t != z) or roll(-g) (t == z) about f */
