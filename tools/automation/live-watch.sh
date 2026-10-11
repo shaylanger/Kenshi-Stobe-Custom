@@ -63,6 +63,12 @@ selftest)
   chk frozen ' frozen=1/'
   s=$($PY "$H/live-watch.py" replay "$C" "$T/clean" --name clean --checks nowindow,black,frozen,menu | tail -1)
   [[ "$s" =~ ' clean ' ]] && echo "SELFTEST clean PASS: $s" || { echo "SELFTEST clean FAIL: $s"; fail=1; }
+  # capture path (capture.default=wgc): FFX = ffx-cap.sh, a non-executable .sh, must be run through bash with the gdigrab
+  # window args intact (ffx-cap.sh turns them into WGC); fake ffx-cap: answers one frame of the asked scale
+  printf '%s
+' 'a="$*"; case "$a" in *"-f gdigrab"*"title="*) ;; *) exit 3;; esac'     's=$(echo "$a" | grep -o "scale=[0-9]*:[0-9]*"); w=${s#scale=}; h=${w#*:}; w=${w%:*}; head -c $((w*h*3)) /dev/zero' > "$T/ffx-cap.sh"
+  s=$(cd "$H" && $PY -c "import importlib.util as u; sp=u.spec_from_file_location('lw', 'live-watch.py'); m=u.module_from_spec(sp); sp.loader.exec_module(m); f=m.grab_gdi('$T/ffx-cap.sh', 'Kenshi'); print('frame' if f is not None else 'none', m.ffx_cmd('$T/ffx-cap.sh')[0])")
+  [ "$s" = "frame bash" ] && echo "SELFTEST wgc-path PASS: grab through ffx-cap.sh via bash" || { echo "SELFTEST wgc-path FAIL: $s"; fail=1; }
   # live loop end to end: fake window = black.mp4 on the watcher clock, stopped by a GAMEDONE file
   mkdir -p "$T/live"; echo "1 rowX 0" > "$T/live/step.pid"
   LW_FAKE_VIDEO="$T/black.mp4" $PY "$H/live-watch.py" watch "$T/live" --every 2 --checks black,frozen >/dev/null 2>&1 & p=$!

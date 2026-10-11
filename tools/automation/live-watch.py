@@ -4,7 +4,7 @@ while a batch runs and writes one line per flagged frame, so a broken take (blac
 load, overlay, cursor, window gone) is seen minutes before the row's RESULT line.
 
   live-watch.py watch  <out-dir> [--every 5] [--checks C] [--name N] [--max-hours 12]
-      live: grabs the game window (ffmpeg gdigrab, window title $WIN_TITLE, -draw_mouse 0: a GDI read of the window,
+      live: grabs the game window ($LW_FFMPEG gdigrab args, title $WIN_TITLE; capture.default=wgc: FFX = ffx-cap.sh = WGC,
       never focuses it, never sends input) until <out>/GAMEDONE, <out>/DONE or <out>/live-watch.stop exists.
       ffmpeg.exe from $LW_FFMPEG (live-watch.sh sets it from rig-env.sh $FFX). LW_FAKE_VIDEO=<video> = take the frame
       at the watcher's own clock from that video instead (selftest / dry runs: the whole loop without a game).
@@ -230,8 +230,15 @@ class Phase:
         return ph, int(time.time() - self.since)
 
 
+def ffx_cmd(ffx):
+    # capture.default=wgc (capture-fix 2026-10-11): rig-env.sh sets FFX to ffx-cap.sh, which turns this gdigrab call into
+    # occlusion-proof Windows Graphics Capture of the window; a .sh runs through bash (Windows python on the 4080 can't
+    # exec it, WSL needs no exec bit)
+    return ['bash', ffx] if ffx.lower().endswith('.sh') else [ffx]
+
+
 def grab_gdi(ffx, title):
-    cmd = [ffx, '-hide_banner', '-loglevel', 'error', '-f', 'gdigrab', '-draw_mouse', '0', '-i', 'title=' + title,
+    cmd = ffx_cmd(ffx) + ['-hide_banner', '-loglevel', 'error', '-f', 'gdigrab', '-draw_mouse', '0', '-i', 'title=' + title,
            '-frames:v', '1', '-vf', 'scale=%d:%d' % (OW, OH), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=20, stdin=subprocess.DEVNULL)
