@@ -98,6 +98,8 @@ if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check
   st "filter: Display 4101 + nvlddmkm 153 since 950, not disk 153 / older / other provider" "$(tdr_filter 950 <"$tf" | cut -d'|' -f1 | paste -sd,)" "1000,1100"
   st "filter: nothing after the last GPU event" "$(tdr_filter 1101 <"$tf" | wc -l | tr -d ' ')" "0"
   TDR_FAKE=$tf; tdr_check 950; st "check: hit returns 1" "$?" "1"
+  st "tdr_guard: evidence (tdr-evidence.ps1) collected before the game stop" "$(awk '/^tdr_guard\(\)/{f=1} f&&/^  tdr_evidence/{print "ev"; exit} f&&/ctl stop/{print "stop-first"; exit}' "$0")" "ev"
+  st "tdr-evidence.ps1 present next to run-batch.sh (synced to the 4080)" "$({ [ -f "$A/tdr-evidence.ps1" ] || [ -f /c/KenshiModding/tools/automation/tdr-evidence.ps1 ]; } && echo yes)" "yes"
   st "check: TDR_HIT names count + first event" "${TDR_HIT%%|*}" "2 event(s), latest: 1000"
   tdr_check 1101; st "check: only a disk 153 later = no hit" "$?:$TDR_HIT" "0:"
   printf '' > "$tf"; tdr_check 0; st "check: empty log = no hit" "$?" "0"
@@ -217,12 +219,22 @@ relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = a
   launch "$s" | tail -1; world 900
 }
 TDR_SINCE=$(date +%s)   # TDR guard: events from the batch start on (launch included)
+# tdr_evidence: <out>/TDR-evidence/ = tdr-evidence.ps1 (last 5 min of gpulog, GPU/kernel events, batch.log tail, Kenshi /
+# capture / lab processes + nvidia-smi + runner state, LiveKernelReports WATCHDOG dump names) + the WSL process list (5090)
+winp() { if command -v wslpath >/dev/null 2>&1; then wslpath -w "$1"; else cygpath -w "$1"; fi; }
+tdr_evidence() { local ev="$O/TDR-evidence"; mkdir -p "$ev"
+  [ "${RIG:-5090}" != 4080 ] && ps -eo pid,etimes,pcpu,rss,args --sort=-pcpu 2>/dev/null | head -40 | cut -c1-220 > "$ev/wsl-ps.txt"
+  [ -n "${TDR_FAKE:-}" ] && { echo "TDR-EVIDENCE fake" > "$ev/fake.txt"; return 0; }
+  [ -f "$A/tdr-evidence.ps1" ] || { echo "evidence: $A/tdr-evidence.ps1 missing" >> "$O/TDR"; return 0; }
+  timeout 120 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(winp "$A/tdr-evidence.ps1")" -Out "$(winp "$ev")" -Rig "${RIG:-5090}" \
+    -Since "$TDR_SINCE" -BatchLog "$(winp "$O/batch.log")" </dev/null 2>&1 | tr -d '\r' | tail -1 >> "$O/TDR"; }
 tdr_guard() {  # tdr_guard <row|launch>: 1 = GPU driver reset since the last check: batch stopped (header)
   local now; now=$(date +%s); tdr_check "$((TDR_SINCE - 5))" && { TDR_SINCE=$now; return 0; }
   local msg="TDR (GPU driver reset) on rig ${RIG:-5090} at/after $1 of $L: $TDR_HIT"
   say "BATCH ABORTED $(date '+%F %H:%M'): $msg (rest of the list not run, game stopped)"
   printf '%s\nrow=%s\nlist=%s\nout=%s\ntime=%s\n' "$msg" "$1" "$L" "$O" "$(date '+%F %H:%M:%S')" > "$O/TDR"
   PRE=TDR
+  tdr_evidence   # before anything is stopped (m103: Shay wants every crash diagnosable)
   if [ "${RIG:-5090}" != 4080 ]; then
     { echo "ALERT 5090 $(date +%H:%M) $msg. Runner stopped; delete this file only once Shay cleared the cause."; cat "$O/TDR"; } > "$([ -n "${TDR_FAKE:-}" ] && echo "$O" || echo "$CR/KenshiTestRuns")/ALERT-5090-tdr.txt"   # fake: into the out dir
     [ -n "${TDR_FAKE:-}" ] || timeout 120 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\rig-runner.ps1' -Stop -Rig 5090 </dev/null 2>&1 | tr -d '\r' | tail -1

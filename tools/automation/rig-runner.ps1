@@ -288,6 +288,10 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) filler row hash (own script only): $($rh[-1])"
     $ms = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" monsel 2>&1 | ForEach-Object { "$_" }); $ok = $ms[-1] -like 'MONSEL PASS*'; if (-not $ok) { $bad++ }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) screen rule (kenshi-ctl.ps1 monsel: never the Samsung SNY05D1): $($ms[-1])"
+    # 5090 game cap: lane 5090c (3rd game) is not started while runner\5090.maxgames < 3 (absent = 2; -Fake: runner\fake\)
+    $gc = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$PSCommandPath" -Ensure -Rig 5090c -Fake 2>&1 | ForEach-Object { "$_" })
+    $ok = ($gc -join ' ') -like '*not started: lane 5090c = 3rd game*'; if (-not $ok) { $bad++ }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 5090 game cap: -Ensure -Rig 5090c refused at cap 2: $($gc[-1])"
     # a KenshiFP take list without '# launch:' and row save '-' defaults to kah-fpxbow (90e 2026-10-11 FAILED 'no save to launch')
     $tl = Join-Path $env:TEMP 'rr-selftest-nolaunch.list'
     [IO.File]::WriteAllLines($tl, [string[]]@('# owner: selftest', 'r1 | - | Axima | Malzin | 60 | RIG={RIG} bash {CR}/KenshiModding/components/KenshiFP/tests/ingame/fp-fists.sh {OUT}/r1'))
@@ -367,10 +371,15 @@ if ($Restart) {   # deploy a new rig-runner.ps1 at the next list boundary (never
     foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c', '4080b') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
     exit 0
 }
+# 5090 game cap (coordinator m103 16:50: Shay approved the 5090 restart for 2 games after the 16:35 TDR): runner\5090.maxgames
+# (first number; absent = 2). Lane 5090c = the 3rd game: never started (-Ensure / -Start / its own loop) while the cap is < 3.
+function GameCap { $f = Join-Path $rd '5090.maxgames'; $v = if (Test-Path $f) { ((Get-Content $f -Raw) -split '\s+' | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1) } else { $null }; if ($v) { [int]$v } else { 2 } }
+function Capped([string]$r) { if ($r -eq '5090c' -and (GameCap) -lt 3) { "lane 5090c = 3rd game on the 5090, cap $(GameCap) (runner\5090.maxgames; raise it only with Shay's OK)" } }
 if ($Start) { $Ensure = $true; $Force = $true }
 if ($Ensure) {
     foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c', '4080b') })) {
         if (PidAlive $r) { "runner $r running pid=$(Get-Content (Join-Path $rd "$r.pid") -Raw)"; continue }
+        $cap = Capped $r; if ($cap) { "runner $r not started: $cap"; continue }
         if (Test-Path (StopFlag $r)) {
             if (-not $Force) { "runner $r STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()): not started (rig-runner.ps1 -Start -Rig $r)"; continue }
             Remove-Item (StopFlag $r) -ErrorAction SilentlyContinue
@@ -388,6 +397,7 @@ if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFro
     Set-Content (Join-Path $rd "$Rig.pid") $PID
 }
 # lanes 5090b/5090c = the 2nd/3rd game instance on the 5090 (D:\KenshiInst\2|3): their own small loop (rig-lane2.ps1 header)
+if ($Rig -in '5090b', '5090c' -and (Capped $Rig)) { Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; "runner $Rig exits: $(Capped $Rig)"; exit 0 }
 if ($Rig -in '5090b', '5090c') { & "$auto\rig-lane2.ps1" -Lane $Rig -Fake:$Fake -TickSec ([Math]::Min($TickSec, 30)); exit 0 }
 # lane 4080b = the 2nd game instance on the 4080 (C:\KenshiInst\2), driven over ssh (rig-lane2-4080.ps1 header)
 if ($Rig -eq '4080b') { & "$auto\rig-lane2-4080.ps1" -TickSec ([Math]::Min($TickSec, 30)); exit 0 }
@@ -414,6 +424,12 @@ function TdrGuard([string[]]$c, $p) {   # every tick of a running batch: any GPU
     Log "TDR $m"
     $pre = "Set-Content 'C:\KenshiTestRuns\$(Split-Path $c[2] -Leaf)\PREEMPT' 'TDR'"
     if ($Fake -or $Rig -eq '5090') { Set-Content (Join-Path $c[1] 'PREEMPT') 'TDR' } else { $null = Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($pre))) }
+    if (-not $Fake) {   # evidence first (tdr-evidence.ps1 -> <out>\TDR-evidence: gpulog, events, batch.log tail, processes, LiveKernelReports)
+        $evo = "C:\KenshiTestRuns\$(Split-Path $c[2] -Leaf)\TDR-evidence"
+        $ev = if ($Rig -eq '5090') { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\tdr-evidence.ps1" -Out (Join-Path $c[1] 'TDR-evidence') -Rig 5090 -Since $t0e -BatchLog (Join-Path $c[1] 'batch.log') 2>&1 | Select-Object -Last 1 }
+              else { Ssh4Ps 'C:\KenshiModding\tools\automation\tdr-evidence.ps1' @('-Out', $evo, '-Rig', '4080', '-Since', "$t0e", '-BatchLog', "$evo\..\batch.log") | Select-Object -Last 1 }
+        Log "TDR evidence: $ev"
+    }
     if (-not $Fake) {   # the batch stops at its next row boundary (PREEMPT, old run-batch snapshots too); the game stops now
         if ($Rig -eq '5090') { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
         else { $null = Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) }

@@ -27,7 +27,7 @@ shopt -s nullglob
 HX='sh,py,awk,ps1,txt,json,tsv,csv,list,sed,jq,spec'
 SETD=(); SETF=()
 addset(){ local d=$1; shift; local f fs=""; for f in "$@"; do [ -f "$f" ] && fs+="$f "; done; SETD+=("$d"); SETF+=("$fs"); }
-addset tools/automation $M/tools/automation/{rig-env.sh,venc.sh,review-pack.py,dialog-guard.sh,row-reaper.sh,rig-runner-probe.sh,batch-excerpts.sh,batch-health.sh,ffx-cap.sh}
+addset tools/automation $M/tools/automation/{rig-env.sh,venc.sh,review-pack.py,dialog-guard.sh,row-reaper.sh,rig-runner-probe.sh,batch-excerpts.sh,batch-health.sh,ffx-cap.sh,tdr-evidence.ps1,gpulog.ps1}
 # occlusion-proof window capture (capture-fix 2026-10-11): ffx-cap.sh runs it when KAH_CAPTURE / capture.default = wgc
 addset Kenshi-Automation-Harness/tools/wgccap/out "$M/Kenshi-Automation-Harness/tools/wgccap/out/wgccap.exe"
 addset components/KenshiFP/animlab $(eval echo "$M/components/KenshiFP/animlab/*.{$HX}")
