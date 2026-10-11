@@ -24,6 +24,11 @@ interrupted him): every non -Play launch first sets kenshi.cfg to Full Screen=No
 Video Mode=1600 x 900 (fits DISPLAY2, 1920x1080) and keeps Shay's own values in
 C:\KenshiTestRuns\kenshi.cfg.play; -Play (and `cfg play`, also run by gfx-mods.sh on)
 writes them back. `cfg status|test|play` shows/applies the two modes.
+
+Graphics + frame cap (Shay 2026-10-10 22:05, kenshi-gfx.ps1): every test launch caps the game at 60 fps (harness
+framecap.txt) and applies graphics mode -Gfx full|low (default: $env:KAH_GFX, else C:\KenshiTestRuns\gfx.want line 1,
+else full): full = Shay's graphics at 1600x900 (filming lists), low = lowest graphics at 1024x576 ("# gfx: low" lists,
+no filming). -Play / cfg play restore Shay's graphics and remove the cap. `gfx [full|low|status]` applies/shows it.
 #>
 param(
   [Parameter(Position = 0)][string]$Command = 'status',
@@ -31,6 +36,7 @@ param(
   [int]$TimeoutSec = 300,
   [string]$Monitor = $(if ($env:KENSHI_MONITOR) { $env:KENSHI_MONITOR } else { 'DISPLAY2' }),
   [switch]$Play,
+  [ValidateSet('', 'full', 'low')][string]$Gfx = '',
   [Parameter(Position = 1)][string]$Mode = 'status'
 )
 $Kenshi = 'D:\Steam\steamapps\common\Kenshi'
@@ -54,6 +60,14 @@ function Set-CfgValues([hashtable]$Want) {
   }
   Set-Content -Path $Cfg -Value $out -Encoding Ascii
 }
+$GfxPs = Join-Path $PSScriptRoot 'kenshi-gfx.ps1'
+function Gfx-Want {
+  if ($Gfx) { return $Gfx }
+  if ($env:KAH_GFX -in @('full', 'low')) { return $env:KAH_GFX }
+  $w = 'C:\KenshiTestRuns\gfx.want'
+  if (Test-Path $w) { $v = (Get-Content $w -TotalCount 1).Trim(); if ($v -in @('full', 'low')) { return $v } }
+  'full'
+}
 function Cfg-Status {
   $cur = Get-CfgValues
   $isTest = $true; foreach ($k in $TestCfg.Keys) { if ($cur[$k] -ne $TestCfg[$k]) { $isTest = $false } }
@@ -73,6 +87,7 @@ function Cfg-Test {   # windowed for automated runs; remember Shay's values once
   "kenshi.cfg set to windowed 1600x900 for tests (play values saved: $((Get-Content $CfgPlay) -join '; '))"
 }
 function Cfg-Play {   # Shay's values back
+  & $GfxPs play -Kenshi $Kenshi   # graphics + no frame cap (kenshi-gfx.ps1)
   if (-not (Test-Path $CfgPlay)) { return "kenshi.cfg: no saved play values ($CfgPlay), left as is: $(Cfg-Status)" }
   $want = @{}; foreach ($line in Get-Content $CfgPlay) { $i = $line.IndexOf('='); if ($i -gt 0) { $want[$line.Substring(0, $i)] = $line.Substring($i + 1) } }
   Set-CfgValues $want
@@ -80,10 +95,14 @@ function Cfg-Play {   # Shay's values back
 }
 
 if ($Command -eq 'cfg') {
-  switch ($Mode) { 'test' { Cfg-Test } 'play' { Cfg-Play } default { Cfg-Status } }
+  switch ($Mode) { 'test' { Cfg-Test } 'play' { Cfg-Play } default { Cfg-Status; & $GfxPs status -Kenshi $Kenshi } }
   exit 0
 }
 
+if ($Command -eq 'gfx') {
+  if ($Mode -in @('full', 'low')) { & $GfxPs $Mode -Kenshi $Kenshi } else { & $GfxPs status -Kenshi $Kenshi }
+  exit $LASTEXITCODE
+}
 if ($Command -eq 'lock') {
   if (Test-Path $LockFile) { Get-Content $LockFile } else { 'free' }
   exit 0
@@ -203,6 +222,8 @@ if ($Command -in @('launch', 'restart')) {
       $Monitor = ($list[0] -split ' ')[0]; "test monitor $want is off: using $Monitor (windowed, background)"; $bg.Monitor = $Monitor
     }
     Cfg-Test
+    if ($Command -eq 'restart') { & 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' stop -Kenshi $Kenshi | Out-Null }
+    & $GfxPs (Gfx-Want) -Kenshi $Kenshi
   }
 }
 & 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' $Command -Save $Save -TimeoutSec $TimeoutSec @bg `
