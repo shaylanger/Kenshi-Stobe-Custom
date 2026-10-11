@@ -5,7 +5,7 @@ other script runs on the real python:
   take_sample.py          -> evidence samples from the fake game's state timeline (same line format)
   takecheck.py            -> the REAL takecheck on the script's labels + the synthetic samples (--video replaced by the
                              recording's virtual length, frame checks skipped): mistimed captions fail like in the game
-  frames.py animlab.py fist-take-check.py review-pack.py -> canned PASS lines after checking their input files exist
+  frames.py animlab.py fist-take-check.py review-pack.py stamp.py -> canned PASS lines after checking their input files exist
 On the 4080 rig python is Windows python behind Git Bash: POSIX paths written inside `-c` code or in env vars it reads
 (KAH_CLIENT) are not converted and can't be opened (pf_rig 4080 bug, 9454eda)."""
 import json, os, re, subprocess, sys, time
@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dr  # noqa: E402
 
 REAL = '/usr/bin/python3'
-CANNED_TOOLS = ('frames.py', 'animlab.py', 'fist-take-check.py', 'review-pack.py', 'vmcheck.py')
+CANNED_TOOLS = ('frames.py', 'animlab.py', 'fist-take-check.py', 'review-pack.py', 'vmcheck.py', 'stamp.py')
 
 
 def p(s):
@@ -127,6 +127,13 @@ def canned(tool, a):
         p({'openground': 'RESULT take PASS openground open=1.00/0.90 frames=4 min_sky=0.30 sky_min=0.26',
            'cursor': 'RESULT %s PASS cursor frames=10 cursor_frames=0' % name,
            'overlay': 'RESULT %s PASS overlay frames=4 overlay_frames=0' % name}.get(sub, 'RESULT %s PASS %s (dryrun canned)' % (name, sub)))
+        return 0
+    if tool == 'stamp.py':   # frame-stamp decoder: video + labels (+ harness stamp log) must exist; no stamp in a fake video
+        files = [x for x in a[:1] if not x.startswith('-')] + [v for v in (opt(a, '--labels'), opt(a, '--log')) if v]
+        if not check_files(tool, files):
+            p('RESULT %s FAIL stamp: input missing' % name); return 1
+        lg = ' agree=yes exact=1 uncaptured=0 mismatch=0' if opt(a, '--log') else ''
+        p('RESULT %s PASS frames=30 ok=30 dup=0 skip_max=1 marks=1%s (dryrun canned)' % (name, lg))
         return 0
     if tool == 'animlab.py':
         a = list(a)

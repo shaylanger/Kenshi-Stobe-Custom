@@ -882,6 +882,17 @@ def handle(s, cmd, a, now, sp):
         n = int(a[1]) if len(a) > 1 and a[1].isdigit() else 0
         dr.log('sync', 'flash n=%d ms=%d' % (n, ms))
         return True, 'sync_flash n=%d ms=%d view=1600x900' % (n, ms)
+    if cmd == 'stamp':   # harness 0c6c695: per-frame sync code (take-sample.sh TAKE_STAMP=1)
+        on = bool(a) and a[0] == 'on'
+        if a and a[0] in ('on', 'off'):
+            dr.log('sync', 'stamp %s' % a[0])
+        if on and 'log' in a[:-1]:   # <HarnessDir>\<file>: one line per change `<fc> <epoch> <lo> <hi> <mark> <flags>`
+            try:
+                with open(os.path.join(dr.KDIR, 'mods', 'AutomationHarness', a[a.index('log') + 1]), 'a') as f:
+                    f.write('\t'.join(['1', '0.000', '0', '0', '0', '1']) + '\n')
+            except OSError as e:
+                return False, 'stamp: log %s' % e
+        return True, 'stamp %s cell=8 fc=0 mark=0' % ('on' if on else 'off')
     if cmd == 'rangedinfo':
         c = need_char(0)
         if not c:
