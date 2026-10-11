@@ -11,6 +11,11 @@ so they are paired with record n-1's clock. Rows (one RESULT line at the end):
   view    every hand's wrist on screen in >= 92% of the swing frames (spec U22 on the game: fists on screen)
   hud     wrists clear of the game HUD (spec U23, spec.HUD_RECTS): hidden share <= .08 per hand in the ready frames and
           in the swing frames (FIST-shoteiL op-b6: fists half under the HUD while the HUD-less sheets showed them)
+  lens    (spec U24) EVERY first-person frame of the take, any technique (verified or not): no arm point (shoulder ->
+          elbow -> wrist, 11 samples per bone) on screen nearer than --lens-near dm (forearm at the lens / cut by the near
+          plane), and no wrist in the top band of the view (y_ndc > --high-y) for longer than --high-s s (arm swung up
+          huge). CLASS: arm across the lens (Misses FIST-ma_chudan/badpunch/ma_2strike fist4080n+p: forearm fills a
+          third of the frame, hollow sleeve at the near plane, wrist in the top-left corner with the elbow out of frame).
 Only verified swings count for match/plays/view/hud: a swing whose native body (spine, recorded 'sp') leaves the guard
 body by > --body-max dm is another native technique under the arms (the fist_tech force bug: op-b6 shoteiL swing 3 leaned
 ~8 dm), and with --swings <KenshiFP.log swing lines> only as many swings as there are "tech='<anim>' ... fallback=0"
@@ -27,6 +32,8 @@ import recfmt, spec
 ap = argparse.ArgumentParser()
 ap.add_argument('rec'); ap.add_argument('lab'); ap.add_argument('--max-err', type=float, default=0.6)
 ap.add_argument('--swings', help='KenshiFP.log [vm] fist swing lines of this take'); ap.add_argument('--body-max', type=float, default=3.0)
+ap.add_argument('--lens-near', type=float, default=1.0); ap.add_argument('--high-y', type=float, default=0.5)
+ap.add_argument('--high-s', type=float, default=0.3)
 a = ap.parse_args()
 R = recfmt.parse(a.rec).frames
 kj = json.load(open(os.path.join(a.lab, 'keys.json')))
@@ -94,6 +101,44 @@ if n:
     res.append(('hud', 'PASS' if all(v <= 0.08 for v in hh.values()) and all(gh[x] / ng <= 0.08 for x in 'LR') else 'FAIL',
                 'wrists under the game HUD: ready-frame share L %.2f R %.2f, swing share L %.2f R %.2f (<= .08 each)' % (
                     gh['L'] / ng, gh['R'] / ng, hh['L'], hh['R'])))
+# lens (U24): all first-person frames (zoom < 0.5 dm), measured joints of record i = frame i-1 (the time of record i-1)
+TX, TY = 1.245, 0.70   # metrics.TX/TY: Kenshi FP view tan half-angles
+
+
+def ndc(p):
+    return (p[0] / p[2] / TX, p[1] / p[2] / TY) if p[2] > 0.05 else None
+
+
+lens_n, lens_w, high, run = 0, None, [], {s: None for s in 'LR'}
+fp = [(R[i - 1]['t'], R[i]) for i in range(1, len(R)) if R[i - 1].get('zoom', 0.0) < 0.5 and R[i].get('Lwr')]
+for t, r in fp:
+    dmin = 99.0
+    for s in 'LR':
+        for a0, b0 in ((r[s + 'sh'], r[s + 'el']), (r[s + 'el'], r[s + 'wr'])):
+            for k in range(11):
+                p = tuple(a0[j] + (b0[j] - a0[j]) * k / 10.0 for j in range(3))
+                q = ndc(p)
+                if q and abs(q[0]) <= 1.0 and abs(q[1]) <= 1.0:
+                    dmin = min(dmin, p[2])
+        q = ndc(r[s + 'wr'])
+        hi = bool(q) and q[1] > a.high_y and abs(q[0]) <= 1.2
+        if hi and run[s] is None:
+            run[s] = t
+        elif not hi and run[s] is not None:
+            high.append((t - run[s], s, run[s])); run[s] = None
+    if dmin < a.lens_near:
+        lens_n += 1
+        lens_w = min(lens_w or (99.0, 0), (dmin, t))
+for s in 'LR':
+    if run[s] is not None and fp:
+        high.append((fp[-1][0] - run[s], s, run[s]))
+t0 = fp[0][0] if fp else 0.0
+hb = [h for h in high if h[0] > a.high_s]
+hw = max(high) if high else (0.0, '-', t0)
+res.append(('lens', 'PASS' if fp and not lens_n and not hb else 'FAIL',
+            'fp frames %d; arm nearer than %.1f dm on screen %d%s; wrist above y %.2f longest %.2f s (%s at %.1f s, <= %.2f)' % (
+                len(fp), a.lens_near, lens_n, (' (nearest %.2f dm at %.1f s)' % (lens_w[0], lens_w[1] - t0)) if lens_w else '',
+                a.high_y, hw[0], hw[1], hw[2] - t0, a.high_s)))
 for x in res:
     print('%-7s %-4s %s' % x)
 bad = [x[0] for x in res if x[1] == 'FAIL']
