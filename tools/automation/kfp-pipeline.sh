@@ -288,6 +288,12 @@ guard_cut() { local cu=$1 nc cl n; nc=$(echo "$cu" | tr ',' '\n' | grep -c .)
   cl=$(for n in ${cu//,/ }; do awk -F'\t' -v n="$n" '$1==n && $2=="alone" && $7 ~ /^(flip|drop|newfail)$/ {print n; exit}' "$D"; done | paste -sd,)
   [ -n "$cl" ] && { echo "$cl"; return 0; }
   echo "would exclude $nc/$N patches ($cu) with no per-patch breaker (none flips/drops alone vs base); not staged"; return 1; }
+# clean_minus <label>: tree <label> (a set minus one patch) shows no regression vs base: no BREAK/newfail, no FAIL key
+# that is not FAIL on base, no INFRA
+clean_minus() { [ -f "$RUN/metrics-$1.tsv" ] || return 1
+  [ -z "$(compare SET set base "$1" | awk -F'\t' '$7=="BREAK" || $7=="newfail"')" ] || return 1
+  [ -z "$(awk -F'\t' 'NR==FNR {b[$1]=$2; next} $2=="FAIL" && b[$1]!="FAIL"' "$RUN/metrics-base.tsv" "$RUN/metrics-$1.tsv")" ] || return 1
+  ! grep -q $'\tINFRA$' "$RUN/metrics-$1.tsv"; }
 # <<< decide-fns
 # round 1 (combined-first): base + all only. Round 2: the per-patch trees, only when round 1 shows a regression vs base
 # (or --per-patch), so the breaking patch can be named and left out.
@@ -304,11 +310,27 @@ if [ $N -ge 2 ]; then
   if [ $PERP = 1 ]; then ff="--per-patch"
   else sr=$(compare SET set base all | awk -F'\t' '$7=="BREAK" || $7=="newfail" {printf "%s %s->%s %s; ", $3, $4, $5, $7}')
     [ -n "$sr" ] && ff="set: ${sr%; }"; kb_eval; case "$GB" in ""|nores) ;; *) ff="${ff:+$ff; }gate: $GB";; esac; fi
+  # RECENCY fast path (coordinator 2026-10-11: the 5090 sat idle ~50 min on a 30-tree round for one patch): gate the
+  # set-minus-one trees newest-changed patch first, $JOBS at a time; the first clean one = that patch is the breaker,
+  # rerun without it right away (the rest ships). No single clean minus-one tree = the full per-patch round below.
+  # KFP_RECENCY=0 turns it off.
+  if [ -n "$ff" ] && [ $COMB = 1 ] && [ $PERP = 0 ] && [ $N -ge 3 ] && [ "${KFP_RECENCY:-1}" = 1 ]; then
+    say "RECENCY minus-one trees, newest patch first, $JOBS at a time (${ff})" | cut -c1-600
+    mapfile -t ord < <(for p in "${S[@]}"; do echo "$(stat -c %Y "$p") $p"; done | sort -rn | cut -d' ' -f2-)
+    i=0; while [ $i -lt ${#ord[@]} ]; do bl=()
+      for p in "${ord[@]:$i:$JOBS}"; do n=$(pname "$p"); r=(); for q in "${S[@]}"; do [ "$q" = "$p" ] || r+=("$q"); done
+        apply_set "$RUN/tree--$n" "${r[@]}" > /dev/null; TREE[-$n]=$RUN/tree--$n; bl+=("-$n"); done
+      run_gates "${bl[@]}"
+      for l in "${bl[@]}"; do clean_minus "$l" && { say "RECENCY set minus ${l#-} is clean vs base: ${l#-} is the breaker"
+          rerun_without "${l#-}" "BREAK(recency: set without it clean vs base; ${ff:0:160})"; }; done
+      i=$((i + JOBS)); done
+    say "RECENCY no single minus-one tree is clean: full per-patch round"; fi
   if [ -n "$ff" ]; then say "COMBINED-FIRST per-patch round (${ff})" | cut -c1-600; pl=()
     for p in "${S[@]}"; do n=$(pname "$p"); apply_set "$RUN/tree-+$n" "$p" > /dev/null; TREE[+$n]=$RUN/tree-+$n; pl+=("+$n"); done
     if [ $N -ge 3 ]; then for p in "${S[@]}"; do n=$(pname "$p"); r=(); for q in "${S[@]}"; do [ "$q" = "$p" ] || r+=("$q"); done
       apply_set "$RUN/tree--$n" "${r[@]}" > /dev/null; TREE[-$n]=$RUN/tree--$n; pl+=("-$n"); done; fi
-    run_gates "${pl[@]}"; PPG=1
+    pg=(); for l in "${pl[@]}"; do [ -f "$RUN/metrics-$l.tsv" ] || pg+=("$l"); done   # recency trees already gated
+    [ ${#pg[@]} = 0 ] || run_gates "${pg[@]}"; PPG=1
   else say "COMBINED-FIRST all-pending clean vs base: per-patch round skipped"; fi
 fi
 printf 'patch\tcompare\tkey\tbefore\tafter\tdelta\tflag\n' > "$D"

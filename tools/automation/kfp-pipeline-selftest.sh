@@ -47,4 +47,14 @@ g=$(guard_cut "$ALLP"); ck "4 guard refuses 14/14 without breaker" "$?:$(echo "$
 printf 'p7\talone\tzz\tPASS\tFAIL\t-\tflip\n' >> "$D"
 ck "4 guard keeps only the clear breaker" "$(guard_cut "$ALLP")" "p7"
 ck "4 small cut passes unchanged" "$(guard_cut p3,p4)" "p3,p4"
+# 5 recency fast path: clean_minus accepts a minus-one tree with only base FAILs, refuses a new FAIL / INFRA
+RUN=$T/r5; N=15
+mk $RUN base "$AGB" 'agree\tFAIL\nzz\tPASS\n' "$RB"
+mk $RUN -p1 "$AGB" 'agree\tFAIL\nzz\tPASS\n' "$RB"
+mk $RUN -p2 "$AGB"'REGRESS FAIL zz: broke\n' 'agree\tFAIL\nzz\tFAIL\n' "$RB"
+mk $RUN -p3 'REGRESS FAIL agree: \n' 'agree:\tFAIL\nzz\tPASS\n' "$RB"
+for l in base -p1 -p2 -p3; do metrics $l > "$RUN/metrics-$l.tsv"; done
+ck "5 clean minus-one accepted" "$(clean_minus -p1 && echo y || echo n)" y
+ck "5 minus-one with new FAIL refused" "$(clean_minus -p2 && echo y || echo n)" n
+ck "5 minus-one with INFRA refused" "$(clean_minus -p3 && echo y || echo n)" n
 [ $F = 0 ] && echo "SELFTEST kfp-pipeline PASS" || { echo "SELFTEST kfp-pipeline FAIL"; exit 1; }
