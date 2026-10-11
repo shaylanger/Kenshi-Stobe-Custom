@@ -645,9 +645,19 @@ static void fpc_free_swing(void *pc) {
     void *tech=g_fpc_choose(stats,5.0f,30.0f,NULL,1);
     if (!readable(tech,TECH_ANIM_SPEED+4)) {++g_fpc_fs_notech;return;}
     if (g_fpc_fists && g_vm_fist_force>=0 && g_vm_fist_force<VM_NFIST) {   /* NA1 take rows: re-pick until the forced technique */
-        char nm[48];int k;for (k=0;k<48;k++) {fpc_tech_name(tech,nm,sizeof nm);if (!strcmp(nm,g_vm_fist_tech[g_vm_fist_force].anim)) break;
-            void *t2=g_fpc_choose(stats,5.0f,30.0f,tech,1);if (readable(t2,TECH_ANIM_SPEED+4)) tech=t2;}
-        if (k==48) logline("[vm] fist force: '%s' not picked in 48 tries (got '%s')",g_vm_fist_tech[g_vm_fist_force].anim,nm);
+        /* the technique data of each table is cached once any pick returns it (static game data); re-picks vary the
+         * range / stationary window and the last-technique exclusion so range-limited techniques come up too */
+        static void *seen[VM_NFIST]; static const float rng[4]={5.0f,2.0f,12.0f,25.0f};
+        const char *want=g_vm_fist_tech[g_vm_fist_force].anim; char nm[48],got[200]; int k=0,i; got[0]=0;
+        if (readable(seen[g_vm_fist_force],TECH_ANIM_SPEED+4)) tech=seen[g_vm_fist_force];
+        else for (k=0;k<96;k++) {
+            fpc_tech_name(tech,nm,sizeof nm);
+            for (i=0;i<VM_NFIST;i++) if (!seen[i] && !strcmp(nm,g_vm_fist_tech[i].anim)) seen[i]=tech;
+            if (!strcmp(nm,want)) break;
+            if (!strstr(got,nm) && strlen(got)+strlen(nm)+2<sizeof got) {strcat(got,nm);strcat(got,",");}
+            {void *t2=g_fpc_choose(stats,rng[k&3],30.0f,(k&4)?NULL:tech,(unsigned char)!(k&8));if (readable(t2,TECH_ANIM_SPEED+4)) tech=t2;}
+        }
+        if (k==96) logline("[vm] fist force: '%s' not picked in 96 tries (seen: %s)",want,got);
     }
     float spd=*(float *)((uintptr_t)stats+STATS_ATTACK_SPEED);
     if (!(isfinite(spd)&&spd>0.2f&&spd<4.0f)) spd=1.0f;
