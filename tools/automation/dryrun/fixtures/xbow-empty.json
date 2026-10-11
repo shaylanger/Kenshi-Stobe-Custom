@@ -125,7 +125,8 @@
  ],
  "hour": 11.0,
  "fight": 0,
- "about": "xbmesh-c 2026-10-10: kah-fpxbow reused in place with the bow EMPTY; the first aim auto-reloads ~8 s before shot_ready (fp-xbow-mesh.sh waited 8 s: setup FAIL)",
+ "about": "xbmesh-c 2026-10-10: kah-fpxbow reused in place with the bow EMPTY; the first aim auto-reloads ~8 s before shot_ready (fp-xbow-mesh.sh waited 8 s: setup FAIL); off_sheathes (xbmesh-c2): fp_combat off lets the native AI sheathe the drawn crossbow, so an unconditional R tap DRAWS it (R holster: state=ready)",
  "swing_ko": 0,
- "xbow_empty": 1
+ "xbow_empty": 1,
+ "off_sheathes": 1
 }

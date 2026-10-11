@@ -128,6 +128,7 @@ def new_state(save):
              tl=[], hist=[], rec=dict(on=0, t=0), keys={}, sets={}, zoom_switch=1, bandhide=1,
              turret=dict(on=0, ammo=1, power=1, shots=0, enters=0, leaves=0), fight=int(f.get('fight', 0)),
              swing_ko=int(f.get('swing_ko', 0)),
+             off_sheathes=int(f.get('off_sheathes', 0)),
              iso=0 if os.environ.get('RIG') == '4080' or os.environ.get('DRYRUN_ISO') == 'off' else 1)
     # iso: 5090 kenshi-ctl launch turns input isolation on; the 4080 C:\KAH\ctl.ps1 launch does not (b4080c setup FAIL)
     t = dr.vnow()
@@ -311,7 +312,9 @@ def press(s, btn, ms, now):
             sched(s, now + 0.6, 'r', drawn=0, ui_state='holstered', hud_text='holstered', vm='holstered')
         else:
             w, melee = weapon_drawn(s, c)
-            sched(s, now + 0.8, 'r', drawn=1, melee=melee, ui_state='ready', hud_text='ready', vm='ready', weapon=w)
+            # off_sheathes fixture (xbmesh-c2): the R draw of a sheathed crossbow shows as 'ready' at once (KenshiFP.log same ms)
+            sched(s, now + (0.05 if s.get('off_sheathes') else 0.8), 'r', drawn=1, melee=melee, ui_state='ready',
+                  hud_text='ready', vm='ready', weapon=w)
         return 'press r'
     tu = s.get('turret', {})
     if tu.get('on') and btn == 'lmb':
@@ -649,6 +652,9 @@ def fp_combat_melee(s, a, now):
         return True, 'manual ownership requested; release all combat buttons to arm'
     if sub == 'off' and len(a) == 1:
         m['on'] = 0; m['armed'] = 0; m['inj'] = 0; s['combat_on'] = 0
+        if s.get('off_sheathes') and s['fp']['drawn'] and not s['fp']['melee']:
+            # fixture off_sheathes (xbmesh-c2): the manual release lets the native AI sheathe the crossbow (back sheath)
+            sched(s, now + 0.3, 'cin', drawn=0, ui_state='holstered', hud_text='holstered', vm='holstered')
         return True, 'manual ownership release requested'
     if sub == 'physical' and len(a) == 1:
         m['inj'] = 0; m['fire'] = 0; m['aim'] = 0
