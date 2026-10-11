@@ -3,6 +3,8 @@
 # Builds the offline KenshiFP viewmodel replay (kfpvm_replay) in WSL against a COPY of the KenshiFP client source.
 #   --l1     the game L1 model in a --drive build too (fist candidates: the fists sit near full reach, where the game
 #            over-reaches its targets by ~0.6 dm; native.py fists --adapter <this build>)
+#   --no-hoff leave out the game weapon-hand offset model (patches/hand-offset.py, hand-frame target offset $AL_HOFF or
+#            0.19,0.02,-0.10 dm; default ON for the replay, off for --drive unless --l1)
 #   --no-l1  leave out the game L1 model (patches/l1-scale.py, l1k 0.871 = the game's short cached upper arm; default ON for the replay, off for --drive)
 #   --main   build another main in this dir (kfpvm_fist.c, fist-equiv.sh)
 #   --drive  build the phase-2 drive adapter (kfpvm_drive.c: authored targets, metricslab.py) instead of the replay
@@ -16,6 +18,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --drive) MAIN=kfpvm_drive.c; shift;;
   --main) MAIN="$2"; shift 2;;   # another harness main in this dir (kfpvm_fist.c: fist-equiv.sh)
   --no-l1) NOL1=1; shift;;
+  --no-hoff) NOHOFF=1; shift;;
   --l1) L1=1; shift;;   # the game L1 model in a --drive build too (fist candidates: native.py fists --adapter; FIST-shoteiL op-b6)
   --sync) mkdir -p /root/animlab-kfp-src && rsync -a --delete /root/KenshiFP/client/ /root/animlab-kfp-src/client/; shift;;
   --src) SRC="$2"; shift 2;;
@@ -26,6 +29,7 @@ for p in "${PATCHES[@]}"; do case "$p" in
   *.py) python3 "$p" "$B/client" ;;
   *) (cd "$B" && patch -s -p1 < "$p") ;; esac; done
 [ -n "$NOL1" ] || { [ "$MAIN" = kfpvm_drive.c ] && [ -z "$L1" ]; } || python3 "$HERE/patches/l1-scale.py" "$B/client"
+[ -n "$NOHOFF" ] || { [ "$MAIN" = kfpvm_drive.c ] && [ -z "$L1" ]; } || python3 "$HERE/patches/hand-offset.py" "$B/client"
 python3 "$HERE/extract_helpers.py" "$B/client/kenshifp_client.c" "$B/gen_helpers.h" quat_mul quat_conj quat_norm quat_slerp quat_rotvec
 DEFS=""; grep -q "g_vm_elb_cb" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ELB_CB"
 grep -q "g_vm_eclamp_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ECLAMP"
