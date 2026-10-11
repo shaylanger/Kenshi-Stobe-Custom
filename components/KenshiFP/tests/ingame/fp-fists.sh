@@ -109,7 +109,12 @@ UMAX=0
 for r in $(seq 1 $REPS); do
   A fp_keys press lmb 60 >/dev/null
   # native techniques can run > 3 s (fist4080p: a press inside one was dropped)
-  e=$((SECONDS+(NAT==1?5:3))); while [ $SECONDS -lt $e ]; do f=$(fist); echo "$f" >> "$N.fist.txt"; u=$(fld u <<<"$f"); UMAX=$(awk -v a="$UMAX" -v b="${u:-0}" 'BEGIN{print (b>a?b:a)}'); sleep 0.15; done
+  # fist4080s fsD0: a 5 s window still dropped the 3rd press inside a long native technique (swings=2/3): native rows
+  # wait until the technique has started AND ended (tech back to '-'), bounded at 10 s, before the next press
+  s0=$SECONDS; e=$((SECONDS+(NAT==1?10:3))); seen=0
+  while [ $SECONDS -lt $e ]; do f=$(fist); echo "$f" >> "$N.fist.txt"; u=$(fld u <<<"$f"); UMAX=$(awk -v a="$UMAX" -v b="${u:-0}" 'BEGIN{print (b>a?b:a)}')
+    if [ "$NAT" = 1 ]; then case "$f" in *"tech='-'"*) [ $seen = 1 ] && [ $((SECONDS-s0)) -ge 1 ] && { sleep 0.3; break; };; *"tech='"*) seen=1;; esac; fi
+    sleep 0.15; done
 done
 lab "Guard"; sleep 1.5; fist >> "$N.fist.txt"
 lab end; touch "$N.stop"; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"

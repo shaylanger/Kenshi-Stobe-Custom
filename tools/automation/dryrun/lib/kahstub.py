@@ -1211,7 +1211,8 @@ def handle(s, cmd, a, now, sp):
             tn = ['badpunch', 'ma chudan', 'ma 2strike', 'shoteiL'][max(fs['force'], 0) % 4]
             d = 1.5 if sw else 0.0   # native wrist moves during a technique (dm, view space)
             r = "fist ua=1 force=%d on=%d fists=%d wih=%d tech='%s' table=%s fallback=0 u=%.3f swings=%d n=4 w=1.00 zf=0.00 state=%s " % (
-                fs['force'], on, on, 0 if fp.get('weapon') in (None, 'fists') else 1, tn, tn.split()[0],
+                fs['force'], on, on, 0 if fp.get('weapon') in (None, 'fists') else 1,
+                tn if sw else '-', tn.split()[0] if sw else 'guard',   # real: tech='-' table=guard between techniques,
                 0.9 if sw else 0.0, fs['swings'], fp['ui_state'])
             r += ('tL=-1.60,-1.00,3.80 tR=1.60,-1.00,3.80 wrL=-1.60,%.2f,3.80 wrR=1.60,%.2f,%.2f '
                   'elL=-2.50,-2.50,2.50 elR=2.50,-2.50,2.50 ikfail=%d') % (-1.0 + d * 0.3, -1.0 + d * 0.3, 3.8 + d, fs['ikfail'])
