@@ -1007,8 +1007,8 @@ function PreDryWait([string]$key, [int]$sec) {
     }
     $true
 }
-function CachedVerdict($f) {   # PASS | FAIL | PENDING | $null for a queued list file
-    $key = DryKey $f.FullName
+function CachedVerdict($f) { KeyVerdict (DryKey $f.FullName) }   # PASS | FAIL | PENDING | $null for a queued list file
+function KeyVerdict([string]$key) {
     $rc = Join-Path $pdd "$key.rc"
     if (Test-Path $rc) {
         $sum = @(Get-Content (Join-Path $pdd "$key.out") -ErrorAction SilentlyContinue | Where-Object { $_ -like 'DRYRUN-SUMMARY*' })[-1]
@@ -1413,7 +1413,11 @@ if ($PreDryOf) {
         elseif ($PreDryNice -eq 0 -and -not $Fake) { $null = Wsl @('bash', '-c', "for p in `$(pgrep -f 'predry/$k/run.sh'); do renice -n 0 -g `$p; done >/dev/null 2>&1; true") }
         if ($PreDryWaitSec -gt 0) { $null = PreDryWait $k $PreDryWaitSec }
     }
-    $v = CachedVerdict (Get-Item -LiteralPath $p); "PREDRY $k $(if ($v) { $v } else { 'none' })"
+    # verdict of the key this call started/waited on (speed-scout 17:21: re-keying the list here gave 'none' for a finished
+    # PASS run when a referenced file changed meanwhile, and lane 4080b dropped 114a as "dryrun none")
+    $v = KeyVerdict $k
+    if (-not $v -and $PreDryWaitSec -gt 0) { Start-Sleep 3; $v = KeyVerdict $k }
+    "PREDRY $k $(if ($v) { $v } else { 'none' })"
     $o = @(Get-Content (Join-Path $pdd "$k.out") -ErrorAction SilentlyContinue)
     @($o | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1) + @($o | Where-Object { $_ -match '^DRYRUN .* FAIL' } | Select-Object -First 2)
     exit 0
