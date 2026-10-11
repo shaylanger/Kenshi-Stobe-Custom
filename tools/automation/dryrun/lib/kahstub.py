@@ -458,7 +458,7 @@ def press(s, btn, ms, now):
             s['free_swings'] = s.get('free_swings', 0) + 1
             n = s['vm_swings'] = s.get('vm_swings', 0) + 1
             # kfp_viewmodel.inc vm_stroke_pick: forced stroke, else round robin over the `strokes` mask
-            force, mask = s.get('vm_force', -1), s.get('vm_strokes', 0x7)   # shipped default 0x7 since kfp-e6-default-mask v3 (strokes 0-2; 3 opt-in)
+            force, mask = s.get('vm_force', -1), s.get('vm_strokes', 0x5)   # shipped default 0x5 since kfp-e6-default-mask v4 (strokes 0 + 2; 1, 3 opt-in)
             k = force if 0 <= force < 4 else 0
             if not 0 <= force < 4:
                 for i in range(4):
