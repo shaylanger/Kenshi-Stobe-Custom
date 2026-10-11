@@ -1309,6 +1309,8 @@ def handle(s, cmd, a, now, sp):
             made.append('%s #%d/%d race=Greenlander' % (tpl, sr, sr + 1))
         return True, 'spawned %d/%d %s: %s' % (n, n, tpl, ', '.join(made))
     if cmd == 'fp_combat' and a:
+        if a[0] == 'on':   # XBDEXP: the draw mask active when the adapter arms (and draws)
+            s['arm_drawexp'] = s.get('drawexp', 0)
         r = fp_combat_melee(s, a, now)
         if r is not None:
             return r
@@ -1326,6 +1328,9 @@ def handle(s, cmd, a, now, sp):
                                          has_ammo=1, loaded=fp['loaded'], loaded_max=1)
         if sub == 'aim':
             return True, 'aim victim=00a1 (target=00a1) dist=12'
+        if sub == 'drawexp' and len(a) > 1:   # kfp-xbow-drawsec XBDEXP test switch (real reply format)
+            s['drawexp'] = int(float(a[1])); s['drawexp_seen'] = 1
+            return True, 'drawexp=%d' % s['drawexp']
         return True, 'fp_combat %s ok' % ' '.join(a)
     if cmd == 'fp_tables':   # KenshiFP live animation tables (pending-fixes/kfp-live-tables.py, kfp_tables.inc reply format)
         sub = a[0] if a else 'state'
@@ -1386,6 +1391,9 @@ def handle(s, cmd, a, now, sp):
                     dr.flag('NOTE', 'fp_vm rec dump %s with 0 frames (rec on never sent?)' % a[2])
                 return True, 'rec dump %s frames=%d' % (a[2], n)
             return True, 'rec on=%d frames=%d' % (s['rec']['on'], int((now - s['rec'].get('t', now)) * 60) if s['rec']['on'] else 0)
+        if sub == 'gun':   # kfp_viewmodel.inc `fp_vm gun` tail; a run that uses drawexp sees the XBDEXP bug (mask 0 = pin mode 36)
+            m = 36 if s.get('drawexp_seen') and s.get('arm_drawexp', 0) == 0 else 1
+            return True, 'gun=0000000000000001 ammo_n=1 loaded=1 | pinned=1 game=1 rel=1 | pin=1 mode=%d new=0 bolt ok=1 vis=1' % m
         if sub == 'fist':   # real kfp_viewmodel.inc `fp_vm fist` format (NA1 fields + kfp-fist-native nat/frz/natL/natR/clamp)
             fs = s.setdefault('fist', dict(force=-1, swings=0, ikfail=0, nat=0))
             on = 1 if fp['drawn'] and fp.get('weapon') == 'fists' else 0
