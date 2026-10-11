@@ -93,7 +93,7 @@ Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '5090b', '5090c', '4080b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
       [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [int]$PreDryMin = 5, [string]$Resolve = '', [string]$DryKeyOf = '', [string]$FillerRows = '', [string]$LedgerFrom = '', [string]$LedgerList = '',
-      [int]$HardMin = 5, [switch]$SelfTest)
+      [int]$HardMin = 5, [switch]$SelfTest, [switch]$RowHashSelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # Stuck decision (pure; -SelfTest checks it). Soft: condition held >= lim AND out dir unchanged >= lim. Hard (2026-10-11,
 # 4080 R11: Kenshi froze 12+ min while the row kept appending "previous command still unread" / "inbox locked" client
@@ -270,6 +270,8 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 5090b rig-lane2.ps1 -SelfTest: $($l2[-1])"
     $l4 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2-4080.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l4[-1]) -like 'LANE4080B-SELFTEST PASS*'; if (-not $ok) { $bad++; $l4 | Where-Object { $_ -like 'FAIL*' } }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 4080b rig-lane2-4080.ps1 -SelfTest: $($l4[-1])"
+    $rh = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$PSCommandPath" -Rig 5090 -RowHashSelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($rh[-1]) -like 'ROWHASH-SELFTEST PASS*'; if (-not $ok) { $bad++; $rh | Where-Object { $_ -like 'FAIL*' } }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) filler row hash (own script only): $($rh[-1])"
     $ms = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" monsel 2>&1 | ForEach-Object { "$_" }); $ok = $ms[-1] -like 'MONSEL PASS*'; if (-not $ok) { $bad++ }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) screen rule (kenshi-ctl.ps1 monsel: never the Samsung SNY05D1): $($ms[-1])"
     "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 4) cases"; exit [int]($bad -gt 0)
@@ -351,7 +353,7 @@ if ($Ensure) {
     exit 0
 }
 if (-not $Rig) { Get-Content $PSCommandPath -TotalCount 40; exit 2 }
-if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFrom) {
+if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFrom -and -not $RowHashSelfTest) {
     if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
     if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
     Set-Content (Join-Path $rd "$Rig.pid") $PID
@@ -565,24 +567,32 @@ function LedSet([hashtable]$rows) {   # key -> @(K, H, hash, result); both loops
     }
     Log "could not write $ledF"
 }
-$script:rhCache = @{}; $script:rhStamp = ''
-function RowHash([string]$row) {   # content hash of a row line + every repo file it reaches (cached while no candidate file changes)
-    $cand = SyncCandidates
-    $st = (($cand.Values | Sort-Object | ForEach-Object { $i = Get-Item -LiteralPath $_; "$_|$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" }) -join "`n")
-    if ($st -ne $script:rhStamp) { $script:rhCache = @{}; $script:rhStamp = $st }
+# Row hash (lane-5090c 2026-10-11: the old hash covered the whole helper closure, so every commit to take-preflight.sh,
+# rig-env.sh, ... marked every filler row "script changed" and lanes reran unchanged lists): the row line + the repo files the
+# row names itself (its own script), comment lines ("#...") ignored. Helpers are shared infrastructure: a helper bug shows
+# up in the real lists that use it. 's1:' prefix; an older closure hash in the ledger counts as unchanged (the next build
+# change reruns the row anyway and writes an s1 hash).
+$script:rhCache = @{}
+function RowHash([string]$row, [hashtable]$cand = $null) {
+    if (-not $cand) { $cand = SyncCandidates }
     $norm = (($row -split '\|') | ForEach-Object { $_.Trim() }) -join '|'
-    if ($script:rhCache.ContainsKey($norm)) { return $script:rhCache[$norm] }
-    $sha = [Security.Cryptography.SHA256]::Create(); $ms = New-Object IO.MemoryStream
-    $b = [Text.Encoding]::UTF8.GetBytes("$norm`n"); $ms.Write($b, 0, $b.Length)
-    foreach ($r in (UsedClosure $norm $cand)) { $b = [Text.Encoding]::UTF8.GetBytes("$r`n"); $ms.Write($b, 0, $b.Length); $b = [IO.File]::ReadAllBytes($cand[$r]); $ms.Write($b, 0, $b.Length) }
-    $hx = (($sha.ComputeHash($ms.ToArray())[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')
-    $script:rhCache[$norm] = $hx; $hx
+    $seeds = @(UsedClosure $norm $cand -SeedsOnly)
+    $key = "$norm`n" + (($seeds | ForEach-Object { $i = Get-Item -LiteralPath $cand[$_]; "$_|$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" }) -join "`n")
+    if ($script:rhCache.ContainsKey($key)) { return $script:rhCache[$key] }
+    $sb = New-Object Text.StringBuilder; $null = $sb.Append("$norm`n")
+    foreach ($r in $seeds) {
+        $null = $sb.Append("== $r`n")
+        foreach ($l in ([IO.File]::ReadAllText($cand[$r]) -split "`r?`n")) { if ($l -notmatch '^\s*#' -and $l.Trim()) { $null = $sb.Append($l.TrimEnd()).Append("`n") } }
+    }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $hx = 's1:' + (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($sb.ToString()))[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')
+    $script:rhCache[$key] = $hx; $hx
 }
 function ChangedRows([string]$path, [string]$listName) {   # rows of a filler list to run: @{ row line = why }
     $ih = InstalledHashes; $led = LedRead; $out = [ordered]@{}
     foreach ($r in (Rows $path)) {
         $n = ($r -split '\|')[0].Trim(); $e = $led["$listName|$n"]
-        $why = if (-not $e) { 'never run' } elseif ($e[4] -ne 'PASS') { "last $($e[4])" } elseif ($e[1] -ne $ih.K) { "KenshiFP $($e[1])->$($ih.K)" } elseif ($e[2] -ne $ih.H) { "Harness $($e[2])->$($ih.H)" } elseif ($e[3] -ne (RowHash $r)) { 'script changed' } else { $null }
+        $why = if (-not $e) { 'never run' } elseif ($e[4] -ne 'PASS') { "last $($e[4])" } elseif ($e[1] -ne $ih.K) { "KenshiFP $($e[1])->$($ih.K)" } elseif ($e[2] -ne $ih.H) { "Harness $($e[2])->$($ih.H)" } elseif ($e[3] -like 's1:*' -and $e[3] -ne (RowHash $r)) { 'script changed' } else { $null }
         if ($why) { $out[$r] = $why }
     }
     $out
@@ -1278,6 +1288,27 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). $more"
 }
 
+# -RowHashSelfTest: a helper edit or a comment edit keeps a row's hash, an edit of the row's own script or line changes it
+if ($RowHashSelfTest) {
+    $td = Join-Path $env:TEMP "rowhash-st-$PID"; New-Item -ItemType Directory -Force $td | Out-Null; $bad = 0
+    $own = Join-Path $td 'own.sh'; $hlp = Join-Path $td 'helper.sh'
+    Set-Content $own "#!/bin/bash`n# take`nsource helper.sh`nrun_take 1" -Encoding Ascii; Set-Content $hlp "#!/bin/bash`nrun_take() { :; }" -Encoding Ascii
+    $cand = @{ 'x/own.sh' = $own; 'x/helper.sh' = $hlp }; $row = 'A | kah-x | P | M | 60 | bash {CR}/KenshiModding/x/own.sh {OUT}/A'
+    $h0 = RowHash $row $cand
+    $steps = @(
+        @('helper edited', { Add-Content $hlp 'echo more' }, 'same'),
+        @('own script comment edited', { Add-Content $own '# a comment'; (Get-Item $own).LastWriteTimeUtc = (Get-Date).AddMinutes(1) }, 'same'),
+        @('own script code edited', { Add-Content $own 'run_take 2'; (Get-Item $own).LastWriteTimeUtc = (Get-Date).AddMinutes(2) }, 'changed'))
+    $prev = $h0
+    foreach ($c in $steps) {
+        & $c[1]; $h = RowHash $row $cand; $g = if ($h -eq $prev) { 'same' } else { 'changed' }; $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }
+        "$(if ($ok) { 'ok  ' } else { 'FAIL' }) row hash, $($c[0]): $g"; $prev = $h
+    }
+    $g = if ((RowHash ($row -replace '60', '90') $cand) -ne $prev) { 'changed' } else { 'same' }; $ok = $g -eq 'changed'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) row hash, row line edited: $g"
+    $ok = $h0 -like 's1:*'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) row hash has the s1: prefix: $h0"
+    Remove-Item -Recurse -Force $td -ErrorAction SilentlyContinue
+    "ROWHASH-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) 5 cases"; exit [int]($bad -gt 0)
+}
 # filler on change for the extra game lanes (rig-lane2.ps1, lane-5090c 2026-10-11: lanes 5090b/5090c sat idle while
 # queue\filler held gfx-low lists): the same ledger rule as this loop, from outside it.
 #   -Rig 5090 -FillerRows <list>   "#build<TAB>K<TAB>H" then "ROW<TAB><hash><TAB><row line>" per row changed since its last PASS

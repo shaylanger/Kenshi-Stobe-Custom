@@ -419,9 +419,11 @@ while ($true) {
     $fill = $null; $film = $false
     $admit = (K2Procs) -or -not (LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 3))
     if (-not $f -and $admit) { $f = StealList $false }
+    # filming work beats filler (coordinator m102: filler kept lane B off film mode): only real gfx-low lists hold film mode
+    # off ($noLowSince); a Film lane takes a queued filming list before a filler list once $FilmAfterMin min passed without them
+    if ($f) { $noLowSince = $null } elseif (-not $noLowSince) { $noLowSince = Get-Date }
+    if (-not $f -and $admit -and $Lanes[$Lane].Film -and "$((Get-Content (Join-Path $rd "$Lane.capproof") -TotalCount 1 -ErrorAction SilentlyContinue))" -notlike 'FAIL*' -and ((Get-Date) - $noLowSince).TotalMinutes -ge $FilmAfterMin) { $f = StealList $true }
     if (-not $f -and $admit) { $fill = PickFiller }
-    if ($f -or $fill) { $noLowSince = $null } elseif (-not $noLowSince) { $noLowSince = Get-Date }
-    if (-not $f -and -not $fill -and $admit -and $Lanes[$Lane].Film -and "$((Get-Content (Join-Path $rd "$Lane.capproof") -TotalCount 1 -ErrorAction SilentlyContinue))" -notlike 'FAIL*' -and ((Get-Date) - $noLowSince).TotalMinutes -ge $FilmAfterMin) { $f = StealList $true }
     if (-not $f -and -not $fill) {
         if ((K2Procs) -and (RamFreeMB) -lt $HoldRamMB) { Stop2 "idle and RAM free $(RamFreeMB) MB < $HoldRamMB" }
         if ((K2Procs) -and (OtherLaneFilming)) { Stop2 'idle while lane 5090b films (Shay 15:20: stop lane 3 for it)' }
