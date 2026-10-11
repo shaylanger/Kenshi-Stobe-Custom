@@ -121,7 +121,13 @@ judge() { local h=$1 sd fd lp lg; J=miss; JS=0; JC=0; JW=0; JD="miss"
     [[ ",$h" == *",$lp("* ]] && [ "$(consistent "$lg" "$(gf last_rel_h "$W1")" "$(gf last_bones "$W1")")" = 1 ] && JC=1
     JD="hp=$h part=$lp/$lg rel_h=$(gf last_rel_h "$W1") bones=$(gf last_bones "$W1") ok=$JC"
   else JD="hp=$h fallback=$(gf last_fallback "$W1") group=$lg sd=$sd fd=$fd"; fi; }
-lowspread() { A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/null; }
+# cb_full: crossbows base so the EFFECTIVE skill (what KenshiFP's spread cone reads: CharStats::getStat with gear and
+# condition, PT15) is >= 100. Axima's armour gear factor x0.56 made "setstat 100" an effective 56 = 1.59 deg cone
+# (5090 xbf-hits-r11 / rg-03-ranged-1011-0523 R08: head 1/3, impact 0.7 dm under the 1 dm head band, one 1.45 deg miss)
+cb_full() { local m; m=$(A stat "$SH" crossbows | grep -o 'mod=[0-9.]*' | cut -d= -f2)
+  A setstat "$SH" crossbows "$(awk -v m="${m:-1}" 'BEGIN{if(!(m>0.05))m=1; v=100/m; if(v<100)v=100; printf "%.1f", v+0.5}')" >/dev/null
+  CBEFF=$(A stat "$SH" crossbows | grep -o 'effective=[0-9.]*' | cut -d= -f2); }
+lowspread() { cb_full; A setstat "$SH" perception 100 >/dev/null; }
 # bones_of <npc>: aim heights head chest legs from the victim's skeleton via `fp_combat aim` (crosshair on it)
 # (no subshell: sets BAIM="head chest legs" or "", BREPLY = the last aim reply, so ensure_fp's count survives)
 bones_of() { BAIM=""; BREPLY=""; for _ in 1 2 3 4; do ensure_fp || { BREPLY="FP control lost, re-take failed"; return 1; }

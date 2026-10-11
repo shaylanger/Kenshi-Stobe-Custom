@@ -107,6 +107,12 @@ inp 1 0 0; SR=0; waitfor 10 shot_ready 1 && SR=1; W1=$(cs why); D1=$(cs draws); 
 ev="before why=$W0 $RI0; aim: draws $D0->$D1 why=$W1 shot_ready=$SR $DG"
 if [ "$W0" = holstered ] && [ "$SR" = 1 ] && [ $((D1-D0)) -ge 1 ]; then row R13 PASS "$ev"; else row R13 FAIL "$ev"; fi
 
+# cb_full: crossbows base so the EFFECTIVE skill (what KenshiFP's spread cone reads: CharStats::getStat with gear and
+# condition, PT15) is >= 100. Axima's armour gear factor x0.56 made "setstat 100" an effective 56 = 1.59 deg cone
+# (5090 xbf-hits-r11 / rg-03-ranged-1011-0523 R08: head 1/3, impact 0.7 dm under the 1 dm head band, one 1.45 deg miss)
+cb_full() { local m; m=$(A stat "$SH" crossbows | grep -o 'mod=[0-9.]*' | cut -d= -f2)
+  A setstat "$SH" crossbows "$(awk -v m="${m:-1}" 'BEGIN{if(!(m>0.05))m=1; v=100/m; if(v<100)v=100; printf "%.1f", v+0.5}')" >/dev/null
+  CBEFF=$(A stat "$SH" crossbows | grep -o 'effective=[0-9.]*' | cut -d= -f2); }
 # ---- R07 native damage + XP at the fixture's own skill (chest aim) ----
 aim_at "$TG" 13
 # up to 6 shots: at the fixture's skill (acc ~0.44) bolts miss (4080 fp-4080-23: 3 misses in a row, p~0.18); XP accrues per shot either way
@@ -183,7 +189,7 @@ free_aim() { local l r o; for l in $([ "$1" = 1 ] && echo "0 0.3 -0.3" || echo "
     r=$(A fp_combat aim); { [ -z "$VIC" ] || [ "$VIC" = 0 ] || grep -q "\bvictim=$VIC " <<<"$r"; } || continue
     o=$(occl "$r" "$2" "$l"); [ "$o" = none ] && return 0; done; AIM_LAT=0; aim_at "$TG" "$2"; }
 SK0=$(A stat "$SH" crossbows | grep -o 'base=[0-9.]*' | cut -d= -f2); PE0=$(A stat "$SH" perception | grep -o 'base=[0-9.]*' | cut -d= -f2)
-A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/null
+cb_full; A setstat "$SH" perception 100 >/dev/null
 : > "$OUT/foreign.txt"; A fp_combat wound reset >/dev/null; r8=""; good=0; total=0; HS=""; nocc=0; disturbed=0; GD=""
 # the target is hostile and aggro since R07's hit: passive combat mode for R08 (restored after)
 PV0=$(A combatmode "$TG" | fld passive); A combatmode "$TG" passive on >/dev/null
@@ -219,7 +225,7 @@ done; AIM_BONE=""; AIM_LAT=0
 A setstat "$SH" crossbows "$SK0" >/dev/null; A setstat "$SH" perception "$PE0" >/dev/null
 case "$PV0" in 1|on|true) A combatmode "$TG" passive on >/dev/null;; *) A combatmode "$TG" passive off >/dev/null;; esac
 WS=$(A fp_combat wound | grep -o 'wound_ready=[0-9]*\|wound_spatial=[0-9]*\|wound_native_fallback=[0-9]*\|last_fallback=[a-z_]*' | tr '\n' ' ')
-ev="expected part hit $good/$total (arm-blocked $nocc: aimed part or [arm] counts): ${r8% } $BONES aim_h=$AH/$AC/$AL shot_h=${HS%,} pose_retaken=$disturbed${GD:+ [${GD%;}]} ${WS% } $(ui_summary)"
+ev="expected part hit $good/$total (arm-blocked $nocc: aimed part or [arm] counts): cb_eff=$CBEFF ${r8% } $BONES aim_h=$AH/$AC/$AL shot_h=${HS%,} pose_retaken=$disturbed${GD:+ [${GD%;}]} ${WS% } $(ui_summary)"
 FOR8=$(awk '{s+=$1} END{print s+0}' "$OUT/foreign.txt" 2>/dev/null); : > "$OUT/foreign.txt"; ev+=" foreign_bolts=$FOR8"
 if [ "$FOR8" -gt 0 ]; then row R08 SETUP "FAIL reason=foreign_shooter: $FOR8 bolt wounds from another attacker during the shots: $ev"
 elif [ "$total" -lt 9 ]; then row R08 SETUP "FAIL reason=pose_moved: only $total of 9 shots with her pose at the trigger matching the aim: $ev"
@@ -245,7 +251,7 @@ BLID=$(A where "$BL" | grep -o '#[0-9]*' | head -1 | tr -d '#'); TGID=$(A where 
 aim_victim() { local v; v=$(A fp_combat aim | fld id4); case "$v" in "$BLID") echo blocker;; "$TGID") echo target;; *) echo "other:$v";; esac; }
 place_bl
 # low-spread (crossbows/perception 100) and up to 3 shots: PASS = some shot hurts the blocker, none ever hurts the target
-A setstat "$SH" crossbows 100 >/dev/null; A setstat "$SH" perception 100 >/dev/null
+cb_full; A setstat "$SH" perception 100 >/dev/null
 # rg03-confirm3 (7C886329): blocker and target pinned within melee reach fought each other (Malzin chest stun 12 + arms,
 # Skaera chest -3.5/stun 2.1; the one bolt impact logged was Malzin's head): both passive for R09, restored after
 PB0=$(A combatmode "$BL" | fld passive); A combatmode "$TG" passive on >/dev/null; A combatmode "$BL" passive on >/dev/null
