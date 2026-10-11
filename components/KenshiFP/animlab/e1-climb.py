@@ -1,4 +1,4 @@
-"""e1-climb.py (lab, E1 2026-10-09; run in WSL from /root/animlab-work, env REC A WBL EH REG GEN POP SEED FZ PS START): hill climb: strike key blade dirs (sw2..sw4 f) + E1 roll cap; objective arc_ok (stroke) with swing wb_max <= WBL."""
+"""e1-climb.py (lab, E1 2026-10-09; run in WSL from /root/animlab-work, env REC A WBL EH REG GEN POP SEED FZ PS START METHOD TARGET): climb (CMA-ES default, optim.py): strike key blade dirs (sw2..sw4 f) + E1 roll cap; objective arc_ok (stroke) with swing wb_max <= WBL."""
 import sys, random, subprocess, json, os
 AL = '/mnt/c/KenshiModding/Kenshi-Automation-Harness/tools/animlab/animlab.py'
 REC = os.environ.get('REC', '/root/animlab-work/f14-e0.txt'); A = os.environ.get('A', '/root/animlab-build/kfpvm_e1c')
@@ -26,6 +26,28 @@ def run(ps):
     hdr = [l for l in out if l.startswith('state ')][0].split()[2:]
     d = {l.split()[1]: l.split()[2:] for l in out if l.startswith('swing ')}
     return [tuple(float(d[m][hdr.index('v%d' % i)]) for m in ('arc_ok', 'wb_max', 'elb_h_max', 'edge_mean')) for i in range(len(ps))]
+# search (Shay 2026-10-10 CPU cut): CMA-ES / Nelder-Mead / coarse-to-fine via harness tools/animlab/optim.py instead of
+# GEN x POP random mutations; same objective (score), same budget cap (GEN*POP+1 evaluations), stops early at TARGET
+# (env, score) or when converged. Each population is one `animlab.py sweep` (parallel replays, labcache-memoised).
+# METHOD=random keeps the old mutation climb for comparison.
+sys.path.insert(0, os.path.dirname(AL))
+import optim
+KEYS = [k for k in ('f1', 'f2', 'f3', 'p1', 'p2', 'p3') if k in best]
+def pack(p): return [v for k in KEYS for v in p[k]] + [p['cap']]
+def unpack(x):
+    q = {k: tuple(round(v, 3) for v in x[3 * i:3 * i + 3]) for i, k in enumerate(KEYS)}
+    for k in ('f1', 'f2', 'f3'): q[k] = q[k][:2] + (max(q[k][2], FZ),)
+    q['cap'] = min(120.0, max(0.0, x[-1])); return q
+step = [0.25 if k[0] == 'f' else 0.25 * PS for k in KEYS for _ in range(3)] + [15 * 0.25 / 0.2]
+METHOD = os.environ.get('METHOD', 'cma'); TARGET = os.environ.get('TARGET')
+def batch(xs):
+    ps = [unpack(x) for x in xs]; return [score(m, p) for p, m in zip(ps, run(ps))]
+if METHOD != 'random':
+    r = optim.minimize(None, pack(best), step, method=METHOD, batch=batch, maximize=True, maxevals=GEN * POP + 1,
+                       target=float(TARGET) if TARGET else None, tol=0.02, log=lambda l: print(l, flush=True))
+    best = unpack(r.x); bm, = run([best])
+    print('%s %s evals=%d m %s %s' % (METHOD, r.reason, r.evals, ','.join('%.2f' % x for x in bm), json.dumps(best)), flush=True)
+    sys.exit(0)
 def mut(p, s):
     q = dict(p)
     for k in ('f1', 'f2', 'f3'):
