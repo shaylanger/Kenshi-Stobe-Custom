@@ -1100,12 +1100,23 @@ def handle(s, cmd, a, now, sp):
                     dr.flag('NOTE', 'fp_vm rec dump %s with 0 frames (rec on never sent?)' % a[2])
                 return True, 'rec dump %s frames=%d' % (a[2], n)
             return True, 'rec on=%d frames=%d' % (s['rec']['on'], int((now - s['rec'].get('t', now)) * 60) if s['rec']['on'] else 0)
-        if sub == 'fist':   # NA1 fists build (pending-fixes/kfp-fists-na1.py)
-            fs = s.setdefault('fist', dict(force=-1, swings=0, ikfail=0))
+        if sub == 'fist':   # real kfp_viewmodel.inc `fp_vm fist` format (NA1 fields + kfp-fist-native nat/frz/natL/natR/clamp)
+            fs = s.setdefault('fist', dict(force=-1, swings=0, ikfail=0, nat=0))
             on = 1 if fp['drawn'] and fp.get('weapon') == 'fists' else 0
-            return True, 'fist ua=1 on=%d fists=%d wih=%d force=%d tech=%d swings=%d ikfail=%d u=%.2f' % (
-                on, on, 0 if fp.get('weapon') in (None, 'fists') else 1, fs['force'], max(fs['force'], 0), fs['swings'],
-                fs['ikfail'], 0.9 if fp['ui_state'] == 'swinging' else 0.0)
+            sw = fp['ui_state'] == 'swinging'
+            tn = ['badpunch', 'ma chudan', 'ma 2strike', 'shoteiL'][max(fs['force'], 0) % 4]
+            d = 1.5 if sw else 0.0   # native wrist moves during a technique (dm, view space)
+            r = "fist ua=1 force=%d on=%d fists=%d wih=%d tech='%s' table=%s fallback=0 u=%.3f swings=%d n=4 w=1.00 zf=0.00 state=%s " % (
+                fs['force'], on, on, 0 if fp.get('weapon') in (None, 'fists') else 1, tn, tn.split()[0],
+                0.9 if sw else 0.0, fs['swings'], fp['ui_state'])
+            r += ('tL=-1.60,-1.00,3.80 tR=1.60,-1.00,3.80 wrL=-1.60,%.2f,3.80 wrR=1.60,%.2f,%.2f '
+                  'elL=-2.50,-2.50,2.50 elR=2.50,-2.50,2.50 ikfail=%d') % (-1.0 + d * 0.3, -1.0 + d * 0.3, 3.8 + d, fs['ikfail'])
+            if fs.get('nat'):
+                r += ' nat=1 frz=%d natL=-1.60,%.2f,3.80 natR=1.60,%.2f,%.2f clamp=0' % (1 if sw else 0, -1.0 + d * 0.3, -1.0 + d * 0.3, 3.8 + d)
+            return True, r
+        if sub == 'set' and len(a) > 2 and a[1] == 'fist_native':   # kfp-fist-native build
+            s.setdefault('fist', dict(force=-1, swings=0, ikfail=0))['nat'] = 1 if float(a[2]) else 0
+            return True, 'fp_vm set fist_native=%s' % a[2]
         if sub == 'set' and len(a) > 3 and a[1] == 'hand_scale':   # pending-fixes/kfp-hand-scale.py build
             return True, 'hand_scale along=%.3f across=%.3f' % (float(a[2]), float(a[3]))
         if sub == 'set' and len(a) > 2 and a[1] in ('stroke', 'strokes'):   # E6 (kfp_viewmodel.inc vm_set_logged)
