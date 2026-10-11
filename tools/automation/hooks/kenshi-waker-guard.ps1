@@ -115,6 +115,9 @@ if ($inflight.Count -gt 0 -and -not $waker) {
 }
 
 # --- 5090 idle? ---
+# rig-runner's own "no changed work" (Shay 2026-10-10 22:05: nothing real queued, every filler row passed on this build with
+# unchanged scripts) is an allowed idle: the runner keeps rig<rig>.idle fresh with that text and writes no ALERT, so neither
+# this check, the 4080 check (rig4080-state.ps1 IDLE-OK) nor the IDLE-GAME check blocks; a new list starts at once.
 if (-not $kenshi -and -not $lock) {
     $idleFile = Join-Path $runs 'rig5090.idle'
     $fresh = (Test-Path -LiteralPath $idleFile) -and ((Get-Item -LiteralPath $idleFile).LastWriteTime -gt (Get-Date).AddMinutes(-60))

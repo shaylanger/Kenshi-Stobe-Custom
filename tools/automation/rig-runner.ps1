@@ -46,7 +46,14 @@ Filler: both queues empty -> a COPY of the least recently started eligible queue
 build, never installs; not running on the other rig; not benched) runs; rotation in runner\filler-rotation.tsv.
 A filler never blocks real work: a list arriving in queue\<rig>\ or any\ writes <out>\PREEMPT; run-batch.sh stops after the
 current row (BATCH PREEMPTED + rows not run in SUMMARY.txt), the copy goes to done\ (result "preempted"), the list starts.
--Fake "# fakesec: <n>" header: the fake batch runs n s (tests preemption).
+-Fake "# fakesec: <n>" header: the fake batch runs n s (tests preemption); runner\fake\fakefail.<row> = that row FAILs;
+runner\fake\rigno.<rig>.<list> = RIGCHECK NO there.
+Filler on change: a filler row runs only if it never passed, last FAILed, or the installed KenshiFP/Harness or its script
+closure changed since its last PASS (runner\filler-ledger.tsv from <out>\rows.tsv); only changed rows run. Nothing real
+queued + every filler unchanged = rig<rig>.idle "no changed work" (allowed idle: no ALERT, the hooks read IDLE-OK).
+Any rig: any\ lists go to a rig whose list-rigcheck.sh says OK (both NO = failed\); NO lists fail at start; an idle rig
+steals the head of the busy other rig's folder (no "# rig:" header, OK here). "# gfx: low|full" (default full): the game
+is reused only in the same mode (runner\<rig>.gfx), else relaunched with KAH_GFX (5090) / kcfg.ps1 -Gfx (4080).
 No relaunch gap: Kenshi stays up between lists (5090 always, 4080 when a next list is queued); run-batch.sh --reuse loads
 the save in place; Kenshi is stopped only for a DLL install. Fast setup FAIL: a list with no PASS whose RESULTs are all
 setup/dryrun FAILs (or none / aborted) within -FastMin (15) min, or 3 instant setup FAILs in a row, writes the sticky
@@ -140,7 +147,8 @@ if (-not $Resolve) {
 }
 
 # ---------------------------------------------------------------- helpers
-$log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"
+$log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"; $gfxF = Join-Path $rd "$Rig.gfx"
+function RunningGfx { $g = ReadShared $gfxF; if ($g -and $g.Trim() -eq 'low') { 'low' } else { 'full' } }
 $alertF = if ($Fake) { Join-Path $rd "ALERT-$Rig.txt" } else { Join-Path $runs "ALERT-$Rig.txt" }
 $owner4 = 'rig4080'; $owner5 = 'runner-5090'
 function Log([string]$m) { if ($Resolve) { Write-Host "LOG $m"; return }; $null = WriteShared $log "$((Get-Date).ToString('MM-dd HH:mm:ss')) $m`r`n" -Append }
@@ -234,9 +242,9 @@ function Ssh([string[]]$a) { & ssh.exe -n -o BatchMode=yes -o ConnectTimeout=10 
 function Ssh4Ps([string]$file, [string[]]$a) { Ssh (@('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $file) + $a) }
 function Ssh4Bash([string[]]$a) { Ssh (@('C:\PROGRA~1\Git\bin\bash.exe', '-l') + $a) }
 function Scp4([string[]]$src, [string]$dst) { & scp -q -o BatchMode=yes @src "4080:$dst" 2>&1 | ForEach-Object { "$_" }; $LASTEXITCODE -eq 0 }
-function IdleReason {
-    $f = Join-Path $runs "rig$Rig.idle"
-    if ((Test-Path $f) -and (Get-Item $f).LastWriteTime -gt (Get-Date).AddMinutes(-60)) { return ((Get-Content $f -Raw).Trim()) }
+function IdleReason {   # a recorded pause; the runner's own "no changed work" is not one (real work starts at once)
+    $f = Join-Path $(if ($Fake) { $rd } else { $runs }) "rig$Rig.idle"
+    if ((Test-Path $f) -and (Get-Item $f).LastWriteTime -gt (Get-Date).AddMinutes(-60)) { $t = ((ReadShared $f) -as [string]).Trim(); if ($t -and $t -notlike 'no changed work*') { return $t } }
     $null
 }
 function Header([string]$path, [string]$key) {
@@ -296,9 +304,57 @@ function FillerUnmet([string]$path) {   # why the installed build doesn't meet t
     if ($need -match 'Harness\s+(\w{8})\b' -and $ih.H -ne $Matches[1].ToUpper()) { return "needs Harness $($Matches[1]), installed $($ih.H)" }
     $null
 }
-$script:fillerSkips = @(); $script:skipNoted = @{}
+# FILLER ON CHANGE (Shay 2026-10-10 22:05): a filler row runs only when something changed since its last PASS: the installed
+# KenshiFP/Harness build or its test script + helpers (content hash of the row line and every repo file it reaches, the
+# UsedClosure of the 4080 sync). Ledger runner\filler-ledger.tsv: list|row, KenshiFP, Harness, script hash, last result,
+# time (from <out>\rows.tsv, one status per row, written by run-batch.sh). A failed or never-run row stays eligible; a filler
+# list runs only its changed rows; a list with none is skipped ("unchanged"). Nothing real queued and only unchanged filler
+# = rig<rig>.idle "no changed work" (no ALERT; the Stop hook / rig-health read it as IDLE-OK); a new list starts at once.
+$ledF = Join-Path $rd 'filler-ledger.tsv'
+function LedRead { $h = @{}; foreach ($l in @((ReadShared $ledF) -split "`r?`n")) { $p = @($l -split "`t"); if ($p.Count -ge 5 -and $p[0]) { $h[$p[0]] = $p } }; $h }
+function LedSet([hashtable]$rows) {   # key -> @(K, H, hash, result); both loops write: rewrite under retry
+    for ($i = 0; $i -lt 5; $i++) {
+        try {
+            $h = LedRead; foreach ($k in $rows.Keys) { $v = $rows[$k]; $h[$k] = [string[]]@($k, $v[0], $v[1], $v[2], $v[3], (Get-Date -Format s)) }
+            [IO.File]::WriteAllLines($ledF, [string[]]@($h.Keys | Sort-Object | ForEach-Object { $h[$_] -join "`t" })); return
+        } catch { Start-Sleep -Milliseconds 300 }
+    }
+    Log "could not write $ledF"
+}
+$script:rhCache = @{}; $script:rhStamp = ''
+function RowHash([string]$row) {   # content hash of a row line + every repo file it reaches (cached while no candidate file changes)
+    $cand = SyncCandidates
+    $st = (($cand.Values | Sort-Object | ForEach-Object { $i = Get-Item -LiteralPath $_; "$_|$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" }) -join "`n")
+    if ($st -ne $script:rhStamp) { $script:rhCache = @{}; $script:rhStamp = $st }
+    $norm = (($row -split '\|') | ForEach-Object { $_.Trim() }) -join '|'
+    if ($script:rhCache.ContainsKey($norm)) { return $script:rhCache[$norm] }
+    $sha = [Security.Cryptography.SHA256]::Create(); $ms = New-Object IO.MemoryStream
+    $b = [Text.Encoding]::UTF8.GetBytes("$norm`n"); $ms.Write($b, 0, $b.Length)
+    foreach ($r in (UsedClosure $norm $cand)) { $b = [Text.Encoding]::UTF8.GetBytes("$r`n"); $ms.Write($b, 0, $b.Length); $b = [IO.File]::ReadAllBytes($cand[$r]); $ms.Write($b, 0, $b.Length) }
+    $hx = (($sha.ComputeHash($ms.ToArray())[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')
+    $script:rhCache[$norm] = $hx; $hx
+}
+function ChangedRows([string]$path, [string]$listName) {   # rows of a filler list to run: @{ row line = why }
+    $ih = InstalledHashes; $led = LedRead; $out = [ordered]@{}
+    foreach ($r in (Rows $path)) {
+        $n = ($r -split '\|')[0].Trim(); $e = $led["$listName|$n"]
+        $why = if (-not $e) { 'never run' } elseif ($e[4] -ne 'PASS') { "last $($e[4])" } elseif ($e[1] -ne $ih.K) { "KenshiFP $($e[1])->$($ih.K)" } elseif ($e[2] -ne $ih.H) { "Harness $($e[2])->$($ih.H)" } elseif ($e[3] -ne (RowHash $r)) { 'script changed' } else { $null }
+        if ($why) { $out[$r] = $why }
+    }
+    $out
+}
+function NoChangeIdle([string]$why) {   # the runner's own idle reason (refreshed every tick while it holds)
+    $f = Join-Path $(if ($Fake) { $rd } else { $runs }) "rig$Rig.idle"
+    $cur = ReadShared $f
+    if (-not $cur -or $cur -like 'no changed work*' -or (Get-Item $f).LastWriteTime -lt (Get-Date).AddMinutes(-60)) { $null = WriteShared $f "no changed work (rig-runner: $why)" }
+}
+function ClearNoChangeIdle {
+    $script:ncIdle = $false; $f = Join-Path $(if ($Fake) { $rd } else { $runs }) "rig$Rig.idle"
+    if ((ReadShared $f) -like 'no changed work*') { Remove-Item $f -ErrorAction SilentlyContinue; Log 'idle "no changed work" cleared' }
+}
+$script:fillerSkips = @(); $script:skipNoted = @{}; $script:fillerUnchanged = 0
 function FillerLists {   # eligible filler lists for this rig, least recently started first
-    $rot = RotRead; $now = Get-Date; $skips = @()
+    $rot = RotRead; $now = Get-Date; $skips = @(); $unch = 0
     $busy = @(Get-ChildItem "$qd\running" -File -ErrorAction SilentlyContinue | ForEach-Object { if ($_.Name -match '__filler__(.+)$') { $Matches[1] } })
     $c = foreach ($f in @(Get-ChildItem "$qd\filler" -Filter *.list -File -ErrorAction SilentlyContinue)) {
         $want = Header $f.FullName 'rig'
@@ -314,26 +370,73 @@ function FillerLists {   # eligible filler lists for this rig, least recently st
             if (-not $script:skipNoted["$($f.Name)|$u"]) { $script:skipNoted["$($f.Name)|$u"] = 1; Log "FILLER skip $($f.Name): $u" }
             continue
         }
+        if (-not (ChangedRows $f.FullName $f.Name).Count) {
+            $unch++; $u = "unchanged (every row passed on KenshiFP $((InstalledHashes).K) / Harness $((InstalledHashes).H), scripts unchanged)"; $skips += "$($f.Name) $u"
+            if (-not $script:skipNoted["$($f.Name)|$u"]) { $script:skipNoted["$($f.Name)|$u"] = 1; Log "FILLER skip $($f.Name): $u" }
+            continue
+        }
         $f
     }
-    $script:fillerSkips = $skips
+    $script:fillerSkips = $skips; $script:fillerUnchanged = $unch
     @($c) | Sort-Object @{ e = { $p = $rot[$_.Name]; if ($p -and $p[1]) { [datetime]$p[1] } else { [datetime]::MinValue } } }, Name
 }
 function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\, then filler\ if both empty)
     $real = @(RealLists); if ($real.Count) { return $real }
     FillerLists
 }
+# EITHER RIG TAKES ANY LIST (Shay 2026-10-10 21:30; speed-parity's list-rigcheck.sh): RigCheck = can this list run on this
+# rig (saves, scripts synced/identical, rig header, Stobe rows)? 'OK' | 'NO <reasons>' | 'UNKNOWN' (4080 unreachable),
+# cached 10 min per list content + rig in runner\rigcheck\. any\ lists another rig can't run go to the rig that can (both NO
+# = failed\ with both reasons); Start-Batch fails a NO list at once (a 5090-only list in queue\4080\); an idle rig whose own
+# folder and any\ are empty steals the head list of the busy other rig's folder when it has no "# rig:" header and is OK here.
+$rcd = Join-Path $rd 'rigcheck'; New-Item -ItemType Directory -Force $rcd | Out-Null
+function RigKey([string]$path, [string]$r = $Rig) { "$r-" + (Get-FileHash -LiteralPath $path -Algorithm MD5).Hash.Substring(0, 12) }
+function RigCheck([string]$path, [switch]$Fix) {
+    $cf = Join-Path $rcd "$(RigKey $path).txt"
+    if (-not $Fix -and (Test-Path $cf) -and (Get-Item $cf).LastWriteTime -gt (Get-Date).AddMinutes(-10)) { return (Get-Content $cf -Raw).Trim() }
+    if ($Fake) { $v = if (Test-Path (Join-Path $rd "rigno.$Rig.$((Split-Path $path -Leaf))")) { 'NO fake rigno' } else { 'OK' }; Set-Content $cf $v; return $v }
+    $lp = '/c/' + ($path.Substring(3) -replace '\\', '/')
+    $o = & 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/list-rigcheck.sh --quiet $(if ($Fix) { '--fix ' })'$lp' $Rig" 2>&1 | ForEach-Object { "$_" }
+    $l = ($o | Where-Object { $_ -like 'RIGCHECK *' } | Select-Object -Last 1)
+    $v = if ($l -match '^RIGCHECK \S+ OK ') { 'OK' } elseif ($l -match '^RIGCHECK \S+ NO [^:]+: (.*)$') { "NO $($Matches[1])" } else { 'UNKNOWN' }
+    if ($v -ne 'UNKNOWN') { Set-Content $cf $v }
+    $v
+}
 function RealLists {
+    $other = if ($Rig -eq '5090') { '4080' } else { '5090' }
+    $n = 0
     foreach ($src in "$qd\$Rig", "$qd\any") {
         foreach ($f in @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
             if ($src -like '*\any') {
                 $want = Header $f.FullName 'rig'
                 if ($want -and $want -ne $Rig) { continue }
                 if ($Rig -eq '4080' -and (StobeRows $f.FullName)) { continue }
+                $rc = RigCheck $f.FullName
+                if ($rc -like 'NO *') {
+                    $ocf = Join-Path $rcd "$(RigKey $f.FullName $other).txt"
+                    $oc = if (Test-Path $ocf) { (Get-Content $ocf -Raw).Trim() } else { '' }
+                    if ($oc -like 'NO *') {   # neither rig can run it: fail it instead of letting it sit
+                        $own = Header $f.FullName 'owner'; if (-not $own) { $own = 'coordinator' }
+                        $dst = Join-Path "$qd\failed" $f.Name; Move-Item -LiteralPath $f.FullName $dst -Force -ErrorAction SilentlyContinue
+                        Set-Content "$dst.result" "FAILED any $(Get-Date -Format s) no rig can run it: ${Rig}: $($rc.Substring(3)) | ${other}: $($oc.Substring(3))"
+                        Log "FAILED any\$($f.Name): no rig can run it ($Rig $rc | $other $oc)"; Note $own "list $($f.Name) (any\) can run on neither rig: ${Rig}: $($rc.Substring(3)); ${other}: $($oc.Substring(3)). Fixed list -> queue again."
+                        continue
+                    }
+                    if (-not $script:skipNoted["rc|$($f.Name)|$rc"]) { $script:skipNoted["rc|$($f.Name)|$rc"] = 1; Log "SKIP any\$($f.Name) on ${Rig}: $rc" }
+                    continue
+                }
             }
-            $f
+            $n++; $f
         }
     }
+    if ($n) { return }
+    # work stealing: the other rig is busy and its own folder has a rig-neutral list this rig can run
+    $busy = @(Get-ChildItem "$qd\running" -Filter "${other}__*" -File -ErrorAction SilentlyContinue).Count -or (Test-Path (Join-Path $rd "$other.cur"))
+    if (-not $busy) { return }
+    $h = Get-ChildItem "$qd\$other" -Filter *.list -File -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1
+    if (-not $h -or (Header $h.FullName 'rig') -or ($Rig -eq '4080' -and (StobeRows $h.FullName))) { return }
+    if ((RigCheck $h.FullName) -ne 'OK') { return }
+    $h
 }
 function NextList { QueuedLists | Select-Object -First 1 }
 function Fail-List([string]$runPath, [string]$name, [string]$own, [string]$why, [string[]]$detail) {
@@ -520,6 +623,14 @@ function Start-Batch($f) {
     if ($filler) {   # copy, never consume: the backlog stays whole; rotation state records the start
         if (Test-Path $run) { Log "could not take filler $name (already running here)"; return $false }
         Copy-Item -LiteralPath $f.FullName $run; RotSet $name @{ 1 = (Get-Date).ToString('s'); 2 = $Rig }
+        # only the rows changed since their last PASS run (filler on change); the ledger keys come from rowmeta.tsv
+        $chg = ChangedRows $f.FullName $name; $all = @(Rows $f.FullName)
+        if ($chg.Count -lt $all.Count) {
+            $keep = @(Get-Content -LiteralPath $f.FullName | Where-Object { $_ -match '^\s*(#|$)' -or $chg.Contains($_) })
+            [IO.File]::WriteAllLines($run, [string[]]$keep)
+            Log "FILLER $name runs $($chg.Count)/$($all.Count) rows (changed: $(($chg.Keys | ForEach-Object { "$(($_ -split '\|')[0].Trim())=$($chg[$_])" }) -join ', '))"
+        }
+        $ih = InstalledHashes; $script:fillMeta = @("#build`t$($ih.K)`t$($ih.H)") + @($chg.Keys | ForEach-Object { "$(($_ -split '\|')[0].Trim())`t$(RowHash $_)" })
     } else { try { Move-Item -LiteralPath $f.FullName $run -ErrorAction Stop } catch { Log "could not take $name (another runner?)"; return $false } }
     $own = Header $run 'owner'; if (-not $own) { $own = 'coordinator' }
     $outN = Header $run 'out'; if (-not $outN) { $outN = "$($f.BaseName)-$(Get-Date -Format 'MMdd-HHmm')" }
@@ -535,6 +646,8 @@ function Start-Batch($f) {
     $outP = if ($Rig -eq '5090' -or $Fake) { WslPath $outW } else { "/c/KenshiTestRuns/$outN" }   # path the batch sees
     $tmp = if ($Rig -eq '5090' -or $Fake) { $outW } else { Join-Path $rd "4080-$outN" }        # local copy of out files
     New-Item -ItemType Directory -Force $tmp | Out-Null
+    if ($filler) { Set-Content (Join-Path $tmp 'rowmeta.tsv') $script:fillMeta }
+    ClearNoChangeIdle
     $txt = (Get-Content $run) -replace '\{CR\}', $cr
     [IO.File]::WriteAllText((Join-Path $tmp 'list.txt'), (($txt -join "`n") + "`n"))
     $skip = NoDryRows $run
@@ -543,6 +656,10 @@ function Start-Batch($f) {
     Set-Content $curF @($run, $outW, $outP, $own, (Get-Date -Format s), $name, $tmp)
     State "starting $name -> $outW (owner $own)"; Log "START $name owner=$own out=$outW launch=$launch"
     ClearAlert
+    $srcD = Split-Path $f.DirectoryName -Leaf
+    if ($srcD -ne $Rig -and $srcD -ne 'any' -and $srcD -ne 'filler') { Log "STEAL $name from queue\$srcD\ ($srcD busy, list rig-neutral and RIGCHECK OK here)"; Note $own "your list $name from queue\$srcD\ runs on $Rig ($srcD was busy)." }
+    $rc = RigCheck $run -Fix:($Rig -eq '4080')   # 4080: copies a save it lacks
+    if ($rc -like 'NO *') { Fail-List $run $name $own "cannot run on ${Rig}: $($rc.Substring(3))" @(); Remove-Item $curF -ErrorAction SilentlyContinue; return $true }
 
     # dry run (fake game): the verdict cached by the background pre-dry-run while the previous batch ran, else run it now
     $key = DryKey $run
@@ -559,13 +676,16 @@ function Start-Batch($f) {
     if ($Fake) {   # fake batch: the dryrun result is the batch result
         if ($Rig -eq '4080') { Sync4080 $name (($txt -join "`n")) }   # deferred-sync planning against runner\fake\fake-procs.txt (setup.sh --dry)
         $res = @($dr | Where-Object { $_ -like 'DRYRUN *' } | ForEach-Object { $_ -replace '^DRYRUN (\S+) (PASS|FAIL|SKIP)', 'RESULT $1 $2' })
+        $fr = @($res | ForEach-Object { $q = $_ -split ' '; "$($q[1])`t$(if ($q[2] -eq 'FAIL' -or (Test-Path (Join-Path $rd "fakefail.$($q[1])"))) { 'FAIL' } else { 'PASS' })" })   # fake rows.tsv (runner\fake\fakefail.<row> = that row FAILs)
         $fsec = Header $run 'fakesec'   # "# fakesec: <n>": the fake batch takes n s (first RESULT at once, the rest at the end; PREEMPT ends it)
         if ($fsec -match '^\d+$') {
             Set-Content (Join-Path $outW 'SUMMARY.txt') (@("BATCH START $(Get-Date -Format 'yyyy-MM-dd HH:mm') list=$name (fake, $fsec s)") + @($res | Select-Object -First 1))
             Set-Content (Join-Path $outW 'fake.sec') @($fsec, (Get-Date -Format s)); Set-Content (Join-Path $outW 'fake.rest') @($res | Select-Object -Skip 1)
+            Set-Content (Join-Path $outW 'rows.tsv') @($fr | Select-Object -First 1); Set-Content (Join-Path $outW 'fake.rowsrest') @($fr | Select-Object -Skip 1)
             State "running $name -> $outW (owner $own, fake)"; Note $own "started $name (fake, $fsec s) out=$outW"; return $true
         }
         Set-Content (Join-Path $outW 'SUMMARY.txt') (@("BATCH START $(Get-Date -Format 'yyyy-MM-dd HH:mm') list=$name (fake)") + $res + "BATCH END $(Get-Date -Format 'yyyy-MM-dd HH:mm') (fake)")
+        Set-Content (Join-Path $outW 'rows.tsv') $fr
         New-Item -ItemType File (Join-Path $outW 'DONE') -Force | Out-Null
         Note $own "started $name (fake) out=$outW"; return $true
     }
@@ -576,6 +696,9 @@ function Start-Batch($f) {
     $needH = if ($need -match 'Harness\s+(\w{8})') { $Matches[1].ToUpper() } else { $null }
     $inst = if ($filler) { $null } else { StagedWanted $needK }   # filler: runs on the installed build (needs checked at pick)
     if ($inst -eq 'FAIL') { Fail-List $run $name $own $script:instWhy @(); Remove-Item $curF; return $true }
+    # "# gfx: low" (res-graphics, Shay 22:05: rows that don't film run at lowest graphics in a small window): the running game
+    # is reused only when its mode matches (runner\<rig>.gfx), else relaunched; the launch reads KAH_GFX (5090) / kcfg -Gfx (4080)
+    $gfx = if ((Header $run 'gfx') -match '^low\b') { 'low' } else { 'full' }
     if ($Rig -eq '5090') {
         $env:KAH_OWNER = $owner5
         $lk = Join-Path $runs 'game.lock'
@@ -586,9 +709,12 @@ function Start-Batch($f) {
         $hd = 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll'
         $hInst = $needH -and (Get-FileHash $hd).Hash.Substring(0, 8) -ne $needH
         if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) {
+            $rg = RunningGfx
             if ($inst -or $hInst) { Log "stop Kenshi for the install (KenshiFP $inst$(if ($hInst) { ", Harness $needH" }))"; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
-            else { Log "REUSE $name : Kenshi stays up, $launch loads in place (no DLL install needed)" }
+            elseif ($rg -ne $gfx) { Log "stop Kenshi: the list wants gfx $gfx, the running game has $rg (relaunch)"; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
+            else { Log "REUSE $name : Kenshi stays up, $launch loads in place (no DLL install needed, gfx $gfx)" }
         }
+        Set-Content $gfxF $gfx   # the game run-batch.sh reuses or launches (KAH_GFX) now has this mode
         if ($inst) {
             $o = & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\install-dll.ps1" KenshiFP -Staged -Hash $inst 2>&1 | ForEach-Object { "$_" }
             Log "install KenshiFP $inst : $($o -join ' / ')"
@@ -603,7 +729,7 @@ function Start-Batch($f) {
             }
         }
         Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
-        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 WSLENV=KAH_OWNER`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --reuse --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
+        $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 KAH_GFX=$gfx WSLENV=KAH_OWNER:KAH_GFX`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --reuse --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
         [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
         Set-Content (Join-Path $runs 'inflight\runner-5090') $outP
         Wsl @('bash', "$outP/.start.sh") | Out-Null
@@ -616,10 +742,12 @@ function Start-Batch($f) {
         $k = Ssh @('tasklist', '/nh')
         if (($k -join ' ') -match 'kenshi_x64') {
             $hOk = (-not $needH) -or ((Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-Harness') | Select-Object -Last 1) -match $needH)
-            if ($script:keep4080 -and -not $inst -and $hOk) { $reuse = $true; Log "REUSE $name : 4080 Kenshi stays up, $launch loads in place (no DLL install needed)" }
+            $rg = RunningGfx
+            if ($script:keep4080 -and -not $inst -and $hOk -and $rg -eq $gfx) { $reuse = $true; Log "REUSE $name : 4080 Kenshi stays up, $launch loads in place (no DLL install needed, gfx $gfx)" }
+            elseif ($rg -ne $gfx) { Log "4080: the list wants gfx $gfx, the running game has $rg (relaunch)"; Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }
             else { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }
         }
-        $script:keep4080 = $false
+        $script:keep4080 = $false; Set-Content $gfxF $gfx
         if ($inst) {
             $o = Ssh4Ps 'C:\KAH\inst-staged.ps1' @('-Hash', $inst); Log "4080 install KenshiFP $inst : $($o -join ' / ')"
             if (-not ($o -match 'installed')) { Fail-List $run $name $own "4080 KenshiFP $inst install failed" $o; Remove-Item $curF; return $true }
@@ -637,7 +765,8 @@ function Start-Batch($f) {
         $ok = $ok -and (Scp4 @("$auto\rig-runner-probe.sh", "$auto\batch-excerpts.sh", "$auto\batch-health.sh", "$auto\rig-env.sh") 'C:/KenshiModding/tools/automation/')
         if (-not $ok) { Fail-List $run $name $own '4080 copy (scp) failed' @(); Remove-Item $curF; return $true }
         if (-not $reuse) {
-            $o = Ssh4Ps 'C:\KAH\kcfg.ps1' @('test'); Log "4080 kcfg: $($o -join ' / ')"
+            $ga = if ((Select-String -LiteralPath "$auto\rig4080\kcfg.ps1" -Pattern '\$Gfx\b' -Quiet -ErrorAction SilentlyContinue)) { @('-Gfx', $gfx) } else { @() }   # res-graphics' -Gfx low|full once kcfg.ps1 has it
+            $o = Ssh4Ps 'C:\KAH\kcfg.ps1' (@('test') + $ga); Log "4080 kcfg$(if ($ga) { " gfx $gfx" }): $($o -join ' / ')"
             $o = Ssh4Ps 'C:\KAH\ctl.ps1' @('launch', '-Save', $launch, '-Owner', $owner4); Log "4080 launch $launch : $(($o | Select-Object -Last 3) -join ' / ')"
         }
         $o = Ssh4Bash @('/c/KAH/bin/stobe-auto', 'input_isolation', 'on'); Log "4080 isolation: $($o -join ' ')"
@@ -673,6 +802,7 @@ function FakeProbe([string[]]$c) {   # -Fake: a "# fakesec:" batch runs for n s 
         New-Item -ItemType File (Join-Path $o 'DONE') -Force | Out-Null; return @{ done = '1' }
     }
     if (((Get-Date) - [datetime]$t0).TotalSeconds -ge [int]$sec) {
+        Add-Content (Join-Path $o 'rows.tsv') @(Get-Content (Join-Path $o 'fake.rowsrest'))
         Add-Content $S (@(Get-Content (Join-Path $o 'fake.rest')) + "BATCH END $(Get-Date -Format 'yyyy-MM-dd HH:mm') (fake)"); New-Item -ItemType File (Join-Path $o 'DONE') -Force | Out-Null; return @{ done = '1' }
     }
     @{ done = '0'; gamedone = '0'; alive = '1'; started = '1'; kenshi = '1'; launched = '1'; phase = 'world'; gh = "$((Get-Date).Ticks)"; step = 'fake'; age = '0'; bpid = '-' }
@@ -709,6 +839,15 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
         }   # 4080: stopped (DIED) / marker removed below
     }
     $sumL = Join-Path "$qd\done" "$name.SUMMARY.txt"
+    if ((Split-Path $run -Leaf) -like '*__filler__*' -and (Test-Path (Join-Path $tmp 'rowmeta.tsv'))) {   # filler ledger
+        try {
+            $rt = Join-Path $tmp 'rows.tsv'
+            if ($Rig -eq '4080' -and -not $Fake) { & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/rows.tsv" $rt 2>$null }
+            $meta = @(Get-Content (Join-Path $tmp 'rowmeta.tsv')); $b = $meta[0] -split "`t"; $mh = @{}; foreach ($m in $meta | Select-Object -Skip 1) { $q = $m -split "`t"; $mh[$q[0]] = $q[1] }
+            $upd = @{}; foreach ($l in @(Get-Content $rt -ErrorAction SilentlyContinue)) { $q = $l -split "`t"; if ($q.Count -ge 2 -and $mh.ContainsKey($q[0])) { $upd["$name|$($q[0])"] = @($b[1], $b[2], $mh[$q[0]], $q[1]) } }
+            if ($upd.Count) { LedSet $upd; Log "ledger $name : $(($upd.Keys | ForEach-Object { "$(($_ -split '\|')[1])=$($upd[$_][3])" }) -join ' ')" } else { Log "ledger $name : no rows.tsv entries (old run-batch.sh snapshot or no row finished)" }
+        } catch { Log "ledger error $name : $($_.Exception.Message)" }
+    }
     if ($Rig -eq '4080' -and -not $Fake) {
         & scp -q -o BatchMode=yes "4080:C:/KenshiTestRuns/$(Split-Path $outP -Leaf)/SUMMARY.txt" $sumL 2>$null
         if (-not $Tail) {
@@ -918,6 +1057,17 @@ while ($true) {
                 if ($script:keep4080) { $ours = $true }   # the open 4080 game is the one we kept up for this list
                 if ($ours) { $unreach = $null; $alerted = $false; $idleSince = $null; $lastGh = $null; $condSince = $null; $hits = @{}; if (Start-Batch $f) { continue } }
                 else { State "waiting for idle rig ($s), $($f.Name) next in $([int]($IdleMin - $idleFor)) min" }
+            } elseif ($script:fillerSkips.Count -and $script:fillerUnchanged -eq $script:fillerSkips.Count) {
+                # nothing real queued and every filler row passed on this build with unchanged scripts: allowed idle
+                if (-not $script:ncIdle) { $script:ncIdle = $true; Log "IDLE no changed work ($($script:fillerUnchanged) filler lists unchanged since their last PASS)" }
+                NoChangeIdle "$($script:fillerUnchanged) filler lists unchanged since their last PASS on KenshiFP $((InstalledHashes).K)"
+                State "idle: no changed work (queue empty, filler unchanged since last PASS)"; ClearAlert; $alerted = $false
+                if ($idleFor -ge $IdleMin -and -not $Fake) {   # give the rig back as the empty-queue path does (no IDLE-GAME block)
+                    if ($Rig -eq '4080' -and $script:keep4080) { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; $script:keep4080 = $false; Log '4080 Kenshi stopped (no changed work)' }
+                    if ($Rig -eq '5090') { $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) {
+                        if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null; Log 'Kenshi stopped (no changed work)' }
+                        Remove-Item $lk; Log 'lock released (no changed work)' } }
+                }
             } else {
                 State "queue empty ($s)"
                 if ($idleFor -ge $IdleMin -and -not $alerted) {
