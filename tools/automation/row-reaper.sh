@@ -76,6 +76,9 @@ do_sweep() {   # current out dir
       [ "$b" = "$cur" ] && { w=""; break; }               # the current batch's own rows: never here
       [ -e "$base/$b/.gamedone.${r#*/}" ] && { w=""; break; }   # finished its game part: background analysis, keep
       [ -e "$base/$b/batch.pid" ] || continue   # not a run-batch.sh out dir (dry runs, runner/predry, agent work dirs): never
+      # a batch that is still running (no DONE, its run-batch.sh alive) owns its rows: never (multi-instance 2026-10-11: lane
+      # 5090b's sweep killed lane A's live fp-fists.sh row fist5090w/fq3)
+      [ -e "$base/$b/DONE" ] || { read -r bp_ _ < "$base/$b/batch.pid" 2>/dev/null; [ -n "${bp_:-}" ] && kill -0 "$bp_" 2>/dev/null && { w=""; break; }; }
       w=$r
     done
     [ -n "$w" ] || continue
