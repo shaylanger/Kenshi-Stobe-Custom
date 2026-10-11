@@ -208,10 +208,17 @@ VID_CHECKS = {
 }
 
 
-def take_check(d):
+def _take_check(d):
     vl = open(os.path.join(d, 'video-len.txt')).read().split()[0]
     return verdict_word(run(['python3', os.path.join(L, 'takecheck.py'), '--labels', os.path.join(d, 'labels.txt'), '--ev',
                              os.path.join(d, 'ev.txt'), '--rules', RULES, '--video-len', vl, '--name', 'mut']), 'RESULT ')
+
+
+def take_check(d):
+    # PASS-REC (speed-takes 2026-10-10: only recording checks failed, judged on what was recorded) still FLAGS the
+    # recording fault (rec-warn=<check>): counts as caught, like FAIL. A clean base take must stay plain PASS.
+    v, l = _take_check(d)
+    return ('FAIL' if 'PASS-REC' in l.split()[:3] else v), l
 
 
 # id, kind, base (relative to the work dir), edit, checks (designated; 'ALL' = exploratory over every check of the kind)
