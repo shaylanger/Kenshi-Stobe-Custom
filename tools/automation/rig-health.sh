@@ -5,12 +5,24 @@
 #   RIG IDLE kenshi=no lock=free idle_reason=<text|none>         5090 free: launch the next batch or record a reason
 #   RIG IDLE-GAME 5090: ...                                       Kenshi open/lock held but every marked batch has DONE > 3 min (rig5090-state.ps1)
 #   RIG STALL ...                                                 lock held / markers present but Kenshi is gone
+#   RIG STALL <5090|4080>: <why> held <n> min ...                 a rig-runner stuck condition (harness silent, game time
+#                                                                 frozen, ...) held >= max(limit, 5 min), even if the row still writes
 # Use: sleep 120; bash tools/automation/rig-health.sh    (Bash run_in_background; restart it every time it wakes you)
 # Markers: touch C:\KenshiTestRuns\inflight\<name> when starting a subagent / rig job / detached batch; delete when done.
 set -u
 R=/mnt/c/KenshiTestRuns; [ -d "$R" ] || R=/c/KenshiTestRuns
 # Rig-runner alerts (rig-runner.ps1: a rig idle >= 2 min with an empty queue, a stuck/killed row, a dead batch) come first
 for a in "$R"/ALERT-*.txt; do [ -f "$a" ] && { tr -d '\r' < "$a"; al=1; }; done; [ -n "${al:-}" ] && exit 1
+# Rig-runner state (both rigs' loops run here): a stuck condition held >= max(limit, 5 min) = STALL even while the row keeps
+# writing its log (2026-10-11 4080 R11: Kenshi frozen 12+ min read as RIG BUSY). Line: "HH:mm running ... COND(<held>m/<lim>m): <why>"
+for s in "$R"/runner/5090.state "$R"/runner/4080.state; do
+  [ -n "$(find "$s" -mmin -5 2>/dev/null)" ] || continue
+  l=$(tail -1 "$s" | tr -d '\r')
+  if [[ $l =~ COND\(([0-9]+)m/([0-9]+)m\):\ (.*)$ ]]; then
+    h=${BASH_REMATCH[1]}; lim=${BASH_REMATCH[2]}; [ "$lim" -lt 5 ] && lim=5
+    [ "$h" -ge "$lim" ] && { echo "RIG STALL $(basename "$s" .state): ${BASH_REMATCH[3]} held $h min (runner: ${l#* })"; exit 2; }
+  fi
+done
 # ONE powershell.exe for the Kenshi check + both rig states (res-wait 2026-10-10: was tasklist.exe + 2 powershell.exe per call)
 st=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'if (Get-Process kenshi_x64 -EA 0) { "K yes" } else { "K no" }; "4 " + [string](& "C:\KenshiModding\tools\automation\rig4080-state.ps1" 2>$null | Select-Object -First 1); "5 " + [string](& "C:\KenshiModding\tools\automation\rig5090-state.ps1" 2>$null | Select-Object -First 1)' </dev/null 2>/dev/null | tr -d '\r')
 k=$(sed -n 's/^K //p' <<<"$st"); k=${k:-no}

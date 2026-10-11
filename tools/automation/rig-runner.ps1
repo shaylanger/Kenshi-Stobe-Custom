@@ -10,6 +10,7 @@ Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 40
                                          running batch keeps running; a restarted loop re-adopts it only if it is its own)
   rig-runner.ps1 -Start [-Rig 5090|4080] clear the stopped flag and start (= -Ensure -Force)
   rig-runner.ps1 -Rig X -DryKeyOf <list>  self-check: the pre-dry-run key, the files it content-hashes, the cached verdict
+  rig-runner.ps1 -SelfTest               check the stuck rule on fixed probe cases (no side effects; run after editing it)
   rig-runner.ps1 -Restart [-Rig X]       deploy an edited rig-runner.ps1: the loop re-spawns itself at its next list boundary
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
   -Fake: test mode on a fake game: queue/runner dirs under C:\KenshiTestRuns\runner\fake\, no lock/install/launch, the
@@ -39,7 +40,10 @@ launch -Owner rig4080 + input isolation, then run-batch.sh via C:\KAH\itrun.ps1,
 runner-5090 / 4080-runner. When DONE: list -> done\, note to the owner, next list at once.
 Every tick (60 s) during a batch: rig-runner-probe.sh. Stuck = Kenshi gone, crash dump, not in the world, harness silent,
 or game time not moving, held >= 2 min (a row's STALL_MIN=<min> word raises it; launch/first load 15 min) AND no file in
-the out dir changed for as long: kill the row's step (crash: kill the game; run-batch.sh relaunches), ALERT-<rig>.txt,
+the out dir changed for as long; while a row runs, Kenshi gone / crash / harness silent / game time frozen held
+>= max(that, -HardMin 5) is stuck even if the row keeps writing its log (2026-10-11 4080 R11 hang; harness silent =
+kill-game). State line "COND(<held>m/<lim>m): <why>" (rig-health.sh: RIG STALL once held >= lim). -SelfTest checks the
+rule on fixed cases. On a stuck hit: kill the row's step (crash: kill the game; run-batch.sh relaunches), ALERT-<rig>.txt,
 note to the owner; a second hit on the same row kills the game. Batch process gone without DONE: list -> failed\.
 Queue empty (or 4080 unreachable with lists waiting) for >= 2 min: ALERT-<rig>.txt + note to the coordinator (rig-health.sh
 and the Stop hook block on ALERT files); the ALERT clears when the rig works again.
@@ -63,8 +67,36 @@ Stale queue\running\<rig>__* entries (no <rig>.cur/.tail naming them, no live ru
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '', [string]$DryKeyOf = '')
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '', [string]$DryKeyOf = '',
+      [int]$HardMin = 5, [switch]$SelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
+# Stuck decision (pure; -SelfTest checks it). Soft: condition held >= lim AND out dir unchanged >= lim. Hard (2026-10-11,
+# 4080 R11: Kenshi froze 12+ min while the row kept appending "previous command still unread" / "inbox locked" client
+# errors to its log, so the out dir kept "changing"): a row is running and Kenshi gone / crashed / harness silent / game
+# time frozen held >= max(lim, HardMin) counts as stuck whatever the out dir does. A hard harness-silent hit kills the game
+# (a hung Kenshi never recovers by killing the row). Returns @(action, 'hard'|'soft') or $null.
+function StuckAct([hashtable]$p, [string]$why, [double]$held, [int]$lim, [int]$prevHits) {
+    if (-not $why -or $held -lt $lim) { return $null }
+    $hard = $p.step -ne '-' -and $why -match '^(Kenshi not running|Kenshi crashed|harness not answering|game time stuck)' -and $held -ge [Math]::Max($lim, $HardMin)
+    if (-not $hard -and [int]$p.age -lt $lim * 60) { return $null }
+    $act = if ($p.crash -eq '1' -or $prevHits -ge 1 -or $p.step -eq '-' -or ($hard -and $why -like 'harness not answering*')) { 'kill-game' } else { 'kill-step' }
+    @($act, $(if ($hard) { 'hard' } else { 'soft' }))
+}
+if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cases (no side effects)
+    $cases = @(
+        @('R11 4080 hang: harness silent 6 min, row log written 10 s ago', @{ step = 'R11'; age = '10'; crash = '0' }, 'harness not answering', 6, 2, 0, 'kill-game hard'),
+        @('harness silent 3 min, out dir busy (not yet hard)', @{ step = 'R11'; age = '10'; crash = '0' }, 'harness not answering', 3, 2, 0, ''),
+        @('harness silent 3 min, out dir still 3 min (soft)', @{ step = 'R11'; age = '200'; crash = '0' }, 'harness not answering', 3, 2, 0, 'kill-step soft'),
+        @('game time frozen 5 min, out dir busy', @{ step = 'R3'; age = '5'; crash = '0' }, 'game time stuck at 12.5 h (paused?)', 5, 2, 0, 'kill-step hard'),
+        @('STALL_MIN=20 row, harness silent 8 min, out dir busy', @{ step = 'R4'; age = '5'; crash = '0' }, 'harness not answering', 8, 20, 0, ''),
+        @('launch grace: harness silent 8 min, no row yet', @{ step = '-'; age = '5'; crash = '0' }, 'harness not answering', 8, 15, 0, ''),
+        @('between rows (relaunch), Kenshi gone 6 min, out dir busy', @{ step = '-'; age = '5'; crash = '0' }, 'Kenshi not running', 6, 2, 0, ''),
+        @('not in the world 9 min, out dir busy (soft only)', @{ step = 'R5'; age = '5'; crash = '0' }, 'not in the world (loading)', 9, 2, 0, ''),
+        @('no condition', @{ step = 'R5'; age = '900'; crash = '0' }, '', 9, 2, 0, ''))
+    $bad = 0
+    foreach ($c in $cases) { $g = (StuckAct $c[1] $c[2] $c[3] $c[4] $c[5]) -join ' '; $ok = $g -eq $c[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) $($c[0]): got '$g' want '$($c[6])'" }
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count) cases"; exit [int]($bad -gt 0)
+}
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
 foreach ($d in $rd, "$qd\5090", "$qd\4080", "$qd\any", "$qd\filler", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
@@ -1110,16 +1142,17 @@ while ($true) {
                 else {
                     if (-not $condSince) { $condSince = Get-Date }
                     $held = ((Get-Date) - $condSince).TotalMinutes
-                    if ($held -ge $lim -and [int]$p.age -ge $lim * 60) {
-                        $key = "$($p.step)"; $hits[$key] = 1 + [int]$hits[$key]
-                        $act = if ($p.crash -eq '1' -or $hits[$key] -ge 2 -or $p.step -eq '-') { 'kill-game' } else { 'kill-step' }
+                    $key = "$($p.step)"; $sa = StuckAct $p $why $held $lim ([int]$hits[$key])
+                    if ($sa) {
+                        $hits[$key] = 1 + [int]$hits[$key]; $act = $sa[0]
                         $r = Probe $c[2] $act
-                        Alert "$($c[5]) stuck $([int]$held) min ($why; out dir unchanged $([int]([int]$p.age / 60)) min, row $($p.step)): $act -> $r"
+                        $od = if ($sa[1] -eq 'hard') { "hard: held >= $([Math]::Max($lim, $HardMin)) min whatever the out dir does (last write $([int]$p.age) s ago)" } else { "out dir unchanged $([int]([int]$p.age / 60)) min" }
+                        Alert "$($c[5]) stuck $([int]$held) min ($why; $od, row $($p.step)): $act -> $r"
                         Note $c[3] "$($c[5]) row $($p.step) was stuck ($why); I did $act ($r). The batch goes on; check that row."
                         $condSince = $null
                     }
                 }
-                State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND: $why" })$(if ($script:preempted[$c[5]]) { ' PREEMPTED: ends after this row' })"
+                State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND($(if ($condSince) { [int]((Get-Date) - $condSince).TotalMinutes } else { 0 })m/$($lim)m): $why" })$(if ($script:preempted[$c[5]]) { ' PREEMPTED: ends after this row' })"
             }
         } else {
             if (Test-Path (Join-Path $rd "$Rig.restart")) {   # list boundary: hand over to a fresh copy of the (new) script
