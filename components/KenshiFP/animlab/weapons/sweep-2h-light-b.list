@@ -1,0 +1,5 @@
+# kfp-2h-light retest (twohand-fix 2026-10-11) on BEBB97C9: Katana + Longsword 2H (86 FAIL = overlay false positive on the gauntlet), Machete stays one-handed (length gate)
+# sid|name|type|anim class|ammo
+476-gamedata.base|Katana|melee|katanas|
+901-gamedata.base|Longsword|melee|katanas|
+55411-ArkWeaponPack.mod|Machete|melee|sabre|

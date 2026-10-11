@@ -190,7 +190,7 @@ analyse(){   # runs in $D with take()'s variables; writes the weapon's RESULT li
 }
 # ---- sweep
 PEND=(); k=0; n=0; np=0; S=${WSTART:-1}; C=${WCOUNT:-9999}
-while IFS='|' read -r sid nm ty ac am; do
+while IFS='|' read -r -u 9 sid nm ty ac am; do   # fd 9: a take command reading stdin ate the list on the 5090 (88b ran 1 of 6)
   [ "${WS_NOXBOW:-0}" = 1 ] && [ "$ty" = crossbow ] && { echo "NOTE skipped crossbow $nm (WS_NOXBOW crash-safety quarantine)"; continue; }
   case "$sid" in ''|'#'*) continue;; esac
   k=$((k + 1)); [ $k -lt $S ] && continue; [ $k -ge $((S + C)) ] && break
@@ -199,7 +199,7 @@ while IFS='|' read -r sid nm ty ac am; do
   [ -n "$r" ] || r="RESULT WEAPON-$(echo "$nm" | tr -c 'A-Za-z0-9\n' '_' | cut -c1-24) FAIL setup: take ended without a RESULT line"
   case "$r" in TAKE-RECORDED*) PEND+=("${r#TAKE-RECORDED }");; *) echo "$r"; echo "$r" | grep -q "^RESULT [^ ]* PASS" && np=$((np + 1));; esac
   cd "$OUT"
-done < "$LIST"
+done 9< "$LIST"
 # ---- restore
 cleanup; A combatmode $SH ranged off >/dev/null; [ -n "$VMSET" ] && A fp_vm set ${VMRESET:-twomask 264} >/dev/null
 [ -n "$BOWN" ] && { A inv $SH | grep -qF "\"$BOWN\"" || A transfer $HOLD $SH "$BOWN" >/dev/null; A equip $SH "$BOWN" >/dev/null; }
