@@ -298,9 +298,11 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     $rc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/list-rigcheck.sh '$($tl -replace '\\','/')' 5090" 2>&1 | ForEach-Object { "$_" }); Remove-Item -LiteralPath $tl -ErrorAction SilentlyContinue
     $ok = -not ($rc -match 'no save to launch'); if (-not $ok) { $bad++ }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) KenshiFP take list without a save -> kah-fpxbow (list-rigcheck): $($rc[-1])"
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 4) cases"; exit [int]($bad -gt 0)
+    . (Join-Path $PSScriptRoot 'tdr-handled.ps1'); $th = @(TdrHandledSelfTest ${function:TdrFilter}); $th; $bad += @($th | Where-Object { $_ -like 'FAIL*' }).Count
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 4 + $th.Count) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
+. (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
 foreach ($d in $rd, "$qd\5090", "$qd\4080", "$qd\any", "$qd\filler", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $distro = 'DwemerAI4Skyrim3'
@@ -415,12 +417,20 @@ function TdrEvents([long]$since) {   # this rig's System-log 4101/153 events sin
     if ($Rig -eq '5090') { return @(& ([scriptblock]::Create($cmd)) | ForEach-Object { "$_" }) }
     @(Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))))
 }
-function TdrGuard([string[]]$c, $p) {   # every tick of a running batch: any GPU driver reset since the batch started = stop the rig
+# events at or before the rig's last handled one (tdr-handled.ps1: alerted by a guard or tdr-watch) never trip again: a
+# restarted runner re-adopting a preempted/ended batch from <rig>.cur re-tripped on the 17:11 event (lane A 17:28, 5090c 17:30).
+# -Force (the ALERT file exists): stop even with no new event (the alert is the human gate; tdr-watch may have handled it).
+function TdrSince([long]$t0e) { [Math]::Max($t0e, (TdrHandledGet $Rig $rd $(if ($Fake) { $rd } else { Join-Path $runs 'gpulog' })) + 1) }
+function TdrGuard([string[]]$c, $p, [switch]$Force) {   # every tick of a running batch: any new GPU driver reset since the batch started = stop the rig
     $t0e = try { ([DateTimeOffset][datetime]$c[4]).ToUnixTimeSeconds() - 30 } catch { return }
-    $h = @(TdrFilter (TdrEvents $t0e) $t0e); if (-not $h.Count) { return }
+    $ts = TdrSince $t0e
+    $h = @(TdrFilter (TdrEvents $ts) $ts); if (-not $h.Count -and -not $Force) { return }
+    if ($h.Count) { TdrHandledSet $Rig (TdrNewest $h) 'runner-guard' $rd }
     $row = if ($p -and $p.step) { $p.step } else { '?' }
-    $m = "TDR (GPU driver reset) on rig $Rig during list $($c[5]) row $row (batch started $($c[4])): $($h.Count) event(s), latest: $(($h[0]).Substring(0, [Math]::Min(200, $h[0].Length)))"
-    Set-Content $tdrF @("ALERT $Rig $(Get-Date -Format HH:mm) $m", "Runner $Rig stopped and the next list does not start. A TDR is a crash warning (2026-10-11 BSOD). Delete this file only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Rig.", "list=$($c[5]) row=$row out=$($c[2]) time=$(Get-Date -Format s)")
+    $af1 = "$((Get-Content $tdrF -TotalCount 1 -ErrorAction SilentlyContinue))"
+    $m = if ($h.Count) { "TDR (GPU driver reset) on rig $Rig during list $($c[5]) row $row (batch started $($c[4])): $($h.Count) event(s), latest: $(($h[0]).Substring(0, [Math]::Min(200, $h[0].Length)))" }
+         else { "TDR alert file on rig $Rig during list $($c[5]) row $row (batch started $($c[4])): $af1" }
+    if (Test-Path $tdrF) { Add-Content $tdrF "runner $Rig $(Get-Date -Format HH:mm): $m" } else { Set-Content $tdrF @("ALERT $Rig $(Get-Date -Format HH:mm) $m", "Runner $Rig stopped and the next list does not start. A TDR is a crash warning (2026-10-11 BSOD). Delete this file only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Rig.", "list=$($c[5]) row=$row out=$($c[2]) time=$(Get-Date -Format s)") }
     Log "TDR $m"
     $pre = "Set-Content 'C:\KenshiTestRuns\$(Split-Path $c[2] -Leaf)\PREEMPT' 'TDR'"
     if ($Fake -or $Rig -eq '5090') { Set-Content (Join-Path $c[1] 'PREEMPT') 'TDR' } else { $null = Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($pre))) }
@@ -1453,7 +1463,7 @@ while ($true) {
     }
     # alert file present (from tdr-watch / rig-health) while a batch runs: the guard stops game + batch first (it exits the
     # runner); before this the loop exited here and left the batch running unsupervised
-    if ((Test-Path $tdrF) -and (Test-Path $curF) -and -not $Fake) { try { $c0 = @(Get-Content $curF); TdrGuard $c0 (Probe $c0[2]) } catch { Log "tdr guard error: $($_.Exception.Message)" } }
+    if ((Test-Path $tdrF) -and (Test-Path $curF) -and -not $Fake) { try { $c0 = @(Get-Content $curF); $p0 = Probe $c0[2]; if (-not ($p0 -and $p0.done -eq '1')) { TdrGuard $c0 $p0 -Force } } catch { Log "tdr guard error: $($_.Exception.Message)" } }
     if (Test-Path $tdrF) { Set-Content (StopFlag $Rig) "$(Get-Date -Format s) by TDR guard: $tdrF exists"; Log "TDR alert $tdrF exists: no new list, exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED TDR (alert file)"; exit 0 }
     if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {

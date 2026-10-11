@@ -32,6 +32,9 @@ try {
         $sf = Join-Path $gd "tdrwatch.$r.last"; $now = [DateTimeOffset]::Now.ToUnixTimeSeconds()
         $last = if (Test-Path $sf) { [long](((Get-Content $sf -Raw) -split '\s+')[0]) } else { -1 }
         if ($last -lt 0) { Set-Content $sf "$now baseline $(Get-Date -Format s)"; if ($Show) { "TDR-WATCH $r baseline" }; continue }
+        # an event a runner/lane guard already alerted (runner\<rig>.tdr-handled, tdr-handled.ps1) is not alerted a second time
+        $rh = Join-Path $runs "runner\$r.tdr-handled"
+        if (Test-Path $rh) { $v = "$((Get-Content $rh -TotalCount 1))".Trim() -split '\s+' | Select-Object -First 1; if ($v -match '^\d+$' -and [long]$v -gt $last) { $last = [long]$v } }
         $cmd = $q -replace 'SINCE', "$($last - 5)"
         $lines = if ($r -eq '5090') { @(& ([scriptblock]::Create($cmd)) | ForEach-Object { "$_" }) }
                  else { $o = @(& ssh -o ConnectTimeout=10 -o BatchMode=yes 4080 "powershell -NoProfile -EncodedCommand $([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("$cmd; exit 0")))" 2>$null | ForEach-Object { "$_" }); if ($LASTEXITCODE -ne 0) { if ($Show) { "TDR-WATCH 4080 unreachable" }; continue }; $o }

@@ -177,6 +177,7 @@ if ($SelfTest) {
 
 # ---------------------------------------------------------------- loop (started by rig-runner.ps1 -Rig 4080b)
 $rd = Join-Path $runs 'runner'; $qd = Join-Path $runs 'queue'
+. (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
 foreach ($d in "$qd\$Lane", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $log = Join-Path $rd "$Lane.log"; $stateF = Join-Path $rd "$Lane.state"; $curF = Join-Path $rd "$Lane.cur"
 $stopF = Join-Path $rd "$Lane.stopped"; $tdrF = Join-Path $runs "ALERT-$Lane-tdr.txt"; $tdr1 = Join-Path $runs 'ALERT-4080-tdr.txt'
@@ -309,7 +310,8 @@ while ($true) {
     if ($cur.Count -ge 6) {
         $outN = $cur[1]; $t0 = [long]$cur[2]; $own = $cur[3]; $name = $cur[5]; $outP = "/c/KenshiTestRuns/$outN"
         if (Test-Path $tdr1) { TdrStop "lane 4080 TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outN }
-        $h = @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)); if ($h.Count) { TdrStop "TDR (GPU driver reset) on the 4080 during lane $Lane list $name : $($h[0])" $outN }
+        $ts = [Math]::Max($t0 - 30, (TdrHandledGet $Lane $rd (Join-Path $runs 'gpulog')) + 1)   # events already alerted never re-trip a restarted lane
+        $h = @(LaneTdrFilter (TdrEvents $ts) $ts); if ($h.Count) { TdrHandledSet $Lane (TdrNewest $h) 'lane-guard' $rd; TdrStop "TDR (GPU driver reset) on the 4080 during lane $Lane list $name : $($h[0])" $outN }
         if ((Xbow1) -and -not (XbPar)) {   # TDR isolation (off while the xbow-parallel switch exists; 17:19 it ended 114a twice beside 116): lane 4080 started a crossbow/turret list -> end this batch now, requeue the list for later
             $o = Probe $outP 'end-batch' "lane $Lane TDR isolation: lane 4080 runs a crossbow/turret list"; Stop2 'TDR isolation'
             $back = Join-Path "$qd\$Lane" $name

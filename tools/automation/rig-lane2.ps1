@@ -203,6 +203,7 @@ if ($SelfTest) {
 
 # ---------------------------------------------------------------- loop (started by rig-runner.ps1 -Rig 5090b|5090c)
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
+. (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
 foreach ($d in "$qd\$Lane", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $log = Join-Path $rd "$Lane.log"; $stateF = Join-Path $rd "$Lane.state"; $curF = Join-Path $rd "$Lane.cur"
@@ -424,7 +425,8 @@ while ($true) {
         # its 16:33 batch and alerted on a later TDR it never ran beside (the DONE branch below clears it)
         $live = -not (Test-Path (Join-Path $outW 'DONE'))
         if ($live -and (Test-Path $tdr1)) { TdrStop "lane A TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outW }
-        $h = if ($live) { @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)) } else { @() }; if ($h.Count) { TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
+        $ts = [Math]::Max($t0 - 30, (TdrHandledGet $Lane $rd $(if ($Fake) { $rd } else { Join-Path $runs 'gpulog' })) + 1)   # events already alerted never re-trip a restarted lane
+        $h = if ($live) { @(LaneTdrFilter (TdrEvents $ts) $ts) } else { @() }; if ($h.Count) { TdrHandledSet $Lane (TdrNewest $h) 'lane-guard' $rd; TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
         if (IsoA) {   # TDR isolation: lane A started a crossbow/turret list -> end this batch now, requeue it (filler: just release the claim)
             $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane TDR isolation: lane A runs a crossbow/turret list"); Stop2 'TDR isolation'
             if ((Split-Path $cur[0] -Leaf) -like '*__filler__*') { Remove-Item -LiteralPath $cur[0] -ErrorAction SilentlyContinue } else { Move-Item -LiteralPath $cur[0] (Join-Path "$qd\$Lane" $name) -Force -ErrorAction SilentlyContinue }
