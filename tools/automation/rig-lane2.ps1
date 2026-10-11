@@ -171,13 +171,17 @@ while ($true) {
     if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)); if ($why) { State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
     $launch = @($txt | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
     $launch = if ($launch) { $launch[0] } else { ((LaneRows $txt)[0] -split '\|')[1].Trim() }
+    # every kah-* test save, not only the list's header one (Shay 2026-10-11: all lanes can use all saves at the same time).
+    # run-batch's load_target swaps the launch save for the row script's pf_load target and rows name their own saves:
+    # m102 96-agree-rec sat on the menu 6 min because instance 2 had kah-fpxbow but not kah-fpstudio.
+    $saves = @(@($launch) + @(Get-ChildItem "$env:LOCALAPPDATA\kenshi\save" -Directory -Filter 'kah-*' | ForEach-Object Name) | Select-Object -Unique)
     if ($up -and (DllHash $K1) -ne (DllHash $K2)) { Log "instance 1 has other DLLs ($(DllHash $K1)) than instance 2 ($(DllHash $K2)): stop + sync"; Stop2 'DLL sync'; $up = $false }
     if (-not $up) {
-        $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" sync -Instance $Inst -Saves $launch 2>&1 | ForEach-Object { "$_" })
+        $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" sync -Instance $Inst -Saves ($saves -join ',') 2>&1 | ForEach-Object { "$_" })
         Log "sync: $(($sy | Select-Object -Last 2) -join ' / ')"
         if (-not ($sy -match "save $launch ->")) { Fail $f.FullName $name $own "instance 2 sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; continue }
     } else {
-        $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" save $launch -Instance $Inst 2>&1 | ForEach-Object { "$_" }); Log "save copy: $(($sy | Select-Object -Last 1))"
+        $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" save ($saves -join ',') -Instance $Inst 2>&1 | ForEach-Object { "$_" }); Log "save copy: $(($sy | Select-Object -Last 1))"
     }
     $outN = @($txt | Where-Object { $_ -match '^\s*#\s*out:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
     $outN = if ($outN) { "$($outN[0])-i2" } else { "$($f.BaseName)-i2-$(Get-Date -Format MMdd-HHmm)" }
