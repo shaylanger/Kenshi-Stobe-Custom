@@ -7,6 +7,7 @@
 # Needs a harness with FrameCap (framecap.txt, Plugin.cpp 2026-10-10): checked from harness.log "KAH: frame cap".
 # PASS = cap 60 holds (avg fps <= 63) and speed-50 game time with the cap >= 90% of uncapped; one RESULT GFXM line.
 # Row line: GFXM | <save> | - | - | 1500 | STALL_MIN=20 bash {CR}/KenshiModding/tools/automation/gfx-measure.sh <save> {OUT}/GFXM
+# dryrun: norec  (measures fps/GPU/game time; records nothing)
 set -u; RIG=${RIG:-}   # rig-env.sh reads $RIG (unset under set -u = abort)
 . "$(dirname "$0")/rig-env.sh"
 SAVE=${1:?save}; OUT=${2:?out}; SEC=${3:-30}
