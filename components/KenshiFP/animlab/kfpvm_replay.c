@@ -240,6 +240,8 @@ static int g_rec_hs = 1, g_hs_used;   /* hand derived scale = the recorded one (
  * (Axima 0.914,1.058,0.914), so Ph = tp - Qh*(lp*sc) sits off the uniform-C_K hand: that was the fitted hand-offset model
  * (patches/hand-offset.py, 0.19,0.02,-0.10 dm hand frame). With the recorded scale the hoff model is switched off
  * (agree take ag1 3F1AD4F8: median 0.103 -> 0.002 dm, blocking elbow 0.30 -> 0.03 dm). */
+static int g_hs_fix_on; static Vec3 g_hs_fix[2];   /* kfpvm_drive --hs x,y,z: fixed hand derived scale vector (the
+ * drive then clears g_rec_hs); the replay never sets it */
 static int g_up_roll, g_hcap_live; static Vec3 g_rig_hn[2]; static int g_rig_have[2];   /* bone roll model (set_native) */
 static int g_cls_fill[2];
 static void set_native(int i)
@@ -284,6 +286,11 @@ static void set_native(int i)
         if (g_rec_hs && g_rec_roll && nr && nr->nl1ok) { hsc = f3(nr->nhs[s]); g_hs_used++;
 #ifdef AL_HAVE_HOFF
             g_al_hoff[0] = g_al_hoff[1] = vm_v(0, 0, 0);   /* the fitted offset was this scale: never both */
+#endif
+        }
+        else if (g_hs_fix_on) { hsc = g_hs_fix[s]; g_hs_used++;   /* fixed hand-scale vector (kfpvm_drive --hs; off in the replay) */
+#ifdef AL_HAVE_HOFF
+            g_al_hoff[0] = g_al_hoff[1] = vm_v(0, 0, 0);
 #endif
         }
         fk_place(B_HA_L + s, Hn, qh, hsc);

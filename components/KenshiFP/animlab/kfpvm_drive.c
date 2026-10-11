@@ -1,7 +1,7 @@
 /* kfpvm_drive.c -- animation lab phase 2 (METRICS LAB): drive KenshiFP's real viewmodel solver with AUTHORED targets.
  *
  * Usage: kfpvm_drive <body_rec.txt> <frames.txt> <out.txt> [--body-frame N] [--side R|L] [--calib L1R,L2R,L1L,L2L,K]
- *                    [--set key=value]... [--no-lookahead] [--cold-elbow] [--quiet]
+ *                    [--set key=value]... [--no-lookahead] [--cold-elbow] [--quiet] [--hs x,y,z | --no-hs]
  *   body_rec.txt  a game recording (`fp_vm rec dump`); record N gives the body: camera (eye, yaw, pitch), torso, shoulders,
  *                 the native arm pose and (from the whole recording, as in the replay) the arm lengths + prop scale.
  *   frames.txt    authored per-frame targets (written by tools/animlab/metricslab.py from a motion file), lines:
@@ -11,6 +11,11 @@
  *   --side L      solve the LEFT hand as the weapon hand (`fp_vm set hand_m 0`, Prop1) with the prop local mirrored
  *                 (biped mirror: position z and quaternion x,y negated) and the grip roll mirrored (groll -> 180 - groll for
  *                 the sword; --set groll takes the RIGHT-hand value); see docs/animlab/USAGE.md phase 2.
+ *   --hs x,y,z    weapon-hand derived scale the solver sees (both hands). Default: the body record's recorded `hs` (rec native
+ *                 v2; lab-calibrate2 2026-10-11: the game's hand is NON-uniformly scaled, e.g. Axima 0.914,1.058,0.914, the
+ *                 uniform C_K = only its Y component), else uniform C_K (a fixed Axima vector worsened faithful-drive on the
+ *                 pre-v2 corpus bodies). With a vector a --l1 build's fitted hand offset (hoff) is zeroed (it was this scale).
+ *                 --no-hs = the old model always (uniform C_K, hoff as built, recorded hs ignored).
  *   out.txt       one line per frame, camera numbers of the body frame, after the apply (what the frame renders):
  *                   i t | Lsh Lel Lwr LhandX LpropP LpropF LpropU | Rsh Rel Rwr RhandX RpropP RpropF RpropU |
  *                   stL stR ikfail eclamp | eye rt up fw (world)
@@ -48,7 +53,7 @@ static void pv(FILE *o, Vec3 v) { fprintf(o, " %.5f,%.5f,%.5f", v.x, v.y, v.z); 
 
 int main(int argc, char **argv)
 {
-    if (argc < 4) { fprintf(stderr, "usage: kfpvm_drive <body_rec.txt> <frames.txt> <out.txt> [--body-frame N] [--side R|L] [--calib ...] [--set k=v]... [--no-lookahead] [--quiet]\n"); return 2; }
+    if (argc < 4) { fprintf(stderr, "usage: kfpvm_drive <body_rec.txt> <frames.txt> <out.txt> [--body-frame N] [--side R|L] [--calib ...] [--set k=v]... [--no-lookahead] [--quiet] [--hs x,y,z|--no-hs]\n"); return 2; }
     if (load_rec(argv[1]) < 2) { fprintf(stderr, "kfpvm_drive: no frames in %s\n", argv[1]); return 1; }
     if (load_frames(argv[2]) < 1) { fprintf(stderr, "kfpvm_drive: no frames in %s\n", argv[2]); return 1; }
     g_get_bone_world = fk_bone_world; g_skel_getbone = fk_getbone; g_oldnode_getdori = fk_getdori; g_oldnode_getdpos = fk_getdpos;
@@ -60,11 +65,16 @@ int main(int argc, char **argv)
     *(void **)(g_pc + CHAR_ANIM) = g_anim; *(void **)(g_anim + ANIM_SKELETON) = (void *)g_b;
     g_anim_ent_off = 0x10; *(void **)(g_anim + 0x10) = g_ent;
     g_get_parent_scenenode = fk_parent_node; g_node_getdori_v = fk_node_ori; g_node_getdpos_v = fk_node_pos; g_node_getdscale_v = fk_node_scale;
+    int hs_mode = 1; Vec3 hs_arg = vm_v(0.914f, 1.058f, 0.914f);   /* 1 = recorded else uniform C_K, 2 = --hs, 0 = --no-hs */
     int bf = -1, left = 0, la = 1, seed_elb = 1; const char *cl_set[256], *tables = NULL; int ncl = 0;
     for (int a = 4; a < argc; a++) {
         if (!strcmp(argv[a], "--quiet")) g_al_quiet = 1;
         else if (!strcmp(argv[a], "--no-lookahead")) la = 0;
         else if (!strcmp(argv[a], "--cold-elbow")) seed_elb = 0;
+        else if (!strcmp(argv[a], "--no-hs")) hs_mode = 0;
+        else if (!strcmp(argv[a], "--hs") && a + 1 < argc) {
+            if (sscanf(argv[++a], "%f,%f,%f", &hs_arg.x, &hs_arg.y, &hs_arg.z) != 3 || hs_arg.x <= 0 || hs_arg.y <= 0 || hs_arg.z <= 0) { fprintf(stderr, "bad --hs\n"); return 2; }
+            hs_mode = 2; }
         else if (!strcmp(argv[a], "--body-frame") && a + 1 < argc) bf = atoi(argv[++a]);
         else if (!strcmp(argv[a], "--side") && a + 1 < argc) left = argv[++a][0] == 'L';
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl < 256) cl_set[ncl++] = argv[++a]; }
@@ -98,12 +108,22 @@ int main(int argc, char **argv)
     printf("calib %.4f,%.4f,%.4f,%.4f,%.4f\n", C_L1[1], C_L2[1], C_L1[0], C_L2[0], C_K);
     const Rin *r = &R[bf];
     g_nat = bf + 1; g_cls_fill[0] = cls; g_vm_class = cls;
+    /* default (1): set_native uses the body record's recorded hs (rec native v2) when it has one, else uniform C_K (a fixed
+     * Axima vector on pre-v2 bodies worsened faithful-drive: crossbow-z0 wrist95 0.003 -> 0.127, elbow95 0.069 -> 1.034) */
+    int hs_rec = hs_mode == 1 && g_rec_roll && R[g_nat].nl1ok;
+    if (hs_mode != 1) g_rec_hs = 0;
+    if (hs_mode == 2) { g_hs_fix_on = 1; g_hs_fix[0] = g_hs_fix[1] = hs_arg; }
+    { Vec3 h0 = hs_rec ? f3(R[g_nat].nhs[0]) : g_hs_fix_on ? g_hs_fix[0] : vm_v(C_K, C_K, C_K),
+           h1 = hs_rec ? f3(R[g_nat].nhs[1]) : g_hs_fix_on ? g_hs_fix[1] : vm_v(C_K, C_K, C_K);
+      printf("hs %s %.4f,%.4f,%.4f %.4f,%.4f,%.4f\n", hs_mode == 2 ? "arg" : hs_rec ? "rec" : "uniform-C_K",
+             h0.x, h0.y, h0.z, h1.x, h1.y, h1.z); }
     set_native(g_nat);
     /* commanded-pose slot (the plugin's `fp_vm replay N t` path) */
     g_vm_rec = calloc(2, sizeof(VmRec)); g_vm_rn = 1; g_vm_rec_on = 0; g_vm_rp = 0; g_vm_rp_t = 1;
     Vec3 rest = g_vm_rest; if (left) rest.x = -rest.x;
     FILE *o = fopen(argv[3], "w"); if (!o) { perror(argv[3]); return 1; }
-    fprintf(o, "# kfpvm_drive side=%c body_frame=%d cls=%d calib=%.4f,%.4f,%.4f,%.4f,%.4f\n", left ? 'L' : 'R', bf, cls, C_L1[1], C_L2[1], C_L1[0], C_L2[0], C_K);
+    fprintf(o, "# kfpvm_drive side=%c body_frame=%d cls=%d calib=%.4f,%.4f,%.4f,%.4f,%.4f hs=%s\n", left ? 'L' : 'R', bf, cls, C_L1[1], C_L2[1], C_L1[0], C_L2[0], C_K,
+            g_hs_fix_on ? "arg" : hs_rec ? "rec" : "uniform");
     #ifndef AL_HAVE_ECLAMP
     unsigned long g_vm_eclamp_n = 0;   /* older solver sources have no edge-clamp counter */
 #endif
