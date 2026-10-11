@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rig-runner-probe.sh <out-dir> [kill-step|kill-game]   (5090: WSL; 4080: Git Bash over ssh)
+# rig-runner-probe.sh <out-dir> [kill-step|kill-game|end-batch "<why>"]   (left=<rows not in done.txt>)   (5090: WSL; 4080: Git Bash over ssh)
 # One line about a run-batch.sh batch, for rig-runner.ps1's 60 s tick (no state kept here, the runner compares ticks):
 #   PROBE done=0|1 age=<s since the newest file under out-dir changed> gh=<game hours|-> phase=<harness phase|-> kenshi=0|1
 #         crash=0|1 step=<running row|-> stallmin=<row STALL_MIN|-> launched=0|1 alive=0|1
@@ -15,12 +15,31 @@
 set -u
 O=${1:?usage: rig-runner-probe.sh <out-dir> [kill-step|kill-game]}; act=${2:-}
 if grep -qi microsoft /proc/version 2>/dev/null; then KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; else RIG=${RIG:-}; . /c/KenshiModding/tools/automation/rig-env.sh >/dev/null 2>&1; KD=$KDIR; fi
+# rows of list.txt (first |-field) not yet in done.txt
+rows_left() { [ -f "$O/list.txt" ] || return 0; awk -F'|' '!/^[ 	]*(#|$)/ {g=$1; gsub(/^[ 	]+|[ 	]+$/, "", g); print g}' "$O/list.txt" | grep -vxF -f <(cat "$O/done.txt" 2>/dev/null; echo ' ') ; }
+# end-batch "<why>" (rig-runner 2026-10-11: 67-xbr-r11-hit sat 6 min in run-batch's post-row liveness waits with Kenshi
+# gone): kill the batch (run-batch.sh process group / Windows tree + every process naming <out>/.run-batch.sh or a row dir
+# not in done.txt), then write the NOTE + BATCH END to SUMMARY.txt and GAMEDONE + DONE so the runner's DONE path takes it.
+if [ "$act" = end-batch ]; then
+  why=${3:-ended by rig-runner}; R=$(dirname "$0")/row-reaper.sh
+  if [ -f "$O/batch.pid" ]; then read -r bp bw < "$O/batch.pid"
+    if [ -n "${bw:-}" ]; then MSYS_NO_PATHCONV=1 taskkill.exe /F /T /PID "$bw" </dev/null >/dev/null 2>&1 && echo "BATCHKILL winpid $bw" || echo "BATCHKILL winpid $bw gone/failed"
+    else { kill -TERM -- "-$bp" 2>/dev/null || kill -TERM "$bp" 2>/dev/null; } && echo "BATCHKILL pgid $bp" || echo "BATCHKILL pid $bp gone/failed"; fi
+  else echo "BATCHKILL no batch.pid"; fi
+  left=$(rows_left | paste -sd' ')
+  if [ -f "$R" ]; then n=$(REAPER_NEUTRAL=0 bash "$R" kill "$O/.run-batch.sh" </dev/null 2>&1 | grep -c '^REAPED')
+    for r in $left; do n=$(( n + $(REAPER_NEUTRAL=0 bash "$R" kill "$O/$r" </dev/null 2>&1 | grep -c '^REAPED') )); done; echo "REAPED $n"; fi
+  { echo "NOTE rig-runner ended the batch: $why"; [ -n "$left" ] && echo "NOTE ended: not run: $left"; echo "BATCH END $(date '+%F %H:%M') (ended by rig-runner)"; } >>"$O/SUMMARY.txt"
+  touch "$O/GAMEDONE" "$O/DONE"; echo "ENDED left=${left:-none}"; exit 0
+fi
 if [ "$act" = kill-step ] || [ "$act" = kill-game ]; then
   # kill-game (2026-10-11): "//F //IM" is Git Bash syntax; WSL (5090) passed it literally, taskkill refused it and the
   # hung game kept running (5090 07:16, 08:41). MSYS_NO_PATHCONV=1 + /F works in both shells; the runner then verifies
   # the game is gone and stops it itself (kenshi-ctl.ps1 stop / 4080 ctl.ps1 stop) if not.
+  # no game running = "gone" (08:45: "GAMEKILL failed" for a game the coordinator had already stopped)
   if [ "$act" = kill-game ]; then
-    MSYS_NO_PATHCONV=1 taskkill.exe /F /T /IM kenshi_x64.exe </dev/null >/dev/null 2>&1 && echo "GAMEKILL ok" || echo "GAMEKILL failed"; fi
+    if ! tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then echo "GAMEKILL gone (not running)"
+    else MSYS_NO_PATHCONV=1 taskkill.exe /F /T /IM kenshi_x64.exe </dev/null >/dev/null 2>&1 && echo "GAMEKILL ok" || echo "GAMEKILL failed"; fi; fi
   if [ -f "$O/step.pid" ]; then read -r p n w < "$O/step.pid"
     if [ -n "${w:-}" ]; then taskkill.exe //F //T //PID "$w" </dev/null >/dev/null 2>&1 && echo "KILLED step $n winpid $w" || echo "KILL failed winpid $w ($n)"   # 4080: other msys session
     else kill -TERM "$p" 2>/dev/null && echo "KILLED step $n pid $p" || echo "KILL failed pid $p ($n)"; fi
@@ -69,4 +88,5 @@ while read -r _ rn rv rest; do e=$(stat -c %Y "$O/$rn.txt" 2>/dev/null || echo "
 done < <(grep -a '^RESULT ' "$O/batch.log" 2>/dev/null)
 st=0; bpid=-; bmt=0; [ -f "$O/batch.pid" ] && { st=1; read -r bpid _ < "$O/batch.pid"; bmt=$(stat -c %Y "$O/batch.pid"); }
 # bpid/bmt: which run-batch.sh owns the out dir (the runner refuses to adopt a batch someone else started there)
-echo "PROBE setupstreak=$ss bpid=${bpid:--} bmt=$bmt started=$st done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"
+lf=$(rows_left | grep -c .)
+echo "PROBE left=$lf setupstreak=$ss bpid=${bpid:--} bmt=$bmt started=$st done=$done age=$age gh=$gh phase=$ph kenshi=$k crash=$crash step=$step stallmin=$sm launched=$la alive=$al gamedone=$gd ana=$ana"

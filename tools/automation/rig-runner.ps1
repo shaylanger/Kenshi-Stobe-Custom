@@ -46,7 +46,9 @@ kill-game). State line "COND(<held>m/<lim>m): <why>" (rig-health.sh: RIG STALL o
 rule on fixed cases. On a stuck hit: kill the row's step (crash: kill the game; run-batch.sh relaunches), ALERT-<rig>.txt,
 note to the owner; a second hit on the same row kills the game. kill-game is verified: if kenshi_x64 is still there
 after the probe's taskkill, the runner stops it (5090 kenshi-ctl.ps1 stop as runner-5090, 4080 ctl.ps1 stop -Owner
-rig4080, then taskkill /F /T) and logs "kill-game ... gone|stopped|forced|ALIVE" (ALIVE = still running, in the ALERT). Batch process gone without DONE: list -> failed\.
+rig4080, then taskkill /F /T) and logs "kill-game ... gone|stopped|forced|ALIVE" (ALIVE = still running, in the ALERT).
+Lingering batch: no row running + Kenshi gone >= 1 min with every row in done.txt, or >= 2 min with rows left = probe
+end-batch (kills run-batch.sh's tree, NOTE ended + BATCH END in SUMMARY.txt, DONE); the DONE path moves to the next list. Batch process gone without DONE: list -> failed\.
 Queue empty (or 4080 unreachable with lists waiting) for >= 2 min: ALERT-<rig>.txt + note to the coordinator (rig-health.sh
 and the Stop hook block on ALERT files); the ALERT clears when the rig works again.
 Filler: both queues empty -> a COPY of the least recently started eligible queue\filler\*.list (needs: met by the installed
@@ -97,6 +99,16 @@ function KillGame([scriptblock]$alive, [scriptblock]$stop, [scriptblock]$force, 
     if (& $gone $waitSec) { return @('forced', "game killed by taskkill after the rig stop failed ($o; $f)") }
     @('ALIVE', "game STILL RUNNING after the rig stop ($o) and taskkill ($f)")
 }
+# Lingering batch (2026-10-11, 67-xbr-r11-hit: after the 08:41 kill the batch wrote done.txt + SUMMARY and then sat 6 min
+# in run-batch.sh's post-row liveness waits with Kenshi gone; the rig idled until the coordinator killed it). Pure: no row
+# running, Kenshi gone, no GAMEDONE/DONE: every row in done.txt (probe left=0) for >= 1 min, or rows left for >= 2 min
+# (run-batch.sh's own relaunch starts Kenshi within seconds) = end it (probe end-batch: kill its tree, DONE). $null = no.
+function LingerAct([hashtable]$p, [double]$goneMin) {
+    if ($p.kenshi -ne '0' -or $p.step -ne '-' -or $p.launched -ne '1' -or $p.gamedone -eq '1' -or $p.done -eq '1') { return $null }
+    if ($p.left -eq '0' -and $goneMin -ge 1) { return 'rows done' }
+    if ($goneMin -ge 2) { return 'rows left' }
+    $null
+}
 if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cases (no side effects)
     $cases = @(
         @('R11 4080 hang: harness silent 6 min, row log written 10 s ago', @{ step = 'R11'; age = '10'; crash = '0' }, 'harness not answering', 6, 2, 0, 'kill-game hard'),
@@ -121,7 +133,19 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
         $g = (KillGame { $script:kgLeft -gt 0 } { $script:kgLeft--; 'stop' } { $script:kgLeft--; 'force' } 0)[0]
         $ok = $g -eq $c[4]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) $($c[0]): got '$g' want '$($c[4])'"
     }
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count) cases"; exit [int]($bad -gt 0)
+    # lingering batch: Kenshi gone, no row running
+    $lg = @(
+        @('67-xbr 08:45: all rows done, Kenshi gone 1.5 min, run-batch in its liveness wait', @{ kenshi = '0'; step = '-'; launched = '1'; left = '0' }, 1.5, 'rows done'),
+        @('all rows done, Kenshi gone 0.5 min (run-batch still finishing)', @{ kenshi = '0'; step = '-'; launched = '1'; left = '0' }, 0.5, ''),
+        @('rows left, Kenshi gone 2.5 min (no relaunch)', @{ kenshi = '0'; step = '-'; launched = '1'; left = '2' }, 2.5, 'rows left'),
+        @('rows left, Kenshi gone 1.5 min (relaunch may be starting)', @{ kenshi = '0'; step = '-'; launched = '1'; left = '2' }, 1.5, ''),
+        @('old probe (no left=), Kenshi gone 3 min', @{ kenshi = '0'; step = '-'; launched = '1' }, 3, 'rows left'),
+        @('row running, Kenshi gone 3 min (StuckAct handles it)', @{ kenshi = '0'; step = 'R11'; launched = '1'; left = '1' }, 3, ''),
+        @('GAMEDONE written (rig already freed)', @{ kenshi = '0'; step = '-'; launched = '1'; left = '0'; gamedone = '1' }, 3, ''),
+        @('first launch not done yet', @{ kenshi = '0'; step = '-'; launched = '0'; left = '2' }, 3, ''),
+        @('Kenshi up between rows', @{ kenshi = '1'; step = '-'; launched = '1'; left = '0' }, 3, ''))
+    foreach ($c in $lg) { $g = [string](LingerAct $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) linger $($c[0]): got '$g' want '$($c[3])'" }
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
@@ -938,8 +962,8 @@ function Start-Batch($f) {
 }
 
 # ---------------------------------------------------------------- finish / probe
-function Probe([string]$outP, [string]$act = '') {
-    $a = @($outP) + $(if ($act) { @($act) } else { @() })
+function Probe([string]$outP, [string]$act = '', [string]$why = '') {
+    $a = @($outP) + $(if ($act) { @($act) } else { @() }) + $(if ($why) { @($why -replace '[^\w.=-]', '_') } else { @() })   # ssh-safe token
     $r = if ($Rig -eq '5090') { Wsl (@('bash', "$(WslPath $auto)/rig-runner-probe.sh") + $a) } else { Ssh4Bash (@('/c/KenshiModding/tools/automation/rig-runner-probe.sh') + $a) }
     if ($act) { return ($r -join ' ') }
     $l = $r | Where-Object { $_ -like 'PROBE *' } | Select-Object -Last 1
@@ -1139,6 +1163,16 @@ while ($true) {
                        elseif ($p.gh -eq '-') { 'harness not answering' } elseif ($p.phase -ne 'world' -and $p.launched -eq '1') { "not in the world ($($p.phase))" }
                        elseif ($lastGh -and $p.gh -eq $lastGh) { "game time stuck at $($p.gh) h (paused?)" } else { $null }
                 $lastGh = $p.gh
+                # lingering batch: Kenshi gone with no row running (LingerAct) -> end it; the DONE path takes it next tick
+                if ($p.kenshi -eq '0' -and $p.step -eq '-') { if (-not $goneSince) { $goneSince = Get-Date } } else { $goneSince = $null }
+                $la = if ($goneSince -and -not $Fake) { LingerAct $p ((Get-Date) - $goneSince).TotalMinutes } else { $null }
+                if ($la) {
+                    $gm = [int]((Get-Date) - $goneSince).TotalMinutes; $goneSince = $null
+                    $r = Probe $c[2] 'end-batch' "Kenshi gone $gm min with no row running ($la)"
+                    Alert "$($c[5]) lingered: Kenshi gone $gm min, no row running ($la, left=$($p.left)): end-batch -> $r"
+                    Note $c[3] "$($c[5]) on ${Rig}: Kenshi was gone $gm min with no row running ($la); I ended the batch ($r). Rows not run are in SUMMARY.txt (NOTE ended: not run)."
+                    State "ending $($c[5]): $la, Kenshi gone"; continue
+                }
                 # game idle while the row analyses in the foreground (no recording): ALERT + note, once per row
                 if ($p.ana -eq '1') {
                     if (-not $anaSince) { $anaSince = Get-Date }
@@ -1229,7 +1263,7 @@ while ($true) {
                 $ours = $Fake -or -not $open4 -or ($idleFor -ge $IdleMin)
                 if ($Rig -eq '5090' -and -not $Fake) { $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) { $ours = $true } }
                 if ($script:keep4080) { $ours = $true }   # the open 4080 game is the one we kept up for this list
-                if ($ours) { $unreach = $null; $alerted = $false; $idleSince = $null; $lastGh = $null; $condSince = $null; $hits = @{}; if (Start-Batch $f) { continue } }
+                if ($ours) { $unreach = $null; $alerted = $false; $idleSince = $null; $lastGh = $null; $condSince = $null; $goneSince = $null; $hits = @{}; if (Start-Batch $f) { continue } }
                 else { State "waiting for idle rig ($s), $($f.Name) next in $([int]($IdleMin - $idleFor)) min" }
             } elseif ($script:fillerSkips.Count -and $script:fillerUnchanged -eq $script:fillerSkips.Count) {
                 # nothing real queued and every filler row passed on this build with unchanged scripts: allowed idle

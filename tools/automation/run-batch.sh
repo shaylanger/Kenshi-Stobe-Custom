@@ -65,6 +65,8 @@ STOBELOG=$KD/RE_Kenshi/mods/Stobe/stobe.log
 say() { echo "$*" | tee -a "$S"; }
 offsets() { local p; for p in $LOGPATHS; do stat -c %s "$p" 2>/dev/null || echo 0; done | paste -sd'\t'; }
 world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
+# world_live <sec>: 0 = in the world, 1 = Kenshi up but not in the world after <sec>, 2 = Kenshi gone (checked every 20 s)
+world_live() { local end=$((SECONDS + ${1:-120})); while [ $SECONDS -lt $end ]; do kenshi_up || return 2; world 20 && return 0; done; kenshi_up || return 2; return 1; }
 # timeout: the WSL powershell proxy can hang after a launch (pipe held by Kenshi, m23); launch output lines
 # are printed before it hangs, so killing it after 420 s loses nothing
 ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" "$@" "${CTLO[@]}" </dev/null | tr -d '\r'; }
@@ -285,9 +287,10 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   else row_result "$name" "$save" "$player" "$mate" "$out" "$to" "$rc" "$sl"; fi
   collect
   # m37: a crashed/killed Kenshi = dead now, no 4.5 min of waits on a game that is gone (the next row relaunches)
-  if kenshi_up; then
-    world 120 || { sleep 30; world 120 || { say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1; }; }
-  else dead=1; fi
+  # 2026-10-11 (67-xbr-r11-hit): the runner killed the hung game DURING these waits and the batch sat 4.5 min on a game that
+  # was gone: world_live re-checks Kenshi every 20 s and returns 2 the moment it is gone (dead now, no NOTE: next row relaunches)
+  lw=2; if kenshi_up; then world_live 120; lw=$?; [ $lw = 1 ] && { for _ in $(seq 15); do kenshi_up || break; sleep 2; done; world_live 120; lw=$?; }; fi
+  case $lw in 0) ;; 2) dead=1 ;; *) say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1 ;; esac
 done 3<"$L"
 [ -n "$PRE" ] && say "NOTE preempted: not run: ${NOTRUN[*]}"
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
