@@ -127,7 +127,8 @@ ok=1
 TC=$(python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
 echo "$TC" | grep -qE "^RESULT (take )?PASS" || ok=0   # takecheck prints "RESULT take PASS"
 NS=$(wc -l < "$N.swings.txt"); NG=$(grep -c "tech='${TA[$TI]}' table=${TA[$TI]%% *}.* fallback=0" "$N.swings.txt")
-[ "$NS" -ge "$REPS" ] && [ "$NG" = "$NS" ] || ok=0
+# native fists (NAT=1): the game picks its own unarmed technique (fist4080n: NA1 names never picked natively): count swings only
+[ "$NS" -ge "$REPS" ] && { [ "$NAT" = 1 ] || [ "$NG" = "$NS" ]; } || ok=0
 [ "${IK1:-0}" = "${IK0:-0}" ] || ok=0
 if [ "$NAT" = 1 ]; then   # native fists: on screen above the HUD + the native motion shows (sampled fp_vm fist lines)
 FG=$(python3 - "$N.fist.txt" <<'PY' 2>&1 | tee "$N.lab.txt" | tail -1
