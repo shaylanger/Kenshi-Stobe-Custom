@@ -122,7 +122,8 @@ shoot 1; sleep 0.5; SHOT1=$SHOT
 RS4=$(cs reload_starts); S9=$(cs actual_shots); H9=$(hshots); sleep 4
 RS5=$(cs reload_starts); L10=$(loaded); R10=$(cs reloading)
 inp 1 1 1; sleep 1; inp 1 0 0; sleep 0.5; S10=$(cs actual_shots); H10=$(hshots); RS6=$(cs reload_starts)
-for _ in $(seq 1 40); do A pickup "$SH" "$BN0" radius 10 now >> "$OUT/pickup.txt"; [ "$(bolts)" = "$BA" ] && break; done; BR=$(bolts)
+# (radius 60: rg03 30-confirm Axima walked ~25 dm off the drop spot, "0 ground items seen" within 10)
+for _ in $(seq 1 40); do A pickup "$SH" "$BN0" radius 60 now >> "$OUT/pickup.txt"; [ "$(bolts)" = "$BA" ] && break; done; BR=$(bolts)
 ev="bolts '$BA' -> dropped '${BN:-none}' -> picked '$BR'; last bolt fired=$SHOT1; no bolts: reload_starts $RS4->$RS5->$RS6 loaded=$L10 reloading=$R10 empty trigger+reload: shots $S9->$S10 harness $H9->$H10"
 if [ -z "$BN" ] && [ "$SHOT1" = 1 ] && [ "$RS6" = "$RS4" ] && [ "$L10" = 0 ] && [ "$S10" = "$S9" ] && [ "$H10" = "$H9" ] && [ "$BR" = "$BA" ]; then row R06 PASS "$ev"; else row R06 FAIL "$ev"; fi
 inp 1 0 0; waitfor 4 reloading 1; reload_watch 30 >/dev/null; inp 0 0 0

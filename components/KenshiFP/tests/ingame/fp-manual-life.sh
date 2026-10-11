@@ -97,7 +97,10 @@ if [ "$KOW" = 0 ] && [ "$W" = down ] && [ "$HK" = "$H0" ] && [ "$HW" = "$HK" ] &
 #      is full (4080 batch 3): pick it up again ----
 ready_held; H0=$(mshots); A unequip "$SH" "$BOW" >/dev/null; waitfor 3 why melee; inp 1 1 0; sleep 1.5; W=$(cs why); HS=$(mshots)
 A equip "$SH" "$BOW" | grep -q ERROR && { A pickup "$SH" "$BOW" now >/dev/null; sleep 1; A equip "$SH" "$BOW" >/dev/null; }
-inp 1 1 0; sleep 2; HE=$(mshots); W2=$(cs why); take; FS=$(fresh_shot)
+inp 1 1 0; sleep 2; HE=$(mshots); W2=$(cs why); take
+# rg03 30-confirm: with the bow off its back the native AI drew the melee weapon (why=melee_in_hands after re-equip; R12-SPEED
+# inherited it): the inherited-fire checks above are done, so put the melee weapon away before the fresh shot (setup, not the rule)
+pf_ranged_inj "$SH" >/dev/null || echo "R12-SWAP weapon reset: $PF_WHY" >> "$LOG"; take; FS=$(fresh_shot)
 ev="swap: unequipped why=$W shots=$((HS-H0)) re-equipped held_shots=$((HE-HS)) why=$W2 fresh_trigger_shots=$FS fault=$(cs fault)"
 if [ "$W" = melee ] && [ "$HS" = "$H0" ] && [ "$HE" = "$HS" ] && [ "$FS" = 1 ] && [ "$(cs fault)" = 0 ]; then row R12-SWAP PASS "$ev"; else row R12-SWAP FAIL "$ev"; fi
 
