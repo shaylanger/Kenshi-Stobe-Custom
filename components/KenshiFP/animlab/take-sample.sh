@@ -19,7 +19,7 @@
 # pairs them with the flashes in the video (frames.py syncmarks) and FAILs a label whose flash is > 0.15 s off the T0
 # offset or missing. A harness without sync_flash: one `<t> mark sync_off=no-sync_flash` line, take_mark does nothing.
 #   lab(){ echo "$(awk ... ) $*" >> "$N.lab"; take_mark "$*"; }
-# Frame stamp (frame-stamp 2026-10-10, TAKE_STAMP=1; default 0 until proven in game): take_sample_start also sends harness
+# Frame stamp (frame-stamp 2026-10-10; default on since proof 2 05-stamp-proof2-1011-0018, TAKE_STAMP=0 turns it off): take_sample_start also sends harness
 # `stamp on 8 [log $TAKE_STAMP_LOG]` (per-frame code in the top-left corner: game frame + FP state + label mark), the
 # sync_flash calls then set the stamp mark instead of flashing, take_sample_stop sends `stamp off`; takecheck.py /
 # review-pack.py read labels + state from the video (harness tools/animlab/stamp.py). Writes `<t> mark stamp=on|off-<why>`.
@@ -28,12 +28,12 @@ _ts_now() { awk -v a="$(date +%s.%N)" -v b="$_TS_T0" 'BEGIN{printf "%.2f", a-b}'
 take_sample_start() {
   _TS_RUN=/tmp/take-sample-run.$$; : > "$1"; touch "$_TS_RUN"; _TS_EV=$1; _TS_T0=$2; _TS_MN=0
   local t r rs=; t=$(_ts_now)
-  [ "${TAKE_STAMP:-0}" = 1 ] && rs=$(stobe-auto stamp on 8 ${TAKE_STAMP_LOG:+log "$TAKE_STAMP_LOG"} </dev/null 2>&1)
+  [ "${TAKE_STAMP:-1}" = 1 ] && rs=$(stobe-auto stamp on 8 ${TAKE_STAMP_LOG:+log "$TAKE_STAMP_LOG"} </dev/null 2>&1)
   r=$(stobe-auto sync_flash "${TAKE_FLASH_MS:-150}" 0 </dev/null 2>&1)
   case "$r" in *"sync_flash n=0"*) _TS_MOK=1; echo "$t mark sync=0" >> "$1";;
     *) _TS_MOK=0; echo "$t mark sync_off=no-sync_flash" >> "$1";; esac
   _TS_STAMP=0
-  if [ "${TAKE_STAMP:-0}" = 1 ]; then
+  if [ "${TAKE_STAMP:-1}" = 1 ]; then
     case "$rs" in *"stamp on"*) _TS_STAMP=1; echo "$t mark stamp=on" >> "$1";;
       *) echo "$t mark stamp=off-no-harness-stamp" >> "$1";; esac
   fi
