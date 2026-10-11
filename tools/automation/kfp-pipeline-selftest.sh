@@ -57,6 +57,7 @@ for l in base -p1 -p2 -p3; do metrics $l > "$RUN/metrics-$l.tsv"; done
 ck "5 clean minus-one accepted" "$(clean_minus -p1 && echo y || echo n)" y
 ck "5 minus-one with new FAIL refused" "$(clean_minus -p2 && echo y || echo n)" n
 ck "5 minus-one with INFRA refused" "$(clean_minus -p3 && echo y || echo n)" n
+RUN=$T/r5; ck "5 nreg clean=0 newfail=1" "$(nreg -p1) $(nreg -p2)" "0 1"
 # 6 mutation-missed only from BASEFAIL (corpus recording missing) = known-base; a real MISSED blocks
 RB6='RESULT ANIMLAB-REGRESS FAIL fail=1 flipped=none why=regress,mutation-missed log=x'
 RUN=$T/r6; N=15

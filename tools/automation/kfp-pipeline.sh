@@ -300,6 +300,9 @@ clean_minus() { [ -f "$RUN/metrics-$1.tsv" ] || return 1
   [ -z "$(compare SET set base "$1" | awk -F'\t' '$7=="BREAK" || $7=="newfail"')" ] || return 1
   [ -z "$(awk -F'\t' 'NR==FNR {b[$1]=$2; next} $2=="FAIL" && b[$1]!="FAIL"' "$RUN/metrics-base.tsv" "$RUN/metrics-$1.tsv")" ] || return 1
   ! grep -q $'\tINFRA$' "$RUN/metrics-$1.tsv"; }
+# nreg <label>: number of regression keys of tree <label> vs base (BREAK/newfail rows + FAIL keys not FAIL on base)
+nreg() { { compare SET set base "$1" | awk -F'\t' '$7=="BREAK" || $7=="newfail" {print $3}'
+    awk -F'\t' 'NR==FNR {b[$1]=$2; next} $2=="FAIL" && b[$1]!="FAIL" {print $1}' "$RUN/metrics-base.tsv" "$RUN/metrics-$1.tsv"; } | sort -u | grep -c .; }
 # <<< decide-fns
 # round 1 (combined-first): base + all only. Round 2: the per-patch trees, only when round 1 shows a regression vs base
 # (or --per-patch), so the breaking patch can be named and left out.
@@ -322,15 +325,22 @@ if [ $N -ge 2 ]; then
   # KFP_RECENCY=0 turns it off.
   if [ -n "$ff" ] && [ $COMB = 1 ] && [ $PERP = 0 ] && [ $N -ge 3 ] && [ "${KFP_RECENCY:-1}" = 1 ]; then
     say "RECENCY minus-one trees, newest patch first, $JOBS at a time (${ff})" | cut -c1-600
-    mapfile -t ord < <(for p in "${S[@]}"; do echo "$(stat -c %Y "$p") $p"; done | sort -rn | cut -d' ' -f2-)
+    bc=""; bt=""; mapfile -t ord < <(for p in "${S[@]}"; do echo "$(stat -c %Y "$p") $p"; done | sort -rn | cut -d' ' -f2-)
     i=0; while [ $i -lt ${#ord[@]} ]; do bl=()
       for p in "${ord[@]:$i:$JOBS}"; do n=$(pname "$p"); r=(); for q in "${S[@]}"; do [ "$q" = "$p" ] || r+=("$q"); done
         apply_set "$RUN/tree--$n" "${r[@]}" > /dev/null; TREE[-$n]=$RUN/tree--$n; bl+=("-$n"); done
       run_gates "${bl[@]}"
       for l in "${bl[@]}"; do clean_minus "$l" && { say "RECENCY set minus ${l#-} is clean vs base: ${l#-} is the breaker"
           rerun_without "${l#-}" "BREAK(recency: set without it clean vs base; ${ff:0:160})"; }; done
+      # several breakers (run-bl-1011-1737: kfp-stroke-line broke pools s0/s3, another patch s1 arc): a minus-one tree
+      # that removes at least half of the regressions = a breaker; leave it out now, the rerun hunts the rest (greedy)
+      na=$(nreg all); for l in "${bl[@]}"; do c=$(nreg "$l"); { [ -z "$bc" ] || [ "$c" -lt "$bc" ]; } && { bc=$c; bt=$l; }; done
+      if [ -n "$bt" ] && [ $((bc * 2)) -le "$na" ]; then ne=$(echo "${EXCL:+$EXCL,}x" | tr ',' '\n' | grep -c .)
+        [ $((ne * 2)) -gt $((N + ne - 1)) ] && die guard "recency would leave out $ne of $((N + ne - 1)) patches (${EXCL:+$EXCL,}${bt#-}); not staged"
+        say "RECENCY set minus ${bt#-}: $bc of $na regressions left: ${bt#-} is a breaker"
+        rerun_without "${bt#-}" "BREAK(recency: removes $((na - bc))/$na regressions; ${ff:0:120})"; fi
       i=$((i + JOBS)); done
-    say "RECENCY no single minus-one tree is clean: full per-patch round"; fi
+    say "RECENCY no minus-one tree is clean or removes half the regressions: full per-patch round"; fi
   if [ -n "$ff" ]; then say "COMBINED-FIRST per-patch round (${ff})" | cut -c1-600; pl=()
     for p in "${S[@]}"; do n=$(pname "$p"); apply_set "$RUN/tree-+$n" "$p" > /dev/null; TREE[+$n]=$RUN/tree-+$n; pl+=("+$n"); done
     if [ $N -ge 3 ]; then for p in "${S[@]}"; do n=$(pname "$p"); r=(); for q in "${S[@]}"; do [ "$q" = "$p" ] || r+=("$q"); done
