@@ -28,7 +28,8 @@ reasons=(); warn(){ [ $Q = 1 ] || echo "WARN $RIG $NAME: $*"; }
 
 # ---- rig header + Stobe rows
 want=$(hdr rig); [ -n "$want" ] && [ "$want" != "$RIG" ] && reasons+=("list says rig: $want")
-if [ "$RIG" = 4080 ] && rows | awk -F'|' '{print $NF}' | grep -qE 'STOBE-|tests/ingame/stobe|\.txt(\s|$)'; then reasons+=("Stobe rows (no Stobe on the 4080)"); fi
+# a .txt counts as a Stobe scenario only in a row that runs no .sh/.py/.ps1 script (fp-pose-sweep.sh takes a variants .txt)
+if [ "$RIG" = 4080 ] && rows | awk -F'|' '{c=$NF} c ~ /STOBE-|tests\/ingame\/stobe/ || (c ~ /\.txt([ \t]|$)/ && c !~ /\.(sh|py|ps1)([ \t]|$)/) {f=1} END {exit !f}'; then reasons+=("Stobe rows (no Stobe on the 4080)"); fi
 
 # ---- saves
 sv=$(hdr launch); declare -A SV=()
