@@ -566,6 +566,13 @@ if [ -f "$PQ" ] && [ -f "$PS" ]; then
   case "$r" in "RESULT FIST-PUNCH PASS "*) ok "fist punch synth regenerated from fq0: PASS";; *) bad "fist punch synth regenerated from fq0 (want PASS): $r";; esac
   rm -f /tmp/al-fps.txt
 else echo "REGRESS INFO fist punch: corpus fq0 / synthetic PASS recording missing"; fi
+# 35e. zoom-0 framing (metrics.framed_check; Misses 2026-10-11 REEL-Buster_Sword / Fragment_Axe / Naginata, weapon-reel-109:
+#     hands never in view at zoom 0, matrix PASS): the three reel recs must FAIL `framed`, ab2h (2H, both wrists in view) PASS.
+for f in rec/reel109-Buster_Sword.vmrec.txt:FAIL rec/reel109-Fragment_Axe.vmrec.txt:FAIL rec/reel109-Naginata.vmrec.txt:FAIL rec/ab2h-5090.txt:PASS; do
+  n=${f%%:*} w=${f##*:}
+  [ -f "$CORPUS/$n" ] || { echo "REGRESS INFO framed: $n not in the corpus"; continue; }
+  r=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[2]); import recfmt, metrics as M; r = recfmt.parse(sys.argv[1]); ok, t = M.framed_check(r.frames, M.frame_metrics(r)); print("framed", "PASS" if ok else "FAIL", " ".join(t))' "$CORPUS/$n" "$L")
+  case "$r" in "framed $w "*) ok "framed $n: ${r:0:120}";; *) bad "framed $n (want $w): ${r:0:200}";; esac; done
 # 36. PT30 follow-ups (harness Misses 2026-10-10 "PT30-FLIP vmcheck time base" + "PT30 follow-through edge roll spikes"):
 #     (a) fp-viewmodel.sh's vmcheck (extracted from the script) on the 4080 game rec pt30-sword (corpus pools/sword-swing):
 #         the strike onset next to the 0.1 s hitch (frame 158) must NOT be flagged, the follow-through roll (284) must be;
@@ -597,7 +604,9 @@ if [ -f "$WJ" ] && [ -f "$ZR" ]; then
     python3 "$L/animlab.py" weapons --run --weapons-json "$WJ" --adapter "$BLD/kfpvm_cur" --only "$ONLY2" -o /tmp/al-2h-b > /tmp/al-2h-b.txt 2>&1
     nw=$(grep -c '^WEAPON ' /tmp/al-2h-b.txt); bw=$(grep '^WEAPON ' /tmp/al-2h-b.txt | grep -E 'twohand=FAIL|twosp=FAIL|near=FAIL|vis=FAIL|no-recordings' | awk '{print $2}' | tr '\n' ',')
     info=$(grep '^WEAPON ' /tmp/al-2h-b.txt | grep -cE 'arc=FAIL|seen=FAIL')
-    [ "$nw" -gt 0 ] && [ -z "$bw" ] && ok "2H weapons hold two-handed: $nw heavy/polearm representatives twohand+twosp+near+vis (arc/seen FAIL on $info: info)" \
+    fr=$(grep '^WEAPON ' /tmp/al-2h-b.txt | grep 'framed=FAIL' | awk '{print $2}' | tr '
+' ',')   # zoom-0 framing (35e): info here until kfp fixes heavy/polearm framing
+    [ "$nw" -gt 0 ] && [ -z "$bw" ] && ok "2H weapons hold two-handed: $nw heavy/polearm representatives twohand+twosp+near+vis (arc/seen FAIL on $info: info; framed FAIL (info): ${fr:-none})" \
       || bad "2H weapons: $nw judged, failing twohand/twosp/near/vis: ${bw:-none judged}"
   else echo "REGRESS INFO 2H: the source has no two-hand path (kfp-two-hand not applied)"; fi
 else echo "REGRESS INFO 2H: weapons.json or corpus q-sword-z0-a missing"; fi
