@@ -83,7 +83,8 @@ grep '^E6TAKE ' "$OUT/e6-takes.txt" | awk '{print "E6TAKE", $2, $3, $4, $5}' >> 
 MR="skipped"
 if [ $MUT = 1 ]; then python3 "$HERE/mutate.py" --work "$W" --out "$OUT/mut" > "$OUT/mutate.txt" 2>&1
   MR=$(grep -o '^RESULT MUTATIONS.*' "$OUT/mutate.txt" | awk '{print $4}'); grep -q '^RESULT MUTATIONS PASS' "$OUT/mutate.txt" || { fail=1; why+=(mutation-missed); }
-  grep '^MUT ' "$OUT/mutate.txt" | awk '{print "MUT", $3, $2}' >> "$OUT/verdicts.raw"; rm -rf "$OUT/mut"; fi
+  # key = the mutation id (was "MUT <status>" with the id as the value: one key for all, a MISSED mutation never flipped)
+  grep '^MUT ' "$OUT/mutate.txt" | awk '{print "MUT", $2, ($3=="CAUGHT" || $3=="FIXED") ? "PASS" : "FAIL"}' >> "$OUT/verdicts.raw"; rm -rf "$OUT/mut"; fi
 # 5. verdict keys + flips (key = line text before the first ': ', digits folded; repeated keys numbered)
 grep -E '^REGRESS (PASS|FAIL)' "$OUT/regress.txt" | awk '{v=$2; $1=$2=""; t=substr($0,3); i=index(t,": "); if (i) t=substr(t,1,i-1);
   gsub(/[0-9]+(\.[0-9]+)?/,"#",t); t=substr(t,1,90); k[t]++; if (k[t]>1) t=t " [" k[t] "]"; print t "\t" v}' > "$OUT/verdicts.tsv"
