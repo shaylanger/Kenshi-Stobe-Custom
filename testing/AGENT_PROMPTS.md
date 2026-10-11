@@ -36,6 +36,10 @@ file paths of outputs, the build hashes involved, and what you want back.
 > 1 TIMEOUT (wait again), 2 PRODUCER GONE / 3 STALE (the producer died or went silent: act). Keep each wait <= 120 s.
 > Stay lean: read RESULT lines and excerpts, one review sheet at a time; hand long judging (frame-by-frame review, log
 > digging) to a short-lived helper agent that returns one verdict line.
+> Speed rules (CLAUDE.md "Speed rules", Shay 2026-10-11): decisive evidence before reruns (diag build, dump, repro row
+> looping the trigger); every lost rig minute -> a tooling fix + selftest the same hour; both rigs unless a rig defect is
+> proven; numeric list prefixes, never edit a script a queued/running list uses; short rows with progress timeouts; open
+> mocap/Kenshi animations as reference, never ripped game assets; end your report with the next speed-up you noticed.
 
 ## STOBE fixer
 You are the **STOBE fixer**, a helper subagent of the coordinator session that runs Kenshi tests (it owns the
