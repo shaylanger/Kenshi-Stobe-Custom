@@ -1,8 +1,9 @@
 #!/bin/bash
 # kfp-buildwatch.sh -- the ONE KenshiFP build line on autopilot (WSL root, detached): reruns `kfp-pipeline.sh --combined`
 # whenever the pending KenshiFP patches (pending-fixes/kfp-*.py|.patch) or the live source /root/KenshiFP (HEAD + working
-# tree of client/ re_plugin/ tests/) change, once they have been quiet for QUIET s (default 600: no half-saved edits),
-# so a new or updated patch reaches both rigs (staged + KenshiFP-latest.txt) within the hour without anyone asking.
+# tree of client/ re_plugin/ tests/) change, once they have been quiet for QUIET s (default 90: no half-saved edits),
+# so a new or updated patch reaches both rigs (staged + KenshiFP-latest.txt) within ~15 min without anyone asking.
+# A change made while a run is going starts the next run as soon as that run ends (re-checked at once, no extra poll).
 # A fingerprint is built at most once per state (a FAIL is not retried until something changes). Never runs two
 # pipelines at once: waits while any kfp-pipeline run holds an inflight marker (C:\KenshiTestRuns\inflight\kfp-pipeline-*).
 #
@@ -12,10 +13,10 @@
 # Stop: touch /root/kfp-pipeline/buildwatch.stop  (or kill the pid in /root/kfp-pipeline/buildwatch.pid)
 # Status: tail /root/kfp-pipeline/buildwatch.log (one line per decision; each build ends with its PIPELINE line);
 #         the newest PIPELINE line is also written to C:\KenshiTestRuns\staged\KenshiFP-pipeline.last
-# Env: QUIET (600) POLL (120)
+# Env: QUIET (90) POLL (30)   (Shay 2026-10-10: was 600/120, a patch written mid-run waited a whole extra cycle)
 set -u
 PR=/root/kfp-pipeline; PF=/mnt/c/KenshiModding/pending-fixes; LIVE=/root/KenshiFP; IFD=/mnt/c/KenshiTestRuns/inflight
-LOG=$PR/buildwatch.log; QUIET=${QUIET:-600}; POLL=${POLL:-120}; ME=/mnt/c/KenshiModding/tools/automation
+LOG=$PR/buildwatch.log; QUIET=${QUIET:-90}; POLL=${POLL:-30}; ME=/mnt/c/KenshiModding/tools/automation
 mkdir -p "$PR"
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 # fingerprint of everything that goes into the combined DLL; newest mtime for the quiet check
@@ -42,6 +43,7 @@ while [ ! -e "$PR/buildwatch.stop" ]; do
       res=$(grep -h '^PIPELINE ' "$PR/buildwatch.run.log" | tail -1); log "${res:-PIPELINE ? no final line (log $PR/buildwatch.run.log)}"
       echo "$(date '+%F %T') ${res:-PIPELINE ? no final line}" > /mnt/c/KenshiTestRuns/staged/KenshiFP-pipeline.last
       last=$f; echo "$f" > "$PR/buildwatch.fp"   # the state that was built (fp before the run: a change during it rebuilds)
+      continue   # re-check at once: a change made during the run starts the next run now (if quiet), not one poll later
     fi
   fi
   sleep "$POLL" 8>&-   # children must not inherit the lock fd (an orphaned sleep kept it after a kill)
