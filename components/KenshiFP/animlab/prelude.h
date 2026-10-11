@@ -63,6 +63,7 @@ static node_set_dpos_t g_node_set_dpos; static node_get_pos_t g_node_get_pos;
 static float g_yaw, g_pitch, g_tx, g_tz;
 static KfpView g_view; static int g_view_have_anchor; static Vec3 g_view_anchor, g_last_eye;
 static int g_fp_mode = 1, g_have_eye = 1, g_fpc_holster_pending; static float g_fpc_holster_prog;
+static float g_nc_applied = -1.0f;   /* kenshifp_client.c camera near clip (kfp-vmrec-nc records it; lab: not applied) */
 static jmp_buf g_guard_jb; static int g_guard_armed; static DWORD g_guard_tid;
 static void guard_arm(void) { g_guard_armed = 1; }
 static int readable(const void *p, size_t n) { (void)n; return p != NULL; }
