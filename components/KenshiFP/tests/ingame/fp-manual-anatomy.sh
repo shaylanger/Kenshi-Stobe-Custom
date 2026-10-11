@@ -194,7 +194,7 @@ A pin "$TG" at "$SH" dist 30 face "$SH" | grep -q '^pinned' || setup_fail "pin $
 A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null
 A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $SH"
 A fp_combat autoreload 1 >/dev/null
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+pf_combat_on "$SH" || setup_fail "$PF_WHY"
 # weapon state (rg05 31-confirm R11: why=melee_in_hands, never armed): no melee in hands, crossbow drawn + loaded
 inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 [ "$(cs wound_ready)" = 1 ] || setup_fail "wound routing not ready (wound_ready=$(cs wound_ready) wound_enabled=$(cs wound_enabled))"

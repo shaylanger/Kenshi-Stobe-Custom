@@ -12,6 +12,7 @@
 FI=${1:-Malzin}; TG=${2:-Skaera}; OUT=${3:-/tmp/fp-manual-melee}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_combat_on (fp_combat on with repair)
 fld() { grep -o "\b$1=[^ ]*" | tail -1 | cut -d= -f2; }          # tail: melee fields follow the ranged ones
 cs() { A fp_combat state | fld "$1"; }
 ms() { A fp_melee state | fld "$1"; }
@@ -67,7 +68,7 @@ A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null
 A select "$FI" >/dev/null; A fp_mode on >/dev/null; sleep 1
 A fp_control take >/dev/null
 A fp_control state | grep -q "control_ids=.*/$(A where "$FI" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $FI"
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused (fault=$(A fp_combat state | grep -o " fault=[0-9]*" | head -1 | cut -d= -f2): fault=1 = KenshiFP latched a guarded native call fault, see KenshiFP.log \"[combat] native call fault\"; only a game relaunch clears it)"
+pf_combat_on || setup_fail "$PF_WHY"
 inp 0 0
 close || setup_fail "pin $TG in reach of $FI refused"
 engage || setup_fail "$FI not in a native fight with $TG (why=$(ms why) active=$(ms active) target_h=$(ms target_h))"

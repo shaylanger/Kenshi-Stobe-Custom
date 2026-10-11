@@ -239,6 +239,20 @@ pf_melee_arm(){ local who=$1 bow w r g ws
       case "$r" in equipped*) PF_WEP=$w2; echo "pf_melee_arm ok: $who $w2${g:+ (given)}"; return 0;; esac; done <<<"$ws"
   done; PF_WHY="$who: no melee weapon equips (given ${g:-}: $(cut -c1-90 <<<"$r"))"; return 1; }
 pf_cs(){ PF_A fp_combat state | grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
+# pf_combat_on [who]: `fp_combat on` with repair (40-rangedrows 1011-0251: 15 rows "fp_combat on refused" in 3 min, harness
+# "native bindings/hooks unavailable or faulted" on a reused game). A guarded native fault clears itself after 2 s (up to 3
+# faults): poll + retry <= ~16 s, re-select <who> and retake FP control from the 2nd try. Still refused (native_ready=0 or a
+# latched fault: only a relaunch clears it) = PF_WHY + the reason written to $RELAUNCH_FILE, so run-batch.sh relaunches the
+# game before the next row instead of every later row failing the same way. 0 = manual combat on.
+pf_combat_on(){ local i r s nr=? f=?
+  for i in 1 2 3 4 5 6 7; do
+    r=$(PF_A fp_combat on); case "$r" in *requested*) [ $i -gt 1 ] && echo "pf_combat_on: on at try $i"; return 0;; esac
+    s=$(PF_A fp_combat state); nr=$(grep -o '\bnative_ready=[0-9]*' <<<"$s" | cut -d= -f2); f=$(grep -o '\bfault=[0-9]*' <<<"$s" | cut -d= -f2)
+    [ "$nr" = 0 ] && break
+    [ $i -ge 2 ] && { [ -n "$1" ] && PF_A select "$1" >/dev/null; PF_A fp_mode on >/dev/null; PF_A fp_control take >/dev/null; }
+    sleep 2; done
+  PF_WHY="fp_combat on refused after $i tries (native_ready=${nr:-?} fault=${f:-?}; latched: game relaunch requested): $(cut -c1-60 <<<"$r")"
+  [ -n "${RELAUNCH_FILE:-}" ] && echo "$PF_WHY" > "$RELAUNCH_FILE"; return 1; }
 pf_ranged_inj(){ local who=$1 e w r bow ws
   PF_A fp_combat input 0 0 0 >/dev/null; sleep 0.5
   if [ "$(pf_cs why)" = melee_in_hands ]; then

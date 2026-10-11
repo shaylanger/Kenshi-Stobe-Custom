@@ -67,7 +67,7 @@ A pin "$TG" at "$SH" dist 25 face "$SH" >/dev/null
 take
 A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $SH"
 A fp_combat autoreload 1 >/dev/null
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+pf_combat_on "$SH" || setup_fail "$PF_WHY"
 # weapon state (rg03 R10/HIT: melee left in the hands; R01: empty crossbow): no melee in hands, crossbow drawn + loaded
 inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 ready_held || setup_fail "never shot-ready (why=$(cs why))"

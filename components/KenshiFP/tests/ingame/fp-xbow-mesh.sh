@@ -44,7 +44,7 @@ chk() { local g h m v d p pv s vs vst vw
 arm() { A select "$SH" >/dev/null; A fp_mode on >/dev/null
   for _ in $(seq 1 10); do sleep 0.5; A fp_state | grep -q 'fp_mode=1' && break; done
   A fp_control take >/dev/null; A fp_camera distance 0 >/dev/null; A fp_combat autoreload 1 >/dev/null
-  A fp_combat on | grep -q requested || pf_fail "fp_combat on refused"
+  pf_combat_on || pf_fail "$PF_WHY"
   inp 0 0 0; waitfor 6 armed 1 || pf_fail "adapter never armed (why=$(cs why))"; sleep 1.5; }
 states() { local s0
   # an empty bow (save/previous row left it unloaded) auto-reloads on the first aim: ~6 s reload + aim (xbmesh-c: 8 s cut it)

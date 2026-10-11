@@ -21,6 +21,7 @@ N=${5:-20}; DIST=${6:-80}
 SH=${1:-Axima}; TG=${2:-Skaera}; BL=${3:-Shay}; OUT=${4:-/tmp/fp-manual-parity}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_combat_on (fp_combat on with repair)
 fld() { grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
 cs() { A fp_combat state | fld "$1"; }
 inp() { A fp_combat input "$1" "$2" "$3" >/dev/null; }
@@ -89,7 +90,7 @@ A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1
 A fp_control take >/dev/null
 A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $SH"
 A fp_combat autoreload 1 >/dev/null
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+pf_combat_on || setup_fail "$PF_WHY"
 inp 0 0 0; waitfor 3 armed 1 || setup_fail "adapter never armed (enabled=$(cs enabled) fault=$(cs fault) why=$(cs why))"
 
 SKL="dist=${DIST}dm crossbows=$(A stat "$SH" crossbows | grep -o 'effective=[0-9.]*' | cut -d= -f2) perception=$(A stat "$SH" perception | grep -o 'effective=[0-9.]*' | cut -d= -f2)"

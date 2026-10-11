@@ -18,6 +18,7 @@
 FI=${1:-Malzin}; TG=${2:-Skaera}; OUT=${3:-/tmp/fp-manual-melee-skill}; WIN=${4:-15}
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_combat_on (fp_combat on with repair)
 fld() { grep -o "\b$1=[^ ]*" | tail -1 | cut -d= -f2; }
 ms() { A fp_melee state | fld "$1"; }
 inp() { A fp_combat input "$1" "$2" 0 >/dev/null; }
@@ -149,7 +150,7 @@ for m in $(A chars 3000 "[nameless]" | tr '|' '
 A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null
 A select "$FI" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null
 A fp_control state | grep -q "control_ids=.*/$(A where "$FI" | grep -o '#[0-9]*' | tr -d '#')" || setup_fail "fp_control did not take $FI"
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+pf_combat_on "$FI" || setup_fail "$PF_WHY"
 close || setup_fail "pin $TG in reach of $FI refused"
 ready || setup_fail "adapter not ready (why=$(ms why) armed=$(ms armed) manual_ready=$(ms manual_ready))"
 # the game pauses itself on squad events/dialogs (4080 batch 13: frozen after the first window): harness unpauses

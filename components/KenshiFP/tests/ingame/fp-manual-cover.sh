@@ -53,7 +53,7 @@ for m in $(A chars 3000 "[nameless]" | tr '|' '
 TS=$(serial "$TG")
 A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null
 A fp_combat autoreload 1 >/dev/null
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+pf_combat_on "$SH" || setup_fail "$PF_WHY"
 # weapon state (rg03 R10/HIT: melee left in the hands; R01: empty crossbow): no melee in hands, crossbow drawn + loaded
 inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 # candidates: buildings within 3000 of the shooter, nearest first

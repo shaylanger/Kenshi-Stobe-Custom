@@ -24,7 +24,7 @@ EV=""; GOOD=""; REPRO=0
 arm() { A select "$SH" >/dev/null; A fp_mode on >/dev/null
   for _ in $(seq 1 10); do sleep 0.5; A fp_state | grep -q 'fp_mode=1' && break; done
   A fp_control take >/dev/null; A fp_camera distance 0 >/dev/null; A fp_combat autoreload 1 >/dev/null
-  A fp_combat on | grep -q requested || pf_fail "fp_combat on refused"
+  pf_combat_on || pf_fail "$PF_WHY"
   inp 0 0 0; sleep 0.5
   # a melee weapon in hands (the AI's combat stance pick): R + unequip it (pf_ranged_inj), then the crossbow arms
   [ "$(cs why)" = melee_in_hands ] && { pf_ranged_inj "$SH" >/dev/null || pf_fail "$PF_WHY"; EV+=" melee_put_away"; }

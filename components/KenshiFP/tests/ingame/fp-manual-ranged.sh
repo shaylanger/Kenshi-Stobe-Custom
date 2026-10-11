@@ -45,7 +45,7 @@ read -r sx sz <<<"$(A where "$SH" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, 
 read -r tx tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
 YAW=$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')
 A fp_camera look "$YAW" 0.02 >/dev/null
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+pf_combat_on || setup_fail "$PF_WHY"
 # weapon state (rg03 R10/HIT: melee left in the hands; R01: empty crossbow): no melee in hands, crossbow drawn + loaded
 inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 [ "$(cs actor)" != 0 ] || setup_fail "adapter has no actor"

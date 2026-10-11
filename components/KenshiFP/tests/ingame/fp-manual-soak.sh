@@ -27,6 +27,7 @@ SH=${1:-Axima}; FI=${2:-Malzin}; TG=${3:-Skaera}; OUT=${4:-/tmp/fp-manual-soak};
 DIST=40
 mkdir -p "$OUT"; LOG="$OUT/log.txt"; : > "$LOG"; CSV="$OUT/samples.csv"; rm -f "$OUT/.stop"
 A() { local r; r=$(stobe-auto "$@" 2>&1); echo "> $* | $r" >> "$LOG"; echo "$r"; }
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_combat_on (fp_combat on with repair)
 fld() { grep -o "\b$1=[^ ]*" | head -1 | cut -d= -f2; }
 gf() { grep -o "\b$1=[^ ]*" <<<"$2" | head -1 | cut -d= -f2; }
 cs() { A fp_combat state | fld "$1"; }
@@ -97,7 +98,7 @@ A fp_combat_probe begin | grep -q 'recording=1' || setup_fail "fp_combat_probe b
 A pin "$FI" at "$SH" dist 300 >/dev/null; A pin "$TG" at "$SH" dist "$DIST" face "$SH" | grep -q '^pinned' || setup_fail "pin $TG at $SH refused"
 take "$SH" || setup_fail "fp_control did not take $SH"
 if [ "$CTRL" = 1 ]; then A fp_combat off >/dev/null; else
-A fp_combat on | grep -q requested || setup_fail "fp_combat on refused"
+pf_combat_on || setup_fail "$PF_WHY"
 inp 0 0 0; waitfor 3 armed 1 || setup_fail "ranged adapter never armed (fault=$(cs fault) why=$(cs why))"
 inp 1 0 0; waitfor 15 shot_ready 1 || setup_fail "ranged: never shot-ready (why=$(cs why))"; inp 0 0 0; fi
 

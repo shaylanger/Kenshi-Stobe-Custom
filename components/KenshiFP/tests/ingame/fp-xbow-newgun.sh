@@ -44,7 +44,7 @@ for ((i=1; i<=N; i++)); do
   read -r tx tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, '{print $1, $3}')"
   YAW=$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')
   A fp_camera look "$YAW" 0.02 >/dev/null
-  A fp_combat on | grep -q requested || { echo "iter $i: fp_combat on refused" >> "$LOG"; setupf=$((setupf+1)); continue; }
+  pf_combat_on "$SH" || { echo "iter $i: $PF_WHY" >> "$LOG"; setupf=$((setupf+1)); continue; }
   inp 0 0 0
   if ! pf_ranged_inj "$SH" >> "$LOG" 2>&1; then echo "iter $i: arm failed: $PF_WHY" >> "$LOG"; setupf=$((setupf+1)); cleanup; continue; fi
   A fp_camera look "$YAW" 0.02 >/dev/null

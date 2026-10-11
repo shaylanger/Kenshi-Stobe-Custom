@@ -74,7 +74,7 @@ read -r tx tz <<<"$(A where "$TG" | grep -o 'pos=[^ ]*' | cut -d= -f2 | awk -F, 
 YAW=$(awk -v a="$sx" -v b="$sz" -v c="$tx" -v d="$tz" 'BEGIN{printf "%.4f", atan2(c-a, d-b)}')
 YAWM=$(awk -v y="$YAW" 'BEGIN{printf "%.4f", y+0.7}')
 A fp_camera look "$YAW" 0.02 >/dev/null
-A fp_combat on | grep -q requested || pf_fail "fp_combat on refused"
+pf_combat_on || pf_fail "$PF_WHY"
 inp 0 0 0; pf_ranged_inj "$SH" || pf_fail "$PF_WHY"
 A fp_combat autoreload 1 >/dev/null
 # GPUMEM_SKILL=full: crossbows base so the effective skill is >= 100 + perception 100, as R11/HIT (fp-manual-anatomy cb_full:
