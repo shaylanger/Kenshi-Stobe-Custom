@@ -109,7 +109,8 @@ STOBELOG=$KD/RE_Kenshi/mods/Stobe/stobe.log
 
 say() { echo "$*" | tee -a "$S"; }
 offsets() { local p; for p in $LOGPATHS; do stat -c %s "$p" 2>/dev/null || echo 0; done | paste -sd'\t'; }
-world() { stobe-auto wait-world "${1:-300}" >/dev/null 2>&1; }
+# world <sec>: 0 once status says phase=world (0.5 s polls; stobe-auto wait-world polls every 2 s)
+world() { local end=$((SECONDS + ${1:-300})); while [ $SECONDS -lt $end ]; do timeout 15 stobe-auto status </dev/null 2>/dev/null | grep -q "phase=world" && return 0; sleep 0.5; done; return 1; }
 # world_live <sec>: 0 = in the world, 1 = Kenshi up but not in the world after <sec>, 2 = Kenshi gone (checked every 20 s)
 world_live() { local end=$((SECONDS + ${1:-120})); while [ $SECONDS -lt $end ]; do kenshi_up || return 2; world 20 && return 0; done; kenshi_up || return 2; return 1; }
 # timeout: the WSL powershell proxy can hang after a launch (pipe held by Kenshi, m23); launch output lines
@@ -125,18 +126,21 @@ launch() {
   ctl launch -Save "$1" > "$O/launch.out" 2>&1 &
   for i in $(seq 1 140); do
     kill -0 $! 2>/dev/null || break
-    [ -f "$HLOG" ] && [ "$(stat -c %Y "$HLOG")" -ge "$t0" ] && grep -a -q "KAH: autoload $1" "$HLOG" && { sleep 5; break; }
-    sleep 3
+    [ -f "$HLOG" ] && [ "$(stat -c %Y "$HLOG")" -ge "$t0" ] && grep -a -q "KAH: autoload $1" "$HLOG" && break
+    sleep 1
   done
+  # fast launch (hotswap2 2026-10-11): no fixed sleeps; the save loads while the proxy finishes its foreground unlock +
+  # re-place loop, then the proxy is killed once the world is in (or after 120 s) and postlaunch fits the window
+  kill -0 $! 2>/dev/null && world 120
   pkill -f "kenshi-ctl.ps1 launch" 2>/dev/null; wait 2>/dev/null
   # the killed proxy never ran kenshi-ctl's re-place + render fit (studio-fixture 2026-10-10: 798x413 on DISPLAY1): do it now
-  [ "${RIG:-5090}" = 4080 ] || { sleep 5; timeout 180 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" postlaunch </dev/null 2>&1 | tr -d '\r' >> "$O/launch.out"; }
+  [ "${RIG:-5090}" = 4080 ] || { timeout 180 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" postlaunch </dev/null 2>&1 | tr -d '\r' >> "$O/launch.out"; }
   tail -3 "$O/launch.out"
 }
 reload() {   # reload <save> <player>; 1 = the game didn't come back
-  stobe-auto load "$1" >/dev/null 2>&1; sleep 12
+  stobe-auto load "$1" >/dev/null 2>&1   # the harness reports phase=loading from the load reply on (g_loadPending)
   world 300 || { sleep 30; world 300 || return 1; }
-  sleep 10; stobe-auto select "$2" >/dev/null 2>&1; return 0
+  local i; for i in $(seq 1 20); do stobe-auto select "$2" >/dev/null 2>&1 && return 0; sleep 0.5; done; return 0
 }
 memline() {  # "<free-commit-GB> <kenshi-private-GB>" (kenshi "-" when not running)
   powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $i=[int]$env:KAH_INSTANCE; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { if ($i -ge 2) { $_.Path -like "D:\KenshiInst\$i\*" } else { $_.Path -notlike "D:\KenshiInst\*" } } | Select-Object -First 1;"{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
