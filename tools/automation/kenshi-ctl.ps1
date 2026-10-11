@@ -60,10 +60,51 @@ if ($Inst -ge 2) {
 $KahDir = "$Kenshi\mods\AutomationHarness"
 # AUTO = the first monitor that is NOT Shay's primary (2026-10-11: Windows renumbered the screens, DISPLAY2 became the
 # primary 2560x1440 and test games landed on Shay's screen, glitching through resize rounds)
-if ($Monitor -eq 'AUTO') {
+# Forbidden screens (Shay 2026-10-11 14:31: NEVER a game window on the Samsung, display 3 today; he works there). Matched by
+# the monitor's hardware id (EnumDisplayDevices interface name DISPLAY#<id>#), never by DISPLAYn number (Windows renumbers).
+$ForbiddenMonIds = @('SNY05D1')
+function Get-ForbiddenMonitors {   # \\.\DISPLAYn names whose attached monitor id is forbidden
+  if (-not ('KenshiMonId' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class KenshiMonId {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct DD { public int cb; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Name; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Str; public int Flags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Id; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Key; }
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplayDevicesW(string dev, int i, ref DD d, int f);
+  public static string Ids(string adapter) { var r = ""; for (int i = 0; ; i++) { var d = new DD(); d.cb = Marshal.SizeOf(d); if (!EnumDisplayDevicesW(adapter, i, ref d, 1)) break; r += d.Id + ";"; } return r; }
+}
+'@
+  }
+  @(1..9 | ForEach-Object { $a = '\\.\DISPLAY' + $_; $ids = [KenshiMonId]::Ids($a); foreach ($f in $ForbiddenMonIds) { if ($ids -match "#$f#") { $a } } })
+}
+# Pick-Monitor (pure; selftest: kenshi-ctl.ps1 monsel): $list = "\\.\DISPLAYn x,y wxh [primary]" entries, $forbidden = names
+# never used. The wanted one if it is on and allowed (AUTO = none wanted), else the first allowed non-primary, else the first
+# allowed; '' = no allowed screen (launch refuses).
+function Pick-Monitor([string[]]$list, [string[]]$forbidden, [string]$want) {
+  $ok = @($list | Where-Object { ($_ -split ' ')[0] -notin $forbidden })
+  $w = '\\.\' + ($want -replace '^\\\\\.\\', '').ToUpper()
+  if ($want -ne 'AUTO' -and @($ok | Where-Object { ($_ -split ' ')[0] -eq $w }).Count) { return $w }
+  $sec = @($ok | Where-Object { $_ -notmatch ' primary' })
+  if ($sec.Count) { return ($sec[0] -split ' ')[0] }
+  if ($ok.Count) { return ($ok[0] -split ' ')[0] }
+  ''
+}
+if ($Command -eq 'monsel') {   # kenshi-ctl.ps1 monsel: selftest of the screen rule + the live forbidden list
+  $L = @('\\.\DISPLAY1 -4480,360 1920x1080', '\\.\DISPLAY2 -2560,0 2560x1440', '\\.\DISPLAY3 0,0 3840x2160 primary'); $F = @('\\.\DISPLAY3'); $bad = 0
+  $cases = @(@('AUTO', $L, $F, '\\.\DISPLAY1'), @('DISPLAY2', $L, $F, '\\.\DISPLAY2'), @('DISPLAY3', $L, $F, '\\.\DISPLAY1'),
+             @('DISPLAY2', @($L[0], $L[2]), $F, '\\.\DISPLAY1'), @('AUTO', @($L[2]), $F, ''), @('AUTO', @('\\.\DISPLAY1 0,0 1920x1080 primary', $L[2]), $F, '\\.\DISPLAY1'))
+  foreach ($c in $cases) { $g = Pick-Monitor $c[1] $c[2] $c[0]; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) want=$($c[0]) screens=$($c[1].Count): got '$g' want '$($c[3])'" }
+  $fl = @(Get-ForbiddenMonitors); $ok = $fl.Count -ge 1; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) forbidden now (ids $($ForbiddenMonIds -join ',')): $($fl -join ',')"
+  "MONSEL $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + 1) cases"; exit [int]($bad -gt 0)
+}
+if ($Command -in @('launch', 'restart', 'postlaunch', 'place', 'fit')) {
   $ml = @((& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' monitors -Kenshi $Kenshi) -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-  $sec = @($ml | Where-Object { $_ -notmatch ' primary' })
-  $Monitor = if ($sec.Count) { ($sec[0] -split ' ')[0] } else { ($ml[0] -split ' ')[0] }
+  $pick = Pick-Monitor $ml (Get-ForbiddenMonitors) $Monitor
+  if (-not $pick) { "REFUSED: no allowed screen for a test game (forbidden: $((Get-ForbiddenMonitors) -join ','); on: $($ml -join ' | '))"; exit 1 }
+  if ($Monitor -ne 'AUTO' -and $pick -ne ('\\.\' + ($Monitor -replace '^\\\\\.\\', '').ToUpper())) { "monitor $Monitor not allowed/on: using $pick" }
+  $Monitor = $pick
+} elseif ($Monitor -eq 'AUTO') {
+  $ml = @((& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' monitors -Kenshi $Kenshi) -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  $Monitor = Pick-Monitor $ml @() 'AUTO'
 }
 # VSync=No for tests: a windowed background game presents at refresh/3 with VSync on (22 fps on the 60 Hz DISPLAY2, 45 on a
 # 143 Hz one; GPU idle), too slow for the ~40 fps viewmodel passes (vm-sword 2026-10-08). Shay's value goes to the play copy.
@@ -326,7 +367,7 @@ if ($Command -in @('launch', 'restart')) {
     if ($mons -notmatch [regex]::Escape($want) + ' ') {
       # Shay 2026-10-08: windowed + background is what matters, the monitor is a preference: when the preferred one is
       # off use the first one that is on (a single screen: that one)
-      $Monitor = ($list[0] -split ' ')[0]; "test monitor $want is off: using $Monitor (windowed, background)"; $bg.Monitor = $Monitor
+      $Monitor = Pick-Monitor $list (Get-ForbiddenMonitors) 'AUTO'; if (-not $Monitor) { 'REFUSED: no allowed screen'; exit 1 }; "test monitor $want is off: using $Monitor (windowed, background)"; $bg.Monitor = $Monitor
     }
     Cfg-Test
     if ($Command -eq 'restart') { & 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' stop -Kenshi $Kenshi | Out-Null }

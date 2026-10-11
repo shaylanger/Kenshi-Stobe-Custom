@@ -177,7 +177,9 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     # lane 5090b (second game instance, rig-lane2.ps1): list eligibility (gfx low, crossbow guard, no Stobe), admission, TDR filter
     $l2 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l2[-1]) -like 'LANE2-SELFTEST PASS*'; if (-not $ok) { $bad++; $l2 | Where-Object { $_ -like 'FAIL*' } }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 5090b rig-lane2.ps1 -SelfTest: $($l2[-1])"
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 3) cases"; exit [int]($bad -gt 0)
+    $ms = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" monsel 2>&1 | ForEach-Object { "$_" }); $ok = $ms[-1] -like 'MONSEL PASS*'; if (-not $ok) { $bad++ }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) screen rule (kenshi-ctl.ps1 monsel: never the Samsung SNY05D1): $($ms[-1])"
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 4) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }

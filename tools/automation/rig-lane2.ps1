@@ -27,7 +27,8 @@ Every tick (30 s) of a batch: TDR guard = System-log nvlddmkm/Display 4101|153 s
 Files: runner\5090b.{pid,log,state,cur,stopped,restart}; ALERT-5090b-tdr.txt.
   rig-lane2.ps1 -SelfTest   eligibility + admission + TDR filter on fixed cases (no side effects)
 #>
-param([switch]$SelfTest, [switch]$Fake, [int]$TickSec = 30, [int]$MinGpuMB = 6144, [int]$MinRamMB = 8192, [int]$StallMin = 10, [int]$IdleStopMin = 5)
+param([switch]$SelfTest, [switch]$Fake, [int]$TickSec = 30, [int]$MinGpuMB = 6144, [int]$MinRamMB = 8192, [int]$StallMin = 10, [int]$IdleStopMin = 5,
+      [string]$VideoMode = '640 x 360', [string]$Monitor = 'DISPLAY2')   # lane B window: small, DISPLAY2 corner (lane A films 1600x900 on DISPLAY1, Shay 14:28)
 $Lane = '5090b'; $Inst = 2
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 
@@ -91,8 +92,8 @@ function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | Fo
 function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
 function K2Procs { @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$K2\*" }) }
 function Ctl2([string[]]$a) {   # workspace kenshi-ctl.ps1 on instance 2 as runner-5090b
-    $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = 'low'
-    try { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" @a 2>&1 | ForEach-Object { "$_" } } finally { Remove-Item env:KAH_INSTANCE, env:KAH_GFX -ErrorAction SilentlyContinue }
+    $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = 'low'; $env:KAH_VIDEO_MODE = $VideoMode; $env:KENSHI_MONITOR = $Monitor
+    try { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" @a 2>&1 | ForEach-Object { "$_" } } finally { Remove-Item env:KAH_INSTANCE, env:KAH_GFX, env:KAH_VIDEO_MODE, env:KENSHI_MONITOR -ErrorAction SilentlyContinue }
 }
 function Stop2([string]$why) { if (K2Procs) { $o = Ctl2 @('stop'); Log "instance 2 stopped ($why): $(($o | Select-Object -Last 1))"; if (K2Procs) { foreach ($k in K2Procs) { & taskkill.exe /F /T /PID $k.Id 2>&1 | Out-Null }; Log 'instance 2 force-killed' } } }
 function GpuFreeMB { try { [int]((& nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | Select-Object -First 1).Trim()) } catch { 0 } }
@@ -110,7 +111,7 @@ function Fail([string]$path, [string]$name, [string]$own, [string]$why) {
     Set-Content "$dst.result" "FAILED $Lane $(Get-Date -Format s) $why"; Log "FAILED $name : $why"
     Note $own "list $name NOT run on lane $Lane ($why); $dst.result."
 }
-function Retitle { if (K2Procs) { $o = Ctl2 @('retitle'); if ("$o" -match 'set') { Log "$o" } } }
+function Retitle { if (K2Procs) { $o = Ctl2 @('retitle'); if ("$o" -match 'set') { Log "$o"; $t = Ctl2 @('ontop', 'off'); Log "lane B window not pinned: $t" } } }   # lane B = non-filming: never topmost
 function TdrStop([string]$m, [string]$out) {
     Set-Content $tdrF @("ALERT $Lane $(Get-Date -Format HH:mm) $m", "Lane $Lane stopped (instance 2). A TDR is a crash warning (2026-10-11 BSOD). Delete only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Lane.")
     if ($out) { Set-Content (Join-Path $out 'PREEMPT') 'TDR' -ErrorAction SilentlyContinue }
@@ -122,9 +123,9 @@ Log "lane $Lane up pid=$PID"
 $idleSince = Get-Date; $stall = $null
 while ($true) {
     if (Test-Path $stopF) { Log 'stopped flag: exit'; Remove-Item (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue; exit 0 }
-    $cur = if (Test-Path $curF) { @(Get-Content $curF) } else { @() }   # runPath, outW, start(s), list name, owner
-    if ($cur.Count -ge 5) {
-        $outW = $cur[1]; $t0 = [long]$cur[2]; $name = $cur[3]; $own = $cur[4]
+    $cur = if (Test-Path $curF) { @(Get-Content $curF) } else { @() }   # runPath, outW, start epoch, owner, start ISO, list name (rig-runner -Status reads [4] + [5])
+    if ($cur.Count -ge 6) {
+        $outW = $cur[1]; $t0 = [long]$cur[2]; $own = $cur[3]; $name = $cur[5]
         if (Test-Path $tdr1) { TdrStop "lane 1 TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outW }
         $h = @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)); if ($h.Count) { TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
         Retitle
@@ -173,13 +174,14 @@ while ($true) {
     $outN = if ($outN) { "$($outN[0])-i2" } else { "$($f.BaseName)-i2-$(Get-Date -Format MMdd-HHmm)" }
     $outW = Join-Path $runs $outN; $outP = WslPath $outW; New-Item -ItemType Directory -Force $outW | Out-Null
     $run = Join-Path "$qd\running" "${Lane}__$name"; Move-Item -LiteralPath $f.FullName $run -Force
-    Copy-Item $run (Join-Path $outW 'list.txt') -Force; Set-Content (Join-Path $outW '.instance') "$Inst"
+    Set-Content (Join-Path $outW 'list.txt') ((Get-Content $run) -replace '\{CR\}', '/mnt/c');   # {CR} = /mnt/c (as rig-runner.ps1 does)
+    Set-Content (Join-Path $outW '.instance') "$Inst"
     Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
     $rl = if ($up) { '--reuse ' } else { '' }
-    $st = "#!/bin/bash`nexport KAH_OWNER=$owner KAH_GFX=low KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
+    $st = "#!/bin/bash`nexport KAH_OWNER=$owner KAH_GFX=low KAH_INSTANCE=$Inst KDIR=/mnt/d/KenshiInst/$Inst KAH_DIR='D:\KenshiInst\$Inst\mods\AutomationHarness' KAH_VIDEO_MODE='$VideoMode' KENSHI_MONITOR=$Monitor WSLENV=KAH_OWNER:KAH_GFX:KAH_INSTANCE:KAH_VIDEO_MODE:KENSHI_MONITOR`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch $rl$outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
     [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
     $t0 = [DateTimeOffset]::Now.ToUnixTimeSeconds()
-    Set-Content $curF @($run, $outW, $t0, $name, $own); Set-Content (Join-Path $runs "inflight\runner-$Lane") $outP
+    Set-Content $curF @($run, $outW, $t0, $own, (Get-Date -Format s), $name); Set-Content (Join-Path $runs "inflight\runner-$Lane") $outP
     Wsl @('bash', "$outP/.start.sh") | Out-Null
     Log "START $name -> $outW (launch $launch$(if ($up) { ', reuse' }), gpu free $(GpuFreeMB) MB, ram free $(RamFreeMB) MB)"; Note $own "lane $Lane started $name : out=$outW"
     State "running $name -> $outW (launching instance 2)"

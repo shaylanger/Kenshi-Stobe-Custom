@@ -65,7 +65,9 @@ Set-Content -Path $save -Value @($saved.Keys | ForEach-Object { "$_=$($saved[$_]
 
 if ($Mode -eq 'low') { Set-Kv $scfg $Low } else { Set-Kv $scfg $saved }
 if ($Mode -ne 'play') {
-  Set-Kv $kcfg @{ 'Video Mode' = $VM[$Mode] }
+  # $env:KAH_VIDEO_MODE ('640 x 360'): lane 5090b's small non-filming window (rig-lane2.ps1); only with gfx low
+  $vmw = if ($Mode -eq 'low' -and $env:KAH_VIDEO_MODE -match '^\d+ x \d+$') { "$($env:KAH_VIDEO_MODE) @ 32-bit colour [0]" } else { $VM[$Mode] }
+  Set-Kv $kcfg @{ 'Video Mode' = $vmw }
   if ($Fps -gt 0) { Set-Content -Path $capF -Value "$Fps" -Encoding Ascii } else { Remove-Item $capF -Force -ErrorAction SilentlyContinue }
   Set-Content -Path $applied -Value $Mode -Encoding Ascii
 } else {
