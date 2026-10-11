@@ -176,12 +176,29 @@ tdr_guard() {  # tdr_guard <row|launch>: 1 = GPU driver reset since the last che
   [ -n "${TDR_FAKE:-}" ] || { kenshi_up && ctl stop | tail -1; }
   return 1
 }
+# Load dedupe (speed-scout 2026-10-11, harness.log: every KenshiFP take row loaded twice, prepare kah-fpxbow then the
+# script's pf_load kah-fpstudio, ~30 s/row; a list start loaded 3x). FRESH = "<save> <epoch>" of the load prepare just
+# did; the row gets KAH_FRESH=$FRESH and take-preflight.sh pf_load uses that load instead of loading again (once, < 120 s);
+# removed after every row (the row changed the world).
+FRESH="$O/.fresh-load"; rm -f "$FRESH"
+# load_target <save>: the save the row ends up on. A take script that calls pf_load loads PF_SAVE, else kah-fpstudio when
+# installed, else kah-fpxbow (take-preflight.sh pf_load) -> prepare loads that one (rows on kah-fpxbow/kah-fpstudio only)
+load_target() {
+  local s="$1" w sc="" ps=""
+  case "$s" in kah-fpxbow|kah-fpstudio) ;; *) echo "$s"; return ;; esac
+  for w in "${WORDS[@]}"; do case "$w" in PF_SAVE=*) ps=${w#PF_SAVE=} ;; [A-Za-z_]*=*) ;; *) sc=$w; break ;; esac; done
+  case "$sc" in /*) ;; *) [ -e "$KT/$sc" ] && sc="$KT/$sc" ;; esac
+  grep -qE '^[[:space:]]*pf_load([[:space:]]|$)' "$sc" 2>/dev/null || { echo "$s"; return; }
+  if [ -n "$ps" ]; then echo "$ps"; elif [ -d "$CR/Users/Shay/AppData/Local/kenshi/save/kah-fpstudio" ]; then echo kah-fpstudio; else echo kah-fpxbow; fi
+}
 prepare() {  # prepare <save> <player> <mate>
   case "$1" in
     -) return 0 ;;
     home) reload auto-home Shay || return 1
           bash "$A/scenarios.sh" fresh >/dev/null 2>&1 </dev/null; stobe-auto select Shay >/dev/null 2>&1 ;;
-    *) reload "$1" "$2" || return 1
+    *) local tg; tg=$(load_target "$1"); [ "$tg" != "$1" ] && echo "$(date +%H:%M) prepare: $tg instead of $1 (the row script's pf_load loads $tg; one load, not two)"
+       reload "$tg" "$2" || return 1
+       echo "$tg $(date +%s)" > "$FRESH"
        [ "$1" = kah-fullbase ] && PLAYER="$2" MATE="$3" bash "$T/fullbase-guard.sh" >/dev/null 2>&1 </dev/null ;;
   esac
   return 0
@@ -208,7 +225,9 @@ if [ -n "$LAUNCH" ] && [ "$REUSE" = 1 ] && kenshi_up && timeout 30 stobe-auto st
   p1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f3 | tr -d " \r")
   say "NOTE reuse: Kenshi already up, loading $LAUNCH in place (no relaunch)"
   stobe-say on >/dev/null 2>&1
-  if ! reload "$LAUNCH" "${p1:-Shay}"; then say "NOTE reuse: in-place load failed, relaunching"; launch "$LAUNCH"; world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }; fi
+  s1=$(grep -v "^[[:space:]]*\(#\|$\)" "$L" | head -1 | cut -d"|" -f2 | tr -d " \r")
+  if [ -n "$s1" ] && [ "$s1" != "-" ]; then say "NOTE reuse: the first row loads its own save ($s1): no extra in-place load of $LAUNCH"   # speed-scout: was 2-3 loads
+  elif ! reload "$LAUNCH" "${p1:-Shay}"; then say "NOTE reuse: in-place load failed, relaunching"; launch "$LAUNCH"; world 900 || { say "BATCH ABORTED: game did not reach the world after launch ($LAUNCH)"; finish; exit 1; }; fi
 elif [ -n "$LAUNCH" ]; then
   stobe-say on >/dev/null 2>&1
   launch "$LAUNCH"
@@ -355,11 +374,11 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   fi
   echo "$(date +%H:%M) $name: run ${run[*]}"
   gd="$O/.gamedone.$name"; rm -f "$gd"; rlf="$O/.relaunch.$name"; rm -f "$rlf"
-  env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" GAME_DONE_FILE="$gd" KAH_ROW="$name" RELAUNCH_FILE="$rlf" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null &
+  env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" GAME_DONE_FILE="$gd" KAH_ROW="$name" RELAUNCH_FILE="$rlf" KAH_FRESH="$FRESH" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null &
   sp=$!; echo "$sp $name $(cat /proc/$sp/winpid 2>/dev/null)" > "$O/step.pid"
   [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ] && { bash "$A/dialog-guard.sh" watch "$sp" "$dgl" >/dev/null 2>&1 </dev/null & dgw=$!; }
   bg=0; while kill -0 "$sp" 2>/dev/null; do [ -f "$gd" ] && { bg=1; break; }; sleep 2; done
-  rm -f "$O/step.pid"; rc=0; [ $bg = 0 ] && { wait "$sp"; rc=$?; }; ROWSEC[$name]=$((SECONDS - rs0))
+  rm -f "$O/step.pid"; rc=0; [ $bg = 0 ] && { wait "$sp"; rc=$?; }; ROWSEC[$name]=$((SECONDS - rs0)); rm -f "$FRESH"
   # the row is over (or its step was killed: rig-runner kill-step / a hand taskkill): nothing of it may keep driving the
   # game. timeout's process group (MSYS/WSL pids), then every process naming the row dir (Windows tree walks miss MSYS forks)
   if [ $bg = 0 ]; then kill -TERM -- "-$sp" 2>/dev/null
