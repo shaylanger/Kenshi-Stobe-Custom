@@ -74,7 +74,7 @@ Run logs: `archive/test-run-2026-10-08-m59-m60.md` (newest), `...-m57-m58.md`, `
     C:\KAH\keep-display-on.bat (desktop copy) in RDP after every reconnect; check `ssh 4080 'powershell -ExecutionPolicy Bypass -File C:\KAH\display-check.ps1'` (LIVE = ok).
   - DONE: `kfp-regress` (no product regression; PT26/28 specs predate accepted poses; side-by-sides
     spec-compare\*.jpg reviewed + shown to Shay; deleted after Shay's spec-video decisions), `animlab-spec` (taste set 71 rows, 0 misses, 6 false
-    alarms -> Misses; spec.py; unarmed spec), `fists` (4 candidates C:\KenshiTestRuns\fists-cand\ +
+    alarms -> Misses; spec.py; unarmed spec), `fists` (4 candidates, now in C:\KenshiTestRuns\corpus\fists\ + corpus\kept\fists-cand_* +
     /root/animlab-work/fists/cand; lab PASS; unarmed spec PASS except shoteiL inferred U6 wind-up 0.05 dm above eye;
     NOT yet coordinator-reviewed; unarmed body game rec spec agents\fists.need-rec.md -> 4080 queue).
 - Waiting on Shay: nothing. Spec videos C:\KenshiTestRuns\spec-videos\ all DECIDED 2026-10-10: keep current swing wrist
