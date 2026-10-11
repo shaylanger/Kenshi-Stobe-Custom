@@ -252,7 +252,7 @@ static float vm_stmax(void) {
 /* S1 (Shay 2026-10-09): the sword edge never faces the camera. kappa = grip constant (hand X -> edge, about the blade),
  * edge_tol = largest allowed cos(edge, wrist->eye). S2: re-seed the elbow pick on entering block / ready. */
 static int   g_vm_edge = 1, g_vm_have_ekap, g_vm_reseed_on = 1, g_vm_rsmode = -1, g_vm_edge_nok;
-static float g_vm_edge_tol = 0.0f, g_vm_ekap, g_vm_edge_pred, g_vm_reseed, g_vm_reseed_dur = 0.25f, g_vm_reseed_tau = 0.05f;
+static float g_vm_edge_tol = 0.0f, g_vm_ekap, g_vm_edge_pred, g_vm_reseed, g_vm_reseed_dur = 0.6f, g_vm_reseed_tau = 0.05f;
 static float g_vm_hroll = 0.0f;   /* option A (Shay decision 2026-10-09): extra sword hand+blade roll about the blade, deg (0 = off) */
 static float g_vm_elb_keep = 1.5f, g_vm_elb_rate = 1750.0f, g_vm_elb_dmax = 24.0f, g_vm_elb_ptau = 0.03f;
 /* wrist look-ahead (PT30): predicted output poses of the next frames + coarse DP over their passing elbows */
