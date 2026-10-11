@@ -31,7 +31,7 @@
 #   --all-pending  every pending-fixes/kfp-*.py|kfp-*.patch, name order (LC_ALL=C); patches already in the base are
 #               detected (their diff reverse-applies) and skipped with status in-base; ones that conflict with the base
 #               (superseded, or applied with no snapshot rev to diff against) are skipped with a warning (fatal with --patches)
-#   --jobs      gate runs in parallel (default 3; each gate's pool already uses every core)
+#   --jobs      gate runs in parallel (default 6, env KFP_JOBS; at 3 the WSL load sat at ~5 of 32 cores, 2026-10-11)
 #   --drop      take-rate drop that counts as a break in the per-patch delta (default 0.05)
 #   --stage-from <run dir>  only stage that run's DLL (after a FAIL the coordinator accepted, e.g. a baseline change)
 #   --stage     stage a --patches/--all-pending run (default only for --combined and --stage-from)
@@ -73,7 +73,7 @@ WS=/mnt/c/KenshiModding; PF=$WS/pending-fixes; LIVE=/root/KenshiFP; PR=/root/kfp
 LABK=$WS/components/KenshiFP/animlab; LABH=$WS/Kenshi-Automation-Harness/tools/animlab
 STAGED=${KFP_STAGED:-/mnt/c/KenshiTestRuns/staged}; QD=${KFP_QUEUE:-/mnt/c/KenshiTestRuns/queue}; R4DIR=${KFP_STAGED_4080:-'C:\KAH\staged'}
 SSH=/mnt/c/Windows/System32/OpenSSH/ssh.exe; SCP=/mnt/c/Windows/System32/OpenSSH/scp.exe
-BASE=live; REVERTS=(); PLIST=""; ALLP=0; JOBS=3; DROP=0.05; STAGE=""; R4080=1; KEEP=0; RUN=""; SFROM=""; COMB=0; EXCL=""
+BASE=live; REVERTS=(); PLIST=""; ALLP=0; JOBS=${KFP_JOBS:-6}; DROP=0.05; STAGE=""; R4080=1; KEEP=0; RUN=""; SFROM=""; COMB=0; EXCL=""
 PERP=${KFP_PER_PATCH:-0}   # 1 = always gate the per-patch trees (old mode); 0 = combined-first (per-patch only on a failure)
 KA=()   # args a combined re-run keeps
 while [ $# -gt 0 ]; do case "$1" in
