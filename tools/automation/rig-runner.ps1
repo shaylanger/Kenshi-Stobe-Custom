@@ -13,7 +13,7 @@ Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 40
   rig-runner.ps1 -SelfTest               check the stuck rule on fixed probe cases (no side effects; run after editing it)
   rig-runner.ps1 -Restart [-Rig X]       deploy an edited rig-runner.ps1: the loop re-spawns itself at its next list boundary
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
-  -Rig 5090b                             lane 5090b = a SECOND Kenshi (instance 2, D:\KenshiInst\2) on the 5090 beside lane 1: queue\5090b\ only,
+  -Rig 5090b|5090c                       lanes 5090b/5090c = a 2nd/3rd Kenshi (instance 2/3, D:\KenshiInst\<n>) on the 5090 beside lane 1: queue\<lane>\ only,
                                          gfx-low, crossbow-guarded, admission GPU free >= 6 GB + RAM free >= 8 GB, own TDR guard; loop in
                                          rig-lane2.ps1 (header). -Ensure/-Start/-Stop/-Status/-Restart/-SelfTest include it. Lane 1 sees and kills only
                                          instance 1 (K1Procs: path not under D:\KenshiInst).
@@ -83,7 +83,7 @@ cause). run-batch.sh checks after every row itself too (<out>\TDR). -Fake: runne
 "epoch|provider|id|message" lines; -SelfTest checks the filter (+ run-batch.sh --selftest).
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
-param([ValidateSet('5090', '4080', '5090b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
+param([ValidateSet('5090', '4080', '5090b', '5090c', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
       [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [string]$Resolve = '', [string]$DryKeyOf = '',
       [int]$HardMin = 5, [switch]$SelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
@@ -126,6 +126,13 @@ function LingerAct([hashtable]$p, [double]$goneMin) {
     if ($p.left -eq '0' -and $goneMin -ge 1) { return 'rows done' }
     if ($goneMin -ge 2) { return 'rows left' }
     $null
+}
+# batch with no batch.pid yet: 'wait' | 'requeue' (no row ran: back into queue\<rig>\, once per 2 h, not a filler copy) | 'fail'.
+# Judged 3 min after the start command, or 90 s into this runner process when an earlier runner issued the start
+# (speed-scout 2026-10-11: a runner restart 1 s after the 4080 start of 90-fists-ini-4080 killed it; 3 idle min, list lost).
+function NeverStartedAct([datetime]$t0, [datetime]$loopStart, [datetime]$now, [bool]$filler, [double]$requeuedAgoH) {
+    if (($now - $t0).TotalMinutes -lt 3 -and -not ($t0 -lt $loopStart -and ($now - $loopStart).TotalSeconds -ge 90)) { return 'wait' }
+    if (-not $filler -and $requeuedAgoH -ge 2) { 'requeue' } else { 'fail' }
 }
 if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cases (no side effects)
     $cases = @(
@@ -171,6 +178,15 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     $rb = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/run-batch.sh --selftest' 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 1)
     $ok = "$rb" -like 'RUNBATCH-SELFTEST PASS*'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) run-batch.sh --selftest (TDR check + relaunch request): $rb"
     foreach ($c in $lg) { $g = [string](LingerAct $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) linger $($c[0]): got '$g' want '$($c[3])'" }
+    # never started (90-fists-ini-4080: runner restarted 1 s after the start command): requeue once, early after a restart
+    $n0 = [datetime]'2026-10-11T14:50:58'
+    $ns = @(@('own start, 2 min, no batch.pid', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(2), $false, 99, 'wait'),
+            @('own start, 3 min = requeue', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $false, 99, 'requeue'),
+            @('start by the previous runner, this one up 60 s', $n0, $n0.AddSeconds(1), $n0.AddSeconds(61), $false, 99, 'wait'),
+            @('start by the previous runner, this one up 90 s', $n0, $n0.AddSeconds(1), $n0.AddSeconds(91), $false, 99, 'requeue'),
+            @('requeued 1 h ago = fail', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $false, 1, 'fail'),
+            @('filler copy = fail (filler\ keeps the original)', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $true, 99, 'fail'))
+    foreach ($c in $ns) { $g = [string](NeverStartedAct $c[1] $c[2] $c[3] $c[4] $c[5]); $ok = $g -eq $c[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) never-started $($c[0]): got '$g' want '$($c[6])'" }
     # 4080 sync covers every helper a synced script names (rg-02 1011-0927: fp-control.sh's fp-yaw-free.awk never synced)
     $sc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --check' 2>&1 | ForEach-Object { "$_" })
     $ok = $LASTEXITCODE -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync helper closure: $(($sc | Select-Object -First 3) -join ' / ')"
@@ -192,7 +208,7 @@ function PidAlive([string]$r) { $f = Join-Path $rd "$r.pid"; if (Test-Path $f) {
 # makes -Ensure skip that rig until -Start (or -Ensure -Force); a loop that sees the flag exits at its next tick.
 function StopFlag([string]$r) { Join-Path $rd "$r.stopped" }
 if ($Stop) {
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b') })) {
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c') })) {
         Set-Content (StopFlag $r) "$(Get-Date -Format s) by $(if ($env:KAH_OWNER) { $env:KAH_OWNER } else { 'coordinator' })"
         if (PidAlive $r) { Stop-Process -Id ([int](Get-Content (Join-Path $rd "$r.pid") -Raw)) -Force; "stopped runner $r (stays stopped: rig-runner.ps1 -Start -Rig $r)" } else { "runner $r not running (marked stopped)" }
         Remove-Item (Join-Path $rd "$r.pid") -ErrorAction SilentlyContinue
@@ -219,7 +235,7 @@ function WriteShared([string]$p, [string]$text, [switch]$Append) {
 if ($Status) {
     # the state line is cross-checked with the runner's current files (2026-10-10: -Status showed "running rg-05 ... 21:17"
     # after the runner had moved on): <rig>.cur names the batch in its game part, <rig>.tail.* the ones still analysing
-    foreach ($r in '5090', '4080', '5090b') {
+    foreach ($r in '5090', '4080', '5090b', '5090c') {
         $st = ReadShared "$rd\$r.state"; $st = if ($st) { $st.Trim() } else { '-' }
         $sf = Get-Item "$rd\$r.state" -ErrorAction SilentlyContinue
         $cur = ReadShared "$rd\$r.cur"; $cl = if ($cur) { @($cur -split "`r?`n") } else { @() }
@@ -240,12 +256,12 @@ if ($Status) {
     exit 0
 }
 if ($Restart) {   # deploy a new rig-runner.ps1 at the next list boundary (never mid-batch): the loop re-spawns itself there
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c') })) { Set-Content (Join-Path $rd "$r.restart") (Get-Date -Format s); "runner $r restarts at its next list boundary$(if (-not (PidAlive $r)) { ' (not running now: use -Start)' })" }
     exit 0
 }
 if ($Start) { $Ensure = $true; $Force = $true }
 if ($Ensure) {
-    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b') })) {
+    foreach ($r in $(if ($Rig) { @($Rig) } else { @('5090', '4080', '5090b', '5090c') })) {
         if (PidAlive $r) { "runner $r running pid=$(Get-Content (Join-Path $rd "$r.pid") -Raw)"; continue }
         if (Test-Path (StopFlag $r)) {
             if (-not $Force) { "runner $r STOPPED since $((Get-Content (StopFlag $r) -Raw).Trim()): not started (rig-runner.ps1 -Start -Rig $r)"; continue }
@@ -263,8 +279,8 @@ if (-not $Resolve -and -not $DryKeyOf) {
     if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
     Set-Content (Join-Path $rd "$Rig.pid") $PID
 }
-# lane 5090b = the second game instance on the 5090 (D:\KenshiInst\2): its own small loop (rig-lane2.ps1 header)
-if ($Rig -eq '5090b') { & "$auto\rig-lane2.ps1" -Fake:$Fake -TickSec ([Math]::Min($TickSec, 30)); exit 0 }
+# lanes 5090b/5090c = the 2nd/3rd game instance on the 5090 (D:\KenshiInst\2|3): their own small loop (rig-lane2.ps1 header)
+if ($Rig -in '5090b', '5090c') { & "$auto\rig-lane2.ps1" -Lane $Rig -Fake:$Fake -TickSec ([Math]::Min($TickSec, 30)); exit 0 }
 
 # ---------------------------------------------------------------- helpers
 $log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"; $gfxF = Join-Path $rd "$Rig.gfx"
@@ -531,8 +547,8 @@ function FillerLists {   # eligible filler lists for this rig, least recently st
 }
 function QueuedLists {   # every list this rig may take, FIFO order (own folder first, then any\, then filler\ if both empty)
     $real = @(RealLists)
-    # lane A prefers filming lists while lane 5090b (second game, rig-lane2.ps1) is up: it takes the "# gfx: low" ones itself
-    if ($Rig -eq '5090' -and $real.Count -gt 1 -and (PidAlive '5090b')) { $real = @(@($real | Where-Object { (Header $_.FullName 'gfx') -ne 'low' }) + @($real | Where-Object { (Header $_.FullName 'gfx') -eq 'low' })) }
+    # lane A prefers filming lists while lane 5090b or 5090c (extra games, rig-lane2.ps1) is up: they take the "# gfx: low" ones
+    if ($Rig -eq '5090' -and $real.Count -gt 1 -and ((PidAlive '5090b') -or (PidAlive '5090c'))) { $real = @(@($real | Where-Object { (Header $_.FullName 'gfx') -ne 'low' }) + @($real | Where-Object { (Header $_.FullName 'gfx') -eq 'low' })) }
     if ($real.Count) { return $real }
     FillerLists
 }
@@ -1172,6 +1188,7 @@ if ($Resolve) {   # rig-runner.ps1 -Rig <rig> -Resolve "KenshiFP <sha8>|latest" 
 }
 
 # ---------------------------------------------------------------- loop
+$script:loopStart = Get-Date
 Log "start pid=$PID fake=$Fake idle>=${IdleMin}m stuck>=${StuckMin}m tick=${TickSec}s"
 if ($Rig -eq '4080' -and -not $Fake) {
     $null = Ssh @('mkdir', 'C:\KAH\runner')
@@ -1240,8 +1257,20 @@ while ($true) {
                 }
             }
             elseif ($p.done -eq '1') { $unreach = $null; ClearAlert; Finish-Batch $c 'DONE'; $condSince = $null; $hits = @{}; continue }
-            elseif ($p.started -eq '0' -and ((Get-Date) - [datetime]$c[4]).TotalMinutes -ge 3) {
-                Alert "batch $($c[5]) never started (no batch.pid 3 min after the start command)"; Finish-Batch $c 'DIED' -Why 'never started (no batch.pid 3 min after the start command)'; continue
+            elseif ($p.started -eq '0' -and ($nsa = NeverStartedAct ([datetime]$c[4]) $script:loopStart (Get-Date) ((Split-Path $c[0] -Leaf) -like '*__filler__*') $(
+                    $rq = Join-Path $rd "$Rig.requeued.$($c[5])"; if (Test-Path $rq) { ((Get-Date) - (Get-Item $rq).LastWriteTime).TotalHours } else { 99 })) -ne 'wait') {
+                # never started = no row ran (NeverStartedAct): requeue it once instead of losing the list
+                $why = "never started (no batch.pid $([int]((Get-Date) - [datetime]$c[4]).TotalSeconds) s after the start command)"
+                $again = $nsa -eq 'requeue'
+                if (-not $again) { Alert "batch $($c[5]) $why" }
+                Finish-Batch $c 'DIED' -Why $why
+                if ($again -and (Test-Path (Join-Path "$qd\failed" $c[5]))) {
+                    Move-Item -LiteralPath (Join-Path "$qd\failed" $c[5]) (Join-Path "$qd\$Rig" $c[5]) -Force; Set-Content $rq (Get-Date -Format s)
+                    Remove-Item (Join-Path "$qd\failed" "$($c[5]).result") -ErrorAction SilentlyContinue
+                    Remove-Item $fastF -ErrorAction SilentlyContinue   # no row ran: not a setup FAIL
+                    Log "REQUEUED $($c[5]) (never started; once per 2 h)"; Note $c[3] "$($c[5]) never started on $Rig ($why): requeued automatically, nothing to do."
+                }
+                continue
             }
             elseif ($p.gamedone -eq '1') {
                 # game part over (Kenshi stopped on the 5090 by --stop): free the rig now, collect the analyses later
