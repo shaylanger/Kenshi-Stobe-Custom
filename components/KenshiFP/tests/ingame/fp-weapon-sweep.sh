@@ -54,7 +54,7 @@ echo "setup ok: bow=${BOWN:-none} list=$LIST catalog=$WCAT"
 # weapon must be creatable, else the whole row stops here with one setup FAIL (a dry run can't see a real factory refusal)
 PSID=$(awk -F'|' -v s="${WSTART:-1}" '$1!~/^(#|$)/{k++; if(k==s){print $1; exit}}' "$LIST")
 if [ -n "$PSID" ] && ! A inv $SH | grep -q "$PSID"; then
-  r=$(A give $SH "$PSID" 1); echo "$r" | grep -q " got 1/" || pf_fail "give probe $PSID (weapon factory): $(echo "$r" | cut -c1-140)"
+  r=$(A give $SH "$PSID" 1); echo "$r" | grep -q " got 1/" || pf_fail "give probe $PSID (weapon factory): $(echo "$r" | cut -c1-400)"
 fi
 # ---- one weapon (subshell: pf_fail ends only this weapon)
 take(){   # k sid name type animcls ammo
@@ -67,7 +67,7 @@ take(){   # k sid name type animcls ammo
   place(){ A teleport $SH $SPOT >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.02 >/dev/null; sleep 1; }
   # preflight: weapon in hand
   if ! A inv $SH | grep -qF "\"$nm\""; then
-    r=$(A give $SH "$sid" 1); echo "$r" | grep -q " got 1/" || pf_fail "give $sid: $(echo "$r" | cut -c1-140)"
+    r=$(A give $SH "$sid" 1); echo "$r" | grep -q " got 1/" || pf_fail "give $sid: $(echo "$r" | cut -c1-400)"
   fi
   if [ "$ty" = crossbow ]; then
     [ -n "$am" ] && { A give $SH "$am" 10 | grep -q " got " || pf_fail "give ammo $am"; }
