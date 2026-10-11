@@ -6,6 +6,8 @@
  *   --no-rec-sets  ignore the recording's `# set` lines
  *   --hinge-capture  E5 hinge captured from the replayed frames (default: pre-captured 0,-1,0 like the game rig)
  *   --up-roll  old arm bone roll model (local Y nearest camera up); default: local Y = -(native bend normal) = the game rig
+ *   --posedump <out> [--pd-frames a,b,c-d]  per-bone pose (fp_posedump format, kfp-posedump writer vm_pd_write) of the
+ *            replayed skeleton at those records (default: every record), written right after vm_frame like the game
  *   --apply-all  apply on every frame (default: only where the recording's napply counter shows the game applied)
  *   rec.txt  an `fp_vm rec dump` file from the game (per camera frame: inputs + the measured skeleton)
  *   out.txt  the replay's own `fp_vm rec dump` (same format, written by the plugin's vm_rec_dump), so every metric
@@ -318,10 +320,23 @@ static int do_set(const char *kv)
     return rc == KAH_OK;
 }
 
+/* --pd-frames "a,b,c-d" (NULL = every record) */
+static int pd_want(const char *l, int i)
+{
+    if (!l) return 1;
+    for (const char *p = l; *p; ) { int a, b; char *e;
+        a = (int)strtol(p, &e, 10); if (e == p) return 0; b = a; p = e;
+        if (*p == '-') { b = (int)strtol(p + 1, &e, 10); p = e; }
+        if (i >= a && i <= b) return 1;
+        if (*p == ',') p++; else break; }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3) { fprintf(stderr, "usage: kfpvm_replay <rec.txt> <out.txt> [--calib L1R,L2R,L1L,L2L,K] [--set k=v]... [--set-at frame:k=v]... [--quiet] [--abs-world] [--bw-lag] [--up-roll]\n"); return 2; }
     const char *sets_at[256], *cl_set[256], *tables = NULL; int nsa = 0, ncl_set = 0;
+    const char *pd_out = NULL, *pd_frames = NULL; FILE *pdf = NULL;   /* --posedump (kfp-posedump) */
     for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "--abs-world")) g_abs_world = 1;
     if (load_rec(argv[1]) < 2) { fprintf(stderr, "kfpvm_replay: no frames in %s\n", argv[1]); return 1; }
     /* plugin wiring */
@@ -346,6 +361,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[a], "--fist") && a + 1 < argc) g_fist_anim = argv[++a];
         else if (!strcmp(argv[a], "--abs-world")) ;
         else if (!strcmp(argv[a], "--set") && a + 1 < argc) { if (ncl_set < 256) cl_set[ncl_set++] = argv[++a]; }
+        else if (!strcmp(argv[a], "--posedump") && a + 1 < argc) pd_out = argv[++a];
+        else if (!strcmp(argv[a], "--pd-frames") && a + 1 < argc) pd_frames = argv[++a];
         else if (!strcmp(argv[a], "--tables") && a + 1 < argc) tables = argv[++a];   /* live tables file (fp_tables format) */
         else if (!strcmp(argv[a], "--set-at") && a + 1 < argc) { if (nsa < 256) sets_at[nsa++] = argv[++a]; }
         else if (!strcmp(argv[a], "--calib") && a + 1 < argc) {
@@ -378,6 +395,14 @@ int main(int argc, char **argv)
     if (!g_hcap_live && !g_up_roll) for (int s = 0; s < 2; s++) { g_vm_hcap_n[s] = VM_HCAP;
         for (int k = 0; k < 2; k++) g_vm_hl[s][k] = vm_v(0, -(float)VM_HCAP, 0); }
 #endif
+    if (pd_out) {
+#ifdef AL_HAVE_POSEDUMP
+        pdf = fopen(pd_out, "w"); if (!pdf) { fprintf(stderr, "%s: cannot write %s\n", argv[0], pd_out); return 2; }
+        vm_pd_header(pdf, "lab");
+#else
+        fprintf(stderr, "%s: --posedump needs a client source with kfp-posedump (vm_pd_write)\n", argv[0]); return 2;
+#endif
+    }
     g_vm_rec = calloc(VM_RECN, sizeof(VmRec)); g_vm_rn = 0; g_al_clock = 0; QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1;
     unsigned shots = 0; int n = RN < VM_RECN ? RN : VM_RECN;
     for (int i = 0; i < n; i++) {
@@ -404,6 +429,9 @@ int main(int argc, char **argv)
         g_cls_fill[0] = cf[i];
         *(void **)(g_pc + CHAR_WEAPON_IN_HANDS) = r->wih ? (cf[i] ? (void *)&g_wep_ranged : (void *)&g_wep_melee) : NULL;
         vm_frame(g_pc, 0);
+#ifdef AL_HAVE_POSEDUMP
+        if (pdf && pd_want(pd_frames, i)) vm_pd_write(pdf, g_pc, g_vm_rn - 1);
+#endif
         g_nat = i + 1 < RN ? i + 1 : i;
         /* the game skips the animation update (no Skeleton::setAnimationState, so no apply) on some frames: napply
          * (re-maps inside full-weight applies) then does not increment and the skeleton keeps the last pose. Skip
@@ -415,6 +443,7 @@ int main(int argc, char **argv)
         g_in_apply = 1; hooked_vm_setanim(g_b, NULL, 1.0f, NULL); g_in_apply = 0;
         g_napp_rec = -1;
     }
+    if (pdf) { fprintf(pdf, "# end done\n"); fclose(pdf); }
     int w = vm_rec_dump(argv[2]);
     printf("frames %d written %d skipped_applies %d native_applies %d rec_sets %d\n", n, w, g_skipped, g_nat_used, g_nrsets);
     return w > 0 ? 0 : 1;
