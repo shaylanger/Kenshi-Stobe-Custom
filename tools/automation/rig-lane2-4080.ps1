@@ -65,13 +65,13 @@ function LaneGfx([string[]]$lines) { $g = @($lines | Where-Object { $_ -match '^
 function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the lane may run this list, else why not ($film: film mode)
     if (-not $film -and (LaneGfx $lines) -ne 'low') { return 'not "# gfx: low" (filming/full-gfx lists stay on lane 4080)' }
     if ($lines -match '^\s*#\s*rig:\s*5090') { return '"# rig: 5090"' }
-    if (IsoHeader $lines) { return '"# tdr-isolate: yes" (crossbow/turret TDR isolation: lane 4080 only)' }
+    if ((IsoHeader $lines) -and -not (XbPar)) { return '"# tdr-isolate: yes" (crossbow/turret TDR isolation: lane 4080 only)' }
     $rows = LaneRows $lines
     if (-not $rows.Count) { return 'no rows' }
     foreach ($r in $rows) {
         $id = (@($r -split '\|'))[0].Trim()
         if ((@($r -split '\|'))[-1] -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (no Stobe on the 4080)" }
-        $x = XbowRow $r; if ($x) { return "crossbow guard: row $id names crossbow/ranged/turret work ($x)" }
+        $x = XbowRow $r; if ($x -and -not (XbPar)) { return "crossbow guard: row $id names crossbow/ranged/turret work ($x)" }
     }
     $null
 }
@@ -83,11 +83,15 @@ function FireRow([string]$r) {
 }
 # "# tdr-isolate: yes" (xbow-escalate 2026-10-11): a list whose rows fire/reload the crossbow or a turret through scripts the
 # FireRx words miss (fp-manual-ranged/hits/anatomy, fp-controls K, fp-turret-rows T3): lane 4080 only, lane 4080b holds.
+# Crossbow in parallel on both 4080 lanes (Shay 2026-10-11 17:00: "if we crash then we just run one at a time"): while
+# C:\KenshiTestRunsunner 80b.xbow-parallel exists, lane 4080b takes crossbow/tdr-isolate lists and does not hold
+# for lane 4080's crossbow list; the TDR guard still stops the lane, and the coordinator deletes the file after a TDR.
+function XbPar { Test-Path -LiteralPath (Join-Path $runs 'runner 80b.xbow-parallel') }
 function IsoHeader([string[]]$lines) { [bool](@($lines | Where-Object { $_ -match '^\s*#\s*tdr-isolate:\s*yes' }).Count) }
 function IsoList([string[]]$lines) { if (IsoHeader $lines) { return $true }; foreach ($l in LaneRows $lines) { if (FireRow $l) { return $true } }; $false }
 function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr, [bool]$xbow1) {   # $null = may launch instance 2
     if ($tdr) { return 'TDR alert present' }
-    if ($xbow1) { return 'lane 4080 runs a crossbow list (TDR isolation)' }
+    if ($xbow1 -and -not (XbPar)) { return 'lane 4080 runs a crossbow list (TDR isolation)' }
     if ($gpuFreeMB -lt $MinGpuMB) { return "4080 GPU memory free $gpuFreeMB MB < $MinGpuMB" }
     if ($ramFreeMB -lt $MinRamMB) { return "4080 RAM free $ramFreeMB MB < $MinRamMB" }
     $null
