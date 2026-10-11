@@ -56,13 +56,20 @@ def score_rec(rec, stroke, tools, vmcheck=None, gate=True):
     if len(sw) < 8:
         d['miss'] = 'no stroke-%d swing frames (%d)' % (stroke, len(sw))
         return 1000.0, d
-    # S1: edge toward the camera
-    ed = [(P[i]['edge'], i) for i in solver]
+    # S1 (STATUS.md R7, Shay): the edge never faces the camera AT REST (ready/block/swing->block; spec.py restedge, threshold
+    # REST_EDGE_P05 = 0). Swing frames are NOT S1: the stroke edge is E1 (arc term below), the follow-through may leave the
+    # line (Shay). The 2026-10-11 runs scored swing frames here and chased a non-rule (all their S1 frames were swing u .5-.9).
+    rest_states = ('ready', 'block', 'swing->block')
+    ed = [(P[i]['edge'], i) for i in solver if P[i]['state'] in rest_states]
     nsw = max(1, len(M.swings(F, P)))   # per-swing (x2) so a 3-cycle confirm compares with a 1-cycle candidate
     d['swings'] = nsw
-    s1 = sum(max(0.0, 0.02 - e) for e, _ in ed) * 2.0 / nsw
-    d['edge_min'] = '%.3f@%d:%s' % (min(ed)[0], min(ed)[1], P[min(ed)[1]]['state'])
-    d['edge_bad'] = sum(1 for e, _ in ed if e < 0.02)
+    s1 = sum(max(0.0, 0.0 - e) for e, _ in ed) * 2.0 / nsw
+    if ed:
+        d['edge_min'] = '%.3f@%d:%s' % (min(ed)[0], min(ed)[1], P[min(ed)[1]]['state'])
+    d['edge_bad'] = sum(1 for e, _ in ed if e < 0.0)
+    d['rest_n'] = len(ed)
+    swe = [P[i]['edge'] for i in sw]   # diagnostic only (not scored)
+    d['swing_edge_min'] = round(min(swe), 3) if swe else None
     # PT30-FLIP: elbow one-frame jumps (scaled to 1/30 s)
     def est(i):
         if i <= 0 or i >= len(P) or max(F[i]['dt'], F[i - 1]['dt']) > 0.07:
