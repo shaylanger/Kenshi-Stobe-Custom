@@ -26,7 +26,7 @@ cleanup() { A fp_melee force_chase off >/dev/null; A fp_melee passive off >/dev/
             A pin "$TG" off >/dev/null; [ -n "$WEP" ] && A unequip "$FI" "$WEP" >/dev/null
             A protect "$FI" off >/dev/null; A protect "$TG" off >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 # click: one injected LMB edge (press 0.15 s, release)
 click() { inp 0 1; sleep 0.15; inp 0 0; }
 # in_fight: the controlled fighter's native CombatClass is active with a target

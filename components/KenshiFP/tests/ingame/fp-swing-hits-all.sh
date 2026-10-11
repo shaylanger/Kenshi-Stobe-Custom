@@ -41,7 +41,7 @@ cleanup() { A fp_melee passive off >/dev/null; A fp_combat input 0 0 0 >/dev/nul
   # the spawned neutral is left knocked out, never unloaded (4080 b41: unload during a fight crashed the game)
   [ -n "$NE" ] && A ko "$NE" 3600 >/dev/null
   A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 # setini <key> <value>: replace/append one ini line in place, then wait for the hot reload (~0.5 s)
 setini() { local t; t=$(grep -v -E "^$1=" "$INI"; echo "$1=$2"); printf '%s\n' "$t" > "$INI"; sleep 1.2; }
 click() { inp 0 1; sleep 0.15; inp 0 0; }

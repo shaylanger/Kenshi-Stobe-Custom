@@ -19,7 +19,7 @@ now_s() { date +%s; }
 waitfor() { local end=$(( $(now_s)+$1 )); while [ "$(now_s)" -lt $end ]; do [ "$(cs "$2")" = "$3" ] && return 0; sleep 0.2; done; return 1; }
 PF_ROW=XBDEXP; . "$(dirname "$0")/take-preflight.sh"
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null; A fp_combat drawexp 0 >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 EV=""; GOOD=""; REPRO=0
 arm() { A select "$SH" >/dev/null; A fp_mode on >/dev/null
   for _ in $(seq 1 10); do sleep 0.5; A fp_state | grep -q 'fp_mode=1' && break; done

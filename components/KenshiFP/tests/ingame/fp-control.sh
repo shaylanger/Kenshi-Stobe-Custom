@@ -231,7 +231,7 @@ cleanup() { A fp_move none >/dev/null; A fp_camera distance "${DIST0:-0}" >/dev/
             for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
             [ -n "$BUILT" ] && A unbuild Storm 2000 >/dev/null   # the C05-STAIRS house
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 
 # ---- setup ----
 A status | grep -q phase=world || setup_fail "not in world"

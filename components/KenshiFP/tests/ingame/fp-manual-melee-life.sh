@@ -24,7 +24,7 @@ cleanup() { A fp_melee passive off >/dev/null; A fp_combat input 0 0 0 >/dev/nul
             A pin "$TG" off >/dev/null; [ -n "$WEP" ] && A unequip "$FI" "$WEP" >/dev/null
             A protect "$FI" off >/dev/null; A protect "$TG" off >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 in_fight() { local s; s=$(A fp_melee state); echo "$s" | grep -q 'active=1' && ! echo "$s" | grep -q 'target_h=#0/'; }
 # melee weapon: kah-fpxbow's fighter wields only a crossbow; the katana sits in the main inventory, so without an
 # explicit equip every "manual" swing was unarmed martial arts (4080 batch 4: no attack XP, attack/strength rows flat).

@@ -439,7 +439,7 @@ cleanup() { local rc=$?; [ -n "$FINISHED" ] || [ "${1:-}" = game-done ] || finis
   A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
   [ -n "$FP0" ] && A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null
   [ "$ISO_SET" = 1 ] && A input_isolation off >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 
 # ---- setup (bounded checks) ----
 A status | grep -q phase=world || setup_fail "not in world"

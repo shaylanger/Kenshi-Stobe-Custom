@@ -38,7 +38,7 @@ HOLD0=$(A combatmode "$SH" | fld hold)
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             [ -n "$HOLD0" ] && A combatmode "$SH" hold "$([ "$HOLD0" = 1 ] && echo on || echo off)" >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 
 wilson() { awk -v k="$1" -v n="$2" 'BEGIN{if(n==0){print "n/a";exit};p=k/n;z=1.96;d=1+z*z/n;c=(p+z*z/(2*n))/d;h=z*sqrt(p*(1-p)/n+z*z/(4*n*n))/d;printf "%.2f[%.2f,%.2f]",p,c-h,c+h}'; }
 dmg() { awk -v a="$1" -v b="$2" 'BEGIN{n=split(a,x," ");split(b,y," ");s=0;for(i=1;i<=n;i++)s+=x[i]-y[i];printf "%.1f",s}'; }

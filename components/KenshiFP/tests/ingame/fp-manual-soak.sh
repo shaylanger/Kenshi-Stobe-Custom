@@ -44,7 +44,7 @@ cleanup() { touch "$OUT/.stop"; [ -n "$SPID" ] && wait "$SPID" 2>/dev/null
             [ -n "$WEP" ] && A unequip "$FI" "$WEP" >/dev/null; [ -n "$BOW" ] && A equip "$FI" "$BOW" >/dev/null
             for c in "$SH" "$FI" "$TG"; do A protect "$c" off >/dev/null; done
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 
 aim_at() { local e; read -r sx sy sz <<<"$(pos "$SH")"; read -r tx ty tz <<<"$(pos "$1")"
   local cam cx cz; cam=$(A fp_camera state); e=$(fld camera_y <<<"$cam"); cx=$(fld camera_x <<<"$cam"); cz=$(fld camera_z <<<"$cam")

@@ -154,7 +154,7 @@ cleanup() { A fp_move none >/dev/null; A fp_keys reset >/dev/null; A fp_keys swa
             for c in "$SH" "$MT"; do A protect "$c" off >/dev/null; done
             A fp_camera distance "${DIST0:-0}" >/dev/null; A speed 1 >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 
 # ---- setup ----
 A status | grep -q phase=world || setup_fail "not in world"

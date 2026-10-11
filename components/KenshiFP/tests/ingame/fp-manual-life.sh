@@ -28,7 +28,7 @@ setup_fail() { local r; for r in $SETUP_ROWS; do echo "RESULT $r FAIL setup: $1 
 FP0=$(A fp_state | fld fp_mode)
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null; A speed 1 >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
-trap cleanup EXIT
+trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
 # take: select + FP + take control of the shooter, camera at the target
 take() { A select "$SH" >/dev/null; A fp_mode on >/dev/null; sleep 1; A fp_control take >/dev/null; look_tg 0; }
 # look_tg <pitch offset>: camera yaw AND pitch from the eye to the target's chest (feet y + 12), from geometry, plus
