@@ -6,6 +6,7 @@
 #   batch-tail.txt  the last 200 lines of the lane's batch.log
 #   procs.txt       Kenshi instances (path, start, memory), capture/encode tools (ffmpeg, wgccap), python, vmmem, nvidia-smi
 #                   (full + compute apps), the runner state/running lists
+#   timeline.tsv    the last 80 lines of gpulog\timeline.tsv (processes per lane, WSL GPU jobs, batch rows, TDRs)
 #   livekernel.txt  C:\Windows\LiveKernelReports files newer than <Since> - 10 min (WATCHDOG dumps: name, time, size; readable
 #                   ones only, no copy of the dump)
 # Prints "TDR-EVIDENCE <dir> files=<n>". Never stops or changes anything.
@@ -30,6 +31,9 @@ if ($g.Count) {
             [datetime]::TryParseExact($ts, 'yyyy/MM/dd HH:mm:ss.fff', $null, 0, [ref]$d) -and $d -ge $cut } }
     @($hdr) + @($rows) | Set-Content (Join-Path $Out 'gpulog.csv')
 } else { 'no gpulog csv for this rig (gpulog-ensure.ps1 not running?)' | Set-Content (Join-Path $Out 'gpulog.csv') }
+# timeline: the last 80 lines of gpulog\timeline.tsv (process start/exit per lane, WSL GPU jobs, batch launch/row/stop, TDRs)
+$tlp = 'C:\KenshiTestRuns\gpulog\timeline.tsv'
+if (Test-Path $tlp) { try { Get-Content $tlp -Tail 80 -ErrorAction Stop | Set-Content (Join-Path $Out 'timeline.tsv') } catch { "timeline read failed: $($_.Exception.Message)" | Set-Content (Join-Path $Out 'timeline.tsv') } }
 
 # events
 $ev = Get-WinEvent -FilterHashtable @{ LogName = 'System'; StartTime = $now.AddMinutes(-30) } -ErrorAction SilentlyContinue |

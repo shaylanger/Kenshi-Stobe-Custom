@@ -89,6 +89,14 @@ lane_after() { local sig=$1 rr=$2 rrow=$3 lrf=$4 lsf=$5 prev=""
   if [ -n "$rr" ]; then echo "row $rrow asked: $rr" > "$lrf"; echo "relaunch request kept for the next batch on this lane: row $rrow: $rr"
   elif [ -n "$sig" ] && [ "$sig" = "$prev" ]; then echo "2 batches in a row failed every row on setup: $sig" > "$lrf"; echo "2nd batch in a row with every row FAIL setup ($sig): the next batch on this lane relaunches"; fi
   if [ -n "$sig" ]; then echo "$sig" > "$lsf"; else rm -f "$lsf"; fi; }
+# tl <event> <detail>: one line in the shared GPU/process timeline (gpulog	imeline.tsv: time rig lane event detail; read
+# next to the gpulog csv when a TDR hits; speed-scout 2026-10-11). KAH_TIMELINE overrides the file, "-" = off.
+# timeline time = the 5090 clock on every rig (Windows Central, DST off = UTC-6; WSL runs CDT, the 4080 Pacific)
+tlts() { date -u -d '-6 hours' '+%F %T'; }
+tl() { local f="${KAH_TIMELINE:-$CR/KenshiTestRuns/gpulog/timeline.tsv}"; [ "$f" = - ] && return 0
+  printf '%s	%s	%s	%s	%s
+' "$(tlts)" "${RIG:-5090}" "i${KAH_INSTANCE:-1}" "$1" "$(printf '%s batch=%s' "$2" "${O##*/}" | tr '	
+' '   ' | cut -c1-200)" >> "$f" 2>/dev/null; return 0; }
 if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check + relaunch request on fixed cases
   st_bad=0; st_n=0; tf=$(mktemp); rq=$(mktemp)
   st() { st_n=$((st_n + 1)); if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2' want '$3'"; st_bad=$((st_bad + 1)); fi; }
@@ -105,6 +113,8 @@ if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check
   printf '' > "$tf"; tdr_check 0; st "check: empty log = no hit" "$?" "0"
   TDR_FAKE=/nonexistent/tdr; tdr_check 0; st "check: unreadable fake log = no hit (no false stop)" "$?" "0"
   unset TDR_FAKE
+  st_rig=${RIG-}; KAH_TIMELINE=$tf O=/x/b-1 RIG=4080 KAH_INSTANCE=2; : > "$tf"; tl row "R01	x"; st "timeline: one 5-field line, tab in the detail flattened" "$(awk -F'	' '{print NF, $2, $3, $4, $5}' "$tf")" "5 4080 i2 row R01 x batch=b-1"
+  KAH_TIMELINE=- tl row x; st "timeline off (-)" "$?" "0"; unset KAH_TIMELINE KAH_INSTANCE; RIG=$st_rig; O=
   : > "$rq"; st "relaunch_req: empty file = none" "$(relaunch_req "$rq")" ""
   st "relaunch_req: missing file = none" "$(relaunch_req /nonexistent/rq)" ""
   printf 'fp_combat on refused after 7 tries (native_ready=0 fault=4; latched)\r\nsecond\n' > "$rq"
@@ -169,7 +179,7 @@ ctl() { timeout 420 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CT
 # kill the stuck proxy, then wait for the world
 HLOG=$KD/mods/AutomationHarness/harness.log
 launch() {
-  local t0 i lp; t0=$(date +%s); rm -f "$O/.noload"
+  local t0 i lp; t0=$(date +%s); rm -f "$O/.noload"; tl launch "$1"
   ctl launch -Save "$1" > "$O/launch.out" 2>&1 &
   lp=$!
   for i in $(seq 1 140); do
@@ -214,7 +224,7 @@ kenshi_pids() {
 kenshi_up() { [ -n "$(kenshi_pids)" ]; }
 relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = auto-home); 1 = it didn't come back
   local s="$1"; case "$s" in home|-) s=auto-home ;; esac
-  recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"
+  recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"; tl relaunch "$s: $2"
   ctl stop >/dev/null 2>&1; stobe-say on >/dev/null 2>&1
   launch "$s" | tail -1; world 900
 }
@@ -232,6 +242,7 @@ tdr_guard() {  # tdr_guard <row|launch>: 1 = GPU driver reset since the last che
   local now; now=$(date +%s); tdr_check "$((TDR_SINCE - 5))" && { TDR_SINCE=$now; return 0; }
   local msg="TDR (GPU driver reset) on rig ${RIG:-5090} at/after $1 of $L: $TDR_HIT"
   say "BATCH ABORTED $(date '+%F %H:%M'): $msg (rest of the list not run, game stopped)"
+  tl tdr "$1: $TDR_HIT"
   printf '%s\nrow=%s\nlist=%s\nout=%s\ntime=%s\n' "$msg" "$1" "$L" "$O" "$(date '+%F %H:%M:%S')" > "$O/TDR"
   PRE=TDR
   tdr_evidence   # before anything is stopped (m103: Shay wants every crash diagnosable)
@@ -471,7 +482,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
       trap 'raid_guard_stop; exit 0' TERM; raid_guard_start; while :; do sleep 5 & wait $!; done )       >/dev/null 2>>"$O/$name.raids" </dev/null &
     rg=$!
   fi
-  echo "$(date +%H:%M) $name: run ${run[*]}"
+  echo "$(date +%H:%M) $name: run ${run[*]}"; tl row "$name"
   gd="$O/.gamedone.$name"; rm -f "$gd"; rlf="$O/.relaunch.$name"; rm -f "$rlf"
   env PLAYER="$player" MATE="$mate" RESULT_LOG="$out" GAME_DONE_FILE="$gd" KAH_ROW="$name" RELAUNCH_FILE="$rlf" KAH_FRESH="$FRESH" "${envs[@]}" timeout "$to" "${run[@]}" >"$out" 2>&1 </dev/null &
   sp=$!; echo "$sp $name $(cat /proc/$sp/winpid 2>/dev/null)" > "$O/step.pid"
@@ -501,7 +512,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
 done 3<"$L"
 [ -n "$PRE" ] && say "NOTE $([ "$PRE" = TDR ] && echo 'TDR stop' || echo preempted): not run: ${NOTRUN[*]}"
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
-[ "$STOP" = 1 ] && if kenshi_up; then ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
+[ "$STOP" = 1 ] && if kenshi_up; then tl stop "end of batch"; ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
 # LANE RELAUNCH END: before GAMEDONE (the runner starts the next list on it): keep the last row's request / 2nd identical
 # all-setup-FAIL batch -> relaunch-lane.<lane> (rows still analysing in the background passed their game part: not setup)
 lsig=""; [ ${#PEND[@]} -eq 0 ] && lsig=$(setup_sig "$S")

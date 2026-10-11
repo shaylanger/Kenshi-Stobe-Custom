@@ -6,6 +6,7 @@
 #         has no auto-logon, no admin needed) and starts it now through a kept scheduled task KAH-gpulog (/it: runs in
 #         Shay's desktop session, survives the ssh session; an ssh-started process dies with the session).
 # Prints one line per rig: GPULOG <rig> RUNNING pid=<n> file=<csv> age=<s>s | STARTED ... | FAILED <why>
+# 5090 also: DXGWATCH RUNNING|STARTED (dxgwatch.sh: WSL /dev/dxg holders -> gpulog\timeline.tsv).
 param([ValidateSet('5090', '4080', 'both')][string]$Rig = 'both', [switch]$Status)
 $auto = $PSScriptRoot
 $src = Join-Path $auto 'gpulog.ps1'
@@ -42,5 +43,10 @@ function Check4080 {
     if ($w[2] -eq 'True') { "GPULOG 4080 STARTED pid=$($w[1]) (Startup folder + task KAH-gpulog)" } else { "GPULOG 4080 FAILED: not running after start ($r / $s)" }
 }
 
-if ($Rig -in '5090', 'both') { Check5090 }
+if ($Rig -in '5090', 'both') {
+    Check5090
+    # WSL GPU jobs (/dev/dxg holders) -> gpulog\timeline.tsv (dxgwatch.sh, one instance)
+    $a = if ($Status) { 'status' } else { 'start' }
+    (& wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/dxgwatch.sh $a 2>&1 | Select-Object -Last 1) -replace '\x00', ''
+}
 if ($Rig -in '4080', 'both') { Check4080 }
