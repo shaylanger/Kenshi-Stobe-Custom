@@ -85,11 +85,11 @@ static float g_vm_swk_u[VM_SWK + 2] = { 0.0f, 0.28f, 0.38f, 0.47f, 0.58f, 0.78f,
 static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
     {   /* 1 backhand: wind-up top-left, sweep across to the bottom right; refit 3: blade sweeps flat right-down in view
          * (strike/follow mf.z <= 0.6, was 0.95 = a stub pointing into the screen), no edge flip in the recovery */
-        VP(-1.054f, -0.616f, 4.580f, -0.225f, 1.220f, 0.519f, -0.261f, -0.379f, 0.999f),
-        VP(-1.513f, -0.171f, 4.802f, 0.033f, 1.064f, 0.621f, 0.482f, -0.490f, 0.887f),
-        VP(-0.422f, -0.384f, 5.308f, 0.632f, 0.448f, 0.663f, 0.642f, -0.989f, 0.231f),
-        VP(1.969f, -2.201f, 5.628f, 0.979f, 0.070f, 0.528f, -0.104f, -1.101f, -0.247f),
-        VP(2.386f, -1.360f, 4.052f, 0.925f, -0.070f, 0.574f, 0.090f, -0.846f, -0.243f) },
+        VP(-0.906f, -0.680f, 4.724f, -0.193f, 1.187f, 0.503f, -0.324f, 0.267f, 1.316f),
+        VP(-1.287f, -0.228f, 4.956f, -0.030f, 1.266f, 0.718f, 0.227f, -0.649f, 1.294f),
+        VP(-0.451f, -0.419f, 5.291f, 0.138f, 0.732f, 0.681f, 0.223f, 1.297f, 1.837f),
+        VP(1.966f, -2.036f, 5.947f, 0.940f, 0.384f, 0.768f, 0.196f, -0.590f, -0.388f),
+        VP(2.162f, -1.426f, 4.052f, 0.925f, -0.070f, 0.574f, 0.003f, -0.392f, -0.073f) },
     {   /* 2 overhead: blade raised over the head, chops down right of the eye line with the blade tilted (length stays in view, flat keeps facing the camera: no edge-on roll, no wind-up snap; E6 review) */
         VP(1.362f, -0.705f, 3.931f, -0.308f, 0.951f, -0.008f, -0.434f, -0.307f, 0.847f),
         VP(1.400f, -0.300f, 4.600f, -0.339f, 0.911f, 0.233f, -0.452f, -0.482f, 0.751f),   /* refit 3: strike top lower (blade in view) */
@@ -105,6 +105,7 @@ static VmPose g_vm_swk_alt[VM_NSTROKE - 1][VM_SWK] = {
 static unsigned char g_vm_band_hidden;   /* Z1: set by fp_head_visibility (band hide active), recorded per frame */
 static VmPose *g_vm_swkp = g_vm_swk;   /* keys of the current swing's stroke */
 static int g_vm_strokes = 0x1, g_vm_stroke_force = -1, g_vm_stroke = 0, g_vm_stroke_next = 0;
+static float g_vm_swk_ul[VM_NSTROKE] = { 0.0f, 0.85f, 0.0f, 0.0f };   /* per-stroke last-key time (0 = g_vm_swk_u): stroke 1 turns to the ready face late (E6 blade seen) */
 static VmPose *vm_stroke_keys(int n) { return n <= 0 || n >= VM_NSTROKE ? g_vm_swk : g_vm_swk_alt[n - 1]; }
 static int vm_stroke_pick(void)
 {
@@ -484,7 +485,10 @@ static Vec3 vm_cr(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, float t0, float t1, float 
 static VmPose vm_swing_at(VmPose start, VmPose end, float u)
 {
     VmPose k[VM_SWK + 2]; k[0] = start; for (int i = 0; i < VM_SWK; i++) k[i+1] = vm_pose_norm(g_vm_swkp[i]); k[VM_SWK+1] = end;
-    const float *t = g_vm_swk_u; int n = VM_SWK + 2;
+    float tt_[VM_SWK + 2]; const float *t = g_vm_swk_u; int n = VM_SWK + 2;
+    if (g_vm_stroke >= 0 && g_vm_stroke < VM_NSTROKE && g_vm_swk_ul[g_vm_stroke] > 0.0f) {   /* per-stroke last-key time */
+        for (int j = 0; j < n; j++) tt_[j] = g_vm_swk_u[j];
+        tt_[VM_SWK] = fmaxf(tt_[VM_SWK - 1] + 0.02f, fminf(0.97f, g_vm_swk_ul[g_vm_stroke])); t = tt_; }
     if (u <= 0.0f) return vm_pose_norm(start);
     if (u >= 1.0f) return vm_pose_norm(end);
     int i = 0; while (i < n - 2 && u > t[i+1]) i++;
@@ -2158,6 +2162,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "elbslow")) { if (x >= 0 && x <= 2) g_vm_elb_slow = x; return 1; }
     else if (!strcmp(k, "elbsmall")) { if (x >= 0 && x <= 30) g_vm_elb_small = x; return 1; }
     else if (!strcmp(k, "elbhyst")) { if (x >= 0 && x <= 1) g_vm_elb_hyst = x; return 1; }
+    else if (!strncmp(k, "swul", 4) && k[4] >= '0' && k[4] < '0' + VM_NSTROKE && !k[5]) { if (x >= 0.0f && x < 0.98f) g_vm_swk_ul[k[4] - '0'] = x; return 1; }
     else if (!strcmp(k, "nearclip")) { if (x >= 0 && x <= 10) g_vm_nc = x; return 1; }
     else if (!strcmp(k, "l1fix")) { g_vm_l1fix = x != 0; return 1; }
     else if (!strcmp(k, "fptol")) { g_vm_fptol = x != 0; return 1; }
