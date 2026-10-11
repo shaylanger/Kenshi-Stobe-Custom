@@ -55,7 +55,7 @@ SPAWN=""
 cleanup() { A fp_combat input 0 0 0 >/dev/null; A fp_combat off >/dev/null; A fp_combat physical >/dev/null
             [ -n "$SK0" ] && A setstat "$SH" crossbows "$SK0" >/dev/null; [ -n "$PE0" ] && A setstat "$SH" perception "$PE0" >/dev/null
             [ -n "$BLK0" ] && A combatmode "$BL" block "$([ "$BLK0" = 1 ] && echo on || echo off)" >/dev/null
-            [ -n "$SPAWN" ] && { A pin "$SPAWN" off >/dev/null; A ko "$SPAWN" 600 >/dev/null; }
+            [ -n "$SPAWN" ] && { A steady "$SPAWN" off >/dev/null; A pin "$SPAWN" off >/dev/null; A ko "$SPAWN" 600 >/dev/null; }
             A pin "$TG" off >/dev/null; A pin "$BL" off >/dev/null; A protect "$TG" off >/dev/null; A protect "$BL" off >/dev/null
             A fp_mode "$([ "$FP0" = 1 ] && echo on || echo off)" >/dev/null; }
 trap cleanup EXIT; trap "exit 143" TERM INT HUP   # a killed row (rig-runner kill-step, timeout) still runs cleanup: neutral fp_combat input
@@ -266,6 +266,10 @@ else
   # reactions): impact head 13.5-16.7 vs 18.5 upright on 9 of 14 shots, not_upright=6 -> pose_unstable SETUP FAIL on both
   # rigs. Passive combat mode for the row (as R08 / XBMESH) and no shot while it is not upright (that try is retaken)
   A combatmode "$SPAWN" passive on >/dev/null
+  # xbf-r11d (5090): still disturbed=10 not_upright=18 aimed_part 0/4 with passive+pin+protect (hit reactions / combat
+  # stance between aim and impact): harness `steady ... on nocombat` (f81f565) skips its stumbles and ends its combat
+  # mode every frame; the hit itself (damage, part) is untouched. Its counts go into the RESULT line.
+  STEADY=$(A steady "$SPAWN" on nocombat)
   A protect "$SPAWN" on >/dev/null; A pin "$SPAWN" at "$SH" dist 30 face "$SH" >/dev/null; A pin "$TG" at "$SH" dist 500 >/dev/null; sleep 1.5
   # bones from the spawn itself: the ray must be on it (id4 = its serial), else the reply is another body's
   BAIM=""; for _ in 1 2 3; do bones_of "$SPAWN" && AIMR=$BREPLY && [ "$(on_target "$SPAWN")" = 1 ] && break; BAIM=""; sleep 1; done
@@ -298,16 +302,17 @@ else
         for w in ${want//,/ }; do [[ ",${S_HURT[0]}" == *",$w("* ]] && { good=$((good+1)); break; }; done
         ev+="$name:aim_h=$ht jit_h=${JIT_H:-none} on_target=$S_ON $JD; "; done; done
     echo "R11-RACE shots: $ev" >> "$LOG"
-    F=$(cs fault)
-    sum="race=$SRACE (target race=${TGRACE:-?}) $SPAWN aim_h=$AH/$AC/$AL aim_on_target=$ontg/$shots hits=$hits consistent=$cons aimed_part=$good/$total disturbed=$disturbed not_upright=$nup ref_head=$REFH fallbacks=${fb%,} fault=$F fp_lost=$FPLOST"
-    if [ "$tooclose" -gt 0 ]; then row R11-RACE SETUP "FAIL reason=too_close: the spawn stayed under 15 dm from the eye on $tooclose shots: $sum"
+    F=$(cs fault); SC=$(A steady "$SPAWN"); SC="blocked=$(gf blocked "$SC")/ended=$(gf ended "$SC")/combat_ended=$(gf combat_ended "$SC")"
+    sum="steady=$SC race=$SRACE (target race=${TGRACE:-?}) $SPAWN aim_h=$AH/$AC/$AL aim_on_target=$ontg/$shots hits=$hits consistent=$cons aimed_part=$good/$total disturbed=$disturbed not_upright=$nup ref_head=$REFH fallbacks=${fb%,} fault=$F fp_lost=$FPLOST"
+    if ! grep -q 'steady blocked=' <<<"$STEADY"; then row R11-RACE SETUP "FAIL steady refused (harness without f81f565?): $(cut -c1-160 <<<"$STEADY") $sum"
+    elif [ "$tooclose" -gt 0 ]; then row R11-RACE SETUP "FAIL reason=too_close: the spawn stayed under 15 dm from the eye on $tooclose shots: $sum"
     elif [ "$nofp" -gt 0 ]; then row R11-RACE SETUP "FAIL FP control lost and not re-taken on $nofp shots: $sum"
     elif [ "$total" -lt $((3*NRACE)) ]; then row R11-RACE SETUP "FAIL reason=pose_unstable: only $total of $((3*NRACE)) shots had the target upright at impact: $sum"
     elif [ -n "$TGRACE" ] && [ "$SRACE" = "$TGRACE" ]; then row R11-RACE SETUP "FAIL spawned race equals the target's: $sum"
     elif [ "$hits" -ge 3 ] && [ "$cons" -ge $((hits-1)) ] && [ "$good" -ge $((total-2)) ] && [ -z "$fb" ] && [ "$F" = 0 ]; then row R11-RACE PASS "$sum"
     else row R11-RACE FAIL "$sum"; fi
   fi
-  A pin "$SPAWN" off >/dev/null; A pin "$SPAWN" at "$SH" dist 600 >/dev/null; A ko "$SPAWN" 600 >/dev/null
+  A steady "$SPAWN" off >/dev/null; A pin "$SPAWN" off >/dev/null; A pin "$SPAWN" at "$SH" dist 600 >/dev/null; A ko "$SPAWN" 600 >/dev/null
 fi
 A pin "$TG" at "$SH" dist 30 face "$SH" >/dev/null; sleep 1
 
