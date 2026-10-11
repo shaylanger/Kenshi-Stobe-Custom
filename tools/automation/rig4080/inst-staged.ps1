@@ -7,6 +7,10 @@ param([string]$Hash = '')
 $ErrorActionPreference = 'Stop'
 $dst = 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\KenshiFP\KenshiFP.dll'
 # only instance 1's game blocks: a lane-2+ game (C:\KenshiInst\<n>, lane 4080b) holds its own DLL copies (m102: 4080b's game failed every 4080 install)
+# wait up to 45 s for an exit already under way: the runner calls this right after `ctl.ps1 stop` (m102 15:20: three lists
+# FAILED "kenshi still running" within 50 s of a gfx relaunch stop)
+$until = (Get-Date).AddSeconds(45)
+while ((Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -notlike 'C:\KenshiInst\*' }) -and (Get-Date) -lt $until) { Start-Sleep -Seconds 2 }
 if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -notlike 'C:\KenshiInst\*' }) { 'kenshi still running: close it first'; exit 1 }
 $f = Get-ChildItem 'C:\KAH\staged\KenshiFP-*.dll' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
 # one build line: KenshiFP-latest.txt names THE build (kfp-pipeline.sh); never pick by date when it exists
