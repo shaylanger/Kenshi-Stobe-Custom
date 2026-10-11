@@ -6,7 +6,7 @@ Also settings.cfg tutorials: test = tutorials=0 (b4080c: hint popups 'Prospectin
 tech / Being a slave' sat on the left of every take; the cursor check hit their X buttons), play = restore (saved in
 C:\KenshiTestRuns\settings.tutorials.play).
 Graphics + frame cap (Shay 2026-10-10 22:05): test also runs C:\KAH\kenshi-gfx.ps1 <-Gfx full|low> (default
-C:\KenshiTestRuns\gfx.want on the 4080, else full): 60 fps cap (harness framecap.txt), low = lowest graphics at 1024x576
+C:\KenshiTestRuns\gfx.want on the 4080, else full): 60 fps cap (harness framecap.txt), low = lowest graphics at 1280x720
 for lists that don't film; play = Shay's graphics back, no cap. Same script as the 5090 (tools/automation/kenshi-gfx.ps1).
 Multi-instance (lane 4080b, 2026-10-11): -Instance n >= 2 = the install copy C:\KenshiInst\<n>: test sets Full Screen=No,
 tutorials=0 and kenshi-gfx low (Video Mode = env KAH_VIDEO_MODE, e.g. '640 x 360'); play/status as usual (play values are

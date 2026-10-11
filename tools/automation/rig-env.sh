@@ -25,6 +25,10 @@ _rig_detect() {
 }
 export RIG=$(_rig_detect)
 export WIN_TITLE="Kenshi 1.0.65 - x64 (Newland)" RES_W=1600 RES_H=900
+# gfx-low games render smaller (kenshi-gfx.ps1 low: env KAH_VIDEO_MODE, e.g. lanes 5090b/5090c '800 x 600', else 1280 x 720;
+# lane-5090c 2026-10-11: agreerec-i2 FAILed pf_rig "renders at 4096x2160 not 1600x900"): takes and pf_rig judge that size
+if [[ "${KAH_VIDEO_MODE:-}" =~ ^([0-9]+)\ x\ ([0-9]+)$ ]]; then export RES_W=${BASH_REMATCH[1]} RES_H=${BASH_REMATCH[2]}
+elif [ "${KAH_GFX:-}" = low ]; then export RES_W=1280 RES_H=720; fi
 if [ "$RIG" = 4080 ]; then
   export CR=/c
   export KDIR="/c/Program Files (x86)/Steam/steamapps/common/Kenshi"

@@ -3,7 +3,7 @@ kenshi-gfx.ps1 full|low|play|status [-Kenshi <dir>] [-Fps <n>]  (both rigs; Kens
 Test-launch graphics (Shay 2026-10-10 22:05: cut GPU/CPU/RAM without slowing tests):
   full   filming lists: Shay's graphics (settings.cfg as he set it), Video Mode 1600x900, frame cap 60 fps
   low    lists that don't film ("# gfx: low"): lowest graphics in settings.cfg (shadows, grass, foliage, reflections,
-         post effects, decals, view/terrain distance, distant towns, half textures), Video Mode 1024x576, frame cap 60
+         post effects, decals, view/terrain distance, distant towns, half textures), Video Mode 1280x720 (KAH_VIDEO_MODE overrides), frame cap 60
   play   Shay's own settings back: settings.cfg graphics as saved, frame cap off (kenshi-ctl -Play / cfg play, kcfg play)
   status one line: applied mode, cap, Video Mode
 Frame cap = <Kenshi>\mods\AutomationHarness\framecap.txt, read once a second by the harness (Plugin.cpp FrameCap; absent
@@ -38,7 +38,7 @@ $Low = [ordered]@{
   'Kuwahara' = '0'; 'Outlines' = '0'; 'Posterise' = '0'; 'Colourful' = '0'; 'DepthBlur' = '0'
   'ContrastAdaptiveSharpening' = '0'; 'FXAA_POST' = '0'
 }
-$VM = @{ full = '1600 x 900 @ 32-bit colour [0]'; low = '1024 x 576 @ 32-bit colour [0]' }
+$VM = @{ full = '1600 x 900 @ 32-bit colour [0]'; low = '1280 x 720 @ 32-bit colour [0]' }   # a listed DXGI mode: Ogre replaces an unlisted one (1024x576, 640x360) with the screen's largest (2560x1440 / 4096x2160), m102
 
 function Read-Kv([string]$f) { $h = [ordered]@{}; foreach ($l in Get-Content $f) { $i = $l.IndexOf('='); if ($i -gt 0) { $h[$l.Substring(0, $i)] = $l.Substring($i + 1) } }; $h }
 function Set-Kv([string]$f, $want) {
@@ -65,7 +65,7 @@ Set-Content -Path $save -Value @($saved.Keys | ForEach-Object { "$_=$($saved[$_]
 
 if ($Mode -eq 'low') { Set-Kv $scfg $Low } else { Set-Kv $scfg $saved }
 if ($Mode -ne 'play') {
-  # $env:KAH_VIDEO_MODE ('640 x 360'): lane 5090b's small non-filming window (rig-lane2.ps1); only with gfx low
+  # $env:KAH_VIDEO_MODE ('800 x 600', must be a listed DXGI mode): lanes 5090b/5090c small non-filming window (rig-lane2.ps1); only with gfx low
   $vmw = if ($Mode -eq 'low' -and $env:KAH_VIDEO_MODE -match '^\d+ x \d+$') { "$($env:KAH_VIDEO_MODE) @ 32-bit colour [0]" } else { $VM[$Mode] }
   Set-Kv $kcfg @{ 'Video Mode' = $vmw }
   if ($Fps -gt 0) { Set-Content -Path $capF -Value "$Fps" -Encoding Ascii } else { Remove-Item $capF -Force -ErrorAction SilentlyContinue }

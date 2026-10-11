@@ -27,7 +27,7 @@ writes them back. `cfg status|test|play` shows/applies the two modes.
 
 Graphics + frame cap (Shay 2026-10-10 22:05, kenshi-gfx.ps1): every test launch caps the game at 60 fps (harness
 framecap.txt) and applies graphics mode -Gfx full|low (default: $env:KAH_GFX, else C:\KenshiTestRuns\gfx.want line 1,
-else full): full = Shay's graphics at 1600x900 (filming lists), low = lowest graphics at 1024x576 ("# gfx: low" lists,
+else full): full = Shay's graphics at 1600x900 (filming lists), low = lowest graphics at 1280x720 ("# gfx: low" lists,
 no filming). -Play / cfg play restore Shay's graphics and remove the cap. `gfx [full|low|status]` applies/shows it.
 #>
 param(
@@ -331,6 +331,8 @@ public static class KenshiTop {
 }
 # launch-time topmost only while takes record with gdigrab (screen area); window capture (wgc) needs no topmost
 function OnTop-IfGdi {
+  # instance n >= 2 = a non-filming lane (5090b/5090c): never topmost (93-fastswap-bench-i2 1011-1447 pinned lane B over DISPLAY2)
+  if ($Inst -ge 2) { return "ontop: skipped (instance $Inst does not film)" }
   $m = $env:KAH_CAPTURE; if (-not $m -and (Test-Path 'C:\KenshiTestRuns\capture.default')) { $m = (Get-Content 'C:\KenshiTestRuns\capture.default' -TotalCount 1).Trim() }
   if ($m -eq 'wgc') { return "ontop: skipped (capture=wgc)" }
   @(Set-OnTop on)[0]
