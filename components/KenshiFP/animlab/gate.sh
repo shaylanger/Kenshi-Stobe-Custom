@@ -33,7 +33,7 @@ HASHONLY=0; [ "${1:-}" = hash ] && { HASHONLY=1; shift; }
 while [ $# -gt 0 ]; do case "$1" in --update-baseline) UPD=1;; --src) SRC=$2; shift;; --out) OUT=$2; shift;; --no-mutate) MUT=0;;
 *) echo "gate.sh: unknown arg $1"; exit 2;; esac; shift; done
 srchash() { (cd "$SRC/client" && find . -type f \( -name '*.inc' -o -name '*.c' -o -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | xargs -0 cat
-  cat "$L"/*.py "$HERE"/regress.sh "$HERE"/mutate.py "$HERE"/stroke-cycle.py "$HERE"/e6-takes.py "$C/MANIFEST.tsv" 2>/dev/null) | sha256sum | cut -c1-12; }
+  cat "$L"/*.py "$HERE"/regress.sh "$HERE"/mutate.py "$HERE"/stroke-cycle.py "$HERE"/e6-takes.py "$HERE"/fist-*.py "$C/MANIFEST.tsv" 2>/dev/null) | sha256sum | cut -c1-12; }
 [ $HASHONLY = 1 ] && { srchash; exit 0; }
 H=$(srchash); mkdir -p "$G"; OUT=${OUT:-$G/run-$(date +%m%d-%H%M%S)-$H}; mkdir -p "$OUT"; W=$G/work
 fail=0; why=()
