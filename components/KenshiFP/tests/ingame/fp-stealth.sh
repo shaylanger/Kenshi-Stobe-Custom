@@ -120,6 +120,28 @@ PASSIVE0=$(A combatmode "$SH" | fld passive); A combatmode "$SH" passive on >/de
 # the mate stands 30 m ahead: an unaware target is pinned facing him (back to the player)
 A pin "$MT" at "$SH" dist 300 | grep -q '^pinned' && PINNED+=" $MT" || setup_fail "could not pin $MT 30 m ahead of $SH"
 echo "SETUP sh=$SH mt=$MT stealth=$ST0 assassination=$AS0 -> $SKILL weapon=$WEP bow='$BOWN' passive0=$PASSIVE0" >> "$LOG"
+# clear_bystanders: every non-squad character (not [Nameless]) within CLEAR_R (default 80 = 8 m) of the shooter is knocked out
+# and moved 40 m away. 4080 rg-02-control-stealth-1011-0548: the fixture's hostile Skaera [Hungry Bandit] (and Tassilo) moved
+# around 1-7 m south of Axima; Axima's body kept turning toward them and the FP camera (yaw = body_yaw) followed, so every
+# probe 0.3-3 s after a correct pick read Tassilo / Skaera / none (ST01 "never unaware", ST02/ST03 "no neutral target").
+clear_bystanders() { local l id x z sx sy sz n=0; read -r sx sy sz <<<"$(pos "$SH")"
+  while IFS= read -r l; do id=$(grep -oE '#[0-9]+/[0-9]+' <<<"$l" | head -1); [ -n "$id" ] || continue
+    grep -q '\[Nameless\]' <<<"$l" && continue
+    read -r x _ z <<<"$(grep -o 'pos=[^ ]*' <<<"$l" | cut -d= -f2 | tr ',' ' ')"
+    awk -v a="$sx" -v b="$sz" -v c="$x" -v d="$z" -v r="${CLEAR_R:-80}" 'BEGIN{exit !((c-a)^2+(d-b)^2 < r*r)}' || continue
+    A ko "$id" 3600 >/dev/null; A teleport "$id" "$SH" dist 400 >/dev/null; n=$((n+1))
+    echo "SETUP cleared bystander $(sed 's/^ *//' <<<"$l" | cut -c1-120)" >> "$LOG"
+  done < <(A chars 3000 '!dead|!ko' | sed 's/^[0-9]* within [0-9.]*: //' | tr '|' '\n'); echo "SETUP bystanders cleared: $n" >> "$LOG"; }
+# camera_hold: a look must still hold 2 s later (yaw within 0.1 rad); otherwise something turns the shooter's body and
+# every crosshair probe after a pick drifts off the target: setup FAIL with the evidence instead of three bogus row FAILs
+ywrap() { awk -v a="$1" -v b="$2" 'BEGIN{d=a-b; while(d>3.14159265)d-=6.2831853; while(d<-3.14159265)d+=6.2831853; print (d<0?-d:d)}'; }
+camera_hold() { local c y0 w y1 b; c=$(A fp_camera state); y0=$(fld yaw <<<"$c")
+  w=$(awk -v y="$y0" 'BEGIN{w=y+1.0; if(w>3.14159265)w-=6.2831853; printf "%.4f", w}')
+  A fp_camera look "$w" 0.2 >/dev/null; sleep 2; c=$(A fp_camera state); y1=$(fld yaw <<<"$c"); b=$(fld body_yaw <<<"$c")
+  CH="look $w held? yaw $y0 -> $y1 body_yaw=$b"; echo "SETUP camera_hold: $CH" >> "$LOG"
+  awk -v d="$(ywrap "$y1" "$w")" 'BEGIN{exit !(d<0.1)}'; }
+clear_bystanders
+camera_hold || setup_fail "camera does not hold a look ($CH): something turns $SH (near: $(A chars 3000 '!dead|!ko' | tr '|' '\n' | grep -v Nameless | head -3 | cut -c1-60 | tr '\n' ';'))"
 
 # spawn_target <row> [faction]: TH (ref) / TN (name) of a fresh neutral Hungry Bandit, or return 1
 # [faction] (default Tech Hunters): ST03 uses another faction (ST03_FACTION, Traders Guild): 5090 m50 P ST02 passed, then the
