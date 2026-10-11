@@ -941,14 +941,14 @@ function FakeProbe([string[]]$c) {   # -Fake: a "# fakesec:" batch runs for n s 
 # analyses still collected), touches GAMEDONE, and the runner starts the real list at once on the running Kenshi (--reuse).
 $script:preempted = @{}
 function Preempt([string[]]$c, [string]$by) {
-    $name = $c[5]; if ($script:preempted[$name]) { return }; $script:preempted[$name] = 1
+    $name = $c[5]; $pk = "$name|$($c[1])"; if ($script:preempted[$pk]) { return }; $script:preempted[$pk] = 1   # keyed per run (out dir): a later run of the same filler can be preempted again
     $snap = if ($Rig -eq '4080' -and -not $Fake) { Join-Path $c[6] '.run-batch.sh' } else { Join-Path $c[1] '.run-batch.sh' }
     if (-not $Fake -and -not (Select-String -LiteralPath $snap -Pattern 'PREEMPT' -SimpleMatch -Quiet -ErrorAction SilentlyContinue)) {
         Log "PREEMPT $name for $by not possible: its run-batch.sh snapshot predates PREEMPT support (runs to its end)"; return }
     $txt = "$by $(Get-Date -Format s)"
     if ($Rig -eq '4080' -and -not $Fake) {
         $lf = Join-Path $c[6] 'PREEMPT'; Set-Content $lf $txt
-        if (-not (Scp4 @($lf) "C:/KenshiTestRuns/$(Split-Path $c[2] -Leaf)/")) { $script:preempted.Remove($name); Log "PREEMPT ${name}: scp to the 4080 failed (retry next tick)"; return }
+        if (-not (Scp4 @($lf) "C:/KenshiTestRuns/$(Split-Path $c[2] -Leaf)/")) { $script:preempted.Remove($pk); Log "PREEMPT ${name}: scp to the 4080 failed (retry next tick)"; return }
     } else { Set-Content (Join-Path $c[1] 'PREEMPT') $txt }
     Log "PREEMPT filler ${name}: $by is queued; the batch ends after its current row"
     State "running $name (filler, preempted by ${by}: ends after the current row)"
@@ -1058,7 +1058,7 @@ while ($true) {
             $p = if ($Fake) { FakeProbe $c } else { Probe $c[2] }
             if ($p) { $probeFail = 0 } else { $probeFail++ }
             # a filler in its game part gives way to real work at the next row boundary
-            if ($p -and $p.done -ne '1' -and $p.gamedone -ne '1' -and (Split-Path $c[0] -Leaf) -like '*__filler__*' -and -not $script:preempted[$c[5]] -and -not (IdleReason)) {
+            if ($p -and $p.done -ne '1' -and $p.gamedone -ne '1' -and (Split-Path $c[0] -Leaf) -like '*__filler__*' -and -not $script:preempted["$($c[5])|$($c[1])"] -and -not (IdleReason)) {
                 $rl = @(RealLists); if ($rl.Count) { Preempt $c $rl[0].Name }
             }
             # ownership (2026-10-10 phantom: a restarted loop adopted the coordinator's hand run in the same out dir and held
@@ -1152,7 +1152,7 @@ while ($true) {
                         $condSince = $null
                     }
                 }
-                State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND($(if ($condSince) { [int]((Get-Date) - $condSince).TotalMinutes } else { 0 })m/$($lim)m): $why" })$(if ($script:preempted[$c[5]]) { ' PREEMPTED: ends after this row' })"
+                State "running $($c[5]) row=$($p.step) age=$($p.age)s gh=$($p.gh) $(if ($why) { "COND($(if ($condSince) { [int]((Get-Date) - $condSince).TotalMinutes } else { 0 })m/$($lim)m): $why" })$(if ($script:preempted["$($c[5])|$($c[1])"]) { ' PREEMPTED: ends after this row' })"
             }
         } else {
             if (Test-Path (Join-Path $rd "$Rig.restart")) {   # list boundary: hand over to a fresh copy of the (new) script
