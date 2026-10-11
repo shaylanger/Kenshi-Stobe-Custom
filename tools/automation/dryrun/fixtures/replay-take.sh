@@ -11,6 +11,8 @@
 #   early     "RMB held: block guard" stamped 1.5 s before the press (T6 labels stamped early)
 #   dialog    (--fixture dialog, DRYRUN_NOREC=1) polls fp_state 60 s: ui_open=1 for 6 s+ = stalled in an NPC
 #             conversation (5090 20-rg04 M08 Dust Bandit); passes only with the batch dialog guard (tools/automation/dialog-guard.sh)
+#   actor     (--fixture raider-on-mate, DRYRUN_NOREC=1) control handed to Axima, whom a Dust Bandit fights (5090 33-rg04
+#             M08-ACTOR): pf_calm clears the raider, ai_refused stays flat -> PASS; actor-bare without pf_calm -> FAIL
 #   noiso     R sent with key_inject without pf_iso and no ready check (b4080c xbow takes filmed holstered: the 4080
 #             launch leaves input isolation off); run with --rig 4080
 #   (fixture stall: a 1.5 s hole in the take sampler, blkH; caught by takecheck cover, before filming by pf_latency)
@@ -32,6 +34,18 @@ if [ "$MODE" = dialog ]; then
     if A fp_state | grep -q '\bui_open=1\b'; then st=$((st + 1)); [ $st -gt $mx ] && mx=$st; else st=0; fi; done
   if [ $mx -ge 6 ]; then pf_result FAIL "stalled: ui_open=1 for ${mx}s ($(A dialog | tr -d '\r' | head -1)), every click refused"
   else pf_result PASS "longest ui_open=1 streak ${mx}s (dialog guard closed the conversations)"; fi
+  exit 0
+fi
+if [ "$MODE" = actor ] || [ "$MODE" = actor-bare ]; then
+  # fixture raider-on-mate (5090 33-rg04 M08-ACTOR 2026-10-11): control handed to a squad member a raider is fighting;
+  # the global ai_refused then counts HER refused AI swings. actor = pf_calm first (clears the raider), actor-bare = none
+  A select Malzin >/dev/null; A fp_control take >/dev/null; A fp_combat on >/dev/null; sleep 1
+  A select $SH >/dev/null; A fp_control take >/dev/null; sleep 1
+  if [ "$MODE" = actor ]; then pf_calm $SH Skaera || pf_fail "$PF_WHY"; fi
+  r0=$(A fp_melee state | grep -o 'ai_refused=[0-9]*' | cut -d= -f2); sleep 6; r1=$(A fp_melee state | grep -o 'ai_refused=[0-9]*' | cut -d= -f2)
+  o=$(A fp_melee state $SH | grep -o ' active=[^ ]* \| target_h=[^ ]*' | tr -d '\n')
+  if [ "$r1" = "$r0" ]; then pf_result PASS "ai_refused $r0->$r1 with $SH controlled ($o)"
+  else pf_result FAIL "ai_refused rose $r0->$r1 with $SH controlled: her own fight ($o)"; fi
   exit 0
 fi
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; }

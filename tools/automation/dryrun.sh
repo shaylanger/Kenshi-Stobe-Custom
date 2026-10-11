@@ -22,6 +22,7 @@
 # xbow-empty: the crossbow comes up EMPTY and the first aim auto-reloads ~8 s before shot_ready (xbmesh-c); the stub's
 # ranged adapter also draws a holstered crossbow on fp_combat arm and answers fp_gear with a "hands" entry; it also sets
 # off_sheathes (xbmesh-c2): fp_combat off sheathes the drawn crossbow, so an unconditional R tap draws it again.
+# raider-on-mate: a Dust Bandit fights the parked Axima (char field "fights"; 5090 33-rg04 M08-ACTOR), cleared by pf_calm.
 # Self-test (replayed 2026-10-10 bugs must FAIL, current scripts must PASS): tools/automation/dryrun/selftest.sh
 set -u
 H=/mnt/c/KenshiModding/tools/automation; D=$H/dryrun

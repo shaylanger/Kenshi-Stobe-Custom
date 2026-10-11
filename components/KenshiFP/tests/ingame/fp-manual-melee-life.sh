@@ -16,6 +16,7 @@ inp() { echo "$1 $2" >> "$OUT/inputs"; A fp_combat input "$1" "$2" 0 >/dev/null;
 cs() { A fp_combat state | fld "$1"; }
 flesh() { A hp "$1" | grep -o '[0-6]:[-0-9.]*/' | tr -d / | cut -d: -f2 | awk '{s+=$1}END{printf "%.1f", s}'; }
 RESULTS=()
+. "$(dirname "$0")/take-preflight.sh"; PF_A() { A "$@"; }   # pf_clean / pf_calm (raiders near the squad), calls logged
 row() { RESULTS+=("RESULT $1 $2 $3"); echo "RESULT $1 $2 $3" >> "$LOG"; }
 setup_fail() { echo "RESULT SETUP FAIL $1 log=$LOG"; exit 1; }
 FP0=$(A fp_state | fld fp_mode)
@@ -110,6 +111,9 @@ arm_melee || setup_fail "$FI has no melee weapon that equips (inv weapons: $(wea
 A protect "$FI" on >/dev/null
 for m in $(A chars 3000 "[nameless]" | tr '|' '\n' | sed -n 's/^[0-9]* within [0-9.]*: //; s/^ *//; s/ #.*//p'); do
   case "$m" in "$FI") ;; *) A protect "$m" on >/dev/null; A pin "$m" at "$FI" dist 600 >/dev/null;; esac; done
+# raiders near the squad (5090 kah-fpxbow copy 2026-10-11: Dust Bandits attacked the parked Axima during M and M08, so
+# M08-ACTOR's handover to Axima counted her refused AI swings): KO every live raider within 3000 of the fighter, target kept
+FP_=$(A where "$FI" | grep -o 'pos=[^ ]*' | cut -d= -f2); PF_CLEAN_KEEP="$TG" pf_clean "${FP_%%,*}" "${FP_##*,}" 3000 >> "$LOG"
 A health "$TG" 100 >/dev/null; A setstat "$TG" defence 1 >/dev/null; A setstat "$TG" dodge 1 >/dev/null
 take
 close || setup_fail "pin $TG in reach of $FI refused"
@@ -203,13 +207,20 @@ if [ -n "$N2" ] && [ "$sw" -ge 3 ] && [ "$OW" = 1 ] && [ "$W" = ok ]; then row M
 
 # ---- M08-ACTOR: control moves to another squad member -> the fighter is released, its AI swings again (ai_refused
 #      stops rising, target flesh drops with no input); re-take the fighter -> owned again, fresh click swings ----
+# ai_refused is one global counter and counts the CONTROLLED actor's refused AI swings: the new controlled actor must be in
+# no fight of its own (5090 33-rg04 2026-10-11: a Dust Bandit fought Axima, ai_refused 3258->3277 with Malzin released and
+# fighting). pf_calm clears it before the window; a fight that starts during the window is a setup FAIL, not a product one.
 ready 15; A select "$OT" >/dev/null; A fp_control take >/dev/null; sleep 1
+if ! pf_calm "$OT" "$TG" >> "$LOG"; then take; row M08-ACTOR FAIL "setup: $PF_WHY"; else
 A health "$TG" 100 >/dev/null; sleep 0.3; R0=$(ms ai_refused); H0=$(flesh "$TG"); AG=$(gap); sleep 10; R1=$(ms ai_refused); H1=$(flesh "$TG"); s=$(A fp_melee state "$FI"); OW=$(echo "$s" | fld owned)
 FIS="controlled=$(echo "$s" | fld controlled) state=$(echo "$s" | fld state) active=$(echo "$s" | fld active) attacking=$(echo "$s" | fld attacking) target_h=$(echo "$s" | fld target_h)"
+o=$(A fp_melee state "$OT"); OTA=$(echo "$o" | fld active); OTS="$OT active=$OTA target_h=$(echo "$o" | fld target_h)"
 take; sleep 2; OW2=$(ms owned); GR=$(gap); FS=$(fresh_click 12)
-ev="control->$OT: $FI owned=$OW ($FIS gap_dm=$AG->$GR, re-pinned 12 for the retake click) ai_refused $R0->$R1 $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
+ev="control->$OT: $FI owned=$OW ($FIS gap_dm=$AG->$GR, re-pinned 12 for the retake click) ai_refused $R0->$R1 ($OTS) $TG flesh $H0->$H1 (AI fights) retake owned=$OW2 fresh_click_swings=$FS"
 [ "$FS" = 1 ] || ev="$ev why=$(ms why) $(gate)"
-if [ "$OW" = 0 ] && [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && [ "$OW2" = 1 ] && [ "$FS" = 1 ]; then row M08-ACTOR PASS "$ev"; else row M08-ACTOR FAIL "$ev"; fi
+if [ "$OW" = 0 ] && [ "$R1" = "$R0" ] && awk -v a="$H0" -v b="$H1" 'BEGIN{exit !(b<a-0.5)}' && [ "$OW2" = 1 ] && [ "$FS" = 1 ]; then row M08-ACTOR PASS "$ev"
+elif [ "$R1" != "$R0" ] && [ "$OTA" = 1 ]; then row M08-ACTOR FAIL "setup: $OT got into a fight during the window (its refused AI swings count in ai_refused) $ev"
+else row M08-ACTOR FAIL "$ev"; fi; fi
 
 # ---- M08-LIMB (last: permanent on this load): left arm severed -> adapter stays ok, fresh clicks still swing ----
 # 4080 batch 11: click 1 swung, then the target was KO (M08-ACTOR's native fight had worn it down; cleanup said "still KO")

@@ -561,7 +561,18 @@ def fight_target(s):
     """the native fight of the controlled fighter (set by `attack` either way), live while both stand"""
     m, f = melee(s), fighter(s)
     t = s['chars'].get(m['tgt']) if m['tgt'] else None
+    if not t and f:
+        return own_fight(s, f)
     if not f or not t or t.get('ko') or f.get('ko'):
+        return None
+    return t
+
+
+def own_fight(s, c):
+    """fixture field "fights": <name> on a character = a native fight of its own (fixture raider-on-mate: a Dust
+    Bandit fights the parked Axima, 5090 33-rg04 M08-ACTOR), live while both stand"""
+    t = s['chars'].get(c.get('fights') or '') if c else None
+    if not t or t.get('ko') or c.get('ko'):
         return None
     return t
 
@@ -708,7 +719,7 @@ def fp_melee_cmd(s, a, now):
     if not f:
         return False, 'controlled actor unavailable' if len(a) == 1 else 'character not found'
     me = f is fighter(s)
-    tg = fight_target(s) if me else None
+    tg = fight_target(s) if me else own_fight(s, f)
     st = mstate(s, now) if me else 4
     why = 'init' if not m['ever'] else ('arming' if m['on'] and not m['armed'] else ('ok' if m['on'] else 'init'))
     th = '#%s' % tg['id'][1:] if tg else '#0/0'

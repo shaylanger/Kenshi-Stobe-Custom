@@ -1,0 +1,180 @@
+{
+ "chars": {
+  "Shay": {
+   "id": "#10/11",
+   "fac": "Nameless",
+   "pos": [
+    -53890.0,
+    633.0,
+    6850.0
+   ],
+   "items": [
+    "Iron Hat"
+   ],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Shay"
+  },
+  "Malzin": {
+   "id": "#12/13",
+   "fac": "Nameless",
+   "pos": [
+    -54170.0,
+    633.0,
+    4390.0
+   ],
+   "items": [
+    "Chisa Katana",
+    "Oldworld Bow MkII"
+   ],
+   "eq": [
+    "Chisa Katana",
+    "Oldworld Bow MkII"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Malzin"
+  },
+  "Axima": {
+   "id": "#14/15",
+   "fac": "Nameless",
+   "pos": [
+    -54190.0,
+    633.0,
+    4380.0
+   ],
+   "items": [
+    "Oldworld Bow MkI",
+    "Iron Hat"
+   ],
+   "eq": [
+    "Oldworld Bow MkI",
+    "Iron Hat"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Axima",
+   "fights": "Dust Bandit"
+  },
+  "Tassilo": {
+   "id": "#16/17",
+   "fac": "Nameless",
+   "pos": [
+    -53940.0,
+    633.0,
+    6850.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Tassilo"
+  },
+  "Skaera": {
+   "id": "#30/31",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -51590.0,
+    633.0,
+    4680.0
+   ],
+   "items": [
+    "Rusty Junk Sword"
+   ],
+   "eq": [
+    "Rusty Junk Sword"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Skaera"
+  },
+  "Hungry Bandit": {
+   "id": "#32/33",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -40000.0,
+    633.0,
+    -2000.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Hungry Bandit"
+  },
+  "Dust Bandit": {
+   "id": "#34/35",
+   "fac": "Dust Bandits",
+   "pos": [
+    -54175.0,
+    633.0,
+    4390.0
+   ],
+   "items": [
+    "Rusty Junk Sword"
+   ],
+   "eq": [
+    "Rusty Junk Sword"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Dust Bandit"
+  },
+  "Hungry Bandit 2": {
+   "id": "#36/37",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -40000.0,
+    633.0,
+    -2000.0
+   ],
+   "items": [
+    "Rusty Junk Sword"
+   ],
+   "eq": [
+    "Rusty Junk Sword"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Hungry Bandit 2"
+  },
+  "Hungry Bandit 3": {
+   "id": "#38/39",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -40000.0,
+    633.0,
+    -2000.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Hungry Bandit 3"
+  },
+  "Starving Vagrant": {
+   "id": "#40/41",
+   "fac": "Starving Vagrants",
+   "pos": [
+    -40000.0,
+    633.0,
+    -2000.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Starving Vagrant"
+  }
+ },
+ "squad": [
+  "Shay",
+  "Malzin",
+  "Axima",
+  "Tassilo"
+ ],
+ "hour": 11.0,
+ "fight": 0,
+ "about": "rg-04 M08-ACTOR 5090 kah-fpxbow copy 2026-10-11 (33-rg04-melee-latest): a Dust Bandit fights the parked squad member Axima; handing control to her counts HER refused AI swings in the global ai_refused (take-preflight.sh pf_calm must clear it)"
+}

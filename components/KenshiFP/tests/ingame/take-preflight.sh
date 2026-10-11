@@ -25,6 +25,8 @@
 #                              row's fp_combat off; R tap, else unequip every melee weapon), crossbow drawn by an injected aim
 #                              (adapter armed), loaded (rg03 R01: an EMPTY bow auto-reloaded 6.1 s > the row's 5 s wait), aim
 #                              released; fails with PF_WHY (why/armed/loaded)
+#   pf_calm <who> [keep...]    <who> in no native fight: KO its attacker + raiders within 3000 of it (keep names spared),
+#                              wait <= 8 s for active=0; PF_WHY otherwise (rg-04 M08-ACTOR 2026-10-11: Dust Bandits on Axima)
 #   pf_pin <who> <pin args>    pin, then wait up to 3 s for the per-frame put-back to land within 1.5 m; reason has off + KO
 PF_A(){ stobe-auto "$@" </dev/null 2>&1; }
 # Git Bash (4080 rig) has no wslpath: cygpath does the same
@@ -55,6 +57,7 @@ pf_clean(){
   local TX=$1 TZ=$2 R=${3:-3000} n=0
   { PF_A chars 6000; for f in "Starving" "Dust Bandits" "Hungry" "Outlaws" "Marauder" "Shinobi"; do PF_A chars 6000 "$f"; done; } 2>/dev/null \
     | sed "s/^[0-9]* within [0-9.]*: //" | sed 's/ | /\n/g' | grep -v "\[Nameless\]\| KO\| DEAD" \
+    | { if [ -n "${PF_CLEAN_KEEP:-}" ]; then grep -v -E "^ *(${PF_CLEAN_KEEP}) (\[|#)"; else cat; fi; } \
     | sed -n 's/.*\(#[0-9]*\/[0-9]*\) .* pos=\([-0-9.]*\),[-0-9.]*,\([-0-9.]*\).*/\1 \2 \3/p' | sort -u > /tmp/pf-clean.$$
   while read id x z; do
     d=$(awk -v x=$x -v z=$z -v a=$TX -v b=$TZ 'BEGIN{printf "%d", sqrt((x-a)^2+(z-b)^2)}')
@@ -96,6 +99,24 @@ pf_open(){
   awk -v y="${y:-0}" -v m="${PF_MIN_YAVG:-35}" 'BEGIN{exit !(y >= m)}' || pf_fail "dark/black frames (min luma ${y:-?} < ${PF_MIN_YAVG:-35}): night, or the display asleep"
   echo "pf_open ok: $r | $c | $o | min luma $y"
 }
+# pf_calm <who> [keep names...] (non-exiting, PF_WHY on failure): <who> (a squad member, e.g. the one a row hands control
+# to) is in no native fight. rg-04 M08-ACTOR on the 5090 kah-fpxbow copy, 2026-10-11 33-rg04: Dust Bandits attacked Axima
+# (pinned 60 m off, protected), so after `fp_control take` of Axima her adapter refused her AI swings and the global
+# ai_refused rose 3258->3277 while Malzin was correctly released (4080: nobody near Axima, 17/17 PASS). Knocks out (pin
+# 600 away + ko 900) the attacker in <who>'s target_h and every live raider within 3000 of <who> (pf_clean factions, keep
+# names spared), then waits <= 8 s for active=0. A fight with a keep name is not cleared (PF_WHY says so).
+pf_calm(){ local who=$1 s th kh k i p x z; shift; PF_WHY=""
+  kh=""; for k in "$@"; do kh="$kh $(PF_A where "$k" | grep -o '#[0-9]*/[0-9]*' | head -1)"; done
+  for i in $(seq 1 6); do s=$(PF_A fp_melee state "$who"); th=$(echo "$s" | grep -o ' target_h=[^ ]*' | head -1 | cut -d= -f2)
+    if ! echo "$s" | grep -q ' active=1 ' || [ -z "$th" ] || [ "${th%/*}" = "#0" ]; then
+      [ $i = 1 ] && echo "pf_calm ok: $who in no fight" || echo "pf_calm ok: $who out of the fight after clearing"; return 0; fi
+    case " $kh " in *" $th "*) PF_WHY="$who fights a keep target $th"; return 1;; esac
+    if [ $i = 1 ]; then p=$(PF_A where "$who" | grep -o 'pos=[^ ]*' | cut -d= -f2); x=${p%%,*}; z=${p##*,}
+      echo "pf_calm: $who in a fight with $th, clearing raiders around it"
+      [ -n "$x" ] && PF_CLEAN_KEEP=$(IFS='|'; echo "$*") pf_clean "$x" "$z" 3000; fi
+    PF_A pin "$th" at "$who" dist 600 >/dev/null; PF_A ko "$th" 900 >/dev/null
+    sleep 1.5; done
+  PF_WHY="$who still in a fight (active=1 target_h=$th) after clearing raiders + its attacker"; return 1; }
 pf_nofight(){   # kfx-b10 blkF: bandits/turrets beyond pf_clean put Axima in a fight, RMB gave the native fight block (presses=0)
   local k=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/KenshiFP.log l n
   l=$(wc -l < "$k"); PF_A fp_keys press rmb 700 >/dev/null; sleep 1.5
