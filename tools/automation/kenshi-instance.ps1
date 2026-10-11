@@ -1,7 +1,7 @@
 <#
 kenshi-instance.ps1: second (third, ...) Kenshi install copies so one PC can run two test games at once (multi-instance,
 C:\KenshiTestRuns\multi-instance\PLAN.md). Instance 1 = the Steam install (D:\Steam\steamapps\common\Kenshi), untouched.
-Instance n >= 2 = D:\KenshiInst\<n>, built from instance 1 without duplicating its ~28 GB:
+Instance n >= 2 = D:\KenshiInst\<n> (4080: C:\KenshiInst\<n>, instance 1 = its C:\Program Files (x86) Steam install), built from instance 1 without duplicating its ~28 GB:
   - a folder whose whole subtree holds only read-only content (no cfg/ini/txt/json/log/dll/exe/... file, nothing skipped)
     is a directory junction to instance 1's folder (most of data\ and the texture mods, incl. Vortex's file symlinks);
   - in the other folders big read-only files (>= 2 MB) are NTFS hard links, everything else (small files, anything written
@@ -28,8 +28,11 @@ param(
   [string[]]$Saves = @()
 )
 $ErrorActionPreference = 'Stop'
-$Src = 'D:\Steam\steamapps\common\Kenshi'
-$Root = 'D:\KenshiInst'
+# instance 1 = the rig's Steam install: D:\Steam\... on the 5090, C:\Program Files (x86)\Steam\... on the 4080 (no D: there;
+# lane 4080b, multi-instance-4080 2026-10-11); copies on the same volume (hard links): D:\KenshiInst | C:\KenshiInst
+$Src = @('D:\Steam\steamapps\common\Kenshi', 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi') | Where-Object { Test-Path "$_\kenshi_x64.exe" } | Select-Object -First 1
+if (-not $Src) { throw 'no Kenshi install (D:\Steam\... or C:\Program Files (x86)\Steam\...)' }
+$Root = if ($Src -like 'D:\*') { 'D:\KenshiInst' } else { 'C:\KenshiInst' }
 $UserSaves = "$env:LOCALAPPDATA\kenshi\save"
 $LinkMin = 2MB
 # never hard-linked (written at runtime, or replaced by install-dll.ps1 while the other game holds it open)
