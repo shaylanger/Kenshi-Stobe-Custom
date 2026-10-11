@@ -41,6 +41,7 @@ bug-k01        | rmb-blocked | 5090 | FAIL:control .*did not move               
 ctl-stealth    | spawn-hostile | 5090 | PASS                                  | st | kah-fpxbow | Axima | Malzin | 1200 | DRYRUN_NOREC=1 bash $KT/fp-stealth.sh Axima Malzin {OUT}/ST
 bug-stealth-hostile | spawn-hostile-all | 5090 | FAIL:setup no neutral target   | st | kah-fpxbow | Axima | Malzin | 1200 | DRYRUN_NOREC=1 ROWS=ST03 bash $KT/fp-stealth.sh Axima Malzin {OUT}/ST
 verdicts-mode  | spawn-hostile-all | 5090 | PASS                                   | st | kah-fpxbow | Axima | Malzin | 1200 | DRYRUN_NOREC=1 DRYRUN_VERDICTS=1 ROWS=ST03 bash $KT/fp-stealth.sh Axima Malzin {OUT}/ST
+rig-placeholder | -    | 4080 | PASS                                          | ag2 | kah-fpxbow | Axima | Malzin | 600 | RIG={RIG} DRYRUN_NOREC=1 bash $KT/fp-agree-rec.sh {OUT}/ag2 ag2
 bug-shellop    | -    | 5090 | FAIL:list: shell operator                      | rp | - | Axima | Malzin | 120 | stobe-auto speed 1; $RP {OUT}/rp clean
 EOF
 )

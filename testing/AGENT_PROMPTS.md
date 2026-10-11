@@ -84,8 +84,10 @@ lines>. Report commits, DLL SHA256, tests.
 > (`20-<what>.list`), each a run-batch.sh list with header comments `# owner: <you>`, `# out: <dir>`, `# launch: <save>`,
 > `# needs: KenshiFP latest` (the default: THE newest staged build, resolved when the batch starts; pin `KenshiFP <sha8>` only
 > if the rows must run on that exact build: a replaced pin is served by a newer staged build that includes all its patches)
-> / `# needs: Harness <sha8>`, `# nodryrun: <row> <reason>` (fake-game gap only),
-> `{CR}` for the C: root and `{OUT}` for the out dir in rows, `STALL_MIN=<min>` in a row that may legitimately sit paused
+> / `# needs: Harness <sha8>`, `DRYRUN_VERDICTS=1` in a row the fake game cannot play (its RESULT FAILs become notes; use it
+> instead of `# nodryrun: <row> <reason>`, which checks nothing), `{CR}` for the C: root, `{OUT}` for the out dir and
+> `RIG={RIG}` (never a hard-coded `RIG=5090|4080`: the runner fills in the rig that takes the list, so ONE take list goes to
+> `queue\any\` and the first free rig runs it; list-rigcheck refuses rows that hard-code the other rig) in rows, `STALL_MIN=<min>` in a row that may legitimately sit paused
 > without output. Check a list by hand first: `wsl -d DwemerAI4Skyrim3 -u root -- bash /mnt/c/KenshiModding/tools/automation/dryrun.sh --rig <rig> <list>`.
 > (2) Read `C:\KenshiTestRuns\agents\<you>.note-from-rig-runner`: started / DONE (pass/fail + `queue\done\<list>.SUMMARY.txt`)
 > / FAILED (dryrun/install, `queue\failed\<list>.result`) / stuck row killed / game idle during foreground analysis.

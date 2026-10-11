@@ -29,6 +29,11 @@ reasons=(); warn(){ [ $Q = 1 ] || echo "WARN $RIG $NAME: $*"; }
 
 # ---- rig header + Stobe rows
 want=$(hdr rig); [ -n "$want" ] && [ "$want" != "$RIG" ] && reasons+=("list says rig: $want")
+# a row hard-coding the other rig's layer (RIG=5090 on the 4080 or RIG=4080 on the 5090) runs with the wrong paths/capture:
+# rows say RIG={RIG} (rig-runner fills in the rig that takes the list, speed-scout 2026-10-11) so one list fits both rigs
+other=$([ "$RIG" = 4080 ] && echo 5090 || echo 4080)
+hard=$(rows | awk -F'|' -v o="RIG=$other" '{c=" "$NF" "} index(c, " " o " ") {gsub(/ /, "", $1); printf "%s ", $1}')
+[ -n "$hard" ] && reasons+=("rows hard-code RIG=$other: ${hard% } (write RIG={RIG})")
 # a .txt counts as a Stobe scenario only in a row that runs no .sh/.py/.ps1 script (fp-pose-sweep.sh takes a variants .txt)
 if [ "$RIG" = 4080 ] && rows | awk -F'|' '{c=$NF} c ~ /STOBE-|tests\/ingame\/stobe/ || (c ~ /\.txt([ \t]|$)/ && c !~ /\.(sh|py|ps1)([ \t]|$)/) {f=1} END {exit !f}'; then reasons+=("Stobe rows (no Stobe on the 4080)"); fi
 

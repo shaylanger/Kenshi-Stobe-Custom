@@ -71,6 +71,7 @@ one() {
   IFS='|' read -r name save player mate to cmd <<<"$line"
   name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
   [ -n "$ONLY" ] && [ "$name" != "$ONLY" ] && return 0
+  cmd="${cmd//\{RIG\}/$RIG}"   # {RIG} = the rig the list runs on (rig-runner fills it in; here: --rig)
   rig=$RIG; [[ " $cmd " =~ [[:space:]]RIG=4080[[:space:]] ]] && rig=4080
   norec=""; [[ " $cmd " =~ [[:space:]]DRYRUN_NOREC=1[[:space:]] ]] && norec=--norec
   local sbx=/mnt/c/KenshiTestRuns/dryrun-sbx/$name; [ "$rig" = 4080 ] && sbx=/c/KenshiTestRuns/dryrun-sbx/$name

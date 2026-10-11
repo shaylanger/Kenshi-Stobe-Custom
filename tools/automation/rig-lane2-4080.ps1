@@ -307,7 +307,7 @@ while ($true) {
     if (-not ($o -match 'SHIM-OK')) { Fail $run $name $own "C:\KAH\bin\stobe-auto ignores KAH_DIR (would drive lane 4080's game): run rig4080/setup.sh"; Stop2 'shim'; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
     $o = Ssh4Bash @('-c', "'export KAH_INSTANCE=$Inst; . /c/KenshiModding/tools/automation/rig-env.sh; /c/KAH/bin/stobe-auto input_isolation on'"); Log "isolation: $($o -join ' ')"
     $tmp = Join-Path $rd "$Lane-$outN"; New-Item -ItemType Directory -Force $tmp | Out-Null
-    [IO.File]::WriteAllText((Join-Path $tmp 'list.txt'), ((((Get-Content $run) -replace '\{CR\}', '/c') -join "`n") + "`n"))
+    [IO.File]::WriteAllText((Join-Path $tmp 'list.txt'), ((((Get-Content $run) -replace '\{CR\}', '/c' -replace '\{RIG\}', '4080') -join "`n") + "`n"))
     Set-Content (Join-Path $tmp '.instance') "$Inst" -Encoding Ascii
     Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
     $rl = if ($up) { "--launch $launch --reuse " } else { '' }

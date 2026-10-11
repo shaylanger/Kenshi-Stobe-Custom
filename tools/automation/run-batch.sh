@@ -16,7 +16,7 @@
 #            dryrun.sh refuses them too): a multi-step row goes in a .sh script.
 #            *.sh  -> bash <script> (relative paths are under tests/ingame/stobe)
 #            *.txt -> stobe-auto run <file> --csv <out>/<name>.csv (run-as.sh <file> <player> <mate> for other squads)
-#            {OUT} in the command becomes <out-dir>
+#            {OUT} in the command becomes <out-dir> ({RIG} becomes the rig, RIG or 5090)
 #   e.g.  21-fullbase | kah-fullbase | Beaks | Avarek | 1500 | STOBE-21-paylater-breach.sh
 #         C25         | home         | Shay  | Malzin | 1800 | STOBE-C25-renamed-surrender.sh
 #         A8-grow     | kah-fullbase | Beaks | Avarek | 3000 | GROW=1 STOBE-A8-bread-chain-fullbase.sh
@@ -341,6 +341,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   t() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; echo "${v%"${v##*[![:space:]]}"}"; }
   name=$(t "$name"); save=$(t "$save"); player=$(t "$player"); mate=$(t "$mate"); to=$(t "$to"); cmd=$(t "$cmd")
   cmd="${cmd//\{OUT\}/$O}"; out="$O/$name.txt"
+  cmd="${cmd//\{RIG\}/${RIG:-5090}}"   # {RIG}: rig-runner fills it in; a hand run uses this rig
   if [ "$RESUME" = 1 ] && grep -qxF "$name" "$D" 2>/dev/null; then echo "$(date +%H:%M) $name: ran before, skipped (--resume)"; continue; fi
   # memory guard (rig-lane2.ps1, lane-5090c 2026-10-11): <out>/HOLD = RAM is short, wait at this row boundary until the
   # lane removes it (RAM free again) or a PREEMPT arrives; one NOTE line on hold and on resume

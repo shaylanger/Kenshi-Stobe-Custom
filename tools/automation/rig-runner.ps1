@@ -37,6 +37,8 @@ format), taken FIFO by file name: the rig's own folder first, then any\ (lists w
   # nodryrun: <row> <reason>  leave that row out of the dry run (fake-game gap); every other row must pass dryrun.sh
   # rig: 5090|4080            (any\ lists) only that rig takes it
   {CR} in rows = POSIX root of C: on the rig (/mnt/c on the 5090, /c on the 4080); {OUT} = the out dir (run-batch.sh).
+  {RIG} in rows = the rig layer of the lane that takes the list (5090 for 5090/5090b/5090c, 4080 for 4080/4080b): one
+  take list with RIG={RIG} goes to queue\any\ and runs on whichever rig is free first (no per-rig copies).
 States: queue\running\<rig>__<list> (running), queue\done\<list> + <list>.result (+ .SUMMARY.txt), queue\failed\<list> +
 <list>.result (dryrun/install/setup failure: the owner gets a note, the runner goes on with the next list).
 Per batch: list -> running\, stop Kenshi + install staged DLL if needed (SHA checked), dryrun.sh the list, snapshot
@@ -759,7 +761,7 @@ $pdd = Join-Path $rd 'predry'; New-Item -ItemType Directory -Force $pdd | Out-Nu
 $script:hashCache = @{}; $script:refCache = @{}; $script:nameIdx = $null; $script:nameIdxT = [datetime]::MinValue
 function DryListText([string]$path) {
     $cr = if ($Rig -eq '5090') { '/mnt/c' } else { '/c' }
-    $txt = (Get-Content $path) -replace '\{CR\}', $cr
+    $txt = (Get-Content $path) -replace '\{CR\}', $cr -replace '\{RIG\}', $(if ($Rig -like '4080*') { '4080' } else { '5090' })
     $skip = NoDryRows $path
     $drl = $txt | Where-Object { $r = $_; if ($r -match '^\s*(#|$)') { return $true }; -not ($skip -contains (($r -split '\|')[0].Trim())) }
     ($drl -join "`n") + "`n"
@@ -923,7 +925,7 @@ function Start-Batch($f) {
     New-Item -ItemType Directory -Force $tmp | Out-Null
     if ($filler) { Set-Content (Join-Path $tmp 'rowmeta.tsv') $script:fillMeta }
     ClearNoChangeIdle
-    $txt = (Get-Content $run) -replace '\{CR\}', $cr
+    $txt = (Get-Content $run) -replace '\{CR\}', $cr -replace '\{RIG\}', $(if ($Rig -like '4080*') { '4080' } else { '5090' })
     [IO.File]::WriteAllText((Join-Path $tmp 'list.txt'), (($txt -join "`n") + "`n"))
     $skip = NoDryRows $run
     $drl = $txt | Where-Object { $r = $_; if ($r -match '^\s*(#|$)') { return $true }; -not ($skip -contains (($r -split '\|')[0].Trim())) }
