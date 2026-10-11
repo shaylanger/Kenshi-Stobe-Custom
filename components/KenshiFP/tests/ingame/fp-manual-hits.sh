@@ -89,6 +89,9 @@ inp 0 0 0; pf_ranged_inj "$SH" || setup_fail "$PF_WHY"
 
 # ---- R13 raise outside native ranged combat: holstered crossbow, aim -> drawn by the adapter -> shot-ready ----
 for _ in $(seq 1 30); do [ "$(cs why)" = holstered ] && break; inp 0 0 0; sleep 0.5; done   # wait for the AI combat to end
+# rg03 32-confirm2 (8C72A4C4): the bow now stays in hand at ready (no AI sheathe), R13 started with why=ok: holster it with R
+if [ "$(cs why)" != holstered ]; then A input_isolation on >/dev/null; A key_inject r tap 120 >/dev/null
+  for _ in $(seq 1 16); do [ "$(cs why)" = holstered ] && break; inp 0 0 0; sleep 0.25; done; fi
 W0=$(cs why); D0=$(cs draws); RI0=$(A rangedinfo "$SH" | grep -o 'in_ranged_combat=[0-9]')
 inp 1 0 0; SR=0; waitfor 10 shot_ready 1 && SR=1; W1=$(cs why); D1=$(cs draws);   # SR from the wait: readiness can drop again when the aim timer restarts
  DG=$(A fp_combat state | grep -o "wih=.*"); inp 0 0 0; sleep 1
