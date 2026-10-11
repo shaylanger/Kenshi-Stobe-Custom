@@ -38,7 +38,8 @@ A fp_control state | grep -q "control_ids=.*/$(A where "$SH" | grep -o '#[0-9]*'
 A fp_combat autoreload 1 >/dev/null; A fp_combat on >/dev/null; inp 0 0 0; sleep 0.5
 YAW=$(A fp_camera state | fld yaw); A fp_camera look "${YAW:-0}" 0.15 >/dev/null   # slightly down: bolts hit the ground ahead
 E_IDLE=$(eye)
-inp 1 0 0; waitfor 10 shot_ready 1 || setup_fail "not shot_ready after aim (why=$(cs why))"
+# (10 -> 20 s, 113 EYE on the 4080: the gun came in empty from the previous row, native reload 6.1 s + raise ran past 10 s)
+inp 1 0 0; waitfor 20 shot_ready 1 || setup_fail "not shot_ready after aim (why=$(cs why) ammo=$(cs ammo) reloading=$(cs reloading))"
 sleep 2; E0=$(eye); S0=$(cs actual_shots)
 [ "${E0%% *}" != nan ] || setup_fail "no camera_y/where y (eye=$E0)"
 
