@@ -92,7 +92,7 @@ cause). run-batch.sh checks after every row itself too (<out>\TDR). -Fake: runne
 Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '5090b', '5090c', '4080b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
-      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [string]$Resolve = '', [string]$DryKeyOf = '', [string]$FillerRows = '', [string]$LedgerFrom = '', [string]$LedgerList = '',
+      [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [int]$PreDryMin = 5, [string]$Resolve = '', [string]$DryKeyOf = '', [string]$FillerRows = '', [string]$LedgerFrom = '', [string]$LedgerList = '',
       [int]$HardMin = 5, [switch]$SelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # Stuck decision (pure; -SelfTest checks it). Soft: condition held >= lim AND out dir unchanged >= lim. Hard (2026-10-11,
@@ -160,6 +160,32 @@ function NeverStartedAct([datetime]$t0, [datetime]$loopStart, [datetime]$now, [b
 # fast setup FAIL list: 'alert' (sticky ALERT-<rig>-setup.txt, Stop hook) only when nothing else is queued (the rig idles) or
 # $max fast lists came in a row; else 'note' (owner note, the next list starts at once)
 function FastAlertAct([int]$queued, [int]$streak, [int]$max) { if ($queued -le 0 -or $streak -ge $max) { 'alert' } else { 'note' } }
+# Tick wait (turret-fp 2026-10-11: DONE noticed up to 60 s late, mean ~40 s/list over 6 lists): sleep up to $TickSec, but
+# wake as soon as something NEW appears: the running batch's <out>\DONE or GAMEDONE (5090: local Test-Path every 2 s;
+# 4080: one ssh Test-Path every 15 s), or a new list in queue\<rig>\ / any\ while nothing runs. Only a file that was not
+# there when the wait began wakes it, so a state the loop can't act on never turns the tick into a busy loop.
+function WaitTick {
+    $end = (Get-Date).AddSeconds($TickSec)
+    $c = if (Test-Path $curF) { @(Get-Content $curF) } else { $null }
+    $qs = @("$qd\$Rig", "$qd\any") | Where-Object { Test-Path $_ }
+    $nq = { @($qs | ForEach-Object { Get-ChildItem $_ -Filter '*.list' -File -ErrorAction SilentlyContinue }).Count }
+    $q0 = & $nq
+    if ($c -and $c.Count -ge 3) {
+        if ($Rig -eq '4080' -and -not $Fake) {
+            $leaf = Split-Path $c[2] -Leaf; $ps = "(Test-Path C:\KenshiTestRuns\$leaf\DONE),(Test-Path C:\KenshiTestRuns\$leaf\GAMEDONE)"
+            $st = { "$(@(Ssh @('powershell', '-NoProfile', '-Command', $ps)) -join ',')" }
+            $s0 = & $st
+            while ((Get-Date) -lt $end) { Start-Sleep 15; if ((Get-Date) -ge $end) { break }; $s = & $st; if ($s -ne $s0 -and $s -match 'True') { return 'batch' } }
+            return 'tick'
+        }
+        $fs = @('DONE', 'GAMEDONE') | ForEach-Object { Join-Path $c[1] $_ }
+        $had = @($fs | Where-Object { Test-Path $_ })
+        while ((Get-Date) -lt $end) { Start-Sleep 2; if (@($fs | Where-Object { (Test-Path $_) -and $had -notcontains $_ }).Count) { return 'batch' } }
+        return 'tick'
+    }
+    while ((Get-Date) -lt $end) { Start-Sleep 2; if ((& $nq) -gt $q0) { return 'queue' } }
+    'tick'
+}
 if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cases (no side effects)
     $cases = @(
         @('R11 4080 hang: harness silent 6 min, row log written 10 s ago', @{ step = 'R11'; age = '10'; crash = '0' }, 'harness not answering', 6, 2, 0, 'kill-game hard'),
@@ -213,6 +239,19 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
             @('requeued 1 h ago = fail', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $false, 1, 'fail'),
             @('filler copy = fail (filler\ keeps the original)', $n0, $n0.AddSeconds(-600), $n0.AddMinutes(3), $true, 99, 'fail'))
     foreach ($c in $ns) { $g = [string](NeverStartedAct $c[1] $c[2] $c[3] $c[4] $c[5]); $ok = $g -eq $c[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) never-started $($c[0]): got '$g' want '$($c[6])'" }
+    # WaitTick (turret-fp): a new DONE wakes the loop within ~2 s; a DONE that was already there does not (no busy loop)
+    $wt = Join-Path $env:TEMP "rr-wt-$PID"; New-Item -ItemType Directory -Force "$wt\out", "$wt\q\$Rig", "$wt\q\any" | Out-Null
+    $sv = @($curF, $qd, $TickSec); $script:curF = "$wt\cur"; $script:qd = "$wt\q"; $script:TickSec = 5
+    Set-Content $curF @('run', "$wt\out", "$wt\out")
+    $j = Start-Job { param($d) Start-Sleep 1; Set-Content "$d\DONE" 'x' } -ArgumentList "$wt\out"
+    $t = Get-Date; $g = WaitTick; $dt = ((Get-Date) - $t).TotalSeconds; Remove-Job $j -Force
+    $ok = $g -eq 'batch' -and $dt -lt 4.5; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) wait-tick new DONE wakes early: $g after $([math]::Round($dt, 1)) s"
+    $t = Get-Date; $g = WaitTick; $dt = ((Get-Date) - $t).TotalSeconds
+    $ok = $g -eq 'tick' -and $dt -ge 4.5; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) wait-tick old DONE waits the tick: $g after $([math]::Round($dt, 1)) s"
+    Remove-Item $curF; $j = Start-Job { param($d) Start-Sleep 1; Set-Content "$d\10-x.list" 'x' } -ArgumentList "$wt\q\any"
+    $t = Get-Date; $g = WaitTick; $dt = ((Get-Date) - $t).TotalSeconds; Remove-Job $j -Force
+    $ok = $g -eq 'queue' -and $dt -lt 4.5; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) wait-tick new list wakes an idle loop: $g after $([math]::Round($dt, 1)) s"
+    $script:curF, $script:qd, $script:TickSec = $sv; Remove-Item -Recurse -Force $wt -ErrorAction SilentlyContinue
     # lazy install (hotswap2): any / +patch keep a reusable game on its build; a needed patch or a restart installs the newest
     $lz = @(@('any, game reusable', 'any', $true, 'AAAA0001', 'p1', 'BBBB0002', 'p1,p2', 'sha='),
             @('any, game must restart', 'any', $false, 'AAAA0001', 'p1', 'BBBB0002', 'p1,p2', 'sha=BBBB0002'),
@@ -921,6 +960,11 @@ function PreDryNext {
     foreach ($f in @(@(RealLists) + @(FillerLists))) {   # filler too: its first pick then starts on a cached verdict
         $key = DryKey $f.FullName
         if (Test-Path (Join-Path $pdd "$key.rc")) { continue }   # PASS or FAIL cached for this exact state
+        # debounce (turret-fp 2026-10-11: 92-e6-strokes pre-dry-ran 9x in 26 min, each time a covered script had changed):
+        # at most one background dry run per list per $PreDryMin min; the list start dry-runs itself (nice 0) if still stale
+        if (-not $script:predryAt) { $script:predryAt = @{} }
+        if ($script:predryAt[$f.Name] -and ((Get-Date) - $script:predryAt[$f.Name]).TotalMinutes -lt $PreDryMin) { continue }
+        $script:predryAt[$f.Name] = Get-Date
         PreDryStart $f.FullName $key; break
     }
     Get-ChildItem $pdd -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-12) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -1507,5 +1551,5 @@ while ($true) {
             }
         }
     } catch { Log "error: $($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)" }
-    Start-Sleep -Seconds $TickSec
+    $null = WaitTick
 }
