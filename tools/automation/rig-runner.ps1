@@ -145,7 +145,10 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
         @('first launch not done yet', @{ kenshi = '0'; step = '-'; launched = '0'; left = '2' }, 3, ''),
         @('Kenshi up between rows', @{ kenshi = '1'; step = '-'; launched = '1'; left = '0' }, 3, ''))
     foreach ($c in $lg) { $g = [string](LingerAct $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) linger $($c[0]): got '$g' want '$($c[3])'" }
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count) cases"; exit [int]($bad -gt 0)
+    # 4080 sync covers every helper a synced script names (rg-02 1011-0927: fp-control.sh's fp-yaw-free.awk never synced)
+    $sc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --check' 2>&1 | ForEach-Object { "$_" })
+    $ok = $LASTEXITCODE -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync helper closure: $(($sc | Select-Object -First 3) -join ' / ')"
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + 1) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
@@ -252,13 +255,12 @@ $script:keep4080 = [bool]$Keep4080   # -Keep4080: handed over by a -Restart with
 # (basename; python "import x"/"from x"). Deferred files (runner\4080.deferred) sync at the next list start where nothing uses
 # them. A new list that needs a deferred file runs on the 4080's old copy: runner\4080.oldcopy.<list> -> its result line.
 function SyncCandidates {   # repo-relative path -> full path, the files rig4080/setup.sh copies
+    # one definition: setup.sh --list (2026-10-11: this list had drifted from setup.sh's globs, e.g. no .awk helpers)
+    if ($script:scCache -and ((Get-Date) - $script:scAt).TotalSeconds -lt 60) { return $script:scCache }   # RowHash calls it per row
     $m = 'C:\KenshiModding'; $h = @{}
-    $g = @("$m\tools\automation\rig-env.sh", "$m\tools\automation\venc.sh", "$m\tools\automation\review-pack.py", "$m\Kenshi-Automation-Harness\client\kah.py") +
-         @(Get-ChildItem "$m\components\KenshiFP\animlab\*" -File -Include *.sh, *.py, *.txt -ErrorAction SilentlyContinue | ForEach-Object FullName) +
-         @(Get-ChildItem "$m\components\KenshiFP\animlab\weapons\*" -File -Include *.list, *.json -ErrorAction SilentlyContinue | ForEach-Object FullName) +
-         @(Get-ChildItem "$m\components\KenshiFP\tests\ingame\*" -File -Include *.sh, *.py -ErrorAction SilentlyContinue | ForEach-Object FullName) +
-         @(Get-ChildItem "$m\Kenshi-Automation-Harness\tools\animlab\*.py" -File -ErrorAction SilentlyContinue | ForEach-Object FullName)
-    foreach ($f in $g) { if (Test-Path -LiteralPath $f -PathType Leaf) { $h[($f.Substring($m.Length + 1) -replace '\\', '/')] = $f } }
+    $l = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --list' 2>$null | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+    foreach ($r in $l) { $f = Join-Path $m ($r -replace '/', '\'); if (Test-Path -LiteralPath $f -PathType Leaf) { $h[$r] = $f } }
+    if ($h.Count) { $script:scCache = $h; $script:scAt = Get-Date }
     $h
 }
 function UsedClosure([string]$text, [hashtable]$cand, [switch]$SeedsOnly) {   # synced files named in $text, plus everything they reference

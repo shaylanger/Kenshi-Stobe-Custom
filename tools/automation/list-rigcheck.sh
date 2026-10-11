@@ -7,7 +7,8 @@
 #           (5090: %LOCALAPPDATA%\kenshi\save; 4080: its save dir over ssh). 4080 copy differing from the 5090's
 #           quick.save (md5) = WARN only (a 4080 test may have saved on purpose).
 #   scripts every script path in the rows ({CR}|/mnt/c|/c ... .sh|.py|.ps1|.awk) exists on the 5090; for the 4080 it is
-#           either a file rig4080/setup.sh syncs at every list start (components/KenshiFP/tests/ingame/*.sh|py,
+#           (plus, transitively, every helper a script names by bare file name that sits next to it, e.g. fp-control.sh ->
+#           fp-yaw-free.awk) either a file rig4080/setup.sh --list syncs at every list start (components/KenshiFP/tests/ingame/*,
 #           animlab/*.sh|py|txt, animlab/weapons/*, harness client/kah.py + tools/animlab/*.py, rig-env.sh,
 #           review-pack.py, run-batch helpers) or already on the 4080 with the same md5. Ad-hoc scripts under
 #           C:\KenshiTestRuns (and the ad-hoc scripts they call) are 5090-only unless identical on the 4080: move them into
@@ -46,9 +47,16 @@ while read -r p; do add_sc "$p"; done < <(rows | awk -F'|' '{print $NF}' | grep 
 todo=("${!SC[@]}"); seen=()
 while [ ${#todo[@]} -gt 0 ]; do
   p=${todo[0]}; todo=("${todo[@]:1}")
-  case "$p" in /c/KenshiTestRuns/*) ;; *) continue ;; esac
   [ -f "$p" ] || continue
   d=$(dirname "$p")
+  # helpers named by bare file name and present next to the script (repo or ad-hoc): fp-control.sh -> fp-yaw-free.awk
+  # (rg-02-control-stealth-1011-0927: the 4080 sync never copied *.awk, the take failed at setup)
+  for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq)\b" "$p" | sort -u); do
+    q="$d/$n"; [ -f "$q" ] && [ -z "${SC[$q]:-}" ] || continue
+    case "$q" in $M/tools/automation/run-batch.sh|$M/tools/automation/kenshi-ctl.ps1|$M/tools/automation/rig-runner.ps1) continue ;; esac
+    SC[$q]=1; todo+=("$q")
+  done
+  case "$p" in /c/KenshiTestRuns/*) ;; *) continue ;; esac
   for q in $(grep -oE "(/mnt/c|/c|\\\$\{CR:-/mnt/c\})/KenshiTestRuns/[^ \"'|;)]+\.(sh|py|awk)" "$p" | sed -E 's#^\$\{CR:-/mnt/c\}#/c#; s#^/mnt/c/#/c/#') \
            $(grep -oE "(^|[;&|] *|^ *)(bash|\.|python3) +[A-Za-z0-9_.-]+\.(sh|py)" "$p" | awk '{print $NF}' | sed "s#^#$d/#"); do
     [ -n "${SC[$q]:-}" ] && continue
@@ -63,16 +71,10 @@ if [ "$RIG" = 5090 ]; then
   for s in "${!SV[@]}"; do [ -d "$SAVES/$s" ] || reasons+=("save $s missing"); done
 else
   # ---- 4080 side
-  synced(){ case "$1" in
-    $M/components/KenshiFP/tests/ingame/*/*) return 1 ;;
-    $M/components/KenshiFP/tests/ingame/*.sh|$M/components/KenshiFP/tests/ingame/*.py) return 0 ;;
-    $M/components/KenshiFP/animlab/weapons/*/*) return 1 ;;
-    $M/components/KenshiFP/animlab/weapons/*.list|$M/components/KenshiFP/animlab/weapons/*.json) return 0 ;;
-    $M/components/KenshiFP/animlab/*/*) return 1 ;;
-    $M/components/KenshiFP/animlab/*.sh|$M/components/KenshiFP/animlab/*.py|$M/components/KenshiFP/animlab/*.txt) return 0 ;;
-    $M/Kenshi-Automation-Harness/client/kah.py|$M/Kenshi-Automation-Harness/tools/animlab/*.py) return 0 ;;
-    $M/tools/automation/rig-env.sh|$M/tools/automation/review-pack.py|$M/tools/automation/run-batch.sh) return 0 ;;
-    $M/tools/automation/rig-runner-probe.sh|$M/tools/automation/batch-excerpts.sh|$M/tools/automation/batch-health.sh) return 0 ;;
+  # synced = in the sync's own file list (rig4080/setup.sh --list, one definition) or a run-batch helper rig-runner copies
+  declare -A SY=(); while read -r f; do SY[$M/$f]=1; done < <(bash $M/tools/automation/rig4080/setup.sh --list)
+  synced(){ [ -n "${SY[$1]:-}" ] && return 0; case "$1" in
+    $M/tools/automation/run-batch.sh|$M/tools/automation/batch-excerpts.sh|$M/tools/automation/batch-health.sh) return 0 ;;
     *) return 1 ;; esac; }
   ask=()
   for p in "${!SC[@]}"; do synced "$p" || ask+=("$p"); done
@@ -99,7 +101,7 @@ else
     m4=$(echo "$out" | grep -F "FILE $p " | awk '{print $3}'); m5=$(md5sum "$p" | cut -c1-32)
     if [ -z "$m4" ]; then
       case "$p" in /c/KenshiTestRuns/*) reasons+=("ad-hoc script $p is 5090-only (move it into components/KenshiFP/tests/ingame, rig-aware via rig-env.sh, so the runner syncs it)") ;;
-                   *) reasons+=("script $p is not synced to the 4080 (rig4080/setup.sh copies only tests/ingame, animlab, harness client/animlab)") ;; esac
+                   *) reasons+=("script $p is not synced to the 4080 and not on it (rig4080/setup.sh --list: tests/ingame, animlab, harness client/animlab helpers)") ;; esac
     elif [ "$m4" != "$m5" ]; then reasons+=("script $p differs on the 4080 (not synced: ad-hoc copy, md5 ${m4:0:8} vs ${m5:0:8})")
     else case "$p" in /c/KenshiTestRuns/*) warn "ad-hoc script $p identical on the 4080 (not synced by the runner: move it into the repo)" ;; esac; fi
   done
