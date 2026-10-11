@@ -37,11 +37,14 @@ for c in $SH Malzin; do A health $c 100 >/dev/null; done
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null; A combatmode $SH ranged off >/dev/null
 A inv $SH | grep -q '"name":"Chisa Katana"' || { A unequip Malzin "Chisa Katana" >/dev/null; A transfer Malzin $SH "Chisa Katana" >/dev/null; A pickup $SH "Chisa Katana" radius 80 >/dev/null; }
 A equip $SH "Chisa Katana" >/dev/null; sleep 1
+# crash safety (2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): no crossbow equipped on anyone in the scene
+for c in $SH Malzin Tassilo Shay; do A inv $c | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | grep -iE 'bow|toothpick|harpoon|eagle' | sort -u | while read -r b; do A unequip $c "$b" >/dev/null; done; done; sleep 1
+for c in $SH Malzin Tassilo Shay; do A inv $c | grep -o '"name":"[^"]*","equipped":true' | grep -iqE 'bow|toothpick|harpoon|eagle' && fail "setup: crossbow still equipped on $c (crash-safety quarantine)"; done
 A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 0 0.05 >/dev/null; sleep 1; A screenshot e6-skyck >/dev/null
 sky=$("$FFX" -hide_banner -loglevel error -y -i "$(wslpath -w "$SHOTS/e6-skyck.png")" -vf "crop=1600:120:0:30,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -tu1 | awk '{print ($3 > $1+25 ? "clear" : "hazy")}')
 [ "$sky" = clear ] || fail "setup: sky $sky"
 A fp_camera look 3.14 0.05 >/dev/null; ready; [ "$(st)" = ready ] || fail "setup: katana not ready (state=$(st))"
-A fp_vm state | grep -q 'class=melee\|class=0' || echo "note: $(A fp_vm state | grep -o 'class=[a-z0-9]*' | head -1)"
+cl_=$(A fp_vm state | grep -o "class=[a-z0-9]*" | head -1); case "$cl_" in *xbow*|*ranged*|*bow*) A key_inject r tap 120 >/dev/null; fail "setup: drawn weapon $cl_ (crash-safety: sword only)";; esac; echo "note: $cl_"
 A fp_vm set strokes 15 >/dev/null
 pf_nofight; pf_open 2   # cursor parked in the sky + open ground/overlay check before filming (op-b8 e6r7: cover:ui_state/near/msgs)
 # ---- take
