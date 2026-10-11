@@ -25,7 +25,7 @@ cleanup() { [ "$STARTED" = 1 ] && { log "stop instance 2: $(ctl2 stop | tail -1)
 trap cleanup EXIT
 fin() { echo "RESULT MI-TRIAL $1 $2 log=$LOG"; exit 0; }
 gh() { grep -o 'game_hours=[0-9.]*\|hours=[0-9.]*' | head -1 | cut -d= -f2; }
-procs() { powershell.exe -NoProfile -Command 'Get-Process kenshi_x64 -ErrorAction SilentlyContinue | ForEach-Object { "{0}:{1:N1}GB" -f ($(if ($_.Path -like "D:\KenshiInst\*") {"i2"} else {"i1"})), ($_.WorkingSet64/1GB) }' 2>/dev/null | tr -d '\r' | tr '\n' ' '; }
+procs() { powershell.exe -NoProfile -Command 'Get-Process kenshi_x64 -ErrorAction SilentlyContinue | ForEach-Object { "{0}:{1:N1}GB" -f ($(if ($_.Path -like "D:\KenshiInst\*") {"i2"} else {"i1"})), ($_.WorkingSet64/1GB) }' 2>/dev/null </dev/null | tr -d '\r' | tr '\n' ' '; }
 gpu() { /usr/lib/wsl/lib/nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,noheader 2>/dev/null | tr -d ' ' | head -1; }
 
 # --- preflight (setup failures stop here, before instance 2 is touched) ---
@@ -36,9 +36,9 @@ c=$(ctl2 status | tail -1); log "i2 ctl status: $c"
 free=$(powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; "{0:N0}" -f ($o.FreeVirtualMemory/1MB)' 2>/dev/null | tr -d '\r,')
 log "commit headroom ${free} GB"
 [ "${free:-0}" -ge "${MI_MIN_COMMIT_GB:-16}" ] || fin FAIL "setup: commit headroom ${free} GB < ${MI_MIN_COMMIT_GB:-16}"
-sy=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTPS" sync -Instance 2 -Saves "$SAVE" 2>&1 | tr -d '\r'); log "sync: $sy"
+sy=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTPS" sync -Instance 2 -Saves "$SAVE" 2>&1 </dev/null | tr -d '\r'); log "sync: $sy"
 echo "$sy" | grep -q "save $SAVE ->" || fin FAIL "setup: instance 2 sync failed ($(echo "$sy" | head -2 | tr '\n' ' '))"
-self=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTPS" selftest -Instance 2 2>&1 | tr -d '\r'); log "$self"
+self=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTPS" selftest -Instance 2 2>&1 </dev/null | tr -d '\r'); log "$self"
 echo "$self" | grep -q 'SELFTEST PASS' || fin FAIL "setup: instance 2 copy selftest ($self)"
 gpu0=$(gpu); p0=$(procs); log "before: gpu=$gpu0 procs=$p0"
 

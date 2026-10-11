@@ -1,0 +1,33 @@
+# family	clip (relative to the data dir)	kind	sides	note
+# Sources + licenses: CMU = CMU Graphics Lab Motion Capture Database, http://mocap.cs.cmu.edu ("free for all uses"; may not resell the data itself; the database asks for an acknowledgement: "The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.")
+# BNR = Bandai Namco Research Motiondataset-1, github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset, CC BY-NC 4.0 (attribution, non-commercial; KenshiFP is a free mod: measuring is fine, the data itself is not redistributed here)
+sword	cmu/02_07.amc	strike	R	CMU 02 swordplay (one-handed, casual)
+sword	cmu/02_08.amc	strike	R	CMU 02 swordplay
+sword	cmu/02_09.amc	strike	R	CMU 02 swordplay
+sword	bandai/slash_normal_001.bvh	strike	R	BNR slash (overhead, acted)
+sword	bandai/slash_normal_002.bvh	strike	R	BNR slash
+fists	cmu/02_05.amc	strike	LR	CMU 02 punch/strike
+fists	cmu/13_17.amc	strike	LR	CMU 13 boxing
+fists	cmu/13_18.amc	strike	LR	CMU 13 boxing
+fists	cmu/14_01.amc	strike	LR	CMU 14 boxing
+fists	cmu/14_02.amc	strike	LR	CMU 14 boxing
+fists	cmu/14_03.amc	strike	LR	CMU 14 boxing
+fists	cmu/17_10.amc	strike	LR	CMU 17 boxing
+fists	cmu/79_08.amc	strike	LR	CMU 79 boxing (pantomime)
+fists	cmu/80_10.amc	strike	LR	CMU 80 boxing (pantomime)
+fists	cmu/143_23.amc	strike	LR	CMU 143 punching
+fists	cmu/141_14.amc	strike	LR	CMU 141 punch and kick
+fists	bandai/punch_normal_001.bvh	strike	LR	BNR punch
+fists	bandai/punch_normal_002.bvh	strike	LR	BNR punch
+kicks	cmu/74_03.amc	kick	LR	CMU 74 kick
+kicks	cmu/74_04.amc	kick	LR	CMU 74 kick
+kicks	cmu/74_05.amc	kick	LR	CMU 74 kick
+kicks	cmu/74_06.amc	kick	LR	CMU 74 kick
+kicks	cmu/143_24.amc	kick	LR	CMU 143 kicking
+kicks	cmu/141_14.amc	kick	LR	CMU 141 punch and kick
+kicks	bandai/kick_normal_001.bvh	kick	LR	BNR kick
+twohand	cmu/79_01.amc	twohand	R	CMU 79 chopping wood (two-handed overhead, axe/heavy weapon reference)
+twohand	cmu/80_71.amc	twohand	R	CMU 80 chopping wood
+crossbow	cmu/80_03.amc	hold	R	CMU 80 shooting a gun (two-handed long gun aim: crossbow stand-in)
+crossbow	cmu/79_96.amc	hold	R	CMU 79 shooting a gun
+crossbow	cmu/79_86.amc	hold	R	CMU 79 shooting bow and arrow (draw)
