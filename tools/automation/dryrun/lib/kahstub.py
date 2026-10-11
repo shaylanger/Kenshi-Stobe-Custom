@@ -453,6 +453,7 @@ def press(s, btn, ms, now):
             sched(s, now + 0.05, 'lmb', ui_state='swinging', vm='swinging')
             sched(s, now + 1.1, 'lmb', ui_state='ready', vm='ready')
             kfplog(now + 0.05, "free swing start live=1")
+            kfplog(now + 1.05, "[controls] free swing end: 1000 ms steps=30 pmin=0.010 live=1 why=done")   # kfp_controls.inc (fp-fists z25 phase)
             # KenshiFP: native free swing counted (fp_keys free_swings) + viewmodel swing lines (kfp_viewmodel.inc)
             s['free_swings'] = s.get('free_swings', 0) + 1
             n = s['vm_swings'] = s.get('vm_swings', 0) + 1
@@ -1411,12 +1412,15 @@ def handle(s, cmd, a, now, sp):
             sw = fp['ui_state'] == 'swinging'
             tn = ['badpunch', 'ma chudan', 'ma 2strike', 'shoteiL'][max(fs['force'], 0) % 4]
             d = 1.5 if sw else 0.0   # native wrist moves during a technique (dm, view space)
-            r = "fist ua=1 force=%d on=%d fists=%d wih=%d tech='%s' table=%s fallback=0 u=%.3f swings=%d n=4 w=1.00 zf=0.00 state=%s " % (
+            bk = fp['ui_state'] == 'blocking'   # native fists block point fn_gb (0.9,-0.4) vs guard fn_g (1.6,-1.0)
+            zf = 0.0 if s.get('cam', {}).get('dist', 0.0) >= 8.0 else 1.0   # zoom fade (zf0 2 .. zf1 8)
+            r = "fist ua=1 force=%d on=%d fists=%d wih=%d tech='%s' table=%s fallback=0 u=%.3f swings=%d n=4 w=1.00 zf=%.2f state=%s " % (
                 fs['force'], on, on, 0 if fp.get('weapon') in (None, 'fists') else 1,
                 tn if sw else '-', tn.split()[0] if sw else 'guard',   # real: tech='-' table=guard between techniques,
-                0.9 if sw else 0.0, fs['swings'], fp['ui_state'])
-            r += ('tL=-1.60,-1.00,3.80 tR=1.60,-1.00,3.80 wrL=-1.60,%.2f,3.80 wrR=1.60,%.2f,%.2f '
-                  'elL=-2.50,-2.50,2.50 elR=2.50,-2.50,2.50 ikfail=%d') % (-1.0 + d * 0.3, -1.0 + d * 0.3, 3.8 + d, fs['ikfail'])
+                0.9 if sw else 0.0, fs['swings'], zf, fp['ui_state'])
+            gx, gy = (0.9, -0.4) if bk else (1.6, -1.0)
+            r += ('tL=-%.2f,%.2f,3.80 tR=%.2f,%.2f,3.80 wrL=-%.2f,%.2f,3.80 wrR=%.2f,%.2f,%.2f '
+                  'elL=-2.50,-2.50,2.50 elR=2.50,-2.50,2.50 ikfail=%d') % (gx, gy, gx, gy, gx, gy + d * 0.3, gx, gy + d * 0.3, 3.8 + d, fs['ikfail'])
             if fs.get('nat'):
                 r += ' nat=1 frz=%d natL=-1.60,%.2f,3.80 natR=1.60,%.2f,%.2f clamp=0' % (1 if sw else 0, -1.0 + d * 0.3, -1.0 + d * 0.3, 3.8 + d)
             return True, r

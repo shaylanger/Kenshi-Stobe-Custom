@@ -123,8 +123,10 @@ done
 : > "$N.block.txt"; : > "$N.z25.txt"; ZL0=
 if [[ ",${FIST_PHASES}," == *,block,* ]]; then
   lab "Guard (ready, before block)"; sleep 0.8; fist >> "$N.block.txt"
-  lab "RMB held: block guard"; A fp_keys press rmb 2500 >/dev/null
-  for _i in 1 2 3 4 5 6 7 8 9 10; do fist >> "$N.block.txt"; sleep 0.18; done; sleep 0.8; fist >> "$N.block.txt"
+  # takecheck claims blocking for the whole label span: the release label goes ~0.3 s before the real release (fp-block-guard.sh)
+  lab "RMB held: block guard"; A fp_keys press rmb 2500 >/dev/null; _b0=$(date +%s%N)
+  while [ $(( ($(date +%s%N) - _b0) / 1000000 )) -lt 2150 ]; do fist >> "$N.block.txt"; sleep 0.15; done
+  lab "Block released: guard"; sleep 1.2
 fi
 if [[ ",${FIST_PHASES}," == *,z25,* ]]; then
   lab "Zoom 25: native unarmed technique (LMB x2)"; A fp_camera distance 25 >/dev/null; sleep 1.5
