@@ -14,21 +14,37 @@ $mk = @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -Filter '4080*' 
     Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) } | ForEach-Object Name)
 # A marker naming a 4080 job ("4080:<path> ...") is checked for its end file (<path>.DONE, <stem>.DONE or <path>\DONE)
 # over ssh: a finished job no longer counts as BUSY (Shay 2026-10-10: no rig idle or paused > 2 min).
-$mkBusy = @()
+# Cheap (res-wait 2026-10-10): ONE ssh for all marker paths per call, a path seen DONE is remembered for good
+# (rig4080.markerdone), a RUN answer is reused for 60 s (rig4080.markerrun) instead of one ssh per marker per call.
+$mkBusy = @(); $ask = @{}
+$doneF = Join-Path $runs 'rig4080.markerdone'; $runF = Join-Path $runs 'rig4080.markerrun'
+$known = @(Get-Content -LiteralPath $doneF -ErrorAction SilentlyContinue)
+$runFresh = (Test-Path -LiteralPath $runF) -and (Get-Item -LiteralPath $runF).LastWriteTime -gt (Get-Date).AddSeconds(-60)
+$runKnown = if ($runFresh) { @(Get-Content -LiteralPath $runF -ErrorAction SilentlyContinue) } else { @() }
 foreach ($n in $mk) {
     $first = ((Get-Content -LiteralPath (Join-Path $runs "inflight\$n") -TotalCount 1 -ErrorAction SilentlyContinue) -as [string])
     if ($first -match '^4080:(\S+)') {
-        $p = $Matches[1]; $stem = $p -replace '\.[A-Za-z0-9]+$', ''
-        $q = "if ((Test-Path '$p.DONE') -or (Test-Path '$stem.DONE') -or (Test-Path '$p\DONE')) { 'DONE' } else { 'RUN' }"
-        $r = & ssh -o BatchMode=yes -o ConnectTimeout=5 4080 "powershell -NoProfile -Command `"$q`"" 2>$null
-        if (($r -join '') -match 'DONE') { continue }
+        $p = $Matches[1]
+        if ($known -contains $p) { continue }
+        if ($runKnown -contains $p) { $mkBusy += $n; continue }
+        $ask[$n] = $p; continue
     }
     $mkBusy += $n
 }
+if ($ask.Count) {
+    $q = ($ask.Values | Select-Object -Unique | ForEach-Object { $s_ = $_ -replace '\.[A-Za-z0-9]+$', ''; "if ((Test-Path '$_.DONE') -or (Test-Path '$s_.DONE') -or (Test-Path '$_\DONE')) { 'DONE $_' } else { 'RUN $_' }" }) -join '; '
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($q))
+    $r = @(& ssh -o BatchMode=yes -o ConnectTimeout=5 4080 "powershell -NoProfile -EncodedCommand $b64" 2>$null | ForEach-Object { "$_".Trim() })
+    $newDone = @($r | Where-Object { $_ -like 'DONE *' } | ForEach-Object { $_.Substring(5) })
+    if ($newDone.Count) { Add-Content -LiteralPath $doneF -Value $newDone -Encoding ascii }
+    Set-Content -LiteralPath $runF -Value @($runKnown + @($r | Where-Object { $_ -like 'RUN *' } | ForEach-Object { $_.Substring(4) })) -Encoding ascii
+    foreach ($n in $ask.Keys) { if ($newDone -notcontains $ask[$n]) { $mkBusy += $n } }
+}
 if ($mkBusy.Count) { "BUSY marker=$($mkBusy -join ',')"; exit 0 }
 $allDone = $mk.Count -gt 0
-if ($allDone) { $Fresh = $true }   # every marker job is DONE: look at the rig itself
-if (-not $Fresh -and (Test-Path -LiteralPath $cache) -and (Get-Item -LiteralPath $cache).LastWriteTime -gt (Get-Date).AddMinutes(-3)) {
+# every marker job is DONE: look at the rig itself, but at most once a minute (was: a fresh ssh on every call)
+$maxAge = if ($allDone) { -1 } else { -3 }
+if (-not $Fresh -and (Test-Path -LiteralPath $cache) -and (Get-Item -LiteralPath $cache).LastWriteTime -gt (Get-Date).AddMinutes($maxAge)) {
     $k = (Get-Content -LiteralPath $cache -Raw).Trim()
 } else {
     $out = & ssh -o BatchMode=yes -o ConnectTimeout=5 4080 'tasklist /nh' 2>$null

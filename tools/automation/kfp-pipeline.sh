@@ -91,6 +91,7 @@ STAGE=${STAGE:-$COMB}; EXNOTE=${KFP_EXCL_NOTE:-}
 RUN=${RUN:-$PR/run-$(date +%m%d-%H%M%S)}; mkdir -p "$RUN"/{diffs,logs,snap}; D=$RUN/delta.tsv
 IFL=/mnt/c/KenshiTestRuns/inflight/kfp-pipeline-$(basename "$RUN"); [ -n "${KFP_STAGED:-}" ] && IFL=""   # tests: no marker
 [ -n "$IFL" ] && { mkdir -p "$(dirname "$IFL")"; echo "$RUN" > "$IFL"; }
+echo $$ > "$RUN/pipeline.pid"   # wait-event.ps1 -Producer kfp-pipeline-<run>: PRODUCER GONE when this run dies without staging
 say() { echo "$*" | tee -a "$RUN/pipeline.log"; }
 die() { say "PIPELINE FAIL $1 $2${EXNOTE:+ excluded=$EXNOTE} delta=$D run=$RUN"; cleanup; exit 1; }
 # rerun_without <names> <why>: combined mode leaves these patches out and repeats the run (the rest still ships)

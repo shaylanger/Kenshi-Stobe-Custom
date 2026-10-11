@@ -28,6 +28,10 @@ file paths of outputs, the build hashes involved, and what you want back.
 > through the live tables file + `fp_tables` (no rebuild) and rebuild only for code changes; a take whose only failures are
 > recording checks is PASS-REC (no refilm); judge only frames the auto-review flags; read decoded frames from the shared
 > frame cache (never decode a video yourself); lab work goes through the result cache and the one lab CPU budget.
+> Waiting (Shay 2026-10-10): wait with `tools/automation/wait-event.ps1` (WSL: `wait-event.sh`), never a loop of ls/wsl/ssh
+> checks: e.g. `wait-event.ps1 -File C:\KenshiTestRuns\queue\done\<list>.SUMMARY.txt -Producer <inflight marker> -Timeout 110`
+> (also -Changed staged\KenshiFP-latest.txt, -Status <agent>, -Glob '<me>.note-from-*', -Remote4080 <path>); exit 0 EVENT,
+> 1 TIMEOUT (wait again), 2 PRODUCER GONE / 3 STALE (the producer died or went silent: act). Keep each wait <= 120 s.
 > Stay lean: read RESULT lines and excerpts, one review sheet at a time; hand long judging (frame-by-frame review, log
 > digging) to a short-lived helper agent that returns one verdict line.
 

@@ -16,7 +16,10 @@ f=$(find "$O" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1)
 if [ -n "$f" ]; then age=$(( ( $(date +%s) - ${f%%.*} ) / 60 )); f="${f#* }"
 else age=0; f="(no output yet in $O)"; fi
 cur=$(grep -a -E '^[0-9]{2}:[0-9]{2} .*: (prepare|run) ' "$O/batch.log" 2>/dev/null | tail -1 | cut -c1-80)
-if ! tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then
+# Cheaper (res-wait 2026-10-10): ask the harness first; a harness answer proves Kenshi runs, so tasklist.exe (a Windows
+# process spawn) only runs when the harness is silent. Same verdicts as before.
+st=$(timeout 30 stobe-auto status </dev/null 2>&1 | tr -d '\r' | head -1)
+if ! grep -q 'phase=' <<<"$st" && ! tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then
   echo "HEALTH STALL Kenshi is not running file=$f age=${age}m ${cur:+now=\"$cur\"}"; exit 2
 fi
 # m50 5090 K: a crash leaves RE_Kenshi's handler on a hidden message box; the game ran on for 40 s and then froze
@@ -27,7 +30,6 @@ first=$(find "$O" -type f -printf '%T@\n' 2>/dev/null | sort -n | head -1)
 if [ -f "$cd_" ] && [ -n "$first" ] && [ "$(stat -c %Y "$cd_")" -gt "${first%%.*}" ]; then
   echo "HEALTH STALL Kenshi crashed (crash dump $(date -d @"$(stat -c %Y "$cd_")" +%H:%M:%S); RE_Kenshi's handler blocks on a hidden dialog, the game may still look alive) file=$f age=${age}m ${cur:+now=\"$cur\"}"; exit 2
 fi
-st=$(timeout 30 stobe-auto status </dev/null 2>&1 | tr -d '\r' | head -1)
 phase=$(grep -oE 'phase=[a-z]+' <<<"$st"); speed=$(grep -oE 'speed=[0-9.]+' <<<"$st"); paused=$(grep -oE 'paused=[01]' <<<"$st")
 why=""
 [ -z "$phase" ] && why="harness did not answer ($(cut -c1-60 <<<"$st"))"

@@ -118,7 +118,7 @@ function Scan-Win([string]$where, [string]$root, [string[]]$keepNames, [string[]
 
 # --- 5090 C:\KenshiTestRuns ---
 $keepTop = 'corpus', 'logs', 'queue', 'inflight', 'scenarios', 'agents', 'spec-videos', 'review-verdicts.tsv', 'game.lock',
-    'kenshi.cfg.play', 'rig5090.idle', 'rig4080.idle', 'rig4080.state', 'display-keeper.beat', 'sweep-keep.tsv', 'sweep-4080.cache'
+    'kenshi.cfg.play', 'rig5090.idle', 'rig4080.idle', 'rig4080.state', 'rig4080.markerdone', 'rig4080.markerrun', 'display-keeper.beat', 'sweep-keep.tsv', 'sweep-4080.cache'
 Scan-Win '5090' $runs $keepTop @('handoff.*')
 # logs: newest 6 launch archives stay
 Get-ChildItem -LiteralPath (Join-Path $runs 'logs') -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -Skip 6 | ForEach-Object {
