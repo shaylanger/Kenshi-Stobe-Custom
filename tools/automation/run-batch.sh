@@ -110,7 +110,7 @@ prepare() {  # prepare <save> <player> <mate>
 
 D="$O/done.txt"   # names of the tests that ran to the end (any result); --resume skips them
 if [ "$RESUME" = 1 ]; then say "BATCH RESUME $(date '+%F %H:%M') list=$L done=$(wc -l <"$D" 2>/dev/null || echo 0)"
-else : > "$S"; : > "$R"; : > "$D"; say "BATCH START $(date '+%F %H:%M') list=$L"; fi
+else : > "$S"; : > "$R"; : > "$D"; : > "$O/rows.tsv"; say "BATCH START $(date '+%F %H:%M') list=$L"; fi
 if [ -n "$NODRY" ]; then say "NOTE dryrun gate skipped (--no-dryrun): $NODRY"
 else
   DRO=$(bash "$A/dryrun.sh" --out "$O/dryrun" "$L" 2>&1); DRC=$?
@@ -169,6 +169,8 @@ RESULT $name FAIL wrapper did not complete (exit $rc)"
     res=$(sed "/^RESULT [^ ]* FAIL/{/ log=/!s|\$| out=$out|;s|\$|${ex:+ excerpt=$ex}|}" <<<"$res")
   fi
   echo "$res" | tee -a "$S"; echo "$name" >>"$D"
+  # rows.tsv: one status per list row (rig-runner's filler ledger: a row reruns only when its build/script changed or it failed)
+  if grep -qE '^RESULT [^ ]+ FAIL' <<<"$res"; then printf '%s\tFAIL\n' "$name"; else printf '%s\tPASS\n' "$name"; fi >>"$O/rows.tsv"
   # count by the row's status word (3rd field): a PASS row quoting an inner "RESULT take FAIL" counted as both (tur-b-2)
   # PASS-REC = pass with a recording warning (only sampler gaps / video length / sync lag failed; takecheck.py)
   pass=$((pass + $(grep -cE '^RESULT [^ ]+ PASS(-REC)? ' <<<"$res"))); fail=$((fail + $(grep -cE '^RESULT [^ ]+ FAIL' <<<"$res")))
@@ -196,7 +198,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   if [ "$RESUME" = 1 ] && grep -qxF "$name" "$D" 2>/dev/null; then echo "$(date +%H:%M) $name: ran before, skipped (--resume)"; continue; fi
   # rig-runner preemption (a filler gives way to real work): <out>/PREEMPT = stop at this row boundary; the running row has
   # its RESULT line, the rest are listed as not run (not in done.txt: --resume would run them), GAMEDONE/DONE as usual
-  if [ -z "$PRE" ] && [ -f "$O/PREEMPT" ]; then PRE=$(head -1 "$O/PREEMPT" | tr -d ''); PRE=${PRE:-preempted}; say "BATCH PREEMPTED $(date '+%F %H:%M') before $name: $PRE"; fi
+  if [ -z "$PRE" ] && [ -f "$O/PREEMPT" ]; then PRE=$(head -1 "$O/PREEMPT" | tr -d '\r'); PRE=${PRE:-preempted}; say "BATCH PREEMPTED $(date '+%F %H:%M') before $name: $PRE"; fi
   if [ -n "$PRE" ]; then NOTRUN+=("$name"); continue; fi
   read -r freec kpriv <<<"$(memline)"
   echo "$(date +%H:%M) $name: commit free ${freec:-?} GB, kenshi private ${kpriv:-?} GB"
