@@ -1006,7 +1006,10 @@ function Preempt([string[]]$c, [string]$by) {
     State "running $name (filler, preempted by ${by}: ends after the current row)"
 }
 function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch]$Tail, [string]$Why = '') {
-    $run, $outW, $outP, $own, $t0, $name, $tmp = $c
+    # $c[0..6] only: a cur/tail file has an 8th line (the start token, Add-Content below); without the slice $tmp became a
+    # 2-element array, the 4080 scp of rows.tsv got two targets and failed, so the filler ledger never recorded a 4080 row
+    # (speed-audit 2026-10-11: 35 filler runs = 6.2 h of 19 h on the 4080, rg-04 x11 / rg-01 x10 reran unchanged rows)
+    $run, $outW, $outP, $own, $t0, $name, $tmp = $c[0..6]
     if ($how -ne 'DONE' -and -not $Tail -and -not $Fake) {
         # a dead/lost batch gives the rig back: marker, lock (only if ours), and a game it left open (DIED only, not LOST)
         if ($Rig -eq '5090') {
