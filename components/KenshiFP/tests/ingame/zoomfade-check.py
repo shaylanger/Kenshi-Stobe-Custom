@@ -9,15 +9,18 @@ Per step (frames whose recorded zoom is within 0.05 dm of the step; held states 
 of a swing):
   band    bandhide 1: every frame with 0.65 <= zoom < HEAD_SHOW (16) has band_hidden=1, every frame at >= HEAD_SHOW 0
   head    right wrist + grip >= HD_MIN (2.0 dm) from the head centre (head bone + 0.9 dm along neck->head), on visible
-          frames with zoom >= 0.65 (zoom-0 frames are the FP viewmodel in front of the eye)
+          frames with zoom >= 0.65 (zoom-0 frames are the FP viewmodel in front of the eye); head and vis judge only
+          frames with zf >= 0.05: at zf < 0.05 the pose is Kenshi's own animation (counted as nhead/nvis, not a FAIL);
+          a blended frame fails only beyond both end poses: hd < min(HD_MIN, native min - 0.1), points < min(5, native min)
   vis     >= 5 of the 21 grip->tip points on screen from the zoomed camera (0,0,-zoom), visible frames
   stretch upper arm / forearm lengths of both arms vs the native lengths at the farthest step: per segment the ratio
           stays within [min(1, r0)*(1-ST_TOL), max(1, r0)*(1+ST_TOL)] (r0 = that segment's zoom-0 FP ratio, accepted FP
-          stretch; ST_TOL 0.08): the half-mix must not stretch/shrink a limb beyond both end poses
+          stretch = per segment min..max over every frame of the zf > 0.95 steps (a swing alternates strokes); ST_TOL 0.08): the half-mix must not stretch/shrink a limb beyond both end poses
           and the recorded upper-arm stretch <= max(1.05 * zoom-0 stretch, 1.05)
   jump    per step pose = median of the joints (both arms, grip, blade tip) relative to the spine in WORLD axes (the camera
           basis rotates with the orbit); adjacent visible steps: max joint move <= J_MIN (0.8 dm) + J_K (2.0) * expected,
-          expected = |dzf| * |P_fp - P_native| (+ (1 - zf) * native spread: the native block/swing tech is random). Swing:
+          expected = |dzf| * |P_fp - P_native| (+ (1 - zf) * native spread: the native block/swing tech is random;
+          + max zf * FP spread: FP swings alternate strokes, held states ~0). Swing:
           poses sampled at swing progress 0.3/0.5/0.7.
   basis   self-check: shoulder line yaw in world axes constant within 20 deg over the steps (else a recorder/basis bug)
 A check FAILs when more than 3% of a step's frames break it (head/vis/stretch/band) or any adjacent pair jumps.
@@ -94,33 +97,45 @@ def main():
     far = S[-1][1]; near = S[0][1]
     L0 = [stt.median(x) for x in zip(*[lens(r) for r in far])]
     def ratios(r): return [l/max(b, 1e-3) for l, b in zip(lens(r), L0)]
-    r0 = [stt.median(x) for x in zip(*[ratios(r) for r in near])]   # zoom-0 FP ratio per segment (accepted FP stretch)
-    RLO = [min(1.0, x)*(1-ST_TOL) for x in r0]; RHI = [max(1.0, x)*(1+ST_TOL) for x in r0]
-    STM = max(1.05, 1.05*max(r['stretch'] for r in near))
+    # accepted FP end pose = every frame of the steps the viewmodel fully owns (zf > 0.95): a held state gives one pose,
+    # a swing many strokes, so per segment the range [min, max] of those frames (not one median) is the FP end
+    fpf = [r for d, fr in S if stt.median(x['zf'] for x in fr) > 0.95 for r in fr] or near
+    fr_ = list(zip(*[ratios(r) for r in fpf]))
+    RLO = [min(1.0, min(x))*(1-ST_TOL) for x in fr_]; RHI = [max(1.0, max(x))*(1+ST_TOL) for x in fr_]
+    STM = max(1.05, 1.05*max(r['stretch'] for r in fpf))
     vis_f = lambda r: not (bandhide and r['band'])
+    # native end pose limits: Kenshi's own tech (zf < 0.05) may bring the hand near the head / the blade off screen; a
+    # blended frame fails only when it is worse than both end poses (HD_MIN / 5 points, or the native extreme)
+    def headd(r):
+        hc = add(r['hd'], mul(nz(sub(r['hd'], r['nk'])), 0.9)); return min(ln(sub(r['j'][5], hc)), ln(sub(r['mp'], hc)))
+    def npts(r):
+        C = (0, 0, -r['zoom'])
+        return sum(bool(s_ and abs(s_[0]) < 1.245 and abs(s_[1]) < 0.70) for s_ in
+                   (prj(add(r['mp'], mul(r['mf'], BL.get(r['cls'], 8.0)*k/20)), C) for k in range(21)))
+    natf = [r for d, fr in S for r in fr if r['zf'] < 0.05 and r['zoom'] >= EYE]
+    HLIM = min(HDM, min(map(headd, natf)) - 0.1) if natf else HDM
+    VLIM = min(5, min(map(npts, natf))) if natf else 5
     bad = {}; out = []; vstep = []
     def flag(k, d): bad.setdefault(k, []).append('%g' % d)
     yaws = []
     for d, fr in S:
-        n = len(fr); c = dict(band=0, head=0, vis=0, stretch=0)
+        n = len(fr); c = dict(band=0, head=0, vis=0, stretch=0, nhead=0, nvis=0)
         hmin, npmin, rmin, rmax, zfs, bh = 99.0, 99, 9.0, 0.0, [], 0
         for r in fr:
             zfs.append(r['zf']); bh += r['band']
             if bandhide and ((EYE <= r['zoom'] < HS) != bool(r['band'])): c['band'] += 1
             if not vis_f(r): continue
+            nat = r['zf'] < 0.05   # pure native Kenshi pose (KenshiFP adds nothing): head/vis noted, not judged
             if r['zoom'] >= EYE:
-                hc = add(r['hd'], mul(nz(sub(r['hd'], r['nk'])), 0.9)); hd = min(ln(sub(r['j'][5], hc)), ln(sub(r['mp'], hc)))
-                hmin = min(hmin, hd); c['head'] += hd < HDM
-            C = (0, 0, -r['zoom']); npt = 0
-            for k in range(21):
-                s_ = prj(add(r['mp'], mul(r['mf'], BL.get(r['cls'], 8.0)*k/20)), C)
-                npt += bool(s_ and abs(s_[0]) < 1.245 and abs(s_[1]) < 0.70)
-            npmin = min(npmin, npt); c['vis'] += npt < 5
+                hd = headd(r)
+                hmin = min(hmin, hd); c['nhead' if nat else 'head'] += hd < (HDM if nat else HLIM)
+            npt = npts(r)
+            npmin = min(npmin, npt); c['nvis' if nat else 'vis'] += npt < (5 if nat else VLIM)
             rr = ratios(r); rmin, rmax = min(rmin, min(rr)), max(rmax, max(rr))
             c['stretch'] += any(x < lo or x > hi for x, lo, hi in zip(rr, RLO, RHI)) or r['stretch'] > STM
         zf = stt.median(zfs); visible = sum(vis_f(r) for r in fr) > n/2
         for k, v in c.items():
-            if v > FR*n: flag(k, d)
+            if v > FR*n and k[0] != 'n': flag(k, d)
         sh = world(fr[0], sub(fr[0]['j'][3], fr[0]['j'][0])); yaws.append(math.degrees(math.atan2(sh[0], sh[2])))
         if state == 'swing':
             P = []
@@ -134,16 +149,15 @@ def main():
             ''.join(' %s:%d' % (k, v) for k, v in c.items() if v)))
     # jump between adjacent visible steps
     fp_ = [p for d, zf, v, p in vstep if zf > 0.95]; na_ = [p for d, zf, v, p in vstep if zf < 0.05]
-    nsp = 0.0
-    if len(na_) >= 2:
-        nsp = max(ln(sub(a_[k], b_[k])) for a_ in na_ for b_ in na_ for k in range(len(a_)))
+    spread = lambda L: max(ln(sub(a_[k], b_[k])) for a_ in L for b_ in L for k in range(len(a_))) if len(L) >= 2 else 0.0
+    nsp = spread(na_); fsp = spread(fp_)   # native tech is random; FP swings alternate strokes (held states ~0)
     jmax, jw = 0.0, ''
     for (d1, z1, v1, p1), (d2, z2, v2, p2) in zip(vstep, vstep[1:]):
         if not (v1 and v2): continue
         for k in range(len(p1)):
             dif = ln(sub(p1[k], p2[k]))
             fn = ln(sub(fp_[0][k], na_[-1][k])) if fp_ and na_ else 0.0
-            lim = JMIN + JK*(abs(z1-z2)*fn + (1-min(z1, z2))*nsp)
+            lim = JMIN + JK*(abs(z1-z2)*fn + (1-min(z1, z2))*nsp + max(z1, z2)*fsp)
             if dif > lim:
                 flag('jump', d2); jw = jw or '%g->%g joint%d %.2f>%.2f' % (d1, d2, k, dif, lim)
             jmax = max(jmax, dif)
@@ -153,8 +167,8 @@ def main():
     for l in out: print(l)
     ok = not bad
     nvis = sum(1 for x in vstep if x[2])
-    print('zoomfade %s %s steps=%d/%d visible=%d bandhide=%d jump_max=%.2f%s native_spread=%.2f len_lim=%s st_lim=%.2f yaw_spread=%.0f bad=%s' % (
-        state, 'PASS' if ok else 'FAIL', len(S), len(steps), nvis, bandhide, jmax, (' (' + jw + ')') if jw else '', nsp, ','.join('%.2f..%.2f' % x for x in zip(RLO, RHI)), STM, ysp,
+    print('zoomfade %s %s steps=%d/%d visible=%d bandhide=%d jump_max=%.2f%s native_spread=%.2f fp_spread=%.2f len_lim=%s st_lim=%.2f yaw_spread=%.0f hd_lim=%.2f vis_lim=%d bad=%s' % (
+        state, 'PASS' if ok else 'FAIL', len(S), len(steps), nvis, bandhide, jmax, (' (' + jw + ')') if jw else '', nsp, fsp, ','.join('%.2f..%.2f' % x for x in zip(RLO, RHI)), STM, ysp, HLIM, VLIM,
         ';'.join('%s@%s' % (k, ','.join(v[:6])) for k, v in sorted(bad.items())) or 'none'))
     return 0 if ok else 1
 
