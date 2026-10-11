@@ -272,6 +272,9 @@ static void fk_native(void *skel, const void *set, float w, const void *bmap) { 
  * from before the recording: start from record 0 (pose, blend, phase, off-hand target, elbow direction) instead of a
  * cold draw. Roll / swing history is not recorded: those settle within the first frames (gate: --skip). */
 static int g_warm = 1, g_napp_mode = 1, g_skipped;
+#ifdef AL_HAVE_2H
+static int g_al_2hsnap;
+#endif
 /* --fist <anim>: NA1 fist take (fp-fists.sh): the game's unarmed fist path (vm_fist_apply) with the swing clock of the
  * recording; every swinging stretch (or clock restart) is a new swing of technique <anim> (g_fpc_fs_tech/_name, set by
  * kfp_controls.inc in the game). Needs a client source with the fist code (VM_NFIST). */
@@ -293,6 +296,13 @@ static void warm_start(void)
 #endif
     }
     g_vm_swing = r->swing && r->swu < 1.0f; g_vm_swu = r->swu; g_vm_sw0 = o;
+#ifdef AL_HAVE_2H
+    /* the 2H blend (g_vm_2hw) is solver state from before the recording too: a recording that starts with a two-handed
+     * weapon up has it at 1 (off hand on the handle). Cold it ramped 0 -> 1 over g_vm_2htau and the off-hand target
+     * glided in from the rest point: lab off by up to 4.8 dm on the left arm for the first ~18 records (e6sw DF24EB64,
+     * lab-calibrate 2026-10-11). Right after frame 0 (which computes g_vm_2h; its dt is 0) the blend snaps to it. */
+    g_al_2hsnap = 1;
+#endif
 }
 
 /* ---------------- fake character ---------------- */
@@ -370,6 +380,20 @@ int main(int argc, char **argv)
             g_have_calib = 1; }
         else { fprintf(stderr, "kfpvm_replay: unknown arg %s\n", argv[a]); return 2; }
     }
+    /* recording inputs the game does not write explicitly (lab-calibrate 2026-10-11, fist recs fs0/fs3 DF24EB64 replayed
+     * 11 dm off, shoulders included): (1) the unarmed fist path does not count napply, so a frozen counter over the whole
+     * recording means "no information", not "the game skipped every apply" (the lab froze the skeleton at record 0 while
+     * the camera walked 10-19 dm away): apply on every frame then. (2) viewmodel-up records with no weapon in hands are
+     * the fist path (game: kfp_controls sets g_fpc_fists): replay it as fists (--fist auto: technique by the recording's
+     * fist_tech set, else the native fallback) unless --fist names one. With both: median 11 -> 0.02 dm (weapon arm). */
+    { int up = 0, inc = 0, unarmed = 0;
+      for (int i = 0; i < RN; i++) { if (R[i].on && R[i].w * R[i].zf > 0.001f) { up++; if (R[i].has_napp && !R[i].wih) unarmed++; }
+        if (i && R[i].has_napp && R[i - 1].has_napp && R[i].napp != R[i - 1].napp) inc++; }
+      if (g_napp_mode && up >= 10 && !inc) { g_napp_mode = 0; if (!g_al_quiet) printf("note: napply never advances: apply on every frame\n"); }
+#ifdef VM_NFIST
+      if (!g_fist_anim && unarmed >= 10) { g_fist_anim = "auto"; if (!g_al_quiet) printf("note: %d unarmed viewmodel records: fist path\n", unarmed); }
+#endif
+    }
     /* the recording's own `# set -1` lines (settings live before it started) come first, --set after them wins */
     if (g_use_rsets) for (int s = 0; s < g_nrsets; s++) if (g_rsets[s].f < 0) do_set(g_rsets[s].kv);
 #ifdef KFP_TABLES
@@ -429,6 +453,13 @@ int main(int argc, char **argv)
         g_cls_fill[0] = cf[i];
         *(void **)(g_pc + CHAR_WEAPON_IN_HANDS) = r->wih ? (cf[i] ? (void *)&g_wep_ranged : (void *)&g_wep_melee) : NULL;
         vm_frame(g_pc, 0);
+#ifdef AL_HAVE_2H
+        if (g_al_2hsnap) { g_vm_2hw = g_vm_2h ? 1.0f : 0.0f; g_al_2hsnap = 0;
+#ifdef AL_HAVE_2HB
+            g_vm_2hbw = r->ti == VM_BLOCK ? 1.0f : 0.0f;   /* 2H block blend, same */
+#endif
+        }
+#endif
 #ifdef AL_HAVE_POSEDUMP
         if (pdf && pd_want(pd_frames, i)) vm_pd_write(pdf, g_pc, g_vm_rn - 1);
 #endif

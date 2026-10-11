@@ -216,6 +216,7 @@ say "PATCH set ok: ${N} pending ($(for p in "${S[@]}"; do printf '%s ' "$(pname 
 (cd "$T_ALL/re_plugin" && bash build.sh) > "$RUN/logs/build.txt" 2>&1 || die build "re_plugin/build.sh failed: $(grep -m1 -i error "$RUN/logs/build.txt" | cut -c1-160) (log $RUN/logs/build.txt)"
 DLL=$T_ALL/re_plugin/KenshiFP.dll; SHA=$(sha256sum "$DLL" | cut -d' ' -f1); H=$(echo "${SHA:0:8}" | tr a-f A-F)
 cp "$DLL" "$RUN/KenshiFP-$H.dll"; say "BUILD KenshiFP $H"
+mkdir -p "$PR/src" && tar czf "$PR/src/KenshiFP-$H.client.tar.gz" -C "$T_ALL" client && say "SRC $PR/src/KenshiFP-$H.client.tar.gz"   # exact source of this DLL: animlab agree-pose.sh replays its recordings with it (lab-calibrate)
 # --- 4 gate ---------------------------------------------------------------------------------------------------------
 declare -A TREE CTX
 TREE[all]=$T_ALL
