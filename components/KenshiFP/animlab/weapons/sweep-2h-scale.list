@@ -1,0 +1,6 @@
+# kfp-2h-scale (2026-10-11): two-handed grip on scaled / long-handled heavy weapons (bare-mesh catalog). Buster Sword (scale
+# 0.73) and Leviathanslayer (0.77): off hand on the drawn handle (game pom now x length scale, VM2H log pom ~1.86 / ~1.67);
+# Brutal Axe (pom 6.87): grip slides so <= 5 dm handle behind the hand, pommel stays out of the near plane in swings.
+55397-ArkWeaponPack.mod|Buster Sword|melee|heavy weapons|
+55403-ArkWeaponPack.mod|Leviathanslayer|melee|heavy weapons|
+55624-ArkWeaponPack.mod|Brutal Axe|melee|heavy weapons|
