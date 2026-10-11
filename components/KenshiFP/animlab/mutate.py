@@ -18,6 +18,7 @@ import argparse, json, math, os, shutil, subprocess, sys
 
 L = '/mnt/c/KenshiModding/Kenshi-Automation-Harness/tools/animlab'
 CORPUS = os.environ.get('ANIMLAB_CORPUS', '/mnt/c/KenshiTestRuns/corpus')
+FTC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fist-take-check.py')
 RULES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'take-rules.txt')
 
 
@@ -120,6 +121,20 @@ def m_jump(lines):         # one-frame 1.5 dm jump of weapon + right arm in read
 ARROW = '/tmp/al-mut-arrow.png'
 
 
+def m_fist_hand(lines):     # U25: the right hand flips 90 deg (rec group F axes) for 0.25 s mid-take, wrist in place
+    fr = [(i, g, t) for i, g, t in frames(lines) if any(x.split()[:1] == ['F'] for x in g)]
+    t0 = float(fr[len(fr) // 2][2][1])
+    for i, g, t in fr:
+        if t0 <= float(t[1]) <= t0 + 0.25:
+            k = [j for j, x in enumerate(g) if x.split()[:1] == ['F']][0]
+            tk = g[k].split()
+            for c in (3, 4):
+                tk[c] = '%.4f,%.4f,%.4f' % rot(tuple(float(v) for v in tk[c].split(',')), (1.0, 0.0, 0.0), 90.0)
+            g[k] = ' '.join(tk)
+            lines[i] = ' | '.join(g)
+    return lines
+
+
 def arrow_png():
     if os.path.exists(ARROW): return
     from PIL import Image, ImageDraw
@@ -199,6 +214,7 @@ REC_CHECKS = {
     'churn-stroke1': lambda p: verdict_word(run(al('--only-stroke', '1', 'churn', '--stroke', p)), 'churn '),
     'stroke': lambda p: verdict_word(run(al('stroke', '--overhead', '2', p)), 'stroke '),
     'spike': lambda p: verdict_word(run(al('spike', p)), 'spike '),
+    'fist-hand': lambda p: verdict_word(run(['python3', FTC, p, '-']), 'hand '),
     'metrics-any': lambda p: (('FAIL' if any(' FAIL' in l[:40] for l in run(al('metrics', p)).splitlines()) else 'PASS'), 'metrics'),
 }
 VID_CHECKS = {
@@ -228,6 +244,7 @@ MUTS = [
     ('rec-endon-blade-frame', 'rec', 'e6-anim-b2.txt', m_endon, ['blade1']),
     ('rec-one-frame-snap', 'rec', 'e6-anim-b2.txt', m_snap, ['blade1', 'churn-stroke1', 'spike']),
     ('rec-one-frame-jump', 'rec', 'f28-sword-z0c.txt', m_jump, 'ALL'),
+    ('rec-fist-hand-flip', 'rec', 'fist-u25-pass-replay-C2-kq025.rec', m_fist_hand, ['fist-hand']),
     ('vid-cursor-overlay', 'vid', 'takes/videos/anim-sword-e6.mp4', v_cursor, ['cursor']),
     ('vid-dark-night', 'vid', 'takes/videos/anim-sword-e6.mp4', v_dark, ['openground']),
     ('vid-black-frames', 'vid', 'takes/videos/anim-sword-e6.mp4', v_black, 'ALL'),
@@ -338,6 +355,8 @@ def mut_key(mid, kind, base, checks, src):
     else:
         mat = [labcache.fhash(src)]
     code = [[d, labcache.fhash(os.path.join(L, d))] for d in DEPS[kind] if os.path.exists(os.path.join(L, d))]
+    if kind == 'rec':
+        code.append(['fist-take-check.py', labcache.fhash(FTC)])
     return labcache.make_key('mutation', [mid, kind, base, checks, labcache.fhash(os.path.abspath(__file__)), code,
                                           labcache.fhash(RULES) if os.path.exists(RULES) else '', _ffv[0], mat, labcache.env_part()])
 

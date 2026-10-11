@@ -478,6 +478,14 @@ if [ -f "$OB" ] && [ -f "$OS" ]; then
   else bad "fist path replay build/run failed (/tmp/al-fisthud.log)"; fi
   rm -rf /tmp/al-fisthud /tmp/al-fisthud.d /tmp/al-fisthud.rec /tmp/al-fisthud.log
 else echo "REGRESS INFO fistgame op-b6: not in the corpus"; fi
+# 35c. fist arm-across-lens + hand flail (spec U24 `lens`, U25 `hand`; fist-take-check.py, Misses FIST-ma_chudan/badpunch/
+#     ma_2strike + FIST-ma_2strike/badpunch fist4080r): every manifest pair must give its verdict on its own row.
+for f in rec/fist-lens-2strike-8b3f.txt:lens:FAIL rec/fist-lens-badpunch-8b3f.txt:lens:FAIL rec/fist-lens-chudan-near.txt:lens:FAIL \
+         rec/fist-lens-chudan-8b3f.txt:lens:PASS fist-u25-fail-fist4080r-C2.rec:hand:FAIL fist-u25-pass-replay-C2-kq025.rec:hand:PASS; do
+  n=${f%%:*} w=${f##*:} c=${f#*:}; c=${c%%:*}
+  [ -f "$CORPUS/$n" ] || { echo "REGRESS INFO fist $c: $n not in the corpus"; continue; }
+  r=$(python3 "$HERE/fist-take-check.py" "$CORPUS/$n" - | grep "^$c ")
+  case "$r" in "$c "*" $w "*|"$c $w"*) ok "fist $c $n: ${r:0:120}";; *) bad "fist $c $n (want $w): ${r:0:200}";; esac; done
 # 36. PT30 follow-ups (harness Misses 2026-10-10 "PT30-FLIP vmcheck time base" + "PT30 follow-through edge roll spikes"):
 #     (a) fp-viewmodel.sh's vmcheck (extracted from the script) on the 4080 game rec pt30-sword (corpus pools/sword-swing):
 #         the strike onset next to the 0.1 s hitch (frame 158) must NOT be flagged, the follow-through roll (284) must be;
