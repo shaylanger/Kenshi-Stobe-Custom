@@ -29,7 +29,9 @@ pf_load
 A speed 1 hold >/dev/null; A chatter off >/dev/null
 A pin Malzin at -53900 633 6850 >/dev/null; A pin Tassilo at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
-pf_rig
+# no video / screenshot in this row (gfx low): pf_rig's render-size check judged a lane-B window (agreerec-i2: 4096x2160
+# at gfx low = setup FAIL on a row that never films); only require the harness to answer
+A fp_vm state | grep -q "state=" || pf_fail "harness/fp_vm not answering"
 pf_clean -54190 4380 6000
 pf_day
 A teleport $SH $SPOT >/dev/null; sleep 2
