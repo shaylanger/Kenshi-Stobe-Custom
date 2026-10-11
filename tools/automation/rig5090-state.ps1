@@ -11,7 +11,9 @@
 param([int]$GraceMin = 2)
 $runs = 'C:\KenshiTestRuns'
 $now = Get-Date
-$kenshiP = Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue | Select-Object -First 1
+# instance 1 only (multi-instance 2026-10-11): the lane-5090b game (D:\KenshiInst\<n>), its marker runner-5090b and its out
+# dirs (.instance file) are a separate game slot and never make the main 5090 slot BUSY or idle
+$kenshiP = Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue | Where-Object { $_.Path -notlike 'D:\KenshiInst\*' } | Select-Object -First 1
 $lockFile = Join-Path $runs 'game.lock'
 $owner = $null; $last = $null
 if (Test-Path -LiteralPath $lockFile) {
@@ -30,7 +32,7 @@ if (-not $kenshiP -and -not $owner) {
 if ($kenshiP -and $kenshiP.StartTime -and (-not $last -or $kenshiP.StartTime -gt $last)) { $last = $kenshiP.StartTime }
 $busy = @(); $done = @()
 foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue)) {
-    if ($m.Name -like '4080-*' -or $m.LastWriteTime -lt $now.AddHours(-6)) { continue }
+    if ($m.Name -like '4080-*' -or $m.Name -eq 'runner-5090b' -or $m.LastWriteTime -lt $now.AddHours(-6)) { continue }
     $p = ((Get-Content -LiteralPath $m.FullName -TotalCount 1 -ErrorAction SilentlyContinue) -as [string])
     $p = if ($p) { $p.Trim() } else { '' }
     $win = $null
@@ -56,7 +58,7 @@ foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -
     }
 }
 # newest finished batch anywhere in C:\KenshiTestRuns (run-batch.sh deletes its marker at DONE, so markers alone lose the end time)
-$nd = Get-ChildItem -LiteralPath $runs -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'DONE') -ErrorAction SilentlyContinue } | Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$nd = Get-ChildItem -LiteralPath $runs -Directory -ErrorAction SilentlyContinue | Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.FullName '.instance')) } | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'DONE') -ErrorAction SilentlyContinue } | Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($nd -and $nd.LastWriteTime -gt $last) { $last = $nd.LastWriteTime; $done += "last DONE $(Split-Path $nd.DirectoryName -Leaf)@$($nd.LastWriteTime.ToString('HH:mm'))" }
 if ($busy.Count) { "BUSY $($busy -join ' ')"; exit 0 }
 if ($last -and $last -gt $now.AddMinutes(-$GraceMin)) { "BUSY between batches (last change $($last.ToString('HH:mm')))"; exit 0 }

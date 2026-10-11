@@ -48,7 +48,9 @@ $targets = @{
 $src, $dst = $targets[$Component]
 if ($Staged) { $src = $stagedSrc }
 
-if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue) { throw 'Kenshi is running: close it first (kenshi-ctl.ps1 stop)' }
+# only instance 1's game blocks (multi-instance 2026-10-11): these targets belong to the Steam install; a test game of an
+# install copy (D:\KenshiInst\<n>, rig-runner lane 5090b) holds its own DLL copies
+if (Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -notlike 'D:\KenshiInst\*' }) { throw 'Kenshi is running: close it first (kenshi-ctl.ps1 stop)' }
 if (-not (Test-Path $src)) { throw "no build at $src" }
 if (-not (Test-Path $dst)) { throw "install target missing: $dst" }
 

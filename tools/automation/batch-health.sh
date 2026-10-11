@@ -12,6 +12,17 @@
 set -u
 O="${1:?usage: batch-health.sh <out-dir> [stall-minutes]}"; STALL_MIN="${2:-20}"
 [ -f "$O/DONE" ] && { echo "HEALTH DONE $(tail -1 "$O/SUMMARY.txt" 2>/dev/null)"; exit 0; }
+# multi-instance: an out dir with .instance (rig-runner lane 5090b) belongs to install copy n (its harness, game dir, pids)
+if [ -f "$O/.instance" ]; then n_=$(tr -dc 0-9 <"$O/.instance"); if [ "${n_:-1}" -ge 2 ] 2>/dev/null; then export KAH_INSTANCE=$n_ KENSHI_DIR=/mnt/d/KenshiInst/$n_ KAH_DIR="D:\\KenshiInst\\$n_\\mods\\AutomationHarness"; fi; fi
+# kenshi_pids (multi-instance 2026-10-11): kenshi_x64 PIDs of THIS install only: KAH_INSTANCE=n>=2 = D:\KenshiInst\<n>, else
+# every install outside D:\KenshiInst (a second test game must not count as instance 1). wmic gives the exe path (0.2 s);
+# no wmic answer (none running, or wmic missing/broken) = tasklist by name as before.
+kenshi_pids() {
+  local o; o=$(wmic.exe process where "name='kenshi_x64.exe'" get ExecutablePath,ProcessId </dev/null 2>/dev/null | tr -d '\r')
+  if grep -q ExecutablePath <<<"$o"; then
+    awk -v n="${KAH_INSTANCE:-1}" 'NR>1 && NF>=2 { p=tolower($0); m=(n+0>=2) ? index(p, "\\kenshiinst\\" n "\\")>0 : index(p, "\\kenshiinst\\")==0; if (m) print $NF }' <<<"$o"
+  else tasklist.exe </dev/null 2>/dev/null | awk 'tolower($1)=="kenshi_x64.exe"{print $2}'; fi
+}
 f=$(find "$O" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1)
 if [ -n "$f" ]; then age=$(( ( $(date +%s) - ${f%%.*} ) / 60 )); f="${f#* }"
 else age=0; f="(no output yet in $O)"; fi
@@ -19,7 +30,7 @@ cur=$(grep -a -E '^[0-9]{2}:[0-9]{2} .*: (prepare|run) ' "$O/batch.log" 2>/dev/n
 # Cheaper (res-wait 2026-10-10): ask the harness first; a harness answer proves Kenshi runs, so tasklist.exe (a Windows
 # process spawn) only runs when the harness is silent. Same verdicts as before.
 st=$(timeout 30 stobe-auto status </dev/null 2>&1 | tr -d '\r' | head -1)
-if ! grep -q 'phase=' <<<"$st" && ! tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then
+if ! grep -q 'phase=' <<<"$st" && [ -z "$(kenshi_pids)" ]; then
   echo "HEALTH STALL Kenshi is not running file=$f age=${age}m ${cur:+now=\"$cur\"}"; exit 2
 fi
 # m50 5090 K: a crash leaves RE_Kenshi's handler on a hidden message box; the game ran on for 40 s and then froze

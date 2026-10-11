@@ -94,10 +94,19 @@ reload() {   # reload <save> <player>; 1 = the game didn't come back
   sleep 10; stobe-auto select "$2" >/dev/null 2>&1; return 0
 }
 memline() {  # "<free-commit-GB> <kenshi-private-GB>" (kenshi "-" when not running)
-  powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Select-Object -First 1; "{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
+  powershell.exe -NoProfile -Command '$o=Get-CimInstance Win32_OperatingSystem; $i=[int]$env:KAH_INSTANCE; $k=Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { if ($i -ge 2) { $_.Path -like "D:\KenshiInst\$i\*" } else { $_.Path -notlike "D:\KenshiInst\*" } } | Select-Object -First 1;"{0:N1} {1}" -f ($o.FreeVirtualMemory/1MB), $(if ($k) { "{0:N1}" -f ($k.PrivateMemorySize64/1GB) } else { "-" })' </dev/null 2>/dev/null | tr -d '
 ,' | tail -1
 }
-kenshi_up() { tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; }   # no /FI args: Git Bash would mangle them
+# kenshi_pids (multi-instance 2026-10-11): kenshi_x64 PIDs of THIS install only: KAH_INSTANCE=n>=2 = D:\KenshiInst\<n>, else
+# every install outside D:\KenshiInst (a second test game must not count as instance 1). wmic gives the exe path (0.2 s);
+# no wmic answer (none running, or wmic missing/broken) = tasklist by name as before.
+kenshi_pids() {
+  local o; o=$(wmic.exe process where "name='kenshi_x64.exe'" get ExecutablePath,ProcessId </dev/null 2>/dev/null | tr -d '\r')
+  if grep -q ExecutablePath <<<"$o"; then
+    awk -v n="${KAH_INSTANCE:-1}" 'NR>1 && NF>=2 { p=tolower($0); m=(n+0>=2) ? index(p, "\\kenshiinst\\" n "\\")>0 : index(p, "\\kenshiinst\\")==0; if (m) print $NF }' <<<"$o"
+  else tasklist.exe </dev/null 2>/dev/null | awk 'tolower($1)=="kenshi_x64.exe"{print $2}'; fi
+}
+kenshi_up() { [ -n "$(kenshi_pids)" ]; }
 relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = auto-home); 1 = it didn't come back
   local s="$1"; case "$s" in home|-) s=auto-home ;; esac
   recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"

@@ -14,6 +14,17 @@
 #            prints "GAMEKILL ok|failed" (the runner verifies and stops the game itself if it is still there).
 set -u
 O=${1:?usage: rig-runner-probe.sh <out-dir> [kill-step|kill-game]}; act=${2:-}
+# multi-instance: an out dir with .instance (rig-runner lane 5090b) belongs to install copy n (its harness, game dir, pids)
+if [ -f "$O/.instance" ]; then n_=$(tr -dc 0-9 <"$O/.instance"); if [ "${n_:-1}" -ge 2 ] 2>/dev/null; then export KAH_INSTANCE=$n_ KDIR=/mnt/d/KenshiInst/$n_ KAH_DIR="D:\\KenshiInst\\$n_\\mods\\AutomationHarness"; fi; fi
+# kenshi_pids (multi-instance 2026-10-11): kenshi_x64 PIDs of THIS install only: KAH_INSTANCE=n>=2 = D:\KenshiInst\<n>, else
+# every install outside D:\KenshiInst (instance 2's game must not count as / be killed for instance 1). wmic gives the exe
+# path (0.2 s); no wmic answer (none running, or wmic missing/broken) = tasklist by name as before.
+kenshi_pids() {
+  local o; o=$(wmic.exe process where "name='kenshi_x64.exe'" get ExecutablePath,ProcessId </dev/null 2>/dev/null | tr -d '\r')
+  if grep -q ExecutablePath <<<"$o"; then
+    awk -v n="${KAH_INSTANCE:-1}" 'NR>1 && NF>=2 { p=tolower($0); m=(n+0>=2) ? index(p, "\\kenshiinst\\" n "\\")>0 : index(p, "\\kenshiinst\\")==0; if (m) print $NF }' <<<"$o"
+  else tasklist.exe </dev/null 2>/dev/null | awk 'tolower($1)=="kenshi_x64.exe"{print $2}'; fi
+}
 if grep -qi microsoft /proc/version 2>/dev/null; then KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}; else RIG=${RIG:-}; . /c/KenshiModding/tools/automation/rig-env.sh >/dev/null 2>&1; KD=$KDIR; fi
 # rows of list.txt (first |-field) not yet in done.txt
 rows_left() { [ -f "$O/list.txt" ] || return 0; awk -F'|' '!/^[ 	]*(#|$)/ {g=$1; gsub(/^[ 	]+|[ 	]+$/, "", g); print g}' "$O/list.txt" | grep -vxF -f <(cat "$O/done.txt" 2>/dev/null; echo ' ') ; }
@@ -38,8 +49,10 @@ if [ "$act" = kill-step ] || [ "$act" = kill-game ]; then
   # the game is gone and stops it itself (kenshi-ctl.ps1 stop / 4080 ctl.ps1 stop) if not.
   # no game running = "gone" (08:45: "GAMEKILL failed" for a game the coordinator had already stopped)
   if [ "$act" = kill-game ]; then
-    if ! tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then echo "GAMEKILL gone (not running)"
-    else MSYS_NO_PATHCONV=1 taskkill.exe /F /T /IM kenshi_x64.exe </dev/null >/dev/null 2>&1 && echo "GAMEKILL ok" || echo "GAMEKILL failed"; fi; fi
+    kp=$(kenshi_pids | paste -sd' ')
+    if [ -z "$kp" ]; then echo "GAMEKILL gone (not running)"
+    else ok=1; for p_ in $kp; do MSYS_NO_PATHCONV=1 taskkill.exe /F /T /PID "$p_" </dev/null >/dev/null 2>&1 || ok=0; done
+      [ $ok = 1 ] && echo "GAMEKILL ok ($kp)" || echo "GAMEKILL failed ($kp)"; fi; fi
   if [ -f "$O/step.pid" ]; then read -r p n w < "$O/step.pid"
     if [ -n "${w:-}" ]; then taskkill.exe //F //T //PID "$w" </dev/null >/dev/null 2>&1 && echo "KILLED step $n winpid $w" || echo "KILL failed winpid $w ($n)"   # 4080: other msys session
     else kill -TERM "$p" 2>/dev/null && echo "KILLED step $n pid $p" || echo "KILL failed pid $p ($n)"; fi
@@ -51,7 +64,7 @@ if [ "$act" = kill-step ] || [ "$act" = kill-game ]; then
 fi
 done=0; [ -f "$O/DONE" ] && done=1
 now=$(date +%s); nf=$(find "$O" -type f ! -name step.pid -printf '%T@\n' 2>/dev/null | sort -n | tail -1); nf=${nf%%.*}; age=$(( now - ${nf:-$now} ))   # no file/dir: age 0 (an empty $nf aborted the probe: "probe failed" forever)
-if tasklist.exe </dev/null 2>/dev/null | grep -qi kenshi_x64; then k=1; else k=0; fi
+if [ -n "$(kenshi_pids)" ]; then k=1; else k=0; fi
 gh=-; ph=-
 if [ $k = 1 ]; then
   st=$(timeout 20 stobe-auto status </dev/null 2>&1 | tr -d '\r' | head -1); ph=$(grep -oE 'phase=[a-z]+' <<<"$st" | cut -d= -f2); ph=${ph:--}

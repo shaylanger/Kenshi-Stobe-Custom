@@ -24,7 +24,7 @@ for s in "$R"/runner/5090.state "$R"/runner/4080.state; do
   fi
 done
 # ONE powershell.exe for the Kenshi check + both rig states (res-wait 2026-10-10: was tasklist.exe + 2 powershell.exe per call)
-st=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'if (Get-Process kenshi_x64 -EA 0) { "K yes" } else { "K no" }; "4 " + [string](& "C:\KenshiModding\tools\automation\rig4080-state.ps1" 2>$null | Select-Object -First 1); "5 " + [string](& "C:\KenshiModding\tools\automation\rig5090-state.ps1" 2>$null | Select-Object -First 1)' </dev/null 2>/dev/null | tr -d '\r')
+st=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'if (Get-Process kenshi_x64 -EA 0 | ? { $_.Path -notlike "D:\KenshiInst\*" }) { "K yes" } else { "K no" }; "4 " + [string](& "C:\KenshiModding\tools\automation\rig4080-state.ps1" 2>$null | Select-Object -First 1); "5 " + [string](& "C:\KenshiModding\tools\automation\rig5090-state.ps1" 2>$null | Select-Object -First 1)' </dev/null 2>/dev/null | tr -d '\r')
 k=$(sed -n 's/^K //p' <<<"$st"); k=${k:-no}
 lock=free; [ -f "$R/game.lock" ] && lock=$(head -1 "$R/game.lock" | tr -d '\r' | sed 's/^\xEF\xBB\xBF//')
 mk=$(find "$R/inflight" -maxdepth 1 -type f -mmin -360 -printf '%f,' 2>/dev/null | sed 's/,$//'); mk=${mk:-none}
