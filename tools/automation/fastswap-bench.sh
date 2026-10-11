@@ -50,8 +50,9 @@ case "$MODE" in
     if wait_world_new 300; then echo "RESULT FS-newlaunch PASS seconds=$(el) save=$SAVE instance=$I (current run-batch launch path)"
     else echo "RESULT FS-newlaunch FAIL seconds=$(el) world not reached (log $OUT/launch.out)"; fi ;;
   swap)
-    ps1 'C:\KenshiModding	oolsutomation\kfp-fastswap.ps1' -NoInstall -Save "$SAVE" -Instance "$I" > "$OUT/swap.out"
+    ps1 'C:\KenshiModding\tools\automation\kfp-fastswap.ps1' -NoInstall -Save "$SAVE" -Instance "$I" > "$OUT/swap.out"
     l=$(grep '^FASTSWAP' "$OUT/swap.out" | tail -1)
+    grep -q "was running: True" "$OUT/swap.out" || l="FASTSWAP FAIL the game was not seen running (nothing restarted)"
     case "$l" in "FASTSWAP OK"*" stop="*) echo "RESULT FS-swap PASS seconds=$(el) ${l#FASTSWAP OK }" ;;
       *) echo "RESULT FS-swap FAIL seconds=$(el) ${l:-no FASTSWAP line} (log $OUT/swap.out)" ;; esac ;;
   oldload)
