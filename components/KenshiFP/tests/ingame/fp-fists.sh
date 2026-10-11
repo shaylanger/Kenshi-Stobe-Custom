@@ -116,6 +116,23 @@ for r in $(seq 1 $REPS); do
     if [ "$NAT" = 1 ]; then case "$f" in *"tech='-'"*) [ $seen = 1 ] && [ $((SECONDS-s0)) -ge 1 ] && { sleep 0.3; break; };; *"tech='"*) seen=1;; esac; fi
     sleep 0.15; done
 done
+# NA1 open acceptance (fists-fix 2026-10-11), FIST_PHASES=block,z25 (default none): block raises the guard (RMB held: state
+# blocking, both FP wrists higher + nearer the centre than the ready guard; fn_gb vs fn_g) and zoom 25 plays the native
+# unarmed technique (zf <= .05 = viewmodel off, every LMB gives a "[controls] free swing end" that ran >= 400 ms, PT32 class).
+# Samples go to $N.block.txt / $N.z25.txt (not $N.fist.txt: the fistnative travel/onscreen numbers stay technique-only).
+: > "$N.block.txt"; : > "$N.z25.txt"; ZL0=
+if [[ ",${FIST_PHASES}," == *,block,* ]]; then
+  lab "Guard (ready, before block)"; sleep 0.8; fist >> "$N.block.txt"
+  lab "RMB held: block guard"; A fp_keys press rmb 2500 >/dev/null
+  for _i in 1 2 3 4 5 6 7 8 9 10; do fist >> "$N.block.txt"; sleep 0.18; done; sleep 0.8; fist >> "$N.block.txt"
+fi
+if [[ ",${FIST_PHASES}," == *,z25,* ]]; then
+  lab "Zoom 25: native unarmed technique (LMB x2)"; A fp_camera distance 25 >/dev/null; sleep 1.5
+  ZL0=$(wc -l < "$KDIR/KenshiFP.log")
+  for _r in 1 2; do A fp_keys press lmb 60 >/dev/null; for _i in $(seq 1 16); do fist >> "$N.z25.txt"; sleep 0.25; done; done
+  ZL1=$(wc -l < "$KDIR/KenshiFP.log")
+  A fp_camera distance 0 >/dev/null; sleep 1.5
+fi
 lab "Guard"; sleep 1.5; fist >> "$N.fist.txt"
 lab end; touch "$N.stop"; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-$N.txt"; A fp_vm rec dump "vmrec-$N.txt" >/dev/null; sleep 2
@@ -170,6 +187,39 @@ else
 FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" --swings "$N.swings.txt" 2>&1 | tee "$N.lab.txt" | tail -1)
 fi
 echo "$FG" | grep -qE "^fist(game|native) PASS" || ok=0
+BZ=
+if [ -n "$FIST_PHASES" ]; then
+  [ -n "$ZL0" ] && sed -n "$((ZL0+1)),${ZL1}p" "$KDIR/KenshiFP.log" | grep -o "free swing end: .*" > "$N.z25.log"
+  BZ=$(python3 - "$N.block.txt" "$N.z25.txt" "$N.z25.log" "$FIST_PHASES" <<'PY2' 2>&1 | tee -a "$N.lab.txt" | tail -1
+import sys, re
+def rd(f):
+    try: return [l for l in open(f) if 'fist ua=' in l]
+    except OSError: return []
+def v(l, k):
+    m = re.search(' %s=([-0-9.]+),([-0-9.]+),([-0-9.]+)' % k, l); return tuple(map(float, m.groups())) if m else None
+ph = sys.argv[4].split(','); out = []; ok = True
+if 'block' in ph:
+    B = rd(sys.argv[1]); r = B[0] if B else None; bl = [l for l in B if 'state=blocking' in l]
+    if not r or not bl: ok = False; out.append('block FAIL blocking samples=%d' % len(bl))
+    else:
+        g = [v(r, 'wrL'), v(r, 'wrR')]
+        dy = min(sum(v(l, k)[1] for l in bl) / len(bl) - g[i][1] for i, k in enumerate(('wrL', 'wrR')))
+        dx = min(abs(g[i][0]) - sum(abs(v(l, k)[0]) for l in bl) / len(bl) for i, k in enumerate(('wrL', 'wrR')))
+        b_ok = dy >= 0.25 and dx >= 0.25; ok &= b_ok
+        out.append('block %s samples=%d raise=%.2fdm inward=%.2fdm' % ('PASS' if b_ok else 'FAIL', len(bl), dy, dx))
+if 'z25' in ph:
+    Z = rd(sys.argv[2]); zf = [float(m.group(1)) for l in Z for m in [re.search(' zf=([-0-9.]+)', l)] if m]
+    try: E = [l for l in open(sys.argv[3])]
+    except OSError: E = []
+    ms = [float(m.group(1)) for l in E for m in [re.search('end: ([0-9.]+) ms', l)] if m]
+    live = [l for l in E if 'live=1' in l]
+    z_ok = bool(zf) and max(zf) <= 0.05 and len(ms) >= 2 and min(ms) >= 400 and len(live) >= 2; ok &= z_ok
+    out.append('z25 %s zf_max=%s swings=%d ms=%s' % ('PASS' if z_ok else 'FAIL', '%.2f' % max(zf) if zf else '-', len(ms), ','.join('%.0f' % x for x in ms)))
+print('fistphases %s %s' % ('PASS' if ok else 'FAIL', '; '.join(out)))
+PY2
+)
+  echo "$BZ" | grep -q "^fistphases PASS" || ok=0
+fi
 python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --labels "$N.lab" --lab "$N.lab.txt" "$N.swings.txt" > review.log 2>&1
 [ -f review/INDEX.txt ] || ok=0
-pf_result "$(pf_grade $ok "$TC")" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG] takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") ${FIST_VMSET:+vmset=[$FIST_VMSET] }rig=${RIG:-5090}$(pf_recwarn "$TC")"
+pf_result "$(pf_grade $ok "$TC")" "swings=$NS forced_ok=$NG umax=$UMAX ikfail+=$(( ${IK1:-0} - ${IK0:-0} )) lab=[$FG]${BZ:+ phases=[$BZ]} takecheck=[$TC] ${FM:+force_miss=[$FM] }review=$OUT/review/INDEX.txt len=$(cat "$N.video-len.txt") ${FIST_VMSET:+vmset=[$FIST_VMSET] }rig=${RIG:-5090}$(pf_recwarn "$TC")"
