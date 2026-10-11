@@ -174,7 +174,7 @@ def canned(tool, a):
     if tool == 'fist-take-check.py':
         if not check_files(tool, a[:1]):
             p('RESULT fist FAIL vmrec missing'); return 1
-        if len(a) > 1 and not check_files(tool, [os.path.join(a[1], 'pose.txt'), os.path.join(a[1], 'keys.json')]):
+        if len(a) > 1 and a[1] != '-' and not check_files(tool, [os.path.join(a[1], 'pose.txt'), os.path.join(a[1], 'keys.json')]):
             p('fistgame FAIL lab candidate missing'); return 1
         p('fistgame PASS dryrun-canned swings=3')
         return 0

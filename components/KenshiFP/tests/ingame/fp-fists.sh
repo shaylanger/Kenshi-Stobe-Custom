@@ -151,6 +151,10 @@ ok = n >= 10 and sh >= 0.9 and mv >= 1.0
 print('fistnative %s samples=%d onscreen=%.2f native_move=%.2fdm' % ('PASS' if ok else 'FAIL', n, sh, mv))
 PY
 )
+# native fists: the per-frame vmrec checks too (lens U24: no arm across the lens; hand U25: hand orientation near the
+# guard, fist4080r: knuckles end-on / fingers-up palm during kicks); '-' = no lab technique
+FT=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" - 2>&1 | tee -a "$N.lab.txt" | tail -1)
+echo "$FT" | grep -q "^fistgame PASS" || ok=0; FG="$FG; $FT"
 else
 FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" --swings "$N.swings.txt" 2>&1 | tee "$N.lab.txt" | tail -1)
 fi
