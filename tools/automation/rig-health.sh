@@ -11,6 +11,9 @@
 # Markers: touch C:\KenshiTestRuns\inflight\<name> when starting a subagent / rig job / detached batch; delete when done.
 set -u
 R=/mnt/c/KenshiTestRuns; [ -d "$R" ] || R=/c/KenshiTestRuns
+# Always-on TDR watch (m103 2026-10-11: two 5090 nvlddmkm 153 at 16:59 raised no alert, no batch was running): new GPU
+# driver events on either rig since the last check -> ALERT-<rig>-tdr.txt + tdr-<time>-<rig>-evidence\ (tdr-watch.ps1)
+timeout 90 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\tdr-watch.ps1' </dev/null >/dev/null 2>&1
 # Rig-runner alerts (rig-runner.ps1: a rig idle >= 2 min with an empty queue, a stuck/killed row, a dead batch) come first
 for a in "$R"/ALERT-*.txt; do [ -f "$a" ] && { tr -d '\r' < "$a"; al=1; }; done; [ -n "${al:-}" ] && exit 1
 # Rig-runner state (both rigs' loops run here): a stuck condition held >= max(limit, 5 min) = STALL even while the row keeps
