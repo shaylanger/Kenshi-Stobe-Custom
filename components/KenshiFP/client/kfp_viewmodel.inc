@@ -405,7 +405,7 @@ static Vec3 g_vm_cms, g_vm_cmw;
  * measurement), or with t the commanded pose; the off-hand goes to the recorded hand position. */
 typedef struct { float t, dt; char st[12]; signed char ti; unsigned char cls, swing, omode, on;
                  float w, swu, prog, kick, fire, yaw, pitch, zoom;
-                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa; signed char stroke; unsigned char bh; Vec3 fhx[2], fhy[2];
+                 VmPose out; Vec3 oc; Vec3 mp, mf, mu; Vec3 mj[2][3]; Vec3 eye, rt, up, fw; Vec3 rootf, roota; unsigned napp; unsigned char phase, wih; float stch; Vec3 mh, mfx; float wb, zf; Vec3 hd, nk, sp, hy, hz; Vec3 hua, hfa; signed char stroke; unsigned char bh; float nc; Vec3 fhx[2], fhy[2];
                  unsigned char nok; Vec3 nj[2][3], nhx[2], nhy[2], nlp[2]; Quat nlq[2]; } VmRec;   /* native pose of this frame's apply (animlab) */
 #define VM_RECN 6000
 static VmRec *g_vm_rec;   /* heap (on first rec on): a static 1.3 MB .bss made the plugin fail to load */ static int g_vm_rn, g_vm_rec_on; static LARGE_INTEGER g_vm_rec_t0;
@@ -751,6 +751,7 @@ static int vm_map_node(void *pc, Vec3 cms, Vec3 cmw_meas)
 /* animlab: native (pre-IK) pose snapshot of the current apply, written into the current record after the re-map */
 static Vec3 g_vm_rn_sj[2][3], g_vm_rn_lp[2]; static Quat g_vm_rn_lq[2];
 static void vm_rec_native(void);
+static int g_vm_rec_ncp;   /* kfp-vmrec-nc: slot recorded this tick still waits for its near clip */
 static int vm_map(void *pc, void *skel)
 {
     Vec3 cw[2], spw, cs[2], sps, ew[3], es[3];
@@ -2143,10 +2144,15 @@ static void vm_frame(void *pc, int body_down)
         q->rootf = g_vm_root_f; q->roota = g_vm_root_a; q->napp = (unsigned)g_vm_napply;
         q->phase = (unsigned char)g_vm_phase; q->wih = (unsigned char)g_vm_wih;
         q->stch = g_vm_st_last[g_vm_whand[g_vm_class] ? 1 : 0];
-        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa; q->stroke = (signed char)(g_vm_swing ? g_vm_stroke : -1); q->bh = g_vm_band_hidden; memcpy(q->fhx, g_vm_fhx, sizeof q->fhx); memcpy(q->fhy, g_vm_fhy, sizeof q->fhy);
+        q->mh = g_vm_mh; q->hy = g_vm_mhy; q->hz = g_vm_mhz; q->mfx = g_vm_mfx; q->wb = g_vm_wb; q->zf = g_vm_zf; q->hd = g_vm_mhd; q->nk = g_vm_mnk; q->sp = g_vm_msp; q->hua = g_vm_mhua; q->hfa = g_vm_mhfa; q->stroke = (signed char)(g_vm_swing ? g_vm_stroke : -1); q->bh = g_vm_band_hidden; q->nc = g_nc_applied; g_vm_rec_ncp = 1; memcpy(q->fhx, g_vm_fhx, sizeof q->fhx); memcpy(q->fhy, g_vm_fhy, sizeof q->fhy);
         if (g_vm_brec) g_vm_brec[g_vm_rn - 1] = g_vm_bolt;
         if (g_vm_rn >= VM_RECN) g_vm_rec_on = 0;
     }
+}
+static void vm_rec_nc(float nc)   /* fp_tick sets the near clip AFTER vm_frame recorded: write the applied value late */
+{
+    if (g_vm_rec && g_vm_rec_ncp && g_vm_rn > 0) g_vm_rec[g_vm_rn - 1].nc = nc;
+    g_vm_rec_ncp = 0;
 }
 static void vm_rec_native(void)
 {
@@ -2194,7 +2200,7 @@ static int vm_rec_dump(const char *path)
     for (int i = 0; i < g_vm_setn; i++)
         fprintf(fo, "# set %d %s %g\n", g_vm_setlog[i].ep == g_vm_rec_ep ? g_vm_setlog[i].f : -1, g_vm_setlog[i].k, g_vm_setlog[i].v);
     kt_rec_header(fo);   /* live tables: hash + the values that differed from the compiled ones at rec on */
-    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm) stroke (E6, -1 = no swing) band_hidden (Z1: whole body hidden by the zoom band hide)\n");
+    fprintf(fo, "# n t dt st ti cls on w swing swu prog kick fire omode yaw pitch zoom | out p f u | oc | mp mf mu | Lsh Lel Lwr Rsh Rel Rwr | eye rt up fw (world) | rootf roota napply phase wih stretch | wb mh mfx zf head neck spine [hy hz [nc]] | nok natLsh natLel natLwr natRsh natRel natRwr nhxL nhyL nhxR nhyR nlpL nlqL nlpR nlqR | H hinge_upperarm hinge_forearm (weapon arm) stroke (E6, -1 = no swing) band_hidden (Z1: whole body hidden by the zoom band hide)\n");
     for (int i = 0; i < g_vm_rn; i++) { const VmRec *q = &g_vm_rec[i];
         fprintf(fo, "%d %.4f %.4f %s %d %d %d %.3f %d %.4f %.4f %.3f %.3f %d %.2f %.2f %.2f |", i, q->t, q->dt, q->st, q->ti, q->cls, q->on,
                 q->w, q->swing, q->swu, q->prog, q->kick, q->fire, q->omode, q->yaw, q->pitch, q->zoom);
@@ -2202,9 +2208,9 @@ static int vm_rec_dump(const char *path)
                             &q->mj[0][0], &q->mj[0][1], &q->mj[0][2], &q->mj[1][0], &q->mj[1][1], &q->mj[1][2], &q->eye, &q->rt, &q->up, &q->fw };
         for (int k = 0; k < 17; k++) fprintf(fo, k == 13 ? " | %.4f,%.4f,%.4f" : " %.4f,%.4f,%.4f", v[k]->x, v[k]->y, v[k]->z);
         fprintf(fo, " | %.4f,%.4f,%.4f %.4f,%.4f,%.4f %u %d %d %.3f", q->rootf.x, q->rootf.y, q->rootf.z, q->roota.x, q->roota.y, q->roota.z, q->napp, q->phase, q->wih, q->stch);
-        fprintf(fo, " | %.1f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.3f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f", q->wb, q->mh.x, q->mh.y, q->mh.z,
+        fprintf(fo, " | %.1f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.3f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.4f,%.4f,%.4f %.3f", q->wb, q->mh.x, q->mh.y, q->mh.z,
                 q->mfx.x, q->mfx.y, q->mfx.z, q->zf, q->hd.x, q->hd.y, q->hd.z, q->nk.x, q->nk.y, q->nk.z, q->sp.x, q->sp.y, q->sp.z,
-                q->hy.x, q->hy.y, q->hy.z, q->hz.x, q->hz.y, q->hz.z);
+                q->hy.x, q->hy.y, q->hy.z, q->hz.x, q->hz.y, q->hz.z, q->nc);   /* nc: kfp-vmrec-nc (Z1 band clip) */
         if (q->nok) {   /* native group */
             fprintf(fo, " | 1");
             for (int a = 0; a < 2; a++) for (int k = 0; k < 3; k++) fprintf(fo, " %.4f,%.4f,%.4f", q->nj[a][k].x, q->nj[a][k].y, q->nj[a][k].z);

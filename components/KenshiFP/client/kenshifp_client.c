@@ -4586,6 +4586,7 @@ static void fp_camera_override(void *gw)
                 g_cam_set_nearclip(ogre_cam, nc);
                 g_nc_applied = nc;
             }
+            vm_rec_nc(g_nc_applied);   /* kfp-vmrec-nc: the rec slot of this tick gets the clip just applied */
         }
     } else if (g_ovr_prev) {
         /* FP exit: release the cursor, restore FOV, and level the node
