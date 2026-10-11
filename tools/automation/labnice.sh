@@ -11,10 +11,13 @@
 #     (e.g. labnice.sh -s 4 make -j4) and gets LABNICE_J=N to size its pool.
 #   - nested calls (LABNICE_SLOT already set, e.g. gate.sh inside kfp-pipeline.sh) just run: no second slot, no deadlock
 #   - thread caps for numpy/BLAS (OMP/OPENBLAS/MKL/NUMEXPR_NUM_THREADS=N) unless already set
-#   - pauses while a 5090 take records (lab-recpause.sh: SIGSTOP/SIGCONT of every labnice job tree; new jobs wait)
+#   - one lab CPU budget (Shay 2026-10-10, speed plan 7): LABNICE_SLOTS (default nproc/2 = 16) workers, LABNICE_REC_SLOTS
+#     (default 12) while a 5090 take records: then new jobs take only slots 1..12 (a job wanting more waits, after 300 s
+#     takes what is free there) and lab-recpause.sh SIGSTOPs only job trees holding a slot above 12 (held slots in
+#     /tmp/labnice/held.<pid>), SIGCONT when the recording ends. LABNICE_REC_SLOTS=0 = old rule: every job pauses/waits.
 #   - slots are taken all-or-nothing (no partial holds: deadlock fix), after 300 s whatever is free (>= 1)
 set -u
-D=/tmp/labnice; mkdir -p "$D"; SLOTS=${LABNICE_SLOTS:-$(( $(nproc --all) / 2 ))}; [ "$SLOTS" -ge 1 ] || SLOTS=1   # --all: nproc honours OMP_NUM_THREADS
+D=/tmp/labnice; mkdir -p "$D"; RECS=${LABNICE_REC_SLOTS:-12}; SLOTS=${LABNICE_SLOTS:-$(( $(nproc --all) / 2 ))}; [ "$SLOTS" -ge 1 ] || SLOTS=1   # --all: nproc honours OMP_NUM_THREADS
 if [ "${1:-}" = --status ]; then
   n=0; for i in $(seq 1 "$SLOTS"); do exec {f}>"$D/slot.$i"; flock -n "$f" || n=$((n + 1)); exec {f}>&-; done
   echo "labnice: $n/$SLOTS slots in use"; exit 0
@@ -32,10 +35,14 @@ N=1; [ "${1:-}" = -s ] && { N=$2; shift 2; }
 # detached) SIGSTOPs every labnice job tree and SIGCONTs it after; a new job also waits here before taking slots.
 ME=$(dirname "$(readlink -f "$0")")
 if [ -z "${LABNICE_SLOT:-}" ] && [ -f "$ME/lab-recpause.sh" ]; then
-  setsid nohup bash "$ME/lab-recpause.sh" >/dev/null 2>&1 </dev/null &
-  rw=0; while bash "$ME/lab-recpause.sh" --recording && [ $rw -lt 1800 ]; do sleep 3; rw=$((rw + 3)); done
+  [ -n "${LAB_NODAEMON:-}" ] || setsid nohup bash "$ME/lab-recpause.sh" >/dev/null 2>&1 </dev/null &   # LAB_NODAEMON=1: tests
+  rw=0; while [ "$RECS" -le 0 ] && bash "$ME/lab-recpause.sh" --recording && [ $rw -lt 1800 ]; do sleep 3; rw=$((rw + 3)); done
   [ $rw -gt 0 ] && echo "labnice: waited ${rw}s for a take recording to end" >&2
 fi
+# held slots for lab-recpause.sh (recording budget): "acquiring" while waiting (not paused), then the slots held;
+# stale files of dead jobs are dropped here
+for h in "$D"/held.*; do [ -e "$h" ] && ! kill -0 "${h##*.}" 2>/dev/null && rm -f "$h"; done
+echo "${LABNICE_SLOT:-acquiring}" > "$D/held.$$"; trap 'rm -f "$D/held.$$"' EXIT
 if [ -z "${LABNICE_SLOT:-}" ]; then
   # all-or-nothing under one acquisition lock (deadlock 2026-10-10: 3 jobs each wanting -s 8 grabbed slots one by one and
   # held 16/16 between them, none ever complete). After LABNICE_PARTIAL s (300) a job takes what is free (>= 1 slot) and
@@ -43,8 +50,9 @@ if [ -z "${LABNICE_SLOT:-}" ]; then
   got=(); t0=$(date +%s); PART=${LABNICE_PARTIAL:-300}
   while :; do
     exec {a}>"$D/acquire.lock"; flock "$a"
-    fds=()
-    for i in $(seq 1 "$SLOTS"); do
+    fds=(); LIM=$SLOTS
+    [ "$RECS" -gt 0 ] && [ "$RECS" -lt "$SLOTS" ] && [ -f "$ME/lab-recpause.sh" ] && bash "$ME/lab-recpause.sh" --recording && LIM=$RECS
+    for i in $(seq 1 "$LIM"); do
       [ ${#got[@]} -ge "$N" ] && break
       exec {f}>"$D/slot.$i"; if flock -n "$f"; then got+=("$i"); fds+=("$f"); else exec {f}>&-; fi
     done
@@ -56,6 +64,7 @@ if [ -z "${LABNICE_SLOT:-}" ]; then
   w=$(( $(date +%s) - t0 )); [ $w -gt 5 ] && echo "labnice: waited ${w}s for $N slot(s)" >&2
   export LABNICE_SLOT="${got[*]}"
 fi
+echo "$LABNICE_SLOT" > "$D/held.$$"
 export LABNICE_J=$N
 for v in OMP_NUM_THREADS OPENBLAS_NUM_THREADS MKL_NUM_THREADS NUMEXPR_NUM_THREADS; do [ -n "${!v:-}" ] || export "$v=$N"; done
 nice -n 15 ionice -c 3 "$@"   # no exec: lab-recpause.sh finds the job tree by this labnice.sh parent
