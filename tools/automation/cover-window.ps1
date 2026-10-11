@@ -1,4 +1,4 @@
-<#
+﻿<#
 cover-window.ps1 [-Seconds 20] [-Title <game window title>] [-Instance n]
 Test helper for capture-proof.sh (capture-fix 2026-10-11): puts an opaque magenta window, topmost and never activated
 (no focus change, ShowWithoutActivation + WS_EX_NOACTIVATE), exactly over the game window's client area for -Seconds,
@@ -6,14 +6,16 @@ then closes it. A take recorded meanwhile must still show the game (Windows Grap
 shows magenta. Writes "COVER <x>,<y> <w>x<h>" to C:\KenshiTestRuns\cover-window.state while it is up (deleted at the end).
 #>
 param([int]$Seconds = 20, [string]$Title = 'Kenshi 1.0.65 - x64 (Newland)')
-$state = 'C:\KenshiTestRuns\cover-window.state'
+$state = 'C:\KenshiTestRuns\cover-window.state'; $logf = 'C:\KenshiTestRuns\cover-window.log'
+trap { Add-Content $logf "$(Get-Date -Format s) ERROR $_"; exit 1 }
+Add-Content $logf "$(Get-Date -Format s) start title='$Title' seconds=$Seconds"
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices; using System.Windows.Forms;
 public static class CoverWin {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
-  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowW(string c, string t);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowW(IntPtr c, string t);
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c);
@@ -25,8 +27,8 @@ public class NoActForm : Form {
 }
 '@ -ReferencedAssemblies System.Windows.Forms
 try { [CoverWin]::SetProcessDpiAwarenessContext([IntPtr]-4) | Out-Null } catch {}
-$h = [CoverWin]::FindWindowW($null, $Title)
-if ($h -eq [IntPtr]::Zero) { "cover: no window '$Title'"; exit 1 }
+$h = [CoverWin]::FindWindowW([IntPtr]::Zero, $Title)   # $null -> "" for a string param in PowerShell
+if ($h -eq [IntPtr]::Zero) { Add-Content $logf "$(Get-Date -Format s) no window '$Title'"; "cover: no window '$Title'"; exit 1 }
 $r = New-Object CoverWin+RECT; [CoverWin]::GetClientRect($h, [ref]$r) | Out-Null
 $p = New-Object CoverWin+POINT; [CoverWin]::ClientToScreen($h, [ref]$p) | Out-Null
 $w = $r.R - $r.L; $hh = $r.B - $r.T
