@@ -392,7 +392,8 @@ while ($true) {
     $script:film = $film
     $up = [bool](K2Procs)
     $gfxF = Join-Path $rd "$Lane.gfx"; $want = if ($film) { 'full' } else { 'low' }
-    if ($up -and "$((Get-Content $gfxF -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -ne $want) { Stop2 "gfx switch to $want"; $up = $false }
+    $have = "$((Get-Content $gfxF -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if (-not $have) { $have = 'low' }   # no .gfx yet = a game the lane started before film mode existed: low
+    if ($up -and $have -ne $want) { Stop2 "gfx switch to $want"; $up = $false }
     if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 30); if ($why) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue }; State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
     $launch = @($txt | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
     $launch = if ($launch) { $launch[0] } else { ((LaneRows $txt)[0] -split '\|')[1].Trim() }
@@ -416,7 +417,7 @@ while ($true) {
     $capF = Join-Path $rd "$Lane.capproof"; $capS = "$((Get-Content $capF -TotalCount 1 -ErrorAction SilentlyContinue))"
     $ll = @(Get-Content $run)
     if ($film -and $capS -notlike 'PASS*') { $ll = @($ll | Where-Object { $_ -match '^\s*(#|$)' }) + @("CAPPROOF | kah-fpstudio | Axima | Malzin | 300 | bash {CR}/KenshiModding/tools/automation/capture-proof.sh {OUT}/capproof 3") + @(LaneRows $ll); Log "film: CAPPROOF row first (lane window never proven yet)" }
-    Set-Content (Join-Path $outW 'list.txt') ($ll -replace '\{CR\}', '/mnt/c');   # {CR} = /mnt/c (as rig-runner.ps1 does)
+    Set-Content (Join-Path $outW 'list.txt') ($ll -replace '\{CR\}', '/mnt/c' -replace '\{RIG\}', '5090');   # {CR} = /mnt/c (as rig-runner.ps1 does)
     Set-Content (Join-Path $outW '.instance') "$Inst"
     Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
     $rl = if ($up) { '--reuse ' } else { '' }
