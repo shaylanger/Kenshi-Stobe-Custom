@@ -81,7 +81,7 @@ bolts() { A inv "$SH" | grep -o '"name":"Bolts[^"]*","count":[0-9]*' | grep -o '
 BOLTS=$(bolts)
 # top up so N shots really fire (66c 4080: 19 bolts in the fixture capped the row at 19 shots)
 need=$((N-BOLTS+5)); while [ "$BOLTS" -lt "$N" ] && [ $need -gt 0 ]; do   # give takes at most 50 per call
-  k=$((need>50?50:need)); echo "GPUMEM: give $SH Bolts $k: $(A give "$SH" Bolts $k)" >> "$LOG"; need=$((need-k)); done
+  k=$((need>50?50:need)); echo "GPUMEM: give $SH Bolts [Regulars] $k: $(A give "$SH" "Bolts [Regulars]" $k)" >> "$LOG"; need=$((need-k)); done
 BOLTS=$(bolts)
 [ "$BOLTS" -ge 10 ] || echo "GPUMEM: bolt count read $BOLTS (inv format?), firing N=$N; a dry bow shows as too few shots" >> "$LOG"
 [ "$BOLTS" -ge 10 ] && [ "$BOLTS" -lt "$N" ] && { echo "GPUMEM: $BOLTS bolts < $N shots, firing $BOLTS" >> "$LOG"; N=$BOLTS; }
