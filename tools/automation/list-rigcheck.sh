@@ -39,6 +39,8 @@ if [ "$RIG" = 4080 ] && rows | awk -F'|' '{c=$NF} c ~ /STOBE-|tests\/ingame\/sto
 
 # ---- saves
 sv=$(hdr launch); declare -A SV=()
+# KenshiFP take lists without a save default to kah-fpxbow (rig-runner does the same)
+[ -z "$sv" ] && [ -z "$(rows | head -1 | cut -d'|' -f2 | tr -d ' -')" ] && rows | grep -q 'KenshiFP/tests/ingame/' && sv=kah-fpxbow
 [ -n "$sv" ] && SV[$sv]=1
 while IFS='|' read -r _ s _; do s=$(echo "$s" | tr -d ' \r'); [ -n "$s" ] && SV[$s]=1; done < <(rows)
 for s in "${!SV[@]}"; do case "$s" in -|home|auto-home) unset "SV[$s]" ;; esac; done

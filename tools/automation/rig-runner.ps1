@@ -288,6 +288,12 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) filler row hash (own script only): $($rh[-1])"
     $ms = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" monsel 2>&1 | ForEach-Object { "$_" }); $ok = $ms[-1] -like 'MONSEL PASS*'; if (-not $ok) { $bad++ }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) screen rule (kenshi-ctl.ps1 monsel: never the Samsung SNY05D1): $($ms[-1])"
+    # a KenshiFP take list without '# launch:' and row save '-' defaults to kah-fpxbow (90e 2026-10-11 FAILED 'no save to launch')
+    $tl = Join-Path $env:TEMP 'rr-selftest-nolaunch.list'
+    [IO.File]::WriteAllLines($tl, [string[]]@('# owner: selftest', 'r1 | - | Axima | Malzin | 60 | RIG={RIG} bash {CR}/KenshiModding/components/KenshiFP/tests/ingame/fp-fists.sh {OUT}/r1'))
+    $rc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/list-rigcheck.sh '$($tl -replace '\\','/')' 5090" 2>&1 | ForEach-Object { "$_" }); Remove-Item -LiteralPath $tl -ErrorAction SilentlyContinue
+    $ok = -not ($rc -match 'no save to launch'); if (-not $ok) { $bad++ }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) KenshiFP take list without a save -> kah-fpxbow (list-rigcheck): $($rc[-1])"
     "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 4) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
@@ -1045,6 +1051,9 @@ function Start-Batch($f) {
     $launch = Header $run 'launch'
     if (-not $launch) { $s = (((Rows $run | Select-Object -First 1) -split '\|')[1]); if ($s) { $launch = $s.Trim() } }
     if ($launch -eq 'home') { $launch = 'auto-home' }
+    # KenshiFP take lists without a save: default kah-fpxbow (run-batch then loads the row's pf_load target in one load;
+    # 90e/99a 2026-10-11 FAILED 'no save to launch' only because the header was missing)
+    if ((-not $launch -or $launch -eq '-') -and @(Rows $run | Where-Object { $_ -match 'KenshiFP/tests/ingame/' }).Count -gt 0) { $launch = 'kah-fpxbow'; Log "$name has no save: KenshiFP take rows -> launch kah-fpxbow" }
     if (-not $Fake -and (-not $launch -or $launch -eq '-')) { Fail-List $run $name $own 'no save to launch: add "# launch: <save>" or a save in the first row' @(); return $true }
     $cr = if ($Rig -eq '5090') { '/mnt/c' } else { '/c' }
     $outW = Join-Path $(if ($Fake) { $rd } else { $runs }) $outN
