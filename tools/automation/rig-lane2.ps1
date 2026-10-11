@@ -420,8 +420,11 @@ while ($true) {
     $cur = if (Test-Path $curF) { @(Get-Content $curF) } else { @() }   # runPath, outW, start epoch, owner, start ISO, list name (rig-runner -Status reads [4] + [5])
     if ($cur.Count -ge 6) {
         $outW = $cur[1]; $t0 = [long]$cur[2]; $own = $cur[3]; $name = $cur[5]
-        if (Test-Path $tdr1) { TdrStop "lane A TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outW }
-        $h = @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)); if ($h.Count) { TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
+        # a finished batch (DONE, e.g. the one a TDR stop left in <lane>.cur) is not guarded: 17:30 a restarted 5090c re-adopted
+        # its 16:33 batch and alerted on a later TDR it never ran beside (the DONE branch below clears it)
+        $live = -not (Test-Path (Join-Path $outW 'DONE'))
+        if ($live -and (Test-Path $tdr1)) { TdrStop "lane A TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outW }
+        $h = if ($live) { @(LaneTdrFilter (TdrEvents ($t0 - 30)) ($t0 - 30)) } else { @() }; if ($h.Count) { TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
         if (IsoA) {   # TDR isolation: lane A started a crossbow/turret list -> end this batch now, requeue it (filler: just release the claim)
             $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane TDR isolation: lane A runs a crossbow/turret list"); Stop2 'TDR isolation'
             if ((Split-Path $cur[0] -Leaf) -like '*__filler__*') { Remove-Item -LiteralPath $cur[0] -ErrorAction SilentlyContinue } else { Move-Item -LiteralPath $cur[0] (Join-Path "$qd\$Lane" $name) -Force -ErrorAction SilentlyContinue }
