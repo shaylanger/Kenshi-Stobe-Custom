@@ -12,8 +12,8 @@ deletes instance 1's files): use `remove` (rmdir /s, which drops junctions witho
 
   kenshi-instance.ps1 path   [-Instance n]          the game folder of instance n (1 = Steam install)
   kenshi-instance.ps1 sync   [-Instance 2] [-Saves a,b]   create/refresh the copy from instance 1 (mods, DLLs, cfgs, gfx-mods
-                                                    state; files gone from instance 1 are removed) + copy those saves
-  kenshi-instance.ps1 save   <name>[,name] [-Instance 2]  copy saves from %LOCALAPPDATA%\kenshi\save into the copy
+                                                    state; files gone from instance 1 are removed) + copy those saves and every kah-* test save
+  kenshi-instance.ps1 save   <name>[,name] [-Instance 2]  copy saves (+ every kah-*; names may use * ?) from %LOCALAPPDATA%\kenshi\save into the copy
   kenshi-instance.ps1 status [-Instance 2]          exists? linked/copied counts, running game pid, saves
   kenshi-instance.ps1 selftest [-Instance 2]        checks the copy: no small/mutable file is a hard link, every big
                                                     data file is, save location is local, harness runtime files absent
@@ -90,7 +90,10 @@ function JunctionTarget([string]$path) {
   if (IsReparse $i) { "$($i.Target)" } else { $null }
 }
 function Copy-Saves([string[]]$names) {
-  foreach ($s in @($names | ForEach-Object { $_ -split ',' } | Where-Object { $_ })) {
+  # a name with * or ? = every matching save folder (kah-* = every test save); unique, in order
+  $list = @($names | ForEach-Object { $_ -split ',' } | Where-Object { $_ } | ForEach-Object {
+    if ($_ -match '[*?]') { @(Get-ChildItem $UserSaves -Directory -Filter $_ -ErrorAction SilentlyContinue | ForEach-Object Name) } else { $_ } } | Select-Object -Unique)
+  foreach ($s in $list) {
     $from = Join-Path $UserSaves $s
     if (-not (Test-Path $from)) { throw "no save '$s' in $UserSaves" }
     $null = & robocopy $from (Join-Path $Dst "save\$s") /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP
@@ -154,7 +157,7 @@ switch ($Command) {
   'path' { $Dst; exit 0 }
   'save' {
     if ($Instance -le 1) { throw 'instance 1 uses the user save folder already' }
-    Copy-Saves (@($Name) + $Saves); exit 0
+    Copy-Saves (@($Name) + $Saves + 'kah-*'); exit 0   # + every kah-* test save (see sync)
   }
   'remove' {
     if ($Instance -le 1) { throw 'refusing to remove instance 1 (the Steam install)' }
@@ -210,7 +213,10 @@ switch ($Command) {
     Set-Content "$Dst\instance.txt" "instance=$Instance synced=$(Get-Date -Format s) from=$Src" -Encoding Ascii
     $st = $script:st
     "sync instance $Instance -> $Dst : $($st.junction) junctions, $($st.link) hard links, $($st.copy) copies, $($st.same) unchanged, $($st.purged) removed, $($st.dead) dead links skipped, $($st.busy.Count) busy$(if ($st.busy.Count) { ' (' + (($st.busy | Select-Object -First 3) -join ',') + ')' }) ($([int]((Get-Date) - $t0).TotalSeconds) s)"
-    Copy-Saves $Saves
+    # every kah-* test save too, not only the asked ones (Shay 2026-10-11: every lane has every test save, all lanes can use
+    # all saves at once; run-batch load_target switches the launch save to a row's pf_load target, e.g. kah-fpstudio).
+    # 5090b (rig-lane2.ps1 7b2373a) and 4080b both get it through this one place; robocopy /MIR = unchanged saves cost ~0 s.
+    Copy-Saves (@($Saves) + 'kah-*')
     exit 0
   }
 }
