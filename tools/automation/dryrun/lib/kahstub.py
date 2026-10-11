@@ -130,6 +130,9 @@ def new_state(save):
              swing_ko=int(f.get('swing_ko', 0)),
              off_sheathes=int(f.get('off_sheathes', 0)),
              give_noroom=f.get('give_noroom'),
+             # fixtures/spawn-hostile.json (23-rg02 ST02/ST03): spawns of these templates/factions ('*' = all) read
+             # isEnemy=1 whatever the relation; sneak_aware_lag: see sneak_aware
+             spawn_hostile=f.get('spawn_hostile', []), sneak_aware_lag=float(f.get('sneak_aware_lag', 0)),
              # fixtures/dialog.json (2026-10-10 20-rg04 M08): NPC conversations that open the dialogue window `at` s after
              # the load and stay open until `dialog close` (KenshiFP fp_state ui_open=1 ui_why=panels meanwhile)
              dlg=[dict(e, vt=dr.vnow() + float(e.get('at', 0)), closed=0) for e in f.get('dialog', [])],
@@ -138,6 +141,9 @@ def new_state(save):
     t = dr.vnow()
     for k, v in s['fp'].items():
         s['hist'].append([t - 3600, k, v])
+    # KenshiFP startup line fp-stealth.sh's setup checks (resolved stealth symbols, kfp_controls.inc)
+    kfplog(t, '[controls] stealth: sensory=7ff6a1000000 aware=7ff6a1000100 kochance=7ff6a1000200 uncon=7ff6a1000300 '
+              'dead=7ff6a1000400')
     return s
 
 
@@ -174,6 +180,51 @@ def settle(s, now):
         s['hour'] = h % 24
     s['hour_vt'] = now
     mtick(s, now)
+    sk = s.get('sk')
+    if sk and sk.get('pend') and now >= sk['pend']:   # the pending sneak knockout lands (KenshiFP fpc_sneak_watch)
+        t = s['chars'].get(sk['t'])
+        sk['pend'] = 0
+        if t:
+            t['ko'] = 1
+        sk['result'], sk['elapsed'] = 'ko', 1500
+        kfplog(now, '[controls] sneak result=ko target=%s elapsed_ms=1500 target_aware_now=0 ko_chance=158.000' % uname(t['name'] if t else 'none'))
+
+
+# ---- FP stealth model (fp-stealth.sh ST01-ST03; KenshiFP client/kfp_controls.inc sneak probe / fpc_sneak_click) ----
+def uname(n):
+    return n.replace(' ', '_').replace('=', '_')
+
+
+def is_enemy(s, c):
+    """PlayerInterface::isEnemy: faction at war (relation < 0) or a game-side enemy flag the relation command doesn't
+    clear (fixtures/spawn-hostile.json: every spawn of the listed templates/factions, 23-rg02 ST02/ST03 hostile=1)"""
+    if c.get('enemy'):
+        return 1
+    rel = s.get('relations', {}).get(c['fac'], -50.0 if 'Bandit' in c['fac'] else 0.0)
+    return 1 if rel < 0 else 0
+
+
+def sneak_aware(s, t, now):
+    """t sees the FP character now: pinned facing him, unless he sneaks with stealth >= 50; fixtures sneak_aware_lag =
+    seconds after sneak goes on in which the facing target reads target_aware=0 (23-rg02 ST02 single probe)"""
+    me = s['chars'].get(s['fpchar'] or '') if s.get('fpchar') else None
+    if not me or not t or t.get('ko') or t.get('face') != me['name']:
+        return 0
+    if me.get('sneak'):
+        if now - me.get('sneak_t', 0) < s.get('sneak_aware_lag', 0):
+            return 0
+        if me.get('stats', {}).get('stealth', 10.0) >= 50:
+            return 0
+    return 1
+
+
+def fight_on(s, key):   # fpc_engage: a native fight of the FP character on him (press() shadows melee())
+    melee(s)['tgt'] = key
+
+
+def crosshair(s):
+    t = s['chars'].get(s.get('pick_t') or '')
+    return t if t and not t.get('ko') else None
 
 
 def desc_item(s, it):
@@ -358,6 +409,27 @@ def press(s, btn, ms, now):
             if t < end:
                 sched(s, t + 0.05, 'rmb', ui_state='aiming', vm='aiming', hud_text='aiming')
             sched(s, max(end, t) + 0.1, 'rmb', ui_state='ready', vm='ready', hud_text='ready')
+    elif btn == 'lmb' and fp['melee'] and crosshair(s):
+        # LMB drawn on a crosshair character (kfp_controls.inc): sneaking + unaware = vanilla sneak KO order (task 228),
+        # else fpc_engage (task 5 on an enemy, 61 unprovoked) and a native fight on him
+        t = crosshair(s)
+        sk = s.setdefault('sk', {})
+        if c.get('sneak'):
+            aw = sneak_aware(s, t, now)
+            sk['clicks'] = sk.get('clicks', 0) + 1
+            if aw == 0:
+                sk['attacks'] = sk.get('attacks', 0) + 1
+                sk.update(path='vanilla_sneak', last_task=228, result='pending', t=s['pick_t'], pend=now + 1.5)
+            else:
+                sk['engages'] = sk.get('engages', 0) + 1
+                sk.update(path='engage_aware', last_task=5 if is_enemy(s, t) else 61)
+                fight_on(s, s['pick_t'])
+            kfplog(now + 0.02, '[controls] LMB sneak=1 target=%s target_aware=%d aware_any=%d ko_chance=%.3f path=%s task=%d' % (
+                uname(t['name']), aw, 1 if t.get('seen_once') else 0, 0.0 if aw else 158.0, sk['path'], sk['last_task']))
+        else:
+            sk['engages'] = sk.get('engages', 0) + 1
+            sk['last_task'] = 5 if is_enemy(s, t) else 61
+            fight_on(s, s['pick_t'])
     elif btn == 'lmb':
         if fp['melee'] and fp.get('weapon') == 'fists':
             fs = s.setdefault('fist', dict(force=-1, swings=0, ikfail=0))
@@ -417,6 +489,11 @@ def fpkeys_state(s):
              ranged=0 if f['melee'] else 1, fists=1 if w == 'fists' else 0, ui_state=f['ui_state'], hud=1, hud_shown=1,
              hud_text=f['hud_text'], hud_changes=3, speed_now='%.2f' % s.get('speed', 1), speed_target='%.2f' % s.get('speed', 1),
              speed_guard=1, ctx_hook=1, gui_hook=1, hud_native_vis=0, ticks=1000, free_swings=s.get('free_swings', 0))
+    sk, me = s.get('sk', {}), s['chars'].get(s.get('fpchar') or '') or {}
+    v.update(sneak=me.get('sneak', 0), sneak_clicks=sk.get('clicks', 0), sneak_attacks=sk.get('attacks', 0),
+             sneak_path=sk.get('path', 'none'), sneak_result=sk.get('result', 'none'), engages=sk.get('engages', 0),
+             last_task=sk.get('last_task', -1), sneak_elapsed_ms=sk.get('elapsed', 0),
+             sneak_ko=1 if sk.get('result') == 'ko' else 0)
     return ' '.join('%s=%s' % (k, v.get(k, '-' if k.endswith(('_why', '_path', '_target', '_result', '_where', '_hist', 'last_select', 'last_target')) else 0))
                     for k in FPKEYS_FIELDS)
 
@@ -844,6 +921,7 @@ def handle(s, cmd, a, now, sp):
                 if not face:
                     return False, 'no character %s' % a[a.index('face') + 1]
             pins.append(nm)
+            c['face'] = face['name'] if face else None
             if s.get('swing_ko') and c.get('ko'):
                 # op-swa4 (fixture swing_ko): a KO ragdoll ignores teleport; the real pin answers ERROR with the miss
                 return False, 'pinned %s at %.1f,%.1f,%.1f off=10.2%s pins=%d' % (nm, at[0], at[1], at[2],
@@ -884,7 +962,20 @@ def handle(s, cmd, a, now, sp):
         if cmd == 'relation' and len(a) >= 2:
             b = s.setdefault('relations', {}).get(c['fac'], -50.0 if 'Bandit' in c['fac'] else 0.0)
             s['relations'][c['fac']] = float(a[1])
-            return True, '%s <-> Nameless: %.1f -> %.1f' % (c['fac'], b, float(a[1]))
+            # enemy = the faction's enemy state (a per-character spawn_hostile flag stays: 23-rg02 enemy=0->0, hostile=1)
+            return True, '%s <-> Nameless: %.1f -> %.1f enemy=%d->%d' % (c['fac'], b, float(a[1]), 1 if b < 0 else 0,
+                                                                        1 if float(a[1]) < 0 else 0)
+        if cmd == 'stealth':
+            if len(a) > 1 and a[1].lower() in ('on', 'off'):
+                was = c.get('sneak', 0)
+                c['sneak'] = 1 if a[1].lower() == 'on' else 0
+                if c['sneak'] and not was:
+                    c['sneak_t'] = now
+            return True, 'stealth_mode=%d' % c.get('sneak', 0)
+        if cmd == 'senses':
+            aw = sneak_aware(s, c, now) if s.get('fpchar') and len(a) > 1 and a[1] == s['fpchar'] else 0
+            return True, 'sees=%d hears=0 aware=%d entry=%d last_seen_s=%s fov=0.0 dist=15.0 observer_ko=%d' % (
+                aw, aw, aw, '0.0' if aw else '-1', 1 if c.get('ko') else 0)
         if cmd == 'attack':   # Commands.cpp attack <attacker> <target>: a native fight between them
             o = need_char(1)
             if not o:
@@ -1085,7 +1176,28 @@ def handle(s, cmd, a, now, sp):
             return True, kfpreply.render('pick', n=s.get('picks', 0), result=s.get('pick', 'none'))
         if sub == 'pick':
             s['picks'] = s.get('picks', 0) + 1
+            # crosshair = the nearest standing non-squad character within 3 m of the FP character (a pinned row target)
+            me = s['chars'].get(s.get('fpchar') or '')
+            near = sorted((flat(me, c), k) for k, c in s["chars"].items()
+                          if k not in s["squad"] and not c.get("ko") and flat(me, c) <= 30) if me else []
+            s['pick_t'] = near[0][1] if near else None
+            s['pick'] = uname(s['chars'][s['pick_t']]['name']) if near else 'terrain'
             return True, 'pick requested'
+        if sub == 'sneak' and len(a) > 1 and a[1] == 'show':
+            t = crosshair(s)
+            me = s['chars'].get(s.get('fpchar') or '') or {}
+            aw = sneak_aware(s, t, now) if t else -1
+            h = is_enemy(s, t) if t else -1
+            sk = s.setdefault('sk', {})
+            sk['n'] = sk.get('n', 0) + 1
+            if t and aw == 1:
+                t['seen_once'] = 1
+            return True, 'sneak n=%d stealth=%d target=%s target_aware=%d aware_any=%d ko_chance=%.3f hostile=%d enemy_tp=%d ' \
+                         'enemy_pt=%d' % (sk['n'], me.get('sneak', 0), uname(t['name']) if t else 'none', aw,
+                                          (1 if t.get('seen_once') else 0) if t else -1, (0.0 if aw else 158.0) if t else -1.0,
+                                          h, (1 if h == 1 and aw == 1 else 0) if t else -1, h)
+        if sub == 'sneak':
+            return True, 'sneak probe requested'
         return True, fpkeys_state(s)
     if cmd == 'fp_melee':
         return fp_melee_cmd(s, a, now)
@@ -1118,6 +1230,19 @@ def handle(s, cmd, a, now, sp):
                                      ui_open=1 if dl else 0, panels=('0x%03x' % 0x020) if dl else '0x000', active=s.get('fpmode', 0),
                                      cursor_hidden=1 if s.get('fpmode', 0) and not s.get('fp_free', 0) else 0,
                                      free=s.get('fp_free', 0))
+    if cmd == 'detecttime' and len(a) >= 2:   # sneak on, sighting reset, answers when (if) the observer sees him
+        me, ob = char(s, a[0]), char(s, a[1])
+        if not me or not ob:
+            return False, 'no character %s' % (a[0] if not me else a[1])
+        if not me.get('sneak'):
+            me['sneak'], me['sneak_t'] = 1, now
+        seen = sneak_aware(s, ob, now) if me['name'] == s.get('fpchar') else 0
+        return True, 'seen=%d seconds_to_seen=%s seconds_to_maybe=-1 max_progress=0.00 dist=15.0 los=%.1f ' \
+                     'observer_perception_mult=1.00' % (seen, '0.0' if seen else '-1', 1.0 if seen else 0.0)
+    if cmd == 'crime' and a:
+        if not char(s, a[0]):
+            return False, 'no character %s' % a[0]
+        return True, '%s committing_crime=none against=none crime_expiry=-1.0 total_bounty=0 stolen_items=0 hunters=0' % a[0]
     if cmd == 'spawn':   # Commands.cpp spawn <template> <faction> [near <npc> | at x y z] [count n] [dist m] ...
         tpl, fac = a[0], a[1]
         at = list(s['chars'][s['selected']]['pos'])
@@ -1134,6 +1259,9 @@ def handle(s, cmd, a, now, sp):
             key = '%s#%d' % (tpl, sr)
             s['chars'][key] = dict(id='#%d/%d' % (sr, sr + 1), fac=fac, pos=[at[0] + d, at[1], at[2]], items=[], eq=[],
                                    ko=0, ranged=None, name=tpl)
+            sh = s.get('spawn_hostile', [])
+            if '*' in sh or tpl in sh or fac in sh:
+                s['chars'][key]['enemy'] = 1
             made.append('%s #%d/%d race=Greenlander' % (tpl, sr, sr + 1))
         return True, 'spawned %d/%d %s: %s' % (n, n, tpl, ', '.join(made))
     if cmd == 'fp_combat' and a:

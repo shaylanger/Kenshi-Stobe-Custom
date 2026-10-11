@@ -34,7 +34,9 @@ ctl-quoted     | -      | 5090 | PASS                                           
 ctl-quoted-4080 | -     | 4080 | PASS                                           | rp | - | Axima | Malzin | 120 | RIG=4080 DRQ="a b c" $RP {OUT}/rp clean
 ctl-dialog     | dialog | 5090 | PASS                                           | dlg | kah-fpxbow | Axima | Malzin | 120 | DRYRUN_NOREC=1 $RP {OUT}/rp dialog
 bug-dialog     | dialog | 5090 | FAIL:stalled: ui_open=1                        | dlg | kah-fpxbow | Axima | Malzin | 120 | DRYRUN_NOREC=1 DIALOG_GUARD=0 $RP {OUT}/rp dialog
-bug-shellop    | -      | 5090 | FAIL:list: shell operator                      | rp | - | Axima | Malzin | 120 | stobe-auto speed 1; $RP {OUT}/rp clean
+ctl-stealth    | spawn-hostile | 5090 | PASS                                  | st | kah-fpxbow | Axima | Malzin | 1200 | DRYRUN_NOREC=1 bash $KT/fp-stealth.sh Axima Malzin {OUT}/ST
+bug-stealth-hostile | spawn-hostile-all | 5090 | FAIL:setup no neutral target   | st | kah-fpxbow | Axima | Malzin | 1200 | DRYRUN_NOREC=1 ROWS=ST03 bash $KT/fp-stealth.sh Axima Malzin {OUT}/ST
+bug-shellop    | -    | 5090 | FAIL:list: shell operator                      | rp | - | Axima | Malzin | 120 | stobe-auto speed 1; $RP {OUT}/rp clean
 EOF
 )
 mkdir -p "$OUT"; n=0; bad=""
