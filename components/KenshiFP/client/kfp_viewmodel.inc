@@ -196,6 +196,8 @@ static float g_vm_2hbw;                                /* block blend 0..1 (foll
 static float g_vm_2hpl[2] = { 0.59f, 0.87f }, g_vm_2hbase; static int g_vm_2hpl_on;   /* grip slide while 2H (native grip: 0; katana plsl 1.0 left no
                                                                      * room for the off hand on short handles), saved one-handed value */
 static float g_vm_2hroom = 1.9f;                      /* handle kept behind the weapon hand for the off hand (dm) */
+static float g_vm_2hmaxb = 5.0f;                      /* heavy: at most this much handle behind the weapon hand (dm; longer handles:
+                                                        * the hand slides toward the pommel, Brutal Axe pommel cut the near plane) */
 static float g_vm_wpom = -1.0f, g_vm_wtip = -1.0f;    /* weapon mesh: handle end behind / tip ahead of the grip, dm (-1 unknown) */
 static int (*g_vm_wdim_fn)(void *wih, float *pom, float *tip);   /* game reader (mesh bounds); NULL offline (fp_vm set wpom/wtip) */
 static float g_vm_2hnear = 7.0f;                     /* 2H: native off hand captured as the grip up to this far from the weapon hand */
@@ -2055,6 +2057,7 @@ static void vm_frame_core(void *pc, int body_down)
         if (g_vm_class == 0 && g_vm_2hw > 0.0f) {   /* 2H grip slide (one-handed: g_vm_plsl untouched) */
             if (!g_vm_2hpl_on) { g_vm_2hbase = g_vm_plsl[0]; g_vm_2hpl_on = 1; }
             float pl_ = g_vm_2hpl[g_vm_2hk ? 1 : 0];   /* heavy, short handles: the weapon hand chokes up so the off hand fits behind it */
+            if (!g_vm_2hk && g_vm_wpom > 0.0f && pl_ < g_vm_wpom - g_vm_2hmaxb) pl_ = g_vm_wpom - g_vm_2hmaxb;
             if (!g_vm_2hk && g_vm_wpom > 0.0f && pl_ > g_vm_wpom - g_vm_2hroom) pl_ = g_vm_wpom - g_vm_2hroom;
             g_vm_plsl[0] = g_vm_2hbase + (pl_ - g_vm_2hbase) * vm_2h_wt();
         } else if (g_vm_2hpl_on) { g_vm_plsl[0] = g_vm_2hbase; g_vm_2hpl_on = 0; }
@@ -2275,6 +2278,7 @@ static int vm_set(const char *k, float x)
     else if (!strcmp(k, "twoplP"))  { if (x > -3 && x < 3) g_vm_2hpl[1] = x; return 1; }
     else if (!strcmp(k, "wpom"))    fp = &g_vm_wpom;
     else if (!strcmp(k, "tworoom")) fp = &g_vm_2hroom;
+    else if (!strcmp(k, "twomaxb")) fp = &g_vm_2hmaxb;
     else if (!strcmp(k, "wtip"))    fp = &g_vm_wtip;
     else if (!strcmp(k, "twoperp")) fp = &g_vm_2hperp;
     else if (!strcmp(k, "twopc")) fp = &g_vm_2hpc;

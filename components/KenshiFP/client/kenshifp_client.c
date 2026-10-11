@@ -108,6 +108,7 @@
 #define ITEM_GAMEDATA      0x78    /* Item::gameData (GameData*) */
 #define ITEM_MESH          0x80    /* Item::mesh (Ogre::MovableObject*); NULL = the game destroyed it */
 #define GD_INTMAP          0x178   /* GameData int-field map (same node layout, int value) */
+#define GD_FLOATMAP        0x1B8   /* GameData float-field map (KenshiLib GameData.h fdata; same node layout, float value) */
 /* AttachSlot (the game's own fcs_enums.def) -- these are the BIT INDICES of the
  * headgear_slots ini bitmask: WEAPON 0, BACK 1, HAIR 2, HAT 3, EYES 4, BODY 5, LEGS 6,
  * NONE 7, SHIRT 8, BOOTS 9, GLOVES 10, NECK 11, BACKPACK 12, BEARD 13, BELT 14. */
@@ -6311,6 +6312,26 @@ static int gd_int_field(void *gd, const char *key, int *out)
     return 0;
 }
 
+/* Read a FLOAT GameData field by name (map at gd+0x1B8, same walk as gd_int_field). CALLER MUST hold the VEH guard. */
+static int gd_float_field(void *gd, const char *key, float *out)
+{
+    if (!readable(gd, GD_FLOATMAP + 0x40)) return 0;
+    unsigned char *m = (unsigned char *)gd + GD_FLOATMAP;
+    size_t nb = *(size_t *)(m + 0x18), n = *(size_t *)(m + 0x20);
+    void **bk = *(void ***)(m + 0x38);
+    if (!n || !nb || nb > 0x10000 || !readable(bk, (nb + 1) * sizeof(void *))) return 0;
+    size_t klen = strlen(key);
+    void *node = bk[nb];
+    for (size_t i = 0; node && i < 4096; i++, node = *(void **)((uintptr_t)node + MAPN_NEXT)) {
+        if (!readable(node, MAPN_VALUE + 4)) return 0;
+        unsigned char *k = (unsigned char *)node + MAPN_KEY;
+        size_t len = *(size_t *)((uintptr_t)node + MAPN_KEYLEN), cap = *(size_t *)((uintptr_t)node + MAPN_KEYCAP);
+        const char *s = (cap > 15) ? *(const char **)k : (const char *)k;
+        if (len == klen && readable(s, klen) && memcmp(s, key, klen) == 0) { *out = *(float *)((uintptr_t)node + MAPN_VALUE); return 1; }
+    }
+    return 0;
+}
+
 /* g_gear_hid / g_gear_n live next to g_head_hidden (fp_head_forget_world in kfp_control.inc) */
 static int   g_gear_dead;     /* headgear hide self-disabled after a fault */
 static int   g_gear_diag;     /* capped count of re-show diagnostic log lines */
@@ -6448,7 +6469,8 @@ static int kfp_weapon_skillcat(void *wih)
 }
 /* 2H: the weapon mesh's extent along the blade axis (prop +Y): handle end behind (pom) and tip ahead of the grip, mesh
  * units = dm (animlab weapons.py: katana05 tip 10.4); Item::mesh is the Ogre::Entity: Entity::getMesh -> Mesh::getBounds
- * (AxisAlignedBox: min xyz, max xyz). Item scale fields are not applied (34 of the 48 heavy/polearm weapons are 1.0). */
+ * (AxisAlignedBox: min xyz, max xyz) x the item's length scale (GameData floats "scale length" x "overall scale", as the
+ * game draws it; kfp-2h-scale 2026-10-11: raw bounds put the off hand past the pommel of Buster Sword 0.73). */
 typedef const void *(*ent_getmesh_t)(const void *ent);
 typedef const float *(*mesh_bounds_t)(const void *mesh);
 static int kfp_weapon_dims(void *wih, float *pom, float *tip)
@@ -6483,7 +6505,11 @@ static int kfp_weapon_dims(void *wih, float *pom, float *tip)
         const void *const *sp = readable(ent, 8) ? (const void *const *)getmesh(ent) : NULL;
         const void *m = readable(sp, 8) ? *sp : NULL;
         const float *b = readable(m, 8) ? bounds(m) : NULL;
-        if (readable(b, 24) && b[4] > 0.5f && b[4] < 60.0f && b[1] < b[4] && b[1] > -30.0f) { pm = -b[1]; tp = b[4]; ok = 1; }
+        if (readable(b, 24) && b[4] > 0.5f && b[4] < 60.0f && b[1] < b[4] && b[1] > -30.0f) { pm = -b[1]; tp = b[4]; ok = 1;
+            float sl = 1.0f, so = 1.0f, f;
+            if (wgd && gd_float_field(wgd, "scale length", &f) && f > 0.2f && f < 5.0f) sl = f;
+            if (wgd && gd_float_field(wgd, "overall scale", &f) && f > 0.2f && f < 5.0f) so = f;
+            pm *= sl * so; tp *= sl * so; }
     }
     g_guard_armed = 0; memcpy(g_guard_jb, save, sizeof(jmp_buf)); g_guard_tid = wt; g_guard_armed = was;
     if (ok) { *pom = pm < 0.0f ? 0.0f : pm; *tip = tp; }

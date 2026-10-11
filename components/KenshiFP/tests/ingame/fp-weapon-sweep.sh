@@ -127,9 +127,11 @@ take(){   # k sid name type animcls ammo
     else
       for s in 1 2; do lab "LMB: free swing $s"; A fp_keys press lmb 60 >/dev/null; sleep 2.4; done
       # block from ready (swing 2 may still recover) and label once RMB is down: blocking came 0.62 s after a pre-press label
-      # (takecheck grace 0.6; 03-twohand Katana/Naginata 2026-10-10); release label stays 1.8 s after the press
-      pf_waitst ready 3; A fp_keys press rmb 2200 >/dev/null; sleep 0.25; lab "RMB held: block guard"; sleep 1.55
-      lab "RMB released: back to ready"; sleep 2.2
+      # (takecheck grace 0.6; 03-twohand Katana/Naginata 2026-10-10); release label 1.8 s after the press, BEFORE the key
+      # goes up (06-twohand-scale 2026-10-11: the 2200 ms timed press let blocking end 0.07 s before the release label's
+      # frame-stamp mark -> claim "block guard" FAIL on its last samples on every weapon)
+      pf_waitst ready 3; A fp_keys press rmb 6000 >/dev/null; sleep 0.25; lab "RMB held: block guard"; sleep 1.55
+      lab "RMB released: back to ready"; A fp_keys release rmb >/dev/null; sleep 2.2
     fi
     lab "R: sheathe"; A key_inject r tap 120 >/dev/null; pf_waitst holstered 6; sleep 0.3
     lab "Holstered (zoom $z)"; sleep 1.2
