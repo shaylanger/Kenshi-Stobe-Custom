@@ -558,8 +558,8 @@ for f in rec/fist-lens-2strike-8b3f.txt:lens:FAIL rec/fist-lens-badpunch-8b3f.tx
 PQ=$CORPUS/rec/fist-punch-fq0-badpunch.vmrec.txt; PS=$CORPUS/rec/fist-punch-synth-pass-v2.txt
 if [ -f "$PQ" ] && [ -f "$PS" ]; then
   r=$(python3 "$HERE/fist-punch-check.py" "$PQ" | tail -1)
-  case "$r" in "RESULT FIST-PUNCH FAIL "*"C1=FAIL C2=FAIL C3=FAIL C4=FAIL C5=FAIL C6=FAIL C7=FAIL C8=FAIL hold=FAIL C9=info"*) ok "fist punch fq0 (Shay reject): ${r:0:140}";;
-    *) bad "fist punch fq0 (want C1-C8 + hold FAIL): $r";; esac
+  case "$r" in "RESULT FIST-PUNCH FAIL "*"C1=FAIL C2=FAIL C3=FAIL C4=FAIL C5=FAIL C6=FAIL C7=FAIL C8=PASS hold=FAIL C9=info"*) ok "fist punch fq0 (Shay reject): ${r:0:140}";;
+    *) bad "fist punch fq0 (want C1-C7 + hold FAIL, C8 PASS: its off hand stays in guard, Shay 16:45): $r";; esac
   r=$(python3 "$HERE/fist-punch-check.py" "$PS" --camera | tail -1)
   case "$r" in "RESULT FIST-PUNCH PASS "*) ok "fist punch synthetic PASS ref: ${r:0:100}";; *) bad "fist punch synthetic PASS ref (want PASS): $r";; esac
   python3 "$HERE/fist-punch-synth.py" "$PQ" /tmp/al-fps.txt > /dev/null && r=$(python3 "$HERE/fist-punch-check.py" /tmp/al-fps.txt --camera | tail -1)

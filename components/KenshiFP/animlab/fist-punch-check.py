@@ -25,7 +25,8 @@ Rows (each = worst punch; a check FAILs if any punch fails it; no punch at all =
   C7 hand    at the peak the striking hand's forward axis (hand bone X, rec group F) within 35 deg of the view axis (+z), its
              palm (-hand Z, Z = X x Y: the convention of animlab native.py fist_hand) within 60 deg of down (knuckles up/forward,
              not the palm-up / side-on reach), and from t20 to peak+.1 s the palm never within 60 deg of the wrist->camera ray
-  C8 off     the other wrist at the peak vs at t20: moves <= .5 dm and pulls back (dz <= -.15 dm)
+  C8 off     the other wrist at the peak vs at t20: moves <= .5 dm and does not drift toward the target (dz <= +.15 dm);
+             Shay 16:45 'other hand stays in guard' (SHAY_RULES SR22): a still guard hand PASSES (old pull-back dz <= -.15 failed it)
   hold       after the peak the wrist speed stays < 10 % of the strike's peak speed for >= 2 frames (within .1 s of the peak)
   C9 camera  (report-only until the camera-impulse toggle ships; --camera gates it) camera yaw/pitch moves .5-1.5 deg
              within .1 s of the peak (vs .15 s before t20) and comes back within .3 s
@@ -178,7 +179,7 @@ if ready:
             rows['C7'].append((False, -999, '%s no hand axes (rec group F)' % tag))
         # C8 off hand
         od = sub(F[kp]['m'][o + 'wr'], F[k20]['m'][o + 'wr'])
-        rows['C8'].append((ln(od) <= .5 and od[2] <= -.15, -od[2], '%s off hand %s moved %.2f dm, dz %+.2f (<= .5, dz <= -.15)' % (tag, o, ln(od), od[2])))
+        rows['C8'].append((ln(od) <= .5 and od[2] <= .15, -ln(od), '%s off hand %s moved %.2f dm, dz %+.2f (<= .5, dz <= +.15: stays in guard)' % (tag, o, ln(od), od[2])))
         # hold at peak
         def spd(k):
             return ln(sub(F[k]['m'][s + 'wr'], F[k - 1]['m'][s + 'wr'])) / max(F[k]['t'] - F[k - 1]['t'], 1e-4)

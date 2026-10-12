@@ -102,3 +102,14 @@ S = Kenshi-Automation-Harness/docs/animlab/STATUS.md; R = components/KenshiFP/an
 | takecheck | takecheck.py + take-rules.txt | SR9 (setup) | none |
 | wm.vis / near / twohand / seen | weapon_matrix.py | SR7, SR8, SR29, SR19-21, SR17 | none (vis only on ready/block/aim) |
 | e6-takes | e6-takes.py | SR4, SR10, SR11, SR13 | none |
+| fist C1-C7, hold, C9 | components/KenshiFP/animlab/fist-punch-check.py | SR22, SR25, SR7 (C9 report-only) | none |
+| fist C8 off hand | fist-punch-check.py | SR22 "other hand stays in guard" | FIXED (rules-audit): required the off hand to PULL BACK (dz <= -.15 dm), so a guard hand that held still failed; now moves <= .5 dm and no drift toward the target (dz <= +.15); regress 35d fq0 now C8=PASS (still FAIL C1-C7/hold) |
+| punch depth..offhand | punch-check.py | SR22 | none |
+| punch sides | punch-check.py (guard hands >= 25% width apart, own halves) | SR22 | OPEN risk: a tight chin guard could fail it; Shay's complaint was hands moving together, not spacing; not changed |
+| swings / match / plays / view U22 / hud U23 / lens U24 / hand U25 | fist-take-check.py | SR7, SR9, SR29, SR22, SR23 | none (full reach to the crosshair moves away from the lens) |
+| black bar | blackbar-check.py | SR22 (no black line) | none |
+| U1-U11, U15, U17-U20, U22 | spec.py unarmed | SR22, SR7, SR8, SR10, SR6, SR29, SR23-25 | none (U4 looser than the crosshair rule: gap, C2 holds the 42-55% box) |
+| U21 arms never cross | spec.py unarmed (fist within 250 px of the other arm fails) | coord | OPEN risk: a centre chin-guard off hand near a rear-hand punch to the crosshair; not changed |
+| stroke-cycle | stroke-cycle.py | SR13 | none |
+
+Coverage gaps (not contradictions): nothing checks that the punching hand and the off hand move independently (SR22 "both hands stay side by side"); no mutation test covers C8.
