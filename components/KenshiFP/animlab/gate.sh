@@ -14,6 +14,7 @@
 #      2026-10-11 "E6 default stroke cycle": 6E7C0363 kept the 2H-light katana on stroke 0); a FAIL fails the gate
 #   3c. e6-takes.py: every corpus E6 GAME take (pools/e6-takes/takes.list) replayed with the current source, per take x stroke
 #      inline + arc like the take judge (Misses 2026-10-11 "E6-s1pt30-s1": the pool aggregate hid a per-take FAIL); baseline
+#   3d. zoomret-check.py: every corpus zoomret rec, whole replay vs fresh start at each zoom return (baseline-judged)
 #   4. mutation tests (mutate.py): every check must FAIL its own synthetic corruption of known-good corpus material
 #   5. flips vs the last accepted baseline (corpus gate-baseline.tsv): any PASS that became FAIL or stopped running
 #      (a fixed miss coming back, a check silently skipped) fails the gate
@@ -33,7 +34,7 @@ HASHONLY=0; [ "${1:-}" = hash ] && { HASHONLY=1; shift; }
 while [ $# -gt 0 ]; do case "$1" in --update-baseline) UPD=1;; --src) SRC=$2; shift;; --out) OUT=$2; shift;; --no-mutate) MUT=0;;
 *) echo "gate.sh: unknown arg $1"; exit 2;; esac; shift; done
 srchash() { (cd "$SRC/client" && find . -type f \( -name '*.inc' -o -name '*.c' -o -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | xargs -0 cat
-  cat "$L"/*.py "$HERE"/regress.sh "$HERE"/mutate.py "$HERE"/stroke-cycle.py "$HERE"/e6-takes.py "$HERE"/fist-*.py "$C/MANIFEST.tsv" 2>/dev/null) | sha256sum | cut -c1-12; }
+  cat "$L"/*.py "$HERE"/regress.sh "$HERE"/mutate.py "$HERE"/stroke-cycle.py "$HERE"/e6-takes.py "$HERE"/zoomret-check.py "$HERE"/fist-*.py "$C/MANIFEST.tsv" 2>/dev/null) | sha256sum | cut -c1-12; }
 [ $HASHONLY = 1 ] && { srchash; exit 0; }
 H=$(srchash); mkdir -p "$G"; OUT=${OUT:-$G/run-$(date +%m%d-%H%M%S)-$H}; mkdir -p "$OUT"; W=$G/work
 fail=0; why=()
@@ -79,6 +80,16 @@ python3 "$HERE/e6-takes.py" --adapter /root/animlab-build/kfpvm_cur > "$OUT/e6-t
 ET=$(grep -o '^RESULT E6-TAKES [A-Z]* n=[0-9]* fail=[0-9]*' "$OUT/e6-takes.txt" | awk '{sub(/n=/,"",$4); sub(/fail=/,"",$5); print $4 "/" $5}'); ET=${ET:-ERR}
 grep -q '^RESULT E6-TAKES' "$OUT/e6-takes.txt" || echo "E6-TAKES run ERR" >> "$OUT/verdicts.raw"
 grep '^E6TAKE ' "$OUT/e6-takes.txt" | awk '{print "E6TAKE", $2, $3, $4, $5}' >> "$OUT/verdicts.raw"
+# 3d. zoom-return pose (zoomret-check.py, class "carried solver state", Misses 139-wc-clv: the arm settled in a second ready
+#     pose after a zoom-out): every corpus rec pinned to check zoomret (MANIFEST col 3) replayed whole vs fresh at each
+#     zoom return with the current source; verdict per rec judged against the baseline (clv139 FAILs until
+#     kfp-elb-zoomreset ships, buster147 PASS; a PASS that flips to FAIL fails the gate like every other key)
+awk -F'\t' '$3=="zoomret" && $7=="ok" {print $1}' "$C/MANIFEST.tsv" | sort -u | while read -r zr; do
+  zf="$C/$zr"; [ -f "$zf" ] || zf="$C/rec/$zr"; [ -f "$zf" ] || { echo "ZOOMRET $zr ERR"; continue; }
+  v=$(python3 "$HERE/zoomret-check.py" "$zf" --adapter /root/animlab-build/kfpvm_cur --row ZR 2>&1 | awk '/^RESULT ZR /{print $3}')
+  echo "ZOOMRET $(basename "$zr" .vmrec.txt) ${v:-ERR}"; done > "$OUT/zoomret.txt"
+cat "$OUT/zoomret.txt" >> "$OUT/verdicts.raw"
+ZR=$(awk '{print $2 ":" $3}' "$OUT/zoomret.txt" | tr '\n' ',' | sed 's/,$//'); ZR=${ZR:-none}
 # 4. mutations
 MR="skipped"
 if [ $MUT = 1 ]; then python3 "$HERE/mutate.py" --work "$W" --out "$OUT/mut" > "$OUT/mutate.txt" 2>&1
@@ -99,7 +110,7 @@ st=$(bash "$HERE/corpus.sh" stats); pairs=$(echo "$st" | grep -o 'pairs=[0-9]*')
 np=$(grep -c $'\tPASS$' "$OUT/verdicts.tsv"); nf=$(grep -c $'\tFAIL$' "$OUT/verdicts.tsv"); nc=$(wc -l < "$OUT/verdicts.tsv")
 # pool FAILs are judged against the baseline only (stroke 0 = Shay-accepted baseline exception fails blade/arc by design)
 [ $fail = 0 ] && V=PASS || V=FAIL
-line="RESULT ANIMLAB-REGRESS $V checks=$nc pass=$np fail=$nf $pairs $pend pool=${PR# } pinl=${PI#,} cycle=$CY e6takes=$ET mutations=$MR flipped=${FL:-none} src=$H$( [ $fail = 1 ] && echo " why=$(IFS=,; echo "${why[*]}")") log=$OUT"
+line="RESULT ANIMLAB-REGRESS $V checks=$nc pass=$np fail=$nf $pairs $pend pool=${PR# } pinl=${PI#,} cycle=$CY e6takes=$ET zoomret=$ZR mutations=$MR flipped=${FL:-none} src=$H$( [ $fail = 1 ] && echo " why=$(IFS=,; echo "${why[*]}")") log=$OUT"
 echo "$line" | tee "$OUT/RESULT.txt"; cp "$OUT/RESULT.txt" "$G/result-$H.txt"
 if [ $UPD = 1 ]; then chmod u+w "$B" 2>/dev/null; cp "$OUT/verdicts.tsv" "$B"; echo "gate: baseline updated ($nc verdicts) -> $B"; fi
 ls -dt "$G"/run-* 2>/dev/null | tail -n +7 | xargs -r rm -rf   # keep the newest 6 runs
