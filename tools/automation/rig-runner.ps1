@@ -299,7 +299,10 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     $ok = -not ($rc -match 'no save to launch'); if (-not $ok) { $bad++ }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) KenshiFP take list without a save -> kah-fpxbow (list-rigcheck): $($rc[-1])"
     . (Join-Path $PSScriptRoot 'tdr-handled.ps1'); $th = @(TdrHandledSelfTest ${function:TdrFilter}); $th; $bad += @($th | Where-Object { $_ -like 'FAIL*' }).Count
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 4 + $th.Count) cases"; exit [int]($bad -gt 0)
+    # m105: 4080 sync = seeds-only defer + staged rename (every 4080 list had run on old copies of ~190 deferred files)
+    $sp = @(Get-Content -LiteralPath $PSCommandPath | Where-Object { $_ -match '^\s*\$defer = @\(UsedClosure \(\$cl' }); $ok = $sp.Count -eq 1 -and $sp[0] -match '-SeedsOnly'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync defers only the files running processes name (no transitive closure)"
+    $su = Get-Content "$auto\rig4080\setup.sh" -Raw; $ok = $su -match '(?m)^mv_staged$' -and $su -notmatch 'scp -q "\$\{keep\[@\]\}" "\$H:\$d"' -and $su -notmatch '(?m)^run scp -q "\$HERE/python3"'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) rig4080/setup.sh stages + renames files into place (never an in-place scp over a running script)"
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 6 + $th.Count) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 . (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
@@ -493,7 +496,10 @@ function Sync4080([string]$name, [string]$listText) {
     $cand = SyncCandidates
     $cl = if ($Fake) { if (Test-Path "$rd\fake-procs.txt") { @(Get-Content "$rd\fake-procs.txt") } else { @() } } else { @(Ssh4Ps 'C:\KAH\runner\procpaths.ps1' @()) }
     if (-not $Fake -and -not ($cl -contains 'PROCPATHS-END')) { Log "4080 sync SKIPPED: 4080 process list unreadable ($(($cl | Select-Object -Last 1)); nothing overwritten, the 4080 keeps its current scripts"; return }
-    $defer = @(UsedClosure ($cl -join "`n") $cand)
+    # only the files running processes name (seeds), not their transitive closure: setup.sh renames new files into place
+    # (a running bash keeps its old file), so nothing else needs to wait. m105: the closure of lane 4080b's + background
+    # analyses' scripts was ~190 files = EVERY 4080 list ran on old scripts and no 4080 filler result reached the ledger.
+    $defer = @(UsedClosure ($cl -join "`n") $cand -SeedsOnly)
     $df = Join-Path $rd '4080.deferred'
     $prev = if (Test-Path $df) { @(Get-Content $df | Where-Object { $_ }) } else { @() }
     foreach ($x in $defer) { Log "4080 sync DEFERRED $x (used by a running 4080 process)" }
@@ -502,6 +508,7 @@ function Sync4080([string]$name, [string]$listText) {
     $dfp = '/c/' + ($df.Substring(3) -replace '\\', '/')
     $so = & 'C:\Program Files\Git\bin\bash.exe' -lc "bash /c/KenshiModding/tools/automation/rig4080/setup.sh $(if ($Fake) { '--dry ' })--defer $dfp" 2>&1 | ForEach-Object { "$_" }
     foreach ($l in $so) { if ($l -match '^SCPFAIL') { Log "4080 sync: $l" } }
+    foreach ($l in $so) { if ($l -match '^DEFERRED (\S+) \(rename failed') { $defer += $Matches[1]; Log "4080 sync: $l" } }   # held open: old copy stays
     Log "4080 sync: $(($so | Select-Object -Last 1))$(if ($Fake) { " copies=$(@($so | Where-Object { $_ -like 'COPY *' }).Count)" })"
     $old = @(UsedClosure $listText $cand | Where-Object { $defer -contains $_ })
     $of = Join-Path $rd "4080.oldcopy.$name"

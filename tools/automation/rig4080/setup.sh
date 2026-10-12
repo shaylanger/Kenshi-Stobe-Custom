@@ -109,17 +109,35 @@ cp_to() {
   done
   [ ${#keep[@]} -eq 0 ] && return 0
   if [ $DRY = 1 ]; then for f in "${keep[@]}"; do echo "COPY ${f#$M/}"; done; return 0; fi
-  scp -q "${keep[@]}" "$H:$d" || echo "SCPFAIL $d: ${keep[*]#$M/}"
+  # staged, then renamed into place by mv_staged (one ssh): a running bash keeps reading its old file (rename, never an
+  # in-place overwrite; m105: in-place scp is why every file a running 4080 process used had to be deferred)
+  stage_to "$d" "${keep[@]}"
+}
+stage_to() { local d=$1 n; shift; [ $DRY = 1 ] && return 0; n=${#STAGEDEST[@]}; STAGEDEST+=("$d")
+  scp -q "$@" "$H:C:/KAH/$STAGE/$n/" || { echo "SCPFAIL $d: ${*#$M/}"; STAGEDEST[$n]=""; }; }
+# mv_staged: rename every staged file over its destination (Git Bash mv = POSIX rename: open handles keep the old content);
+# a file that cannot be renamed (held without delete sharing) keeps the 4080's old copy: "DEFERRED <rel> (rename failed)"
+mv_staged() {
+  [ $DRY = 1 ] && return 0; [ ${#STAGEDEST[@]} -eq 0 ] && return 0
+  local t i d s; t=$(mktemp); echo "cd /c/KAH/$STAGE || { echo 'SCPFAIL stage dir C:/KAH/$STAGE missing'; exit 0; }" > "$t"
+  for i in "${!STAGEDEST[@]}"; do d=${STAGEDEST[$i]}; [ -n "$d" ] || continue; d=/c/${d#C:/}; s=${d#/c/KenshiModding/}
+    echo "for f in $i/*; do [ -f \"\$f\" ] || continue; b=\${f#$i/}; mv -f \"\$f\" \"$d\$b\" 2>/dev/null || echo \"DEFERRED $s\$b (rename failed: in use)\"; done" >> "$t"; done
+  echo "cd /c/KAH && rm -rf $STAGE" >> "$t"
+  scp -q "$t" "$H:C:/KAH/$STAGE/mv.sh" && ssh $H "C:\\PROGRA~1\\Git\\bin\\bash.exe -l C:/KAH/$STAGE/mv.sh" || echo "SCPFAIL rename step (files stay staged in C:/KAH/$STAGE)"
+  rm -f "$t"
 }
 run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual C:\KenshiModding\Kenshi-Automation-Harness\tools\wgccap\out 2>NUL & exit 0'
-run scp -q "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" $H:C:/KAH/
+STAGE="stage-$$-$RANDOM"; STAGEDEST=()   # every file goes to C:\KAH\<STAGE>\<n>\ first, mv_staged renames them into place
+if [ $DRY = 0 ]; then sd=""; for i in $(seq 0 $(( ${#SETD[@]} + 4 ))); do sd+=" C:\\KAH\\$STAGE\\$i"; done; ssh $H "mkdir$sd 2>NUL & exit 0"; fi
+stage_to C:/KAH/ "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1"
 # lane 4080b (multi-instance-4080 2026-10-11): ctl.ps1 -Instance, inst-window.ps1 (parks/retitles instance n), the instance
 # copier, and the harness kenshi-ctl.ps1 that only sees the game of the install it is given (the old copy killed both games)
-run scp -q "$HERE/ctl.ps1" "$HERE/inst-window.ps1" "$HERE/../kenshi-instance.ps1" $H:C:/KAH/
-run scp -q "$M/Kenshi-Automation-Harness/tools/kenshi-ctl.ps1" "$M/Kenshi-Automation-Harness/tools/Win32Ui.cs" "$M/Kenshi-Automation-Harness/tools/WindowCapture.cs" $H:C:/KAH/tools/
-run scp -q "$HERE/python3" "$HERE/stobe-auto" $H:C:/KAH/bin/   # stobe-auto honours KAH_DIR (lane 4080b)
+stage_to C:/KAH/ "$HERE/ctl.ps1" "$HERE/inst-window.ps1" "$HERE/../kenshi-instance.ps1"
+stage_to C:/KAH/tools/ "$M/Kenshi-Automation-Harness/tools/kenshi-ctl.ps1" "$M/Kenshi-Automation-Harness/tools/Win32Ui.cs" "$M/Kenshi-Automation-Harness/tools/WindowCapture.cs"
+stage_to C:/KAH/bin/ "$HERE/python3" "$HERE/stobe-auto"   # stobe-auto honours KAH_DIR (lane 4080b)
 for d in "${NEWD[@]}"; do w=$(echo "$d" | tr / '\\'); run ssh $H "mkdir C:\\KenshiModding\\$w 2>NUL & exit 0"; done   # list-closure dirs outside the fixed sets
 for i in "${!SETD[@]}"; do cp_to "C:/KenshiModding/${SETD[$i]}/" ${SETF[$i]}; done
+mv_staged
 for d in "$@"; do
   ssh $H "mkdir C:\\KenshiTestRuns\\$d 2>NUL & exit 0"
   ( cd "$R/$d" && ls | grep -E '\.(sh|py|txt|awk|ttf)$' | grep -v -E '^(ts|s3ts|ev|s3ev)\.txt' | tr '\n' '\0' | xargs -0 -r -I{} scp -q {} "$H:C:/KenshiTestRuns/$d/" )

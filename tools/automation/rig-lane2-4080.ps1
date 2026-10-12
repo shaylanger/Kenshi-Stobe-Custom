@@ -106,6 +106,18 @@ function FillerSkip([string]$name, [string[]]$lines, $q, [string[]]$running, [da
 }
 # the list a batch runs: CAPPROOF row first (after the header lines) while instance 2's window was never proven
 $CapRow = 'CAPPROOF | kah-fpstudio | Axima | Malzin | 300 | bash {CR}/KenshiModding/tools/automation/capture-proof.sh {OUT}/capproof 3'
+# commands the LOADED game must have before a list starts (m105 2026-10-11: Windows Defender quarantined instance 2's
+# KenshiFP.dll as Trojan:Win32/Bearfoos.A!ml at load, so 4080b ran 151 + fillers on a game without KenshiFP: 0/4 SETUP FAIL).
+# fp_control for every list (all lane lists drive KenshiFP) + "# needs-cmd: a,b"; "# needs-cmd: none" = no check
+function NeedCmds([string[]]$lines) {
+    $h = @($lines | Where-Object { $_ -match '^\s*#\s*needs-cmd:\s*(.+)$' } | ForEach-Object { $Matches[1].Trim() })
+    if ($h -contains 'none') { return @() }
+    @(@('fp_control') + @($h | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ }) | ForEach-Object { $_.ToLower() } | Sort-Object -Unique)
+}
+function MissingCmds([string[]]$lines, [string]$help) {
+    $have = @{}; foreach ($m in [regex]::Matches($help.ToLower(), '[a-z][a-z0-9_]*')) { $have[$m.Value] = 1 }
+    @(NeedCmds $lines | Where-Object { -not $have.ContainsKey($_) })
+}
 function RunLines([string[]]$lines, [bool]$proof) { if (-not $proof) { return @($lines) }; @($lines | Where-Object { $_ -match '^\s*(#|$)' }) + @($CapRow) + @(LaneRows $lines) }
 function LaneTdrFilter([string[]]$lines, [long]$since) {
     @($lines | Where-Object { $q = "$_" -split '\|', 4; $q.Count -ge 3 -and $q[0] -match '^\d+$' -and [long]$q[0] -ge $since -and $q[2] -in '4101', '153' -and $q[1] -match '^(nvlddmkm|display)$' })
@@ -170,6 +182,13 @@ if ($SelfTest) {
     $n++; $g = [string](LaneReject @('# gfx: low', '# tdr-isolate: yes', 'XC | kah-fpxbow | a | b | 1 | bash x/fp-xbow-tdrconfirm.sh {OUT}/XC') $false); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: tdr-isolate crossbow list admitted: got '$g'"
     $n++; $g = [string](LaneAdmit 9000 20000 $false $true); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: no hold while lane 4080 runs crossbow: got '$g'"
     $script:XbParTest = $false
+    $hk = 'built-in: help | status ... KenshiFP: fp_camera <d> | fp_control <npc> | fp_melee swing_all on|off | fp_vm state'; $hp = 'built-in: help | status | pg_info <npc> <item> | pg_roll <npc> <item>'
+    $nc = @(@('melee list on a KenshiFP game', @('# needs-cmd: fp_melee', 'M | s | a | b | 1 | bash x/fp-swing-hits-all.sh'), $hk, ''),
+            @('melee list on a game without KenshiFP (m105 151)', @('# needs-cmd: fp_melee', 'M | s | a | b | 1 | bash x/fp-swing-hits-all.sh'), $hp, 'fp_control,fp_melee'),
+            @('no header: fp_control still required', @('M | s | a | b | 1 | bash x/fp-control.sh'), $hp, 'fp_control'),
+            @('needs-cmd: none', @('# needs-cmd: none', 'M | s | a | b | 1 | bash x/m.sh'), $hp, ''),
+            @('fp_vm present, fp_vmx wanted', @('# needs-cmd: fp_vmx', 'M | s | a | b | 1 | bash x/m.sh'), $hk, 'fp_vmx'))
+    foreach ($c in $nc) { $n++; $g = (@(MissingCmds $c[1] $c[2]) -join ','); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b needed commands $($c[0]): missing '$g'" }
     # source pin (17:19: the in-batch end-batch check lacked XbPar and killed 114a twice): every isolation `if ((Xbow1)` honours the switch
     $n++; $src = @(Get-Content -LiteralPath $PSCommandPath | Where-Object { $_ -match '^\s*if \(+Xbow1\)' -and $_ -notmatch 'XbPar' }); $ok = $src.Count -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: every isolation check honours the switch ($($src.Count) without XbPar)"
     "LANE4080B-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
@@ -300,6 +319,9 @@ function PreDry([string]$path, [int]$nice, [int]$wait) {
 function Busy1 { [bool]@(Get-ChildItem "$qd\running" -Filter '4080__*' -File -ErrorAction SilentlyContinue).Count }   # lane 4080 has a batch
 function Gfx2 { $g = "$((Get-Content (Join-Path $rd "$Lane.gfx") -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if ($g) { $g } else { 'low' } }
 function CapState { "$((Get-Content (Join-Path $rd "$Lane.capproof") -TotalCount 1 -ErrorAction SilentlyContinue))" }
+$kfpF = Join-Path $rd "$Lane.kfp-blocked"   # Defender quarantines instance 2's KenshiFP.dll: lane parked until $K2 is excluded
+$defQ = "Get-MpThreatDetection -ErrorAction SilentlyContinue | Where-Object { `$_.InitialDetectionTime -gt (Get-Date).AddHours(-6) -and ((`$_.Resources -join ';') -like '*$K2\*') } | Sort-Object InitialDetectionTime -Descending | Select-Object -First 1 | ForEach-Object { 'DEFENDER ' + `$_.InitialDetectionTime.ToString('s') + ' ' + (Get-MpThreat -ThreatID `$_.ThreatID -ErrorAction SilentlyContinue).ThreatName + ' removed ' + (`$_.Resources -join ';') }"
+$exQ = "`$e = @((Get-MpPreference).ExclusionPath | Where-Object { `$_ }); if (@(`$e | Where-Object { '$K2\'.StartsWith(`$_.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) }).Count) { 'EXCL yes' } else { 'EXCL no' }"
 function SetPos([string]$xy) { $null = Ssh4Enc "Set-Content 'C:\KenshiTestRuns\inst-window-$Inst.pos' '$xy' -Encoding Ascii" }
 
 Log "lane $Lane up pid=$PID"
@@ -373,6 +395,12 @@ while ($true) {
     if ($tdrOn) { $rm = Remote; if ($rm.k2) { Stop2 'TDR alert' }; State 'waiting: TDR alert present (no instance 2 launch)'; Start-Sleep $TickSec; continue }
     if ((Xbow1) -and -not (XbPar)) {   # TDR isolation (off while the xbow-parallel switch exists): no instance 2 beside lane 4080's crossbow/turret list (stop an idle one too)
         $rm = Remote; if ($rm.k2) { Stop2 'TDR isolation' }; State 'waiting: lane 4080 runs a crossbow list (TDR isolation)'; Start-Sleep $TickSec; continue
+    }
+    if (Test-Path $kfpF) {   # parked: Defender removes instance 2's KenshiFP.dll; re-check the exclusion every 10 min (or delete the file)
+        if (-not $script:kfpAt -or ((Get-Date) - $script:kfpAt).TotalMinutes -ge 10) { $script:kfpAt = Get-Date
+            $ex = @(Ssh4Enc $exQ) | Where-Object { $_ -like 'EXCL *' } | Select-Object -Last 1
+            if ($ex -eq 'EXCL yes') { Remove-Item $kfpF -ErrorAction SilentlyContinue; Log "KenshiFP block cleared: $K2 is excluded from Defender scans now" } }
+        if (Test-Path $kfpF) { $rm = Remote; if ($rm.k2) { Stop2 'KenshiFP blocked' }; State "PARKED: $((Get-Content $kfpF -TotalCount 1)) | needs a Defender exclusion for $K2 (or C:\KenshiInst) on the 4080 (Shay); resumes by itself within 10 min"; Start-Sleep $TickSec; continue }
     }
     $f = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
     $rm = $null; $fill = $null
@@ -453,6 +481,21 @@ while ($true) {
     $o = Ssh4Bash @('-c', "'grep -q KAH_DIR:- /c/KAH/bin/stobe-auto && echo SHIM-OK'")
     if (-not ($o -match 'SHIM-OK')) { Drop "C:\KAH\bin\stobe-auto ignores KAH_DIR (would drive lane 4080's game): run rig4080/setup.sh"; Stop2 'shim'; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
     $o = Ssh4Bash @('-c', "'export KAH_INSTANCE=$Inst; . /c/KenshiModding/tools/automation/rig-env.sh; /c/KAH/bin/stobe-auto input_isolation on'"); Log "isolation: $($o -join ' ')"
+    # the loaded game must have the list's commands (NeedCmds): never run a list on a game without KenshiFP (m105 151)
+    $miss = @()
+    foreach ($try in 1..3) {
+        $hl = (Ssh4Bash @('-c', "'export KAH_INSTANCE=$Inst; . /c/KenshiModding/tools/automation/rig-env.sh; /c/KAH/bin/stobe-auto help'")) -join ' '
+        $miss = @(MissingCmds $txt $hl); if (-not $miss.Count) { break }; Start-Sleep 5
+    }
+    if ($miss.Count) {
+        $dv = @(Ssh4Enc $defQ) | Where-Object { $_ -like 'DEFENDER *' } | Select-Object -First 1
+        $why = "instance 2's game lacks $($miss -join ',')$(if ($dv) { " ($dv)" } else { ' (KenshiFP not loaded?)' })"
+        Log "REFUSED $name : $why"; Stop2 'needed commands missing'
+        if ($dv) { Set-Content $kfpF "$(Get-Date -Format s) $why"; Note 'coordinator' "lane $Lane PARKED: $why. Needs a Defender exclusion for $K2 (or C:\KenshiInst) on the 4080 (Shay; the agent's Add-MpPreference was denied); the lane resumes by itself once it exists" }
+        if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue; $script:fillBad[$name] = Get-Date }
+        else { Move-Item -LiteralPath $src (Join-Path "$qd\4080" $name) -Force -ErrorAction SilentlyContinue; Log "$name back to queue\4080 (lane 4080 runs it)"; Note $own "lane $Lane refused $name ($why); back in queue\4080" }
+        Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; $idleSince = Get-Date; continue
+    }
     [IO.File]::WriteAllText((Join-Path $tmp 'list.txt'), ((((Get-Content (Join-Path $tmp 'list.src.list')) -replace '\{CR\}', '/c' -replace '\{RIG\}', '4080') -join "`n") + "`n"))
     Set-Content (Join-Path $tmp '.instance') "$Inst" -Encoding Ascii
     Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
