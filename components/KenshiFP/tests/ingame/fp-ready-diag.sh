@@ -31,7 +31,8 @@ pf_load
 A speed 1 hold >/dev/null; A chatter off >/dev/null
 A pin Malzin at -53900 633 6850 >/dev/null; A pin $HOLD at -53940 640 6850 >/dev/null; A pin Shay at -53980 640 6850 >/dev/null
 A select $SH >/dev/null; A fp_control take >/dev/null
-pf_rig
+# no pf_rig: this row films nothing (200-clv-readydiag lost both rows on lane 4080b to pf_rig's capture check, and a
+# gfx-low lane renders below 1600x900 too); the evidence is the fp_vm rec + state snapshots, so any lane can run it
 pf_clean -54190 4380 6000
 A teleport $SH $SPOT >/dev/null; sleep 2; A health $SH 100 >/dev/null
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null; A combatmode $SH ranged off >/dev/null
