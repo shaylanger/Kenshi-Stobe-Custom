@@ -75,7 +75,8 @@ S = Kenshi-Automation-Harness/docs/animlab/STATUS.md; R = components/KenshiFP/an
 | SR35 | Every visible FP feature that passes gets a short labelled review video + README in C:\KenshiTestRuns\for-shay\<ROW>\ for Shay. | 2026-10-11 | M visible-features-get-video |
 | SR36 | Every review flaw -> lab Misses row + automatic check. | 2026-10-10 | M review-flaws-feed-the-lab |
 | SR37 | Review videos show exactly 1 swing of each stroke type, once at full speed and once at 1/2 speed. Nothing more (no repeated swings, no 1/4 speed). (The E6 video, 6 swings per stroke, 1:31, real + 1/4 speed, broke this.) | 2026-10-11 18:05 | Shay via coordinator |
-| SR38 | Swing strokes must end with the blade TIP in the last 10% (or less) of the screen (outer 10% band on the end side; off screen counts). Replaces the 20% end band for strokes. Also (18:10): every stroke passes through or near the screen centre, and tip travel must be about double the old threshold. | 2026-10-11 18:15 | Shay direct |
+| SR38 | Swing strokes must end with the blade TIP in the last 10% (or less) of the screen (outer 10% band on the end side; off screen counts). Replaces the 20% end band. | 2026-10-11 18:15 | Shay direct |
+| SR39 | E6 diagonal (stroke 0) and E6 overhead (stroke 2) ONLY, as shipped in E6 (BBF5B2A4): they don't pass through/near the screen centre, don't end in the end band, and tip travel is far too small: these two need about double the tip travel. Applies to these two strokes only, NOT a general threshold change for other strokes. | 2026-10-11 18:10 | Shay E6 review |
 
 ## Check audit (rules-audit, 2026-10-11 ~18:00; each check read in code)
 
