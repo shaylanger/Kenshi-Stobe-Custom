@@ -1033,6 +1033,16 @@ function DryWinPath([string]$p) {   # /mnt/c/x, /c/x, ${CR:-/mnt/c}/x, {CR}/x ->
     if ($p -match '^/c(/.+)$') { return 'C:' + ($Matches[1] -replace '/', '\') }
     $null
 }
+# Canned in the dry run (speed-scout r10): python tools the sandbox replaces (dryrun/lib/pyshim.py CANNED_TOOLS + kah.py +
+# take_sample.py) only need to EXIST there, so their content and their imports stay out of the key: a fists list's key
+# covered ~110 files (animlab.py's lab modules), every lab edit re-ran the dry run (~20-37 s at a 4080 list start).
+function DryCanned {
+    if ($script:dryCanned) { return $script:dryCanned }
+    $c = @{ 'kah.py' = 1; 'take_sample.py' = 1 }
+    $t = try { [IO.File]::ReadAllText("$auto\dryrun\lib\pyshim.py") } catch { '' }
+    if ($t -match "CANNED_TOOLS\s*=\s*\(([^)]*)\)") { foreach ($m in [regex]::Matches($Matches[1], "'([^']+)'")) { $c[$m.Groups[1].Value.ToLowerInvariant()] = 1 } }
+    $script:dryCanned = $c; $c
+}
 function DryFiles([string]$listText) {   # every file the list's rows use (closure), sorted full paths
     $idx = DryNameIndex; $seen = @{}; $todo = New-Object Collections.Queue
     $add = { param($w) if ($w -and -not $seen.ContainsKey($w.ToLowerInvariant()) -and (Test-Path -LiteralPath $w -PathType Leaf)) { $seen[$w.ToLowerInvariant()] = $w; $todo.Enqueue($w) } }
@@ -1054,6 +1064,7 @@ function DryFiles([string]$listText) {   # every file the list's rows use (closu
     while ($todo.Count) {
         $w = $todo.Dequeue(); if ($scanned.ContainsKey($w)) { continue }; $scanned[$w] = 1
         if ($w -notmatch '\.(sh|py|awk)$') { continue }
+        if ((DryCanned).ContainsKey((Split-Path $w -Leaf).ToLowerInvariant())) { continue }   # canned: no import closure
         $fi = Get-Item -LiteralPath $w -ErrorAction SilentlyContinue; if (-not $fi) { continue }; $dir = Split-Path $w
         $ck = "$w|$($fi.Length)|$($fi.LastWriteTimeUtc.Ticks)"
         if (-not $script:refCache.ContainsKey($ck)) {   # tokens per file version (abs paths, names, py imports), scanned once
@@ -1076,7 +1087,8 @@ function DryKey([string]$path, [switch]$Show) {
     $t = DryListText $path
     $files = DryFiles $t
     $sb = New-Object Text.StringBuilder; $null = $sb.Append("$Rig`n$t")
-    foreach ($w in $files) { $fi = Get-Item -LiteralPath $w -ErrorAction SilentlyContinue; if ($fi) { $null = $sb.Append("$($w.ToLowerInvariant())|$(FileSha $fi)`n") } }
+    $cn = DryCanned
+    foreach ($w in $files) { $fi = Get-Item -LiteralPath $w -ErrorAction SilentlyContinue; if ($fi) { $null = $sb.Append("$($w.ToLowerInvariant())|$(if ($cn.ContainsKey($fi.Name.ToLowerInvariant())) { 'canned' } else { FileSha $fi })`n") } }
     $h = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($sb.ToString()))
     $k = $Rig + '-' + (($h[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')
     if ($Show) { "DRYKEY $k files=$($files.Count)"; $files | ForEach-Object { "  $_" } } else { $k }
