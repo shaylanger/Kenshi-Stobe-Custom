@@ -21,6 +21,9 @@ Agreement set (C:\\KenshiTestRuns\\gpu-wire\\agree-set, built once from what the
                                            run the evaluator command and record wall, CPU-s of the command's process tree
                                            (rusage), WSL machine CPU% (/proc/stat), Windows CPU% (typeperf) and GPU util/mem
                                            (nvidia-smi.exe, 0.5 s samples) -> <results>.bench.json; compare prints it
+  gpu-agree.py run <outdir> [--eval gpu|gpu-stub]
+                                           one command: jobs -> bench of `gpueval.py batch --eval M` (GPU command from
+                                           ANIMLAB_GPU_EVAL_CMD / gpu-eval-cmd.txt, e.g. gpu-lab's kfpvm-gpu.sh) -> compare
   gpu-agree.py cpu-ref <outdir> [-j N]     CPU baseline in the same protocol: bench 'cpu' of gpueval.py cpu-batch (no cache)
   gpu-agree.py selftest                    fake 'GPU' results: exact copies PASS, noise within tol PASS, a corrupted
                                            replay / flipped state / reordered scores FAIL
@@ -522,6 +525,13 @@ def main(argv):
         i = argv.index('--'); return bench(argv[1], argv[2], argv[i + 1:])
     if c == 'cpu-ref':
         return cpu_ref(argv[1:])
+    if c == 'run':   # run <outdir> [--eval gpu|gpu-stub] : jobs + bench of gpueval batch + compare, one command
+        od = argv[1]; mode = argv[argv.index('--eval') + 1] if '--eval' in argv else 'gpu'
+        os.makedirs(od, exist_ok=True); jf, rp = os.path.join(od, 'jobs.jsonl'), os.path.join(od, 'results.jsonl')
+        write_jobs(od, jf)
+        bench('%s (gpueval batch, cmd=%s)' % (mode, G.gpu_cmd() or 'cpu-batch'), rp,
+              [sys.executable, os.path.join(HERE, 'gpueval.py'), 'batch', jf, rp, '--eval', mode])
+        return compare([rp])
     if c == 'selftest':
         return selftest()
     return compare(argv)
