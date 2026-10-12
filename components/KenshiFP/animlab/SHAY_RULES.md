@@ -100,7 +100,7 @@ S = Kenshi-Automation-Harness/docs/animlab/STATUS.md; R = components/KenshiFP/an
 | path / sweep / wexit / rep / thrust | metrics.path_one, swing_sweep, windup_exit, path_rep, thrust_one | SR11-SR16, SR18 (PATH_INFO = s1, s2 non-blocking = SR13) | none: unclipped tip path, off-screen end = edge 0, off-screen start needs visible exit |
 | guard | metrics.guard_check | coord R18 | none |
 | zoomband / bandleak | metrics.zoomband_check / bandleak_check | SR32, SR8 | none |
-| framed | metrics.framed_check (a wrist in view >= 80% ready/block, >= 50% swing) | coord R35 / SR9 | OPEN risk SR17: a full corner-to-corner stroke whose wrist leaves at both ends could fail the 50% swing share; unproven on a recording, not changed |
+| framed | metrics.framed_check (a wrist in view >= 80% ready/block, >= 50% swing) | coord R35 / SR9 | FIXED 2026-10-11 (weapon-classes): proven on the ACCEPTED SR41 game recs (pt17v2s0 framed swing 0.19, s3a 0.31): the 50% swing share contradicted SR41; swing frames of the straight strokes 0/3 are info (framed_swing_line), other strokes keep 50% |
 | pool_predict / check_suite | metrics.pool_predict / check_suite | aggregates arc/blade/stroke/churn | same SR13 risk as stroke |
 | wrist / restedge / stilljit / blade_native | spec.py | SR10, SR3, SR28, SR17/SR23 | none |
 | vmcheck.wrist / wswing / zo / cut | components/KenshiFP/tests/ingame/fp-viewmodel.sh embedded vmcheck (held <= 30, swing <= 50, native exempt) | SR10, SR8, SR29 | none (STATUS taste note about t33/t34 "gates swings at 30" is stale) |
