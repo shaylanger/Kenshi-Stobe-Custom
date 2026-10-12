@@ -24,6 +24,7 @@ Queue: C:\KenshiTestRuns\queue\4080b\*.list first (FIFO by numeric prefix); own 
   first filming list (until runner\4080b.capproof says PASS) starts with a CAPPROOF row (capture-proof.sh on instance 2's
   window); CAPPROOF FAIL -> PREEMPT, the list goes back to queue\4080, runner\4080b.capproof FAIL = no film mode until
   deleted (note to coordinator). A gfx change between lists = instance 2 restarted. Runner\4080b.gfx = mode of instance 2.
+  A CAPPROOF "FAIL setup:" (sky, fixture) = SETUP: film mode held 20 min, then proven again (never off; CapVerdict/CapOff).
 Dry run: through rig-runner.ps1 -Rig 4080 -PreDryOf (lane 4080's pre-dry-run cache: a list lane 4080 already pre-dried
   starts at once); while a batch runs, the head of queue\4080b is pre-dried in the background (nice 15).
 Admission (before every launch of instance 2): 4080 GPU memory free >= 4 GB (nvidia-smi over ssh), RAM free >= 6 GB, no
@@ -54,6 +55,16 @@ $Lane = '4080b'; $Inst = 2
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 
 # ---------------------------------------------------------------- pure rules (-SelfTest)
+# CAPPROOF verdict (speed-scout r9: lane 4080b film mode sat OFF from 18:17 because its CAPPROOF row failed SETUP
+# ("sky not clear"), a fixture/weather problem, not a capture one): "RESULT CAPPROOF FAIL setup: ..." = SETUP = inconclusive,
+# runner\<lane>.capproof "SETUP <ts> <out>" holds film mode 20 min, then the next film list proves again; only a real
+# capture FAIL turns film mode off. CapOff = film mode off now.
+function CapVerdict([string]$line) { if ($line -match '^RESULT CAPPROOF FAIL setup:') { 'SETUP' } elseif ($line -match '^RESULT CAPPROOF FAIL') { 'FAIL' } elseif ($line -match '^RESULT CAPPROOF PASS') { 'PASS' } else { '' } }
+function CapOff([string]$s, [datetime]$now = (Get-Date)) {
+    if ($s -like 'FAIL*') { return $true }
+    if ($s -match '^SETUP (\S+)') { $t = [datetime]::MinValue; if ([datetime]::TryParse($Matches[1], [ref]$t)) { return ($now - $t).TotalMinutes -lt 20 } }
+    $false
+}
 function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
 $XbowRx = '(?i)(xbow|crossbow|ranged|turret|reload|\bbolt|vmquick|fp-e6-xbow)'
 function XbowRow([string]$r) {   # $null or the crossbow word a row names (the melee fixture save + *noxbow* guards are not crossbow work)
@@ -203,6 +214,13 @@ if ($SelfTest) {
         $n++; $g = [bool](Kfp2Gap $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) KenshiFP gap after sync, $($c[0]): gap=$g"
     }
     $script:XbParTest = $null; $n++; $ok = (XbPar) -ne (Test-Path (Join-Path $runs "runner\4080b.xbow-serial")) -and ($IdleStopMin -eq 0) -and ($FilmAfterMin -eq 0); if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) speed-scout r8: crossbow parallel by default (now $(XbPar)), IdleStopMin=$IdleStopMin FilmAfterMin=$FilmAfterMin"
+    foreach ($c in @(@('setup fail', 'RESULT CAPPROOF FAIL setup: sky not clear (rgb  119  99  80) out=x', 'SETUP'), @('capture fail', 'RESULT CAPPROOF FAIL 960x540 capture out=x', 'FAIL'), @('pass', 'RESULT CAPPROOF PASS out=x', 'PASS'))) {
+        $n++; $g = CapVerdict $c[1]; $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) capproof verdict $($c[0]): $g"
+    }
+    $nw = Get-Date '2026-10-11T19:00:00'
+    foreach ($c in @(@('FAIL', 'FAIL 2026-10-11T18:17:39 x', $true), @('SETUP 5 min old', 'SETUP 2026-10-11T18:55:00 x', $true), @('SETUP 30 min old', 'SETUP 2026-10-11T18:30:00 x', $false), @('PASS', 'PASS 2026-10-11T18:00:00 x', $false), @('none', '', $false))) {
+        $n++; $g = CapOff $c[1] $nw; $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) capproof film off, $($c[0]): $g"
+    }
     "LANE4080B-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
 
@@ -368,7 +386,7 @@ while ($true) {
                 $lg = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-runner.ps1" -Rig 4080 -LedgerFrom $tmp -LedgerList $name 2>&1 | ForEach-Object { "$_" }); Log "ledger: $($lg | Select-Object -Last 1)"
             }
             $cp = @($sl | Where-Object { $_ -match '^RESULT CAPPROOF (PASS|FAIL)' } | Select-Object -Last 1)
-            if ($cp) { $cv = if ($cp[0] -match '^RESULT CAPPROOF FAIL') { 'FAIL' } else { 'PASS' }; Set-Content (Join-Path $rd "$Lane.capproof") "$cv $(Get-Date -Format s) 4080:C:\KenshiTestRuns\$outN"; Log "CAPPROOF $cv"
+            if ($cp) { $cv = CapVerdict $cp[0]; Set-Content (Join-Path $rd "$Lane.capproof") "$cv $(Get-Date -Format s) 4080:C:\KenshiTestRuns\$outN"; Log "CAPPROOF $cv"
                 if ($cv -eq 'FAIL') { Note 'coordinator' "lane $Lane CAPPROOF FAIL on instance 2's window (4080:C:\KenshiTestRuns\$outN): film mode off for lane $Lane until runner\$Lane.capproof is deleted" } }
             $rq = "$((Get-Content (Join-Path $rd "$Lane.requeue") -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); Remove-Item (Join-Path $rd "$Lane.requeue") -ErrorAction SilentlyContinue
             $dst = Join-Path "$qd\done" $name
@@ -424,12 +442,12 @@ while ($true) {
         if ($admit) { $f = StealList $false }
         # filming work beats filler (as rig-laneB/C d8be0be): only real gfx-low lists hold film mode off
         if ($f) { $noLowSince = $null } elseif (-not $noLowSince) { $noLowSince = Get-Date }
-        if (-not $f -and $admit -and (CapState) -notlike 'FAIL*' -and (Busy1) -and ((Get-Date) - $noLowSince).TotalMinutes -ge $FilmAfterMin) { $f = StealList $true }
+        if (-not $f -and $admit -and -not (CapOff (CapState)) -and (Busy1) -and ((Get-Date) - $noLowSince).TotalMinutes -ge $FilmAfterMin) { $f = StealList $true }
         if (-not $f -and $admit) { $fill = PickFiller }
     } else { $noLowSince = $null }
     if (-not $f -and -not $fill) {
         if ($rm -and $rm.k2 -and ((Get-Date) - $idleSince).TotalMinutes -ge $IdleStopMin) { Stop2 "queue empty $IdleStopMin min" }
-        State "idle: no work for lane $Lane (own folder, queue\4080/any gfx-low, changed filler; filming after $FilmAfterMin min while lane 4080 is busy$(if ((CapState) -like 'FAIL*') { ': OFF, CAPPROOF FAIL' }))$(if ($rm -and $rm.k2) { ' (instance 2 up)' })$(if ($rm -and -not $rm.ok) { ' (4080 unreachable)' })"; $null = DryNote $Lane "$((Get-Content $stateF -TotalCount 1) -replace '^\S+ ', '')" $rd $dryNF $qd; Start-Sleep $TickSec; continue
+        State "idle: no work for lane $Lane (own folder, queue\4080/any gfx-low, changed filler; filming after $FilmAfterMin min while lane 4080 is busy$(if (CapOff (CapState)) { ": OFF, CAPPROOF $((CapState) -replace ' .*')" }))$(if ($rm -and $rm.k2) { ' (instance 2 up)' })$(if ($rm -and -not $rm.ok) { ' (4080 unreachable)' })"; $null = DryNote $Lane "$((Get-Content $stateF -TotalCount 1) -replace '^\S+ ', '')" $rd $dryNF $qd; Start-Sleep $TickSec; continue
     }
     DryClear $Lane $rd
     if ($fill) { $src = $fill.Run; $name = $fill.Name } else { $src = $f.FullName; $name = $f.Name }
@@ -437,7 +455,7 @@ while ($true) {
     $own = @($txt | Where-Object { $_ -match '^\s*#\s*owner:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1); $own = if ($own) { $own[0] } else { 'coordinator' }
     function Drop([string]$why) { if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue; $script:fillBad[$name] = Get-Date; Log "filler $name dropped: $why" } else { Fail $src $name $own $why } }
     $film = (LaneGfx $txt) -ne 'low'
-    if ($film -and -not $fill -and (CapState) -like 'FAIL*') { Move-Item -LiteralPath $src (Join-Path "$qd\4080" $name) -Force -ErrorAction SilentlyContinue; Log "film list $name back to queue\4080 (CAPPROOF FAIL: no film mode)"; continue }
+    if ($film -and -not $fill -and (CapOff (CapState))) { Move-Item -LiteralPath $src (Join-Path "$qd\4080" $name) -Force -ErrorAction SilentlyContinue; Log "film list $name back to queue\4080 (CAPPROOF FAIL: no film mode)"; continue }
     $why = LaneReject $txt $film; if ($why) { Drop $why; continue }
     if (-not $rm) { $rm = Remote }
     if (-not $rm.ok) { if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue }; State "waiting: 4080 unreachable ($name queued)"; Start-Sleep $TickSec; continue }

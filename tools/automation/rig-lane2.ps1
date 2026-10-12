@@ -55,10 +55,21 @@ $Lanes = [ordered]@{ '5090b' = @{ Inst = 2; Slot = 0; Cpu = $false; Film = $true
 # overlap and are pinned topmost only under gdigrab. Filming lanes sit on $FilmMonitor (DISPLAY1, with lane A: WGC films a
 # covered window), never DISPLAY2: DISPLAY2's scaling made lane 5090b's 1600x900 game a 960x540 capture (CAPPROOF FAIL 15:33). A lane's first filming list (per lane, until it passes) starts with a
 # CAPPROOF row (capture-proof.sh on the lane's own window); CAPPROOF FAIL = no more film mode on that lane (note to coordinator).
+# A CAPPROOF "FAIL setup:" (sky, fixture) = SETUP: film mode held 20 min, then proven again (never off; CapVerdict/CapOff).
 $Inst = $Lanes[$Lane].Inst; $Slot = $Lanes[$Lane].Slot
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 
 # ---------------------------------------------------------------- pure rules (-SelfTest)
+# CAPPROOF verdict (speed-scout r9: lane 4080b film mode sat OFF from 18:17 because its CAPPROOF row failed SETUP
+# ("sky not clear"), a fixture/weather problem, not a capture one): "RESULT CAPPROOF FAIL setup: ..." = SETUP = inconclusive,
+# runner\<lane>.capproof "SETUP <ts> <out>" holds film mode 20 min, then the next film list proves again; only a real
+# capture FAIL turns film mode off. CapOff = film mode off now.
+function CapVerdict([string]$line) { if ($line -match '^RESULT CAPPROOF FAIL setup:') { 'SETUP' } elseif ($line -match '^RESULT CAPPROOF FAIL') { 'FAIL' } elseif ($line -match '^RESULT CAPPROOF PASS') { 'PASS' } else { '' } }
+function CapOff([string]$s, [datetime]$now = (Get-Date)) {
+    if ($s -like 'FAIL*') { return $true }
+    if ($s -match '^SETUP (\S+)') { $t = [datetime]::MinValue; if ([datetime]::TryParse($Matches[1], [ref]$t)) { return ($now - $t).TotalMinutes -lt 20 } }
+    $false
+}
 function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
 # instance sync failure (speed-scout r9: 210-fists-zpv4-any went to failed\ on lane 5090c 19:11 for a sync whose output lacked
 # the launch save line, the next sync 90 s later was fine): full output -> runner\<lane>.syncfail.txt, one retry, then a list
@@ -228,6 +239,13 @@ if ($SelfTest) {
                      @('launch from row 1 of 2', (LaunchSave @('z | kah-fpxbow | a | b | 9 | bash x', 'y | kah-squin | a | b | 9 | bash y')), 'kah-fpxbow'),
                      @('1st fail = retry', (SyncFailAction 1 'C:\q\any'), 'retry'), @('2nd fail, stolen = requeue', (SyncFailAction 2 'C:\q\any'), 'requeue C:\q\any'), @('2nd fail, own list = fail', (SyncFailAction 2 ''), 'fail'))) {
         $n++; $ok = "$($c[1])" -eq "$($c[2])"; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) sync failure: $($c[0]): $($c[1])"
+    }
+    foreach ($c in @(@('setup fail', 'RESULT CAPPROOF FAIL setup: sky not clear (rgb  119  99  80) out=x', 'SETUP'), @('capture fail', 'RESULT CAPPROOF FAIL 960x540 capture out=x', 'FAIL'), @('pass', 'RESULT CAPPROOF PASS out=x', 'PASS'))) {
+        $n++; $g = CapVerdict $c[1]; $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) capproof verdict $($c[0]): $g"
+    }
+    $nw = Get-Date '2026-10-11T19:00:00'
+    foreach ($c in @(@('FAIL', 'FAIL 2026-10-11T18:17:39 x', $true), @('SETUP 5 min old', 'SETUP 2026-10-11T18:55:00 x', $true), @('SETUP 30 min old', 'SETUP 2026-10-11T18:30:00 x', $false), @('PASS', 'PASS 2026-10-11T18:00:00 x', $false), @('none', '', $false))) {
+        $n++; $g = CapOff $c[1] $nw; $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) capproof film off, $($c[0]): $g"
     }
     "LANE2-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
@@ -492,7 +510,8 @@ while ($true) {
             if (Test-Path $sum) { Copy-Item $sum "$dst.SUMMARY.txt" -Force }
             Set-Content "$dst.result" "DONE $Lane start=$([DateTimeOffset]::FromUnixTimeSeconds($t0).LocalDateTime.ToString('s')) end=$(Get-Date -Format s) out=$outW pass=$p fail=$f summary=$dst.SUMMARY.txt"
             $cp = @($sl | Where-Object { $_ -match '^RESULT CAPPROOF (PASS|FAIL)' } | Select-Object -Last 1)
-            if ($cp) { Set-Content (Join-Path $rd "$Lane.capproof") "$($Matches[1]) $(Get-Date -Format s) $outW"; if ($cp[0] -match 'FAIL') { Note 'coordinator' "lane $Lane CAPPROOF FAIL ($outW): film mode off for this lane until $Lane.capproof is deleted" } }
+            if ($cp) { $cv = CapVerdict $cp[0]; Set-Content (Join-Path $rd "$Lane.capproof") "$cv $(Get-Date -Format s) $outW"; Log "CAPPROOF $cv"
+                if ($cv -eq 'FAIL') { Note 'coordinator' "lane $Lane CAPPROOF FAIL ($outW): film mode off for this lane until $Lane.capproof is deleted" } }
             Log "DONE $name pass=$p fail=$f"; Note $own "lane $Lane finished $name : pass=$p fail=$f, $dst.SUMMARY.txt"
             Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; $idleSince = Get-Date; $stall = $null; continue
         }
@@ -528,7 +547,7 @@ while ($true) {
     # filming work beats filler (coordinator m102: filler kept lane B off film mode): only real gfx-low lists hold film mode
     # off ($noLowSince); a Film lane takes a queued filming list before a filler list once $FilmAfterMin min passed without them
     if ($f) { $noLowSince = $null } elseif (-not $noLowSince) { $noLowSince = Get-Date }
-    if (-not $f -and $admit -and $Lanes[$Lane].Film -and "$((Get-Content (Join-Path $rd "$Lane.capproof") -TotalCount 1 -ErrorAction SilentlyContinue))" -notlike 'FAIL*' -and ((Get-Date) - $noLowSince).TotalMinutes -ge $FilmAfterMin) { $f = StealList $true }
+    if (-not $f -and $admit -and $Lanes[$Lane].Film -and -not (CapOff "$((Get-Content (Join-Path $rd "$Lane.capproof") -TotalCount 1 -ErrorAction SilentlyContinue))") -and ((Get-Date) - $noLowSince).TotalMinutes -ge $FilmAfterMin) { $f = StealList $true }
     if (-not $f -and $admit) { $fill = PickFiller }
     if (-not $f -and -not $fill) {
         if ((K2Procs) -and (RamFreeMB) -lt $HoldRamMB) { Stop2 "idle and RAM free $(RamFreeMB) MB < $HoldRamMB" }
