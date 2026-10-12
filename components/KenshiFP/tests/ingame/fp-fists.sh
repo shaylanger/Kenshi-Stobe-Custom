@@ -205,7 +205,7 @@ PY
 FT=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" - 2>&1 | tee -a "$N.lab.txt" | tail -1)
 # zpunch rows: the FP hand turns into its strike frame on purpose, so fistgame's "hand vs guard <= 60 deg" rule does not apply
 # (fist-punch-check C7 judges the strike hand); swings/lens still gate
-if [[ ",${FIST_VMSET}," == *,fp_on,1,* ]]; then echo "$FT" | grep -q "swings=PASS lens=PASS" || ok=0
+if [[ ",${FIST_VMSET}," == *,fp_on,1,* ]]; then echo "$FT" | grep -qE "^fistgame PASS|swings=PASS lens=PASS" || ok=0
 else echo "$FT" | grep -q "^fistgame PASS" || ok=0; fi; FG="$FG; $FT"
 else
 FG=$(python3 $HERE/animlab/fist-take-check.py "$N.vmrec.txt" "$LABD/$T" --swings "$N.swings.txt" 2>&1 | tee "$N.lab.txt" | tail -1)
