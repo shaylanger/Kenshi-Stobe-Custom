@@ -17,8 +17,8 @@
 M=/c/KenshiModding; R=/c/KenshiTestRuns; H=4080; HERE=$M/tools/automation/rig4080
 SAVES=""; DEFER=""; DRY=0
 WITH=()
-while :; do case "$1" in --with-list) WITH+=("$2"); shift 2 ;; --saves) SAVES=$2; shift 2 ;; --saves-only) SAVES=$2; SAVESONLY=1; shift 2 ;; --defer) DEFER=$2; shift 2 ;; --dry) DRY=1; shift ;; *) break ;; esac; done
-[ -n "$DEFER" ] && [ ! -f "$DEFER" ] && DEFER=""
+while :; do case "$1" in --with-list) WITH+=("$2"); shift 2 ;; --saves) SAVES=$2; shift 2 ;; --saves-only) SAVES=$2; SAVESONLY=1; shift 2 ;; --defer) DEFER=$2; shift 2 ;; --defer-procs) DPROCS=$2; DEFER=$3; shift 3 ;; --dry) DRY=1; shift ;; *) break ;; esac; done
+[ -z "${DPROCS:-}" ] && [ -n "$DEFER" ] && [ ! -f "$DEFER" ] && DEFER=""
 # The synced repo file sets (dest dir under C:\KenshiModding | files), the ONE definition used for copying, for --list
 # (rig-runner SyncCandidates, list-rigcheck.sh) and for --check. Script dirs sync EVERY helper type next to the scripts
 # (sh py awk ps1 txt json tsv csv list sed jq): rg-02-control-stealth-1011-0927 fp-control.sh needs fp-yaw-free.awk,
@@ -88,6 +88,14 @@ if [ "${1:-}" = --check ]; then
     echo "$lc" | grep -qxF "$f" || { echo "UNSYNCED $f (list-closure case: --with-list row script / its sibling)"; bad=1; }; done
   [ $bad = 0 ] && echo "SYNCCHECK OK $(synced_list | wc -l) files + list closure"; exit $bad
 fi
+# --defer-procs <procs file> <defer out> (speed-scout r9: lane 4080b ran this script twice per list, --list then the sync,
+#   ~5 s): the defer list is computed here in the same pass = every synced path whose file name appears (case-insensitive)
+#   in the 4080 process command lines (procpaths.ps1 output); written to <defer out>, each printed "DEFERLIST <path>".
+if [ -n "${DPROCS:-}" ]; then
+  synced_list | awk -v pf="$DPROCS" 'BEGIN { while ((getline l < pf) > 0) all = all " " tolower(l) }
+    { n = split($0, a, "/"); if (index(all, tolower(a[n])) > 0) print }' > "$DEFER"
+  sed 's/^/DEFERLIST /' "$DEFER"
+fi
 # --saves-only "<saves>": copy only those saves (list-rigcheck.sh --fix: a list's save missing on the 4080), nothing else
 if [ "${SAVESONLY:-0}" = 1 ]; then
   for s in $SAVES; do [ -d "/c/Users/Shay/AppData/Local/kenshi/save/$s" ] || { echo "SAVEFAIL $s: not on the 5090"; continue; }
@@ -100,11 +108,13 @@ if [ "${SAVESONLY:-0}" = 1 ]; then
 fi
 run() { if [ $DRY = 1 ]; then :; else "$@"; fi; }
 # cp_to <dest> <files...>: scp the files that exist and aren't deferred
+# the defer list read once (was tr|grep per file: ~200 process pairs, ~5 s in Git Bash; speed-scout r9)
+declare -A DF=(); if [ -n "$DEFER" ] && [ -f "$DEFER" ]; then while IFS= read -r l; do l=${l%[[:cntrl:]]}; [ -n "$l" ] && DF[$l]=1; done < "$DEFER"; fi
 cp_to() {
   local d=$1 f rel keep=(); shift
   for f in "$@"; do
     [ -f "$f" ] || continue; rel=${f#$M/}
-    if [ -n "$DEFER" ] && tr -d '' < "$DEFER" | grep -qxF "$rel"; then echo "DEFERRED $rel"; continue; fi
+    if [ -n "${DF[$rel]:-}" ]; then echo "DEFERRED $rel"; continue; fi
     keep+=("$f")
   done
   [ ${#keep[@]} -eq 0 ] && return 0

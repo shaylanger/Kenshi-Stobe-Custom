@@ -281,11 +281,11 @@ function Probe([string]$outP, [string]$act = '', [string]$why = '') {
 function SyncList([string]$listFile) {
     $cl = @(Ssh4Ps 'C:\KAH\runner\procpaths.ps1' @())
     if (-not ($cl -contains 'PROCPATHS-END')) { Log "sync SKIPPED: 4080 process list unreadable; the 4080 keeps its current scripts"; return }
-    $all = @(& $gitBash -lc "bash /c/KenshiModding/tools/automation/rig4080/setup.sh --with-list '$((($listFile -replace '\\', '/') -replace '^C:', '/c'))' --list" 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match '^[\w.-]+/' })
-    $cj = $cl -join "`n"
-    $defer = @($all | Where-Object { $cj -match [regex]::Escape((Split-Path $_ -Leaf)) })
-    $df = Join-Path $rd "$Lane.deferred"; [IO.File]::WriteAllText($df, (($defer -join "`n") + $(if ($defer.Count) { "`n" } else { '' })))
-    $so = & $gitBash -lc "bash /c/KenshiModding/tools/automation/rig4080/setup.sh --with-list '$((($listFile -replace '\\', '/') -replace '^C:', '/c'))' --defer /c/KenshiTestRuns/runner/$Lane.deferred" 2>&1 | ForEach-Object { "$_" }
+    # one setup.sh pass (speed-scout r9; was --list + the sync, ~5 s more per list): setup.sh --defer-procs computes the defer
+    # list itself (synced paths whose file name is in a 4080 process command line, case-insensitive) into runner\<lane>.deferred
+    $pf = Join-Path $rd "$Lane.procs"; [IO.File]::WriteAllText($pf, (($cl -join "`n") + "`n"))
+    $so = @(& $gitBash -lc "bash /c/KenshiModding/tools/automation/rig4080/setup.sh --with-list '$((($listFile -replace '\\', '/') -replace '^C:', '/c'))' --defer-procs /c/KenshiTestRuns/runner/$Lane.procs /c/KenshiTestRuns/runner/$Lane.deferred" 2>&1 | ForEach-Object { "$_" })
+    $defer = @($so | Where-Object { $_ -like 'DEFERLIST *' } | ForEach-Object { $_.Substring(10) })
     Log "sync: $(($so | Select-Object -Last 1))$(if ($defer.Count) { " deferred: $($defer -join ',')" })"
 }
 
