@@ -1045,18 +1045,27 @@ function PickList {
     $x = $ls | Where-Object { $v[$_.Name] -eq 'PASS' } | Select-Object -First 1; if ($x) { if ($x.Name -ne $ls[0].Name -and $script:lastPick -ne $x.Name) { $script:lastPick = $x.Name; Log "pick $($x.Name) (dry run PASS cached) before $($ls[0].Name) ($(if ($v[$ls[0].Name]) { $v[$ls[0].Name] } else { 'not dry-run yet' }))" }; return $x }
     $ls[0]
 }
+function FillerDryCopy($f) {   # the text a filler claim runs (header + changed rows, Start-Batch): pre-dry THAT text
+    # (m105: lanes pre-dried the whole filler list, the claim ran 2 changed rows = another key: 4080b waited 88 s for rg-02)
+    $chg = ChangedRows $f.FullName $f.Name; $all = @(Rows $f.FullName)
+    if (-not $chg.Count -or $chg.Count -ge $all.Count) { return $f.FullName }
+    $keep = @(Get-Content -LiteralPath $f.FullName | Where-Object { $_ -match '^\s*(#|$)' -or $chg.Contains($_) })
+    $p = Join-Path $pdd "filler-$Rig-$($f.Name)"; [IO.File]::WriteAllLines($p, [string[]]$keep); $p
+}
 function PreDryNext {
-    # one background dry run per rig at a time: the first queued list (FIFO) whose verdict is not cached yet
-    if (@(Get-ChildItem $pdd -Filter "$Rig-*.pid" -File -ErrorAction SilentlyContinue | Where-Object { PreDryRunning $_.BaseName }).Count) { return }
+    # up to 2 background dry runs per rig at a time (nice 15): the first queued lists (FIFO) whose verdict is not cached yet
+    if (@(Get-ChildItem $pdd -Filter "$Rig-*.pid" -File -ErrorAction SilentlyContinue | Where-Object { PreDryRunning $_.BaseName }).Count -ge 2) { return }
     foreach ($f in @(@(RealLists) + @(FillerLists))) {   # filler too: its first pick then starts on a cached verdict
-        $key = DryKey $f.FullName
+        $fp = if ($f.DirectoryName -like '*\filler') { FillerDryCopy $f } else { $f.FullName }
+        $key = DryKey $fp
+        if (PreDryRunning $key) { continue }
         if (Test-Path (Join-Path $pdd "$key.rc")) { continue }   # PASS or FAIL cached for this exact state
         # debounce (turret-fp 2026-10-11: 92-e6-strokes pre-dry-ran 9x in 26 min, each time a covered script had changed):
         # at most one background dry run per list per $PreDryMin min; the list start dry-runs itself (nice 0) if still stale
         if (-not $script:predryAt) { $script:predryAt = @{} }
         if ($script:predryAt[$f.Name] -and ((Get-Date) - $script:predryAt[$f.Name]).TotalMinutes -lt $PreDryMin) { continue }
         $script:predryAt[$f.Name] = Get-Date
-        PreDryStart $f.FullName $key; break
+        PreDryStart $fp $key; break
     }
     Get-ChildItem $pdd -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-12) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
