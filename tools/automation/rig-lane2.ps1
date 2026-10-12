@@ -23,7 +23,9 @@ Memory guard (every tick, all lanes): RAM free < 4 GB -> the highest lane with a
   <out>\HOLD ("ram free N MB"): run-batch.sh waits at its next row boundary, batch-health.sh says "HEALTH OK held", the
   lane's stall check is skipped; HOLD is removed when RAM free >= 7 GB (lower lanes resume first). RAM free < 2 GB = the
   highest running lane ends its batch (rig-runner-probe.sh end-batch) and stops its game. An idle lane whose game is up
-  stops it at once when RAM free < 4 GB.
+  stops it at once when RAM free < 4 GB. HOLD/CRITICAL/RAM-wait lines name the cause (RamWho: vmmem vs WSL used, kenshi
+  total); "VMMEM BLOAT" = vmmem >= 2x WSL used + 4 GB: Windows 10 never shrinks vmmem, lower .wslconfig memory= (14 GB
+  since 2026-10-11) and run wsl-restart.ps1 at a quiet moment (ram-fix).
 Frame cap: lanes run at $Fps (30) fps: KAH_FPS for kenshi-gfx.ps1 at launch + framecap.txt of the copy rewritten every tick
   (the harness rereads it every second). Window: every tick the lane's window is placed at DISPLAY2.left + slot*(window width + 10), top (no room = left where it is),
   HWND_NOTOPMOST, never activated, shrunk to the video mode (1024x768: Kenshi replaced 640x360 + 1024x576 (not DXGI modes) and 800x600 (a DXGI mode: Kenshi's minimum?) with the screen's largest mode, m102) if far larger; never on the primary screen (the Samsung).
@@ -144,6 +146,14 @@ function MemGuardAct([string]$me, [int]$ramFreeMB, $act) {
     if ($ramFreeMB -lt $HoldRamMB -and -not @($higher | Where-Object { -not $act[$_].Held }).Count) { return 'hold' }
     ''
 }
+# RAM cause for HOLD/CRITICAL/admission lines (ram-fix 2026-10-11: 5090c ended lists on RAM CRITICAL while vmmem held
+# 20 GB and WSL used 2-3 GB; Windows 10 19045 never shrinks vmmem, the .wslconfig memory= cap is its real cost).
+# vmmem >= 2x WSL used + 4 GB = "vmmem bloat" (fix: lower memory= in %UserProfile%\.wslconfig + wsl-restart.ps1 at a quiet moment).
+function RamCause([double]$vmmemGB, [double]$wslUsedGB, [double]$kenshiGB, [int]$kenshiN) {
+    $s = "vmmem $([math]::Round($vmmemGB,1)) GB (WSL used $(if ($wslUsedGB -ge 0) { [math]::Round($wslUsedGB,1) } else { '?' }) GB), kenshi x$kenshiN $([math]::Round($kenshiGB,1)) GB"
+    if ($wslUsedGB -ge 0 -and $vmmemGB -ge 2 * $wslUsedGB + 4) { $s += ": VMMEM BLOAT, lower .wslconfig memory= + wsl-restart.ps1 at a quiet moment" }
+    $s
+}
 function LaneTdrFilter([string[]]$lines, [long]$since) {
     @($lines | Where-Object { $q = "$_" -split '\|', 4; $q.Count -ge 3 -and $q[0] -match '^\d+$' -and [long]$q[0] -ge $since -and $q[2] -in '4101', '153' -and $q[1] -match '^(nvlddmkm|display)$' })
 }
@@ -170,6 +180,7 @@ if ($SelfTest) {
     foreach ($c in $cases) { $n++; $g = [string](LaneReject $c[1] ([bool]($c.Count -ge 4 -and $c[3]))); $ok = if ($c[2]) { $g -like "$($c[2])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 list $($c[0]): got '$g'" }
     $ad = @(@(20000, 20000, $false, -1, ''), @(5000, 20000, $false, -1, 'GPU'), @(20000, 6000, $false, -1, 'RAM'), @(20000, 7500, $false, -1, ''), @(20000, 20000, $true, -1, 'TDR'),
             @(20000, 20000, $false, 50, ''), @(20000, 20000, $false, 90, 'CPU'))
+    foreach ($rc in @(@(20.4, 2.5, 'BLOAT'), @(12, 6, ''), @(10, -1, ''))) { $n++; $g = RamCause $rc[0] $rc[1] 20 2; $ok = if ($rc[2]) { $g -match 'VMMEM BLOAT' } else { $g -notmatch 'BLOAT' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) ram cause vmmem=$($rc[0]) wsl=$($rc[1]): $g" }
     foreach ($a in $ad) { $n++; $g = [string](LaneAdmit $a[0] $a[1] $a[2] $a[3]); $ok = if ($a[4]) { $g -like "$($a[4])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 admit gpu=$($a[0]) ram=$($a[1]) tdr=$($a[2]) cpu=$($a[3]): got '$g'" }
     # lane table: instance + slot unique, instances >= 2, 5090b = instance 2 (existing copy), 5090c needs CPU room
     $n++; $ins = @($Lanes.Values | ForEach-Object { $_.Inst }); $sl = @($Lanes.Values | ForEach-Object { $_.Slot })
@@ -274,6 +285,12 @@ function Ctl2([string[]]$a) {   # workspace kenshi-ctl.ps1 on instance $Inst as 
 function Stop2([string]$why) { if (K2Procs) { $o = Ctl2 @('stop'); Log "instance $Inst stopped ($why): $(($o | Select-Object -Last 1))"; if (K2Procs) { foreach ($k in K2Procs) { & taskkill.exe /F /T /PID $k.Id 2>&1 | Out-Null }; Log "instance $Inst force-killed" } } }
 function GpuFreeMB { try { [int]((& nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | Select-Object -First 1).Trim()) } catch { 0 } }
 function RamFreeMB { [int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB) }
+function RamWho {   # only on a RAM event (one wsl call): who holds the memory, see RamCause
+    $vm = [double](@(Get-Process vmmem, vmmemWSL -ErrorAction SilentlyContinue | Measure-Object PrivateMemorySize64 -Sum).Sum) / 1GB
+    $k = @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue); $kg = [double](($k | Measure-Object PrivateMemorySize64 -Sum).Sum) / 1GB
+    $u = -1; try { $l = Wsl @('free', '-m') | Where-Object { $_ -match '^Mem:' } | Select-Object -First 1; if ("$l" -match '^Mem:\s+\d+\s+(\d+)') { $u = [double]$Matches[1] / 1024 } <# no awk $3: wsl.exe re-expands $ #> } catch {}
+    RamCause $vm $u $kg $k.Count
+}
 # CPU % averaged over $samples x 2 s (30 = the 1-min admission average); -1 = this lane has no CPU rule
 function CpuPct([int]$samples) {
     if (-not $Lanes[$Lane].Cpu) { return -1 }
@@ -491,12 +508,12 @@ while ($true) {
         }
         $holdF = Join-Path $outW 'HOLD'; $ram = RamFreeMB
         switch (MemGuardAct $Lane $ram (LaneActs)) {
-            'hold' { Set-Content $holdF "ram free $ram MB < $HoldRamMB (lane $Lane memory guard $(Get-Date -Format HH:mm))"; Log "HOLD $name : ram free $ram MB"; Note $own "lane $Lane holds $name at the next row boundary: RAM free $ram MB < $HoldRamMB" }
+            'hold' { $why = RamWho; Set-Content $holdF "ram free $ram MB < $HoldRamMB (lane $Lane memory guard $(Get-Date -Format HH:mm)); $why"; Log "HOLD $name : ram free $ram MB; $why"; Note $own "lane $Lane holds $name at the next row boundary: RAM free $ram MB < $HoldRamMB; $why" }
             'release' { Remove-Item $holdF -ErrorAction SilentlyContinue; Log "HOLD released $name : ram free $ram MB" }
             'kill' {
-                Set-Content $holdF "RAM critical: ram free $ram MB < $KillRamMB, batch ended (lane $Lane memory guard)"
-                $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane RAM critical: free $ram MB"); Log "RAM CRITICAL end-batch ($ram MB free): $(($o | Select-Object -Last 1))"
-                Stop2 "RAM critical $ram MB"; Note 'coordinator' "lane $Lane ended $name and stopped instance $Inst : RAM free $ram MB < $KillRamMB"
+                $why = RamWho; Set-Content $holdF "RAM critical: ram free $ram MB < $KillRamMB, batch ended (lane $Lane memory guard); $why"
+                $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane RAM critical: free $ram MB"); Log "RAM CRITICAL end-batch ($ram MB free; $why): $(($o | Select-Object -Last 1))"
+                Stop2 "RAM critical $ram MB"; Note 'coordinator' "lane $Lane ended $name and stopped instance $Inst : RAM free $ram MB < $KillRamMB; $why"
             }
         }
         if (Test-Path (Join-Path $outW 'DONE')) {
@@ -571,7 +588,7 @@ while ($true) {
     $gfxF = Join-Path $rd "$Lane.gfx"; $want = if ($film) { 'full' } else { 'low' }
     $have = "$((Get-Content $gfxF -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if (-not $have) { $have = 'low' }   # no .gfx yet = a game the lane started before film mode existed: low
     if ($up -and $have -ne $want) { Stop2 "gfx switch to $want"; $up = $false }
-    if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 30); if ($why) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue }; State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
+    if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 30); if ($why) { if ($why -like 'RAM*') { $why += "; $(RamWho)" }; if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue }; State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
     $launch = LaunchSave $txt
     # every kah-* test save, not only the list's header one (Shay 2026-10-11: all lanes can use all saves at the same time).
     # run-batch's load_target swaps the launch save for the row script's pf_load target and rows name their own saves:
