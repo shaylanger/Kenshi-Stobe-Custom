@@ -38,6 +38,9 @@ foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -
     $win = $null
     if ($p -match '^/mnt/([a-z])/(.*)$') { $win = ($Matches[1].ToUpper() + ':\' + ($Matches[2] -replace '/', '\')) }
     elseif ($p -match '^[A-Za-z]:[\\/]') { $win = $p }
+    # an agent marker pointing at a lane-5090b|c batch (.instance in its out dir) is that lane's game, not lane A's
+    # (m105 18:31: xbow-escalate -> xbe-dgconfirm230-i3 held lane A paused as "rig busy with other work")
+    if ($win -and (Test-Path -LiteralPath (Join-Path $win '.instance'))) { continue }
     # game work = the lock owner's marker or a run-batch out dir (batch.log); lab/offline jobs (WSL path, plain text,
     # a C: scratch dir without batch.log) are not 5090 game work
     if ($m.Name -ne $owner -and -not ($win -and (Test-Path -LiteralPath (Join-Path $win 'batch.log')))) { continue }
