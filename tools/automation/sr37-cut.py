@@ -40,9 +40,14 @@ def segments(take, zoom, still):
     seg = []
     if still:
         seg.append((L[0][0], min(L[0][0] + 1.5, nxt(0)), 1.0, 'ready stance'))
-    i = next(i for i, (t, s) in enumerate(L) if 'free swing 1' in s)
-    a, b = L[i][0] - 0.3, min(nxt(i), L[i][0] + 2.6)
-    seg += [(a, b, 1.0, 'swing (full speed)'), (a, b, 2.0, 'same swing (1/2 speed)')]
+    # WS_STROKES takes ("LMB: stroke n <name> swing", one forced swing per stroke): each stroke full + 1/2 (SR37);
+    # else the first free swing. Only the asked zoom's section (stops at the next "Zoom" label).
+    zend = next((k for k, (t, s) in enumerate(L) if k and s.startswith('Zoom ')), len(L))
+    st = [i for i, (t, s) in enumerate(L[:zend]) if re.match(r'LMB: stroke \d', s)]
+    for i in st or [next(i for i, (t, s) in enumerate(L) if 'free swing 1' in s)]:
+        a, b = L[i][0] - 0.3, min(nxt(i), L[i][0] + 2.6)
+        nm = re.sub(r'^LMB: | swing$', '', L[i][1]) + ' ' if st else ''
+        seg += [(a, b, 1.0, nm + 'swing (full speed)'), (a, b, 2.0, nm + 'same swing (1/2 speed)')]
     if still:
         j = next((j for j, (t, s) in enumerate(L) if s.startswith('RMB held')), None)
         if j is not None:
