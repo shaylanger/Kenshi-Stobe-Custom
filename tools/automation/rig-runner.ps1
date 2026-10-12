@@ -10,6 +10,11 @@ Use (PowerShell on the 5090; both rig loops run here, the 4080 one drives the 40
                                          running batch keeps running; a restarted loop re-adopts it only if it is its own)
   rig-runner.ps1 -Start [-Rig 5090|4080] clear the stopped flag and start (= -Ensure -Force)
   rig-runner.ps1 -Rig X -DryKeyOf <list>  self-check: the pre-dry-run key, the files it content-hashes, the cached verdict
+  rig-runner.ps1 -Rig 5090 -Fake -RowCacheSelfTest   dry-run ROW cache: a list whose rows all passed dryrun.sh before (same key:value
+                                         headers, row line, scripts) is PASS at once, no WSL dry run (runner/predry/rows/*.pass)
+Lane A (speed-scout r8): no gfx-low filler while lane 5090b/c is up, gfx-low real lists left to an idle 5090b/c; with
+queue/5090 + any empty it steals 4080 work before filler (head if lane 4080 busy, else the 2nd list). Idle lanes: queue-dry.ps1
+(runner/<lane>.dry + agents/coordinator.note-from-runner the moment the queues run dry).
   rig-runner.ps1 -SelfTest               check the stuck rule on fixed probe cases (no side effects; run after editing it)
   rig-runner.ps1 -Restart [-Rig X]       deploy an edited rig-runner.ps1: the loop re-spawns itself at its next list boundary
   rig-runner.ps1 -Rig 5090|4080 [-Fake]  run one loop in the foreground (what -Ensure starts hidden)
@@ -93,7 +98,7 @@ Files: C:\KenshiTestRuns\runner\<rig>.pid|.log|.state|.cur, filler-rotation.tsv.
 #>
 param([ValidateSet('5090', '4080', '5090b', '5090c', '4080b', '')][string]$Rig = '', [switch]$Ensure, [switch]$Stop, [switch]$Start, [switch]$Restart, [switch]$Keep4080, [switch]$Force, [switch]$Status, [switch]$Fake,
       [int]$IdleMin = 2, [int]$StuckMin = 2, [int]$TickSec = 60, [int]$FastMin = 15, [int]$FastStreak = 2, [int]$PreDryMin = 5, [string]$Resolve = '', [string]$DryKeyOf = '', [string]$FillerRows = '', [string]$LedgerFrom = '', [string]$LedgerList = '', [string]$PreDryOf = '', [int]$PreDryNice = 15, [int]$PreDryWaitSec = 0,
-      [int]$HardMin = 5, [switch]$SelfTest, [switch]$RowHashSelfTest)
+      [int]$HardMin = 5, [switch]$SelfTest, [switch]$RowHashSelfTest, [switch]$RowCacheSelfTest)
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 # Stuck decision (pure; -SelfTest checks it). Soft: condition held >= lim AND out dir unchanged >= lim. Hard (2026-10-11,
 # 4080 R11: Kenshi froze 12+ min while the row kept appending "previous command still unread" / "inbox locked" client
@@ -308,6 +313,8 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 4080b rig-lane2-4080.ps1 -SelfTest: $($l4[-1])"
     $rh = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$PSCommandPath" -Rig 5090 -RowHashSelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($rh[-1]) -like 'ROWHASH-SELFTEST PASS*'; if (-not $ok) { $bad++; $rh | Where-Object { $_ -like 'FAIL*' } }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) filler row hash (own script only): $($rh[-1])"
+    $rq = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$PSCommandPath" -Rig 5090 -Fake -RowCacheSelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($rq[-1]) -like 'ROWCACHE-SELFTEST PASS*'; if (-not $ok) { $bad++; $rq | Where-Object { $_ -like 'FAIL*' } }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) dry-run row cache (-RowCacheSelfTest): $($rq[-1])"
     $ms = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" monsel 2>&1 | ForEach-Object { "$_" }); $ok = $ms[-1] -like 'MONSEL PASS*'; if (-not $ok) { $bad++ }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) screen rule (kenshi-ctl.ps1 monsel: never the Samsung SNY05D1): $($ms[-1])"
     # 5090 game cap: lane 5090c (3rd game) is not started while runner\5090.maxgames < 3 (absent = 2; -Fake: runner\fake\)
@@ -419,7 +426,7 @@ if ($Ensure) {
     exit 0
 }
 if (-not $Rig) { Get-Content $PSCommandPath -TotalCount 40; exit 2 }
-if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFrom -and -not $PreDryOf -and -not $RowHashSelfTest) {
+if (-not $Resolve -and -not $DryKeyOf -and -not $FillerRows -and -not $LedgerFrom -and -not $PreDryOf -and -not $RowHashSelfTest -and -not $RowCacheSelfTest) {
     if (PidAlive $Rig) { "runner $Rig already running"; exit 0 }
     if ((Test-Path (StopFlag $Rig)) -and -not $Force) { "runner $Rig is STOPPED ($((Get-Content (StopFlag $Rig) -Raw).Trim())): rig-runner.ps1 -Start -Rig $Rig"; exit 0 }
     Set-Content (Join-Path $rd "$Rig.pid") $PID
@@ -1040,6 +1047,7 @@ function DryKey([string]$path, [switch]$Show) {
 function PreDryRunning([string]$key) { $p = Join-Path $pdd "$key.pid"; (Test-Path $p) -and -not (Test-Path (Join-Path $pdd "$key.rc")) -and [bool](Get-Process -Id ([int](Get-Content $p -Raw)) -ErrorAction SilentlyContinue) }
 function PreDryStart([string]$path, [string]$key, [int]$Nice = 15) {   # Nice 0: the game waits for this one (speed-scout)
     $d = Join-Path $pdd $key; New-Item -ItemType Directory -Force $d | Out-Null
+    if (RowCacheHit $path $key) { Log "predry $(Split-Path $path -Leaf) key=${key}: PASS from the row cache (every row passed before, no dry run)"; return }
     [IO.File]::WriteAllText((Join-Path $d 'list.dryrun.txt'), (DryListText $path))
     $dw = WslPath $d; $pw = WslPath $pdd
     Remove-Item (Join-Path $pdd "$key.rc"), (Join-Path $pdd "$key.out") -ErrorAction SilentlyContinue
@@ -1062,11 +1070,43 @@ function CachedVerdict($f) { KeyVerdict (DryKey $f.FullName) }   # PASS | FAIL |
 function KeyVerdict([string]$key) {
     $rc = Join-Path $pdd "$key.rc"
     if (Test-Path $rc) {
+        try { RowCacheRecord $key } catch { }
         $sum = @(Get-Content (Join-Path $pdd "$key.out") -ErrorAction SilentlyContinue | Where-Object { $_ -like 'DRYRUN-SUMMARY*' })[-1]
         if ((Get-Content $rc -Raw).Trim() -eq '0' -and $sum -cmatch '^DRYRUN-SUMMARY pass=\d+ fail=0 ') { return 'PASS' } else { return 'FAIL' }
     }
     if (PreDryRunning $key) { return 'PENDING' }
     $null
+}
+# DRY-RUN ROW CACHE (speed-scout r8): a list whose every row already passed dryrun.sh with the same header lines, row line and
+# script closure (in any earlier list: a filler claim's changed-rows copy, a split / renamed / requeued list) gets its PASS at
+# once, no WSL dry run (PreDryStart writes "<key>.out" with "(row cache)" + rc 0). runner\predry\rows\<rowkey>.pass, recorded
+# from every finished real dry run's "DRYRUN <id> PASS" lines (ids unique in the list). -RowCacheSelfTest checks it.
+$prd = Join-Path $pdd 'rows'; New-Item -ItemType Directory -Force $prd | Out-Null
+function RowKeys([string]$listText) {   # one "id<TAB>rowkey" per row of a dry-run list text
+    $lines = @($listText -split "`n"); $hdr = @($lines | Where-Object { $_ -match '^\s*#\s*[\w-]+:' -and $_ -notmatch '^\s*#\s*(owner|stolen-from|out):' }) -join "`n"   # key: value headers only (owner / stolen-from / out don't change a dry run)
+    foreach ($r in @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' })) {
+        $t = "$hdr`n$r`n"; $sb = New-Object Text.StringBuilder; $null = $sb.Append("row`n$Rig`n$t")
+        foreach ($w in (DryFiles $t)) { $fi = Get-Item -LiteralPath $w -ErrorAction SilentlyContinue; if ($fi) { $null = $sb.Append("$($w.ToLowerInvariant())|$(FileSha $fi)`n") } }
+        $h = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($sb.ToString()))
+        "$(($r -split '\|')[0].Trim())`t$Rig-r$(($h[0..7] | ForEach-Object { $_.ToString('x2') }) -join '')"
+    }
+}
+function RowCacheRecord([string]$key) {   # a finished dry run of <key>: its PASS rows into the row cache (once)
+    $d = Join-Path $pdd $key; $done = Join-Path $d 'rows.recorded'; $rkF = Join-Path $d 'rowkeys.tsv'; $out = Join-Path $pdd "$key.out"
+    if ((Test-Path $done) -or -not (Test-Path $rkF) -or -not (Test-Path $out)) { return }
+    $pass = @{}; foreach ($l in @(Get-Content $out)) { if ($l -match '^DRYRUN (\S+) PASS\b') { $pass[$Matches[1]] = 1 } }
+    $rows = @(Get-Content $rkF | Where-Object { $_ } | ForEach-Object { , @($_ -split "`t") }); $ids = @{}; foreach ($x in $rows) { $ids[$x[0]] = 1 + [int]$ids[$x[0]] }
+    foreach ($x in $rows) { if ($ids[$x[0]] -eq 1 -and $pass[$x[0]]) { Set-Content (Join-Path $prd "$($x[1]).pass") $key } }
+    Set-Content $done 'ok'
+}
+function RowCacheHit([string]$path, [string]$key) {   # $true = every row cached PASS: <key>.out + .rc written, no dry run needed
+    $d = Join-Path $pdd $key; New-Item -ItemType Directory -Force $d | Out-Null
+    $rk = @(RowKeys (DryListText $path)); [IO.File]::WriteAllLines((Join-Path $d 'rowkeys.tsv'), [string[]]$rk)
+    if (-not $rk.Count) { return $false }
+    foreach ($x in $rk) { if (-not (Test-Path (Join-Path $prd "$(($x -split "`t")[1]).pass"))) { return $false } }
+    $o = @($rk | ForEach-Object { "DRYRUN $(($_ -split "`t")[0]) PASS  (row cache: passed before with the same header, row line and scripts)" }) + "DRYRUN-SUMMARY pass=$($rk.Count) fail=0 skip=0 rig=$Rig out=row-cache"
+    [IO.File]::WriteAllLines((Join-Path $pdd "$key.out"), [string[]]$o); Set-Content (Join-Path $pdd "$key.rc") '0'; Set-Content (Join-Path $d 'rows.recorded') 'row cache'
+    $true
 }
 # which list to start at a boundary (2026-10-10: the 5090 sat 5 min while the FIFO head dry-ran and then FAILED):
 # a list whose cached verdict is FAIL first (fails at once, owner noted), else the first cached PASS, else the FIFO head
@@ -1432,6 +1472,37 @@ function Finish-Batch([string[]]$c, [string]$how, [string]$file = $curF, [switch
     Note $own "$how $name on ${Rig}: pass=$np fail=$nf; SUMMARY $sumL (out $where). $more"
 }
 
+# -RowCacheSelfTest -Fake (speed-scout r8): dry-run row cache: PASS rows of a finished run make a subset list PASS at once;
+# a FAILed row, an edited row line, an edited script or another header miss
+if ($RowCacheSelfTest) {
+    if (-not $Fake) { 'ROWCACHE-SELFTEST needs -Fake'; exit 1 }
+    $td = Join-Path $env:TEMP "rowcache-st-$PID"; New-Item -ItemType Directory -Force $td | Out-Null; $bad = 0; $n = 0
+    $sc = Join-Path $td 'own.sh'; Set-Content $sc "#!/bin/bash`necho take" -Encoding Ascii; $su = '/c/' + ($sc.Substring(3) -replace '\\', '/')
+    $hd = '# gfx: low'; $ra = "A | s | a | b | 1 | bash $su A"; $rb = "B | s | a | b | 1 | bash $su B"; $rc2 = "C | s | a | b | 1 | bash $su C"
+    function L([string]$name, [string[]]$lines) { $f = Join-Path $td $name; [IO.File]::WriteAllLines($f, $lines); $f }
+    $l1 = L 'l1.list' @($hd, $ra, $rb, $rc2); $k1 = DryKey $l1
+    $null = RowCacheHit $l1 $k1   # a miss: writes rowkeys.tsv; then the "real" run finishes: A PASS, B PASS, C FAIL
+    [IO.File]::WriteAllLines((Join-Path $pdd "$k1.out"), [string[]]@('DRYRUN A PASS  (rig x)', 'DRYRUN B PASS  (rig x)', 'DRYRUN C FAIL  (rig x)', 'DRYRUN-SUMMARY pass=2 fail=1 skip=0'))
+    Set-Content (Join-Path $pdd "$k1.rc") '1'; $v1 = KeyVerdict $k1
+    $cases = @(
+        @('full list itself stays FAIL', $null, 'FAIL'),
+        @('subset A+B (filler claim) = PASS from the row cache', @($hd, $ra, $rb), 'PASS'),
+        @('row B alone, other list name', @($hd, $rb), 'PASS'),
+        @('row B + owner/stolen-from headers + a plain comment', @($hd, '# owner: x', '# stolen-from: queue\4080 by lane 5090b 2026-10-11T19:00:00', '# retry of B', $rb), 'PASS'),
+        @('the FAILed row C alone = miss', @($hd, $rc2), $null),
+        @('row B with an edited line = miss', @($hd, ($rb -replace '\| 1 \|', '| 2 |')), $null),
+        @('row B under another header = miss', @('# gfx: full', $rb), $null))
+    $i = 0
+    foreach ($c in $cases) {
+        $n++; $i++
+        if ($c[1]) { $f = L "c$i.list" $c[1]; $k = DryKey $f; $h = RowCacheHit $f $k; $g = KeyVerdict $k } else { $g = $v1 }
+        $ok = "$g" -eq "$($c[2])"; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) row cache, $($c[0]): $(if ($g) { $g } else { 'miss' })"
+    }
+    $n++; Add-Content $sc 'echo changed'; (Get-Item $sc).LastWriteTimeUtc = (Get-Date).AddMinutes(5); $f = L 'c9.list' @($hd, $rb); $k = DryKey $f; $g = if (RowCacheHit $f $k) { 'PASS' } else { 'miss' }
+    $ok = $g -eq 'miss'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) row cache, row B after its script changed = miss: $g"
+    Remove-Item -Recurse -Force $td -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force $pdd -ErrorAction SilentlyContinue
+    "ROWCACHE-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
+}
 # -RowHashSelfTest: a helper edit or a comment edit keeps a row's hash, an edit of the row's own script or line changes it
 if ($RowHashSelfTest) {
     $td = Join-Path $env:TEMP "rowhash-st-$PID"; New-Item -ItemType Directory -Force $td | Out-Null; $bad = 0
