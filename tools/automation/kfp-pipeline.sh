@@ -24,6 +24,9 @@
 #   --exclude   leave these patches out (combined re-runs use it; env KFP_EXCL_NOTE carries the reasons)
 #   accepted    patches listed in tools/automation/kfp-accepted.txt (Shay accepted the look) are never left out by a
 #               BREAK/recency/conflict rerun (build-now 2026-10-11: x2 dropped the accepted kfp-stroke-line SR41)
+#   accepted ref  stage_dll saves the staged run's gate-all metrics as /root/kfp-pipeline/accepted-metrics.tsv (env
+#               KFP_ACCEPTED_METRICS); a base->all regression or new flip/FAIL that the accepted (staged) build shows too is
+#               not blocking (KB lists it as ACC:<key>), so a combined run no worse than THE staged build stages by itself
 #   env KFP_ROUND2=0  gate base + all only (no recency/per-patch trees); verdict from those two
 #   dependent   a patch whose docstring says "Needs kfp-X" and fails alone is tried on base + X; it then counts as pending
 #               (kfp-stroke-recedge needs kfp-stroke-line); its +P/-X trees in round 2 fail to apply = no verdict for them
@@ -79,6 +82,7 @@ LABK=$WS/components/KenshiFP/animlab; LABH=$WS/Kenshi-Automation-Harness/tools/a
 STAGED=${KFP_STAGED:-/mnt/c/KenshiTestRuns/staged}; QD=${KFP_QUEUE:-/mnt/c/KenshiTestRuns/queue}; R4DIR=${KFP_STAGED_4080:-'C:\KAH\staged'}
 SSH=/mnt/c/Windows/System32/OpenSSH/ssh.exe; SCP=/mnt/c/Windows/System32/OpenSSH/scp.exe
 BASE=live; REVERTS=(); PLIST=""; ALLP=0; JOBS=${KFP_JOBS:-6}; DROP=0.05; STAGE=""; R4080=1; KEEP=0; RUN=""; SFROM=""; COMB=0; EXCL=""
+ACC=${KFP_ACCEPTED_METRICS:-/root/kfp-pipeline/accepted-metrics.tsv}   # THE staged build's gate-all metrics (saved by stage_dll)
 PERP=${KFP_PER_PATCH:-0}   # 1 = always gate the per-patch trees (old mode); 0 = combined-first (per-patch only on a failure)
 KA=()   # args a combined re-run keeps
 while [ $# -gt 0 ]; do case "$1" in
@@ -117,6 +121,7 @@ cleanup() { [ $KEEP = 1 ] && return; rm -rf "$RUN"/tree-* "$RUN"/ns-* "$RUN"/sna
 stage_dll() { local dll=$1 pn=$2 note=$3 sha h sd ql rh; sha=$(sha256sum "$dll" | cut -d' ' -f1); h=$(echo "${sha:0:8}" | tr a-f A-F)
   mkdir -p "$STAGED"; sd=$STAGED/KenshiFP-$h.dll; cp "$dll" "$sd"
   [ "$(sha256sum "$sd" | cut -d' ' -f1)" = "$sha" ] || die stage "5090 copy sha mismatch"
+  [ -s "$RUN/metrics-all.tsv" ] && [ -z "${KFP_STAGED:-}" ] && cp "$RUN/metrics-all.tsv" "$ACC"   # accepted reference = THE build
   printf 'KenshiFP %s sha256 %s\nstaged %s by kfp-pipeline (%s)\nbase %s reverted=%s\npatches %s\ngate %s\nrun %s\n' "$h" "$sha" "$(date '+%F %T')" "$note" \
     "$BASE" "$(for r in "${REVERTS[@]}"; do printf '%s,' "$(pname "$r")"; done)" "$pn" "$(head -1 "$RUN/gate-all/RESULT.txt" 2>/dev/null)" "$RUN" > "${sd%.dll}.txt"
   { printf 'KenshiFP %s sha256 %s\npatches %s\n' "$h" "$sha" "$pn"; printf 'excluded %s\nknown-base %s\n' "${EXNOTE:-none}" "${KB:-none}"
@@ -282,6 +287,22 @@ compare() { awk -F'\t' -v p="$1" -v k="$2" -v dr="$DROP" 'NR==FNR {a[$1]=$2; nex
               f=(d<=-dr ? (k=="alone" ? "drop" : "BREAK") : (d<0 ? "drop" : "gain")); printf "%s\t%s\t%s\t%s\t%s\t%+.2f\t%s\n", p, k, x, a[x], b[x], d, f } }
           else if (a[x]!=b[x]) print p "\t" k "\t" x "\t" a[x] "\t" b[x] "\t-\t" (a[x]=="INFRA" || b[x]=="INFRA" ? "infra" : a[x]=="PASS" && b[x]=="FAIL" ? (k=="alone" ? "flip" : "BREAK") : (a[x]=="FAIL" && b[x]=="PASS" ? "fix" : "changed")) }
         for (x in b) if (!(x in a)) print p "\t" k "\t" x "\t-\t" b[x] "\t-\t" (b[x]=="INFRA" ? "infra" : b[x] ~ /^FAIL/ && x != "" ? (k=="in-set" ? "BREAK" : "newfail") : "new") }' "$RUN/metrics-$3.tsv" "$RUN/metrics-$4.tsv" | sort -t$'\t' -k3,3; }
+# acc_reg: stdin = keys (spaces or '_'), prints the ones that are a regression vs the ACCEPTED build ($ACC = gate-all
+# metrics of THE staged build): worse than there (PASS there, FAIL/GONE here; take rate down >= DROP; a FAIL key it
+# didn't have). A key that fails on the accepted build too is not this run's regression (build-now 2026-10-11: the base
+# tree failed 15 checks + the staged build carried accepted flips, so every combined run went to minus-one trees).
+# No $ACC file = every key is a regression (old behaviour).
+acc_reg() { awk -F'\t' -v dr="$DROP" -v acc="$ACC" -v allm="$RUN/metrics-all.tsv" 'function nk(x) { gsub(/ /,"_",x); return x }
+  BEGIN { noacc=1; while ((getline l < acc) > 0) { noacc=0; split(l,f,"\t"); a[nk(f[1])]=f[2] }
+          while ((getline l < allm) > 0) { split(l,f,"\t"); b[nk(f[1])]=f[2] } }
+  { k=nk($0); if (k=="") next; if (noacc) { print $0; next }
+    if (!(k in a)) { if ((k in b) && b[k]!="PASS" && b[k] !~ /^[0-9.]+$/) print $0; next }
+    if (a[k] ~ /^[0-9.]+$/) { if ((k in b) && b[k] ~ /^[0-9.]+$/ && b[k] <= a[k]-dr+1e-9) print $0; next }
+    if (a[k]=="PASS" && b[k]!="PASS") print $0 }'; }
+# set_reg: SET base->all BREAK/newfail rows that are also a regression vs the accepted build ("key before->after flag; ")
+set_reg() { local rows k; rows=$(compare SET set base all | awk -F'\t' '$7=="BREAK" || $7=="newfail"')
+  [ -n "$rows" ] || return 0; k=$(echo "$rows" | cut -f3 | acc_reg)
+  echo "$rows" | awk -F'\t' -v ks="$k" 'BEGIN { n=split(ks,a,"\n"); for (i=1;i<=n;i++) r[a[i]]=1 } ($3 in r) {printf "%s %s->%s %s; ", $3, $4, $5, $7}'; }
 # kb_eval: a gate-all FAIL whose only cause is baseline flips the base gate shows identically = KNOWN-BASE (sets KB,
 # non-blocking); anything else sets GB (the blocking reason; nores = no RESULT). The delta blocks every flip a patch causes.
 kb_eval() { local gl why fa fb newf; KB=""; GB=""; [ "$(cat "$RUN/logs/gate-all.rc" 2>/dev/null)" = 0 ] && return 0
@@ -298,8 +319,14 @@ kb_eval() { local gl why fa fb newf; KB=""; GB=""; [ "$(cat "$RUN/logs/gate-all.
     mm=$(grep -o '^RESULT MUTATIONS.*missed=[^ ]*' "$RUN/gate-all/mutate.txt" 2>/dev/null | sed 's/.*missed=//' | tr ',' ' ')
     for m in $mm; do grep -qE "^MUT $m BASEFAIL( |$)" "$RUN/gate-all/mutate.txt" || { mb=""; break; }; mb="${mb:+$mb;}MUT-BASEFAIL:$m"; done
     [ -n "$mb" ] && why=$(echo ",$why," | sed 's/,mutation-missed,/,/; s/^,//; s/,$//'); fi
+  # flips / new FAIL keys the accepted build has too = accepted (non-blocking, named ACC:<key> in KB)
+  af=""; if [ -n "$newf$nfk" ] && [ -s "$ACC" ]; then local x k keep
+    keep=$(echo "$newf;$nfk" | tr ';' '\n' | sed 's/^PASS->[A-Z]*://; s/^GONE://' | grep . | acc_reg | tr ' ' '_' | paste -sd';')
+    af=$(echo "$newf;$nfk" | tr ';' '\n' | sed 's/^PASS->[A-Z]*://; s/^GONE://' | grep . | tr ' ' '_' | while read -r k; do echo ";$keep;" | grep -qF ";$k;" || echo "ACC:$k"; done | paste -sd';')
+    newf=$(echo "$newf" | tr ';' '\n' | grep . | while read -r x; do k=$(echo "$x" | sed 's/^PASS->[A-Z]*://; s/^GONE://' | tr ' ' '_'); echo ";$keep;" | grep -qF ";$k;" && echo "$x"; done | paste -sd';')
+    nfk=$(echo "$nfk" | tr ';' '\n' | grep . | while read -r x; do k=$(echo "$x" | tr ' ' '_'); echo ";$keep;" | grep -qF ";$k;" && echo "$x"; done | paste -sd';'); fi
   if [ -z "$newf" ] && [ -z "$nfk" ] && ! echo ",$why," | grep -qE ',(mutation-missed|corpus-file-missing),'; then
-    KB=$( { echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)'; awk -F'\t' '$2=="FAIL" {print "FAIL:" $1}' "$RUN/metrics-all.tsv"; [ -n "$mb" ] && echo "$mb"; } | tr ' ' '_' | paste -sd';')
+    KB=$( { echo "$fa" | tr ';' '\n' | grep -E '^(PASS->|GONE:)'; awk -F'\t' '$2=="FAIL" {print "FAIL:" $1}' "$RUN/metrics-all.tsv"; [ -n "$mb" ] && echo "$mb"; [ -n "$af" ] && echo "$af"; } | tr ' ' '_' | paste -sd';')
   else GB="why=$why${newf:+ new-flips=$newf}${nfk:+ new-fail=$nfk}"; fi; }
 # guard_cut <comma list>: excluding more than half the set needs a clear per-patch breaker (the patch alone flips/drops/
 # newfails vs base in $D); prints the list to leave out, or the refusal text + rc 1 (2026-10-11 a bogus key made all 14
@@ -333,7 +360,7 @@ PPG=0; ff=""
 if [ $N -ge 2 ] && [ "${KFP_ROUND2:-1}" = 0 ]; then say "ROUND2 off (KFP_ROUND2=0): base + all only, no minus-one/per-patch trees"
 elif [ $N -ge 2 ]; then
   if [ $PERP = 1 ]; then ff="--per-patch"
-  else sr=$(compare SET set base all | awk -F'\t' '$7=="BREAK" || $7=="newfail" {printf "%s %s->%s %s; ", $3, $4, $5, $7}')
+  else sr=$(set_reg)
     [ -n "$sr" ] && ff="set: ${sr%; }"; kb_eval; case "$GB" in ""|nores) ;; *) ff="${ff:+$ff; }gate: $GB";; esac; fi
   # RECENCY fast path (coordinator 2026-10-11: the 5090 sat idle ~50 min on a 30-tree round for one patch): gate the
   # set-minus-one trees newest-changed patch first, $JOBS at a time; the first clean one = that patch is the breaker,
@@ -374,7 +401,7 @@ awk -F'\t' 'NR>1 && $2!="set" && $7 ~ /BREAK|drop|flip|GONE|newfail/ {print "DEL
 GL=$(cat "$RUN/gate-all/RESULT.txt" 2>/dev/null | head -1)
 [ -n "$GL" ] || die gate "no gate result for the full set (log $RUN/logs/gate-all.txt)"
 GS="$(echo "$GL" | awk '{print $3}') $(echo "$GL" | grep -o 'pool=[^ ]*\( s[0-9]*:[A-Z]*\)*' | tr ' ' ',') $(echo "$GL" | grep -o 'flipped=[^ ]*')"
-br=$(awk -F'\t' 'NR>1 && $7=="BREAK" {printf "%s %s %s->%s; ", $1, $3, $4, $5}' "$D")
+br=$(awk -F'\t' 'NR>1 && $7=="BREAK" && $1!="SET" {printf "%s %s %s->%s; ", $1, $3, $4, $5}' "$D")$(set_reg)   # SET rows: only regressions vs the accepted build
 if [ -n "$br" ] && [ $COMB = 1 ]; then cu=$(awk -F'\t' 'NR>1 && $7=="BREAK" && $1!="SET" {print $1}' "$D" | sort -u | paste -sd,)
   if [ -n "$cu" ]; then g=$(guard_cut "$cu") || die guard "$g"; [ "$g" = "$cu" ] || say "GUARD in-set BREAK on $cu; leaving out only the clear per-patch breakers: $g"; cu=$g; fi
   [ -n "$cu" ] && rerun_without "$cu" "BREAK"; fi

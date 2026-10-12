@@ -31,6 +31,9 @@ newest() { { stat -c %Y "$PF"/kfp-*.py "$PF"/kfp-*.patch 2>/dev/null; find "$LIV
 # Accepted patches (tools/automation/kfp-accepted.txt: kfp-stroke-line SR41, kfp-pt30-followthrough) are never carried
 # and kfp-pipeline.sh never leaves them out (build-now 2026-10-11: run-watch-1011-1852-x2 excluded the accepted
 # kfp-stroke-line that THE staged build B17B98D5 already shipped, which would have regressed Shay's accepted look).
+# Accepted reference (kfp-pipeline.sh, build-now 2026-10-11): every stage saves its gate-all metrics as
+# /root/kfp-pipeline/accepted-metrics.tsv; a combined run that is no worse than THE staged build stages by itself (no
+# minus-one trees for checks the base tree or the staged build already fail).
 pfile() { ls "$PF/$1.py" "$PF/$1.patch" 2>/dev/null | head -1; }
 remember() { local last ex n p h; last=$(ls -d "$1" "$1"-x* 2>/dev/null | sort -V | tail -1); ex=$(cat "$last/exclude.list" 2>/dev/null)
   h=$(git -C "$LIVE" rev-parse HEAD 2>/dev/null); : > "$PR/buildwatch.excl"

@@ -4,6 +4,7 @@
 #   1 empty agree text on 'all' (run-watch-1011-1606): verdict INFRA, compare flags infra, never BREAK/newfail
 #   2 a regress FAIL that fails identically on base (agree + overlay miss, run-watch-1011-1705): known-base, not blocking
 #   3 a FAIL only on 'all': blocking (new-fail)
+#   7 accepted reference: base->all regressions the staged (accepted) build has too don't block
 #   4 guard: 14/14 patches BREAK in-set with no per-patch breaker -> refused; with one clear breaker -> only it is cut
 # Usage (WSL): bash kfp-pipeline-selftest.sh [path/to/kfp-pipeline.sh]   -> last line "SELFTEST kfp-pipeline PASS|FAIL"
 P=${1:-$(dirname "$0")/kfp-pipeline.sh}
@@ -68,4 +69,20 @@ for l in base all; do metrics $l > "$RUN/metrics-$l.tsv"; done
 kb_eval; ck "6 BASEFAIL mutation known-base" "$GB|$(echo "$KB" | grep -o 'MUT-BASEFAIL:rec-path-late-drift')" "|MUT-BASEFAIL:rec-path-late-drift"
 printf 'MUT b MISSED chk x\nRESULT MUTATIONS FAIL 18/19 missed=b known=none\n' > $RUN/gate-all/mutate.txt
 kb_eval; ck "6 real missed mutation blocks" "$(echo "$GB" | grep -o 'mutation-missed')" "mutation-missed"
+# 7 accepted reference (THE staged build's gate-all metrics): a base->all FAIL/flip the accepted build has too is not
+#   blocking (ACC:), one it doesn't have blocks; a take-rate drop vs accepted >= DROP blocks; no ACC file = old behaviour
+RUN=$T/r7; N=18; ACC=$T/acc7.tsv
+RB7='RESULT ANIMLAB-REGRESS FAIL fail=2 flipped=PASS->FAIL:s1_arc; why=regress,flipped log=x'
+mk $RUN base "$AGB" 'agree\tFAIL\ns1 arc\tPASS\nzz\tPASS\n' "${RB7/PASS->FAIL:s1_arc;/none}"
+mk $RUN all "$AGB"'REGRESS FAIL s1 arc: wb\n' 'agree\tFAIL\ns1 arc\tFAIL\nzz\tPASS\n' "$RB7"
+for l in base all; do metrics $l > "$RUN/metrics-$l.tsv"; done
+printf 'agree\tFAIL\ns1 arc\tFAIL\nzz\tPASS\n' > "$ACC"
+kb_eval; ck "7 accepted flip+fail not blocking" "$GB|$(echo "$KB" | grep -o 'ACC:s1_arc' | head -1)" "|ACC:s1_arc"
+ck "7 accepted set row dropped" "$(set_reg)" ""
+printf 'agree\tFAIL\ns1 arc\tPASS\nzz\tPASS\n' > "$ACC"
+kb_eval; ck "7 not in accepted blocks" "$(echo "$GB" | grep -o 'new-fail=s1 arc')" "new-fail=s1 arc"
+ck "7 set row kept" "$(set_reg)" "s1 arc PASS->FAIL BREAK; "
+printf 's1.take_all\t0.95\n' >> "$RUN/metrics-all.tsv"; printf 'agree\tFAIL\ns1 arc\tFAIL\ns1.take_all\t1.00\n' > "$ACC"
+ck "7 take drop vs accepted" "$(printf 's1.take_all\ns1 arc\n' | acc_reg)" "s1.take_all"
+ACC=$T/none.tsv; ck "7 no ACC file = every key" "$(printf 's1 arc\n' | acc_reg)" "s1 arc"
 [ $F = 0 ] && echo "SELFTEST kfp-pipeline PASS" || { echo "SELFTEST kfp-pipeline FAIL"; exit 1; }
