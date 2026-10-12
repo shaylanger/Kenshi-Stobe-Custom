@@ -12,7 +12,8 @@ of the recording with a full stroke-N swing is cached), judge that swing with ev
 angle SR14 diagonals, end band SR38, span/centre/fast, travel SR39/40, sweep + wind-up exit, SR41 return edge away,
 arc edge lead, wrist, blade snap/seen, stroke length, churn, inline, framing) and render a labelled contact strip at
 zoom 0 (tip path + outer 10% end band + crosshair drawn on every tile).
-  --pool   also every swing of every pool recording (kfcheck.evaluate, the pool take rates; ~10 s)
+  --pool   also every swing of every pool recording (kfcheck.evaluate, the pool take rates; ~10 s) AND the game-take
+           judge on corpus E6 game takes (kftake.py via kfcheck: weapon sets kept, fp-e6-strokes.sh lab commands)
   --mp4    a short clip of the swing: once at full speed, once at 1/2 speed (SR37), h264_nvenc (libx264 fallback)
 Prints `RESULT KFPREVIEW-s<N>[<label>] PASS|FAIL <failed checks> path=... strip=<png>` (exit 0 PASS, 1 FAIL, 2 error).
 Strip: DIR/strip.png (default DIR /mnt/c/KenshiTestRuns/kf-lab/preview/<tables name>)."""
@@ -239,7 +240,14 @@ def preview(a):
         if getattr(a, 'pool', False):
             import kfcheck
             pr = kfcheck.evaluate(adapter, stroke, tables, getattr(a, 'set', []) or [], None, 10)
-            pool_txt = ' pool=%s(%s n=%s)' % ('PASS' if pr['ok'] else 'FAIL', 'score=%.2f' % pr['score'], pr.get('n'))
+            # kfcheck.evaluate includes the game-take judge (kftake.py, Misses kf-s0b): pool rates AND every take line
+            tk = pr.get('take') or {}
+            pool_txt = ' pool=%s(%s n=%s kftake=%s)' % ('PASS' if pr['ok'] else 'FAIL', 'score=%.2f' % pr['score'], pr.get('n'),
+                                                       '%s,fail=%s/%s,%s' % ('PASS' if tk.get('ok') else 'FAIL', tk.get('fail'), tk.get('n'),
+                                                                            tk.get('worst', '').replace(' ', ',')) if tk else 'off')
+            for l in tk.get('lines', []):
+                if ' FAIL' in l and '(info)' not in l:
+                    det.append(l[:260])
             if not pr['ok']:
                 bad.append('pool'); ok = False
         # strip: 6 frames of wind-up before the swing, the swing, 6 frames after (every N)

@@ -10,6 +10,10 @@ path dev/late, angle, end band, centre, fast share, travel; swing_rules: sweep/w
 (metrics.pool_predict over arc blade stroke churn inline path). Score = the same objective as stroke-fix's obj.py
 (copied, so the keyframe and table methods are judged by one yardstick): 0 = every swing inside every limit with margin.
 Prints the per-check pool rates, the mean path metrics and `RESULT KFCHECK-s<N> PASS|FAIL score=..`.
+Game-take gate (kf-lab 2026-10-11, Misses kf-s0b): kftake.py replays the corpus single-stroke E6 GAME takes
+(pools/sword-take/take.list, shipped sword weapon sets kept) with the variant and runs the take judge's exact lab
+commands; PASS needs the pool AND every take line; the take replays' swing penalties are added to the score
+(`kftake:take=.. pen=..` in the RESULT). --no-take = pool only.
 Replays go through labcache (result cache) and run at the caller's nice level (use labnice / nice 15)."""
 import sys, os, re, tempfile, shlex, json, argparse, shutil
 from concurrent.futures import ThreadPoolExecutor
@@ -92,23 +96,53 @@ def pen_swing(v, pm, stroke, trav):
     return p
 
 
-def evaluate(adapter, stroke, tables=None, sets=(), trav=None, j=10, keep=None):
+def swings_of(out, stroke, trav, V, P_, PM):
+    """every full stroke-N swing of one replay -> appended to V (verdicts), P_ (penalties), PM (path metrics)"""
+    r = recfmt.parse(out)
+    Pm = M.frame_metrics(r)
+    ps = {k: S for k, (stk, S) in enumerate(M.path_series(r.frames, Pm))}
+    for v in M.swing_verdicts(r.frames, Pm, (2,), inline=True):
+        if v['stroke'] not in (None, -1, stroke) or not v['full']:
+            continue
+        v['rec'] = os.path.basename(out)
+        S = ps.get(v['k'])
+        pm = M.path_metrics([x[2] for x in S], us=[x[0] for x in S]) if S and len(S) >= M.PATH_MIN_N else None
+        V.append(v); P_.append(pen_swing(v, pm, stroke, trav)); PM.append(pm)
+
+
+def take_part(adapter, stroke, tables, sets, trav, j):
+    """kf-lab 2026-10-11 (Misses kf-s0b): the GAME TAKE judge (kftake.py: corpus single-stroke E6 game takes replayed with
+    their weapon/condition sets + the variant, judged by fp-e6-strokes.sh's lab commands) gates the verdict, and the same
+    swing penalties computed on those replays join the score so a fit steers by the take conditions too (the pool
+    replays carry no weapon geometry: k5sl scored 1.53 on the pool, wrist 82.7 in the game)."""
+    import kftake
+    td = tempfile.mkdtemp(prefix='kfchk-take-', dir='/tmp')
+    try:
+        tk = kftake.evaluate(adapter, stroke, tables, list(sets), None, j, keep=td)
+        M.STROKE_ONLY = stroke
+        V, P_, PM = [], [], []
+        for f in sorted(os.listdir(td)):
+            if f.endswith('.txt'):
+                swings_of(os.path.join(td, f), stroke, trav, V, P_, PM)
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+    tk['pen'] = 0.0
+    if P_:
+        keys = list(P_[0].keys())
+        tk['pen'] = sum(sum(p[k] for p in P_) / len(P_) for k in keys) + 0.3 * sum(max(p[k] for p in P_) for k in keys)
+    if not tk['ok']:
+        tk['pen'] += 2.0   # a failing game-take line always costs more than the PASS margin
+    return tk
+
+
+def evaluate(adapter, stroke, tables=None, sets=(), trav=None, j=10, keep=None, take=True):
     M.STROKE_ONLY = stroke
     d, outs = replays(adapter, stroke, tables, list(sets), j, keep)
     V, P_, PM = [], [], []
     for out in outs:
         if not out:
             return dict(score=1e3, ok=False, txt='adapter fail', dir=d)
-        r = recfmt.parse(out)
-        Pm = M.frame_metrics(r)
-        ps = {k: S for k, (stk, S) in enumerate(M.path_series(r.frames, Pm))}
-        for v in M.swing_verdicts(r.frames, Pm, (2,), inline=True):
-            if v['stroke'] not in (None, -1, stroke) or not v['full']:
-                continue
-            v['rec'] = os.path.basename(out)
-            S = ps.get(v['k'])
-            pm = M.path_metrics([x[2] for x in S], us=[x[0] for x in S]) if S and len(S) >= M.PATH_MIN_N else None
-            V.append(v); P_.append(pen_swing(v, pm, stroke, trav)); PM.append(pm)
+        swings_of(out, stroke, trav, V, P_, PM)
     if not keep:
         shutil.rmtree(d, ignore_errors=True)
     if not V:
@@ -119,6 +153,12 @@ def evaluate(adapter, stroke, tables=None, sets=(), trav=None, j=10, keep=None):
     ok, txt = M.pool_predict(V, ('arc', 'blade', 'stroke', 'churn', 'inline', 'path'))
     score = sum(tot.values()) + 0.3 * sum(worst.values())
     rates = re.sub(r',worst=\S+', '', ' '.join(t for t in txt if 'take=' in t))
+    tk = None
+    if take:
+        tk = take_part(adapter, stroke, tables, sets, trav, j)
+        score += tk['pen']
+        ok = ok and tk['ok']
+        rates += ' kftake:%s pen=%.2f' % (tk['txt'], tk['pen'])
     pms = [p for p in PM if p]
     mean = {}
     for k in ('ang', 'dev', 'late', 'edge', 'ctr', 'fast', 'trav'):
@@ -129,7 +169,7 @@ def evaluate(adapter, stroke, tables=None, sets=(), trav=None, j=10, keep=None):
     mean['sweep'] = sum(sw) / len(sw) if sw else None
     mean['wb_max'] = max(v['wb_max'] for v in V)
     mean['arc_good'] = sum(v['arc_good'] / max(1, v['arc_n']) for v in V) / len(V)
-    return dict(score=score, ok=ok, n=len(V), pen=tot, rates=rates, mean=mean, dir=d,
+    return dict(score=score, ok=ok, n=len(V), pen=tot, rates=rates, mean=mean, dir=d, take=tk,
                 txt='score=%.3f %s n=%d | mean %s | %s' % (score, 'PASS' if ok else 'FAIL', len(V),
                                                        ' '.join('%s=%.2f' % (k, tot[k]) for k in keys), rates))
 
@@ -145,10 +185,14 @@ def main():
     ap.add_argument('--json')
     ap.add_argument('-j', type=int, default=10)
     ap.add_argument('--tag', default='')
+    ap.add_argument('--no-take', action='store_true', help='skip the game-take judge (kftake.py); pool only (old behaviour)')
     a = ap.parse_args()
     trav = tuple(map(float, a.trav.split(':'))) if a.trav else None
-    r = evaluate(a.adapter, a.stroke, a.tables, a.set, trav, a.j, a.keep)
+    r = evaluate(a.adapter, a.stroke, a.tables, a.set, trav, a.j, a.keep, take=not a.no_take)
     print(r['txt'])
+    for l in (r.get('take') or {}).get('lines', []):
+        if ' FAIL' in l and '(info)' not in l:
+            print(l[:260])
     if 'mean' in r:
         print('path mean ' + ' '.join('%s=%s' % (k, 'n/a' if v is None else '%.3f' % v) for k, v in r['mean'].items()))
     if a.json:

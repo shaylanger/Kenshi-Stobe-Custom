@@ -656,6 +656,16 @@ print('records=%d zoom_skipped=%d left_zoomed=%d' % (n, k, len(bad)))" 2>&1)
       [ "${k:-0}" -ge 500 ] && ok "agree zoom skip clv139: $r" || bad "agree zoom skip clv139 (want >= 500 skipped): $r";;
     *) bad "agree zoom skip clv139: $r";; esac
 else echo "REGRESS INFO agree zoom skip: corpus clv139-zoomret.vmrec.txt missing"; fi
+# 35g. keyframe lab runs the GAME TAKE judge (kf-lab 2026-10-11, Misses kf-s0b: kf-s0-k5sl passed kfcheck on the sword
+#   pool, 1.53, and failed its game take: the pool replays had no weapon geometry). kf/kftake.py replays the corpus
+#   single-stroke E6 takes with their weapon sets + the variant and runs fp-e6-strokes.sh's lab commands: k5sl FAILs,
+#   the accepted PT17-v2 s0 tables PASS.
+if [ -x /root/animlab-build/kfpvm_kf ] && [ -f "$CORPUS/tables/kf-s0-k5sl.txt" ]; then
+  r1=$(python3 "$HERE/kf/kftake.py" --stroke 0 --tables "$CORPUS/tables/kf-s0-k5sl.txt" -q 2>&1 | grep '^RESULT')
+  r2=$(python3 "$HERE/kf/kftake.py" --stroke 0 --tables "$CORPUS/tables/pt17v2-s0line.txt" -q 2>&1 | grep '^RESULT')
+  case "$r1|$r2" in "RESULT KFTAKE-s0 FAIL"*"|RESULT KFTAKE-s0 PASS"*) ok "kftake: k5sl FAIL + pt17v2-s0line PASS ($(echo "$r1" | grep -o 'fail=[0-9]*'))";;
+    *) bad "kftake (want k5sl FAIL, pt17v2-s0line PASS): $r1 | $r2";; esac
+else echo "REGRESS INFO kftake: /root/animlab-build/kfpvm_kf (kf/build-kf.sh) or corpus tables/kf-s0-k5sl.txt missing"; fi
 rm -rf /tmp/al-e6src-*
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
