@@ -40,6 +40,10 @@ FB=$(A rangedinfo "$FI" | grep -o 'bow=.* has_ammo' | sed 's/^bow=//; s/ has_amm
 SHID=$(id_of "$SH"); FIID=$(id_of "$FI")
 A protect "$SH" on >/dev/null; A protect "$FI" on >/dev/null
 A pin "$FI" at "$SH" dist 400 >/dev/null                      # the fighter out of the line of fire for the ranged row
+# every other squad member far away + protected (5090c 248: other_damage=3 = a mate hit the target in the baseline)
+for m in $(A chars 3000 "[nameless]" | tr '|' '
+' | sed -n 's/^[0-9]* within [0-9.]*: //; s/^ *//; s/ #.*//p'); do
+  case "$m" in "$SH"|"$FI"|"$TG") ;; *) A protect "$m" on >/dev/null; A pin "$m" at "$SH" dist 600 >/dev/null;; esac; done
 A pin "$TG" at "$SH" dist "$DIST" face "$SH" >/dev/null
 A combatmode "$SH" hold on >/dev/null
 
