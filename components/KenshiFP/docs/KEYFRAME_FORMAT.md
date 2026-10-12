@@ -55,3 +55,11 @@ Recordings carry the variant (`# set -1 t.kf.<i>` lines), so the lab replays a f
 Binaries: `components/KenshiFP/animlab/kf/build-kf.sh` -> `/root/animlab-build/kfpvm_kf` (replay adapter) and
 `kfpvm_kfpath` (`kfpvm_kfpath.c`: commanded path, no IK, ms). Tools in `components/KenshiFP/animlab/kf/`: `kfstroke.py`
 (fit / make / path), `kfcheck.py` (every swing check over the sword pool, same objective as stroke-fix obj.py), `kfwhy.py`.
+`kfpreview.py <tables file> [--mp4] [--pool] [--label=X]` (kf-lab): replays one pool recording with the set (~1.5 s),
+judges its stroke swing with every lab swing check (path dev/late/angle, SR38 end band, span/centre/fast, SR39/40 travel,
+sweep + wind-up exit, SR41 return edge away, arc edge, wrist, blade, stroke length, churn, inline, framing), writes
+`strip.png` (zoom 0, tip path + 10% band + crosshair per tile) + `checks.txt`, `--mp4` a full + 1/2 speed clip (NVENC),
+`--pool` the whole pool (kfcheck); prints `RESULT KFPREVIEW-s<N> PASS|FAIL ...` (default out
+`C:\KenshiTestRuns\kf-lab\preview\<name>\`). `kfstroke.py preview` calls it. Agreement (one source: the adapter compiles
+the plugin's own kfp_viewmodel.inc + this patch): `kfagree.sh <game kf take rec>` replays a filmed kf take with the lab
+built from that DLL's exact source and compares every arm joint / hand axis (agree-pose.sh), `RESULT KFAGREE`.
