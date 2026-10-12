@@ -14,6 +14,8 @@ arc edge lead, wrist, blade snap/seen, stroke length, churn, inline, framing) an
 zoom 0 (tip path + outer 10% end band + crosshair drawn on every tile).
   --pool   also every swing of every pool recording (kfcheck.evaluate, the pool take rates; ~10 s) AND the game-take
            judge on corpus E6 game takes (kftake.py via kfcheck: weapon sets kept, fp-e6-strokes.sh lab commands)
+  --rec R  replay game take recording R (its weapon/2H condition sets kept, as kftake.py) instead of the sword pool
+           (heavy-kf 2026-10-11: heavy 2H / polearm keyframe strokes need the take's weapon class)
   --mp4    a short clip of the swing: once at full speed, once at 1/2 speed (SR37), h264_nvenc (libx264 fallback)
 Prints `RESULT KFPREVIEW-s<N>[<label>] PASS|FAIL <failed checks> path=... strip=<png>` (exit 0 PASS, 1 FAIL, 2 error).
 Strip: DIR/strip.png (default DIR /mnt/c/KenshiTestRuns/kf-lab/preview/<tables name>)."""
@@ -27,6 +29,7 @@ POOL = '/mnt/c/KenshiTestRuns/corpus/pools/sword-swing'
 VISUAL = os.path.join(os.path.dirname(HERE), 'visual.json')
 WORK = '/root/animlab-work/kfpreview'
 ADAPTER = '/root/animlab-build/kfpvm_kf'
+REC = None
 
 
 def pool_recs():
@@ -69,6 +72,13 @@ def judge(out, stroke):
 
 def pick_and_judge(adapter, stroke, tables, sets, d):
     os.makedirs(WORK, exist_ok=True)
+    if REC:   # --rec: one game take recording with its condition sets kept (weapon wcat/wpom/wtip, 2H class keys; kftake.replay)
+        import kftake
+        out, _ = kftake.replay(adapter, REC, os.path.join(d, os.path.basename(REC)), stroke, tables, sets)
+        j = judge(out, stroke)
+        if not j:
+            raise SystemExit('%s has no full stroke-%d swing' % (REC, stroke))
+        return REC, out, j
     pk = os.path.join(WORK, 'pick-s%d.txt' % stroke)
     recs = pool_recs()
     if os.path.exists(pk):
@@ -291,7 +301,10 @@ def main():
     ap.add_argument('--label', default='')
     ap.add_argument('--pool', action='store_true')
     ap.add_argument('--mp4', action='store_true')
+    ap.add_argument('--rec', help='replay this game take recording (condition sets kept: weapon, 2H class) instead of a sword-pool rec')
     a = ap.parse_args()
+    global REC
+    REC = os.path.abspath(a.rec) if a.rec else None
     try:
         return preview(a)
     except SystemExit as e:
