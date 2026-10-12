@@ -9,7 +9,7 @@ Queue: C:\KenshiTestRuns\queue\4080b\*.list first (FIFO by numeric prefix); own 
   at the same time). Eligible (LaneReject):
   - "# gfx: low" (no filming: lane 4080 films its 1600x900 window with gdigrab on the 4080's only screen), no Stobe rows
     (no Stobe on the 4080), not "# rig: 5090";
-  - crossbow guard (NO PC CRASHES, 2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): no row names a
+  - [OFF by default since speed-scout r8 (Shay 17:20+19:00): only while runner\4080b.xbow-serial exists] crossbow guard (NO PC CRASHES, 2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): no row names a
     crossbow/ranged/turret/reload script or switch (fp-xbow*, crossbow, ranged, turret, reload, bolt, VMQUICK, XB*/T6 rows);
   - list-rigcheck.sh --fix <list> 4080 OK, dryrun.sh --rig 4080 PASS (run here, at nice 0).
   Lists that break a rule go to queue\failed\ (+ .result naming the rule); the owner gets a note.
@@ -43,13 +43,13 @@ Per list: instance 2 down -> kenshi-instance.ps1 sync -Instance 2 (DLLs/mods/cfg
 Every tick (30 s) of a batch: TDR guard = 4080 System-log nvlddmkm/Display 4101|153 since the batch started, or
   ALERT-4080-tdr.txt from lane 4080 -> PREEMPT TDR, instance 2 stopped, ALERT-4080b-tdr.txt, 4080b.stopped, loop exits.
   rig-runner-probe.sh: batch process gone without DONE, or no new file for StallMin (a row's STALL_MIN wins) -> end-batch +
-  instance 2 stopped. DONE -> SUMMARY.txt copied to queue\done\<list>.SUMMARY.txt + .result. Queue empty 5 min -> instance 2
+  instance 2 stopped. DONE -> SUMMARY.txt copied to queue\done\<list>.SUMMARY.txt + .result. Queue empty IdleStopMin (0 since speed-scout r8) -> instance 2
   stopped (frees ~3.5 GB RAM / 2 GB VRAM on the 4080).
 Files: runner\4080b.{pid,log,state,cur,stopped,restart}; ALERT-4080b-tdr.txt.
   rig-lane2-4080.ps1 -SelfTest   eligibility + admission + TDR filter on fixed cases (no side effects, no ssh)
 #>
-param([switch]$SelfTest, [switch]$Fake, [int]$TickSec = 30, [int]$MinGpuMB = 4096, [int]$MinRamMB = 6144, [int]$StallMin = 20, [int]$IdleStopMin = 5,
-      [string]$VideoMode = '1024 x 768', [int]$Fps = 30, [int]$FilmAfterMin = 2)   # 1024x768: 800x600 rendered 4096x2160 on lane 5090b (m102)
+param([switch]$SelfTest, [switch]$Fake, [int]$TickSec = 30, [int]$MinGpuMB = 4096, [int]$MinRamMB = 6144, [int]$StallMin = 20, [int]$IdleStopMin = 0,
+      [string]$VideoMode = '1024 x 768', [int]$Fps = 30, [int]$FilmAfterMin = 0)   # 1024x768: 800x600 rendered 4096x2160 on lane 5090b (m102)
 $Lane = '4080b'; $Inst = 2
 $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 
@@ -87,7 +87,9 @@ function FireRow([string]$r) {
 # C:\KenshiTestRuns\runner\4080b.xbow-parallel exists, lane 4080b takes crossbow/tdr-isolate lists and does not hold
 # for lane 4080's crossbow list; the TDR guard still stops the lane, and the coordinator deletes the file after a TDR.
 $script:XbParTest = $null   # -SelfTest pins the switch ($false/$true) so the real file never changes the cases
-function XbPar { if ($null -ne $script:XbParTest) { return $script:XbParTest }; Test-Path -LiteralPath (Join-Path $runs 'runner\4080b.xbow-parallel') }
+# speed-scout r8 (Shay 17:20 "crossbow on all rigs/lanes, no TDR holds" + 19:00 "remove any blockers"): parallel is the
+# DEFAULT now; only runner\4080b.xbow-serial (create it to go back to one crossbow list at a time) turns it off.
+function XbPar { if ($null -ne $script:XbParTest) { return $script:XbParTest }; -not (Test-Path -LiteralPath (Join-Path $runs 'runner\4080b.xbow-serial')) }
 function IsoHeader([string[]]$lines) { [bool](@($lines | Where-Object { $_ -match '^\s*#\s*tdr-isolate:\s*yes' }).Count) }
 function IsoList([string[]]$lines) { if (IsoHeader $lines) { return $true }; foreach ($l in LaneRows $lines) { if (FireRow $l) { return $true } }; $false }
 function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr, [bool]$xbow1) {   # $null = may launch instance 2
@@ -114,6 +116,10 @@ function NeedCmds([string[]]$lines) {
     if ($h -contains 'none') { return @() }
     @(@('fp_control') + @($h | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ }) | ForEach-Object { $_.ToLower() } | Sort-Object -Unique)
 }
+# instance 2 lacks KenshiFP.dll while instance 1 has it (coordinator 18:59 / xbow-escalate: the runner log showed instance 2's
+# KenshiFP hash blank at every sync while Defender removed it; 232 lost a 4-min 0/9 run): checked right after the instance
+# sync, before the launch; a gap = list back to queue\4080 (filler dropped) + lane parked (kfp-blocked, 10-min recheck).
+function Kfp2Gap([string]$dll1, [string]$dll2) { if ($dll1 -match 'KenshiFP\.dll=\w' -and $dll2 -notmatch 'KenshiFP\.dll=\w') { "instance 2 has no KenshiFP.dll after the sync (instance 1: $dll1; instance 2: '$dll2')" } else { $null } }
 function MissingCmds([string[]]$lines, [string]$help) {
     $have = @{}; foreach ($m in [regex]::Matches($help.ToLower(), '[a-z][a-z0-9_]*')) { $have[$m.Value] = 1 }
     @(NeedCmds $lines | Where-Object { -not $have.ContainsKey($_) })
@@ -191,14 +197,22 @@ if ($SelfTest) {
     foreach ($c in $nc) { $n++; $g = (@(MissingCmds $c[1] $c[2]) -join ','); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b needed commands $($c[0]): missing '$g'" }
     # source pin (17:19: the in-batch end-batch check lacked XbPar and killed 114a twice): every isolation `if ((Xbow1)` honours the switch
     $n++; $src = @(Get-Content -LiteralPath $PSCommandPath | Where-Object { $_ -match '^\s*if \(+Xbow1\)' -and $_ -notmatch 'XbPar' }); $ok = $src.Count -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b xbow-parallel: every isolation check honours the switch ($($src.Count) without XbPar)"
+    foreach ($c in @(@('both have KenshiFP', 'AutomationHarness.dll=974DBA03,KenshiFP.dll=B17B98D5', 'AutomationHarness.dll=974DBA03,KenshiFP.dll=B17B98D5', $false),
+                     @('instance 2 hash blank (m105 232)', 'AutomationHarness.dll=974DBA03,KenshiFP.dll=B17B98D5', 'AutomationHarness.dll=974DBA03', $true),
+                     @('KenshiFP= empty value', 'KenshiFP.dll=B17B98D5', 'KenshiFP.dll=', $true), @('instance 1 has none either', 'AutomationHarness.dll=1', 'AutomationHarness.dll=1', $false))) {
+        $n++; $g = [bool](Kfp2Gap $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) KenshiFP gap after sync, $($c[0]): gap=$g"
+    }
+    $script:XbParTest = $null; $n++; $ok = (XbPar) -ne (Test-Path (Join-Path $runs "runner\4080b.xbow-serial")) -and ($IdleStopMin -eq 0) -and ($FilmAfterMin -eq 0); if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) speed-scout r8: crossbow parallel by default (now $(XbPar)), IdleStopMin=$IdleStopMin FilmAfterMin=$FilmAfterMin"
     "LANE4080B-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
 
 # ---------------------------------------------------------------- loop (started by rig-runner.ps1 -Rig 4080b)
 $rd = Join-Path $runs 'runner'; $qd = Join-Path $runs 'queue'
 . (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
+. (Join-Path $PSScriptRoot 'queue-dry.ps1')   # DryNote/DryClear: idle reason runner\<lane>.dry + coordinator.note-from-runner when the queues run dry (speed-scout r8)
 foreach ($d in "$qd\$Lane", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $log = Join-Path $rd "$Lane.log"; $stateF = Join-Path $rd "$Lane.state"; $curF = Join-Path $rd "$Lane.cur"
+$dryNF = Join-Path $runs "agents\$(if ($Fake) { 'fake-' })coordinator.note-from-runner"
 $stopF = Join-Path $rd "$Lane.stopped"; $tdrF = Join-Path $runs "ALERT-$Lane-tdr.txt"; $tdr1 = Join-Path $runs 'ALERT-4080-tdr.txt'
 $owner = "runner-$Lane"; $K2 = "C:\KenshiInst\$Inst"; $K1 = 'C:\Program Files (x86)\Steam\steamapps\common\Kenshi'; $distro = 'DwemerAI4Skyrim3'
 $gitBash = 'C:\Program Files\Git\bin\bash.exe'
@@ -415,8 +429,9 @@ while ($true) {
     } else { $noLowSince = $null }
     if (-not $f -and -not $fill) {
         if ($rm -and $rm.k2 -and ((Get-Date) - $idleSince).TotalMinutes -ge $IdleStopMin) { Stop2 "queue empty $IdleStopMin min" }
-        State "idle: no work for lane $Lane (own folder, queue\4080/any gfx-low, changed filler; filming after $FilmAfterMin min while lane 4080 is busy$(if ((CapState) -like 'FAIL*') { ': OFF, CAPPROOF FAIL' }))$(if ($rm -and $rm.k2) { ' (instance 2 up)' })$(if ($rm -and -not $rm.ok) { ' (4080 unreachable)' })"; Start-Sleep $TickSec; continue
+        State "idle: no work for lane $Lane (own folder, queue\4080/any gfx-low, changed filler; filming after $FilmAfterMin min while lane 4080 is busy$(if ((CapState) -like 'FAIL*') { ': OFF, CAPPROOF FAIL' }))$(if ($rm -and $rm.k2) { ' (instance 2 up)' })$(if ($rm -and -not $rm.ok) { ' (4080 unreachable)' })"; $null = DryNote $Lane "$((Get-Content $stateF -TotalCount 1) -replace '^\S+ ', '')" $rd $dryNF $qd; Start-Sleep $TickSec; continue
     }
+    DryClear $Lane $rd
     if ($fill) { $src = $fill.Run; $name = $fill.Name } else { $src = $f.FullName; $name = $f.Name }
     $txt = @(Get-Content $src)
     $own = @($txt | Where-Object { $_ -match '^\s*#\s*owner:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1); $own = if ($own) { $own[0] } else { 'coordinator' }
@@ -469,6 +484,12 @@ while ($true) {
     if (-not $up) {
         $sy = @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('sync', '-Instance', "$Inst", '-Saves', $saves))
         Log "instance sync: $(@($sy | Where-Object { $_ -like 'sync instance*' }) -join ' ')"
+        $rs = Remote; $gap = if ($rs.ok) { Kfp2Gap $rs.dll1 $rs.dll2 } else { $null }
+        if ($gap) {
+            Log "REFUSED $name : $gap"; Set-Content $kfpF "$(Get-Date -Format s) $gap"; Note 'coordinator' "lane $Lane PARKED: $gap (Defender? exclusion for $K2 on the 4080); resumes by itself within 10 min"
+            if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue; $script:fillBad[$name] = Get-Date } else { Move-Item -LiteralPath $src (Join-Path "$qd\4080" $name) -Force -ErrorAction SilentlyContinue; Log "$name back to queue\4080" }
+            Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; $idleSince = Get-Date; continue
+        }
         if (-not ($sy -match '^sync instance')) { Drop "instance 2 sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
         $o = if ($film) { Ssh4Enc "Remove-Item env:KAH_VIDEO_MODE -ErrorAction SilentlyContinue; & C:\KAH\kcfg.ps1 test -Instance $Inst -Gfx full" } else { Ssh4Enc "`$env:KAH_VIDEO_MODE='$VideoMode'; & C:\KAH\kcfg.ps1 test -Instance $Inst -Gfx low" }
         Log "kcfg ($want): $($o -join ' / ')"

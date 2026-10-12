@@ -153,6 +153,17 @@ function LazyNeed([string]$need, [bool]$reusable, [string]$installed, $instP, [s
 # batch with no batch.pid yet: 'wait' | 'requeue' (no row ran: back into queue\<rig>\, once per 2 h, not a filler copy) | 'fail'.
 # Judged 3 min after the start command, or 90 s into this runner process when an earlier runner issued the start
 # (speed-scout 2026-10-11: a runner restart 1 s after the 4080 start of 90-fists-ini-4080 killed it; 3 idle min, list lost).
+function LaneALow([bool]$isReal, [int]$bcIdle, [string]$gfx) {   # $true = lane A leaves this list to lanes B/C (lanes B/C up)
+    if ($gfx -notmatch '^low') { return $false }
+    if ($isReal) { return $bcIdle -gt 0 }
+    $true
+}
+function StealPick([string]$rig, [bool]$otherBusy, [int]$n) {   # index of the other rig's list to steal, -1 = none
+    if ($n -lt 1) { return -1 }
+    if ($otherBusy) { return 0 }
+    if ($rig -eq '5090' -and $n -ge 2) { return 1 }
+    -1
+}
 function NeverStartedAct([datetime]$t0, [datetime]$loopStart, [datetime]$now, [bool]$filler, [double]$requeuedAgoH) {
     if (($now - $t0).TotalMinutes -lt 3 -and -not ($t0 -lt $loopStart -and ($now - $loopStart).TotalSeconds -ge 90)) { return 'wait' }
     if (-not $filler -and $requeuedAgoH -ge 2) { 'requeue' } else { 'fail' }
@@ -279,6 +290,17 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     # 4080 sync covers every helper a synced script names (rg-02 1011-0927: fp-control.sh's fp-yaw-free.awk never synced)
     $sc = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --check' 2>&1 | ForEach-Object { "$_" })
     $ok = $LASTEXITCODE -eq 0; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync helper closure: $(($sc | Select-Object -First 3) -join ' / ')"
+    # speed-scout r8: lane A leaves gfx-low work to lanes B/C; lane A steals real 4080 work before filler; queue-dry notes
+    foreach ($c in @(@($true, 1, 'low', $true, 'real low, lane B idle -> B'), @($true, 0, 'low', $false, 'real low, B/C busy -> A'), @($true, 1, 'full', $false, 'real full -> A'),
+                     @($true, 1, '', $false, 'real no header (full) -> A'), @($false, 0, 'low', $true, 'filler low, B/C up -> never A'), @($false, 1, 'full', $false, 'filler full -> A'))) {
+        $n++; $g = LaneALow $c[0] $c[1] $c[2]; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane A gfx-low rule, $($c[4]): leave=$g"
+    }
+    foreach ($c in @(@('5090', $true, 3, 0, '4080 busy: head'), @('5090', $false, 2, 1, '4080 free, 2 queued: 2nd'), @('5090', $false, 1, -1, '4080 free, 1 queued: none'),
+                     @('5090', $true, 0, -1, 'empty'), @('4080', $false, 3, -1, '4080 rig, 5090 free: none'), @('4080', $true, 2, 0, '4080 rig, 5090 busy: head'))) {
+        $n++; $g = StealPick $c[0] $c[1] $c[2]; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) steal pick $($c[4]): $g"
+    }
+    . (Join-Path $PSScriptRoot 'queue-dry.ps1'); $qy = @(QueueDrySelfTest); $ok = $qy[-1] -like 'QUEUE-DRY-SELFTEST PASS*'; if (-not $ok) { $bad++; $qy | Where-Object { $_ -like 'FAIL*' } }; $n++
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) queue-dry.ps1: $($qy[-1])"
     # lane 5090b (second game instance, rig-lane2.ps1): list eligibility (gfx low, crossbow guard, no Stobe), admission, TDR filter
     $l2 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l2[-1]) -like 'LANE2-SELFTEST PASS*'; if (-not $ok) { $bad++; $l2 | Where-Object { $_ -like 'FAIL*' } }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 5090b rig-lane2.ps1 -SelfTest: $($l2[-1])"
@@ -306,6 +328,7 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 . (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
+. (Join-Path $PSScriptRoot 'queue-dry.ps1')   # DryNote/DryClear (speed-scout r8): idle reason runner\<rig>.dry + coordinator.note-from-runner the moment the queues run dry
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
 foreach ($d in $rd, "$qd\5090", "$qd\4080", "$qd\any", "$qd\filler", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $distro = 'DwemerAI4Skyrim3'
@@ -409,6 +432,7 @@ if ($Rig -eq '4080b') { & "$auto\rig-lane2-4080.ps1" -TickSec ([Math]::Min($Tick
 
 # ---------------------------------------------------------------- helpers
 $log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"; $gfxF = Join-Path $rd "$Rig.gfx"
+$dryNF = Join-Path $runs "agents\$(if ($Fake) { 'fake-' })coordinator.note-from-runner"
 function RunningGfx { $g = ReadShared $gfxF; if ($g -and $g.Trim() -eq 'low') { 'low' } else { 'full' } }
 $alertF = if ($Fake) { Join-Path $rd "ALERT-$Rig.txt" } else { Join-Path $runs "ALERT-$Rig.txt" }
 $owner4 = 'rig4080'; $owner5 = 'runner-5090'
@@ -702,7 +726,13 @@ function QueuedLists {   # every list this rig may take, FIFO order (own folder 
     if ($Rig -eq '5090' -and $real.Count -gt 1 -and ((PidAlive '5090b') -or (PidAlive '5090c'))) { $real = @(@($real | Where-Object { (Header $_.FullName 'gfx') -ne 'low' }) + @($real | Where-Object { (Header $_.FullName 'gfx') -eq 'low' })) }
     # lane 4080 likewise while lane 4080b (rig-lane2-4080.ps1) is up
     if ($Rig -eq '4080' -and $real.Count -gt 1 -and (PidAlive '4080b')) { $real = @(@($real | Where-Object { (Header $_.FullName 'gfx') -ne 'low' }) + @($real | Where-Object { (Header $_.FullName 'gfx') -eq 'low' })) }
+    # lane A (speed-scout r8, coordinator m105 18:35: lane A killed its full-gfx game to relaunch in gfx low for filler rg-02):
+    # gfx-low REAL lists stay for lanes B/C while one of them is up with no batch (it takes them within one 30-s tick), and
+    # gfx-low FILLER is never lane A's while lane B or C is up (LaneALow, -SelfTest)
+    $bc = if ($Rig -eq '5090') { @('5090b', '5090c' | Where-Object { PidAlive $_ }) } else { @() }; $bcIdle = @($bc | Where-Object { -not (Test-Path (Join-Path $rd "$_.cur")) })
+    if ($Rig -eq '5090' -and $bcIdle.Count) { $real = @($real | Where-Object { -not (LaneALow $true $bcIdle.Count (Header $_.FullName 'gfx')) }) }
     if ($real.Count) { return $real }
+    if ($Rig -eq '5090' -and $bc.Count) { return @(FillerLists | Where-Object { -not (LaneALow $false $bcIdle.Count (Header $_.FullName 'gfx')) }) }
     FillerLists
 }
 # EITHER RIG TAKES ANY LIST (Shay 2026-10-10 21:30; speed-parity's list-rigcheck.sh): RigCheck = can this list run on this
@@ -758,8 +788,12 @@ function RealLists {
     if ($n) { return }
     # work stealing: the other rig is busy and its own folder has a rig-neutral list this rig can run
     $busy = @(Get-ChildItem "$qd\running" -Filter "${other}__*" -File -ErrorAction SilentlyContinue).Count -or (Test-Path (Join-Path $rd "$other.cur"))
-    if (-not $busy) { return }
-    $h = Get-ChildItem "$qd\$other" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
+    # lane A (speed-scout r8, coordinator m105 18:36): with queue\5090 + any\ empty it takes real 4080 work before any filler: the
+    # head while lane 4080 is busy, else the SECOND list (the free 4080 starts its head itself) when queue\4080 holds >= 2
+    $ol = @(Get-ChildItem "$qd\$other" -Filter *.list -File -ErrorAction SilentlyContinue | QSort)
+    $pick = StealPick $Rig ([bool]$busy) $ol.Count
+    if ($pick -lt 0) { return }
+    $h = $ol[$pick]
     if (-not $h -or (DefWaiting $h.Name) -or (Header $h.FullName 'rig') -or ($Rig -eq '4080' -and (StobeRows $h.FullName))) { return }
     if ((RigCheck $h.FullName) -ne 'OK') { return }
     $h
@@ -1687,6 +1721,7 @@ while ($true) {
             } elseif ($reason) { State "paused: $reason"; ClearAlert; $alerted = $false }
             elseif ($other) { State "rig busy with other work ($s)$(if ($f) { "; next $($f.Name)" })" }
             elseif ($f) {
+                DryClear $Rig $rd
                 # the rig is free: start at once if Kenshi is closed / we own it, else after IdleMin of an idle open game
                 # free rig with a list waiting: start at once (the previous batch is DONE/GAMEDONE or Kenshi is closed);
                 # only a 4080 Kenshi left open with no job waits IdleMin (someone may be using it by hand)
@@ -1700,6 +1735,7 @@ while ($true) {
                 if (-not $script:ncIdle) { $script:ncIdle = $true; Log "IDLE no changed work ($($script:fillerUnchanged) filler lists unchanged since their last PASS)" }
                 NoChangeIdle "$($script:fillerUnchanged) filler lists unchanged since their last PASS on KenshiFP $((InstalledHashes).K)"
                 State "idle: no changed work (queue empty, filler unchanged since last PASS)"; ClearAlert; $alerted = $false
+                $null = DryNote $Rig "idle: no changed work (queue empty, filler unchanged since last PASS)" $rd $dryNF $qd
                 if ($idleFor -ge $IdleMin -and -not $Fake) {   # give the rig back as the empty-queue path does (no IDLE-GAME block)
                     if ($Rig -eq '4080' -and $script:keep4080) { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null; $script:keep4080 = $false; Log '4080 Kenshi stopped (no changed work)' }
                     if ($Rig -eq '5090') { $lk = Join-Path $runs 'game.lock'; if ((Test-Path $lk) -and (Get-Content $lk -TotalCount 1).Trim() -eq $owner5) {
@@ -1707,7 +1743,7 @@ while ($true) {
                         Remove-Item $lk; Log 'lock released (no changed work)' } }
                 }
             } else {
-                State "queue empty ($s)"
+                State "queue empty ($s)"; $null = DryNote $Rig "queue empty ($s)" $rd $dryNF $qd
                 if ($idleFor -ge $IdleMin -and -not $alerted) {
                     $fs = if ($script:fillerSkips.Count) { " Filler skipped: $($script:fillerSkips -join '; ')." } else { ' queue\filler\ has nothing for this rig.' }
                     Alert "$Rig idle $([int]$idleFor) min and its queue is empty (queue\$Rig\ and queue\any\ have no *.list).$fs Put the next batch list there now, or record kenshi-ctl.ps1 idle$(if ($Rig -eq '4080') { '4080' }) `"<reason>`"."

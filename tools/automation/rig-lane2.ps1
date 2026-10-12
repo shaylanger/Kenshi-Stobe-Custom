@@ -11,7 +11,7 @@ Queue: C:\KenshiTestRuns\queue\<lane>\*.list (run-batch.sh list format, FIFO by 
   A list is taken only if
   - "# gfx: low" (no recording / screenshot / pixel checks: filming stays on lane A), no Stobe rows (STOBE-*,
     tests/ingame/stobe, *.txt), no "# rig: 4080";
-  - crossbow guard (NO PC CRASHES, 2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): no row command names
+  - [OFF since speed-scout r8, Shay 17:20 + 19:00: only while runner\<lane>.xbow-serial exists] crossbow guard (NO PC CRASHES, 2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): no row command names
     a crossbow/ranged/turret/reload script or switch (fp-xbow*, crossbow, ranged, turret, reload, XB* rows, VMQUICK);
   - no "# tdr-isolate: yes" header. TDR isolation: while lane A runs such a list (or one with a fire/reload row, FireRx), the
     lanes launch nothing, stop an idle game, and end + requeue a running batch (xbow-escalate 2026-10-11).
@@ -38,13 +38,13 @@ Every tick (30 s) of a batch: TDR guard = System-log nvlddmkm/Display 4101|153 s
   rig-runner.ps1 TdrFilter) or an ALERT-5090-tdr.txt from lane A -> PREEMPT TDR, instance n stopped, ALERT-<lane>-tdr.txt,
   <lane>.stopped, loop exits (lane A's own guard stops instance 1 on the same events: one GPU). batch-health.sh STALL held
   >= 10 min -> rig-runner-probe.sh end-batch + instance n stopped. DONE -> queue\done\<list> + .result + .SUMMARY.txt.
-  Queue empty 5 min -> instance n stopped (frees ~4 GB RAM / 2.5 GB VRAM).
+  Queue empty (IdleStopMin, 0 since speed-scout r8) -> instance n stopped (frees ~4 GB RAM / 2.5 GB VRAM).
 Files: runner\<lane>.{pid,log,state,cur,stopped,restart}; ALERT-<lane>-tdr.txt.
   rig-lane2.ps1 -SelfTest   eligibility + admission (GPU/RAM/CPU) + TDR filter + lane table + memory-guard order (no side effects)
 #>
 param([switch]$SelfTest, [switch]$Fake, [ValidateSet('5090b', '5090c')][string]$Lane = '5090b', [int]$TickSec = 30, [int]$MinGpuMB = 6144,
       [int]$MinRamMB = 7168, [int]$HoldRamMB = 4096, [int]$KillRamMB = 2048, [int]$MaxCpuPct = 85, [int]$Fps = 30,
-      [int]$StallMin = 10, [int]$IdleStopMin = 5, [int]$SlotPitch = 0, [int]$FilmAfterMin = 2, [string]$FilmMode = '1600 x 900', [string]$FilmMonitor = 'DISPLAY1',
+      [int]$StallMin = 10, [int]$IdleStopMin = 0, [int]$SlotPitch = 0, [int]$FilmAfterMin = 0, [string]$FilmMode = '1600 x 900', [string]$FilmMonitor = 'DISPLAY1',
       [string]$VideoMode = '1024 x 768', [string]$Monitor = 'DISPLAY2')   # extra lanes: small windows side by side on DISPLAY2 (lane A films on DISPLAY1, Shay 14:28/14:31)
 # lane table: instance (D:\KenshiInst\<n>), window slot on $Monitor, CPU admission (a third game only while the CPU has room)
 $Lanes = [ordered]@{ '5090b' = @{ Inst = 2; Slot = 0; Cpu = $false; Film = $true }; '5090c' = @{ Inst = 3; Slot = 1; Cpu = $true; Film = $true } }
@@ -67,17 +67,23 @@ function LaneGfx([string[]]$lines) { $g = @($lines | Where-Object { $_ -match '^
 function Rig4080Copy([string[]]$lines) { @($lines | ForEach-Object { $_ -replace '\bRIG=4080\b', 'RIG=5090' }) }
 function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the lane may run this list, else why not ($film: a filming lane in film mode)
     if ($lines -match '^\s*#\s*rig:\s*4080') { return '"# rig: 4080" list' }
-    if (IsoHeader $lines) { return '"# tdr-isolate: yes" (crossbow/turret TDR isolation: lane A only)' }
+    if ((XbGuard) -and (IsoHeader $lines)) { return '"# tdr-isolate: yes" (crossbow/turret TDR isolation: lane A only)' }
     if (-not $film -and (LaneGfx $lines) -ne 'low') { return 'not "# gfx: low" (filming/full-gfx lists stay on lane 1)' }
     $rows = LaneRows $lines
     if (-not $rows.Count) { return 'no rows' }
     foreach ($r in $rows) {
         $f = @($r -split '\|'); $cmd = $f[-1]; $id = $f[0].Trim()
         if (($cmd -replace '\S+=\S+', '') -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (lane 2 has no Stobe server path)" }
-        $x = XbowRow $r; if ($x) { return "crossbow guard: row $id names crossbow/ranged/turret work ($x)" }
+        $x = if (XbGuard) { XbowRow $r }; if ($x) { return "crossbow guard: row $id names crossbow/ranged/turret work ($x)" }
     }
     $null
 }
+# crossbow guard + TDR isolation are OFF (Shay 17:20 "crossbow on all rigs/lanes, no TDR holds", 19:00 "remove any blockers";
+# speed-scout r8): only while C:/KenshiTestRuns/runner/<lane>.xbow-serial exists (create it after a TDR if Shay wants crossbow
+# serial again) does the lane refuse crossbow/tdr-isolate lists and hold while lane A runs one. The TDR guard (a real
+# GPU reset stops the lane) stays on.
+$script:XbGuardTest = $null   # -SelfTest pins it
+function XbGuard { if ($null -ne $script:XbGuardTest) { return $script:XbGuardTest }; Test-Path -LiteralPath (Join-Path $runs "runner\$Lane.xbow-serial") }
 function XbowRow([string]$r) {   # $null or the crossbow word a row names (the melee fixture's save name and the WS_NOXBOW / pf_noxbow guard are not crossbow work)
     $f = @($r -split '\|'); $id = $f[0].Trim()
     $c = $f[-1] -replace '(?i)kah-fpxbow', 'kah-SAVE' -replace '(?i)\w*noxbow\w*', 'GUARD'
@@ -122,7 +128,7 @@ function LaneTdrFilter([string[]]$lines, [long]$since) {
     @($lines | Where-Object { $q = "$_" -split '\|', 4; $q.Count -ge 3 -and $q[0] -match '^\d+$' -and [long]$q[0] -ge $since -and $q[2] -in '4101', '153' -and $q[1] -match '^(nvlddmkm|display)$' })
 }
 if ($SelfTest) {
-    $bad = 0; $n = 0
+    $bad = 0; $n = 0; $script:XbGuardTest = $true   # the legacy guard cases below; guard-off cases at the end
     $low = '# gfx: low'
     $cases = @(
         @('melee gfx low', @($low, 'M | kah-fpxbow | Malzin | Axima | 1200 | DRYRUN_NOREC=1 bash {CR}/x/fp-manual-melee.sh Malzin Skaera {OUT}/M'), ''),
@@ -198,15 +204,25 @@ if ($SelfTest) {
             @('fists on the xbow save', @($low, 'fq0 | kah-fpxbow | a | b | 1 | RIG=5090 FIST_NATIVE=1 bash x/fp-fist-take.sh'), $false),
             @('melee list on the xbow save with WS_NOXBOW', @($low, 'W | kah-fpxbow | a | b | 1 | WS_NOXBOW=1 bash x/fp-weapon-sweep.sh'), $false))
     foreach ($c in $ic) { $n++; $g = [bool](IsoList $c[1]); $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane2 TDR isolation $($c[0]): iso=$g" }
+    # speed-scout r8 (Shay 17:20/19:00): guard off by default = crossbow / turret / tdr-isolate lists run on this lane, no hold
+    $script:XbGuardTest = $null; $n++; $ok = -not (XbGuard) -eq -not (Test-Path (Join-Path $runs "runner\$Lane.xbow-serial")); if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) xbow guard follows runner\$Lane.xbow-serial (now $(XbGuard))"
+    $script:XbGuardTest = $false
+    foreach ($c in @(@('crossbow script', @($low, 'XC | kah-fpxbow | a | b | 1 | bash x/fp-xbow-tdrconfirm.sh {OUT}/XC')), @('turret row', @($low, 'T1 | s | a | b | 1 | bash x/fp-turret-take.sh')),
+                     @('tdr-isolate list', @($low, '# tdr-isolate: yes', 'K | s | a | b | 1 | bash x/fp-controls.sh')), @('film xbow list', @('# gfx: full', 'F | s | a | b | 1 | bash x/fp-xbow-take.sh'), $true))) {
+        $n++; $g = [string](LaneReject $c[1] ([bool]($c.Count -ge 3 -and $c[2]))); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) guard off: $($c[0]) taken: got '$g'"
+    }
+    $n++; $ok = ($IdleStopMin -eq 0) -and ($FilmAfterMin -eq 0); if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) no idle holds: IdleStopMin=$IdleStopMin FilmAfterMin=$FilmAfterMin (Shay 19:00)"
     "LANE2-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
 
 # ---------------------------------------------------------------- loop (started by rig-runner.ps1 -Rig 5090b|5090c)
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 . (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
+. (Join-Path $PSScriptRoot 'queue-dry.ps1')   # DryNote/DryClear: idle reason runner\<lane>.dry + coordinator.note-from-runner when the queues run dry (speed-scout r8)
 $qd = if ($Fake) { Join-Path $rd 'queue' } else { Join-Path $runs 'queue' }
 foreach ($d in "$qd\$Lane", "$qd\running", "$qd\done", "$qd\failed") { New-Item -ItemType Directory -Force $d | Out-Null }
 $log = Join-Path $rd "$Lane.log"; $stateF = Join-Path $rd "$Lane.state"; $curF = Join-Path $rd "$Lane.cur"
+$dryNF = Join-Path $runs "agents\$(if ($Fake) { 'fake-' })coordinator.note-from-runner"
 $stopF = Join-Path $rd "$Lane.stopped"; $tdrF = Join-Path $runs "ALERT-$Lane-tdr.txt"; $tdr1 = Join-Path $runs 'ALERT-5090-tdr.txt'
 $owner = "runner-$Lane"; $K2 = "D:\KenshiInst\$Inst"; $K1 = 'D:\Steam\steamapps\common\Kenshi'; $distro = 'DwemerAI4Skyrim3'
 function Log([string]$m) { Add-Content $log "$((Get-Date).ToString('MM-dd HH:mm:ss')) $m" -ErrorAction SilentlyContinue }
@@ -300,7 +316,7 @@ function IsoA {   # lane A (rig-runner -Rig 5090) runs a TDR-isolation list (run
     # Shay 2026-10-11 17:00 (speed): while C:/KenshiTestRuns/runner/<lane>.iso-off exists, this lane keeps running its own
     # NON-crossbow lists beside lane A's crossbow list (the crossbow guard still refuses crossbow lists here; the TDR guard
     # still stops the lane); the coordinator deletes the file after any TDR.
-    if (Test-Path -LiteralPath (Join-Path $runs "runner/$Lane.iso-off")) { return $false }
+    if (-not (XbGuard) -or (Test-Path -LiteralPath (Join-Path $runs "runner/$Lane.iso-off"))) { return $false }
     foreach ($r in @(Get-ChildItem "$qd\running" -Filter '5090__*' -File -ErrorAction SilentlyContinue)) { if (IsoList @(Get-Content $r.FullName)) { return $true } }
     $false
 }
@@ -500,8 +516,9 @@ while ($true) {
         if ((K2Procs) -and (RamFreeMB) -lt $HoldRamMB) { Stop2 "idle and RAM free $(RamFreeMB) MB < $HoldRamMB" }
         if ((K2Procs) -and (OtherLaneFilming)) { Stop2 'idle while lane 5090b films (Shay 15:20: stop lane 3 for it)' }
         if ((K2Procs) -and ((Get-Date) - $idleSince).TotalMinutes -ge $IdleStopMin) { Stop2 "queue empty $IdleStopMin min" }
-        State "idle: no work for lane $Lane (own folder, queue\5090/any gfx-low, changed filler$(if ($Lanes[$Lane].Film) { ', filming after ' + $FilmAfterMin + ' min' }))$(if (K2Procs) { " (instance $Inst up)" })"; Start-Sleep $TickSec; continue
+        State "idle: no work for lane $Lane (own folder, queue\5090/any gfx-low, changed filler$(if ($Lanes[$Lane].Film) { ', filming after ' + $FilmAfterMin + ' min' }))$(if (K2Procs) { " (instance $Inst up)" })"; $null = DryNote $Lane "$((Get-Content $stateF -TotalCount 1) -replace '^\S+ ', '')" $rd $dryNF $qd; Start-Sleep $TickSec; continue
     }
+    DryClear $Lane $rd
     if ($fill) { $runPre = $fill.Run; $name = $fill.Name; $txt = @(Get-Content $runPre) } else { $runPre = $null; $txt = @(Get-Content $f.FullName); $name = $f.Name }
     $own = @($txt | Where-Object { $_ -match '^\s*#\s*owner:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1); $own = if ($own) { $own[0] } else { 'coordinator' }
     $film = $Lanes[$Lane].Film -and (LaneGfx $txt) -ne 'low'
