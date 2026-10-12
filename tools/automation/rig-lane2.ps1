@@ -63,6 +63,10 @@ function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\
 # instance sync failure (speed-scout r9: 210-fists-zpv4-any went to failed\ on lane 5090c 19:11 for a sync whose output lacked
 # the launch save line, the next sync 90 s later was fine): full output -> runner\<lane>.syncfail.txt, one retry, then a list
 # stolen from queue\5090|any goes BACK there (lane trouble is not the list's failure); only an own-folder list fails.
+# launch save = '# launch:' header, else row 1's save column. @(LaneRows ..)[0]: a ONE-row list returns a bare string and
+# [0] gave its first character (213-fists-guard 2026-10-11: launch '' -> sync 'failed' twice, lane 5090b idled)
+function LaunchSave([string[]]$lines) { $h = @($lines | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
+    if ($h.Count) { return $h[0] }; $r = @(LaneRows $lines); if (-not $r.Count) { return '' }; "$((($r[0] -split '\|') + @('',''))[1])".Trim() }
 function SyncOk([string[]]$sy, [string]$launch) { [bool]@($sy | Where-Object { $_ -like "save $launch -> *" }).Count }
 function SyncFailAction([int]$try, [string]$stoleFrom) { if ($try -lt 2) { 'retry' } elseif ($stoleFrom) { "requeue $stoleFrom" } else { 'fail' } }
 function CapMode { $m = "$((Get-Content 'C:\KenshiTestRuns\capture.default' -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if ($env:KAH_CAPTURE) { $m = $env:KAH_CAPTURE }; if ($m) { $m } else { 'gdigrab' } }
@@ -219,6 +223,9 @@ if ($SelfTest) {
     $n++; $ok = ($IdleStopMin -eq 0) -and ($FilmAfterMin -eq 0); if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) no idle holds: IdleStopMin=$IdleStopMin FilmAfterMin=$FilmAfterMin (Shay 19:00)"
     $okSy = @('save kah-fpxbow -> D:\KenshiInst\3\save\kah-fpxbow', 'save kah-squin -> D:\KenshiInst\3\save\kah-squin'); $badSy = @('sync instance 3 -> D:\KenshiInst\3 : 0 junctions', 'save kah-squin -> D:\KenshiInst\3\save\kah-squin')
     foreach ($c in @(@('launch line present', (SyncOk $okSy 'kah-fpxbow'), $true), @('launch line missing (210 case)', (SyncOk $badSy 'kah-fpxbow'), $false),
+                     @('launch from the only row (213 case)', (LaunchSave @('# owner: x', 'z | kah-fpxbow | a | b | 9 | bash x')), 'kah-fpxbow'),
+                     @('launch header wins', (LaunchSave @('# launch: kah-fpstudio', 'z | kah-fpxbow | a | b | 9 | bash x', 'y | kah-squin | a | b | 9 | bash y')), 'kah-fpstudio'),
+                     @('launch from row 1 of 2', (LaunchSave @('z | kah-fpxbow | a | b | 9 | bash x', 'y | kah-squin | a | b | 9 | bash y')), 'kah-fpxbow'),
                      @('1st fail = retry', (SyncFailAction 1 'C:\q\any'), 'retry'), @('2nd fail, stolen = requeue', (SyncFailAction 2 'C:\q\any'), 'requeue C:\q\any'), @('2nd fail, own list = fail', (SyncFailAction 2 ''), 'fail'))) {
         $n++; $ok = "$($c[1])" -eq "$($c[2])"; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) sync failure: $($c[0]): $($c[1])"
     }
@@ -546,8 +553,7 @@ while ($true) {
     $have = "$((Get-Content $gfxF -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if (-not $have) { $have = 'low' }   # no .gfx yet = a game the lane started before film mode existed: low
     if ($up -and $have -ne $want) { Stop2 "gfx switch to $want"; $up = $false }
     if (-not $up) { $why = LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 30); if ($why) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue }; State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
-    $launch = @($txt | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
-    $launch = if ($launch) { $launch[0] } else { ((LaneRows $txt)[0] -split '\|')[1].Trim() }
+    $launch = LaunchSave $txt
     # every kah-* test save, not only the list's header one (Shay 2026-10-11: all lanes can use all saves at the same time).
     # run-batch's load_target swaps the launch save for the row script's pf_load target and rows name their own saves:
     # m102 96-agree-rec sat on the menu 6 min because instance $Inst had kah-fpxbow but not kah-fpstudio.

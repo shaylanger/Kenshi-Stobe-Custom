@@ -459,7 +459,7 @@ while ($true) {
         if ($script:pdRetry[$name] -le 3) { if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue }; State "dry run of $name gave no verdict ($($pv.V)), retry $($script:pdRetry[$name])/3"; Start-Sleep $TickSec; continue } }
     if ($pv.V -ne 'PASS') { Drop "dryrun $($pv.V): $sum $(@($pv.Lines | Where-Object { $_ -match '^DRYRUN .* FAIL' } | Select-Object -First 2) -join ' | ')"; continue }
     $launch = @($txt | Where-Object { $_ -match '^\s*#\s*launch:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
-    $launch = if ($launch) { $launch[0] } else { ((LaneRows $txt)[0] -split '\|')[1].Trim() }
+    $launch = if ($launch) { $launch[0] } else { (@(LaneRows $txt)[0] -split '\|')[1].Trim() }
     if ($launch -in '-', 'home') { $launch = 'kah-fpxbow' }
     $outN = @($txt | Where-Object { $_ -match '^\s*#\s*out:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
     $outN = if ($outN) { "$($outN[0])-i2-$(Get-Date -Format MMdd-HHmm)" } else { "$([IO.Path]::GetFileNameWithoutExtension($name))-i2-$(Get-Date -Format MMdd-HHmm)" }
