@@ -379,11 +379,8 @@ function Fail([string]$path, [string]$name, [string]$own, [string]$why) {
     Note $own "list $name NOT run on lane $Lane ($why); $dst.result."
 }
 function Retitle { if (K2Procs) { $o = Ctl2 @('retitle'); if ("$o" -match 'set') { Log "$o"; $t = Ctl2 @('ontop', $(if (Pin) { 'on' } else { 'off' })); Log "lane $Lane window $(if (Pin) { 'pinned (filming, gdigrab)' } else { 'not pinned' }): $t" } } }   # topmost only while filming
-function TdrStop([string]$m, [string]$out) {
-    Set-Content $tdrF @("ALERT $Lane $(Get-Date -Format HH:mm) $m", "Lane $Lane stopped (instance $Inst). A TDR is a crash warning (2026-10-11 BSOD). Delete only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Lane.")
-    if ($out) { Set-Content (Join-Path $out 'PREEMPT') 'TDR' -ErrorAction SilentlyContinue }
-    Stop2 'TDR'; Log "TDR $m"; Note 'coordinator' "$m. Lane $Lane STOPPED, instance $Inst stopped."
-    Set-Content $stopF "$(Get-Date -Format s) by TDR guard: $m"; State "STOPPED TDR: $m"; Remove-Item (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue; exit 0
+function TdrStop([string]$m, [string]$out) {   # Shay 2026-10-11 19:40: TDR guard REMOVED: log only, the lane keeps running
+    Add-Content (Join-Path $runs "TDR-LOG-$Lane.txt") "$(Get-Date -Format s) $m"; Log "TDR $m (guard removed: lane keeps running)"
 }
 
 # steal the first list from queue\5090 then queue\any that this lane may run ($film = filming lists, not gfx-low ones)
@@ -492,7 +489,6 @@ while ($true) {
         # a finished batch (DONE, e.g. the one a TDR stop left in <lane>.cur) is not guarded: 17:30 a restarted 5090c re-adopted
         # its 16:33 batch and alerted on a later TDR it never ran beside (the DONE branch below clears it)
         $live = -not (Test-Path (Join-Path $outW 'DONE'))
-        if ($live -and (Test-Path $tdr1)) { TdrStop "lane A TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outW }
         $ts = [Math]::Max($t0 - 30, (TdrHandledGet $Lane $rd $(if ($Fake) { $rd } else { Join-Path $runs 'gpulog' })) + 1)   # events already alerted never re-trip a restarted lane
         $h = if ($live) { @(LaneTdrFilter (TdrEvents $ts) $ts) } else { @() }; if ($h.Count) { TdrHandledSet $Lane (TdrNewest $h) 'lane-guard' $rd; TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
         if (IsoA) {   # TDR isolation: lane A started a crossbow/turret list -> end this batch now, requeue it (filler: just release the claim)
@@ -549,7 +545,6 @@ while ($true) {
         Remove-Item (Join-Path $rd "$Lane.restart"), (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue
         Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$auto\rig-runner.ps1", '-Rig', $Lane); Log 'restart: re-spawned'; exit 0
     }
-    if ((Test-Path $tdr1) -or (Test-Path $tdrF)) { Stop2 'TDR alert'; State "waiting: TDR alert present (no instance $Inst launch)"; Start-Sleep $TickSec; continue }
     if (IsoA) { Stop2 'TDR isolation'; State 'waiting: lane A runs a crossbow/turret list (TDR isolation)'; Start-Sleep $TickSec; continue }
     # pick (lane-5090c 2026-10-11): own folder head; else the first gfx-low list from queue\5090 then queue\any (coordinator
     # 14:35: no lane idles while another has a backlog; moved into queue\<lane> first: one rename, lane A can't take it too);

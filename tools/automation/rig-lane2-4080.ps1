@@ -280,11 +280,8 @@ function Fail([string]$path, [string]$name, [string]$own, [string]$why) {
     Set-Content "$dst.result" "FAILED $Lane $(Get-Date -Format s) $why"; Log "FAILED $name : $why"
     Note $own "list $name NOT run on lane $Lane ($why); $dst.result."
 }
-function TdrStop([string]$m, [string]$outN) {
-    Set-Content $tdrF @("ALERT $Lane $(Get-Date -Format HH:mm) $m", "Lane $Lane stopped (4080 instance 2). A TDR is a crash warning (2026-10-11 BSOD). Delete only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Lane.")
-    if ($outN) { $null = Ssh4Enc "Set-Content 'C:\KenshiTestRuns\$outN\PREEMPT' 'TDR'" }
-    Stop2 'TDR'; Log "TDR $m"; Note 'coordinator' "$m. Lane $Lane STOPPED, 4080 instance 2 stopped."
-    Set-Content $stopF "$(Get-Date -Format s) by TDR guard: $m"; State "STOPPED TDR: $m"; Remove-Item (Join-Path $rd "$Lane.pid"), (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; exit 0
+function TdrStop([string]$m, [string]$outN) {   # Shay 2026-10-11 19:40: TDR guard REMOVED: log only, the lane keeps running
+    Add-Content (Join-Path $runs "TDR-LOG-$Lane.txt") "$(Get-Date -Format s) $m"; Log "TDR $m (guard removed: lane keeps running)"
 }
 function Probe([string]$outP, [string]$act = '', [string]$why = '') {
     $a = @($outP) + $(if ($act) { @($act) } else { @() }) + $(if ($why) { @($why -replace '[^\w.=-]', '_') } else { @() })
@@ -363,7 +360,6 @@ while ($true) {
     $cur = if (Test-Path $curF) { @(Get-Content $curF) } else { @() }   # runPath, outN, start epoch, owner, start ISO, list name (rig-runner -Status reads [4] + [5])
     if ($cur.Count -ge 6) {
         $outN = $cur[1]; $t0 = [long]$cur[2]; $own = $cur[3]; $name = $cur[5]; $outP = "/c/KenshiTestRuns/$outN"
-        if (Test-Path $tdr1) { TdrStop "lane 4080 TDR alert ($((Get-Content $tdr1 -TotalCount 1)))" $outN }
         $ts = [Math]::Max($t0 - 30, (TdrHandledGet $Lane $rd (Join-Path $runs 'gpulog')) + 1)   # events already alerted never re-trip a restarted lane
         $h = @(LaneTdrFilter (TdrEvents $ts) $ts); if ($h.Count) { TdrHandledSet $Lane (TdrNewest $h) 'lane-guard' $rd; TdrStop "TDR (GPU driver reset) on the 4080 during lane $Lane list $name : $($h[0])" $outN }
         if ((Xbow1) -and -not (XbPar)) {   # TDR isolation (off while the xbow-parallel switch exists; 17:19 it ended 114a twice beside 116): lane 4080 started a crossbow/turret list -> end this batch now, requeue the list for later
@@ -424,7 +420,6 @@ while ($true) {
         Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$auto\rig-runner.ps1", '-Rig', $Lane); Log 'restart: re-spawned'; exit 0
     }
     $tdrOn = (Test-Path $tdr1) -or (Test-Path $tdrF)
-    if ($tdrOn) { $rm = Remote; if ($rm.k2) { Stop2 'TDR alert' }; State 'waiting: TDR alert present (no instance 2 launch)'; Start-Sleep $TickSec; continue }
     if ((Xbow1) -and -not (XbPar)) {   # TDR isolation (off while the xbow-parallel switch exists): no instance 2 beside lane 4080's crossbow/turret list (stop an idle one too)
         $rm = Remote; if ($rm.k2) { Stop2 'TDR isolation' }; State 'waiting: lane 4080 runs a crossbow list (TDR isolation)'; Start-Sleep $TickSec; continue
     }

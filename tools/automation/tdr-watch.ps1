@@ -46,7 +46,7 @@ try {
         $stamp = Get-Date -Format 'MMdd-HHmm'
         $evd = Join-Path $runs "tdr-$stamp-$r-evidence"
         $desc = "$($new.Count) GPU event(s) on rig $r outside/inside a batch, latest: $(($new | Sort-Object | Select-Object -Last 1).Substring(0, [Math]::Min(200, ($new | Sort-Object | Select-Object -Last 1).Length)))"
-        $af = Join-Path $runs "ALERT-$r-tdr.txt"
+        $af = Join-Path $runs "TDR-LOG-$r.txt"   # Shay 2026-10-11 19:40: guard removed, log only
         if (Test-Path $af) { Add-Content $af "tdr-watch $(Get-Date -Format HH:mm): $desc (evidence $evd)" }
         else { Set-Content $af @("ALERT $r $(Get-Date -Format HH:mm) TDR watch: $desc", "Evidence: $evd. A TDR is a crash warning (2026-10-11 BSOD): stop that rig's GPU work, tell Shay; delete this file only once he cleared the cause.") }
         Set-Content $sf "$newest handled $(Get-Date -Format s)"

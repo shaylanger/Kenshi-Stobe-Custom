@@ -484,23 +484,15 @@ function TdrGuard([string[]]$c, $p, [switch]$Force) {   # every tick of a runnin
     $af1 = "$((Get-Content $tdrF -TotalCount 1 -ErrorAction SilentlyContinue))"
     $m = if ($h.Count) { "TDR (GPU driver reset) on rig $Rig during list $($c[5]) row $row (batch started $($c[4])): $($h.Count) event(s), latest: $(($h[0]).Substring(0, [Math]::Min(200, $h[0].Length)))" }
          else { "TDR alert file on rig $Rig during list $($c[5]) row $row (batch started $($c[4])): $af1" }
-    if (Test-Path $tdrF) { Add-Content $tdrF "runner $Rig $(Get-Date -Format HH:mm): $m" } else { Set-Content $tdrF @("ALERT $Rig $(Get-Date -Format HH:mm) $m", "Runner $Rig stopped and the next list does not start. A TDR is a crash warning (2026-10-11 BSOD). Delete this file only once Shay cleared the cause, then rig-runner.ps1 -Start -Rig $Rig.", "list=$($c[5]) row=$row out=$($c[2]) time=$(Get-Date -Format s)") }
+    Add-Content (Join-Path $runs "TDR-LOG-$Rig.txt") "$(Get-Date -Format s) $m"   # Shay 2026-10-11 19:40: TDR guard REMOVED: log + evidence only
     Log "TDR $m"
-    $pre = "Set-Content 'C:\KenshiTestRuns\$(Split-Path $c[2] -Leaf)\PREEMPT' 'TDR'"
-    if ($Fake -or $Rig -eq '5090') { Set-Content (Join-Path $c[1] 'PREEMPT') 'TDR' } else { $null = Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($pre))) }
     if (-not $Fake) {   # evidence first (tdr-evidence.ps1 -> <out>\TDR-evidence: gpulog, events, batch.log tail, processes, LiveKernelReports)
         $evo = "C:\KenshiTestRuns\$(Split-Path $c[2] -Leaf)\TDR-evidence"
         $ev = if ($Rig -eq '5090') { & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\tdr-evidence.ps1" -Out (Join-Path $c[1] 'TDR-evidence') -Rig 5090 -Since $t0e -BatchLog (Join-Path $c[1] 'batch.log') 2>&1 | Select-Object -Last 1 }
               else { Ssh4Ps 'C:\KenshiModding\tools\automation\tdr-evidence.ps1' @('-Out', $evo, '-Rig', '4080', '-Since', "$t0e", '-BatchLog', "$evo\..\batch.log") | Select-Object -Last 1 }
         Log "TDR evidence: $ev"
     }
-    if (-not $Fake) {   # the batch stops at its next row boundary (PREEMPT, old run-batch snapshots too); the game stops now
-        if ($Rig -eq '5090') { $env:KAH_OWNER = $owner5; & powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-ctl.ps1" stop | Out-Null }
-        else { $null = Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) }
-    }
-    Note 'coordinator' "$m. Runner $Rig STOPPED, game stopped, rest of the list not run; $tdrF. Do not restart the rig until Shay cleared it."
-    Set-Content (StopFlag $Rig) "$(Get-Date -Format s) by TDR guard: $m"
-    State "STOPPED TDR: $m"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; exit 0
+    Note 'coordinator' "$m. Runner $Rig keeps running (TDR guard removed by Shay 2026-10-11 19:40); TDR-LOG-$Rig.txt + evidence."
 }
 function Log([string]$m) { if ($Resolve) { Write-Host "LOG $m"; return }; $null = WriteShared $log "$((Get-Date).ToString('MM-dd HH:mm:ss')) $m`r`n" -Append }
 function State([string]$m) { $null = WriteShared $stateF "$((Get-Date).ToString('HH:mm')) $m`r`n" }
@@ -1657,8 +1649,6 @@ while ($true) {
     }
     # alert file present (from tdr-watch / rig-health) while a batch runs: the guard stops game + batch first (it exits the
     # runner); before this the loop exited here and left the batch running unsupervised
-    if ((Test-Path $tdrF) -and (Test-Path $curF) -and -not $Fake) { try { $c0 = @(Get-Content $curF); $p0 = Probe $c0[2]; if (-not ($p0 -and $p0.done -eq '1')) { TdrGuard $c0 $p0 -Force } } catch { Log "tdr guard error: $($_.Exception.Message)" } }
-    if (Test-Path $tdrF) { Set-Content (StopFlag $Rig) "$(Get-Date -Format s) by TDR guard: $tdrF exists"; Log "TDR alert $tdrF exists: no new list, exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED TDR (alert file)"; exit 0 }
     if (Test-Path (StopFlag $Rig)) { Log "stopped flag set ($((Get-Content (StopFlag $Rig) -Raw).Trim())): exit"; Remove-Item (Join-Path $rd "$Rig.pid") -ErrorAction SilentlyContinue; State "STOPPED"; exit 0 }
     try {
         if ((Test-Path $fastF) -and (Get-Item $fastF).LastWriteTime -lt (Get-Date).AddMinutes(-30)) { Remove-Item $fastF -ErrorAction SilentlyContinue; Log 'setup alert expired (30 min)' }
