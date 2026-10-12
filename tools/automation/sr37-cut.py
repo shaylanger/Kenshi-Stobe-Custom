@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """sr37-cut.py (WSL python3): Shay's SR37 review video from fp-weapon-sweep.sh takes, one command.
   python3 sr37-cut.py <out.mp4> <take dir>[=<caption>] [<take dir>[=<caption>] ...] [--zoom 0|25] [--no-still]
+  --seg <start>-<end>=<what> (repeatable, one take): cut exactly these swings (full + 1/2 speed each) instead of the label
+  rule; for takes whose swing outlasts the label spacing (205-clv-sr37 2026-10-11: a 5 s Long Cleaver swing absorbed the next
+  forced stroke, so the label rule would caption mid-swing frames as another stroke)
 Per take (review/INDEX.txt labels, frame-stamp exact): ready stance 1.5 s, the FIRST swing at full speed, the same swing
 at 1/2 speed (SR37: exactly 1 swing per stroke type, full + 1/2, nothing more), block guard (--no-still drops ready +
 block). Captions burned in (weapon/caption, part, speed). h264_nvenc (libx264 fallback, /etc/kah-no-gpu), 1280x720.
@@ -65,13 +68,19 @@ def main():
         k = a.index('--zoom'); zoom = a[k + 1]; del a[k:k + 2]
     if '--no-still' in a:
         a.remove('--no-still'); still = False
+    segs = []
+    while '--seg' in a:
+        k = a.index('--seg'); t, w = a[k + 1].split('=', 1); x, y = t.split('-'); segs.append((float(x), float(y), w)); del a[k:k + 2]
     out, takes = a[0], a[1:]
     E = enc(); tmp = tempfile.mkdtemp(prefix='sr37-'); parts = []
     for tk in takes:
         tk, cap = (tk.split('=', 1) + [None])[:2]
         cap = cap or os.path.basename(tk.rstrip('/')).split('-', 1)[-1].replace('_', ' ')
         vid = os.path.join(tk, 'take.mp4')
-        for (s, e, slow, what) in segments(tk, zoom, still):
+        sg = segments(tk, zoom, still)
+        if segs:
+            sg = [x for x in sg if x[3] in ('ready stance',)] + [p for (x, y, w) in segs for p in ((x, y, 1.0, w + ' (full speed)'), (x, y, 2.0, w + ' (1/2 speed)'))] +                  [x for x in sg if x[3].startswith('block')]
+        for (s, e, slow, what) in sg:
             p = os.path.join(tmp, '%03d.mp4' % len(parts))
             txt = esc('%s - zoom %s - %s' % (cap, zoom, what))
             vf = 'setpts=%.1f*PTS,scale=1280:720,fps=30' % slow
