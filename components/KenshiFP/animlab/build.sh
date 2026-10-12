@@ -1,5 +1,5 @@
 #!/bin/bash
-# build.sh [--sync] [--src <client dir> | --rev <KenshiModding git rev (components/KenshiFP/client snapshot)>] [--patch <file.patch|file.py>]... [--out <binary>] [--drive]
+# build.sh [--preprocess] [--sync] [--src <client dir> | --rev <KenshiModding git rev (components/KenshiFP/client snapshot)>] [--patch <file.patch|file.py>]... [--out <binary>] [--drive]
 # Builds the offline KenshiFP viewmodel replay (kfpvm_replay) in WSL against a COPY of the KenshiFP client source.
 #   --l1     the game L1 model in a --drive build too (fist candidates: the fists sit near full reach, where the game
 #            over-reaches its targets by ~0.6 dm; native.py fists --adapter <this build>)
@@ -20,7 +20,8 @@ while [ $# -gt 0 ]; do case "$1" in
   --main) MAIN="$2"; shift 2;;   # another harness main in this dir (kfpvm_fist.c: fist-equiv.sh)
   --no-l1) NOL1=1; shift;;
   --no-hoff) NOHOFF=1; shift;;
-  --no-fast) NOFAST=1; shift;;   # leave out patches/fast-elb.py (exact lab speed patch; also AL_NO_FAST=1)
+  --no-fast) NOFAST=1; shift;;
+  --preprocess) PREP=1; shift;;   # gpu-lab: write <out>.i (gcc -E, same flags/defs) instead of compiling (gpu/gpugen.py input)   # leave out patches/fast-elb.py (exact lab speed patch; also AL_NO_FAST=1)
   --l1) L1=1; shift;;   # the game L1 model in a --drive build too (fist candidates: native.py fists --adapter; FIST-shoteiL op-b6)
   --sync) mkdir -p /root/animlab-kfp-src && rsync -a --delete /root/KenshiFP/client/ /root/animlab-kfp-src/client/; shift;;
   --src) SRC="$2"; shift 2;;
@@ -43,6 +44,7 @@ grep -q "g_vm_2hbw" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_2HB"
 grep -q "vm_pd_write" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_POSEDUMP"
 grep -q "g_al_hoff" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_HOFF"   # recorded hand scale replaces it (lab-calibrate2)
 grep -q "g_al_l1n_rec" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_L1REC"   # recorded solver upper-arm length (lab-calibrate2)   # kfp-posedump: kfpvm_replay --posedump
+if [ -n "$PREP" ]; then gcc -E -std=gnu11 $DEFS -I"$B" -I"$B/client" -I"$HERE" -o "$OUT.i" "$HERE/$MAIN"; echo "preprocessed $OUT.i defs:$DEFS"; exit 0; fi
 # build cache (labcache.py, Shay 2026-10-10 CPU cut): key = content of every compile input (patched client copy +
 # generated helpers, the harness mains/headers here, -D flags, gcc version), not paths: the same source built under
 # another name or in another pipeline tree restores the same binary, so its replays hit the result cache too.
