@@ -19,7 +19,7 @@ foreach ($l in $Lanes) {
     $it = Get-Item $f
     $s = ((Get-Content $f -TotalCount 1) -as [string]).Trim()
     $stale = $it.LastWriteTime -lt $now.AddMinutes(-3)
-    $prod = (-not $stale) -and ($s -match ' running ') -and (($s -match 'row=[^-\s]') -or ($s -match 'HEALTH OK.*phase=world'))
+    $prod = (-not $stale) -and ($s -match ' running ') -and (($s -match 'row=[^-\s]') -or ($s -match 'HEALTH OK.*phase=world') -or ($s -match 'step=[^-s].*phase=world'))
     if ($s -match 'no changed work') { $prod = $true }   # the one allowed idle (CLAUDE.md rig uptime)
     if ($prod) { $mem.Remove($l); $mem.Remove("rep:$l"); continue }
     if (-not $mem.ContainsKey($l)) { $mem[$l] = $now }
