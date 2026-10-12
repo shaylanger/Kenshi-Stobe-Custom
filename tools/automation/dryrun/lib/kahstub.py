@@ -393,6 +393,8 @@ def press(s, btn, ms, now):
     if btn == 'r':
         if fp['drawn']:
             sched(s, now + 0.6, 'r', drawn=0, ui_state='holstered', hud_text='holstered', vm='holstered')
+            if s.get('dims_late'):   # KenshiFP restarts the dims reads when weapon-in-hands changes (holster -> draw)
+                s['dims_reequip'] = 1
         else:
             w, melee = weapon_drawn(s, c)
             # off_sheathes fixture (xbmesh-c2): the R draw of a sheathed crossbow shows as 'ready' at once (KenshiFP.log same ms)
@@ -1106,8 +1108,9 @@ def handle(s, cmd, a, now, sp):
             if it not in c['eq']:
                 return True, 'not equipped: ' + desc_item(s, it)
             c['eq'].remove(it)
-            if s.get('dims_late'):
-                s['dims_reequip'] = 1
+            if s.get('dims_late'):   # 181-hv-e: a long 2H weapon fits no main slot: unequip drops it on the ground
+                c['items'] = [i for i in c['items'] if i != it]
+                return True, 'unequipped (dropped on the ground: no room) %s' % desc_item(s, it)
             if s['fpchar'] == c['name'] and fp['drawn'] and fp.get('weapon') == it:
                 sched(s, now + 0.2, 'r', drawn=0, ui_state='holstered', hud_text='holstered', vm='holstered')
             return True, 'unequipped (%s -> main) %s' % ('back' if is_ranged(it) else 'hip', desc_item(s, it))
