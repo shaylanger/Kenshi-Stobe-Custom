@@ -60,6 +60,11 @@ $runs = 'C:\KenshiTestRuns'; $auto = 'C:\KenshiModding\tools\automation'
 
 # ---------------------------------------------------------------- pure rules (-SelfTest)
 function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
+# instance sync failure (speed-scout r9: 210-fists-zpv4-any went to failed\ on lane 5090c 19:11 for a sync whose output lacked
+# the launch save line, the next sync 90 s later was fine): full output -> runner\<lane>.syncfail.txt, one retry, then a list
+# stolen from queue\5090|any goes BACK there (lane trouble is not the list's failure); only an own-folder list fails.
+function SyncOk([string[]]$sy, [string]$launch) { [bool]@($sy | Where-Object { $_ -like "save $launch -> *" }).Count }
+function SyncFailAction([int]$try, [string]$stoleFrom) { if ($try -lt 2) { 'retry' } elseif ($stoleFrom) { "requeue $stoleFrom" } else { 'fail' } }
 function CapMode { $m = "$((Get-Content 'C:\KenshiTestRuns\capture.default' -TotalCount 1 -ErrorAction SilentlyContinue))".Trim(); if ($env:KAH_CAPTURE) { $m = $env:KAH_CAPTURE }; if ($m) { $m } else { 'gdigrab' } }
 function LaneMon { if ($script:film) { $FilmMonitor } else { $Monitor } }
 function Pin { [bool]$script:film -and (CapMode) -ne 'wgc' }   # topmost only while filming with gdigrab (screen area)
@@ -212,6 +217,11 @@ if ($SelfTest) {
         $n++; $g = [string](LaneReject $c[1] ([bool]($c.Count -ge 3 -and $c[2]))); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) guard off: $($c[0]) taken: got '$g'"
     }
     $n++; $ok = ($IdleStopMin -eq 0) -and ($FilmAfterMin -eq 0); if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) no idle holds: IdleStopMin=$IdleStopMin FilmAfterMin=$FilmAfterMin (Shay 19:00)"
+    $okSy = @('save kah-fpxbow -> D:\KenshiInst\3\save\kah-fpxbow', 'save kah-squin -> D:\KenshiInst\3\save\kah-squin'); $badSy = @('sync instance 3 -> D:\KenshiInst\3 : 0 junctions', 'save kah-squin -> D:\KenshiInst\3\save\kah-squin')
+    foreach ($c in @(@('launch line present', (SyncOk $okSy 'kah-fpxbow'), $true), @('launch line missing (210 case)', (SyncOk $badSy 'kah-fpxbow'), $false),
+                     @('1st fail = retry', (SyncFailAction 1 'C:\q\any'), 'retry'), @('2nd fail, stolen = requeue', (SyncFailAction 2 'C:\q\any'), 'requeue C:\q\any'), @('2nd fail, own list = fail', (SyncFailAction 2 ''), 'fail'))) {
+        $n++; $ok = "$($c[1])" -eq "$($c[2])"; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) sync failure: $($c[0]): $($c[1])"
+    }
     "LANE2-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
 
@@ -338,7 +348,7 @@ function TdrStop([string]$m, [string]$out) {
 function StealList([bool]$film) {
     foreach ($src in "$qd\5090", "$qd\any") {
         $c = @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Where-Object { $t = @(Get-Content $_.FullName); -not (LaneReject $t $film) -and ($film -eq ((LaneGfx $t) -ne 'low')) }) | Select-Object -First 1
-        if ($c) { try { Move-Item -LiteralPath $c.FullName (Join-Path "$qd\$Lane" $c.Name) -ErrorAction Stop; Log "STEAL $(if ($film) { 'FILM ' })$($c.Name) from $src (own folder empty$(if ($film) { ", no gfx-low work $FilmAfterMin min" }))"; return Get-Item (Join-Path "$qd\$Lane" $c.Name) } catch { } }
+        if ($c) { try { Move-Item -LiteralPath $c.FullName (Join-Path "$qd\$Lane" $c.Name) -ErrorAction Stop; Log "STEAL $(if ($film) { 'FILM ' })$($c.Name) from $src (own folder empty$(if ($film) { ", no gfx-low work $FilmAfterMin min" }))"; $script:stoleFrom = $src; return Get-Item (Join-Path "$qd\$Lane" $c.Name) } catch { } }
     }
     Steal4080 $film
 }
@@ -503,6 +513,7 @@ while ($true) {
     # else a gfx-low filler list with rows changed since their last PASS (rig-runner.ps1 ledger; claimed as
     # running\<lane>__filler__<name>, so lane A and the other lanes skip it); else, on a Film lane after $FilmAfterMin min with
     # none of that, a filming list from queue\5090 / any (film mode). Only while instance $Inst may run now.
+    $script:stoleFrom = $null
     $f = Get-ChildItem "$qd\$Lane" -Filter *.list -File -ErrorAction SilentlyContinue | QSort | Select-Object -First 1
     $fill = $null; $film = $false
     $admit = (K2Procs) -or -not (LaneAdmit (GpuFreeMB) (RamFreeMB) ((Test-Path $tdr1) -or (Test-Path $tdrF)) (CpuPct 3))
@@ -543,9 +554,22 @@ while ($true) {
     $saves = @(@($launch) + @(Get-ChildItem "$env:LOCALAPPDATA\kenshi\save" -Directory -Filter 'kah-*' | ForEach-Object Name) | Select-Object -Unique)
     if ($up -and (DllHash $K1) -ne (DllHash $K2)) { Log "instance 1 has other DLLs ($(DllHash $K1)) than instance $Inst ($(DllHash $K2)): stop + sync"; Stop2 'DLL sync'; $up = $false }
     if (-not $up) {
-        $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" sync -Instance $Inst -Saves ($saves -join ',') 2>&1 | ForEach-Object { "$_" })
-        Log "sync: $(($sy | Select-Object -Last 2) -join ' / ')"
-        if (-not ($sy -match "save $launch ->")) { if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue; Log "filler $name : sync failed"; continue }; Fail $f.FullName $name $own "instance $Inst sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; continue }
+        $syTry = 0; $syAct = ''
+        while ($true) {
+            $syTry++
+            $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" sync -Instance $Inst -Saves ($saves -join ',') 2>&1 | ForEach-Object { "$_" })
+            Log "sync: $(($sy | Select-Object -Last 2) -join ' / ')"
+            if (SyncOk $sy $launch) { break }
+            Set-Content (Join-Path $rd "$Lane.syncfail.txt") (@("$(Get-Date -Format s) try $syTry list $name launch '$launch' saves $($saves -join ',')") + $sy)
+            $syAct = SyncFailAction $syTry $script:stoleFrom; Log "sync failed (try $syTry, launch '$launch' line missing; full output runner\$Lane.syncfail.txt): $syAct"
+            if ($syAct -ne 'retry' -or $fill) { break }
+            Start-Sleep 5
+        }
+        if (-not (SyncOk $sy $launch)) {
+            if ($fill) { Remove-Item $runPre -ErrorAction SilentlyContinue; Log "filler $name : sync failed"; continue }
+            if ($syAct -like 'requeue *') { $back = $syAct.Substring(8); Move-Item -LiteralPath $f.FullName (Join-Path $back $name) -Force -ErrorAction SilentlyContinue; Log "REQUEUED $name to $back (instance $Inst sync failed twice)"; State "waiting: instance $Inst sync failed twice (runner\$Lane.syncfail.txt), $name back in $back"; Start-Sleep 60; continue }
+            Fail $f.FullName $name $own "instance $Inst sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; continue
+        }
     } else {
         $sy = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\kenshi-instance.ps1" save ($saves -join ',') -Instance $Inst 2>&1 | ForEach-Object { "$_" }); Log "save copy: $(($sy | Select-Object -Last 1))"
     }
