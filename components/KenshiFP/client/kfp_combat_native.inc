@@ -518,7 +518,11 @@ static int g_combat_draw_hook; /* 0 not tried, 1 installed, -1 failed */
 static unsigned g_combat_draw_refused;
 static unsigned g_combat_gun_setups,g_combat_aim_stalls;   /* PT28 (m70) */
 static const char *g_combat_aim_stall_why="none";
+static unsigned g_tur_draw_refused;   /* kfp-turret-nodraw */
 static char combat_draw_weapon_hook(void *pc,void *item,void *str) {
+    if (pc && pc==g_tur_pc) {   /* kfp-turret-nodraw */ /* manning a turret in FP: the turret is the weapon; W leaves first */
+        if (!g_tur_draw_refused++) logline("[turret] weapon draw refused: manning a turret (item %p)",item);
+        return 0;}
     if (pc && pc==g_combat_pc && g_combat_enabled && g_fp_mode && g_combat_control.aimed &&
         g_combat_weapon && item!=g_combat_weapon) {++g_combat_draw_refused;return 0;}
     if (fpc_suppress_draw(pc)) return 0;   /* PT25: R-holstered out of a fight stays holstered */

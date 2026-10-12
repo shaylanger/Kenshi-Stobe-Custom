@@ -280,6 +280,12 @@ static int kah_fp_turret(const char *id,int argc,const char *const *argv,KAH_Rep
         char b[160];if (argc>=5) {g_tur_eye_f=(float)atof(argv[2]);g_tur_eye_s=(float)atof(argv[3]);g_tur_eye_u=(float)atof(argv[4]);g_tur_eye_fixed=1;} else g_tur_eye_fixed=0;
         snprintf(b,sizeof b,"turret eye fixed=%d fwd=%.1f side=%.1f up=%.1f captured=%.1f,%.1f,%.1f",g_tur_eye_fixed,g_tur_eye_f,g_tur_eye_s,g_tur_eye_u,g_tur_eye_cf,g_tur_eye_cs,g_tur_eye_cu);
         r->append(r,b);return KAH_OK;}
+    if (argc>=2 && !_stricmp(argv[1],"unload")) {   /* kfp-turret-unload */ /* T3 test: empty the gun without firing */
+        void *g=g_tur_pc?g_tur_gun:NULL;char b[96];
+        if (!g || !readable(g,0x130)) {r->append(r,"turret unload refused: not on a turret");return KAH_OK;}
+        int *am=(int *)((uintptr_t)g+GUN_AMMO),was=*am;*am=0;
+        logline("[turret] unload (test): ammo %d -> 0",was);
+        snprintf(b,sizeof b,"turret unload ammo %d -> 0",was);r->append(r,b);return KAH_OK;}
     if (argc>=3 && !_stricmp(argv[1],"drive")) {g_tur_cfg_drive=atoi(argv[2])!=0;r->append(r,g_tur_cfg_drive?"turret drive 1":"turret drive 0");return KAH_OK;}
     char b[1400];void *gun=g_tur_pc?g_tur_gun:NULL;
     if (gun && !readable(gun,0x130)) gun=NULL;
@@ -295,14 +301,14 @@ static int kah_fp_turret(const char *id,int argc,const char *const *argv,KAH_Rep
     }
     snprintf(b,sizeof b,"turret on=%d why=%s name=%s ammo=%d/%d reload_left=%.2f reload_max=%.2f rl_state=%.2f aim_valid=%d aim=%.1f,%.1f,%.1f "
              "cur_dir=%.3f,%.3f,%.3f aim_err_deg=%.1f enters=%u leaves=%u leave_cuts=%u eye_left=%d frames=%u shots=%u refused=%u refuse_why=%s reloads=%u "
-             "r_ignored=%u native_shots_suppressed=%u ai_updates_suppressed=%u last_target=%d gun_pos=%.1f,%.1f,%.1f harp_char=%u harp_target=%u harp_world=%u gunaim=%d last_target_pos=%.1f,%.1f,%.1f",
+             "r_ignored=%u draw_refused=%u native_shots_suppressed=%u ai_updates_suppressed=%u last_target=%d gun_pos=%.1f,%.1f,%.1f harp_char=%u harp_target=%u harp_world=%u gunaim=%d last_target_pos=%.1f,%.1f,%.1f",
              g_tur_pc!=NULL,g_tur_why,g_tur_pc?g_tur_name:"-",
              gun?*(int *)((uintptr_t)gun+GUN_AMMO):-1,gun?*(int *)((uintptr_t)gun+TUR_GUN_MAX):-1,
              g_tur_rl_left,g_tur_rl_max,gun?*(float *)((uintptr_t)gun+TUR_GUN_RLSTATE):-1.0f,g_tur_aim_valid,g_tur_aim.x,g_tur_aim.y,g_tur_aim.z,
              bld?((Vec3 *)((uintptr_t)bld+TUR_CUR_DIR))->x:0,bld?((Vec3 *)((uintptr_t)bld+TUR_CUR_DIR))->y:0,
              bld?((Vec3 *)((uintptr_t)bld+TUR_CUR_DIR))->z:0,rd,
              g_tur_enters,g_tur_leaves,g_tur_eye_leave_cuts,g_tur_eye_left,g_tur_frames,g_tur_shots,g_tur_shot_refused,g_tur_refuse_why,g_tur_reloads,
-             g_tur_r_ignored,g_tur_native_suppressed,g_tur_updt_suppressed,g_tur_last_target!=NULL,gun?((Vec3 *)((uintptr_t)gun+0xE4))->x:0,gun?((Vec3 *)((uintptr_t)gun+0xE4))->y:0,gun?((Vec3 *)((uintptr_t)gun+0xE4))->z:0,g_tur_harp_char,g_tur_harp_target,g_tur_harp_world,g_tur_cfg_gunaim,gun?((Vec3 *)((uintptr_t)gun+0x118))->x:0,gun?((Vec3 *)((uintptr_t)gun+0x118))->y:0,gun?((Vec3 *)((uintptr_t)gun+0x118))->z:0);
+             g_tur_r_ignored,g_tur_draw_refused,g_tur_native_suppressed,g_tur_updt_suppressed,g_tur_last_target!=NULL,gun?((Vec3 *)((uintptr_t)gun+0xE4))->x:0,gun?((Vec3 *)((uintptr_t)gun+0xE4))->y:0,gun?((Vec3 *)((uintptr_t)gun+0xE4))->z:0,g_tur_harp_char,g_tur_harp_target,g_tur_harp_world,g_tur_cfg_gunaim,gun?((Vec3 *)((uintptr_t)gun+0x118))->x:0,gun?((Vec3 *)((uintptr_t)gun+0x118))->y:0,gun?((Vec3 *)((uintptr_t)gun+0x118))->z:0);
     if (bld) {
         void *h=*(void **)((uintptr_t)bld+0x498);
         size_t n=strlen(b);
