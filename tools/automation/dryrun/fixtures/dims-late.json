@@ -1,0 +1,131 @@
+{
+ "chars": {
+  "Shay": {
+   "id": "#10/11",
+   "fac": "Nameless",
+   "pos": [
+    -53890.0,
+    633.0,
+    6850.0
+   ],
+   "items": [
+    "Iron Hat"
+   ],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Shay"
+  },
+  "Malzin": {
+   "id": "#12/13",
+   "fac": "Nameless",
+   "pos": [
+    -54170.0,
+    633.0,
+    4390.0
+   ],
+   "items": [
+    "Oldworld Bow MkII"
+   ],
+   "eq": [
+    "Oldworld Bow MkII"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Malzin"
+  },
+  "Axima": {
+   "id": "#14/15",
+   "fac": "Nameless",
+   "pos": [
+    -54190.0,
+    633.0,
+    4380.0
+   ],
+   "items": [
+    "Chisa Katana",
+    "Oldworld Bow MkI",
+    "Iron Hat"
+   ],
+   "eq": [
+    "Chisa Katana",
+    "Oldworld Bow MkI",
+    "Iron Hat"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Axima"
+  },
+  "Tassilo": {
+   "id": "#16/17",
+   "fac": "Nameless",
+   "pos": [
+    -53940.0,
+    633.0,
+    6850.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Tassilo"
+  },
+  "Skaera": {
+   "id": "#30/31",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -51590.0,
+    633.0,
+    4680.0
+   ],
+   "items": [
+    "Rusty Junk Sword"
+   ],
+   "eq": [
+    "Rusty Junk Sword"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Skaera"
+  },
+  "Hungry Bandit": {
+   "id": "#32/33",
+   "fac": "Hungry Bandits",
+   "pos": [
+    -49690.0,
+    633.0,
+    3480.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Hungry Bandit"
+  },
+  "Dust Bandit": {
+   "id": "#34/35",
+   "fac": "Dust Bandits",
+   "pos": [
+    -59390.0,
+    633.0,
+    5580.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Dust Bandit"
+  }
+ },
+ "squad": [
+  "Shay",
+  "Malzin",
+  "Axima",
+  "Tassilo"
+ ],
+ "hour": 11.0,
+ "fight": 0,
+ "about": "135/146-wc-v1 2026-10-11 (lane 5090b, Buster Sword): the second game instance had not built the 2H weapon entity in the ~5 s dims-read window after the draw: fp_vm probe pom=-1 until the weapon is unequipped + equipped again (fp-weapon-sweep.sh recovers once, then a setup FAIL)",
+ "swing_ko": 0,
+ "dims_late": 1
+}

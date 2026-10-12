@@ -133,6 +133,9 @@ def new_state(save):
              swing_ko=int(f.get('swing_ko', 0)),
              off_sheathes=int(f.get('off_sheathes', 0)),
              give_noroom=f.get('give_noroom'),
+             # fixtures/dims-late.json (135/146-wc-v1 lane 5090b 2026-10-11): the 2H weapon mesh dims stay unread (pom=-1)
+             # until the weapon is unequipped + equipped again; fp_vm probe answers cat/2h/pom/tip only with this fixture
+             dims_late=int(f.get('dims_late', 0)), dims_reequip=0, last_equip=None,
              # fixtures/spawn-hostile.json (23-rg02 ST02/ST03): spawns of these templates/factions ('*' = all) read
              # isEnemy=1 whatever the relation; sneak_aware_lag: see sneak_aware
              spawn_hostile=f.get('spawn_hostile', []), sneak_aware_lag=float(f.get('sneak_aware_lag', 0)),
@@ -1093,11 +1096,14 @@ def handle(s, cmd, a, now, sp):
         if cmd == 'equip':
             if it not in c['eq']:
                 c['eq'].append(it)
+            s['last_equip'] = it
             return True, 'equipped ' + desc_item(s, it)
         if cmd == 'unequip':
             if it not in c['eq']:
                 return True, 'not equipped: ' + desc_item(s, it)
             c['eq'].remove(it)
+            if s.get('dims_late'):
+                s['dims_reequip'] = 1
             if s['fpchar'] == c['name'] and fp['drawn'] and fp.get('weapon') == it:
                 sched(s, now + 0.2, 'r', drawn=0, ui_state='holstered', hud_text='holstered', vm='holstered')
             return True, 'unequipped (%s -> main) %s' % ('back' if is_ranged(it) else 'hip', desc_item(s, it))
@@ -1403,6 +1409,15 @@ def handle(s, cmd, a, now, sp):
                     dr.flag('NOTE', 'fp_vm rec dump %s with 0 frames (rec on never sent?)' % a[2])
                 return True, 'rec dump %s frames=%d' % (a[2], n)
             return True, 'rec on=%d frames=%d' % (s['rec']['on'], int((now - s['rec'].get('t', now)) * 60) if s['rec']['on'] else 0)
+        if sub == 'probe' and s.get('dims_late'):   # kfp_viewmodel.inc `fp_vm probe` 2H fields (kfp-two-hand builds)
+            cat = -1
+            try:
+                W = json.load(open('/mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/weapons.json'))['weapons']
+                cat = next((w['cls'] for w in W if w['name'] == s.get('last_equip') or w['sid'] == s.get('last_equip')), -1)
+            except Exception:
+                pass
+            pom = 2.4 if s.get('dims_reequip') else -1.0
+            return True, 'probe wih=1 cat=%d 2h=%d pom=%.2f tip=%.2f' % (cat, 1 if cat in (3, 8) else 0, pom, 11.0 if pom > 0 else -1.0)
         if sub == 'gun':   # kfp_viewmodel.inc `fp_vm gun` tail; a run that uses drawexp sees the XBDEXP bug (mask 0 = pin mode 36)
             m = 36 if s.get('drawexp_seen') and s.get('arm_drawexp', 0) == 0 else 1
             return True, 'gun=0000000000000001 ammo_n=1 loaded=1 | pinned=1 game=1 rel=1 | pin=1 mode=%d new=0 bolt ok=1 vis=1' % m

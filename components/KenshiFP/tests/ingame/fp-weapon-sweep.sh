@@ -129,7 +129,17 @@ take(){   # k sid name type animcls ammo
     if [ "$w2" = 1 ]; then
       pm2=$(echo "$st2" | fld pom)   # empty = a build without the dims reader in probe: fails too
       for _ in 1 2 3 4 5 6; do case "$pm2" in -*|'') sleep 1; pm2=$(A fp_vm probe | fld pom);; *) break;; esac; done
-      case "$pm2" in -*|'') pf_fail "2H weapon mesh not read (pom=$pm2)";; esac
+      # lane 5090b 2026-10-11 (lists 135/146, Buster Sword): the second instance had not built the weapon entity within
+      # the reader's ~5 s window after the draw -> one recovery: unequip + re-equip + ready (restarts KenshiFP's dims
+      # reads on the new weapon-in-hand), then 10 s more; a changed action, not an unchanged retry
+      case "$pm2" in -*|'')
+        echo "2H mesh dims unread after 6 s (pom=$pm2): unequip + re-equip once" >&2
+        A unequip $SH "$nm" >/dev/null; sleep 1
+        r=$(A equip $SH "$sid"); case "$r" in equipped*) ;; *) pf_fail "re-equip $sid: $(echo "$r" | cut -c1-140)";; esac
+        sleep 1; place; pf_ready
+        for _ in 1 2 3 4 5 6 7 8 9 10; do pm2=$(A fp_vm probe | fld pom); case "$pm2" in -*|'') sleep 1;; *) break;; esac; done;;
+      esac
+      case "$pm2" in -*|'') pf_fail "2H weapon mesh not read (pom=$pm2, also after unequip + re-equip + 10 s)";; esac
     fi
   fi
   pf_clear; place

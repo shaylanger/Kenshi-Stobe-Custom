@@ -21,6 +21,7 @@ ctl-swa-ko     | swing-ko | 5090 | PASS                                         
 ctl-swa-nomelee | no-melee | 5090 | PASS                                        | swa | - | Malzin | Shay | 900 | $KT/fp-swing-hits-all.sh Malzin Skaera Shay {OUT}/swa
 ctl-xbmesh-empty | xbow-empty | 5090 | PASS                                    | xbmesh | kah-fpxbow | Axima | Malzin | 600 | $KT/fp-xbow-mesh.sh Axima Skaera {OUT}/xbmesh
 ctl-2h-noroom  | studio-noroom | 4080 | PASS                                   | wm | kah-fpxbow | Axima | Malzin | 900 | RIG=4080 bash $KT/fp-weapon-sweep.sh {OUT}/wm /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-2h-b.list wm
+ctl-2h-dimslate | dims-late | 5090 | PASS                                     | wm | kah-fpxbow | Axima | Malzin | 900 | bash $KT/fp-weapon-sweep.sh {OUT}/wm /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-wc.list wm
 bug-night      | night  | 5090 | FAIL:filmed at night                           | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp bare
 bug-combat     | combat | 5090 | FAIL:hostiles within 30 m.*popup               | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp bare
 bug-popup      | combat | 5090 | FAIL:setup: foreign overlay                    | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp popup
