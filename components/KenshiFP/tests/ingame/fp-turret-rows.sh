@@ -12,6 +12,7 @@
 # Prints exactly one line: RESULT TUR-<row> PASS|FAIL <evidence>
 for d in /mnt/c /c; do [ -f $d/KenshiModding/tools/automation/rig-env.sh ] && { . $d/KenshiModding/tools/automation/rig-env.sh; break; }; done
 R=$1; OUT=$2; SH=${3:-Axima}; ROW=TUR-$R
+TDIR=$(cd "$(dirname "$0")" && pwd)   # before the cd into OUT: take-preflight.sh (pf_clean) lives beside this script
 case "$R" in T2|T3|T5) ;; *) echo "RESULT $ROW FAIL setup: row must be T2|T3|T5 (usage: fp-turret-rows.sh <row> <out> [shooter])"; exit 2;; esac
 [ -n "$OUT" ] && mkdir -p "$OUT" && cd "$OUT" || { echo "RESULT $ROW FAIL setup: out dir '$OUT' not usable"; exit 2; }
 export KAH_OWNER=${KAH_OWNER:-$([ "${RIG:-5090}" = 4080 ] && echo rig4080 || echo kfp-fixer)}
@@ -38,7 +39,13 @@ A select $SH >/dev/null; A fp_control take >/dev/null
 A fp_combat input 0 0 0 >/dev/null; A fp_combat on >/dev/null; sleep 0.5
 A fp_combat state | grep -q "enabled=1" || fail "manual combat off ($(A fp_combat state | grep -o 'enabled=[^ ]* fault=[^ ]*'))"
 A power 'Harpoon Turret' on radius 3000 >/dev/null; A power 'Harpoon Turret' supply radius 3000 | grep -o "has_power=[^ ]*" >> "$LOG"
+# hostiles near the turret (turret-fix 2026-10-11, 98/141 on 5090c: the fixture's Hungry Bandit (Tech Hunters) attacked
+# Axima the moment she sat down; ~4 s later the AI drew her melee weapon (PT34 combat stance) and walked her off the turret:
+# T2/T3/T5 FAIL "walked off (native still assigned)" were the bandit, not the product). Shared preflight pin + KO.
+PF_ROW=$ROW; . "$TDIR/take-preflight.sh" || fail "take-preflight.sh not found beside $0"
+pf_clean $TX $TZ 3000 >> "$LOG"
 A fp_move w 1200 >/dev/null; sleep 2; A teleport $SH $TX 690 $TZ >/dev/null; sleep 2
+pf_calm $SH >> "$LOG" || fail "$PF_WHY"   # nobody fighting the operator at the turret (pf_melee state target)
 A fp_combat physical >/dev/null; A fp_camera look 0.22 -0.075 >/dev/null
 A order $SH USE_TURRET building "Harpoon Turret" >/dev/null
 for i in $(seq 1 30); do [ "$(fv on)" = 1 ] && break; sleep 0.5; done
