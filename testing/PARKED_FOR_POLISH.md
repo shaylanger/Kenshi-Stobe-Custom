@@ -34,6 +34,7 @@ and made perfect later. Agent status/handoff files in `C:\KenshiTestRuns\agents\
 
 ## MVP result
 - **E6 s2 overhead (sword) keyframes shipped (kf-mvp, 20:1x):** 5 keys, kfmask 4, default live-tables file
+- **Naginata stroke 1 (kf-pa1 20:18):** class-2 row 9 = sword row-2 overhead keys (kf.9/kfh.9, kfmask bit 9 -> 63316). Lab kfpreview --stroke 1 on pa-192-i3/pav6 rec: all checks PASS (ang 74, trav .47, ctr .010, span T>B; variant `C:KenshiTestRuns	ablespa1-r2.tbl`). Other sources (cleaver 12/13/14, heavy 4/6) FAIL. Rough: same overhead shape as stroke 2. No game take.
   `components/KenshiFP/tables/fp_tables.txt` = `<Kenshi>\mods\KenshiFP\fp_tables.txt` on both rigs + lane instances
   (5090 D:\KenshiInst\2,3; 4080 C:\KenshiInst\2). Lab kfpreview s2 PASS all checks (ang 86, trav .47, arc 12/12, wrist 45);
   game take 300-kfmvp-e6s2 PASS (12 take checks, 0 lab FAILs; C:\KenshiTestRuns\kfmvp-e6s2).
