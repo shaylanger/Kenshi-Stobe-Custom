@@ -189,6 +189,15 @@ def s_2hl_stroke0(d):   # E6 default stroke cycle: the light-2H class drops out 
 ARROW = '/tmp/al-mut-arrow.png'
 
 
+def m_cross_unseen(lines):   # SR17 framed swing: every swing's stroke proper (u .28-.58) carried out of view (grip, wrists, elbows 30 dm below the camera, blade pointing back): the mid-stroke crossing is never seen
+    for i, g, t in frames(lines):
+        if len(t) > 9 and t[3].startswith('swing') and 0.26 <= float(t[9]) <= 0.60:
+            for k in (MP, 8, 9, 11, 12):
+                p = getvec(g, 1, k); setvec(g, 1, k, (p[0], p[1] - 30.0, p[2]))
+            setvec(g, 1, MF, (0.0, -0.2, -0.98)); lines[i] = ' | '.join(g)
+    return lines
+
+
 def m_fist_hand(lines):     # U25: the right hand flips 90 deg (rec group F axes) for 0.25 s mid-take, wrist in place
     fr = [(i, g, t) for i, g, t in frames(lines) if any(x.split()[:1] == ['F'] for x in g)]
     t0 = float(fr[len(fr) // 2][2][1])
@@ -373,6 +382,7 @@ REC_CHECKS = {
     'punch-C5': lambda p: verdict_word(run(['python3', FPC, p]), 'C5 '),
     'punch-C6': lambda p: verdict_word(run(['python3', FPC, p]), 'C6 '),
     'punch-C7': lambda p: verdict_word(run(['python3', FPC, p]), 'C7 '),
+    'framed': lambda p: verdict_word(run(['python3', os.path.join(L, 'spec.py'), 'framed', p]), 'framed '),
     'metrics-any': lambda p: (('FAIL' if any(' FAIL' in l[:40] for l in run(al('metrics', p)).splitlines()) else 'PASS'), 'metrics'),
 }
 def _pool_inline_s3(p):   # the gate pool's per-swing inline path (metrics.swing_verdicts inline + pool_predict) on the rec as recorded
@@ -460,6 +470,7 @@ MUTS = [
     ('rec-path-late-drift', 'rec', 'rec/ab2h-5090.txt', m_path_drift, ['path-stroke1']),
     ('rec-windup-popin', 'rec', 'rec/ab2h-5090.txt', m_windup_popin, ['path-wexit-stroke3']),
     ('rec-sweep-frozen', 'rec', 'rec/ab2h-5090.txt', m_sweep_frozen, ['path-sweep-stroke1']),
+    ('rec-framed-cross-unseen', 'rec', 'rec/ab2h-5090.txt', m_cross_unseen, ['framed']),
     ('src-2hl-stroke0', 'src', 'src/KenshiFP-e6mask3-c4ee493.client.tar.gz', s_2hl_stroke0, ['stroke-cycle']),
 ]
 

@@ -579,6 +579,14 @@ for f in rec/reel109-Buster_Sword.vmrec.txt:FAIL rec/reel109-Fragment_Axe.vmrec.
   [ -f "$CORPUS/$n" ] || { echo "REGRESS INFO framed: $n not in the corpus"; continue; }
   r=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[2]); import recfmt, metrics as M; r = recfmt.parse(sys.argv[1]); ok, t = M.framed_check(r.frames, M.frame_metrics(r)); print("framed", "PASS" if ok else "FAIL", " ".join(t))' "$CORPUS/$n" "$L")
   case "$r" in "framed $w "*) ok "framed $n: ${r:0:120}";; *) bad "framed $n (want $w): ${r:0:200}";; esac; done
+#     SR17 mid-stroke crossing (lab-rules 2026-10-11): swing frames are judged only in each swing's mid-stroke crossing
+#     (metrics.framed_cross); the 136 Naginata (crossing never on screen) must fail framed_swing_cross, the 147 Naginata and
+#     139 Long Cleaver (stroke ends off screen, old 50%-of-all-swing-frames rule 0.12/0.15) must pass it.
+for f in rec/framedx-naginata136-4080.vmrec.txt:BAD rec/framedx-naginata147-5090.vmrec.txt:OK rec/framedx-cleaver139-4080.vmrec.txt:OK; do
+  n=${f%%:*} w=${f##*:}
+  [ -f "$CORPUS/$n" ] || { echo "REGRESS INFO framed cross: $n not in the corpus"; continue; }
+  r=$(python3 "$L/spec.py" framed "$CORPUS/$n" | grep -oE 'framed_swing_cross=[^)]*\)(:BAD)?')
+  case "$w:$r" in BAD:*:BAD|OK:*\)) ok "framed cross $n: $r";; *) bad "framed cross $n (want $w): ${r:-no crossing}";; esac; done
 # 36. PT30 follow-ups (harness Misses 2026-10-10 "PT30-FLIP vmcheck time base" + "PT30 follow-through edge roll spikes"):
 #     (a) fp-viewmodel.sh's vmcheck (extracted from the script) on the 4080 game rec pt30-sword (corpus pools/sword-swing):
 #         the strike onset next to the 0.1 s hitch (frame 158) must NOT be flagged, the follow-through roll (284) must be;
