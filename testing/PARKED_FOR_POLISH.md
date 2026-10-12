@@ -31,3 +31,13 @@ and made perfect later. Agent status/handoff files in `C:\KenshiTestRuns\agents\
 2. One keyframe agent: passable keyframe strokes for what is missing (E6 s2 overhead, heavy 2H, Cleaver,
    Naginata) - lab basic checks + one game take each, one for-shay video.
 3. Fists v2: existing video (for-shay/NA1-FISTS-v2) goes to Shay as is.
+
+## MVP result
+- **E6 s2 overhead (sword) keyframes shipped (kf-mvp, 20:1x):** 5 keys, kfmask 4, default live-tables file
+  `components/KenshiFP/tables/fp_tables.txt` = `<Kenshi>\mods\KenshiFP\fp_tables.txt` on both rigs + lane instances
+  (5090 D:\KenshiInst\2,3; 4080 C:\KenshiInst\2). Lab kfpreview s2 PASS all checks (ang 86, trav .47, arc 12/12, wrist 45);
+  game take 300-kfmvp-e6s2 PASS (12 take checks, 0 lab FAILs; C:\KenshiTestRuns\kfmvp-e6s2).
+- **Rough:** blade dips briefly off the bottom at u .70-.80; kf rows/kfmask are shared by ALL weapon classes, so this
+  file also gives heavy/polearm stroke 2 the sword keys (lab on Buster/Axe: wrist 86 FAIL). Resume: per-class kf rows in
+  `pending-fixes/kfp-keyframe-stroke.py` (row = stroke + 4*class, kfmask 12 bits), then add the heavy sets
+  (C:\KenshiTestRuns\kf-mvp\HEAVY-NOTES.txt: heavy s0 z1 passes Buster, Axe near-miss blade seen; heavy s2 f5 fails churn/inline).
