@@ -34,7 +34,7 @@ WCAT=${WCAT:-$(dirname "$LIST")/weapons.json}
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 NI=; command -v nice >/dev/null 2>&1 && NI="nice -n 15"   # offline lab checks at low priority (CLAUDE.md rig uptime 5)
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
-cleanup(){ [ -n "${WS_TABLES:-}" ] && A fp_tables reset >/dev/null; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A chatter on >/dev/null; }
+cleanup(){ [ -n "${WS_TABLES:-}" ] && A fp_tables reset >/dev/null; [ -n "${WS_STROKES:-}" ] && A fp_vm set stroke -1 >/dev/null; A fp_keys release rmb >/dev/null; A fp_keys release lmb >/dev/null; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A chatter on >/dev/null; }
 PF_ROW=WEAPONSWEEP-$NAME; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh; . $HERE/tests/ingame/take-preflight-cam.sh
 pf_begin "$PF_ROW"
 [ -s "$WCAT" ] || pf_fail "weapon catalog $WCAT missing (animlab.py weapons --catalog writes it next to sweep.list)"
@@ -59,6 +59,11 @@ fi
 [ "${WS_TWO_LIGHT:-0}" = 1 ] && export AL_TWO_LIGHT=1
 # WS_TABLES=<Windows path, e.g. C:/KenshiTestRuns/tables/x.txt> (weapon-classes 2026-10-11): film every weapon with a live-tables
 # variant (fp_tables load; reply hash= logged in the setup line; compiled values restored by fp_tables reset on exit)
+# WS_STROKES=<digits, comma/space separated, e.g. 0,2> (polearm-fix 2026-10-11): melee weapons swing ONE forced swing per listed
+# stroke (fp_vm set stroke n, labelled "LMB: stroke n <name> swing") instead of the 2 free swings (SR37 review: 1 swing per stroke
+# type); unset = the 2 free swings as before
+WSS=${WS_STROKES//,/ }; WSN=(diagonal backhand overhead rising)
+case "$WSS" in *[!0-3[:space:]]*) pf_fail "WS_STROKES '$WS_STROKES' not a list of strokes 0-3";; esac
 WSTH=
 if [ -n "${WS_TABLES:-}" ]; then
   r=$(A fp_tables load "$WS_TABLES"); WSTH=$(grep -o 'hash=[0-9a-f]*' <<<"$r" | head -1 | cut -d= -f2)
@@ -161,7 +166,12 @@ take(){   # k sid name type animcls ammo
       lab "Crossbow aim (RMB) zoom $z"; A fp_keys press rmb 2200 >/dev/null; sleep 1.8
       lab "RMB released: back to ready"; sleep 2.2
     else
+      if [ -n "$WSS" ]; then   # WS_STROKES: one forced swing per listed stroke (SR37 review takes), force cleared after
+        for s in $WSS; do A fp_vm set stroke $s >/dev/null; lab "LMB: stroke $s ${WSN[$s]} swing"; A fp_keys press lmb 60 >/dev/null; sleep 2.4; done
+        A fp_vm set stroke -1 >/dev/null
+      else
       for s in 1 2; do lab "LMB: free swing $s"; A fp_keys press lmb 60 >/dev/null; sleep 2.4; done
+      fi
       # block from ready (swing 2 may still recover) and label once RMB is down: blocking came 0.62 s after a pre-press label
       # (takecheck grace 0.6; 03-twohand Katana/Naginata 2026-10-10); release label 1.8 s after the press, BEFORE the key
       # goes up (06-twohand-scale 2026-10-11: the 2200 ms timed press let blocking end 0.07 s before the release label's
