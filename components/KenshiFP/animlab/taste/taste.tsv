@@ -94,3 +94,6 @@ t96	rec/reel109-Buster_Sword.vmrec.txt	R35	reject	coord		review 2026-10-11 weapo
 t97	rec/reel109-Fragment_Axe.vmrec.txt	R35	reject	coord		review 2026-10-11 weapon-reel-109: only the long blade edge-on from the right edge, hands never in view
 t98	rec/reel109-Naginata.vmrec.txt	R35	reject	coord		review 2026-10-11 weapon-reel-109: only a thin shaft end at the bottom edge, hands never in view
 t99	rec/ab2h-5090.txt	R35	accept	coord		2H katana zoom 0: both hands in view through ready/swing (sjudge-ab12b reviewed)
+t100	kf-s0b-k5sl	R8	accept	shay	checks=arc.wb	Shay 2026-10-11 19:36 keyframe take kfs0b (KEYFRAME-VS-TABLES, look approved): "In the video i can not see the wrist at all so i cant even tell if it is moving weirdly" -> SR43: wb judged on wrist-on-screen frames only (82.7 all off screen, 30.5 on screen)
+t101	kf-s0b-k5sl	R17	accept	shay		Shay 2026-10-11 19:36 kfs0b: "the blade does not look edge on at the end (or maybe it just adjusts very quickly? as the sword returns to the resting state it looks perfectly fine" -> SR44: one-frame late edge-on (frame 223 u .82) not judged
+t102	kf-s0b-k5sl	R30	open	shay		Shay 2026-10-11 19:36 kfs0b: "slightly off center is fine, this was within a reasonable margin" (ctr 0.148/0.144 accepted, SR45 PATH_CTR 0.16); end hook 0.071 (printed hook=, was late=) and span=- not ruled by Shay yet: open

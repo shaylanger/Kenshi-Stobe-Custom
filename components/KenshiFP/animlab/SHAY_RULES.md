@@ -29,6 +29,10 @@ S = Kenshi-Automation-Harness/docs/animlab/STATUS.md; R = components/KenshiFP/an
 | SR18 | "Refined (Shay 17:25): ending off screen is fine; a stroke that STARTS off screen must show the wind-up carrying the blade off screen (the blade visibly leaves the screen during the wind-up, no pop-in from outside). Off-screen start/end is never a failure by itself." | 2026-10-11 17:25 | M sword-strokes-straight-45; R32 |
 | SR31 | "PT33 open hand: LEAVE FOR NOW (no finger curl, would slow the work)." | 2026-10-11 16:20 | H 16:20-16:35 |
 | SR32 | "Z1: SWITCH chosen (fade with hidden body looks like a glitch)" | 2026-10-11 16:20 | H 16:20-16:35 |
+| SR43 | "In the video i can not see the wrist at all so i cant even tell if it is moving weirdly." -> the wrist bend (arc wb, <= 50 in swings) is judged only on frames where the wrist is on screen. | 2026-10-11 19:36/19:38 | Shay 2026-10-11 19:36 on the keyframe take kfs0b (for-shay KEYFRAME-VS-TABLES, look approved); his approval of the lab change 19:38: "okay that fine i approve this" |
+| SR44 | "the blade does not look edge on at the end (or maybe it just adjusts very quickly? as the sword returns to the resting state it looks perfectly fine" -> a single-frame edge-on blade late in the stroke / return is OK; several edge-on frames in a row still fail. | 2026-10-11 19:36/19:38 | Shay 2026-10-11 19:36 on the keyframe take kfs0b (for-shay KEYFRAME-VS-TABLES, look approved); his approval of the lab change 19:38: "okay that fine i approve this" |
+| SR45 | "slightly off center is fine, this was within a reasonable margin" -> the stroke path may pass slightly off the screen centre (kfs0b 0.148 / 0.144 of the screen height accepted; limit 0.16). | 2026-10-11 19:36/19:38 | Shay 2026-10-11 19:36 on the keyframe take kfs0b (for-shay KEYFRAME-VS-TABLES, look approved); his approval of the lab change 19:38: "okay that fine i approve this" |
+| SR46 | "is the path late relative to the click? how late in seconds" -> the path "late" number is the end-hook drift of the path SHAPE (0.071 vs 0.05), not timing; renamed hook=. Not ruled by Shay: limit unchanged, open. | 2026-10-11 19:36/19:38 | Shay 2026-10-11 19:36 on the keyframe take kfs0b (for-shay KEYFRAME-VS-TABLES, look approved); his approval of the lab change 19:38: "okay that fine i approve this" |
 
 ## All weapons / all states
 
@@ -86,7 +90,7 @@ S = Kenshi-Automation-Harness/docs/animlab/STATUS.md; R = components/KenshiFP/an
 | check id | code | rules enforced | contradiction? |
 |---|---|---|---|
 | moves | metrics.moves_ok / moves_each | SR7 | none |
-| arc.edge / arc.wb | metrics.arc_gate (edge on stroke frames u .28-.58 only, wb <= 50) | SR1, SR10 | none (wind-up not judged) |
+| arc.edge / arc.wb | metrics.arc_gate (edge on stroke frames u .28-.58 only, wb <= 50 on wrist-on-screen frames, SR43 17732ca) | SR1, SR10, SR43 | none (wind-up not judged) |
 | churn.rev / churn.roll | metrics.churn_check (rev 450 px / 0.4 s, grip 250; wind-up roll <= 15) | SR6, SR2 | none |
 | inline | metrics.inline_check / inline_each (forearm-blade median 30 / max 40; wrist share <= .6 stroke only) | SR4 | none |
 | branch | metrics.ready_branch | SR2 (E3) | none |
@@ -94,10 +98,10 @@ S = Kenshi-Automation-Harness/docs/animlab/STATUS.md; R = components/KenshiFP/an
 | stock | metrics.stock_ok | SR26 | none |
 | bolt | metrics.bolt_ok | SR27 | none |
 | reload | metrics.reload_check | SR30 | none |
-| blade.snap / blade.seen | metrics.blade_check | SR17, SR18, SR23 | FIXED 769f29e (before this audit): seen was judged on every frame u .45-.95, so an off-screen follow-through failed; now off-screen tip frames outside SEE_MID (u .40-.58) are skipped. Verified complete. |
+| blade.snap / blade.seen | metrics.blade_check (one isolated late edge-on frame excused, SR44 17732ca) | SR17, SR18, SR23, SR44 | FIXED 769f29e (before this audit): seen was judged on every frame u .45-.95, so an off-screen follow-through failed; now off-screen tip frames outside SEE_MID (u .40-.58) are skipped. Verified complete. |
 | spike | metrics.spike_check | SR2 | none (on-screen frames only) |
 | stroke.len / stroke.oh | metrics.stroke_check (unclipped projection, len >= 240 px u .40-.78) | SR29-adjacent (coord) | none vs SR17 (unclipped). OPEN risk SR13: no non-blocking exemption for accepted strokes (s1); accepted recordings pass today |
-| path / sweep / wexit / rep / thrust | metrics.path_one, swing_sweep, windup_exit, path_rep, thrust_one | SR11-SR16, SR18 (PATH_INFO = s1, s2 non-blocking = SR13) | none: unclipped tip path, off-screen end = edge 0, off-screen start needs visible exit |
+| path / sweep / wexit / rep / thrust | metrics.path_one (ctr <= .16 SR45; late printed hook= SR46), swing_sweep, windup_exit, path_rep, thrust_one | SR11-SR16, SR18, SR45, SR46 (PATH_INFO = s1, s2 non-blocking = SR13) | none: unclipped tip path, off-screen end = edge 0, off-screen start needs visible exit |
 | guard | metrics.guard_check | coord R18 | none |
 | zoomband / bandleak | metrics.zoomband_check / bandleak_check | SR32, SR8 | none |
 | framed | metrics.framed_check (a wrist in view >= 80% ready/block; swing: weapon seen (wrist in view or grip..tip >= 80 px) on >= 80% of the MID-STROKE CROSSING frames (pooled; crossing = middle half of each stroke's own screen path within u .28-.58) and every swing seen at least once) | coord R35 / SR9 / SR17 / SR18 / SR41 | FIXED 2026-10-11 (lab-rules): the swing rule (wrist on 50% of ALL swing frames, then straight strokes exempted) failed every heavy 2H/hacker/polearm take (146-148: 0.12-0.29) although SR17 allows off-screen starts/ends; now only the crossing is judged (metrics.framed_cross), regress 35e cross rows, mutation rec-framed-cross-unseen |

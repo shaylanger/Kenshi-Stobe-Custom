@@ -393,7 +393,7 @@ def _pool_inline_s3(p):   # the gate pool's per-swing inline path (metrics.swing
     return verdict_word(run(['python3', '-c', code, p]), 'poolinl ')
 
 
-REC_CHECKS['path-stroke1'] = lambda p: _path_rule('1', 'late')(p)   # the late-drift rule of stroke 1 (gated for the mutation); was the whole path verdict: BASEFAIL once span/ctr (Shay 17:05) fail the accepted s1
+REC_CHECKS['path-stroke1'] = lambda p: _path_rule('1', 'hook')(p)   # the end-hook (was 'late') rule of stroke 1 (gated for the mutation); was the whole path verdict: BASEFAIL once span/ctr (Shay 17:05) fail the accepted s1
 def _path_rule(stroke, rule):   # one swing rule of `animlab.py path` (sweep= / wexit=) on one stroke (gated for the mutation)
     def f(p):
         out = run(al('path', '--stroke', stroke, '--gate-info', p))
