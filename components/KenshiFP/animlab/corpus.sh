@@ -41,7 +41,25 @@ verify)
     [ "$name" = name ] && continue; [ "$status" = pending ] && continue; n=$((n+1))
     [ -f "$C/$name" ] || { echo "corpus MISSING $name ($check)"; bad=1; }
   done < "$M"
-  (cd "$C" && sha256sum --quiet -c SHA256SUMS 2>&1) | sed 's/^/corpus /' | grep . && bad=1
+  # sha cache (load-balance 2026-10-11: a full sha256sum -c of 1.5 GB over /mnt/c took 14-22 s per gate run): a file is
+  # re-hashed only when its size:mtime:ctime stamp or its expected sha changed since it last verified OK. Files are never
+  # modified in place (add = cp -n + chmod a-w), so the stamp is enough. CORPUS_VERIFY_FULL=1 = hash everything.
+  K=${CORPUS_VCACHE:-/root/.cache/animlab/corpus-verify.$(echo "$C" | md5sum | cut -c1-8).tsv}; mkdir -p "$(dirname "$K")"
+  [ "${CORPUS_VERIFY_FULL:-0}" = 1 ] && : > "$K"; [ -f "$K" ] || : > "$K"
+  T=$(mktemp -d)
+  (cd "$C" && cut -c67- SHA256SUMS | tr '\n' '\0' | xargs -0 -r stat -c $'%s:%Y:%Z\t%n' 2>/dev/null) > "$T/st"
+  awk -F'\t' -v OFS='\t' -v NK="$T/keep" -v TD="$T/todo" -v SM="$T/stamps" '
+    FILENAME==ARGV[1] {c[$1]=$2 "\t" $3; next}
+    FILENAME==ARGV[2] {st[$2]=$1; next}
+    { h=substr($0,1,64); n=substr($0,67); s=(n in st)?st[n]:"none"
+      if (c[n]==s "\t" h) print n, s, h > NK; else { print $0 > TD; print n, s, h > SM } }' "$K" "$T/st" "$S"
+  touch "$T/keep" "$T/todo" "$T/stamps"; nre=$(wc -l < "$T/todo")
+  if [ "$nre" -gt 0 ]; then
+    (cd "$C" && sha256sum -c "$T/todo" 2>&1) > "$T/res"
+    grep -v ': OK$' "$T/res" | sed 's/^/corpus /' | grep . && bad=1
+    sed -n 's/: OK$//p' "$T/res" | awk -F'\t' -v OFS='\t' 'FILENAME==ARGV[1]{ok[$0]=1; next} ($1 in ok) && $2!="none"' - "$T/stamps" >> "$T/keep"
+  fi
+  cp "$T/keep" "$K.$$" && mv "$K.$$" "$K"; rm -rf "$T"; echo "corpus verify: re-hashed $nre of $(wc -l < "$S") files (rest unchanged since last OK, cache $K)"
   [ $bad = 0 ] && echo "RESULT CORPUS PASS rows=$n files=$(wc -l < "$S")" || { echo "RESULT CORPUS FAIL (missing or changed files above)"; exit 1; };;
 sync)
   d=${1:?sync <dir>}; mkdir -p "$d"
