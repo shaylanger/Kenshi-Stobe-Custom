@@ -89,6 +89,14 @@ lane_after() { local sig=$1 rr=$2 rrow=$3 lrf=$4 lsf=$5 prev=""
   if [ -n "$rr" ]; then echo "row $rrow asked: $rr" > "$lrf"; echo "relaunch request kept for the next batch on this lane: row $rrow: $rr"
   elif [ -n "$sig" ] && [ "$sig" = "$prev" ]; then echo "2 batches in a row failed every row on setup: $sig" > "$lrf"; echo "2nd batch in a row with every row FAIL setup ($sig): the next batch on this lane relaunches"; fi
   if [ -n "$sig" ]; then echo "$sig" > "$lsf"; else rm -f "$lsf"; fi; }
+# need_missing <list> <help text>: commands the list needs that the loaded game's `help` lacks (comma list, empty = ok):
+# "# needs-cmd: a,b" (none = no check) + fp_control for any KenshiFP take row (speed-scout m105: lane 4080b's game ran
+# without KenshiFP after Defender removed its DLL, and every row FAILed setup one by one)
+need_missing() { local need c
+  need=$(grep -h '^[[:space:]]*#[[:space:]]*needs-cmd:' "$1" | sed 's/^[^:]*://' | tr ', \r' '\n\n\n' | grep -v '^$' | tr 'A-Z' 'a-z')
+  grep -qx none <<<"$need" && return 0
+  grep -v '^[[:space:]]*\(#\|$\)' "$1" | grep -q 'KenshiFP/tests/ingame/' && need=$(printf 'fp_control\n%s' "$need")
+  for c in $(sort -u <<<"$need"); do grep -qw -- "$c" <<<"$(tr 'A-Z' 'a-z' <<<"$2")" || echo "$c"; done | paste -sd, -; }
 # tl <event> <detail>: one line in the shared GPU/process timeline (gpulog	imeline.tsv: time rig lane event detail; read
 # next to the gpulog csv when a TDR hits; speed-scout 2026-10-11). KAH_TIMELINE overrides the file, "-" = off.
 # timeline time = the 5090 clock on every rig (Windows Central, DST off = UTC-6; WSL runs CDT, the 4080 Pacific)
@@ -146,6 +154,16 @@ if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check
   pkill -P $lp 2>/dev/null; kill $lp 2>/dev/null; wait $lp 2>/dev/null
   st "launch: own proxy tree killed, the other lane's launch alive" "$(kill -0 $lp 2>/dev/null && echo own-alive || echo own-gone):$(kill -0 $ol 2>/dev/null && echo other-alive || echo other-gone)" "own-gone:other-alive"
   kill $ol 2>/dev/null; wait $ol 2>/dev/null
+  nl=$(mktemp); hk='built-in: help | status ... KenshiFP: fp_camera <d> | fp_control <npc> | fp_melee swing_all on|off'; hp='built-in: help | status | pg_info <npc> <item>'
+  printf '%s\n' '# needs-cmd: fp_melee' 'M | s | a | b | 1 | bash {CR}/KenshiModding/components/KenshiFP/tests/ingame/fp-swing-hits-all.sh' > "$nl"
+  st "needs: KenshiFP game has fp_control + fp_melee" "$(need_missing "$nl" "$hk")" ""
+  st "needs: game without KenshiFP (m105 151 on 4080b)" "$(need_missing "$nl" "$hp")" "fp_control,fp_melee"
+  printf '%s\n' '# needs-cmd: none' 'M | s | a | b | 1 | bash {CR}/KenshiModding/components/KenshiFP/tests/ingame/fp-control.sh' > "$nl"
+  st "needs: none = no check" "$(need_missing "$nl" "$hp")" ""
+  printf '%s\n' 'S1 | s | a | b | 1 | bash {CR}/KenshiModding/tests/ingame/stobe/STOBE-X.sh' > "$nl"
+  st "needs: a non-KenshiFP list needs nothing" "$(need_missing "$nl" "$hp")" ""
+  st "needs: checked after every batch launch" "$(grep -c '^  nm=\$(need_missing "\$L"' "$0")" "1"
+  rm -f "$nl"
   echo "RUNBATCH-SELFTEST $([ $st_bad = 0 ] && echo PASS || echo "FAIL $st_bad") $st_n cases"; exit $((st_bad > 0))
 fi
 while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --reuse) REUSE=1; shift ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; *) break ;; esac; done
@@ -340,6 +358,12 @@ if [ -f "$O/launch.out" ] && grep -q "postlaunch FAIL" "$O/launch.out"; then
   say "BATCH ABORTED: game window not at the Video Mode size (postlaunch FAIL, see launch.out)"
   [ "${RIG:-5090}" = 4080 ] || powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$CTL" stop </dev/null >/dev/null 2>&1
   finish; exit 1
+fi
+# the loaded game must have the commands the list needs (need_missing): one clear abort instead of N setup FAILs
+if [ -n "$LAUNCH" ]; then
+  nm=$(need_missing "$L" "")
+  if [ -n "$nm" ]; then for _ in 1 2 3; do hp=$(timeout 20 stobe-auto help </dev/null 2>/dev/null); nm=$(need_missing "$L" "$hp"); [ -z "$nm" ] && break; sleep 5; done; fi
+  if [ -n "$nm" ]; then say "BATCH ABORTED: the loaded game lacks $nm (KenshiFP not loaded? the game's help lists $(grep -o 'fp_[a-z_]*' <<<"$hp" | sort -u | wc -l) fp_ commands)"; tl abort "missing $nm"; finish; exit 1; fi
 fi
 PRE=""; NOTRUN=(); pass=0; fail=0; recwarn=0; dead=0; recovered=0; RECOVER=${RECOVER:-2}; MIN_COMMIT_GB=${MIN_COMMIT_GB:-3}; relreq=""; relrow=""
 tdr_guard launch || true   # a reset during the launch/first load: no row runs (PRE=TDR)
