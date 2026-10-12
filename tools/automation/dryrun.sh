@@ -107,6 +107,8 @@ one() {
 if [ -n "$ROW" ]; then one "$ROW"
 else
   [ -f "$L" ] || { echo "DRYRUN-SUMMARY FAIL list $L missing"; exit 2; }
+  # no "# launch:" header: the runners launch row 1's save (rig-lane2 LaunchSave, rig-runner; speed-scout r10, 210/213 fists lists)
+  grep -qiE '^#\s*launch:' "$L" || { s1=$(grep -vE '^\s*(#|$)' "$L" | head -1 | cut -d'|' -f2 | tr -d ' \r'); echo "DRYRUN-NOTE no '# launch:' header: runners launch row 1's save '${s1:-none}'"; }
   # "# nodryrun: <row>[/<row>,...] <reason>" (rig-runner.ps1 leaves those rows out): SKIP with the reason
   declare -A NODRY=()
   while IFS= read -r line; do
