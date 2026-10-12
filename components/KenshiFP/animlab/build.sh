@@ -21,12 +21,15 @@ while [ $# -gt 0 ]; do case "$1" in
   --no-l1) NOL1=1; shift;;
   --no-hoff) NOHOFF=1; shift;;
   --no-fast) NOFAST=1; shift;;
+  --built) BUILT="$2"; shift 2;;   # gpu-lab: reuse an existing <adapter>.d build dir (patched client + gen_helpers.h) as is: no copy, no patches (GPU build of the exact source of a CPU adapter)
   --preprocess) PREP=1; shift;;   # gpu-lab: write <out>.i (gcc -E, same flags/defs) instead of compiling (gpu/gpugen.py input)   # leave out patches/fast-elb.py (exact lab speed patch; also AL_NO_FAST=1)
   --l1) L1=1; shift;;   # the game L1 model in a --drive build too (fist candidates: native.py fists --adapter; FIST-shoteiL op-b6)
   --sync) mkdir -p /root/animlab-kfp-src && rsync -a --delete /root/KenshiFP/client/ /root/animlab-kfp-src/client/; shift;;
   --src) SRC="$2"; shift 2;;
   --rev) R_=/root/animlab-build/rev-$2; rm -rf "$R_"; mkdir -p "$R_"; git -C /mnt/c/KenshiModding archive "$2" components/KenshiFP/client | tar -x -C "$R_"; SRC="$R_/components/KenshiFP/client"; shift 2;; --out) OUT="$2"; shift 2;; --patch) PATCHES+=("$2"); shift 2;;
   *) echo "build.sh: unknown arg $1" >&2; exit 2;; esac; done
+if [ -n "$BUILT" ]; then B="$BUILT"; [ -f "$B/gen_helpers.h" ] && [ -d "$B/client" ] || { echo "build.sh: --built $B is not an adapter build dir" >&2; exit 2; }
+else
 B="$(dirname "$OUT")/$(basename "$OUT").d"; rm -rf "$B"; mkdir -p "$B"; cp -r "$SRC" "$B/client"
 for p in "${PATCHES[@]}"; do case "$p" in
   *.py) python3 "$p" "$B/client" ;;
@@ -36,6 +39,7 @@ for p in "${PATCHES[@]}"; do case "$p" in
 # lab speed (gpu-lab 2026-10-11): exact branch-and-bound + hoisted trig in the elbow search, bit-identical output (fastcheck.sh), ~1.5x
 [ -n "$NOFAST" ] || [ -n "${AL_NO_FAST:-}" ] || python3 "$HERE/patches/fast-elb.py" "$B/client"
 python3 "$HERE/extract_helpers.py" "$B/client/kenshifp_client.c" "$B/gen_helpers.h" quat_mul quat_conj quat_norm quat_slerp quat_rotvec
+fi
 DEFS=""; grep -q "g_vm_elb_cb" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ELB_CB"
 grep -q "g_vm_eclamp_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_ECLAMP"
 grep -q "g_vm_hcap_n" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_HINGE"
@@ -44,7 +48,7 @@ grep -q "g_vm_2hbw" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_2HB"
 grep -q "vm_pd_write" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_POSEDUMP"
 grep -q "g_al_hoff" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_HOFF"   # recorded hand scale replaces it (lab-calibrate2)
 grep -q "g_al_l1n_rec" "$B/client/kfp_viewmodel.inc" && DEFS="$DEFS -DAL_HAVE_L1REC"   # recorded solver upper-arm length (lab-calibrate2)   # kfp-posedump: kfpvm_replay --posedump
-if [ -n "$PREP" ]; then gcc -E -std=gnu11 $DEFS -I"$B" -I"$B/client" -I"$HERE" -o "$OUT.i" "$HERE/$MAIN"; echo "preprocessed $OUT.i defs:$DEFS"; exit 0; fi
+if [ -n "$PREP" ]; then gcc -E -std=gnu11 $DEFS '-DAL_LOOP_HOOK(n)=al_gpu_loop(n)' -I"$B" -I"$B/client" -I"$HERE" -o "$OUT.i" "$HERE/$MAIN"; echo "preprocessed $OUT.i defs:$DEFS"; exit 0; fi
 # build cache (labcache.py, Shay 2026-10-10 CPU cut): key = content of every compile input (patched client copy +
 # generated helpers, the harness mains/headers here, -D flags, gcc version), not paths: the same source built under
 # another name or in another pipeline tree restores the same binary, so its replays hit the result cache too.

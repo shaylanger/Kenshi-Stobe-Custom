@@ -7,6 +7,9 @@ static float fabsf(float x) { return __builtin_fabsf(x); }
 static float fminf(float a, float b) { return a != a ? b : b != b ? a : a < b ? a : b; }   /* glibc: NaN-ignoring */
 static float fmaxf(float a, float b) { return a != a ? b : b != b ? a : a > b ? a : b; }
 static float sqrtf(float x) { return __nv_sqrtf(x); }
+static float floorf(float x) { return __builtin_floorf(x); }   /* exact on both sides */
+static float ceilf(float x) { return __builtin_ceilf(x); }
+static float truncf(float x) { return __builtin_truncf(x); }
 static double sqrt(double x) { return __nv_sqrt(x); }
 static double log(double x) { return __nv_log(x); }
 #ifdef AL_EXACT_LIBM

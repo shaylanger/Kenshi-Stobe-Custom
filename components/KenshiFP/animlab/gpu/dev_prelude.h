@@ -84,8 +84,29 @@ static char *fgets(char *s, int n, FILE *f) { (void)s; (void)n; (void)f; return 
 static int sscanf(const char *s, const char *f, ...) { (void)s; (void)f; return 0; }
 static long strtol(const char *s, char **e, int base) { long v = 0; int neg = 0; (void)base; while (*s == ' ') s++; if (*s == '-') { neg = 1; s++; } while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0'); if (e) *e = (char *)s; return neg ? -v : v; }
 static int atoi(const char *s) { return (int)strtol(s, 0, 10); }
-static float strtof(const char *s, char **e) { (void)s; if (e) *e = (char *)s; return 0.0f; }   /* host-only (fp_vm set parser) */
-static double atof(const char *s) { (void)s; return 0.0; }
+/* strtod: the recording's per-frame `# set` lines (fp_vm set -> atof) run inside the frame loop. Clinger's fast path
+ * (<= 19 digits, mantissa < 2^53, |exp10| <= 22: one IEEE operation, so the same bits as glibc's correctly rounded
+ * strtod); longer inputs fall back to a double-precision power product (may differ in the last bit). */
+static double strtod(const char *s, char **e)
+{
+    static const double p10[23] = { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+                                    1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22 };
+    const char *p = s; int neg = 0, nd = 0, ex = 0, any = 0; unsigned long long m = 0;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p == '-' || *p == '+') neg = *p++ == '-';
+    for (; *p >= '0' && *p <= '9'; p++, any = 1) { if (nd < 19) { m = m * 10 + (*p - '0'); if (m) nd++; } else ex++; }
+    if (*p == '.') for (p++; *p >= '0' && *p <= '9'; p++, any = 1) if (nd < 19) { m = m * 10 + (*p - '0'); if (m) nd++; ex--; }
+    if (!any) { if (e) *e = (char *)s; return 0.0; }
+    if (*p == 'e' || *p == 'E') { const char *q = p + 1; int en = 0, eg = 0; if (*q == '-' || *q == '+') eg = *q++ == '-';
+        if (*q >= '0' && *q <= '9') { while (*q >= '0' && *q <= '9') en = en * 10 + (*q++ - '0'); ex += eg ? -en : en; p = q; } }
+    if (e) *e = (char *)p;
+    double v = (double)m;
+    if (m < (1ull << 53) && ex >= -22 && ex <= 22) v = ex < 0 ? v / p10[-ex] : v * p10[ex];
+    else { while (ex > 0) { int k = ex > 22 ? 22 : ex; v *= p10[k]; ex -= k; } while (ex < 0) { int k = -ex > 22 ? 22 : -ex; v /= p10[k]; ex += k; } }
+    return neg ? -v : v;
+}
+static float strtof(const char *s, char **e) { return (float)strtod(s, e); }
+static double atof(const char *s) { return strtod(s, 0); }
 static char *strtok(char *s, const char *d) { (void)s; (void)d; return 0; }
 static char *strtok_r(char *s, const char *d, char **sv) { (void)s; (void)d; (void)sv; return 0; }
 static void qsort(void *b, size_t n, size_t w, int (*c)(const void *, const void *))

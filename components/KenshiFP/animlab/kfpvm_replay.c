@@ -386,6 +386,63 @@ static int pd_want(const char *l, int i)
     return 0;
 }
 
+/* one replayed frame (gpu-lab 2026-10-11: the loop body of main as a function, so the GPU evaluator (gpu/) can run the
+ * frame loop from a captured state; main's loop locals live in these globals) */
+static const char **g_al_sets_at; static int g_al_nsa; static unsigned g_al_shots; static int *g_al_cf;
+static FILE *g_al_pdf; static const char *g_al_pd_frames;
+static void al_frame(int i)
+{
+    const char **sets_at = g_al_sets_at; int nsa = g_al_nsa; int *cf = g_al_cf; FILE *pdf = g_al_pdf; const char *pd_frames = g_al_pd_frames;
+    (void)pdf; (void)pd_frames;
+    const Rin *r = &R[i];
+    for (int s = 0; s < nsa; s++) { int fr; const char *c = strchr(sets_at[s], ':');
+        if (c && sscanf(sets_at[s], "%d:", &fr) == 1 && fr == i) do_set(c + 1); }
+    if (g_use_rsets) for (int s = 0; s < g_nrsets; s++) if (g_rsets[s].f == i) do_set(g_rsets[s].kv);
+    if (i) g_al_clock += r->dt;
+    g_fpc_ui_state = r->st; g_fpc_fs_prog = r->prog; g_view.applied = r->zoom; g_view.target = r->zoom;
+    g_yaw = r->yaw * 0.017453293f; g_pitch = r->pitch * 0.017453293f;
+    g_last_eye = f3(r->v[13]); g_view_have_anchor = 0; g_tx = g_tz = 0;
+    if (i && r->fire > R[i - 1].fire + 0.01f) g_al_shots++;
+    g_combat_actual_shots = g_al_shots;
+    { int lower = r->phase == VMP_LOWER; int ons = strcmp(r->st, "holstered") && strcmp(r->st, "down") && strcmp(r->st, "off") && strcmp(r->st, "none");
+      g_fpc_holster_pending = lower && ons; }
+#ifdef VM_NFIST
+    if (g_fist_anim) {
+        int sw = !strcmp(r->st, "swinging");
+        if (sw && (!i || strcmp(R[i - 1].st, "swinging") || r->prog < R[i - 1].prog - 0.3f)) g_fist_k = (g_fist_k + 1) & 255;
+        g_fpc_fists = 1; g_fpc_fs_tech = sw && g_fist_k >= 0 ? (void *)&g_fist_mk[g_fist_k] : NULL;
+        snprintf(g_fpc_fs_name, sizeof g_fpc_fs_name, "%s", g_fist_nn && g_fist_k >= 0 ? g_fist_nm[g_fist_k % g_fist_nn] : g_fist_anim);
+    }
+#endif
+    g_cls_fill[0] = cf[i];
+    *(void **)(g_pc + CHAR_WEAPON_IN_HANDS) = r->wih ? (cf[i] ? (void *)&g_wep_ranged : (void *)&g_wep_melee) : NULL;
+    vm_frame(g_pc, 0);
+#ifdef AL_HAVE_2H
+    if (g_al_2hsnap) { g_vm_2hw = g_vm_2h ? 1.0f : 0.0f; g_al_2hsnap = 0;
+#ifdef AL_HAVE_2HB
+        g_vm_2hbw = r->ti == VM_BLOCK ? 1.0f : 0.0f;   /* 2H block blend, same */
+#endif
+    }
+#endif
+#ifdef AL_HAVE_POSEDUMP
+    if (pdf && pd_want(pd_frames, i)) vm_pd_write(pdf, g_pc, g_vm_rn - 1);
+#endif
+    g_nat = i + 1 < RN ? i + 1 : i;
+    /* the game skips the animation update (no Skeleton::setAnimationState, so no apply) on some frames: napply
+     * (re-maps inside full-weight applies) then does not increment and the skeleton keeps the last pose. Skip
+     * the apply there too (only provable on frames where the viewmodel is up: napply counts only those). */
+    int skip_apply = g_napp_mode && i + 1 < RN && r->has_napp && R[i + 1].has_napp && R[i + 1].napp == r->napp
+                     && r->w * r->zf > 0.001f && R[i + 1].w * R[i + 1].zf > 0.001f;
+    if (skip_apply) { g_skipped++; return; }
+    g_napp_rec = i;
+    g_in_apply = 1; hooked_vm_setanim(g_b, NULL, 1.0f, NULL); g_in_apply = 0;
+    g_napp_rec = -1;
+}
+#ifndef AL_LOOP_HOOK
+#define AL_LOOP_HOOK(n) 0   /* gpu/ (build.sh --preprocess): 1 = the frame loop ran elsewhere and its state was loaded */
+#else
+static int al_gpu_loop(int n);
+#endif
 int main(int argc, char **argv)
 {
     if (argc < 3) { fprintf(stderr, "usage: kfpvm_replay <rec.txt> <out.txt> [--calib L1R,L2R,L1L,L2L,K] [--set k=v]... [--set-at frame:k=v]... [--quiet] [--abs-world] [--bw-lag] [--up-roll]\n"); return 2; }
@@ -492,52 +549,9 @@ int main(int argc, char **argv)
 #endif
     }
     g_vm_rec = calloc(VM_RECN, sizeof(VmRec)); g_vm_rn = 0; g_al_clock = 0; QueryPerformanceCounter(&g_vm_rec_t0); g_vm_rec_on = 1;
-    unsigned shots = 0; int n = RN < VM_RECN ? RN : VM_RECN;
-    for (int i = 0; i < n; i++) {
-        const Rin *r = &R[i];
-        for (int s = 0; s < nsa; s++) { int fr; const char *c = strchr(sets_at[s], ':');
-            if (c && sscanf(sets_at[s], "%d:", &fr) == 1 && fr == i) do_set(c + 1); }
-        if (g_use_rsets) for (int s = 0; s < g_nrsets; s++) if (g_rsets[s].f == i) do_set(g_rsets[s].kv);
-        if (i) g_al_clock += r->dt;
-        g_fpc_ui_state = r->st; g_fpc_fs_prog = r->prog; g_view.applied = r->zoom; g_view.target = r->zoom;
-        g_yaw = r->yaw * 0.017453293f; g_pitch = r->pitch * 0.017453293f;
-        g_last_eye = f3(r->v[13]); g_view_have_anchor = 0; g_tx = g_tz = 0;
-        if (i && r->fire > R[i - 1].fire + 0.01f) shots++;
-        g_combat_actual_shots = shots;
-        { int lower = r->phase == VMP_LOWER; int ons = strcmp(r->st, "holstered") && strcmp(r->st, "down") && strcmp(r->st, "off") && strcmp(r->st, "none");
-          g_fpc_holster_pending = lower && ons; }
-#ifdef VM_NFIST
-        if (g_fist_anim) {
-            int sw = !strcmp(r->st, "swinging");
-            if (sw && (!i || strcmp(R[i - 1].st, "swinging") || r->prog < R[i - 1].prog - 0.3f)) g_fist_k = (g_fist_k + 1) & 255;
-            g_fpc_fists = 1; g_fpc_fs_tech = sw && g_fist_k >= 0 ? (void *)&g_fist_mk[g_fist_k] : NULL;
-            snprintf(g_fpc_fs_name, sizeof g_fpc_fs_name, "%s", g_fist_nn && g_fist_k >= 0 ? g_fist_nm[g_fist_k % g_fist_nn] : g_fist_anim);
-        }
-#endif
-        g_cls_fill[0] = cf[i];
-        *(void **)(g_pc + CHAR_WEAPON_IN_HANDS) = r->wih ? (cf[i] ? (void *)&g_wep_ranged : (void *)&g_wep_melee) : NULL;
-        vm_frame(g_pc, 0);
-#ifdef AL_HAVE_2H
-        if (g_al_2hsnap) { g_vm_2hw = g_vm_2h ? 1.0f : 0.0f; g_al_2hsnap = 0;
-#ifdef AL_HAVE_2HB
-            g_vm_2hbw = r->ti == VM_BLOCK ? 1.0f : 0.0f;   /* 2H block blend, same */
-#endif
-        }
-#endif
-#ifdef AL_HAVE_POSEDUMP
-        if (pdf && pd_want(pd_frames, i)) vm_pd_write(pdf, g_pc, g_vm_rn - 1);
-#endif
-        g_nat = i + 1 < RN ? i + 1 : i;
-        /* the game skips the animation update (no Skeleton::setAnimationState, so no apply) on some frames: napply
-         * (re-maps inside full-weight applies) then does not increment and the skeleton keeps the last pose. Skip
-         * the apply there too (only provable on frames where the viewmodel is up: napply counts only those). */
-        int skip_apply = g_napp_mode && i + 1 < RN && r->has_napp && R[i + 1].has_napp && R[i + 1].napp == r->napp
-                         && r->w * r->zf > 0.001f && R[i + 1].w * R[i + 1].zf > 0.001f;
-        if (skip_apply) { g_skipped++; continue; }
-        g_napp_rec = i;
-        g_in_apply = 1; hooked_vm_setanim(g_b, NULL, 1.0f, NULL); g_in_apply = 0;
-        g_napp_rec = -1;
-    }
+    int n = RN < VM_RECN ? RN : VM_RECN;
+    g_al_sets_at = sets_at; g_al_nsa = nsa; g_al_shots = 0; g_al_cf = cf; g_al_pdf = pdf; g_al_pd_frames = pd_frames;
+    if (!AL_LOOP_HOOK(n)) for (int i = 0; i < n; i++) al_frame(i);
     if (pdf) { fprintf(pdf, "# end done\n"); fclose(pdf); }
     int w = vm_rec_dump(argv[2]);
     printf("frames %d written %d skipped_applies %d native_applies %d roll_applies %d l1_applies %d hs_applies %d rec_sets %d\n", n, w, g_skipped, g_nat_used, g_roll_used, g_l1_used, g_hs_used, g_nrsets);
