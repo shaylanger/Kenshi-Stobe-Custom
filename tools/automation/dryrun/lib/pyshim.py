@@ -122,6 +122,8 @@ def canned(tool, a):
         w = fakeexe.now_world()
         if sub == 'overlay' and w.get('popup'):
             p('RESULT %s FAIL overlay frames=4 overlay_frames=4 text "%s" (dryrun fixture: fight near the spot)' % (name, w['popup'])); return 1
+        if sub == 'overlay' and w.get('bark'):
+            p('RESULT %s FAIL overlay frames=4 overlay_frames=4:BAD at=0.0-1.5s(text-panel x32,y0) (dryrun fixture bark "%s")' % (name, w['bark'])); return 1
         if sub == 'openground' and w.get('night'):
             p('RESULT take FAIL openground open=0.10/0.90 frames=4 min_sky=0.02 sky_min=0.26 (dryrun fixture: night)'); return 1
         p({'openground': 'RESULT take PASS openground open=1.00/0.90 frames=4 min_sky=0.30 sky_min=0.26',

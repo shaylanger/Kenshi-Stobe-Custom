@@ -5,6 +5,8 @@
 # dryrun.sh / dryrun/ / take-preflight.sh. Prints one line per case and a last line
 #   RESULT DRYRUN-SELFTEST PASS|FAIL cases=<n> bad=<names>
 # (bug-shellop / ctl-quoted: run-batch.sh row_split, rows are not run by a shell)
+# bark / inst2 (138-wc-clv-any 2026-10-11): a top-band text line pf_open must wait out; lane 5090b (KAH_INSTANCE=2) must film
+# its own "[i2]" window, not lane A's.
 # Cases: <name> | <fixture or -> | <rig> | <expect: PASS or FAIL:<regex the DRYRUN line must match>> | <batch row>
 set -u
 H=/mnt/c/KenshiModding/tools/automation; RP=$H/dryrun/fixtures/replay-take.sh
@@ -25,6 +27,10 @@ ctl-2h-dimslate | dims-late | 5090 | PASS                                     | 
 bug-night      | night  | 5090 | FAIL:filmed at night                           | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp bare
 bug-combat     | combat | 5090 | FAIL:hostiles within 30 m.*popup               | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp bare
 bug-popup      | combat | 5090 | FAIL:setup: foreign overlay                    | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp popup
+ctl-bark       | bark   | 5090 | PASS                                           | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp popup
+bug-bark       | bark   | 5090 | FAIL:setup: foreign overlay.*text-panel        | rp | - | Axima | Malzin | 120 | PF_TEXT_RETRY=0 $RP {OUT}/rp popup
+ctl-inst2-wc   | -      | 5090 | PASS                                           | wc | kah-fpxbow | Axima | Malzin | 600 | KAH_INSTANCE=2 WS_NOXBOW=1 WS_TWO_LIGHT=1 PF_SAVE=kah-fpxbow bash $KT/fp-weapon-sweep.sh {OUT}/wcclv /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-wc-clv.list wcclv
+ctl-readydiag  | -      | 5090 | PASS                                           | rd | kah-fpxbow | Axima | Malzin | 600 | bash $KT/fp-ready-diag.sh {OUT}/rd
 bug-noresult   | -      | 5090 | FAIL:no RESULT line                            | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp noresult
 bug-lag        | -      | 5090 | FAIL:REPLAY-lag FAIL takecheck                 | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp lag
 bug-early      | -      | 5090 | FAIL:REPLAY-early FAIL takecheck.*claim        | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp early

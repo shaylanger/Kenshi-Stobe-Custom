@@ -66,7 +66,12 @@ PF_SHOTS=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}/mods/AutomationHarness/sh
 PF_LAB=${CR:-/mnt/c}/KenshiModding/Kenshi-Automation-Harness/tools/animlab
 for _d in ${CR:-/mnt/c} /mnt/c /c; do [ -f $_d/KenshiModding/tools/automation/venc.sh ] && { . $_d/KenshiModding/tools/automation/venc.sh; break; }; done   # venc_args: h264_nvenc, libx264 fallback
 type venc_args >/dev/null 2>&1 || venc_args(){ echo "-c:v libx264 -preset ${2:-veryfast} -crf ${1:-18} -pix_fmt yuv420p"; }
-PF_TITLE="title=Kenshi 1.0.65 - x64 (Newland)"
+# pf_title: capture window of THIS game lane, same rule as rig-env.sh WIN_TITLE (instance n>=2 is retitled "<title> [i<n>]").
+# 138-wc-clv-any 2026-10-11 (lane 5090b = instance 2): PF_TITLE was hardcoded, so pf_open filmed lane A's window and failed on
+# ITS top-left text ("foreign overlay text-panel x32,y0") while the take itself would have filmed the right window.
+pf_title(){ local t=${WIN_TITLE:-Kenshi 1.0.65 - x64 (Newland)}
+  [ -z "${WIN_TITLE:-}" ] && [[ "${KAH_INSTANCE:-1}" =~ ^[2-9]$ ]] && t="$t [i$KAH_INSTANCE]"; echo "title=$t"; }
+PF_TITLE=$(pf_title)
 pf_fail(){ [ -n "$PF_ON_FAIL" ] && eval "$PF_ON_FAIL"; PF_DONE=1; echo "RESULT ${PF_ROW:-take} FAIL setup: $*"; exit 1; }
 pf_hour(){ local h; h=$(PF_A time | grep -o 'time=[0-9]*'); h=${h#time=}; echo $((10#${h:-0})); }
 pf_day(){
@@ -130,26 +135,43 @@ pf_ontop(){ local r
   r=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\kenshi-ctl.ps1' ontop on 2>&1 </dev/null | tr -d '\r' | grep '^ontop' | head -1)
   case "$r" in *unoccluded*) echo "pf_ontop ok: $r";; *"occluded by "*) pf_fail "window occluded by ${r#*occluded by }";;
     *) pf_fail "window topmost/occlusion check failed: ${r:-no answer}";; esac; }
+# pf_open text wait: an overlay FAIL whose every span is bark/message TEXT in the top 10% of the frame (NPC chatter line
+# already on screen when `chatter off` was sent; it fades, it is not zeroed) gets `chatter off` + a PF_TEXT_WAIT (4 s) wait
+# and ONE new clip (a different condition: the text had time to fade, not an unchanged retry; PF_TEXT_RETRY=0 = off). A failing clip is kept as
+# <row log dir>/pf-<row>-<n>.mp4 (RESULT_LOG from run-batch.sh) so the next setup FAIL can be judged from its frames.
+pf_textonly(){ local sp k y lim=$(( ${RES_H:-900} / 10 ))
+  sp=$(grep -oE '\((text|text-panel|uibox|toast|panel) x[0-9]+,y[0-9]+\)' <<<"$1"); [ -n "$sp" ] || return 1
+  while read -r k; do y=${k##*,y}; y=${y%)}; case "$k" in "(text "*|"(text-panel "*) [ "$y" -lt "$lim" ] || return 1;; *) return 1;; esac
+  done <<<"$sp"; return 0; }
 pf_open(){
-  local s=${1:-2} f=/tmp/pf-open.$$.mp4 r o
+  local s=${1:-2} f=/tmp/pf-open.$$.mp4 r o c y n=0 why
   pf_ontop
   # park the virtual cursor in the top-right corner (sky): hovering a character shows its "[name]" tag (kfx-b9 blkE overlay)
   PF_A mouse_inject at "${PF_PARK_X:-$(( ${RES_W:-1600} - 5 ))}" "${PF_PARK_Y:-4}" >/dev/null 2>&1
-  ( cd /tmp && "$PF_FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t "$s" -i "$PF_TITLE" $(venc_args 23) "$(wslpath -w $f)" ) </dev/null
-  [ -s "$f" ] || pf_fail "open-ground clip not recorded"
-  r=$(python3 $PF_LAB/frames.py openground "$f" 2>&1 | tail -1)
-  local c y; c=$(python3 $PF_LAB/frames.py cursor "$f" --name pf 2>&1 | tail -1); o=$(python3 $PF_LAB/frames.py overlay "$f" --name pf 2>&1 | tail -1)
-  y=$(ffmpeg -hide_banner -nostdin -i "$f" -vf "fps=2,signalstats,metadata=print:key=lavfi.signalstats.YAVG" -f null - 2>&1 | grep -o 'YAVG=[0-9.]*' | cut -d= -f2 | sort -n | head -1); rm -f "$f"
-  echo "$r" | grep -q "PASS" || pf_fail "open ground: $r"
-  echo "$c" | grep -q "PASS" || pf_fail "mouse cursor in frame: $c"
+  while :; do n=$((n + 1)); why=""
+    ( cd /tmp && "$PF_FFX" -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 10 -t "$s" -i "$(pf_title)" $(venc_args 23) "$(wslpath -w $f)" ) </dev/null
+    [ -s "$f" ] || pf_fail "open-ground clip not recorded ($(pf_title))"
+    r=$(python3 $PF_LAB/frames.py openground "$f" 2>&1 | tail -1)
+    c=$(python3 $PF_LAB/frames.py cursor "$f" --name pf 2>&1 | tail -1); o=$(python3 $PF_LAB/frames.py overlay "$f" --name pf 2>&1 | tail -1)
+    y=$(ffmpeg -hide_banner -nostdin -i "$f" -vf "fps=2,signalstats,metadata=print:key=lavfi.signalstats.YAVG" -f null - 2>&1 | grep -o 'YAVG=[0-9.]*' | cut -d= -f2 | sort -n | head -1)
+    echo "$r" | grep -q "PASS" || why="open ground: $r"
+    [ -z "$why" ] && { echo "$c" | grep -q "PASS" || why="mouse cursor in frame: $c"; }
+    [ -z "$why" ] && echo "$o" | grep -q "FAIL" && why="foreign overlay in frame (name tag / bark text / popup): $o"
+    [ -z "$why" ] && { awk -v y="${y:-0}" -v m="${PF_MIN_YAVG:-35}" 'BEGIN{exit !(y >= m)}' || why="dark/black frames (min luma ${y:-?} < ${PF_MIN_YAVG:-35}): night, or the display asleep"; }
+    if [ -n "$why" ] && [ -n "${RESULT_LOG:-}" ]; then cp -f "$f" "${RESULT_LOG%/*}/pf-${PF_ROW:-take}-$n.mp4" 2>/dev/null; fi
+    rm -f "$f"
+    if [ $n = 1 ] && [ -n "$why" ] && [ "${PF_TEXT_RETRY:-1}" = 1 ] && [ "${why#foreign overlay}" != "$why" ] && pf_textonly "$o"; then
+      echo "pf_open text wait: top-band text only ($o): chatter off, ${PF_TEXT_WAIT:-4} s, new clip"
+      PF_A chatter off >/dev/null; sleep "${PF_TEXT_WAIT:-4}"; continue; fi
+    break
+  done
   # a ui box in the left hint column (x<40) = Kenshi tutorial hint popups (Prospecting / How to research ...): the game was
   # launched before kenshi-ctl's tutorials=0 (54a22ec) and they never go away on a reused game (sword-judge 2026-10-11: 3 lists,
   # 5 rows lost to 'uibox x16,y330' on the 14:59 lane-A instance) -> ask run-batch.sh for a relaunch before the next row.
   if echo "$o" | grep -q "FAIL" && echo "$o" | grep -Eq 'uibox x([0-9]|[1-3][0-9]),'; then
     [ -n "${RELAUNCH_FILE:-}" ] && echo "tutorial hint popups on screen (game launched before tutorials=0): $o" > "$RELAUNCH_FILE"; fi
-  echo "$o" | grep -q "FAIL" && pf_fail "foreign overlay in frame (name tag / bark text / popup): $o"
-  awk -v y="${y:-0}" -v m="${PF_MIN_YAVG:-35}" 'BEGIN{exit !(y >= m)}' || pf_fail "dark/black frames (min luma ${y:-?} < ${PF_MIN_YAVG:-35}): night, or the display asleep"
-  echo "pf_open ok: $r | $c | $o | min luma $y"
+  [ -n "$why" ] && pf_fail "$why"
+  echo "pf_open ok: $r | $c | $o | min luma $y | $(pf_title)$([ $n -gt 1 ] && echo " | after text wait")"
 }
 # pf_calm <who> [keep names...] (non-exiting, PF_WHY on failure): <who> (a squad member, e.g. the one a row hands control
 # to) is in no native fight. rg-04 M08-ACTOR on the 5090 kah-fpxbow copy, 2026-10-11 33-rg04: Dust Bandits attacked Axima

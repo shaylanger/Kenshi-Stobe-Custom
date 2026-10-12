@@ -19,6 +19,10 @@ R=$S/r
 mount -t overlay overlay -o lowerdir=/,upperdir="$S/ru",workdir="$S/rw" "$R" || { echo "DRYRUN $NAME FAIL sandbox: root overlay"; exit 3; }
 mount -t proc proc "$R/proc"; mount --rbind /dev "$R/dev"; mount --make-rslave "$R/dev"; mount -t tmpfs none "$R/tmp"
 if [ "$RIG" = 4080 ]; then CM=$R/c; KD="/c/Program Files (x86)/Steam/steamapps/common/Kenshi"; else CM=$R/mnt/c; KD=/mnt/d/Steam/steamapps/common/Kenshi; fi
+# multi-instance lane (KAH_INSTANCE=n>=2 in the row command; rig-env.sh): the game dir is the install copy KenshiInst\<n>, the window
+# is retitled "<title> [i<n>]" (fakeexe.py WIN_TITLE) -- 138-wc-clv-any 2026-10-11, pf_open filmed lane A from lane 5090b
+DRI=$(grep -oE '(^|[[:space:]])KAH_INSTANCE=[2-9]([[:space:]]|$)' <<<"$CMD" | grep -oE '[2-9]' | head -1)
+[ -n "$DRI" ] && { if [ "$RIG" = 4080 ]; then KD=/c/KenshiInst/$DRI; else KD=/mnt/d/KenshiInst/$DRI; fi; }
 mkdir -p "$CM"
 mount -t overlay overlay -o lowerdir=/mnt/c,upperdir="$S/cu",workdir="$S/cw",noexec "$CM" || { echo "DRYRUN $NAME FAIL sandbox: C: overlay"; exit 3; }
 mkdir -p "$R$KD/mods/AutomationHarness/shots" "$R$KD/RE_Kenshi/mods/Stobe"

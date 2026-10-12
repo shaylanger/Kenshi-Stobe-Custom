@@ -143,6 +143,9 @@ def new_state(save):
              # fixtures/dialog.json (2026-10-10 20-rg04 M08): NPC conversations that open the dialogue window `at` s after
              # the load and stay open until `dialog close` (KenshiFP fp_state ui_open=1 ui_why=panels meanwhile)
              dlg=[dict(e, vt=dr.vnow() + float(e.get('at', 0)), closed=0) for e in f.get('dialog', [])],
+             # fixtures/bark.json (138-wc-clv-any 2026-10-11): a bark/message line in the top 10% of the frame that is on screen
+             # from the load until `secs` later (it fades; `chatter off` does not remove a line already shown)
+             bark=dict(text=f['bark']['text'], vt_end=dr.vnow() + float(f['bark'].get('secs', 6))) if f.get('bark') else None,
              iso=0 if os.environ.get('RIG') == '4080' or os.environ.get('DRYRUN_ISO') == 'off' else 1)
     # iso: 5090 kenshi-ctl launch turns input isolation on; the 4080 C:\KAH\ctl.ps1 launch does not (b4080c setup FAIL)
     t = dr.vnow()
@@ -280,7 +283,8 @@ def world(s, now=None, allow=()):
         if d < 2000:
             near.append(n)
     return dict(hour=round(h, 2), night=h < 6.5 or h >= 18.5, hostiles=host, near=near,
-                popup=('%s is attacking!' % host[0]) if host and s.get('fight') else None)
+                popup=('%s is attacking!' % host[0]) if host and s.get('fight') else None,
+                bark=s['bark']['text'] if s.get('bark') and (now is None or now < s['bark']['vt_end']) else None)
 
 
 def dlg_open(s, now):

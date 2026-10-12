@@ -12,6 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dr  # noqa: E402
 
 WIN_TITLE = 'title=Kenshi 1.0.65 - x64 (Newland)'
+# multi-instance lanes (rig-env.sh): instance n>=2 is retitled "<title> [i<n>]"; filming the base title there films lane A's
+# game (138-wc-clv-any 2026-10-11: take-preflight.sh pf_open hardcoded the base title on lane 5090b)
+if re.fullmatch(r'[2-9]', os.environ.get('KAH_INSTANCE', '1')):
+    WIN_TITLE = WIN_TITLE + ' [i%s]' % os.environ['KAH_INSTANCE']
 BOOL = {'-y', '-n', '-hide_banner', '-nostdin', '-an', '-sn', '-vn', '-dn', '-shortest', '-nostats', '-stats', '-re',
         '-show_format', '-show_streams', '-of', '-print_format'}
 BOOL_PROBE = {'-show_format', '-show_streams', '-show_entries', '-v', '-of', '-select_streams'}

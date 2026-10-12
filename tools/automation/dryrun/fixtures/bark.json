@@ -1,0 +1,87 @@
+{
+ "chars": {
+  "Shay": {
+   "id": "#10/11",
+   "fac": "Nameless",
+   "pos": [
+    -53890.0,
+    633.0,
+    6850.0
+   ],
+   "items": [
+    "Iron Hat"
+   ],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Shay"
+  },
+  "Malzin": {
+   "id": "#12/13",
+   "fac": "Nameless",
+   "pos": [
+    -54170.0,
+    633.0,
+    4390.0
+   ],
+   "items": [
+    "Chisa Katana",
+    "Oldworld Bow MkII"
+   ],
+   "eq": [
+    "Chisa Katana",
+    "Oldworld Bow MkII"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Malzin"
+  },
+  "Axima": {
+   "id": "#14/15",
+   "fac": "Nameless",
+   "pos": [
+    -54190.0,
+    633.0,
+    4380.0
+   ],
+   "items": [
+    "Oldworld Bow MkI",
+    "Iron Hat"
+   ],
+   "eq": [
+    "Oldworld Bow MkI",
+    "Iron Hat"
+   ],
+   "ko": 0,
+   "ranged": null,
+   "name": "Axima"
+  },
+  "Tassilo": {
+   "id": "#16/17",
+   "fac": "Nameless",
+   "pos": [
+    -53940.0,
+    633.0,
+    6850.0
+   ],
+   "items": [],
+   "eq": [],
+   "ko": 0,
+   "ranged": null,
+   "name": "Tassilo"
+  }
+ },
+ "squad": [
+  "Shay",
+  "Malzin",
+  "Axima",
+  "Tassilo"
+ ],
+ "hour": 11.0,
+ "fight": 0,
+ "about": "5090b 138-wc-clv-any 2026-10-11: pf_open overlay FAIL text-panel x32,y0 in all frames (lane 5090b filmed lane A through the hardcoded title; the top-band bark/message class). A text line in the top 10% is on screen from the load for secs s (fades; chatter off does not remove it). take-preflight.sh pf_open must wait it out (chatter off + PF_TEXT_WAIT + one new clip); replay: replay-take.sh <out> popup",
+ "bark": {
+  "text": "Skaera: Got any spare change?",
+  "secs": 9
+ }
+}
