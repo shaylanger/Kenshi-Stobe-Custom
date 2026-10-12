@@ -80,7 +80,9 @@ closure changed since its last PASS (runner\filler-ledger.tsv from <out>\rows.ts
 queued + every filler unchanged = rig<rig>.idle "no changed work" (allowed idle: no ALERT, the hooks read IDLE-OK).
 Any rig: any\ lists go to a rig whose list-rigcheck.sh says OK (both NO = failed\); NO lists fail at start; an idle rig
 steals the head of the busy other rig's folder (no "# rig:" header, OK here). "# gfx: low|full" (default full): the game
-is reused only in the same mode (runner\<rig>.gfx), else relaunched with KAH_GFX (5090) / kcfg.ps1 -Gfx (4080).
+is reused only in the same mode (runner\<rig>.gfx), else relaunched with KAH_GFX (5090) / kcfg.ps1 -Gfx (4080). Since speed-scout r9
+low is a saving, not a need (GfxPick): a low list runs in a running FULL game, a cold launch for a low list starts full when a
+queued list wants full; only a full list on a low game (or "# gfx: low strict") relaunches.
 No relaunch gap: Kenshi stays up between lists (5090 always, 4080 when a next list is queued); run-batch.sh --reuse loads
 the save in place; Kenshi is stopped only for a DLL install. Fast setup FAIL: a list with no PASS whose RESULTs are all
 setup/dryrun FAILs (or none / aborted) within -FastMin (15) min notes its owner ("ALERT(setup, <rig>)") and the next list
@@ -441,6 +443,19 @@ if ($Rig -eq '4080b') { & "$auto\rig-lane2-4080.ps1" -TickSec ([Math]::Min($Tick
 $log = Join-Path $rd "$Rig.log"; $stateF = Join-Path $rd "$Rig.state"; $curF = Join-Path $rd "$Rig.cur"; $gfxF = Join-Path $rd "$Rig.gfx"
 $dryNF = Join-Path $runs "agents\$(if ($Fake) { 'fake-' })coordinator.note-from-runner"
 function RunningGfx { $g = ReadShared $gfxF; if ($g -and $g.Trim() -eq 'low') { 'low' } else { 'full' } }
+# GFX PICK (speed-scout r9, 2026-10-11: 21 gfx relaunches on the 4080 and 25 on the 5090 in one day, ~60 s of game time each,
+# e.g. 4080 19:01 "Kenshi stays up for the next list" then killed for 180-hv-d's gfx): gfx low is a saving, not a need.
+# A "# gfx: low" list runs in an already running FULL game (no relaunch); a cold launch for a low list starts FULL when a
+# queued real list (this rig's folder or any\) wants full, so the next list reuses the game. Only a full list on a low
+# game relaunches. "# gfx: low strict" keeps the old relaunch (a list that must measure low graphics). -RowCacheSelfTest.
+function GfxPick([string]$want, [string]$hdr, [bool]$up, [string]$running, [bool]$nextFull) {
+    $script:gfxWhy = $null
+    if ($want -ne 'low' -or $hdr -match '\bstrict\b') { return $want }
+    if ($up -and $running -eq 'full') { $script:gfxWhy = 'gfx low list runs in the running full game (no relaunch)'; return 'full' }
+    if (-not $up -and $nextFull) { $script:gfxWhy = 'cold launch in gfx full: a queued list wants full (no relaunch at the next list)'; return 'full' }
+    'low'
+}
+function NextWantsFull { foreach ($f in @(Get-ChildItem "$qd\$Rig", "$qd\any" -Filter *.list -File -ErrorAction SilentlyContinue)) { if ((Header $f.FullName 'gfx') -notmatch '^low\b') { return $true } }; $false }
 $alertF = if ($Fake) { Join-Path $rd "ALERT-$Rig.txt" } else { Join-Path $runs "ALERT-$Rig.txt" }
 $owner4 = 'rig4080'; $owner5 = 'runner-5090'
 # TDR guard (header): ALERT-<rig>-tdr.txt; while it exists the loop does not run (stop flag set again, exit)
@@ -748,8 +763,11 @@ function QueuedLists {   # every list this rig may take, FIFO order (own folder 
 # = failed\ with both reasons); Start-Batch fails a NO list at once (a 5090-only list in queue\4080\); an idle rig whose own
 # folder and any\ are empty steals the head list of the busy other rig's folder when it has no "# rig:" header and is OK here.
 $rcd = Join-Path $rd 'rigcheck'; New-Item -ItemType Directory -Force $rcd | Out-Null
-function RigKey([string]$path, [string]$r = $Rig) { "$r-" + (Get-FileHash -LiteralPath $path -Algorithm MD5).Hash.Substring(0, 12) }
+# a list file another lane took between the folder scan and the hash ("You cannot call a method on a null-valued expression",
+# 4080.log 18:25/18:56/19:00, speed-scout r9): key "<rig>-gone", RigCheck 'GONE' (RealLists skips it); -RowCacheSelfTest
+function RigKey([string]$path, [string]$r = $Rig) { $h = Get-FileHash -LiteralPath $path -Algorithm MD5 -ErrorAction SilentlyContinue; if (-not $h) { return "$r-gone" }; "$r-" + $h.Hash.Substring(0, 12) }
 function RigCheck([string]$path, [switch]$Fix) {
+    if (-not (Test-Path -LiteralPath $path)) { return 'GONE' }
     $cf = Join-Path $rcd "$(RigKey $path).txt"
     if (-not $Fix -and (Test-Path $cf) -and (Get-Item $cf).LastWriteTime -gt (Get-Date).AddMinutes(-10)) { return (Get-Content $cf -Raw).Trim() }
     if ($Fake) { $v = if (Test-Path (Join-Path $rd "rigno.$Rig.$((Split-Path $path -Leaf))")) { 'NO fake rigno' } else { 'OK' }; Set-Content $cf $v; return $v }
@@ -775,6 +793,7 @@ function RealLists {
                 if ($want -and $want -ne $Rig) { continue }
                 if ($Rig -eq '4080' -and (StobeRows $f.FullName)) { continue }
                 $rc = RigCheck $f.FullName
+                if ($rc -eq 'GONE') { continue }   # taken by another lane meanwhile
                 if ($rc -like 'NO *') {
                     $ocf = Join-Path $rcd "$(RigKey $f.FullName $other).txt"
                     $oc = if (Test-Path $ocf) { (Get-Content $ocf -Raw).Trim() } else { '' }
@@ -1240,6 +1259,8 @@ function Start-Batch($f) {
     $hl = Join-Path $runs 'staged\AutomationHarness-latest.txt'
     if (-not $needH -and (Test-Path $hl)) { $t = (Get-Content $hl -TotalCount 1); if ($t -match '^\s*(\w{8})') { $needH = $Matches[1].ToUpper() } }
     $gfx = if ((Header $run 'gfx') -match '^low\b') { 'low' } else { 'full' }
+    $gfx = GfxPick $gfx (Header $run 'gfx') $(if ($gfx -ne 'low') { $false } elseif ($Rig -eq '5090') { [bool](K1Procs) } else { (K1on4080) -eq 'yes' }) (RunningGfx) $(if ($gfx -eq 'low') { NextWantsFull } else { $false })
+    if ($script:gfxWhy) { Log "gfx: $script:gfxWhy" }
     # the running game can serve this list in place (same gfx, no harness install): lazy needs (any / +patch) keep it up
     $reuseOk = if ($Rig -eq '5090') { [bool](K1Procs) -and (RunningGfx) -eq $gfx -and -not ($needH -and (Get-FileHash 'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll').Hash.Substring(0, 8) -ne $needH) }
                else { [bool]$script:keep4080 -and (RunningGfx) -eq $gfx }
@@ -1247,7 +1268,7 @@ function Start-Batch($f) {
     if ($inst -eq 'FAIL') { Defer-List $run $name $own $script:instWhy @() $f; Remove-Item $curF; return $true }
     # "# gfx: low" (res-graphics, Shay 22:05: rows that don't film run at lowest graphics in a small window): the running game
     # is reused only when its mode matches (runner\<rig>.gfx), else relaunched; the launch reads KAH_GFX (5090) / kcfg -Gfx (4080)
-    $gfx = if ((Header $run 'gfx') -match '^low\b') { 'low' } else { 'full' }
+    # (gfx picked above: GfxPick)
     if ($Rig -eq '5090') {
         $env:KAH_OWNER = $owner5
         $lk = Join-Path $runs 'game.lock'
@@ -1500,6 +1521,14 @@ if ($RowCacheSelfTest) {
     }
     $n++; Add-Content $sc 'echo changed'; (Get-Item $sc).LastWriteTimeUtc = (Get-Date).AddMinutes(5); $f = L 'c9.list' @($hd, $rb); $k = DryKey $f; $g = if (RowCacheHit $f $k) { 'PASS' } else { 'miss' }
     $ok = $g -eq 'miss'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) row cache, row B after its script changed = miss: $g"
+    # speed-scout r9: a list another lane took meanwhile (no exception), and the gfx pick
+    $n++; $gk = try { "$(RigKey (Join-Path $td 'gone.list'))|$(RigCheck (Join-Path $td 'gone.list'))" } catch { "THROW $($_.Exception.Message)" }
+    $ok = $gk -eq "$Rig-gone|GONE"; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) vanished list: RigKey/RigCheck = $gk"
+    foreach ($g in @(@('low list, full game up', 'low', 'low', $true, 'full', $false, 'full'), @('low list, low game up', 'low', 'low', $true, 'low', $true, 'low'),
+                     @('low list, cold, full queued', 'low', 'low', $false, 'full', $true, 'full'), @('low list, cold, nothing full queued', 'low', 'low', $false, 'full', $false, 'low'),
+                     @('low strict, full game up', 'low', 'low strict', $true, 'full', $true, 'low'), @('full list, low game up', 'full', '', $true, 'low', $false, 'full'))) {
+        $n++; $r = GfxPick $g[1] $g[2] $g[3] $g[4] $g[5]; $ok = $r -eq $g[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) gfx pick, $($g[0]): $r"
+    }
     Remove-Item -Recurse -Force $td -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force $pdd -ErrorAction SilentlyContinue
     "ROWCACHE-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
 }
@@ -1599,7 +1628,7 @@ while ($true) {
         if ((Test-Path $fastF) -and (Get-Item $fastF).LastWriteTime -lt (Get-Date).AddMinutes(-30)) { Remove-Item $fastF -ErrorAction SilentlyContinue; Log 'setup alert expired (30 min)' }
         try { CleanRunning } catch { Log "cleanrunning error: $($_.Exception.Message)" }
         try { StagedRecord } catch { Log "staged-history error: $($_.Exception.Message)" }
-        if ((Test-Path $curF) -and -not $Fake) { try { PreDryNext } catch { Log "predry error: $($_.Exception.Message)" } }
+        if ((Test-Path $curF) -and -not $Fake) { try { PreDryNext } catch { Log "predry error: $($_.Exception.Message) at $(($_.ScriptStackTrace -split "`n" | Select-Object -First 2) -join ' <- ')" } }
         # batches past their game part (GAMEDONE) whose background analyses still run: finish them when DONE
         foreach ($tf in @(Get-ChildItem $rd -Filter "$Rig.tail.*" -File -ErrorAction SilentlyContinue)) {
             $tc = @(Get-Content $tf.FullName); $tp = if ($Fake) { @{ done = '1' } } else { Probe $tc[2] }
@@ -1831,6 +1860,6 @@ while ($true) {
                 }
             }
         }
-    } catch { Log "error: $($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)" }
+    } catch { Log "error: $($_.Exception.Message) at $(($_.ScriptStackTrace -split "`n" | Select-Object -First 3) -join ' <- ')" }
     $null = WaitTick
 }
