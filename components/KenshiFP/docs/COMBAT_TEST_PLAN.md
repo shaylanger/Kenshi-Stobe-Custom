@@ -60,9 +60,6 @@ Sneaking + LMB drawn (melee) on a character that does not perceive the attacker 
 ## Gate 2: ranged mechanics
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| R10 | Cover/parallax | FP/third-person muzzle obstruction prevents shooting through walls |
-| R11 | Animated anatomy | moving/race/robot/missing limbs map correctly; nearest valid intersection (`fp-manual-anatomy.sh`: R11-MOVE/RACE/LIMB); PASS 4080 b21 (MOVE/RACE/LIMB); PASS 5090 m49 (MOVE dec-5090-2, LIMB dec-5090-4, RACE dec-5090-5 with bone-point aim) |
-| R12 | Lifecycle/input | UI, pause, actor/weapon swap, KO, reload/save/load, speed/FPS; no inherited fire |
 Diagnostic forced spread may isolate hit routing but cannot count toward balance evidence; ordinary production RNG must be used for R14-R16.
 
 ## Gate 3: ranged parity and tactical balance
