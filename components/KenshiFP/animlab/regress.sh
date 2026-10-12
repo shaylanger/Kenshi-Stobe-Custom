@@ -555,7 +555,7 @@ for f in rec/fist-lens-2strike-8b3f.txt:lens:FAIL rec/fist-lens-badpunch-8b3f.tx
 #     reach; C9 camera impulse is report-only = INFO until the camera toggle ships); the synthetic PASS
 #     reference (fist-punch-synth.py of fq0, until fists-fix's first rework passes) must PASS every row incl. --camera, and
 #     regenerating it from fq0 must still PASS (the synth and the check stay in step).
-PQ=$CORPUS/rec/fist-punch-fq0-badpunch.vmrec.txt; PS=$CORPUS/rec/fist-punch-synth-pass-v2.txt
+PQ=$CORPUS/rec/fist-punch-fq0-badpunch.vmrec.txt; PS=$CORPUS/rec/fist-punch-synth-pass-v3.txt
 if [ -f "$PQ" ] && [ -f "$PS" ]; then
   r=$(python3 "$HERE/fist-punch-check.py" "$PQ" | tail -1)
   case "$r" in "RESULT FIST-PUNCH FAIL "*"C1=FAIL C2=FAIL C3=FAIL C4=FAIL C5=FAIL C6=FAIL C7=FAIL C8=PASS hold=FAIL C9=info"*) ok "fist punch fq0 (Shay reject): ${r:0:140}";;
@@ -566,6 +566,12 @@ if [ -f "$PQ" ] && [ -f "$PS" ]; then
   case "$r" in "RESULT FIST-PUNCH PASS "*) ok "fist punch synth regenerated from fq0: PASS";; *) bad "fist punch synth regenerated from fq0 (want PASS): $r";; esac
   rm -f /tmp/al-fps.txt
 else echo "REGRESS INFO fist punch: corpus fq0 / synthetic PASS recording missing"; fi
+# 35d2. C7 palm side (Misses 2026-10-11 "FIST zpA3 strike hand fingers up"): the rec's camera frame is left-handed, palm =
+#     +(X x Y) there; the zpA3 game take (rendered palm-up claw at every FP punch peak) must FAIL C7.
+PZ=$CORPUS/rec/fist-zpA3-palmup.vmrec.txt
+if [ -f "$PZ" ]; then r=$(python3 "$HERE/fist-punch-check.py" "$PZ" --detect fp | tail -1)
+  case "$r" in *" C7=FAIL "*) ok "fist punch zpA3 palm-up: C7 FAIL";; *) bad "fist punch zpA3 palm-up (want C7=FAIL): $r";; esac
+else echo "REGRESS INFO fist punch: zpA3 palm-up recording missing"; fi
 # 35e. zoom-0 framing (metrics.framed_check; Misses 2026-10-11 REEL-Buster_Sword / Fragment_Axe / Naginata, weapon-reel-109:
 #     hands never in view at zoom 0, matrix PASS): the three reel recs must FAIL `framed`, ab2h (2H, both wrists in view) PASS.
 for f in rec/reel109-Buster_Sword.vmrec.txt:FAIL rec/reel109-Fragment_Axe.vmrec.txt:FAIL rec/reel109-Naginata.vmrec.txt:FAIL rec/ab2h-5090.txt:PASS; do

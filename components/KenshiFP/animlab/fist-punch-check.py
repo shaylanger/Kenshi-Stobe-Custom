@@ -23,7 +23,7 @@ Rows (each = worst punch; a check FAILs if any punch fails it; no punch at all =
   C5 recover peak -> back to p <= .2 p_peak (or the end of the FP stretch) >= 1.5 x (t90 - t20)
   C6 windup  in the .08-.20 s before t20 the wrist moves >= .3 dm toward its shoulder (from the guard, along unit(S - g))
   C7 hand    at the peak the striking hand's forward axis (hand bone X, rec group F) within 35 deg of the view axis (+z), its
-             palm (-hand Z, Z = X x Y: the convention of animlab native.py fist_hand) within 60 deg of down (knuckles up/forward,
+             palm (true -hand Z = +(X x Y) in the rec's left-handed camera frame) within 60 deg of down (knuckles up/forward,
              not the palm-up / side-on reach), and from t20 to peak+.1 s the palm never within 60 deg of the wrist->camera ray
   C8 off     the other wrist at the peak vs at t20: moves <= .5 dm and does not drift toward the target (dz <= +.15 dm);
              Shay 16:45 'other hand stays in guard' (SHAY_RULES SR22): a still guard hand PASSES (old pull-back dz <= -.15 failed it)
@@ -169,8 +169,10 @@ if ready:
         if fh:
             j = 0 if s == 'L' else 2
             fa = ang(fh[j], (0.0, 0.0, 1.0))
-            def palm(k):   # palm normal = -hand Z (Z = X x Y; animlab fist_hand: the mesh fingers curl toward -Z)
-                h = F[k]['m']['fh']; return tuple(-x for x in recfmt.cross(h[j], h[j + 1]))
+            def palm(k):   # palm normal = true -hand Z; the rec's camera frame (x right, y up, z forward) is LEFT-handed, so
+                # cross(X, Y) computed in it = -Z_true and the palm = +cross. Game 140 zpA3 (Misses 'FIST zpA3 strike hand fingers
+                # up'): -cross judged a palm-UP hand 'palm 13 deg from down'; 170 guard frames: fingertips curl toward +cross
+                h = F[k]['m']['fh']; return tuple(recfmt.cross(h[j], h[j + 1]))
             pd = ang(palm(kp), (0.0, -1.0, 0.0))
             pc = min(ang(palm(k), tuple(-x for x in F[k]['m'][s + 'wr'])) for k in at(t20, tp + .1) if F[k]['m'].get('fh'))
             rows['C7'].append((fa <= 35 and pd <= 60 and pc > 60, -max(fa / 35, pd / 60, 60 / max(pc, 1)),

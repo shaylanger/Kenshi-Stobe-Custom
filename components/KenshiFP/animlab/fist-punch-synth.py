@@ -6,7 +6,7 @@ PASS side is this synthetic recording: the source take (fq0 = Shay-rejected badp
 arm (so fist-punch-check finds the same punches), while the measured arms are rewritten to the fists-design targets:
 guard L/R (-+1.4, -0.8, 3.6); per punch (at the source's peak time tp) a .16 s wind-up .55 dm toward the shoulder, a .09 s
 ease-in strike to a near-straight arm (.95 x arm length) aimed at the crosshair, a .05 s hold, a .30 s ease-out recovery;
-hand X axis onto the view axis and palm (-Z) down at the peak; off wrist pulls back .3 dm; camera yaw +1 deg impulse. Elbows by two-bone IK
+hand X axis onto the view axis and palm (+(X x Y) in the camera frame) down at the peak; off wrist pulls back .3 dm; camera yaw +1 deg impulse. Elbows by two-bone IK
 (the frame's own bone lengths, its own bend side). Synthetic data: it proves the check can PASS and anchors the
 mutations; it is not a pose anyone accepted.
 """
@@ -115,8 +115,8 @@ for i in data:
             w_ = ease((dt + ST) / ST) if dt < 0 else 1.0 - ease((dt - HO) / RC)
             X, Y = v3(tk[j]), v3(tk[j + 1])
             Xn = nz(add(mul(X, 1 - w_), mul((0.0, 0.0, 1.0), w_)))
-            Zt = nz(sub((0.0, 1.0, 0.0), mul(Xn, Xn[1])))          # target Z up = palm (-Z) down
-            Yt = cross(Zt, Xn)                                      # Z = X x Y  ->  Y = Z x X
+            Zt = nz(sub((0.0, -1.0, 0.0), mul(Xn, -Xn[1])))        # camera-frame X x Y down = palm down (the rec's camera frame is
+            Yt = cross(Zt, Xn)                                      # left-handed: palm = +(X x Y) there, fist-punch-check C7)
             Yo = nz(sub(Y, mul(Xn, dot(Y, Xn))))
             Yn = nz(add(mul(Yo, 1 - w_), mul(Yt, w_)))
             Yn = nz(sub(Yn, mul(Xn, dot(Yn, Xn))))

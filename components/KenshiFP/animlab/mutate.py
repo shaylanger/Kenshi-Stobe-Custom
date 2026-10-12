@@ -204,7 +204,7 @@ def m_fist_hand(lines):     # U25: the right hand flips 90 deg (rec group F axes
 
 
 # ---- fist "punch reads" (fist-punch-check.py C1-C9, Misses 2026-10-11 "fist punch read" NA1); base = the synthetic PASS
-#      rec/fist-punch-synth-pass-v2.txt (fist-punch-synth.py from fq0) until a game take passes
+#      rec/fist-punch-synth-pass-v3.txt (fist-punch-synth.py from fq0) until a game take passes
 def _punch_peaks(lines):
     import tempfile
     with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
@@ -440,12 +440,12 @@ MUTS = [
     ('rec-one-frame-snap', 'rec', 'e6-anim-b2.txt', m_snap, ['blade1', 'churn-stroke1', 'spike']),
     ('rec-one-frame-jump', 'rec', 'f28-sword-z0c.txt', m_jump, 'ALL'),
     ('rec-fist-hand-flip', 'rec', 'fist-u25-pass-replay-C2-kq025.rec', m_fist_hand, ['fist-hand']),
-    ('rec-fist-punch-small-C1', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_small, ['punch-C1']),
-    ('rec-fist-punch-small-C2', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_small, ['punch-C2']),
-    ('rec-fist-punch-small-C3', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_small, ['punch-C3']),
-    ('rec-fist-punch-reverse', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_reverse, ['punch-C5']),
-    ('rec-fist-punch-nowindup', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_nowindup, ['punch-C6']),
-    ('rec-fist-punch-hand90', 'rec', 'rec/fist-punch-synth-pass-v2.txt', m_punch_hand90, ['punch-C7']),
+    ('rec-fist-punch-small-C1', 'rec', 'rec/fist-punch-synth-pass-v3.txt', m_punch_small, ['punch-C1']),
+    ('rec-fist-punch-small-C2', 'rec', 'rec/fist-punch-synth-pass-v3.txt', m_punch_small, ['punch-C2']),
+    ('rec-fist-punch-small-C3', 'rec', 'rec/fist-punch-synth-pass-v3.txt', m_punch_small, ['punch-C3']),
+    ('rec-fist-punch-reverse', 'rec', 'rec/fist-punch-synth-pass-v3.txt', m_punch_reverse, ['punch-C5']),
+    ('rec-fist-punch-nowindup', 'rec', 'rec/fist-punch-synth-pass-v3.txt', m_punch_nowindup, ['punch-C6']),
+    ('rec-fist-punch-hand90', 'rec', 'rec/fist-punch-synth-pass-v3.txt', m_punch_hand90, ['punch-C7']),
     ('vid-cursor-overlay', 'vid', 'takes/videos/anim-sword-e6.mp4', v_cursor, ['cursor']),
     ('vid-dark-night', 'vid', 'takes/videos/anim-sword-e6.mp4', v_dark, ['openground']),
     ('vid-black-frames', 'vid', 'takes/videos/anim-sword-e6.mp4', v_black, 'ALL'),
