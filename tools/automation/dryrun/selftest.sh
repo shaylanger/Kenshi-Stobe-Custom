@@ -31,6 +31,7 @@ ctl-bark       | bark   | 5090 | PASS                                           
 bug-bark       | bark   | 5090 | FAIL:setup: foreign overlay.*text-panel        | rp | - | Axima | Malzin | 120 | PF_TEXT_RETRY=0 $RP {OUT}/rp popup
 ctl-inst2-wc   | -      | 5090 | PASS                                           | wc | kah-fpxbow | Axima | Malzin | 600 | KAH_INSTANCE=2 WS_NOXBOW=1 WS_TWO_LIGHT=1 PF_SAVE=kah-fpxbow bash $KT/fp-weapon-sweep.sh {OUT}/wcclv /mnt/c/KenshiModding/components/KenshiFP/animlab/weapons/sweep-wc-clv.list wcclv
 ctl-readydiag  | -      | 5090 | PASS                                           | rd | kah-fpxbow | Axima | Malzin | 600 | bash $KT/fp-ready-diag.sh {OUT}/rd
+ctl-readydiag-drop | dims-late | 5090 | PASS                                    | rd | kah-fpxbow | Axima | Malzin | 600 | bash $KT/fp-ready-diag.sh {OUT}/rd
 bug-noresult   | -      | 5090 | FAIL:no RESULT line                            | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp noresult
 bug-lag        | -      | 5090 | FAIL:REPLAY-lag FAIL takecheck                 | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp lag
 bug-early      | -      | 5090 | FAIL:REPLAY-early FAIL takecheck.*claim        | rp | - | Axima | Malzin | 120 | $RP {OUT}/rp early

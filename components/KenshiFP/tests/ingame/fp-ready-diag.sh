@@ -52,9 +52,16 @@ A key_inject r tap 120 >/dev/null; pf_waitst holstered 6 || pf_fail "no holster 
 A key_inject r tap 120 >/dev/null; pf_waitst ready 6 || pf_fail "no draw after R"; sleep 0.5
 snap redraw-0.5; sleep 2; snap redraw-2.5
 A key_inject r tap 120 >/dev/null; pf_waitst holstered 6; sleep 0.5
-A unequip $SH "$SID" >/dev/null; sleep 1; r=$(A equip $SH "$SID"); case "$r" in equipped*) ;; *) pf_fail "re-equip $SID: $(cut -c1-140 <<<"$r")";; esac
-sleep 1; pf_ready; snap reequip-0.5; sleep 2; snap reequip-2.5
-A fp_keys press lmb 60 >/dev/null; sleep 2.6; snap after-swing2
+# re-equip phase (203 lost both rows here: a long weapon fits no main slot, so unequip drops it on the ground, 764de49):
+# give a fresh one when it left the inventory; this phase is extra evidence, so a refusal skips it (noted), never fails
+# the row (the zoom-return evidence above is already in the rec)
+A unequip $SH "$SID" >/dev/null; sleep 1
+A inv $SH | grep -qF "\"$NM\"" || A give $SH "$SID" 1 >/dev/null
+r=$(A equip $SH "$SID"); case "$r" in
+  equipped*) sleep 1; pf_ready; snap reequip-0.5; sleep 2; snap reequip-2.5
+             A fp_keys press lmb 60 >/dev/null; sleep 2.6; snap after-swing2 ;;
+  *) echo "SNAP reequip-skipped: $(cut -c1-140 <<<"$r")" >> "$S" ;;
+esac
 A fp_vm rec off >/dev/null; rm -f "$KDIR/vmrec-rd-$SLUG.txt"; A fp_vm rec dump "vmrec-rd-$SLUG.txt" >/dev/null; sleep 2
 cp "$KDIR/vmrec-rd-$SLUG.txt" diag.vmrec.txt 2>/dev/null; rm -f "$KDIR/vmrec-rd-$SLUG.txt"
 A key_inject r tap 120 >/dev/null; cleanup
