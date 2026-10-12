@@ -7,7 +7,7 @@
 # The stroke mask itself is never changed (force only overrides it; was set to 15 and "restored" to 0x1, which undid
 # the shipped default).
 # Evidence: take-sample.sh + takecheck.py, fp_vm rec dump judged by the
-# animlab per stroke (inline, metrics/arc, churn, blade) and `stroke --overhead 2`.
+# animlab per stroke (inline, metrics/arc, churn, blade), `path` on every swing (SR38/SR39) and `stroke --overhead 2`.
 # Output in <out dir>: <name>.mp4 .lab .ev.txt .vmrec.txt .lab.txt; last line: RESULT E6-<name> PASS|FAIL <evidence>
 OUT=$1; N=$2; STROKES=${3:-0 1 2}; STROKES=${STROKES//,/ }; REPS=${4:-2}; CYCLE=${CYCLE:-0}; CYCLE_EXPECT=${CYCLE_EXPECT:-}
 case "$STROKES" in *[!0-9[:space:]]*|"") echo "RESULT E6-$N FAIL setup: strokes '$STROKES' not a digit list (run-batch passes quotes literally: kfx-b7)"; exit 2;; esac
@@ -24,7 +24,7 @@ fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 st(){ A fp_vm state | fld state; }
 waitst(){ local e=$((SECONDS+$2)); while [ $SECONDS -lt $e ]; do [ "$(st)" = "$1" ] && return 0; sleep 0.2; done; return 1; }
 fail(){ PF_DONE=1; echo "RESULT E6-$N FAIL $*"; A fp_vm set stroke -1 >/dev/null; A chatter on >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop; [ -n "$FP" ] && { echo q >&7 2>/dev/null; [ -n "$E6_PIPE" ] && touch "$N.stop"; wait $FP; }; exit 1; }
-PF_ROW=E6-$N; PF_ON_FAIL='A fp_vm set stroke -1 >/dev/null; [ -n "$_TS_RUN" ] \&\& take_sample_stop'; . $HERE/tests/ingame/take-preflight.sh
+PF_ROW=E6-$N; PF_ON_FAIL='A fp_vm set stroke -1 >/dev/null; [ -n "$_TS_RUN" ] && take_sample_stop'; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"   # RESULT guard (shared preflight: take-preflight.sh)
 T0=0; lab(){ echo "$(awk -v a="$(date +%s.%N)" -v b="$T0" 'BEGIN{printf "%.2f", a-b}') $*" >> "$N.lab"; if type take_mark >/dev/null 2>&1; then take_mark "$*"; fi; }
 ready(){ [ "$(st)" = ready ] || { [ "$(st)" = holstered ] || { A key_inject r tap 120 >/dev/null; waitst holstered 6; }; A key_inject r tap 120 >/dev/null; waitst ready 6; }; }
@@ -95,6 +95,13 @@ for s in $STROKES; do for c in inline metrics churn blade; do
   [ "$s" = 0 ] && [ "${r%% *}" = blade ] && continue
   echo "$r" | grep -q " PASS" || ok=0
 done; done
+# screen path rules on EVERY swing of the take (forced + cycle swings, strokes 0-3): straight line, through the centre, ends in
+# the outer 10% band (SR38), sweep/wexit, E6 s0/s2 tip travel (SR39); stroke 1 = accepted look, reported only (SR13).
+# Gap fixed 2026-10-11 (stroke-fix): the take judge never ran the path rules, so E6 shipped s0/s2 failing them.
+python3 $L/animlab.py path "$N.vmrec.txt" > "$N.path.txt" 2>&1
+PR=$(grep '^path ' "$N.path.txt" | tail -1 | cut -c1-300); echo "${PR:-path FAIL no verdict (see $N.path.txt)}" >> "$N.lab.txt"
+grep '^pathsw ' "$N.path.txt" | grep -v ' PASS ' | cut -c1-260 >> "$N.lab.txt"
+echo "$PR" | grep -q "^path PASS" || ok=0
 CYR=; if [ "$CYCLE" -gt 0 ]; then   # cycle: every swing logged, no stroke repeats before the mask is used up, exact order if asked
   nd=$(tr ',' '\n' <<<"$CY" | sort -u | grep -c .); nm=$(( $(printf '%d' "${CYM:-0x1}") )); pc=0; for b in 0 1 2 3 4 5 6 7; do [ $(( (nm >> b) & 1 )) = 1 ] && pc=$((pc+1)); done
   want=$(( CYCLE < pc ? CYCLE : pc ))
