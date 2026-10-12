@@ -35,7 +35,7 @@ $Low = [ordered]@{
   'view distance' = '3000'; 'terrain hi-res distance' = '500'; 'terrain detail' = '0'; 'terrain distant' = '0'
   'terrain threshold' = '500'; 'grass range' = '0'; 'grass density' = '0'; 'foliage range' = '0'
   'water reflection' = '0'; 'reflection range' = '0'; 'shadow mode' = '0'; 'shadow quality' = '0'; 'Shadow Range' = '1000'
-  'texture resolution gimping' = '1'; 'Decal Resolution' = '256'; 'Decal Range' = '50'; 'feature range' = '1'
+  'texture resolution gimping' = '2'; 'Decal Resolution' = '256'; 'Decal Range' = '50'; 'feature range' = '1'
   'distant town range' = '1'; 'generate distant towns' = '0'; 'FXAA' = '0'; 'HeatHaze' = '0'; 'SSAOD' = '0'
   'Kuwahara' = '0'; 'Outlines' = '0'; 'Posterise' = '0'; 'Colourful' = '0'; 'DepthBlur' = '0'
   'ContrastAdaptiveSharpening' = '0'; 'FXAA_POST' = '0'
