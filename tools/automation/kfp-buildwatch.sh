@@ -28,13 +28,17 @@ newest() { { stat -c %Y "$PF"/kfp-*.py "$PF"/kfp-*.patch 2>/dev/null; find "$LIV
 # Carried exclusions (2026-10-11: every watch run re-found the same breakers with a ~25 min recency round each): after a
 # run, the patches its last rerun left out are recorded with their sha256 + the live HEAD (buildwatch.excl); the next run
 # starts with --exclude for those still unchanged (an edited patch or a new live HEAD = tried again).
+# Accepted patches (tools/automation/kfp-accepted.txt: kfp-stroke-line SR41, kfp-pt30-followthrough) are never carried
+# and kfp-pipeline.sh never leaves them out (build-now 2026-10-11: run-watch-1011-1852-x2 excluded the accepted
+# kfp-stroke-line that THE staged build B17B98D5 already shipped, which would have regressed Shay's accepted look).
 pfile() { ls "$PF/$1.py" "$PF/$1.patch" 2>/dev/null | head -1; }
 remember() { local last ex n p h; last=$(ls -d "$1" "$1"-x* 2>/dev/null | sort -V | tail -1); ex=$(cat "$last/exclude.list" 2>/dev/null)
   h=$(git -C "$LIVE" rev-parse HEAD 2>/dev/null); : > "$PR/buildwatch.excl"
   for n in ${ex//,/ }; do p=$(pfile "$n"); [ -n "$p" ] && echo "$n $(sha256sum "$p" | cut -c1-16) $h" >> "$PR/buildwatch.excl"; done; }
 carried() { local n s h p hh; hh=$(git -C "$LIVE" rev-parse HEAD 2>/dev/null)
   [ -f "$PR/buildwatch.excl" ] || return 0
-  while read -r n s h; do p=$(pfile "$n"); [ -n "$p" ] && [ "$h" = "$hh" ] && [ "$(sha256sum "$p" | cut -c1-16)" = "$s" ] && echo "$n"; done < "$PR/buildwatch.excl" | paste -sd,; }
+  while read -r n s h; do grep -q "^$n " "$ME/kfp-accepted.txt" 2>/dev/null && continue   # accepted look: never carried
+    p=$(pfile "$n"); [ -n "$p" ] && [ "$h" = "$hh" ] && [ "$(sha256sum "$p" | cut -c1-16)" = "$s" ] && echo "$n"; done < "$PR/buildwatch.excl" | paste -sd,; }
 [ "${1:-}" = --remember ] && { remember "${2:?run dir}"; cat "$PR/buildwatch.excl"; exit 0; }
 # --seed: record the current state as built (e.g. right after a manual --combined run of it) and exit
 [ "${1:-}" = --seed ] && { fp > "$PR/buildwatch.fp"; log "seeded fp $(cat "$PR/buildwatch.fp")"; exit 0; }

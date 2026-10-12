@@ -1,0 +1,5 @@
+# Patches whose look Shay ACCEPTED (SHAY_RULES.md): the build line never leaves them out (no carried exclusion in
+# kfp-buildwatch.sh, no rerun_without in kfp-pipeline.sh). A lab check they fail is a lab miss, not a breaker.
+# One per line: <patch name> <reason>
+kfp-stroke-line SR41 rising-stroke line accepted by Shay (staged B17B98D5)
+kfp-pt30-followthrough PT30 follow-through accepted (coordinator, 2026-10-11)

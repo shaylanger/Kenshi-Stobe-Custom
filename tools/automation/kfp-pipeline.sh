@@ -22,6 +22,11 @@
 #   they don't stage unless --stage is given. Watcher: kfp-buildwatch.sh reruns --combined when pending-fixes/kfp-* or
 #   /root/KenshiFP change (90 s quiet). Each run holds C:\KenshiTestRuns\inflight\kfp-pipeline-<run> while it runs.
 #   --exclude   leave these patches out (combined re-runs use it; env KFP_EXCL_NOTE carries the reasons)
+#   accepted    patches listed in tools/automation/kfp-accepted.txt (Shay accepted the look) are never left out by a
+#               BREAK/recency/conflict rerun (build-now 2026-10-11: x2 dropped the accepted kfp-stroke-line SR41)
+#   env KFP_ROUND2=0  gate base + all only (no recency/per-patch trees); verdict from those two
+#   dependent   a patch whose docstring says "Needs kfp-X" and fails alone is tried on base + X; it then counts as pending
+#               (kfp-stroke-recedge needs kfp-stroke-line); its +P/-X trees in round 2 fail to apply = no verdict for them
 #   --base      live (default) = /root/KenshiFP incl. its uncommitted working tree; rev: = components/KenshiFP snapshot at a
 #               KenshiModding git rev; dir: = any tree root (client/, re_plugin/, tests/)
 #   --revert    take a patch that is already IN the base back out first (to measure it as a pending patch): its diff is made
@@ -67,7 +72,7 @@ set -u
 # ffmpeg) runs at nice 15 / ionice idle; every child inherits it (run-comb-1535-x1 ran its gate at nice 0, load 28/32)
 renice -n 15 -p $$ >/dev/null 2>&1; ionice -c 3 -p $$ >/dev/null 2>&1
 # run from a private copy: editing this file while a run is in flight must not change the running script
-if [ -z "${KFP_PIPELINE_COPY:-}" ]; then c=$(mktemp /tmp/kfp-pipeline.XXXXXX); cp "$0" "$c"; KFP_PIPELINE_COPY=$c exec bash "$c" "$@"; fi
+if [ -z "${KFP_PIPELINE_COPY:-}" ]; then c=$(mktemp /tmp/kfp-pipeline.XXXXXX); cp "$0" "$c"; KFP_SELF=$(readlink -f "$0") KFP_PIPELINE_COPY=$c exec bash "$c" "$@"; fi
 IFL=""; trap 'rm -f "$KFP_PIPELINE_COPY" $IFL' EXIT
 WS=/mnt/c/KenshiModding; PF=$WS/pending-fixes; LIVE=/root/KenshiFP; PR=/root/kfp-pipeline
 LABK=$WS/components/KenshiFP/animlab; LABH=$WS/Kenshi-Automation-Harness/tools/animlab
@@ -96,7 +101,13 @@ echo $$ > "$RUN/pipeline.pid"   # wait-event.ps1 -Producer kfp-pipeline-<run>: P
 say() { echo "$*" | tee -a "$RUN/pipeline.log"; }
 die() { say "PIPELINE FAIL $1 $2${EXNOTE:+ excluded=$EXNOTE} delta=$D run=$RUN"; cleanup; exit 1; }
 # rerun_without <names> <why>: combined mode leaves these patches out and repeats the run (the rest still ships)
-rerun_without() { local ex=${EXCL:+$EXCL,}$1 k=1 n; for n in ${1//,/ }; do EXNOTE="${EXNOTE:+$EXNOTE;}$n:$2"; done
+# accepted patches (kfp-accepted.txt, Shay accepted their look) are never left out: a check they fail is a lab miss
+ACCEPTED=$(grep -v '^#' "$(dirname "$(readlink -f "${KFP_SELF:-$0}")")/kfp-accepted.txt" 2>/dev/null | awk '{print $1}' | paste -sd' ')
+rerun_without() { local keep="" a n
+  for n in ${1//,/ }; do case " $ACCEPTED " in *" $n "*) a="${a:+$a,}$n";; *) keep="${keep:+$keep,}$n";; esac; done
+  [ -n "${a:-}" ] && say "ACCEPTED $a not left out ($2): Shay accepted its look (kfp-accepted.txt), a failing check is a lab miss"
+  [ -z "$keep" ] && return 0; set -- "$keep" "$2"
+  local ex=${EXCL:+$EXCL,}$1 k=1; for n in ${1//,/ }; do EXNOTE="${EXNOTE:+$EXNOTE;}$n:$2"; done
   while [ -e "${RUN%-x*}-x$k" ]; do k=$((k+1)); done
   say "COMBINED leaving out $1 ($2); rerun -> ${RUN%-x*}-x$k"; cleanup; rm -f $IFL
   KFP_EXCL_NOTE=$EXNOTE exec bash "$KFP_PIPELINE_COPY" --combined "${KA[@]}" --exclude "$ex" --out "${RUN%-x*}-x$k"; }
@@ -195,10 +206,13 @@ for p in "${P[@]}"; do n=$(pname "$p"); t=$RUN/tree-alone; rm -rf "$t"; cp -a "$
   elif apply_one "$p" "$t" > "$RUN/logs/alone-$n.txt" 2>&1; then
     if diff -rq "$B" "$t" > /dev/null 2>&1; then st="in-base(no-op)"; else st=pending; S+=("$p"); fi
   elif [ $hd = 1 ] && [ $nc = 0 ]; then st="partial($na file(s) already in base, $np applied from its diff)"; APPLY[$n]=$rest; S+=("$p")
+  elif dp=$(grep -o -E 'Needs (kfp-[a-z0-9-]+)' "$p" | awk '{print $2}' | paste -sd' ') && [ -n "$dp" ] && { rm -rf "$t"; cp -a "$B" "$t"
+         ( for d in $dp; do apply_one "$(resolve "$d")" "$t" || exit 1; done ) > /dev/null 2>&1 && apply_one "$p" "$t" >> "$RUN/logs/alone-$n.txt" 2>&1; }; then
+    st="pending(needs $dp)"; S+=("$p")   # dependent patch (docstring "Needs kfp-X"): applies on top of X; X sorts earlier in the set
   elif [ $ALLP = 1 ]; then st="skipped:conflict-base$([ $hd = 0 ] && echo ',no-snapshot-rev-applies(applied-or-superseded?)')"; skip="$skip $n"
   else st=conflict-base; bad="$bad $n"; fi
   why=$(grep -m1 -E 'AssertionError|anchor|error|rejects|FAILED' "$RUN/logs/alone-$n.txt" 2>/dev/null | sed 's/^ *//' | cut -c1-140)
-  case "$st" in pending|partial*|in-base*) why="";; esac; printf '%s\t%s\t%s\n' "$n" "$st" "$why" >> "$RUN/patches.tsv"; say "PATCH $n $st${why:+ ($why)}"
+  case "$st" in pending*|partial*|in-base*) why="";; esac; printf '%s\t%s\t%s\n' "$n" "$st" "$why" >> "$RUN/patches.tsv"; say "PATCH $n $st${why:+ ($why)}"
 done; rm -rf "$RUN/tree-alone"
 [ -n "$bad" ] && die patch "conflict with the base:${bad} (anchor errors in $RUN/patches.tsv)"
 # apply_set <tree> <patch...>: in order; prints the first failing patch name
@@ -316,7 +330,8 @@ if [ -n "$it" ]; then say "INFRA no-result check(s) on tree(s) $it: $(cat $(for 
   for l in $it; do rm -rf "$RUN/gate-$l.infra1"; mv "$RUN/gate-$l" "$RUN/gate-$l.infra1"; done; run_gates $it
   it=$(infra_trees $it); [ -z "$it" ] || die infra "check(s) gave no result twice on tree(s) $it (see $RUN/gate-*/regress.txt)"; fi
 PPG=0; ff=""
-if [ $N -ge 2 ]; then
+if [ $N -ge 2 ] && [ "${KFP_ROUND2:-1}" = 0 ]; then say "ROUND2 off (KFP_ROUND2=0): base + all only, no minus-one/per-patch trees"
+elif [ $N -ge 2 ]; then
   if [ $PERP = 1 ]; then ff="--per-patch"
   else sr=$(compare SET set base all | awk -F'\t' '$7=="BREAK" || $7=="newfail" {printf "%s %s->%s %s; ", $3, $4, $5, $7}')
     [ -n "$sr" ] && ff="set: ${sr%; }"; kb_eval; case "$GB" in ""|nores) ;; *) ff="${ff:+$ff; }gate: $GB";; esac; fi
