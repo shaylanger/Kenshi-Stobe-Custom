@@ -19,6 +19,19 @@ SH=Axima; SPOT="-54190 633 4380"; HOLD=Tassilo
 A(){ stobe-auto "$@" </dev/null 2>&1; }
 fld(){ grep -o " $1=[^ ]*" | head -1 | cut -d= -f2; }
 cleanup(){ A fp_keys release lmb >/dev/null; A fp_vm rec off >/dev/null; A chatter on >/dev/null; }
+# give_w <sid> (copy of fp-weapon-sweep.sh give_w; 201 2026-10-11: Long Cleaver 9x2 fit neither hip nor back on kah-fpxbow,
+# harness give frees only a worn weapon of the item's slot type): on "no room" unequip every worn weapon (armour stays)
+# and give once more; a second refusal is the setup FAIL
+give_w(){ local r w ws
+  r=$(A give $SH "$1" 1)
+  if echo "$r" | grep -q "no room"; then
+    ws=$(A inv $SH | grep -o '"name":"[^"]*","count":[0-9]*,"equipped":true' | sed 's/^"name":"\([^"]*\)".*/\1/' |
+         grep -viE '(^| )(hat|helmet|armou?r|shirt|boots|pants|coat|vest|cap|mask|shoes|gloves|backpack|bag)( |$)')
+    while IFS= read -r w; do [ -n "$w" ] && A unequip $SH "$w" >/dev/null; done <<< "$ws"
+    echo "give repair: no room for $1, unequipped worn weapons: $(echo "$ws" | tr '\n' ',')" >&2
+    r=$(A give $SH "$1" 1)
+  fi
+  echo "$r"; }
 PF_ROW=READYDIAG-$SLUG; PF_ON_FAIL=cleanup; . $HERE/tests/ingame/take-preflight.sh
 pf_begin "$PF_ROW"
 pf_outdir "$OUT"; cd "$OUT" || pf_fail "out dir $OUT"
@@ -38,7 +51,7 @@ A teleport $SH $SPOT >/dev/null; sleep 2; A health $SH 100 >/dev/null
 A fp_combat physical >/dev/null; A fp_combat on >/dev/null; A combatmode $SH ranged off >/dev/null
 pf_noxbow $SH Malzin $HOLD Shay || pf_fail "$PF_WHY"
 pf_iso
-A inv $SH | grep -qF "\"$NM\"" || { r=$(A give $SH "$SID" 1); echo "$r" | grep -q " got 1/" || pf_fail "give $SID: $(cut -c1-200 <<<"$r")"; }
+A inv $SH | grep -qF "\"$NM\"" || { r=$(give_w "$SID"); echo "$r" | grep -q " got 1/" || pf_fail "give $SID: $(cut -c1-200 <<<"$r")"; }
 r=$(A equip $SH "$SID"); case "$r" in equipped*) ;; *) pf_fail "equip $SID: $(cut -c1-140 <<<"$r")";; esac
 sleep 1; A fp_camera distance 0 >/dev/null; A fp_camera orbit 0 >/dev/null; A fp_camera look 3.14 0.02 >/dev/null
 A fp_vm rec on >/dev/null
@@ -56,7 +69,7 @@ A key_inject r tap 120 >/dev/null; pf_waitst holstered 6; sleep 0.5
 # give a fresh one when it left the inventory; this phase is extra evidence, so a refusal skips it (noted), never fails
 # the row (the zoom-return evidence above is already in the rec)
 A unequip $SH "$SID" >/dev/null; sleep 1
-A inv $SH | grep -qF "\"$NM\"" || A give $SH "$SID" 1 >/dev/null
+A inv $SH | grep -qF "\"$NM\"" || give_w "$SID" >/dev/null
 r=$(A equip $SH "$SID"); case "$r" in
   equipped*) sleep 1; pf_ready; snap reequip-0.5; sleep 2; snap reequip-2.5
              A fp_keys press lmb 60 >/dev/null; sleep 2.6; snap after-swing2 ;;
