@@ -26,7 +26,7 @@ recording() {
   find "$REC" -maxdepth 1 -name '5090*' -newermt "-$RECMAX seconds" 2>/dev/null | grep -q . && return 0
   local p a0 age
   for p in $(pgrep -f -- "$GPAT"); do
-    a0=$(tr '\0' '\n' < /proc/$p/cmdline 2>/dev/null | head -1)
+    a0=$( { tr '\0' '\n' < /proc/$p/cmdline; } 2>/dev/null | head -1)   # { }: a pid gone since pgrep printed the < error into every lab job log
     case "${a0,,}" in *ffmpeg.exe)
       age=$(ps -o etimes= -p "$p" 2>/dev/null | tr -d ' '); [ -n "$age" ] && [ "$age" -le "$RECMAX" ] && return 0 ;;
     esac
@@ -56,7 +56,7 @@ labpids() {   # every process below a labnice.sh root over the recording budget,
 }
 
 resume() {
-  [ -s "$ST" ] || { : > "$ST"; return 0; }
+  [ -s "$ST" ] || { : 2>/dev/null > "$ST"; return 0; }   # quiet when the state dir is gone (selftest temp dir removed)
   local n; n=$(wc -l < "$ST"); xargs -r kill -CONT < "$ST" 2>/dev/null
   # anything stopped by us that we lost track of: CONT the current lab trees too (harmless on running processes)
   labpids | xargs -r kill -CONT 2>/dev/null
