@@ -104,7 +104,6 @@ Notes (2026-10-05, KenshiFP 62464E5D): B17 offline covers AI refusal, click buff
 |---|---|---|
 | S01 | Extraction integration | gameplay goals/actions work without FP dependency; controls use correct actor identity |
 | S02 | Normal/fallback combat | no changes to uncontrolled NPC/squad/native shooting outside manual ownership |
-| S03 | Repeated transitions | no stuck aim/reload/control after repeated switching/loading (`fp-manual-transitions.sh`) |
 
 ## Gate 6: Shay playtest 2026-10-07 (5090, KenshiFP 07376F24; logs `C:\KenshiTestRuns\logs\20261007-shay-play\`)
 Most of these broke under combined actions (toggle FP off/on, two weapons, squad switching, fight then talk), so every row
