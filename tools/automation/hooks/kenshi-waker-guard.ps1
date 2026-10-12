@@ -101,7 +101,7 @@ $waker = $procs.Values | Where-Object {
     if ($_.ProcessId -eq $me -or $_.Name -notmatch '^(sleep|wsl|bash|sh|powershell|pwsh|timeout)\.exe$') { return $false }
     $cl = [string]$_.CommandLine
     $isWaker = $false
-    if ($cl -match 'batch-health|rig-health') { $isWaker = $true }
+    if ($cl -match 'batch-health|rig-health|lane-waker') { $isWaker = $true }
     else {
         # matches `sleep 120; ...` inside a bash -c string and `"C:\...\sleep.exe" 120` (Git Bash spawns sleep as its own process)
         $m = [regex]::Match($cl, '(?:^|[;&|(\s"\\/])(?:sleep|Start-Sleep)(?:\.exe")?\s+(?:-Seconds\s+|-s\s+)?(\d+)(?!\S)')
