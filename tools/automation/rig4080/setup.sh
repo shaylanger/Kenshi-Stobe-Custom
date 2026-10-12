@@ -14,6 +14,11 @@
 #  --list: print the repo-relative paths the sync copies (no ssh). --check: every helper a synced script names (sibling
 #    sh/py/awk/ps1/txt/json/tsv/csv/list/sed/jq) is synced too ("UNSYNCED <helper> (named in <script>)", exit 1).
 # A failed copy prints "SCPFAIL <dest>: <files>" and the sync goes on (was: set -e aborted the rest, 2026-10-10 17:42).
+# Changed files only (speed-scout r10: every list start copied all ~300 files, ~22 s of lane 4080's ~45 s START->launch):
+#   C:\KenshiTestRuns\runner\4080.syncman ("<size> <mtime> <path>" per file last copied + renamed into place OK, shared by
+#   lanes 4080 + 4080b) skips files unchanged since; deferred / SCPFAIL / rename-failed files are not recorded (copied next
+#   time). Full copy when the manifest is > 6 h old, with SYNC_FULL=1, or after deleting it. --dry ignores it unless
+#   SYNCMAN=<file> is set (selftest: SYNCMAN=<tmp> ... --dry prints "UNCHANGED <n>").
 M=/c/KenshiModding; R=/c/KenshiTestRuns; H=4080; HERE=$M/tools/automation/rig4080
 SAVES=""; DEFER=""; DRY=0
 WITH=()
@@ -53,10 +58,14 @@ list_closure(){
   # the hand-picked tools/automation set is closed the same way (rig-env.sh -> kenshi-instance.ps1, batch-health.sh ->
   # rig-lane2.ps1 were named but never synced: setup.sh --check / rig-runner -SelfTest failed)
   for p in "${!FIXED[@]}"; do case "$p" in $M/tools/automation/*) [ -z "${S[$p]:-}" ] && { S[$p]=1; todo+=("$p"); } ;; esac; done
-  while [ ${#todo[@]} -gt 0 ]; do p=${todo[0]}; todo=("${todo[@]:1}"); d=$(dirname "$p")
-    case "$p" in *.sh|*.py|*.awk|*.ps1) ;; *) continue ;; esac
-    for n in $(grep -oE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq|spec)\b" "$p" | sort -u); do
-      q="$d/$n"; [ -f "$q" ] && [ -z "${S[$q]:-}" ] || continue; S[$q]=1; todo+=("$q"); done
+  # breadth-first, ONE grep per level over all its scripts (speed-scout r10: a dirname+grep+sort fork per file made --list
+  # take 5.3 s in Git Bash; rig-runner calls --list and the sync at every 4080 list start)
+  local sc l f n
+  while [ ${#todo[@]} -gt 0 ]; do sc=(); for p in "${todo[@]}"; do case "$p" in *.sh|*.py|*.awk|*.ps1) sc+=("$p") ;; esac; done; todo=()
+    [ ${#sc[@]} -eq 0 ] && break
+    while IFS= read -r l; do f=${l%%:*}; n=${l#*:}; q="${f%/*}/$n"
+      [ -f "$q" ] && [ -z "${S[$q]:-}" ] || continue; S[$q]=1; todo+=("$q"); done \
+      < <(grep -oHE "[A-Za-z0-9_][A-Za-z0-9_.-]*\.(sh|py|awk|ps1|txt|json|tsv|csv|list|sed|jq|spec)\b" "${sc[@]}" | sort -u)
   done
   for p in "${!S[@]}"; do case "$p" in $M/tools/automation/run-batch.sh|$M/tools/automation/kenshi-ctl.ps1|$M/tools/automation/rig-runner.ps1) ;; *) echo "$p" ;; esac; done
 }
@@ -69,6 +78,15 @@ for d in "${NEWD[@]}"; do SETD+=("$d"); SETF+=("${XD[$d]}"); done
 synced_list(){ local i f; for i in "${!SETF[@]}"; do for f in ${SETF[$i]}; do echo "${f#$M/}"; done; done; }
 # --list: every repo-relative path the sync copies, one per line (no ssh)
 [ "${1:-}" = --list ] && { synced_list; exit 0; }
+# --mantest: changed-files manifest self-check (no ssh): a manifest of the current files -> --dry copies none of them
+#   ("MANTEST PASS <n> unchanged"); one entry made stale -> exactly that file is copied again. rig-runner -SelfTest runs it.
+if [ "${1:-}" = --mantest ]; then
+  t=$(mktemp); mapfile -t lf < <(synced_list | sed "s#^#$M/#"); stat -c '%s %Y %n' "${lf[@]}" > "$t"
+  o=$(SYNCMAN=$t bash "$0" --dry); u=$(echo "$o" | sed -n 's/^UNCHANGED //p'); c=$(echo "$o" | grep '^COPY ' | grep -cvE '^COPY tools/automation/(rig4080/|kenshi-gfx|kenshi-instance)|^COPY Kenshi-Automation-Harness/tools/(kenshi-ctl|Win32Ui|WindowCapture)')
+  f1=${lf[0]}; sed -i "1s/^[0-9]* /0 /" "$t"; o2=$(SYNCMAN=$t bash "$0" --dry | grep '^COPY ' | grep -F "${f1#$M/}"); rm -f "$t"
+  if [ "$u" = "${#lf[@]}" ] && [ "$c" = 0 ] && [ -n "$o2" ]; then echo "MANTEST PASS $u unchanged, stale entry recopied"; exit 0; fi
+  echo "MANTEST FAIL unchanged=$u of ${#lf[@]}, repo copies=$c, stale recopied='${o2}'"; exit 1
+fi
 # --check: every helper a synced script names (bare file name, any helper type, sibling in its own dir) must be synced too.
 # Prints "UNSYNCED <helper> (named in <script>)" per gap; exit 1 if any. rig-runner -SelfTest + list-rigcheck.sh use it.
 if [ "${1:-}" = --check ]; then
@@ -107,6 +125,18 @@ if [ "${SAVESONLY:-0}" = 1 ]; then
   echo "4080 saves synced$( [ $DRY = 1 ] && echo " (DRY)"): [$SAVES]"; exit 0
 fi
 run() { if [ $DRY = 1 ]; then :; else "$@"; fi; }
+# changed-files manifest (see header): SM = last synced "size mtime" per path, CUR = now; NEWMAN lines to record
+MAN=${SYNCMAN:-}; [ -z "$MAN" ] && [ $DRY = 0 ] && MAN=$R/runner/4080.syncman
+declare -A SM=() CUR=(); UNCH=0; STAGEFILES=()
+if [ -n "$MAN" ] && [ -f "$MAN" ] && [ "${SYNC_FULL:-0}" != 1 ] && [ -n "$(find "$MAN" -mmin -360 2>/dev/null)" ]; then
+  while read -r a b c; do [ -n "$c" ] && SM[$c]="$a $b"; done < "$MAN"; fi
+if [ -n "$MAN" ]; then
+  allf=("$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1" "$HERE/ctl.ps1" "$HERE/inst-window.ps1" "$HERE/../kenshi-instance.ps1" "$M/Kenshi-Automation-Harness/tools/kenshi-ctl.ps1" "$M/Kenshi-Automation-Harness/tools/Win32Ui.cs" "$M/Kenshi-Automation-Harness/tools/WindowCapture.cs" "$HERE/python3" "$HERE/stobe-auto")
+  for i in "${!SETF[@]}"; do for f in ${SETF[$i]}; do allf+=("$f"); done; done
+  while read -r a b c; do CUR[$c]="$a $b"; done < <(stat -c '%s %Y %n' "${allf[@]}" 2>/dev/null)
+fi
+# unchanged <file>: same size + mtime as when it was last synced
+unchanged() { [ -n "$MAN" ] && [ -n "${CUR[$1]:-}" ] && [ "${SM[$1]:-}" = "${CUR[$1]}" ]; }
 # cp_to <dest> <files...>: scp the files that exist and aren't deferred
 # the defer list read once (was tr|grep per file: ~200 process pairs, ~5 s in Git Bash; speed-scout r9)
 declare -A DF=(); if [ -n "$DEFER" ] && [ -f "$DEFER" ]; then while IFS= read -r l; do l=${l%[[:cntrl:]]}; [ -n "$l" ] && DF[$l]=1; done < "$DEFER"; fi
@@ -115,6 +145,7 @@ cp_to() {
   for f in "$@"; do
     [ -f "$f" ] || continue; rel=${f#$M/}
     if [ -n "${DF[$rel]:-}" ]; then echo "DEFERRED $rel"; continue; fi
+    if unchanged "$f"; then UNCH=$((UNCH+1)); continue; fi
     keep+=("$f")
   done
   [ ${#keep[@]} -eq 0 ] && return 0
@@ -123,28 +154,35 @@ cp_to() {
   # in-place overwrite; m105: in-place scp is why every file a running 4080 process used had to be deferred)
   stage_to "$d" "${keep[@]}"
 }
-stage_to() { local d=$1 n; shift; [ $DRY = 1 ] && return 0; n=${#STAGEDEST[@]}; STAGEDEST+=("$d")
+stage_to() { local d=$1 n; shift; [ $DRY = 1 ] && return 0; n=${#STAGEDEST[@]}; STAGEDEST+=("$d"); STAGEFILES+=("$*")
   scp -q "$@" "$H:C:/KAH/$STAGE/$n/" || { echo "SCPFAIL $d: ${*#$M/}"; STAGEDEST[$n]=""; }; }
 # mv_staged: rename every staged file over its destination (Git Bash mv = POSIX rename: open handles keep the old content);
 # a file that cannot be renamed (held without delete sharing) keeps the 4080's old copy: "DEFERRED <rel> (rename failed)"
 mv_staged() {
-  [ $DRY = 1 ] && return 0; [ ${#STAGEDEST[@]} -eq 0 ] && return 0
+  [ $DRY = 1 ] && return 0; [ ${#STAGEDEST[@]} -eq 0 ] && { ssh $H "rmdir /s /q C:\\KAH\\$STAGE 2>NUL & exit 0"; return 0; }   # nothing changed: drop the empty stage dirs
   local t i d s; t=$(mktemp); echo "cd /c/KAH/$STAGE || { echo 'SCPFAIL stage dir C:/KAH/$STAGE missing'; exit 0; }" > "$t"
   for i in "${!STAGEDEST[@]}"; do d=${STAGEDEST[$i]}; [ -n "$d" ] || continue; d=/c/${d#C:/}; s=${d#/c/KenshiModding/}
     echo "for f in $i/*; do [ -f \"\$f\" ] || continue; b=\${f#$i/}; mv -f \"\$f\" \"$d\$b\" 2>/dev/null || echo \"DEFERRED $s\$b (rename failed: in use)\"; done" >> "$t"; done
   echo "cd /c/KAH && rm -rf $STAGE" >> "$t"
-  scp -q "$t" "$H:C:/KAH/$STAGE/mv.sh" && ssh $H "C:\\PROGRA~1\\Git\\bin\\bash.exe -l C:/KAH/$STAGE/mv.sh" || echo "SCPFAIL rename step (files stay staged in C:/KAH/$STAGE)"
+  local mo ok=1; mo=$(scp -q "$t" "$H:C:/KAH/$STAGE/mv.sh" && ssh $H "C:\\PROGRA~1\\Git\\bin\\bash.exe -l C:/KAH/$STAGE/mv.sh") || ok=0
+  [ -n "$mo" ] && echo "$mo"; [ $ok = 1 ] || echo "SCPFAIL rename step (files stay staged in C:/KAH/$STAGE)"
   rm -f "$t"
+  # record what landed: every staged file of a stage dir that scp'd OK, minus rename failures (none if the step failed)
+  [ -n "$MAN" ] && [ $ok = 1 ] || return 0
+  local -A RF=(); local l f; while read -r l; do [[ $l == DEFERRED*rename\ failed* ]] && { l=${l#DEFERRED }; RF[${l%% *}]=1; }; done <<< "$mo"
+  for i in "${!STAGEDEST[@]}"; do [ -n "${STAGEDEST[$i]}" ] || continue; d=/c/${STAGEDEST[$i]#C:/}; s=${d#/c/KenshiModding/}
+    for f in ${STAGEFILES[$i]}; do [ -n "${RF[$s$(basename "$f")]:-}" ] || [ -z "${CUR[$f]:-}" ] || SM[$f]=${CUR[$f]}; done; done
+  for f in "${!SM[@]}"; do echo "${SM[$f]} $f"; done > "$MAN.$$" && mv -f "$MAN.$$" "$MAN"
 }
 run ssh $H 'mkdir C:\KAH\bin C:\KenshiModding\tools\automation C:\KenshiModding\components\KenshiFP\animlab C:\KenshiModding\components\KenshiFP\animlab\weapons C:\KenshiModding\components\KenshiFP\tests\ingame C:\KenshiModding\Kenshi-Automation-Harness\client C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab C:\KenshiModding\Kenshi-Automation-Harness\tools\animlab\visual C:\KenshiModding\Kenshi-Automation-Harness\tools\wgccap\out 2>NUL & exit 0'
 STAGE="stage-$$-$RANDOM"; STAGEDEST=()   # every file goes to C:\KAH\<STAGE>\<n>\ first, mv_staged renames them into place
 if [ $DRY = 0 ]; then sd=""; for i in $(seq 0 $(( ${#SETD[@]} + 4 ))); do sd+=" C:\\KAH\\$STAGE\\$i"; done; ssh $H "mkdir$sd 2>NUL & exit 0"; fi
-stage_to C:/KAH/ "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1"
+cp_to C:/KAH/ "$HERE/itrun.ps1" "$HERE/kcfg.ps1" "$HERE/../kenshi-gfx.ps1"
 # lane 4080b (multi-instance-4080 2026-10-11): ctl.ps1 -Instance, inst-window.ps1 (parks/retitles instance n), the instance
 # copier, and the harness kenshi-ctl.ps1 that only sees the game of the install it is given (the old copy killed both games)
-stage_to C:/KAH/ "$HERE/ctl.ps1" "$HERE/inst-window.ps1" "$HERE/../kenshi-instance.ps1"
-stage_to C:/KAH/tools/ "$M/Kenshi-Automation-Harness/tools/kenshi-ctl.ps1" "$M/Kenshi-Automation-Harness/tools/Win32Ui.cs" "$M/Kenshi-Automation-Harness/tools/WindowCapture.cs"
-stage_to C:/KAH/bin/ "$HERE/python3" "$HERE/stobe-auto"   # stobe-auto honours KAH_DIR (lane 4080b)
+cp_to C:/KAH/ "$HERE/ctl.ps1" "$HERE/inst-window.ps1" "$HERE/../kenshi-instance.ps1"
+cp_to C:/KAH/tools/ "$M/Kenshi-Automation-Harness/tools/kenshi-ctl.ps1" "$M/Kenshi-Automation-Harness/tools/Win32Ui.cs" "$M/Kenshi-Automation-Harness/tools/WindowCapture.cs"
+cp_to C:/KAH/bin/ "$HERE/python3" "$HERE/stobe-auto"   # stobe-auto honours KAH_DIR (lane 4080b)
 for d in "${NEWD[@]}"; do w=$(echo "$d" | tr / '\\'); run ssh $H "mkdir C:\\KenshiModding\\$w 2>NUL & exit 0"; done   # list-closure dirs outside the fixed sets
 for i in "${!SETD[@]}"; do cp_to "C:/KenshiModding/${SETD[$i]}/" ${SETF[$i]}; done
 mv_staged
@@ -156,4 +194,5 @@ for s in $SAVES; do
   ssh $H "powershell -NoProfile -Command \"Remove-Item -Recurse -Force \$env:LOCALAPPDATA\\kenshi\\save\\$s -EA 0\"" || true
   scp -q -r "/c/Users/Shay/AppData/Local/kenshi/save/$s" "$H:AppData/Local/kenshi/save/"
 done
-echo "4080 rig synced$( [ $DRY = 1 ] && echo " (DRY)"): helpers, repo files$( [ -n "$DEFER" ] && echo " ($(grep -c . "$DEFER") deferred)"), run dirs [$*], saves [$SAVES]"
+[ -n "$MAN" ] && echo "UNCHANGED $UNCH"
+echo "4080 rig synced$( [ $DRY = 1 ] && echo " (DRY)"): helpers, repo files$( [ -n "$DEFER" ] && echo " ($(grep -c . "$DEFER") deferred)")$( [ -n "$MAN" ] && echo " ($UNCH unchanged skipped)"), run dirs [$*], saves [$SAVES]"

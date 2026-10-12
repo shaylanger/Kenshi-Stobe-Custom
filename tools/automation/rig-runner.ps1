@@ -333,7 +333,12 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     # m105: 4080 sync = seeds-only defer + staged rename (every 4080 list had run on old copies of ~190 deferred files)
     $sp = @(Get-Content -LiteralPath $PSCommandPath | Where-Object { $_ -match '^\s*\$defer = @\(UsedClosure \(\$cl' }); $ok = $sp.Count -eq 1 -and $sp[0] -match '-SeedsOnly'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 sync defers only the files running processes name (no transitive closure)"
     $su = Get-Content "$auto\rig4080\setup.sh" -Raw; $ok = $su -match '(?m)^mv_staged$' -and $su -notmatch 'scp -q "\$\{keep\[@\]\}" "\$H:\$d"' -and $su -notmatch '(?m)^run scp -q "\$HERE/python3"'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) rig4080/setup.sh stages + renames files into place (never an in-place scp over a running script)"
-    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 6 + $th.Count) cases"; exit [int]($bad -gt 0)
+    # speed-scout r10: 4080 sync copies only changed files (setup.sh manifest) + one prep ssh + no forced -Fix rigcheck at START
+    $mt = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/rig4080/setup.sh --mantest' 2>&1 | ForEach-Object { "$_" }); $ok = $mt[-1] -like 'MANTEST PASS*'; if (-not $ok) { $bad++ }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) rig4080/setup.sh changed-files manifest: $($mt[-1])"
+    $rs = Get-Content -LiteralPath $PSCommandPath -Raw; $ok = $rs -match '(?m)^\s*Prep4080\s*$' -and $rs -match "(?m)^\s*\`$rc = RigCheck \`$run\s*$" -and $rs -match "save\\b'\) \{ \`$rc = RigCheck \`$run -Fix \}"; if (-not $ok) { $bad++ }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 START: one Prep4080 ssh, cached rigcheck, -Fix only for a save NO"
+    "SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $kg.Count + $lg.Count + $td.Count + 8 + $th.Count) cases"; exit [int]($bad -gt 0)
 }
 $rd = if ($Fake) { Join-Path $runs 'runner\fake' } else { Join-Path $runs 'runner' }
 . (Join-Path $PSScriptRoot 'tdr-handled.ps1')   # shared last-handled GPU-reset epoch per rig (no re-trip on an old event)
@@ -538,9 +543,9 @@ function UsedClosure([string]$text, [hashtable]$cand, [switch]$SeedsOnly) {   # 
     }
     @($seen.Keys | Sort-Object)
 }
-function Sync4080([string]$name, [string]$listText) {
+function Sync4080([string]$name, [string]$listText, [string[]]$procs = $null) {
     $cand = SyncCandidates
-    $cl = if ($Fake) { if (Test-Path "$rd\fake-procs.txt") { @(Get-Content "$rd\fake-procs.txt") } else { @() } } else { @(Ssh4Ps 'C:\KAH\runner\procpaths.ps1' @()) }
+    $cl = if ($procs) { $procs } elseif ($Fake) { if (Test-Path "$rd\fake-procs.txt") { @(Get-Content "$rd\fake-procs.txt") } else { @() } } else { @(Ssh4Ps 'C:\KAH\runner\procpaths.ps1' @()) }
     if (-not $Fake -and -not ($cl -contains 'PROCPATHS-END')) { Log "4080 sync SKIPPED: 4080 process list unreadable ($(($cl | Select-Object -Last 1)); nothing overwritten, the 4080 keeps its current scripts"; return }
     # only the files running processes name (seeds), not their transitive closure: setup.sh renames new files into place
     # (a running bash keeps its old file), so nothing else needs to wait. m105: the closure of lane 4080b's + background
@@ -593,7 +598,19 @@ function Ssh4Bash([string[]]$a) { Ssh (@('C:\PROGRA~1\Git\bin\bash.exe', '-l') +
 # lane 4080b (multi-instance-4080): the 4080 may run a second game (C:\KenshiInst\<n>); lane 4080 only sees / kills instance 1
 function Ssh4Enc([string]$ps) { Ssh @('powershell', '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ps))) }
 $k1Sel = "Get-CimInstance Win32_Process -Filter `"Name='kenshi_x64.exe'`" | Where-Object { -not `$_.ExecutablePath -or `$_.ExecutablePath -notlike '*\KenshiInst\*' }"
-function K1on4080 { $o = @(Ssh4Enc "if (@($k1Sel).Count) { 'K1 yes' } else { 'K1 no' }"); if ($o -match '^K1 yes') { 'yes' } elseif ($o -match '^K1 no') { 'no' } else { '' } }
+function K1on4080 { $c = P4 'K1'; if ($c) { return $c }; $o = @(Ssh4Enc "if (@($k1Sel).Count) { 'K1 yes' } else { 'K1 no' }"); if ($o -match '^K1 yes') { 'yes' } elseif ($o -match '^K1 no') { 'no' } else { '' } }
+# ONE ssh at a 4080 list start (speed-scout r10: staged-state, -Harness, lock, K1 and procpaths were 6 separate ssh +
+# powershell starts, ~5 s of the ~45 s START->launch): the answers are kept 60 s in $script:p4 (cleared after a stop /
+# install); every reader falls back to its own ssh when $script:p4 is absent or old. Lines: ST/HS/LK/K1 <value>, PP <procline>.
+function Prep4080 {
+    $script:p4 = $null; if ($Fake -or $Rig -ne '4080') { return }
+    $ps = "& 'C:\KAH\runner\staged-state.ps1' | Select-Object -Last 1 | ForEach-Object { 'ST ' + `$_ }; & 'C:\KAH\runner\staged-state.ps1' -Harness | Select-Object -Last 1 | ForEach-Object { 'HS ' + `$_ }; & 'C:\KAH\ctl.ps1' lock | Select-Object -First 1 | ForEach-Object { 'LK ' + `$_ }; if (@($k1Sel).Count) { 'K1 yes' } else { 'K1 no' }; & 'C:\KAH\runner\procpaths.ps1' | ForEach-Object { 'PP ' + `$_ }"
+    $o = @(Ssh @('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ps))))
+    $p = @{ T = Get-Date; PP = @() }
+    foreach ($l in $o) { if ($l -match '^(ST|HS|LK|K1) (.*)$') { $p[$Matches[1]] = $Matches[2].Trim() } elseif ($l -like 'PP *') { $p.PP += $l.Substring(3) } }
+    if ($p.ST -and $p.HS -and $p.LK -and $p.K1 -and ($p.PP -contains 'PROCPATHS-END')) { $script:p4 = $p } else { Log "4080 prep ssh incomplete (each step asks on its own): $(($o | Select-Object -Last 2) -join ' / ')" }
+}
+function P4([string]$k) { if ($script:p4 -and ((Get-Date) - $script:p4.T).TotalSeconds -lt 60) { $script:p4[$k] } else { $null } }
 function Kill1on4080 { Ssh4Enc "$k1Sel | ForEach-Object { taskkill.exe /F /T /PID `$_.ProcessId 2>&1 }" }
 function Scp4([string[]]$src, [string]$dst) { & scp -q -o BatchMode=yes @src "4080:$dst" 2>&1 | ForEach-Object { "$_" }; $LASTEXITCODE -eq 0 }
 function IdleReason {   # a recorded pause; the runner's own "no changed work" is not one (real work starts at once)
@@ -966,7 +983,7 @@ function StagedWanted([string]$need, [bool]$reusable = $false) {
         return $null
     }
     # 4080: newest staged there vs installed (one ssh call)
-    $r = Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @() | Select-Object -Last 1
+    $r = P4 'ST'; if (-not $r) { $r = Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @() | Select-Object -Last 1 }
     StagedPick4080 $r $need
 }
 # speed-scout r9: "NEWEST <h> newer=0 installed=<h>" with "# needs: KenshiFP latest" returned <h> = an install was "needed",
@@ -1217,7 +1234,11 @@ function Start-Batch($f) {
     ClearAlert
     $srcD = Split-Path $f.DirectoryName -Leaf
     if ($srcD -ne $Rig -and $srcD -ne 'any' -and $srcD -ne 'filler') { Log "STEAL $name from queue\$srcD\ ($srcD busy, list rig-neutral and RIGCHECK OK here)"; Note $own "your list $name from queue\$srcD\ runs on $Rig ($srcD was busy)." }
-    $rc = RigCheck $run -Fix:($Rig -eq '4080')   # 4080: copies a save it lacks
+    # the verdict cached at the pick (10 min, content key); the 4080 reruns it with -Fix (copies a missing save) only when it
+    # says NO for a save (speed-scout r10: an always-fresh -Fix check cost ~7 s per 4080 list start)
+    $rc = RigCheck $run
+    if ($Rig -eq '4080' -and $rc -match '^NO .*\bsave\b') { $rc = RigCheck $run -Fix }
+    Prep4080
     if ($rc -like 'NO *') { Fail-List $run $name $own "cannot run on ${Rig}: $($rc.Substring(3))" @(); Remove-Item $curF -ErrorAction SilentlyContinue; return $true }
 
     # dry run (fake game): the verdict cached by the background pre-dry-run while the previous batch ran, else run it now
@@ -1320,19 +1341,21 @@ function Start-Batch($f) {
         Set-Content (Join-Path $runs 'inflight\runner-5090') $outP
         Wsl @('bash', "$outP/.start.sh") | Out-Null
     } else {
-        $lk = (Ssh4Ps 'C:\KAH\ctl.ps1' @('lock') | Select-Object -First 1)
+        $lk = P4 'LK'; if (-not $lk) { $lk = (Ssh4Ps 'C:\KAH\ctl.ps1' @('lock') | Select-Object -First 1) }
         if ($lk -and $lk -ne 'free' -and $lk.Trim() -ne $owner4) { Defer-List $run $name $own "4080 lock held by $lk" @() $f; Remove-Item $curF; return $true }
         # no relaunch gap (2026-10-10): the previous list left Kenshi up for this one (keep4080): run-batch.sh --reuse loads
         # the save in place, unless a DLL must be installed (stop + launch as before)
         $reuse = $false
         if ((K1on4080) -eq 'yes') {   # instance 1 only: lane 4080b's game (C:\KenshiInst\<n>) is not this lane's
-            $hOk = (-not $needH) -or ((Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-Harness') | Select-Object -Last 1) -match $needH)
+            $hs = P4 'HS'; if (-not $hs) { $hs = (Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-Harness') | Select-Object -Last 1) }
+            $hOk = (-not $needH) -or ($hs -match $needH)
             $rg = RunningGfx
             if ($script:keep4080 -and -not $inst -and $hOk -and $rg -eq $gfx) { $reuse = $true; Log "REUSE $name : 4080 Kenshi stays up, $launch loads in place (no DLL install needed, gfx $gfx)" }
             elseif ($rg -ne $gfx) { Log "4080: the list wants gfx $gfx, the running game has $rg (relaunch)"; Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }
             else { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4) | Out-Null }
         }
         $script:keep4080 = $false; Set-Content $gfxF $gfx
+        $hsPrep = P4 'HS'; $ppPrep = P4 'PP'; $p4T = if ($script:p4) { $script:p4.T } else { Get-Date 0 }; $script:p4 = $null   # K1 / lock change with the stop below
         if ($inst -and -not $reuse) {   # the stop above returns before the exit: wait for it (m102 15:20: 3 lists FAILED at install)
             $kr = KillGame { (K1on4080) -ne 'no' } { Ssh4Ps 'C:\KAH\ctl.ps1' @('stop', '-Owner', $owner4, '-TimeoutSec', '90') } { Kill1on4080 } 30
             if ($kr[0] -ne 'gone') { Log "4080 stop for the install: $($kr[0])" }
@@ -1343,12 +1366,12 @@ function Start-Batch($f) {
             if (-not ($o -match 'installed')) { Defer-List $run $name $own "4080 KenshiFP $inst install failed" $o $f; Remove-Item $curF; return $true }
         }
         if ($needH) {
-            $hh = (Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-InstallHarness', $needH) | Select-Object -Last 1); Log "4080 harness (need $needH, installs C:\KAH\staged\AutomationHarness-$needH.dll if present): $hh"
+            $hh = if ($hsPrep -match "HARNESS $needH") { $hsPrep } else { (Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @('-InstallHarness', $needH) | Select-Object -Last 1) }; Log "4080 harness (need $needH, installs C:\KAH\staged\AutomationHarness-$needH.dll if present): $hh"
             if ($hh -notmatch $needH) { Defer-List $run $name $own "4080 needs Harness $needH, installed $hh" @() $f; Remove-Item $curF; return $true }
         }
         # take scripts + lab modules on the 4080 = this tree (rig4080/setup.sh): without it the 4080 ran stale scripts
         # (zsfist4080 fists lab: "No module named recfmt", 2026-10-10); files a running analysis uses are deferred (Sync4080)
-        Sync4080 $name (($txt -join "`n"))
+        Sync4080 $name (($txt -join "`n")) $(if ($ppPrep -and ((Get-Date) - $p4T).TotalSeconds -lt 60) { $ppPrep } else { $null })
         $why = DryGate; if ($why) { Fail-List $run $name $own $why $script:dryDetail; Remove-Item $curF; return $true }
         $null = Ssh @('mkdir', "C:\KenshiTestRuns\$outN")
         Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
