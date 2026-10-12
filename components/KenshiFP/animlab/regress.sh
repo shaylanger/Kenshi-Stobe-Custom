@@ -642,6 +642,20 @@ if e6src 13334FFF; then
   r=$(python3 "$HERE/e6-takes.py" --adapter "$BLD/kfpvm_e6-13334FFF" --args "--tables $CORPUS/pools/e6-takes/noclamp.tables" 2>&1 | grep '^E6TAKE s1pt30-1333 s1 arc')
   case "$r" in *" arc PASS "*) ok "e6-takes 13334FFF noclamp tables: s1pt30 s1 arc PASS $(echo "$r" | grep -o 'wb_max=[0-9.]*')";; *) bad "e6-takes 13334FFF noclamp (want s1pt30 s1 arc PASS): ${r:0:160}";; esac
 else echo "REGRESS INFO e6-takes 13334FFF: corpus source or build missing (/tmp/al-e6src-13334FFF.log)"; fi
+# 35f. agreement skips zoomed-out records (lab-rules 2026-10-11, cleaver-fix 139: every zoom-25 half showed as 60-140 deg
+#   lab-vs-game disagreement and hid the real ready-roll gap): posedump selftest (zoom >= 8 on the record or the one before
+#   dropped, ANIMLAB_AGREE_ZOOM=0 keeps all) + the clv139 corpus rec: its zoom-25 half (~730 records) leaves the comparison.
+r=$(cd "$L" && python3 posedump.py selftest 2>&1 | tail -1); [ "$r" = "posedump selftest PASS" ] && ok "agree zoom skip: $r" || bad "agree zoom skip selftest: $r"
+if [ -f "$CORPUS/clv139-zoomret.vmrec.txt" ]; then
+  r=$(cd "$L" && python3 posedump.py fromrec "$CORPUS/clv139-zoomret.vmrec.txt" /tmp/al-zs.pd >/dev/null 2>&1 && python3 -c "
+import posedump as P, metrics as M
+g = P.parse('/tmp/al-zs.pd'); n = len(g['B']); k = P.zoom_skip(g, M.AGREE_ZOOM_SKIP)
+bad = [f for f in g['B'] if float(g['S'][f][P.S_ZOOM]) >= M.AGREE_ZOOM_SKIP]
+print('records=%d zoom_skipped=%d left_zoomed=%d' % (n, k, len(bad)))" 2>&1)
+  case "$r" in records=*" left_zoomed=0") k=$(echo "$r" | grep -o 'zoom_skipped=[0-9]*' | cut -d= -f2)
+      [ "${k:-0}" -ge 500 ] && ok "agree zoom skip clv139: $r" || bad "agree zoom skip clv139 (want >= 500 skipped): $r";;
+    *) bad "agree zoom skip clv139: $r";; esac
+else echo "REGRESS INFO agree zoom skip: corpus clv139-zoomret.vmrec.txt missing"; fi
 rm -rf /tmp/al-e6src-*
 [ $fail = 0 ] && echo "REGRESS ALL PASS" || echo "REGRESS FAILED"
 exit $fail
