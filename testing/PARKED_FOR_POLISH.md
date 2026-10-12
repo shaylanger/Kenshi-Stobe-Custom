@@ -7,9 +7,9 @@ and made perfect later. (Agent status/handoff files were cleaned up 2026-10-11 2
 ## Stopped / parked work
 - **GPU lab** (gpu-lab, gpu-wire): CuPy/CUDA port of lab evaluators. 19:33 TDR on the 5090 came from an
   untested elb_kernel (raw heap pointers in the no-heap capture). GPU kernel runs banned. Tooling for
-  GPU-vs-CPU agreement exists (gpu-agree.py, optimizer --eval gpu|cpu, gpu/kfpgpu.py). Handoffs:
+  GPU-vs-CPU agreement exists (gpu-agree.py, optimizer --eval gpu|cpu, gpu/kfpgpu.py).
   GPU-lab next: heap captures, host raw-pointer check, ptxas -c + link path, compile-only; first run only with that rig's game lanes paused, N=1, under compute-sanitizer. gpu-wire next: `gpu-agree.py run /root/gpu-agree-gpu --eval gpu` once a GPU kernel exists (agreement set C:KenshiTestRunsgpu-wiregree-set).
-- **Table/optimizer strokes** (stroke-fix, sj-line): E6 s2 CMA tables (/root/strokefix opt-s2b/c),
+- **Table/optimizer strokes** (stroke-fix, sj-line): E6 s2 CMA tables (scratch deleted 2026-10-11),
   screen-line mode (kfp-stroke-line, accepted for PT17-v2 s0/s3). Superseded by keyframes (Shay 19:30).
 - **Lab polish:** hud-check (HUD band/whole-weapon-hidden, decision pending), judge-vec (judge/takecheck
   vectorize, profile in jv-tmp), animlab-maintainer gate rebaseline (gate.sh --update-baseline),
