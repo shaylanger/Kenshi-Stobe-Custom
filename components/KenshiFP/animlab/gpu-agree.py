@@ -293,7 +293,15 @@ def _cmp_variant(a):
     except Exception as e:
         out['err'] = 'judge: %s' % e; return out
     hard, s = score(line)
-    ta, tb = tokens(r['cpu_line']), tokens(line)
+    # reference = the CURRENT judge on the stored CPU replays (the manifest's cpu_line is from the sweep's judge
+    # version; the judge keeps changing, e.g. 458d22c blade seen); stale_ref = manifest line differs (info)
+    try:
+        ref = _rejudge_cpu(r)
+    except Exception as e:
+        out['err'] = 'cpu rejudge: %s' % e; return out
+    ch, cs = score(ref)
+    out.update(cpu_line=ref, cpu_score=cs, cpu_hard=ch, stale_ref=ref != r['cpu_line'])
+    ta, tb = tokens(ref), tokens(line)
     flips, numd, worst = [], 0.0, None
     if [k for k, _ in ta] != [k for k, _ in tb]:
         flips.append('token layout differs')
@@ -331,14 +339,14 @@ def compare(argv):
         mr = max(x['max_abs'] for x in c['raw']); maxraw = max(maxraw, mr)
         rb = sum(x['bad_frames'] for x in c['raw']); rawbad += rb
         sm = sum(x['state_mismatch'] for x in c['raw']) + sum(x['n_cpu'] != x['n_other'] for x in c['raw']); smis += sm
-        sd = abs(c['score'] - r['cpu_score']); sdmax = max(sdmax, sd)
-        hf = c['hard'] != r['cpu_hard']; hflip += hf; nflip += bool(c['flips'])
-        sc_cpu.append(r['cpu_score']); sc_gpu.append(c['score'])
+        sd = abs(c['score'] - c['cpu_score']); sdmax = max(sdmax, sd)
+        hf = c['hard'] != c['cpu_hard']; hflip += hf; nflip += bool(c['flips'])
+        sc_cpu.append(c['cpu_score']); sc_gpu.append(c['score'])
         bad = rb or sm or sd > st or hf or c['num_rel'] > num_tol
         if bad:
             fails.append(r['id'])
         rep.append('%s %s %s raw_max=%.4g bad_frames=%d state_mis=%d score cpu=%.3f gpu=%.3f d=%.3f hard %s->%s num_rel=%.3g%s flips=%s' % (
-            r['id'], 'FAIL' if bad else 'ok', r['group'], mr, rb, sm, r['cpu_score'], c['score'], sd, r['cpu_hard'], c['hard'],
+            r['id'], 'FAIL' if bad else 'ok', r['group'], mr, rb, sm, c['cpu_score'], c['score'], sd, c['cpu_hard'], c['hard'],
             c['num_rel'], (' (%s)' % c['num_worst']) if c['num_worst'] and c['num_rel'] > 0 else '', ';'.join(c['flips'][:4]) or '-'))
     rho = spearman(sc_cpu, sc_gpu)
     top_cpu = max(range(len(sc_cpu)), key=lambda i: sc_cpu[i]) if sc_cpu else None
@@ -350,9 +358,9 @@ def compare(argv):
     if os.path.exists(cpu_b) and os.path.abspath(cpu_b) != os.path.abspath(bench):
         btxt += '\n' + bench_text(cpu_b)
     head = ('AGREE %s variants=%d jobs=%d fail=%d rho=%.4f(min %.2f) score_dmax=%.3f(tol %.2f) hard_flips=%d verdict_token_flips=%d '
-            'raw_max=%.4g(tol %.3g) raw_bad_frames=%d state_mismatch=%d same_winner=%s' % (
+            'raw_max=%.4g(tol %.3g) raw_bad_frames=%d state_mismatch=%d same_winner=%s ref=current-judge(stale_manifest_lines=%d)' % (
                 'PASS' if ok else 'FAIL', len(rows), sum(len(r['jobs']) for r in rows), len(fails), rho, rho_min, sdmax, st, hflip,
-                nflip, maxraw, raw_tol, rawbad, smis, top_cpu == top_gpu))
+                nflip, maxraw, raw_tol, rawbad, smis, top_cpu == top_gpu, sum(bool(c.get('stale_ref')) for c in cs)))
     txt = head + '\n' + btxt + '\n' + '\n'.join(rep) + '\n'
     open(res_p + '.agree.txt', 'w').write(txt)
     print(head); print(btxt); print('report: %s.agree.txt' % res_p)
