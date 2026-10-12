@@ -967,7 +967,16 @@ function StagedWanted([string]$need, [bool]$reusable = $false) {
     }
     # 4080: newest staged there vs installed (one ssh call)
     $r = Ssh4Ps 'C:\KAH\runner\staged-state.ps1' @() | Select-Object -Last 1
-    if ($r -match '^NEWEST (\w+) newer=(\d)') { if ($need -or $Matches[2] -eq '1') { return $Matches[1] } }
+    StagedPick4080 $r $need
+}
+# speed-scout r9: "NEWEST <h> newer=0 installed=<h>" with "# needs: KenshiFP latest" returned <h> = an install was "needed",
+# so the kept-up 4080 game was stopped + relaunched for EVERY list ("KenshiFP already installed: 08AAF9BF", ~60 s each).
+# The newest staged build already installed = nothing to install (reuse stays possible). -RowCacheSelfTest
+function StagedPick4080([string]$r, [string]$need) {
+    if ($r -match '^NEWEST (\w+) newer=(\d)(?: installed=(\w+))?') {
+        if ($Matches[3] -and $Matches[3] -eq $Matches[1]) { return $null }
+        if ($need -or $Matches[2] -eq '1') { return $Matches[1] }
+    }
     $null
 }
 
@@ -1528,6 +1537,10 @@ if ($RowCacheSelfTest) {
                      @('low list, cold, full queued', 'low', 'low', $false, 'full', $true, 'full'), @('low list, cold, nothing full queued', 'low', 'low', $false, 'full', $false, 'low'),
                      @('low strict, full game up', 'low', 'low strict', $true, 'full', $true, 'low'), @('full list, low game up', 'full', '', $true, 'low', $false, 'full'))) {
         $n++; $r = GfxPick $g[1] $g[2] $g[3] $g[4] $g[5]; $ok = $r -eq $g[6]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) gfx pick, $($g[0]): $r"
+    }
+    foreach ($g in @(@('newest installed, needs latest', 'NEWEST 08AAF9BF newer=0 installed=08AAF9BF', 'latest', ''), @('newer staged', 'NEWEST 11111111 newer=1 installed=08AAF9BF', '', '11111111'),
+                     @('needs latest, other installed', 'NEWEST 11111111 newer=0 installed=08AAF9BF', 'latest', '11111111'), @('no need, not newer', 'NEWEST 11111111 newer=0 installed=08AAF9BF', '', ''))) {
+        $n++; $r = "$(StagedPick4080 $g[1] $g[2])"; $ok = $r -eq $g[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) 4080 staged pick, $($g[0]): '$r'"
     }
     Remove-Item -Recurse -Force $td -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force $pdd -ErrorAction SilentlyContinue
     "ROWCACHE-SELFTEST $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $n cases"; exit [int]($bad -gt 0)
