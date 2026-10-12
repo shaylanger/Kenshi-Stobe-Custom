@@ -142,7 +142,12 @@ fi
 # 0..5 = L/R straight, L/R hook, L/R upper), deterministic, independent of which native technique the game picks
 if [[ ",${FIST_PHASES}," == *,fire,* ]]; then
   FN=(L-straight R-straight L-hook R-hook L-upper R-upper)
-  for _v in 0 1 2 3 4 5; do lab "FP punch ${FN[$_v]} (fp_fire $_v)"; A fp_vm set fp_fire $_v >/dev/null; sleep 1.1; fist >> "$N.fist.txt"; done
+  # FIST_FIREVAR=k,v,k,v/k,v (no spaces/;: row syntax) = one punch set per variant (live keys set before it, labelled), e.g. strike hand pitch/roll
+  IFS=/ read -ra _VARS <<< "${FIST_FIREVAR:-}"; [ ${#_VARS[@]} -gt 0 ] || _VARS=("")
+  for _var in "${_VARS[@]}"; do
+    set -- ${_var//,/ }; while [ $# -ge 2 ]; do A fp_vm set $1 $2 >/dev/null; shift 2; done
+    for _v in 0 1 2 3 4 5; do lab "FP punch ${FN[$_v]} (fp_fire $_v)${_var:+ [$_var]}"; A fp_vm set fp_fire $_v >/dev/null; sleep 1.1; fist >> "$N.fist.txt"; done
+  done
 fi
 lab "Guard"; sleep 1.5; fist >> "$N.fist.txt"
 lab end; touch "$N.stop"; take_sample_stop; wait $FP; FP=; rm -f "$N.stop"
