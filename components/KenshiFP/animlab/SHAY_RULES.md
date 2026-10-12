@@ -74,6 +74,7 @@ S = Kenshi-Automation-Harness/docs/animlab/STATUS.md; R = components/KenshiFP/an
 | SR33 | Review before handing over: frame-by-frame review of every video before Shay; a noticed flaw = fix first. | 2026-10-09 | M review-before-handing-over |
 | SR35 | Every visible FP feature that passes gets a short labelled review video + README in C:\KenshiTestRuns\for-shay\<ROW>\ for Shay. | 2026-10-11 | M visible-features-get-video |
 | SR36 | Every review flaw -> lab Misses row + automatic check. | 2026-10-10 | M review-flaws-feed-the-lab |
+| SR37 | Review videos show exactly 1 swing of each stroke type, once at full speed and once at 1/2 speed. Nothing more (no repeated swings, no 1/4 speed). (The E6 video, 6 swings per stroke, 1:31, real + 1/4 speed, broke this.) | 2026-10-11 18:05 | Shay via coordinator |
 
 ## Check audit (rules-audit, 2026-10-11 ~18:00; each check read in code)
 
