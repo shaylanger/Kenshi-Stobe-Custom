@@ -58,6 +58,12 @@ def pen_swing(v, pm, stroke, trav):
     p['seen'] = max(0, 0.065 - num(r'seen=([\d.]+)', bt, 0)) / 0.015
     st = ' '.join(v['stxt'])
     p['len'] = max(0, 260 - num(r'len=([\d.]+)', st, 0)) / 30
+    # stroke_check overhead tilt + blade-middle path (stroke 2) were BAD in the verdict but unscored, so optimizers drifted
+    # into them (kf-author 2026-10-11: CMA s2 reached tilt 82/35 with score 5.7); score them with a margin
+    for lab, sc in ((('overhead tilt', 3.0), ('path', 2.0)) if stroke == 2 else ()):
+        m = re.search(r'(?<![a-z])' + lab + r'=([\d.]+)/([\d.]+)', st)
+        if m:
+            p['len'] += max(0, float(m.group(1)) - 0.9 * float(m.group(2))) / sc
     ct = v['ctxt']
     p['roll'] = max(0, num(r'windup_roll=([\d.]+)', ct, 0) - 13) / 2 + max(0, num(r'stroke_roll=([\d.]+)', ct, 0) - 41) / 4 + max(0, num(r'step([\d.]+)', ct, 0) - 10.5) / 1.5
     it = ' '.join(v.get('itxt', []))
