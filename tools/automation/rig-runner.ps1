@@ -1116,16 +1116,21 @@ function Start-Batch($f) {
     # run it at nice 0, and lift a background one already running for this key to nice 0 too (speed-scout)
     if (-not $cached) {
         if (-not (PreDryRunning $key)) { PreDryStart $run $key 0 }
-        elseif (-not $Fake) { $null = Wsl @('bash', '-c', "for p in `$(pgrep -f 'predry/$key/run.sh'); do renice -n 0 -g `$p; done >/dev/null 2>&1; true") }
-        $null = PreDryWait $key 1200 }
-    $dr = if (Test-Path (Join-Path $pdd "$key.out")) { @(Get-Content (Join-Path $pdd "$key.out")) } else { @() }
-    $drc = if (Test-Path (Join-Path $pdd "$key.rc")) { [int]((Get-Content (Join-Path $pdd "$key.rc") -Raw).Trim()) } else { 124 }
-    $sum = ($dr | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1)
-    Log "dryrun $name $(if ($cached) { '(cached, pre-run in the background)' } else { '(now)' }) key=$key rc=$drc : $sum"
-    # a FAIL stays cached: the key changes with the list or any script it runs, so the same state would fail again
-    if ($drc -ne 0 -or $sum -cnotmatch '^DRYRUN-SUMMARY pass=\d+ fail=0 ') {   # dryrun.sh exits 1 on any FAIL row
-        Fail-List $run $name $own "dryrun failed: $sum" @($dr | Where-Object { $_ -match '^DRYRUN .* FAIL' }); Remove-Item $curF; return $true
+        elseif (-not $Fake) { $null = Wsl @('bash', '-c', "for p in `$(pgrep -f 'predry/$key/run.sh'); do renice -n 0 -g `$p; done >/dev/null 2>&1; true") } }
+    # an uncached dry run runs WHILE the rig is prepared (stop / install / 4080 sync, ~30 s on the 4080) and is judged
+    # right before run-batch starts (speed-scout m105: lanes A waited 36-57 s per uncached list, ~45 min a day)
+    $dryT0 = Get-Date
+    function DryGate {   # $null = PASS (logged), else the Fail-List reason (+ $script:dryDetail)
+        $w0 = Get-Date; if (-not $cached) { $null = PreDryWait $key 1200 }
+        $dr = if (Test-Path (Join-Path $pdd "$key.out")) { @(Get-Content (Join-Path $pdd "$key.out")) } else { @() }
+        $drc = if (Test-Path (Join-Path $pdd "$key.rc")) { [int]((Get-Content (Join-Path $pdd "$key.rc") -Raw).Trim()) } else { 124 }
+        $sum = ($dr | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1)
+        Log "dryrun $name $(if ($cached) { '(cached, pre-run in the background)' } else { "(now, started $([int]($w0 - $dryT0).TotalSeconds) s before, waited $([int]((Get-Date) - $w0).TotalSeconds) s after the rig prep)" }) key=$key rc=$drc : $sum"
+        # a FAIL stays cached: the key changes with the list or any script it runs, so the same state would fail again
+        if ($drc -ne 0 -or $sum -cnotmatch '^DRYRUN-SUMMARY pass=\d+ fail=0 ') { $script:dryDetail = @($dr | Where-Object { $_ -match '^DRYRUN .* FAIL' }); return "dryrun failed: $sum" }   # dryrun.sh exits 1 on any FAIL row
+        $script:dryOut = $dr; $null
     }
+    if ($Fake) { $why = DryGate; if ($why) { Fail-List $run $name $own $why $script:dryDetail; Remove-Item $curF; return $true }; $dr = $script:dryOut }
     if ($Fake) {   # fake batch: the dryrun result is the batch result
         if ($Rig -eq '4080') { Sync4080 $name (($txt -join "`n")) }   # deferred-sync planning against runner\fake\fake-procs.txt (setup.sh --dry)
         $res = @($dr | Where-Object { $_ -like 'DRYRUN *' } | ForEach-Object { $_ -replace '^DRYRUN (\S+) (PASS|FAIL|SKIP)', 'RESULT $1 $2' })
@@ -1195,6 +1200,7 @@ function Start-Batch($f) {
                 Log "install Harness $needH"
             }
         }
+        $why = DryGate; if ($why) { Fail-List $run $name $own $why $script:dryDetail; Remove-Item $curF; return $true }
         Copy-Item "$auto\run-batch.sh" (Join-Path $outW '.run-batch.sh') -Force
         $st = "#!/bin/bash`nexport KAH_OWNER=$owner5 KAH_GFX=$gfx WSLENV=KAH_OWNER:KAH_GFX`ncd /`nsetsid nohup bash $outP/.run-batch.sh --launch $launch --reuse --no-dryrun 'rig-runner dry-ran the list' $outP/list.txt $outP >/dev/null 2>&1 </dev/null &`nsleep 5`n"
         [IO.File]::WriteAllText((Join-Path $outW '.start.sh'), $st)
@@ -1230,10 +1236,12 @@ function Start-Batch($f) {
         # take scripts + lab modules on the 4080 = this tree (rig4080/setup.sh): without it the 4080 ran stale scripts
         # (zsfist4080 fists lab: "No module named recfmt", 2026-10-10); files a running analysis uses are deferred (Sync4080)
         Sync4080 $name (($txt -join "`n"))
+        $why = DryGate; if ($why) { Fail-List $run $name $own $why $script:dryDetail; Remove-Item $curF; return $true }
         $null = Ssh @('mkdir', "C:\KenshiTestRuns\$outN")
         Copy-Item "$auto\run-batch.sh" (Join-Path $tmp '.run-batch.sh') -Force
         $ok = Scp4 @((Join-Path $tmp 'list.txt'), (Join-Path $tmp '.run-batch.sh')) "C:/KenshiTestRuns/$outN/"
-        $ok = $ok -and (Scp4 @("$auto\rig-runner-probe.sh", "$auto\batch-excerpts.sh", "$auto\batch-health.sh", "$auto\rig-env.sh", "$auto\dialog-guard.sh", "$auto\row-reaper.sh") 'C:/KenshiModding/tools/automation/')
+        # (rig-runner-probe / batch-excerpts / batch-health / rig-env / dialog-guard / row-reaper: synced by Sync4080 = setup.sh's
+        # staged rename; the in-place scp here overwrote dialog-guard.sh while lane 4080b's row ran it, m105)
         if (-not $ok) { Defer-List $run $name $own '4080 copy (scp) failed' @() $f; Remove-Item $curF; return $true }
         if (-not $reuse) {
             $ga = if ((Select-String -LiteralPath "$auto\rig4080\kcfg.ps1" -Pattern '\$Gfx\b' -Quiet -ErrorAction SilentlyContinue)) { @('-Gfx', $gfx) } else { @() }   # res-graphics' -Gfx low|full once kcfg.ps1 has it
