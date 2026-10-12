@@ -478,11 +478,18 @@ while ($true) {
     State "starting $name -> 4080:C:\KenshiTestRuns\$outN"
     if ($up -and $rm.dll1 -ne $rm.dll2) { Log "instance 1 has other DLLs ($($rm.dll1)) than instance 2 ($($rm.dll2)): stop + sync"; Stop2 'DLL sync'; $up = $false }
     State "starting $name : script sync, instance 2 $(if ($up) { 'reuse' } else { 'sync + launch' })"
+    # speed-scout r8: the instance sync (~20 s on the 4080) runs there in the background WHILE SyncList (~25 s) copies the
+    # scripts (independent trees: C:\KenshiInst\<n> vs C:\KAH + repo copies); was serial = ~20 s per launch
+    $isP = $null; $isOut = Join-Path $rd "$Lane.isync.out"
+    if (-not $up) {
+        Remove-Item $isOut, "$isOut.err" -ErrorAction SilentlyContinue
+        $isP = Start-Process ssh.exe -ArgumentList @('-n', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '4080', 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\KAH\kenshi-instance.ps1', 'sync', '-Instance', "$Inst", '-Saves', $saves) -NoNewWindow -PassThru -RedirectStandardOutput $isOut -RedirectStandardError "$isOut.err"
+    }
     SyncList (Join-Path $tmp 'list.src.list')
     # window: on the screen at 0,0 while filming (WGC films it; not topmost), parked right of the screen for gfx-low work
     SetPos $(if ($film) { '0,0' } else { '1920,0' })
     if (-not $up) {
-        $sy = @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('sync', '-Instance', "$Inst", '-Saves', $saves))
+        $sy = if ($isP) { if (-not $isP.WaitForExit(300000)) { try { $isP.Kill() } catch { } }; @(Get-Content $isOut, "$isOut.err" -ErrorAction SilentlyContinue) } else { @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('sync', '-Instance', "$Inst", '-Saves', $saves)) }
         Log "instance sync: $(@($sy | Where-Object { $_ -like 'sync instance*' }) -join ' ')"
         $rs = Remote; $gap = if ($rs.ok) { Kfp2Gap $rs.dll1 $rs.dll2 } else { $null }
         if ($gap) {
