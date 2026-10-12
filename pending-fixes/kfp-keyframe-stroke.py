@@ -7,7 +7,7 @@ A keyframe stroke is written directly in SCREEN terms: 2-6 keys of the weapon (h
 point, edge roll, time) and per-segment easing; KenshiFP interpolates and the existing arm IK (vm_apply: elbow pick,
 wrist roll, E1 lead, inline) places the hands on the grip. Collinear tip keys give an exactly straight screen path.
 
-What (opt-in per stroke: bit n of fp_vm key `kfmask`, default 0 = nothing shipped changes; a kf stroke wins over the
+What (opt-in per stroke and weapon class: bit r = stroke + 4*class (class 0 1H, 1 2H heavy/light, 2 polearm, 3 1H hacker/cleaver; rows 0-15) of fp_vm key `kfmask`, default 0 = nothing shipped changes; a kf stroke wins over the
 screen-line / key-arc path of the same stroke, everything downstream of vm_swing_at is unchanged):
   - key k (table `kf`, row = stroke 0..3, cols k<i>t k<i>hx k<i>hy k<i>hz k<i>tx k<i>ty k<i>r k<i>ea k<i>eb, i = 1..6):
     t = swing time u (0..1, increasing), hilt = screen point (hx, hy) (-1..1, y up, zoom-0 FP view, tan half-angles
@@ -58,26 +58,29 @@ CODE = r'''
 #define VM_KFN 6
 #define VM_KFC 9
 enum { KF_T, KF_HX, KF_HY, KF_HZ, KF_TX, KF_TY, KF_R, KF_EA, KF_EB };
-static float g_vm_kf[VM_NSTROKE][VM_KFN * VM_KFC] = {
+#define VM_KFCLS 4   /* per-class rows (fix-build 2026-10-11): row = stroke + VM_NSTROKE * class; class 0 1H, 1 2H heavy/light, 2 2H polearm, 3 1H hacker/cleaver (wcat 4) (= kfc rows) */
+static float g_vm_kf[VM_NSTROKE * VM_KFCLS][VM_KFN * VM_KFC] = {
     { @KF0@ },
     { @KF1@ },
     { @KF2@ },
     { @KF3@ } };
-static float g_vm_kfh[VM_NSTROKE][3] = { { @KFH0@ }, { @KFH1@ }, { @KFH2@ }, { @KFH3@ } };   /* n rk lead */
-static float g_vm_kfc[3][4] = { { 8.0f, 0.10f, 0.0f, 0.80f }, { 10.0f, 0.10f, 0.0f, 0.80f }, { 14.0f, 0.10f, 0.0f, 0.80f } };   /* L ox oy oz (c1/c2 uncalibrated) */
-static float g_vm_kfmask = 0.0f;   /* bit n = stroke n is a keyframe stroke */
+static float g_vm_kfh[VM_NSTROKE * VM_KFCLS][3] = { { @KFH0@ }, { @KFH1@ }, { @KFH2@ }, { @KFH3@ } };   /* n rk lead */
+static float g_vm_kfc[VM_KFCLS][4] = { { 8.0f, 0.10f, 0.0f, 0.80f }, { 10.0f, 0.10f, 0.0f, 0.80f }, { 14.0f, 0.10f, 0.0f, 0.80f }, { 8.0f, 0.10f, 0.0f, 0.80f } };   /* L ox oy oz (c1/c2 uncalibrated) */
+static float g_vm_kfmask = 0.0f;   /* bit r = kf row r (stroke + 4 * class) is a keyframe stroke */
 static const float g_vm_kftx = 1.245f, g_vm_kfty = 0.70f;   /* FP view tan half-angles (zoom 0, 16:9, vertical FOV 70) */
+static int vm_kf_ci(void) { return g_vm_2h ? (g_vm_2hk ? 2 : 1) : g_vm_wcat == 4 ? 3 : 0; }
+static int vm_kf_row(void) { return g_vm_stroke + VM_NSTROKE * vm_kf_ci(); }
 static int vm_kf_n(void)
 {
-    if (g_vm_stroke < 0 || g_vm_stroke >= VM_NSTROKE || !(((int)g_vm_kfmask >> g_vm_stroke) & 1)) return 0;
-    int n = (int)g_vm_kfh[g_vm_stroke][0]; if (n < 2) return 0; if (n > VM_KFN) n = VM_KFN;
-    const float *k = g_vm_kf[g_vm_stroke];
+    if (g_vm_stroke < 0 || g_vm_stroke >= VM_NSTROKE || !(((int)g_vm_kfmask >> vm_kf_row()) & 1)) return 0;
+    int n = (int)g_vm_kfh[vm_kf_row()][0]; if (n < 2) return 0; if (n > VM_KFN) n = VM_KFN;
+    const float *k = g_vm_kf[vm_kf_row()];
     if (k[KF_T] < 0.005f || k[(n - 1) * VM_KFC + KF_T] > 0.995f) return 0;
     for (int i = 1; i < n; i++) if (k[i * VM_KFC + KF_T] < k[(i - 1) * VM_KFC + KF_T] + 0.005f) return 0;   /* times must increase */
     return n;
 }
-static float vm_kf_leadw(void) { return vm_kf_n() ? fmaxf(0.0f, fminf(1.0f, g_vm_kfh[g_vm_stroke][2])) : 1.0f; }
-static const float *vm_kf_cls(void) { return g_vm_kfc[g_vm_2h ? (g_vm_2hk ? 2 : 1) : 0]; }
+static float vm_kf_leadw(void) { return vm_kf_n() ? fmaxf(0.0f, fminf(1.0f, g_vm_kfh[vm_kf_row()][2])) : 1.0f; }
+static const float *vm_kf_cls(void) { return g_vm_kfc[vm_kf_ci()]; }
 static float vm_kf_ss(float x) { x = fmaxf(0.0f, fminf(1.0f, x)); return x * x * (3.0f - 2.0f * x); }
 static float vm_kf_ease(float ea, float eb, float s)
 {
@@ -119,7 +122,7 @@ static void vm_kf_key(const float *k, int n, int j, float L, Vec3 *H, Vec3 *T, V
 }
 static VmPose vm_kf_pose(int n, float uq)
 {
-    const float *k = g_vm_kf[g_vm_stroke], *cl = vm_kf_cls(); float L = cl[0];
+    const float *k = g_vm_kf[vm_kf_row()], *cl = vm_kf_cls(); float L = cl[0];
     int i = 0; while (i < n - 2 && uq > k[(i + 1) * VM_KFC]) i++;
     float t1 = k[i * VM_KFC], t2 = k[(i + 1) * VM_KFC];
     float e = vm_kf_ease(k[i * VM_KFC + KF_EA], k[i * VM_KFC + KF_EB], (uq - t1) / fmaxf(t2 - t1, 1e-4f)), tq = t1 + e * (t2 - t1);
@@ -140,11 +143,11 @@ static VmPose vm_kf_swing_at(VmPose start, VmPose end, float u)
     if (!n) return vm_swing_at(start, end, u);
     if (u <= 0.0f) return vm_pose_norm(start);
     if (u >= 1.0f) return vm_pose_norm(end);
-    const float *k = g_vm_kf[g_vm_stroke]; float t0 = k[KF_T], tl = k[(n - 1) * VM_KFC + KF_T];
+    const float *k = g_vm_kf[vm_kf_row()]; float t0 = k[KF_T], tl = k[(n - 1) * VM_KFC + KF_T];
     if (u < t0) return vm_pose_lerp(start, vm_kf_pose(n, t0), vm_kf_ss(u / t0));
     if (u <= tl) return vm_kf_pose(n, u);
     VmPose a = vm_kf_pose(n, tl), kk = vm_pose_norm(g_vm_swkp[VM_SWK - 1]), m, r;
-    float w = vm_kf_ss((u - tl) / (1.0f - tl)), rk = fmaxf(0.0f, fminf(1.0f, g_vm_kfh[g_vm_stroke][1]));
+    float w = vm_kf_ss((u - tl) / (1.0f - tl)), rk = fmaxf(0.0f, fminf(1.0f, g_vm_kfh[vm_kf_row()][1]));
     m.p = vm_lerp(vm_lerp(a.p, end.p, 0.5f), kk.p, rk); m.f = vm_lerp(vm_lerp(a.f, end.f, 0.5f), kk.f, rk); m.u = vm_lerp(vm_lerp(a.u, end.u, 0.5f), kk.u, rk);
     float w0 = (1.0f - w) * (1.0f - w), w1 = 2.0f * (1.0f - w) * w, w2 = w * w;
     r.p = vm_add(vm_add(vm_mul(a.p, w0), vm_mul(m.p, w1)), vm_mul(end.p, w2));
@@ -176,7 +179,7 @@ edit('kfp_viewmodel.inc', [
     ('\n/* E1: edge leads the arc.', code + '\n/* E1: edge leads the arc.'),
     (LEAD, LEAD + '        w *= vm_kf_leadw();   /* kfp-keyframe-stroke: kfh lead weight (1 = shipped E1 lead) */\n'),
     ('    else if (!strcmp(k, "strokes")) {',
-     '    else if (!strcmp(k, "kfmask")) { g_vm_kfmask = fmaxf(0.0f, fminf(15.0f, floorf(x))); return 1; }   ' + TAG + '\n'
+     '    else if (!strcmp(k, "kfmask")) { g_vm_kfmask = fmaxf(0.0f, fminf(65535.0f, floorf(x))); return 1; }   ' + TAG + '\n'
      '    else if (!strcmp(k, "strokes")) {'),
 ])
 edit('kfp_tables.inc', [

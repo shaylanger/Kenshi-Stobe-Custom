@@ -34,10 +34,15 @@ weapon pose; everything downstream (arm IK, elbow pick, wrist roll, E1 edge lead
 ## Tables (fp_tables / live tables, no rebuild)
 | table | rows | columns |
 |---|---|---|
-| `kf` | 0..3 = stroke | 54 = 6 keys x 9: `k<i>t k<i>hx k<i>hy k<i>hz k<i>tx k<i>ty k<i>r k<i>ea k<i>eb` (i = 1..6) |
-| `kfh` | 0..3 = stroke | `n rk lead`: n keys used (< 2 = off), rk recovery pull, lead = E1 edge-lead weight on top of the authored roll (1 = shipped lead, 0 = authored edge only) |
-| `kfc` | 0..2 = class | `L ox oy oz` |
-| `kfmask` | scalar | bit n = stroke n is a keyframe stroke (fp_vm key `kfmask`, 0..15) |
+| `kf` | 0..15 = stroke + 4 x class | 54 = 6 keys x 9: `k<i>t k<i>hx k<i>hy k<i>hz k<i>tx k<i>ty k<i>r k<i>ea k<i>eb` (i = 1..6) |
+| `kfh` | 0..15 = stroke + 4 x class | `n rk lead`: n keys used (< 2 = off), rk recovery pull, lead = E1 edge-lead weight on top of the authored roll (1 = shipped lead, 0 = authored edge only) |
+| `kfc` | 0..3 = class | `L ox oy oz` |
+| `kfmask` | scalar | bit r = kf row r is a keyframe stroke (fp_vm key `kfmask`, 0..65535) |
+
+Weapon classes (per-class rows, fix-build 2026-10-11; same index as `kfc`): class 0 = 1H (rows 0-3, the sword rows, unchanged),
+class 1 = 2H heavy/light (Buster Sword, Fragment Axe, katana 2H-light; rows 4-7), class 2 = 2H polearm (Naginata, polearms,
+Crab Maul; rows 8-11), class 3 = 1H hacker/cleaver (weapon skill category 4, not 2H; rows 12-15). Row = stroke + 4 x class; e.g. heavy stroke 0 = `kf.4`, `kfh.4`, kfmask bit 4 (16).
+
 
 Rows are NUMBERS, so address them as `<row>.<col>` (a bare number after the table is a FLAT index: `kf.2 = ...` writes
 from element 2 of row 0). File example (stroke 2, 5 keys):
