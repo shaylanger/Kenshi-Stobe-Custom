@@ -204,17 +204,21 @@ analyse(){   # runs in $D with take()'s variables; writes the weapon's RESULT li
   TC=$($NI python3 $L/takecheck.py --labels "$N.lab" --ev "$N.ev.txt" --rules $HERE/animlab/take-rules.txt --video "$N.mp4" 2>&1 | tail -1)
   CU=$($NI python3 $L/frames.py cursor "$N.mp4" 2>&1 | tail -1)
   OG=$($NI python3 $L/frames.py openground "$N.mp4" 2>&1 | tail -1)
-  WM=""; MV=""
+  WM=""; MV=""; ZRT=""
   if [ -s "$N.vmrec.txt" ]; then
     WM=$($NI python3 $L/animlab.py weapons --run --weapons-json "$WCAT" --only "$sid" --recs "$N.vmrec.txt" -o wm 2>&1 | grep '^WEAPON ' | head -1)
     MV=$($NI python3 $L/animlab.py metrics "$N.vmrec.txt" 2>&1 | grep '^moves ' | head -1)
+    # zoom-return pose (lab-rules 2026-10-11, class "carried solver state", Misses 139-wc-clv): the take replayed with its
+    # DLL's own source, whole vs fresh at each zoom return; FAIL = the arm settles in a second ready pose after a zoom-out
+    ZRT=$($NI bash $HERE/animlab/zoomret-take.sh "$N.vmrec.txt" 2>&1 | tail -1)
   fi
-  printf '%s\n' "takecheck $TC" "cursor $CU" "openground $OG" "matrix $WM" "$MV" > lab.txt
+  printf '%s\n' "takecheck $TC" "cursor $CU" "openground $OG" "matrix $WM" "$MV" "${ZRT:-zoomret=n/a(no rec)}" > lab.txt
   $NI python3 ${CR:-/mnt/c}/KenshiModding/tools/automation/review-pack.py "$N.mp4" review --ts "$N.ev.txt" --labels "$N.lab" --lab lab.txt > review.log 2>&1
   ok=1; for r in "$TC" "$CU" "$OG" "$MV"; do echo "$r" | grep -q "PASS" || ok=0; done
   [ -n "$VMSET" ] || echo "$WM" | grep -q "^WEAPON [^ ]* PASS" || ok=0
   [ -s "$N.vmrec.txt" ] || ok=0
-  echo "RESULT WEAPON-$slug $(pf_grade $ok "$TC") sid=$sid class=$ac matrix=[$(echo "$WM" | cut -d' ' -f6- | cut -c1-260)] moves=[$(echo "$MV" | cut -c1-80)] takecheck=[$TC] cursor=[$CU] openground=[$OG] review=$D/review/INDEX.txt len=$(cat "$N.video-len.txt" 2>/dev/null)$(pf_recwarn "$TC")" > "$D/result.tmp" && mv "$D/result.tmp" "$D/result.txt"
+  case "$ZRT" in zoomret=FAIL*) ok=0;; esac
+  echo "RESULT WEAPON-$slug $(pf_grade $ok "$TC") sid=$sid class=$ac matrix=[$(echo "$WM" | cut -d' ' -f6- | cut -c1-260)] moves=[$(echo "$MV" | cut -c1-80)] takecheck=[$TC] cursor=[$CU] openground=[$OG] zoomret=[$(echo "${ZRT:-n/a}" | cut -c1-90)] review=$D/review/INDEX.txt len=$(cat "$N.video-len.txt" 2>/dev/null)$(pf_recwarn "$TC")" > "$D/result.tmp" && mv "$D/result.tmp" "$D/result.txt"
 }
 # ---- sweep
 PEND=(); k=0; n=0; np=0; S=${WSTART:-1}; C=${WCOUNT:-9999}
