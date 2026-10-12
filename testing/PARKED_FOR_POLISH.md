@@ -2,19 +2,19 @@
 
 Shay 20:00: credits burning; cut everything not moving forward, ship an MVP now with keyframed
 "passable" animations, GPU work stopped. This file lists what was in progress so it can be resumed
-and made perfect later. Agent status/handoff files in `C:\KenshiTestRuns\agents\` hold the detail.
+and made perfect later. (Agent status/handoff files were cleaned up 2026-10-11 20:50; what matters is written below.)
 
 ## Stopped / parked work
 - **GPU lab** (gpu-lab, gpu-wire): CuPy/CUDA port of lab evaluators. 19:33 TDR on the 5090 came from an
   untested elb_kernel (raw heap pointers in the no-heap capture). GPU kernel runs banned. Tooling for
   GPU-vs-CPU agreement exists (gpu-agree.py, optimizer --eval gpu|cpu, gpu/kfpgpu.py). Handoffs:
-  agents/gpu-lab.status, gpu-wire.handoff.md.
+  GPU-lab next: heap captures, host raw-pointer check, ptxas -c + link path, compile-only; first run only with that rig's game lanes paused, N=1, under compute-sanitizer. gpu-wire next: `gpu-agree.py run /root/gpu-agree-gpu --eval gpu` once a GPU kernel exists (agreement set C:KenshiTestRunsgpu-wiregree-set).
 - **Table/optimizer strokes** (stroke-fix, sj-line): E6 s2 CMA tables (/root/strokefix opt-s2b/c),
   screen-line mode (kfp-stroke-line, accepted for PT17-v2 s0/s3). Superseded by keyframes (Shay 19:30).
 - **Lab polish:** hud-check (HUD band/whole-weapon-hidden, decision pending), judge-vec (judge/takecheck
   vectorize, profile in jv-tmp), animlab-maintainer gate rebaseline (gate.sh --update-baseline),
   Taste/rule maps. Keyframe take checks in kfcheck (kf-lab DONE).
-- **Speed tooling:** speed-scout r10 items 3b/4/5 + WSL detacher (speed-scout.handoff.md).
+- **Speed tooling:** speed-scout r10 committed 306510f, 9394be2, ef9fc0b; its remaining items (3b/4/5: 4080 start speed, predry, 4080b sky, lane-watch load; WSL detacher helper) were not written down in detail.
 - **Regression filler:** OFF. Lists parked in `C:\KenshiTestRuns\queue\filler.off\`; restore only for
   the final build (Shay: no regression until final results).
 - **Look items still not perfect:** Cleaver strokes (for-shay/CLEAVER README), Naginata arc/twosp/seen
