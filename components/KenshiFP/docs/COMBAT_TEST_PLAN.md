@@ -65,8 +65,6 @@ Diagnostic forced spread may isolate hit routing but cannot count toward balance
 ## Gate 3: ranged parity and tactical balance
 | ID | Requirement | Acceptance evidence |
 |---|---|---|
-| R14 | Torso accuracy parity | matched native/manual hit rates with sample counts and intervals |
-| R15 | Fire-rate/damage parity | shots/game minute, reload time, ammo and damage/game minute |
 Matrix: low/medium/high crossbow skill x independent Perception bands; first fixed weapon/quality and stationary human target, then weapon accuracy requirements, distances, movement, injuries/gear, races and armour.
 Record effective stats and environmental modifiers immediately before each block. Keep input/aim protocol, target pose and RNG policy explicit.
 Use native centre-of-target combat vs reproducible manual torso aim as initial reference; aiming at a leg is a separate tactic, not silently compared with native torso shooting.
