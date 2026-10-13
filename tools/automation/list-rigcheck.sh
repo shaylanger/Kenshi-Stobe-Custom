@@ -13,7 +13,8 @@
 #           review-pack.py, run-batch helpers) or already on the 4080 with the same md5. Ad-hoc scripts under
 #           C:\KenshiTestRuns (and the ad-hoc scripts they call) are 5090-only unless identical on the 4080: move them into
 #           components/KenshiFP/tests/ingame (rig-aware, rig-env.sh) so the runner syncs them.
-#   rig     "# rig: X" header names another rig; Stobe rows (STOBE-*, tests/ingame/stobe, *.txt scenarios) on the 4080.
+#   rig     "# rig: X" header names another rig; 4080 Stobe rows require the verified instance-3/save/DLL contract
+#           (`stobe-isolation-gate.ps1`); the 4080 main lane remains barred from Stobe and lane 4080b routes to instance 3.
 # --fix (4080): copy a save that exists on the 5090 but not on the 4080 (rig4080/setup.sh --saves-only), then recheck.
 # Output: WARN lines, then one line  RIGCHECK <rig> OK <list>  |  RIGCHECK <rig> NO <list>: <reason>; <reason>...
 # Exit 0 = OK, 1 = NO, 2 = usage / 4080 unreachable (reason printed; the caller treats it as "can't tell", not NO).
@@ -28,6 +29,8 @@ SSH="ssh -n -o BatchMode=yes -o ConnectTimeout=10 4080"
 hdr(){ grep -m1 -iE "^#\s*$1:" "$L" | sed -E "s/^#\s*$1:\s*//I; s/\s+$//"; }
 rows(){ grep -vE '^\s*(#|$)' "$L"; }
 reasons=(); warn(){ [ $Q = 1 ] || echo "WARN $RIG $NAME: $*"; }
+stobe_rows(){ rows | awk -F'|' '{c=$NF} c ~ /STOBE-|tests\/ingame\/stobe/ || (c ~ /\.txt([ \t]|$)/ && c !~ /\.(sh|py|ps1)([ \t]|$)/) {f=1} END {exit !f}'; }
+stobe_list=0
 
 # ---- rig header + Stobe rows
 want=$(hdr rig); [ -n "$want" ] && [ "$want" != "$RIG" ] && reasons+=("list says rig: $want")
@@ -36,8 +39,26 @@ want=$(hdr rig); [ -n "$want" ] && [ "$want" != "$RIG" ] && reasons+=("list says
 other=$([ "$RIG" = 4080 ] && echo 5090 || echo 4080)
 hard=$(rows | awk -F'|' -v o="RIG=$other" '{c=" "$NF" "} index(c, " " o " ") {gsub(/ /, "", $1); printf "%s ", $1}')
 [ -n "$hard" ] && reasons+=("rows hard-code RIG=$other: ${hard% } (write RIG={RIG})")
-# a .txt counts as a Stobe scenario only in a row that runs no .sh/.py/.ps1 script (fp-pose-sweep.sh takes a variants .txt)
-if [ "$RIG" = 4080 ] && rows | awk -F'|' '{c=$NF} c ~ /STOBE-|tests\/ingame\/stobe/ || (c ~ /\.txt([ \t]|$)/ && c !~ /\.(sh|py|ps1)([ \t]|$)/) {f=1} END {exit !f}'; then reasons+=("Stobe rows (no Stobe on the 4080)"); fi
+# A Stobe row may run on the 4080 only through the verified isolated instance-3 route.
+# The normal 4080 lane still refuses Stobe in rig-runner.ps1; 4080b repeats this proof
+# immediately before it launches instance 3.
+if [ "$RIG" = 4080 ] && stobe_rows; then
+  stobe_list=1
+  gate_line=''
+  helper="$M/tools/automation/stobe-isolation-gate.ps1"
+  list_win=$(cygpath -w "$L" 2>/dev/null)
+  if [ -f "$helper" ] && [ -n "$list_win" ] && command -v powershell.exe >/dev/null 2>&1; then
+    gate_line=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$helper")" -ListPath "$list_win" 2>/dev/null | tr -d '\r' | grep '^STOBE-GATE ' | tail -1)
+  fi
+  case "$gate_line" in
+    'STOBE-GATE PASS '*) ;;
+    *)
+      detail=${gate_line#STOBE-GATE NO }
+      [ -n "$detail" ] || detail='proof unavailable (unknown path or 4080 unreachable)'
+      reasons+=("Stobe isolation: $detail")
+      ;;
+  esac
+fi
 
 # ---- saves
 sv=$(hdr launch); declare -A SV=()
@@ -94,6 +115,10 @@ else
   out=$(printf '%s\n' "$q" | ssh -o BatchMode=yes -o ConnectTimeout=10 4080 'C:\PROGRA~1\Git\bin\bash.exe -ls' 2>/dev/null | tr -d '\r')
   echo "$out" | grep -q '^SAVE ' || { echo "RIGCHECK 4080 UNKNOWN $NAME: 4080 unreachable over ssh"; exit 2; }
   for s in "${!SV[@]}"; do
+    # The Stobe gate checked every list save beneath C:\KenshiInst\3\save, including
+    # its non-reparse ancestors and quick.save link count. Do not accept/reject it by
+    # looking in the shared instance-1 user-save folder.
+    [ "$stobe_list" = 1 ] && continue
     if ! echo "$out" | grep -q "^SAVE $s "; then
       if [ ! -d "$SAVES/$s" ]; then reasons+=("save $s missing on both rigs")
       elif [ $FIX = 1 ]; then

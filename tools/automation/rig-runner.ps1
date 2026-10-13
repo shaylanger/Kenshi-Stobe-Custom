@@ -209,6 +209,10 @@ function WaitTick {
     while ((Get-Date) -lt $end) { Start-Sleep 2; if ((& $nq) -gt $q0) { return 'queue' } }
     'tick'
 }
+function MainLaneStobeReject([string]$rig, [bool]$stobe) {
+    if ($rig -eq '4080' -and $stobe) { return 'Stobe rows require lane 4080b on verified isolated instance 3' }
+    $null
+}
 if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cases (no side effects)
     $cases = @(
         @('R11 4080 hang: harness silent 6 min, row log written 10 s ago', @{ step = 'R11'; age = '10'; crash = '0' }, 'harness not answering', 6, 2, 0, 'kill-game hard'),
@@ -250,6 +254,11 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
             @('tdr: only a disk 153 after the last reset = no hit', 1101, ''), @('tdr: unreachable rig (ssh error only) = no hit', 0, ''))
     foreach ($c in $td) { $in = if ($c[0] -like '*unreachable*') { @($tl[5]) } else { $tl }; $g = (@(TdrFilter $in $c[1]) | ForEach-Object { ($_ -split '\|')[0] }) -join ','
         $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) $($c[0]): got '$g' want '$($c[2])'" }
+    foreach ($c in @(@('4080 shared main lane', '4080', $true, 'Stobe rows require lane 4080b on verified isolated instance 3'),
+                     @('4080 non-Stobe row', '4080', $false, ''), @('5090 Stobe row', '5090', $true, ''))) {
+        $g = [string](MainLaneStobeReject $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }
+        "$(if ($ok) { 'ok  ' } else { 'FAIL' }) Stobe lane guard $($c[0]): '$g'"
+    }
     $rb = @(& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash /c/KenshiModding/tools/automation/run-batch.sh --selftest' 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 1)
     $ok = "$rb" -like 'RUNBATCH-SELFTEST PASS*'; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) run-batch.sh --selftest (TDR check + relaunch request): $rb"
     foreach ($c in $lg) { $g = [string](LingerAct $c[1] $c[2]); $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) linger $($c[0]): got '$g' want '$($c[3])'" }
@@ -311,6 +320,8 @@ if ($SelfTest) {   # rig-runner.ps1 -SelfTest: the stuck rule on fixed probe cas
     # lane 5090b (second game instance, rig-lane2.ps1): list eligibility (gfx low, crossbow guard, no Stobe), admission, TDR filter
     $l2 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l2[-1]) -like 'LANE2-SELFTEST PASS*'; if (-not $ok) { $bad++; $l2 | Where-Object { $_ -like 'FAIL*' } }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 5090b rig-lane2.ps1 -SelfTest: $($l2[-1])"
+    $sg = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\stobe-isolation-gate.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($sg[-1]) -like 'STOBE-GATE-SELFTEST PASS*'; if (-not $ok) { $bad++; $sg | Where-Object { $_ -like 'FAIL*' } }
+    "$(if ($ok) { 'ok  ' } else { 'FAIL' }) Stobe isolated instance-3 proof gate: $($sg[-1])"
     $l4 = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\rig-lane2-4080.ps1" -SelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($l4[-1]) -like 'LANE4080B-SELFTEST PASS*'; if (-not $ok) { $bad++; $l4 | Where-Object { $_ -like 'FAIL*' } }
     "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane 4080b rig-lane2-4080.ps1 -SelfTest: $($l4[-1])"
     $rh = @(& powershell -NoProfile -ExecutionPolicy Bypass -File "$PSCommandPath" -Rig 5090 -RowHashSelfTest 2>&1 | ForEach-Object { "$_" }); $ok = ($rh[-1]) -like 'ROWHASH-SELFTEST PASS*'; if (-not $ok) { $bad++; $rh | Where-Object { $_ -like 'FAIL*' } }
@@ -797,10 +808,11 @@ function RealLists {
     foreach ($src in "$qd\$Rig", "$qd\any") {
         foreach ($f in @(Get-ChildItem $src -Filter *.list -File -ErrorAction SilentlyContinue | QSort)) {
             if (DefWaiting $f.Name) { continue }   # deferred start: waits for its retry time
+            # Lane 4080 launches the shared Steam install. Stobe can only run through 4080b's isolated instance-3 route.
+            if (MainLaneStobeReject $Rig (StobeRows $f.FullName)) { continue }
             if ($src -like '*\any') {
                 $want = Header $f.FullName 'rig'
                 if ($want -and $want -ne $Rig) { continue }
-                if ($Rig -eq '4080' -and (StobeRows $f.FullName)) { continue }
                 $rc = RigCheck $f.FullName
                 if ($rc -eq 'GONE') { continue }   # taken by another lane meanwhile
                 if ($rc -like 'NO *') {
@@ -1196,6 +1208,8 @@ function PreDryNext {
 # ---------------------------------------------------------------- start a batch
 function Start-Batch($f) {
     $name = $f.Name; $filler = $f.DirectoryName -like '*\filler'
+    $mainLaneGate = MainLaneStobeReject $Rig (StobeRows $f.FullName)
+    if ($mainLaneGate) { Log "REFUSED $name : $mainLaneGate"; return $false }
     $run = Join-Path "$qd\running" "${Rig}__$(if ($filler) { 'filler__' })$name"
     if ($filler) {   # copy, never consume: the backlog stays whole; rotation state records the start
         if (Test-Path $run) { Log "could not take filler $name (already running here)"; return $false }

@@ -4,11 +4,11 @@ lane 4080's game (instance 1), driven from the 5090 over ssh like lane 4080 (age
 rules as lane 5090b (rig-lane2.ps1), only the transport differs. Started and controlled through rig-runner.ps1 (-Rig 4080b;
 -Ensure / -Start / -Stop / -Status / -Restart include it), never run by hand except -SelfTest.
 
-Queue: C:\KenshiTestRuns\queue\4080b\*.list first (FIFO by numeric prefix); own folder empty and instance 2 admitted = the
+Queue: C:\KenshiTestRuns\queue\4080b\*.list first (FIFO by numeric prefix); own folder empty and target instance admitted = the
   first lane-eligible list from queue\4080, then queue\any (moved into queue\4080b first: one rename, lane 4080 can't take it
   at the same time). Eligible (LaneReject):
-  - "# gfx: low" (no filming: lane 4080 films its 1600x900 window with gdigrab on the 4080's only screen), no Stobe rows
-    (no Stobe on the 4080), not "# rig: 5090";
+  - "# gfx: low" (no filming: lane 4080 films its 1600x900 window with gdigrab on the 4080's only screen), Stobe rows
+    only with the verified instance-3/save/DLL contract (instance 3 is never synced by this runner), not "# rig: 5090";
   - [OFF by default since speed-scout r8 (Shay 17:20+19:00): only while runner\4080b.xbow-serial exists] crossbow guard (NO PC CRASHES, 2026-10-11 BSOD: every TDR was on a crossbow shot/reload frame): no row names a
     crossbow/ranged/turret/reload script or switch (fp-xbow*, crossbow, ranged, turret, reload, bolt, VMQUICK, XB*/T6 rows);
   - list-rigcheck.sh --fix <list> 4080 OK, dryrun.sh --rig 4080 PASS (run here, at nice 0).
@@ -27,19 +27,21 @@ Queue: C:\KenshiTestRuns\queue\4080b\*.list first (FIFO by numeric prefix); own 
   A CAPPROOF "FAIL setup:" (sky, fixture) = SETUP: film mode held 20 min, then proven again (never off; CapVerdict/CapOff).
 Dry run: through rig-runner.ps1 -Rig 4080 -PreDryOf (lane 4080's pre-dry-run cache: a list lane 4080 already pre-dried
   starts at once); while a batch runs, the head of queue\4080b is pre-dried in the background (nice 15).
-Admission (before every launch of instance 2): 4080 GPU memory free >= 4 GB (nvidia-smi over ssh), RAM free >= 6 GB, no
+Admission (before every lane launch): 4080 GPU memory free >= 4 GB (nvidia-smi over ssh), RAM free >= 6 GB, no
   ALERT-4080-tdr.txt / ALERT-4080b-tdr.txt, and lane 4080 is not running a crossbow list (a fire/reload row or the header
   "# tdr-isolate: yes", which this lane also never takes; a running lane-4080b batch is ended and requeued, an idle instance 2
   stopped, the moment lane 4080 starts one) (TDR isolation: a TDR during such a
   list must be the crossbow's). Not admitted = the list waits (state "waiting: <why>").
-Per list: instance 2 down -> kenshi-instance.ps1 sync -Instance 2 (DLLs/mods/cfgs = instance 1's; all kah-* saves), kcfg.ps1
-  test -Instance 2 (window 800x600, gfx low), frame cap 30 (framecap.txt), ctl.ps1 launch -Instance 2 -Save <launch>
+Per list: ordinary lists use instance 2: down -> kenshi-instance.ps1 sync -Instance 2 (DLLs/mods/cfgs = instance 1's; all kah-* saves), kcfg.ps1
+  test (window 800x600, gfx low), frame cap 30 (framecap.txt), ctl.ps1 launch -Instance 2 -Save <launch>.
+  Verified Stobe lists switch lane 4080b to instance 3 at the list boundary, recheck the isolation proof before launch, and
+  never sync or save-copy instance 3 (which would replace the reviewed Stobe DLL / approved copied save).
   -Owner runner-4080b (lock game-2.lock; ctl.ps1 starts C:\KAH\inst-window.ps1: the window is parked right of the screen
   at 1920,0, never topmost, title "... [i2]" so lane 4080's title capture never grabs it), input isolation on. Instance 2
   up but instance 1's KenshiFP/harness DLLs differ -> stop + sync + launch. Then rig4080/setup.sh syncs the list's scripts
   (files a running 4080 process uses are deferred) and run-batch.sh runs via C:\KAH\itrun.ps1 (desktop session) with
-  KAH_INSTANCE=2 KAH_OWNER=runner-4080b KAH_GFX=low; out dir 4080:C:\KenshiTestRuns\<list>-i2-<MMdd-HHmm> with .instance=2
-  (rig-runner-probe.sh then sees only instance 2's harness/pids); inflight marker runner-4080b (not 4080-*: lane B must not
+  KAH_INSTANCE=2 KAH_OWNER=runner-4080b KAH_GFX=low; out dir 4080:C:\KenshiTestRuns\<list>-i<instance>-<MMdd-HHmm> with .instance=<instance>
+  (rig-runner-probe.sh sees only that instance's harness/pids); inflight marker runner-4080b (not 4080-*: lane B must not
   make lane 4080 look busy).
 Every tick (30 s) of a batch: TDR guard = 4080 System-log nvlddmkm/Display 4101|153 since the batch started, or
   ALERT-4080-tdr.txt from lane 4080 -> PREEMPT TDR, instance 2 stopped, ALERT-4080b-tdr.txt, 4080b.stopped, loop exits.
@@ -66,6 +68,28 @@ function CapOff([string]$s, [datetime]$now = (Get-Date)) {
     $false
 }
 function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
+function HeaderValue([string[]]$lines, [string]$key) {
+    $hits = @($lines | Where-Object { $_ -match "^\s*#\s*$([regex]::Escape($key))\s*:\s*(.*?)\s*$" } | ForEach-Object {
+        $null = $_ -match "^\s*#\s*$([regex]::Escape($key))\s*:\s*(.*?)\s*$"; $Matches[1].Trim()
+    })
+    if ($hits.Count -ne 1) { return $null }; [string]$hits[0]
+}
+function StobeRows([string[]]$lines) {
+    @((LaneRows $lines) | Where-Object { $last = (($_ -split '\|')[-1] -replace '\S+=\S+', ''); $last -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)' }).Count -gt 0
+}
+function StobeHeaderReject([string[]]$lines) {
+    if (-not (StobeRows $lines)) { return 'list has no Stobe row' }
+    if ((HeaderValue $lines 'stobe-instance') -cne '3') { return 'stobe-instance must be 3' }
+    $save = HeaderValue $lines 'stobe-save'
+    if (-not $save -or $save -notmatch '^[A-Za-z0-9][A-Za-z0-9_. -]*$' -or $save -in '.', '..') { return 'stobe-save must name one local save folder' }
+    if ((HeaderValue $lines 'launch') -cne $save) { return 'launch must exactly match stobe-save' }
+    $sha = HeaderValue $lines 'stobe-dll-sha256'
+    if ($sha -notmatch '^[A-Fa-f0-9]{64}$' -or $sha.ToUpperInvariant() -cne '40414D8C70E5E377D2FE1EB8C42C167D6B21F3D20CD7077B5ECB8D5661E7101D') { return 'stobe-dll-sha256 is not the reviewed DLL hash' }
+    foreach ($r in @(LaneRows $lines)) { $f = @($r -split '\|'); if ($f.Count -lt 6 -or $f[1].Trim() -notin '-', $save) { return 'row save is outside the declared isolated save' } }
+    $null
+}
+function ListInstance([string[]]$lines) { if (StobeRows $lines) { 3 } else { 2 } }
+function SkipInstanceSync([string[]]$lines) { [bool](StobeRows $lines) }
 $XbowRx = '(?i)(xbow|crossbow|ranged|turret|reload|\bbolt|vmquick|fp-e6-xbow)'
 function XbowRow([string]$r) {   # $null or the crossbow word a row names (the melee fixture save + *noxbow* guards are not crossbow work)
     $f = @($r -split '\|'); $id = $f[0].Trim()
@@ -81,7 +105,11 @@ function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the la
     if (-not $rows.Count) { return 'no rows' }
     foreach ($r in $rows) {
         $id = (@($r -split '\|'))[0].Trim()
-        if (((@($r -split '\|'))[-1] -replace '\S+=\S+', '') -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') { return "Stobe row $id (no Stobe on the 4080)" }
+        if (((@($r -split '\|'))[-1] -replace '\S+=\S+', '') -match 'STOBE-|tests/ingame/stobe|\.txt(\s|$)') {
+            $stobeWhy = StobeHeaderReject $lines
+            if ($film) { return "Stobe row $id (Stobe uses the isolated instance-3 low-gfx route only)" }
+            if ($stobeWhy) { return "Stobe row $id ($stobeWhy)" }
+        }
         $x = XbowRow $r; if ($x -and -not (XbPar)) { return "crossbow guard: row $id names crossbow/ranged/turret work ($x)" }
     }
     $null
@@ -112,6 +140,7 @@ function LaneAdmit([int]$gpuFreeMB, [int]$ramFreeMB, [bool]$tdr, [bool]$xbow1) {
 }
 # filler skip rule ($q = its filler-rotation.tsv row, $running = names in queue\running): $null = may claim, else why not
 function FillerSkip([string]$name, [string[]]$lines, $q, [string[]]$running, [datetime]$now) {
+    if (StobeRows $lines) { return 'Stobe rows require an explicit verified instance-3 list, not filler' }
     $w = LaneReject $lines; if ($w) { return $w }
     if ($q -and $q.Count -ge 4 -and $q[3] -and ([datetime]$q[3]) -gt $now) { return "benched until $($q[3])" }
     if (@($running | Where-Object { $_ -like "*__filler__$name" }).Count) { return 'running on another lane/rig' }
@@ -142,6 +171,9 @@ function LaneTdrFilter([string[]]$lines, [long]$since) {
 if ($SelfTest) {
     $bad = 0; $n = 0; $script:XbParTest = $false
     $low = '# gfx: low'
+    $stobeSave = 'kah-stobe-travel-validation-20261013'
+    $stobeHash = '40414D8C70E5E377D2FE1EB8C42C167D6B21F3D20CD7077B5ECB8D5661E7101D'
+    $stobeList = @($low, '# stobe-instance: 3', "# stobe-save: $stobeSave", "# launch: $stobeSave", "# stobe-dll-sha256: $stobeHash", 'S1 | - | Axima | Malzin | 60 | bash {CR}/KenshiModding/tests/ingame/stobe/STOBE-X.sh')
     $cases = @(
         @('melee gfx low', @($low, 'M | kah-fpxbow | Malzin | Axima | 1200 | DRYRUN_NOREC=1 bash {CR}/x/fp-manual-melee.sh Malzin Skaera {OUT}/M'), ''),
         @('no gfx header', @('M | kah-fpxbow | Malzin | Axima | 1200 | bash x/fp-manual-melee.sh'), 'not "# gfx: low"'),
@@ -151,7 +183,11 @@ if ($SelfTest) {
         @('turret row', @($low, 'T1 | s | a | b | 1 | bash x/fp-turret-take.sh'), 'crossbow guard'),
         @('ranged list', @($low, 'R | s | a | b | 1 | bash x/fp-ranged.sh'), 'crossbow guard'),
         @('XB row id', @($low, 'XBRLD | s | a | b | 1 | bash x/fp-thing.sh'), 'crossbow guard'),
-        @('stobe row', @($low, 'S1 | s | a | b | 1 | bash {CR}/KenshiModding/tests/ingame/stobe/STOBE-X.sh'), 'Stobe row'),
+        @('Stobe with verified instance-3 contract', $stobeList, ''),
+        @('Stobe without instance declaration', @($stobeList | Where-Object { $_ -notmatch '^# stobe-instance:' }), 'Stobe row S1 (stobe-instance must be 3)'),
+        @('Stobe with wrong DLL hash', @($stobeList | ForEach-Object { $_ -replace [regex]::Escape($stobeHash), ('0' * 64) }), 'Stobe row S1 (stobe-dll-sha256 is not the reviewed DLL hash)'),
+        @('Stobe save and launch mismatch', @($stobeList | ForEach-Object { $_ -replace "# launch: $stobeSave", '# launch: kah-other-save' }), 'Stobe row S1 (launch must exactly match stobe-save)'),
+        @('Stobe row points at another save', @($stobeList | ForEach-Object { if ($_ -like 'S1 |*') { $_ -replace '\| - \|', '| kah-other-save |' } else { $_ } }), 'Stobe row S1 (row save is outside the declared isolated save)'),
         @('tdr-isolate list (fp-controls K: no crossbow word in the row)', @($low, '# tdr-isolate: yes', 'K | kah-fpxbow | a | b | 1 | bash x/fp-controls.sh'), '"# tdr-isolate: yes"'),
         @('save name + WS_NOXBOW guard are not crossbow work', @($low, 'W | kah-fpxbow | a | b | 1 | WS_NOXBOW=1 PF_SAVE=kah-fpxbow bash x/fp-weapon-sweep.sh'), '')
     )
@@ -161,8 +197,11 @@ if ($SelfTest) {
     $cases += ,@('film mode: turret take refused', @('T6 | kah-fpturret | a | b | 1 | bash x/fp-turret-take.sh'), 'crossbow guard', $true)
     $cases += ,@('film mode: never a 5090 list', @('# rig: 5090', 'F | s | a | b | 1 | bash x/fp-control.sh'), '"# rig: 5090"', $true)
     $cases += ,@('film mode: never a tdr-isolate list', @('# tdr-isolate: yes', 'K | s | a | b | 1 | bash x/fp-controls.sh'), '"# tdr-isolate: yes"', $true)
-    $cases += ,@('film mode: never Stobe', @('S1 | s | a | b | 1 | bash {CR}/KenshiModding/tests/ingame/stobe/STOBE-X.sh'), 'Stobe row', $true)
+    $cases += ,@('film mode: never Stobe', @($stobeList | Where-Object { $_ -ne $low }), 'Stobe row S1 (Stobe uses the isolated instance-3 low-gfx route only)', $true)
     foreach ($c in $cases) { $n++; $g = [string](LaneReject $c[1] ([bool]($c.Count -ge 4 -and $c[3]))); $ok = if ($c[2]) { $g -like "$($c[2])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b list $($c[0]): got '$g'" }
+    foreach ($c in @(@('Stobe selects instance 3', $stobeList, 3, $true), @('ordinary list selects instance 2', @($low, 'M | s | a | b | 1 | bash x/fp-control.sh'), 2, $false))) {
+        $n++; $g = ListInstance $c[1]; $skip = SkipInstanceSync $c[1]; $ok = $g -eq $c[2] -and $skip -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b routing $($c[0]): instance=$g skipSync=$skip"
+    }
     $ad = @(@(9000, 20000, $false, $false, ''), @(3000, 20000, $false, $false, '4080 GPU'), @(9000, 5000, $false, $false, '4080 RAM'), @(9000, 20000, $true, $false, 'TDR'), @(9000, 20000, $false, $true, 'lane 4080 runs a crossbow'))
     foreach ($a in $ad) { $n++; $g = [string](LaneAdmit $a[0] $a[1] $a[2] $a[3]); $ok = if ($a[4]) { $g -like "$($a[4])*" } else { $g -eq '' }; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) lane4080b admit gpu=$($a[0]) ram=$($a[1]) tdr=$($a[2]) xbow1=$($a[3]): got '$g'" }
     $fc = @(@('turret nofire row (no shot, no reload)', 'TN | kah-fpturret | a | b | 600 | bash {CR}/x/fp-turret-nofire.sh {OUT}/TN', $false),
@@ -244,6 +283,22 @@ function Ssh4Ps([string]$file, [string[]]$a) { Ssh (@('powershell', '-NoProfile'
 function Ssh4Enc([string]$ps) { Ssh @('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ps))) }
 function Ssh4Bash([string[]]$a) { Ssh (@('C:\PROGRA~1\Git\bin\bash.exe', '-l') + $a) }
 function Scp4([string[]]$src, [string]$dst) { & scp -q -o BatchMode=yes @src "4080:$dst" 2>&1 | ForEach-Object { "$_" }; $LASTEXITCODE -eq 0 }
+function CheckListRig([string]$listFile, [bool]$stobe) {
+    $lp = (($listFile -replace '\\', '/') -replace '^C:', '/c')
+    $fix = if ($stobe) { '' } else { '--fix ' }
+    $o = @(& $gitBash -lc "bash /c/KenshiModding/tools/automation/list-rigcheck.sh --quiet $fix'$lp' 4080" 2>&1 | ForEach-Object { "$_" })
+    $last = @($o | Where-Object { $_ -match '^RIGCHECK 4080 (OK|NO|UNKNOWN) ' } | Select-Object -Last 1)
+    $line = if ($last.Count) { [string]$last[-1] } else { '' }
+    @{ ok = ($line -match '^RIGCHECK 4080 OK '); line = $line }
+}
+function RouteInstance([int]$target) {
+    if ($Inst -eq $target) { return $true }
+    $old = Remote
+    if (-not $old.ok) { return $false }
+    if ($old.k2 -gt 0) { Stop2 "route from instance $Inst to instance $target" }
+    $script:Inst = $target; $script:K2 = "C:\KenshiInst\$target"
+    $true
+}
 # one ssh round trip for the lane's view of the 4080: instance 2 up, free GPU/RAM, both installs' DLL hashes
 function Remote {
     $ps = @"
@@ -261,9 +316,9 @@ function dh(`$root) { @(Get-ChildItem "`$root\mods" -Recurse -Include 'KenshiFP.
 }
 function Ctl2([string[]]$a) { Ssh4Ps 'C:\KAH\ctl.ps1' (@($a) + @('-Instance', "$Inst", '-Owner', $owner)) }
 function Stop2([string]$why) {
-    $o = Ctl2 @('stop'); Log "instance 2 stopped ($why): $(($o | Select-Object -Last 1))"
+    $o = Ctl2 @('stop'); Log "instance $Inst stopped ($why): $(($o | Select-Object -Last 1))"
     $left = @(Ssh4Enc "@(Get-CimInstance Win32_Process -Filter `"Name='kenshi_x64.exe'`" | Where-Object { `$_.ExecutablePath -like '$K2\*' } | ForEach-Object { taskkill.exe /F /T /PID `$_.ProcessId 2>&1 })")
-    if ($left -match 'SUCCESS') { Log "instance 2 force-killed: $($left -join ' ')" }
+    if ($left -match 'SUCCESS') { Log "instance $Inst force-killed: $($left -join ' ')" }
 }
 function TdrEvents([long]$since) {
     $cmd = "`$s=[DateTimeOffset]::FromUnixTimeSeconds($since).LocalDateTime; Get-WinEvent -FilterHashtable @{LogName='System'; Id=4101,153; StartTime=`$s} -ErrorAction SilentlyContinue | ForEach-Object { '{0}|{1}|{2}|{3}' -f ([DateTimeOffset]`$_.TimeCreated).ToUnixTimeSeconds(), `$_.ProviderName, `$_.Id, (([string]`$_.Message -replace '\s+',' ') -replace '\|','/') }"
@@ -452,16 +507,27 @@ while ($true) {
     $film = (LaneGfx $txt) -ne 'low'
     if ($film -and -not $fill -and (CapOff (CapState))) { Move-Item -LiteralPath $src (Join-Path "$qd\4080" $name) -Force -ErrorAction SilentlyContinue; Log "film list $name back to queue\4080 (CAPPROOF FAIL: no film mode)"; continue }
     $why = LaneReject $txt $film; if ($why) { Drop $why; continue }
-    if (-not $rm) { $rm = Remote }
+    $stobe = [bool](StobeRows $txt)
+    $skipInstanceSync = SkipInstanceSync $txt
+    $targetInst = [int](ListInstance $txt)
+    if ($stobe) {
+        $pre = CheckListRig $src $true
+        if (-not $pre.ok) { State "waiting: Stobe isolation proof unavailable for $name ($($pre.line))"; Start-Sleep $TickSec; continue }
+    }
+    if (-not (RouteInstance $targetInst)) { State "waiting: 4080 unreachable while selecting instance $targetInst for $name"; Start-Sleep $TickSec; continue }
+    $rm = Remote
     if (-not $rm.ok) { if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue }; State "waiting: 4080 unreachable ($name queued)"; Start-Sleep $TickSec; continue }
     $up = $rm.k2 -gt 0
+    if ($stobe -and $up) { Stop2 'fresh Stobe load from verified instance-3 DLL'; $up = $false; $rm = Remote }
     $want = if ($film) { 'full' } else { 'low' }
     if ($up -and (Gfx2) -ne $want) { Stop2 "gfx switch to $want"; $up = $false }
     if (-not $up) { $why = LaneAdmit $rm.gpu $rm.ram $false (Xbow1); if ($why) { if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue }; State "waiting: $why ($name queued)"; Start-Sleep $TickSec; continue } }
     State "checking $name (list-rigcheck, dry run)"
-    $lp = (($src -replace '\\', '/') -replace '^C:', '/c')
-    $rc = @(& $gitBash -lc "bash /c/KenshiModding/tools/automation/list-rigcheck.sh --quiet --fix '$lp' 4080" 2>&1 | ForEach-Object { "$_" }) | Select-Object -Last 1
-    if ($rc -like 'NO *') { Drop "cannot run on the 4080: $($rc.Substring(3))"; continue }
+    $check = if ($stobe) { $pre } else { CheckListRig $src $false }   # preflight checked Stobe; re-prove after dry-run, just before launch
+    if (-not $check.ok) {
+        if ($stobe) { State "waiting: Stobe isolation proof unavailable for $name ($($check.line))"; Start-Sleep $TickSec; continue }
+        Drop "cannot run on the 4080: $($check.line)"; continue
+    }
     # dry run (fake game) through lane 4080's pre-dry-run cache: cached = no wait; else nice 0 now (rows in "# nodryrun:" left out)
     $pv = PreDry $src 0 1200
     $sum = @($pv.Lines | Where-Object { $_ -like 'DRYRUN-SUMMARY*' } | Select-Object -Last 1)
@@ -475,7 +541,7 @@ while ($true) {
     $launch = if ($launch) { $launch[0] } else { (@(LaneRows $txt)[0] -split '\|')[1].Trim() }
     if ($launch -in '-', 'home') { $launch = 'kah-fpxbow' }
     $outN = @($txt | Where-Object { $_ -match '^\s*#\s*out:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
-    $outN = if ($outN) { "$($outN[0])-i2-$(Get-Date -Format MMdd-HHmm)" } else { "$([IO.Path]::GetFileNameWithoutExtension($name))-i2-$(Get-Date -Format MMdd-HHmm)" }
+    $outN = if ($outN) { "$($outN[0])-i$Inst-$(Get-Date -Format MMdd-HHmm)" } else { "$([IO.Path]::GetFileNameWithoutExtension($name))-i$Inst-$(Get-Date -Format MMdd-HHmm)" }
     $outP = "/c/KenshiTestRuns/$outN"
     if ($fill) { $run = $src } else { $run = Join-Path "$qd\running" "${Lane}__$name"; Move-Item -LiteralPath $src $run -Force }
     $src = $run   # Drop / Fail act on the running copy from here on
@@ -485,16 +551,16 @@ while ($true) {
     [IO.File]::WriteAllLines((Join-Path $tmp 'list.src.list'), [string[]](RunLines @(Get-Content $run) $proof))   # {CR} form: SyncList + list.txt
     if ($fill) { Set-Content (Join-Path $tmp 'rowmeta.tsv') $fill.Meta }
     Set-Content (Join-Path $rd "$Lane.gfx") $want; Remove-Item (Join-Path $rd "$Lane.requeue") -ErrorAction SilentlyContinue
-    if ($proof) { Log "film: CAPPROOF row first (instance 2's window never proven)" }
+    if ($proof) { Log "film: CAPPROOF row first (instance $Inst's window never proven)" }
     $t0 = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     Set-Content $curF @($run, $outN, $t0, $own, (Get-Date -Format s), $name); Set-Content (Join-Path $runs "inflight\runner-$Lane") "4080:C:\KenshiTestRuns\$outN"
     State "starting $name -> 4080:C:\KenshiTestRuns\$outN"
-    if ($up -and $rm.dll1 -ne $rm.dll2) { Log "instance 1 has other DLLs ($($rm.dll1)) than instance 2 ($($rm.dll2)): stop + sync"; Stop2 'DLL sync'; $up = $false }
-    State "starting $name : script sync, instance 2 $(if ($up) { 'reuse' } else { 'sync + launch' })"
+    if ($up -and -not $stobe -and $rm.dll1 -ne $rm.dll2) { Log "instance 1 has other DLLs ($($rm.dll1)) than instance $Inst ($($rm.dll2)): stop + sync"; Stop2 'DLL sync'; $up = $false }
+    State "starting $name : script sync, instance $Inst $(if ($up) { 'reuse' } elseif ($skipInstanceSync) { 'verified isolated launch' } else { 'sync + launch' })"
     # speed-scout r8: the instance sync (~20 s on the 4080) runs there in the background WHILE SyncList (~25 s) copies the
     # scripts (independent trees: C:\KenshiInst\<n> vs C:\KAH + repo copies); was serial = ~20 s per launch
     $isP = $null; $isOut = Join-Path $rd "$Lane.isync.out"
-    if (-not $up) {
+    if (-not $up -and -not $skipInstanceSync) {
         Remove-Item $isOut, "$isOut.err" -ErrorAction SilentlyContinue
         $isP = Start-Process ssh.exe -ArgumentList @('-n', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '4080', 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\KAH\kenshi-instance.ps1', 'sync', '-Instance', "$Inst", '-Saves', $saves) -NoNewWindow -PassThru -RedirectStandardOutput $isOut -RedirectStandardError "$isOut.err"
     }
@@ -502,22 +568,27 @@ while ($true) {
     # window: on the screen at 0,0 while filming (WGC films it; not topmost), parked right of the screen for gfx-low work
     SetPos $(if ($film) { '0,0' } else { '1920,0' })
     if (-not $up) {
-        $sy = if ($isP) { if (-not $isP.WaitForExit(300000)) { try { $isP.Kill() } catch { } }; @(Get-Content $isOut, "$isOut.err" -ErrorAction SilentlyContinue) } else { @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('sync', '-Instance', "$Inst", '-Saves', $saves)) }
-        Log "instance sync: $(@($sy | Where-Object { $_ -like 'sync instance*' }) -join ' ')"
-        $rs = Remote; $gap = if ($rs.ok) { Kfp2Gap $rs.dll1 $rs.dll2 } else { $null }
+        if ($skipInstanceSync) { $sy = @('instance 3 sync skipped: reviewed Stobe DLL and copied save are preserved') }
+        else { $sy = if ($isP) { if (-not $isP.WaitForExit(300000)) { try { $isP.Kill() } catch { } }; @(Get-Content $isOut, "$isOut.err" -ErrorAction SilentlyContinue) } else { @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('sync', '-Instance', "$Inst", '-Saves', $saves)) } }
+        Log "instance sync: $(@($sy | Where-Object { $_ -like 'sync instance*' -or $_ -like 'instance 3 sync skipped*' }) -join ' ')"
+        $rs = Remote; $gap = if ($rs.ok -and -not $skipInstanceSync) { Kfp2Gap $rs.dll1 $rs.dll2 } else { $null }
         if ($gap) {
             Log "REFUSED $name : $gap"; Set-Content $kfpF "$(Get-Date -Format s) $gap"; Note 'coordinator' "lane $Lane PARKED: $gap (Defender? exclusion for $K2 on the 4080); resumes by itself within 10 min"
             if ($fill) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue; $script:fillBad[$name] = Get-Date } else { Move-Item -LiteralPath $src (Join-Path "$qd\4080" $name) -Force -ErrorAction SilentlyContinue; Log "$name back to queue\4080" }
             Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; $idleSince = Get-Date; continue
         }
-        if (-not ($sy -match '^sync instance')) { Drop "instance 2 sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
+        if (-not $skipInstanceSync -and -not ($sy -match '^sync instance')) { Drop "instance $Inst sync failed: $(($sy | Select-Object -Last 2) -join ' / ')"; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
         $o = if ($film) { Ssh4Enc "Remove-Item env:KAH_VIDEO_MODE -ErrorAction SilentlyContinue; & C:\KAH\kcfg.ps1 test -Instance $Inst -Gfx full" } else { Ssh4Enc "`$env:KAH_VIDEO_MODE='$VideoMode'; & C:\KAH\kcfg.ps1 test -Instance $Inst -Gfx low" }
         Log "kcfg ($want): $($o -join ' / ')"
         $null = Ssh4Enc "Set-Content '$K2\mods\AutomationHarness\framecap.txt' '$(if ($film) { 60 } else { $Fps })' -Encoding Ascii"
-        $o = Ctl2 @('launch', '-Save', $launch); Log "launch $launch : $(($o | Select-Object -Last 3) -join ' / ')"
-        if (-not ($o -match 'autoload')) { Drop "instance 2 launch failed: $(($o | Select-Object -Last 2) -join ' / ')"; Stop2 'launch failed'; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
+        if ($stobe) {
+            $finalProof = CheckListRig $run $true
+            if (-not $finalProof.ok) { Move-Item -LiteralPath $run (Join-Path "$qd\$Lane" $name) -Force -ErrorAction SilentlyContinue; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane"), $tmp -Recurse -Force -ErrorAction SilentlyContinue; State "waiting: Stobe final isolation proof unavailable for $name ($($finalProof.line))"; $idleSince = Get-Date; Start-Sleep $TickSec; continue }
+        }
+        $o = Ctl2 @('launch', '-Save', $launch); Log "launch $launch on instance $Inst : $(($o | Select-Object -Last 3) -join ' / ')"
+        if (-not ($o -match 'autoload')) { Drop "instance $Inst launch failed: $(($o | Select-Object -Last 2) -join ' / ')"; Stop2 'launch failed'; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
     } else {
-        $sy = @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('save', $saves, '-Instance', "$Inst")); Log "save copy: $(($sy | Select-Object -Last 1))"
+        if (-not $skipInstanceSync) { $sy = @(Ssh4Ps 'C:\KAH\kenshi-instance.ps1' @('save', $saves, '-Instance', "$Inst")); Log "save copy: $(($sy | Select-Object -Last 1))" }
     }
     $o = Ssh4Bash @('-c', "'grep -q KAH_DIR:- /c/KAH/bin/stobe-auto && echo SHIM-OK'")
     if (-not ($o -match 'SHIM-OK')) { Drop "C:\KAH\bin\stobe-auto ignores KAH_DIR (would drive lane 4080's game): run rig4080/setup.sh"; Stop2 'shim'; Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue; continue }
