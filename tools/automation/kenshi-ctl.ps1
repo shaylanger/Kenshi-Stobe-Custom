@@ -62,7 +62,9 @@ $KahDir = "$Kenshi\mods\AutomationHarness"
 # primary 2560x1440 and test games landed on Shay's screen, glitching through resize rounds)
 # Forbidden screens (Shay 2026-10-11 14:31: NEVER a game window on the Samsung, display 3 today; he works there). Matched by
 # the monitor's hardware id (EnumDisplayDevices interface name DISPLAY#<id>#), never by DISPLAYn number (Windows renumbers).
-$ForbiddenMonIds = @('SNY05D1')
+# 2026-10-12: ignore inactive monitor ghosts (Flags&1=0); SAM0B49 is Samsung even when Windows renumbers it DISPLAY1.
+# Live MONSEL selftest reports the current forbidden screens; choose an active allowed monitor before any test launch.
+$ForbiddenMonIds = @('SNY05D1', 'SAM0B49')
 function Get-ForbiddenMonitors {   # \\.\DISPLAYn names whose attached monitor id is forbidden
   if (-not ('KenshiMonId' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -70,7 +72,8 @@ using System; using System.Runtime.InteropServices;
 public static class KenshiMonId {
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct DD { public int cb; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Name; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Str; public int Flags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Id; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Key; }
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplayDevicesW(string dev, int i, ref DD d, int f);
-  public static string Ids(string adapter) { var r = ""; for (int i = 0; ; i++) { var d = new DD(); d.cb = Marshal.SizeOf(d); if (!EnumDisplayDevicesW(adapter, i, ref d, 1)) break; r += d.Id + ";"; } return r; }
+  // Only attached monitor entries count. Windows retains inactive monitor ghosts on every adapter.
+  public static string Ids(string adapter) { var r = ""; for (int i = 0; ; i++) { var d = new DD(); d.cb = Marshal.SizeOf(d); if (!EnumDisplayDevicesW(adapter, i, ref d, 1)) break; if ((d.Flags & 1) != 0) r += d.Id + ";"; } return r; }
 }
 '@
   }
