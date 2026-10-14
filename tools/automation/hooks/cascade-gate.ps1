@@ -66,7 +66,11 @@ try {
             } else {
                 $word = ((Get-Content -LiteralPath $verdict -TotalCount 1 -Encoding UTF8) -replace '^\uFEFF', '').Trim().Split(' ')[0]
                 if ($word -eq 'FAIL') {
-                    if (-not @($tr | Where-Object { $_.case -eq 'escalate' }).Count) {
+                    $hasEsc = @($tr | Where-Object { $_.case -eq 'escalate' }).Count -gt 0
+                    $hasDbg = @($tr | Where-Object { $_.case -eq 'debug' }).Count -gt 0
+                    if ($hasDbg -and -not $hasEsc) {
+                        $pending += "ticket ${tk}: second verdict FAIL after a debug round. Spawn the escalation now (Agent, description '[case:escalate][ticket:$tk] escalate $tk', subagent kenshi-escalation) with the full ticket history."
+                    } elseif (-not $hasEsc) {
                         $pending += "ticket ${tk}: verdict FAIL. Spawn the debugger now (Agent, description '[case:debug][ticket:$tk] diagnose $tk', subagent kenshi-debugger) with the verifier's evidence."
                     }
                 } elseif ($word -ne 'PASS') {
