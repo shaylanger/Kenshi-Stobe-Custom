@@ -21,6 +21,7 @@ file paths of outputs, the build hashes involved, and what you want back.
 > Your name is `<name>`. Report to a file, not only to this session: run
 > `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\agent-status.ps1 <name> RUNNING "<task>" "<latest step>" "<output paths>" "<next step>"`
 > at start and after every milestone, and with DONE or FAILED plus the final result paths before your final report.
+> When you message a session, also drop a one-line file in `C:\KenshiTestRuns\inbox\<target>\` (name it `<time>-<your name>.msg`): the target's event wait wakes within seconds (Shay 2026-10-14).
 > Write any handoff to `C:\KenshiTestRuns\agents\<name>.handoff.md` (not your scratchpad). Long work (game rows,
 > sweeps, renders) runs as a detached `run-batch.sh` job, with its out dir written into `C:\KenshiTestRuns\inflight\<name>`.
 > Game takes (CLAUDE.md "Game-take discipline"): preflight before recording (day verified, weapon ready/crossbow loaded,

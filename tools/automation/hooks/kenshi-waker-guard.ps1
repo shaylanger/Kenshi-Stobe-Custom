@@ -101,7 +101,7 @@ $waker = $procs.Values | Where-Object {
     if ($_.ProcessId -eq $me -or $_.Name -notmatch '^(sleep|wsl|bash|sh|powershell|pwsh|timeout)\.exe$') { return $false }
     $cl = [string]$_.CommandLine
     $isWaker = $false
-    if ($cl -match 'batch-health|rig-health|lane-waker') { $isWaker = $true }
+    if ($cl -match 'batch-health|rig-health|lane-waker|event-wait') { $isWaker = $true }
     else {
         # matches `sleep 120; ...` inside a bash -c string and `"C:\...\sleep.exe" 120` (Git Bash spawns sleep as its own process)
         $m = [regex]::Match($cl, '(?:^|[;&|(\s"\\/])(?:sleep|Start-Sleep)(?:\.exe")?\s+(?:-Seconds\s+|-s\s+)?(\d+)(?!\S)')
@@ -111,7 +111,7 @@ $waker = $procs.Values | Where-Object {
 } | Select-Object -First 1
 
 if ($inflight.Count -gt 0 -and -not $waker) {
-    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Before ending the turn start a background waker (Bash run_in_background): "sleep 120; bash tools/automation/batch-health.sh <out-dir>" for a batch, else "sleep 120; bash tools/automation/rig-health.sh". Restart it every time it wakes you. If nothing is really in flight, release the lock / delete the stale marker in C:\KenshiTestRuns\inflight\ and say so.')
+    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Before ending the turn start a background event wait (Bash run_in_background): "bash tools/automation/event-wait.sh --batch <out-dir>" for a batch, else "bash tools/automation/event-wait.sh" (it ends on an event or at the 10-minute backstop). Restart it every time it wakes you. If nothing is really in flight, release the lock / delete the stale marker in C:\KenshiTestRuns\inflight\ and say so.')
 }
 
 # --- 5090 idle? ---
