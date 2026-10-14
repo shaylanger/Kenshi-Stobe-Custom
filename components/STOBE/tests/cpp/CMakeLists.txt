@@ -63,3 +63,7 @@ add_test(NAME test_inbox_target_ref_tests COMMAND test_inbox_target_ref_tests)
 add_executable(portrait_fault_injection_tests portrait_fault_injection_tests.cpp)
 target_include_directories(portrait_fault_injection_tests PRIVATE ../../src)
 add_test(NAME portrait_fault_injection_tests COMMAND portrait_fault_injection_tests)
+
+add_executable(native_travel_receipt_tests native_travel_receipt_tests.cpp)
+target_include_directories(native_travel_receipt_tests PRIVATE ../../src)
+add_test(NAME native_travel_receipt_tests COMMAND native_travel_receipt_tests)
