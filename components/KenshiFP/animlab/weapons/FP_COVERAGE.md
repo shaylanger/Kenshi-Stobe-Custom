@@ -1,5 +1,7 @@
 # KenshiFP viewmodel: coverage per weapon class
 
+> **ANIMATION WORK CLOSED FOR NOW (Shay, 2026-10-14).** All animation/KenshiFP-viewmodel/animlab tasks, bugs, tickets and queued rows are cleared; no agents, batches or new animation work. Resumes only after Shay's own in-game testing. Anything below about open animation rows, Misses, polish or lab work is historical and NOT scheduled. See `testing/PARKED_FOR_POLISH.md`.
+
 Read from `/root/KenshiFP/client/kfp_viewmodel.inc` at ad419c0 (2026-10-10, read only). Weapon list and dims:
 `WEAPON_CATALOG.md` / `weapons.csv` here (regenerate: `python3 tools/animlab/animlab.py weapons --catalog -o <dir>` in the
 harness). Lab matrix: `animlab.py weapons --run` (harness `tools/animlab/weapon_matrix.py`).

@@ -1,5 +1,7 @@
 # Shay's FP animation / presentation rules (the one place they live)
 
+> **ANIMATION WORK CLOSED FOR NOW (Shay, 2026-10-14).** All animation/KenshiFP-viewmodel/animlab tasks, bugs, tickets and queued rows are cleared; no agents, batches or new animation work. Resumes only after Shay's own in-game testing. Anything below about open animation rows, Misses, polish or lab work is historical and NOT scheduled. See `testing/PARKED_FOR_POLISH.md`.
+
 Every first-person animation / presentation rule Shay gave, copied word for word from where it was recorded
 (memory files, testing/HANDOFF.md "SHAY" lines, animlab STATUS.md). Number = SRn; other docs point here by SRn.
 Read this before any FP look work. Judge every lab check by its CODE against these rules: a check that contradicts

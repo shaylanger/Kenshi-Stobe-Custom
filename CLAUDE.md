@@ -1,5 +1,7 @@
 # Kenshi modding workspace (Shay)
 
+> **ANIMATION WORK CLOSED FOR NOW (Shay, 2026-10-14).** All animation/KenshiFP-viewmodel/animlab tasks, bugs, tickets and queued rows are cleared; no agents, batches or new animation work. Resumes only after Shay's own in-game testing. Anything below about open animation rows, Misses, polish or lab work is historical and NOT scheduled. See `testing/PARKED_FOR_POLISH.md`.
+
 STOBE / KenshiFP / Profession Gear (PG) / relationship system (REL) / Automation Harness (KAH): notes, test plans, patch scripts, tools, source snapshots.
 Reference docs in `docs/`: `REFERENCE.md` (full command list, scenario helpers, launch details, gotchas, relationship storage), `NPC_INFO_PANEL.md`, REL `RELATIONSHIP_SYSTEM_DESIGN.md` (design + open SR rows) / `REL_ARCHITECTURE.md` (code, DB, settings) / `REL_FINAL_REPORT.md`. History: `archive/` (newest run logs, old bug numbers) and `git log`.
 

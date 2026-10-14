@@ -1,4 +1,6 @@
 # KenshiFP Player-Controlled Combat Test Plan
+
+> **ANIMATION WORK CLOSED FOR NOW (Shay, 2026-10-14).** All animation/KenshiFP-viewmodel/animlab tasks, bugs, tickets and queued rows are cleared; no agents, batches or new animation work. Resumes only after Shay's own in-game testing. Anything below about open animation rows, Misses, polish or lab work is historical and NOT scheduled. See `testing/PARKED_FOR_POLISH.md`.
 Updated: 2026-10-06. Status: manual ranged/melee adapter in main (KenshiFP FE26573F on both rigs, FP-only since the m49 decoupling; harness 2995EE5E), manual combat OFF by default. Passed rows are deleted (run logs `archive/test-run-2026-10-05-m41.md`, `archive/test-run-2026-10-06-m49.md`); the tables hold open rows only.
 Coordination: C:\KenshiModding\FP_COMBAT_COORDINATION_CONTEXT.md (received: m45 baseline).
 Design: KENSHI_BIG_MOD_IDEAS_CONTEXT.md section 24.
