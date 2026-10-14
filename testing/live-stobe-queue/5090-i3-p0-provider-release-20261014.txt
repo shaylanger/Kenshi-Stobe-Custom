@@ -1,0 +1,11 @@
+provider_hold_released=true
+request_active=false
+provider_profile=private5090-Qwen4B-existing-alias-two-profiles
+provider_model_sha256=3605803B982CB64AEAD44F6C1B2AE36E3ACDB41D8E46C8A94C6533BC4C67E597
+provider_release_utc=2026-10-14T18:12:23Z
+provider_route=http://172.31.176.1:18099/v1
+provider_model_pid=97588
+provider_adapter_pid=29152
+provider_alias=C:\KenshiTestRuns\standalone4080\qwen4b.gguf
+proof_owner=/root/5090_wsl_runtime_recovery
+proof=actual WSL models healthy, URL-only CAS2profiles PASS, auth READY/load6/token32/generation match afterCAS; no request active

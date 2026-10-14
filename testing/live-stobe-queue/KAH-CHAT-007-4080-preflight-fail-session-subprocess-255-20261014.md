@@ -1,0 +1,11 @@
+# KAH-CHAT-007 4080 preflight setup failure — session reader subprocess exit 255
+
+- Timestamp: 2026-10-14 03:00:35 UTC.
+- Outcome: `RESULT KAH-CHAT-007 FAIL setup: sanitized session reader returned subprocess exit 255; session/world/actor gates remain unverified.`
+- Exact reviewed caller SHA-256: `1D10CF267DAD2FC6370A514777F74405BBE38FA703D908893B1CA13AA9FCD3B8`; regression SHA-256 `5119579762FF659D088D5920AC9DD8121FCF391FE32EDACB5ED78A1959F40889`; session reader SHA-256 `C3620F171FE5096CC636AC593996342C66825CB3D29E46F9214C458AD826C30B`; remote probe SHA-256 `121956C2A61A4B59854BB12AC414C788A15B9A599D05680D98F78971D705A31F`.
+- Read-only runtime source audit before invocation: `/tmp/stobe-standalone4080/site/lib/playthrough_preferences.php:20-32` shows `ptp_connect()` builds connection parameters and returns `pg_connect(...)`; `/tmp/stobe-standalone4080/site/lib/playthrough_retention.php:61-65` shows `ptr_read()` uses a SELECT-only query on `stobe_meta.settings`. No write call was present in either function body.
+- Exact reader bytes were streamed through the documented SSH-stdin route into WSL `python3 -`; no remote file was created or changed.
+- Fresh isolated route passed (`C:\KenshiInst\3`, instance 3, inbox clear). PID 3452 matched the exact i3 executable. Stobe and Harness loaded-module on-disk hashes matched pins: `AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C` and `974DBA03F136D6CB08153F29ACC497C485C39BAECEB8BF50C8B5291661D3025D`. INI points to `127.0.0.1:18084`; private backend health/schema passed.
+- Session helper output: `{"result": "FAIL", "exit_code": 255}`; outer preflight exited 255 immediately. The helper does not surface captured stderr on this branch, so the underlying subprocess cause is unknown.
+- No fresh session generation, world/time/pause, input-isolation/focus, speaker, or actor roster evidence was obtained. No KAH resolver query, chat, game input, focus change, queue/config/service/save/game-state mutation occurred. CHAT-007 is not running; previous receipts remain unchanged.
+- Next gate: diagnose the session reader’s bounded WSL subprocess exit-255 cause without exposing credentials or changing state, then obtain a fresh full preflight before any resolver query.

@@ -1,0 +1,7 @@
+ssh.exe : Can't open user config file C:\\Users\\Shay\\.ssh\\config: Permission denied
+At C:\KenshiModding\tools\automation\live-testing-waker.ps1:129 char:10
++     $raw=& $ssh.exe @args 2>&1; $ec=$LASTEXITCODE
++          ~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Can't open user...rmission denied:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

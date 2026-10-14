@@ -1,0 +1,30 @@
+# 4080 greeting target reconciliation — 2026-10-13
+
+KAH-CHAT-001 is superseded for the 4080 greeting by immutable KAH-CHAT-005. Preserve the old row and all attempts; do not replay them. The validator-cleared isolated `newgame:Empire Citizen` is an acceptable test context; do not require a copied-save-only setup. The stricter KAH-CHAT-004 row remains separate history.
+
+| Attempt | Observed evidence | Classification |
+|---|---|---|
+| KAH-CHAT-001 attempt 1 | Direct inbox sent `Hello`; `CHAT_SEND_STAGE` recorded `dist_to_target=189.817`; `ACTION_EXEC SAY[Stream]:Hello`; no NPC reply recorded. The text also differs from KAH-CHAT-001's specified utterance. | `FAIL setup: target was outside the 80-unit talk range and utterance differed from the row`; separately `FAIL evidence: no NPC reply, correlated backend event, or before/after trip receipt established`. Not a product failure. No unchanged retry. |
+| KAH-CHAT-001 attempt 2 | Command returned `target not found: Ulvik`; a fresh `chars` listing had `#520507808/7` at 72.5, while bridge `stobe_ping` reported `nearest=Serka`. No chat send is evidenced. | `FAIL setup: read-only target observations disagreed (Ulvik vs #520507808/7 vs nearest Serka)`; no utterance issued by this attempt. Stop until a new, internally matching target snapshot exists. |
+| Transport probe (not KAH-CHAT-001) | Request `k1791927669430_12312_1`: `TEST_INBOX` 14:41:09.448, Bean `#798584000`, 14.1546m; StobeServer dispatch 14:41:09.464; NPC reply 14:42:22.995: “Hey. Still movin' around here. What's on your mind?”; processed 14:42:23.007; one line queued; empty stream 14:42:23.649. Utterance was one-token `Hello` via nearest-target route. Durable receipt: `pending-fixes/rig4080-validation/direct-chat-transport-4080i3-20261013.md`. | Narrow transport/reply evidence only; not the planned multiword greeting, no trip-state receipt, no naturalness/travel coverage. Do not count as a KAH-CHAT-001, KAH-CHAT-004, or KAH-CHAT-005 PASS. No duplicate sent. |
+
+KAH-CHAT-005 is eligible only after fresh world/backend/session/build checks and `stobe_ping` returns a live nearest target whose ACK/native handle is within 80. Do not require the `chars` display name to equal the native alias; use the reviewed Base64-safe Bash transport for the exact multiword utterance. Current preflight reverified the expected Stobe DLL and backend HTTP 200, but `stobe_ping nearest=none`; after a pathfinding attempt, the tracked target was 165.4m away and absent from `chars 80`. No greeting send occurred. A PASS additionally needs complete native say text, reply, correlated backend event, and before/after trip state.
+
+KAH-CHAT-002 and KAH-CHAT-003 remain blocked on KAH-CHAT-005 PASS, in that order. KAH-CHAT-002 must use a fresh target gate; KAH-CHAT-003 remains further dependent on KAH-CHAT-002 PASS and its existing valid-destination/trip-state gates. Target-resolution build/install confirmation KAH-CHAT-006 is separate and does not block a valid nearest-target greeting.
+
+## Superseding update: KAH-CHAT-005 sent once (14:53)
+
+The preceding paragraph describes the pre-dispatch gate state and is superseded by this event. The sole 4080 operator dispatched KAH-CHAT-005 once after a matching fresh nearest-target ACK. Request `k1791928437009_12632_1` targeted Mare [Samurai Captain Yori], native handle `2986084096`, at `11.1233m`; exact `TEST_INBOX` text was `Hello there. How are you doing today?`, `build_people_json len=140`, and ACK matches. Native log: `C:\\KenshiInst\\3\\RE_Kenshi\\mods\\Stobe\\stobe.log`, timestamp 14:53:57.061, after pre-log offset 1,510,301. The request remains IN FLIGHT: no backend dispatch, NPC reply, or post-send trip/state evidence has been reported yet. Observe the same request only; no retry. Do not mark PASS until correlated backend/reply and trip-state evidence arrives. This row is not currently blocked on `stobe_ping nearest=none`; it passed the dispatch gate once.
+
+## KAH-CHAT-005 terminal result
+
+The operator closed request `k1791928437009_12632_1` as `FAIL evidence/no-response`. Durable receipt: `pending-fixes/rig4080-validation/chat-005-no-response-4080i3-20261013.md`. It records the exact native TEST_INBOX utterance, target/range validation, people JSON, and `dispatched inputtext` event at line 4352; the game/log advanced for at least 4m11s, but no backend receipt, NPC reply, or terminal error appeared and the outbox contained only the ACK. Backend receipt remains unverified. No retry was sent. Dispatcher assigned source-only response/correlation diagnosis, exact candidate fix, independent review, and a later focused confirmation row.
+
+
+## Final correction: KAH-CHAT-005 PASS end-to-end
+
+The earlier terminal FAIL/no-response paragraph is superseded by the sole operator's full-log and backend correlation. Request `k1791928437009_12632_1` was processed by backend `req_6acea8752cbf0` with HTTP 200/status ok/stream=true (111,428 ms). The active 4080/i3 native log shows Mare's reply queued at 14:55:49.401, processed 14:55:49.433–.440, and a follow-up SAY at 14:55:57.649. The later empty-stream observation at 14:55:58.114 followed the delivered speech. Amended receipt `pending-fixes/rig4080-validation/chat-005-multiword-greeting-4080i3-20261013.md`, SHA256 `F548FF8FF7E370ADE07F46D16D174C67C6A5E83570C4BF7DF82F6E777C5238F9`, records `RESULT KAH-CHAT-005 PASS end-to-end`. No retry; no distinct product defect established.
+
+## 5090 KAH-CHAT-001 terminal classification
+
+The sole operator received a native multi-line Beak reply and correlated backend HTTP 200 for request `k1791929017904_87220_1_0`; post-state showed Talk, empty destination, activity NONE, NULL_TASK and no orders. The row is `FAIL evidence` only because the same-target pre-chat trip snapshot was omitted. No product failure or retry. The exact-AEF confirmation row is `kah-chat-008-5090-greeting-state-confirm.sh`, SHA256 `04741B20790DDF6E62EE06A8D62C05E5A71B9C642A01E1BFC883123D3FCD4B1A`.

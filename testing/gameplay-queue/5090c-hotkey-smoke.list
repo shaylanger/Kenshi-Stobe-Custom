@@ -1,0 +1,8 @@
+# owner: /root/rig_queue_supervisor
+# out: npc-hotkey-smoke-5090c-20261013
+# launch: kah-npcpanel
+# needs: KenshiFP any
+# gfx: low
+146a-self-hotkey | kah-npcpanel | Shay | Malzin | 300 | STOBE-BIO-CHAT-HOTKEYS.sh 146a
+146b-mate-hotkey | kah-npcpanel | Shay | Malzin | 300 | STOBE-BIO-CHAT-HOTKEYS.sh 146b
+147-mate-chat-hotkey | kah-npcpanel | Shay | Malzin | 300 | STOBE-BIO-CHAT-HOTKEYS.sh 147

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Immutable operator packet emitter. Prints instructions only; never sends commands.
+cat <<'ROW'
+ROW TL-003 — eligible “Lead the way” start and matching native ACK
+Status: NOT RUNNABLE / NOT QUEUED / NOT EXECUTED. No rig, movement, or queue action is authorized by this packet.
+Source: c-v2/C3.md. Exact source utterance: “Lead the way.” C3 requires an accepted supported point and a separate scoped start; no KAH order or teleport may substitute.
+Prerequisite: disposable isolated branch with one accepted/requested trip at a verified supported point, exact actor/speaker/trip/agreement/point/request IDs, no existing native start receipt, and a documented eligibility/readback route. Starting this row from PROPOSED or an already-started/completed/cancelled trip is a setup failure.
+Required pins: candidate Stobe DLL 128171DCA37821BCB254C601BD7145E9888EB22DC7CE33B3F3497C1283827620; source manifest 88D85D31A2D75CFD6CDAD49E54529411B61F7114985693DBC2B199357352846D; candidate server source manifest E4168F120D8ED9E0530256C7495033E254A68FAFBBDC79636B8661D46015645D; candidate server payload 67DBAACDDBFB322E48EC02CBDCB1D68CA206368CC4CB9149232634C870FFB604. Exact pair contract/release review, installed hashes, disposable save/backend/session/world identity, and native owned-start ACK capture command remain PENDING; these candidate hashes do not authorize execution.
+Action: Capture pre-turn lifecycle and native-order/status baseline. Send “Lead the way.” once. Observe only the same request, without resending. Correlate native start ACK to exact actor/trip/request/load/world and freshness; then read state again using the documented read-only route. No other movement command.
+Evidence: exact turn/native inbox/reply/backend decision/action; all identifiers and before/after lifecycle; ACK timestamp, actor/trip/request/load/world/freshness scope; exact endpoint and provenance; order/status and movement evidence only if separately captured by an approved method. A generic moving flag, database phase, KAH ACK, or NPC wording is not start proof.
+PASS only if the actor was eligible, one matching fresh native start ACK is recorded, identifiers/endpoint match, and no duplicate start/action exists. Do not claim arrival from a start ACK. Exactly one line: `RESULT TL-003 PASS|FAIL <eligibility, matching ACK scope, lifecycle and receipt paths>`.
+Stop before send on missing eligibility or ACK procedure. After send, absent ACK is `FAIL evidence`/inconclusive per operator receipt policy, not proof of movement; stale/mismatched/cross-actor ACK or duplicate start is `FAIL product` only with complete evidence. No retry, order, teleport, cancellation, or cleanup mutation.
+5090/4080 execution recipes are NOT SOURCEABLE YET for the current candidate pair. The documented isolated routes may be selected by the authorized operator after exact install/save/session gates; do not infer the older live baseline is compatible.
+ROW

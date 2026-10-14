@@ -1,0 +1,7 @@
+verdict=CLEAR mechanics-only independent review
+reviewer=/root/5090_p0_game_operator/literal_slash_visual_review
+install_SHA256=0ED67317E52FF65A454589BB1456CBE393A2DFFF12114421DFE664E4811C55C8
+rollback_SHA256=B2BD7E2F7C01BCAE06D1BB0CB80506DFB0E0F24A6FAA68C4C15F4CD36D58B590
+README_SHA256=5B6F3E50C845A8A31D4C6D68B5687863B023ECA9A43689A9F085B52ECF4422D2
+scope=plan-only default; exactinstance3/source marker, target/ownerlock, AEFbaseline/candidate/receiptpins, freshboundary<=10minutes, pre-replaceCAS, samevolumeatomicreplace/posthash, rollbackCAS retainsdisplacedcandidate.
+limitations=No finalcandidate review/authorization implied. No script run, externalmutation, stop/start/backendoperation done. Finalnativecandidate review and root terminalboundary required.

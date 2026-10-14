@@ -1,0 +1,12 @@
+rig=5090 instance=3 copied_save=kah-5090c-ui-20261014
+session_ready=true
+load_sequence=6
+token_length=32
+manager_ready_generation_match=true
+canonical_copied_marker_hash_match=true
+proof_owner=/root/5090_wsl_runtime_recovery
+proof=actual private DB READY after single normal copied firstbind exec77333
+native_bridge_health_receipt=b8e324
+native_ping=ACK
+world_paused=false
+input_isolation=on focused=0

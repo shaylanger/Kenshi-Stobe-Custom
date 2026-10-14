@@ -1,0 +1,40 @@
+diff --git a/tools/automation/rig-env.sh b/tools/automation/rig-env.sh
+index 5a3ea33..0000000 100644
+--- a/tools/automation/rig-env.sh
++++ b/tools/automation/rig-env.sh
+@@ -44,3 +44,35 @@ if [ "$RIG" = 4080 ]; then
+   export KAH_CLIENT='C:/KenshiModding/Kenshi-Automation-Harness/client'
+   export KAH_OWNER=${KAH_OWNER:-rig4080}
++  # 4080 i3 direct-command gate: validate the isolated route and only check
++  # inbox/lock presence. Never read, wait on, or mutate either file.
++  export KENSHI_DIR="$KDIR"
++  rig4080_i3_preflight() {
++    if [[ "${KAH_INSTANCE:-}" != 3 ]]; then
++      echo 'RESULT 4080-I3-ROUTE FAIL setup: export KAH_INSTANCE=3 explicitly first' >&2
++      return 2
++    fi
++    local want_game='/c/KenshiInst/3' want_harness='c:/kenshiinst/3/mods/automationharness' harness_unix
++    printf 'KAH_INSTANCE=%s\nKENSHI_DIR=%s (C:\\KenshiInst\\3)\nKDIR=%s (C:\\KenshiInst\\3)\nKAH_DIR=%s\n' \
++      "$KAH_INSTANCE" "$KENSHI_DIR" "$KDIR" "$KAH_DIR"
++    local kah_norm=${KAH_DIR//\\/\/}
++    kah_norm=${kah_norm,,}
++    if [[ "$KDIR" != "$want_game" || "$KENSHI_DIR" != "$want_game" || "$kah_norm" != "$want_harness" ]]; then
++      echo 'RESULT 4080-I3-ROUTE FAIL setup: instance paths do not resolve to C:\KenshiInst\3' >&2
++      return 2
++    fi
++    harness_unix=$(cygpath -u "$KAH_DIR") || {
++      echo 'RESULT 4080-I3-ROUTE FAIL setup: cannot resolve isolated harness directory' >&2
++      return 2
++    }
++    if [[ -e "$harness_unix/inbox.txt" || -e "$harness_unix/inbox.txt.lock" ]]; then
++      echo 'RESULT 4080-I3-ROUTE STOP inbox pending or locked; no contents read and no files changed' >&2
++      return 3
++    fi
++    if [[ ! -d "$harness_unix" ]]; then
++      echo 'RESULT 4080-I3-ROUTE FAIL setup: isolated harness directory is missing' >&2
++      return 2
++    fi
++    echo 'RESULT 4080-I3-ROUTE PASS route=C:\KenshiInst\3 inbox=clear metadata-only'
++    return 0
++  }
+   export PATH="/c/KAH/bin:$PATH"

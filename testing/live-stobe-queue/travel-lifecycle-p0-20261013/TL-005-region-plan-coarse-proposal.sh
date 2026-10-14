@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Immutable operator packet emitter. Prints instructions only; never sends commands.
+cat <<'ROW'
+ROW TL-005 — explicit regional request may create only a coarse proposal
+Status: NOT RUNNABLE / NOT QUEUED / NOT EXECUTED. No rig, trip mutation, or queue action is authorized.
+Sources: c-v2/C6.md, r-v3/r4.md, and the C6 exact input “Would you lead me to the Pits?” A coarse proposal must identify waypoint uncertainty, remain PROPOSED, and never accept or dispatch.
+Prerequisite: fixture owner provides a disposable isolated branch with a proven in-region endpoint, scoped endpoint provenance, and documented semantics for proposing the region while a local accepted leg exists. The source plans describe an accepted local leg and a new regional request but do not specify whether/how this should replace or coexist with the accepted leg. Until exact transition semantics and safe readback/reset are reviewed, stop before sending; do not infer expected mutation. Never invent an endpoint.
+Required candidate pins (not authorization): Stobe DLL 128171DCA37821BCB254C601BD7145E9888EB22DC7CE33B3F3497C1283827620; native source manifest 88D85D31A2D75CFD6CDAD49E54529411B61F7114985693DBC2B199357352846D; server source manifest E4168F120D8ED9E0530256C7495033E254A68FAFBBDC79636B8661D46015645D; payload 67DBAACDDBFB322E48EC02CBDCB1D68CA206368CC4CB9149232634C870FFB604. Exact pair release review, current installed hashes, fixture hashes/currentness, copied save/backend/session/world, actor map, and endpoint/readback procedure are PENDING. Historical offline refs only: region fixture 23962FC304862012822DAB56E5FE082360AEA5171C41A9C822EBEE953DA4AA94; resolver fixture 39AAB9CE7FE6F999F32A8E9CAF5D39EB61EA4F41EF4B8C88AC92E0F5CA5920C6; neither proves live behavior.
+Action once all gates are reviewed: snapshot existing local trip, region resolver evidence, endpoint and event/outbox. Send the exact regional request once. Capture raw/final decision and full post-state. Do not accept, start, order, or dispatch. No retry.
+PASS only when scoped live endpoint evidence supports the area and one coarse PROPOSE is created with waypoint uncertainty disclosed, no fabricated point, no ACCEPT, no native start/action, and transition semantics match the fixture owner's reviewed expectation. Require before/after trip/proposal/event/outbox, endpoint provenance, exact turn, native/backend evidence, IDs and hash receipts.
+One line only: `RESULT TL-005 PASS|FAIL <coarse proposal scope, endpoint provenance, no-accept/no-dispatch and receipts>`.
+Because the active-leg transition semantics are not specified by the named sources, current classification is BLOCKED/NOT RUNNABLE; do not treat a guess as a setup pass. No cleanup mutation.
+Rig-specific recipes are NOT SOURCEABLE YET for the current candidate pair. Keep out of both rig queues until the fixture owner resolves the transition contract and the queue supervisor pins the exact release and save.
+ROW

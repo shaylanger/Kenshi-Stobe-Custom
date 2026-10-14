@@ -1,0 +1,11 @@
+# Isolated 4080 final full readiness capture
+
+Reviewed V7 wrapper SHA `268FC4E45F1477DCA6EA510676D7D284750E5F2B53C0C48528DD1B41198A4719` plus V6 body SHA `122F790606C446A1D67EFEFD17DA618B41D5073E698899A44B28068B919AEC70` executed once, exit0 in5.354seconds. Backend health timestamp1791997831. Owned receiver3216/Bash9276 metadata emitted; all required sections completed in order, no timeout or capture-cap event. This validates the testing transport/readiness contract, not an NPC dialogue/travel test.
+
+Captured actual native facts: DESKTOP-NQQPA73/i3, PID3452 exact executable, loaded Stobe path and on-disk AEF84C0A…1907C, loaded Harness path and on-disk974DBA…3025D. Config127.0.0.1:18084, private guarded fixedroot/listener, backend health/schema true. Session present/ready, generationmanager match, gamets272866, loadSHA4b227777…dabf8a. World copiedkah-stobe-4080-standalone-active, paused0/speed1/playerShay/squad2; game_hours96.7395(day4/00:44), advancing from earlier87.9082.
+
+Input isolation on; native input-isolation focused0, FP override focus1. No focus/window/input was changed. Native stobe_ping reports `mode=chat speaker=Shay nearest=Cind [Hungry Bandit]`; that handler returns native metadata and does not send HTTP/model requests. Roster2within300.0: Cind2529907200/2 TraderGuild HiveSoldierDrone at[-53202.7,956.9,4893.5] distance15.0; playerShay971557632/1 at[-53217.7,956.5,4893.5].
+
+The final formatter accepted all actual fields. Prior failures were setup/evidence-tooling issues: missing sudo DB env, CLIXML progress, no partial bounded capture, per-line event ordering, CRLF regex anchors, integer-only radius regex, absent native speaker query, and singleword-only nearest-name regex. V7 fixes have full local regression proof and a live complete capture. The canonical wrapper remains unchanged pending root's integration decision; the candidate is valid for short bounded preflights only(110-second remote/120-second local), not an entire long lifecycle row.
+
+Next actual gameplay row: corrected P0 consent/lead/movement driver, exacthash as supplied by queueowner after review. At this receipt boundary private inference owner requested a model-request HOLD for tuning; no NPC chat/offer/acceptance has been sent by this operator. That separate hold must be released and actor/destination fresh gates rechecked before invocation.

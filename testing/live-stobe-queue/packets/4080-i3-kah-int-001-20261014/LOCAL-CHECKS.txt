@@ -1,0 +1,37 @@
+KAH-INT-001 / 4080 i3 packet preparation checks
+Date: 2026-10-14
+Scope: local filesystem only; no SSH, rig, game, host, server, save, KAH request, or queue was accessed or changed.
+
+Syntax checks (all passed):
+  & 'C:\Program Files\Git\bin\bash.exe' -n testing/live-stobe-queue/integrated-AEF84C0A/kah-int-001-chat-hotkey-isolated.sh
+  & 'C:\Program Files\Git\bin\bash.exe' -n tools/automation/rig-env.sh
+  [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/automation/remote-bash-stdin-4080.ps1').Path,[ref]$tokens,[ref]$errors) | Out-Null
+  Parser result: no errors; parsed only, not executed.
+  git diff --check -- testing/live-stobe-queue/packets/4080-i3-kah-int-001-20261014/README.md
+  Result: exit 0, no whitespace errors.
+
+The initial `bash` command resolved to the Windows app alias and returned E_ACCESSDENIED before parsing anything. The installed Git Bash executable above was then invoked by its full path and passed both syntax checks.
+
+Observed SHA-256:
+5EA4BD563D0697ECA7B7939F0666F1557D23DCA66598E61EAD24738DE44219F5  testing/live-stobe-queue/integrated-AEF84C0A/kah-int-001-chat-hotkey-isolated.sh
+918FCD6C8A571F6719AD9AACFFCD4964C25908D583005104ADAD3B313DD882A3  testing/live-stobe-queue/integrated-AEF84C0A/kah-int-001-local-ui-exception-5090.packet.md
+BAD511F01ADE7726B67F6DCA63F483FA8157CE1996AED99E8FB1D80ABA3B0822  testing/live-stobe-queue/4080-i3-command-route.md
+138460C012FEBA82314D39013B60D1ADD6B060ACAB561A31C2DB045E894E7354  tools/automation/remote-bash-stdin-4080.ps1
+A96DF1C3FDD95CF5F96471048F5FC1B63153EA21B6D3AD5A711145F0A80FE20D  tools/automation/rig-env.sh
+04C59FF58944191B47D45DDE0F1E625E08A5E32C75DA5E1C72C49018C11B0615  pending-fixes/rig4080-validation/aef-install-4080i3-20261013.md
+AD63A137D74CFE23DEFF8914B06C56B8DC51693E88FBDA55AE1E365EE7B0445C  pending-fixes/release-coordination/stobe-native-integrated-candidate-20261013/SOURCE-MANIFEST.json
+475B58A78C02377C3B67B1F7F6677F7E9AD912F018EC737CDE85807AB6D7FB0A  pending-fixes/release-coordination/stobe-native-integrated-candidate-20261013/PAYLOAD-MANIFEST.json
+AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C  pending-fixes/release-coordination/stobe-native-integrated-candidate-20261013/build-v100/Stobe.dll
+AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C  pending-fixes/release-staging/stobe-integrated/4080/AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C/Stobe.dll
+21840EFEBA9499A482ED33271148633D85E32652F8C51F855358DA9417393546  pending-fixes/release-staging/stobe-integrated/4080/AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C/manifest.json
+A2D876CD0DC1DC9F1F288A1EFAD546EE434135F982F3DF85972CC21C58855879  testing/live-stobe-queue/packets/4080-i3-kah-int-001-20261014/body.sh
+333FF2F05F9410D48CCDB628B93914F1596661342151D5650F471CC28AA5CAFE  testing/live-stobe-queue/packets/4080-i3-kah-int-001-20261014/README.md
+
+The expected Stobe/Harness/build and manifest hashes match the local candidate, manifests, and staged DLL. The staged install manifest says `deploymentPerformed=false`; the historical i3 install receipt says the DLL was installed to disk but was not yet loaded. Fresh runtime proof remains mandatory.
+
+Repair checks (local only):
+  Git Bash -n body.sh: passed.
+  Runner result-state inspection: only PASS/FAIL are counted; no pending-evidence state exists.
+  Packet result guard: body emits FAIL evidence while visual review is outstanding; no unconditional PASS remains.
+  git diff --check on packet files: passed.
+  Current body and README SHA-256 pins are listed above.

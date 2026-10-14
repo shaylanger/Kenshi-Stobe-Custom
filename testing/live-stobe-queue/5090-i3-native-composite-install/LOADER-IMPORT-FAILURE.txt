@@ -1,0 +1,38 @@
+Static PE diagnosis — read-only; 2026-10-14
+
+Files and pins
+- Actual runtime plugin path: D:\KenshiInst\3\RE_Kenshi\mods\Stobe\Stobe.dll
+  SHA-256 40414D8C70E5E377D2FE1EB8C42C167D6B21F3D20CD7077B5ECB8D5661E7101D, 3,809,280 bytes.
+- Wrong-path copy: D:\KenshiInst\3\mods\Stobe\Stobe.dll
+  SHA-256 BC9D2F91F8DD134CD8E8BA79514703C158923DC43EB2B8D9F4C361A8E34494A2, 3,865,088 bytes. This is the candidate file; it is not the actual runtime plugin path.
+- Previous rollback file from that wrong-path packet: D:\KenshiInst\3\stobe-native-composite-rollback-20261014\Stobe.dll.before-composite
+  SHA-256 AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C. This is not the current correct-path runtime file; corrected-path rollback must preserve hash 40414D8C…7101D instead.
+- Exact game dependency: D:\KenshiInst\3\OgreMain_x64.dll
+  SHA-256 7D3888D21398647519F10A89B1F300D8606F761AD159E6021A797B1B9B3DF5F6.
+- Current runtime exports x64 `?startPlugin@@YAXXZ`; its complete import gate passes 733 import refs across 12 modules with zero unresolved symbols.
+
+Decisive unresolved import
+- Candidate is x64 and exports the same `?startPlugin@@YAXXZ` plugin entry as AEF. Its dependency DLL names match AEF.
+- Candidate imports `OgreMain_x64.dll!?getColourWriteEnabled@Pass@Ogre@@QEBA_NXZ`.
+- The exact installed OgreMain exports `?getColourWriteEnabled@Pass@Ogre@@QEBAEXZ` (different decorated ABI return type) and does not export the candidate's `_N` symbol.
+- Candidate has 754 import refs across the 12 dependencies and exactly one unresolved import in the exact-export gate. The other 19 distinct new imports resolve. The mismatch alone is sufficient to make the PE import resolution fail, so the Windows loader cannot map Stobe.dll; the plugin entry is never reached and native commands such as `stobe_ping` remain unknown.
+- Candidate source call: `pending-fixes/portrait-black-render/native-auth-chatbox-portrait-composite-20261014/src/ProfilePortrait.cpp:212`, diagnostic `pass->getColourWriteEnabled()`.
+- Exact D3 supporting DLL hashes from the check run:
+  * KenshiLib.dll 5B6240622D06801DC39896E385EFB834B8E1FE2FCDF86067D071AE7A04F6C83B
+  * MyGUIEngine_x64.dll FEA6F1F935703812485BD6606FF4D3CEEA172ECE131ED4C6DCBF7A7E25B083A8
+  * OgreMain_x64.dll 7D3888D21398647519F10A89B1F300D8606F761AD159E6021A797B1B9B3DF5F6
+  * MSVCP100.dll C:\Windows\System32\MSVCP100.dll 934D882EFD3C0F3F1EFBC238EF87708F3879F5BB456D30AF62F3368D58B6AA4C
+  * MSVCR100.dll C:\Windows\System32\MSVCR100.dll AE3CB6C6AFBA9A4AA5C85F66023C35338CA579B30326DD02918F9D55259503D5
+
+Tool and commands
+- Tool: `C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\dumpbin.exe` (versioned path)
+- `dumpbin /nologo /headers <Stobe.dll>` → both candidate and runtime report `8664 machine (x64)`.
+- `dumpbin /nologo /exports <candidate>` → 4 names, including `?startPlugin@@YAXXZ`.
+- `dumpbin /nologo /imports <candidate>` → the unresolved `_N` import is present.
+- `dumpbin /nologo /exports D:\KenshiInst\3\OgreMain_x64.dll` → only the `_E` spelling is present.
+- Automated reproducible check: `testing/live-stobe-queue/5090-i3-native-composite-install/check-pe-imports.ps1`; it passes on the exact current runtime DLL and exits 1 on the BC9D candidate, reporting only the missing Ogre symbol.
+
+Conclusion and guard
+- The wrong-path install location alone invalidates the prior claim that this candidate was installed into the actual runtime path. Separately, the candidate has a proven import/ABI incompatibility and must remain blocked even at the correct path.
+- Do not install BC9D. A compatible new candidate needs a new hash, exact independent review and fresh boundary receipt; the corrected-path installer requires the complete exact dependency import/export gate before any apply.
+- This report was generated from read-only file/PE inspection. No game process, DLL, configuration, service, or receipt was modified.

@@ -1,0 +1,15 @@
+{
+    "schema":  1,
+    "pid":  34216,
+    "startUtc":  "2026-10-14T18:47:54.7711541Z",
+    "script":  "C:\\KenshiModding\\tools\\automation\\rig-progress-producer.ps1",
+    "scriptSha256":  "AA445D50014F36F3DE645DA9A9E89799FA5D65910FCE49CBD01D79F19728B551",
+    "intervalSeconds":  120,
+    "status5090":  "C:\\KenshiModding\\testing\\live-stobe-queue\\5090-p0-operator.status",
+    "status4080":  "C:\\KenshiModding\\testing\\live-stobe-queue\\4080-live-operator.status.md",
+    "remoteObserver":  "C:\\KenshiModding\\testing\\rig-progress-watchdog\\observe-4080-i3.sh",
+    "remoteWrapper":  "C:\\KenshiModding\\tools\\automation\\remote-bash-stdin-4080.ps1",
+    "owner5090":  "/root/5090_p0_game_operator",
+    "owner4080":  "/root/4080_corrected_session_diagnostic_operator",
+    "startedUtc":  "2026-10-14T18:47:54.9754394Z"
+}

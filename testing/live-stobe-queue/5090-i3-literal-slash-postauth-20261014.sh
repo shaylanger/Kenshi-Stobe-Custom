@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export RIG=5090 KAH_INSTANCE=3 KENSHI_DIR=/mnt/d/KenshiInst/3 KAH_DIR='D:\KenshiInst\3\mods\AutomationHarness'
+python3 /mnt/c/KenshiModding/tools/stobe-auto key_inject / tap 120
+python3 /mnt/c/KenshiModding/tools/stobe-auto ui tree Stobe_ChatWindow up 0
+python3 /mnt/c/KenshiModding/tools/stobe-auto mouse_inject at 500 323
+python3 /mnt/c/KenshiModding/tools/stobe-auto mouse_inject left click 80
+python3 /mnt/c/KenshiModding/tools/stobe-auto screenshot kah-int-001-5090-i3-20261014-03-caret
+python3 /mnt/c/KenshiModding/tools/stobe-auto key_inject A tap 120
+python3 /mnt/c/KenshiModding/tools/stobe-auto key_inject / tap 120
+python3 /mnt/c/KenshiModding/tools/stobe-auto ui tree Stobe_ChatWindow up 0
+python3 /mnt/c/KenshiModding/tools/stobe-auto screenshot kah-int-001-5090-i3-20261014-04-literal
+python3 /mnt/c/KenshiModding/tools/stobe-auto stobe_npcinfo chatclose
+python3 /mnt/c/KenshiModding/tools/stobe-auto input_isolation status

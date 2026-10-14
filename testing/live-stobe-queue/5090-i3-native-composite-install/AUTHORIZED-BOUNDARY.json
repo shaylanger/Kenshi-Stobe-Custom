@@ -1,0 +1,15 @@
+{
+  "status": "CLEAR",
+  "instance": 3,
+  "target": "D:\\KenshiInst\\3\\mods\\Stobe\\Stobe.dll",
+  "candidate_sha256": "BC9D2F91F8DD134CD8E8BA79514703C158923DC43EB2B8D9F4C361A8E34494A2",
+  "owner": "5090c-ui-setup-20261014",
+  "game_stopped": true,
+  "review_verdict": "CLEAR 8356EBFB2B9898462FF424D8CAB714D4F008F26DFF72B5A361CAC1B79A2EF9B6",
+  "issued_utc": "2026-10-14T18:55:19.7581639Z",
+  "previous_pid": 26972,
+  "previous_start_utc": "2026-10-14T16:25:53.1614872Z",
+  "request_active": false,
+  "load_active": false,
+  "rollback_baseline": "AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C"
+}

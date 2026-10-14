@@ -1,0 +1,19 @@
+# KAH-CHAT-007 on 5090c: read-only eligibility audit
+
+**Determination: BLOCKED. Do not run the row on 5090c under the current checkpoint.** The lane being idle does not grant route authorization. `testing/HANDOFF.md` current `Right now` table says the 5090 isolated route has no cleared current AEF P0/P1 row and still lacks provenance-verified complete 5090 source/backend and private-host readiness. It explicitly preserves bans on 5090 instance 1/shared `8083` and instance 2/`18083`. The canonical row queue says KAH-CHAT-007 is READY for 4080 i3, while `queue-5090.md` records the 5090 instance-1 PASS as historical evidence. No current 5090c authorization was found.
+
+## Exact row and evidence pins
+
+`kah-chat-007-integrated-target-handle-readonly.sh` requires loaded Stobe DLL SHA256 `AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C` and source manifest SHA256 `AD63A137D74CFE23DEFF8914B06C56B8DC51693E88FBDA55AE1E365EE7B0445C`. It asks for fresh status/session/world identity, DLL and input-isolation checks, a fresh `stobe-auto chars 300`, then read-only name and `#serial/index` lookups; it forbids chat and native orders. Existing `KAH-CHAT-007-5090-20261013.receipt.md` records a PASS against main instance 1 on 2026-10-13, save `kah-5090-legacy-auth-20261013-1740`, actor Pyl `#2199951104/3`, and a same-actor name/handle match. This historical PASS cannot establish current 5090c readiness or authorize repeating the row.
+
+The staged packet `packets/5090-source-excerpts-staged-20261014-c6cb2306/README.md` is explicitly **PREPARED ONLY — NOT AUTHORIZED TO RUN**. Its own invocation is a six-file source excerpt audit, not the CHAT-007 resolver row. It requires independent exact-hash review and fresh Validator CLEAR before that packet invocation; it does not authorize this row or its route.
+
+## 5090c lane route and current status evidence
+
+`tools/automation/rig-lane2.ps1` maps `5090c` to Kenshi instance 3 at `D:\KenshiInst\3` (slot 1), and its status/list routines set `KAH_INSTANCE=3`, `KDIR=/mnt/d/KenshiInst/3`. This establishes the intended filesystem route only. The CHAT-007 row requires current backend/session identity, but no permitted/current private 5090c endpoint or backend identity was found in the controlling checkpoint or row packet. The old historical 5090 receipt used shared/main `8083`, which is barred. Do not infer a port for instance 3 from that receipt. Backend/session readiness is therefore unknown, and the backend is a required preflight gate even though the resolver actions themselves are read-only and issue no chat.
+
+The on-disk runner state snapshot `C:\KenshiTestRuns\runner\5090c.state` says `05:21 idle: no work for lane 5090c ...`; the adjacent `5090c.cur` content is `40364`. I did not run `rig-runner.ps1 -Status`: inspection of its implementation shows it calls `PidAlive`/`Get-Process` for each lane, which conflicts with the task's explicit ban on live-process queries. Thus I cannot affirm the runner is currently up from this audit; the snapshot only shows its last recorded idle state. No queue, process, device, backend, game, or service was queried or changed.
+
+## Required next gate
+
+Before any 5090c attempt: obtain a fresh scope/Validator clearance explicitly naming KAH-CHAT-007 and 5090c instance 3; establish a provenance-verified private 5090c backend/source route with an exact endpoint pin that does not use `8083` or `18083`; then have the authorized physical operator collect fresh instance/PID, loaded Stobe/Harness hash, world/save, session/generation, input-isolation, and actor gates. The installed hashes must match the row's exact Stobe and source manifest pins. Stop on any incomplete gate. The existing 4080 i3 route remains the only one the current handoff labels READY, and its 2026-10-14 preflight receipts show setup failures requiring a separately cleared attempt/diagnosis.

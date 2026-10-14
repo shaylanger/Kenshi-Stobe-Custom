@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export RIG=5090 KAH_INSTANCE=3 KENSHI_DIR=/mnt/d/KenshiInst/3 KAH_DIR='D:\KenshiInst\3\mods\AutomationHarness'
+python3 /mnt/c/KenshiModding/tools/stobe-auto chars 100
+python3 /mnt/c/KenshiModding/tools/stobe-auto where @selected
+python3 /mnt/c/KenshiModding/tools/stobe-auto stobe_state 'Plastic Surgeon Lungrot'
+python3 /mnt/c/KenshiModding/tools/stobe-auto towns 'Spring,Squin' max 3

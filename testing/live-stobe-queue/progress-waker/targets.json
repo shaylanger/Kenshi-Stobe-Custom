@@ -1,0 +1,51 @@
+{
+  "schema": 2,
+  "pollSeconds": 120,
+  "rigs": [
+    {
+      "rig": "5090",
+      "row": "none",
+      "request": "",
+      "phase": "setup_fail",
+      "source": "local",
+      "nativeLog": "D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\mods\\Stobe\\stobe.log",
+      "gameExe": "D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\kenshi_x64.exe",
+      "receipt": "testing/live-stobe-queue/KAH-CHAT-006-5090-preflight-setup-fail-20261014.receipt.md",
+      "nextCandidate": "KAH-CHAT-006 read-only resolver row: reattempt only after a fresh chars80 lists a distinct live NPC, then exact name and #serial/index queries; no chat/UI/state changes.",
+      "gamePid": 86884,
+      "stallSeconds": 240,
+      "lastCompletedRow": "KAH-INT-002",
+      "lastCompletedRequest": "",
+      "receiptSha256": "0784694316F319C1D68D2FA750A87D2A06B91CEA4DF393325A8BC43DA9DF8DE2",
+      "uiActionId": "",
+      "uiGeneration": 0,
+      "lastCompletedActionId": "k1791941592897_101792_1_0",
+      "lastCompletedGeneration": 98
+    },
+    {
+      "rig": "4080",
+      "row": "none",
+      "request": "",
+      "phase": "complete_awaiting_next",
+      "source": "ssh4080",
+      "nativeLog": "C:\\KenshiInst\\3\\RE_Kenshi\\mods\\Stobe\\stobe.log",
+      "ssh": {
+        "exe": "C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+        "config": "C:\\Users\\Shay\\.ssh\\config",
+        "host": "4080",
+        "expectedHostname": "DESKTOP-NQQPA73"
+      },
+      "receipt": "testing/live-stobe-queue/KAH-CHAT-007-4080-route-fail-20261014.receipt.md",
+      "gameExe": "C:\\KenshiInst\\3\\RE_Kenshi\\kenshi_x64.exe",
+      "nextCandidate": "Stop: configured SSH config access denied before connection; no remote/KAH query. Resume only after authorized transport access and fresh setup clearance.",
+      "gamePid": 3452,
+      "stallSeconds": 240,
+      "lastCompletedRow": "KAH-CHAT-007",
+      "lastCompletedRequest": "",
+      "receiptSha256": "EE452AD197DB19B0CC27E1B061E9FC557C9C38C9151E1D731A72FCF3E68FDC87",
+      "receiptOnly": true,
+      "lastCompletedActionId": "",
+      "lastCompletedGeneration": 0
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+pid=86884 path=D:\Steam\steamapps\common\Kenshi\RE_Kenshi\kenshi_x64.exe responding=True start=10/13/2026 16:48:06
+loaded_modules=AutomationHarness.dll=D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness\AutomationHarness.dll sha256=974DBA03F136D6CB08153F29ACC497C485C39BAECEB8BF50C8B5291661D3025D | Stobe.dll=D:\Steam\steamapps\common\Kenshi\mods\Stobe\Stobe.dll sha256=AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C
+config=D:\Steam\steamapps\common\Kenshi\RE_Kenshi\mods\Stobe\StobeCustom.ini ChatHotkey=ChatHotkey=/ sha256=E8009B11CCD248E10820A332A09427C506B14A7E8242626C2FCA5A43FD1FFB00
+{"ok":true,"status":"ok","service":"StobeServer","database":true,"database_encoding":"UTF8","database_encoding_supported":true,"database_schema_ready":true,"database_upgrade_required":false,"database_repair_command":"sudo php /var/www/html/StobeServer/debug/run_db_updates.php","timestamp":1791935582,"database_missing":[]}
+
+HTTP=200
+ready|current_campaign|false|t|t|4041de5d5c481056bf2a49ca33be441abca2eeeaa25b1acf46930ff23a089b64|4041de5d5c481056bf2a49ca33be441abca2eeeaa25b1acf46930ff23a089b64
+phase=world save=kah-5090-legacy-auth-20261013-1740 last_saved=test-npcs-following paused=0 speed=1.0 squad=2 player=Kint
+isolation=on hooks=user32:8/8,dinput:4/4 wndproc=1 devices=kbd:1,mouse:2,other:0 dropped_msgs=0 dropped_di=0 blocked_clip=0 blocked_setcursor=213221 blocked_foreground=0 hidden_deactivate=0 restored_minimized=0 injected_keys=0 injected_mouse=0 held=none cursor=1920,1080 frames=213892 focused=0 iconic=0 window=0,0,1600x900 monitor=\\.\DISPLAY3
+mode=chat speaker=Beak nearest=Kint
+0 widget(s)

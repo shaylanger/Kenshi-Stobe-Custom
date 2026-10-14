@@ -1,0 +1,44 @@
+{
+  "schema": 2,
+  "pollSeconds": 120,
+  "rigs": [
+    {
+      "rig": "5090",
+      "row": "KAH-TEST-5090",
+      "request": "",
+      "uiActionId": "synthetic-ui-action-5090",
+      "uiGeneration": 7,
+      "phase": "A_done_B_read_pending",
+      "source": "local",
+      "nativeLog": "D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\mods\\Stobe\\stobe.log",
+      "gameExe": "D:\\Steam\\steamapps\\common\\Kenshi\\RE_Kenshi\\kenshi_x64.exe",
+      "receipt": "",
+      "receiptSha256": "",
+      "nextCandidate": "synthetic schema-only example",
+      "gamePid": 10001,
+      "stallSeconds": 240
+    },
+    {
+      "rig": "4080",
+      "row": "KAH-TEST-4080",
+      "request": "synthetic4080_1",
+      "uiActionId": "",
+      "uiGeneration": 0,
+      "phase": "active",
+      "source": "ssh4080",
+      "nativeLog": "C:\\KenshiInst\\3\\RE_Kenshi\\mods\\Stobe\\stobe.log",
+      "ssh": {
+        "exe": "C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+        "config": "C:\\Users\\Shay\\.ssh\\config",
+        "host": "4080",
+        "expectedHostname": "DESKTOP-NQQPA73"
+      },
+      "receipt": "",
+      "receiptSha256": "",
+      "gameExe": "C:\\KenshiInst\\3\\RE_Kenshi\\kenshi_x64.exe",
+      "nextCandidate": "synthetic schema-only example",
+      "gamePid": 10002,
+      "stallSeconds": 240
+    }
+  ]
+}

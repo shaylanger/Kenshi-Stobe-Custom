@@ -1,0 +1,3 @@
+$token=/var/lib/stobe/sessions; SYNTHETIC_SECRET=must-not-appear
+temporary=/tmp/stobe_negotiation_worker.ts; unrelated=SYNTHETIC_SECRET
+call=sys_get_temp_dir(); do-not-print-neighbor

@@ -1,0 +1,14 @@
+{
+  "status": "FROZEN_WAIT_FINAL_INDEPENDENT_REVIEW_AND_ROOT_BOUNDARY",
+  "instance": 3,
+  "candidate_dll": "C:\\KenshiModding\\pending-fixes\\portrait-black-render\\native-auth-chatbox-portrait-composite-20261014\\build-v100\\Stobe.dll",
+  "candidate_sha256": "BC9D2F91F8DD134CD8E8BA79514703C158923DC43EB2B8D9F4C361A8E34494A2",
+  "candidate_bytes": 3865088,
+  "source_manifest_sha256": "1DB3A2FB01AC9B0140C4B66D724BDF88C6A7D7ADDB0FA93BCB643A36EDD489FB",
+  "source_inputs": 145,
+  "payload_manifest_sha256": "BE474C1C993F767084CF389B5841389E63B1C2D49AC2C5542302388A37FD2A8A",
+  "target": "D:\\KenshiInst\\3\\mods\\Stobe\\Stobe.dll",
+  "baseline_sha256": "AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C",
+  "owner": "5090c-ui-setup-20261014",
+  "backup_directory": "D:\\KenshiInst\\3\\stobe-native-composite-rollback-20261014"
+}

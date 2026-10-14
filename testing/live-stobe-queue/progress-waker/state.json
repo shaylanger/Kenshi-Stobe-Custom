@@ -1,0 +1,48 @@
+﻿{
+    "startedUtc":  "2026-10-14T00:38:38.1176171Z",
+    "version":  3,
+    "rigs":  {
+                 "4080":  {
+                              "gamePid":  3452,
+                              "phase":  "complete-awaiting-next",
+                              "sourceAvailable":  true,
+                              "lastEvent":  "",
+                              "operator":  "/root/urgent_4080_chat007",
+                              "lastTickUtc":  "2026-10-14T19:29:09.2794543Z",
+                              "uiActionId":  "",
+                              "ticks":  531,
+                              "cursor":  "21CDB382CE8D0A8CB3F20990A8930F2313B9E78903F01A6B438720001E61E7EE",
+                              "request":  "",
+                              "terminal":  "fail",
+                              "operatorHeartbeatUtc":  "2026-10-14T01:59:08Z",
+                              "uiGeneration":  0,
+                              "lastProgressUtc":  "2026-10-14T01:05:16.7797655Z",
+                              "completedKey":  "KAH-CHAT-007|||0|testing/live-stobe-queue/KAH-CHAT-007-4080-route-fail-20261014.receipt.md|fail",
+                              "rowStartedUtc":  "2026-10-14T01:05:16.7797655Z",
+                              "operatorStatus":  "setup_fail",
+                              "row":  "KAH-CHAT-007"
+                          },
+                 "5090":  {
+                              "gamePid":  86884,
+                              "phase":  "setup_fail",
+                              "sourceAvailable":  true,
+                              "lastEvent":  "",
+                              "operator":  "/root/urgent_live_5090",
+                              "lastTickUtc":  "2026-10-14T19:29:09.2794543Z",
+                              "uiActionId":  "k1791941592897_101792_1_0",
+                              "ticks":  531,
+                              "cursor":  "D99FCD88B0EAADBA8F75C8E4D72DFAC056633805265E981A0D5DC39DF3BF96F0",
+                              "request":  "",
+                              "terminal":  "setup_fail",
+                              "operatorHeartbeatUtc":  "2026-10-14T02:53:58Z",
+                              "uiGeneration":  98,
+                              "lastProgressUtc":  "2026-10-14T01:01:14.5412496Z",
+                              "completedKey":  "KAH-CHAT-006||k1791941592897_101792_1_0|98|testing/live-stobe-queue/KAH-CHAT-006-5090-preflight-setup-fail-20261014.receipt.md|setup_fail",
+                              "rowStartedUtc":  "2026-10-14T01:01:14.5412496Z",
+                              "operatorStatus":  "setup_fail",
+                              "row":  "KAH-CHAT-006"
+                          }
+             },
+    "pid":  90704,
+    "heartbeatUtc":  "2026-10-14T19:29:09.2794543Z"
+}

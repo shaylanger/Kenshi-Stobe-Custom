@@ -1,0 +1,8 @@
+# Self-contained 4080 i3 P0 invocation r5 (legacy-source auth gate)
+
+`body.sh` embeds the exact current driver, its shell entrypoint, sanitized session reader, and historical receipts. It needs no files from the author workspace at runtime beyond the standard `/c/KenshiModding/tools/automation/rig-env.sh` route layer and its existing native/tool entrypoints. Before the driver starts, it captures fresh native world/session/actor/destination evidence into a unique atomic receipt parent. The Hub must resolve as catalog row 1 of 378 at `[-50978.8,1533.1,2932.5]`; actor must be Cind [Hungry Bandit] #2529907200/2 with player Shay. The body does not create `run/`; the pinned driver claims that path atomically. For the exact EAC727 legacy source hash, it uses supported ready/token/character/campaign/generation checks without requiring the absent helper; other hashes require both supported helper proof flags. It retains both auth diagnostics in the receipt and labels native header authentication NOT_YET_PROVEN until a correlated HTTP/chat outcome. The exact acceptance text remains unchanged despite the known parser product bug.
+
+- driver.py SHA-256 `EB0BA4C4F3B3F7091D1A8ED79E7CCD356823B23850B6B6885172C6B366213C70`
+- driver.sh SHA-256 `A0A8B8846FCA898483CE7206D992AD164082181AAD8219E916594A9F292F91E3`
+- session reader SHA-256 `204D419A203933478B646C9DA896D1E82EF9A2DB59DD609E08F9A240D4E03754`
+- acceptance text `I explicitly accept your offer to lead me to The Hub. Please start that exact trip now.`

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export RIG=5090 KAH_INSTANCE=3 KENSHI_DIR=/mnt/d/KenshiInst/3 KAH_DIR='D:\KenshiInst\3\mods\AutomationHarness'
+python3 /mnt/c/KenshiModding/tools/stobe-auto where '#3947387648/1'
+python3 /mnt/c/KenshiModding/tools/stobe-auto teleport Shay '#3947387648/1' dist 5
+python3 /mnt/c/KenshiModding/tools/stobe-auto where Ginkin
+python3 /mnt/c/KenshiModding/tools/stobe-auto where @player
+python3 /mnt/c/KenshiModding/tools/stobe-auto status

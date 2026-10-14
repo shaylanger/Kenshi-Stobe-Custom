@@ -1,0 +1,9 @@
+# KAH-CHAT-007 4080 preflight setup failure — WSL session reader unavailable
+
+- Timestamp: 2026-10-14 02:56:17 UTC.
+- Outcome: `RESULT KAH-CHAT-007 FAIL setup: the WSL session-generation reader file is not present at its canonical `/mnt/c/KenshiModding/...` path.`
+- Exact reviewed caller SHA-256: `1D10CF267DAD2FC6370A514777F74405BBE38FA703D908893B1CA13AA9FCD3B8`; regression SHA-256 `5119579762FF659D088D5920AC9DD8121FCF391FE32EDACB5ED78A1959F40889`. Exact helper SHA-256: `121956C2A61A4B59854BB12AC414C788A15B9A599D05680D98F78971D705A31F` locally and remotely.
+- Fresh i3 route passed (`C:\KenshiInst\3`, instance 3, inbox clear). Loaded-module probe passed for PID 3452 at the exact i3 executable. Stobe on-disk module SHA `AEF84C0A682DF036EB2CD0DC30A809E52E19956933F142C3A1D5877C4EB1907C`; Harness on-disk module SHA `974DBA03F136D6CB08153F29ACC497C485C39BAECEB8BF50C8B5291661D3025D`. INI points to `127.0.0.1:18084`; private backend health reports database/schema ready.
+- The exact caller reached `=== FRESH SESSION GENERATION ===` and stopped with exit code 2: `python3: can't open file '/mnt/c/KenshiModding/pending-fixes/rig4080-validation/chat007-session-read-once.py': [Errno 2] No such file or directory`. The newly exact-reviewed path normalizer avoided the former Git Bash path conversion, but the reader file itself is unavailable at the canonical WSL mount path.
+- Fresh session generation, world/time/pause, input isolation, and actor/target evidence were therefore not established. No KAH world/status/roster or resolver query ran; no chat/input/focus/queue/config/service changes occurred. CHAT-007 is not running.
+- Next gate: make the approved sanitized session reader available to the existing WSL mount or exact-review a one-shot route-local reader. Do not issue the resolver query until fresh session/world/actor gates pass.

@@ -1,0 +1,7 @@
+Refusing remote body that could override or unset isolated-i3 routing
+At C:\KenshiModding\tools\automation\remote-bash-stdin-4080.ps1:360 char:9
++         throw 'Refusing remote body that could override or unset isol ...
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Refusing remote...ated-i3 routing:String) [], RuntimeException
+    + FullyQualifiedErrorId : Refusing remote body that could override or unset isolated-i3 routing
+ 

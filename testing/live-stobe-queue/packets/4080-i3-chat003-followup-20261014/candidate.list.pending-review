@@ -1,0 +1,4 @@
+# NOT RUNNER-READY: kept outside all executable queue folders until fresh row-specific Agent Validator CLEAR.
+# Scope: one isolated 4080/i3 KAH-CHAT-003-FOLLOWUP turn, exact packet/body in this directory.
+# Preflight: ROW.md; command route: testing/live-stobe-queue/4080-i3-command-route.md.
+# No retry; no UI/input, movement, second turn, or shared instance/service.

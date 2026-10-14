@@ -1,9 +1,13 @@
 # Master test plan (all features, one game)
 
+> **ANIMATION WORK CLOSED FOR NOW (Shay, 2026-10-14).** All animation/KenshiFP-viewmodel/animlab tasks, bugs, tickets and queued rows are cleared; no agents, batches or new animation work. Resumes only after Shay's own in-game testing. Anything below about open animation rows, Misses, polish or lab work is historical and NOT scheduled. See `testing/PARKED_FOR_POLISH.md`.
+
 Index of every open test, one coordinator session runs Kenshi (roles, loop, scenario format: `testing/README.md`; goal,
 run rules and to-do list: `testing/HANDOFF.md`). **Open rows only:** a row that passed is deleted (line in the run log
 `archive/test-run-<date>-m<n>.md`); rows passed before 2026-10-03 m19 are in the m19 run log (git history).
 IDs: `<feature> <row>` (STOBE 41, PG 306, REL SR02, KAH 3).
+
+NPC feature coverage crosswalk: `testing/NPC_FEATURE_COVERAGE.md`.
 
 | Feature | Detail plan (source of truth) | Scenarios |
 |---|---|---|

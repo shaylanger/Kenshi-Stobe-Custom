@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "updatedBy": "/root/urgent_live_5090",
+  "rigs": {
+    "5090": {
+      "operator": "/root/urgent_live_5090",
+      "status": "setup_fail",
+      "updatedUtc": "2026-10-14T02:53:58Z",
+      "row": "KAH-CHAT-006 FAIL setup: fresh chars80 contained only player Beak; no distinct live target for exact name/serial comparison. Read-only receipt testing/live-stobe-queue/KAH-CHAT-006-5090-preflight-setup-fail-20261014.receipt.md SHA256 0784694316F319C1D68D2FA750A87D2A06B91CEA4DF393325A8BC43DA9DF8DE2. All process/build/session/backend/isolation gates passed; no where/chat/UI/state action.",
+      "gamePid": 86884
+    },
+    "4080": {
+      "operator": "/root/urgent_4080_chat007",
+      "status": "setup_fail",
+      "updatedUtc": "2026-10-14T01:59:08Z",
+      "row": "KAH-CHAT-007 FAIL setup: isolated route helper rig4080_i3_preflight missing (exit 127), before KAH query. Receipt testing/live-stobe-queue/KAH-CHAT-007-4080-route-fail-20261014.receipt.md SHA256 EE452AD197DB19B0CC27E1B061E9FC557C9C38C9151E1D731A72FCF3E68FDC87",
+      "gamePid": 3452
+    }
+  }
+}

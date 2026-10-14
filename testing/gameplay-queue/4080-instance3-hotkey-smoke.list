@@ -1,0 +1,10 @@
+# owner: /root/rig_queue_supervisor
+# rig: 4080
+# out: npc-hotkey-smoke-4080i3-20261013
+# launch: kah-stobe-travel-validation-20261013
+# needs: KenshiFP any
+# installed pins: KenshiFP 0E4C44E3D651C8A8F797897CE87DA8B467166EB12B6EE20E5C7AF9672D50C355; Stobe 40414D8C70E5E377D2FE1EB8C42C167D6B21F3D20CD7077B5ECB8D5661E7101D
+# gfx: low
+146a-self-hotkey | kah-stobe-travel-validation-20261013 | Shay | Malzin | 300 | STOBE-BIO-CHAT-HOTKEYS.sh 146a
+146b-mate-hotkey | kah-stobe-travel-validation-20261013 | Shay | Malzin | 300 | STOBE-BIO-CHAT-HOTKEYS.sh 146b
+147-mate-chat-hotkey | kah-stobe-travel-validation-20261013 | Shay | Malzin | 300 | STOBE-BIO-CHAT-HOTKEYS.sh 147

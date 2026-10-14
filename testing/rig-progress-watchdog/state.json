@@ -1,0 +1,105 @@
+{
+    "schema":  1,
+    "sequence":  22,
+    "atUtc":  "2026-10-14T19:27:47.5527247Z",
+    "producerPid":  34216,
+    "producerStartUtc":  "2026-10-14T18:47:54.7711541Z",
+    "rigs":  {
+                 "5090":  {
+                              "game":  {
+                                           "pid":  26972,
+                                           "name":  null,
+                                           "startUtc":  null,
+                                           "responding":  false,
+                                           "state":  "missing_or_unreadable"
+                                       },
+                              "model":  {
+                                            "pid":  97588,
+                                            "name":  "llama-server",
+                                            "startUtc":  "2026-10-14T18:09:23.7495705Z",
+                                            "responding":  true,
+                                            "state":  "alive"
+                                        },
+                              "adapter":  {
+                                              "pid":  29152,
+                                              "name":  "powershell",
+                                              "startUtc":  "2026-10-14T18:11:49.3831804Z",
+                                              "responding":  true,
+                                              "state":  "alive"
+                                          },
+                              "endpoint18098":  {
+                                                    "port":  18098,
+                                                    "status":  200,
+                                                    "ms":  15,
+                                                    "state":  "healthy"
+                                                },
+                              "endpoint14725":  "operator-reported WSL/Linux route; not observable from this Windows probe",
+                              "operatorStatus":  {
+                                                     "available":  true,
+                                                     "digest":  "0AD0D985604EAEAC3C197658E3EDCE107927F73E705B2F6A2590453F41976ABA",
+                                                     "fields":  {
+                                                                    "stage":  "COMPOSITE_INSTALLED_STOBE_DLL_NOT_MAPPED_LOADER_DIAGNOSTIC",
+                                                                    "actual_progress":  "AEF001 slash open/close/literal-draft PASS; native actor identity PASS; explicit panel target-switch PASS; biological age samples76/28 only; portrait black silhouette FAIL",
+                                                                    "last_case":  "installBC9DactualPASS; autoloadworldunpausedPASS; stobe_pingUNKNOWNcommand and mappedmoduleabsenceFAILsetup",
+                                                                    "session":  "currentload7pending token0 new_game=true despite matching canonical and realmanagerReady; priorload6READY real; sourcefix/runtime owners active",
+                                                                    "backend":  "privateHTTP14725/18086 manager14737/nc14770/12387; source557 manifestA5039D433FAE535991BFCC2C6C3EA287118BD093830571E97999B8D068371AF4",
+                                                                    "provider":  "released independent5090GPU model97588 adapter29152 route18099; twoactualnative replies under25s; no owned request active",
+                                                                    "actor_candidate":  "Ginkin #3947387648/1 alive conscious available noorders/permajobs; wandering needs fresh proximity at dispatch",
+                                                                    "next":  "rootloaderdiagnostic+PEimportexporthelper -\u003e exactreviewedloaderfix at authorizedboundary -\u003e genuinepluginload/READY -\u003e originalP0/portrait; no furtherreload/restart/configmutation now",
+                                                                    "receipt":  "testing/live-stobe-queue/5090-i3-native-actor-identity-20261014.receipt.md"
+                                                                },
+                                                     "modifiedUtc":  "2026-10-14T18:58:36.4261185Z"
+                                                 },
+                              "activeRequestIds":  [
+
+                                                   ],
+                              "taskEvidence":  "No active request/stream reported by operator"
+                          },
+                 "4080":  {
+                              "remote":  {
+                                             "host":  "DESKTOP-NQQPA73",
+                                             "exitCode":  0,
+                                             "processes":  [
+                                                               {
+                                                                   "pid":  3452,
+                                                                   "name":  "kenshi_x64",
+                                                                   "state":  "alive"
+                                                               },
+                                                               {
+                                                                   "pid":  2260,
+                                                                   "name":  "llama-server",
+                                                                   "state":  "alive"
+                                                               }
+                                                           ],
+                                             "listenerPid":  3532,
+                                             "health":  {
+                                                            "status":  200,
+                                                            "seconds":  0.120466,
+                                                            "state":  "healthy"
+                                                        },
+                                             "outputTail":  [
+                                                                "DESKTOP-NQQPA73",
+                                                                "PROCESS=[{\"Id\":3452,\"ProcessName\":\"kenshi_x64\",\"StartTime\":\"\\/Date(1791929904792)\\/\",\"Responding\":true},{\"Id\":2260,\"ProcessName\":\"llama-server\",\"StartTime\":\"\\/Date(1791998109184)\\/\",\"Responding\":true}]",
+                                                                "LISTENER=  TCP    127.0.0.1:18084        0.0.0.0:0              LISTENING       3532",
+                                                                "HEALTH=http=200 total=0.120466"
+                                                            ]
+                                         },
+                              "operatorStatus":  {
+                                                     "available":  true,
+                                                     "digest":  "26DC807B9F1BE38385905666EBB5BC67CFA4C4082F941D6267B86F6F0FB315AB",
+                                                     "fields":  {
+                                                                    "Owner":  "/root/4080_corrected_session_diagnostic_operator",
+                                                                    "Task":  "isolated 4080 i3 live NPC validation",
+                                                                    "Current step":  "P0-ROLE-CLARIFICATION-4080-001 executing in exec session17011. Exact reviewed bodyD73669E0EE02E83187B4D21A30C3EE9E14AF66284963E47B88B46988A3BA261C, driver3A6070921D0AC1C7FD43066F90598452FE157B0874A5AF9E5A830B55ADB581B8. Fresh19:00:32UTC private model/summary preflight PASS; first native request receipt not yet observed. Prior P0 request req_6acfcca75db97 terminal FAIL evidence remains preserved.",
+                                                                    "Current game":  "PID3452 isolated i3; copied kah-stobe-4080-standalone-active, saveSHA d339e3052345460f6e500d80f72168608747624250929727f97e1d09aa5cd6d0. Reload completed; Shay conscious, Cind #2529907200/2 living/NULL_TASK/no orders,18.6m. World unpaused/advancing. Loaded StobeAEF84C...1907C/Harness974DB...3025D, private127.0.0.1:18084/site /tmp/stobe-standalone4080/site, switchingEAC727...1c488. Supported legacy session/token/character/campaign/generation checks passed; native header authentication remains unproven, no PASS claims.",
+                                                                    "Next":  "verify owned proposal-handler receipt and actual request progress for the clarification row, then classify full final response; send explicit acceptance only after unambiguous offer, require endpoint-bound native movement before travel PASS. Queue ownervalidation_queue_maintainer coordinates follow-ons. Mechanical query affinity0/candidates[] remains incomplete and needs native context-sync/source membership. No current557/558 install authorization."
+                                                                },
+                                                     "modifiedUtc":  "2026-10-14T19:02:48.3641573Z"
+                                                 },
+                              "activeRequestIds":  [
+
+                                                   ],
+                              "taskEvidence":  "Correlate request/model/native progress from operator receipt"
+                          }
+             }
+}
