@@ -77,6 +77,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/hooks/cascade-gate.ps1"
+          }
+        ]
+      }
     ]
   }
 }

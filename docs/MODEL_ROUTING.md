@@ -41,6 +41,10 @@ Coordinator: Sonnet medium, set in `.claude/settings.json` (`model`, `effortLeve
 
 A change counts only after a PASS verdict backed by evidence. The sweep flags a work ticket (patch, generate, debug or escalate) from the last 6 h that has no verifier call after its last work row, or a verdict that is missing, not PASS, older than that call, or citing fewer than two existing evidence paths.
 
+Automatic at turn end: the Stop gate (`tools/automation/hooks/cascade-gate.ps1`) keeps the cascade going. When a work ticket's next step is missing, it blocks the coordinator from ending its turn and names the Agent call to make: a verifier after a generator or escalation, a debugger after a FAIL, a generator after a debug round. It reads the coordinator's transcript for each subagent's task-notification, so it acts only on finished runs; a ticket with a run still going is skipped. It fails open when `transcript_path` is missing. The log `C:\KenshiTestRuns\ledger\cascade-gate.log` shows whether that path arrives.
+
+Not automatic: nothing stops the coordinator from editing code itself. A direct edit is not an Agent call, so neither the router nor the gate sees it. Blocking direct edits would also block the generator's own edits, unless the hook can tell the coordinator's calls from a subagent's. That is not confirmed.
+
 Why scripts first: at the table's prices a Sonnet medium verifier ($0.40) costs 8x a Haiku max generator ($0.05). One attempt plus a verifier costs $0.45, and three attempts plus a verifier cost $0.55, so the cascade costs more than Sonnet medium alone. It saves only against Sonnet high or Opus ($0.55 or more), or when scripts replace the verifier call. Up to 3 Haiku retries still cost less than one Sonnet medium prompt ($0.15 against $0.40), so retries are cheap and the verifier call is the expensive step. Script-only verdicts are not built yet.
 
 ## Tags and the router
