@@ -10,6 +10,7 @@
 #                                      its last work row, or its verdict file is missing, is not PASS, is older than that call, or cites
 #                                      fewer than two evidence paths that exist
 #   SWEEP ROUTER n error row(s)        Agent calls that went through unrouted (router crash) in the last 6 h
+#   SWEEP CLOCK ...                    powershell.exe gave no Windows clock, so the ticket and router checks were skipped
 # Prints "SWEEP CLEAN" when nothing is found. Exit 0 clean, 1 problems. Lanes are not checked here: lane-waker.sh does that.
 # Test switch: KAH_RUNS (root, default /mnt/c/KenshiTestRuns).
 set -u
@@ -49,10 +50,14 @@ done
 # tickets (Shay 2026-10-14). Ledger times are "yyyy-mm-dd hh:mm:ss", so string order is time order. The BOM strip keeps old
 # ledgers readable (PowerShell once wrote one on the first line).
 L="$R/ledger/agent-calls.tsv"; V="$R/verdicts"
-if [ -f "$L" ]; then
+# The ledger's clock is the Windows clock, which is not WSL's zone (WSL is America/Chicago, Windows is UTC-6 here, so the two
+# differ by an hour from March to November). powershell.exe gives the Windows UTC offset and the time six hours ago.
+wclock=$(powershell.exe -NoProfile -Command '$n = Get-Date; $n.ToString("zzz") + " " + $n.AddHours(-6).ToString("yyyy-MM-dd HH:mm:ss")' 2>/dev/null | tr -d '\r')
+WOFF=${wclock%% *}; cut6=${wclock#* }
+if [ -f "$L" ] && [ -z "$WOFF" ]; then say "CLOCK no Windows clock from powershell.exe: ticket and router checks skipped"; fi
+if [ -f "$L" ] && [ -n "$WOFF" ]; then
   rows() { sed '1s/^\xEF\xBB\xBF//' "$L"; }
-  cut6=$(date -d '6 hours ago' '+%Y-%m-%d %H:%M:%S')
-  work=$(rows | awk -F'\t' -v c="$cut6" '($2=="patch"||$2=="generate"||$2=="debug"||$2=="escalate") && $3!="" && ($7=="allow"||$7=="override") && $1>=c {if ($1>m[$3]) m[$3]=$1} END{for (t in m) print t"\t"m[t]}')
+  work=$(rows | awk -F'\t' -v c="$cut6" '($2=="patch"||$2=="generate"||$2=="debug"||$2=="escalate"||$2=="investigate") && $3!="" && ($7=="allow"||$7=="override") && $1>=c {if ($1>m[$3]) m[$3]=$1} END{for (t in m) print t"\t"m[t]}')
   ver=$(rows | awk -F'\t' '($2=="verify"||$2=="judge"||$2=="review") && $3!="" && ($7=="allow"||$7=="override") {if ($1>m[$3]) m[$3]=$1} END{for (t in m) print t"\t"m[t]}')
   while IFS=$'\t' read -r T WT; do
     [ -n "$T" ] || continue
@@ -62,7 +67,7 @@ if [ -f "$L" ]; then
     if [ ! -f "$f" ]; then say "TICKET $T no verdict file"; continue; fi
     word=$(head -1 "$f" | tr -d '\r' | sed 's/^\xEF\xBB\xBF//' | awk '{print $1}')
     [ "$word" = PASS ] || { say "TICKET $T verdict is not PASS"; continue; }
-    [ "$(stat -c %Y "$f")" -ge "$(date -d "$VT" +%s)" ] || { say "TICKET $T verdict is older than its verifier call"; continue; }
+    [ "$(stat -c %Y "$f")" -ge "$(date -d "$VT $WOFF" +%s)" ] || { say "TICKET $T verdict is older than its verifier call"; continue; }
     ok=0
     while IFS= read -r ev; do
       ev=$(printf '%s' "$ev" | tr -d '\r')

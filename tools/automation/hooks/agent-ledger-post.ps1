@@ -10,9 +10,17 @@ try {
     if ([string]$in.cwd -notmatch '^C:[\\/]KenshiModding([\\/]|$)') { exit 0 }
     $resp = if ($in.tool_response -is [string]) { [string]$in.tool_response } else { ($in.tool_response | ConvertTo-Json -Depth 8) -replace '\\\\', '\' }
     $aid = ''; $out = ''
-    if ($resp -match 'agentId:\s*([A-Za-z0-9_-]+)') { $aid = $Matches[1] }
-    if ($resp -match 'output_file:\s*([^\s"]+)') { $out = $Matches[1] }
-    if (-not $aid) { exit 0 }
+    if ($resp -match 'agentId"?\s*:\s*"?([A-Za-z0-9_-]+)') { $aid = $Matches[1] }
+    if ($resp -match 'output_file"?\s*:\s*"?([^\s"]+)') { $out = $Matches[1] }
+    # a foreground run has no output_file in its response: its transcript is <session>\subagents\agent-<agentId>.jsonl
+    if (-not $out -and $in.transcript_path -and $aid) {
+        $tp = [string]$in.transcript_path
+        $out = Join-Path (Join-Path (Split-Path -Parent $tp) ([IO.Path]::GetFileNameWithoutExtension($tp))) ('subagents\agent-' + $aid + '.jsonl')
+    }
+    if (-not $aid) {
+        [IO.File]::AppendAllText((Join-Path (Split-Path -Parent $runs) 'agent-ledger-post.log'), ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' no agentId in response: ' + $resp.Substring(0, [Math]::Min(200, $resp.Length)).Replace("`n", ' ') + "`n"), $utf8)
+        exit 0
+    }
     $ti = $in.tool_input
     $prompt = [string]$ti.prompt
     $desc = [string]$ti.description

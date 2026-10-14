@@ -1,11 +1,13 @@
 {
-  "_doc": "Model and effort per subagent tier (Shay 2026-10-14). tools/automation/hooks/agent-router.ps1 sets model and effort from here on every Agent call in this project, and enforces the cascade gates (debug needs a FAIL verdict; escalate needs a debug round and a later FAIL). event-sweep.sh checks verdicts for work cases patch, generate, debug and escalate. Prices and reasoning: docs/MODEL_ROUTING.md.",
+  "_doc": "Model and effort per subagent tier (Shay 2026-10-14). tools/automation/hooks/agent-router.ps1 sets model and effort from here on every Agent call in this project, and enforces the cascade gates (debug needs a FAIL verdict; escalate needs a debug round and a later FAIL). event-sweep.sh checks verdicts for work cases patch, generate, debug, escalate and investigate. The solo case is a benchmark baseline only. The grade case (kenshi-grader, Sonnet high) scores two finished outputs blind and writes a grade file, not a verdict. Prices and reasoning: docs/MODEL_ROUTING.md.",
   "tiers": {
     "kenshi-reader":     { "model": "haiku",  "effort": "low" },
     "kenshi-generator":  { "model": "haiku",  "effort": "max" },
     "kenshi-verifier":   { "model": "sonnet", "effort": "medium" },
-    "kenshi-debugger":   { "model": "sonnet", "effort": "high" },
-    "kenshi-escalation": { "model": "opus",   "effort": "medium" }
+    "kenshi-debugger":   { "model": "haiku",  "effort": "max" },
+    "kenshi-escalation": { "model": "opus",   "effort": "medium" },
+    "kenshi-solo":       { "model": "sonnet", "effort": "medium" },
+    "kenshi-grader":     { "model": "sonnet", "effort": "high" }
   },
   "cases": {
     "read": "kenshi-reader",
@@ -17,7 +19,10 @@
     "judge": "kenshi-verifier",
     "review": "kenshi-verifier",
     "debug": "kenshi-debugger",
-    "escalate": "kenshi-escalation"
+    "escalate": "kenshi-escalation",
+    "investigate": "kenshi-debugger",
+    "solo": "kenshi-solo",
+    "grade": "kenshi-grader"
   },
-  "needs_ticket": ["patch", "generate", "debug", "escalate", "verify", "judge", "review"]
+  "needs_ticket": ["patch", "generate", "debug", "escalate", "investigate", "solo", "verify", "judge", "review", "grade"]
 }

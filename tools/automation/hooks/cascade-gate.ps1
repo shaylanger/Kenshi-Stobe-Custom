@@ -36,7 +36,7 @@ try {
         try { $t = [datetime]::ParseExact($f[0].Trim(), 'yyyy-MM-dd HH:mm:ss', $inv) } catch { continue }
         if ($t -ge $cut) { $runs += [pscustomobject]@{ ts = $t; aid = $f[1]; case = $f[3]; ticket = $f[4] } }
     }
-    $workCases = @('patch', 'generate', 'debug', 'escalate')
+    $workCases = @('patch', 'generate', 'debug', 'escalate', 'investigate')
     $tickets = @($runs | Where-Object { $workCases -contains $_.case } | ForEach-Object { $_.ticket } | Sort-Object -Unique)
     if ($tickets.Count -eq 0) { exit 0 }
 
@@ -56,8 +56,8 @@ try {
         if (@($tr | Where-Object { -not $done.ContainsKey($_.aid) }).Count -gt 0) { continue }
         $last = $tr[-1]
         $verdict = Join-Path $verdD "$tk.txt"
-        if ($last.case -in @('patch', 'generate', 'escalate')) {
-            $pending += "ticket ${tk}: spawn a verifier now (Agent, description '[case:verify][ticket:$tk] verify $tk', subagent kenshi-verifier) with the changed files, the checks run and their results. It writes verdicts\$tk.txt: PASS or FAIL, then at least two evidence paths."
+        if ($last.case -in @('patch', 'generate', 'escalate', 'investigate')) {
+            $pending += "ticket ${tk}: spawn a verifier now (Agent, description '[case:verify][ticket:$tk] verify $tk', subagent kenshi-verifier) with what it produced: the changed files and their check results, or the proposal with its evidence and proof check. It writes verdicts\$tk.txt: PASS or FAIL, then at least two evidence paths."
         } elseif ($last.case -eq 'debug') {
             $pending += "ticket ${tk}: the debugger's diagnosis is in. Spawn a generator with it now (Agent, description '[case:patch][ticket:$tk] fix $tk', subagent kenshi-generator), then a verifier."
         } elseif ($last.case -in @('verify', 'judge', 'review')) {

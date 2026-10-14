@@ -1,0 +1,8 @@
+{
+  "_source": "https://platform.claude.com/docs/en/about-claude/pricing (Anthropic platform pricing page, read 2026-10-14). USD per million tokens, standard global routing, no Batch API, no fast mode.",
+  "_note": "haiku_over_100k is the Haiku 5.5 rate for prompts over 100,000 tokens. The page does not say whether that rate covers the whole prompt or only the tokens above 100,000; ledger-report.py bills the whole prompt at it. Sonnet 5.5 and Opus 5.5 have no band.",
+  "haiku": {"input": 0.10, "output": 0.50, "cache_read": 0.01, "cache_write_5m": 0.125, "cache_write_1h": 0.20},
+  "haiku_over_100k": {"input": 0.50, "output": 2.50, "cache_read": 0.05, "cache_write_5m": 0.625, "cache_write_1h": 1.00},
+  "sonnet": {"input": 2.00, "output": 10.00, "cache_read": 0.10, "cache_write_5m": 2.50, "cache_write_1h": 4.00},
+  "opus": {"input": 4.00, "output": 20.00, "cache_read": 0.20, "cache_write_5m": 5.00, "cache_write_1h": 8.00}
+}
