@@ -1,5 +1,7 @@
 # KenshiFP — First-Person Mode for Kenshi
 
+> **ANIMATION WORK CLOSED FOR NOW (Shay, 2026-10-14).** All animation/KenshiFP-viewmodel/animlab tasks, bugs, tickets and queued rows are cleared; no agents, batches or new animation work. Resumes only after Shay's own in-game testing. Anything below about open animation rows, Misses, polish or lab work is historical and NOT scheduled. See `testing/PARKED_FOR_POLISH.md`.
+
 Play Kenshi in true first person: the camera is welded to your character's
 head, and the RTS click-to-move scheme is replaced with WASD + mouse-look.
 Built as a native code plugin — no game files are modified.
@@ -33,6 +35,10 @@ embedded in the DLL).
   feature toggle, all applied instantly. A "Reset to Defaults" button, close
   via the X / Escape / F10. No more editing files by hand (the `.ini` still
   works and stays in sync).
+  To change the vanilla/first-person toggle, click **FP on / off**, release the
+  click, then press your new key (Escape cancels). The binding is saved immediately;
+  **Reset to Defaults** restores Right Alt. Mode switching is ignored while typing
+  or using the settings window.
 - **True first-person camera** — attached to the head bone; tracks
   animations and ragdolls, roll-free, with FOV and near-clip tuned for FP.
   The camera **leads your movement** and scales with game speed, so it keeps

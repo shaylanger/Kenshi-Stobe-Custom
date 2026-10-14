@@ -49,6 +49,14 @@ static int g_stuck_frames,g_dbg_prone,g_dbg_in_bed,g_dbg_downed,g_dbg_ko;
 #include "../client/kfp_stuck.h"
 static int live_releases;static void fp_control_release_actor(void *pc,int live){(void)pc;++releases;live_releases+=live!=0;}
 static int g_head_hidden,g_gear_n;static void *g_head_hidden_char,*g_player_app,*g_head_params,*g_head_params_mat;
+static void *g_gear_pc;static int g_gear_wn;          /* worn-item hand lookup + holster diag (kenshifp_client.c) */
+static int g_free_toggle;static unsigned g_free_load_resets;   /* PT25 free cursor (kenshifp_client.c) */
+/* fp_move state gait-hold diag (kenshifp_client.c) */
+static int g_dm_vso=-1,g_gm_gait=-1,g_gm_vso=-1;
+static float g_gm_t,g_gm_dist,g_gm_dist1,g_gm_t1,g_gm_winrate,g_gm_peak,g_gm_max,g_gm_des,g_gm_walk,g_gm_cur;
+static unsigned g_gm_holds,g_gm_restores;
+static const char *gait_name(int so){static const char *const n[]={"walk","jog","run","grouped","no_change"};return so>=0&&so<5?n[so]:"none";}
+#define __declspec(x)
 #include "../client/kfp_control.inc"
 #include "../client/kfp_view.h"
 static void put_ptr(unsigned char *p,size_t off,void *v){memcpy(p+off,&v,sizeof(v));}
@@ -74,10 +82,11 @@ int main(void){
     select_actor(b);chars[0]=b;assert(!fp_controlled_char(world));fp_control_tick(world);assert(!g_fp_mode);
     /* b27b crash: world teardown drops head-hide pointers without touching them */
     assert(fp_char_in_squad(world,b)&&!fp_char_in_squad(world,a)&&!fp_char_in_squad(world,outsider)&&!fp_char_in_squad(world,NULL));
-    g_head_hidden=1;g_head_hidden_char=b;g_player_app=b;g_head_params=b;g_head_params_mat=b;g_gear_n=2;
+    g_head_hidden=1;g_head_hidden_char=b;g_player_app=b;g_head_params=b;g_head_params_mat=b;g_gear_n=2;g_gear_pc=b;g_gear_wn=3;g_free_toggle=1;
     {int r0=releases,l0=live_releases;selected=NULL;fp_control_tick(world);assert(!g_fp_mode && !g_fp_control_pinned);
      assert(releases==r0+1&&live_releases==l0);} /* b27b: teardown forgets the actor, never writes to it */
-    assert(!g_head_hidden&&!g_head_hidden_char&&!g_player_app&&!g_head_params&&!g_head_params_mat&&!g_gear_n);
+    assert(!g_head_hidden&&!g_head_hidden_char&&!g_player_app&&!g_head_params&&!g_head_params_mat&&!g_gear_n&&!g_gear_pc&&!g_gear_wn);
+    assert(!g_free_toggle&&g_free_load_resets==1); /* PT25: teardown resets a free cursor */
     chars[0]=a;select_actor(a);fp_control_tick(world);assert(g_fp_mode && fp_controlled_char(world)==a);
     KAH_Reply r={NULL,append};const char *argv[]={"fp_control","state"};reply[0]=0;
     assert(kah_fp_control("test",2,argv,&r,NULL)==KAH_OK);assert(strstr(reply,"direct=1"));

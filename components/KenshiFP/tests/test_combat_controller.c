@@ -60,6 +60,9 @@ int main(void) {
     step(&c,&o,1,0,0);o.running=0;assert(step(&c,&o,1,1,0)==KFP_ACT_LOWER);
     o.running=1;assert(!step(&c,&o,1,1,0));arm(&c,&o);
     o.dt=NAN;assert(!step(&c,&o,0,1,0));o.dt=.016f;arm(&c,&o);
+    /* B05: paused (dt=0) / invalid time never acts: no shot, no reload request, a pending press does not age */
+    o.ammo=0;o.dt=0;assert(!step(&c,&o,1,0,1));assert(!step(&c,&o,1,1,1));o.dt=-1.f;assert(!step(&c,&o,1,0,1));
+    o.dt=INFINITY;assert(!step(&c,&o,1,0,1));o.dt=.016f;o.ammo=1;arm(&c,&o);
     memset(&c,0,sizeof(c));o=base(KFP_WEAPON_MELEE);arm(&c,&o);
     assert(step(&c,&o,0,1,0)==KFP_ACT_SWING);
     o.committed=1;o.swing_ready=o.block_ready=0;

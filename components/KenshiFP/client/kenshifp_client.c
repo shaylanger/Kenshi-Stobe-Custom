@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <setjmp.h>
+#include "fp_toggle_key_policy.h"
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 #ifndef KFP_RE_PLUGIN
@@ -1261,7 +1262,8 @@ static unsigned char g_head_bone[32];   /* MSVC std::string "Bip01 Head" (SSO) *
 static int g_ogre_ready;
 static DWORD g_last_tick_ms;
 static int g_fp_mode;              /* toggled by VK_TOGGLE_FP edge */
-static volatile LONG g_toggle_edge;    /* FP-toggle press latched by the DI poll thread */
+static volatile LONG g_toggle_edge;    /* explicit programmatic FP-mode request */
+static volatile LONG g_toggle_physical_edge; /* separate from explicit mode requests: UI may reject a key */
 static volatile LONG g_kah_inject_click, g_kah_inject_putdown; /* harness-injected presses */
 static void fp_manual_combat_tick(void *,float);
 static void fp_combat_native_init(void);
@@ -1746,7 +1748,7 @@ static int g_clearmod_frames;      /* countdown: keep clearing stuck mods after 
 static void poll_input(void)
 {
     /* One toggle per physical press, consumed from the ~1kHz DI poll thread's
-     * key-DOWN edge (g_toggle_edge). The thread is separate, so it never misses
+     * key-DOWN edge (g_toggle_physical_edge). The thread is separate, so it never misses
      * a press even if a bare Alt stalls the game's message loop.
      *
      * A second, per-frame GetAsyncKeyState edge detector used to live here as
@@ -1758,6 +1760,21 @@ static void poll_input(void)
      * poll-thread edge alone is reliable and there is no LL hook to fall back
      * from anymore. */
     LONG edge = InterlockedExchange(&g_toggle_edge, 0);
+    LONG physical = InterlockedExchange(&g_toggle_physical_edge, 0);
+    if (physical && game_has_focus() && !g_settings_open) {
+        /* Rebound letters and AltGr belong to the focused text field, in BOTH
+         * modes. Ask MyGUI on the game thread, never the DI polling thread. */
+        int typing = 0;
+        if (g_input_getinst && g_keyfocus) {
+            void *im = g_input_getinst();
+            if (im) typing = g_keyfocus(im) != NULL;
+        }
+        int control = readable((void *)(g_base + RVA_INPUT_CONTROLENABLED), 1)
+                    ? *(unsigned char *)(g_base + RVA_INPUT_CONTROLENABLED) : 0;
+        if (kfp_toggle_physical_press_allowed(physical, game_has_focus(),
+                                              g_settings_open, typing, control))
+            edge = 1;
+    }
     if (edge) {
         /* AltGr guard: on many EU layouts Right Alt is AltGr (typing € @ etc);
          * don't yank the player into FP while they type in an open panel. */
@@ -2566,7 +2583,7 @@ static DWORD WINAPI di_poll_thread(void *unused)
 {
     (void)unused;
     timeBeginPeriod(1);              /* 1ms Sleep granularity for this loop */
-    int fp_key_down = 0;
+    int fp_key_down = 0, fp_key_previous = g_cfg_key_fp;
     for (;;) {
         /* FP-toggle detection lives HERE, not in a global WH_KEYBOARD_LL hook:
          * a dedicated thread whose job is a global keyboard hook is the textbook
@@ -2574,12 +2591,19 @@ static DWORD WINAPI di_poll_thread(void *unused)
          * GetAsyncKeyState poll (the same call the game uses for WASD) does not,
          * and because this thread is off the frame loop it still catches the
          * toggle even if an Alt press briefly stalls the game's message loop. */
-        int kd = (GetAsyncKeyState(g_cfg_key_fp) & 0x8000) != 0;
+        int fp_key = g_cfg_key_fp;
+        int kd = (GetAsyncKeyState(fp_key) & 0x8000) != 0;
+        /* A newly assigned key is commonly still held by the capture gesture.
+         * Baseline it until release, so closing settings cannot fire that press. */
+        if (kfp_toggle_key_rebase(fp_key, &fp_key_previous, kd,
+                                  &fp_key_down)) {
+            InterlockedExchange(&g_toggle_physical_edge, 0);
+        }
         /* Only while Kenshi has focus: GetAsyncKeyState is global, so a Right Alt/AltGr
          * typed in another window toggled FP mid-test (fp-5090-5 R12-LOAD: [input] FP mode
          * toggled -> OFF with no harness fp_mode call). */
-        if (kd && !fp_key_down && game_has_focus()) InterlockedExchange(&g_toggle_edge, 1);   /* press edge */
-        fp_key_down = kd;
+        if (kfp_toggle_key_pressed_edge(kd, &fp_key_down) && game_has_focus())
+            InterlockedExchange(&g_toggle_physical_edge, 1);   /* press edge */
 
         /* Mouse look + wheel from DirectInput (once acquired) -- no WH_MOUSE_LL. */
         if (g_di_ready) {
@@ -7329,6 +7353,7 @@ static kset_t g_ksets[] = {
     { "Select target",   &g_cfg_key_select,   0x04, 0 },
     { "Interact",        &g_cfg_key_interact, 0x02, 0 },
     { "Draw / holster",  &g_cfg_key_draw,     0x52, 0 },
+    { "FP on / off",     &g_cfg_key_fp,       0xA5, 0 },
 };
 static int g_kb_cap = -1;      /* bind row waiting for a key, -1 = none */
 static int g_kb_cap_armed;     /* all keys were up since the capture started */

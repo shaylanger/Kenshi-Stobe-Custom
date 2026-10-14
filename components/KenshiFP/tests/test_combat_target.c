@@ -12,6 +12,9 @@ static void *resolved;
 static int resolve_calls;
 static int readable(void *p,size_t size) {return p==actor+CHAR_HANDLE+HAND_IDS&&size==20;}
 static int char_valid(void *p) {return p==actor;}
+typedef void *HMODULE;   /* PT08 combat_hit_root resolves KenshiLib getRootObject; absent offline */
+static HMODULE GetModuleHandleA(const char *n){(void)n;return NULL;}
+static void *GetProcAddress(HMODULE m,const char *n){(void)m;(void)n;return NULL;}
 #include "../client/kfp_combat_trace.inc"
 #include "../client/kfp_combat_target.inc"
 static void *ctor(void *p,char a,char b,float f) {(void)a;(void)b;(void)f;memset(p,0,0x60);return p;}
@@ -35,7 +38,8 @@ int main(void) {
  resolved=(void *)(uintptr_t)1;assert(combat_ray_target(&hit,NULL)==NULL);
  int before=resolve_calls;hit.ids[0]=11;assert(combat_ray_target(&hit,NULL)==NULL);
  hit.ids[0]=1;hit.shape=0;assert(combat_ray_target(&hit,NULL)==NULL);
- assert(combat_ray_target(NULL,NULL)==NULL);assert(resolve_calls==before);
+ assert(combat_ray_target(NULL,NULL)==NULL);
+ assert(combat_hit_root(&hit)==NULL&&combat_hit_root(NULL)==NULL); /* no KenshiLib resolver: never resolves */assert(resolve_calls==before);
  g_combat_camera_hit=hit;g_combat_hand_character=NULL;assert(combat_ray_target(&hit,NULL)==NULL);
  puts("B15 PASS intended target complete-identity/noncharacter/self/stale guards; native resolver not validated");return 0;
 }
