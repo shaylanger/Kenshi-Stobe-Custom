@@ -1,0 +1,71 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\install-dll.ps1\" Stobe)",
+      "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\install-dll.ps1\" KenshiFP)",
+      "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1\" *)"
+    ],
+    "deny": [
+      "AskUserQuestion",
+      "mcp__Claude_Browser",
+      "mcp__claude-in-chrome",
+      "mcp__Desktop_Commander",
+      "mcp__scheduled-tasks",
+      "mcp__mcp-registry",
+      "mcp__visualize",
+      "mcp__6f616b42-0ed8-571e-823f-ee4aca6b7ce9",
+      "mcp__1a59c906-04da-521d-bda7-7f71b9f9e01c",
+      "mcp__ccd_pr",
+      "mcp__ccd_sidebar",
+      "mcp__ccd_window",
+      "mcp__ccd_session_mgmt"
+    ]
+  },
+  "model": "sonnet",
+  "effortLevel": "medium",
+  "disableClaudeAiConnectors": true,
+  "enableArtifact": false,
+  "skillOverrides": {
+    "anthropic-skills:built-in-browser": "off",
+    "anthropic-skills:chrome-browser": "off",
+    "anthropic-skills:computer-use": "off",
+    "anthropic-skills:consolidate-memory": "off",
+    "anthropic-skills:deep-research": "off",
+    "anthropic-skills:docs": "off",
+    "anthropic-skills:docx": "off",
+    "anthropic-skills:explain-usage": "off",
+    "anthropic-skills:google-workspace": "off",
+    "anthropic-skills:import-memory": "off",
+    "anthropic-skills:morning": "off",
+    "anthropic-skills:pdf": "off",
+    "anthropic-skills:pptx": "off",
+    "anthropic-skills:schedule": "off",
+    "anthropic-skills:setup-claude": "off",
+    "anthropic-skills:setup-writing-style": "off",
+    "anthropic-skills:skill-creator": "off",
+    "anthropic-skills:xlsx": "off",
+    "dataviz": "off",
+    "artifact-design": "off",
+    "artifact-diagramming": "off",
+    "artifact-capabilities": "off",
+    "claude-api": "off",
+    "schedule": "off",
+    "loop": "off",
+    "keybindings-help": "off",
+    "fewer-permission-prompts": "off",
+    "run": "off"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/hooks/agent-router.ps1"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -6,6 +6,10 @@
 #   SWEEP STATUS <name> bad format     agent status file whose first line is not "<name> | STATE | yyyy-mm-dd hh:mm"
 #   SWEEP STATUS <name> RUNNING <n>m   a RUNNING agent with no status update for 60 min (dead or silent)
 #   SWEEP MARKER <name> <why>          an inflight marker (touched in the last 6 h) whose out dir is missing, empty, or already DONE
+#   SWEEP TICKET <id> <why>            a work ticket (patch, generate, debug, escalate) from the last 6 h has no verifier call after
+#                                      its last work row, or its verdict file is missing, is not PASS, is older than that call, or cites
+#                                      fewer than two evidence paths that exist
+#   SWEEP ROUTER n error row(s)        Agent calls that went through unrouted (router crash) in the last 6 h
 # Prints "SWEEP CLEAN" when nothing is found. Exit 0 clean, 1 problems. Lanes are not checked here: lane-waker.sh does that.
 # Test switch: KAH_RUNS (root, default /mnt/c/KenshiTestRuns).
 set -u
@@ -42,5 +46,34 @@ for m in "$R"/inflight/*; do
   if [ ! -d "$p" ]; then say "MARKER $n out dir missing: $d"
   elif [ -f "$p/DONE" ]; then say "MARKER $n already DONE, still marked: $d"; fi
 done
+# tickets (Shay 2026-10-14). Ledger times are "yyyy-mm-dd hh:mm:ss", so string order is time order. The BOM strip keeps old
+# ledgers readable (PowerShell once wrote one on the first line).
+L="$R/ledger/agent-calls.tsv"; V="$R/verdicts"
+if [ -f "$L" ]; then
+  rows() { sed '1s/^\xEF\xBB\xBF//' "$L"; }
+  cut6=$(date -d '6 hours ago' '+%Y-%m-%d %H:%M:%S')
+  work=$(rows | awk -F'\t' -v c="$cut6" '($2=="patch"||$2=="generate"||$2=="debug"||$2=="escalate") && $3!="" && ($7=="allow"||$7=="override") && $1>=c {if ($1>m[$3]) m[$3]=$1} END{for (t in m) print t"\t"m[t]}')
+  ver=$(rows | awk -F'\t' '($2=="verify"||$2=="judge"||$2=="review") && $3!="" && ($7=="allow"||$7=="override") {if ($1>m[$3]) m[$3]=$1} END{for (t in m) print t"\t"m[t]}')
+  while IFS=$'\t' read -r T WT; do
+    [ -n "$T" ] || continue
+    VT=$(awk -F'\t' -v t="$T" '$1==t{print $2}' <<<"$ver")
+    if [ -z "$VT" ] || [[ "$VT" < "$WT" ]]; then say "TICKET $T no verifier call after its last work"; continue; fi
+    f="$V/$T.txt"
+    if [ ! -f "$f" ]; then say "TICKET $T no verdict file"; continue; fi
+    word=$(head -1 "$f" | tr -d '\r' | sed 's/^\xEF\xBB\xBF//' | awk '{print $1}')
+    [ "$word" = PASS ] || { say "TICKET $T verdict is not PASS"; continue; }
+    [ "$(stat -c %Y "$f")" -ge "$(date -d "$VT" +%s)" ] || { say "TICKET $T verdict is older than its verifier call"; continue; }
+    ok=0
+    while IFS= read -r ev; do
+      ev=$(printf '%s' "$ev" | tr -d '\r')
+      [ -n "$ev" ] || continue
+      case "$ev" in [A-Za-z]:*) p=$(wslpath -u "$ev" 2>/dev/null || echo "$ev") ;; *) p="$ev" ;; esac
+      [ -e "$p" ] && ok=$((ok + 1))
+    done < <(tail -n +2 "$f")
+    [ "$ok" -ge 2 ] || say "TICKET $T verdict cites $ok existing evidence path(s), needs 2"
+  done < <(printf '%s\n' "$work")
+  routerr=$(rows | awk -F'\t' -v c="$cut6" '$7=="error" && $1>=c' | wc -l | tr -d ' ')
+  [ "$routerr" -gt 0 ] && say "ROUTER $routerr error row(s) in the last 6 h: those calls went through unrouted"
+fi
 [ "$bad" -eq 0 ] && echo "SWEEP CLEAN"
 exit "$bad"

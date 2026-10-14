@@ -1,0 +1,23 @@
+{
+  "_doc": "Model and effort per subagent tier (Shay 2026-10-14). tools/automation/hooks/agent-router.ps1 sets model and effort from here on every Agent call in this project, and enforces the cascade gates (debug needs a FAIL verdict; escalate needs a debug round and a later FAIL). event-sweep.sh checks verdicts for work cases patch, generate, debug and escalate. Prices and reasoning: docs/MODEL_ROUTING.md.",
+  "tiers": {
+    "kenshi-reader":     { "model": "haiku",  "effort": "low" },
+    "kenshi-generator":  { "model": "haiku",  "effort": "max" },
+    "kenshi-verifier":   { "model": "sonnet", "effort": "medium" },
+    "kenshi-debugger":   { "model": "sonnet", "effort": "high" },
+    "kenshi-escalation": { "model": "opus",   "effort": "medium" }
+  },
+  "cases": {
+    "read": "kenshi-reader",
+    "parse": "kenshi-reader",
+    "check": "kenshi-reader",
+    "patch": "kenshi-generator",
+    "generate": "kenshi-generator",
+    "verify": "kenshi-verifier",
+    "judge": "kenshi-verifier",
+    "review": "kenshi-verifier",
+    "debug": "kenshi-debugger",
+    "escalate": "kenshi-escalation"
+  },
+  "needs_ticket": ["patch", "generate", "debug", "escalate", "verify", "judge", "review"]
+}
