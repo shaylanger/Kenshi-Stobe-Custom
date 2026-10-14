@@ -1,4 +1,5 @@
 #include "AiNpcInfoWindow.h"
+#include "NpcPanelRequestPolicy.h"
 #include "Interaction.h"
 #include "AudioPlayback.h"
 #include "Comm.h"
@@ -726,8 +727,9 @@ void SetNpcPanelText(const std::string &data) {
   }
   int generation = atoi(data.substr(0, a).c_str());
   std::string key = data.substr(a + 1, b - a - 1);
-  if (!g_npcPanelWindow || generation != (int)g_npcPanelGeneration ||
-      key != g_npcPanelKey) {
+  if (!g_npcPanelWindow ||
+      !StobeNpcPanelRequestPolicy::ReplyMatches(
+          generation, (int)g_npcPanelGeneration, key, g_npcPanelKey)) {
     Log("NPC_PANEL: dropped stale reply gen=" + ToString(generation) +
         " key=" + key + " current_gen=" + ToString((int)g_npcPanelGeneration) +
         " current_key=" + g_npcPanelKey);

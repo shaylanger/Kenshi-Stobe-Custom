@@ -1,3 +1,6 @@
+#include <float.h>
+#include "LocalTravel.h"
+#include "NativeTravelLifecycle.h"
 #include "Interaction.h"
 #include "PlaythroughNotices.h"
 #include "Functions.h"
@@ -1185,7 +1188,8 @@ int ResolveTtsPlaybackVolumePercent(GameWorld *world, Character *speaker,
 
 static bool ParseTravelLocationPayload(const std::string &rawPayload, float &xOut,
                                        float &yOut, float &zOut,
-                                       std::string &labelOut) {
+                                       std::string &labelOut, std::string &candidateIdOut) {
+  candidateIdOut.clear();
   std::string payload = TrimCopySimple(rawPayload);
   if (payload.empty()) {
     return false;
@@ -1229,7 +1233,7 @@ static bool ParseTravelLocationPayload(const std::string &rawPayload, float &xOu
       }
       ++endPtr;
     }
-    if (parsed < -10000000.0f || parsed > 10000000.0f) {
+    if (!_finite(parsed) || parsed < -10000000.0f || parsed > 10000000.0f) {
       return false;
     }
     valueOut = parsed;
@@ -1241,9 +1245,15 @@ static bool ParseTravelLocationPayload(const std::string &rawPayload, float &xOu
     return false;
   }
 
-  labelOut = (sep3 == std::string::npos)
-                 ? ""
-                 : TrimCopySimple(payload.substr(sep3 + 1));
+  const size_t sep4 = sep3 == std::string::npos ? std::string::npos : payload.find(separator, sep3 + 1);
+  labelOut = (sep3 == std::string::npos) ? "" : TrimCopySimple(payload.substr(sep3 + 1,
+      sep4 == std::string::npos ? std::string::npos : sep4 - sep3 - 1));
+  if (sep4 != std::string::npos) {
+    candidateIdOut = TrimCopySimple(payload.substr(sep4 + 1));
+    if (candidateIdOut.empty() || candidateIdOut.size() > 96 ||
+        candidateIdOut.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-") != std::string::npos)
+      return false;
+  }
   if (!labelOut.empty()) {
     std::replace(labelOut.begin(), labelOut.end(), '@', ' ');
     std::replace(labelOut.begin(), labelOut.end(), '|', ' ');
@@ -3775,6 +3785,25 @@ struct PersonalTruceGuard {
   int reapplied;
 };
 static std::vector<PersonalTruceGuard> g_personalTruces;
+bool HasActivePersonalTruce(Character *first, Character *second) {
+  if (!first || !second) return true;
+  try {
+    const unsigned a = first->getHandle().serial, b = second->getHandle().serial;
+    const DWORD now = GetTickCount();
+    for (size_t i = 0; i < g_personalTruces.size(); ++i) {
+      const PersonalTruceGuard &g = g_personalTruces[i];
+      if ((LONG)(now - g.until) >= 0) continue;
+      if ((g.first.serial == a && g.second.serial == b) ||
+          (g.first.serial == b && g.second.serial == a) ||
+          (g.faction && ((first->getFaction() == g.faction && g.second.serial == b) ||
+                         (second->getFaction() == g.faction && g.second.serial == a))))
+        return true;
+    }
+    return false;
+  } catch (...) { return true; }
+}
+
+
 
 // Item 97: the player chose to fight this pair again: drop the guard instead of clearing the order.
 bool BreakPersonalTruceForExplicitAttack(Character *attacker, Character *target,
@@ -7903,6 +7932,12 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
                 npc->getName() + " left your squad.", true);
           }
 
+        } else if (act.type == ACT_OWNED_TRAVEL) {
+          std::string reason;
+          bool accepted = Stobe::NativeTravelLifecycle::DispatchWire(
+              thisptr, npc, act.message, CurrentGameTsSeconds(), reason);
+          Log("OWNED_TRAVEL: actor=" + ToString(act.actor.serial) +
+              " accepted=" + (accepted ? "1" : "0") + " reason=" + reason);
         } else if (act.type == ACT_MOVE_TO) {
           if (!StartMoveTo(thisptr, npc, act.message)) {
             thisptr->showPlayerAMessage_withLog(npc->getName() + " could not reach that destination.", true);
@@ -7986,8 +8021,19 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
           float travelY = 0.0f;
           float travelZ = 0.0f;
           std::string destinationLabel = "";
+          std::string candidateId;
           bool payloadOk = ParseTravelLocationPayload(
-              act.message, travelX, travelY, travelZ, destinationLabel);
+              act.message, travelX, travelY, travelZ, destinationLabel, candidateId);
+          if (payloadOk && !candidateId.empty()) {
+            std::string reason;
+            if (!Stobe::LocalTravel::Validate(GetWorldSafe(), npc, candidateId,
+                  travelX, travelY, travelZ, destinationLabel, reason)) {
+              Log("LOCAL_TRAVEL: plan rejected id=" + candidateId + " reason=" + reason);
+              thisptr->showPlayerAMessage_withLog(
+                  "That local route is no longer available. Agree on a new destination.", true);
+              continue; // Validate before dialogue, follow, jobs, or AI changes.
+            }
+          }
           if (!payloadOk) {
             std::string requestedLabel = TrimCopySimple(act.message);
             if (requestedLabel.empty()) {

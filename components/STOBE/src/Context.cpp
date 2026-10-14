@@ -1,3 +1,7 @@
+#include "LocalTravel.h"
+#include "NativeAiAwareness.h"
+#include "NpcReferralPeople.h"
+#include "NativeTravelLifecycle.h"
 #include "Context.h"
 #include "Functions.h"
 #include "Globals.h"
@@ -3613,6 +3617,11 @@ std::string BuildNpcContextEnvelope(Character *npc, const std::string &type) {
           std::string(isPlayerCharacter ? "true" : "false") + ",";
   json += "\"is_animal\": " + std::string(isAnimal ? "true" : "false") + ",";
   json += "\"handle\": \"" + ToString((int)npc->getHandle().serial) + "\",";
+  json += "\"travel_destinations\":" + Stobe::LocalTravel::CandidatesJson(world, npc) + ",";
+  json += "\"native_ai\":" + Stobe::NativeAiAwareness::CaptureJson(world, npc) + ",";
+  json += "\"referral_people\":" + Stobe::NpcReferralPeople::CaptureJson(world, npc) + ",";
+  Stobe::NativeTravelLifecycle::ObserveIdle(world, npc, CurrentGameTsSeconds());
+  json += "\"travel_lifecycle\":" + Stobe::NativeTravelLifecycle::SnapshotJson(npc->getHandle().serial) + ",";
   if (world) {
     TimeOfDay tod = world->getTimeStamp_inGameHours();
     // Kenshi Time tracking:

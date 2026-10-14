@@ -29,8 +29,9 @@ const char *const kCommands[][2] = {
     {"give_cats", "stobe_give_cats <1..1000000>"},
     {"give_item", "stobe_give_item <name> [count]"},
     {"shopprice", "stobe_shopprice <trader> [player]"},
-    {"npcinfo", "stobe_npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|rename <target> <new name>|read|refresh|close> (read: key gen loaded portrait tex bio_state text)"}, // NPC info panel
+    {"npcinfo", "stobe_npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|rename <target> <new name>|testportrait <private|both|clear|status>|read|refresh|close> (testportrait is one-shot on the open humanoid panel only; read: key gen loaded portrait tex bio_state text)"}, // NPC info panel
     {"drawn", "stobe_drawn <status|draw <char>|sheathe <char>|hold <char> on|off|reset|set <key> <value>|pair <npc>>"}, // drawn-weapon reactions
+    {"bodyguard_probe", "stobe_bodyguard_probe <start:<quick.save-sha256>:<copy-id>|stop|status> (opt-in read-only squad-contract transition logger)"},
 };
 
 KAH_Api g_kah;
@@ -83,8 +84,8 @@ void Connect() {
   g_kah.registerBeforeAttack(&BeforeAttack, nullptr);
   g_kah.log("Stobe: test commands registered");
   Log("TEST_HARNESS: connected to the automation harness, " +
-      std::string(registered == 9 ? "9 commands" : "SOME COMMANDS REFUSED") +
-      " (stobe_ping/mode/say/state/give_cats/give_item/shopprice/npcinfo/drawn)");
+      std::string(registered == 10 ? "10 commands" : "SOME COMMANDS REFUSED") +
+      " (stobe_ping/mode/say/state/give_cats/give_item/shopprice/npcinfo/drawn/bodyguard_probe)");
 }
 
 void Drain(GameWorld *world, Character *sel, RunFn run) {

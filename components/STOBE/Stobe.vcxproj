@@ -86,6 +86,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\ActivityGoals.cpp" />
+    <ClCompile Include="src\ActivityRuntime.cpp" />
+    <ClCompile Include="src\ActivityNativeExecutor.cpp" />
+    <ClCompile Include="src\ActivityRuntimeBindings.cpp" />
+    <ClCompile Include="src\ActivityPolicySupport.cpp" />
+    <ClCompile Include="src\ActivityController.cpp" />
+    <ClCompile Include="src\ActivityTransport.cpp" />
+    <ClCompile Include="src\NativeAiAwareness.cpp" />
+    <ClCompile Include="src\BodyguardContractProbe.cpp" />
+    <ClCompile Include="src\NativePlaceKnowledge.cpp" />
+    <ClCompile Include="src\NpcReferralPeople.cpp" />
+    <ClCompile Include="src\NativeTravelLifecycle.cpp" />
     <ClCompile Include="src\AiNpcInfoWindow.cpp" />
     <ClCompile Include="src\AudioPlayback.cpp" />
     <ClCompile Include="src\AutonomyController.cpp" />
@@ -104,6 +116,8 @@
     <ClCompile Include="src\KenshiAiCompat.cpp" />
     <ClCompile Include="src\JournalWindow.cpp" />
     <ClCompile Include="src\KenshiRvaCompat.cpp" />
+    <ClCompile Include="src\ProfilePortrait.cpp" />
+    <ClCompile Include="src\LocalTravel.cpp" />
     <ClCompile Include="src\KenshiTownIdentity.cpp">
       <AdditionalIncludeDirectories>$(ProjectDir)..\third_party\kenshi\KenshiLib Source\Include\ogre;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
@@ -142,6 +156,9 @@
     <ClInclude Include="src\KenshiAiCompat.h" />
     <ClInclude Include="src\JournalWindow.h" />
     <ClInclude Include="src\KenshiRvaCompat.h" />
+    <ClInclude Include="src\ProfilePortrait.h" />
+    <ClInclude Include="src\LocalTravel.h" />
+    <ClInclude Include="src\NativePlaceKnowledge.h" />
     <ClInclude Include="src\KenshiTownIdentity.h" />
     <ClInclude Include="src\PlayerBaseState.h" />
     <ClInclude Include="src\SettingsWindow.h" />

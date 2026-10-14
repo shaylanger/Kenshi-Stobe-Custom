@@ -109,7 +109,8 @@ enum ActionType {
   ACT_USE_OBJECT,
   ACT_KNOCKOUT,
   ACT_KILL,
-  ACT_MOVE_TO
+  ACT_MOVE_TO,
+  ACT_OWNED_TRAVEL
 };
 
 struct GameEvent {

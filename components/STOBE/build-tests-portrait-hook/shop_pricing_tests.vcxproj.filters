@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\KenshiModding\components\STOBE\tests\cpp\shop_pricing_tests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\KenshiModding\components\STOBE\src\ShopPricing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\KenshiModding\components\STOBE\tests\cpp\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{BCE502D1-69D4-3FB8-B7E3-106E3327139C}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

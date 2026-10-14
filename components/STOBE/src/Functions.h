@@ -39,6 +39,7 @@ bool BreakFactionCeasefireForExplicitAttack(Character *attacker,
                                             Character *target,
                                             const std::string &source);
 // Item 97: an explicit player attack order ends the pair's personal truce guard (never cleared by it)
+bool HasActivePersonalTruce(Character *first, Character *second);
 bool BreakPersonalTruceForExplicitAttack(Character *attacker, Character *target,
                                          const std::string &source);
 bool BreakFactionCeasefireForPlayerOrder(Character *attacker,

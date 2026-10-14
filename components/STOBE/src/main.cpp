@@ -1,4 +1,8 @@
+#include "LocalTravel.h"
+#include "NativeTravelLifecycle.h"
 #include "PlaythroughSession.h"
+#include "BodyguardContractProbe.h"
+#include "ProfilePortrait.h"
 #include <kenshi/SaveFileSystem.h>
 #include <kenshi/SaveManager.h>
 #include <kenshi/SaveInfo.h>
@@ -12,6 +16,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cmath>
+#include <float.h>
 #include <cstdlib>
 #include <deque>
 #include <fstream>
@@ -33,8 +38,12 @@
 #include "PlayerBaseState.h"
 #include "StobeIdentityRename.h"
 #include "StobeChatMode.h"
+#include "NpcPanelRequestPolicy.h"
+#include "PortraitFaultInjection.h"
 #include "StobeHarnessBridge.h"
+#include "TestInboxTargetRef.h"
 #include "StobeGoals.h"
+#include "ActivityController.h"
 #include "ShopPriceHook.h"
 #include "StobeDrawnWeapon.h"
 #include "Utils.h"
@@ -1982,63 +1991,79 @@ static bool TryCapturePortraitBmpUnsafe(Character *npc, std::string &bmpDataOut,
     return fail("invalid_handle");
   }
 
-  PortraitManager *portraitManager = nullptr;
-  try {
-    portraitManager = PortraitManager::getInstance();
-  } catch (...) {
-    portraitManager = nullptr;
-  }
-  if (!portraitManager || (uintptr_t)portraitManager <= 0x1000) {
-    return fail("portrait_manager_unavailable");
-  }
-
-  try {
-    portraitManager->getPortrait(characterHandle);
-  } catch (...) {
-  }
-
-  bool updateOk = false;
-  try {
-    updateOk = portraitManager->updatePortraitImage(characterHandle);
-  } catch (...) {
-    updateOk = false;
-  }
-  if (!updateOk) {
-    try {
-      portraitManager->getPortrait(characterHandle);
-      updateOk = portraitManager->updatePortraitImage(characterHandle);
-    } catch (...) {
-      updateOk = false;
-    }
-  }
-  if (!updateOk) {
-    return fail("update_portrait_image_failed");
-  }
-
-  PortraitImage *portraitImage = nullptr;
-  try {
-    auto it = portraitManager->characterPortraits.find(characterHandle);
-    if (it == portraitManager->characterPortraits.end()) {
-      return fail("portrait_map_missing");
-    }
-    portraitImage = it->second.second;
-  } catch (...) {
-    return fail("portrait_map_exception");
-  }
-  if (!portraitImage || (uintptr_t)portraitImage <= 0x1000) {
-    return fail("portrait_image_invalid");
-  }
-
+  Stobe::ProfilePortrait profilePortrait;
+  Ogre::Texture *texture = nullptr;
   int srcLeft = 0;
   int srcTop = 0;
   int srcWidth = 0;
   int srcHeight = 0;
-  if (!ResolvePortraitImageRegion(portraitManager, portraitImage, srcLeft, srcTop,
-                                  srcWidth, srcHeight)) {
-    return fail("resolve_region_failed");
+  if (npc->isHuman()) {
+    std::string reason;
+    if (profilePortrait.render(npc, reason)) {
+      texture = profilePortrait.texture();
+      srcWidth = static_cast<int>(texture->getWidth());
+      srcHeight = static_cast<int>(texture->getHeight());
+    } else {
+      Log("PORTRAIT_SYNC: private portrait unavailable; using native fallback reason=" + reason);
+    }
   }
+  if (!texture) {
+    // Keep a working native portrait when private rendering is unavailable.
+    // Animals also retain Kenshi's species-specific portrait framing.
+    PortraitManager *portraitManager = nullptr;
+    try {
+      portraitManager = PortraitManager::getInstance();
+    } catch (...) {
+      portraitManager = nullptr;
+    }
+    if (!portraitManager || (uintptr_t)portraitManager <= 0x1000) {
+      return fail("portrait_manager_unavailable");
+    }
 
-  Ogre::Texture *texture = portraitManager->texture.getPointer();
+    try {
+      portraitManager->getPortrait(characterHandle);
+    } catch (...) {
+    }
+
+    bool updateOk = false;
+    try {
+      updateOk = portraitManager->updatePortraitImage(characterHandle);
+    } catch (...) {
+      updateOk = false;
+    }
+    if (!updateOk) {
+      try {
+        portraitManager->getPortrait(characterHandle);
+        updateOk = portraitManager->updatePortraitImage(characterHandle);
+      } catch (...) {
+        updateOk = false;
+      }
+    }
+    if (!updateOk) {
+      return fail("update_portrait_image_failed");
+    }
+
+    PortraitImage *portraitImage = nullptr;
+    try {
+      auto it = portraitManager->characterPortraits.find(characterHandle);
+      if (it == portraitManager->characterPortraits.end()) {
+        return fail("portrait_map_missing");
+      }
+      portraitImage = it->second.second;
+    } catch (...) {
+      return fail("portrait_map_exception");
+    }
+    if (!portraitImage || (uintptr_t)portraitImage <= 0x1000) {
+      return fail("portrait_image_invalid");
+    }
+
+    if (!ResolvePortraitImageRegion(portraitManager, portraitImage, srcLeft, srcTop,
+                                    srcWidth, srcHeight)) {
+      return fail("resolve_region_failed");
+    }
+
+    texture = portraitManager->texture.getPointer();
+  }
   if (!texture || (uintptr_t)texture <= 0x1000) {
     return fail("texture_unavailable");
   }
@@ -11029,7 +11054,7 @@ void ProcessMessageQueue(GameWorld *thisptr) {
                 }
                 ++endPtr;
               }
-              if (parsed < -10000000.0f || parsed > 10000000.0f) {
+              if (!_finite(parsed) || parsed < -10000000.0f || parsed > 10000000.0f) {
                 return false;
               }
               valueOut = parsed;
@@ -11041,8 +11066,9 @@ void ProcessMessageQueue(GameWorld *thisptr) {
               return false;
             }
 
-            labelOut =
-                (sep3 == std::string::npos) ? "" : TrimCopy(payload.substr(sep3 + 1));
+            const size_t sep4 = sep3 == std::string::npos ? std::string::npos : payload.find(separator, sep3 + 1);
+            labelOut = (sep3 == std::string::npos) ? "" : TrimCopy(payload.substr(sep3 + 1,
+                sep4 == std::string::npos ? std::string::npos : sep4 - sep3 - 1));
             if (!labelOut.empty()) {
               std::replace(labelOut.begin(), labelOut.end(), '@', ' ');
               std::replace(labelOut.begin(), labelOut.end(), '|', ' ');
@@ -12541,6 +12567,17 @@ void ProcessMessageQueue(GameWorld *thisptr) {
             EnterCriticalSection(&g_uiMutex);
             g_uiActionQueue.push_back(act);
             LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "OWNED_TRAVEL") {
+            // Start policy is checked by the owned executor. A release must
+            // still retire its exact old order after the NPC joins the squad.
+            if (!targetHand.isValid() || actionArgument.size() > 4096) continue;
+            QueuedAction act;
+            act.type = ACT_OWNED_TRAVEL;
+            act.actor = targetHand;
+            act.message = actionArgument;
+            EnterCriticalSection(&g_uiMutex);
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
           } else if (actionCommand == "TRAVEL_LOCATION") {
             if (!targetHand.isValid()) {
               Log("HOOK_MSG_PROC: TRAVEL_LOCATION ignored; invalid actor handle");
@@ -13577,6 +13614,8 @@ static std::string ResolveDialogueReplyTextByTokenSafe(Dialogue *dialogue,
 static void CapturePlayerDialogueReplyFromUi(Dialogue *dialogue,
                                              const std::string &rawReplyText,
                                              const char *sourceTag) {
+  Stobe::BodyguardContractProbe::RecordDialogueChoice(dialogue, rawReplyText,
+                                                       sourceTag);
   if (!g_enableRegularDialogueCapture) {
     Log("SPEECH_HOOK: skipped player reply capture; regular dialogue disabled.");
     return;
@@ -14230,7 +14269,8 @@ static Character *ResolveTestInboxSpeaker(GameWorld *world, Character *sel) {
   return nullptr;
 }
 
-// "@nearest", "@selected", or a character name (nearest match to speaker).
+// "@nearest", "@selected", "#serial/index", or a character name (nearest
+// exact name match to speaker; nearby-object results are a fallback).
 static Character *ResolveTestInboxTarget(GameWorld *world, Character *sel,
                                          Character *speaker,
                                          const std::string &name) {
@@ -14240,6 +14280,10 @@ static Character *ResolveTestInboxTarget(GameWorld *world, Character *sel,
     return speaker ? ResolveNearestNpcTargetForSelection(world, speaker) : nullptr;
   if (name == "@selected")
     return (sel && (uintptr_t)sel > 0x1000) ? sel : nullptr;
+  const Stobe::Harness::TestInboxTargetRef targetRef =
+      Stobe::Harness::ParseTestInboxTargetRef(name);
+  if (targetRef.isReference && !targetRef.valid)
+    return nullptr;
   std::string wanted = TestInboxLower(name);
   Ogre::Vector3 origin(0, 0, 0);
   bool haveOrigin = false;
@@ -14250,35 +14294,67 @@ static Character *ResolveTestInboxTarget(GameWorld *world, Character *sel,
     } catch (...) {
     }
   }
-  Character *best = nullptr;
-  float bestDist = 0.0f;
-  const ogre_unordered_set<Character *>::type &chars =
-      world->getCharacterUpdateList();
-  for (auto it = chars.begin(); it != chars.end(); ++it) {
-    Character *candidate = *it;
+  typedef Stobe::Harness::TestInboxTargetCandidate<Character *> TargetCandidate;
+  std::vector<TargetCandidate> updateCandidates;
+  std::vector<TargetCandidate> nearbyCandidates;
+  const auto appendCandidate = [&](Character *candidate,
+                                   std::vector<TargetCandidate> &out) {
     if (!candidate || (uintptr_t)candidate <= 0x1000)
-      continue;
-    std::string candidateName;
+      return;
+    for (size_t i = 0; i < out.size(); ++i)
+      if (out[i].target == candidate)
+        return;
+    TargetCandidate record;
+    record.target = candidate;
+    record.normalizedName.clear();
+    record.serial = 0;
+    record.index = 0;
+    record.distance = 0.0f;
     try {
-      candidateName = candidate->getName();
+      const hand handle = candidate->getHandle();
+      record.serial = handle.serial;
+      record.index = handle.index;
     } catch (...) {
-      continue;
     }
-    if (TestInboxLower(candidateName) != wanted)
-      continue;
-    float dist = 0.0f;
+    try {
+      record.normalizedName = TestInboxLower(candidate->getName());
+    } catch (...) {
+    }
     if (haveOrigin) {
       try {
-        dist = candidate->getPosition().distance(origin);
+        record.distance = candidate->getPosition().distance(origin);
       } catch (...) {
       }
     }
-    if (!best || dist < bestDist) {
-      best = candidate;
-      bestDist = dist;
+    out.push_back(record);
+  };
+  const ogre_unordered_set<Character *>::type &chars =
+      world->getCharacterUpdateList();
+  for (auto it = chars.begin(); it != chars.end(); ++it)
+    appendCandidate(*it, updateCandidates);
+  // Match KAH `chars` / generic character lookup: a character can be returned
+  // by the nearby-object query without appearing in the update list. Keep this
+  // as a fallback pool so existing exact-name selection among update-list
+  // characters remains unchanged.
+  try {
+    lektor<RootObject *> nearby;
+    world->getObjectsWithinSphere(nearby, origin, 500.0f, CHARACTER, 256,
+                                  speaker ? static_cast<RootObject *>(speaker)
+                                          : nullptr);
+    for (uint32_t i = 0; i < nearby.size(); ++i) {
+      Character *candidate = dynamic_cast<Character *>(nearby.stuff[i]);
+      appendCandidate(candidate, nearbyCandidates);
     }
+  } catch (...) {
   }
-  return best;
+  if (targetRef.isReference) {
+    const TargetCandidate *match = Stobe::Harness::ResolveHandleTarget(
+        updateCandidates, nearbyCandidates, targetRef);
+    return match ? match->target : nullptr;
+  }
+  const TargetCandidate *match = Stobe::Harness::ResolveNamedTarget(
+      updateCandidates, nearbyCandidates, wanted);
+  return match ? match->target : nullptr;
 }
 
 #include <kenshi/RootObjectFactory.h>
@@ -14323,17 +14399,30 @@ static GameData *FindTestInboxItemData(GameWorld *world, const std::string &name
 // NPC is doing, faction, trader) are read here and sent with the request; the server
 // adds stored deals/goals/relationship/learned facts. No LLM call.
 static unsigned int g_npcPanelTargetSerial = 0;
-static bool g_npcPanelFollowsChat = true; // item 146: false when opened by the hotkey
+static bool g_npcPanelFollowsChat = true; // Info follows chat; hotkey follows selection
+static unsigned int g_npcPanelObservedSelectionSerial = 0;
 static std::string g_npcPanelTargetName;
 static unsigned int g_npcPanelSpeakerSerial = 0;
 static std::string g_npcPanelSpeakerName;
 static DWORD g_npcPanelLastRequestTick = 0;
 static const DWORD kNpcPanelRefreshMs = 10000;
 static bool g_npcPanelPortraitDisabled = false;
+// Released when the panel closes or the world changes; allocated lazily so its
+// destructor never calls Ogre after the game's renderer has shut down.
+static Stobe::ProfilePortrait *g_npcPanelProfilePortrait = nullptr;
+static unsigned int g_npcPanelProfilePortraitSerial = 0;
+static StobePortraitFaultInjection::OneShot g_npcPanelPortraitTestFault;
 
-// The target's portrait region in PortraitManager's atlas texture (same source as the
-// portrait sync). Only reads the manager; asks it to (re)render the portrait when
-// render=true (open / Refresh / target change), not on the 10 s refresh.
+static void ResetNpcPanelProfilePortrait() {
+  delete g_npcPanelProfilePortrait;
+  g_npcPanelProfilePortrait = nullptr;
+  g_npcPanelProfilePortraitSerial = 0;
+  g_npcPanelPortraitTestFault.clear();
+}
+
+// Humanoids use Stobe's private headgear-free frontal portrait. Animals retain
+// the game's species-specific atlas image. Render on open / Refresh / target
+// change, not on the panel's periodic text refresh.
 static bool NpcPanelPortraitUnsafe(Character *npc, bool render, std::string &texOut,
                                    int &l, int &t, int &w, int &h, std::string &reason) {
   try {
@@ -14342,6 +14431,51 @@ static bool NpcPanelPortraitUnsafe(Character *npc, bool render, std::string &tex
       reason = "invalid_handle";
       return false;
     }
+    const StobePortraitFaultInjection::Mode injectedFault =
+        g_npcPanelPortraitTestFault.takeFor(handle.serial);
+    if (npc->isHuman()) {
+      if (injectedFault != StobePortraitFaultInjection::NONE) {
+        // The test hook selects the existing fallback without injecting an
+        // Ogre fault or changing renderer configuration. A cached private image
+        // is deliberately bypassed, not invalidated. The private-only mode
+        // then exercises the ordinary native portrait-manager update below.
+        reason = "test_injected_private_render_unavailable";
+        Log("NPC_PANEL_TEST: injected private_render_unavailable target=" +
+            ToString(handle.serial));
+        if (injectedFault ==
+            StobePortraitFaultInjection::ALL_RENDER_PATHS_UNAVAILABLE) {
+          reason = "test_injected_all_render_paths_unavailable";
+          Log("NPC_PANEL_TEST: outcome=initials target=" +
+              ToString(handle.serial));
+          return false;
+        }
+        render = true;
+      } else {
+        if (!g_npcPanelProfilePortrait)
+          g_npcPanelProfilePortrait = new Stobe::ProfilePortrait();
+        if (render || handle.serial != g_npcPanelProfilePortraitSerial ||
+            !g_npcPanelProfilePortrait->texture()) {
+          if (g_npcPanelProfilePortrait->render(npc, reason)) {
+            g_npcPanelProfilePortraitSerial = handle.serial;
+          } else {
+            Log("NPC_PANEL: private portrait unavailable; retaining previous/native fallback reason=" + reason);
+          }
+        }
+        Ogre::Texture *texture = g_npcPanelProfilePortrait->texture();
+        // A failed refresh retains this NPC's last valid image. Never reuse an
+        // image belonging to the previous panel target.
+        if (texture && g_npcPanelProfilePortraitSerial == handle.serial) {
+          texOut = texture->getName();
+          l = t = 0;
+          w = static_cast<int>(texture->getWidth());
+          h = static_cast<int>(texture->getHeight());
+          reason.clear();
+          return true;
+        }
+        render = true; // Ensure the native fallback exists for this target.
+      }
+    }
+    reason.clear();
     PortraitManager *pm = PortraitManager::getInstance();
     if (!pm || (uintptr_t)pm <= 0x1000) {
       reason = "portrait_manager_unavailable";
@@ -14374,6 +14508,13 @@ static bool NpcPanelPortraitUnsafe(Character *npc, bool render, std::string &tex
     if (texOut.empty()) {
       reason = "no_texture_name";
       return false;
+    }
+    if (injectedFault ==
+        StobePortraitFaultInjection::PRIVATE_RENDER_UNAVAILABLE) {
+      Log("NPC_PANEL_TEST: outcome=native_atlas target=" +
+          ToString(handle.serial) + " tex=" + texOut + " region=" +
+          ToString(l) + "," + ToString(t) + "," + ToString(w) + "," +
+          ToString(h));
     }
     return true;
   } catch (...) {
@@ -14495,12 +14636,21 @@ static bool NpcPanelOpenForSelection(GameWorld *world, Character *sel, const cha
 // Item 146: the hotkey shows the SELECTED character's card (squad member or NPC), seen by
 // the FP-controlled character, else by the nearest other squad member.
 namespace Stobe { namespace UI { Character *StobeFpControlledCharacter(GameWorld *world); } }
-static bool NpcPanelOpenForSelected(GameWorld *world, Character *sel, const char *why) {
+static bool NpcPanelOpenForSelected(GameWorld *world, Character *sel, const char *why,
+                                    bool retainViewer = false) {
   if (!sel || (uintptr_t)sel <= 0x1000)
     return false;
   Character *viewer = nullptr;
   try {
-    viewer = Stobe::UI::StobeFpControlledCharacter(world);
+    // Selecting another NPC changes the subject, not whose knowledge we show.
+    // Keep the existing player observer while they are still available.
+    if (retainViewer && g_npcPanelSpeakerSerial != 0) {
+      viewer = FindCharacterBySerial(world, g_npcPanelSpeakerSerial);
+      if (viewer && (viewer == sel || !viewer->isPlayerCharacter()))
+        viewer = nullptr;
+    }
+    if (!viewer)
+      viewer = Stobe::UI::StobeFpControlledCharacter(world);
     if (!viewer || viewer == sel)
       viewer = sel->isPlayerCharacter()
                    ? ResolveNearestSquadmateTargetForSelection(world, sel)
@@ -14512,7 +14662,10 @@ static bool NpcPanelOpenForSelected(GameWorld *world, Character *sel, const char
     viewer = nullptr;
   Log(std::string("NPC_PANEL: ") + why + " selected='" + sel->getName() + "' viewer='" +
       (viewer ? viewer->getName() : std::string("")) + "'");
-  return NpcPanelOpenFor(world, viewer, sel, why);
+  const bool opened = NpcPanelOpenFor(world, viewer, sel, why);
+  if (opened)
+    g_npcPanelFollowsChat = false;
+  return opened;
 }
 
 // The chat window's current target and speaking character, if a chat is open.
@@ -14560,18 +14713,70 @@ static bool NpcPanelPair(GameWorld *world, Character *sel, Character *&speaker,
   return true;
 }
 
-// Per tick: chat Info button, follow the chat target, Refresh button, periodic refresh.
+// Per tick: an explicit selected-target change supersedes the card's original
+// chat-follow source. A new request generation/key rejects late replies for the
+// previous target before they can replace its title, text, or portrait.
 static void NpcPanelTick(GameWorld *world, Character *sel) {
   if (Stobe::UI::g_npcPanelOpenRequest) {
     Stobe::UI::g_npcPanelOpenRequest = false;
     Character *speaker = nullptr, *target = nullptr;
+    bool opened = false;
     if (NpcPanelPair(world, sel, speaker, target))
-      NpcPanelOpenFor(world, speaker, target, "chat_info_button");
+      opened = NpcPanelOpenFor(world, speaker, target, "chat_info_button");
     else if (!NpcPanelOpenForSelection(world, sel, "chat_info_button_selection"))
       Log("NPC_PANEL: Info pressed but no conversation target");
+    else
+      opened = true;
+    if (opened) {
+      unsigned int selectedSerial = 0;
+      try {
+        const hand selectedHandle = sel ? sel->getHandle() : hand();
+        if (selectedHandle.isValid())
+          selectedSerial = selectedHandle.serial;
+      } catch (...) {
+      }
+      g_npcPanelObservedSelectionSerial =
+          StobeNpcPanelRequestPolicy::SelectionBaselineAfterRequest(
+              true, selectedSerial, g_npcPanelObservedSelectionSerial);
+    }
   }
-  if (!Stobe::UI::IsNpcPanelOpen())
+  if (!Stobe::UI::IsNpcPanelOpen()) {
+    g_npcPanelObservedSelectionSerial = 0;
+    ResetNpcPanelProfilePortrait();
     return;
+  }
+  if (sel && (uintptr_t)sel > 0x1000) {
+    try {
+      const hand selectedHandle = sel->getHandle();
+      if (selectedHandle.isValid()) {
+        const unsigned int previousSelectionSerial =
+            g_npcPanelObservedSelectionSerial;
+        const bool refreshNeeded =
+            StobeNpcPanelRequestPolicy::ShouldRefreshForSelection(
+                true, previousSelectionSerial, selectedHandle.serial,
+                g_npcPanelTargetSerial);
+        bool refreshSucceeded = false;
+        if (refreshNeeded) {
+          refreshSucceeded = NpcPanelOpenForSelected(
+              world, sel, "selection_changed", true);
+          if (refreshSucceeded) {
+            Stobe::UI::g_npcPanelRefreshRequest = false;
+            g_npcPanelObservedSelectionSerial =
+                StobeNpcPanelRequestPolicy::SelectionBaselineAfterTick(
+                    true, true, selectedHandle.serial,
+                    previousSelectionSerial);
+            return; // One text/portrait refresh per actual target identity change.
+          }
+        }
+        g_npcPanelObservedSelectionSerial =
+            StobeNpcPanelRequestPolicy::SelectionBaselineAfterTick(
+                refreshNeeded, refreshSucceeded, selectedHandle.serial,
+                previousSelectionSerial);
+      }
+    } catch (...) {
+      // A temporarily unavailable selection retains the previous card.
+    }
+  }
   Character *speaker = nullptr, *target = nullptr;
   if (g_npcPanelFollowsChat && NpcPanelPair(world, sel, speaker, target)) {
     std::string speakerName;
@@ -14618,6 +14823,12 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
                                        bool &ok) {
   ok = false;
   const std::string &cmd = f[1];
+  if (cmd == "bodyguard_probe") {
+    if (f.size() < 3) return "usage: bodyguard_probe <start|stop|status>";
+    std::string action = Stobe::BodyguardContractProbe::Command(f[2]);
+    ok = action.find("usage:") != 0;
+    return action;
+  }
   Character *speaker = ResolveTestInboxSpeaker(world, sel);
   if (cmd == "ping") {
     Character *nearest =
@@ -14800,7 +15011,50 @@ static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
              " " + Stobe::UI::NpcPanelStatus() +
              " text=" + NpcPanelOneLine(text);
     }
-    return "usage: npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|read|refresh|close>";
+    if (sub == "testportrait") {
+      const std::string action = f.size() >= 4 ? f[3] : "";
+      if (action == "status") {
+        ok = true;
+        const StobePortraitFaultInjection::Mode mode =
+            g_npcPanelPortraitTestFault.mode();
+        const char *name = mode == StobePortraitFaultInjection::PRIVATE_RENDER_UNAVAILABLE
+                               ? "private"
+                               : (mode == StobePortraitFaultInjection::ALL_RENDER_PATHS_UNAVAILABLE
+                                      ? "both" : "none");
+        return std::string("armed=") + (mode == StobePortraitFaultInjection::NONE ? "0" : "1") +
+               " mode=" + name + " target=" +
+               ToString(g_npcPanelPortraitTestFault.targetSerial());
+      }
+      if (action == "clear") {
+        g_npcPanelPortraitTestFault.clear();
+        ok = true;
+        return "cleared";
+      }
+      if (action != "private" && action != "both")
+        return "usage: npcinfo testportrait <private|both|clear|status>";
+      if (!Stobe::UI::IsNpcPanelOpen() || g_npcPanelTargetSerial == 0)
+        return "panel not open";
+      if (g_npcPanelPortraitDisabled)
+        return "portrait path disabled after engine fault";
+      Character *target = FindCharacterBySerial(world, g_npcPanelTargetSerial);
+      if (!target || (uintptr_t)target <= 0x1000 || !target->isHuman())
+        return "current panel target is not a live humanoid";
+      const StobePortraitFaultInjection::Mode mode =
+          action == "private"
+              ? StobePortraitFaultInjection::PRIVATE_RENDER_UNAVAILABLE
+              : StobePortraitFaultInjection::ALL_RENDER_PATHS_UNAVAILABLE;
+      if (!g_npcPanelPortraitTestFault.arm(mode, g_npcPanelTargetSerial))
+        return "could not arm portrait fault";
+      const unsigned int targetSerial = g_npcPanelTargetSerial;
+      NpcPanelSend(world, "test_portrait_fault", true);
+      const char *modeName = action == "private" ? "private" : "both";
+      Log("NPC_PANEL_TEST: command=" + std::string(modeName) +
+          " target=" + ToString(targetSerial) + " one_shot=1");
+      ok = true;
+      return std::string("applied mode=") + modeName +
+             " target=" + ToString(targetSerial) + " one_shot=1";
+    }
+    return "usage: npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|testportrait <private|both|clear|status>|read|refresh|close>";
   }
   if (cmd == "drawn") // drawn-weapon reactions: status/draw/sheathe/hold/reset/set/pair
     return Stobe::DrawnWeapon::TestCommand(world, sel, f, ok, &ResolveTestInboxTargetForDrawn);
@@ -15028,10 +15282,16 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
         (gui ? "1" : "0"));
   }
   if (!gui) {
+    Stobe::BodyguardContractProbe::Reset();
     // During loads MyGUI can be torn down; clear stale pointers and do nothing.
+    // A load may finish before another unstable frame with a GUI is observed.
+    // Never retain executable route tokens or sightings across that gap.
+    Stobe::LocalTravel::Reset();
+    Stobe::NativeTravelLifecycle::Reset();
     Stobe::UI::ResetNpcContextRenameAction(false);
     ResetMoveToActions();
     ResetAutonomyController("gui_unavailable");
+    ResetActivityController("gui_unavailable");
     ResetAutonomySafetyProbe("gui_unavailable");
     Stobe::DialogueMenuTts::Reset("gui_unavailable");
     CloseChatUI();
@@ -15046,10 +15306,12 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
   }
 
   if (!worldStable) {
+    Stobe::BodyguardContractProbe::Reset();
     StobeGoals_HidePanel();
     Stobe::UI::ResetNpcContextRenameAction();
     ResetMoveToActions();
     ResetAutonomyController("world_unstable");
+    ResetActivityController("world_unstable");
     ResetAutonomySafetyProbe("world_unstable");
     Stobe::DialogueMenuTts::Reset("world_unstable");
     if (worldWasStable) {
@@ -15061,6 +15323,9 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
         Stobe::UI::CloseNpcPanelUI();
         Log("NPC_PANEL: closed on world transition");
       }
+      ResetNpcPanelProfilePortrait();
+      Stobe::LocalTravel::Reset();
+      Stobe::NativeTravelLifecycle::Reset();
       EnterCriticalSection(&g_stateMutex);
         g_inventorySyncStateBySerial.clear();
         g_itemImageSyncStateByItemId.clear();
@@ -15239,6 +15504,12 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
 
   // 1. Core Selection Tracking
   Character *sel = ResolveSelectedCharacterSehSafe(thisptr);
+  Character *probeAnchor = sel;
+  if (worldUi->player && worldUi->player->playerCharacters.size() > 0) {
+    Character *firstPlayer = worldUi->player->playerCharacters[0];
+    if (firstPlayer) probeAnchor = firstPlayer;
+  }
+  Stobe::BodyguardContractProbe::Observe(worldUi, probeAnchor);
   Stobe::UI::UpdateNpcContextRenameAction(thisptr);
   Stobe::DialogueMenuTts::Update();
   Stobe::PlayerBase::Update(worldUi, sel);
@@ -15467,9 +15738,11 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
     static int invTimer = 0;
     ExecuteQueuedActions(world, invTimer);
     UpdateMoveToActions(world);
+    Stobe::NativeTravelLifecycle::Tick(world, CurrentGameTsSeconds());
     ApplyFollowTargets(world);
     ApplyTravelTargets(world);
     StobeGoals_Tick(world); // work/task goals, goal panel, action/unequip requests (was KenshiFP)
+    UpdateActivityController(world); // finite, explicitly agreed activities only
     RunQueuedItemImageSync();
     RunPendingSelectionContextPush(sel, worldBecameStableTick);
     if (probePostLoadPipeline) {
@@ -15618,8 +15891,8 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
     }
   }
 
-  // NPC info panel: hotkey toggles it for the current conversation pair (not while
-  // typing in a text box); the panel follows the chat target and refreshes itself.
+  // NPC info panel: hotkey toggles the selected character's card (not while
+  // typing). An open hotkey card follows selection; chat Info follows the chat.
   if (StobeHotkeyDown(g_npcInfoHotkey) &&
       !MyGUI::InputManager::getInstance().isFocusKey()) {
     static DWORD lastNpcPanelTick = 0;
@@ -15630,11 +15903,15 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
       } else {
         Character *chatSpeaker = nullptr, *chatTarget = nullptr;
         if (NpcPanelOpenForSelected(world, sel, "hotkey_selected")) {
-          g_npcPanelFollowsChat = false; // stays on the selected character
+          g_npcPanelFollowsChat = false; // follows future selection changes too
         } else if (NpcPanelPair(world, sel, chatSpeaker, chatTarget)) {
           NpcPanelOpenFor(world, chatSpeaker, chatTarget, "hotkey_chat");
         } else if (!NpcPanelOpenForSelection(world, sel, "hotkey"))
           Log("NPC_PANEL: hotkey pressed but no conversation target");
+        // Even a hotkey card initially opened via the chat fallback follows
+        // the next valid selection once the player selects a character.
+        if (Stobe::UI::IsNpcPanelOpen())
+          g_npcPanelFollowsChat = false;
       }
     }
   }
@@ -15642,149 +15919,145 @@ void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
 
   // Rename checks are now queued only for dialogue-tagged NPCs.
   // 4. Input Handling ??? Chat window hotkey
-  if (StobeHotkeyDown(g_chatHotkey) && !g_chatWindow) {
-    static DWORD lastTalkTick = 0;
-    if (GetTickCount() - lastTalkTick > 500) {
-      lastTalkTick = GetTickCount();
-      Log("UI: chat hotkey pressed [" + g_chatHotkeyStr + "].");
-      if (IsAnyStobeMenuUIOpen()) {
-        CloseAllStobeMenuUI();
-        Log("UI: closed STOBE menu before opening chat.");
-      }
-      if (sel && (uintptr_t)sel > 0x1000) {
-        Character *chatTarget = nullptr;
-        Character *chatSpeaker = nullptr;
-        if (sel->isPlayerCharacter()) {
-          chatSpeaker = sel;
-          Character *resolvedTarget = nullptr;
-          if (g_useNearestPlayerSpeaker) {
-            resolvedTarget = ResolveNearestNpcTargetForSelection(world, sel);
-            if (resolvedTarget && (uintptr_t)resolvedTarget > 0x1000) {
-              chatTarget = resolvedTarget;
-              Log("CHAT_OPEN: selected player speaker '" + sel->getName() +
-                  "' targeted nearest NPC '" + chatTarget->getName() + "'");
-            } else {
-              Log("CHAT_OPEN: selected player speaker '" + sel->getName() +
-                  "' has no nearby NPC target; opening targetless chat");
-            }
+  if (UpdateChatHotkey(IsKenshiWindowFocused())) {
+    Log("UI: chat hotkey pressed [" + g_chatHotkeyStr + "].");
+    if (IsAnyStobeMenuUIOpen()) {
+      CloseAllStobeMenuUI();
+      Log("UI: closed STOBE menu before opening chat.");
+    }
+    if (sel && (uintptr_t)sel > 0x1000) {
+      Character *chatTarget = nullptr;
+      Character *chatSpeaker = nullptr;
+      if (sel->isPlayerCharacter()) {
+        chatSpeaker = sel;
+        Character *resolvedTarget = nullptr;
+        if (g_useNearestPlayerSpeaker) {
+          resolvedTarget = ResolveNearestNpcTargetForSelection(world, sel);
+          if (resolvedTarget && (uintptr_t)resolvedTarget > 0x1000) {
+            chatTarget = resolvedTarget;
+            Log("CHAT_OPEN: selected player speaker '" + sel->getName() +
+                "' targeted nearest NPC '" + chatTarget->getName() + "'");
           } else {
-            resolvedTarget = ResolveNearestSquadmateTargetForSelection(world, sel);
-            if (resolvedTarget && (uintptr_t)resolvedTarget > 0x1000) {
-              chatTarget = resolvedTarget;
-              Log("CHAT_OPEN: selected squadmate '" + sel->getName() +
-                  "' retargeted to nearest squadmate '" + chatTarget->getName() +
-                  "'");
-            } else {
-              Log("CHAT_OPEN: selected squadmate '" + sel->getName() +
-                  "' has no alternate squadmate target; opening targetless chat");
-            }
+            Log("CHAT_OPEN: selected player speaker '" + sel->getName() +
+                "' has no nearby NPC target; opening targetless chat");
           }
         } else {
-          chatTarget = sel;
-          chatSpeaker = ResolveNearestPlayerSpeakerForTarget(world, chatTarget);
-        }
-        // Item 147: in first person the controlled character speaks; a selected squad
-        // mate is who she talks to (same rule as the stobe_say ui path, item 136).
-        Character *fpSpeaker = StobeFpControlledCharacter(world);
-        if (fpSpeaker && fpSpeaker != chatSpeaker) {
-          bool selIsPlayer = false;
-          try {
-            selIsPlayer = sel->isPlayerCharacter();
-          } catch (...) {
-          }
-          chatSpeaker = fpSpeaker;
-          if (selIsPlayer && sel != fpSpeaker)
-            chatTarget = sel;
-          else if (!chatTarget || chatTarget == fpSpeaker)
-            chatTarget = ResolveNearestNpcTargetForSelection(world, chatSpeaker);
-          Log("CHAT_OPEN: FP-controlled speaker '" + fpSpeaker->getName() + "' target='" +
-              (chatTarget ? chatTarget->getName() : std::string("")) + "'");
-        }
-
-        if (chatTarget && !IsAliveConsciousCharacterForTargeting(chatTarget)) {
-          Log("CHAT_OPEN: allowing dead_or_unconscious target='" +
-              chatTarget->getName() + "'");
-        }
-
-        bool selectedIsAnimal = chatTarget && IsAnimalCharacterSafe(chatTarget);
-        if (selectedIsAnimal) {
-          unsigned int animalSerial = chatTarget->getHandle().serial;
-          if (!g_enableAnimalTalks) {
-            EnterCriticalSection(&g_msgMutex);
-            g_messageQueue.push_back(
-                "NOTIFY:Animal Talks is OFF in plugin settings.");
-            LeaveCriticalSection(&g_msgMutex);
-            Log("ANIMAL_TALKS: ignored selected target; toggle disabled serial=" +
-                ToString(animalSerial));
-            chatTarget = nullptr;
-            selectedIsAnimal = false;
+          resolvedTarget = ResolveNearestSquadmateTargetForSelection(world, sel);
+          if (resolvedTarget && (uintptr_t)resolvedTarget > 0x1000) {
+            chatTarget = resolvedTarget;
+            Log("CHAT_OPEN: selected squadmate '" + sel->getName() +
+                "' retargeted to nearest squadmate '" + chatTarget->getName() +
+                "'");
           } else {
-            MarkAnimalActivated(animalSerial);
-            Log("ANIMAL_TALKS: activated animal serial=" +
-                ToString(animalSerial) + " name=" + chatTarget->getName());
+            Log("CHAT_OPEN: selected squadmate '" + sel->getName() +
+                "' has no alternate squadmate target; opening targetless chat");
           }
         }
-
-        if (chatTarget) {
-          g_talkTargetHand = chatTarget->getHandle();
-          QueueIdentityRenameCandidate(chatTarget, "chat_open_target");
-          SyncInventoryForCharacter(chatTarget, true, "chat_open");
-        } else {
-          g_talkTargetHand = hand();
-        }
-
-        bool chatTargetIsTrader = false;
-        if (chatTarget) {
-          try {
-            chatTargetIsTrader = !chatTarget->isPlayerCharacter() &&
-                                 chatTarget->isATrader();
-          } catch (...) {
-            chatTargetIsTrader = false;
-          }
-        }
-        if (chatTargetIsTrader) {
-          bool capturedTraderInventory =
-              CaptureTraderInventorySnapshot(chatTarget, "chat_open");
-          Log("TRADER_INVENTORY_CAPTURE: chat-open target=" +
-              ResolveCharacterNameSafe(chatTarget) + " success=" +
-              std::string(capturedTraderInventory ? "1" : "0"));
-          if (capturedTraderInventory) {
-            PushImmediateContextSnapshot(chatTarget,
-                                         "chat_open_trade_capture", true);
-          }
-        }
-
-        // Suppress vanilla dialogue state to prevent "double dialogue"
-        if (chatTarget && chatTarget->dialogue &&
-            (uintptr_t)chatTarget->dialogue > 0x1000) {
-          try {
-            chatTarget->dialogue->endDialogue(true);
-            chatTarget->dialogue->setInDialog(false);
-          } catch (...) {
-          }
-        }
-
-        if ((!chatSpeaker || (uintptr_t)chatSpeaker < 0x1000) &&
-            thisptr->playerCharacters.size() > 0) {
-          chatSpeaker = thisptr->playerCharacters[0];
-        }
-        std::string pName = chatSpeaker ? chatSpeaker->getName() : "Drifter";
-        std::string targetName = chatTarget ? chatTarget->getName() : "";
-        std::string targetSerial =
-            chatTarget ? ToString(chatTarget->getHandle().serial) : "";
-        CreateChatUI(targetName, pName, targetSerial);
-        Log("UI: CreateChatUI done target=" +
-            (targetName.empty() ? std::string("<none>") : targetName) +
-            " speaker=" + pName);
       } else {
-        Character *chatSpeaker =
-            thisptr->playerCharacters.size() > 0 ? thisptr->playerCharacters[0]
-                                                 : nullptr;
-        std::string pName = chatSpeaker ? chatSpeaker->getName() : "Drifter";
-        g_talkTargetHand = hand();
-        CreateChatUI("", pName, "");
-        Log("CHAT_OPEN: no selected character; opened targetless chat");
+        chatTarget = sel;
+        chatSpeaker = ResolveNearestPlayerSpeakerForTarget(world, chatTarget);
       }
+      // Item 147: in first person the controlled character speaks; a selected squad
+      // mate is who she talks to (same rule as the stobe_say ui path, item 136).
+      Character *fpSpeaker = StobeFpControlledCharacter(world);
+      if (fpSpeaker && fpSpeaker != chatSpeaker) {
+        bool selIsPlayer = false;
+        try {
+          selIsPlayer = sel->isPlayerCharacter();
+        } catch (...) {
+        }
+        chatSpeaker = fpSpeaker;
+        if (selIsPlayer && sel != fpSpeaker)
+          chatTarget = sel;
+        else if (!chatTarget || chatTarget == fpSpeaker)
+          chatTarget = ResolveNearestNpcTargetForSelection(world, chatSpeaker);
+        Log("CHAT_OPEN: FP-controlled speaker '" + fpSpeaker->getName() + "' target='" +
+            (chatTarget ? chatTarget->getName() : std::string("")) + "'");
+      }
+
+      if (chatTarget && !IsAliveConsciousCharacterForTargeting(chatTarget)) {
+        Log("CHAT_OPEN: allowing dead_or_unconscious target='" +
+            chatTarget->getName() + "'");
+      }
+
+      bool selectedIsAnimal = chatTarget && IsAnimalCharacterSafe(chatTarget);
+      if (selectedIsAnimal) {
+        unsigned int animalSerial = chatTarget->getHandle().serial;
+        if (!g_enableAnimalTalks) {
+          EnterCriticalSection(&g_msgMutex);
+          g_messageQueue.push_back(
+              "NOTIFY:Animal Talks is OFF in plugin settings.");
+          LeaveCriticalSection(&g_msgMutex);
+          Log("ANIMAL_TALKS: ignored selected target; toggle disabled serial=" +
+              ToString(animalSerial));
+          chatTarget = nullptr;
+          selectedIsAnimal = false;
+        } else {
+          MarkAnimalActivated(animalSerial);
+          Log("ANIMAL_TALKS: activated animal serial=" +
+              ToString(animalSerial) + " name=" + chatTarget->getName());
+        }
+      }
+
+      if (chatTarget) {
+        g_talkTargetHand = chatTarget->getHandle();
+        QueueIdentityRenameCandidate(chatTarget, "chat_open_target");
+        SyncInventoryForCharacter(chatTarget, true, "chat_open");
+      } else {
+        g_talkTargetHand = hand();
+      }
+
+      bool chatTargetIsTrader = false;
+      if (chatTarget) {
+        try {
+          chatTargetIsTrader = !chatTarget->isPlayerCharacter() &&
+                               chatTarget->isATrader();
+        } catch (...) {
+          chatTargetIsTrader = false;
+        }
+      }
+      if (chatTargetIsTrader) {
+        bool capturedTraderInventory =
+            CaptureTraderInventorySnapshot(chatTarget, "chat_open");
+        Log("TRADER_INVENTORY_CAPTURE: chat-open target=" +
+            ResolveCharacterNameSafe(chatTarget) + " success=" +
+            std::string(capturedTraderInventory ? "1" : "0"));
+        if (capturedTraderInventory) {
+          PushImmediateContextSnapshot(chatTarget,
+                                       "chat_open_trade_capture", true);
+        }
+      }
+
+      // Suppress vanilla dialogue state to prevent "double dialogue"
+      if (chatTarget && chatTarget->dialogue &&
+          (uintptr_t)chatTarget->dialogue > 0x1000) {
+        try {
+          chatTarget->dialogue->endDialogue(true);
+          chatTarget->dialogue->setInDialog(false);
+        } catch (...) {
+        }
+      }
+
+      if ((!chatSpeaker || (uintptr_t)chatSpeaker < 0x1000) &&
+          thisptr->playerCharacters.size() > 0) {
+        chatSpeaker = thisptr->playerCharacters[0];
+      }
+      std::string pName = chatSpeaker ? chatSpeaker->getName() : "Drifter";
+      std::string targetName = chatTarget ? chatTarget->getName() : "";
+      std::string targetSerial =
+          chatTarget ? ToString(chatTarget->getHandle().serial) : "";
+      CreateChatUI(targetName, pName, targetSerial);
+      Log("UI: CreateChatUI done target=" +
+          (targetName.empty() ? std::string("<none>") : targetName) +
+          " speaker=" + pName);
+    } else {
+      Character *chatSpeaker =
+          thisptr->playerCharacters.size() > 0 ? thisptr->playerCharacters[0]
+                                               : nullptr;
+      std::string pName = chatSpeaker ? chatSpeaker->getName() : "Drifter";
+      g_talkTargetHand = hand();
+      CreateChatUI("", pName, "");
+      Log("CHAT_OPEN: no selected character; opened targetless chat");
     }
   }
 

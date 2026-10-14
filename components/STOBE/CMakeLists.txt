@@ -65,6 +65,7 @@ if(NOT OGRE_MAIN_LIBRARY)
 endif()
 
 add_library(Stobe SHARED
+  src/BodyguardContractProbe.cpp
   src/AudioPlayback.cpp
   src/AutonomyController.cpp
   src/AutonomyExecutor.cpp
@@ -89,6 +90,8 @@ add_library(Stobe SHARED
   src/AiNpcInfoWindow.cpp
   src/KenshiBuildingStatus.cpp
   src/KenshiRvaCompat.cpp
+  src/ProfilePortrait.cpp
+  src/LocalTravel.cpp
   src/KenshiTownIdentity.cpp
   src/PlayerBaseState.cpp
   src/StobeIdentityRename.cpp
@@ -98,6 +101,17 @@ add_library(Stobe SHARED
   src/SocialEventProtocol.cpp
   src/StobeEventPolicy.cpp
   src/StobeHarnessBridge.cpp
+  src/ActivityGoals.cpp
+  src/ActivityRuntime.cpp
+  src/ActivityNativeExecutor.cpp
+  src/ActivityRuntimeBindings.cpp
+  src/ActivityPolicySupport.cpp
+  src/ActivityController.cpp
+  src/ActivityTransport.cpp
+  src/NativeAiAwareness.cpp
+  src/NativePlaceKnowledge.cpp
+  src/NpcReferralPeople.cpp
+  src/NativeTravelLifecycle.cpp
   src/StobeGoals.cpp
   src/ShopPricing.cpp
   src/ShopPriceHook.cpp

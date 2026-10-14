@@ -52,8 +52,18 @@ public:
   const hand &getOccupant() const;
 };
 
+class InventorySection;
+class GameData;
 class StorageBuilding : public UseableStuff {
 public:
+  // Exact public SDK declaration (StorageBuilding.h, getProductionItem RVA 0x595DA0).
+  class ConsumptionItem {
+  public:
+    float amount, rate; int maxCapacity;
+    GameData* item;
+    InventorySection* inventorySection;
+  };
+  ConsumptionItem* getProductionItem() const;
   StorageBuilding *_NV_getFunctionStuff();
   TaskType _NV_getDefaultTask();
   bool _NV_isAnyInputsEmpty() const;
@@ -66,6 +76,8 @@ class ProductionBuilding : public StorageBuilding {
 public:
   TaskType _NV_getDefaultTask();
   float getOutput() const;
+  void _NV_operate(Character*, float); // SDK RVA 0x298250
+  void _NV_updateOutput(float); // SDK RVA 0x298000
 };
 
 class CraftingBuilding : public ProductionBuilding {

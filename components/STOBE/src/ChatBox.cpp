@@ -1,6 +1,8 @@
 #include "PlaythroughSession.h"
 #include "Interaction.h"
 #include "ChatBox.h"
+#include "StobeChatHotkeyPolicy.h"
+#include "ActivityTransport.h"
 #include "AudioPlayback.h"
 #include "Comm.h"
 #include "Context.h"
@@ -77,7 +79,128 @@ size_t g_lastChatModeIndex = 1;
 // lifetime, mirroring how g_chatMode keeps the last chat mode.
 size_t g_playerMoodIndex = 0;
 std::string g_playerCustomMoodRawStr = "";
-bool g_chatJustOpened = false;
+// Per-open-session latch: once composition starts, clearing the draft cannot
+// turn the chat shortcut back into a close command.
+static bool g_chatToggleArmed = false;
+static bool g_chatHotkeyWasDown = false;
+static bool g_chatOpeningKeyHeld = false;
+static bool g_chatToggleClosePending = false;
+static bool g_chatSuppressHotkeyText = false;
+static bool g_chatHotkeyTextCandidate = false;
+static bool g_chatClearingHotkeyText = false;
+static std::string g_chatHotkeyGlyph;
+
+static bool ChatHotkeyModifiersDown() {
+  return ((GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_CONTROL) |
+           GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LWIN) |
+           GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+}
+
+static bool IsChatHotkeyText(const std::string &text) {
+  if (!g_chatHotkeyGlyph.empty() && text == g_chatHotkeyGlyph)
+    return true;
+  return text.size() == 1 && g_chatHotkeyStr.size() == 1 &&
+      std::toupper(static_cast<unsigned char>(text[0])) ==
+      std::toupper(static_cast<unsigned char>(g_chatHotkeyStr[0]));
+}
+
+static bool IsChatHotkeyCode(MyGUI::KeyCode key) {
+  return g_chatHotkey != 0 &&
+      MapVirtualKey(static_cast<UINT>(key.getValue()), MAPVK_VSC_TO_VK) ==
+          static_cast<UINT>(g_chatHotkey);
+}
+
+static void ChatCompositionStarted() {
+  StobeChatHotkeyPolicy::DisarmAfterComposition(&g_chatToggleArmed);
+  g_chatToggleClosePending = false;
+  g_chatSuppressHotkeyText = false;
+  g_chatHotkeyTextCandidate = false;
+}
+
+static void ClearChatHotkeyText() {
+  if (!g_chatInput || !IsChatHotkeyText(g_chatInput->getCaption().asUTF8()))
+    return;
+  g_chatClearingHotkeyText = true;
+  g_chatInput->setCaption("");
+  g_chatClearingHotkeyText = false;
+  g_chatHotkeyTextCandidate = false;
+}
+
+static void OnChatDraftKeyPressed(MyGUI::Widget *sender, MyGUI::KeyCode key,
+                                  MyGUI::Char character) {
+  if (!g_chatToggleArmed)
+    return;
+  const bool messageInputFocused = sender == g_chatInput;
+  const bool modifiersDown = ChatHotkeyModifiersDown();
+  if (StobeChatHotkeyPolicy::OnMessageKeyDown(
+          g_chatToggleArmed, messageInputFocused, IsChatHotkeyCode(key),
+          modifiersDown, g_chatOpeningKeyHeld, &g_chatHotkeyWasDown,
+          &g_chatToggleClosePending, &g_chatSuppressHotkeyText)) {
+    if (character >= 32 && character != 127)
+      g_chatHotkeyGlyph = MyGUI::UString(1, character).asUTF8();
+    ClearChatHotkeyText();
+    return;
+  }
+  // Edits count even when they leave an empty draft (Backspace, Delete, cut,
+  // paste or undo). Cursor/focus movement by itself is not composition.
+  const bool clipboardOrUndoEdit =
+      ((GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+       (key == MyGUI::KeyCode::V || key == MyGUI::KeyCode::X ||
+        key == MyGUI::KeyCode::Z || key == MyGUI::KeyCode::Y));
+  const bool shiftInsert =
+      (GetAsyncKeyState(VK_SHIFT) & 0x8000) && key == MyGUI::KeyCode::Insert;
+  if (StobeChatHotkeyPolicy::IsCompositionEdit(
+          character >= 32 && character != 127,
+          key == MyGUI::KeyCode::Backspace,
+          key == MyGUI::KeyCode::Delete, clipboardOrUndoEdit, shiftInsert))
+    ChatCompositionStarted();
+}
+
+static void OnChatDraftKeyReleased(MyGUI::Widget *, MyGUI::KeyCode key) {
+  if (IsChatHotkeyCode(key)) {
+    g_chatHotkeyWasDown = false;
+    g_chatOpeningKeyHeld = false;
+    g_chatSuppressHotkeyText = false;
+  }
+}
+
+static void OnChatAuxiliaryDraftChanged(MyGUI::EditBox *) {
+  ChatCompositionStarted();
+}
+
+bool UpdateChatHotkey(bool windowFocused) {
+  const bool down = g_chatHotkey != 0 &&
+      (GetAsyncKeyState(g_chatHotkey) & 0x8000) != 0;
+  const bool freshPress = down && !g_chatHotkeyWasDown;
+  g_chatHotkeyWasDown = down;
+  if (!down) {
+    g_chatOpeningKeyHeld = false;
+    g_chatSuppressHotkeyText = false;
+  }
+  const bool shortcut = StobeChatHotkeyPolicy::ShortcutAllowed(
+      windowFocused, ChatHotkeyModifiersDown());
+  if (!g_chatWindow)
+    return StobeChatHotkeyPolicy::ShouldOpen(false, freshPress, shortcut);
+
+  const bool messageInputFocused =
+      MyGUI::InputManager::getInstance().getKeyFocusWidget() == g_chatInput;
+  if (StobeChatHotkeyPolicy::ShouldRequestClose(
+          true, freshPress, shortcut, g_chatToggleArmed,
+          messageInputFocused))
+    g_chatToggleClosePending = true;
+  if (StobeChatHotkeyPolicy::ShouldCloseAfterPoll(
+          g_chatToggleClosePending, g_chatToggleArmed, windowFocused)) {
+    // Defer destruction out of MyGUI key/text dispatch; the physical-key latch
+    // stays down so a held close key cannot reopen chat on the following tick.
+    CloseChatUI();
+    return false;
+  }
+  // A one-character paste can equal the shortcut. It is ordinary draft text
+  // unless a corresponding key event/physical press actually requested toggle.
+  if (g_chatHotkeyTextCandidate)
+    ChatCompositionStarted();
+  return false;
+}
 bool g_chatPausedGame = false;
 bool g_renamePausedGame = false;
 bool g_chatTargetRefreshInProgress = false;
@@ -2350,7 +2473,8 @@ void CloseChatUI() {
   g_chatLastRealTargetHandleStr.clear();
   g_chatLastRealTargetNameStr.clear();
   g_chatPlayerNameStr.clear();
-  g_chatJustOpened = false;
+  ChatCompositionStarted();
+  g_chatOpeningKeyHeld = false;
 }
 
 void CloseRenameUI() {
@@ -2475,6 +2599,7 @@ DWORD WINAPI DialogResponseWorker(LPVOID lpParam) {
 
 struct StreamChatTask {
   std::wstring endpoint;
+  std::string activityTurnId;
   std::string npcName;
   std::string handleStr;
   std::string localPlayerSpeech;
@@ -2517,6 +2642,7 @@ struct StreamChatParseState {
   std::string lastSpeaker;
   std::string lastSpeakerHandle;
   std::string lastSubtitle;
+  std::string activitySpokenText;
   std::vector<std::string> speechUtteranceIds;
   std::set<std::string> seenActions;
   // m50 D86: superseded by a danger interrupt only -> keep delivering actions.
@@ -3775,6 +3901,10 @@ bool ProcessStreamChatResponseLine(StreamChatParseState *state,
         speakerHandle = TrimChatLine(state->task->handleStr);
       }
     }
+    if (!state->task->activityTurnId.empty() && speakerHandle == state->task->handleStr) {
+      if (!state->activitySpokenText.empty()) state->activitySpokenText += " ";
+      state->activitySpokenText += subtitle;
+    }
     state->lastSpeaker = actor;
     state->lastSpeakerHandle = speakerHandle;
     state->lastSubtitle = subtitle;
@@ -3820,6 +3950,7 @@ DWORD WINAPI StreamChatResponseThread(LPVOID lpParam) {
   }
   AddActiveChatPartner(partnerSerial);
 
+  task->endpoint = Stobe::Activity::PrepareActivityChatTurn(task->activityTurnId, task->endpoint);
   bool requestOk =
       PostToStobeWithResponseStream(task->endpoint, "", OnStreamChatHttpLine,
                                     &parseState);
@@ -3905,6 +4036,11 @@ DWORD WINAPI StreamChatResponseThread(LPVOID lpParam) {
       return 0;
     }
 
+    // Bind an offer only after native delivery confirms it was actually shown.
+    Stobe::Activity::FinishActivityChatTurn(task->activityTurnId,
+        requestOk && speechDelivered && parseState.lastSpeakerHandle == task->handleStr,
+        parseState.activitySpokenText);
+
     DWORD followupDelayMs = static_cast<DWORD>(
         Stobe::Timing::ResolveRechatDispatchDelayMs(parseState.interLineDelayMs));
     bool waitForPlayback =
@@ -3951,36 +4087,24 @@ bool IsDirectorSceneActive() {
 }
 
 void OnChatInputChange(MyGUI::EditBox *sender) {
+  if (g_chatClearingHotkeyText)
+    return;
   std::string text = sender->getCaption().asUTF8();
-
-  if (g_chatJustOpened) {
-    if (text.length() > 0) {
-      std::string textUpper = text;
-      textUpper[0] = toupper(textUpper[0]);
-      std::string hkUpper = g_chatHotkeyStr;
-      if (!hkUpper.empty())
-        hkUpper[0] = toupper(hkUpper[0]);
-
-      if (text == "\\" || text == "\n" || text == "\r" ||
-          (text.length() == 1 && textUpper == hkUpper)) {
-        sender->setCaption("");
-        g_chatJustOpened = false;
-        return;
-      }
-
-      // Some keyboard layouts leak the chat hotkey character into the input
-      // immediately after opening. If the hotkey is still physically down,
-      // treat the first single-char change as leaked input and clear it.
-      if (text.length() == 1 && (GetAsyncKeyState(g_chatHotkey) & 0x8000)) {
-        sender->setCaption("");
-        g_chatJustOpened = false;
-        return;
-      }
-      g_chatJustOpened = false;
+  if (g_chatToggleArmed && IsChatHotkeyText(text) &&
+      !ChatHotkeyModifiersDown()) {
+    if (g_chatSuppressHotkeyText || g_chatToggleClosePending) {
+      ClearChatHotkeyText();
+    } else {
+      // MyGUI may deliver text-change before key-pressed. Let that key event
+      // classify the character; a paste without a key event disarms next tick.
+      g_chatHotkeyTextCandidate = true;
     }
+    return;
   }
+  if (!text.empty())
+    ChatCompositionStarted();
 
-  if (text == "\\" || text == "\n" || text == "\r") {
+  if (text == "\n" || text == "\r") {
     sender->setCaption("");
     return;
   }
@@ -4735,6 +4859,12 @@ void SubmitChatTextForCurrentContext(const std::string &submittedText,
   }
   StreamChatTask *streamTask = new StreamChatTask();
   streamTask->endpoint = endpoint;
+  if ((selectedMode == "chat" || selectedMode == "whisper" || selectedMode == "shout") &&
+      player && !resolvedTargetHandle.empty() && !manualActionSelected) {
+    const unsigned activityActor = static_cast<unsigned>(strtoul(resolvedTargetHandle.c_str(), NULL, 10));
+    streamTask->activityTurnId = Stobe::Activity::CaptureActivityChatTurn(
+        activityActor, player->getHandle().serial, text);
+  }
   streamTask->npcName = profileName;
   streamTask->handleStr = resolvedTargetHandle;
   streamTask->localPlayerSpeech = shouldQueueLocalPlayerSpeech ? text : "";
@@ -5816,7 +5946,19 @@ void CreateChatUI(const std::string &npcName, const std::string &playerName,
 
   g_chatPlayerNameStr = playerName;
   SetActiveChatTarget(npcName, handleStr, true);
-  g_chatJustOpened = true;
+  g_chatToggleArmed = true;
+  g_chatToggleClosePending = false;
+  g_chatHotkeyTextCandidate = false;
+  g_chatOpeningKeyHeld = g_chatHotkey != 0 &&
+      (GetAsyncKeyState(g_chatHotkey) & 0x8000) != 0;
+  g_chatHotkeyWasDown = g_chatOpeningKeyHeld;
+  g_chatSuppressHotkeyText = g_chatOpeningKeyHeld;
+  // Map the configured virtual key through the current keyboard layout; OEM
+  // keys need not produce the English label shown in the settings dropdown.
+  const UINT hotkeyCharacter = MapVirtualKey(g_chatHotkey, MAPVK_VK_TO_CHAR);
+  g_chatHotkeyGlyph = (hotkeyCharacter >= 32 && hotkeyCharacter <= 0xffff)
+      ? MyGUI::UString(1, static_cast<MyGUI::Char>(hotkeyCharacter)).asUTF8()
+      : std::string();
   g_chatPausedGame = false;
   RequestProfileModelSlotRefresh(true);
 
@@ -5886,6 +6028,8 @@ void CreateChatUI(const std::string &npcName, const std::string &playerName,
   g_chatInput->setFontHeight(18);
 
   g_chatInput->eventEditTextChange += MyGUI::newDelegate(OnChatInputChange);
+  g_chatInput->eventKeyButtonPressed += MyGUI::newDelegate(OnChatDraftKeyPressed);
+  g_chatInput->eventKeyButtonReleased += MyGUI::newDelegate(OnChatDraftKeyReleased);
   g_chatInput->eventEditSelectAccept += MyGUI::newDelegate(OnChatInputAccept);
   MyGUI::InputManager::getInstance().setKeyFocusWidget(g_chatInput);
 
@@ -6069,6 +6213,15 @@ void CreateChatUI(const std::string &npcName, const std::string &playerName,
       MyGUI::newDelegate(OnChatProfileModelChange);
   g_chatProfileModelCombo->eventComboChangePosition +=
       MyGUI::newDelegate(OnChatProfileModelChange);
+
+  // Attach after initial control population so restored mood/action defaults
+  // do not count as typing. Editing either field protects this chat session too.
+  MyGUI::EditBox *draftFields[] = {g_chatActionArgInput, g_chatCustomMoodInput};
+  for (size_t i = 0; i < 2; ++i) {
+    draftFields[i]->eventKeyButtonPressed += MyGUI::newDelegate(OnChatDraftKeyPressed);
+    draftFields[i]->eventKeyButtonReleased += MyGUI::newDelegate(OnChatDraftKeyReleased);
+    draftFields[i]->eventEditTextChange += MyGUI::newDelegate(OnChatAuxiliaryDraftChanged);
+  }
 }
 
 void OnChatModeChange(MyGUI::ComboBox *sender, size_t index) {

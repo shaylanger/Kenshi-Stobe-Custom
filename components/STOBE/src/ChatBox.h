@@ -25,6 +25,9 @@ extern size_t g_lastChatModeIndex;
 void CreateChatUI(const std::string &npcName, const std::string &playerName,
                   const std::string &handleStr);
 void CloseChatUI();
+// Game-thread poll: returns true only for a fresh configured-key press that
+// should open chat. Handles an armed close itself, after MyGUI event dispatch.
+bool UpdateChatHotkey(bool windowFocused);
 void SendChatToStobeServer(GameWorld *world, Character *sel,
                       const std::string &npcName, const std::string &playerName,
                       const std::string &text, const std::string &mode,

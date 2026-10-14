@@ -1,5 +1,6 @@
 #include "Interaction.h"
 #include "Globals.h"
+#include "NativeTravelLifecycle.h"
 #include "AudioPlayback.h"
 #include "Comm.h"
 #include "Utils.h"
@@ -348,6 +349,7 @@ void SetFollowTarget(unsigned int followerSerial, const hand &target) {
   }
   EnterCriticalSection(&g_stateMutex);
   g_followTargets[followerSerial] = target;
+  Stobe::NativeTravelLifecycle::ControllerChanged(followerSerial, true, true);
   LeaveCriticalSection(&g_stateMutex);
 }
 
@@ -356,12 +358,15 @@ void ClearFollowTarget(unsigned int followerSerial) {
     return;
   }
   EnterCriticalSection(&g_stateMutex);
-  g_followTargets.erase(followerSerial);
+  if (g_followTargets.erase(followerSerial))
+    Stobe::NativeTravelLifecycle::ControllerChanged(followerSerial, true, false);
   LeaveCriticalSection(&g_stateMutex);
 }
 
 void ClearAllFollowTargets() {
   EnterCriticalSection(&g_stateMutex);
+  for (std::map<unsigned int,hand>::const_iterator entry=g_followTargets.begin(); entry!=g_followTargets.end(); ++entry)
+    Stobe::NativeTravelLifecycle::ControllerChanged(entry->first, true, false);
   g_followTargets.clear();
   LeaveCriticalSection(&g_stateMutex);
 }
@@ -385,6 +390,7 @@ void SetTravelTarget(unsigned int actorSerial, float x, float y, float z,
   target.z = z;
   target.label = label;
   g_travelTargets[actorSerial] = target;
+  Stobe::NativeTravelLifecycle::ControllerChanged(actorSerial, false, true);
   LeaveCriticalSection(&g_stateMutex);
 }
 
@@ -393,12 +399,15 @@ void ClearTravelTarget(unsigned int actorSerial) {
     return;
   }
   EnterCriticalSection(&g_stateMutex);
-  g_travelTargets.erase(actorSerial);
+  if (g_travelTargets.erase(actorSerial))
+    Stobe::NativeTravelLifecycle::ControllerChanged(actorSerial, false, false);
   LeaveCriticalSection(&g_stateMutex);
 }
 
 void ClearAllTravelTargets() {
   EnterCriticalSection(&g_stateMutex);
+  for (std::map<unsigned int,TravelTarget>::const_iterator entry=g_travelTargets.begin(); entry!=g_travelTargets.end(); ++entry)
+    Stobe::NativeTravelLifecycle::ControllerChanged(entry->first, false, false);
   g_travelTargets.clear();
   LeaveCriticalSection(&g_stateMutex);
 }
@@ -458,8 +467,8 @@ LONG BeginChatInterruptGeneration(bool interruptPlaying, bool danger) {
   g_nextSpeechActionTick = 0;
   g_lastRechatDispatchTick = 0;
   if (interruptPlaying) {
-    g_followTargets.clear();
-    g_travelTargets.clear();
+    ClearAllFollowTargets();
+    ClearAllTravelTargets();
   }
   LeaveCriticalSection(&g_stateMutex);
 
