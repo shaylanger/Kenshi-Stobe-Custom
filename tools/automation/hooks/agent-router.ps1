@@ -100,6 +100,8 @@ try {
     foreach ($p in $ti.PSObject.Properties) { $new[$p.Name] = $p.Value }
     $new['model'] = $model
     $new['effort'] = $effort
+    # the subagent only sees its prompt, not the description, so the routing facts go into the first line of the prompt
+    $new['prompt'] = "Routing: case=$case tier=$tier ticket=$ticket`n" + [string]$ti.prompt
     Write-Ledger $action $case $ticket $stype $model $effort $desc
     @{ hookSpecificOutput = @{ hookEventName = 'PreToolUse'; permissionDecision = 'allow'; updatedInput = $new } } | ConvertTo-Json -Depth 10 -Compress
     exit 0

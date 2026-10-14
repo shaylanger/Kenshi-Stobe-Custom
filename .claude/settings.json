@@ -66,6 +66,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/hooks/agent-ledger-post.ps1"
+          }
+        ]
+      }
     ]
   }
 }

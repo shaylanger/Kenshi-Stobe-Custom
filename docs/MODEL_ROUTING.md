@@ -55,7 +55,9 @@ Why scripts first: at the table's prices a Sonnet medium verifier ($0.40) costs 
 Every Agent call writes one line to `C:\KenshiTestRuns\ledger\agent-calls.tsv`:
 time, case, ticket, subagent_type, model, effort, action (allow, override, deny or error), description.
 
-The ledger has no token counts. Read those from the transcripts per session when you compare tiers, and tune the table from that data, not from the guessed prices.
+Every Agent call that runs also writes one line to `C:\KenshiTestRuns\ledger\agent-runs.tsv`: time, agentId, output_file (its transcript), case, ticket, subagent_type, model, effort. `python3 tools/automation/ledger-report.py` (run in WSL) adds up each run's tokens from its transcript and prints them per case, model and effort, plus the verdict per ticket. Tune the table from that report, not from the guessed prices.
+
+The subagent sees the routing facts in the first line of its prompt (`Routing: case=... tier=... ticket=...`), because it does not see the description.
 
 ## Not enforced
 
