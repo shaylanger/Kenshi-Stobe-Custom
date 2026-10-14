@@ -73,6 +73,20 @@ function CapOff([string]$s, [datetime]$now = (Get-Date)) {
     $false
 }
 function LaneRows([string[]]$lines) { @($lines | Where-Object { $_ -notmatch '^\s*(#|$)' }) }
+function HVal([string[]]$lines, [string]$key) { $v = @($lines | Where-Object { $_ -match "^\s*#\s*$([regex]::Escape($key)):\s*(\S+)" } | ForEach-Object { $Matches[1] } | Select-Object -First 1); if ($v.Count) { $v[0] } else { '' } }
+function AttachContract([string[]]$lines, [string]$lane = '5090c') {
+    $pidText = HVal $lines 'attach-current'; if (-not $pidText) { return '' }
+    if ($lane -ne '5090c') { return 'attach-current is only allowed on lane 5090c' }
+    if ($pidText -notmatch '^\d+$') { return 'attach-current needs an exact numeric PID' }
+    $save = HVal $lines 'attach-save'; if ($save -notmatch '^[A-Za-z0-9_-]+$') { return 'attach-save must name one save' }
+    $sha = HVal $lines 'attach-stobe-sha256'; if ($sha -notmatch '^[A-Fa-f0-9]{64}$') { return 'attach-stobe-sha256 must be an exact 64 digit SHA256' }
+    $gfx = HVal $lines 'attach-gfx'; if ($gfx -notin @('low','full')) { return 'attach-gfx must be low or full' }
+    if ((HVal $lines 'launch') -or (HVal $lines 'needs') -or (HVal $lines 'reuse')) { return 'attach-current cannot request launch, build install, or reuse' }
+    $rows = @(LaneRows $lines); if (-not $rows.Count) { return 'attach-current list has no rows' }
+    foreach ($r in $rows) { $f = @($r -split '\|'); if ($f.Count -lt 6) { return 'attach-current row is malformed' }; if ($f[1].Trim() -ne '-') { return "attach-current row $($f[0].Trim()) must use save -" }; if ($f[-1].Trim() -notmatch '(^|\s)STOBE-BIO-CHAT-HOTKEYS\.sh\s+(146a|146b|147)\s*$') { return 'attach-current permits only STOBE-BIO-CHAT-HOTKEYS.sh 146a|146b|147 rows' } }
+    ''
+}
+function AttachMode([string[]]$lines, [string]$lane = '5090c') { [pscustomobject]@{ Requested=[bool](HVal $lines 'attach-current'); Error=(AttachContract $lines $lane); Pid=(HVal $lines 'attach-current'); Save=(HVal $lines 'attach-save'); Sha=(HVal $lines 'attach-stobe-sha256'); Gfx=(HVal $lines 'attach-gfx') } }
 # instance sync failure (speed-scout r9: 210-fists-zpv4-any went to failed\ on lane 5090c 19:11 for a sync whose output lacked
 # the launch save line, the next sync 90 s later was fine): full output -> runner\<lane>.syncfail.txt, one retry, then a list
 # stolen from queue\5090|any goes BACK there (lane trouble is not the list's failure); only an own-folder list fails.
@@ -88,6 +102,7 @@ function Pin { [bool]$script:film -and (CapMode) -ne 'wgc' }   # topmost only wh
 function LaneGfx([string[]]$lines) { $g = @($lines | Where-Object { $_ -match '^\s*#\s*gfx:\s*(\S+)' } | ForEach-Object { $Matches[1].ToLower() } | Select-Object -First 1); if ($g -and $g[0] -eq 'low') { 'low' } else { 'full' } }
 function Rig4080Copy([string[]]$lines) { @($lines | ForEach-Object { $_ -replace '\bRIG=4080\b', 'RIG=5090' }) }
 function LaneReject([string[]]$lines, [bool]$film = $false) {   # $null = the lane may run this list, else why not ($film: a filming lane in film mode)
+    $am = AttachMode $lines $Lane; if ($am.Requested) { return $am.Error }
     if ($lines -match '^\s*#\s*rig:\s*4080') { return '"# rig: 4080" list' }
     if ((XbGuard) -and (IsoHeader $lines)) { return '"# tdr-isolate: yes" (crossbow/turret TDR isolation: lane A only)' }
     if (-not $film -and (LaneGfx $lines) -ne 'low') { return 'not "# gfx: low" (filming/full-gfx lists stay on lane 1)' }
@@ -243,6 +258,14 @@ if ($SelfTest) {
         $n++; $g = [string](LaneReject $c[1] ([bool]($c.Count -ge 3 -and $c[2]))); $ok = $g -eq ''; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) guard off: $($c[0]) taken: got '$g'"
     }
     $n++; $ok = ($IdleStopMin -eq 0) -and ($FilmAfterMin -eq 0); if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) no idle holds: IdleStopMin=$IdleStopMin FilmAfterMin=$FilmAfterMin (Shay 19:00)"
+    $attachGood = @('# attach-current: 63768','# attach-save: kah-npcpanel','# attach-stobe-sha256: 40414D8C70E5E377D2FE1EB8C42C167D6B21F3D20CD7077B5ECB8D5661E7101D','# attach-gfx: low','A | - | Shay | Malzin | 60 | STOBE-BIO-CHAT-HOTKEYS.sh 146a')
+    foreach ($c in @(@('valid mode', $attachGood, '5090c', ''), @('wrong lane', $attachGood, '5090b', 'attach-current is only allowed on lane 5090c'),
+                     @('missing DLL hash', @($attachGood[0],$attachGood[1],$attachGood[3],$attachGood[4]), '5090c', 'attach-stobe-sha256 must be an exact 64 digit SHA256'),
+                     @('launch requested', @($attachGood[0],$attachGood[1],$attachGood[2],$attachGood[3],'# launch: kah-npcpanel',$attachGood[4]), '5090c', 'attach-current cannot request launch, build install, or reuse'),
+                     @('row save requested', @($attachGood[0],$attachGood[1],$attachGood[2],$attachGood[3],'A | kah-npcpanel | Shay | Malzin | 60 | STOBE-BIO-CHAT-HOTKEYS.sh 146a'), '5090c', 'attach-current row A must use save -'),
+                     @('unapproved row', @($attachGood[0],$attachGood[1],$attachGood[2],$attachGood[3],'A | - | Shay | Malzin | 60 | bash arbitrary.sh'), '5090c', 'attach-current permits only STOBE-BIO-CHAT-HOTKEYS.sh 146a|146b|147 rows'))) {
+        $n++; $g = AttachContract $c[1] $c[2]; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) attach-current $($c[0]): $(if ($g) { $g } else { 'accepted' })"
+    }
     $okSy = @('save kah-fpxbow -> D:\KenshiInst\3\save\kah-fpxbow', 'save kah-squin -> D:\KenshiInst\3\save\kah-squin'); $badSy = @('sync instance 3 -> D:\KenshiInst\3 : 0 junctions', 'save kah-squin -> D:\KenshiInst\3\save\kah-squin')
     foreach ($c in @(@('launch line present', (SyncOk $okSy 'kah-fpxbow'), $true), @('launch line missing (210 case)', (SyncOk $badSy 'kah-fpxbow'), $false),
                      @('launch from the only row (213 case)', (LaunchSave @('# owner: x', 'z | kah-fpxbow | a | b | 9 | bash x')), 'kah-fpxbow'),
@@ -277,6 +300,26 @@ function Note([string]$who, [string]$m) { Add-Content (Join-Path $runs "agents\$
 function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | ForEach-Object { "$_" } }
 function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
 function K2Procs { @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$K2\*" }) }
+function AttachIdentity([object]$spec) {
+    $proc = Get-Process -Id ([int]$spec.Pid) -ErrorAction SilentlyContinue
+    if (-not $proc -or -not [string]::Equals([string]$proc.Path, (Join-Path $K2 'kenshi_x64.exe'), [StringComparison]::OrdinalIgnoreCase)) { return 'exact PID is not the instance-3 Kenshi process' }
+    $marker = [string](Get-Content (Join-Path $K2 'instance.txt') -Raw -ErrorAction SilentlyContinue).Trim()
+    if ($marker -ne 'instance=3') { return "instance marker mismatch: $marker" }
+    $settings = @(Get-Content (Join-Path $K2 'settings.cfg') -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -eq 'User save location=0' })
+    if (-not $settings.Count) { return 'instance 3 is not configured for local saves' }
+    $savePath = Join-Path (Join-Path $K2 'save') $spec.Save
+    if (-not (Test-Path (Join-Path $savePath 'quick.save'))) { return 'expected instance-3 save is missing' }
+    $dll = Join-Path $K2 'mods\Stobe\Stobe.dll'
+    $hash = if (Test-Path $dll) { (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToUpperInvariant() } else { '' }
+    if ($hash -ne $spec.Sha.ToUpperInvariant()) { return "Stobe DLL hash mismatch: $hash" }
+    $envline = "export KAH_INSTANCE=3 KDIR=/mnt/d/KenshiInst/3 KAH_DIR='D:\KenshiInst\3\mods\AutomationHarness'; stobe-auto status </dev/null; stobe-auto input_isolation status </dev/null"
+    $probe = Wsl @('bash', '-lc', $envline)
+    $world = @($probe | Where-Object { $_ -match 'phase=world' -and $_ -match "\bsave=$([regex]::Escape($spec.Save))\b" })
+    if (-not $world.Count) { return "live game/save status mismatch: $(($probe | Select-Object -First 2) -join ' / ')" }
+    if (-not (@($probe | Where-Object { $_ -match 'isolation=on' -and $_ -match 'focused=0' }).Count)) { return "input isolation/focus proof mismatch: $(($probe | Select-Object -Last 1) -join '')" }
+    if (-not (Test-Path (Join-Path $rd "$Lane.gfx")) -or ("$((Get-Content (Join-Path $rd "$Lane.gfx") -TotalCount 1)).Trim()" -ne $spec.Gfx)) { return "current lane gfx marker does not prove attach-gfx=$($spec.Gfx)" }
+    ''
+}
 function Ctl2([string[]]$a) {   # workspace kenshi-ctl.ps1 on instance $Inst as runner-<lane>
     $env:KAH_INSTANCE = "$Inst"; $env:KAH_OWNER = $owner; $env:KAH_GFX = $(if ($script:film) { 'full' } else { 'low' }); $env:KAH_VIDEO_MODE = $VideoMode; $env:KENSHI_MONITOR = (LaneMon); $env:KAH_FPS = "$(if ($script:film) { 60 } else { $Fps })"
     if ($script:film) { $env:KAH_LANE_FILM = '1' } else { Remove-Item env:KAH_LANE_FILM -ErrorAction SilentlyContinue }
@@ -480,25 +523,31 @@ Log "lane $Lane up pid=$PID"
 $noLowSince = $null
 # re-adopt: a running batch of this lane keeps its mode (runner\<lane>.gfx = full while it films)
 $script:film = (Test-Path $curF) -and "$((Get-Content (Join-Path $rd "$Lane.gfx") -TotalCount 1 -ErrorAction SilentlyContinue))".Trim() -eq 'full'
+$script:attached = $false; $script:attachPid = 0
 $idleSince = Get-Date; $stall = $null
 while ($true) {
     if (Test-Path $stopF) { Log 'stopped flag: exit'; Remove-Item (Join-Path $rd "$Lane.pid") -ErrorAction SilentlyContinue; exit 0 }
     $cur = if (Test-Path $curF) { @(Get-Content $curF) } else { @() }   # runPath, outW, start epoch, owner, start ISO, list name (rig-runner -Status reads [4] + [5])
+    if ($script:attached -and -not $cur.Count) {
+        $held = Get-Process -Id $script:attachPid -ErrorAction SilentlyContinue
+        if ($held -and [string]::Equals([string]$held.Path, (Join-Path $K2 'kenshi_x64.exe'), [StringComparison]::OrdinalIgnoreCase)) { State "attach-hold: preserving current instance-3 PID $script:attachPid"; Start-Sleep $TickSec; continue }
+        $script:attached = $false; $script:attachPid = 0; Log 'attach-hold released: exact attached PID is gone'
+    }
     if ($cur.Count -ge 6) {
         $outW = $cur[1]; $t0 = [long]$cur[2]; $own = $cur[3]; $name = $cur[5]
         # a finished batch (DONE, e.g. the one a TDR stop left in <lane>.cur) is not guarded: 17:30 a restarted 5090c re-adopted
         # its 16:33 batch and alerted on a later TDR it never ran beside (the DONE branch below clears it)
         $live = -not (Test-Path (Join-Path $outW 'DONE'))
         $ts = [Math]::Max($t0 - 30, (TdrHandledGet $Lane $rd $(if ($Fake) { $rd } else { Join-Path $runs 'gpulog' })) + 1)   # events already alerted never re-trip a restarted lane
-        $h = if ($live) { @(LaneTdrFilter (TdrEvents $ts) $ts) } else { @() }; if ($h.Count) { TdrHandledSet $Lane (TdrNewest $h) 'lane-guard' $rd; TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW }
+        $h = if ($live) { @(LaneTdrFilter (TdrEvents $ts) $ts) } else { @() }; if ($h.Count) { TdrHandledSet $Lane (TdrNewest $h) 'lane-guard' $rd; TdrStop "TDR (GPU driver reset) during lane $Lane list $name : $($h[0])" $outW; if ($script:attached) { $null = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', 'TDR during attached batch; game preserved') } }
         if (IsoA) {   # TDR isolation: lane A started a crossbow/turret list -> end this batch now, requeue it (filler: just release the claim)
-            $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane TDR isolation: lane A runs a crossbow/turret list"); Stop2 'TDR isolation'
-            if ((Split-Path $cur[0] -Leaf) -like '*__filler__*') { Remove-Item -LiteralPath $cur[0] -ErrorAction SilentlyContinue } else { Move-Item -LiteralPath $cur[0] (Join-Path "$qd\$Lane" $name) -Force -ErrorAction SilentlyContinue }
+            $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane TDR isolation: lane A runs a crossbow/turret list"); if (-not $script:attached) { Stop2 'TDR isolation' }
+            if (-not $script:attached) { if ((Split-Path $cur[0] -Leaf) -like '*__filler__*') { Remove-Item -LiteralPath $cur[0] -ErrorAction SilentlyContinue } else { Move-Item -LiteralPath $cur[0] (Join-Path "$qd\$Lane" $name) -Force -ErrorAction SilentlyContinue } }
             Remove-Item $curF, (Join-Path $runs "inflight\runner-$Lane") -ErrorAction SilentlyContinue
             Log "ISOLATION end-batch $name (requeued): $(($o | Select-Object -Last 1))"; Note $own "lane $Lane ended $name (lane A runs a crossbow/turret list, TDR isolation); requeued, reruns after it"
             $idleSince = Get-Date; $stall = $null; continue
         }
-        Retitle; PlaceWin; CapFps
+        if (-not $script:attached) { Retitle; PlaceWin; CapFps }
         if ($script:film -and -not (Test-Path (Join-Path $outW 'PREEMPT')) -and (Select-String -Path (Join-Path $outW 'SUMMARY.txt') -Pattern '^RESULT CAPPROOF FAIL' -Quiet -ErrorAction SilentlyContinue)) {
             Set-Content (Join-Path $outW 'PREEMPT') "CAPPROOF FAIL on lane $Lane : list back to queue\5090"; Set-Content (Join-Path $outW '.requeue') '5090'; Log "CAPPROOF FAIL: $name preempted, back to queue\5090 at DONE"
         }
@@ -509,7 +558,7 @@ while ($true) {
             'kill' {
                 $why = RamWho; Set-Content $holdF "RAM critical: ram free $ram MB < $KillRamMB, batch ended (lane $Lane memory guard); $why"
                 $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane RAM critical: free $ram MB"); Log "RAM CRITICAL end-batch ($ram MB free; $why): $(($o | Select-Object -Last 1))"
-                Stop2 "RAM critical $ram MB"; Note 'coordinator' "lane $Lane ended $name and stopped instance $Inst : RAM free $ram MB < $KillRamMB; $why"
+                if (-not $script:attached) { Stop2 "RAM critical $ram MB" }; Note 'coordinator' "lane $Lane RAM critical $ram MB during $(if ($script:attached) { 'attached batch; game preserved' } else { 'batch; instance stopped' }) : $why"
             }
         }
         if (Test-Path (Join-Path $outW 'DONE')) {
@@ -531,7 +580,7 @@ while ($true) {
         $hl = (Wsl @('bash', "$(WslPath $auto)/batch-health.sh", (WslPath $outW)) | Select-Object -Last 1)
         # a batch waiting on HOLD reads "HEALTH OK held" (batch-health.sh): no stall
         if ($hl -match '^HEALTH STALL') { if (-not $stall) { $stall = Get-Date }; if (((Get-Date) - $stall).TotalMinutes -ge $StallMin) {
-                $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane stall: $hl"); Log "STALL end-batch: $hl / $(($o | Select-Object -Last 1))"; Stop2 'stall'; $stall = $null } }
+                $o = Wsl @('bash', "$(WslPath $auto)/rig-runner-probe.sh", (WslPath $outW), 'end-batch', "lane $Lane stall: $hl"); Log "STALL end-batch: $hl / $(($o | Select-Object -Last 1))"; if (-not $script:attached) { Stop2 'stall' }; $stall = $null } }
         else { $stall = $null }
         PreDryAhead
         State "running $name -> $outW ($(if ($stall) { "STALL since $($stall.ToString('HH:mm')): " })$hl)"

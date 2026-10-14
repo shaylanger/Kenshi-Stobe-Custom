@@ -60,11 +60,10 @@ if ($Inst -ge 2) {
 $KahDir = "$Kenshi\mods\AutomationHarness"
 # AUTO = the first monitor that is NOT Shay's primary (2026-10-11: Windows renumbered the screens, DISPLAY2 became the
 # primary 2560x1440 and test games landed on Shay's screen, glitching through resize rounds)
-# Forbidden screens (Shay 2026-10-11 14:31: NEVER a game window on the Samsung, display 3 today; he works there). Matched by
-# the monitor's hardware id (EnumDisplayDevices interface name DISPLAY#<id>#), never by DISPLAYn number (Windows renumbers).
-# 2026-10-12: ignore inactive monitor ghosts (Flags&1=0); SAM0B49 is Samsung even when Windows renumbers it DISPLAY1.
-# Live MONSEL selftest reports the current forbidden screens; choose an active allowed monitor before any test launch.
-$ForbiddenMonIds = @('SNY05D1', 'SAM0B49')
+# Samsung remains forbidden by hardware identity even if Windows renumbers it.
+# DISPLAY1 and DISPLAY2 are authorized for 5090 auxiliary lanes (instances 2 and 3);
+# those callers require the exact requested display and refuse all fallback.
+$ForbiddenMonIds = @('SAM0B49')
 function Get-ForbiddenMonitors {   # \\.\DISPLAYn names whose attached monitor id is forbidden
   if (-not ('KenshiMonId' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -82,26 +81,44 @@ public static class KenshiMonId {
 # Pick-Monitor (pure; selftest: kenshi-ctl.ps1 monsel): $list = "\\.\DISPLAYn x,y wxh [primary]" entries, $forbidden = names
 # never used. The wanted one if it is on and allowed (AUTO = none wanted), else the first allowed non-primary, else the first
 # allowed; '' = no allowed screen (launch refuses).
-function Pick-Monitor([string[]]$list, [string[]]$forbidden, [string]$want) {
+function Pick-Monitor([string[]]$list, [string[]]$forbidden, [string]$want, [bool]$strictExact = $false) {
   $ok = @($list | Where-Object { ($_ -split ' ')[0] -notin $forbidden })
   $w = '\\.\' + ($want -replace '^\\\\\.\\', '').ToUpper()
-  if ($want -ne 'AUTO' -and @($ok | Where-Object { ($_ -split ' ')[0] -eq $w }).Count) { return $w }
+  # The authorized 5090 auxiliary lanes (instances 2 and 3 / DISPLAY1 or DISPLAY2)
+  # are fail-closed: never move them to a different display than requested.
+  # Other explicit monitor requests retain their historical fallback behavior.
+  if ($want -ne 'AUTO') {
+    if (@($ok | Where-Object { ($_ -split ' ')[0] -eq $w }).Count) { return $w }
+    if ($strictExact) { return '' }
+  }
   $sec = @($ok | Where-Object { $_ -notmatch ' primary' })
   if ($sec.Count) { return ($sec[0] -split ' ')[0] }
   if ($ok.Count) { return ($ok[0] -split ' ')[0] }
   ''
 }
-if ($Command -eq 'monsel') {   # kenshi-ctl.ps1 monsel: selftest of the screen rule + the live forbidden list
+function Is-StrictAuxDisplayRequest([int]$instance, [string]$monitor) {
+  return ($instance -in @(2, 3) -and $monitor -match '(?i)^(?:\\\\\.\\)?DISPLAY[12]$')
+}
+if ($Command -eq 'monsel') {   # kenshi-ctl.ps1 monsel: pure screen-selection selftest
   $L = @('\\.\DISPLAY1 -4480,360 1920x1080', '\\.\DISPLAY2 -2560,0 2560x1440', '\\.\DISPLAY3 0,0 3840x2160 primary'); $F = @('\\.\DISPLAY3'); $bad = 0
-  $cases = @(@('AUTO', $L, $F, '\\.\DISPLAY1'), @('DISPLAY2', $L, $F, '\\.\DISPLAY2'), @('DISPLAY3', $L, $F, '\\.\DISPLAY1'),
-             @('DISPLAY2', @($L[0], $L[2]), $F, '\\.\DISPLAY1'), @('AUTO', @($L[2]), $F, ''), @('AUTO', @('\\.\DISPLAY1 0,0 1920x1080 primary', $L[2]), $F, '\\.\DISPLAY1'))
-  foreach ($c in $cases) { $g = Pick-Monitor $c[1] $c[2] $c[0]; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) want=$($c[0]) screens=$($c[1].Count): got '$g' want '$($c[3])'" }
-  $fl = @(Get-ForbiddenMonitors); $ok = $fl.Count -ge 1; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) forbidden now (ids $($ForbiddenMonIds -join ',')): $($fl -join ',')"
-  "MONSEL $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + 1) cases"; exit [int]($bad -gt 0)
+  $cases = @(@('AUTO', $L, $F, '\\.\DISPLAY1', $false, 1), @('DISPLAY2', $L, $F, '\\.\DISPLAY2', $false, 1), @('DISPLAY3', $L, $F, '', $true, 1),
+             @('DISPLAY1', @($L[1], $L[2]), $F, '', $true, 2), @('DISPLAY1', @($L[1], $L[2]), $F, '', $true, 3),
+             @('DISPLAY1', @($L[0], $L[1], $L[2]), $F, '\\.\DISPLAY1', $true, 2), @('DISPLAY1', @($L[0], $L[1], $L[2]), $F, '\\.\DISPLAY1', $true, 3),
+             @('DISPLAY2', @($L[0], $L[2]), $F, '', $true, 2), @('DISPLAY2', @($L[0], $L[2]), $F, '', $true, 3),
+             @('DISPLAY2', $L, $F, '\\.\DISPLAY2', $true, 2), @('DISPLAY2', $L, $F, '\\.\DISPLAY2', $true, 3),
+             @('DISPLAY2', @($L[0], $L[2]), $F, '\\.\DISPLAY1', $false, 1),
+             @('AUTO', @($L[2]), $F, '', $false, 1), @('AUTO', @('\\.\DISPLAY1 0,0 1920x1080 primary', $L[2]), $F, '\\.\DISPLAY1', $false, 1))
+  foreach ($c in $cases) { $strict = $c[4] -and (($c[5] -in @(2, 3) -and $c[0] -in @('DISPLAY1', 'DISPLAY2')) -or $c[0] -eq 'DISPLAY3'); $g = Pick-Monitor $c[1] $c[2] $c[0] $strict; $ok = $g -eq $c[3]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) instance=$($c[5]) want=$($c[0]) screens=$($c[1].Count): got '$g' want '$($c[3])'" }
+  $identityCases = @(@('\\.\DISPLAY1 0,0 1920x1080', 'DISPLAY#SNY05D1#ABC'), @('\\.\DISPLAY3 0,0 3840x2160', 'DISPLAY#SAM0B49#ABC'))
+  foreach ($c in $identityCases) { $isForbidden = $false; foreach ($id in $ForbiddenMonIds) { if ($c[1] -match "#$([regex]::Escape($id))#") { $isForbidden = $true } }; $wantBad = $c[0] -like '*DISPLAY3*'; $ok = $isForbidden -eq $wantBad; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) identity $($c[0]) id=$($c[1]) forbidden=$isForbidden expected=$wantBad" }
+  $strictCases = @(@(2, 'DISPLAY1', $true), @(3, '\\.\DISPLAY1', $true), @(2, 'display1', $true), @(2, 'DISPLAY2', $true), @(3, '\\.\DISPLAY2', $true), @(1, 'DISPLAY1', $false), @(1, 'DISPLAY2', $false), @(2, '\\.\DISPLAY3', $false))
+  foreach ($c in $strictCases) { $g = Is-StrictAuxDisplayRequest $c[0] $c[1]; $ok = $g -eq $c[2]; if (-not $ok) { $bad++ }; "$(if ($ok) { 'ok  ' } else { 'FAIL' }) strictAuxDisplay instance=$($c[0]) monitor=$($c[1]) got=$g expected=$($c[2])" }
+  "MONSEL $(if ($bad) { "FAIL $bad" } else { 'PASS' }) $($cases.Count + $identityCases.Count + $strictCases.Count) cases"; exit [int]($bad -gt 0)
 }
 if ($Command -in @('launch', 'restart', 'postlaunch', 'place', 'fit')) {
   $ml = @((& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' monitors -Kenshi $Kenshi) -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-  $pick = Pick-Monitor $ml (Get-ForbiddenMonitors) $Monitor
+  $strictAuxDisplay = Is-StrictAuxDisplayRequest $Inst $Monitor
+  $pick = Pick-Monitor $ml (Get-ForbiddenMonitors) $Monitor $strictAuxDisplay
   if (-not $pick) { "REFUSED: no allowed screen for a test game (forbidden: $((Get-ForbiddenMonitors) -join ','); on: $($ml -join ' | '))"; exit 1 }
   if ($Monitor -ne 'AUTO' -and $pick -ne ('\\.\' + ($Monitor -replace '^\\\\\.\\', '').ToUpper())) { "monitor $Monitor not allowed/on: using $pick" }
   $Monitor = $pick
@@ -383,7 +400,10 @@ if ($Command -eq 'postlaunch') {
   $ctl = 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1'
   $mons = & $ctl monitors -Kenshi $Kenshi
   $want = '\\.\' + ($Monitor -replace '^\\\\\.\\', '').ToUpper()
-  if ($mons -notmatch [regex]::Escape($want) + ' ') { $Monitor = ((@($mons -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ }))[0] -split ' ')[0]; $want = $Monitor }
+  if ($mons -notmatch [regex]::Escape($want) + ' ') {
+    if ($Inst -in @(2, 3) -and $want -eq '\\.\DISPLAY1') { "REFUSED: DISPLAY1 unavailable during 5090 lane instance $Inst postlaunch"; exit 1 }
+    $Monitor = ((@($mons -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ }))[0] -split ' ')[0]; $want = $Monitor
+  }
   if ($Inst -ge 2) { Set-InstTitle }
   foreach ($i in 1..3) {
     $b = & $ctl background -Monitor $Monitor -Kenshi $Kenshi
@@ -407,8 +427,7 @@ if ($Command -in @('launch', 'restart')) {
     $want = '\\.\' + ($Monitor -replace '^\\\\\.\\', '').ToUpper()
     $list = @($mons -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     if ($mons -notmatch [regex]::Escape($want) + ' ') {
-      # Shay 2026-10-08: windowed + background is what matters, the monitor is a preference: when the preferred one is
-      # off use the first one that is on (a single screen: that one)
+      if ($Inst -in @(2, 3) -and $want -eq '\\.\DISPLAY1') { "REFUSED: DISPLAY1 unavailable for 5090 lane instance $Inst"; exit 1 }
       $Monitor = Pick-Monitor $list (Get-ForbiddenMonitors) 'AUTO'; if (-not $Monitor) { 'REFUSED: no allowed screen'; exit 1 }; "test monitor $want is off: using $Monitor (windowed, background)"; $bg.Monitor = $Monitor
     }
     Cfg-Test
@@ -420,7 +439,9 @@ if ($Command -in @('launch', 'restart')) {
     & $GfxPs (Gfx-Want) -Kenshi $Kenshi
   }
 }
-& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' $Command -Save $Save -TimeoutSec $TimeoutSec @bg `
+$testDialogArgs = @{}
+if (-not $Play -and $Command -in @('launch', 'restart')) { $testDialogArgs = @{ AutoAcceptModOrderWarning = $true } }
+& 'C:\KenshiModding\Kenshi-Automation-Harness\tools\kenshi-ctl.ps1' $Command -Save $Save -TimeoutSec $TimeoutSec @bg @testDialogArgs `
   -Kenshi $Kenshi -ArchiveRoot $Archive `
   -ExtraLogs @("$Kenshi\RE_Kenshi\mods\Stobe\stobe.log", "$Kenshi\KenshiFP.log", "$Kenshi\RE_Kenshi\mods\Stobe\stobe_goals.log",
                "$Kenshi\mods\ProfessionGearProgression\ProfessionGear.log",

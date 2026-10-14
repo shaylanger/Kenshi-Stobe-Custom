@@ -25,7 +25,15 @@ while :; do case "$1" in --fix) FIX=1; shift ;; --quiet) Q=1; shift ;; *) break 
 L=$1; RIG=$2
 [ -f "$L" ] && { [ "$RIG" = 5090 ] || [ "$RIG" = 4080 ]; } || { sed -n '2,20p' "$0"; exit 2; }
 M=/c/KenshiModding; SAVES=/c/Users/Shay/AppData/Local/kenshi/save; NAME=$(basename "$L")
-SSH="ssh -n -o BatchMode=yes -o ConnectTimeout=10 4080"
+SSH_CONFIG='C:/Users/Shay/.ssh/config'
+SSH_BIN='/c/Windows/System32/OpenSSH/ssh.exe'
+if [ "$RIG" = 4080 ] && [ ! -r "$SSH_CONFIG" ]; then
+  echo "RIGCHECK 4080 UNKNOWN $NAME: trusted SSH config is unreadable; refusing ambient alias"; exit 2
+fi
+if [ "$RIG" = 4080 ]; then
+  route_host=$("$SSH_BIN" -F "$SSH_CONFIG" -n -o BatchMode=yes -o ConnectTimeout=8 4080 hostname 2>/dev/null | tr -d '\r')
+  [ "$route_host" = 'DESKTOP-NQQPA73' ] || { echo "RIGCHECK 4080 UNKNOWN $NAME: trusted SSH route returned '$route_host', expected DESKTOP-NQQPA73"; exit 2; }
+fi
 hdr(){ grep -m1 -iE "^#\s*$1:" "$L" | sed -E "s/^#\s*$1:\s*//I; s/\s+$//"; }
 rows(){ grep -vE '^\s*(#|$)' "$L"; }
 reasons=(); warn(){ [ $Q = 1 ] || echo "WARN $RIG $NAME: $*"; }
@@ -112,7 +120,7 @@ else
   # one ssh round: save dirs + md5 of every not-synced script + the saves' quick.save
   q='cd ~/AppData/Local/kenshi/save 2>/dev/null && for s in */; do echo "SAVE ${s%/} $(md5sum "${s%/}/quick.save" 2>/dev/null | cut -c1-32)"; done'
   for p in "${ask[@]}"; do q="$q; echo \"FILE $p \$(md5sum '$p' 2>/dev/null | cut -c1-32)\""; done
-  out=$(printf '%s\n' "$q" | ssh -o BatchMode=yes -o ConnectTimeout=10 4080 'C:\PROGRA~1\Git\bin\bash.exe -ls' 2>/dev/null | tr -d '\r')
+  out=$(printf '%s\n' "$q" | "$SSH_BIN" -F "$SSH_CONFIG" -o BatchMode=yes -o ConnectTimeout=10 4080 'C:\PROGRA~1\Git\bin\bash.exe -ls' 2>/dev/null | tr -d '\r')
   echo "$out" | grep -q '^SAVE ' || { echo "RIGCHECK 4080 UNKNOWN $NAME: 4080 unreachable over ssh"; exit 2; }
   for s in "${!SV[@]}"; do
     # The Stobe gate checked every list save beneath C:\KenshiInst\3\save, including
@@ -123,7 +131,7 @@ else
       if [ ! -d "$SAVES/$s" ]; then reasons+=("save $s missing on both rigs")
       elif [ $FIX = 1 ]; then
         r=$(bash $M/tools/automation/rig4080/setup.sh --saves-only "$s" 2>&1 | tail -1)
-        printf '%s\n' "test -d ~/AppData/Local/kenshi/save/$s && echo COPIED" | ssh -o BatchMode=yes 4080 'C:\PROGRA~1\Git\bin\bash.exe -ls' 2>/dev/null | grep -q COPIED \
+        printf '%s\n' "test -d ~/AppData/Local/kenshi/save/$s && echo COPIED" | "$SSH_BIN" -F "$SSH_CONFIG" -o BatchMode=yes 4080 'C:\PROGRA~1\Git\bin\bash.exe -ls' 2>/dev/null | grep -q COPIED \
           && warn "save $s copied to the 4080 ($r)" || reasons+=("save $s not on the 4080, copy failed ($r)")
       else reasons+=("save $s only on the 5090 (list-rigcheck.sh --fix or rig4080/setup.sh --saves-only $s copies it)"); fi
     else

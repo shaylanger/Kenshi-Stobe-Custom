@@ -595,7 +595,17 @@ function CleanRunning {
 }
 function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | ForEach-Object { "$_" } }
 function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
-function Ssh([string[]]$a) { & ssh.exe -n -o BatchMode=yes -o ConnectTimeout=10 4080 @a 2>&1 | ForEach-Object { "$_" } }
+$trusted4080SshConfig = 'C:\Users\Shay\.ssh\config'
+$script:verified4080Host = $false
+function Ssh([string[]]$a) {
+    if (-not (Test-Path -LiteralPath $trusted4080SshConfig)) { throw "4080 route unavailable: trusted SSH config cannot be read at $trusted4080SshConfig; refusing ambient alias" }
+    if (-not $script:verified4080Host) {
+        $h = @(& ssh.exe -F $trusted4080SshConfig -n -o BatchMode=yes -o ConnectTimeout=8 4080 hostname 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0 -or (($h -join '').Trim() -ne 'DESKTOP-NQQPA73')) { throw "4080 route verification failed; expected DESKTOP-NQQPA73, got: $(($h -join ' ').Trim())" }
+        $script:verified4080Host = $true
+    }
+    & ssh.exe -F $trusted4080SshConfig -n -o BatchMode=yes -o ConnectTimeout=10 4080 @a 2>&1 | ForEach-Object { "$_" }
+}
 function Ssh4Ps([string]$file, [string[]]$a) { Ssh (@('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $file) + $a) }
 function Ssh4Bash([string[]]$a) { Ssh (@('C:\PROGRA~1\Git\bin\bash.exe', '-l') + $a) }
 # lane 4080b (multi-instance-4080): the 4080 may run a second game (C:\KenshiInst\<n>); lane 4080 only sees / kills instance 1

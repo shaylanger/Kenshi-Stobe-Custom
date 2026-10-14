@@ -278,11 +278,20 @@ function State([string]$m) { Set-Content $stateF "$((Get-Date).ToString('HH:mm')
 function Note([string]$who, [string]$m) { Add-Content (Join-Path $runs "agents\$who.note-from-rig-runner") "$((Get-Date).ToString('MM-dd HH:mm')) rig-runner $Lane`: $m" -ErrorAction SilentlyContinue }
 function Wsl([string[]]$a) { & wsl.exe -d $distro -u root --cd / -- @a 2>&1 | ForEach-Object { "$_" } }
 function WslPath([string]$w) { '/mnt/' + $w.Substring(0, 1).ToLower() + ($w.Substring(2) -replace '\\', '/') }
-function Ssh([string[]]$a) { & ssh.exe -n -o BatchMode=yes -o ConnectTimeout=10 4080 @a 2>&1 | ForEach-Object { "$_" } }
+function Ssh([string[]]$a) {
+    $cfg = 'C:\Users\Shay\.ssh\config'
+    if (-not (Test-Path -LiteralPath $cfg)) { throw "4080 route unavailable: trusted SSH config cannot be read at $cfg; refusing ambient alias" }
+    if (-not $script:verified4080Host) {
+        $h = @(& ssh.exe -F $cfg -n -o BatchMode=yes -o ConnectTimeout=8 4080 hostname 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0 -or (($h -join '').Trim() -ne 'DESKTOP-NQQPA73')) { throw "4080 route verification failed; expected DESKTOP-NQQPA73, got: $(($h -join ' ').Trim())" }
+        $script:verified4080Host = $true
+    }
+    & ssh.exe -F $cfg -n -o BatchMode=yes -o ConnectTimeout=10 4080 @a 2>&1 | ForEach-Object { "$_" }
+}
 function Ssh4Ps([string]$file, [string[]]$a) { Ssh (@('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $file) + $a) }
 function Ssh4Enc([string]$ps) { Ssh @('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ps))) }
 function Ssh4Bash([string[]]$a) { Ssh (@('C:\PROGRA~1\Git\bin\bash.exe', '-l') + $a) }
-function Scp4([string[]]$src, [string]$dst) { & scp -q -o BatchMode=yes @src "4080:$dst" 2>&1 | ForEach-Object { "$_" }; $LASTEXITCODE -eq 0 }
+function Scp4([string[]]$src, [string]$dst) { & scp.exe -F 'C:\Users\Shay\.ssh\config' -q -o BatchMode=yes @src "4080:$dst" 2>&1 | ForEach-Object { "$_" }; $LASTEXITCODE -eq 0 }
 function CheckListRig([string]$listFile, [bool]$stobe) {
     $lp = (($listFile -replace '\\', '/') -replace '^C:', '/c')
     $fix = if ($stobe) { '' } else { '--fix ' }

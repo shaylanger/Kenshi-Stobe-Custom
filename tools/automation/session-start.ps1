@@ -38,6 +38,8 @@ foreach ($a in $ag) {
 '=== rig runners (rig-runner.ps1: one daemon per rig runs the queue\<rig>\ and queue\any\ list files; ALERT on idle/stuck) ==='
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Ensure
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Status
+'=== paired runner supervisor (45 s paired progress + heartbeat monitor; exact-hash recovery pin required) ==='
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'paired-runner-supervisor.ps1') -Ensure
 '=== GPU telemetry (gpulog.ps1: 2 s nvidia-smi samples per rig in C:\KenshiTestRuns\gpulog\ for TDR/BSOD evidence) ==='
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'gpulog-ensure.ps1') -Rig both
 Get-ChildItem 'C:\KenshiTestRuns' -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }

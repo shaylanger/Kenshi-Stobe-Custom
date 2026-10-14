@@ -24,6 +24,8 @@
 # test with no RESULT line gets one built from its VERDICT lines, the `== N passed, M failed` line or its exit code.
 # Every FAIL gets an excerpt (batch-excerpts.sh). If the game stops answering or Kenshi died, it is relaunched on the
 # next row's save (at most RECOVER=2 times, NOTE line); after that the rest of the batch is skipped.
+# After an explicit terminal `RESULT <row> FAIL setup: ...`, world readiness is checked for at most 20 seconds; if Kenshi
+# remains out of world or exits, the remaining rows are recorded as skipped and the existing lane relaunch request is persisted.
 # Memory: before every row the Windows commit headroom is checked; below MIN_COMMIT_GB (default 3) Kenshi is
 # restarted first (NOTE line). m22: Kenshi crashed on a NULL texture allocation with the commit charge at its limit.
 # Dry-run gate (Speed plan 1, Shay 2026-10-10): before the game is touched the whole list runs through
@@ -58,7 +60,7 @@ KD=${KDIR:-/mnt/d/Steam/steamapps/common/Kenshi}
 A=$CR/KenshiModding/tools/automation; T=$CR/KenshiModding/tests/ingame/stobe; KT=$CR/KenshiModding/components/KenshiFP/tests/ingame
 CTL='C:\KenshiModding\tools\automation\kenshi-ctl.ps1'; CTLO=()
 [ "${RIG:-5090}" = 4080 ] && { CTL='C:\KAH\ctl.ps1'; CTLO=(-Owner "${KAH_OWNER:-rig4080}" -Instance "${KAH_INSTANCE:-1}"); }   # -Instance: lane 4080b (C:\KenshiInst\<n>)
-LAUNCH=""; STOP=0; RESUME=0; NODRY=""; REUSE=0
+LAUNCH=""; STOP=0; RESUME=0; NODRY=""; REUSE=0; ATTACH=0; ATTACH_PID=""; ATTACH_SAVE=""; ATTACH_STOBE_SHA256=""
 # --reuse (rig-runner, 2026-10-10 no relaunch gap): with --launch, a game that is already up and in the world loads <save>
 # in place (stobe-auto load) instead of a stop + relaunch; launches as usual when Kenshi is not running / not answering
 # TDR guard (see header). tdr_events <since-epoch>: "epoch|provider|id|message" of System-log events 4101/153 since then
@@ -89,6 +91,35 @@ lane_after() { local sig=$1 rr=$2 rrow=$3 lrf=$4 lsf=$5 prev=""
   if [ -n "$rr" ]; then echo "row $rrow asked: $rr" > "$lrf"; echo "relaunch request kept for the next batch on this lane: row $rrow: $rr"
   elif [ -n "$sig" ] && [ "$sig" = "$prev" ]; then echo "2 batches in a row failed every row on setup: $sig" > "$lrf"; echo "2nd batch in a row with every row FAIL setup ($sig): the next batch on this lane relaunches"; fi
   if [ -n "$sig" ]; then echo "$sig" > "$lsf"; else rm -f "$lsf"; fi; }
+# A completed wrapper's own RESULT line is the only signal that can use the short setup recovery.
+explicit_terminal_setup_fail() { awk -v r="$2" '$1 == "RESULT" && $2 == r && $3 == "FAIL" && $4 == "setup:" { found=1 } END { exit !found }' "$1" 2>/dev/null; }
+# world_live_bounded: same world test, with a hard wall-clock cap for the setup-failure recovery path.
+world_live_bounded() { # <seconds>; 0 = in-world, 1 = still out-of-world, 2 = Kenshi gone
+  local limit=${1:-20} rc
+  [ -f "$O/.noload" ] && return 1
+  timeout "$limit" stobe-auto wait-world "$limit" </dev/null >/dev/null 2>&1
+  rc=$?
+  [ "$rc" = 0 ] && return 0
+  kenshi_up || return 2
+  return 1
+}
+setupfail_recovery_action() { # <explicit-terminal-setup-fail: 0|1> <world_live code>
+  [ "$1" = 1 ] || { echo normal; return; }
+  case "$2" in 0) echo continue ;; 1) echo skip-lane-relaunch ;; 2) echo skip-lane-relaunch-dead ;; *) echo normal ;; esac
+}
+batch_should_skip_row() { [ -n "$1" ]; }
+mark_setupfail_skip_tail() { # <row> <world_live code>
+  PRE=SETUP_FAIL_RECOVERY
+  if [ "$2" = 2 ]; then relreq="setup FAIL left Kenshi unavailable during world readiness"
+  else relreq="setup FAIL left the game out of world after the 20-second check"; fi
+  relrow=$1
+}
+row_analysis_pending() { # <pid>
+  local item
+  for item in "${PEND[@]}"; do [ "${item%%|*}" = "$1" ] && return 0; done
+  return 1
+}
+row_has_terminal_setup_fail() { ! row_analysis_pending "$1" && explicit_terminal_setup_fail "$2" "$3"; }
 # need_missing <list> <help text>: commands the list needs that the loaded game's `help` lacks (comma list, empty = ok):
 # "# needs-cmd: a,b" (none = no check) + fp_control for any KenshiFP take row (speed-scout m105: lane 4080b's game ran
 # without KenshiFP after Defender removed its DLL, and every row FAILed setup one by one)
@@ -105,9 +136,50 @@ tl() { local f="${KAH_TIMELINE:-$CR/KenshiTestRuns/gpulog/timeline.tsv}"; [ "$f"
   printf '%s	%s	%s	%s	%s
 ' "$(tlts)" "${RIG:-5090}" "i${KAH_INSTANCE:-1}" "$1" "$(printf '%s batch=%s' "$2" "${O##*/}" | tr '	
 ' '   ' | cut -c1-200)" >> "$f" 2>/dev/null; return 0; }
-if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check + relaunch request on fixed cases
+test_setupfail_recovery() {
+  local sf ld found n
+  sf=$(mktemp); ld=$(mktemp -d)
+  printf '%s\n' 'RESULT setup-row FAIL setup: weapon is not ready' > "$sf"
+  if explicit_terminal_setup_fail "$sf" setup-row; then found=yes; else found=no; fi
+  st "explicit terminal setup FAIL is recognized" "$found" yes
+  PEND=("4242|setup-row|save|player|mate|out|30|0")
+  if row_has_terminal_setup_fail 4242 "$sf" setup-row; then found=yes; else found=no; fi
+  st "pending background analysis does not trigger fast recovery" "$found" no
+  PEND=()
+  if row_has_terminal_setup_fail 4242 "$sf" setup-row; then found=yes; else found=no; fi
+  st "completed setup FAIL can trigger fast recovery" "$found" yes
+  st "setup FAIL with world restored continues normally" "$(setupfail_recovery_action 1 0)" continue
+  st "setup FAIL still out of world selects skip plus lane relaunch" "$(setupfail_recovery_action 1 1)" skip-lane-relaunch
+  mark_setupfail_skip_tail setup-row 1
+  st "out-of-world recovery records stop and lane-relaunch reasons" "$PRE|$relrow|$relreq" "SETUP_FAIL_RECOVERY|setup-row|setup FAIL left the game out of world after the 20-second check"
+  NOTRUN=(); for n in tail-a tail-b; do batch_should_skip_row "$PRE" && NOTRUN+=("$n"); done
+  st "out-of-world recovery records every remaining row as skipped" "${NOTRUN[*]}" "tail-a tail-b"
+  lane_after "" "$relreq" "$relrow" "$ld/relaunch" "$ld/signature" >/dev/null
+  st "out-of-world recovery persists the existing lane relaunch request" "$(cat "$ld/relaunch")" "row setup-row asked: setup FAIL left the game out of world after the 20-second check"
+  st "setup FAIL with Kenshi gone selects skip plus lane relaunch" "$(setupfail_recovery_action 1 2)" skip-lane-relaunch-dead
+  mark_setupfail_skip_tail dead-row 2
+  st "dead-game recovery records stop and lane-relaunch reasons" "$PRE|$relrow|$relreq" "SETUP_FAIL_RECOVERY|dead-row|setup FAIL left Kenshi unavailable during world readiness"
+  NOTRUN=(); for n in dead-tail-a dead-tail-b; do batch_should_skip_row "$PRE" && NOTRUN+=("$n"); done
+  st "dead-game recovery records every remaining row as skipped" "${NOTRUN[*]}" "dead-tail-a dead-tail-b"
+  lane_after "" "$relreq" "$relrow" "$ld/relaunch" "$ld/signature" >/dev/null
+  st "dead-game recovery persists the existing lane relaunch request" "$(cat "$ld/relaunch")" "row dead-row asked: setup FAIL left Kenshi unavailable during world readiness"
+  printf '%s\n' 'RESULT product-row FAIL best=1.4' > "$sf"
+  if explicit_terminal_setup_fail "$sf" product-row; then found=yes; else found=no; fi
+  st "product FAIL does not enter the short setup recovery path" "$(setupfail_recovery_action "$([ "$found" = yes ] && echo 1 || echo 0)" 1)" normal
+  st "setup failure passes a 20-second readiness cap" "$(grep -c '^    lw=2; if kenshi_up; then world_live_bounded 20; lw=' "$0")" 1
+  st "bounded readiness uses a hard wait-world timeout" "$(grep -c 'timeout "\$limit" stobe-auto wait-world "\$limit"' "$0")" 1
+  rm -f "$sf"; rm -rf "$ld"
+}
+if [ "${1:-}" = --selftest-setupfail ]; then
+  st_bad=0; st_n=0
+  st() { st_n=$((st_n + 1)); if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2' want '$3'"; st_bad=$((st_bad + 1)); fi; }
+  test_setupfail_recovery
+  echo "RUNBATCH-SETUPFAIL-SELFTEST $([ $st_bad = 0 ] && echo PASS || echo "FAIL $st_bad") $st_n cases"; exit $((st_bad > 0))
+fi
+if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR, relaunch, and terminal setup-fail recovery cases
   st_bad=0; st_n=0; tf=$(mktemp); rq=$(mktemp)
   st() { st_n=$((st_n + 1)); if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2' want '$3'"; st_bad=$((st_bad + 1)); fi; }
+  test_setupfail_recovery
   printf '%s\n' "1000|Display|4101|Display driver nvlddmkm stopped responding and has successfully recovered." \
     "1100|nvlddmkm|153|Error occurred on GPUID: 100" "1200|disk|153|The IO operation at logical block address 0x1 was retried." \
     "900|Display|4101|old reset before the row" "1300|Microsoft-Windows-Kernel-Power|4101|other provider" > "$tf"
@@ -166,7 +238,7 @@ if [ "${1:-}" = --selftest ]; then   # run-batch.sh --selftest: TDR filter/check
   rm -f "$nl"
   echo "RUNBATCH-SELFTEST $([ $st_bad = 0 ] && echo PASS || echo "FAIL $st_bad") $st_n cases"; exit $((st_bad > 0))
 fi
-while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --reuse) REUSE=1; shift ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; *) break ;; esac; done
+while [ $# -gt 0 ]; do case "$1" in --launch) LAUNCH="$2"; shift 2 ;; --reuse) REUSE=1; shift ;; --stop) STOP=1; shift ;; --resume) RESUME=1; shift ;; --no-dryrun) NODRY="${2:?--no-dryrun needs a reason}"; shift 2 ;; --attach-current) ATTACH=1; ATTACH_PID="${2:?--attach-current needs PID SAVE SHA256}"; ATTACH_SAVE="${3:?--attach-current needs PID SAVE SHA256}"; ATTACH_STOBE_SHA256="${4:?--attach-current needs PID SAVE SHA256}"; shift 4 ;; *) break ;; esac; done
 L="${1:?usage: run-batch.sh [--launch <save>] [--stop] [--resume] [--no-dryrun <reason>] <list-file> <out-dir>}"; O="${2:?out-dir}"
 mkdir -p "$O"; rm -f "$O/DONE" "$O/GAMEDONE"
 # Batch end: DONE + drop every inflight marker naming this out dir, so idle detection (rig5090-state.ps1) sees the
@@ -240,6 +312,17 @@ kenshi_pids() {
   else tasklist.exe </dev/null 2>/dev/null | awk 'tolower($1)=="kenshi_x64.exe"{print $2}'; fi
 }
 kenshi_up() { [ -n "$(kenshi_pids)" ]; }
+attach_guard() { # side-effect-free proof; attach batches fail closed instead of recovering or touching the game
+  [ "$ATTACH" = 1 ] || return 0
+  [[ "$ATTACH_PID" =~ ^[0-9]+$ && "$ATTACH_SAVE" =~ ^[A-Za-z0-9_-]+$ && "$ATTACH_STOBE_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || { echo 'invalid attach identity arguments'; return 1; }
+  [ "${KAH_INSTANCE:-}" = 3 ] && [ "${KD//\\//}" = '/mnt/d/KenshiInst/3' ] && [ "${KAH_DIR:-}" = 'D:\KenshiInst\3\mods\AutomationHarness' ] || { echo 'instance routing is not D3'; return 1; }
+  local st iso proof
+  st=$(timeout 15 stobe-auto status </dev/null 2>/dev/null | head -1); [[ "$st" == *"phase=world"* && "$st" == *"save=$ATTACH_SAVE"* ]] || { echo "game/save identity mismatch: $st"; return 1; }
+  iso=$(timeout 15 stobe-auto input_isolation status </dev/null 2>/dev/null | head -1); [[ "$iso" == *'isolation=on'* ]] || { echo "input isolation is not on: $iso"; return 1; }
+  proof=$(timeout 15 powershell.exe -NoProfile -Command '$p=Get-CimInstance Win32_Process -Filter "ProcessId='"$ATTACH_PID"'"; $d="D:\KenshiInst\3"; $f=Join-Path $d "mods\Stobe\Stobe.dll"; if (!$p -or $p.ExecutablePath -ine (Join-Path $d "kenshi_x64.exe")) { exit 2 }; if (!(Test-Path -LiteralPath $f)) { exit 3 }; $h=(Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToUpperInvariant(); if ($h -ne "'"${ATTACH_STOBE_SHA256^^}"'") { exit 4 }; "ATTACH-PROOF OK pid=$($p.ProcessId) dll=$h"' 2>/dev/null | tr -d '\r' | tail -1)
+  [[ "$proof" == ATTACH-PROOF\ OK\ pid="$ATTACH_PID"\ dll="${ATTACH_STOBE_SHA256^^}" ]] || { echo "PID/instance/Stobe identity mismatch: ${proof:-proof unavailable}"; return 1; }
+  return 0
+}
 relaunch() { # relaunch <save> <why>: (re)start Kenshi on <save> ("home"/"-" = auto-home); 1 = it didn't come back
   local s="$1"; case "$s" in home|-) s=auto-home ;; esac
   recovered=$((recovered + 1)); say "NOTE relaunch $recovered/$RECOVER on $s: $2"; tl relaunch "$s: $2"
@@ -259,16 +342,16 @@ tdr_evidence() { local ev="$O/TDR-evidence"; mkdir -p "$ev"
 tdr_guard() {  # tdr_guard <row|launch>: 1 = GPU driver reset since the last check: batch stopped (header)
   local now; now=$(date +%s); tdr_check "$((TDR_SINCE - 5))" && { TDR_SINCE=$now; return 0; }
   local msg="TDR (GPU driver reset) on rig ${RIG:-5090} at/after $1 of $L: $TDR_HIT"
-  say "BATCH ABORTED $(date '+%F %H:%M'): $msg (rest of the list not run, game stopped)"
+  say "BATCH ABORTED $(date '+%F %H:%M'): $msg (rest of the list not run$( [ "$ATTACH" = 1 ] && echo ', attached game preserved' || echo ', game stopped'))"
   tl tdr "$1: $TDR_HIT"
   printf '%s\nrow=%s\nlist=%s\nout=%s\ntime=%s\n' "$msg" "$1" "$L" "$O" "$(date '+%F %H:%M:%S')" > "$O/TDR"
   PRE=TDR
   tdr_evidence   # before anything is stopped (m103: Shay wants every crash diagnosable)
-  if [ "${RIG:-5090}" != 4080 ]; then
+  if [ "${RIG:-5090}" != 4080 ] && [ "$ATTACH" != 1 ]; then
     { echo "ALERT 5090 $(date +%H:%M) $msg. Runner stopped; delete this file only once Shay cleared the cause."; cat "$O/TDR"; } > "$([ -n "${TDR_FAKE:-}" ] && echo "$O" || echo "$CR/KenshiTestRuns")/ALERT-5090-tdr.txt"   # fake: into the out dir
     [ -n "${TDR_FAKE:-}" ] || timeout 120 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\rig-runner.ps1' -Stop -Rig 5090 </dev/null 2>&1 | tr -d '\r' | tail -1
   fi
-  [ -n "${TDR_FAKE:-}" ] || { kenshi_up && ctl stop | tail -1; }
+  [ -n "${TDR_FAKE:-}" ] || { [ "$ATTACH" = 1 ] || { kenshi_up && ctl stop | tail -1; }; }
   return 1
 }
 # Load dedupe (speed-scout 2026-10-11, harness.log: every KenshiFP take row loaded twice, prepare kah-fpxbow then the
@@ -334,7 +417,12 @@ esac
 # game, so the launch below starts fresh instead of reusing it
 LANEK="${RIG:-5090}-i${KAH_INSTANCE:-1}"; LRD="$CR/KenshiTestRuns/runner"; mkdir -p "$LRD" 2>/dev/null
 LRF="$LRD/relaunch-lane.$LANEK"; LSF="$LRD/setupfail-lane.$LANEK"
-if [ -n "$LAUNCH" ] && [ -s "$LRF" ]; then
+if [ "$ATTACH" = 1 ]; then
+  [ -z "$LAUNCH" ] && [ "$REUSE" = 0 ] && [ "$STOP" = 0 ] && [ "$ATTACH_SAVE" != '-' ] || { say 'BATCH REFUSED: attach-current cannot be combined with launch/reuse/stop'; finish; exit 2; }
+  while IFS='|' read -r an as ap am at ac; do case "$an" in ''|\#*) continue ;; esac; as=$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$as"); [ "$as" = '-' ] || { say "BATCH REFUSED: attach-current row $an must use save -"; finish; exit 2; }; done < "$L"
+  why=$(attach_guard) || { say "BATCH REFUSED: attach-current guard: $why"; finish; exit 2; }
+fi
+if [ "$ATTACH" != 1 ] && [ -n "$LAUNCH" ] && [ -s "$LRF" ]; then
   if kenshi_up; then say "NOTE lane relaunch ($LANEK): $(relaunch_req "$LRF"): stopping the running game, fresh launch"; ctl stop | tail -1
     for _ in $(seq 30); do kenshi_up || break; sleep 2; done; kenshi_up && say "NOTE lane relaunch: the game is still up after stop"
   fi; rm -f "$LRF"
@@ -448,7 +536,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   # rig-runner preemption (a filler gives way to real work): <out>/PREEMPT = stop at this row boundary; the running row has
   # its RESULT line, the rest are listed as not run (not in done.txt: --resume would run them), GAMEDONE/DONE as usual
   if [ -z "$PRE" ] && [ -f "$O/PREEMPT" ]; then PRE=$(head -1 "$O/PREEMPT" | tr -d '\r'); PRE=${PRE:-preempted}; say "BATCH PREEMPTED $(date '+%F %H:%M') before $name: $PRE"; fi
-  if [ -n "$PRE" ]; then NOTRUN+=("$name"); continue; fi
+  if batch_should_skip_row "$PRE"; then NOTRUN+=("$name"); continue; fi
   # row_split (2026-10-10): quotes group a value with spaces; shell operators are refused here, before the save loads
   if ! row_split "$cmd"; then say "RESULT $name FAIL list: $ROWERR"; fail=$((fail + 1)); continue; fi
   read -r freec kpriv <<<"$(memline)"
@@ -468,7 +556,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   if [ "$dead" = 1 ]; then say "RESULT $name FAIL skipped: game not responding"; fail=$((fail + 1)); continue; fi
   # leftover game drivers of earlier rows/batches (killtree 2026-10-11: a runner-killed 4080 crossbow row kept running 42 min
   # and sent fp_combat aim inputs into three later batches): kill them before the row loads its save (row-reaper.sh)
-  if [ -f "$A/row-reaper.sh" ]; then
+  if [ "$ATTACH" != 1 ] && [ -f "$A/row-reaper.sh" ]; then
     while IFS= read -r l; do case "$l" in NOTE*) say "${l/NOTE /NOTE $name: }" ;; NEUTRAL*) echo "$l" ;; esac; done < <(bash "$A/row-reaper.sh" sweep "$O" 2>&1 </dev/null)
   fi
   echo "$(date +%H:%M) $name: prepare $save"
@@ -491,7 +579,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   # every click, the row stalled until closed by hand): close an open conversation before the row (setup FAIL if it
   # stays open) and watch for new ones during it (tools/automation/dialog-guard.sh; DIALOG_GUARD=0 in the command = off)
   dgw=""; dgl="$O/$name.dialogs"; rm -f "$dgl"
-  if [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ]; then
+  if [ "$ATTACH" != 1 ] && [[ " ${envs[*]} " != *" DIALOG_GUARD=0 "* ]] && [ -f "$A/dialog-guard.sh" ]; then
     dg=$(bash "$A/dialog-guard.sh" check 2>&1) || {
       say "RESULT $name FAIL setup: dialog ${dg#DIALOG stuck } (before the row)"; fail=$((fail + 1)); continue; }
     case "$dg" in "DIALOG closed"*) say "NOTE $name: preflight closed an open conversation (${dg#DIALOG closed })" ;; esac
@@ -521,26 +609,52 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do   # list on fd 3: Windows tool
   [ -n "$rg" ] && { kill "$rg" 2>/dev/null; wait "$rg" 2>/dev/null; }
   [ -n "$dgw" ] && { kill "$dgw" 2>/dev/null; wait "$dgw" 2>/dev/null; }
   [ -s "$dgl" ] && say "NOTE $name: dialog guard closed $(grep -c 'DIALOG GUARD: closed' "$dgl") conversation(s) mid-row, stuck $(grep -c 'DIALOG GUARD: stuck' "$dgl"): $(awk '{sub(/^[^ ]+ DIALOG GUARD: /,""); print}' "$dgl" | sort -u | head -3 | paste -sd';' | cut -c1-200) (clicks during it were refused: check the row's ui_open gates)"
-  stobe-auto speed 0 >/dev/null 2>&1
+  [ "$ATTACH" = 1 ] || stobe-auto speed 0 >/dev/null 2>&1
   printf '%s\t%s\t' "$name" "$save" >>"$R"; paste <(echo "$before" | tr '\t' '\n') <(offsets | tr '\t' '\n') | paste -sd'\t' >>"$R"
   if [ $bg = 1 ]; then echo "$(date +%H:%M) $name: game part done, analysis goes on in the background (pid $sp)"; PEND+=("$sp|$name|$save|$player|$mate|$out|$to|$sl")
   else row_result "$name" "$save" "$player" "$mate" "$out" "$to" "$rc" "$sl"; fi
   collect
-  relreq=$(relaunch_req "$rlf"); [ -n "$relreq" ] && { relrow=$name; say "NOTE $name: asked for a game relaunch before the next row: $relreq"; }
+  if [ "$ATTACH" = 1 ]; then
+    why=$(attach_guard) || { say "RESULT $name FAIL setup: attach-current guard after row: $why"; PRE=ATTACH_GUARD; continue; }
+    relreq=""
+  else
+    relreq=$(relaunch_req "$rlf"); [ -n "$relreq" ] && { relrow=$name; say "NOTE $name: asked for a game relaunch before the next row: $relreq"; }
+  fi
   tdr_guard "row $name" || continue   # GPU driver reset: batch stopped, no liveness wait on the stopped game
-  # m37: a crashed/killed Kenshi = dead now, no 4.5 min of waits on a game that is gone (the next row relaunches)
-  # 2026-10-11 (67-xbr-r11-hit): the runner killed the hung game DURING these waits and the batch sat 4.5 min on a game that
-  # was gone: world_live re-checks Kenshi every 20 s and returns 2 the moment it is gone (dead now, no NOTE: next row relaunches)
-  lw=2; if kenshi_up; then world_live 120; lw=$?; [ $lw = 1 ] && { for _ in $(seq 15); do kenshi_up || break; sleep 2; done; world_live 120; lw=$?; }; fi
-  case $lw in 0) ;; 2) dead=1 ;; *) say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1 ;; esac
+  # Only a terminal setup FAIL gets the short readiness check. An analysis still in PEND is deliberately left on the
+  # normal path until its wrapper exits; product FAILs also retain the existing liveness handling below.
+  setupfail=0
+  if row_has_terminal_setup_fail "$sp" "$out" "$name"; then setupfail=1; fi
+  if [ "$setupfail" = 1 ]; then
+    lw=2; if kenshi_up; then world_live_bounded 20; lw=$?; fi
+    case "$(setupfail_recovery_action 1 "$lw")" in
+      continue) ;;
+      skip-lane-relaunch|skip-lane-relaunch-dead)
+        mark_setupfail_skip_tail "$name" "$lw"
+        say "NOTE $name: $relreq; skipping the remaining rows and requesting the lane relaunch"
+        ;;
+    esac
+  else
+    # m37: a crashed/killed Kenshi = dead now, no 4.5 min of waits on a game that is gone (the next row relaunches)
+    # 2026-10-11 (67-xbr-r11-hit): the runner killed the hung game DURING these waits and the batch sat 4.5 min on a game that
+    # was gone: world_live re-checks Kenshi every 20 s and returns 2 the moment it is gone (dead now, no NOTE: next row relaunches)
+    lw=2; if kenshi_up; then world_live 120; lw=$?; [ $lw = 1 ] && { for _ in $(seq 15); do kenshi_up || break; sleep 2; done; world_live 120; lw=$?; }; fi
+    case $lw in 0) ;; 2) dead=1 ;; *) say "NOTE game not responding after $name (rest of the batch skipped)"; dead=1 ;; esac
+  fi
 done 3<"$L"
-[ -n "$PRE" ] && say "NOTE $([ "$PRE" = TDR ] && echo 'TDR stop' || echo preempted): not run: ${NOTRUN[*]}"
+if [ -n "$PRE" ]; then
+  case "$PRE" in
+    TDR) say "NOTE TDR stop: not run: ${NOTRUN[*]}" ;;
+    SETUP_FAIL_RECOVERY) say "NOTE setup-fail recovery: skipped remaining rows: ${NOTRUN[*]}" ;;
+    *) say "NOTE preempted: not run: ${NOTRUN[*]}" ;;
+  esac
+fi
 # m37: skip `ctl stop` (up to 420 s) when Kenshi is already gone
 [ "$STOP" = 1 ] && if kenshi_up; then tl stop "end of batch"; ctl stop | tail -2; else echo "Kenshi not running, no stop needed"; fi
 # LANE RELAUNCH END: before GAMEDONE (the runner starts the next list on it): keep the last row's request / 2nd identical
 # all-setup-FAIL batch -> relaunch-lane.<lane> (rows still analysing in the background passed their game part: not setup)
 lsig=""; [ ${#PEND[@]} -eq 0 ] && lsig=$(setup_sig "$S")
-ln=$(lane_after "$lsig" "$relreq" "$relrow" "$LRF" "$LSF"); [ -n "$ln" ] && say "NOTE $ln"
+if [ "$ATTACH" != 1 ]; then ln=$(lane_after "$lsig" "$relreq" "$relrow" "$LRF" "$LSF"); [ -n "$ln" ] && say "NOTE $ln"; fi
 touch "$O/GAMEDONE"; [ ${#PEND[@]} -gt 0 ] && echo "$(date +%H:%M) game part done; waiting for ${#PEND[@]} background analyses"
 collect wait
 say "BATCH END $(date '+%F %H:%M') pass=$pass fail=$fail recwarn=$recwarn"

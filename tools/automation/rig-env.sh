@@ -4,6 +4,7 @@
 #   RIG        5090 | 4080
 #   CR         POSIX root of drive C:  /mnt/c (5090) | /c (4080)   -> $CR/KenshiTestRuns, $CR/KenshiModding, $CR/Windows/Fonts
 #   KDIR       Kenshi game dir (KenshiFP.log, harness shots, vmrec dumps)
+#   KENSHI_DIR Alias of KDIR for tools that use the game-root variable name
 #   FFX        ffmpeg.exe (winget Gyan.FFmpeg 8.0.1, same package path on both rigs); its dir is on PATH (frames.py/takecheck.py
 #              call ffmpeg/ffprobe by name)
 #   KAH_DIR    harness mod dir (Windows form, read by kah.py); KAH_CLIENT = kah.py dir in the form this rig's python reads
@@ -43,7 +44,41 @@ if [ "$RIG" = 4080 ]; then
   fi
   export KAH_CLIENT='C:/KenshiModding/Kenshi-Automation-Harness/client'
   export KAH_OWNER=${KAH_OWNER:-rig4080}
+  # Keep the game-root name in sync with the selected instance. The 4080
+  # instance-3 operator preflight and tools such as anim-mods use KENSHI_DIR.
+  export KENSHI_DIR="$KDIR"
   export PATH="/c/KAH/bin:$PATH"
+  # Read-only proof before a direct isolated i3 command. Checks inbox/lock
+  # presence only; it never opens, waits on, removes, or consumes either file.
+  rig4080_i3_preflight() {
+    if [[ "${KAH_INSTANCE:-}" != 3 ]]; then
+      echo 'RESULT 4080-I3-ROUTE FAIL setup: export KAH_INSTANCE=3 explicitly first' >&2
+      return 2
+    fi
+    local want_game='/c/KenshiInst/3' want_harness='c:/kenshiinst/3/mods/automationharness' harness_unix
+    printf 'KAH_INSTANCE=%s\nKENSHI_DIR=%s (C:\\KenshiInst\\3)\nKDIR=%s (C:\\KenshiInst\\3)\nKAH_DIR=%s\n' \
+      "$KAH_INSTANCE" "$KENSHI_DIR" "$KDIR" "$KAH_DIR"
+    local kah_norm=${KAH_DIR//\\//}
+    kah_norm=${kah_norm,,}
+    if [[ "$KDIR" != "$want_game" || "$KENSHI_DIR" != "$want_game" || "$kah_norm" != "$want_harness" ]]; then
+      echo 'RESULT 4080-I3-ROUTE FAIL setup: instance paths do not resolve to C:\KenshiInst\3' >&2
+      return 2
+    fi
+    harness_unix=$(cygpath -u "$KAH_DIR") || {
+      echo 'RESULT 4080-I3-ROUTE FAIL setup: cannot resolve isolated harness directory' >&2
+      return 2
+    }
+    if [[ -e "$harness_unix/inbox.txt" || -e "$harness_unix/inbox.txt.lock" ]]; then
+      echo 'RESULT 4080-I3-ROUTE STOP inbox pending or locked; no contents read and no files changed' >&2
+      return 3
+    fi
+    if [[ ! -d "$harness_unix" ]]; then
+      echo 'RESULT 4080-I3-ROUTE FAIL setup: isolated harness directory is missing' >&2
+      return 2
+    fi
+    echo 'RESULT 4080-I3-ROUTE PASS route=C:\KenshiInst\3 inbox=clear metadata-only'
+    return 0
+  }
   # animlab catalogs/configs hold WSL game paths; the lab maps them here (visual/ogre.py hostpath)
   export ANIMLAB_PATHMAP='mnt/d/Steam=C:/Program Files (x86)/Steam'   # no leading / (Git Bash would rewrite it for Windows python)
   rig_launch() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KAH\ctl.ps1' launch -Save "$1" -Owner "$KAH_OWNER" -Instance "${KAH_INSTANCE:-1}"; }
@@ -61,6 +96,7 @@ else
   export KAH_DIR=${KAH_DIR:-'D:\Steam\steamapps\common\Kenshi\mods\AutomationHarness'}
   export KAH_CLIENT=${KAH_CLIENT:-/mnt/c/KenshiModding/Kenshi-Automation-Harness/client}
   export KAH_OWNER=${KAH_OWNER:-kfp-fixer}
+  export KENSHI_DIR="$KDIR"
   rig_launch() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\kenshi-ctl.ps1' launch -Save "$1"; }
   rig_stop() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\kenshi-ctl.ps1' stop; }
   rig_bg() { local log=$1; shift; setsid nohup bash -c "$*" > "$log" 2>&1 < /dev/null & }

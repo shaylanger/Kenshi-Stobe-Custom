@@ -1,6 +1,84 @@
 #!/usr/bin/env bash
-# C:\KAH\bin\stobe-auto (4080 rig; deployed by rig4080/setup.sh): harness client. KAH_DIR from the environment wins
-# (rig-env.sh sets it; lane 4080b: KAH_INSTANCE=2 -> C:\KenshiInst\2\mods\AutomationHarness). The old shim hard-coded
-# instance 1, so lane 4080b's first batch drove lane 4080's game (multi-instance-4080 2026-10-11).
-export KAH_DIR="${KAH_DIR:-C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\AutomationHarness}"
+# C:\KAH\bin\stobe-auto (4080 rig; deployed by rig4080/setup.sh): harness client.
+# An explicit isolated instance is fail-closed: KAH_INSTANCE, KENSHI_DIR and
+# KAH_DIR must all identify the same install. This prevents an omitted or stale
+# KAH_DIR from silently falling back to the shared Steam instance-1 harness.
+
+_route_norm() {
+  local p=${1//\\//}
+  p=${p,,}
+  if [[ "$p" =~ ^([a-z]):/(.*)$ ]]; then
+    printf '%s:/%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  elif [[ "$p" =~ ^/([a-z])/(.*)$ ]]; then
+    printf '%s:/%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  else
+    printf '%s' "$p"
+  fi
+}
+
+_expected_install() {
+  local n=$1
+  if (( n >= 2 )); then
+    printf 'c:/kenshiinst/%s' "$n"
+  else
+    printf 'c:/program files (x86)/steam/steamapps/common/kenshi'
+  fi
+}
+
+_expected_harness() {
+  printf '%s/mods/automationharness' "$(_expected_install "$1")"
+}
+
+_instance_from_path() {
+  local p
+  p=$(_route_norm "$1")
+  if [[ "$p" =~ ^c:/kenshiinst/([0-9]+)/?$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  elif [[ "$p" =~ ^c:/kenshiinst/([0-9]+)/mods/automationharness/?$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
+_explicit_instance=${KAH_INSTANCE:-}
+_dir_instance=$(_instance_from_path "${KENSHI_DIR:-}")
+_kah_instance=$(_instance_from_path "${KAH_DIR:-}")
+_isolated_intent=0
+if [[ -n "$_explicit_instance" && "$_explicit_instance" =~ ^[0-9]+$ ]] && (( _explicit_instance >= 2 )); then
+  _isolated_intent=1
+elif [[ -n "$_dir_instance" || -n "$_kah_instance" ]]; then
+  _isolated_intent=1
+fi
+
+if (( _isolated_intent )); then
+  if [[ ! "$_explicit_instance" =~ ^[0-9]+$ ]] || (( _explicit_instance < 2 )); then
+    echo 'stobe-auto: refusing isolated path without explicit KAH_INSTANCE' >&2
+    exit 2
+  fi
+  _want_game=$(_expected_install "$_explicit_instance")
+  _want_harness=$(_expected_harness "$_explicit_instance")
+  if [[ "$(_route_norm "${KENSHI_DIR:-}")" != "$_want_game" ||
+        "$(_route_norm "${KAH_DIR:-}")" != "$_want_harness" ]]; then
+    echo "stobe-auto: refusing instance $_explicit_instance route mismatch (require matching KENSHI_DIR and KAH_DIR)" >&2
+    exit 2
+  fi
+
+  _harness_unix=$(cygpath -u "$KAH_DIR" 2>/dev/null) || {
+    echo 'stobe-auto: cannot resolve isolated KAH_DIR; refusing command' >&2
+    exit 2
+  }
+  if [[ ! -d "$_harness_unix" ]]; then
+    echo "stobe-auto: isolated harness directory is missing; refusing command" >&2
+    exit 2
+  fi
+  # Metadata-only check. Never open, remove, consume, or wait on a pending inbox
+  # or lock; the operator must resolve it separately before another command.
+  if [[ -e "$_harness_unix/inbox.txt" || -e "$_harness_unix/inbox.txt.lock" ]]; then
+    echo "stobe-auto: isolated inbox is pending or locked; refusing without reading or changing it" >&2
+    exit 3
+  fi
+fi
+
+if [[ -z "${KAH_DIR:-}" ]]; then
+  export KAH_DIR='C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\AutomationHarness'
+fi
 exec python C:/KAH/client/kah.py "$@"

@@ -25,17 +25,87 @@ import subprocess
 import sys
 import time
 
-MOD = '/mnt/d/Steam/steamapps/common/Kenshi/RE_Kenshi/mods/Stobe'
-HARNESS = '/mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness'
-FLAG = HARNESS + '/enabled.flag'
-INBOX = HARNESS + '/inbox.txt'
-OUTBOX = HARNESS + '/outbox.txt'
-STOBE_LOG = MOD + '/stobe.log'
+MAIN_GAME = '/mnt/d/Steam/steamapps/common/Kenshi'
+MAIN_HARNESS = '/mnt/d/Steam/steamapps/common/Kenshi/mods/AutomationHarness'
 
 
 def die(msg, code=2):
     print(msg)
     sys.exit(code)
+
+
+def _norm_route(path):
+    """Normalize Windows, WSL, and POSIX forms for exact route comparisons."""
+    path = (path or '').replace('\\\\', '/').replace('\\', '/').rstrip('/')
+    path = path.lower()
+    m = re.match(r'^([a-z]):/(.*)$', path)
+    if m:
+        return m.group(1) + ':/' + m.group(2)
+    m = re.match(r'^/mnt/([a-z])/(.*)$', path)
+    if m:
+        return m.group(1) + ':/' + m.group(2)
+    m = re.match(r'^/([a-z])/(.*)$', path)
+    if m:
+        return m.group(1) + ':/' + m.group(2)
+    return path
+
+
+def _instance_from_path(path):
+    m = re.match(r'^[a-z]:/kenshiinst/([0-9]+)(?:/mods/automationharness)?$', _norm_route(path))
+    return m.group(1) if m else None
+
+
+def _resolve_paths(env=None):
+    """Resolve the game paths; isolated intent requires a complete exact route."""
+    env = os.environ if env is None else env
+    explicit = env.get('KAH_INSTANCE', '')
+    game = env.get('KENSHI_DIR', '')
+    harness = env.get('KAH_DIR', '')
+    game_instance = _instance_from_path(game)
+    harness_instance = _instance_from_path(harness)
+    route_variables_present = any(k in env for k in ('KAH_INSTANCE', 'KENSHI_DIR', 'KAH_DIR'))
+    isolated = bool((explicit.isdigit() and int(explicit) >= 2) or game_instance or harness_instance)
+    if not route_variables_present:
+        return MAIN_GAME, MAIN_HARNESS
+    if not isolated:
+        die('stobe-say: refusing incomplete isolated route; require explicit KAH_INSTANCE, KENSHI_DIR, and KAH_DIR')
+    if not explicit.isdigit() or int(explicit) < 2:
+        die('stobe-say: refusing isolated path without explicit KAH_INSTANCE')
+    normalized_game = _norm_route(game)
+    drive = normalized_game[0] if re.match(r'^[a-z]:/', normalized_game) else ''
+    if drive not in ('c', 'd'):
+        die('stobe-say: refusing unsupported isolated drive in KENSHI_DIR')
+    expected_game = '%s:/kenshiinst/%s' % (drive, explicit)
+    expected_harness = expected_game + '/mods/automationharness'
+    if _norm_route(game) != expected_game or _norm_route(harness) != expected_harness:
+        die('stobe-say: refusing instance %s route mismatch (require matching KENSHI_DIR and KAH_DIR)' % explicit)
+    # The route variables are Windows paths in rig environments. Convert them
+    # to the local POSIX filesystem paths before opening inbox/log files.
+    try:
+        game_path = subprocess.check_output(['cygpath', '-u', game], text=True).strip()
+        harness_path = subprocess.check_output(['cygpath', '-u', harness], text=True).strip()
+    except (OSError, subprocess.CalledProcessError):
+        def wsl_path(path):
+            path = path.replace('\\', '/')
+            m = re.match(r'^([a-z]):/(.*)$', path, re.I)
+            if m:
+                return '/mnt/%s/%s' % (m.group(1).lower(), m.group(2))
+            m = re.match(r'^/([a-z])/(.*)$', path, re.I)
+            if m:
+                return '/mnt/%s/%s' % (m.group(1).lower(), m.group(2))
+            return path
+        game_path, harness_path = wsl_path(game), wsl_path(harness)
+    if not os.path.isdir(harness_path):
+        die('stobe-say: isolated harness directory is missing; refusing command')
+    return game_path, harness_path
+
+
+GAME, HARNESS = _resolve_paths()
+MOD = GAME + '/RE_Kenshi/mods/Stobe'
+FLAG = HARNESS + '/enabled.flag'
+INBOX = HARNESS + '/inbox.txt'
+OUTBOX = HARNESS + '/outbox.txt'
+STOBE_LOG = MOD + '/stobe.log'
 
 
 KAH_PY = '/mnt/c/KenshiModding/Kenshi-Automation-Harness/client/kah.py'
