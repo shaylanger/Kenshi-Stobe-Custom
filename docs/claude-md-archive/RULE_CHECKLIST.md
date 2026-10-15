@@ -94,3 +94,13 @@ Enforced: HOOK = a Claude Code hook in `.claude/settings.json`/context-meter; TO
 | 95 | - **Agent handoff guards (2026-10-15):** 'agent-status.ps1' keeps 'inf... | CORE-VERBATIM | POLICY |
 | 96 | - Details and the tooling that enforces this are recorded in 'testing/... | CORE-VERBATIM | POLICY |
 | 97 | - **Waker guard (restored 2026-10-15; '.claude/settings.json' Stop + P... | CORE-VERBATIM | POLICY |
+
+## Changes after the trim (live CLAUDE.md edits)
+
+| Date | Rule | Change | Enforced by |
+|---|---|---|---|
+| 2026-10-15 | "Independent agent sessions" bullet (WP agents as separate `claude` sessions, coordinator at its limit never touches them) | REPLACED by three bullets: in-session subagents are the standard (hidden agent-host / `spawn-wp-session.ps1` kept as code, off by default); OVERLAP HANDOFF (old coordinator stays alive as a TAIL session, `tail-relay.ps1` / `tail-ack.ps1`, new coordinator never respawns agents owned by a live tail); COLD START (DEAD listing in `session-start.ps1`). Original text remains in `testing/AGENT_PROMPTS.md` "Independent agent sessions" (marked superseded/optional) | HOOK: `.claude/context-meter.project.ps1` (270k/300k/400k), `kenshi-waker-guard.ps1` tail Stop rule, `agent-router.ps1` (no longer denies long in-session agents); TOOL: `tail-mode.ps1`, `tail-relay.ps1`, `tail-ack.ps1`, `program-ledger.ps1 route/ack`, `session-start.ps1`; selftests `tail-hooks-selftest.ps1`, `tail-ledger-selftest.ps1` |
+| 2026-10-15 | "First step of every session" (Start here): "Respawn every agent not DONE" | Added exception: agents owned by a LIVE tail session | TOOL: `session-start.ps1` TAIL/DEAD lines, `handoff-ready.ps1` |
+| 2026-10-15 | Supervisor bullet (orphaned RUNNING agents respawned) | Added: not when owned by a live tail | TOOL: `coord-supervisor.ps1` |
+| 2026-10-15 | Waker guard bullet | Added: tail session may end only when its agents are done and acked; exempt from idle-5090 / handoff-marker rules | HOOK: `kenshi-waker-guard.ps1` |
+| 2026-10-15 (row 12, "Session continuity") | context-meter handoff at 300k | Handoff now an OVERLAP handoff (warn 270k, handoff 300k, tail hard limit 400k) | HOOK: `.claude/context-meter.project.ps1` |

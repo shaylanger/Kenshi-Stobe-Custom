@@ -58,7 +58,7 @@ The status "latest" line must be enough for a fresh agent to continue without as
 - **Handoff:** status `STOPPED-CONTEXT`, handoff file with exact next step, final report begins `CONTEXT LIMIT: handoff at <path>`.
 - **Successor naming:** `wpA` -> `wpA2` -> `wpA3`; the successor continues the SAME work dir and patch name suffix-free (patch stays `wpA.patch`), is a
   fresh agent (never SendMessage a stopped one), pointed at the predecessor's status + handoff files. The ledger records the chain. More than 3 successors = the WP was mis-sized: split it.
-- **Coordinator** at its own limit hands off WITHOUT telling healthy running agents to stop (see PROPOSED CONTEXT-METER HANDOFF TEXT).
+- **Coordinator** at its own limit (300k) hands off WITHOUT telling healthy running agents to stop: it stays alive as a TAIL session and relays their results (section 9, overlap handoff).
 
 ## 7. Agent BRIEF TEMPLATE (copy into every Agent prompt)
 ```
@@ -87,7 +87,8 @@ only: code maps, warn level, successor names, tool pointers.)
 - **Checkpoints and handoffs:** every milestone or ~40k tokens an agent regenerates its patch, compile-checks, updates its status `latest`, commits and updates its handoff, so a stop at 200k loses nothing. At the meter's warn level (before 200k): finish the edit, checkpoint, continue only if < 150k of work remains, else hand off (STOPPED-CONTEXT). Successors are fresh agents named wpA -> wpA2 -> wpA3 (the same work dir). Brief template: `docs/WP_SIZING.md` section 7.
 ```
 
-## 9. CONTEXT-METER HANDOFF TEXT (RESOLVED 2026-10-15: the proposal below was REJECTED by the resume test)
+## 9. CONTEXT-METER HANDOFF TEXT (RESOLVED 2026-10-15: the proposal below was REJECTED by the resume test; REPLACED the same day by the OVERLAP HANDOFF)
+**Current flow (Shay 2026-10-15, `docs/TAIL_HANDOFF_CONTRACT.md`, steps in `testing/AGENT_PROMPTS.md` "Overlap handoff and tail mode"):** the coordinator's handoff text (`$HANDOFF_MSG_MAIN` in `.claude/context-meter.project.ps1`, at 300k; warn 270k) no longer asks for a "checkpoint now" message or a fresh-respawn list. The old coordinator writes a ledger routing note per running agent (`program-ledger.ps1 route ... -Owner tail:<session>`), runs `tail-mode.ps1 enter`, `handoff-ready.ps1`, opens the new coordinator with the meter's `handoff ... keep` and stays alive as a TAIL session; the in-session agents therefore keep running and their results reach the new coordinator via `tail-relay.ps1` / `tail-ack.ps1`. Tail hard limit 400k (agents checkpoint, are stopped, new coordinator respawns them). Work-package sizing/checkpoints (sections 2 and 5) still apply: they protect against an agent hitting its own 200k, and a dead tail (PC shutdown) is recovered from checkpoints by the cold-start listing in `session-start.ps1`. The text below is historical.
 Resume test result (coordinator, 2026-10-15 14:50): subagents of an ended session are gone (no processes, status files frozen, not in ListAgents, no stobe-tests running) and cannot be messaged by the new session. So 'adopt healthy agents' is impossible. Applied instead in `.claude/context-meter.project.ps1`: step (2) = one non-blocking 'checkpoint now' SendMessage (max ~2 min), then list every running agent + its fresh successor name in HANDOFF and the ledger; the next coordinator respawns them fresh. The real protection is small work packages + 40k-token checkpoints (sections 2, 5). Historic proposal text follows.
 Not applied (`.claude/context-meter.project.ps1` untouched; awaits Shay). Problem: `$HANDOFF_MSG_MAIN` step (2) tells the coordinator to
 SendMessage every running subagent to stop, so a coordinator at its limit kills healthy mid-package agents (imm26). Revised wording; replace
@@ -102,7 +103,8 @@ $WARN_MSG = "Context: {tokens} tokens (handoff at {handoff}). Wrap up the curren
 and in step (5) after the `handoff` command: "the next coordinator adopts the running agents from the ledger and HANDOFF; their reports arrive in C:\KenshiTestRuns\inbox\coordinator\ and status files, which the new session's event wait reads".
 The subagent message `$HANDOFF_MSG_SUBAGENT` stays, plus its first clause "CHECKPOINT first (regenerate patch, compile check, status latest, commit)" so the stop point is always a valid tree.
 
-## 10. Independent agent sessions (2026-10-15, imm26-indep-spawn)
+## 10. Independent agent sessions (2026-10-15, imm26-indep-spawn) - SUPERSEDED / OPTIONAL
+**Superseded the same day by the overlap (tail) handoff (section 9):** in-session subagents are the standard and the router no longer forces long work into independent sessions; this section documents code that stays in the repo (`spawn-wp-session.ps1`, `agent-host.ps1`) but is off by default. Use it only if Shay asks.
 Why: in-session subagents die with the session that spawned them (section 9). A work package that must outlive its coordinator runs as an INDEPENDENT `claude` session: its own terminal window, own process tree, own transcript, found and adopted by files. Tools: `tools/automation/spawn-wp-session.ps1`, `agent-session-live.ps1`, selftest `spawn-wp-session-selftest.ps1` (22 offline checks; `-Real` adds one real trivial child). No LLM is needed to call them (the supervisor / a watchdog may).
 
 ### Usage
