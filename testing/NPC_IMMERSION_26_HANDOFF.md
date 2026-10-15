@@ -28,6 +28,8 @@ Plans, travel, activities: 18 awareness of actual game behavior; 19 shared commi
 
 - 2026-10-15 13:00 new coordinator session: spawned FRESH generators imm26-wpA, wpB, wpD, wpE (from their handoff files) and wpC1 (2,5,6,7), wpC2 (8,9,11) (all background; status files `agents\imm26-wp*.status`). Shared stobe_test DB: agents serialize with `flock /tmp/stobe-tests.lock`. Next: 4080 baseline rows, test-file author, N1/N2 native, composer.
 
+- 2026-10-15 test author DONE: `NPC_IMMERSION_26_TESTS.md` has 87 F-rows (76 BASE, 11 GATED; 53 BASE runnable now). Open audit inconsistencies to settle by test: installed DLL identity (A3 cites 8A5749CE with referral_people vs E607), A5 vs A3 on known_place/RouteTravel in E607, social_* column names, SOCIAL_RELATIONSHIP_MODE value, i3 log path (use C:\KenshiInst).
+
 ## SUCCESSOR START HERE (context handoff written 2026-10-15)
 State: audits A1..A5 done and saved (`pending-fixes/npc-immersion-26/audit/`). Common agent brief `pending-fixes/npc-immersion-26/WP-COMMON.md`. Shay's answers recorded above (4080 only, candidates only, any change OK, no FP/animation).
 Running when the handoff was written (respawn any not DONE as a FRESH agent pointed at its status/handoff file; never SendMessage the old ids): 
