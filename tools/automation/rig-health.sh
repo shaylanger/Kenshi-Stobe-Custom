@@ -44,7 +44,10 @@ case "$g" in IDLE-GAME*) echo "RIG IDLE-GAME 5090: ${g#IDLE-GAME } 4080=$r4"; ex
 if [ "$k" = yes ]; then echo "RIG BUSY kenshi=yes lock=$lock inflight=$mk 4080=$r4"; exit 0; fi
 # 5090 parked on purpose (kenshi-ctl.ps1 idle, e.g. the 2026-10-11 BSOD) + lock free: markers are lab/4080 work, not a stall
 if [ "$lock" = free ] && [ "$reason" != none ]; then echo "RIG IDLE kenshi=no lock=free idle_reason=$reason inflight=$mk 4080=$r4"; exit 0; fi
-if [ "$lock" != free ] || [ "$mk" != none ]; then echo "RIG STALL kenshi=no lock=$lock inflight=$mk 4080=$r4 (Kenshi gone while work is claimed: check the batch/agent, release or relaunch)"; exit 2; fi
+# 4080-* markers are 4080 work (2026-10-15: 4080-imm26 read as a 5090 stall with the 5090 held free on Shay's order)
+mk5=$(tr ',' '
+' <<<"$mk" | grep -v '^4080-' | paste -sd, -); mk5=${mk5:-none}
+if [ "$lock" != free ] || [ "$mk5" != none ]; then echo "RIG STALL kenshi=no lock=$lock inflight=$mk 4080=$r4 (Kenshi gone while work is claimed: check the batch/agent, release or relaunch)"; exit 2; fi
 # rig-runner's own "no changed work" (filler unchanged since its last PASS, nothing real queued) = allowed idle, not a block
 case "$reason" in "no changed work"*) echo "RIG IDLE-OK no changed work (rig-runner) 4080=$r4"; exit 0;; esac
 echo "RIG IDLE kenshi=no lock=free idle_reason=$reason 4080=$r4"; [ "$reason" = none ] && exit 1 || exit 0

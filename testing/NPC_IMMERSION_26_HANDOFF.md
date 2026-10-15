@@ -26,6 +26,8 @@ Plans, travel, activities: 18 awareness of actual game behavior; 19 shared commi
 - 2026-10-15 implementation agents started: WP-A (items 1,12,13,16,17), WP-B (3,4,10,15), WP-D (14,18,19,20,21,23 server), WP-E (22,24,25,26 server). Next: WP-C (2,5,6,7,8,9,11) after A3; N1 native (activity/travel DLL), N2 native (social DLL); composer; 4080 install + tests.
 - Key cross-audit facts: activity transport signing key may be unprovisioned (no activity request can succeed); installed native E607 lacks known_place/RouteTravel/camp/participation/transfer-evidence producers; social ledger mode (off/fights/enabled) gates most relationship effects; legacy FOLLOW has no expiry (indefinite non-squad follower).
 
+- 2026-10-15 13:00 new coordinator session: spawned FRESH generators imm26-wpA, wpB, wpD, wpE (from their handoff files) and wpC1 (2,5,6,7), wpC2 (8,9,11) (all background; status files `agents\imm26-wp*.status`). Shared stobe_test DB: agents serialize with `flock /tmp/stobe-tests.lock`. Next: 4080 baseline rows, test-file author, N1/N2 native, composer.
+
 ## SUCCESSOR START HERE (context handoff written 2026-10-15)
 State: audits A1..A5 done and saved (`pending-fixes/npc-immersion-26/audit/`). Common agent brief `pending-fixes/npc-immersion-26/WP-COMMON.md`. Shay's answers recorded above (4080 only, candidates only, any change OK, no FP/animation).
 Running when the handoff was written (respawn any not DONE as a FRESH agent pointed at its status/handoff file; never SendMessage the old ids): 
