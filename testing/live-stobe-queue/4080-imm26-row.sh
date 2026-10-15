@@ -40,12 +40,18 @@ if stobe-auto stobe_state Shay | grep -q '"unconscious":true'; then stobe-auto w
 stobe-auto select Shay >/dev/null; stobe-auto stobe_state Shay | grep -o '"unconscious":[a-z]*' | head -1
 EOF3
 }
-i3_row() {  # i3_row ROW target text [wait]
+i3_clean() {  # clean-lane preamble (COORDINATOR_IMPROVEMENTS 2): PLAYER_NAME=Shay, no leftover deals/travel agreements/injections
+  i3_sql "DELETE FROM general_settings WHERE id='PLAYER_NAME'; INSERT INTO general_settings (id,value) VALUES ('PLAYER_NAME','Shay'); UPDATE stobe_social_contract SET status='CANCELLED' WHERE status IN ('AWAITING_PERFORMANCE','PROPOSED','COUNTERED','ACCEPTED'); DELETE FROM stobe_negotiation_directive; DELETE FROM eventlog WHERE type='travel_agreement'; DELETE FROM general_settings WHERE id='NEG_TEST_INJECT'" >/dev/null
+}
+i3_row() {  # i3_row ROW target text [wait]   (I3_NOCLEAN=1 skips the clean preamble: use it mid-deal)
   local row="$1" d="$I3ROW_OUT/$1"; mkdir -p "$d"
+  [ -n "${I3_NOCLEAN:-}" ] || i3_clean
   i3_prep | grep -q 'unconscious":false' || { echo "RESULT $row SETUP-FAIL Shay not conscious/selected"; return 3; }
   local mk; mk=$(i3_mark | tail -1)
   i3_say "$2" "$3" "${4:-150}" | tee "$d/reply.txt"
   grep -q "resolved_speaker=Shay" "$d/reply.txt" || echo "RESULT $row SETUP-FAIL resolved_speaker is not Shay (see $d/reply.txt)"
+  local dist; dist=$(grep -ao 'dist_to_target=[0-9.]*' "$d/reply.txt" | head -1 | cut -d= -f2)
+  awk -v x="${dist:-0}" 'BEGIN{exit !(x>=80)}' && echo "RESULT $row SETUP-FAIL dist_to_target=$dist >= 80 (native people list drops the NPC)"
   i3_bundle "$row" "$mk" "say: $3"
   grep -aoE '"?(Current conversational stance|Grounded referrals|personal_boundaries|attention_limits|Conversation discretion|Personal preferences)[^\n]{0,40}' "$d/prompt.txt" | sort | uniq -c | head
 }
