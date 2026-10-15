@@ -1,0 +1,42 @@
+{
+  "_doc": "Single source of truth for the isolated STOBE test lanes on the 4080 (read by lane-isolation-check.ps1, stobe-lane-backend.sh, lane-llm-apply.sh/.ps1, 4080-imm26-lib.sh). Add a lane = add an entry here, then provision it.",
+  "rig": "4080",
+  "wsl_distro": "DwemerAI4Skyrim3",
+  "llm_file": "C:\\KAH\\lane-llm.json",
+  "displays_allowed": ["DISPLAY5"],
+  "park_note": "the 4080 has ONE desktop screen (DISPLAY5, 1920x1080); lane windows are parked right of it (x >= 1920) by inst-window.ps1 (never activated), each in its own rect",
+  "lanes": {
+    "i3": {
+      "instance": 3,
+      "dir": "C:\\KenshiInst\\3",
+      "save": "kah-imm26-4080",
+      "backend_root": "/tmp/stobe-standalone4080",
+      "php_port": 18084,
+      "bridge_port": 18096,
+      "pg_port": 15434,
+      "db": "stobe_standalone4080_test",
+      "task": "StobeStandalone4080Backend",
+      "marker": "C:\\KenshiTestRuns\\inflight\\4080-imm26",
+      "lock": "C:\\KenshiTestRuns\\game-3.lock",
+      "window_pos": "1920,0",
+      "window_size": "1920x1080",
+      "owner_note": "pre-existing lane, provisioned by standalone4080-provision.sh; stobe-lane-backend.sh only reads it"
+    },
+    "i4": {
+      "instance": 4,
+      "dir": "C:\\KenshiInst\\4",
+      "save": "kah-imm26-4080-i4",
+      "backend_root": "/tmp/stobe-standalone4080-i4",
+      "php_port": 18085,
+      "bridge_port": 18097,
+      "pg_port": 15435,
+      "db": "stobe_standalone4080_i4_test",
+      "task": "StobeStandalone4080I4Backend",
+      "marker": "C:\\KenshiTestRuns\\inflight\\4080-imm26-i4",
+      "lock": "C:\\KenshiTestRuns\\game-4.lock",
+      "window_pos": "3840,0",
+      "window_size": "1280x720",
+      "owner_note": "built by imm26-lanes-4080 2026-10-15 with stobe-lane-backend.sh i4 provision"
+    }
+  }
+}
