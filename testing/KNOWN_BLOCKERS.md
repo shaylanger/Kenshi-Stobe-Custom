@@ -1,0 +1,11 @@
+# Known blockers (every imm26 brief: read this first; update it when you find or clear one)
+- Installed DLL E607 never posts native_ai / referral_people / travel_destinations through harness select/stobe_say. Fix: NC DLL 4D18E32C (stobe_ctxpush), installed on 5090 lanes i4+i5 only (2026-10-15). i3, 4080 i3/i4 still old. Rows 05-a/b, 07-*, 04-b, 18-a/b, 06-d, 14-b, 24-* need it.
+- NC DLL does not yet emit the native event emitter (22-a/b, 26-*): gated.
+- Native people list drops NPCs > 80 units: keep the addressed NPC and bystanders within 80 (check dist_to_target).
+- Lane general_settings PLAYER_NAME defaults to 'Drifter' (speaker is 'Shay'): set it before gate/trust/deal rows.
+- Leftover deals / PROPOSED or ACCEPTED travel agreements contaminate follow-up and travel rows: clear before each row.
+- lane-setup.sh --with Cind fails while the world is paused; harness `fight` refuses same-faction NPCs; `faction` re-serials the NPC; stobe_ctxpush needs the full "Name [Faction]".
+- 16-c: sparse-profile NPC makes dynamic profile refresh fail (backstory count); use a non-sparse NPC; clear metadata.imm26_anchor.
+- 15-a: KO must come from real combat events (ko: incident, target.conscious=false); harness transfer on a conscious NPC records a 'gift'.
+- Server fixes pending in compose tree: see agents\imm26-compose-fix-batch2.status.
+- 5090 i3 (i3op2 findings): outside The Hub the NPC has no environment xyz so the nearby-places list falls back to 'heard' names and Cind refuses every trip: use C:\KenshiTestRuns\imm26-5090-i3\clear-hub.sh + gohub.sh, not go.sh. Starving to hunger <=8 KOs the NPC (replies dropped): use hunger 20-25. The Hub has sortieing Outlaw Watch/Slaver Guards/Hundred Guardians cancelling replies: `relation` per faction + lane-setup --clear-faction. Accept writes two ACCEPTED rows (execution-request update). Native E607 gates 19-c, 20-b, 21-b, 14-a/b, 23-a/c/d, 24-a.

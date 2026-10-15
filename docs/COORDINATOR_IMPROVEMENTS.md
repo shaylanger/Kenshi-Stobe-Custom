@@ -1,0 +1,15 @@
+# Coordinator / agent improvements (Shay asked these be recorded so every future agent and coordinator does them; 2026-10-15)
+
+Apply to every imm26-style program (row operators, investigators, fixers). Briefs must reference this file.
+
+1. **Rows are scripts, not agent work.** Each test row = one script `go ROW` that does setup + action + assertion and prints ONE `RESULT <row> PASS|FAIL <evidence>` line (start: `testing/live-stobe-queue/imm26-assert/*`). Operators only handle FAILs. Row operators used 170-210k tokens and ~100 tool calls for 12-15 rows, mostly scene setup: automate it. Row scripts write effects as full `select * from social_effect` and take extra evidence files (haff, inv, distance) so x rows bundle themselves.
+2. **Clean-lane + distance preamble in every row helper:** clear leftover deals (e.g. Metal Junk loan) and travel agreements, set `general_settings PLAYER_NAME='Shay'` on the lane (default 'Drifter' breaks gift/gear/trust gates), and FAIL FAST if `dist_to_target` >= 80 (the native people list drops NPCs beyond 80 units: social scope null, no region/preference/followup capture). 4 reruns were wasted on contamination and 24-b/23-b ran at ~126 units.
+3. **Install the native DLL on every lane before native-gated rows** and keep a shared **known-blockers file** (`testing/KNOWN_BLOCKERS.md`) that every brief tells agents to read first. Four agents separately rediscovered "installed DLL never posts native_ai". Current: NC DLL 4D18E32C on 5090 i4+i5 only; i3 and the 4080 lanes still old E607. Use `stobe-auto stobe_ctxpush "<Full Name [Faction]>"` before context-dependent checks (observed_unix within 120 s).
+3b. Production selection push is dead in all native trees (QueueSelectionContextPush has no caller); context reaches the server only via chat/trade/horn/rename.
+4. **Quiet waker:** filter `event-wait.sh` output to EVENT STATUS / INBOX / STALL lines; SWEEP MARKER / SWEEP STATUS lines are noise (each wake costs a turn + restart). Bulk-abandon dead markers/statuses (`agent-abandon.ps1`). Start wakers with run_in_background, never detached `&`.
+5. **Reports go to a file BEFORE an agent stops** (`agents\out\<name>\latest.md` via save-report.ps1). Cap each investigator at 2-3 rows (one hit its context limit and its report nearly got lost, and a redundant successor was spawned).
+6. **One fixer per batch of patches.** Parallel agents regenerating the same composed tree and compose.patch collide: queue extra patches to the running fixer (SendMessage) or wait.
+7. **Hand-back reports <= 30 lines** (verdict + file:line + rerun row), evidence by path only.
+8. **Model/effort for row operators:** mechanical work: consider a cheaper model or lower effort for operators, keep diagnosis agents as is (routing change: Shay decides, see docs/MODEL_ROUTING.md).
+9. **One operator per lane; never more agents than lanes** (5090 RAM ceiling = 3 lanes; 4080 = 2 lanes).
+10. Lane window slots: 5090 i3 DISPLAY2 0,0; i4 DISPLAY2 1300,0; i5 DISPLAY1 -1500,400 (DISPLAY2 has no room for a third). Shay must confirm DISPLAY1 is not the Samsung display.

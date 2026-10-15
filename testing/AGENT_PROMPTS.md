@@ -135,3 +135,6 @@ lines>. Report commits, DLL SHA256, tests.
 > - **Stop hook** (`kenshi-waker-guard.ps1 stop`): an agent may end only when its own `agents\<name>.status` is DONE/FAILED/STOPPED-CONTEXT (else blocked with the `agent-status.ps1` command). No event-wait, idle-rig, in-flight, other-agent or handoff.ready rules apply to agents. The PreToolUse sleep/wakeup > 120 s denial still applies.
 > - **Heartbeat** (`coord-heartbeat.ps1`): a session with `KAH_AGENT_NAME` never beats, claims or refreshes `coordinator.heartbeat` (so a working agent cannot mask a dead coordinator).
 <!-- END independent-agent-sessions block -->
+
+## Coordinator/agent improvements (Shay 2026-10-15) — every brief must say: read docs/COORDINATOR_IMPROVEMENTS.md and testing/KNOWN_BLOCKERS.md first
+Rows are scripts (go ROW -> one RESULT line), clean-lane + dist<80 + PLAYER_NAME preamble, native DLL on every lane before gated rows, quiet waker (EVENT/INBOX/STALL only), report to file before stopping, one fixer per patch batch, hand-back <= 30 lines, one operator per lane.
