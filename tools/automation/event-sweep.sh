@@ -52,7 +52,7 @@ done
 L="$R/ledger/agent-calls.tsv"; V="$R/verdicts"
 # The ledger's clock is the Windows clock, which is not WSL's zone (WSL is America/Chicago, Windows is UTC-6 here, so the two
 # differ by an hour from March to November). powershell.exe gives the Windows UTC offset and the time six hours ago.
-wclock=$(powershell.exe -NoProfile -Command '$n = Get-Date; $n.ToString("zzz") + " " + $n.AddHours(-6).ToString("yyyy-MM-dd HH:mm:ss")' 2>/dev/null | tr -d '\r')
+wclock=$(powershell.exe -NoProfile -Command '$n = Get-Date; $n.ToString("zzz") + " " + $n.AddHours(-6).ToString("yyyy-MM-dd HH:mm:ss")' < /dev/null 2>/dev/null | tr -d '\r')
 WOFF=${wclock%% *}; cut6=${wclock#* }
 if [ -f "$L" ] && [ -z "$WOFF" ]; then say "CLOCK no Windows clock from powershell.exe: ticket and router checks skipped"; fi
 if [ -f "$L" ] && [ -n "$WOFF" ]; then

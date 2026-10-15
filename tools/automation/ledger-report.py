@@ -60,7 +60,7 @@ def windows_offset():
     """UTC offset of the Windows clock, which the ledger and the windows are in. Asked from powershell.exe: WSL's own zone differs."""
     try:
         r = subprocess.run(['powershell.exe', '-NoProfile', '-Command', "(Get-Date).ToString('zzz')"],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
         raise SystemExit('cannot read the Windows clock offset (%s); pass --utc-offset=-06:00' % e)
     return parse_offset(r.stdout.strip())
