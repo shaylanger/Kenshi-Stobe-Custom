@@ -1,0 +1,1218 @@
+diff -ruN a/src/N2Policy.h b/src/N2Policy.h
+--- a/src/N2Policy.h	2026-10-15 18:46:53.597423059 -0500
++++ b/src/N2Policy.h	2026-10-15 18:46:54.094835854 -0500
+@@ -1,295 +1,337 @@
+-// N2Policy.h: pure (SDK-free) logic for the N2 native package. Header only, VS2010 compatible.
+-//  - Attention block JSON (what an NPC is busy with / how they are doing)
+-//  - AbandonTracker: "abandoned_in_danger" (a squad mate left a downed squad mate far behind)
+-//  - ProximityGate: when the native side may fire the optional bored/follow-up turn
+-#pragma once
+-#include <map>
+-#include <string>
+-#include <sstream>
+-#include <stdio.h>
+-
+-namespace Stobe {
+-namespace N2Policy {
+-
+-inline int ClampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+-
+-inline std::string JsonEscape(const std::string &s) {
+-  std::string o;
+-  o.reserve(s.size() + 8);
+-  for (size_t i = 0; i < s.size(); ++i) {
+-    unsigned char c = (unsigned char)s[i];
+-    if (c == '"') o += "\\\"";
+-    else if (c == '\\') o += "\\\\";
+-    else if (c == '\n') o += "\\n";
+-    else if (c == '\r') o += "\\r";
+-    else if (c == '\t') o += "\\t";
+-    else if (c < 0x20) { char b[8]; sprintf(b, "\\u%04x", (unsigned)c); o += b; }
+-    else o += (char)c;
+-  }
+-  return o;
+-}
+-
+-// Keep only printable ASCII (drops UTF-8 multi-byte so a cut can never split a character), max n chars.
+-inline std::string AsciiTruncate(const std::string &s, size_t n) {
+-  std::string o;
+-  for (size_t i = 0; i < s.size() && o.size() < n; ++i) {
+-    unsigned char c = (unsigned char)s[i];
+-    if (c >= 0x20 && c < 0x7f) o += (char)c;
+-    else if (c == '\t' || c == '\n' || c == '\r') o += ' ';
+-  }
+-  return o;
+-}
+-
+-inline std::string BoolJson(bool b) { return b ? "true" : "false"; }
+-
+-// ------------------------------------------------------------------ attention
+-struct AttentionInputs {
+-  bool observed, busy, sleeping, injured, crippled, bleeding, exhausted, afraid, fleeing, hungry, inCombat;
+-  int bloodPct; // 0..100, -1 = unknown (reported as 100)
+-  std::string busyReason;
+-  AttentionInputs()
+-      : observed(true), busy(false), sleeping(false), injured(false), crippled(false), bleeding(false),
+-        exhausted(false), afraid(false), fleeing(false), hungry(false), inCombat(false), bloodPct(-1) {}
+-};
+-
+-// blood/maxBlood -> 0..100 (unknown max = -1)
+-inline int BloodPct(float blood, float maxBlood) {
+-  if (!(maxBlood > 0.0f)) return -1;
+-  int p = (int)(blood * 100.0f / maxBlood + 0.5f);
+-  return ClampInt(p, 0, 100);
+-}
+-// hunger: (hunger+fed)*100 clamped 0..300, hungry below 75 (same scale as the context "hunger" field)
+-inline int HungerValue(float hunger, float fed) {
+-  float v = (hunger + fed) * 100.0f;
+-  if (v > 300.0f) v = 300.0f;
+-  if (v < 0.0f) v = 0.0f;
+-  return (int)v;
+-}
+-inline bool HungryFrom(int hungerValue) { return hungerValue < 75; }
+-// starving (<8% of 300) or blood-loss trauma. Limb "rested state" is limb health, NOT fatigue: never used here.
+-inline bool ExhaustedFrom(int hungerValue, bool bloodlossTrauma) { return hungerValue < 24 || bloodlossTrauma; }
+-// worstFleshPct: lowest flesh% of any body part, -1 = unknown
+-inline bool InjuredFrom(int bloodPct, bool crippled, bool bleeding, int worstFleshPct) {
+-  if (crippled || bleeding) return true;
+-  if (bloodPct >= 0 && bloodPct < 50) return true;
+-  return worstFleshPct >= 0 && worstFleshPct < 70;
+-}
+-
+-inline std::string AttentionJson(const AttentionInputs &a) {
+-  if (!a.observed) return "{\"observed\":false}";
+-  int blood = a.bloodPct < 0 ? 100 : ClampInt(a.bloodPct, 0, 100);
+-  std::string reason = AsciiTruncate(a.busyReason, 40);
+-  std::string j = "{\"observed\":true";
+-  j += ",\"busy\":" + BoolJson(a.busy);
+-  j += ",\"sleeping\":" + BoolJson(a.sleeping);
+-  j += ",\"injured\":" + BoolJson(a.injured);
+-  j += ",\"crippled\":" + BoolJson(a.crippled);
+-  j += ",\"bleeding\":" + BoolJson(a.bleeding);
+-  j += ",\"exhausted\":" + BoolJson(a.exhausted);
+-  j += ",\"afraid\":" + BoolJson(a.afraid);
+-  j += ",\"fleeing\":" + BoolJson(a.fleeing);
+-  j += ",\"hungry\":" + BoolJson(a.hungry);
+-  j += ",\"in_combat\":" + BoolJson(a.inCombat);
+-  std::ostringstream os;
+-  os << blood;
+-  j += ",\"blood_pct\":" + os.str();
+-  if (!reason.empty()) j += ",\"busy_reason\":\"" + JsonEscape(reason) + "\"";
+-  j += "}";
+-  return j;
+-}
+-
+-// Insert ,"attention":<attn> before the final '}' of a native_ai object that reports observed:true.
+-// Anything else (empty, unobserved, already has attention, not an object) is returned unchanged.
+-inline std::string AppendAttention(const std::string &nativeAiJson, const std::string &attnJson) {
+-  if (attnJson.empty() || nativeAiJson.empty()) return nativeAiJson;
+-  size_t end = nativeAiJson.find_last_not_of(" \t\r\n");
+-  if (end == std::string::npos || nativeAiJson[end] != '}' || nativeAiJson[0] != '{') return nativeAiJson;
+-  if (nativeAiJson.find("\"observed\":true") == std::string::npos) return nativeAiJson;
+-  if (nativeAiJson.find("\"attention\":") != std::string::npos) return nativeAiJson;
+-  std::string head = nativeAiJson.substr(0, end);
+-  size_t last = head.find_last_not_of(" \t\r\n");
+-  bool empty = last != std::string::npos && head[last] == '{';
+-  return head + (empty ? "" : ",") + "\"attention\":" + attnJson + "}";
+-}
+-
+-// ------------------------------------------------------------------ abandoned_in_danger
+-enum PartnerState { PS_NONE = 0, PS_KNOCKED_OUT = 1, PS_BLEEDING_OUT = 2, PS_DOWNED = 3 };
+-inline const char *PartnerStateName(int s) {
+-  return s == PS_KNOCKED_OUT ? "knocked_out" : (s == PS_BLEEDING_OUT ? "bleeding_out" : (s == PS_DOWNED ? "downed" : "none"));
+-}
+-inline int ClassifyPartner(bool dead, bool unconscious, bool bleeding, int bloodPct, bool bloodlossTrauma, bool down) {
+-  if (dead) return PS_NONE;
+-  if (unconscious) return PS_KNOCKED_OUT;
+-  if (bloodlossTrauma || (bleeding && bloodPct >= 0 && bloodPct < 50)) return PS_BLEEDING_OUT;
+-  if (down) return PS_DOWNED;
+-  return PS_NONE;
+-}
+-
+-struct AbandonEvent {
+-  std::string evidenceId, partnerState;
+-  float distanceM;
+-  int seconds;
+-  AbandonEvent() : distanceM(0), seconds(0) {}
+-};
+-
+-class AbandonTracker {
+-public:
+-  static float ArmRadius() { return 25.0f; }
+-  static float FarRadius() { return 30.0f; }
+-  static double FarSeconds() { return 20.0; }
+-  static double GapSeconds() { return 10.0; }
+-
+-  AbandonTracker() {}
+-  void Reset() { m_pairs.clear(); m_episode.clear(); }
+-
+-  // Call for every squad member each scan: down=false ends the partner's episode.
+-  void NotePartnerState(unsigned partner, int state, double nowSec) {
+-    std::map<unsigned, Episode>::iterator it = m_episode.find(partner);
+-    if (state == PS_NONE) {
+-      if (it != m_episode.end()) {
+-        m_episode.erase(it);
+-        for (std::map<Key, Pair>::iterator p = m_pairs.begin(); p != m_pairs.end();) {
+-          if (p->first.second == partner) m_pairs.erase(p++); else ++p;
+-        }
+-      }
+-      return;
+-    }
+-    if (it == m_episode.end()) { Episode e; e.start = nowSec; m_episode[partner] = e; }
+-  }
+-
+-  // One (leaver, partner) observation. Returns true once per episode when the abandonment is proven.
+-  bool Observe(unsigned leaver, unsigned partner, bool leaverFree, int partnerState, float dist, double nowSec,
+-               AbandonEvent *out) {
+-    if (!leaver || !partner || leaver == partner) return false;
+-    NotePartnerState(partner, partnerState, nowSec);
+-    if (partnerState == PS_NONE) return false;
+-    Episode &ep = m_episode[partner];
+-    Key key(leaver, partner);
+-    std::map<Key, Pair>::iterator it = m_pairs.find(key);
+-    if (it == m_pairs.end()) { Pair p; p.episodeStart = ep.start; it = m_pairs.insert(std::make_pair(key, p)).first; }
+-    Pair &p = it->second;
+-    if (p.episodeStart != ep.start) { p = Pair(); p.episodeStart = ep.start; }
+-    if (p.lastSeen >= 0 && (nowSec < p.lastSeen || nowSec - p.lastSeen > GapSeconds())) p.farSince = -1.0;
+-    p.lastSeen = nowSec;
+-    if (!leaverFree) { p.farSince = -1.0; return false; }
+-    if (dist <= ArmRadius()) p.armed = true;
+-    if (dist < FarRadius()) { p.farSince = -1.0; return false; }
+-    if (!p.armed || p.fired) return false;
+-    if (p.farSince < 0.0) { p.farSince = nowSec; return false; }
+-    if (nowSec - p.farSince < FarSeconds()) return false;
+-    p.fired = true;
+-    if (out) {
+-      char buf[96];
+-      sprintf(buf, "abandon:%u:%u:%lld", leaver, partner, (long long)ep.start);
+-      out->evidenceId = buf;
+-      out->partnerState = PartnerStateName(partnerState);
+-      out->distanceM = dist;
+-      out->seconds = (int)(nowSec - p.farSince);
+-    }
+-    return true;
+-  }
+-
+-private:
+-  typedef std::pair<unsigned, unsigned> Key;
+-  struct Episode { double start; Episode() : start(0) {} };
+-  struct Pair {
+-    double episodeStart, farSince, lastSeen;
+-    bool armed, fired;
+-    Pair() : episodeStart(0), farSince(-1.0), lastSeen(-1.0), armed(false), fired(false) {}
+-  };
+-  std::map<Key, Pair> m_pairs;
+-  std::map<unsigned, Episode> m_episode;
+-};
+-
+-// ------------------------------------------------------------------ proximity follow-up gate
+-// Decides when the native side fires the optional bored turn (server answers "ok" when nothing is claimable).
+-class ProximityGate {
+-public:
+-  static double GlobalMinSec() { return 90.0; }
+-  static double PerNpcMinSec() { return 600.0; }
+-  static double AwaySec() { return 45.0; }
+-  static float AwayDist() { return 30.0f; }
+-  static float NearCap() { return 15.0f; }
+-  static double LoadDelaySec() { return 8.0; }
+-  static double CombatDelaySec() { return 1.5; }
+-  static double CombatStaleSec() { return 10.0; }
+-  static float CombatPlayerRange() { return 60.0f; }
+-  static float CombatCompanionRange() { return 40.0f; }
+-
+-  ProximityGate() : m_lastFire(-1e9), m_combatDue(-1.0) {}
+-  void Reset() { m_npc.clear(); m_lastFire = -1e9; m_combatDue = -1.0; }
+-
+-  static float NearRadius(float talkRadius) { return talkRadius < NearCap() ? talkRadius : NearCap(); }
+-
+-  // Rate limits: global and per NPC. Records the fire when allowed.
+-  bool TryFire(unsigned npc, double now) {
+-    if (now < m_lastFire) m_lastFire = -1e9;
+-    if (now - m_lastFire < GlobalMinSec()) return false;
+-    Npc &n = m_npc[npc];
+-    if (n.lastFire > -1e8 && now >= n.lastFire && now - n.lastFire < PerNpcMinSec()) return false;
+-    m_lastFire = now;
+-    n.lastFire = now;
+-    return true;
+-  }
+-
+-  // Per companion, per scan (only call while the caller's gates are open). nearestPlayerDist = metres to
+-  // the nearest player character. Returns true when the proximity turn should fire for this companion now.
+-  bool OnScan(unsigned npc, double now, bool idle, float nearestPlayerDist, float talkRadius) {
+-    Npc &n = m_npc[npc];
+-    float nearR = NearRadius(talkRadius);
+-    bool nearNow = nearestPlayerDist <= nearR;
+-    if (!n.seen) {
+-      n.seen = true;
+-      if (nearNow) n.loadDue = now + LoadDelaySec();
+-    }
+-    if (nearestPlayerDist > AwayDist()) {
+-      if (n.farSince < 0.0) n.farSince = now;
+-      if (now - n.farSince >= AwaySec()) n.away = true;
+-    } else {
+-      n.farSince = -1.0;
+-    }
+-    if (!idle) return false;
+-    if (n.loadDue >= 0.0) {
+-      if (!nearNow) n.loadDue = -1.0;
+-      else if (now >= n.loadDue) {
+-        n.loadDue = -1.0;
+-        if (TryFire(npc, now)) return true;
+-        return false;
+-      }
+-    }
+-    if (n.away && nearNow) {
+-      n.away = false;
+-      n.farSince = -1.0;
+-      return TryFire(npc, now);
+-    }
+-    return false;
+-  }
+-
+-  // A combat_start happened `nearestPlayerDist` metres from the nearest player character.
+-  void NoteCombatStart(double now, float nearestPlayerDist) {
+-    if (nearestPlayerDist > CombatPlayerRange()) return;
+-    if (m_combatDue < 0.0) m_combatDue = now + CombatDelaySec();
+-  }
+-  // True once when a pending combat trigger is due (and not stale). The caller then picks the nearest
+-  // companion within CombatCompanionRange() and calls TryFire().
+-  bool TakeCombatDue(double now) {
+-    if (m_combatDue < 0.0) return false;
+-    if (now < m_combatDue) return false;
+-    bool stale = now - m_combatDue > CombatStaleSec();
+-    m_combatDue = -1.0;
+-    return !stale;
+-  }
+-  bool CombatPending() const { return m_combatDue >= 0.0; }
+-
+-private:
+-  struct Npc {
+-    bool seen, away;
+-    double farSince, loadDue, lastFire;
+-    Npc() : seen(false), away(false), farSince(-1.0), loadDue(-1.0), lastFire(-1e9) {}
+-  };
+-  std::map<unsigned, Npc> m_npc;
+-  double m_lastFire, m_combatDue;
+-};
+-
+-} // namespace N2Policy
+-} // namespace Stobe
++// N2Policy.h: pure (SDK-free) logic for the N2 native package. Header only, VS2010 compatible.
++//  - Attention block JSON (what an NPC is busy with / how they are doing)
++//  - AbandonTracker: "abandoned_in_danger" (a squad mate left a downed squad mate far behind)
++//  - ProximityGate: when the native side may fire the optional bored/follow-up turn
++#pragma once
++#include <map>
++#include <utility>
++#include <vector>
++#include <string>
++#include <sstream>
++#include <stdio.h>
++
++namespace Stobe {
++namespace N2Policy {
++
++inline int ClampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
++
++inline std::string JsonEscape(const std::string &s) {
++  std::string o;
++  o.reserve(s.size() + 8);
++  for (size_t i = 0; i < s.size(); ++i) {
++    unsigned char c = (unsigned char)s[i];
++    if (c == '"') o += "\\\"";
++    else if (c == '\\') o += "\\\\";
++    else if (c == '\n') o += "\\n";
++    else if (c == '\r') o += "\\r";
++    else if (c == '\t') o += "\\t";
++    else if (c < 0x20) { char b[8]; sprintf(b, "\\u%04x", (unsigned)c); o += b; }
++    else o += (char)c;
++  }
++  return o;
++}
++
++// Keep only printable ASCII (drops UTF-8 multi-byte so a cut can never split a character), max n chars.
++inline std::string AsciiTruncate(const std::string &s, size_t n) {
++  std::string o;
++  for (size_t i = 0; i < s.size() && o.size() < n; ++i) {
++    unsigned char c = (unsigned char)s[i];
++    if (c >= 0x20 && c < 0x7f) o += (char)c;
++    else if (c == '\t' || c == '\n' || c == '\r') o += ' ';
++  }
++  return o;
++}
++
++inline std::string BoolJson(bool b) { return b ? "true" : "false"; }
++
++// ------------------------------------------------------------------ attention
++struct AttentionInputs {
++  bool observed, busy, sleeping, injured, crippled, bleeding, exhausted, afraid, fleeing, hungry, inCombat;
++  int bloodPct; // 0..100, -1 = unknown (reported as 100)
++  std::string busyReason;
++  AttentionInputs()
++      : observed(true), busy(false), sleeping(false), injured(false), crippled(false), bleeding(false),
++        exhausted(false), afraid(false), fleeing(false), hungry(false), inCombat(false), bloodPct(-1) {}
++};
++
++// blood/maxBlood -> 0..100 (unknown max = -1)
++inline int BloodPct(float blood, float maxBlood) {
++  if (!(maxBlood > 0.0f)) return -1;
++  int p = (int)(blood * 100.0f / maxBlood + 0.5f);
++  return ClampInt(p, 0, 100);
++}
++// hunger: (hunger+fed)*100 clamped 0..300, hungry below 75 (same scale as the context "hunger" field)
++inline int HungerValue(float hunger, float fed) {
++  float v = (hunger + fed) * 100.0f;
++  if (v > 300.0f) v = 300.0f;
++  if (v < 0.0f) v = 0.0f;
++  return (int)v;
++}
++inline bool HungryFrom(int hungerValue) { return hungerValue < 75; }
++// starving (<8% of 300) or blood-loss trauma. Limb "rested state" is limb health, NOT fatigue: never used here.
++inline bool ExhaustedFrom(int hungerValue, bool bloodlossTrauma) { return hungerValue < 24 || bloodlossTrauma; }
++// worstFleshPct: lowest flesh% of any body part, -1 = unknown
++inline bool InjuredFrom(int bloodPct, bool crippled, bool bleeding, int worstFleshPct) {
++  if (crippled || bleeding) return true;
++  if (bloodPct >= 0 && bloodPct < 50) return true;
++  return worstFleshPct >= 0 && worstFleshPct < 70;
++}
++
++inline std::string AttentionJson(const AttentionInputs &a) {
++  if (!a.observed) return "{\"observed\":false}";
++  int blood = a.bloodPct < 0 ? 100 : ClampInt(a.bloodPct, 0, 100);
++  std::string reason = AsciiTruncate(a.busyReason, 40);
++  std::string j = "{\"observed\":true";
++  j += ",\"busy\":" + BoolJson(a.busy);
++  j += ",\"sleeping\":" + BoolJson(a.sleeping);
++  j += ",\"injured\":" + BoolJson(a.injured);
++  j += ",\"crippled\":" + BoolJson(a.crippled);
++  j += ",\"bleeding\":" + BoolJson(a.bleeding);
++  j += ",\"exhausted\":" + BoolJson(a.exhausted);
++  j += ",\"afraid\":" + BoolJson(a.afraid);
++  j += ",\"fleeing\":" + BoolJson(a.fleeing);
++  j += ",\"hungry\":" + BoolJson(a.hungry);
++  j += ",\"in_combat\":" + BoolJson(a.inCombat);
++  std::ostringstream os;
++  os << blood;
++  j += ",\"blood_pct\":" + os.str();
++  if (!reason.empty()) j += ",\"busy_reason\":\"" + JsonEscape(reason) + "\"";
++  j += "}";
++  return j;
++}
++
++// Insert ,"attention":<attn> before the final '}' of a native_ai object that reports observed:true.
++// Anything else (empty, unobserved, already has attention, not an object) is returned unchanged.
++inline std::string AppendAttention(const std::string &nativeAiJson, const std::string &attnJson) {
++  if (attnJson.empty() || nativeAiJson.empty()) return nativeAiJson;
++  size_t end = nativeAiJson.find_last_not_of(" \t\r\n");
++  if (end == std::string::npos || nativeAiJson[end] != '}' || nativeAiJson[0] != '{') return nativeAiJson;
++  if (nativeAiJson.find("\"observed\":true") == std::string::npos) return nativeAiJson;
++  if (nativeAiJson.find("\"attention\":") != std::string::npos) return nativeAiJson;
++  std::string head = nativeAiJson.substr(0, end);
++  size_t last = head.find_last_not_of(" \t\r\n");
++  bool empty = last != std::string::npos && head[last] == '{';
++  return head + (empty ? "" : ",") + "\"attention\":" + attnJson + "}";
++}
++
++// ------------------------------------------------------------------ abandoned_in_danger
++enum PartnerState { PS_NONE = 0, PS_KNOCKED_OUT = 1, PS_BLEEDING_OUT = 2, PS_DOWNED = 3 };
++inline const char *PartnerStateName(int s) {
++  return s == PS_KNOCKED_OUT ? "knocked_out" : (s == PS_BLEEDING_OUT ? "bleeding_out" : (s == PS_DOWNED ? "downed" : "none"));
++}
++inline int ClassifyPartner(bool dead, bool unconscious, bool bleeding, int bloodPct, bool bloodlossTrauma, bool down) {
++  if (dead) return PS_NONE;
++  if (unconscious) return PS_KNOCKED_OUT;
++  if (bloodlossTrauma || (bleeding && bloodPct >= 0 && bloodPct < 50)) return PS_BLEEDING_OUT;
++  if (down) return PS_DOWNED;
++  return PS_NONE;
++}
++
++struct AbandonEvent {
++  std::string evidenceId, partnerState;
++  float distanceM;
++  int seconds;
++  int heldSec; // N5b: game seconds between proof and release (0 when posted at once); log only, not a server fact
++  AbandonEvent() : distanceM(0), seconds(0), heldSec(0) {}
++};
++
++class AbandonTracker {
++public:
++  static float ArmRadius() { return 25.0f; }
++  static float FarRadius() { return 30.0f; }
++  static double FarSeconds() { return 20.0; }
++  static double GapSeconds() { return 10.0; }
++  // N5b: an abandonment proven while the partner is knocked out is HELD (the partner cannot be an observer) and
++  // released by PollPending once the partner is conscious again, or after this many game seconds (still alive).
++  static double HoldSeconds() { return 900.0; }
++  enum PollResult { POLL_KEEP = 0, POLL_POST_WOKE = 1, POLL_POST_TIMEOUT = 2, POLL_DROP = 3 };
++
++  AbandonTracker() {}
++  void Reset() { m_pairs.clear(); m_episode.clear(); m_pending.clear(); }
++  size_t PendingCount() const { return m_pending.size(); }
++  // Held (leaver, partner) pairs, so the caller can poll each one every scan.
++  std::vector<std::pair<unsigned, unsigned> > PendingPairs() const {
++    std::vector<std::pair<unsigned, unsigned> > v;
++    for (std::map<Key, Held>::const_iterator it = m_pending.begin(); it != m_pending.end(); ++it) v.push_back(it->first);
++    return v;
++  }
++  // Release test for one held pair. present = both characters were read this scan; alive/conscious describe the
++  // partner (conscious implies alive). POLL_POST_*: *out is the event to post (heldSec set) and the pair is removed;
++  // POLL_DROP: removed without posting (partner dead, or absent past the hold); POLL_KEEP: nothing to do.
++  int PollPending(unsigned leaver, unsigned partner, bool present, bool alive, bool conscious, double nowSec,
++                  AbandonEvent *out) {
++    std::map<Key, Held>::iterator it = m_pending.find(Key(leaver, partner));
++    if (it == m_pending.end()) return POLL_KEEP;
++    bool expired = nowSec < it->second.since || nowSec - it->second.since >= HoldSeconds();
++    int r = POLL_KEEP;
++    if (present && !alive) r = POLL_DROP;
++    else if (present && conscious) r = POLL_POST_WOKE;
++    else if (expired) r = present ? POLL_POST_TIMEOUT : POLL_DROP;
++    if (r == POLL_POST_WOKE || r == POLL_POST_TIMEOUT) {
++      if (out) {
++        *out = it->second.ev;
++        out->heldSec = nowSec >= it->second.since ? (int)(nowSec - it->second.since) : 0;
++      }
++    }
++    if (r != POLL_KEEP) m_pending.erase(it);
++    return r;
++  }
++
++  // Call for every squad member each scan: down=false ends the partner's episode.
++  void NotePartnerState(unsigned partner, int state, double nowSec) {
++    std::map<unsigned, Episode>::iterator it = m_episode.find(partner);
++    if (state == PS_NONE) {
++      if (it != m_episode.end()) {
++        m_episode.erase(it);
++        for (std::map<Key, Pair>::iterator p = m_pairs.begin(); p != m_pairs.end();) {
++          if (p->first.second == partner) m_pairs.erase(p++); else ++p;
++        }
++      }
++      return;
++    }
++    if (it == m_episode.end()) { Episode e; e.start = nowSec; m_episode[partner] = e; }
++  }
++
++  // One (leaver, partner) observation. Returns true once per episode when the abandonment is proven.
++  bool Observe(unsigned leaver, unsigned partner, bool leaverFree, int partnerState, float dist, double nowSec,
++               AbandonEvent *out) {
++    if (!leaver || !partner || leaver == partner) return false;
++    NotePartnerState(partner, partnerState, nowSec);
++    if (partnerState == PS_NONE) return false;
++    Episode &ep = m_episode[partner];
++    Key key(leaver, partner);
++    std::map<Key, Pair>::iterator it = m_pairs.find(key);
++    if (it == m_pairs.end()) { Pair p; p.episodeStart = ep.start; it = m_pairs.insert(std::make_pair(key, p)).first; }
++    Pair &p = it->second;
++    if (p.episodeStart != ep.start) { p = Pair(); p.episodeStart = ep.start; }
++    if (p.lastSeen >= 0 && (nowSec < p.lastSeen || nowSec - p.lastSeen > GapSeconds())) p.farSince = -1.0;
++    p.lastSeen = nowSec;
++    if (!leaverFree) { p.farSince = -1.0; return false; }
++    if (dist <= ArmRadius()) p.armed = true;
++    if (dist < FarRadius()) { p.farSince = -1.0; return false; }
++    if (!p.armed || p.fired) return false;
++    if (p.farSince < 0.0) { p.farSince = nowSec; return false; }
++    if (nowSec - p.farSince < FarSeconds()) return false;
++    p.fired = true;
++    AbandonEvent e;
++    char buf[96];
++    sprintf(buf, "abandon:%u:%u:%lld", leaver, partner, (long long)ep.start);
++    e.evidenceId = buf;
++    e.partnerState = PartnerStateName(partnerState);
++    e.distanceM = dist;
++    e.seconds = (int)(nowSec - p.farSince);
++    if (partnerState == PS_KNOCKED_OUT) { // N5b: hold until the partner is conscious (see PollPending)
++      Held h; h.ev = e; h.since = nowSec;
++      m_pending[key] = h;
++      return false;
++    }
++    if (out) *out = e;
++    return true;
++  }
++
++private:
++  typedef std::pair<unsigned, unsigned> Key;
++  struct Episode { double start; Episode() : start(0) {} };
++  struct Pair {
++    double episodeStart, farSince, lastSeen;
++    bool armed, fired;
++    Pair() : episodeStart(0), farSince(-1.0), lastSeen(-1.0), armed(false), fired(false) {}
++  };
++  struct Held { AbandonEvent ev; double since; Held() : since(0) {} };
++  std::map<Key, Pair> m_pairs;
++  std::map<unsigned, Episode> m_episode;
++  std::map<Key, Held> m_pending;
++};
++
++// ------------------------------------------------------------------ proximity follow-up gate
++// Decides when the native side fires the optional bored turn (server answers "ok" when nothing is claimable).
++class ProximityGate {
++public:
++  static double GlobalMinSec() { return 90.0; }
++  static double PerNpcMinSec() { return 600.0; }
++  static double AwaySec() { return 45.0; }
++  static float AwayDist() { return 30.0f; }
++  static float NearCap() { return 15.0f; }
++  static double LoadDelaySec() { return 8.0; }
++  static double CombatDelaySec() { return 1.5; }
++  static double CombatStaleSec() { return 10.0; }
++  static float CombatPlayerRange() { return 60.0f; }
++  static float CombatCompanionRange() { return 40.0f; }
++
++  ProximityGate() : m_lastFire(-1e9), m_combatDue(-1.0) {}
++  void Reset() { m_npc.clear(); m_lastFire = -1e9; m_combatDue = -1.0; }
++
++  static float NearRadius(float talkRadius) { return talkRadius < NearCap() ? talkRadius : NearCap(); }
++
++  // Rate limits: global and per NPC. Records the fire when allowed.
++  bool TryFire(unsigned npc, double now) {
++    if (now < m_lastFire) m_lastFire = -1e9;
++    if (now - m_lastFire < GlobalMinSec()) return false;
++    Npc &n = m_npc[npc];
++    if (n.lastFire > -1e8 && now >= n.lastFire && now - n.lastFire < PerNpcMinSec()) return false;
++    m_lastFire = now;
++    n.lastFire = now;
++    return true;
++  }
++
++  // Per companion, per scan (only call while the caller's gates are open). nearestPlayerDist = metres to
++  // the nearest player character. Returns true when the proximity turn should fire for this companion now.
++  bool OnScan(unsigned npc, double now, bool idle, float nearestPlayerDist, float talkRadius) {
++    Npc &n = m_npc[npc];
++    float nearR = NearRadius(talkRadius);
++    bool nearNow = nearestPlayerDist <= nearR;
++    if (!n.seen) {
++      n.seen = true;
++      if (nearNow) n.loadDue = now + LoadDelaySec();
++    }
++    if (nearestPlayerDist > AwayDist()) {
++      if (n.farSince < 0.0) n.farSince = now;
++      if (now - n.farSince >= AwaySec()) n.away = true;
++    } else {
++      n.farSince = -1.0;
++    }
++    if (!idle) return false;
++    if (n.loadDue >= 0.0) {
++      if (!nearNow) n.loadDue = -1.0;
++      else if (now >= n.loadDue) {
++        n.loadDue = -1.0;
++        if (TryFire(npc, now)) return true;
++        return false;
++      }
++    }
++    if (n.away && nearNow) {
++      n.away = false;
++      n.farSince = -1.0;
++      return TryFire(npc, now);
++    }
++    return false;
++  }
++
++  // A combat_start happened `nearestPlayerDist` metres from the nearest player character.
++  void NoteCombatStart(double now, float nearestPlayerDist) {
++    if (nearestPlayerDist > CombatPlayerRange()) return;
++    if (m_combatDue < 0.0) m_combatDue = now + CombatDelaySec();
++  }
++  // True once when a pending combat trigger is due (and not stale). The caller then picks the nearest
++  // companion within CombatCompanionRange() and calls TryFire().
++  bool TakeCombatDue(double now) {
++    if (m_combatDue < 0.0) return false;
++    if (now < m_combatDue) return false;
++    bool stale = now - m_combatDue > CombatStaleSec();
++    m_combatDue = -1.0;
++    return !stale;
++  }
++  bool CombatPending() const { return m_combatDue >= 0.0; }
++
++private:
++  struct Npc {
++    bool seen, away;
++    double farSince, loadDue, lastFire;
++    Npc() : seen(false), away(false), farSince(-1.0), loadDue(-1.0), lastFire(-1e9) {}
++  };
++  std::map<unsigned, Npc> m_npc;
++  double m_lastFire, m_combatDue;
++};
++
++} // namespace N2Policy
++} // namespace Stobe
+diff -ruN a/src/NativeAttention.cpp b/src/NativeAttention.cpp
+--- a/src/NativeAttention.cpp	2026-10-15 18:46:53.634180658 -0500
++++ b/src/NativeAttention.cpp	2026-10-15 18:46:54.163202653 -0500
+@@ -1,202 +1,214 @@
+-#include "NativeAttention.h"
+-#include "N2Policy.h"
+-#include "Utils.h"
+-#include <kenshi/Character.h>
+-#include <kenshi/CharBody.h>
+-#include <kenshi/Faction.h>
+-#include <kenshi/GameWorld.h>
+-#include <kenshi/MedicalSystem.h>
+-#include <kenshi/Platoon.h>
+-#include <kenshi/RootObjectBase.h>
+-#include <kenshi/StateBroadcastData.h>
+-#include <kenshi/Tasker.h>
+-#include <kenshi/util/YesNoMaybe.h>
+-#include <stdint.h>
+-
+-namespace Stobe { namespace NativeAttention {
+-namespace {
+-bool Ok(const void* p) { return p && (uintptr_t)p >= 0x1000; }
+-
+-TaskType CurrentTask(Character* c) {
+-  try {
+-    CharBody* body = c->getBody();
+-    if (!Ok(body)) return NULL_TASK;
+-    Tasker* action = body->currentAction;
+-    if (!Ok(action) || !Ok(action->taskData)) return NULL_TASK;
+-    return action->taskData->key;
+-  } catch (...) { return NULL_TASK; }
+-}
+-
+-bool IsSleepTask(TaskType t) { return t == SLEEP_ON_FLOOR || t == USE_BED || t == USE_BED_ORDER || t == REST; }
+-bool IsFearTask(TaskType t) {
+-  return t == RUN_AWAY || t == RUN_AWAY_HOMETOWN || t == RETREAT_HOMETOWN || t == RUN_AWAY_FORCED || t == SELF_PRESERVATION;
+-}
+-// Reason text for tasks that mean "occupied with a job"; "" = free (idle, wandering, following, standing).
+-const char* BusyReason(TaskType t) {
+-  switch (t) {
+-  case BUILD: case ADD_MATERIALS_TO_BUILDING: case JOB_BUILDER: return "building";
+-  case REPAIR: case JOB_REPAIR_ROBOT: return "repairing";
+-  case DISMANTLE: return "dismantling";
+-  case OPERATE_MACHINERY: case OPERATE_AUTOMATIC_MACHINERY: case PRETEND_TO_OPERATE_MACHINERY:
+-  case JOB_KEEP_EVERYTHING_RUNNING: case FILL_MACHINE: case WANT_TO_FILL_MACHINE: case UNJAM_ALL_MACHINES:
+-  case UNJAM_MACHINE: case COLLECT_OUTPUT_RESOURCE: case COLLECT_OUTPUT_RESOURCE_BUILD_MATS: case EMPTYING_MACHINE:
+-  case EMPTY_MACHINE_OUTPUTS: return "operating machinery";
+-  case FIRST_AID_ORDER: case FIRST_AID_ROBOT: case JOB_MEDIC: case SPLINT_ORDER: case SPLINT_JOB: case HEAL_MY_LEGS:
+-    return "giving first aid";
+-  case USE_TRAINING_DUMMY: return "training";
+-  case SHOPPING: case BUY_SHIT: case FIND_A_SHOP: return "shopping";
+-  case STAND_AT_SHOPKEEPER_NODE: case WANDERING_TRADER: case OPEN_UP_SHOP_DOORS: return "tending a shop";
+-  case PATROL: case PATROL_TOWN: case STAND_AT_GUARD_NODE_HOMEBUILDING_IN_OUT: case STAND_AT_GUARD_NODE_HOMETOWN_OUTSIDE:
+-  case STAND_AT_GUARD_NODE_HOMEBUILDING_INDOORS_ONLY: case STAND_AT_BUILDING_GUARD_NODE: case MAN_THE_GATE:
+-    return "on guard duty";
+-  case MAN_A_TURRET: case MAN_A_TURRET_ON_BUILDING: case MAN_A_TURRET_PLAYER_JOB: case USE_TURRET: return "manning a turret";
+-  case PROSPECTING: return "prospecting";
+-  case AUTO_LABOURING_MINES: case AUTO_LABOURING_MINES_PRETEND: case WORK_THE_SLAVES: return "working";
+-  case OPERATE_STORAGE: case PUT_LOOT_IN_STORAGE: case DELIVER_RESOURCES: return "hauling goods";
+-  case PICK_LOCK: case LOCK_DOOR: case UNLOCK_DOOR: return "working a lock";
+-  case TRAVEL_TO_TARGET_TOWN: case TRAVEL_TO_TARGET_TOWN_FAST: case TRAVEL_TO_TARGET_PACKAGE: return "travelling";
+-  case LOOT_TARGET: case LOOT_THE_DEAD: case LOOT_CONTAINER: return "looting";
+-  default: return "";
+-  }
+-}
+-
+-struct Vitals {
+-  bool ok, dead, unconscious, bleeding, trauma;
+-  int bloodPct, hungerValue, worstFleshPct;
+-  Vitals() : ok(false), dead(false), unconscious(false), bleeding(false), trauma(false), bloodPct(-1), hungerValue(300), worstFleshPct(-1) {}
+-};
+-
+-Vitals ReadVitals(Character* c) {
+-  Vitals v;
+-  try {
+-    MedicalSystem* med = c->getMedical();
+-    if (!Ok(med)) return v;
+-    v.ok = true;
+-    v.dead = med->dead;
+-    v.unconscious = med->unconcious;
+-    v.bloodPct = N2Policy::BloodPct(med->blood, med->getMaxBlood());
+-    v.bleeding = med->currentBleedRate > 0.0f;
+-    v.trauma = med->isInBloodlossTrauma();
+-    v.hungerValue = N2Policy::HungerValue(med->hunger, med->fed);
+-    MedicalSystem::HealthPartStatus* parts[6] = {med->getPart(0), med->getPart(1), med->leftArm, med->rightArm, med->leftLeg, med->rightLeg};
+-    int worst = 100;
+-    bool any = false;
+-    for (int i = 0; i < 6; ++i) {
+-      MedicalSystem::HealthPartStatus* p = parts[i];
+-      if (!Ok(p)) continue;
+-      float mx = p->maxHealth();
+-      if (!(mx > 0.0f)) continue;
+-      int pct = (int)(p->flesh * 100.0f / mx);
+-      if (pct < worst) worst = pct;
+-      any = true;
+-    }
+-    if (any) v.worstFleshPct = worst < 0 ? 0 : worst;
+-  } catch (...) { v = Vitals(); }
+-  return v;
+-}
+-
+-bool IsAsleep(Character* c, TaskType task) {
+-  try {
+-    if (c->inSomething == IN_BED || IsSleepTask(task)) return true;
+-    StateBroadcastData* sb = c->stateBroadcast;
+-    if (Ok(sb) && sb->isSleeping.key == YesNoMaybe::YES) return true;
+-  } catch (...) {}
+-  return false;
+-}
+-} // namespace
+-
+-std::string AttentionJson(Character* npc) {
+-  if (!Ok(npc)) return "{\"observed\":false}";
+-  N2Policy::AttentionInputs a;
+-  Vitals v = ReadVitals(npc);
+-  if (!v.ok) return "{\"observed\":false}";
+-  TaskType task = CurrentTask(npc);
+-  a.bloodPct = v.bloodPct;
+-  a.bleeding = v.bleeding;
+-  a.hungry = N2Policy::HungryFrom(v.hungerValue);
+-  a.exhausted = N2Policy::ExhaustedFrom(v.hungerValue, v.trauma);
+-  try { a.crippled = npc->isCrippled(); } catch (...) { a.crippled = false; }
+-  try { a.fleeing = npc->isFleeing(); } catch (...) { a.fleeing = false; }
+-  try { a.inCombat = npc->isInCombatMode(true, true); } catch (...) { a.inCombat = false; }
+-  a.injured = N2Policy::InjuredFrom(v.bloodPct, a.crippled, a.bleeding, v.worstFleshPct);
+-  a.sleeping = IsAsleep(npc, task);
+-  a.afraid = a.fleeing || IsFearTask(task);
+-  const char* reason = BusyReason(task);
+-  a.busy = reason[0] != 0;
+-  a.busyReason = reason;
+-  return N2Policy::AttentionJson(a);
+-}
+-
+-std::string WithAttention(const std::string& nativeAiJson, Character* npc) {
+-  try { return N2Policy::AppendAttention(nativeAiJson, AttentionJson(npc)); }
+-  catch (...) { return nativeAiJson; }
+-}
+-
+-std::string RoleFor(Character* npc) {
+-  if (!Ok(npc)) return "";
+-  try {
+-    TaskType t = CurrentTask(npc);
+-    if (npc->isSlave() == IS_SLAVE) return "slave";
+-    if (t == STAND_AT_SHOPKEEPER_NODE) return "shopkeeper";
+-    if (npc->isATrader() || t == WANDERING_TRADER) return "trader";
+-    if (t == JOB_MEDIC) return "medic";
+-    if (npc->isLawEnforcement() || t == PATROL || t == PATROL_TOWN || t == STAND_AT_GUARD_NODE_HOMEBUILDING_IN_OUT ||
+-        t == STAND_AT_GUARD_NODE_HOMETOWN_OUTSIDE || t == STAND_AT_BUILDING_GUARD_NODE)
+-      return "guard";
+-  } catch (...) {}
+-  return "";
+-}
+-
+-std::string SquadName(Character* npc) {
+-  if (!Ok(npc)) return "";
+-  try {
+-    ActivePlatoon* g = npc->getPlatoon();
+-    if (!Ok(g)) return "";
+-    return N2Policy::AsciiTruncate(g->getName(), 60);
+-  } catch (...) { return ""; }
+-}
+-
+-unsigned SquadId(Character* npc) {
+-  if (!Ok(npc)) return 0;
+-  try {
+-    ActivePlatoon* g = npc->getPlatoon();
+-    if (!Ok(g) || !Ok(g->me)) return 0;
+-    return g->me->getHandle().serial;
+-  } catch (...) { return 0; }
+-}
+-
+-std::string SettlementName(Character* npc) {
+-  if (!Ok(npc)) return "";
+-  try {
+-    TownBase* town = npc->getCurrentTownLocation();
+-    if (!Ok(town)) return "";
+-    return N2Policy::AsciiTruncate(((RootObjectBase*)town)->getName(), 60);
+-  } catch (...) { return ""; }
+-}
+-
+-int PartnerState(Character* npc) {
+-  if (!Ok(npc)) return N2Policy::PS_NONE;
+-  Vitals v = ReadVitals(npc);
+-  if (!v.ok) return N2Policy::PS_NONE;
+-  bool down = false;
+-  try { down = npc->isDown(); } catch (...) { down = false; }
+-  return N2Policy::ClassifyPartner(v.dead, v.unconscious, v.bleeding, v.bloodPct, v.trauma, down);
+-}
+-
+-bool IsFree(Character* npc) {
+-  if (!Ok(npc)) return false;
+-  Vitals v = ReadVitals(npc);
+-  if (!v.ok || v.dead || v.unconscious) return false;
+-  try { return !npc->isDown(); } catch (...) { return false; }
+-}
+-
+-bool IsIdle(Character* npc) {
+-  if (!IsFree(npc)) return false;
+-  TaskType task = CurrentTask(npc);
+-  try {
+-    if (npc->isInCombatMode(true, true) || npc->isFleeing()) return false;
+-  } catch (...) { return false; }
+-  if (IsAsleep(npc, task) || IsFearTask(task)) return false;
+-  return BusyReason(task)[0] == 0;
+-}
+-} }
++#include "NativeAttention.h"
++#include "N2Policy.h"
++#include "Utils.h"
++#include <kenshi/Character.h>
++#include <kenshi/CharBody.h>
++#include <kenshi/Faction.h>
++#include <kenshi/GameWorld.h>
++#include <kenshi/MedicalSystem.h>
++#include <kenshi/Platoon.h>
++#include <kenshi/RootObjectBase.h>
++#include <kenshi/StateBroadcastData.h>
++#include <kenshi/Tasker.h>
++#include <kenshi/util/YesNoMaybe.h>
++#include <stdint.h>
++
++namespace Stobe { namespace NativeAttention {
++namespace {
++bool Ok(const void* p) { return p && (uintptr_t)p >= 0x1000; }
++
++TaskType CurrentTask(Character* c) {
++  try {
++    CharBody* body = c->getBody();
++    if (!Ok(body)) return NULL_TASK;
++    Tasker* action = body->currentAction;
++    if (!Ok(action) || !Ok(action->taskData)) return NULL_TASK;
++    return action->taskData->key;
++  } catch (...) { return NULL_TASK; }
++}
++
++bool IsSleepTask(TaskType t) { return t == SLEEP_ON_FLOOR || t == USE_BED || t == USE_BED_ORDER || t == REST; }
++bool IsFearTask(TaskType t) {
++  return t == RUN_AWAY || t == RUN_AWAY_HOMETOWN || t == RETREAT_HOMETOWN || t == RUN_AWAY_FORCED || t == SELF_PRESERVATION;
++}
++// Reason text for tasks that mean "occupied with a job"; "" = free (idle, wandering, following, standing).
++const char* BusyReason(TaskType t) {
++  switch (t) {
++  case BUILD: case ADD_MATERIALS_TO_BUILDING: case JOB_BUILDER: return "building";
++  case REPAIR: case JOB_REPAIR_ROBOT: return "repairing";
++  case DISMANTLE: return "dismantling";
++  case OPERATE_MACHINERY: case OPERATE_AUTOMATIC_MACHINERY: case PRETEND_TO_OPERATE_MACHINERY:
++  case JOB_KEEP_EVERYTHING_RUNNING: case FILL_MACHINE: case WANT_TO_FILL_MACHINE: case UNJAM_ALL_MACHINES:
++  case UNJAM_MACHINE: case COLLECT_OUTPUT_RESOURCE: case COLLECT_OUTPUT_RESOURCE_BUILD_MATS: case EMPTYING_MACHINE:
++  case EMPTY_MACHINE_OUTPUTS: return "operating machinery";
++  case FIRST_AID_ORDER: case FIRST_AID_ROBOT: case JOB_MEDIC: case SPLINT_ORDER: case SPLINT_JOB: case HEAL_MY_LEGS:
++    return "giving first aid";
++  case USE_TRAINING_DUMMY: return "training";
++  case SHOPPING: case BUY_SHIT: case FIND_A_SHOP: return "shopping";
++  case STAND_AT_SHOPKEEPER_NODE: case WANDERING_TRADER: case OPEN_UP_SHOP_DOORS: return "tending a shop";
++  case PATROL: case PATROL_TOWN: case STAND_AT_GUARD_NODE_HOMEBUILDING_IN_OUT: case STAND_AT_GUARD_NODE_HOMETOWN_OUTSIDE:
++  case STAND_AT_GUARD_NODE_HOMEBUILDING_INDOORS_ONLY: case STAND_AT_BUILDING_GUARD_NODE: case MAN_THE_GATE:
++    return "on guard duty";
++  case MAN_A_TURRET: case MAN_A_TURRET_ON_BUILDING: case MAN_A_TURRET_PLAYER_JOB: case USE_TURRET: return "manning a turret";
++  case PROSPECTING: return "prospecting";
++  case AUTO_LABOURING_MINES: case AUTO_LABOURING_MINES_PRETEND: case WORK_THE_SLAVES: return "working";
++  case OPERATE_STORAGE: case PUT_LOOT_IN_STORAGE: case DELIVER_RESOURCES: return "hauling goods";
++  case PICK_LOCK: case LOCK_DOOR: case UNLOCK_DOOR: return "working a lock";
++  case TRAVEL_TO_TARGET_TOWN: case TRAVEL_TO_TARGET_TOWN_FAST: case TRAVEL_TO_TARGET_PACKAGE: return "travelling";
++  case LOOT_TARGET: case LOOT_THE_DEAD: case LOOT_CONTAINER: return "looting";
++  default: return "";
++  }
++}
++
++struct Vitals {
++  bool ok, dead, unconscious, bleeding, trauma;
++  int bloodPct, hungerValue, worstFleshPct;
++  Vitals() : ok(false), dead(false), unconscious(false), bleeding(false), trauma(false), bloodPct(-1), hungerValue(300), worstFleshPct(-1) {}
++};
++
++Vitals ReadVitals(Character* c) {
++  Vitals v;
++  try {
++    MedicalSystem* med = c->getMedical();
++    if (!Ok(med)) return v;
++    v.ok = true;
++    v.dead = med->dead;
++    v.unconscious = med->unconcious;
++    v.bloodPct = N2Policy::BloodPct(med->blood, med->getMaxBlood());
++    v.bleeding = med->currentBleedRate > 0.0f;
++    v.trauma = med->isInBloodlossTrauma();
++    v.hungerValue = N2Policy::HungerValue(med->hunger, med->fed);
++    MedicalSystem::HealthPartStatus* parts[6] = {med->getPart(0), med->getPart(1), med->leftArm, med->rightArm, med->leftLeg, med->rightLeg};
++    int worst = 100;
++    bool any = false;
++    for (int i = 0; i < 6; ++i) {
++      MedicalSystem::HealthPartStatus* p = parts[i];
++      if (!Ok(p)) continue;
++      float mx = p->maxHealth();
++      if (!(mx > 0.0f)) continue;
++      int pct = (int)(p->flesh * 100.0f / mx);
++      if (pct < worst) worst = pct;
++      any = true;
++    }
++    if (any) v.worstFleshPct = worst < 0 ? 0 : worst;
++  } catch (...) { v = Vitals(); }
++  return v;
++}
++
++bool IsAsleep(Character* c, TaskType task) {
++  try {
++    if (c->inSomething == IN_BED || IsSleepTask(task)) return true;
++    StateBroadcastData* sb = c->stateBroadcast;
++    if (Ok(sb) && sb->isSleeping.key == YesNoMaybe::YES) return true;
++  } catch (...) {}
++  return false;
++}
++} // namespace
++
++std::string AttentionJson(Character* npc) {
++  if (!Ok(npc)) return "{\"observed\":false}";
++  N2Policy::AttentionInputs a;
++  Vitals v = ReadVitals(npc);
++  if (!v.ok) return "{\"observed\":false}";
++  TaskType task = CurrentTask(npc);
++  a.bloodPct = v.bloodPct;
++  a.bleeding = v.bleeding;
++  a.hungry = N2Policy::HungryFrom(v.hungerValue);
++  a.exhausted = N2Policy::ExhaustedFrom(v.hungerValue, v.trauma);
++  try { a.crippled = npc->isCrippled(); } catch (...) { a.crippled = false; }
++  try { a.fleeing = npc->isFleeing(); } catch (...) { a.fleeing = false; }
++  try { a.inCombat = npc->isInCombatMode(true, true); } catch (...) { a.inCombat = false; }
++  a.injured = N2Policy::InjuredFrom(v.bloodPct, a.crippled, a.bleeding, v.worstFleshPct);
++  a.sleeping = IsAsleep(npc, task);
++  a.afraid = a.fleeing || IsFearTask(task);
++  const char* reason = BusyReason(task);
++  a.busy = reason[0] != 0;
++  a.busyReason = reason;
++  return N2Policy::AttentionJson(a);
++}
++
++std::string WithAttention(const std::string& nativeAiJson, Character* npc) {
++  try { return N2Policy::AppendAttention(nativeAiJson, AttentionJson(npc)); }
++  catch (...) { return nativeAiJson; }
++}
++
++std::string RoleFor(Character* npc) {
++  if (!Ok(npc)) return "";
++  try {
++    TaskType t = CurrentTask(npc);
++    if (npc->isSlave() == IS_SLAVE) return "slave";
++    if (t == STAND_AT_SHOPKEEPER_NODE) return "shopkeeper";
++    if (npc->isATrader() || t == WANDERING_TRADER) return "trader";
++    if (t == JOB_MEDIC) return "medic";
++    if (npc->isLawEnforcement() || t == PATROL || t == PATROL_TOWN || t == STAND_AT_GUARD_NODE_HOMEBUILDING_IN_OUT ||
++        t == STAND_AT_GUARD_NODE_HOMETOWN_OUTSIDE || t == STAND_AT_BUILDING_GUARD_NODE)
++      return "guard";
++  } catch (...) {}
++  return "";
++}
++
++std::string SquadName(Character* npc) {
++  if (!Ok(npc)) return "";
++  try {
++    ActivePlatoon* g = npc->getPlatoon();
++    if (!Ok(g)) return "";
++    return N2Policy::AsciiTruncate(g->getName(), 60);
++  } catch (...) { return ""; }
++}
++
++unsigned SquadId(Character* npc) {
++  if (!Ok(npc)) return 0;
++  try {
++    ActivePlatoon* g = npc->getPlatoon();
++    if (!Ok(g) || !Ok(g->me)) return 0;
++    return g->me->getHandle().serial;
++  } catch (...) { return 0; }
++}
++
++std::string SettlementName(Character* npc) {
++  if (!Ok(npc)) return "";
++  try {
++    TownBase* town = npc->getCurrentTownLocation();
++    if (!Ok(town)) return "";
++    return N2Policy::AsciiTruncate(((RootObjectBase*)town)->getName(), 60);
++  } catch (...) { return ""; }
++}
++
++int PartnerState(Character* npc) {
++  if (!Ok(npc)) return N2Policy::PS_NONE;
++  Vitals v = ReadVitals(npc);
++  if (!v.ok) return N2Policy::PS_NONE;
++  bool down = false;
++  try { down = npc->isDown(); } catch (...) { down = false; }
++  return N2Policy::ClassifyPartner(v.dead, v.unconscious, v.bleeding, v.bloodPct, v.trauma, down);
++}
++
++bool IsFree(Character* npc) {
++  if (!Ok(npc)) return false;
++  Vitals v = ReadVitals(npc);
++  if (!v.ok || v.dead || v.unconscious) return false;
++  try { return !npc->isDown(); } catch (...) { return false; }
++}
++
++bool IsAlive(Character* npc) {
++  if (!Ok(npc)) return false;
++  Vitals v = ReadVitals(npc);
++  return v.ok && !v.dead;
++}
++
++bool IsConscious(Character* npc) {
++  if (!Ok(npc)) return false;
++  Vitals v = ReadVitals(npc);
++  return v.ok && !v.dead && !v.unconscious;
++}
++
++bool IsIdle(Character* npc) {
++  if (!IsFree(npc)) return false;
++  TaskType task = CurrentTask(npc);
++  try {
++    if (npc->isInCombatMode(true, true) || npc->isFleeing()) return false;
++  } catch (...) { return false; }
++  if (IsAsleep(npc, task) || IsFearTask(task)) return false;
++  return BusyReason(task)[0] == 0;
++}
++} }
+diff -ruN a/src/NativeAttention.h b/src/NativeAttention.h
+--- a/src/NativeAttention.h	2026-10-15 18:46:53.312541562 -0500
++++ b/src/NativeAttention.h	2026-10-15 18:46:54.121265253 -0500
+@@ -1,24 +1,28 @@
+-#pragma once
+-// N2: native attention / role / squad reads for one character (game thread only, no retained pointers).
+-#include <string>
+-class Character;
+-class GameWorld;
+-namespace Stobe { namespace NativeAttention {
+-// {"observed":true,busy,sleeping,injured,crippled,bleeding,exhausted,afraid,fleeing,hungry,in_combat,blood_pct,busy_reason}
+-// or {"observed":false} when the character cannot be read.
+-std::string AttentionJson(Character* npc);
+-// native_ai json (NativeAiAwareness::CaptureJson) with ,"attention":{...} appended when observed.
+-std::string WithAttention(const std::string& nativeAiJson, Character* npc);
+-// Public occupation of a bystander: trader|shopkeeper|guard|medic|slave|"" (<=24 chars).
+-std::string RoleFor(Character* npc);
+-// Squad name / id / current town name of a character ("" / 0 when unknown).
+-std::string SquadName(Character* npc);
+-unsigned SquadId(Character* npc);
+-std::string SettlementName(Character* npc);
+-// 0 none, 1 knocked_out, 2 bleeding_out, 3 downed (N2Policy::PartnerState); alive characters only.
+-int PartnerState(Character* npc);
+-// Alive, conscious, not downed (can walk away).
+-bool IsFree(Character* npc);
+-// Not in combat, not sleeping, not busy, not fleeing: fit for an optional chat turn.
+-bool IsIdle(Character* npc);
+-} }
++#pragma once
++// N2: native attention / role / squad reads for one character (game thread only, no retained pointers).
++#include <string>
++class Character;
++class GameWorld;
++namespace Stobe { namespace NativeAttention {
++// {"observed":true,busy,sleeping,injured,crippled,bleeding,exhausted,afraid,fleeing,hungry,in_combat,blood_pct,busy_reason}
++// or {"observed":false} when the character cannot be read.
++std::string AttentionJson(Character* npc);
++// native_ai json (NativeAiAwareness::CaptureJson) with ,"attention":{...} appended when observed.
++std::string WithAttention(const std::string& nativeAiJson, Character* npc);
++// Public occupation of a bystander: trader|shopkeeper|guard|medic|slave|"" (<=24 chars).
++std::string RoleFor(Character* npc);
++// Squad name / id / current town name of a character ("" / 0 when unknown).
++std::string SquadName(Character* npc);
++unsigned SquadId(Character* npc);
++std::string SettlementName(Character* npc);
++// 0 none, 1 knocked_out, 2 bleeding_out, 3 downed (N2Policy::PartnerState); alive characters only.
++int PartnerState(Character* npc);
++// Alive, conscious, not downed (can walk away).
++bool IsFree(Character* npc);
++// N5b: readable and alive (not dead).
++bool IsAlive(Character* npc);
++// N5b: alive and not knocked out (may still be downed/bleeding): able to notice being left behind.
++bool IsConscious(Character* npc);
++// Not in combat, not sleeping, not busy, not fleeing: fit for an optional chat turn.
++bool IsIdle(Character* npc);
++} }
+diff -ruN a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp	2026-10-15 18:46:53.273138662 -0500
++++ b/src/main.cpp	2026-10-15 18:46:54.173541453 -0500
+@@ -8880,6 +8880,37 @@
+   g_abandonTracker.Reset();
+   g_lastAbandonScanTick = 0;
+ }
++// Posts one abandoned_in_danger fact (both must be player-faction members). N5b: also used for held events.
++static void N2PostAbandon(Character *leaverC, Character *partnerC, int partnerNow, const Stobe::N2Policy::AbandonEvent &ev) {
++  StobeSocial::EntityInfo leaver = SocialEntityFor(leaverC), partner = SocialEntityFor(partnerC);
++  if (leaver.inPlayerFaction != 1 || partner.inPlayerFaction != 1)
++    return; // both must be player-faction members
++  std::vector<StobeSocial::EntityInfo> who;
++  std::vector<int> sense;
++  SocialCollectWitnesses(leaverC, partnerC, who, sense);
++  bool sawLeaving = false;
++  for (size_t k = 0; k < sense.size(); ++k)
++    if (((sense[k] >> 2) & 3) == 2 && (sense[k] & 1))
++      sawLeaving = true;
++  if (!sawLeaving && partnerNow != Stobe::N2Policy::PS_KNOCKED_OUT) {
++    SensoryData *sd = nullptr;
++    try {
++      sd = partnerC->getSensoryData();
++    } catch (...) {
++      sd = nullptr;
++    }
++    sawLeaving = SocialSenseTri(sd, leaverC, false) == 2;
++  }
++  std::string facts = "\"evidence_id\":" + StobeSocial::JsonString(ev.evidenceId) +
++                      ",\"partner_state\":" + StobeSocial::JsonString(ev.partnerState) +
++                      ",\"distance_m\":" + ToString((int)(ev.distanceM + 0.5f)) +
++                      ",\"seconds\":" + ToString(ev.seconds) +
++                      ",\"observer_saw_leaving\":" + (sawLeaving ? "true" : "false");
++  SocialPostStructuredW("abandoned_in_danger", &leaver, &partner, facts, who, sense);
++  Log("N2_ABANDON: leaver=" + leaver.name + " partner=" + partner.name + " state=" + ev.partnerState +
++      " dist=" + ToString((int)ev.distanceM) + " seconds=" + ToString(ev.seconds) + " held=" + ToString(ev.heldSec));
++}
++
+ static void N2AbandonWatch(GameWorld *world, DWORD nowTick) {
+   if (!SocialCaptureEnabled() || nowTick - g_lastAbandonScanTick < 2000)
+     return;
+@@ -8918,6 +8949,29 @@
+     g_abandonTracker.NotePartnerState(m.serial, m.state, nowSec);
+     members.push_back(m);
+   }
++  // N5b: abandonments proven while the partner was knocked out are held; release them once the partner is
++  // conscious (episode state stays knocked_out), or after the bounded hold while the partner is still alive.
++  if (g_abandonTracker.PendingCount()) {
++    std::vector<std::pair<unsigned, unsigned> > held = g_abandonTracker.PendingPairs();
++    for (size_t h = 0; h < held.size(); ++h) {
++      Member *lm = nullptr, *pm = nullptr;
++      for (size_t k = 0; k < members.size(); ++k) {
++        if (members[k].serial == held[h].first)
++          lm = &members[k];
++        if (members[k].serial == held[h].second)
++          pm = &members[k];
++      }
++      const bool present = lm && pm;
++      const bool alive = present && Stobe::NativeAttention::IsAlive(pm->c);
++      const bool conscious = present && Stobe::NativeAttention::IsConscious(pm->c);
++      Stobe::N2Policy::AbandonEvent hev;
++      int r = g_abandonTracker.PollPending(held[h].first, held[h].second, present, alive, conscious, nowSec, &hev);
++      if (r == Stobe::N2Policy::AbandonTracker::POLL_POST_WOKE || r == Stobe::N2Policy::AbandonTracker::POLL_POST_TIMEOUT)
++        N2PostAbandon(lm->c, pm->c, pm->state, hev);
++      else if (r == Stobe::N2Policy::AbandonTracker::POLL_DROP)
++        Log("N2_ABANDON: held event dropped leaver=" + ToString((int)held[h].first) + " partner=" + ToString((int)held[h].second));
++    }
++  }
+   for (size_t pi = 0; pi < members.size(); ++pi) {
+     if (members[pi].state == Stobe::N2Policy::PS_NONE)
+       continue;
+@@ -8933,33 +8987,7 @@
+       Stobe::N2Policy::AbandonEvent ev;
+       if (!g_abandonTracker.Observe(members[li].serial, members[pi].serial, true, members[pi].state, dist, nowSec, &ev))
+         continue;
+-      StobeSocial::EntityInfo leaver = SocialEntityFor(members[li].c), partner = SocialEntityFor(members[pi].c);
+-      if (leaver.inPlayerFaction != 1 || partner.inPlayerFaction != 1)
+-        continue; // both must be player-faction members
+-      std::vector<StobeSocial::EntityInfo> who;
+-      std::vector<int> sense;
+-      SocialCollectWitnesses(members[li].c, members[pi].c, who, sense);
+-      bool sawLeaving = false;
+-      for (size_t k = 0; k < sense.size(); ++k)
+-        if (((sense[k] >> 2) & 3) == 2 && (sense[k] & 1))
+-          sawLeaving = true;
+-      if (!sawLeaving && members[pi].state != Stobe::N2Policy::PS_KNOCKED_OUT) {
+-        SensoryData *sd = nullptr;
+-        try {
+-          sd = members[pi].c->getSensoryData();
+-        } catch (...) {
+-          sd = nullptr;
+-        }
+-        sawLeaving = SocialSenseTri(sd, members[li].c, false) == 2;
+-      }
+-      std::string facts = "\"evidence_id\":" + StobeSocial::JsonString(ev.evidenceId) +
+-                          ",\"partner_state\":" + StobeSocial::JsonString(ev.partnerState) +
+-                          ",\"distance_m\":" + ToString((int)(ev.distanceM + 0.5f)) +
+-                          ",\"seconds\":" + ToString(ev.seconds) +
+-                          ",\"observer_saw_leaving\":" + (sawLeaving ? "true" : "false");
+-      SocialPostStructuredW("abandoned_in_danger", &leaver, &partner, facts, who, sense);
+-      Log("N2_ABANDON: leaver=" + leaver.name + " partner=" + partner.name + " state=" + ev.partnerState +
+-          " dist=" + ToString((int)ev.distanceM) + " seconds=" + ToString(ev.seconds));
++      N2PostAbandon(members[li].c, members[pi].c, members[pi].state, ev);
+     }
+   }
+ }
