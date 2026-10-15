@@ -27,6 +27,11 @@
 #   ALERT-coordinator.txt: session-start prints it, rig-health.sh and the Stop hook block on ALERT-*.txt, so a live coordinator
 #   cannot miss it. No relay-message mechanism exists in tools/automation (agents use SendMessage inside Claude); the ALERT is
 #   the notification. State: supervisor\coord-supervisor.state.json (launch times), log supervisor\coord-supervisor.log.
+# Tail sessions (overlap handoff, docs/TAIL_HANDOFF_CONTRACT.md; flags runs\tail\<session>.flag, tail-mode.ps1):
+#   - every pass lists them (log + -Status). A tail whose claude process is gone while it still owns unfinished/unacknowledged agents is DEAD:
+#     those agents died with it, so their RUNNING statuses are rewritten to STOPPED-CONTEXT at once (ledger wp -> stopped) and
+#     ALERT-tail-dead.txt names them (respawn from checkpoints; then `tail-mode.ps1 leave -Session <id> -Force` clears it).
+#   - agents owned by a LIVE tail are never marked orphaned, and while a live tail still owns agents NO new coordinator is auto-launched.
 # Usage
 #   coord-supervisor.ps1 -Ensure          start ONE hidden background loop (like rig-runner -Ensure); call from session-start
 #   coord-supervisor.ps1 -Loop            the loop itself (hidden); -Stop kills it
@@ -41,6 +46,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if (-not $Root) { $Root = if ($env:KCS_RUNS) { $env:KCS_RUNS } else { 'C:\KenshiTestRuns' } }
+. (Join-Path $PSScriptRoot 'tail-mode.ps1')   # tail-session helpers (functions only; its param block uses names this script does not)
 
 $HB_STALE = 600; $AGENT_STALE = 1800; $HANDOFF_FRESH = 1800; $HOUR = 3600; $MAX_LAUNCH = 3; $BASE_GAP = 900
 $ALERT_MARK = 'COORDINATOR-SUPERVISOR ALERT'
@@ -132,6 +138,68 @@ function Clear-Alert([hashtable]$c) {
     }
 }
 
+# ---- tail sessions (overlap handoff) ----
+$TAIL_ALERT_MARK = 'TAIL-SUPERVISOR ALERT'
+# @{ Live = tails with the agents they still own; Dead = tails whose process is gone and that still own unfinished/unacked agents; LiveAgents/DeadAgents = names }
+function Get-TailInfo([hashtable]$c) {
+    $i = @{ Live = @(); Dead = @(); LiveAgents = @(); DeadAgents = @() }
+    try {
+        foreach ($f in (Get-TailFlags $c.Root)) {
+            $pend = @(Get-TailAgentSet $c.Root $f | Where-Object { $_.Pending })
+            if ($f.Alive) {
+                $i.Live += , @{ Flag = $f; Agents = $pend }
+                $i.LiveAgents += @($pend | ForEach-Object { $_.Agent })
+            } elseif ($pend.Count) {
+                $i.Dead += , @{ Flag = $f; Agents = $pend }
+                $i.DeadAgents += @($pend | ForEach-Object { $_.Agent })
+            }
+        }
+    } catch { Log $c "tail scan failed (fail open): $($_.Exception.Message)" }
+    return $i
+}
+
+function Invoke-TailPass([hashtable]$c) {
+    $ti = Get-TailInfo $c
+    $c.Tails = $ti
+    foreach ($t in $ti.Live) { Log $c "tail session $($t.Flag.Session) LIVE (pid $($t.Flag.Pid)) owns: $(if ($t.Agents.Count) { ($t.Agents | ForEach-Object Agent) -join ', ' } else { 'nothing pending' })" }
+    $af = Join-Path $c.Root 'ALERT-tail-dead.txt'
+    if (-not $ti.Dead.Count) {
+        if ((Test-Path -LiteralPath $af) -and "$(Get-Content -LiteralPath $af -TotalCount 1)" -like "*$TAIL_ALERT_MARK*") { Remove-Item -LiteralPath $af -Force; Log $c 'no dead tail sessions left: alert cleared' }
+        return
+    }
+    $dir = Join-Path $c.Root 'agents'
+    $marked = @()
+    $lines = @()
+    foreach ($t in $ti.Dead) {
+        $names = @($t.Agents | ForEach-Object Agent)
+        $lines += "tail session $($t.Flag.Session) (pid $($t.Flag.Pid)) is DEAD and its agents died with it: $($names -join ', '). Respawn each as a FRESH agent from its checkpoint/handoff (names wpA -> wpA2), then: powershell -NoProfile -File C:\KenshiModding\tools\automation\tail-mode.ps1 leave -Session $($t.Flag.Session) -Force"
+        foreach ($n in $names) {
+            try {
+                $sf = Join-Path $dir "$n.status"
+                if (-not (Test-Path -LiteralPath $sf)) { continue }
+                $l = @(Get-Content -LiteralPath $sf -ErrorAction Stop)
+                $head = "$($l[0])".TrimStart([char]0xFEFF) -split '\s*\|\s*'
+                if ($head.Count -lt 2 -or $head[1].Trim() -ne 'RUNNING') { continue }
+                $get = { param($p) $x = $l | Where-Object { $_ -like "$($p):*" } | Select-Object -First 1; if ($x) { ("$x" -replace "^$($p):\s*", '') } else { '' } }
+                & $c.StatusWriter $n 'STOPPED-CONTEXT' (& $get 'task') "ORPHANED: tail session $($t.Flag.Session) is dead; marked STOPPED-CONTEXT by coord-supervisor. Was: $(& $get 'latest')" (& $get 'outputs') (& $get 'next')
+                $marked += $n
+                Log $c "agent $n marked STOPPED-CONTEXT (dead tail $($t.Flag.Session))"
+            } catch { Log $c "dead-tail agent $n mark failed: $($_.Exception.Message)" }
+        }
+    }
+    if ($marked.Count) {
+        $programs = Read-Programs $c
+        foreach ($rec in $programs.All) {
+            $changed = $false
+            foreach ($w in $rec.Wps) { if ($w -and $marked -contains "$($w.agent)" -and "$($w.state)" -ieq 'running') { $w.state = 'stopped'; $changed = $true } }
+            if ($changed) { try { Save-Ledger $rec } catch { Log $c "ledger write failed $($rec.Path): $($_.Exception.Message)" } }
+        }
+    }
+    $txt = @("$TAIL_ALERT_MARK $(Stamp $c.Now)") + $lines
+    Set-Content -LiteralPath $af -Value $txt -Encoding UTF8
+    $c.Alerts.Add(($lines -join ' | ')) | Out-Null
+}
+
 # ---- launch ----
 function New-LaunchSpec([string]$projectDir, [string]$handoffDir, [string[]]$programs, [int]$n, [int64]$now) {
     $names = ($programs -join ', ')
@@ -184,6 +252,7 @@ function Mark-Orphans([hashtable]$c, $programs) {
             if (-not $name -or $name -eq 'coord-supervisor') { continue }
             $age = $c.Now - (To-Epoch $f.LastWriteTime)
             if ($age -le $AGENT_STALE) { continue }
+            if ($c.Tails -and @($c.Tails.LiveAgents) -contains $name) { Log $c "agent $name stale $([int]($age/60)) min but a LIVE tail session owns it: left RUNNING"; continue }
             $low = $name.ToLowerInvariant()
             $statusText = ($lines -join ' ').ToLowerInvariant()
             $protected = $false
@@ -219,6 +288,7 @@ function Mark-Orphans([hashtable]$c, $programs) {
 function Invoke-Pass([hashtable]$c) {
     $r = @{ Result = ''; Launched = $false }
     try {
+        Invoke-TailPass $c
         $hb = Read-Heartbeat $c.Root
         if (-not $hb) { Log $c 'no (readable) coordinator.heartbeat: hook not installed yet, doing nothing'; $r.Result = 'no-heartbeat'; return $r }
         $hbAge = $c.Now - $hb.Epoch
@@ -234,6 +304,10 @@ function Invoke-Pass([hashtable]$c) {
         if (Test-Path -LiteralPath $hf) {
             $hAge = $c.Now - (To-Epoch (Get-Item -LiteralPath $hf).LastWriteTime)
             if ($hAge -lt $HANDOFF_FRESH) { Log $c "heartbeat stale $([int]($hbAge/60)) min but handoff.ready is $([int]($hAge/60)) min old: new session expected"; $r.Result = 'handoff-fresh'; return $r }
+        }
+        if ($c.Tails -and @($c.Tails.LiveAgents).Count) {
+            Log $c "heartbeat stale $([int]($hbAge/60)) min, but a LIVE tail session still owns agents ($((@($c.Tails.LiveAgents)) -join ', ')): no coordinator relaunch"
+            $r.Result = 'tail-live'; return $r
         }
         if (-not $programs.Active.Count) { Log $c "heartbeat stale $([int]($hbAge/60)) min, no program with open work packages: nothing to resume"; $r.Result = 'no-open-work'; return $r }
 
@@ -278,6 +352,7 @@ function New-Ctx([string]$root, [int64]$now, [scriptblock]$launcher, [scriptbloc
     return @{
         Root = $root; Now = $now; ProjectDir = $projectDir
         Launcher = $launcher; StatusWriter = $writer; ProcessProbe = $probe
+        Tails = $null
         Log = (New-Object Collections.ArrayList); Alerts = (New-Object Collections.ArrayList); Launched = (New-Object Collections.ArrayList)
     }
 }
@@ -419,6 +494,29 @@ function Invoke-Selftest {
         Set-Content "$r\ALERT-coordinator.txt" 'someone else wrote this'
         $x = Run $r ($T0 + 120) $false
         T (Test-Path "$r\ALERT-coordinator.txt") '9b foreign alert file not deleted'
+
+        # 10 tail sessions (overlap handoff): flag + pid; $PID = a live process, 2147480000 = none
+        function TailFlag([string]$r, [string]$sess, [int]$cpid, [string[]]$ag) {
+            New-Item -ItemType Directory -Force -Path (Join-Path $r 'tail') | Out-Null
+            [IO.File]::WriteAllText((Join-Path $r "tail\$sess.flag"), ((@{ session = $sess; pid = $cpid; created = (Get-Date).AddMinutes(1).ToString('o'); agents = @($ag) }) | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+        }
+        function MkSt([string]$r, [string]$n, [int64]$age) { $f = "$r\agents\$n.status"; Set-Content $f @("$n | RUNNING | d", 'task: T', 'latest: L', 'outputs: O', 'next: N'); SetMtime $f ($T0 - $age) }
+        $r = NewEnv 'tail-live'; Beat $r ($T0 - 700); Ledger $r 'imm26.json' $todoLedger; MkSt $r 'tA' 7200; TailFlag $r 'sLive' $PID @('tA')
+        $x = Run $r $T0 $true
+        T ($x.Result -eq 'tail-live' -and $script:calls.Count -eq 0) '10a live tail owning an agent: no coordinator relaunch'
+        T ((Get-Content "$r\agents\tA.status" -TotalCount 1) -match 'RUNNING') '10b live tail agent not marked orphaned'
+        $r = NewEnv 'tail-dead'; Beat $r ($T0 - 60); Ledger $r 'imm26.json' ('{"name":"imm26","wps":[{"id":"wp1","state":"running","agent":"tB"}]}'); MkSt $r 'tB' 60; TailFlag $r 'sDead' 2147480000 @('tB')
+        $x = Run $r $T0 $false
+        T ((Get-Content "$r\agents\tB.status" -TotalCount 1) -match 'STOPPED-CONTEXT') '10c dead tail: its RUNNING agent marked STOPPED-CONTEXT at once'
+        T ((Test-Path "$r\ALERT-tail-dead.txt") -and ((Get-Content "$r\ALERT-tail-dead.txt" -Raw) -match 'tB' -and (Get-Content "$r\ALERT-tail-dead.txt" -Raw) -match 'sDead')) '10d dead tail alert names tail and agent'
+        T (((Get-Content "$r\programs\imm26.json" -Raw | ConvertFrom-Json).wps | Where-Object { $_.id -eq 'wp1' }).state -eq 'stopped') '10e dead tail agent ledger wp -> stopped'
+        Remove-Item "$r\tail\sDead.flag"
+        $x = Run $r $T0 $false
+        T (-not (Test-Path "$r\ALERT-tail-dead.txt")) '10f alert cleared once the dead flag is removed'
+        $r = NewEnv 'tail-dead2'; Beat $r ($T0 - 60); MkSt $r 'tC' 60; TailFlag $r 'sDead2' 2147480000 @('tC')
+        Set-Content "$r\ALERT-tail-dead.txt" 'foreign'; Remove-Item "$r\tail\sDead2.flag"
+        $x = Run $r $T0 $false
+        T (Test-Path "$r\ALERT-tail-dead.txt") '10g foreign ALERT-tail-dead.txt file not deleted'
     } finally { Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:fails) { "SELFTEST FAILED ($script:fails)"; exit 1 } else { 'SELFTEST OK'; exit 0 }
 }
@@ -448,6 +546,8 @@ if ($Status) {
     $p = Read-Programs $c
     "programs with open wps: $(if ($p.Active.Count) { ($p.Active | ForEach-Object { $_.Name }) -join ', ' } else { 'none' }); malformed ledgers: $($p.Bad.Count)"
     "auto-launch: $(if (Test-Path (Join-Path $Root 'supervisor.autolaunch')) { 'ON' } else { 'OFF (default)' }); relaunches in the last hour: $(@(Get-State $c | Where-Object { ($c.Now - $_) -lt $HOUR }).Count)"
+    $ti = Get-TailInfo $c
+    "tail sessions: $(if (@(Get-TailFlags $Root).Count) { (@(Get-TailFlags $Root) | ForEach-Object { "$($_.Session) $(if ($_.Alive) { 'LIVE' } else { 'DEAD' })" }) -join '; ' } else { 'none' }); live-tail agents: $(if (@($ti.LiveAgents).Count) { @($ti.LiveAgents) -join ', ' } else { 'none' }); dead-tail agents (respawn): $(if (@($ti.DeadAgents).Count) { @($ti.DeadAgents) -join ', ' } else { 'none' })"
     $loops = Find-Loops; "loop: $(if ($loops) { "running pid $($loops[0].ProcessId)" } else { 'not running' })"
     exit 0
 }

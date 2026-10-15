@@ -60,6 +60,21 @@ if ($mode -eq 'pre') {
 }
 
 if ($mode -ne 'stop') { exit 0 }
+# TAIL session (overlap handoff, docs/TAIL_HANDOFF_CONTRACT.md, Shay 2026-10-15): a session with C:\KenshiTestRuns\tail\<session>.flag has
+# handed the coordinator role to a new session and only waits for its own agents. It may end only when every owned agent is done AND
+# acknowledged by the new coordinator (ledger acked_by_new_coordinator); until then its Stop is blocked EVERY time (no stop_hook_active
+# escape) with a clear message, but it is never blocked from working. It is exempt from the idle-rig, ready-queue, alert, handoff-marker
+# and agent-respawn rules (those belong to the live coordinator). Fails open on any error. See tail-mode.ps1 / tail-hooks-selftest.ps1.
+if (-not $env:KAH_AGENT_NAME -and [string]$in.session_id) {
+    try {
+        $tr = $runs; $ts = [string]$in.session_id   # the lib's param block would reset $runs inside the dot-sourcing scope
+        $tv = & { . (Join-Path $PSScriptRoot '..\tail-mode.ps1'); Get-TailStopVerdict $tr $ts }
+        if ($tv.Tail) {
+            if ($tv.Block) { Block-Stop ('kenshi-waker-guard: ' + $tv.Message + ' Keep the waker running: ' + $WAKER) }
+            exit 0
+        }
+    } catch { }
+}
 if ($in.stop_hook_active) { exit 0 }
 # Independent agent session (spawn-wp-session.ps1 sets KAH_AGENT_NAME; Shay 2026-10-15): an AGENT, not the coordinator. Only its
 # own status file counts: it may end only when agents\<name>.status is DONE/FAILED/STOPPED-CONTEXT. No event-wait, idle-rig,

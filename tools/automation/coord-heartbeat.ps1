@@ -91,7 +91,14 @@ try {
     # Independent agent sessions (spawn-wp-session.ps1 sets KAH_AGENT_NAME) are not the coordinator: never beat, claim or refresh
     # (a working agent must not mask a dead coordinator; event-wait.sh -Beat from an agent session is skipped too).
     if ($env:KAH_AGENT_NAME) { exit 0 }
-    if ($Beat) { [void](Invoke-Beat $runs '' $false $true $now); exit 0 }
+    # Tail sessions (overlap handoff, runs\tail\<session>.flag) never beat: only the live coordinator does. -Beat (event-wait.sh) has no
+    # session id, so it is skipped while the heartbeat owner is a tail session (the new coordinator claims ownership via session-start.ps1).
+    function Test-TailSid([string]$sid0) { [bool]($sid0 -and (Test-Path -LiteralPath (Join-Path (Join-Path $runs 'tail') (($sid0 -replace '[\/:*?"<>|]', '_') + '.flag')))) }
+    if ($Beat) {
+        $cur0 = Read-Hb (Get-HbPath $runs)
+        if ($cur0 -and (Test-TailSid $cur0.Session)) { exit 0 }
+        [void](Invoke-Beat $runs '' $false $true $now); exit 0
+    }
     if ($Claim) { [void](Invoke-Beat $runs $(if ($Session) { $Session } else { 'manual' }) $true $false $now); exit 0 }
     # hook mode
     $sid = $Session; $claim = $false
@@ -107,6 +114,7 @@ try {
             if (-not $in.agent_id -and $cmd -match 'session-start\.ps1') { $claim = $true }
         }
     }
+    if (Test-TailSid $sid) { exit 0 }   # a tail session never beats or claims
     [void](Invoke-Beat $runs $sid $claim $false $now)
 } catch {}
 exit 0
