@@ -122,6 +122,16 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\coord-heartbeat.ps1",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {
