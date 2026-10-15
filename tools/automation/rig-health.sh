@@ -30,7 +30,7 @@ for s in "$R"/runner/5090.state "$R"/runner/4080.state; do
   fi
 done
 # ONE powershell.exe for the Kenshi check + both rig states (res-wait 2026-10-10: was tasklist.exe + 2 powershell.exe per call)
-st=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'if (Get-Process kenshi_x64 -EA 0 | ? { $_.Path -notlike "D:\KenshiInst\*" }) { "K yes" } else { "K no" }; "4 " + [string](& "C:\KenshiModding\tools\automation\rig4080-state.ps1" 2>$null | Select-Object -First 1); "5 " + [string](& "C:\KenshiModding\tools\automation\rig5090-state.ps1" 2>$null | Select-Object -First 1)' </dev/null 2>/dev/null | tr -d '\r')
+st=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'if (Get-Process kenshi_x64 -EA 0 | ? { $_.Path -notlike "D:\KenshiInst\*" }) { "K yes" } else { "K no" }; "L " + @(Get-Process kenshi_x64 -EA 0 | ? { $_.Path -like "D:\KenshiInst\*" }).Count; "4 " + [string](& "C:\KenshiModding\tools\automation\rig4080-state.ps1" 2>$null | Select-Object -First 1); "5 " + [string](& "C:\KenshiModding\tools\automation\rig5090-state.ps1" 2>$null | Select-Object -First 1)' </dev/null 2>/dev/null | tr -d '\r')
 k=$(sed -n 's/^K //p' <<<"$st"); k=${k:-no}
 lock=free; [ -f "$R/game.lock" ] && lock=$(head -1 "$R/game.lock" | tr -d '\r' | sed 's/^\xEF\xBB\xBF//')
 mk=$(find "$R/inflight" -maxdepth 1 -type f -mmin -360 -printf '%f,' 2>/dev/null | sed 's/,$//'); mk=${mk:-none}
@@ -42,6 +42,9 @@ case "$r4" in IDLE_*|IDLE-GAME*) echo "RIG4080 IDLE ($r4): start a 4080 job now 
 g=$(sed -n 's/^5 //p' <<<"$st" | head -1)
 case "$g" in IDLE-GAME*) echo "RIG IDLE-GAME 5090: ${g#IDLE-GAME } 4080=$r4"; exit 1;; esac
 if [ "$k" = yes ]; then echo "RIG BUSY kenshi=yes lock=$lock inflight=$mk 4080=$r4"; exit 0; fi
+# isolated 5090 lane games (D:\KenshiInst\<n>, imm26) are real work, not a Kenshi-gone stall (2026-10-15: false RIG STALL woke the coordinator with 3 lane games up)
+lg=$(sed -n 's/^L //p' <<<"$st" | head -1); lg=${lg:-0}
+if [ "$lg" -gt 0 ] 2>/dev/null; then echo "RIG BUSY kenshi=lanes($lg) lock=$lock inflight=$mk 4080=$r4"; exit 0; fi
 # 5090 parked on purpose (kenshi-ctl.ps1 idle, e.g. the 2026-10-11 BSOD) + lock free: markers are lab/4080 work, not a stall
 if [ "$lock" = free ] && [ "$reason" != none ]; then echo "RIG IDLE kenshi=no lock=free idle_reason=$reason inflight=$mk 4080=$r4"; exit 0; fi
 # 4080-* markers are 4080 work (2026-10-15: 4080-imm26 read as a 5090 stall with the 5090 held free on Shay's order); agent-name
