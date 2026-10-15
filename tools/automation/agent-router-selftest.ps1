@@ -1,4 +1,4 @@
-# agent-router-selftest.ps1: offline checks of hooks\agent-router.ps1 (allow / deny / fail-open), incl. the "no in-session long-running agents" rule.
+# agent-router-selftest.ps1: offline checks of hooks\agent-router.ps1 (allow / deny / fail-open); in-session long-running agents are allowed again (tail handoff, 2026-10-15).
 # Runs the hook as a subprocess with JSON on stdin; AGENT_LEDGER points at a temp file. Prints SELFTEST PASS n/n or FAIL.
 $hook = Join-Path $PSScriptRoot 'hooks\agent-router.ps1'
 $tmp = Join-Path $env:TEMP ("agent-router-selftest-" + [guid]::NewGuid().ToString('N'))
@@ -30,24 +30,24 @@ function Allowed($r) { $r.Exit -eq 0 -and $r.Out -match '"permissionDecision":"a
 function Denied($r) { $r.Exit -eq 2 }
 
 $r = Call '[case:read] list files' 'kenshi-reader';                   Check 'reader foreground allowed' (Allowed $r) "$($r.Exit) $($r.Err)"
-$r = Call '[case:read] list files' 'kenshi-reader' $true;            Check 'reader run_in_background=true denied' (Denied $r)
-Check 'bg denial prints spawn-wp-session command' ($r.Err.Contains('spawn-wp-session.ps1 imm26-list-files read C:\KenshiTestRuns\agents\briefs\imm26-list-files.md')) $r.Err
-Check 'bg denial says agent-host, never a visible window' ($r.Err -match 'agent-host job' -and $r.Err -match 'never a visible window') $r.Err
-$r = Call '[case:read] list files' 'kenshi-reader' 'true';           Check 'run_in_background="true" (string) denied' (Denied $r)
+$r = Call '[case:read] list files' 'kenshi-reader' $true;            Check 'reader run_in_background=true allowed' (Allowed $r) "$($r.Exit) $($r.Err)"
+$r = Call '[case:read] list files' 'kenshi-reader' 'true';           Check 'run_in_background="true" (string) allowed' (Allowed $r)
 $r = Call '[case:read] list files' 'kenshi-reader' $false;           Check 'run_in_background=false allowed' (Allowed $r)
-$r = Call '[case:read] list files [short]' 'kenshi-reader' $true;    Check 'bg + [short] allowed' (Allowed $r)
-$r = Call '[case:patch] wpA fix foo';                                Check 'case patch denied' (Denied $r)
-Check 'patch denial names tier command' ($r.Err -match 'spawn-wp-session\.ps1 imm26-wpa-fix-foo patch ') $r.Err
-$r = Call '[case:generate] write x' 'kenshi-generator';              Check 'case generate denied' (Denied $r)
-$r = Call '[case:debug] why y';                                      Check 'case debug denied' (Denied $r)
-$r = Call '[case:investigate] bug z';                                Check 'case investigate denied' (Denied $r)
-$r = Call '[case:escalate] hard' 'kenshi-escalation';                Check 'case escalate denied' (Denied $r)
-Check 'escalate denial uses escalate tier' ($r.Err -match 'spawn-wp-session\.ps1 \S+ escalate ') $r.Err
-$r = Call '[case:patch] tiny edit [short]';                          Check 'patch + [short] allowed' (Allowed $r)
+$r = Call '[case:read] list files [short]' 'kenshi-reader' $true;    Check 'bg + [short] allowed (tag ignored)' (Allowed $r)
+$r = Call '[case:patch] wpA fix foo';                                Check 'case patch allowed in-session' (Allowed $r) "$($r.Exit) $($r.Err)"
 Check 'allowed patch got generator routing' ($r.Out -match '"model":"sonnet"' -and $r.Out -match 'Routing: case=patch tier=kenshi-generator') $r.Out
+$r = Call '[case:generate] write x' 'kenshi-generator' $true;        Check 'case generate (bg) allowed' (Allowed $r)
+$r = Call '[case:debug] why y';                                      Check 'case debug allowed' (Allowed $r)
+Check 'debug got debugger routing' ($r.Out -match 'Routing: case=debug tier=kenshi-debugger') $r.Out
+$r = Call '[case:investigate] bug z';                                Check 'case investigate allowed' (Allowed $r)
+$r = Call '[case:escalate] hard' 'kenshi-escalation';                Check 'case escalate allowed' (Allowed $r)
+Check 'escalate got escalation routing' ($r.Out -match 'Routing: case=escalate tier=kenshi-escalation') $r.Out
+$r = Call '[case:patch] tiny edit [short]';                          Check 'patch + [short] allowed' (Allowed $r)
 $r = Call '[case:debug] tiny [inproc-ok:one grep]';                  Check 'debug + [inproc-ok:reason] allowed' (Allowed $r)
-$r = Call '[case:debug] tiny [inproc-ok:]';                          Check 'empty [inproc-ok:] does not unlock' (Denied $r)
-$r = Call '[case:grade] compare outputs' 'kenshi-grader';            Check 'grade (not long-running) allowed' (Allowed $r)
+$r = Call '[case:debug] tiny [inproc-ok:]';                          Check 'empty [inproc-ok:] harmless, still allowed' (Allowed $r)
+$r = Call '[case:grade] compare outputs' 'kenshi-grader';            Check 'grade allowed' (Allowed $r)
+$r = Call '[case:nosuchcase] x' 'kenshi-generator';                  Check 'unknown case denied' (Denied $r)
+$r = Call '[case:patch] x' 'kenshi-reader';                          Check 'case/tier mismatch denied' (Denied $r)
 $r = Call 'no tag' 'kenshi-generator';                               Check 'untagged generator still denied (no case)' (Denied $r)
 $r = Call '[case:patch] wpA fix foo' '' $null 'C:\Windows';          Check 'cwd outside KenshiModding: no action' ($r.Exit -eq 0 -and -not $r.Out)
 $r = Run-Hook 'this is not json {{{';                                Check 'fail-open: garbage stdin' ($r.Exit -eq 0 -and $r.Err -match 'internal error')
