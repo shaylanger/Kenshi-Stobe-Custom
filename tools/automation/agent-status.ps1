@@ -10,6 +10,8 @@
 #   STOPPED-CONTEXT  keeps the marker and writes C:\KenshiTestRuns\respawn\<name>.todo (task, handoff path, status path, next) so a
 #                    fresh agent is spawned from it; FAILED keeps the marker too. Coordinators never delete the marker of a
 #                    STOPPED-CONTEXT/FAILED agent until a successor exists.
+# Program ledger: every call also runs `program-ledger.ps1 sync <name> <STATE>` (RUNNING->running, DONE->done, STOPPED-CONTEXT/FAILED->stopped
+#   on the ledger WP whose agent/successors names this agent; programs\*.json; fail-open).
 # Test switch: KAH_RUNS_DIR (root, default C:\KenshiTestRuns); selftest: agent-guard-selftest.ps1.
 param(
     [Parameter(Mandatory)][string]$Name,
@@ -62,4 +64,9 @@ try {
             ) | Set-Content -LiteralPath $todo -Encoding UTF8
         }
     }
+} catch { }
+# --- program ledger: move the work package this agent owns (programs\*.json, program-ledger.ps1 sync); fail-open ---
+try {
+    $pl = Join-Path $PSScriptRoot 'program-ledger.ps1'
+    if ((Test-Path -LiteralPath $pl) -and (Test-Path -LiteralPath (Join-Path $runs 'programs'))) { & $pl sync $Name $State 2>$null }
 } catch { }
