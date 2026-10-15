@@ -6149,8 +6149,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
              if (in_array($record['topic_id'],$meta['resolved_followup_ids']??[],true)) continue;
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_interpreter.php b/lib/social_interpreter.php
 --- a/lib/social_interpreter.php	2026-10-12 21:20:51.858290219 -0500
-+++ b/lib/social_interpreter.php	2026-10-15 16:37:57.725674749 -0500
-@@ -51,11 +51,37 @@
++++ b/lib/social_interpreter.php	2026-10-15 18:29:08.404340541 -0500
+@@ -51,11 +51,44 @@
              'placed' => $this->placed($event, $mode),
              'eat' => $this->eat($event, $mode),
              'trade' => $this->trade($event, $mode),
@@ -6163,7 +6163,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
 +    /**
 +     * WP-A item 13: an agreed travel/escort partner (actor) walked away from the other (target) while the target was knocked
 +     * out or bleeding. Native supplies the objective facts; the server checks them and owns the consequence.
-+     * facts: agreement_id, evidence_id (tokens), partner_state knocked_out|bleeding_out|downed, distance_m >= 30,
++     * facts: evidence_id (token), agreement_id (optional token), partner_state knocked_out|bleeding_out|downed, distance_m >= 30,
 +     * seconds >= 20, observer_saw_leaving (bool). The abandoned character must be conscious now (told or saw it).
 +     */
 +    private function abandonedInDanger(array $event, string $mode): array
@@ -6171,14 +6171,21 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
 +        $culprit = $event['actor']; $victim = $event['target']; $f = $event['facts'] ?? [];
 +        if (!$culprit || !$victim || $culprit['entity_key'] === $victim['entity_key']) return [['status'=>'incomplete_roles']];
 +        try {
-+            $agreement = SocialEventContract::token($f['agreement_id'] ?? null, 'agreement_id');
-+            SocialEventContract::token($f['evidence_id'] ?? null, 'evidence_id');
++            $evidence = SocialEventContract::token($f['evidence_id'] ?? null, 'evidence_id');
++            // N5a: agreement_id is optional. The native abandon watch (squad mates) has no agreement; its per-episode
++            // evidence_id ("abandon:<leaver>:<partner>:<episode start>") is the incident key instead.
++            $hasAgreement = ($f['agreement_id'] ?? null) !== null && $f['agreement_id'] !== '';
++            $agreement = $hasAgreement ? SocialEventContract::token($f['agreement_id'], 'agreement_id') : $evidence;
 +        } catch (Throwable $e) { return [['status'=>'invalid_evidence']]; }
 +        if (!in_array($f['partner_state'] ?? '', ['knocked_out', 'bleeding_out', 'downed'], true)
 +            || !is_numeric($f['distance_m'] ?? null) || (float)$f['distance_m'] < 30
 +            || !is_numeric($f['seconds'] ?? null) || (float)$f['seconds'] < 20) return [['status'=>'not_abandonment']];
-+        if (($victim['conscious'] ?? null) !== true) return [['status'=>'unaware_observer']];
-+        $saw = ($f['observer_saw_leaving'] ?? false) === true;
++        // N5a: an agreed escort needs a conscious victim now. A native episode (no agreement_id) is posted while the
++        // partner is still down: partner_state IS the victim's state, so the conscious check is waived and the victim
++        // only infers it (cannot have seen the leaving).
++        $nativeEpisode = !$hasAgreement && ($victim['conscious'] ?? null) !== true;
++        if (($victim['conscious'] ?? null) !== true && !$nativeEpisode) return [['status'=>'unaware_observer']];
++        $saw = !$nativeEpisode && ($f['observer_saw_leaving'] ?? false) === true;
 +        $incident = 'abandon:' . substr(hash('sha256', $agreement . '|' . $victim['entity_key'] . '|' . $culprit['entity_key']), 0, 32);
 +        return [$this->effect($event, $mode, $victim, $culprit, 'abandoned_in_danger',
 +            ['awareness'=>$saw ? 'directly_experienced' : 'inferred', 'confidence'=>$saw ? 'certain' : 'strongly_inferred', 'conscious'=>true,
@@ -6188,7 +6195,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
      // ---------- phase 7: slave escape ----------
      /**
       * A freed slave whose liberator is known (native: the character whose current task targets the slave when
-@@ -140,6 +166,9 @@
+@@ -140,6 +173,9 @@
          $belief += ['responsible_entity'=>$culprit['entity_key'], 'confidence'=>'certain'];
          $result = $this->store->apply($event, $observer['entity_key'], $culprit['entity_key'], $component, $belief, $resolve, $mode, $context, $incident);
          $out = ['component'=>$component, 'observer'=>$observer['name'], 'culprit'=>$culprit['name']] + $result;
@@ -6198,7 +6205,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
          $witnesses = $this->witnesses($event, $mode, $observer, $culprit, $component, $result, $incident);
          if ($witnesses) $out['witnesses'] = $witnesses;
          return $out;
-@@ -169,6 +198,7 @@
+@@ -169,6 +205,7 @@
              $row = getNpcById((int)$profile['id']);
              $entry = $row ? stobeRelationshipEntryFor($row, $victim['name']) : null;
              $toVictim = (int)($entry['aff'] ?? 0);
@@ -12387,8 +12394,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +exit($fail === 0 ? 0 : 1);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpA_abandonment_regression.php b/tests/imm26_wpA_abandonment_regression.php
 --- a/tests/imm26_wpA_abandonment_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpA_abandonment_regression.php	2026-10-15 16:15:25.287036800 -0500
-@@ -0,0 +1,93 @@
++++ b/tests/imm26_wpA_abandonment_regression.php	2026-10-15 18:29:17.702922324 -0500
+@@ -0,0 +1,106 @@
 +<?php
 +// WP-A item 13 (trust is earned by experience): abandoned_in_danger event + property_returned on a kept lend/return deal.
 +// Oracle: the pinned rule range [-25,-12] / [3,9]; must FAIL on the baseline (unknown event kind, no property_returned row).
@@ -12417,7 +12424,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +    else sql('INSERT INTO general_settings(id,value) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET value=EXCLUDED.value', [$id, $v]);
 +}
 +const P = ['Abn Victim'=>[701,'Blue',false], 'Abn Partner'=>[702,'Blue',false], 'Abn Victim Two'=>[703,'Blue',false], 'Abn Victim Three'=>[704,'Blue',false],
-+    'Abn Victim Four'=>[705,'Blue',false], 'Abn Lender'=>[706,'Blue',false], 'Abn Lender Two'=>[707,'Blue',false], 'Abn Player'=>[710,'Nameless',true]];
++    'Abn Victim Four'=>[705,'Blue',false], 'Abn Lender'=>[706,'Blue',false], 'Abn Lender Two'=>[707,'Blue',false], 'Abn Player'=>[710,'Nameless',true],
++    'Abn Victim Five'=>[708,'Blue',false], 'Abn Victim Six'=>[709,'Blue',false]];
 +foreach (['social_event_inbox','social_incident','social_belief','social_effect','social_evidence','social_checkpoint'] as $t) sql("DELETE FROM $t");
 +foreach (P as $name => [$serial]) {
 +    sql('DELETE FROM core_npc_master_history WHERE name=$1', [$name]); sql('DELETE FROM core_npc WHERE name=$1', [$name]);
@@ -12465,6 +12473,18 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +send('abandoned_in_danger', ent('Abn Partner'), ent('Abn Victim Four', true), ['agreement_id'=>'ag-4'] + $good, 10030);
 +send('abandoned_in_danger', ent('Abn Partner'), ent('Abn Victim Four', true), ['agreement_id'=>'ag-4'] + $good, 10040);
 +ok(count(rows('Abn Victim Four', 'Abn Partner', 'abandoned_in_danger')) === 1, 'duplicate agreement report: one ledger row');
++// 4b. N5a: the native abandon watch sends no agreement_id (its evidence_id is per episode) and posts while the partner is still down
++$nat = ['evidence_id'=>'abandon:701:702:123', 'partner_state'=>'knocked_out', 'distance_m'=>60, 'seconds'=>40, 'observer_saw_leaving'=>false];
++$r = send('abandoned_in_danger', ent('Abn Partner'), ent('Abn Victim Five', false), $nat, 10060);
++$d = rows('Abn Victim Five', 'Abn Partner', 'abandoned_in_danger');
++ok(count($d) === 1 && $d[0]['applied'] === 't' && (int)$d[0]['delta'] <= -12 && (int)$d[0]['delta'] >= -25, 'native episode without agreement_id, victim still down: applied in [-25,-12]: ' . json_encode([status($r), $d]));
++send('abandoned_in_danger', ent('Abn Partner'), ent('Abn Victim Five', false), $nat, 10070);
++ok(count(rows('Abn Victim Five', 'Abn Partner', 'abandoned_in_danger')) === 1, 'native episode reported twice (same evidence_id): one ledger row');
++$r = send('abandoned_in_danger', ent('Abn Partner'), ent('Abn Victim Six', true), ['evidence_id'=>'abandon:701:709:5'] + $nat, 10080);
++ok(count(rows('Abn Victim Six', 'Abn Partner', 'abandoned_in_danger')) === 1, 'native episode, conscious victim, no agreement_id: applied (' . status($r) . ')');
++$r = send('abandoned_in_danger', ent('Abn Partner'), ent('Abn Victim Six', true), ['evidence_id'=>'', 'partner_state'=>'knocked_out'] + $nat, 10090);
++ok(status($r) === 'invalid_evidence', 'native episode without evidence_id is still refused');
++
 +// 5. the contract rejects unknown kinds still
 +$threw = false;
 +try { send('abandoned_in_danger_x', ent('Abn Partner'), ent('Abn Victim', true), $good, 10050); } catch (Throwable $e) { $threw = true; }
