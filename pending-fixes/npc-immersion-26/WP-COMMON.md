@@ -4,7 +4,7 @@ Program: make Shay's 26 NPC-immersion features fully supported in STOBE. Handoff
 
 Hard constraints (Shay 2026-10-15):
 - STOBE only. No KenshiFP / animation / viewmodel work.
-- Nothing may affect the 5090 (no launch, install, save, or live-server change). Game testing is 4080-only (coordinator runs it).
+- BOTH RIGS ALLOWED (Shay 2026-10-15): game testing may use the 5090 and 4080 isolated lanes (coordinator runs it). Never touch Shay's live play install, live server tree or live DB; no 5090 live-server promote.
 - NEVER modify /var/www/html/StobeServer or /root/stobe-work/ss-merge or the live `stobe` DB. Work only in your own working copy. Tests use the `stobe_test` DB (`stobe-tests <tree> <pattern>` runs the suites against a tree; header of /usr/local/bin/stobe-tests explains) or pure-PHP unit tests.
 - Server work is done in WSL (distro DwemerAI4Skyrim3): run via `wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s <<'EOF' ... EOF` (Git Bash mangles /mnt paths: use heredocs or MSYS_NO_PATHCONV=1).
 - Your working copy of the live server is /root/imm26/<wp>/ (a full tree copy of the pristine baseline /root/imm26/base, which equals the installed live server at 2026-10-15). Edit only inside it. Do not edit /root/imm26/base.
