@@ -5335,8 +5335,85 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/nativ
  }
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negotiation_engine.php b/lib/negotiation_engine.php
 --- a/lib/negotiation_engine.php	2026-10-12 21:20:51.617338718 -0500
-+++ b/lib/negotiation_engine.php	2026-10-15 15:39:39.642340628 -0500
-@@ -2184,8 +2184,8 @@
++++ b/lib/negotiation_engine.php	2026-10-15 18:05:44.271611242 -0500
+@@ -769,7 +769,7 @@
+         $deadlineGamets = $kind === 'social' ? max(0, $gamets) + STOBE_NEG_SOCIAL_DEADLINE_GAMETS
+             : ($gamets > 0 ? $gamets + STOBE_NEG_PAY_WINDOW_GAMETS : 0);
+         $npcRow = stobeNegNpcRow(strval($deal['npc_name']), intval($deal['npc_serial'] ?? 0));
+-        $playerSerial = function_exists('stobeResolveLiveParticipantSerial') ? stobeResolveLiveParticipantSerial($player) : 0;
++        $playerSerial = function_exists('stobeResolveLiveParticipantSerial') ? stobeResolveLiveParticipantSerial($player) : 0;
+         $playerRow = stobeNegNpcRow($player, intval($playerSerial));
+         $baseline = [
+             'at'=>$now,
+@@ -780,8 +780,8 @@
+             'player_inventory'=>stobeNegInventoryCounts(strval($playerRow['inventory'] ?? '') . ', ' . strval($playerRow['equipment'] ?? '')),
+             'witnesses_people'=>$peopleRaw,
+         ];
+-        require_once __DIR__ . '/social_repair_agreements.php';
+-        $baseline['repair_binding_scope'] = stobeSocialRepairAgreementScope($npcRow, $playerRow, $gamets, $deadlineGamets);
++        require_once __DIR__ . '/social_repair_agreements.php';
++        $baseline['repair_binding_scope'] = stobeSocialRepairAgreementScope($npcRow, $playerRow, $gamets, $deadlineGamets);
+         $state = stobeNegBuildTermState($terms, $finalActions, $player, $now, $kind, $deadlineUnix);
+         $baseline['repair_action_tickets'] = stobeSocialRepairCreateAgreementTickets($deal, $baseline['repair_binding_scope'], $state);
+         // Look back for a hand-over made moments before the deal was recorded, but never
+@@ -865,6 +865,20 @@
+     return $term;
+ }
+ 
++/** Quantity of `$item` the NPC has already handed over under this deal (VERIFIED NPC-side GIVE_ITEM/LOAN_ITEM terms). */
++function stobeNegLentQuantity(array $deal, string $item): int {
++    $norm = static fn($s): string => strtolower(trim(preg_replace('/\s*\[[^\]]*\]/', '', strval($s)) ?? ''));
++    if ($norm($item) === '') return 0;
++    $lent = 0;
++    foreach (stobeNegDecode($deal['term_state'] ?? []) as $other) {
++        if (is_array($other) && ($other['by'] ?? '') === 'npc' && in_array($other['kind'] ?? '', ['GIVE_ITEM','LOAN_ITEM'], true)
++            && ($other['status'] ?? '') === 'VERIFIED' && stobeNegItemMatchesTerm($norm($other['item'] ?? ''), $norm($item))) {
++            $lent += max(1, intval($other['quantity'] ?? 1));
++        }
++    }
++    return $lent;
++}
++
+ function stobeNegEvaluateTerm(array $term, array $deal, string $player, int $now): array {
+     $status = strval($term['status'] ?? '');
+     if (in_array($status, ['VERIFIED','IMPOSSIBLE','UNMET','RECORDED','WAITING_FOR_PLAYER','BETRAYED'], true)) return $term;
+@@ -1012,6 +1026,9 @@
+         $row = stobeNegNpcRow($npc, $serial);
+         $nowCount = stobeNegItemCount(stobeNegInventoryCounts(strval($row['inventory'] ?? '') . ', ' . strval($row['equipment'] ?? '')), $item);
+         $baseCount = stobeNegItemCount(is_array($baseline['npc_inventory'] ?? null) ? $baseline['npc_inventory'] : [], $item);
++        // Row 13-d: the baseline was taken at accept, before the NPC lent the item; a return is
++        // measured against what the NPC held after lending, so take the verified lent quantity off.
++        if ($kind === 'RETURN_ITEM') $baseCount -= stobeNegLentQuantity($deal, $item);
+         if ($exec['transferred'] >= $qty || ($nowCount - $baseCount) >= $qty) {
+             $term['status'] = 'VERIFIED';
+             $note($term, 'player_delivered_item', ['executed'=>$exec['transferred'], 'npc_count_delta'=>$nowCount - $baseCount]);
+@@ -1136,10 +1153,10 @@
+         if (json_encode($state[$idx]) !== $before) $changed = true;
+     }
+ 
+-    require_once __DIR__ . '/social_repair_agreements.php';
+-    $boundState = stobeSocialRepairBindAgreementTerms($deal, $state);
+-    if ($boundState !== $state) { $state = $boundState; $changed = true; }
+-
++    require_once __DIR__ . '/social_repair_agreements.php';
++    $boundState = stobeSocialRepairBindAgreementTerms($deal, $state);
++    if ($boundState !== $state) { $state = $boundState; $changed = true; }
++
+     $playerTerms = array_filter($state, static fn($t) => ($t['by'] ?? '') === 'player' && ($t['kind'] ?? '') !== 'PROMISE'
+         && strval($t['when'] ?? '') !== 'after_npc');
+     $playerDone = count($playerTerms) === 0 || count(array_filter($playerTerms, static fn($t) => ($t['status'] ?? '') === 'VERIFIED')) === count($playerTerms);
+@@ -2102,8 +2119,8 @@
+         // REL (phase 5): with SOCIAL_RELATIONSHIP_MODE=enabled the relationship system scores the outcome
+         // (kept/broken promise, betrayal) and the legacy delta is skipped; off/shadow keep the legacy delta.
+         require_once __DIR__ . '/social_agreements.php';
+-        require_once __DIR__ . '/social_repair_agreements.php';
+-        if ($status === 'COMPLETE' && stobeSocialRepairAgreementCompleteBound($deal, is_array($state) ? $state : [])) $delta = 0;
++        require_once __DIR__ . '/social_repair_agreements.php';
++        if ($status === 'COMPLETE' && stobeSocialRepairAgreementCompleteBound($deal, is_array($state) ? $state : [])) $delta = 0;
+         if (stobeSocialAgreementOutcome($deal, $player, $status, is_array($state) ? $state : [])) $delta = 0;
+         if ($delta !== 0 && function_exists('stobeGetNpcRelationshipMap')) {
+             $npcData = getNpcData($npc);
+@@ -2184,8 +2201,8 @@
          $kept = intval($row['player_kept'] ?? 0);
          $broken = intval($row['player_broken'] ?? 0);
          if ($kept + $broken === 0) return '';
@@ -5347,7 +5424,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negot
          return '';
      } catch (Throwable $e) {
          return '';
-@@ -2215,7 +2215,7 @@
+@@ -2215,7 +2232,7 @@
      if (!($broken >= 2 && $broken > $kept)) return '';
      $who = function_exists('stobePromptXmlEscape') ? stobePromptXmlEscape($player) : $player;
      return "<reply_reputation>\n"
@@ -13917,6 +13994,65 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +check('travel receipts record arrival', str_contains($life, 'stobeSituatedRecordTravelOutcome($state,$observation,$gamets)'));
 +echo "pass=$pass fail=$fail\n";
 +exit($fail === 0 ? 0 : 1);
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/negotiation_return_item_baseline_regression.php b/tests/negotiation_return_item_baseline_regression.php
+--- a/tests/negotiation_return_item_baseline_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/negotiation_return_item_baseline_regression.php	2026-10-15 18:05:44.272572242 -0500
+@@ -0,0 +1,55 @@
++<?php
++// Row 13-d: a loan deal's RETURN_ITEM is measured against the NPC's inventory AFTER it lent the item.
++// STOBE_DB_NAME=stobe_test php tests/negotiation_return_item_baseline_regression.php
++require __DIR__ . '/../lib/bootstrap.php';
++$db = $GLOBALS['db'];
++$pass = 0; $fail = 0;
++function check(string $name, bool $ok, $detail = null): void {
++    global $pass, $fail;
++    if ($ok) { $pass++; echo "PASS $name\n"; } else { $fail++; echo "FAIL $name" . ($detail !== null ? ' :: ' . json_encode($detail) : '') . "\n"; }
++}
++$npc = 'RetBaseTestCind';
++$player = 'RetBaseTestShay';
++$db->exec("DELETE FROM core_npc_master WHERE name=$1", [$npc]);
++$db->exec(
++    "INSERT INTO core_npc_master (name, metadata, inventory, equipment, personality, blood, faction, created_at, updated_at)
++     VALUES ($1, '{}'::jsonb, $2, '', 'Calm.', '100/100', 'Test', NOW(), NOW())",
++    [$npc, 'Metal Junk x1 value 10']
++);
++$now = time();
++$give = ['kind'=>'GIVE_ITEM', 'by'=>'npc', 'item'=>'Metal Junk', 'quantity'=>1, 'status'=>'VERIFIED'];
++$ret = ['kind'=>'RETURN_ITEM', 'by'=>'player', 'item'=>'Metal Junk', 'quantity'=>1, 'status'=>'AWAITING_PLAYER',
++        'dispatched_unix'=>$now - 5, 'deadline_unix'=>$now + 600];
++// Baseline taken at accept: the NPC had 1 Metal Junk BEFORE lending; it now holds 0 after lending, then gets it back.
++$deal = ['contract_id'=>'ret-base-test', 'npc_name'=>$npc, 'player_name'=>$player, 'kind'=>'loan',
++         'baseline'=>['npc_inventory'=>['metal junk'=>1], 'at'=>$now - 60],
++         'term_state'=>[$give, $ret]];
++
++// Lent quantity helper.
++check('lent quantity counts the verified npc give', stobeNegLentQuantity($deal, 'Metal Junk') === 1);
++check('lent quantity ignores other items', stobeNegLentQuantity($deal, 'Bread') === 0);
++check('lent quantity ignores unverified give', stobeNegLentQuantity(['term_state'=>[['status'=>'DISPATCHED'] + $give]], 'Metal Junk') === 0);
++
++// Lent but NOT returned: the NPC holds 0 -> still waiting.
++$db->exec("UPDATE core_npc_master SET inventory='' WHERE name=$1", [$npc]);
++$r = stobeNegEvaluateTerm($ret, $deal, $player, $now);
++check('not returned yet stays AWAITING_PLAYER', ($r['status'] ?? '') === 'AWAITING_PLAYER', $r);
++
++// Returned: the NPC holds the Metal Junk again (delta vs the pre-loan baseline is 0, vs post-loan is 1).
++$db->exec("UPDATE core_npc_master SET inventory=$2 WHERE name=$1", [$npc, 'Metal Junk x1 value 10']);
++$r = stobeNegEvaluateTerm($ret, $deal, $player, $now);
++check('returned item VERIFIES the RETURN_ITEM', ($r['status'] ?? '') === 'VERIFIED', $r);
++
++// A plain GIVE_ITEM by the player (no npc lend) is unchanged: baseline 0 -> now 1 verifies, baseline 1 -> now 1 does not.
++$gp = ['kind'=>'GIVE_ITEM', 'by'=>'player', 'item'=>'Metal Junk', 'quantity'=>1, 'status'=>'AWAITING_PLAYER',
++       'dispatched_unix'=>$now - 5, 'deadline_unix'=>$now + 600];
++$d2 = $deal; $d2['term_state'] = [$gp];
++$r = stobeNegEvaluateTerm($gp, $d2, $player, $now);
++check('player GIVE_ITEM with pre-held item is not counted', ($r['status'] ?? '') === 'AWAITING_PLAYER', $r);
++$d2['baseline']['npc_inventory'] = [];
++$r = stobeNegEvaluateTerm($gp, $d2, $player, $now);
++check('player GIVE_ITEM with new item verifies', ($r['status'] ?? '') === 'VERIFIED', $r);
++
++$db->exec("DELETE FROM core_npc_master WHERE name=$1", [$npc]);
++echo "\n$pass passed, $fail failed\n";
++exit($fail > 0 ? 1 : 0);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/relationship_stance_regression.php b/tests/relationship_stance_regression.php
 --- a/tests/relationship_stance_regression.php	2026-10-04 00:09:47.348408441 -0500
 +++ b/tests/relationship_stance_regression.php	2026-10-15 13:32:02.111143365 -0500
