@@ -87,7 +87,8 @@ only: code maps, warn level, successor names, tool pointers.)
 - **Checkpoints and handoffs:** every milestone or ~40k tokens an agent regenerates its patch, compile-checks, updates its status `latest`, commits and updates its handoff, so a stop at 200k loses nothing. At the meter's warn level (before 200k): finish the edit, checkpoint, continue only if < 150k of work remains, else hand off (STOPPED-CONTEXT). Successors are fresh agents named wpA -> wpA2 -> wpA3 (the same work dir). Brief template: `docs/WP_SIZING.md` section 7.
 ```
 
-## 9. PROPOSED CONTEXT-METER HANDOFF TEXT
+## 9. CONTEXT-METER HANDOFF TEXT (RESOLVED 2026-10-15: the proposal below was REJECTED by the resume test)
+Resume test result (coordinator, 2026-10-15 14:50): subagents of an ended session are gone (no processes, status files frozen, not in ListAgents, no stobe-tests running) and cannot be messaged by the new session. So 'adopt healthy agents' is impossible. Applied instead in `.claude/context-meter.project.ps1`: step (2) = one non-blocking 'checkpoint now' SendMessage (max ~2 min), then list every running agent + its fresh successor name in HANDOFF and the ledger; the next coordinator respawns them fresh. The real protection is small work packages + 40k-token checkpoints (sections 2, 5). Historic proposal text follows.
 Not applied (`.claude/context-meter.project.ps1` untouched; awaits Shay). Problem: `$HANDOFF_MSG_MAIN` step (2) tells the coordinator to
 SendMessage every running subagent to stop, so a coordinator at its limit kills healthy mid-package agents (imm26). Revised wording; replace
 step (2) and add the sentence to step (3) in `$HANDOFF_MSG_MAIN`, and soften `$WARN_MSG`:
