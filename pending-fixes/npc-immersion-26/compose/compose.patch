@@ -3805,8 +3805,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_knowledge.php b/lib/imm26_knowledge.php
 --- a/lib/imm26_knowledge.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_knowledge.php	2026-10-15 13:29:51.508718468 -0500
-@@ -0,0 +1,427 @@
++++ b/lib/imm26_knowledge.php	2026-10-15 17:15:31.618807032 -0500
+@@ -0,0 +1,429 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -4172,7 +4172,9 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +    try {
 +        if (!stobeKnowledgeEnabled()) return '';
 +        $gamets = intval($meta['stream_gamets'] ?? $meta['gamets'] ?? 0);
-+        $message = is_string($meta['user_message'] ?? null) ? $meta['user_message'] : '';
++        // chat.php sets player_message only; user_message kept as a fallback (mirrors npc_referrals.php).
++        $message = is_string($meta['user_message'] ?? null) ? $meta['user_message']
++            : (is_string($meta['player_message'] ?? null) ? $meta['player_message'] : '');
 +        $scope = stobeKnowledgeScope();
 +        $id = (int)($npc['id'] ?? 0);
 +        if ($gamets <= 0 || !$scope || $id < 1) return '';
@@ -4727,8 +4729,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_ties.php b/lib/imm26_ties.php
 --- a/lib/imm26_ties.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_ties.php	2026-10-15 16:42:55.290548874 -0500
-@@ -0,0 +1,142 @@
++++ b/lib/imm26_ties.php	2026-10-15 17:15:31.618186332 -0500
+@@ -0,0 +1,144 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -4849,7 +4851,9 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +function stobeTiesConversationContext(string $actor, array $npc, string $listener, array $config = [], array $meta = []): string
 +{
 +    try {
-+        $message = is_string($meta['user_message'] ?? null) ? $meta['user_message'] : '';
++        // chat.php sets player_message only; user_message kept as a fallback (mirrors npc_referrals.php).
++        $message = is_string($meta['user_message'] ?? null) ? $meta['user_message']
++            : (is_string($meta['player_message'] ?? null) ? $meta['player_message'] : '');
 +        if ($message === '' || (int)($npc['id'] ?? 0) < 1) return '';
 +        $names = [];
 +        $map = function_exists('stobeGetNpcRelationshipMap') ? stobeGetNpcRelationshipMap($npc) : [];
@@ -12055,8 +12059,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +echo "imm26_wpA_trust_regression: $n checks passed\n";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpB_knowledge_regression.php b/tests/imm26_wpB_knowledge_regression.php
 --- a/tests/imm26_wpB_knowledge_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpB_knowledge_regression.php	2026-10-15 13:30:03.600131851 -0500
-@@ -0,0 +1,139 @@
++++ b/tests/imm26_wpB_knowledge_regression.php	2026-10-15 17:15:36.957946345 -0500
+@@ -0,0 +1,142 @@
 +<?php
 +// NPC-immersion WP-B regression: items 3/15 (provenance ledger, hearsay, imperfect knowledge) and 4 (ties).
 +// Fails on the baseline server (no social_rumor ledger, no ties, no hooks). Runs on stobe_test or the social phase-1 DB.
@@ -12159,6 +12163,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +$meta = fn(int $ts, string $msg) => ['gamets'=>$ts, 'user_message'=>$msg];
 +$ctx = stobeKnowledgeConversationContext('WpB Zero', $npc('WpB Zero'), 'WpB Attacker', [], $meta($T0 + $DAY, 'Who started the fight?'));
 +ok(str_contains($ctx, 'you saw it yourself') && str_contains($ctx, 'WpB Attacker') && str_contains($ctx, 'Never add detail'), 'eyewitness: first-hand line with the no-invention rule');
++ok(stobeKnowledgeConversationContext('WpB Zero', $npc('WpB Zero'), 'WpB Attacker', [], ['gamets'=>$T0 + $DAY, 'player_message'=>'Who started the fight?']) === $ctx, 'knowledge context reads chat.php player_message (row 04-c regression)');
 +$ctx = stobeKnowledgeConversationContext('WpB Cee', $npc('WpB Cee'), 'WpB Attacker', [], $meta($T0 + $DAY, 'Who started the fight?'));
 +ok(str_contains($ctx, 'did not personally see') && !str_contains($ctx, 'WpB Attacker attacked'), 'no knowledge + asked: "did not see it", nothing leaked');
 +ok(stobeKnowledgeConversationContext('WpB Cee', $npc('WpB Cee'), 'WpB Attacker', [], $meta($T0 + $DAY, 'Nice day.')) === '', 'no knowledge, no question: zero prompt cost');
@@ -12187,6 +12192,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +$ctx = stobeTiesConversationContext('WpB Seeker', $seeker, 'WpB Attacker', [], ['user_message'=>'Could WpB DocFriend patch my leg?']);
 +ok(str_contains($ctx, 'WpB DocFriend: close friend') && !str_contains($ctx, 'DocRival'), 'named third party: the tie reaches the prompt, only for the person named');
 +ok(stobeTiesConversationContext('WpB Seeker', $seeker, 'WpB Attacker', [], ['user_message'=>'Nice day']) === '', 'nobody named: no prompt cost');
++$ctxPm = stobeTiesConversationContext('WpB Seeker', $seeker, 'WpB Attacker', [], ['player_message'=>'Could WpB DocFriend patch my leg?']);
++ok($ctxPm !== '' && $ctxPm === $ctx, 'ties context reads chat.php player_message (row 04-c regression)');
 +RelationshipManager::setRelationship('WpB Seeker', 'WpB Pal', 10);
 +ok(stobeTieGet('WpB Seeker', 'WpB Pal', ['campaign_id'=>CAMP]) === null, 'no source, no tie');
 +

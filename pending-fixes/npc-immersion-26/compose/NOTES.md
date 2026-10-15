@@ -42,3 +42,6 @@ Then the travel fix: `python3 travel-fix/apply-travel-actor-serial.py /root/imm2
 ## Trivial CONTRACTS items noticed (not done; next WP)
 - `abandoned_in_danger` rule key is present (wpA). Server still rejects it without an `agreement_id` (CONTRACTS item list).
 - `nearby[].role/squad_name/squad_id/settlement` still dropped by the `social_privacy` audience whitelist (MISMATCH 4).
+
+## user_message fix (imm26-compose-fix-usermsg, 2026-10-15; row 04-c)
+`lib/imm26_ties.php` stobeTiesConversationContext and `lib/imm26_knowledge.php` stobeKnowledgeConversationContext read `$meta['user_message']`, which chat.php never sets (it sets `player_message`); both now fall back to `player_message` (user_message kept first, as in npc_referrals.php). Regression asserts added to `tests/imm26_wpB_knowledge_regression.php`. Full stobe-tests: 93 passed, 5 FAILED (the 5 known), 7 known. compose.patch regenerated (APPLY-IDENTICAL). Delta copied to 5 lane sites (`*.bak-pre-usermsg`).
