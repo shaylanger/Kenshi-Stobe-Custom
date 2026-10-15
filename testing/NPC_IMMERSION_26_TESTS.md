@@ -170,22 +170,22 @@ Needs H-MODE not `off`; record mode.
 |---|---|---|---|---|---|---|---|---|
 | IMM-15-a | FX-NPCS [B]: KO NPC N; third party C steals N's items; N wakes | say to N: "Who took your things?" | PROMPT has no C identity; R~ names only the remembered KO attacker, hedged | identified witness ally: names the taker | BASE (exp FAIL: awareness not in prompt, gap 2) | UNRUN | | |
 | IMM-15-b | FX-NPCS [B]: X asleep or out of range during a fight | say to X: "Who started the fight?" | PROMPT has no fight event for X; R~ "I didn't see it" or hedged hearsay | conscious witness answers first-person | BASE | UNRUN | | |
-| IMM-15-c | any claim just made by Cind | say: "No, the fight happened at the Hub, not the gate." | R~ acknowledges, no invented excuse; hard: no new fabricated fact in CAP | n/a | BASE | UNRUN | | |
+| IMM-15-c | any claim just made by Cind | say: "No, the fight happened at the Hub, not the gate." | R~ acknowledges, no invented excuse; hard: no new fabricated fact in CAP | n/a | BASE | FAIL | 5090 i3 Cind, run right after 17-b (context contaminated). reply 'I know the fight was at the Hub. But I saw your caravan pass through Okran's Valley with no sign of my Sabreclaw.' repeats fabricated sighting; acknowledges correction only; rerun isolated after WP | 2026-10-15 |
 
 ### 16 Consistent personalities (A1; WP-A)
 | ID | Setup | Utterance / action | Expected evidence | Negative control | Build | Status | Evidence | Date |
 |---|---|---|---|---|---|---|---|---|
-| IMM-16-a | FX-CIND, H-AFF 0, 30, 60 (three runs) | say: "Tell me about yourself." | diff of the three PROMPT captures: personality text identical; R~ same speech style, more openness at higher tiers | n/a | BASE | UNRUN | | |
-| IMM-16-b | reserved NPC at +60 (FX-NPCS [B] or Cind) | say: "Good to see you again, friend." x3 | R~ none of 3 samples gushes | outgoing NPC at 0: friendly but INV shows no possession handed over | BASE | UNRUN | | |
-| IMM-16-c | force a profile refresh (H-TIME +24 h or call refresh); copy the profile field before and after | none | core traits unchanged in the profile diff | n/a | BASE (exp FAIL: drift possible, no diff-check) | UNRUN | | |
+| IMM-16-a | FX-CIND, H-AFF 0, 30, 60 (three runs) | say: "Tell me about yourself." | diff of the three PROMPT captures: personality text identical; R~ same speech style, more openness at higher tiers | n/a | BASE | PASS | 5090 i3 Cind aff 0/30/60 captures C:\KenshiTestRuns\imm26-5090\rows\IMM-16-a-aff{0,30,60}\prompt.txt: personality line 37 md5 identical (a60ecf42...), stance line differs Neutral/Acquaintance/Fond; R~ replies identical across tiers (no openness gradient, model note) | 2026-10-15 |
+| IMM-16-b | reserved NPC at +60 (FX-NPCS [B] or Cind) | say: "Good to see you again, friend." x3 | R~ none of 3 samples gushes | outgoing NPC at 0: friendly but INV shows no possession handed over | BASE | PASS | 5090 i3 Cind aff 60 platonic, 3 samples C:\KenshiTestRuns\imm26-5090\rows\IMM-16-b-{1,2,3}: echoes 'Good to see you again, friend.' each time, no gushing, only chat rows (weak: parrots) | 2026-10-15 |
+| IMM-16-c | force a profile refresh (H-TIME +24 h or call refresh); copy the profile field before and after | none | core traits unchanged in the profile diff | n/a | BASE (exp FAIL: drift possible, no diff-check) | SETUP-FAIL | 5090 i3: dps_request('Cind') returned 0 and dps_run updated=0 npcs=0 events=0 on private DB; profile md5s unchanged C:\KenshiTestRuns\imm26-5090\rows\IMM-16-c\before.txt; no way found to force a dynamic profile refresh (needs DYNAMIC_PROFILE enabled/clock) | 2026-10-15 |
 
 ### 17 Uncertainty and corrections (A1; WP-A)
 Hazard-word grep for the log: ledge, cliff, ravine, rockslide, trap, storm, wolves, ambush (not backed by any state).
 | ID | Setup | Utterance / action | Expected evidence | Negative control | Build | Status | Evidence | Date |
 |---|---|---|---|---|---|---|---|---|
-| IMM-17-a | Cind said it would follow (seed an eventlog chat line or get it by asking); `stobe_state Cind` shows no follow order | say: "Are you following me?" | CAP reply has no invented cause and no hazard word; R~ honest correction | Cind really following: confirms | BASE | UNRUN | | |
-| IMM-17-b | seed an NPC accusation "you took my sword"; sword is still in Cind's INV | say: "No, I never took your sword." | R~ NPC admits it may be mistaken; CAP no fabricated evidence | item really missing: NPC holds its position | BASE | UNRUN | | |
-| IMM-17-c | no scoped receipt for the place | say: "What makes the start unsafe?" | R~ "I don't know"; CAP has no hazard word | n/a | BASE | UNRUN | | |
+| IMM-17-a | Cind said it would follow (seed an eventlog chat line or get it by asking); `stobe_state Cind` shows no follow order | say: "Are you following me?" | CAP reply has no invented cause and no hazard word; R~ honest correction | Cind really following: confirms | BASE | PASS | 5090 i3 Cind not following (first_order none). eventlog 9374 'No, I'm not following. I'm keeping my distance.' honest, no hazard word | 2026-10-15 |
+| IMM-17-b | seed an NPC accusation "you took my sword"; sword is still in Cind's INV | say: "No, I never took your sword." | R~ NPC admits it may be mistaken; CAP no fabricated evidence | item really missing: NPC holds its position | BASE | FAIL | 5090 i3 gave Cind Sabreclaw (stand-in for sword), seeded accusation eventlog 9378; reply 'I know you didn't take it. But I saw the last caravan go through Okran's Valley with no sign of your Sabreclaw.' = fabricated sighting; concedes but invents evidence | 2026-10-15 |
+| IMM-17-c | no scoped receipt for the place | say: "What makes the start unsafe?" | R~ "I don't know"; CAP has no hazard word | n/a | BASE | PASS | 5090 i3 Cind. eventlog 9369 reply 'I need to find a practical place before promising to lead us there.' no hazard word, non-answer (R~ not 'I do not know': model note); prompt hazard grep hits only static profile text (ambush) | 2026-10-15 |
 
 ### 18 Awareness of actual game behavior (A4; WP-D)
 | ID | Setup | Utterance / action | Expected evidence | Negative control | Build | Status | Evidence | Date |
@@ -225,7 +225,7 @@ Hazard-word grep for the log: ledge, cliff, ravine, rockslide, trap, storm, wolv
 | ID | Setup | Utterance / action | Expected evidence | Negative control | Build | Status | Evidence | Date |
 |---|---|---|---|---|---|---|---|---|
 | IMM-23-a | FX-TRAVEL: complete an agreed trip | arrive, then say any line | one completion acknowledgement next turn; row COMPLETED with owned_work_released true; no FOLLOW/travel controller left (`stobe_state`); NPC not in squad | n/a | BASE | UNRUN | | |
-| IMM-23-b | non-faction NPC affinity >=56 (H-AFF) | say: "Follow me." then H-TIME +1 game day | follow ends by expiry (`stobe_state`, no controller) | n/a | BASE (exp FAIL: legacy follow has no expiry) | UNRUN | | |
+| IMM-23-b | non-faction NPC affinity >=56 (H-AFF) | say: "Follow me." then H-TIME +1 game day | follow ends by expiry (`stobe_state`, no controller) | n/a | BASE (exp FAIL: legacy follow has no expiry) | SETUP-FAIL | 5090 i3 Cind aff 60 platonic: 'Follow me.' -> canned 'I need to find a practical place before promising to lead us there.' no follow order (stobe_state first_order none, C:\KenshiTestRuns\imm26-5090\rows\IMM-23-b-a); expiry untestable on Cind | 2026-10-15 |
 | IMM-23-c | FX-SQUIN member plus a temporary companion (non-squad) | say "Leave" to each; then END to each | "Leave" works only on the squad member; END ends only the temporary NPC | unrelated assigned job remains | BASE | UNRUN | | |
 | IMM-23-d | active trip, an unrelated job on the NPC | withdraw mid-trip | only the owned order cancelled (receipt reason), other job intact | n/a | BASE | UNRUN | | |
 
