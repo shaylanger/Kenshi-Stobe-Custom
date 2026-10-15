@@ -66,6 +66,16 @@ if ($in.stop_hook_active) { exit 0 }
 $hr = Join-Path $runs 'handoff.ready'
 if ((Test-Path -LiteralPath $hr) -and ((Get-Item -LiteralPath $hr).LastWriteTime -gt (Get-Date).AddMinutes(-30))) { exit 0 }
 
+# Only the live coordinator (heartbeat owner, coordinator-heartbeat.ps1) is held to the in-flight/no-successor rules: a retired
+# session that handed off must be able to end (peer report 2026-10-15). Heartbeat line = '<epoch> <session_id> <time>'.
+try {
+    $hb = Join-Path $runs 'coordinator.heartbeat'
+    if ((Test-Path -LiteralPath $hb) -and [string]$in.session_id) {
+        $hp = (Get-Content -LiteralPath $hb -TotalCount 1) -split '\s+'
+        if ($hp.Count -ge 2 -and $hp[1] -ne [string]$in.session_id -and ((Get-Date) - (Get-Item -LiteralPath $hb).LastWriteTime).TotalMinutes -lt 30) { exit 0 }
+    }
+} catch { }
+
 # --- agent statuses (agent-guard-lib.ps1; fails open) ---
 $agentFly = @()
 try {
