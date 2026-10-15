@@ -10,6 +10,5 @@ Apply to every imm26-style program (row operators, investigators, fixers). Brief
 5. **Reports go to a file BEFORE an agent stops** (`agents\out\<name>\latest.md` via save-report.ps1). Cap each investigator at 2-3 rows (one hit its context limit and its report nearly got lost, and a redundant successor was spawned).
 6. **One fixer per batch of patches.** Parallel agents regenerating the same composed tree and compose.patch collide: queue extra patches to the running fixer (SendMessage) or wait.
 7. **Hand-back reports <= 30 lines** (verdict + file:line + rerun row), evidence by path only.
-8. **Model/effort for row operators:** mechanical work: consider a cheaper model or lower effort for operators, keep diagnosis agents as is (routing change: Shay decides, see docs/MODEL_ROUTING.md).
-9. **One operator per lane; never more agents than lanes** (5090 RAM ceiling = 3 lanes; 4080 = 2 lanes).
+8. **One operator per lane; never more agents than lanes** (5090 RAM ceiling = 3 lanes; 4080 = 2 lanes).
 10. Lane window slots: 5090 i3 DISPLAY2 0,0; i4 DISPLAY2 1300,0; i5 DISPLAY1 -1500,400 (DISPLAY2 has no room for a third). Shay must confirm DISPLAY1 is not the Samsung display.
