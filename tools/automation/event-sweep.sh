@@ -5,7 +5,7 @@
 #   SWEEP INBOX n unread               messages still in inbox\coordinator\ (read them, then move them to read\)
 #   SWEEP STATUS <name> bad format     agent status file whose first line is not "<name> | STATE | yyyy-mm-dd hh:mm"
 #   SWEEP STATUS <name> RUNNING <n>m   a RUNNING agent with no status update for 60 min (dead or silent)
-#   SWEEP MARKER <name> <why>          an inflight marker (touched in the last 6 h) whose out dir is missing, empty, or already DONE
+#   SWEEP MARKER <name> <why>          an inflight marker (touched in the last 6 h) whose out dir is missing, empty, or already DONE (agent-name markers are skipped)
 #   SWEEP ROUTER n error row(s)        Agent calls that went through unrouted (router crash) in the last 6 h
 #   SWEEP CLOCK ...                    powershell.exe gave no Windows clock, so the router check was skipped
 # Prints "SWEEP CLEAN" when nothing is found. Exit 0 clean, 1 problems. Lanes are not checked here: lane-waker.sh does that.
@@ -39,6 +39,7 @@ for m in "$R"/inflight/*; do
   [ -f "$m" ] || continue
   [ -n "$(find "$m" -mmin -360 2>/dev/null)" ] || continue
   n=$(basename "$m"); d=$(head -1 "$m" | tr -d '\r')
+  [ -f "$R/agents/$n.status" ] && continue   # agent-name marker (agent-status.ps1 RUNNING): its status is checked above, it names no out dir
   if [ -z "$d" ]; then say "MARKER $n no out dir in marker"; continue; fi
   p=$(wslpath -u "$d" 2>/dev/null || echo "$d")
   if [ ! -d "$p" ]; then say "MARKER $n out dir missing: $d"

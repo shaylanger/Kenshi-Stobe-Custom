@@ -3,7 +3,7 @@
 # Event-driven wait (Shay 2026-10-14; replaces the fixed 2-minute check-in, which woke the coordinator for every HEALTH OK).
 # The script ends, and so wakes the session, only when one of these happens:
 #   INBOX     a file appears in C:\KenshiTestRuns\inbox\<me>\ (a sender drops it next to its SendMessage); the wait prints it and moves it to delivered\ so a re-armed wait does not wake again on the same file
-#   STATUS    an agent status file in C:\KenshiTestRuns\agents\ is rewritten to DONE, FAILED or STOPPED-CONTEXT
+#   STATUS    an agent status file in C:\KenshiTestRuns\agents\ is rewritten to DONE, FAILED or STOPPED-CONTEXT (the latter two end with: respawn fresh <task> from <handoff path>)
 #   BATCH     batch-health.sh <out-dir> (--batch) is not HEALTH OK (HEALTH DONE or HEALTH STALL)
 #   RIG       rig-health.sh exits non-zero (stall, alert, idle with no reason)
 #   BACKSTOP  none of the above for --backstop s (default 600): runs event-sweep.sh and prints its lines after the header
@@ -36,7 +36,14 @@ while :; do
   while IFS= read -r f; do
     l=$(head -1 "$f" | tr -d '\r')
     if [[ $l =~ ^[^|]*[|][[:space:]]*(DONE|FAILED|STOPPED-CONTEXT)[[:space:]]*[|] ]]; then
-      echo "EVENT STATUS $(basename "$f" .status) ${BASH_REMATCH[1]}: $(sed -n 2p "$f" | tr -d '\r' | cut -c1-200)"; exit 0
+      n=$(basename "$f" .status); st=${BASH_REMATCH[1]}; task=$(sed -n 2p "$f" | tr -d '\r' | cut -c1-200)
+      rs=""
+      if [ "$st" != DONE ]; then   # work is not finished: say how to pick it up (a fresh agent, never SendMessage the old one)
+        h="$R/agents/$n.handoff.md"; [ -f "$h" ] || h="$f"
+        case "$h" in /mnt/c/*|/c/*) h="C:\$(printf '%s' "${h#/mnt}" | sed 's|^/c/||; s|/|\|g')";; esac
+        rs=" | respawn fresh ${task#task: } from $h (unless a successor such as ${n}2 or ${n}b already runs)"
+      fi
+      echo "EVENT STATUS $n $st: $task$rs"; exit 0
     fi
   done < <(find "$R/agents" -maxdepth 1 -name '*.status' -newer "$MARK" 2>/dev/null)
   # BATCH + RIG: silent health checks every 120 s; anything not healthy wakes the session

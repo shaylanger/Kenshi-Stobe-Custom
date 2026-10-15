@@ -12,6 +12,10 @@
 #   PreToolUse hook (kenshi-waker-guard.ps1 pre), matcher Bash|PowerShell|ScheduleWakeup:
 #     Denies a top-level `sleep N` / `Start-Sleep N` / `timeout /t N` with N > 120, and ScheduleWakeup delays > 120 s.
 #
+#   Agent statuses (agent-guard-lib.ps1, 2026-10-15): the Stop hook also BLOCKS while an agents\*.status is STOPPED-CONTEXT/FAILED
+#   (updated < 18 h ago) with no successor and not abandoned (it prints the exact respawn text); every RUNNING status updated < 45 min
+#   ago counts as in-flight work (so a running event wait is required). Fails open: any error in this part is ignored.
+#   Test switches: KAH_RUNS_DIR (root), KAH_GUARD_TEST_ONLY_AGENTS=1 (run only the agent checks, print INFLIGHT:/exit); see agent-guard-selftest.ps1.
 # Markers: scripts/agents `touch C:\KenshiTestRuns\inflight\<name>` when they start a batch, subagent or rig job,
 # delete it when done. Idle reason: `kenshi-ctl.ps1 idle "<reason>"` or write the text into rig5090.idle.
 $mode = $args[0]
@@ -19,8 +23,10 @@ $raw = [Console]::In.ReadToEnd()
 try { $in = $raw | ConvertFrom-Json } catch { exit 0 }
 $cwd = if ($in.cwd) { [string]$in.cwd } else { $PWD.Path }
 if ($cwd -notmatch '^[A-Za-z]:[\\/]KenshiModding') { exit 0 }
-$runs = 'C:\KenshiTestRuns'
+$runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 $MAX = 120
+# The one correct waker (Shay 2026-10-15): a background event wait, never sleep+batch-health/rig-health.
+$WAKER = 'the background command (Bash run_in_background) "bash tools/automation/event-wait.sh [--batch <out-dir>]" in WSL (from Git Bash: MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh [--batch /mnt/c/<out-dir>]); it ends on an inbox message, an agent status DONE/FAILED/STOPPED-CONTEXT, a batch/rig problem or the 10-minute backstop; restart it every time it wakes you'
 
 function Block-Stop([string]$reason) {
     @{ decision = 'block'; reason = $reason } | ConvertTo-Json -Compress | Write-Output
@@ -32,7 +38,7 @@ if ($mode -eq 'pre') {
     $ti = $in.tool_input
     if ($tool -eq 'ScheduleWakeup') {
         if ($ti.delaySeconds -and [double]$ti.delaySeconds -gt $MAX) {
-            [Console]::Error.WriteLine("kenshi-waker-guard: ScheduleWakeup delay $($ti.delaySeconds)s > $MAX s. Check in at most every $MAX s (Shay 2026-10-07).")
+            [Console]::Error.WriteLine("kenshi-waker-guard: ScheduleWakeup delay $($ti.delaySeconds)s > $MAX s. Do not use ScheduleWakeup for waiting: run $WAKER.")
             exit 2
         }
         exit 0
@@ -47,7 +53,7 @@ if ($mode -eq 'pre') {
         if ([int]$m.Groups[1].Value -gt $MAX) { $hits += $m.Value.Trim() }
     }
     if ($hits.Count -gt 0) {
-        [Console]::Error.WriteLine("kenshi-waker-guard: '$($hits -join ', ')' waits longer than $MAX s. Wakers are at most $MAX s (sleep $MAX; bash tools/automation/batch-health.sh <out> or rig-health.sh), so peer messages and stalls are seen within 2 min (Shay 2026-10-07/08).")
+        [Console]::Error.WriteLine("kenshi-waker-guard: '$($hits -join ', ')' waits longer than $MAX s. Never wait with a long sleep or a sleep+batch-health/rig-health loop. Use $WAKER (Shay 2026-10-15).")
         exit 2
     }
     exit 0
@@ -57,8 +63,21 @@ if ($mode -ne 'stop') { exit 0 }
 if ($in.stop_hook_active) { exit 0 }
 # Context-limit handoff done (handoff-ready.ps1 wrote the marker in the last 30 min): the next session owns the
 # in-flight work, so this one may end without a waker.
-$hr = 'C:\KenshiTestRuns\handoff.ready'
+$hr = Join-Path $runs 'handoff.ready'
 if ((Test-Path -LiteralPath $hr) -and ((Get-Item -LiteralPath $hr).LastWriteTime -gt (Get-Date).AddMinutes(-30))) { exit 0 }
+
+# --- agent statuses (agent-guard-lib.ps1; fails open) ---
+$agentFly = @()
+try {
+    . (Join-Path $PSScriptRoot '..\agent-guard-lib.ps1')
+    $ar = Get-AgentReport
+    $agentFly = @($ar.InFlight | ForEach-Object Name)
+    if ($ar.OpenRecent.Count) {
+        $lines = @($ar.OpenRecent | Select-Object -First 8 | ForEach-Object { Get-AgentRespawn $_ })
+        Block-Stop ('kenshi-waker-guard: ' + $ar.OpenRecent.Count + ' agent(s) stopped or failed with no successor, so their work would be lost: ' + ($lines -join ' || ') + ' -- Spawn each as a FRESH agent (Agent tool) from its handoff/status file now (never SendMessage the old agent); the new agent writes its own status and the old one stops being reported. If one was dropped on purpose: powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-abandon.ps1 <name> "<why>".')
+    }
+} catch { }
+if ($env:KAH_GUARD_TEST_ONLY_AGENTS) { 'INFLIGHT: ' + ($agentFly -join ','); exit 0 }
 
 # --- what is in flight ---
 $kenshi = $null -ne (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue)
@@ -73,6 +92,8 @@ $inflight = @()
 if ($kenshi) { $inflight += 'Kenshi running' }
 if ($lock) { $inflight += "game.lock=$lock" }
 if ($markers.Count) { $inflight += "inflight markers: $($markers -join ', ')" }
+$agentOnly = @($agentFly | Where-Object { $markers -notcontains $_ })
+if ($agentOnly.Count) { $inflight += "RUNNING agents (status < 45 min old): $($agentOnly -join ', ')" }
 
 # --- is a waker running? (a background sleep/Start-Sleep or a health check chained after one) ---
 $me = $PID
@@ -111,7 +132,7 @@ $waker = $procs.Values | Where-Object {
 } | Select-Object -First 1
 
 if ($inflight.Count -gt 0 -and -not $waker) {
-    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Before ending the turn start a background event wait (Bash run_in_background): "bash tools/automation/event-wait.sh --batch <out-dir>" for a batch, else "bash tools/automation/event-wait.sh" (it ends on an event or at the 10-minute backstop). Restart it every time it wakes you. If nothing is really in flight, release the lock / delete the stale marker in C:\KenshiTestRuns\inflight\ and say so.')
+    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Before ending the turn start ' + $WAKER + ' (add --batch <out-dir> when a batch runs). If nothing is really in flight, release the lock / delete the stale marker in C:\KenshiTestRuns\inflight\ and say so.')
 }
 
 # --- 5090 idle? ---
@@ -122,7 +143,7 @@ if (-not $kenshi -and -not $lock) {
     $idleFile = Join-Path $runs 'rig5090.idle'
     $fresh = (Test-Path -LiteralPath $idleFile) -and ((Get-Item -LiteralPath $idleFile).LastWriteTime -gt (Get-Date).AddMinutes(-60))
     if (-not $fresh) {
-        Block-Stop ('kenshi-waker-guard: the 5090 is idle (Kenshi closed, game lock free) and no reason is recorded. Shay''s rule: when the 5090 finishes its work, don''t stop; run the next open rows there (viewmodel/FP/STOBE/PG). Either launch the next 5090 batch now, or record a one-line reason with: & C:\KenshiModding\tools\automation\kenshi-ctl.ps1 idle "<reason>"  (e.g. "Shay playing", "nothing testable left", "waiting for build X", "chat-only session"); it is good for 60 min, "idle" shows it, "idle clear" removes it.')
+        Block-Stop ('kenshi-waker-guard: the 5090 is idle (Kenshi closed, game lock free) and no reason is recorded. Shay''s rule: when the 5090 finishes its work, don''t stop; run the next open rows there (viewmodel/FP/STOBE/PG). Either start the next work there now (imm26/queue rows: both rigs are allowed; drop a list into C:\KenshiTestRuns\queue\5090\ or queue\any\ or launch the batch), or record a one-line reason with: & C:\KenshiModding\tools\automation\kenshi-ctl.ps1 idle "<reason>"  (e.g. "Shay playing", "nothing testable left", "chat-only session"); it is good for 60 min, "idle" shows it, "idle clear" removes it.')
     }
 }
 

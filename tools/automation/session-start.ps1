@@ -3,7 +3,12 @@
 # file (C:\KenshiTestRuns\agents\<name>.status), inflight markers (+ the batch out dir a marker names: DONE/SUMMARY),
 # game lock and Kenshi state.
 $ws = 'C:\KenshiModding'
-$runs = 'C:\KenshiTestRuns'
+$runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
+
+# First line (Shay 2026-10-15): is a background event wait running? A session without one is unreachable for peer messages and stalls.
+$ew = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $PID -and [string]$_.CommandLine -match 'event-wait\.sh' -and $_.Name -match '^(wsl|bash|sh)\.exe$' } | Select-Object -First 2)
+if ($ew.Count) { "WAKER STATUS: running (event-wait.sh, pid $($ew[0].ProcessId))" }
+else { 'WAKER STATUS: NOT running (start: Bash run_in_background  MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh [--batch /mnt/c/<out-dir>]; restart it every time it wakes you)' }
 
 $mk = Join-Path $runs 'handoff.ready'
 if (Test-Path -LiteralPath $mk) {
@@ -35,6 +40,15 @@ foreach ($a in $ag) {
     Get-Content -LiteralPath $a.FullName | Select-Object -First 12
 }
 
+'=== agent health (agent-guard-lib.ps1: RUNNING > 30 min = orphaned; stopped/failed agents without a successor; respawn todos) ==='
+try {
+    . (Join-Path $PSScriptRoot 'agent-guard-lib.ps1')
+    Remove-SupersededTodos
+    $ah = @(Get-AgentHealthLines)
+    if ($ah.Count) { $ah | ForEach-Object { $_ } } else { 'every agent is DONE, RUNNING (fresh) or has a successor: nothing to respawn' }
+    $rt = @(Get-ChildItem -LiteralPath (Join-Path $runs 'respawn') -Filter '*.todo' -File -ErrorAction SilentlyContinue | ForEach-Object BaseName)
+    if ($rt.Count) { "respawn todos (C:\KenshiTestRuns\respawn\): $($rt -join ', ')" }
+} catch { "agent health check failed open: $($_.Exception.Message)" }
 '=== rig runners (rig-runner.ps1: one daemon per rig runs the queue\<rig>\ and queue\any\ list files; ALERT on idle/stuck) ==='
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Ensure
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Status
