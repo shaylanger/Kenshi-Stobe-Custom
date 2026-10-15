@@ -38,7 +38,7 @@
     ]
   },
   "model": "sonnet",
-  "effortLevel": "medium",
+  "effortLevel": "high",
   "disableClaudeAiConnectors": true,
   "enableArtifact": false,
   "skillOverrides": {
@@ -90,16 +90,6 @@
           {
             "type": "command",
             "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/hooks/agent-ledger-post.ps1"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/hooks/cascade-gate.ps1"
           }
         ]
       }

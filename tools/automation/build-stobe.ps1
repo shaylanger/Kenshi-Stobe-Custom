@@ -21,4 +21,12 @@ if (($out -join "`n") -notmatch 'BUILD OK') {
   Get-ChildItem 'C:\StobeBuild\obj\*.log' | Select-String -Pattern ' error ' | Select-Object -First 8 | ForEach-Object { $_.Line }
   exit 1
 }
+# Build guard (2026-10-15): the 2026-10-14 19:37 DLL was built from a tree without the native
+# travel code and shipped with no "travel_destinations" at all. Fail when the DLL lacks it.
+$dllText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('C:\StobeBuild\out\Stobe.dll'))
+$missing = @('travel_destinations', 'LOCAL_TRAVEL', 'travel_lifecycle', 'world_towns') | Where-Object { -not $dllText.Contains($_) }
+if ($missing) {
+  "BUILD GUARD FAILED: Stobe.dll lacks " + ($missing -join ', ') + " (native travel code not built in; check /root/STOBE-src/src and the SOURCES= line of C:\StobeBuild\build_portable.bat)"
+  exit 1
+}
 "Stobe.dll " + (Get-FileHash 'C:\StobeBuild\out\Stobe.dll').Hash.Substring(0, 8)

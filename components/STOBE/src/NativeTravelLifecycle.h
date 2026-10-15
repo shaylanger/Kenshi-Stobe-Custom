@@ -13,7 +13,7 @@ void Reset();
 bool Start(GameWorld *world, Character *actor, unsigned int speaker, Character *target,
            float x, float y, float z, const std::string &agreement,
            const std::string &request, const std::string &expectedWorld,
-           const std::string &dispatchEnvelope, long long expiresGameTs,
+           const std::string &planHash, const std::string &dispatchEnvelope, long long expiresGameTs,
            long long nowGameTs, std::string &reason);
 void Tick(GameWorld *world, long long nowGameTs);
 void ObserveIdle(GameWorld *world, Character *actor, long long nowGameTs);
@@ -21,8 +21,11 @@ void ObserveIdle(GameWorld *world, Character *actor, long long nowGameTs);
 bool DispatchWire(GameWorld *world, Character *actor, const std::string &json,
                   long long nowGameTs, std::string &reason);
 bool ReleaseOwned(GameWorld *world, unsigned int actor, unsigned int speaker,
-                  const std::string &agreement, const std::string &worldId,
-                  const std::string &task, std::string &reason);
+                  const std::string &agreement, const std::string &request,
+                  const std::string &worldId,
+                  unsigned long sessionGeneration, const std::string &planHash,
+                  const std::string &task,
+                  std::string &reason);
 std::string WorldId();
 void ControllerChanged(unsigned int actor, bool follow, bool present);
 // Call BEFORE issuing an action: 1=new request, 0=already issued (skip replay),

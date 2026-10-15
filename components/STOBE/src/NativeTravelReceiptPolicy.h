@@ -14,12 +14,15 @@ struct Scope {
   std::string request;
   std::string world;
   std::string task;
-  Scope() : actor(0), speaker(0) {}
+  std::string planHash;
+  unsigned long sessionGeneration;
+  Scope() : actor(0), speaker(0), sessionGeneration(0) {}
 };
 
 enum DuplicateResult {
   DUPLICATE_NEW = 0,
   DUPLICATE_EXACT_ACCEPTED,
+  DUPLICATE_EXACT_NOT_STARTED,
   DUPLICATE_EXACT_UNCERTAIN,
   DUPLICATE_CONFLICT
 };
@@ -32,35 +35,50 @@ inline std::string RequestKey(const std::string &agreement,
   return out.str();
 }
 
+inline bool IsPlanHash(const std::string &value) {
+  return value.size() == 64 &&
+         value.find_first_not_of("0123456789abcdef") == std::string::npos;
+}
+
 inline DuplicateResult ClassifyDuplicate(bool exists,
                                          const std::string &savedEnvelope,
                                          const std::string &incomingEnvelope,
-                                         bool dispatchAccepted) {
+                                         bool dispatchAccepted,
+                                         bool notStartedVerified) {
   if (!exists) return DUPLICATE_NEW;
   if (savedEnvelope != incomingEnvelope) return DUPLICATE_CONFLICT;
-  return dispatchAccepted ? DUPLICATE_EXACT_ACCEPTED : DUPLICATE_EXACT_UNCERTAIN;
+  if (dispatchAccepted) return DUPLICATE_EXACT_ACCEPTED;
+  return notStartedVerified ? DUPLICATE_EXACT_NOT_STARTED : DUPLICATE_EXACT_UNCERTAIN;
 }
 
 inline bool MatchesCurrentScope(const Scope &receipt, unsigned int actor,
                                 unsigned int speaker,
                                 const std::string &agreement,
                                 const std::string &request,
-                                const std::string &currentWorld) {
+                                const std::string &currentWorld,
+                                unsigned long currentSessionGeneration,
+                                const std::string &planHash) {
   return receipt.actor == actor && receipt.speaker == speaker &&
          receipt.agreement == agreement && receipt.request == request &&
-         !currentWorld.empty() && receipt.world == currentWorld;
+         !currentWorld.empty() && receipt.world == currentWorld &&
+         currentSessionGeneration != 0 && receipt.sessionGeneration == currentSessionGeneration &&
+         !planHash.empty() && receipt.planHash == planHash;
 }
 
 inline bool MatchesRelease(const Scope &receipt, unsigned int actor,
                            unsigned int speaker,
                            const std::string &agreement,
+                           const std::string &request,
                            const std::string &currentWorld,
+                           unsigned long currentSessionGeneration,
+                           const std::string &planHash,
                            const std::string &task,
                            bool freshlyObservedNativeAbsence) {
   return freshlyObservedNativeAbsence && receipt.actor == actor &&
-         receipt.speaker == speaker && receipt.agreement == agreement &&
+         receipt.speaker == speaker && receipt.agreement == agreement && receipt.request == request &&
          !currentWorld.empty() && receipt.world == currentWorld &&
-         !task.empty() && receipt.task == task;
+         currentSessionGeneration != 0 && receipt.sessionGeneration == currentSessionGeneration &&
+         !planHash.empty() && receipt.planHash == planHash && !task.empty() && receipt.task == task;
 }
 
 inline bool AtAgreedEndpoint(float x, float y, float z,

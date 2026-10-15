@@ -1,9 +1,8 @@
 # agent-router.ps1 (PreToolUse, matcher Agent): every subagent gets the model and effort of its tier (Shay 2026-10-14).
 # Policy: tools\automation\model-policy.json. Reasoning and prices: docs\MODEL_ROUTING.md.
-#   - Tags: the Agent description starts with [case:<name>]. Cases in needs_ticket also need [ticket:<id>].
+#   - Tags: the Agent description starts with [case:<name>]. An optional [ticket:<id>] is only recorded in the ledger.
 #   - No case: only kenshi-reader may run. Every other tier needs a case.
-#   - Cascade gates: debug needs a FAIL verdict for its ticket; escalate needs a debug row for that ticket and a FAIL verdict
-#     written after it. Verdicts: C:\KenshiTestRuns\verdicts\<ticket>.txt (env AGENT_VERDICTS overrides, for tests).
+#   - No cascade (Shay 2026-10-15): there are no verdict files, no FAIL gates and no verifier step. One agent on the right model does the task.
 #   - Denied (exit 2) when a rule above fails. Allowed (updatedInput): model and effort set from the tier; a different model or
 #     effort the coordinator passed is logged as an override.
 #   - Every decision is one line in C:\KenshiTestRuns\ledger\agent-calls.tsv (env AGENT_LEDGER overrides, for tests), UTF-8 without BOM.
@@ -11,9 +10,7 @@
 #   - Internal error: the call goes through unrouted and an error row is logged (event-sweep.sh reports those).
 # Only acts when cwd is under C:\KenshiModding.
 $ledger = if ($env:AGENT_LEDGER) { $env:AGENT_LEDGER } else { 'C:\KenshiTestRuns\ledger\agent-calls.tsv' }
-$verdicts = if ($env:AGENT_VERDICTS) { $env:AGENT_VERDICTS } else { 'C:\KenshiTestRuns\verdicts' }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-$inv = [Globalization.CultureInfo]::InvariantCulture
 
 function Write-Ledger([string]$action, [string]$case, [string]$ticket, [string]$stype, [string]$model, [string]$effort, [string]$desc) {
     try {
@@ -31,31 +28,6 @@ function Deny([string]$msg, [string]$case, [string]$ticket, [string]$stype, [str
     Write-Ledger 'deny' $case $ticket $stype '' '' $desc
     [Console]::Error.WriteLine("agent-router: $msg")
     exit 2
-}
-
-# latest allow or override ledger time for this case and ticket, or $null
-function Get-LastTime([string]$case, [string]$ticket) {
-    if (-not (Test-Path -LiteralPath $ledger)) { return $null }
-    $best = $null
-    foreach ($row in (Get-Content -LiteralPath $ledger -Encoding UTF8)) {
-        $f = $row -split "`t"
-        if ($f.Count -ge 7 -and $f[1] -eq $case -and $f[2] -eq $ticket -and ($f[6] -eq 'allow' -or $f[6] -eq 'override')) {
-            try {
-                $t = [datetime]::ParseExact($f[0].Trim(), 'yyyy-MM-dd HH:mm:ss', $inv)
-                if (-not $best -or $t -gt $best) { $best = $t }
-            } catch {}
-        }
-    }
-    return $best
-}
-
-# the ticket's verdict: first word (PASS or FAIL) and write time, or $null when there is no file
-function Get-Verdict([string]$ticket) {
-    $p = Join-Path $verdicts "$ticket.txt"
-    if (-not (Test-Path -LiteralPath $p)) { return $null }
-    $first = [string](Get-Content -LiteralPath $p -TotalCount 1 -Encoding UTF8)
-    $first = $first -replace '^\uFEFF', ''
-    return @{ Word = (($first.Trim() -split '\s+')[0]); Time = (Get-Item -LiteralPath $p).LastWriteTime }
 }
 
 try {
@@ -80,20 +52,18 @@ try {
         if ($stype -ne 'kenshi-reader') { Deny 'tag the description with [case:<name>] (cases in tools\automation\model-policy.json). Only kenshi-reader may run without a case' '' $ticket $stype $desc }
         $tier = 'kenshi-reader'
     }
-    if (($pol.needs_ticket -contains $case) -and -not $ticket) { Deny "case $case needs a [ticket:<id>] tag" $case '' $stype $desc }
-    if ($case -eq 'debug') {
-        $v = Get-Verdict $ticket
-        if (-not $v -or $v.Word -ne 'FAIL') { Deny "debug on ticket $ticket needs a FAIL verdict first: verdicts\$ticket.txt, written by a verifier" $case $ticket $stype $desc }
-    }
-    if ($case -eq 'escalate') {
-        $dbg = Get-LastTime 'debug' $ticket
-        $v = Get-Verdict $ticket
-        if (-not $dbg) { Deny "escalate on ticket $ticket needs a debug round on that ticket first" $case $ticket $stype $desc }
-        if (-not $v -or $v.Word -ne 'FAIL' -or $v.Time -lt $dbg) { Deny "escalate on ticket $ticket needs a FAIL verdict written after its debug round" $case $ticket $stype $desc }
-    }
 
     $model = [string]$pol.tiers.$tier.model
     $effort = [string]$pol.tiers.$tier.effort
+    # benchmark case (Shay 2026-10-15): model and effort come from [model:x] [effort:y] tags. Fable is never allowed.
+    if ($case -eq 'bench') {
+        $tm = ''; $te = ''
+        if ($desc -match '\[model:([a-z]+)\]') { $tm = $Matches[1] }
+        if ($desc -match '\[effort:([a-z]+)\]') { $te = $Matches[1] }
+        if (@('haiku', 'sonnet', 'opus') -notcontains $tm) { Deny 'case bench needs [model:haiku|sonnet|opus] (fable is never allowed)' $case $ticket $stype $desc }
+        if (@('low', 'medium', 'high', 'xhigh') -notcontains $te) { Deny 'case bench needs [effort:low|medium|high|xhigh]' $case $ticket $stype $desc }
+        $model = $tm; $effort = $te
+    }
     $action = 'allow'
     if (($ti.model -and [string]$ti.model -ne $model) -or ($ti.effort -and [string]$ti.effort -ne $effort)) { $action = 'override' }
     $new = [ordered]@{}

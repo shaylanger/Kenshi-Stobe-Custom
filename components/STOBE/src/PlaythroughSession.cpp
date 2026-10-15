@@ -1,8 +1,10 @@
 #include "PlaythroughSession.h"
+#include "Utils.h"
 #include <map>
 #include <sstream>
 #include <vector>
 #include <wincrypt.h>
+void Log(const std::string&);
 #pragma comment(lib, "advapi32.lib")
 
 namespace PlaythroughSession {
@@ -19,10 +21,11 @@ namespace {
     }
     struct State {
         CRITICAL_SECTION mutex;
-        DWORD tls; unsigned long generation, started;
+        DWORD tls; unsigned long generation, started, inFlightGeneration, attempts;
+        ULONGLONG retryAt;
         bool ready, isNew, connectedNotice;
         std::string character, receipt, client, notice;
-        State() : generation(1), started(0), ready(false), isNew(false), connectedNotice(false) {
+        State() : generation(1), started(0), inFlightGeneration(0), attempts(0), retryAt(0), ready(false), isNew(false), connectedNotice(false) {
             InitializeCriticalSection(&mutex); tls = TlsAlloc(); client = NewId();
         }
     };
@@ -79,32 +82,55 @@ namespace {
         }
         Space(s,p);return p==s.size();
     }
-    struct Request { unsigned long epoch; std::string body; };
+    const unsigned long kMaxAttempts = 6;
+    ULONGLONG RetryDelay(unsigned long attempt) {
+        // attempt is one-based; the cap keeps recovery bounded while allowing
+        // a short server restart or transient network interruption to recover.
+        static const ULONGLONG delays[] = {1000, 2000, 4000, 8000, 16000};
+        const size_t index = attempt > 0 ? (attempt - 1 < 5 ? attempt - 1 : 4) : 0;
+        return delays[index];
+    }
+    bool RetryableStatus(unsigned long status) {
+        return status == 0 || status == 408 || status == 429 || (status >= 500 && status <= 599);
+    }
+    struct Request { unsigned long epoch, attempt; std::string body; };
     DWORD WINAPI Run(PVOID data) {
         Request request=*static_cast<Request*>(data);delete static_cast<Request*>(data);Scope scope(request.epoch);
-        const ULONGLONG deadline=GetTickCount64()+30000; bool transportRetried=false, accepted=false;
-        std::map<std::string,std::string> fields;
+        const ULONGLONG deadline=GetTickCount64()+30000; bool accepted=false, transient=false;
+        std::map<std::string,std::string> fields;unsigned long lastStatus=0;
         try {
             for(;;) {
                 if(request.epoch!=Generation())return 0;
-                unsigned long status=0;std::string body=Transport(request.body,status);fields.clear();
+                unsigned long status=0;std::string body=Transport(request.body,status);lastStatus=status;fields.clear();
                 if(status==404){fields["status"]="sunsupported";accepted=true;break;}
                 bool valid=Parse(body,fields);
                 if(status==200&&valid&&fields["ok"]=="ltrue") {
                     accepted=fields["status"]=="soff" || (fields["status"]=="sready" && fields["token"].size()==33 && fields["character_id"].size()==33 && ValidId(fields["token"].substr(1)) && ValidId(fields["character_id"].substr(1)) && fields["token"][0]=='s' && fields["character_id"][0]=='s');break;
                 }
-                if(status==0&&!transportRetried){transportRetried=true;continue;}
+                if(RetryableStatus(status)) transient=true;
                 if(status!=503||!valid||fields["status"]!="sbusy"||fields["ok"]!="lfalse"||GetTickCount64()>=deadline)break;
                 for(int i=0;i<10;++i){if(request.epoch!=Generation())return 0;Sleep(100);}
             }
-        } catch(...) { fields.clear(); }
+        } catch(...) { fields.clear();transient=true; }
         Lock lock;State& state=Get();if(request.epoch!=state.generation)return 0;
+        if(state.inFlightGeneration==request.epoch)state.inFlightGeneration=0;
         if(accepted) {
-            if(fields["status"]=="sready") { state.receipt=fields["token"].substr(1);state.character=fields["character_id"].substr(1);state.isNew=false; }
-            state.ready=true;
+            if(fields["status"]=="sready") { state.receipt=fields["token"].substr(1);state.character=fields["character_id"].substr(1); }
+            // A successful handshake consumes the one-shot new-campaign intent,
+            // including the server's explicit AI-off response.
+            state.isNew=false;state.ready=true;state.retryAt=0;
         }
-        if(fields["message"].size()>1&&fields["message"][0]=='s')state.notice=fields["message"].substr(1);
-        else if(!accepted)state.notice="Playthrough unavailable. Open Playthrough Saves, then reload this save.";
+        if(!accepted&&transient&&request.attempt<kMaxAttempts) {
+            state.retryAt=GetTickCount64()+RetryDelay(request.attempt);
+            Log("PLAYTHROUGH: outcome=transient http="+ToString((int)lastStatus)+" attempt="+ToString((int)request.attempt)+" generation="+ToString((int)request.epoch));
+            state.notice="Playthrough connection interrupted; retrying.";
+        }
+        else if(fields["message"].size()>1&&fields["message"][0]=='s')state.notice=fields["message"].substr(1);
+        else if(!accepted){
+            state.retryAt=0;
+            Log(std::string("PLAYTHROUGH: outcome=")+(transient?"retry_exhausted":"rejected")+" http="+ToString((int)lastStatus)+" attempt="+ToString((int)request.attempt)+" generation="+ToString((int)request.epoch));
+            state.notice=transient?"Playthrough connection failed after retries. Reload this save to try again.":"Playthrough unavailable. Open Playthrough Saves, then reload this save.";
+        }
         else if(!state.connectedNotice)state.notice="Connected";
         if(accepted)state.connectedNotice=true;
         return 0;
@@ -117,18 +143,19 @@ Scope::Scope(unsigned long epoch){previous=static_cast<DWORD>(reinterpret_cast<U
 Scope::~Scope(){TlsSetValue(Get().tls,reinterpret_cast<PVOID>(static_cast<ULONG_PTR>(previous)));}
 bool Allowed(unsigned long epoch){Lock lock;return Get().ready&&epoch==Get().generation;}
 std::wstring Headers(unsigned long epoch){Lock lock;std::string token=Allowed(epoch)?(Get().receipt.empty()?"legacy":Get().receipt):"blocked";return L"\r\nX-STOBE-Playthrough: "+std::wstring(token.begin(),token.end())+L"\r\n";}
-void BeginLoad(bool newGame){Lock lock;State& s=Get();++s.generation;s.ready=false;s.receipt.clear();s.notice.clear();s.character=newGame?NewId():"";s.isNew=newGame;}
+void BeginLoad(bool newGame){Lock lock;State& s=Get();++s.generation;s.started=0;s.inFlightGeneration=0;s.attempts=0;s.retryAt=0;s.ready=false;s.receipt.clear();s.notice.clear();s.character=newGame?NewId():"";s.isNew=newGame;}
 std::string Character(){Lock lock;return Get().character;}
 bool NewCharacter(){Lock lock;return Get().isNew;}
 void RestoreCharacter(const std::string& id,bool isNew){if(!ValidId(id))return;Lock lock;Get().character=id;Get().isNew=isNew;}
 bool TakeNotice(std::string& message){Lock lock;message.swap(Get().notice);return !message.empty();}
 void Connect(const std::string& name,long long gamets,const std::string& members){
-    Lock lock;State& s=Get();if(s.started==s.generation||name.empty()||gamets<=0)return;
-    if(s.client.empty()||(s.isNew&&s.character.empty())){s.notice="Could not identify this save. Reload the game.";s.started=s.generation;return;}
-    s.started=s.generation;std::ostringstream json;
+    Lock lock;State& s=Get();const ULONGLONG now=GetTickCount64();
+    if(name.empty()||gamets<=0||s.inFlightGeneration==s.generation||s.attempts>=kMaxAttempts||(s.attempts>0&&now<s.retryAt))return;
+    if(s.client.empty()||(s.isNew&&s.character.empty())){s.notice="Could not identify this save. Reload the game.";s.started=s.generation;s.attempts=kMaxAttempts;return;}
+    s.started=s.generation;s.inFlightGeneration=s.generation;++s.attempts;std::ostringstream json;
     json<<"{\"client_id\":\""<<s.client<<"\",\"load_id\":"<<s.generation<<",\"character_id\":\""<<s.character<<"\",\"new_game\":"<<(s.isNew?"true":"false")<<",\"player_name\":\""<<Escape(name)<<"\",\"gamets\":"<<gamets<<",\"player_members\":"<<members<<"}";
-    Request* request=new Request();request->epoch=s.generation;request->body=json.str();
-    HANDLE thread=CreateThread(NULL,0,Run,request,0,NULL);if(thread)CloseHandle(thread);else{delete request;s.notice="Could not connect this playthrough. Reload the save.";}
+    Request* request=new Request();request->epoch=s.generation;request->attempt=s.attempts;request->body=json.str();
+    HANDLE thread=CreateThread(NULL,0,Run,request,0,NULL);if(thread)CloseHandle(thread);else{delete request;s.inFlightGeneration=0;if(s.attempts<kMaxAttempts){s.retryAt=GetTickCount64()+RetryDelay(s.attempts);s.notice="Could not connect this playthrough; retrying.";}else{s.retryAt=0;s.notice="Could not connect this playthrough after retries. Reload this save to try again.";}Log("PLAYTHROUGH: outcome=thread_start_failed attempt="+ToString((int)s.attempts)+" generation="+ToString((int)s.generation));}
 }
 }
 

@@ -3101,6 +3101,17 @@ bool TryMarkRechatDispatch(LONG generation) {
   return allowDispatch && IsChatInterruptGenerationCurrent(generation);
 }
 
+// Same read SleepIfPaused does from a worker thread.
+static bool IsWorldPausedNow() {
+  GameWorld *world = GetWorldSafe();
+  if (!world) return false;
+  try {
+    return world->isPaused();
+  } catch (...) {
+    return false;
+  }
+}
+
 void DispatchRechatFollowup(const StreamChatTask &currentTask,
                             const std::string &lastSpeaker,
                             const std::string &lastSpeakerHandle,
@@ -4062,6 +4073,17 @@ DWORD WINAPI StreamChatResponseThread(LPVOID lpParam) {
           Log("RECHAT_TIMING: follow-up playback wait timed out");
           break;
         }
+      }
+    }
+
+    // SpeakWhilePaused lets the line play while paused; the follow-up chat between
+    // NPCs still waits for the unpause (the generation check is repeated in
+    // DispatchRechatFollowup).
+    {
+      DWORD pauseWaitStart = GetTickCount();
+      while (IsChatInterruptGenerationCurrent(generation) && IsWorldPausedNow() &&
+             (GetTickCount() - pauseWaitStart) < 600000) {
+        Sleep(50);
       }
     }
 

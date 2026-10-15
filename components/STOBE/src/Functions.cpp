@@ -7081,6 +7081,13 @@ void UpdateMoveToActions(GameWorld *world) {
 }
 
 
+// SpeakWhilePaused: spoken lines (bubble + TTS + narrator popups) are wall-clock,
+// so they may run while the game is paused; every other action waits for the unpause.
+static bool IsSpeechQueuedAction(const QueuedAction &a) {
+  return a.type == ACT_SAY || a.type == ACT_PLAY_TTS ||
+         (a.type == ACT_NOTIFY && a.narratorNotification);
+}
+
 void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
   // This update is entered only after Kenshi's post-load world gate is ready.
   PlaythroughNotices::Notice saveNotice;
@@ -7160,7 +7167,10 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
       }
     }
 
-    if (gamePaused) {
+    const bool speechMayRunPaused =
+        g_speakWhilePaused && !g_uiActionQueue.empty() &&
+        IsSpeechQueuedAction(g_uiActionQueue.front());
+    if (gamePaused && !speechMayRunPaused) {
       if (!g_uiActionQueue.empty() && nowTick - pausedQueueLogTick >= 1500) {
         pausedQueueLogTick = nowTick;
         const QueuedAction &nextAction = g_uiActionQueue.front();
@@ -7235,6 +7245,10 @@ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
           nextAction.type == ACT_SAY || nextAction.type == ACT_PLAY_TTS ||
           (nextAction.type == ACT_NOTIFY &&
            nextAction.narratorNotification);
+      // Paused (only reached with SpeakWhilePaused): world-changing actions wait for the unpause.
+      if (gamePaused && !nextActionIsSpeech) {
+        break;
+      }
       bool pendingPlayerBubble =
           nextAction.type == ACT_SAY && nextAction.taskValue < 0;
       if (nextActionIsSpeech && !pendingPlayerBubble &&

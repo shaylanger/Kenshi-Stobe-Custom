@@ -14,7 +14,9 @@ The contract complements the frozen TL rows in this directory; it does not super
 
 Capture and correlate this tuple at every transition:
 
-`{campaign_id, session_generation, load_id, world_id, actor_id+serial, speaker_id+serial, agreement_id, trip_id, offer_id, endpoint_id, destination label+coordinates, request_id, native_task_id, game_tick}`
+`{campaign_id, session_generation, load_id, world_id, actor_id+serial, speaker_id+serial, agreement_id, trip_id, offer_id, endpoint_id, destination label+coordinates, plan_hash, request_id, native_task_id, game_tick}`
+
+The cross-boundary field names are `actor_serial`, `speaker_serial`, `agreement_id`, `request_id`, `world_id`, `session_generation`, and `plan_hash`. `plan_hash` is a lowercase SHA-256 token computed and checked by PHP against the stored immutable offer fields. The authenticated native dispatch, owned task, and receipt must carry that exact token unchanged; native code compares the token and does not independently re-canonicalize the offer. The token does not replace checks of the other scope fields.
 
 Fields that are not supported by a current read-only source must be reported as unavailable. Do not infer identity from NPC name, speech text, current selection, or a stale log line. The tuple must remain immutable from accepted consent through terminal state, except monotonic lifecycle phase/timestamps and documented native task identifiers.
 

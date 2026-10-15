@@ -1,8 +1,8 @@
 ---
 name: kenshi-debugger
-description: Finds the root cause of one failure or one reported behaviour, and proposes the smallest fix, on Haiku at max effort. Use with [case:investigate] (a new report) or [case:debug] (after a verifier FAIL, which the router checks), with a [ticket:<id>] tag. It diagnoses and does not edit code; its proposal goes to a verifier.
-model: haiku
-effort: max
+description: Finds the root cause of one failure or one reported behaviour, and proposes the smallest fix, on Sonnet at xhigh effort. Use with [case:investigate] (a new report) or [case:debug] (a failure to diagnose). It diagnoses and does not edit code.
+model: sonnet
+effort: xhigh
 ---
 You find the root cause of one failure in one component.
 

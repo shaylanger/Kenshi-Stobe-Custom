@@ -623,6 +623,9 @@ void LoadStobeRuntimeConfig() {
   g_ttsEnabled =
       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings", "TtsEnabled", 1) !=
       0;
+  g_speakWhilePaused =
+      ReadLayeredIniInt(baseIniPath, customIniPath, "Settings",
+                        "SpeakWhilePaused", 1) != 0;
   g_enableDialogueMenuTts =
       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings",
                         "EnableDialogueMenuTTS", 1) != 0;
@@ -744,6 +747,8 @@ void SaveStobeRuntimeConfig() {
                              iniPath.c_str());
   WritePrivateProfileStringA("Settings", "TtsEnabled",
                               g_ttsEnabled ? "1" : "0", iniPath.c_str());
+  WritePrivateProfileStringA("Settings", "SpeakWhilePaused",
+                             g_speakWhilePaused ? "1" : "0", iniPath.c_str());
   WritePrivateProfileStringA("Settings", "EnableDialogueMenuTTS",
                              g_enableDialogueMenuTts ? "1" : "0",
                              iniPath.c_str());

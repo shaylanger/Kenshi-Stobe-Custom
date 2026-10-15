@@ -1,6 +1,6 @@
 # Model routing (Kenshi workspace)
 
-Set 2026-10-14 from Shay's cost reasoning. Enforced by `tools/automation/hooks/agent-router.ps1` (every Agent call) and `tools/automation/event-sweep.sh` (verdicts). Policy: `tools/automation/model-policy.json`. Agent roles: `.claude/agents/kenshi-*.md`.
+Set 2026-10-14, revised 2026-10-15 from the 36-run model test. Enforced by `tools/automation/hooks/agent-router.ps1` (every Agent call); `tools/automation/event-sweep.sh` reports router errors. Policy: `tools/automation/model-policy.json`. Agent roles: `.claude/agents/kenshi-*.md`.
 
 ## Prices
 
@@ -41,39 +41,25 @@ What the table says:
 
 | Tier | Model and effort | Used for |
 |---|---|---|
-| kenshi-reader | Haiku low | read, parse, check |
-| kenshi-generator | Haiku max | patch, generate (output must be verified) |
-| kenshi-verifier | Sonnet medium | verify, judge, review (writes the verdict) |
-| kenshi-debugger | Haiku max | investigate (root cause and proposed fix); debug (after a FAIL) |
-| kenshi-escalation | Opus medium | escalate, after the cascade fails |
-| kenshi-solo | Sonnet medium | solo: benchmark baseline only, never for real work |
-| kenshi-grader | Sonnet high | grade: scores two finished outputs of one task blind to which arm made which; writes a grade file, not a verdict |
+| kenshi-reader | Sonnet high | read, parse, check |
+| kenshi-generator | Sonnet high | patch, generate |
+| kenshi-debugger | Sonnet xhigh | investigate (root cause and proposed fix), debug |
+| kenshi-escalation | Opus medium | escalate: one hard problem, or when an earlier attempt failed |
+| kenshi-grader | Sonnet high | grade: scores two finished outputs of one task blind to which arm made which; writes a grade file |
+| kenshi-bench | from tags | bench: `[model:x] [effort:y]` tags set model and effort (benchmarks only; Fable is never allowed) |
 
-Coordinator: Sonnet medium, set in `.claude/settings.json` (`model`, `effortLevel`). Choose the model when a session starts. Changing model or effort mid-session can invalidate the prompt cache, so start a new session for a different tier.
+There is no Haiku tier and no Sonnet medium tier. There is no cascade: one agent on the right model does the task, with no verifier step, no verdict files and no FAIL gates.
 
-## Cascade for one ticket
+**Why (2026-10-15, 36-run test: 3 models x low/medium/high/xhigh x 3 investigation prompts, two blind judges; results in `C:\KenshiTestRuns\invest\suite2\FULL_TABLE.md`):** quality out of 25, mean of both judges. Haiku low/medium/high 14.7/15.3/19.0 and Sonnet low/medium 14.3/17.3 were not good enough (each dropped below 20 on at least one prompt). Only Sonnet xhigh (24.7, $1.39, 9.4 min, 0 false claims), Opus medium (22.7, $1.09, 4 min), Opus xhigh (22.8, $3.78) and Haiku xhigh (22.3, $0.74, 10.7 min) scored 20 or more on every prompt; Sonnet high averaged 21.3 ($0.66, 4.4 min) but scored 19.5 on one prompt. Haiku xhigh has no edge over Sonnet or Opus at that time and cost, so Haiku is not used. Opus above medium bought nothing. The old cascade (Haiku investigates, a better model verifies) scored 21.5 for $1.11 in 19 min, worse and slower than one Opus medium run (22.7, $1.09, 4 min) or one Sonnet xhigh run, so it was removed. The measured task was diagnosis; the generator and reader rows are judgement calls from that data, not measured. Revisit after a few real tasks. To run more comparisons (more prompts or models): `docs/MODEL_TEST.md`.
 
-Investigation first: a report of a bug or of a behaviour that should not happen (for example, an NPC that said it would do something and did not) goes to `investigate` (kenshi-debugger, Haiku max). Its proposal (the root cause, the evidence lines with file and line, what was ruled out, the smallest fix, and the proof check) goes to a verifier (Sonnet medium), which checks the evidence and the proof check. Only a PASS sends the fix to a generator, and the generator's change then goes to a verifier too.
+Measured agent runs cost $0.70 to $4 per task, far above the per-call table in the Prices section, which is kept only as a price reference.
 
-Once a fix is in, the steps below apply.
-
-1. Generator, up to 3 attempts, each with the previous failure text. The mechanical checks (tests, RESULT lines, lab checks) decide each attempt.
-2. Verifier. Evidence first. It writes `C:\KenshiTestRuns\verdicts\<ticket>.txt`, whose first word is PASS or FAIL, and judges only what scripts cannot.
-3. On FAIL: `debug` (the router needs a FAIL verdict first), then one more generator attempt with the diagnosis, then the verifier again.
-4. Still FAIL: `escalate` (Opus medium) with the full ticket history. The router needs a debug round on the ticket and a FAIL verdict written after it.
-
-A change counts only after a PASS verdict backed by evidence. The sweep flags a work ticket (patch, generate, debug, escalate or investigate) from the last 6 h that has no verifier call after its last work row, or a verdict that is missing, not PASS, older than that call, or citing fewer than two existing evidence paths.
-
-Automatic at turn end: the Stop gate (`tools/automation/hooks/cascade-gate.ps1`) keeps the cascade going. When a work ticket's next step is missing, it blocks the coordinator from ending its turn and names the Agent call to make: a verifier after a generator or escalation, a debugger after a FAIL, a generator after a debug round. It reads the coordinator's transcript for each subagent's task-notification, so it acts only on finished runs; a ticket with a run still going is skipped. It fails open when `transcript_path` is missing. The log `C:\KenshiTestRuns\ledger\cascade-gate.log` shows whether that path arrives.
-
-Not automatic: nothing stops the coordinator from editing code itself. A direct edit is not an Agent call, so neither the router nor the gate sees it. Blocking direct edits would also block the generator's own edits, unless the hook can tell the coordinator's calls from a subagent's. That is not confirmed.
-
-Why the split can save money: each call is one unit at the table's prices: Haiku max $0.05, Sonnet medium $0.40. Investigating alone on Sonnet medium costs n × $0.40 for n calls. Haiku investigating and Sonnet validating costs n × $0.05 + v × $0.40 for v validation calls. The split is cheaper once n is more than about 1.14 × v: from 2 investigation calls with 1 validation call, from 3 with 2. Even if Haiku needs three times as many calls, the split still wins once n is about 1.6 × v. A one-call task is cheaper on Sonnet alone, because the validation call adds cost and saves nothing. Long runs cost more than the table shows, because every call re-reads the conversation so far, so a short validation package saves more than the table does. Script checks can replace the verifier for mechanical claims, which cuts the validation cost further. That is not built yet.
+Coordinator: Sonnet high (Shay 2026-10-15: close to Opus medium in quality and time at about half the cost, and the coordinator sends many messages; switch to Opus medium if it makes mistakes), set in `.claude/settings.json` (`model`, `effortLevel`). Choose the model when a session starts. Changing model or effort mid-session can invalidate the prompt cache, so start a new session for a different tier.
 
 ## Tags and the router
 
-- The Agent description starts with `[case:<name>]`. `patch`, `generate`, `debug`, `escalate`, `investigate`, `solo`, `verify`, `judge`, `review` and `grade` also need `[ticket:<id>]`.
-- The router denies: a call with no case unless it is kenshi-reader; an unknown case; a case that doesn't match the subagent_type it names; a case without its required ticket; `debug` without a FAIL verdict for its ticket; `escalate` without a debug round on its ticket and a FAIL verdict written after it.
+- The Agent description starts with `[case:<name>]`. A `[ticket:<id>]` tag is optional and is only written to the ledger.
+- The router denies: a call with no case unless it is kenshi-reader; an unknown case; a case that doesn't match the subagent_type it names; a `bench` call without valid model and effort tags.
 - Otherwise it rewrites model and effort to the tier's values. Any model or effort the coordinator passed is overridden, and the ledger records the override.
 - If the router crashes, the call goes through unrouted, the ledger records an error row, and the sweep reports it.
 
@@ -88,11 +74,9 @@ The subagent sees the routing facts in the first line of its prompt (`Routing: c
 
 ## Not enforced
 
-- Retry limits (3 generator attempts, one debugger round) are documented, not enforced by the router.
-- The verifier's judgement. The sweep checks that a verdict exists, starts with PASS, is newer than the verifier call and cites two evidence paths that exist. It does not check that the evidence supports the verdict, so a model can still write a false PASS.
+- Retry limits are not enforced by the router.
+- Nothing stops the coordinator from editing code itself: a direct edit is not an Agent call, so the router does not see it.
 - The grader's judgement. A grade is a gauge: one model judges two outputs, and models can favour length or the first output. Grade twice with the labels swapped to see the position effect. Shay's accept or reject is the ground truth.
-- The chain is only as honest as the ledger. The router writes it; nothing checks it against the transcripts, so a model that edits the ledger or the verdict files by hand can fake the chain.
-- The break-even assumes each call is one price unit from the table. The report does not measure quality: the verifier's verdict and your judgement are the checks.
-- Script-only verdicts (no verifier call when scripts can judge) are not built.
+- The ledger is written by the router; nothing checks it against the transcripts.
 - The Kenshi waker guard Stop and PreToolUse hooks were not registered in any settings file on 2026-10-14. CLAUDE.md "Stay reachable" describes what they should do.
-- The user-level default model is `opus` (`C:\Users\Shay\.claude\settings.json`). This project overrides it to sonnet.
+- The user-level default model is `opus` (`C:\Users\Shay\.claude\settings.json`); this project overrides it to sonnet high.

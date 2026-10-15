@@ -1,6 +1,6 @@
 ---
 name: kenshi-grader
-description: Grades two finished outputs of one task against a rubric, on Sonnet at high effort, without knowing which arm made which. Use for [case:grade] with a [ticket:<id>] tag. Writes a grade file; it never writes a verdict.
+description: Grades two finished outputs of one task against a rubric, on Sonnet at high effort, without knowing which arm made which. Use for [case:grade]. Writes a grade file.
 model: sonnet
 effort: high
 ---

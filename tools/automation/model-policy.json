@@ -1,13 +1,12 @@
 {
-  "_doc": "Model and effort per subagent tier (Shay 2026-10-14). tools/automation/hooks/agent-router.ps1 sets model and effort from here on every Agent call in this project, and enforces the cascade gates (debug needs a FAIL verdict; escalate needs a debug round and a later FAIL). event-sweep.sh checks verdicts for work cases patch, generate, debug, escalate and investigate. The solo case is a benchmark baseline only. The grade case (kenshi-grader, Sonnet high) scores two finished outputs blind and writes a grade file, not a verdict. Prices and reasoning: docs/MODEL_ROUTING.md.",
+  "_doc": "Model and effort per subagent tier (Shay 2026-10-14, revised 2026-10-15 from the 36-run model test). tools/automation/hooks/agent-router.ps1 sets model and effort from here on every Agent call in this project. There is no cascade: no verifier step, no verdict files, no FAIL gates (removed 2026-10-15; one agent on the right model beat cheap-model-then-verify). No Haiku and no Sonnet medium tier. The grade case (kenshi-grader) scores two finished outputs blind and writes a grade file. The bench case takes [model:x] [effort:y] tags. Reasoning and prices: docs/MODEL_ROUTING.md.",
   "tiers": {
-    "kenshi-reader":     { "model": "haiku",  "effort": "low" },
-    "kenshi-generator":  { "model": "haiku",  "effort": "max" },
-    "kenshi-verifier":   { "model": "sonnet", "effort": "medium" },
-    "kenshi-debugger":   { "model": "haiku",  "effort": "max" },
+    "kenshi-reader":     { "model": "sonnet", "effort": "high" },
+    "kenshi-generator":  { "model": "sonnet", "effort": "high" },
+    "kenshi-debugger":   { "model": "sonnet", "effort": "xhigh" },
     "kenshi-escalation": { "model": "opus",   "effort": "medium" },
-    "kenshi-solo":       { "model": "sonnet", "effort": "medium" },
-    "kenshi-grader":     { "model": "sonnet", "effort": "high" }
+    "kenshi-grader":     { "model": "sonnet", "effort": "high" },
+    "kenshi-bench":      { "model": "sonnet", "effort": "high" }
   },
   "cases": {
     "read": "kenshi-reader",
@@ -15,14 +14,10 @@
     "check": "kenshi-reader",
     "patch": "kenshi-generator",
     "generate": "kenshi-generator",
-    "verify": "kenshi-verifier",
-    "judge": "kenshi-verifier",
-    "review": "kenshi-verifier",
     "debug": "kenshi-debugger",
-    "escalate": "kenshi-escalation",
     "investigate": "kenshi-debugger",
-    "solo": "kenshi-solo",
-    "grade": "kenshi-grader"
-  },
-  "needs_ticket": ["patch", "generate", "debug", "escalate", "investigate", "solo", "verify", "judge", "review", "grade"]
+    "escalate": "kenshi-escalation",
+    "grade": "kenshi-grader",
+    "bench": "kenshi-bench"
+  }
 }

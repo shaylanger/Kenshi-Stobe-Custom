@@ -45,6 +45,7 @@ int g_rechatDispatchCooldownMs = 350;
 int g_ttsVolumePercent = 100;
 int g_ttsFadePercent = 100; // TTS distance fade range, % of default (round 18b)
 bool g_ttsEnabled = true;
+bool g_speakWhilePaused = true;
 bool g_enableDialogueMenuTts = true;
 bool g_speedDialogue = false; // TTS plays at 1x regardless of game speed (round 18a)
 bool g_enableRegularDialogueCapture = false;

@@ -8612,9 +8612,18 @@ static void RunTownKnowledgeSync(GameWorld *world) {
   }
 
   std::string townsJson = "[";
+  // world_towns (2026-10-15): every town the scan can read, discovered or not,
+  // with its REAL name. getKnownName() returns the unexplored placeholder until
+  // the town is explored, so the real name comes from RootObjectBase::getName()
+  // (the same call getKnownName() makes once explored; it only returns the
+  // object's own name string, no discovered/explored gate).
+  std::string worldTownsJson = "[";
   size_t emitted = 0;
+  size_t worldEmitted = 0;
   const uint32_t count = allTowns->count;
-  for (uint32_t i = 0; i < count && emitted < kTownKnowledgeHardCap; ++i) {
+  for (uint32_t i = 0; i < count && (emitted < kTownKnowledgeHardCap ||
+                                     worldEmitted < kTownKnowledgeHardCap);
+       ++i) {
     RootObject *object = allTowns->stuff[i];
     if (!object || (uintptr_t)object < 0x1000) {
       continue;
@@ -8624,6 +8633,7 @@ static void RunTownKnowledgeSync(GameWorld *world) {
     bool discovered = false;
     bool explored = false;
     std::string name;
+    std::string worldName;
     Ogre::Vector3 position = Ogre::Vector3::ZERO;
     try {
       if (object->getDataType() != TOWN) {
@@ -8632,33 +8642,64 @@ static void RunTownKnowledgeSync(GameWorld *world) {
       townBase = static_cast<TownBase *>(object);
       discovered = townBase->_NV_isDiscovered();
       explored = townBase->_NV_isExplored();
-      if (!discovered) {
-        continue;
-      }
-      name = TrimCopy(townBase->getKnownName());
-      if (name.empty()) {
-        continue;
-      }
       position = object->getPosition();
     } catch (...) {
       continue;
     }
 
-    if (emitted > 0) {
-      townsJson += ",";
+    if (discovered && emitted < kTownKnowledgeHardCap) {
+      try {
+        name = TrimCopy(townBase->getKnownName());
+      } catch (...) {
+        name.clear();
+      }
     }
-    townsJson += "{\"name\":\"" + EscapeJSON(name) + "\",";
-    townsJson += "\"x\":" + ToString(position.x) + ",";
-    townsJson += "\"y\":" + ToString(position.y) + ",";
-    townsJson += "\"z\":" + ToString(position.z) + ",";
-    townsJson += "\"discovered\":true,";
-    townsJson +=
-        "\"explored\":" + std::string(explored ? "true" : "false") + "}";
-    ++emitted;
+    if (worldEmitted < kTownKnowledgeHardCap) {
+      try {
+        worldName = TrimCopy(object->getName());
+      } catch (...) {
+        worldName.clear();
+      }
+    }
+
+    if (!name.empty()) {
+      if (emitted > 0) {
+        townsJson += ",";
+      }
+      townsJson += "{\"name\":\"" + EscapeJSON(name) + "\",";
+      townsJson += "\"x\":" + ToString(position.x) + ",";
+      townsJson += "\"y\":" + ToString(position.y) + ",";
+      townsJson += "\"z\":" + ToString(position.z) + ",";
+      townsJson += "\"discovered\":true,";
+      townsJson +=
+          "\"explored\":" + std::string(explored ? "true" : "false") + "}";
+      ++emitted;
+    }
+
+    const bool positionFinite = position.x == position.x &&
+                                position.y == position.y &&
+                                position.z == position.z;
+    if (!worldName.empty() && positionFinite) {
+      if (worldEmitted > 0) {
+        worldTownsJson += ",";
+      }
+      worldTownsJson += "{\"name\":\"" + EscapeJSON(worldName) + "\",";
+      worldTownsJson += "\"x\":" + ToString(position.x) + ",";
+      worldTownsJson += "\"y\":" + ToString(position.y) + ",";
+      worldTownsJson += "\"z\":" + ToString(position.z) + ",";
+      worldTownsJson +=
+          "\"discovered\":" + std::string(discovered ? "true" : "false") +
+          ",";
+      worldTownsJson +=
+          "\"explored\":" + std::string(explored ? "true" : "false") + "}";
+      ++worldEmitted;
+    }
   }
   townsJson += "]";
+  worldTownsJson += "]";
 
-  const bool changed = townsJson != g_lastTownKnowledgeDigest;
+  const std::string townDigest = townsJson + "|" + worldTownsJson;
+  const bool changed = townDigest != g_lastTownKnowledgeDigest;
   const bool resendDue = g_lastTownKnowledgeSentTick == 0 ||
                          (nowTick - g_lastTownKnowledgeSentTick) >=
                              kTownKnowledgeResendIntervalMs;
@@ -8669,11 +8710,13 @@ static void RunTownKnowledgeSync(GameWorld *world) {
   const int gameTs = ResolveCurrentGameTsSafe(world);
   std::string payload = "{\"source\":\"kenshi_town_list\",";
   payload += "\"game_ts\":" + ToString(gameTs) + ",";
-  payload += "\"towns\":" + townsJson + "}";
+  payload += "\"towns\":" + townsJson + ",";
+  payload += "\"world_towns\":" + worldTownsJson + "}";
   AsyncPostToStobe(L"/town_knowledge", payload);
-  g_lastTownKnowledgeDigest = townsJson;
+  g_lastTownKnowledgeDigest = townDigest;
   g_lastTownKnowledgeSentTick = nowTick;
   Log("TOWN_KNOWLEDGE_SYNC: sent discovered=" + ToString((int)emitted) +
+      " world=" + ToString((int)worldEmitted) +
       " scanned=" + ToString((int)count) +
       " changed=" + std::string(changed ? "1" : "0"));
 }

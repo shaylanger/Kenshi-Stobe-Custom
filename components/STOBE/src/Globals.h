@@ -44,6 +44,7 @@ extern int g_rechatDispatchCooldownMs;
 extern int g_ttsVolumePercent;
 extern int g_ttsFadePercent;
 extern bool g_ttsEnabled;
+extern bool g_speakWhilePaused; // [Settings] SpeakWhilePaused: speech actions run while the game is paused
 extern bool g_enableDialogueMenuTts;
 extern bool g_speedDialogue;
 extern bool g_enableRegularDialogueCapture;

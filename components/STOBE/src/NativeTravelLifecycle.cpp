@@ -41,7 +41,7 @@ struct Receipt {
   Stobe::Autonomy::OrderFingerprint order;
   unsigned long long revision, evidence;
   unsigned long sessionGeneration;
-  std::string agreement, request, world, task, phase, reason;
+  std::string agreement, request, world, task, planHash, phase, reason;
   std::string dispatchEnvelope;
   Receipt():actor(0),speaker(0),follow(false),terminal(false),arrived(false),released(false),
     direct(false),fullyReleased(false),notStarted(false),dispatchAccepted(false),endPending(false),pendingArrived(false),
@@ -93,7 +93,7 @@ Stobe::NativeTravelReceiptPolicy::Scope ReceiptScope(const Receipt &r) {
   Stobe::NativeTravelReceiptPolicy::Scope scope;
   scope.actor = r.actor; scope.speaker = r.speaker; scope.agreement = r.agreement;
   scope.request = r.request; scope.world = r.world; scope.task = r.task;
-  scope.sessionGeneration = r.sessionGeneration;
+  scope.sessionGeneration = r.sessionGeneration; scope.planHash = r.planHash;
   return scope;
 }
 bool SameHand(const hand &a, const hand &b) {
@@ -144,8 +144,8 @@ bool CancelDirect(GameWorld *world, Receipt &r, std::string &reason) {
   r.endPending = true;
   const bool absentNow = NativeEnded(actor,r);
   r.fullyReleased = Stobe::NativeTravelReceiptPolicy::MatchesRelease(
-    ReceiptScope(r), r.actor, r.speaker, r.agreement, worldId,
-    PlaythroughSession::Generation(), r.task, absentNow);
+    ReceiptScope(r), r.actor, r.speaker, r.agreement, r.request, worldId,
+    PlaythroughSession::Generation(), r.planHash, r.task, absentNow);
   if (!r.fullyReleased) reason = "owned_order_removed_native_end_pending";
   return r.fullyReleased;
 }
@@ -292,6 +292,7 @@ std::string SnapshotJson(unsigned int actor) {
         << ",\"world_id\":" << Quote(r.world) << ",\"task_id\":" << Quote(r.task)
         << ",\"actor_serial\":" << r.actor << ",\"speaker_serial\":" << r.speaker
         << ",\"session_generation\":" << r.sessionGeneration
+        << ",\"plan_hash\":" << Quote(r.planHash)
         << ",\"dispatch_outcome\":" << Quote(r.notStarted ? "not_started_verified" :
              (r.dispatchAccepted ? "accepted" : "uncertain"))
         << ",\"phase\":" << Quote(r.phase) << ",\"reason\":" << Quote(r.reason)
@@ -307,9 +308,10 @@ std::string SnapshotJson(unsigned int actor) {
 bool Start(GameWorld *world, Character *actor, unsigned int speaker, Character *target,
            float x, float y, float z, const std::string &agreement,
            const std::string &request, const std::string &expectedWorld,
-           const std::string &dispatchEnvelope, long long expiresGameTs,
+           const std::string &planHash, const std::string &dispatchEnvelope, long long expiresGameTs,
            long long nowGameTs, std::string &reason) {
-  if (!GameThread() || !world || !actor || !speaker || !_finite(x) || !_finite(y) || !_finite(z)) {
+  if (!GameThread() || !world || !actor || !speaker || !Stobe::NativeTravelReceiptPolicy::IsPlanHash(planHash) ||
+      !_finite(x) || !_finite(y) || !_finite(z)) {
     reason = "invalid_travel_request"; return false;
   }
   if (expiresGameTs <= nowGameTs || expiresGameTs - nowGameTs > 86400) { reason = "invalid_travel_deadline"; return false; }
@@ -359,6 +361,7 @@ bool Start(GameWorld *world, Character *actor, unsigned int speaker, Character *
     r.follow = target != nullptr; r.direct = true; r.expires = expiresGameTs;
     r.issuedTick = GetTickCount();
     r.agreement = agreement; r.request = request; r.world = expectedWorld;
+    r.planHash = planHash;
     r.sessionGeneration = PlaythroughSession::Generation();
     r.dispatchEnvelope = dispatchEnvelope;
     r.subject = target ? target->getHandle() : hand();
@@ -398,16 +401,18 @@ bool Start(GameWorld *world, Character *actor, unsigned int speaker, Character *
   }
 }
 bool ReleaseOwned(GameWorld *world, unsigned int actor, unsigned int speaker,
-                  const std::string &agreement, const std::string &expectedWorld,
-                  unsigned long sessionGeneration, const std::string &task,
+                  const std::string &agreement, const std::string &request,
+                  const std::string &expectedWorld,
+                  unsigned long sessionGeneration, const std::string &planHash,
+                  const std::string &task,
                   std::string &reason) {
   if (!GameThread()) { reason = "not_game_thread"; return false; }
   Lock lock(mutex);
   Receipt *r = Latest(actor);
   if (!r || !r->direct || expectedWorld.empty() || expectedWorld != worldId ||
       !Stobe::NativeTravelReceiptPolicy::MatchesCurrentScope(
-        ReceiptScope(*r), actor, speaker, agreement, r->request, expectedWorld,
-        sessionGeneration) || sessionGeneration != PlaythroughSession::Generation() ||
+        ReceiptScope(*r), actor, speaker, agreement, request, expectedWorld,
+        sessionGeneration, planHash) || sessionGeneration != PlaythroughSession::Generation() ||
       r->task != task) {
     reason = "owned_travel_identity_mismatch"; return false;
   }
@@ -452,8 +457,8 @@ void Tick(GameWorld *world, long long nowGameTs) {
       if (r.endPending) {
         const bool absentNow = NativeEnded(actor,r);
         if (Stobe::NativeTravelReceiptPolicy::MatchesRelease(
-              ReceiptScope(r), r.actor, r.speaker, r.agreement, worldId,
-              PlaythroughSession::Generation(), r.task, absentNow)) {
+              ReceiptScope(r), r.actor, r.speaker, r.agreement, r.request, worldId,
+              PlaythroughSession::Generation(), r.planHash, r.task, absentNow)) {
           r.fullyReleased = true;
           const bool viable = !actor->isDead() && !actor->isUnconcious();
           const bool complete = r.pendingArrived && viable;
@@ -532,8 +537,8 @@ void ObserveIdle(GameWorld *world, Character *actor, long long nowGameTs) {
   Receipt *latest = Latest(serial);
   if (latest && latest->direct && !latest->fullyReleased) {
     if (Stobe::NativeTravelReceiptPolicy::MatchesRelease(
-          ReceiptScope(*latest), latest->actor, latest->speaker, latest->agreement,
-          worldId, PlaythroughSession::Generation(), latest->task, verified) &&
+          ReceiptScope(*latest), latest->actor, latest->speaker, latest->agreement, latest->request,
+          worldId, PlaythroughSession::Generation(), latest->planHash, latest->task, verified) &&
         latest->terminal && !latest->endPending) {
       latest->fullyReleased = true;
       Emit(*latest,"failed","owned_travel_absence_observed",true,true);
@@ -569,17 +574,20 @@ bool DispatchWire(GameWorld *world, Character *actor, const std::string &json,
   }
   if (field("operation") == "release")
     return ReleaseOwned(world, static_cast<unsigned int>(actorId), static_cast<unsigned int>(speaker),
-                        agreement, expectedWorld, static_cast<unsigned long>(sessionGeneration),
-                        field("task_id"), reason);
+                        agreement, field("request_id"), expectedWorld, static_cast<unsigned long>(sessionGeneration),
+                        field("plan_hash"), field("task_id"), reason);
   if (field("operation") != "start") { reason = "unknown_owned_travel_operation"; return false; }
   const std::string request = field("request_id");
+  const std::string planHash = field("plan_hash");
   auto reject = [&](const std::string &why) -> bool {
     reason = why;
     Lock lock(mutex);
     if (!worldId.empty() && expectedWorld == worldId && Token(agreement,96) && Token(request,96) &&
+        Stobe::NativeTravelReceiptPolicy::IsPlanHash(planHash) &&
         issuedRequests.count(Stobe::NativeTravelReceiptPolicy::RequestKey(agreement,request)) == 0 && issuedRequests.size() < 4096) {
       Receipt r; r.actor = static_cast<unsigned int>(actorId); r.speaker = static_cast<unsigned int>(speaker);
       r.agreement = agreement; r.request = request; r.world = expectedWorld;
+      r.planHash = planHash;
       r.sessionGeneration = PlaythroughSession::Generation(); r.dispatchEnvelope = json;
       r.follow = field("kind") == "follow"; r.direct = true; r.notStarted = true; r.fullyReleased = true;
       Emit(r,"failed",why,true,true);
@@ -592,6 +600,8 @@ bool DispatchWire(GameWorld *world, Character *actor, const std::string &json,
     }
     return false;
   };
+  if (!Stobe::NativeTravelReceiptPolicy::IsPlanHash(planHash))
+    return reject("invalid_owned_travel_plan_hash");
   long long expiry = 0;
   if (!integer("expires_gamets", expiry)) return reject("invalid_owned_travel_expiry");
   Character *target = nullptr; float point[3] = {0,0,0};
@@ -614,7 +624,7 @@ bool DispatchWire(GameWorld *world, Character *actor, const std::string &json,
         point[0], point[1], point[2], field("label"), reason)) return reject(reason);
   }
   if (!Start(world, actor, static_cast<unsigned int>(speaker), target, point[0], point[1], point[2],
-               agreement, request, expectedWorld, json, expiry, nowGameTs, reason)) return reject(reason);
+               agreement, request, expectedWorld, planHash, json, expiry, nowGameTs, reason)) return reject(reason);
   return true;
 }
 } }
