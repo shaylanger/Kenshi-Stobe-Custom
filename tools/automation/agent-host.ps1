@@ -5,8 +5,12 @@
 # - singleton (agent-host.pid + live check), started hidden by spawn-wp-session.ps1 (Start-Process -WindowStyle Hidden), same pattern as coord-supervisor
 # - max 4 concurrent agents (live launcher processes); extra jobs wait in the queue
 # - relaunches nothing on its own; an agent that exits without a terminal status is marked FAILED by its launcher (see spawn-wp-session.ps1)
+# - MONITOR (every 30 s, -MonitorOnce for selftests): per RUNNING agent: process gone -> FAILED + respawn todo + wake; status AND log silent > StallMin (10) -> 'AGENT STALL' wake;
+#   > KillMin (20) -> kill the process tree, FAILED + respawn todo + wake; wall clock > WallMin (90, job field max_min overrides) -> kill, STOPPED-CONTEXT; RUNNING status with no
+#   session (INPROC/orphan) silent > StallMin -> 'AGENT ORPHANED' wake. Wakes = a .msg in inbox\coordinator\ (event-wait.sh INBOX). Roll call: agent-rollcall.ps1.
 # - state: agent-queue\host.state.json (heartbeat, live count, last launches); jobs moved to agent-queue\started\
-param([switch]$Once, [int]$IntervalSec = 2, [int]$Max = 4)
+param([switch]$Once, [switch]$MonitorOnce, [int]$IntervalSec = 2, [int]$Max = 4, [int]$MonitorSec = 30,
+      [int]$StallMin = 10, [int]$KillMin = 20, [int]$WallMin = 90)
 $ErrorActionPreference = 'Continue'
 $runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 $here = $PSScriptRoot
@@ -15,7 +19,7 @@ New-Item -ItemType Directory -Force -Path $q, (Join-Path $q 'started') | Out-Nul
 $pidF = Join-Path $q 'agent-host.pid'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
-if (-not $Once) {
+if (-not $Once -and -not $MonitorOnce) {
     if (Test-Path -LiteralPath $pidF) {
         $old = 0; [int]::TryParse((Get-Content -LiteralPath $pidF -Raw).Trim(), [ref]$old) | Out-Null
         if ($old -gt 0 -and $old -ne $PID -and (Get-Process -Id $old -ErrorAction SilentlyContinue)) { "agent-host already running pid $old"; return }
@@ -26,6 +30,81 @@ if (-not $Once) {
 function Get-LiveLaunchers {
     @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -match '\.launch\.ps1' })
+}
+
+. (Join-Path $here 'agent-rollcall.ps1')
+$flagDir = Join-Path $q 'flags'
+New-Item -ItemType Directory -Force -Path $flagDir | Out-Null
+
+function Send-Wake([string]$name, [string]$text) {
+    $d = Join-Path $runs 'inbox\coordinator'
+    New-Item -ItemType Directory -Force -Path $d | Out-Null
+    [IO.File]::WriteAllText((Join-Path $d ("{0}-{1}.msg" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $name)), $text, $utf8)
+}
+function Log-Tail([string]$name) {
+    $lf = Join-Path $runs "agents\out\$name.log"
+    if (-not (Test-Path -LiteralPath $lf)) { return '(no log)' }
+    $t = @(Get-Content -LiteralPath $lf -Tail 3 -ErrorAction SilentlyContinue | ForEach-Object { $x = "$_" -replace '[^\x20-\x7E]', ''; if ($x.Length -gt 160) { $x.Substring(0, 160) } else { $x } })
+    return ($t -join ' // ')
+}
+function Set-AgentTerminal([string]$name, [string]$state, [string]$why) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'agent-status.ps1') $name $state "agent-host monitor" $why '' 'coordinator: respawn a fresh successor from the handoff/status' | Out-Null
+    if ($state -eq 'FAILED') {
+        try {
+            $td = Join-Path $runs 'respawn'; New-Item -ItemType Directory -Force -Path $td | Out-Null
+            $ho = Join-Path $runs "agents\$name.handoff.md"
+            [IO.File]::WriteAllText((Join-Path $td "$name.todo"), ("name: $name`
+written: $(Get-Date -Format 'yyyy-MM-dd HH:mm')`
+task: (agent-host: $why)`
+handoff: $(if (Test-Path -LiteralPath $ho) { $ho } else { '(none written: use the status file)' })`
+status: $(Join-Path $runs "agents\$name.status")`
+next: respawn a FRESH successor with spawn-wp-session.ps1 (same brief + 'continue from the status/handoff')`
+"), $utf8)
+        } catch { }
+    }
+}
+function Invoke-Monitor {
+    foreach ($a in @(Get-AgentRoll)) {
+        $n = $a.Name
+        $fStall = Join-Path $flagDir "$n.stall"
+        if ($a.Kind -eq 'INPROC') {
+            if ($a.StatusAgeMin -gt $StallMin -and -not (Test-Path -LiteralPath (Join-Path $flagDir "$n.orphan"))) {
+                'x' | Set-Content (Join-Path $flagDir "$n.orphan")
+                Send-Wake $n "AGENT ORPHANED $n : status RUNNING, no session/process known to the agent-host, silent $($a.StatusAgeMin) min. Latest: $($a.Latest). Respawn it (spawn-wp-session.ps1) or agent-abandon.ps1."
+            } elseif ($a.StatusAgeMin -le $StallMin) { Remove-Item (Join-Path $flagDir "$n.orphan") -ErrorAction SilentlyContinue }
+            continue
+        }
+        # launching grace: no pid recorded yet and started < 2 min ago
+        if ($a.LauncherPid -le 0 -and $a.StartedAgeMin -ne $null -and $a.StartedAgeMin -lt 2) { continue }
+        if (-not $a.Alive) {
+            Set-AgentTerminal $n 'FAILED' "process gone without a terminal status (launcher $($a.LauncherPid), claude $($a.ClaudePid)); log tail: $(Log-Tail $n)"
+            Send-Wake $n "AGENT DEAD $n : process gone while status was RUNNING (status age $($a.StatusAgeMin) min). Marked FAILED, respawn todo written. Log: $(Log-Tail $n)"
+            continue
+        }
+        $wall = $WallMin
+        $jf = Join-Path $q "started\$n.job"
+        if (Test-Path -LiteralPath $jf) { try { $jj = Get-Content -LiteralPath $jf -Raw | ConvertFrom-Json; if ($jj.max_min) { $wall = [int]$jj.max_min } } catch { } }
+        if ($a.StartedAgeMin -ne $null -and $a.StartedAgeMin -gt $wall) {
+            & taskkill /PID $a.LauncherPid /T /F 2>&1 | Out-Null
+            Set-AgentTerminal $n 'STOPPED-CONTEXT' "wall-clock limit $wall min reached; killed by agent-host. Successor continues from its handoff."
+            Send-Wake $n "AGENT WALL-CLOCK $n : ran $($a.StartedAgeMin) min (limit $wall), killed, marked STOPPED-CONTEXT with respawn todo."
+            continue
+        }
+        $logQuiet = ($null -eq $a.LogAgeMin) -or ($a.LogAgeMin -gt $StallMin)
+        $silent = [math]::Max($a.StatusAgeMin, $(if ($null -eq $a.LogAgeMin) { $a.StatusAgeMin } else { $a.LogAgeMin }))
+        $silentMin = [math]::Min($a.StatusAgeMin, $(if ($null -eq $a.LogAgeMin) { $a.StatusAgeMin } else { $a.LogAgeMin }))
+        if ($a.StatusAgeMin -gt $StallMin -and $logQuiet) {
+            if ($silentMin -gt $KillMin) {
+                & taskkill /PID $a.LauncherPid /T /F 2>&1 | Out-Null
+                Set-AgentTerminal $n 'FAILED' "stalled > $KillMin min (status $($a.StatusAgeMin) min, log $($a.LogAgeMin) min); killed by agent-host. Log: $(Log-Tail $n)"
+                Send-Wake $n "AGENT KILLED $n : stalled $silentMin min (status+log), process tree killed, marked FAILED with respawn todo. Log: $(Log-Tail $n)"
+                Remove-Item $fStall -ErrorAction SilentlyContinue
+            } elseif (-not (Test-Path -LiteralPath $fStall)) {
+                'x' | Set-Content $fStall
+                Send-Wake $n "AGENT STALL $n : $silentMin min with no status heartbeat (status $($a.StatusAgeMin) m, log $(if ($null -eq $a.LogAgeMin) { '-' } else { $a.LogAgeMin }) m). Latest: $($a.Latest). Log: $(Log-Tail $n). Auto-kill at $KillMin min."
+            }
+        } else { Remove-Item $fStall -ErrorAction SilentlyContinue }
+    }
 }
 
 function Start-Job1($jobFile) {
@@ -59,7 +138,10 @@ function Start-Job1($jobFile) {
 }
 
 $last = @()
+$nextMon = Get-Date
+if ($MonitorOnce) { Invoke-Monitor; return }
 do {
+    if ((Get-Date) -ge $nextMon) { try { Invoke-Monitor } catch { $last += "MONITOR ERROR: $($_.Exception.Message)" }; $nextMon = (Get-Date).AddSeconds($MonitorSec) }
     $jobs = @(Get-ChildItem -LiteralPath $q -Filter '*.job' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime)
     $live = (Get-LiveLaunchers).Count
     foreach ($j in $jobs) {

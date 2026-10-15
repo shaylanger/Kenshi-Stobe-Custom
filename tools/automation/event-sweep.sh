@@ -35,6 +35,10 @@ for f in "$R"/agents/*.status; do
     age=$(( (now - $(stat -c %Y "$f")) / 60 )); [ "$age" -ge 60 ] && say "STATUS $n RUNNING ${age}m"
   fi
 done
+# Roll call of RUNNING agents (kind INDEPENDENT/INPROC, process alive, status age, log age, latest line); informational, makes a stuck agent visible every 10 min
+rc=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding	oolsutomationgent-rollcall.ps1' < /dev/null 2>/dev/null | tr -d '')
+[ -n "$rc" ] && printf '%s
+' "$rc" | sed 's/^ROLLCALL /SWEEP ROLLCALL /'
 for m in "$R"/inflight/*; do
   [ -f "$m" ] || continue
   [ -n "$(find "$m" -mmin -360 2>/dev/null)" ] || continue

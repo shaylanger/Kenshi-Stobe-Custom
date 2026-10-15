@@ -7,7 +7,7 @@
 #   BATCH     batch-health.sh <out-dir> (--batch) is not HEALTH OK (HEALTH DONE or HEALTH STALL)
 #   RIG       rig-health.sh exits non-zero (stall, alert, idle with no reason)
 #   BACKSTOP  none of the above for --backstop s (default 600): runs event-sweep.sh and prints its lines after the header
-# Inbox and status are checked every --poll s (default 5); batch and rig health every 120 s, silently (no model turn).
+# Inbox and status are checked every --poll s (default 5); batch and rig health every 300 s (EW_HEALTH_EVERY), silently (no model turn).
 # Output: "EVENT <kind> <detail>" then exit 0. Test switches: KAH_RUNS (root, default /mnt/c/KenshiTestRuns), --no-health.
 # kenshi-waker-guard counts this script as a waker (its name is in the command line).
 set -u
@@ -46,8 +46,15 @@ while :; do
       echo "EVENT STATUS $n $st: $task$rs"; exit 0
     fi
   done < <(find "$R/agents" -maxdepth 1 -name '*.status' -newer "$MARK" 2>/dev/null)
-  # BATCH + RIG: silent health checks every 120 s; anything not healthy wakes the session
-  if [ "$HEALTH" = 1 ] && [ $(( now - last_health )) -ge "${EW_HEALTH_EVERY:-120}" ]; then
+  # AGENT-HOST: the hidden daemon that owns the independent agents writes agent-queue/host.state.json every ~2 s; stale > 120 s while it had agents/jobs = restart it hidden and wake
+  hs="$R/agent-queue/host.state.json"
+  if [ -f "$hs" ] && [ $(( now - $(stat -c %Y "$hs") )) -gt "${EW_HOST_STALE:-120}" ] && grep -Eq '"(live|queued)": *[1-9]' "$hs"; then
+    powershell.exe -NoProfile -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\KenshiModding\tools\automation\agent-host.ps1'" < /dev/null >/dev/null 2>&1
+    touch "$hs"
+    echo "EVENT STALL agent-host: heartbeat was > ${EW_HOST_STALE:-120}s old with live/queued agents; restarted it hidden (check agent-rollcall.ps1 and the agents' pids)"; exit 0
+  fi
+  # BATCH + RIG: silent health checks every 300 s (EW_HEALTH_EVERY); anything not healthy wakes the session
+  if [ "$HEALTH" = 1 ] && [ $(( now - last_health )) -ge "${EW_HEALTH_EVERY:-300}" ]; then
     last_health=$now
     if [ -n "$BATCH" ]; then
       b=$(timeout 120 bash "$HERE/batch-health.sh" "$BATCH" 2>&1 | tail -1)

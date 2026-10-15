@@ -112,7 +112,7 @@ $launchText = @"
 Get-ChildItem Env: | Where-Object { `$_.Name -like 'CLAUDE*' -and -not [Environment]::GetEnvironmentVariable(`$_.Name, 'User') -and -not [Environment]::GetEnvironmentVariable(`$_.Name, 'Machine') } | ForEach-Object { Remove-Item -LiteralPath "Env:`$(`$_.Name)" -ErrorAction SilentlyContinue }
 `$env:KAH_AGENT_NAME = '$Name'
 Set-Location '$work'
-& claude '-p' '$bootstrap' '--model', '$Model', '--effort', '$Effort', ${permArg}'--session-id', '$sid', '-n', '$Name', '--add-dir', '$work', '$runs' *>> '$logF'
+& claude '-p' '$bootstrap' '--output-format', 'stream-json', '--verbose', '--model', '$Model', '--effort', '$Effort', ${permArg}'--session-id', '$sid', '-n', '$Name', '--add-dir', '$work', '$runs' *>> '$logF'
 `$code = `$LASTEXITCODE
 try {
     `$st = (Get-Content -LiteralPath '$statusF' -Raw -ErrorAction Stop)
