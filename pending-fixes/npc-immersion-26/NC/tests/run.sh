@@ -32,5 +32,6 @@ run activity_goal_route_lifecycle c++14 "$FIN" $A/activity_goal_route_lifecycle_
 run activity_discovery_ref c++14 "$FIN" $A/activity_discovery_ref_contract_tests.cpp
 run activity_status_snapshot c++14 "$FIN" -I$S/../tests $A/activity_status_snapshot_tests.cpp
 if python3 playthrough_session_retry_source_tests.py >$W/pt.out 2>&1; then echo "RESULT playthrough_session_retry_source PASS $(tail -1 $W/pt.out)"; else echo "RESULT playthrough_session_retry_source FAIL $W/pt.out"; fail=$((fail+1)); fi
+if python3 ctxpush_source_tests.py >$W/cp.out 2>&1; then echo "RESULT ctxpush_source PASS $(tail -1 $W/cp.out)"; else echo "RESULT ctxpush_source FAIL $W/cp.out"; fail=$((fail+1)); fi
 echo "SUMMARY failures=$fail"
 exit $fail
