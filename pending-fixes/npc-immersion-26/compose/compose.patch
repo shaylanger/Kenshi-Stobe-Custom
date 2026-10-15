@@ -5335,27 +5335,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/nativ
  }
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negotiation_engine.php b/lib/negotiation_engine.php
 --- a/lib/negotiation_engine.php	2026-10-12 21:20:51.617338718 -0500
-+++ b/lib/negotiation_engine.php	2026-10-15 18:05:44.271611242 -0500
-@@ -769,7 +769,7 @@
-         $deadlineGamets = $kind === 'social' ? max(0, $gamets) + STOBE_NEG_SOCIAL_DEADLINE_GAMETS
-             : ($gamets > 0 ? $gamets + STOBE_NEG_PAY_WINDOW_GAMETS : 0);
-         $npcRow = stobeNegNpcRow(strval($deal['npc_name']), intval($deal['npc_serial'] ?? 0));
--        $playerSerial = function_exists('stobeResolveLiveParticipantSerial') ? stobeResolveLiveParticipantSerial($player) : 0;
-+        $playerSerial = function_exists('stobeResolveLiveParticipantSerial') ? stobeResolveLiveParticipantSerial($player) : 0;
-         $playerRow = stobeNegNpcRow($player, intval($playerSerial));
-         $baseline = [
-             'at'=>$now,
-@@ -780,8 +780,8 @@
-             'player_inventory'=>stobeNegInventoryCounts(strval($playerRow['inventory'] ?? '') . ', ' . strval($playerRow['equipment'] ?? '')),
-             'witnesses_people'=>$peopleRaw,
-         ];
--        require_once __DIR__ . '/social_repair_agreements.php';
--        $baseline['repair_binding_scope'] = stobeSocialRepairAgreementScope($npcRow, $playerRow, $gamets, $deadlineGamets);
-+        require_once __DIR__ . '/social_repair_agreements.php';
-+        $baseline['repair_binding_scope'] = stobeSocialRepairAgreementScope($npcRow, $playerRow, $gamets, $deadlineGamets);
-         $state = stobeNegBuildTermState($terms, $finalActions, $player, $now, $kind, $deadlineUnix);
-         $baseline['repair_action_tickets'] = stobeSocialRepairCreateAgreementTickets($deal, $baseline['repair_binding_scope'], $state);
-         // Look back for a hand-over made moments before the deal was recorded, but never
++++ b/lib/negotiation_engine.php	2026-10-15 18:11:00.655755996 -0500
 @@ -865,6 +865,20 @@
      return $term;
  }
@@ -5387,32 +5367,6 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negot
          if ($exec['transferred'] >= $qty || ($nowCount - $baseCount) >= $qty) {
              $term['status'] = 'VERIFIED';
              $note($term, 'player_delivered_item', ['executed'=>$exec['transferred'], 'npc_count_delta'=>$nowCount - $baseCount]);
-@@ -1136,10 +1153,10 @@
-         if (json_encode($state[$idx]) !== $before) $changed = true;
-     }
- 
--    require_once __DIR__ . '/social_repair_agreements.php';
--    $boundState = stobeSocialRepairBindAgreementTerms($deal, $state);
--    if ($boundState !== $state) { $state = $boundState; $changed = true; }
--
-+    require_once __DIR__ . '/social_repair_agreements.php';
-+    $boundState = stobeSocialRepairBindAgreementTerms($deal, $state);
-+    if ($boundState !== $state) { $state = $boundState; $changed = true; }
-+
-     $playerTerms = array_filter($state, static fn($t) => ($t['by'] ?? '') === 'player' && ($t['kind'] ?? '') !== 'PROMISE'
-         && strval($t['when'] ?? '') !== 'after_npc');
-     $playerDone = count($playerTerms) === 0 || count(array_filter($playerTerms, static fn($t) => ($t['status'] ?? '') === 'VERIFIED')) === count($playerTerms);
-@@ -2102,8 +2119,8 @@
-         // REL (phase 5): with SOCIAL_RELATIONSHIP_MODE=enabled the relationship system scores the outcome
-         // (kept/broken promise, betrayal) and the legacy delta is skipped; off/shadow keep the legacy delta.
-         require_once __DIR__ . '/social_agreements.php';
--        require_once __DIR__ . '/social_repair_agreements.php';
--        if ($status === 'COMPLETE' && stobeSocialRepairAgreementCompleteBound($deal, is_array($state) ? $state : [])) $delta = 0;
-+        require_once __DIR__ . '/social_repair_agreements.php';
-+        if ($status === 'COMPLETE' && stobeSocialRepairAgreementCompleteBound($deal, is_array($state) ? $state : [])) $delta = 0;
-         if (stobeSocialAgreementOutcome($deal, $player, $status, is_array($state) ? $state : [])) $delta = 0;
-         if ($delta !== 0 && function_exists('stobeGetNpcRelationshipMap')) {
-             $npcData = getNpcData($npc);
 @@ -2184,8 +2201,8 @@
          $kept = intval($row['player_kept'] ?? 0);
          $broken = intval($row['player_broken'] ?? 0);
