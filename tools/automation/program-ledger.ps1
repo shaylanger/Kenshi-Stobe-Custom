@@ -311,7 +311,16 @@ function Invoke-Cmd([string]$cmd, [string[]]$a) {
                 $open = @($o.wps | Where-Object { "$($_.state)" -ne 'done' })
                 if (-not $open.Count) { continue }
                 "=== PROGRAM LEDGER $($o.name) ($($o.md)): $($open.Count) of $(@($o.wps).Count) wps unfinished, updated $(Format-Age $o.updated) ago ==="
-                foreach ($w in $open) { Format-WpLine $w }
+                foreach ($w in $open) {
+                    Format-WpLine $w
+                    # independent agent sessions (spawn-wp-session.ps1): LIVE = adopt, DEAD = respawn from the handoff (WP_SIZING.md section 10)
+                    $ss = @($w.sessions)
+                    if ($ss.Count -and "$($ss[-1])") {
+                        $sn = ([string]$ss[-1]).Split('|')[0]
+                        $lv = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'agent-session-live.ps1') $sn 2>&1 | Select-Object -First 1)
+                        "      independent session ${sn}: $lv" + $(if ("$lv" -like 'DEAD*') { "  -> respawn: spawn-wp-session.ps1 ${sn}b <case> <prompt-file> -Program $($o.name) -Wp $($w.id) (brief from agents\$sn.handoff.md)" } else { '' })
+                    }
+                }
                 $rd = @(Get-Ready $o | ForEach-Object { $_.id })
                 if ($rd.Count) { "  ready to start (todo, depends done): $($rd -join ', ')" }
             }
