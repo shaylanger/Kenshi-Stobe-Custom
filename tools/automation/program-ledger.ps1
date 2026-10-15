@@ -13,6 +13,9 @@
 #                                        -Md -Write = write it to the ledger's `md` file
 #   brief                                unfinished WPs of every ledger, one line each (session-start.ps1 prints this)
 #   next [<name>]                        todo WPs whose depends are all done (ready to start)
+#   session <name> <wp> <agent> <launcher_pid> [claude_pid]   record an independent claude session (spawn-wp-session.ps1): sets/replaces the
+#                                        `sessions` entry "agent|launcher_pid|claude_pid|startedISO" and makes <agent> the WP's agent (when the WP has
+#                                        none, or already has this one) or appends it to `successors` (agent-status.ps1 RUNNING then takes it over)
 #   sync <agent> <STATE>                 what agent-status.ps1 calls: the WP whose `agent` is <agent> (or whose `successors` lists
 #                                        it: then it becomes the WP's agent) follows the status: RUNNING->running, DONE->done,
 #                                        STOPPED-CONTEXT|FAILED->stopped, last_checkpoint=now. done is sticky (never regressed).
@@ -30,8 +33,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $SelfPath = $PSCommandPath
-$KnownKeys = @('items', 'size_estimate_tokens', 'depends', 'state', 'agent', 'successors', 'outputs', 'handoff', 'last_checkpoint')
-$ListKeys = @('depends', 'successors', 'outputs')
+$KnownKeys = @('items', 'size_estimate_tokens', 'depends', 'state', 'agent', 'successors', 'outputs', 'handoff', 'last_checkpoint', 'sessions')
+$ListKeys = @('depends', 'successors', 'outputs', 'sessions')
 $States = @('todo', 'running', 'stopped', 'done', 'blocked')
 
 function Get-ProgDir {
@@ -239,6 +242,7 @@ function Get-Markdown($o) {
         if (@($w.successors).Count) { $L.Add("- successors: $(@($w.successors) -join ', ')") }
         if ($w.handoff) { $L.Add("- handoff: $($w.handoff)") }
         foreach ($p in @($w.outputs)) { $L.Add("- output: $p") }
+        foreach ($p in @($w.sessions)) { $L.Add("- session: $p") }
     }
     return ($L -join "`n") + "`n"
 }
@@ -318,6 +322,24 @@ function Invoke-Cmd([string]$cmd, [string[]]$a) {
                 if ($o -is [string]) { $o; continue }
                 foreach ($w in (Get-Ready $o)) { "$($o.name)/$($w.id)  est $($w.size_estimate_tokens)  $($w.items)" }
             }
+        }
+        'session' {
+            if ($a.Count -lt 4) { throw 'usage: session <name> <wp> <agent> <launcher_pid> [claude_pid]' }
+            $p = Get-LedgerPath $a[0]
+            $ag = $a[2]
+            if ($ag -notmatch '^[A-Za-z0-9_.-]+$') { throw "bad agent name '$ag'" }
+            if ($a[3] -notmatch '^\d+$' -or ($a.Count -gt 4 -and $a[4] -notmatch '^\d+$')) { throw 'pids must be integers' }
+            $entry = "$ag|$($a[3])|$(if ($a.Count -gt 4) { $a[4] } else { '' })|$(Get-Iso)"
+            Invoke-Locked {
+                $o = Read-Ledger $p
+                $w = Get-Wp $o $a[1]
+                $w.sessions = @(@($w.sessions | Where-Object { ("$_" -split '\|')[0] -ine $ag }) + $entry)
+                if (-not "$($w.agent)" -or "$($w.agent)" -ieq $ag) { $w.agent = $ag }
+                elseif (-not (@($w.successors) | Where-Object { "$_" -ieq $ag })) { $w.successors = @(@($w.successors) + $ag) }
+                $w.last_checkpoint = Get-Iso
+                Write-Ledger $p $o
+            }
+            "session $($a[0])/$($a[1]) <- $entry"
         }
         'sync' {
             if ($a.Count -lt 2) { throw 'usage: sync <agent> <STATE>' }
@@ -420,6 +442,16 @@ function Invoke-Selftest {
         Run 'set' @('t1', 'c', 'agent=agC', 'state=running')
         Run 'sync' @('cNew', 'STOPPED-CONTEXT');        T ((J 't1').wps[2].state -eq 'running' -and (J 't1').wps[2].agent -eq 'agC') '6h a queued successor stopping does not stop the live agent'
         $ck = (J 't1').wps[0].last_checkpoint; Run 'sync' @('agA', 'RUNNING'); T ((J 't1').wps[0].state -eq 'done') '6i sync RUNNING on a done wp keeps done'
+        # independent sessions
+        Run 'session' @('t1', 'b', 'sessB', '4242', '4343')
+        $w = (J 't1').wps[1]
+        T (@($w.sessions).Count -eq 1 -and @($w.sessions)[0] -match '^sessB\|4242\|4343\|\d{4}-' -and $w.agent -eq 'agB2' -and (@($w.successors) -contains 'sessB')) '6j session: entry name|launcher|claude|iso; wp with another agent gets it as successor'
+        Run 'session' @('t1', 'b', 'sessB', '5000')
+        $w = (J 't1').wps[1]
+        T (@($w.sessions).Count -eq 1 -and @($w.sessions)[0] -like 'sessB|5000||*' -and @($w.successors | Where-Object { $_ -eq 'sessB' }).Count -eq 1) '6k session twice replaces the entry, successor not duplicated'
+        Run 'add-wp' @('t1', 'sx', 'items=9')
+        Run 'session' @('t1', 'sx', 'sessX', '77')
+        T ((J 't1').wps[3].agent -eq 'sessX' -and (Throws { Run 'session' @('t1', 'sx', 'bad name', '1') }) -and (Throws { Run 'session' @('t1', 'sx', 'ok', 'x') }) -and (Throws { Run 'session' @('t1', 'nope', 'ok', '1') })) '6l session on a wp without agent sets it; bad name/pid/wp rejected'
         # backup / restore / atomic / contract
         $bd = Join-Path $env:KPL_DIR '.bak'
         T (Test-Path (Join-Path $bd 't1.json.bak')) '7a .bak exists after writes'
