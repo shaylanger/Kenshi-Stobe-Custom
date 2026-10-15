@@ -81,8 +81,10 @@ function WslRun([string]$bash) {
   Remove-Item $f -Force -ErrorAction SilentlyContinue
   @($out | ForEach-Object { "$_" })
 }
-$procs = @(Get-Process kenshi_x64 -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ ProcessId = $_.Id; ExecutablePath = $_.Path } })
-function LaneProcs($L) { $pre = $L.dir.TrimEnd('\') + '\'; @($procs | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase) }) }
+# Get-Process .Path is null over ssh (other session); the CIM/WMI process table always carries ExecutablePath
+$procs = @(Get-CimInstance Win32_Process -Filter "Name='kenshi_x64.exe'" -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ ProcessId = [int]$_.ProcessId; ExecutablePath = $_.ExecutablePath } })
+# ',' keeps a single match an array (a lone pscustomobject has no .Count)
+function LaneProcs($L) { $pre = $L.dir.TrimEnd('\') + '\'; ,@($procs | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase) }) }
 foreach ($L in $lanes) { if ((LaneProcs $L).Count) { "RUNNING $($L.id) pid=$(((LaneProcs $L) | ForEach-Object ProcessId) -join ',')" } }
 
 # 1 install-dirs
