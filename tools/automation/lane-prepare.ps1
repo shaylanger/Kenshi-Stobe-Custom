@@ -4,7 +4,8 @@ Make an isolated 4080 test lane's Kenshi install ready to launch next to the oth
 `kenshi-instance.ps1 sync -Instance <n>` (junctions/hard links from the Steam install, own settings.cfg "User save location=0", own
 mods\ runtime files); this script then does the lane-specific parts, all from lane-defs.4080.json:
   1. Stobe mod files: Stobe.dll copied from the source lane (-FromLane, default i3: the reviewed build that lane already runs; SHA256
-     compared, no other DLL is touched), Stobe.ini / StobeCustom.ini ServerPort = the lane's php_port (ServerHost 127.0.0.1).
+     compared, no other DLL is touched), Stobe.ini / StobeCustom.ini ServerPort = the lane's php_port (ServerHost 127.0.0.1); StobeCustom.ini is normalised with lane-ini-lib.ps1
+     (no BOM, exactly ONE [Settings] block, EnableBoredEventConversations=1; the synced live file has a BOM + two blocks, the 2nd with =0 and the BOM made it win).
   2. Save: a fresh copy of fixture -FromSave (default kah-stobe-4080-standalone-active, taken from the source lane's save dir) as the
      lane's own save name (defs "save"); refuses to overwrite an existing one unless -Force.
   3. Window: C:\KenshiTestRuns\inst-window-<n>.pos = defs window_pos (inst-window.ps1 parks the lane's windows there, never activated), so
@@ -17,6 +18,7 @@ param([Parameter(Mandatory = $true)][string]$Lane, [string]$FromLane = 'i3', [st
       [string]$Defs = 'C:\KenshiTestRuns\lane-i4\lane-defs.4080.json', [switch]$Force)
 $ErrorActionPreference = 'Stop'
 function Fail([string]$m) { "RESULT lane-prepare $Lane FAIL $m"; exit 1 }
+. (Join-Path $PSScriptRoot 'lane-ini-lib.ps1')
 $d = Get-Content $Defs -Raw | ConvertFrom-Json
 $L = $d.lanes.$Lane; $S = $d.lanes.$FromLane
 if (-not $L -or -not $S) { Fail "unknown lane in $Defs" }
@@ -37,6 +39,11 @@ if ($h1 -ne $h2) { Fail "Stobe.dll hash mismatch after copy" }
 foreach ($ini in 'Stobe.ini', 'StobeCustom.ini') {
   $f = "$dir\RE_Kenshi\mods\Stobe\$ini"
   if (-not (Test-Path $f)) { $f2 = "$($S.dir)\RE_Kenshi\mods\Stobe\$ini"; if (Test-Path $f2) { New-Item -ItemType Directory -Force (Split-Path $f) | Out-Null; Copy-Item $f2 $f } else { continue } }
+  if ($ini -eq 'StobeCustom.ini') {   # no BOM, ONE [Settings] block, EnableBoredEventConversations=1 (lane-ini-lib.ps1; the live file has a BOM + two blocks)
+    $null = Write-LaneIni -Path $f -Port ([int]$L.php_port)
+    $bad = @(Test-LaneIni -Path $f -Port ([int]$L.php_port)); if ($bad.Count) { Fail "StobeCustom.ini still invalid: $($bad -join '; ')" }
+    "$ini -> ServerPort=$($L.php_port), no BOM, one [Settings], EnableBoredEventConversations=1"; continue
+  }
   $bom = ([IO.File]::ReadAllBytes($f) | Select-Object -First 1) -eq 0xEF; $raw = [IO.File]::ReadAllText($f)
   $new = [regex]::Replace($raw, '(?m)^ServerPort=\d+', "ServerPort=$($L.php_port)")
   $new = [regex]::Replace($new, '(?m)^ServerHost=.*', 'ServerHost=127.0.0.1')

@@ -25,13 +25,21 @@ Items:
   npc-world        each running game reports its own save name (distinct saves = distinct world state)
   resources        RAM < 85% used, VRAM < 90%, per-process numbers
   markers (5090)   distinct inflight markers, present while the lane's game runs
+  lane-config      WARNING lines only (never FAIL, not counted in the exit code): `RESULT lane-isolation lane-config <rig>-<lane> ini|key PASS|WARN|FIXED ...` from
+                   lane-config-check.ps1 (StobeCustom.ini no BOM / one [Settings] / EnableBoredEventConversations=1; activity-transport.key beside Stobe.dll)
 #>
 param([Parameter(Position = 0, Mandatory = $true)][string]$Rig, [string]$Defs = '')
 $ErrorActionPreference = 'Continue'
 $rigHost = 'DESKTOP-NQQPA73'
 function Out-R([string]$item, [bool]$ok, [string]$ev) { $script:nfail += $(if ($ok) { 0 } else { 1 }); "RESULT lane-isolation $item $(if ($ok) { 'PASS' } else { 'FAIL' }) $ev" }
 $script:nfail = 0
-if ($Rig -eq '5090') { & "$(Split-Path -Parent $MyInvocation.MyCommand.Path)\lane-isolation-check-5090.ps1" @(if ($Defs) { '-Registry'; $Defs }); exit $LASTEXITCODE }
+# lane-config-check.ps1 (ini: no BOM / one [Settings] / EnableBoredEventConversations=1; key beside Stobe.dll): WARNING lines only, never a FAIL
+$script:laneCfgDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+function Emit-LaneConfigWarn([string]$r) {
+  $cc = Join-Path $script:laneCfgDir 'lane-config-check.ps1'
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $cc $r 2>&1 | Where-Object { $_ -match '^RESULT lane-config' -and $_ -notmatch ' boot ' } | ForEach-Object { ("$_" -replace '^RESULT lane-config', 'RESULT lane-isolation lane-config') }
+}
+if ($Rig -eq '5090') { & "$(Split-Path -Parent $MyInvocation.MyCommand.Path)\lane-isolation-check-5090.ps1" @(if ($Defs) { '-Registry'; $Defs }); $rc5 = $LASTEXITCODE; if (-not $Defs) { Emit-LaneConfigWarn '5090' }; exit $rc5 }
 if ($Rig -ne '4080') { "RESULT lane-isolation setup FAIL rig '$Rig' has no lane definitions (4080, 5090)"; exit 2 }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -56,6 +64,7 @@ if ($env:COMPUTERNAME -ne $rigHost) {
   }
   if (@($mk.Values | Select-Object -Unique).Count -ne $mk.Count) { $bad += 'two lanes share one marker file' }
   Out-R 'markers' ($bad.Count -eq 0) ($(if ($bad.Count) { $bad -join '; ' } else { $ev -join ' ' }))
+  if (-not $Defs) { Emit-LaneConfigWarn '4080' }
   exit $(if ($rc -ne 0 -or $script:nfail -gt 0) { 1 } else { 0 })
 }
 

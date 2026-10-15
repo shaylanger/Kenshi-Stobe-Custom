@@ -13,6 +13,7 @@ Registry: C:\KenshiTestRuns\lanes\lanes-5090.json
 #>
 param([Parameter(Mandatory)][ValidateSet('i3', 'i4', 'i5')][string]$Lane, [string]$FromLane = 'i3', [string]$SrcSave = 'kah-imm26-5090-ready', [switch]$Check)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lane-ini-lib.ps1')
 if ($Lane -eq 'i3') { throw 'i3 is the operator lane: never rewritten by this script' }
 $reg = Get-Content 'C:\KenshiTestRuns\lanes\lanes-5090.json' -Raw | ConvertFrom-Json
 $L = $reg.lanes | Where-Object id -eq $Lane; $T = $reg.lanes | Where-Object id -eq $FromLane
@@ -33,15 +34,14 @@ foreach ($f in $files) {
   if ($f -like 'data\*') { $dd = Split-Path $d; if ((Get-Item $dd -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "$dd is a junction into the Steam install: refusing to write" } }
   [IO.File]::Copy($s, $d, $true); $rec.files[$f] = Hsh $d
 }
-# port edit: ServerPort only (every [Settings] occurrence), ServerHost stays 127.0.0.1
+# ini: ServerPort := the lane's port, ServerHost 127.0.0.1, and (lane-ini-lib.ps1) NO BOM, exactly ONE [Settings] block, EnableBoredEventConversations=1
+# (the template/live file has a BOM + two [Settings] blocks; the BOM made the 2nd block, =0, win -> EnableBoredEvents=false)
 $ini = $L.ini
 if (-not $Check) {
-  $txt = [IO.File]::ReadAllText($ini)
-  $txt = [regex]::Replace($txt, '(?m)^ServerPort=.*$', "ServerPort=$($L.backend_port)")
-  $txt = [regex]::Replace($txt, '(?m)^ServerHost=.*$', 'ServerHost=127.0.0.1')
-  [IO.File]::WriteAllText($ini, $txt, (New-Object Text.UTF8Encoding $false))
+  $null = Write-LaneIni -Path $ini -Port ([int]$L.backend_port)
   $rec.files['RE_Kenshi\mods\Stobe\StobeCustom.ini'] = Hsh $ini
 }
+$iniBad = @(Test-LaneIni -Path $ini -Port ([int]$L.backend_port)); if ($iniBad.Count) { "WARN ini: $($iniBad -join '; ')" }
 "ini ServerPort lines: " + ((Select-String -Path $ini -Pattern '^Server(Host|Port)=' | ForEach-Object { $_.Line }) -join ' ')
 # gfx-off like the template (Dust + ReShade), only when the template has them off
 foreach ($pair in @(@('mods\Dust\RE_Kenshi.json', 'mods\Dust\RE_Kenshi.json.gfxoff'), @('dxgi.dll', 'dxgi.dll.gfxoff'))) {
@@ -49,9 +49,23 @@ foreach ($pair in @(@('mods\Dust\RE_Kenshi.json', 'mods\Dust\RE_Kenshi.json.gfxo
   if ($tOff -and $lOn) { "gfxoff {0}" -f $pair[0]; if (-not $Check) { Move-Item -LiteralPath (Join-Path $L.dir $pair[0]) (Join-Path $L.dir $pair[1]) -Force } }
 }
 # live leftovers
-$junk = @(Get-ChildItem "$($L.dir)\mods\Stobe" -Force -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'activity-transport.key' -or $_.Name -like 'Stobe.dll.pre-*' })
+$junk = @(Get-ChildItem "$($L.dir)\mods\Stobe" -Force -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'Stobe.dll.pre-*' })
 $junk += @(Get-ChildItem $L.dir -Force -File -Filter 'crashDump*' -ErrorAction SilentlyContinue)
 foreach ($j in $junk) { "remove leftover $($j.Name)"; if (-not $Check) { Remove-Item -LiteralPath $j.FullName -Force } }
+# game-side activity-transport.key = the lane's OWN backend key ($L.key_file in WSL); the synced copy (Shay's live key, or none) must never be used.
+# Without it the 5090 lane cannot sign activity requests (imm26 P-KEY). Kept/written here, never deleted.
+$keyTxt = ''
+try { $keyTxt = ((& wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- cat $L.key_file) -join '').Trim() } catch { }
+if ($keyTxt -match '^[0-9a-f]{64}$') {
+  # native Secret() reads the key beside the LOADED Stobe.dll: every dir of the lane that holds a Stobe.dll gets it (presence/equality only is printed)
+  foreach ($rel in 'mods\Stobe', 'RE_Kenshi\mods\Stobe') {
+    $dd = Join-Path $L.dir $rel; if (-not (Test-Path -LiteralPath (Join-Path $dd 'Stobe.dll'))) { continue }
+    $kf = Join-Path $dd 'activity-transport.key'
+    $have = if (Test-Path -LiteralPath $kf) { ([IO.File]::ReadAllText($kf)).Trim() } else { '' }
+    if ($have -eq $keyTxt) { "activity-transport.key ok beside $rel\Stobe.dll (lane server key)" }
+    else { "activity-transport.key $(if ($have) { 'REPLACED (differed from the lane server key)' } else { 'written' }) beside $rel\Stobe.dll"; if (-not $Check) { if (Test-Path -LiteralPath $kf) { Remove-Item -LiteralPath $kf -Force }; [IO.File]::WriteAllText($kf, $keyTxt, (New-Object Text.ASCIIEncoding)) } }
+  }
+} else { "WARN activity-transport.key: lane server key $($L.key_file) unreadable; provision the lane backend, then rerun" }
 # fixture save: own copy under the lane's own save name
 $from = Join-Path $T.save_dir $SrcSave; $to = Join-Path $L.save_dir $L.save_name
 if (Test-Path -LiteralPath $from) {

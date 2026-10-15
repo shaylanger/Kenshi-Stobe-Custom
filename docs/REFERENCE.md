@@ -10,6 +10,10 @@ everything incl. mod commands; agent guide `Kenshi-Automation-Harness/AGENTS.md`
 - characters: `chars`, `traders`, `where`, `hp`, `inv`, `sections`, `spawn`, `teleport` (`<npc> <npc2|x y z|building
   <name>> [dist m]`), `ko`, `health`, `damage`, `blood`, `kill`, `hunger <npc> [0..300]` (no value = read), `eat`,
   `stat`/`setstat`, `setname`, `faction`, `sleep`/`wake`, `shackle`, `cage`, `select`, `recruit`, `relation`;
+- drawn-weapon reactions: `stobe-auto stobe_drawn status|draw <char>|sheathe <char>|hold <char> on|off|reset|set <key> <value>|pair <npc>` (StobeHarnessBridge.cpp:33,
+  StobeDrawnWeapon.cpp). `draw <char>` draws the weapon once; `hold <char> on` re-draws it every frame (use it for a reaction test, `off` to release); `pair <npc>` prints that NPC's
+  reaction state toward the drawer. The drawer needs a weapon (`give`), and the reacting NPC must NOT be in the drawer's squad (own squad is never tracked): use a non-squad NPC like Cind.
+  Wrapper: STOBE-DRAWN.sh (docs/STOBE_TESTING_GUIDE.md section 6).
 - orders: `order <npc> <task> [target|building]` (291 tasks, `tasks`), `attack`, `fight <a> <b>` (NPC vs NPC),
   `job <npc> <building> [task <t>] [radius <m>]`, `jobs`, `clearjobs`;
 - items/money: `give`, `money`, `buy`, `trade` (real purchase), `shopstock`, `stash`, `transfer`, `packput`/`packweight`,
@@ -26,8 +30,10 @@ Names: exact match nearest the player, `#serial`, `@player`, `@selected`. New ge
 Stobe-only ones into `StobeHarnessBridge.cpp`, other mods register theirs via `include/KenshiAutomationHarness.h`.
 
 Command facts learned the hard way:
-- Weapons can't be created directly (the item factory refuses them): `research` to unlock, then `craft <npc> <weapon> at
-  weapon` with the materials given to the worker. `give` can't create weapons.
+- Weapons: `give <npc> <weapon name|sid> [n] [maker <manufacturer>] [model <grade>]` is the harness's weapon creator (Kenshi-Automation-Harness/docs/COMMANDS.md:216;
+  needs a WEAPON_MANUFACTURER listing the weapon + a MATERIAL_SPECS_WEAPON grade, default = player maker, else the first maker; `find` shows exact names/`sid=`).
+  The older note "the item factory refuses weapons" is STALE but the new path is not yet confirmed in game: after `give`, verify with `iteminfo`/`find`; if it refuses,
+  fall back to `research` + `craft <npc> <weapon> at weapon` with the materials given to the worker.
 - Wounds from `damage` don't bleed (use `blood`); first aid needs a kit on the medic.
 - A given backpack goes on the back if that slot is free, else into the main inventory; `unequip` moves the item to the
   main inventory (dropped if no room); `sections <npc>` shows where everything is.
