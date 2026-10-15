@@ -14,6 +14,68 @@ else { 'WAKER STATUS: NOT running (start: Bash run_in_background  MSYS_NO_PATHCO
 # Program ledgers (Shay 2026-10-15): unfinished work packages of every program (C:\KenshiTestRuns\programs\*.json, tools\automation\program-ledger.ps1); fail-open.
 try { & (Join-Path $ws 'tools\automation\program-ledger.ps1') brief } catch { }
 
+# Tail sessions + COLD START (docs/TAIL_HANDOFF_CONTRACT.md sections 5-7; Shay 2026-10-15). A tail session is an old coordinator kept alive
+# (flag C:\KenshiTestRuns\tail\<session>.flag) so its in-session subagents keep running: those agents are OWNED by it, never respawn them.
+# A tail whose process is gone = its agents are DEAD. Every other ledger agent that is not alive is DEAD too (PC shutdown): respawn from its checkpoint.
+$tailOwned = @{}   # agent -> tail session id (LIVE tails only; used to drop respawn lines for them below)
+try {
+    $recs = @()
+    try { $recs = @((& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ws 'tools\automation\program-ledger.ps1') records | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
+    $tailDir = Join-Path $runs 'tail'
+    $tails = @{}
+    foreach ($tf in @(Get-ChildItem -LiteralPath $tailDir -Filter '*.flag' -File -ErrorAction SilentlyContinue)) {
+        try { $tj = Get-Content -LiteralPath $tf.FullName -Raw | ConvertFrom-Json } catch { $tails[$tf.BaseName] = [pscustomobject]@{ alive = $false; pid = 0; agents = @(); created = ''; why = 'unreadable flag' }; continue }
+        $tp = $null; $tpid = 0; if ($tj.pid) { $tpid = [int]$tj.pid; $tp = Get-Process -Id $tpid -ErrorAction SilentlyContinue }
+        $alive = [bool]$tp
+        if ($tp -and $tj.created) { try { if ($tp.StartTime.ToUniversalTime() -gt ([datetime]$tj.created).ToUniversalTime().AddMinutes(1)) { $alive = $false } } catch { } }   # pid recycled by a newer process
+        $tails[$tf.BaseName] = [pscustomobject]@{ alive = $alive; pid = $tpid; agents = @($tj.agents); created = "$($tj.created)"; why = $(if ($alive) { '' } else { "process $tpid gone" }) }
+    }
+    if ($tails.Count) {
+        '=== tail sessions (C:\KenshiTestRuns\tail\*.flag: old coordinators kept alive for their in-session agents; they relay results to this session) ==='
+        foreach ($tn in ($tails.Keys | Sort-Object)) {
+            $t = $tails[$tn]
+            $names = @($t.agents | Where-Object { $_ })
+            if ($t.alive) { "TAIL $tn LIVE (pid $($t.pid), since $($t.created)): owns $(if ($names.Count) { $names -join ', ' } else { '(no agents listed)' }) -- leave them running; ack each relayed result with tail-ack.ps1 -Agent <name>" }
+            else { "TAIL $tn DEAD ($($t.why)): its agents are DEAD with it: $(if ($names.Count) { $names -join ', ' } else { '(none listed)' }) -- continue them from their checkpoints (lines below)" }
+        }
+    }
+    foreach ($tn in $tails.Keys) { if ($tails[$tn].alive) { foreach ($x in @($tails[$tn].agents)) { if ($x) { $tailOwned["$x"] = $tn } } } }
+    foreach ($r in $recs) { if ("$($r.owner_session)" -like 'tail:*') { $tid = "$($r.owner_session)".Substring(5); if ($tails.ContainsKey($tid) -and $tails[$tid].alive) { $tailOwned["$($r.agent)"] = $tid } } }
+
+    $agDir = Join-Path $runs 'agents'
+    function Get-AgentStatusLine([string]$n) {
+        $sf = Join-Path $agDir "$n.status"
+        if (-not (Test-Path -LiteralPath $sf)) { return $null }
+        $first = (Get-Content -LiteralPath $sf -TotalCount 1) -split '\|' | ForEach-Object { $_.Trim() }
+        return [pscustomobject]@{ state = $(if ($first.Count -ge 2) { $first[1] } else { '' }); age = [int]((Get-Date) - (Get-Item -LiteralPath $sf).LastWriteTime).TotalMinutes }
+    }
+    function Get-NextAgentName([string]$n) { if ($n -match '^(.*?)(\d+)$') { "$($Matches[1])$([int]$Matches[2] + 1)" } else { "${n}2" } }
+    $own = @(); $dead = @()
+    foreach ($r in $recs) {
+        $wst = "$($r.state)"
+        $stat = Get-AgentStatusLine "$($r.agent)"
+        $tn = if ("$($r.owner_session)" -like 'tail:*') { "$($r.owner_session)".Substring(5) } else { '' }
+        $tailLive = $tn -and $tails.ContainsKey($tn) -and $tails[$tn].alive
+        $unacked = $tn -and -not $r.acked_by_new_coordinator
+        if ($tailLive -and ($wst -ne 'done' -or $unacked)) {
+            $own += "OWNED-BY-LIVE-TAIL $($r.agent) ($($r.program)/$($r.wp), wp $wst, status $(if ($stat) { "$($stat.state) $($stat.age) min ago" } else { 'none' })) tail $tn, acked=$(if ($r.acked_by_new_coordinator) { 'yes' } else { 'NO' })$(if ($r.result_file) { ', result ' + $r.result_file }); leave it running, wait for its relay.$(if ($r.routing_note) { ' routing note: ' + $r.routing_note })"
+            continue
+        }
+        if ($wst -notin 'running', 'stopped') { continue }
+        if ($stat -and $stat.state -eq 'DONE') { continue }
+        if ($stat -and $stat.state -eq 'RUNNING' -and $stat.age -lt 30 -and -not ($tn -and -not $tailLive)) { continue }   # fresh heartbeat: alive
+        $why = if ($tn -and -not $tailLive) { "owner tail $tn is gone" } elseif ($stat) { "status $($stat.state) $($stat.age) min ago (not alive)" } else { 'no status file' }
+        $nx = Get-NextAgentName "$($r.agent)"
+        $ck = if ($stat -or (Test-Path -LiteralPath (Join-Path $agDir "$($r.agent).handoff.md"))) { "agents\$($r.agent).status / agents\$($r.agent).handoff.md" } else { 'ledger outputs/handoff' }
+        $dead += "DEAD $($r.agent) ($($r.program)/$($r.wp), wp $wst): $why -> respawn a FRESH agent $nx (Agent tool, same work dir) from its checkpoint $ck$(if ($r.routing_note) { ". Routing note: $($r.routing_note)" } else { '. (no routing note in the ledger)' })"
+    }
+    if ($own.Count -or $dead.Count) {
+        '=== ledger agents: owned by a live tail / DEAD (cold start: respawn from checkpoints; fresh names agent -> agent2) ==='
+        $own | ForEach-Object { if ($Brief -and $_.Length -gt 600) { $_.Substring(0, 600) + '...' } else { $_ } }
+        $dead | ForEach-Object { if ($Brief -and $_.Length -gt 700) { $_.Substring(0, 700) + '...' } else { $_ } }
+    }
+} catch { "tail/cold-start check failed open: $($_.Exception.Message)" }
+
 $mk = Join-Path $runs 'handoff.ready'
 if (Test-Path -LiteralPath $mk) {
     '=== handoff.ready ==='
@@ -50,9 +112,11 @@ try {
     . (Join-Path $PSScriptRoot 'agent-guard-lib.ps1')
     Remove-SupersededTodos
     $ah = @(Get-AgentHealthLines)
+    $ah = @($ah | Where-Object { $l = $_; -not ($tailOwned.Keys | Where-Object { $l -match ('(?<![\w.-])' + [regex]::Escape($_) + '(?![\w.-])') }) })   # agents owned by a LIVE tail are not respawned
     if ($Brief) { $ah = @($ah | ForEach-Object { if ($_.Length -gt 400) { $_.Substring(0,400) + '...' } else { $_ } }) }
     if ($ah.Count) { $ah | ForEach-Object { $_ } } else { 'every agent is DONE, RUNNING (fresh) or has a successor: nothing to respawn' }
     $rt = @(Get-ChildItem -LiteralPath (Join-Path $runs 'respawn') -Filter '*.todo' -File -ErrorAction SilentlyContinue | ForEach-Object BaseName)
+    $rt = @($rt | Where-Object { -not $tailOwned.ContainsKey($_) })
     if ($rt.Count) { "respawn todos (C:\KenshiTestRuns\respawn\): $($rt -join ', ')" }
 } catch { "agent health check failed open: $($_.Exception.Message)" }
 '=== agent roll call (agent-rollcall.ps1: kind INDEPENDENT = hidden agent-host job with a session.json, survives this coordinator; INPROC = subagent of a session, DIES when its session ends) + agent-host daemon ==='
@@ -115,4 +179,4 @@ $wslq = 'bash /mnt/c/KenshiModding/tools/automation/wsl-cache-trim.sh start | ta
 $rv = Join-Path $runs 'review-verdicts.tsv'
 if (Test-Path -LiteralPath $rv) { '=== newest review verdicts ==='; Get-Content -LiteralPath $rv -Tail 8 }
 ''
-'Next: respawn every agent whose status is not DONE as a FRESH agent pointed at its status file; start a <=120 s waker if anything is in flight; continue from HANDOFF.md.'
+'Next: respawn every agent whose status is not DONE (except OWNED-BY-LIVE-TAIL ones, which keep running) as a FRESH agent pointed at its status file; start a <=120 s waker if anything is in flight; continue from HANDOFF.md.'

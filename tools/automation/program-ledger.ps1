@@ -16,6 +16,13 @@
 #   session <name> <wp> <agent> <launcher_pid> [claude_pid]   record an independent claude session (spawn-wp-session.ps1): sets/replaces the
 #                                        `sessions` entry "agent|launcher_pid|claude_pid|startedISO" and makes <agent> the WP's agent (when the WP has
 #                                        none, or already has this one) or appends it to `successors` (agent-status.ps1 RUNNING then takes it over)
+#   route <name> <agent> -Owner live|tail:<session> [-Note "<routing note>"] [-Result <file>]
+#                                        tail handoff (docs/TAIL_HANDOFF_CONTRACT.md sec 6): record who owns a running agent and what the new coordinator does
+#                                        when it finishes. Stored in the wp's `agent_records.<agent>`: owner_session, routing_note, result_file,
+#                                        acked_by_new_coordinator (reset to false by route). The agent must be the wp's agent or a successor.
+#   ack <name> <agent>                   the new coordinator acknowledged the agent's relayed result: acked_by_new_coordinator=true
+#   records [<name>]                     machine view: one JSON array of {program,wp,state,agent,owner_session,routing_note,result_file,acked_by_new_coordinator}
+#                                        (every wp agent/successor with a record; default owner live). Used by tail-relay/tail-ack/session-start.
 #   sync <agent> <STATE>                 what agent-status.ps1 calls: the WP whose `agent` is <agent> (or whose `successors` lists
 #                                        it: then it becomes the WP's agent) follows the status: RUNNING->running, DONE->done,
 #                                        STOPPED-CONTEXT|FAILED->stopped, last_checkpoint=now. done is sticky (never regressed).
@@ -29,7 +36,8 @@
 param(
     [Parameter(Position = 0)][string]$Cmd = 'help',
     [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest,
-    [switch]$Md, [switch]$Write, [switch]$Force, [switch]$Selftest
+    [switch]$Md, [switch]$Write, [switch]$Force, [switch]$Selftest,
+    [string]$Owner = '', [string]$Note = '', [string]$Result = ''
 )
 $ErrorActionPreference = 'Stop'
 $SelfPath = $PSCommandPath
@@ -209,6 +217,57 @@ function Format-WpLine($w) {
     $it = "$($w.items)"; if ($it.Length -gt 38) { $it = $it.Substring(0, 35) + '...' }
     return ('  {0,-14} {1,-8} {2,-18} ckpt {3,-4} {4}' -f $w.id, $w.state, $w.agent, $(if ("$($w.state)" -eq 'todo' -and -not $w.agent) { '-' } else { Format-Age $w.last_checkpoint }), $it)
 }
+# tail handoff records (contract sec 6): wp.agent_records.<agent> = {owner_session, routing_note, result_file, acked_by_new_coordinator}
+function Get-AgentRec($w, [string]$agent, [bool]$create) {
+    $ar = if ($w.PSObject.Properties['agent_records']) { $w.agent_records } else { $null }
+    if ($null -eq $ar) {
+        if (-not $create) { return $null }
+        $ar = [pscustomobject]@{}; Set-Prop $w 'agent_records' $ar
+    }
+    $r = $ar.PSObject.Properties[$agent]
+    if ($r) { return $r.Value }
+    if (-not $create) { return $null }
+    $rec = [pscustomobject]@{ owner_session = 'live'; routing_note = ''; result_file = ''; acked_by_new_coordinator = $false }
+    Add-Member -InputObject $ar -NotePropertyName $agent -NotePropertyValue $rec
+    return $rec
+}
+function Get-WpAgentNames($w) {
+    $n = @()
+    if ("$($w.agent)") { $n += "$($w.agent)" }
+    if ($w.PSObject.Properties['agent_records'] -and $w.agent_records) { $n += @($w.agent_records.PSObject.Properties | ForEach-Object { $_.Name }) }
+    return @($n | Select-Object -Unique)
+}
+function Find-AgentWp($o, [string]$agent) {
+    $m = @($o.wps | Where-Object { "$($_.agent)" -ieq $agent })
+    if (-not $m.Count) { $m = @($o.wps | Where-Object { @($_.successors) | Where-Object { "$_" -ieq $agent } }) }
+    if (-not $m.Count) { $m = @($o.wps | Where-Object { $_.PSObject.Properties['agent_records'] -and $_.agent_records -and $_.agent_records.PSObject.Properties[$agent] }) }
+    if (-not $m.Count) { return $null }
+    return $m[0]
+}
+function Get-RecordRows($o) {
+    $rows = @()
+    foreach ($w in $o.wps) {
+        foreach ($n in (Get-WpAgentNames $w)) {
+            $r = Get-AgentRec $w $n $false
+            $rows += [pscustomobject][ordered]@{
+                program = "$($o.name)"; wp = "$($w.id)"; state = "$($w.state)"; agent = $n
+                owner_session = $(if ($r -and "$($r.owner_session)") { "$($r.owner_session)" } else { 'live' })
+                routing_note = $(if ($r) { "$($r.routing_note)" } else { '' })
+                result_file = $(if ($r) { "$($r.result_file)" } else { '' })
+                acked_by_new_coordinator = $(if ($r) { [bool]$r.acked_by_new_coordinator } else { $false })
+            }
+        }
+    }
+    return $rows
+}
+function Format-RecLines($w) {
+    foreach ($n in (Get-WpAgentNames $w)) {
+        $r = Get-AgentRec $w $n $false
+        if (-not $r) { continue }
+        $nt = "$($r.routing_note)"; if ($nt.Length -gt 140) { $nt = $nt.Substring(0, 137) + '...' }
+        "      route ${n}: owner=$($r.owner_session) acked=$(if ($r.acked_by_new_coordinator) { 'yes' } else { 'no' })$(if ($r.result_file) { ' result=' + $r.result_file })$(if ($nt) { ' note: ' + $nt })"
+    }
+}
 function Read-AllLedgers {
     $res = @()
     $dir = Get-ProgDir
@@ -243,6 +302,10 @@ function Get-Markdown($o) {
         if ($w.handoff) { $L.Add("- handoff: $($w.handoff)") }
         foreach ($p in @($w.outputs)) { $L.Add("- output: $p") }
         foreach ($p in @($w.sessions)) { $L.Add("- session: $p") }
+        foreach ($n in (Get-WpAgentNames $w)) {
+            $r = Get-AgentRec $w $n $false
+            if ($r) { $L.Add("- route $n`: owner $($r.owner_session), acked $($r.acked_by_new_coordinator), result $($r.result_file), note: $($r.routing_note)") }
+        }
     }
     return ($L -join "`n") + "`n"
 }
@@ -301,7 +364,7 @@ function Invoke-Cmd([string]$cmd, [string[]]$a) {
                 } else {
                     $c = Get-StateCounts $o
                     "== $($o.name) (md $($o.md), updated $($o.updated)): " + (($States | ForEach-Object { "$($c[$_]) $_" }) -join ', ')
-                    foreach ($w in $o.wps) { Format-WpLine $w }
+                    foreach ($w in $o.wps) { Format-WpLine $w; Format-RecLines $w }
                 }
             }
         }
@@ -313,6 +376,7 @@ function Invoke-Cmd([string]$cmd, [string[]]$a) {
                 "=== PROGRAM LEDGER $($o.name) ($($o.md)): $($open.Count) of $(@($o.wps).Count) wps unfinished, updated $(Format-Age $o.updated) ago ==="
                 foreach ($w in $open) {
                     Format-WpLine $w
+                    Format-RecLines $w
                     # independent agent sessions (spawn-wp-session.ps1): LIVE = adopt, DEAD = respawn from the handoff (WP_SIZING.md section 10)
                     $ss = @($w.sessions)
                     if ($ss.Count -and "$($ss[-1])") {
@@ -349,6 +413,43 @@ function Invoke-Cmd([string]$cmd, [string[]]$a) {
                 Write-Ledger $p $o
             }
             "session $($a[0])/$($a[1]) <- $entry"
+        }
+        'route' {
+            if ($a.Count -lt 2) { throw 'usage: route <name> <agent> -Owner live|tail:<session> [-Note "<text>"] [-Result <file>]' }
+            if ($Owner -notmatch '^(live|tail:[A-Za-z0-9_.-]+)$') { throw "bad -Owner '$Owner' (live or tail:<session>)" }
+            $p = Get-LedgerPath $a[0]
+            Invoke-Locked {
+                $o = Read-Ledger $p
+                $w = Find-AgentWp $o $a[1]
+                if (-not $w) { throw "ledger $($o.name): no wp has agent '$($a[1])' (agent or successor)" }
+                $r = Get-AgentRec $w $a[1] $true
+                if (-not $Note -and -not "$($r.routing_note)") { throw 'route needs -Note "<routing note>" (purpose, where output lands, what the new coordinator does when it finishes)' }
+                $r.owner_session = $Owner
+                if ($Note) { $r.routing_note = $Note }
+                if ($Result) { $r.result_file = $Result }
+                $r.acked_by_new_coordinator = $false
+                $w.last_checkpoint = Get-Iso
+                Write-Ledger $p $o
+            }
+            "routed $($a[0]) $($a[1]) owner=$Owner"
+        }
+        'ack' {
+            if ($a.Count -lt 2) { throw 'usage: ack <name> <agent>' }
+            $p = Get-LedgerPath $a[0]
+            Invoke-Locked {
+                $o = Read-Ledger $p
+                $w = Find-AgentWp $o $a[1]
+                if (-not $w) { throw "ledger $($o.name): no wp has agent '$($a[1])'" }
+                $r = Get-AgentRec $w $a[1] $true
+                $r.acked_by_new_coordinator = $true
+                Write-Ledger $p $o
+            }
+            "acked $($a[0]) $($a[1])"
+        }
+        'records' {
+            $objs = if ($a.Count) { , (Read-Ledger (Get-LedgerPath $a[0])) } else { Read-AllLedgers }
+            $rows = @(); foreach ($o in $objs) { if ($o -isnot [string]) { $rows += Get-RecordRows $o } }
+            ConvertTo-Json -InputObject @($rows) -Depth 5 -Compress
         }
         'sync' {
             if ($a.Count -lt 2) { throw 'usage: sync <agent> <STATE>' }
@@ -393,7 +494,7 @@ function Invoke-Cmd([string]$cmd, [string[]]$a) {
             "restored $p from $bak (previous version kept as the new .bak)"
         }
         default {
-            Get-Content -LiteralPath $SelfPath -TotalCount 28 | Where-Object { $_ -like '#*' } | ForEach-Object { $_.Substring(1).TrimStart() }
+            Get-Content -LiteralPath $SelfPath -TotalCount 36 | Where-Object { $_ -like '#*' } | ForEach-Object { $_.Substring(1).TrimStart() }
         }
     }
 }
