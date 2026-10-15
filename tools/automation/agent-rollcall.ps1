@@ -27,6 +27,20 @@ function Get-AgentRoll {
         $log = Join-Path $ad "out\$name.log"
         $logAge = $null
         if (Test-Path -LiteralPath $log) { $logAge = [math]::Round(($now - (Get-Item -LiteralPath $log).LastWriteTime).TotalMinutes, 1) }
+        # evidence activity counts as a heartbeat: newest file under a directory named on the status `outputs:` line
+        $outLine = ($lines | Where-Object { $_ -like 'outputs:*' } | Select-Object -First 1)
+        if ($outLine) {
+            foreach ($tok in ($outLine -replace '^outputs:\s*', '') -split '[;,]\s*') {
+                $p = $tok.Trim()
+                if ($p -and (Test-Path -LiteralPath $p -PathType Container)) {
+                    $nf = Get-ChildItem -LiteralPath $p -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                    if ($nf) {
+                        $evAge = [math]::Round(($now - $nf.LastWriteTime).TotalMinutes, 1)
+                        if ($null -eq $logAge -or $evAge -lt $logAge) { $logAge = $evAge }
+                    }
+                }
+            }
+        }
         $lp = 0; $cp = 0; $started = $null; $exited = $false
         if ($sess) {
             $lp = [int]$sess.launcher_pid; $cp = [int]$sess.claude_pid
