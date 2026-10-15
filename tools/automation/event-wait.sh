@@ -93,10 +93,8 @@ while :; do
   # LANES: per-lane activity check (lane-idle.ps1: operator RUNNING + status/evidence younger than 6 min); wakes on LANE IDLE / LANE NO-OPERATOR
   if [ "$HEALTH" = 1 ] && [ $(( now - ${last_lane:-0} )) -ge "${EW_LANE_EVERY:-90}" ]; then
     last_lane=$now
-    li=$(timeout 60 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding	oolsutomation\lane-idle.ps1' 2>&1 < /dev/null | tr -d ''); lrc=$?
-    case "$li" in *"LANE IDLE"*|*"LANE NO-OPERATOR"*) echo "EVENT LANE $(printf '%s
-' "$li" | grep -E 'LANE (IDLE|NO-OPERATOR)' | head -5 | tr '
-' ' ')"; exit 0;; esac
+    li=$(timeout 60 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\lane-idle.ps1' 2>&1 < /dev/null | tr -d '\r')
+    case "$li" in *"LANE IDLE"*|*"LANE NO-OPERATOR"*) echo "EVENT LANE $(printf '%s\n' "$li" | grep -E 'LANE (IDLE|NO-OPERATOR)' | head -5 | tr '\n' ' ')"; exit 0;; esac
   fi
   # BACKSTOP: nothing else happened for --backstop seconds; the sweep catches what no sender reported
   if [ $(( now - start )) -ge "$BACK" ]; then
