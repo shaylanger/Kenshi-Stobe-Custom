@@ -1,0 +1,561 @@
+diff -ruN --binary a/BodyguardContractProbe.cpp b/BodyguardContractProbe.cpp
+--- a/BodyguardContractProbe.cpp	1969-12-31 18:00:00.000000000 -0600
++++ b/BodyguardContractProbe.cpp	2026-10-15 15:36:49.275293789 -0500
+@@ -0,0 +1,203 @@
++#include "BodyguardContractProbe.h"
++#include "NativeAiAwareness.h"
++#include "Utils.h"
++#include <kenshi/Character.h>
++#include <kenshi/Dialogue.h>
++#include <kenshi/GameWorld.h>
++#include <kenshi/Platoon.h>
++#include <kenshi/RootObject.h>
++#include <kenshi/util/lektor.h>
++#include <map>
++#include <set>
++#include <sstream>
++#include <windows.h>
++
++namespace Stobe { namespace BodyguardContractProbe { namespace {
++bool g_enabled = false;
++DWORD g_lastSample = 0;
++std::map<uintptr_t, std::string> g_lastSquadState;
++const char kRequiredSaveSha256[] =
++    "98DAF7F0A0E3A8D3505EBE9DF059FE45E957D5154F86292FDA33D0BDF917F868";
++std::string g_saveSha256;
++std::string g_copyId;
++unsigned long long g_eventId = 0;
++
++unsigned long long UnixMillis() {
++  FILETIME ft;
++  GetSystemTimeAsFileTime(&ft);
++  ULARGE_INTEGER value;
++  value.LowPart = ft.dwLowDateTime;
++  value.HighPart = ft.dwHighDateTime;
++  return (value.QuadPart - 116444736000000000ULL) / 10000ULL;
++}
++
++std::string Context(const char* event) {
++  ++g_eventId;
++  std::ostringstream out;
++  out << "BODYGUARD_PROBE: event=" << event << " event_id=" << g_eventId
++      << " unix_ms=" << UnixMillis() << " monotonic_ms=" << GetTickCount()
++      << " save_sha256=" << g_saveSha256 << " copy_id=" << g_copyId;
++  return out.str();
++}
++
++bool IsSha256(const std::string& value) {
++  if (value.size() != 64) return false;
++  for (size_t i = 0; i < value.size(); ++i) {
++    const char c = value[i];
++    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
++          (c >= 'A' && c <= 'F'))) return false;
++  }
++  return true;
++}
++
++bool ParseStart(const std::string& action, std::string& saveSha,
++                std::string& copyId) {
++  const std::string prefix = "start:";
++  if (action.compare(0, prefix.size(), prefix) != 0) return false;
++  const size_t sep = action.find(':', prefix.size());
++  if (sep == std::string::npos) return false;
++  saveSha = action.substr(prefix.size(), sep - prefix.size());
++  copyId = action.substr(sep + 1);
++  if (!IsSha256(saveSha) || saveSha != kRequiredSaveSha256 ||
++      copyId.empty() || copyId.size() > 48) return false;
++  for (size_t i = 0; i < copyId.size(); ++i) {
++    const char c = copyId[i];
++    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
++          (c >= '0' && c <= '9') || c == '-' || c == '_')) return false;
++  }
++  return true;
++}
++
++std::string SquadPart(const std::string& json) {
++  const std::string key = "\"squad\":";
++  size_t at = json.find(key);
++  if (at == std::string::npos) return "{\"observed\":false}";
++  at += key.size();
++  size_t end = json.rfind("}}");
++  if (end == std::string::npos || end < at) return "{\"observed\":false}";
++  return json.substr(at, end - at + 1);
++}
++
++std::string Roster(ActivePlatoon* active) {
++  std::ostringstream out;
++  out << "[";
++  bool first = true;
++  if (active) {
++    lektor<RootObject*>* things = active->getThings();
++    if (things && things->valid()) {
++      for (uint32_t i = 0; i < things->size(); ++i) {
++        Character* c = dynamic_cast<Character*>((*things)[i]);
++        if (!c) continue;
++        if (!first) out << ",";
++        first = false;
++        out << "{\"serial\":" << c->getHandle().serial
++            << ",\"name\":\"" << EscapeJSON(c->getName()) << "\"}";
++      }
++    }
++  }
++  out << "]";
++  return out.str();
++}
++} // namespace
++
++std::string Command(const std::string& action) {
++  std::string saveSha;
++  std::string copyId;
++  if (ParseStart(action, saveSha, copyId)) {
++    g_lastSquadState.clear();
++    g_lastSample = 0;
++    g_eventId = 0;
++    g_saveSha256 = saveSha;
++    g_copyId = copyId;
++    g_enabled = true;
++    Log(Context("start") + " mode=read_only");
++    return "started; read-only; sample interval=500ms; radius=250m";
++  }
++  if (action == "stop") {
++    if (!g_enabled || g_saveSha256.empty() || g_copyId.empty()) {
++      g_enabled = false;
++      return "stopped; no active probe";
++    }
++    g_enabled = false;
++    Log(Context("stop"));
++    return "stopped";
++  }
++  if (action == "status") return g_enabled ?
++      ("running save_sha256=" + g_saveSha256 + " copy_id=" + g_copyId) : "stopped";
++  return "usage: bodyguard_probe start:<quick.save-sha256>:<copy-id>|stop|status";
++}
++
++void Reset() {
++  if (g_enabled)
++    Log(Context("world_load_boundary") + " baseline_cleared=1");
++  g_lastSquadState.clear();
++  g_lastSample = 0;
++}
++
++void RecordDialogueChoice(void* rawDialogue, const std::string& reply,
++                          const char* sourceTag) {
++  if (!g_enabled) return;
++  Dialogue* dialogue = static_cast<Dialogue*>(rawDialogue);
++  Character* owner = nullptr;
++  try { owner = dialogue ? dialogue->getCharacter() : nullptr; } catch (...) {}
++  std::string actor = "unknown";
++  unsigned int serial = 0;
++  try {
++    if (owner) {
++      actor = owner->getName();
++      serial = owner->getHandle().serial;
++    }
++  } catch (...) {}
++  Log(Context("dialogue_choice") + " npc=\"" + EscapeJSON(actor) +
++      "\" npc_serial=" + ToString(serial) + " source=" +
++      (sourceTag ? sourceTag : "unknown") + " reply=\"" +
++      EscapeJSON(reply.substr(0, 240)) + "\"");
++}
++
++void Observe(GameWorld* world, Character* anchor) {
++  if (!g_enabled || !world || !anchor) return;
++  DWORD now = GetTickCount();
++  if (g_lastSample && now - g_lastSample < 500) return;
++  g_lastSample = now;
++
++  lektor<RootObject*> nearby;
++  try {
++    world->getCharactersWithinSphere(nearby, anchor->getPosition(), 250.0f,
++                                     0.0f, 0.0f, 256, 256, anchor);
++  } catch (...) {
++    Log(Context("sample_failed") + " reason=native_enumeration_exception");
++    return;
++  }
++  std::set<uintptr_t> seen;
++  for (uint32_t i = 0; i < nearby.size(); ++i) {
++    Character* actor = dynamic_cast<Character*>(nearby[i]);
++    if (!actor) continue;
++    ActivePlatoon* active = nullptr;
++    try { active = actor->getPlatoon(); } catch (...) { continue; }
++    if (!active || !seen.insert(reinterpret_cast<uintptr_t>(active)).second) continue;
++    std::string squad = SquadPart(NativeAiAwareness::CaptureJson(world, actor));
++    std::map<uintptr_t, std::string>::iterator old =
++        g_lastSquadState.find(reinterpret_cast<uintptr_t>(active));
++    if (old == g_lastSquadState.end() || old->second != squad) {
++      std::string squadId;
++      std::string squadName;
++      unsigned int serial = 0;
++      double gameTs = 0.0;
++      try {
++        squadId = active->me ? active->me->getPlatoonStringID() : "";
++        squadName = active->getName();
++        serial = actor->getHandle().serial;
++        gameTs = world->getTimeStamp_inGameHours().getTotalSeconds();
++      } catch (...) {}
++      Log(Context(old == g_lastSquadState.end() ? "baseline" : "transition") +
++          " game_ts=" + ToString(static_cast<float>(gameTs)) +
++          " squad_id=\"" + EscapeJSON(squadId) + "\" name=\"" +
++          EscapeJSON(squadName) + "\" anchor_serial=" +
++          ToString(anchor->getHandle().serial) + " anchor_name=\"" +
++          EscapeJSON(anchor->getName()) + "\" observed_actor=" + ToString(serial) +
++          " roster=" + Roster(active) + " state=" + squad);
++      g_lastSquadState[reinterpret_cast<uintptr_t>(active)] = squad;
++    }
++  }
++}
++} }
+diff -ruN --binary a/BodyguardContractProbe.h b/BodyguardContractProbe.h
+--- a/BodyguardContractProbe.h	1969-12-31 18:00:00.000000000 -0600
++++ b/BodyguardContractProbe.h	2026-10-15 15:36:49.285024689 -0500
+@@ -0,0 +1,16 @@
++#pragma once
++
++#include <string>
++class Character;
++class GameWorld;
++
++namespace Stobe { namespace BodyguardContractProbe {
++// Opt-in, read-only diagnostic. Start with a pinned copied-save identity via
++// `stobe_bodyguard_probe start:<quick.save-sha256>:<copy-id>`; call Observe
++// from the game thread. Every emitted record is bound to that identity.
++std::string Command(const std::string& action);
++void Observe(GameWorld* world, Character* anchor);
++void RecordDialogueChoice(void* dialogue, const std::string& reply,
++                          const char* sourceTag);
++void Reset();
++} }
+diff -ruN --binary a/ChatBox.cpp b/ChatBox.cpp
+--- a/ChatBox.cpp	2026-10-15 15:36:49.186253291 -0500
++++ b/ChatBox.cpp	2026-10-15 15:36:49.189137391 -0500
+@@ -3101,6 +3101,17 @@
+   return allowDispatch && IsChatInterruptGenerationCurrent(generation);
+ }
+ 
++// Same read SleepIfPaused does from a worker thread.
++static bool IsWorldPausedNow() {
++  GameWorld *world = GetWorldSafe();
++  if (!world) return false;
++  try {
++    return world->isPaused();
++  } catch (...) {
++    return false;
++  }
++}
++
+ void DispatchRechatFollowup(const StreamChatTask &currentTask,
+                             const std::string &lastSpeaker,
+                             const std::string &lastSpeakerHandle,
+@@ -4065,6 +4076,17 @@
+       }
+     }
+ 
++    // SpeakWhilePaused lets the line play while paused; the follow-up chat between
++    // NPCs still waits for the unpause (the generation check is repeated in
++    // DispatchRechatFollowup).
++    {
++      DWORD pauseWaitStart = GetTickCount();
++      while (IsChatInterruptGenerationCurrent(generation) && IsWorldPausedNow() &&
++             (GetTickCount() - pauseWaitStart) < 600000) {
++        Sleep(50);
++      }
++    }
++
+     Log("RECHAT_TIMING: follow-up dispatch gate passed playback_active=" +
+         std::string(IsTtsPlaybackActive() ? "1" : "0") +
+         " remaining_ms=" + ToString(GetTtsPlaybackRemainingMs()) +
+diff -ruN --binary a/Functions.cpp b/Functions.cpp
+--- a/Functions.cpp	2026-10-15 15:36:49.199238591 -0500
++++ b/Functions.cpp	2026-10-15 15:36:49.206751791 -0500
+@@ -7081,6 +7081,13 @@
+ }
+ 
+ 
++// SpeakWhilePaused: spoken lines (bubble + TTS + narrator popups) are wall-clock,
++// so they may run while the game is paused; every other action waits for the unpause.
++static bool IsSpeechQueuedAction(const QueuedAction &a) {
++  return a.type == ACT_SAY || a.type == ACT_PLAY_TTS ||
++         (a.type == ACT_NOTIFY && a.narratorNotification);
++}
++
+ void ExecuteQueuedActions(GameWorld *thisptr, int &inventoryTimer) {
+   // This update is entered only after Kenshi's post-load world gate is ready.
+   PlaythroughNotices::Notice saveNotice;
+@@ -7160,7 +7167,10 @@
+       }
+     }
+ 
+-    if (gamePaused) {
++    const bool speechMayRunPaused =
++        g_speakWhilePaused && !g_uiActionQueue.empty() &&
++        IsSpeechQueuedAction(g_uiActionQueue.front());
++    if (gamePaused && !speechMayRunPaused) {
+       if (!g_uiActionQueue.empty() && nowTick - pausedQueueLogTick >= 1500) {
+         pausedQueueLogTick = nowTick;
+         const QueuedAction &nextAction = g_uiActionQueue.front();
+@@ -7235,6 +7245,10 @@
+           nextAction.type == ACT_SAY || nextAction.type == ACT_PLAY_TTS ||
+           (nextAction.type == ACT_NOTIFY &&
+            nextAction.narratorNotification);
++      // Paused (only reached with SpeakWhilePaused): world-changing actions wait for the unpause.
++      if (gamePaused && !nextActionIsSpeech) {
++        break;
++      }
+       bool pendingPlayerBubble =
+           nextAction.type == ACT_SAY && nextAction.taskValue < 0;
+       if (nextActionIsSpeech && !pendingPlayerBubble &&
+diff -ruN --binary a/Globals.cpp b/Globals.cpp
+--- a/Globals.cpp	2026-10-15 15:36:49.214026891 -0500
++++ b/Globals.cpp	2026-10-15 15:36:49.217137391 -0500
+@@ -45,6 +45,7 @@
+ int g_ttsVolumePercent = 100;
+ int g_ttsFadePercent = 100; // TTS distance fade range, % of default (round 18b)
+ bool g_ttsEnabled = true;
++bool g_speakWhilePaused = true;
+ bool g_enableDialogueMenuTts = true;
+ bool g_speedDialogue = false; // TTS plays at 1x regardless of game speed (round 18a)
+ bool g_enableRegularDialogueCapture = false;
+diff -ruN --binary a/Globals.h b/Globals.h
+--- a/Globals.h	2026-10-15 15:36:49.224727790 -0500
++++ b/Globals.h	2026-10-15 15:36:49.230670490 -0500
+@@ -44,6 +44,7 @@
+ extern int g_ttsVolumePercent;
+ extern int g_ttsFadePercent;
+ extern bool g_ttsEnabled;
++extern bool g_speakWhilePaused; // [Settings] SpeakWhilePaused: speech actions run while the game is paused
+ extern bool g_enableDialogueMenuTts;
+ extern bool g_speedDialogue;
+ extern bool g_enableRegularDialogueCapture;
+diff -ruN --binary a/StobeHarnessBridge.cpp b/StobeHarnessBridge.cpp
+--- a/StobeHarnessBridge.cpp	2026-10-15 15:36:49.261137389 -0500
++++ b/StobeHarnessBridge.cpp	2026-10-15 15:36:49.269741089 -0500
+@@ -31,6 +31,7 @@
+     {"shopprice", "stobe_shopprice <trader> [player]"},
+     {"npcinfo", "stobe_npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|rename <target> <new name>|testportrait <private|both|clear|status>|read|refresh|close> (testportrait is one-shot on the open humanoid panel only; read: key gen loaded portrait tex bio_state text)"}, // NPC info panel
+     {"drawn", "stobe_drawn <status|draw <char>|sheathe <char>|hold <char> on|off|reset|set <key> <value>|pair <npc>>"}, // drawn-weapon reactions
++    {"bodyguard_probe", "stobe_bodyguard_probe <start:<quick.save-sha256>:<copy-id>|stop|status> (opt-in read-only squad-contract transition logger)"},
+ };
+ 
+ KAH_Api g_kah;
+@@ -83,8 +84,8 @@
+   g_kah.registerBeforeAttack(&BeforeAttack, nullptr);
+   g_kah.log("Stobe: test commands registered");
+   Log("TEST_HARNESS: connected to the automation harness, " +
+-      std::string(registered == 9 ? "9 commands" : "SOME COMMANDS REFUSED") +
+-      " (stobe_ping/mode/say/state/give_cats/give_item/shopprice/npcinfo/drawn)");
++      std::string(registered == 10 ? "10 commands" : "SOME COMMANDS REFUSED") +
++      " (stobe_ping/mode/say/state/give_cats/give_item/shopprice/npcinfo/drawn/bodyguard_probe)");
+ }
+ 
+ void Drain(GameWorld *world, Character *sel, RunFn run) {
+diff -ruN --binary a/Utils.cpp b/Utils.cpp
+--- a/Utils.cpp	2026-10-15 15:36:49.233137390 -0500
++++ b/Utils.cpp	2026-10-15 15:36:49.241394390 -0500
+@@ -623,6 +623,9 @@
+   g_ttsEnabled =
+       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings", "TtsEnabled", 1) !=
+       0;
++  g_speakWhilePaused =
++      ReadLayeredIniInt(baseIniPath, customIniPath, "Settings",
++                        "SpeakWhilePaused", 1) != 0;
+   g_enableDialogueMenuTts =
+       ReadLayeredIniInt(baseIniPath, customIniPath, "Settings",
+                         "EnableDialogueMenuTTS", 1) != 0;
+@@ -744,6 +747,8 @@
+                              iniPath.c_str());
+   WritePrivateProfileStringA("Settings", "TtsEnabled",
+                               g_ttsEnabled ? "1" : "0", iniPath.c_str());
++  WritePrivateProfileStringA("Settings", "SpeakWhilePaused",
++                             g_speakWhilePaused ? "1" : "0", iniPath.c_str());
+   WritePrivateProfileStringA("Settings", "EnableDialogueMenuTTS",
+                              g_enableDialogueMenuTts ? "1" : "0",
+                              iniPath.c_str());
+diff -ruN --binary a/main.cpp b/main.cpp
+--- a/main.cpp	2026-10-15 15:36:49.246959390 -0500
++++ b/main.cpp	2026-10-15 15:36:49.253137390 -0500
+@@ -1,6 +1,7 @@
+ #include "LocalTravel.h"
+ #include "NativeTravelLifecycle.h"
+ #include "PlaythroughSession.h"
++#include "BodyguardContractProbe.h"
+ #include "ProfilePortrait.h"
+ #include <kenshi/SaveFileSystem.h>
+ #include <kenshi/SaveManager.h>
+@@ -8611,9 +8612,18 @@
+   }
+ 
+   std::string townsJson = "[";
++  // world_towns (2026-10-15): every town the scan can read, discovered or not,
++  // with its REAL name. getKnownName() returns the unexplored placeholder until
++  // the town is explored, so the real name comes from RootObjectBase::getName()
++  // (the same call getKnownName() makes once explored; it only returns the
++  // object's own name string, no discovered/explored gate).
++  std::string worldTownsJson = "[";
+   size_t emitted = 0;
++  size_t worldEmitted = 0;
+   const uint32_t count = allTowns->count;
+-  for (uint32_t i = 0; i < count && emitted < kTownKnowledgeHardCap; ++i) {
++  for (uint32_t i = 0; i < count && (emitted < kTownKnowledgeHardCap ||
++                                     worldEmitted < kTownKnowledgeHardCap);
++       ++i) {
+     RootObject *object = allTowns->stuff[i];
+     if (!object || (uintptr_t)object < 0x1000) {
+       continue;
+@@ -8623,6 +8633,7 @@
+     bool discovered = false;
+     bool explored = false;
+     std::string name;
++    std::string worldName;
+     Ogre::Vector3 position = Ogre::Vector3::ZERO;
+     try {
+       if (object->getDataType() != TOWN) {
+@@ -8631,33 +8642,64 @@
+       townBase = static_cast<TownBase *>(object);
+       discovered = townBase->_NV_isDiscovered();
+       explored = townBase->_NV_isExplored();
+-      if (!discovered) {
+-        continue;
+-      }
+-      name = TrimCopy(townBase->getKnownName());
+-      if (name.empty()) {
+-        continue;
+-      }
+       position = object->getPosition();
+     } catch (...) {
+       continue;
+     }
+ 
+-    if (emitted > 0) {
+-      townsJson += ",";
++    if (discovered && emitted < kTownKnowledgeHardCap) {
++      try {
++        name = TrimCopy(townBase->getKnownName());
++      } catch (...) {
++        name.clear();
++      }
++    }
++    if (worldEmitted < kTownKnowledgeHardCap) {
++      try {
++        worldName = TrimCopy(object->getName());
++      } catch (...) {
++        worldName.clear();
++      }
++    }
++
++    if (!name.empty()) {
++      if (emitted > 0) {
++        townsJson += ",";
++      }
++      townsJson += "{\"name\":\"" + EscapeJSON(name) + "\",";
++      townsJson += "\"x\":" + ToString(position.x) + ",";
++      townsJson += "\"y\":" + ToString(position.y) + ",";
++      townsJson += "\"z\":" + ToString(position.z) + ",";
++      townsJson += "\"discovered\":true,";
++      townsJson +=
++          "\"explored\":" + std::string(explored ? "true" : "false") + "}";
++      ++emitted;
++    }
++
++    const bool positionFinite = position.x == position.x &&
++                                position.y == position.y &&
++                                position.z == position.z;
++    if (!worldName.empty() && positionFinite) {
++      if (worldEmitted > 0) {
++        worldTownsJson += ",";
++      }
++      worldTownsJson += "{\"name\":\"" + EscapeJSON(worldName) + "\",";
++      worldTownsJson += "\"x\":" + ToString(position.x) + ",";
++      worldTownsJson += "\"y\":" + ToString(position.y) + ",";
++      worldTownsJson += "\"z\":" + ToString(position.z) + ",";
++      worldTownsJson +=
++          "\"discovered\":" + std::string(discovered ? "true" : "false") +
++          ",";
++      worldTownsJson +=
++          "\"explored\":" + std::string(explored ? "true" : "false") + "}";
++      ++worldEmitted;
+     }
+-    townsJson += "{\"name\":\"" + EscapeJSON(name) + "\",";
+-    townsJson += "\"x\":" + ToString(position.x) + ",";
+-    townsJson += "\"y\":" + ToString(position.y) + ",";
+-    townsJson += "\"z\":" + ToString(position.z) + ",";
+-    townsJson += "\"discovered\":true,";
+-    townsJson +=
+-        "\"explored\":" + std::string(explored ? "true" : "false") + "}";
+-    ++emitted;
+   }
+   townsJson += "]";
++  worldTownsJson += "]";
+ 
+-  const bool changed = townsJson != g_lastTownKnowledgeDigest;
++  const std::string townDigest = townsJson + "|" + worldTownsJson;
++  const bool changed = townDigest != g_lastTownKnowledgeDigest;
+   const bool resendDue = g_lastTownKnowledgeSentTick == 0 ||
+                          (nowTick - g_lastTownKnowledgeSentTick) >=
+                              kTownKnowledgeResendIntervalMs;
+@@ -8668,11 +8710,13 @@
+   const int gameTs = ResolveCurrentGameTsSafe(world);
+   std::string payload = "{\"source\":\"kenshi_town_list\",";
+   payload += "\"game_ts\":" + ToString(gameTs) + ",";
+-  payload += "\"towns\":" + townsJson + "}";
++  payload += "\"towns\":" + townsJson + ",";
++  payload += "\"world_towns\":" + worldTownsJson + "}";
+   AsyncPostToStobe(L"/town_knowledge", payload);
+-  g_lastTownKnowledgeDigest = townsJson;
++  g_lastTownKnowledgeDigest = townDigest;
+   g_lastTownKnowledgeSentTick = nowTick;
+   Log("TOWN_KNOWLEDGE_SYNC: sent discovered=" + ToString((int)emitted) +
++      " world=" + ToString((int)worldEmitted) +
+       " scanned=" + ToString((int)count) +
+       " changed=" + std::string(changed ? "1" : "0"));
+ }
+@@ -13613,6 +13657,8 @@
+ static void CapturePlayerDialogueReplyFromUi(Dialogue *dialogue,
+                                              const std::string &rawReplyText,
+                                              const char *sourceTag) {
++  Stobe::BodyguardContractProbe::RecordDialogueChoice(dialogue, rawReplyText,
++                                                       sourceTag);
+   if (!g_enableRegularDialogueCapture) {
+     Log("SPEECH_HOOK: skipped player reply capture; regular dialogue disabled.");
+     return;
+@@ -14820,6 +14866,12 @@
+                                        bool &ok) {
+   ok = false;
+   const std::string &cmd = f[1];
++  if (cmd == "bodyguard_probe") {
++    if (f.size() < 3) return "usage: bodyguard_probe <start|stop|status>";
++    std::string action = Stobe::BodyguardContractProbe::Command(f[2]);
++    ok = action.find("usage:") != 0;
++    return action;
++  }
+   Character *speaker = ResolveTestInboxSpeaker(world, sel);
+   if (cmd == "ping") {
+     Character *nearest =
+@@ -15273,6 +15325,7 @@
+         (gui ? "1" : "0"));
+   }
+   if (!gui) {
++    Stobe::BodyguardContractProbe::Reset();
+     // During loads MyGUI can be torn down; clear stale pointers and do nothing.
+     // A load may finish before another unstable frame with a GUI is observed.
+     // Never retain executable route tokens or sightings across that gap.
+@@ -15296,6 +15349,7 @@
+   }
+ 
+   if (!worldStable) {
++    Stobe::BodyguardContractProbe::Reset();
+     StobeGoals_HidePanel();
+     Stobe::UI::ResetNpcContextRenameAction();
+     ResetMoveToActions();
+@@ -15493,6 +15547,12 @@
+ 
+   // 1. Core Selection Tracking
+   Character *sel = ResolveSelectedCharacterSehSafe(thisptr);
++  Character *probeAnchor = sel;
++  if (worldUi->player && worldUi->player->playerCharacters.size() > 0) {
++    Character *firstPlayer = worldUi->player->playerCharacters[0];
++    if (firstPlayer) probeAnchor = firstPlayer;
++  }
++  Stobe::BodyguardContractProbe::Observe(worldUi, probeAnchor);
+   Stobe::UI::UpdateNpcContextRenameAction(thisptr);
+   Stobe::DialogueMenuTts::Update();
+   Stobe::PlayerBase::Update(worldUi, sel);

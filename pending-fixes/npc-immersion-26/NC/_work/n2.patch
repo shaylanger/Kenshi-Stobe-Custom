@@ -1,0 +1,1401 @@
+--- a/src/ChatBox.cpp
++++ b/src/ChatBox.cpp
+@@ -5876,6 +5876,67 @@
+   return true;
+ }
+ 
++// N2: optional follow-up turn (proximity / nearby combat). The server decides whether anything is claimable
++// (open topic, not_before, ask caps, quiet preference, attention) and answers "ok" with no speech otherwise.
++bool TriggerOptionalBoredTurn(GameWorld *world, Character *npc, Character *player,
++                              const std::string &attentionJson) {
++  if (!Stobe::Interaction::Allowed()) return false;
++  if (!world || !npc || !player || (uintptr_t)npc <= 0x1000 ||
++      (uintptr_t)player <= 0x1000) {
++    return false;
++  }
++  std::string npcName, npcSerial, playerName, playerSerial;
++  try {
++    npcName = npc->getName();
++    npcSerial = ToString(npc->getHandle().serial);
++    playerName = player->getName();
++    playerSerial = ToString(player->getHandle().serial);
++  } catch (...) {
++    return false;
++  }
++  if (npcName.empty() || playerName.empty()) return false;
++  std::string peopleJson = "[\"" + EscapeJSON(playerName + "|" + playerSerial) +
++                           "\",\"" + EscapeJSON(npcName + "|" + npcSerial) + "\"]";
++  std::string eventData =
++      npcName + ": [BORED_EVENT_TRIGGER] (talking to: " + playerName + ")";
++  std::wstring endpoint =
++      L"/StobeServer/stream.php?DATA=" +
++      ToWide(BuildStreamQueryData("bored", eventData, ResolveCurrentGameTs())) +
++      L"&profile=" + ToWide(UrlEncode(npcName)) +
++      L"&mode=autochat" +
++      L"&tts_enabled=" + (g_ttsEnabled ? L"1" : L"0") +
++      L"&people=" + ToWide(UrlEncode(peopleJson)) +
++      L"&optional=1";
++  if (!attentionJson.empty() && attentionJson.size() <= 600)
++    endpoint += L"&attn=" + ToWide(UrlEncode(attentionJson));
++  AppendGeoQueryFromPlayer(endpoint, player);
++
++  StreamChatTask *task = new StreamChatTask();
++  task->endpoint = endpoint;
++  task->npcName = npcName;
++  task->handleStr = npcSerial;
++  task->peopleJson = peopleJson;
++  task->previousSpeaker = playerName;
++  task->previousSpeakerHandle = playerSerial;
++  task->playerFallbackName = playerName;
++  task->playerFallbackHandle = playerSerial;
++  task->initiatorSpeaker = "";
++  task->initiatorSpeakerHandle = "";
++  task->requestMode = "autochat";
++  task->generation = GetChatInterruptGeneration();
++  task->rechatDepth = 0;
++  task->allowUnavailableTargetSpeech = false;
++  HANDLE thread = PlaythroughSession::StartTask(NULL, 0, StreamChatResponseThread, task, 0, NULL);
++  if (!thread) {
++    delete task;
++    Log("OPTIONAL_TURN: failed to start stream thread");
++    return false;
++  }
++  CloseHandle(thread);
++  Log("OPTIONAL_TURN: dispatched speaker=" + npcName + " listener=" + playerName);
++  return true;
++}
++
+ bool TriggerNarratorWelcomeOnLoad(GameWorld *world, Character *preferredSpeaker,
+                                   LONG generationOverride) {
+   if (!world || !world->player || world->player->playerCharacters.size() == 0) {
+--- a/src/ChatBox.h
++++ b/src/ChatBox.h
+@@ -76,6 +76,9 @@
+ bool TriggerReactionTurn(GameWorld *world, Character *npc, Character *player,
+                          const std::string &react, const std::string &kind,
+                          const std::string &detail, int distance);
++// N2: optional follow-up turn (bored event with optional=1 + attention json); the server may stay silent.
++bool TriggerOptionalBoredTurn(GameWorld *world, Character *npc, Character *player,
++                              const std::string &attentionJson);
+ bool TriggerNarratorWelcomeOnLoad(GameWorld *world,
+                                   Character *preferredSpeaker = nullptr,
+                                   LONG generationOverride = 0);
+--- a/src/Context.cpp
++++ b/src/Context.cpp
+@@ -1,5 +1,6 @@
+ #include "LocalTravel.h"
+ #include "NativeAiAwareness.h"
++#include "NativeAttention.h" // N2: attention block + bystander role/squad
+ #include "NpcReferralPeople.h"
+ #include "NativeTravelLifecycle.h"
+ #include "Context.h"
+@@ -3618,7 +3619,7 @@
+   json += "\"is_animal\": " + std::string(isAnimal ? "true" : "false") + ",";
+   json += "\"handle\": \"" + ToString((int)npc->getHandle().serial) + "\",";
+   json += "\"travel_destinations\":" + Stobe::LocalTravel::CandidatesJson(world, npc) + ",";
+-  json += "\"native_ai\":" + Stobe::NativeAiAwareness::CaptureJson(world, npc) + ",";
++  json += "\"native_ai\":" + Stobe::NativeAttention::WithAttention(Stobe::NativeAiAwareness::CaptureJson(world, npc), npc) + ",";
+   json += "\"referral_people\":" + Stobe::NpcReferralPeople::CaptureJson(world, npc) + ",";
+   Stobe::NativeTravelLifecycle::ObserveIdle(world, npc, CurrentGameTsSeconds());
+   json += "\"travel_lifecycle\":" + Stobe::NativeTravelLifecycle::SnapshotJson(npc->getHandle().serial) + ",";
+@@ -4218,6 +4219,20 @@
+         json += "\"building_serial\": " +
+                 ToString((int)otherBuildingSerial) + ",";
+         json += "\"building_name\":\"" + EscapeJSON(otherBuildingName) + "\",";
++        { // N2: public role + squad/settlement for each bystander (empty values omitted)
++          std::string n2Role = Stobe::NativeAttention::RoleFor(other);
++          std::string n2Squad = Stobe::NativeAttention::SquadName(other);
++          std::string n2Town = Stobe::NativeAttention::SettlementName(other);
++          unsigned n2SquadId = Stobe::NativeAttention::SquadId(other);
++          if (!n2Role.empty())
++            json += "\"role\":\"" + EscapeJSON(n2Role) + "\",";
++          if (!n2Squad.empty())
++            json += "\"squad_name\":\"" + EscapeJSON(n2Squad) + "\",";
++          if (n2SquadId)
++            json += "\"squad_id\":" + ToString((int)n2SquadId) + ",";
++          if (!n2Town.empty())
++            json += "\"settlement\":\"" + EscapeJSON(n2Town) + "\",";
++        }
+         json += "\"floor\": " + ToString(otherFloor) + ",";
+         json += "\"current_action\":\"" + EscapeJSON(o_activity.currentAction) +
+                 "\",";
+--- /dev/null
++++ b/src/N2Policy.h
+@@ -0,0 +1,295 @@
++// N2Policy.h: pure (SDK-free) logic for the N2 native package. Header only, VS2010 compatible.
++//  - Attention block JSON (what an NPC is busy with / how they are doing)
++//  - AbandonTracker: "abandoned_in_danger" (a squad mate left a downed squad mate far behind)
++//  - ProximityGate: when the native side may fire the optional bored/follow-up turn
++#pragma once
++#include <map>
++#include <string>
++#include <sstream>
++#include <stdio.h>
++
++namespace Stobe {
++namespace N2Policy {
++
++inline int ClampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
++
++inline std::string JsonEscape(const std::string &s) {
++  std::string o;
++  o.reserve(s.size() + 8);
++  for (size_t i = 0; i < s.size(); ++i) {
++    unsigned char c = (unsigned char)s[i];
++    if (c == '"') o += "\\\"";
++    else if (c == '\\') o += "\\\\";
++    else if (c == '\n') o += "\\n";
++    else if (c == '\r') o += "\\r";
++    else if (c == '\t') o += "\\t";
++    else if (c < 0x20) { char b[8]; sprintf(b, "\\u%04x", (unsigned)c); o += b; }
++    else o += (char)c;
++  }
++  return o;
++}
++
++// Keep only printable ASCII (drops UTF-8 multi-byte so a cut can never split a character), max n chars.
++inline std::string AsciiTruncate(const std::string &s, size_t n) {
++  std::string o;
++  for (size_t i = 0; i < s.size() && o.size() < n; ++i) {
++    unsigned char c = (unsigned char)s[i];
++    if (c >= 0x20 && c < 0x7f) o += (char)c;
++    else if (c == '\t' || c == '\n' || c == '\r') o += ' ';
++  }
++  return o;
++}
++
++inline std::string BoolJson(bool b) { return b ? "true" : "false"; }
++
++// ------------------------------------------------------------------ attention
++struct AttentionInputs {
++  bool observed, busy, sleeping, injured, crippled, bleeding, exhausted, afraid, fleeing, hungry, inCombat;
++  int bloodPct; // 0..100, -1 = unknown (reported as 100)
++  std::string busyReason;
++  AttentionInputs()
++      : observed(true), busy(false), sleeping(false), injured(false), crippled(false), bleeding(false),
++        exhausted(false), afraid(false), fleeing(false), hungry(false), inCombat(false), bloodPct(-1) {}
++};
++
++// blood/maxBlood -> 0..100 (unknown max = -1)
++inline int BloodPct(float blood, float maxBlood) {
++  if (!(maxBlood > 0.0f)) return -1;
++  int p = (int)(blood * 100.0f / maxBlood + 0.5f);
++  return ClampInt(p, 0, 100);
++}
++// hunger: (hunger+fed)*100 clamped 0..300, hungry below 75 (same scale as the context "hunger" field)
++inline int HungerValue(float hunger, float fed) {
++  float v = (hunger + fed) * 100.0f;
++  if (v > 300.0f) v = 300.0f;
++  if (v < 0.0f) v = 0.0f;
++  return (int)v;
++}
++inline bool HungryFrom(int hungerValue) { return hungerValue < 75; }
++// starving (<8% of 300) or blood-loss trauma. Limb "rested state" is limb health, NOT fatigue: never used here.
++inline bool ExhaustedFrom(int hungerValue, bool bloodlossTrauma) { return hungerValue < 24 || bloodlossTrauma; }
++// worstFleshPct: lowest flesh% of any body part, -1 = unknown
++inline bool InjuredFrom(int bloodPct, bool crippled, bool bleeding, int worstFleshPct) {
++  if (crippled || bleeding) return true;
++  if (bloodPct >= 0 && bloodPct < 50) return true;
++  return worstFleshPct >= 0 && worstFleshPct < 70;
++}
++
++inline std::string AttentionJson(const AttentionInputs &a) {
++  if (!a.observed) return "{\"observed\":false}";
++  int blood = a.bloodPct < 0 ? 100 : ClampInt(a.bloodPct, 0, 100);
++  std::string reason = AsciiTruncate(a.busyReason, 40);
++  std::string j = "{\"observed\":true";
++  j += ",\"busy\":" + BoolJson(a.busy);
++  j += ",\"sleeping\":" + BoolJson(a.sleeping);
++  j += ",\"injured\":" + BoolJson(a.injured);
++  j += ",\"crippled\":" + BoolJson(a.crippled);
++  j += ",\"bleeding\":" + BoolJson(a.bleeding);
++  j += ",\"exhausted\":" + BoolJson(a.exhausted);
++  j += ",\"afraid\":" + BoolJson(a.afraid);
++  j += ",\"fleeing\":" + BoolJson(a.fleeing);
++  j += ",\"hungry\":" + BoolJson(a.hungry);
++  j += ",\"in_combat\":" + BoolJson(a.inCombat);
++  std::ostringstream os;
++  os << blood;
++  j += ",\"blood_pct\":" + os.str();
++  if (!reason.empty()) j += ",\"busy_reason\":\"" + JsonEscape(reason) + "\"";
++  j += "}";
++  return j;
++}
++
++// Insert ,"attention":<attn> before the final '}' of a native_ai object that reports observed:true.
++// Anything else (empty, unobserved, already has attention, not an object) is returned unchanged.
++inline std::string AppendAttention(const std::string &nativeAiJson, const std::string &attnJson) {
++  if (attnJson.empty() || nativeAiJson.empty()) return nativeAiJson;
++  size_t end = nativeAiJson.find_last_not_of(" \t\r\n");
++  if (end == std::string::npos || nativeAiJson[end] != '}' || nativeAiJson[0] != '{') return nativeAiJson;
++  if (nativeAiJson.find("\"observed\":true") == std::string::npos) return nativeAiJson;
++  if (nativeAiJson.find("\"attention\":") != std::string::npos) return nativeAiJson;
++  std::string head = nativeAiJson.substr(0, end);
++  size_t last = head.find_last_not_of(" \t\r\n");
++  bool empty = last != std::string::npos && head[last] == '{';
++  return head + (empty ? "" : ",") + "\"attention\":" + attnJson + "}";
++}
++
++// ------------------------------------------------------------------ abandoned_in_danger
++enum PartnerState { PS_NONE = 0, PS_KNOCKED_OUT = 1, PS_BLEEDING_OUT = 2, PS_DOWNED = 3 };
++inline const char *PartnerStateName(int s) {
++  return s == PS_KNOCKED_OUT ? "knocked_out" : (s == PS_BLEEDING_OUT ? "bleeding_out" : (s == PS_DOWNED ? "downed" : "none"));
++}
++inline int ClassifyPartner(bool dead, bool unconscious, bool bleeding, int bloodPct, bool bloodlossTrauma, bool down) {
++  if (dead) return PS_NONE;
++  if (unconscious) return PS_KNOCKED_OUT;
++  if (bloodlossTrauma || (bleeding && bloodPct >= 0 && bloodPct < 50)) return PS_BLEEDING_OUT;
++  if (down) return PS_DOWNED;
++  return PS_NONE;
++}
++
++struct AbandonEvent {
++  std::string evidenceId, partnerState;
++  float distanceM;
++  int seconds;
++  AbandonEvent() : distanceM(0), seconds(0) {}
++};
++
++class AbandonTracker {
++public:
++  static float ArmRadius() { return 25.0f; }
++  static float FarRadius() { return 30.0f; }
++  static double FarSeconds() { return 20.0; }
++  static double GapSeconds() { return 10.0; }
++
++  AbandonTracker() {}
++  void Reset() { m_pairs.clear(); m_episode.clear(); }
++
++  // Call for every squad member each scan: down=false ends the partner's episode.
++  void NotePartnerState(unsigned partner, int state, double nowSec) {
++    std::map<unsigned, Episode>::iterator it = m_episode.find(partner);
++    if (state == PS_NONE) {
++      if (it != m_episode.end()) {
++        m_episode.erase(it);
++        for (std::map<Key, Pair>::iterator p = m_pairs.begin(); p != m_pairs.end();) {
++          if (p->first.second == partner) m_pairs.erase(p++); else ++p;
++        }
++      }
++      return;
++    }
++    if (it == m_episode.end()) { Episode e; e.start = nowSec; m_episode[partner] = e; }
++  }
++
++  // One (leaver, partner) observation. Returns true once per episode when the abandonment is proven.
++  bool Observe(unsigned leaver, unsigned partner, bool leaverFree, int partnerState, float dist, double nowSec,
++               AbandonEvent *out) {
++    if (!leaver || !partner || leaver == partner) return false;
++    NotePartnerState(partner, partnerState, nowSec);
++    if (partnerState == PS_NONE) return false;
++    Episode &ep = m_episode[partner];
++    Key key(leaver, partner);
++    std::map<Key, Pair>::iterator it = m_pairs.find(key);
++    if (it == m_pairs.end()) { Pair p; p.episodeStart = ep.start; it = m_pairs.insert(std::make_pair(key, p)).first; }
++    Pair &p = it->second;
++    if (p.episodeStart != ep.start) { p = Pair(); p.episodeStart = ep.start; }
++    if (p.lastSeen >= 0 && (nowSec < p.lastSeen || nowSec - p.lastSeen > GapSeconds())) p.farSince = -1.0;
++    p.lastSeen = nowSec;
++    if (!leaverFree) { p.farSince = -1.0; return false; }
++    if (dist <= ArmRadius()) p.armed = true;
++    if (dist < FarRadius()) { p.farSince = -1.0; return false; }
++    if (!p.armed || p.fired) return false;
++    if (p.farSince < 0.0) { p.farSince = nowSec; return false; }
++    if (nowSec - p.farSince < FarSeconds()) return false;
++    p.fired = true;
++    if (out) {
++      char buf[96];
++      sprintf(buf, "abandon:%u:%u:%lld", leaver, partner, (long long)ep.start);
++      out->evidenceId = buf;
++      out->partnerState = PartnerStateName(partnerState);
++      out->distanceM = dist;
++      out->seconds = (int)(nowSec - p.farSince);
++    }
++    return true;
++  }
++
++private:
++  typedef std::pair<unsigned, unsigned> Key;
++  struct Episode { double start; Episode() : start(0) {} };
++  struct Pair {
++    double episodeStart, farSince, lastSeen;
++    bool armed, fired;
++    Pair() : episodeStart(0), farSince(-1.0), lastSeen(-1.0), armed(false), fired(false) {}
++  };
++  std::map<Key, Pair> m_pairs;
++  std::map<unsigned, Episode> m_episode;
++};
++
++// ------------------------------------------------------------------ proximity follow-up gate
++// Decides when the native side fires the optional bored turn (server answers "ok" when nothing is claimable).
++class ProximityGate {
++public:
++  static double GlobalMinSec() { return 90.0; }
++  static double PerNpcMinSec() { return 600.0; }
++  static double AwaySec() { return 45.0; }
++  static float AwayDist() { return 30.0f; }
++  static float NearCap() { return 15.0f; }
++  static double LoadDelaySec() { return 8.0; }
++  static double CombatDelaySec() { return 1.5; }
++  static double CombatStaleSec() { return 10.0; }
++  static float CombatPlayerRange() { return 60.0f; }
++  static float CombatCompanionRange() { return 40.0f; }
++
++  ProximityGate() : m_lastFire(-1e9), m_combatDue(-1.0) {}
++  void Reset() { m_npc.clear(); m_lastFire = -1e9; m_combatDue = -1.0; }
++
++  static float NearRadius(float talkRadius) { return talkRadius < NearCap() ? talkRadius : NearCap(); }
++
++  // Rate limits: global and per NPC. Records the fire when allowed.
++  bool TryFire(unsigned npc, double now) {
++    if (now < m_lastFire) m_lastFire = -1e9;
++    if (now - m_lastFire < GlobalMinSec()) return false;
++    Npc &n = m_npc[npc];
++    if (n.lastFire > -1e8 && now >= n.lastFire && now - n.lastFire < PerNpcMinSec()) return false;
++    m_lastFire = now;
++    n.lastFire = now;
++    return true;
++  }
++
++  // Per companion, per scan (only call while the caller's gates are open). nearestPlayerDist = metres to
++  // the nearest player character. Returns true when the proximity turn should fire for this companion now.
++  bool OnScan(unsigned npc, double now, bool idle, float nearestPlayerDist, float talkRadius) {
++    Npc &n = m_npc[npc];
++    float nearR = NearRadius(talkRadius);
++    bool nearNow = nearestPlayerDist <= nearR;
++    if (!n.seen) {
++      n.seen = true;
++      if (nearNow) n.loadDue = now + LoadDelaySec();
++    }
++    if (nearestPlayerDist > AwayDist()) {
++      if (n.farSince < 0.0) n.farSince = now;
++      if (now - n.farSince >= AwaySec()) n.away = true;
++    } else {
++      n.farSince = -1.0;
++    }
++    if (!idle) return false;
++    if (n.loadDue >= 0.0) {
++      if (!nearNow) n.loadDue = -1.0;
++      else if (now >= n.loadDue) {
++        n.loadDue = -1.0;
++        if (TryFire(npc, now)) return true;
++        return false;
++      }
++    }
++    if (n.away && nearNow) {
++      n.away = false;
++      n.farSince = -1.0;
++      return TryFire(npc, now);
++    }
++    return false;
++  }
++
++  // A combat_start happened `nearestPlayerDist` metres from the nearest player character.
++  void NoteCombatStart(double now, float nearestPlayerDist) {
++    if (nearestPlayerDist > CombatPlayerRange()) return;
++    if (m_combatDue < 0.0) m_combatDue = now + CombatDelaySec();
++  }
++  // True once when a pending combat trigger is due (and not stale). The caller then picks the nearest
++  // companion within CombatCompanionRange() and calls TryFire().
++  bool TakeCombatDue(double now) {
++    if (m_combatDue < 0.0) return false;
++    if (now < m_combatDue) return false;
++    bool stale = now - m_combatDue > CombatStaleSec();
++    m_combatDue = -1.0;
++    return !stale;
++  }
++  bool CombatPending() const { return m_combatDue >= 0.0; }
++
++private:
++  struct Npc {
++    bool seen, away;
++    double farSince, loadDue, lastFire;
++    Npc() : seen(false), away(false), farSince(-1.0), loadDue(-1.0), lastFire(-1e9) {}
++  };
++  std::map<unsigned, Npc> m_npc;
++  double m_lastFire, m_combatDue;
++};
++
++} // namespace N2Policy
++} // namespace Stobe
+--- /dev/null
++++ b/src/N2SocialWatch.cpp
+@@ -0,0 +1,164 @@
++#include "N2SocialWatch.h"
++#include "AudioPlayback.h"
++#include "ChatBox.h"
++#include "Globals.h"
++#include "Interaction.h"
++#include "N2Policy.h"
++#include "NativeAttention.h"
++#include "Utils.h"
++#include <kenshi/Character.h>
++#include <kenshi/GameWorld.h>
++#include <kenshi/PlayerInterface.h>
++#include <kenshi/RootObject.h>
++#include <stdint.h>
++#include <string>
++#include <vector>
++#include <windows.h>
++
++namespace Stobe { namespace N2SocialWatch {
++namespace {
++const DWORD kScanIntervalMs = 2000;
++const size_t kMaxPendingCombat = 8;
++
++struct CombatNote { unsigned actor, target; };
++struct Cand { Character* c; float dist; };
++
++CRITICAL_SECTION g_cs;
++bool g_csInit = false;
++std::vector<CombatNote> g_pendingCombat;
++N2Policy::ProximityGate g_gate;
++DWORD g_lastScan = 0;
++
++void EnsureInit() {
++  if (!g_csInit) { InitializeCriticalSection(&g_cs); g_csInit = true; }
++}
++bool Ok(const void* p) { return p && (uintptr_t)p >= 0x1000; }
++unsigned SerialOf(Character* c) {
++  try { return c->getHandle().serial; } catch (...) { return 0; }
++}
++bool Gates() {
++  if (!g_enableBoredEvents) return false;
++  if (!Stobe::Interaction::Allowed()) return false;
++  if (IsTtsPlaybackActive()) return false;
++  if (Stobe::UI::IsDirectorSceneActive()) return false;
++  if (Stobe::UI::IsAiRequestActive()) return false;
++  return true;
++}
++std::string NameOf(Character* c) {
++  try { return c->getName(); } catch (...) { return ""; }
++}
++bool Fire(GameWorld* world, Character* npc, Character* anchor, const char* reason, float dist) {
++  std::string attn = Stobe::NativeAttention::AttentionJson(npc);
++  if (attn.size() > 600) attn = "{\"observed\":false}";
++  bool sent = Stobe::UI::TriggerOptionalBoredTurn(world, npc, anchor, attn);
++  Log(std::string("N2_PROXIMITY: ") + (sent ? "dispatched" : "not dispatched") + " reason=" + reason + " npc=" + NameOf(npc) +
++      " dist=" + ToString((int)dist));
++  return sent;
++}
++} // namespace
++
++void Reset() {
++  EnsureInit();
++  EnterCriticalSection(&g_cs);
++  g_gate.Reset();
++  g_pendingCombat.clear();
++  g_lastScan = 0;
++  LeaveCriticalSection(&g_cs);
++}
++
++void NoteCombatStart(unsigned actorSerial, unsigned targetSerial) {
++  if (!actorSerial && !targetSerial) return;
++  EnsureInit();
++  EnterCriticalSection(&g_cs);
++  if (g_pendingCombat.size() < kMaxPendingCombat) {
++    CombatNote n; n.actor = actorSerial; n.target = targetSerial;
++    g_pendingCombat.push_back(n);
++  }
++  LeaveCriticalSection(&g_cs);
++}
++
++void Update(GameWorld* world, Character* selected) {
++  EnsureInit();
++  DWORD tick = GetTickCount();
++  if (tick - g_lastScan < kScanIntervalMs) return;
++  g_lastScan = tick;
++  if (!Ok(world) || !Ok(world->player)) return;
++  uint32_t n = world->player->playerCharacters.size();
++  if (n < 2) {
++    EnterCriticalSection(&g_cs); g_pendingCombat.clear(); LeaveCriticalSection(&g_cs);
++    return;
++  }
++  const bool open = Gates();
++  std::vector<CombatNote> pending;
++  EnterCriticalSection(&g_cs);
++  pending.swap(g_pendingCombat);
++  LeaveCriticalSection(&g_cs);
++  if (!open) return;
++
++  const double now = (double)tick / 1000.0;
++  try {
++    Character* anchor = NULL;
++    if (Ok(selected)) {
++      try { if (selected->isPlayerCharacter()) anchor = selected; } catch (...) { anchor = NULL; }
++    }
++    if (!anchor) anchor = world->player->playerCharacters[0];
++    if (!Ok(anchor) || !Stobe::NativeAttention::IsFree(anchor)) return;
++    const Ogre::Vector3 apos = anchor->getPosition();
++    const unsigned anchorSerial = SerialOf(anchor);
++
++    // Combat starts: distance from the anchor to the nearest participant.
++    if (!pending.empty()) {
++      lektor<RootObject*> nearList;
++      bool haveNear = false;
++      try {
++        world->getCharactersWithinSphere(nearList, apos, N2Policy::ProximityGate::CombatPlayerRange(), 0.0f, 0.0f, 24, 0, anchor);
++        haveNear = true;
++      } catch (...) { haveNear = false; }
++      for (size_t i = 0; i < pending.size(); ++i) {
++        float best = 1e9f;
++        if (pending[i].actor == anchorSerial || pending[i].target == anchorSerial) best = 0.0f;
++        for (uint32_t k = 0; haveNear && k < nearList.size(); ++k) {
++          Character* c = (Character*)nearList.stuff[k];
++          if (!Ok(c)) continue;
++          unsigned s = SerialOf(c);
++          if (!s || (s != pending[i].actor && s != pending[i].target)) continue;
++          try {
++            float d = apos.distance(c->getPosition());
++            if (d < best) best = d;
++          } catch (...) {}
++        }
++        g_gate.NoteCombatStart(now, best);
++      }
++    }
++
++    // Companion scan: every other squad member, distance to the anchor.
++    std::vector<Cand> able;
++    for (uint32_t i = 0; i < n && i < 32; ++i) {
++      Character* c = world->player->playerCharacters[i];
++      if (!Ok(c) || c == anchor) continue;
++      unsigned s = SerialOf(c);
++      if (!s) continue;
++      float d = 1e9f;
++      try { d = apos.distance(c->getPosition()); } catch (...) { continue; }
++      if (!Stobe::NativeAttention::IsFree(c)) continue;
++      Cand k; k.c = c; k.dist = d;
++      able.push_back(k);
++      bool idle = Stobe::NativeAttention::IsIdle(c);
++      if (g_gate.OnScan(s, now, idle, d, g_proximityRadius)) {
++        Fire(world, c, anchor, "proximity", d);
++        return; // one turn per scan
++      }
++    }
++
++    if (g_gate.TakeCombatDue(now)) {
++      Character* best = NULL;
++      float bestD = N2Policy::ProximityGate::CombatCompanionRange();
++      for (size_t i = 0; i < able.size(); ++i)
++        if (able[i].dist <= bestD) { bestD = able[i].dist; best = able[i].c; }
++      if (best && g_gate.TryFire(SerialOf(best), now)) Fire(world, best, anchor, "combat_start", bestD);
++    }
++  } catch (...) {
++    Log("N2_PROXIMITY: scan exception");
++  }
++}
++} }
+--- /dev/null
++++ b/src/N2SocialWatch.h
+@@ -0,0 +1,19 @@
++#pragma once
++// N2: proximity follow-up trigger. Fires the optional bored turn (server decides; it answers "ok" and does
++// nothing when nothing is claimable) when
++//   (a) the selected player character comes within talking range of an idle squad companion after being
++//       away (> 30 m for >= 45 s), or on the first stable scan after a load (once, 8 s delay);
++//   (b) 1-3 s after a combat_start within 60 m of the selected player character: nearest able companion
++//       within 40 m (the attention block carries in_combat so the server can allow a threat remark).
++// Pure rules (rate limits 90 s global / 10 min per NPC, away/return, load once) live in N2Policy.h.
++// Log lines: "N2_PROXIMITY: ..." in stobe.log.
++class GameWorld;
++class Character;
++namespace Stobe { namespace N2SocialWatch {
++// Main game thread, every frame (rate-limited to one scan per 2 s inside).
++void Update(GameWorld* world, Character* selected);
++// Load / new game / import: forget all state.
++void Reset();
++// Any thread: a combat_start event was logged (actor and target handle serials, 0 = unknown).
++void NoteCombatStart(unsigned actorSerial, unsigned targetSerial);
++} }
+--- /dev/null
++++ b/src/NativeAttention.cpp
+@@ -0,0 +1,202 @@
++#include "NativeAttention.h"
++#include "N2Policy.h"
++#include "Utils.h"
++#include <kenshi/Character.h>
++#include <kenshi/CharBody.h>
++#include <kenshi/Faction.h>
++#include <kenshi/GameWorld.h>
++#include <kenshi/MedicalSystem.h>
++#include <kenshi/Platoon.h>
++#include <kenshi/RootObjectBase.h>
++#include <kenshi/StateBroadcastData.h>
++#include <kenshi/Tasker.h>
++#include <kenshi/util/YesNoMaybe.h>
++#include <stdint.h>
++
++namespace Stobe { namespace NativeAttention {
++namespace {
++bool Ok(const void* p) { return p && (uintptr_t)p >= 0x1000; }
++
++TaskType CurrentTask(Character* c) {
++  try {
++    CharBody* body = c->getBody();
++    if (!Ok(body)) return NULL_TASK;
++    Tasker* action = body->currentAction;
++    if (!Ok(action) || !Ok(action->taskData)) return NULL_TASK;
++    return action->taskData->key;
++  } catch (...) { return NULL_TASK; }
++}
++
++bool IsSleepTask(TaskType t) { return t == SLEEP_ON_FLOOR || t == USE_BED || t == USE_BED_ORDER || t == REST; }
++bool IsFearTask(TaskType t) {
++  return t == RUN_AWAY || t == RUN_AWAY_HOMETOWN || t == RETREAT_HOMETOWN || t == RUN_AWAY_FORCED || t == SELF_PRESERVATION;
++}
++// Reason text for tasks that mean "occupied with a job"; "" = free (idle, wandering, following, standing).
++const char* BusyReason(TaskType t) {
++  switch (t) {
++  case BUILD: case ADD_MATERIALS_TO_BUILDING: case JOB_BUILDER: return "building";
++  case REPAIR: case JOB_REPAIR_ROBOT: return "repairing";
++  case DISMANTLE: return "dismantling";
++  case OPERATE_MACHINERY: case OPERATE_AUTOMATIC_MACHINERY: case PRETEND_TO_OPERATE_MACHINERY:
++  case JOB_KEEP_EVERYTHING_RUNNING: case FILL_MACHINE: case WANT_TO_FILL_MACHINE: case UNJAM_ALL_MACHINES:
++  case UNJAM_MACHINE: case COLLECT_OUTPUT_RESOURCE: case COLLECT_OUTPUT_RESOURCE_BUILD_MATS: case EMPTYING_MACHINE:
++  case EMPTY_MACHINE_OUTPUTS: return "operating machinery";
++  case FIRST_AID_ORDER: case FIRST_AID_ROBOT: case JOB_MEDIC: case SPLINT_ORDER: case SPLINT_JOB: case HEAL_MY_LEGS:
++    return "giving first aid";
++  case USE_TRAINING_DUMMY: return "training";
++  case SHOPPING: case BUY_SHIT: case FIND_A_SHOP: return "shopping";
++  case STAND_AT_SHOPKEEPER_NODE: case WANDERING_TRADER: case OPEN_UP_SHOP_DOORS: return "tending a shop";
++  case PATROL: case PATROL_TOWN: case STAND_AT_GUARD_NODE_HOMEBUILDING_IN_OUT: case STAND_AT_GUARD_NODE_HOMETOWN_OUTSIDE:
++  case STAND_AT_GUARD_NODE_HOMEBUILDING_INDOORS_ONLY: case STAND_AT_BUILDING_GUARD_NODE: case MAN_THE_GATE:
++    return "on guard duty";
++  case MAN_A_TURRET: case MAN_A_TURRET_ON_BUILDING: case MAN_A_TURRET_PLAYER_JOB: case USE_TURRET: return "manning a turret";
++  case PROSPECTING: return "prospecting";
++  case AUTO_LABOURING_MINES: case AUTO_LABOURING_MINES_PRETEND: case WORK_THE_SLAVES: return "working";
++  case OPERATE_STORAGE: case PUT_LOOT_IN_STORAGE: case DELIVER_RESOURCES: return "hauling goods";
++  case PICK_LOCK: case LOCK_DOOR: case UNLOCK_DOOR: return "working a lock";
++  case TRAVEL_TO_TARGET_TOWN: case TRAVEL_TO_TARGET_TOWN_FAST: case TRAVEL_TO_TARGET_PACKAGE: return "travelling";
++  case LOOT_TARGET: case LOOT_THE_DEAD: case LOOT_CONTAINER: return "looting";
++  default: return "";
++  }
++}
++
++struct Vitals {
++  bool ok, dead, unconscious, bleeding, trauma;
++  int bloodPct, hungerValue, worstFleshPct;
++  Vitals() : ok(false), dead(false), unconscious(false), bleeding(false), trauma(false), bloodPct(-1), hungerValue(300), worstFleshPct(-1) {}
++};
++
++Vitals ReadVitals(Character* c) {
++  Vitals v;
++  try {
++    MedicalSystem* med = c->getMedical();
++    if (!Ok(med)) return v;
++    v.ok = true;
++    v.dead = med->dead;
++    v.unconscious = med->unconcious;
++    v.bloodPct = N2Policy::BloodPct(med->blood, med->getMaxBlood());
++    v.bleeding = med->currentBleedRate > 0.0f;
++    v.trauma = med->isInBloodlossTrauma();
++    v.hungerValue = N2Policy::HungerValue(med->hunger, med->fed);
++    MedicalSystem::HealthPartStatus* parts[6] = {med->getPart(0), med->getPart(1), med->leftArm, med->rightArm, med->leftLeg, med->rightLeg};
++    int worst = 100;
++    bool any = false;
++    for (int i = 0; i < 6; ++i) {
++      MedicalSystem::HealthPartStatus* p = parts[i];
++      if (!Ok(p)) continue;
++      float mx = p->maxHealth();
++      if (!(mx > 0.0f)) continue;
++      int pct = (int)(p->flesh * 100.0f / mx);
++      if (pct < worst) worst = pct;
++      any = true;
++    }
++    if (any) v.worstFleshPct = worst < 0 ? 0 : worst;
++  } catch (...) { v = Vitals(); }
++  return v;
++}
++
++bool IsAsleep(Character* c, TaskType task) {
++  try {
++    if (c->inSomething == IN_BED || IsSleepTask(task)) return true;
++    StateBroadcastData* sb = c->stateBroadcast;
++    if (Ok(sb) && sb->isSleeping.key == YesNoMaybe::YES) return true;
++  } catch (...) {}
++  return false;
++}
++} // namespace
++
++std::string AttentionJson(Character* npc) {
++  if (!Ok(npc)) return "{\"observed\":false}";
++  N2Policy::AttentionInputs a;
++  Vitals v = ReadVitals(npc);
++  if (!v.ok) return "{\"observed\":false}";
++  TaskType task = CurrentTask(npc);
++  a.bloodPct = v.bloodPct;
++  a.bleeding = v.bleeding;
++  a.hungry = N2Policy::HungryFrom(v.hungerValue);
++  a.exhausted = N2Policy::ExhaustedFrom(v.hungerValue, v.trauma);
++  try { a.crippled = npc->isCrippled(); } catch (...) { a.crippled = false; }
++  try { a.fleeing = npc->isFleeing(); } catch (...) { a.fleeing = false; }
++  try { a.inCombat = npc->isInCombatMode(true, true); } catch (...) { a.inCombat = false; }
++  a.injured = N2Policy::InjuredFrom(v.bloodPct, a.crippled, a.bleeding, v.worstFleshPct);
++  a.sleeping = IsAsleep(npc, task);
++  a.afraid = a.fleeing || IsFearTask(task);
++  const char* reason = BusyReason(task);
++  a.busy = reason[0] != 0;
++  a.busyReason = reason;
++  return N2Policy::AttentionJson(a);
++}
++
++std::string WithAttention(const std::string& nativeAiJson, Character* npc) {
++  try { return N2Policy::AppendAttention(nativeAiJson, AttentionJson(npc)); }
++  catch (...) { return nativeAiJson; }
++}
++
++std::string RoleFor(Character* npc) {
++  if (!Ok(npc)) return "";
++  try {
++    TaskType t = CurrentTask(npc);
++    if (npc->isSlave() == IS_SLAVE) return "slave";
++    if (t == STAND_AT_SHOPKEEPER_NODE) return "shopkeeper";
++    if (npc->isATrader() || t == WANDERING_TRADER) return "trader";
++    if (t == JOB_MEDIC) return "medic";
++    if (npc->isLawEnforcement() || t == PATROL || t == PATROL_TOWN || t == STAND_AT_GUARD_NODE_HOMEBUILDING_IN_OUT ||
++        t == STAND_AT_GUARD_NODE_HOMETOWN_OUTSIDE || t == STAND_AT_BUILDING_GUARD_NODE)
++      return "guard";
++  } catch (...) {}
++  return "";
++}
++
++std::string SquadName(Character* npc) {
++  if (!Ok(npc)) return "";
++  try {
++    ActivePlatoon* g = npc->getPlatoon();
++    if (!Ok(g)) return "";
++    return N2Policy::AsciiTruncate(g->getName(), 60);
++  } catch (...) { return ""; }
++}
++
++unsigned SquadId(Character* npc) {
++  if (!Ok(npc)) return 0;
++  try {
++    ActivePlatoon* g = npc->getPlatoon();
++    if (!Ok(g) || !Ok(g->me)) return 0;
++    return g->me->getHandle().serial;
++  } catch (...) { return 0; }
++}
++
++std::string SettlementName(Character* npc) {
++  if (!Ok(npc)) return "";
++  try {
++    TownBase* town = npc->getCurrentTownLocation();
++    if (!Ok(town)) return "";
++    return N2Policy::AsciiTruncate(((RootObjectBase*)town)->getName(), 60);
++  } catch (...) { return ""; }
++}
++
++int PartnerState(Character* npc) {
++  if (!Ok(npc)) return N2Policy::PS_NONE;
++  Vitals v = ReadVitals(npc);
++  if (!v.ok) return N2Policy::PS_NONE;
++  bool down = false;
++  try { down = npc->isDown(); } catch (...) { down = false; }
++  return N2Policy::ClassifyPartner(v.dead, v.unconscious, v.bleeding, v.bloodPct, v.trauma, down);
++}
++
++bool IsFree(Character* npc) {
++  if (!Ok(npc)) return false;
++  Vitals v = ReadVitals(npc);
++  if (!v.ok || v.dead || v.unconscious) return false;
++  try { return !npc->isDown(); } catch (...) { return false; }
++}
++
++bool IsIdle(Character* npc) {
++  if (!IsFree(npc)) return false;
++  TaskType task = CurrentTask(npc);
++  try {
++    if (npc->isInCombatMode(true, true) || npc->isFleeing()) return false;
++  } catch (...) { return false; }
++  if (IsAsleep(npc, task) || IsFearTask(task)) return false;
++  return BusyReason(task)[0] == 0;
++}
++} }
+--- /dev/null
++++ b/src/NativeAttention.h
+@@ -0,0 +1,24 @@
++#pragma once
++// N2: native attention / role / squad reads for one character (game thread only, no retained pointers).
++#include <string>
++class Character;
++class GameWorld;
++namespace Stobe { namespace NativeAttention {
++// {"observed":true,busy,sleeping,injured,crippled,bleeding,exhausted,afraid,fleeing,hungry,in_combat,blood_pct,busy_reason}
++// or {"observed":false} when the character cannot be read.
++std::string AttentionJson(Character* npc);
++// native_ai json (NativeAiAwareness::CaptureJson) with ,"attention":{...} appended when observed.
++std::string WithAttention(const std::string& nativeAiJson, Character* npc);
++// Public occupation of a bystander: trader|shopkeeper|guard|medic|slave|"" (<=24 chars).
++std::string RoleFor(Character* npc);
++// Squad name / id / current town name of a character ("" / 0 when unknown).
++std::string SquadName(Character* npc);
++unsigned SquadId(Character* npc);
++std::string SettlementName(Character* npc);
++// 0 none, 1 knocked_out, 2 bleeding_out, 3 downed (N2Policy::PartnerState); alive characters only.
++int PartnerState(Character* npc);
++// Alive, conscious, not downed (can walk away).
++bool IsFree(Character* npc);
++// Not in combat, not sleeping, not busy, not fleeing: fit for an optional chat turn.
++bool IsIdle(Character* npc);
++} }
+--- a/src/NativeTravelLifecycle.cpp
++++ b/src/NativeTravelLifecycle.cpp
+@@ -1,4 +1,5 @@
+ #include "NativeTravelLifecycle.h"
++#include "ParticipationEvidence.h"
+ #include "Globals.h"
+ #include "AutonomyExecutor.h"
+ #include "KenshiAiCompat.h"
+@@ -26,6 +27,8 @@
+ namespace {
+ struct Controller { unsigned long long revision; bool present; Controller():revision(0),present(false) {} };
+ struct Receipt {
++  Stobe::Participation::Evidence participation;
++  bool partBegun;
+   unsigned int actor, speaker;
+   bool follow, terminal, arrived, released;
+   bool direct, fullyReleased;
+@@ -43,7 +46,7 @@
+   unsigned long sessionGeneration;
+   std::string agreement, request, world, task, planHash, phase, reason;
+   std::string dispatchEnvelope;
+-  Receipt():actor(0),speaker(0),follow(false),terminal(false),arrived(false),released(false),
++  Receipt():partBegun(false),actor(0),speaker(0),follow(false),terminal(false),arrived(false),released(false),
+     direct(false),fullyReleased(false),notStarted(false),dispatchAccepted(false),endPending(false),pendingArrived(false),
+     expires(0),startTime(0),issuedTick(0),pathFailureSamples(0),revision(0),evidence(0),sessionGeneration(0) {}
+ };
+@@ -77,6 +80,7 @@
+ }
+ void Emit(Receipt &r, const std::string &phase, const std::string &reason,
+           bool terminal, bool released = false, bool arrived = false) {
++  if (terminal && r.partBegun) r.participation.Freeze(phase == "completed" && arrived, observedGameTs);
+   r.phase = phase; r.reason = reason; r.terminal = terminal;
+   r.released = released; r.arrived = arrived; r.evidence = ++sequence;
+ }
+@@ -301,7 +305,8 @@
+         << ",\"controller_released\":" << (r.released ? "true" : "false")
+         << ",\"owned_work_released\":" << (r.fullyReleased ? "true" : "false")
+         << ",\"not_started_verified\":" << (r.notStarted ? "true" : "false")
+-        << ",\"end_condition_verified\":" << (r.arrived ? "true" : "false") << '}';
++        << ",\"end_condition_verified\":" << (r.arrived ? "true" : "false")
++        << ",\"participation\":" << (r.partBegun ? r.participation.Json() : std::string("{\"schema_version\":1,\"qualified\":false}")) << '}';
+   }
+   out << "]}"; return out.str();
+ }
+@@ -372,6 +377,9 @@
+       Lock lock(mutex);
+       absence[serial].verified = false;
+       r.task = "order:" + Number(serial) + ":" + Number(++sequence);
++      r.participation.Begin(world, serial, speaker, expectedWorld, agreement, r.task, true, Ogre::Vector3(x,y,z));
++      r.partBegun = true;
++      r.participation.Sample(world, expectedWorld, nowGameTs, 0);
+       r.phase = "dispatching"; r.reason = "native_dispatch_started_outcome_pending"; r.terminal = true;
+       std::vector<Receipt> &history = receipts[serial];
+       if (history.size() >= 32) history.erase(history.begin());
+@@ -443,8 +451,24 @@
+   for (std::map<unsigned int,std::vector<Receipt> >::iterator entry=receipts.begin(); entry!=receipts.end(); ++entry) {
+     if (entry->second.empty()) continue;
+     Receipt &r = entry->second.back();
++    if (!r.terminal && !r.direct && !r.follow) {
++      // Stobe route controller (not a native order): bind participation lazily to the controller's endpoint.
++      try {
++        if (!r.partBegun) {
++          const auto routeTargets = SnapshotTravelTargets();
++          const auto routeTarget = routeTargets.find(r.actor);
++          if (routeTarget != routeTargets.end()) {
++            r.participation.Begin(world, r.actor, r.speaker, r.world, r.agreement, r.task, true,
++              Ogre::Vector3(routeTarget->second.x, routeTarget->second.y, routeTarget->second.z));
++            r.partBegun = true;
++          }
++        }
++        if (r.partBegun) r.participation.Sample(world, r.world, nowGameTs, 0);
++      } catch (...) {}
++    }
+     if (!r.direct || (r.terminal && !r.endPending) || r.fullyReleased) continue;
+     try {
++      if (r.partBegun) r.participation.Sample(world, r.world, nowGameTs, 0);
+       Character *actor = Stobe::KenshiAi::ResolveCharacter(world, r.actor);
+       if (!actor) {
+         Emit(r, "running", "actor_unloaded_observation_unavailable", false); continue;
+--- /dev/null
++++ b/src/ParticipationEvidence.h
+@@ -0,0 +1,81 @@
++#pragma once
++// Main-thread-only observer. No AI commands, timers, persistence or rewards.
++#include "KenshiAiCompat.h"
++#include "StobeText.h"
++#include <kenshi/Character.h>
++#include <kenshi/InstanceID.h>
++#include <cmath>
++#include <float.h>
++#include <sstream>
++
++namespace Stobe { namespace Participation {
++struct Evidence {
++ std::string world, agreement, task, actorStorage, partnerStorage, actorName, partnerName, frozen;
++ hand actorHandle, partnerHandle;
++ unsigned actor, partner, samples, progressSamples, lastProgress;
++ long long first, last;
++ double actorDistance, partnerDistance, endpointProgress, maxSeparation, firstEndpoint;
++ Ogre::Vector3 actorPos, partnerPos, endpoint;
++ bool travel, bound;
++ Evidence():actor(0),partner(0),samples(0),progressSamples(0),lastProgress(0),first(0),last(0),
++ actorDistance(0),partnerDistance(0),endpointProgress(0),maxSeparation(0),firstEndpoint(0),travel(false),bound(false) {}
++ static bool Same(const hand&a,const hand&b) {return a.serial==b.serial&&a.index==b.index&&a.type==b.type&&a.container==b.container&&a.containerSerial==b.containerSerial;}
++ static bool Finite(const Ogre::Vector3&p) {return _finite(p.x)&&_finite(p.y)&&_finite(p.z);}
++ static double Distance(const Ogre::Vector3&a,const Ogre::Vector3&b) {double x=a.x-b.x,y=a.y-b.y,z=a.z-b.z;return std::sqrt(x*x+y*y+z*z);}
++ void Break() {samples=progressSamples=0;first=last=0;actorDistance=partnerDistance=endpointProgress=maxSeparation=0;}
++ void Begin(GameWorld*w,unsigned a,unsigned p,const std::string&wi,const std::string&ag,const std::string&ta,bool trip,const Ogre::Vector3&end) {
++  *this=Evidence();actor=a;partner=p;world=wi;agreement=ag;task=ta;travel=trip;endpoint=end;
++  try {
++   Character*ac=KenshiAi::ResolveCharacter(w,a);Character*pc=KenshiAi::ResolveCharacter(w,p);
++   if(!ac||!pc||a==p||wi.empty()||ag.empty()||ta.empty())return;
++   InstanceID*ai=ac->getInstanceID();InstanceID*pi=pc->getInstanceID();
++   // Never use name or session-local hand_ fallback as durable identity.
++   if(!ai||!pi||ai->uid.empty()||pi->uid.empty()||ai->uid==pi->uid)return;
++   actorStorage=ai->uid;partnerStorage=pi->uid;actorName=ac->getName();partnerName=pc->getName();
++   actorHandle=ac->getHandle();partnerHandle=pc->getHandle();bound=true;
++  }catch(...){bound=false;}
++ }
++ void Sample(GameWorld*w,const std::string&wi,long long now,unsigned progress) {
++  if(!frozen.empty())return;
++  try {
++   if(!bound||wi!=world||now<0){Break();return;}
++   Character*a=KenshiAi::ResolveCharacter(w,actor);Character*p=KenshiAi::ResolveCharacter(w,partner);
++   if(!a||!p||!Same(a->getHandle(),actorHandle)||!Same(p->getHandle(),partnerHandle)||
++      a->isDead()||p->isDead()||a->isUnconcious()||p->isUnconcious()){Break();return;}
++   InstanceID*ai=a->getInstanceID();InstanceID*pi=p->getInstanceID();
++   if(!ai||!pi||ai->uid!=actorStorage||pi->uid!=partnerStorage){bound=false;Break();return;}
++   const Ogre::Vector3 ap=a->getPosition(),pp=p->getPosition();
++   if(!Finite(ap)||!Finite(pp)||!Finite(endpoint)){Break();return;}
++   const double separation=Distance(ap,pp),remaining=Distance(ap,endpoint);
++   if(separation>35.0){Break();return;}
++   if(samples && (now<last||now-last>10||progress<lastProgress))Break();
++   if(samples&&now==last)return; // Frames while paused are not participation time.
++   if(samples) {
++    double ad=Distance(ap,actorPos),pd=Distance(pp,partnerPos);
++    if(ad>20.0*(now-last)+5.0||pd>20.0*(now-last)+5.0)Break();
++    else {actorDistance+=ad;partnerDistance+=pd;if(progress>lastProgress)++progressSamples;}
++   }
++   if(!samples){first=now;firstEndpoint=remaining;lastProgress=progress;}
++   ++samples;last=now;actorPos=ap;partnerPos=pp;lastProgress=progress;
++   endpointProgress=firstEndpoint-remaining;if(separation>maxSeparation)maxSeparation=separation;
++  }catch(...){Break();}
++ }
++ static std::string Q(const std::string&s){return std::string("\"")+Text::EscapeJSON(s)+"\"";}
++ void Freeze(bool completed,long long now) {
++  if(!frozen.empty())return;
++  bool qualified=completed&&bound&&samples>=4&&now>=last&&now-last<=2&&last-first>=30&&
++    (travel?(actorDistance>=30&&partnerDistance>=30&&endpointProgress>=30):(progressSamples>=2&&partnerDistance>=5));
++  std::ostringstream o;o<<"{\"schema_version\":1,\"mode\":"<<Q(travel?"travel_accompaniment":"activity_accompaniment")
++   <<",\"qualified\":"<<(qualified?"true":"false")<<",\"conscious_alive_all\":"<<(qualified?"true":"false")
++   <<",\"world_id\":"<<Q(world)<<",\"agreement_id\":"<<Q(agreement)<<",\"task_id\":"<<Q(task)
++   <<",\"actor_serial\":"<<actor<<",\"partner_serial\":"<<partner
++   <<",\"actor_storage_id\":"<<Q(actorStorage)<<",\"partner_storage_id\":"<<Q(partnerStorage)
++   <<",\"actor_name\":"<<Q(actorName)<<",\"partner_name\":"<<Q(partnerName)
++   <<",\"first_gamets\":"<<first<<",\"last_gamets\":"<<last<<",\"terminal_gamets\":"<<now
++   <<",\"qualified_samples\":"<<samples<<",\"progress_samples\":"<<progressSamples
++   <<",\"actor_distance\":"<<actorDistance<<",\"partner_distance\":"<<partnerDistance
++   <<",\"endpoint_progress\":"<<endpointProgress<<",\"max_separation\":"<<maxSeparation<<"}";frozen=o.str();
++ }
++ std::string Json()const{return frozen.empty()?"{\"schema_version\":1,\"qualified\":false}":frozen;}
++};
++} }
+--- a/src/SocialEventProtocol.cpp
++++ b/src/SocialEventProtocol.cpp
+@@ -49,7 +49,7 @@
+ 
+ namespace StobeSocial {
+ bool StructuredKind(const std::string& kind) {
+-    const char* kinds[]={"attack","harm","recovered","item_transfer","enslaved","freed","aid","carry_start","carry_end","placed","eat","trade","item_gain","theft_caught"};
++    const char* kinds[]={"attack","harm","recovered","item_transfer","enslaved","freed","aid","carry_start","carry_end","placed","eat","trade","item_gain","theft_caught","abandoned_in_danger"};
+     for(size_t i=0;i<sizeof(kinds)/sizeof(kinds[0]);++i)if(kind==kinds[i])return true;
+     return false;
+ }
+@@ -64,6 +64,7 @@
+     out<<"}"; return out.str();
+ }
+ namespace {
++std::string SquadIdText(unsigned id){std::ostringstream o; o<<"squad_"<<id; return o.str();}
+ std::string StructuredEntity(const EntityInfo* e,const std::string& session,unsigned long epoch){
+     if(!e||!e->serial||e->name.size()>180)return "null";
+     std::ostringstream s;
+@@ -74,7 +75,12 @@
+      <<(e->storageAlias.empty()||e->storageAlias.size()>128?std::string():",\"storage_alias\":"+JsonString(e->storageAlias))
+      <<",\"faction\":"<<(e->faction.empty()||e->faction.size()>128?"null":JsonString(e->faction))
+      <<",\"in_player_faction\":"<<JsonBool(e->inPlayerFaction)
+-     <<",\"conscious\":"<<JsonBool(e->conscious)<<"}";
++     <<",\"conscious\":"<<JsonBool(e->conscious)
++     <<(e->inPlayerSquad<0?std::string():",\"in_player_squad\":"+JsonBool(e->inPlayerSquad))
++     <<(e->squadId?",\"squad_id\":"+std::string(1,'"')+SquadIdText(e->squadId)+"\"":std::string())
++     <<(e->squadName.empty()||e->squadName.size()>64?std::string():",\"squad_name\":"+JsonString(e->squadName))
++     <<(e->settlement.empty()||e->settlement.size()>64?std::string():",\"settlement\":"+JsonString(e->settlement))
++     <<"}";
+     return s.str();
+ }
+ }
+--- a/src/SocialEventProtocol.h
++++ b/src/SocialEventProtocol.h
+@@ -18,7 +18,11 @@
+         std::string storageAlias; // earlier hand_<serial> of the same live character (re-squad gave it a new handle)
+         int inPlayerFaction;
+         int conscious;
+-        EntityInfo() : serial(0), inPlayerFaction(-1), conscious(-1) {}
++        // N2 entity export (all optional; omitted from the JSON when unset)
++        int inPlayerSquad;       // -1 unknown, 0/1
++        unsigned squadId;        // squad (platoon) handle serial, 0 = unknown
++        std::string squadName, settlement;
++        EntityInfo() : serial(0), inPlayerFaction(-1), conscious(-1), inPlayerSquad(-1), squadId(0) {}
+     };
+     bool StructuredKind(const std::string& kind);
+     std::string JsonString(const std::string& value);           // quoted + escaped
+--- a/src/Utils.cpp
++++ b/src/Utils.cpp
+@@ -1,5 +1,6 @@
+ #include "PlaythroughSession.h"
+ #include "SocialEventProtocol.h"
++#include "N2SocialWatch.h"
+ #include "Utils.h"
+ #include "ChatBox.h"
+ #include "ChatUIGlobals.h"
+@@ -1477,6 +1478,8 @@
+   }
+ 
+   NoteDangerEventActor(normalizedType, actorSerial); // m50 D86: partner-only danger skip
++  if (normalizedType == "combat_start")
++    Stobe::N2SocialWatch::NoteCombatStart(actorSerial, targetSerial); // N2 proximity trigger
+ 
+   EnterCriticalSection(&g_eventMutex);
+   GameEvent ev;
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -46,6 +46,9 @@
+ #include "ActivityController.h"
+ #include "ShopPriceHook.h"
+ #include "StobeDrawnWeapon.h"
++#include "N2Policy.h"
++#include "N2SocialWatch.h"
++#include "NativeAttention.h"
+ #include "Utils.h"
+ #include "SocialEventProtocol.h"
+ #include "VoiceCapture.h"
+@@ -1414,7 +1417,18 @@
+   PendingItemImageSyncRequest() : npcHand(), reason(""), queuedTick(0) {}
+ };
+ 
++// Repair evidence: session-local object identity, never a durable item UUID.
++struct SocialInventoryInstance {
++  uintptr_t address;
++  unsigned int serial;
++  unsigned long epoch;
++  std::string prototypeId, typeKey;
++  int quantity;
++  SocialInventoryInstance() : address(0), serial(0), epoch(0), quantity(0) {}
++};
++
+ struct InventoryEventSnapshot {
++  std::map<unsigned int, SocialInventoryInstance> exactInstances;
+   std::map<std::string, int> countsByKey;
+   std::map<std::string, int> stolenByKey;
+   std::map<std::string, int> foodByKey;
+@@ -5375,6 +5389,15 @@
+   } catch (...) {
+     e.conscious = -1;
+   }
++  // N2 entity export: squad / settlement / player-squad membership (all optional on the wire).
++  try {
++    e.inPlayerSquad = c->isPlayerCharacter() ? 1 : 0;
++  } catch (...) {
++    e.inPlayerSquad = -1;
++  }
++  e.squadId = Stobe::NativeAttention::SquadId(c);
++  e.squadName = Stobe::NativeAttention::SquadName(c);
++  e.settlement = Stobe::NativeAttention::SettlementName(c);
+   return e;
+ }
+ 
+@@ -5865,6 +5888,27 @@
+     if (key.empty()) {
+       key = itemName;
+     }
++    // Preserve exact native identity separately from the legacy display-name totals.
++    // An alias/duplicate observation invalidates proof instead of counting twice.
++    try {
++      unsigned int serial = item->getHandle().serial;
++      GameData *data = item->getGameData();
++      std::string prototype = data ? TrimCopy(data->stringID) : "";
++      if (serial && count > 0 && count <= 1000000 && !prototype.empty() &&
++          prototype.size() <= 128 && key.size() <= 180) {
++        SocialInventoryInstance instance;
++        instance.address = reinterpret_cast<uintptr_t>(item);
++        instance.serial = serial;
++        instance.epoch = PlaythroughSession::Generation();
++        instance.prototypeId = prototype;
++        instance.typeKey = key;
++        instance.quantity = item->quantity; // Do not use the legacy fallback of one.
++        if (out.exactInstances.count(serial))
++          out.exactInstances[serial].quantity = 0;
++        else
++          out.exactInstances[serial] = instance;
++      }
++    } catch (...) { /* Missing identity is no evidence. */ }
+     out.countsByKey[key] += count;
+     if (isStolen) {
+       out.stolenByKey[key] += count;
+@@ -6996,6 +7040,73 @@
+   return nullptr;
+ }
+ 
++// Proves ONLY unchanged whole stacks observed moving between these two holders.
++// Split/merged stacks, stale loads, missed sweeps and name-only matches fail closed.
++// Server must scope item_key by envelope campaign/session/epoch and match both
++// participants and the original incident before allocating restitution.
++static std::string SocialExactTransferEvidence(
++    const TransferEventAggregation &agg,
++    const std::vector<PendingInventoryTransferDelta> &deltas,
++    const StobeSocial::EntityInfo &giver, const StobeSocial::EntityInfo &receiver) {
++  const PendingInventoryTransferDelta *from = nullptr, *to = nullptr;
++  for (size_t i = 0; i < deltas.size(); ++i) {
++    if (deltas[i].serial == agg.fromSerial) {
++      if (from) return "\"transfer_evidence\":{\"verified\":false}";
++      from = &deltas[i];
++    }
++    if (deltas[i].serial == agg.toSerial) {
++      if (to) return "\"transfer_evidence\":{\"verified\":false}";
++      to = &deltas[i];
++    }
++  }
++  std::string rows;
++  size_t emitted = 0;
++  std::map<std::string, int> provedByType;
++  if (from && to && from != to && !giver.storageId.empty() &&
++      !receiver.storageId.empty() && giver.storageId != receiver.storageId) {
++    for (auto it = from->beforeSnapshot.exactInstances.begin();
++         it != from->beforeSnapshot.exactInstances.end() && emitted < 32; ++it) {
++      const SocialInventoryInstance &a = it->second;
++      auto found = to->afterSnapshot.exactInstances.find(it->first);
++      if (found == to->afterSnapshot.exactInstances.end()) continue;
++      const SocialInventoryInstance &b = found->second;
++      auto bound = agg.qtyByKey.find(a.typeKey);
++      if (!a.address || !a.serial || a.quantity <= 0 ||
++          a.epoch != PlaythroughSession::Generation() || a.epoch != b.epoch ||
++          a.address != b.address || a.serial != b.serial ||
++          a.prototypeId != b.prototypeId || a.typeKey != b.typeKey ||
++          a.quantity != b.quantity || bound == agg.qtyByKey.end() ||
++          a.quantity > bound->second - provedByType[a.typeKey] ||
++          from->afterSnapshot.exactInstances.count(it->first) ||
++          to->beforeSnapshot.exactInstances.count(it->first)) continue;
++      bool ambiguous = false;
++      for (size_t n = 0; n < deltas.size(); ++n) {
++        if (&deltas[n] == from || &deltas[n] == to) continue;
++        if (deltas[n].beforeSnapshot.exactInstances.count(it->first) ||
++            deltas[n].afterSnapshot.exactInstances.count(it->first)) ambiguous = true;
++      }
++      // Also reject aliases in tracked holders which did not emit a delta.
++      for (auto owner = g_npcWorldEventStateBySerial.begin();
++           owner != g_npcWorldEventStateBySerial.end(); ++owner) {
++        if (owner->first != agg.fromSerial && owner->first != agg.toSerial &&
++            owner->second.inventory.exactInstances.count(it->first)) ambiguous = true;
++      }
++      if (ambiguous) continue;
++      if (!rows.empty()) rows += ",";
++      rows += "{\"item_key\":" + StobeSocial::JsonString("hand_" + ToString(a.serial)) +
++          ",\"prototype_id\":" + StobeSocial::JsonString(a.prototypeId) +
++          ",\"type_key\":" + StobeSocial::JsonString(a.typeKey) +
++          ",\"quantity\":" + ToString(a.quantity) +
++          ",\"from_storage_id\":" + StobeSocial::JsonString(giver.storageId) +
++          ",\"to_storage_id\":" + StobeSocial::JsonString(receiver.storageId) + "}";
++      provedByType[a.typeKey] += a.quantity;
++      ++emitted;
++    }
++  }
++  return rows.empty() ? "\"transfer_evidence\":{\"verified\":false}" :
++      "\"transfer_evidence\":{\"verified\":true,\"method\":\"same_live_item_whole_stack\",\"items\":[" + rows + "]}";
++}
++
+ static void EmitInventoryTransferEventsFromDeltas(
+     const std::vector<PendingInventoryTransferDelta> &deltas,
+     std::map<unsigned int, std::map<std::string, int> > &matchedGainBySerialOut) {
+@@ -7343,6 +7454,7 @@
+             if (!isGroundDrop && toChar && fromChar)
+               SocialCollectWitnesses(toChar, fromChar, transferWho, transferSense);
+             SocialPostStructuredW("item_transfer", isGroundDrop ? nullptr : &taker, &loser,
++                                 SocialExactTransferEvidence(agg, deltas, loser, taker) + "," +
+                                  "\"items\":" + StobeSocial::JsonCountMap(agg.qtyByKey, 64) +
+                                      ",\"to_ground\":" + std::string(isGroundDrop ? "true" : "false") +
+                                      ",\"food_items\":" + StobeSocial::JsonCountMap(food, 64) +
+@@ -8759,6 +8871,98 @@
+   }
+ }
+ 
++// N2: abandoned_in_danger. A free squad member stays >= 30 m from a downed squad member for >= 20 game
++// seconds after having been within 25 m during that episode. Rules/dedupe: N2Policy::AbandonTracker.
++static Stobe::N2Policy::AbandonTracker g_abandonTracker;
++static DWORD g_lastAbandonScanTick = 0;
++static void N2AbandonWatchReset() {
++  g_abandonTracker.Reset();
++  g_lastAbandonScanTick = 0;
++}
++static void N2AbandonWatch(GameWorld *world, DWORD nowTick) {
++  if (!SocialCaptureEnabled() || nowTick - g_lastAbandonScanTick < 2000)
++    return;
++  g_lastAbandonScanTick = nowTick;
++  if (!world || !world->player)
++    return;
++  uint32_t n = world->player->playerCharacters.size();
++  if (n < 2)
++    return;
++  if (n > 16)
++    n = 16;
++  const double nowSec = (double)CurrentGameTsSeconds();
++  struct Member {
++    Character *c;
++    unsigned int serial;
++    int state;
++    bool free;
++  };
++  std::vector<Member> members;
++  for (uint32_t i = 0; i < n; ++i) {
++    Character *c = world->player->playerCharacters[i];
++    if (!c || (uintptr_t)c < 0x1000)
++      continue;
++    Member m;
++    m.c = c;
++    m.serial = 0;
++    try {
++      m.serial = c->getHandle().serial;
++    } catch (...) {
++      m.serial = 0;
++    }
++    if (!m.serial)
++      continue;
++    m.state = Stobe::NativeAttention::PartnerState(c);
++    m.free = Stobe::NativeAttention::IsFree(c);
++    g_abandonTracker.NotePartnerState(m.serial, m.state, nowSec);
++    members.push_back(m);
++  }
++  for (size_t pi = 0; pi < members.size(); ++pi) {
++    if (members[pi].state == Stobe::N2Policy::PS_NONE)
++      continue;
++    for (size_t li = 0; li < members.size(); ++li) {
++      if (li == pi || !members[li].free)
++        continue;
++      float dist = 1e9f;
++      try {
++        dist = members[li].c->getPosition().distance(members[pi].c->getPosition());
++      } catch (...) {
++        continue;
++      }
++      Stobe::N2Policy::AbandonEvent ev;
++      if (!g_abandonTracker.Observe(members[li].serial, members[pi].serial, true, members[pi].state, dist, nowSec, &ev))
++        continue;
++      StobeSocial::EntityInfo leaver = SocialEntityFor(members[li].c), partner = SocialEntityFor(members[pi].c);
++      if (leaver.inPlayerFaction != 1 || partner.inPlayerFaction != 1)
++        continue; // both must be player-faction members
++      std::vector<StobeSocial::EntityInfo> who;
++      std::vector<int> sense;
++      SocialCollectWitnesses(members[li].c, members[pi].c, who, sense);
++      bool sawLeaving = false;
++      for (size_t k = 0; k < sense.size(); ++k)
++        if (((sense[k] >> 2) & 3) == 2 && (sense[k] & 1))
++          sawLeaving = true;
++      if (!sawLeaving && members[pi].state != Stobe::N2Policy::PS_KNOCKED_OUT) {
++        SensoryData *sd = nullptr;
++        try {
++          sd = members[pi].c->getSensoryData();
++        } catch (...) {
++          sd = nullptr;
++        }
++        sawLeaving = SocialSenseTri(sd, members[li].c, false) == 2;
++      }
++      std::string facts = "\"evidence_id\":" + StobeSocial::JsonString(ev.evidenceId) +
++                          ",\"partner_state\":" + StobeSocial::JsonString(ev.partnerState) +
++                          ",\"distance_m\":" + ToString((int)(ev.distanceM + 0.5f)) +
++                          ",\"seconds\":" + ToString(ev.seconds) +
++                          ",\"observer_saw_leaving\":" + (sawLeaving ? "true" : "false");
++      SocialPostStructuredW("abandoned_in_danger", &leaver, &partner, facts, who, sense);
++      Log("N2_ABANDON: leaver=" + leaver.name + " partner=" + partner.name + " state=" + ev.partnerState +
++          " dist=" + ToString((int)ev.distanceM) + " seconds=" + ToString(ev.seconds));
++    }
++  }
++}
++
+ static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) {
+   if (!world || !world->player || world->player->playerCharacters.size() == 0) {
+     return;
+@@ -8767,6 +8971,7 @@
+   DWORD nowTick = GetTickCount();
+   SocialFlushAidSessions(nowTick);
+   SocialLiberationWatch(world, nowTick); // REL_LIB_WATCH_M31
++  N2AbandonWatch(world, nowTick);        // N2 abandoned_in_danger
+   if (nowTick - g_lastNpcWorldEventSweepTick < kNpcWorldEventSweepIntervalMs) {
+     return;
+   }
+@@ -14034,6 +14239,8 @@
+     PlaythroughSession::BeginLoad();
+     Stobe::ShopPrice::ClearCache();
+     Stobe::DrawnWeapon::Reset();
++    Stobe::N2SocialWatch::Reset();
++    N2AbandonWatchReset();
+     BeginChatInterruptGeneration(false);
+     Stobe::Voice::Cancel();
+     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
+@@ -14044,6 +14251,8 @@
+     PlaythroughSession::BeginLoad(true);
+     Stobe::ShopPrice::ClearCache();
+     Stobe::DrawnWeapon::Reset();
++    Stobe::N2SocialWatch::Reset();
++    N2AbandonWatchReset();
+     BeginChatInterruptGeneration(false);
+     Stobe::Voice::Cancel();
+     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
+@@ -14053,6 +14262,8 @@
+     PlaythroughSession::BeginLoad();
+     Stobe::ShopPrice::ClearCache();
+     Stobe::DrawnWeapon::Reset();
++    Stobe::N2SocialWatch::Reset();
++    N2AbandonWatchReset();
+     BeginChatInterruptGeneration(false);
+     Stobe::Voice::Cancel();
+     EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
+@@ -15668,6 +15879,7 @@
+   Stobe::HarnessBridge::Drain(worldUi, sel, &RunTestInboxCommand);
+   UpdateLifelikeInitiativeFlag();
+   Stobe::DrawnWeapon::Update(worldUi); // drawn-weapon reactions
++  Stobe::N2SocialWatch::Update(worldUi, sel); // N2 proximity / combat follow-up trigger
+ 
+   // Player Cats and squads for the server (these used to run on the background loop).
+   static DWORD lastPlayerSyncTick = 0;
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -112,6 +112,8 @@
+   src/NativePlaceKnowledge.cpp
+   src/NpcReferralPeople.cpp
+   src/NativeTravelLifecycle.cpp
++  src/NativeAttention.cpp
++  src/N2SocialWatch.cpp
+   src/StobeGoals.cpp
+   src/ShopPricing.cpp
+   src/ShopPriceHook.cpp
+--- a/Stobe.vcxproj
++++ b/Stobe.vcxproj
+@@ -98,6 +98,8 @@
+     <ClCompile Include="src\NativePlaceKnowledge.cpp" />
+     <ClCompile Include="src\NpcReferralPeople.cpp" />
+     <ClCompile Include="src\NativeTravelLifecycle.cpp" />
++    <ClCompile Include="src\NativeAttention.cpp" />
++    <ClCompile Include="src\N2SocialWatch.cpp" />
+     <ClCompile Include="src\AiNpcInfoWindow.cpp" />
+     <ClCompile Include="src\AudioPlayback.cpp" />
+     <ClCompile Include="src\AutonomyController.cpp" />
+@@ -140,6 +142,10 @@
+   <ItemGroup>
+     <ClInclude Include="src\AiNpcInfoWindow.h" />
+     <ClInclude Include="src\AudioPlayback.h" />
++    <ClInclude Include="src\N2Policy.h" />
++    <ClInclude Include="src\N2SocialWatch.h" />
++    <ClInclude Include="src\NativeAttention.h" />
++    <ClInclude Include="src\ParticipationEvidence.h" />
+     <ClInclude Include="src\AutonomyController.h" />
+     <ClInclude Include="src\AutonomyExecutor.h" />
+     <ClInclude Include="src\AutonomyMonitor.h" />
