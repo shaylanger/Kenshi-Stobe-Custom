@@ -323,7 +323,7 @@ if [ "$RUN_TESTS" = 1 ]; then
   else
     status RUNNING "stobe-tests on compose (timeout ${tmo}s, waiting for lock $TESTS_LOCK)"
     # lock wait counts against the same budget
-    timeout "$tmo" flock -w "$tmo" "$TESTS_LOCK" "$STOBE_TESTS" "$COMPOSE" > "$OUT/stobe-tests.out" 2>&1; trc=$?
+    timeout "$tmo" flock -o -w "$tmo" "$TESTS_LOCK" "$STOBE_TESTS" "$COMPOSE" > "$OUT/stobe-tests.out" 2>&1; trc=$?
     if [ $trc -eq 124 ]; then
       res "stobe-tests FAIL timeout/deadline after ${tmo}s (partial output $OUT/stobe-tests.out)"; overall=1; tests_line="timeout"
     else
