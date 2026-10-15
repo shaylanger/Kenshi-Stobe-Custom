@@ -35,7 +35,7 @@
       "marker": "C:\\KenshiTestRuns\\inflight\\4080-imm26-i4",
       "lock": "C:\\KenshiTestRuns\\game-4.lock",
       "window_pos": "3840,0",
-      "window_size": "1280x720",
+      "window_size": "1024x768",
       "owner_note": "built by imm26-lanes-4080 2026-10-15 with stobe-lane-backend.sh i4 provision"
     }
   }
