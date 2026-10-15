@@ -8,7 +8,7 @@ param([int]$Max = 6, [int]$Repeat = 10, [string]$Runs = $(if ($env:KAH_RUNS_DIR)
 $lanes = [ordered]@{
     '5090-i3' = @{ ops = @('imm26-5090-i3op3');                    dirs = @('imm26-5090-i3', 'imm26-5090-i3op3') }
     '5090-i4' = @{ ops = @('imm26-5090-i4op3');                    dirs = @('imm26-5090-i4', 'imm26-5090-i4op3') }
-    '5090-i5' = @{ ops = @('imm26-5090-ctxop32', 'imm26-5090-ctxop3'); dirs = @('imm26-5090-i5', 'imm26-5090-ctxop3', 'imm26-5090-ctxop32') }
+    '5090-i5' = @{ ops = @('imm26-5090-ctxop322', 'imm26-5090-ctxop32', 'imm26-5090-ctxop3'); dirs = @('imm26-5090-i5', 'imm26-5090-ctxop3', 'imm26-5090-ctxop32') }
     '4080-i3' = @{ ops = @('imm26-4080-op2g');                     dirs = @('imm26-4080') }
     '4080-i4' = @{ ops = @('imm26-4080-i4op5');                    dirs = @('imm26-4080-i4') }
 }
