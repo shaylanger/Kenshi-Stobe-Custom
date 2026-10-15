@@ -88,6 +88,9 @@ try {
         if ($h) { "heartbeat age $($now - $h.Epoch) s, owner session $($h.Session)" } else { 'no heartbeat file' }
         exit 0
     }
+    # Independent agent sessions (spawn-wp-session.ps1 sets KAH_AGENT_NAME) are not the coordinator: never beat, claim or refresh
+    # (a working agent must not mask a dead coordinator; event-wait.sh -Beat from an agent session is skipped too).
+    if ($env:KAH_AGENT_NAME) { exit 0 }
     if ($Beat) { [void](Invoke-Beat $runs '' $false $true $now); exit 0 }
     if ($Claim) { [void](Invoke-Beat $runs $(if ($Session) { $Session } else { 'manual' }) $true $false $now); exit 0 }
     # hook mode

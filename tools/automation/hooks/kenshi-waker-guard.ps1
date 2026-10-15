@@ -61,6 +61,21 @@ if ($mode -eq 'pre') {
 
 if ($mode -ne 'stop') { exit 0 }
 if ($in.stop_hook_active) { exit 0 }
+# Independent agent session (spawn-wp-session.ps1 sets KAH_AGENT_NAME; Shay 2026-10-15): an AGENT, not the coordinator. Only its
+# own status file counts: it may end only when agents\<name>.status is DONE/FAILED/STOPPED-CONTEXT. No event-wait, idle-rig,
+# in-flight, other-agent or handoff.ready rules (those belong to the coordinator). The `pre` sleep > 120 s rule above still applies.
+if ($env:KAH_AGENT_NAME) {
+    $an = [string]$env:KAH_AGENT_NAME
+    $sf = Join-Path (Join-Path $runs 'agents') "$an.status"
+    $st = ''
+    if (Test-Path -LiteralPath $sf) {
+        $l1 = ((Get-Content -LiteralPath $sf -TotalCount 1 -ErrorAction SilentlyContinue) -as [string]).TrimStart([char]0xFEFF)
+        $pp = @($l1 -split '\|' | ForEach-Object { $_.Trim() })
+        if ($pp.Count -ge 2) { $st = $pp[1] }
+    }
+    if ($st -in 'DONE', 'FAILED', 'STOPPED-CONTEXT') { exit 0 }
+    Block-Stop ("kenshi-waker-guard: you are the independent agent session '$an' and your status file $sf is " + $(if ($st) { "'$st'" } else { 'missing' }) + ", not DONE/FAILED/STOPPED-CONTEXT. Write your final status with: powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\agent-status.ps1 $an DONE|FAILED|STOPPED-CONTEXT ""<task>"" ""<latest step>"" ""<output paths>"" ""<next step>"" (and your report/handoff file), then end the turn.")
+}
 # Context-limit handoff done (handoff-ready.ps1 wrote the marker in the last 30 min): the next session owns the
 # in-flight work, so this one may end without a waker.
 $hr = Join-Path $runs 'handoff.ready'
