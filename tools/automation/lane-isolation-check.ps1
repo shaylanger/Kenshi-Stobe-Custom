@@ -31,7 +31,8 @@ $ErrorActionPreference = 'Continue'
 $rigHost = 'DESKTOP-NQQPA73'
 function Out-R([string]$item, [bool]$ok, [string]$ev) { $script:nfail += $(if ($ok) { 0 } else { 1 }); "RESULT lane-isolation $item $(if ($ok) { 'PASS' } else { 'FAIL' }) $ev" }
 $script:nfail = 0
-if ($Rig -ne '4080') { "RESULT lane-isolation setup FAIL rig '$Rig' has no lane definitions (only 4080)"; exit 2 }
+if ($Rig -eq '5090') { & "$(Split-Path -Parent $MyInvocation.MyCommand.Path)\lane-isolation-check-5090.ps1" @(if ($Defs) { '-Registry'; $Defs }); exit $LASTEXITCODE }
+if ($Rig -ne '4080') { "RESULT lane-isolation setup FAIL rig '$Rig' has no lane definitions (4080, 5090)"; exit 2 }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # ---------------- 5090 side: push to the 4080, run there, add the marker item ----------------
