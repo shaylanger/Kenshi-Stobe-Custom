@@ -13,7 +13,7 @@ TOOLS=/mnt/c/KenshiModding/tools/automation
 [ -n "$cmd" ] && [ -n "$lane" ] || { sed -n 2,3p "$0"; exit 2; }
 eval "$(python3 - "$REG" "$lane" <<'PY'
 import json,sys,shlex
-reg=json.load(open(sys.argv[1]))
+reg=json.load(open(sys.argv[1],encoding='utf-8-sig'))
 l=[x for x in reg['lanes'] if x['id']==sys.argv[2]]
 if not l: print('echo "no such lane in registry" >&2; exit 2'); sys.exit()
 l=l[0]
