@@ -2,6 +2,7 @@
 # Prints, compactly: the handoff marker (then archives it), testing/HANDOFF.md "Right now", each agent status
 # file (C:\KenshiTestRuns\agents\<name>.status), inflight markers (+ the batch out dir a marker names: DONE/SUMMARY),
 # game lock and Kenshi state.
+param([switch]$Brief)  # -Brief (Shay 2026-10-15): ~10x smaller output; agents not DONE and < 6 h old only, long lines cut, no rig-runner/stale sections
 $ws = 'C:\KenshiModding'
 $runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 
@@ -31,16 +32,17 @@ $i = [array]::FindIndex($h, [Predicate[string]]{ param($l) $l -like '## Right no
 if ($i -ge 0) {
     $j = $i + 1
     while ($j -lt $h.Count -and $h[$j] -notlike '## *') { $j++ }
-    $h[$i..($j - 1)] | Select-Object -First 40
-    if ($j - $i -gt 40) { "... ($($j - $i - 40) more lines: read testing/HANDOFF.md lines $($i + 41)-$j)" }
+    $h[$i..($j - 1)] | Select-Object -First $(if ($Brief) { 12 } else { 40 }) | ForEach-Object { if ($Brief -and $_.Length -gt 700) { $_.Substring(0,700) + ' ...[cut: read testing/HANDOFF.md]' } else { $_ } }
+    if (-not $Brief -and $j - $i -gt 40) { "... ($($j - $i - 40) more lines: read testing/HANDOFF.md lines $($i + 41)-$j)" }
 } else { $h | Select-Object -First 25 }
 
 '=== agents (C:\KenshiTestRuns\agents) ==='
 $ag = @(Get-ChildItem -LiteralPath (Join-Path $runs 'agents') -Filter '*.status' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
 if (-not $ag.Count) { 'none' }
+if ($Brief) { $ag = @($ag | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) -and ((Get-Content -LiteralPath $_.FullName -TotalCount 2) -join ' ') -notmatch '\| DONE \|' }) }
 foreach ($a in $ag) {
     "--- $($a.BaseName) (updated $(Get-Date $a.LastWriteTime -Format 'MM-dd HH:mm'))"
-    Get-Content -LiteralPath $a.FullName | Select-Object -First 12
+    Get-Content -LiteralPath $a.FullName | Select-Object -First $(if ($Brief) { 5 } else { 12 }) | ForEach-Object { if ($Brief -and $_.Length -gt 220) { $_.Substring(0,220) + '...' } else { $_ } }
 }
 
 '=== agent health (agent-guard-lib.ps1: RUNNING > 30 min = orphaned; stopped/failed agents without a successor; respawn todos) ==='
@@ -48,10 +50,12 @@ try {
     . (Join-Path $PSScriptRoot 'agent-guard-lib.ps1')
     Remove-SupersededTodos
     $ah = @(Get-AgentHealthLines)
+    if ($Brief) { $ah = @($ah | ForEach-Object { if ($_.Length -gt 400) { $_.Substring(0,400) + '...' } else { $_ } }) }
     if ($ah.Count) { $ah | ForEach-Object { $_ } } else { 'every agent is DONE, RUNNING (fresh) or has a successor: nothing to respawn' }
     $rt = @(Get-ChildItem -LiteralPath (Join-Path $runs 'respawn') -Filter '*.todo' -File -ErrorAction SilentlyContinue | ForEach-Object BaseName)
     if ($rt.Count) { "respawn todos (C:\KenshiTestRuns\respawn\): $($rt -join ', ')" }
 } catch { "agent health check failed open: $($_.Exception.Message)" }
+if (-not $Brief) {
 '=== rig runners (rig-runner.ps1: one daemon per rig runs the queue\<rig>\ and queue\any\ list files; ALERT on idle/stuck) ==='
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Ensure
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Status
@@ -59,7 +63,8 @@ try {
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'paired-runner-supervisor.ps1') -Ensure
 '=== GPU telemetry (gpulog.ps1: 2 s nvidia-smi samples per rig in C:\KenshiTestRuns\gpulog\ for TDR/BSOD evidence) ==='
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'gpulog-ensure.ps1') -Rig both
-Get-ChildItem 'C:\KenshiTestRuns' -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }
+Get-Content (Get-ChildItem 'C:\KenshiTestRuns' -Filter 'ALERT-*.txt' -File -ErrorAction SilentlyContinue).FullName -ErrorAction SilentlyContinue
+} else { & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Ensure | Out-Null }
 '=== in flight ==='
 $k = if (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue) { 'running' } else { 'closed' }
 $lock = if (Test-Path -LiteralPath (Join-Path $runs 'game.lock')) { (Get-Content -Raw -LiteralPath (Join-Path $runs 'game.lock')).Trim() } else { 'free' }
