@@ -14,6 +14,16 @@ else { 'WAKER STATUS: NOT running (start: Bash run_in_background  MSYS_NO_PATHCO
 # Program ledgers (Shay 2026-10-15): unfinished work packages of every program (C:\KenshiTestRuns\programs\*.json, tools\automation\program-ledger.ps1); fail-open.
 try { & (Join-Path $ws 'tools\automation\program-ledger.ps1') brief } catch { }
 
+# Process ideas (Shay 2026-10-15; docs/PROCESS_IDEAS.md, tools/automation/process-ideas.ps1): open entries, short, to ask Shay ONCE in the first summary. Never apply them. Fail-open.
+try {
+    $piLines = @(& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'process-ideas.ps1') list 2>&1 | ForEach-Object { "$_" })
+    if ($piLines.Count -and "$($piLines[0])" -ne 'none') {
+        'PROCESS IDEAS FOR SHAY (ask once, together, in your first summary; do not apply any):'
+        $piLines | ForEach-Object { "  $_" }
+        '  (after asking: process-ideas.ps1 asked <id>..; Shay''s answer: process-ideas.ps1 answer <id> no|yes; unanswered ideas are re-reviewed and asked again at the next handoff)'
+    }
+} catch { "process ideas check failed open: $($_.Exception.Message)" }
+
 # Tail sessions + COLD START (docs/TAIL_HANDOFF_CONTRACT.md sections 5-7; Shay 2026-10-15). A tail session is an old coordinator kept alive
 # (flag C:\KenshiTestRuns\tail\<session>.flag) so its in-session subagents keep running: those agents are OWNED by it, never respawn them.
 # A tail whose process is gone = its agents are DEAD. Every other ledger agent that is not alive is DEAD too (PC shutdown): respawn from its checkpoint.

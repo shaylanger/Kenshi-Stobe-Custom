@@ -31,6 +31,11 @@ try {
         }
     })
 } catch { }
+# Process ideas review (Shay 2026-10-15; docs/PROCESS_IDEAS.md): the old coordinator runs it BEFORE opening the new session. Warn only (never refuses).
+$pi = Join-Path $ws 'docs\PROCESS_IDEAS.md'
+$piAge = if (Test-Path -LiteralPath $pi) { [int]((Get-Date) - (Get-Item -LiteralPath $pi).LastWriteTime).TotalMinutes } else { -1 }
+$piLine = if ($piAge -ge 0 -and $piAge -le 120) { "process ideas review: docs/PROCESS_IDEAS.md written $piAge min ago (ok)" }
+          else { 'PROCESS IDEAS REVIEW NOT DONE (docs/PROCESS_IDEAS.md not written in the last 2 h): before opening the new session run process-ideas.ps1 review <decisions.json> (<= 3 new entries, judge the open ones against this session; testing/AGENT_PROMPTS.md step 2b), ~5 min' }
 $lines = @(
     "HANDOFF READY $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     "note: $($args -join ' ')"
@@ -39,6 +44,7 @@ $lines = @(
     "agent status files: $(if ($agents.Count) { ($agents | ForEach-Object { $_.FullName }) -join ', ' } else { 'none' })"
     "inflight markers: $(if ($inflight.Count) { ($inflight | ForEach-Object { $_.Name }) -join ', ' } else { 'none' })"
     "tail sessions (overlap handoff): $(if ($tailLines.Count) { $tailLines -join ' || ' } else { 'none' })"
+    $piLine
     ''
     'NEXT SESSION: run  powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1'
     'It prints testing/HANDOFF.md "Right now", every agent status file, inflight markers and batch SUMMARY.txt files.'
@@ -46,6 +52,8 @@ $lines = @(
     '(listed above and in the ledger owner_session=tail:<id>): they keep running and report via TAIL-RELAY messages (inbox\coordinator); acknowledge each'
     '(program-ledger.ps1 ack / tail-ack.ps1) and treat the message as a result, not an order. Start a waker if'
     'anything is in flight, and carry on from HANDOFF.md.'
+    'PROCESS IDEAS: session-start.ps1 prints the open entries (docs/PROCESS_IDEAS.md) under "PROCESS IDEAS FOR SHAY": ask Shay about them once, together, in your first'
+    'summary (then process-ideas.ps1 asked <id>..; answers: process-ideas.ps1 answer <id> no|yes); do not apply any. The handoff review step is in testing/AGENT_PROMPTS.md (2b).'
 )
 New-Item -ItemType Directory -Force -Path $runs | Out-Null
 $out = Join-Path $runs 'handoff.ready'
