@@ -57,3 +57,13 @@ php tools/social_relationship_inspect.php --relation "$1" "$2" 2>&1 | grep -A8 '
 EOF2
   echo
 }
+# NEG_TEST_INJECT on the private backend (mechanical rows: the model reply is overridden BEFORE the logic under test).
+#   i3_inject <row> "<npc>" '<steps json array>'   chat context; one step per turn   |  i3_inject_off
+#   Fired check: grep "NEG_TEST_INJECT fired (test switch, row <row>)" in /tmp/stobe-standalone4080/site/log/stobeserver.log
+i3_inject_off() { i3_sql "DELETE FROM general_settings WHERE id='NEG_TEST_INJECT'" ; }
+i3_fired() { echo "grep -a -c 'NEG_TEST_INJECT fired (test switch, row $1)' /tmp/stobe-standalone4080/site/log/stobeserver.log" | i3w; }
+i3_inject() {
+  local j; j=$(printf '{"row":"%s","npc":"%s","context":"chat","steps":%s}' "$1" "$2" "$3")
+  { printf '%s\n' "cat > /tmp/inj.sql <<'EOS'" "DELETE FROM general_settings WHERE id='NEG_TEST_INJECT';" "INSERT INTO general_settings (id,value) VALUES ('NEG_TEST_INJECT', \$q\$$j\$q\$);" "EOS" \
+      "chmod 644 /tmp/inj.sql; runuser -u postgres -- psql -h /tmp/stobe-standalone4080/socket -p 15434 -d stobe_standalone4080_test -q -f /tmp/inj.sql"; } | i3w
+}
