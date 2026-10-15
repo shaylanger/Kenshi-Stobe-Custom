@@ -1,6 +1,6 @@
 # NC Stobe.dll install on 5090 lanes i4 and i5 (2026-10-15, imm26-install-nc-5090)
 
-DLL `NC\Stobe.dll` SHA256 `4D18E32CE45C08B799B56A9FC5E998BAFC270C3F1881543573C61BFAB3568766`. i3 NOT touched (operator imm26-5090-i3op2 still RUNNING); Shay's Steam install NOT touched.
+DLL `NC\Stobe.dll` SHA256 `E17FC00CDDC44894400838A8B38155A0073B08B8605D071EE8C27CA00F6FE4D6`. i3 NOT touched (operator imm26-5090-i3op2 still RUNNING); Shay's Steam install NOT touched.
 
 Active plugin path per runbook = `D:\KenshiInst\<n>\mods\Stobe\Stobe.dll` (was E607 e60752c8...); the stray `RE_Kenshi\mods\Stobe\Stobe.dll` (was e64c6593...) was replaced too so both agree. Backups: `D:\KenshiInst\4\imm26-backup-nc-*` and `D:\KenshiInst\5\imm26-backup-nc-*` (Stobe.mods.dll, Stobe.re.dll).
 
@@ -8,7 +8,7 @@ Procedure: `kenshi-ctl.ps1 stop` per lane (KAH_INSTANCE/KAH_OWNER env), copy, sh
 
 | lane | DLL SHA on active path | commands | ctxpush | metadata keys (core_npc_master) | isolation |
 |---|---|---|---|---|---|
-| i4 | 4D18E32C... (mods\Stobe and RE_Kenshi\mods\Stobe) | `TEST_HARNESS: connected ... 11 commands (...bodyguard_probe/ctxpush)` | Cind [Hungry Bandit] (len 43076), Opajil, Liplom: `native_ai=1 referral_people=1 travel_destinations=1`, log `CONTEXT_PUSH: test_inbox reason=ctxpush` | Cind, Opajil, Liplom all have native_ai, referral_people, travel_destinations | lane-isolation 5090 SUMMARY PASS n_fail=0 |
+| i4 | E17FC00C... (mods\Stobe and RE_Kenshi\mods\Stobe) | `TEST_HARNESS: connected ... 11 commands (...bodyguard_probe/ctxpush)` | Cind [Hungry Bandit] (len 43076), Opajil, Liplom: `native_ai=1 referral_people=1 travel_destinations=1`, log `CONTEXT_PUSH: test_inbox reason=ctxpush` | Cind, Opajil, Liplom all have native_ai, referral_people, travel_destinations | lane-isolation 5090 SUMMARY PASS n_fail=0 |
 | i5 | same | 11 commands | Cind (len 19528), Opajil, Liplom: same | same three NPCs, all three keys | PASS |
 
 Server `/context` already stores the three keys in `core_npc_master.metadata` (no server patch needed).

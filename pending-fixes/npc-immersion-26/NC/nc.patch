@@ -1,6 +1,6 @@
-diff -ruN --binary a/CMakeLists.txt b/CMakeLists.txt
---- a/CMakeLists.txt	2026-10-15 17:20:26.476980157 -0500
-+++ b/CMakeLists.txt	2026-10-15 17:20:27.049613136 -0500
+diff -ruN a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt	2026-10-15 17:28:29.067861800 -0600
++++ b/CMakeLists.txt	2026-10-15 17:28:05.083338900 -0600
 @@ -93,6 +93,14 @@
    src/ProfilePortrait.cpp
    src/LocalTravel.cpp
@@ -28,9 +28,9 @@ diff -ruN --binary a/CMakeLists.txt b/CMakeLists.txt
    src/NativePlaceKnowledge.cpp
    src/NpcReferralPeople.cpp
    src/NativeTravelLifecycle.cpp
-diff -ruN --binary a/Stobe.vcxproj b/Stobe.vcxproj
---- a/Stobe.vcxproj	2026-10-15 17:20:26.488733556 -0500
-+++ b/Stobe.vcxproj	2026-10-15 17:20:27.052429136 -0500
+diff -ruN a/Stobe.vcxproj b/Stobe.vcxproj
+--- a/Stobe.vcxproj	2026-10-15 17:28:29.066860500 -0600
++++ b/Stobe.vcxproj	2026-10-15 17:28:05.086339900 -0600
 @@ -96,6 +96,27 @@
      <ClCompile Include="src\NativeAiAwareness.cpp" />
      <ClCompile Include="src\BodyguardContractProbe.cpp" />
@@ -81,9 +81,9 @@ diff -ruN --binary a/Stobe.vcxproj b/Stobe.vcxproj
      <ClInclude Include="src\KenshiTownIdentity.h" />
      <ClInclude Include="src\PlayerBaseState.h" />
      <ClInclude Include="src\SettingsWindow.h" />
-diff -ruN --binary a/legacy-v1/ActivityCandidatePolicy.h b/legacy-v1/ActivityCandidatePolicy.h
+diff -ruN a/legacy-v1/ActivityCandidatePolicy.h b/legacy-v1/ActivityCandidatePolicy.h
 --- a/legacy-v1/ActivityCandidatePolicy.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityCandidatePolicy.h	2026-10-15 17:20:27.079038235 -0500
++++ b/legacy-v1/ActivityCandidatePolicy.h	2026-10-15 17:28:05.088340100 -0600
 @@ -0,0 +1,33 @@
 +#pragma once
 +
@@ -118,9 +118,9 @@ diff -ruN --binary a/legacy-v1/ActivityCandidatePolicy.h b/legacy-v1/ActivityCan
 +  return targets;
 +}
 +} }
-diff -ruN --binary a/legacy-v1/ActivityController.cpp b/legacy-v1/ActivityController.cpp
+diff -ruN a/legacy-v1/ActivityController.cpp b/legacy-v1/ActivityController.cpp
 --- a/legacy-v1/ActivityController.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityController.cpp	2026-10-15 17:20:27.065138135 -0500
++++ b/legacy-v1/ActivityController.cpp	2026-10-15 17:28:05.089340200 -0600
 @@ -0,0 +1,121 @@
 +#include "ActivityController.h"
 +#include "ActivityTransport.h"
@@ -243,9 +243,9 @@ diff -ruN --binary a/legacy-v1/ActivityController.cpp b/legacy-v1/ActivityContro
 + }
 + /* The shared signed transport polls both controller branches. */
 +}
-diff -ruN --binary a/legacy-v1/ActivityController.h b/legacy-v1/ActivityController.h
+diff -ruN a/legacy-v1/ActivityController.h b/legacy-v1/ActivityController.h
 --- a/legacy-v1/ActivityController.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityController.h	2026-10-15 17:20:27.093877134 -0500
++++ b/legacy-v1/ActivityController.h	2026-10-15 17:28:05.092341300 -0600
 @@ -0,0 +1,12 @@
 +#pragma once
 +#include "ActivityGoals.h"
@@ -260,9 +260,9 @@ diff -ruN --binary a/legacy-v1/ActivityController.h b/legacy-v1/ActivityControll
 +void UpdateActivityControllerV1(GameWorld*);
 +void ResetActivityControllerV1(const char* reason);
 \ No newline at end of file
-diff -ruN --binary a/legacy-v1/ActivityGoals.cpp b/legacy-v1/ActivityGoals.cpp
+diff -ruN a/legacy-v1/ActivityGoals.cpp b/legacy-v1/ActivityGoals.cpp
 --- a/legacy-v1/ActivityGoals.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityGoals.cpp	2026-10-15 17:20:27.071152835 -0500
++++ b/legacy-v1/ActivityGoals.cpp	2026-10-15 17:28:05.094339400 -0600
 @@ -0,0 +1,222 @@
 +#include "ActivityGoals.h"
 +#include <algorithm>
@@ -486,9 +486,9 @@ diff -ruN --binary a/legacy-v1/ActivityGoals.cpp b/legacy-v1/ActivityGoals.cpp
 +  else Replan(now, host, reason_);
 +}
 +} }
-diff -ruN --binary a/legacy-v1/ActivityGoals.h b/legacy-v1/ActivityGoals.h
+diff -ruN a/legacy-v1/ActivityGoals.h b/legacy-v1/ActivityGoals.h
 --- a/legacy-v1/ActivityGoals.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityGoals.h	2026-10-15 17:20:27.090294934 -0500
++++ b/legacy-v1/ActivityGoals.h	2026-10-15 17:28:05.095878900 -0600
 @@ -0,0 +1,93 @@
 +#pragma once
 +#include <string>
@@ -583,9 +583,9 @@ diff -ruN --binary a/legacy-v1/ActivityGoals.h b/legacy-v1/ActivityGoals.h
 +  void Replan(Clock, Host&, const std::string&);
 +};
 +} }
-diff -ruN --binary a/legacy-v1/ActivityNativeExecutor.cpp b/legacy-v1/ActivityNativeExecutor.cpp
+diff -ruN a/legacy-v1/ActivityNativeExecutor.cpp b/legacy-v1/ActivityNativeExecutor.cpp
 --- a/legacy-v1/ActivityNativeExecutor.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityNativeExecutor.cpp	2026-10-15 17:20:27.104506234 -0500
++++ b/legacy-v1/ActivityNativeExecutor.cpp	2026-10-15 17:28:05.098856100 -0600
 @@ -0,0 +1,370 @@
 +#include "ActivityNativeExecutor.h"
 +#include "ActivityPolicySupport.h"
@@ -957,9 +957,9 @@ diff -ruN --binary a/legacy-v1/ActivityNativeExecutor.cpp b/legacy-v1/ActivityNa
 + return true;
 +}
 +} }
-diff -ruN --binary a/legacy-v1/ActivityNativeExecutor.h b/legacy-v1/ActivityNativeExecutor.h
+diff -ruN a/legacy-v1/ActivityNativeExecutor.h b/legacy-v1/ActivityNativeExecutor.h
 --- a/legacy-v1/ActivityNativeExecutor.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityNativeExecutor.h	2026-10-15 17:20:27.064362235 -0500
++++ b/legacy-v1/ActivityNativeExecutor.h	2026-10-15 17:28:05.100858200 -0600
 @@ -0,0 +1,55 @@
 +#pragma once
 +#include "ActivityGoals.h"
@@ -1016,9 +1016,9 @@ diff -ruN --binary a/legacy-v1/ActivityNativeExecutor.h b/legacy-v1/ActivityNati
 +};
 +} }
 +
-diff -ruN --binary a/legacy-v1/ActivityPolicySupport.cpp b/legacy-v1/ActivityPolicySupport.cpp
+diff -ruN a/legacy-v1/ActivityPolicySupport.cpp b/legacy-v1/ActivityPolicySupport.cpp
 --- a/legacy-v1/ActivityPolicySupport.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityPolicySupport.cpp	2026-10-15 17:20:27.100675634 -0500
++++ b/legacy-v1/ActivityPolicySupport.cpp	2026-10-15 17:28:05.101859100 -0600
 @@ -0,0 +1,248 @@
 +#include "ActivityPolicySupport.h"
 +#include "Functions.h"
@@ -1268,9 +1268,9 @@ diff -ruN --binary a/legacy-v1/ActivityPolicySupport.cpp b/legacy-v1/ActivityPol
 + } catch(...) {reason="resource_facts_unavailable";return false;}
 +}
 +} }
-diff -ruN --binary a/legacy-v1/ActivityPolicySupport.h b/legacy-v1/ActivityPolicySupport.h
+diff -ruN a/legacy-v1/ActivityPolicySupport.h b/legacy-v1/ActivityPolicySupport.h
 --- a/legacy-v1/ActivityPolicySupport.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityPolicySupport.h	2026-10-15 17:20:27.097337734 -0500
++++ b/legacy-v1/ActivityPolicySupport.h	2026-10-15 17:28:05.102855900 -0600
 @@ -0,0 +1,24 @@
 +#pragma once
 +#include <string>
@@ -1296,9 +1296,9 @@ diff -ruN --binary a/legacy-v1/ActivityPolicySupport.h b/legacy-v1/ActivityPolic
 +namespace Stobe { namespace ActivityV1Legacy {
 +bool MineSourcePermitted(Building*, Character*, std::string& resourceId, std::string& reason);
 +} }
-diff -ruN --binary a/legacy-v1/ActivityRuntime.cpp b/legacy-v1/ActivityRuntime.cpp
+diff -ruN a/legacy-v1/ActivityRuntime.cpp b/legacy-v1/ActivityRuntime.cpp
 --- a/legacy-v1/ActivityRuntime.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityRuntime.cpp	2026-10-15 17:20:27.060832335 -0500
++++ b/legacy-v1/ActivityRuntime.cpp	2026-10-15 17:28:05.104856000 -0600
 @@ -0,0 +1,114 @@
 +#include "ActivityRuntime.h"
 +#include <algorithm>
@@ -1415,9 +1415,9 @@ diff -ruN --binary a/legacy-v1/ActivityRuntime.cpp b/legacy-v1/ActivityRuntime.c
 +}
 +} }
 \ No newline at end of file
-diff -ruN --binary a/legacy-v1/ActivityRuntime.h b/legacy-v1/ActivityRuntime.h
+diff -ruN a/legacy-v1/ActivityRuntime.h b/legacy-v1/ActivityRuntime.h
 --- a/legacy-v1/ActivityRuntime.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityRuntime.h	2026-10-15 17:20:27.086709035 -0500
++++ b/legacy-v1/ActivityRuntime.h	2026-10-15 17:28:05.105855900 -0600
 @@ -0,0 +1,55 @@
 +#pragma once
 +#include "ActivityNativeExecutor.h"
@@ -1475,9 +1475,9 @@ diff -ruN --binary a/legacy-v1/ActivityRuntime.h b/legacy-v1/ActivityRuntime.h
 +};
 +} }
 \ No newline at end of file
-diff -ruN --binary a/legacy-v1/ActivityRuntimeBindings.cpp b/legacy-v1/ActivityRuntimeBindings.cpp
+diff -ruN a/legacy-v1/ActivityRuntimeBindings.cpp b/legacy-v1/ActivityRuntimeBindings.cpp
 --- a/legacy-v1/ActivityRuntimeBindings.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityRuntimeBindings.cpp	2026-10-15 17:20:27.075442335 -0500
++++ b/legacy-v1/ActivityRuntimeBindings.cpp	2026-10-15 17:28:05.107858700 -0600
 @@ -0,0 +1,357 @@
 +#include "ActivityRuntimeBindings.h"
 +#include "ActivityCandidatePolicy.h"
@@ -1836,9 +1836,9 @@ diff -ruN --binary a/legacy-v1/ActivityRuntimeBindings.cpp b/legacy-v1/ActivityR
 +
 +
 +
-diff -ruN --binary a/legacy-v1/ActivityRuntimeBindings.h b/legacy-v1/ActivityRuntimeBindings.h
+diff -ruN a/legacy-v1/ActivityRuntimeBindings.h b/legacy-v1/ActivityRuntimeBindings.h
 --- a/legacy-v1/ActivityRuntimeBindings.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/legacy-v1/ActivityRuntimeBindings.h	2026-10-15 17:20:27.083007035 -0500
++++ b/legacy-v1/ActivityRuntimeBindings.h	2026-10-15 17:28:05.109856000 -0600
 @@ -0,0 +1,32 @@
 +#pragma once
 +#include "ActivityRuntime.h"
@@ -1872,9 +1872,9 @@ diff -ruN --binary a/legacy-v1/ActivityRuntimeBindings.h b/legacy-v1/ActivityRun
 +
 +
 +
-diff -ruN --binary a/src/ActivityCampNativeAdapter.h b/src/ActivityCampNativeAdapter.h
+diff -ruN a/src/ActivityCampNativeAdapter.h b/src/ActivityCampNativeAdapter.h
 --- a/src/ActivityCampNativeAdapter.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityCampNativeAdapter.h	2026-10-15 17:20:26.514340555 -0500
++++ b/src/ActivityCampNativeAdapter.h	2026-10-15 17:28:05.111854900 -0600
 @@ -0,0 +1,289 @@
 +#pragma once
 +
@@ -2165,9 +2165,9 @@ diff -ruN --binary a/src/ActivityCampNativeAdapter.h b/src/ActivityCampNativeAda
 +}
 +
 +} } // namespace Stobe::ActivityCampNative
-diff -ruN --binary a/src/ActivityCampTownListBridge.cpp b/src/ActivityCampTownListBridge.cpp
+diff -ruN a/src/ActivityCampTownListBridge.cpp b/src/ActivityCampTownListBridge.cpp
 --- a/src/ActivityCampTownListBridge.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityCampTownListBridge.cpp	2026-10-15 17:20:26.994605038 -0500
++++ b/src/ActivityCampTownListBridge.cpp	2026-10-15 17:28:05.113856000 -0600
 @@ -0,0 +1,128 @@
 +#include "ActivityCampTownListBridge.h"
 +#include "Globals.h"
@@ -2297,9 +2297,9 @@ diff -ruN --binary a/src/ActivityCampTownListBridge.cpp b/src/ActivityCampTownLi
 +  return g_mainThreadId && GetCurrentThreadId()==g_mainThreadId;
 +}
 +} }
-diff -ruN --binary a/src/ActivityCampTownListBridge.h b/src/ActivityCampTownListBridge.h
+diff -ruN a/src/ActivityCampTownListBridge.h b/src/ActivityCampTownListBridge.h
 --- a/src/ActivityCampTownListBridge.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityCampTownListBridge.h	2026-10-15 17:20:26.959960639 -0500
++++ b/src/ActivityCampTownListBridge.h	2026-10-15 17:28:05.114857500 -0600
 @@ -0,0 +1,42 @@
 +#pragma once
 +
@@ -2343,9 +2343,9 @@ diff -ruN --binary a/src/ActivityCampTownListBridge.h b/src/ActivityCampTownList
 +};
 +
 +} }
-diff -ruN --binary a/src/ActivityCampTownReader.cpp b/src/ActivityCampTownReader.cpp
+diff -ruN a/src/ActivityCampTownReader.cpp b/src/ActivityCampTownReader.cpp
 --- a/src/ActivityCampTownReader.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityCampTownReader.cpp	2026-10-15 17:20:26.518108955 -0500
++++ b/src/ActivityCampTownReader.cpp	2026-10-15 17:28:05.116858500 -0600
 @@ -0,0 +1,93 @@
 +// ABI boundary: keep this translation unit isolated from Platoon.h, following
 +// the existing KenshiTownIdentity.cpp pattern. No raw offsets or vtable calls.
@@ -2440,9 +2440,9 @@ diff -ruN --binary a/src/ActivityCampTownReader.cpp b/src/ActivityCampTownReader
 +  return IsPointInsideTownBorders(match,x,y,z,&inside);
 +}
 +} }
-diff -ruN --binary a/src/ActivityCampTownReader.h b/src/ActivityCampTownReader.h
+diff -ruN a/src/ActivityCampTownReader.h b/src/ActivityCampTownReader.h
 --- a/src/ActivityCampTownReader.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityCampTownReader.h	2026-10-15 17:20:26.521879555 -0500
++++ b/src/ActivityCampTownReader.h	2026-10-15 17:28:05.118856100 -0600
 @@ -0,0 +1,39 @@
 +#pragma once
 +
@@ -2483,9 +2483,9 @@ diff -ruN --binary a/src/ActivityCampTownReader.h b/src/ActivityCampTownReader.h
 +};
 +
 +} }
-diff -ruN --binary a/src/ActivityController.cpp b/src/ActivityController.cpp
---- a/src/ActivityController.cpp	2026-10-15 17:20:26.353138161 -0500
-+++ b/src/ActivityController.cpp	2026-10-15 17:20:27.027145037 -0500
+diff -ruN a/src/ActivityController.cpp b/src/ActivityController.cpp
+--- a/src/ActivityController.cpp	2026-10-15 17:28:29.632386800 -0600
++++ b/src/ActivityController.cpp	2026-10-15 17:28:05.120856500 -0600
 @@ -1,7 +1,12 @@
  #include "ActivityController.h"
 +#include "../legacy-v1/ActivityController.h"
@@ -2733,9 +2733,9 @@ diff -ruN --binary a/src/ActivityController.cpp b/src/ActivityController.cpp
 -}
 \ No newline at end of file
 +}
-diff -ruN --binary a/src/ActivityController.h b/src/ActivityController.h
---- a/src/ActivityController.h	2026-10-15 17:20:26.399163660 -0500
-+++ b/src/ActivityController.h	2026-10-15 17:20:26.528553855 -0500
+diff -ruN a/src/ActivityController.h b/src/ActivityController.h
+--- a/src/ActivityController.h	2026-10-15 17:28:29.636385200 -0600
++++ b/src/ActivityController.h	2026-10-15 17:28:05.121856200 -0600
 @@ -7,6 +7,9 @@
  std::string ActivityControllerWorldId();
  Stobe::Activity::Clock ActivityControllerGameClock();
@@ -2748,9 +2748,9 @@ diff -ruN --binary a/src/ActivityController.h b/src/ActivityController.h
 -void ResetActivityController(const char* reason);
 \ No newline at end of file
 +void ResetActivityController(const char* reason);
-diff -ruN --binary a/src/ActivityDanger.cpp b/src/ActivityDanger.cpp
+diff -ruN a/src/ActivityDanger.cpp b/src/ActivityDanger.cpp
 --- a/src/ActivityDanger.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityDanger.cpp	2026-10-15 17:20:26.837794044 -0500
++++ b/src/ActivityDanger.cpp	2026-10-15 17:28:05.122856500 -0600
 @@ -0,0 +1,70 @@
 +#include "ActivityDanger.h"
 +#include "KenshiAiCompat.h"
@@ -2822,9 +2822,9 @@ diff -ruN --binary a/src/ActivityDanger.cpp b/src/ActivityDanger.cpp
 + return true;
 +}
 +} }
-diff -ruN --binary a/src/ActivityDanger.h b/src/ActivityDanger.h
+diff -ruN a/src/ActivityDanger.h b/src/ActivityDanger.h
 --- a/src/ActivityDanger.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityDanger.h	2026-10-15 17:20:26.597908552 -0500
++++ b/src/ActivityDanger.h	2026-10-15 17:28:05.124856300 -0600
 @@ -0,0 +1,17 @@
 +#pragma once
 +#include <string>
@@ -2843,9 +2843,9 @@ diff -ruN --binary a/src/ActivityDanger.h b/src/ActivityDanger.h
 +bool ObserveDanger(GameWorld* world, unsigned actor, unsigned requester, const std::vector<unsigned>& quarry,
 +                   unsigned currentTarget, DangerFacts& out);
 +} }
-diff -ruN --binary a/src/ActivityDiscoveryRef.h b/src/ActivityDiscoveryRef.h
+diff -ruN a/src/ActivityDiscoveryRef.h b/src/ActivityDiscoveryRef.h
 --- a/src/ActivityDiscoveryRef.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityDiscoveryRef.h	2026-10-15 17:20:26.673937550 -0500
++++ b/src/ActivityDiscoveryRef.h	2026-10-15 17:28:05.125854700 -0600
 @@ -0,0 +1,46 @@
 +#pragma once
 +#include <string>
@@ -2893,9 +2893,9 @@ diff -ruN --binary a/src/ActivityDiscoveryRef.h b/src/ActivityDiscoveryRef.h
 +         FreshDiscoveryObservation(now, observedAt);
 +}
 +} }
-diff -ruN --binary a/src/ActivityEventTracker.h b/src/ActivityEventTracker.h
+diff -ruN a/src/ActivityEventTracker.h b/src/ActivityEventTracker.h
 --- a/src/ActivityEventTracker.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityEventTracker.h	2026-10-15 17:20:26.952775939 -0500
++++ b/src/ActivityEventTracker.h	2026-10-15 17:28:05.127855600 -0600
 @@ -0,0 +1,151 @@
 +#pragma once
 +// Pure logic (no Kenshi SDK): turns per-agreement observations into the structured
@@ -3048,9 +3048,9 @@ diff -ruN --binary a/src/ActivityEventTracker.h b/src/ActivityEventTracker.h
 + }
 +};
 +} } }
-diff -ruN --binary a/src/ActivityGoals.cpp b/src/ActivityGoals.cpp
---- a/src/ActivityGoals.cpp	2026-10-15 17:20:26.322924662 -0500
-+++ b/src/ActivityGoals.cpp	2026-10-15 17:20:27.009184737 -0500
+diff -ruN a/src/ActivityGoals.cpp b/src/ActivityGoals.cpp
+--- a/src/ActivityGoals.cpp	2026-10-15 17:28:29.630523400 -0600
++++ b/src/ActivityGoals.cpp	2026-10-15 17:28:05.130391100 -0600
 @@ -1,222 +1,269 @@
 -#include "ActivityGoals.h"
 -#include <algorithm>
@@ -3537,9 +3537,9 @@ diff -ruN --binary a/src/ActivityGoals.cpp b/src/ActivityGoals.cpp
 +  else Replan(now, host, reason_);
 +}
 +} }
-diff -ruN --binary a/src/ActivityGoals.h b/src/ActivityGoals.h
---- a/src/ActivityGoals.h	2026-10-15 17:20:26.415355859 -0500
-+++ b/src/ActivityGoals.h	2026-10-15 17:20:27.037570736 -0500
+diff -ruN a/src/ActivityGoals.h b/src/ActivityGoals.h
+--- a/src/ActivityGoals.h	2026-10-15 17:28:29.638385300 -0600
++++ b/src/ActivityGoals.h	2026-10-15 17:28:05.132380200 -0600
 @@ -1,93 +1,141 @@
 -#pragma once
 -#include <string>
@@ -3773,9 +3773,9 @@ diff -ruN --binary a/src/ActivityGoals.h b/src/ActivityGoals.h
 +  void Replan(Clock, Host&, const std::string&);
 +};
 +} }
-diff -ruN --binary a/src/ActivityHandBack.cpp b/src/ActivityHandBack.cpp
+diff -ruN a/src/ActivityHandBack.cpp b/src/ActivityHandBack.cpp
 --- a/src/ActivityHandBack.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityHandBack.cpp	2026-10-15 17:20:26.739758847 -0500
++++ b/src/ActivityHandBack.cpp	2026-10-15 17:28:05.134382600 -0600
 @@ -0,0 +1,146 @@
 +#include "ActivityHandBack.h"
 +#include "ActivityHandBackPolicy.h"
@@ -3923,9 +3923,9 @@ diff -ruN --binary a/src/ActivityHandBack.cpp b/src/ActivityHandBack.cpp
 + view.finished = e.machine.Finished(); view.status = e.machine.Status(); view.reason = e.machine.Reason(); view.amount = e.machine.Amount();
 +}
 +} }
-diff -ruN --binary a/src/ActivityHandBack.h b/src/ActivityHandBack.h
+diff -ruN a/src/ActivityHandBack.h b/src/ActivityHandBack.h
 --- a/src/ActivityHandBack.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityHandBack.h	2026-10-15 17:20:26.813138144 -0500
++++ b/src/ActivityHandBack.h	2026-10-15 17:28:05.135910900 -0600
 @@ -0,0 +1,32 @@
 +#pragma once
 +#include "ActivityGoals.h"
@@ -3959,9 +3959,9 @@ diff -ruN --binary a/src/ActivityHandBack.h b/src/ActivityHandBack.h
 + std::map<std::string, Entry*> entries_;
 +};
 +} }
-diff -ruN --binary a/src/ActivityHandBackPolicy.h b/src/ActivityHandBackPolicy.h
+diff -ruN a/src/ActivityHandBackPolicy.h b/src/ActivityHandBackPolicy.h
 --- a/src/ActivityHandBackPolicy.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityHandBackPolicy.h	2026-10-15 17:20:26.977515338 -0500
++++ b/src/ActivityHandBackPolicy.h	2026-10-15 17:28:05.136906300 -0600
 @@ -0,0 +1,108 @@
 +#pragma once
 +// Pure logic (no Kenshi SDK): the post-completion "hand the result to the requester" step.
@@ -4071,9 +4071,9 @@ diff -ruN --binary a/src/ActivityHandBackPolicy.h b/src/ActivityHandBackPolicy.h
 + }
 +};
 +} } }
-diff -ruN --binary a/src/ActivityNativeExecutor.cpp b/src/ActivityNativeExecutor.cpp
---- a/src/ActivityNativeExecutor.cpp	2026-10-15 17:20:26.339384062 -0500
-+++ b/src/ActivityNativeExecutor.cpp	2026-10-15 17:20:26.973961039 -0500
+diff -ruN a/src/ActivityNativeExecutor.cpp b/src/ActivityNativeExecutor.cpp
+--- a/src/ActivityNativeExecutor.cpp	2026-10-15 17:28:29.631386300 -0600
++++ b/src/ActivityNativeExecutor.cpp	2026-10-15 17:28:05.137905200 -0600
 @@ -308,6 +308,75 @@
   } catch (...) { return op.receipt=Result(Receipt::Interrupted,"native_poll_exception"); }
   return op.receipt;
@@ -4163,9 +4163,9 @@ diff -ruN --binary a/src/ActivityNativeExecutor.cpp b/src/ActivityNativeExecutor
   // Stop owned activity before inventory recovery: an uncertain transfer must
   // never keep a revoked mining/combat order running.
   if(op.cleanupRequired) {
-diff -ruN --binary a/src/ActivityNativeExecutor.h b/src/ActivityNativeExecutor.h
---- a/src/ActivityNativeExecutor.h	2026-10-15 17:20:26.383445560 -0500
-+++ b/src/ActivityNativeExecutor.h	2026-10-15 17:20:26.630377551 -0500
+diff -ruN a/src/ActivityNativeExecutor.h b/src/ActivityNativeExecutor.h
+--- a/src/ActivityNativeExecutor.h	2026-10-15 17:28:29.635386900 -0600
++++ b/src/ActivityNativeExecutor.h	2026-10-15 17:28:05.139905800 -0600
 @@ -17,6 +17,7 @@
  public:
   virtual ~NativePolicy() {}
@@ -4182,9 +4182,9 @@ diff -ruN --binary a/src/ActivityNativeExecutor.h b/src/ActivityNativeExecutor.h
   bool CancelOwned(const std::string& requestId);
   unsigned int Delivered(const std::string& agreementId) const;
  private:
-diff -ruN --binary a/src/ActivityPolicySupport.cpp b/src/ActivityPolicySupport.cpp
---- a/src/ActivityPolicySupport.cpp	2026-10-15 17:20:26.394081260 -0500
-+++ b/src/ActivityPolicySupport.cpp	2026-10-15 17:20:26.831062944 -0500
+diff -ruN a/src/ActivityPolicySupport.cpp b/src/ActivityPolicySupport.cpp
+--- a/src/ActivityPolicySupport.cpp	2026-10-15 17:28:29.636385200 -0600
++++ b/src/ActivityPolicySupport.cpp	2026-10-15 17:28:05.141423800 -0600
 @@ -44,10 +44,10 @@
   Building* building; Character* actor;
   unsigned buildingSerial,actorSerial;
@@ -4236,9 +4236,9 @@ diff -ruN --binary a/src/ActivityPolicySupport.cpp b/src/ActivityPolicySupport.c
  bool ConfirmMineOutputTaken(const std::string& id,unsigned amount) {
   try {
    std::map<std::string,MineLease>::iterator i=leases.find(id);if(i==leases.end()) return false;
-diff -ruN --binary a/src/ActivityPolicySupport.h b/src/ActivityPolicySupport.h
---- a/src/ActivityPolicySupport.h	2026-10-15 17:20:26.388872260 -0500
-+++ b/src/ActivityPolicySupport.h	2026-10-15 17:20:27.041789936 -0500
+diff -ruN a/src/ActivityPolicySupport.h b/src/ActivityPolicySupport.h
+--- a/src/ActivityPolicySupport.h	2026-10-15 17:28:29.635386900 -0600
++++ b/src/ActivityPolicySupport.h	2026-10-15 17:28:05.143426300 -0600
 @@ -4,6 +4,14 @@
  class Building;
  class Inventory;
@@ -4265,9 +4265,9 @@ diff -ruN --binary a/src/ActivityPolicySupport.h b/src/ActivityPolicySupport.h
  bool ConfirmMineOutputTaken(const std::string& agreement, unsigned amount);
  Inventory* NaturalResourceOutput(Building*, Character*, const std::string& itemSid,
                                   bool requireExclusive, std::string& reason);
-diff -ruN --binary a/src/ActivityRuntime.cpp b/src/ActivityRuntime.cpp
---- a/src/ActivityRuntime.cpp	2026-10-15 17:20:26.442299758 -0500
-+++ b/src/ActivityRuntime.cpp	2026-10-15 17:20:26.931116040 -0500
+diff -ruN a/src/ActivityRuntime.cpp b/src/ActivityRuntime.cpp
+--- a/src/ActivityRuntime.cpp	2026-10-15 17:28:29.641387400 -0600
++++ b/src/ActivityRuntime.cpp	2026-10-15 17:28:05.144424900 -0600
 @@ -3,12 +3,16 @@
  namespace Stobe { namespace Activity {
  NativeHost::NativeHost(RuntimeBindings& b):bindings_(b),executor_(*this),world_(0),now_(0),frameObserved_(false){}
@@ -4338,9 +4338,9 @@ diff -ruN --binary a/src/ActivityRuntime.cpp b/src/ActivityRuntime.cpp
 + return true;
 +}
 +} }
-diff -ruN --binary a/src/ActivityRuntime.h b/src/ActivityRuntime.h
---- a/src/ActivityRuntime.h	2026-10-15 17:20:26.452989858 -0500
-+++ b/src/ActivityRuntime.h	2026-10-15 17:20:26.750662747 -0500
+diff -ruN a/src/ActivityRuntime.h b/src/ActivityRuntime.h
+--- a/src/ActivityRuntime.h	2026-10-15 17:28:29.642909900 -0600
++++ b/src/ActivityRuntime.h	2026-10-15 17:28:05.145957300 -0600
 @@ -7,11 +7,15 @@
  class RuntimeBindings {
  public:
@@ -4393,9 +4393,9 @@ diff -ruN --binary a/src/ActivityRuntime.h b/src/ActivityRuntime.h
 -} }
 \ No newline at end of file
 +} }
-diff -ruN --binary a/src/ActivityRuntimeBindings.cpp b/src/ActivityRuntimeBindings.cpp
---- a/src/ActivityRuntimeBindings.cpp	2026-10-15 17:20:26.421159959 -0500
-+++ b/src/ActivityRuntimeBindings.cpp	2026-10-15 17:20:26.956566739 -0500
+diff -ruN a/src/ActivityRuntimeBindings.cpp b/src/ActivityRuntimeBindings.cpp
+--- a/src/ActivityRuntimeBindings.cpp	2026-10-15 17:28:29.639386400 -0600
++++ b/src/ActivityRuntimeBindings.cpp	2026-10-15 17:28:05.147942800 -0600
 @@ -1,8 +1,10 @@
  #include "ActivityRuntimeBindings.h"
 +#include "ActivityDiscoveryRef.h"
@@ -4874,9 +4874,9 @@ diff -ruN --binary a/src/ActivityRuntimeBindings.cpp b/src/ActivityRuntimeBindin
  }
  } }
  
-diff -ruN --binary a/src/ActivityRuntimeBindings.h b/src/ActivityRuntimeBindings.h
---- a/src/ActivityRuntimeBindings.h	2026-10-15 17:20:26.431274058 -0500
-+++ b/src/ActivityRuntimeBindings.h	2026-10-15 17:20:26.653138150 -0500
+diff -ruN a/src/ActivityRuntimeBindings.h b/src/ActivityRuntimeBindings.h
+--- a/src/ActivityRuntimeBindings.h	2026-10-15 17:28:29.640385800 -0600
++++ b/src/ActivityRuntimeBindings.h	2026-10-15 17:28:05.149945500 -0600
 @@ -1,5 +1,6 @@
  #pragma once
  #include "ActivityRuntime.h"
@@ -4911,9 +4911,9 @@ diff -ruN --binary a/src/ActivityRuntimeBindings.h b/src/ActivityRuntimeBindings
  };
  } }
  
-diff -ruN --binary a/src/ActivityStatusSnapshot.h b/src/ActivityStatusSnapshot.h
+diff -ruN a/src/ActivityStatusSnapshot.h b/src/ActivityStatusSnapshot.h
 --- a/src/ActivityStatusSnapshot.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ActivityStatusSnapshot.h	2026-10-15 17:20:26.652448750 -0500
++++ b/src/ActivityStatusSnapshot.h	2026-10-15 17:28:05.151942700 -0600
 @@ -0,0 +1,273 @@
 +#pragma once
 +
@@ -5188,9 +5188,9 @@ diff -ruN --binary a/src/ActivityStatusSnapshot.h b/src/ActivityStatusSnapshot.h
 +}
 +
 +} }
-diff -ruN --binary a/src/ActivityTransport.cpp b/src/ActivityTransport.cpp
---- a/src/ActivityTransport.cpp	2026-10-15 17:20:26.366858461 -0500
-+++ b/src/ActivityTransport.cpp	2026-10-15 17:20:26.617138152 -0500
+diff -ruN a/src/ActivityTransport.cpp b/src/ActivityTransport.cpp
+--- a/src/ActivityTransport.cpp	2026-10-15 17:28:29.633385500 -0600
++++ b/src/ActivityTransport.cpp	2026-10-15 17:28:05.153943200 -0600
 @@ -1,6 +1,8 @@
  #include "ActivityTransport.h"
  #include "ActivityController.h"
@@ -5448,9 +5448,9 @@ diff -ruN --binary a/src/ActivityTransport.cpp b/src/ActivityTransport.cpp
    S().now=now;const DWORD tick=GetTickCount();if(S().polling || (S().lastPoll && tick-S().lastPoll<2000))return;
    S().lastPoll=tick;S().polling=true;job=new PollJob;job->status=status;job->turn.world=world;job->turn.now=now;job->turn.epoch=epoch;job->acknowledged.swap(S().acknowledgements);
   }
-diff -ruN --binary a/src/ActivityTransport.h b/src/ActivityTransport.h
---- a/src/ActivityTransport.h	2026-10-15 17:20:26.179396568 -0500
-+++ b/src/ActivityTransport.h	2026-10-15 17:20:26.808609145 -0500
+diff -ruN a/src/ActivityTransport.h b/src/ActivityTransport.h
+--- a/src/ActivityTransport.h	2026-10-15 17:28:29.615861700 -0600
++++ b/src/ActivityTransport.h	2026-10-15 17:28:05.154943900 -0600
 @@ -7,6 +7,9 @@
  std::wstring PrepareActivityChatTurn(const std::string& turnId, const std::wstring& endpoint);
  // Only after existing speech-delivery checks prove NPC speech was displayed.
@@ -5461,9 +5461,9 @@ diff -ruN --binary a/src/ActivityTransport.h b/src/ActivityTransport.h
  void UpdateActivityTransport();
  void ResetActivityTransport();
  } }
-diff -ruN --binary a/src/ChatBox.cpp b/src/ChatBox.cpp
---- a/src/ChatBox.cpp	2026-10-15 17:20:25.826089980 -0500
-+++ b/src/ChatBox.cpp	2026-10-15 17:20:26.817138144 -0500
+diff -ruN a/src/ChatBox.cpp b/src/ChatBox.cpp
+--- a/src/ChatBox.cpp	2026-10-15 17:28:29.573769700 -0600
++++ b/src/ChatBox.cpp	2026-10-15 17:28:05.156942700 -0600
 @@ -5876,6 +5876,67 @@
    return true;
  }
@@ -5532,9 +5532,9 @@ diff -ruN --binary a/src/ChatBox.cpp b/src/ChatBox.cpp
  bool TriggerNarratorWelcomeOnLoad(GameWorld *world, Character *preferredSpeaker,
                                    LONG generationOverride) {
    if (!world || !world->player || world->player->playerCharacters.size() == 0) {
-diff -ruN --binary a/src/ChatBox.h b/src/ChatBox.h
---- a/src/ChatBox.h	2026-10-15 17:20:26.205876367 -0500
-+++ b/src/ChatBox.h	2026-10-15 17:20:26.874268242 -0500
+diff -ruN a/src/ChatBox.h b/src/ChatBox.h
+--- a/src/ChatBox.h	2026-10-15 17:28:29.617861900 -0600
++++ b/src/ChatBox.h	2026-10-15 17:28:05.159485200 -0600
 @@ -76,6 +76,9 @@
  bool TriggerReactionTurn(GameWorld *world, Character *npc, Character *player,
                           const std::string &react, const std::string &kind,
@@ -5545,9 +5545,9 @@ diff -ruN --binary a/src/ChatBox.h b/src/ChatBox.h
  bool TriggerNarratorWelcomeOnLoad(GameWorld *world,
                                    Character *preferredSpeaker = nullptr,
                                    LONG generationOverride = 0);
-diff -ruN --binary a/src/Context.cpp b/src/Context.cpp
---- a/src/Context.cpp	2026-10-15 17:20:25.991543574 -0500
-+++ b/src/Context.cpp	2026-10-15 17:20:26.754887847 -0500
+diff -ruN a/src/Context.cpp b/src/Context.cpp
+--- a/src/Context.cpp	2026-10-15 17:28:29.593815200 -0600
++++ b/src/Context.cpp	2026-10-15 17:28:05.160466700 -0600
 @@ -1,5 +1,6 @@
  #include "LocalTravel.h"
  #include "NativeAiAwareness.h"
@@ -5585,9 +5585,9 @@ diff -ruN --binary a/src/Context.cpp b/src/Context.cpp
          json += "\"floor\": " + ToString(otherFloor) + ",";
          json += "\"current_action\":\"" + EscapeJSON(o_activity.currentAction) +
                  "\",";
-diff -ruN --binary a/src/FollowExpiryPolicy.h b/src/FollowExpiryPolicy.h
+diff -ruN a/src/FollowExpiryPolicy.h b/src/FollowExpiryPolicy.h
 --- a/src/FollowExpiryPolicy.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/FollowExpiryPolicy.h	2026-10-15 17:20:26.633732151 -0500
++++ b/src/FollowExpiryPolicy.h	2026-10-15 17:28:05.162466600 -0600
 @@ -0,0 +1,43 @@
 +#pragma once
 +// Pure logic: safety-net expiry and reporting for the legacy (unscoped) FOLLOW controller.
@@ -5632,9 +5632,9 @@ diff -ruN --binary a/src/FollowExpiryPolicy.h b/src/FollowExpiryPolicy.h
 + return s.str() + "}";
 +}
 +} }
-diff -ruN --binary a/src/Globals.cpp b/src/Globals.cpp
---- a/src/Globals.cpp	2026-10-15 17:20:26.157768968 -0500
-+++ b/src/Globals.cpp	2026-10-15 17:20:26.623490951 -0500
+diff -ruN a/src/Globals.cpp b/src/Globals.cpp
+--- a/src/Globals.cpp	2026-10-15 17:28:29.612895500 -0600
++++ b/src/Globals.cpp	2026-10-15 17:28:05.163467100 -0600
 @@ -84,6 +84,8 @@
  std::deque<QueuedAction> g_uiActionQueue;
  CRITICAL_SECTION g_uiMutex;
@@ -5690,9 +5690,9 @@ diff -ruN --binary a/src/Globals.cpp b/src/Globals.cpp
  }
  
  std::map<unsigned int, hand> SnapshotFollowTargets() {
-diff -ruN --binary a/src/Globals.h b/src/Globals.h
---- a/src/Globals.h	2026-10-15 17:20:26.237087566 -0500
-+++ b/src/Globals.h	2026-10-15 17:20:26.565138154 -0500
+diff -ruN a/src/Globals.h b/src/Globals.h
+--- a/src/Globals.h	2026-10-15 17:28:29.621385900 -0600
++++ b/src/Globals.h	2026-10-15 17:28:05.165468700 -0600
 @@ -237,6 +237,8 @@
  void ClearFollowTarget(unsigned int followerSerial);
  void ClearAllFollowTargets();
@@ -5702,9 +5702,9 @@ diff -ruN --binary a/src/Globals.h b/src/Globals.h
  void SetTravelTarget(unsigned int actorSerial, float x, float y, float z,
                       const std::string &label);
  void ClearTravelTarget(unsigned int actorSerial);
-diff -ruN --binary a/src/LocalTravel.cpp b/src/LocalTravel.cpp
---- a/src/LocalTravel.cpp	2026-10-15 17:20:26.173784668 -0500
-+++ b/src/LocalTravel.cpp	2026-10-15 17:20:26.938075740 -0500
+diff -ruN a/src/LocalTravel.cpp b/src/LocalTravel.cpp
+--- a/src/LocalTravel.cpp	2026-10-15 17:28:29.614862300 -0600
++++ b/src/LocalTravel.cpp	2026-10-15 17:28:05.167467700 -0600
 @@ -14,6 +14,7 @@
  #include <kenshi/GameData.h>
  #include <kenshi/RaceData.h>
@@ -5984,9 +5984,9 @@ diff -ruN --binary a/src/LocalTravel.cpp b/src/LocalTravel.cpp
  }
 +
  } }
-diff -ruN --binary a/src/LocalTravel.h b/src/LocalTravel.h
---- a/src/LocalTravel.h	2026-10-15 17:20:26.216837466 -0500
-+++ b/src/LocalTravel.h	2026-10-15 17:20:26.997940438 -0500
+diff -ruN a/src/LocalTravel.h b/src/LocalTravel.h
+--- a/src/LocalTravel.h	2026-10-15 17:28:29.618864100 -0600
++++ b/src/LocalTravel.h	2026-10-15 17:28:05.168468900 -0600
 @@ -9,5 +9,8 @@
  bool ValidateForDispatch(GameWorld *world, Character *actor, const std::string &id,
                           float x, float y, float z, const std::string &label,
@@ -5996,9 +5996,9 @@ diff -ruN --binary a/src/LocalTravel.h b/src/LocalTravel.h
 +                        const std::string &kind, std::string &reason);
  void Reset();
  } }
-diff -ruN --binary a/src/N2Policy.h b/src/N2Policy.h
+diff -ruN a/src/N2Policy.h b/src/N2Policy.h
 --- a/src/N2Policy.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/N2Policy.h	2026-10-15 17:20:26.718518748 -0500
++++ b/src/N2Policy.h	2026-10-15 17:28:05.170468000 -0600
 @@ -0,0 +1,295 @@
 +// N2Policy.h: pure (SDK-free) logic for the N2 native package. Header only, VS2010 compatible.
 +//  - Attention block JSON (what an NPC is busy with / how they are doing)
@@ -6295,9 +6295,9 @@ diff -ruN --binary a/src/N2Policy.h b/src/N2Policy.h
 +
 +} // namespace N2Policy
 +} // namespace Stobe
-diff -ruN --binary a/src/N2SocialWatch.cpp b/src/N2SocialWatch.cpp
+diff -ruN a/src/N2SocialWatch.cpp b/src/N2SocialWatch.cpp
 --- a/src/N2SocialWatch.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/N2SocialWatch.cpp	2026-10-15 17:20:27.023043837 -0500
++++ b/src/N2SocialWatch.cpp	2026-10-15 17:28:05.171993800 -0600
 @@ -0,0 +1,164 @@
 +#include "N2SocialWatch.h"
 +#include "AudioPlayback.h"
@@ -6463,9 +6463,9 @@ diff -ruN --binary a/src/N2SocialWatch.cpp b/src/N2SocialWatch.cpp
 +  }
 +}
 +} }
-diff -ruN --binary a/src/N2SocialWatch.h b/src/N2SocialWatch.h
+diff -ruN a/src/N2SocialWatch.h b/src/N2SocialWatch.h
 --- a/src/N2SocialWatch.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/N2SocialWatch.h	2026-10-15 17:20:26.899269341 -0500
++++ b/src/N2SocialWatch.h	2026-10-15 17:28:05.172987800 -0600
 @@ -0,0 +1,19 @@
 +#pragma once
 +// N2: proximity follow-up trigger. Fires the optional bored turn (server decides; it answers "ok" and does
@@ -6486,9 +6486,9 @@ diff -ruN --binary a/src/N2SocialWatch.h b/src/N2SocialWatch.h
 +// Any thread: a combat_start event was logged (actor and target handle serials, 0 = unknown).
 +void NoteCombatStart(unsigned actorSerial, unsigned targetSerial);
 +} }
-diff -ruN --binary a/src/NativeAiAwareness.cpp b/src/NativeAiAwareness.cpp
---- a/src/NativeAiAwareness.cpp	2026-10-15 17:20:26.258677865 -0500
-+++ b/src/NativeAiAwareness.cpp	2026-10-15 17:20:26.902599341 -0500
+diff -ruN a/src/NativeAiAwareness.cpp b/src/NativeAiAwareness.cpp
+--- a/src/NativeAiAwareness.cpp	2026-10-15 17:28:29.623385200 -0600
++++ b/src/NativeAiAwareness.cpp	2026-10-15 17:28:28.906609200 -0600
 @@ -1,6 +1,12 @@
  #include "NativeAiAwareness.h"
  #include "KenshiAiRuntimeCompat.h"
@@ -6502,7 +6502,7 @@ diff -ruN --binary a/src/NativeAiAwareness.cpp b/src/NativeAiAwareness.cpp
  #include <kenshi/AI/AITaskSystem.h>
  #include <kenshi/Character.h>
  #include <kenshi/GameWorld.h>
-@@ -26,6 +32,10 @@
+@@ -26,12 +32,19 @@
    TimeOfDay getContractExpiryTime() const;
  };
  
@@ -6513,7 +6513,17 @@ diff -ruN --binary a/src/NativeAiAwareness.cpp b/src/NativeAiAwareness.cpp
  namespace Stobe { namespace NativeAiAwareness { namespace {
  std::string Quote(const std::string& s) { return "\"" + EscapeJSON(s.substr(0, 160)) + "\""; }
  std::string Bool(bool b) { return b ? "true" : "false"; }
-@@ -68,6 +78,73 @@
+ std::string Number(double n) {
+   if (!_finite(n)) return "null";
+-  std::ostringstream s; s.imbue(std::locale::classic()); s << n; return s.str();
++  std::ostringstream s; s.imbue(std::locale::classic());
++  // default precision 6 rounded observed_unix/game_ts (1792103647 -> 1.7921e+09) so every native_ai snapshot looked stale
++  if (n == floor(n) && n > -9e15 && n < 9e15) s << static_cast<long long>(n); else { s.precision(12); s << n; }
++  return s.str();
+ }
+ template<class T> bool ReadField(const void* object, size_t offset, T& out) {
+   if (reinterpret_cast<uintptr_t>(object) < 0x10000) return false;
+@@ -68,6 +81,73 @@
    if (data) s += ",\"package_name\":" + Quote(data->name);
    return s + "}";
  }
@@ -6587,7 +6597,7 @@ diff -ruN --binary a/src/NativeAiAwareness.cpp b/src/NativeAiAwareness.cpp
  } // namespace
  
  std::string CaptureJson(GameWorld* world, Character* actor) {
-@@ -130,6 +207,20 @@
+@@ -130,6 +210,20 @@
        squad += "}";
      }
    } catch (...) { squad = "{\"observed\":false}"; }
@@ -6608,9 +6618,9 @@ diff -ruN --binary a/src/NativeAiAwareness.cpp b/src/NativeAiAwareness.cpp
    return s + ",\"squad\":" + squad + "}";
  }
  } }
-diff -ruN --binary a/src/NativeAiOrdersJson.h b/src/NativeAiOrdersJson.h
+diff -ruN a/src/NativeAiOrdersJson.h b/src/NativeAiOrdersJson.h
 --- a/src/NativeAiOrdersJson.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/NativeAiOrdersJson.h	2026-10-15 17:20:26.637337851 -0500
++++ b/src/NativeAiOrdersJson.h	2026-10-15 17:28:05.175987800 -0600
 @@ -0,0 +1,48 @@
 +#pragma once
 +// Pure JSON builders for the native_ai additions (player_orders, active_job, active_package).
@@ -6660,9 +6670,9 @@ diff -ruN --binary a/src/NativeAiOrdersJson.h b/src/NativeAiOrdersJson.h
 + return "{\"observed\":true,\"name\":\"" + Esc(name, 120) + "\"}";
 +}
 +} }
-diff -ruN --binary a/src/NativeAttention.cpp b/src/NativeAttention.cpp
+diff -ruN a/src/NativeAttention.cpp b/src/NativeAttention.cpp
 --- a/src/NativeAttention.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/NativeAttention.cpp	2026-10-15 17:20:26.980944438 -0500
++++ b/src/NativeAttention.cpp	2026-10-15 17:28:05.176987800 -0600
 @@ -0,0 +1,202 @@
 +#include "NativeAttention.h"
 +#include "N2Policy.h"
@@ -6866,9 +6876,9 @@ diff -ruN --binary a/src/NativeAttention.cpp b/src/NativeAttention.cpp
 +  return BusyReason(task)[0] == 0;
 +}
 +} }
-diff -ruN --binary a/src/NativeAttention.h b/src/NativeAttention.h
+diff -ruN a/src/NativeAttention.h b/src/NativeAttention.h
 --- a/src/NativeAttention.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/NativeAttention.h	2026-10-15 17:20:26.770217046 -0500
++++ b/src/NativeAttention.h	2026-10-15 17:28:05.177987800 -0600
 @@ -0,0 +1,24 @@
 +#pragma once
 +// N2: native attention / role / squad reads for one character (game thread only, no retained pointers).
@@ -6894,9 +6904,9 @@ diff -ruN --binary a/src/NativeAttention.h b/src/NativeAttention.h
 +// Not in combat, not sleeping, not busy, not fleeing: fit for an optional chat turn.
 +bool IsIdle(Character* npc);
 +} }
-diff -ruN --binary a/src/NativePlaceKnowledge.cpp b/src/NativePlaceKnowledge.cpp
+diff -ruN a/src/NativePlaceKnowledge.cpp b/src/NativePlaceKnowledge.cpp
 --- a/src/NativePlaceKnowledge.cpp	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/NativePlaceKnowledge.cpp	2026-10-15 17:20:26.853138143 -0500
++++ b/src/NativePlaceKnowledge.cpp	2026-10-15 17:28:05.179987800 -0600
 @@ -0,0 +1,72 @@
 +// Keep full Town/Building SDK ABI isolated from KenshiBuildingCompat.h users.
 +#include "NativePlaceKnowledge.h"
@@ -6970,9 +6980,9 @@ diff -ruN --binary a/src/NativePlaceKnowledge.cpp b/src/NativePlaceKnowledge.cpp
 +  }
 +  return false;
 +}
-diff -ruN --binary a/src/NativePlaceKnowledge.h b/src/NativePlaceKnowledge.h
+diff -ruN a/src/NativePlaceKnowledge.h b/src/NativePlaceKnowledge.h
 --- a/src/NativePlaceKnowledge.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/NativePlaceKnowledge.h	2026-10-15 17:20:26.885511842 -0500
++++ b/src/NativePlaceKnowledge.h	2026-10-15 17:28:05.180994000 -0600
 @@ -0,0 +1,13 @@
 +#pragma once
 +#include <string>
@@ -6987,9 +6997,9 @@ diff -ruN --binary a/src/NativePlaceKnowledge.h b/src/NativePlaceKnowledge.h
 +};
 +void CaptureNativeKnownPlaces(Character *actor,std::vector<NativeKnownPlace> &places);
 +bool ValidateNativeKnownPlace(Character *actor,unsigned int serial,unsigned int mapSerial,const Ogre::Vector3 &point,const std::string &name);
-diff -ruN --binary a/src/NativeTravelLifecycle.cpp b/src/NativeTravelLifecycle.cpp
---- a/src/NativeTravelLifecycle.cpp	2026-10-15 17:20:26.317401463 -0500
-+++ b/src/NativeTravelLifecycle.cpp	2026-10-15 17:20:26.774261546 -0500
+diff -ruN a/src/NativeTravelLifecycle.cpp b/src/NativeTravelLifecycle.cpp
+--- a/src/NativeTravelLifecycle.cpp	2026-10-15 17:28:29.629388000 -0600
++++ b/src/NativeTravelLifecycle.cpp	2026-10-15 17:28:05.181989300 -0600
 @@ -1,4 +1,5 @@
  #include "NativeTravelLifecycle.h"
 +#include "ParticipationEvidence.h"
@@ -7095,9 +7105,9 @@ diff -ruN --binary a/src/NativeTravelLifecycle.cpp b/src/NativeTravelLifecycle.c
        Character *actor = Stobe::KenshiAi::ResolveCharacter(world, r.actor);
        if (!actor) {
          Emit(r, "running", "actor_unloaded_observation_unavailable", false); continue;
-diff -ruN --binary a/src/NativeTravelLifecycle.h b/src/NativeTravelLifecycle.h
---- a/src/NativeTravelLifecycle.h	2026-10-15 17:20:26.263364365 -0500
-+++ b/src/NativeTravelLifecycle.h	2026-10-15 17:20:26.895826241 -0500
+diff -ruN a/src/NativeTravelLifecycle.h b/src/NativeTravelLifecycle.h
+--- a/src/NativeTravelLifecycle.h	2026-10-15 17:28:29.624386300 -0600
++++ b/src/NativeTravelLifecycle.h	2026-10-15 17:28:05.183989100 -0600
 @@ -15,6 +15,11 @@
             const std::string &request, const std::string &expectedWorld,
             const std::string &planHash, const std::string &dispatchEnvelope, long long expiresGameTs,
@@ -7110,9 +7120,9 @@ diff -ruN --binary a/src/NativeTravelLifecycle.h b/src/NativeTravelLifecycle.h
  void Tick(GameWorld *world, long long nowGameTs);
  void ObserveIdle(GameWorld *world, Character *actor, long long nowGameTs);
  // Internal server-generated envelope only; never expose as an LLM action.
-diff -ruN --binary a/src/ParticipationEvidence.h b/src/ParticipationEvidence.h
+diff -ruN a/src/ParticipationEvidence.h b/src/ParticipationEvidence.h
 --- a/src/ParticipationEvidence.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/ParticipationEvidence.h	2026-10-15 17:20:26.641390751 -0500
++++ b/src/ParticipationEvidence.h	2026-10-15 17:28:05.184988600 -0600
 @@ -0,0 +1,81 @@
 +#pragma once
 +// Main-thread-only observer. No AI commands, timers, persistence or rewards.
@@ -7195,9 +7205,9 @@ diff -ruN --binary a/src/ParticipationEvidence.h b/src/ParticipationEvidence.h
 + std::string Json()const{return frozen.empty()?"{\"schema_version\":1,\"qualified\":false}":frozen;}
 +};
 +} }
-diff -ruN --binary a/src/SocialEventProtocol.cpp b/src/SocialEventProtocol.cpp
---- a/src/SocialEventProtocol.cpp	2026-10-15 17:20:26.277138164 -0500
-+++ b/src/SocialEventProtocol.cpp	2026-10-15 17:20:26.729015948 -0500
+diff -ruN a/src/SocialEventProtocol.cpp b/src/SocialEventProtocol.cpp
+--- a/src/SocialEventProtocol.cpp	2026-10-15 17:28:29.625386800 -0600
++++ b/src/SocialEventProtocol.cpp	2026-10-15 17:28:05.186987100 -0600
 @@ -49,7 +49,7 @@
  
  namespace StobeSocial {
@@ -7229,9 +7239,9 @@ diff -ruN --binary a/src/SocialEventProtocol.cpp b/src/SocialEventProtocol.cpp
      return s.str();
  }
  }
-diff -ruN --binary a/src/SocialEventProtocol.h b/src/SocialEventProtocol.h
---- a/src/SocialEventProtocol.h	2026-10-15 17:20:26.195413667 -0500
-+++ b/src/SocialEventProtocol.h	2026-10-15 17:20:26.608918852 -0500
+diff -ruN a/src/SocialEventProtocol.h b/src/SocialEventProtocol.h
+--- a/src/SocialEventProtocol.h	2026-10-15 17:28:29.616864200 -0600
++++ b/src/SocialEventProtocol.h	2026-10-15 17:28:05.187988200 -0600
 @@ -18,7 +18,11 @@
          std::string storageAlias; // earlier hand_<serial> of the same live character (re-squad gave it a new handle)
          int inPlayerFaction;
@@ -7245,9 +7255,9 @@ diff -ruN --binary a/src/SocialEventProtocol.h b/src/SocialEventProtocol.h
      };
      bool StructuredKind(const std::string& kind);
      std::string JsonString(const std::string& value);           // quoted + escaped
-diff -ruN --binary a/src/StobeHarnessBridge.cpp b/src/StobeHarnessBridge.cpp
---- a/src/StobeHarnessBridge.cpp	2026-10-15 17:20:25.801077281 -0500
-+++ b/src/StobeHarnessBridge.cpp	2026-10-15 17:20:26.612595152 -0500
+diff -ruN a/src/StobeHarnessBridge.cpp b/src/StobeHarnessBridge.cpp
+--- a/src/StobeHarnessBridge.cpp	2026-10-15 17:28:29.570245700 -0600
++++ b/src/StobeHarnessBridge.cpp	2026-10-15 17:28:05.188988300 -0600
 @@ -31,6 +31,7 @@
      {"shopprice", "stobe_shopprice <trader> [player]"},
      {"npcinfo", "stobe_npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|rename <target> <new name>|testportrait <private|both|clear|status>|read|refresh|close> (testportrait is one-shot on the open humanoid panel only; read: key gen loaded portrait tex bio_state text)"}, // NPC info panel
@@ -7267,9 +7277,9 @@ diff -ruN --binary a/src/StobeHarnessBridge.cpp b/src/StobeHarnessBridge.cpp
  }
  
  void Drain(GameWorld *world, Character *sel, RunFn run) {
-diff -ruN --binary a/src/Utils.cpp b/src/Utils.cpp
---- a/src/Utils.cpp	2026-10-15 17:20:26.378102560 -0500
-+++ b/src/Utils.cpp	2026-10-15 17:20:26.866793143 -0500
+diff -ruN a/src/Utils.cpp b/src/Utils.cpp
+--- a/src/Utils.cpp	2026-10-15 17:28:29.634385300 -0600
++++ b/src/Utils.cpp	2026-10-15 17:28:05.190986600 -0600
 @@ -1,5 +1,6 @@
  #include "PlaythroughSession.h"
  #include "SocialEventProtocol.h"
@@ -7309,9 +7319,9 @@ diff -ruN --binary a/src/Utils.cpp b/src/Utils.cpp
  
    EnterCriticalSection(&g_eventMutex);
    GameEvent ev;
-diff -ruN --binary a/src/Utils.h b/src/Utils.h
---- a/src/Utils.h	2026-10-15 17:20:25.844974480 -0500
-+++ b/src/Utils.h	2026-10-15 17:20:26.714887048 -0500
+diff -ruN a/src/Utils.h b/src/Utils.h
+--- a/src/Utils.h	2026-10-15 17:28:29.576769300 -0600
++++ b/src/Utils.h	2026-10-15 17:28:05.192530900 -0600
 @@ -21,6 +21,7 @@
  void SetPushToTalkHotkeyFromString(const std::string &keyStr);
  void SetNpcInfoHotkeyFromString(const std::string &keyStr); // NPC info panel
@@ -7320,9 +7330,9 @@ diff -ruN --binary a/src/Utils.h b/src/Utils.h
  float ResolveDialogueGameSpeedMultiplier(GameWorld *world);
  void SleepIfPaused(DWORD ms);
  void ResetRuntimeLogsForSession();
-diff -ruN --binary a/src/main.cpp b/src/main.cpp
---- a/src/main.cpp	2026-10-15 17:20:25.849744780 -0500
-+++ b/src/main.cpp	2026-10-15 17:20:26.506399256 -0500
+diff -ruN a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp	2026-10-15 17:28:29.577769700 -0600
++++ b/src/main.cpp	2026-10-15 17:28:05.196510600 -0600
 @@ -1,5 +1,6 @@
  #include "LocalTravel.h"
  #include "NativeTravelLifecycle.h"

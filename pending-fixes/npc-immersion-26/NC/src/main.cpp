@@ -1,0 +1,17013 @@
+#include "LocalTravel.h"
+#include "NativeTravelLifecycle.h"
+#include "FollowExpiryPolicy.h"
+#include "PlaythroughSession.h"
+#include "BodyguardContractProbe.h"
+#include "ProfilePortrait.h"
+#include <kenshi/SaveFileSystem.h>
+#include <kenshi/SaveManager.h>
+#include <kenshi/SaveInfo.h>
+#include "Interaction.h"
+// ???? AGENT PROTOCOL: Before editing this file, you MUST read PROJECT_CONTEXT.md
+// ???? This project has strict threading and memory safety rules.
+#include <string>
+#include <vector>
+#include <windows.h>
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <cmath>
+#include <float.h>
+#include <cstdlib>
+#include <deque>
+#include <fstream>
+#include <map>
+#include <set>
+
+#include "Comm.h"
+#include "Context.h"
+#include "DialogueMenuTts.h"
+// ???? AGENT PROTOCOL: Before editing this file, you MUST read PROJECT_CONTEXT.md
+// ???? Kenshi engine writes MUST occur on the main thread inside hooks.
+#include <core/Functions.h>
+#include "Functions.h"
+#include "AudioPlayback.h"
+#include "AutonomyController.h"
+#include "AutonomySafetyProbe.h"
+#include "Globals.h"
+#include "KenshiTownCompat.h"
+#include "PlayerBaseState.h"
+#include "StobeIdentityRename.h"
+#include "StobeChatMode.h"
+#include "NpcPanelRequestPolicy.h"
+#include "PortraitFaultInjection.h"
+#include "StobeHarnessBridge.h"
+#include "TestInboxTargetRef.h"
+#include "StobeGoals.h"
+#include "ActivityController.h"
+#include "ShopPriceHook.h"
+#include "StobeDrawnWeapon.h"
+#include "N2Policy.h"
+#include "N2SocialWatch.h"
+#include "NativeAttention.h"
+#include "Utils.h"
+#include "SocialEventProtocol.h"
+#include "VoiceCapture.h"
+#include "WorldStateRuntime.h"
+
+#include <kenshi/CharStats.h>
+#include <kenshi/Character.h>
+#include <kenshi/StateBroadcastData.h>
+#include <kenshi/util/YesNoMaybe.h>
+#include <kenshi/CharBody.h>
+#include <kenshi/CharMovement.h>
+#include <kenshi/Dialogue.h>
+#include <kenshi/Faction.h>
+#include <kenshi/FactionRelations.h>
+#include <kenshi/GameData.h>
+#include <kenshi/GameWorld.h>
+#include <kenshi/Inventory.h>
+#include <kenshi/Item.h>
+#include <kenshi/Kenshi.h>
+#include <kenshi/MedicalSystem.h>
+#include <kenshi/Platoon.h>
+#include <kenshi/PlayerInterface.h>
+#include <kenshi/Tasker.h>
+#include <kenshi/SensoryData.h>
+#include <kenshi/AI/AITaskSystem.h> // REL_THEFT_CAUGHT_M18: OrdersReceiver::currentGoal
+#include <kenshi/BountyManager.h>
+#include <kenshi/gui/InventoryGUI.h>
+#include <kenshi/gui/PortraitManager.h>
+#include <kenshi/util/hand.h>
+#include <kenshi/Damages.h>
+#include <ogre/OgreImage.h>
+
+#include <kenshi/RaceData.h>
+#include <kenshi/RootObject.h>
+#include <kenshi/RootObjectBase.h>
+#include <kenshi/SharedKing.h>
+#include <kenshi/Globals.h>
+#include <kenshi/WorldEventStateQuery.h>
+
+// Helper to safely get faction names for logging
+inline std::string SafeFaction(RootObjectBase *obj) {
+  if (!obj || (uintptr_t)obj < 0x1000)
+    return "None";
+  try {
+    Faction *f = obj->getFaction();
+    if (f && (uintptr_t)f > 0x1000)
+      return f->getName();
+  } catch (...) {
+  }
+  return "None";
+}
+
+void (*playerUpdate_orig)(PlayerInterface *) = nullptr;
+void (*attackingYou_orig)(Character *, Character *, bool, bool) = nullptr;
+bool (*aiIsEnemyRoot_orig)(AI *, RootObjectBase *) = nullptr;
+bool (*aiIsEnemyHand_orig)(AI *, const hand &, const Ogre::Vector3 &) = nullptr;
+Character *(*aiGetCharacter)(AI *) = nullptr;
+void (*newPlayerTaskSelectedCharacters_orig)(PlayerInterface *, TaskType,
+                                              const hand &, Building *,
+                                              const Ogre::Vector3 &, bool) =
+    nullptr;
+void (*attackTarget_orig)(Character *, Character *) = nullptr;
+bool (*applyFirstAid_orig)(MedicalSystem *, float, Item *, float,
+                           Character *) = nullptr;
+bool (*characterGettingEaten_orig)(Character *, float, Character *) = nullptr;
+Item *(*buyItem_orig)(Inventory *, Item *, RootObject *) = nullptr;
+
+// New World Event Hooks
+void (*declareDead_orig)(Character *) = nullptr;
+void (*setPrisonMode_orig)(Character *, bool, UseableStuff *) = nullptr;
+void (*setProneState_orig)(Character *, ProneState) = nullptr;
+bool (*isItOkForMeToLoot_orig)(Character *, RootObject *, Item *) = nullptr;
+void (*setChainedMode_orig)(Character *, bool, const hand &) = nullptr;
+void (*sayALine_orig)(Character *, const std::string &, bool) = nullptr;
+void (*characterSay_orig)(Character *, const std::string &) = nullptr;
+bool (*dialogueSayLine_orig)(Dialogue *, DialogLineData *) = nullptr;
+void (*dialogueSayText_orig)(Dialogue *, const std::string &, DialogLineData *) =
+    nullptr;
+void (*dialogueReplyClickedInt_orig)(Dialogue *, int) = nullptr;
+void (*dialogueReplyClickedString_orig)(Dialogue *, const std::string &) = nullptr;
+
+#include <mygui/MyGUI_Button.h>
+#include <mygui/MyGUI_ComboBox.h>
+#include <mygui/MyGUI_Delegate.h>
+#include <mygui/MyGUI_EditBox.h>
+#include <mygui/MyGUI_Gui.h>
+#include <mygui/MyGUI_InputManager.h>
+#include <mygui/MyGUI_TextBox.h>
+#include <mygui/MyGUI_Window.h>
+
+#include "ChatUI.h"
+
+// --- Main Hook Core ---
+
+// Bug 123: lower-case letters/digits with single spaces ("Pax [Hungry Bandit]"
+// -> "pax hungry bandit"); the server's sanitizer strips the brackets.
+static std::string LettersAndSpacesOnlyName(const std::string &value) {
+  std::string out;
+  bool space = false;
+  for (size_t i = 0; i < value.size(); ++i) {
+    unsigned char c = (unsigned char)value[i];
+    if (isalnum(c)) {
+      if (space && !out.empty())
+        out += ' ';
+      out += (char)tolower(c);
+      space = false;
+    } else {
+      space = true;
+    }
+  }
+  return out;
+}
+
+static std::string ToLowerAsciiCopy(const std::string &value) {
+  std::string lowered = value;
+  for (size_t i = 0; i < lowered.size(); ++i) {
+    lowered[i] = (char)std::tolower((unsigned char)lowered[i]);
+  }
+  return lowered;
+}
+
+static bool EndsWithAsciiInsensitive(const std::string &value,
+                                     const std::string &suffix) {
+  if (value.length() < suffix.length()) {
+    return false;
+  }
+  std::string left = ToLowerAsciiCopy(value);
+  std::string right = ToLowerAsciiCopy(suffix);
+  return left.compare(left.length() - right.length(), right.length(), right) ==
+         0;
+}
+
+static bool ContainsAsciiInsensitive(const std::string &value,
+                                     const std::string &needle) {
+  if (needle.empty()) {
+    return false;
+  }
+  return ToLowerAsciiCopy(value).find(ToLowerAsciiCopy(needle)) !=
+         std::string::npos;
+}
+
+static std::string TrimCopy(const std::string &value);
+
+static bool IsSpeechSerialBoundaryChar(char ch) {
+  const unsigned char uch = static_cast<unsigned char>(ch);
+  return std::isspace(uch) || ch == '.' || ch == ',' || ch == ';' ||
+         ch == ':' || ch == '!' || ch == '?' || ch == '(' || ch == ')' ||
+         ch == '[' || ch == ']' || ch == '{' || ch == '}' || ch == '"' ||
+         ch == '\'' || ch == '/' || ch == '\\' || ch == '-' || ch == '_';
+}
+
+// Some queue lines can leak engine serial fragments into spoken text
+// (e.g. "|80120293|"). Strip those before showing speech bubbles.
+static std::string StripLeakedSpeechSerialTokens(std::string value) {
+  if (value.empty()) {
+    return "";
+  }
+
+  std::string cleaned;
+  cleaned.reserve(value.size());
+  bool removedAny = false;
+
+  for (size_t i = 0; i < value.size();) {
+    if (value[i] != '|') {
+      cleaned.push_back(value[i]);
+      ++i;
+      continue;
+    }
+
+    size_t digitsStart = i + 1;
+    size_t cursor = digitsStart;
+    while (cursor < value.size() &&
+           std::isdigit(static_cast<unsigned char>(value[cursor]))) {
+      ++cursor;
+    }
+
+    const size_t digitCount = cursor - digitsStart;
+    const bool hasLongDigitRun = (digitCount >= 6);
+    const bool hasClosingPipe = (cursor < value.size() && value[cursor] == '|');
+    const size_t tokenEnd = hasClosingPipe ? (cursor + 1) : cursor;
+
+    bool removeToken = false;
+    if (hasLongDigitRun && hasClosingPipe) {
+      removeToken = true;
+    } else if (hasLongDigitRun &&
+               (cursor >= value.size() ||
+                IsSpeechSerialBoundaryChar(value[cursor]))) {
+      const bool leftBoundary =
+          (i == 0) || IsSpeechSerialBoundaryChar(value[i - 1]);
+      if (leftBoundary) {
+        removeToken = true;
+      }
+    }
+
+    if (removeToken) {
+      removedAny = true;
+      i = tokenEnd;
+      continue;
+    }
+
+    cleaned.push_back(value[i]);
+    ++i;
+  }
+
+  if (!removedAny) {
+    return value;
+  }
+
+  std::string trimmed = TrimCopy(cleaned);
+  std::string collapsed;
+  collapsed.reserve(trimmed.size());
+  bool prevSpace = false;
+  for (size_t i = 0; i < trimmed.size(); ++i) {
+    unsigned char ch = static_cast<unsigned char>(trimmed[i]);
+    if (std::isspace(ch)) {
+      if (!prevSpace) {
+        collapsed.push_back(' ');
+        prevSpace = true;
+      }
+      continue;
+    }
+    prevSpace = false;
+    collapsed.push_back(trimmed[i]);
+  }
+
+  return TrimCopy(collapsed);
+}
+
+static std::string StripDanglingTrailingClosingBrackets(std::string value) {
+  value = TrimCopy(value);
+  if (value.empty()) {
+    return "";
+  }
+
+  size_t openCount = 0;
+  size_t closeCount = 0;
+  for (size_t i = 0; i < value.size(); ++i) {
+    if (value[i] == '[') {
+      ++openCount;
+    } else if (value[i] == ']') {
+      ++closeCount;
+    }
+  }
+
+  if (closeCount <= openCount) {
+    return value;
+  }
+
+  while (!value.empty() && closeCount > openCount) {
+    value = TrimCopy(value);
+    if (value.empty() || value[value.size() - 1] != ']') {
+      break;
+    }
+    value.erase(value.size() - 1);
+    if (closeCount > 0) {
+      --closeCount;
+    }
+  }
+
+  return TrimCopy(value);
+}
+
+static bool IsLikelyTradeDialogueReply(const std::string &line) {
+  std::string trimmed = line;
+  size_t first = trimmed.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return false;
+  }
+  size_t last = trimmed.find_last_not_of(" \t\r\n");
+  trimmed = trimmed.substr(first, last - first + 1);
+  std::string lowered = ToLowerAsciiCopy(trimmed);
+  if (lowered.empty()) {
+    return false;
+  }
+  if (lowered.find("trade") != std::string::npos ||
+      lowered.find("shop") != std::string::npos ||
+      lowered.find("buy") != std::string::npos ||
+      lowered.find("sell") != std::string::npos ||
+      lowered.find("wares") != std::string::npos ||
+      lowered.find("goods") != std::string::npos ||
+      lowered.find("show me what you have") != std::string::npos ||
+      lowered.find("show me your goods") != std::string::npos) {
+    return true;
+  }
+  return false;
+}
+
+static bool DirectoryExists(const std::string &path) {
+  DWORD attrs = GetFileAttributesA(path.c_str());
+  if (attrs == INVALID_FILE_ATTRIBUTES) {
+    return false;
+  }
+  return (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+static std::string GetKenshiModsDirectoryPath(bool ensureExists) {
+  char path[MAX_PATH];
+  GetModuleFileNameA(NULL, path, MAX_PATH);
+  std::string exeDir = path;
+  size_t lastBackslash = exeDir.find_last_of("\\/");
+  if (lastBackslash != std::string::npos) {
+    exeDir = exeDir.substr(0, lastBackslash);
+  }
+  std::string modsDir = exeDir + "\\mods";
+  if (ensureExists) {
+    CreateDirectoryA(modsDir.c_str(), NULL);
+  }
+  return modsDir;
+}
+
+static std::vector<std::string> GetStobeImportDirectories() {
+  std::vector<std::string> directories;
+  std::set<std::string> seenLower;
+
+  std::string modsDir = GetKenshiModsDirectoryPath(true);
+  std::string rootStobeDir = modsDir + "\\Stobe";
+  CreateDirectoryA(rootStobeDir.c_str(), NULL);
+  if (DirectoryExists(rootStobeDir)) {
+    std::string key = ToLowerAsciiCopy(rootStobeDir);
+    if (seenLower.insert(key).second) {
+      directories.push_back(rootStobeDir);
+    }
+  }
+
+  std::string wildcardPath = modsDir + "\\*";
+  WIN32_FIND_DATAA findData;
+  HANDLE handle = FindFirstFileA(wildcardPath.c_str(), &findData);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return directories;
+  }
+
+  do {
+    if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+      continue;
+    }
+    std::string dirName = findData.cFileName;
+    if (dirName == "." || dirName == "..") {
+      continue;
+    }
+
+    std::string nestedStobe = modsDir + "\\" + dirName + "\\Stobe";
+    if (!DirectoryExists(nestedStobe)) {
+      continue;
+    }
+
+    std::string key = ToLowerAsciiCopy(nestedStobe);
+    if (seenLower.insert(key).second) {
+      directories.push_back(nestedStobe);
+    }
+  } while (FindNextFileA(handle, &findData));
+
+  FindClose(handle);
+  return directories;
+}
+
+static std::vector<std::string> FindCsvFilesInStobeModFolder(
+    const std::string &modFolder) {
+  std::vector<std::string> files;
+  std::string wildcardPath = modFolder + "\\*.csv";
+  WIN32_FIND_DATAA findData;
+  HANDLE handle = FindFirstFileA(wildcardPath.c_str(), &findData);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return files;
+  }
+
+  do {
+    if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+      continue;
+    }
+    files.push_back(modFolder + "\\" + findData.cFileName);
+  } while (FindNextFileA(handle, &findData));
+  FindClose(handle);
+
+  std::sort(files.begin(), files.end());
+  return files;
+}
+
+static std::string BasenameFromPath(const std::string &fullPath) {
+  size_t pos = fullPath.find_last_of("\\/");
+  if (pos == std::string::npos) {
+    return fullPath;
+  }
+  return fullPath.substr(pos + 1);
+}
+
+static bool ReadSmallFileBinary(const std::string &fullPath, size_t maxBytes,
+                                std::string &outData) {
+  outData.clear();
+  std::ifstream in(fullPath.c_str(), std::ios::binary);
+  if (!in.is_open()) {
+    return false;
+  }
+
+  in.seekg(0, std::ios::end);
+  std::streamoff fileSize = in.tellg();
+  in.seekg(0, std::ios::beg);
+  if (fileSize < 0) {
+    return false;
+  }
+  if (static_cast<size_t>(fileSize) > maxBytes) {
+    return false;
+  }
+  if (fileSize == 0) {
+    return true;
+  }
+
+  outData.resize(static_cast<size_t>(fileSize));
+  in.read(&outData[0], fileSize);
+  return in.good() || in.eof();
+}
+
+static std::string ExtractFirstCsvLine(const std::string &csvData) {
+  size_t end = csvData.find_first_of("\r\n");
+  if (end == std::string::npos) {
+    return csvData;
+  }
+  return csvData.substr(0, end);
+}
+
+static std::string DetectCsvImportType(const std::string &filename,
+                                       const std::string &csvData) {
+  std::string lowerName = ToLowerAsciiCopy(filename);
+  std::string firstLine = ToLowerAsciiCopy(ExtractFirstCsvLine(csvData));
+
+  if (ContainsAsciiInsensitive(lowerName, "world_knowledge") ||
+      ContainsAsciiInsensitive(lowerName, "worldknowledge") ||
+      ContainsAsciiInsensitive(lowerName, "worldstate") ||
+      ContainsAsciiInsensitive(lowerName, "oghma")) {
+    return "world_knowledge_import";
+  }
+  if (ContainsAsciiInsensitive(lowerName, "bio_unique")) {
+    return "bio_unique_import";
+  }
+  if (ContainsAsciiInsensitive(lowerName, "bio_random") ||
+      EndsWithAsciiInsensitive(lowerName, "_bios.csv")) {
+    return "bio_random_import";
+  }
+  if (ContainsAsciiInsensitive(lowerName, "bio_token") ||
+      ContainsAsciiInsensitive(lowerName, "rename_token")) {
+    return "bio_token_import";
+  }
+  if (ContainsAsciiInsensitive(lowerName, "description")) {
+    return "description_import";
+  }
+
+  if (firstLine.find("topic") != std::string::npos &&
+      (firstLine.find("topic_desc") != std::string::npos ||
+       firstLine.find("topic_desc_basic") != std::string::npos)) {
+    return "world_knowledge_import";
+  }
+  if (firstLine.find("token") != std::string::npos) {
+    return "bio_token_import";
+  }
+  if (firstLine.find("stringid") != std::string::npos &&
+      firstLine.find("name") != std::string::npos &&
+      firstLine.find("description") != std::string::npos) {
+    if (ContainsAsciiInsensitive(lowerName, "unique")) {
+      return "bio_unique_import";
+    }
+    if (ContainsAsciiInsensitive(lowerName, "bio")) {
+      return "bio_random_import";
+    }
+    return "description_import";
+  }
+
+  return "";
+}
+
+static std::string LogSnippet(const std::string &value, size_t maxLen) {
+  if (value.length() <= maxLen) {
+    return value;
+  }
+  return value.substr(0, maxLen) + "...";
+}
+
+DWORD WINAPI CsvImportStartupThread(LPVOID) {
+  // Wait for StobeServer startup/discovery before posting uploads.
+  Sleep(10000);
+
+  std::vector<std::string> importDirs = GetStobeImportDirectories();
+  std::vector<std::string> csvFiles;
+  std::set<std::string> seenFiles;
+  for (size_t i = 0; i < importDirs.size(); ++i) {
+    std::vector<std::string> dirFiles =
+        FindCsvFilesInStobeModFolder(importDirs[i]);
+    for (size_t f = 0; f < dirFiles.size(); ++f) {
+      std::string key = ToLowerAsciiCopy(dirFiles[f]);
+      if (seenFiles.insert(key).second) {
+        csvFiles.push_back(dirFiles[f]);
+      }
+    }
+  }
+  if (csvFiles.empty()) {
+    Log("CSV_IMPORT: no CSV files detected in configured Stobe import folders.");
+    return 0;
+  }
+
+  Log("CSV_IMPORT: scanning " + ToString((int)csvFiles.size()) +
+      " CSV file(s) across " + ToString((int)importDirs.size()) +
+      " Stobe import folder(s)");
+
+  const size_t maxCsvBytes = 10u * 1024u * 1024u;
+  int uploadedCount = 0;
+  int skippedCount = 0;
+  int failedCount = 0;
+
+  for (size_t i = 0; i < csvFiles.size(); ++i) {
+    const std::string fullPath = csvFiles[i];
+    const std::string filename = BasenameFromPath(fullPath);
+
+    std::string csvData;
+    if (!ReadSmallFileBinary(fullPath, maxCsvBytes, csvData)) {
+      failedCount++;
+      Log("CSV_IMPORT: failed to read file (missing or too large): " +
+          filename);
+      continue;
+    }
+    if (csvData.empty()) {
+      skippedCount++;
+      Log("CSV_IMPORT: skipped empty file " + filename);
+      continue;
+    }
+
+    std::string importType = DetectCsvImportType(filename, csvData);
+    if (importType.empty()) {
+      skippedCount++;
+      Log("CSV_IMPORT: skipped unknown CSV pattern " + filename);
+      continue;
+    }
+
+    std::string response = "";
+    bool ok = false;
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+      response = UploadCsvImportToStobe(csvData, filename, importType);
+      ok = (!response.empty() &&
+            response.find("\"success\":true") != std::string::npos);
+      if (ok) {
+        break;
+      }
+      if (attempt < 3) {
+        Sleep(2000);
+      }
+    }
+    if (ok) {
+      uploadedCount++;
+      Log("CSV_IMPORT: uploaded file=" + filename + " type=" + importType);
+    } else {
+      failedCount++;
+      Log("CSV_IMPORT: upload failed file=" + filename + " type=" + importType +
+          " response=" + LogSnippet(response, 220));
+    }
+  }
+
+  Log("CSV_IMPORT: completed uploaded=" + ToString(uploadedCount) +
+      " skipped=" + ToString(skippedCount) +
+      " failed=" + ToString(failedCount));
+  return 0;
+}
+
+static bool IsAnimalCharacterSafe(Character *npc) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+  try {
+    return npc->isAnimal() != 0;
+  } catch (...) {
+    return false;
+  }
+}
+
+static bool ShouldProcessAnimalCharacter(Character *npc) {
+  if (!IsAnimalCharacterSafe(npc)) {
+    return true;
+  }
+  if (!g_enableAnimalTalks) {
+    return false;
+  }
+  unsigned int serial = 0;
+  try {
+    serial = npc->getHandle().serial;
+  } catch (...) {
+    serial = 0;
+  }
+  if (serial == 0) {
+    return false;
+  }
+  return IsAnimalActivated(serial);
+}
+
+static void QueueIdentityRenameCandidate(Character *other,
+                                         const std::string &reason) {
+  if (!other || (uintptr_t)other < 0x1000) {
+    return;
+  }
+
+  unsigned int serial = 0;
+  try {
+    serial = other->getHandle().serial;
+  } catch (...) {
+    serial = 0;
+  }
+  if (serial == 0) {
+    return;
+  }
+
+  if (!ShouldProcessAnimalCharacter(other)) {
+    return;
+  }
+
+  std::string otherName;
+  try {
+    otherName = other->getName();
+  } catch (...) {
+    return;
+  }
+  if (!Stobe::IdentityRename::IsQueueEligibleName(otherName)) {
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  EnterCriticalSection(&g_nameCheckMutex);
+  bool alreadyDone = (g_identityRenameCompletedSerials.count(serial) > 0);
+  auto nextAttemptIt = g_identityRenameNextAttemptTick.find(serial);
+  DWORD nextAttemptTick =
+      (nextAttemptIt == g_identityRenameNextAttemptTick.end())
+          ? 0
+          : nextAttemptIt->second;
+  bool attemptReady =
+      Stobe::IdentityRename::IsAttemptReady(nowTick, nextAttemptTick);
+  if (alreadyDone) {
+    LeaveCriticalSection(&g_nameCheckMutex);
+    return;
+  }
+  if (!attemptReady) {
+    LeaveCriticalSection(&g_nameCheckMutex);
+    return;
+  }
+  for (uint32_t q = 0; q < g_nameCheckQueue.size(); ++q) {
+    if (g_nameCheckQueue[q].serial == serial) {
+      LeaveCriticalSection(&g_nameCheckMutex);
+      return;
+    }
+  }
+  LeaveCriticalSection(&g_nameCheckMutex);
+
+  std::string otherGender = other->isFemale() ? "Female" : "Male";
+  RaceData *otherRace = other->getRace() ? other->getRace() : other->myRace;
+  std::string otherRaceName = "Human";
+  if (otherRace && (uintptr_t)otherRace > 0x1000 && otherRace->data &&
+      !otherRace->data->name.empty()) {
+    otherRaceName = otherRace->data->name;
+  }
+
+  std::string otherFactionName;
+  if (g_originFactions.count(serial)) {
+    otherFactionName = g_originFactions[serial];
+  }
+  if (otherFactionName.empty()) {
+    Faction *otherFaction = other->getFaction() ? other->getFaction() : other->owner;
+    if (otherFaction && (uintptr_t)otherFaction > 0x1000) {
+      std::string fn = otherFaction->getName();
+      if ((fn.empty() || fn == "Unknown") && otherFaction->data &&
+          !otherFaction->data->name.empty()) {
+        fn = otherFaction->data->name;
+      }
+      if (fn != "Unknown" && fn != "Neutral" && fn != "None") {
+        otherFactionName = fn;
+      }
+    }
+  }
+
+  NameCheckItem item;
+  item.serial = serial;
+  item.name = otherName;
+  item.gender = otherGender;
+  item.race = otherRaceName;
+  item.faction = otherFactionName;
+  item.contextJson = BuildIdentityBootstrapContext(other);
+
+  EnterCriticalSection(&g_nameCheckMutex);
+  g_nameCheckQueue.push_back(item);
+  g_identityRenameNextAttemptTick[serial] =
+      Stobe::IdentityRename::ResolveQueuedAttemptDeadline(nowTick);
+  LeaveCriticalSection(&g_nameCheckMutex);
+}
+
+static std::string TrimCopy(const std::string &value) {
+  if (value.empty()) {
+    return "";
+  }
+  size_t start = value.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) {
+    return "";
+  }
+  size_t end = value.find_last_not_of(" \t\r\n");
+  return value.substr(start, end - start + 1);
+}
+
+static int ResolveCurrentGameTsSafe(GameWorld *world) {
+  if (!world || (uintptr_t)world <= 0x1000) {
+    return 0;
+  }
+  try {
+    TimeOfDay tod = world->getTimeStamp_inGameHours();
+    int gameTs = (int)tod.getTotalSeconds();
+    if (gameTs < 0) {
+      return 0;
+    }
+    return gameTs;
+  } catch (...) {
+    return 0;
+  }
+}
+
+static std::string SafeFactionName(Faction *faction) {
+  if (!faction || (uintptr_t)faction <= 0x1000) {
+    return "";
+  }
+
+  try {
+    std::string name = TrimCopy(faction->getName());
+    if (!name.empty()) {
+      return name;
+    }
+  } catch (...) {
+  }
+
+  try {
+    if (faction->data && (uintptr_t)faction->data > 0x1000) {
+      return TrimCopy(faction->data->name);
+    }
+  } catch (...) {
+  }
+  return "";
+}
+
+static std::string SafeFactionStringId(Faction *faction) {
+  if (!faction || (uintptr_t)faction <= 0x1000) {
+    return "";
+  }
+  try {
+    if (faction->data && (uintptr_t)faction->data > 0x1000) {
+      return TrimCopy(faction->data->stringID);
+    }
+  } catch (...) {
+  }
+  return "";
+}
+
+static int SafeFactionNumericId(Faction *faction) {
+  if (!faction || (uintptr_t)faction <= 0x1000) {
+    return 0;
+  }
+  try {
+    if (faction->data && (uintptr_t)faction->data > 0x1000) {
+      return static_cast<int>(faction->data->id);
+    }
+  } catch (...) {
+  }
+  return 0;
+}
+
+static std::string BuildFactionRelationStableToken(const std::string &stringId,
+                                                   int numericId,
+                                                   const std::string &name) {
+  std::string sid = TrimCopy(stringId);
+  if (!sid.empty()) {
+    return "sid:" + ToLowerAsciiCopy(sid);
+  }
+  if (numericId > 0) {
+    return "id:" + ToString(numericId);
+  }
+  std::string trimmedName = TrimCopy(name);
+  if (!trimmedName.empty()) {
+    return "name:" + ToLowerAsciiCopy(trimmedName);
+  }
+  return "";
+}
+
+static std::string BuildFactionRelationMergeKey(
+    const std::string &sourceStringId, int sourceNumericId,
+    const std::string &sourceName, const std::string &targetStringId,
+    int targetNumericId, const std::string &targetName) {
+  std::string sourceToken = BuildFactionRelationStableToken(
+      sourceStringId, sourceNumericId, sourceName);
+  std::string targetToken = BuildFactionRelationStableToken(
+      targetStringId, targetNumericId, targetName);
+  if (sourceToken.empty() || targetToken.empty()) {
+    return "";
+  }
+  return sourceToken + "->" + targetToken;
+}
+
+struct FactionRelationSnapshotEntry {
+  std::string mergeKey;
+  std::string sourceName;
+  std::string sourceStringId;
+  int sourceNumericId;
+  std::string targetName;
+  std::string targetStringId;
+  int targetNumericId;
+  double relation;
+  bool alliance;
+  bool war;
+  bool coexists;
+
+  FactionRelationSnapshotEntry()
+      : mergeKey(""), sourceName(""), sourceStringId(""), sourceNumericId(0),
+        targetName(""), targetStringId(""), targetNumericId(0), relation(0.0),
+        alliance(false), war(false), coexists(false) {}
+};
+
+static bool IsFactionRelationEntryDifferent(
+    const FactionRelationSnapshotEntry &left,
+    const FactionRelationSnapshotEntry &right) {
+  const double kRelationEpsilon = 0.001;
+  if (std::fabs(left.relation - right.relation) > kRelationEpsilon) {
+    return true;
+  }
+  if (left.alliance != right.alliance || left.war != right.war ||
+      left.coexists != right.coexists) {
+    return true;
+  }
+  if (left.sourceName != right.sourceName ||
+      left.sourceStringId != right.sourceStringId ||
+      left.sourceNumericId != right.sourceNumericId ||
+      left.targetName != right.targetName ||
+      left.targetStringId != right.targetStringId ||
+      left.targetNumericId != right.targetNumericId) {
+    return true;
+  }
+  return false;
+}
+
+static bool LooksLikeDialogueTemplateToken(const std::string &value) {
+  std::string trimmed = TrimCopy(value);
+  if (trimmed.empty()) {
+    return false;
+  }
+
+  std::string lower = ToLowerAsciiCopy(trimmed);
+  if (lower.find("/factioncomment/") != std::string::npos ||
+      lower.find("/racecomment/") != std::string::npos ||
+      lower.find("/towncomment/") != std::string::npos ||
+      lower.find("/genericcomment/") != std::string::npos ||
+      lower.find("/personalitycomment/") != std::string::npos) {
+    return true;
+  }
+
+  if (trimmed.front() != '/' || trimmed.back() != '/') {
+    return false;
+  }
+
+  bool hasAlpha = false;
+  for (size_t i = 0; i < trimmed.size(); ++i) {
+    unsigned char ch = static_cast<unsigned char>(trimmed[i]);
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+      hasAlpha = true;
+    }
+    bool allowed =
+        (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') ||
+        (ch >= 'A' && ch <= 'Z') || ch == '/' || ch == '_' || ch == '-' ||
+        ch == ':' || ch == ' ' || ch == '\t';
+    if (!allowed) {
+      return false;
+    }
+  }
+
+  return hasAlpha;
+}
+
+static std::string SanitizeCapturedDialogueLine(std::string value) {
+  value = TrimCopy(value);
+  if (value.empty()) {
+    return "";
+  }
+
+  value = StripLeakedSpeechSerialTokens(value);
+  value = StripDanglingTrailingClosingBrackets(value);
+  if (value.empty()) {
+    return "";
+  }
+
+  // Drop embedded NUL tails if engine-provided text contains binary remnants.
+  size_t nulPos = value.find('\0');
+  if (nulPos != std::string::npos) {
+    value = value.substr(0, nulPos);
+    value = TrimCopy(value);
+  }
+
+  // Strip trailing " ??" corruption while preserving intentional single '?' usage.
+  size_t suffixStart = value.find_last_not_of('?');
+  if (suffixStart != std::string::npos && suffixStart + 1 < value.size()) {
+    size_t qCount = value.size() - (suffixStart + 1);
+    if (qCount >= 2) {
+      std::string prefix = value.substr(0, suffixStart + 1);
+      if (!prefix.empty() &&
+          std::isspace(static_cast<unsigned char>(prefix[prefix.size() - 1]))) {
+        value = TrimCopy(prefix);
+      }
+    }
+  }
+
+  // Strip garbage suffixes such as "...night6??х??????Ѽ?..."
+  // Keep this conservative: only trim when a trailing suspect run is long.
+  if (!value.empty()) {
+    size_t scan = value.size();
+    size_t suffixRun = 0;
+    size_t hardSuspectCount = 0;
+    bool seenSuspect = false;
+
+    while (scan > 0) {
+      const unsigned char ch = static_cast<unsigned char>(value[scan - 1]);
+      const bool isControl = (ch < 0x20 && ch != '\t' && ch != '\r' && ch != '\n');
+      const bool isNonAscii = (ch >= 0x80);
+      const bool isQuestion = (ch == '?');
+      const bool isSoftJoiner =
+          std::isspace(ch) || std::isdigit(ch) || ch == '=' || ch == '+' ||
+          ch == '-' || ch == '_' || ch == '.' || ch == ',' || ch == ':' ||
+          ch == ';' || ch == '!' || ch == ')' || ch == ']' || ch == '(' ||
+          ch == '[' || ch == '|' || ch == '\\' || ch == '/';
+
+      if (isControl || isNonAscii || isQuestion) {
+        seenSuspect = true;
+        ++suffixRun;
+        if (isControl || isNonAscii) {
+          ++hardSuspectCount;
+        }
+        --scan;
+        continue;
+      }
+
+      if (seenSuspect && isSoftJoiner) {
+        ++suffixRun;
+        --scan;
+        continue;
+      }
+
+      break;
+    }
+
+    if (seenSuspect && suffixRun >= 6 && hardSuspectCount >= 1 &&
+        scan < value.size()) {
+      value = TrimCopy(value.substr(0, scan));
+    }
+  }
+
+  // Strip trailing numeric corruption like "...7" or ")7".
+  if (!value.empty() &&
+      std::isdigit(static_cast<unsigned char>(value[value.size() - 1]))) {
+    size_t digitStart = value.size();
+    while (digitStart > 0 &&
+           std::isdigit(static_cast<unsigned char>(value[digitStart - 1]))) {
+      --digitStart;
+    }
+    if (digitStart < value.size() && digitStart > 0) {
+      char prev = value[digitStart - 1];
+      if (prev == '.' || prev == '!' || prev == '?' || prev == ')' ||
+          prev == ']') {
+        value = TrimCopy(value.substr(0, digitStart));
+      }
+    }
+  }
+
+  return TrimCopy(value);
+}
+
+static bool HasActiveSpeechBubbleSafe(Character *npc);
+static std::string ReadNpcSpeechLineSafe(Character *npc);
+static bool IsNpcInSpeechFlowBySerial(unsigned int serial);
+
+static bool ShouldDropDuplicateNpcAction(unsigned int actorSerial,
+                                         const std::string &actionCommand,
+                                         const std::string &actionArgument) {
+  static std::map<std::string, DWORD> s_recentActions;
+  const DWORD nowTick = GetTickCount();
+  const DWORD windowMs = 2500;
+  const DWORD pruneMs = 12000;
+
+  for (auto it = s_recentActions.begin(); it != s_recentActions.end();) {
+    if ((nowTick - it->second) > pruneMs) {
+      it = s_recentActions.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  std::string normalizedArg = ToLowerAsciiCopy(TrimCopy(actionArgument));
+  std::string normalizedCmd = ToLowerAsciiCopy(TrimCopy(actionCommand));
+  std::string dedupeKey = ToString((int)GetChatInterruptGeneration()) + "|" +
+                          ToString((int)actorSerial) + "|" + normalizedCmd +
+                          "|" + normalizedArg;
+
+  auto existing = s_recentActions.find(dedupeKey);
+  if (existing != s_recentActions.end() &&
+      (nowTick - existing->second) <= windowMs) {
+    existing->second = nowTick;
+    return true;
+  }
+
+  s_recentActions[dedupeKey] = nowTick;
+  return false;
+}
+
+static bool ShouldDropDuplicateNonAiDialogue(unsigned int actorSerial,
+                                             bool isPlayerLine,
+                                             const std::string &line) {
+  static std::map<std::string, DWORD> s_recentDialogueLines;
+  const DWORD nowTick = GetTickCount();
+  const DWORD windowMs = 1800;
+  const DWORD pruneMs = 20000;
+
+  for (auto it = s_recentDialogueLines.begin();
+       it != s_recentDialogueLines.end();) {
+    if ((nowTick - it->second) > pruneMs) {
+      it = s_recentDialogueLines.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  std::string normalizedLine = ToLowerAsciiCopy(TrimCopy(line));
+  if (normalizedLine.length() > 240) {
+    normalizedLine = normalizedLine.substr(0, 240);
+  }
+
+  std::string dedupeKey = ToString((int)GetChatInterruptGeneration()) + "|" +
+                          (isPlayerLine ? "p" : "n") + "|" +
+                          ToString((unsigned int)actorSerial) + "|" +
+                          normalizedLine;
+  auto existing = s_recentDialogueLines.find(dedupeKey);
+  if (existing != s_recentDialogueLines.end() &&
+      (nowTick - existing->second) <= windowMs) {
+    existing->second = nowTick;
+    return true;
+  }
+
+  s_recentDialogueLines[dedupeKey] = nowTick;
+  return false;
+}
+
+static bool ShouldEmitRegularDialogueProbeLog(unsigned int actorSerial) {
+  static std::map<unsigned int, DWORD> s_lastProbeLogTickBySerial;
+  const DWORD nowTick = GetTickCount();
+  const DWORD minIntervalMs = 1200;
+
+  std::map<unsigned int, DWORD>::iterator existing =
+      s_lastProbeLogTickBySerial.find(actorSerial);
+  if (existing != s_lastProbeLogTickBySerial.end() &&
+      (nowTick - existing->second) < minIntervalMs) {
+    return false;
+  }
+
+  s_lastProbeLogTickBySerial[actorSerial] = nowTick;
+  return true;
+}
+
+static std::string ExtractInlineMetadataToken(std::string &message,
+                                              const std::string &marker) {
+  std::string trimmed = TrimCopy(message);
+  size_t markerPos = trimmed.rfind(marker);
+  if (markerPos == std::string::npos) {
+    message = trimmed;
+    return "";
+  }
+
+  size_t valuePos = markerPos + marker.length();
+  size_t endPos = std::string::npos;
+  for (size_t candidate = trimmed.find(']', valuePos);
+       candidate != std::string::npos;
+       candidate = trimmed.find(']', candidate + 1)) {
+    size_t next = candidate + 1;
+    while (next < trimmed.size() &&
+           std::isspace((unsigned char)trimmed[next])) {
+      ++next;
+    }
+    if (next >= trimmed.size()) {
+      endPos = candidate;
+      break;
+    }
+    unsigned char nextCh = (unsigned char)trimmed[next];
+    if (trimmed[next] == '[' || trimmed[next] == '(' || trimmed[next] == ')' ||
+        trimmed[next] == '.' || trimmed[next] == ',' || trimmed[next] == ';' ||
+        trimmed[next] == ':' || trimmed[next] == '!' || trimmed[next] == '?' ||
+        std::isspace(nextCh)) {
+      endPos = candidate;
+      break;
+    }
+  }
+  if (endPos == std::string::npos) {
+    message = trimmed;
+    return "";
+  }
+
+  std::string token = TrimCopy(trimmed.substr(valuePos, endPos - valuePos));
+  if (token.empty()) {
+    message = trimmed;
+    return "";
+  }
+
+  trimmed.erase(markerPos, endPos - markerPos + 1);
+  message = TrimCopy(trimmed);
+  return token;
+}
+
+static std::string ExtractTrailingTalkingToToken(std::string &message) {
+  std::string trimmed = TrimCopy(message);
+  std::string lowered = ToLowerAsciiCopy(trimmed);
+  const std::string marker = "(talking to:";
+  size_t markerPos = lowered.rfind(marker);
+  if (markerPos == std::string::npos) {
+    message = trimmed;
+    return "";
+  }
+
+  size_t closePos = trimmed.find(')', markerPos);
+  if (closePos == std::string::npos) {
+    message = trimmed;
+    return "";
+  }
+
+  std::string tail = TrimCopy(trimmed.substr(closePos + 1));
+  if (!tail.empty()) {
+    message = trimmed;
+    return "";
+  }
+
+  size_t valuePos = markerPos + marker.length();
+  std::string token = TrimCopy(trimmed.substr(valuePos, closePos - valuePos));
+  if (token.empty()) {
+    message = trimmed;
+    return "";
+  }
+
+  trimmed.erase(markerPos);
+  message = TrimCopy(trimmed);
+  return token;
+}
+
+static std::string ExtractTalkTargetToken(std::string &message) {
+  std::string token = ExtractInlineMetadataToken(message, "[TALKTARGET:");
+  if (!token.empty()) {
+    return token;
+  }
+  return ExtractTrailingTalkingToToken(message);
+}
+
+static std::string ExtractTrailingTtsHash(std::string &message) {
+  std::string trimmed = TrimCopy(message);
+  size_t markerPos = trimmed.rfind("[TTSHASH:");
+  if (markerPos == std::string::npos) {
+    message = trimmed;
+    return "";
+  }
+
+  size_t endPos = trimmed.find(']', markerPos);
+  if (endPos == std::string::npos || endPos != trimmed.size() - 1) {
+    message = trimmed;
+    return "";
+  }
+
+  size_t valuePos = markerPos + 9;
+  std::string hash = TrimCopy(trimmed.substr(valuePos, endPos - valuePos));
+  if (hash.empty()) {
+    message = trimmed;
+    return "";
+  }
+
+  for (size_t i = 0; i < hash.size(); ++i) {
+    const unsigned char ch = static_cast<unsigned char>(hash[i]);
+    bool isHex =
+        (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+    if (!isHex) {
+      message = trimmed;
+      return "";
+    }
+    hash[i] = static_cast<char>(tolower(ch));
+  }
+
+  trimmed.erase(markerPos);
+  message = TrimCopy(trimmed);
+  return hash;
+}
+
+static int ExtractTrailingTtsDurationMs(std::string &message) {
+  std::string trimmed = TrimCopy(message);
+  size_t markerPos = trimmed.rfind("[TTSDUR:");
+  if (markerPos == std::string::npos) {
+    message = trimmed;
+    return 0;
+  }
+
+  size_t endPos = trimmed.find(']', markerPos);
+  if (endPos == std::string::npos || endPos != trimmed.size() - 1) {
+    message = trimmed;
+    return 0;
+  }
+
+  size_t valuePos = markerPos + 8;
+  std::string durationStr = TrimCopy(trimmed.substr(valuePos, endPos - valuePos));
+  if (durationStr.empty()) {
+    message = trimmed;
+    return 0;
+  }
+
+  for (size_t i = 0; i < durationStr.size(); ++i) {
+    const unsigned char ch = static_cast<unsigned char>(durationStr[i]);
+    if (ch < '0' || ch > '9') {
+      message = trimmed;
+      return 0;
+    }
+  }
+
+  int durationMs = atoi(durationStr.c_str());
+  if (durationMs <= 0) {
+    message = trimmed;
+    return 0;
+  }
+  if (durationMs > 600000) {
+    durationMs = 600000;
+  }
+
+  trimmed.erase(markerPos);
+  message = TrimCopy(trimmed);
+  return durationMs;
+}
+
+static std::string ExtractTrailingUtteranceId(std::string &message) {
+  std::string trimmed = TrimCopy(message);
+  size_t markerPos = trimmed.rfind("[UTTERANCEID:");
+  if (markerPos == std::string::npos) {
+    message = trimmed;
+    return "";
+  }
+
+  size_t endPos = trimmed.find(']', markerPos);
+  if (endPos == std::string::npos || endPos != trimmed.size() - 1) {
+    message = trimmed;
+    return "";
+  }
+
+  size_t valuePos = markerPos + 13;
+  std::string utteranceId =
+      TrimCopy(trimmed.substr(valuePos, endPos - valuePos));
+  if (utteranceId.empty() || utteranceId.length() > 80) {
+    message = trimmed;
+    return "";
+  }
+
+  for (size_t i = 0; i < utteranceId.length(); ++i) {
+    const unsigned char ch = static_cast<unsigned char>(utteranceId[i]);
+    bool isSafe =
+        (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+        (ch >= '0' && ch <= '9') || ch == '_' || ch == '-';
+    if (!isSafe) {
+      message = trimmed;
+      return "";
+    }
+  }
+
+  trimmed.erase(markerPos);
+  message = TrimCopy(trimmed);
+  return utteranceId;
+}
+
+static std::string ExtractDialogueMessageFromStructuredText(
+    const std::string &rawText) {
+  std::string candidate = TrimCopy(rawText);
+  if (candidate.empty()) {
+    return "";
+  }
+
+  if (candidate.find("```") == 0) {
+    size_t firstNewline = candidate.find('\n');
+    if (firstNewline != std::string::npos) {
+      candidate = candidate.substr(firstNewline + 1);
+    }
+    size_t lastFence = candidate.rfind("```");
+    if (lastFence != std::string::npos) {
+      candidate = candidate.substr(0, lastFence);
+    }
+    candidate = TrimCopy(candidate);
+  }
+
+  if (candidate.empty() || candidate[0] != '{') {
+    return "";
+  }
+
+  auto tryExtractCoreMessage = [](const std::string &jsonPayload) -> std::string {
+    std::string extracted = TrimCopy(JsonReadField(jsonPayload, "message"));
+    if (extracted.empty()) {
+      extracted = TrimCopy(JsonReadField(jsonPayload, "text"));
+    }
+    if (extracted.empty()) {
+      extracted = TrimCopy(JsonReadField(jsonPayload, "content"));
+    }
+    return extracted;
+  };
+
+  std::string directMessage = tryExtractCoreMessage(candidate);
+  if (!directMessage.empty()) {
+    return directMessage;
+  }
+
+  const char *wrapperKeys[] = {"response", "data", "output", "result",
+                               "payload"};
+  for (size_t i = 0; i < sizeof(wrapperKeys) / sizeof(wrapperKeys[0]); ++i) {
+    std::string nested = TrimCopy(JsonReadField(candidate, wrapperKeys[i]));
+    if (nested.empty()) {
+      continue;
+    }
+    std::string nestedMessage = tryExtractCoreMessage(nested);
+    if (!nestedMessage.empty()) {
+      return nestedMessage;
+    }
+  }
+
+  return "";
+}
+
+struct InventorySyncState {
+  std::string lastHash;
+  DWORD lastSentTick;
+  DWORD lastSeenTick;
+  bool hasSent;
+
+  InventorySyncState()
+      : lastHash(""), lastSentTick(0), lastSeenTick(0), hasSent(false) {}
+};
+
+struct PortraitSyncState {
+  std::string lastHash;
+  DWORD lastSentTick;
+  DWORD lastSeenTick;
+  DWORD lastAttemptTick;
+  bool hasSent;
+
+  PortraitSyncState()
+      : lastHash(""),
+        lastSentTick(0),
+        lastSeenTick(0),
+        lastAttemptTick(0),
+        hasSent(false) {}
+};
+
+struct ItemImageSyncState {
+  std::string lastHash;
+  DWORD lastSentTick;
+  DWORD lastSeenTick;
+  DWORD lastAttemptTick;
+  bool hasSent;
+
+  ItemImageSyncState()
+      : lastHash(""),
+        lastSentTick(0),
+        lastSeenTick(0),
+        lastAttemptTick(0),
+        hasSent(false) {}
+};
+
+struct PendingItemImageSyncRequest {
+  hand npcHand;
+  std::string reason;
+  DWORD queuedTick;
+
+  PendingItemImageSyncRequest() : npcHand(), reason(""), queuedTick(0) {}
+};
+
+// Repair evidence: session-local object identity, never a durable item UUID.
+struct SocialInventoryInstance {
+  uintptr_t address;
+  unsigned int serial;
+  unsigned long epoch;
+  std::string prototypeId, typeKey;
+  int quantity;
+  SocialInventoryInstance() : address(0), serial(0), epoch(0), quantity(0) {}
+};
+
+struct InventoryEventSnapshot {
+  std::map<unsigned int, SocialInventoryInstance> exactInstances;
+  std::map<std::string, int> countsByKey;
+  std::map<std::string, int> stolenByKey;
+  std::map<std::string, int> foodByKey;
+  std::map<std::string, std::string> displayNameByKey;
+  int totalCount;
+
+  InventoryEventSnapshot() : totalCount(0) {}
+};
+
+struct NpcWorldEventState {
+  bool initialized;
+  bool seededWithCapture; // REL_SEED_CAPTURE_M22
+  bool dead;
+  bool unconscious;
+  bool enslaved;
+  bool hasMoney;
+  int money;
+  bool hasHunger;
+  float hunger;
+  float fed;
+  float satiety;
+  bool carrying;
+  unsigned int carryingTargetSerial;
+  std::string carryingTargetName;
+  bool speechActive;
+  bool leftArmPresent;
+  bool rightArmPresent;
+  bool leftLegPresent;
+  bool rightLegPresent;
+  int leftArmState;
+  int rightArmState;
+  int leftLegState;
+  int rightLegState;
+  int currentTask;
+  unsigned int currentTaskSubjectSerial;
+  std::string currentTaskSubjectName;
+  int constructionAction;
+  unsigned int constructionSubjectSerial;
+  std::string constructionSubjectName;
+  int lockpickingSkill;
+  std::string lastSpeechLine;
+  InventoryEventSnapshot inventory;
+  std::map<uintptr_t, float> fleshHealthByPart;
+  DWORD lastSeenTick;
+  int useState;                    // REL: Character::inSomething (bed/prison), -1 unknown
+  unsigned int lastCarrierSerial;  // REL: who last put this character down
+  DWORD lastCarryDropTick;
+  unsigned int recentTaskSubjectSerial; // REL m16b: last non-zero task subject (a lockpick ends in the frame it frees)
+  int recentTask;
+  DWORD recentTaskSubjectTick;
+  bool chained;
+  int slaveState;
+  unsigned int libSubjectSerial; // REL m16d: last subject of a lock/shackle task (lockpicks get interrupted; 60 s memory)
+  int libTask;
+  DWORD libTick;
+  bool freedLatch; // REL m16c: chains came off while IS_SLAVE: free until chained again or the slave state changes
+
+  NpcWorldEventState()
+      : initialized(false), seededWithCapture(false), dead(false), unconscious(false), enslaved(false),
+        hasMoney(false), money(0), hasHunger(false), hunger(0.0f), fed(0.0f),
+        satiety(0.0f),
+        carrying(false), carryingTargetSerial(0), carryingTargetName(""),
+        speechActive(false), leftArmPresent(true), rightArmPresent(true),
+        leftLegPresent(true), rightLegPresent(true),
+        leftArmState((int)LIMB_ORIGINAL), rightArmState((int)LIMB_ORIGINAL),
+        leftLegState((int)LIMB_ORIGINAL), rightLegState((int)LIMB_ORIGINAL),
+        currentTask((int)NULL_TASK), currentTaskSubjectSerial(0),
+        currentTaskSubjectName(""), constructionAction(0),
+        constructionSubjectSerial(0), constructionSubjectName(""),
+        lockpickingSkill(0), lastSpeechLine(""), lastSeenTick(0), useState(-1),
+        lastCarrierSerial(0), lastCarryDropTick(0), recentTaskSubjectSerial(0), recentTask(0),
+        recentTaskSubjectTick(0), chained(false), slaveState(0), freedLatch(false), libSubjectSerial(0), libTask(0), libTick(0) {}
+};
+
+struct CombatParticipantState {
+  std::string name;
+  std::string faction;
+  bool playerSide;
+  bool dead;
+  bool unconscious;
+  bool fled;
+  DWORD lastSeenTick;
+
+  CombatParticipantState()
+      : name("Unknown"), faction("None"), playerSide(false), dead(false),
+        unconscious(false), fled(false), lastSeenTick(0) {}
+};
+
+struct CombatLifecycleState {
+  bool active;
+  DWORD startedTick;
+  DWORD lastObservedTick;
+  std::string actorName;
+  std::string actorFaction;
+  unsigned int actorSerial;
+  std::string targetName;
+  std::string targetFaction;
+  unsigned int targetSerial;
+  bool sawOpponent;
+  Ogre::Vector3 origin;
+  std::map<unsigned int, CombatParticipantState> participants;
+
+  CombatLifecycleState()
+      : active(false), startedTick(0), lastObservedTick(0), actorName(""),
+        actorFaction("None"), actorSerial(0), targetName("None"),
+        targetFaction("None"), targetSerial(0), sawOpponent(false) {}
+};
+
+struct PendingMedicalItemUseState {
+  std::map<std::string, int> pendingByKey;
+  DWORD lastUpdateTick;
+
+  PendingMedicalItemUseState() : lastUpdateTick(0) {}
+};
+
+struct HealingEventSessionState {
+  DWORD lastUpdateTick;
+  std::string targetKey;
+  std::string itemKey;
+
+  HealingEventSessionState() : lastUpdateTick(0), targetKey(""), itemKey("") {}
+};
+
+struct PredationEventSessionState {
+  DWORD lastUpdateTick;
+  std::string targetKey;
+
+  PredationEventSessionState() : lastUpdateTick(0), targetKey("") {}
+};
+
+static std::map<unsigned int, InventorySyncState> g_inventorySyncStateBySerial;
+static std::map<std::string, PortraitSyncState> g_portraitSyncStateByStorageId;
+static std::map<unsigned int, DWORD> g_portraitSpeechTriggerBySerial;
+static std::map<std::string, ItemImageSyncState> g_itemImageSyncStateByItemId;
+static std::deque<PendingItemImageSyncRequest> g_itemImageSyncRequestQueue;
+static hand g_pendingSelectionContextHand;
+static unsigned int g_pendingSelectionContextSerial = 0;
+static DWORD g_pendingSelectionContextQueuedTick = 0;
+static unsigned int g_lastSelectionSerial = 0;
+static DWORD g_lastSelectionContextPushedTick = 0;
+static unsigned int g_lastSelectionContextPushedSerial = 0;
+static DWORD g_lastInventorySweepTick = 0;
+static const DWORD kInventorySweepIntervalMs = 6000;
+static const DWORD kInventoryMinResendMs = 1200;
+static const size_t kInventorySweepCandidateLimit = 8;
+static const DWORD kInventoryStateRetentionMs = 15 * 60 * 1000;
+static const size_t kItemImageBatchLimit = 4;
+static const size_t kItemImageConsiderMultiplier = 12;
+static const DWORD kItemImageMinResendMs = 10 * 60 * 1000;
+static const DWORD kItemImageStateRetentionMs = 60 * 60 * 1000;
+static const DWORD kItemImageRunCooldownMs = 3 * 1000;
+static const DWORD kItemImageStartupDelayMs = 5 * 1000;
+static const DWORD kItemImageAttemptCooldownMs = 60 * 1000;
+static const DWORD kItemImageInventoryUiHideGraceMs = 15 * 1000;
+static const size_t kItemImageRequestQueueMax = 64;
+static DWORD g_itemImageLastRunTick = 0;
+static DWORD g_lastInventoryUiVisibleTick = 0;
+static DWORD g_worldStableSinceTick = 0;
+static volatile LONG g_portraitSehCount = 0;
+static DWORD g_portraitLastSehTick = 0;
+static DWORD g_portraitLastSehCode = 0;
+static bool g_portraitSyncDisabledForSession = false;
+static bool g_portraitDisableLogged = false;
+static DWORD g_portraitSyncDisabledUntilTick = 0;
+static DWORD g_lastPortraitSweepTick = 0;
+static const DWORD kPortraitSweepIntervalMs = 15000;
+static const DWORD kPortraitMinResendMs = 30 * 60 * 1000;
+static const size_t kPortraitSweepCandidateLimit = 48;
+static const size_t kPortraitSweepBudgetPerPass = 4;
+static const DWORD kPortraitStateRetentionMs = 30 * 60 * 1000;
+static const DWORD kPortraitSpeechTriggerCooldownMs = 2 * 60 * 1000;
+static const DWORD kPortraitSyncBackoffMs = 2 * 60 * 1000;
+static const DWORD kPortraitAttemptCooldownMs = 2 * 60 * 1000;
+static const DWORD kRecentServerSuccessGraceMs = 10 * 1000;
+static size_t g_portraitSweepCursor = 0;
+static std::map<unsigned int, NpcWorldEventState> g_npcWorldEventStateBySerial;
+static DWORD g_lastNpcWorldEventSweepTick = 0;
+static const DWORD kNpcWorldEventSweepIntervalMs = 3000;
+static const size_t kNpcWorldEventCandidateLimit = 32;
+static const DWORD kNpcWorldEventStateRetentionMs = 10 * 60 * 1000;
+static std::map<unsigned int, CombatLifecycleState> g_combatEncounters;
+static unsigned int g_nextCombatEncounterId = 1;
+static const DWORD kCombatEndGraceMs = 12 * 1000;
+static const DWORD kRecentCombatSignalMs = 8 * 1000;
+static const float kMajorDamageThreshold = 15.0f;
+static const size_t kCombatParticipantLimit = 64;
+// Bug 109: a separate fight farther away must not keep this encounter alive.
+static const float kCombatLocalRadius = 150.0f;
+static std::map<unsigned int, DWORD> g_recentCombatSignalTickBySerial;
+static DWORD g_lastIdentityRenameSweepTick = 0;
+static const DWORD kIdentityRenameSweepIntervalMs = 2500;
+static const size_t kIdentityRenameSweepCandidateLimit = 24;
+static DWORD g_lastInfoNpcTelemetryCheckTick = 0;
+static DWORD g_lastInfoNpcTelemetrySentTick = 0;
+static std::string g_lastInfoNpcTelemetryDigest = "";
+static const DWORD kInfoNpcTelemetryCheckIntervalMs = 8000;
+static const DWORD kInfoNpcTelemetryResendIntervalMs = 90000;
+static DWORD g_lastInfoLocTelemetryCheckTick = 0;
+static DWORD g_lastInfoLocTelemetrySentTick = 0;
+static std::string g_lastInfoLocTelemetryDigest = "";
+static const DWORD kInfoLocTelemetryCheckIntervalMs = 5000;
+static const DWORD kInfoLocTelemetryResendIntervalMs = 120000;
+static bool g_playerCatsSyncHasValue = false;
+static int g_playerCatsSyncLastValue = 0;
+static DWORD g_playerCatsSyncLastSentTick = 0;
+static const DWORD kPlayerCatsResendIntervalMs = 5 * 60 * 1000;
+static const char *kStobePluginVersion = "1.3.1";
+static const char *kStobePluginReleaseDate = "2026-09-19";
+static bool g_pluginVersionSyncHasValue = false;
+static std::string g_pluginVersionSyncLastValue = "";
+static DWORD g_pluginVersionSyncLastSentTick = 0;
+static const DWORD kHookHeavySyncWarmupMs = 45 * 1000;
+static const DWORD kNpcWorldEventWarmupMs = 45 * 1000;
+static const DWORD kSelectionContextStartupDelayMs = 60 * 1000;
+static const DWORD kPluginVersionResendIntervalMs = 10 * 60 * 1000;
+static const DWORD kSelectionContextDebounceMs = 1500;
+static const DWORD kSelectionContextMinIntervalMs = 8000;
+static std::map<unsigned int, PendingMedicalItemUseState>
+    g_pendingMedicalItemUseBySerial;
+static const DWORD kPendingMedicalItemUseRetentionMs = 20 * 1000;
+static std::map<std::string, HealingEventSessionState>
+    g_healingEventSessionByActorKey;
+static std::map<std::string, DWORD> g_healingEventBurstByTargetKey;
+static const DWORD kHealingEventSessionGapMs = 12000;
+static const DWORD kHealingEventTargetBurstCooldownMs = 5000;
+static const DWORD kHealingEventSessionRetentionMs = 60 * 1000;
+static std::map<unsigned int, PredationEventSessionState>
+    g_predationEventSessionByEaterSerial;
+static const DWORD kPredationEventSessionGapMs = 4000;
+static const DWORD kPredationEventSessionRetentionMs = 60 * 1000;
+static bool g_playerSquadsSyncHasValue = false;
+static std::string g_playerSquadsSyncLastDigest = "";
+static DWORD g_playerSquadsSyncLastSentTick = 0;
+static std::set<std::string> g_playerSquadsLastKeys;
+static const DWORD kPlayerSquadsResendIntervalMs = 60 * 1000;
+static std::map<std::string, FactionRelationSnapshotEntry>
+    g_factionRelationStateByKey;
+static DWORD g_lastFactionRelationSyncTick = 0;
+static const DWORD kFactionRelationSyncIntervalMs = 30 * 1000;
+static const size_t kFactionRelationSyncHardCap = 262144;
+static DWORD g_lastTownKnowledgeScanTick = 0;
+static DWORD g_lastTownKnowledgeSentTick = 0;
+static std::string g_lastTownKnowledgeDigest = "";
+static const DWORD kTownKnowledgeScanIntervalMs = 30 * 1000;
+static const DWORD kTownKnowledgeResendIntervalMs = 5 * 60 * 1000;
+static const size_t kTownKnowledgeHardCap = 512;
+
+const char *GetStobePluginVersion() {
+  return kStobePluginVersion ? kStobePluginVersion : "";
+}
+
+static std::string ShortInventoryHashForLog(const std::string &hash) {
+  if (hash.length() <= 12) {
+    return hash;
+  }
+  return hash.substr(0, 12);
+}
+
+static uint64_t HashFnv1a64(const unsigned char *data, size_t length) {
+  const uint64_t kOffset = 1469598103934665603ULL;
+  const uint64_t kPrime = 1099511628211ULL;
+  uint64_t hash = kOffset;
+  if (!data || length == 0) {
+    return hash;
+  }
+  for (size_t i = 0; i < length; ++i) {
+    hash ^= static_cast<uint64_t>(data[i]);
+    hash *= kPrime;
+  }
+  return hash;
+}
+
+static std::string HexFromU64(uint64_t value) {
+  const char *digits = "0123456789abcdef";
+  std::string out(16, '0');
+  for (int i = 15; i >= 0; --i) {
+    out[i] = digits[static_cast<int>(value & 0xFULL)];
+    value >>= 4;
+  }
+  return out;
+}
+
+static std::string Base64EncodeBinary(const std::string &input) {
+  static const char *kChars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string output;
+  output.reserve(((input.size() + 2) / 3) * 4);
+
+  size_t i = 0;
+  while (i + 2 < input.size()) {
+    const unsigned int a = static_cast<unsigned char>(input[i++]);
+    const unsigned int b = static_cast<unsigned char>(input[i++]);
+    const unsigned int c = static_cast<unsigned char>(input[i++]);
+    const unsigned int triple = (a << 16) | (b << 8) | c;
+    output.push_back(kChars[(triple >> 18) & 0x3F]);
+    output.push_back(kChars[(triple >> 12) & 0x3F]);
+    output.push_back(kChars[(triple >> 6) & 0x3F]);
+    output.push_back(kChars[triple & 0x3F]);
+  }
+
+  if (i < input.size()) {
+    const size_t remaining = input.size() - i;
+    const unsigned int a = static_cast<unsigned char>(input[i++]);
+    const unsigned int b =
+        (remaining > 1) ? static_cast<unsigned char>(input[i++]) : 0;
+    const unsigned int triple = (a << 16) | (b << 8);
+    if (remaining == 1) {
+      output.push_back(kChars[(triple >> 18) & 0x3F]);
+      output.push_back(kChars[(triple >> 12) & 0x3F]);
+      output.push_back('=');
+      output.push_back('=');
+    } else {
+      output.push_back(kChars[(triple >> 18) & 0x3F]);
+      output.push_back(kChars[(triple >> 12) & 0x3F]);
+      output.push_back(kChars[(triple >> 6) & 0x3F]);
+      output.push_back('=');
+    }
+  }
+
+  return output;
+}
+
+static void WriteUInt32LE(std::string &buffer, size_t offset, uint32_t value) {
+  if (offset + 4 > buffer.size()) {
+    return;
+  }
+  buffer[offset + 0] = static_cast<char>(value & 0xFF);
+  buffer[offset + 1] = static_cast<char>((value >> 8) & 0xFF);
+  buffer[offset + 2] = static_cast<char>((value >> 16) & 0xFF);
+  buffer[offset + 3] = static_cast<char>((value >> 24) & 0xFF);
+}
+
+static bool EncodeBmp24(const std::vector<unsigned char> &rgba, int width,
+                        int height, std::string &bmpDataOut) {
+  bmpDataOut.clear();
+  if (width <= 0 || height <= 0) {
+    return false;
+  }
+  const size_t expectedBytes =
+      static_cast<size_t>(width) * static_cast<size_t>(height) * 4U;
+  if (rgba.size() < expectedBytes) {
+    return false;
+  }
+
+  const uint32_t rowStride = static_cast<uint32_t>(width) * 3U;
+  const uint32_t paddedRowStride = (rowStride + 3U) & ~3U;
+  const uint32_t imageSize =
+      paddedRowStride * static_cast<uint32_t>(height);
+  const uint32_t fileSize = 54U + imageSize;
+
+  bmpDataOut.assign(fileSize, '\0');
+  bmpDataOut[0] = 'B';
+  bmpDataOut[1] = 'M';
+  WriteUInt32LE(bmpDataOut, 2, fileSize);
+  WriteUInt32LE(bmpDataOut, 10, 54U);
+  WriteUInt32LE(bmpDataOut, 14, 40U);
+  WriteUInt32LE(bmpDataOut, 18, static_cast<uint32_t>(width));
+  WriteUInt32LE(bmpDataOut, 22, static_cast<uint32_t>(height));
+  bmpDataOut[26] = 1;   // planes
+  bmpDataOut[28] = 24;  // bits per pixel
+  WriteUInt32LE(bmpDataOut, 34, imageSize);
+
+  unsigned char *dst = reinterpret_cast<unsigned char *>(&bmpDataOut[0]) + 54;
+  for (int y = 0; y < height; ++y) {
+    const int srcY = height - 1 - y;
+    const unsigned char *srcRow =
+        &rgba[static_cast<size_t>(srcY) * static_cast<size_t>(width) * 4U];
+    unsigned char *dstRow =
+        dst + static_cast<size_t>(y) * static_cast<size_t>(paddedRowStride);
+    for (int x = 0; x < width; ++x) {
+      const unsigned char *srcPx = srcRow + static_cast<size_t>(x) * 4U;
+      unsigned char *dstPx = dstRow + static_cast<size_t>(x) * 3U;
+      // BMP stores BGR order.
+      dstPx[0] = srcPx[2];
+      dstPx[1] = srcPx[1];
+      dstPx[2] = srcPx[0];
+    }
+  }
+  return true;
+}
+
+static bool ResolvePortraitImageRegion(PortraitManager *portraitManager,
+                                       PortraitImage *portraitImage,
+                                       int &leftOut, int &topOut,
+                                       int &widthOut, int &heightOut) {
+  leftOut = 0;
+  topOut = 0;
+  widthOut = 0;
+  heightOut = 0;
+  if (!portraitManager || (uintptr_t)portraitManager <= 0x1000 ||
+      !portraitImage || (uintptr_t)portraitImage <= 0x1000) {
+    return false;
+  }
+
+  leftOut = portraitImage->coords.left;
+  topOut = portraitImage->coords.top;
+  widthOut = portraitImage->coords.width;
+  heightOut = portraitImage->coords.height;
+
+  if (widthOut <= 0 || heightOut <= 0) {
+    widthOut = portraitManager->texturePortraitSize.x;
+    heightOut = portraitManager->texturePortraitSize.y;
+  }
+
+  Ogre::Texture *texture = portraitManager->texture.getPointer();
+  if (!texture || (uintptr_t)texture <= 0x1000) {
+    return false;
+  }
+  const int texWidth = static_cast<int>(texture->getWidth());
+  const int texHeight = static_cast<int>(texture->getHeight());
+  if (texWidth <= 0 || texHeight <= 0) {
+    return false;
+  }
+
+  if (leftOut < 0 || topOut < 0 || leftOut >= texWidth || topOut >= texHeight) {
+    leftOut = static_cast<int>(portraitImage->textureRect.left * texWidth);
+    topOut = static_cast<int>(portraitImage->textureRect.top * texHeight);
+  }
+  if (widthOut <= 0 || heightOut <= 0) {
+    widthOut = static_cast<int>((portraitImage->textureRect.right -
+                                 portraitImage->textureRect.left) *
+                                texWidth);
+    heightOut = static_cast<int>((portraitImage->textureRect.bottom -
+                                  portraitImage->textureRect.top) *
+                                 texHeight);
+  }
+
+  if (leftOut < 0) {
+    leftOut = 0;
+  }
+  if (topOut < 0) {
+    topOut = 0;
+  }
+  if (widthOut <= 0 || heightOut <= 0) {
+    return false;
+  }
+  if (leftOut + widthOut > texWidth) {
+    widthOut = texWidth - leftOut;
+  }
+  if (topOut + heightOut > texHeight) {
+    heightOut = texHeight - topOut;
+  }
+  if (widthOut <= 0 || heightOut <= 0) {
+    return false;
+  }
+  return true;
+}
+
+static int PortraitSehFilter(unsigned int code) {
+  g_portraitLastSehCode = code;
+  g_portraitLastSehTick = GetTickCount();
+  InterlockedIncrement(&g_portraitSehCount);
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static bool HasRecentDwemerDistroConnection(DWORD maxSuccessAgeMs) {
+  if (IsDwemerDistroConnected()) {
+    return true;
+  }
+
+  DWORD ageMs = GetDwemerDistroLastSuccessAgeMs();
+  return ageMs != 0xFFFFFFFF && ageMs <= maxSuccessAgeMs;
+}
+
+static bool ShouldDeferVisualSyncWhileInventoryVisible(
+    Character *npc, const char *syncTag, const std::string &reason,
+    DWORD recentVisibleGraceMs = 0);
+
+static bool ShouldAttemptPortraitCapture(const std::string &storageId,
+                                         DWORD nowTick, bool force,
+                                         const std::string &reason,
+                                         std::string *skipReasonOut = nullptr) {
+  (void)reason;
+  if (skipReasonOut) {
+    skipReasonOut->clear();
+  }
+  if (storageId.empty()) {
+    if (skipReasonOut) {
+      *skipReasonOut = "empty_storage";
+    }
+    return false;
+  }
+  if (!HasRecentDwemerDistroConnection(kRecentServerSuccessGraceMs)) {
+    if (skipReasonOut) {
+      *skipReasonOut = "offline";
+    }
+    return false;
+  }
+
+  bool allow = false;
+  EnterCriticalSection(&g_stateMutex);
+  PortraitSyncState &state = g_portraitSyncStateByStorageId[storageId];
+  state.lastSeenTick = nowTick;
+  DWORD sinceLastAttempt =
+      state.lastAttemptTick == 0 ? 0 : (nowTick - state.lastAttemptTick);
+  if (force || state.lastAttemptTick == 0 ||
+      sinceLastAttempt >= kPortraitAttemptCooldownMs) {
+    state.lastAttemptTick = nowTick;
+    allow = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (!allow && skipReasonOut) {
+    *skipReasonOut = "attempt_cooldown";
+  }
+  return allow;
+}
+
+static void MaybeDisablePortraitSyncAfterSeh() {
+  DWORD nowTick = GetTickCount();
+  if (g_portraitSyncDisabledForSession && nowTick < g_portraitSyncDisabledUntilTick) {
+    return;
+  }
+  LONG sehCount = InterlockedCompareExchange(&g_portraitSehCount, 0, 0);
+  if (sehCount >= 3) {
+    g_portraitSyncDisabledForSession = true;
+    g_portraitSyncDisabledUntilTick = nowTick + kPortraitSyncBackoffMs;
+    InterlockedExchange(&g_portraitSehCount, 0);
+    if (!g_portraitDisableLogged) {
+      g_portraitDisableLogged = true;
+      Log("PORTRAIT_SYNC: temporarily disabled after repeated engine SEH faults code=" +
+          ToString((int)g_portraitLastSehCode) + " count=" +
+          ToString((int)sehCount) + " last_tick=" +
+          ToString((int)g_portraitLastSehTick) + " resume_in_ms=" +
+          ToString((int)kPortraitSyncBackoffMs));
+    }
+  }
+}
+
+static void RefreshPortraitSyncBackoffState() {
+  if (!g_portraitSyncDisabledForSession) {
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  if (g_portraitSyncDisabledUntilTick != 0 && nowTick >= g_portraitSyncDisabledUntilTick) {
+    g_portraitSyncDisabledForSession = false;
+    g_portraitSyncDisabledUntilTick = 0;
+    g_portraitDisableLogged = false;
+    InterlockedExchange(&g_portraitSehCount, 0);
+    Log("PORTRAIT_SYNC: re-enabled after backoff.");
+  }
+}
+
+static bool TryCapturePortraitBmpUnsafe(Character *npc, std::string &bmpDataOut,
+                                        int &widthOut, int &heightOut,
+                                        std::string &imageHashOut,
+                                        std::string *diagReasonOut = nullptr) {
+  auto fail = [&](const std::string &reason) -> bool {
+    if (diagReasonOut) {
+      *diagReasonOut = reason;
+    }
+    return false;
+  };
+  bmpDataOut.clear();
+  imageHashOut.clear();
+  widthOut = 0;
+  heightOut = 0;
+  if (diagReasonOut) {
+    diagReasonOut->clear();
+  }
+
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return fail("invalid_npc");
+  }
+
+  hand characterHandle;
+  try {
+    characterHandle = npc->getHandle();
+  } catch (...) {
+    return fail("get_handle_exception");
+  }
+  if (!characterHandle.isValid()) {
+    return fail("invalid_handle");
+  }
+
+  Stobe::ProfilePortrait profilePortrait;
+  Ogre::Texture *texture = nullptr;
+  int srcLeft = 0;
+  int srcTop = 0;
+  int srcWidth = 0;
+  int srcHeight = 0;
+  if (npc->isHuman()) {
+    std::string reason;
+    if (profilePortrait.render(npc, reason)) {
+      texture = profilePortrait.texture();
+      srcWidth = static_cast<int>(texture->getWidth());
+      srcHeight = static_cast<int>(texture->getHeight());
+    } else {
+      Log("PORTRAIT_SYNC: private portrait unavailable; using native fallback reason=" + reason);
+    }
+  }
+  if (!texture) {
+    // Keep a working native portrait when private rendering is unavailable.
+    // Animals also retain Kenshi's species-specific portrait framing.
+    PortraitManager *portraitManager = nullptr;
+    try {
+      portraitManager = PortraitManager::getInstance();
+    } catch (...) {
+      portraitManager = nullptr;
+    }
+    if (!portraitManager || (uintptr_t)portraitManager <= 0x1000) {
+      return fail("portrait_manager_unavailable");
+    }
+
+    try {
+      portraitManager->getPortrait(characterHandle);
+    } catch (...) {
+    }
+
+    bool updateOk = false;
+    try {
+      updateOk = portraitManager->updatePortraitImage(characterHandle);
+    } catch (...) {
+      updateOk = false;
+    }
+    if (!updateOk) {
+      try {
+        portraitManager->getPortrait(characterHandle);
+        updateOk = portraitManager->updatePortraitImage(characterHandle);
+      } catch (...) {
+        updateOk = false;
+      }
+    }
+    if (!updateOk) {
+      return fail("update_portrait_image_failed");
+    }
+
+    PortraitImage *portraitImage = nullptr;
+    try {
+      auto it = portraitManager->characterPortraits.find(characterHandle);
+      if (it == portraitManager->characterPortraits.end()) {
+        return fail("portrait_map_missing");
+      }
+      portraitImage = it->second.second;
+    } catch (...) {
+      return fail("portrait_map_exception");
+    }
+    if (!portraitImage || (uintptr_t)portraitImage <= 0x1000) {
+      return fail("portrait_image_invalid");
+    }
+
+    if (!ResolvePortraitImageRegion(portraitManager, portraitImage, srcLeft, srcTop,
+                                    srcWidth, srcHeight)) {
+      return fail("resolve_region_failed");
+    }
+
+    texture = portraitManager->texture.getPointer();
+  }
+  if (!texture || (uintptr_t)texture <= 0x1000) {
+    return fail("texture_unavailable");
+  }
+  std::vector<unsigned char> rgba;
+  try {
+    Ogre::Image textureImage;
+    texture->convertToImage(textureImage, false);
+    Ogre::PixelBox pixelBox = textureImage.getPixelBox(0, 0);
+    if (!pixelBox.data) {
+      return fail("image_pixel_box_no_data");
+    }
+    if (!Ogre::PixelUtil::isAccessible(pixelBox.format)) {
+      return fail("image_pixel_format_inaccessible");
+    }
+
+    const size_t elemBytes = Ogre::PixelUtil::getNumElemBytes(pixelBox.format);
+    if (elemBytes == 0) {
+      return fail("image_pixel_elem_bytes_zero");
+    }
+
+    const int imageWidth = static_cast<int>(pixelBox.getWidth());
+    const int imageHeight = static_cast<int>(pixelBox.getHeight());
+    if (srcLeft < 0 || srcTop < 0 || srcWidth <= 0 || srcHeight <= 0 ||
+        srcLeft + srcWidth > imageWidth || srcTop + srcHeight > imageHeight) {
+      return fail("image_crop_out_of_bounds");
+    }
+
+    rgba.assign(static_cast<size_t>(srcWidth) * static_cast<size_t>(srcHeight) * 4U,
+                0U);
+    const unsigned char *base = static_cast<const unsigned char *>(pixelBox.data);
+    for (int y = 0; y < srcHeight; ++y) {
+      for (int x = 0; x < srcWidth; ++x) {
+        const size_t srcOffset =
+            (static_cast<size_t>(srcTop + y) * static_cast<size_t>(pixelBox.rowPitch) +
+             static_cast<size_t>(srcLeft + x)) *
+            elemBytes;
+        const unsigned char *srcPixel = base + srcOffset;
+        unsigned char *dstPixel =
+            &rgba[(static_cast<size_t>(y) * static_cast<size_t>(srcWidth) +
+                   static_cast<size_t>(x)) *
+                  4U];
+        Ogre::PixelUtil::unpackColour(&dstPixel[0], &dstPixel[1], &dstPixel[2],
+                                      &dstPixel[3], pixelBox.format, srcPixel);
+      }
+    }
+  } catch (...) {
+    return fail("image_readback_exception");
+  }
+
+  if (!EncodeBmp24(rgba, srcWidth, srcHeight, bmpDataOut) || bmpDataOut.empty()) {
+    return fail("encode_bmp_failed");
+  }
+
+  imageHashOut = HexFromU64(HashFnv1a64(
+      reinterpret_cast<const unsigned char *>(bmpDataOut.data()),
+      bmpDataOut.size()));
+  widthOut = srcWidth;
+  heightOut = srcHeight;
+  return true;
+}
+
+static bool TryCapturePortraitBmp(Character *npc, std::string &bmpDataOut,
+                                  int &widthOut, int &heightOut,
+                                  std::string &imageHashOut,
+                                  std::string *diagReasonOut = nullptr) {
+  RefreshPortraitSyncBackoffState();
+  if (g_portraitSyncDisabledForSession) {
+    if (diagReasonOut) {
+      *diagReasonOut = "portrait_sync_disabled_for_session";
+    }
+    return false;
+  }
+
+  __try {
+    return TryCapturePortraitBmpUnsafe(npc, bmpDataOut, widthOut, heightOut,
+                                       imageHashOut, diagReasonOut);
+  } __except (PortraitSehFilter(GetExceptionCode())) {
+    if (diagReasonOut) {
+      *diagReasonOut = "portrait_capture_seh";
+    }
+    MaybeDisablePortraitSyncAfterSeh();
+    return false;
+  }
+}
+
+static bool ShouldSendPortraitSync(const std::string &storageId,
+                                   const std::string &imageHash, DWORD nowTick,
+                                   bool force, DWORD &sinceLastSentOut,
+                                   bool &changedOut, bool &firstOut) {
+  sinceLastSentOut = 0;
+  changedOut = false;
+  firstOut = false;
+  if (storageId.empty() || imageHash.empty()) {
+    return false;
+  }
+
+  bool shouldSend = false;
+  EnterCriticalSection(&g_stateMutex);
+  PortraitSyncState &state = g_portraitSyncStateByStorageId[storageId];
+  state.lastSeenTick = nowTick;
+  changedOut = (state.lastHash != imageHash);
+  firstOut = !state.hasSent;
+  sinceLastSentOut = state.hasSent ? (nowTick - state.lastSentTick) : 0;
+  if (force || firstOut || changedOut || sinceLastSentOut >= kPortraitMinResendMs) {
+    shouldSend = true;
+    state.lastHash = imageHash;
+    state.lastSentTick = nowTick;
+    state.hasSent = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  return shouldSend;
+}
+
+static bool SyncPortraitForCharacterUnsafe(Character *npc, bool force,
+                                           const std::string &reason) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+
+  unsigned int serial = 0;
+  std::string npcName = "Unknown";
+  std::string storageId = "";
+  try {
+    serial = npc->getHandle().serial;
+    npcName = npc->getName();
+    storageId = GetStorageIDFor(npc, npcName, GetIdentityFaction(npc));
+  } catch (...) {
+    return false;
+  }
+  if (serial == 0) {
+    return false;
+  }
+  if (storageId.empty()) {
+    storageId = "hand_" + ToString((int)serial);
+  }
+  if (ShouldDeferVisualSyncWhileInventoryVisible(npc, "PORTRAIT_SYNC",
+                                                 reason, 1500)) {
+    return false;
+  }
+
+  DWORD nowTick = GetTickCount();
+  std::string skipReason = "";
+  if (!ShouldAttemptPortraitCapture(storageId, nowTick, force, reason,
+                                    &skipReason)) {
+    return false;
+  }
+
+  std::string bmpData = "";
+  std::string imageHash = "";
+  std::string captureReason = "";
+  int width = 0;
+  int height = 0;
+  if (!TryCapturePortraitBmp(npc, bmpData, width, height, imageHash,
+                             &captureReason)) {
+    static DWORD lastCaptureFailLogTick = 0;
+    DWORD nowTick = GetTickCount();
+    if (nowTick - lastCaptureFailLogTick >= 5000) {
+      lastCaptureFailLogTick = nowTick;
+      Log("PORTRAIT_SYNC: capture failed name=" + npcName +
+          " storage=" + storageId + " reason=" + captureReason);
+    }
+    return false;
+  }
+  if (bmpData.empty() || imageHash.empty() || width <= 0 || height <= 0) {
+    static DWORD lastInvalidSampleLogTick = 0;
+    DWORD nowTick = GetTickCount();
+    if (nowTick - lastInvalidSampleLogTick >= 5000) {
+      lastInvalidSampleLogTick = nowTick;
+      Log("PORTRAIT_SYNC: invalid sample name=" + npcName +
+          " storage=" + storageId + " width=" + ToString(width) +
+          " height=" + ToString(height) + " hash_len=" +
+          ToString((int)imageHash.length()) + " bytes=" +
+          ToString((int)bmpData.length()));
+    }
+    return false;
+  }
+
+  DWORD sinceLastSent = 0;
+  bool changed = false;
+  bool firstSync = false;
+  if (!ShouldSendPortraitSync(storageId, imageHash, nowTick, force, sinceLastSent,
+                              changed, firstSync)) {
+    return false;
+  }
+
+  std::string base64Image = Base64EncodeBinary(bmpData);
+  if (base64Image.empty()) {
+    static DWORD lastBase64FailLogTick = 0;
+    DWORD nowTick = GetTickCount();
+    if (nowTick - lastBase64FailLogTick >= 5000) {
+      lastBase64FailLogTick = nowTick;
+      Log("PORTRAIT_SYNC: base64 encode failed name=" + npcName +
+          " storage=" + storageId + " bytes=" + ToString((int)bmpData.length()));
+    }
+    return false;
+  }
+
+  int gameTs = 0;
+  try {
+    GameWorld *world = GetWorldSafe();
+    if (world) {
+      TimeOfDay tod = world->getTimeStamp_inGameHours();
+      gameTs = static_cast<int>(tod.getTotalSeconds());
+    }
+  } catch (...) {
+    gameTs = 0;
+  }
+
+  std::string payload = "{";
+  payload += "\"name\":\"" + EscapeJSON(npcName) + "\",";
+  payload += "\"storage_id\":\"" + EscapeJSON(storageId) + "\",";
+  payload += "\"source\":\"player_faction_portrait_sync\",";
+  payload += "\"sync_reason\":\"" + EscapeJSON(reason) + "\",";
+  payload += "\"image_hash\":\"" + EscapeJSON(imageHash) + "\",";
+  payload += "\"format\":\"bmp\",";
+  payload += "\"width\":" + ToString(width) + ",";
+  payload += "\"height\":" + ToString(height) + ",";
+  payload += "\"game_ts\":" + ToString(gameTs) + ",";
+  payload += "\"image_base64\":\"" + EscapeJSON(base64Image) + "\"";
+  payload += "}";
+
+  AsyncPostToStobe(L"/portrait_upload", payload);
+  Log("PORTRAIT_SYNC: sent name=" + npcName + " storage=" + storageId +
+      " hash=" + imageHash + " size=" + ToString(width) + "x" +
+      ToString(height) + " changed=" + std::string(changed ? "1" : "0") +
+      " first=" + std::string(firstSync ? "1" : "0") + " reason=" + reason);
+  return true;
+}
+
+static bool SyncPortraitForCharacter(Character *npc, bool force,
+                                     const std::string &reason) {
+  RefreshPortraitSyncBackoffState();
+  if (g_portraitSyncDisabledForSession) {
+    return false;
+  }
+
+  __try {
+    return SyncPortraitForCharacterUnsafe(npc, force, reason);
+  } __except (PortraitSehFilter(GetExceptionCode())) {
+    MaybeDisablePortraitSyncAfterSeh();
+    return false;
+  }
+}
+
+static bool ShouldTriggerSpeechPortraitSync(unsigned int serial, DWORD nowTick) {
+  if (serial == 0) {
+    return false;
+  }
+
+  bool shouldTrigger = false;
+  EnterCriticalSection(&g_stateMutex);
+  std::map<unsigned int, DWORD>::iterator it =
+      g_portraitSpeechTriggerBySerial.find(serial);
+  if (it == g_portraitSpeechTriggerBySerial.end() || it->second == 0 ||
+      nowTick - it->second >= kPortraitSpeechTriggerCooldownMs) {
+    g_portraitSpeechTriggerBySerial[serial] = nowTick;
+    shouldTrigger = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  return shouldTrigger;
+}
+
+static void TrySpeechTriggeredPortraitSync(Character *npc,
+                                           const std::string &reason) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return;
+  }
+
+  bool isPlayerCharacter = false;
+  try {
+    isPlayerCharacter = npc->isPlayerCharacter();
+  } catch (...) {
+    isPlayerCharacter = false;
+  }
+  if (isPlayerCharacter) {
+    return;
+  }
+
+  unsigned int serial = 0;
+  try {
+    serial = npc->getHandle().serial;
+  } catch (...) {
+    serial = 0;
+  }
+  if (serial == 0) {
+    return;
+  }
+  DWORD nowTick = GetTickCount();
+  if (!ShouldTriggerSpeechPortraitSync(serial, nowTick)) {
+    return;
+  }
+
+  SyncPortraitForCharacter(npc, true, reason);
+}
+
+static void TrySpeechTriggeredPortraitSyncForPair(Character *speaker,
+                                                  Character *listener,
+                                                  const char *sourceTag) {
+  std::string reasonBase = "speech_trigger";
+  if (sourceTag && sourceTag[0] != '\0') {
+    reasonBase = reasonBase + "_" + std::string(sourceTag);
+  }
+
+  TrySpeechTriggeredPortraitSync(speaker, reasonBase + "_speaker");
+  if (listener && listener != speaker) {
+    TrySpeechTriggeredPortraitSync(listener, reasonBase + "_listener");
+  }
+}
+
+static void PrunePortraitSyncState() {
+  DWORD nowTick = GetTickCount();
+  int pruned = 0;
+  EnterCriticalSection(&g_stateMutex);
+  for (std::map<std::string, PortraitSyncState>::iterator it =
+           g_portraitSyncStateByStorageId.begin();
+       it != g_portraitSyncStateByStorageId.end();) {
+    DWORD age = nowTick - it->second.lastSeenTick;
+    if (it->second.lastSeenTick == 0 || age > kPortraitStateRetentionMs) {
+      it = g_portraitSyncStateByStorageId.erase(it);
+      ++pruned;
+    } else {
+      ++it;
+    }
+  }
+
+  for (std::map<unsigned int, DWORD>::iterator it =
+           g_portraitSpeechTriggerBySerial.begin();
+       it != g_portraitSpeechTriggerBySerial.end();) {
+    DWORD age = nowTick - it->second;
+    if (it->second == 0 || age > kPortraitStateRetentionMs) {
+      it = g_portraitSpeechTriggerBySerial.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  if (pruned > 0) {
+    Log("PORTRAIT_SYNC: pruned stale state entries=" + ToString(pruned));
+  }
+}
+
+static void ResetPortraitSyncState() {
+  EnterCriticalSection(&g_stateMutex);
+  g_portraitSyncStateByStorageId.clear();
+  g_portraitSpeechTriggerBySerial.clear();
+  LeaveCriticalSection(&g_stateMutex);
+  g_portraitSyncDisabledForSession = false;
+  g_portraitDisableLogged = false;
+  g_portraitSyncDisabledUntilTick = 0;
+  g_portraitLastSehTick = 0;
+  g_portraitLastSehCode = 0;
+  g_lastPortraitSweepTick = 0;
+  g_portraitSweepCursor = 0;
+  InterlockedExchange(&g_portraitSehCount, 0);
+}
+
+static bool IsWorldStableForUI(GameWorld *world);
+
+static void RunPlayerFactionPortraitSweep(GameWorld *world) {
+  if (!IsWorldStableForUI(world)) {
+    static DWORD lastNoRosterLogTick = 0;
+    DWORD nowTick = GetTickCount();
+    if (nowTick - lastNoRosterLogTick >= 30000) {
+      lastNoRosterLogTick = nowTick;
+      Log("PORTRAIT_SYNC: skipped sweep (no player roster)");
+    }
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  if (nowTick - g_lastPortraitSweepTick < kPortraitSweepIntervalMs) {
+    return;
+  }
+  g_lastPortraitSweepTick = nowTick;
+
+  const size_t rosterSize = world->player->playerCharacters.size();
+  if (rosterSize == 0) {
+    g_portraitSweepCursor = 0;
+    return;
+  }
+  if (g_portraitSweepCursor >= rosterSize) {
+    g_portraitSweepCursor = 0;
+  }
+  if (!HasRecentDwemerDistroConnection(kRecentServerSuccessGraceMs)) {
+    static DWORD lastOfflineLogTick = 0;
+    if (nowTick - lastOfflineLogTick >= 30000) {
+      lastOfflineLogTick = nowTick;
+      Log("PORTRAIT_SYNC: sweep deferred while server connection is unavailable.");
+    }
+    return;
+  }
+
+  size_t candidates = 0;
+  size_t sent = 0;
+  size_t inspectedSlots = 0;
+  const size_t maxInspect =
+      std::min(static_cast<size_t>(kPortraitSweepCandidateLimit), rosterSize);
+  const size_t budget =
+      std::min(static_cast<size_t>(kPortraitSweepBudgetPerPass), maxInspect);
+  for (; inspectedSlots < maxInspect && candidates < budget; ++inspectedSlots) {
+    size_t rosterIndex = (g_portraitSweepCursor + inspectedSlots) % rosterSize;
+    Character *member = world->player->playerCharacters[rosterIndex];
+    if (!member || (uintptr_t)member < 0x1000) {
+      continue;
+    }
+    ++candidates;
+    if (SyncPortraitForCharacter(member, false, "player_faction_sweep")) {
+      ++sent;
+    }
+  }
+  if (inspectedSlots == 0) {
+    inspectedSlots = 1;
+  }
+  g_portraitSweepCursor = (g_portraitSweepCursor + inspectedSlots) % rosterSize;
+
+  static DWORD lastPruneTick = 0;
+  if (nowTick - lastPruneTick >= 60000) {
+    lastPruneTick = nowTick;
+    PrunePortraitSyncState();
+  }
+
+  if (sent > 0) {
+    Log("PORTRAIT_SYNC: sweep complete candidates=" + ToString((int)candidates) +
+        " sent=" + ToString((int)sent) +
+        " inspected=" + ToString((int)inspectedSlots));
+  } else {
+    static DWORD lastNoSendLogTick = 0;
+    if (nowTick - lastNoSendLogTick >= 60000) {
+      lastNoSendLogTick = nowTick;
+      Log("PORTRAIT_SYNC: sweep no-send candidates=" +
+          ToString((int)candidates) +
+          " inspected=" + ToString((int)inspectedSlots));
+    }
+  }
+}
+
+static void ResetPlayerCatsSyncState() {
+  EnterCriticalSection(&g_stateMutex);
+  g_playerCatsSyncHasValue = false;
+  g_playerCatsSyncLastValue = 0;
+  g_playerCatsSyncLastSentTick = 0;
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+
+static void ResetPlayerSquadsSyncState() {
+  EnterCriticalSection(&g_stateMutex);
+  g_playerSquadsSyncHasValue = false;
+  g_playerSquadsSyncLastDigest = "";
+  g_playerSquadsSyncLastSentTick = 0;
+  g_playerSquadsLastKeys.clear();
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static void ResetFactionRelationSyncState() {
+  EnterCriticalSection(&g_stateMutex);
+  g_factionRelationStateByKey.clear();
+  g_lastFactionRelationSyncTick = 0;
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static void ResetTownKnowledgeSyncState() {
+  EnterCriticalSection(&g_stateMutex);
+  g_lastTownKnowledgeScanTick = 0;
+  g_lastTownKnowledgeSentTick = 0;
+  g_lastTownKnowledgeDigest = "";
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static std::string BuildJsonStringArray(const std::vector<std::string> &values) {
+  std::string json = "[";
+  for (size_t i = 0; i < values.size(); ++i) {
+    if (i > 0) {
+      json += ",";
+    }
+    json += "\"" + EscapeJSON(values[i]) + "\"";
+  }
+  json += "]";
+  return json;
+}
+
+static std::string ResolvePlayerSquadName(Character *member) {
+  if (!member || (uintptr_t)member < 0x1000) {
+    return "Unknown Squad";
+  }
+
+  ActivePlatoon *activePlatoon = nullptr;
+  try {
+    activePlatoon = member->getPlatoon();
+  } catch (...) {
+    activePlatoon = nullptr;
+  }
+
+  std::string squadName = "";
+  if (activePlatoon && (uintptr_t)activePlatoon > 0x1000) {
+    try {
+      squadName = TrimCopy(activePlatoon->getName());
+    } catch (...) {
+      squadName = "";
+    }
+    if (squadName.empty() && activePlatoon->me &&
+        (uintptr_t)activePlatoon->me > 0x1000) {
+      try {
+        squadName = TrimCopy(activePlatoon->me->getPlatoonStringID());
+      } catch (...) {
+      }
+      if (squadName.empty()) {
+        squadName = TrimCopy(activePlatoon->me->stringID);
+      }
+    }
+  }
+
+  if (squadName.empty()) {
+    squadName = "Unknown Squad";
+  }
+  return squadName;
+}
+
+static bool SyncPlayerSquadsToConfOpts(GameWorld *world, bool force,
+                                       const std::string &reason) {
+  if (!world || !world->player) {
+    return false;
+  }
+
+  std::map<std::string, std::set<std::string> > squadMembers;
+  for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+    Character *member = world->player->playerCharacters[i];
+    if (!member || (uintptr_t)member < 0x1000) {
+      continue;
+    }
+
+    std::string memberName = "";
+    try {
+      memberName = TrimCopy(member->getName());
+    } catch (...) {
+      memberName = "";
+    }
+    if (memberName.empty()) {
+      memberName = "Unknown Member";
+    }
+
+    std::string squadName = ResolvePlayerSquadName(member);
+    squadMembers[squadName].insert(memberName);
+  }
+
+  std::map<std::string, std::string> squadPayloads;
+  std::set<std::string> currentSquadKeys;
+  std::string digest = "";
+  for (std::map<std::string, std::set<std::string> >::const_iterator it =
+           squadMembers.begin();
+       it != squadMembers.end(); ++it) {
+    const std::string &squadName = it->first;
+    std::vector<std::string> members(it->second.begin(), it->second.end());
+    std::sort(members.begin(), members.end());
+    std::string memberJson = BuildJsonStringArray(members);
+    squadPayloads[squadName] = memberJson;
+    currentSquadKeys.insert(squadName);
+    digest += squadName + "=" + memberJson + ";";
+  }
+
+  DWORD nowTick = GetTickCount();
+  bool shouldSend = false;
+  bool changed = false;
+  DWORD sinceLastSent = 0;
+  std::vector<std::string> staleSquadKeys;
+  EnterCriticalSection(&g_stateMutex);
+  changed =
+      (!g_playerSquadsSyncHasValue || digest != g_playerSquadsSyncLastDigest);
+  sinceLastSent = g_playerSquadsSyncHasValue
+                      ? (nowTick - g_playerSquadsSyncLastSentTick)
+                      : 0;
+  if (force || !g_playerSquadsSyncHasValue || changed ||
+      sinceLastSent >= kPlayerSquadsResendIntervalMs) {
+    shouldSend = true;
+    for (std::set<std::string>::const_iterator it =
+             g_playerSquadsLastKeys.begin();
+         it != g_playerSquadsLastKeys.end(); ++it) {
+      if (currentSquadKeys.count(*it) == 0) {
+        staleSquadKeys.push_back(*it);
+      }
+    }
+    g_playerSquadsSyncHasValue = true;
+    g_playerSquadsSyncLastDigest = digest;
+    g_playerSquadsSyncLastSentTick = nowTick;
+    g_playerSquadsLastKeys = currentSquadKeys;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (!shouldSend) {
+    return false;
+  }
+
+  for (std::map<std::string, std::string>::const_iterator it =
+           squadPayloads.begin();
+       it != squadPayloads.end(); ++it) {
+    std::string payload =
+        "{\"id\":\"" + EscapeJSON(it->first) + "\",\"value\":\"" +
+        EscapeJSON(it->second) + "\",\"only_if_changed\":true}";
+    AsyncPostToStobe(L"/conf_opts", payload);
+  }
+
+  for (size_t i = 0; i < staleSquadKeys.size(); ++i) {
+    std::string payload = "{\"id\":\"" + EscapeJSON(staleSquadKeys[i]) +
+                          "\",\"value\":\"[]\",\"only_if_changed\":true}";
+    AsyncPostToStobe(L"/conf_opts", payload);
+  }
+
+  std::vector<std::string> squadNames(currentSquadKeys.begin(),
+                                      currentSquadKeys.end());
+  std::string squadNamesJson = BuildJsonStringArray(squadNames);
+  std::string indexPayload =
+      "{\"id\":\"PLAYER_SQUADS\",\"value\":\"" + EscapeJSON(squadNamesJson) +
+      "\",\"only_if_changed\":true}";
+  AsyncPostToStobe(L"/conf_opts", indexPayload);
+
+  Log("SQUAD_SYNC: sent squads=" + ToString((int)squadPayloads.size()) +
+      " stale=" + ToString((int)staleSquadKeys.size()) + " changed=" +
+      std::string(changed ? "1" : "0") + " reason=" + reason);
+  return true;
+}
+
+static bool SyncPlayerCatsValue(Character *player, bool force,
+                                const std::string &reason) {
+  if (!player || (uintptr_t)player < 0x1000) {
+    return false;
+  }
+
+  int cats = 0;
+  try {
+    cats = player->getMoney();
+    if (cats <= 0 && player->getOwnerships()) {
+      cats = player->getOwnerships()->getMoney();
+    }
+  } catch (...) {
+    return false;
+  }
+  if (cats < 0) {
+    cats = 0;
+  }
+
+  DWORD nowTick = GetTickCount();
+  bool shouldSend = false;
+  bool changed = false;
+  DWORD sinceLastSent = 0;
+  EnterCriticalSection(&g_stateMutex);
+  changed = (!g_playerCatsSyncHasValue || cats != g_playerCatsSyncLastValue);
+  sinceLastSent =
+      g_playerCatsSyncHasValue ? (nowTick - g_playerCatsSyncLastSentTick) : 0;
+  if (force || !g_playerCatsSyncHasValue || changed ||
+      sinceLastSent >= kPlayerCatsResendIntervalMs) {
+    shouldSend = true;
+    g_playerCatsSyncHasValue = true;
+    g_playerCatsSyncLastValue = cats;
+    g_playerCatsSyncLastSentTick = nowTick;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (!shouldSend) {
+    return false;
+  }
+
+  std::string payload = "{\"id\":\"PLAYER_CATS\",\"value\":\"" +
+                        ToString(cats) + "\",\"only_if_changed\":true}";
+  AsyncPostToStobe(L"/conf_opts", payload);
+  Log("CATS_SYNC: sent value=" + ToString(cats) + " changed=" +
+      std::string(changed ? "1" : "0") + " reason=" + reason);
+  return true;
+}
+
+
+static bool SyncPluginVersionToConfOpts(bool force, const std::string &reason) {
+  const std::string pluginVersion =
+      kStobePluginVersion ? std::string(kStobePluginVersion) : "";
+  if (pluginVersion.empty()) {
+    return false;
+  }
+
+  DWORD nowTick = GetTickCount();
+  bool shouldSend = false;
+  bool changed = false;
+  DWORD sinceLastSent = 0;
+  EnterCriticalSection(&g_stateMutex);
+  changed = (!g_pluginVersionSyncHasValue ||
+             pluginVersion != g_pluginVersionSyncLastValue);
+  sinceLastSent = g_pluginVersionSyncHasValue
+                      ? (nowTick - g_pluginVersionSyncLastSentTick)
+                      : 0;
+  if (force || !g_pluginVersionSyncHasValue || changed ||
+      sinceLastSent >= kPluginVersionResendIntervalMs) {
+    shouldSend = true;
+    g_pluginVersionSyncHasValue = true;
+    g_pluginVersionSyncLastValue = pluginVersion;
+    g_pluginVersionSyncLastSentTick = nowTick;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (!shouldSend) {
+    return false;
+  }
+
+  std::string payload = "{\"id\":\"plugin_dll_version\",\"value\":\"" +
+                        EscapeJSON(pluginVersion) +
+                        "\",\"only_if_changed\":true}";
+  AsyncPostToStobe(L"/conf_opts", payload);
+  Log("PLUGIN_VERSION_SYNC: sent version=" + pluginVersion +
+      " changed=" + std::string(changed ? "1" : "0") + " reason=" + reason);
+  return true;
+}
+
+static void RefreshInventoryContextCache(Character *npc,
+                                         const std::string &inventoryJson,
+                                         bool isPlayerCharacter) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return;
+  }
+  EnterCriticalSection(&g_stateMutex);
+  if (isPlayerCharacter) {
+    g_playerInventoryJson = inventoryJson;
+    g_playerHand = npc->getHandle();
+  } else {
+    g_activeInventoryJson = inventoryJson;
+    g_lastInventoryHand = npc->getHandle();
+  }
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static volatile LONG g_inventorySyncSehCount = 0;
+static DWORD g_inventoryLastSehTick = 0;
+static DWORD g_inventoryLastSehCode = 0;
+
+static int InventorySyncSehFilter(unsigned int code) {
+  g_inventoryLastSehCode = code;
+  g_inventoryLastSehTick = GetTickCount();
+  InterlockedIncrement(&g_inventorySyncSehCount);
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static volatile LONG g_itemImageSehCount = 0;
+static DWORD g_itemImageLastSehTick = 0;
+static DWORD g_itemImageLastSehCode = 0;
+static bool g_itemImageSyncDisabledForSession = false;
+static bool g_itemImageDisableLogged = false;
+
+static int ItemImageSehFilter(unsigned int code) {
+  g_itemImageLastSehCode = code;
+  g_itemImageLastSehTick = GetTickCount();
+  InterlockedIncrement(&g_itemImageSehCount);
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void MaybeDisableItemImageSyncAfterSeh() {
+  if (g_itemImageSyncDisabledForSession) {
+    return;
+  }
+  LONG sehCount = InterlockedCompareExchange(&g_itemImageSehCount, 0, 0);
+  if (sehCount >= 3) {
+    g_itemImageSyncDisabledForSession = true;
+    if (!g_itemImageDisableLogged) {
+      g_itemImageDisableLogged = true;
+      Log("ITEM_IMAGE_SYNC: disabled for this session after repeated engine SEH faults code=" +
+          ToString((int)g_itemImageLastSehCode) + " count=" +
+          ToString((int)sehCount) + " last_tick=" +
+          ToString((int)g_itemImageLastSehTick));
+    }
+  }
+}
+
+static std::string NormalizeItemImageStateKey(const std::string &itemId) {
+  std::string key = TrimCopy(itemId);
+  for (size_t i = 0; i < key.size(); ++i) {
+    key[i] = static_cast<char>(tolower((unsigned char)key[i]));
+  }
+  return key;
+}
+
+static std::string BuildSyntheticItemStringIdFromName(const std::string &itemName) {
+  std::string normalized = ToLowerAsciiCopy(TrimCopy(itemName));
+  if (normalized.empty()) {
+    return "";
+  }
+
+  std::string slug = "";
+  slug.reserve(normalized.size());
+  bool lastWasUnderscore = false;
+  for (size_t i = 0; i < normalized.size(); ++i) {
+    unsigned char ch = (unsigned char)normalized[i];
+    bool isAlphaNum = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
+    if (isAlphaNum) {
+      slug.push_back((char)ch);
+      lastWasUnderscore = false;
+      continue;
+    }
+    if (!slug.empty() && !lastWasUnderscore) {
+      slug.push_back('_');
+      lastWasUnderscore = true;
+    }
+  }
+  while (!slug.empty() && slug.back() == '_') {
+    slug.pop_back();
+  }
+  if (slug.empty()) {
+    return "";
+  }
+  if (slug.length() > 110) {
+    slug = slug.substr(0, 110);
+    while (!slug.empty() && slug.back() == '_') {
+      slug.pop_back();
+    }
+  }
+  if (slug.empty()) {
+    return "";
+  }
+  return "name_" + slug;
+}
+
+static bool IsNpcInventoryWindowVisible(Character *npc) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+
+  Inventory *inventory = nullptr;
+  try {
+    inventory = npc->getInventory();
+  } catch (...) {
+    inventory = nullptr;
+  }
+  if (!inventory || (uintptr_t)inventory < 0x1000) {
+    return false;
+  }
+
+  InventoryGUI *inventoryGui = nullptr;
+  try {
+    inventoryGui = inventory->getInventoryGUI();
+  } catch (...) {
+    inventoryGui = nullptr;
+  }
+  if (!inventoryGui || (uintptr_t)inventoryGui < 0x1000) {
+    return false;
+  }
+
+  try {
+    return inventoryGui->isVisible();
+  } catch (...) {
+    return false;
+  }
+}
+
+static bool IsAnyPlayerInventoryWindowVisible() {
+  GameWorld *world = GetWorldSafe();
+  if (!world || !world->player) {
+    return false;
+  }
+
+  try {
+    for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+      Character *playerChar = world->player->playerCharacters[i];
+      if (IsNpcInventoryWindowVisible(playerChar)) {
+        return true;
+      }
+    }
+  } catch (...) {
+    return false;
+  }
+
+  return false;
+}
+
+static bool IsAnyInventoryOrTradeUiVisible(Character *npc) {
+  return IsNpcInventoryWindowVisible(npc) ||
+         IsAnyPlayerInventoryWindowVisible();
+}
+
+static bool ShouldDeferVisualSyncWhileInventoryVisible(
+    Character *npc, const char *syncTag, const std::string &reason,
+    DWORD recentVisibleGraceMs) {
+  DWORD nowTick = GetTickCount();
+  bool inventoryUiVisibleNow = IsAnyInventoryOrTradeUiVisible(npc);
+  DWORD lastVisibleTick = 0;
+
+  if (inventoryUiVisibleNow) {
+    EnterCriticalSection(&g_stateMutex);
+    g_lastInventoryUiVisibleTick = nowTick;
+    lastVisibleTick = g_lastInventoryUiVisibleTick;
+    LeaveCriticalSection(&g_stateMutex);
+  } else if (recentVisibleGraceMs != 0) {
+    EnterCriticalSection(&g_stateMutex);
+    lastVisibleTick = g_lastInventoryUiVisibleTick;
+    LeaveCriticalSection(&g_stateMutex);
+  }
+
+  bool inventoryUiRecentlyVisible =
+      !inventoryUiVisibleNow && recentVisibleGraceMs != 0 &&
+      lastVisibleTick != 0 &&
+      (nowTick - lastVisibleTick) < recentVisibleGraceMs;
+  if (!inventoryUiVisibleNow && !inventoryUiRecentlyVisible) {
+    return false;
+  }
+
+  static DWORD lastInventoryUiDeferLogTick = 0;
+  if (syncTag && syncTag[0] != '\0' &&
+      nowTick - lastInventoryUiDeferLogTick >= 5000) {
+    lastInventoryUiDeferLogTick = nowTick;
+    Log(std::string(syncTag) +
+        ": deferred while inventory UI " +
+        std::string(inventoryUiVisibleNow ? "visible" : "recently visible") +
+        " reason=" + reason);
+  }
+  return true;
+}
+
+static bool IsItemImageSyncReasonAllowed(const std::string &reason) {
+  std::string key = ToLowerAsciiCopy(TrimCopy(reason));
+  if (key.empty()) {
+    return false;
+  }
+  if (key == "selection_change" || key == "chat_open" ||
+      key == "dialogue_npc" || key == "dialogue_player" ||
+      key == "periodic") {
+    return true;
+  }
+  if (key.find("dialogue") != std::string::npos ||
+      key.find("description") != std::string::npos ||
+      key.find("chat") != std::string::npos ||
+      key.find("inventory") != std::string::npos) {
+    return true;
+  }
+  return false;
+}
+
+static bool ShouldQueueItemImageSyncForInventorySync(const std::string &reason,
+                                                     bool firstSync,
+                                                     bool hashChanged) {
+  std::string key = ToLowerAsciiCopy(TrimCopy(reason));
+  if (!IsItemImageSyncReasonAllowed(key)) {
+    return false;
+  }
+  if (key == "selection_change") {
+    return firstSync || hashChanged;
+  }
+  return true;
+}
+
+static bool ShouldAllowItemImageSyncWork(const std::string &reason,
+                                         std::string *blockReasonOut = nullptr) {
+  if (blockReasonOut) {
+    *blockReasonOut = "";
+  }
+  if (!g_enableItemImageSync) {
+    if (blockReasonOut) {
+      *blockReasonOut = "setting_disabled";
+    }
+    return false;
+  }
+  if (g_itemImageSyncDisabledForSession) {
+    if (blockReasonOut) {
+      *blockReasonOut = "session_disabled";
+    }
+    return false;
+  }
+  std::string reasonKey = ToLowerAsciiCopy(TrimCopy(reason));
+  if (!IsItemImageSyncReasonAllowed(reasonKey)) {
+    if (blockReasonOut) {
+      *blockReasonOut = "reason_not_allowed";
+    }
+    return false;
+  }
+  if (!HasRecentDwemerDistroConnection(kRecentServerSuccessGraceMs)) {
+    if (blockReasonOut) {
+      *blockReasonOut = "offline";
+    }
+    return false;
+  }
+  return true;
+}
+
+static bool ShouldRunItemImageSyncNow(const std::string &reason, bool force,
+                                      std::string *blockReasonOut = nullptr) {
+  (void)force;
+  if (!ShouldAllowItemImageSyncWork(reason, blockReasonOut)) {
+    return false;
+  }
+
+  DWORD nowTick = GetTickCount();
+  bool allow = false;
+  EnterCriticalSection(&g_stateMutex);
+  DWORD stableTick = g_worldStableSinceTick;
+  DWORD sinceLastRun =
+      g_itemImageLastRunTick == 0 ? 0 : (nowTick - g_itemImageLastRunTick);
+  bool startupDelayPassed =
+      stableTick != 0 && (nowTick - stableTick) >= kItemImageStartupDelayMs;
+  bool cooldownPassed =
+      g_itemImageLastRunTick == 0 || sinceLastRun >= kItemImageRunCooldownMs;
+  if (startupDelayPassed && cooldownPassed) {
+    allow = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  if (!allow && blockReasonOut) {
+    *blockReasonOut = startupDelayPassed ? "run_cooldown" : "startup_delay";
+  }
+  return allow;
+}
+
+static bool ShouldAttemptItemImageCapture(const std::string &itemId, DWORD nowTick,
+                                          bool force,
+                                          std::string *skipReasonOut = nullptr) {
+  if (skipReasonOut) {
+    *skipReasonOut = "";
+  }
+  std::string stateKey = NormalizeItemImageStateKey(itemId);
+  if (stateKey.empty()) {
+    if (skipReasonOut) {
+      *skipReasonOut = "invalid_item_id";
+    }
+    return false;
+  }
+
+  bool allow = false;
+  EnterCriticalSection(&g_stateMutex);
+  ItemImageSyncState &state = g_itemImageSyncStateByItemId[stateKey];
+  state.lastSeenTick = nowTick;
+  DWORD sinceLastAttempt =
+      state.lastAttemptTick == 0 ? 0 : (nowTick - state.lastAttemptTick);
+  if (force || state.lastAttemptTick == 0 ||
+      sinceLastAttempt >= kItemImageAttemptCooldownMs) {
+    state.lastAttemptTick = nowTick;
+    allow = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (!allow && skipReasonOut) {
+    *skipReasonOut = "attempt_cooldown";
+  }
+  return allow;
+}
+
+static bool ShouldSendItemImageSync(const std::string &itemId,
+                                    const std::string &imageHash, DWORD nowTick,
+                                    bool force, DWORD &sinceLastSentOut,
+                                    bool &changedOut, bool &firstOut) {
+  sinceLastSentOut = 0;
+  changedOut = false;
+  firstOut = false;
+  if (itemId.empty() || imageHash.empty()) {
+    return false;
+  }
+
+  std::string stateKey = NormalizeItemImageStateKey(itemId);
+  if (stateKey.empty()) {
+    return false;
+  }
+
+  bool shouldSend = false;
+  EnterCriticalSection(&g_stateMutex);
+  ItemImageSyncState &state = g_itemImageSyncStateByItemId[stateKey];
+  state.lastSeenTick = nowTick;
+  changedOut = (state.lastHash != imageHash);
+  firstOut = !state.hasSent;
+  sinceLastSentOut = state.hasSent ? (nowTick - state.lastSentTick) : 0;
+  if (force || firstOut || changedOut || sinceLastSentOut >= kItemImageMinResendMs) {
+    shouldSend = true;
+    state.lastHash = imageHash;
+    state.lastSentTick = nowTick;
+    state.hasSent = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  return shouldSend;
+}
+
+static void QueueItemImageSyncRequest(Character *npc, const std::string &reason) {
+  if (!g_enableItemImageSync) {
+    return;
+  }
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return;
+  }
+
+  hand npcHand;
+  unsigned int serial = 0;
+  try {
+    npcHand = npc->getHandle();
+    serial = npcHand.serial;
+  } catch (...) {
+    return;
+  }
+  if (serial == 0 || !npcHand.isValid()) {
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  EnterCriticalSection(&g_stateMutex);
+  for (size_t i = 0; i < g_itemImageSyncRequestQueue.size(); ++i) {
+    if (g_itemImageSyncRequestQueue[i].npcHand.serial == serial) {
+      g_itemImageSyncRequestQueue[i].reason = reason;
+      g_itemImageSyncRequestQueue[i].queuedTick = nowTick;
+      LeaveCriticalSection(&g_stateMutex);
+      return;
+    }
+  }
+
+  PendingItemImageSyncRequest req;
+  req.npcHand = npcHand;
+  req.reason = reason;
+  req.queuedTick = nowTick;
+  g_itemImageSyncRequestQueue.push_back(req);
+  while (g_itemImageSyncRequestQueue.size() > kItemImageRequestQueueMax) {
+    g_itemImageSyncRequestQueue.pop_front();
+  }
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static std::string TruncateItemImageDiagValue(const std::string &value,
+                                              size_t maxLen = 72) {
+  if (value.length() <= maxLen) {
+    return value;
+  }
+  if (maxLen <= 3) {
+    return value.substr(0, maxLen);
+  }
+  return value.substr(0, maxLen - 3) + "...";
+}
+
+static bool HasKnownImageExtension(const std::string &name) {
+  return EndsWithAsciiInsensitive(name, ".dds") ||
+         EndsWithAsciiInsensitive(name, ".png") ||
+         EndsWithAsciiInsensitive(name, ".tga") ||
+         EndsWithAsciiInsensitive(name, ".bmp") ||
+         EndsWithAsciiInsensitive(name, ".jpg") ||
+         EndsWithAsciiInsensitive(name, ".jpeg") ||
+         EndsWithAsciiInsensitive(name, ".webp");
+}
+
+static void AppendUniqueIconResourceCandidate(std::vector<std::string> &out,
+                                              const std::string &candidate) {
+  std::string trimmed = TrimCopy(candidate);
+  if (trimmed.empty()) {
+    return;
+  }
+  std::string lowered = ToLowerAsciiCopy(trimmed);
+  for (size_t i = 0; i < out.size(); ++i) {
+    if (ToLowerAsciiCopy(out[i]) == lowered) {
+      return;
+    }
+  }
+  out.push_back(trimmed);
+}
+
+static std::vector<Ogre::String>
+BuildItemIconResourceCandidates(const std::string &iconImageName) {
+  std::vector<std::string> nativeCandidates;
+  std::string trimmed = TrimCopy(iconImageName);
+  AppendUniqueIconResourceCandidate(nativeCandidates, trimmed);
+
+  std::string normalizedSlashes = trimmed;
+  for (size_t i = 0; i < normalizedSlashes.size(); ++i) {
+    if (normalizedSlashes[i] == '\\') {
+      normalizedSlashes[i] = '/';
+    }
+  }
+  AppendUniqueIconResourceCandidate(nativeCandidates, normalizedSlashes);
+
+  if (!HasKnownImageExtension(trimmed)) {
+    const char *exts[] = {".dds", ".png", ".tga", ".bmp", ".jpg", ".jpeg"};
+    for (size_t i = 0; i < sizeof(exts) / sizeof(exts[0]); ++i) {
+      AppendUniqueIconResourceCandidate(nativeCandidates, trimmed + exts[i]);
+      AppendUniqueIconResourceCandidate(nativeCandidates,
+                                        normalizedSlashes + exts[i]);
+    }
+  }
+
+  std::vector<Ogre::String> ogreCandidates;
+  ogreCandidates.reserve(nativeCandidates.size());
+  for (size_t i = 0; i < nativeCandidates.size(); ++i) {
+    ogreCandidates.push_back(Ogre::String(nativeCandidates[i].c_str()));
+  }
+  return ogreCandidates;
+}
+
+static bool TryLoadItemIconImage(const std::string &iconImageName,
+                                 Ogre::Image &iconImage,
+                                 std::string &resolvedNameOut,
+                                 std::string &resolvedGroupOut,
+                                 std::string *diagReasonOut = nullptr) {
+  resolvedNameOut.clear();
+  resolvedGroupOut.clear();
+  if (diagReasonOut) {
+    diagReasonOut->clear();
+  }
+
+  std::vector<Ogre::String> candidates =
+      BuildItemIconResourceCandidates(iconImageName);
+  if (candidates.empty()) {
+    if (diagReasonOut) {
+      *diagReasonOut = "icon_candidates_empty";
+    }
+    return false;
+  }
+
+  const char *groupCandidates[] = {"General", "GUI", "Characters", "Materials",
+                                   ""};
+
+  for (size_t c = 0; c < candidates.size(); ++c) {
+    const Ogre::String &candidate = candidates[c];
+    for (size_t g = 0; g < sizeof(groupCandidates) / sizeof(groupCandidates[0]);
+         ++g) {
+      try {
+        iconImage.load(candidate, Ogre::String(groupCandidates[g]));
+        resolvedNameOut = candidate.c_str();
+        resolvedGroupOut = groupCandidates[g];
+        return true;
+      } catch (...) {
+      }
+    }
+  }
+
+  if (diagReasonOut) {
+    *diagReasonOut =
+        "icon_load_failed:" + TruncateItemImageDiagValue(iconImageName);
+  }
+  return false;
+}
+
+static bool ExtractIconRectToRgba(const Ogre::PixelBox &pixelBox, size_t elemBytes,
+                                  int srcLeft, int srcTop, int width, int height,
+                                  std::vector<unsigned char> &rgbaOut) {
+  rgbaOut.clear();
+  if (width <= 0 || height <= 0 || srcLeft < 0 || srcTop < 0) {
+    return false;
+  }
+  const int imageWidth = static_cast<int>(pixelBox.getWidth());
+  const int imageHeight = static_cast<int>(pixelBox.getHeight());
+  if (srcLeft + width > imageWidth || srcTop + height > imageHeight) {
+    return false;
+  }
+  const unsigned char *base = static_cast<const unsigned char *>(pixelBox.data);
+  if (!base) {
+    return false;
+  }
+
+  try {
+    rgbaOut.assign(static_cast<size_t>(width) * static_cast<size_t>(height) * 4U,
+                   0U);
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        const size_t srcOffset =
+            (static_cast<size_t>(srcTop + y) *
+                 static_cast<size_t>(pixelBox.rowPitch) +
+             static_cast<size_t>(srcLeft + x)) *
+            elemBytes;
+        const unsigned char *srcPixel = base + srcOffset;
+        unsigned char *dstPixel =
+            &rgbaOut[(static_cast<size_t>(y) * static_cast<size_t>(width) +
+                      static_cast<size_t>(x)) *
+                     4U];
+        Ogre::PixelUtil::unpackColour(&dstPixel[0], &dstPixel[1], &dstPixel[2],
+                                      &dstPixel[3], pixelBox.format, srcPixel);
+      }
+    }
+  } catch (...) {
+    rgbaOut.clear();
+    return false;
+  }
+
+  return !rgbaOut.empty();
+}
+
+static bool ComputeOpaqueIconBounds(const Ogre::PixelBox &pixelBox, size_t elemBytes,
+                                    int alphaThreshold, int &leftOut, int &topOut,
+                                    int &widthOut, int &heightOut) {
+  leftOut = 0;
+  topOut = 0;
+  widthOut = 0;
+  heightOut = 0;
+
+  const unsigned char *base = static_cast<const unsigned char *>(pixelBox.data);
+  if (!base) {
+    return false;
+  }
+
+  const int imageWidth = static_cast<int>(pixelBox.getWidth());
+  const int imageHeight = static_cast<int>(pixelBox.getHeight());
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return false;
+  }
+
+  int minX = imageWidth;
+  int minY = imageHeight;
+  int maxX = -1;
+  int maxY = -1;
+  try {
+    for (int y = 0; y < imageHeight; ++y) {
+      for (int x = 0; x < imageWidth; ++x) {
+        const size_t srcOffset =
+            (static_cast<size_t>(y) * static_cast<size_t>(pixelBox.rowPitch) +
+             static_cast<size_t>(x)) *
+            elemBytes;
+        const unsigned char *srcPixel = base + srcOffset;
+        unsigned char r = 0;
+        unsigned char g = 0;
+        unsigned char b = 0;
+        unsigned char a = 0;
+        Ogre::PixelUtil::unpackColour(&r, &g, &b, &a, pixelBox.format, srcPixel);
+        if (a > alphaThreshold && (r > 6 || g > 6 || b > 6)) {
+          if (x < minX) {
+            minX = x;
+          }
+          if (y < minY) {
+            minY = y;
+          }
+          if (x > maxX) {
+            maxX = x;
+          }
+          if (y > maxY) {
+            maxY = y;
+          }
+        }
+      }
+    }
+  } catch (...) {
+    return false;
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return false;
+  }
+
+  leftOut = minX;
+  topOut = minY;
+  widthOut = maxX - minX + 1;
+  heightOut = maxY - minY + 1;
+  return widthOut > 0 && heightOut > 0;
+}
+
+static size_t CountOpaquePixelsRgba(const std::vector<unsigned char> &rgba,
+                                    unsigned char alphaThreshold) {
+  size_t count = 0;
+  for (size_t i = 3; i < rgba.size(); i += 4) {
+    if (rgba[i] > alphaThreshold) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+typedef void (*InventoryIconCreateIconImageExportFn)(Item *, std::string &,
+                                                      iVector2 &);
+
+static InventoryIconCreateIconImageExportFn ResolveInventoryIconCreateIconImageExport() {
+  static InventoryIconCreateIconImageExportFn fn = nullptr;
+  static bool resolved = false;
+  if (resolved) {
+    return fn;
+  }
+  resolved = true;
+
+  HMODULE kenshiLib = GetModuleHandleA("KenshiLib.dll");
+  if (!kenshiLib) {
+    return nullptr;
+  }
+
+  FARPROC exported = GetProcAddress(
+      kenshiLib,
+      "?createIconImage@InventoryIcon@@SAXPEAVItem@@AEAV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AEAViVector2@@@Z");
+  if (exported) {
+    fn = reinterpret_cast<InventoryIconCreateIconImageExportFn>(exported);
+  }
+  return fn;
+}
+
+static bool TryCreateIconImageSehSafe(Item *item, std::string &iconImageNameOut,
+                                      iVector2 &iconSizeOut,
+                                      std::string *diagReasonOut = nullptr) {
+  if (diagReasonOut) {
+    diagReasonOut->clear();
+  }
+  iconImageNameOut.clear();
+  iconSizeOut.x = 0;
+  iconSizeOut.y = 0;
+  if (!item || (uintptr_t)item < 0x1000) {
+    if (diagReasonOut) {
+      *diagReasonOut = "invalid_item";
+    }
+    return false;
+  }
+
+  InventoryIconCreateIconImageExportFn exportFn =
+      ResolveInventoryIconCreateIconImageExport();
+  if (exportFn) {
+    __try {
+      exportFn(item, iconImageNameOut, iconSizeOut);
+      return true;
+    } __except (ItemImageSehFilter(GetExceptionCode())) {
+      if (diagReasonOut) {
+        *diagReasonOut = "create_icon_image_export_seh";
+      }
+      MaybeDisableItemImageSyncAfterSeh();
+      return false;
+    }
+  }
+
+  __try {
+    InventoryIcon::createIconImage(item, iconImageNameOut, iconSizeOut);
+    return true;
+  } __except (ItemImageSehFilter(GetExceptionCode())) {
+    if (diagReasonOut) {
+      *diagReasonOut = "create_icon_image_seh";
+    }
+    MaybeDisableItemImageSyncAfterSeh();
+    return false;
+  }
+}
+
+static bool TryCaptureItemIconBmpUnsafe(Item *item, std::string &bmpDataOut,
+                                        int &widthOut, int &heightOut,
+                                        std::string &imageHashOut,
+                                        std::string *diagReasonOut = nullptr) {
+  auto fail = [&](const std::string &reason) -> bool {
+    if (diagReasonOut) {
+      *diagReasonOut = reason;
+    }
+    return false;
+  };
+
+  bmpDataOut.clear();
+  imageHashOut.clear();
+  widthOut = 0;
+  heightOut = 0;
+  if (diagReasonOut) {
+    diagReasonOut->clear();
+  }
+
+  if (!item || (uintptr_t)item < 0x1000) {
+    return fail("invalid_item");
+  }
+
+  std::string iconImageName = "";
+  iVector2 iconSize;
+  if (!TryCreateIconImageSehSafe(item, iconImageName, iconSize, diagReasonOut)) {
+    if (diagReasonOut && !diagReasonOut->empty()) {
+      return false;
+    }
+    return fail("create_icon_image_failed");
+  }
+  iconImageName = TrimCopy(iconImageName);
+  if (iconImageName.empty()) {
+    return fail("icon_name_empty");
+  }
+
+  Ogre::Image iconImage;
+  std::string resolvedName = "";
+  std::string resolvedGroup = "";
+  if (!TryLoadItemIconImage(iconImageName, iconImage, resolvedName, resolvedGroup,
+                            diagReasonOut)) {
+    if (diagReasonOut && !diagReasonOut->empty()) {
+      return false;
+    }
+    return fail("icon_load_failed");
+  }
+
+  Ogre::PixelBox pixelBox;
+  try {
+    pixelBox = iconImage.getPixelBox(0, 0);
+  } catch (...) {
+    return fail("icon_pixel_box_exception");
+  }
+  if (!pixelBox.data) {
+    return fail("icon_pixel_box_no_data");
+  }
+  if (!Ogre::PixelUtil::isAccessible(pixelBox.format)) {
+    return fail("icon_pixel_format_inaccessible");
+  }
+  const size_t elemBytes = Ogre::PixelUtil::getNumElemBytes(pixelBox.format);
+  if (elemBytes == 0) {
+    return fail("icon_elem_bytes_zero");
+  }
+
+  const int imageWidth = static_cast<int>(pixelBox.getWidth());
+  const int imageHeight = static_cast<int>(pixelBox.getHeight());
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return fail("icon_dimensions_invalid");
+  }
+  if (imageWidth < 8 || imageHeight < 8) {
+    return fail("icon_dimensions_too_small");
+  }
+
+  bool hasIconSizeHint =
+      iconSize.x > 0 && iconSize.y > 0 && iconSize.x <= imageWidth &&
+      iconSize.y <= imageHeight;
+
+  int opaqueLeft = 0;
+  int opaqueTop = 0;
+  int opaqueWidth = 0;
+  int opaqueHeight = 0;
+  // Avoid expensive per-pixel alpha scans on large source textures to prevent
+  // frame hangs on the main thread.
+  bool canRunOpaqueScan = imageWidth <= 512 && imageHeight <= 512;
+  bool hasOpaqueBounds = false;
+  if (canRunOpaqueScan) {
+    hasOpaqueBounds = ComputeOpaqueIconBounds(pixelBox, elemBytes, 10, opaqueLeft,
+                                              opaqueTop, opaqueWidth,
+                                              opaqueHeight);
+  }
+  if (hasOpaqueBounds) {
+    const int kOpaquePad = 1;
+    int left = opaqueLeft - kOpaquePad;
+    int top = opaqueTop - kOpaquePad;
+    int right = opaqueLeft + opaqueWidth - 1 + kOpaquePad;
+    int bottom = opaqueTop + opaqueHeight - 1 + kOpaquePad;
+    if (left < 0) {
+      left = 0;
+    }
+    if (top < 0) {
+      top = 0;
+    }
+    if (right >= imageWidth) {
+      right = imageWidth - 1;
+    }
+    if (bottom >= imageHeight) {
+      bottom = imageHeight - 1;
+    }
+    if (right >= left && bottom >= top) {
+      opaqueLeft = left;
+      opaqueTop = top;
+      opaqueWidth = right - left + 1;
+      opaqueHeight = bottom - top + 1;
+    }
+  }
+
+  int captureLeft = 0;
+  int captureTop = 0;
+  int captureWidth = imageWidth;
+  int captureHeight = imageHeight;
+  if (hasIconSizeHint) {
+    captureWidth = iconSize.x;
+    captureHeight = iconSize.y;
+    captureLeft = (imageWidth - captureWidth) / 2;
+    captureTop = (imageHeight - captureHeight) / 2;
+  } else if (imageWidth > 512 || imageHeight > 512) {
+    // No reliable size hint; take a bounded center crop instead of scanning or
+    // processing a full atlas-sized source.
+    int bounded = std::min(imageWidth, imageHeight);
+    if (bounded > 256) {
+      bounded = 256;
+    }
+    if (bounded < 8) {
+      return fail("icon_dimensions_too_small");
+    }
+    captureWidth = bounded;
+    captureHeight = bounded;
+    captureLeft = (imageWidth - captureWidth) / 2;
+    captureTop = (imageHeight - captureHeight) / 2;
+  }
+  if (hasOpaqueBounds && opaqueWidth >= 8 && opaqueHeight >= 8) {
+    long long opaqueArea =
+        static_cast<long long>(opaqueWidth) * static_cast<long long>(opaqueHeight);
+    long long fullArea =
+        static_cast<long long>(imageWidth) * static_cast<long long>(imageHeight);
+    bool opaqueLooksSpecific = fullArea > 0 && opaqueArea * 100LL <= fullArea * 95LL;
+    if (!hasIconSizeHint || opaqueLooksSpecific) {
+      captureLeft = opaqueLeft;
+      captureTop = opaqueTop;
+      captureWidth = opaqueWidth;
+      captureHeight = opaqueHeight;
+    }
+  }
+  if (captureWidth < 8 || captureHeight < 8) {
+    return fail("icon_dimensions_too_small");
+  }
+
+  const int kMaxCaptureDimension = 512;
+  if (captureWidth > kMaxCaptureDimension || captureHeight > kMaxCaptureDimension) {
+    bool reduced = false;
+    if (hasIconSizeHint && iconSize.x <= kMaxCaptureDimension &&
+        iconSize.y <= kMaxCaptureDimension) {
+      captureWidth = iconSize.x;
+      captureHeight = iconSize.y;
+      captureLeft = (imageWidth - captureWidth) / 2;
+      captureTop = (imageHeight - captureHeight) / 2;
+      reduced = true;
+    }
+    if (!reduced && hasOpaqueBounds && opaqueWidth >= 8 && opaqueHeight >= 8 &&
+        opaqueWidth <= kMaxCaptureDimension &&
+        opaqueHeight <= kMaxCaptureDimension) {
+      captureLeft = opaqueLeft;
+      captureTop = opaqueTop;
+      captureWidth = opaqueWidth;
+      captureHeight = opaqueHeight;
+      reduced = true;
+    }
+    if (!reduced) {
+      return fail("icon_dimensions_too_large");
+    }
+  }
+
+  std::vector<unsigned char> rgba;
+  if (!ExtractIconRectToRgba(pixelBox, elemBytes, captureLeft, captureTop,
+                             captureWidth, captureHeight, rgba)) {
+    return fail("icon_readback_exception");
+  }
+
+  if (hasIconSizeHint &&
+      (captureWidth != imageWidth || captureHeight != imageHeight)) {
+    size_t totalPixels =
+        static_cast<size_t>(captureWidth) * static_cast<size_t>(captureHeight);
+    size_t opaquePixels = CountOpaquePixelsRgba(rgba, 8);
+    bool mostlyTransparent =
+        totalPixels == 0 || opaquePixels == 0 || (opaquePixels * 200U) < totalPixels;
+    if (mostlyTransparent) {
+      bool replaced = false;
+      if (hasOpaqueBounds && opaqueWidth >= 8 && opaqueHeight >= 8 &&
+          (opaqueLeft != captureLeft || opaqueTop != captureTop ||
+           opaqueWidth != captureWidth || opaqueHeight != captureHeight) &&
+          ExtractIconRectToRgba(pixelBox, elemBytes, opaqueLeft, opaqueTop,
+                                opaqueWidth, opaqueHeight, rgba)) {
+        captureLeft = opaqueLeft;
+        captureTop = opaqueTop;
+        captureWidth = opaqueWidth;
+        captureHeight = opaqueHeight;
+        replaced = true;
+      }
+      if (!replaced &&
+          ExtractIconRectToRgba(pixelBox, elemBytes, 0, 0, imageWidth, imageHeight,
+                                rgba)) {
+        captureLeft = 0;
+        captureTop = 0;
+        captureWidth = imageWidth;
+        captureHeight = imageHeight;
+      }
+    }
+  }
+
+  if (!EncodeBmp24(rgba, captureWidth, captureHeight, bmpDataOut) ||
+      bmpDataOut.empty()) {
+    return fail("icon_encode_bmp_failed");
+  }
+
+  if (diagReasonOut) {
+    *diagReasonOut = "ok:" + TruncateItemImageDiagValue(resolvedName) + "@" +
+                     TruncateItemImageDiagValue(resolvedGroup) + ":" +
+                     ToString(captureWidth) + "x" + ToString(captureHeight);
+  }
+
+  imageHashOut = HexFromU64(HashFnv1a64(
+      reinterpret_cast<const unsigned char *>(bmpDataOut.data()),
+      bmpDataOut.size()));
+  widthOut = captureWidth;
+  heightOut = captureHeight;
+  return true;
+}
+
+static bool TryCaptureItemIconBmp(Item *item, std::string &bmpDataOut,
+                                  int &widthOut, int &heightOut,
+                                  std::string &imageHashOut,
+                                  std::string *diagReasonOut = nullptr) {
+  if (g_itemImageSyncDisabledForSession) {
+    if (diagReasonOut) {
+      *diagReasonOut = "item_image_sync_disabled_for_session";
+    }
+    return false;
+  }
+
+  __try {
+    return TryCaptureItemIconBmpUnsafe(item, bmpDataOut, widthOut, heightOut,
+                                       imageHashOut, diagReasonOut);
+  } __except (ItemImageSehFilter(GetExceptionCode())) {
+    if (diagReasonOut) {
+      *diagReasonOut = "item_icon_capture_seh";
+    }
+    MaybeDisableItemImageSyncAfterSeh();
+    return false;
+  }
+}
+
+static void PruneItemImageSyncState() {
+  DWORD nowTick = GetTickCount();
+  int pruned = 0;
+  EnterCriticalSection(&g_stateMutex);
+  for (std::map<std::string, ItemImageSyncState>::iterator it =
+           g_itemImageSyncStateByItemId.begin();
+       it != g_itemImageSyncStateByItemId.end();) {
+    DWORD age = nowTick - it->second.lastSeenTick;
+    if (it->second.lastSeenTick == 0 || age > kItemImageStateRetentionMs) {
+      it = g_itemImageSyncStateByItemId.erase(it);
+      ++pruned;
+    } else {
+      ++it;
+    }
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  if (pruned > 0) {
+    Log("ITEM_IMAGE_SYNC: pruned stale state entries=" + ToString(pruned));
+  }
+}
+
+static size_t SyncItemImagesForCharacterUnsafe(Character *npc, bool force,
+                                               const std::string &reason) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return 0;
+  }
+  if (g_itemImageSyncDisabledForSession) {
+    return 0;
+  }
+  if (!ShouldAllowItemImageSyncWork(reason, nullptr)) {
+    return 0;
+  }
+    if (ShouldDeferVisualSyncWhileInventoryVisible(
+            npc, "ITEM_IMAGE_SYNC", reason,
+            kItemImageInventoryUiHideGraceMs)) {
+    return 0;
+  }
+
+  DWORD nowTick = GetTickCount();
+  EnterCriticalSection(&g_stateMutex);
+  g_itemImageLastRunTick = nowTick;
+  LeaveCriticalSection(&g_stateMutex);
+
+  std::vector<Item *> rawItems;
+  try {
+    GetAllCharacterItems(npc, rawItems);
+  } catch (...) {
+    return 0;
+  }
+  if (rawItems.empty()) {
+    return 0;
+  }
+
+  std::map<std::string, Item *> uniqueByIdKey;
+  std::map<std::string, std::string> sourceItemIdByKey;
+  for (uint32_t i = 0; i < rawItems.size(); ++i) {
+    Item *item = rawItems[i];
+    if (!item || (uintptr_t)item < 0x1000) {
+      continue;
+    }
+    std::string itemId = "";
+    std::string itemName = "";
+    try {
+      itemName = TrimCopy(item->getName());
+      if (item->data && (uintptr_t)item->data > 0x1000) {
+        itemId = TrimCopy(item->data->stringID);
+      }
+    } catch (...) {
+      itemId = "";
+      itemName = "";
+    }
+    if (itemId.empty()) {
+      itemId = BuildSyntheticItemStringIdFromName(itemName);
+    }
+    if (itemId.empty()) {
+      continue;
+    }
+    std::string key = NormalizeItemImageStateKey(itemId);
+    if (key.empty()) {
+      continue;
+    }
+    if (uniqueByIdKey.find(key) == uniqueByIdKey.end()) {
+      uniqueByIdKey[key] = item;
+      sourceItemIdByKey[key] = itemId;
+    }
+  }
+
+  if (uniqueByIdKey.empty()) {
+    return 0;
+  }
+
+  size_t queued = 0;
+  size_t captureFailed = 0;
+  size_t considered = 0;
+  bool truncatedByBatchOrConsiderLimit = false;
+  std::string firstCaptureReason = "";
+  std::string entriesJson = "[";
+  for (std::map<std::string, Item *>::iterator it = uniqueByIdKey.begin();
+       it != uniqueByIdKey.end(); ++it) {
+    if (queued >= kItemImageBatchLimit) {
+      truncatedByBatchOrConsiderLimit = true;
+      break;
+    }
+
+    const std::string itemId = sourceItemIdByKey[it->first];
+    Item *item = it->second;
+    if (!item || (uintptr_t)item < 0x1000 || itemId.empty()) {
+      continue;
+    }
+    std::string attemptSkipReason = "";
+    if (!ShouldAttemptItemImageCapture(itemId, nowTick, force,
+                                       &attemptSkipReason)) {
+      continue;
+    }
+    if (considered >= kItemImageBatchLimit * kItemImageConsiderMultiplier) {
+      truncatedByBatchOrConsiderLimit = true;
+      break;
+    }
+    ++considered;
+
+    std::string bmpData = "";
+    std::string imageHash = "";
+    std::string captureReason = "";
+    int width = 0;
+    int height = 0;
+    if (!TryCaptureItemIconBmp(item, bmpData, width, height, imageHash,
+                               &captureReason)) {
+      ++captureFailed;
+      if (firstCaptureReason.empty() && !captureReason.empty()) {
+        firstCaptureReason = captureReason;
+      }
+      continue;
+    }
+    if (bmpData.empty() || imageHash.empty() || width <= 0 || height <= 0) {
+      ++captureFailed;
+      if (firstCaptureReason.empty()) {
+        firstCaptureReason = "invalid_captured_icon";
+      }
+      continue;
+    }
+
+    DWORD sinceLastSent = 0;
+    bool changed = false;
+    bool firstSync = false;
+    if (!ShouldSendItemImageSync(itemId, imageHash, nowTick, force,
+                                 sinceLastSent, changed, firstSync)) {
+      continue;
+    }
+
+    std::string base64Image = Base64EncodeBinary(bmpData);
+    if (base64Image.empty()) {
+      continue;
+    }
+
+    std::string itemName = "";
+    try {
+      itemName = item->getName();
+    } catch (...) {
+      itemName = "";
+    }
+
+    if (queued > 0) {
+      entriesJson += ",";
+    }
+    entriesJson += "{";
+    entriesJson += "\"stringid\":\"" + EscapeJSON(itemId) + "\",";
+    entriesJson += "\"name\":\"" + EscapeJSON(itemName) + "\",";
+    entriesJson += "\"image_hash\":\"" + EscapeJSON(imageHash) + "\",";
+    entriesJson += "\"format\":\"bmp\",";
+    entriesJson += "\"width\":" + ToString(width) + ",";
+    entriesJson += "\"height\":" + ToString(height) + ",";
+    entriesJson += "\"image_base64\":\"" + EscapeJSON(base64Image) + "\"";
+    entriesJson += "}";
+    ++queued;
+  }
+  entriesJson += "]";
+
+  if (queued == 0) {
+    static DWORD lastNoSendLogTick = 0;
+    if (considered > 0 && nowTick - lastNoSendLogTick >= 5000) {
+      lastNoSendLogTick = nowTick;
+      Log("ITEM_IMAGE_SYNC: no-send considered=" + ToString((int)considered) +
+          " capture_failed=" + ToString((int)captureFailed) +
+          " reason=" + reason +
+          (firstCaptureReason.empty()
+               ? std::string("")
+               : std::string(" capture_reason=" + firstCaptureReason)));
+    }
+    return 0;
+  }
+
+  int gameTs = 0;
+  try {
+    GameWorld *world = GetWorldSafe();
+    if (world) {
+      TimeOfDay tod = world->getTimeStamp_inGameHours();
+      gameTs = static_cast<int>(tod.getTotalSeconds());
+    }
+  } catch (...) {
+    gameTs = 0;
+  }
+
+  std::string payload = "{";
+  payload += "\"source\":\"inventory_live_sync\",";
+  payload += "\"sync_reason\":\"" + EscapeJSON(reason) + "\",";
+  payload += "\"game_ts\":" + ToString(gameTs) + ",";
+  payload += "\"entries\":" + entriesJson;
+  payload += "}";
+  AsyncPostToStobe(L"/item_image_upload", payload);
+
+  static DWORD lastPruneTick = 0;
+  if (nowTick - lastPruneTick >= 60000) {
+    lastPruneTick = nowTick;
+    PruneItemImageSyncState();
+  }
+
+  Log("ITEM_IMAGE_SYNC: sent entries=" + ToString((int)queued) +
+      " considered=" + ToString((int)considered) +
+      " capture_failed=" + ToString((int)captureFailed) + " reason=" + reason);
+
+  if (truncatedByBatchOrConsiderLimit && queued >= kItemImageBatchLimit) {
+    QueueItemImageSyncRequest(npc, "inventory_sync_overflow");
+    Log("ITEM_IMAGE_SYNC: queued continuation after batch cap reason=inventory_sync_overflow");
+  }
+
+  return queued;
+}
+
+static size_t SyncItemImagesForCharacter(Character *npc, bool force,
+                                         const std::string &reason) {
+  if (g_itemImageSyncDisabledForSession) {
+    return 0;
+  }
+
+  __try {
+    return SyncItemImagesForCharacterUnsafe(npc, force, reason);
+  } __except (ItemImageSehFilter(GetExceptionCode())) {
+    MaybeDisableItemImageSyncAfterSeh();
+    return 0;
+  }
+}
+
+static Character *ResolveCharacterFromHandSehSafe(const hand &characterHand) {
+  Character *npc = nullptr;
+  __try {
+    npc = characterHand.getCharacter();
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    npc = nullptr;
+  }
+  return npc;
+}
+
+static void RunQueuedItemImageSync() {
+  if (!g_enableItemImageSync) {
+    EnterCriticalSection(&g_stateMutex);
+    g_itemImageSyncRequestQueue.clear();
+    LeaveCriticalSection(&g_stateMutex);
+    return;
+  }
+  if (g_itemImageSyncDisabledForSession) {
+    return;
+  }
+
+  PendingItemImageSyncRequest peekReq;
+  bool hasPending = false;
+  EnterCriticalSection(&g_stateMutex);
+  if (!g_itemImageSyncRequestQueue.empty()) {
+    peekReq = g_itemImageSyncRequestQueue.front();
+    hasPending = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  if (!hasPending) {
+    return;
+  }
+
+  if (!ShouldRunItemImageSyncNow(peekReq.reason, false, nullptr)) {
+    return;
+  }
+    Character *peekNpc = ResolveCharacterFromHandSehSafe(peekReq.npcHand);
+    if (peekNpc && (uintptr_t)peekNpc > 0x1000 &&
+        ShouldDeferVisualSyncWhileInventoryVisible(
+            peekNpc, "ITEM_IMAGE_SYNC", peekReq.reason,
+            kItemImageInventoryUiHideGraceMs)) {
+      return;
+    }
+
+  PendingItemImageSyncRequest req;
+  bool hasRequest = false;
+  DWORD nowTick = GetTickCount();
+  EnterCriticalSection(&g_stateMutex);
+  if (!g_itemImageSyncRequestQueue.empty()) {
+    req = g_itemImageSyncRequestQueue.front();
+    g_itemImageSyncRequestQueue.pop_front();
+    g_itemImageLastRunTick = nowTick;
+    hasRequest = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (!hasRequest) {
+    return;
+  }
+
+  Character *npc = ResolveCharacterFromHandSehSafe(req.npcHand);
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return;
+  }
+
+  std::string reason = TrimCopy(req.reason);
+  if (reason.empty()) {
+    reason = "queued_inventory_sync";
+  }
+  SyncItemImagesForCharacter(npc, false, reason);
+}
+
+static std::string BuildInventorySyncPayload(Character *npc,
+                                             const std::string &inventoryJson,
+                                             int inventoryItemCount,
+                                             const std::string &reason) {
+  std::string payload = BuildIdentityBootstrapContext(npc);
+  if (payload.empty() || payload[0] != '{' || payload.back() != '}') {
+    payload = "{}";
+  }
+
+  std::string npcName = "Unknown";
+  bool isPlayerCharacter = false;
+  try {
+    npcName = npc->getName();
+    isPlayerCharacter = npc->isPlayerCharacter();
+  } catch (...) {
+  }
+
+  payload.pop_back(); // remove closing '}'
+  if (payload.length() > 1) {
+    payload += ",";
+  }
+  payload += "\"name\":\"" + EscapeJSON(npcName) + "\",";
+  payload += "\"type\":\"" + std::string(isPlayerCharacter ? "player" : "npc") + "\",";
+  payload += "\"is_player_character\":" +
+             std::string(isPlayerCharacter ? "true" : "false") + ",";
+  payload += "\"inventory\":" + inventoryJson + ",";
+  payload += "\"inventory_item_count\":" + ToString(inventoryItemCount) + ",";
+  int money = -1;
+  try {
+    money = npc->getMoney();
+    if (money <= 0 && npc->getOwnerships())
+      money = npc->getOwnerships()->getMoney();
+  } catch (...) {
+    money = -1;
+  }
+  if (money >= 0) {
+    payload += "\"money\":" + ToString(money) + ",";
+  }
+  payload += "\"source\":\"inventory_live_sync\",";
+  payload += "\"sync_reason\":\"" + EscapeJSON(reason) + "\"";
+  payload += "}";
+  return payload;
+}
+
+static bool SyncInventoryForCharacterUnsafe(Character *npc, bool force,
+                                            const std::string &reason) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+  if (!ShouldProcessAnimalCharacter(npc)) {
+    return false;
+  }
+
+  unsigned int serial = 0;
+  std::string npcName = "Unknown";
+  bool isPlayerCharacter = false;
+  try {
+    serial = npc->getHandle().serial;
+    npcName = npc->getName();
+    isPlayerCharacter = npc->isPlayerCharacter();
+  } catch (...) {
+    return false;
+  }
+  if (serial == 0) {
+    return false;
+  }
+
+  std::string inventoryJson = "[]";
+  std::string inventoryHash = "";
+  int inventoryItemCount = 0;
+  if (!BuildInventorySnapshot(npc, inventoryJson, inventoryHash, inventoryItemCount)) {
+    Log("INV_SYNC: sample failed serial=" + ToString(serial) + " reason=" +
+        reason);
+    return false;
+  }
+  RefreshInventoryContextCache(npc, inventoryJson, isPlayerCharacter);
+  // Cats aren't an item: fold them into the change hash so a payment alone resyncs.
+  try {
+    int cats = npc->getMoney();
+    if (cats <= 0 && npc->getOwnerships())
+      cats = npc->getOwnerships()->getMoney();
+    inventoryHash += "|cats=" + ToString(cats);
+  } catch (...) {
+  }
+
+  DWORD nowTick = GetTickCount();
+  bool shouldSend = false;
+  bool hashChanged = false;
+  bool firstSync = false;
+  DWORD sinceLastSent = 0;
+  {
+    EnterCriticalSection(&g_stateMutex);
+    InventorySyncState &state = g_inventorySyncStateBySerial[serial];
+    state.lastSeenTick = nowTick;
+    hashChanged = (state.lastHash != inventoryHash);
+    firstSync = !state.hasSent;
+    sinceLastSent = state.hasSent ? (nowTick - state.lastSentTick) : 0;
+
+    if (force) {
+      shouldSend = firstSync || hashChanged || sinceLastSent >= kInventoryMinResendMs;
+    } else {
+      if (firstSync || hashChanged) {
+        shouldSend = firstSync || sinceLastSent >= kInventoryMinResendMs;
+      }
+    }
+
+    if (shouldSend) {
+      state.lastHash = inventoryHash;
+      state.lastSentTick = nowTick;
+      state.hasSent = true;
+    }
+    LeaveCriticalSection(&g_stateMutex);
+  }
+
+  if (!shouldSend) {
+    return false;
+  }
+
+  if (ShouldQueueItemImageSyncForInventorySync(reason, firstSync, hashChanged)) {
+    QueueItemImageSyncRequest(npc, reason);
+  }
+
+  std::string payload =
+      BuildInventorySyncPayload(npc, inventoryJson, inventoryItemCount, reason);
+  AsyncPostToStobe(L"/context", payload);
+  Log("INV_SYNC: sent name=" + npcName + " serial=" + ToString(serial) +
+      " reason=" + reason +
+      " force=" + std::string(force ? "1" : "0") +
+      " hash=" + ShortInventoryHashForLog(inventoryHash) +
+      " items=" + ToString(inventoryItemCount));
+  return true;
+}
+
+static bool SyncInventoryForCharacter(Character *npc, bool force,
+                                      const std::string &reason) {
+  __try {
+    return SyncInventoryForCharacterUnsafe(npc, force, reason);
+  } __except (InventorySyncSehFilter(GetExceptionCode())) {
+    return false;
+  }
+}
+
+static void PushImmediateContextSnapshot(Character *npc,
+                                         const std::string &reason,
+                                         bool synchronous) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return;
+  }
+
+  std::string contextType = "npc";
+  std::string npcName = "Unknown";
+  try {
+    if (npc->isPlayerCharacter()) {
+      contextType = "player";
+    }
+    npcName = npc->getName();
+  } catch (...) {
+  }
+
+  std::string contextJson = BuildNpcContextEnvelope(npc, contextType);
+  if (contextJson.empty() || contextJson.front() != '{' ||
+      contextJson.back() != '}') {
+    Log("CONTEXT_PUSH: skipped invalid immediate snapshot reason=" + reason +
+        " name=" + npcName);
+    return;
+  }
+
+  if (synchronous) {
+    PostToStobe(L"/context", contextJson);
+  } else {
+    AsyncPostToStobe(L"/context", contextJson);
+  }
+  Log("CONTEXT_PUSH: sent immediate snapshot reason=" + reason +
+      " name=" + npcName + " type=" + contextType +
+      " len=" + ToString((int)contextJson.length()) +
+      " sync=" + std::string(synchronous ? "1" : "0"));
+}
+
+static void PruneInventorySyncState() {
+  DWORD nowTick = GetTickCount();
+  int pruned = 0;
+  EnterCriticalSection(&g_stateMutex);
+  for (auto it = g_inventorySyncStateBySerial.begin();
+       it != g_inventorySyncStateBySerial.end();) {
+    DWORD age = nowTick - it->second.lastSeenTick;
+    if (it->second.lastSeenTick == 0 || age > kInventoryStateRetentionMs) {
+      it = g_inventorySyncStateBySerial.erase(it);
+      ++pruned;
+    } else {
+      ++it;
+    }
+  }
+  LeaveCriticalSection(&g_stateMutex);
+  if (pruned > 0) {
+    Log("INV_SYNC: pruned stale state entries=" + ToString(pruned));
+  }
+}
+
+static void AddInventorySyncCandidate(Character *npc, std::vector<Character *> &out,
+                                      std::set<unsigned int> &seen) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return;
+  }
+  if (!ShouldProcessAnimalCharacter(npc)) {
+    return;
+  }
+  unsigned int serial = 0;
+  try {
+    serial = npc->getHandle().serial;
+  } catch (...) {
+    return;
+  }
+  if (serial == 0) {
+    return;
+  }
+  if (!seen.insert(serial).second) {
+    return;
+  }
+  out.push_back(npc);
+}
+
+static std::string NormalizeInventoryKey(const std::string &name) {
+  std::string key = TrimCopy(name);
+  for (size_t i = 0; i < key.length(); ++i) {
+    key[i] = static_cast<char>(tolower((unsigned char)key[i]));
+  }
+  return key;
+}
+
+static std::string BuildHealingSessionTargetKey(unsigned int targetSerial,
+                                                const std::string &targetName) {
+  if (targetSerial != 0) {
+    return "sid:" + ToString((int)targetSerial);
+  }
+  std::string normalized = ToLowerAsciiCopy(TrimCopy(targetName));
+  if (!normalized.empty()) {
+    return "name:" + normalized;
+  }
+  return "unknown";
+}
+
+static std::string BuildHealingSessionActorKey(unsigned int healerSerial,
+                                               const std::string &healerName) {
+  if (healerSerial != 0) {
+    return "sid:" + ToString((int)healerSerial);
+  }
+  std::string normalized = ToLowerAsciiCopy(TrimCopy(healerName));
+  if (!normalized.empty()) {
+    return "name:" + normalized;
+  }
+  return "unknown_actor";
+}
+
+static bool ShouldEmitHealingEvent(unsigned int healerSerial,
+                                   const std::string &healerName,
+                                   unsigned int targetSerial,
+                                   const std::string &targetName,
+                                   const std::string &itemName,
+                                   DWORD nowTick) {
+  std::string actorKey = BuildHealingSessionActorKey(healerSerial, healerName);
+  std::string targetKey = BuildHealingSessionTargetKey(targetSerial, targetName);
+  std::string itemKey = NormalizeInventoryKey(itemName);
+  if (itemKey.empty()) {
+    itemKey = "medical item";
+  }
+  std::string burstKey = targetKey + "|" + itemKey;
+
+  HealingEventSessionState &state =
+      g_healingEventSessionByActorKey[actorKey];
+  bool activeSession =
+      state.lastUpdateTick != 0 &&
+      (nowTick - state.lastUpdateTick) <= kHealingEventSessionGapMs &&
+      state.targetKey == targetKey && state.itemKey == itemKey;
+  bool targetBurstActive = false;
+  std::map<std::string, DWORD>::const_iterator burstIt =
+      g_healingEventBurstByTargetKey.find(burstKey);
+  if (burstIt != g_healingEventBurstByTargetKey.end() && burstIt->second != 0) {
+    targetBurstActive =
+        (nowTick - burstIt->second) <= kHealingEventTargetBurstCooldownMs;
+  }
+
+  state.lastUpdateTick = nowTick;
+  state.targetKey = targetKey;
+  state.itemKey = itemKey;
+  if (!activeSession && !targetBurstActive) {
+    g_healingEventBurstByTargetKey[burstKey] = nowTick;
+  }
+
+  return !activeSession && !targetBurstActive;
+}
+
+static void PruneHealingEventSessionState(DWORD nowTick) {
+  for (std::map<std::string, HealingEventSessionState>::iterator it =
+           g_healingEventSessionByActorKey.begin();
+       it != g_healingEventSessionByActorKey.end();) {
+    const bool expired =
+        (it->second.lastUpdateTick == 0) ||
+        ((nowTick - it->second.lastUpdateTick) > kHealingEventSessionRetentionMs);
+    if (expired) {
+      it = g_healingEventSessionByActorKey.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  for (std::map<std::string, DWORD>::iterator it =
+           g_healingEventBurstByTargetKey.begin();
+       it != g_healingEventBurstByTargetKey.end();) {
+    const bool expired =
+        (it->second == 0) ||
+        ((nowTick - it->second) > kHealingEventSessionRetentionMs);
+    if (expired) {
+      it = g_healingEventBurstByTargetKey.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+static bool ShouldEmitPredationEvent(unsigned int eaterSerial,
+                                     unsigned int victimSerial,
+                                     const std::string &victimName,
+                                     DWORD nowTick) {
+  unsigned int sessionKeySerial =
+      eaterSerial != 0 ? eaterSerial : victimSerial;
+  if (sessionKeySerial == 0) {
+    return true;
+  }
+
+  std::string targetKey =
+      BuildHealingSessionTargetKey(victimSerial, victimName);
+
+  PredationEventSessionState &state =
+      g_predationEventSessionByEaterSerial[sessionKeySerial];
+  bool activeSession =
+      state.lastUpdateTick != 0 &&
+      (nowTick - state.lastUpdateTick) <= kPredationEventSessionGapMs &&
+      state.targetKey == targetKey;
+
+  state.lastUpdateTick = nowTick;
+  state.targetKey = targetKey;
+  return !activeSession;
+}
+
+static void PrunePredationEventSessionState(DWORD nowTick) {
+  for (std::map<unsigned int, PredationEventSessionState>::iterator it =
+           g_predationEventSessionByEaterSerial.begin();
+       it != g_predationEventSessionByEaterSerial.end();) {
+    const bool expired =
+        (it->second.lastUpdateTick == 0) ||
+        ((nowTick - it->second.lastUpdateTick) >
+         kPredationEventSessionRetentionMs);
+    if (expired) {
+      it = g_predationEventSessionByEaterSerial.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+static unsigned int ResolveCharacterSerialForEvent(Character *npc);
+static std::string ResolveCharacterNameSafe(Character *npc);
+static Character *ResolveCharacterFromHandSafe(const hand &h);
+static std::string ResolveConstructionSubjectName(const hand &subjectHand);
+static bool IsAnyPredationTask(TaskType taskType);
+static bool IsCorpsePredationTask(TaskType taskType);
+
+static void EmitPredationEvent(Character *eater, Character *victim,
+                               const std::string &victimNameHint,
+                               DWORD nowTick, bool corpseContext = false) {
+  if (!eater || (uintptr_t)eater < 0x1000) {
+    return;
+  }
+
+  unsigned int eaterSerial = ResolveCharacterSerialForEvent(eater);
+  unsigned int victimSerial = ResolveCharacterSerialForEvent(victim);
+  if (eaterSerial != 0 && victimSerial != 0 && eaterSerial == victimSerial) {
+    return;
+  }
+
+  bool victimAlive = true;
+  bool victimDead = false;
+  if (victim && (uintptr_t)victim >= 0x1000) {
+    try {
+      victimAlive = !victim->isDead();
+      victimDead = !victimAlive;
+    } catch (...) {
+      victimAlive = false;
+      victimDead = false;
+    }
+  }
+  if (!victimAlive && !corpseContext) {
+    return;
+  }
+
+  std::string victimName =
+      victim ? ResolveCharacterNameSafe(victim) : TrimCopy(victimNameHint);
+  if (victimName.empty()) {
+    victimName = "someone";
+  }
+
+  if (!ShouldEmitPredationEvent(eaterSerial, victimSerial, victimName, nowTick)) {
+    return;
+  }
+
+  std::string eaterName = ResolveCharacterNameSafe(eater);
+  if (eaterName.empty()) {
+    eaterName = "Unknown";
+  }
+
+  std::string message = "";
+  if (victimDead) {
+    message = "is eating " + victimName + "'s corpse.";
+  } else if (corpseContext) {
+    message = "is eating " + victimName + " while they are down.";
+  } else {
+    message = "is eating " + victimName + " alive!";
+  }
+  // Keep stream text clean (no talking-to suffix), but still include victim
+  // in people-present via target serial.
+  LogGameEvent("predation", eaterName, SafeFaction(eater), "", "None", message,
+               eaterSerial, victimSerial);
+}
+
+static void EmitPredationEventFromTask(Character *eater, const hand &subjectHand,
+                                       DWORD nowTick, TaskType taskType) {
+  Character *victim = ResolveCharacterFromHandSafe(subjectHand);
+  std::string victimNameHint = ResolveConstructionSubjectName(subjectHand);
+  EmitPredationEvent(eater, victim, victimNameHint, nowTick,
+                     IsCorpsePredationTask(taskType));
+}
+
+static Character *ResolveCharacterFromHandSafe(const hand &h) {
+  if (!h.isValid() || h.isNull()) {
+    return nullptr;
+  }
+  Character *npc = nullptr;
+  try {
+    npc = h.getCharacter();
+  } catch (...) {
+    npc = nullptr;
+  }
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return nullptr;
+  }
+  return npc;
+}
+
+static Character *ResolveLikelyTraderForActor(GameWorld *world, Character *actor) {
+  auto isValidTrader = [&](Character *candidate) -> bool {
+    if (!candidate || (uintptr_t)candidate < 0x1000 || candidate == actor) {
+      return false;
+    }
+    try { // bug 103: your own squad never sells to you
+      if (candidate->isPlayerCharacter()) return false;
+    } catch (...) {
+      return false;
+    }
+    bool trader = false;
+    try {
+      trader = candidate->isATrader();
+    } catch (...) {
+      trader = false;
+    }
+    return trader;
+  };
+
+  Character *talkTarget = ResolveCharacterFromHandSafe(g_talkTargetHand);
+  if (isValidTrader(talkTarget)) {
+    return talkTarget;
+  }
+  Character *selectionTarget = ResolveCharacterFromHandSafe(g_lastSelectionHand);
+  if (isValidTrader(selectionTarget)) {
+    return selectionTarget;
+  }
+
+  if (!world || !actor || (uintptr_t)world < 0x1000 || (uintptr_t)actor < 0x1000) {
+    return nullptr;
+  }
+
+  Ogre::Vector3 actorPos = Ogre::Vector3::ZERO;
+  bool actorPosValid = false;
+  try {
+    actorPos = actor->getPosition();
+    actorPosValid = true;
+  } catch (...) {
+    actorPosValid = false;
+  }
+  if (!actorPosValid) {
+    return nullptr;
+  }
+
+  lektor<RootObject *> nearby;
+  world->getCharactersWithinSphere(nearby, actorPos, 30.0f, 0.0f, 0.0f, 16, 0,
+                                   actor);
+
+  Character *best = nullptr;
+  float bestDistance = 1e9f;
+  for (uint32_t i = 0; i < nearby.size(); ++i) {
+    Character *candidate = (Character *)nearby.stuff[i];
+    if (!isValidTrader(candidate)) {
+      continue;
+    }
+    float distance = 9999.0f;
+    try {
+      distance = candidate->getPosition().distance(actorPos);
+    } catch (...) {
+      distance = 9999.0f;
+    }
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+
+  return best;
+}
+
+static Character *ResolveDialogueListenerForSpeech(Character *speaker,
+                                                   Dialogue *dialogueHint,
+                                                   std::string &sourceOut) {
+  sourceOut.clear();
+  if (!speaker || (uintptr_t)speaker < 0x1000) {
+    return nullptr;
+  }
+
+  Dialogue *dialogue = dialogueHint;
+  if (!dialogue || (uintptr_t)dialogue < 0x1000) {
+    try {
+      dialogue = speaker->dialogue;
+    } catch (...) {
+      dialogue = nullptr;
+    }
+  }
+  if (!dialogue || (uintptr_t)dialogue < 0x1000) {
+    return nullptr;
+  }
+
+  bool conversationActive = false;
+  try {
+    conversationActive = !dialogue->conversationHasEndedPrettyMuch();
+  } catch (...) {
+    conversationActive = false;
+  }
+
+  const bool allowInactiveDialogueState = (dialogueHint != nullptr);
+  if (!conversationActive && !allowInactiveDialogueState) {
+    return nullptr;
+  }
+
+  auto tryResolveHand = [&](const hand &candidateHand,
+                            const char *label) -> Character * {
+    Character *candidate = ResolveCharacterFromHandSafe(candidateHand);
+    if (!candidate || (uintptr_t)candidate < 0x1000 || candidate == speaker) {
+      return nullptr;
+    }
+    sourceOut = label;
+    return candidate;
+  };
+
+  try {
+    hand targetHand = dialogue->getConversationTarget();
+    Character *target = tryResolveHand(targetHand, "getConversationTarget");
+    if (target) {
+      return target;
+    }
+  } catch (...) {
+  }
+
+  try {
+    Character *target =
+        tryResolveHand(dialogue->conversationTarget, "conversationTarget");
+    if (target) {
+      return target;
+    }
+  } catch (...) {
+  }
+
+  try {
+    Character *target =
+        tryResolveHand(dialogue->waitingForReplyFrom, "waitingForReplyFrom");
+    if (target) {
+      return target;
+    }
+  } catch (...) {
+  }
+
+  try {
+    Character *target =
+        tryResolveHand(dialogue->conversationMaster, "conversationMaster");
+    if (target) {
+      return target;
+    }
+  } catch (...) {
+  }
+
+  Character *fallback = ResolveCharacterFromHandSafe(g_talkTargetHand);
+  if (fallback && (uintptr_t)fallback > 0x1000 && fallback != speaker) {
+    sourceOut = "g_talkTargetHand";
+    return fallback;
+  }
+
+  return nullptr;
+}
+
+static bool IsAliveConsciousCharacterForTargeting(Character *npc) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+  try {
+    if (npc->isDead() || npc->isUnconcious()) {
+      return false;
+    }
+  } catch (...) {
+    return false;
+  }
+  return true;
+}
+
+static float ResolveTargetingDistance(Character *anchor, Character *candidate) {
+  float distance = anchor->getPosition().distance(candidate->getPosition());
+  if (!IsAnimalCharacterSafe(candidate)) {
+    return distance;
+  }
+  try {
+    float combinedRadius = anchor->getRadius() + candidate->getRadius();
+    if (combinedRadius > 0.0f) {
+      distance -= combinedRadius;
+    }
+  } catch (...) {
+  }
+  return distance > 0.0f ? distance : 0.0f;
+}
+
+static Character *ResolveFirstAliveConsciousPlayerCharacter(GameWorld *world) {
+  if (!world || !world->player) {
+    return nullptr;
+  }
+  for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+    Character *candidate = world->player->playerCharacters[i];
+    if (IsAliveConsciousCharacterForTargeting(candidate)) {
+      return candidate;
+    }
+  }
+  return nullptr;
+}
+
+static Character *ResolveNearestPlayerSpeakerForTarget(GameWorld *world,
+                                                       Character *target) {
+  if (!world || !world->player || world->player->playerCharacters.size() == 0) {
+    return nullptr;
+  }
+  Character *fallback = ResolveFirstAliveConsciousPlayerCharacter(world);
+  if (!g_useNearestPlayerSpeaker) {
+    return fallback;
+  }
+  if (!target || (uintptr_t)target < 0x1000) {
+    return fallback;
+  }
+
+  Character *best = nullptr;
+  float bestDist = 1e30f;
+  for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+    Character *candidate = world->player->playerCharacters[i];
+    if (!IsAliveConsciousCharacterForTargeting(candidate)) {
+      continue;
+    }
+    // If the target is a squadmate, pick another squadmate as the speaker.
+    if (candidate == target) {
+      continue;
+    }
+    float dist = candidate->getPosition().distance(target->getPosition());
+    if (!best || dist < bestDist) {
+      best = candidate;
+      bestDist = dist;
+    }
+  }
+  if (best) {
+    return best;
+  }
+  if (fallback && (uintptr_t)fallback >= 0x1000 && fallback != target) {
+    return fallback;
+  }
+
+  for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+    Character *candidate = world->player->playerCharacters[i];
+    if (!IsAliveConsciousCharacterForTargeting(candidate) || candidate == target) {
+      continue;
+    }
+    return candidate;
+  }
+  return fallback;
+}
+
+static Character *ResolveNearestSquadmateTargetForSelection(GameWorld *world,
+                                                            Character *selected) {
+  if (!world || !world->player || world->player->playerCharacters.size() == 0) {
+    return nullptr;
+  }
+  if (!selected || (uintptr_t)selected < 0x1000) {
+    return nullptr;
+  }
+
+  Character *best = nullptr;
+  float bestDist = 1e30f;
+  for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+    Character *candidate = world->player->playerCharacters[i];
+    if (!IsAliveConsciousCharacterForTargeting(candidate) || candidate == selected) {
+      continue;
+    }
+    float dist = candidate->getPosition().distance(selected->getPosition());
+    if (!best || dist < bestDist) {
+      best = candidate;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+static bool IsIndoorHandleValidForTargeting(const hand &indoorsHandle) {
+  return indoorsHandle.isValid() && !indoorsHandle.isNull();
+}
+
+static bool TryGetTargetSpatialState(Character *character, bool &hasBuilding,
+                                     unsigned int &buildingSerial,
+                                     int &floorValue) {
+  hasBuilding = false;
+  buildingSerial = 0;
+  floorValue = 0;
+  if (!character || (uintptr_t)character <= 0x1000) {
+    return false;
+  }
+  try {
+    const hand &indoorsHandle = character->isIndoors();
+    hasBuilding = IsIndoorHandleValidForTargeting(indoorsHandle);
+    buildingSerial = hasBuilding ? indoorsHandle.serial : 0;
+    floorValue = character->getFloor();
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+static bool IsTargetAreaCompatibleForSelection(Character *anchor,
+                                               Character *candidate) {
+  if (!anchor || !candidate || (uintptr_t)anchor <= 0x1000 ||
+      (uintptr_t)candidate <= 0x1000) {
+    return false;
+  }
+
+  bool anchorHasBuilding = false;
+  bool candidateHasBuilding = false;
+  unsigned int anchorBuildingSerial = 0;
+  unsigned int candidateBuildingSerial = 0;
+  int anchorFloor = 0;
+  int candidateFloor = 0;
+  if (!TryGetTargetSpatialState(anchor, anchorHasBuilding, anchorBuildingSerial,
+                                anchorFloor)) {
+    return false;
+  }
+  if (!TryGetTargetSpatialState(candidate, candidateHasBuilding,
+                                candidateBuildingSerial, candidateFloor)) {
+    return false;
+  }
+
+  if (anchorHasBuilding) {
+    if (!candidateHasBuilding) {
+      return false;
+    }
+    if (anchorBuildingSerial != 0 && candidateBuildingSerial != 0) {
+      if (anchorBuildingSerial != candidateBuildingSerial) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    int floorDelta = anchorFloor - candidateFloor;
+    if (floorDelta < 0) {
+      floorDelta = -floorDelta;
+    }
+    return floorDelta <= 1;
+  }
+
+  if (candidateHasBuilding) {
+    return false;
+  }
+  if (g_enableAnimalTalks && IsAnimalCharacterSafe(candidate)) {
+    // Outdoor wildlife can report terrain levels as floors. Use distance when
+    // both actors are outside instead of rejecting the animal as another level.
+    return true;
+  }
+  if (candidateFloor > anchorFloor + 1) {
+    return false;
+  }
+  return true;
+}
+
+static Character *ResolveNearestNpcTargetForSelection(GameWorld *world,
+                                                      Character *selected) {
+  if (!world || !selected || (uintptr_t)selected < 0x1000) {
+    return nullptr;
+  }
+
+  Character *best = nullptr;
+  float bestDist = 1e30f;
+  try {
+    float searchRadius = g_proximityRadius;
+    if (searchRadius < 10.0f) {
+      searchRadius = 10.0f;
+    }
+    Ogre::Vector3 selectedPos = selected->getPosition();
+    lektor<RootObject *> nearby;
+    world->getCharactersWithinSphere(nearby, selectedPos, searchRadius, 0.0f,
+                                     0.0f, 0x10, 0, selected);
+
+    auto considerCandidate = [&](Character *candidate) {
+      if (!IsAliveConsciousCharacterForTargeting(candidate) ||
+          candidate == selected) {
+        return;
+      }
+      bool candidateIsAnimal = IsAnimalCharacterSafe(candidate);
+      if (candidateIsAnimal && !g_enableAnimalTalks) {
+        return;
+      }
+      if (!IsTargetAreaCompatibleForSelection(selected, candidate)) {
+        return;
+      }
+      float dist = ResolveTargetingDistance(selected, candidate);
+      if (dist > searchRadius) {
+        return;
+      }
+      if (!best || dist < bestDist) {
+        best = candidate;
+        bestDist = dist;
+      }
+    };
+
+    for (uint32_t i = 0; i < nearby.size(); ++i) {
+      considerCandidate((Character *)nearby.stuff[i]);
+    }
+
+    if (g_enableAnimalTalks) {
+      // Kenshi's sphere query can omit wildlife, so include loaded nearby
+      // animals explicitly when the user has enabled Animal Talks.
+      const ogre_unordered_set<Character *>::type &activeCharacters =
+          world->getCharacterUpdateList();
+      for (ogre_unordered_set<Character *>::type::const_iterator it =
+               activeCharacters.begin();
+           it != activeCharacters.end(); ++it) {
+        Character *candidate = *it;
+        if (!IsAnimalCharacterSafe(candidate)) {
+          continue;
+        }
+        considerCandidate(candidate);
+      }
+    }
+
+    if (best && IsAnimalCharacterSafe(best)) {
+      Log("ANIMAL_TALKS: nearest enabled animal target name=" +
+          best->getName() + " distance=" + ToString(bestDist));
+    }
+  } catch (...) {
+    return nullptr;
+  }
+
+  return best;
+}
+
+static Character *ResolvePlayerSpeakerForCurrentTalk(GameWorld *world) {
+  Character *target = ResolveCharacterFromHandSafe(g_talkTargetHand);
+  if (!target) {
+    target = ResolveCharacterFromHandSafe(g_lastSelectionHand);
+  }
+  return ResolveNearestPlayerSpeakerForTarget(world, target);
+}
+
+static Character *ResolveSelectedPlayerSpeakerForCurrentTalk(GameWorld *world) {
+  if (!world || !world->player) {
+    return nullptr;
+  }
+
+  hand selectedHand;
+  try {
+    selectedHand = world->player->selectedCharacter;
+  } catch (...) {
+    return nullptr;
+  }
+  if (!selectedHand.isValid()) {
+    return nullptr;
+  }
+
+  Character *selected = ResolveCharacterFromHandSafe(selectedHand);
+  if (!selected || (uintptr_t)selected < 0x1000) {
+    return nullptr;
+  }
+
+  bool isPlayerCharacter = false;
+  try {
+    isPlayerCharacter = selected->isPlayerCharacter();
+  } catch (...) {
+    isPlayerCharacter = false;
+  }
+  if (!isPlayerCharacter || !IsAliveConsciousCharacterForTargeting(selected)) {
+    return nullptr;
+  }
+
+  return selected;
+}
+
+static Character *ResolvePreferredPlayerSpeakerForCurrentTalk(GameWorld *world) {
+  Character *selectedSpeaker = ResolveSelectedPlayerSpeakerForCurrentTalk(world);
+  if (selectedSpeaker && (uintptr_t)selectedSpeaker >= 0x1000) {
+    return selectedSpeaker;
+  }
+  return ResolvePlayerSpeakerForCurrentTalk(world);
+}
+
+static unsigned int ResolveCharacterSerialForEvent(Character *npc) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return 0;
+  }
+  unsigned int serial = 0;
+  try {
+    serial = npc->getHandle().serial;
+  } catch (...) {
+    serial = 0;
+  }
+  return serial;
+}
+
+static unsigned int ResolveRootObjectSerialForEvent(RootObjectBase *obj) {
+  if (!obj || (uintptr_t)obj < 0x1000) {
+    return 0;
+  }
+  unsigned int serial = 0;
+  try {
+    serial = obj->getHandle().serial;
+  } catch (...) {
+    serial = 0;
+  }
+  return serial;
+}
+
+static std::string ResolveRootObjectNameSafe(RootObjectBase *obj) {
+  if (!obj || (uintptr_t)obj < 0x1000) {
+    return "Unknown";
+  }
+  try {
+    std::string name = obj->getName();
+    if (!name.empty()) {
+      return name;
+    }
+  } catch (...) {
+  }
+  return "Unknown";
+}
+
+static bool TryResolveRootObjectMoneySafe(RootObject *obj, int &moneyOut) {
+  moneyOut = 0;
+  if (!obj || (uintptr_t)obj < 0x1000) {
+    return false;
+  }
+
+  int resolved = 0;
+  bool hasValue = false;
+  try {
+    resolved = obj->getMoney();
+    hasValue = true;
+  } catch (...) {
+    hasValue = false;
+  }
+
+  try {
+    Ownerships *ownerships = obj->getOwnerships();
+    if (ownerships && (uintptr_t)ownerships > 0x1000) {
+      int ownershipMoney = ownerships->getMoney();
+      if (!hasValue || ownershipMoney > resolved) {
+        resolved = ownershipMoney;
+        hasValue = true;
+      }
+    }
+  } catch (...) {
+  }
+
+  if (!hasValue) {
+    return false;
+  }
+  if (resolved < 0) {
+    resolved = 0;
+  }
+  moneyOut = resolved;
+  return true;
+}
+
+static bool TryResolveCharacterMoneySafe(Character *npc, int &moneyOut) {
+  moneyOut = 0;
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+
+  int resolved = 0;
+  bool hasValue = false;
+  try {
+    resolved = npc->getMoney();
+    hasValue = true;
+  } catch (...) {
+    hasValue = false;
+  }
+
+  try {
+    Ownerships *ownerships = npc->getOwnerships();
+    if (ownerships && (uintptr_t)ownerships > 0x1000) {
+      int ownershipMoney = ownerships->getMoney();
+      if (!hasValue || ownershipMoney > resolved) {
+        resolved = ownershipMoney;
+        hasValue = true;
+      }
+    }
+  } catch (...) {
+  }
+
+  if (!hasValue) {
+    return false;
+  }
+  if (resolved < 0) {
+    resolved = 0;
+  }
+  moneyOut = resolved;
+  return true;
+}
+
+static std::string ResolvePrimaryWeaponName(Character *npc) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return "Unknown";
+  }
+  Inventory *inv = nullptr;
+  try {
+    inv = npc->getInventory();
+  } catch (...) {
+    inv = nullptr;
+  }
+  if (!inv || (uintptr_t)inv < 0x1000) {
+    return "Unarmed";
+  }
+
+  lektor<Item *> weapons;
+  try {
+    inv->getEquippedWeapons(weapons);
+  } catch (...) {
+    return "Unarmed";
+  }
+
+  for (uint32_t i = 0; i < weapons.size(); ++i) {
+    Item *weapon = weapons.stuff[i];
+    if (!weapon || (uintptr_t)weapon < 0x1000) {
+      continue;
+    }
+    try {
+      std::string weaponName = TrimCopy(weapon->getName());
+      if (!weaponName.empty()) {
+        return weaponName;
+      }
+    } catch (...) {
+    }
+  }
+  return "Unarmed";
+}
+
+struct CombatAttribution {
+  std::string actorName;
+  std::string actorFaction;
+  std::string weaponName;
+  unsigned int actorSerial;
+  Character *actor;   // valid only in the frame it was resolved
+  const char *source; // REL: defeated_by | attacker_list | predation | none
+
+  CombatAttribution()
+      : actorName("Unknown"), actorFaction("None"), weaponName("Unknown"),
+        actorSerial(0), actor(nullptr), source("none") {}
+};
+
+static Character *ResolveCharacterFromHandSafe(const hand &h);
+static std::string ResolveConstructionSubjectName(const hand &subjectHand);
+static unsigned int ResolveCharacterSerialForEvent(Character *npc);
+static std::string ResolveCharacterNameSafe(Character *npc);
+static TaskType ResolveCurrentNpcTaskSafe(Character *npc, hand &subjectOut);
+
+static bool IsPredationTaskAgainstVictim(Character *attacker,
+                                         Character *victim) {
+  if (!attacker || !victim || (uintptr_t)attacker < 0x1000 ||
+      (uintptr_t)victim < 0x1000 || attacker == victim) {
+    return false;
+  }
+  hand subject;
+  TaskType task = ResolveCurrentNpcTaskSafe(attacker, subject);
+  if (!IsAnyPredationTask(task)) {
+    return false;
+  }
+
+  unsigned int victimSerial = ResolveCharacterSerialForEvent(victim);
+  if (victimSerial != 0 && subject.isValid() && !subject.isNull() &&
+      subject.serial == victimSerial) {
+    return true;
+  }
+
+  Character *subjectCharacter = ResolveCharacterFromHandSafe(subject);
+  return subjectCharacter && subjectCharacter == victim;
+}
+
+static Character *ResolvePredationAttackerForVictim(Character *victim) {
+  if (!victim || (uintptr_t)victim < 0x1000) {
+    return nullptr;
+  }
+  unsigned int victimSerial = ResolveCharacterSerialForEvent(victim);
+  GameWorld *world = GetWorldSafe();
+  if (!world || (uintptr_t)world < 0x1000) {
+    return nullptr;
+  }
+  try {
+    const auto &chars = world->getCharacterUpdateList();
+    for (auto it = chars.begin(); it != chars.end(); ++it) {
+      Character *candidate = *it;
+      if (!candidate || (uintptr_t)candidate < 0x1000 || candidate == victim) {
+        continue;
+      }
+      hand subject;
+      TaskType task = ResolveCurrentNpcTaskSafe(candidate, subject);
+      if (!IsAnyPredationTask(task)) {
+        continue;
+      }
+      if (victimSerial != 0 && subject.isValid() && !subject.isNull() &&
+          subject.serial == victimSerial) {
+        return candidate;
+      }
+      Character *subjectCharacter = ResolveCharacterFromHandSafe(subject);
+      if (subjectCharacter && subjectCharacter == victim) {
+        return candidate;
+      }
+    }
+  } catch (...) {
+  }
+  return nullptr;
+}
+
+static bool IsAnyPredationTask(TaskType taskType) {
+  return taskType == EAT_TARGET_ALIVE || taskType == EAT_A_RANDOM_DEAD_BODY ||
+         taskType == EAT_A_RANDOM_KO_BODY;
+}
+
+static bool IsCorpsePredationTask(TaskType taskType) {
+  return taskType == EAT_A_RANDOM_DEAD_BODY || taskType == EAT_A_RANDOM_KO_BODY;
+}
+
+static CombatAttribution ResolveCombatAttribution(Character *target) {
+  CombatAttribution out;
+  if (!target || (uintptr_t)target < 0x1000) {
+    return out;
+  }
+
+  Character *attacker = nullptr;
+  bool predationAttribution = false;
+  const char *source = "none";
+  try {
+    attacker = ResolveCharacterFromHandSafe(target->lastGuyWhoDefeatedMe);
+  } catch (...) {
+    attacker = nullptr;
+  }
+  if (attacker)
+    source = "defeated_by";
+
+  if (!attacker) {
+    lektor<hand> attackers;
+    try {
+      target->getAllAttackers(attackers);
+    } catch (...) {
+    }
+    for (uint32_t i = 0; i < attackers.size(); ++i) {
+      Character *candidate = ResolveCharacterFromHandSafe(attackers.stuff[i]);
+      if (!candidate || candidate == target) {
+        continue;
+      }
+      attacker = candidate;
+      source = "attacker_list";
+      break;
+    }
+  }
+
+  if (!attacker) {
+    attacker = ResolvePredationAttackerForVictim(target);
+    if (attacker) {
+      predationAttribution = true;
+      source = "predation";
+    }
+  }
+
+  if (!attacker) {
+    return out;
+  }
+
+  if (!predationAttribution && IsPredationTaskAgainstVictim(attacker, target)) {
+    predationAttribution = true;
+  }
+
+  try {
+    out.actorName = TrimCopy(attacker->getName());
+  } catch (...) {
+    out.actorName = "Unknown";
+  }
+  if (out.actorName.empty()) {
+    out.actorName = "Unknown";
+  }
+  out.actorFaction = SafeFaction(attacker);
+  out.weaponName =
+      predationAttribution ? "Teeth" : ResolvePrimaryWeaponName(attacker);
+  if (!predationAttribution &&
+      (out.weaponName.empty() || out.weaponName == "Unknown") &&
+      CharacterHasHacksaw(attacker)) {
+    out.weaponName = "Hacksaw";
+  }
+  if (out.weaponName.empty() || out.weaponName == "Unknown") {
+    out.weaponName = predationAttribution ? "Teeth" : "Unarmed";
+  }
+  out.actorSerial = ResolveCharacterSerialForEvent(attacker);
+  out.actor = attacker;
+  out.source = source;
+  return out;
+}
+
+static Character *ResolveCharacterBySerialForInventoryEvent(unsigned int serial);
+static Character *ResolveCharacterBySerialForInventoryEvent(unsigned int serial);
+static void SocialCollectWitnesses(Character *actor, Character *target, std::vector<StobeSocial::EntityInfo> &who,
+                                   std::vector<int> &sense);
+// REL: one structured entity (serial, name, storage id, faction, player faction, consciousness).
+// Unknown stays unknown (-1 -> null), never false.
+// REL m16 (SR32): Kenshi gives a character a new handle when it changes squad (a fresh slave is moved ~5 s after
+// being chained), so hand_<serial> changes mid-session while the server profile is bound to the old one. Remember
+// the first hand_ storage id per live character (same name) and send it as storage_alias. Cleared on load.
+struct SocialStorageMemo {
+  std::string name, first, last;
+};
+static std::map<uintptr_t, SocialStorageMemo> g_socialStorageByChar;
+
+static void SocialRememberStorage(Character *c, StobeSocial::EntityInfo &e) {
+  if (e.storageId.compare(0, 5, "hand_") != 0 || e.name.empty())
+    return;
+  EnterCriticalSection(&g_stateMutex);
+  std::map<uintptr_t, SocialStorageMemo>::iterator it = g_socialStorageByChar.find((uintptr_t)c);
+  if (it == g_socialStorageByChar.end() || it->second.name != e.name) {
+    SocialStorageMemo m;
+    m.name = e.name;
+    m.first = e.storageId;
+    m.last = e.storageId;
+    g_socialStorageByChar[(uintptr_t)c] = m;
+  } else if (it->second.first != e.storageId) {
+    e.storageAlias = it->second.first;
+    if (it->second.last != e.storageId) {
+      it->second.last = e.storageId;
+      Log("SOCIAL_IDENTITY: handle changed name=" + e.name + " storage=" + e.storageId + " alias=" + e.storageAlias);
+    }
+  }
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static unsigned int SocialAliasSerial(const StobeSocial::EntityInfo &e) {
+  if (e.storageAlias.compare(0, 5, "hand_") != 0)
+    return 0;
+  return (unsigned int)strtoul(e.storageAlias.c_str() + 5, NULL, 10);
+}
+
+// REL m16b: the world sweep keys its state by serial; when the same live character (same name) shows up under a new
+// handle (freed slave re-squadded), move its state to the new serial so the transition (freed) is still seen.
+struct SocialScanMemo {
+  unsigned int serial;
+  std::string name;
+};
+static std::map<uintptr_t, SocialScanMemo> g_socialScanSerialByChar;
+
+static void SocialCarryStateOnHandleChange(Character *npc, unsigned int serial) {
+  std::map<uintptr_t, SocialScanMemo>::iterator m = g_socialScanSerialByChar.find((uintptr_t)npc);
+  if (m != g_socialScanSerialByChar.end() && m->second.serial == serial)
+    return;
+  std::string name = ResolveCharacterNameSafe(npc);
+  if (m != g_socialScanSerialByChar.end() && m->second.name == name && !name.empty() &&
+      g_npcWorldEventStateBySerial.find(serial) == g_npcWorldEventStateBySerial.end()) {
+    std::map<unsigned int, NpcWorldEventState>::iterator old = g_npcWorldEventStateBySerial.find(m->second.serial);
+    if (old != g_npcWorldEventStateBySerial.end() && old->second.initialized) {
+      NpcWorldEventState moved = old->second;
+      g_npcWorldEventStateBySerial.erase(old);
+      g_npcWorldEventStateBySerial[serial] = moved;
+      Log("SOCIAL_IDENTITY: handle changed (scan) name=" + name + " old=" + ToString(m->second.serial) +
+          " new=" + ToString(serial) + " enslaved=" + ToString((int)moved.enslaved));
+    }
+  }
+  SocialScanMemo memo;
+  memo.serial = serial;
+  memo.name = name;
+  g_socialScanSerialByChar[(uintptr_t)npc] = memo;
+}
+
+static StobeSocial::EntityInfo SocialEntityFor(Character *c) {
+  StobeSocial::EntityInfo e;
+  if (!c || (uintptr_t)c < 0x1000)
+    return e;
+  e.serial = ResolveCharacterSerialForEvent(c);
+  e.name = ResolveCharacterNameSafe(c);
+  try {
+    e.storageId = GetStorageIDFor(c, e.name, "");
+  } catch (...) {
+    e.storageId.clear();
+  }
+  if (e.storageId == e.name)
+    e.storageId.clear();
+  SocialRememberStorage(c, e);
+  e.faction = SafeFaction(c);
+  try {
+    Faction *f = c->getFaction();
+    e.inPlayerFaction = (f && (uintptr_t)f >= 0x1000) ? (f->isThePlayer() ? 1 : 0) : -1;
+  } catch (...) {
+    e.inPlayerFaction = -1;
+  }
+  try {
+    e.conscious = c->isDead() ? 0 : (c->isUnconcious() ? 0 : 1);
+  } catch (...) {
+    e.conscious = -1;
+  }
+  // N2 entity export: squad / settlement / player-squad membership (all optional on the wire).
+  try {
+    e.inPlayerSquad = c->isPlayerCharacter() ? 1 : 0;
+  } catch (...) {
+    e.inPlayerSquad = -1;
+  }
+  e.squadId = Stobe::NativeAttention::SquadId(c);
+  e.squadName = Stobe::NativeAttention::SquadName(c);
+  e.settlement = Stobe::NativeAttention::SettlementName(c);
+  return e;
+}
+
+// REL: harm with the attacker as actor and the victim as target (attribution source included so
+// the server can refuse weak guesses). Emitted only from the polling path: one fact per transition.
+static void SocialEmitHarm(Character *victim, const CombatAttribution &attribution,
+                           const char *level, const std::string &extraFacts) {
+  if (!SocialCaptureEnabled() || !victim || (uintptr_t)victim < 0x1000)
+    return;
+  StobeSocial::EntityInfo target = SocialEntityFor(victim);
+  StobeSocial::EntityInfo actor;
+  bool hasActor = attribution.actor && attribution.actor != victim;
+  const char *source = hasActor ? attribution.source : "none";
+  if (hasActor) {
+    actor = SocialEntityFor(attribution.actor);
+  } else if (std::string(level) != "death") {
+    // REL (run m5): the game named no attacker for the KO; the attack hook saw who hit this victim last.
+    unsigned int recent = SocialRecentAttacker(target.serial, 10000);
+    Character *recentChar = recent ? ResolveCharacterBySerialForInventoryEvent(recent) : nullptr;
+    if (recentChar && recentChar != victim) {
+      actor = SocialEntityFor(recentChar);
+      hasActor = true;
+      source = "recent_attacker";
+    }
+  }
+  std::string facts = "\"level\":" + StobeSocial::JsonString(level) +
+                      ",\"attribution\":" + StobeSocial::JsonString(source);
+  if (!extraFacts.empty())
+    facts += "," + extraFacts;
+  std::vector<StobeSocial::EntityInfo> witnessWho;
+  std::vector<int> witnessSense;
+  Character *actorChar = hasActor ? ResolveCharacterBySerialForInventoryEvent(actor.serial) : nullptr;
+  SocialCollectWitnesses(actorChar, victim, witnessWho, witnessSense);
+  SocialPostStructuredW("harm", hasActor ? &actor : nullptr, &target, facts, witnessWho, witnessSense);
+}
+
+// REL phase 4: vitals for aid/carry facts. worst = lowest flesh/max over body parts (can go below 0),
+// blood = blood/max, bleed = current bleed rate (game units). Unknown -> false.
+static bool SocialVitals(Character *c, float &worst, float &blood, float &bleed, float *wound = nullptr,
+                         float *untreated = nullptr) {
+  worst = 1.0f; blood = 1.0f; bleed = 0.0f;
+  if (wound)
+    *wound = 0.0f;
+  if (untreated)
+    *untreated = 0.0f;
+  if (!c || (uintptr_t)c < 0x1000)
+    return false;
+  try {
+    MedicalSystem *med = c->getMedical();
+    if (!med || (uintptr_t)med < 0x1000)
+      return false;
+    bool any = false;
+    for (uint32_t i = 0; i < med->anatomy.size(); ++i) {
+      MedicalSystem::HealthPartStatus *part = med->anatomy[i];
+      if (!part || (uintptr_t)part < 0x1000)
+        continue;
+      float maxHealth = part->maxHealth();
+      if (maxHealth <= 0.0f)
+        continue;
+      float ratio = part->flesh / maxHealth;
+      if (!any || ratio < worst)
+        worst = ratio;
+      any = true;
+      float damage = maxHealth - part->flesh;
+      if (damage > 0.0f) {
+        if (wound)
+          *wound += damage;
+        float open = damage - part->bandaging;
+        if (untreated && open > 0.0f)
+          *untreated += open;
+      }
+    }
+    float maxBlood = med->getMaxBlood();
+    blood = maxBlood > 0.0f ? med->blood / maxBlood : 1.0f;
+    bleed = med->currentBleedRate;
+    return any;
+  } catch (...) {
+    return false;
+  }
+}
+
+static std::string SocialVitalsFacts(const char *prefix, Character *c) {
+  float worst, blood, bleed, wound, untreated;
+  if (!SocialVitals(c, worst, blood, bleed, &wound, &untreated))
+    return std::string("\"") + prefix + "known\":false";
+  char buf[320];
+  sprintf_s(buf, sizeof(buf),
+            "\"%sknown\":true,\"%shealth\":%.3f,\"%sblood\":%.3f,\"%sbleed\":%.4f,\"%swound\":%.1f,\"%suntreated\":%.1f",
+            prefix, prefix, worst, prefix, blood, prefix, bleed, prefix, wound, prefix, untreated);
+  return buf;
+}
+
+// REL phase 4: a first-aid session per (provider, recipient). The hook fires every treatment frame;
+// the session is closed by the world sweep once no treatment happened for 4 s, and one 'aid' fact
+// with before/after vitals is sent (provider credited once per session, not per tick).
+struct SocialAidSession {
+  unsigned int provider, recipient, supplier;
+  std::string item;
+  DWORD startTick, lastTick;
+  float worst, blood, bleed, wound, untreated;
+  bool known;
+  int conscious;
+};
+static std::map<unsigned long long, SocialAidSession> g_socialAidSessions;
+
+static void SocialNoteFirstAid(Character *provider, Character *recipient, Character *supplier,
+                               const std::string &item) {
+  if (!SocialCaptureEnabled() || !provider || !recipient)
+    return;
+  unsigned int ps = ResolveCharacterSerialForEvent(provider), rs = ResolveCharacterSerialForEvent(recipient);
+  if (!ps || !rs)
+    return;
+  unsigned long long key = ((unsigned long long)ps << 32) | rs;
+  DWORD now = GetTickCount();
+  EnterCriticalSection(&g_eventMutex);
+  // m22 B55: aid sessions never drop the squad's first aid (a load opens ~50 world sessions at once; the old cap
+  // was 64 and a refused session vanished silently).
+  bool squadAid = false;
+  try {
+    squadAid = provider->isPlayerCharacter() || recipient->isPlayerCharacter();
+  } catch (...) {
+  }
+  std::map<unsigned long long, SocialAidSession>::iterator it = g_socialAidSessions.find(key);
+  bool refused = false;
+  if (it == g_socialAidSessions.end() && !squadAid && g_socialAidSessions.size() >= 512) {
+    refused = true;
+  } else if (it == g_socialAidSessions.end()) {
+    SocialAidSession s;
+    s.provider = ps; s.recipient = rs; s.supplier = ResolveCharacterSerialForEvent(supplier);
+    s.item = item; s.startTick = now; s.lastTick = now;
+    s.known = SocialVitals(recipient, s.worst, s.blood, s.bleed, &s.wound, &s.untreated);
+    try {
+      s.conscious = recipient->isDead() ? 0 : (recipient->isUnconcious() ? 0 : 1);
+    } catch (...) {
+      s.conscious = -1;
+    }
+    g_socialAidSessions[key] = s;
+  } else {
+    it->second.lastTick = now;
+  }
+  size_t open = g_socialAidSessions.size();
+  LeaveCriticalSection(&g_eventMutex);
+  static DWORD lastRefusedLog = 0;
+  if (refused && now - lastRefusedLog > 10000) {
+    lastRefusedLog = now;
+    Log("SOCIAL_AID: session refused (" + ToString((unsigned int)open) + " open) provider=#" + ToString(ps) +
+        " recipient=#" + ToString(rs));
+  }
+  if (squadAid && it == g_socialAidSessions.end())
+    Log("SOCIAL_AID: squad session provider=#" + ToString(ps) + " recipient=#" + ToString(rs) + " item=" + item);
+}
+
+// REL phase 6: who saw it. Characters within 40 m of the target (at most 12), each with the game's own
+// sensing (SensoryData::canISeeThisGuy / canIHearThisGuy). Unknown consciousness = not listed.
+static int SocialSenseTri(SensoryData *sd, Character *who, bool hear) {
+  if (!sd || !who)
+    return 0;
+  try {
+    return (hear ? sd->canIHearThisGuy(who) : sd->canISeeThisGuy(who)) ? 2 : 1;
+  } catch (...) {
+    return 0;
+  }
+}
+
+static void SocialCollectWitnesses(Character *actor, Character *target, std::vector<StobeSocial::EntityInfo> &who,
+                                   std::vector<int> &sense) {
+  who.clear();
+  sense.clear();
+  if (!target || (uintptr_t)target < 0x1000 || !SocialCaptureEnabled())
+    return;
+  GameWorld *world = GetWorldSafe();
+  if (!world || (uintptr_t)world < 0x1000)
+    return;
+  lektor<RootObject *> nearby;
+  try {
+    world->getCharactersWithinSphere(nearby, target->getPosition(), 40.0f, 0.0f, 0.0f, 12, 0, target);
+  } catch (...) {
+    return;
+  }
+  for (uint32_t i = 0; i < nearby.size(); ++i) {
+    Character *w = (Character *)nearby.stuff[i];
+    if (!w || (uintptr_t)w < 0x1000 || w == actor || w == target)
+      continue;
+    StobeSocial::EntityInfo e = SocialEntityFor(w);
+    if (!e.serial || e.conscious < 0)
+      continue;
+    // Run m8: isUnconcious() is false while sleeping. Asleep = in a bed, or the current task is sleeping.
+    bool asleep = false;
+    int taskId = 0, prone = 0, sleeping = 3; // 3 = unknown (logged as -1)
+    try {
+      hand ignoredSubject;
+      TaskType task = ResolveCurrentNpcTaskSafe(w, ignoredSubject);
+      taskId = (int)task;
+      prone = (int)w->getProneState();
+      asleep = w->inSomething == IN_BED || task == SLEEP_ON_FLOOR || task == USE_BED || prone == (int)PS_KO ||
+               prone == (int)PS_PLAYING_DEAD;
+      // Run m13: a floor sleeper's body task was not SLEEP_ON_FLOOR (logged 290); the AI's own broadcast state
+      // (StateBroadcastData::isSleeping, what other characters' senses read) is the reliable flag.
+      StateBroadcastData *sb = w->stateBroadcast;
+      if (sb && (uintptr_t)sb > 0x1000) {
+        sleeping = (int)sb->isSleeping.key;
+        if (sleeping < 0 || sleeping > 2)
+          sleeping = 3;
+        if (sb->isSleeping.key == YesNoMaybe::YES)
+          asleep = true;
+      }
+    } catch (...) {
+      asleep = false;
+    }
+    if (asleep)
+      e.conscious = 0;
+    SensoryData *sd = nullptr;
+    try {
+      sd = w->getSensoryData();
+    } catch (...) {
+      sd = nullptr;
+    }
+    int seesActor = actor ? SocialSenseTri(sd, actor, false) : 0;
+    int seesTarget = SocialSenseTri(sd, target, false);
+    int hearsActor = actor ? SocialSenseTri(sd, actor, true) : 0;
+    bool perceived = e.conscious == 1 && (seesActor == 2 || seesTarget == 2 || hearsActor == 2);
+    who.push_back(e);
+    sense.push_back((e.conscious == 1 ? 1 : 0) | (perceived ? 2 : 0) | (seesActor << 2) | (seesTarget << 4) | (hearsActor << 6) |
+                    ((taskId & 0x3FF) << 8) | ((prone & 7) << 18) | ((sleeping & 3) << 21));
+  }
+}
+
+// REL phase 3: inventory baseline (KO) / current inventory (recovered) as item key -> count, plus cats.
+static std::string SocialInventoryFacts(const InventoryEventSnapshot *inv, int money) {
+  if (!inv)
+    return "";
+  return "\"inventory\":" + StobeSocial::JsonCountMap(inv->countsByKey, 64) +
+         ",\"inventory_total\":" + ToString(inv->totalCount) +
+         ",\"money\":" + (money >= 0 ? ToString(money) : std::string("null"));
+}
+
+static bool IsLimbLostState(int limbState) {
+  return limbState == (int)LIMB_STUMP || limbState == (int)LIMB_CRUSHED;
+}
+
+static int ResolveLimbState(Character *npc, RobotLimbs::Limb limb) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return (int)LIMB_ORIGINAL;
+  }
+  MedicalSystem *med = nullptr;
+  try {
+    med = npc->getMedical();
+  } catch (...) {
+    med = nullptr;
+  }
+  if (!med || (uintptr_t)med < 0x1000) {
+    return (int)LIMB_ORIGINAL;
+  }
+  int state = (int)LIMB_ORIGINAL;
+  try {
+    state = (int)med->getLimbState(limb);
+  } catch (...) {
+    state = (int)LIMB_ORIGINAL;
+  }
+  return state;
+}
+
+static bool ResolveLimbPartPresent(Character *npc, RobotLimbs::Limb limb) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return true;
+  }
+  MedicalSystem *med = nullptr;
+  try {
+    med = npc->getMedical();
+  } catch (...) {
+    med = nullptr;
+  }
+  if (!med || (uintptr_t)med < 0x1000) {
+    return true;
+  }
+  MedicalSystem::HealthPartStatus *part = nullptr;
+  try {
+    part = med->getPart(limb);
+  } catch (...) {
+    part = nullptr;
+  }
+  return part && (uintptr_t)part >= 0x1000;
+}
+
+// Capture body-part health for qualitative events without relying on damage
+// hook callbacks.
+static bool CollectFleshHealthByPart(
+    Character *npc, std::map<uintptr_t, float> &healthByPartOut) {
+  healthByPartOut.clear();
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+
+  MedicalSystem *med = nullptr;
+  try {
+    med = npc->getMedical();
+  } catch (...) {
+    med = nullptr;
+  }
+  if (!med || (uintptr_t)med < 0x1000) {
+    return false;
+  }
+
+  try {
+    for (uint32_t i = 0; i < med->anatomy.size(); ++i) {
+      MedicalSystem::HealthPartStatus *part = med->anatomy[i];
+      if (part && (uintptr_t)part >= 0x1000) {
+        healthByPartOut[(uintptr_t)part] = part->flesh;
+      }
+    }
+  } catch (...) {
+    healthByPartOut.clear();
+    return false;
+  }
+  return !healthByPartOut.empty();
+}
+
+// Bug 98: overall health (worst body part, 0..100) and the last bucket
+// reported per NPC, so the server can offer a surrender before the knockout.
+// Serial -> (bucket, last update); entries expire so a reload (same serials)
+// or a later fight reports again.
+static std::map<unsigned int, std::pair<int, DWORD> > g_healthBucketBySerial;
+
+static int OverallHealthPercent(const std::map<uintptr_t, float> &healthByPart) {
+  float worst = 1.0f;
+  int parts = 0;
+  for (std::map<uintptr_t, float>::const_iterator it = healthByPart.begin();
+       it != healthByPart.end(); ++it) {
+    MedicalSystem::HealthPartStatus *part = (MedicalSystem::HealthPartStatus *)it->first;
+    float maxHealth = 0.0f;
+    try {
+      maxHealth = part->maxHealth();
+    } catch (...) {
+      maxHealth = 0.0f;
+    }
+    if (maxHealth <= 0.0f)
+      continue;
+    float ratio = it->second / maxHealth;
+    ratio = ratio < 0.0f ? 0.0f : (ratio > 1.0f ? 1.0f : ratio);
+    if (ratio < worst)
+      worst = ratio; // worst part: a knockout comes when one part runs out
+    ++parts;
+  }
+  return parts ? (int)(100.0f * worst + 0.5f) : 100;
+}
+
+static void EmitHealthBucketEvent(Character *victim, int healthPercent) {
+  LogGameEvent("major_damage", ResolveCharacterNameSafe(victim), SafeFaction(victim),
+               "None", "None",
+               "took a major hit (health " + ToString(healthPercent) + "%)",
+               ResolveCharacterSerialForEvent(victim), 0);
+}
+
+// Emits once each time the health falls into a lower bucket (60/45/30/15 %);
+// healing back up re-arms the higher buckets.
+static void ReportHealthBucket(Character *npc, unsigned int serial, int healthPercent) {
+  static const int kHealthBuckets[] = {60, 45, 30, 15};
+  int bucket = 100;
+  for (int b = 0; b < 4; ++b)
+    if (healthPercent < kHealthBuckets[b])
+      bucket = kHealthBuckets[b];
+  const DWORD now = GetTickCount();
+  std::map<unsigned int, std::pair<int, DWORD> >::iterator last =
+      g_healthBucketBySerial.find(serial);
+  int lastBucket = (last == g_healthBucketBySerial.end() ||
+                    now - last->second.second > 120000)
+                       ? 100
+                       : last->second.first;
+  if (bucket < lastBucket)
+    EmitHealthBucketEvent(npc, healthPercent);
+  g_healthBucketBySerial[serial] = std::make_pair(bucket, now);
+}
+
+static void EmitMajorDamageEvent(Character *victim) {
+  CombatAttribution attribution = ResolveCombatAttribution(victim);
+  std::string victimName = ResolveCharacterNameSafe(victim);
+  std::string attackerName = TrimCopy(attribution.actorName);
+  std::string weaponName = TrimCopy(attribution.weaponName);
+  std::string attackerLower = ToLowerAsciiCopy(attackerName);
+  std::string weaponLower = ToLowerAsciiCopy(weaponName);
+  bool knownAttacker = !attackerName.empty() && attackerLower != "unknown" &&
+                       attackerLower != ToLowerAsciiCopy(victimName);
+  bool knownWeapon = !weaponName.empty() && weaponLower != "unknown" &&
+                     weaponLower != "unknown weapon" && weaponLower != "none";
+
+  std::string message = "took a major hit";
+  if (knownAttacker) {
+    message += " from " + attackerName;
+    if (knownWeapon) {
+      message += weaponLower == "unarmed" ? " using unarmed attacks"
+                                           : " using " + weaponName;
+    }
+  }
+
+  LogGameEvent("major_damage", victimName, SafeFaction(victim),
+               knownAttacker ? attackerName : "None",
+               knownAttacker ? attribution.actorFaction : "None", message,
+               ResolveCharacterSerialForEvent(victim),
+               knownAttacker ? attribution.actorSerial : 0);
+  SocialEmitHarm(victim, attribution, "injury", "");
+}
+
+static bool ResolveNpcHungerMetrics(Character *npc, float &hungerOut,
+                                    float &fedOut, float &satietyOut) {
+  hungerOut = 0.0f;
+  fedOut = 0.0f;
+  satietyOut = 0.0f;
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+
+  MedicalSystem *med = nullptr;
+  try {
+    med = npc->getMedical();
+  } catch (...) {
+    med = nullptr;
+  }
+  if (!med || (uintptr_t)med < 0x1000) {
+    return false;
+  }
+
+  try {
+    hungerOut = med->hunger;
+    fedOut = med->fed;
+  } catch (...) {
+    hungerOut = 0.0f;
+    fedOut = 0.0f;
+    satietyOut = 0.0f;
+    return false;
+  }
+
+  if (hungerOut < 0.0f) {
+    hungerOut = 0.0f;
+  }
+  if (fedOut < 0.0f) {
+    fedOut = 0.0f;
+  }
+  // hunger is fullness on a 0..3 scale (UI shows x100); not hungriness (bug 81)
+  satietyOut = (hungerOut + fedOut) * 100.0f;
+  if (satietyOut < 0.0f) {
+    satietyOut = 0.0f;
+  }
+  return true;
+}
+
+static bool CollectInventoryEventSnapshot(Character *npc,
+                                          InventoryEventSnapshot &out) {
+  out = InventoryEventSnapshot();
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return false;
+  }
+
+  std::vector<Item *> rawItems;
+  try {
+    GetAllCharacterItems(npc, rawItems);
+  } catch (...) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < rawItems.size(); ++i) {
+    Item *item = rawItems[i];
+    if (!item || (uintptr_t)item < 0x1000) {
+      continue;
+    }
+
+    std::string itemName;
+    int count = 1;
+    bool isStolen = false;
+    bool isFood = false;
+    try {
+      itemName = TrimCopy(item->getName());
+      count = item->quantity;
+      isStolen = item->isStolen(true);
+      GameData *itemData = item->getGameData();
+      if (itemData && (uintptr_t)itemData > 0x1000) {
+        isFood = Item::isFood(itemData);
+      }
+    } catch (...) {
+      continue;
+    }
+    if (itemName.empty()) {
+      continue;
+    }
+    if (count <= 0) {
+      count = 1;
+    }
+    std::string key = NormalizeInventoryKey(itemName);
+    if (key.empty()) {
+      key = itemName;
+    }
+    // Preserve exact native identity separately from the legacy display-name totals.
+    // An alias/duplicate observation invalidates proof instead of counting twice.
+    try {
+      unsigned int serial = item->getHandle().serial;
+      GameData *data = item->getGameData();
+      std::string prototype = data ? TrimCopy(data->stringID) : "";
+      if (serial && count > 0 && count <= 1000000 && !prototype.empty() &&
+          prototype.size() <= 128 && key.size() <= 180) {
+        SocialInventoryInstance instance;
+        instance.address = reinterpret_cast<uintptr_t>(item);
+        instance.serial = serial;
+        instance.epoch = PlaythroughSession::Generation();
+        instance.prototypeId = prototype;
+        instance.typeKey = key;
+        instance.quantity = item->quantity; // Do not use the legacy fallback of one.
+        if (out.exactInstances.count(serial))
+          out.exactInstances[serial].quantity = 0;
+        else
+          out.exactInstances[serial] = instance;
+      }
+    } catch (...) { /* Missing identity is no evidence. */ }
+    out.countsByKey[key] += count;
+    if (isStolen) {
+      out.stolenByKey[key] += count;
+    }
+    if (isFood) {
+      out.foodByKey[key] += count;
+    }
+    if (out.displayNameByKey.count(key) == 0) {
+      out.displayNameByKey[key] = itemName;
+    }
+    out.totalCount += count;
+  }
+
+  return true;
+}
+
+static std::string ResolveCharacterNameSafe(Character *npc) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return "Unknown";
+  }
+  std::string name;
+  try {
+    name = TrimCopy(npc->getName());
+  } catch (...) {
+    name = "";
+  }
+  if (name.empty()) {
+    name = "Unknown";
+  }
+  return name;
+}
+
+static int ResolveLockpickingSkillLevel(Character *npc) {
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return 0;
+  }
+  try {
+    CharStats *stats = npc->getStats();
+    if (!stats || (uintptr_t)stats < 0x1000) {
+      return 0;
+    }
+    int level = (int)(stats->lockpicking + 0.5f);
+    if (level < 0) {
+      level = 0;
+    } else if (level > 200) {
+      level = 200;
+    }
+    return level;
+  } catch (...) {
+    return 0;
+  }
+}
+
+enum ConstructionActionEventType {
+  CONSTRUCTION_ACTION_NONE = 0,
+  CONSTRUCTION_ACTION_BUILD = 1,
+  CONSTRUCTION_ACTION_DISMANTLE = 2,
+};
+
+static TaskType ResolveCurrentNpcTaskSafe(Character *npc, hand &subjectOut) {
+  subjectOut = hand();
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return NULL_TASK;
+  }
+
+  try {
+    CharBody *body = npc->getBody();
+    if (!body || (uintptr_t)body < 0x1000) {
+      return NULL_TASK;
+    }
+
+    Tasker *action = nullptr;
+    try {
+      action = body->currentAction;
+    } catch (...) {
+      action = nullptr;
+    }
+    if (!action || (uintptr_t)action < 0x1000) {
+      return NULL_TASK;
+    }
+
+    try {
+      hand subject = action->subject;
+      if (subject.isValid() && !subject.isNull()) {
+        subjectOut = subject;
+      } else if (body->target.isValid() && !body->target.isNull()) {
+        subjectOut = body->target;
+      }
+    } catch (...) {
+      subjectOut = hand();
+    }
+
+    TaskType taskKey = NULL_TASK;
+    try {
+      if (action->taskData && (uintptr_t)action->taskData > 0x1000) {
+        taskKey = action->taskData->key;
+      }
+    } catch (...) {
+      taskKey = NULL_TASK;
+    }
+    return taskKey;
+  } catch (...) {
+    return NULL_TASK;
+  }
+}
+
+static ConstructionActionEventType ResolveConstructionActionType(TaskType taskType) {
+  switch (taskType) {
+  case BUILD:
+  case ADD_MATERIALS_TO_BUILDING:
+  case FIND_SOME_BUILDING_MATERIALS:
+  case JOB_BUILDER:
+    return CONSTRUCTION_ACTION_BUILD;
+  case DISMANTLE:
+    return CONSTRUCTION_ACTION_DISMANTLE;
+  default:
+    return CONSTRUCTION_ACTION_NONE;
+  }
+}
+
+static std::string ResolveConstructionSubjectName(const hand &subjectHand) {
+  if (!subjectHand.isValid() || subjectHand.isNull()) {
+    return "";
+  }
+
+  try {
+    RootObject *subject = subjectHand.getRootObject();
+    if (subject && (uintptr_t)subject > 0x1000) {
+      std::string name = TrimCopy(subject->getName());
+      if (!name.empty()) {
+        return name;
+      }
+    }
+  } catch (...) {
+  }
+
+  try {
+    Character *subjectCharacter = subjectHand.getCharacter();
+    if (subjectCharacter && (uintptr_t)subjectCharacter > 0x1000) {
+      std::string name = TrimCopy(subjectCharacter->getName());
+      if (!name.empty()) {
+        return name;
+      }
+    }
+  } catch (...) {
+  }
+
+  return "";
+}
+
+static std::string DescribeConstructionSubject(const std::string &subjectName) {
+  std::string name = TrimCopy(subjectName);
+  if (name.empty()) {
+    return "an object";
+  }
+  return name;
+}
+
+static void EmitBuildEvent(Character *npc, const std::string &subjectName) {
+  std::string actorName = ResolveCharacterNameSafe(npc);
+  std::string actorFaction = SafeFaction(npc);
+  std::string message =
+      "started building " + DescribeConstructionSubject(subjectName);
+  LogGameEvent("build", actorName, actorFaction, "None", "None", message,
+               ResolveCharacterSerialForEvent(npc), 0);
+}
+
+static void EmitDismantleEvent(Character *npc, const std::string &subjectName) {
+  std::string actorName = ResolveCharacterNameSafe(npc);
+  std::string actorFaction = SafeFaction(npc);
+  std::string message =
+      "started dismantling " + DescribeConstructionSubject(subjectName);
+  LogGameEvent("dismantle", actorName, actorFaction, "None", "None", message,
+               ResolveCharacterSerialForEvent(npc), 0);
+}
+
+// REL_THEFT_CAUGHT_M18 (SR13): the game's own "caught a thief" signal. A character whose current goal is
+// HUNT_MY_THIEF reports it once per hunter/thief pair (again after 5 min real time while it lasts):
+// actor = thief, target = hunter. The server pairs it with the stolen goods.
+static std::map<unsigned long long, DWORD> g_socialTheftHunts;
+static void SocialTheftHuntCheck(Character *hunter, unsigned int hunterSerial, DWORD now) {
+  if (!hunter || (uintptr_t)hunter < 0x1000 || !SocialCaptureEnabled())
+    return;
+  hand subject;
+  try {
+    OrdersReceiver *orders = hunter->getOrdersReciever();
+    if (!orders || (uintptr_t)orders < 0x1000 || !orders->currentGoal.taskData)
+      return;
+    if (orders->currentGoal.key() != HUNT_MY_THIEF)
+      return;
+    subject = orders->currentGoal.subject;
+  } catch (...) {
+    return;
+  }
+  Character *thief = nullptr;
+  try {
+    if (subject.isValid() && !subject.isNull())
+      thief = subject.getCharacter();
+  } catch (...) {
+    thief = nullptr;
+  }
+  if (!thief || (uintptr_t)thief < 0x1000 || thief == hunter)
+    return;
+  unsigned int thiefSerial = ResolveCharacterSerialForEvent(thief);
+  unsigned long long key = ((unsigned long long)hunterSerial << 32) | (unsigned long long)thiefSerial;
+  std::map<unsigned long long, DWORD>::iterator seen = g_socialTheftHunts.find(key);
+  if (seen != g_socialTheftHunts.end() && now - seen->second < 300000)
+    return;
+  if (g_socialTheftHunts.size() > 512)
+    g_socialTheftHunts.clear();
+  g_socialTheftHunts[key] = now;
+  int stolenCount = -1, bounty = -1;
+  std::string crime = "none";
+  try {
+    Inventory *inv = thief->getInventory();
+    if (inv && (uintptr_t)inv > 0x1000) {
+      lektor<Item *> stolen;
+      inv->getAllStolenItems(stolen, false);
+      stolenCount = (int)stolen.size();
+    }
+  } catch (...) {
+  }
+  try {
+    BountyManager &b = thief->crimes;
+    bounty = b.getTotalBounty();
+    if (b.isCommittingCrime())
+      crime = BountyManager::crimeToStr(b.committingCrime);
+  } catch (...) {
+  }
+  std::map<std::string, int> stolenByKey;
+  std::map<unsigned int, NpcWorldEventState>::const_iterator ts = g_npcWorldEventStateBySerial.find(thiefSerial);
+  if (ts != g_npcWorldEventStateBySerial.end())
+    stolenByKey = ts->second.inventory.stolenByKey;
+  Log("SOCIAL_CAPTURE: theft hunt hunter=" + ResolveCharacterNameSafe(hunter) + " thief=" + ResolveCharacterNameSafe(thief) +
+      " stolen=" + ToString(stolenCount) + " bounty=" + ToString(bounty) + " crime=" + crime);
+  StobeSocial::EntityInfo t = SocialEntityFor(thief), h = SocialEntityFor(hunter);
+  SocialPostStructured("theft_caught", &t, &h,
+                       "\"goal\":\"HUNT_MY_THIEF\",\"stolen_items\":" + StobeSocial::JsonCountMap(stolenByKey, 32) +
+                           ",\"thief_stolen_count\":" + ToString(stolenCount) + ",\"thief_bounty\":" + ToString(bounty) +
+                           ",\"crime\":" + StobeSocial::JsonString(crime));
+}
+
+// M23_THEFT_DIALOG (SR13): the game's own "caught a thief" dialog events (EV_THIEF_CAUGHT_STEALING_FROM_ME = the
+// victim/owner caught him, EV_WITNESS_THIEF_OR_LOCKPICK = a witness saw it). actor = thief, target = speaker.
+static std::map<std::string, DWORD> g_socialTheftDialogSeen;
+static bool SocialIsTheftDialogEvent(int what) {
+  return what == (int)EV_THIEF_CAUGHT_STEALING_FROM_ME || what == (int)EV_WITNESS_THIEF_OR_LOCKPICK;
+}
+static void SocialTheftDialog(Character *speaker, Character *thief, int what, bool delivered, const char *via) {
+  if (!speaker || (uintptr_t)speaker < 0x1000 || !thief || (uintptr_t)thief < 0x1000 || speaker == thief ||
+      !SocialCaptureEnabled())
+    return;
+  try {
+    const char *ev = what == (int)EV_THIEF_CAUGHT_STEALING_FROM_ME ? "EV_THIEF_CAUGHT_STEALING_FROM_ME"
+                                                                   : "EV_WITNESS_THIEF_OR_LOCKPICK";
+    unsigned int ss = ResolveCharacterSerialForEvent(speaker), ts = ResolveCharacterSerialForEvent(thief);
+    std::string key = ToString(ss) + ":" + ToString(ts) + ":" + ToString(what);
+    DWORD now = GetTickCount();
+    std::map<std::string, DWORD>::iterator seen = g_socialTheftDialogSeen.find(key);
+    if (seen != g_socialTheftDialogSeen.end() && now - seen->second < 60000)
+      return;
+    if (g_socialTheftDialogSeen.size() > 512)
+      g_socialTheftDialogSeen.clear();
+    g_socialTheftDialogSeen[key] = now;
+    int stolenCount = -1;
+    std::string crime = "none";
+    try {
+      Inventory *inv = thief->getInventory();
+      if (inv && (uintptr_t)inv > 0x1000) {
+        lektor<Item *> stolen;
+        inv->getAllStolenItems(stolen, false);
+        stolenCount = (int)stolen.size();
+      }
+      if (thief->crimes.isCommittingCrime())
+        crime = BountyManager::crimeToStr(thief->crimes.committingCrime);
+    } catch (...) {
+    }
+    std::map<std::string, int> stolenByKey;
+    std::map<unsigned int, NpcWorldEventState>::const_iterator st = g_npcWorldEventStateBySerial.find(ts);
+    if (st != g_npcWorldEventStateBySerial.end())
+      stolenByKey = st->second.inventory.stolenByKey;
+    Log(std::string("SOCIAL_CAPTURE: theft dialog ev=") + ev + " speaker=" + ResolveCharacterNameSafe(speaker) +
+        " thief=" + ResolveCharacterNameSafe(thief) + " delivered=" + (delivered ? "1" : "0") + " via=" + via +
+        " stolen=" + ToString(stolenCount) + " crime=" + crime);
+    StobeSocial::EntityInfo t = SocialEntityFor(thief), h = SocialEntityFor(speaker);
+    SocialPostStructured("theft_caught", &t, &h,
+                         std::string("\"goal\":") + StobeSocial::JsonString(ev) +
+                             ",\"stolen_items\":" + StobeSocial::JsonCountMap(stolenByKey, 32) +
+                             ",\"thief_stolen_count\":" + ToString(stolenCount) +
+                             ",\"crime\":" + StobeSocial::JsonString(crime));
+  } catch (...) {
+  }
+}
+bool (*dialogueSendEvent_orig)(Dialogue *, Character *, EventTriggerEnum) = nullptr;
+bool (*dialogueSendEventOverride_orig)(Dialogue *, Character *, EventTriggerEnum, bool) = nullptr;
+bool (*charSendDialogEvent_orig)(Character *, Character *, EventTriggerEnum) = nullptr;
+bool (*charSendDialogEventOverride_orig)(Character *, Character *, EventTriggerEnum, bool) = nullptr;
+static Character *SocialDialogueOwner(Dialogue *d) {
+  try {
+    return d && (uintptr_t)d > 0x1000 ? d->getCharacter() : nullptr;
+  } catch (...) {
+    return nullptr;
+  }
+}
+bool dialogueSendEvent_hook(Dialogue *d, Character *who, EventTriggerEnum what) {
+  bool r = dialogueSendEvent_orig(d, who, what);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(SocialDialogueOwner(d), who, (int)what, r, "Dialogue::sendEvent");
+  return r;
+}
+bool dialogueSendEventOverride_hook(Dialogue *d, Character *who, EventTriggerEnum what, bool force) {
+  bool r = dialogueSendEventOverride_orig(d, who, what, force);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(SocialDialogueOwner(d), who, (int)what, r, "Dialogue::sendEventOverride");
+  return r;
+}
+bool charSendDialogEvent_hook(Character *c, Character *who, EventTriggerEnum what) {
+  bool r = charSendDialogEvent_orig(c, who, what);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(c, who, (int)what, r, "Character::sendDialogEvent");
+  return r;
+}
+bool charSendDialogEventOverride_hook(Character *c, Character *who, EventTriggerEnum what, bool force) {
+  bool r = charSendDialogEventOverride_orig(c, who, what, force);
+  if (SocialIsTheftDialogEvent((int)what))
+    SocialTheftDialog(c, who, (int)what, r, "Character::sendDialogEventOverride");
+  return r;
+}
+
+static void EmitLimbLossEvent(Character *victim, const std::string &limbLabel) {
+  CombatAttribution attribution = ResolveCombatAttribution(victim);
+  std::string victimName = ResolveCharacterNameSafe(victim);
+  std::string victimFaction = SafeFaction(victim);
+  std::string message = "severed " + limbLabel + " from " + victimName +
+                        " with " + attribution.weaponName;
+  LogGameEvent("limb_loss", attribution.actorName, attribution.actorFaction,
+               victimName, victimFaction, message, attribution.actorSerial,
+               ResolveCharacterSerialForEvent(victim));
+  SocialEmitHarm(victim, attribution, "maiming", "\"limb\":" + StobeSocial::JsonString(limbLabel));
+}
+
+static std::string EnsureLeadingArticle(const std::string &rawValue) {
+  std::string value = TrimCopy(rawValue);
+  if (value.empty()) {
+    return "an unknown weapon";
+  }
+  std::string lower = ToLowerAsciiCopy(value);
+  if (lower.rfind("a ", 0) == 0 || lower.rfind("an ", 0) == 0 ||
+      lower.rfind("the ", 0) == 0) {
+    return value;
+  }
+  char first = (char)std::tolower((unsigned char)value[0]);
+  bool vowel =
+      first == 'a' || first == 'e' || first == 'i' || first == 'o' || first == 'u';
+  return std::string(vowel ? "an " : "a ") + value;
+}
+
+static void EmitKnockoutEvent(Character *victim, const InventoryEventSnapshot *inventory = nullptr,
+                              int money = -1) {
+  CombatAttribution attribution = ResolveCombatAttribution(victim);
+  std::string victimName = ResolveCharacterNameSafe(victim);
+  std::string victimFaction = SafeFaction(victim);
+  std::string attackerName = TrimCopy(attribution.actorName);
+  std::string weaponName = TrimCopy(attribution.weaponName);
+  std::string weaponLower = ToLowerAsciiCopy(weaponName);
+  bool unknownWeapon =
+      weaponName.empty() || weaponLower == "unknown" ||
+      weaponLower == "unknown weapon" || weaponLower == "an unknown weapon" ||
+      weaponLower == "none";
+  bool knownAttacker =
+      !attackerName.empty() && ToLowerAsciiCopy(attackerName) != "unknown" &&
+      ToLowerAsciiCopy(attackerName) != ToLowerAsciiCopy(victimName);
+
+  std::string message = "was Knocked Out.";
+  if (!unknownWeapon) {
+    message = "Knocked out by " + EnsureLeadingArticle(weaponName);
+    if (knownAttacker) {
+      message += " from " + attackerName;
+    }
+  }
+  LogGameEvent("knockout", victimName, victimFaction, "None", "None", message,
+               ResolveCharacterSerialForEvent(victim), 0);
+  SocialEmitHarm(victim, attribution, "knockout", SocialInventoryFacts(inventory, money));
+}
+
+static void EmitRecoveredEvent(Character *victim, const InventoryEventSnapshot *inventory = nullptr,
+                               int money = -1) {
+  std::string victimName = ResolveCharacterNameSafe(victim);
+  std::string victimFaction = SafeFaction(victim);
+  LogGameEvent("recovered", victimName, victimFaction, "None", "None",
+               "regained consciousness",
+               ResolveCharacterSerialForEvent(victim), 0);
+  if (SocialCaptureEnabled()) {
+    StobeSocial::EntityInfo target = SocialEntityFor(victim);
+    // B 55: vitals on waking (server: bleeding out / near death on waking = critical_harm in the attacker's fight budget).
+    std::string facts = SocialInventoryFacts(inventory, money);
+    facts += (facts.empty() ? "" : ",") + SocialVitalsFacts("", victim);
+    SocialPostStructured("recovered", nullptr, &target, facts);
+  }
+}
+
+static void EmitDeathEvent(Character *victim) {
+  std::string victimName = ResolveCharacterNameSafe(victim);
+  std::string victimFaction = SafeFaction(victim);
+  LogGameEvent("death", victimName, victimFaction, "None", "None", "has died",
+               ResolveCharacterSerialForEvent(victim), 0);
+  if (SocialCaptureEnabled())
+    SocialEmitHarm(victim, ResolveCombatAttribution(victim), "death", "");
+}
+
+// REL m16d: someone who worked on this slave's locks/shackles in the last 60 s (or targets him with any task right
+// now). Returns the sweep key (serial) or 0; owner never counts. Used to tell "freed" from an owner unchaining a slave.
+static bool IsLiberationTask(int t) {
+  return t == (int)PICK_LOCK_ON_SHACKLES || t == (int)CUT_SHACKLES || t == (int)BRUTE_FORCE_SHACKLES ||
+         t == (int)PICK_LOCK || t == (int)CUT_LOCK || t == (int)BRUTE_FORCE_LOCK;
+}
+static unsigned int SocialFindLiberator(unsigned int victimSerial, unsigned int aliasSerial, unsigned int ownerSerial, int &task) {
+  DWORD now = GetTickCount();
+  unsigned int best = 0;
+  for (std::map<unsigned int, NpcWorldEventState>::const_iterator it = g_npcWorldEventStateBySerial.begin();
+       it != g_npcWorldEventStateBySerial.end(); ++it) {
+    if (it->first == victimSerial || (ownerSerial && it->first == ownerSerial))
+      continue;
+    const NpcWorldEventState &s = it->second;
+    bool hits = s.libSubjectSerial && (s.libSubjectSerial == victimSerial || s.libSubjectSerial == aliasSerial) &&
+                now - s.libTick <= 60000;
+    if (hits) {
+      task = s.libTask;
+      return it->first; // a lock/shackle task wins
+    }
+    unsigned int subject = s.currentTaskSubjectSerial;
+    if (!best && subject && (subject == victimSerial || subject == aliasSerial) && now - s.lastSeenTick <= 5000 &&
+        IsLiberationTask(s.currentTask)) {
+      best = it->first;
+      task = s.currentTask;
+    }
+  }
+  return best;
+}
+
+static void EmitSlaveryEvent(Character *victim, bool enslavedNow) {
+  std::string victimName = ResolveCharacterNameSafe(victim);
+  std::string victimFaction = SafeFaction(victim);
+  Character *owner = nullptr;
+  try {
+    owner = ResolveCharacterFromHandSafe(victim->getMySlaveOwner());
+    if (!owner) {
+      owner = ResolveCharacterFromHandSafe(victim->slaveOwner);
+    }
+  } catch (...) {
+    owner = nullptr;
+  }
+  std::string ownerName = owner ? ResolveCharacterNameSafe(owner) : "Unknown";
+  std::string ownerFaction = owner ? SafeFaction(owner) : "None";
+  std::string message = enslavedNow ? "enslaved as a slave" : "freed from slavery";
+  if (enslavedNow && owner) {
+    std::string factionLabel = TrimCopy(ownerFaction);
+    if (factionLabel.empty() || ToLowerAsciiCopy(factionLabel) == "none") {
+      factionLabel = "Unknown Faction";
+    }
+    message += " by " + ownerName + " [" + factionLabel + "]";
+  }
+  LogGameEvent("slavery", victimName, victimFaction, "None", "None", message,
+               ResolveCharacterSerialForEvent(victim),
+               ResolveCharacterSerialForEvent(owner));
+  if (SocialCaptureEnabled()) {
+    // REL phase 3: confirmed state after the change (polling), owner as the actor; unknown owner = null.
+    StobeSocial::EntityInfo target = SocialEntityFor(victim);
+    StobeSocial::EntityInfo actor;
+    if (owner && owner != victim)
+      actor = SocialEntityFor(owner);
+    std::string facts = "\"owner_role\":\"owner\"";
+    if (!enslavedNow) {
+      // REL phase 7: who freed them = someone whose current task targets the slave right now (engine task subject).
+      unsigned int victimSerial = ResolveCharacterSerialForEvent(victim);
+      unsigned int victimAliasSerial = SocialAliasSerial(target); // an order given before the re-squad targets the old handle
+      int libTask = 0;
+      unsigned int libKey = SocialFindLiberator(victimSerial, victimAliasSerial,
+                                                (owner && owner != victim) ? ResolveCharacterSerialForEvent(owner) : 0, libTask);
+      Character *lib = libKey ? ResolveCharacterBySerialForInventoryEvent(libKey) : nullptr;
+      if (libKey && !lib) { // m16d: the freeing can re-squad the freer too (new handle): find her by the sweep's memo
+        for (std::map<uintptr_t, SocialScanMemo>::const_iterator m = g_socialScanSerialByChar.begin();
+             m != g_socialScanSerialByChar.end(); ++m)
+          if (m->second.serial == libKey) {
+            lib = (Character *)m->first;
+            break;
+          }
+      }
+      if (libKey && SocialCaptureEnabled())
+        Log("EVENT_SCAN: liberator for serial=" + ToString(victimSerial) + " key=" + ToString(libKey) + " task=" +
+            ToString(libTask) + (lib ? " name=" + ResolveCharacterNameSafe(lib) : std::string(" (not resolved)")));
+      if (lib) {
+        StobeSocial::EntityInfo l = SocialEntityFor(lib);
+        facts += ",\"liberator\":{\"entity_key\":\"" + PlaythroughSession::ClientId() + ":" +
+                 ToString((unsigned int)PlaythroughSession::Generation()) + ":" + ToString(l.serial) + "\",\"serial\":" +
+                 ToString(l.serial) + ",\"name\":" + StobeSocial::JsonString(l.name) + ",\"storage_id\":" +
+                 (l.storageId.empty() ? std::string("null") : StobeSocial::JsonString(l.storageId)) +
+                 (l.storageAlias.empty() ? std::string() : ",\"storage_alias\":" + StobeSocial::JsonString(l.storageAlias)) +
+                 ",\"faction\":" +
+                 StobeSocial::JsonString(l.faction) + ",\"in_player_faction\":" + StobeSocial::JsonBool(l.inPlayerFaction) +
+                 ",\"conscious\":" + StobeSocial::JsonBool(l.conscious) + "},\"liberator_task\":" + ToString(libTask);
+      }
+    }
+    SocialPostStructured(enslavedNow ? "enslaved" : "freed", (owner && owner != victim) ? &actor : nullptr, &target, facts);
+  }
+}
+
+static void EmitLockpickedEvent(Character *npc, int previousSkill,
+                                int currentSkill) {
+  std::string actorName = ResolveCharacterNameSafe(npc);
+  std::string actorFaction = SafeFaction(npc);
+  std::string skillDelta = ToString(previousSkill) + "->" + ToString(currentSkill);
+  std::string message = "picked a lock (lockpicking " + skillDelta + ")";
+  LogGameEvent("lockpicked", actorName, actorFaction, "None", "None", message,
+               ResolveCharacterSerialForEvent(npc), 0);
+}
+
+static std::string ResolveInventoryDisplayNameForKey(
+    const std::string &key, const InventoryEventSnapshot &preferredSnapshot,
+    const InventoryEventSnapshot &fallbackSnapshot) {
+  std::map<std::string, std::string>::const_iterator preferredIt =
+      preferredSnapshot.displayNameByKey.find(key);
+  if (preferredIt != preferredSnapshot.displayNameByKey.end() &&
+      !preferredIt->second.empty()) {
+    return preferredIt->second;
+  }
+  std::map<std::string, std::string>::const_iterator fallbackIt =
+      fallbackSnapshot.displayNameByKey.find(key);
+  if (fallbackIt != fallbackSnapshot.displayNameByKey.end() &&
+      !fallbackIt->second.empty()) {
+    return fallbackIt->second;
+  }
+  return "Unknown Item";
+}
+
+struct InventoryDeltaDisplayEntry {
+  std::string name;
+  int count;
+
+  InventoryDeltaDisplayEntry() : name(""), count(0) {}
+  InventoryDeltaDisplayEntry(const std::string &entryName, int entryCount)
+      : name(entryName), count(entryCount) {}
+};
+
+static std::string BuildInventoryDeltaItemsText(
+    const std::map<std::string, int> &deltaByKey,
+    const InventoryEventSnapshot &preferredSnapshot,
+    const InventoryEventSnapshot &fallbackSnapshot) {
+  std::vector<InventoryDeltaDisplayEntry> items;
+  for (std::map<std::string, int>::const_iterator it = deltaByKey.begin();
+       it != deltaByKey.end(); ++it) {
+    if (it->second <= 0) {
+      continue;
+    }
+    std::string itemName =
+        ResolveInventoryDisplayNameForKey(it->first, preferredSnapshot,
+                                          fallbackSnapshot);
+    items.push_back(InventoryDeltaDisplayEntry(itemName, it->second));
+  }
+  if (items.empty()) {
+    return "";
+  }
+
+  std::stable_sort(
+      items.begin(), items.end(),
+      [](const InventoryDeltaDisplayEntry &left,
+         const InventoryDeltaDisplayEntry &right) -> bool {
+        if (left.count != right.count) {
+          return left.count > right.count;
+        }
+        return left.name < right.name;
+      });
+
+  std::string itemsText = "";
+  for (size_t i = 0; i < items.size(); ++i) {
+    if (items[i].count <= 0) {
+      continue;
+    }
+    if (!itemsText.empty()) {
+      itemsText += ", ";
+    }
+    std::string itemName = items[i].name.empty() ? "Unknown Item" : items[i].name;
+    itemsText += ToString(items[i].count) + "x " + itemName;
+  }
+  return itemsText;
+}
+
+static void SubtractInventoryDeltaByKey(
+    std::map<std::string, int> &deltaByKey,
+    const std::map<std::string, int> &subtractByKey) {
+  if (deltaByKey.empty() || subtractByKey.empty()) {
+    return;
+  }
+  for (std::map<std::string, int>::const_iterator it = subtractByKey.begin();
+       it != subtractByKey.end(); ++it) {
+    if (it->second <= 0) {
+      continue;
+    }
+    std::map<std::string, int>::iterator deltaIt = deltaByKey.find(it->first);
+    if (deltaIt == deltaByKey.end()) {
+      continue;
+    }
+    deltaIt->second -= it->second;
+    if (deltaIt->second <= 0) {
+      deltaByKey.erase(deltaIt);
+    }
+  }
+}
+
+static void RegisterPendingMedicalItemUse(unsigned int actorSerial,
+                                          const std::string &itemName,
+                                          int quantity) {
+  if (actorSerial == 0 || quantity <= 0) {
+    return;
+  }
+  std::string key = NormalizeInventoryKey(itemName);
+  if (key.empty()) {
+    return;
+  }
+
+  PendingMedicalItemUseState &state =
+      g_pendingMedicalItemUseBySerial[actorSerial];
+  state.pendingByKey[key] += quantity;
+  state.lastUpdateTick = GetTickCount();
+}
+
+static std::map<std::string, int> ConsumePendingMedicalItemLossByKey(
+    unsigned int actorSerial, const std::map<std::string, int> &lossByKey,
+    DWORD nowTick) {
+  std::map<std::string, int> consumedByKey;
+  if (actorSerial == 0 || lossByKey.empty()) {
+    return consumedByKey;
+  }
+
+  std::map<unsigned int, PendingMedicalItemUseState>::iterator stateIt =
+      g_pendingMedicalItemUseBySerial.find(actorSerial);
+  if (stateIt == g_pendingMedicalItemUseBySerial.end()) {
+    return consumedByKey;
+  }
+
+  PendingMedicalItemUseState &state = stateIt->second;
+  if (state.lastUpdateTick == 0 ||
+      (nowTick - state.lastUpdateTick) > kPendingMedicalItemUseRetentionMs) {
+    g_pendingMedicalItemUseBySerial.erase(stateIt);
+    return consumedByKey;
+  }
+
+  for (std::map<std::string, int>::const_iterator it = lossByKey.begin();
+       it != lossByKey.end(); ++it) {
+    const std::string &key = it->first;
+    int lossQty = it->second;
+    if (key.empty() || lossQty <= 0) {
+      continue;
+    }
+    std::map<std::string, int>::iterator pendingIt = state.pendingByKey.find(key);
+    if (pendingIt == state.pendingByKey.end() || pendingIt->second <= 0) {
+      continue;
+    }
+    int matchedQty = lossQty < pendingIt->second ? lossQty : pendingIt->second;
+    if (matchedQty <= 0) {
+      continue;
+    }
+    consumedByKey[key] += matchedQty;
+    pendingIt->second -= matchedQty;
+    if (pendingIt->second <= 0) {
+      state.pendingByKey.erase(pendingIt);
+    }
+  }
+
+  if (state.pendingByKey.empty()) {
+    g_pendingMedicalItemUseBySerial.erase(stateIt);
+  } else {
+    state.lastUpdateTick = nowTick;
+  }
+  return consumedByKey;
+}
+
+static void PrunePendingMedicalItemUseState(DWORD nowTick) {
+  for (std::map<unsigned int, PendingMedicalItemUseState>::iterator it =
+           g_pendingMedicalItemUseBySerial.begin();
+       it != g_pendingMedicalItemUseBySerial.end();) {
+    const bool expired =
+        (it->second.lastUpdateTick == 0) ||
+        ((nowTick - it->second.lastUpdateTick) > kPendingMedicalItemUseRetentionMs);
+    if (expired || it->second.pendingByKey.empty()) {
+      it = g_pendingMedicalItemUseBySerial.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+static std::map<std::string, int> DetectFoodConsumptionLossByKey(
+    const std::map<std::string, int> &lossByKey,
+    const InventoryEventSnapshot &beforeSnapshot, bool hadHungerBefore,
+    float hungerBefore, float fedBefore, float satietyBefore, bool hasHungerAfter,
+    float hungerAfter, float fedAfter, float satietyAfter) {
+  std::map<std::string, int> consumedByKey;
+  if (lossByKey.empty() || !hadHungerBefore || !hasHungerAfter) {
+    return consumedByKey;
+  }
+
+  // Eating raises hunger (fullness) or fed; it falls on its own over time,
+  // so a drop is not a meal (bug 81).
+  const float hungerRise = hungerAfter - hungerBefore;
+  const float fedRise = fedAfter - fedBefore;
+  const float satietyRise = satietyAfter - satietyBefore;
+  const bool hasConsumptionSignal =
+      hungerRise >= 0.01f || fedRise >= 0.01f || satietyRise >= 1.0f; // raw 0..3 scale
+  if (!hasConsumptionSignal) {
+    return consumedByKey;
+  }
+
+  for (std::map<std::string, int>::const_iterator it = lossByKey.begin();
+       it != lossByKey.end(); ++it) {
+    const std::string &key = it->first;
+    int lossQty = it->second;
+    if (key.empty() || lossQty <= 0) {
+      continue;
+    }
+    std::map<std::string, int>::const_iterator foodIt =
+        beforeSnapshot.foodByKey.find(key);
+    if (foodIt == beforeSnapshot.foodByKey.end() || foodIt->second <= 0) {
+      continue;
+    }
+    int consumedQty = lossQty < foodIt->second ? lossQty : foodIt->second;
+    if (consumedQty > 0) {
+      consumedByKey[key] = consumedQty;
+    }
+  }
+  return consumedByKey;
+}
+
+static void EmitEatEvent(Character *npc,
+                         const InventoryEventSnapshot &beforeSnapshot,
+                         const InventoryEventSnapshot &afterSnapshot,
+                         const std::map<std::string, int> &consumedByKey,
+                         float hungerBefore = -1.0f, float hungerAfter = -1.0f) {
+  if (consumedByKey.empty()) {
+    return;
+  }
+
+  std::string itemsText =
+      BuildInventoryDeltaItemsText(consumedByKey, beforeSnapshot, afterSnapshot);
+  if (itemsText.empty()) {
+    return;
+  }
+
+  std::string actorName = ResolveCharacterNameSafe(npc);
+  std::string actorFaction = SafeFaction(npc);
+  std::string message = "ate " + itemsText;
+  LogGameEvent("eat", actorName, actorFaction, "None", "None", message,
+               ResolveCharacterSerialForEvent(npc), 0);
+  if (SocialCaptureEnabled()) {
+    // REL phase 4: who ate what, with fullness before/after (native 0..3; UI x100).
+    StobeSocial::EntityInfo a = SocialEntityFor(npc);
+    char hunger[96];
+    sprintf_s(hunger, sizeof(hunger), "\"hunger_before\":%.3f,\"hunger_after\":%.3f", hungerBefore, hungerAfter);
+    SocialPostStructured("eat", &a, nullptr, "\"items\":" + StobeSocial::JsonCountMap(consumedByKey, 32) + "," + hunger);
+  }
+}
+
+static void ComputeInventoryDeltaByKey(
+    const InventoryEventSnapshot &beforeSnapshot,
+    const InventoryEventSnapshot &afterSnapshot,
+    std::map<std::string, int> &gainByKeyOut,
+    std::map<std::string, int> &lossByKeyOut) {
+  gainByKeyOut.clear();
+  lossByKeyOut.clear();
+
+  for (std::map<std::string, int>::const_iterator it =
+           afterSnapshot.countsByKey.begin();
+       it != afterSnapshot.countsByKey.end(); ++it) {
+    const std::string &key = it->first;
+    int afterCount = it->second;
+    int beforeCount = 0;
+    std::map<std::string, int>::const_iterator beforeIt =
+        beforeSnapshot.countsByKey.find(key);
+    if (beforeIt != beforeSnapshot.countsByKey.end()) {
+      beforeCount = beforeIt->second;
+    }
+    if (afterCount > beforeCount) {
+      gainByKeyOut[key] = afterCount - beforeCount;
+    }
+  }
+
+  for (std::map<std::string, int>::const_iterator it =
+           beforeSnapshot.countsByKey.begin();
+       it != beforeSnapshot.countsByKey.end(); ++it) {
+    const std::string &key = it->first;
+    int beforeCount = it->second;
+    int afterCount = 0;
+    std::map<std::string, int>::const_iterator afterIt =
+        afterSnapshot.countsByKey.find(key);
+    if (afterIt != afterSnapshot.countsByKey.end()) {
+      afterCount = afterIt->second;
+    }
+    if (beforeCount > afterCount) {
+      lossByKeyOut[key] = beforeCount - afterCount;
+    }
+  }
+}
+
+static void EmitPickupEvent(
+    Character *npc, const NpcWorldEventState &state,
+    const InventoryEventSnapshot &currentSnapshot,
+    const std::map<std::string, int> *matchedTransferGainByKey,
+    bool hasMoneyAfter, int moneyAfter) {
+  struct PickupDeltaEntry {
+    std::string name;
+    int count;
+
+    PickupDeltaEntry() : name(""), count(0) {}
+    PickupDeltaEntry(const std::string &entryName, int entryCount)
+        : name(entryName), count(entryCount) {}
+  };
+
+  int addedCount = 0;
+  int addedStolenCount = 0;
+  std::vector<PickupDeltaEntry> addedItems;
+
+  for (std::map<std::string, int>::const_iterator it =
+           currentSnapshot.countsByKey.begin();
+       it != currentSnapshot.countsByKey.end(); ++it) {
+    const std::string &key = it->first;
+    int currentCount = it->second;
+    int previousCount = 0;
+    std::map<std::string, int>::const_iterator prevIt =
+        state.inventory.countsByKey.find(key);
+    if (prevIt != state.inventory.countsByKey.end()) {
+      previousCount = prevIt->second;
+    }
+    int delta = currentCount - previousCount;
+    if (delta <= 0) {
+      continue;
+    }
+    if (matchedTransferGainByKey) {
+      std::map<std::string, int>::const_iterator matchedIt =
+          matchedTransferGainByKey->find(key);
+      if (matchedIt != matchedTransferGainByKey->end()) {
+        int matchedQty = matchedIt->second;
+        if (matchedQty > 0) {
+          int consumed = matchedQty > delta ? delta : matchedQty;
+          delta -= consumed;
+        }
+      }
+    }
+    if (delta <= 0) {
+      continue;
+    }
+    addedCount += delta;
+    std::string displayName =
+        ResolveInventoryDisplayNameForKey(key, currentSnapshot, state.inventory);
+    addedItems.push_back(PickupDeltaEntry(displayName, delta));
+
+    int currentStolen = 0;
+    int previousStolen = 0;
+    std::map<std::string, int>::const_iterator stolenNowIt =
+        currentSnapshot.stolenByKey.find(key);
+    if (stolenNowIt != currentSnapshot.stolenByKey.end()) {
+      currentStolen = stolenNowIt->second;
+    }
+    std::map<std::string, int>::const_iterator stolenPrevIt =
+        state.inventory.stolenByKey.find(key);
+    if (stolenPrevIt != state.inventory.stolenByKey.end()) {
+      previousStolen = stolenPrevIt->second;
+    }
+    int stolenDelta = currentStolen - previousStolen;
+    if (matchedTransferGainByKey) {
+      std::map<std::string, int>::const_iterator matchedIt =
+          matchedTransferGainByKey->find(key);
+      if (matchedIt != matchedTransferGainByKey->end()) {
+        int matchedQty = matchedIt->second;
+        if (matchedQty > 0 && stolenDelta > 0) {
+          stolenDelta -= matchedQty;
+          if (stolenDelta < 0) {
+            stolenDelta = 0;
+          }
+        }
+      }
+    }
+    if (stolenDelta > 0) {
+      addedStolenCount += stolenDelta;
+    }
+  }
+
+  if (addedCount <= 0) {
+    return;
+  }
+
+  std::string actorName = ResolveCharacterNameSafe(npc);
+  std::string actorFaction = SafeFaction(npc);
+
+  bool isPlayerActor = false;
+  try {
+    isPlayerActor = npc && (uintptr_t)npc > 0x1000 && npc->isPlayerCharacter();
+  } catch (...) {
+    isPlayerActor = false;
+  }
+  int catsSpent = 0;
+  if (state.hasMoney && hasMoneyAfter && state.money > moneyAfter) {
+    catsSpent = state.money - moneyAfter;
+  }
+
+  if (isPlayerActor && catsSpent > 0) {
+    GameWorld *world = GetWorldSafe();
+    Character *seller = ResolveLikelyTraderForActor(world, npc);
+    bool sellerValid = seller && (uintptr_t)seller > 0x1000 && seller != npc;
+    bool sellerIsTrader = false;
+    if (sellerValid) {
+      try {
+        sellerIsTrader = seller->isATrader();
+      } catch (...) {
+        sellerIsTrader = false;
+      }
+    }
+    if (sellerValid && sellerIsTrader) {
+      std::string sellerName = ResolveCharacterNameSafe(seller);
+      std::string sellerFaction = SafeFaction(seller);
+      std::map<std::string, int> buyDeltaByKey;
+      for (std::map<std::string, int>::const_iterator it =
+               currentSnapshot.countsByKey.begin();
+           it != currentSnapshot.countsByKey.end(); ++it) {
+        int beforeCount = 0;
+        std::map<std::string, int>::const_iterator beforeIt =
+            state.inventory.countsByKey.find(it->first);
+        if (beforeIt != state.inventory.countsByKey.end()) {
+          beforeCount = beforeIt->second;
+        }
+        if (it->second > beforeCount) {
+          buyDeltaByKey[it->first] = it->second - beforeCount;
+        }
+      }
+      std::string itemsText =
+          BuildInventoryDeltaItemsText(buyDeltaByKey, currentSnapshot, state.inventory);
+      if (itemsText.empty()) {
+        itemsText = ToString(addedCount) + "x Unknown Item";
+      }
+      std::string message =
+          "bought " + itemsText + " from " + sellerName + " for " +
+          ToString(catsSpent) + " cats";
+      LogGameEvent("trade", actorName, actorFaction, sellerName, sellerFaction,
+                   message, ResolveCharacterSerialForEvent(npc),
+                   ResolveCharacterSerialForEvent(seller));
+      return;
+    }
+  }
+
+  std::string mode = "normal";
+  if (addedStolenCount > 0 && addedStolenCount >= addedCount) {
+    mode = "theft";
+  } else if (addedStolenCount > 0) {
+    mode = "mixed";
+  }
+
+  std::string message = "";
+  if (addedItems.size() <= 1) {
+    std::string itemName = !addedItems.empty() && !addedItems[0].name.empty()
+                               ? addedItems[0].name
+                               : "Unknown Item";
+    message =
+        "picked up " + ToString(addedCount) + "x " + itemName + " (" + mode + ")";
+  } else {
+    std::stable_sort(
+        addedItems.begin(), addedItems.end(),
+        [](const PickupDeltaEntry &left,
+           const PickupDeltaEntry &right) -> bool {
+          if (left.count != right.count) {
+            return left.count > right.count;
+          }
+          return left.name < right.name;
+        });
+
+    std::string breakdown = "";
+    for (size_t i = 0; i < addedItems.size(); ++i) {
+      if (i > 0) {
+        breakdown += ", ";
+      }
+      breakdown += ToString(addedItems[i].count) + "x " + addedItems[i].name;
+    }
+
+    message = "picked up " + ToString(addedCount) + " total: " + breakdown +
+              " (" + mode + ")";
+  }
+  LogGameEvent("item_pickup", actorName, actorFaction, "None", "None",
+               message, ResolveCharacterSerialForEvent(npc), 0);
+}
+
+struct PendingInventoryTransferDelta {
+  unsigned int serial;
+  Character *npc;
+  std::string actorName;
+  std::string actorFaction;
+  InventoryEventSnapshot beforeSnapshot;
+  InventoryEventSnapshot afterSnapshot;
+  std::map<std::string, int> gainByKey;
+  std::map<std::string, int> lossByKey;
+
+  PendingInventoryTransferDelta()
+      : serial(0), npc(nullptr), actorName(""), actorFaction("") {}
+};
+
+struct PendingInventoryPickupEvent {
+  unsigned int serial;
+  Character *npc;
+  NpcWorldEventState priorState;
+  InventoryEventSnapshot currentSnapshot;
+  bool hasMoneyAfter;
+  int moneyAfter;
+
+  PendingInventoryPickupEvent()
+      : serial(0), npc(nullptr), priorState(), hasMoneyAfter(false),
+        moneyAfter(0) {}
+};
+
+struct TransferEventAggregation {
+  unsigned int fromSerial;
+  unsigned int toSerial;
+  std::string fromName;
+  std::string fromFaction;
+  std::string toName;
+  std::string toFaction;
+  std::map<std::string, int> qtyByKey;
+  std::map<std::string, std::string> displayNameByKey;
+  std::vector<std::string> itemOrder;
+
+  TransferEventAggregation()
+      : fromSerial(0), toSerial(0), fromName(""), fromFaction(""),
+        toName(""), toFaction("") {}
+};
+
+struct PendingTransferLoss {
+  unsigned int fromSerial;
+  std::string fromName;
+  std::string fromFaction;
+  std::string itemKey;
+  std::string itemName;
+  int qty;
+  DWORD observedTick;
+
+  PendingTransferLoss()
+      : fromSerial(0), fromName(""), fromFaction(""), itemKey(""),
+        itemName(""), qty(0), observedTick(0) {}
+};
+
+static std::string BuildTransferPairKey(unsigned int fromSerial,
+                                        unsigned int toSerial) {
+  return ToString(fromSerial) + "->" + ToString(toSerial);
+}
+
+static Character *ResolveCharacterBySerialForInventoryEvent(unsigned int serial) {
+  if (serial == 0) {
+    return nullptr;
+  }
+  GameWorld *world = GetWorldSafe();
+  if (!world || (uintptr_t)world < 0x1000) {
+    return nullptr;
+  }
+  try {
+    const auto &chars = world->getCharacterUpdateList();
+    for (auto it = chars.begin(); it != chars.end(); ++it) {
+      Character *candidate = *it;
+      if (!candidate || (uintptr_t)candidate < 0x1000) {
+        continue;
+      }
+      unsigned int candidateSerial = 0;
+      try {
+        candidateSerial = candidate->getHandle().serial;
+      } catch (...) {
+        candidateSerial = 0;
+      }
+      if (candidateSerial == serial) {
+        return candidate;
+      }
+    }
+  } catch (...) {
+  }
+  return nullptr;
+}
+
+static Character *ResolveLikelyInventoryTransferCounterparty(Character *actor) {
+  if (!actor || (uintptr_t)actor < 0x1000) {
+    return nullptr;
+  }
+
+  GameWorld *world = GetWorldSafe();
+  if (!world || (uintptr_t)world < 0x1000) {
+    return nullptr;
+  }
+
+  Character *talkTarget = ResolveCharacterFromHandSafe(g_talkTargetHand);
+  if (talkTarget && (uintptr_t)talkTarget > 0x1000) {
+    if (talkTarget == actor) {
+      Character *playerSpeaker = ResolveNearestPlayerSpeakerForTarget(world, actor);
+      if (playerSpeaker && (uintptr_t)playerSpeaker > 0x1000 &&
+          playerSpeaker != actor) {
+        return playerSpeaker;
+      }
+    } else {
+      bool actorIsPlayer = false;
+      try {
+        actorIsPlayer = actor->isPlayerCharacter();
+      } catch (...) {
+        actorIsPlayer = false;
+      }
+      if (actorIsPlayer) {
+        return talkTarget;
+      }
+    }
+  }
+
+  std::string listenerSource = "";
+  Character *listener =
+      ResolveDialogueListenerForSpeech(actor, nullptr, listenerSource);
+  if (listener && (uintptr_t)listener > 0x1000 && listener != actor) {
+    return listener;
+  }
+
+  Character *selectionTarget = ResolveCharacterFromHandSafe(g_lastSelectionHand);
+  if (selectionTarget && (uintptr_t)selectionTarget > 0x1000 &&
+      selectionTarget == actor) {
+    Character *playerSpeaker = ResolveNearestPlayerSpeakerForTarget(world, actor);
+    if (playerSpeaker && (uintptr_t)playerSpeaker > 0x1000 &&
+        playerSpeaker != actor) {
+      return playerSpeaker;
+    }
+  }
+
+  return nullptr;
+}
+
+// Proves ONLY unchanged whole stacks observed moving between these two holders.
+// Split/merged stacks, stale loads, missed sweeps and name-only matches fail closed.
+// Server must scope item_key by envelope campaign/session/epoch and match both
+// participants and the original incident before allocating restitution.
+static std::string SocialExactTransferEvidence(
+    const TransferEventAggregation &agg,
+    const std::vector<PendingInventoryTransferDelta> &deltas,
+    const StobeSocial::EntityInfo &giver, const StobeSocial::EntityInfo &receiver) {
+  const PendingInventoryTransferDelta *from = nullptr, *to = nullptr;
+  for (size_t i = 0; i < deltas.size(); ++i) {
+    if (deltas[i].serial == agg.fromSerial) {
+      if (from) return "\"transfer_evidence\":{\"verified\":false}";
+      from = &deltas[i];
+    }
+    if (deltas[i].serial == agg.toSerial) {
+      if (to) return "\"transfer_evidence\":{\"verified\":false}";
+      to = &deltas[i];
+    }
+  }
+  std::string rows;
+  size_t emitted = 0;
+  std::map<std::string, int> provedByType;
+  if (from && to && from != to && !giver.storageId.empty() &&
+      !receiver.storageId.empty() && giver.storageId != receiver.storageId) {
+    for (auto it = from->beforeSnapshot.exactInstances.begin();
+         it != from->beforeSnapshot.exactInstances.end() && emitted < 32; ++it) {
+      const SocialInventoryInstance &a = it->second;
+      auto found = to->afterSnapshot.exactInstances.find(it->first);
+      if (found == to->afterSnapshot.exactInstances.end()) continue;
+      const SocialInventoryInstance &b = found->second;
+      auto bound = agg.qtyByKey.find(a.typeKey);
+      if (!a.address || !a.serial || a.quantity <= 0 ||
+          a.epoch != PlaythroughSession::Generation() || a.epoch != b.epoch ||
+          a.address != b.address || a.serial != b.serial ||
+          a.prototypeId != b.prototypeId || a.typeKey != b.typeKey ||
+          a.quantity != b.quantity || bound == agg.qtyByKey.end() ||
+          a.quantity > bound->second - provedByType[a.typeKey] ||
+          from->afterSnapshot.exactInstances.count(it->first) ||
+          to->beforeSnapshot.exactInstances.count(it->first)) continue;
+      bool ambiguous = false;
+      for (size_t n = 0; n < deltas.size(); ++n) {
+        if (&deltas[n] == from || &deltas[n] == to) continue;
+        if (deltas[n].beforeSnapshot.exactInstances.count(it->first) ||
+            deltas[n].afterSnapshot.exactInstances.count(it->first)) ambiguous = true;
+      }
+      // Also reject aliases in tracked holders which did not emit a delta.
+      for (auto owner = g_npcWorldEventStateBySerial.begin();
+           owner != g_npcWorldEventStateBySerial.end(); ++owner) {
+        if (owner->first != agg.fromSerial && owner->first != agg.toSerial &&
+            owner->second.inventory.exactInstances.count(it->first)) ambiguous = true;
+      }
+      if (ambiguous) continue;
+      if (!rows.empty()) rows += ",";
+      rows += "{\"item_key\":" + StobeSocial::JsonString("hand_" + ToString(a.serial)) +
+          ",\"prototype_id\":" + StobeSocial::JsonString(a.prototypeId) +
+          ",\"type_key\":" + StobeSocial::JsonString(a.typeKey) +
+          ",\"quantity\":" + ToString(a.quantity) +
+          ",\"from_storage_id\":" + StobeSocial::JsonString(giver.storageId) +
+          ",\"to_storage_id\":" + StobeSocial::JsonString(receiver.storageId) + "}";
+      provedByType[a.typeKey] += a.quantity;
+      ++emitted;
+    }
+  }
+  return rows.empty() ? "\"transfer_evidence\":{\"verified\":false}" :
+      "\"transfer_evidence\":{\"verified\":true,\"method\":\"same_live_item_whole_stack\",\"items\":[" + rows + "]}";
+}
+
+static void EmitInventoryTransferEventsFromDeltas(
+    const std::vector<PendingInventoryTransferDelta> &deltas,
+    std::map<unsigned int, std::map<std::string, int> > &matchedGainBySerialOut) {
+  matchedGainBySerialOut.clear();
+
+  static std::deque<PendingTransferLoss> pendingLosses;
+  DWORD nowTick = GetTickCount();
+  const DWORD kPendingLossMaxAgeMs = 6000;
+  const size_t kPendingLossMaxEntries = 512;
+
+  std::map<std::string, TransferEventAggregation> aggregatedByPair;
+  std::map<std::string, TransferEventAggregation> agedOutByPair;
+
+  auto appendAggregation = [&](std::map<std::string, TransferEventAggregation> &dest,
+                               unsigned int fromSerial,
+                               const std::string &fromName,
+                               const std::string &fromFaction,
+                               unsigned int toSerial, const std::string &toName,
+                               const std::string &toFaction,
+                               const std::string &itemKey,
+                               const std::string &itemName, int matchedQty) {
+    if (fromSerial == 0 || itemKey.empty() || matchedQty <= 0) {
+      return;
+    }
+    std::string pairKey = BuildTransferPairKey(fromSerial, toSerial);
+    TransferEventAggregation &agg = dest[pairKey];
+    agg.fromSerial = fromSerial;
+    agg.toSerial = toSerial;
+    if (agg.fromName.empty()) {
+      agg.fromName = fromName;
+    }
+    if (agg.fromFaction.empty()) {
+      agg.fromFaction = fromFaction;
+    }
+    if (agg.toName.empty()) {
+      agg.toName = toName;
+    }
+    if (agg.toFaction.empty()) {
+      agg.toFaction = toFaction;
+    }
+    if (agg.qtyByKey.count(itemKey) == 0) {
+      agg.itemOrder.push_back(itemKey);
+    }
+    agg.qtyByKey[itemKey] += matchedQty;
+    if (agg.displayNameByKey.count(itemKey) == 0) {
+      agg.displayNameByKey[itemKey] = itemName;
+    }
+  };
+
+  for (std::deque<PendingTransferLoss>::iterator it = pendingLosses.begin();
+       it != pendingLosses.end();) {
+    bool expired = (it->observedTick == 0) ||
+                   (nowTick - it->observedTick > kPendingLossMaxAgeMs);
+    bool empty = it->qty <= 0 || it->itemKey.empty() || it->fromSerial == 0;
+    if (expired || empty) {
+      if (!empty && expired) {
+        // Bug 102: no matching gain = eaten, drunk, used up or dropped; never
+        // a hand-over to whoever is nearby.
+        Log("INV_TRANSFER: unmatched loss from=" + it->fromName + " item=" +
+            it->itemName + " qty=" + ToString(it->qty) +
+            " (used up or dropped; no event)");
+      }
+      it = pendingLosses.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  if (!deltas.empty()) {
+    std::vector<PendingInventoryTransferDelta> working = deltas;
+    auto appendMatch = [&](unsigned int fromSerial, const std::string &fromName,
+                           const std::string &fromFaction, unsigned int toSerial,
+                           const std::string &toName,
+                           const std::string &toFaction,
+                           const std::string &itemKey,
+                           const std::string &itemName, int matchedQty) {
+      appendAggregation(aggregatedByPair, fromSerial, fromName, fromFaction,
+                        toSerial, toName, toFaction, itemKey, itemName,
+                        matchedQty);
+    };
+
+    for (size_t toIndex = 0; toIndex < working.size(); ++toIndex) {
+      PendingInventoryTransferDelta &toDelta = working[toIndex];
+      if (toDelta.serial == 0) {
+        continue;
+      }
+
+      for (std::map<std::string, int>::iterator gainIt = toDelta.gainByKey.begin();
+           gainIt != toDelta.gainByKey.end(); ++gainIt) {
+        const std::string &itemKey = gainIt->first;
+        int gainRemaining = gainIt->second;
+        if (gainRemaining <= 0) {
+          continue;
+        }
+
+        for (size_t fromIndex = 0;
+             fromIndex < working.size() && gainRemaining > 0; ++fromIndex) {
+          if (fromIndex == toIndex) {
+            continue;
+          }
+          PendingInventoryTransferDelta &fromDelta = working[fromIndex];
+          if (fromDelta.serial == 0 || fromDelta.serial == toDelta.serial) {
+            continue;
+          }
+          std::map<std::string, int>::iterator lossIt =
+              fromDelta.lossByKey.find(itemKey);
+          if (lossIt == fromDelta.lossByKey.end() || lossIt->second <= 0) {
+            continue;
+          }
+
+          int matchedQty =
+              gainRemaining < lossIt->second ? gainRemaining : lossIt->second;
+          if (matchedQty <= 0) {
+            continue;
+          }
+
+          gainRemaining -= matchedQty;
+          gainIt->second -= matchedQty;
+          lossIt->second -= matchedQty;
+          matchedGainBySerialOut[toDelta.serial][itemKey] += matchedQty;
+          appendMatch(fromDelta.serial, fromDelta.actorName, fromDelta.actorFaction,
+                      toDelta.serial, toDelta.actorName, toDelta.actorFaction,
+                      itemKey,
+                      ResolveInventoryDisplayNameForKey(
+                          itemKey, fromDelta.beforeSnapshot, toDelta.afterSnapshot),
+                      matchedQty);
+        }
+
+        if (gainRemaining > 0 && SocialCaptureEnabled()) {
+          // REL probe (capture on only): which gains find no loss in this sweep (matched later or never).
+          Log("INV_TRANSFER: gain without loss this sweep to=" + toDelta.actorName + " item=" + itemKey +
+              " qty=" + ToString(gainRemaining));
+          // Run m8: looting a knocked-out body shows only the looter's gain (the body's loss appears on waking).
+          StobeSocial::EntityInfo gainer = SocialEntityFor(toDelta.npc);
+          std::map<std::string, int> gained;
+          gained[itemKey] = gainRemaining;
+          // REL_THEFT_CAUGHT_M18: the stolen-flagged part of the gain (shop/world goods) and who saw the taker.
+          int stolenGain = 0;
+          {
+            std::map<std::string, int>::const_iterator sa = toDelta.afterSnapshot.stolenByKey.find(itemKey);
+            std::map<std::string, int>::const_iterator sb = toDelta.beforeSnapshot.stolenByKey.find(itemKey);
+            stolenGain = (sa != toDelta.afterSnapshot.stolenByKey.end() ? sa->second : 0) -
+                         (sb != toDelta.beforeSnapshot.stolenByKey.end() ? sb->second : 0);
+            if (stolenGain > gainRemaining)
+              stolenGain = gainRemaining;
+            if (stolenGain < 0)
+              stolenGain = 0;
+          }
+          std::map<std::string, int> stolenGained;
+          if (stolenGain > 0)
+            stolenGained[itemKey] = stolenGain;
+          std::vector<StobeSocial::EntityInfo> gainWho;
+          std::vector<int> gainSense;
+          // Who saw the taker: SR09 evidence when he loots a knocked-out body (only the gain shows then).
+          SocialCollectWitnesses(toDelta.npc, toDelta.npc, gainWho, gainSense);
+          SocialPostStructuredW("item_gain", &gainer, nullptr,
+                                "\"items\":" + StobeSocial::JsonCountMap(gained, 8) +
+                                    ",\"stolen_items\":" + StobeSocial::JsonCountMap(stolenGained, 8),
+                                gainWho, gainSense);
+        }
+        if (gainRemaining > 0) {
+          for (std::deque<PendingTransferLoss>::iterator pendingIt =
+                   pendingLosses.begin();
+               pendingIt != pendingLosses.end() && gainRemaining > 0;
+               ++pendingIt) {
+            if (pendingIt->qty <= 0 || pendingIt->itemKey != itemKey) {
+              continue;
+            }
+            if (pendingIt->fromSerial == 0 ||
+                pendingIt->fromSerial == toDelta.serial) {
+              continue;
+            }
+            int matchedQty =
+                gainRemaining < pendingIt->qty ? gainRemaining : pendingIt->qty;
+            if (matchedQty <= 0) {
+              continue;
+            }
+            gainRemaining -= matchedQty;
+            gainIt->second -= matchedQty;
+            pendingIt->qty -= matchedQty;
+            matchedGainBySerialOut[toDelta.serial][itemKey] += matchedQty;
+            appendMatch(
+                pendingIt->fromSerial, pendingIt->fromName, pendingIt->fromFaction,
+                toDelta.serial, toDelta.actorName, toDelta.actorFaction, itemKey,
+                pendingIt->itemName.empty()
+                    ? ResolveInventoryDisplayNameForKey(
+                          itemKey, toDelta.afterSnapshot, toDelta.beforeSnapshot)
+                    : pendingIt->itemName,
+                matchedQty);
+          }
+        }
+      }
+    }
+
+    for (std::deque<PendingTransferLoss>::iterator it = pendingLosses.begin();
+         it != pendingLosses.end();) {
+      if (it->qty <= 0) {
+        it = pendingLosses.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    for (size_t fromIndex = 0; fromIndex < working.size(); ++fromIndex) {
+      PendingInventoryTransferDelta &fromDelta = working[fromIndex];
+      if (fromDelta.serial == 0) {
+        continue;
+      }
+      for (std::map<std::string, int>::const_iterator lossIt =
+               fromDelta.lossByKey.begin();
+           lossIt != fromDelta.lossByKey.end(); ++lossIt) {
+        const std::string &itemKey = lossIt->first;
+        int lossQty = lossIt->second;
+        if (itemKey.empty() || lossQty <= 0) {
+          continue;
+        }
+        PendingTransferLoss pending;
+        pending.fromSerial = fromDelta.serial;
+        pending.fromName = fromDelta.actorName;
+        pending.fromFaction = fromDelta.actorFaction;
+        pending.itemKey = itemKey;
+        pending.itemName = ResolveInventoryDisplayNameForKey(
+            itemKey, fromDelta.beforeSnapshot, fromDelta.afterSnapshot);
+        pending.qty = lossQty;
+        pending.observedTick = nowTick;
+        pendingLosses.push_back(pending);
+      }
+    }
+  }
+
+  while (pendingLosses.size() > kPendingLossMaxEntries) {
+    const PendingTransferLoss &overflow = pendingLosses.front();
+    if (overflow.qty > 0 && overflow.fromSerial != 0 && !overflow.itemKey.empty()) {
+      Log("INV_TRANSFER: unmatched loss from=" + overflow.fromName + " item=" +
+          overflow.itemName + " qty=" + ToString(overflow.qty) +
+          " (queue full; no event)"); // bug 102
+    }
+    pendingLosses.pop_front();
+  }
+
+  auto emitAggregations =
+      [&](std::map<std::string, TransferEventAggregation> &byPair) {
+        for (std::map<std::string, TransferEventAggregation>::iterator it =
+                 byPair.begin();
+             it != byPair.end(); ++it) {
+          TransferEventAggregation &agg = it->second;
+          if (agg.qtyByKey.empty()) {
+            continue;
+          }
+
+          std::string itemsText = "";
+          for (size_t i = 0; i < agg.itemOrder.size(); ++i) {
+            const std::string &itemKey = agg.itemOrder[i];
+            std::map<std::string, int>::const_iterator qtyIt =
+                agg.qtyByKey.find(itemKey);
+            if (qtyIt == agg.qtyByKey.end() || qtyIt->second <= 0) {
+              continue;
+            }
+            std::string itemName = "Unknown Item";
+            std::map<std::string, std::string>::const_iterator nameIt =
+                agg.displayNameByKey.find(itemKey);
+            if (nameIt != agg.displayNameByKey.end() && !nameIt->second.empty()) {
+              itemName = nameIt->second;
+            }
+            if (!itemsText.empty()) {
+              itemsText += ", ";
+            }
+            itemsText += ToString(qtyIt->second) + "x " + itemName;
+          }
+          if (itemsText.empty()) {
+            continue;
+          }
+
+          std::string fromName = agg.fromName.empty() ? "Unknown" : agg.fromName;
+          std::string toName = agg.toName.empty() ? "Unknown" : agg.toName;
+          std::string fromFaction =
+              agg.fromFaction.empty() ? "None" : agg.fromFaction;
+          std::string toFaction = agg.toFaction.empty() ? "None" : agg.toFaction;
+
+          std::string toNameLower = ToLowerAsciiCopy(TrimCopy(toName));
+          bool isGroundDrop = (agg.toSerial == 0) || (toNameLower == "ground");
+          std::string message = isGroundDrop
+                                    ? ("dropped " + itemsText +
+                                       " on the ground")
+                                    : ("transferred " + itemsText + " to " +
+                                       toName);
+          LogGameEvent("trade", fromName, fromFaction, toName, toFaction,
+                       message, agg.fromSerial, agg.toSerial);
+          if (SocialCaptureEnabled()) {
+            // REL phase 3: objective item movement (actor = taker, target = loser). The server keeps it
+            // as diagnostic truth while the loser is unconscious; it never becomes the victim's belief.
+            Character *fromChar = ResolveCharacterBySerialForInventoryEvent(agg.fromSerial);
+            Character *toChar = isGroundDrop ? nullptr : ResolveCharacterBySerialForInventoryEvent(agg.toSerial);
+            StobeSocial::EntityInfo loser = SocialEntityFor(fromChar), taker = SocialEntityFor(toChar);
+            if (!fromChar) {
+              loser.serial = agg.fromSerial;
+              loser.name = fromName;
+            }
+            if (!isGroundDrop && !toChar) {
+              taker.serial = agg.toSerial;
+              taker.name = toName;
+            }
+            // REL phase 6: "caught" = the conscious owner's own senses register the taker (SensoryData).
+            int caught = 0;
+            if (fromChar && toChar && loser.conscious == 1) {
+              SensoryData *ownerSense = nullptr;
+              try {
+                ownerSense = fromChar->getSensoryData();
+              } catch (...) {
+                ownerSense = nullptr;
+              }
+              caught = SocialSenseTri(ownerSense, toChar, false);
+            }
+            std::map<std::string, int> food, stolen;
+            std::string recipientHunger = "null", loserHunger = "null";
+            int loserTotal = -1;
+            std::map<unsigned int, NpcWorldEventState>::const_iterator from =
+                g_npcWorldEventStateBySerial.find(agg.fromSerial);
+            if (from != g_npcWorldEventStateBySerial.end()) {
+              loserTotal = from->second.inventory.totalCount;
+              if (from->second.hasHunger) {
+                char h[32];
+                sprintf_s(h, sizeof(h), "%.3f", from->second.hunger);
+                loserHunger = h;
+              }
+            }
+            std::map<unsigned int, NpcWorldEventState>::const_iterator to =
+                g_npcWorldEventStateBySerial.find(agg.toSerial);
+            if (!isGroundDrop && to != g_npcWorldEventStateBySerial.end()) {
+              for (std::map<std::string, int>::const_iterator q = agg.qtyByKey.begin(); q != agg.qtyByKey.end(); ++q) {
+                if (to->second.inventory.foodByKey.count(q->first))
+                  food[q->first] = q->second;
+                if (to->second.inventory.stolenByKey.count(q->first))
+                  stolen[q->first] = q->second;
+              }
+              if (to->second.hasHunger) {
+                char h[32];
+                sprintf_s(h, sizeof(h), "%.3f", to->second.hunger);
+                recipientHunger = h;
+              }
+            }
+            // REL_THEFT_CAUGHT_M18 (SR09): who saw the taker take it.
+            std::vector<StobeSocial::EntityInfo> transferWho;
+            std::vector<int> transferSense;
+            if (!isGroundDrop && toChar && fromChar)
+              SocialCollectWitnesses(toChar, fromChar, transferWho, transferSense);
+            SocialPostStructuredW("item_transfer", isGroundDrop ? nullptr : &taker, &loser,
+                                 SocialExactTransferEvidence(agg, deltas, loser, taker) + "," +
+                                 "\"items\":" + StobeSocial::JsonCountMap(agg.qtyByKey, 64) +
+                                     ",\"to_ground\":" + std::string(isGroundDrop ? "true" : "false") +
+                                     ",\"food_items\":" + StobeSocial::JsonCountMap(food, 64) +
+                                     ",\"recipient_hunger\":" + recipientHunger +
+                                     ",\"stolen_items\":" + StobeSocial::JsonCountMap(stolen, 64) +
+                                     ",\"caught\":" + std::string(caught == 2 ? "true" : (caught == 1 ? "false" : "null")) +
+                                     ",\"loser_inventory_total\":" +
+                                     (loserTotal >= 0 ? ToString(loserTotal + 0) : std::string("null")) +
+                                     ",\"loser_hunger\":" + loserHunger,
+                                 transferWho, transferSense);
+          }
+        }
+      };
+  emitAggregations(aggregatedByPair);
+  emitAggregations(agedOutByPair);
+}
+
+static Character *ResolveCharacterBySerialForCarryEvent(unsigned int serial) {
+  return ResolveCharacterBySerialForInventoryEvent(serial);
+}
+
+static void EmitCarryPickupEvent(Character *carrier, unsigned int targetSerial,
+                                 const std::string &targetNameHint) {
+  std::string actorName = ResolveCharacterNameSafe(carrier);
+  std::string actorFaction = SafeFaction(carrier);
+  Character *target = ResolveCharacterBySerialForCarryEvent(targetSerial);
+  std::string targetName = target ? ResolveCharacterNameSafe(target)
+                                  : TrimCopy(targetNameHint);
+  if (targetName.empty()) {
+    targetName = "someone";
+  }
+  std::string targetFaction = target ? SafeFaction(target) : "None";
+  std::string message = "picked up " + targetName;
+  LogGameEvent("carry", actorName, actorFaction, targetName, targetFaction,
+               message, ResolveCharacterSerialForEvent(carrier),
+               targetSerial != 0 ? targetSerial
+                                 : ResolveCharacterSerialForEvent(target));
+  if (SocialCaptureEnabled() && target) {
+    StobeSocial::EntityInfo a = SocialEntityFor(carrier), t = SocialEntityFor(target);
+    SocialPostStructured("carry_start", &a, &t, SocialVitalsFacts("", target));
+  }
+}
+
+static void EmitCarryDropEvent(Character *carrier, unsigned int targetSerial,
+                               const std::string &targetNameHint) {
+  std::string actorName = ResolveCharacterNameSafe(carrier);
+  std::string actorFaction = SafeFaction(carrier);
+  Character *target = ResolveCharacterBySerialForCarryEvent(targetSerial);
+  std::string targetName = target ? ResolveCharacterNameSafe(target)
+                                  : TrimCopy(targetNameHint);
+  if (targetName.empty()) {
+    targetName = "their carried target";
+  }
+  std::string targetFaction = target ? SafeFaction(target) : "None";
+  std::string message = "put down " + targetName;
+  LogGameEvent("carry", actorName, actorFaction, targetName, targetFaction,
+               message, ResolveCharacterSerialForEvent(carrier),
+               targetSerial != 0 ? targetSerial
+                                 : ResolveCharacterSerialForEvent(target));
+  unsigned int droppedSerial = targetSerial != 0 ? targetSerial : ResolveCharacterSerialForEvent(target);
+  if (droppedSerial != 0) {
+    NpcWorldEventState &dropped = g_npcWorldEventStateBySerial[droppedSerial];
+    dropped.lastCarrierSerial = ResolveCharacterSerialForEvent(carrier);
+    dropped.lastCarryDropTick = GetTickCount();
+  }
+  if (SocialCaptureEnabled() && target) {
+    StobeSocial::EntityInfo a = SocialEntityFor(carrier), t = SocialEntityFor(target);
+    int place = -1;
+    bool chained = false, dead = false;
+    try {
+      place = (int)target->inSomething;
+      chained = target->isChainedMode();
+      dead = target->isDead();
+    } catch (...) {
+    }
+    SocialPostStructured("carry_end", &a, &t,
+                         "\"in_something\":" + ToString(place) + ",\"chained\":" + (chained ? "true" : "false") +
+                             ",\"dead\":" + (dead ? "true" : "false") + "," + SocialVitalsFacts("", target));
+  }
+}
+
+static void SocialFlushAidSessions(DWORD now) {
+  if (g_socialAidSessions.empty())
+    return;
+  std::vector<SocialAidSession> done;
+  EnterCriticalSection(&g_eventMutex);
+  for (std::map<unsigned long long, SocialAidSession>::iterator it = g_socialAidSessions.begin();
+       it != g_socialAidSessions.end();) {
+    if (now - it->second.lastTick > 4000) {
+      done.push_back(it->second);
+      it = g_socialAidSessions.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  LeaveCriticalSection(&g_eventMutex);
+  for (size_t i = 0; i < done.size(); ++i) {
+    const SocialAidSession &s = done[i];
+    Character *provider = ResolveCharacterBySerialForInventoryEvent(s.provider);
+    Character *recipient = ResolveCharacterBySerialForInventoryEvent(s.recipient);
+    if (!provider || !recipient) {
+      Log("SOCIAL_AID: dropped unresolved session provider=#" + ToString(s.provider) + (provider ? "" : "(gone)") +
+          " recipient=#" + ToString(s.recipient) + (recipient ? "" : "(gone)"));
+      continue;
+    }
+    if (provider == recipient)
+      continue; // self-treatment builds no relationship
+    StobeSocial::EntityInfo a = SocialEntityFor(provider), t = SocialEntityFor(recipient);
+    std::vector<StobeSocial::EntityInfo> witnessWho;
+    std::vector<int> witnessSense;
+    SocialCollectWitnesses(provider, recipient, witnessWho, witnessSense);
+    char before[320];
+    if (s.known)
+      sprintf_s(before, sizeof(before),
+                "\"before_known\":true,\"before_health\":%.3f,\"before_blood\":%.3f,\"before_bleed\":%.4f,\"before_wound\":%.1f,\"before_untreated\":%.1f",
+                s.worst, s.blood, s.bleed, s.wound, s.untreated);
+    else
+      sprintf_s(before, sizeof(before), "\"before_known\":false");
+    SocialPostStructuredW("aid", &a, &t,
+                         std::string(before) + "," + SocialVitalsFacts("after_", recipient) +
+                             ",\"conscious_before\":" + StobeSocial::JsonBool(s.conscious) +
+                             ",\"seconds\":" + ToString((int)((s.lastTick - s.startTick) / 1000)) +
+                             ",\"item\":" + StobeSocial::JsonString(s.item) +
+                             ",\"supplier_serial\":" + ToString(s.supplier),
+                         witnessWho, witnessSense);
+  }
+}
+
+static void PruneNpcWorldEventState() {
+  DWORD nowTick = GetTickCount();
+  int pruned = 0;
+  for (std::map<unsigned int, NpcWorldEventState>::iterator it =
+           g_npcWorldEventStateBySerial.begin();
+       it != g_npcWorldEventStateBySerial.end();) {
+    DWORD age = nowTick - it->second.lastSeenTick;
+    if (it->second.lastSeenTick == 0 || age > kNpcWorldEventStateRetentionMs) {
+      it = g_npcWorldEventStateBySerial.erase(it);
+      ++pruned;
+    } else {
+      ++it;
+    }
+  }
+  if (pruned > 0) {
+    Log("EVENT_SCAN: pruned npc event state entries=" + ToString(pruned));
+  }
+  for (std::map<uintptr_t, SocialScanMemo>::iterator m = g_socialScanSerialByChar.begin(); m != g_socialScanSerialByChar.end();) {
+    if (g_npcWorldEventStateBySerial.find(m->second.serial) == g_npcWorldEventStateBySerial.end())
+      m = g_socialScanSerialByChar.erase(m);
+    else
+      ++m;
+  }
+  PrunePendingMedicalItemUseState(nowTick);
+  PruneHealingEventSessionState(nowTick);
+  PrunePredationEventSessionState(nowTick);
+}
+
+struct CombatCharacterObservation {
+  bool dead;
+  bool unconscious;
+  bool fleeing;
+  bool evidence;
+  Character *attackTarget;
+  std::vector<Character *> attackers;
+
+  CombatCharacterObservation()
+      : dead(false), unconscious(false), fleeing(false), evidence(false),
+        attackTarget(nullptr) {}
+};
+
+// Item 88: when a character last fought (kept 2 min, unlike the 12 s combat signal) so a
+// fighter who flees at low health still reports his health buckets (surrender offers).
+static std::map<unsigned int, DWORD> g_lastFightTickBySerial;
+static const DWORD kFledFighterHealthMs = 120 * 1000;
+
+static void MarkRecentCombatSignal(Character *npc, DWORD nowTick) {
+  unsigned int serial = ResolveCharacterSerialForEvent(npc);
+  if (serial != 0) {
+    g_recentCombatSignalTickBySerial[serial] = nowTick;
+    if (g_lastFightTickBySerial.size() > 2048) g_lastFightTickBySerial.clear();
+    g_lastFightTickBySerial[serial] = nowTick;
+  }
+}
+
+// Item 88c: fights with the player side get their own list: in a busy town the general list
+// (walked in serial order, capped) is full of animal and guard fights.
+static std::map<unsigned int, DWORD> g_lastPlayerFightTickBySerial;
+
+static void MarkPlayerSideFight(Character *attacker, Character *npc, DWORD nowTick) {
+  bool playerSide = false;
+  try {
+    Faction *fa = attacker ? attacker->getFaction() : nullptr;
+    Faction *fn = npc ? npc->getFaction() : nullptr;
+    playerSide = (fa && fa->isThePlayer()) || (fn && fn->isThePlayer());
+  } catch (...) {
+    playerSide = false;
+  }
+  if (!playerSide) return;
+  if (g_lastPlayerFightTickBySerial.size() > 256) g_lastPlayerFightTickBySerial.clear();
+  unsigned int sa = ResolveCharacterSerialForEvent(attacker);
+  unsigned int sn = ResolveCharacterSerialForEvent(npc);
+  if (sa) g_lastPlayerFightTickBySerial[sa] = nowTick;
+  if (sn) g_lastPlayerFightTickBySerial[sn] = nowTick;
+}
+
+static bool FoughtRecently(unsigned int serial, DWORD nowTick) {
+  std::map<unsigned int, DWORD>::const_iterator it = g_lastFightTickBySerial.find(serial);
+  return it != g_lastFightTickBySerial.end() && nowTick - it->second <= kFledFighterHealthMs;
+}
+
+static bool HasRecentCombatSignal(unsigned int serial, DWORD nowTick) {
+  std::map<unsigned int, DWORD>::const_iterator it =
+      g_recentCombatSignalTickBySerial.find(serial);
+  return it != g_recentCombatSignalTickBySerial.end() &&
+         nowTick - it->second <= kRecentCombatSignalMs;
+}
+
+static void QueueCombatCharacter(Character *npc,
+                                 std::vector<Character *> &queue,
+                                 std::set<unsigned int> &queuedSerials) {
+  unsigned int serial = ResolveCharacterSerialForEvent(npc);
+  if (!npc || (uintptr_t)npc < 0x1000 || serial == 0 ||
+      queuedSerials.count(serial) != 0 ||
+      queue.size() >= kCombatParticipantLimit) {
+    return;
+  }
+  queuedSerials.insert(serial);
+  queue.push_back(npc);
+}
+
+// Combines Kenshi's current combat flags with recent attack/damage hooks so a
+// brief engine-state gap cannot split one encounter into multiple lifecycle events.
+static CombatCharacterObservation ObserveCombatCharacter(Character *npc,
+                                                           DWORD nowTick) {
+  CombatCharacterObservation observation;
+  if (!npc || (uintptr_t)npc < 0x1000) {
+    return observation;
+  }
+
+  unsigned int serial = ResolveCharacterSerialForEvent(npc);
+  try {
+    observation.dead = npc->isDead();
+    observation.unconscious = npc->isUnconcious();
+    observation.fleeing = npc->isFleeing();
+  } catch (...) {
+  }
+
+  bool inCombat = false;
+  bool rangedCombat = false;
+  bool underMeleeAttack = false;
+  try {
+    inCombat = npc->isInCombatMode(true, true);
+  } catch (...) {
+  }
+  try {
+    rangedCombat = npc->isInRangedCombatMode();
+  } catch (...) {
+  }
+  try {
+    underMeleeAttack = npc->isLiterallyUnderMeleeAttackRightNowForSure();
+  } catch (...) {
+  }
+
+  try {
+    observation.attackTarget =
+        ResolveCharacterFromHandSafe(npc->getAttackTarget());
+  } catch (...) {
+    observation.attackTarget = nullptr;
+  }
+
+  lektor<hand> attackerHandles;
+  try {
+    npc->getAllAttackers(attackerHandles);
+  } catch (...) {
+  }
+  for (uint32_t i = 0; i < attackerHandles.size(); ++i) {
+    Character *attacker = ResolveCharacterFromHandSafe(attackerHandles.stuff[i]);
+    if (attacker && attacker != npc) {
+      observation.attackers.push_back(attacker);
+    }
+  }
+
+  // Bug 109: someone far away (fled, or fighting elsewhere) is no evidence.
+  bool closeTarget = false;
+  try {
+    const Ogre::Vector3 me = npc->getPosition();
+    if (observation.attackTarget &&
+        observation.attackTarget->getPosition().distance(me) <= kCombatLocalRadius)
+      closeTarget = true;
+    for (size_t i = 0; i < observation.attackers.size() && !closeTarget; ++i)
+      if (observation.attackers[i]->getPosition().distance(me) <= kCombatLocalRadius)
+        closeTarget = true;
+  } catch (...) {
+  }
+  observation.evidence =
+      !observation.dead && !observation.unconscious &&
+      (underMeleeAttack || closeTarget ||
+       ((inCombat || rangedCombat || HasRecentCombatSignal(serial, nowTick)) &&
+        (closeTarget || (observation.attackTarget == nullptr &&
+                         observation.attackers.empty()))));
+  return observation;
+}
+
+// Follow only this encounter's local attack graph.
+static void UpdateLocalCombatEncounter(
+    CombatLifecycleState &combatState, Character *seedActor, DWORD nowTick,
+    const std::map<unsigned int, Character *> &loadedBySerial,
+    const std::set<unsigned int> &playerSquadSerials,
+    std::set<unsigned int> &claimed) {
+  Character *seedTarget = nullptr;
+  if (!combatState.active) {
+    CombatCharacterObservation observation = ObserveCombatCharacter(seedActor, nowTick);
+    seedTarget = observation.attackTarget;
+    if (!seedTarget && !observation.attackers.empty()) {
+      seedTarget = observation.attackers[0];
+    }
+    combatState.origin = seedActor->getPosition();
+    combatState.active = true;
+    combatState.startedTick = nowTick;
+    combatState.lastObservedTick = nowTick;
+    combatState.actorName = ResolveCharacterNameSafe(seedActor);
+    combatState.actorFaction = SafeFaction(seedActor);
+    combatState.actorSerial =
+        ResolveCharacterSerialForEvent(seedActor);
+    if (seedTarget && (uintptr_t)seedTarget >= 0x1000) {
+      combatState.targetName = ResolveCharacterNameSafe(seedTarget);
+      combatState.targetFaction = SafeFaction(seedTarget);
+      combatState.targetSerial =
+          ResolveCharacterSerialForEvent(seedTarget);
+    }
+    LogGameEvent("combat_start", combatState.actorName,
+                 combatState.actorFaction,
+                 combatState.targetName,
+                 combatState.targetFaction,
+                 "entered active combat", combatState.actorSerial,
+                 combatState.targetSerial);
+
+    // Lifelike interruption: when the player's squad enters a real fight,
+    // immediately cut off casual chat/TTS and invalidate queued dialogue.
+    // Survival takes priority over finishing a sentence.
+    bool playerSquadInvolved =
+        playerSquadSerials.count(combatState.actorSerial) != 0 ||
+        (combatState.targetSerial != 0 &&
+         playerSquadSerials.count(combatState.targetSerial) != 0);
+    if (playerSquadInvolved) {
+      std::string dangerActors;
+      if (ShouldSkipDangerInterruptForChatPartners(&dangerActors)) {
+        Log("LIFELIKE_INTERRUPT: combat start skipped, only chat partner(s) " +
+            dangerActors);
+      } else {
+        BeginChatInterruptGeneration(true, true);
+        Log("LIFELIKE_INTERRUPT: combat interrupted active dialogue (actions kept)");
+      }
+    }
+  }
+
+  std::vector<Character *> queue;
+  std::set<unsigned int> queuedSerials;
+  queue.reserve(kCombatParticipantLimit);
+  if (seedActor) {
+    QueueCombatCharacter(seedActor, queue, queuedSerials);
+  } else {
+    for (std::map<unsigned int, CombatParticipantState>::const_iterator it =
+             combatState.participants.begin();
+         it != combatState.participants.end(); ++it) {
+      std::map<unsigned int, Character *>::const_iterator loadedIt =
+          loadedBySerial.find(it->first);
+      if (loadedIt != loadedBySerial.end()) {
+        QueueCombatCharacter(loadedIt->second, queue, queuedSerials);
+      }
+    }
+  }
+
+  bool combatObserved = false;
+  for (size_t queueIndex = 0; queueIndex < queue.size(); ++queueIndex) {
+    Character *npc = queue[queueIndex];
+    unsigned int serial = ResolveCharacterSerialForEvent(npc);
+    if (serial == 0 || claimed.count(serial) != 0 ||
+        npc->getPosition().distance(combatState.origin) > kCombatLocalRadius) {
+      continue;
+    }
+    claimed.insert(serial);
+    CombatCharacterObservation observation = ObserveCombatCharacter(npc, nowTick);
+    CombatParticipantState &participant =
+        combatState.participants[serial];
+    participant.name = ResolveCharacterNameSafe(npc);
+    participant.faction = SafeFaction(npc);
+    participant.playerSide = participant.playerSide ||
+                             playerSquadSerials.count(serial) != 0;
+    participant.dead = observation.dead;
+    participant.unconscious = observation.unconscious;
+    participant.fled = observation.fleeing;
+    participant.lastSeenTick = nowTick;
+    // Bug 98: report an opponent's health per bucket from the fight itself;
+    // the periodic NPC sweep only covers a few nearby characters.
+    if (!participant.playerSide && !observation.dead && !observation.unconscious &&
+        (observation.evidence || observation.fleeing)) { // a hurt enemy breaking off counts
+      std::map<uintptr_t, float> healthByPart;
+      if (CollectFleshHealthByPart(npc, healthByPart))
+        ReportHealthBucket(npc, serial, OverallHealthPercent(healthByPart));
+    }
+
+    if (!participant.playerSide) {
+      combatState.sawOpponent = true;
+      if (combatState.targetSerial == 0) {
+        combatState.targetName = participant.name;
+        combatState.targetFaction = participant.faction;
+        combatState.targetSerial = serial;
+      }
+    }
+
+    if (!observation.evidence) {
+      continue;
+    }
+    combatObserved = true;
+    QueueCombatCharacter(observation.attackTarget, queue, queuedSerials);
+    for (size_t i = 0; i < observation.attackers.size(); ++i) {
+      QueueCombatCharacter(observation.attackers[i], queue, queuedSerials);
+    }
+  }
+
+  if (combatObserved) {
+    combatState.lastObservedTick = nowTick;
+    return;
+  }
+  if (nowTick - combatState.lastObservedTick < kCombatEndGraceMs) {
+    return;
+  }
+
+  int deadCount = 0;
+  int unconsciousCount = 0;
+  int fledCount = 0;
+  int friendlyStanding = 0;
+  int opponentStanding = 0;
+  bool lostTracking = !combatState.sawOpponent;
+  for (std::map<unsigned int, CombatParticipantState>::const_iterator it =
+           combatState.participants.begin();
+       it != combatState.participants.end(); ++it) {
+    const CombatParticipantState &participant = it->second;
+    if (participant.dead) {
+      ++deadCount;
+    } else if (participant.unconscious) {
+      ++unconsciousCount;
+    }
+    if (participant.fled && !participant.dead && !participant.unconscious) {
+      ++fledCount;
+    }
+
+    bool standing = !participant.dead && !participant.unconscious &&
+                    !participant.fled;
+    bool missing = participant.lastSeenTick == 0 ||
+                   nowTick - participant.lastSeenTick >= kCombatEndGraceMs;
+    if (standing && missing) {
+      lostTracking = true;
+    } else if (standing) {
+      if (participant.playerSide) {
+        ++friendlyStanding;
+      } else {
+        ++opponentStanding;
+      }
+    }
+  }
+
+  std::string outcome = "disengaged";
+  if (lostTracking) {
+    outcome = "lost_tracking";
+  } else if (fledCount > 0) {
+    outcome = "escape";
+  } else if (friendlyStanding > 0 && opponentStanding == 0) {
+    outcome = "victory";
+  } else if (friendlyStanding == 0 && opponentStanding > 0) {
+    outcome = "defeat";
+  }
+
+  DWORD durationSeconds =
+      (nowTick - combatState.startedTick + 500) / 1000;
+  if (durationSeconds < 1) {
+    durationSeconds = 1;
+  }
+  std::string message =
+      "combat ended after " + ToString((int)durationSeconds) +
+      " seconds (outcome: " + outcome + "; participants: " +
+      ToString((int)combatState.participants.size()) +
+      "; friendly side standing: " + ToString(friendlyStanding) +
+      "; opponents standing: " + ToString(opponentStanding) +
+      "; knocked out: " + ToString(unconsciousCount) +
+      "; dead: " + ToString(deadCount) + "; fled: " +
+      ToString(fledCount) + ")";
+  // Ending a fight must not give its outcome to people the seed actor later visits.
+  Character *localAnchor = nullptr;
+  for (std::map<unsigned int, CombatParticipantState>::const_iterator it =
+           combatState.participants.begin(); it != combatState.participants.end(); ++it) {
+    std::map<unsigned int, Character *>::const_iterator loaded = loadedBySerial.find(it->first);
+    if (loaded != loadedBySerial.end() &&
+        loaded->second->getPosition().distance(combatState.origin) <= 600.0f) {
+      localAnchor = loaded->second;
+      break;
+    }
+  }
+  std::string endPeople = BuildLocalEventPeople(localAnchor);
+  LogGameEvent("combat_end", combatState.actorName,
+               combatState.actorFaction,
+               combatState.targetName,
+               combatState.targetFaction, message,
+               combatState.actorSerial,
+               combatState.targetSerial, &endPeople,
+               ResolveCharacterSerialForEvent(localAnchor));
+  combatState.active = false;
+
+}
+
+// Keep disconnected battles in separate local encounters; never seed from all squads
+// into an existing fight. The claimed set also bounds work to one visit per actor.
+static void UpdateCombatLifecycleEvent(GameWorld *world, DWORD nowTick) {
+  if (!world || !world->player) {
+    return;
+  }
+  std::set<unsigned int> playerSquadSerials;
+  std::map<unsigned int, Character *> loadedBySerial;
+  for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+    Character *member = world->player->playerCharacters[i];
+    unsigned int serial = ResolveCharacterSerialForEvent(member);
+    if (member && (uintptr_t)member >= 0x1000 && serial != 0) {
+      playerSquadSerials.insert(serial);
+      loadedBySerial[serial] = member;
+    }
+  }
+  try {
+    const ogre_unordered_set<Character *>::type &loadedCharacters =
+        world->getCharacterUpdateList();
+    for (ogre_unordered_set<Character *>::type::const_iterator it =
+             loadedCharacters.begin();
+         it != loadedCharacters.end(); ++it) {
+      Character *candidate = *it;
+      unsigned int serial = ResolveCharacterSerialForEvent(candidate);
+      if (candidate && (uintptr_t)candidate >= 0x1000 && serial != 0) {
+        loadedBySerial[serial] = candidate;
+      }
+    }
+  } catch (...) {
+  }
+
+  std::set<unsigned int> claimed;
+  for (std::map<unsigned int, CombatLifecycleState>::iterator it =
+           g_combatEncounters.begin(); it != g_combatEncounters.end();) {
+    UpdateLocalCombatEncounter(it->second, nullptr, nowTick, loadedBySerial,
+                               playerSquadSerials, claimed);
+    if (!it->second.active) {
+      it = g_combatEncounters.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  for (uint32_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+    Character *member = world->player->playerCharacters[i];
+    unsigned int serial = ResolveCharacterSerialForEvent(member);
+    if (serial == 0 || claimed.count(serial) != 0 ||
+        !ObserveCombatCharacter(member, nowTick).evidence) {
+      continue;
+    }
+    // The same character may leave one ongoing fight and enter another.
+    while (g_combatEncounters.count(g_nextCombatEncounterId) != 0) {
+      ++g_nextCombatEncounterId;
+    }
+    UpdateLocalCombatEncounter(g_combatEncounters[g_nextCombatEncounterId++], member, nowTick,
+                               loadedBySerial, playerSquadSerials, claimed);
+  }
+
+  for (std::map<unsigned int, DWORD>::iterator it =
+           g_recentCombatSignalTickBySerial.begin();
+       it != g_recentCombatSignalTickBySerial.end();) {
+    if (nowTick - it->second > kCombatEndGraceMs) {
+      it = g_recentCombatSignalTickBySerial.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+static std::string NormalizeInfoTelemetryToken(const std::string &rawValue) {
+  std::string value = TrimCopy(rawValue);
+  if (value.empty()) {
+    return "";
+  }
+  std::string lowered = ToLowerAsciiCopy(value);
+  if (lowered == "unknown" || lowered == "none" || lowered == "null" ||
+      lowered == "n/a") {
+    return "";
+  }
+  return value;
+}
+
+static bool TryParseInfoTelemetryBool(const std::string &rawValue,
+                                      bool &valueOut) {
+  std::string value = TrimCopy(rawValue);
+  if (value.empty()) {
+    return false;
+  }
+  std::string lowered = ToLowerAsciiCopy(value);
+  if (lowered == "1" || lowered == "true" || lowered == "yes" ||
+      lowered == "on") {
+    valueOut = true;
+    return true;
+  }
+  if (lowered == "0" || lowered == "false" || lowered == "no" ||
+      lowered == "off") {
+    valueOut = false;
+    return true;
+  }
+  return false;
+}
+
+static bool IsInfoTelemetryIndoorsHandleValid(const hand &indoorsHandle) {
+  return indoorsHandle.isValid() && !indoorsHandle.isNull();
+}
+
+static bool BuildInfolocPayload(Character *player, std::string &digestOut,
+                                std::string &messageOut) {
+  digestOut = "";
+  messageOut = "";
+  if (!player || (uintptr_t)player < 0x1000) {
+    return false;
+  }
+
+  std::string contextJson = BuildNpcContextEnvelope(player, "player");
+  if (contextJson.empty() || contextJson == "{}") {
+    return false;
+  }
+
+  std::string rawTown = JsonReadField(contextJson, "town");
+  std::string rawZone = JsonReadField(contextJson, "zone");
+  std::string rawRegion = JsonReadField(contextJson, "region");
+  std::string town = NormalizeInfoTelemetryToken(rawTown);
+  std::string zone = NormalizeInfoTelemetryToken(rawZone);
+  std::string region = NormalizeInfoTelemetryToken(rawRegion);
+  std::string environmentJson = JsonReadField(contextJson, "environment");
+  std::string rawBuilding = JsonReadField(environmentJson, "building_name");
+  std::string rawEnvZone = JsonReadField(environmentJson, "zone_name");
+  std::string rawEnvRegionName = JsonReadField(environmentJson, "region_name");
+  std::string rawEnvRegion = JsonReadField(environmentJson, "region");
+  std::string building = NormalizeInfoTelemetryToken(rawBuilding);
+  if (zone.empty()) {
+    zone = NormalizeInfoTelemetryToken(rawEnvZone);
+  }
+  if (region.empty()) {
+    region = NormalizeInfoTelemetryToken(rawEnvRegionName);
+  }
+  if (region.empty()) {
+    region = NormalizeInfoTelemetryToken(rawEnvRegion);
+  }
+  if (zone.empty()) {
+    zone = town;
+  }
+  auto safeGeoToken = [](const std::string &value) {
+    return value.empty() ? std::string("(empty)") : value;
+  };
+  bool indoorsValue = false;
+  bool outdoorsValue = false;
+  bool inTownValue = false;
+  bool indoorsKnown = TryParseInfoTelemetryBool(
+      JsonReadField(environmentJson, "indoors"), indoorsValue);
+  bool outdoorsKnown = TryParseInfoTelemetryBool(
+      JsonReadField(environmentJson, "outdoors"), outdoorsValue);
+  bool inTownKnown = TryParseInfoTelemetryBool(
+      JsonReadField(environmentJson, "in_town"), inTownValue);
+  bool useBuilding =
+      IsInfoTelemetryIndoorsHandleValid(player->isIndoors());
+  if (indoorsKnown && indoorsValue) {
+    useBuilding = true;
+  }
+  if ((outdoorsKnown && outdoorsValue) || (indoorsKnown && !indoorsValue)) {
+    useBuilding = false;
+  }
+  if (!useBuilding) {
+    building.clear();
+  }
+  std::string playerName = "Unknown";
+  try {
+    playerName = player->getName();
+  } catch (...) {
+    playerName = "Unknown";
+  }
+
+  std::string location = "";
+  if (useBuilding && !building.empty() && !zone.empty()) {
+    location = building + ", " + zone;
+  } else if (useBuilding && !building.empty()) {
+    location = building;
+  } else if (!zone.empty()) {
+    location = zone;
+  } else if (!region.empty()) {
+    location = region;
+  }
+  if (location.empty()) {
+    Log("GEO_DEBUG_INFOLOC: skipped empty location actor=" + playerName +
+        " raw_town=" + safeGeoToken(rawTown) + " raw_zone=" + safeGeoToken(rawZone) +
+        " raw_region=" + safeGeoToken(rawRegion) +
+        " raw_building=" + safeGeoToken(rawBuilding) +
+        " raw_env_zone=" + safeGeoToken(rawEnvZone) +
+        " raw_env_region_name=" + safeGeoToken(rawEnvRegionName) +
+        " raw_env_region=" + safeGeoToken(rawEnvRegion) +
+        " building=" + safeGeoToken(building) + " town=" + safeGeoToken(town) +
+        " zone=" + safeGeoToken(zone) + " region=" + safeGeoToken(region) +
+        " indoors=" + std::string(useBuilding ? "1" : "0") +
+        " in_town=" +
+        std::string((inTownKnown && inTownValue) ? "1" : (inTownKnown ? "0" : "?")));
+    return false;
+  }
+
+  std::string locationWithRegion = location;
+  if (!region.empty() &&
+      ToLowerAsciiCopy(locationWithRegion).find(ToLowerAsciiCopy(region)) ==
+          std::string::npos) {
+    locationWithRegion += ", " + region;
+  }
+
+  messageOut = "location update: " + locationWithRegion;
+  digestOut = ToLowerAsciiCopy(location + "|" + zone + "|" + region);
+  Log("GEO_DEBUG_INFOLOC: actor=" + playerName +
+      " message=" + safeGeoToken(messageOut) +
+      " digest=" + safeGeoToken(digestOut) +
+      " raw_town=" + safeGeoToken(rawTown) + " raw_zone=" + safeGeoToken(rawZone) +
+      " raw_region=" + safeGeoToken(rawRegion) +
+      " raw_building=" + safeGeoToken(rawBuilding) +
+      " raw_env_zone=" + safeGeoToken(rawEnvZone) +
+      " raw_env_region_name=" + safeGeoToken(rawEnvRegionName) +
+      " raw_env_region=" + safeGeoToken(rawEnvRegion) +
+      " building=" + safeGeoToken(building) + " town=" + safeGeoToken(town) +
+      " zone=" + safeGeoToken(zone) + " region=" + safeGeoToken(region) +
+      " indoors=" + std::string(useBuilding ? "1" : "0") +
+      " in_town=" +
+      std::string((inTownKnown && inTownValue) ? "1" : (inTownKnown ? "0" : "?")));
+  return !digestOut.empty();
+}
+
+struct InfoNearbyNpcCandidate {
+  Character *npc;
+  unsigned int serial;
+  std::string name;
+  float distance;
+
+  InfoNearbyNpcCandidate()
+      : npc(nullptr), serial(0), name(""), distance(0.0f) {}
+};
+
+static void AppendInfonpcCandidate(std::vector<InfoNearbyNpcCandidate> &out,
+                                   std::set<unsigned int> &seen,
+                                   Character *candidate, Character *player) {
+  if (!candidate || !player || (uintptr_t)candidate < 0x1000 ||
+      (uintptr_t)player < 0x1000 || candidate == player) {
+    return;
+  }
+  if (!ShouldProcessAnimalCharacter(candidate)) {
+    return;
+  }
+
+  unsigned int serial = 0;
+  try {
+    serial = candidate->getHandle().serial;
+  } catch (...) {
+    serial = 0;
+  }
+  if (serial == 0 || seen.count(serial) > 0) {
+    return;
+  }
+
+  std::string name = ResolveCharacterNameSafe(candidate);
+  if (name.empty() || ToLowerAsciiCopy(name) == "unknown") {
+    return;
+  }
+
+  float dist = 0.0f;
+  try {
+    Ogre::Vector3 a = player->getPosition();
+    Ogre::Vector3 b = candidate->getPosition();
+    float dx = a.x - b.x;
+    float dy = a.y - b.y;
+    float dz = a.z - b.z;
+    dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+  } catch (...) {
+    dist = 0.0f;
+  }
+
+  InfoNearbyNpcCandidate row;
+  row.npc = candidate;
+  row.serial = serial;
+  row.name = name;
+  row.distance = dist;
+  out.push_back(row);
+  seen.insert(serial);
+  QueueIdentityRenameCandidate(candidate, "infonpc_scan");
+}
+
+static void PrimeNearbyIdentityRenames(GameWorld *world, Character *player,
+                                       Character *selection) {
+  if (!world || !player || (uintptr_t)player < 0x1000) {
+    return;
+  }
+
+  float scanRange = g_boredEventRange;
+  if (scanRange < 80.0f) {
+    scanRange = 80.0f;
+  } else if (scanRange > 600.0f) {
+    scanRange = 600.0f;
+  }
+
+  std::vector<InfoNearbyNpcCandidate> candidates;
+  std::set<unsigned int> seen;
+  candidates.reserve(kIdentityRenameSweepCandidateLimit);
+
+  AppendInfonpcCandidate(candidates, seen, selection, player);
+  Character *talkTarget = nullptr;
+  try {
+    talkTarget = g_talkTargetHand.getCharacter();
+  } catch (...) {
+    talkTarget = nullptr;
+  }
+  AppendInfonpcCandidate(candidates, seen, talkTarget, player);
+
+  lektor<RootObject *> nearby;
+  world->getCharactersWithinSphere(nearby, player->getPosition(), scanRange, 0.0f,
+                                   0.0f, 16, 0, player);
+  for (uint32_t i = 0; i < nearby.size(); ++i) {
+    Character *other = (Character *)nearby.stuff[i];
+    AppendInfonpcCandidate(candidates, seen, other, player);
+    if (candidates.size() >= kIdentityRenameSweepCandidateLimit) {
+      break;
+    }
+  }
+}
+
+static bool BuildInfonpcPayload(GameWorld *world, Character *player,
+                                Character *selection, std::string &digestOut,
+                                std::string &messageOut, std::string &targetOut,
+                                std::string &targetFactionOut,
+                                unsigned int &targetSerialOut) {
+  digestOut = "";
+  messageOut = "";
+  targetOut = "None";
+  targetFactionOut = "None";
+  targetSerialOut = 0;
+  if (!world || !player || (uintptr_t)player < 0x1000) {
+    return false;
+  }
+
+  float scanRange = g_boredEventRange;
+  if (scanRange < 80.0f) {
+    scanRange = 80.0f;
+  } else if (scanRange > 600.0f) {
+    scanRange = 600.0f;
+  }
+
+  std::vector<InfoNearbyNpcCandidate> candidates;
+  std::set<unsigned int> seen;
+  candidates.reserve(32);
+
+  AppendInfonpcCandidate(candidates, seen, selection, player);
+  Character *talkTarget = nullptr;
+  try {
+    talkTarget = g_talkTargetHand.getCharacter();
+  } catch (...) {
+    talkTarget = nullptr;
+  }
+  AppendInfonpcCandidate(candidates, seen, talkTarget, player);
+
+  lektor<RootObject *> nearby;
+  world->getCharactersWithinSphere(nearby, player->getPosition(), scanRange, 0.0f,
+                                   0.0f, 16, 0, player);
+  for (uint32_t i = 0; i < nearby.size(); ++i) {
+    Character *other = (Character *)nearby.stuff[i];
+    AppendInfonpcCandidate(candidates, seen, other, player);
+    if (candidates.size() >= 48) {
+      break;
+    }
+  }
+  // Corpses don't come back from the character sphere search (bug 73).
+  try {
+    lektor<RootObject *> bodies;
+    world->getObjectsWithinSphere(bodies, player->getPosition(), scanRange,
+                                  CHARACTER, 32, (RootObject *)player);
+    for (uint32_t i = 0; i < bodies.size() && candidates.size() < 48; ++i) {
+      AppendInfonpcCandidate(candidates, seen, (Character *)bodies.stuff[i],
+                             player);
+    }
+  } catch (...) {
+  }
+
+  if (candidates.empty()) {
+    return false;
+  }
+
+  // "(dead)" / "(unconscious)" so NPCs don't talk about a corpse as alive
+  // (bug 73); part of the digest so a death re-sends the roster.
+  struct RosterState {
+    static std::string Of(Character *c) {
+      try {
+        if (c && (uintptr_t)c > 0x1000) {
+          if (c->isDead())
+            return " (dead)";
+          if (c->isUnconcious())
+            return " (unconscious)";
+        }
+      } catch (...) {
+      }
+      return "";
+    }
+  };
+
+  std::sort(candidates.begin(), candidates.end(),
+            [](const InfoNearbyNpcCandidate &a,
+               const InfoNearbyNpcCandidate &b) -> bool {
+              return a.distance < b.distance;
+            });
+
+  std::vector<unsigned int> digestSerials;
+  digestSerials.reserve(candidates.size());
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    digestSerials.push_back(candidates[i].serial);
+  }
+  std::sort(digestSerials.begin(), digestSerials.end());
+  for (size_t i = 0; i < digestSerials.size(); ++i) {
+    if (i > 0) {
+      digestOut += ",";
+    }
+    digestOut += ToString(digestSerials[i]);
+  }
+  if (digestOut.empty()) {
+    return false;
+  }
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    std::string st = RosterState::Of(candidates[i].npc);
+    if (!st.empty()) {
+      digestOut += "|" + ToString(candidates[i].serial) + st;
+    }
+  }
+
+  messageOut = "nearby NPC roster (" + ToString((int)candidates.size()) + "): ";
+  size_t listed = 0;
+  for (size_t i = 0; i < candidates.size() && listed < 8; ++i) {
+    if (listed > 0) {
+      messageOut += ", ";
+    }
+    messageOut += candidates[i].name + RosterState::Of(candidates[i].npc);
+    ++listed;
+  }
+  if (candidates.size() > listed) {
+    messageOut += ", ...";
+  }
+
+  targetOut = candidates[0].name;
+  targetFactionOut = SafeFaction(candidates[0].npc);
+  targetSerialOut = candidates[0].serial;
+  return true;
+}
+
+static void RunInfoTelemetrySweep(GameWorld *world, Character *selection) {
+  if (!world || !world->player || world->player->playerCharacters.size() == 0) {
+    return;
+  }
+  Character *player = world->player->playerCharacters[0];
+  if (!player || (uintptr_t)player < 0x1000) {
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  if (nowTick - g_lastIdentityRenameSweepTick >=
+      kIdentityRenameSweepIntervalMs) {
+    g_lastIdentityRenameSweepTick = nowTick;
+    PrimeNearbyIdentityRenames(world, player, selection);
+  }
+  if (nowTick - g_lastInfoLocTelemetryCheckTick >=
+      kInfoLocTelemetryCheckIntervalMs) {
+    g_lastInfoLocTelemetryCheckTick = nowTick;
+    std::string digest;
+    std::string message;
+    if (BuildInfolocPayload(player, digest, message)) {
+      bool changed = digest != g_lastInfoLocTelemetryDigest;
+      bool resendDue = g_lastInfoLocTelemetrySentTick == 0 ||
+                       (nowTick - g_lastInfoLocTelemetrySentTick) >=
+                           kInfoLocTelemetryResendIntervalMs;
+      if (changed || resendDue) {
+        LogGameEvent("infoloc", ResolveCharacterNameSafe(player), SafeFaction(player),
+                     "None", "None", message, ResolveCharacterSerialForEvent(player),
+                     0);
+        g_lastInfoLocTelemetryDigest = digest;
+        g_lastInfoLocTelemetrySentTick = nowTick;
+      }
+    }
+  }
+
+  if (nowTick - g_lastInfoNpcTelemetryCheckTick >=
+      kInfoNpcTelemetryCheckIntervalMs) {
+    g_lastInfoNpcTelemetryCheckTick = nowTick;
+    std::string digest;
+    std::string message;
+    std::string targetName;
+    std::string targetFaction;
+    unsigned int targetSerial = 0;
+    if (BuildInfonpcPayload(world, player, selection, digest, message, targetName,
+                            targetFaction, targetSerial)) {
+      bool changed = digest != g_lastInfoNpcTelemetryDigest;
+      bool resendDue = g_lastInfoNpcTelemetrySentTick == 0 ||
+                       (nowTick - g_lastInfoNpcTelemetrySentTick) >=
+                           kInfoNpcTelemetryResendIntervalMs;
+      if (changed || resendDue) {
+        LogGameEvent("infonpc", ResolveCharacterNameSafe(player), SafeFaction(player),
+                     targetName, targetFaction, message,
+                     ResolveCharacterSerialForEvent(player), targetSerial);
+        g_lastInfoNpcTelemetryDigest = digest;
+        g_lastInfoNpcTelemetrySentTick = nowTick;
+      }
+    }
+  }
+}
+
+static void RunFactionRelationSync(GameWorld *world) {
+  if (!world || (uintptr_t)world < 0x1000 || !world->factionMgr ||
+      (uintptr_t)world->factionMgr < 0x1000) {
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  std::map<std::string, FactionRelationSnapshotEntry> previousState;
+  EnterCriticalSection(&g_stateMutex);
+  if (g_lastFactionRelationSyncTick != 0 &&
+      (nowTick - g_lastFactionRelationSyncTick) < kFactionRelationSyncIntervalMs) {
+    LeaveCriticalSection(&g_stateMutex);
+    return;
+  }
+  if (!HasRecentDwemerDistroConnection(kRecentServerSuccessGraceMs)) {
+    g_lastFactionRelationSyncTick = nowTick;
+    LeaveCriticalSection(&g_stateMutex);
+    static DWORD lastOfflineLogTick = 0;
+    if (nowTick - lastOfflineLogTick >= 30000) {
+      lastOfflineLogTick = nowTick;
+      Log("FACTION_REL_SYNC: deferred while server connection is unavailable.");
+    }
+    return;
+  }
+  previousState = g_factionRelationStateByKey;
+  LeaveCriticalSection(&g_stateMutex);
+
+  const lektor<Faction *> *allFactions = nullptr;
+  try {
+    allFactions = world->factionMgr->getAllFactions();
+  } catch (...) {
+    allFactions = nullptr;
+  }
+  if (!allFactions || allFactions->count == 0) {
+    EnterCriticalSection(&g_stateMutex);
+    g_lastFactionRelationSyncTick = nowTick;
+    g_factionRelationStateByKey.clear();
+    LeaveCriticalSection(&g_stateMutex);
+    return;
+  }
+
+  std::map<std::string, FactionRelationSnapshotEntry> currentState;
+  size_t scannedPairs = 0;
+  bool truncated = false;
+
+  bool hardStop = false;
+  for (uint32_t i = 0; i < allFactions->count && !hardStop; ++i) {
+    Faction *sourceFaction = allFactions->stuff[i];
+    if (!sourceFaction || (uintptr_t)sourceFaction <= 0x1000 ||
+        !sourceFaction->relations ||
+        (uintptr_t)sourceFaction->relations <= 0x1000) {
+      continue;
+    }
+
+    std::string sourceName = SafeFactionName(sourceFaction);
+    std::string sourceStringId = SafeFactionStringId(sourceFaction);
+    int sourceNumericId = SafeFactionNumericId(sourceFaction);
+    if (sourceName.empty() && sourceStringId.empty() && sourceNumericId <= 0) {
+      continue;
+    }
+
+    for (uint32_t j = 0; j < allFactions->count; ++j) {
+      if (scannedPairs >= kFactionRelationSyncHardCap) {
+        truncated = true;
+        hardStop = true;
+        break;
+      }
+
+      Faction *targetFaction = allFactions->stuff[j];
+      if (!targetFaction || (uintptr_t)targetFaction <= 0x1000 ||
+          targetFaction == sourceFaction) {
+        continue;
+      }
+
+      std::string targetName = SafeFactionName(targetFaction);
+      std::string targetStringId = SafeFactionStringId(targetFaction);
+      int targetNumericId = SafeFactionNumericId(targetFaction);
+      if (targetName.empty() && targetStringId.empty() && targetNumericId <= 0) {
+        continue;
+      }
+
+      std::string mergeKey =
+          BuildFactionRelationMergeKey(sourceStringId, sourceNumericId,
+                                       sourceName, targetStringId, targetNumericId,
+                                       targetName);
+      if (mergeKey.empty()) {
+        continue;
+      }
+
+      double relationValue = 0.0;
+      bool relationResolved = false;
+      try {
+        relationValue =
+            static_cast<double>(sourceFaction->relations->getFactionRelation(
+                targetFaction));
+        relationResolved = true;
+      } catch (...) {
+        relationResolved = false;
+      }
+      if (!relationResolved) {
+        continue;
+      }
+
+      bool alliance = false;
+      bool war = false;
+      bool coexists = false;
+      try {
+        FactionRelations::RelationData *relationData =
+            sourceFaction->relations->getRelationData(targetFaction);
+        if (relationData && (uintptr_t)relationData > 0x1000) {
+          alliance = relationData->alliance;
+          war = relationData->war;
+          coexists = relationData->coexists;
+        }
+      } catch (...) {
+      }
+
+      FactionRelationSnapshotEntry entry;
+      entry.mergeKey = mergeKey;
+      entry.sourceName = sourceName;
+      entry.sourceStringId = sourceStringId;
+      entry.sourceNumericId = sourceNumericId;
+      entry.targetName = targetName;
+      entry.targetStringId = targetStringId;
+      entry.targetNumericId = targetNumericId;
+      entry.relation = relationValue;
+      entry.alliance = alliance;
+      entry.war = war;
+      entry.coexists = coexists;
+      currentState[mergeKey] = entry;
+      ++scannedPairs;
+    }
+  }
+
+  std::vector<FactionRelationSnapshotEntry> changedEntries;
+  changedEntries.reserve(currentState.size());
+  for (std::map<std::string, FactionRelationSnapshotEntry>::const_iterator it =
+           currentState.begin();
+       it != currentState.end(); ++it) {
+    std::map<std::string, FactionRelationSnapshotEntry>::const_iterator previousIt =
+        previousState.find(it->first);
+    if (previousIt == previousState.end() ||
+        IsFactionRelationEntryDifferent(it->second, previousIt->second)) {
+      changedEntries.push_back(it->second);
+    }
+  }
+
+  std::vector<std::string> removedKeys;
+  for (std::map<std::string, FactionRelationSnapshotEntry>::const_iterator it =
+           previousState.begin();
+       it != previousState.end(); ++it) {
+    if (currentState.find(it->first) == currentState.end()) {
+      removedKeys.push_back(it->first);
+    }
+  }
+
+  EnterCriticalSection(&g_stateMutex);
+  g_lastFactionRelationSyncTick = nowTick;
+  g_factionRelationStateByKey = currentState;
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (changedEntries.empty() && removedKeys.empty()) {
+    if (truncated) {
+      Log("FACTION_REL_SYNC: no delta but scan truncated at " +
+          ToString((int)kFactionRelationSyncHardCap) + " pairs.");
+    }
+    return;
+  }
+
+  bool isFullSnapshot = previousState.empty();
+  int gameTs = ResolveCurrentGameTsSafe(world);
+  std::string payload = "{";
+  payload += "\"source\":\"faction_relations_snapshot\",";
+  payload += "\"game_ts\":" + ToString(gameTs) + ",";
+  payload +=
+      "\"full_snapshot\":" + std::string(isFullSnapshot ? "true" : "false") + ",";
+  payload += "\"truncated\":" + std::string(truncated ? "true" : "false") + ",";
+  payload += "\"scanned_pairs\":" + ToString((int)scannedPairs) + ",";
+  payload += "\"changed_count\":" + ToString((int)changedEntries.size()) + ",";
+  payload += "\"removed_count\":" + ToString((int)removedKeys.size()) + ",";
+
+  payload += "\"relations\":[";
+  for (size_t i = 0; i < changedEntries.size(); ++i) {
+    const FactionRelationSnapshotEntry &entry = changedEntries[i];
+    if (i > 0) {
+      payload += ",";
+    }
+    payload += "{";
+    payload += "\"merge_key\":\"" + EscapeJSON(entry.mergeKey) + "\",";
+    payload += "\"source_name\":\"" + EscapeJSON(entry.sourceName) + "\",";
+    payload += "\"source_string_id\":\"" + EscapeJSON(entry.sourceStringId) +
+               "\",";
+    payload += "\"source_numeric_id\":" + ToString(entry.sourceNumericId) + ",";
+    payload += "\"target_name\":\"" + EscapeJSON(entry.targetName) + "\",";
+    payload += "\"target_string_id\":\"" + EscapeJSON(entry.targetStringId) +
+               "\",";
+    payload += "\"target_numeric_id\":" + ToString(entry.targetNumericId) + ",";
+    payload += "\"relation\":" + ToString(static_cast<float>(entry.relation)) +
+               ",";
+    payload += "\"alliance\":" + std::string(entry.alliance ? "true" : "false") +
+               ",";
+    payload += "\"war\":" + std::string(entry.war ? "true" : "false") + ",";
+    payload += "\"coexists\":" + std::string(entry.coexists ? "true" : "false");
+    payload += "}";
+  }
+  payload += "],";
+
+  payload += "\"removed\":[";
+  for (size_t i = 0; i < removedKeys.size(); ++i) {
+    if (i > 0) {
+      payload += ",";
+    }
+    payload += "{\"merge_key\":\"" + EscapeJSON(removedKeys[i]) + "\"}";
+  }
+  payload += "]";
+  payload += "}";
+
+  AsyncPostToStobe(L"/faction_relations", payload);
+  Log("FACTION_REL_SYNC: sent changed=" + ToString((int)changedEntries.size()) +
+      " removed=" + ToString((int)removedKeys.size()) +
+      " scanned_pairs=" + ToString((int)scannedPairs) +
+      " full_snapshot=" + std::string(isFullSnapshot ? "1" : "0") +
+      " truncated=" + std::string(truncated ? "1" : "0"));
+}
+
+static void RunTownKnowledgeSync(GameWorld *world) {
+  if (!world || (uintptr_t)world < 0x1000 || !shou ||
+      (uintptr_t)shou < 0x1000 || !shou->townList ||
+      (uintptr_t)shou->townList < 0x1000) {
+    return;
+  }
+
+  const DWORD nowTick = GetTickCount();
+  if (g_lastTownKnowledgeScanTick != 0 &&
+      (nowTick - g_lastTownKnowledgeScanTick) <
+          kTownKnowledgeScanIntervalMs) {
+    return;
+  }
+  g_lastTownKnowledgeScanTick = nowTick;
+
+  if (!HasRecentDwemerDistroConnection(kRecentServerSuccessGraceMs)) {
+    return;
+  }
+
+  lektor<RootObject *> *allTowns = nullptr;
+  try {
+    allTowns = &shou->townList->getAllTowns();
+  } catch (...) {
+    allTowns = nullptr;
+  }
+  if (!allTowns) {
+    return;
+  }
+
+  std::string townsJson = "[";
+  // world_towns (2026-10-15): every town the scan can read, discovered or not,
+  // with its REAL name. getKnownName() returns the unexplored placeholder until
+  // the town is explored, so the real name comes from RootObjectBase::getName()
+  // (the same call getKnownName() makes once explored; it only returns the
+  // object's own name string, no discovered/explored gate).
+  std::string worldTownsJson = "[";
+  size_t emitted = 0;
+  size_t worldEmitted = 0;
+  const uint32_t count = allTowns->count;
+  for (uint32_t i = 0; i < count && (emitted < kTownKnowledgeHardCap ||
+                                     worldEmitted < kTownKnowledgeHardCap);
+       ++i) {
+    RootObject *object = allTowns->stuff[i];
+    if (!object || (uintptr_t)object < 0x1000) {
+      continue;
+    }
+
+    TownBase *townBase = nullptr;
+    bool discovered = false;
+    bool explored = false;
+    std::string name;
+    std::string worldName;
+    Ogre::Vector3 position = Ogre::Vector3::ZERO;
+    try {
+      if (object->getDataType() != TOWN) {
+        continue;
+      }
+      townBase = static_cast<TownBase *>(object);
+      discovered = townBase->_NV_isDiscovered();
+      explored = townBase->_NV_isExplored();
+      position = object->getPosition();
+    } catch (...) {
+      continue;
+    }
+
+    if (discovered && emitted < kTownKnowledgeHardCap) {
+      try {
+        name = TrimCopy(townBase->getKnownName());
+      } catch (...) {
+        name.clear();
+      }
+    }
+    if (worldEmitted < kTownKnowledgeHardCap) {
+      try {
+        worldName = TrimCopy(object->getName());
+      } catch (...) {
+        worldName.clear();
+      }
+    }
+
+    if (!name.empty()) {
+      if (emitted > 0) {
+        townsJson += ",";
+      }
+      townsJson += "{\"name\":\"" + EscapeJSON(name) + "\",";
+      townsJson += "\"x\":" + ToString(position.x) + ",";
+      townsJson += "\"y\":" + ToString(position.y) + ",";
+      townsJson += "\"z\":" + ToString(position.z) + ",";
+      townsJson += "\"discovered\":true,";
+      townsJson +=
+          "\"explored\":" + std::string(explored ? "true" : "false") + "}";
+      ++emitted;
+    }
+
+    const bool positionFinite = position.x == position.x &&
+                                position.y == position.y &&
+                                position.z == position.z;
+    if (!worldName.empty() && positionFinite) {
+      if (worldEmitted > 0) {
+        worldTownsJson += ",";
+      }
+      worldTownsJson += "{\"name\":\"" + EscapeJSON(worldName) + "\",";
+      worldTownsJson += "\"x\":" + ToString(position.x) + ",";
+      worldTownsJson += "\"y\":" + ToString(position.y) + ",";
+      worldTownsJson += "\"z\":" + ToString(position.z) + ",";
+      worldTownsJson +=
+          "\"discovered\":" + std::string(discovered ? "true" : "false") +
+          ",";
+      worldTownsJson +=
+          "\"explored\":" + std::string(explored ? "true" : "false") + "}";
+      ++worldEmitted;
+    }
+  }
+  townsJson += "]";
+  worldTownsJson += "]";
+
+  const std::string townDigest = townsJson + "|" + worldTownsJson;
+  const bool changed = townDigest != g_lastTownKnowledgeDigest;
+  const bool resendDue = g_lastTownKnowledgeSentTick == 0 ||
+                         (nowTick - g_lastTownKnowledgeSentTick) >=
+                             kTownKnowledgeResendIntervalMs;
+  if (!changed && !resendDue) {
+    return;
+  }
+
+  const int gameTs = ResolveCurrentGameTsSafe(world);
+  std::string payload = "{\"source\":\"kenshi_town_list\",";
+  payload += "\"game_ts\":" + ToString(gameTs) + ",";
+  payload += "\"towns\":" + townsJson + ",";
+  payload += "\"world_towns\":" + worldTownsJson + "}";
+  AsyncPostToStobe(L"/town_knowledge", payload);
+  g_lastTownKnowledgeDigest = townDigest;
+  g_lastTownKnowledgeSentTick = nowTick;
+  Log("TOWN_KNOWLEDGE_SYNC: sent discovered=" + ToString((int)emitted) +
+      " world=" + ToString((int)worldEmitted) +
+      " scanned=" + ToString((int)count) +
+      " changed=" + std::string(changed ? "1" : "0"));
+}
+
+// REL_LIB_WATCH_M31: a squad member's lock/shackle task is sampled every 250 ms (the 3 s sweep missed a 7 s pick at
+// speed 2, batch P p7-05), into the same memo SocialFindLiberator reads. Squad only (<= 16): the player frees people.
+static DWORD g_lastLiberationWatchTick = 0;
+static void SocialLiberationWatch(GameWorld *world, DWORD nowTick) {
+  if (!SocialCaptureEnabled() || nowTick - g_lastLiberationWatchTick < 250)
+    return;
+  g_lastLiberationWatchTick = nowTick;
+  if (!world || !world->player)
+    return;
+  uint32_t n = world->player->playerCharacters.size();
+  for (uint32_t i = 0; i < n && i < 16; ++i) {
+    Character *member = world->player->playerCharacters[i];
+    if (!member || (uintptr_t)member < 0x1000)
+      continue;
+    unsigned int serial = 0;
+    try {
+      serial = member->getHandle().serial;
+    } catch (...) {
+      serial = 0;
+    }
+    if (!serial)
+      continue;
+    hand subject;
+    TaskType task = ResolveCurrentNpcTaskSafe(member, subject);
+    if (!IsLiberationTask((int)task) || !subject.isValid() || subject.isNull() || !subject.serial)
+      continue;
+    NpcWorldEventState &state = g_npcWorldEventStateBySerial[serial];
+    bool changed = state.libSubjectSerial != subject.serial || state.libTask != (int)task ||
+                   nowTick - state.libTick > 60000;
+    state.libSubjectSerial = subject.serial;
+    state.libTask = (int)task;
+    state.libTick = nowTick;
+    if (changed)
+      Log("EVENT_SCAN: liberation task serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(member) +
+          " task=" + ToString((int)task) + " subject=" + ToString(subject.serial));
+  }
+}
+
+// N2: abandoned_in_danger. A free squad member stays >= 30 m from a downed squad member for >= 20 game
+// seconds after having been within 25 m during that episode. Rules/dedupe: N2Policy::AbandonTracker.
+static Stobe::N2Policy::AbandonTracker g_abandonTracker;
+static DWORD g_lastAbandonScanTick = 0;
+static void N2AbandonWatchReset() {
+  g_abandonTracker.Reset();
+  g_lastAbandonScanTick = 0;
+}
+static void N2AbandonWatch(GameWorld *world, DWORD nowTick) {
+  if (!SocialCaptureEnabled() || nowTick - g_lastAbandonScanTick < 2000)
+    return;
+  g_lastAbandonScanTick = nowTick;
+  if (!world || !world->player)
+    return;
+  uint32_t n = world->player->playerCharacters.size();
+  if (n < 2)
+    return;
+  if (n > 16)
+    n = 16;
+  const double nowSec = (double)CurrentGameTsSeconds();
+  struct Member {
+    Character *c;
+    unsigned int serial;
+    int state;
+    bool free;
+  };
+  std::vector<Member> members;
+  for (uint32_t i = 0; i < n; ++i) {
+    Character *c = world->player->playerCharacters[i];
+    if (!c || (uintptr_t)c < 0x1000)
+      continue;
+    Member m;
+    m.c = c;
+    m.serial = 0;
+    try {
+      m.serial = c->getHandle().serial;
+    } catch (...) {
+      m.serial = 0;
+    }
+    if (!m.serial)
+      continue;
+    m.state = Stobe::NativeAttention::PartnerState(c);
+    m.free = Stobe::NativeAttention::IsFree(c);
+    g_abandonTracker.NotePartnerState(m.serial, m.state, nowSec);
+    members.push_back(m);
+  }
+  for (size_t pi = 0; pi < members.size(); ++pi) {
+    if (members[pi].state == Stobe::N2Policy::PS_NONE)
+      continue;
+    for (size_t li = 0; li < members.size(); ++li) {
+      if (li == pi || !members[li].free)
+        continue;
+      float dist = 1e9f;
+      try {
+        dist = members[li].c->getPosition().distance(members[pi].c->getPosition());
+      } catch (...) {
+        continue;
+      }
+      Stobe::N2Policy::AbandonEvent ev;
+      if (!g_abandonTracker.Observe(members[li].serial, members[pi].serial, true, members[pi].state, dist, nowSec, &ev))
+        continue;
+      StobeSocial::EntityInfo leaver = SocialEntityFor(members[li].c), partner = SocialEntityFor(members[pi].c);
+      if (leaver.inPlayerFaction != 1 || partner.inPlayerFaction != 1)
+        continue; // both must be player-faction members
+      std::vector<StobeSocial::EntityInfo> who;
+      std::vector<int> sense;
+      SocialCollectWitnesses(members[li].c, members[pi].c, who, sense);
+      bool sawLeaving = false;
+      for (size_t k = 0; k < sense.size(); ++k)
+        if (((sense[k] >> 2) & 3) == 2 && (sense[k] & 1))
+          sawLeaving = true;
+      if (!sawLeaving && members[pi].state != Stobe::N2Policy::PS_KNOCKED_OUT) {
+        SensoryData *sd = nullptr;
+        try {
+          sd = members[pi].c->getSensoryData();
+        } catch (...) {
+          sd = nullptr;
+        }
+        sawLeaving = SocialSenseTri(sd, members[li].c, false) == 2;
+      }
+      std::string facts = "\"evidence_id\":" + StobeSocial::JsonString(ev.evidenceId) +
+                          ",\"partner_state\":" + StobeSocial::JsonString(ev.partnerState) +
+                          ",\"distance_m\":" + ToString((int)(ev.distanceM + 0.5f)) +
+                          ",\"seconds\":" + ToString(ev.seconds) +
+                          ",\"observer_saw_leaving\":" + (sawLeaving ? "true" : "false");
+      SocialPostStructuredW("abandoned_in_danger", &leaver, &partner, facts, who, sense);
+      Log("N2_ABANDON: leaver=" + leaver.name + " partner=" + partner.name + " state=" + ev.partnerState +
+          " dist=" + ToString((int)ev.distanceM) + " seconds=" + ToString(ev.seconds));
+    }
+  }
+}
+
+static void RunNpcWorldEventSweepUnsafe(GameWorld *world, Character *selection) {
+  if (!world || !world->player || world->player->playerCharacters.size() == 0) {
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  SocialFlushAidSessions(nowTick);
+  SocialLiberationWatch(world, nowTick); // REL_LIB_WATCH_M31
+  N2AbandonWatch(world, nowTick);        // N2 abandoned_in_danger
+  if (nowTick - g_lastNpcWorldEventSweepTick < kNpcWorldEventSweepIntervalMs) {
+    return;
+  }
+  g_lastNpcWorldEventSweepTick = nowTick;
+
+  Character *player = world->player->playerCharacters[0];
+  if (!player || (uintptr_t)player < 0x1000) {
+    return;
+  }
+
+  std::vector<Character *> candidates;
+  std::set<unsigned int> seen;
+  candidates.reserve(kNpcWorldEventCandidateLimit + 4);
+
+  AddInventorySyncCandidate(player, candidates, seen);
+  AddInventorySyncCandidate(selection, candidates, seen);
+  Character *talkTarget = nullptr;
+  try {
+    talkTarget = g_talkTargetHand.getCharacter();
+  } catch (...) {
+    talkTarget = nullptr;
+  }
+  AddInventorySyncCandidate(talkTarget, candidates, seen);
+  {
+    std::vector<unsigned int> focus;
+    SocialFocusSerials(focus, 24);
+    size_t resolvedFocus = 0;
+    std::string unresolvedFocus;
+    for (size_t f = 0; f < focus.size(); ++f) {
+      Character *fc = ResolveCharacterBySerialForInventoryEvent(focus[f]);
+      if (fc) {
+        ++resolvedFocus;
+        AddInventorySyncCandidate(fc, candidates, seen);
+      } else if (unresolvedFocus.size() < 200) {
+        unresolvedFocus += (unresolvedFocus.empty() ? "#" : ",#") + ToString(focus[f]);
+      }
+    }
+    if (!focus.empty())
+      SocialFocusReport(focus.size(), resolvedFocus, unresolvedFocus);
+  }
+
+  // Item 88b: everyone who fought in the last 2 min is scanned (health buckets for surrender
+  // offers), even beyond the sphere's 16 results or after fleeing out of range.
+  {
+    // item 88c: fighters in a fight with the player side first (uncapped by the town's fights)
+    int addedPlayerFights = 0;
+    for (std::map<unsigned int, DWORD>::const_iterator pf = g_lastPlayerFightTickBySerial.begin();
+         pf != g_lastPlayerFightTickBySerial.end() && addedPlayerFights < 16; ++pf) {
+      if (nowTick - pf->second > kFledFighterHealthMs) continue;
+      Character *pc = ResolveCharacterBySerialForInventoryEvent(pf->first);
+      if (pc) {
+        AddInventorySyncCandidate(pc, candidates, seen);
+        ++addedPlayerFights;
+      }
+    }
+  }
+  {
+    int added = 0;
+    for (std::map<unsigned int, DWORD>::const_iterator f = g_lastFightTickBySerial.begin();
+         f != g_lastFightTickBySerial.end() && added < 8; ++f) {
+      if (nowTick - f->second > kFledFighterHealthMs) continue;
+      Character *fc = ResolveCharacterBySerialForInventoryEvent(f->first);
+      if (fc) {
+        AddInventorySyncCandidate(fc, candidates, seen);
+        ++added;
+      }
+    }
+  }
+
+  float eventRange = g_shoutRadius;
+  if (eventRange < 120.0f) {
+    eventRange = 120.0f;
+  } else if (eventRange > 600.0f) {
+    eventRange = 600.0f;
+  }
+
+  // REL_SQUAD_SWEEP_M22: squad members near the player or the selection are always scanned
+  // (carry_start/placed for a squad carrier on a crowded base, SR18/SR19), cap 16.
+  {
+    int addedSquad = 0;
+    Ogre::Vector3 playerPos = player->getPosition();
+    bool haveSel = selection && (uintptr_t)selection >= 0x1000;
+    Ogre::Vector3 selPos = haveSel ? selection->getPosition() : playerPos;
+    for (uint32_t i = 0; i < world->player->playerCharacters.size() && addedSquad < 16; ++i) {
+      Character *member = world->player->playerCharacters[i];
+      if (!member || (uintptr_t)member < 0x1000) continue;
+      try {
+        Ogre::Vector3 mp = member->getPosition();
+        if (mp.distance(playerPos) > eventRange && mp.distance(selPos) > eventRange) continue;
+      } catch (...) {
+        continue;
+      }
+      size_t before = candidates.size();
+      AddInventorySyncCandidate(member, candidates, seen);
+      if (candidates.size() > before) ++addedSquad;
+    }
+  }
+
+  lektor<RootObject *> nearby;
+  world->getCharactersWithinSphere(nearby, player->getPosition(), eventRange, 0.0f,
+                                   0.0f, 16, 0, player);
+  for (uint32_t i = 0; i < nearby.size(); ++i) {
+    Character *other = (Character *)nearby.stuff[i];
+    AddInventorySyncCandidate(other, candidates, seen);
+    if (candidates.size() >= kNpcWorldEventCandidateLimit) {
+      break;
+    }
+  }
+
+  std::vector<PendingInventoryTransferDelta> pendingTransferDeltas;
+  std::vector<PendingInventoryPickupEvent> pendingPickupEvents;
+  pendingTransferDeltas.reserve(candidates.size());
+  pendingPickupEvents.reserve(candidates.size());
+
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    Character *npc = candidates[i];
+    if (!npc || (uintptr_t)npc < 0x1000) {
+      continue;
+    }
+    bool isPlayerActor = (npc == player);
+
+    unsigned int serial = 0;
+    try {
+      serial = npc->getHandle().serial;
+    } catch (...) {
+      serial = 0;
+    }
+    if (serial == 0) {
+      continue;
+    }
+
+    bool deadNow = false;
+    bool unconsciousNow = false;
+    bool enslavedNow = false;
+    bool chainedNow = false;
+    int slaveStateNow = 0;
+    bool hasMoneyNow = false;
+    int moneyNow = 0;
+    bool hasHungerNow = false;
+    float hungerNow = 0.0f;
+    float fedNow = 0.0f;
+    float satietyNow = 0.0f;
+    std::map<uintptr_t, float> fleshHealthByPartNow;
+    int lockpickingNow = 0;
+    try {
+      deadNow = npc->isDead();
+      unconsciousNow = npc->isUnconcious();
+      SlaveStateEnum slaveState = npc->isSlave();
+      chainedNow = npc->isChainedMode();
+      slaveStateNow = (int)slaveState;
+      // REL m16b: ESCAPING_SLAVE / EX_SLAVE are free (a picked lock leaves ESCAPING_SLAVE); only chains or IS_SLAVE count.
+      enslavedNow = (slaveState == IS_SLAVE) || chainedNow;
+    } catch (...) {
+      continue;
+    }
+    hasMoneyNow = TryResolveCharacterMoneySafe(npc, moneyNow);
+    hasHungerNow = ResolveNpcHungerMetrics(npc, hungerNow, fedNow, satietyNow);
+    CollectFleshHealthByPart(npc, fleshHealthByPartNow);
+
+    int leftArmState = ResolveLimbState(npc, RobotLimbs::LEFT_ARM);
+    int rightArmState = ResolveLimbState(npc, RobotLimbs::RIGHT_ARM);
+    int leftLegState = ResolveLimbState(npc, RobotLimbs::LEFT_LEG);
+    int rightLegState = ResolveLimbState(npc, RobotLimbs::RIGHT_LEG);
+    bool leftArmPresent = ResolveLimbPartPresent(npc, RobotLimbs::LEFT_ARM);
+    bool rightArmPresent = ResolveLimbPartPresent(npc, RobotLimbs::RIGHT_ARM);
+    bool leftLegPresent = ResolveLimbPartPresent(npc, RobotLimbs::LEFT_LEG);
+    bool rightLegPresent = ResolveLimbPartPresent(npc, RobotLimbs::RIGHT_LEG);
+
+    InventoryEventSnapshot inventorySnapshot;
+    CollectInventoryEventSnapshot(npc, inventorySnapshot);
+    lockpickingNow = ResolveLockpickingSkillLevel(npc);
+    bool speechActiveNow = HasActiveSpeechBubbleSafe(npc);
+    std::string rawSpeechLine = ReadNpcSpeechLineSafe(npc);
+    std::string speechLine = rawSpeechLine;
+    bool speechHadTtsMetadata = false;
+    if (!speechLine.empty()) {
+      std::string structuredSpeech =
+          ExtractDialogueMessageFromStructuredText(speechLine);
+      if (!structuredSpeech.empty()) {
+        speechLine = structuredSpeech;
+      }
+      int speechTtsDurationMs = ExtractTrailingTtsDurationMs(speechLine);
+      std::string speechTtsHash = ExtractTrailingTtsHash(speechLine);
+      speechHadTtsMetadata = !speechTtsHash.empty() || speechTtsDurationMs > 0;
+      if (!speechHadTtsMetadata && LooksLikeDialogueTemplateToken(speechLine)) {
+        std::string resolvedSpeech = ReadNpcSpeechLineSafe(npc);
+        if (!resolvedSpeech.empty()) {
+          std::string structuredResolved =
+              ExtractDialogueMessageFromStructuredText(resolvedSpeech);
+          if (!structuredResolved.empty()) {
+            resolvedSpeech = structuredResolved;
+          }
+          int resolvedTtsDurationMs = ExtractTrailingTtsDurationMs(resolvedSpeech);
+          std::string resolvedTtsHash = ExtractTrailingTtsHash(resolvedSpeech);
+          resolvedSpeech = TrimCopy(resolvedSpeech);
+          if (resolvedTtsHash.empty() && resolvedTtsDurationMs <= 0 &&
+              !resolvedSpeech.empty() &&
+              !LooksLikeDialogueTemplateToken(resolvedSpeech)) {
+            speechLine = resolvedSpeech;
+          } else {
+            speechLine.clear();
+          }
+        } else {
+          speechLine.clear();
+        }
+      }
+      speechLine = SanitizeCapturedDialogueLine(speechLine);
+    }
+    std::string normalizedSpeechLine = ToLowerAsciiCopy(TrimCopy(speechLine));
+    if (normalizedSpeechLine.length() > 240) {
+      normalizedSpeechLine = normalizedSpeechLine.substr(0, 240);
+    }
+    bool dialogueConversationActiveNow = false;
+    if (npc->dialogue && (uintptr_t)npc->dialogue > 0x1000) {
+      try {
+        dialogueConversationActiveNow =
+            !npc->dialogue->conversationHasEndedPrettyMuch();
+      } catch (...) {
+        dialogueConversationActiveNow = false;
+      }
+    }
+    hand currentTaskSubject;
+    TaskType currentTaskNow = ResolveCurrentNpcTaskSafe(npc, currentTaskSubject);
+    unsigned int currentTaskSubjectSerialNow = 0;
+    std::string currentTaskSubjectNameNow = "";
+    if (currentTaskSubject.isValid() && !currentTaskSubject.isNull()) {
+      currentTaskSubjectSerialNow = currentTaskSubject.serial;
+      currentTaskSubjectNameNow = ResolveConstructionSubjectName(currentTaskSubject);
+    }
+    ConstructionActionEventType constructionActionNow =
+        ResolveConstructionActionType(currentTaskNow);
+    unsigned int constructionSubjectSerialNow = 0;
+    std::string constructionSubjectNameNow = "";
+    if (constructionActionNow != CONSTRUCTION_ACTION_NONE) {
+      constructionSubjectSerialNow = currentTaskSubject.serial;
+      constructionSubjectNameNow = ResolveConstructionSubjectName(currentTaskSubject);
+    }
+    bool carryingNow = false;
+    unsigned int carryingTargetSerialNow = 0;
+    std::string carryingTargetNameNow = "";
+    try {
+      carryingNow = npc->isCarryingSomething && npc->carryingObject.isValid();
+      if (carryingNow) {
+        carryingTargetSerialNow = npc->carryingObject.serial;
+        carryingTargetNameNow = ResolveConstructionSubjectName(npc->carryingObject);
+      }
+    } catch (...) {
+      carryingNow = false;
+      carryingTargetSerialNow = 0;
+      carryingTargetNameNow.clear();
+    }
+    if (carryingNow && carryingTargetNameNow.empty()) {
+      carryingTargetNameNow = "someone";
+    }
+    int useStateNow = 0;
+    try {
+      useStateNow = (int)npc->inSomething;
+    } catch (...) {
+      useStateNow = 0;
+    }
+
+    SocialCarryStateOnHandleChange(npc, serial);
+    NpcWorldEventState &state = g_npcWorldEventStateBySerial[serial];
+    // REL_SEED_CAPTURE_M22: sweeps run right after world-stable, before the playthrough session is
+    // ready (SocialCaptureEnabled false). States seeded then were silent (no "first seen already
+    // enslaved", squad slaves missed on a later load). Re-seed once capture is on.
+    if (state.initialized && !state.seededWithCapture && SocialCaptureEnabled())
+      state.initialized = false;
+    if (state.initialized && (state.chained != chainedNow || state.slaveState != slaveStateNow) && SocialCaptureEnabled())
+      Log("EVENT_SCAN: slave state serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
+          " chained=" + ToString((int)state.chained) + "->" + ToString((int)chainedNow) +
+          " slave_state=" + ToString(state.slaveState) + "->" + ToString(slaveStateNow));
+    bool wasChained = state.chained;
+    state.chained = chainedNow;
+    state.slaveState = slaveStateNow;
+    SocialTheftHuntCheck(npc, serial, nowTick); // REL_THEFT_CAUGHT_M18
+    if (currentTaskSubjectSerialNow != 0 && IsLiberationTask((int)currentTaskNow)) {
+      state.libSubjectSerial = currentTaskSubjectSerialNow;
+      state.libTask = (int)currentTaskNow;
+      state.libTick = nowTick;
+    }
+    if (currentTaskSubjectSerialNow != 0) {
+      state.recentTaskSubjectSerial = currentTaskSubjectSerialNow;
+      state.recentTask = (int)currentTaskNow;
+      state.recentTaskSubjectTick = nowTick;
+    }
+    if (!state.initialized) {
+      state.initialized = true;
+      state.seededWithCapture = SocialCaptureEnabled();
+      state.useState = useStateNow;
+      if (enslavedNow && SocialCaptureEnabled())
+        Log("EVENT_SCAN: first seen already enslaved serial=" + ToString(serial) + " name=" + ResolveCharacterNameSafe(npc) +
+            " (no enslaved transition will be reported)");
+      state.dead = deadNow;
+      state.unconscious = unconsciousNow;
+      state.enslaved = enslavedNow;
+      state.hasMoney = hasMoneyNow;
+      state.money = moneyNow;
+      state.hasHunger = hasHungerNow;
+      state.hunger = hungerNow;
+      state.fed = fedNow;
+      state.satiety = satietyNow;
+      state.carrying = carryingNow;
+      state.carryingTargetSerial = carryingTargetSerialNow;
+      state.carryingTargetName = carryingTargetNameNow;
+      state.speechActive = speechActiveNow;
+      state.leftArmPresent = leftArmPresent;
+      state.rightArmPresent = rightArmPresent;
+      state.leftLegPresent = leftLegPresent;
+      state.rightLegPresent = rightLegPresent;
+      state.leftArmState = leftArmState;
+      state.rightArmState = rightArmState;
+      state.leftLegState = leftLegState;
+      state.rightLegState = rightLegState;
+      state.currentTask = (int)currentTaskNow;
+      state.currentTaskSubjectSerial = currentTaskSubjectSerialNow;
+      state.currentTaskSubjectName = currentTaskSubjectNameNow;
+      state.constructionAction = (int)constructionActionNow;
+      state.constructionSubjectSerial = constructionSubjectSerialNow;
+      state.constructionSubjectName = constructionSubjectNameNow;
+      state.lockpickingSkill = lockpickingNow;
+      state.lastSpeechLine = normalizedSpeechLine;
+      state.inventory = inventorySnapshot;
+      state.fleshHealthByPart = fleshHealthByPartNow;
+      state.lastSeenTick = nowTick;
+      // Item 92: first seen already down, but he went down in a fight with the squad (sweep missed the moment)
+      if (unconsciousNow && !deadNow) {
+        std::map<unsigned int, DWORD>::const_iterator pf92 = g_lastPlayerFightTickBySerial.find(serial);
+        if (pf92 != g_lastPlayerFightTickBySerial.end() && nowTick - pf92->second <= kFledFighterHealthMs) {
+          Log("EVENT_SCAN: first seen unconscious after a squad fight serial=" + ToString(serial) +
+              " name=" + ResolveCharacterNameSafe(npc) + " (item 92: knockout reported now)");
+          EmitKnockoutEvent(npc, &inventorySnapshot, hasMoneyNow ? moneyNow : -1);
+        }
+      }
+      if (!isPlayerActor && IsAnyPredationTask(currentTaskNow)) {
+        EmitPredationEventFromTask(npc, currentTaskSubject, nowTick,
+                                   currentTaskNow);
+      }
+      if (IsLimbLostState(leftArmState) || !leftArmPresent ||
+          IsLimbLostState(rightArmState) || !rightArmPresent ||
+          IsLimbLostState(leftLegState) || !leftLegPresent ||
+          IsLimbLostState(rightLegState) || !rightLegPresent) {
+        Log("EVENT_SCAN: init limb state serial=" + ToString(serial) +
+            " name=" + ResolveCharacterNameSafe(npc) +
+            " la=" + ToString(leftArmState) + "/" +
+            std::string(leftArmPresent ? "1" : "0") + " ra=" +
+            ToString(rightArmState) + "/" +
+            std::string(rightArmPresent ? "1" : "0") + " ll=" +
+            ToString(leftLegState) + "/" +
+            std::string(leftLegPresent ? "1" : "0") + " rl=" +
+            ToString(rightLegState) + "/" +
+            std::string(rightLegPresent ? "1" : "0"));
+      }
+      continue;
+    }
+
+    NpcWorldEventState previousState = state;
+    bool majorDamageNow = false;
+    for (std::map<uintptr_t, float>::const_iterator it =
+             fleshHealthByPartNow.begin();
+         it != fleshHealthByPartNow.end(); ++it) {
+      std::map<uintptr_t, float>::const_iterator previousIt =
+          previousState.fleshHealthByPart.find(it->first);
+      if (previousIt != previousState.fleshHealthByPart.end() &&
+          previousIt->second - it->second > kMajorDamageThreshold) {
+        majorDamageNow = true;
+        break;
+      }
+    }
+    if (majorDamageNow && ObserveCombatCharacter(npc, nowTick).evidence) {
+      MarkRecentCombatSignal(npc, nowTick);
+      EmitMajorDamageEvent(npc);
+    }
+    if ((ObserveCombatCharacter(npc, nowTick).evidence || FoughtRecently(serial, nowTick)) &&
+        !deadNow && !unconsciousNow) // item 88: also after he fled
+      ReportHealthBucket(npc, serial, OverallHealthPercent(fleshHealthByPartNow));
+    std::map<std::string, int> gainByKey;
+    std::map<std::string, int> lossByKey;
+    bool suppressPickupEvent = false;
+    ComputeInventoryDeltaByKey(previousState.inventory, inventorySnapshot,
+                               gainByKey, lossByKey);
+    if (!gainByKey.empty() || !lossByKey.empty()) {
+      bool hasMoneyDelta = previousState.hasMoney && hasMoneyNow;
+      int moneyDelta = hasMoneyDelta ? (moneyNow - previousState.money) : 0;
+      Character *tradeCounterparty = nullptr;
+      if (hasMoneyDelta && moneyDelta != 0) {
+        // Bug 103: a real trader first; squad members never trade cats with you.
+        if (isPlayerActor) {
+          tradeCounterparty = ResolveLikelyTraderForActor(world, npc);
+        }
+        if (!tradeCounterparty || (uintptr_t)tradeCounterparty <= 0x1000) {
+          tradeCounterparty = ResolveLikelyInventoryTransferCounterparty(npc);
+        }
+        if (tradeCounterparty && (uintptr_t)tradeCounterparty > 0x1000 && isPlayerActor) {
+          bool counterpartySquad = false;
+          try {
+            counterpartySquad = tradeCounterparty->isPlayerCharacter();
+          } catch (...) {
+            counterpartySquad = true;
+          }
+          if (counterpartySquad) {
+            Log("INV_TRANSFER: cats trade counterparty " +
+                ResolveCharacterNameSafe(tradeCounterparty) +
+                " is in the player's squad; not a seller (bug 103)");
+            tradeCounterparty = nullptr;
+          }
+        }
+      }
+      if (tradeCounterparty && (uintptr_t)tradeCounterparty > 0x1000) {
+        std::string actorName = ResolveCharacterNameSafe(npc);
+        std::string actorFaction = SafeFaction(npc);
+        std::string traderName = ResolveCharacterNameSafe(tradeCounterparty);
+        std::string traderFaction = SafeFaction(tradeCounterparty);
+        unsigned int traderSerial =
+            ResolveCharacterSerialForEvent(tradeCounterparty);
+
+        if (moneyDelta < 0 && !gainByKey.empty()) {
+          std::string itemsText = BuildInventoryDeltaItemsText(
+              gainByKey, inventorySnapshot, previousState.inventory);
+          if (itemsText.empty()) {
+            itemsText = "items";
+          }
+          std::string message =
+              "bought " + itemsText + " from " + traderName + " for " +
+              ToString(-moneyDelta) + " cats";
+          LogGameEvent("trade", actorName, actorFaction, traderName, traderFaction,
+                       message, serial, traderSerial);
+          gainByKey.clear();
+          suppressPickupEvent = true;
+        } else if (moneyDelta > 0 && !lossByKey.empty()) {
+          std::string itemsText = BuildInventoryDeltaItemsText(
+              lossByKey, previousState.inventory, inventorySnapshot);
+          if (itemsText.empty()) {
+            itemsText = "items";
+          }
+          std::string message =
+              "sold " + itemsText + " to " + traderName + " for " +
+              ToString(moneyDelta) + " cats";
+          LogGameEvent("trade", actorName, actorFaction, traderName, traderFaction,
+                       message, serial, traderSerial);
+          lossByKey.clear();
+        }
+      }
+    }
+    if (!isPlayerActor && !lossByKey.empty()) {
+      std::map<std::string, int> consumedFoodByKey =
+          DetectFoodConsumptionLossByKey(
+              lossByKey, previousState.inventory, previousState.hasHunger,
+              previousState.hunger, previousState.fed, previousState.satiety,
+              hasHungerNow, hungerNow, fedNow, satietyNow);
+      if (!consumedFoodByKey.empty()) {
+        SubtractInventoryDeltaByKey(lossByKey, consumedFoodByKey);
+        EmitEatEvent(npc, previousState.inventory, inventorySnapshot,
+                     consumedFoodByKey, previousState.hasHunger ? previousState.hunger : -1.0f,
+                     hasHungerNow ? hungerNow : -1.0f);
+      }
+    }
+    if (!lossByKey.empty()) {
+      std::map<std::string, int> consumedMedicalByKey =
+          ConsumePendingMedicalItemLossByKey(serial, lossByKey, nowTick);
+      if (!consumedMedicalByKey.empty()) {
+        SubtractInventoryDeltaByKey(lossByKey, consumedMedicalByKey);
+      }
+    }
+    if (!gainByKey.empty() || !lossByKey.empty()) {
+      PendingInventoryTransferDelta transferDelta;
+      transferDelta.serial = serial;
+      transferDelta.npc = npc;
+      transferDelta.actorName = ResolveCharacterNameSafe(npc);
+      transferDelta.actorFaction = SafeFaction(npc);
+      transferDelta.beforeSnapshot = previousState.inventory;
+      transferDelta.afterSnapshot = inventorySnapshot;
+      transferDelta.gainByKey = gainByKey;
+      transferDelta.lossByKey = lossByKey;
+      pendingTransferDeltas.push_back(transferDelta);
+    }
+    if (!suppressPickupEvent &&
+        inventorySnapshot.totalCount > previousState.inventory.totalCount) {
+      PendingInventoryPickupEvent pickupEvent;
+      pickupEvent.serial = serial;
+      pickupEvent.npc = npc;
+      pickupEvent.priorState = previousState;
+      pickupEvent.currentSnapshot = inventorySnapshot;
+      pickupEvent.hasMoneyAfter = hasMoneyNow;
+      pickupEvent.moneyAfter = moneyNow;
+      pendingPickupEvents.push_back(pickupEvent);
+    }
+
+    // Bug 113: the player's own knockout/recovery/death are events too.
+    if (!state.unconscious && unconsciousNow) {
+      EmitKnockoutEvent(npc, &inventorySnapshot, hasMoneyNow ? moneyNow : -1);
+    } else if (state.unconscious && !unconsciousNow && !deadNow) {
+      EmitRecoveredEvent(npc, &inventorySnapshot, hasMoneyNow ? moneyNow : -1);
+    }
+    if (!state.dead && deadNow) {
+      EmitDeathEvent(npc);
+    }
+    if (state.useState >= 0 && state.useState != useStateNow && useStateNow != (int)IN_NOTHING &&
+        SocialCaptureEnabled()) {
+      // REL phase 4: put into a bed or a prison; the carrier who set them down in the last 15 s did it.
+      Character *carrier = (state.lastCarrierSerial != 0 && nowTick - state.lastCarryDropTick < 15000)
+                               ? ResolveCharacterBySerialForInventoryEvent(state.lastCarrierSerial)
+                               : nullptr;
+      if (!carrier) {
+        // Run m13: the bed/cage flag shows up in the same sweep, before the carrier's own drop is processed
+        // (placed came 5 ms ahead of carry_end, actor #0). The carrier's last state still says it carries us.
+        for (std::map<unsigned int, NpcWorldEventState>::const_iterator it = g_npcWorldEventStateBySerial.begin();
+             it != g_npcWorldEventStateBySerial.end(); ++it) {
+          if (it->first != serial && it->second.carryingTargetSerial == serial) {
+            carrier = ResolveCharacterBySerialForInventoryEvent(it->first);
+            if (carrier)
+              break;
+          }
+        }
+      }
+      StobeSocial::EntityInfo c = SocialEntityFor(carrier), t = SocialEntityFor(npc);
+      SocialPostStructured("placed", carrier ? &c : nullptr, &t,
+                           std::string("\"place\":") + (useStateNow == (int)IN_BED ? "\"bed\"" : "\"prison\"") +
+                               "," + SocialVitalsFacts("", npc));
+    }
+    state.useState = useStateNow;
+    {
+      // REL m16c: a picked lock takes the chains off but leaves isSlave()==IS_SLAVE (the game then re-creates him
+      // under a new handle, a different object). The chains coming off is the freeing: report it on this handle.
+      // m16d: only when someone worked the lock/shackles (an owner unchaining his slave in a camp is not freeing);
+      // and also for the player actor (Testing-Save-Enslaved: the first squad member is the slave).
+      if (wasChained && !chainedNow && state.enslaved && !deadNow) {
+        int t = 0;
+        if (slaveStateNow != (int)IS_SLAVE || SocialFindLiberator(serial, SocialAliasSerial(SocialEntityFor(npc)), 0, t))
+          state.freedLatch = true;
+        else if (SocialCaptureEnabled())
+          Log("EVENT_SCAN: chains off, still a slave, nobody worked the lock: not freed serial=" + ToString(serial) +
+              " name=" + ResolveCharacterNameSafe(npc));
+      }
+      if (chainedNow || slaveStateNow != (int)IS_SLAVE)
+        state.freedLatch = false;
+      if (state.freedLatch)
+        enslavedNow = false;
+      if (!state.enslaved && enslavedNow) {
+        EmitSlaveryEvent(npc, true);
+      } else if (state.enslaved && !enslavedNow) {
+        EmitSlaveryEvent(npc, false);
+      }
+    }
+    // SR18: carry events for the player actor too (playerCharacters[0] carrying someone to a bed/cage
+    // must set lastCarrierSerial, else `placed` has actor #0).
+    if (!state.carrying && carryingNow) {
+      EmitCarryPickupEvent(npc, carryingTargetSerialNow, carryingTargetNameNow);
+    } else if (state.carrying && !carryingNow) {
+      EmitCarryDropEvent(npc, state.carryingTargetSerial,
+                         state.carryingTargetName);
+    } else if (state.carrying && carryingNow &&
+               state.carryingTargetSerial != carryingTargetSerialNow) {
+      EmitCarryDropEvent(npc, state.carryingTargetSerial,
+                         state.carryingTargetName);
+      EmitCarryPickupEvent(npc, carryingTargetSerialNow, carryingTargetNameNow);
+    }
+    if (!isPlayerActor) {
+      bool predationTaskNow = IsAnyPredationTask(currentTaskNow);
+      bool predationTaskPrevious = IsAnyPredationTask((TaskType)state.currentTask);
+      bool predationTargetChanged = false;
+      if (predationTaskNow && predationTaskPrevious) {
+        if (currentTaskSubjectSerialNow != 0 && state.currentTaskSubjectSerial != 0) {
+          predationTargetChanged =
+              (currentTaskSubjectSerialNow != state.currentTaskSubjectSerial);
+        } else {
+          predationTargetChanged =
+              ToLowerAsciiCopy(currentTaskSubjectNameNow) !=
+              ToLowerAsciiCopy(state.currentTaskSubjectName);
+        }
+      }
+      if (predationTaskNow && (!predationTaskPrevious || predationTargetChanged)) {
+        EmitPredationEventFromTask(npc, currentTaskSubject, nowTick,
+                                   currentTaskNow);
+      }
+
+      if (!IsLimbLostState(state.leftArmState) && IsLimbLostState(leftArmState)) {
+        Log("EVENT_SCAN: limb loss transition serial=" + ToString(serial) +
+            " limb=left_arm state " + ToString(state.leftArmState) + "->" +
+            ToString(leftArmState));
+        EmitLimbLossEvent(npc, "left arm");
+      } else if (state.leftArmPresent && !leftArmPresent) {
+        Log("EVENT_SCAN: limb missing transition serial=" + ToString(serial) +
+            " limb=left_arm part_present 1->0");
+        EmitLimbLossEvent(npc, "left arm");
+      }
+      if (!IsLimbLostState(state.rightArmState) && IsLimbLostState(rightArmState)) {
+        Log("EVENT_SCAN: limb loss transition serial=" + ToString(serial) +
+            " limb=right_arm state " + ToString(state.rightArmState) + "->" +
+            ToString(rightArmState));
+        EmitLimbLossEvent(npc, "right arm");
+      } else if (state.rightArmPresent && !rightArmPresent) {
+        Log("EVENT_SCAN: limb missing transition serial=" + ToString(serial) +
+            " limb=right_arm part_present 1->0");
+        EmitLimbLossEvent(npc, "right arm");
+      }
+      if (!IsLimbLostState(state.leftLegState) && IsLimbLostState(leftLegState)) {
+        Log("EVENT_SCAN: limb loss transition serial=" + ToString(serial) +
+            " limb=left_leg state " + ToString(state.leftLegState) + "->" +
+            ToString(leftLegState));
+        EmitLimbLossEvent(npc, "left leg");
+      } else if (state.leftLegPresent && !leftLegPresent) {
+        Log("EVENT_SCAN: limb missing transition serial=" + ToString(serial) +
+            " limb=left_leg part_present 1->0");
+        EmitLimbLossEvent(npc, "left leg");
+      }
+      if (!IsLimbLostState(state.rightLegState) && IsLimbLostState(rightLegState)) {
+        Log("EVENT_SCAN: limb loss transition serial=" + ToString(serial) +
+            " limb=right_leg state " + ToString(state.rightLegState) + "->" +
+            ToString(rightLegState));
+        EmitLimbLossEvent(npc, "right leg");
+      } else if (state.rightLegPresent && !rightLegPresent) {
+        Log("EVENT_SCAN: limb missing transition serial=" + ToString(serial) +
+            " limb=right_leg part_present 1->0");
+        EmitLimbLossEvent(npc, "right leg");
+      }
+
+      if (lockpickingNow > state.lockpickingSkill) {
+        EmitLockpickedEvent(npc, state.lockpickingSkill, lockpickingNow);
+      }
+      bool constructionChanged =
+          state.constructionAction != (int)constructionActionNow;
+      bool constructionTargetChanged =
+          !constructionChanged &&
+          constructionActionNow != CONSTRUCTION_ACTION_NONE &&
+          ((constructionSubjectSerialNow != 0 &&
+            constructionSubjectSerialNow != state.constructionSubjectSerial) ||
+           ((constructionSubjectSerialNow == 0 ||
+             state.constructionSubjectSerial == 0) &&
+            !constructionSubjectNameNow.empty() &&
+            constructionSubjectNameNow != state.constructionSubjectName));
+      if (constructionActionNow == CONSTRUCTION_ACTION_BUILD &&
+          (constructionChanged || constructionTargetChanged)) {
+        EmitBuildEvent(npc, constructionSubjectNameNow);
+      } else if (constructionActionNow == CONSTRUCTION_ACTION_DISMANTLE &&
+                 (constructionChanged || constructionTargetChanged)) {
+        EmitDismantleEvent(npc, constructionSubjectNameNow);
+      }
+
+      bool hasAmbientSpeech = !normalizedSpeechLine.empty();
+      bool speechChanged =
+          hasAmbientSpeech && normalizedSpeechLine != state.lastSpeechLine;
+      bool inSpeechFlow = false;
+      bool duplicateDialogue = false;
+      if (g_enableRegularDialogueCapture &&
+          (hasAmbientSpeech || speechActiveNow || dialogueConversationActiveNow)) {
+        inSpeechFlow = IsNpcInSpeechFlowBySerial(serial);
+        if (hasAmbientSpeech && speechChanged && !speechHadTtsMetadata &&
+            !inSpeechFlow) {
+          duplicateDialogue =
+              ShouldDropDuplicateNonAiDialogue(serial, false, speechLine);
+        }
+      }
+      if (g_enableRegularDialogueCapture && speechChanged &&
+          !speechHadTtsMetadata && !inSpeechFlow && !duplicateDialogue) {
+        unsigned int listenerSerial = 0;
+        std::string listenerName = "None";
+        std::string listenerFaction = "None";
+        Character *listener = nullptr;
+        std::string listenerSource = "";
+        try {
+          listener =
+              ResolveDialogueListenerForSpeech(npc, npc->dialogue, listenerSource);
+        } catch (...) {
+          listener = nullptr;
+        }
+        if (listener && (uintptr_t)listener > 0x1000 && listener != npc) {
+          listenerName = ResolveCharacterNameSafe(listener);
+          listenerFaction = SafeFaction(listener);
+          listenerSerial = ResolveCharacterSerialForEvent(listener);
+        }
+        LogGameEvent("chat", ResolveCharacterNameSafe(npc), SafeFaction(npc),
+                     listenerName, listenerFaction, speechLine, serial,
+                     listenerSerial);
+      }
+    }
+
+    state.dead = deadNow;
+    state.unconscious = unconsciousNow;
+    state.enslaved = enslavedNow;
+    state.hasMoney = hasMoneyNow;
+    state.money = moneyNow;
+    state.hasHunger = hasHungerNow;
+    state.hunger = hungerNow;
+    state.fed = fedNow;
+    state.satiety = satietyNow;
+    state.carrying = carryingNow;
+    state.carryingTargetSerial = carryingTargetSerialNow;
+    state.carryingTargetName = carryingTargetNameNow;
+    state.speechActive = speechActiveNow;
+    state.leftArmPresent = leftArmPresent;
+    state.rightArmPresent = rightArmPresent;
+    state.leftLegPresent = leftLegPresent;
+    state.rightLegPresent = rightLegPresent;
+    state.leftArmState = leftArmState;
+    state.rightArmState = rightArmState;
+    state.leftLegState = leftLegState;
+    state.rightLegState = rightLegState;
+    state.currentTask = (int)currentTaskNow;
+    state.currentTaskSubjectSerial = currentTaskSubjectSerialNow;
+    state.currentTaskSubjectName = currentTaskSubjectNameNow;
+    state.constructionAction = (int)constructionActionNow;
+    state.constructionSubjectSerial = constructionSubjectSerialNow;
+    state.constructionSubjectName = constructionSubjectNameNow;
+    state.lockpickingSkill = lockpickingNow;
+    state.lastSpeechLine = normalizedSpeechLine;
+    state.inventory = inventorySnapshot;
+    state.fleshHealthByPart = fleshHealthByPartNow;
+    state.lastSeenTick = nowTick;
+  }
+
+  std::map<unsigned int, std::map<std::string, int> > matchedTransferGainBySerial;
+  EmitInventoryTransferEventsFromDeltas(pendingTransferDeltas,
+                                        matchedTransferGainBySerial);
+  for (size_t i = 0; i < pendingPickupEvents.size(); ++i) {
+    const PendingInventoryPickupEvent &pickupEvent = pendingPickupEvents[i];
+    const std::map<std::string, int> *matchedGain = nullptr;
+    std::map<unsigned int, std::map<std::string, int> >::const_iterator matchedIt =
+        matchedTransferGainBySerial.find(pickupEvent.serial);
+    if (matchedIt != matchedTransferGainBySerial.end()) {
+      matchedGain = &matchedIt->second;
+    }
+    EmitPickupEvent(pickupEvent.npc, pickupEvent.priorState,
+                    pickupEvent.currentSnapshot, matchedGain,
+                    pickupEvent.hasMoneyAfter, pickupEvent.moneyAfter);
+  }
+
+  UpdateCombatLifecycleEvent(world, nowTick);
+
+  static DWORD lastPruneTick = 0;
+  if (nowTick - lastPruneTick >= 60000) {
+    lastPruneTick = nowTick;
+    PruneNpcWorldEventState();
+  }
+}
+
+static volatile LONG g_npcWorldEventSweepSehCount = 0;
+static DWORD g_npcWorldEventSweepLastSehCode = 0;
+
+static int NpcWorldEventSweepSehFilter(unsigned int code) {
+  g_npcWorldEventSweepLastSehCode = code;
+  InterlockedIncrement(&g_npcWorldEventSweepSehCount);
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void RunNpcWorldEventSweep(GameWorld *world, Character *selection) {
+  __try {
+    RunNpcWorldEventSweepUnsafe(world, selection);
+  } __except (NpcWorldEventSweepSehFilter(GetExceptionCode())) {
+  }
+}
+
+static void RunInventorySyncSweep(GameWorld *world, Character *selection) {
+  if (!world || !world->player || world->player->playerCharacters.size() == 0) {
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  if (nowTick - g_lastInventorySweepTick < kInventorySweepIntervalMs) {
+    return;
+  }
+  g_lastInventorySweepTick = nowTick;
+
+  Character *player = world->player->playerCharacters[0];
+  if (!player || (uintptr_t)player < 0x1000) {
+    return;
+  }
+
+  std::vector<Character *> candidates;
+  std::set<unsigned int> seen;
+  candidates.reserve(kInventorySweepCandidateLimit + 3);
+
+  AddInventorySyncCandidate(player, candidates, seen);
+  AddInventorySyncCandidate(selection, candidates, seen);
+  Character *talkTarget = nullptr;
+  try {
+    talkTarget = g_talkTargetHand.getCharacter();
+  } catch (...) {
+    talkTarget = nullptr;
+  }
+  AddInventorySyncCandidate(talkTarget, candidates, seen);
+
+  float syncRange = g_proximityRadius;
+  if (syncRange < 25.0f) {
+    syncRange = 25.0f;
+  } else if (syncRange > 120.0f) {
+    syncRange = 120.0f;
+  }
+
+  lektor<RootObject *> nearby;
+  world->getCharactersWithinSphere(nearby, player->getPosition(), syncRange, 0.0f,
+                                   0.0f, 16, 0, player);
+  for (uint32_t i = 0; i < nearby.size(); ++i) {
+    Character *other = (Character *)nearby.stuff[i];
+    AddInventorySyncCandidate(other, candidates, seen);
+    if (candidates.size() >= kInventorySweepCandidateLimit) {
+      break;
+    }
+  }
+
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    SyncInventoryForCharacter(candidates[i], false, "periodic");
+  }
+
+  static DWORD lastPruneTick = 0;
+  if (nowTick - lastPruneTick >= 60000) {
+    lastPruneTick = nowTick;
+    PruneInventorySyncState();
+  }
+}
+
+static Character *FindCharacterBySerial(GameWorld *world, unsigned int serial) {
+  if (!world || serial == 0) {
+    return nullptr;
+  }
+  const ogre_unordered_set<Character *>::type &chars =
+      world->getCharacterUpdateList();
+  for (auto it = chars.begin(); it != chars.end(); ++it) {
+    Character *c = *it;
+    if (!c || (uintptr_t)c < 0x1000) {
+      continue;
+    }
+    try {
+      if (c->getHandle().serial == serial) {
+        return c;
+      }
+    } catch (...) {
+    }
+  }
+  return nullptr;
+}
+
+static Character *ResolveCharacterFromHandSafe(GameWorld *world,
+                                               const hand &characterHand) {
+  if (!world || !characterHand.isValid()) {
+    return nullptr;
+  }
+
+  Character *resolved = FindCharacterBySerial(world, characterHand.serial);
+  if (resolved && (uintptr_t)resolved > 0x1000) {
+    return resolved;
+  }
+
+  try {
+    resolved = characterHand.getCharacter();
+  } catch (...) {
+    resolved = nullptr;
+  }
+
+  if (!resolved || (uintptr_t)resolved <= 0x1000) {
+    return nullptr;
+  }
+  return resolved;
+}
+
+static void ClearAllJobsForFollow(Character *follower) {
+  if (!follower || (uintptr_t)follower <= 0x1000) {
+    return;
+  }
+  try {
+    follower->clearPermajobs();
+  } catch (...) {
+  }
+  static const TaskType kFollowCancelledJobs[] = {
+      GO_HOMEBUILDING,
+      STAND_AT_SHOPKEEPER_NODE,
+      IDLE,
+      WANDERER,
+      WANDER_TOWN,
+      PATROL_TOWN,
+      STAND_AT_GUARD_NODE_HOMEBUILDING_IN_OUT,
+      STAND_AT_GENERAL_NODE,
+      STAND_AT_DEFENSIVE_NODE,
+      STAND_AT_BUILDING_GUARD_NODE,
+      STAND_AT_BUILDING_DEFENSIVE_NODE,
+      STAND_AT_NODE,
+      STAND_AT_GUARD_NODE_HOMETOWN_OUTSIDE,
+      STAND_AT_GUARD_NODE_HOMEBUILDING_INDOORS_ONLY,
+      STAY_IN_HOME,
+      MAN_THE_GATE,
+      OPEN_UP_SHOP_DOORS,
+      RELAX_IN_TOWN_PACKAGE,
+      TRAVEL_TO_TARGET_PACKAGE,
+      TRAVEL_TO_TARGET_TOWN,
+      TRAVEL_TO_TARGET_TOWN_FAST,
+      RUN_AWAY,
+      JOB_KEEP_EVERYTHING_RUNNING,
+      DELIVER_RESOURCES,
+      COLLECT_OUTPUT_RESOURCE,
+      FILL_MACHINE,
+      OPERATE_MACHINERY,
+      OPERATE_AUTOMATIC_MACHINERY,
+      GET_RID_OF_RESOURCES_IN_MY_INVENTORY,
+      DITCH_ALL_RESOURCES,
+      AUTO_LABOURING_MINES,
+      JOB_MEDIC,
+      FIRST_AID_ORDER,
+      FIRST_AID_ROBOT,
+      SPLINT_ORDER,
+      SPLINT_JOB,
+      JOB_REPAIR_ROBOT,
+  };
+  for (size_t i = 0; i < sizeof(kFollowCancelledJobs) / sizeof(kFollowCancelledJobs[0]); ++i) {
+    try {
+      follower->removeJob(kFollowCancelledJobs[i]);
+    } catch (...) {
+    }
+  }
+}
+
+bool TryApplyJobsToggleSafe(Character *npc, bool enabled, const std::string &label);
+
+static void ApplyFollowTargets(GameWorld *world) {
+  if (!world) {
+    return;
+  }
+
+  static DWORD lastFollowTick = 0;
+  DWORD nowTick = GetTickCount();
+  if (nowTick - lastFollowTick < 250) {
+    return;
+  }
+  lastFollowTick = nowTick;
+
+  std::map<unsigned int, hand> followSnapshot = SnapshotFollowTargets();
+  if (followSnapshot.empty()) {
+    return;
+  }
+
+  static std::map<unsigned int, DWORD> s_followScrubTick;
+  static std::map<unsigned int, DWORD> s_followPermajobScrubTick;
+  static std::map<unsigned int, DWORD> s_followGoalRefreshTick;
+  for (auto it = followSnapshot.begin(); it != followSnapshot.end(); ++it) {
+    unsigned int followerSerial = it->first;
+    hand targetHand = it->second;
+    if (followerSerial == 0 || !targetHand.isValid()) {
+      ClearFollowTarget(followerSerial);
+      continue;
+    }
+
+    Character *follower = FindCharacterBySerial(world, followerSerial);
+    Character *target = nullptr;
+    try {
+      target = targetHand.getCharacter();
+    } catch (...) {
+      target = nullptr;
+    }
+
+    if (!follower || (uintptr_t)follower < 0x1000 || !target ||
+        (uintptr_t)target < 0x1000) {
+      continue;
+    }
+    if (follower == target) {
+      ClearFollowTarget(followerSerial);
+      continue;
+    }
+
+    // Safety net: a non-squad NPC must not follow forever (FollowExpiryGameHours, default 24).
+    {
+      bool squadMember = false;
+      try {
+        Faction *followerFaction = follower->getFaction();
+        squadMember = followerFaction && followerFaction->isThePlayer();
+      } catch (...) {
+        squadMember = true; // unknown faction: never expire
+      }
+      long long followStart = 0;
+      if (!squadMember && GetFollowStart(followerSerial, followStart) &&
+          Stobe::FollowExpiry::ShouldExpire(followStart, CurrentGameTsSeconds(),
+                                            FollowExpiryLimitGameSeconds(), false, false)) {
+        Log("FOLLOW_EXPIRED: follower=" + ToString(followerSerial) + " started_gamets=" +
+            ToString(static_cast<int>(followStart)) + " now_gamets=" + ToString(CurrentGameTsSeconds()));
+        ClearFollowTarget(followerSerial);
+        TryApplyJobsToggleSafe(follower, true, "FOLLOW_EXPIRED_RESTORE_JOBS");
+        try {
+          CharMovement *movement = follower->getMovement();
+          if (movement && (uintptr_t)movement > 0x1000) movement->restoreDesiredSpeed();
+        } catch (...) {
+        }
+        try {
+          follower->clearAllAIGoals();
+          follower->reThinkCurrentAIAction();
+        } catch (...) {
+        }
+        continue;
+      }
+    }
+
+    Ogre::Vector3 from = follower->getPosition();
+    Ogre::Vector3 to = target->getPosition();
+    float dx = from.x - to.x;
+    float dy = from.y - to.y;
+    float dz = from.z - to.z;
+    float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    try {
+      DWORD &lastGoalScrubTick = s_followScrubTick[followerSerial];
+      if (nowTick - lastGoalScrubTick >= 700) {
+        lastGoalScrubTick = nowTick;
+        try {
+          follower->setStandingOrder((MessageForB::StandingOrder)13 /* PASSIVE */,
+                                     false);
+          follower->setStandingOrder((MessageForB::StandingOrder)12 /* HOLD */,
+                                     false);
+        } catch (...) {
+        }
+      }
+      DWORD &lastGoalRefreshTick = s_followGoalRefreshTick[followerSerial];
+      if (nowTick - lastGoalRefreshTick >= 900) {
+        lastGoalRefreshTick = nowTick;
+        try {
+          follower->clearAllAIGoals();
+        } catch (...) {
+        }
+        try {
+          follower->addGoal(STAY_CLOSE_TO_TARGET, (RootObjectBase *)target);
+        } catch (...) {
+        }
+        try {
+          follower->reThinkCurrentAIAction();
+        } catch (...) {
+        }
+      }
+      DWORD &lastPermajobScrubTick = s_followPermajobScrubTick[followerSerial];
+      if (nowTick - lastPermajobScrubTick >= 1400) {
+        lastPermajobScrubTick = nowTick;
+        ClearAllJobsForFollow(follower);
+      }
+
+      bool moved = false;
+      CharMovement *movement = nullptr;
+      try {
+        movement = follower->getMovement();
+      } catch (...) {
+        movement = nullptr;
+      }
+      if (movement && (uintptr_t)movement > 0x1000) {
+        try {
+          movement->setDesiredSpeedOrders(RUN);
+          movement->setDesiredSpeed(RUN);
+        } catch (...) {
+        }
+      }
+      if (dist > 3.0f) {
+        if (movement && (uintptr_t)movement > 0x1000) {
+          movement->setDestination(target, HIGH_PRIORITY);
+          moved = true;
+        } else {
+          follower->setDestination(to, false);
+          moved = true;
+        }
+      }
+      if (moved) {
+        static std::map<unsigned int, DWORD> s_followLogTick;
+        DWORD &lastLogTick = s_followLogTick[followerSerial];
+        if (nowTick - lastLogTick >= 2000) {
+          lastLogTick = nowTick;
+          Log("FOLLOW_TICK: follower=" + follower->getName() +
+              " target=" + target->getName() + " dist=" + ToString(dist));
+        }
+      }
+    } catch (...) {
+      Log("FOLLOW: setDestination failed for follower serial " +
+          ToString(followerSerial));
+      ClearFollowTarget(followerSerial);
+    }
+  }
+}
+
+static void ApplyTravelTargets(GameWorld *world) {
+  if (!world) {
+    return;
+  }
+
+  static DWORD lastTravelTick = 0;
+  DWORD nowTick = GetTickCount();
+  if (nowTick - lastTravelTick < 250) {
+    return;
+  }
+  lastTravelTick = nowTick;
+
+  std::map<unsigned int, TravelTarget> travelSnapshot = SnapshotTravelTargets();
+  if (travelSnapshot.empty()) {
+    return;
+  }
+
+  static std::map<unsigned int, DWORD> s_travelOrderScrubTick;
+  static std::map<unsigned int, DWORD> s_travelPermajobScrubTick;
+  static std::map<unsigned int, DWORD> s_travelGoalRefreshTick;
+  static std::map<unsigned int, DWORD> s_travelLogTick;
+
+  for (auto it = travelSnapshot.begin(); it != travelSnapshot.end(); ++it) {
+    unsigned int actorSerial = it->first;
+    const TravelTarget &target = it->second;
+    if (actorSerial == 0) {
+      ClearTravelTarget(actorSerial);
+      continue;
+    }
+
+    Character *actor = FindCharacterBySerial(world, actorSerial);
+    if (!actor || (uintptr_t)actor < 0x1000) {
+      continue;
+    }
+
+    Ogre::Vector3 from = actor->getPosition();
+    Ogre::Vector3 to(target.x, target.y, target.z);
+    float dx = from.x - to.x;
+    float dy = from.y - to.y;
+    float dz = from.z - to.z;
+    float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (dist <= 8.0f) {
+      ClearTravelTarget(actorSerial);
+      s_travelOrderScrubTick.erase(actorSerial);
+      s_travelPermajobScrubTick.erase(actorSerial);
+      s_travelGoalRefreshTick.erase(actorSerial);
+      s_travelLogTick.erase(actorSerial);
+      Log("TRAVEL_TICK: reached destination actor=" + actor->getName() +
+          " destination='" + target.label + "'");
+      continue;
+    }
+
+    try {
+      ClearFollowTarget(actorSerial);
+
+      DWORD &lastOrderTick = s_travelOrderScrubTick[actorSerial];
+      if (nowTick - lastOrderTick >= 700) {
+        lastOrderTick = nowTick;
+        try {
+          actor->setStandingOrder((MessageForB::StandingOrder)13 /* PASSIVE */,
+                                  false);
+          actor->setStandingOrder((MessageForB::StandingOrder)12 /* HOLD */,
+                                  false);
+        } catch (...) {
+        }
+      }
+
+      DWORD &lastGoalRefreshTick = s_travelGoalRefreshTick[actorSerial];
+      if (nowTick - lastGoalRefreshTick >= 900) {
+        lastGoalRefreshTick = nowTick;
+        try {
+          actor->clearAllAIGoals();
+        } catch (...) {
+        }
+        try {
+          actor->reThinkCurrentAIAction();
+        } catch (...) {
+        }
+      }
+
+      DWORD &lastPermajobTick = s_travelPermajobScrubTick[actorSerial];
+      if (nowTick - lastPermajobTick >= 1400) {
+        lastPermajobTick = nowTick;
+        ClearAllJobsForFollow(actor);
+      }
+
+      try {
+        if (actor->dialogue && (uintptr_t)actor->dialogue > 0x1000) {
+          actor->dialogue->endDialogue(true);
+          actor->dialogue->setInDialog(false);
+        }
+      } catch (...) {
+      }
+
+      bool moved = false;
+      CharMovement *movement = nullptr;
+      try {
+        movement = actor->getMovement();
+      } catch (...) {
+        movement = nullptr;
+      }
+      if (movement && (uintptr_t)movement > 0x1000) {
+        try {
+          movement->setDesiredSpeedOrders(RUN);
+          movement->setDesiredSpeed(RUN);
+        } catch (...) {
+        }
+        try {
+          movement->setDestination(to, HIGH_PRIORITY, false);
+          moved = true;
+        } catch (...) {
+          moved = false;
+        }
+        if (!moved) {
+          try {
+            movement->setDestination(to, HIGH_PRIORITY, true);
+            moved = true;
+          } catch (...) {
+            moved = false;
+          }
+        }
+        if (!moved) {
+          try {
+            moved = movement->setRoadDestination(to);
+          } catch (...) {
+            moved = false;
+          }
+        }
+      }
+      if (!moved) {
+        try {
+          actor->setDestination(to, false);
+          moved = true;
+        } catch (...) {
+          moved = false;
+        }
+      }
+      if (!moved) {
+        try {
+          actor->setDestination(to, true);
+          moved = true;
+        } catch (...) {
+          moved = false;
+        }
+      }
+
+      if (moved) {
+        DWORD &lastLogTick = s_travelLogTick[actorSerial];
+        if (nowTick - lastLogTick >= 2000) {
+          lastLogTick = nowTick;
+          bool movingNow = false;
+          bool pathOk = false;
+          bool pathFailed = false;
+          float currentSpeed = 0.0f;
+          try {
+            if (movement && (uintptr_t)movement > 0x1000) {
+              movingNow = movement->isCurrentlyMoving();
+              pathOk = movement->pathOk();
+              pathFailed = movement->pathFailed();
+              currentSpeed = movement->getCurrentSpeed();
+            }
+          } catch (...) {
+          }
+          Log("TRAVEL_TICK: actor=" + actor->getName() + " destination='" +
+              target.label + "' dist=" + ToString(dist) +
+              " moving=" + (movingNow ? "1" : "0") +
+              " path_ok=" + (pathOk ? "1" : "0") +
+              " path_failed=" + (pathFailed ? "1" : "0") +
+              " speed=" + ToString(currentSpeed));
+        }
+      } else {
+        Log("TRAVEL_TICK: move order failed actor_serial=" +
+            ToString(actorSerial) + " destination='" + target.label + "'");
+      }
+    } catch (...) {
+      Log("TRAVEL_TICK: exception actor_serial=" + ToString(actorSerial) +
+          " destination='" + target.label + "'");
+      ClearTravelTarget(actorSerial);
+      s_travelOrderScrubTick.erase(actorSerial);
+      s_travelPermajobScrubTick.erase(actorSerial);
+      s_travelGoalRefreshTick.erase(actorSerial);
+      s_travelLogTick.erase(actorSerial);
+    }
+  }
+}
+
+void ProcessMessageQueue(GameWorld *thisptr) {
+  if (TryEnterCriticalSection(&g_msgMutex)) {
+    while (!g_messageQueue.empty()) {
+      std::string msg = g_messageQueue.front();
+      g_messageQueue.pop_front();
+      if (!Stobe::Interaction::Allowed() && (msg.find("NPC_SAY: ") == 0
+          || msg.find("NPC_ACTION: ") == 0 || msg.find("PLAYER_TTS: ") == 0)) continue;
+      std::string autonomyDecisionId;
+      const bool autonomyCatalogMessage =
+          ClaimPendingAutonomyCatalogMessageLocked(msg, autonomyDecisionId);
+      size_t autonomyQueueSizeBefore = 0;
+      const std::string directorMarker = " [DIRECTOR_ACTION]";
+      const bool directorAction = msg.find("NPC_ACTION: ") == 0 &&
+          msg.size() >= directorMarker.size() &&
+          msg.compare(msg.size() - directorMarker.size(), directorMarker.size(), directorMarker) == 0;
+      if (directorAction) msg.erase(msg.size() - directorMarker.size());
+      if (autonomyCatalogMessage || directorAction) {
+        EnterCriticalSection(&g_uiMutex);
+        autonomyQueueSizeBefore = g_uiActionQueue.size();
+        LeaveCriticalSection(&g_uiMutex);
+      }
+      Log("HOOK_MSG_PROC: Processing: " + msg);
+
+      bool isNPCAction = (msg.find("NPC_ACTION: ") == 0);
+      bool isPlayerTts = (msg.find("PLAYER_TTS: ") == 0);
+      bool isPlayerSay = (msg.find("PLAYER_SAY: ") == 0);
+      bool isNPCSay = (msg.find("NPC_SAY: ") == 0);
+      bool isNotify = (msg.find("NOTIFY:") == 0);
+      bool isNarratorNotify = (msg.find("NARRATOR_NOTIFY:") == 0);
+      bool isCmd = (msg.find("CMD:") == 0);
+      bool isRename = (msg.find("NPC_RENAME: ") == 0);
+      bool speakerResolvedFromHeader = false;
+
+      hand targetHand = g_talkTargetHand;
+      // Do not fall back to selection yet; handles inside the branches
+
+      if (isCmd) {
+        size_t firstColon = msg.find(":", 4); // skip "CMD: "
+        if (firstColon != std::string::npos) {
+          std::string command = msg.substr(4, firstColon - 4);
+          std::string data = msg.substr(firstColon + 1);
+
+          // Trim command and data
+          auto trim = [](std::string &s) {
+            s.erase(0, s.find_first_not_of(" \t\r\n"));
+            s.erase(s.find_last_not_of(" \t\r\n") + 1);
+          };
+          trim(command);
+          // Do not trim data, it may contain multiline blocks we want to keep
+          // exactly
+
+          if (command == "TRIGGER_BORED") {
+            g_triggerBoredEvent = true;
+          } else if (command == "POPULATE_WELCOME") {
+            PopulateSettingsUI(data);
+          } else if (command == "POPULATE_AINPCINFO") {
+            PopulateAiNpcInfoUI(data);
+          } else if (command == "SET_NPCPANEL_TEXT") { // NPC info panel
+            Stobe::UI::SetNpcPanelText(data);
+          } else if (command == "SET_AINPCINFO_TEXT") {
+            SetAiNpcInfoText(data);
+          } else if (command == "POPULATE_AIDIARIES") {
+            PopulateAiDiaryUI(data);
+          } else if (command == "POPULATE_AIDIARY_ENTRIES") {
+            PopulateAiDiaryEntries(data);
+          } else if (command == "SET_AIDIARY_TEXT") {
+            SetAiDiaryText(data);
+          } else if (command == "SET_AIDIARY_AUDIO_STATE") {
+            SetAiDiaryAudioState(data);
+          } else if (command == "SET_STOBE_HISTORY") {
+            SetRecentHistoryText(data);
+          } else if (command == "STT_TRANSCRIPT") {
+            Stobe::Voice::Context voiceContext;
+            std::string transcript;
+            std::string error;
+            if (Stobe::Voice::ConsumeResult(atoi(data.c_str()), voiceContext,
+                                            transcript, error)) {
+              if (!error.empty() || transcript.empty()) {
+                std::string message = error.empty() ? "No speech was detected." : error;
+                if (thisptr)
+                  thisptr->showPlayerAMessage_withLog(message, true);
+                Log("STT_RESULT: rejected reason=" + message);
+              } else {
+                Log("STT_RESULT: dispatching transcript mode=" + voiceContext.mode +
+                    " speaker=" + voiceContext.speakerName +
+                    " target=" + voiceContext.targetName +
+                    " text_len=" + ToString((int)transcript.length()));
+                SubmitVoiceChatText(transcript, voiceContext.speakerName,
+                                    voiceContext.speakerSerial,
+                                    voiceContext.targetName,
+                                    voiceContext.targetSerial,
+                                    voiceContext.mode);
+              }
+            }
+          } else if (command == "SET_PROFILE_MODEL") {
+            ApplyProfileModelSlotUpdate(data);
+          } else if (command == "SET_CONFIG") {
+            size_t colon = data.find(":");
+            if (colon != std::string::npos) {
+              std::string var = data.substr(0, colon);
+              std::string val = data.substr(colon + 1);
+
+              // Trim var and val
+              auto trimInternal = [](std::string &s) {
+                s.erase(0, s.find_first_not_of(" \t\r\n"));
+                s.erase(s.find_last_not_of(" \t\r\n") + 1);
+              };
+              trimInternal(var);
+              trimInternal(val);
+
+              if (var == "g_enableBoredEvents") {
+                g_enableBoredEvents = (val == "1");
+                g_lastBoredEventTick = GetTickCount();
+                g_lastBoredEventGameTs = 0; // Re-arm interval on toggle.
+              } else if (var == "g_boredEventIntervalHours") {
+                g_boredEventIntervalHours = atoi(val.c_str());
+                if (g_boredEventIntervalHours < 1) {
+                  g_boredEventIntervalHours = 1;
+                } else if (g_boredEventIntervalHours > 720) {
+                  g_boredEventIntervalHours = 720;
+                }
+                g_lastBoredEventTick = GetTickCount();
+                g_lastBoredEventGameTs = 0; // Re-arm interval on frequency change.
+              } else if (var == "g_boredEventIntervalSeconds") {
+                int legacySeconds = atoi(val.c_str());
+                if (legacySeconds < 1) {
+                  legacySeconds = 3600;
+                }
+                if (legacySeconds <= 300) {
+                  g_boredEventIntervalHours = 3;
+                } else {
+                  g_boredEventIntervalHours = (legacySeconds + 3599) / 3600;
+                }
+                if (g_boredEventIntervalHours < 1) {
+                  g_boredEventIntervalHours = 1;
+                } else if (g_boredEventIntervalHours > 720) {
+                  g_boredEventIntervalHours = 720;
+                }
+                g_lastBoredEventTick = GetTickCount();
+                g_lastBoredEventGameTs = 0; // Re-arm interval on legacy frequency change.
+              } else if (var == "g_proximityRadius")
+                g_proximityRadius = (float)atof(val.c_str());
+              else if (var == "g_boredEventRange")
+                g_boredEventRange = (float)atof(val.c_str());
+              else if (var == "g_shoutRadius")
+                g_shoutRadius = (float)atof(val.c_str());
+              else if (var == "g_minFactionRelation")
+                g_minFactionRelation = (float)atof(val.c_str());
+              else if (var == "g_maxFactionRelation")
+                g_maxFactionRelation = (float)atof(val.c_str());
+              else if (var == "g_dialogueSpeedSeconds") {
+                g_dialogueSpeedSeconds = atoi(val.c_str());
+                g_lastDialogueTick =
+                    GetTickCount(); // Reset timer on speed change
+              } else if (var == "g_speechBubbleLife") {
+                g_speechBubbleLife = (float)atof(val.c_str());
+              }
+            }
+          } else if (command == "POPULATE_SETTINGS") {
+            PopulateSettingsUI(data);
+          }
+        }
+      } else if (isRename) {
+        // Format: "NPC_RENAME: <serial>|<newName>"
+        std::string payload = msg.substr(12); // skip "NPC_RENAME: "
+        size_t sep = payload.find('|');
+        if (sep != std::string::npos) {
+          unsigned int serial =
+              (unsigned int)strtoul(payload.substr(0, sep).c_str(), NULL, 10);
+          std::string newName = payload.substr(sep + 1);
+          // M23_RENAME_GUARD: "<new>|<sent>": skip when the character was renamed after the request
+          std::string sentName;
+          bool hasSent = false;
+          size_t sep2 = newName.find('|');
+          if (sep2 != std::string::npos) {
+            sentName = newName.substr(sep2 + 1);
+            newName = newName.substr(0, sep2);
+            hasSent = true;
+          }
+          if (serial > 0 && !newName.empty() && thisptr) {
+            const ogre_unordered_set<Character *>::type &chars =
+                thisptr->getCharacterUpdateList();
+            for (auto it = chars.begin(); it != chars.end(); ++it) {
+              if (*it && (uintptr_t)*it > 0x1000 &&
+                  (*it)->getHandle().serial == serial) {
+                std::string oldName = (*it)->getName();
+                if (hasSent && !sentName.empty() && oldName != sentName) {
+                  Log("NAME_ASSIGN: kept '" + oldName + "' (renamed after the identity request for '" + sentName +
+                      "'; dropped '" + newName + "', serial " + ToString(serial) + ")");
+                  break;
+                }
+                (*it)->setName(newName);
+                Log("NAME_ASSIGN: Renamed '" + oldName + "' -> '" + newName +
+                    "' (serial " + ToString(serial) + ")");
+                break;
+              }
+            }
+          }
+        }
+      } else if (isNotify || isNarratorNotify) {
+        std::string text = isNarratorNotify ? msg.substr(16) : msg.substr(7);
+        std::string utteranceId = ExtractTrailingUtteranceId(text);
+        int ttsDurationMs = ExtractTrailingTtsDurationMs(text);
+        std::string ttsHash = ExtractTrailingTtsHash(text);
+        if (!g_ttsEnabled) {
+          ttsDurationMs = 0;
+          ttsHash.clear();
+        }
+        EnterCriticalSection(&g_uiMutex);
+        QueuedAction act;
+        act.type = ACT_NOTIFY;
+        act.actor = hand();
+        act.target = hand();
+        act.message = text;
+        act.ttsHash = ttsHash;
+        act.utteranceId = utteranceId;
+        act.taskValue = ttsDurationMs;
+        act.narratorNotification = isNarratorNotify;
+        g_uiActionQueue.push_back(act);
+        LeaveCriticalSection(&g_uiMutex);
+      } else if (isPlayerTts) {
+        if (!g_ttsEnabled) {
+          ClearPlayerTtsPlaybackBarrier(GetChatInterruptGeneration());
+          Log("TIMING_META: PLAYER_TTS ignored because TTS is disabled.");
+          continue;
+        }
+        LONG playerTtsGeneration = GetChatInterruptGeneration();
+        if (!IsPlayerTtsPlaybackBarrierPending(playerTtsGeneration)) {
+          Log("TIMING_META: PLAYER_TTS ignored because playback barrier is no "
+              "longer pending.");
+          continue;
+        }
+        std::string payload = TrimCopy(msg.substr(12));
+        size_t pipePos = payload.find('|');
+        std::string hash =
+            TrimCopy(pipePos == std::string::npos ? payload : payload.substr(0, pipePos));
+        std::string durationStr =
+            TrimCopy(pipePos == std::string::npos ? "" : payload.substr(pipePos + 1));
+
+        bool validHash = (hash.size() == 32);
+        if (validHash) {
+          for (size_t i = 0; i < hash.size(); ++i) {
+            const unsigned char ch = static_cast<unsigned char>(hash[i]);
+            bool isHex =
+                (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
+                (ch >= 'A' && ch <= 'F');
+            if (!isHex) {
+              validHash = false;
+              break;
+            }
+          }
+        }
+
+        int durationMs = 0;
+        if (!durationStr.empty()) {
+          bool validDuration = true;
+          for (size_t i = 0; i < durationStr.size(); ++i) {
+            const unsigned char ch = static_cast<unsigned char>(durationStr[i]);
+            if (ch < '0' || ch > '9') {
+              validDuration = false;
+              break;
+            }
+          }
+          if (validDuration) {
+            durationMs = atoi(durationStr.c_str());
+          }
+        }
+        if (durationMs < 0) {
+          durationMs = 0;
+        } else if (durationMs > 600000) {
+          durationMs = 600000;
+        }
+
+        Log("TIMING_META: PLAYER_TTS parsed hash_valid=" +
+            std::string(validHash ? "1" : "0") +
+            " dur_ms=" + ToString(durationMs));
+
+        if (validHash && thisptr->player && thisptr->player->playerCharacters.size() > 0) {
+          Character *playerSpeaker = ResolvePreferredPlayerSpeakerForCurrentTalk(thisptr);
+          if (!playerSpeaker || (uintptr_t)playerSpeaker < 0x1000) {
+            playerSpeaker = ResolveFirstAliveConsciousPlayerCharacter(thisptr);
+          }
+          hand playerHand = playerSpeaker ? playerSpeaker->getHandle() : hand();
+          if (playerHand.isValid()) {
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_PLAY_TTS;
+            act.actor = playerHand;
+            act.target = playerHand;
+            act.message = "";
+            act.ttsHash = hash;
+            act.taskValue = durationMs;
+            std::deque<QueuedAction>::iterator insertAt =
+                g_uiActionQueue.begin();
+            while (insertAt != g_uiActionQueue.end() &&
+                   insertAt->type == ACT_SAY && insertAt->taskValue < 0) {
+              ++insertAt;
+            }
+            g_uiActionQueue.insert(insertAt, act);
+            bool barrierReleased = ClearPlayerTtsPlaybackBarrier(
+                playerTtsGeneration);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("TIMING_META: PLAYER_TTS queued ACT_PLAY_TTS hash=" +
+                hash.substr(0, 8) + " dur_ms=" + ToString(durationMs) +
+                " priority=player_first barrier_released=" +
+                std::string(barrierReleased ? "1" : "0"));
+            if (playerSpeaker && (uintptr_t)playerSpeaker > 0x1000) {
+              Log("CHAT_SPEAKER: PLAYER_TTS speaker=" + playerSpeaker->getName() +
+                  " serial=" +
+                  ToString(playerSpeaker->getHandle().serial));
+            }
+          } else {
+            ClearPlayerTtsPlaybackBarrier(playerTtsGeneration);
+            Log("TIMING_META: PLAYER_TTS barrier released because player "
+                "speaker is unavailable.");
+          }
+        } else {
+          ClearPlayerTtsPlaybackBarrier(playerTtsGeneration);
+          Log("TIMING_META: PLAYER_TTS barrier released because payload or "
+              "player roster is invalid.");
+        }
+      } else if (isPlayerSay || isNPCAction || isNPCSay) {
+        g_lastBoredEventTick = GetTickCount();
+        g_lastBoredEventGameTs = ResolveCurrentGameTsSafe(GetWorldSafe());
+
+        // ???? FIX: For PLAYER_SAY, ensure the bubble appears over the player,
+        // not the target NPC.
+        if (isPlayerSay) {
+          Character *playerSpeaker = ResolvePreferredPlayerSpeakerForCurrentTalk(thisptr);
+          if (!playerSpeaker && thisptr->player &&
+              thisptr->player->playerCharacters.size() > 0) {
+            playerSpeaker = ResolveFirstAliveConsciousPlayerCharacter(thisptr);
+          }
+          if (playerSpeaker && (uintptr_t)playerSpeaker > 0x1000) {
+            targetHand = playerSpeaker->getHandle();
+            Log("CHAT_SPEAKER: PLAYER_SAY speaker=" + playerSpeaker->getName() +
+                " serial=" +
+                ToString(playerSpeaker->getHandle().serial));
+          }
+        } else if (!targetHand.isValid()) {
+          targetHand = g_lastSelectionHand;
+        }
+
+        std::string content = "";
+        bool found = false;
+        bool header_processed = false;
+        speakerResolvedFromHeader = false;
+
+        if (isNPCSay || isNPCAction) {
+          // AI responses should try to resolve the specific speaker if
+          // possible, but if no header is found, we fall back to the current
+          // talk target.
+          hand fallbackHand = targetHand;
+          // targetHand = hand(); // ???? BUG: Resetting here kills bubbles for
+          // single-target talk.
+
+          size_t startPos = isNPCSay ? 9 : 12;
+          std::string remainder = msg.substr(startPos);
+          size_t colon = remainder.find(':');
+
+          std::string name = "";
+          unsigned int tSerial = 0;
+
+          if (colon != std::string::npos && colon < 64 && remainder[0] != '[') {
+            header_processed = true;
+            std::string header = remainder.substr(0, colon);
+            name = header;
+            size_t piper = header.find("|");
+            if (piper != std::string::npos) {
+              name = header.substr(0, piper);
+              std::string sStr = header.substr(piper + 1);
+              size_t endS = sStr.find_first_not_of("0123456789");
+              if (endS != std::string::npos)
+                sStr = sStr.substr(0, endS);
+              tSerial = (unsigned int)strtoul(sStr.c_str(), NULL, 10);
+            }
+
+            std::string nLow = name;
+            std::transform(nLow.begin(), nLow.end(), nLow.begin(), ::tolower);
+
+            Character *bestMatch = nullptr;
+            int bestScore = 0;
+
+            const ogre_unordered_set<Character *>::type &chars =
+                thisptr->getCharacterUpdateList();
+            for (auto it = chars.begin(); it != chars.end(); ++it) {
+              Character *c = *it;
+              if (!c || (uintptr_t)c < 0x1000)
+                continue;
+
+              int score = 0;
+              if (tSerial > 0 && c->getHandle().serial == tSerial)
+                score = 1000;
+              else {
+                std::string cName = c->getName();
+                if (cName == name)
+                  score = 500;
+                else {
+                  std::string cLow = cName;
+                  std::transform(cLow.begin(), cLow.end(), cLow.begin(),
+                                 ::tolower);
+                  if (cLow == nLow)
+                    score = 400;
+                  else if (cLow.find(nLow) == 0)
+                    score =
+                        200; // Prefix match (e.g. "Mu" -> "Mu the Wanderer")
+                  else if (cLow.find(nLow) != std::string::npos)
+                    score = 100; // Substring match (e.g. "Mu" -> "Murphy")
+                }
+              }
+
+              if (score > bestScore) {
+                bestScore = score;
+                bestMatch = c;
+                if (score == 1000)
+                  break; // Serial match is absolute
+              }
+            }
+
+            if (bestMatch && bestScore > 0) {
+              targetHand = bestMatch->getHandle();
+              found = true;
+              speakerResolvedFromHeader = true;
+            }
+
+            // Fallback sphere check if not found in update list or Score too
+            // low
+            if (!found && thisptr->player &&
+                thisptr->player->playerCharacters.size() > 0) {
+              Character *p = thisptr->player->playerCharacters[0];
+              lektor<RootObject *> results;
+              thisptr->getCharactersWithinSphere(
+                  results, p->getPosition(), 2500.0f, 0.0f, 0.0f, 0x10, 0, p);
+              for (uint32_t i = 0; i < results.size(); ++i) {
+                Character *c = (Character *)results.stuff[i];
+                if (!c || (uintptr_t)c < 0x1000)
+                  continue;
+
+                int score = 0;
+                if (tSerial > 0 && c->getHandle().serial == tSerial)
+                  score = 1000;
+                else {
+                  std::string cName = c->getName();
+                  if (cName == name)
+                    score = 500;
+                  else {
+                    std::string cLow = cName;
+                    std::transform(cLow.begin(), cLow.end(), cLow.begin(),
+                                   ::tolower);
+                    if (cLow == nLow)
+                      score = 400;
+                    else if (cLow.find(nLow) == 0)
+                      score = 200;
+                    else if (cLow.find(nLow) != std::string::npos)
+                      score = 100;
+                  }
+                }
+
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestMatch = c;
+                  if (score == 1000)
+                    break;
+                }
+              }
+              if (bestMatch && bestScore > 0) {
+                targetHand = bestMatch->getHandle();
+                found = true;
+                speakerResolvedFromHeader = true;
+              }
+            }
+
+            // Final fallback: If name matches current talk target or is empty,
+            // use it
+            if (!found && fallbackHand.isValid()) {
+              Character *fc = ResolveCharacterFromHandSafe(thisptr, fallbackHand);
+              if (fc && (uintptr_t)fc > 0x1000) {
+                std::string fcName = fc->getName();
+                std::transform(fcName.begin(), fcName.end(), fcName.begin(),
+                               ::tolower);
+                std::string nLow = name;
+                std::transform(nLow.begin(), nLow.end(), nLow.begin(),
+                               ::tolower);
+
+                if (name.empty() || fcName == nLow ||
+                    fcName.find(nLow) != std::string::npos) {
+                  targetHand = fallbackHand;
+                  found = true;
+                }
+              }
+            }
+          }
+
+          // Strip header if we found the NPC (or if we have a fallback and it's
+          // 1-on-1 talk)
+          if (found || (header_processed && !found && fallbackHand.isValid())) {
+            msg = (isNPCSay ? "NPC_SAY: " : "NPC_ACTION: ") +
+                  remainder.substr(colon + 1);
+            if (msg.length() > startPos && msg[startPos] == ' ')
+              msg.erase(startPos, 1);
+
+            // If we didn't find specific NPC but stripped header, use fallback
+            if (!found && fallbackHand.isValid()) {
+              targetHand = fallbackHand;
+            }
+          } else {
+            Log("HOOK_MSG_PROC: WARNING: speaker not found: " + name);
+          }
+        }
+      }
+
+      if ((isNPCSay || isNPCAction) && targetHand.isValid()) {
+        Character *speaker = ResolveCharacterFromHandSafe(thisptr, targetHand);
+        if (speaker && (uintptr_t)speaker > 0x1000) {
+          QueueIdentityRenameCandidate(speaker,
+                                       isNPCSay ? "npc_say_actor"
+                                                : "npc_action_actor");
+        }
+      }
+
+      if (isNPCAction) {
+        std::string actStr = TrimCopy(msg.substr(12));
+        if (!actStr.empty()) {
+          auto parseActionToken = [](const std::string &rawAction,
+                                     std::string &commandOut,
+                                     std::string &argumentOut) -> bool {
+            std::string token = TrimCopy(rawAction);
+            if (token.empty()) {
+              return false;
+            }
+
+            size_t atPos = token.find('@');
+            if (atPos == std::string::npos) {
+              return false;
+            }
+
+            std::string command = token.substr(0, atPos);
+            std::string argument = token.substr(atPos + 1);
+            command = TrimCopy(command);
+            argument = TrimCopy(argument);
+
+            std::transform(command.begin(), command.end(), command.begin(),
+                           ::toupper);
+            if (command.empty()) {
+              return false;
+            }
+
+            commandOut = command;
+            argumentOut = argument;
+            return true;
+          };
+
+          std::string actionCommand = "";
+          std::string actionArgument = "";
+          if (!parseActionToken(actStr, actionCommand, actionArgument)) {
+            continue;
+          }
+          if (actionCommand == "RELEASE_PLAYER" ||
+              actionCommand == "RELEASE_PRISONER" ||
+              actionCommand == "RELEASEPLAYER" ||
+              actionCommand == "STOPCARRYING" ||
+              actionCommand == "DROPNPC" ||
+              actionCommand == "DROP_NPC" ||
+              actionCommand == "DROP-NPC" ||
+              actionCommand == "PUTDOWNNPC" ||
+              actionCommand == "PUT_DOWN_NPC" ||
+              actionCommand == "PUT-DOWN-NPC" ||
+              actionCommand == "RELEASENPC" ||
+              actionCommand == "RELEASE_NPC" ||
+              actionCommand == "RELEASE-NPC") {
+            actionCommand = "STOP_CARRYING";
+          } else if (actionCommand == "PICKUPNPC" ||
+                     actionCommand == "PICKUP-NPC" ||
+                     actionCommand == "KIDNAP") {
+            actionCommand = "PICKUP_NPC";
+          } else if (actionCommand == "DRINKITEM" ||
+                     actionCommand == "DRINK-ITEM") {
+            actionCommand = "DRINK_ITEM";
+          } else if (actionCommand == "USEDRUGS" ||
+                     actionCommand == "USE-DRUGS") {
+            actionCommand = "USE_DRUGS";
+          } else if (actionCommand == "FORCEDRINK" ||
+                     actionCommand == "FORCE-DRINK") {
+            actionCommand = "FORCE_DRINK";
+          } else if (actionCommand == "REMOVELIMB") {
+            actionCommand = "REMOVE_LIMB";
+          } else if (actionCommand == "CUTHORNS" ||
+                     actionCommand == "CUT-HORNS") {
+            actionCommand = "CUT_HORNS";
+          } else if (actionCommand == "KO" ||
+                     actionCommand == "KNOCK_OUT" ||
+                     actionCommand == "KNOCK-OUT") {
+            actionCommand = "KNOCKOUT";
+          } else if (actionCommand == "KILLTARGET" ||
+                     actionCommand == "EXECUTE" ||
+                     actionCommand == "MURDER") {
+            actionCommand = "KILL";
+          } else if (actionCommand == "TRAVELLOCATION" ||
+                     actionCommand == "TRAVEL-LOCATION") {
+            actionCommand = "TRAVEL_LOCATION";
+          } else if (actionCommand == "USEOBJECT" ||
+                     actionCommand == "USE-OBJECT") {
+            actionCommand = "USE_OBJECT";
+          } else if (actionCommand == "ROLEPLAYACTION" ||
+                     actionCommand == "ROLEPLAY-ACTION" ||
+                     actionCommand == "NOTIFY") {
+            actionCommand = "ROLEPLAY_ACTION";
+          } else if (actionCommand == "STOPATTACK") {
+            actionCommand = "STOP_ATTACK";
+          }
+          if (ShouldDropDuplicateNpcAction(
+                  targetHand.isValid() ? targetHand.serial : 0, actionCommand,
+                  actionArgument)) {
+            Log("HOOK_MSG_PROC: Dropped duplicate NPC action command=" +
+                actionCommand + " arg=" + actionArgument + " actor_serial=" +
+                ToString((unsigned int)targetHand.serial));
+            continue;
+          }
+          Log("HOOK_MSG_PROC: Parsed NPC action command=" + actionCommand +
+              " arg=" + actionArgument + " actor_serial=" +
+              ToString((unsigned int)targetHand.serial));
+          Character *actionActor =
+              ResolveCharacterFromHandSafe(thisptr, targetHand);
+          std::string actionActorName = ResolveCharacterNameSafe(actionActor);
+          std::string actionActorFaction = SafeFaction(actionActor);
+          bool actionActorResolved =
+              actionActor && (uintptr_t)actionActor > 0x1000;
+          unsigned int actionActorSerial = 0;
+          if (actionActorResolved) {
+            try {
+              actionActorSerial = actionActor->getHandle().serial;
+            } catch (...) {
+              actionActorSerial = 0;
+            }
+          }
+          bool actionActorIsPlayerFaction = false;
+          try {
+            Faction *actorFaction =
+                (actionActor && (uintptr_t)actionActor > 0x1000)
+                    ? actionActor->getFaction()
+                    : nullptr;
+            actionActorIsPlayerFaction =
+                (actorFaction && actorFaction->isThePlayer());
+          } catch (...) {
+            actionActorIsPlayerFaction = false;
+          }
+          bool logAsInfoAction =
+              (actionCommand != "REMOVE_LIMB" && actionCommand != "CUT_HORNS");
+          if (logAsInfoAction) {
+            std::string actionEventMessage =
+                "action command received: " + actionCommand + "@";
+            if (!actionArgument.empty()) {
+              actionEventMessage += actionArgument;
+            }
+            LogGameEvent("infoaction", actionActorName, actionActorFaction,
+                         "None", "None", actionEventMessage, targetHand.serial,
+                         0);
+          }
+          auto shouldSkipSpeakerBoundAction =
+              [&](const std::string &commandName) -> bool {
+            if (!targetHand.isValid() || targetHand.serial == 0 ||
+                !actionActorResolved || actionActorSerial == 0 ||
+                actionActorSerial != targetHand.serial) {
+              Log("HOOK_MSG_PROC: " + commandName +
+                  " skipped; unresolved actor reference queued_serial=" +
+                  ToString((unsigned int)targetHand.serial) +
+                  " resolved_serial=" + ToString(actionActorSerial));
+              return true;
+            }
+            bool actorUnavailable = false;
+            try {
+              actorUnavailable =
+                  actionActor->isDead() || actionActor->isUnconcious();
+            } catch (...) {
+              actorUnavailable = true;
+            }
+            if (actorUnavailable) {
+              Log("HOOK_MSG_PROC: " + commandName +
+                  " skipped; actor unavailable serial=" +
+                  ToString(actionActorSerial));
+              return true;
+            }
+              return false;
+            };
+          auto knockoutTargetMatchesActorName =
+              [&](const std::string &rawTargetToken) -> bool {
+            if (!targetHand.isValid() || targetHand.serial == 0 ||
+                !actionActorResolved || actionActorSerial == 0 ||
+                actionActorSerial != targetHand.serial || !actionActor ||
+                (uintptr_t)actionActor <= 0x1000) {
+              return false;
+            }
+
+            std::string tokenLow = ToLowerAsciiCopy(TrimCopy(rawTargetToken));
+            if (tokenLow.empty()) {
+              return false;
+            }
+
+            std::string actorNameLow = ToLowerAsciiCopy(TrimCopy(actionActorName));
+            if (!actorNameLow.empty() &&
+                (actorNameLow == tokenLow ||
+                 actorNameLow.find(tokenLow) == 0)) {
+              return true;
+            }
+
+            std::string displayNameLow =
+                ToLowerAsciiCopy(TrimCopy(actionActor->displayName));
+            if (!displayNameLow.empty() &&
+                (displayNameLow == tokenLow ||
+                 displayNameLow.find(tokenLow) == 0)) {
+              return true;
+            }
+
+            return false;
+          };
+
+          auto parseToggleArg = [](const std::string &raw,
+                                   bool &enabledOut) -> bool {
+            std::string token = TrimCopy(raw);
+            std::transform(token.begin(), token.end(), token.begin(), ::toupper);
+            if (token == "ON" || token == "TRUE" || token == "1" ||
+                token == "ENABLE" || token == "ENABLED") {
+              enabledOut = true;
+              return true;
+            }
+            if (token == "OFF" || token == "FALSE" || token == "0" ||
+                token == "DISABLE" || token == "DISABLED") {
+              enabledOut = false;
+              return true;
+            }
+            return false;
+          };
+          auto parseRemoveLimbPayload =
+              [](const std::string &rawPayload, std::string &targetOut,
+                 int &limbOut) -> bool {
+            std::string payload = TrimCopy(rawPayload);
+            if (payload.empty()) {
+              return false;
+            }
+
+            size_t splitPos = payload.rfind('@');
+            if (splitPos == std::string::npos) {
+              return false;
+            }
+
+            std::string targetToken = TrimCopy(payload.substr(0, splitPos));
+            std::string limbToken = TrimCopy(payload.substr(splitPos + 1));
+            if (targetToken.empty() || limbToken.empty()) {
+              return false;
+            }
+
+            std::transform(limbToken.begin(), limbToken.end(), limbToken.begin(),
+                           ::toupper);
+
+            int parsedLimb = -1;
+            if (limbToken == "LEFT_ARM" || limbToken == "LEFTARM" ||
+                limbToken == "L_ARM" || limbToken == "LARM") {
+              parsedLimb = (int)RobotLimbs::LEFT_ARM;
+            } else if (limbToken == "RIGHT_ARM" || limbToken == "RIGHTARM" ||
+                       limbToken == "R_ARM" || limbToken == "RARM") {
+              parsedLimb = (int)RobotLimbs::RIGHT_ARM;
+            } else if (limbToken == "LEFT_LEG" || limbToken == "LEFTLEG" ||
+                       limbToken == "L_LEG" || limbToken == "LLEG") {
+              parsedLimb = (int)RobotLimbs::LEFT_LEG;
+            } else if (limbToken == "RIGHT_LEG" || limbToken == "RIGHTLEG" ||
+                       limbToken == "R_LEG" || limbToken == "RLEG") {
+              parsedLimb = (int)RobotLimbs::RIGHT_LEG;
+            } else {
+              return false;
+            }
+
+            targetOut = targetToken;
+            limbOut = parsedLimb;
+            return true;
+          };
+          auto parseSingleTargetPayload =
+              [](const std::string &rawPayload,
+                 std::string &targetOut) -> bool {
+            targetOut = TrimCopy(rawPayload);
+            return !targetOut.empty();
+          };
+          auto parseForceDrinkPayload =
+              [](const std::string &rawPayload, std::string &targetOut,
+                 std::string &drinkOut) -> bool {
+            targetOut.clear();
+            drinkOut.clear();
+            std::string payload = TrimCopy(rawPayload);
+            if (payload.empty()) {
+              return false;
+            }
+            size_t splitPos = payload.find('@');
+            if (splitPos == std::string::npos) {
+              targetOut = TrimCopy(payload);
+              drinkOut = "Cactus Rum";
+              return !targetOut.empty();
+            }
+
+            targetOut = TrimCopy(payload.substr(0, splitPos));
+            drinkOut = TrimCopy(payload.substr(splitPos + 1));
+            if (targetOut.empty()) {
+              return false;
+            }
+            if (drinkOut.empty()) {
+              drinkOut = "Cactus Rum";
+            }
+            return true;
+          };
+          auto parseCatsPayload =
+              [](const std::string &rawPayload, std::string &targetOut,
+                 int &amountOut) -> bool {
+            targetOut.clear();
+            amountOut = 0;
+            std::string payload = TrimCopy(rawPayload);
+            if (payload.empty()) {
+              return false;
+            }
+
+            auto parsePositiveAmount = [](const std::string &raw,
+                                          int &outAmount) -> bool {
+              std::string token = TrimCopy(raw);
+              if (token.empty()) {
+                return false;
+              }
+              for (size_t i = 0; i < token.size(); ++i) {
+                unsigned char ch = (unsigned char)token[i];
+                if (ch < '0' || ch > '9') {
+                  return false;
+                }
+              }
+              int parsed = atoi(token.c_str());
+              if (parsed <= 0) {
+                return false;
+              }
+              outAmount = parsed;
+              return true;
+            };
+
+            size_t splitPos = payload.rfind('@');
+            if (splitPos == std::string::npos) {
+              return parsePositiveAmount(payload, amountOut);
+            }
+
+            std::string left = TrimCopy(payload.substr(0, splitPos));
+            std::string right = TrimCopy(payload.substr(splitPos + 1));
+            int parsedAmount = 0;
+            if (parsePositiveAmount(right, parsedAmount)) {
+              targetOut = left;
+              amountOut = parsedAmount;
+              return true;
+            }
+            if (parsePositiveAmount(left, parsedAmount)) {
+              targetOut = right;
+              amountOut = parsedAmount;
+              return true;
+            }
+
+            return false;
+          };
+          auto parseGiveItemPayload =
+              [](const std::string &rawPayload, std::string &targetOut,
+                 std::string &itemOut, int &amountOut) -> bool {
+            targetOut.clear();
+            itemOut.clear();
+            amountOut = 1;
+            std::string payload = TrimCopy(rawPayload);
+            if (payload.empty()) {
+              return false;
+            }
+
+            auto parsePositiveAmount = [](const std::string &raw,
+                                          int &outAmount) -> bool {
+              std::string token = TrimCopy(raw);
+              if (token.empty()) {
+                return false;
+              }
+              for (size_t i = 0; i < token.size(); ++i) {
+                unsigned char ch = (unsigned char)token[i];
+                if (ch < '0' || ch > '9') {
+                  return false;
+                }
+              }
+              int parsed = atoi(token.c_str());
+              if (parsed <= 0) {
+                return false;
+              }
+              outAmount = parsed;
+              return true;
+            };
+            auto parseItemSpec = [&](const std::string &rawSpec,
+                                     std::string &itemNameOut,
+                                     int &itemAmountOut) -> bool {
+              auto stripTrailingNoise = [](std::string value) -> std::string {
+                value = TrimCopy(value);
+                if (value.empty()) {
+                  return value;
+                }
+
+                size_t fencePos = value.find("```");
+                if (fencePos != std::string::npos) {
+                  value = TrimCopy(value.substr(0, fencePos));
+                }
+
+                std::string valueLower = ToLowerAsciiCopy(value);
+                size_t sourcePos = valueLower.find("[source:");
+                if (sourcePos != std::string::npos) {
+                  value = TrimCopy(value.substr(0, sourcePos));
+                  valueLower = ToLowerAsciiCopy(value);
+                }
+                size_t talkingPos = valueLower.find("(talking to:");
+                if (talkingPos != std::string::npos) {
+                  value = TrimCopy(value.substr(0, talkingPos));
+                }
+
+                while (!value.empty()) {
+                  char c = value.back();
+                  if (c == '`' || c == '.' || c == ',' || c == ';' || c == ':' ||
+                      c == '!' || c == '?' || c == ')' || c == ']' || c == '}') {
+                    value.erase(value.size() - 1, 1);
+                    continue;
+                  }
+                  break;
+                }
+                return TrimCopy(value);
+              };
+
+              itemNameOut = stripTrailingNoise(rawSpec);
+              itemAmountOut = 1;
+              if (itemNameOut.empty()) {
+                return false;
+              }
+
+              std::string leadingLower = ToLowerAsciiCopy(itemNameOut);
+              if (leadingLower.find("and ") == 0) {
+                itemNameOut = TrimCopy(itemNameOut.substr(4));
+              } else if (leadingLower.find("then ") == 0) {
+                itemNameOut = TrimCopy(itemNameOut.substr(5));
+              }
+              itemNameOut = stripTrailingNoise(itemNameOut);
+              if (itemNameOut.empty()) {
+                return false;
+              }
+
+              if (itemNameOut.size() >= 2 &&
+                  ((itemNameOut.front() == '"' && itemNameOut.back() == '"') ||
+                   (itemNameOut.front() == '\'' && itemNameOut.back() == '\''))) {
+                itemNameOut =
+                    TrimCopy(itemNameOut.substr(1, itemNameOut.size() - 2));
+                itemNameOut = stripTrailingNoise(itemNameOut);
+              }
+              if (itemNameOut.empty()) {
+                return false;
+              }
+
+              // "2x Item Name" / "2 Item Name"
+              size_t leadingDigitsEnd = 0;
+              while (leadingDigitsEnd < itemNameOut.size() &&
+                     std::isdigit((unsigned char)itemNameOut[leadingDigitsEnd])) {
+                ++leadingDigitsEnd;
+              }
+              if (leadingDigitsEnd > 0 && leadingDigitsEnd < itemNameOut.size()) {
+                size_t markerPos = leadingDigitsEnd;
+                if (markerPos < itemNameOut.size() &&
+                    (itemNameOut[markerPos] == 'x' ||
+                     itemNameOut[markerPos] == 'X' ||
+                     itemNameOut[markerPos] == '*')) {
+                  ++markerPos;
+                }
+                if (markerPos < itemNameOut.size() &&
+                    std::isspace((unsigned char)itemNameOut[markerPos])) {
+                  std::string amountToken = itemNameOut.substr(0, leadingDigitsEnd);
+                  int parsedLeadingAmount = 0;
+                  if (parsePositiveAmount(amountToken, parsedLeadingAmount)) {
+                    std::string remainder =
+                        TrimCopy(itemNameOut.substr(markerPos + 1));
+                    if (!remainder.empty()) {
+                      itemNameOut = remainder;
+                      itemAmountOut = parsedLeadingAmount;
+                      return true;
+                    }
+                  }
+                }
+              }
+
+              // "Item Name x2" / "Item Name 2" / compact "ItemName2"
+              size_t digitStart = itemNameOut.size();
+              while (digitStart > 0 &&
+                     std::isdigit((unsigned char)itemNameOut[digitStart - 1])) {
+                --digitStart;
+              }
+              if (digitStart < itemNameOut.size() && digitStart > 0) {
+                std::string amountToken = itemNameOut.substr(digitStart);
+                int parsedTrailingAmount = 0;
+                if (parsePositiveAmount(amountToken, parsedTrailingAmount)) {
+                  const char prev = itemNameOut[digitStart - 1];
+                  const bool explicitSeparator =
+                      std::isspace((unsigned char)prev) || prev == 'x' ||
+                      prev == 'X' || prev == '*';
+                  const bool compactSuffix =
+                      std::isalpha((unsigned char)prev) &&
+                      parsedTrailingAmount <= 20;
+                  if (explicitSeparator || compactSuffix) {
+                    size_t baseEnd = digitStart;
+                    if ((prev == 'x' || prev == 'X' || prev == '*') &&
+                        baseEnd > 0) {
+                      --baseEnd;
+                    }
+                    std::string baseName = TrimCopy(itemNameOut.substr(0, baseEnd));
+                    if (!baseName.empty()) {
+                      itemNameOut = baseName;
+                      itemAmountOut = parsedTrailingAmount;
+                      return true;
+                    }
+                  }
+                }
+              }
+
+              return !itemNameOut.empty();
+            };
+
+            size_t firstSplitPos = payload.find('@');
+            if (firstSplitPos == std::string::npos) {
+              return parseItemSpec(payload, itemOut, amountOut);
+            }
+
+            size_t lastSplitPos = payload.find_last_of('@');
+            if (firstSplitPos == lastSplitPos) {
+              std::string left = TrimCopy(payload.substr(0, firstSplitPos));
+              std::string right = TrimCopy(payload.substr(firstSplitPos + 1));
+              if (left.empty() || right.empty()) {
+                return false;
+              }
+              targetOut = left;
+              return parseItemSpec(right, itemOut, amountOut);
+            }
+
+            std::string left = TrimCopy(payload.substr(0, firstSplitPos));
+            std::string middle =
+                TrimCopy(payload.substr(firstSplitPos + 1,
+                                        lastSplitPos - firstSplitPos - 1));
+            std::string right = TrimCopy(payload.substr(lastSplitPos + 1));
+            if (left.empty() || middle.empty() || right.empty()) {
+              return false;
+            }
+
+            int explicitAmount = 0;
+            if (!parsePositiveAmount(right, explicitAmount)) {
+              targetOut = left;
+              std::string mergedItem =
+                  TrimCopy(payload.substr(firstSplitPos + 1));
+              return parseItemSpec(mergedItem, itemOut, amountOut);
+            }
+
+            targetOut = left;
+            int parsedFromSpec = 1;
+            if (!parseItemSpec(middle, itemOut, parsedFromSpec)) {
+              return false;
+            }
+            amountOut = explicitAmount;
+            return amountOut > 0;
+          };
+          auto parseTravelLocationPayload =
+              [](const std::string &rawPayload, float &xOut, float &yOut,
+                 float &zOut, std::string &labelOut) -> bool {
+            std::string payload = TrimCopy(rawPayload);
+            if (payload.empty()) {
+              return false;
+            }
+
+            char separator = '|';
+            if (payload.find('|') == std::string::npos &&
+                payload.find(';') != std::string::npos) {
+              separator = ';';
+            }
+
+            size_t sep1 = payload.find(separator);
+            size_t sep2 =
+                (sep1 == std::string::npos) ? std::string::npos
+                                            : payload.find(separator, sep1 + 1);
+            if (sep1 == std::string::npos || sep2 == std::string::npos) {
+              return false;
+            }
+            size_t sep3 = payload.find(separator, sep2 + 1);
+
+            std::string xToken = TrimCopy(payload.substr(0, sep1));
+            std::string yToken = TrimCopy(payload.substr(sep1 + 1, sep2 - sep1 - 1));
+            std::string zToken =
+                (sep3 == std::string::npos)
+                    ? TrimCopy(payload.substr(sep2 + 1))
+                    : TrimCopy(payload.substr(sep2 + 1, sep3 - sep2 - 1));
+
+            if (xToken.empty() || yToken.empty() || zToken.empty()) {
+              return false;
+            }
+
+            auto parseFloatToken = [](const std::string &token,
+                                      float &valueOut) -> bool {
+              char *endPtr = NULL;
+              float parsed = (float)strtod(token.c_str(), &endPtr);
+              if (endPtr == token.c_str()) {
+                return false;
+              }
+              while (endPtr && *endPtr != '\0') {
+                if (!isspace((unsigned char)*endPtr)) {
+                  return false;
+                }
+                ++endPtr;
+              }
+              if (!_finite(parsed) || parsed < -10000000.0f || parsed > 10000000.0f) {
+                return false;
+              }
+              valueOut = parsed;
+              return true;
+            };
+
+            if (!parseFloatToken(xToken, xOut) || !parseFloatToken(yToken, yOut) ||
+                !parseFloatToken(zToken, zOut)) {
+              return false;
+            }
+
+            const size_t sep4 = sep3 == std::string::npos ? std::string::npos : payload.find(separator, sep3 + 1);
+            labelOut = (sep3 == std::string::npos) ? "" : TrimCopy(payload.substr(sep3 + 1,
+                sep4 == std::string::npos ? std::string::npos : sep4 - sep3 - 1));
+            if (!labelOut.empty()) {
+              std::replace(labelOut.begin(), labelOut.end(), '@', ' ');
+              std::replace(labelOut.begin(), labelOut.end(), '|', ' ');
+              std::replace(labelOut.begin(), labelOut.end(), ';', ' ');
+              labelOut = TrimCopy(labelOut);
+            }
+            return true;
+          };
+          auto resolveActionTargetHand = [&](const std::string &rawTarget,
+                                             const hand &actorHandle) -> hand {
+            std::string token = TrimCopy(rawTarget);
+            if (token.empty()) {
+              return hand();
+            }
+
+            // Trim leading/trailing punctuation that often appears in LLM
+            // action targets (e.g. "player.", "the Whistler,").
+            auto trimPunctuation = [](std::string value) -> std::string {
+              while (!value.empty()) {
+                char c = value.front();
+                if (c == ' ' || c == '\t' || c == '"' || c == '\'' || c == '(' ||
+                    c == '[' || c == '{') {
+                  value.erase(0, 1);
+                  continue;
+                }
+                break;
+              }
+              while (!value.empty()) {
+                char c = value.back();
+                if (c == ' ' || c == '\t' || c == '"' || c == '\'' || c == ')' ||
+                    c == ']' || c == '}' || c == '.' || c == ',' || c == '!' ||
+                    c == '?' || c == ':') {
+                  value.erase(value.size() - 1, 1);
+                  continue;
+                }
+                break;
+              }
+              return value;
+            };
+            token = trimPunctuation(token);
+
+            if (token.size() >= 2 &&
+                ((token.front() == '"' && token.back() == '"') ||
+                 (token.front() == '\'' && token.back() == '\''))) {
+              token = TrimCopy(token.substr(1, token.size() - 2));
+            }
+
+            unsigned int wantedSerial = 0;
+            bool hasSerial = false;
+            size_t pipePos = token.find('|');
+            if (pipePos != std::string::npos) {
+              std::string serialPart = TrimCopy(token.substr(pipePos + 1));
+              token = TrimCopy(token.substr(0, pipePos));
+              if (!serialPart.empty()) {
+                bool allDigits = true;
+                for (size_t i = 0; i < serialPart.size(); ++i) {
+                  unsigned char ch = (unsigned char)serialPart[i];
+                  if (ch < '0' || ch > '9') {
+                    allDigits = false;
+                    break;
+                  }
+                }
+                if (allDigits) {
+                  wantedSerial =
+                      (unsigned int)strtoul(serialPart.c_str(), NULL, 10);
+                  hasSerial = (wantedSerial > 0);
+                }
+              }
+            }
+            if (!hasSerial && !token.empty()) {
+              bool allDigits = true;
+              for (size_t i = 0; i < token.size(); ++i) {
+                unsigned char ch = (unsigned char)token[i];
+                if (ch < '0' || ch > '9') {
+                  allDigits = false;
+                  break;
+                }
+              }
+              if (allDigits) {
+                wantedSerial = (unsigned int)strtoul(token.c_str(), NULL, 10);
+                hasSerial = (wantedSerial > 0);
+                token = "";
+              }
+            }
+
+            std::string tokenLow = token;
+            std::transform(tokenLow.begin(), tokenLow.end(), tokenLow.begin(),
+                           ::tolower);
+            if (tokenLow == "the player") {
+              tokenLow = "player";
+            } else if (tokenLow.find("the ") == 0) {
+              tokenLow = TrimCopy(tokenLow.substr(4));
+            } else if (tokenLow.find("a ") == 0) {
+              tokenLow = TrimCopy(tokenLow.substr(2));
+            } else if (tokenLow.find("an ") == 0) {
+              tokenLow = TrimCopy(tokenLow.substr(3));
+            }
+
+            auto resolvePlayerHandle = [&]() -> hand {
+              if (!thisptr || !thisptr->player) {
+                return hand();
+              }
+              try {
+                hand selected = thisptr->player->selectedCharacter;
+                if (selected.isValid()) {
+                  Character *selectedCharacter = selected.getCharacter();
+                  if (selectedCharacter && (uintptr_t)selectedCharacter > 0x1000 &&
+                      selectedCharacter->isPlayerCharacter()) {
+                    return selected;
+                  }
+                }
+              } catch (...) {
+              }
+              if (thisptr->player->playerCharacters.size() > 0 &&
+                  thisptr->player->playerCharacters[0]) {
+                return thisptr->player->playerCharacters[0]->getHandle();
+              }
+              return hand();
+            };
+            if (!hasSerial &&
+                (tokenLow == "speaker" || tokenLow == "self")) {
+              if (actorHandle.isValid()) {
+                return actorHandle;
+              }
+              return resolvePlayerHandle();
+            }
+            if (!hasSerial &&
+                (tokenLow == "player" || tokenLow == "me" || tokenLow == "you")) {
+              return resolvePlayerHandle();
+            }
+
+            Character *bestMatch = nullptr;
+            int bestScore = 0;
+            Character *actorCharacter = nullptr;
+            Ogre::Vector3 actorPosition = Ogre::Vector3::ZERO;
+            bool actorPositionValid = false;
+            hand actorIndoorsHandle;
+            bool actorIsIndoors = false;
+            int actorFloor = 0;
+            if (thisptr) {
+              const ogre_unordered_set<Character *>::type &chars =
+                  thisptr->getCharacterUpdateList();
+              if (actorHandle.isValid() && actorHandle.serial != 0) {
+                for (auto it = chars.begin(); it != chars.end(); ++it) {
+                  Character *candidate = *it;
+                  if (!candidate || (uintptr_t)candidate < 0x1000) {
+                    continue;
+                  }
+                  unsigned int candidateSerial = 0;
+                  try {
+                    candidateSerial = candidate->getHandle().serial;
+                  } catch (...) {
+                    candidateSerial = 0;
+                  }
+                  if (candidateSerial == actorHandle.serial) {
+                    actorCharacter = candidate;
+                    break;
+                  }
+                }
+              }
+              if (!actorCharacter && actorHandle.isValid()) {
+                try {
+                  Character *directActor = actorHandle.getCharacter();
+                  if (directActor && (uintptr_t)directActor > 0x1000) {
+                    actorCharacter = directActor;
+                  }
+                } catch (...) {
+                  actorCharacter = nullptr;
+                }
+              }
+              if (actorCharacter && (uintptr_t)actorCharacter > 0x1000) {
+                try {
+                  actorPosition = actorCharacter->getPosition();
+                  actorPositionValid = true;
+                } catch (...) {
+                  actorPositionValid = false;
+                }
+                try {
+                  actorIndoorsHandle = actorCharacter->isIndoors();
+                  actorIsIndoors =
+                      actorIndoorsHandle.isValid() && !actorIndoorsHandle.isNull();
+                } catch (...) {
+                  actorIsIndoors = false;
+                }
+                try {
+                  actorFloor = actorCharacter->getFloor();
+                } catch (...) {
+                  actorFloor = 0;
+                }
+              }
+              for (auto it = chars.begin(); it != chars.end(); ++it) {
+                Character *candidate = *it;
+                if (!candidate || (uintptr_t)candidate < 0x1000) {
+                  continue;
+                }
+                hand candidateHandle = hand();
+                unsigned int candidateSerial = 0;
+                try {
+                  candidateHandle = candidate->getHandle();
+                  candidateSerial = candidateHandle.serial;
+                } catch (...) {
+                  candidateHandle = hand();
+                  candidateSerial = 0;
+                }
+                if (!candidateHandle.isValid() || candidateSerial == 0) {
+                  continue;
+                }
+                if (actorHandle.isValid() && candidateSerial == actorHandle.serial) {
+                  continue;
+                }
+
+                int score = 0;
+                if (hasSerial && candidateSerial == wantedSerial) {
+                  score = 1000;
+                } else if (!tokenLow.empty()) {
+                  std::string candidateName = candidate->getName();
+                  std::string candidateLow = candidateName;
+                  std::transform(candidateLow.begin(), candidateLow.end(),
+                                 candidateLow.begin(), ::tolower);
+                  if (candidateLow == tokenLow) {
+                    score = 500;
+                  } else if (candidateLow.find(tokenLow) == 0) {
+                    score = 320;
+                  } else if (candidateLow.find(tokenLow) != std::string::npos) {
+                    score = 180;
+                  } else if (LettersAndSpacesOnlyName(candidateLow) ==
+                             LettersAndSpacesOnlyName(tokenLow)) {
+                    score = 480; // bug 123: brackets stripped by the server
+                  } else if (!candidate->displayName.empty()) {
+                    std::string displayLow = candidate->displayName;
+                    std::transform(displayLow.begin(), displayLow.end(),
+                                   displayLow.begin(), ::tolower);
+                    if (displayLow == tokenLow) {
+                      score = 260;
+                    } else if (displayLow.find(tokenLow) != std::string::npos) {
+                      score = 140;
+                    }
+                  }
+                }
+                if (score > 0 && actorCharacter &&
+                    (uintptr_t)actorCharacter > 0x1000 && actorPositionValid) {
+                  float distance = -1.0f;
+                  try {
+                    distance = candidate->getPosition().distance(actorPosition);
+                  } catch (...) {
+                    distance = -1.0f;
+                  }
+                  if (distance >= 0.0f) {
+                    if (distance <= 8.0f) {
+                      score += 260;
+                    } else if (distance <= 25.0f) {
+                      score += 180;
+                    } else if (distance <= 60.0f) {
+                      score += 110;
+                    } else if (distance <= 120.0f) {
+                      score += 40;
+                    } else if (!hasSerial && distance >= 300.0f) {
+                      score -= 100;
+                    }
+                  }
+
+                  bool candidateIsIndoors = false;
+                  hand candidateIndoorsHandle;
+                  try {
+                    candidateIndoorsHandle = candidate->isIndoors();
+                    candidateIsIndoors = candidateIndoorsHandle.isValid() &&
+                                         !candidateIndoorsHandle.isNull();
+                  } catch (...) {
+                    candidateIsIndoors = false;
+                  }
+                  if (candidateIsIndoors == actorIsIndoors) {
+                    score += 24;
+                  }
+                  if (candidateIsIndoors && actorIsIndoors &&
+                      candidateIndoorsHandle.serial == actorIndoorsHandle.serial) {
+                    score += 90;
+                  } else if (candidateIsIndoors != actorIsIndoors) {
+                    score -= 30;
+                  }
+
+                  int candidateFloor = 0;
+                  bool candidateFloorValid = true;
+                  try {
+                    candidateFloor = candidate->getFloor();
+                  } catch (...) {
+                    candidateFloorValid = false;
+                  }
+                  if (candidateFloorValid) {
+                    if (candidateFloor == actorFloor) {
+                      score += 20;
+                    } else {
+                      score -= 6;
+                    }
+                  }
+                }
+
+                if (score > 1 && !(hasSerial && candidateSerial == wantedSerial)) {
+                  // item 47: a corpse with the same name must not win over the living
+                  try {
+                    if (candidate->isDead())
+                      score = 1;
+                  } catch (...) {
+                  }
+                }
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestMatch = candidate;
+                  if (score == 1000) {
+                    break;
+                  }
+                }
+              }
+            }
+
+            // Fallback: nearby sphere query catches dead/KO actors that may not
+            // be present in the regular update set.
+            if (thisptr && (!bestMatch || bestScore < 1000)) {
+              Character *anchorCharacter = actorCharacter;
+              if ((!anchorCharacter || (uintptr_t)anchorCharacter <= 0x1000) &&
+                  thisptr->player &&
+                  thisptr->player->playerCharacters.size() > 0 &&
+                  thisptr->player->playerCharacters[0]) {
+                anchorCharacter = thisptr->player->playerCharacters[0];
+              }
+
+              if (anchorCharacter && (uintptr_t)anchorCharacter > 0x1000) {
+                Ogre::Vector3 anchorPos = Ogre::Vector3::ZERO;
+                bool anchorPosValid = false;
+                try {
+                  anchorPos = anchorCharacter->getPosition();
+                  anchorPosValid = true;
+                } catch (...) {
+                  anchorPosValid = false;
+                }
+
+                if (anchorPosValid) {
+                  lektor<RootObject *> nearby;
+                  try {
+                    thisptr->getCharactersWithinSphere(nearby, anchorPos, 600.0f,
+                                                       0.0f, 0.0f, 16, 0,
+                                                       anchorCharacter);
+                  } catch (...) {
+                    nearby.clear();
+                  }
+
+                  for (uint32_t i = 0; i < nearby.size(); ++i) {
+                    Character *candidate = (Character *)nearby.stuff[i];
+                    if (!candidate || (uintptr_t)candidate < 0x1000) {
+                      continue;
+                    }
+
+                    hand candidateHandle;
+                    unsigned int candidateSerial = 0;
+                    try {
+                      candidateHandle = candidate->getHandle();
+                      candidateSerial = candidateHandle.serial;
+                    } catch (...) {
+                      candidateHandle = hand();
+                      candidateSerial = 0;
+                    }
+                    if (!candidateHandle.isValid() || candidateSerial == 0) {
+                      continue;
+                    }
+                    if (actorHandle.isValid() &&
+                        candidateSerial == actorHandle.serial) {
+                      continue;
+                    }
+
+                    int score = 0;
+                    if (hasSerial && candidateSerial == wantedSerial) {
+                      score = 1200;
+                    } else if (!tokenLow.empty()) {
+                      std::string candidateName = candidate->getName();
+                      std::string candidateLow = candidateName;
+                      std::transform(candidateLow.begin(), candidateLow.end(),
+                                     candidateLow.begin(), ::tolower);
+                      if (candidateLow == tokenLow) {
+                        score = 520;
+                      } else if (candidateLow.find(tokenLow) == 0) {
+                        score = 340;
+                      } else if (candidateLow.find(tokenLow) != std::string::npos) {
+                        score = 200;
+                      } else if (!candidate->displayName.empty()) {
+                        std::string displayLow = candidate->displayName;
+                        std::transform(displayLow.begin(), displayLow.end(),
+                                       displayLow.begin(), ::tolower);
+                        if (displayLow == tokenLow) {
+                          score = 280;
+                        } else if (displayLow.find(tokenLow) !=
+                                   std::string::npos) {
+                          score = 160;
+                        }
+                      }
+                    }
+                    if (score <= 0) {
+                      continue;
+                    }
+
+                    try {
+                      float distance = candidate->getPosition().distance(anchorPos);
+                      if (distance <= 8.0f) {
+                        score += 320;
+                      } else if (distance <= 25.0f) {
+                        score += 220;
+                      } else if (distance <= 60.0f) {
+                        score += 130;
+                      } else if (distance <= 120.0f) {
+                        score += 55;
+                      } else if (!hasSerial && distance >= 300.0f) {
+                        score -= 120;
+                      }
+                    } catch (...) {
+                    }
+
+                    if (score > 1 && !(hasSerial && candidateSerial == wantedSerial)) {
+                      // item 47 (C47): the sphere fallback finds corpses too; a
+                      // dead namesake must not outscore the living one
+                      try {
+                        if (candidate->isDead())
+                          score = 1;
+                      } catch (...) {
+                      }
+                    }
+                    if (score > bestScore) {
+                      bestScore = score;
+                      bestMatch = candidate;
+                      if (score >= 1200) {
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            if (!bestMatch && !hasSerial &&
+                (tokenLow == "lead" || tokenLow == "leader")) {
+              hand playerHandle = resolvePlayerHandle();
+              if (playerHandle.isValid() && playerHandle.serial != 0) {
+                return playerHandle;
+              }
+            }
+            if (bestMatch && bestScore > 0) {
+              hand bestHandle = hand();
+              try {
+                bestHandle = bestMatch->getHandle();
+              } catch (...) {
+                bestHandle = hand();
+              }
+              if (bestHandle.isValid() && bestHandle.serial != 0) {
+                return bestHandle;
+              }
+            }
+            return hand();
+          };
+
+          if (actionCommand == "JOIN_PARTY") {
+            if (!targetHand.isValid()) {
+              Log("HOOK_MSG_PROC: JOIN_PARTY ignored; invalid actor handle");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_JOIN_PARTY;
+            act.actor = targetHand;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: JOIN_PARTY queued actor_serial=" +
+                ToString((int)targetHand.serial));
+          } else if (actionCommand == "ATTACK") {
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_ATTACK;
+            act.actor = targetHand;
+            const std::string helpSuffix = "@help";
+            if (actionArgument.size() > helpSuffix.size() &&
+                actionArgument.compare(actionArgument.size() - helpSuffix.size(),
+                                       helpSuffix.size(), helpSuffix) == 0) {
+              actionArgument.erase(actionArgument.size() - helpSuffix.size());
+              act.message = "help";
+            }
+            hand resolvedTarget = resolveActionTargetHand(actionArgument, targetHand);
+            if (!resolvedTarget.isValid() && thisptr->player &&
+                thisptr->player->playerCharacters.size() > 0) {
+              resolvedTarget = thisptr->player->playerCharacters[0]->getHandle();
+            }
+            act.target = resolvedTarget;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: ATTACK target resolved arg='" + actionArgument +
+                "' target_serial=" + ToString((int)act.target.serial));
+          } else if (actionCommand == "STOP_ATTACK") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            hand resolvedTarget =
+                resolveActionTargetHand(actionArgument, targetHand);
+            if (!resolvedTarget.isValid() || resolvedTarget.isNull() ||
+                resolvedTarget.serial == targetHand.serial) {
+              Log("HOOK_MSG_PROC: STOP_ATTACK ignored; explicit opposing "
+                  "target could not be resolved arg='" +
+                  actionArgument + "'");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_STOP_ATTACK;
+            act.actor = targetHand;
+            act.target = resolvedTarget;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: STOP_ATTACK queued actor_serial=" +
+                ToString((int)targetHand.serial) + " target_serial=" +
+                ToString((int)resolvedTarget.serial) + " arg='" +
+                actionArgument + "'");
+          } else if (actionCommand == "SUICIDE") {
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_SUICIDE;
+            act.actor = targetHand;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: SUICIDE queued actor_serial=" +
+                ToString((int)targetHand.serial));
+          } else if (actionCommand == "GIVE_ITEM") {
+            std::string giveItemTargetToken = "";
+            std::vector<std::pair<std::string, int>> giveItemRequests;
+
+            std::string trimmedGiveItemArg = TrimCopy(actionArgument);
+            bool listSyntaxRequested =
+                trimmedGiveItemArg.find(',') != std::string::npos ||
+                trimmedGiveItemArg.find(';') != std::string::npos;
+
+            if (listSyntaxRequested) {
+              std::string listPayload = trimmedGiveItemArg;
+              size_t firstAt = listPayload.find('@');
+              if (firstAt != std::string::npos) {
+                std::string targetToken = TrimCopy(listPayload.substr(0, firstAt));
+                std::string itemsToken = TrimCopy(listPayload.substr(firstAt + 1));
+                if (!targetToken.empty() && !itemsToken.empty()) {
+                  giveItemTargetToken = targetToken;
+                  listPayload = itemsToken;
+                }
+              }
+
+              std::vector<std::string> parts;
+              std::string current = "";
+              std::string listPayloadLower = ToLowerAsciiCopy(listPayload);
+              for (size_t i = 0; i < listPayload.size(); ++i) {
+                char ch = listPayload[i];
+                bool shouldSplit = (ch == ',' || ch == ';');
+                size_t splitAdvance = 0;
+                if (!shouldSplit && i + 5 <= listPayloadLower.size() &&
+                    listPayloadLower.substr(i, 5) == " and ") {
+                  shouldSplit = true;
+                  splitAdvance = 4;
+                }
+                if (shouldSplit) {
+                  std::string part = TrimCopy(current);
+                  if (!part.empty()) {
+                    parts.push_back(part);
+                  }
+                  current.clear();
+                  i += splitAdvance;
+                  continue;
+                }
+                current.push_back(ch);
+              }
+              std::string tail = TrimCopy(current);
+              if (!tail.empty()) {
+                parts.push_back(tail);
+              }
+
+              for (size_t i = 0; i < parts.size(); ++i) {
+                std::string parsedTargetToken = "";
+                std::string parsedItemName = "";
+                int parsedAmount = 1;
+                if (!parseGiveItemPayload(parts[i], parsedTargetToken, parsedItemName,
+                                          parsedAmount)) {
+                  Log("HOOK_MSG_PROC: GIVE_ITEM list part parse failed part='" +
+                      parts[i] + "'");
+                  continue;
+                }
+                if (!parsedTargetToken.empty() && giveItemTargetToken.empty()) {
+                  giveItemTargetToken = parsedTargetToken;
+                }
+                if (!parsedItemName.empty() && parsedAmount > 0) {
+                  giveItemRequests.push_back(
+                      std::make_pair(parsedItemName, parsedAmount));
+                }
+              }
+            }
+
+            if (giveItemRequests.empty()) {
+              std::string iName = "";
+              int giveItemAmount = 1;
+              if (!parseGiveItemPayload(actionArgument, giveItemTargetToken, iName,
+                                        giveItemAmount)) {
+                Log("HOOK_MSG_PROC: GIVE_ITEM ignored; invalid payload '" +
+                    actionArgument + "'");
+                continue;
+              }
+              giveItemRequests.push_back(std::make_pair(iName, giveItemAmount));
+            }
+
+            hand giveItemTarget = hand();
+            if (!giveItemTargetToken.empty()) {
+              giveItemTarget =
+                  resolveActionTargetHand(giveItemTargetToken, targetHand);
+              if (!giveItemTarget.isValid()) {
+                Log("HOOK_MSG_PROC: GIVE_ITEM ignored; target unresolved '" +
+                    giveItemTargetToken + "'");
+                continue;
+              }
+            } else if (actionActorResolved && actionActor) {
+              std::string inferredRecipientSource = "";
+              Dialogue *dialogueHint = nullptr;
+              try {
+                dialogueHint = actionActor->dialogue;
+              } catch (...) {
+                dialogueHint = nullptr;
+              }
+              Character *inferredRecipient = ResolveDialogueListenerForSpeech(
+                  actionActor, dialogueHint, inferredRecipientSource);
+              if (inferredRecipient && (uintptr_t)inferredRecipient > 0x1000 &&
+                  inferredRecipient != actionActor) {
+                try {
+                  giveItemTarget = inferredRecipient->getHandle();
+                } catch (...) {
+                  giveItemTarget = hand();
+                }
+                if (giveItemTarget.isValid()) {
+                  giveItemTargetToken = inferredRecipient->getName();
+                  Log("HOOK_MSG_PROC: GIVE_ITEM inferred recipient '" +
+                      giveItemTargetToken + "' source=" +
+                      inferredRecipientSource + " serial=" +
+                      ToString((unsigned int)giveItemTarget.serial));
+                }
+              }
+            }
+            EnterCriticalSection(&g_uiMutex);
+            for (size_t i = 0; i < giveItemRequests.size(); ++i) {
+              QueuedAction act;
+              act.type = ACT_GIVE_ITEM;
+              act.actor = targetHand;
+              act.target = giveItemTarget;
+              act.message = giveItemRequests[i].first;
+              act.taskValue = giveItemRequests[i].second;
+              g_uiActionQueue.push_back(act);
+            }
+            LeaveCriticalSection(&g_uiMutex);
+            std::string giveItemSummary = "";
+            for (size_t i = 0; i < giveItemRequests.size(); ++i) {
+              if (i > 0) {
+                giveItemSummary += ", ";
+              }
+              giveItemSummary += giveItemRequests[i].first + " x" +
+                                 ToString(giveItemRequests[i].second);
+            }
+            Log("HOOK_MSG_PROC: GIVE_ITEM queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " count=" +
+                ToString((int)giveItemRequests.size()) + " items=[" +
+                giveItemSummary + "] target='" + giveItemTargetToken +
+                "' target_serial=" + ToString((unsigned int)giveItemTarget.serial));
+          } else if (actionCommand == "TAKE_ITEM") {
+            std::string takeItemTargetToken = "";
+            std::vector<std::pair<std::string, int>> takeItemRequests;
+
+            auto parseLegacyTakeItemPayload =
+                [&](const std::string &rawPayload, std::string &targetOut,
+                    std::string &itemOut, int &amountOut) -> bool {
+              targetOut.clear();
+              itemOut.clear();
+              amountOut = 1;
+              std::string payload = TrimCopy(rawPayload);
+              if (payload.empty()) {
+                return false;
+              }
+
+              auto canonicalLootQueryFromSuffix =
+                  [&](const std::string &rawSuffix) -> std::string {
+                std::string suffix = ToLowerAsciiCopy(TrimCopy(rawSuffix));
+                if (suffix == "equip" || suffix == "equipment" ||
+                    suffix == "gear" || suffix == "armor" ||
+                    suffix == "armour") {
+                  return "equipment";
+                }
+                if (suffix == "all" || suffix == "everything" ||
+                    suffix == "inventory" || suffix == "items" ||
+                    suffix == "loot") {
+                  return "all";
+                }
+                if (suffix == "weapon" || suffix == "weapons") {
+                  return "weapon";
+                }
+                return "";
+              };
+
+              // Handle malformed payloads such as "Blue Eyesequipment"
+              // where target and loot keyword are concatenated.
+              {
+                auto trimTargetPrefixToken = [](std::string value) -> std::string {
+                  while (!value.empty()) {
+                    char tail = value.back();
+                    if (tail == '-' || tail == '_' || tail == ':' || tail == '.' ||
+                        tail == ',' || tail == ';' || tail == '/' || tail == '\\' ||
+                        tail == '|' || std::isspace((unsigned char)tail)) {
+                      value.erase(value.size() - 1, 1);
+                      continue;
+                    }
+                    break;
+                  }
+                  while (!value.empty()) {
+                    char head = value.front();
+                    if (head == '-' || head == '_' || head == ':' || head == '.' ||
+                        head == ',' || head == ';' || head == '/' || head == '\\' ||
+                        head == '|' || std::isspace((unsigned char)head)) {
+                      value.erase(0, 1);
+                      continue;
+                    }
+                    break;
+                  }
+                  return TrimCopy(value);
+                };
+                auto extractPrefixByLootSuffix =
+                    [&](const std::string &rawValue, const std::string &suffix,
+                        std::string &prefixOut) -> bool {
+                  prefixOut.clear();
+                  std::string loweredValue = ToLowerAsciiCopy(rawValue);
+                  std::string suffixLower = ToLowerAsciiCopy(suffix);
+                  if (loweredValue.length() > suffixLower.length() &&
+                      loweredValue.compare(loweredValue.length() - suffixLower.length(),
+                                           suffixLower.length(), suffixLower) == 0) {
+                    prefixOut =
+                        rawValue.substr(0, rawValue.length() - suffixLower.length());
+                    return true;
+                  }
+                  const char *joiners[] = {"/", "\\", "-", "_", ":", "|"};
+                  for (size_t joinIdx = 0; joinIdx < sizeof(joiners) / sizeof(joiners[0]);
+                       ++joinIdx) {
+                    std::string joined = std::string(joiners[joinIdx]) + suffixLower;
+                    if (loweredValue.length() <= joined.length()) {
+                      continue;
+                    }
+                    if (loweredValue.compare(loweredValue.length() - joined.length(),
+                                             joined.length(), joined) != 0) {
+                      continue;
+                    }
+                    prefixOut = rawValue.substr(0, rawValue.length() - joined.length());
+                    return true;
+                  }
+                  return false;
+                };
+                auto extractSuffixByLootPrefix =
+                    [&](const std::string &rawValue, const std::string &prefix,
+                        std::string &suffixOut) -> bool {
+                  suffixOut.clear();
+                  std::string loweredValue = ToLowerAsciiCopy(rawValue);
+                  std::string prefixLower = ToLowerAsciiCopy(prefix);
+                  if (loweredValue.length() > prefixLower.length() &&
+                      loweredValue.compare(0, prefixLower.length(), prefixLower) ==
+                          0) {
+                    suffixOut = rawValue.substr(prefixLower.length());
+                    return true;
+                  }
+                  const char *joiners[] = {"/", "\\", "-", "_", ":", "|"};
+                  for (size_t joinIdx = 0; joinIdx < sizeof(joiners) / sizeof(joiners[0]);
+                       ++joinIdx) {
+                    std::string joined = prefixLower + std::string(joiners[joinIdx]);
+                    if (loweredValue.length() <= joined.length()) {
+                      continue;
+                    }
+                    if (loweredValue.compare(0, joined.length(), joined) != 0) {
+                      continue;
+                    }
+                    suffixOut = rawValue.substr(joined.length());
+                    return true;
+                  }
+                  return false;
+                };
+
+                const std::string loweredPayload = ToLowerAsciiCopy(payload);
+                const char *suffixes[] = {"equipment", "equip",  "gear",
+                                          "armor",     "armour", "all",
+                                          "everything","inventory","items",
+                                          "loot",      "weapon", "weapons"};
+                for (size_t suffixIdx = 0; suffixIdx < sizeof(suffixes) / sizeof(suffixes[0]);
+                     ++suffixIdx) {
+                  const std::string suffix = suffixes[suffixIdx];
+                  std::string prefix = "";
+                  if (!extractPrefixByLootSuffix(payload, suffix, prefix)) {
+                    continue;
+                  }
+                  prefix = trimTargetPrefixToken(prefix);
+                  if (prefix.empty()) {
+                    continue;
+                  }
+                  std::string canonicalQuery = canonicalLootQueryFromSuffix(suffix);
+                  if (canonicalQuery.empty()) {
+                    continue;
+                  }
+
+                  hand candidateTarget = resolveActionTargetHand(prefix, targetHand);
+                  if (!candidateTarget.isValid() && canonicalQuery == "all") {
+                    // Support malformed variants like "Blue Eyesequipment/all".
+                    const char *nestedSuffixes[] = {"equipment", "equip", "gear",
+                                                    "armor", "armour", "weapon",
+                                                    "weapons"};
+                    for (size_t nestedIdx = 0;
+                         nestedIdx < sizeof(nestedSuffixes) / sizeof(nestedSuffixes[0]);
+                         ++nestedIdx) {
+                      std::string nestedPrefix = "";
+                      if (!extractPrefixByLootSuffix(prefix, nestedSuffixes[nestedIdx],
+                                                     nestedPrefix)) {
+                        continue;
+                      }
+                      nestedPrefix = trimTargetPrefixToken(nestedPrefix);
+                      if (nestedPrefix.empty()) {
+                        continue;
+                      }
+                      hand nestedTarget =
+                          resolveActionTargetHand(nestedPrefix, targetHand);
+                      if (!nestedTarget.isValid()) {
+                        continue;
+                      }
+                      targetOut = nestedPrefix;
+                      itemOut = canonicalQuery;
+                      amountOut = 1;
+                      return true;
+                    }
+                  }
+
+                  if (candidateTarget.isValid()) {
+                    targetOut = prefix;
+                    itemOut = canonicalQuery;
+                    amountOut = 1;
+                    return true;
+                  }
+
+                  // If this looks like a named target intent, don't downgrade to
+                  // taking items from player inventory.
+                  if (prefix.find(' ') != std::string::npos) {
+                    return false;
+                  }
+                }
+
+                // Support malformed variants like "equipmentBlue Eyes",
+                // where loot keyword is concatenated before target.
+                for (size_t suffixIdx = 0; suffixIdx < sizeof(suffixes) / sizeof(suffixes[0]);
+                     ++suffixIdx) {
+                  const std::string suffix = suffixes[suffixIdx];
+                  std::string trailingTarget = "";
+                  if (!extractSuffixByLootPrefix(payload, suffix, trailingTarget)) {
+                    continue;
+                  }
+                  trailingTarget = trimTargetPrefixToken(trailingTarget);
+                  if (trailingTarget.empty()) {
+                    continue;
+                  }
+
+                  std::string canonicalQuery = canonicalLootQueryFromSuffix(suffix);
+                  if (canonicalQuery.empty()) {
+                    continue;
+                  }
+
+                  hand candidateTarget =
+                      resolveActionTargetHand(trailingTarget, targetHand);
+                  if (candidateTarget.isValid()) {
+                    targetOut = trailingTarget;
+                    itemOut = canonicalQuery;
+                    amountOut = 1;
+                    return true;
+                  }
+
+                  // If this looks like a named target intent, don't downgrade to
+                  // taking items from player inventory.
+                  if (trailingTarget.find(' ') != std::string::npos) {
+                    return false;
+                  }
+                }
+              }
+
+              size_t firstAtPos = payload.find('@');
+              if (firstAtPos != std::string::npos &&
+                  firstAtPos == payload.find_last_of('@')) {
+                std::string leftAtToken = TrimCopy(payload.substr(0, firstAtPos));
+                std::string rightAtToken =
+                    TrimCopy(payload.substr(firstAtPos + 1));
+                if (!leftAtToken.empty() && !rightAtToken.empty()) {
+                  bool rightIsDigits = true;
+                  for (size_t i = 0; i < rightAtToken.size(); ++i) {
+                    unsigned char ch = (unsigned char)rightAtToken[i];
+                    if (ch < '0' || ch > '9') {
+                      rightIsDigits = false;
+                      break;
+                    }
+                  }
+                  if (rightIsDigits) {
+                    hand leftAsTarget =
+                        resolveActionTargetHand(leftAtToken, targetHand);
+                    hand rightAsTarget =
+                        resolveActionTargetHand(rightAtToken, targetHand);
+                    if (!leftAsTarget.isValid() && !rightAsTarget.isValid()) {
+                      int parsedAmount = atoi(rightAtToken.c_str());
+                      if (parsedAmount > 0) {
+                        targetOut.clear();
+                        itemOut = leftAtToken;
+                        amountOut = parsedAmount;
+                        return true;
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Primary parser handles target@item and quantity formats.
+              if (parseGiveItemPayload(payload, targetOut, itemOut, amountOut)) {
+                if (!targetOut.empty()) {
+                  hand parsedTarget = resolveActionTargetHand(targetOut, targetHand);
+                  if (!parsedTarget.isValid()) {
+                    targetOut.clear();
+                    itemOut.clear();
+                    amountOut = 1;
+                  }
+                }
+              }
+              if (!itemOut.empty() || !targetOut.empty()) {
+                if (itemOut.empty() && !targetOut.empty()) {
+                  itemOut = "equipment";
+                  amountOut = 1;
+                }
+                return !itemOut.empty() && amountOut > 0;
+              }
+
+              // Target-only shorthand means "loot target equipment".
+              hand shorthandTarget = resolveActionTargetHand(payload, targetHand);
+              if (shorthandTarget.isValid()) {
+                targetOut = payload;
+                itemOut = "equipment";
+                amountOut = 1;
+                return true;
+              }
+
+              // Legacy fallback supports item@target and target@item.
+              size_t splitPos = payload.find('@');
+              if (splitPos == std::string::npos) {
+                return false;
+              }
+              std::string leftToken = TrimCopy(payload.substr(0, splitPos));
+              std::string rightToken = TrimCopy(payload.substr(splitPos + 1));
+              if (leftToken.empty() || rightToken.empty()) {
+                return false;
+              }
+              hand leftTarget = resolveActionTargetHand(leftToken, targetHand);
+              hand rightTarget = resolveActionTargetHand(rightToken, targetHand);
+              std::string itemSpec = "";
+              if (leftTarget.isValid() &&
+                  (!rightTarget.isValid() || rightToken.empty())) {
+                targetOut = leftToken;
+                itemSpec = rightToken;
+              } else if (rightTarget.isValid() &&
+                         (!leftTarget.isValid() || leftToken.empty())) {
+                targetOut = rightToken;
+                itemSpec = leftToken;
+              } else if (leftTarget.isValid() && rightTarget.isValid()) {
+                targetOut = leftToken;
+                itemSpec = rightToken;
+              } else {
+                return false;
+              }
+
+              if (itemSpec.empty()) {
+                itemOut = "equipment";
+                amountOut = 1;
+                return true;
+              }
+
+              std::string ignoredTargetToken = "";
+              if (!parseGiveItemPayload(itemSpec, ignoredTargetToken, itemOut,
+                                        amountOut)) {
+                itemOut = TrimCopy(itemSpec);
+                amountOut = 1;
+              }
+              if (itemOut.empty()) {
+                itemOut = "equipment";
+                amountOut = 1;
+              }
+              return amountOut > 0;
+            };
+
+            std::string trimmedTakeItemArg = TrimCopy(actionArgument);
+            bool listSyntaxRequested =
+                trimmedTakeItemArg.find(',') != std::string::npos ||
+                trimmedTakeItemArg.find(';') != std::string::npos;
+
+            if (listSyntaxRequested) {
+              std::string listPayload = trimmedTakeItemArg;
+              size_t firstAt = listPayload.find('@');
+              if (firstAt != std::string::npos) {
+                std::string targetToken = TrimCopy(listPayload.substr(0, firstAt));
+                std::string itemsToken = TrimCopy(listPayload.substr(firstAt + 1));
+                hand resolvedPrefixTarget =
+                    resolveActionTargetHand(targetToken, targetHand);
+                if (!targetToken.empty() && !itemsToken.empty() &&
+                    resolvedPrefixTarget.isValid()) {
+                  takeItemTargetToken = targetToken;
+                  listPayload = itemsToken;
+                }
+              }
+
+              std::vector<std::string> parts;
+              std::string current = "";
+              std::string listPayloadLower = ToLowerAsciiCopy(listPayload);
+              for (size_t i = 0; i < listPayload.size(); ++i) {
+                char ch = listPayload[i];
+                bool shouldSplit = (ch == ',' || ch == ';');
+                size_t splitAdvance = 0;
+                if (!shouldSplit && i + 5 <= listPayloadLower.size() &&
+                    listPayloadLower.substr(i, 5) == " and ") {
+                  shouldSplit = true;
+                  splitAdvance = 4;
+                }
+                if (shouldSplit) {
+                  std::string part = TrimCopy(current);
+                  if (!part.empty()) {
+                    parts.push_back(part);
+                  }
+                  current.clear();
+                  i += splitAdvance;
+                  continue;
+                }
+                current.push_back(ch);
+              }
+              std::string tail = TrimCopy(current);
+              if (!tail.empty()) {
+                parts.push_back(tail);
+              }
+
+              for (size_t i = 0; i < parts.size(); ++i) {
+                std::string parsedTargetToken = "";
+                std::string parsedItemName = "";
+                int parsedAmount = 1;
+                if (!parseLegacyTakeItemPayload(parts[i], parsedTargetToken,
+                                                parsedItemName, parsedAmount)) {
+                  Log("HOOK_MSG_PROC: TAKE_ITEM list part parse failed part='" +
+                      parts[i] + "'");
+                  continue;
+                }
+                if (!parsedTargetToken.empty() && takeItemTargetToken.empty()) {
+                  takeItemTargetToken = parsedTargetToken;
+                }
+                if (!parsedItemName.empty() && parsedAmount > 0) {
+                  takeItemRequests.push_back(
+                      std::make_pair(parsedItemName, parsedAmount));
+                }
+              }
+            }
+
+            if (takeItemRequests.empty()) {
+              std::string iName = "";
+              int takeItemAmount = 1;
+              std::string parsedTargetToken = "";
+              if (!parseLegacyTakeItemPayload(actionArgument, parsedTargetToken,
+                                              iName, takeItemAmount)) {
+                Log("HOOK_MSG_PROC: TAKE_ITEM ignored; invalid payload '" +
+                    actionArgument + "'");
+                continue;
+              }
+              if (!parsedTargetToken.empty()) {
+                takeItemTargetToken = parsedTargetToken;
+              }
+              takeItemRequests.push_back(std::make_pair(iName, takeItemAmount));
+            }
+
+            hand takeItemTarget = hand();
+            if (!takeItemTargetToken.empty()) {
+              takeItemTarget =
+                  resolveActionTargetHand(takeItemTargetToken, targetHand);
+              if (!takeItemTarget.isValid() || takeItemTarget.serial == 0) {
+                Log("HOOK_MSG_PROC: TAKE_ITEM target unresolved at parse-time '" +
+                    takeItemTargetToken +
+                    "'; deferring to runtime token resolution");
+                takeItemTarget = hand();
+              }
+            }
+
+            EnterCriticalSection(&g_uiMutex);
+            for (size_t i = 0; i < takeItemRequests.size(); ++i) {
+              QueuedAction act;
+              act.type = ACT_TAKE_ITEM;
+              act.actor = targetHand;
+              act.target = takeItemTarget;
+              act.message = takeItemRequests[i].first;
+              act.targetToken = takeItemTargetToken;
+              act.taskValue = takeItemRequests[i].second;
+              g_uiActionQueue.push_back(act);
+            }
+            LeaveCriticalSection(&g_uiMutex);
+
+            std::string takeItemSummary = "";
+            for (size_t i = 0; i < takeItemRequests.size(); ++i) {
+              if (i > 0) {
+                takeItemSummary += ", ";
+              }
+              takeItemSummary += takeItemRequests[i].first + " x" +
+                                 ToString(takeItemRequests[i].second);
+            }
+            Log("HOOK_MSG_PROC: TAKE_ITEM queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " count=" +
+                ToString((int)takeItemRequests.size()) + " items=[" +
+                takeItemSummary + "] target='" + takeItemTargetToken +
+                "' target_serial=" + ToString((unsigned int)takeItemTarget.serial));
+          } else if (actionCommand == "DROP_ITEM") {
+            std::string iName = actionArgument;
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_DROP_ITEM;
+            act.actor = targetHand;
+            act.message = iName;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "DRINK_ITEM") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string drinkItemName = TrimCopy(actionArgument);
+            if (drinkItemName.empty()) {
+              Log("HOOK_MSG_PROC: DRINK_ITEM ignored; empty item payload");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_DRINK_ITEM;
+            act.actor = targetHand;
+            act.message = drinkItemName;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: DRINK_ITEM queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " item='" +
+                drinkItemName + "'");
+          } else if (actionCommand == "FORCE_DRINK") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string targetToken = "";
+            std::string drinkItemName = "";
+            if (!parseForceDrinkPayload(actionArgument, targetToken,
+                                        drinkItemName)) {
+              Log("HOOK_MSG_PROC: FORCE_DRINK ignored; invalid payload '" +
+                  actionArgument + "'");
+              continue;
+            }
+            hand forceDrinkTarget =
+                resolveActionTargetHand(targetToken, targetHand);
+            if (!forceDrinkTarget.isValid()) {
+              Log("HOOK_MSG_PROC: FORCE_DRINK ignored; target unresolved '" +
+                  targetToken + "'");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_FORCE_DRINK;
+            act.actor = targetHand;
+            act.target = forceDrinkTarget;
+            act.message = drinkItemName;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: FORCE_DRINK queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " target='" +
+                targetToken + "' target_serial=" +
+                ToString((unsigned int)forceDrinkTarget.serial) + " item='" +
+                drinkItemName + "'");
+          } else if (actionCommand == "PICKUP_NPC") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string targetToken = TrimCopy(actionArgument);
+            if (targetToken.empty()) {
+              Log("HOOK_MSG_PROC: PICKUP_NPC ignored; empty target payload");
+              continue;
+            }
+            hand pickupTarget = resolveActionTargetHand(targetToken, targetHand);
+            if (!pickupTarget.isValid()) {
+              Log("HOOK_MSG_PROC: PICKUP_NPC ignored; target unresolved '" +
+                  targetToken + "'");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_PICKUP_NPC;
+            act.actor = targetHand;
+            act.target = pickupTarget;
+            act.message = targetToken;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: PICKUP_NPC queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " target='" +
+                targetToken + "' target_serial=" +
+                ToString((unsigned int)pickupTarget.serial));
+          } else if (actionCommand == "USE_DRUGS") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string drugItemName = TrimCopy(actionArgument);
+            if (drugItemName.empty()) {
+              Log("HOOK_MSG_PROC: USE_DRUGS ignored; empty item payload");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_USE_DRUGS;
+            act.actor = targetHand;
+            act.message = drugItemName;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: USE_DRUGS queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " item='" +
+                drugItemName + "'");
+          } else if (actionCommand == "ROLEPLAY_ACTION") {
+            std::string notice = TrimCopy(actionArgument);
+            if (notice.empty()) {
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_NOTIFY;
+            act.actor = targetHand;
+            act.target = hand();
+            act.message = notice;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "TAKE_CATS") {
+            std::string catsTargetToken = "";
+            int catsAmount = 0;
+            if (!parseCatsPayload(actionArgument, catsTargetToken, catsAmount)) {
+              Log("HOOK_MSG_PROC: TAKE_CATS ignored; invalid payload '" +
+                  actionArgument + "'");
+              continue;
+            }
+            hand catsTarget = hand();
+            if (!catsTargetToken.empty()) {
+              catsTarget = resolveActionTargetHand(catsTargetToken, targetHand);
+              if (!catsTarget.isValid()) {
+                Log("HOOK_MSG_PROC: TAKE_CATS ignored; target unresolved '" +
+                    catsTargetToken + "'");
+                continue;
+              }
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_TAKE_CATS;
+            act.actor = targetHand;
+            act.target = catsTarget;
+            act.message = catsTargetToken;
+            act.taskValue = catsAmount;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: TAKE_CATS queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " amount=" +
+                ToString(catsAmount) + " target='" + catsTargetToken +
+                "' target_serial=" + ToString((unsigned int)catsTarget.serial));
+          } else if (actionCommand == "GIVE_CATS") {
+            std::string catsTargetToken = "";
+            int catsAmount = 0;
+            // Cap tiers: GIVE_CATS purse mode, a trailing @topup / @exact.
+            std::string catsMode = "";
+            {
+              size_t modeAt = actionArgument.rfind('@');
+              if (modeAt != std::string::npos) {
+                std::string tail = TrimCopy(actionArgument.substr(modeAt + 1));
+                for (size_t i = 0; i < tail.size(); ++i)
+                  tail[i] = (char)tolower((unsigned char)tail[i]);
+                if (tail == "topup" || tail == "exact") {
+                  catsMode = tail;
+                  actionArgument = actionArgument.substr(0, modeAt);
+                }
+              }
+            }
+            if (!parseCatsPayload(actionArgument, catsTargetToken, catsAmount)) {
+              Log("HOOK_MSG_PROC: GIVE_CATS ignored; invalid payload '" +
+                  actionArgument + "'");
+              continue;
+            }
+            hand catsTarget = hand();
+            if (!catsTargetToken.empty()) {
+              catsTarget = resolveActionTargetHand(catsTargetToken, targetHand);
+              if (!catsTarget.isValid()) {
+                Log("HOOK_MSG_PROC: GIVE_CATS ignored; target unresolved '" +
+                    catsTargetToken + "'");
+                continue;
+              }
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_GIVE_CATS;
+            act.actor = targetHand;
+            act.target = catsTarget;
+            act.message = catsTargetToken;
+            act.taskValue = catsAmount;
+            act.catsMode = catsMode;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: GIVE_CATS queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " amount=" +
+                ToString(catsAmount) + " target='" + catsTargetToken +
+                "' target_serial=" + ToString((unsigned int)catsTarget.serial));
+          } else if (actionCommand == "LEAVE") {
+            if (!targetHand.isValid()) {
+              Log("HOOK_MSG_PROC: LEAVE ignored; invalid actor handle");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_LEAVE;
+            act.actor = targetHand;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: LEAVE queued actor_serial=" +
+                ToString((int)targetHand.serial));
+          } else if (actionCommand == "FACTION_RELATIONS") {
+            std::string payload = actionArgument;
+            size_t delimiterPos = payload.find('@');
+            if (delimiterPos != std::string::npos) {
+              std::string targetName = TrimCopy(payload.substr(0, delimiterPos));
+              std::string deltaToken =
+                  TrimCopy(payload.substr(delimiterPos + 1));
+              int amountRaw = atoi(deltaToken.c_str());
+              if (targetName.empty() || amountRaw == 0) {
+                Log("HOOK_MSG_PROC: FACTION_RELATIONS ignored; invalid payload '" +
+                    payload + "'");
+                continue;
+              }
+              int amount = (amountRaw < 0) ? -100 : 100;
+              hand relationTarget =
+                  resolveActionTargetHand(targetName, targetHand);
+              EnterCriticalSection(&g_uiMutex);
+              QueuedAction act;
+              act.type = ACT_FACTION_RELATIONS;
+              act.actor = targetHand;
+              act.target = relationTarget;
+              // Keep the raw target token as a compatibility fallback
+              // when hand resolution fails.
+              act.message = targetName;
+              act.taskValue = amount;
+              g_uiActionQueue.push_back(act);
+              LeaveCriticalSection(&g_uiMutex);
+              if (!relationTarget.isValid()) {
+                Log("HOOK_MSG_PROC: FACTION_RELATIONS fallback to name token '" +
+                    targetName + "' (no target hand match)");
+              } else {
+                Log("HOOK_MSG_PROC: FACTION_RELATIONS target resolved name='" +
+                    targetName + "' serial=" +
+                    ToString((unsigned int)relationTarget.serial) +
+                    " delta=" + ToString(amount));
+              }
+            }
+          } else if (actionCommand == "REMOVE_LIMB") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string targetToken = "";
+            int limbCode = -1;
+            if (!parseRemoveLimbPayload(actionArgument, targetToken, limbCode)) {
+              Log("HOOK_MSG_PROC: REMOVE_LIMB ignored; invalid payload '" +
+                  actionArgument + "'");
+              continue;
+            }
+            hand limbTarget = resolveActionTargetHand(targetToken, targetHand);
+            if (!limbTarget.isValid()) {
+              Log("HOOK_MSG_PROC: REMOVE_LIMB target unresolved at parse-time '" +
+                  targetToken +
+                  "'; deferring to runtime token resolution");
+              limbTarget = hand();
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_REMOVE_LIMB;
+            act.actor = targetHand;
+            act.target = limbTarget;
+            act.message = targetToken;
+            act.targetToken = targetToken;
+            act.taskValue = limbCode;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: REMOVE_LIMB queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " target='" +
+                targetToken + "' target_serial=" +
+                ToString((unsigned int)limbTarget.serial) + " limb_code=" +
+                ToString(limbCode));
+          } else if (actionCommand == "CUT_HORNS") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string targetToken = "";
+            if (!parseSingleTargetPayload(actionArgument, targetToken)) {
+              Log("HOOK_MSG_PROC: CUT_HORNS ignored; invalid payload '" +
+                  actionArgument + "'");
+              continue;
+            }
+            hand hornTarget = resolveActionTargetHand(targetToken, targetHand);
+            if (!hornTarget.isValid()) {
+              Log("HOOK_MSG_PROC: CUT_HORNS target unresolved at parse-time '" +
+                  targetToken +
+                  "'; deferring to runtime token resolution");
+              hornTarget = hand();
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_CUT_HORNS;
+            act.actor = targetHand;
+            act.target = hornTarget;
+            act.message = targetToken;
+            act.targetToken = targetToken;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: CUT_HORNS queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " target='" +
+                targetToken + "' target_serial=" +
+                ToString((unsigned int)hornTarget.serial));
+          } else if (actionCommand == "KNOCKOUT") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string targetToken = TrimCopy(actionArgument);
+            if (targetToken.empty()) {
+              Log("HOOK_MSG_PROC: KNOCKOUT ignored; empty target payload");
+              continue;
+            }
+            hand knockoutTarget = hand();
+            if (knockoutTargetMatchesActorName(targetToken)) {
+              knockoutTarget = targetHand;
+              Log("HOOK_MSG_PROC: KNOCKOUT self-target resolved from actor name '" +
+                  targetToken + "' actor_serial=" +
+                  ToString((unsigned int)targetHand.serial));
+            } else {
+              knockoutTarget = resolveActionTargetHand(targetToken, targetHand);
+            }
+            if (!knockoutTarget.isValid()) {
+              Log("HOOK_MSG_PROC: KNOCKOUT ignored; target unresolved '" +
+                  targetToken + "'");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_KNOCKOUT;
+            act.actor = targetHand;
+            act.target = knockoutTarget;
+            act.message = targetToken;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: KNOCKOUT queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " target='" +
+                targetToken + "' target_serial=" +
+                ToString((unsigned int)knockoutTarget.serial));
+          } else if (actionCommand == "KILL") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            std::string targetToken = TrimCopy(actionArgument);
+            if (targetToken.empty()) {
+              Log("HOOK_MSG_PROC: KILL ignored; empty target payload");
+              continue;
+            }
+            hand killTarget = resolveActionTargetHand(targetToken, targetHand);
+            if (!killTarget.isValid()) {
+              Log("HOOK_MSG_PROC: KILL ignored; target unresolved '" +
+                  targetToken + "'");
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_KILL;
+            act.actor = targetHand;
+            act.target = killTarget;
+            act.message = targetToken;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: KILL queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " target='" +
+                targetToken + "' target_serial=" +
+                ToString((unsigned int)killTarget.serial));
+          } else if (actionCommand == "SPAWN_ITEM") {
+            Log("HOOK_MSG_PROC: SPAWN_ITEM ignored; action currently disabled. arg='" +
+                actionArgument + "'");
+            thisptr->showPlayerAMessage_withLog(
+                "Spawn item action is currently disabled.", true);
+            continue;
+          } else if (actionCommand == "MOVE_TO" || actionCommand == "MOVETO") {
+            if (!targetHand.isValid()) {
+              continue;
+            }
+            QueuedAction act;
+            act.type = ACT_MOVE_TO;
+            act.actor = targetHand;
+            act.message = actionArgument;
+            EnterCriticalSection(&g_uiMutex);
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "OWNED_TRAVEL") {
+            // Start policy is checked by the owned executor. A release must
+            // still retire its exact old order after the NPC joins the squad.
+            if (!targetHand.isValid() || actionArgument.size() > 4096) continue;
+            QueuedAction act;
+            act.type = ACT_OWNED_TRAVEL;
+            act.actor = targetHand;
+            act.message = actionArgument;
+            EnterCriticalSection(&g_uiMutex);
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "TRAVEL_LOCATION") {
+            if (!targetHand.isValid()) {
+              Log("HOOK_MSG_PROC: TRAVEL_LOCATION ignored; invalid actor handle");
+              continue;
+            }
+
+            float travelX = 0.0f;
+            float travelY = 0.0f;
+            float travelZ = 0.0f;
+            std::string travelLabel = "";
+            if (!parseTravelLocationPayload(actionArgument, travelX, travelY,
+                                            travelZ, travelLabel)) {
+              std::string destinationLabel = TrimCopy(actionArgument);
+              if (destinationLabel.empty()) {
+                destinationLabel = "that location";
+              }
+              thisptr->showPlayerAMessage_withLog(
+                  "Can not travel to " + destinationLabel +
+                      " as you have not visited it yet",
+                  true);
+              Log("HOOK_MSG_PROC: TRAVEL_LOCATION invalid payload '" +
+                  actionArgument + "'");
+              continue;
+            }
+
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_TRAVEL_LOCATION;
+            act.actor = targetHand;
+            act.message = actionArgument;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: TRAVEL_LOCATION queued actor_serial=" +
+                ToString((int)targetHand.serial) + " payload='" + actionArgument +
+                "'");
+          } else if (actionCommand == "USE_OBJECT") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_USE_OBJECT;
+            act.actor = targetHand;
+            act.message = actionArgument;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: USE_OBJECT queued actor_serial=" +
+                ToString((unsigned int)targetHand.serial) + " target='" +
+                actionArgument + "'");
+          } else if (actionCommand == "FOLLOW") {
+            if (actionActorIsPlayerFaction) {
+              Log("HOOK_MSG_PROC: FOLLOW blocked for player-faction NPC actor=" +
+                  actionActorName + " serial=" +
+                  ToString((int)targetHand.serial));
+              thisptr->showPlayerAMessage_withLog(
+                  actionActorName +
+                      " cannot use follow actions while in your faction.",
+                  true);
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_START_FOLLOW;
+            act.actor = targetHand;
+            hand followTarget = resolveActionTargetHand(actionArgument, targetHand);
+            if (!followTarget.isValid()) {
+              LeaveCriticalSection(&g_uiMutex);
+              Log("HOOK_MSG_PROC: FOLLOW ignored; could not resolve target from '" +
+                  actionArgument + "'");
+              continue;
+            }
+            act.target = followTarget;
+            act.taskValue = 0;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: FOLLOW target resolved arg='" + actionArgument +
+                "' target_serial=" + ToString((unsigned int)act.target.serial));
+          } else if (actionCommand == "STOP_FOLLOW") {
+            if (actionActorIsPlayerFaction) {
+              Log("HOOK_MSG_PROC: STOP_FOLLOW blocked for player-faction NPC actor=" +
+                  actionActorName + " serial=" +
+                  ToString((int)targetHand.serial));
+              thisptr->showPlayerAMessage_withLog(
+                  actionActorName +
+                      " cannot use follow actions while in your faction.",
+                  true);
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_STOP_FOLLOW;
+            act.actor = targetHand;
+            act.taskValue = 0;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "IDLE") {
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_SET_TASK;
+            act.actor = targetHand;
+            act.taskValue = 14; // IDLE
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "SET_BLOCK" || actionCommand == "SET_HOLD" ||
+                     actionCommand == "SET_PASSIVE" || actionCommand == "SET_JOBS" ||
+                     actionCommand == "SET_RANGED" || actionCommand == "SET_TAUNT" ||
+                     actionCommand == "SET_SNEAK" || actionCommand == "SET_RESOURCE" ||
+                     actionCommand == "SET_MEDIC") {
+            bool enabled = false;
+            if (!parseToggleArg(actionArgument, enabled)) {
+              Log("HOOK_MSG_PROC: Ignoring invalid toggle action argument for " +
+                  actionCommand + ": " + actionArgument);
+              continue;
+            }
+            if (shouldSkipSpeakerBoundAction(actionCommand)) {
+              continue;
+            }
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_SET_NPC_TOGGLE;
+            act.actor = targetHand;
+            act.message = actionCommand;
+            act.taskValue = enabled ? 1 : 0;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          } else if (actionCommand == "STOP_CARRYING") {
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_RELEASE;
+            act.actor = targetHand;
+            act.message = actionArgument;
+            hand releaseTarget = resolveActionTargetHand(actionArgument, targetHand);
+            if (!releaseTarget.isValid() && actionActor &&
+                (uintptr_t)actionActor > 0x1000) {
+              try {
+                if (actionActor->isCarryingSomething &&
+                    actionActor->carryingObject.isValid()) {
+                  releaseTarget = actionActor->carryingObject;
+                }
+              } catch (...) {
+              }
+            }
+            act.target = releaseTarget;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("HOOK_MSG_PROC: STOP_CARRYING target resolved arg='" +
+                actionArgument + "' target_serial=" +
+                ToString((int)act.target.serial));
+          } else if (actionCommand == "TASK") {
+            std::string tName = actionArgument;
+            std::transform(tName.begin(), tName.end(), tName.begin(), ::toupper);
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_SET_TASK;
+            act.actor = targetHand;
+
+            // Set default target to player for player-given orders
+            if (thisptr->player && thisptr->player->playerCharacters.size() > 0)
+              act.target = thisptr->player->playerCharacters[0]->getHandle();
+
+            // Correct mapping for TaskType (NULL_TASK = 0)
+            act.taskValue = 24; // Default to WANDERER
+            if (tName == "IDLE")
+              act.taskValue = 14;
+            else if (tName == "RUN_AWAY")
+              act.taskValue = 35;
+            else if (tName == "CHASE")
+              act.taskValue = 46;
+            else if (tName == "MOVE_ON_FREE_WILL")
+              act.taskValue = 1;
+            else if (tName == "MELEE_ATTACK") {
+              act.taskValue = 4;
+            } else if (tName == "RELEASE_PRISONER") {
+              act.taskValue = 110;
+            }
+
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+          }
+        }
+      } else {
+        // Normal dialogue bubble
+        std::string bubbleContent =
+            isPlayerSay ? msg.substr(12) : (isNPCSay ? msg.substr(9) : "");
+        const std::string unavailableSpeechMarker =
+            " [ALLOW_UNAVAILABLE_SPEECH]";
+        bool allowUnavailableSpeech = false;
+        size_t unavailableSpeechPos = bubbleContent.rfind(unavailableSpeechMarker);
+        if (unavailableSpeechPos != std::string::npos &&
+            unavailableSpeechPos + unavailableSpeechMarker.length() ==
+                bubbleContent.length()) {
+          bubbleContent.erase(unavailableSpeechPos);
+          allowUnavailableSpeech = true;
+        }
+        std::string structuredMessage =
+            ExtractDialogueMessageFromStructuredText(bubbleContent);
+        if (!structuredMessage.empty()) {
+          bubbleContent = structuredMessage;
+        }
+        std::string utteranceId = ExtractTrailingUtteranceId(bubbleContent);
+        int ttsDurationMs = ExtractTrailingTtsDurationMs(bubbleContent);
+        std::string ttsHash = ExtractTrailingTtsHash(bubbleContent);
+        std::string talkTargetToken = ExtractTalkTargetToken(bubbleContent);
+        bubbleContent = StripLeakedSpeechSerialTokens(bubbleContent);
+        bubbleContent = StripDanglingTrailingClosingBrackets(bubbleContent);
+        const bool hadStructuredMessage = !structuredMessage.empty();
+        const bool hadTtsMetadata = !ttsHash.empty() || ttsDurationMs > 0;
+        const bool hadAiDeliveryMetadata = !utteranceId.empty();
+        if (!g_ttsEnabled) {
+          ttsDurationMs = 0;
+          ttsHash.clear();
+        }
+        if (isPlayerSay || hadTtsMetadata) {
+          Log("TIMING_META: bubble parse kind=" +
+              std::string(isPlayerSay ? "player" : "npc") +
+              " text_len=" + ToString((int)bubbleContent.length()) +
+              " tts_hash=" + (ttsHash.empty() ? "" : ttsHash.substr(0, 8)) +
+              " tts_dur_ms=" + ToString(ttsDurationMs));
+        }
+
+        // Suppress bubbles for test commands
+        if (!bubbleContent.empty()) {
+          if (isPlayerSay && bubbleContent[0] == '/')
+            bubbleContent = "";
+          else if (isNPCSay && bubbleContent.find("[DEBUG]") == 0)
+            bubbleContent = "";
+        }
+        if (!bubbleContent.empty() && isNPCSay) {
+          // Item 48: a reply that arrives after its speaker died or was knocked out isn't spoken.
+          Character *sayer = ResolveCharacterFromHandSafe(thisptr, targetHand);
+          if (sayer && (uintptr_t)sayer > 0x1000 && !sayer->isPlayerCharacter() &&
+              (sayer->isDead() || sayer->isUnconcious())) {
+            Log("HOOK_MSG_PROC: NPC_SAY dropped: speaker is dead or unconscious (item 48): " +
+                sayer->getName() + ": " + bubbleContent);
+            bubbleContent = "";
+          }
+        }
+        if (bubbleContent.empty() && !utteranceId.empty()) {
+          PostSpeechDeliveryState(utteranceId, "cancelled");
+        }
+
+        if (!bubbleContent.empty()) {
+          Character *tc = ResolveCharacterFromHandSafe(thisptr, targetHand);
+          if (!tc && !isPlayerSay) {
+            tc = ResolveCharacterFromHandSafe(thisptr, g_talkTargetHand);
+          }
+          if (!tc && !isPlayerSay) {
+            tc = ResolveCharacterFromHandSafe(thisptr, g_lastSelectionHand);
+          }
+          if (!tc && isPlayerSay) {
+            tc = ResolvePreferredPlayerSpeakerForCurrentTalk(thisptr);
+            if (!tc && thisptr->player && thisptr->player->playerCharacters.size() > 0) {
+              tc = ResolveFirstAliveConsciousPlayerCharacter(thisptr);
+            }
+          }
+          if (isNPCSay && tc && (uintptr_t)tc > 0x1000 && tc->isPlayerCharacter()) {
+            // Keep explicit stream speakers (autochat/rechat) on their own actor.
+            // Only retarget legacy fallback cases where no speaker was resolved.
+            if (!speakerResolvedFromHeader) {
+              Character *talkTarget =
+                  ResolveCharacterFromHandSafe(thisptr, g_talkTargetHand);
+              if (talkTarget && (uintptr_t)talkTarget > 0x1000 &&
+                  !talkTarget->isPlayerCharacter()) {
+                Log("CHAT_SPEAKER: NPC_SAY retargeted from player " +
+                    tc->getName() + " to talk target " + talkTarget->getName());
+                tc = talkTarget;
+                targetHand = talkTarget->getHandle();
+              }
+            } else {
+              Log("CHAT_SPEAKER: NPC_SAY keeping explicit player speaker " +
+                  tc->getName());
+            }
+          }
+
+          Log("HOOK_MSG_PROC: Queuing SAY for " +
+              (tc ? tc->getName() : "Unknown") + ": " + bubbleContent);
+
+          if (tc && (uintptr_t)tc > 0x1000) {
+            SyncInventoryForCharacter(tc, true,
+                                      isNPCSay ? "dialogue_npc" : "dialogue_player");
+          }
+
+          bool trackAsNonAiDialogue =
+              !hadStructuredMessage && !hadTtsMetadata && !hadAiDeliveryMetadata;
+          std::string nonAiDialogueLine = bubbleContent;
+          if (trackAsNonAiDialogue) {
+            nonAiDialogueLine = SanitizeCapturedDialogueLine(nonAiDialogueLine);
+            if (nonAiDialogueLine.empty()) {
+              trackAsNonAiDialogue = false;
+            }
+          }
+          unsigned int speakerSerial = 0;
+          if (tc && (uintptr_t)tc > 0x1000) {
+            try {
+              speakerSerial = tc->getHandle().serial;
+            } catch (...) {
+              speakerSerial = 0;
+            }
+          }
+          const std::string &dedupeLine =
+              trackAsNonAiDialogue ? nonAiDialogueLine : bubbleContent;
+          bool duplicateDialogueLine =
+              ShouldDropDuplicateNonAiDialogue(speakerSerial, isPlayerSay,
+                                               dedupeLine);
+
+          if (g_enableRegularDialogueCapture && trackAsNonAiDialogue &&
+              !duplicateDialogueLine) {
+            std::string listenerName = "None";
+            std::string listenerFaction = "None";
+            unsigned int listenerSerial = 0;
+            Character *listener = nullptr;
+            if (tc && (uintptr_t)tc > 0x1000) {
+              if (isPlayerSay) {
+                listener = ResolveCharacterFromHandSafe(thisptr, g_talkTargetHand);
+                if ((!listener || (uintptr_t)listener <= 0x1000 || listener == tc) &&
+                    targetHand.isValid()) {
+                  listener = ResolveCharacterFromHandSafe(thisptr, targetHand);
+                }
+              } else {
+                std::string listenerSource = "";
+                listener = ResolveDialogueListenerForSpeech(tc, nullptr, listenerSource);
+                if ((!listener || (uintptr_t)listener <= 0x1000 || listener == tc) &&
+                    targetHand.isValid()) {
+                  listener = ResolveCharacterFromHandSafe(thisptr, targetHand);
+                }
+              }
+            }
+            if (listener && (uintptr_t)listener > 0x1000 && listener != tc) {
+              listenerName = ResolveCharacterNameSafe(listener);
+              listenerFaction = SafeFaction(listener);
+              listenerSerial = ResolveCharacterSerialForEvent(listener);
+            }
+
+            std::string speakerName = (tc && (uintptr_t)tc > 0x1000)
+                                          ? ResolveCharacterNameSafe(tc)
+                                          : (isPlayerSay ? "Player" : "Nearby NPC");
+            std::string speakerFaction =
+                (tc && (uintptr_t)tc > 0x1000) ? SafeFaction(tc) : "None";
+
+            LogGameEvent("chat", speakerName, speakerFaction, listenerName,
+                         listenerFaction, nonAiDialogueLine, speakerSerial,
+                         listenerSerial);
+            Log("REGULAR_DIALOGUE: bubble captured speaker=" + speakerName +
+                " listener=" + listenerName + " player_line=" +
+                std::string(isPlayerSay ? "1" : "0"));
+          }
+
+          hand sayTargetHand = targetHand;
+          if (tc && (uintptr_t)tc > 0x1000) {
+            sayTargetHand = tc->getHandle();
+            targetHand = sayTargetHand;
+          }
+
+          if (sayTargetHand.isValid()) {
+            EnterCriticalSection(&g_uiMutex);
+            QueuedAction act;
+            act.type = ACT_SAY;
+            act.actor = sayTargetHand;
+            act.target = sayTargetHand;
+            act.message = bubbleContent;
+            act.targetToken = talkTargetToken;
+            act.ttsHash = ttsHash;
+            act.utteranceId = utteranceId;
+            act.allowUnavailableSpeech = allowUnavailableSpeech;
+            int speechTimingMs = ttsDurationMs;
+            if (isPlayerSay && g_ttsEnabled && ttsHash.empty() &&
+                ttsDurationMs <= 0) {
+              // PLAYER_TTS metadata arrives asynchronously after PLAYER_SAY.
+              // Use a sentinel so only local player speech gets the short wait.
+              speechTimingMs = -1;
+            }
+            act.taskValue = speechTimingMs;
+            g_uiActionQueue.push_back(act);
+            LeaveCriticalSection(&g_uiMutex);
+            Log("TIMING_META: queued ACT_SAY target=" +
+                (tc ? tc->getName() : "Unknown") +
+                " utterance_id=" + utteranceId +
+                " tts_hash=" + (ttsHash.empty() ? "" : ttsHash.substr(0, 8)) +
+                " tts_dur_ms=" + ToString(ttsDurationMs) +
+                " player_tts_wait_hint=" +
+                std::string(speechTimingMs < 0 ? "1" : "0") +
+                " allow_unavailable=" +
+                std::string(allowUnavailableSpeech ? "1" : "0"));
+          } else {
+            if (!utteranceId.empty()) {
+              PostSpeechDeliveryState(utteranceId, "cancelled");
+            }
+            Log("HOOK_MSG_PROC: SAY fallback logged without target hand actor=" +
+                std::string(tc ? tc->getName() : "Unknown"));
+          }
+        }
+      }
+      if (directorAction) {
+        EnterCriticalSection(&g_uiMutex);
+        for (size_t index = autonomyQueueSizeBefore; index < g_uiActionQueue.size(); ++index)
+          g_uiActionQueue[index].directorAction = true;
+        LeaveCriticalSection(&g_uiMutex);
+      }
+      if (autonomyCatalogMessage) {
+        size_t tagged = 0;
+        EnterCriticalSection(&g_uiMutex);
+        if (g_uiActionQueue.size() > autonomyQueueSizeBefore) {
+          for (size_t index = autonomyQueueSizeBefore;
+               index < g_uiActionQueue.size(); ++index) {
+            g_uiActionQueue[index].autonomyDecisionId = autonomyDecisionId;
+            ++tagged;
+          }
+        }
+        LeaveCriticalSection(&g_uiMutex);
+        if (tagged > 0) {
+          Log("AUTONOMY_PHASE3_ADAPTER: decision=" + autonomyDecisionId +
+              " queued_actions=" + ToString(static_cast<int>(tagged)));
+        } else {
+          ReportAutonomyActionExecutionResult(
+              autonomyDecisionId, false, "catalog_adapter_no_queued_action");
+        }
+      }
+    }
+    LeaveCriticalSection(&g_msgMutex);
+  }
+}
+
+// Bug 89: a player character on block/passive that hits back at someone who is
+// attacking it was logged as "Initiated attack" and treated as breaking the
+// ceasefire. When the victim is already targeting the attacker, it's defence.
+static bool PlayerSideIsDefending(Character *attacker, Character *victim) {
+  try {
+    Faction *f = attacker->getFaction();
+    if (!f || !f->isThePlayer())
+      return false;
+    hand t = victim->getAttackTarget();
+    return t.isValid() && !t.isNull() && t.getCharacter() == attacker;
+  } catch (...) {
+    return false;
+  }
+}
+
+void attackingYou_hook(Character *npc, Character *attacker, bool so,
+                       bool doAwarenessCheck) {
+  bool playerDefending = so && attacker && npc && PlayerSideIsDefending(attacker, npc);
+  if (so && attacker && npc) {
+    if (!playerDefending)
+      BreakFactionCeasefireForPlayerOrder(attacker, npc,
+                                          "player_order_attacking_you");
+    if (ShouldSuppressFactionCeasefireAttack(npc, attacker)) {
+      QueueFactionCeasefireReject(attacker, npc, "attacking_you");
+      return;
+    }
+  }
+  if (so && attacker && npc) {
+    DWORD nowTick = GetTickCount();
+    MarkRecentCombatSignal(attacker, nowTick);
+    MarkRecentCombatSignal(npc, nowTick);
+    MarkPlayerSideFight(attacker, npc, nowTick); // item 88c
+    LogGameEvent("combat", attacker->getName(), SafeFaction(attacker),
+                 npc->getName(), SafeFaction(npc),
+                 playerDefending ? "Defending against" : "Initiated attack",
+                 ResolveCharacterSerialForEvent(attacker),
+                 ResolveCharacterSerialForEvent(npc));
+    if (SocialCaptureEnabled()) {
+      // REL: was the victim already fighting the attacker (any faction)? That makes this a reply.
+      int targeting = -1;
+      try {
+        hand t = npc->getAttackTarget();
+        targeting = (t.isValid() && !t.isNull() && t.getCharacter() == attacker) ? 1 : 0;
+      } catch (...) {
+        targeting = -1;
+      }
+      StobeSocial::EntityInfo a = SocialEntityFor(attacker), v = SocialEntityFor(npc);
+      SocialNoteAttack(a.serial, v.serial);
+      std::vector<StobeSocial::EntityInfo> witnessWho;
+      std::vector<int> witnessSense;
+      SocialCollectWitnesses(attacker, npc, witnessWho, witnessSense);
+      SocialPostStructuredW("attack", &a, &v,
+                           "\"victim_targeting_actor\":" + StobeSocial::JsonBool(targeting) +
+                               ",\"player_defending\":" + std::string(playerDefending ? "true" : "false") +
+                               ",\"awareness_check\":" + std::string(doAwarenessCheck ? "true" : "false"),
+                           witnessWho, witnessSense);
+    }
+  }
+  if (attackingYou_orig)
+    attackingYou_orig(npc, attacker, so, doAwarenessCheck);
+}
+
+bool aiIsEnemyRoot_hook(AI *ai, RootObjectBase *target) {
+  Character *observer = nullptr;
+  Character *targetCharacter = nullptr;
+  try {
+    observer = ai && aiGetCharacter ? aiGetCharacter(ai) : nullptr;
+    if (target && (target->getDataType() == HUMAN_CHARACTER ||
+                   target->getDataType() == ANIMAL_CHARACTER)) {
+      targetCharacter = static_cast<Character *>(target);
+    }
+  } catch (...) {
+    observer = nullptr;
+    targetCharacter = nullptr;
+  }
+  if (observer && targetCharacter) {
+    BreakFactionCeasefireForPlayerOrder(observer, targetCharacter,
+                                        "player_order_enemy_root");
+  }
+  if (observer && ShouldTreatFactionCeasefireTargetAsNeutral(observer, target)) {
+    return false;
+  }
+  return aiIsEnemyRoot_orig ? aiIsEnemyRoot_orig(ai, target) : false;
+}
+
+bool aiIsEnemyHand_hook(AI *ai, const hand &subject,
+                        const Ogre::Vector3 &position) {
+  Character *observer = nullptr;
+  Character *targetCharacter = nullptr;
+  RootObjectBase *target = nullptr;
+  try {
+    observer = ai && aiGetCharacter ? aiGetCharacter(ai) : nullptr;
+    if (subject.isValid() && !subject.isNull()) {
+      target = subject.getRootObjectBase();
+      targetCharacter = subject.getCharacter();
+    }
+  } catch (...) {
+    observer = nullptr;
+    targetCharacter = nullptr;
+    target = nullptr;
+  }
+  if (observer && targetCharacter) {
+    BreakFactionCeasefireForPlayerOrder(observer, targetCharacter,
+                                        "player_order_enemy_hand");
+  }
+  if (observer && ShouldTreatFactionCeasefireTargetAsNeutral(observer, target)) {
+    return false;
+  }
+  return aiIsEnemyHand_orig ? aiIsEnemyHand_orig(ai, subject, position) : false;
+}
+
+void newPlayerTaskSelectedCharacters_hook(PlayerInterface *playerInterface,
+                                          TaskType task, const hand &subject,
+                                          Building *destinationIndoors,
+                                          const Ogre::Vector3 &position,
+                                          bool addDontClear) {
+  if (playerInterface &&
+      (task == UNPROVOKED_FOCUSED_MELEE_ATTACK ||
+       task == FOCUSED_MELEE_ATTACK ||
+       task == RANGED_ATTACK_FOCUSED_UNPROVOKED ||
+       task == RANGED_ATTACK_FOCUSED)) {
+    try {
+      Character *target = subject.isValid() && !subject.isNull()
+                              ? subject.getCharacter()
+                              : nullptr;
+      if (target) {
+        bool truceBroken = false;
+        for (ogre_unordered_set<hand>::type::const_iterator it =
+                 playerInterface->selectedCharacters.begin();
+             it != playerInterface->selectedCharacters.end(); ++it) {
+          Character *attacker = it->getCharacter();
+          if (attacker && BreakFactionCeasefireForExplicitAttack(
+                              attacker, target, "player_attack_order")) {
+            truceBroken = true;
+            break;
+          }
+        }
+        if (!truceBroken && playerInterface->selectedCharacter.isValid() &&
+            !playerInterface->selectedCharacter.isNull()) {
+          Character *attacker =
+              playerInterface->selectedCharacter.getCharacter();
+          BreakFactionCeasefireForExplicitAttack(attacker, target,
+                                                 "player_attack_order");
+        }
+      }
+    } catch (...) {
+    }
+  }
+  if (newPlayerTaskSelectedCharacters_orig) {
+    newPlayerTaskSelectedCharacters_orig(playerInterface, task, subject,
+                                         destinationIndoors, position,
+                                         addDontClear);
+  }
+}
+
+void attackTarget_hook(Character *attacker, Character *target) {
+  if (attacker && target) {
+    BreakFactionCeasefireForPlayerOrder(attacker, target,
+                                        "player_order_attack_target");
+    if (ShouldSuppressFactionCeasefireAttack(attacker, target)) {
+      QueueFactionCeasefireReject(attacker, target, "attack_target");
+      return;
+    }
+  }
+  if (attackTarget_orig) {
+    attackTarget_orig(attacker, target);
+  }
+}
+
+bool applyFirstAid_hook(MedicalSystem *med, float skill, Item *equipment,
+                        float frameTIME, Character *who) {
+  bool res = false;
+  if (applyFirstAid_orig)
+    res = applyFirstAid_orig(med, skill, equipment, frameTIME, who);
+  if (res && med && med->me && who) {
+    std::string itemName = "Medical item";
+    unsigned int itemOwnerSerial = 0;
+    Character *itemOwner = nullptr;
+    if (equipment) {
+      std::string resolvedItem = TrimCopy(equipment->getName());
+      if (!resolvedItem.empty()) {
+        itemName = resolvedItem;
+      }
+      try {
+        hand ownerHand = equipment->getInventoryWeAreIn();
+        itemOwner = ResolveCharacterFromHandSafe(ownerHand);
+      } catch (...) {
+        itemOwner = nullptr;
+      }
+      itemOwnerSerial = ResolveCharacterSerialForEvent(itemOwner);
+    }
+
+    unsigned int whoSerial = ResolveCharacterSerialForEvent(who);
+    unsigned int medSerial = ResolveCharacterSerialForEvent(med->me);
+    unsigned int healerSerial = itemOwnerSerial != 0 ? itemOwnerSerial : whoSerial;
+
+    auto registerPendingFor = [&](unsigned int serial) {
+      if (serial != 0) {
+        RegisterPendingMedicalItemUse(serial, itemName, 1);
+      }
+    };
+    if (itemOwnerSerial != 0) {
+      registerPendingFor(itemOwnerSerial);
+    } else {
+      registerPendingFor(whoSerial);
+      if (medSerial != 0 && medSerial != whoSerial) {
+        registerPendingFor(medSerial);
+      }
+    }
+
+    std::string actorName = itemOwner ? ResolveCharacterNameSafe(itemOwner)
+                                      : ResolveCharacterNameSafe(who);
+    std::string actorFaction = itemOwner ? SafeFaction(itemOwner) : SafeFaction(who);
+    std::string targetName = TrimCopy(med->me->getName());
+    if (targetName.empty()) {
+      targetName = "Unknown";
+    }
+    bool selfHeal =
+        (healerSerial != 0 && medSerial != 0 && healerSerial == medSerial);
+    if (!selfHeal) {
+      std::string normalizedActor = ToLowerAsciiCopy(TrimCopy(actorName));
+      std::string normalizedTarget = ToLowerAsciiCopy(TrimCopy(targetName));
+      selfHeal =
+          !normalizedActor.empty() && normalizedActor == normalizedTarget;
+    }
+    std::string healTargetText = selfHeal ? "themself" : targetName;
+    std::string healMsg =
+        "is using (" + itemName + ") to heal " + healTargetText;
+
+    SocialNoteFirstAid(who, med->me, itemOwner, itemName);
+    DWORD nowTick = GetTickCount();
+    if (ShouldEmitHealingEvent(healerSerial, actorName, medSerial, targetName,
+                               itemName, nowTick)) {
+      LogGameEvent("healing", actorName, actorFaction,
+                   med->me->getName(), SafeFaction(med->me),
+                   healMsg, healerSerial, medSerial);
+    }
+  }
+  return res;
+}
+
+bool characterGettingEaten_hook(Character *victim, float amount,
+                                Character *eater) {
+  bool res = false;
+  if (characterGettingEaten_orig) {
+    res = characterGettingEaten_orig(victim, amount, eater);
+  }
+
+  if (!victim || !eater) {
+    return res;
+  }
+
+  EmitPredationEvent(eater, victim, "", GetTickCount());
+  return res;
+}
+
+Item *buyItem_hook(Inventory *inv, Item *itemToBuy, RootObject *sendingTo) {
+  RootObject *buyerObj = nullptr;
+  RootObject *sellerObj = nullptr;
+  if (sendingTo && (uintptr_t)sendingTo > 0x1000) {
+    buyerObj = sendingTo;
+  }
+  if (inv && (uintptr_t)inv > 0x1000) {
+    try {
+      sellerObj = inv->owner;
+    } catch (...) {
+      sellerObj = nullptr;
+    }
+  }
+
+  int buyerMoneyBefore = 0;
+  int sellerMoneyBefore = 0;
+  bool hasBuyerMoneyBefore =
+      TryResolveRootObjectMoneySafe(buyerObj, buyerMoneyBefore);
+  bool hasSellerMoneyBefore =
+      TryResolveRootObjectMoneySafe(sellerObj, sellerMoneyBefore);
+
+  // Item 104: relationship shop prices. The value hooks price this purchase for the
+  // (trader, squad member) pair; at r <= -80 the trader refuses (nothing moves).
+  // A shop's trade window (and the harness `trade`) sells through a ShopTrader built around the
+  // shopkeeper: TradingCharacter maps it to her.
+  Character *shopBuyerChar = Stobe::ShopPrice::TradingCharacter(buyerObj);
+  Character *shopSellerChar = Stobe::ShopPrice::TradingCharacter(sellerObj);
+  if (Stobe::ShopPrice::BeginBuy(shopBuyerChar, shopSellerChar)) {
+    Stobe::ShopPrice::EndBuy();
+    return nullptr;
+  }
+
+  Item *result = nullptr;
+  if (buyItem_orig) {
+    try {
+      result = buyItem_orig(inv, itemToBuy, sendingTo);
+    } catch (...) {
+      Stobe::ShopPrice::EndBuy();
+      throw;
+    }
+  }
+  Stobe::ShopPrice::EndBuy();
+
+  if (buyerObj && result) {
+    int buyerMoneyAfter = 0;
+    int sellerMoneyAfter = 0;
+    bool hasBuyerMoneyAfter =
+        TryResolveRootObjectMoneySafe(buyerObj, buyerMoneyAfter);
+    bool hasSellerMoneyAfter =
+        TryResolveRootObjectMoneySafe(sellerObj, sellerMoneyAfter);
+
+    int buyerSpent = 0;
+    if (hasBuyerMoneyBefore && hasBuyerMoneyAfter &&
+        buyerMoneyBefore > buyerMoneyAfter) {
+      buyerSpent = buyerMoneyBefore - buyerMoneyAfter;
+    }
+    int sellerGained = 0;
+    if (hasSellerMoneyBefore && hasSellerMoneyAfter &&
+        sellerMoneyAfter > sellerMoneyBefore) {
+      sellerGained = sellerMoneyAfter - sellerMoneyBefore;
+    }
+    int catsCost = buyerSpent > 0 ? buyerSpent : sellerGained;
+
+    std::string itemName = "Unknown Item";
+    int itemQty = 1;
+    if (itemToBuy && (uintptr_t)itemToBuy > 0x1000) {
+      try {
+        itemName = itemToBuy->getName();
+        itemQty = itemToBuy->quantity;
+      } catch (...) {
+        itemName = "Unknown Item";
+        itemQty = 1;
+      }
+    }
+    if (itemName == "Unknown Item" && result && (uintptr_t)result > 0x1000) {
+      try {
+        itemName = result->getName();
+        if (itemQty <= 0) {
+          itemQty = result->quantity;
+        }
+      } catch (...) {
+      }
+    }
+    if (itemQty <= 0) {
+      itemQty = 1;
+    }
+
+    std::string buyerName = ResolveRootObjectNameSafe(buyerObj);
+    std::string buyerFaction = SafeFaction(buyerObj);
+    std::string sellerName = ResolveRootObjectNameSafe(sellerObj);
+    std::string sellerFaction = SafeFaction(sellerObj);
+
+    if (!sellerObj || sellerName == buyerName) {
+      sellerName = "None";
+      sellerFaction = "None";
+    }
+
+    std::string message =
+        "bought " + ToString(itemQty) + "x " + itemName;
+    if (sellerName != "None") {
+      message += " from " + sellerName;
+    }
+    if (catsCost > 0) {
+      message += " for " + ToString(catsCost) + " cats";
+    }
+
+    LogGameEvent("trade", buyerName, buyerFaction, sellerName, sellerFaction,
+                 message, ResolveRootObjectSerialForEvent(buyerObj),
+                 ResolveRootObjectSerialForEvent(sellerObj));
+    if (SocialCaptureEnabled()) {
+      // REL phase 5: completed purchase. A seller that is not a character (shop storage) stays null:
+      // nobody is credited personally. reference_value = the game's own value of the goods.
+      // Run m5: getDataType() did not report a character for either side; a character is whatever the
+      // serial resolves to in the world's character list (shop storage resolves to nothing).
+      unsigned int buyerSerialNow = ResolveRootObjectSerialForEvent(buyerObj);
+      unsigned int sellerSerialNow = sellerObj != buyerObj ? ResolveRootObjectSerialForEvent(sellerObj) : 0;
+      Character *buyerChar = buyerSerialNow ? ResolveCharacterBySerialForInventoryEvent(buyerSerialNow) : nullptr;
+      Character *sellerChar = sellerSerialNow ? ResolveCharacterBySerialForInventoryEvent(sellerSerialNow) : nullptr;
+      if (sellerChar == buyerChar)
+        sellerChar = nullptr;
+      int reference = -1;
+      try {
+        reference = result->getValueAll(false);
+      } catch (...) {
+        reference = -1;
+      }
+      StobeSocial::EntityInfo b = SocialEntityFor(buyerChar), sl = SocialEntityFor(sellerChar);
+      SocialPostStructured("trade", buyerChar ? &b : nullptr, sellerChar ? &sl : nullptr,
+                           "\"item\":" + StobeSocial::JsonString(itemName) + ",\"quantity\":" + ToString(itemQty) +
+                               ",\"buyer_spent\":" + ToString(buyerSpent) + ",\"seller_gained\":" + ToString(sellerGained) +
+                               ",\"reference_value\":" + ToString(reference));
+    }
+  }
+  return result;
+}
+
+static bool HasActiveSpeechBubbleSafe(Character *npc) {
+  if (!npc || (uintptr_t)npc <= 0x1000) {
+    return false;
+  }
+  try {
+    if (!npc->dialogue || (uintptr_t)npc->dialogue <= 0x1000) {
+      return false;
+    }
+    return npc->dialogue->speechTextTimer > 0.05f ||
+           npc->dialogue->speechTextTimer_forced > 0.05f;
+  } catch (...) {
+    return false;
+  }
+}
+
+static std::string ReadNpcSpeechLineSafe(Character *npc) {
+  if (!npc || (uintptr_t)npc <= 0x1000) {
+    return "";
+  }
+  try {
+    if (!npc->dialogue || (uintptr_t)npc->dialogue <= 0x1000) {
+      return "";
+    }
+    std::string line = TrimCopy(npc->dialogue->npcReplyText);
+    if (!line.empty()) {
+      return line;
+    }
+    if (npc->dialogue->speechBubblePanel &&
+        (uintptr_t)npc->dialogue->speechBubblePanel > 0x1000 &&
+        npc->dialogue->speechBubblePanel->textBox &&
+        (uintptr_t)npc->dialogue->speechBubblePanel->textBox > 0x1000) {
+      try {
+        line = TrimCopy(npc->dialogue->speechBubblePanel->textBox->getOnlyText());
+      } catch (...) {
+        line.clear();
+      }
+      if (!line.empty()) {
+        return line;
+      }
+      try {
+        line = TrimCopy(npc->dialogue->speechBubblePanel->textBox->getCaption());
+      } catch (...) {
+        line.clear();
+      }
+      if (!line.empty()) {
+        return line;
+      }
+    }
+    try {
+      line = TrimCopy(npc->dialogue->sayMsg);
+    } catch (...) {
+      line.clear();
+    }
+    if (!line.empty()) {
+      return line;
+    }
+    if (npc->dialogue->currentLine &&
+        (uintptr_t)npc->dialogue->currentLine > 0x1000) {
+      try {
+        line = TrimCopy(npc->dialogue->currentLine->getText(false));
+      } catch (...) {
+        line.clear();
+      }
+      if (!line.empty()) {
+        return line;
+      }
+      try {
+        std::string currentLineText;
+        npc->dialogue->currentLine->getText(currentLineText, false);
+        line = TrimCopy(currentLineText);
+      } catch (...) {
+        line.clear();
+      }
+    }
+    return TrimCopy(line);
+  } catch (...) {
+    return "";
+  }
+}
+
+static void ClearSpeechBubbleImmediateSafe(Character *npc) {
+  if (!npc || (uintptr_t)npc <= 0x1000) {
+    return;
+  }
+  try {
+    if (!npc->dialogue || (uintptr_t)npc->dialogue <= 0x1000) {
+      return;
+    }
+    npc->dialogue->speechTextTimer = 0.0f;
+    npc->dialogue->speechTextTimer_forced = 0.0f;
+  } catch (...) {
+  }
+}
+
+static bool IsNpcInSpeechFlowBySerial(unsigned int serial) {
+  if (serial == 0) {
+    return false;
+  }
+
+  bool inFlow = false;
+  if (TryEnterCriticalSection(&g_stateMutex)) {
+    try {
+      inFlow = g_talkTargetHand.isValid() && g_talkTargetHand.serial == serial;
+    } catch (...) {
+      inFlow = false;
+    }
+    LeaveCriticalSection(&g_stateMutex);
+  }
+  if (inFlow) {
+    return true;
+  }
+
+  if (!TryEnterCriticalSection(&g_uiMutex)) {
+    return false;
+  }
+  for (std::deque<QueuedAction>::const_iterator it = g_uiActionQueue.begin();
+       it != g_uiActionQueue.end(); ++it) {
+    const QueuedAction &act = *it;
+    if (act.type != ACT_SAY && act.type != ACT_PLAY_TTS) {
+      continue;
+    }
+    if ((act.actor.isValid() && act.actor.serial == serial) ||
+        (act.target.isValid() && act.target.serial == serial)) {
+      inFlow = true;
+      break;
+    }
+  }
+  LeaveCriticalSection(&g_uiMutex);
+  return inFlow;
+}
+
+static void InterruptConversationForUnavailableNpc(Character *npc,
+                                                   const std::string &reason) {
+  if (!npc || (uintptr_t)npc <= 0x1000) {
+    return;
+  }
+  unsigned int serial = ResolveCharacterSerialForEvent(npc);
+  if (serial == 0) {
+    return;
+  }
+
+  const bool inSpeechFlow = IsNpcInSpeechFlowBySerial(serial);
+  const bool hadBubble = HasActiveSpeechBubbleSafe(npc);
+  if (!inSpeechFlow && !hadBubble) {
+    return;
+  }
+
+  ClearSpeechBubbleImmediateSafe(npc);
+  LONG generation = BeginChatInterruptGeneration();
+  Log("CHAT_INTERRUPT: npc unavailable reason=" + reason +
+      " npc=" + ResolveCharacterNameSafe(npc) + " serial=" +
+      ToString(serial) + " gen=" + ToString((int)generation) +
+      " in_flow=" + (inSpeechFlow ? "1" : "0") +
+      " had_bubble=" + (hadBubble ? "1" : "0"));
+}
+
+static std::string ResolveDialogueReplyTextByIndexSafe(Dialogue *dialogue,
+                                                       int replyIndex) {
+  if (!dialogue || (uintptr_t)dialogue <= 0x1000 || replyIndex < 0) {
+    return "";
+  }
+  try {
+    size_t idx = static_cast<size_t>(replyIndex);
+    if (idx < dialogue->responses.size()) {
+      return TrimCopy(dialogue->responses[idx]);
+    }
+  } catch (...) {
+  }
+  return "";
+}
+
+static std::string ResolveDialogueReplyTextByTokenSafe(Dialogue *dialogue,
+                                                       const std::string &token) {
+  if (!dialogue || (uintptr_t)dialogue <= 0x1000) {
+    return "";
+  }
+
+  std::string trimmedToken = TrimCopy(token);
+  if (trimmedToken.empty()) {
+    return "";
+  }
+
+  bool numeric = true;
+  for (size_t i = 0; i < trimmedToken.length(); ++i) {
+    unsigned char ch = static_cast<unsigned char>(trimmedToken[i]);
+    if (ch < '0' || ch > '9') {
+      numeric = false;
+      break;
+    }
+  }
+  if (numeric) {
+    int idx = atoi(trimmedToken.c_str());
+    return ResolveDialogueReplyTextByIndexSafe(dialogue, idx);
+  }
+
+  std::string wanted = ToLowerAsciiCopy(trimmedToken);
+  try {
+    for (size_t i = 0; i < dialogue->replyIds.size(); ++i) {
+      std::string candidate = TrimCopy(dialogue->replyIds[i]);
+      if (candidate.empty()) {
+        continue;
+      }
+      if (ToLowerAsciiCopy(candidate) != wanted) {
+        continue;
+      }
+      if (i < dialogue->responses.size()) {
+        return TrimCopy(dialogue->responses[i]);
+      }
+      break;
+    }
+  } catch (...) {
+  }
+
+  return "";
+}
+
+static void CapturePlayerDialogueReplyFromUi(Dialogue *dialogue,
+                                             const std::string &rawReplyText,
+                                             const char *sourceTag) {
+  Stobe::BodyguardContractProbe::RecordDialogueChoice(dialogue, rawReplyText,
+                                                       sourceTag);
+  if (!g_enableRegularDialogueCapture) {
+    Log("SPEECH_HOOK: skipped player reply capture; regular dialogue disabled.");
+    return;
+  }
+
+  std::string line = TrimCopy(rawReplyText);
+  if (line.empty() || line.find("[DEBUG]") == 0) {
+    return;
+  }
+
+  std::string structured = ExtractDialogueMessageFromStructuredText(line);
+  if (!structured.empty()) {
+    line = structured;
+  }
+  line = SanitizeCapturedDialogueLine(line);
+  if (line.empty()) {
+    return;
+  }
+
+  GameWorld *world = GetWorldSafe();
+  if (!world) {
+    return;
+  }
+
+  Character *dialogueOwner = nullptr;
+  if (dialogue && (uintptr_t)dialogue > 0x1000) {
+    try {
+      dialogueOwner = dialogue->getCharacter();
+    } catch (...) {
+      dialogueOwner = nullptr;
+    }
+  }
+
+  Character *speaker = ResolveNearestPlayerSpeakerForTarget(world, dialogueOwner);
+  if (!speaker && world->player && world->player->playerCharacters.size() > 0) {
+    speaker = ResolveFirstAliveConsciousPlayerCharacter(world);
+  }
+  if (!speaker || (uintptr_t)speaker <= 0x1000) {
+    return;
+  }
+
+  unsigned int speakerSerial = ResolveCharacterSerialForEvent(speaker);
+  if (ShouldDropDuplicateNonAiDialogue(speakerSerial, true, line)) {
+    return;
+  }
+  if (speakerSerial != 0 && IsNpcInSpeechFlowBySerial(speakerSerial)) {
+    return;
+  }
+
+  Character *listener = nullptr;
+  std::string listenerSource = "";
+  if (dialogueOwner && (uintptr_t)dialogueOwner > 0x1000 &&
+      dialogueOwner != speaker) {
+    listener = dialogueOwner;
+    listenerSource = "dialogue_owner";
+  }
+  if (!listener) {
+    listener = ResolveDialogueListenerForSpeech(speaker, dialogue, listenerSource);
+  }
+
+  std::string listenerName = "None";
+  std::string listenerFaction = "None";
+  unsigned int listenerSerial = 0;
+  if (listener && (uintptr_t)listener > 0x1000) {
+    listenerName = ResolveCharacterNameSafe(listener);
+    listenerFaction = SafeFaction(listener);
+    listenerSerial = ResolveCharacterSerialForEvent(listener);
+  }
+
+  TrySpeechTriggeredPortraitSyncForPair(speaker, listener, sourceTag);
+
+  bool listenerIsPlayerCharacter = false;
+  if (listener && (uintptr_t)listener > 0x1000) {
+    try {
+      listenerIsPlayerCharacter = listener->isPlayerCharacter();
+    } catch (...) {
+      listenerIsPlayerCharacter = false;
+    }
+  }
+
+  bool listenerIsTrader = false;
+  if (listener && (uintptr_t)listener > 0x1000 && !listenerIsPlayerCharacter) {
+    try {
+      listenerIsTrader = listener->isATrader();
+    } catch (...) {
+      listenerIsTrader = false;
+    }
+  }
+
+  bool likelyTradeReply = IsLikelyTradeDialogueReply(line);
+  if (listener && (uintptr_t)listener > 0x1000 && !listenerIsPlayerCharacter &&
+      (likelyTradeReply || listenerIsTrader)) {
+    bool capturedTraderInventory =
+        CaptureTraderInventorySnapshot(listener, "dialogue_reply_trade");
+    Log("TRADER_INVENTORY_CAPTURE: reply-triggered listener=" +
+        ResolveCharacterNameSafe(listener) + " serial=" +
+        ToString(listenerSerial) +
+        " success=" + std::string(capturedTraderInventory ? "1" : "0") +
+        " reason=" +
+        std::string(likelyTradeReply ? "trade_reply" : "listener_is_trader"));
+    if (capturedTraderInventory) {
+      PushImmediateContextSnapshot(listener, "dialogue_reply_trade_capture",
+                                   true);
+    }
+  }
+
+  LogGameEvent("chat", ResolveCharacterNameSafe(speaker), SafeFaction(speaker),
+               listenerName, listenerFaction, line, speakerSerial, listenerSerial);
+}
+
+static void TryCaptureAmbientSpeechFromNative(Character *speaker,
+                                              const std::string &rawLine,
+                                              bool force,
+                                              const char *sourceTag,
+                                              Dialogue *dialogueHint) {
+  if (!g_enableRegularDialogueCapture) {
+    return;
+  }
+  if (!speaker || (uintptr_t)speaker <= 0x1000) {
+    return;
+  }
+  if (speaker->isPlayerCharacter()) {
+    return;
+  }
+
+  std::string line = TrimCopy(rawLine);
+  if (line.empty() || line.find("[DEBUG]") == 0) {
+    return;
+  }
+
+  std::string structured = ExtractDialogueMessageFromStructuredText(line);
+  if (!structured.empty()) {
+    line = structured;
+  }
+
+  int ttsDurationMs = ExtractTrailingTtsDurationMs(line);
+  std::string ttsHash = ExtractTrailingTtsHash(line);
+  if (!ttsHash.empty() || ttsDurationMs > 0) {
+    return;
+  }
+  if (LooksLikeDialogueTemplateToken(line)) {
+    std::string resolvedLine = ReadNpcSpeechLineSafe(speaker);
+    if (!resolvedLine.empty()) {
+      std::string structuredResolved =
+          ExtractDialogueMessageFromStructuredText(resolvedLine);
+      if (!structuredResolved.empty()) {
+        resolvedLine = structuredResolved;
+      }
+      int resolvedTtsDurationMs = ExtractTrailingTtsDurationMs(resolvedLine);
+      std::string resolvedTtsHash = ExtractTrailingTtsHash(resolvedLine);
+      resolvedLine = TrimCopy(resolvedLine);
+      if (resolvedTtsHash.empty() && resolvedTtsDurationMs <= 0 &&
+          !resolvedLine.empty() &&
+          !LooksLikeDialogueTemplateToken(resolvedLine)) {
+        line = resolvedLine;
+      } else {
+        Log("SPEECH_HOOK: dropped unresolved template token source=" +
+            std::string(sourceTag) + " speaker=" +
+            ResolveCharacterNameSafe(speaker));
+        return;
+      }
+    } else {
+      Log("SPEECH_HOOK: dropped template token with empty resolved line source=" +
+          std::string(sourceTag) + " speaker=" +
+          ResolveCharacterNameSafe(speaker));
+      return;
+    }
+  }
+  line = SanitizeCapturedDialogueLine(line);
+  if (line.empty()) {
+    return;
+  }
+
+  unsigned int speakerSerial = ResolveCharacterSerialForEvent(speaker);
+  if (ShouldDropDuplicateNonAiDialogue(speakerSerial, false, line)) {
+    return;
+  }
+  if (speakerSerial != 0 && IsNpcInSpeechFlowBySerial(speakerSerial)) {
+    return;
+  }
+
+  GameWorld *world = GetWorldSafe();
+  if (!world) {
+    return;
+  }
+
+  // Native ambient speech capture stores base dialogue with no explicit target.
+  std::string listenerName = "None";
+  std::string listenerFaction = "None";
+  unsigned int listenerSerial = 0;
+  std::string listenerSource = "";
+  Character *listener =
+      ResolveDialogueListenerForSpeech(speaker, dialogueHint, listenerSource);
+  if (listener && (uintptr_t)listener > 0x1000) {
+    listenerName = ResolveCharacterNameSafe(listener);
+    listenerFaction = SafeFaction(listener);
+    listenerSerial = ResolveCharacterSerialForEvent(listener);
+  }
+
+  TrySpeechTriggeredPortraitSyncForPair(speaker, listener, sourceTag);
+
+  LogGameEvent("chat", ResolveCharacterNameSafe(speaker), SafeFaction(speaker),
+               listenerName, listenerFaction, line, speakerSerial, listenerSerial);
+  Log("SPEECH_HOOK: captured source=" + std::string(sourceTag) +
+      " force=" + std::string(force ? "1" : "0") +
+      " speaker=" + ResolveCharacterNameSafe(speaker) +
+      " serial=" + ToString(speakerSerial) + " listener=" + listenerName +
+      " listener_serial=" + ToString(listenerSerial) +
+      " listener_src=" + listenerSource);
+}
+
+void sayALine_hook(Character *speaker, const std::string &line, bool force) {
+  if (sayALine_orig) {
+    sayALine_orig(speaker, line, force);
+  }
+  TryCaptureAmbientSpeechFromNative(speaker, line, force, "sayALine", nullptr);
+}
+
+void characterSay_hook(Character *speaker, const std::string &line) {
+  if (characterSay_orig) {
+    characterSay_orig(speaker, line);
+  }
+  TryCaptureAmbientSpeechFromNative(speaker, line, false, "say", nullptr);
+}
+
+bool dialogueSayLine_hook(Dialogue *dialogue, DialogLineData *lineData) {
+  bool result = false;
+  if (dialogueSayLine_orig) {
+    result = dialogueSayLine_orig(dialogue, lineData);
+  }
+
+  Character *speaker = nullptr;
+  std::string line = "";
+  if (dialogue && (uintptr_t)dialogue > 0x1000) {
+    try {
+      speaker = dialogue->getCharacter();
+    } catch (...) {
+      speaker = nullptr;
+    }
+    try {
+      line = TrimCopy(dialogue->npcReplyText);
+    } catch (...) {
+      line = "";
+    }
+  }
+  TryCaptureAmbientSpeechFromNative(speaker, line, false, "dialogue_sayline",
+                                    dialogue);
+  return result;
+}
+
+void dialogueSayText_hook(Dialogue *dialogue, const std::string &line,
+                          DialogLineData *lineData) {
+  if (dialogueSayText_orig) {
+    dialogueSayText_orig(dialogue, line, lineData);
+  }
+
+  Character *speaker = nullptr;
+  if (dialogue && (uintptr_t)dialogue > 0x1000) {
+    try {
+      speaker = dialogue->getCharacter();
+    } catch (...) {
+      speaker = nullptr;
+    }
+  }
+  TryCaptureAmbientSpeechFromNative(speaker, line, false, "dialogue_saytext",
+                                    dialogue);
+}
+
+void dialogueReplyClickedInt_hook(Dialogue *dialogue, int index) {
+  std::string replyText = ResolveDialogueReplyTextByIndexSafe(dialogue, index);
+  Stobe::DialogueMenuTts::NotifySelection();
+  if (dialogueReplyClickedInt_orig) {
+    dialogueReplyClickedInt_orig(dialogue, index);
+  }
+  if (!replyText.empty()) {
+    CapturePlayerDialogueReplyFromUi(dialogue, replyText, "replyClicked_int");
+  }
+}
+
+void dialogueReplyClickedString_hook(Dialogue *dialogue,
+                                     const std::string &indexToken) {
+  std::string replyText = ResolveDialogueReplyTextByTokenSafe(dialogue, indexToken);
+  Stobe::DialogueMenuTts::NotifySelection();
+  if (dialogueReplyClickedString_orig) {
+    dialogueReplyClickedString_orig(dialogue, indexToken);
+  }
+  if (!replyText.empty()) {
+    CapturePlayerDialogueReplyFromUi(dialogue, replyText, "replyClicked_string");
+  }
+}
+
+void declareDead_hook(Character *npc) {
+  if (npc) {
+    LogGameEvent("death", npc->getName(), SafeFaction(npc), "None", "None",
+                 "Has perished", ResolveCharacterSerialForEvent(npc), 0);
+    InterruptConversationForUnavailableNpc(npc, "death");
+  }
+  if (declareDead_orig)
+    declareDead_orig(npc);
+}
+
+void setPrisonMode_hook(Character *npc, bool on, UseableStuff *h) {
+  if (npc) {
+    std::string msg = on ? "Was imprisoned" : "Was released from prison";
+    LogGameEvent("imprisonment", npc->getName(), SafeFaction(npc), "None",
+                 "None", msg, ResolveCharacterSerialForEvent(npc), 0);
+  }
+  if (setPrisonMode_orig)
+    setPrisonMode_orig(npc, on, h);
+}
+
+void setProneState_hook(Character *npc, ProneState p) {
+  if (npc && p == PS_KO) {
+    LogGameEvent("knockout", "Unknown", "None", npc->getName(),
+                 SafeFaction(npc), "Was knocked unconscious", 0,
+                 ResolveCharacterSerialForEvent(npc));
+    InterruptConversationForUnavailableNpc(npc, "knockout");
+  }
+  if (setProneState_orig)
+    setProneState_orig(npc, p);
+}
+
+bool isItOkForMeToLoot_hook(Character *npc, RootObject *victim, Item *item) {
+  if (npc && victim && item) {
+    LogGameEvent("looting", npc->getName(), SafeFaction(npc), victim->getName(),
+                 SafeFaction(victim), "Looted " + item->getName(),
+                 ResolveCharacterSerialForEvent(npc), 0);
+  }
+  if (isItOkForMeToLoot_orig)
+    return isItOkForMeToLoot_orig(npc, victim, item);
+  return false;
+}
+
+void setChainedMode_hook(Character *npc, bool on, const hand &owner) {
+  if (npc) {
+    std::string msg = on ? "Was forced into slavery" : "Was freed from slavery";
+    LogGameEvent("slavery", npc->getName(), SafeFaction(npc), "None", "None",
+                 msg, ResolveCharacterSerialForEvent(npc), 0);
+  }
+  if (setChainedMode_orig)
+    setChainedMode_orig(npc, on, owner);
+}
+
+
+// Campaign identity travels through Kenshi's save filesystem, including save-as and autosaves.
+namespace {
+const char* kCampaignFile = "stobe-playthrough.id";
+bool g_campaignHooksReady = false;
+bool (__fastcall *saveCampaignOriginal)(SaveFileSystem*, const std::string&) = NULL;
+void (__fastcall *loadCampaignOriginal)(SaveFileSystem*, const std::string&) = NULL;
+void (__fastcall *newCampaignOriginal)(SaveManager*, const std::string&) = NULL;
+void (__fastcall *importCampaignOriginal)(SaveManager*, const SaveInfo&, int) = NULL;
+
+void ReadCampaignFile(const std::string& path) {
+    std::ifstream file((path + "/" + kCampaignFile).c_str(), std::ios::binary);
+    char record[34]={0};file.read(record,sizeof(record));
+    if(file.gcount()==33 && (record[32]=='0'||record[32]=='1'))
+        PlaythroughSession::RestoreCharacter(std::string(record,32),record[32]=='1');
+}
+bool __fastcall SaveCampaign(SaveFileSystem* fs, const std::string& path) {
+    const std::string id=PlaythroughSession::Character();
+    if(PlaythroughSession::ValidId(id)) {
+        try {
+            const std::string target=fs->writeFile(kCampaignFile);
+            std::ofstream file(target.c_str(),std::ios::binary|std::ios::trunc);
+            file << id << (PlaythroughSession::NewCharacter()?'1':'0'); file.flush();
+            if(!file)Log("PLAYTHROUGH: could not persist campaign identity.");
+        } catch(...) { Log("PLAYTHROUGH: campaign identity write failed."); }
+    }
+    return saveCampaignOriginal(fs,path);
+}
+void __fastcall LoadCampaign(SaveFileSystem* fs, const std::string& path) {
+    PlaythroughSession::BeginLoad();
+    Stobe::ShopPrice::ClearCache();
+    Stobe::DrawnWeapon::Reset();
+    Stobe::N2SocialWatch::Reset();
+    N2AbandonWatchReset();
+    BeginChatInterruptGeneration(false);
+    Stobe::Voice::Cancel();
+    EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
+    ReadCampaignFile(path);
+    loadCampaignOriginal(fs,path);
+}
+void __fastcall NewCampaign(SaveManager* manager, const std::string& start) {
+    PlaythroughSession::BeginLoad(true);
+    Stobe::ShopPrice::ClearCache();
+    Stobe::DrawnWeapon::Reset();
+    Stobe::N2SocialWatch::Reset();
+    N2AbandonWatchReset();
+    BeginChatInterruptGeneration(false);
+    Stobe::Voice::Cancel();
+    EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
+    newCampaignOriginal(manager,start);
+}
+void __fastcall ImportCampaign(SaveManager* manager, const SaveInfo& save, int flags) {
+    PlaythroughSession::BeginLoad();
+    Stobe::ShopPrice::ClearCache();
+    Stobe::DrawnWeapon::Reset();
+    Stobe::N2SocialWatch::Reset();
+    N2AbandonWatchReset();
+    BeginChatInterruptGeneration(false);
+    Stobe::Voice::Cancel();
+    EnterCriticalSection(&g_msgMutex);g_messageQueue.clear();LeaveCriticalSection(&g_msgMutex);
+    ReadCampaignFile(save.location + "/" + save.name);
+    const std::string id=PlaythroughSession::Character();
+    const bool isNew=PlaythroughSession::NewCharacter();
+    importCampaignOriginal(manager,save,flags);
+    // Import may internally take the new-game path. Retain the source campaign identity.
+    PlaythroughSession::BeginLoad();
+    PlaythroughSession::RestoreCharacter(id,isNew);
+}
+void InstallCampaignHooks() {
+    bool ok=true;
+    ok = KenshiLib::AddHook((void*)KenshiLib::GetRealAddress(&SaveFileSystem::saveGame),(void*)SaveCampaign,(void**)&saveCampaignOriginal)==KenshiLib::SUCCESS && ok;
+    ok = KenshiLib::AddHook((void*)KenshiLib::GetRealAddress(&SaveFileSystem::loadGame),(void*)LoadCampaign,(void**)&loadCampaignOriginal)==KenshiLib::SUCCESS && ok;
+    ok = KenshiLib::AddHook((void*)KenshiLib::GetRealAddress(&SaveManager::newGame),(void*)NewCampaign,(void**)&newCampaignOriginal)==KenshiLib::SUCCESS && ok;
+    ok = KenshiLib::AddHook((void*)KenshiLib::GetRealAddress(&SaveManager::import),(void*)ImportCampaign,(void**)&importCampaignOriginal)==KenshiLib::SUCCESS && ok;
+    g_campaignHooksReady=ok;
+    Log(ok?"PLAYTHROUGH: campaign save/load hooks ready.":"PLAYTHROUGH: campaign hooks unavailable; automatic connection blocked.");
+}
+}
+
+static bool IsWorldStableForUI(GameWorld *world) {
+  if (!world || reinterpret_cast<uintptr_t>(world) < 0x10000) {
+    return false;
+  }
+
+  __try {
+    if (!world->player || reinterpret_cast<uintptr_t>(world->player) < 0x10000) {
+      return false;
+    }
+    if (world->player->playerCharacters.size() == 0) {
+      return false;
+    }
+    Character *player = world->player->playerCharacters[0];
+    if (!player || reinterpret_cast<uintptr_t>(player) < 0x1000) {
+      return false;
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+
+  return true;
+}
+
+static bool TryGetPrimaryPlayerCharacterSafe(GameWorld *world,
+                                             Character *&playerOut) {
+  playerOut = nullptr;
+  if (!IsWorldStableForUI(world)) {
+    return false;
+  }
+
+  __try {
+    if (!world || !world->player ||
+        world->player->playerCharacters.size() == 0) {
+      return false;
+    }
+    Character *player = world->player->playerCharacters[0];
+    if (!player || reinterpret_cast<uintptr_t>(player) < 0x1000) {
+      return false;
+    }
+    playerOut = player;
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    playerOut = nullptr;
+    return false;
+  }
+}
+
+static bool TryGetCharacterHandleSafe(Character *character, hand &handleOut) {
+  handleOut = hand();
+  if (!character || reinterpret_cast<uintptr_t>(character) < 0x1000) {
+    return false;
+  }
+  __try {
+    handleOut = character->getHandle();
+    return handleOut.isValid() && handleOut.serial != 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    handleOut = hand();
+    return false;
+  }
+}
+
+static Character *ResolveSelectedCharacterSehSafe(PlayerInterface *thisptr) {
+  if (!thisptr || reinterpret_cast<uintptr_t>(thisptr) < 0x10000) {
+    return nullptr;
+  }
+
+  Character *selected = nullptr;
+  __try {
+    selected = thisptr->selectedObject.getCharacter();
+    if (!selected || reinterpret_cast<uintptr_t>(selected) < 0x1000) {
+      selected = thisptr->selectedCharacter.getCharacter();
+    }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    selected = nullptr;
+  }
+
+  if (selected && reinterpret_cast<uintptr_t>(selected) >= 0x1000) {
+    return selected;
+  }
+  return nullptr;
+}
+
+static void ClearPendingSelectionContextPush() {
+  EnterCriticalSection(&g_stateMutex);
+  g_pendingSelectionContextHand = hand();
+  g_pendingSelectionContextSerial = 0;
+  g_pendingSelectionContextQueuedTick = 0;
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static void QueueSelectionContextPush(const hand &selectionHand) {
+  if (!selectionHand.isValid() || selectionHand.serial == 0) {
+    ClearPendingSelectionContextPush();
+    return;
+  }
+  DWORD nowTick = GetTickCount();
+  EnterCriticalSection(&g_stateMutex);
+  if (g_pendingSelectionContextSerial == selectionHand.serial &&
+      g_pendingSelectionContextQueuedTick != 0) {
+    LeaveCriticalSection(&g_stateMutex);
+    return;
+  }
+  if (g_lastSelectionContextPushedSerial == selectionHand.serial &&
+      g_lastSelectionContextPushedTick != 0 &&
+      (nowTick - g_lastSelectionContextPushedTick) <
+          kSelectionContextMinIntervalMs) {
+    LeaveCriticalSection(&g_stateMutex);
+    return;
+  }
+  g_pendingSelectionContextHand = selectionHand;
+  g_pendingSelectionContextSerial = selectionHand.serial;
+  g_pendingSelectionContextQueuedTick = nowTick;
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static void RunPendingSelectionContextPush(Character *sel,
+                                           DWORD worldBecameStableTick) {
+  if (!sel || reinterpret_cast<uintptr_t>(sel) < 0x1000) {
+    ClearPendingSelectionContextPush();
+    return;
+  }
+
+  hand selectionHand;
+  if (!TryGetCharacterHandleSafe(sel, selectionHand)) {
+    ClearPendingSelectionContextPush();
+    return;
+  }
+
+  DWORD nowTick = GetTickCount();
+  if ((nowTick - worldBecameStableTick) < kSelectionContextStartupDelayMs) {
+    return;
+  }
+
+  hand pendingHand;
+  unsigned int pendingSerial = 0;
+  DWORD queuedTick = 0;
+  DWORD lastPushedTick = 0;
+  EnterCriticalSection(&g_stateMutex);
+  pendingHand = g_pendingSelectionContextHand;
+  pendingSerial = g_pendingSelectionContextSerial;
+  queuedTick = g_pendingSelectionContextQueuedTick;
+  lastPushedTick = g_lastSelectionContextPushedTick;
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (!pendingHand.isValid() || pendingSerial == 0 ||
+      pendingSerial != selectionHand.serial || queuedTick == 0) {
+    return;
+  }
+  if (nowTick - queuedTick < kSelectionContextDebounceMs) {
+    return;
+  }
+  if (lastPushedTick != 0 &&
+      (nowTick - lastPushedTick) < kSelectionContextMinIntervalMs) {
+    return;
+  }
+
+  std::string contextType = "npc";
+  std::string selectedName = "Unknown";
+  try {
+    if (sel->isPlayerCharacter()) {
+      contextType = "player";
+    }
+    selectedName = sel->getName();
+  } catch (...) {
+  }
+
+  std::string selectedContext = BuildNpcContextEnvelope(sel, contextType);
+  AsyncPostToStobe(L"/context", selectedContext);
+  std::string selectedGameData =
+      "{\"type\":\"" + contextType + "\",\"name\":\"" +
+      EscapeJSON(selectedName) + "\",\"data\":" + selectedContext + "}";
+  AsyncPostToStobe(L"/gamedata", selectedGameData);
+
+  EnterCriticalSection(&g_stateMutex);
+  if (g_pendingSelectionContextSerial == selectionHand.serial) {
+    g_pendingSelectionContextHand = hand();
+    g_pendingSelectionContextSerial = 0;
+    g_pendingSelectionContextQueuedTick = 0;
+    g_lastSelectionContextPushedTick = nowTick;
+    g_lastSelectionContextPushedSerial = selectionHand.serial;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+}
+
+static bool IsSpeechSystemBusyForMOTD() {
+  if (IsTtsPlaybackActive()) {
+    return true;
+  }
+
+  if (!TryEnterCriticalSection(&g_uiMutex)) {
+    return true;
+  }
+
+  bool busy = false;
+  DWORD now = GetTickCount();
+  if (!g_uiActionQueue.empty()) {
+    busy = true;
+  } else if (g_nextSpeechActionTick != 0 && now < g_nextSpeechActionTick) {
+    busy = true;
+  }
+
+  LeaveCriticalSection(&g_uiMutex);
+  return busy;
+}
+
+
+// Test commands (stobe_say, stobe_state, ...): tooling sends them through the
+// Kenshi Automation Harness, which queues them for the player update hook
+// (StobeHarnessBridge.cpp). "say" lines go the same path as push-to-talk.
+static std::string TestInboxLower(const std::string &value) {
+  std::string out = value;
+  for (size_t i = 0; i < out.size(); ++i)
+    out[i] = (char)tolower((unsigned char)out[i]);
+  return out;
+}
+
+static std::string TestInboxOneLine(const std::string &value) {
+  std::string out = value;
+  for (size_t i = 0; i < out.size(); ++i)
+    if (out[i] == '\r' || out[i] == '\n' || out[i] == '\t')
+      out[i] = ' ';
+  return out;
+}
+
+static Character *ResolveTestInboxSpeaker(GameWorld *world, Character *sel) {
+  if (sel && (uintptr_t)sel > 0x1000) {
+    try {
+      if (sel->isPlayerCharacter())
+        return sel;
+    } catch (...) {
+    }
+  }
+  if (world && world->player && world->player->playerCharacters.size() > 0)
+    return world->player->playerCharacters[0];
+  return nullptr;
+}
+
+// "@nearest", "@selected", "#serial/index", or a character name (nearest
+// exact name match to speaker; nearby-object results are a fallback).
+static Character *ResolveTestInboxTarget(GameWorld *world, Character *sel,
+                                         Character *speaker,
+                                         const std::string &name) {
+  if (!world)
+    return nullptr;
+  if (name == "@nearest")
+    return speaker ? ResolveNearestNpcTargetForSelection(world, speaker) : nullptr;
+  if (name == "@selected")
+    return (sel && (uintptr_t)sel > 0x1000) ? sel : nullptr;
+  const Stobe::Harness::TestInboxTargetRef targetRef =
+      Stobe::Harness::ParseTestInboxTargetRef(name);
+  if (targetRef.isReference && !targetRef.valid)
+    return nullptr;
+  std::string wanted = TestInboxLower(name);
+  Ogre::Vector3 origin(0, 0, 0);
+  bool haveOrigin = false;
+  if (speaker) {
+    try {
+      origin = speaker->getPosition();
+      haveOrigin = true;
+    } catch (...) {
+    }
+  }
+  typedef Stobe::Harness::TestInboxTargetCandidate<Character *> TargetCandidate;
+  std::vector<TargetCandidate> updateCandidates;
+  std::vector<TargetCandidate> nearbyCandidates;
+  const auto appendCandidate = [&](Character *candidate,
+                                   std::vector<TargetCandidate> &out) {
+    if (!candidate || (uintptr_t)candidate <= 0x1000)
+      return;
+    for (size_t i = 0; i < out.size(); ++i)
+      if (out[i].target == candidate)
+        return;
+    TargetCandidate record;
+    record.target = candidate;
+    record.normalizedName.clear();
+    record.serial = 0;
+    record.index = 0;
+    record.distance = 0.0f;
+    try {
+      const hand handle = candidate->getHandle();
+      record.serial = handle.serial;
+      record.index = handle.index;
+    } catch (...) {
+    }
+    try {
+      record.normalizedName = TestInboxLower(candidate->getName());
+    } catch (...) {
+    }
+    if (haveOrigin) {
+      try {
+        record.distance = candidate->getPosition().distance(origin);
+      } catch (...) {
+      }
+    }
+    out.push_back(record);
+  };
+  const ogre_unordered_set<Character *>::type &chars =
+      world->getCharacterUpdateList();
+  for (auto it = chars.begin(); it != chars.end(); ++it)
+    appendCandidate(*it, updateCandidates);
+  // Match KAH `chars` / generic character lookup: a character can be returned
+  // by the nearby-object query without appearing in the update list. Keep this
+  // as a fallback pool so existing exact-name selection among update-list
+  // characters remains unchanged.
+  try {
+    lektor<RootObject *> nearby;
+    world->getObjectsWithinSphere(nearby, origin, 500.0f, CHARACTER, 256,
+                                  speaker ? static_cast<RootObject *>(speaker)
+                                          : nullptr);
+    for (uint32_t i = 0; i < nearby.size(); ++i) {
+      Character *candidate = dynamic_cast<Character *>(nearby.stuff[i]);
+      appendCandidate(candidate, nearbyCandidates);
+    }
+  } catch (...) {
+  }
+  if (targetRef.isReference) {
+    const TargetCandidate *match = Stobe::Harness::ResolveHandleTarget(
+        updateCandidates, nearbyCandidates, targetRef);
+    return match ? match->target : nullptr;
+  }
+  const TargetCandidate *match = Stobe::Harness::ResolveNamedTarget(
+      updateCandidates, nearbyCandidates, wanted);
+  return match ? match->target : nullptr;
+}
+
+#include <kenshi/RootObjectFactory.h>
+
+// Finds item data by name for give_item: exact (case-insensitive) match wins,
+// otherwise a single substring match. Candidates are listed on ambiguity.
+static GameData *FindTestInboxItemData(GameWorld *world, const std::string &name,
+                                       std::string &error) {
+  std::string wanted = TestInboxLower(name);
+  const itemType categories[] = {ITEM, WEAPON, ARMOUR};
+  std::vector<GameData *> partial;
+  for (size_t c = 0; c < 3; ++c) {
+    const auto categoryIt = world->gamedata.gamedataCatSID.find((int)categories[c]);
+    if (categoryIt == world->gamedata.gamedataCatSID.end())
+      continue;
+    const auto &entries = categoryIt->second;
+    for (auto it = entries.begin(); it != entries.end(); ++it) {
+      GameData *data = it->second;
+      if (!data || (uintptr_t)data <= 0x1000)
+        continue;
+      std::string dataName = TestInboxLower(data->name);
+      if (dataName == wanted)
+        return data;
+      if (dataName.find(wanted) != std::string::npos)
+        partial.push_back(data);
+    }
+  }
+  if (partial.size() == 1)
+    return partial[0];
+  if (partial.empty()) {
+    error = "no item data named: " + name;
+  } else {
+    error = "ambiguous item name, candidates:";
+    for (size_t i = 0; i < partial.size() && i < 12; ++i)
+      error += " [" + partial[i]->name + "]";
+  }
+  return nullptr;
+}
+
+// ---------------------------------------------------------------- NPC info panel
+// Game-thread side: who the panel is about and who is asking. Live fields (what the
+// NPC is doing, faction, trader) are read here and sent with the request; the server
+// adds stored deals/goals/relationship/learned facts. No LLM call.
+static unsigned int g_npcPanelTargetSerial = 0;
+static bool g_npcPanelFollowsChat = true; // Info follows chat; hotkey follows selection
+static unsigned int g_npcPanelObservedSelectionSerial = 0;
+static std::string g_npcPanelTargetName;
+static unsigned int g_npcPanelSpeakerSerial = 0;
+static std::string g_npcPanelSpeakerName;
+static DWORD g_npcPanelLastRequestTick = 0;
+static const DWORD kNpcPanelRefreshMs = 10000;
+static bool g_npcPanelPortraitDisabled = false;
+// Released when the panel closes or the world changes; allocated lazily so its
+// destructor never calls Ogre after the game's renderer has shut down.
+static Stobe::ProfilePortrait *g_npcPanelProfilePortrait = nullptr;
+static unsigned int g_npcPanelProfilePortraitSerial = 0;
+static StobePortraitFaultInjection::OneShot g_npcPanelPortraitTestFault;
+
+static void ResetNpcPanelProfilePortrait() {
+  delete g_npcPanelProfilePortrait;
+  g_npcPanelProfilePortrait = nullptr;
+  g_npcPanelProfilePortraitSerial = 0;
+  g_npcPanelPortraitTestFault.clear();
+}
+
+// Humanoids use Stobe's private headgear-free frontal portrait. Animals retain
+// the game's species-specific atlas image. Render on open / Refresh / target
+// change, not on the panel's periodic text refresh.
+static bool NpcPanelPortraitUnsafe(Character *npc, bool render, std::string &texOut,
+                                   int &l, int &t, int &w, int &h, std::string &reason) {
+  try {
+    hand handle = npc->getHandle();
+    if (!handle.isValid()) {
+      reason = "invalid_handle";
+      return false;
+    }
+    const StobePortraitFaultInjection::Mode injectedFault =
+        g_npcPanelPortraitTestFault.takeFor(handle.serial);
+    if (npc->isHuman()) {
+      if (injectedFault != StobePortraitFaultInjection::NONE) {
+        // The test hook selects the existing fallback without injecting an
+        // Ogre fault or changing renderer configuration. A cached private image
+        // is deliberately bypassed, not invalidated. The private-only mode
+        // then exercises the ordinary native portrait-manager update below.
+        reason = "test_injected_private_render_unavailable";
+        Log("NPC_PANEL_TEST: injected private_render_unavailable target=" +
+            ToString(handle.serial));
+        if (injectedFault ==
+            StobePortraitFaultInjection::ALL_RENDER_PATHS_UNAVAILABLE) {
+          reason = "test_injected_all_render_paths_unavailable";
+          Log("NPC_PANEL_TEST: outcome=initials target=" +
+              ToString(handle.serial));
+          return false;
+        }
+        render = true;
+      } else {
+        if (!g_npcPanelProfilePortrait)
+          g_npcPanelProfilePortrait = new Stobe::ProfilePortrait();
+        if (render || handle.serial != g_npcPanelProfilePortraitSerial ||
+            !g_npcPanelProfilePortrait->texture()) {
+          if (g_npcPanelProfilePortrait->render(npc, reason)) {
+            g_npcPanelProfilePortraitSerial = handle.serial;
+          } else {
+            Log("NPC_PANEL: private portrait unavailable; retaining previous/native fallback reason=" + reason);
+          }
+        }
+        Ogre::Texture *texture = g_npcPanelProfilePortrait->texture();
+        // A failed refresh retains this NPC's last valid image. Never reuse an
+        // image belonging to the previous panel target.
+        if (texture && g_npcPanelProfilePortraitSerial == handle.serial) {
+          texOut = texture->getName();
+          l = t = 0;
+          w = static_cast<int>(texture->getWidth());
+          h = static_cast<int>(texture->getHeight());
+          reason.clear();
+          return true;
+        }
+        render = true; // Ensure the native fallback exists for this target.
+      }
+    }
+    reason.clear();
+    PortraitManager *pm = PortraitManager::getInstance();
+    if (!pm || (uintptr_t)pm <= 0x1000) {
+      reason = "portrait_manager_unavailable";
+      return false;
+    }
+    auto it = pm->characterPortraits.find(handle);
+    if (render || it == pm->characterPortraits.end()) {
+      pm->getPortrait(handle);
+      pm->updatePortraitImage(handle);
+      it = pm->characterPortraits.find(handle);
+    }
+    if (it == pm->characterPortraits.end()) {
+      reason = "portrait_map_missing";
+      return false;
+    }
+    PortraitImage *img = it->second.second;
+    if (!img || (uintptr_t)img <= 0x1000) {
+      reason = "portrait_image_invalid";
+      return false;
+    }
+    if (!ResolvePortraitImageRegion(pm, img, l, t, w, h)) {
+      reason = "resolve_region_failed";
+      return false;
+    }
+    Ogre::Texture *texture = pm->texture.getPointer();
+    texOut = texture && (uintptr_t)texture > 0x1000 ? std::string(texture->getName().c_str())
+                                                     : std::string();
+    if (texOut.empty())
+      texOut = img->textureName.empty() ? pm->textureName : img->textureName;
+    if (texOut.empty()) {
+      reason = "no_texture_name";
+      return false;
+    }
+    if (injectedFault ==
+        StobePortraitFaultInjection::PRIVATE_RENDER_UNAVAILABLE) {
+      Log("NPC_PANEL_TEST: outcome=native_atlas target=" +
+          ToString(handle.serial) + " tex=" + texOut + " region=" +
+          ToString(l) + "," + ToString(t) + "," + ToString(w) + "," +
+          ToString(h));
+    }
+    return true;
+  } catch (...) {
+    reason = "exception";
+    return false;
+  }
+}
+
+static bool NpcPanelPortrait(Character *npc, bool render, std::string &texOut, int &l,
+                             int &t, int &w, int &h, std::string &reason) {
+  if (g_npcPanelPortraitDisabled) {
+    reason = "disabled_after_fault";
+    return false;
+  }
+  if (!npc || (uintptr_t)npc <= 0x1000) {
+    reason = "not_visible";
+    return false;
+  }
+  __try {
+    return NpcPanelPortraitUnsafe(npc, render, texOut, l, t, w, h, reason);
+  } __except (PortraitSehFilter(GetExceptionCode())) {
+    g_npcPanelPortraitDisabled = true;
+    return false;
+  }
+}
+
+static void NpcPanelSend(GameWorld *world, const char *why, bool showLoading) {
+  if (g_npcPanelTargetSerial == 0) {
+    return;
+  }
+  Character *target = FindCharacterBySerial(world, g_npcPanelTargetSerial);
+  std::string activity, faction;
+  bool trader = false;
+  if (target) {
+    activity = DescribeCharacterLiveActivity(target);
+    try {
+      faction = SafeFactionName(target->getFaction());
+    } catch (...) {
+    }
+    try {
+      trader = !target->isPlayerCharacter() && target->isATrader();
+    } catch (...) {
+    }
+    try {
+      std::string liveName = target->getName();
+      if (!liveName.empty())
+        g_npcPanelTargetName = liveName; // renamed NPCs follow their new name
+    } catch (...) {
+    }
+  }
+  const std::string serial = ToString(g_npcPanelTargetSerial);
+  const std::string key = serial + "|" + g_npcPanelSpeakerName;
+  std::string json = "{\"action\":\"player_view\",\"storage_id\":\"hand_" + serial +
+                     "\",\"serial\":" + serial + ",\"name\":\"" +
+                     EscapeJSON(g_npcPanelTargetName) + "\",\"speaker\":\"" +
+                     EscapeJSON(g_npcPanelSpeakerName) + "\",\"gamets\":" +
+                     ToString(CurrentGameTsSeconds()) + ",\"live_activity\":\"" +
+                     EscapeJSON(target ? activity : std::string("")) +
+                     "\",\"live_faction\":\"" + EscapeJSON(faction) +
+                     "\",\"trader\":" + (trader ? "true" : "false") +
+                     ",\"why\":\"" + EscapeJSON(why) + "\"" +
+                     ",\"key\":\"" + EscapeJSON(key) + "\"}";
+  g_npcPanelLastRequestTick = GetTickCount();
+  if (showLoading)
+    Log(std::string("NPC_PANEL: request why=") + why + " target=" +
+        g_npcPanelTargetName + " serial=" + serial + " speaker=" +
+        g_npcPanelSpeakerName + " visible=" + (target ? "1" : "0"));
+  Stobe::UI::RequestNpcPanel(key, g_npcPanelTargetName, json, showLoading);
+  std::string tex, reason;
+  int pl = 0, pt = 0, pw = 0, ph = 0;
+  bool havePortrait = NpcPanelPortrait(target, showLoading, tex, pl, pt, pw, ph, reason);
+  if (g_npcPanelPortraitDisabled && reason.empty())
+    reason = "portrait_seh";
+  Stobe::UI::SetNpcPanelPortrait(havePortrait, tex, pl, pt, pw, ph, reason);
+}
+
+static bool NpcPanelOpenFor(GameWorld *world, Character *speaker, Character *target,
+                            const char *why) {
+  if (!target || (uintptr_t)target <= 0x1000 || target == speaker)
+    return false;
+  g_npcPanelFollowsChat = true; // any open follows the chat; the hotkey clears it after
+  try {
+    g_npcPanelTargetSerial = target->getHandle().serial;
+    g_npcPanelTargetName = target->getName();
+    g_npcPanelSpeakerSerial = 0;
+    g_npcPanelSpeakerName.clear();
+    if (speaker && (uintptr_t)speaker > 0x1000) {
+      g_npcPanelSpeakerSerial = speaker->getHandle().serial;
+      g_npcPanelSpeakerName = speaker->getName();
+    }
+  } catch (...) {
+    return false;
+  }
+  NpcPanelSend(world, why, true);
+  return true;
+}
+
+// Same pick as the chat hotkey: a selected squad member talks to the nearest NPC,
+// a selected NPC is talked to by the nearest squad member.
+static bool NpcPanelOpenForSelection(GameWorld *world, Character *sel, const char *why) {
+  if (!sel || (uintptr_t)sel <= 0x1000)
+    return false;
+  Character *speaker = nullptr;
+  Character *target = nullptr;
+  try {
+    if (sel->isPlayerCharacter()) {
+      speaker = sel;
+      target = ResolveNearestNpcTargetForSelection(world, sel);
+    } else {
+      target = sel;
+      speaker = ResolveNearestPlayerSpeakerForTarget(world, sel);
+    }
+  } catch (...) {
+    return false;
+  }
+  return NpcPanelOpenFor(world, speaker, target, why);
+}
+
+// Item 146: the hotkey shows the SELECTED character's card (squad member or NPC), seen by
+// the FP-controlled character, else by the nearest other squad member.
+namespace Stobe { namespace UI { Character *StobeFpControlledCharacter(GameWorld *world); } }
+static bool NpcPanelOpenForSelected(GameWorld *world, Character *sel, const char *why,
+                                    bool retainViewer = false) {
+  if (!sel || (uintptr_t)sel <= 0x1000)
+    return false;
+  Character *viewer = nullptr;
+  try {
+    // Selecting another NPC changes the subject, not whose knowledge we show.
+    // Keep the existing player observer while they are still available.
+    if (retainViewer && g_npcPanelSpeakerSerial != 0) {
+      viewer = FindCharacterBySerial(world, g_npcPanelSpeakerSerial);
+      if (viewer && (viewer == sel || !viewer->isPlayerCharacter()))
+        viewer = nullptr;
+    }
+    if (!viewer)
+      viewer = Stobe::UI::StobeFpControlledCharacter(world);
+    if (!viewer || viewer == sel)
+      viewer = sel->isPlayerCharacter()
+                   ? ResolveNearestSquadmateTargetForSelection(world, sel)
+                   : ResolveNearestPlayerSpeakerForTarget(world, sel);
+  } catch (...) {
+    return false;
+  }
+  if (viewer == sel)
+    viewer = nullptr;
+  Log(std::string("NPC_PANEL: ") + why + " selected='" + sel->getName() + "' viewer='" +
+      (viewer ? viewer->getName() : std::string("")) + "'");
+  const bool opened = NpcPanelOpenFor(world, viewer, sel, why);
+  if (opened)
+    g_npcPanelFollowsChat = false;
+  return opened;
+}
+
+// The chat window's current target and speaking character, if a chat is open.
+static bool NpcPanelChatPair(GameWorld *world, Character *sel, Character *&speaker,
+                             Character *&target) {
+  speaker = nullptr;
+  target = nullptr;
+  if (!Stobe::UI::g_chatWindow)
+    return false;
+  unsigned int serial = (unsigned int)strtoul(Stobe::UI::g_chatTargetHandleStr.c_str(), nullptr, 10);
+  if (serial == 0)
+    return false;
+  target = FindCharacterBySerial(world, serial);
+  if (!Stobe::UI::g_chatPlayerNameStr.empty())
+    speaker = ResolveTestInboxTarget(world, sel, nullptr, Stobe::UI::g_chatPlayerNameStr);
+  return target != nullptr;
+}
+
+// Item 135: inside the squad the card is the SELECTED member's, seen by the controlled one
+// (KenshiFP's character in first person, else the other side of the chat). Chats with an
+// outsider keep the chat target's card.
+namespace Stobe { namespace UI { Character *StobeFpControlledCharacter(GameWorld *world); } }
+using Stobe::UI::StobeFpControlledCharacter;
+namespace Stobe { namespace UI {
+std::string TestRenameViaWindow(const std::string &targetName, const std::string &serial,
+                                const std::string &newName, bool &renamed);
+} }
+static bool NpcPanelPair(GameWorld *world, Character *sel, Character *&speaker,
+                         Character *&target) {
+  if (!NpcPanelChatPair(world, sel, speaker, target))
+    return false;
+  try {
+    if (sel && (uintptr_t)sel > 0x1000 && sel->isPlayerCharacter() &&
+        target->isPlayerCharacter()) {
+      Character *observer = StobeFpControlledCharacter(world);
+      if (!observer || observer == sel)
+        observer = (target != sel) ? target : speaker;
+      if (observer && observer != sel) {
+        speaker = observer;
+        target = sel;
+      }
+    }
+  } catch (...) {
+  }
+  return true;
+}
+
+// Per tick: an explicit selected-target change supersedes the card's original
+// chat-follow source. A new request generation/key rejects late replies for the
+// previous target before they can replace its title, text, or portrait.
+static void NpcPanelTick(GameWorld *world, Character *sel) {
+  if (Stobe::UI::g_npcPanelOpenRequest) {
+    Stobe::UI::g_npcPanelOpenRequest = false;
+    Character *speaker = nullptr, *target = nullptr;
+    bool opened = false;
+    if (NpcPanelPair(world, sel, speaker, target))
+      opened = NpcPanelOpenFor(world, speaker, target, "chat_info_button");
+    else if (!NpcPanelOpenForSelection(world, sel, "chat_info_button_selection"))
+      Log("NPC_PANEL: Info pressed but no conversation target");
+    else
+      opened = true;
+    if (opened) {
+      unsigned int selectedSerial = 0;
+      try {
+        const hand selectedHandle = sel ? sel->getHandle() : hand();
+        if (selectedHandle.isValid())
+          selectedSerial = selectedHandle.serial;
+      } catch (...) {
+      }
+      g_npcPanelObservedSelectionSerial =
+          StobeNpcPanelRequestPolicy::SelectionBaselineAfterRequest(
+              true, selectedSerial, g_npcPanelObservedSelectionSerial);
+    }
+  }
+  if (!Stobe::UI::IsNpcPanelOpen()) {
+    g_npcPanelObservedSelectionSerial = 0;
+    ResetNpcPanelProfilePortrait();
+    return;
+  }
+  if (sel && (uintptr_t)sel > 0x1000) {
+    try {
+      const hand selectedHandle = sel->getHandle();
+      if (selectedHandle.isValid()) {
+        const unsigned int previousSelectionSerial =
+            g_npcPanelObservedSelectionSerial;
+        const bool refreshNeeded =
+            StobeNpcPanelRequestPolicy::ShouldRefreshForSelection(
+                true, previousSelectionSerial, selectedHandle.serial,
+                g_npcPanelTargetSerial);
+        bool refreshSucceeded = false;
+        if (refreshNeeded) {
+          refreshSucceeded = NpcPanelOpenForSelected(
+              world, sel, "selection_changed", true);
+          if (refreshSucceeded) {
+            Stobe::UI::g_npcPanelRefreshRequest = false;
+            g_npcPanelObservedSelectionSerial =
+                StobeNpcPanelRequestPolicy::SelectionBaselineAfterTick(
+                    true, true, selectedHandle.serial,
+                    previousSelectionSerial);
+            return; // One text/portrait refresh per actual target identity change.
+          }
+        }
+        g_npcPanelObservedSelectionSerial =
+            StobeNpcPanelRequestPolicy::SelectionBaselineAfterTick(
+                refreshNeeded, refreshSucceeded, selectedHandle.serial,
+                previousSelectionSerial);
+      }
+    } catch (...) {
+      // A temporarily unavailable selection retains the previous card.
+    }
+  }
+  Character *speaker = nullptr, *target = nullptr;
+  if (g_npcPanelFollowsChat && NpcPanelPair(world, sel, speaker, target)) {
+    std::string speakerName;
+    try {
+      speakerName = speaker ? speaker->getName() : std::string("");
+    } catch (...) {
+    }
+    if (target->getHandle().serial != g_npcPanelTargetSerial ||
+        (!speakerName.empty() && speakerName != g_npcPanelSpeakerName)) {
+      NpcPanelOpenFor(world, speaker, target, "chat_target_changed");
+      return;
+    }
+  }
+  if (Stobe::UI::g_npcPanelRefreshRequest) {
+    Stobe::UI::g_npcPanelRefreshRequest = false;
+    NpcPanelSend(world, "refresh_button", true);
+    return;
+  }
+  if (GetTickCount() - g_npcPanelLastRequestTick >= kNpcPanelRefreshMs)
+    NpcPanelSend(world, "periodic", false);
+}
+
+static std::string NpcPanelOneLine(const std::string &text) {
+  std::string out;
+  for (size_t i = 0; i < text.size(); ++i) {
+    char c = text[i];
+    if (c == '\r')
+      continue;
+    if (c == '\n')
+      out += " | ";
+    else
+      out += c;
+  }
+  return out;
+}
+
+static Character *ResolveTestInboxTargetForDrawn(GameWorld *world, Character *sel,
+                                                 const std::string &name) {
+  return ResolveTestInboxTarget(world, sel, ResolveTestInboxSpeaker(world, sel), name);
+}
+
+// Test-inbox only (`ctxpush`, and `say` when the envelope is stale): post the same
+// context envelope the selection push builds (BuildNpcContextEnvelope -> /context,
+// then /gamedata) so native_ai / referral_people / travel_destinations reach the
+// server. The production selection push is cleared in the update hook after a
+// selection change (stale nearby objects after a load) and the harness `select`
+// does not produce a real selection event, so lanes never received them. The
+// tick map is private to this helper: it never touches the production
+// g_pendingSelectionContext* / g_lastSelectionContextPushed* state.
+static std::string TestInboxPushNpcContext(Character *npc, const std::string &reason,
+                                           bool onlyIfStale, bool &pushed) {
+  pushed = false;
+  if (!npc || (uintptr_t)npc < 0x1000)
+    return "no character";
+  static std::map<unsigned int, DWORD> lastPushTickBySerial;
+  unsigned int serial = 0;
+  std::string contextType = "npc";
+  std::string name = "Unknown";
+  try {
+    serial = npc->getHandle().serial;
+    if (npc->isPlayerCharacter())
+      contextType = "player";
+    name = npc->getName();
+  } catch (...) {
+    return "could not read character";
+  }
+  const DWORD nowTick = GetTickCount();
+  std::map<unsigned int, DWORD>::iterator last = lastPushTickBySerial.find(serial);
+  if (onlyIfStale && last != lastPushTickBySerial.end() &&
+      (nowTick - last->second) < kSelectionContextMinIntervalMs)
+    return "fresh name=" + name + " serial=" + ToString(serial);
+  std::string contextJson = BuildNpcContextEnvelope(npc, contextType);
+  if (contextJson.empty() || contextJson.front() != '{' ||
+      contextJson.back() != '}')
+    return "invalid envelope name=" + name;
+  AsyncPostToStobe(L"/context", contextJson);
+  AsyncPostToStobe(L"/gamedata", "{\"type\":\"" + contextType + "\",\"name\":\"" +
+                                     EscapeJSON(name) + "\",\"data\":" +
+                                     contextJson + "}");
+  lastPushTickBySerial[serial] = nowTick;
+  pushed = true;
+  const bool hasNativeAi = contextJson.find("\"native_ai\":") != std::string::npos;
+  const bool hasReferral = contextJson.find("\"referral_people\":") != std::string::npos;
+  const bool hasTravel = contextJson.find("\"travel_destinations\":") != std::string::npos;
+  std::string detail = "name=" + name + " serial=" + ToString(serial) +
+                       " type=" + contextType + " len=" + ToString((int)contextJson.length()) +
+                       " native_ai=" + (hasNativeAi ? "1" : "0") +
+                       " referral_people=" + (hasReferral ? "1" : "0") +
+                       " travel_destinations=" + (hasTravel ? "1" : "0");
+  Log("CONTEXT_PUSH: test_inbox reason=" + reason + " " + detail);
+  return detail;
+}
+
+static std::string RunTestInboxCommand(GameWorld *world, Character *sel,
+                                       const std::vector<std::string> &f,
+                                       bool &ok) {
+  ok = false;
+  const std::string &cmd = f[1];
+  if (cmd == "bodyguard_probe") {
+    if (f.size() < 3) return "usage: bodyguard_probe <start|stop|status>";
+    std::string action = Stobe::BodyguardContractProbe::Command(f[2]);
+    ok = action.find("usage:") != 0;
+    return action;
+  }
+  Character *speaker = ResolveTestInboxSpeaker(world, sel);
+  if (cmd == "ping") {
+    Character *nearest =
+        speaker ? ResolveNearestNpcTargetForSelection(world, speaker) : nullptr;
+    ok = true;
+    std::string detail = "mode=" + Stobe::ChatMode::Normalize(g_chatMode);
+    try {
+      detail += " speaker=" + (speaker ? speaker->getName() : std::string("none"));
+      detail += " nearest=" + (nearest ? nearest->getName() : std::string("none"));
+    } catch (...) {
+    }
+    return detail;
+  }
+  if (cmd == "ctxpush") { // stobe_ctxpush <target|@selected|@nearest|#serial> : push the selection-style context envelope now
+    if (f.size() < 3 || f[2].empty())
+      return "usage: ctxpush <target|@nearest|@selected|#serial>";
+    Character *ctxTarget = ResolveTestInboxTarget(world, sel, speaker, f[2]);
+    if (!ctxTarget)
+      return "target not found: " + f[2];
+    bool pushed = false;
+    std::string detail = TestInboxPushNpcContext(ctxTarget, "ctxpush", false, pushed);
+    ok = pushed;
+    return detail;
+  }
+  if (cmd == "mode") {
+    if (f.size() < 3)
+      return "usage: mode <mode>";
+    g_chatMode = Stobe::ChatMode::Normalize(f[2]);
+    g_lastChatModeIndex = Stobe::ChatMode::ToIndex(g_chatMode);
+    ok = true;
+    return "mode=" + g_chatMode;
+  }
+  if (cmd == "say") {
+    if (f.size() < 4 || f[3].empty())
+      return "usage: say <target> <text>";
+    if (!speaker)
+      return "no player character to speak as";
+    if (!Stobe::Interaction::ManualInputAllowed())
+      return "manual input not allowed right now";
+    std::string mode = Stobe::ChatMode::Normalize(g_chatMode);
+    bool narratorMode = (mode == "narrator");
+    Character *target = narratorMode
+                            ? nullptr
+                            : ResolveTestInboxTarget(world, sel, speaker, f[2]);
+    if (!narratorMode && !target)
+      return "target not found: " + f[2];
+    if (target && target == speaker && world && world->player) {
+      for (size_t i = 0; i < world->player->playerCharacters.size(); ++i) {
+        Character *pc = world->player->playerCharacters[i];
+        if (pc && pc != target) {
+          speaker = pc;
+          break;
+        }
+      }
+      if (speaker == target)
+        return "speaker and target are the same character";
+    }
+    std::string speakerName, speakerSerial, targetName, targetSerial;
+    try {
+      speakerName = speaker->getName();
+      speakerSerial = ToString(speaker->getHandle().serial);
+      if (narratorMode) {
+        targetName = GetNarratorDisplayName();
+      } else {
+        targetName = target->getName();
+        targetSerial = ToString(target->getHandle().serial);
+      }
+    } catch (...) {
+      return "could not read speaker/target";
+    }
+    if (narratorMode) {
+      g_talkTargetHand = hand();
+    } else {
+      g_talkTargetHand = target->getHandle();
+      SyncInventoryForCharacter(target, true, "test_inbox");
+      { bool ctxPushed = false; TestInboxPushNpcContext(target, "say", true, ctxPushed); }
+    }
+    InterruptTtsPlayback();
+    // Items 135/136 tests: `say <target> <text> ui` = the chat window's Send button (no speaker
+    // override), so the speaker is resolved the way a typed chat resolves it (FP char first).
+    if (f.size() >= 5 && f[4] == "ui" && !narratorMode) {
+      Log("TEST_INBOX: say_ui id=" + f[0] + " mode=" + mode + " target=" + targetName +
+          " text=" + f[3]);
+      Stobe::UI::g_chatTargetNameStr = targetName;
+      Stobe::UI::g_chatTargetHandleStr = targetSerial;
+      Stobe::UI::SubmitChatTextForCurrentContext(f[3], false);
+      ok = true;
+      return "target=" + targetName + " serial=" + targetSerial + " mode=" + mode + " ui=1";
+    }
+    Log("TEST_INBOX: say id=" + f[0] + " mode=" + mode + " speaker=" +
+        speakerName + " target=" + targetName + " text=" + f[3]);
+    SubmitVoiceChatText(f[3], speakerName, speakerSerial, targetName,
+                        targetSerial, mode);
+    ok = true;
+    return "target=" + targetName + " serial=" + targetSerial + " mode=" + mode;
+  }
+  if (cmd == "npcinfo") { // NPC info panel: drive and read the panel like a player would
+    std::string sub = f.size() >= 3 ? f[2] : "";
+    if (sub == "open") {
+      if (f.size() < 4)
+        return "usage: npcinfo open <target> [speaker]";
+      Character *target = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!target)
+        return "target not found: " + f[3];
+      Character *asker = speaker;
+      if (f.size() >= 5 && !f[4].empty()) {
+        asker = ResolveTestInboxTarget(world, sel, speaker, f[4]);
+        if (!asker)
+          return "speaker not found: " + f[4];
+      }
+      if (!NpcPanelOpenFor(world, asker, target, "test_open"))
+        return "cannot open the panel for " + f[3];
+      ok = true;
+      return "open key=" + Stobe::UI::NpcPanelKey() +
+             " gen=" + ToString(Stobe::UI::NpcPanelGeneration());
+    }
+    if (sub == "rename") { // NP6: rename through Stobe's Rename NPC window (the player's path)
+      if (f.size() < 5)
+        return "usage: npcinfo rename <target> <new name>";
+      Character *target = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!target)
+        return "target not found: " + f[3];
+      std::string newName = f[4];
+      for (size_t i = 5; i < f.size(); ++i)
+        newName += " " + f[i];
+      bool renamed = false;
+      std::string st = Stobe::UI::TestRenameViaWindow(target->getName(),
+                                                      ToString(target->getHandle().serial),
+                                                      newName, renamed);
+      ok = renamed;
+      return std::string(renamed ? "renamed" : "rename failed") + " name=" + newName +
+             " status=" + st;
+    }
+    if (sub == "chatwith") { // Item 135 tests: open the chat window on <target> as the chat hotkey does
+      if (f.size() < 4)
+        return "usage: npcinfo chatwith <target> [speaker]";
+      Character *target = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!target)
+        return "target not found: " + f[3];
+      Character *asker = speaker;
+      if (f.size() >= 5 && !f[4].empty()) {
+        asker = ResolveTestInboxTarget(world, sel, speaker, f[4]);
+        if (!asker)
+          return "speaker not found: " + f[4];
+      }
+      if (Stobe::UI::g_chatWindow)
+        Stobe::UI::CloseChatUI();
+      std::string tn, an, ts;
+      try {
+        tn = target->getName();
+        an = asker ? asker->getName() : std::string("");
+        ts = ToString(target->getHandle().serial);
+      } catch (...) {
+        return "could not read target/speaker";
+      }
+      Stobe::UI::CreateChatUI(tn, an, ts);
+      Log("TEST_INBOX: npcinfo chatwith target=" + tn + " speaker=" + an);
+      ok = Stobe::UI::g_chatWindow != nullptr;
+      return ok ? "chat open target=" + tn + " serial=" + ts + " speaker=" + an : "chat window did not open";
+    }
+    if (sub == "chatclose") {
+      if (Stobe::UI::g_chatWindow)
+        Stobe::UI::CloseChatUI();
+      ok = true;
+      return "chat closed";
+    }
+    if (sub == "chat") { // same path as the chat window's Info button
+      Stobe::UI::g_npcPanelOpenRequest = true;
+      ok = true;
+      return "queued";
+    }
+    if (sub == "refresh") {
+      if (!Stobe::UI::IsNpcPanelOpen())
+        return "panel not open";
+      Stobe::UI::g_npcPanelRefreshRequest = true;
+      ok = true;
+      return "queued";
+    }
+    if (sub == "close") {
+      Stobe::UI::CloseNpcPanelUI();
+      ok = true;
+      return "closed";
+    }
+    if (sub == "read") {
+      ok = true;
+      if (!Stobe::UI::IsNpcPanelOpen())
+        return "open=0";
+      std::string text = Stobe::UI::NpcPanelText();
+      return "open=1 key=" + Stobe::UI::NpcPanelKey() +
+             " gen=" + ToString(Stobe::UI::NpcPanelGeneration()) +
+             " loaded=" + (text.empty() ? std::string("0") : std::string("1")) +
+             " " + Stobe::UI::NpcPanelStatus() +
+             " text=" + NpcPanelOneLine(text);
+    }
+    if (sub == "testportrait") {
+      const std::string action = f.size() >= 4 ? f[3] : "";
+      if (action == "status") {
+        ok = true;
+        const StobePortraitFaultInjection::Mode mode =
+            g_npcPanelPortraitTestFault.mode();
+        const char *name = mode == StobePortraitFaultInjection::PRIVATE_RENDER_UNAVAILABLE
+                               ? "private"
+                               : (mode == StobePortraitFaultInjection::ALL_RENDER_PATHS_UNAVAILABLE
+                                      ? "both" : "none");
+        return std::string("armed=") + (mode == StobePortraitFaultInjection::NONE ? "0" : "1") +
+               " mode=" + name + " target=" +
+               ToString(g_npcPanelPortraitTestFault.targetSerial());
+      }
+      if (action == "clear") {
+        g_npcPanelPortraitTestFault.clear();
+        ok = true;
+        return "cleared";
+      }
+      if (action != "private" && action != "both")
+        return "usage: npcinfo testportrait <private|both|clear|status>";
+      if (!Stobe::UI::IsNpcPanelOpen() || g_npcPanelTargetSerial == 0)
+        return "panel not open";
+      if (g_npcPanelPortraitDisabled)
+        return "portrait path disabled after engine fault";
+      Character *target = FindCharacterBySerial(world, g_npcPanelTargetSerial);
+      if (!target || (uintptr_t)target <= 0x1000 || !target->isHuman())
+        return "current panel target is not a live humanoid";
+      const StobePortraitFaultInjection::Mode mode =
+          action == "private"
+              ? StobePortraitFaultInjection::PRIVATE_RENDER_UNAVAILABLE
+              : StobePortraitFaultInjection::ALL_RENDER_PATHS_UNAVAILABLE;
+      if (!g_npcPanelPortraitTestFault.arm(mode, g_npcPanelTargetSerial))
+        return "could not arm portrait fault";
+      const unsigned int targetSerial = g_npcPanelTargetSerial;
+      NpcPanelSend(world, "test_portrait_fault", true);
+      const char *modeName = action == "private" ? "private" : "both";
+      Log("NPC_PANEL_TEST: command=" + std::string(modeName) +
+          " target=" + ToString(targetSerial) + " one_shot=1");
+      ok = true;
+      return std::string("applied mode=") + modeName +
+             " target=" + ToString(targetSerial) + " one_shot=1";
+    }
+    return "usage: npcinfo <open <target> [speaker]|chat|chatwith <target> [speaker]|chatclose|testportrait <private|both|clear|status>|read|refresh|close>";
+  }
+  if (cmd == "drawn") // drawn-weapon reactions: status/draw/sheathe/hold/reset/set/pair
+    return Stobe::DrawnWeapon::TestCommand(world, sel, f, ok, &ResolveTestInboxTargetForDrawn);
+  if (cmd == "shopprice") { // item 104: refetch r for (trader, player) and show the cached value
+    if (f.size() < 3)
+      return "usage: shopprice <trader> [player]";
+    Character *trader = ResolveTestInboxTarget(world, sel, speaker, f[2]);
+    if (!trader)
+      return "target not found: " + f[2];
+    Character *player = speaker;
+    if (f.size() >= 4 && !f[3].empty()) {
+      player = ResolveTestInboxTarget(world, sel, speaker, f[3]);
+      if (!player)
+        return "target not found: " + f[3];
+    }
+    ok = true;
+    return Stobe::ShopPrice::DebugRefresh(trader, player);
+  }
+  if (cmd == "state") {
+    if (f.size() < 3)
+      return "usage: state <target>";
+    Character *target = ResolveTestInboxTarget(world, sel, speaker, f[2]);
+    if (!target)
+      return "target not found: " + f[2];
+    std::string inventoryJson, inventoryHash;
+    int itemCount = 0;
+    BuildInventorySnapshot(target, inventoryJson, inventoryHash, itemCount);
+    int playerCats = 0;
+    float distance = -1.0f;
+    std::string name, faction;
+    unsigned int serial = 0;
+    try {
+      name = target->getName();
+      serial = target->getHandle().serial;
+      faction = SafeFactionName(target->getFaction());
+      if (speaker) {
+        distance = target->getPosition().distance(speaker->getPosition());
+        playerCats = speaker->getMoney();
+        if (playerCats <= 0 && speaker->getOwnerships())
+          playerCats = speaker->getOwnerships()->getMoney();
+      }
+    } catch (...) {
+    }
+    std::string json = "{\"name\":\"" + EscapeJSON(name) + "\"";
+    json += ",\"serial\":" + ToString(serial);
+    json += ",\"faction\":\"" + EscapeJSON(faction) + "\"";
+    json += ",\"distance_to_player\":" + ToString(distance);
+    json += ",\"player_cats\":" + ToString(playerCats);
+    json += ",\"ai\":" + DescribeCharacterAiStateJson(target);
+    json += ",\"inventory\":" + inventoryJson + "}";
+    ok = true;
+    return json;
+  }
+  if (cmd == "give_cats") {
+    int amount = f.size() >= 3 ? atoi(f[2].c_str()) : 0;
+    if (amount <= 0 || amount > 1000000)
+      return "usage: give_cats <1..1000000>";
+    if (!speaker)
+      return "no player character";
+    int before = 0, after = 0;
+    try {
+      before = speaker->getMoney();
+      speaker->takeMoney(-amount);
+      after = speaker->getMoney();
+    } catch (...) {
+      return "money change failed";
+    }
+    SyncPlayerCatsValue(speaker, true, "test_inbox");
+    Log("TEST_INBOX: give_cats id=" + f[0] + " amount=" + ToString(amount) +
+        " before=" + ToString(before) + " after=" + ToString(after));
+    ok = true;
+    return "cats " + ToString(before) + " -> " + ToString(after);
+  }
+  if (cmd == "give_item") {
+    if (f.size() < 3 || f[2].empty())
+      return "usage: give_item <name> [count]";
+    int count = f.size() >= 4 ? atoi(f[3].c_str()) : 1;
+    if (count <= 0 || count > 50)
+      return "count must be 1..50";
+    if (!speaker || !world->theFactory)
+      return "no player character or item factory";
+    std::string error;
+    GameData *data = FindTestInboxItemData(world, f[2], error);
+    if (!data)
+      return error;
+    Inventory *inventory = speaker->getInventory();
+    if (!inventory)
+      return "player has no inventory";
+    int added = 0;
+    for (int i = 0; i < count; ++i) {
+      Item *item = nullptr;
+      try {
+        item = world->theFactory->createItem(data, hand(), nullptr, nullptr, -1,
+                                             nullptr);
+      } catch (...) {
+        item = nullptr;
+      }
+      if (!item)
+        break;
+      bool placed = false;
+      try {
+        placed = inventory->addItem(item, 1, false, true);
+      } catch (...) {
+        placed = false;
+      }
+      if (!placed)
+        break;
+      ++added;
+    }
+    Log("TEST_INBOX: give_item id=" + f[0] + " item=" + data->name +
+        " requested=" + ToString(count) + " added=" + ToString(added));
+    ok = added > 0;
+    return (ok ? "" : "nothing added (inventory full?) ") + std::string("item=") +
+           data->name + " added=" + ToString(added) + "/" + ToString(count);
+  }
+  return "unknown command: " + cmd;
+}
+
+namespace Stobe { namespace UI { extern bool g_initiativeAllowPlayerListener; } } // ChatBox.cpp
+
+// Server/KenshiFP ask for an NPC-initiated turn by writing lifelike_initiative.flag.
+static void UpdateLifelikeInitiativeFlag() {
+  static DWORD lastPoll = 0;
+  DWORD now = GetTickCount();
+  if (now - lastPoll < 1000)
+    return;
+  lastPoll = now;
+  const std::string path = GetTestInboxDir() + "\\lifelike_initiative.flag";
+  if (GetFileAttributesA(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+    return;
+  DeleteFileA(path.c_str());
+  if (!g_enableBoredEvents) {
+    Log("LIFELIKE_INITIATIVE: flag ignored (bored events disabled)");
+    return;
+  }
+  EnterCriticalSection(&g_stateMutex);
+  g_triggerBoredEvent = true;
+  Stobe::UI::g_initiativeAllowPlayerListener = true;
+  LeaveCriticalSection(&g_stateMutex);
+  Log("LIFELIKE_INITIATIVE: flag consumed, initiative turn armed");
+}
+
+// StobeGoals.cpp (moved from KenshiFP): post-STT voice range lock and lifelike danger interrupt.
+float *StobeGoals_ProximityRadius(void) { return &g_proximityRadius; }
+long StobeGoals_ChatInterrupt(void) {
+  EnterCriticalSection(&g_stateMutex);
+  g_triggerBoredEvent = false;
+  LeaveCriticalSection(&g_stateMutex);
+  // m50 D86: danger fired only by NPCs we await a reply from (the bandit we
+  // are negotiating a truce with) must not cut that reply.
+  std::string dangerActors;
+  if (ShouldSkipDangerInterruptForChatPartners(&dangerActors)) {
+    Log("LIFELIKE_INTERRUPT: skipped, danger only from chat partner(s) " +
+        dangerActors + "; reply keeps playing");
+    return (long)GetChatInterruptGeneration();
+  }
+  // Danger: speech/TTS cut, action lines of in-flight replies still delivered.
+  LONG generation = BeginChatInterruptGeneration(true, true);
+  Log("LIFELIKE_INTERRUPT: danger preempted chat/TTS (actions kept) gen=" +
+      ToString((int)generation) + " actors=" + dangerActors);
+  return (long)generation;
+}
+
+// GetAsyncKeyState sees keys pressed in any window, so typing in another app
+// while Kenshi ran opened the chat box, the STOBE menu or push-to-talk. Only
+// react when Kenshi's own window has focus, like Kenshi and KenshiFP do.
+static bool IsKenshiWindowFocused() {
+  HWND fg = GetForegroundWindow();
+  if (!fg)
+    return false;
+  DWORD pid = 0;
+  GetWindowThreadProcessId(fg, &pid);
+  return pid == GetCurrentProcessId();
+}
+
+static bool StobeHotkeyDown(int vk) {
+  return vk != 0 && (GetAsyncKeyState(vk) & 0x8000) != 0 &&
+         IsKenshiWindowFocused();
+}
+
+void Hook_PlayerUpdateTick(PlayerInterface *thisptr) {
+  static LONG postLoadHookProbe = 0;
+  if (!thisptr || reinterpret_cast<uintptr_t>(thisptr) < 0x10000) {
+    static bool loggedInvalidThis = false;
+    if (!loggedInvalidThis) {
+      Log("HOOK_WARN: Hook_PlayerUpdateTick received invalid this pointer.");
+      loggedInvalidThis = true;
+    }
+    return;
+  }
+
+  const bool tracePostLoadHook =
+      InterlockedCompareExchange(&postLoadHookProbe, 2, 1) == 1;
+  if (tracePostLoadHook) {
+    Log("HOOK_LOAD_PROBE: entering first post-stable PlayerInterface::update");
+  }
+  if (playerUpdate_orig)
+    playerUpdate_orig(thisptr);
+  if (tracePostLoadHook) {
+    Log("HOOK_LOAD_PROBE: original PlayerInterface::update returned");
+  }
+
+  GameWorld *worldUi = GetWorldSafe();
+  if (tracePostLoadHook) {
+    Log("HOOK_LOAD_PROBE: GameWorld lookup returned");
+  }
+  static bool worldWasStable = false;
+  static DWORD worldBecameStableTick = 0;
+  static bool heavySweepPrimed = false;
+  static bool motdAutoOpenQueued = false;
+  static DWORD motdAutoOpenTick = 0;
+  static DWORD motdAutoOpenDeadlineTick = 0;
+  static bool loadInitEventDispatched = false;
+  static bool postLoadPipelineProbed = false;
+  static bool heavySyncPipelineProbed = false;
+  bool worldStable = IsWorldStableForUI(worldUi);
+  if (tracePostLoadHook) {
+    Log(std::string("HOOK_LOAD_PROBE: stability check returned stable=") +
+        (worldStable ? "1" : "0"));
+  }
+
+  MyGUI::Gui *gui = MyGUI::Gui::getInstancePtr();
+  if (tracePostLoadHook) {
+    Log(std::string("HOOK_LOAD_PROBE: GUI lookup returned available=") +
+        (gui ? "1" : "0"));
+  }
+  if (!gui) {
+    Stobe::BodyguardContractProbe::Reset();
+    // During loads MyGUI can be torn down; clear stale pointers and do nothing.
+    // A load may finish before another unstable frame with a GUI is observed.
+    // Never retain executable route tokens or sightings across that gap.
+    Stobe::LocalTravel::Reset();
+    Stobe::NativeTravelLifecycle::Reset();
+    Stobe::UI::ResetNpcContextRenameAction(false);
+    ResetMoveToActions();
+    ResetAutonomyController("gui_unavailable");
+    ResetActivityController("gui_unavailable");
+    ResetAutonomySafetyProbe("gui_unavailable");
+    Stobe::DialogueMenuTts::Reset("gui_unavailable");
+    CloseChatUI();
+    g_settingsWindow = nullptr;
+    g_startingWindow = nullptr;
+    g_welcomeWindow = nullptr;
+    g_aiNpcInfoWindow = nullptr;
+    CloseAiDiaryUI(false);
+    g_recentHistoryWindow = nullptr;
+    g_statusHudWindow = nullptr;
+    return;
+  }
+
+  if (!worldStable) {
+    Stobe::BodyguardContractProbe::Reset();
+    StobeGoals_HidePanel();
+    Stobe::UI::ResetNpcContextRenameAction();
+    ResetMoveToActions();
+    ResetAutonomyController("world_unstable");
+    ResetActivityController("world_unstable");
+    ResetAutonomySafetyProbe("world_unstable");
+    Stobe::DialogueMenuTts::Reset("world_unstable");
+    if (worldWasStable) {
+      worldWasStable = false;
+      Log("HOOK: world transition detected; pausing UI hook logic.");
+      // Kenshi crashed rendering the open NPC info panel (portrait image on the game's portrait
+      // texture) while a save loaded (m61/m62, kenshi_x64+0xb42f5): close it on the transition.
+      if (Stobe::UI::IsNpcPanelOpen()) {
+        Stobe::UI::CloseNpcPanelUI();
+        Log("NPC_PANEL: closed on world transition");
+      }
+      ResetNpcPanelProfilePortrait();
+      Stobe::LocalTravel::Reset();
+      Stobe::NativeTravelLifecycle::Reset();
+      EnterCriticalSection(&g_stateMutex);
+        g_inventorySyncStateBySerial.clear();
+        g_itemImageSyncStateByItemId.clear();
+        g_itemImageSyncRequestQueue.clear();
+        g_itemImageLastRunTick = 0;
+        g_lastInventoryUiVisibleTick = 0;
+        g_worldStableSinceTick = 0;
+      g_pendingSelectionContextHand = hand();
+      g_pendingSelectionContextSerial = 0;
+      g_pendingSelectionContextQueuedTick = 0;
+      g_lastSelectionSerial = 0;
+      g_lastSelectionContextPushedTick = 0;
+      g_lastSelectionContextPushedSerial = 0;
+      g_activeInventoryJson = "[]";
+      g_playerInventoryJson = "[]";
+      g_lastInventoryHand = hand();
+      g_playerHand = hand();
+      g_activatedAnimalSerials.clear();
+      LeaveCriticalSection(&g_stateMutex);
+      g_npcWorldEventStateBySerial.clear();
+      EnterCriticalSection(&g_stateMutex);
+      g_socialStorageByChar.clear();
+      LeaveCriticalSection(&g_stateMutex);
+      g_socialScanSerialByChar.clear();
+      g_combatEncounters.clear();
+      g_recentCombatSignalTickBySerial.clear();
+      g_lastNpcWorldEventSweepTick = 0;
+      g_lastInventorySweepTick = 0;
+      g_lastInfoNpcTelemetryCheckTick = 0;
+      g_lastInfoNpcTelemetrySentTick = 0;
+      g_lastInfoNpcTelemetryDigest = "";
+      g_lastInfoLocTelemetryCheckTick = 0;
+      g_lastInfoLocTelemetrySentTick = 0;
+      g_lastInfoLocTelemetryDigest = "";
+      ResetPortraitSyncState();
+      ResetPlayerCatsSyncState();
+      ResetPlayerSquadsSyncState();
+      ResetFactionRelationSyncState();
+      ResetTownKnowledgeSyncState();
+      Stobe::PlayerBase::Reset();
+      Stobe::WorldStateRuntime::Reset();
+      heavySweepPrimed = false;
+      motdAutoOpenQueued = false;
+      motdAutoOpenTick = 0;
+      motdAutoOpenDeadlineTick = 0;
+      loadInitEventDispatched = false;
+      postLoadPipelineProbed = false;
+      heavySyncPipelineProbed = false;
+      Log("INV_SYNC: state reset on world transition.");
+      Log("PORTRAIT_SYNC: state reset on world transition.");
+    }
+    if (IsAnyStobeMenuUIOpen())
+      CloseAllStobeMenuUI();
+    if (g_statusHudWindow)
+      CloseStatusHud();
+    if (g_chatWindow)
+      CloseChatUI();
+    return;
+  }
+
+  if (!worldWasStable) {
+    worldWasStable = true;
+      worldBecameStableTick = GetTickCount();
+      EnterCriticalSection(&g_stateMutex);
+      g_lastInventoryUiVisibleTick = 0;
+      g_worldStableSinceTick = worldBecameStableTick;
+    g_pendingSelectionContextHand = hand();
+    g_pendingSelectionContextSerial = 0;
+    g_pendingSelectionContextQueuedTick = 0;
+    g_lastSelectionSerial = 0;
+    g_lastSelectionContextPushedTick = 0;
+    g_lastSelectionContextPushedSerial = 0;
+    LeaveCriticalSection(&g_stateMutex);
+    Stobe::WorldStateRuntime::Reset();
+    Stobe::PlayerBase::Reset();
+    heavySweepPrimed = false;
+    motdAutoOpenQueued = false;
+    motdAutoOpenTick = 0;
+    motdAutoOpenDeadlineTick = 0;
+    loadInitEventDispatched = false;
+    postLoadPipelineProbed = false;
+    heavySyncPipelineProbed = false;
+    InterlockedExchange(&postLoadHookProbe, 1);
+    Log("HOOK: world stable; delaying UI hook logic.");
+    return;
+  }
+
+  // Save loads can expose unstable pointers for several seconds after world appears.
+  if (GetTickCount() - worldBecameStableTick < 10000) {
+    return;
+  }
+
+  if (!g_enableWelcome) {
+    motdAutoOpenQueued = false;
+    motdAutoOpenTick = 0;
+    motdAutoOpenDeadlineTick = 0;
+  } else if (!g_welcomeShown) {
+    if (!motdAutoOpenQueued) {
+      motdAutoOpenQueued = true;
+      motdAutoOpenTick = worldBecameStableTick + 5500;
+      motdAutoOpenDeadlineTick = worldBecameStableTick + 20000;
+      Log("UI: MOTD auto-open queued (startup quiet-window mode).");
+    } else {
+      DWORD now = GetTickCount();
+      if ((LONG)(now - motdAutoOpenDeadlineTick) >= 0 &&
+          motdAutoOpenDeadlineTick != 0) {
+  // Do not open MOTD late during gameplay; leave manual open via general menu hotkey.
+        g_welcomeShown = true;
+        motdAutoOpenQueued = false;
+        motdAutoOpenTick = 0;
+        motdAutoOpenDeadlineTick = 0;
+        Log("UI: MOTD auto-open skipped (startup quiet window expired).");
+      } else if ((LONG)(now - motdAutoOpenTick) >= 0 &&
+                  !IsSpeechSystemBusyForMOTD() && !g_chatWindow &&
+                  !IsAnyStobeMenuUIOpen()) {
+        try {
+          CreateWelcomeUI();
+          g_welcomeShown = true;
+          motdAutoOpenQueued = false;
+          motdAutoOpenTick = 0;
+          motdAutoOpenDeadlineTick = 0;
+          Log("UI: MOTD auto-opened.");
+        } catch (...) {
+          motdAutoOpenQueued = false;
+          motdAutoOpenTick = 0;
+          motdAutoOpenDeadlineTick = 0;
+          Log("UI_WARN: MOTD auto-open failed; skipping this session.");
+        }
+      }
+    }
+  }
+
+  // Left menu hotkey (configurable) - only once world/UI are stable.
+  if (StobeHotkeyDown(g_generalHotkey)) {
+    static DWORD lastSettingsTick = 0;
+    DWORD now = GetTickCount();
+    if (now - lastSettingsTick > 500) {
+      lastSettingsTick = now;
+      Log("UI: general hotkey pressed [" + g_generalHotkeyStr + "].");
+      if (IsAnyStobeMenuUIOpen()) {
+        CloseAllStobeMenuUI();
+        Log("UI: CloseAllStobeMenuUI done.");
+      } else {
+        CreateStartingUI();
+        Log("UI: CreateStartingUI done.");
+      }
+    }
+  }
+
+  if (worldUi->isLoadingFromASaveGame()) return;
+  std::string playthroughMessage;
+  if (PlaythroughSession::TakeNotice(playthroughMessage)) worldUi->showPlayerAMessage_withLog("[STOBE] " + playthroughMessage, true);
+  if (!PlaythroughSession::Allowed(PlaythroughSession::Generation())) {
+    if (!g_campaignHooksReady) return;
+    std::set<std::string> members;
+    for (size_t i=0;i<worldUi->player->playerCharacters.size();++i) {
+      Character* member=worldUi->player->playerCharacters[i];
+      if (member && members.size()<128) members.insert(member->getName());
+    }
+    std::string roster="[";
+    for(std::set<std::string>::const_iterator it=members.begin();it!=members.end();++it) {
+      if(it!=members.begin())roster+=",";roster+="\""+EscapeJSON(*it)+"\"";
+    }
+    roster+="]";
+    Character* first=worldUi->player->playerCharacters[0];
+    std::string name=SafeFactionName(first->getFaction());
+    if(name.empty() || name=="None")name="Campaign";
+    PlaythroughSession::Connect(name,ResolveCurrentGameTsSafe(worldUi),roster);
+    return;
+  }
+
+  bool probePostLoadPipeline = !postLoadPipelineProbed;
+  if (probePostLoadPipeline) {
+    Log("HOOK_LOAD_PROBE: entering warmed post-load pipeline");
+  }
+
+  // 1. Core Selection Tracking
+  Character *sel = ResolveSelectedCharacterSehSafe(thisptr);
+  Character *probeAnchor = sel;
+  if (worldUi->player && worldUi->player->playerCharacters.size() > 0) {
+    Character *firstPlayer = worldUi->player->playerCharacters[0];
+    if (firstPlayer) probeAnchor = firstPlayer;
+  }
+  Stobe::BodyguardContractProbe::Observe(worldUi, probeAnchor);
+  Stobe::UI::UpdateNpcContextRenameAction(thisptr);
+  Stobe::DialogueMenuTts::Update();
+  Stobe::PlayerBase::Update(worldUi, sel);
+  UpdateStatusHud(worldUi);
+  UpdateSupportReportUI();
+
+  static bool pushToTalkWasDown = false;
+  bool pushToTalkEnabled = g_pushToTalkHotkey != 0;
+  bool pushToTalkDown =
+      pushToTalkEnabled && StobeHotkeyDown(g_pushToTalkHotkey);
+  if (!pushToTalkEnabled) {
+    if (Stobe::Voice::IsRecording())
+      Stobe::Voice::Cancel();
+  } else if (pushToTalkDown && !pushToTalkWasDown &&
+             MyGUI::InputManager::getInstance().isFocusKey()) {
+    // Item 145: V typed into the chat box (or any text field) is a letter, not push-to-talk
+    // (Shay's 2026-10-07 session: 120 "Hold push-to-talk longer" rejections of ~70 ms taps).
+    static DWORD lastTypedLog = 0;
+    if (GetTickCount() - lastTypedLog > 60000) {
+      lastTypedLog = GetTickCount();
+      Log("STT_CAPTURE: push-to-talk key ignored while a text field has focus");
+    }
+  } else if (pushToTalkDown && !pushToTalkWasDown &&
+             !IsAnyStobeMenuUIOpen()) {
+    std::string voiceMode = Stobe::ChatMode::Normalize(g_chatMode);
+    bool narratorMode = (voiceMode == "narrator");
+    Character *speaker = nullptr;
+    Character *target = nullptr;
+    bool selectedIsPlayer = false;
+    if (sel && (uintptr_t)sel > 0x1000) {
+      try { selectedIsPlayer = sel->isPlayerCharacter(); } catch (...) {}
+    }
+    if (selectedIsPlayer) {
+      speaker = sel;
+      target = ResolveNearestNpcTargetForSelection(worldUi, speaker);
+    } else if (sel && (uintptr_t)sel > 0x1000) {
+      target = sel;
+      speaker = ResolveNearestPlayerSpeakerForTarget(worldUi, target);
+    } else if (worldUi && worldUi->player &&
+               worldUi->player->playerCharacters.size() > 0) {
+      speaker = worldUi->player->playerCharacters[0];
+      target = ResolveNearestNpcTargetForSelection(worldUi, speaker);
+    }
+    // Item 136: in first person the controlled character speaks; a selected squad mate
+    // is who she talks to.
+    Character *fpSpeaker = StobeFpControlledCharacter(worldUi);
+    if (fpSpeaker && fpSpeaker != speaker) {
+      speaker = fpSpeaker;
+      if (selectedIsPlayer && sel != fpSpeaker)
+        target = sel;
+      else if (!target || target == fpSpeaker)
+        target = ResolveNearestNpcTargetForSelection(worldUi, speaker);
+    }
+
+    bool targetIsAnimal = target && IsAnimalCharacterSafe(target);
+    if (!narratorMode && targetIsAnimal && !g_enableAnimalTalks) {
+      target = nullptr;
+      if (worldUi)
+        worldUi->showPlayerAMessage_withLog(
+            "Animal Talks must be enabled to speak to this target.", true);
+    }
+    if (!speaker || (uintptr_t)speaker < 0x1000) {
+      if (worldUi)
+        worldUi->showPlayerAMessage_withLog(
+            "Push-to-talk needs a selected player character.", true);
+      Log("STT_CAPTURE: start blocked; no valid speaker");
+    } else if (!narratorMode &&
+               (!target || (uintptr_t)target < 0x1000)) {
+      if (worldUi)
+        worldUi->showPlayerAMessage_withLog(
+            "No one is nearby to respond.", true);
+      Log("STT_CAPTURE: start blocked; no nearby target mode=" + voiceMode);
+    } else {
+      Stobe::Voice::Context voiceContext;
+      try {
+        voiceContext.speakerName = speaker->getName();
+        voiceContext.speakerSerial = ToString(speaker->getHandle().serial);
+        if (narratorMode) {
+          voiceContext.targetName = GetNarratorDisplayName();
+          voiceContext.targetSerial.clear();
+        } else {
+          voiceContext.targetName = target->getName();
+          voiceContext.targetSerial = ToString(target->getHandle().serial);
+        }
+      } catch (...) {
+      }
+      voiceContext.mode = voiceMode;
+      if (narratorMode) {
+        g_talkTargetHand = hand();
+      } else {
+        g_talkTargetHand = target->getHandle();
+        SyncInventoryForCharacter(target, true, "stt_start");
+        if (targetIsAnimal) MarkAnimalActivated(target->getHandle().serial);
+      }
+      InterruptTtsPlayback();
+      if (Stobe::Voice::Start(voiceContext)) {
+        if (worldUi)
+          worldUi->showPlayerAMessage_withLog("Listening...", false);
+      } else if (worldUi) {
+        worldUi->showPlayerAMessage_withLog(
+            "Could not start the microphone.", true);
+      }
+    }
+  } else if (!pushToTalkDown && pushToTalkWasDown &&
+             Stobe::Voice::IsRecording()) {
+    Stobe::Voice::StopAndTranscribe();
+    if (worldUi)
+      worldUi->showPlayerAMessage_withLog("Transcribing...", false);
+  }
+  pushToTalkWasDown = pushToTalkDown;
+  if (pushToTalkEnabled)
+    Stobe::Voice::Update();
+  Stobe::HarnessBridge::Drain(worldUi, sel, &RunTestInboxCommand);
+  UpdateLifelikeInitiativeFlag();
+  Stobe::DrawnWeapon::Update(worldUi); // drawn-weapon reactions
+  Stobe::N2SocialWatch::Update(worldUi, sel); // N2 proximity / combat follow-up trigger
+
+  // Player Cats and squads for the server (these used to run on the background loop).
+  static DWORD lastPlayerSyncTick = 0;
+  if (worldUi && worldUi->player && worldUi->player->playerCharacters.size() > 0 &&
+      GetTickCount() - lastPlayerSyncTick >= 2000) {
+    lastPlayerSyncTick = GetTickCount();
+    Character *primaryPlayer = worldUi->player->playerCharacters[0];
+    if (primaryPlayer && (uintptr_t)primaryPlayer > 0x1000) {
+      SyncPlayerCatsValue(primaryPlayer, false, "update_tick");
+      SyncPlayerSquadsToConfOpts(worldUi, false, "update_tick");
+    }
+  }
+
+  // Detect Selection Change
+  EnterCriticalSection(&g_stateMutex);
+  bool selectionChanged = false;
+  hand currentSelectionHand;
+  bool hasSelectionHandle = TryGetCharacterHandleSafe(sel, currentSelectionHand);
+  if (hasSelectionHandle && currentSelectionHand.serial != 0) {
+    if (currentSelectionHand.serial != g_lastSelectionSerial) {
+      std::string selectedName = "";
+      try {
+        selectedName = sel->getName();
+      } catch (...) {
+        selectedName = "";
+      }
+      g_activeCharName = selectedName;
+      g_lastSelectionSerial = currentSelectionHand.serial;
+      g_lastSelectionHand = currentSelectionHand;
+      selectionChanged = true;
+    } else {
+      g_lastSelectionHand = currentSelectionHand;
+    }
+  } else if (g_lastSelectionSerial != 0 || g_lastSelectionHand.isValid()) {
+    g_activeCharName = "";
+    g_lastSelectionSerial = 0;
+    g_lastSelectionHand = hand();
+    selectionChanged = true;
+  }
+  LeaveCriticalSection(&g_stateMutex);
+
+  if (selectionChanged && hasSelectionHandle && sel &&
+      (uintptr_t)sel > 0x1000) {
+    if (ShouldProcessAnimalCharacter(sel)) {
+      if (GetTickCount() - worldBecameStableTick >= kHookHeavySyncWarmupMs) {
+        SyncInventoryForCharacter(sel, true, "selection_change");
+        SyncPortraitForCharacter(sel, false, "selection_change");
+      } else {
+        Log("HOOK_LOAD_PROBE: deferred initial selection inventory and portrait sync");
+      }
+      // Full context snapshots can traverse stale nearby objects immediately
+      // after a save load. Dialogue and action paths still build them on demand.
+      ClearPendingSelectionContextPush();
+    } else {
+      ClearPendingSelectionContextPush();
+      Log("ANIMAL_TALKS: ignoring selection context sync for inactive animal.");
+    }
+  } else if (selectionChanged) {
+    ClearPendingSelectionContextPush();
+  }
+  if (probePostLoadPipeline) {
+    Log("HOOK_LOAD_PROBE: selection stage complete");
+  }
+
+  // 2. Message queue + queued actions
+  GameWorld *world = GetWorldSafe();
+  bool worldFrameStable = IsWorldStableForUI(world);
+  if (world && worldFrameStable) {
+    Stobe::WorldStateRuntime::Update(world, worldBecameStableTick);
+    UpdateAutonomyController(world);
+    UpdateAutonomySafetyProbe(world, sel);
+    if (!loadInitEventDispatched) {
+      if (probePostLoadPipeline) {
+        Log("HOOK_LOAD_PROBE: narrator init stage starting");
+      }
+      bool dispatchedViaStream =
+          TriggerNarratorWelcomeOnLoad(world, ResolvePlayerSpeakerForCurrentTalk(world));
+      if (!dispatchedViaStream) {
+        Character *initSpeaker = ResolvePlayerSpeakerForCurrentTalk(world);
+        if ((!initSpeaker || (uintptr_t)initSpeaker < 0x1000) && world->player &&
+            world->player->playerCharacters.size() > 0) {
+          initSpeaker = ResolveFirstAliveConsciousPlayerCharacter(world);
+        }
+
+        std::string initActor = ResolveCharacterNameSafe(initSpeaker);
+        if (initActor.empty() || initActor == "Unknown") {
+          initActor = "Player";
+        }
+        std::string initFaction = SafeFaction(initSpeaker);
+        if (initFaction.empty()) {
+          initFaction = "None";
+        }
+        unsigned int initActorSerial = ResolveCharacterSerialForEvent(initSpeaker);
+        std::string initMessage = "game load detected";
+
+        LogGameEvent("init", initActor, initFaction, "", "None", initMessage,
+                     initActorSerial, 0);
+        Log("LOAD_SYNC: narrator welcome stream unavailable; queued init fallback actor=" +
+            initActor + " serial=" + ToString((int)initActorSerial));
+      }
+      loadInitEventDispatched = true;
+      if (probePostLoadPipeline) {
+        Log("HOOK_LOAD_PROBE: narrator init stage complete");
+      }
+    }
+
+    if (probePostLoadPipeline) {
+      Log("HOOK_LOAD_PROBE: message and action stage starting");
+    }
+    ProcessMessageQueue(world);
+    static int invTimer = 0;
+    ExecuteQueuedActions(world, invTimer);
+    UpdateMoveToActions(world);
+    Stobe::NativeTravelLifecycle::Tick(world, CurrentGameTsSeconds());
+    ApplyFollowTargets(world);
+    ApplyTravelTargets(world);
+    StobeGoals_Tick(world); // work/task goals, goal panel, action/unequip requests (was KenshiFP)
+    UpdateActivityController(world); // finite, explicitly agreed activities only
+    RunQueuedItemImageSync();
+    RunPendingSelectionContextPush(sel, worldBecameStableTick);
+    if (probePostLoadPipeline) {
+      Log("HOOK_LOAD_PROBE: message and action stage complete");
+    }
+
+    DWORD nowTick = GetTickCount();
+    if (!heavySweepPrimed) {
+      g_lastInventorySweepTick = nowTick;
+      g_lastPortraitSweepTick = nowTick;
+      g_lastNpcWorldEventSweepTick = nowTick;
+      g_lastInfoNpcTelemetryCheckTick = nowTick;
+      g_lastInfoLocTelemetryCheckTick = nowTick;
+      heavySweepPrimed = true;
+    }
+
+    bool heavySyncReady = (nowTick - worldBecameStableTick) >= kHookHeavySyncWarmupMs;
+    bool npcEventSyncReady =
+        (nowTick - worldBecameStableTick) >= kNpcWorldEventWarmupMs;
+    bool probeHeavySyncPipeline = heavySyncReady && !heavySyncPipelineProbed;
+    if (npcEventSyncReady) {
+      if (probeHeavySyncPipeline) {
+        Log("HOOK_LOAD_PROBE: NPC world event sweep starting");
+      }
+      LONG sweepSehBefore =
+          InterlockedCompareExchange(&g_npcWorldEventSweepSehCount, 0, 0);
+      RunNpcWorldEventSweep(world, sel);
+      LONG sweepSehAfter =
+          InterlockedCompareExchange(&g_npcWorldEventSweepSehCount, 0, 0);
+      if (sweepSehAfter != sweepSehBefore) {
+        Log("NPC_WORLD_EVENT: skipped unsafe sweep after engine fault code=" +
+            ToString((int)g_npcWorldEventSweepLastSehCode));
+      }
+      if (probeHeavySyncPipeline) {
+        Log("HOOK_LOAD_PROBE: NPC world event sweep complete");
+      }
+    }
+    if (heavySyncReady) {
+      if (probeHeavySyncPipeline) {
+        Log("HOOK_LOAD_PROBE: inventory sweep starting");
+      }
+      RunInventorySyncSweep(world, sel);
+      if (probeHeavySyncPipeline) {
+        Log("HOOK_LOAD_PROBE: inventory sweep complete");
+        Log("HOOK_LOAD_PROBE: portrait sweep starting");
+      }
+      RunPlayerFactionPortraitSweep(world);
+      if (probeHeavySyncPipeline) {
+        Log("HOOK_LOAD_PROBE: portrait sweep complete");
+        Log("HOOK_LOAD_PROBE: info telemetry sweep starting");
+      }
+      RunInfoTelemetrySweep(world, sel);
+      if (probeHeavySyncPipeline) {
+        Log("HOOK_LOAD_PROBE: info telemetry sweep complete");
+        Log("HOOK_LOAD_PROBE: faction relation sync starting");
+      }
+      RunFactionRelationSync(world);
+      if (probeHeavySyncPipeline) {
+        Log("HOOK_LOAD_PROBE: faction relation sync complete");
+        Log("HOOK_LOAD_PROBE: town knowledge sync starting");
+      }
+      RunTownKnowledgeSync(world);
+      if (probeHeavySyncPipeline) {
+        heavySyncPipelineProbed = true;
+        Log("HOOK_LOAD_PROBE: town knowledge sync complete");
+        Log("HOOK_LOAD_PROBE: heavy sync pipeline complete");
+      }
+    }
+  }
+  if (probePostLoadPipeline) {
+    postLoadPipelineProbed = true;
+    Log("HOOK_LOAD_PROBE: warmed post-load pipeline complete");
+  }
+
+  if (world && worldFrameStable && g_enableBoredEvents) {
+    bool forceTrigger = false;
+    EnterCriticalSection(&g_stateMutex);
+    if (g_triggerBoredEvent) {
+      forceTrigger = true;
+      g_triggerBoredEvent = false;
+    }
+    LeaveCriticalSection(&g_stateMutex);
+
+    DWORD now = GetTickCount();
+    bool worldPaused = world->isPaused();
+    int nowGameTs = 0;
+    try {
+      TimeOfDay nowTod = world->getTimeStamp_inGameHours();
+      nowGameTs = (int)nowTod.getTotalSeconds();
+    } catch (...) {
+      nowGameTs = 0;
+    }
+    if (nowGameTs <= 0) {
+      nowGameTs = g_lastBoredEventGameTs;
+    }
+
+    int intervalHours = g_boredEventIntervalHours;
+    if (intervalHours < 1) {
+      intervalHours = 1;
+    } else if (intervalHours > 720) {
+      intervalHours = 720;
+    }
+
+    const int extraBoredDelayGamets = 10;
+    const int intervalGamets = intervalHours * 3600 + extraBoredDelayGamets;
+
+    if (!forceTrigger && g_lastBoredEventGameTs > 0 &&
+        nowGameTs > 0 && nowGameTs + 5 < g_lastBoredEventGameTs) {
+      // Game load/rewind: rebase so bored events do not immediately spam.
+      g_lastBoredEventGameTs = nowGameTs;
+      g_lastBoredEventTick = now;
+    }
+
+    if (!forceTrigger && g_lastBoredEventGameTs <= 0) {
+      g_lastBoredEventGameTs = nowGameTs;
+      g_lastBoredEventTick = now;
+      Log("BORED_EVENT: startup cooldown armed for " + ToString(intervalHours) +
+          "h (+10s ingame grace)");
+    }
+
+    bool periodicDue =
+        !forceTrigger && !worldPaused && nowGameTs > 0 &&
+        g_lastBoredEventGameTs > 0 &&
+        ((nowGameTs - g_lastBoredEventGameTs) >= intervalGamets);
+
+    if (forceTrigger || periodicDue) {
+      bool speechBusy = IsTtsPlaybackActive() || IsDirectorSceneActive();
+      if (speechBusy) {
+        if (forceTrigger) {
+          EnterCriticalSection(&g_stateMutex);
+          g_triggerBoredEvent = true;
+          LeaveCriticalSection(&g_stateMutex);
+          Log("BORED_EVENT: delayed (active TTS playback)");
+        } else {
+          g_lastBoredEventGameTs = nowGameTs;
+          g_lastBoredEventTick = now;
+        }
+      } else {
+        g_lastBoredEventGameTs = nowGameTs;
+        g_lastBoredEventTick = now;
+        bool dispatched = TriggerBoredEvent(world, forceTrigger);
+        if (!dispatched && forceTrigger) {
+          Log("BORED_EVENT: manual trigger skipped (no eligible NPC)");
+        }
+      }
+    }
+  }
+
+  // NPC info panel: hotkey toggles the selected character's card (not while
+  // typing). An open hotkey card follows selection; chat Info follows the chat.
+  if (StobeHotkeyDown(g_npcInfoHotkey) &&
+      !MyGUI::InputManager::getInstance().isFocusKey()) {
+    static DWORD lastNpcPanelTick = 0;
+    if (GetTickCount() - lastNpcPanelTick > 500) {
+      lastNpcPanelTick = GetTickCount();
+      if (Stobe::UI::IsNpcPanelOpen()) {
+        Stobe::UI::CloseNpcPanelUI();
+      } else {
+        Character *chatSpeaker = nullptr, *chatTarget = nullptr;
+        if (NpcPanelOpenForSelected(world, sel, "hotkey_selected")) {
+          g_npcPanelFollowsChat = false; // follows future selection changes too
+        } else if (NpcPanelPair(world, sel, chatSpeaker, chatTarget)) {
+          NpcPanelOpenFor(world, chatSpeaker, chatTarget, "hotkey_chat");
+        } else if (!NpcPanelOpenForSelection(world, sel, "hotkey"))
+          Log("NPC_PANEL: hotkey pressed but no conversation target");
+        // Even a hotkey card initially opened via the chat fallback follows
+        // the next valid selection once the player selects a character.
+        if (Stobe::UI::IsNpcPanelOpen())
+          g_npcPanelFollowsChat = false;
+      }
+    }
+  }
+  NpcPanelTick(world, sel);
+
+  // Rename checks are now queued only for dialogue-tagged NPCs.
+  // 4. Input Handling ??? Chat window hotkey
+  if (UpdateChatHotkey(IsKenshiWindowFocused())) {
+    Log("UI: chat hotkey pressed [" + g_chatHotkeyStr + "].");
+    if (IsAnyStobeMenuUIOpen()) {
+      CloseAllStobeMenuUI();
+      Log("UI: closed STOBE menu before opening chat.");
+    }
+    if (sel && (uintptr_t)sel > 0x1000) {
+      Character *chatTarget = nullptr;
+      Character *chatSpeaker = nullptr;
+      if (sel->isPlayerCharacter()) {
+        chatSpeaker = sel;
+        Character *resolvedTarget = nullptr;
+        if (g_useNearestPlayerSpeaker) {
+          resolvedTarget = ResolveNearestNpcTargetForSelection(world, sel);
+          if (resolvedTarget && (uintptr_t)resolvedTarget > 0x1000) {
+            chatTarget = resolvedTarget;
+            Log("CHAT_OPEN: selected player speaker '" + sel->getName() +
+                "' targeted nearest NPC '" + chatTarget->getName() + "'");
+          } else {
+            Log("CHAT_OPEN: selected player speaker '" + sel->getName() +
+                "' has no nearby NPC target; opening targetless chat");
+          }
+        } else {
+          resolvedTarget = ResolveNearestSquadmateTargetForSelection(world, sel);
+          if (resolvedTarget && (uintptr_t)resolvedTarget > 0x1000) {
+            chatTarget = resolvedTarget;
+            Log("CHAT_OPEN: selected squadmate '" + sel->getName() +
+                "' retargeted to nearest squadmate '" + chatTarget->getName() +
+                "'");
+          } else {
+            Log("CHAT_OPEN: selected squadmate '" + sel->getName() +
+                "' has no alternate squadmate target; opening targetless chat");
+          }
+        }
+      } else {
+        chatTarget = sel;
+        chatSpeaker = ResolveNearestPlayerSpeakerForTarget(world, chatTarget);
+      }
+      // Item 147: in first person the controlled character speaks; a selected squad
+      // mate is who she talks to (same rule as the stobe_say ui path, item 136).
+      Character *fpSpeaker = StobeFpControlledCharacter(world);
+      if (fpSpeaker && fpSpeaker != chatSpeaker) {
+        bool selIsPlayer = false;
+        try {
+          selIsPlayer = sel->isPlayerCharacter();
+        } catch (...) {
+        }
+        chatSpeaker = fpSpeaker;
+        if (selIsPlayer && sel != fpSpeaker)
+          chatTarget = sel;
+        else if (!chatTarget || chatTarget == fpSpeaker)
+          chatTarget = ResolveNearestNpcTargetForSelection(world, chatSpeaker);
+        Log("CHAT_OPEN: FP-controlled speaker '" + fpSpeaker->getName() + "' target='" +
+            (chatTarget ? chatTarget->getName() : std::string("")) + "'");
+      }
+
+      if (chatTarget && !IsAliveConsciousCharacterForTargeting(chatTarget)) {
+        Log("CHAT_OPEN: allowing dead_or_unconscious target='" +
+            chatTarget->getName() + "'");
+      }
+
+      bool selectedIsAnimal = chatTarget && IsAnimalCharacterSafe(chatTarget);
+      if (selectedIsAnimal) {
+        unsigned int animalSerial = chatTarget->getHandle().serial;
+        if (!g_enableAnimalTalks) {
+          EnterCriticalSection(&g_msgMutex);
+          g_messageQueue.push_back(
+              "NOTIFY:Animal Talks is OFF in plugin settings.");
+          LeaveCriticalSection(&g_msgMutex);
+          Log("ANIMAL_TALKS: ignored selected target; toggle disabled serial=" +
+              ToString(animalSerial));
+          chatTarget = nullptr;
+          selectedIsAnimal = false;
+        } else {
+          MarkAnimalActivated(animalSerial);
+          Log("ANIMAL_TALKS: activated animal serial=" +
+              ToString(animalSerial) + " name=" + chatTarget->getName());
+        }
+      }
+
+      if (chatTarget) {
+        g_talkTargetHand = chatTarget->getHandle();
+        QueueIdentityRenameCandidate(chatTarget, "chat_open_target");
+        SyncInventoryForCharacter(chatTarget, true, "chat_open");
+      } else {
+        g_talkTargetHand = hand();
+      }
+
+      bool chatTargetIsTrader = false;
+      if (chatTarget) {
+        try {
+          chatTargetIsTrader = !chatTarget->isPlayerCharacter() &&
+                               chatTarget->isATrader();
+        } catch (...) {
+          chatTargetIsTrader = false;
+        }
+      }
+      if (chatTargetIsTrader) {
+        bool capturedTraderInventory =
+            CaptureTraderInventorySnapshot(chatTarget, "chat_open");
+        Log("TRADER_INVENTORY_CAPTURE: chat-open target=" +
+            ResolveCharacterNameSafe(chatTarget) + " success=" +
+            std::string(capturedTraderInventory ? "1" : "0"));
+        if (capturedTraderInventory) {
+          PushImmediateContextSnapshot(chatTarget,
+                                       "chat_open_trade_capture", true);
+        }
+      }
+
+      // Suppress vanilla dialogue state to prevent "double dialogue"
+      if (chatTarget && chatTarget->dialogue &&
+          (uintptr_t)chatTarget->dialogue > 0x1000) {
+        try {
+          chatTarget->dialogue->endDialogue(true);
+          chatTarget->dialogue->setInDialog(false);
+        } catch (...) {
+        }
+      }
+
+      if ((!chatSpeaker || (uintptr_t)chatSpeaker < 0x1000) &&
+          thisptr->playerCharacters.size() > 0) {
+        chatSpeaker = thisptr->playerCharacters[0];
+      }
+      std::string pName = chatSpeaker ? chatSpeaker->getName() : "Drifter";
+      std::string targetName = chatTarget ? chatTarget->getName() : "";
+      std::string targetSerial =
+          chatTarget ? ToString(chatTarget->getHandle().serial) : "";
+      CreateChatUI(targetName, pName, targetSerial);
+      Log("UI: CreateChatUI done target=" +
+          (targetName.empty() ? std::string("<none>") : targetName) +
+          " speaker=" + pName);
+    } else {
+      Character *chatSpeaker =
+          thisptr->playerCharacters.size() > 0 ? thisptr->playerCharacters[0]
+                                               : nullptr;
+      std::string pName = chatSpeaker ? chatSpeaker->getName() : "Drifter";
+      g_talkTargetHand = hand();
+      CreateChatUI("", pName, "");
+      Log("CHAT_OPEN: no selected character; opened targetless chat");
+    }
+  }
+
+}
+
+// Redundant hooks removed since playerUpdate handles real-time needs now.
+
+DWORD WINAPI RenameWorker(LPVOID lpParam) {
+  // Wait for server to be fully ready
+  Sleep(8000);
+
+  while (true) {
+    std::vector<NameCheckItem> batch;
+    {
+      EnterCriticalSection(&g_nameCheckMutex);
+      while (!g_nameCheckQueue.empty() && batch.size() < 100) {
+        batch.push_back(g_nameCheckQueue.front());
+        g_nameCheckQueue.pop_front();
+      }
+      LeaveCriticalSection(&g_nameCheckMutex);
+    }
+
+    if (batch.empty()) {
+      Sleep(1000);
+      continue;
+    }
+
+    // Build batch request JSON
+    std::string reqJson = "[";
+    for (size_t i = 0; i < batch.size(); ++i) {
+      reqJson += "{\"serial\": " + ToString(batch[i].serial) +
+                 ", \"name\": \"" + EscapeJSON(batch[i].name) +
+                 "\", \"gender\": \"" + EscapeJSON(batch[i].gender) +
+                 "\", \"race\": \"" + EscapeJSON(batch[i].race) +
+                 "\", \"faction\": \"" + EscapeJSON(batch[i].faction) + "\"";
+      if (!batch[i].contextJson.empty() && batch[i].contextJson[0] == '{') {
+        reqJson += ", \"context\": " + batch[i].contextJson;
+      }
+      reqJson += "}";
+      if (i < batch.size() - 1)
+        reqJson += ",";
+    }
+    reqJson += "]";
+
+    std::string resp =
+        PostToStobeWithResponse(L"/get_batch_identities", reqJson);
+    if (resp.empty()) {
+      DWORD retryTick =
+          Stobe::IdentityRename::ResolveRetryAttemptDeadline(GetTickCount());
+      EnterCriticalSection(&g_nameCheckMutex);
+      for (size_t i = 0; i < batch.size(); ++i) {
+        if (g_identityRenameCompletedSerials.count(batch[i].serial) == 0) {
+          g_identityRenameNextAttemptTick[batch[i].serial] = retryTick;
+        }
+      }
+      LeaveCriticalSection(&g_nameCheckMutex);
+      continue;
+    }
+
+    std::string parsedResp = TrimCopy(resp);
+    if (parsedResp.size() >= 3 &&
+        (unsigned char)parsedResp[0] == 0xEF &&
+        (unsigned char)parsedResp[1] == 0xBB &&
+        (unsigned char)parsedResp[2] == 0xBF) {
+      parsedResp = TrimCopy(parsedResp.substr(3));
+    }
+
+    if (parsedResp.empty() || parsedResp == "[]") {
+      DWORD retryTick =
+          Stobe::IdentityRename::ResolveRetryAttemptDeadline(GetTickCount());
+      EnterCriticalSection(&g_nameCheckMutex);
+      for (size_t i = 0; i < batch.size(); ++i) {
+        if (g_identityRenameCompletedSerials.count(batch[i].serial) == 0) {
+          g_identityRenameNextAttemptTick[batch[i].serial] = retryTick;
+        }
+      }
+      LeaveCriticalSection(&g_nameCheckMutex);
+      continue;
+    }
+    if (parsedResp[0] != '[') {
+      std::string snippet = parsedResp.substr(0, std::min<size_t>(120, parsedResp.size()));
+      Log("NAME_ASSIGN: Skipping malformed batch identity response: " + snippet);
+      DWORD retryTick =
+          Stobe::IdentityRename::ResolveRetryAttemptDeadline(GetTickCount());
+      EnterCriticalSection(&g_nameCheckMutex);
+      for (size_t i = 0; i < batch.size(); ++i) {
+        if (g_identityRenameCompletedSerials.count(batch[i].serial) == 0) {
+          g_identityRenameNextAttemptTick[batch[i].serial] = retryTick;
+        }
+      }
+      LeaveCriticalSection(&g_nameCheckMutex);
+      continue;
+    }
+
+    int assignedCount = 0;
+    std::set<unsigned int> responseSerials;
+    DWORD retryTick =
+        Stobe::IdentityRename::ResolveRetryAttemptDeadline(GetTickCount());
+    size_t pos = 0;
+    while ((pos = parsedResp.find("{", pos)) != std::string::npos) {
+      size_t endPos = parsedResp.find("}", pos);
+      if (endPos == std::string::npos)
+        break;
+      std::string obj = parsedResp.substr(pos, endPos - pos + 1);
+      pos = endPos + 1;
+
+      std::string sSerial = JsonReadField(obj, "serial");
+      std::string status = JsonReadField(obj, "status");
+      unsigned int serial = (unsigned int)strtoul(sSerial.c_str(), NULL, 10);
+      if (serial == 0) {
+        continue;
+      }
+      responseSerials.insert(serial);
+
+      Stobe::IdentityRename::BatchStatus batchStatus =
+          Stobe::IdentityRename::ParseBatchStatus(status);
+      if (batchStatus == Stobe::IdentityRename::BATCH_STATUS_RENAME) {
+        std::string newName = JsonReadField(obj, "new_name");
+        if (!newName.empty()) {
+          // M23_RENAME_GUARD: carry the name that was sent, the rename applies only if it is still current
+          std::string sentName;
+          for (size_t bi = 0; bi < batch.size(); ++bi)
+            if (batch[bi].serial == serial) { sentName = batch[bi].name; break; }
+          std::string renameMsg = "NPC_RENAME: " + sSerial + "|" + newName + "|" + sentName;
+          EnterCriticalSection(&g_msgMutex);
+          g_messageQueue.push_back(renameMsg);
+          LeaveCriticalSection(&g_msgMutex);
+          assignedCount++;
+        } else {
+          batchStatus = Stobe::IdentityRename::BATCH_STATUS_RETRY;
+        }
+      }
+
+      EnterCriticalSection(&g_nameCheckMutex);
+      if (batchStatus == Stobe::IdentityRename::BATCH_STATUS_RENAME) {
+        g_renamedSerials.insert(serial);
+        g_identityRenameCompletedSerials.insert(serial);
+        g_identityRenameNextAttemptTick.erase(serial);
+      } else if (batchStatus ==
+                 Stobe::IdentityRename::BATCH_STATUS_COMPLETE) {
+        g_identityRenameCompletedSerials.insert(serial);
+        g_identityRenameNextAttemptTick.erase(serial);
+      } else {
+        g_identityRenameNextAttemptTick[serial] = retryTick;
+      }
+      LeaveCriticalSection(&g_nameCheckMutex);
+
+    }
+
+    EnterCriticalSection(&g_nameCheckMutex);
+    for (size_t i = 0; i < batch.size(); ++i) {
+      unsigned int batchSerial = batch[i].serial;
+      if (batchSerial == 0 ||
+          responseSerials.count(batchSerial) > 0 ||
+          g_identityRenameCompletedSerials.count(batchSerial) > 0) {
+        continue;
+      }
+      g_identityRenameNextAttemptTick[batchSerial] = retryTick;
+    }
+    LeaveCriticalSection(&g_nameCheckMutex);
+
+    /*
+    if (assignedCount > 0) {
+      EnterCriticalSection(&g_msgMutex);
+      g_messageQueue.push_back("NOTIFY:Assigned " + ToString(assignedCount) +
+                               " unique names to local NPCs.");
+      LeaveCriticalSection(&g_msgMutex);
+    }
+    */
+  }
+  return 0;
+}
+
+DWORD WINAPI MainThread(LPVOID lpParam) {
+  HMODULE hLib = GetModuleHandleA("KenshiLib.dll");
+  while (!hLib) {
+    Sleep(500);
+    hLib = GetModuleHandleA("KenshiLib.dll");
+  }
+  InstallCampaignHooks();
+  ppWorld = (GameWorld **)GetProcAddress(hLib, "?ou@@3PEAVGameWorld@@EA");
+  if (!ppWorld)
+    return 1;
+  LoadStobeRuntimeConfig();
+  bool nameThreadStarted = false;
+  while (true) {
+    if (!nameThreadStarted) {
+      CreateThread(NULL, 0, RenameWorker, NULL, 0, NULL);
+      nameThreadStarted = true;
+    }
+
+    // Keep main thread lightweight and avoid direct world/player reads.
+    // Runtime game-state sync now runs from the hooked PlayerInterface update path.
+    SyncPluginVersionToConfOpts(false, "main_loop");
+    Sleep(2000);
+  }
+  return 0;
+}
+
+__declspec(dllexport) void startPlugin() {
+  InitializeCriticalSection(&g_LogMutex);
+  InitializeCriticalSection(&g_msgMutex);
+  InitializeCriticalSection(&g_uiMutex);
+  InitializeCriticalSection(&g_stateMutex);
+  InitializeCriticalSection(&g_eventMutex);
+  InitializeCriticalSection(&g_nameCheckMutex);
+  g_mainThreadId = GetCurrentThreadId();
+
+  ResetRuntimeLogsForSession();
+  LoadStobeRuntimeConfig();
+  Log("STARTUP: initializing UI-only hook mode.");
+  Log(std::string("STARTUP: Stobe plugin version ") + kStobePluginVersion);
+  Log(std::string("STARTUP: Stobe plugin release date ") + kStobePluginReleaseDate);
+  Log("UI: MOTD auto-popup enabled when EnableMOTD is ON.");
+  StartAutonomyController();
+
+  HMODULE hLib = GetModuleHandleA("KenshiLib.dll");
+  if (!hLib) {
+    Log("ERROR: KenshiLib.dll not loaded; skipping PlayerInterface::update hook.");
+    return;
+  }
+
+  ppWorld = (GameWorld **)GetProcAddress(hLib, "?ou@@3PEAVGameWorld@@EA");
+  if (!ppWorld) {
+    Log("HOOK_WARN: failed to resolve GameWorld export (ou).");
+  } else {
+    Log("STARTUP: resolved GameWorld export (ou).");
+  }
+
+  void *thunkPlayer =
+      (void *)GetProcAddress(hLib, "?update@PlayerInterface@@QEAAXXZ");
+  if (!thunkPlayer) {
+    Log("HOOK_WARN: PlayerInterface::update symbol not found.");
+    return;
+  }
+  Log("HOOK_DIAG: thunkPlayer=" + ToString((unsigned int)(uintptr_t)thunkPlayer));
+
+  __int64 realAddr = KenshiLib::GetRealAddress(thunkPlayer);
+  Log("HOOK_DIAG: GetRealAddress=" + ToString((unsigned int)(uintptr_t)realAddr));
+  if (!realAddr) {
+    Log("HOOK_WARN: GetRealAddress returned null, hook not installed.");
+    return;
+  }
+
+  KenshiLib::HookStatus status = KenshiLib::AddHook(
+      (void *)realAddr, (void *)Hook_PlayerUpdateTick, (void **)&playerUpdate_orig);
+  Log("HOOK_DIAG: AddHook status=" + ToString((int)status) +
+      " orig=" + ToString((unsigned int)(uintptr_t)playerUpdate_orig));
+  Log("HOOK: PlayerInterface::update installed (UI-only mode).");
+  Stobe::HarnessBridge::Connect(); // test commands via the automation harness, if installed
+
+  void *thunkAttackingYou = (void *)GetProcAddress(
+      hLib, "?attackingYou@Character@@QEAAXPEAV1@_N1@Z");
+  if (!thunkAttackingYou) {
+    Log("HOOK_WARN: Character::attackingYou symbol not found.");
+  } else {
+    __int64 realAttackingYou = KenshiLib::GetRealAddress(thunkAttackingYou);
+    if (!realAttackingYou) {
+      Log("HOOK_WARN: GetRealAddress failed for Character::attackingYou.");
+    } else {
+      KenshiLib::HookStatus attackingYouStatus = KenshiLib::AddHook(
+          (void *)realAttackingYou, (void *)attackingYou_hook,
+          (void **)&attackingYou_orig);
+      Log("HOOK_DIAG: Character::attackingYou AddHook status=" +
+          ToString((int)attackingYouStatus) + " orig=" +
+          ToString((unsigned int)(uintptr_t)attackingYou_orig));
+    }
+  }
+
+  // M23_THEFT_DIALOG: the game's theft dialog events (SR13 engine detection signal)
+  {
+    struct TheftDialogHook { const char *sym; void *hook; void **orig; };
+    TheftDialogHook hooks[] = {
+      {"?sendEvent@Dialogue@@QEAA_NPEAVCharacter@@W4EventTriggerEnum@@@Z", (void *)dialogueSendEvent_hook,
+       (void **)&dialogueSendEvent_orig},
+      {"?sendEventOverride@Dialogue@@QEAA_NPEAVCharacter@@W4EventTriggerEnum@@_N@Z",
+       (void *)dialogueSendEventOverride_hook, (void **)&dialogueSendEventOverride_orig},
+      {"?sendDialogEvent@Character@@QEAA_NPEAV1@W4EventTriggerEnum@@@Z", (void *)charSendDialogEvent_hook,
+       (void **)&charSendDialogEvent_orig},
+      {"?sendDialogEventOverride@Character@@QEAA_NPEAV1@W4EventTriggerEnum@@_N@Z",
+       (void *)charSendDialogEventOverride_hook, (void **)&charSendDialogEventOverride_orig},
+    };
+    for (size_t hi = 0; hi < sizeof(hooks) / sizeof(hooks[0]); ++hi) {
+      void *thunk = (void *)GetProcAddress(hLib, hooks[hi].sym);
+      __int64 real = thunk ? KenshiLib::GetRealAddress(thunk) : 0;
+      if (!real) {
+        Log(std::string("HOOK_WARN: theft dialog hook not found: ") + hooks[hi].sym);
+        continue;
+      }
+      KenshiLib::HookStatus st = KenshiLib::AddHook((void *)real, hooks[hi].hook, hooks[hi].orig);
+      Log(std::string("HOOK_DIAG: theft dialog hook ") + hooks[hi].sym + " status=" + ToString((int)st));
+    }
+  }
+
+  void *thunkAiGetCharacter =
+      (void *)GetProcAddress(hLib, "?getCharacter@AI@@QEAAPEAVCharacter@@XZ");
+  if (!thunkAiGetCharacter) {
+    Log("HOOK_WARN: AI::getCharacter symbol not found.");
+  } else {
+    __int64 realAiGetCharacter =
+        KenshiLib::GetRealAddress(thunkAiGetCharacter);
+    if (!realAiGetCharacter) {
+      Log("HOOK_WARN: GetRealAddress failed for AI::getCharacter.");
+    } else {
+      aiGetCharacter = reinterpret_cast<Character *(*)(AI *)>(
+          realAiGetCharacter);
+      Log("HOOK_DIAG: AI::getCharacter resolved address=" +
+          ToString((unsigned int)(uintptr_t)aiGetCharacter));
+    }
+  }
+
+  void *thunkAiIsEnemyRoot =
+      (void *)GetProcAddress(hLib,
+                             "?isEnemy@AI@@QEAA_NPEAVRootObjectBase@@@Z");
+  if (!thunkAiIsEnemyRoot) {
+    Log("HOOK_WARN: AI::isEnemy(RootObjectBase*) symbol not found.");
+  } else {
+    __int64 realAiIsEnemyRoot = KenshiLib::GetRealAddress(thunkAiIsEnemyRoot);
+    if (!realAiIsEnemyRoot) {
+      Log("HOOK_WARN: GetRealAddress failed for AI::isEnemy(RootObjectBase*).");
+    } else {
+      KenshiLib::HookStatus status = KenshiLib::AddHook(
+          (void *)realAiIsEnemyRoot, (void *)aiIsEnemyRoot_hook,
+          (void **)&aiIsEnemyRoot_orig);
+      Log("HOOK_DIAG: AI::isEnemy(RootObjectBase*) AddHook status=" +
+          ToString((int)status) + " orig=" +
+          ToString((unsigned int)(uintptr_t)aiIsEnemyRoot_orig));
+    }
+  }
+
+  void *thunkAiIsEnemyHand = (void *)GetProcAddress(
+      hLib, "?isEnemy@AI@@QEAA_NAEBVhand@@AEBVVector3@Ogre@@@Z");
+  if (!thunkAiIsEnemyHand) {
+    Log("HOOK_WARN: AI::isEnemy(hand) symbol not found.");
+  } else {
+    __int64 realAiIsEnemyHand = KenshiLib::GetRealAddress(thunkAiIsEnemyHand);
+    if (!realAiIsEnemyHand) {
+      Log("HOOK_WARN: GetRealAddress failed for AI::isEnemy(hand).");
+    } else {
+      KenshiLib::HookStatus status = KenshiLib::AddHook(
+          (void *)realAiIsEnemyHand, (void *)aiIsEnemyHand_hook,
+          (void **)&aiIsEnemyHand_orig);
+      Log("HOOK_DIAG: AI::isEnemy(hand) AddHook status=" +
+          ToString((int)status) + " orig=" +
+          ToString((unsigned int)(uintptr_t)aiIsEnemyHand_orig));
+    }
+  }
+
+  void *thunkAttackTarget = (void *)GetProcAddress(
+      hLib, "?attackTarget@Character@@QEAAXPEAV1@@Z");
+  if (!thunkAttackTarget) {
+    Log("HOOK_WARN: Character::attackTarget symbol not found.");
+  } else {
+    __int64 realAttackTarget = KenshiLib::GetRealAddress(thunkAttackTarget);
+    if (!realAttackTarget) {
+      Log("HOOK_WARN: GetRealAddress failed for Character::attackTarget.");
+    } else {
+      KenshiLib::HookStatus status = KenshiLib::AddHook(
+          (void *)realAttackTarget, (void *)attackTarget_hook,
+          (void **)&attackTarget_orig);
+      Log("HOOK_DIAG: Character::attackTarget AddHook status=" +
+          ToString((int)status) + " orig=" +
+          ToString((unsigned int)(uintptr_t)attackTarget_orig));
+    }
+  }
+
+  void *thunkNewPlayerTaskSelectedCharacters = (void *)GetProcAddress(
+      hLib,
+      "?newPlayerTaskSelectedCharacters@PlayerInterface@@QEAAXW4TaskType@@AEBVhand@@PEAVBuilding@@AEBVVector3@Ogre@@_N@Z");
+  if (!thunkNewPlayerTaskSelectedCharacters) {
+    Log("HOOK_WARN: PlayerInterface::newPlayerTaskSelectedCharacters symbol not found.");
+  } else {
+    __int64 realNewPlayerTaskSelectedCharacters =
+        KenshiLib::GetRealAddress(thunkNewPlayerTaskSelectedCharacters);
+    if (!realNewPlayerTaskSelectedCharacters) {
+      Log("HOOK_WARN: GetRealAddress failed for "
+          "PlayerInterface::newPlayerTaskSelectedCharacters.");
+    } else {
+      KenshiLib::HookStatus status = KenshiLib::AddHook(
+          (void *)realNewPlayerTaskSelectedCharacters,
+          (void *)newPlayerTaskSelectedCharacters_hook,
+          (void **)&newPlayerTaskSelectedCharacters_orig);
+      Log("HOOK_DIAG: PlayerInterface::newPlayerTaskSelectedCharacters "
+          "AddHook status=" +
+          ToString((int)status) + " orig=" +
+          ToString((unsigned int)(uintptr_t)newPlayerTaskSelectedCharacters_orig));
+    }
+  }
+
+  void *thunkInventoryBuyItem = (void *)GetProcAddress(
+      hLib, "?buyItem@Inventory@@QEAAPEAVItem@@PEAV2@PEAVRootObject@@@Z");
+  if (!thunkInventoryBuyItem) {
+    Log("HOOK_WARN: Inventory::buyItem symbol not found.");
+  } else {
+    __int64 realInventoryBuyItem = KenshiLib::GetRealAddress(thunkInventoryBuyItem);
+    if (!realInventoryBuyItem) {
+      Log("HOOK_WARN: GetRealAddress failed for Inventory::buyItem.");
+    } else {
+      KenshiLib::HookStatus buyItemStatus =
+          KenshiLib::AddHook((void *)realInventoryBuyItem, (void *)buyItem_hook,
+                             (void **)&buyItem_orig);
+      Log("HOOK_DIAG: Inventory::buyItem AddHook status=" +
+          ToString((int)buyItemStatus) + " orig=" +
+          ToString((unsigned int)(uintptr_t)buyItem_orig));
+    }
+  }
+  Stobe::ShopPrice::Install(hLib); // item 104: relationship shop prices
+
+  void *thunkMedicalApplyFirstAid = (void *)GetProcAddress(
+      hLib, "?applyFirstAid@MedicalSystem@@QEAA_NMPEAVItem@@MPEAVCharacter@@@Z");
+  if (!thunkMedicalApplyFirstAid) {
+    Log("HOOK_WARN: MedicalSystem::applyFirstAid symbol not found.");
+  } else {
+    __int64 realMedicalApplyFirstAid =
+        KenshiLib::GetRealAddress(thunkMedicalApplyFirstAid);
+    if (!realMedicalApplyFirstAid) {
+      Log("HOOK_WARN: GetRealAddress failed for MedicalSystem::applyFirstAid.");
+    } else {
+      KenshiLib::HookStatus medicalFirstAidStatus = KenshiLib::AddHook(
+          (void *)realMedicalApplyFirstAid, (void *)applyFirstAid_hook,
+          (void **)&applyFirstAid_orig);
+      Log("HOOK_DIAG: MedicalSystem::applyFirstAid AddHook status=" +
+          ToString((int)medicalFirstAidStatus) + " orig=" +
+          ToString((unsigned int)(uintptr_t)applyFirstAid_orig));
+    }
+  }
+
+  void *thunkCharacterGettingEaten = (void *)GetProcAddress(
+      hLib, "?gettingEaten@Character@@UEAA_NMPEAV1@@Z");
+  if (!thunkCharacterGettingEaten) {
+    thunkCharacterGettingEaten = (void *)GetProcAddress(
+        hLib, "?gettingEaten@Character@@QEAA_NMPEAV1@@Z");
+  }
+  if (!thunkCharacterGettingEaten) {
+    Log("HOOK_WARN: Character::gettingEaten symbol not found.");
+  } else {
+    __int64 realCharacterGettingEaten =
+        KenshiLib::GetRealAddress(thunkCharacterGettingEaten);
+    if (!realCharacterGettingEaten) {
+      Log("HOOK_WARN: GetRealAddress failed for Character::gettingEaten.");
+    } else {
+      KenshiLib::HookStatus characterGettingEatenStatus = KenshiLib::AddHook(
+          (void *)realCharacterGettingEaten, (void *)characterGettingEaten_hook,
+          (void **)&characterGettingEaten_orig);
+      Log("HOOK_DIAG: Character::gettingEaten AddHook status=" +
+          ToString((int)characterGettingEatenStatus) + " orig=" +
+          ToString((unsigned int)(uintptr_t)characterGettingEaten_orig));
+    }
+  }
+
+  const bool kEnableSpeechCaptureHooks = false;
+  const bool kEnableDialogueReplyHooks = true;
+  if (!kEnableSpeechCaptureHooks) {
+    Log("HOOK: speech/dialogue capture hooks disabled for stability.");
+  } else {
+    void *thunkSayALine = (void *)GetProcAddress(
+        hLib, "?sayALine@Character@@QEAAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z");
+    if (!thunkSayALine) {
+      Log("HOOK_WARN: Character::sayALine symbol not found.");
+    } else {
+      __int64 realSayALine = KenshiLib::GetRealAddress(thunkSayALine);
+      if (!realSayALine) {
+        Log("HOOK_WARN: GetRealAddress failed for Character::sayALine.");
+      } else {
+        KenshiLib::HookStatus sayStatus =
+            KenshiLib::AddHook((void *)realSayALine, (void *)sayALine_hook,
+                               (void **)&sayALine_orig);
+        Log("HOOK_DIAG: Character::sayALine AddHook status=" +
+            ToString((int)sayStatus) + " orig=" +
+            ToString((unsigned int)(uintptr_t)sayALine_orig));
+      }
+    }
+
+    void *thunkCharacterSay = (void *)GetProcAddress(
+        hLib, "?say@Character@@UEAAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z");
+    if (!thunkCharacterSay) {
+      Log("HOOK_WARN: Character::say symbol not found.");
+    } else {
+      __int64 realCharacterSay = KenshiLib::GetRealAddress(thunkCharacterSay);
+      if (!realCharacterSay) {
+        Log("HOOK_WARN: GetRealAddress failed for Character::say.");
+      } else {
+        KenshiLib::HookStatus sayFallbackStatus =
+            KenshiLib::AddHook((void *)realCharacterSay, (void *)characterSay_hook,
+                               (void **)&characterSay_orig);
+        Log("HOOK_DIAG: Character::say AddHook status=" +
+            ToString((int)sayFallbackStatus) + " orig=" +
+            ToString((unsigned int)(uintptr_t)characterSay_orig));
+      }
+    }
+
+    void *thunkDialogueSayLine =
+        (void *)GetProcAddress(hLib, "?sayLine@Dialogue@@QEAA_NPEAVDialogLineData@@@Z");
+    if (!thunkDialogueSayLine) {
+      Log("HOOK_WARN: Dialogue::sayLine symbol not found.");
+    } else {
+      __int64 realDialogueSayLine = KenshiLib::GetRealAddress(thunkDialogueSayLine);
+      if (!realDialogueSayLine) {
+        Log("HOOK_WARN: GetRealAddress failed for Dialogue::sayLine.");
+      } else {
+        KenshiLib::HookStatus dialogueSayLineStatus =
+            KenshiLib::AddHook((void *)realDialogueSayLine,
+                               (void *)dialogueSayLine_hook,
+                               (void **)&dialogueSayLine_orig);
+        Log("HOOK_DIAG: Dialogue::sayLine AddHook status=" +
+            ToString((int)dialogueSayLineStatus) + " orig=" +
+            ToString((unsigned int)(uintptr_t)dialogueSayLine_orig));
+      }
+    }
+
+    void *thunkDialogueSayText = (void *)GetProcAddress(
+        hLib,
+        "?say@Dialogue@@QEAAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@PEAVDialogLineData@@@Z");
+    if (!thunkDialogueSayText) {
+      Log("HOOK_WARN: Dialogue::say(text, line) symbol not found.");
+    } else {
+      __int64 realDialogueSayText = KenshiLib::GetRealAddress(thunkDialogueSayText);
+      if (!realDialogueSayText) {
+        Log("HOOK_WARN: GetRealAddress failed for Dialogue::say(text, line).");
+      } else {
+        KenshiLib::HookStatus dialogueSayTextStatus =
+            KenshiLib::AddHook((void *)realDialogueSayText,
+                               (void *)dialogueSayText_hook,
+                               (void **)&dialogueSayText_orig);
+        Log("HOOK_DIAG: Dialogue::say(text, line) AddHook status=" +
+            ToString((int)dialogueSayTextStatus) + " orig=" +
+            ToString((unsigned int)(uintptr_t)dialogueSayText_orig));
+      }
+    }
+  }
+
+  if (!kEnableDialogueReplyHooks) {
+    Log("HOOK: dialogue reply hooks disabled.");
+  } else {
+    void *thunkDialogueReplyClickedInt =
+        (void *)GetProcAddress(hLib, "?replyClicked@Dialogue@@QEAAXH@Z");
+    if (!thunkDialogueReplyClickedInt) {
+      Log("HOOK_WARN: Dialogue::replyClicked(int) symbol not found.");
+    } else {
+      __int64 realDialogueReplyClickedInt =
+          KenshiLib::GetRealAddress(thunkDialogueReplyClickedInt);
+      if (!realDialogueReplyClickedInt) {
+        Log("HOOK_WARN: GetRealAddress failed for Dialogue::replyClicked(int).");
+      } else {
+        KenshiLib::HookStatus dialogueReplyClickedIntStatus =
+            KenshiLib::AddHook((void *)realDialogueReplyClickedInt,
+                               (void *)dialogueReplyClickedInt_hook,
+                               (void **)&dialogueReplyClickedInt_orig);
+        Log("HOOK_DIAG: Dialogue::replyClicked(int) AddHook status=" +
+            ToString((int)dialogueReplyClickedIntStatus) + " orig=" +
+            ToString((unsigned int)(uintptr_t)dialogueReplyClickedInt_orig));
+      }
+    }
+
+    void *thunkDialogueReplyClickedString = (void *)GetProcAddress(
+        hLib,
+        "?replyClicked@Dialogue@@QEAAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z");
+    if (!thunkDialogueReplyClickedString) {
+      Log("HOOK_WARN: Dialogue::replyClicked(string) symbol not found.");
+    } else {
+      __int64 realDialogueReplyClickedString =
+          KenshiLib::GetRealAddress(thunkDialogueReplyClickedString);
+      if (!realDialogueReplyClickedString) {
+        Log("HOOK_WARN: GetRealAddress failed for Dialogue::replyClicked(string).");
+      } else {
+        KenshiLib::HookStatus dialogueReplyClickedStringStatus =
+            KenshiLib::AddHook((void *)realDialogueReplyClickedString,
+                               (void *)dialogueReplyClickedString_hook,
+                               (void **)&dialogueReplyClickedString_orig);
+        Log("HOOK_DIAG: Dialogue::replyClicked(string) AddHook status=" +
+            ToString((int)dialogueReplyClickedStringStatus) + " orig=" +
+            ToString((unsigned int)(uintptr_t)dialogueReplyClickedString_orig));
+      }
+    }
+  }
+
+  HANDLE hMainThread = CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
+  if (!hMainThread) {
+    Log("STARTUP_WARN: failed to start MainThread.");
+  } else {
+    CloseHandle(hMainThread);
+    Log("STARTUP: MainThread started.");
+  }
+
+  HANDLE hCsvImportThread =
+      CreateThread(NULL, 0, CsvImportStartupThread, NULL, 0, NULL);
+  if (!hCsvImportThread) {
+    Log("STARTUP_WARN: failed to start CSV import startup thread.");
+  } else {
+    CloseHandle(hCsvImportThread);
+    Log("STARTUP: CSV import startup thread started.");
+  }
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call,
+                      LPVOID lpReserved) {
+  return TRUE;
+}
+
+

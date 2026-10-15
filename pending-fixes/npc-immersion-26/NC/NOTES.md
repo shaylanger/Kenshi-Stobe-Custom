@@ -1,8 +1,10 @@
-# NC = N1 + N2 composed native Stobe.dll (NOT installed anywhere)
+# NC2 = N1 + N2 composed native Stobe.dll (NC base 4D18E32C + observed_unix fix); installed on the 5090 lanes as E17FC00C
 
-DLL: `NC\Stobe.dll`  SHA256 `4D18E32CE45C08B799B56A9FC5E998BAFC270C3F1881543573C61BFAB3568766`
+DLL: `NC\Stobe.dll`  SHA256 `E17FC00CDDC44894400838A8B38155A0073B08B8605D071EE8C27CA00F6FE4D6`
 (VS2010 x64, 69 objects: 63 src + 6 legacy-v1). Build: `powershell -File NC\build.ps1` -> `RESULT NC-BUILD PASS ... objects=69` (takes `inflight\build-stobe-lock`, source list read from `NC\CMakeLists.txt`, guard strings: travel_destinations LOCAL_TRAVEL travel_lifecycle world_towns known_place abandoned_in_danger N2_PROXIMITY handBackStatus FOLLOW_EXPIRED SpeakWhilePaused outcome=transient).
 Patch: `NC\nc.patch` = `diff -ruN a b` against `components/STOBE` (apply with `patch -p1 --binary` from `components/STOBE`; roundtrip verified identical to NC/src, NC/legacy-v1, CMakeLists.txt, Stobe.vcxproj). It adds the `legacy-v1/` dir. Full tree: `NC\src`, `NC\legacy-v1`.
+
+NC2 delta vs NC 4D18E32C (ctxop2, 2026-10-15): `src/NativeAiAwareness.cpp:45-47` serialises observed_unix/game_ts as integers (default stream precision 6 rounded 1792103647 to 1.7921e+09, so every native_ai snapshot looked stale to the server). Nothing else changed. DLL built by imm26-5090-ctxop2 (`C:\KenshiTestRuns\imm26-5090-ctxop2uild\out\Stobe.dll`, same build.ps1).
 
 ## IMPORTANT: the base is NOT components/STOBE/src alone
 `components/STOBE/src` is a half-merged snapshot: its Activity*/LocalTravel*/NativeTravelLifecycle are OLDER than the installed E607 release (no discovery/route refs, camp, activity v2 protocol, `NativePlaceKnowledge.*`, `InspectRequest`, `ValidateForDispatch`; yet its CMakeLists/vcxproj already list NativePlaceKnowledge.cpp). It is NEWER than E607 in: SpeakWhilePaused (ChatBox/Functions/Globals/Utils), world_towns (main.cpp), BodyguardContractProbe (+ `bodyguard_probe` harness command), PlaythroughSession retry (6 attempts, `PLAYTHROUGH: outcome=transient`).
@@ -32,7 +34,7 @@ n1_logic 83 checks; n2_logic 109; n2_entity 15; social_protocol 22; native_trave
 ## Open (not done)
 `tools\automation\build-stobe.ps1` still reads the stale `build_portable.bat` SOURCES; planned fix: derive SOURCES from CMakeLists.txt into a derived bat (+ legacy-v1 loop, `-Root` param, keep guard strings). Not committed; first attempt aborted before writing (file unchanged).
 
-## stobe_ctxpush (harness context push, 2026-10-15; DLL 4D18E32C..., not installed)
+## stobe_ctxpush (harness context push, 2026-10-15; DLL E17FC00C..., not installed)
 Why: lanes only ever saw `source=inventory_live_sync` snapshots. In this tree the production selection push is dead: `QueueSelectionContextPush` has NO caller, and the update hook calls `ClearPendingSelectionContextPush()` after every selection change (comment: full snapshots can walk stale nearby objects after a load), so `RunPendingSelectionContextPush` never posts. Harness `select` is a harness-DLL command (not Stobe), so it cannot be hooked from here and is left alone. Envelope reachers that DO exist: `/chat` (ChatBox `SendChatToStobeServer`, `"context": <envelope>` of the target), `PushImmediateContextSnapshot` (trade capture), horn snapshot (Functions.cpp), rename.
 Added: harness command `stobe_ctxpush <target|@nearest|@selected|#serial>` (registered in StobeHarnessBridge, count 10 -> 11, so only exists when the automation harness is loaded, same as stobe_say). Handler in `RunTestInboxCommand` -> `TestInboxPushNpcContext`: `BuildNpcContextEnvelope(npc, npc|player)` -> `AsyncPostToStobe(/context)` then `AsyncPostToStobe(/gamedata, {type,name,data})` (exactly what the selection push does; same Comm.cpp headers/playthrough). Reply/log: `name= serial= type= len= native_ai=1 referral_people=1 travel_destinations=1`; log `CONTEXT_PUSH: test_inbox reason=ctxpush ...`. Not gated by `Interaction::ManualInputAllowed` (read-only, no UI input; `say` keeps its gate).
 `stobe_say`: after the existing `SyncInventoryForCharacter(target, true, "test_inbox")` it also calls `TestInboxPushNpcContext(target, "say", onlyIfStale=true)` (skips if that serial was pushed < 8 s ago by this helper; private tick map, never touches production selection state). Test-inbox only, so production behaviour is unchanged.
