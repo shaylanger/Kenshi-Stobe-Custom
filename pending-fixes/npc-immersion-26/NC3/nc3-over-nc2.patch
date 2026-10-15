@@ -1,0 +1,64 @@
+diff -ruN a/src/ChatBox.cpp b/src/ChatBox.cpp
+--- a/src/ChatBox.cpp	2026-10-15 17:32:07.319687500 -0600
++++ b/src/ChatBox.cpp	2026-10-15 17:32:07.397854100 -0600
+@@ -8,6 +8,7 @@
+ #include "Context.h"
+ #include "Functions.h"
+ #include "Globals.h"
++#include "KenshiAiCompat.h"
+ #include "StobeChatInterruptPolicy.h"
+ #include "StobeChatMode.h"
+ #include "StobeTiming.h"
+@@ -4884,8 +4885,12 @@
+   if ((selectedMode == "chat" || selectedMode == "whisper" || selectedMode == "shout") &&
+       player && !resolvedTargetHandle.empty() && !manualActionSelected) {
+     const unsigned activityActor = static_cast<unsigned>(strtoul(resolvedTargetHandle.c_str(), NULL, 10));
+-    streamTask->activityTurnId = Stobe::Activity::CaptureActivityChatTurn(
+-        activityActor, player->getHandle().serial, text);
++    const unsigned activityRequester = player->getHandle().serial;
++    if (Stobe::KenshiAi::RegisterCharacterHandle(targetNpc, activityActor) &&
++        Stobe::KenshiAi::RegisterCharacterHandle(player, activityRequester)) {
++      streamTask->activityTurnId = Stobe::Activity::CaptureActivityChatTurn(
++          activityActor, activityRequester, text);
++    }
+   }
+   streamTask->npcName = profileName;
+   streamTask->handleStr = resolvedTargetHandle;
+diff -ruN a/src/KenshiAiCompat.cpp b/src/KenshiAiCompat.cpp
+--- a/src/KenshiAiCompat.cpp	2026-10-15 17:32:07.331690100 -0600
++++ b/src/KenshiAiCompat.cpp	2026-10-15 17:32:07.460425500 -0600
+@@ -278,6 +278,23 @@
+ 
+ } // namespace
+ 
++bool RegisterCharacterHandle(Character *character, unsigned int expectedSerial) {
++  if (!expectedSerial || !IsValidCharacter(character)) {
++    return false;
++  }
++  try {
++    const hand runtimeHandle = character->getHandle();
++    if (runtimeHandle.serial != expectedSerial || runtimeHandle.isNull() ||
++        !runtimeHandle.isValid()) {
++      return false;
++    }
++    g_characterHandles[expectedSerial] = runtimeHandle;
++    return true;
++  } catch (...) {
++    return false;
++  }
++}
++
+ InventoryItemSnapshot::InventoryItemSnapshot()
+     : kind("item"), count(0), buyValueEach(0), sellValueEach(0) {}
+ 
+diff -ruN a/src/KenshiAiCompat.h b/src/KenshiAiCompat.h
+--- a/src/KenshiAiCompat.h	2026-10-15 17:32:07.285650600 -0600
++++ b/src/KenshiAiCompat.h	2026-10-15 17:32:07.459425700 -0600
+@@ -134,6 +134,7 @@
+ };
+ 
+ Character *ResolveCharacter(GameWorld *world, unsigned int serial);
++bool RegisterCharacterHandle(Character *character, unsigned int expectedSerial);
+ void ClearCharacterHandleCache();
+ Building *ResolveNearestRestBed(GameWorld *world, Character *character,
+                                 double maxDistance = 250.0);
