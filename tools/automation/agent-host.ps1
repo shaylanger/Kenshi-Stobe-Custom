@@ -8,6 +8,8 @@
 # - MONITOR (every 30 s, -MonitorOnce for selftests): per RUNNING agent: process gone -> FAILED + respawn todo + wake; status AND log silent > StallMin (10) -> 'AGENT STALL' wake;
 #   > KillMin (20) -> kill the process tree, FAILED + respawn todo + wake; wall clock > WallMin (90, job field max_min overrides) -> kill, STOPPED-CONTEXT; RUNNING status with no
 #   session (INPROC/orphan) silent > StallMin -> 'AGENT ORPHANED' wake. Wakes = a .msg in inbox\coordinator\ (event-wait.sh INBOX). Roll call: agent-rollcall.ps1.
+# - quiet wakes: the ORPHANED/STALL wakes count the newest file under the status `outputs:` dirs as activity (agent-rollcall LogAgeMin); a working agent never wakes the coordinator. agent-rollcall.ps1 is
+#   re-dot-sourced on change every monitor tick (live reload); agent-host-reload.ps1 restarts only the daemon (launchers keep running) to pick up a changed agent-host.ps1.
 # - state: agent-queue\host.state.json (heartbeat, live count, last launches); jobs moved to agent-queue\started\
 param([switch]$Once, [switch]$MonitorOnce, [int]$IntervalSec = 2, [int]$Max = 4, [int]$MonitorSec = 30,
       [int]$StallMin = 10, [int]$KillMin = 20, [int]$WallMin = 90)
@@ -32,7 +34,10 @@ function Get-LiveLaunchers {
         Where-Object { $_.CommandLine -match '\.launch\.ps1' })
 }
 
-. (Join-Path $here 'agent-rollcall.ps1')
+$rcFile = Join-Path $here 'agent-rollcall.ps1'
+. $rcFile
+$rcStamp = (Get-Item -LiteralPath $rcFile).LastWriteTimeUtc.Ticks
+# live reload (agent-host-reload task): the loop below re-dot-sources agent-rollcall.ps1 (at script scope, so the functions replace the old ones) when the file changed; edits apply without a daemon restart.
 $flagDir = Join-Path $q 'flags'
 New-Item -ItemType Directory -Force -Path $flagDir | Out-Null
 
@@ -68,10 +73,12 @@ function Invoke-Monitor {
         $n = $a.Name
         $fStall = Join-Path $flagDir "$n.stall"
         if ($a.Kind -eq 'INPROC') {
-            if ($a.StatusAgeMin -gt $StallMin -and -not (Test-Path -LiteralPath (Join-Path $flagDir "$n.orphan"))) {
+            # evidence counts (LogAgeMin includes the newest file under the status `outputs:` dirs): a fresh evidence dir = a working agent, no wake
+            $evQuiet = ($null -eq $a.LogAgeMin) -or ($a.LogAgeMin -gt $StallMin)
+            if ($a.StatusAgeMin -gt 30 -and $evQuiet -and -not (Test-Path -LiteralPath (Join-Path $flagDir "$n.orphan"))) {
                 'x' | Set-Content (Join-Path $flagDir "$n.orphan")
                 Send-Wake $n "AGENT ORPHANED $n : status RUNNING, no session/process known to the agent-host, silent $($a.StatusAgeMin) min. Latest: $($a.Latest). Respawn it (spawn-wp-session.ps1) or agent-abandon.ps1."
-            } elseif ($a.StatusAgeMin -le $StallMin) { Remove-Item (Join-Path $flagDir "$n.orphan") -ErrorAction SilentlyContinue }
+            } elseif ($a.StatusAgeMin -le $StallMin -or -not $evQuiet) { Remove-Item (Join-Path $flagDir "$n.orphan") -ErrorAction SilentlyContinue }
             continue
         }
         # launching grace: no pid recorded yet and started < 2 min ago
@@ -141,7 +148,10 @@ $last = @()
 $nextMon = Get-Date
 if ($MonitorOnce) { Invoke-Monitor; return }
 do {
-    if ((Get-Date) -ge $nextMon) { try { Invoke-Monitor } catch { $last += "MONITOR ERROR: $($_.Exception.Message)" }; $nextMon = (Get-Date).AddSeconds($MonitorSec) }
+    if ((Get-Date) -ge $nextMon) {
+        try { $t = (Get-Item -LiteralPath $rcFile -ErrorAction Stop).LastWriteTimeUtc.Ticks; if ($t -ne $rcStamp) { $rcStamp = $t; . $rcFile } }
+        catch { $last += "ROLLCALL RELOAD ERROR (kept previous functions): $($_.Exception.Message)" }
+        try { Invoke-Monitor } catch { $last += "MONITOR ERROR: $($_.Exception.Message)" }; $nextMon = (Get-Date).AddSeconds($MonitorSec) }
     $jobs = @(Get-ChildItem -LiteralPath $q -Filter '*.job' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime)
     $live = (Get-LiveLaunchers).Count
     foreach ($j in $jobs) {

@@ -30,7 +30,7 @@ New-Agent 'dead' 1 1 'dead' 5
 New-Agent 'stall' 12 12 'live'
 New-Agent 'killme' 22 22 'live'
 New-Agent 'wall' 1 1 'live' 100
-New-Agent 'orphan' 12 -1 'none'
+New-Agent 'orphan' 34 -1 'none'
 New-Agent 'logfresh' 15 1 'live'   # status silent but log growing -> not a stall
 $ev = Join-Path $box 'evidence'; New-Item -ItemType Directory -Force -Path $ev | Out-Null
 Set-Content (Join-Path $ev 'result.txt') 'fresh' -Encoding ascii   # evidence just written
