@@ -37,3 +37,34 @@ i3_selftest() {
   [ "$(printf '%s\n' "$out" | sed -n 4p)" = 'echo BODY' ] || { echo 'SELFTEST FAIL body not on its own line'; return 1; }
   echo 'SELFTEST PASS 4080-imm26-lib preamble'
 }
+
+# ---- lane i4 (second isolated 4080 lane: C:\KenshiInst\4, backend 18085, db stobe_standalone4080_i4_test, WSL /tmp/stobe-standalone4080-i4) ----
+#   i4 / i4w / i4_say / i4_sql / i4_ready / i4_selftest: same behaviour as the i3 ones above, never touch instance 3.
+I4_PRE=$'export RIG=4080 KAH_INSTANCE=4\n. /c/KenshiModding/tools/automation/rig-env.sh\n[ "$KDIR" = /c/KenshiInst/4 ] || { echo "RESULT 4080-I4-ROUTE FAIL setup: KDIR=$KDIR"; exit 2; }\n{ [ -e "$KDIR/mods/AutomationHarness/inbox.txt" ] || [ -e "$KDIR/mods/AutomationHarness/inbox.txt.lock" ]; } && { echo "RESULT 4080-I4-ROUTE STOP inbox pending or locked"; exit 3; }\n'
+i4()  { { printf '%s' "$I4_PRE"; cat; } | ssh -o BatchMode=yes 4080 '"C:\Program Files\Git\bin\bash.exe" -l -s'; }
+i4w() { cat | ssh -o BatchMode=yes 4080 'wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -s'; }
+i4_sql() {
+  printf '%s\n' "runuser -u postgres -- psql -h /tmp/stobe-standalone4080-i4/socket -p 15435 -d stobe_standalone4080_i4_test -At -c \"$1\"" | i4w
+}
+i4_say() {  # i4_say "#2529907200/2" "Got any news?" [wait_s]
+  local target="$1" text="$2" wait_s="${3:-150}"
+  i4 <<EOF
+L="/c/KenshiInst/4/RE_Kenshi/mods/Stobe/stobe.log"; n0=\$(wc -l < "\$L")
+stobe-auto stobe_say "$target" "$text" 2>&1 | head -2
+end=\$((SECONDS+$wait_s))
+while [ \$SECONDS -lt \$end ]; do sleep 3; tail -n +\$((n0+1)) "\$L" | grep -qE "ACTION_EXEC: SAY \[[^]]*\](.*)\(NPC\)" && { sleep 4; break; }; done
+tail -n +\$((n0+1)) "\$L" | grep -E "resolved_speaker|ERROR|Empty stream|ACTION_EXEC: SAY|ACTION_EXEC: Setting task" | cut -c1-300
+EOF
+}
+i4_ready() {
+  i4 <<'EOF'
+stobe-auto status; stobe-auto stobe_ping; stobe-auto time
+powershell.exe -NoProfile -Command "\$p=Get-Process kenshi_x64 -EA SilentlyContinue | ? { \$_.Path -like 'C:\KenshiInst\4\*' }; if(\$p){'PID '+\$p.Id+' '+\$p.Path; \$p.Modules | ? {\$_.FileName -match 'Stobe|AutomationHarness'} | % {\$_.FileName+' '+(Get-FileHash \$_.FileName).Hash}} else {'NO KENSHI i4'}; try{(Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18085/health.php -TimeoutSec 5).Content}catch{'BACKEND DOWN'}" | cut -c1-200
+EOF
+}
+i4_selftest() {
+  local out; out=$(printf '%s' "$I4_PRE"; echo 'echo BODY')
+  [ "$(printf '%s\n' "$out" | sed -n 3p | cut -c1-12)" = '[ "$KDIR" = ' ] || { echo 'SELFTEST FAIL i4 preamble line 3'; return 1; }
+  [ "$(printf '%s\n' "$out" | sed -n 5p)" = 'echo BODY' ] || { echo 'SELFTEST FAIL i4 body not on its own line'; return 1; }
+  echo 'SELFTEST PASS 4080-imm26-lib i4 preamble'
+}
