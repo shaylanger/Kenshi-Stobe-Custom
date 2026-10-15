@@ -1,87 +1,58 @@
-#!/bin/bash
-# lane-llm-apply.sh: write the ONE per-rig LLM config (C:\KAH\lane-llm.json) into each isolated lane's private DB
-# (core_llm_connector, ALL rows, like config.php did for the 4080 lane i3 and the 5090 lane's rows 1-12).
-# Runs inside the rig's WSL distro as root (the lanes' Postgres clusters are in /tmp there). Nothing here touches the live DB
-# (/var/www/html/StobeServer, db "stobe"): lanes come only from lane-defs.<rig>.json, each db name must contain "test".
-#
-#   lane-llm-apply.sh [--check] <lane|all> [--defs <lane-defs.json>] [--llm <lane-llm.json>]
-#     apply : UPDATE every core_llm_connector row of the lane (base_url, model, api_key, max_tokens, connector_type,
-#             is_default=(id=1), api_badge_id=NULL) + setting HTTP_TIMEOUT; prints one line per lane with the row count.
-#     --check: read-only; prints "RESULT lane-llm <lane> PASS|FAIL <why>" and exits 1 if any lane differs from the file.
-#   Switch to DeepInfra later (key never printed, never on a command line):
-#     1. write C:\KAH\lane-llm.json  {"base_url":"https://api.deepinfra.com/v1/openai","model":"deepseek-ai/DeepSeek-V4.1-Flash",
-#        "key_file":"C:\\KAH\\lane-llm.key", ...}   (exact model id/URL as Shay gives them)
-#     2. drop the key into key_file (one line)
-#     3. run:  lane-llm-apply.sh i3 ; lane-llm-apply.sh i4   (or: all). PHP re-reads connectors per request, no restart.
-#   lane-llm.json fields: base_url (may contain {bridge_port} = the lane's local bridge port), model, key_file (optional Windows
-#   path; missing/empty = api_key "local-test-no-auth"), connector_type (default openrouterjson), max_tokens (default 1024),
-#   http_timeout (seconds, default 600), provider (free text label).
-# Wrapper from Windows/5090: tools\automation\lane-llm-apply.ps1
-set -eu
-mode=apply; lane=; defs=/mnt/c/KenshiTestRuns/lane-i4/lane-defs.4080.json; llm=/mnt/c/KAH/lane-llm.json
-while [ $# -gt 0 ]; do case "$1" in
-  --check) mode=check;; --defs) defs=$2; shift;; --llm) llm=$2; shift;; *) lane=$1;; esac; shift; done
-[ -n "$lane" ] || { sed -n 2,22p "$0"; exit 2; }
-[ -f "$defs" ] || { echo "no defs file $defs"; exit 2; }
-[ -f "$llm" ] || { echo "no LLM config $llm (write it first, see header)"; exit 2; }
-
-lanes=$lane
-[ "$lane" = all ] && lanes=$(python3 -c "import json,sys;print(' '.join(json.load(open(sys.argv[1]))['lanes']))" "$defs")
-rc=0
-for L in $lanes; do
-  # shell vars for the lane + the desired connector values (the key is read inside python, only its sha256 is compared)
-  eval "$(python3 - "$defs" "$llm" "$L" <<'PY'
-import json,sys,os,hashlib,shlex
-defs=json.load(open(sys.argv[1])); cfg=json.load(open(sys.argv[2])); L=sys.argv[3]
-lane=defs['lanes'][L]
-def win2wsl(p):
-    p=p.replace('\\','/')
-    return '/mnt/'+p[0].lower()+p[2:] if len(p)>2 and p[1]==':' else p
-key='local-test-no-auth'
-kf=cfg.get('key_file') or ''
-if kf and os.path.isfile(win2wsl(kf)):
-    k=open(win2wsl(kf),encoding='utf-8-sig').read().strip()
-    if k: key=k
-out={
- 'ROOT':lane['backend_root'],'PGPORT_':str(lane['pg_port']),'DB':lane['db'],
- 'URL':cfg['base_url'].replace('{bridge_port}',str(lane['bridge_port'])),
- 'MODEL':cfg['model'],'CTYPE':cfg.get('connector_type','openrouterjson'),
- 'MAXTOK':str(int(cfg.get('max_tokens',1024))),'HTTPTO':str(int(cfg.get('http_timeout',600))),
- 'KEYSHA':hashlib.sha256(key.encode()).hexdigest(),'HASKEY':'1' if key!='local-test-no-auth' else '0',
-}
-for k2,v in out.items(): print('%s=%s'%(k2,shlex.quote(v)))
-open('/tmp/.lane-llm-key.%s'%L,'w').write(key)  # mode fixed below; deleted right after use
-os.chmod('/tmp/.lane-llm-key.%s'%L,0o600)
+#!/usr/bin/env bash
+# lane-llm-apply.sh [--check] <lane|all>     (WSL root; 5090 imm26 lanes; the 4080 uses lane-llm-apply.ps1 -Rig 4080)
+# ONE per-rig LLM file C:\KenshiTestRuns\lane-llm.json drives every lane DB:
+#   { "mode":"local|deepinfra", "base_url":"http://127.0.0.1:{bridge_port}/v1", "model":"qwen4b", "key_file":"",
+#     "connector_type":"", "max_tokens":1024, "local_api_key":"local-test-no-auth" }
+#   {bridge_port} is replaced per lane (registry C:\KenshiTestRuns\lanes\lanes-5090.json). mode=local: api_key = local_api_key;
+#   mode=deepinfra: api_key is read from key_file (a Windows or /mnt path; the file content is never printed, only a 6-char sha256 fingerprint).
+#   connector_type "" keeps the row's type (local = openrouterjson); for DeepInfra set the type the server expects (openaijson, base_url https://api.deepinfra.com/v1/openai).
+# Rewrites EVERY row of core_llm_connector in the lane DB (the lane DB has ids 1-12), api_badge_id=NULL, is_default only id 1.
+# Switching later = put the key in key_file, edit lane-llm.json (mode/base_url/model/connector_type), run this per lane.
+# --check: no write; prints per-lane MATCH/MISMATCH, exit 1 on a mismatch.
+set -euo pipefail
+args=(); for a in "$@"; do [ -n "$a" ] && args+=("$a"); done; set -- "${args[@]+"${args[@]}"}"
+chk=0; [ "${1:-}" = "--check" ] && { chk=1; shift; }
+lane=${1:-all}
+exec python3 - "$chk" "$lane" <<'PY'
+import json, sys, subprocess, hashlib, re
+chk = sys.argv[1] == '1'; want = sys.argv[2]
+reg = json.load(open('/mnt/c/KenshiTestRuns/lanes/lanes-5090.json', encoding='utf-8-sig'))
+cfg = json.load(open('/mnt/c/KenshiTestRuns/lane-llm.json', encoding='utf-8-sig'))
+def wsl_path(p):
+    m = re.match(r'^([A-Za-z]):[\\/](.*)$', p)
+    return '/mnt/%s/%s' % (m.group(1).lower(), m.group(2).replace('\\', '/')) if m else p
+mode = cfg.get('mode', 'local')
+if mode == 'local':
+    key = cfg.get('local_api_key', 'local-test-no-auth')
+else:
+    kf = cfg.get('key_file', '')
+    if not kf: print('FAIL mode=%s but key_file is empty' % mode); sys.exit(2)
+    key = open(wsl_path(kf)).read().strip()
+    if not key: print('FAIL key_file empty'); sys.exit(2)
+fp = hashlib.sha256(key.encode()).hexdigest()[:6]
+q = lambda s: "'" + str(s).replace("'", "''") + "'"
+bad = 0
+for l in reg['lanes']:
+    if want != 'all' and l['id'] != want: continue
+    url = cfg['base_url'].replace('{bridge_port}', str(l['bridge_port']))
+    psql = ['runuser', '-u', 'postgres', '--', 'psql', '-h', l['wsl_root'] + '/socket', '-p', str(l['pg_port']), '-d', l['db'], '-At', '-v', 'ON_ERROR_STOP=1']
+    def run(sql):
+        r = subprocess.run(psql, input=sql, capture_output=True, text=True)
+        if r.returncode: print('FAIL lane %s psql: %s' % (l['id'], r.stderr.strip()[:200])); sys.exit(2)
+        return r.stdout.strip()
+    ct = cfg.get('connector_type', '')
+    if chk:
+        out = run("select count(*), count(*) filter (where base_url=%s and model=%s and api_key=%s and api_badge_id is null%s) from core_llm_connector;" %
+                  (q(url), q(cfg['model']), q(key), (' and connector_type=%s' % q(ct)) if ct else ''))
+        n, ok = [int(x) for x in out.split('|')]
+        good = n > 0 and n == ok
+        bad += 0 if good else 1
+        print('lane %s %s rows=%d matching=%d mode=%s url=%s model=%s key_fp=%s' % (l['id'], 'MATCH' if good else 'MISMATCH', n, ok, mode, url, cfg['model'], fp))
+    else:
+        sql = ("UPDATE core_llm_connector SET base_url=%s, model=%s, api_key=%s, max_tokens=%d, api_badge_id=NULL, is_default=(id=1)%s;"
+               % (q(url), q(cfg['model']), q(key), int(cfg.get('max_tokens', 1024)), (', connector_type=%s' % q(ct)) if ct else ''))
+        run(sql)
+        n = run("select count(*) from core_llm_connector;")
+        print('lane %s APPLIED rows=%s mode=%s url=%s model=%s key_fp=%s' % (l['id'], n, mode, url, cfg['model'], fp))
+sys.exit(1 if bad else 0)
 PY
-)"
-  trap 'rm -f /tmp/.lane-llm-key.'"$L" EXIT
-  case "$DB" in *test*) ;; *) echo "RESULT lane-llm $L FAIL refusing db '$DB' (not a test db)"; rc=1; continue;; esac
-  [ "$DB" != stobe ] || { echo "refusing live db"; exit 3; }
-  P="runuser -u postgres -- psql -h $ROOT/socket -p $PGPORT_ -d $DB -At -v ON_ERROR_STOP=1"
-  if [ "$mode" = check ]; then
-    rows=$($P -c "select count(*) from core_llm_connector" 2>&1) || { echo "RESULT lane-llm $L FAIL db unreachable: $(echo "$rows"|head -1)"; rc=1; continue; }
-    bad=$($P -c "select count(*) from core_llm_connector where base_url<>'$URL' or model<>'$MODEL' or connector_type<>'$CTYPE' or max_tokens<>$MAXTOK or encode(sha256(convert_to(api_key,'UTF8')),'hex')<>'$KEYSHA'")
-    dflt=$($P -c "select string_agg(id::text,',') from core_llm_connector where is_default")
-    if [ "$bad" = 0 ] && [ "$dflt" = 1 ]; then echo "RESULT lane-llm $L PASS rows=$rows base_url=$URL model=$MODEL key=$([ $HASKEY = 1 ] && echo set || echo local-no-auth)"
-    else echo "RESULT lane-llm $L FAIL rows=$rows differing=$bad default_ids=$dflt want base_url=$URL model=$MODEL"; rc=1; fi
-  else
-    # SQL (with the key) goes over stdin only; never on a command line
-    {
-      python3 - "$URL" "$MODEL" "$CTYPE" "$MAXTOK" "$L" <<'PY'
-import sys
-url,model,ctype,maxtok,L=sys.argv[1:6]
-q=lambda s:"'"+s.replace("'","''")+"'"
-key=open('/tmp/.lane-llm-key.%s'%L).read()
-print("UPDATE core_llm_connector SET base_url=%s,model=%s,api_key=%s,api_badge_id=NULL,max_tokens=%s,connector_type=%s,is_default=(id=1);"%(q(url),q(model),q(key),maxtok,q(ctype)))
-PY
-    } | $P -f - >/dev/null
-    rm -f /tmp/.lane-llm-key.$L
-    # HTTP_TIMEOUT lives in the lane's settings table via the app's own setter (same call config.php used)
-    ( set +x; . "$ROOT/env.sh"; php -r "require '$ROOT/site/lib/bootstrap.php'; setSetting('HTTP_TIMEOUT','$HTTPTO','general','lane-llm-apply');" ) >/dev/null 2>&1 \
-      && to=ok || to="FAILED(setSetting)"
-    n=$($P -c "select count(*) from core_llm_connector")
-    echo "lane-llm $L: $n connector rows -> base_url=$URL model=$MODEL key=$([ $HASKEY = 1 ] && echo set || echo local-no-auth) http_timeout=$HTTPTO($to)"
-  fi
-  rm -f /tmp/.lane-llm-key.$L
-done
-exit $rc
