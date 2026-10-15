@@ -63,6 +63,13 @@ try {
     $d3 = Saved $r.out
     Ok ($d3 -and [IO.Path]::GetFileName($d3) -notmatch $blocked) "agent report-files + label REPORT gives a safe name ($d3)"
 
+    # 3b. -Handoff writes agents\<agent>.handoff.md (overwrite), also for an agent name the Write tool would block
+    $r = Run @('report-files', '-Handoff') $utf8.GetBytes("handoff one`n")
+    $r = Run @('report-files', '-Handoff') $utf8.GetBytes("handoff two`n")
+    $hp = Join-Path $tmp 'agents\report-files.handoff.md'
+    Ok ($r.code -eq 0 -and (Test-Path -LiteralPath $hp)) "-Handoff wrote $hp (code $($r.code) err '$($r.err)')"
+    if (Test-Path -LiteralPath $hp) { Ok ([IO.File]::ReadAllText($hp) -eq "handoff two`n") '-Handoff overwrites' }
+
     # 4. two saves inside one second never overwrite each other
     $a = Saved (Run @('twice') $utf8.GetBytes("one`n")).out
     $b2 = Saved (Run @('twice') $utf8.GetBytes("two`n")).out
