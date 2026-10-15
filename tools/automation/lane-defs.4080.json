@@ -19,7 +19,7 @@
       "marker": "C:\\KenshiTestRuns\\inflight\\4080-imm26",
       "lock": "C:\\KenshiTestRuns\\game-3.lock",
       "window_pos": "1920,0",
-      "window_size": "1920x1080",
+      "window_size": "1024x768",
       "owner_note": "pre-existing lane, provisioned by standalone4080-provision.sh; stobe-lane-backend.sh only reads it"
     },
     "i4": {
