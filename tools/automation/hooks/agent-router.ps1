@@ -7,6 +7,10 @@
 #     effort the coordinator passed is logged as an override.
 #   - Every decision is one line in C:\KenshiTestRuns\ledger\agent-calls.tsv (env AGENT_LEDGER overrides, for tests), UTF-8 without BOM.
 #     The ledger write never throws, so a deny still denies when the ledger is unwritable.
+#   - Long-running work is never in-session (Shay 2026-10-15, "we dont want the subagents killed during the handoff"): an Agent call with
+#     run_in_background=true, or whose tier is kenshi-generator / kenshi-debugger / kenshi-escalation (cases patch generate debug investigate
+#     escalate, or that subagent_type), is DENIED unless the description contains [short] or [inproc-ok:<reason>]. The message prints the
+#     spawn-wp-session.ps1 command to use instead (a hidden agent-host job that survives the coordinator; never a visible window). Docs: testing/AGENT_PROMPTS.md.
 #   - Internal error: the call goes through unrouted and an error row is logged (event-sweep.sh reports those).
 # Only acts when cwd is under C:\KenshiModding.
 $ledger = if ($env:AGENT_LEDGER) { $env:AGENT_LEDGER } else { 'C:\KenshiTestRuns\ledger\agent-calls.tsv' }
@@ -34,7 +38,7 @@ try {
     $in = [Console]::In.ReadToEnd() | ConvertFrom-Json
     if ([string]$in.tool_name -ne 'Agent') { exit 0 }
     if ([string]$in.cwd -notmatch '^C:[\\/]KenshiModding([\\/]|$)') { exit 0 }
-    $pol = Get-Content -Raw -LiteralPath 'C:\KenshiModding\tools\automation\model-policy.json' | ConvertFrom-Json
+    $pol = Get-Content -Raw -LiteralPath $(if ($env:AGENT_POLICY) { $env:AGENT_POLICY } else { 'C:\KenshiModding\tools\automation\model-policy.json' }) | ConvertFrom-Json
     $ti = $in.tool_input
     $desc = [string]$ti.description
     $stype = [string]$ti.subagent_type
@@ -51,6 +55,22 @@ try {
     } else {
         if ($stype -ne 'kenshi-reader') { Deny 'tag the description with [case:<name>] (cases in tools\automation\model-policy.json). Only kenshi-reader may run without a case' '' $ticket $stype $desc }
         $tier = 'kenshi-reader'
+    }
+
+    # in-session long-running agents are impossible (see header): spawn an independent session instead
+    $bgv = $ti.run_in_background
+    $bg = ($bgv -eq $true) -or ([string]$bgv -eq 'true')
+    $longTier = @('kenshi-generator', 'kenshi-debugger', 'kenshi-escalation') -contains $tier
+    $shortOk = ($desc -match '\[short\]') -or ($desc -match '\[inproc-ok:[^\]]+\]')
+    if (($bg -or $longTier) -and -not $shortOk) {
+        $slug = (($desc -replace '\[[^\]]*\]', ' ').ToLower() -replace '[^a-z0-9]+', ' ').Trim() -split ' ' | Where-Object { $_ } | Select-Object -First 4
+        $nm = if ($slug) { 'imm26-' + ($slug -join '-') } else { 'agent-' + (Get-Date -Format 'HHmmss') }
+        $sc = if ($case -and $case -ne 'bench') { $case } else { switch ($tier) { 'kenshi-debugger' { 'debug' } 'kenshi-escalation' { 'escalate' } 'kenshi-reader' { 'read' } default { 'generate' } } }
+        $why = if ($bg) { 'run_in_background=true' } else { "tier $tier" }
+        $brief = "C:\KenshiTestRuns\agents\briefs\$nm.md"
+        Deny ("in-session long-running agents die with the coordinator at handoff ($why). Use an agent-host job (hidden, headless, max 4 live), never a visible window: write the brief to $brief (docs/WP_SIZING.md section 7), then run: " +
+            "powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\spawn-wp-session.ps1 $nm $sc $brief [-Program <program> -Wp <wp>]. " +
+            "Follow-ups go to C:\KenshiTestRuns\inbox\$nm\. A genuinely short foreground job (a few minutes) may add [short] or [inproc-ok:<reason>] to the description.") $case $ticket $stype $desc
     }
 
     $model = [string]$pol.tiers.$tier.model
