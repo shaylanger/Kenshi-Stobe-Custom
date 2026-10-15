@@ -2,7 +2,7 @@
 # Prints, compactly: the handoff marker (then archives it), testing/HANDOFF.md "Right now", each agent status
 # file (C:\KenshiTestRuns\agents\<name>.status), inflight markers (+ the batch out dir a marker names: DONE/SUMMARY),
 # game lock and Kenshi state.
-param([switch]$Brief)  # -Brief (Shay 2026-10-15): ~10x smaller output; agents not DONE and < 6 h old only, long lines cut, no rig-runner/stale sections
+param([switch]$Brief, [switch]$AgentsOnly)  # -AgentsOnly: stop after the agent roll call (selftest). -Brief (Shay 2026-10-15): ~10x smaller output; agents not DONE and < 6 h old only, long lines cut, no rig-runner/stale sections
 $ws = 'C:\KenshiModding'
 $runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 
@@ -55,6 +55,15 @@ try {
     $rt = @(Get-ChildItem -LiteralPath (Join-Path $runs 'respawn') -Filter '*.todo' -File -ErrorAction SilentlyContinue | ForEach-Object BaseName)
     if ($rt.Count) { "respawn todos (C:\KenshiTestRuns\respawn\): $($rt -join ', ')" }
 } catch { "agent health check failed open: $($_.Exception.Message)" }
+'=== agent roll call (agent-rollcall.ps1: kind INDEPENDENT = hidden agent-host job with a session.json, survives this coordinator; INPROC = subagent of a session, DIES when its session ends) + agent-host daemon ==='
+try {
+    $rcLines = @(& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'agent-rollcall.ps1'))
+    $rcLines | ForEach-Object { $_ }
+    if (@($rcLines | Where-Object { $_ -match 'kind=INPROC' }).Count) { 'WARNING: INPROC agents die when this coordinator ends: finish them first or respawn them as independent jobs (spawn-wp-session.ps1) before a handoff.' }
+    if (@($rcLines | Where-Object { $_ -match 'kind=INDEPENDENT proc=DEAD' }).Count) { 'WARNING: INDEPENDENT agent(s) with proc=DEAD: the monitor marks them FAILED; respawn a fresh successor (agent health above).' }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'agent-host-ensure.ps1') $(if ($env:KAH_RUNS_DIR) { '-DryRun' })
+} catch { "roll call failed open: $($_.Exception.Message)" }
+if ($AgentsOnly) { return }
 if (-not $Brief) {
 '=== rig runners (rig-runner.ps1: one daemon per rig runs the queue\<rig>\ and queue\any\ list files; ALERT on idle/stuck) ==='
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'rig-runner.ps1') -Ensure
