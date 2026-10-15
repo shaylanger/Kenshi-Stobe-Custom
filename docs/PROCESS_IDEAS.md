@@ -15,7 +15,7 @@ Rules:
 
 ## Active
 
-### PI-06 | open
+### PI-06 | confirmed
 - idea: Enforce the one-debug-attempt-per-row budget mechanically: go-row.sh / go-batch.sh count attempts per row per lane and, on the second attempt of a failed row, record the cause and stop with ROW-NEEDS-FIXER instead of letting the operator keep debugging.
 - evidence: 2026-10-15 operator imm26-5090-ctxop3 reached the 200k-token limit debugging row 07-a (one operator, one row, a whole 200k budget, then a respawn as ctxop32/ctxop322). The DEBUG BUDGET rule exists since 2026-10-15 only as text in briefs/COMMON.md; nothing counts attempts.
 - saving: up to one operator context (~200k tokens, ~1 h of a lane) per stuck row; rows after the stuck one start sooner.
@@ -23,8 +23,11 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-15 17:40
+- moment: 17:15, imm26-5090-ctxop3 STOPPED-CONTEXT while debugging 07-a: a mechanical attempt counter would have forced the move to the next row after the first failure.
+- last_review: coordinator #6 handoff 2026-10-15
+- log: 2026-10-15 17:57 review 'coordinator #6 handoff 2026-10-15': open -> confirmed (applies: 2026-10-15 ~17:15 operator imm26-5090-ctxop3 hit its context limit after 5 rows, mostly debugging row 07-a (stobeNativeAiSnapshot EMPTY); the new one-attempt rule was only a text rule in briefs.)
 
-### PI-07 | open
+### PI-07 | confirmed
 - idea: Give session-start.ps1 -Brief a hard output budget (e.g. 12 KB): per-section line caps, only agents not DONE, ledger lines cut to 300 chars, tail/cold-start sections only when non-empty.
 - evidence: measured 2026-10-15 17:35: session-start.ps1 -Brief prints 36617 characters (~9k tokens) on the live workspace; the full run was ~94 KB before -Brief (482ab59), so -Brief is only ~2.5x smaller now, not 10x, because the ledger/tail/rollcall sections grew. Every new coordinator pays it once, and every fresh agent that runs it again.
 - saving: ~6k tokens per coordinator or agent session start (about 25 KB less to read).
@@ -32,8 +35,11 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-15 17:40
+- moment: session start 17:01: the full output was truncated to a file and cost ~3 extra tool calls before the coordinator knew the live agents; a capped -Brief would have fit on one screen.
+- last_review: coordinator #6 handoff 2026-10-15
+- log: 2026-10-15 17:57 review 'coordinator #6 handoff 2026-10-15': open -> confirmed (applies: first session-start.ps1 call of this session returned 93.8 KB (persisted-output) and needed 3 follow-up reads (sed/cut/grep) to find handoff state.)
 
-### PI-08 | open
+### PI-08 | confirmed
 - idea: Archive the old "Right now" entries of testing/HANDOFF.md at each handoff (move everything older than the current coordinator number to archive/HANDOFF_history_<date>.md), so the live file stays under ~30 KB.
 - evidence: measured 2026-10-15 17:35: testing/HANDOFF.md is 268469 bytes / 539 lines (~67k tokens if read whole); its "Right now" section alone is lines 8-143, with coordinator #1..#6 entries interleaved out of order (the newest #6 handoff is at line 10, #5 at line 535). Agents and coordinators that open the file whole burn that much context; session-start -Brief has to cut it to 12 lines.
 - saving: ~60k tokens for any agent that reads HANDOFF.md whole; fewer wrong-order reads.
@@ -41,6 +47,9 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-15 17:40
+- moment: 17:02: tail -60 of HANDOFF.md dumped ~25 KB of old-handoff text into context; an archived, short 'Right now' would have shown only coordinator #5's block.
+- last_review: coordinator #6 handoff 2026-10-15
+- log: 2026-10-15 17:57 review 'coordinator #6 handoff 2026-10-15': open -> confirmed (applies: reading testing/HANDOFF.md 'Right now' at start needed grep -n + tail of a 268 KB file; the first tail printed 60 very long lines.)
 
 ### PI-09 | open
 - idea: Measure the first live use of go-row.sh / go-batch.sh / preflight.sh (rowtools3) against the hand-run baseline and record per-row time and tokens, then fix or keep the tools on that evidence.
@@ -50,6 +59,36 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-15 17:40
+
+### PI-10 | open
+- idea: Batch waker events: after the first non-urgent event wait 60-120 s and print everything that happened in one wake (DEAD/KILLED/FAILED/question/peer messages still wake at once).
+- evidence: 2026-10-15 17:00-18:00 this coordinator session had about 30 waker exits/restarts, each costing a turn plus a restart tool call (~1.5-3k tokens each, ~60k tokens total); many fired seconds apart (e.g. STATUS wpT4 DONE then wpT1/T2 DONE reports).
+- saving: ~30-40k tokens per coordinator hour and fewer turns
+- risk: must never delay DEAD, KILLED, WALL-CLOCK, FAILED, STOPPED, question or peer wakes; only DONE/INFO events are batched
+- hooks: no
+- weakens: no
+- added: 2026-10-15 17:57
+- log: 2026-10-15 17:57 review 'coordinator #6 handoff 2026-10-15': added
+
+### PI-11 | open
+- idea: Stop-hook successor recognition: accept a successor listed in the program ledger (successors/agent field) or any RUNNING agent on the same wp, not only names with a b/2/-2 suffix.
+- evidence: 2026-10-15 the Stop hook blocked the coordinator 3 times for agents that already had live successors under other names (batch2c->batch2d, i4op4->i4op5, ctxop32->ctxop322 and setupfail-scope2->scope2b); each cost a turn plus a manual agent-abandon.ps1.
+- saving: ~3 blocked stops per hour, ~3-5k tokens each, no manual abandon
+- risk: a wrongly accepted successor could hide a really dead agent: require the successor's status RUNNING < 45 min and the same wp in the ledger
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 17:57
+- log: 2026-10-15 17:57 review 'coordinator #6 handoff 2026-10-15': added
+
+### PI-12 | open
+- idea: Generate a one-page lane operator brief from the ledger (state, helpers, next 5 rows, NC DLL SHA, known blockers) so a new operator starts testing within 2 minutes.
+- evidence: 2026-10-15 5090 lane i4 had no game activity from 16:18 to 17:28 and imm26-5090-i4op3 spent 8+ min 'reading briefs' (2.5 MB transcript) before its first row; lane-idle flagged 5090 i3 idle 9.9 min while its operator did setup.
+- saving: ~8 min of lane time per operator spawn (5 spawns this session = ~40 lane-minutes)
+- risk: a stale generated brief could point to a wrong DLL SHA: the generator reads the ledger and lane files at spawn time
+- hooks: no
+- weakens: no
+- added: 2026-10-15 17:57
+- log: 2026-10-15 17:57 review 'coordinator #6 handoff 2026-10-15': added
 
 ## Retired
 
