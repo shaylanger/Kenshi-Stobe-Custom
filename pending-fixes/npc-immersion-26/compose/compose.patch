@@ -1920,7 +1920,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
          'candidate_id'=>($point['source'] ?? '') === 'native_local' ? strval($point['id'] ?? '') : ''];
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/destination_discovery.php b/lib/destination_discovery.php
 --- a/lib/destination_discovery.php	2026-10-14 15:57:13.145829378 -0500
-+++ b/lib/destination_discovery.php	2026-10-15 13:30:36.105776400 -0500
++++ b/lib/destination_discovery.php	2026-10-15 16:43:55.341358718 -0500
 @@ -203,6 +203,9 @@
              // Rank the full matching set before applying the output bound.
          }
@@ -1947,7 +1947,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/desti
          ."Discussing a region, map area, route idea or supplied public world knowledge is ordinary conversation, not a promise to move. Answer those questions from the supplied knowledge with travel_decision=NONE and no movement action; no native destination ID is needed for discussion. Public region lore does not prove you personally visited it or know its current road, inhabitants or safety. Require a resolved executable point only before a concrete travel offer or acceptance, not before considering where an outing might go.\n"
          ."Choose a destination that serves the actual intended journey or requested purpose BEFORE inviting anyone. Compare named-place and source evidence semantically; lexical order is an aid, never proof. A request for another town needs an actual other-town candidate, not a gate, residential exterior, current-town boundary or arbitrary rise. Do not invent an existing route or a personal history to justify a candidate. Keep same_route for your actual intended journey; changing your plans for the speaker is a detour and retains its existing willingness rules.\n"
          ."Generic compass ground samples are fallback short walks, not evidence of a meaningful away trip. Offer one only when no relevant grounded destination fits and a short local walk is actually appropriate; clearly explain that limitation before proposing. Do not silently substitute a local walk for a requested place or purpose. A current native path check does not prove road familiarity, safety, gate permission or arrival. Existing agreed trips retain their exact destination; this ranked menu is not permission to change them.\n"
-@@ -223,3 +233,47 @@
+@@ -223,3 +233,50 @@
          .'This NPC historical observations (not current presence or executable coordinates): '.json_encode($history,JSON_UNESCAPED_UNICODE)."\n"
          .'Conditional regional search suggestions: '.json_encode($regional,JSON_UNESCAPED_UNICODE);
  }
@@ -1959,7 +1959,10 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/desti
 +    if (function_exists('stobeLogInfo')) stobeLogInfo('Destination candidate counts',['npc'=>$actor]+$counts);
 +    try {
 +        if ($gamets>0 && isset($GLOBALS['db']) && function_exists('storeEvent')) {
-+            storeEvent('destination_candidate_counts',time(),$gamets,json_encode(['npc'=>$actor]+$counts,JSON_UNESCAPED_UNICODE),'pending','','',false);
++            // storeEvent() rewrites CACHE_CITY/REGION/LOCATION from the event's own geo; a diagnostics row must not move "here".
++            $saved=[];foreach (['CACHE_CITY','CACHE_REGION','CACHE_LOCATION'] as $k) $saved[$k]=$GLOBALS[$k]??null;
++            try { storeEvent('destination_candidate_counts',time(),$gamets,json_encode(['npc'=>$actor]+$counts,JSON_UNESCAPED_UNICODE),'pending','','',false); }
++            finally { foreach ($saved as $k=>$v) { if ($v===null) unset($GLOBALS[$k]); else $GLOBALS[$k]=$v; } }
 +        }
 +    } catch (Throwable $e) { /* diagnostics only */ }
 +}
@@ -4420,7 +4423,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_plans.php b/lib/imm26_plans.php
 --- a/lib/imm26_plans.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_plans.php	2026-10-15 13:24:19.537571687 -0500
++++ b/lib/imm26_plans.php	2026-10-15 16:42:55.290684374 -0500
 @@ -0,0 +1,223 @@
 +<?php
 +/** WP-D: negotiated alternatives (14), shared plans (19), natural plan changes (20),
@@ -4595,7 +4598,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +/** Item 23: an unscoped follow of a non-faction NPC becomes a finite implicit agreement. */
 +function stobeImm26ImplicitFollow(string $actor, array|false $npc, string $speaker, int $gamets, string $action): bool {
 +    if (!is_array($npc) || (function_exists('npcIsInPlayerFaction') && npcIsInPlayerFaction($npc))) return false;
-+    if (getSetting('STOBE_IMPLICIT_FOLLOW', '1') === '0') return false;
++    if ((function_exists('getSetting') ? getSetting('STOBE_IMPLICIT_FOLLOW', '1') : '1') === '0') return false;
 +    if (strcasecmp($action, 'FOLLOW@' . $speaker) !== 0) return false;
 +    $old = stobeTravelRead($actor, $speaker, $gamets);
 +    if (is_array($old) && ($old['status'] ?? '') === 'ACCEPTED') return false;
@@ -4604,7 +4607,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +    $point = ['source'=>'visited_location', 'label'=>'following ' . $speaker, 'x'=>$pos['x'], 'y'=>$pos['y'], 'z'=>$pos['z']];
 +    $hash = stobeTravelPlanHash($actor, $speaker, 'same_route', 'player', $point);
 +    if ($hash === '') return false;
-+    $seconds = max(600, min(86400, intval(getSetting('STOBE_IMPLICIT_FOLLOW_SECONDS', '21600'))));
++    $seconds = max(600, min(86400, intval(function_exists('getSetting') ? getSetting('STOBE_IMPLICIT_FOLLOW_SECONDS', '21600') : '21600')));
 +    $state = ['status'=>'ACCEPTED', 'kind'=>'same_route', 'leader'=>'player', 'destination'=>$point['label'],
 +        'destination_point'=>$point, 'reason'=>'Plain follow request', 'actor'=>$actor, 'speaker'=>$speaker,
 +        'created_gamets'=>$gamets, 'plan_hash'=>$hash, 'implicit'=>true, 'origin'=>'player'];
@@ -4724,7 +4727,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_ties.php b/lib/imm26_ties.php
 --- a/lib/imm26_ties.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_ties.php	2026-10-15 13:26:32.662763557 -0500
++++ b/lib/imm26_ties.php	2026-10-15 16:42:55.290548874 -0500
 @@ -0,0 +1,142 @@
 +<?php
 +declare(strict_types=1);
@@ -4781,7 +4784,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +/** Map-derived tie from $row's own relationship entry for $other (typed entry or strong affinity), or null. */
 +function stobeTieFromMap(array|false $row, string $other): ?array
 +{
-+    $entry = is_array($row) ? stobeRelationshipEntryFor($row, $other) : null;
++    $entry = is_array($row) && function_exists('stobeRelationshipEntryFor') ? stobeRelationshipEntryFor($row, $other) : null;
 +    if (!$entry) return null;
 +    $aff = (int)($entry['aff'] ?? 0);
 +    $type = strtolower(strval($entry['type'] ?? ''));
@@ -11653,6 +11656,118 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +
 +echo "pass=$pass fail=$fail\n";
 +exit($fail > 0 ? 1 : 0);
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_travel_target_out_of_people_regression.php b/tests/imm26_travel_target_out_of_people_regression.php
+--- a/tests/imm26_travel_target_out_of_people_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_travel_target_out_of_people_regression.php	2026-10-15 16:44:02.313793322 -0500
+@@ -0,0 +1,108 @@
++<?php
++// imm26 travel blocker: the addressed NPC is missing from the request's `people` list (the native
++// BuildPeopleJson drops the chat target when it is beyond the talk radius, g_proximityRadius = 80), so
++// stobeResolveLiveParticipantSerial(actor) = 0 and
++//   - stobeTravelPlanHash() returns ''  -> "I need to confirm the exact travel offer before agreeing."
++//   - stobeTravelKey() returns ''       -> stobeTravelRead() finds no earlier PROPOSED offer, nothing can be saved.
++// Evidence: lane log C:\KenshiTestRuns\imm26-5090 (stobeserver.log 20:42:08/20:42:34/20:42:48/21:01:14 rejected with
++// the target absent from people; 20:41:49/20:55:44/20:56:47 saved with the target present).
++// Run ONLY against a test database (scratch copy of the tree, see run.sh):
++//   STOBE_DB_NAME=stobe_test php tests/imm26_travel_target_out_of_people_regression.php
++require __DIR__ . '/../lib/bootstrap.php';
++
++$db = $GLOBALS['db'];
++$pass = 0; $fail = 0;
++function check(string $name, bool $ok, $detail = null): void {
++    global $pass, $fail;
++    if ($ok) { $pass++; echo "PASS $name\n"; }
++    else { $fail++; echo "FAIL $name" . ($detail !== null ? ' :: ' . json_encode($detail) : '') . "\n"; }
++}
++if (strval(getenv('STOBE_DB_NAME')) !== 'stobe_test') { echo "refusing: STOBE_DB_NAME must be stobe_test\n"; exit(2); }
++
++$oldPlayer = $db->fetchOne("SELECT value FROM general_settings WHERE id='PLAYER_NAME'");
++register_shutdown_function(static function () use ($db, $oldPlayer): void {
++    $db->exec("ROLLBACK");
++    $db->exec("DELETE FROM general_settings WHERE id='PLAYER_NAME'");
++    if (is_array($oldPlayer)) $db->exec("INSERT INTO general_settings (id, value) VALUES ('PLAYER_NAME', $1)", [strval($oldPlayer['value'])]);
++});
++$db->exec("DELETE FROM general_settings WHERE id='PLAYER_NAME'");
++$db->exec("INSERT INTO general_settings (id, value) VALUES ('PLAYER_NAME', 'Shay')");
++$GLOBALS['CACHE_CITY'] = 'The Hub';
++$GLOBALS['STOBE_TRAVEL_SPEAKER'] = 'Shay';
++
++$db->exec('BEGIN');
++$db->exec("DELETE FROM location_zones");
++$db->exec("DELETE FROM eventlog WHERE type='travel_agreement'");
++$now = time();
++$db->exec("INSERT INTO location_zones (zone_name, city_name, x, y, z, last_seen_ts, metadata) VALUES ('The Hub','',0,0,0,$1,'{}'::jsonb)", [$now - 10]);
++$db->exec("INSERT INTO location_zones (zone_name, city_name, x, y, z, last_seen_ts, metadata) VALUES ('Stumble Inn','',4000,0,0,$1,'{}'::jsonb)", [$now - 10]);
++// The addressed NPC is known to the server by name -> hand serial (what the first, in-range turn stored).
++$db->exec("DELETE FROM core_npc_master WHERE LOWER(name) IN ('uttravfar','uttravdup')");
++$db->exec("INSERT INTO core_npc_master (name, metadata) VALUES ('UtTravFar', '{\"storage_id\":\"hand_44444\"}'::jsonb)");
++// core_npc_name_key is case-sensitive unique: a second row differing only in case is how a real duplicate arises; the stored-serial fallback matches LOWER(name) and must refuse it.
++$db->exec("INSERT INTO core_npc_master (name, metadata) VALUES ('UtTravDup', '{\"storage_id\":\"hand_55551\"}'::jsonb)");
++$db->exec("INSERT INTO core_npc_master (name, metadata) VALUES ('UTTRAVDUP', '{\"storage_id\":\"hand_55552\"}'::jsonb)");
++
++function npc_row(string $name, string $sid): array {
++    return ['name' => $name, 'race' => 'Greenlander', 'faction' => 'No Faction',
++        'metadata' => ['storage_id' => $sid],
++        'extended_data' => ['relationships' => ['Shay' => ['aff' => 80]]]];
++}
++function capture(string $actor, array $npc, string $decision, string $playerLine, string $quote = ''): array {
++    $GLOBALS['STOBE_TRAVEL_STATE'] = [];   // a new HTTP request each turn
++    $raw = json_encode(['travel_decision' => $decision, 'travel_kind' => 'detour', 'travel_leader' => 'npc',
++        'travel_destination' => 'Stumble Inn', 'travel_player_quote' => $quote, 'travel_reason' => 'test']);
++    $text = 'I will take you there.'; $actions = ['TRAVEL_LOCATION@Stumble Inn'];
++    stobeTravelCapture($raw, $actor, $npc, 'Shay', $playerLine, 1000, $text, $actions);
++    return [$text, $actions];
++}
++function saved(string $key): array {
++    $rows = $GLOBALS['db']->fetchAll("SELECT data FROM eventlog WHERE type='travel_agreement' AND LEFT(data, LENGTH($1))=$1 ORDER BY rowid", [$key]);
++    return array_map(static fn($r) => json_decode(substr(strval($r['data']), strlen($key)), true), is_array($rows) ? $rows : []);
++}
++
++$actor = 'UtTravFar';
++$npc = npc_row($actor, 'hand_44444');
++$confirmMsg = 'I need to confirm the exact travel offer before agreeing.';
++
++// ---- control: addressed NPC IS in people (turn 1, in talk range) -> PROPOSED saved with a plan hash
++$GLOBALS['CACHE_PEOPLE'] = '["Shay|hand_11111","UtTravFar|hand_44444"]';
++[$text, $actions] = capture($actor, $npc, 'PROPOSE', 'Walk with me to Stumble Inn.');
++check('control: in people -> offer is not rejected', $text !== $confirmMsg, $text);
++$rows = saved('travel-v1:44444:11111:');
++check('control: in people -> PROPOSED saved under travel-v1:44444:11111:', count($rows) === 1 && ($rows[0]['status'] ?? '') === 'PROPOSED', $rows);
++$hash1 = strval($rows[0]['plan_hash'] ?? '');
++check('control: in people -> 64-hex plan_hash', preg_match('/^[0-9a-f]{64}$/D', $hash1) === 1, $hash1);
++
++// ---- the bug: turn 2, speaker moved >80 units away, native omits the addressed NPC from people
++$GLOBALS['CACHE_PEOPLE'] = '["Shay|hand_11111","Loth [Captain Krump]|hand_77777"]';
++check('resolver itself: absent from people -> no live serial (unchanged contract)', stobeResolveLiveParticipantSerial($actor) === 0);
++[$text, $actions] = capture($actor, $npc, 'ACCEPT', "Yes, let's go.", "Yes, let's go");
++$rows = saved('travel-v1:44444:11111:');
++check('absent from people: acceptance finds the earlier offer and is not rejected for a missing plan hash',
++    $text !== $confirmMsg && $text !== 'I need to make a concrete travel offer before we can agree.', $text);
++check('absent from people: ACCEPTED saved under the same key as the PROPOSED offer',
++    count($rows) === 2 && ($rows[1]['status'] ?? '') === 'ACCEPTED', array_column($rows, 'status'));
++check('absent from people: plan_hash unchanged between PROPOSED and ACCEPTED', strval($rows[1]['plan_hash'] ?? '') === $hash1, [$hash1, $rows[1]['plan_hash'] ?? null]);
++
++// ---- a fresh offer while the NPC is absent from people (row 'Walk with me to Stumble Inn' after a drift)
++$db->exec("DELETE FROM eventlog WHERE type='travel_agreement'");
++[$text, $actions] = capture($actor, $npc, 'PROPOSE', 'Walk with me to Stumble Inn.');
++check('absent from people: fresh PROPOSE is not rejected with the plan-hash message', $text !== $confirmMsg, $text);
++$rows = saved('travel-v1:44444:11111:');
++check('absent from people: fresh PROPOSE saved with the same plan_hash as the in-range one',
++    count($rows) === 1 && strval($rows[0]['plan_hash'] ?? '') === $hash1, array_column($rows, 'plan_hash'));
++
++// ---- safety: an ambiguous stored name must NOT get a serial (two stored rows) -> still refuses, nothing saved
++$dup = npc_row('UtTravDup', 'hand_55551');
++[$text, $actions] = capture('UtTravDup', $dup, 'PROPOSE', 'Walk with me to Stumble Inn.');
++check('ambiguous stored name: offer still refused (no consent bound to a guessed serial)', $text === $confirmMsg, $text);
++check('ambiguous stored name: nothing saved', saved('travel-v1:55551:11111:') === [] && saved('travel-v1:55552:11111:') === []);
++
++// ---- safety: the speaker (player side) is never taken from the stored fallback
++$GLOBALS['CACHE_PEOPLE'] = '["UtTravFar|hand_44444"]';
++[$text, $actions] = capture($actor, $npc, 'PROPOSE', 'Walk with me to Stumble Inn.');
++check('speaker absent from people: offer refused (speaker serial must be live)', $text === $confirmMsg, $text);
++
++echo "imm26_travel_target_out_of_people: $pass passed, $fail failed\n";
++exit($fail === 0 ? 0 : 1);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpA_abandonment_regression.php b/tests/imm26_wpA_abandonment_regression.php
 --- a/tests/imm26_wpA_abandonment_regression.php	1969-12-31 18:00:00.000000000 -0600
 +++ b/tests/imm26_wpA_abandonment_regression.php	2026-10-15 16:15:25.287036800 -0500
@@ -12288,8 +12403,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +echo "OK $checks checks\n";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpC2_followups_comm_regression.php b/tests/imm26_wpC2_followups_comm_regression.php
 --- a/tests/imm26_wpC2_followups_comm_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpC2_followups_comm_regression.php	2026-10-15 13:31:33.860712939 -0500
-@@ -0,0 +1,189 @@
++++ b/tests/imm26_wpC2_followups_comm_regression.php	2026-10-15 16:45:48.998722282 -0500
+@@ -0,0 +1,191 @@
 +<?php
 +// WP-C2 items 8 and 9: follow-up resumption + communication preferences with teeth.
 +// Run: STOBE_DB_NAME=stobe_test php tests/imm26_wpC2_followups_comm_regression.php   (use flock /tmp/stobe-tests.lock)
@@ -12302,6 +12417,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +const T0 = 4000000000; // far above anything real tests write
 +$RUN = bin2hex(random_bytes(4));
 +function cleanup(): void {
++    // compose: earlier suites (chat_flow) leave recent inputtext/claim rows that block the optional-claim gate (30 s manual-input check, global spacing).
++    $GLOBALS['db']->exec("DELETE FROM eventlog WHERE type IN ('inputtext','inputtext_s','situated_remark_claim') AND localts >= " . (time() - 300));
 +    global $db;
 +    $db->exec("DELETE FROM eventlog WHERE gamets >= " . T0 . " AND type IN ('social_followup','situated_event','situated_remark_claim','travel_agreement','imm26_squad_comm','imm26_plan_notice','inputtext')");
 +}
@@ -13107,8 +13224,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +echo "RESULT IMM26-WPE-REGION PASS assertions=$n\n";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpE_situated_events_regression.php b/tests/imm26_wpE_situated_events_regression.php
 --- a/tests/imm26_wpE_situated_events_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpE_situated_events_regression.php	2026-10-15 13:22:28.685108711 -0500
-@@ -0,0 +1,97 @@
++++ b/tests/imm26_wpE_situated_events_regression.php	2026-10-15 16:45:48.998603182 -0500
+@@ -0,0 +1,99 @@
 +<?php
 +// imm26 WP-E item 22: reactions during shared activities (event op, priority/TTL claim, next-turn pull, travel arrival).
 +require __DIR__ . '/../lib/bootstrap.php';
@@ -13124,6 +13241,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +function cleanup(): void {
 +    $GLOBALS['db']->exec("DELETE FROM eventlog WHERE type='situated_event' AND data LIKE 'situated-v1:9100%'");
 +    $GLOBALS['db']->exec("DELETE FROM eventlog WHERE type='situated_remark_claim' AND data LIKE '%\"actor_serial\":9100%'");
++    // compose: earlier suites (chat_flow) leave recent inputtext/claim rows that block the optional-claim gate (30 s manual-input check, global spacing).
++    $GLOBALS['db']->exec("DELETE FROM eventlog WHERE type IN ('inputtext','inputtext_s','situated_remark_claim') AND localts >= " . (time() - 300));
 +}
 +cleanup();
 +$G = 5000;

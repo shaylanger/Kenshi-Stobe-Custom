@@ -24,8 +24,20 @@ Then the travel fix: `python3 travel-fix/apply-travel-actor-serial.py /root/imm2
    `$score = $score*10 + $tieRank` and `relationship_to_you` hint, plus C1's `'kind'=>'visible'`.
 7. `processor/chat.php` after-reply hook: both C1 `stobeImm26C1AfterReply` and C2 `imm26C2AfterManualTurn` blocks.
 
-## Checks
-See RESULTS section below (filled by the run).
+## Compose-level fixes (found by the first full run; the wp trees are NOT changed, so wp owners must carry these)
+- `lib/imm26_ties.php` `stobeTieFromMap`: `function_exists('stobeRelationshipEntryFor')` guard (wpB x wpC1: C1's pure test does not load chat_helper_functions).
+- `lib/imm26_plans.php` `stobeImm26ImplicitFollow`: `function_exists('getSetting')` guard around both `getSetting` calls (wpD item 23 called from wpE region test without settings.php).
+- `lib/destination_discovery.php` `stobeDestinationRecordCounts` (wpE): REAL BUG. `storeEvent()` overwrites `CACHE_CITY/CACHE_REGION/CACHE_LOCATION` from the event's geo, so the diagnostics row cleared the current town for the rest of the request (broke travel_known_places 2 asserts, world_town_rumour 3). Now saves/restores the three globals.
+- `tests/imm26_wpE_situated_events_regression.php`, `tests/imm26_wpC2_followups_comm_regression.php`: cleanup() also deletes recent `inputtext/inputtext_s/situated_remark_claim` rows (chat_flow_regression leaves them; the claim gate refuses within 30 s of manual input / global spacing). Failed identically on the bare wpE tree after chat_flow.
+- Added `tests/imm26_travel_target_out_of_people_regression.php` (travel fix regression) to the patch.
+
+## Checks (all on /root/imm26/compose, stobe_test DB)
+- php -l: every changed/new php file clean (41+ files).
+- `patch -p1` of compose.patch on a fresh copy of base: clean, result identical to compose tree (`mkcompose_patch.sh`).
+- Full stobe-tests: `suites: 93 passed, 5 FAILED, 7 known pre-existing`. The 5 failures are all expected pre-existing:
+  chat_json_endpoint, main_ingress_http, npc_player_view (68/2, identical to base), social_property, social_fights.
+  `bio_unique` and `relationship_stance` now PASS (fixed by wpA). No new failures. Every wpA/B/C1/C2/D/E regression and the travel regression pass inside the run.
+- `flock -o` note: an orphaned `php -S` test server on /root/imm26/base (parent /init) held /tmp/stobe-tests.lock and blocked the run; killed it (not Shay's). Check `fuser -v /tmp/stobe-tests.lock` if the lock waits.
 
 ## Trivial CONTRACTS items noticed (not done; next WP)
 - `abandoned_in_danger` rule key is present (wpA). Server still rejects it without an `agreement_id` (CONTRACTS item list).
