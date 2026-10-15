@@ -72,7 +72,44 @@
     "run": "off"
   },
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "C:/KenshiModding/tools/automation/hooks/kenshi-waker-guard.ps1",
+              "stop"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|ScheduleWakeup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "C:/KenshiModding/tools/automation/hooks/kenshi-waker-guard.ps1",
+              "pre"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
       {
         "matcher": "Agent",
         "hooks": [
