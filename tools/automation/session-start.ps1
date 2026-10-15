@@ -6,7 +6,7 @@ $ws = 'C:\KenshiModding'
 $runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 
 # First line (Shay 2026-10-15): is a background event wait running? A session without one is unreachable for peer messages and stalls.
-$ew = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $PID -and [string]$_.CommandLine -match 'event-wait\.sh' -and $_.Name -match '^(wsl|bash|sh)\.exe$' } | Select-Object -First 2)
+$ew = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $PID -and [string]$_.CommandLine -match 'event-wait\.sh' -and [string]$_.CommandLine -notmatch '\b(grep|rg|git|sed|python3?|cat|head|tail)\b|bash -n' -and $_.Name -match '^(wsl|bash|sh)\.exe$' } | Select-Object -First 2)
 if ($ew.Count) { "WAKER STATUS: running (event-wait.sh, pid $($ew[0].ProcessId))" }
 else { 'WAKER STATUS: NOT running (start: Bash run_in_background  MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh [--batch /mnt/c/<out-dir>]; restart it every time it wakes you)' }
 
