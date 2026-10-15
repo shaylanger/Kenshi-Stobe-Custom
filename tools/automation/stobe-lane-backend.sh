@@ -5,7 +5,7 @@
 # own database, own php -S port, own LLM bridge port, own manager loop, own activity-transport key, own env.sh, own /tmp root.
 # Lane parameters come from lane-defs.<rig>.json (python3 json), nothing is hard-coded here.
 #   provision : build the lane's backend from lane i3's reviewed site tree (same release, copied without logs), fresh cluster+DB
-#               (schema.sql + bootstrap-database.php + activity schema), fresh transport key, then lane-llm-apply.sh. Refuses if
+#               (schema.sql + bootstrap-database.php + activity schema), fresh transport key, then lane-llm-apply-4080.sh. Refuses if
 #               the lane's root exists. Only lanes with "owner_note" starting "built by" may be provisioned (i3 is read-only here).
 #   start     : idempotent: pg, bridge, php -S, manager loop (each only if not running).
 #   stop      : manager, php, bridge, pg (this lane only; pids from the lane root, ownership checked against /proc cmdline).
@@ -107,7 +107,7 @@ EOF
     psql -h "$ROOT/socket" -U dwemer -d "$DB" -v ON_ERROR_STOP=1 -f "$ROOT/site/data/schema.sql" > "$ROOT/schema.log" 2>&1
     php "$ROOT/site/tools/bootstrap-database.php" > "$ROOT/bootstrap.log" 2>&1
     psql -h "$ROOT/socket" -U dwemer -d "$DB" -v ON_ERROR_STOP=1 -f "$ROOT/site/lib/activity/schema.sql" > "$ROOT/activity-schema.log" 2>&1
-    # lane settings (same as standalone4080-config.php minus the connector rows, which lane-llm-apply.sh owns), parameterized
+    # lane settings (same as standalone4080-config.php minus the connector rows, which lane-llm-apply-4080.sh owns), parameterized
     cat > "$ROOT/config.php" <<PHPEOF
 <?php
 require '$ROOT/site/lib/bootstrap.php';
@@ -125,7 +125,7 @@ echo json_encode(['database'=>\$db->fetchOne('select current_database() as d'),'
 PHPEOF
     php "$ROOT/config.php" > "$ROOT/config-proof.json"
   )
-  bash "$here/lane-llm-apply.sh" "$lane" --defs "$defs"
+  bash "$here/lane-llm-apply-4080.sh" "$lane" --defs "$defs"
   echo "PRIVATE BOOTSTRAP COMPLETE lane $lane"
 }
 
