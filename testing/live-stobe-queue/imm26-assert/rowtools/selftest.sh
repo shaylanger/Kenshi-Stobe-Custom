@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# selftest.sh: OFFLINE self-test of preflight.sh / go-row.sh / go-batch.sh / heartbeat (no game, no ssh, no WSL, no DB; fake lane dirs under a temp base).
+# Usage: bash rowtools/selftest.sh   -> prints `SELFTEST <name> PASS|FAIL ...` lines and a final `SELFTEST ALL PASS|FAIL n/m`.
+ST_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; A="$ST_HERE/.."
+PY=$(command -v python3 || command -v python)
+T=$(mktemp -d); export KAH_ROWS_BASE="$T/runs" KAH_ROW_FAKE=1 KAH_ROW_FAKE_LOG="$T/fake.log" KAH_PF_ISOLATION=0 FAKE_STATE="$T/state.json"
+export ROW_SETTLE=0 ROW_WAIT=1
+unset KAH_AGENT_NAME KAH_ROW_DRY
+mkdir -p "$KAH_ROWS_BASE"
+n=0; ok=0
+chk() { n=$((n+1)); if [ "$2" = ok ]; then ok=$((ok+1)); echo "SELFTEST $1 PASS ${3:-}"; else echo "SELFTEST $1 FAIL ${3:-}"; fi; }
+. "$A/go-row.sh"                                                        # sources lane/rowlib/rowdefs/heartbeat/preflight (no main: sourced)
+lt_fake() { "$PY" "$ST_HERE/fakelane.py" "$@"; }
+scen() { rm -f "$FAKE_STATE"; export FAKE_SCEN="$T/scen.json"; cat > "$FAKE_SCEN"; }
+run() { gr_main "$@" 2>/dev/null; }
+dom='Recorded experience (data): promises: broken x2; property: no record; safety: no record; fighting beside: no record; secrets: no record'
+
+# 1 12-b PASS (domains in prompt, replies differ)
+scen <<EOF
+{"steps":[{"reply":"You've got my attention, go on.","prompt":"$dom\nrecorded_experiences_with_addressee"},{"reply":"A raid? You are leading with the exciting part and leaving out the rest.","prompt":"x"}]}
+EOF
+r=$(run 12-b 5090-i3); case "$r" in "RESULT 12-b PASS"*) chk 12-b-pass ok;; *) chk 12-b-pass bad "$r";; esac
+echo "$r" | grep -q 'evidence=' && [ -f "$KAH_ROWS_BASE/imm26-5090-i3/rows/12-b/s2/prompt.txt" ] && chk evidence-dir ok || chk evidence-dir bad
+[ "$(echo "$r" | wc -l)" = 1 ] && chk one-line-output ok || chk one-line-output bad
+
+# 2 12-d: aff75 gift transfers but no gate log line -> FAIL
+scen <<EOF
+{"inv0":{"SHAY":{"Machete":1},"CIND":{"Katana":1}},"steps":[{"reply":"As a gift, no."},{"reply":"Fine, take it.","give":["Katana"]}]}
+EOF
+r=$(run 12-d 4080-i4); case "$r" in "RESULT 12-d FAIL"*aff40_gate_reason_in_log*) echo "$r" | grep -q 'aff75_transferred=shay_gained' && chk 12-d-fail-gate-missing-transfer-ok ok || chk 12-d-fail-gate-missing-transfer-ok bad "$r";; *) chk 12-d-fail-gate-missing-transfer-ok bad "$r";; esac
+
+# 3 08-a PASS (open personal_plan followup, negatives create none)
+jq() { printf '%s' "${1//\"/\\\"}"; }   # escape for a JSON string
+fu='followup-v1:x:y:{"topic_id":"t1","kind":"personal_plan","status":"open","ask_count":0,"not_before_gamets":3600,"expires_gamets":600000}'
+scen <<EOF
+{"steps":[{"reply":"I hope you find him.","full":[["social_followup","$(jq "$fu")"]]},{"reply":"a"},{"reply":"b"},{"reply":"c"}]}
+EOF
+r=$(run 08-a 5090-i4); case "$r" in "RESULT 08-a PASS"*neg3_no_followup*) chk 08-a-pass ok;; *) chk 08-a-pass bad "$r";; esac
+
+# 4 24-b FAIL (no region_plan row)
+scen <<EOF
+{"steps":[{"reply":"General area changes the answer."}]}
+EOF
+r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b FAIL"*region_plan_row*) chk 24-b-fail ok;; *) chk 24-b-fail bad "$r";; esac
+
+# 5 14-a GATED on old DLL (ctxpush unsupported)
+scen <<EOF
+{"ctxpush":"ERROR unknown command stobe_ctxpush","steps":[{"reply":"x"}]}
+EOF
+r=$(run 14-a 4080-i3); case "$r" in "RESULT 14-a GATED native-context blocker E607"*) chk 14-a-gated-E607 ok;; *) chk 14-a-gated-E607 bad "$r";; esac
+
+# 6 preflight FAIL FAST: dist 126 / lane backend down / game down / unknown lane
+scen <<EOF
+{"dist":126.4,"steps":[]}
+EOF
+r=$(run 12-b 5090-i4); case "$r" in "RESULT 12-b SETUP-FAIL PREFLIGHT-FAIL dist_to_target=126.4 >= 80"*) chk preflight-dist ok;; *) chk preflight-dist bad "$r";; esac
+scen <<EOF
+{"backend_down":true,"steps":[]}
+EOF
+r=$(run 12-b 5090-i4); case "$r" in *"PREFLIGHT-FAIL lane backend down"*) chk preflight-backend-down ok;; *) chk preflight-backend-down bad "$r";; esac
+scen <<EOF
+{"game_down":true,"steps":[]}
+EOF
+pf=$(pf_run 4080-i3; echo "rc=$?"); case "$pf" in *"PREFLIGHT-FAIL game down"*"rc=2") chk preflight-game-down ok;; *) chk preflight-game-down bad "$pf";; esac
+pf=$(pf_run 9999-i9; echo "rc=$?"); case "$pf" in *"PREFLIGHT-FAIL unknown lane"*"rc=2") chk preflight-unknown-lane ok;; *) chk preflight-unknown-lane bad "$pf";; esac
+# preflight DB statements were issued (PLAYER_NAME, deals, agreements, anchor) and the OK line is printed
+scen <<EOF
+{"steps":[]}
+EOF
+pf=$(pf_run 5090-i3); case "$pf" in "PREFLIGHT-OK 5090-i3 dist=9.0 player_name=Shay open_deals/agreements=0/0"*) chk preflight-ok ok;; *) chk preflight-ok bad "$pf";; esac
+grep -q "INSERT INTO general_settings (id,value) VALUES ('PLAYER_NAME','Shay')" "$KAH_ROW_FAKE_LOG" && grep -q "stobe_social_contract SET status='EXPIRED'" "$KAH_ROW_FAKE_LOG" \
+  && grep -q "type='travel_agreement'" "$KAH_ROW_FAKE_LOG" && grep -q "imm26_anchor" "$KAH_ROW_FAKE_LOG" && chk preflight-clean-statements ok || chk preflight-clean-statements bad
+
+# 7 19-a accept leg PASS -> GATED (reload leg manual); 06-c missing tombstone FAIL; 23-b no follow order SETUP-FAIL; 04-c PASS
+acc='travel-v1:a:b:{"status":"ACCEPTED","plan_hash":"0dfde8c0","expires_gamets":374858,"accepted_by":["Cind","Shay"],"leader":"npc","destination":"Stumble Inn"}'
+scen <<EOF
+{"steps":[{"reply":"Stumble Inn."},{"reply":"Lead on.","full":[["travel_agreement","$(jq "$acc")"]]}]}
+EOF
+r=$(run 19-a 5090-i4); case "$r" in "RESULT 19-a GATED reload leg"*) chk 19-a-accept-then-gated ok;; *) chk 19-a-accept-then-gated bad "$r";; esac
+jax='social-pref-v1:z:{"entries":{"personal:address":{"value":"Jax","status":"active"}}}'
+scen <<EOF
+{"steps":[{"reply":"Boss it is.","full":[["social_preferences","social-pref-v1:z:{\"entries\":{\"personal:address\":{\"value\":\"Boss\",\"status\":\"active\"}}}"]]},{"reply":"Jax.","full":[["social_preferences","$(jq "$jax")"]]},{"reply":"Not sure."},{"reply":"Fine."}]}
+EOF
+r=$(run 06-c 5090-i5); case "$r" in "RESULT 06-c FAIL"*forget_wrote_tombstone*) echo "$r" | grep -q 'call_me_Jax_replaced_row=' && chk 06-c-fail-no-tombstone ok || chk 06-c-fail-no-tombstone bad "$r";; *) chk 06-c-fail-no-tombstone bad "$r";; esac
+scen <<EOF
+{"follow":["{\"first_order\":\"none\"}"],"steps":[{"reply":"I'll walk with you."}]}
+EOF
+r=$(run 23-b 5090-i3); case "$r" in "RESULT 23-b SETUP-FAIL no follow order"*) chk 23-b-setup-fail ok;; *) chk 23-b-setup-fail bad "$r";; esac
+scen <<EOF
+{"follow":["{\"first_order\":\"follow\"}","{\"first_order\":\"none\"}"],"steps":[{"reply":"I'll walk with you."}]}
+EOF
+r=$(run 23-b 5090-i3); case "$r" in "RESULT 23-b PASS"*follow_ended_by_expiry*) chk 23-b-pass ok;; *) chk 23-b-pass bad "$r";; esac
+scen <<EOF
+{"steps":[{"reply":"Dax? He owes you nothing.","prompt":"Your ties to people just named:\n- Rethar Dax: familial (you)"}]}
+EOF
+r=$(run 04-c 5090-i5); case "$r" in "RESULT 04-c PASS"*tie_line_names_B*) chk 04-c-pass ok;; *) chk 04-c-pass bad "$r";; esac
+
+# 8 heartbeat: status latest = RESULT line when KAH_AGENT_NAME is set and RUNNING; DONE status is never touched
+export KAH_RUNS_DIR=$(cygpath -w "$T/hbruns" 2>/dev/null || echo "$T/hbruns"); mkdir -p "$T/hbruns/agents"
+printf '\xef\xbb\xbfhbagent | RUNNING | 2026-10-15 17:00\ntask: my rows\nlatest: x\noutputs: \nnext: more\n' > "$T/hbruns/agents/hbagent.status"
+printf 'dagent | DONE | 2026-10-15 17:00\ntask: t\nlatest: final\noutputs: \nnext: \n' > "$T/hbruns/agents/dagent.status"
+export KAH_HB_DRY=1
+scen <<EOF
+{"steps":[{"reply":"x","prompt":"$dom"},{"reply":"y"}]}
+EOF
+out=$(KAH_AGENT_NAME=hbagent run 12-b 5090-i3 2>&1 | tr '\n' ' '); echo "$out" | grep -q 'HB hbagent RUNNING latest=RESULT 12-b ' && chk heartbeat-latest-is-RESULT ok || chk heartbeat-latest-is-RESULT bad "$out"
+out=$(KAH_AGENT_NAME=dagent run 12-b 5090-i3 2>&1 | tr '\n' ' '); echo "$out" | grep -q 'HB dagent' && chk heartbeat-skips-DONE bad "$out" || chk heartbeat-skips-DONE ok
+unset KAH_HB_DRY
+# real agent-status.ps1 call against a temp runs dir (proves argv + latest line); needs powershell.exe
+if command -v powershell.exe >/dev/null 2>&1; then
+  scen <<EOF
+{"steps":[{"reply":"x","prompt":"$dom"},{"reply":"y"}]}
+EOF
+  KAH_AGENT_NAME=hbagent run 12-b 5090-i3 >/dev/null 2>&1
+  grep -q '^latest: RESULT 12-b' "$T/hbruns/agents/hbagent.status" && grep -q '^task: my rows' "$T/hbruns/agents/hbagent.status" && chk heartbeat-agent-status-ps1 ok || chk heartbeat-agent-status-ps1 bad "$(cat "$T/hbruns/agents/hbagent.status")"
+fi
+unset KAH_RUNS_DIR
+
+# 9 batch (foreground): one RESULT per row in results.txt, DONE + summary; lane-down skips the rest
+scen <<EOF
+{"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
+EOF
+o=$(bash -c ". '$ST_HERE/lane.sh'; lt_fake() { '$PY' '$ST_HERE/fakelane.py' \"\$@\"; }; export -f lt_fake; export PY; exec bash '$A/go-batch.sh' --fg 5090-i3 12-b 24-b zz-9" 2>&1)
+res=$(echo "$o" | sed -nE 's/.*results=(.*)/\1/p'); d=$(dirname "$res")
+[ -f "$d/DONE" ] && [ "$(wc -l < "$res")" = 3 ] && grep -q '^RESULT 12-b PASS' "$res" && grep -q '^RESULT zz-9 SETUP-FAIL row not ported' "$res" && chk batch-fg ok || chk batch-fg bad "$o | $(cat "$res" 2>/dev/null)"
+# 10 DRY-RUN prints DRY-RUN and the planned steps (default simulator)
+unset FAKE_SCEN; unset -f lt_fake
+r=$(KAH_ROW_DRY=1 run 12-d 4080-i4); case "$r" in "RESULT 12-d DRY-RUN planned lane=4080-i4 steps=2"*) chk dry-run ok;; *) chk dry-run bad "$r";; esac
+
+rm -rf "$T"
+if [ $ok = $n ]; then echo "SELFTEST ALL PASS $ok/$n"; exit 0; else echo "SELFTEST ALL FAIL $ok/$n"; exit 1; fi
