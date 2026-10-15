@@ -83,17 +83,19 @@ rl_aff() {  # rl_aff <npc> <counterpart> <value> <type> [tag]   (H-AFF on the la
   printf 'cd %s/site; KAH_LANE_ROOT=%s KAH_LANE_DB=%s php %s %s %s %s %s 2>&1 | head -c 1500\n' "$LT_ROOT" "$LT_ROOT" "$LT_DB" "$(rl_wsl_path "$RL_HAFF")" "$(rl_q "$1")" "$(rl_q "$2")" "${3:-0}" "${4:-read}" | lt_w >> "$EV/haff-$tag.txt"
   echo >> "$EV/haff-$tag.txt"
 }
-rl_inv() {  # rl_inv <tag> : inventories of Shay and the NPC -> inv_<tag>.txt (one line each: NAME <inv output>)
-  local c; : > "$EV/inv_$1.txt"
-  for c in Shay "${RL_NPC_FULL:-Cind}"; do
-    printf '%s ' "$(echo "$c" | tr a-z A-Z)" >> "$EV/inv_$1.txt"
-    printf 'stobe-auto inv %s </dev/null 2>&1 | tr "\\n" " " | cut -c1-2500\n' "$(rl_q "$c")" | lt_h >> "$EV/inv_$1.txt"; echo >> "$EV/inv_$1.txt"
+rl_inv() {  # rl_inv <tag> : inventories of Shay and the NPC -> inv_<tag>.txt (lines "SHAY <inv output>" and "NPC <inv output>")
+  local who label; : > "$EV/inv_$1.txt"
+  for who in "Shay:SHAY" "${RL_NPC_ID:-Cind}:NPC"; do
+    label=${who##*:}; who=${who%:*}
+    printf '%s ' "$label" >> "$EV/inv_$1.txt"
+    printf 'stobe-auto inv %s </dev/null 2>&1 | tr "\n" " " | cut -c1-2500
+' "$(rl_q "$who")" | lt_h >> "$EV/inv_$1.txt"; echo >> "$EV/inv_$1.txt"
   done
 }
 rl_dist() { rl_resolve >/dev/null 2>&1; echo "${RL_NPC_FULL:-?}|${RL_DIST:-?}" >> "$EV/distance.txt"; }
 rl_final_dump() {
   lt_sql "select * from social_effect order by 1 desc limit 40" > "$EV/social_effect.txt"
-  lt_sql "select status,left(coalesce(detail::text,''),200) from stobe_social_contract order by 1 limit 20" > "$EV/deals.txt" 2>&1
+  lt_sql "select contract_id,npc_name,kind,status,left(coalesce(terms::text,''),160) from stobe_social_contract order by updated_at desc nulls last limit 20" > "$EV/deals.txt" 2>&1
   lt_sql "select rowid,left(data,300) from eventlog where type='travel_agreement' order by rowid desc limit 5" > "$EV/agreements.txt"
   rl_dist
 }
