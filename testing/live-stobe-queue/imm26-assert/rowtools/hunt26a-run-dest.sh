@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hunt26a-run-dest.sh = hunt26a-run.sh v2 + goats spawned at the route goal after the Yes (op13). Orig header: hunt26a-run.sh v2 (imm26-fix26a; v1 = imm26-fix26ad, SETUP-FAIL ticket 26-a): row 26-a on lane 5090-i5 in ONE command: clean scene + sfO inject arm + hunt26a-scene.sh (offer + accept) + "Shay follows Malzin" loop + verdict.
+# hunt26a-run-dest.sh = hunt26a-run.sh v2 + (op14) the AGREED goat teleported+pinned at the route goal after the Yes (op13 spawned substitute goats there: never selectable). Orig header: hunt26a-run.sh v2 (imm26-fix26a; v1 = imm26-fix26ad, SETUP-FAIL ticket 26-a): row 26-a on lane 5090-i5 in ONE command: clean scene + sfO inject arm + hunt26a-scene.sh (offer + accept) + "Shay follows Malzin" loop + verdict.
 #   bash rowtools/hunt26a-run.sh [outdir]        (Malzin [Nameless]; hunt26a-scene.sh itself is unchanged)
 # Why (ticket 26-a, op9p): the Hunt is a JOINT trip. After the Yes Malzin walks to the target (~1000 u away) and Shay stood still at the scene: NATIVE_TRAVEL brk_sep:132 participation_qualified=0
 #   -> owned_order_removed_native_end_pending -> ACTIVITY_END_DIAG activity_no_verified_progress (record failed/timeout, participation not_completed). Also earlier KO by goats (Malzin unarmed / low blood),
@@ -83,17 +83,30 @@ grep -aq 'OFFER_SEEN=1' "$T/offer.txt" 2>/dev/null && grep -aq '^SAY2 ' "$T/offe
 
 N0=$(echo "wc -l < $LT_STOBELOG" | lt_h 2>/dev/null | tail -1 | tr -dc 0-9); N0=${N0:-0}
 pa_h "stobe-auto speed ${RW_HUNT_SPEED} </dev/null | head -1" >/dev/null
-# op13 (2026-10-16): the Hunt route goal ("outside Outlaw Watch") is ~1280 u from the scene goats; Candidates() needs a VISIBLE animal at arrival
-# (ActivityRuntime.cpp:37-48), op13 attempt 1 ended no_observed_suitable_reachable_target at arrival. Spawn goats at the route goal right after the Yes.
-RW_DEST="${RW_DEST:--50685 1580 3585}"
-pa_h "stobe-auto spawn \"wild goats\" Herbivore at $RW_DEST count ${RW_DEST_COUNT:-3} size 0.2 </dev/null | head -3" > "$OUT/dest_spawn.txt" 2>&1
-for g in $(grep -oE '#[0-9]+/[0-9]+' "$OUT/dest_spawn.txt" | sort -u | head -5); do pa_h "stobe-auto pin \"$g\" </dev/null | head -1" >> "$OUT/dest_spawn.txt" 2>&1; done
+# op14 (2026-10-16, diagnosis imm26-investigate-26a-leg): the Hunt is bound to the EXACT agreed animal (ActivityRuntimeBindings.cpp:384-394), never to a spawned substitute, and the route goal is ~1280 u
+# from the scene goats, so Malzin walks back to the scene goat while Shay (teleported onto her every ~1 s) leaves the scene empty: a race. Fix: no dest-goat spawn; after the Yes MOVE the agreed goat
+# (record.discoveryRef.targetSerial -> #serial/idx from this try's spawn.txt) to the route goal and pin it, so Malzin sees it on arrival. Done inside the follow loop (pa_move_goat) as soon as the serial is in the record.
+RW_DEST="${RW_DEST:--50685 1580 3585}"; moved=0; : > "$OUT/goat_move.txt"
+pa_move_goat() {    # moves the agreed goat to $RW_DEST + pin; sets moved=1 only when the teleport answered; logs to goat_move.txt
+  local ser id out
+  ser=$(lt_sql "select record->'discoveryRef'->>'targetSerial' from stobe_activity_record where actor=$ACTOR and coalesce(record->'agreement'->>'kind','')='Hunt' and id not in ($OLDIDS) order by (record->>'createdAt')::numeric desc, revision desc limit 1" | head -1 | tr -dc 0-9)
+  [ -n "$ser" ] || { echo "$(date +%T) no targetSerial in the record yet" >> "$OUT/goat_move.txt"; return 1; }
+  id=$(grep -ahoE "#${ser}/[0-9]+" "$T/spawn.txt" 2>/dev/null | head -1)
+  [ -n "$id" ] || id=$(pa_h 'stobe-auto chars 400 "[Herbivore]|!dead" </dev/null | head -60' | grep -ahoE "#${ser}/[0-9]+" | head -1)
+  [ -n "$id" ] || { echo "$(date +%T) targetSerial=$ser not found in $T/spawn.txt or chars 400" >> "$OUT/goat_move.txt"; return 1; }
+  out=$(pa_h "stobe-auto teleport \"$id\" $RW_DEST </dev/null | head -2
+stobe-auto pin \"$id\" </dev/null | head -1")
+  echo "$(date +%T) targetSerial=$ser agreed goat $id -> $RW_DEST: $(echo "$out" | tr '
+' ' ' | cut -c1-300)" >> "$OUT/goat_move.txt"
+  moved=1
+}
 # the accept must land first (newest NEW record leaves 'proposed'); then Shay follows until the record is terminal
 rec=""; step="${RW_FOLLOW_STEP:-1}"; amax="${RW_ACCEPT_WAIT:-40}"; hmax="${RW_HUNT_WAIT:-300}"; ht=0; seen_acc=0; term=""
 : > "$OUT/follow.log"
 while :; do
   seps=$(pa_follow | grep -oE '[0-9.]+' | paste -sd, -); ht=$((ht + ${RW_FOLLOW_N:-5} * (${step%%.*} + 1)))   # estimated real seconds (sleep + ~0.5 s of harness round trips per jump)
   rec=$(pa_rec)
+  [ $moved = 0 ] && [ -n "$rec" ] && pa_move_goat
   far=$(echo "$seps" | tr ',' '\n' | awk '$1+0 > 35 {c++} END {print c+0}')
   echo "$(date +%T) t~${ht}s $rec sep_before=[$seps]$([ "$far" -gt 0 ] && echo " SEP>35 x$far")" >> "$OUT/follow.log"
   st=$(echo "$rec" | cut -d'|' -f3)
