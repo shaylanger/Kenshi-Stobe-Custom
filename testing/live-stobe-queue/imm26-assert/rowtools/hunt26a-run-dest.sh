@@ -100,7 +100,7 @@ pa_move_goat() {    # moves the agreed goat to $RW_DEST + pin; sets moved=1 only
   moved=1
 }
 # the accept must land first (newest NEW record leaves 'proposed'); then Shay follows until the record is terminal
-rec=""; step="${RW_FOLLOW_STEP:-1}"; amax="${RW_ACCEPT_WAIT:-40}"; hmax="${RW_HUNT_WAIT:-300}"; ht=0; seen_acc=0; term=""
+resent=0; rec=""; step="${RW_FOLLOW_STEP:-1}"; amax="${RW_ACCEPT_WAIT:-40}"; hmax="${RW_HUNT_WAIT:-300}"; ht=0; seen_acc=0; term=""
 : > "$OUT/follow.log"
 while :; do
   seps=$(pa_follow | grep -oE '[0-9.]+' | paste -sd, -); ht=$((ht + ${RW_FOLLOW_N:-5} * (${step%%.*} + 1)))   # estimated real seconds (sleep + ~0.5 s of harness round trips per jump)
@@ -109,6 +109,10 @@ while :; do
   far=$(echo "$seps" | tr ',' '\n' | awk '$1+0 > 35 {c++} END {print c+0}')
   echo "$(date +%T) t~${ht}s $rec sep_before=[$seps]$([ "$far" -gt 0 ] && echo " SEP>35 x$far")" >> "$OUT/follow.log"
   st=$(echo "$rec" | cut -d'|' -f3)
+  # op14: Malzin's LLM sometimes answers the Yes with talk (Ukil / "last hunt fell through") and does not accept; the offer is still pending -> say Yes again (at most 2x, ~15 s apart), logged in resend.log
+  if [ $seen_acc = 0 ] && [ "$st" = proposed ] && [ "$resent" -lt 2 ] && [ $ht -ge $((15 * (resent + 1))) ]; then
+    resent=$((resent + 1)); echo "$(date +%T) resend Yes #$resent: $(pa_h "stobe-auto stobe_say \"$NPC_ID\" \"Yes, I mean it. Let's go hunting now.\" </dev/null | head -1" | cut -c1-120)" >> "$OUT/resend.log"; amax=$((amax + 20))
+  fi
   case "$st" in accepted) seen_acc=1;; completed|failed|cancelled|expired) term="$st"; seen_acc=1; break;; esac
   if [ $seen_acc = 0 ] && [ $ht -ge "$amax" ]; then break; fi
   [ $ht -ge "$hmax" ] && break
