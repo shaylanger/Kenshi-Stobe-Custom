@@ -17,6 +17,9 @@
 #   ago counts as in-flight work (so a running event wait is required). Fails open: any error in this part is ignored.
 #   Rule (e) (PI-11): a STOPPED-CONTEXT/FAILED agent whose ledger wp / lane has a fresh RUNNING agent under another name is not blocked;
 #   the accepted pair is printed ("accepted successor S for X via ledger wp W") on stderr and appended to a block message.
+#   Lane locks (PI-16, 2026-10-15; lane-lock-lib.ps1): game-<N>.lock + a kenshi_x64 from D:\KenshiInst\<N> = a live lane game (counts as in-flight work;
+#   a lock with no such process is stale and ignored). If only the default slot is IDLE-GAME while lanes run, the hook does not block unless
+#   lane-idle.ps1 reports one of the live lanes idle / without operator. Switches: KAH_GUARD_TEST_LANE_PROCS, KAH_GUARD_TEST_STATE5090, KAH_GUARD_TEST_STOP_AFTER_GAME.
 #   Test switches: KAH_RUNS_DIR (root), KAH_GUARD_TEST_ONLY_AGENTS=1 (run only the agent checks, print INFLIGHT:/exit); see agent-guard-selftest.ps1.
 # Markers: scripts/agents `touch C:\KenshiTestRuns\inflight\<name>` when they start a batch, subagent or rig job,
 # delete it when done. Idle reason: `kenshi-ctl.ps1 idle "<reason>"` or write the text into rig5090.idle.
@@ -149,9 +152,13 @@ function Format-Newest($items, [string]$what, [string]$tag = 'newest 2') {
     "${what}: $($a.Count) ($tag`: $(($a | Select-Object -First 2) -join ', '))"
 }
 function Format-MarkerAge($f) { $m = [int]((Get-Date) - $f.LastWriteTime).TotalMinutes; "$($f.Name) ($(if ($m -ge 120) { [string][int]($m / 60) + ' h' } else { "$m min" }) old)" }
+# Lane games (PI-16, 2026-10-15): game-<N>.lock + a kenshi_x64 running from D:\KenshiInst\<N>; a lock without that process is stale and ignored.
+$liveLanes = @()
+try { . (Join-Path $PSScriptRoot '..\lane-lock-lib.ps1'); $liveLanes = @(Get-LiveLaneGames $runs) } catch { }
 $inflight = @()
 if ($kenshi) { $inflight += 'Kenshi running' }
 if ($lock) { $inflight += "game.lock=$lock" }
+if ($liveLanes.Count) { $inflight += ('lane games running: ' + (($liveLanes | ForEach-Object { "game-$($_.N).lock=$($_.Lock)" }) -join ', ')) }
 if ($markers.Count) { $inflight += (Format-Newest @($markerFiles | ForEach-Object { Format-MarkerAge $_ }) 'inflight markers') }
 $agentOnly = @($agentFly | Where-Object { $markers -notcontains $_ })
 if ($agentOnly.Count) { $inflight += (Format-Newest $agentOnly 'RUNNING agents (status < 45 min old)' 'first 2') }
@@ -201,7 +208,7 @@ if ($inflight.Count -gt 0 -and -not $wakerProc) {
 # rig-runner's own "no changed work" (Shay 2026-10-10 22:05: nothing real queued, every filler row passed on this build with
 # unchanged scripts) is an allowed idle: the runner keeps rig<rig>.idle fresh with that text and writes no ALERT, so neither
 # this check, the 4080 check (rig4080-state.ps1 IDLE-OK) nor the IDLE-GAME check blocks; a new list starts at once.
-if (-not $kenshi -and -not $lock) {
+if (-not $kenshi -and -not $lock -and -not $liveLanes.Count) {
     $idleFile = Join-Path $runs 'rig5090.idle'
     $fresh = (Test-Path -LiteralPath $idleFile) -and ((Get-Item -LiteralPath $idleFile).LastWriteTime -gt (Get-Date).AddMinutes(-60))
     if (-not $fresh) {
@@ -222,12 +229,24 @@ if ($alerts.Count) { Block-Stop ('kenshi-waker-guard: ' + ($alerts -join ' | ') 
 
 # --- 5090 game slot idle while Kenshi is open / the lock is held? (Shay 2026-10-10: op-b4 had written DONE, the
 # marker still pointed at it, and everything read BUSY for 5 min) ---
-if ($kenshi -or $lock) {
-    $g = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\rig5090-state.ps1') | Select-Object -First 1) -as [string]
+if ($kenshi -or $lock -or $liveLanes.Count) {
+    $g = if ($env:KAH_GUARD_TEST_STATE5090) { $env:KAH_GUARD_TEST_STATE5090 } else { (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\rig5090-state.ps1') | Select-Object -First 1) -as [string] }
     if ($g -like 'IDLE-GAME*') {
-        Block-Stop ('kenshi-waker-guard: the 5090 game slot is idle: ' + $g + '. Queue the next list in C:\KenshiTestRuns\queue\5090\ (rig-runner.ps1 starts it within 2 min and takes the lock over), or record a reason with kenshi-ctl.ps1 idle "<reason>".')
+        # PI-16: the default slot (instance 1) is idle. If lane games are running (live lock + process) the 5090 is working through them, so the
+        # default slot's idleness is not the alert; the lanes themselves must be active: lane-idle.ps1 (operator RUNNING + activity < 6 min) for each live lane.
+        # An idle lane / a lane with no operator still blocks; a stale lane lock (dead game) never counts as a live lane.
+        if ($liveLanes.Count) {
+            $lp = @(); try { $lp = @(Get-LaneIdleProblems $liveLanes $runs) } catch { }
+            if ($lp.Count) {
+                Block-Stop ('kenshi-waker-guard: lane game(s) running but a lane is idle: ' + (($lp | Select-Object -First 4) -join ' | ') + ' (default slot: ' + $g + '). Ask/respawn the lane operator or fix the root, or record a reason with kenshi-ctl.ps1 idle "<reason>".')
+            }
+            [Console]::Error.WriteLine('kenshi-waker-guard: default 5090 slot idle but ' + $liveLanes.Count + ' lane game(s) active (' + (($liveLanes | ForEach-Object { $_.Lane }) -join ',') + '): not blocking.')
+        } else {
+            Block-Stop ('kenshi-waker-guard: the 5090 game slot is idle: ' + $g + '. Queue the next list in C:\KenshiTestRuns\queue\5090\ (rig-runner.ps1 starts it within 2 min and takes the lock over), or record a reason with kenshi-ctl.ps1 idle "<reason>".')
+        }
     }
 }
+if ($env:KAH_GUARD_TEST_STOP_AFTER_GAME) { 'PASSED-5090-GAME'; exit 0 }   # selftest switch (waker-lanes-selftest.ps1): stop before the 4080/queue/sweep checks
 
 # --- 4080 idle? (Shay 2026-10-10: it sat idle a whole day while the 5090 worked; nothing looked at it) ---
 $r4 = & powershell -NoProfile -File (Join-Path $PSScriptRoot '..\rig4080-state.ps1') 2>$null | Select-Object -First 1
