@@ -35,3 +35,7 @@ Server behaviour (wpR1/wpR3 deploy notes): the continuation gets a NEW agreement
 
 ## Offline self-test
 `reload-selftest.sh` = reloadfake.py (-> tripfake.py -> fakelane.py) + reloadscen.py (30 scenarios). Every defect scenario asserts the EXACT set of failing checks (each assertion fails alone), plus recipe statements (activity tables cleaned, fixtures spawned, save before load, env overrides) and CLI runs of `reload-run.sh` / `reload-cycle.sh`.
+
+## 27-a status form and 08-e recipe (imm26-rowfix-reload 2026-10-15)
+- 27-a: the harness parses `contract-bodyguard` modes from field 3, so the status query is `contract-bodyguard <npc> Shay status` (`<npc> status` made "status" the HIRER: `ERROR: no character named: status`); an `@player` retry follows when it still errors. `bg_set.txt` `has_contract=1` counts as pre-load proof; when the status query is unavailable after the load, `order_present_after_load` falls back to the post-load chase (the check detail says so). Scenarios `27a-statuserr` / `27a-statuserr-lost`.
+- 08-e: quiet scene (`rw_prep` tr_quiet) + the NPC sheathed; after the load re-quiet, sheathe, ONE chat line to the NPC (`RW_08E_POST_SAY`), then `RW_TICK_CHUNKS` (default 8) chunks of `RW_ADV` (default 60) s. Evidence `cind_ticks.txt` / `cind_ticks_log.txt` / `srvlog_n0.txt` = NPC-speaker ticks in the lane server log since the load. SETUP-FAIL wording separates "no NPC-speaker tick (speaker lottery)" from "N NPC-speaker ticks, none claimed (server claim gate; Fix B, Shay decides)". BORED_EVENT_CHANCE is not the cause.

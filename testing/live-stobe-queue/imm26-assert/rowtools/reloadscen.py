@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """reloadscen.py <name>   prints the reloadfake.py scenario JSON for reload-selftest.sh (synthetic rows modelled on the wpR1/wpR3 deploy notes).
 Names: 24c-goalgone 26d-pass 26d-old 26d-reject 26d-nooffer 26d-samewid 26d-complete 26d-nocomplete 26dx-pass 26dx-bad 26e-pass 26e-notrebound 26e-reject 26f-pass
-       24c-pass 24c-noregion 24c-lost 23e-pass 23e-lost 23e-nopre 27a-pass 27a-lost 27a-noorder 08e-pass 08e-lost 08e-noclaim 08e-double 20d-pass 20d-nopending 20d-lost"""
+       24c-pass 24c-noregion 24c-lost 23e-pass 23e-lost 23e-nopre 27a-pass 27a-lost 27a-noorder 27a-statuserr 27a-statuserr-lost 08e-pass 08e-lost 08e-noclaim 08e-noclaim-noticks 08e-double 20d-pass 20d-nopending 20d-lost"""
 import json
 import sys
 
@@ -117,15 +117,19 @@ elif n in ('27a-pass', '27a-lost', '27a-noorder'):
                              ['Cind bodyguard Shay hours=23'] if n == '27a-pass' else ['no contract']],
          'follow': [bg_state if n != '27a-noorder' else state('none', goal='NONE'), bg_state if n == '27a-pass' else state('none', goal='NONE'), bg_state],
          'closes': [True, n == '27a-pass']}
-elif n in ('08e-pass', '08e-lost', '08e-noclaim', '08e-double'):
+elif n in ('27a-statuserr', '27a-statuserr-lost'):   # the real 27-a result: hire answered has_contract=1, the status query answered a harness ERROR, state_* has no BODYGUARD
+    err = ['ERROR: no character named: status']
+    S = {'steps': [], 'bgset': ['Cind [Hungry Bandit] has_contract=1 package=Bodyguard (5090-gamedata.base) hirer=Shay hours_left=24.0'], 'bg': [err, err],
+         'follow': [state('none', goal='OTHER')] * 3, 'closes': [True, n == '27a-statuserr']}
+elif n in ('08e-pass', '08e-lost', '08e-noclaim', '08e-noclaim-noticks', '08e-double'):
     fu = {'topic_id': 't1', 'kind': 'personal_plan', 'status': 'open', 'ask_count': 0, 'not_before_gamets': 3600, 'expires_gamets': 600000}
     fu1 = dict(fu, ask_count=1, not_before_gamets=90000)
     c1 = '301|situated_remark_claim|' + jd({'actor_serial': 1, 'event_id': 'followup:t1:1'})
-    claims = [[], [c1], [c1]] if n in ('08e-pass', '08e-lost') else ([[], [], []] if n == '08e-noclaim' else [[c1, c1.replace('301', '302')]] * 3)
+    claims = [[], [c1], [c1]] if n in ('08e-pass', '08e-lost') else ([[], [], []] if n in ('08e-noclaim', '08e-noclaim-noticks') else [[c1, c1.replace('301', '302')]] * 3)
     S = {'steps': [step('Take care with that armor.', full=[['social_followup', 'followup-v1:x:y:' + jd(fu)]])],
          'fu': [['201|social_followup|followup-v1:x:y:' + jd(fu)], [] if n == '08e-lost' else ['201|social_followup|followup-v1:x:y:' + jd(fu)],
                 ['201|social_followup|followup-v1:x:y:' + jd(fu), '202|social_followup|followup-v1:x:y:' + jd(fu1)]],
-         'claim': claims, 'bored': 100}
+         'claim': claims, 'bored': 100, 'ticks': 0 if n == '08e-noclaim-noticks' else 3}
 elif n in ('20d-pass', '20d-nopending', '20d-lost'):
     old = row('ACCEPTED', 'running', 'req-old', 1, 'world-old', dest='Squin', rg=None)
     ended = row('ENDED', 'ended', 'req-old', 1, 'world-old', dest='Squin', rg=None)

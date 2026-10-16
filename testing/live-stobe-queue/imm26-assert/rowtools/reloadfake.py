@@ -35,6 +35,10 @@ def out(lines):
     sys.exit(0)
 
 
+if kind == 'w' and 'rw:srvn' in body:
+    out(['100'])
+if kind == 'w' and 'rw:ticks' in body:
+    out(scen.get('tick_log', ['x']) if ' -c ' not in body else [str(scen.get('ticks', 3))])
 if kind == 'h':
     if re.search(r'teleport Shay -?\d', body):
         st['away'] = True
@@ -52,10 +56,10 @@ if kind == 'h':
         out([pick('follow')])
     if "grep -a -E 'FOLLOW'" in body:
         out(pick('follow_log'))
-    if 'contract-bodyguard status' in body:
+    if re.search(r'contract-bodyguard.*status', body):
         out(pick('bg', [['']]))
     if 'contract-bodyguard' in body:
-        out(['ok'])
+        out(scen.get('bgset', ['ok']))
     if "grep -a -E 'ACTIVITY'" in body:
         out(pick('actlog'))
 elif kind == 'sql':

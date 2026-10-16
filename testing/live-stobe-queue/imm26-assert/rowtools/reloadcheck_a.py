@@ -222,22 +222,44 @@ def c_23e(v, ev):
     v.note = f'R~ pre-load chase {a0}->{a1}; verdict FAIL with no ticks and a far NPC = the legacy follow is LOST on load (native fix: see wpR3 report section 3)'
 
 
+def _bg_ok(t):
+    """Drop harness error lines (an `unknown command: contract-bodyguard` / `no character named` answer contains 'bodyguard' but proves nothing)."""
+    return '\n'.join(l for l in t.splitlines() if not re.search(r'ERROR|unknown command|no character named', l, re.I))
+
+
+def _bg_has(t):
+    """A real order proof: the harness hire/status answer `has_contract=1 package=Bodyguard ...`, a BODYGUARD word, or a BODYGUARD goal in the stobe state."""
+    return bool(re.search(r'BODYGUARD|has_contract=1', _bg_ok(t), re.I))
+
+
+def _bg_status_err(t):
+    """True when the status query only produced harness error lines (no has_contract= answer at all)."""
+    return bool(re.search(r'ERROR|unknown command|no character named', t, re.I)) and 'has_contract=' not in t
+
+
 def c_27a(v, ev):
-    pre_txt = (rd(ev, 'state_pre.txt') or '') + (rd(ev, 'bg_pre.txt') or '')
+    pre_raw = (rd(ev, 'state_pre.txt') or '') + (rd(ev, 'bg_pre.txt') or '') + (rd(ev, 'bg_set.txt') or '')   # bg_set.txt: the hire answer `has_contract=1 package=Bodyguard` is pre-load proof
     if not need(v, ev, 'state_pre.txt', 'bg_pre.txt', 'bg_set.txt'):
         return
-    if not re.search(r'BODYGUARD', pre_txt, re.I):
-        return v.setup_fail('no BODYGUARD order/contract visible after contract-bodyguard (state_pre.txt / bg_pre.txt): nothing to carry over (needs: recipe; try RW_BG_ARGS)')
+    if not _bg_has(pre_raw):
+        errs = ' | '.join(' '.join(l.split())[:100] for l in pre_raw.splitlines() if re.search(r'ERROR|unknown command|no character named', l, re.I))[:240]
+        return v.setup_fail('no BODYGUARD order/contract visible after contract-bodyguard (no has_contract=1 in bg_set.txt, no BODYGUARD in state_pre.txt / bg_pre.txt)'
+                            + (f'; harness answered: {errs}' if errs else '') + ' (needs: recipe; try RW_BG_ARGS)')
     if not need(v, ev, 'bg_post.txt', 'state_post.txt', 'chase_pre.txt', 'chase_post.txt', 'state_after_chase.txt'):
         return
     a0, a1 = chase(ev, 'chase_pre.txt')
     v.ck('pre_load_bodyguard_follows', a0 is not None and a1 is not None and a1 <= 35, f'{a0} -> {a1}')
-    post_txt = (rd(ev, 'state_post.txt') or '') + (rd(ev, 'bg_post.txt') or '')
-    v.ck('order_present_after_load', bool(re.search(r'BODYGUARD', post_txt, re.I)), 'present' if re.search(r'BODYGUARD', post_txt, re.I) else 'absent: the engine/STOBE kept no record')
     b0, b1 = chase(ev, 'chase_post.txt')
+    closes = b1 is not None and b0 is not None and b1 <= 35 and b1 < b0
+    post_raw = (rd(ev, 'state_post.txt') or '') + (rd(ev, 'bg_post.txt') or '')
+    present, how = _bg_has(post_raw), 'present'
+    if not present and _bg_status_err(rd(ev, 'bg_post.txt') or '') and not re.search(r'has_contract=0', post_raw):
+        present = closes
+        how = 'status query unavailable (harness ERROR): proved by the post-load bodyguard chase instead' if closes else 'status query unavailable (harness ERROR) and the NPC did not close the distance'
+    v.ck('order_present_after_load', present, how if (present or how != 'present') else 'absent: the engine/STOBE kept no record')
     v.ck('post_load_precondition_Shay_away', b0 is not None and b0 >= 60, f'dist after teleport={b0}')
-    v.ck('post_load_bodyguard_closes_distance', b1 is not None and b0 is not None and b1 <= 35 and b1 < b0, f'{b0} -> {b1}')
-    v.note = 'R~ bg_pre ' + ' '.join((rd(ev, 'bg_pre.txt') or '').split())[:120] + ' | bg_post ' + ' '.join((rd(ev, 'bg_post.txt') or '').split())[:120]
+    v.ck('post_load_bodyguard_closes_distance', closes, f'{b0} -> {b1}')
+    v.note = 'R~ bg_set ' + ' '.join((rd(ev, 'bg_set.txt') or '').split())[:120] + ' | bg_pre ' + ' '.join((rd(ev, 'bg_pre.txt') or '').split())[:100] + ' | bg_post ' + ' '.join((rd(ev, 'bg_post.txt') or '').split())[:100]
 
 
 # ---------------------------------------------------------------- 08-e
@@ -265,7 +287,18 @@ def c_08e(v, ev):
     claims = [js for _, _, js in jrows(ev, 'claim.txt') if re.fullmatch(r'followup:%s:\d+' % re.escape(tid), str(js.get('event_id', '')))]
     chance = (rd(ev, 'bored_chance.txt') or '').strip()
     if not claims:
-        return v.setup_fail(f'topic still open after the reload but no bored tick claimed it in {(rd(ev, "chunks.txt") or "?").strip()} advance chunks (BORED_EVENT_CHANCE={chance}; needs: recipe, 100 on the private backend and more game time, see 08-b)')
+        chunks = (rd(ev, 'chunks.txt') or '?').strip()
+        try:
+            ticks = int((rd(ev, 'cind_ticks.txt') or '').strip() or '-1')
+        except ValueError:
+            ticks = -1
+        if ticks == 0:
+            return v.setup_fail(f'topic still open after the reload but no bored tick claimed it in {chunks} advance chunks: the lane server log shows NO tick with the NPC as speaker after the load '
+                                f'(speaker lottery in a crowd; BORED_EVENT_CHANCE={chance} is not the cause; needs: recipe, quieter scene / more chunks, see cind_ticks_log.txt)')
+        if ticks > 0:
+            return v.setup_fail(f'topic still open after the reload but no bored tick claimed it in {chunks} advance chunks although {ticks} tick(s) had the NPC as speaker (server-side claim gate: social attention / situated_remark cooldown; '
+                                f'BORED_EVENT_CHANCE={chance} is not the cause; needs: server-fix, Shay decides, see cind_ticks_log.txt)')
+        return v.setup_fail(f'topic still open after the reload but no bored tick claimed it in {chunks} advance chunks (NPC-speaker ticks not counted; BORED_EVENT_CHANCE={chance} is not the usual cause; needs: recipe, see 08-b)')
     n1 = [c for c in claims if str(c.get('event_id')).endswith(':1')]
     v.ck('claimed_once_after_reload', len(n1) == 1, f'claims={[c.get("event_id") for c in claims]}')
     v.ck('no_second_claim_same_day', not [c for c in claims if str(c.get('event_id')).endswith(':2')], len(claims))

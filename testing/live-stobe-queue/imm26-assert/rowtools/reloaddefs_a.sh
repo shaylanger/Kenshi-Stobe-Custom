@@ -185,6 +185,13 @@ rd_23e() {
 }
 
 # ------------------------------------------------------------------ 27-a: BODYGUARD order across a reload
+# The harness parses contract-bodyguard fields from index 3 (src/ContractArgs.h): `<npc> <hirer> status`; `<npc> status` makes "status" the HIRER ("ERROR: no character named: status").
+rw_bg_status_fallback() {   # rw_bg_status_fallback <file> <npc-arg>: when the status answer is an ERROR try the @player hirer slot; the checker then proves the order from the chase
+  grep -qiE 'ERROR|unknown command|no character named' "$EV/$1" 2>/dev/null || return 0
+  lt_h <<EOT >> "$EV/$1" 2>&1
+stobe-auto contract-bodyguard $2 @player status </dev/null 2>&1 | head -6 | cut -c1-300
+EOT
+}
 rd_27a() {
   local nq; rw_prep || return $?
   nq=$(rl_q "$RL_NPC_FULL")
@@ -193,15 +200,19 @@ stobe-auto contract-bodyguard $nq Shay ${RW_BG_ARGS:-hours 24 own} </dev/null 2>
 EOT
   rw_sleep 3
   lt_h <<EOT > "$EV/bg_pre.txt" 2>&1
-stobe-auto contract-bodyguard status </dev/null 2>&1 | head -6 | cut -c1-300
+stobe-auto contract-bodyguard $nq Shay status </dev/null 2>&1 | head -6 | cut -c1-300
 EOT
+  rw_bg_status_fallback bg_pre.txt "$nq"
   tr_state state_pre.txt "$RL_NPC_FULL"
-  grep -qiE 'BODYGUARD' "$EV/state_pre.txt" "$EV/bg_pre.txt" 2>/dev/null || return 0               # checker: SETUP-FAIL (no order)
+  # pre-load proof: the hire answer (bg_set.txt: `has_contract=1 package=Bodyguard`), the status answer or the stobe state; harness ERROR lines prove nothing
+  cat "$EV/bg_set.txt" "$EV/state_pre.txt" "$EV/bg_pre.txt" 2>/dev/null | grep -iE 'BODYGUARD|has_contract=1' | grep -qviE 'ERROR|unknown command|no character named' || return 0   # checker: SETUP-FAIL (no order)
   rw_chase pre || return $?
   rw_save_load bodyguard near || return $?
+  nq=$(rl_q "$RL_NPC_FULL")
   lt_h <<EOT > "$EV/bg_post.txt" 2>&1
-stobe-auto contract-bodyguard status </dev/null 2>&1 | head -6 | cut -c1-300
+stobe-auto contract-bodyguard $nq Shay status </dev/null 2>&1 | head -6 | cut -c1-300
 EOT
+  rw_bg_status_fallback bg_post.txt "$nq"
   tr_state state_post.txt "$RL_NPC_FULL"
   rw_chase post || return $?
   tr_state state_after_chase.txt "$RL_NPC_FULL"
@@ -213,17 +224,31 @@ rw_claim_dump() {
   local m; m=$(tr -dc 0-9 < "$EV/load_rowid.txt" 2>/dev/null); m=${m:-0}
   lt_sql "select rowid||'|'||type||'|'||left(data,300) from eventlog where type='situated_remark_claim' and data like '%followup:%' and rowid>$m order by rowid" > "$EV/$1" 2>&1
 }
+rw_08e_cind_ticks() {   # rw_08e_cind_ticks <srvlog-line-offset>: natural bored ticks since the load whose SPEAKER is the NPC (mode=autochat/director with profile=<npc>) -> cind_ticks.txt (count), cind_ticks_log.txt (last lines)
+  local nm="${RL_NPC_FULL%% *}"
+  printf "tail -n +%s %s 2>/dev/null | grep -a -E 'profile=%s' | grep -a -E 'mode=(autochat|director)|bored' | cut -c1-260 | tail -6 # rw:ticks\n" "$(( ${1:-0} + 1 ))" "$LT_SRVLOG" "$nm" | lt_w > "$EV/cind_ticks_log.txt" 2>&1
+  printf "tail -n +%s %s 2>/dev/null | grep -a -E 'profile=%s' | grep -a -c -E 'mode=(autochat|director)|bored' # rw:ticks\n" "$(( ${1:-0} + 1 ))" "$LT_SRVLOG" "$nm" | lt_w | tail -1 | tr -dc 0-9 > "$EV/cind_ticks.txt"
+}
 rd_08e() {
-  local k
+  # Recipe (sfinv-13g diagnosis): quiet scene (rw_prep = tr_quiet: strangers moved away, Shay sheathed) + the NPC sheathed; after the load re-quiet, sheathe again and say ONE chat line to the NPC (fresh native_ai < 120 s,
+  # without it the autochat tick is denied by the attention gate), then advance in SHORT chunks (RW_ADV 60) so every tick sees a fresh snapshot. The row counts the NPC-speaker ticks in the lane server log
+  # (cind_ticks.txt): BORED_EVENT_CHANCE is NOT the usual cause of a missing claim (the lifelike initiative already raises it); the speaker lottery in a crowd is.
+  local k n0 nq
   rw_prep || return $?
+  nq=$(rl_q "$RL_NPC_FULL")
   lt_sql "select coalesce((select value from general_settings where id='BORED_EVENT_CHANCE'),'unset')" > "$EV/bored_chance.txt" 2>&1
+  printf 'stobe-auto stobe_drawn sheathe %s </dev/null | head -1\n' "$nq" | lt_h >> "$EV/quiet.txt" 2>&1
   rl_say 1 "${RW_FU_SAY:-I have to mend my armor tomorrow, it is falling apart.}" || return $?
   rw_fu_dump fu_pre.txt
   grep -q '"status":"open"' "$EV/fu_pre.txt" || return 0                                          # checker: SETUP-FAIL (no topic)
   rw_save_load followup near || return $?
   rw_fu_dump fu_post.txt
-  for k in $(seq 1 "${RW_TICK_CHUNKS:-4}"); do
-    ADV_SECONDS="${RW_ADV:-120}" rl_advance_gametime || return $?
+  n0=$(printf 'wc -l < %s # rw:srvn\n' "$LT_SRVLOG" | lt_w | tail -1 | tr -dc 0-9); echo "${n0:-0}" > "$EV/srvlog_n0.txt"
+  nq=$(rl_q "$RL_NPC_FULL"); unset TR_SCENE
+  tr_quiet; printf 'stobe-auto stobe_drawn sheathe %s </dev/null | head -1\n' "$nq" | lt_h >> "$EV/quiet.txt" 2>&1
+  rl_say 2 "${RW_08E_POST_SAY:-Hello again, I am back.}" || return $?                              # one chat line to the NPC after the load: fresh native snapshot
+  for k in $(seq 1 "${RW_TICK_CHUNKS:-8}"); do
+    ADV_SECONDS="${RW_ADV:-60}" rl_advance_gametime || return $?
     lt_h <<EOT >> "$EV/heal.txt" 2>&1
 stobe-auto health Shay 100 </dev/null | head -1
 stobe-auto health $(rl_q "$RL_NPC_FULL") 100 </dev/null | head -1
@@ -231,6 +256,7 @@ EOT
     rw_claim_dump claim.txt
     [ -s "$EV/claim.txt" ] && break
   done
+  rw_08e_cind_ticks "${n0:-0}"
   rw_fu_dump fu_final.txt; rw_claim_dump claim.txt
   echo "$k" > "$EV/chunks.txt"
 }

@@ -75,10 +75,13 @@ expect 23-e-no-follow-setup-fail 23e-nopre 23-e "RESULT 23-e SETUP-FAIL" "FOLLOW
 expect 27-a-pass 27a-pass 27-a "RESULT 27-a PASS" "order_present_after_load"
 expect 27-a-order-lost 27a-lost 27-a "RESULT 27-a FAIL" "order_present_after_load,post_load_bodyguard_closes_distance"
 expect 27-a-no-order-setup-fail 27a-noorder 27-a "RESULT 27-a SETUP-FAIL" "no BODYGUARD"
+expect 27-a-status-error-hire-proof-passes 27a-statuserr 27-a "RESULT 27-a PASS" "order_present_after_load"
+expect 27-a-status-error-and-no-chase-fails 27a-statuserr-lost 27-a "RESULT 27-a FAIL" "order_present_after_load,post_load_bodyguard_closes_distance"
 # --- 08-e follow-up topic
 expect 08-e-pass 08e-pass 08-e "RESULT 08-e PASS" "claimed_once_after_reload"
 expect 08-e-topic-lost 08e-lost 08-e "RESULT 08-e FAIL" "topic_survives_load"
 expect 08-e-no-claim-setup-fail 08e-noclaim 08-e "RESULT 08-e SETUP-FAIL" "no bored tick claimed"
+expect 08-e-no-claim-no-speaker-ticks 08e-noclaim-noticks 08-e "RESULT 08-e SETUP-FAIL" "NO tick with the NPC as speaker"
 expect 08-e-claimed-twice 08e-double 08-e "RESULT 08-e FAIL" "claimed_once_after_reload"
 # --- 20-d pending plan change
 expect 20-d-pass 20d-pass 20-d "RESULT 20-d PASS" "pending_change_survives_load"
