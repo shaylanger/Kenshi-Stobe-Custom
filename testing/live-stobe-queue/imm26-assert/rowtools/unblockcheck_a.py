@@ -108,11 +108,11 @@ def c_11b(v, ev):
     t = topic_pre(ev)
     if not t:
         return v.setup_fail('no open personal_plan social_followup after the topic line (s1): nothing to claim (needs: recipe, RW_FU_SAY)')
-    if not need(v, ev, 'mark_rowid.txt', 'state_combat_pre.txt', 'state_combat.txt', 'claim_c1b.txt', 'claim_c1a.txt', 'fu_combat.txt', 'state_calm.txt',
+    if not need(v, ev, 'mark_rowid.txt', 'state_combat_pre.txt', 'state_combat.txt', 'claim_c1b.txt', 'claim_c1a.txt', 'fu_combat.txt', 'state_calm.txt', 'state_calm2.txt',
                 'claim_after.txt', 'fu_final.txt'):
         return
     tid = t['topic_id']
-    st = dict((k, (rd(ev, 'state_%s.txt' % k) or '').strip()) for k in ('combat_pre', 'combat', 'calm'))
+    st = dict((k, (rd(ev, 'state_%s.txt' % k) or '').strip()) for k in ('combat_pre', 'combat', 'calm', 'calm2'))
     if any('gone' in s for s in st.values()):
         return v.setup_fail('the NPC vanished/died during the fight (%s): the scene is not isolated enough (needs: recipe, protect both, fewer enemies)' % st)
     rows = (rd(ev, 'combat_rows.txt') or '').strip()
@@ -123,6 +123,11 @@ def c_11b(v, ev):
     bad = [tg for tg in ('c1b', 'c1a', 'c2') if res(ev, tg) in ('http_err', 'missing')]
     if bad:
         return v.setup_fail('targeted bored request failed for %s (no HTTP=200; see bored_<tag>.txt): the claim path never ran (needs: recipe, lane backend)' % bad)
+    nb = t.get('not_before_gamets')
+    for tg in ('c1b', 'c1a'):   # u6-fix08d (inv-11b): the claim loop skips a topic with not_before > now, so ticks before it make the no-claim checks vacuous
+        m = re.search(r'"gamets":(\d+)', rd(ev, 'bored_%s_log.txt' % tg) or '')
+        if m and isinstance(nb, int) and int(m.group(1)) < nb:
+            return v.setup_fail('topic not yet claimable at the in-combat ticks (%s gamets %s < not_before_gamets %s): the no-claim checks would be vacuous (needs: recipe, U11B_PRE_ADV)' % (tg, m.group(1), nb))
     a0 = ask_count(ev, 'fu_pre.txt', tid)
     cb, ca = claims(ev, 'claim_c1b.txt', tid), claims(ev, 'claim_c1a.txt', tid)
     ca = [c for c in ca if c not in cb]   # the dumps are cumulative since the mark: report each claim once
@@ -136,6 +141,8 @@ def c_11b(v, ev):
         return
     if 'in_combat=false' not in st['calm']:
         return v.setup_fail('combat did not end before the after-combat tick (%s): the second leg is untestable (needs: recipe, longer U11B_CALM_S)' % st['calm'])
+    if 'in_combat=false' not in st['calm2']:
+        return v.setup_fail('NPC re-engaged by a third-party hostile before the after-combat tick (state_calm2 %s; the fight sets the whole faction pair to -100): the second leg is untestable' % st['calm2'])
     after = claims(ev, 'claim_after.txt', tid)
     v.ck('exactly_one_claim_after_combat', len(after) == 1 and after[0].endswith(':1'), '%s (tick %s)' % (after, res(ev, 'c2')))
     v.ck('ask_count_plus_1_after_claim', ask_count(ev, 'fu_final.txt', tid) == a0 + 1, '%s->%s' % (a0, ask_count(ev, 'fu_final.txt', tid)))

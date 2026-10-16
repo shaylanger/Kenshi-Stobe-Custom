@@ -70,6 +70,8 @@ expect 11-b-combat-never-ended-setup-fail 11b-nocalm 11-b "RESULT 11-b SETUP-FAI
 expect 11-b-request-failed-setup-fail 11b-http 11-b "RESULT 11-b SETUP-FAIL" "targeted bored request failed"
 expect 11-b-no-topic-setup-fail 11b-notopic 11-b "RESULT 11-b SETUP-FAIL" "no open personal_plan"
 expect 11-b-spawn-failed-setup-fail 11b-spawnfail 11-b "RESULT 11-b SETUP-FAIL" "enemy spawn failed"
+expect 11-b-recombat-setup-fail 11b-recombat 11-b "RESULT 11-b SETUP-FAIL" "re-engaged"
+expect 11-b-early-ticks-setup-fail 11b-early-ticks 11-b "RESULT 11-b SETUP-FAIL" "not yet claimable"
 
 # --- recipe statements (fake-lane transcript)
 F="$KAH_ROW_FAKE_LOG"
@@ -90,6 +92,8 @@ grep -q 'stobe-auto teleport .*-62380 330 16250 dist 350' "$F" && chk walk-stage
 grep -q 'stobe-auto speed 2 ' "$F" && chk walk-speed-2 ok || chk walk-speed-2 bad
 ! grep -E 'stobe-auto order ' "$F" | grep -v 'order Shay' | grep -q . && chk walk-gives-the-npc-no-harness-order ok || chk walk-gives-the-npc-no-harness-order bad
 [ "$(fl 'dist 350')" -lt "$(fl 'u:stream')" ] && chk 08-d-walk-before-tick ok || chk 08-d-walk-before-tick bad
+grep -q 'Cind|2529907200' "$EVB/08-d/bored_people.txt" 2>/dev/null && grep -q 'Shay|' "$EVB/08-d/bored_people.txt" && chk 08-d-bored-people-name-serial ok || chk 08-d-bored-people-name-serial bad "$(cat "$EVB/08-d/bored_people.txt" 2>/dev/null)"
+grep -q 'tick 1 ' "$EVB/08-d/bored_08d_tries.txt" 2>/dev/null && chk 08-d-retry-loop-evidence ok || chk 08-d-retry-loop-evidence bad
 grep -q 'completed=1' "$EVB/08-d/walk_done.txt" && chk walk-done-evidence ok || chk walk-done-evidence bad "$(cat "$EVB/08-d/walk_done.txt" 2>/dev/null)"
 scen 08d-pass; TRIP_WALK_BACK=200 TRIP_WALK_SPEED=3 run 08-d $L >/dev/null
 grep -q 'dist 200' "$F" && grep -q 'stobe-auto speed 3 ' "$F" && chk walk-env-overrides ok || chk walk-env-overrides bad
@@ -100,6 +104,7 @@ grep -q 'stobe-auto fight ' "$F" && [ "$(grep -c 'stobe-auto protect .* on' "$F"
 grep -q 'no ctxpush' "$EVB/11-b/ctxpush.txt" && chk 11-b-first-tick-without-snapshot ok || chk 11-b-first-tick-without-snapshot bad
 grep -q "stobe-auto teleport 'Vren \[Hungry Bandit\]' -53200 957 4893" "$F" && grep -q "order 'Cind \[Hungry Bandit\]' NULL_TASK" "$F" && chk 11-b-combat-ended-enemy-removed ok || chk 11-b-combat-ended-enemy-removed bad
 [ "$(fl 'stobe-auto fight')" -lt "$(fl 'u:stream')" ] && chk 11-b-fight-before-first-tick ok || chk 11-b-fight-before-first-tick bad
+[ -s "$EVB/11-b/state_calm2.txt" ] && grep -q 'in_combat=false' "$EVB/11-b/state_calm2.txt" && chk 11-b-calm2-state-read-before-c2 ok || chk 11-b-calm2-state-read-before-c2 bad "$(cat "$EVB/11-b/state_calm2.txt" 2>/dev/null)"
 scen 11b-pass; U11B_FACTION="Dust Bandits" U11B_DIST=40 run 11-b $L >/dev/null
 grep -q "'Dust Bandits' near .* dist 40" "$F" && chk 11-b-env-overrides ok || chk 11-b-env-overrides bad
 

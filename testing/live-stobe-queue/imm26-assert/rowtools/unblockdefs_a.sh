@@ -182,6 +182,10 @@ rd_11b() {
   nq=$(rl_q "$RL_NPC_FULL")
   u_topic "${RW_FU_SAY:-I have to mend my armor tomorrow, it is falling apart.}" || return $?
   grep -q '"status":"open"' "$EV/fu_pre.txt" || return 0                                         # checker: SETUP-FAIL (no topic)
+  # u6-fix08d (inv-11b): make the topic claimable BEFORE the fight (not_before = created + 3600 game s; 15 s at speed 10 ~ 3750 game s) so the in-combat ticks are not vacuous
+  # and no post-combat advance is needed (it let the natural Starving-Bandit pack re-engage the NPC before c2)
+  ADV_SECONDS="${U11B_PRE_ADV:-15}" rl_advance_gametime || return $?
+  u_heal
   mark=$(lt_sql "select coalesce(max(rowid),0) from eventlog" | head -1 | tr -dc 0-9); echo "${mark:-0}" > "$EV/mark_rowid.txt"
   o=$(printf 'stobe-auto spawn "Hungry Bandit" %s near %s dist %s count 1 </dev/null 2>&1 | head -2\n' "$(rl_q "${U11B_FACTION:-Holy Nation Outlaws}")" "$nq" "${U11B_DIST:-20}" | lt_h 2>&1)
   echo "$o" > "$EV/spawn.txt"
@@ -207,8 +211,8 @@ stobe-auto order $nq NULL_TASK </dev/null | head -1
 EOT
   rw_sleep "${U11B_CALM_S:-15}"
   u_state_combat state_calm.txt
-  ADV_SECONDS="${U_BORED_GAP:-60}" rl_advance_gametime || return $?
   u_heal
+  u_state_combat state_calm2.txt                                                                 # re-read right before c2: the checker demands in_combat=false here
   i4_bored c2 1 || return $?
   u_claim_dump claim_after.txt "$mark"; rw_fu_dump fu_final.txt
 }

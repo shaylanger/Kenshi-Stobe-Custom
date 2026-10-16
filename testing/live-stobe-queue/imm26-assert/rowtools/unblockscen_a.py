@@ -2,7 +2,7 @@
 """unblockscen_a.py <name>   prints the unblockfake_a.py scenario JSON for unblock_a_selftest.sh. 08-e / 08-d scenarios are the reloadscen.py / tripscen.py base
 scenarios plus the targeted-tick keys; 11-b scenarios are built here.
 Names: 08e-pass 08e-lost 08e-double 08e-http 08e-gate  08d-pass 08d-open 08d-claim 08d-notrip 08d-http 08d-neg-pass 08d-neg-closed 08d-neg-completed
-       11b-pass 11b-claim-nosnap 11b-claim-snap 11b-notcombat 11b-gone 11b-nocalm 11b-http 11b-noclaim-after 11b-notopic 11b-spawnfail"""
+       11b-pass 11b-claim-nosnap 11b-claim-snap 11b-notcombat 11b-gone 11b-nocalm 11b-http 11b-noclaim-after 11b-notopic 11b-spawnfail 11b-recombat 11b-early-ticks"""
 import json
 import os
 import subprocess
@@ -71,6 +71,11 @@ elif n.startswith('11b-'):
         S['cstate'] = ['{"in_combat": true}'] * 3
     elif n == '11b-http':
         S['stream'] = [BAD]
+    elif n == '11b-recombat':   # u6-fix08d: calm after the teleport, but a third party re-engaged the NPC before c2
+        S['cstate'] = ['{"in_combat": true}', '{"in_combat": true}', '{"in_combat": false}', '{"in_combat": true}']
+    elif n == '11b-early-ticks':   # u6-fix08d: the in-combat ticks ran at gamets 1000 < the topic's not_before 3600
+        early = '[2026-10-16 08:43:46] [INFO] Game event received | {"event_type":"bored","gamets":1000,"profile":"Cind"}'
+        S['tlog'] = [[early], [early], []]
     elif n == '11b-noclaim-after':
         S['claim'] = [[], [], []]
         S['fu'] = [[fu(fu0)]] * 4
