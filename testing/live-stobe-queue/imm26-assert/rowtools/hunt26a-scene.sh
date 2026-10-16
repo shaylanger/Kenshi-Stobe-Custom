@@ -66,6 +66,8 @@ for g in $GOATS; do
 done
 say "senses sees=1 count=$SEES of $(echo $GOATS | wc -w)"
 [ $SEES -ge 1 ] || { say "SCENE-BAD cind sees no goat (see $OUT/log.txt)"; exit 3; }
+# op16 26-a NC30: 6/6 goats were owned_target (ActivityPolicySupport.cpp:164) 8 s after the spawn, 1/7 in op15: optional settle before the offer (GOAT_SETTLE seconds, default 0 = unchanged)
+[ "${GOAT_SETTLE:-0}" -gt 0 ] && { say "settling ${GOAT_SETTLE}s after the goat spawn"; sleep "${GOAT_SETTLE}"; }
 say "SCENE-OK"
 # t+5 say; accept as soon as the offer's first NPC sentence shows (<=5 s)
 i3 <<EOT > "$OUT/offer.txt" 2>&1
