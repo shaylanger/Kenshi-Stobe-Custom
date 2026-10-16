@@ -15,20 +15,6 @@ Rules:
 
 ## Active
 
-### PI-13 | confirmed
-- idea: Run every selftest at each handoff (selftest-all.ps1: agent-guard, tail-*, process-ideas, event-wait, rowtools, session-start-budget) and make selftests use fixtures, never live state.
-- evidence: 2026-10-15 two selftests drifted silently: process-ideas-selftest 2d/8a failed once the live idea list changed, and agent-guard 'event-sweep.sh LF only' had failed unnoticed since be37f58 because event-sweep.sh line 39 had a mangled rollcall path (backslash-t and backslash-a became control characters) so the waker roll call returned nothing and every stall check failed open for hours.
-- saving: catches a broken waker/hook script the same hour instead of hours later; ~5 min per handoff
-- risk: low; selftests that start games or take > 2 min must be skipped by a flag
-- hooks: no
-- weakens: no
-- added: 2026-10-15 18:51
-- moment: 19:36 hookq ran the full selftest set after its hook edit and discovered the pre-existing failure only because it ran everything.
-- last_review: coordinator8-19:50
-- log: 2026-10-15 18:51 review 'coordinator #7 handoff 2026-10-15': added
-- log: 2026-10-15 18:52 asked Shay
-- log: 2026-10-15 19:43 review 'coordinator8-19:50': asked -> confirmed (applies: imm26-hookq found agent-session-hooks-selftest meter-coordinator-text failing the same way on the untouched original hook: a drifted selftest nobody ran.)
-
 ### PI-21 | confirmed
 - idea: Open-alert ledger: every urgent waker event (LANE IDLE, LANE NO-OPERATOR, AGENT STALL/ORPHANED, DEAD, KILLED, FAILED, 402) is written to C:\KenshiTestRuns\alerts\open\<id>.json and stays open until alert-ack.ps1 <id> '<action taken>' is run or the condition clears by itself (lane-idle OK, agent DONE); a PostToolUse reminder prints 'OPEN ALERTS n: oldest <min>' after tool calls while any alert is older than 3 min; the Stop hook blocks the coordinator from ending a turn with an unacked alert older than 5 min; operators get their own lane alerts in their inbox with the same ack.
 - evidence: 2026-10-15 20:0x: waker event 'LANE IDLE 4080-i4 7m' arrived while I was mid-edit and I did not act on it; I only found the 5090-i4 lane idle 16.7 min after Shay asked 'are we running tests on all lanes'. The waker alerts once and nothing tracks whether anyone acted.
@@ -311,3 +297,19 @@ Rules:
 - measured: tail-hooks selftest 16 new PI-18 cases PASS (A: relay delivered / 5 min grace / not-relayed / RUNNING / pre-DONE relay / FAILED / ledger ack; C: blocks 1-3 plain, 4-6 'ONE long background wait', 7th let through + cap-ends.log, change restarts count); tail-ledger 33/33, tail-close 73/73, waker-lanes 15/15, hook-command, agent-guard 75/75 all pass; settings.json Stop+PreToolUse guard entries intact
 - retired: 2026-10-15 built
 - log: 2026-10-15 19:58 Shay answered yes
+
+### PI-13 | done
+- idea: Run every selftest at each handoff (selftest-all.ps1: agent-guard, tail-*, process-ideas, event-wait, rowtools, session-start-budget) and make selftests use fixtures, never live state.
+- evidence: 2026-10-15 two selftests drifted silently: process-ideas-selftest 2d/8a failed once the live idea list changed, and agent-guard 'event-sweep.sh LF only' had failed unnoticed since be37f58 because event-sweep.sh line 39 had a mangled rollcall path (backslash-t and backslash-a became control characters) so the waker roll call returned nothing and every stall check failed open for hours.
+- saving: catches a broken waker/hook script the same hour instead of hours later; ~5 min per handoff
+- risk: low; selftests that start games or take > 2 min must be skipped by a flag
+- hooks: no
+- weakens: no
+- added: 2026-10-15 18:51
+- moment: 19:36 hookq ran the full selftest set after its hook edit and discovered the pre-existing failure only because it ran everything.
+- last_review: coordinator8-19:50
+- measured: 33 tests (32 default ~6 min + rowtools slow 3.5 min), 5 FAIL found at first run (agent-session-hooks, spawn-wp-session, imm26-assert no-assert, rowtools heartbeat leak/WSL path, rowtools-trip CRLF) all fixed, 33/33 pass; also found selftest leaking a fake RUNNING hbagent into live agents dir
+- retired: 2026-10-15 built
+- log: 2026-10-15 18:51 review 'coordinator #7 handoff 2026-10-15': added
+- log: 2026-10-15 18:52 asked Shay
+- log: 2026-10-15 19:43 review 'coordinator8-19:50': asked -> confirmed (applies: imm26-hookq found agent-session-hooks-selftest meter-coordinator-text failing the same way on the untouched original hook: a drifted selftest nobody ran.)
