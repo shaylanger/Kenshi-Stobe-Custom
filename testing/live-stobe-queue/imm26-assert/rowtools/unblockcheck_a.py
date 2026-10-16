@@ -8,6 +8,7 @@
   11-b : topic open -> NPC in proven combat -> tick WITHOUT snapshot and tick WITH snapshot: no followup claim, ask_count unchanged -> combat over -> tick with snapshot:
          exactly one claim followup:<id>:1, ask_count +1.
 A precondition that was not met (no topic, NPC gone, combat not proven, request failed, trip not completed) is SETUP-FAIL with `needs: ...`; never a PASS."""
+import json
 import os
 import re
 import sys
@@ -85,20 +86,31 @@ def c_08d(v, ev):
     if res(ev, '08d') == 'http_err':
         return v.setup_fail('negative control: the targeted bored request failed (no HTTP=200), the claim path never ran')
     tid = topic.get('topic_id', '')
-    after = [r for r in jrows(ev, 'fu_after.txt') if r[2].get('topic_id') == tid]
-    last = max(after, key=lambda r: r[0])[2] if after else {}
+    after = []
+    for ln in (rd(ev, 'fu_after.txt') or '').splitlines():   # rd08d_dump format: type|rowid|json
+        p3 = ln.split('|', 2)
+        if len(p3) == 3 and p3[0] == 'social_followup' and p3[1].strip().isdigit():
+            try:
+                js = json.loads(p3[2])
+            except ValueError:
+                js = {}
+            if js.get('topic_id') == tid:
+                after.append((int(p3[1]), js))
+    last = max(after, key=lambda r: r[0])[1] if after else {}
     v.ck('negative_trip_not_completed_topic_stays_open', last.get('status') == 'open', 'status=%s closed_reason=%s' % (last.get('status'), last.get('closed_reason')))
     v.good.append('R~ negative control; tick=%s' % res(ev, '08d'))
 
 
 # ---------------------------------------------------------------- 11-b
 def c_11b(v, ev):
-    if not need(v, ev, 'fu_pre.txt', 'mark_rowid.txt', 'state_combat_pre.txt', 'state_combat.txt', 'claim_c1b.txt', 'claim_c1a.txt', 'fu_combat.txt', 'state_calm.txt',
-                'claim_after.txt', 'fu_final.txt'):
+    if not need(v, ev, 'fu_pre.txt'):
         return
     t = topic_pre(ev)
     if not t:
         return v.setup_fail('no open personal_plan social_followup after the topic line (s1): nothing to claim (needs: recipe, RW_FU_SAY)')
+    if not need(v, ev, 'mark_rowid.txt', 'state_combat_pre.txt', 'state_combat.txt', 'claim_c1b.txt', 'claim_c1a.txt', 'fu_combat.txt', 'state_calm.txt',
+                'claim_after.txt', 'fu_final.txt'):
+        return
     tid = t['topic_id']
     st = dict((k, (rd(ev, 'state_%s.txt' % k) or '').strip()) for k in ('combat_pre', 'combat', 'calm'))
     if any('gone' in s for s in st.values()):

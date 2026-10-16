@@ -2,6 +2,7 @@
 # unblock_a_selftest.sh: OFFLINE self-test of the unblock rows 08-e 08-d 11-b (unblockdefs_a.sh / unblockcheck_a.py / unblockrun_a.sh / unblockpy_a.sh).
 # No game, ssh, WSL or DB: lanes are simulated by unblockfake_a.py (-> reloadfake.py -> tripfake.py -> fakelane.py) with scenarios from unblockscen_a.py. For every defect scenario the
 # EXACT set of failing checks is asserted, plus recipe statements (targeted request shape, push before the request, real walk staging, no harness order on the walker, combat scene).
+# FAST: run in WSL (WSL python3, ~5 min; Git Bash/Windows python is ~10x slower): wsl.exe -d DwemerAI4Skyrim3 -u root --cd /mnt/c/KenshiModding/testing/live-stobe-queue/imm26-assert -- bash rowtools/unblock_a_selftest.sh
 # Prints `SELFTEST unblock-<name> PASS|FAIL` lines and `SELFTEST UNBLOCK ALL PASS|FAIL n/m`.  Usage: bash rowtools/unblock_a_selftest.sh
 ST_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; A="$ST_HERE/.."
 REAL_PY=$(command -v python3 || command -v python)
@@ -76,7 +77,7 @@ fl() { grep -n -m1 -- "$1" "$F" | cut -d: -f1; }
 scen 08e-pass; run 08-e $L >/dev/null
 grep -q 'stream.php?DATA=' "$F" && grep -q 'profile=Cind' "$F" && grep -q 'optional=1' "$F" && grep -q 'mode=autochat' "$F" && grep -q 'people=' "$F" && chk i4-bored-request-shape ok || chk i4-bored-request-shape bad
 grep -q 'stream.php?DATA=\$D&profile' "$F" && chk i4-bored-DATA-is-first-query-parameter ok || chk i4-bored-DATA-is-first-query-parameter bad
-[ "$(grep -n 'stobe_ctxpush' "$F" | tail -1 | cut -d: -f1)" -lt "$(fl 'u:stream')" ] && chk i4-bored-push-before-request ok || chk i4-bored-push-before-request bad
+[ "$(awk '/stobe_ctxpush/{p=1} /# u:stream/{if(!p)bad++; p=0} END{print bad+0}' "$F")" = 0 ] && grep -q 'u:stream' "$F" && chk i4-bored-push-before-request ok || chk i4-bored-push-before-request bad
 grep -q 'stobe-auto save kah-imm26-rw-followup-4080-i4' "$F" && grep -q 'stobe-auto load kah-imm26-rw-followup-4080-i4' "$F" && chk 08-e-save-then-load ok || chk 08-e-save-then-load bad
 [ "$(fl 'stobe-auto save')" -lt "$(fl 'stobe-auto load')" ] && [ "$(fl 'stobe-auto load')" -lt "$(fl 'u:stream')" ] && chk 08-e-tick-after-load ok || chk 08-e-tick-after-load bad
 [ "$(grep -c 'stobe_drawn sheathe' "$F")" -ge 3 ] && chk 08-e-npc-sheathed-before-and-after-load ok || chk 08-e-npc-sheathed-before-and-after-load bad "$(grep -c 'stobe_drawn sheathe' "$F")"

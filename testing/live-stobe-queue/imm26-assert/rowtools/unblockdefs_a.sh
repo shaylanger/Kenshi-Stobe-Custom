@@ -158,7 +158,7 @@ rd_11b() {
   o=$(printf 'stobe-auto spawn "Hungry Bandit" %s near %s dist %s count 1 </dev/null 2>&1 | head -2\n' "$(rl_q "${U11B_FACTION:-Holy Nation Outlaws}")" "$nq" "${U11B_DIST:-20}" | lt_h 2>&1)
   echo "$o" > "$EV/spawn.txt"
   en=$(echo "$o" | sed -nE 's/^spawned [0-9]+\/[0-9]+ [^:]*: (.*) #[0-9]+\/[0-9]+.*/\1/p' | head -1)
-  [ -n "${KAH_ROW_FAKE:-}" ] && en="${en:-Dry [Hungry Bandit]}"
+  [ -n "${KAH_ROW_FAKE:-}" ] && ! echo "$o" | grep -qi 'error' && en="${en:-Dry [Hungry Bandit]}"
   [ -n "$en" ] || { RL_REASON="enemy spawn failed or unparseable reply: $(echo "$o" | head -1 | cut -c1-160)"; return 3; }
   echo "$en" > "$EV/enemy.txt"
   lt_h <<EOT >> "$EV/fight.txt" 2>&1
