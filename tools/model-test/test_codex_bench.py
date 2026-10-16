@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -161,6 +162,27 @@ See C:\\KenshiModding\\src\\module.py:42
             digest = bench._sha(prompt.read_bytes())
             self.assertEqual(bench._json(run_dir / "launch.json")["prompt_sha256"], digest)
             self.assertEqual(bench._json(run_dir / "attempt-01" / "launch.json")["prompt_sha256"], digest)
+
+    def test_prepare_recovers_only_missing_untouched_prepared_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "suite"
+            root.mkdir()
+            (root / "suite.json").write_text(json.dumps({
+                "cells": [{"slug": "x-high-standard", "model": "x", "effort": "high", "speed": "standard"}],
+                "prompts": ["prompt2.txt"], "prompt_numbers": [2], "template": "task-frozen.tmpl",
+            }))
+            (root / "prompt2.txt").write_text("p2")
+            (root / "task-frozen.tmpl").write_text("{TICKET} {PROMPT} {FROZEN} {FROZEN_WSL}")
+            env = {"LOCALAPPDATA": str(Path(tmp) / "local")}
+            with mock.patch.dict(bench.os.environ, env):
+                bench.prepare(root)
+                run_dir = root / "runs" / "x-high-standard-p2"
+                old_receipt = (run_dir / "launch.json").read_bytes()
+                shutil.rmtree(run_dir / "attempt-01")
+                bench.prepare(root)
+            self.assertEqual((run_dir / "legacy-prepared-launch.json").read_bytes(), old_receipt)
+            self.assertTrue((run_dir / "attempt-01" / "requested-config.json").is_file())
+            self.assertEqual(bench._json(run_dir / "launch.json")["status"], "PREPARED")
 
     def test_prepare_refuses_refresh_after_report_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:

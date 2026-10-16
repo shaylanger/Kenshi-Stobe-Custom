@@ -458,6 +458,39 @@ def _refresh_prepared_profile(run_dir: Path, rid: str, cell: dict[str, Any]) -> 
     _write_json(root_receipt, root_item)
 
 
+def _recover_missing_prepared_attempt(run_dir: Path, rid: str, cell: dict[str, Any],
+                                     rendered_prompt: str) -> None:
+    """Rebuild a missing attempt only when the run is an untouched PREPARED shell."""
+    receipt_path = _record_path(run_dir)
+    if not receipt_path.is_file():
+        raise BenchError("prepared launch receipt is missing; refusing attempt recovery")
+    receipt = _json(receipt_path)
+    if receipt.get("status") != "PREPARED":
+        raise BenchError("attempt recovery is allowed only for untouched PREPARED runs")
+    if list(run_dir.glob("attempt-[0-9][0-9]")):
+        raise BenchError("attempt directory exists; refusing missing-attempt recovery")
+    prompt = run_dir / "prompt.md"
+    if not prompt.is_file() or _sha(prompt.read_bytes()) != receipt.get("prompt_sha256"):
+        raise BenchError("prepared prompt does not match its receipt; refusing attempt recovery")
+    if prompt.read_text(encoding="utf-8") != rendered_prompt:
+        raise BenchError("prepared prompt differs from current frozen task; refusing attempt recovery")
+    if {p.name for p in run_dir.iterdir()} - {"launch.json", "prompt.md", "legacy-prepared-launch.json"}:
+        raise BenchError("run contains attempt evidence; refusing missing-attempt recovery")
+    codex_home = Path(receipt.get("codex_home", ""))
+    if (codex_home / "auth.json").exists():
+        raise BenchError("private profile contains authentication; refusing attempt recovery")
+    sessions = codex_home / "sessions"
+    if sessions.exists() and any(p.is_file() for p in sessions.rglob("*")):
+        raise BenchError("private profile contains session evidence; refusing attempt recovery")
+    legacy = run_dir / "legacy-prepared-launch.json"
+    old_bytes = receipt_path.read_bytes()
+    if legacy.exists() and legacy.read_bytes() != old_bytes:
+        raise BenchError("legacy prepared receipt already differs; refusing recovery")
+    if not legacy.exists():
+        shutil.copy2(receipt_path, legacy)
+    _write_attempt(run_dir.parent.parent, rid, cell, rendered_prompt)
+
+
 def _validate_frozen(path: Path) -> None:
     verify = path / "verify.sh"
     if not verify.is_file():
@@ -517,6 +550,9 @@ def prepare(root: Path) -> int:
                     .replace("{PROMPT}", prompt_source.read_text(encoding="utf-8").strip())
                     .replace("{FROZEN_WSL}", fwsl).replace("{FROZEN}", frozen_value))
         target = root / "runs" / rid / "prompt.md"
+        receipt_path = _record_path(target.parent)
+        if receipt_path.is_file() and not list(target.parent.glob("attempt-[0-9][0-9]")):
+            _recover_missing_prepared_attempt(target.parent, rid, cell, rendered)
         if target.exists():
             receipt_path = _record_path(target.parent)
             recorded_hash = _json(receipt_path).get("prompt_sha256") if receipt_path.is_file() else None
