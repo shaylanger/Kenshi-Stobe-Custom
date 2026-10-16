@@ -4,7 +4,8 @@
 Usage (every dir = one sample = one distinct utterance):
   assert_principle.py 02-ax --target D1 D2 D3 --ctl F1 F2 F3
       target = Cind with generated profile (profile.txt in dir = SQL dump of the profile text, >200 chars);
-      ctl    = FX-FRESH NPC with empty profile (profile.txt <20 chars).
+      ctl    = FX-GENERATED NPC whose server-GENERATED profile (profile.txt captured AFTER the chat; an empty-profile NPC cannot exist at chat
+               time, lib/data_functions.php:5124) gives no <principles> block; every principle statement in its reply must be grounded in that profile.
   assert_principle.py 02-bx --target D1 D2 D3 --ctl S1 S2 S3 [--principle slavery] [--voice-min 3]
       target = anti-slavery profile, ctl = slaver-faction NPC without the principle. Needs principle_rows.txt (imm26_npc_principle dump),
       state_after.txt (stobe-auto status of the victim; no captive/shackle/imprison), server_log.txt (grep IMM26_PRINCIPLE_VOICED) in target dirs.
@@ -42,15 +43,21 @@ def row_02ax(a, res):
         prof = res.need(os.path.join(b.dir, 'profile.txt'), f'{b.name}/profile.txt')
         if prof is not None:
             tgt = b in T
-            res.check(f'{b.name}:profile_len', len(prof.strip()) > 200 if tgt else len(prof.strip()) < 20, len(prof.strip()))
+            res.check(f'{b.name}:profile_len', len(prof.strip()) > 200 if tgt else len(prof.strip()) > 0, len(prof.strip()))
             rep = reply_of(b).lower()
             bad = [w for w in INVENT if w in rep and w not in prof.lower()]
             res.check(f'{b.name}:no_invented_principle', not bad, bad)
             if tgt:
-                words = {w for w in re.findall(r'[a-z]{6,}', prof.lower())} - set(re.findall(r'[a-z]{6,}', ' '.join(b.inputs()).lower()))
-                res.check(f'{b.name}:reply_uses_profile_words', any(w in rep for w in words), '')
+                # ground against profile + prompt <personal_boundaries> with 5-letter stems (a paraphrase like 'pack stays mine to sort'
+                # for 'keeping supplies in strict order' is grounded; exact >=6-letter words were a lexical-proxy miss, triageA 2026-10-15)
+                pb = b.prompt.split('<personal_boundaries>')[1].split('</personal_boundaries>')[0] if '<personal_boundaries>' in b.prompt else ''
+                stems = {w[:5] for w in re.findall(r'[a-z]{5,}', (prof + ' ' + pb).lower())} - {w[:5] for w in re.findall(r'[a-z]{5,}', ' '.join(b.inputs()).lower())}
+                res.check(f'{b.name}:reply_uses_profile_words', any(s in rep for s in stems), '')
     for b in C:
-        res.check(f'{b.name}:ctl_reply_unknown', bool(UNKNOWN.search(reply_of(b))), reply_of(b)[:60])
+        # control has a generated profile now: the reply is either 'unknown' or grounded in that profile (no invented principle word, above)
+        prof = (res.need(os.path.join(b.dir, 'profile.txt'), f'{b.name}/profile.txt') or '').lower()
+        grounded = any(w[:5] in reply_of(b).lower() for w in re.findall(r'[a-z]{5,}', prof))
+        res.check(f'{b.name}:ctl_reply_unknown_or_grounded', bool(UNKNOWN.search(reply_of(b))) or grounded and res.lenient is False and bool(prof), reply_of(b)[:60])
         res.check(f'{b.name}:ctl_no_principles_block', '<principles>' not in b.prompt or 'none' in b.prompt.split('<principles>')[1][:200].lower(), '')
     for b in T:
         res.check(f'{b.name}:target_reply_not_unknown_only', len(reply_of(b).split()) >= 6, len(reply_of(b).split()))

@@ -52,7 +52,7 @@ for n in ('synth-03c-1', 'synth-03c-2'):
 def chat(name, utter, reply, prompt_extra='', npc='Cind [Hungry Bandit]', **files):
     ev = "1|inputtext|Shay: %s (talking to: %s)|\n2|chat|Shay: %s (talking to: %s)|\n3|chat|%s: %s (talking to: Shay)|spoken\n" % (utter, npc, utter, npc, npc, reply)
     mk(name, **{'prompt.txt': prompt_extra, 'events.txt': ev, 'reply.txt': '', **files})
-cl = '<claims_and_corrections>x</claims_and_corrections> you took my Sabreclaw'
+cl = '# Conversation History\nCind: You took my Sabreclaw.\n# World\n<claims_and_corrections>x</claims_and_corrections> you took my Sabreclaw'
 for i, (u, r) in enumerate((("No, I never took your Sabreclaw.", "Then I was wrong to say you took it."), ("You are mistaken, I never touched it.", "Maybe I put it down somewhere; my mistake."), ("Check your pack, I haven't had it.", "Hm. I may have misplaced it. Sorry."))):
     chat('synth-17-f%d' % i, u, r, cl, **{'inv.txt': 'Sabreclaw|1\n'})
 for i, (u, r) in enumerate((("No, I never took your Sabreclaw.", "Still, it is gone, and you were near my pack."), ("You've got it wrong, I did not touch it.", "But it is missing, so someone took it."), ("I haven't had your Sabreclaw.", "Then who did? It is not in my pack any more."))):

@@ -15,7 +15,7 @@
       pos: kept_promise 1..3, incident deal:<contract>, cats moved by price, aff delta == row delta (>0).
       neg: broken_promise -15..-5, incident deal:<contract>, cats unmoved, aff delta == row delta (<0). ctl: no kept/broken row, aff unchanged.
   assert_witness.py 15-bx --out D1 D2 D3 --inrange P1 P2 P3 --fighters "A,B" --starter A
-      out = NPC asleep/away (distance.txt `name|dist`, >=60) asked 3 different phrasings of "who started the fight"; inrange = participant/witness (<=15).
+      out = NPC asleep/KO or >=250 u away (distance.txt `name|dist`; fight events reach everyone within ShoutRadius 200) asked 3 different phrasings of "who started the fight"; inrange = participant/witness (<=15).
 """
 import os
 import re
@@ -159,7 +159,9 @@ def row_15bx(a, res):
     for b in O:
         dm = dist_map(b, res)
         far = [v[0] for k, v in dm.items() if k not in [f.lower() for f in fighters]]
-        res.check(f'{b.name}:out_of_range>=60', bool(dm) and min(far or [0]) >= 60 or res.lenient and not dm, far[:2])
+        # the DLL tags a fight's events for every character within max(ShoutRadius 200, TalkRadius 80) (Utils.cpp:1327-1348), so 60-94 u is
+        # INSIDE the audience by design; X must be >= 250 u (write ShoutRadius into distance.txt) or asleep/KO (see --asleep)
+        res.check(f'{b.name}:out_of_range>=250', bool(dm) and min(far or [0]) >= 250 or res.lenient and not dm, far[:2])
         res.check(f'{b.name}:no_fight_event_in_prompt', not combat_line(b), len(combat_line(b)))
         rep = reply_of(b)
         res.check(f'{b.name}:no_eyewitness_claim', not EYEWITNESS.search(rep), (EYEWITNESS.search(rep).group(0) if EYEWITNESS.search(rep) else ''))
@@ -171,13 +173,21 @@ def row_15bx(a, res):
         res.check(f'{b.name}:in_range<=15', any(v[0] <= 15 for k, v in dm.items() if k not in [f.lower() for f in fighters]) or res.lenient and not dm, '')
         res.check(f'{b.name}:fight_event_in_prompt', bool(combat_line(b)), len(combat_line(b)))
         res.check(f'{b.name}:starter_event_in_prompt', any(re.search(re.escape(a['--starter'] or '~'), l) and 'Initiated attack' in l for l in b.prompt.splitlines()), a['--starter'])
+    # extra measurement (rowfix 2026-10-15): an asleep/KO NPC within 100 u. CollectEventPeopleFromAnchor has no sleep/KO filter, so if it
+    # still gets [combat] lines that is a REAL DEFECT recorded as its own check (not a fixture problem).
+    for d in a['--asleep']:
+        b = Bundle(d)
+        dm = dist_map(b, res)
+        far = [v[0] for k, v in dm.items() if k not in [f.lower() for f in fighters]]
+        res.check(f'{b.name}:asleep_within_100u', bool(far) and max(far) <= 100 or res.lenient and not dm, far[:2])
+        res.check(f'{b.name}:asleep_no_fight_event_DEFECT_if_fail', not combat_line(b), len(combat_line(b)))
     res.check('inrange_names_starter>=2/3', sum((a['--starter'] or '~').split(' ')[0].lower() in reply_of(b).lower() for b in I) >= 2, '')
 
 
 ROWS = {'03-cx': ('--run', ('--run',), ('--victim', '--friend', '--ko', '--stranger', '--samefaction')),
         '04-ax': ('--run', ('--run',), ('--victim', '--friend', '--stranger', '--samefaction')),
         '13-ax': (None, ('--pos', '--neg', '--ctl'), ('--price',)),
-        '15-bx': (None, ('--out', '--inrange'), ('--fighters', '--starter'))}
+        '15-bx': (None, ('--out', '--inrange', '--asleep'), ('--fighters', '--starter'))}
 
 if __name__ == '__main__':
     row = sys.argv[1] if len(sys.argv) > 1 else ''

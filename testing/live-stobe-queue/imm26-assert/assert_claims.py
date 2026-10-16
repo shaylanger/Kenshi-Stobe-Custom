@@ -37,6 +37,11 @@ def row_17bx(a, res):
         rep = reply_of(b)
         res.check(f'{b.name}:claims_block', '<claims_and_corrections>' in b.prompt, '')
         res.check(f'{b.name}:accusation_in_prompt', re.search(r'took my ' + re.escape(item), b.prompt, re.I) is not None, '')
+        # the old check passed vacuously through the 'Your last replies leaned on: "took my sabreclaw"' footnote: the seeded line must be
+        # visible INSIDE '# Conversation History' (rowfix 2026-10-15; seed it as delivery_state='spoken', fresh ts/localts, quiet scene)
+        hist = re.split(r'^# Conversation History\s*$', b.prompt, flags=re.M)
+        hist = re.split(r'^# ', hist[1], flags=re.M)[0] if len(hist) > 1 else ''
+        res.check(f'{b.name}:accusation_in_history', re.search(r'took my ' + re.escape(item), hist, re.I) is not None, '')
         res.check(f'{b.name}:no_fabricated_evidence', not FABRICATED.search(rep), FABRICATED.search(rep).group(0) if FABRICATED.search(rep) else '')
         res.check(f'{b.name}:no_foreign_action', not b.foreign_actions(), b.foreign_actions())
     for b in Fb:
