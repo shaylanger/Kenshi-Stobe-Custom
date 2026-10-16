@@ -72,3 +72,115 @@ EOT
   echo "completed=$fin loops=$k speed=$spd back=$back" > "$EV/walk_done.txt"
   return 0
 }
+
+# ------------------------------------------------------------------ small shared bits
+u_sheathe() { printf 'stobe-auto stobe_drawn sheathe %s </dev/null | head -1\n' "$(rl_q "$1")" | lt_h >> "$EV/quiet.txt" 2>&1; }
+u_heal() { lt_h <<EOT >> "$EV/heal.txt" 2>&1
+stobe-auto health Shay 100 </dev/null | head -1
+stobe-auto health $(rl_q "$RL_NPC_FULL") 100 </dev/null | head -1
+EOT
+}
+u_state_combat() {  # u_state_combat <file>: `in_combat=true|false|unknown` (stobe_state), ERROR text when the NPC is gone
+  local js ic; js=$(printf 'stobe-auto stobe_state %s </dev/null 2>&1 | head -c 6000 # u:state\n' "$(rl_q "$RL_NPC_FULL")" | lt_h 2>&1)
+  ic=$(echo "$js" | grep -oE '"in_combat": ?(true|false)' | head -1 | grep -oE 'true|false')
+  if echo "$js" | grep -qiE 'no character named|ERROR'; then echo "in_combat=gone $(echo "$js" | head -1 | cut -c1-120)" > "$EV/$1"
+  else echo "in_combat=${ic:-unknown}" > "$EV/$1"; fi
+}
+u_claim_dump() {  # u_claim_dump <file> <rowid mark>: follow-up claims written after the mark
+  lt_sql "select rowid||'|'||type||'|'||left(data,400) from eventlog where type='situated_remark_claim' and data like '%followup:%' and rowid>${2:-0} order by rowid" > "$EV/$1" 2>&1
+}
+u_topic() {  # u_topic <say-text>: open personal_plan topic via one chat line; fu_pre.txt; rc 0 always (the checker judges)
+  rl_say 1 "$1" || return $?
+  rw_fu_dump fu_pre.txt
+}
+
+# ------------------------------------------------------------------ 08-e: open topic survives a save+load and is claimed ONCE by a targeted autochat tick
+rd_08e() {
+  local k n0 nq tries="${U_BORED_TRIES:-3}"
+  rw_prep || return $?
+  nq=$(rl_q "$RL_NPC_FULL")
+  lt_sql "select coalesce((select value from general_settings where id='BORED_EVENT_CHANCE'),'unset')" > "$EV/bored_chance.txt" 2>&1
+  u_sheathe "$RL_NPC_FULL"
+  u_topic "${RW_FU_SAY:-I have to mend my armor tomorrow, it is falling apart.}" || return $?
+  grep -q '"status":"open"' "$EV/fu_pre.txt" || return 0                                         # checker: SETUP-FAIL (no topic)
+  rw_save_load followup near || return $?
+  rw_fu_dump fu_post.txt
+  n0=$(printf 'wc -l < %s # rw:srvn\n' "$LT_SRVLOG" | lt_w | tail -1 | tr -dc 0-9); echo "${n0:-0}" > "$EV/srvlog_n0.txt"
+  unset TR_SCENE; tr_quiet; u_sheathe "$RL_NPC_FULL"
+  rl_resolve "$ROW_NPC" >/dev/null 2>&1
+  rl_say 2 "${RW_08E_POST_SAY:-Hello again, I am back.}" || return $?                             # fresh native snapshot for the NPC
+  for k in $(seq 1 "$tries"); do
+    i4_bored "08e$k" 1 || return $?
+    rw_claim_dump claim.txt
+    [ -s "$EV/claim.txt" ] && break
+    ADV_SECONDS="${U_BORED_GAP:-60}" rl_advance_gametime || return $?                            # past the 60 s any-actor claim cooldown, snapshot refreshed by the next push
+    u_heal
+  done
+  cp "$EV/bored_ticks.txt" "$EV/cind_ticks_list.txt" 2>/dev/null
+  [ -s "$EV/bored_ticks.txt" ] && wc -l < "$EV/bored_ticks.txt" | tr -dc 0-9 > "$EV/cind_ticks.txt" || echo 0 > "$EV/cind_ticks.txt"
+  cat "$EV"/bored_08e*_log.txt 2>/dev/null | tail -6 > "$EV/cind_ticks_log.txt"
+  rw_fu_dump fu_final.txt; rw_claim_dump claim.txt
+  echo "$k" > "$EV/chunks.txt"
+}
+
+# ------------------------------------------------------------------ 08-d: topic retired by a REALLY WALKED trip (no teleported arrival)
+rd_08d() {
+  tr_prep || return $?
+  local dest="$TR_DEST" neg="${U08D_NEG:-0}" n0
+  echo "neg=$neg" > "$EV/neg.txt"
+  lt_sqlx "delete from eventlog where type='social_followup' and data like '%sell my furs%'" >> "$EV/clean.txt" 2>&1
+  rl_say 0 "I need to sell my furs in $dest before winter." || return $?
+  grep -q '"kind":"personal_plan"' "$EV/s0/ev_full.txt" 2>/dev/null || { rl_say 0b "I want to sell my furs in $dest before winter." || return $?; }
+  tr_trip_setup || return $?
+  if [ "$neg" = 1 ]; then echo "completed=0 (negative control: no walk)" > "$EV/walk_done.txt"
+  else
+    tr_walk_stage || return $?
+    tr_state state_shay.txt Shay
+    rl_say 3 "We're here. Thanks for guiding me." || return $?
+  fi
+  tr_state state_after.txt "$RL_NPC_FULL"; tr_agr agr_final.txt 8
+  rd08d_dump fu_before.txt
+  n0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); n0=${n0:-0}
+  i4_bored 08d 1 || return $?
+  rw_sleep 3
+  rd08d_dump fu_after.txt
+  printf 'tail -n +%s %s | grep -E "BORED_EVENT|ACTION_EXEC: SAY|FOLLOWUP|followup" | cut -c1-300 | head -40\n' "$(( n0 + 1 ))" "$LT_STOBELOG" | lt_h > "$EV/bored_log.txt" 2>&1
+}
+
+# ------------------------------------------------------------------ 11-b: no follow-up claim while the NPC is in combat; exactly one after combat
+rd_11b() {
+  local nq o en mark
+  tr_prep || return $?
+  nq=$(rl_q "$RL_NPC_FULL")
+  u_topic "${RW_FU_SAY:-I have to mend my armor tomorrow, it is falling apart.}" || return $?
+  grep -q '"status":"open"' "$EV/fu_pre.txt" || return 0                                         # checker: SETUP-FAIL (no topic)
+  mark=$(lt_sql "select coalesce(max(rowid),0) from eventlog" | head -1 | tr -dc 0-9); echo "${mark:-0}" > "$EV/mark_rowid.txt"
+  o=$(printf 'stobe-auto spawn "Hungry Bandit" %s near %s dist %s count 1 </dev/null 2>&1 | head -2\n' "$(rl_q "${U11B_FACTION:-Holy Nation Outlaws}")" "$nq" "${U11B_DIST:-20}" | lt_h 2>&1)
+  echo "$o" > "$EV/spawn.txt"
+  en=$(echo "$o" | sed -nE 's/^spawned [0-9]+\/[0-9]+ [^:]*: (.*) #[0-9]+\/[0-9]+.*/\1/p' | head -1)
+  [ -n "${KAH_ROW_FAKE:-}" ] && en="${en:-Dry [Hungry Bandit]}"
+  [ -n "$en" ] || { RL_REASON="enemy spawn failed or unparseable reply: $(echo "$o" | head -1 | cut -c1-160)"; return 3; }
+  echo "$en" > "$EV/enemy.txt"
+  lt_h <<EOT >> "$EV/fight.txt" 2>&1
+stobe-auto protect $nq on </dev/null | head -1
+stobe-auto protect $(rl_q "$en") on </dev/null | head -1
+stobe-auto fight $nq $(rl_q "$en") </dev/null 2>&1 | head -2
+EOT
+  rw_sleep "${U11B_FIGHT_S:-10}"
+  u_state_combat state_combat_pre.txt
+  i4_bored c1b 0 || return $?                                                                    # tick WITHOUT a snapshot first (what a natural tick looks like; no push was sent in this scene yet)
+  u_claim_dump claim_c1b.txt "$mark"; rw_fu_dump fu_c1b.txt
+  i4_bored c1a 1 || return $?                                                                    # then WITH a fresh snapshot (in_combat visible to the attention gate)
+  u_state_combat state_combat.txt; u_claim_dump claim_c1a.txt "$mark"; rw_fu_dump fu_combat.txt
+  lt_sql "select count(*) from eventlog where type='combat' and rowid>${mark:-0}" > "$EV/combat_rows.txt" 2>&1
+  lt_h <<EOT >> "$EV/calm.txt" 2>&1                                                              # end the fight: enemy gone, orders cleared
+stobe-auto teleport $(rl_q "$en") $U_FAR </dev/null | head -1
+stobe-auto order $nq NULL_TASK </dev/null | head -1
+EOT
+  rw_sleep "${U11B_CALM_S:-15}"
+  u_state_combat state_calm.txt
+  ADV_SECONDS="${U_BORED_GAP:-60}" rl_advance_gametime || return $?
+  u_heal
+  i4_bored c2 1 || return $?
+  u_claim_dump claim_after.txt "$mark"; rw_fu_dump fu_final.txt
+}
