@@ -46,7 +46,7 @@ B1=$(echo $BANDITS | awk '{print $1}')
 i3 <<<"stobe-auto relation \"$B1\" -100 </dev/null | head -2" | tee -a "$OUT/log.txt"   # Dust Bandits <-> player faction -100
 # 14-c lesson (op9j): spawned bandits roam 190-390 u away within 12 s (the spawn pos is only a start). Do NOT wait: unpin, teleport each next to the spot and pin at once.
 k=0
-for b in $BANDITS; do i3 <<<"stobe-auto pin \"$b\" off </dev/null | head -1; stobe-auto teleport \"$b\" $((-47335+6*($k-2))) 725 $((-55640+2*$k)) </dev/null | head -1; stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; k=$((k+1)); done
+for b in $BANDITS; do i3 <<<"stobe-auto pin \"$b\" off </dev/null | head -1; stobe-auto teleport \"$b\" $(if [ -n \"${GRID5:-}\" ]; then echo $((-47341+4*$k)); else echo $((-47335+6*($k-2))); fi) 725 $(if [ -n \"${GRID5:-}\" ]; then echo -55624; else echo $((-55640+2*$k)); fi) </dev/null | head -1; stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; k=$((k+1)); done
 i3 <<<"stobe-auto face \"$CIND\" \"$B1\" </dev/null | head -1; sleep 1" >> "$OUT/log.txt" 2>&1
 # DISTANT=n (row 14-d): the last n spawned bandits go 170 u north (outside the group), hostile, pinned
 [ -n "${FAR_IN:-}" ] && FAR="$FAR_IN"
@@ -58,9 +58,28 @@ for poll in 1 2; do
   for b in $BANDITS; do s=$(i3 <<<"stobe-auto senses \"$CIND\" \"$b\" </dev/null | head -2"); echo "senses $b: $s" >> "$OUT/log.txt"; echo "$s" | grep -qE 'sees=1' && SEES=$((SEES+1)); done
   say "poll $poll senses sees=1 count=$SEES of $(echo $BANDITS | wc -w)"; [ $SEES -ge 3 ] && ok=$((ok+1)); sleep 4
 done
-[ $ok -ge 2 ] || { say "SCENE-BAD cind does not stably see >=3 bandits (see $OUT/log.txt)"; exit 3; }
+[ $ok -ge "${POLLOK:-2}" ] || { say "SCENE-BAD cind does not stably see >=3 bandits (see $OUT/log.txt)"; exit 3; }
 i3 <<<"stobe-auto stobe_ctxpush \"$CINDFULL\" </dev/null | head -2" >> "$OUT/log.txt" 2>&1
 say "SCENE-OK"
+# GRID5=1 (row 14-d, inv-14e recipe): bandits stand on flat ground north of the wall (x=-47341+4k, z=-55624). Probe the native ClearGroup set BEFORE the ask:
+# the newest context_sent_to_llm.log agreedTargets must list exactly the COUNT near bandits; else move all closer (z -55618, -55612), re-pin, re-probe (max 3 rounds), then SCENE-BAD.
+if [ -n "${GRID5:-}" ]; then
+  CTXL=/tmp/stobe-imm26-5090-i5/site/log/context_sent_to_llm.log
+  probe_set() {
+    local n0; n0=$(i3w <<<"wc -l < $CTXL" | tail -1)
+    i3_say "$CIND" "Cind, can you see those bandits?" 40 > /dev/null 2>&1
+    i3w <<<"tail -n +$((n0+1)) $CTXL | grep -o '\"agreedTargets\":\[[0-9,]*\]' | tail -1"
+  }
+  for round in 1 2 3; do
+    SET=$(probe_set); say "probe round $round agreedTargets: $SET"; echo "$SET" >> "$OUT/probe.txt"
+    NSET=$(echo "$SET" | grep -oE '[0-9]{5,}' | sort -u | wc -l)
+    [ "$NSET" -ge "${COUNT:-4}" ] && break
+    z=$((-55624+6*round)); k=0
+    for b in $BANDITS; do i3 <<<"stobe-auto pin \"$b\" off </dev/null | head -1; stobe-auto teleport \"$b\" $((-47341+4*$k)) 725 $z </dev/null | head -1; stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; k=$((k+1)); done
+    sleep 3
+  done
+  [ "$NSET" -ge "${COUNT:-4}" ] || { say "SCENE-BAD agreedTargets has $NSET of ${COUNT:-4} (see $OUT/probe.txt)"; exit 3; }
+fi
 # 7. the ask. NEVER the bare 'Clear the bandit camp.' (6/6 NONE: 'which camp?'). Name the group, the place and the joint intent like the 26-a Hunt phrase (PROPOSE 5/6).
 P1="Look at those Dust Bandits here in Rebirth. Cind, I want you to clear them out with me."
 P2="Cind, will you help me clear out the bandits you can see in front of us here in Rebirth?"
