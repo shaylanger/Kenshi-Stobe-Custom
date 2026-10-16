@@ -1,0 +1,97 @@
+diff -ruN a/lib/npc_player_view.php b/lib/npc_player_view.php
+--- a/lib/npc_player_view.php	2026-10-16 12:53:11.221110500 -0500
++++ b/lib/npc_player_view.php	2026-10-16 12:53:11.222301800 -0500
+@@ -57,12 +57,25 @@
+     return md5(trim(preg_replace('/\s+/', ' ', $norm) ?? ''));
+ }
+ 
+-function stobeNpcViewStorageId(array|false $npcData): string {
++function stobeNpcViewStorageId(array|false $npcData, string $nameHint = ''): string {
+     if (!is_array($npcData)) return '';
+     $meta = $npcData['metadata'] ?? [];
+     if (is_string($meta)) $meta = json_decode($meta, true);
+-    if (!is_array($meta)) return '';
+-    return normalizeStorageIdToken(strval($meta['storage_id'] ?? ($meta['refid'] ?? '')));
++    $sid = is_array($meta)
++        ? normalizeStorageIdToken(strval($meta['storage_id'] ?? ($meta['refid'] ?? '')))
++        : '';
++    if ($sid !== '') return $sid;
++    // imm26 sfV: some NPC rows carry no storage id in metadata, which silently dropped the told-facts
++    // read/write and keyed principles by name. Fall back to the id the info panel itself sends
++    // (hand_<live serial>, also the storage alias used elsewhere). One resolver for read AND write.
++    $col = normalizeStorageIdToken(strval($npcData['storage_id'] ?? ''));
++    if ($col !== '') return $col;
++    $name = trim($nameHint !== '' ? $nameHint : strval($npcData['name'] ?? ''));
++    if ($name !== '' && function_exists('stobeResolveLiveParticipantSerial')) {
++        try { $serial = intval(stobeResolveLiveParticipantSerial($name)); } catch (Throwable $e) { $serial = 0; }
++        if ($serial > 0) return 'hand_' . $serial;
++    }
++    return '';
+ }
+ 
+ /** Pulls the optional "disclosed" list out of a relationship-evaluator JSON reply. */
+@@ -93,7 +106,7 @@
+  */
+ function stobeNpcFactRecordDisclosed(array|false $npcData, string $npcName, string $learner, array $facts, string $sourceLine, int $gamets): int {
+     $learner = trim($learner);
+-    $sid = stobeNpcViewStorageId($npcData);
++    $sid = stobeNpcViewStorageId($npcData, $npcName);
+     if ($sid === '' || $learner === '' || count($facts) === 0) return 0;
+     if (strcasecmp($learner, 'The Narrator') === 0 || strcasecmp($learner, $npcName) === 0) return 0;
+     stobeNpcFactEnsureSchema();
+@@ -547,6 +560,7 @@
+             : '')
+         . "  <rule>Use ONLY what the character said in the conversation lines and the told facts below. Do not invent anything, do not guess, do not add lore.</rule>\n"
+         . "  <rule>Third person about the character, plain everyday English, 2 to 5 short sentences, no lists, no headings, no quotes, no names of the reader.</rule>\n"
++        . "  <rule>Always include any told fact marked [value] (a principle or stance they stated, such as opposing slavery), in your own words, as something they believe or refuse.</rule>\n"
+         . "  <rule>Prefer what they said about themselves (origin, work, family, interests, plans). If they said nothing personal, say in one or two sentences how they have come across when talking.</rule>\n"
+         . "  <rule>Reply with the paragraph only.</rule>\n"
+         . "</npc_card_biography>";
+@@ -555,7 +569,7 @@
+         $conv[] = ($l['who'] === 'npc' ? $npcName : $learner) . ': ' . $l['text'];
+     }
+     $told = [];
+-    foreach ($facts as $f) $told[] = '- ' . strval($f['fact'] ?? '');
++    foreach ($facts as $f) $told[] = '- ' . (strval($f['category'] ?? '') === 'value' ? '[value] ' : '') . strval($f['fact'] ?? '');
+     $user = "<character>" . stobePromptXmlEscape($npcName) . "</character>\n"
+         . "<pronoun>" . stobePromptXmlEscape($pronoun) . "</pronoun>\n"
+         . "<reader>" . stobePromptXmlEscape($learner) . "</reader>\n"
+diff -ruN a/tests/imm26_c1_db_regression.php b/tests/imm26_c1_db_regression.php
+--- a/tests/imm26_c1_db_regression.php	2026-10-16 12:53:11.223525300 -0500
++++ b/tests/imm26_c1_db_regression.php	2026-10-16 12:53:11.224757100 -0500
+@@ -22,7 +22,7 @@
+ }
+ if (strval(getenv('STOBE_DB_NAME')) !== 'stobe_test') { echo "refusing: STOBE_DB_NAME must be stobe_test\n"; exit(2); }
+ 
+-$SID = [ 'abel' => 'hand_990101', 'slav' => 'hand_990102', 'flex' => 'hand_990103', 'blank' => 'hand_990104', 'doc' => 'hand_990105' ];
++$SID = [ 'abel' => 'hand_990101', 'slav' => 'hand_990102', 'flex' => 'hand_990103', 'blank' => 'hand_990104', 'doc' => 'hand_990105', 'nosid' => 'hand_990106' ];
+ $cleanup = static function () use ($db, $SID, $have): void {
+     foreach ($SID as $sid) {
+         if ($have) { try { $db->exec("DELETE FROM imm26_npc_principle WHERE npc_key=$1", [$sid]); } catch (Throwable $e) {} }
+@@ -135,6 +135,26 @@
+ check('2 consistency: the next prompt reminds the NPC what it already told this listener', str_contains($again, 'You already told this listener: opposes slavery'), $again);
+ $otherL = stobeImm26PrinciplesContext('C1T Abel', $abel3, 'Someone Else', [], ['gamets' => $gt + 100, 'player_message' => 'Hello.']);
+ check('2 consistency: another listener is not told', !str_contains($otherL, 'You already told'), $otherL);
++// ---- sfV (02-cx): an NPC row WITHOUT a storage id in metadata resolves hand_<live serial> for read AND write
++$nosid = $mk('C1T NoSid', 'x', ['personality' => 'A devout abolitionist who has sworn never to own a slave.', 'metadata' => []]);
++$GLOBALS['CACHE_PEOPLE'] = '["C1T NoSid|hand_990106","C1T Player"]';
++check('sfV sid: no metadata storage id -> hand_<serial> from the live people list', stobeNpcViewStorageId($nosid) === $SID['nosid'], stobeNpcViewStorageId($nosid));
++check('sfV sid: an NPC that has a storage id keeps it', stobeNpcViewStorageId($abel3) === $SID['abel']);
++check('sfV sid: principle key is the hand id, not name:...', stobeImm26PrincipleNpcKey($nosid) === $SID['nosid'], stobeImm26PrincipleNpcKey($nosid));
++unset($GLOBALS['IMM26_PRINCIPLE_CACHE']);
++$rn = stobeImm26PrincipleAfterReply('C1T NoSid', $nosid, 'C1T Player', 'What do you think of slavery?', "I won't have any part in slavery. It is wrong.", $gt);
++check('sfV sid: voiced stance stored for the no-sid NPC', in_array('slavery', $rn['voiced'], true), $rn);
++$nf = stobeNpcFactsFor($SID['nosid'], 'C1T Player');
++check("sfV sid: 'value' fact stored under hand_<serial> (panel id)", count(array_filter($nf, static fn($f) => $f['category'] === 'value' && str_contains($f['fact'], 'slavery'))) === 1, $nf);
++$nn = stobeImm26PrinciplesContext('C1T NoSid', $nosid, 'C1T Player', [], ['gamets' => $gt + 100, 'player_message' => 'Hello.']);
++check('sfV sid: the next prompt carries the "already told this listener" line', str_contains($nn, 'You already told this listener: opposes slavery'), $nn);
++$bm = stobeNpcBioMessages('C1T NoSid', 'C1T Player', [], [['fact' => 'opposes slavery', 'category' => 'value']]);
++check('sfV bio: value facts are tagged [value] and the bio prompt demands them', str_contains($bm[1]['content'], '- [value] opposes slavery') && str_contains($bm[0]['content'], 'marked [value]'));
++unset($GLOBALS['CACHE_PEOPLE']);
++$GLOBALS['CACHE_PEOPLE'] = '';
++check('sfV sid: no people list and no id -> empty (nothing stored, as before)', stobeNpcViewStorageId($nosid) === '');
++unset($GLOBALS['CACHE_PEOPLE']);
++
+ $r = stobeImm26PrincipleAfterReply('C1T Slaver', $slav, 'C1T Player', 'What do you think of slavery?', "I hate slavery, it is wrong.", $gt);
+ check('2 contradiction: opposing a topic the profile supports is logged, not stored', $r['contradiction'] === ['slavery'] && $r['voiced'] === [], $r);
+ $r = stobeImm26PrincipleAfterReply('C1T Blank', $blank, 'C1T Player', 'Would you steal for me? Steal that purse.', "I refuse to steal, that is wrong.", $gt);
