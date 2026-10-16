@@ -38,6 +38,8 @@ $pi = Join-Path $ws 'docs\PROCESS_IDEAS.md'
 $piAge = if (Test-Path -LiteralPath $pi) { [int]((Get-Date) - (Get-Item -LiteralPath $pi).LastWriteTime).TotalMinutes } else { -1 }
 $piLine = if ($piAge -ge 0 -and $piAge -le 120) { "process ideas review: docs/PROCESS_IDEAS.md written $piAge min ago (ok)" }
           else { 'PROCESS IDEAS REVIEW NOT DONE (docs/PROCESS_IDEAS.md not written in the last 2 h): before opening the new session run process-ideas.ps1 review <decisions.json> (<= 3 new entries, judge the open ones against this session; testing/AGENT_PROMPTS.md step 2b), ~5 min' }
+# PI-13 (Shay 2026-10-15): selftests are NOT run here (about 8 min); this only reminds. The old coordinator starts selftest-all.ps1 in the background at step 2 (testing/AGENT_PROMPTS.md 4b).
+$stLine = 'SELFTESTS (PI-13): not run by this script. Run powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\selftest-all.ps1 in the background (about 8 min; FAIL output paths under C:\KenshiTestRuns\selftest\) and fix or list every FAIL in HANDOFF (testing/AGENT_PROMPTS.md step 4b)'
 $lines = @(
     "HANDOFF READY $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     "note: $($args -join ' ')"
@@ -48,6 +50,7 @@ $lines = @(
     "inflight markers: $(if ($inflight.Count) { ($inflight | ForEach-Object { $_.Name }) -join ', ' } else { 'none' })"
     "tail sessions (overlap handoff): $(if ($tailLines.Count) { $tailLines -join ' || ' } else { 'none' })"
     $piLine
+    $stLine
     ''
     'NEXT SESSION: run  powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1'
     'It prints testing/HANDOFF.md "Right now", every agent status file, inflight markers and batch SUMMARY.txt files.'
