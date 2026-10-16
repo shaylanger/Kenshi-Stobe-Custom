@@ -312,11 +312,7 @@ $r = tr_turn($H2, $H2s, 1200, ['world'=>'world-load-2-dddddddd', 'gen'=>3, 'live
 check('count: STOBE_TRIP_RESUME_MAX_COUNT=1 -> first load resumes', $ok1);
 tr_expect_failed('count: MAX_COUNT=1 second load', $r);
 reset_settings();
-// 5f native_local destination (candidate ids die on load): FAILED as today
-[$I, $Is] = tr_actor();
-tr_seed($I, $Is, ['point'=>['source'=>'native_local', 'label'=>'Old Gate', 'x'=>100.0, 'y'=>2.0, 'z'=>300.0]]);
-$r = tr_turn($I, $Is, 1100, ['live'=>true]);
-tr_expect_failed('native_local destination', $r);
+// 5f native_local destinations now resume from their stored x/y/z (imm26-wpL: tests/imm26_wpL_landmark_resume_regression.php)
 // 5g a meeting (duel/truce) is not a resumable walk
 [$I2, $I2s] = tr_actor(); tr_seed($I2, $I2s, ['kind'=>'duel_meeting']);
 $r = tr_turn($I2, $I2s, 1100, ['live'=>true]);
