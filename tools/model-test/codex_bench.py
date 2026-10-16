@@ -260,6 +260,11 @@ ATTEMPT_COLUMNS = ["run", "attempt", "status", "model", "effort", "service_tier"
 def _append_attempt_row(root: Path, rid: str, receipt: dict[str, Any], result: dict[str, Any] | None) -> None:
     path = root / "attempts.tsv"
     attempt_id = int(receipt.get("attempt", 1))
+    if path.is_file():
+        with path.open("r", encoding="utf-8", newline="") as stream:
+            if any(row.get("run") == rid and row.get("attempt") == str(attempt_id)
+                   for row in csv.DictReader(stream, delimiter="\t")):
+                return
     usage = (result or {}).get("usage") or {}
     pricing = (result or {}).get("pricing") or {}
     audit = (result or {}).get("audit") or {}
@@ -638,6 +643,39 @@ def _prepare_retry_attempt(root: Path, rid: str, attempt_no: int) -> None:
 
 def _record_path(run_dir: Path) -> Path:
     return run_dir / "launch.json"
+
+
+def _quarantine_failed_canonical(root: Path, rid: str, attempt_id: int,
+                                 report_path: Path, report: str | None) -> None:
+    """Remove only this failed attempt's legacy canonical projections, preserving copies."""
+    ledger = root / "runs.tsv"
+    if not ledger.is_file():
+        return
+    with ledger.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        fields = reader.fieldnames or []
+        rows = list(reader)
+    failed_agent = f"{rid}/attempt-{attempt_id:02d}"
+    removed = [row for row in rows if row.get("run") == rid and row.get("agent") == failed_agent]
+    if removed:
+        quarantine = root / "runs" / rid / "failed-attempts"
+        quarantine.mkdir(parents=True, exist_ok=True)
+        row_path = quarantine / f"attempt-{attempt_id:02d}-canonical-row.tsv"
+        if not row_path.exists():
+            with row_path.open("w", encoding="utf-8", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=fields, delimiter="\t", extrasaction="ignore")
+                writer.writeheader(); writer.writerows(removed)
+        kept = [row for row in rows if not (row.get("run") == rid and row.get("agent") == failed_agent)]
+        temp = ledger.with_name(ledger.name + f".{os.getpid()}.tmp")
+        with temp.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields, delimiter="\t", extrasaction="ignore")
+            writer.writeheader(); writer.writerows(kept)
+        os.replace(temp, ledger)
+        if report_path.is_file() and report:
+            report_bytes = report.encode("utf-8")
+            if report_path.read_bytes() == report_bytes:
+                archived = quarantine / f"attempt-{attempt_id:02d}-report.md"
+                if not archived.exists(): os.replace(report_path, archived)
 
 
 def _stamp_launch_context(attempt_receipt: Path, run_receipt: Path, attempt_dir: Path,
@@ -1340,21 +1378,32 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
     if rollout.is_file():
         sys.path.insert(0, str(HERE))
         import codex_record
+        import codex_status
         prices = _json(HERE / "codex_prices.json")
+        host_proof = receipt.get("code_mode_host_proof") if isinstance(receipt.get("code_mode_host_proof"), dict) else {}
+        host_verification = codex_status._verify_hostprobe(
+            host_proof.get("path", receipt.get("hostprobe_path")),
+            host_proof.get("sha256", receipt.get("hostprobe_sha256")))
+        requested_modes = codex_status._verify_requested_modes(receipt, rollout)
+        requested_modes_verified = requested_modes.get("status") == "PASS"
+        receipt_verified = (receipt.get("verified_receipt") is True and
+                            host_verification.get("status") == "PASS" and requested_modes_verified)
         result = codex_record.parse_rollout(rollout, config={
-        "verified_receipt": receipt.get("verified_receipt") is True,
+        "verified_receipt": receipt_verified,
         "agents_enabled": receipt.get("agents_enabled"), "multi_agent": receipt.get("multi_agent"),
         "max_concurrent_threads_per_session": receipt.get("max_concurrent_threads_per_session"),
         "hook_verified": receipt.get("hook_verified") is True,
         "hook_enforcement": receipt.get("hook_enforcement", {"status": "UNKNOWN"}),
-        "code_mode_host_proof": receipt.get("code_mode_host_proof"),
+        "code_mode_host_proof": {"verified": host_verification.get("status") == "PASS",
+                                  "status": host_verification.get("status")},
+        "requested_modes_verified": requested_modes_verified,
         "terminal_verified": receipt.get("terminal_verified") is True,
         "allowed_tools": receipt.get("allowed_tools", []),
         "model": receipt.get("model"), "effort": receipt.get("effort"),
         "service_tier": receipt.get("service_tier"),
         "requested_model": receipt.get("model"), "requested_effort": receipt.get("effort"),
         "requested_service_tier": receipt.get("service_tier"),
-        "receipt": receipt, "config_digest": receipt.get("config_sha256"),
+        "config_digest": receipt.get("config_sha256"),
         }, pricing=prices)
     if result is not None and receipt.get("child_rollout_paths"):
         audit = result["audit"]
@@ -1366,11 +1415,6 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         audit["status"] = "FAIL"
     report = (result or {}).get("report")
     report_path = run_dir / "report.md"
-    if report:
-        report_bytes = report.encode("utf-8")
-        if report_path.exists() and report_path.read_bytes() != report_bytes:
-            raise BenchError("saved report differs from rollout; refusing overwrite")
-        if not report_path.exists(): report_path.write_bytes(report_bytes)
     usage = (result or {}).get("usage") or {}
     pricing = (result or {}).get("pricing") or {}
     audit = (result or {}).get("audit") or {"status": "UNKNOWN", "flags": ["no-final-report" if rollout.exists() else "no-rollout"]}
@@ -1378,6 +1422,11 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         missing_flag = "no-final-report" if rollout.exists() else "no-rollout"
         audit["flags"] = sorted(set(audit.get("flags", []) + [missing_flag]))
         if audit.get("status") != "FAIL": audit["status"] = "UNKNOWN"
+    setup_health = audit.get("setup_health") if isinstance(audit.get("setup_health"), dict) else {}
+    setup_pass = setup_health.get("status") == "PASS"
+    canonical_pass = bool(report and result and audit.get("status") == "PASS" and setup_pass and
+                          receipt.get("verified_receipt") is True and
+                          requested_modes_verified and host_verification.get("status") == "PASS")
     row = {
         "run": rid, "model": receipt.get("model", ""), "effort": receipt.get("effort", ""),
         "prompt": rid.rsplit("-p", 1)[-1], "start_local": (result or {}).get("start_local", ""),
@@ -1394,7 +1443,7 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         "agent": f"{rid}/attempt-{receipt.get('attempt', 1):02d}",
     }
     _append_attempt_row(root, rid, receipt, result or {"audit": audit, "wall_s": receipt.get("elapsed_s", "")})
-    if report and not recheck:
+    if canonical_pass and not recheck:
         ledger = root / "runs.tsv"
         with LEDGER_MUTEX:
             if ledger.exists():
@@ -1402,20 +1451,38 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
                     if any(item.get("run") == rid for item in csv.DictReader(f, delimiter="\t")):
                         raise BenchError(f"run already recorded: {rid}")
             codex_record.append_tsv(ledger, row)
+    if canonical_pass:
+        report_bytes = report.encode("utf-8")
+        if report_path.exists() and report_path.read_bytes() != report_bytes:
+            raise BenchError("saved report differs from rollout; refusing overwrite")
+        if not report_path.exists(): report_path.write_bytes(report_bytes)
+    elif report_path.exists() and report:
+        # Older runner versions promoted unaudited reports before recording. Preserve
+        # that evidence under the attempt and clear only a byte-identical projection.
+        report_bytes = report.encode("utf-8")
+        if report_path.read_bytes() == report_bytes:
+            quarantined = run_dir / "failed-attempts" / f"attempt-{receipt.get('attempt', 1):02d}-report.md"
+            quarantined.parent.mkdir(parents=True, exist_ok=True)
+            if not quarantined.exists():
+                os.replace(report_path, quarantined)
+    if not canonical_pass:
+        _quarantine_failed_canonical(root, rid, int(receipt.get("attempt", 1)), report_path, report)
     if result:
         receipt["audit"] = audit
         receipt["runtime"] = {k: result.get(k) for k in ("models", "efforts", "service_tiers", "usage", "pricing")}
     else:
         receipt["audit"] = audit
         if receipt.get("status") in {"RUNNING", "PREPARED"}: receipt["status"] = "FAILED_NO_FINAL_REPORT"
-    if report and result: receipt["status"] = "RECORDED" if not recheck else "RECHECKED"
+    if canonical_pass: receipt["status"] = "RECORDED" if not recheck else "RECHECKED"
+    elif report and result:
+        receipt["status"] = "FAILED_SETUP" if setup_health.get("status") == "FAIL" else "COMPLETE_UNAUDITED"
     _write_json(_record_path(run_dir), receipt)
     _write_json(attempt_dirs[-1] / "launch.json", receipt)
     if not report:
         print(f"{receipt.get('status', 'UNKNOWN')} {rid} attempt={receipt.get('attempt', 1)} metadata-only")
         return 1
-    print(f"{audit['status']} {rid} report_bytes={len(report.encode())} pricing={pricing.get('status', 'UNKNOWN')}")
-    return 0 if audit["status"] == "PASS" else 1
+    print(f"{receipt.get('status')} {rid} report_bytes={len(report.encode())} pricing={pricing.get('status', 'UNKNOWN')}")
+    return 0 if canonical_pass else 1
 
 
 def status(root: Path, metrics: bool = False) -> int:

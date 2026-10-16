@@ -18,6 +18,65 @@ SPEC.loader.exec_module(bench)
 
 
 class BenchTests(unittest.TestCase):
+    def test_record_quarantines_failed_attempt_then_promotes_valid_retry_once(self):
+        import sys
+        sys.path.insert(0, str(MODULE_PATH.parent))
+        import codex_status
+        import codex_record
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_id = "model-low-standard-p2"
+            run_dir = root / "runs" / run_id
+            run_dir.mkdir(parents=True)
+            report_failed = "synthetic failed-attempt report"
+            report_valid = "synthetic valid-attempt report"
+
+            def add_attempt(number):
+                attempt = run_dir / f"attempt-{number:02d}"
+                attempt.mkdir()
+                (attempt / "rollout.jsonl").write_text("{}\n", encoding="utf-8")
+                (attempt / "argv.json").write_text(json.dumps({"argv": ["--model", "model", "--reasoning-effort", "low", "--service-tier", "default"]}))
+                (attempt / "requested-config.json").write_text("{}")
+                receipt = {"run": run_id, "attempt": number, "status": "COMPLETE_UNAUDITED",
+                           "model": "model", "effort": "low", "service_tier": "standard",
+                           "verified_receipt": True, "terminal_verified": True,
+                           "code_mode_host_proof": {"path": "probe.json", "sha256": "digest"},
+                           "requested_config": {}, "config_sha256": "config", "argv_sha256": "argv",
+                           "attempt_dir": str(attempt)}
+                (attempt / "launch.json").write_text(json.dumps(receipt), encoding="utf-8")
+                bench._write_json(run_dir / "launch.json", receipt)
+                return attempt
+
+            failed_attempt = add_attempt(1)
+            failed_result = {"report": report_failed, "audit": {"status": "FAIL", "flags": ["mcp-transport-timeout"],
+                             "setup_health": {"status": "FAIL", "infrastructure_failures": ["timeout"]}},
+                             "usage": {"input_tokens": 10, "output_tokens": 2},
+                             "pricing": {"usd": 0.01, "status": "priced"}, "wall_s": 1,
+                             "tool_uses": 1, "models": ["model"], "efforts": ["low"], "service_tiers": ["default"]}
+            with mock.patch.object(codex_status, "_verify_hostprobe", return_value={"status": "PASS"}), \
+                 mock.patch.object(codex_status, "_verify_requested_modes", return_value={"status": "PASS"}), \
+                 mock.patch.object(codex_record, "parse_rollout", return_value=failed_result):
+                self.assertEqual(bench.record(root, run_id), 1)
+            self.assertFalse((root / "runs.tsv").exists())
+            self.assertFalse((run_dir / "report.md").exists())
+            self.assertEqual((failed_attempt / "launch.json").read_bytes(), (run_dir / "launch.json").read_bytes())
+
+            valid_attempt = add_attempt(2)
+            valid_result = {**failed_result, "report": report_valid,
+                            "audit": {"status": "PASS", "flags": [], "setup_health": {"status": "PASS", "infrastructure_failures": []}}}
+            with mock.patch.object(codex_status, "_verify_hostprobe", return_value={"status": "PASS"}), \
+                 mock.patch.object(codex_status, "_verify_requested_modes", return_value={"status": "PASS"}), \
+                 mock.patch.object(codex_record, "parse_rollout", return_value=valid_result):
+                self.assertEqual(bench.record(root, run_id), 0)
+            with (root / "runs.tsv").open("r", encoding="utf-8", newline="") as stream:
+                rows = list(csv.DictReader(stream, delimiter="\t"))
+            self.assertEqual([row["agent"] for row in rows], [f"{run_id}/attempt-02"])
+            self.assertEqual((run_dir / "report.md").read_text(encoding="utf-8"), report_valid)
+            with (root / "attempts.tsv").open("r", encoding="utf-8", newline="") as stream:
+                attempts = list(csv.DictReader(stream, delimiter="\t"))
+            self.assertEqual([row["attempt"] for row in attempts], ["1", "2"])
+            self.assertTrue((valid_attempt / "launch.json").is_file())
+
     def test_concurrency_obeys_configured_hard_cap(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
