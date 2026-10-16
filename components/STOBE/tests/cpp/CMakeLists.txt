@@ -67,3 +67,7 @@ add_test(NAME portrait_fault_injection_tests COMMAND portrait_fault_injection_te
 add_executable(native_travel_receipt_tests native_travel_receipt_tests.cpp)
 target_include_directories(native_travel_receipt_tests PRIVATE ../../src)
 add_test(NAME native_travel_receipt_tests COMMAND native_travel_receipt_tests)
+
+add_executable(activity_mine_product_tests activity_mine_product_tests.cpp)
+target_include_directories(activity_mine_product_tests PRIVATE ../../src)
+add_test(NAME activity_mine_product_tests COMMAND activity_mine_product_tests)
