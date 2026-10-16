@@ -13,6 +13,8 @@
 #   Override (coordinator/operator, logged with the reason): `go-row.sh --allow-retry "<reason>" <ROW> <lane>` runs it once more;
 #   or `powershell tools/automation/row-attempts.ps1 reset <lane> <ROW> "<reason>"` forgets the failed state. PASS clears the count; GATED and
 #   PREFLIGHT-FAIL (row never ran: lane down, dist >= 80) are logged but never block a retry. Show: `row-attempts.ps1 show [lane]`.
+# Timing (PI-09): one line per row appended to <KenshiTestRuns>/row-timing.log (time lane row verdict wall_s steps attempt agent); report with
+#   tools/automation/row-timing-report.ps1. Tool-call counts are not known to the script (no token numbers are recorded).
 # Test switches: KAH_ROW_FAKE=1 (+ lt_fake) / KAH_ROW_DRY=1 (prints `RESULT <ROW> DRY-RUN ...`), KAH_ROWS_BASE, KAH_RUNS_DIR (see lane.sh, heartbeat.sh).
 GR_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$GR_HERE/rowtools/rowlib.sh"; . "$GR_HERE/rowtools/rowdefs.sh"; . "$GR_HERE/rowtools/heartbeat.sh"; . "$GR_HERE/preflight.sh"
@@ -84,6 +86,8 @@ gr_main() {  # gr_main [--no-preflight] [--allow-retry "<reason>"] <ROW> <lane>
     out=$("$PY" "$GR_HERE/rowtools/attempts.py" check "$ad" "$lane" "$norm" "$allow"); rc=$?
     if [ $rc = 4 ]; then
       echo "$out" | head -1 | cut -c1-1900; hb_update "$(echo "$out" | head -1)" "$ev"
+      printf '%s lane=%s row=%s verdict=NEEDS-FIXER wall_s=0 steps=0 attempt=blocked agent=%s
+' "$(date +%Y-%m-%dT%H:%M:%S)" "$lane" "$norm" "${KAH_AGENT_NAME:--}" >> "$LT_BASE/row-timing.log"
       return 4
     fi
   fi
@@ -96,6 +100,8 @@ gr_main() {  # gr_main [--no-preflight] [--allow-retry "<reason>"] <ROW> <lane>
     case "$kind" in SETUP-FAIL) case "$cause" in PREFLIGHT-FAIL*) kind=PREFLIGHT-FAIL;; esac;; esac
     "$PY" "$GR_HERE/rowtools/attempts.py" record "$ad" "$lane" "$norm" "$kind" "$cause" "$ev" >/dev/null 2>&1
   else att=dry; fi
+  printf '%s lane=%s row=%s verdict=%s wall_s=%s steps=%s attempt=%s agent=%s
+' "$(date +%Y-%m-%dT%H:%M:%S)" "$lane" "$norm" "$kind" "$(( $(date +%s) - t0 ))" "$nsteps" "$att" "${KAH_AGENT_NAME:--}" >> "$LT_BASE/row-timing.log"
   return $rc
 }
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then gr_main "$@"; exit $?; fi

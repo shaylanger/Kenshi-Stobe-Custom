@@ -5,7 +5,7 @@
 #   (counts PASS/FAIL/SETUP-FAIL/GATED) when finished; per-row logs/evidence stay in rows/<ROW>/ (open it only for a FAIL, see its `excerpt`
 #   = the RESULT text). If a row fails preflight because the lane is down the remaining rows are written as SETUP-FAIL without retries.
 #   Rows whose last attempt FAILED are not re-run (PI-06): their results line is `ROW-NEEDS-FIXER <ROW> <lane> cause=...`; one reason for
-#   all rows: --allow-retry "<reason>" (logged). See go-row.sh.
+#   all rows: --allow-retry "<reason>" (logged). See go-row.sh. Every row also appends to row-timing.log (PI-09).
 #   Env KAH_AGENT_NAME: every finished row updates that agent's status `latest` (heartbeat) via go-row.sh.
 #   Wait for it with: until [ -f <dir>/DONE ]; do sleep 20; done   (or event-wait.sh --batch <dir>)
 GB_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

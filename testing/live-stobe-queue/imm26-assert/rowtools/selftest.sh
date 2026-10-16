@@ -133,7 +133,7 @@ r=$(KAH_ROW_DRY=1 run 12-d 4080-i4); case "$r" in "RESULT 12-d DRY-RUN planned l
 
 # 11 PI-06 attempt guard + PI-09 timing: first attempt runs, second after FAIL blocks, override permits, PASS clears
 lt_fake() { "$PY" "$ST_HERE/fakelane.py" "$@"; }
-AD="$KAH_ROWS_BASE/row-attempts"; L=4080-i3
+AD="$KAH_ROWS_BASE/row-attempts"; TL="$KAH_ROWS_BASE/row-timing.log"; L=4080-i3
 scen <<EOF
 {"steps":[{"reply":"x","prompt":"no domains here"},{"reply":"x"}]}
 EOF
@@ -163,6 +163,8 @@ EOF
 run 24-b $L >/dev/null; run 24-b $L >/dev/null; r=$(run 24-b $L); case "$r" in "RESULT 24-b SETUP-FAIL PREFLIGHT-FAIL"*) chk guard-preflight-fail-not-counted ok;; *) chk guard-preflight-fail-not-counted bad "$r";; esac
 # every attempt is logged (audit): VERDICT lines for the 12-b runs above, plus the BLOCK
 [ "$(grep -c "lane=$L row=12-b event=VERDICT" "$AD/attempts.log")" -ge 4 ] && grep -q 'row=12-b event=BLOCK' "$AD/attempts.log" && chk guard-audit-log ok || chk guard-audit-log bad
+# PI-09: row-timing.log has one line per go-row call incl. the blocked ones
+grep -E "^[0-9T:-]+ lane=$L row=12-b verdict=FAIL wall_s=[0-9]+ steps=[0-9]+ attempt=1 agent=-" "$TL" >/dev/null && grep -q 'row=12-b verdict=NEEDS-FIXER wall_s=0' "$TL" && grep -q 'row=12-b verdict=PASS wall_s=' "$TL" && chk timing-log-lines ok || chk timing-log-lines bad "$(tail -4 "$TL")"
 # batch: a blocked row shows as ROW-NEEDS-FIXER, others still run, summary counts it; --allow-retry passes through
 scen <<EOF
 {"steps":[{"reply":"x","prompt":"no domains here"},{"reply":"x"}]}
