@@ -100,5 +100,19 @@ r=$(bash -c ". '$A/go-row.sh'; . '$ST_HERE/hxdefs.sh'; . '$U'; echo \$(declare -
 [ "${r%% *}" = 1 ] && [ "${r##* }" -ge 1 ] 2>/dev/null && chk library-mode-redefines-rd_15bx ok || chk library-mode-redefines-rd_15bx bad "$r"
 git -C "$A/../../.." diff --quiet -- testing/live-stobe-queue/imm26-assert/rowtools/unblockdefs_c.sh testing/live-stobe-queue/imm26-assert/rowtools/unblockcheck_c.py testing/live-stobe-queue/imm26-assert/rowtools/hxdefs.sh testing/live-stobe-queue/imm26-assert/rowtools/rowdefs.sh testing/live-stobe-queue/imm26-assert/imm26_lib.py testing/live-stobe-queue/imm26-assert/assert_principle.py 2>/dev/null && chk v1-files-untouched ok || chk v1-files-untouched bad "modified"
 
+# ---- 5. ub15_say (sfU2): cancelled reply -> one repeat, second cancellation -> named SETUP-FAIL; plain no-reply -> no repeat
+cat > "$T/say_t.sh" <<'EOS'
+. "$A/go-row.sh"; . "$ST_HERE/hxdefs.sh"; . "$U"
+KAH_ROW_DRY=; HXD="$T/hxd"; EV="$T/ev"; UB_NPC=Cind; mkdir -p "$HXD" "$EV"; calls=0; places=0
+hxd_sample() { calls=$((calls+1)); mkdir -p "$HXD/$1"; if [ "$MODE" != plain ]; then echo '24097|chat|Cind: x (talking to: Shay)|cancelled' > "$HXD/$1/events.txt"; else echo '1|chat|y|' > "$HXD/$1/events.txt"; fi
+  if [ "$MODE" = okretry ] && [ $calls = 2 ]; then return 0; fi; RL_REASON="no reply of Cind within 150s in $1"; return 3; }
+pl() { places=$((places+1)); mkdir -p "$HXD/$1"; return 0; }
+ub15_say P1 "q" pl; rc=$?; echo "rc=$rc calls=$calls places=$places reason=$RL_REASON retry=$(ls "$EV/retry" 2>/dev/null | paste -sd, -)"
+EOS
+for MODE in cancelled plain okretry; do export MODE A ST_HERE U T; echo "$MODE: $(bash "$T/say_t.sh" 2>&1 | tail -1)"; done > "$T/say.out"
+grep -q '^cancelled: rc=3 calls=2 places=1 .*first try AND the retry.*P1-cancelled.txt' "$T/say.out" && chk say-cancelled-retries-once-then-names-it ok || chk say-cancelled-retries-once-then-names-it bad "$(grep ^cancelled "$T/say.out")"
+grep -q '^plain: rc=3 calls=1 places=0 ' "$T/say.out" && chk say-plain-noreply-no-retry ok || chk say-plain-noreply-no-retry bad "$(grep ^plain "$T/say.out")"
+grep -q '^okretry: rc=0 calls=2 places=1 ' "$T/say.out" && chk say-ok-no-retry ok || chk say-ok-no-retry bad "$(grep ^okretry "$T/say.out")"
+
 rm -rf "$T"
 if [ "$ok" = "$n" ]; then echo "SELFTEST UNBLOCK-C-V2 ALL PASS $ok/$n"; exit 0; else echo "SELFTEST UNBLOCK-C-V2 ALL FAIL $ok/$n"; exit 1; fi

@@ -118,6 +118,23 @@ ub15_place_s() {  # ub15_place_s <sleeper handle> : S1 asleep, next to the fight
   done
   RL_REASON="sleeper S1 not within 100 u of the fight ($(tr '\n' ' ' < "$HXD/S1/distance.txt"))"; return 3
 }
+ub15_say() {  # ub15_say <label> "text" <place fn> : hxd_sample for X/P.  ticket sfU2 (5090-i3 P1 "no reply within 150 s"): the reply WAS generated (eventlog chat row `Cind...|cancelled`) but never
+  # spoken (no ACTION_EXEC SAY), so hxd_sample timed out.  (The rl_say (NPC)|(PC) wait is NOT the cause: hxd_sample already accepts both.)  v2: if the only failure is "no reply" AND the bundle
+  # has a cancelled chat row of the NPC, the first try is kept in $EV/retry/<label>-try1, the NPC is placed again and the say is repeated ONCE; a second cancellation is a SETUP-FAIL that names it.
+  local lab="$1" q="$2" placefn="$3" rc d="$HXD/$1"
+  hxd_sample "$lab" "$q" "$UB_NPC"; rc=$?
+  [ $rc = 3 ] || return $rc
+  uc_dry && return $rc
+  case "$RL_REASON" in *"no reply of"*) ;; *) return $rc;; esac
+  grep -qE '^[0-9]+[|]chat[|].*[|]cancelled' "$d/events.txt" 2>/dev/null || return $rc
+  mkdir -p "$EV/retry"; rm -rf "$EV/retry/$lab-try1"; cp -r "$d" "$EV/retry/$lab-try1"
+  grep -E '[|]cancelled' "$d/events.txt" | cut -c1-300 > "$EV/retry/$lab-cancelled.txt"
+  echo "$(date +%T) $lab: reply generated but cancelled, placing again and repeating the say once" >> "$EV/phases.txt"
+  rm -rf "$d"; mkdir -p "$d"; $placefn "$lab" || return $?
+  hxd_sample "$lab" "$q" "$UB_NPC"; rc=$?
+  [ $rc = 0 ] || { case "$RL_REASON" in *"no reply of"*) RL_REASON="$RL_REASON; the first try AND the retry produced a cancelled chat row (reply generated, not spoken: NPC busy/in combat?), see $EV/retry/$lab-cancelled.txt";; esac; }
+  return $rc
+}
 rd_15bx() {
   hxd_begin; rd_need_npc || return 3
   local m0 i q lab s1id fn_x st_x
@@ -135,7 +152,7 @@ rd_15bx() {
   printf 'stobe-auto chars 300 </dev/null 2>&1 | sed "s/ | /\\n/g" | grep -E "#[0-9]+/[0-9]+" | cut -c1-80\n' | lt_h > "$EV/roster.txt" 2>&1
   i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="X$i"; mkdir -p "$HXD/$lab"
     ub15_place_x "$lab" || return $?
-    hxd_sample "$lab" "$q" "$UB_NPC" || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" "$UB_ID1" "$UB_NPC" || return $?
+    ub15_say "$lab" "$q" ub15_place_x || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" "$UB_ID1" "$UB_NPC" || return $?
   done
   ub15_place_s "$s1id" || return $?
   ub15_sleep_state sample "$s1id"
@@ -148,7 +165,7 @@ rd_15bx() {
   echo "$UB_STARTER" > "$HXD/starter.txt"; echo "$st_x" > "$HXD/starter_out_phase.txt"
   i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="P$i"; mkdir -p "$HXD/$lab"
     ub15_place_p "$lab" || return $?
-    hxd_sample "$lab" "$q" "$UB_NPC" || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" "$UB_ID1" "$UB_NPC" || return $?
+    ub15_say "$lab" "$q" ub15_place_p || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" "$UB_ID1" "$UB_NPC" || return $?
   done
   hxd_trim "$m0"
 }
