@@ -43,4 +43,6 @@ n=$(grep -c 'rs_guard;.*rl_say' "$F"); [ "$n" = 3 ] && chk say-guarded ok || chk
 # fix26f2: the sfO seam is armed once (first wording only), disarmed/evidenced after the offer loop, opt-out RW_INJECT_PROPOSE=0; accept waits for delivery; resume is polled
 grep -q 'rs_inject_arm || return' "$F" && grep -q 'rs_inject_done' "$F" && [ "$(grep -c 'inject-propose.sh' "$F")" -ge 3 ] && grep -q 'RW_INJECT_PROPOSE:-ClearGroup}" = 0' "$F" && chk inject-arm-wired ok || chk inject-arm-wired bad
 grep -q 'rs_wait_delivery "$RS_OFFER_STEP"' "$F" && grep -q 'rs_poll_resume$' "$F" && grep -q 'reloaddefs_sfp.sh' "$F" && chk delivery-poll-sfp-wired ok || chk delivery-poll-sfp-wired bad
+# fix26f4: availability bypass flag on the arm (opt-out RW_INJECT_BYPASS=0), rs_inject_end (--disarm-all) via the rd_26f wrapper on every exit path
+grep -q 'RW_INJECT_BYPASS:-1}" = 0 ] || echo --bypass-availability' "$F" && grep -q 'rd_26f_body "\$@"; rc=\$?; rs_inject_end' "$F" && grep -q -- '--disarm-all' "$F" && chk bypass-and-disarm-all-wired ok || chk bypass-and-disarm-all-wired bad
 rm -rf "$EV"; echo "fix26f-selftest: fails=$fails"; [ "$fails" = 0 ]

@@ -67,10 +67,47 @@ function stobeActivityTestInjectBuildIntent(array $turn, array $spec): ?array {
 }
 
 /**
+ * fix26f4: mark this turn's availability as open and keep a trace of what the product gate said (the row evidence shows e.g. reasons=[in_combat]).
+ * Only reachable from stobeActivityTestInjectApply() after the lane gate and a marker with bypass_availability=true; an unarmed request never gets here.
+ */
+function stobeActivityTestInjectBypass(array &$turn, string $where): void {
+    $was = is_array($turn['availability'] ?? null) ? $turn['availability'] : [];
+    $turn['availability'] = ['available'=>true, 'reasons'=>[], 'detail'=>[], 'test_inject_bypass'=>['was_available'=>($was['available'] ?? true), 'was_reasons'=>($was['reasons'] ?? [])]];
+    if (function_exists('stobeLogWarn')) stobeLogWarn('STOBE_TEST_ACTIVITY_INJECT availability bypassed (test seam, isolated lane only)',
+        ['where'=>$where, 'actor'=>$turn['request']['context']['actor'] ?? null, 'was_available'=>($was['available'] ?? true), 'was_reasons'=>($was['reasons'] ?? [])]);
+}
+
+/**
+ * fix26f4 phase 2 of a bypass marker (the PROPOSE already fired for this actor). While the record the seam proposed is still `proposed`:
+ *  - availability is opened for the Yes turn (ActivityChat.php checks it again at ACCEPT);
+ *  - when the model answered NONE (it is told to decline while the NPC is in combat) and the native side delivered REAL consent evidence for the displayed offer (the player's Yes),
+ *    the model's choice is replaced by ACCEPT. Consent is never created here: adapter->accept() still validates the evidence (proposal id, digest, displayed) exactly as in production.
+ * Once the record is no longer `proposed` (accepted / ended) the marker is consumed. It also expires after bypass_window (default 600 s) and inject-propose.sh --disarm-all removes it.
+ */
+function stobeActivityTestInjectAcceptPhase(array &$turn, &$reply, array $spec, string $lane, string $marker): string {
+    $rec = $turn['record'] ?? null;
+    $status = is_array($rec) ? strval($rec['status'] ?? '') : '';
+    if ($status === '') return 'accept_phase_wait';
+    if ($status !== 'proposed') {
+        @rename($marker, $lane . '/test-inject-activity.done-' . date('YmdHis') . '-' . bin2hex(random_bytes(3)) . '.json');
+        return 'accept_phase_done';
+    }
+    if (strval($rec['agreement']['kind'] ?? '') !== strval($spec['kind'] ?? '')) return 'accept_phase_other_kind';
+    stobeActivityTestInjectBypass($turn, 'accept');
+    $decision = is_array($reply) ? strval($reply['activity_decision'] ?? 'NONE') : 'NONE';
+    if ($decision === 'NONE' && !empty($turn['request']['consent'])) {
+        $reply = array_merge(is_array($reply) ? $reply : [], ['action'=>'Talk', 'activity_decision'=>'ACCEPT', 'activity_intent'=>'', 'travel_decision'=>'NONE', 'deal_decision'=>'NONE', 'deal_terms'=>'']);
+        if (function_exists('stobeLogWarn')) stobeLogWarn('STOBE_TEST_ACTIVITY_INJECT accept injected (real consent evidence present)', ['actor'=>$turn['request']['context']['actor'] ?? null]);
+        return 'accept_injected';
+    }
+    return 'accept_phase_bypass';
+}
+
+/**
  * Called by stobeActivityChatFinish() only when the marker file exists. On success $reply is replaced by a PROPOSE reply and the
  * marker is consumed. Returns a short status string (never throws).
  */
-function stobeActivityTestInjectApply(array $turn, &$reply): string {
+function stobeActivityTestInjectApply(array &$turn, &$reply): string {   // $turn by reference: the availability bypass (fix26f4) edits $turn['availability']
     try {
         $lane = stobeActivityTestInjectLaneRoot();
         if ($lane === null) return 'gate_closed';
@@ -88,6 +125,8 @@ function stobeActivityTestInjectApply(array $turn, &$reply): string {
             if ($actor === 0) return 'npc_unresolved';
         }
         if ($actor !== 0 && $actor !== ($turn['request']['context']['actor'] ?? null)) return 'other_actor';
+        // fix26f4: the second phase of a bypass marker (written when the PROPOSE fired) covers the player's Yes.
+        if (($spec['phase'] ?? '') === 'accept') return stobeActivityTestInjectAcceptPhase($turn, $reply, $spec, $lane, $marker);
         $intent = stobeActivityTestInjectBuildIntent($turn, $spec);
         if ($intent === null) {
             if (function_exists('stobeLogWarn')) stobeLogWarn('STOBE_TEST_ACTIVITY_INJECT: no groundable candidate in this turn; model reply used (marker kept)',
@@ -97,6 +136,16 @@ function stobeActivityTestInjectApply(array $turn, &$reply): string {
         $fired = $lane . '/test-inject-activity.fired-' . date('YmdHis') . '-' . bin2hex(random_bytes(3)) . '.json';
         if (!@rename($marker, $fired)) return 'claim_failed';   // one-shot: a concurrent request lost the rename
         @file_put_contents($fired, json_encode($spec + ['fired_at'=>time(), 'intent'=>$intent], JSON_UNESCAPED_SLASHES));
+        // fix26f4: availability bypass, ONLY when the marker asks for it (inject-propose.sh --bypass-availability). The PROPOSE turn and the player's Yes turn are rejected by
+        // ActivityChat.php when the NPC is in combat (npc_availability.php in_combat); 26-f's Cind fights the very group she is asked to clear. Phase 2 of the marker keeps the bypass for
+        // the Yes (see stobeActivityTestInjectAcceptPhase). Nothing else about the product path changes: grounding, willingness, consent evidence, native scope check.
+        if (($spec['bypass_availability'] ?? false) === true) {
+            stobeActivityTestInjectBypass($turn, 'propose');
+            $win = max(60, min(1800, intval($spec['bypass_window'] ?? 600)));
+            $next = array_merge($spec, ['phase'=>'accept', 'actor'=>intval($turn['request']['context']['actor'] ?? 0), 'npc'=>'', 'expires_at'=>time() + $win, 'proposed_at'=>time()]);
+            $tmp = $marker . '.tmp' . getmypid();
+            if (@file_put_contents($tmp, json_encode($next, JSON_UNESCAPED_SLASHES)) !== false) { @chmod($tmp, 0644); @rename($tmp, $marker); }
+        }
         $reply = array_merge(is_array($reply) ? $reply : [], ['action'=>'Talk', 'activity_decision'=>'PROPOSE',
             'activity_intent'=>json_encode($intent, JSON_UNESCAPED_SLASHES), 'travel_decision'=>'NONE', 'deal_decision'=>'NONE', 'deal_terms'=>'']);
         if (function_exists('stobeLogWarn')) stobeLogWarn('STOBE_TEST_ACTIVITY_INJECT fired (test seam, isolated lane only)',

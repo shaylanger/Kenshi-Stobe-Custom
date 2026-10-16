@@ -2,7 +2,10 @@
 # inject-propose.sh (imm26-sfO): arm a lane so the NEXT chat turn of an NPC becomes a REAL Hunt / ClearGroup PROPOSE, whatever the model says.
 #   inject-propose.sh <lane|lane-root> <actor> <Hunt|ClearGroup> [target] [--row ID] [--ttl SEC] [--quantity N]   arm (one-shot marker)
 #   inject-propose.sh <lane|lane-root> --status                                                                  marker, fired files, newest activity records
-#   inject-propose.sh <lane|lane-root> --disarm                                                                  remove an unused marker
+#   inject-propose.sh <lane|lane-root> --disarm                                                                  remove an unused PROPOSE-phase marker (keeps a phase-2 accept marker)
+#   inject-propose.sh <lane|lane-root> --disarm-all                                                              remove any marker (also the phase-2 accept marker of --bypass-availability)
+#   arm option --bypass-availability [--bypass-window SEC]  (fix26f4, 26-f) the NPC may be in combat: the seam opens the product availability gate for the PROPOSE turn and for the player's Yes
+#       (phase-2 marker, default 600 s, 60..1800), lane gate only; logs 'availability bypassed' with the reasons the product gate gave. Without the flag nothing changes.
 # <lane> = 5090-i3 5090-i4 5090-i5 4080-i3 4080-i4 (lane.sh) or that lane's root (/tmp/stobe-imm26-5090 ...). Anything else is refused.
 # <actor> = the NPC's name as the game shows it (e.g. Cind; after a faction re-serial use the NAME), a numeric serial, or "any" (first activity turn of any NPC).
 # [target] = optional filter on the candidate (sourceId / candidateId / targetSerial / resource name / ClearGroup target serial); default: first groundable one.
@@ -16,10 +19,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 2 ] || usage
 LANE_ARG="$1"; shift
-MODE=arm; ACTOR=""; KIND=""; TARGET=""; ROW=""; TTL=900; QTY=1
+MODE=arm; ACTOR=""; KIND=""; TARGET=""; ROW=""; TTL=900; QTY=1; BYPASS=0; BWIN=600
 case "${1:-}" in
   --status) MODE=status; shift ;;
   --disarm) MODE=disarm; shift ;;
+  --disarm-all) MODE=disarmall; shift ;;
   *) ACTOR="${1:-}"; KIND="${2:-}"; shift 2 2>/dev/null || usage
      if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then TARGET="$1"; shift; fi ;;
 esac
@@ -28,12 +32,15 @@ while [ $# -gt 0 ]; do
     --row) ROW="${2:-}"; shift 2 ;;
     --ttl) TTL="${2:-}"; shift 2 ;;
     --quantity) QTY="${2:-}"; shift 2 ;;
+    --bypass-availability) BYPASS=1; shift ;;
+    --bypass-window) BWIN="${2:-}"; shift 2 ;;
     *) echo "REFUSED unknown argument '$1'"; exit 2 ;;
   esac
 done
 if [ "$MODE" = arm ]; then
   case "$KIND" in Hunt|ClearGroup) ;; *) echo "REFUSED kind '$KIND' (Hunt|ClearGroup)"; exit 2 ;; esac
   printf '%s\n' "$TTL" | grep -Eq '^[0-9]{1,5}$' && [ "$TTL" -ge 30 ] && [ "$TTL" -le 7200 ] || { echo "REFUSED --ttl 30..7200"; exit 2; }
+  printf '%s\n' "$BWIN" | grep -Eq '^[0-9]{2,4}$' && [ "$BWIN" -ge 60 ] && [ "$BWIN" -le 1800 ] || { echo "REFUSED --bypass-window 60..1800"; exit 2; }
   printf '%s\n' "$QTY" | grep -Eq '^[0-9]{1,3}$' && [ "$QTY" -ge 1 ] || { echo "REFUSED --quantity 1..999"; exit 2; }
   printf '%s\n' "$ROW" | grep -Eq '^[A-Za-z0-9._-]{0,24}$' || { echo "REFUSED --row"; exit 2; }
   printf '%s\n' "$TARGET" | grep -Eq '^[A-Za-z0-9 ._:#@()-]{0,80}$' || { echo "REFUSED target characters"; exit 2; }
@@ -71,15 +78,23 @@ EOF
   exit 0
 fi
 
-if [ "$MODE" = disarm ]; then
+if [ "$MODE" = disarm ]; then   # only an unused PROPOSE-phase marker; the phase-2 accept marker (bypass) must survive until the Yes
   wbody <<EOF
-rm -f "$ROOT/test-inject-activity.json" && echo "DISARMED $LANE_NAME"
+M="$ROOT/test-inject-activity.json"
+if [ -f "\$M" ] && grep -q '"phase":"accept"' "\$M"; then echo "KEPT phase-2 accept marker $LANE_NAME (use --disarm-all)"
+else rm -f "$ROOT/test-inject-activity.json" && echo "DISARMED $LANE_NAME"; fi
+EOF
+  exit 0
+fi
+if [ "$MODE" = disarmall ]; then
+  wbody <<EOF
+rm -f "$ROOT/test-inject-activity.json" && echo "DISARMED-ALL $LANE_NAME"
 EOF
   exit 0
 fi
 
 # ---- arm
-ACT_JSON="0"; NPC_JSON=""
+ACT_JSON="0"; NPC_JSON=""; BYPASS_JSON=""; [ "$BYPASS" = 1 ] && BYPASS_JSON=",\"bypass_availability\":true,\"bypass_window\":$BWIN"
 if printf '%s\n' "$ACTOR" | grep -Eq '^[0-9]+$'; then ACT_JSON="$ACTOR"
 elif [ "$ACTOR" != any ]; then NPC_JSON="$ACTOR"; fi
 out=$(wbody <<EOF
@@ -88,9 +103,9 @@ if ! grep -q 'imm26-sfO TEST SEAM' "\$R/site/lib/activity/ActivityChat.php" 2>/d
   echo "SEAM-MISSING \$R: deploy with python3 pending-fixes/imm26-sfO/apply.py \$R/site (see inbox/operators/sfO.txt)"; exit 4; fi
 exp=\$(( \$(date +%s) + $TTL ))
 tmp="\$R/test-inject-activity.json.tmp\$\$"
-printf '{"schema":"STOBE_TEST_ACTIVITY_INJECT_V1","kind":"%s","actor":%s,"npc":"%s","target":"%s","quantity":%s,"row":"%s","expires_at":%s}\n' \
-  '$KIND' '$ACT_JSON' '$NPC_JSON' '$TARGET' '$QTY' '$ROW' "\$exp" > "\$tmp" && chmod 644 "\$tmp" && mv -f "\$tmp" "\$R/test-inject-activity.json" \
-  && echo "ARMED lane=$LANE_NAME kind=$KIND actor=$ACTOR target=$TARGET row=$ROW expires_in=${TTL}s marker=\$R/test-inject-activity.json"
+printf '{"schema":"STOBE_TEST_ACTIVITY_INJECT_V1","kind":"%s","actor":%s,"npc":"%s","target":"%s","quantity":%s,"row":"%s","expires_at":%s%s}\n' \
+  '$KIND' '$ACT_JSON' '$NPC_JSON' '$TARGET' '$QTY' '$ROW' "\$exp" '$BYPASS_JSON' > "\$tmp" && chmod 644 "\$tmp" && mv -f "\$tmp" "\$R/test-inject-activity.json" \
+  && echo "ARMED lane=$LANE_NAME kind=$KIND actor=$ACTOR target=$TARGET row=$ROW expires_in=${TTL}s bypass_availability=$BYPASS marker=\$R/test-inject-activity.json"
 EOF
 )
 rc=$?

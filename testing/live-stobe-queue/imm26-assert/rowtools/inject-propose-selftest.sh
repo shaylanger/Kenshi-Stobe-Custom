@@ -93,6 +93,15 @@ rm -f "$W"/test-inject-activity.fired-*.json
 out=$(ip "$W" any ClearGroup --row sfo); out2=$(runphp "$W" armed 7402 ClearGroup)
 echo "$out2" | grep -E '^(FAIL|imm26_sfO)'; ck "C10: script-armed ClearGroup (any NPC) -> real proposed ClearGroup" $(echo "$out2" | grep -q ' 0 failed' && echo 0 || echo 1) "$(echo "$out2" | grep -m3 FAIL)"
 
+# C11-C14 (fix26f4): --bypass-availability marker flag, --disarm keeps the phase-2 accept marker, --disarm-all removes it, bad window refused
+rm -f "$W"/test-inject-activity.fired-*.json "$W/test-inject-activity.json"
+out=$(ip "$W" Cind ClearGroup --row 26-f --bypass-availability --bypass-window 300); ck "C11: arm with --bypass-availability" $(echo "$out" | grep -q '^ARMED.*bypass_availability=1' && grep -q '"bypass_availability":true,"bypass_window":300' "$W/test-inject-activity.json" && python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$W/test-inject-activity.json" && echo 0 || echo 1) "$out | $(cat "$W/test-inject-activity.json")"
+out=$(ip "$W" Cind Hunt --row x); ck "C11b: without the flag the marker has no bypass key" $(grep -q bypass "$W/test-inject-activity.json" && echo 1 || echo 0) "$(cat "$W/test-inject-activity.json")"
+echo '{"schema":"STOBE_TEST_ACTIVITY_INJECT_V1","kind":"ClearGroup","phase":"accept","actor":7,"bypass_availability":true}' > "$W/test-inject-activity.json"
+out=$(ip "$W" --disarm); ck "C12: --disarm keeps the phase-2 accept marker" $([ -f "$W/test-inject-activity.json" ] && echo "$out" | grep -q KEPT && echo 0 || echo 1) "$out"
+out=$(ip "$W" --disarm-all); ck "C13: --disarm-all removes it" $([ ! -e "$W/test-inject-activity.json" ] && echo "$out" | grep -q DISARMED-ALL && echo 0 || echo 1) "$out"
+out=$(ip "$W" Cind ClearGroup --bypass-availability --bypass-window 5); rc=$?; ck "C14: --bypass-window 5 refused" $([ $rc = 2 ] && echo "$out" | grep -q REFUSED && [ ! -e "$W/test-inject-activity.json" ] && echo 0 || echo 1) "rc=$rc $out"
+
 # D. lane-table mode (fake transport) and the deploy script (its body is replayed against a local fake lane)
 export KAH_ROW_FAKE=1 KAH_ROW_FAKE_LOG=$W.fake.log; : > "$KAH_ROW_FAKE_LOG"
 out=$(bash "$IP" 5090-i3 Cind Hunt --row 26-a 2>&1); rc=$?
