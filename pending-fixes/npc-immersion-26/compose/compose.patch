@@ -2796,6 +2796,17 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/desti
 +    return "SEARCH-AREA GOAL: nothing matching the request is observed right now. Offer a travel PROPOSE (travel_destination ".$targetId.", near ".$area.") as a place to start looking; ".$why
 +        .". Say you are going to look around, not that it is there. Do NOT offer a hunt/mine/gather activity (those need an observed source).\n";
 +}
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/director_scene.php b/lib/director_scene.php
+--- a/lib/director_scene.php	2026-09-29 11:13:36.152441948 -0500
++++ b/lib/director_scene.php	2026-10-15 22:42:29.327154961 -0500
+@@ -146,4 +146,7 @@
+     echo $payload;
+     stobeLogOutputToPlugin('rolemaster', 'DirectorScene', '', $payload);
+     stobeLogInfo('Director scene queued', ['scene_id' => $scene['id'], 'turns' => count($turns)]);
++    // Row 03-b: gossip also spreads in director scenes (the same server-checked hook as bored.php; swallows Throwable).
++    require_once __DIR__ . '/imm26_knowledge.php';
++    stobeDirectorShareRumors($turns, $actors, $gamets);
+ }
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/dynamic_profile_helper_functions.php b/lib/dynamic_profile_helper_functions.php
 --- a/lib/dynamic_profile_helper_functions.php	2026-09-30 20:35:59.547742924 -0500
 +++ b/lib/dynamic_profile_helper_functions.php	2026-10-15 15:22:07.862971654 -0500
@@ -4441,8 +4452,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_claims.php b/lib/imm26_claims.php
 --- a/lib/imm26_claims.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_claims.php	2026-10-15 20:39:40.131503433 -0500
-@@ -0,0 +1,108 @@
++++ b/lib/imm26_claims.php	2026-10-15 22:42:29.349686360 -0500
+@@ -0,0 +1,212 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -4516,6 +4527,109 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +    return preg_match('/\b(?:why|what makes|how do you know|are you sure|is it (?:safe|dangerous)|what(?:\'s| is) (?:wrong|dangerous|unsafe))\b/iu', $playerMessage) === 1;
 +}
 +
++// ---------- IMM-17-bx: inventory verdict for an item the conversation names ----------
++const IMM26_INV_OWNERSHIP_RE = "/\\b(?:took|take|taken|taking|stole|steal|stolen|have|has|had|got|grabbed|swiped|pocketed|borrowed|lost|misplaced|carry|carrying|carried|holding|hold|touch|touched|give|gave|return|returned|keep|kept|sold|sell|find|found|seen|saw|where(?:'s| is| are)|pack|bag|inventory|mine|yours|belongs?|stash(?:ed)?)\\b/iu";
++const IMM26_INV_NOT_ITEM = ['nation','hive','lord','boss','cat','cats','kenshi','empire','guild','alliance','outlaws','order','inn','bar','shek','shek kingdom','swamp','hub'];
++const IMM26_INV_GENERIC_HEAD = ['armor','armour','plate','small','large','heavy','light','chain','steel','strip','kit'];
++
++/** lower-case name => display name of what the NPC's verified inventory holds (carried or worn). [] = unknown. Pure. */
++function imm26ClaimsInventoryNames(array $npc): array
++{
++    $names = [];
++    $strip = static fn(string $n): string => trim(preg_replace('/\s*\[[^\]]*\]|\s*\([^)]*\)/', '', $n) ?? $n);
++    $meta = $npc['metadata'] ?? [];
++    if (is_string($meta)) $meta = json_decode($meta, true);
++    $items = is_array($meta) ? ($meta['inventory_items'] ?? []) : [];
++    if (is_string($items)) $items = json_decode($items, true);
++    foreach (is_array($items) ? $items : [] as $entry) {
++        $n = is_array($entry) ? strval($entry['name'] ?? '') : (is_string($entry) ? $entry : '');
++        $n = $strip($n);
++        if ($n !== '') $names[mb_strtolower($n)] = $n;
++    }
++    if (!$names) {   // same fallback the prompt's Inventory section uses: the stored text lists
++        foreach ([strval($npc['inventory'] ?? ''), strval($npc['equipment'] ?? '')] as $text) {
++            foreach (preg_split('/,\s*(?=[^,]*\bx\d+)/', $text) ?: [] as $entry) {
++                if (!preg_match('/^\s*(.+?)\s+x(\d+)\b/', $entry, $m)) continue;
++                $n = $strip($m[1]);
++                if ($n !== '') $names[mb_strtolower($n)] = $n;
++            }
++        }
++    }
++    return $names;
++}
++
++/** Items a text names: [[display, held?], ...] (max 2). Inventory names are matched in any case; an item the pack does not hold is
++ *  only reported when it is a capitalised name after my/your/the/a in an ownership sentence. Pure. */
++function imm26ClaimsItemsInText(string $text, array $names): array
++{
++    $found = [];
++    $low = mb_strtolower($text);
++    foreach ($names as $key => $display) {
++        $key = strval($key);
++        if (mb_strlen($key) < 3) continue;
++        $hit = preg_match('/(?<![\p{L}\p{N}])' . preg_quote($key, '/') . '(?:e?s)?(?![\p{L}\p{N}])/u', $low) === 1;
++        if (!$hit) {
++            $words = preg_split('/\s+/u', $key) ?: [$key];
++            $head = strval(end($words));
++            $hit = count($words) > 1 && mb_strlen($head) >= 5 && !in_array($head, IMM26_INV_GENERIC_HEAD, true)
++                && preg_match('/(?<![\p{L}\p{N}])' . preg_quote($head, '/') . '(?:e?s)?(?![\p{L}\p{N}])/u', $low) === 1;
++        }
++        if ($hit) $found[$key] = [$display, true];
++    }
++    $sentences = preg_split('/(?<=[.!?])\s+/u', $text) ?: [];
++    foreach ($sentences as $sentence) {
++        if (preg_match(IMM26_INV_OWNERSHIP_RE, $sentence) !== 1) continue;
++        if (preg_match_all("/(?<![\\p{L}'])(?:[Mm]y|[Yy]our|[Tt]he|[Aa]n?|[Tt]hat|[Tt]his)\\s+([A-Z][\\p{L}'-]+(?:\\s+(?:of\\s+)?[A-Z][\\p{L}'-]+){0,2})/u", $sentence, $mm) < 1) continue;
++        foreach ($mm[1] as $cand) {
++            $ck = mb_strtolower($cand);
++            $bad = false;
++            foreach (preg_split('/\s+/u', $ck) ?: [] as $w) if (in_array($w, IMM26_INV_NOT_ITEM, true)) $bad = true;
++            if ($bad || mb_strlen($ck) < 3) continue;
++            $held = false;
++            foreach ($names as $key => $display) {
++                $key = strval($key);
++                if ($key === $ck || str_contains($key, $ck) || str_contains($ck, $key)) { $found[$key] = [$display, true]; $held = true; }
++            }
++            if (!$held && !isset($found[$ck]) && $names) $found[$ck] = [$cand, false];
++        }
++    }
++    return array_slice(array_values($found), 0, 2);
++}
++
++/** Verdict lines for the claims block ([] = no item named, or inventory unknown: fail-closed). Pure. */
++function imm26ClaimsInventoryLines(array $npc, string $playerMessage, array $replies): array
++{
++    $names = imm26ClaimsInventoryNames($npc);
++    if (!$names) return [];
++    $topic = preg_match(IMM26_INV_OWNERSHIP_RE, $playerMessage) === 1 || imm26IsChallenge($playerMessage)
++        || preg_match("/\\b(?:do|did|does|are)\\s+you\\s+(?:have|got|carry|hold|own|keep|take|took|steal|stole)\\b/iu", $playerMessage) === 1;
++    if (!$topic) return [];
++    $items = imm26ClaimsItemsInText($playerMessage, $names);
++    if (!$items) {   // a bare challenge ("Check your pack, I haven't had it."): the item is in what the NPC itself said last
++        foreach (array_slice($replies, 0, 3) as $reply) {
++            $items = imm26ClaimsItemsInText(strval($reply), $names);
++            if ($items) break;
++        }
++    }
++    if (!$items) return [];
++    $has = [];
++    $lacks = [];
++    foreach ($items as [$display, $held]) {
++        if ($held) $has[] = $display; else $lacks[] = $display;
++    }
++    $out = [];
++    if ($has) $out[] = 'Inventory check (read from your own pack and gear, not a guess): your inventory DOES contain ' . stobePromptXmlEscape(implode(' and ', $has)) . '.';
++    if ($lacks) $out[] = 'Inventory check (read from your own pack and gear, not a guess): your inventory DOES NOT contain ' . stobePromptXmlEscape(implode(' and ', $lacks)) . '.';
++    if ($has) {
++        $out[] = 'If they ask whether you have it, answer yes. If you said or implied earlier that it was taken, lost or missing, you were probably mistaken or misplaced it yourself: say so plainly in one short sentence ("my mistake", "I must have misplaced it") without inventing how, where or by whom.';
++    }
++    if ($lacks) {
++        $out[] = 'If they ask whether you have it, answer no. If you said earlier that it is missing or was taken, that still stands: hold your position, do not retract, apologise or say you were wrong, and do not accuse anyone you have no fact against.';
++    }
++    $out[] = 'Do not say you saw, heard or were told anything about it unless a fact in this prompt says so.';
++    return $out;
++}
++
 +function imm26ClaimsContext(string $actor, array $npc, string $listener, int $gameTs = 0, array $meta = []): string
 +{
 +    if (function_exists('getSettingBool') && !getSettingBool('IMM26_CLAIMS', true)) return '';
@@ -4548,6 +4662,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +    } elseif ($playerMessage !== '' && imm26IsWhyQuestion($playerMessage)) {
 +        $lines[] = 'For a why or how-do-you-know question, answer only from facts supplied in this prompt or things you directly witnessed. If you do not know the reason, route or cause, say "I don\'t know" or "I\'m not sure". Do not name hazards, creatures, places or causes that no supplied fact mentions.';
 +    }
++    foreach (imm26ClaimsInventoryLines($npc, $playerMessage, $replies) as $inventoryLine) $lines[] = $inventoryLine; // IMM-17-bx
 +    if (!$lines) return '';
 +    return "<claims_and_corrections>\n" . implode("\n", $lines) . "\n</claims_and_corrections>";
 +}
@@ -4617,8 +4732,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_knowledge.php b/lib/imm26_knowledge.php
 --- a/lib/imm26_knowledge.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_knowledge.php	2026-10-15 17:15:31.618807032 -0500
-@@ -0,0 +1,429 @@
++++ b/lib/imm26_knowledge.php	2026-10-15 22:42:29.326533161 -0500
+@@ -0,0 +1,466 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -4914,6 +5029,43 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +        if (function_exists('stobeLogWarn')) stobeLogWarn('Knowledge share skipped', ['error' => $e->getMessage()]);
 +        return [];
 +    }
++}
++
++/** Kill switch for rumor sharing inside director scenes (default on). Env var STOBE_DIRECTOR_RUMOR_ENABLED overrides the setting. */
++function stobeDirectorRumorEnabled(): bool
++{
++    $v = getenv('STOBE_DIRECTOR_RUMOR_ENABLED');
++    if ($v !== false && $v !== '') return !in_array(strtolower(trim($v)), ['0', 'false', 'no', 'off'], true);
++    try { return !in_array(strtolower(trim(getSetting('STOBE_DIRECTOR_RUMOR_ENABLED', '1'))), ['0', 'false', 'no', 'off'], true); }
++    catch (Throwable $e) { return true; }
++}
++
++/**
++ * Director scenes (mode=director) return before the bored.php hook, so gossip never spread in busy scenes (row 03-b).
++ * Runs the same hook per line of a committed scene: NPC speaker -> NPC listener, spoken text only.
++ * $turns = scene lines (speaker, listener, text); $actors = name => getNpcData row of everyone cast in the scene.
++ * @return list<array> the hearsay rows created (also logged).
++ */
++function stobeDirectorShareRumors(array $turns, array $actors, int $gamets): array
++{
++    $out = [];
++    try {
++        if (!stobeDirectorRumorEnabled() || !stobeKnowledgeEnabled()) return [];
++        foreach ($turns as $line) {
++            $speaker = strval($line['speaker'] ?? '');
++            $listener = strval($line['listener'] ?? '');
++            $text = strval($line['text'] ?? '');
++            if ($speaker === '' || $listener === '' || $text === '' || !isset($actors[$speaker]) || !isset($actors[$listener])) continue; // player/unknown listener: not an NPC
++            $shared = stobeKnowledgeShareFromSpeech($speaker, is_array($actors[$speaker]) ? $actors[$speaker] : [], $listener, $text, $gamets);
++            if ($shared) {
++                $out = array_merge($out, $shared);
++                if (function_exists('stobeLogInfo')) stobeLogInfo('NPC gossip passed on', ['speaker' => $speaker, 'shared' => $shared, 'via' => 'director']);
++            }
++        }
++    } catch (Throwable $e) {
++        if (function_exists('stobeLogWarn')) stobeLogWarn('Director rumor share skipped', ['error' => $e->getMessage()]);
++    }
++    return $out;
 +}
 +
 +/** Undo a belief that turned out wrong: mark it corrected and take back the opinion shift it caused. */
@@ -7384,8 +7536,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
              if($same && stobeSocialRepairAgreementTermBound($saved,$term))continue;
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_repair_dialogue.php b/lib/social_repair_dialogue.php
 --- a/lib/social_repair_dialogue.php	2026-10-12 21:20:51.901128319 -0500
-+++ b/lib/social_repair_dialogue.php	2026-10-15 20:13:03.244014212 -0500
-@@ -184,6 +184,29 @@
++++ b/lib/social_repair_dialogue.php	2026-10-15 22:42:29.303369161 -0500
+@@ -184,6 +184,53 @@
      return $specific ?: $general;
  }
  
@@ -7406,16 +7558,40 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
 +    return trim($t);
 +}
 +
++/**
++ * One normaliser for every quote/reply comparison. The reply reaches this module already passed through
++ * sanitizeForKenshi() (em/en dash, curly quotes, ellipsis, nbsp), while the model copies npc_quote/player_quote from its
++ * raw text; so both sides go through the same transformations. Reuses sanitizeForKenshi() when loaded, then folds the
++ * remaining unicode dash/quote/space variants, collapses whitespace and case-folds. Different words still differ.
++ */
++function stobeSocialRepairQuoteNormalize(string $text): string
++{
++    if (function_exists('sanitizeForKenshi')) $t=sanitizeForKenshi($text);
++    else $t=str_replace(["\u{2018}","\u{2019}","\u{201c}","\u{201d}","\u{2013}","\u{2014}","\u{2026}","\u{00a0}","\r\n","\\n","\\r"],
++        ["'","'",'"','"','-','-','...',' ',"\n","\n",''],$text);
++    $t=preg_replace('/[\x{2010}-\x{2015}\x{2212}\x{FE58}\x{FE63}\x{FF0D}]/u','-',$t) ?? $t;
++    $t=strtr($t,["\u{201a}"=>"'","\u{201b}"=>"'","\u{2032}"=>"'","\u{ff07}"=>"'","\u{201e}"=>'"',"\u{201f}"=>'"',"\u{2033}"=>'"',"\u{ff02}"=>'"']);
++    $t=preg_replace('/[\p{Z}\s]+/u',' ',$t) ?? $t;
++    $t=trim($t);
++    return function_exists('mb_strtolower') ? mb_strtolower($t,'UTF-8') : strtolower($t);
++}
++
 +function stobeSocialRepairQuoteMatches(string $quote, string $message, string $speaker): bool
 +{
-+    $core=stobeSocialRepairQuoteCore($message,$speaker);
-+    return $core!=='' && stobeSocialRepairQuoteCore($quote,$speaker)===$core;
++    $core=stobeSocialRepairQuoteNormalize(stobeSocialRepairQuoteCore($message,$speaker));
++    return $core!=='' && stobeSocialRepairQuoteNormalize(stobeSocialRepairQuoteCore($quote,$speaker))===$core;
++}
++
++function stobeSocialRepairNpcQuoteInReply(string $npcQuote, string $reply): bool
++{
++    $q=stobeSocialRepairQuoteNormalize($npcQuote);
++    return $q!=='' && strpos(stobeSocialRepairQuoteNormalize($reply),$q)!==false;
 +}
 +
  function stobeSocialRepairCapture(string $actor, array $npc, string $speaker, string $message,
      string $utteranceId, int $gamets, array $payload, array $meta=[]): array
  {
-@@ -219,7 +242,7 @@
+@@ -219,12 +266,12 @@
              }
              $id=$update['grievance_id']; $fact=$facts[$id] ?? null;
              if (!$fact || !in_array($id,$meta['social_repair_exposed_ids'] ?? [],true)
@@ -7424,6 +7600,12 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
                  || !stobeSocialRepairIncidentMentioned($fact,$message,$meta)
                  || !in_array($update['emotional_acceptance'],['accepted','not_accepted','undecided'],true)
                  || ($kind==='explanation' && $update['emotional_acceptance']!=='undecided')
+                 || $update['npc_quote']==='' || strlen($update['npc_quote'])>800
+-                || strpos(strval($meta['response_message'] ?? ''),$update['npc_quote'])===false) continue;
++                || !stobeSocialRepairNpcQuoteInReply($update['npc_quote'],strval($meta['response_message'] ?? ''))) continue;
+             // If a cue matches multiple incidents, ask for clarification instead of selecting one.
+             $matches=stobeSocialRepairMatchingIncidents($facts,$message,$meta);
+             if (count($matches)!==1 || $matches[0]!==$id) continue;
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_repair_ledger.php b/lib/social_repair_ledger.php
 --- a/lib/social_repair_ledger.php	2026-10-12 21:20:51.908215019 -0500
 +++ b/lib/social_repair_ledger.php	2026-10-15 15:39:34.501987182 -0500
@@ -14094,6 +14276,211 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +
 +echo "pass=$pass fail=$fail\n";
 +exit($fail > 0 ? 1 : 0);
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_fix03b_director_rumor_regression.php b/tests/imm26_fix03b_director_rumor_regression.php
+--- a/tests/imm26_fix03b_director_rumor_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_fix03b_director_rumor_regression.php	2026-10-15 22:42:29.329520961 -0500
+@@ -0,0 +1,82 @@
++<?php
++// imm26 fix03b (row 03-b): rumor sharing also runs for director-mode scenes. Fails on a tree without stobeDirectorShareRumors.
++// Runs on stobe_test or the social phase-1 DB.
++declare(strict_types=1);
++set_exception_handler(function (Throwable $e) { echo get_class($e), ': ', $e->getMessage(), ' @', basename($e->getFile()), ':', $e->getLine(), "\n"; exit(1); });
++$dbName = getenv('STOBE_DB_NAME');
++if (!in_array($dbName, ['stobe_test', 'stobe_social_phase1_test'], true)) throw new RuntimeException('Test DB required');
++require_once __DIR__ . '/../lib/bootstrap.php';
++require_once __DIR__ . '/../lib/social_runtime.php';
++require_once __DIR__ . '/../lib/relationship_manager.php';
++require_once __DIR__ . '/../lib/imm26_knowledge.php';
++$db = $GLOBALS['db']; $n = 0;
++function ok(bool $c, string $what): void { global $n; if (!$c) throw new RuntimeException('FAIL: ' . $what); ++$n; }
++function sql(string $s, array $p = []): mixed { $r = $GLOBALS['db']->exec($s, $p); if ($r === false) throw new RuntimeException('SQL failed: ' . $s); return $r; }
++ok(function_exists('stobeDirectorShareRumors') && function_exists('stobeDirectorRumorEnabled'), 'director rumor helper exists');
++
++const CAMP = 'f3bcamp';
++const P = ['F3 Victim'=>[7201,'Blue'], 'F3 Attacker'=>[7202,'Red'], 'F3 Witness'=>[7210,'Grey'], 'F3 Bee'=>[7220,'Hub'], 'F3 Cee'=>[7221,'Hub'], 'F3 Dee'=>[7222,'Hub']];
++stobeKnowledgeEnsureSchema();
++foreach (['social_event_inbox','social_incident','social_belief','social_effect','social_evidence','social_checkpoint','social_rumor','npc_ties'] as $t) sql("DELETE FROM $t WHERE campaign_id=\$1", [CAMP]);
++foreach (P as $name => [$serial]) {
++    sql('DELETE FROM core_npc_master_history WHERE name=$1', [$name]); sql('DELETE FROM core_npc WHERE name=$1', [$name]);
++    sql("INSERT INTO core_npc(name,extended_data,metadata) VALUES($1,'{}'::jsonb,jsonb_build_object('storage_id',$2::text))", [$name, 'hand_' . $serial]);
++}
++sql("INSERT INTO general_settings(id,value) VALUES('SOCIAL_RELATIONSHIP_MODE','enabled') ON CONFLICT(id) DO UPDATE SET value=EXCLUDED.value");
++sql("INSERT INTO general_settings(id,value) VALUES('PLAYER_NAME','F3 Player') ON CONFLICT(id) DO UPDATE SET value=EXCLUDED.value");
++sql("DELETE FROM general_settings WHERE id='STOBE_DIRECTOR_RUMOR_ENABLED'");
++putenv('STOBE_DIRECTOR_RUMOR_ENABLED');
++$GLOBALS['stobeKnowledgeScopeOverride'] = ['campaign_id'=>CAMP, 'timeline_epoch'=>'3'];
++RelationshipManager::setRelationship('F3 Bee', 'F3 Victim', 76);
++$store = new SocialStore($db);
++function ent(string $name): array { [$serial, $faction] = P[$name]; return ['entity_key'=>"s9:3:$serial", 'serial'=>$serial, 'name'=>$name, 'storage_id'=>"hand_$serial", 'faction'=>$faction, 'in_player_faction'=>false, 'conscious'=>true]; }
++function rumor(string $holder, string $subject = 'F3 Attacker'): ?array {
++    $r = $GLOBALS['db']->fetchOne('SELECT * FROM social_rumor WHERE campaign_id=$1 AND holder_name=$2 AND subject_name=$3', [CAMP, $holder, $subject]);
++    return is_array($r) ? $r : null;
++}
++$DAY = 86400; $T0 = 10 * $DAY;
++$e = ['schema_version'=>1, 'event_id'=>'s9:3:1', 'incident_id'=>'s9:3:1', 'campaign_id'=>CAMP, 'timeline_epoch'=>'3', 'native_session_id'=>'s9', 'sequence'=>1,
++    'game_ts'=>$T0, 'event_kind'=>'attack', 'origin'=>'gameplay', 'actor'=>ent('F3 Attacker'), 'target'=>ent('F3 Victim'), 'state_before'=>[], 'state_after'=>[],
++    'witnesses'=>[['entity'=>ent('F3 Witness'), 'conscious'=>true, 'perceived'=>true]], 'facts'=>['source'=>'structured', 'victim_targeting_actor'=>false]];
++$r = $store->ingest($e, ['campaign_id'=>CAMP, 'timeline_epoch'=>'3', 'native_session_id'=>'s9'], 'enabled');
++ok(($r['status'] ?? '') === 'captured', 'seed incident captured');
++ok(rumor('F3 Witness') && rumor('F3 Witness')['basis'] === 'saw', 'witness holds it first-hand');
++
++$actors = [];
++foreach (array_keys(P) as $name) $actors[$name] = getNpcData($name);
++$line = fn(string $s, string $l, string $t) => ['speaker'=>$s, 'listener'=>$l, 'text'=>$t];
++$NOW = $T0 + $DAY;
++
++// kill switch OFF (setting): nothing happens, even for a perfect line.
++sql("INSERT INTO general_settings(id,value) VALUES('STOBE_DIRECTOR_RUMOR_ENABLED','0') ON CONFLICT(id) DO UPDATE SET value=EXCLUDED.value");
++ok(!stobeDirectorRumorEnabled(), 'setting 0 turns the switch off');
++ok(stobeDirectorShareRumors([$line('F3 Witness', 'F3 Bee', 'I saw F3 Attacker go for F3 Victim.')], $actors, $NOW) === [] && rumor('F3 Bee') === null, 'kill switch off: no hearsay row');
++sql("DELETE FROM general_settings WHERE id='STOBE_DIRECTOR_RUMOR_ENABLED'");
++ok(stobeDirectorRumorEnabled(), 'default is on');
++putenv('STOBE_DIRECTOR_RUMOR_ENABLED=off');
++ok(!stobeDirectorRumorEnabled() && stobeDirectorShareRumors([$line('F3 Witness', 'F3 Bee', 'I saw F3 Attacker go for F3 Victim.')], $actors, $NOW) === [] && rumor('F3 Bee') === null, 'env kill switch off: nothing');
++putenv('STOBE_DIRECTOR_RUMOR_ENABLED');
++
++// switch on: a scene line without the subject, a line to the player, and a self-line pass nothing on.
++ok(stobeDirectorShareRumors([$line('F3 Witness', 'F3 Cee', 'Lovely weather by the gate today.'),
++    $line('F3 Witness', 'F3 Player', 'I saw F3 Attacker hit F3 Victim.'), $line('F3 Witness', 'F3 Witness', 'F3 Attacker again.')], $actors, $NOW) === [] && rumor('F3 Cee') === null,
++    'no subject spoken / player listener / self: nothing passed on');
++// told about themselves: no row for a victim listener.
++ok(stobeDirectorShareRumors([$line('F3 Witness', 'F3 Victim', 'I saw F3 Attacker hit you.')], $actors, $NOW) === [] && (rumor('F3 Victim')['basis'] ?? '') !== 'heard_from', 'victim listener: no hearsay row (own first-hand row untouched)');
++// a scene with several lines: the line naming the subject creates hearsay for ITS listener only.
++$scene = [$line('F3 Witness', 'F3 Cee', 'Lovely weather by the gate today.'), $line('F3 Cee', 'F3 Witness', 'Not bad at all.'),
++    $line('F3 Witness', 'F3 Bee', 'Careful: F3 Attacker went for F3 Victim near the gate.'), $line('F3 Bee', 'F3 Dee', 'F3 Attacker hurt F3 Victim, I heard.')];
++$shared = stobeDirectorShareRumors($scene, $actors, $NOW);
++$bee = rumor('F3 Bee');
++ok(count($shared) === 1 && $bee && $bee['basis'] === 'heard_from' && (int)$bee['hops'] === 1 && $bee['source_name'] === 'F3 Witness' && $bee['confidence'] === 'hearsay',
++    'director line naming the subject: listener holds hearsay (heard_from, hops=1, source=speaker)');
++ok(rumor('F3 Cee') === null && rumor('F3 Dee') === null, 'other listeners and a hearsay holder re-telling it (no re-spread): no rows');
++ok(stobeDirectorShareRumors([$line('F3 Witness', 'F3 Bee', 'Once more, F3 Attacker is trouble.')], $actors, $NOW + 60) === [], 'repeat telling creates nothing new');
++
++// wiring: the scene generator calls the helper after the history COMMIT (source order check).
++$src = (string)file_get_contents(__DIR__ . '/../lib/director_scene.php');
++$commit = strpos($src, "exec('COMMIT')"); $call = strpos($src, 'stobeDirectorShareRumors($turns, $actors, $gamets)');
++ok($commit !== false && $call !== false && $call > $commit, 'stobeGenerateDirectorScene calls the rumor helper after the history commit');
++
++sql("DELETE FROM general_settings WHERE id='PLAYER_NAME'");
++echo "imm26_fix03b_director_rumor_regression: $n checks passed\n";
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_fix10a_quote_norm_regression.php b/tests/imm26_fix10a_quote_norm_regression.php
+--- a/tests/imm26_fix10a_quote_norm_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_fix10a_quote_norm_regression.php	2026-10-15 22:42:29.306199561 -0500
+@@ -0,0 +1,43 @@
++<?php
++// imm26 fix10a (row 10-a): npc_quote / player_quote comparisons in lib/social_repair_dialogue.php must normalise BOTH sides
++// the same way. The reply (meta response_message) is sanitizeForKenshi()-normalised (em dash -> '-'), the model's npc_quote keeps
++// the raw em dash, so strpos() failed and no apology was captured. Fails on the unpatched tree (no helper). Pure, no DB.
++// Run: php tests/imm26_fix10a_quote_norm_regression.php
++$root = __DIR__ . '/..';
++require_once $root . '/lib/social_repair_dialogue.php';
++$checks = 0;
++function check(string $name, bool $ok): void { global $checks; $checks++; if (!$ok) { echo "FAIL $name\n"; exit(1); } }
++check('N0: helpers exist', function_exists('stobeSocialRepairNpcQuoteInReply') && function_exists('stobeSocialRepairQuoteNormalize'));
++$in = 'stobeSocialRepairNpcQuoteInReply';
++$pq = 'stobeSocialRepairQuoteMatches';
++$raw = "I hear you, Shay. I don\u{2019}t want to stay angry with you \u{2014} that\u{2019}s not who I am\u{2026} Thank you.";
++$reply = "I hear you, Shay. I don't want to stay angry with you - that's not who I am... Thank you.";
++$phase = 'fallback';
++for ($round = 0; $round < 2; $round++) {
++    if ($round === 1) {
++        // Round 2: the real production sanitiser loaded (extracted verbatim from the tree, never re-written here).
++        $src = file_get_contents($root . '/lib/data_functions.php');
++        check('N20: sanitizer found in tree', preg_match('/^function sanitizeForKenshi\(.*?^}\r?\n/ms', $src, $mm) === 1);
++        eval($mm[0]);
++        $phase = 'prod';
++        $reply = sanitizeForKenshi($raw);
++        check('N21: reply really lost the em dash', strpos($reply, "\u{2014}") === false);
++    }
++    check("N1[$phase]: npc_quote with em dash/curly/ellipsis matches the sanitised reply", $in("with you \u{2014} that\u{2019}s not who I am\u{2026}", $reply));
++    check("N2[$phase]: whole raw reply as quote matches", $in($raw, $reply));
++    check("N3[$phase]: ASCII quote still matches", $in("that's not who I am", $reply));
++    check("N4[$phase]: spaced/cased variation matches", $in("  WITH YOU \u{2013}   that's NOT who I am ", $reply));
++    check("N5[$phase]: different words rejected", !$in("I forgive you completely", $reply));
++    check("N6[$phase]: reordered words rejected", !$in("that's not who I am - with you", $reply));
++    check("N7[$phase]: empty / whitespace quote rejected", !$in('', $reply) && !$in(" \u{00a0} ", $reply));
++    check("N8[$phase]: dropped word rejected", !$in("with you - that's who I am", $reply));
++    $msg = "Malzin, I'm sorry I hurt you \u{2014} I was angry and I was wrong\u{2026}";
++    check("N9[$phase]: player_quote em dash/ellipsis vs same text ASCII", $pq("Malzin, I'm sorry I hurt you - I was angry and I was wrong...", $msg, 'Shay'));
++    check("N10[$phase]: player_quote curly apostrophe echo", $pq("Malzin, I\u{2019}m sorry I hurt you \u{2014} I was angry and I was wrong\u{2026} (talking to: Malzin)", $msg, 'Shay'));
++    check("N11[$phase]: player_quote different words rejected", !$pq("Malzin, I'm sorry I hurt you - I was right", $msg, 'Shay'));
++    check("N12[$phase]: empty core rejected", !$pq('(talking to: Malzin)', '(talking to: Malzin)', 'Shay'));
++}
++$src = file_get_contents($root . '/lib/social_repair_dialogue.php');
++check('N30: capture uses the normalised npc_quote helper, no raw strpos', strpos($src, "stobeSocialRepairNpcQuoteInReply(\$update['npc_quote']") !== false
++    && strpos($src, "strpos(strval(\$meta['response_message'] ?? ''),\$update['npc_quote'])") === false);
++echo "imm26_fix10a_quote_norm checks=$checks OK\n";
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_fix17bx_inventory_verdict_regression.php b/tests/imm26_fix17bx_inventory_verdict_regression.php
+--- a/tests/imm26_fix17bx_inventory_verdict_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_fix17bx_inventory_verdict_regression.php	2026-10-15 22:42:29.352889460 -0500
+@@ -0,0 +1,68 @@
++<?php
++// imm26 fix17bx regression (offline, no DB): row 17-bx. The claims block must give the NPC an explicit inventory verdict for an item
++// the conversation names: "your inventory DOES contain X" (item really in the pack) / "DOES NOT contain X" (really missing),
++// read from the NPC's verified inventory, fail-closed when the inventory is unknown. FAILS on the old code (no verdict line),
++// passes on the patched tree.   Run: php tests/imm26_fix17bx_inventory_verdict_regression.php
++declare(strict_types=1);
++$root = __DIR__ . '/..';
++$n = 0;
++function ok(bool $c, string $what, $detail = null): void { global $n; if (!$c) { echo 'FAIL: ' . $what . ($detail !== null ? ' :: ' . json_encode($detail) : '') . "\n"; exit(1); } ++$n; }
++
++// minimal stubs: the NPC's own recent replies come from eventlog through $GLOBALS['db']
++if (!function_exists('stobePromptXmlEscape')) { function stobePromptXmlEscape(string $s): string { return htmlspecialchars($s, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8'); } }
++final class Fix17bxFakeDb { public array $rows = []; public function fetchAll($sql, $params = []) { return $this->rows; } }
++$GLOBALS['db'] = new Fix17bxFakeDb();
++require_once $root . '/lib/imm26_claims.php';
++
++ok(function_exists('imm26ClaimsInventoryLines'), 'imm26ClaimsInventoryLines exists (claims block has an inventory verdict)');
++function verdict(array $npc, string $msg, array $replies = []): string { return implode("\n", imm26ClaimsInventoryLines($npc, $msg, $replies)); }
++function ctx(array $npc, string $msg, array $chatRows = []): string {
++    $GLOBALS['db']->rows = array_map(static fn($t) => ['data' => $t], $chatRows);
++    return imm26ClaimsContext('Cind', $npc, 'Shay', 0, ['player_message' => $msg]);
++}
++
++$has = ['name' => 'Cind', 'metadata' => json_encode(['inventory_items' => [
++    ['name' => 'Sabreclaw', 'count' => 1, 'equipped' => false], ['name' => 'Bandages [Standard]', 'count' => 3], ['name' => 'Falling Sun Katana', 'count' => 1, 'equipped' => true]]])];
++$lacks = ['name' => 'Cind', 'metadata' => json_encode(['inventory_items' => [['name' => 'Bandages', 'count' => 3], ['name' => 'Dried Fish', 'count' => 2]]])];
++
++// the three row denials, item really in the pack
++foreach (['No, I never took your Sabreclaw.', 'You are mistaken, I never touched it.', "Check your pack, I haven't had it."] as $i => $msg) {
++    $replies = $i >= 1 ? ['You took my Sabreclaw.'] : [];
++    $v = verdict($has, $msg, $replies);
++    ok(str_contains($v, 'your inventory DOES contain Sabreclaw.') && !str_contains($v, 'DOES NOT'), "has: denial #$i gets DOES contain Sabreclaw", $v);
++    ok(str_contains($v, 'misplaced it yourself') && str_contains($v, 'Do not say you saw'), "has: admit-mistake rule and no-fabrication rule #$i", $v);
++}
++// same three denials, item really missing
++foreach (['No, I never took your Sabreclaw.', 'You are mistaken, I never touched it.', "Check your pack, I haven't had it."] as $i => $msg) {
++    $replies = $i >= 1 ? ['You took my Sabreclaw.'] : [];
++    $v = verdict($lacks, $msg, $replies);
++    ok(str_contains($v, 'your inventory DOES NOT contain Sabreclaw.') && !str_contains($v, 'DOES contain'), "lacks: denial #$i gets DOES NOT contain Sabreclaw", $v);
++    ok(str_contains($v, 'do not retract') && str_contains($v, 'Do not say you saw'), "lacks: hold-position rule and no-fabrication rule #$i", $v);
++}
++// a plain question, lower case item matched against the pack; quality tag and worn gear handled
++ok(str_contains(verdict($has, 'Do you have any bandages on you?'), 'DOES contain Bandages.'), 'question: bandages (quality tag stripped)');
++ok(str_contains(verdict($has, 'Did you take my katana?'), 'DOES contain Falling Sun Katana.'), 'worn katana counts (head word match)');
++ok(str_contains(verdict($lacks, 'Do you have the Falling Sun Katana?'), 'DOES NOT contain Falling Sun Katana.'), 'asked item the pack lacks');
++// text-list fallback when there is no structured list
++$text = ['name' => 'Cind', 'inventory' => 'Sabreclaw x1 value 900, Bandages x3 value 20', 'equipment' => 'Wooden Sandals [Shoddy] x1 value 45'];
++ok(str_contains(verdict($text, 'You took my Sabreclaw!'), 'DOES contain Sabreclaw.'), 'text inventory fallback');
++ok(str_contains(verdict($text, 'Where are my sandals, did you take them?'), 'DOES contain Wooden Sandals.'), 'text equipment fallback');
++
++// fail-closed and no noise
++ok(verdict(['name' => 'Cind'], 'You took my Sabreclaw.') === '', 'unknown inventory -> no verdict');
++ok(verdict($has, 'Nice weather today, is it not?') === '', 'no item/ownership topic -> no verdict');
++ok(verdict($has, 'What a lovely Sabreclaw design.') === '', 'item mentioned without ownership/challenge topic -> no verdict');
++ok(verdict($lacks, 'You took my money.') === '', 'money is not an inventory item -> no DOES NOT line');
++ok(verdict($lacks, 'Did you take it to the Holy Nation?') === '', 'faction word is not an item');
++ok(verdict($has, "Check your pack, I haven't had it.") === '', 'bare challenge with no item anywhere -> no verdict');
++
++// full block: the claims block carries the verdict for the seeded accusation (NPC accused, item in her own pack)
++$block = ctx($has, "Check your pack, I haven't had it.", ['Cind: You took my Sabreclaw.']);
++ok(str_contains($block, '<claims_and_corrections>') && str_contains($block, 'your inventory DOES contain Sabreclaw.'), 'block: DOES contain Sabreclaw from the NPC\'s own accusation', $block);
++ok(str_contains($block, 'correcting or challenging you'), 'block: the challenge rule is still there');
++$block2 = ctx($lacks, 'No, I never took your Sabreclaw.', ['Cind: You took my Sabreclaw.']);
++ok(str_contains($block2, 'your inventory DOES NOT contain Sabreclaw.') && str_contains($block2, 'do not retract'), 'block: DOES NOT contain when missing', $block2);
++ok(!str_contains(ctx($has, 'Hello there.', []), 'Inventory check'), 'block: no verdict for a greeting');
++ok(ctx(['name' => 'Cind'], 'Hello there.', []) === '', 'block: nothing at all for a greeting');
++
++echo "imm26_fix17bx_inventory_verdict_regression: $n checks passed\n";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_pq_quote_regression.php b/tests/imm26_pq_quote_regression.php
 --- a/tests/imm26_pq_quote_regression.php	1969-12-31 18:00:00.000000000 -0600
 +++ b/tests/imm26_pq_quote_regression.php	2026-10-15 20:13:03.245136312 -0500
