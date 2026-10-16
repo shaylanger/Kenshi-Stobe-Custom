@@ -7,6 +7,8 @@ Animation lab: `Kenshi-Automation-Harness/docs/animlab/STATUS.md`, KenshiFP adap
 
 ## Right now — canonical resumable checkpoint (2026-10-14)
 
+**#13 04:00:** 19-f server fix 55074c1 (resume_count counted in NoteTravelRequest; capped load writes resume_failure) deployed compose + 3 5090 lane trees (4080 trees pending: add to after-op12 step 1; copy fix-19f/ to the 4080 first, then patch.py <tree>). 19-e = row defect (needs a 2nd post-load line): imm26-fix-19e stages pending-fixes\19e-recipe. Live proof: reloadrun-b.sh 19-f <lane> --n 4 --cap 10 (expect 1,2,3,4) and --mode cap --cap 3. OPEN FOR SHAY: resume cap 3 vs "everything resumes" (keep / raise / reset on running receipt); may a Hunt partner be player-faction? (26-a family).
+
 **#13 03:50:** 03-b one-call script committed (62edcdf, unblockdefs_d.sh, never run live); after op12 DONE: see inboxoperatorsfter-op12-4080.txt (deploy hearsay+acceptpropose to 4080 trees, apply 27a patch, spawn op13).
 
 **#13 03:40:** op9i DONE (relay received; 5090-i5 idle -> op9j spawned: 14-c, 14-d via cleargroup14c-scene.sh). hearsay + acceptpropose deployed to the 3 5090 lane trees (site/ root; 4080 trees still pending until op12 DONE). op9i results: 12-d FAIL, 19-e FAIL, 19-f FAIL (imm26-inv-19ef investigating), 26-a FAIL: Start rejects player-faction partner (NativeTravelLifecycle.cpp:351-355) -> DESIGN question for Shay (allow squad/player-faction Hunt partner?) ; 22-a/26-b/26-c blocked on it.
