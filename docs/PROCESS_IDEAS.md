@@ -171,6 +171,16 @@ Rules:
 - added: 2026-10-16 16:14
 - log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
 
+### PI-59 | open
+- idea: tail-ack.ps1 must accept agents that are in no program ledger (in-session operators/fixers named imm26-*), e.g. by acking via the inbox/relay file instead of the ledger record, so the new coordinator can ack and the tail closes by ack instead of by timeout.
+- evidence: 2026-10-16 17:12: coordinator 21 reported 'tail-ack could not ack them (agents not in the program ledger)' for nc28, 5090-i5-op14 and 4080-i3op26; the tail cannot close via ack, so the tail keeps burning turns until the 5 min relay timeout.
+- saving: about 3-5 tail turns and a faster tail close per handoff
+- risk: low: ack only closes the tail's wait, it changes no agent state
+- hooks: no
+- weakens: no
+- added: 2026-10-16 17:12
+- log: 2026-10-16 17:12 review '05c6207d-b5b1-49c2-904b-6c32d15536f1-tail': added
+
 ## In progress
 
 ### PI-54 | in-progress
