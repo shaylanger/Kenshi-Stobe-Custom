@@ -312,6 +312,9 @@ hx13_run() {  # hx13_run <label> <save> <pos|neg|ctl>   (port of hx13.sh hx13_ru
     hxd_sleep 5; read sa na <<<"$(hx13_cats)"
     echo "contract=$cid status=$st price=${price}" > "$d/deal.txt"; echo "shay_before=$sb shay_after=$sa npc_before=$nb npc_after=$na" > "$d/cats.txt"
   fi
+  if [ "$mode" != ctl ] && [ -n "${cid:-}" ]; then   # live fix (4080-i4 2026-10-16): kept_/broken_promise is applied by the worker some seconds AFTER the contract status flips; wait up to 90 s for the row before the snapshot
+    for i in $(seq 1 18); do [ "$(lt_sql "select count(*) from social_effect where incident_id='deal:$cid'" | head -1 | tr -dc 0-9)" -ge 1 ] 2>/dev/null && break; hxd_sleep 5; done
+  fi
   c1=$(lt_sql "select count(*) from social_effect" | head -1)
   { echo "count_before=$c0 count_after=$c1"; lt_sql "select * from social_effect order by 1 desc limit 12"; } > "$d/effects.txt"
   hxd_haff "$d" after_json "$RL_NPC_FULL" "" read; echo "aff=$(hxd_affnum "$d/haff-after_json.txt")" > "$d/haff_after.txt"
