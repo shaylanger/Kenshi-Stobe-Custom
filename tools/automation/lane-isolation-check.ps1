@@ -16,7 +16,7 @@ Items:
   backend-php      php -S per lane with its own docroot, no apache/80/443 listener, docroots outside /var/www/html, distinct log dirs
   tmp-env          distinct /tmp roots and env.sh (db name + port), manager pid/lock inside own root
   activity-key     per-lane transport key: server key differs per lane and equals the lane's game-side mods\Stobe\activity-transport.key
-  windows          windowed, rects non-overlapping, not on a forbidden display, never the foreground
+  windows          windowed, not on a forbidden display, never the foreground; rect overlap allowed only as stacked windows (reported as stacked=[...])
   graphics         low gfx applied, 60 fps cap file, small windowed Video Mode
   locks            own game-<n>.lock per lane, not the instance-1 game.lock
   shared-mutable   no mutable file (cfg/ini/log/dll/...) is hard-linked or reached through a junction in any lane
@@ -263,7 +263,7 @@ foreach ($L in $lanes) {
   }
 }
 # 10 windows
-$bad = @(); $ev = @()
+$bad = @(); $ev = @(); $stk = @()
 foreach ($L in $lanes) {
   $cfg = (Get-Content (Join-Path $L.dir 'kenshi.cfg') | Where-Object { $_ -like 'Full Screen=*' }) -join ''
   if ($cfg -ne 'Full Screen=No') { $bad += "$($L.id): kenshi.cfg '$cfg' (must be windowed; applies at next launch)" }
@@ -275,8 +275,10 @@ foreach ($L in $lanes) {
 }
 for ($i = 0; $i -lt $lanes.Count; $i++) { for ($j = $i + 1; $j -lt $lanes.Count; $j++) {
   $a = $rects["use-$($lanes[$i].id)"]; $b = $rects["use-$($lanes[$j].id)"]
-  if ($a[0] -lt $b[0] + $b[2] -and $a[0] + $a[2] -gt $b[0] -and $a[1] -lt $b[1] + $b[3] -and $a[1] + $a[3] -gt $b[1]) { $bad += "rects of $($lanes[$i].id) and $($lanes[$j].id) overlap" } } }
-Out-R 'windows' ($bad.Count -eq 0) ($(if ($bad.Count) { $bad -join '; ' } else { "windowed, non-overlapping, off forbidden displays (monitors: $(($mons | ForEach-Object { $_.n }) -join ',')): $($ev -join ' ')" }))
+  if ($a[0] -lt $b[0] + $b[2] -and $a[0] + $a[2] -gt $b[0] -and $a[1] -lt $b[1] + $b[3] -and $a[1] + $a[3] -gt $b[1]) {   # stacked windows (imm26-winstack): allowed unless one of the two holds the foreground (forbidden-display check above is unchanged)
+    $fgs = @($lanes[$i].id, $lanes[$j].id | Where-Object { $rects["fg-$_"] -match 'foreground=\S*kenshi' })
+    if ($fgs.Count) { $bad += "rects of $($lanes[$i].id) and $($lanes[$j].id) overlap and $($fgs -join ',') holds the foreground" } else { $stk += "$($lanes[$i].id)>$($lanes[$j].id)" } } } }
+Out-R 'windows' ($bad.Count -eq 0) ($(if ($bad.Count) { $bad -join '; ' } else { "windowed, off forbidden displays, overlap only as stacked windows (monitors: $(($mons | ForEach-Object { $_.n }) -join ',')): stacked=[$($stk -join ',')] $($ev -join ' ')" }))
 
 # 11 graphics
 $bad = @(); $ev = @()

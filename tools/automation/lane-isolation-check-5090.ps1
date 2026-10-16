@@ -194,19 +194,19 @@ foreach ($l in $SEL) {
 Res 'stobe-ini-route' $bad "each game's ini routes to its own backend port: $($ev -join ' ')"
 
 # 11 windows
-$bad = @(); $ev = @()
+$bad = @(); $ev = @(); $stk = @()
 $wo = & powershell -NoProfile -ExecutionPolicy Bypass -File "$here\lane-window.ps1" -Lane all -Action show 2>&1 | ForEach-Object { "$_" }
 foreach ($l in $SEL) {
   $row = $wo | Where-Object { $_ -like "$($l.id) *" } | Select-Object -First 1
   if ($row -like '*not running*') { $ev += "$($l.id)=not-running"; continue }
-  if ($row -notmatch 'overlap=\[\]') { $bad += "$($l.id): $row" }
+  if ($row -match 'overlap=\[(.+?)\]') { $stk += "$($l.id)>$($Matches[1])" }   # stacked lane windows (imm26-winstack): allowed because the foreground check below fails any lane that holds the foreground, and the forbidden-display / DISPLAY1-2 checks stay
   if ($row -notmatch 'forbidden=no') { $bad += "$($l.id): on a forbidden display: $row" }
   if ($row -notmatch 'screen=DISPLAY[12]') { $bad += "$($l.id): not wholly on DISPLAY1/2: $row" }
   $ev += ($row -replace '^(\S+) pid=\d+ rect=(\S+) .*screen=(\S+) .*', '$1=$2@$3')
 }
 $fg = $wo | Where-Object { $_ -like 'foreground*' } | Select-Object -First 1
 if ($fg -match 'foreground pid=(\d+)') { $fpid = [int]$Matches[1]; foreach ($l in $SEL) { if (@(LaneProcs $l).ProcessId -contains $fpid) { $bad += "$($l.id) game is the foreground window" } } }
-Res 'windows' $bad "windowed, non-overlapping, DISPLAY1/2 only, none foreground: $($ev -join ' ')"
+Res 'windows' $bad "windowed, DISPLAY1/2 only, none foreground, overlap only as stacked windows: stacked=[$($stk -join ',')] $($ev -join ' ')"
 
 # 12 markers-locks
 $bad = @(); $ev = @()

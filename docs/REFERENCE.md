@@ -65,6 +65,7 @@ stobe_goals.log, KenshiFP.log), starts `kenshi_x64.exe` (RE_Kenshi restarts it w
 launcher OK (button 1003), waits for `KAH: frame listener running` and the autoload. Also `stop`, `restart`, `status`,
 `health` (ok/crashed/hung), `screenshot` (window grab without HUD; use the harness `screenshot` for the HUD).
 Stobe's MOTD dialog is off (`EnableMOTD=0` in `StobeCustom.ini` and `Stobe.ini`) so it doesn't cover screenshots.
+5090 lane windows (`tools/automation/lane-window.ps1 plan|place|show|selftest`): DISPLAY1/2 only (Samsung forbidden); a lane with no free slot is stacked (cascade >= 40 px) and placed at the z-order bottom without focus, `lane-isolation-check*` then reports `stacked=[...]` instead of failing on overlap.
 
 ## Gotchas
 - **Goals live outside the save** (`RE_Kenshi\mods\Stobe\stobe_work_goals.tsv`, `stobe_task_goals.tsv` + server DB),

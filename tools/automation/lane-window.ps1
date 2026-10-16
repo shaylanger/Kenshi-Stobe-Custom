@@ -4,7 +4,8 @@ Window slots for the isolated imm26 lanes, from C:\KenshiTestRuns\lanes\lanes-50
   show     prints each lane's actual outer window rect (DPI-aware, physical pixels), monitor, and whether it overlaps another lane window.
   place    moves the lane's game window (found by its kenshi_x64 pid under the lane dir) to its slot with SetWindowPos
            SWP_NOZORDER|NOACTIVATE|NOSENDCHANGING (never focuses, no input). Refuses a slot that is not wholly inside an allowed display
-           (DISPLAY1/DISPLAY2; the Samsung DISPLAY3 is forbidden) or overlaps another lane's actual window.
+           (DISPLAY1/DISPLAY2; the Samsung DISPLAY3 is forbidden). A lane with no free slot is STACKED (cascade >= 40 px, wholly inside the working area)
+           and sent to the BOTTOM of the z-order (HWND_BOTTOM + NOACTIVATE, never focused); a non-stacked slot still refuses to overlap a running lane window.
   plan     prints the slots computed from the LIVE monitor layout (registry window x/y/display are only a preference and go stale when
            Windows renumbers/moves monitors; never DISPLAY3 / the Samsung (also by hardware id SAM0B49); lanes only on DISPLAY1/DISPLAY2).
   sync     plan + writes those slots into lanes-5090.json (backup .bak-lanewindow) and deletes the cached C:\KenshiTestRuns\preflight-isolation-5090.txt.
@@ -58,6 +59,8 @@ function Screens([string[]]$forbidNames = @()) {
 # (never DISPLAY3 / the Samsung, whatever number Windows gives it). $lanes = @{Id;W;H;Display;X;Y} (registry values are only a preference):
 # the registry slot is kept when it is still wholly inside the live working area of its display and free; otherwise first-fit (20 px grid,
 # 20 px margin) on the preferred display, then the other allowed ones (non-primary first). Returns {Lane;Display;X;Y;W;H;Why}; Display $null = no room.
+# When no free non-overlapping slot is left, the lane is STACKED on an allowed display (Why starts with 'stacked': cascade >= 40 px from every lane there,
+# wholly inside the working area); only an all-forbidden layout still gives NO-SLOT.
 function Plan-Slots($screens, $lanes) {
   $ok = @($screens | Where-Object { -not $_.Forbidden -and $_.Name -match '^DISPLAY[12]$' })
   $placed = @(); $out = @(); $m = 20
@@ -76,7 +79,18 @@ function Plan-Slots($screens, $lanes) {
       }
       if ($got) { break }
     }
-    if ($got) { $placed += $got[1]; $out += [pscustomobject]@{ Lane = $ln.Id; Display = $got[0].Name; X = $got[1].L; Y = $got[1].T; W = $w; H = $h; Why = $got[2] } }
+    if (-not $got) {   # no free slot anywhere: STACK on an allowed display (cascade, >= 40 px from every lane already there, wholly inside the working area); the game window goes to the bottom of the z-order at place time
+      foreach ($s in $order) {
+        for ($y = $s.WT + $m; -not $got -and $y + $h -le $s.WB; $y += 20) {
+          for ($x = $s.WL + $m; $x + $w -le $s.WR; $x += 20) {
+            $near = @($placed | Where-Object { $_.Disp -eq $s.Name -and [Math]::Max([Math]::Abs($_.L - $x), [Math]::Abs($_.T - $y)) -lt 40 })
+            if (-not $near.Count) { $got = @($s, [pscustomobject]@{ L = $x; T = $y; R = $x + $w; B = $y + $h }, 'stacked (no free slot: cascade, window sent to bottom)'); break }
+          }
+        }
+        if ($got) { break }
+      }
+    }
+    if ($got) { $got[1] | Add-Member -NotePropertyName Disp -NotePropertyValue $got[0].Name; $placed += $got[1]; $out += [pscustomobject]@{ Lane = $ln.Id; Display = $got[0].Name; X = $got[1].L; Y = $got[1].T; W = $w; H = $h; Why = $got[2] } }
     else { $out += [pscustomobject]@{ Lane = $ln.Id; Display = $null; X = 0; Y = 0; W = $w; H = $h; Why = 'NO-SLOT on an allowed display' } }
   }
   $out
@@ -100,16 +114,22 @@ if ($Action -eq 'selftest') {
         if ($sc.Forbidden -or $s.Display -notmatch '^DISPLAY[12]$') { $bad++; "FAIL $($case[0]) $($s.Lane) on a forbidden/unauthorised display $($s.Display)" }
         $r = [pscustomobject]@{ L = $s.X; T = $s.Y; R = $s.X + $s.W; B = $s.Y + $s.H }
         if (-not (Inside ([pscustomobject]@{ L = $sc.WL; T = $sc.WT; R = $sc.WR; B = $sc.WB }) $r)) { $bad++; "FAIL $($case[0]) $($s.Lane) not wholly inside $($s.Display)" }
-        foreach ($o in $p) { if ($o.Lane -ne $s.Lane -and $o.Display -and (Overlap $r ([pscustomobject]@{ L = $o.X; T = $o.Y; R = $o.X + $o.W; B = $o.Y + $o.H }))) { $bad++; "FAIL $($case[0]) $($s.Lane) overlaps $($o.Lane)" } }
+        foreach ($o in $p) { if ($o.Lane -ne $s.Lane -and $o.Display -and $s.Why -notlike 'stacked*' -and $o.Why -notlike 'stacked*' -and (Overlap $r ([pscustomobject]@{ L = $o.X; T = $o.Y; R = $o.X + $o.W; B = $o.Y + $o.H }))) { $bad++; "FAIL $($case[0]) $($s.Lane) overlaps $($o.Lane)" } }
       }
     }
     if ($case[0] -ne 'C' -and @($p | Where-Object { -not $_.Display }).Count) { $bad++; "FAIL $($case[0]) a lane got no slot" }
   }
   $pB = @(Plan-Slots $LayB $ln); if ($pB[0].Why -notlike 'registry*' -or $pB[2].Display -ne 'DISPLAY1') { $bad++; 'FAIL B must keep valid registry slots / i5 on DISPLAY1' }
   $pA = @(Plan-Slots $LayA $ln); if ($pA[1].Why -notlike 'computed*' -or $pA[1].X -ne -1500 -or $pA[1].Display -ne 'DISPLAY2') { $bad++; "FAIL A stale i4 slot must be recomputed on DISPLAY2 (got $($pA[1].Display) $($pA[1].X))" }
-  # D) the layout seen 2026-10-15: the Samsung (by hardware id) is DISPLAY1 at -1920,360, the primary DISPLAY2 is the only allowed screen: i3/i4 fit side by side, i5 has no slot (never DISPLAY1)
+  # D) the layout seen 2026-10-15: the Samsung (by hardware id) is DISPLAY1 at -1920,360, the primary DISPLAY2 is the only allowed screen: i3/i4 fit side by side, i5 is STACKED on DISPLAY2 (never DISPLAY1)
   $LayD = @((Scr 'DISPLAY1' -1920 360 0 1440 $false $true), (Scr 'DISPLAY2' 0 0 2560 1440 $true)); $pD = @(Plan-Slots $LayD $ln)
-  if ($pD[0].Display -ne 'DISPLAY2' -or $pD[1].Display -ne 'DISPLAY2' -or $pD[2].Display) { $bad++; 'FAIL D i3/i4 on DISPLAY2, i5 without slot expected' }
+  if ($pD[0].Display -ne 'DISPLAY2' -or $pD[1].Display -ne 'DISPLAY2' -or $pD[2].Display -ne 'DISPLAY2' -or $pD[2].Why -notlike 'stacked*' -or $pD[0].Why -like 'stacked*' -or $pD[1].Why -like 'stacked*') { $bad++; 'FAIL D i3/i4 free slots on DISPLAY2, i5 stacked on DISPLAY2 expected' }
+  foreach ($o in @($pD[0], $pD[1])) { if ([Math]::Max([Math]::Abs($pD[2].X - $o.X), [Math]::Abs($pD[2].Y - $o.Y)) -lt 40) { $bad++; "FAIL D i5 stack offset < 40 px from $($o.Lane)" } }
+  # E) four lanes on one allowed screen: i5 and i6 both stacked, 40 px apart from every lane, still inside the working area
+  $ln4 = $ln + @(@{ Id = 'i6'; W = 1040; H = 807; Display = 'DISPLAY2'; X = 0; Y = 0 }); $pE = @(Plan-Slots $LayD $ln4)
+  foreach ($a1 in $pE) { if (-not $a1.Display -or $a1.Display -ne 'DISPLAY2') { $bad++; "FAIL E $($a1.Lane) display $($a1.Display)" } else { foreach ($o in $pE) { if ($o.Lane -ne $a1.Lane -and [Math]::Max([Math]::Abs($a1.X - $o.X), [Math]::Abs($a1.Y - $o.Y)) -lt 40) { $bad++; "FAIL E $($a1.Lane)/$($o.Lane) stack offset < 40 px" } }; if (-not (Inside ([pscustomobject]@{ L = 0; T = 0; R = 2560; B = 1400 }) ([pscustomobject]@{ L = $a1.X; T = $a1.Y; R = $a1.X + $a1.W; B = $a1.Y + $a1.H }))) { $bad++; "FAIL E $($a1.Lane) outside working area" } } }
+  if (@($pE | Where-Object { $_.Why -like 'stacked*' }).Count -ne 2) { $bad++; 'FAIL E expected exactly i5/i6 stacked' }
+  # F) a forbidden screen is never used for stacking (only-forbidden stays NO-SLOT: checked below)
   $pS = @(Plan-Slots @((Scr 'DISPLAY3' 0 0 3840 2160 $true $true)) $ln); if (@($pS | Where-Object { $_.Display }).Count) { $bad++; 'FAIL only-forbidden layout must give no slot' }
   $a = [pscustomobject]@{ L = 0; T = 0; R = 10; B = 10 }; $b = [pscustomobject]@{ L = 10; T = 0; R = 20; B = 10 }; $c = [pscustomobject]@{ L = 5; T = 5; R = 15; B = 15 }
   if (Overlap $a $b) { $bad++; 'FAIL touching edges must not overlap' }
@@ -163,10 +183,12 @@ foreach ($r in $want) {
   $sl = [pscustomobject]@{ display = $pl.Display; x = $pl.X; y = $pl.Y; w = $pl.W; h = $pl.H }; $dest = [pscustomobject]@{ L = [int]$sl.x; T = [int]$sl.y; R = [int]$sl.x + [int]$sl.w; B = [int]$sl.y + [int]$sl.h }
   $s = ScreenOf $dest
   if (-not $s -or ('\\.\' + $s.Name) -ne ('\\.\' + $sl.display) -or $s.Forbidden) { "REFUSED {0}: slot not wholly inside {1} (or forbidden)" -f $r.Lane, $sl.display; exit 1 }
+  $stk = $pl.Why -like 'stacked*'
   $hit = @($rows | Where-Object { $_.Lane -ne $r.Lane -and $_.Rect -and (Overlap $_.Rect $dest) } | ForEach-Object Lane)
-  if ($hit.Count) { "REFUSED {0}: slot overlaps running window of {1}" -f $r.Lane, ($hit -join ','); exit 1 }
-  "{0} slot {1} {2},{3} ({4})" -f $r.Lane, $sl.display, $sl.x, $sl.y, $pl.Why
-  $ok = [LaneWin]::SetWindowPos($r.Hwnd, [IntPtr]::Zero, $dest.L, $dest.T, $sl.w, $sl.h, [uint32](0x0004 -bor 0x0010 -bor 0x0400))
+  if ($hit.Count -and -not $stk) { "REFUSED {0}: slot overlaps running window of {1}" -f $r.Lane, ($hit -join ','); exit 1 }
+  "{0} slot {1} {2},{3} ({4}){5}" -f $r.Lane, $sl.display, $sl.x, $sl.y, $pl.Why, $(if ($stk -and $hit.Count) { " stacked-over=[$($hit -join ',')]" } else { '' })
+  # stacked lane: HWND_BOTTOM (1) + NOACTIVATE|NOSENDCHANGING (no NOZORDER, so the window really goes to the bottom); never focuses, no input
+  $ok = if ($stk) { [LaneWin]::SetWindowPos($r.Hwnd, [IntPtr]1, $dest.L, $dest.T, $sl.w, $sl.h, [uint32](0x0010 -bor 0x0400)) } else { [LaneWin]::SetWindowPos($r.Hwnd, [IntPtr]::Zero, $dest.L, $dest.T, $sl.w, $sl.h, [uint32](0x0004 -bor 0x0010 -bor 0x0400)) }
   $w = [LaneWin]::Game([uint32]$r.Pid) | Select-Object -First 1
   "{0} placed ok={1} now={2},{3},{4},{5}" -f $r.Lane, $ok, $w[1], $w[2], $w[3], $w[4]
 }
