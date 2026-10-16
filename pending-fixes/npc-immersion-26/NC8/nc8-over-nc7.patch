@@ -1,0 +1,360 @@
+diff -ruN a/legacy-v1/ActivityPolicySupport.cpp b/legacy-v1/ActivityPolicySupport.cpp
+--- a/legacy-v1/ActivityPolicySupport.cpp	2026-10-15 19:18:37.849038900 -0600
++++ b/legacy-v1/ActivityPolicySupport.cpp	2026-10-15 19:18:37.940985700 -0600
+@@ -1,17 +1,21 @@
+ #include "ActivityPolicySupport.h"
+ #include "Functions.h"
+ #include "KenshiBuildingCompat.h"
++#include "ActivityWildVerdict.h"
+ #include <core/Functions.h>
+ #include <kenshi/Character.h>
+ #include <kenshi/GameData.h>
+ #include <kenshi/Inventory.h>
+-#include <kenshi/Item.h>
+-#include <kenshi/Faction.h>
++#include <kenshi/Item.h>
++#include <kenshi/Faction.h>
+ #include <kenshi/Platoon.h>
+ #include <map>
+ #include <algorithm>
+ #include <float.h>
+ #include <limits>
++#include <ctime>
++#include <sstream>
++void Log(const std::string&);
+ namespace Stobe { namespace ActivityV1Legacy {
+ namespace {
+ bool HasRef(GameData* data,const char* list,const std::string& sid) {
+@@ -20,25 +24,60 @@
+  for(size_t i=0;i<refs->size();++i) if((*refs)[i].sid==sid) return true;
+  return false;
+ }
+-bool ProvenWild(Character* target) {
++// Returns "" when proven wild, else a specific failing-clause reason code (NC8).
++std::string WildRefusal(Character* target,std::string& note) {
++ ActivityWild::WildFacts f;
++ note.clear();
+  Faction* faction=target->getFaction();
+  ActivePlatoon* active=target->getPlatoon();
+- if(!faction || !faction->data || !faction->isNotARealFaction() ||
+-    faction->fundamentalNPCType!=OT_NONE || !active || !active->isAnimalsOnly ||
+-    active->getIsTrader() || !active->me) return false;
+- Platoon* squad=active->me;
++ Platoon* squad=active ? active->me : NULL;
++ f.identity=faction && faction->data && active && squad && target->getGameData();
++ if(!f.identity) return ActivityWild::Verdict(f);
+  const Ownerships& owned=squad->ownerships;
+- if(squad->getSquadType()!=SQ_ROAMING || squad->myBaseHomeTownData ||
+-    owned._homeTown || owned._homeBuilding.serial || owned.occupiedTown ||
+-    !owned.slaves.empty() || owned.stuff.size() || !squad->squadTemplate ||
+-    !target->getGameData()) return false;
+- // Require both species membership and current faction to match explicit loaded
+- // squad-template provenance. A purchased/recruited animal no longer qualifies.
+- // Missing/inherited or mod-ambiguous faction provenance is deliberately refused.
+- return HasRef(squad->squadTemplate,"faction",faction->data->stringID) &&
+-  (HasRef(squad->squadTemplate,"animals",target->getGameData()->stringID) ||
+-   HasRef(squad->squadTemplate,"animals2",target->getGameData()->stringID));
+-}
++ f.factionNotReal=faction->isNotARealFaction();
++ f.fundamentalNone=faction->fundamentalNPCType==OT_NONE;
++ f.animalsOnly=active->isAnimalsOnly;
++ f.trader=active->getIsTrader();
++ f.roaming=squad->getSquadType()==SQ_ROAMING;
++ f.baseTown=squad->myBaseHomeTownData ? true:false;
++ f.homeTown=owned._homeTown ? true:false;
++ f.homeBuilding=owned._homeBuilding.serial ? true:false;
++ f.occupiedTown=owned.occupiedTown ? true:false;
++ f.slaves=!owned.slaves.empty();
++ f.stuff=owned.stuff.size() ? true:false;
++ // Non-blocking note: loaded squad-template provenance (no longer required).
++ if(!squad->squadTemplate) note="template=none";
++ else {
++  const bool fr=HasRef(squad->squadTemplate,"faction",faction->data->stringID);
++  const bool sp=HasRef(squad->squadTemplate,"animals",target->getGameData()->stringID) ||
++   HasRef(squad->squadTemplate,"animals2",target->getGameData()->stringID);
++  note=std::string("templateFactionRef=")+(fr?"1":"0")+" templateSpeciesRef="+(sp?"1":"0");
++ }
++ return ActivityWild::Verdict(f);
++}
++bool ProvenWild(Character* target,std::string& reason) {
++ std::string note;
++ reason=WildRefusal(target,note);
++ if(reason.empty()) return true;
++ // One diagnostic line per refusal, rate limited per animal (about 5 s) so proposals do not spam.
++ static std::map<unsigned,long> last;
++ const unsigned serial=target->getHandle().serial;
++ const long now=(long)std::clock();
++ std::map<unsigned,long>::iterator it=last.find(serial);
++ if(it==last.end() || now-it->second>5L*CLOCKS_PER_SEC || now<it->second) {
++  last[serial]=now;
++  if(last.size()>512) last.clear();
++  try {
++   std::ostringstream o;
++   Faction* faction=target->getFaction();
++   o<<"ACTIVITY_WILD_REFUSED reason="<<reason<<" serial="<<serial
++    <<" species="<<(target->getGameData()?target->getGameData()->stringID:std::string("?"))
++    <<" faction="<<(faction&&faction->data?faction->data->stringID:std::string("?"))<<" "<<note;
++   ::Log(o.str());
++  } catch(...) {}
++ }
++ return false;
++}
+ struct MineLease {
+  std::string id,item;
+  Building* building; Character* actor;
+@@ -163,7 +202,7 @@
+   }
+   if(target->getMySlaveOwner().serial) {reason="owned_target";return true;}
+   if(target->isAnimal()) {
+-   if(!ProvenWild(target)) {reason="animal_ownership_not_proven_wild";return true;}
++   if(!ProvenWild(target,reason)) return true;
+    reason.clear();return false;
+   }
+   if(!actor->isEnemy(target,true)) {reason="non_hostile_target";return true;}
+@@ -181,10 +220,10 @@
+   }
+   for(std::map<std::string,MineLease>::iterator i=leases.begin();i!=leases.end();++i)
+    if(i->second.building==b || i->second.actor==actor) {reason="conflicting_mine_lease";return false;}
+-  std::string resolvedItem;
+-  if(!MineSourcePermitted(b,actor,resolvedItem,reason) || resolvedItem!=item) {
+-   if(reason.empty()) reason="resource_identity_changed";return false;
+-  }
++  std::string resolvedItem;
++  if(!MineSourcePermitted(b,actor,resolvedItem,reason) || resolvedItem!=item) {
++   if(reason.empty()) reason="resource_identity_changed";return false;
++  }
+   InventorySection* section=ExactSection(b,item);
+   if(!section || !Install()) {reason="exact_output_or_observer_unavailable";return false;}
+   MineLease l; l.id=id;l.actor=actor;l.building=b;l.item=item;
+@@ -226,7 +265,7 @@
+  } catch(...) {}
+  return NULL;
+ }
+-} }
++} }
+ namespace Stobe { namespace ActivityV1Legacy {
+ bool MineSourcePermitted(Building* b,Character* actor,std::string& item,std::string& reason) {
+  item.clear();
+@@ -245,4 +284,4 @@
+   item=product->item->stringID;reason.clear();return true;
+  } catch(...) {reason="resource_facts_unavailable";return false;}
+ }
+-} }
++} }
+diff -ruN a/legacy-v1/ActivityWildVerdict.h b/legacy-v1/ActivityWildVerdict.h
+--- a/legacy-v1/ActivityWildVerdict.h	1969-12-31 18:00:00.000000000 -0600
++++ b/legacy-v1/ActivityWildVerdict.h	2026-10-15 19:18:37.940985700 -0600
+@@ -0,0 +1,33 @@
++#pragma once
++// Pure (no game types) decision for "is this animal proven wild" so it is testable offline.
++// NC8 (Shay 2026-10-15): an animal in no real faction, in an animals-only non-trader roaming
++// squad with no base/home/occupied town, no slaves and no stuff IS wild. The squad template's
++// faction/species refs are no longer required (they stay a non-blocking note).
++namespace Stobe { namespace ActivityWild {
++struct WildFacts {
++ bool identity;          // faction, faction data, platoon, squad and game data all readable
++ bool factionNotReal;    // faction->isNotARealFaction()
++ bool fundamentalNone;   // faction->fundamentalNPCType==OT_NONE
++ bool animalsOnly;       // platoon->isAnimalsOnly
++ bool trader;            // platoon->getIsTrader()
++ bool roaming;           // squad type == SQ_ROAMING
++ bool baseTown;          // squad->myBaseHomeTownData
++ bool homeTown;          // ownerships._homeTown
++ bool homeBuilding;      // ownerships._homeBuilding.serial
++ bool occupiedTown;      // ownerships.occupiedTown
++ bool slaves;            // !ownerships.slaves.empty()
++ bool stuff;             // ownerships.stuff.size()
++ WildFacts():identity(false),factionNotReal(false),fundamentalNone(false),animalsOnly(false),
++  trader(false),roaming(false),baseTown(false),homeTown(false),homeBuilding(false),
++  occupiedTown(false),slaves(false),stuff(false) {}
++};
++// Returns "" when proven wild, else the specific failing clause as a policy reason code.
++inline const char* Verdict(const WildFacts& f) {
++ if(!f.identity) return "animal_not_wild_identity_unavailable";
++ if(!f.factionNotReal || !f.fundamentalNone) return "animal_not_wild_real_faction";
++ if(!f.animalsOnly || f.trader || !f.roaming) return "animal_not_wild_squad_type";
++ if(f.baseTown || f.homeTown || f.homeBuilding || f.occupiedTown || f.slaves || f.stuff)
++  return "animal_not_wild_ownership";
++ return "";
++}
++}}
+diff -ruN a/src/ActivityPolicySupport.cpp b/src/ActivityPolicySupport.cpp
+--- a/src/ActivityPolicySupport.cpp	2026-10-15 19:18:37.835515100 -0600
++++ b/src/ActivityPolicySupport.cpp	2026-10-15 19:18:37.932986100 -0600
+@@ -1,17 +1,21 @@
+ #include "ActivityPolicySupport.h"
+ #include "Functions.h"
+ #include "KenshiBuildingCompat.h"
++#include "ActivityWildVerdict.h"
+ #include <core/Functions.h>
+ #include <kenshi/Character.h>
+ #include <kenshi/GameData.h>
+ #include <kenshi/Inventory.h>
+-#include <kenshi/Item.h>
+-#include <kenshi/Faction.h>
++#include <kenshi/Item.h>
++#include <kenshi/Faction.h>
+ #include <kenshi/Platoon.h>
+ #include <map>
+ #include <algorithm>
+ #include <float.h>
+ #include <limits>
++#include <ctime>
++#include <sstream>
++void Log(const std::string&);
+ namespace Stobe { namespace Activity {
+ namespace {
+ bool HasRef(GameData* data,const char* list,const std::string& sid) {
+@@ -20,25 +24,60 @@
+  for(size_t i=0;i<refs->size();++i) if((*refs)[i].sid==sid) return true;
+  return false;
+ }
+-bool ProvenWild(Character* target) {
++// Returns "" when proven wild, else a specific failing-clause reason code (NC8).
++std::string WildRefusal(Character* target,std::string& note) {
++ ActivityWild::WildFacts f;
++ note.clear();
+  Faction* faction=target->getFaction();
+  ActivePlatoon* active=target->getPlatoon();
+- if(!faction || !faction->data || !faction->isNotARealFaction() ||
+-    faction->fundamentalNPCType!=OT_NONE || !active || !active->isAnimalsOnly ||
+-    active->getIsTrader() || !active->me) return false;
+- Platoon* squad=active->me;
++ Platoon* squad=active ? active->me : NULL;
++ f.identity=faction && faction->data && active && squad && target->getGameData();
++ if(!f.identity) return ActivityWild::Verdict(f);
+  const Ownerships& owned=squad->ownerships;
+- if(squad->getSquadType()!=SQ_ROAMING || squad->myBaseHomeTownData ||
+-    owned._homeTown || owned._homeBuilding.serial || owned.occupiedTown ||
+-    !owned.slaves.empty() || owned.stuff.size() || !squad->squadTemplate ||
+-    !target->getGameData()) return false;
+- // Require both species membership and current faction to match explicit loaded
+- // squad-template provenance. A purchased/recruited animal no longer qualifies.
+- // Missing/inherited or mod-ambiguous faction provenance is deliberately refused.
+- return HasRef(squad->squadTemplate,"faction",faction->data->stringID) &&
+-  (HasRef(squad->squadTemplate,"animals",target->getGameData()->stringID) ||
+-   HasRef(squad->squadTemplate,"animals2",target->getGameData()->stringID));
+-}
++ f.factionNotReal=faction->isNotARealFaction();
++ f.fundamentalNone=faction->fundamentalNPCType==OT_NONE;
++ f.animalsOnly=active->isAnimalsOnly;
++ f.trader=active->getIsTrader();
++ f.roaming=squad->getSquadType()==SQ_ROAMING;
++ f.baseTown=squad->myBaseHomeTownData ? true:false;
++ f.homeTown=owned._homeTown ? true:false;
++ f.homeBuilding=owned._homeBuilding.serial ? true:false;
++ f.occupiedTown=owned.occupiedTown ? true:false;
++ f.slaves=!owned.slaves.empty();
++ f.stuff=owned.stuff.size() ? true:false;
++ // Non-blocking note: loaded squad-template provenance (no longer required).
++ if(!squad->squadTemplate) note="template=none";
++ else {
++  const bool fr=HasRef(squad->squadTemplate,"faction",faction->data->stringID);
++  const bool sp=HasRef(squad->squadTemplate,"animals",target->getGameData()->stringID) ||
++   HasRef(squad->squadTemplate,"animals2",target->getGameData()->stringID);
++  note=std::string("templateFactionRef=")+(fr?"1":"0")+" templateSpeciesRef="+(sp?"1":"0");
++ }
++ return ActivityWild::Verdict(f);
++}
++bool ProvenWild(Character* target,std::string& reason) {
++ std::string note;
++ reason=WildRefusal(target,note);
++ if(reason.empty()) return true;
++ // One diagnostic line per refusal, rate limited per animal (about 5 s) so proposals do not spam.
++ static std::map<unsigned,long> last;
++ const unsigned serial=target->getHandle().serial;
++ const long now=(long)std::clock();
++ std::map<unsigned,long>::iterator it=last.find(serial);
++ if(it==last.end() || now-it->second>5L*CLOCKS_PER_SEC || now<it->second) {
++  last[serial]=now;
++  if(last.size()>512) last.clear();
++  try {
++   std::ostringstream o;
++   Faction* faction=target->getFaction();
++   o<<"ACTIVITY_WILD_REFUSED reason="<<reason<<" serial="<<serial
++    <<" species="<<(target->getGameData()?target->getGameData()->stringID:std::string("?"))
++    <<" faction="<<(faction&&faction->data?faction->data->stringID:std::string("?"))<<" "<<note;
++   ::Log(o.str());
++  } catch(...) {}
++ }
++ return false;
++}
+ struct MineLease {
+  std::string id,item;
+  Building* building; Character* actor;
+@@ -163,7 +202,7 @@
+   }
+   if(target->getMySlaveOwner().serial) {reason="owned_target";return true;}
+   if(target->isAnimal()) {
+-   if(!ProvenWild(target)) {reason="animal_ownership_not_proven_wild";return true;}
++   if(!ProvenWild(target,reason)) return true;
+    reason.clear();return false;
+   }
+   if(!actor->isEnemy(target,true)) {reason="non_hostile_target";return true;}
+@@ -181,10 +220,10 @@
+   }
+   for(std::map<std::string,MineLease>::iterator i=leases.begin();i!=leases.end();++i)
+    if(i->second.building==b || i->second.actor==actor) {reason="conflicting_mine_lease";return false;}
+-  std::string resolvedItem;
+-  if(!MineSourcePermitted(b,actor,resolvedItem,reason) || resolvedItem!=item) {
+-   if(reason.empty()) reason="resource_identity_changed";return false;
+-  }
++  std::string resolvedItem;
++  if(!MineSourcePermitted(b,actor,resolvedItem,reason) || resolvedItem!=item) {
++   if(reason.empty()) reason="resource_identity_changed";return false;
++  }
+   InventorySection* section=ExactSection(b,item);
+   if(!section || !Install()) {reason="exact_output_or_observer_unavailable";return false;}
+   MineLease l; l.id=id;l.actor=actor;l.building=b;l.item=item;
+@@ -248,7 +287,7 @@
+  } catch(...) {}
+  return NULL;
+ }
+-} }
++} }
+ namespace Stobe { namespace Activity {
+ bool MineSourcePermitted(Building* b,Character* actor,std::string& item,std::string& reason) {
+  item.clear();
+@@ -267,4 +306,4 @@
+   item=product->item->stringID;reason.clear();return true;
+  } catch(...) {reason="resource_facts_unavailable";return false;}
+ }
+-} }
++} }
+diff -ruN a/src/ActivityWildVerdict.h b/src/ActivityWildVerdict.h
+--- a/src/ActivityWildVerdict.h	1969-12-31 18:00:00.000000000 -0600
++++ b/src/ActivityWildVerdict.h	2026-10-15 19:18:37.932986100 -0600
+@@ -0,0 +1,33 @@
++#pragma once
++// Pure (no game types) decision for "is this animal proven wild" so it is testable offline.
++// NC8 (Shay 2026-10-15): an animal in no real faction, in an animals-only non-trader roaming
++// squad with no base/home/occupied town, no slaves and no stuff IS wild. The squad template's
++// faction/species refs are no longer required (they stay a non-blocking note).
++namespace Stobe { namespace ActivityWild {
++struct WildFacts {
++ bool identity;          // faction, faction data, platoon, squad and game data all readable
++ bool factionNotReal;    // faction->isNotARealFaction()
++ bool fundamentalNone;   // faction->fundamentalNPCType==OT_NONE
++ bool animalsOnly;       // platoon->isAnimalsOnly
++ bool trader;            // platoon->getIsTrader()
++ bool roaming;           // squad type == SQ_ROAMING
++ bool baseTown;          // squad->myBaseHomeTownData
++ bool homeTown;          // ownerships._homeTown
++ bool homeBuilding;      // ownerships._homeBuilding.serial
++ bool occupiedTown;      // ownerships.occupiedTown
++ bool slaves;            // !ownerships.slaves.empty()
++ bool stuff;             // ownerships.stuff.size()
++ WildFacts():identity(false),factionNotReal(false),fundamentalNone(false),animalsOnly(false),
++  trader(false),roaming(false),baseTown(false),homeTown(false),homeBuilding(false),
++  occupiedTown(false),slaves(false),stuff(false) {}
++};
++// Returns "" when proven wild, else the specific failing clause as a policy reason code.
++inline const char* Verdict(const WildFacts& f) {
++ if(!f.identity) return "animal_not_wild_identity_unavailable";
++ if(!f.factionNotReal || !f.fundamentalNone) return "animal_not_wild_real_faction";
++ if(!f.animalsOnly || f.trader || !f.roaming) return "animal_not_wild_squad_type";
++ if(f.baseTown || f.homeTown || f.homeBuilding || f.occupiedTown || f.slaves || f.stuff)
++  return "animal_not_wild_ownership";
++ return "";
++}
++}}
