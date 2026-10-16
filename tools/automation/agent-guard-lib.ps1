@@ -182,7 +182,7 @@ function Get-AgentRespawn($r) {
     $src = if ($r.Handoff) { $r.Handoff } else { $r.Path }
     $next = Get-NextAgentName $r.Name
     $nxt = if ($r.Next) { " Its own 'next:' line: $($r.Next)" } else { '' }
-    "Respawn fresh agent '$next' for $($r.Name) ($($r.State) $($r.Mtime.ToString('MM-dd HH:mm'))): Agent prompt `"Resume the task '$($r.Task)' as a FRESH agent named $next. Read $src first (status file $($r.Path)), continue from where $($r.Name) stopped, keep your own status current with tools\automation\agent-status.ps1 $next RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:\KenshiTestRuns\agents\$next.handoff.md. Never SendMessage the old agent.$nxt`""
+    "Respawn fresh agent '$next' for $($r.Name) ($($r.State) $($r.Mtime.ToString('MM-dd HH:mm'))): Agent prompt `"Resume the task '$($r.Task)' as a FRESH agent named $next. Read $src first (status file $($r.Path)), continue from where $($r.Name) stopped, keep your own status current with tools\automation\agent-status.ps1 $next RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:\KenshiTestRuns\agents\$next.handoff.md. Never SendMessage the old agent.$nxt Hand back at most 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay; save the full report first with tools\automation\save-report.ps1 <agent> <file>.`""
 }
 
 # newest write time (minutes before $Now) of one file or of all files under one dir; $null when none. Never counts *.status. Capped at 20000 files.

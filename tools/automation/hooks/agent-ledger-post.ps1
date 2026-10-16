@@ -9,6 +9,22 @@ try {
     if ([string]$in.tool_name -ne 'Agent') { exit 0 }
     if ([string]$in.cwd -notmatch '^C:[\\/]KenshiModding([\\/]|$)') { exit 0 }
     $resp = if ($in.tool_response -is [string]) { [string]$in.tool_response } else { ($in.tool_response | ConvertTo-Json -Depth 8) -replace '\\\\', '\' }
+    # hand-back length warning (Shay 2026-10-16): the sub-agent's result text lands in the coordinator's context on every later turn.
+    # > 12 non-blank lines (trailing agentId/usage metadata not counted) -> additionalContext warning on stdout. Never blocks. HANDBACK_MAX overrides 12.
+    $hbMax = 12; if ($env:HANDBACK_MAX -match '^\d+$') { $hbMax = [int]$env:HANDBACK_MAX }
+    $hbText = ''
+    if ($in.tool_response -is [string]) { $hbText = [string]$in.tool_response }
+    elseif ($in.tool_response.content) { $hbText = (@($in.tool_response.content) | ForEach-Object { if ($_ -is [string]) { $_ } else { [string]$_.text } }) -join "`n" }
+    elseif ($in.tool_response.text) { $hbText = [string]$in.tool_response.text }
+    elseif ($in.tool_response.result) { $hbText = [string]$in.tool_response.result }
+    $hbLines = @($hbText -split "`r?`n")
+    $hbCut = @($hbLines | Where-Object { $_ -match '^\s*(agentId:|<usage>|<task-notification>)' } | Select-Object -First 1)
+    if ($hbCut.Count) { $ci = [Array]::IndexOf($hbLines, $hbCut[0]); $hbLines = if ($ci -le 0) { @() } else { $hbLines[0..($ci - 1)] } }
+    $hbN = @($hbLines | Where-Object { $_ -and $_.Trim() }).Count
+    if ($hbN -gt $hbMax -and $hbText -notmatch 'Async agent launched') {
+        $warn = "[handback-length: $hbN lines > $hbMax; next time save the report with save-report.ps1 and hand back <= 8 lines]"
+        [Console]::Out.WriteLine((@{ hookSpecificOutput = @{ hookEventName = 'PostToolUse'; additionalContext = $warn } } | ConvertTo-Json -Compress))
+    }
     $aid = ''; $out = ''
     if ($resp -match 'agentId"?\s*:\s*"?([A-Za-z0-9_-]+)') { $aid = $Matches[1] }
     if ($resp -match 'output_file"?\s*:\s*"?([^\s"]+)') { $out = $Matches[1] }

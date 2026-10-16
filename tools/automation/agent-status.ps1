@@ -65,6 +65,7 @@ try {
                 "status: $f"
                 "next: $Next"
                 "action: spawn a FRESH agent from the handoff/status file; never SendMessage this one"
+                "handback: tell the successor to hand back at most 8 lines (verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay) and save the full report with save-report.ps1 first"
             ) | Set-Content -LiteralPath $todo -Encoding UTF8
         }
     }

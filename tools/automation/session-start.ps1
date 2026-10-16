@@ -104,7 +104,7 @@ try {
         $why = if ($tn -and -not $tailLive) { "owner tail $tn is gone" } elseif ($stat) { "status $($stat.state) $($stat.age) min ago (not alive)" } else { 'no status file' }
         $nx = Get-NextAgentName "$($r.agent)"
         $ck = if ($stat -or (Test-Path -LiteralPath (Join-Path $agDir "$($r.agent).handoff.md"))) { "agents\$($r.agent).status / agents\$($r.agent).handoff.md" } else { 'ledger outputs/handoff' }
-        $dead += "DEAD $($r.agent) ($($r.program)/$($r.wp), wp $wst): $why -> respawn a FRESH agent $nx (Agent tool, same work dir) from its checkpoint $ck$(if ($r.routing_note) { ". Routing note: $($(if ($Brief -and "$($r.routing_note)".Length -gt 60) { "$($r.routing_note)".Substring(0, 60) + '...' } else { $r.routing_note }))" } else { '. (no routing note in the ledger)' })"
+        $dead += "DEAD $($r.agent) ($($r.program)/$($r.wp), wp $wst): $why -> respawn a FRESH agent $nx (Agent tool, same work dir; end the prompt with 'Hand back at most 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay; full report via save-report.ps1') from its checkpoint $ck$(if ($r.routing_note) { ". Routing note: $($(if ($Brief -and "$($r.routing_note)".Length -gt 60) { "$($r.routing_note)".Substring(0, 60) + '...' } else { $r.routing_note }))" } else { '. (no routing note in the ledger)' })"
     }
     if ($own.Count -or $dead.Count) {
         '=== ledger agents: owned by a live tail / DEAD (cold start: respawn from checkpoints; fresh names agent -> agent2) ==='
@@ -228,4 +228,4 @@ $wslq = 'bash /mnt/c/KenshiModding/tools/automation/wsl-cache-trim.sh start | ta
 $rv = Join-Path $runs 'review-verdicts.tsv'
 if (Test-Path -LiteralPath $rv) { '=== newest review verdicts ==='; Get-Content -LiteralPath $rv -Tail 8 }
 ''
-'Next: respawn every agent whose status is not DONE (except OWNED-BY-LIVE-TAIL ones, which keep running) as a FRESH agent pointed at its status file; start a <=120 s waker if anything is in flight; continue from HANDOFF.md.'
+'Next: respawn every agent whose status is not DONE (except OWNED-BY-LIVE-TAIL ones, which keep running) as a FRESH agent pointed at its status file (end each spawn prompt with: Hand back at most 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay; full report via save-report.ps1); start a <=120 s waker if anything is in flight; continue from HANDOFF.md.'

@@ -309,7 +309,7 @@ if ($Pilot) {
         ('- ANYTHING outside the one-call scripts above (lane or game down, launch problem, LLM health 402/empty replies, preflight errors you cannot fix with lane-setup.sh, unclear instruction): do NOT improvise. Record it with ' + $pm + ' 00-ask ESCALATE "<what you need>" (this only messages the coordinator, it does not close anything), then end your turn with a 2-line handback; the coordinator answers.'),
         '- Game speed (PI-20): above 5 only under bash tools/stobe-goal-watch.sh; never speed 10 for minutes. Never sleeps > 120 s in one call (hook denies); poll in 30 s loops.',
         '- Status: agent-status.ps1 at start and after every row (pilot-mark.sh does it for you after each call); silence > 20 min = killed. Keep your handoff file current. Checkpoint every ~40k tokens; at ~120k finish the row, write the handoff, end STOPPED-CONTEXT.',
-        '- Ending: after the last row of rows-i4.txt (or every remaining row escalated) end DONE with a line "pilot rows: <n> accepted, <n> escalated, <n> refused". Handbacks <= 8 lines; report via save-report.ps1 then SubagentHandback.'
+        '- Ending: after the last row of rows-i4.txt (or every remaining row escalated) end DONE with a line "pilot rows: <n> accepted, <n> escalated, <n> refused". Hand-back (SubagentHandback) = AT MOST 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay; full report first via save-report.ps1.'
     )
 }
 
@@ -393,7 +393,7 @@ function Build([int]$exBudget) {
         '- Server/DLL bug: write cause (file+function+evidence) in the row and status `latest`; do not fix it. GATED / needs-native (PI-23): grep the NATIVE sources (C:\KenshiTestRuns\imm26-nc10\src, components/STOBE) for native names, paste grep + result in the row. No `find /` (search a named directory).',
         '- Ending (PI-22): never DONE while runnable non-PASS rows remain; end STOPPED-CONTEXT (successor in the handoff) or DONE with a `lane complete: <why>` line. PI-24: write the steps of a hand-run row without rd_ script into your handoff.',
         '- Status discipline: agent-status after EVERY row (silence > 20 min = killed); keep the handoff file current. Checkpoint every ~40k tokens; ~120k run the WARN-120k step, ~150k finish the row, write the handoff, end STOPPED-CONTEXT (successor name + 1). Budget <= 120k.',
-        '- Handbacks <= 8 lines (verdict, PASS/FAIL counts, report path, commits, next); full report via save-report.ps1 (<= 30 lines), then SubagentHandback.'
+        '- Hand-back (SubagentHandback) = AT MOST 8 lines: verdict (+PASS/FAIL counts), files/commits, SHA/paths (report path), one next action, any DECISION/QUESTION for Shay. Save the full report first (save-report.ps1, <= 30 lines); every hand-back line lands in the coordinator context.'
     )
     if ($Pilot) { $ruleLines = $pilotRules }
     foreach ($ln in $ruleLines) { $null = $sb.AppendLine($ln) }
@@ -404,7 +404,7 @@ function Build([int]$exBudget) {
     $null = $sb.AppendLine("- status: $as $Name RUNNING `"$taskQ`" `"<row/step>`" `"<evidence dir>`" `"<next row>`"   (DONE|FAILED|STOPPED-CONTEXT when ending)")
     $null = $sb.AppendLine("- context warning (~120k): $as $Name RUNNING `"$taskQ`" `"WARN-120k <row/step>`" `"<evidence dir>`" `"<next row>`"   (writes agents\$Name.warn)")
     $null = $sb.AppendLine("- handoff file: $ho2 (successor: same name, number + 1)")
-    $null = $sb.AppendLine("- report: powershell -NoProfile -File $ta\save-report.ps1 $Name <srcfile>   (final report <= 8 lines; then SubagentHandback)")
+    $null = $sb.AppendLine("- report: powershell -NoProfile -File $ta\save-report.ps1 $Name <srcfile>   (save the full report first; then SubagentHandback with AT MOST 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay)")
     $sb.ToString()
 }
 $budget = 2200

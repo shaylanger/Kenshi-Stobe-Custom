@@ -75,12 +75,12 @@ STATUS: powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-stat
 HANDOFF: C:\KenshiTestRuns\agents\<wpName>.handoff.md ; successor name <wpName>2.
 CHECKS: <exact commands, e.g. php -l, tests path, RESULT lines to paste>; 3 failed attempts = FAILED with last error.
 DELIVERABLES: <patch /root/imm26/<wpName>.patch + copy in pending-fixes/<program>/<wpName>/, tests, docs row>.
-REPORT (10 lines max): files changed, check result lines, patch path + diffstat, status path, next speed-up. End with SubagentHandback.
+REPORT: save the full report first (powershell -NoProfile -File C:\KenshiModding\tools\automation\save-report.ps1 <wpName> <file>). Hand back at most 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay (files changed, check result lines, patch path + diffstat belong in the saved report). End with SubagentHandback.
 ```
 
 ### 7b. Lane operators: generate the brief, do not write one (PI-12, 2026-10-15)
 
-For a rig-lane operator (5090-i3/i4/i5, 4080-i3/i4) do not copy the long briefs into the Agent prompt. Run `powershell -NoProfile -File C:\KenshiModding\tools\automation\lane-brief.ps1 <lane> -Out C:\KenshiTestRuns\agents\<operator>.brief.md -Name <operator>` and spawn with a 2-line prompt that points at that file (it carries the lane facts, current lane and newest NC DLL SHA256, the predecessor handoff, the next 5 non-PASS rows, known blockers, the standing rules (ONE debug attempt per row, <= 8-line handbacks, status/handoff files, isolated lane only) and the exact status/handoff/report commands, all read at call time, about 6 KB). Set `lane-owners.json` to the new operator first. Selftest: `tools/automation/lane-brief-selftest.ps1`.
+For a rig-lane operator (5090-i3/i4/i5, 4080-i3/i4) do not copy the long briefs into the Agent prompt. Run `powershell -NoProfile -File C:\KenshiModding\tools\automation\lane-brief.ps1 <lane> -Out C:\KenshiTestRuns\agents\<operator>.brief.md -Name <operator>` and spawn with a 2-line prompt that points at that file (it carries the lane facts, current lane and newest NC DLL SHA256, the predecessor handoff, the next 5 non-PASS rows, known blockers, the standing rules (ONE debug attempt per row, <= 8-line handbacks, status/handoff files, isolated lane only) and the exact status/handoff/report commands, all read at call time, about 6 KB). Set `lane-owners.json` to the new operator first. Selftest: `tools/automation/lane-brief-selftest.ps1`. End every operator spawn prompt with: Hand back at most 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay; full report via save-report.ps1.
 
 ## 8. PROPOSED CLAUDE.MD TEXT
 Not applied (awaits Shay). The existing section "Large programs: never lost, never stalled" already holds: state in files, supervisor, "Size work
