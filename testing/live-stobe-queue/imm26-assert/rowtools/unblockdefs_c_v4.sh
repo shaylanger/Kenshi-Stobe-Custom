@@ -7,6 +7,7 @@
 #      (2) `--away near` is the DEFAULT (HX15_AWAY=near; `--away far` unloads the spawned pair so `where #handle` errors).  (3) the base save must EXIST (hx4lib.sh): lane default for 5090-i3 is
 #      kah-imm26-5090-ready (kah-imm26-5090-hxA never existed on i3 and the load silently kept the loaded world); a missing save = SETUP-FAIL SAVE-MISSING.  (4) KO gate polls (v3b) and rename poll (v3c)
 #      are folded in; the rename poll only waits for the server when setname could not be applied.  Verdict checker unchanged (unblockcheck_c_v2.py).
+#   FIX (imm26-fix15bxv5, op25 live P3 SETUP-FAIL 17.4 u > 15): ub15_place_p pins F1 (`order F1 HOLD_POSITION keep`, ub4_pin) before every placement try; the <= 15 u guard is unchanged.
 #   RUN (one call): bash testing/live-stobe-queue/imm26-assert/rowtools/unblockdefs_c_v4.sh 15-bx <lane> [--allow-retry "why"] [--save S] [--save2 S] [--names 'A B'] [--away far|near] ...
 # (v3c header follows) unblockdefs_c_v3c.sh = v3b + rename poll up to HX15_RENAME_N (30) x 2 s (op23: 20 s was too short, fighters renamed later). v3b: v3 + S1 KO gate polls <=16 s (op23: first read right after the ko order says unconscious:false; 2 s later true). # unblockdefs_c_v3.sh (imm26-fix15bx05cx, 2026-10-16): v3 = v2 + the fixes diagnosed by imm26-inv15bx (C:/KenshiTestRuns/agents/out/imm26-inv15bx/out-20261016-134157.md); unblockdefs_c_v2.sh is NOT edited.
 #   V3 CHANGES: (1) S1 is put to sleep with `ko <s1> ${HX15_KO_S:-900}` instead of `sleep` (the harness SLEEP_ON_FLOOR order is dropped at once by a spawned NPC's AI); a gate right after it
@@ -153,9 +154,15 @@ ub15_place_x() {  # ub15_place_x <label> : X at spot+out, Shay on X, distance.tx
   done
   RL_REASON="X could not be held >= 255 u from the fight at $lab ($(tr '\n' ' ' < "$HXD/$lab/distance.txt"))"; return 3
 }
-ub15_place_p() {  # ub15_place_p <label> : P within 15 u of F1 (teleport npc F1 dist 10 / 6 / 3), Shay on P
+ub4_pin() {  # ub4_pin <#handle> : imm26-fix15bxv5: freeze the fighter in place (HOLD_POSITION) so it does not run off between the teleport and the distance read (op25 live: P3 17.4 u, limit 15).
+  # The order reply goes to pin.txt (evidence only).  The distance guard in ub15_place_p is NOT relaxed.
+  printf 'stobe-auto order %s HOLD_POSITION keep </dev/null 2>&1 | head -1\n' "$(rl_q "$1")" | lt_h >> "$EV/pin.txt" 2>&1
+  echo "$(date +%T) pinned $1 (HOLD_POSITION keep)" >> "$EV/pin.txt"
+}
+ub15_place_p() {  # ub15_place_p <label> : F1 pinned (HOLD_POSITION), then P within 15 u of F1 (teleport npc F1 dist 10 / 6 / 3), Shay on P; the pin is re-issued before every try
   local lab="$1" d
   for d in 10 6 3; do
+    ub4_pin "$UB_ID1"
     printf 'stobe-auto teleport %s %s dist %s </dev/null | head -1\nstobe-auto teleport Shay %s </dev/null | head -1\n' "$(rl_q "$UB_NPC")" "$(rl_q "$UB_ID1")" "$d" "$(rl_q "$UB_NPC")" | lt_h >> "$EV/place.txt" 2>&1
     hxd_dist "$lab" "$UB_ID1" "$UB_NPC" || return $?
     uc_dry && return 0
