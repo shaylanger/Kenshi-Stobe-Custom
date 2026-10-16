@@ -15,15 +15,6 @@ Rules:
 
 ## Active
 
-### PI-25 | open
-- idea: Automatic tail relay: a script (tail-autorelay) waits on the tail's owned agents and, when one reaches DONE/FAILED/STOPPED-CONTEXT, writes the TAIL-RELAY inbox file from the agent's agents/out/<name>/latest.md or handoff itself (no LLM turn); the tail then has nothing to do and its Stop hook passes 5 min after the relay file (PI-18).
-- evidence: 2026-10-15 20:00-21:00 (tail phase): the tail needed ~7 wait cycles and ~40 Stop-hook blocks (each a model turn replaying the tail context) plus 8 hand-written relays of ~2.5k tokens each (wpR3, pi13, wpR2, wpR1, i5-op7, pi21, i3-hard2b, fix19) to move results the coordinator's waker could already see as inbox files.
-- saving: ~40 wasted turns and ~20k tokens of manual relays per overlap handoff; the tail context stops growing
-- risk: a relay without a model summary may miss a decision for Shay: keep the first 30 lines of latest.md plus any line starting DECISION/QUESTION
-- hooks: no
-- weakens: no
-- added: 2026-10-15 20:51
-
 ### PI-27 | open
 - idea: A tail runs only a FILTERED waker (its own agents' status changes), not the full event stream; or none if tail-autorelay exists.
 - evidence: 2026-10-15 the tail received LANE IDLE, wpR3-deploy, inv19d and other events it cannot act on (spawn/decide nothing) and each one cost a turn; both Monitor wakers also died with exit 1 at ~20:36 and had to be replaced by hand.
@@ -358,4 +349,15 @@ Rules:
 - weakens: no
 - added: 2026-10-15 20:51
 - measured: hook version NOT built (a pre-written RUNNING status could mask a never-started agent); replaced by the coordinator rule in AGENT_PROMPTS block C: check ListAgents/ledger owner before duplicating
+- retired: 2026-10-15 built
+
+### PI-25 | done
+- idea: Automatic tail relay: a script (tail-autorelay) waits on the tail's owned agents and, when one reaches DONE/FAILED/STOPPED-CONTEXT, writes the TAIL-RELAY inbox file from the agent's agents/out/<name>/latest.md or handoff itself (no LLM turn); the tail then has nothing to do and its Stop hook passes 5 min after the relay file (PI-18).
+- evidence: 2026-10-15 20:00-21:00 (tail phase): the tail needed ~7 wait cycles and ~40 Stop-hook blocks (each a model turn replaying the tail context) plus 8 hand-written relays of ~2.5k tokens each (wpR3, pi13, wpR2, wpR1, i5-op7, pi21, i3-hard2b, fix19) to move results the coordinator's waker could already see as inbox files.
+- saving: ~40 wasted turns and ~20k tokens of manual relays per overlap handoff; the tail context stops growing
+- risk: a relay without a model summary may miss a decision for Shay: keep the first 30 lines of latest.md plus any line starting DECISION/QUESTION
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:51
+- measured: tail-autorelay-selftest 24/24 PASS; tail-close/hooks/ledger selftests green (selftest-all -Only tail-*: 4 pass / 0 fail)
 - retired: 2026-10-15 built
