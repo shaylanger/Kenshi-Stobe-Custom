@@ -36,7 +36,11 @@ def ticket_hook(d, lane, row, verdict, cause):
     PREFLIGHT-FAIL is exempt. <runs> = the parent of DIR (DIR = <runs>/row-attempts). Never breaks a record: any error is swallowed."""
     try:
         # SHADOW PILOT (haiku-i4): while <runs>/pilot/haiku-i4/ACTIVE exists, verdicts of lane 5090-i4 never open/close real tickets.
-        if lane == "5090-i4" and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(d)), "pilot", "haiku-i4", "ACTIVE")): return
+        # pilot 2 (ab2): the same for any pilot\<x>\ACTIVE / pilot\<x>\<y>\ACTIVE younger than 12 h.
+        if lane == "5090-i4":
+            import glob, time
+            pdir = os.path.join(os.path.dirname(os.path.abspath(d)), "pilot")
+            if any(time.time() - os.path.getmtime(m) < 43200 for m in glob.glob(os.path.join(pdir, "*", "ACTIVE")) + glob.glob(os.path.join(pdir, "*", "*", "ACTIVE"))): return
         sp = os.environ.get("KAH_SETUPFAIL_PY") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "tools", "automation", "setupfail.py")
         if not os.path.isfile(sp): return
         import importlib.util
