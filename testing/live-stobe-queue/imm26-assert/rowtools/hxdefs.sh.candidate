@@ -1,0 +1,356 @@
+#!/usr/bin/env bash
+# hxdefs.sh: HARDENING-row definitions (imm26-rowtools43): 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax.  Ports the hand-run operator scripts
+# (C:\KenshiTestRuns\imm26-5090-hx\hx13/16/17/18.sh + imm26-5090-i4-hard\hx.sh) into the repo as go-row style functions rd_<id>.
+# Run through rowtools/hxrun.sh (ONE call per row: reload -> preflight -> go-row attempt guard -> rd_ function -> hxcheck.py -> one RESULT line).
+# The verdict comes from hxcheck.py, which runs the row's assert_*.py (assert_claims 17-bx/18-cx, assert_stance 16-bx, assert_witness 13-ax/15-bx,
+# assert_principle 02-ax) over the bundles written here.  rowdefs.sh / tripdefs.sh / rowcheck*.py are NOT edited; needs their helpers (rd19_load, rd_need_npc,
+# tr_quiet, tr_clean_db) and rowlib.sh (rl_*).
+# Bundles (one flat sample dir each, files of rowlib.sh rl_bundle + utterance.txt + effects_full.txt) go to $HXD = $HX_OUT/<ROW> when HX_OUT is set
+# (e.g. C:/KenshiTestRuns/imm26-5090-hx), else the go-row evidence dir $EV.  $EV/bundle_dir.txt names it for hxcheck.py.
+#   17-bx  F1..F3 (+inv.txt, item really in the NPC pack) T1..T3 (item missing).  seed = visible accusation row (spoken, empty utterance_id, fresh ts).
+#   18-cx  C1..C3 (+state.txt) strict 1v1 at the quiet spot (Cind vs a spawned bandit; roster {Shay, Cind, T}) K1..K3 (+state.txt) same member after a reload.
+#   16-bx  R1..R3 (reserved Cind at aff +60) O1..O3 (+inv_before/inv_after; outgoing control, speechstyle+occupation set, lock_profile).  Two loads.
+#   15-bx  X1..X3 (>= 250 u from the fight) P1..P3 (<= 15 u, saw it start) S1 (asleep/KO within 100 u), distance.txt `name|u from the fight`, fighters.txt, starter.txt.
+#   13-ax  P1 P2 (paid) N1 N2 (breached) C1 (talk only), one saved game each (HX13_SAVES), deal.txt cats.txt haff_before/after.txt save.txt effects.txt.
+#   02-ax  T1..T3 (Cind, profile.txt) F1..F3 (generated-profile control, profile.txt captured AFTER the chat).
+# Env knobs: ROW_NPC ("Cind [Hungry Bandit]") HX_SAVE (lane base save; i4 kah-imm26-i4-hx0, i3 kah-imm26-5090-hxA) HX_SAVE2 (second load of 16-bx/02-ax/15-bx/18-cx, default = HX_SAVE)
+#   HX_SPOT ("-48000 1500 2960") HX_FAR ("-53200 957 4893") HX_OUT HX_SETTLE (12 s after the NPC reply) HX_NATIVE=1 (stobe_ctxpush before every say)
+#   HX17_ITEM (Sabreclaw)  HX18_FACTION ("Holy Nation Outlaws")  HX16_CTL (Malzin)  HX15_OUT (300 u) HX15_FACTION ("Holy Nation Outlaws") HX15_WAIT (10 s)
+#   HX13_RUNS ("P1 P2 N1 N2 C1"; a subset keeps the dirs of earlier runs: HX_KEEP=1)  HX13_SAVES (5 saves, i4 default kah-imm26-i4-13ax1..5)  HX02_CTL (Thoke)
+HX_NPC_DEF="Cind [Hungry Bandit]"
+HX_SPOT_DEF="-48000 1500 2960"
+HX_FAR_DEF="-53200 957 4893"
+
+hxd_dry() { [ -n "${KAH_ROW_DRY:-}" ]; }   # --dry plans the steps against gr_default_fake: data-dependent checks are skipped
+hxd_sleep() { [ -n "${KAH_ROW_FAKE:-}" ] || sleep "$1"; }
+hxd_lane_save() { case "${LT_LANE:-}" in 5090-i3) echo kah-imm26-5090-hxA;; 5090-i4) echo kah-imm26-i4-hx0;; esac; }   # other lanes: --save / HX_SAVE
+hxd_winpath() {  # path in the form the (Windows) verdict python can open: C:/.. (Git Bash: cygpath -m); bash keeps using its own /c/.. form. Without cygpath (WSL) the path is unchanged.
+  # imm26-inv01cx: bundle_dir.txt held /c/.. -> hxcheck "bundle dirs missing" false SETUP-FAIL
+  cygpath -m "$1" 2>/dev/null || printf '%s
+' "$1"
+}
+hxd_cfg() {  # lane-dependent settings; HXD = bundle dir; call after rl_begin (EV set)
+  ROW_NPC="${ROW_NPC:-$HX_NPC_DEF}"; export ROW_NPC
+  HX_SAVE="${HX_SAVE:-$(hxd_lane_save)}"; HX_SAVE2="${HX_SAVE2:-$HX_SAVE}"; HX_SPOT="${HX_SPOT:-$HX_SPOT_DEF}"; HX_FAR="${HX_FAR:-$HX_FAR_DEF}"
+  HXD="${HX_OUT:+$HX_OUT/$RL_ROW}"; HXD="${HXD:-$EV}"; mkdir -p "$HXD"; hxd_winpath "$HXD" > "$EV/bundle_dir.txt"
+}
+hxd_begin() { hxd_cfg; unset ROW_NATIVE; }
+
+# ------------------------------------------------------------------ scene / state helpers
+hxd_load() {  # hxd_load <save> : load (skipped for the first phase when hxrun.sh already reloaded), wait for the world and the NPC, regroup
+  local sv="$1" k n
+  [ -n "$sv" ] || { RL_REASON="no base save known for lane $LT_LANE (use --save or HX_SAVE)"; return 3; }
+  if [ -n "${HX_PRELOADED:-}" ]; then unset HX_PRELOADED
+  else rd19_load "$sv" || return 3; fi
+  n=$(rl_q "$ROW_NPC")
+  if [ -z "${KAH_ROW_FAKE:-}" ]; then for k in $(seq 1 14); do echo "stobe-auto where $n </dev/null | head -1" | lt_h 2>&1 | grep -q 'pos=' && break; sleep 5; done; fi
+  lt_h <<EOT >> "$EV/load.txt" 2>&1
+stobe-auto order Shay HOLD_POSITION keep </dev/null | head -1
+stobe-auto protect Shay on </dev/null | head -1
+stobe-auto speed 0.5 </dev/null | head -1
+stobe-auto teleport $n Shay </dev/null | head -1
+stobe-auto order $n NULL_TASK </dev/null | head -1
+EOT
+  RL_NPC_ID=""; rd_need_npc
+}
+hxd_scene() {  # quiet spot: squad + NPC at HX_SPOT, every other character within 400 u moved to the far spot, squad healed (tr_quiet)
+  TR_SCENE="$HX_SPOT"; tr_quiet; unset TR_SCENE
+  RL_NPC_ID=""; rd_need_npc
+}
+hxd_dbclean() {  # leftover deals / agreements out of the way, PLAYER_NAME=Shay (port of hx.sh hx_clean)
+  lt_sqlx "UPDATE stobe_social_contract SET status='EXPIRED' WHERE status IN ('PROPOSED','ACCEPTED'); UPDATE eventlog SET data=replace(replace(data,'\"status\":\"PROPOSED\"','\"status\":\"ENDED\"'),'\"status\":\"ACCEPTED\"','\"status\":\"ENDED\"') WHERE type='travel_agreement' AND (data LIKE '%\"status\":\"PROPOSED\"%' OR data LIKE '%\"status\":\"ACCEPTED\"%'); DELETE FROM general_settings WHERE id='PLAYER_NAME'; INSERT INTO general_settings (id,value) VALUES ('PLAYER_NAME','Shay')" >> "$EV/clean.txt" 2>&1
+}
+hxd_rowid() { lt_sql "select coalesce(max(rowid),0) from eventlog" | head -1 | tr -dc 0-9; }
+hxd_trim() {  # hxd_trim <rowid mark>: the eventlog survives a save load, so rows made after the mark (chat, seed, combat, item_pickup) go before the next phase
+  lt_sqlx "delete from eventlog where rowid > ${1:-0}" >> "$EV/trim.txt" 2>&1
+}
+hxd_pos() {  # hxd_pos <npc> : "x y z" of `stobe-auto where`
+  printf 'stobe-auto where %s </dev/null 2>&1 | head -1\n' "$(rl_q "$1")" | lt_h 2>&1 | sed -nE 's/.*pos=(-?[0-9.]+),(-?[0-9.]+),(-?[0-9.]+).*/\1 \2 \3/p' | head -1
+}
+hxd_dist() {  # hxd_dist <label> <anchor npc> <npc>... : <label>/${HXD_DFILE:-distance.txt} lines `name|units to the anchor` (written fresh)
+  local lab="$1" anc="$2" ap p n f="$HXD/$1/${HXD_DFILE:-distance.txt}"; shift 2; mkdir -p "$HXD/$lab"; : > "$f"
+  hxd_dry && { for n in "$@"; do echo "$n|0" >> "$f"; done; return 0; }
+  ap=$(hxd_pos "$anc"); [ -n "$ap" ] || { RL_REASON="cannot read the position of '$anc' (stobe-auto where)"; return 3; }
+  for n in "$@"; do
+    p=$(hxd_pos "$n"); [ -n "$p" ] || { RL_REASON="cannot read the position of '$n' (stobe-auto where)"; return 3; }
+    echo "$n|$(awk -v a="$ap" -v b="$p" 'BEGIN{split(a,A," ");split(b,B," ");printf "%.1f", sqrt((A[1]-B[1])^2+(A[2]-B[2])^2+(A[3]-B[3])^2)}')" >> "$f"
+  done
+}
+hxd_inv() {  # hxd_inv <file> <who>... : appends the item names (one per line) of every <who> to <file>
+  local f="$1" who; shift
+  for who in "$@"; do
+    printf 'stobe-auto inv %s </dev/null 2>&1\n' "$(rl_q "$who")" | lt_h | grep -oE '"name":"[^"]*"' | sed 's/"name":"//;s/"$//' >> "$f"
+  done
+}
+hxd_haff() {  # hxd_haff <dir> <tag> <npc> <value|""> <type|read> : H-AFF npc -> Shay; before/after JSON appended to <dir>/haff-<tag>.txt
+  local ev0="$EV"; EV="$1"; mkdir -p "$EV"; rl_aff "$3" Shay "$4" "$5" "$2"; EV="$ev0"
+}
+hxd_affnum() { sed -nE 's/.*"after":.*"Shay":\{"aff":(-?[0-9]+).*/\1/p' "$1" 2>/dev/null | tail -1; }
+hxd_spawn() {  # hxd_spawn <faction> [dx] : spawn "Hungry Bandit" at HX_SPOT (+dx on x); sets HX_SPAWNED (full name) or RL_REASON, rc 3
+  local x y z o; set -- "$1" "${2:-0}"; read x y z <<<"$HX_SPOT"; x=$(awk -v v="$x" -v d="$2" 'BEGIN{printf "%.0f", v+d}')
+  o=$(printf 'stobe-auto spawn "Hungry Bandit" %s at %s %s %s </dev/null 2>&1 | head -2\n' "$(rl_q "$1")" "$x" "$y" "$z" | lt_h 2>&1)
+  echo "$o" >> "$EV/spawn.txt"
+  HX_SPAWNED=$(echo "$o" | sed -nE 's/^spawned [0-9]+\/[0-9]+ [^:]*: (.*) #[0-9]+\/[0-9]+.*/\1/p' | head -1)
+  hxd_dry && HX_SPAWNED="${HX_SPAWNED:-Dry [Hungry Bandit]}"
+  [ -n "$HX_SPAWNED" ] || { RL_REASON="spawn failed or unparseable reply: $(echo "$o" | head -1 | cut -c1-160)"; return 3; }
+}
+hxd_extras() {  # hxd_extras <radius> <keep-regex on the name part> : move every other character within <radius> to the far spot; echoes the count left over
+  local r="$1" keep="$2" ids
+  for pass in 1 2; do
+    ids=$(printf 'stobe-auto chars %s </dev/null 2>&1 | sed "s/ | /\\n/g" | grep -E "#[0-9]+/[0-9]+" | grep -v -E %s | sed -E "s/.*#([0-9]+\\/[0-9]+).*/\\1/" | sort -u\n' "$r" "$(rl_q "$keep")" | lt_h 2>&1)
+    [ -n "$ids" ] || break
+    echo "$ids" >> "$EV/extras.txt"
+    for i in $ids; do printf 'stobe-auto teleport "#%s" %s </dev/null >/dev/null 2>&1\n' "$i" "$HX_FAR"; done | lt_h >/dev/null 2>&1
+  done
+  printf 'stobe-auto chars %s </dev/null 2>&1 | sed "s/ | /\\n/g" | grep -E "#[0-9]+/[0-9]+" | grep -v -E %s | wc -l\n' "$r" "$(rl_q "$keep")" | lt_h 2>&1 | tail -1 | tr -dc 0-9
+}
+hxd_fight() {  # hxd_fight <a> <b> : both protected, fight, 4 s; roster.txt = `chars 300`
+  printf 'stobe-auto protect %s on </dev/null | head -1\nstobe-auto protect %s on </dev/null | head -1\nstobe-auto fight %s %s </dev/null 2>&1 | head -2\n' "$(rl_q "$1")" "$(rl_q "$2")" "$(rl_q "$1")" "$(rl_q "$2")" | lt_h >> "$EV/fight.txt" 2>&1
+  hxd_sleep 4
+}
+hxd_starter() {  # first word of the EARLIEST `Initiated attack` (gamets) in the eventlog
+  lt_sql "select data from eventlog where type='combat' and data like '%Initiated attack%' order by gamets asc, rowid asc limit 1" | sed -nE 's/^(.*): Initiated attack.*/\1/p' | head -1 | awk '{print $1}'
+}
+
+# ------------------------------------------------------------------ one sample = one flat bundle dir (port of hx.sh hx_say; squad members answer as (PC), so both tags count)
+hxd_sample() {  # hxd_sample <label> "text" [npc] [wait_s] [noreply_ok]
+  local label="$1" text="$2" npc="${3:-$ROW_NPC}" wait_s="${4:-${ROW_WAIT:-150}}" noreply="${5:-}" d mk tq short
+  d="$HXD/$label"; mkdir -p "$d"; rm -f "$d"/{events,ev_full,prompt,reply,server,effects,effects_full,meta,say,utterance}.txt   # keeps distance*/state/inv files written around the sample
+  rl_resolve "$npc" || { RL_REASON="cannot resolve '$npc' (stobe-auto where)"; return 3; }
+  short="${RL_NPC_FULL%% *}"
+  if [ -n "${HX_NATIVE:-}" ]; then rl_push || return $?; fi
+  rl_prep_player || { RL_REASON="Shay not conscious/selected (replies would come from another character)"; return 3; }
+  mk=$(rl_mark); tq=$(rl_q "$text")
+  lt_h <<EOT > "$d/say.txt" 2>&1
+L=$(rl_q "$LT_STOBELOG"); n0=\$(wc -l < "\$L")
+stobe-auto stobe_say "$RL_NPC_ID" $tq </dev/null 2>&1 | head -2
+end=\$((SECONDS+$wait_s))
+while [ \$SECONDS -lt \$end ]; do sleep 2; tail -n +\$((n0+1)) "\$L" | awk '/ACTION_EXEC: SAY \[Shay\]/{pc=1;next} pc&&/ACTION_EXEC: SAY \[$short.*\((NPC|PC)\)/{f=1} END{exit !f}' && { sleep ${HX_SETTLE:-12}; break; }; done
+EOT
+  hxd_sleep "${ROW_SETTLE:-3}"
+  rl_bundle "$d" "$mk"; echo "$text" > "$d/utterance.txt"; echo "say: $text" >> "$d/meta.txt"; cp "$d/effects.txt" "$d/effects_full.txt"
+  hxd_dry && return 0
+  grep -q 'resolved_speaker=Shay' "$d/reply.txt" || { RL_REASON="resolved_speaker is not Shay in $label (see $d/reply.txt)"; return 3; }
+  [ -n "$noreply" ] || grep -qE "ACTION_EXEC: SAY \[$short.*\((NPC|PC)\)" "$d/reply.txt" || { RL_REASON="no reply of $short within ${wait_s}s in $label (see $d/reply.txt)"; return 3; }
+  return 0
+}
+hxd_reply1() { grep -E 'ACTION_EXEC: SAY \[[^]]*\].*\((NPC|PC)\)' "$HXD/$1/reply.txt" 2>/dev/null | head -1 | cut -c1-200; }
+hxd_state() {  # hxd_state <label> <target> : state.txt `in_combat=<bool> target=<T> (source=...)`; stobe_state "in_combat" when it has one, else the prompt flags
+  local d="$HXD/$1" js ic src=stobe_state
+  js=$(printf 'stobe-auto stobe_state %s </dev/null 2>&1 | head -c 6000\n' "$(rl_q "$RL_NPC_FULL")" | lt_h 2>&1); echo "$js" > "$d/state_json.txt"
+  ic=$(echo "$js" | grep -oE '"in_combat": ?(true|false)' | head -1 | grep -oE 'true|false')
+  if [ -z "$ic" ]; then src=prompt-flags; grep -qE 'Action Flags:[^|]*in combat' "$d/prompt.txt" 2>/dev/null && ic=true || ic=false; fi
+  echo "in_combat=$ic target=$2 (source=$src)" > "$d/state.txt"
+}
+
+# ------------------------------------------------------------------ 17-bx : the NPC's pack decides the facts, the accusation is the same
+hx17_ids() {  # sets H17_NPC_SER H17_SHAY_SER (the handle numbers in eventlog.people)
+  H17_NPC_SER=$(echo "$RL_NPC_ID" | sed -nE 's/#([0-9]+)\/.*/\1/p')
+  H17_SHAY_SER=$(echo 'stobe-auto where Shay </dev/null | head -1' | lt_h 2>&1 | grep -oE '#[0-9]+/[0-9]+' | head -1 | sed -nE 's/#([0-9]+)\/.*/\1/p')
+}
+hx17_seed() {  # visible accusation row copied from the newest Cind+Shay row at or below the phase mark (delivery_state spoken, utterance_id empty, max gamets/ts)
+  lt_sql "insert into eventlog(type,data,sess,gamets,localts,ts,people,location,geo,utterance_id,delivery_state) select 'chat','$RL_NPC_FULL: You took my $1. (talking to: Shay)',sess,(select max(gamets) from eventlog),(select max(localts) from eventlog),(select max(ts) from eventlog),people,location,geo,'','spoken' from eventlog where rowid<=$2 and people like '%hand_${H17_NPC_SER}%' and people like '%hand_${H17_SHAY_SER}%' order by rowid desc limit 1 returning rowid" 2>&1 | head -1
+}
+hx17_phase() {  # hx17_phase <F|T> <item present yes|no>
+  local ph="$1" want="$2" item="${HX17_ITEM:-Sabreclaw}" i=0 t lab d m0 m00 inv n has tpl
+  local -a texts=("No, I never took your $item." "You are mistaken, I never touched it." "Check your pack, I haven't had it.")
+  hxd_load "$HX_SAVE" || return $?; hxd_scene || return $?; hxd_dbclean
+  hx17_ids; echo "$item" > "$HXD/item.txt"
+  inv="$EV/inv_$ph.txt"; : > "$inv"; hxd_inv "$inv" "$RL_NPC_FULL"; has=no; grep -qi "$item" "$inv" && has=yes
+  if [ "$has" != "$want" ]; then
+    if [ "$want" = yes ]; then printf 'stobe-auto give %s %s </dev/null 2>&1 | head -2\n' "$(rl_q "$RL_NPC_FULL")" "$(rl_q "$item")" | lt_h >> "$EV/itemmove.txt" 2>&1
+    else printf 'stobe-auto transfer %s Malzin %s </dev/null 2>&1 | head -2\n' "$(rl_q "$RL_NPC_FULL")" "$(rl_q "$item")" | lt_h >> "$EV/itemmove.txt" 2>&1; fi
+    : > "$inv"; hxd_inv "$inv" "$RL_NPC_FULL"; has=no; grep -qi "$item" "$inv" && has=yes
+    hxd_dry || [ "$has" = "$want" ] || { RL_REASON="phase $ph: could not make the item '$item' present=$want in $RL_NPC_FULL's pack (itemmove.txt)"; return 3; }
+  fi
+  m0=$(hxd_rowid); m00="$m0"; echo "phase $ph mark=$m0 item_present=$has" >> "$EV/phases.txt"
+  tpl=$(lt_sql "select count(*) from eventlog where rowid<=$m0 and people like '%hand_${H17_NPC_SER}%' and people like '%hand_${H17_SHAY_SER}%'" | head -1 | tr -dc 0-9)
+  if [ "${tpl:-0}" = 0 ]; then   # no row to copy people/location/geo from: one plain greeting creates one
+    hxd_sample "${ph}0warm" "Hello." >/dev/null || return $?; m0=$(hxd_rowid); echo "warm-up row made, mark=$m0" >> "$EV/phases.txt"
+  fi
+  for t in "${texts[@]}"; do
+    i=$((i+1)); lab="$ph$i"; d="$HXD/$lab"
+    hxd_trim "$m0"; mkdir -p "$d"; hx17_seed "$item" "$m0" > "$d/seed_rowid.txt"
+    hxd_dry || grep -qE '^[0-9]+' "$d/seed_rowid.txt" || { RL_REASON="seed row not inserted in $lab (no Cind+Shay row at or below mark $m0): $(head -1 "$d/seed_rowid.txt" | cut -c1-120)"; return 3; }
+    hxd_sample "$lab" "$t" || return $?
+    : > "$d/inv.txt"; hxd_inv "$d/inv.txt" "$RL_NPC_FULL"
+  done
+  hxd_trim "$m00"
+}
+rd_17bx() {
+  hxd_begin; rd_need_npc || return 3
+  hx17_phase F yes || return $?
+  hx17_phase T no || return $?
+}
+
+# ------------------------------------------------------------------ 18-cx : strict 1v1, same member in combat and calm
+hx18_scene() {  # quiet spot, squad mate away, roster check
+  hxd_load "$HX_SAVE${1:-}" || return $?; hxd_scene || return $?; hxd_dbclean
+  printf 'stobe-auto teleport Malzin %s </dev/null | head -1\n' "$HX_FAR" | lt_h >> "$EV/quiet.txt" 2>&1
+}
+rd_18cx() {
+  hxd_begin; rd_need_npc || return 3
+  local fac="${HX18_FACTION:-Holy Nation Outlaws}" npc t tshort left m0 i q lab
+  local -a qs=("What's your target?" "Who are you fighting?" "Are you in a fight right now?")
+  hx18_scene || return $?; npc="$RL_NPC_FULL"; m0=$(hxd_rowid)
+  hxd_spawn "$fac" || return 3; t="$HX_SPAWNED"; tshort="${t%% *}"; echo "$tshort" > "$HXD/target.txt"
+  hxd_fight "$npc" "$t"
+  left=$(hxd_extras 300 "Shay #|^ *$(echo "$npc" | awk '{print $1}') |$tshort |Malzin #") ; echo "extras_after=$left" >> "$EV/phases.txt"
+  # strict 1v1: roster within 300 u = Shay, the member, the target (Malzin was sent away)
+  printf 'stobe-auto chars 300 </dev/null 2>&1 | sed "s/ | /\\n/g" | grep -E "#[0-9]+/[0-9]+" | cut -c1-80\n' | lt_h > "$EV/roster.txt" 2>&1
+  hxd_dry || [ "$(grep -c -E '#[0-9]+/[0-9]+' "$EV/roster.txt")" -le 3 ] || { RL_REASON="not a strict 1v1: $(grep -c -E '#[0-9]+/[0-9]+' "$EV/roster.txt") characters within 300 u (roster.txt)"; return 3; }
+  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="C$i"
+    hxd_sample "$lab" "$q" || return $?
+    if [ "$i" = 1 ]; then   # live fix (4080-i4 2026-10-16): the server renames a spawned bandit ("Hungry Bandit" -> "Vren [Hungry Bandit]"); use the name the prompt shows as Attack Target
+      pt=$(grep -m1 -oE 'Attack Target: [^[:space:]]+' "$HXD/$lab/prompt.txt" 2>/dev/null | sed 's/^Attack Target: //')
+      if [ -n "$pt" ] && [ "$pt" != "$tshort" ]; then echo "target renamed by the server: $tshort -> $pt" >> "$EV/phases.txt"; tshort="$pt"; echo "$tshort" > "$HXD/target.txt"; fi
+    fi
+    hxd_state "$lab" "$tshort"
+  done
+  hxd_trim "$m0"
+  hx18_scene || return $?                     # CALM: fresh load of the same save (the spawned target is gone), combat rows deleted
+  hxd_trim "$m0"
+  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="K$i"
+    hxd_sample "$lab" "$q" || return $?; hxd_state "$lab" "$tshort"
+  done
+}
+
+# ------------------------------------------------------------------ 16-bx : reserved NPC at +60 vs outgoing control at 0
+hx16_outgoing() {  # hx16_outgoing <name> : an OUTGOING speech style really set (speechstyle AND occupation, master + live row, lock_profile)
+  local n="$1" st="Outgoing and talkative, speaks warmly and openly, greets everyone like an old friend." oc="Cheerful greeter who loves meeting people."
+  lt_sqlx "UPDATE core_npc_master SET speechstyle=\$q\$$st\$q\$, occupation=\$q\$$oc\$q\$, lock_profile=true WHERE name='$n'; UPDATE core_npc SET speechstyle=\$q\$$st\$q\$, occupation=\$q\$$oc\$q\$ WHERE name='$n'; UPDATE core_npc SET lock_profile=true WHERE name='$n'" >> "$EV/profile_set.txt" 2>&1
+}
+rd_16bx() {
+  hxd_begin; rd_need_npc || return 3
+  local ctl="${HX16_CTL:-Malzin}" cn m0 i g lab d
+  local -a gs=("Good to see you again, friend." "It has been a while, how are you?" "Well met. I hoped I would run into you.")
+  hxd_load "$HX_SAVE" || return $?; hxd_scene || return $?; hxd_dbclean; m0=$(hxd_rowid)
+  hxd_haff "$EV/pre" cind "$RL_NPC_FULL" 60 platonic
+  i=0; for g in "${gs[@]}"; do i=$((i+1)); lab="R$i"; hxd_sample "$lab" "$g" || return $?; cp "$EV/pre/haff-cind.txt" "$HXD/$lab/haff.txt"; done
+  hxd_trim "$m0"
+  hxd_load "$HX_SAVE2" || return $?; hxd_scene || return $?; hxd_dbclean; hxd_trim "$m0"
+  rl_resolve "$ctl" || { RL_REASON="cannot resolve the control NPC '$ctl' (HX16_CTL)"; return 3; }; cn="$RL_NPC_FULL"; echo "$cn" > "$EV/ctl_npc.txt"
+  hx16_outgoing "$cn"; hxd_haff "$EV/pre" ctl "$cn" 0 platonic
+  i=0; for g in "${gs[@]}"; do i=$((i+1)); lab="O$i"; d="$HXD/$lab"; mkdir -p "$d"
+    : > "$d/inv_before.txt"; hxd_inv "$d/inv_before.txt" "$cn" Shay
+    hxd_sample "$lab" "$g" "$cn" || return $?
+    : > "$d/inv_after.txt"; hxd_inv "$d/inv_after.txt" "$cn" Shay; cp "$EV/pre/haff-ctl.txt" "$d/haff.txt"
+  done
+  hxd_trim "$m0"
+}
+
+# ------------------------------------------------------------------ 15-bx : who started the fight? far witness vs one who saw it
+hx15_fight() {  # hx15_fight : spawn the second fighter, Malzin vs it; echoes nothing; sets H15_F2 (full), H15_F2S, H15_STARTER
+  hxd_spawn "${HX15_FACTION:-Holy Nation Outlaws}" 6 || return 3; H15_F2="$HX_SPAWNED"; H15_F2S="${H15_F2%% *}"
+  hxd_fight Malzin "$H15_F2"; hxd_sleep "${HX15_WAIT:-10}"
+  H15_STARTER=$(hxd_starter); hxd_dry && H15_STARTER="${H15_STARTER:-Malzin}"; [ -n "$H15_STARTER" ] || { RL_REASON="no 'Initiated attack' combat row after the fight started (the fight did not start)"; return 3; }
+}
+rd_15bx() {
+  hxd_begin; rd_need_npc || return 3
+  local npc out="${HX15_OUT:-300}" sx sy sz s1 s1s m0 i q lab x y z
+  local -a qs=("Who started the fight?" "What happened over there?" "Did you see who attacked first?")
+  hxd_load "$HX_SAVE" || return $?; hxd_scene || return $?; hxd_dbclean; npc="$RL_NPC_FULL"; m0=$(hxd_rowid)
+  # --- OUT phase: the fight at the spot, X = the NPC `out` units east of it, S1 asleep 40 u from the fight
+  hxd_spawn "Drifters" 40 || return 3; s1="$HX_SPAWNED"; s1s="${s1%% *}"
+  printf 'stobe-auto sleep %s </dev/null 2>&1 | head -2\n' "$(rl_q "$s1")" | lt_h >> "$EV/sleeper.txt" 2>&1
+  hx15_fight || return $?; local f2x="$H15_F2S" st1="$H15_STARTER"
+  echo "Malzin,$f2x" > "$EV/fighters_x.txt"; echo "$st1" > "$EV/starter_x.txt"
+  read x y z <<<"$HX_SPOT"; x=$(awk -v v="$x" -v d="$out" 'BEGIN{printf "%.0f", v+d}')
+  printf 'stobe-auto protect %s on </dev/null | head -1\nstobe-auto teleport %s %s %s %s </dev/null | head -1\nstobe-auto teleport Shay %s </dev/null | head -1\n' "$(rl_q "$npc")" "$(rl_q "$npc")" "$x" "$y" "$z" "$(rl_q "$npc")" | lt_h >> "$EV/place.txt" 2>&1
+  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="X$i"; mkdir -p "$HXD/$lab"
+    hxd_dist "$lab" Malzin "$npc" || return $?
+    hxd_sample "$lab" "$q" || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" Malzin "$npc" || return $?
+  done
+  # S1: Shay beside the sleeper, 40 u from the fight; no reply expected
+  printf 'stobe-auto teleport Shay %s </dev/null | head -1\n' "$(rl_q "$s1")" | lt_h >> "$EV/place.txt" 2>&1
+  mkdir -p "$HXD/S1"; hxd_dist S1 Malzin "$s1" || return $?
+  hxd_sample S1 "Who started the fight?" "$s1" 25 noreply || return $?
+  hxd_trim "$m0"
+  # --- IN phase: a fresh load, the NPC stays within 15 u of the fight and saw it start
+  hxd_load "$HX_SAVE2" || return $?; hxd_scene || return $?; hxd_dbclean; npc="$RL_NPC_FULL"; hxd_trim "$m0"
+  hx15_fight || return $?
+  echo "Malzin,$f2x,$H15_F2S" > "$HXD/fighters.txt"; echo "$H15_STARTER" > "$HXD/starter.txt"; echo "$st1" > "$HXD/starter_out_phase.txt"
+  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="P$i"; mkdir -p "$HXD/$lab"
+    printf 'stobe-auto teleport %s Malzin </dev/null | head -1\nstobe-auto teleport Shay %s </dev/null | head -1\n' "$(rl_q "$npc")" "$(rl_q "$npc")" | lt_h >> "$EV/place.txt" 2>&1
+    hxd_dist "$lab" Malzin "$npc" || return $?
+    hxd_sample "$lab" "$q" || return $?; HXD_DFILE=distance_after.txt hxd_dist "$lab" Malzin "$npc" || return $?
+  done
+  hxd_trim "$m0"
+}
+
+# ------------------------------------------------------------------ 13-ax : numeric deal outcome, one saved game per run
+hx13_default_saves() { case "$LT_LANE" in 5090-i4) echo "kah-imm26-i4-13ax1 kah-imm26-i4-13ax2 kah-imm26-i4-13ax3 kah-imm26-i4-13ax4 kah-imm26-i4-13ax5";; esac; }
+hx13_inject() {
+  local j; j='{"row":"13ax","npc":"Cind","context":"chat","steps":[{"deal_decision":"ACCEPT","deal_terms":[{"kind":"GIVE_ITEM","by":"npc","to":"player","item":"Bread","quantity":1},{"kind":"GIVE_CATS","by":"player","to":"npc","amount":20,"when":"after_npc"}],"message":"Fine, bread now, twenty cats later."}]}'
+  lt_sqlx "DELETE FROM general_settings WHERE id='NEG_TEST_INJECT'; INSERT INTO general_settings (id,value) VALUES ('NEG_TEST_INJECT', \$q\$$j\$q\$);" >> "$EV/inject.txt" 2>&1
+}
+hx13_inject_off() { lt_sqlx "DELETE FROM general_settings WHERE id='NEG_TEST_INJECT'" >> "$EV/inject.txt" 2>&1; }
+hx13_cats() {  # "<Shay cats> <NPC cats>"
+  printf 'stobe-auto money Shay 0 </dev/null | head -1; stobe-auto money %s 0 </dev/null | head -1\n' "$(rl_q "$RL_NPC_ID")" | lt_h | sed -nE 's/.*cats [-0-9]+ -> ([-0-9]+).*/\1/p' | tr '\n' ' '
+}
+hx13_run() {  # hx13_run <label> <save> <pos|neg|ctl>   (port of hx13.sh hx13_run)
+  local lab="$1" save="$2" mode="$3" d="$HXD/$1" cid price="" sb nb sa na st c0 c1 i g
+  rm -rf "$d"; mkdir -p "$d"; echo "$save" > "$d/save.txt"
+  hxd_load "$save" || return $?; hxd_scene || return $?; hxd_dbclean
+  hxd_haff "$d" before_json "$RL_NPC_FULL" 0 platonic
+  echo "aff=$(hxd_affnum "$d/haff-before_json.txt")" > "$d/haff_before.txt"
+  c0=$(lt_sql "select count(*) from social_effect" | head -1)
+  if [ "$mode" = ctl ]; then hxd_sample "$lab/s1" "How are you holding up, Cind?" || return $?
+  else
+    hx13_inject; hxd_sample "$lab/s1" "Cind, give me one of your bread now and I'll pay you 20 cats later." || { hx13_inject_off; return $?; }; hx13_inject_off
+    cid=$(lt_sql "select contract_id from stobe_social_contract order by created_at desc limit 1" | head -1)
+    lt_sql "select contract_id,status,left(term_state::text,900) from stobe_social_contract where contract_id='$cid'" > "$d/contract_offer.txt"
+    price=$(grep "(NPC)" "$d/s1/reply.txt" | grep -oiE "[0-9]+ cats" | grep -oE "[0-9]+" | head -1); echo "offer price from reply=$price" >> "$d/setup.txt"
+    hxd_dry && price="${price:-1}"
+    [ -n "$price" ] || { echo "contract=$cid status=NOOFFER price=0" > "$d/deal.txt"; RL_REASON="no price in the offer reply of $lab (s1/reply.txt)"; return 3; }
+    hxd_sample "$lab/s2" "Deal. I accept the terms, ${price} cats after." || return $?
+    for i in 1 2 3 4 5 6 7 8; do hxd_sleep 8; st=$(lt_sql "select status||' '||left(term_state::text,600) from stobe_social_contract where contract_id='$cid'" | head -1); echo "$st" | grep -q 'GIVE_ITEM[^}]*VERIFIED' && break; done
+    echo "$st" > "$d/contract_accepted.txt"
+    read sb nb <<<"$(hx13_cats)"
+    if [ "$mode" = pos ]; then
+      printf 'stobe-auto money Shay -%s </dev/null | head -1; stobe-auto money %s %s </dev/null | head -1\n' "$price" "$(rl_q "$RL_NPC_ID")" "$price" | lt_h >> "$d/setup.txt" 2>&1
+    else
+      g=$(lt_sql "select max(gamets) from eventlog" | head -1)
+      lt_sqlx "update stobe_social_contract set deadline_unix=extract(epoch from now())::int-30, deadline_gamets=$g-30 where contract_id='$cid'" >> "$d/setup.txt" 2>&1
+    fi
+    for i in $(seq 1 14); do hxd_sleep 10; st=$(lt_sql "select status from stobe_social_contract where contract_id='$cid'" | head -1); case "$st" in AWAITING_PERFORMANCE|ACCEPTED) ;; *) break;; esac; done
+    hxd_sleep 5; read sa na <<<"$(hx13_cats)"
+    echo "contract=$cid status=$st price=${price}" > "$d/deal.txt"; echo "shay_before=$sb shay_after=$sa npc_before=$nb npc_after=$na" > "$d/cats.txt"
+  fi
+  if [ "$mode" != ctl ] && [ -n "${cid:-}" ]; then   # live fix (4080-i4 2026-10-16): kept_/broken_promise is applied by the worker some seconds AFTER the contract status flips; wait up to 90 s for the row before the snapshot
+    for i in $(seq 1 18); do [ "$(lt_sql "select count(*) from social_effect where incident_id='deal:$cid'" | head -1 | tr -dc 0-9)" -ge 1 ] 2>/dev/null && break; hxd_sleep 5; done
+  fi
+  c1=$(lt_sql "select count(*) from social_effect" | head -1)
+  { echo "count_before=$c0 count_after=$c1"; lt_sql "select * from social_effect where incident_id like 'deal:%' order by game_ts desc limit 12"; } > "$d/effects.txt"
+  hxd_haff "$d" after_json "$RL_NPC_FULL" "" read; echo "aff=$(hxd_affnum "$d/haff-after_json.txt")" > "$d/haff_after.txt"
+  cat "$d/deal.txt" "$d/cats.txt" "$d/haff_before.txt" "$d/haff_after.txt" 2>/dev/null | tr '\n' ' ' >> "$EV/runs.txt"; echo >> "$EV/runs.txt"
+}
+rd_13ax() {
+  hxd_begin; rd_need_npc || return 3
+  local lab save idx mode; local -a saves; read -r -a saves <<<"${HX13_SAVES:-$(hx13_default_saves)}"
+  for lab in ${HX13_RUNS:-P1 P2 N1 N2 C1}; do
+    case "$lab" in P1) idx=0; mode=pos;; P2) idx=1; mode=pos;; N1) idx=2; mode=neg;; N2) idx=3; mode=neg;; C1) idx=4; mode=ctl;; *) RL_REASON="unknown 13-ax run '$lab' (P1 P2 N1 N2 C1)"; return 3;; esac
+    save="${saves[$idx]:-}"; [ -n "$save" ] || { RL_REASON="no save for run $lab: set HX13_SAVES (5 saves: P1 P2 N1 N2 C1)"; return 3; }
+    hx13_run "$lab" "$save" "$mode" || return $?
+  done
+}
+
+# ------------------------------------------------------------------ 02-ax : principle grounded in the profile, generated-profile control
+hx02_profile() {  # hx02_profile <npc full> <file> : profile text (personality | backstory | goals | speechstyle | occupation) of the live/master row
+  lt_sql "select coalesce(nullif(m.personality,''),c.personality,'')||' | '||coalesce(nullif(m.backstory,''),c.backstory,'')||' | '||coalesce(nullif(m.goals,''),c.goals,'')||' | '||coalesce(m.speechstyle,'')||' | '||coalesce(m.occupation,'') from core_npc c left join core_npc_master m on m.name=c.name where c.name='$1' limit 1" > "$2" 2>&1
+}
+rd_02ax() {
+  hxd_begin; rd_need_npc || return 3
+  local ctl="${HX02_CTL:-Thoke}" cn m0 i q lab d
+  local -a qs=("Is there anything you feel strongly about that you would rather not compromise on?" "What lines would you never cross?" "What do you stand for?")
+  hxd_load "$HX_SAVE" || return $?; hxd_scene || return $?; hxd_dbclean; m0=$(hxd_rowid)
+  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="T$i"; hxd_sample "$lab" "$q" || return $?; hx02_profile "$RL_NPC_FULL" "$HXD/$lab/profile.txt"; done
+  hxd_trim "$m0"
+  hxd_load "$HX_SAVE2" || return $?; hxd_scene || return $?; hxd_dbclean; hxd_trim "$m0"
+  rl_resolve "$ctl" || { RL_REASON="cannot resolve the control NPC '$ctl' (HX02_CTL)"; return 3; }; cn="$RL_NPC_FULL"; echo "$cn" > "$EV/ctl_npc.txt"
+  # FX-GENERATED: blank the stored profile (backup kept in hx_bak_*) so the server generates a fresh one at the first chat; profile.txt is read AFTER the chat
+  lt_sqlx "create table if not exists hx_bak_core_npc_master as select * from core_npc_master where false; insert into hx_bak_core_npc_master select * from core_npc_master where name='$cn'; update core_npc_master set personality='',backstory='',goals='' where name='$cn'; update core_npc set personality='',backstory='',goals='' where name='$cn'" >> "$EV/blank.txt" 2>&1
+  printf 'stobe-auto teleport %s Shay </dev/null | head -1\n' "$(rl_q "$cn")" | lt_h >> "$EV/place.txt" 2>&1
+  i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="F$i"; hxd_sample "$lab" "$q" "$cn" || return $?; hx02_profile "$cn" "$HXD/$lab/profile.txt"; done
+  hxd_trim "$m0"
+}
