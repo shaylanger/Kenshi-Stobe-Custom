@@ -213,6 +213,72 @@ EOT
   printf 'tail -n +%s %s | grep -E "BORED_EVENT|ACTION_EXEC: SAY|FOLLOWUP|followup" | cut -c1-300 | head -40\n' "$(( n0 + 1 ))" "$LT_STOBELOG" | lt_h > "$EV/bored_log.txt" 2>&1
 }
 
+# 13-c: a REAL walk produces the native participation proof (a teleport cannot: ParticipationEvidence.h Break()s on separation > 35, sample gap > 10 game s and
+# per-sample displacement > 20*dt+5; only the LAST continuous stretch counts, >= 4 samples, >= 30 game s, both walked >= 30, endpoint progress >= 30).
+# Recipe (agents/out/imm26-inv-setupfail section 13-c): tr_prep, trip proposed + accepted, Cind teleported to the gate with x + TRIP_13C_BACK (400 u; TRIP_13C_STAGE="x y z"
+# overrides), Shay on Cind, speed TRIP_13C_SPEED (1), then Shay is teleported onto Cind every 1.5 s real (separation stays far below 35, per-sample jump small) while
+# Cind walks the trip natively (NO harness order on her), polled up to TRIP_13C_TRIES x ~8 s for COMPLETED, then up to TRIP_13C_AWARD_WAIT s (30) for a sharedexp row.
+# TRIP_13C_NEG=1 = negative leg: Shay left TRIP_13C_NEG_GAP (150) u behind the stage point, no follow -> no sharedexp row expected.
+# Evidence: se_before/se_after.txt (`incident_id|component|delta|applied` of sharedexp rows), award.txt (server `Participation award` lines since the start),
+# native.txt (stobe.log participation lines), stage.txt, neg.txt, gate.txt, agr_final.txt.
+rd13c_sx() {  # rd13c_sx <file>
+  lt_sql "select incident_id||'|'||component||'|'||delta||'|'||applied from social_effect where incident_id like 'sharedexp:%' order by game_ts" > "$EV/$1" 2>&1
+}
+rd_13c() {
+  tr_prep || return $?
+  local n g back neg stage nstage gap s0 n0 k c mk
+  n=$(rl_q "$RL_NPC_FULL"); neg="${TRIP_13C_NEG:-0}"; back="${TRIP_13C_BACK:-400}"; gap="${TRIP_13C_NEG_GAP:-150}"
+  tr_trip_setup || return $?
+  g=$(tr_gate); [ -n "$g" ] || { RL_REASON="no gate coordinates for '$TR_DEST' (set TRIP_GATE='x y z')"; return 3; }
+  echo "$g" > "$EV/gate.txt"; echo "neg=$neg back=$back gap=$gap speed=${TRIP_13C_SPEED:-1}" > "$EV/neg.txt"
+  rd13c_sx se_before.txt
+  mk=$(rl_mark); set -- $mk; s0=${4:-0}
+  n0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); n0=${n0:-0}
+  if [ -n "${TRIP_13C_STAGE:-}" ]; then stage="${TRIP_13C_STAGE} dist 0"; else stage="$g dist $back"; fi
+  echo "$stage" > "$EV/stage.txt"
+  lt_h <<EOT >> "$EV/stage.txt" 2>&1
+stobe-auto teleport $n $stage </dev/null | head -1 | cut -c1-120
+EOT
+  if [ -n "${TRIP_13C_STAGE:-}" ]; then nstage="${TRIP_13C_STAGE} dist $gap"; else nstage="$g dist $(( back + gap ))"; fi
+  if [ "$neg" = 1 ]; then
+    lt_h <<EOT >> "$EV/stage.txt" 2>&1
+stobe-auto teleport Shay $nstage </dev/null | head -1 | cut -c1-120
+EOT
+  else
+    lt_h <<EOT >> "$EV/stage.txt" 2>&1
+stobe-auto teleport Shay $n </dev/null | head -1 | cut -c1-120
+EOT
+  fi
+  lt_h <<EOT >> "$EV/walk.txt" 2>&1
+stobe-auto speed ${TRIP_13C_SPEED:-1} </dev/null | head -1
+EOT
+  for k in $(seq 1 "${TRIP_13C_TRIES:-30}"); do
+    if [ "$neg" = 1 ]; then [ -n "${KAH_ROW_FAKE:-}" ] || sleep 8
+    else
+      lt_h <<EOT >> "$EV/walk.txt" 2>&1
+for i in 1 2 3 4 5; do stobe-auto teleport Shay $n </dev/null >/dev/null; sleep 1.5; done
+stobe-auto where $n </dev/null | head -1 | cut -c1-140
+EOT
+    fi
+    c=$(lt_sql "select count(*) from eventlog where type='travel_agreement' and data like '%\"status\":\"COMPLETED\"%'" | head -1 | tr -dc 0-9)
+    [ "${c:-0}" -gt 0 ] && break
+  done
+  for k in $(seq 1 "$(( ${TRIP_13C_AWARD_WAIT:-30} / 5 ))"); do
+    rd13c_sx se_after.txt
+    [ "$(grep -c 'sharedexp:' "$EV/se_after.txt" 2>/dev/null)" -gt "$(grep -c 'sharedexp:' "$EV/se_before.txt" 2>/dev/null)" ] && break
+    [ -n "${KAH_ROW_FAKE:-}" ] || sleep 5
+  done
+  rd13c_sx se_after.txt
+  lt_h <<EOT >> "$EV/walk.txt" 2>&1
+stobe-auto speed 0.5 </dev/null | head -1
+EOT
+  tr_agr agr_final.txt 8
+  printf 'tail -n +%s %s 2>/dev/null | grep -a "Participation award" | cut -c1-700 | tail -6
+' "$(( s0 + 1 ))" "$LT_SRVLOG" | lt_w > "$EV/award.txt" 2>&1
+  printf 'tail -n +%s %s | grep -a -i -E "participation|PLAYTHROUGH" | cut -c1-300 | tail -12
+' "$(( n0 + 1 ))" "$LT_STOBELOG" | lt_h > "$EV/native.txt" 2>&1
+}
+
 # 13-b abandon: partner (Malzin) KO'd within 25 u for >= one 2 s real scan BEFORE the leaver (Cind) is moved away (NC6 observation-gap fix);
 # phase 1 armed + KO, phase 2 control with a healthy partner. Evidence: n2_armed/n2_control (N2_* log lines), se_* (abandoned_in_danger rows).
 tr_n2_log() {  # tr_n2_log <file> <n0> : N2 lines of stobe.log after line n0

@@ -108,6 +108,26 @@ elif n.startswith('08d-'):
     elif n == '08d-notrip':  # trip failed instead of completing
         S['agr'] = [ACC, [agr(7009, 'FAILED', 'failed', 'native_order_ended_before_goal', 'false')] + ACC]
         S['fu'] = [[open_row], [open_row]]; S['fu_closed'] = 0
+elif n.startswith('13c-'):
+    SXR = 'sharedexp:0123abcd|kept_promise|3|true'
+    AW_OK = '[2026-10-15 21:00:00] INFO Participation award {"status":"enabled","reason":"ok","mode":"travel","qualified_samples":9,"span_gamets":41.0,"max_separation":12.0}'
+
+    def aw(status, reason):
+        return '[2026-10-15 21:00:00] WARN Participation award {"status":"%s","reason":"%s","mode":"travel","qualified_samples":2}' % (status, reason)
+    S = {'steps': [S1, S2], 'agr': [ACC, [agr(7009, 'COMPLETED', 'completed', '', 'true')] + ACC], 'sx': [[], [SXR]], 'award': [AW_OK],
+         'native': ['PARTICIPATION qualified=1 samples=9'], 'completed': 1}
+    if n == '13c-noaward':       # row written nowhere, no award log: lib not deployed / proof never sent
+        S['sx'] = [[], []]; S['award'] = []; S['native'] = []
+    elif n == '13c-uid':         # identity defect: empty native uid
+        S['sx'] = [[], []]; S['award'] = [aw('unresolved_identity', 'empty_instance_uid_actor')]
+    elif n == '13c-unqualified':
+        S['sx'] = [[], []]; S['award'] = [aw('insufficient_participation', 'too_short')]
+    elif n == '13c-notcompleted':
+        S['agr'] = [ACC, ACC]; S['sx'] = [[], []]; S['award'] = []
+    elif n == '13c-neg-pass':
+        S['sx'] = [[], []]; S['award'] = [aw('unqualified', 'participation_proof_missing_or_unqualified')]
+    elif n not in ('13c-pass', '13c-neg-fail'):   # 13c-neg-fail: a row appears although Shay was far away
+        sys.exit('unknown scenario ' + n)
 else:
     sys.exit('unknown scenario ' + n)
 print(json.dumps(S))

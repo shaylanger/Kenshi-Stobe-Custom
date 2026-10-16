@@ -37,10 +37,14 @@ if kind == 'h':
         out(['{}'])
     if 'BORED_EVENT|ACTION_EXEC' in body:
         out(scen.get('bored', []))
+    if 'participation|PLAYTHROUGH' in body:
+        out(scen.get('native', []))
     if 'N2_ABANDON|N2_PROXIMITY' in body and 'cut -c1-300 | tail -40' in body:
         st['n2'] += 1
         seq = scen.get('n2', [[]])
         out(seq[min(st['n2'] - 1, len(seq) - 1)])
+elif kind == 'w' and 'Participation award' in body:
+    out(scen.get('award', []))
 elif kind == 'sql':
     if body.startswith('select rowid||'):
         st['agr'] += 1
@@ -52,6 +56,12 @@ elif kind == 'sql':
         out(seq[min(st['se'] - 1, len(seq) - 1)])
     if 'select count(*) from social_effect se' in body:
         out([str(scen.get('se_count', 0))])
+    if body.startswith('select incident_id||'):
+        st['sx'] = st.get('sx', 0) + 1
+        seq = scen.get('sx', [[]])
+        out(seq[min(st['sx'] - 1, len(seq) - 1)])
+    if "type='travel_agreement' and data like" in body and 'count(*)' in body:
+        out([str(scen.get('completed', 1))])
     if body.startswith('select type||'):
         st['fu'] = st.get('fu', 0) + 1
         seq = scen.get('fu', [[]])

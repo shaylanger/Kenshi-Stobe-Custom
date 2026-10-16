@@ -180,6 +180,54 @@ def register(rc, CHECKS):
         hit = [x for x in places if x and x.lower() in r1.lower()]
         v.note = f"R~ names a listed place? {hit or 'none'} of {places[:5]} | candidate log: {cand.group(0)[:60] if cand else 'none'} | reply: {r1[:120]!r}"
 
+    # ---------------------------------------------------------------- 13-c
+    def c_13c(v, ev):
+        if not pre_ok(v, ev):
+            return
+        if not need(v, ev, 'agr_final.txt', 'se_before.txt', 'se_after.txt', 'award.txt', 'neg.txt'):
+            return
+        o = orig(ev)
+        fin = latest(agr(ev, 'agr_final.txt')).get(o['aid'])
+        if not fin or fin['status'] != 'COMPLETED':
+            return v.setup_fail(f"the walked trip did not reach COMPLETED ({(fin or {}).get('status', 'row not found')}, reason {(fin or {}).get('reason', '')}): "
+                                'no endpoint to award (stage closer / longer TRIP_13C_TRIES, or the same arrival defect as 23-a)')
+        neg = 'neg=1' in (rd(ev, 'neg.txt') or '')
+
+        def sx(name):
+            out = []
+            for ln in (rd(ev, name) or '').splitlines():
+                p = ln.strip().split('|')
+                if len(p) >= 3 and p[0].startswith('sharedexp:'):
+                    try:
+                        out.append((p[0], p[1], int(p[2])))
+                    except ValueError:
+                        pass
+            return out
+        before = {r[0] for r in sx('se_before.txt')}
+        new = [r for r in sx('se_after.txt') if r[0] not in before]
+        aw = rd(ev, 'award.txt') or ''
+        statuses = re.findall(r'"status"\s*:\s*"([^"]*)"', aw) or re.findall(r'status=([A-Za-z_]+)', aw)
+        reasons = re.findall(r'"reason"\s*:\s*"([^"]*)"', aw) or re.findall(r'reason=([A-Za-z_]+)', aw)
+        last_status, last_reason = (statuses[-1] if statuses else ''), (reasons[-1] if reasons else '')
+        info = f"award_status={last_status or 'none'} reason={last_reason or 'none'}"
+        if neg:
+            v.ck('no_sharedexp_row_when_shay_far', not new, f'new_rows={len(new)} {info}')
+            v.note = 'R~ negative leg (Shay held > 35 u behind)'
+            return
+        if new:
+            good = [r for r in new if r[1] == 'kept_promise' and r[2] > 0]
+            v.ck('sharedexp_kept_promise_row', bool(good), f'new={[(r[1], r[2]) for r in new]} {info}')
+            return
+        if not statuses:
+            return v.setup_fail('trip COMPLETED but no "Participation award" server log line and no sharedexp row: the award never reached the server (wp13c lib not deployed on this lane, '
+                                'or the native proof was never sent; see native.txt)')
+        if re.search(r'empty_instance_uid|unresolved_identity|missing_identity|identity_mismatch|stale_scope', last_status + ' ' + last_reason):
+            v.ck('sharedexp_kept_promise_row', False, f'no row: {info} (identity/session defect, see award.txt)')
+            return
+        if re.search(r'unqualified|insufficient|too_few|too_short|separation|walked_too_little|proof_missing', last_status + ' ' + last_reason):
+            return v.setup_fail(f'the walk did not qualify as participation ({info}): stage closer/farther (TRIP_13C_BACK), speed 1, keep Shay within 35 u; native.txt shows the proof')
+        v.ck('sharedexp_kept_promise_row', False, f'no row: {info}')
+
     # ---------------------------------------------------------------- 13-b
     def c_13b(v, ev):
         if not need(v, ev, 'n2_armed.txt', 'n2_control.txt', 'se_base.txt', 'se_armed.txt', 'se_control.txt', 'partner.txt'):
@@ -248,4 +296,4 @@ def register(rc, CHECKS):
         v.ck('no_npc_ask_about_the_topic', not ask, f'n={len(ask)}')
         v.note = f"R~ quote={topic.get('source_quote', '')[:60]!r} ticks={ticks}"
 
-    CHECKS.update({'13-b': c_13b, '20-a': c_20a, '20-b': c_20b, '23-a': c_23a, '23-c': c_23c, '23-d': c_23d, '24-a': c_24a, '08-d': c_08d})
+    CHECKS.update({'13-b': c_13b, '20-a': c_20a, '20-b': c_20b, '23-a': c_23a, '23-c': c_23c, '23-d': c_23d, '24-a': c_24a, '08-d': c_08d, '13-c': c_13c})

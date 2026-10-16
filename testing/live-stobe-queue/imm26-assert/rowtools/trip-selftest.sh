@@ -69,6 +69,20 @@ n_s0=$(grep -n "stobe_say .* 'I need to sell my furs in Squin before winter\.'" 
 grep -q 'stream.php' "$F" && chk 08-d-no-stream-by-default bad || chk 08-d-no-stream-by-default ok
 scen 08d-pass; TRIP_08D_STREAM=1 run 08-d $L >/dev/null; grep -q 'stream.php?DATA=' "$KAH_ROW_FAKE_LOG" && grep -q 'optional=1' "$KAH_ROW_FAKE_LOG" && chk 08-d-stream-trigger-option ok || chk 08-d-stream-trigger-option bad
 
+# --- 13-c: real walk -> sharedexp kept_promise row (identity/qualification outcomes named, negative leg)
+expect 13-c-pass 13c-pass 13-c $L "RESULT 13-c PASS" "sharedexp_kept_promise_row"
+expect 13-c-setup-fail-no-award-line 13c-noaward 13-c $L "RESULT 13-c SETUP-FAIL trip COMPLETED but no \"Participation award\""
+expect 13-c-fail-empty-uid 13c-uid 13-c $L "RESULT 13-c FAIL" "empty_instance_uid_actor"
+expect 13-c-setup-fail-unqualified-walk 13c-unqualified 13-c $L "RESULT 13-c SETUP-FAIL the walk did not qualify"
+expect 13-c-setup-fail-trip-not-completed 13c-notcompleted 13-c $L "RESULT 13-c SETUP-FAIL the walked trip did not reach COMPLETED"
+scen 13c-neg-pass; r=$(TRIP_13C_NEG=1 run 13-c $L); case "$r" in "RESULT 13-c PASS"*no_sharedexp_row_when_shay_far*) chk 13-c-neg-pass ok;; *) chk 13-c-neg-pass bad "$r";; esac
+scen 13c-neg-fail; r=$(TRIP_13C_NEG=1 run 13-c $L); case "$r" in "RESULT 13-c FAIL"*no_sharedexp_row_when_shay_far*) chk 13-c-neg-fail ok;; *) chk 13-c-neg-fail bad "$r";; esac
+scen 13c-pass; run 13-c $L >/dev/null; F="$KAH_ROW_FAKE_LOG"
+grep -q "teleport 'Cind \[Hungry Bandit\]' -62380 330 16250 dist 400" "$F" && chk 13-c-stages-cind-400-short-of-gate ok || chk 13-c-stages-cind-400-short-of-gate bad "$(grep -m3 'teleport' "$F")"
+[ "$(grep -c "teleport Shay 'Cind \[Hungry Bandit\]'" "$F")" -ge 2 ] && grep -q 'sleep 1.5' "$F" && chk 13-c-shay-follows-cind ok || chk 13-c-shay-follows-cind bad
+grep -q "order 'Cind \[Hungry Bandit\]'" "$F" && chk 13-c-no-harness-order-on-cind bad || chk 13-c-no-harness-order-on-cind ok
+scen 13c-neg-pass; TRIP_13C_NEG=1 run 13-c $L >/dev/null; grep -q "teleport Shay -62380 330 16250 dist 550" "$KAH_ROW_FAKE_LOG" && ! grep -q 'sleep 1.5' "$KAH_ROW_FAKE_LOG" && chk 13-c-neg-leaves-shay-behind ok || chk 13-c-neg-leaves-shay-behind bad
+
 # --- recipe statements: db clean, haff 60, quiet scene, KO sequence, never an IDLE order on the NPC outside 20-b
 IDLE_CIND="order 'Cind \[Hungry Bandit\]' IDLE"
 scen 23a-pass; run 23-a $L >/dev/null
