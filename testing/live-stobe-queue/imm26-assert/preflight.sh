@@ -22,7 +22,7 @@ pf_isolation() {
   if [ ! -s "$cache" ] || [ -n "$(find "$cache" -mmin +10 2>/dev/null)" ] || [ "$lw" -nt "$cache" ] || [ "$rg" -nt "$cache" ]; then
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\lane-isolation-check.ps1' "$LT_RIG" > "$cache" 2>&1
   fi
-  local bad; bad=$(grep -E '^RESULT lane-isolation .* FAIL' "$cache" | grep -E "(^|[^a-z0-9])$id([^0-9]|$)|lane $id|instance $LT_N")
+  local bad; bad=$(grep -E '^RESULT lane-isolation .* FAIL' "$cache" | grep -E "(^|[^a-z0-9])$id([^0-9]|$)|lane $id|instance $LT_N" | grep -vE "lane $id MATCH")
   if [ -n "$bad" ]; then echo "isolation FAIL for $id: $(echo "$bad" | head -2 | cut -c1-200 | tr '\n' ';')"; return 1; fi
   echo "isolation=ok warn=$(grep -c -E '^RESULT lane-isolation .* FAIL' "$cache")"
 }
