@@ -140,7 +140,7 @@ $stLines += "- $gameLine"
 $stateRc = @(RowCard @('state', $Lane))
 if ($stateRc.Count -and -not $Pilot) { $stLines += '- ' + (Clip $stateRc[0] 700) }
 $launch = if ($rig -eq '5090') {
-    "launch: wsl lane-backend.sh start $id ; env KAH_INSTANCE=$($l.instance) KAH_OWNER=$($l.lock_owner) KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KAH_FPS=60 KENSHI_MONITOR='\.\DISPLAY2' kenshi-ctl.ps1 launch -Save <save> -Gfx low ; lane-window.ps1 -Lane $id -Action place   (scripts in tools\automation; then stobe-auto wait-world)"
+    "launch: wsl lane-backend.sh start $id ; env KAH_INSTANCE=$($l.instance) KAH_OWNER=$($l.lock_owner) KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KAH_FPS=60 KENSHI_MONITOR='\.\DISPLAY2' kenshi-ctl.ps1 launch -Save <save> -Gfx low ; lane-window.ps1 -Lane $id -Action place   (scripts in tools\automation; then lane-setup.sh waits for the world)"
 } else {
     "launch: ssh 4080 powershell -File C:\KAH\ctl.ps1 launch -Instance $($l.instance) -Save <save> ; backend: stobe-lane-backend.sh $id (tools\automation, WSL)"
 }
@@ -297,11 +297,14 @@ if ($Pilot) {
         @("$ta\event-wait.sh", "bash event-wait.sh [--batch <dir>]  = background waker (<= 120 s)")
     ) | Where-Object { Test-Path -LiteralPath $_[0] }
 }
+# PI-48 standing rule (every brief, pilot or not): a bare `stobe-auto` answers from Shay's LIVE install. While a pilot is ACTIVE the PreToolUse guard (hooks\kenshi-waker-guard.ps1) also refuses it.
+$banRule = "- STOBE-AUTO BAN (PI-48): NEVER run bare ``stobe-auto`` (no KAH_DIR) or any command on the live install / default port / Steam Kenshi dir: it answers from Shay's LIVE game, not this lane. Lane-scoped tools only: go-row/go-batch/row scripts, lane-setup.sh, preflight.sh, status tools, kenshi-ctl.ps1 with KAH_INSTANCE=<n>. A by-hand harness query is only ``KAH_DIR='$($l.dir)\mods\AutomationHarness' stobe-auto ...``."
 $pilotRules = @()
 if ($Pilot) {
     $pm = "bash /c/KenshiModding/tools/automation/pilot-mark.sh $Name"
     $pilotRules = @(
         '- Scope: ONE lane (above). Never the live install, live server tree or DB, Shay''s saves, or another lane. PLAYER_NAME=''Shay''. Windowed launches, never focus the game.',
+        $banRule,
         ('- SHADOW MODE (hard): you NEVER claim rows (no mkdir claims, no next-row.sh --claim), NEVER write testing/NPC_IMMERSION_26_TESTS.md or tickets (no mark-row.py, status-mark.sh, setupfail.ps1), NEVER git commit/push. The ONLY recording tool is ' + $pm + ' ... (it also updates your agent status).'),
         '- Verdict = what the checker printed. PASS/FAIL are accepted only if the evidence file holds the matching `RESULT <row> PASS|FAIL` line (exit 3 = you disagreed with the checker: re-mark with the checker''s word or ESCALATE; a 2nd disagreement escalates). SETUP-FAIL, GATED, ROW-NEEDS-FIXER, a 2nd FAIL of one row, no RESULT line, odd logs = ESCALATE (exit 4) and go to the NEXT row. A closed row (exit 4) is never retried.',
         '- One attempt per row, no debugging, no fixing. Do not open evidence files except to quote the checker line; do not read the TESTS file, the long briefs or old handoffs. The pilot measures you, not the fix.',
@@ -395,6 +398,7 @@ function Build([int]$exBudget) {
         '- Status discipline: agent-status after EVERY row (silence > 20 min = killed); keep the handoff file current. Checkpoint every ~40k tokens; ~120k run the WARN-120k step, ~150k finish the row, write the handoff, end STOPPED-CONTEXT (successor name + 1). Budget <= 120k.',
         '- Hand-back (SubagentHandback) = AT MOST 8 lines: verdict (+PASS/FAIL counts), files/commits, SHA/paths (report path), one next action, any DECISION/QUESTION for Shay. Save the full report first (save-report.ps1, <= 30 lines); every hand-back line lands in the coordinator context.'
     )
+    $ruleLines = @($ruleLines[0], $banRule) + @($ruleLines | Select-Object -Skip 1)
     if ($Pilot) { $ruleLines = $pilotRules }
     foreach ($ln in $ruleLines) { $null = $sb.AppendLine($ln) }
     $null = $sb.AppendLine("## Helper scripts (all exist now; in $ta, those marked [R] in $ra)")

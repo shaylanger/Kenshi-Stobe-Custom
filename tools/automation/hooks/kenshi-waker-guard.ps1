@@ -50,6 +50,18 @@ if ($mode -eq 'pre') {
     }
     $cmd = [string]$ti.command
     if (-not $cmd) { exit 0 }
+    # PI-48 (pilot 2): while a pilot is ACTIVE (pilot\ACTIVE, pilot\<x>\ACTIVE or pilot\<x>\<y>\ACTIVE touched < 12 h ago) a BARE `stobe-auto` (command position, no KAH_DIR= /
+    # KAH_INSTANCE= / --dir / rig-env.sh in the same command) talks to the LIVE install, not the lane: deny it. Fails open on any error. Selftest: tools\automation\stobe-auto-guard-selftest.ps1.
+    try {
+        $pil = Join-Path $runs 'pilot'
+        if (Test-Path -LiteralPath $pil) {
+            $act = @(Get-ChildItem -LiteralPath $pil -Filter ACTIVE -Recurse -Depth 2 -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-12) })
+            if ($act.Count -gt 0 -and $cmd -match '(?m)(?:^|[;&|(`{]\s*|\$\(\s*|\b(?:then|do)\s+|(?:\s-c|\s--)\s+["'']?)(?:\w+=\S*\s+)*(?:/usr/local/bin/)?stobe-auto(?=\s|$)' -and $cmd -notmatch 'KAH_DIR=|KAH_INSTANCE=|--dir\s|rig-env\.sh') {
+                [Console]::Error.WriteLine("kenshi-waker-guard: bare 'stobe-auto' denied while a pilot is ACTIVE ($($act[0].FullName)): it talks to Shay's LIVE install, not your lane (PI-48). Use the lane-scoped tools (go-row / row scripts / lane-setup.sh / preflight.sh / ab2-run.sh), or for a by-hand query prefix KAH_DIR='<lane game dir>\mods\AutomationHarness' (e.g. D:\KenshiInst\4\mods\AutomationHarness).")
+                exit 2
+            }
+        }
+    } catch { }
     $hits = @()
     foreach ($m in [regex]::Matches($cmd, '(?m)(?:^|[;&|({]\s*)(?:sleep|Start-Sleep)\s+(?:-Seconds\s+|-s\s+)?(\d+)(?![\d.]*[mh])')) {
         if ([int]$m.Groups[1].Value -gt $MAX) { $hits += $m.Value.Trim() }

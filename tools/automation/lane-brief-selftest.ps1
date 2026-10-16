@@ -130,6 +130,10 @@ Chk 'PILOT: no claim/mark-row/status-mark/next-row/row-card/go-batch helper, no 
 Chk 'PILOT: keeps agent-status commands, report command, lane-deploy-only rule, pilot task text' ($txtp -match 'agent-status\.ps1 imm26-hk-test RUNNING "5090-i4 pilot operator \(shadow, haiku-i4\)"' -and $txtp -match 'lane-deploy\.sh is the ONLY server deploy path' -and $txtp -match 'save-report\.ps1')
 Chk 'PILOT + normal: explicit 8-line hand-back rule with the five items' ($txtp -match 'AT MOST 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay' -and $txt -match 'AT MOST 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay')
 Chk 'PILOT: asks the coordinator instead of improvising' ($txtp -match 'do NOT improvise')
+Chk 'PI-48 stobe-auto ban in the normal brief (rule + lane harness dir form, no launch hint to run bare stobe-auto)' ($txt -match 'STOBE-AUTO BAN \(PI-48\): NEVER run bare' -and $txt -match 'KAH_DIR=''[^'']*mods.AutomationHarness'' stobe-auto' -and $txt -notmatch 'then stobe-auto wait-world')
+Chk 'PI-48 stobe-auto ban in the pilot brief' ($txtp -match 'STOBE-AUTO BAN \(PI-48\): NEVER run bare')
+Chk 'PI-48 stobe-auto ban also with -Predecessor' ($txtr -match 'STOBE-AUTO BAN \(PI-48\)')
+
 Chk "PILOT: size <= 14500 ($([Text.Encoding]::UTF8.GetByteCount($txtp)))" ([Text.Encoding]::UTF8.GetByteCount($txtp) -le 14500)
 Chk 'PILOT: the normal brief is unchanged (no PILOT text, still status-mark + TESTS rows + next-row)' ($txtn0 -notmatch 'PILOT haiku-i4' -and $txtn0 -match '### IMM-02-a' -and $txtn0 -match 'Next rows: first 3 in full' -and $txtn0 -notmatch 'SHADOW MODE')
 $ErrorActionPreference = 'Continue'
