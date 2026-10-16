@@ -52,6 +52,17 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(cr.audit_rollout(safe, proof)["status"], "PASS")
         self.assertEqual(cr.audit_rollout([], None)["status"], "UNKNOWN")
 
+    def test_unavailable_hooks_do_not_override_verified_hard_boundary(self):
+        events = [{"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "c1",
+                   "name": "exec", "input": json.dumps({"code": "text(1)"})}}]
+        config = {"verified_receipt": True, "agents_enabled": False, "multi_agent": False,
+                  "hook_verified": False, "hook_enforcement": {"status": "UNAVAILABLE"},
+                  "code_mode_host_proof": {"verified": True}, "terminal_verified": True,
+                  "allowed_tools": ["exec"]}
+        self.assertEqual(cr.audit_rollout(events, config)["status"], "PASS")
+        config["code_mode_host_proof"] = {"verified": False}
+        self.assertEqual(cr.audit_rollout(events, config)["status"], "UNKNOWN")
+
     def test_audit_flags_mutation_prohibited_read_and_delegation(self):
         events = [{"type": "response_item", "payload": {"type": "function_call", "call_id": "1", "name": "Bash", "arguments": "{\"command\":\"git commit -m x\"}"}},
                   {"type": "response_item", "payload": {"type": "function_call", "call_id": "2", "name": "Read", "arguments": "{\"file_path\":\"C:/StobeBuild/out.dll\"}"}},

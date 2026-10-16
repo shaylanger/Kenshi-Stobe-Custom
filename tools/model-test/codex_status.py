@@ -12,8 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_record
 
 FROZEN_TOOLS = {"mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"}
+EXCLUDED_NAMESPACES = ["functions", "clock", "mcp__codex_apps", "mcp__plugins"]
+OUTER_TOOL_NAMES = {"functions__exec", "functions__wait", "functions__request_user_input",
+                    "functions__request_user_input_async", "clock__sleep"}
+AGENT_APIS = {"spawn_agent", "delegate", "subagent", "collaboration"}
 FORBIDDEN_GLOBALS = {"process", "require", "buffer", "global", "deno", "bun", "fetch",
-                    "xmlhttprequest", "websocket", "fs"}
+                    "xmlhttprequest", "websocket", "webtransport", "eventsource", "navigator",
+                    "filesystem", "fs", "child_process"}
 
 
 def _dt(value: Any) -> datetime | None:
@@ -58,7 +63,7 @@ def _rollout_threads(path: str | Path) -> dict:
 
 
 def _verify_hostprobe(path: Any, expected_sha256: Any) -> dict:
-    """Verify the sanitized isolated-host receipt; never read credentials or logs."""
+    """Verify the sanitized hard-boundary receipt; hook status is metadata only."""
     if not isinstance(path, str) or not path:
         return {"status": "UNKNOWN", "reason": "hostprobe path missing"}
     try:
@@ -85,59 +90,102 @@ def _verify_hostprobe(path: Any, expected_sha256: Any) -> dict:
     config = probe.get("config") if isinstance(probe.get("config"), dict) else {}
     provider = probe.get("provider") if isinstance(probe.get("provider"), dict) else {}
     host = probe.get("host") if isinstance(probe.get("host"), dict) else {}
-    hooks = probe.get("hooks") if isinstance(probe.get("hooks"), dict) else {}
     true_keys = ("code_mode", "code_mode_host")
-    false_keys = ("shell_tool", "multi_agent", "agents_enabled", "view_image")
+    false_keys = ("shell_tool", "multi_agent", "agents_enabled", "view_image", "hooks_enabled")
     if any(k in config and config[k] is not True for k in true_keys) or any(k in config and config[k] is not False for k in false_keys):
         return {"status": "FAIL", "reason": "hostprobe contains unsafe configuration"}
     required_true = all(config.get(k) is True for k in true_keys)
     required_false = all(config.get(k) is False for k in false_keys)
-    configured_tools = config.get("enabled_tools", config.get("mcp_tools"))
-    request_tools = probe.get("request_tool_names")
-    if not isinstance(configured_tools, list) or not isinstance(request_tools, list) or not isinstance(host.get("tool_names"), list):
-        return {"status": "UNKNOWN", "reason": "hostprobe tool-list proof missing"}
-    enabled = set(configured_tools) | ({"exec"} if "exec" not in configured_tools else set())
-    requested = set(request_tools)
-    hosttools = set(host.get("tool_names", [])) if isinstance(host.get("tool_names"), list) else set()
-    globals_seen = {str(x).lower() for x in host.get("global_names", [])} if isinstance(host.get("global_names"), list) else None
-    forbidden_value = host.get("global_forbidden_names", host.get("forbidden_global_names"))
-    forbidden = {str(x).lower() for x in forbidden_value} if isinstance(forbidden_value, list) else None
     if not required_true or not required_false:
         return {"status": "UNKNOWN", "reason": "hostprobe config proof incomplete"}
-    if enabled != FROZEN_TOOLS | {"exec"} or requested != FROZEN_TOOLS | {"exec"} or hosttools != FROZEN_TOOLS:
-        return {"status": "FAIL", "reason": "hostprobe tool allowlist mismatch"}
-    if host.get("frozen_list_call") != "ok":
-        return {"status": "FAIL" if host.get("frozen_list_call") not in (None, "") else "UNKNOWN",
-                "reason": "frozen list call proof missing or failed"}
-    if forbidden is None:
+    configured_tools = config.get("mcp_tools")
+    excluded_namespaces = config.get("excluded_tool_namespaces")
+    request_tools = probe.get("request_tool_names")
+    if not isinstance(configured_tools, list) or not isinstance(excluded_namespaces, list):
+        return {"status": "UNKNOWN", "reason": "hostprobe MCP boundary config missing"}
+    if configured_tools != sorted(FROZEN_TOOLS) or excluded_namespaces != EXCLUDED_NAMESPACES:
+        return {"status": "FAIL", "reason": "hostprobe MCP/native namespace boundary mismatch"}
+    if not isinstance(request_tools, list):
+        return {"status": "UNKNOWN", "reason": "outer transport tool list missing"}
+    normalized_request = {str(x).replace(".", "__") for x in request_tools}
+    normalized_request.discard("exec")
+    if not normalized_request or not normalized_request <= OUTER_TOOL_NAMES or "functions__exec" not in normalized_request:
+        return {"status": "FAIL", "reason": "outer transport tool allowlist mismatch"}
+    tool_fields = ("tool_names", "tool_namespace_keys", "callable_names")
+    if any(not isinstance(host.get(k), list) for k in tool_fields):
+        return {"status": "UNKNOWN", "reason": "nested callable inventory incomplete"}
+    if any(set(host[k]) != FROZEN_TOOLS or len(host[k]) != len(FROZEN_TOOLS) for k in tool_fields):
+        return {"status": "FAIL", "reason": "nested callable inventory contains unlisted tools"}
+    if not isinstance(host.get("unlisted_callable_names"), list):
+        return {"status": "UNKNOWN", "reason": "unlisted callable proof missing"}
+    if host.get("unlisted_callable_names"):
+        return {"status": "FAIL", "reason": "host exposes unlisted callables"}
+    forbidden_value = host.get("forbidden_global_names")
+    if not isinstance(forbidden_value, list):
         return {"status": "UNKNOWN", "reason": "host global isolation proof missing"}
-    if forbidden or globals_seen is not None and globals_seen & FORBIDDEN_GLOBALS:
+    forbidden = {str(x).lower() for x in forbidden_value}
+    globals_seen = host.get("global_names")
+    if forbidden or (isinstance(globals_seen, list) and {str(x).lower() for x in globals_seen} & FORBIDDEN_GLOBALS):
         return {"status": "FAIL", "reason": "host exposes forbidden globals"}
-    hook_counts = (hooks.get("session_start_receipts"),
-                   hooks.get("pretool_allowed_frozen", hooks.get("pretool_allow_frozen")),
-                   hooks.get("pretool_denied_nonfrozen", hooks.get("pretool_deny_other")))
-    if any(isinstance(n, int) and n < 1 for n in hook_counts):
-        return {"status": "FAIL", "reason": "guard hook allow/deny receipt failed"}
-    if not all(isinstance(n, int) and n >= 1 for n in hook_counts):
-        return {"status": "UNKNOWN", "reason": "guard hook allow/deny receipts incomplete"}
+    agent_types = host.get("agent_api_types")
+    if not isinstance(agent_types, dict) or not AGENT_APIS <= set(agent_types):
+        return {"status": "UNKNOWN", "reason": "agent API isolation proof incomplete"}
+    for api in AGENT_APIS:
+        values = agent_types[api]
+        if isinstance(values, dict):
+            if values.get("global") not in ("undefined", False) or values.get("tool") not in ("undefined", False):
+                return {"status": "FAIL", "reason": "agent API is exposed"}
+        elif values not in ("undefined", False):
+            return {"status": "FAIL", "reason": "agent API is exposed"}
+    list_result = host.get("frozen_list_call")
+    if isinstance(list_result, dict): list_ok = list_result.get("isError") is False
+    else: list_ok = list_result == "ok"
+    unknown_status = host.get("unknown_parameter_status")
+    unknown_error = host.get("unknown_parameter_isError")
+    strict_reject = unknown_status == "server_rejected" and unknown_error is True
+    mcp_calls = probe.get("mcp_calls")
+    if not isinstance(mcp_calls, list):
+        return {"status": "UNKNOWN", "reason": "MCP call receipts missing"}
+    list_receipt = any(isinstance(c, dict) and c.get("tool") == "mcp__frozen__list" and
+                       c.get("isError") is False and c.get("result_class") == "ok" for c in mcp_calls)
+    error_receipt = any(isinstance(c, dict) and c.get("tool") == "mcp__frozen__list" and
+                        c.get("isError") is True and isinstance(c.get("result_class"), str) and
+                        c["result_class"].startswith("error:") for c in mcp_calls)
+    if not list_ok or not list_receipt or not strict_reject or not error_receipt:
+        return {"status": "FAIL" if mcp_calls else "UNKNOWN",
+                "reason": "strict MCP success/error proof missing"}
     external_hosts = provider.get("external_hosts_attempted", provider.get("external_hosts"))
     auth_mode = provider.get("auth", provider.get("credential"))
     if (("bound_host" in provider and provider.get("bound_host") != "127.0.0.1") or
             (external_hosts is not None and external_hosts != 0) or
             (auth_mode is not None and auth_mode not in ("dummy", "dummy_credentials"))):
         return {"status": "FAIL", "reason": "isolated provider constraints violated"}
-    if (provider.get("bound_host") != "127.0.0.1" or
-            not isinstance(provider.get("port_ephemeral"), int) or provider.get("port_ephemeral") <= 0 or
-            not isinstance(provider.get("requests_n"), int) or provider.get("requests_n") < 1 or
+    request_count = provider.get("requests_n", provider.get("requests"))
+    ephemeral = provider.get("port_ephemeral") is True or (isinstance(provider.get("port_ephemeral"), int) and
+                 not isinstance(provider.get("port_ephemeral"), bool) and provider.get("port_ephemeral") > 0)
+    if (provider.get("bound_host") != "127.0.0.1" or not ephemeral or
+            not isinstance(request_count, int) or request_count < 1 or
             external_hosts != 0 or auth_mode not in ("dummy", "dummy_credentials")):
         return {"status": "UNKNOWN", "reason": "isolated provider proof incomplete"}
-    if not isinstance(probe.get("cli_sha256"), str) or not probe["cli_sha256"] or not isinstance(probe.get("code_mode_host_sha256"), str) or not probe["code_mode_host_sha256"]:
+    host_hash = probe.get("code_mode_host_sha256", probe.get("host_sha256"))
+    if not isinstance(probe.get("cli_sha256"), str) or not probe["cli_sha256"] or not isinstance(host_hash, str) or not host_hash:
         return {"status": "UNKNOWN", "reason": "CLI/host binary identity missing"}
+    hook_enforcement = probe.get("hook_enforcement") if isinstance(probe.get("hook_enforcement"), dict) else {}
+    hook_status = hook_enforcement.get("status", "UNKNOWN")
+    if hook_status == "UNAVAILABLE" and (hook_enforcement.get("stdin_type") != 2 or
+            hook_enforcement.get("bytes_received") != 0 or hook_enforcement.get("errno") in (None, 0)):
+        hook_status = "UNKNOWN"
+    if hook_status not in ("UNAVAILABLE", "PASS", "UNKNOWN"):
+        return {"status": "FAIL", "reason": "hook evidence reports failure"}
     if probe.get("status") != "PASS":
         return {"status": "UNKNOWN", "reason": "hostprobe did not pass"}
     provider_request = probe.get("provider_request") if isinstance(probe.get("provider_request"), dict) else {}
     requested_tier = probe.get("request_service_tier") or provider_request.get("service_tier")
-    return {"status": "PASS", "sha256": actual, "request_service_tier": requested_tier}
+    return {"status": "PASS", "sha256": actual, "request_service_tier": requested_tier,
+            "hook_enforcement": {"status": hook_status,
+                                 "stdin_type": hook_enforcement.get("stdin_type"),
+                                 "bytes_received": hook_enforcement.get("bytes_received"),
+                                 "errno": hook_enforcement.get("errno")}}
 
 
 def _verify_requested_modes(receipt: dict, rollout_path: str | Path) -> dict:
@@ -231,6 +279,7 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
     launch_modes = _verify_requested_modes(receipt, rollout)
     hostprobe = _verify_hostprobe(receipt.get("hostprobe_path"), receipt.get("hostprobe_sha256"))
     config["code_mode_host_proof"] = {"verified": hostprobe["status"] == "PASS"}
+    config["hook_enforcement"] = hostprobe.get("hook_enforcement", {"status": "UNKNOWN"})
     try:
         parsed = codex_record.parse_rollout(rollout, config, prices, include_report=False)
     except OSError as exc:
@@ -264,25 +313,25 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
         mcp_receipts_verified = False
     requested_tier = codex_record._normalize_tier(config.get("service_tier"))
     hostprobe_tier = codex_record._normalize_tier(hostprobe.get("request_service_tier"))
-    tier_request_status = "UNKNOWN"
-    if launch_modes["status"] == "FAIL":
-        tier_request_status = "FAIL"
-    elif launch_modes["status"] == "PASS" and requested_tier and hostprobe_tier:
-        tier_request_status = "PASS" if requested_tier == hostprobe_tier else "FAIL"
-    elif launch_modes["status"] == "PASS" and requested_tier and hostprobe_tier is None:
-        tier_request_status = "UNKNOWN"
-    if launch_modes["status"] == "FAIL" or tier_request_status == "FAIL":
+    requested_tier_status = launch_modes["status"] if requested_tier else "UNKNOWN"
+    hostprobe_tier_status = "UNKNOWN"
+    if hostprobe_tier is not None and requested_tier is not None:
+        hostprobe_tier_status = "PASS" if requested_tier == hostprobe_tier else "FAIL"
+    if launch_modes["status"] == "FAIL" or hostprobe_tier_status == "FAIL":
         audit_status, overall_status = "FAIL", "FAIL"
-    elif launch_modes["status"] != "PASS" or tier_request_status != "PASS":
+    elif launch_modes["status"] != "PASS":
         if audit_status != "FAIL": audit_status = "UNKNOWN"
         if overall_status != "FAIL": overall_status = "UNKNOWN"
+    elif hostprobe_tier_status == "UNKNOWN" and overall_status != "FAIL":
+        overall_status = "UNKNOWN"
     return {
         "run": receipt.get("run"), "status": receipt.get("status", "unknown"),
         "elapsed_s": elapsed, "model": parsed.get("model"), "effort": parsed.get("effort"),
         "requested_model": receipt.get("model"), "requested_effort": receipt.get("effort"),
         "requested_service_tier": config.get("service_tier"),
         "hostprobe_requested_service_tier": hostprobe.get("request_service_tier"),
-        "requested_tier_proof": tier_request_status,
+        "requested_tier_proof": requested_tier_status,
+        "hostprobe_tier_request_proof": hostprobe_tier_status,
         "launch_mode_proof": launch_modes,
         "observed_service_tier": parsed.get("observed_service_tier"),
         "usage": {k: usage.get(k) for k in codex_record.TOKENS},
@@ -300,6 +349,7 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
         "audit_unknown_reasons": parsed["audit"].get("unknown_reasons", []),
         "audit_dimensions": {**parsed["audit"].get("dimensions", {}),
                              "launch_mode": launch_modes["status"],
-                             "requested_service_tier": tier_request_status},
+                             "requested_service_tier": requested_tier_status,
+                             "hostprobe_service_tier_request": hostprobe_tier_status},
         "thread": threads, "code_mode_host": hostprobe,
     }

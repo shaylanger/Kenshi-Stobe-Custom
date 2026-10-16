@@ -228,7 +228,12 @@ def audit_rollout(events: list[dict], config: dict | None) -> dict:
             if any(k in metadata for k in ("child_thread_id", "agent_id", "subagent_id", "child_agents")):
                 delegation.append("child/agent metadata in rollout context")
     if isinstance(config, dict) and config.get("hook_verified") is not True:
-        reasons.append("pre-tool policy hook verification missing")
+        host_proof = config.get("code_mode_host_proof")
+        hook_state = config.get("hook_enforcement")
+        hard_boundary_verified = isinstance(host_proof, dict) and host_proof.get("verified") is True
+        hook_unavailable = isinstance(hook_state, dict) and hook_state.get("status") == "UNAVAILABLE"
+        if not (hard_boundary_verified and hook_unavailable):
+            reasons.append("pre-tool policy hook verification missing and hard-boundary proof unavailable")
     if isinstance(config, dict) and config.get("terminal_verified") is not True:
         reasons.append("complete terminal event not verified")
     if delegation:

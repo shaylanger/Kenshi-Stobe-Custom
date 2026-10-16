@@ -48,19 +48,27 @@ class LiveMetricsTests(unittest.TestCase):
 
     def _write_hostprobe(self, request_tier):
         frozen = sorted(codex_status.FROZEN_TOOLS)
+        outer_tools = sorted(codex_status.OUTER_TOOL_NAMES)
         probe = {
             "kind": "codex_hostprobe", "status": "PASS", "cli_returncode": 0,
-            "cli_sha256": "a" * 64, "code_mode_host_sha256": "b" * 64,
+            "cli_sha256": "a" * 64, "host_sha256": "b" * 64,
             "config": {"code_mode": True, "code_mode_host": True, "shell_tool": False,
                        "multi_agent": False, "agents_enabled": False, "view_image": False,
-                       "enabled_tools": frozen + ["exec"]},
-            "request_tool_names": frozen + ["exec"], "request_service_tier": request_tier,
-            "provider": {"bound_host": "127.0.0.1", "port_ephemeral": 54321,
-                         "requests_n": 1, "external_hosts_attempted": 0, "auth": "dummy"},
-            "host": {"global_names": ["Object", "JSON"], "global_forbidden_names": [],
-                     "tool_names": frozen, "frozen_list_call": "ok"},
-            "hooks": {"session_start_receipts": 1, "pretool_allowed_frozen": 1,
-                      "pretool_denied_nonfrozen": 1},
+                       "hooks_enabled": False, "mcp_tools": frozen,
+                       "excluded_tool_namespaces": list(codex_status.EXCLUDED_NAMESPACES)},
+            "request_tool_names": outer_tools, "request_service_tier": request_tier,
+            "provider": {"bound_host": "127.0.0.1", "port_ephemeral": True,
+                         "requests": 1, "external_hosts": 0, "credential": "dummy"},
+            "host": {"global_names": ["Object", "JSON"], "forbidden_global_names": [],
+                     "tool_names": frozen, "tool_namespace_keys": frozen, "callable_names": frozen,
+                     "unlisted_callable_names": [], "frozen_list_call": {"isError": False},
+                     "unknown_parameter_status": "server_rejected", "unknown_parameter_isError": True,
+                     "agent_api_types": {name: {"global": "undefined", "tool": "undefined"}
+                                         for name in codex_status.AGENT_APIS}},
+            "mcp_calls": [{"tool": "mcp__frozen__list", "isError": False, "result_class": "ok"},
+                          {"tool": "mcp__frozen__list", "isError": True, "result_class": "error:invalid_params"}],
+            "hook_enforcement": {"status": "UNAVAILABLE", "stdin_type": 2,
+                                 "bytes_received": 0, "errno": 1},
         }
         raw = json.dumps(probe).encode()
         path = Path(self.tmp.name) / "hostprobe.json"
@@ -75,6 +83,7 @@ class LiveMetricsTests(unittest.TestCase):
         self.assertEqual(metrics["thread"], {"root_thread_id": "root-1", "provenance": "root", "malformed_lines": 0})
         self.assertEqual(metrics["model"], "gpt-x")
         self.assertEqual(metrics["observed_service_tier"], "standard")
+        self.assertEqual(metrics["code_mode_host"]["hook_enforcement"]["status"], "UNAVAILABLE")
         self.assertNotIn("report", metrics)
         self.assertNotIn("private report content", repr(metrics))
 
@@ -88,10 +97,13 @@ class LiveMetricsTests(unittest.TestCase):
 
     def test_completed_validity_can_pass_while_overall_tier_is_unknown(self):
         self.records[1].pop("service_tier")
+        self._write_hostprobe(None)
         self.write()
         metrics = codex_status.live_metrics(self.receipt, None)
         self.assertEqual(metrics["audit"], "PASS")
         self.assertEqual(metrics["overall_status"], "UNKNOWN")
+        self.assertEqual(metrics["requested_tier_proof"], "PASS")
+        self.assertEqual(metrics["hostprobe_tier_request_proof"], "UNKNOWN")
         self.assertEqual(metrics["audit_dimensions"]["service_tier"], "UNKNOWN")
 
     def test_child_and_ambiguous_thread_origins_fail(self):
@@ -126,6 +138,18 @@ class LiveMetricsTests(unittest.TestCase):
         self.assertEqual(metrics["audit"], "UNKNOWN")
         self.assertEqual(metrics["code_mode_host"]["status"], "UNKNOWN")
 
+    def test_code_mode_exec_accepts_hard_boundary_with_unavailable_hooks(self):
+        self.records.append({"type": "response_item", "payload": {"type": "custom_tool_call",
+                            "call_id": "call-1", "name": "exec", "input": json.dumps({"code": "text(1)"})}})
+        self.records.append({"type": "response_item", "payload": {"type": "custom_tool_call_output",
+                            "call_id": "call-1", "output": "hidden"}})
+        self.receipt["allowed_tools"] = ["exec"]
+        self.receipt["hook_verified"] = False
+        self.write()
+        metrics = codex_status.live_metrics(self.receipt, None)
+        self.assertEqual(metrics["audit"], "PASS")
+        self.assertEqual(metrics["code_mode_host"]["hook_enforcement"]["status"], "UNAVAILABLE")
+
     def test_sanitized_hostprobe_hash_and_guard_binding(self):
         path = Path(self.tmp.name) / "hostprobe.json"
         raw = path.read_bytes()
@@ -158,6 +182,20 @@ class LiveMetricsTests(unittest.TestCase):
         path.write_bytes(raw)
         result = codex_status._verify_hostprobe(str(path), hashlib.sha256(raw).hexdigest())
         self.assertEqual(result["status"], "PASS")
+
+    def test_hostprobe_rejects_nonfrozen_callable_and_missing_strict_mcp_error(self):
+        path = Path(self.tmp.name) / "hostprobe.json"
+        probe = json.loads(path.read_text(encoding="utf-8"))
+        probe["host"]["callable_names"].append("apply_patch")
+        raw = json.dumps(probe).encode()
+        path.write_bytes(raw)
+        self.assertEqual(codex_status._verify_hostprobe(str(path), hashlib.sha256(raw).hexdigest())["status"], "FAIL")
+        self._write_hostprobe("default")
+        probe = json.loads(path.read_text(encoding="utf-8"))
+        probe["mcp_calls"].pop()
+        raw = json.dumps(probe).encode()
+        path.write_bytes(raw)
+        self.assertEqual(codex_status._verify_hostprobe(str(path), hashlib.sha256(raw).hexdigest())["status"], "FAIL")
 
 
 if __name__ == "__main__":
