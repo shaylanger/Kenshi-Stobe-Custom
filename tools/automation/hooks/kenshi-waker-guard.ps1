@@ -79,13 +79,30 @@ if (-not $env:KAH_AGENT_NAME -and [string]$in.session_id) {
         $tv = & {
             . (Join-Path $PSScriptRoot '..\tail-mode.ps1')
             $v = Get-TailStopVerdict $tr $ts
-            if ($v.Tail -and $v.Block) { try { $v['Cap'] = Register-TailBlock $tr $ts ([string]$v.Sig) } catch { } }
+            if ($v.Tail -and $v.Block) {
+                # PI-28 (Shay 2026-10-15): the tail's own wait (tail-wait.ps1, heartbeat file <runs>\tail\<session>.wait) is provably ALIVE and ARMED
+                # (pid + process start + command line + fresh heartbeat, tail-wait-lib.ps1) and the tail has nothing to do (only running agents / relays
+                # awaiting delivery) -> the turn may END (the session idles; the wait's completion notification wakes it). FAIL CLOSED: any error or
+                # doubt = not armed = the block + PI-18 cap below, exactly as before.
+                $armedNow = $false
+                try {
+                    . (Join-Path $PSScriptRoot '..\tail-wait-lib.ps1')
+                    $fl = Read-TailFlag (Get-TailFlagPath $tr $ts)
+                    if ($fl) {
+                        $w = Test-TailWaitArmed $tr $ts $fl
+                        if ($w.Armed -and -not [string](Get-TailWaitAction $tr $fl)) { $armedNow = $true; $v['WaitArmed'] = [string]$w.Why }
+                    }
+                } catch { $armedNow = $false; $v.Remove('WaitArmed') }
+                if (-not $armedNow) { try { $v['Cap'] = Register-TailBlock $tr $ts ([string]$v.Sig) } catch { } }
+            }
             $v
         }
         if ($tv.Tail) {
+            if ($tv.Block -and $tv.WaitArmed) { exit 0 }   # PI-28: armed wait -> end the turn quietly (no cap count, no close attempt: the tail is not finished)
             if ($tv.Block -and -not ($tv.Cap -and $tv.Cap.Allow)) {
                 $extra = ''
                 if ($tv.Cap -and $tv.Cap.Quiet) { $extra = " You have now been blocked $($tv.Cap.Count) times in a row with nothing changed: wait with ONE long background wait (bash tools/automation/event-wait.sh in the background, or a single wait on the agent); do not reply per block. After 6 unchanged blocks this hook lets you end." }
+                $extra += " TO STOP THESE BLOCKS (PI-28): start ONE background wait over your own agents, powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\tail-wait.ps1 -Session $ts (run_in_background; it keeps a heartbeat file and exits when an owned agent finishes or needs a relay), then end your turn: while it is alive and armed this hook lets you end and the session wakes on the wait's completion. Never reply to this block message."
                 Block-Stop ('kenshi-waker-guard: ' + $tv.Message + $extra + ' Keep the waker running: ' + $WAKER)
             }
             # The tail may end = it is FINISHED (all agents done + acknowledged): close it (Shay 2026-10-15). tail-close.ps1 re-checks everything

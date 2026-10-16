@@ -165,7 +165,7 @@ lines>. Report commits, DLL SHA256, tests.
 >
 > **D. Cold start (PC shutdown, everything died):** `session-start.ps1` lists every ledger agent whose session is not alive as DEAD, with the respawn line and its routing note; respawn them fresh in-session (Agent tool) from their checkpoints and handoff files, naming wpA -> wpA2. `coord-supervisor.ps1` also flags dead tails.
 >
-> **Selftests:** `tools/automation/tail-hooks-selftest.ps1` (hooks, 33 PASS), `tools/automation/tail-ledger-selftest.ps1` (ledger/relay/ack/session-start, 33 PASS), `tools/automation/tail-close-selftest.ps1` (current-coordinator relay, adopt, safe close, ack/hook triggers, 73 PASS), `agent-router-selftest.ps1` (25 PASS).
+> **Selftests:** `tools/automation/tail-hooks-selftest.ps1` (hooks, 69 PASS), `tools/automation/tail-ledger-selftest.ps1` (ledger/relay/ack/session-start, 33 PASS), `tools/automation/tail-close-selftest.ps1` (current-coordinator relay, adopt, safe close, ack/hook triggers, 73 PASS), `agent-router-selftest.ps1` (25 PASS).
 <!-- END overlap-handoff block -->
 
 ## Coordinator/agent improvements (Shay 2026-10-15) — every brief must say: read docs/COORDINATOR_IMPROVEMENTS.md and testing/KNOWN_BLOCKERS.md first

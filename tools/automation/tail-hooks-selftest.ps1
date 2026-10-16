@@ -132,6 +132,95 @@ try {
     $o = (Guard 'OTHER2' $true) -join "`n"
     T ($o.Trim() -eq '') 'PI-18 C: a non-tail session is unchanged'
 
+    # --- PI-28 (+PI-27): an ARMED, provably alive tail-wait.ps1 lets a tail's turn END; no wait / dead pid / stale heartbeat / error = blocked as before
+    $script:waitProcs = @()
+    $tw = Join-Path $auto 'tail-wait.ps1'
+    $twLib = Join-Path $auto 'tail-wait-lib.ps1'
+    foreach ($f in @($tw, $twLib)) { $err = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$null, [ref]$err); T (-not $err) "syntax $(Split-Path $f -Leaf)" }
+    function StartWait([string]$sess) {
+        $wfile = Join-Path $d "tail\$sess.wait"
+        Remove-Item -LiteralPath $wfile -Force -ErrorAction SilentlyContinue
+        $pr = Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $tw, '-Session', $sess, '-IntervalSec', '15') -PassThru -WindowStyle Hidden
+        $script:waitProcs += $pr
+        for ($i = 0; $i -lt 60 -and -not (Test-Path -LiteralPath $wfile); $i++) { Start-Sleep -Milliseconds 250 }
+        return $pr
+    }
+    function WaitJson([string]$sess) { Get-Content -LiteralPath (Join-Path $d "tail\$sess.wait") -Raw | ConvertFrom-Json }
+    function SetWait([string]$sess, [string]$field, [string]$value) {
+        $j = WaitJson $sess; $j.$field = $value
+        [IO.File]::WriteAllText((Join-Path $d "tail\$sess.wait"), ($j | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    }
+    [void](RunPS @('-File', $tm, 'enter', '-Session', 'SW', '-ClaudePid', "$PID", '-Agents', 'w1'))
+    Ledger '{"name":"p","agents":{"w1":{"owner_session":"tail:SW","acked_by_new_coordinator":false}}}'
+    Status 'w1' 'RUNNING'
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -match 'tail-wait\.ps1 -Session SW' -and $o -match 'Never reply to this block') 'PI-28: no wait armed -> blocked, message names tail-wait.ps1 and says never reply per block'
+    $o = (Guard 'SW') -join "`n"
+    T ((Get-Content (Join-Path $d 'tail\SW.blocks') -Raw | ConvertFrom-Json).count -eq 2) 'PI-28: unarmed blocks still count toward the PI-18 cap'
+    $wp1 = StartWait 'SW'
+    T (Test-Path (Join-Path $d 'tail\SW.wait')) 'PI-28: tail-wait.ps1 registers <session>.wait'
+    $o = (Guard 'SW') -join "`n"
+    T ($o.Trim() -eq '') 'PI-28: armed alive wait, owned agent RUNNING -> turn may end (no block output)'
+    $outs = @(); for ($i = 0; $i -lt 8; $i++) { $outs += ((Guard 'SW') -join "`n").Trim() }
+    T (@($outs | Where-Object { $_ -ne '' }).Count -eq 0 -and (Get-Content (Join-Path $d 'tail\SW.blocks') -Raw | ConvertFrom-Json).count -eq 2) 'PI-28: 8 more armed Stops all pass and do not touch the block counter'
+    Status 'w1' 'DONE'
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -match 'w1') 'PI-28: armed wait but an owned agent just finished (needs relay) -> still blocked'
+    Age (Join-Path $d 'agents\w1.status') 7
+    $rf = RelayFile 'w1' 2 $false
+    $o = (Guard 'SW') -join "`n"
+    T ($o.Trim() -eq '') 'PI-28: armed wait, agent DONE with relay written 2 min ago (only delivery/grace pending) -> may end'
+    Remove-Item -LiteralPath $rf -Force; Status 'w1' 'RUNNING'
+    # a wait of ANOTHER session does not help this one
+    [void](RunPS @('-File', $tm, 'enter', '-Session', 'SW2', '-ClaudePid', "$PID", '-Agents', 'w1'))
+    $o = (Guard 'SW2') -join "`n"
+    T ($o -match '"decision":"block"') 'PI-28: a second tail without its own wait is blocked while SW has one'
+    Copy-Item (Join-Path $d 'tail\SW.wait') (Join-Path $d 'tail\SW2.wait')
+    $o = (Guard 'SW2') -join "`n"
+    T ($o -match '"decision":"block"') 'PI-28: another sessions wait file copied under this session id (session/command-line mismatch) -> blocked'
+    Remove-Item (Join-Path $d 'tail\SW2.wait') -Force
+    # armed before the tail started
+    $flagCreated = [string](Get-Content (Join-Path $d 'tail\SW.flag') -Raw | ConvertFrom-Json).created
+    SetWait 'SW' 'armed' ([datetimeoffset]::Parse($flagCreated).AddHours(-1).ToString('o'))
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"') 'PI-28: wait armed before the tail flag was created -> blocked'
+    # stale heartbeat (the live wait beats every 15 s: set it stale and check at once)
+    $wp1.Kill(); $wp1.WaitForExit()
+    $wp2 = StartWait 'SW'
+    SetWait 'SW' 'hb' ((Get-Date).AddMinutes(-10).ToString('o'))
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"') 'PI-28: alive process but stale heartbeat -> blocked'
+    # pid alive but it is not tail-wait.ps1 (the selftest's own powershell): command-line check
+    $wp2.Kill(); $wp2.WaitForExit()
+    $meProc = Get-Process -Id $PID
+    $fake = [ordered]@{ session = 'SW'; pid = $PID; proc_start = $meProc.StartTime.ToString('o'); armed = (Get-Date).ToString('o'); hb = (Get-Date).ToString('o'); interval = 5; script = 'tail-wait.ps1' }
+    [IO.File]::WriteAllText((Join-Path $d 'tail\SW.wait'), ($fake | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"') 'PI-28: live pid that is not this sessions tail-wait.ps1 (fresh heartbeat, right start time) -> blocked'
+    # dead pid
+    $wp3 = StartWait 'SW'
+    $o = (Guard 'SW') -join "`n"
+    T ($o.Trim() -eq '') 'PI-28: re-armed wait passes again'
+    $wp3.Kill(); $wp3.WaitForExit()
+    T (Test-Path (Join-Path $d 'tail\SW.wait')) 'PI-28: killed wait leaves its .wait file behind (the hook must not trust the file)'
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"') 'PI-28: wait process dead but file fresh -> blocked'
+    # error: corrupt wait file
+    Set-Content -LiteralPath (Join-Path $d 'tail\SW.wait') -Value '{ not json'
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"') 'PI-28: corrupt wait file (error in the check) -> blocked (fail closed)'
+    Remove-Item (Join-Path $d 'tail\SW.wait') -Force
+    # the wait itself exits at once when the tail has something to do, and removes its file
+    Status 'w1' 'DONE'
+    $out = @(RunPS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $tw, '-Session', 'SW', '-IntervalSec', '1'))
+    T (($out -join "`n") -match 'TAIL-WAIT SW EXIT agent w1 needs the tail' -and -not (Test-Path (Join-Path $d 'tail\SW.wait'))) 'PI-27/28: tail-wait exits at once when an owned agent is DONE and not relayed, and leaves no .wait file'
+    Status 'w1' 'RUNNING'
+    [void](RunPS @('-File', $tm, 'leave', '-Session', 'SW', '-Force')); [void](RunPS @('-File', $tm, 'leave', '-Session', 'SW2', '-Force'))
+    # a non-tail session id with a .wait file lying around is unaffected (still the non-tail exit)
+    [IO.File]::WriteAllText((Join-Path $d 'tail\NOTTAIL.wait'), ($fake | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    $o = (Guard 'NOTTAIL' $true) -join "`n"
+    T ($o.Trim() -eq '') 'PI-28: a non-tail (coordinator) session is unaffected by .wait files'
+
     # a non-tail session in the same runs dir is not treated as a tail (stop_hook_active => the existing once-per-turn exit)
     $o = (Guard 'OTHER' $true) -join "`n"
     T ($o.Trim() -eq '') 'guard: a non-tail session is unaffected by the tail flag of another session'
@@ -186,6 +275,7 @@ try {
     $o = (RunPS @('-File', (Join-Path $auto 'coord-supervisor.ps1'), '-Selftest')) -join "`n"
     T ($o -match 'SELFTEST OK' -and $o -match 'PASS 10a' -and $o -match 'PASS 10c') 'supervisor selftest incl. tail cases'
 } finally {
+    foreach ($wpx in @($script:waitProcs)) { try { if (-not $wpx.HasExited) { $wpx.Kill() } } catch { } }
     Remove-Item Env:KAH_RUNS_DIR, Env:KCS_RUNS, Env:KAH_TAIL_NO_CLOSE -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
 }
