@@ -71,6 +71,67 @@ try {
     Ledger '{"name":"p","agents":{"a1":{"owner_session":"tail:S1","acked_by_new_coordinator":false},"a3":{"owner_session":"tail:S1","acked_by_new_coordinator":true},"zz":{"owner_session":"tail:S1","acked_by_new_coordinator":true}}}'
     $o = (Guard 'S1') -join "`n"
     T ($o -match '"decision":"block"' -and $o -match 'a1 \[DONE, not acknowledged\]') 'guard: finished but unacknowledged agent still blocks'
+    # --- PI-18 A: a finished agent does not hold the tail on the explicit ack (relay delivered, or 5 min after the relay was written)
+    $inbox = Join-Path $d 'inbox\coordinator'
+    New-Item -ItemType Directory -Force -Path (Join-Path $inbox 'delivered') | Out-Null
+    function Age([string]$path, [double]$minutesAgo) { (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddMinutes(-$minutesAgo) }
+    function RelayFile([string]$agent, [double]$minutesAgo, [bool]$delivered) {
+        $p = Join-Path $(if ($delivered) { Join-Path $inbox 'delivered' } else { $inbox }) ("20261015-120000-tail-$agent.msg")
+        Set-Content -LiteralPath $p -Value "TAIL-RELAY $agent DONE x"; Age $p $minutesAgo; return $p
+    }
+    [void](RunPS @('-File', $tm, 'enter', '-Session', 'S4', '-ClaudePid', "$PID", '-Agents', 'r1'))
+    Ledger '{"name":"p","agents":{"r1":{"owner_session":"tail:S4","acked_by_new_coordinator":false}}}'
+    Status 'r1' 'DONE'; Age (Join-Path $d 'agents\r1.status') 7
+    $o = (Guard 'S4') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -match 'r1 \[DONE, not acknowledged\]' -and $o -match 'not relayed yet') 'PI-18 A: DONE + no relay file written -> still blocks (not relayed yet)'
+    $rf = RelayFile 'r1' 2 $false
+    $o = (Guard 'S4') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -match 'ack grace ends in') 'PI-18 A: DONE + undelivered relay written 2 min ago -> blocks inside the 5 min grace'
+    Age $rf 6
+    $o = (Guard 'S4') -join "`n"
+    T ($o.Trim() -eq '') 'PI-18 A: undelivered relay older than 5 min -> tail may end without the ack'
+    Remove-Item -LiteralPath $rf
+    $rf = RelayFile 'r1' 1 $true
+    $o = (Guard 'S4') -join "`n"
+    T ($o.Trim() -eq '') 'PI-18 A: relay file delivered (moved to delivered\) -> tail may end without the ack'
+    Age $rf 30   # relay written before the agent finished = an earlier run of a same-named agent
+    Status 'r1' 'DONE'
+    $o = (Guard 'S4') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -match 'not relayed yet') 'PI-18 A: a delivered relay from BEFORE the agent DONE does not release it'
+    Remove-Item -LiteralPath $rf
+    $rf = RelayFile 'r1' 1 $true
+    Status 'r1' 'RUNNING'
+    $o = (Guard 'S4') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -match 'r1 \[running\]') 'PI-18 A: a RUNNING owned agent still blocks even with a delivered relay file'
+    Status 'r1' 'FAILED'; Age (Join-Path $d 'agents\r1.status') 3
+    $o = (Guard 'S4') -join "`n"
+    T ($o.Trim() -eq '') 'PI-18 A: FAILED agent with a delivered relay -> tail may end'
+    Remove-Item -LiteralPath $rf
+    Ledger '{"name":"p","agents":{"r1":{"owner_session":"tail:S4","acked_by_new_coordinator":true}}}'
+    $o = (Guard 'S4') -join "`n"
+    T ($o.Trim() -eq '') 'PI-18 A: explicit ack in the ledger still releases the tail (unchanged)'
+    $o = (RunPS @('-File', $tm, 'status', '-Session', 'S4')) -join "`n"
+    T ($o -match 'r1') 'PI-18 A: tail-mode status still works'
+
+    # --- PI-18 C: capped Stop blocks (message from the 4th unchanged block, tail let end after the 6th, count restarts on a change)
+    [void](RunPS @('-File', $tm, 'enter', '-Session', 'S5', '-ClaudePid', "$PID", '-Agents', 'c1'))
+    Ledger '{"name":"p","agents":{"c1":{"owner_session":"tail:S5","acked_by_new_coordinator":false}}}'
+    Status 'c1' 'RUNNING'
+    $outs = @(); for ($i = 1; $i -le 6; $i++) { $outs += ((Guard 'S5') -join "`n") }
+    T (@($outs | Where-Object { $_ -match '"decision":"block"' }).Count -eq 6) 'PI-18 C: blocks 1-6 are all blocked'
+    T (@($outs[0..2] | Where-Object { $_ -match 'ONE long background wait' }).Count -eq 0) 'PI-18 C: blocks 1-3 carry no wait advice'
+    T ($outs[3] -match 'ONE long background wait' -and $outs[3] -match 'do not reply per block' -and $outs[5] -match 'ONE long background wait') 'PI-18 C: blocks 4-6 say to wait with ONE long background wait'
+    $o = (Guard 'S5') -join "`n"
+    T ($o.Trim() -eq '' -and (Test-Path (Join-Path $d 'tail\cap-ends.log')) -and ((Get-Content (Join-Path $d 'tail\cap-ends.log') -Raw) -match 'session=S5')) 'PI-18 C: the 7th unchanged attempt is let through and logged in cap-ends.log'
+    $o = (Guard 'S5') -join "`n"
+    T ($o.Trim() -eq '') 'PI-18 C: later attempts with the same pending set keep passing'
+    Status 'c1' 'DONE'   # pending set changes (running -> done, unacked, unrelayed): count restarts
+    $o = (Guard 'S5') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -notmatch 'ONE long background wait') 'PI-18 C: a changed pending set restarts the count (blocked again, no wait advice yet)'
+    # the cap never touches a non-tail session or a tail with nothing pending
+    $o = (Guard 'OTHER2' $true) -join "`n"
+    T ($o.Trim() -eq '') 'PI-18 C: a non-tail session is unchanged'
+
     # a non-tail session in the same runs dir is not treated as a tail (stop_hook_active => the existing once-per-turn exit)
     $o = (Guard 'OTHER' $true) -join "`n"
     T ($o.Trim() -eq '') 'guard: a non-tail session is unaffected by the tail flag of another session'

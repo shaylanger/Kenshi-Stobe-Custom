@@ -105,7 +105,29 @@ function Get-AgentStatusState([string]$runs, [string]$agent) {
     @{ State = $(if ($pp.Count -ge 2) { $pp[1] } else { '' }); AgeMin = ((Get-Date) - (Get-Item -LiteralPath $sf).LastWriteTime).TotalMinutes }
 }
 
-# The agents a tail flag owns, with their state. Pending = still running, or finished but not acknowledged by the new coordinator.
+# PI-18 (Shay 2026-10-15): a finished agent does not hold the tail on the explicit ack. Released when its TAIL-RELAY file was DELIVERED
+# (moved to <inbox>\delivered\ by the new coordinator's event-wait) or when TAIL_ACK_GRACE_MIN minutes passed since that relay file was written.
+# The ack stays in the ledger (tail-ack.ps1) but no longer gates the tail. No relay file written after the agent's DONE = still pending.
+$TAIL_ACK_GRACE_MIN = 5
+function Get-TailRelayState([string]$runs, $flag, [string]$agent, [datetime]$doneAt) {
+    $inboxes = @((Join-Path (Get-TailRuns $runs) 'inbox\coordinator'))
+    if ($flag.Inbox -and ($inboxes -notcontains $flag.Inbox)) { $inboxes += $flag.Inbox }
+    $best = $null; $delivered = $false
+    foreach ($ib in $inboxes) {
+        foreach ($loc in @(@($ib, $false), @((Join-Path $ib 'delivered'), $true))) {
+            if (-not (Test-Path -LiteralPath $loc[0])) { continue }
+            foreach ($f in @(Get-ChildItem -LiteralPath $loc[0] -Filter "*-tail-$agent.msg" -File -ErrorAction SilentlyContinue)) {
+                if ($f.LastWriteTime -lt $doneAt.AddMinutes(-1)) { continue }   # relay of an earlier run of a same-named agent
+                if (-not $best -or $f.LastWriteTime -gt $best.LastWriteTime) { $best = $f }
+                if ($loc[1]) { $delivered = $true }
+            }
+        }
+    }
+    if (-not $best) { return @{ Relayed = $false; Delivered = $false; AgeMin = 0 } }
+    return @{ Relayed = $true; Delivered = $delivered; AgeMin = ((Get-Date) - $best.LastWriteTime).TotalMinutes }
+}
+
+# The agents a tail flag owns, with their state. Pending = still running, or finished but neither acknowledged nor (relay delivered / ack grace over).
 function Get-TailAgentSet([string]$runs, $flag) {
     $recs = @(Get-LedgerAgentRecords $runs)
     $names = New-Object Collections.ArrayList
@@ -117,11 +139,48 @@ function Get-TailAgentSet([string]$runs, $flag) {
         $st = Get-AgentStatusState $runs $n
         $acked = [bool]($rec -and $rec.Acked)
         $running = ($st.State -ne '') -and ($TAIL_TERMINAL -notcontains $st.State) -and ($st.AgeMin -lt 45)
-        $pending = (-not $acked) -or $running
-        $why = if ($running) { "running" } elseif (-not $rec) { "$(if ($st.State) { $st.State } else { 'no status' }), no ledger record" } elseif (-not $acked) { "$(if ($st.State) { $st.State } else { 'no status' }), not acknowledged" } else { 'done+acked' }
-        $res += [pscustomobject]@{ Agent = $n; Program = $(if ($rec) { $rec.Program } else { '' }); State = $st.State; Acked = $acked; Pending = $pending; Why = $why }
+        $relayOk = $false; $relayWhy = ''
+        if (-not $running -and -not $acked -and ($TAIL_TERMINAL -contains $st.State)) {
+            $rs = Get-TailRelayState $runs $flag $n ((Get-Date).AddMinutes(-$st.AgeMin))
+            if ($rs.Delivered) { $relayOk = $true; $relayWhy = 'relay delivered' }
+            elseif ($rs.Relayed -and $rs.AgeMin -ge $TAIL_ACK_GRACE_MIN) { $relayOk = $true; $relayWhy = "relay written $([int]$rs.AgeMin) min ago (ack grace over)" }
+            elseif ($rs.Relayed) { $relayWhy = "relay not delivered yet, ack grace ends in $([math]::Ceiling($TAIL_ACK_GRACE_MIN - $rs.AgeMin)) min" }
+            else { $relayWhy = 'not relayed yet (no TAIL-RELAY file after its DONE)' }
+        }
+        $pending = ((-not $acked) -and (-not $relayOk)) -or $running
+        $sn = if ($st.State) { $st.State } else { 'no status' }
+        $why = if ($running) { 'running' }
+               elseif ($acked) { 'done+acked' }
+               elseif ($relayOk) { "$sn, $relayWhy" }
+               elseif (-not $rec) { "$sn, no ledger record" }
+               else { "$sn, not acknowledged" }
+        $res += [pscustomobject]@{ Agent = $n; Program = $(if ($rec) { $rec.Program } else { '' }); State = $st.State; Acked = $acked; Pending = $pending; Why = $why; Hint = $(if ($relayWhy -and -not $relayOk) { $relayWhy } else { '' }); Sig = "$n|$($st.State)|$acked|$running|$relayOk|$($relayWhy -replace '\d+ min','N min')" }
     }
     return @($res)
+}
+
+# PI-18 C: the Stop hook blocks a tail at most TAIL_BLOCK_CAP times in a row with an unchanged pending set; from the 4th block the message
+# tells it to wait with ONE long background wait; the attempt after the 6th block is let through (logged in <runs>\tail\cap-ends.log).
+# State file <runs>\tail\<session>.blocks (sig/count/last); a changed pending set, or a gap > 60 min since the last block, restarts the count.
+$TAIL_BLOCK_QUIET = 3
+$TAIL_BLOCK_CAP = 6
+function Register-TailBlock([string]$runs, [string]$session, [string]$sig) {
+    $fp = Join-Path (Get-TailDir $runs) (($session -replace '[\\/:*?"<>|]', '_') + '.blocks')
+    $count = 0; $lastIso = (Get-Date).ToString('o')
+    try {
+        $j = (Get-Content -LiteralPath $fp -Raw -ErrorAction Stop).TrimStart([char]0xFEFF) | ConvertFrom-Json -ErrorAction Stop
+        $last = [datetime]::Parse([string]$j.last)
+        if ([string]$j.sig -eq $sig -and ((Get-Date) - $last).TotalMinutes -le 60) { $count = [int]$j.count; $lastIso = [string]$j.last }
+    } catch { }
+    $allow = ($count -ge $TAIL_BLOCK_CAP)
+    if (-not $allow) { $count++; $lastIso = (Get-Date).ToString('o') }
+    try {
+        New-Item -ItemType Directory -Force -Path (Get-TailDir $runs) | Out-Null
+        $obj = [ordered]@{ sig = $sig; count = $count; last = $lastIso }
+        [IO.File]::WriteAllText($fp, ($obj | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+        if ($allow) { Add-Content -LiteralPath (Join-Path (Get-TailDir $runs) 'cap-ends.log') -Value "$((Get-Date).ToString('o')) session=$session let end after $TAIL_BLOCK_CAP unchanged Stop blocks; pending: $sig" }
+    } catch { }
+    return @{ Count = $count; Allow = $allow; Quiet = ($count -gt $TAIL_BLOCK_QUIET) }
 }
 
 # Stop-hook verdict for a session: Tail=$false when it has no flag; Block=$true while an owned agent is pending.
@@ -133,10 +192,11 @@ function Get-TailStopVerdict([string]$runs, [string]$session) {
     if (-not $flag) { return @{ Tail = $true; Block = $false; Message = 'unreadable tail flag: not blocking' } }
     $set = @(Get-TailAgentSet $runs $flag | Where-Object { $_.Pending })
     if (-not $set.Count) { return @{ Tail = $true; Block = $false; Message = '' } }
-    $msg = "this is a TAIL session (overlap handoff, flag $fp) and still owns $($set.Count) agent(s) that are not finished or not acknowledged by the new coordinator: " +
-        (($set | ForEach-Object { "$($_.Agent) [$($_.Why)]" }) -join '; ') +
-        ". Do not end the turn: keep waiting for them (you spawn and decide nothing new), and when one finishes save its report to a file, relay it to the new coordinator (tail-relay.ps1 + SendMessage, inbox C:\KenshiTestRuns\inbox\coordinator), and wait for its ACK (program-ledger.ps1 ack / tail-ack.ps1). A stalled agent: silent 10 min -> message it, 20 min -> TaskStop it and tell the new coordinator. You may end only when every agent is done AND acknowledged. If this flag is wrong: powershell -NoProfile -File C:\KenshiModding\tools\automation\tail-mode.ps1 leave -Session $session -Force"
-    return @{ Tail = $true; Block = $true; Message = $msg; Pending = $set }
+    $sig = (($set | ForEach-Object { $_.Sig }) -join ';')
+    $msg = "this is a TAIL session (overlap handoff, flag $fp) and still owns $($set.Count) agent(s) that are not finished or whose result is not yet relayed/delivered: " +
+        (($set | ForEach-Object { "$($_.Agent) [$($_.Why)]$(if ($_.Hint) { " ($($_.Hint))" })" }) -join '; ') +
+        ". Do not end the turn: keep waiting for them (you spawn and decide nothing new), and when one finishes save its report to a file and relay it to the new coordinator (tail-relay.ps1 + SendMessage, inbox C:\KenshiTestRuns\inbox\coordinator). You may end once every agent is finished AND its relay file was delivered (or $TAIL_ACK_GRACE_MIN min after the relay was written); the new coordinator's explicit ack (tail-ack.ps1) is recorded in the ledger but does not hold you. A stalled agent: silent 10 min -> message it, 20 min -> TaskStop it and tell the new coordinator. If this flag is wrong: powershell -NoProfile -File C:\KenshiModding\tools\automation\tail-mode.ps1 leave -Session $session -Force"
+    return @{ Tail = $true; Block = $true; Message = $msg; Pending = $set; Sig = $sig }
 }
 
 # Nearest claude/node ancestor of this process (the session's own process).

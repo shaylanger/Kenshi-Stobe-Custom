@@ -73,9 +73,21 @@ if ($mode -ne 'stop') { exit 0 }
 if (-not $env:KAH_AGENT_NAME -and [string]$in.session_id) {
     try {
         $tr = $runs; $ts = [string]$in.session_id   # the lib's param block would reset $runs inside the dot-sourcing scope
-        $tv = & { . (Join-Path $PSScriptRoot '..\tail-mode.ps1'); Get-TailStopVerdict $tr $ts }
+        # PI-18 (Shay 2026-10-15): the verdict no longer waits for the explicit ack (relay delivered or 5 min grace is enough), and the block
+        # count is capped: from the 4th unchanged block the message says to use ONE long background wait; after the 6th the tail is let end
+        # (logged in <runs>\tail\cap-ends.log). A changed pending set restarts the count. See Register-TailBlock in tail-mode.ps1.
+        $tv = & {
+            . (Join-Path $PSScriptRoot '..\tail-mode.ps1')
+            $v = Get-TailStopVerdict $tr $ts
+            if ($v.Tail -and $v.Block) { try { $v['Cap'] = Register-TailBlock $tr $ts ([string]$v.Sig) } catch { } }
+            $v
+        }
         if ($tv.Tail) {
-            if ($tv.Block) { Block-Stop ('kenshi-waker-guard: ' + $tv.Message + ' Keep the waker running: ' + $WAKER) }
+            if ($tv.Block -and -not ($tv.Cap -and $tv.Cap.Allow)) {
+                $extra = ''
+                if ($tv.Cap -and $tv.Cap.Quiet) { $extra = " You have now been blocked $($tv.Cap.Count) times in a row with nothing changed: wait with ONE long background wait (bash tools/automation/event-wait.sh in the background, or a single wait on the agent); do not reply per block. After 6 unchanged blocks this hook lets you end." }
+                Block-Stop ('kenshi-waker-guard: ' + $tv.Message + $extra + ' Keep the waker running: ' + $WAKER)
+            }
             # The tail may end = it is FINISHED (all agents done + acknowledged): close it (Shay 2026-10-15). tail-close.ps1 re-checks everything
             # (flag, agents, claude pid name/start time, never the current coordinator), sends TAIL-DONE to the current coordinator, and a detached
             # worker ends this session's process ~20 s later (log: <runs>\tail\closed.log). Fail closed + silent: any error = nothing is closed.
