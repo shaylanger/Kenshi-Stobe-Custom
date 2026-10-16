@@ -7,6 +7,8 @@ Animation lab: `Kenshi-Automation-Harness/docs/animlab/STATUS.md`, KenshiFP adap
 
 ## Right now — canonical resumable checkpoint (2026-10-14)
 
+**#13 03:50:** 03-b one-call script committed (62edcdf, unblockdefs_d.sh, never run live); after op12 DONE: see inboxoperatorsfter-op12-4080.txt (deploy hearsay+acceptpropose to 4080 trees, apply 27a patch, spawn op13).
+
 **#13 03:40:** op9i DONE (relay received; 5090-i5 idle -> op9j spawned: 14-c, 14-d via cleargroup14c-scene.sh). hearsay + acceptpropose deployed to the 3 5090 lane trees (site/ root; 4080 trees still pending until op12 DONE). op9i results: 12-d FAIL, 19-e FAIL, 19-f FAIL (imm26-inv-19ef investigating), 26-a FAIL: Start rejects player-faction partner (NativeTravelLifecycle.cpp:351-355) -> DESIGN question for Shay (allow squad/player-faction Hunt partner?) ; 22-a/26-b/26-c blocked on it.
 
 **#13 03:25 reports in:** 27-a = test defect, patch staged pending-fixes\27a-recipe (be3b493; apply.sh AFTER op12 is DONE, then `unblockrun_b.sh 27-a 4080-i4 ...` per its README); 03-b = recipe (sparse B) + ranking cut: hearsay fix ba448ed in compose (deploy pkg C:\KenshiTestRuns\imm26-install\hearsay\deploy.sh, lanes NOT yet, after op12) + imm26-rowtools-03b (new unblockdefs_d.sh) RUNNING; 14-c = model sends ACCEPT without offer: cleargroup14c-scene.sh committed (inbox\operators\inv14c.txt, 5090-i5 after op9i) + imm26-fix-acceptpropose RUNNING (compose only). imm26_wpB_repair_regression fails on unpatched compose too (pre-existing). Next: lane-deploy hearsay+acceptpropose after op12; apply 27a patch.
