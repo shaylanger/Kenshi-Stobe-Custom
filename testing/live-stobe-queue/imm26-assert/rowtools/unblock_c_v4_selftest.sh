@@ -9,7 +9,7 @@ unset KAH_AGENT_NAME KAH_ROW_DRY HX_OUT HX_SAVE HX_SAVE2 HX_PRELOADED UC_LOADED 
 mkdir -p "$KAH_ROWS_BASE" "$T/stubs"
 n=0; ok=0
 chk() { n=$((n+1)); if [ "$2" = ok ]; then ok=$((ok+1)); echo "SELFTEST unblockCv4-$1 PASS ${3:-}"; else echo "SELFTEST unblockCv4-$1 FAIL ${3:-}"; fi; }
-U="$ST_HERE/unblockdefs_c_v4.sh"; C="$ST_HERE/unblockcheck_c_v2.py"
+U="${UC_U:-$ST_HERE/unblockdefs_c_v4.sh}"; C="$ST_HERE/unblockcheck_c_v2.py"
 
 # ---- 1. syntax / registration
 bash -n "$U" && chk bash-n ok || chk bash-n bad
@@ -178,6 +178,33 @@ o=$(cli 15-bx 5090-i3 --allow-retry selftest); grep -q "stobe-auto load kah-imm2
 "$PYB" "$ST_HERE/hxscen_cx4.py" savemissing > "$FAKE_SCEN"; o2=$(cli 15-bx 5090-i3 --save kah-imm26-5090-hxA --allow-retry selftest)
 echo "$o2" | grep -q 'SAVE-MISSING base save .kah-imm26-5090-hxA.' && chk v4-explicit-missing-save-fails ok || chk v4-explicit-missing-save-fails bad "$o2"
 unset FAKE_SCEN FAKE_STATE
+
+# ---- 8. fix15bxv5: ub15_place_p pins F1 (HOLD_POSITION) so a MOVING fighter cannot run off between the teleport and the distance read (op25: P3 17.4 u > 15)
+cat > "$T/pin_t.sh" <<'EOS'
+. "$A/go-row.sh"; . "$ST_HERE/hxdefs.sh"; . "$U"
+export KAH_ROW_FAKE=1; unset KAH_ROW_DRY; HXD="$T/hxd8"; EV="$T/ev8"; rm -rf "$HXD" "$EV"; mkdir -p "$HXD" "$EV"; UB_NPC="Cind [Hungry Bandit]"; UB_ID1="#9/1"
+S8="$T/s8"; rm -rf "$S8"; mkdir -p "$S8"; echo 1000 > "$S8/f1x"; echo 1000 > "$S8/px"; echo 0 > "$S8/pinned"; : > "$S8/calls"
+# moving-fighter fixture: F1 runs 20 u the moment P is teleported next to it unless it was pinned (HOLD_POSITION); MODE=stuck: the teleport never lands within range
+lt_h() { local l f1x px d
+  while IFS= read -r l; do
+    case "$l" in
+      *"order '#9/1' HOLD_POSITION keep"*) echo 1 > "$S8/pinned"; echo "pin" >> "$S8/calls"; echo "ordered";;
+      *"where '#9/1'"*) f1x=$(cat "$S8/f1x"); echo "Garrick #9/1 [HNO] pos=$f1x,0,0";;
+      *"where 'Cind"*) px=$(cat "$S8/px"); echo "Cind [Hungry Bandit] #1/2 [x] pos=$px,0,0";;
+      *"teleport 'Cind [Hungry Bandit]' '#9/1' dist "*) d=${l##*dist }; d=${d%% *}; f1x=$(cat "$S8/f1x"); echo "tp" >> "$S8/calls"
+        if [ "${MODE:-}" = stuck ]; then echo $((f1x+40)) > "$S8/px"; else echo $((f1x+d)) > "$S8/px"; fi
+        [ "$(cat "$S8/pinned")" = 1 ] || echo $((f1x-20)) > "$S8/f1x";;
+    esac
+  done; }
+for MODE in moving stuck; do echo 1000 > "$S8/f1x"; echo 1000 > "$S8/px"; echo 0 > "$S8/pinned"; : > "$S8/calls"; RL_REASON=
+  ub15_place_p P1; echo "$MODE rc=$? calls=$(paste -sd, "$S8/calls") dist=$(cat "$HXD/P1/distance.txt" | tr '\n' ' ') reason=$(echo "$RL_REASON" | cut -c1-120)"; done
+EOS
+export A ST_HERE U T; bash "$T/pin_t.sh" > "$T/pin_t.out" 2>&1
+grep -q '^moving rc=0 calls=pin,tp ' "$T/pin_t.out" && grep -q '^moving rc=0 .*dist=Cind .Hungry Bandit.|10.0' "$T/pin_t.out" && chk v5-moving-fighter-pinned-p-within-15 ok || chk v5-moving-fighter-pinned-p-within-15 bad "$(grep ^moving "$T/pin_t.out" | head -1)"
+grep -q '^stuck rc=3 .*reason=P could not be placed within 15 u of the fight at P1' "$T/pin_t.out" && [ "$(grep '^stuck' "$T/pin_t.out" | grep -o 'tp' | wc -l)" = 3 ] && chk v5-distance-guard-still-setupfails ok || chk v5-distance-guard-still-setupfails bad "$(grep ^stuck "$T/pin_t.out" | head -1)"
+grep -q 'HOLD_POSITION keep' "$T/ev8/pin.txt" 2>/dev/null; [ -s "$T/ev8/pin.txt" ] && chk v5-pin-evidence-file ok || chk v5-pin-evidence-file bad
+# the dry run issues the pin before the first P placement
+grep -q "stobe-auto order '#9/[0-9]*' HOLD_POSITION keep" "$L3" && chk v5-dry-run-issues-pin ok || chk v5-dry-run-issues-pin bad "no HOLD_POSITION in the dry fake log"
 
 rm -rf "$T"
 if [ "$ok" = "$n" ]; then echo "SELFTEST UNBLOCK-C-V4 ALL PASS $ok/$n"; exit 0; else echo "SELFTEST UNBLOCK-C-V4 ALL FAIL $ok/$n"; exit 1; fi
