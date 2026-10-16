@@ -129,7 +129,8 @@ $rows = foreach ($l in $reg.lanes) {
 $scr = @(Screens $forbid)
 function ScreenOf($r) { $scr | Where-Object { Inside $_ $r } | Select-Object -First 1 }
 # Slots always come from the LIVE layout (registry window values are only a size/position preference, they go stale when Windows renumbers or moves monitors).
-$plan = @(Plan-Slots $scr @($reg.lanes | ForEach-Object { @{ Id = $_.id; W = $_.window.w; H = $_.window.h; Display = $_.window.display; X = $_.window.x; Y = $_.window.y } }))
+$planLanes = if ($Action -eq 'place' -or $Action -eq 'show') { @($reg.lanes | Where-Object { $id = $_.id; $id -eq ($Lane -replace '^(\d)$', 'i$1') -or @($rows | Where-Object { $_.Lane -eq $id -and $_.Rect }).Count }) } else { @($reg.lanes) }   # place/show: only running lanes + the requested one reserve space (one 5090 lane may be i5 even though the full 3-lane plan has no room for it)
+$plan = @(Plan-Slots $scr @($planLanes | ForEach-Object { @{ Id = $_.id; W = $_.window.w; H = $_.window.h; Display = $_.window.display; X = $_.window.x; Y = $_.window.y } }))
 function PlanOf($id) { $plan | Where-Object { $_.Lane -eq $id } | Select-Object -First 1 }
 if ($Action -eq 'plan' -or $Action -eq 'sync') {
   foreach ($p in $plan) { "{0} slot {1} {2},{3} {4}x{5} ({6})" -f $p.Lane, $(if ($p.Display) { $p.Display } else { 'NONE' }), $p.X, $p.Y, $p.W, $p.H, $p.Why }
