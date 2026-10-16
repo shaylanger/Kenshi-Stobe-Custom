@@ -1,0 +1,71 @@
+diff -ruN a/src/N2Policy.h b/src/N2Policy.h
+--- a/src/N2Policy.h	2026-10-15 19:03:13.054460131 -0500
++++ b/src/N2Policy.h	2026-10-15 19:03:13.571702533 -0500
+@@ -140,6 +140,9 @@
+   static float ArmRadius() { return 25.0f; }
+   static float FarRadius() { return 30.0f; }
+   static double FarSeconds() { return 20.0; }
++  // Observation gap that restarts the far-timer. NC6: measured on the REAL clock (the scan runs every 2 s real; game
++  // time runs up to ~12x faster, so a game-time gap of 10 s was exceeded by every single scan and the 20 s far-timer
++  // never completed). 10 real seconds = 5 missed scans; independent of the game speed multiplier.
+   static double GapSeconds() { return 10.0; }
+   // N5b: an abandonment proven while the partner is knocked out is HELD (the partner cannot be an observer) and
+   // released by PollPending once the partner is conscious again, or after this many game seconds (still alive).
+@@ -193,8 +196,14 @@
+   }
+ 
+   // One (leaver, partner) observation. Returns true once per episode when the abandonment is proven.
++  // Legacy form (game seconds == real seconds, i.e. speed 1x); kept for callers/tests that have no real clock.
+   bool Observe(unsigned leaver, unsigned partner, bool leaverFree, int partnerState, float dist, double nowSec,
+                AbandonEvent *out) {
++    return Observe(leaver, partner, leaverFree, partnerState, dist, nowSec, nowSec, out);
++  }
++  // nowSec = game seconds (far-timer, episode, hold); realSec = monotonic real seconds (observation-gap test only).
++  bool Observe(unsigned leaver, unsigned partner, bool leaverFree, int partnerState, float dist, double nowSec,
++               double realSec, AbandonEvent *out) {
+     if (!leaver || !partner || leaver == partner) return false;
+     NotePartnerState(partner, partnerState, nowSec);
+     if (partnerState == PS_NONE) return false;
+@@ -204,8 +213,9 @@
+     if (it == m_pairs.end()) { Pair p; p.episodeStart = ep.start; it = m_pairs.insert(std::make_pair(key, p)).first; }
+     Pair &p = it->second;
+     if (p.episodeStart != ep.start) { p = Pair(); p.episodeStart = ep.start; }
+-    if (p.lastSeen >= 0 && (nowSec < p.lastSeen || nowSec - p.lastSeen > GapSeconds())) p.farSince = -1.0;
++    if (p.lastSeen >= 0 && (nowSec < p.lastSeen || realSec < p.lastReal || realSec - p.lastReal > GapSeconds())) p.farSince = -1.0;
+     p.lastSeen = nowSec;
++    p.lastReal = realSec;
+     if (!leaverFree) { p.farSince = -1.0; return false; }
+     if (dist <= ArmRadius()) p.armed = true;
+     if (dist < FarRadius()) { p.farSince = -1.0; return false; }
+@@ -233,9 +243,9 @@
+   typedef std::pair<unsigned, unsigned> Key;
+   struct Episode { double start; Episode() : start(0) {} };
+   struct Pair {
+-    double episodeStart, farSince, lastSeen;
++    double episodeStart, farSince, lastSeen, lastReal;
+     bool armed, fired;
+-    Pair() : episodeStart(0), farSince(-1.0), lastSeen(-1.0), armed(false), fired(false) {}
++    Pair() : episodeStart(0), farSince(-1.0), lastSeen(-1.0), lastReal(-1.0), armed(false), fired(false) {}
+   };
+   struct Held { AbandonEvent ev; double since; Held() : since(0) {} };
+   std::map<Key, Pair> m_pairs;
+diff -ruN a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp	2026-10-15 19:03:13.132925032 -0500
++++ b/src/main.cpp	2026-10-15 19:03:13.650035533 -0500
+@@ -8923,6 +8923,7 @@
+   if (n > 16)
+     n = 16;
+   const double nowSec = (double)CurrentGameTsSeconds();
++  const double realSec = (double)nowTick / 1000.0; // NC6: real clock for the observation-gap test (speed independent)
+   struct Member {
+     Character *c;
+     unsigned int serial;
+@@ -8985,7 +8986,7 @@
+         continue;
+       }
+       Stobe::N2Policy::AbandonEvent ev;
+-      if (!g_abandonTracker.Observe(members[li].serial, members[pi].serial, true, members[pi].state, dist, nowSec, &ev))
++      if (!g_abandonTracker.Observe(members[li].serial, members[pi].serial, true, members[pi].state, dist, nowSec, realSec, &ev))
+         continue;
+       N2PostAbandon(members[li].c, members[pi].c, members[pi].state, ev);
+     }
