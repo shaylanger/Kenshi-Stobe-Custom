@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# unblockdefs_a.sh: one-call rows 08-e 08-d 11-b for the 4080-i4 operator (imm26-u-rowsA). Sourced by unblock-run.sh AFTER go-row.sh (rowlib, rowdefs, tripdefs helpers)
+# unblockdefs_a.sh: one-call rows 08-e 08-d 11-b for the 4080-i4 operator (imm26-u-rowsA). Sourced by unblockrun_a.sh AFTER go-row.sh (rowlib, rowdefs, tripdefs helpers)
 # and reloaddefs_a.sh (rw_* helpers; sourced here when missing). rowdefs.sh / hxdefs.sh / tripdefs.sh / hunt26a-scene.sh are NOT edited: this file REDEFINES rd_08e / rd_08d
-# (only inside the unblock-run.sh shell) and defines rd_11b. The verdict is unblockcheck_a.py (unblock-py.sh redirects rowcheck.py for these three rows).
+# (only inside the unblockrun_a.sh shell) and defines rd_11b. The verdict is unblockcheck_a.py (unblockpy_a.sh redirects rowcheck.py for these three rows).
 #   Shared helpers:
 #     i4_bored <tag> [push=1]   ONE targeted autochat bored request (the speaker lottery is gone): stobe_ctxpush (fresh native_ai < 120 s; push=0 = stale/no snapshot like a
 #                               natural tick), then GET stream.php?DATA=<base64 bored event, FIRST parameter>&profile=<NPC>&optional=1&people=["<NPC>","Shay"]&mode=autochat on the

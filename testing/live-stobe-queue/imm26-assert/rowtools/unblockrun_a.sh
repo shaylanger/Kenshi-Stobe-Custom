@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# unblock-run.sh <ROW> <lane> [options]   ONE call per unblock row (imm26-u-rowsA): optional reload of the lane's ready save -> preflight -> go-row (row steps + unblockcheck_a.py)
+# unblockrun_a.sh <ROW> <lane> [options]   ONE call per unblock row (imm26-u-rowsA): optional reload of the lane's ready save -> preflight -> go-row (row steps + unblockcheck_a.py)
 #   -> `EVIDENCE` lines -> exactly ONE `RESULT <ROW> PASS|FAIL|SETUP-FAIL|GATED ...` line; exit 0/1/2/3/4 as go-row.sh. Rows: 08-e 08-d 11-b.
 #   Options: --save <name> (ready save to reload first; default for 4080-i4: kah-imm26-4080-i4h)  --no-reload  --dry  --allow-retry "<why>"
 #            --neg (08-d negative control: no walk, topic must stay open)  --back <u> --speed <1-3> (08-d real-walk staging, defaults 350 / 2)  --tries <n> (08-e tick tries, 3)
@@ -8,8 +8,8 @@ UR_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$UR_HERE/../go-row.sh"
 . "$UR_HERE/reloaddefs_a.sh"
 . "$UR_HERE/unblockdefs_a.sh"
-PY="$UR_HERE/unblock-py.sh"
-ur_usage() { echo "usage: unblock-run.sh <ROW: 08-e 08-d 11-b> <lane: $(lt_lanes)> [--save S] [--no-reload] [--dry] [--allow-retry 'why'] [--neg] [--back U] [--speed N] [--tries N]" >&2; }
+PY="$UR_HERE/unblockpy_a.sh"
+ur_usage() { echo "usage: unblockrun_a.sh <ROW: 08-e 08-d 11-b> <lane: $(lt_lanes)> [--save S] [--no-reload] [--dry] [--allow-retry 'why'] [--neg] [--back U] [--speed N] [--tries N]" >&2; }
 ROW=""; LANE=""; RELOAD=1; ALLOW=()
 while [ $# -gt 0 ]; do case "$1" in
   --save) export TRIP_SAVE="$2"; shift 2;; --neg) export U08D_NEG=1; shift;; --back) export TRIP_WALK_BACK="$2"; shift 2;;

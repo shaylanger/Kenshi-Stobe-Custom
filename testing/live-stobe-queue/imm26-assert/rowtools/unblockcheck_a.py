@@ -113,6 +113,7 @@ def c_11b(v, ev):
         return v.setup_fail('targeted bored request failed for %s (no HTTP=200; see bored_<tag>.txt): the claim path never ran (needs: recipe, lane backend)' % bad)
     a0 = ask_count(ev, 'fu_pre.txt', tid)
     cb, ca = claims(ev, 'claim_c1b.txt', tid), claims(ev, 'claim_c1a.txt', tid)
+    ca = [c for c in ca if c not in cb]   # the dumps are cumulative since the mark: report each claim once
     v.ck('no_claim_in_combat_without_snapshot', not cb, '%s (tick %s)' % (cb, res(ev, 'c1b')))
     v.ck('no_claim_in_combat_with_fresh_snapshot', not ca, '%s (tick %s)' % (ca, res(ev, 'c1a')))
     v.ck('ask_count_unchanged_in_combat', ask_count(ev, 'fu_combat.txt', tid) == a0, '%s->%s' % (a0, ask_count(ev, 'fu_combat.txt', tid)))
