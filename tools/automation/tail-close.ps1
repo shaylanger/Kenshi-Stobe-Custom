@@ -71,10 +71,30 @@ if ($cfg.Delay -lt 0) { $cfg.Delay = if ($env:KAH_TAIL_CLOSE_DELAY) { [int]$env:
             if (-not $c2.Ok) { Write-CloseLog 'REFUSED-AT-KILL' $c2.Why; Remove-Item -LiteralPath $mk -Force -ErrorAction SilentlyContinue; return }
             Write-CloseLog 'CLOSING' "pid $($c2.Pid) ($($c2.Name)): taskkill /T /F"
             $ErrorActionPreference = 'Continue'
+            # Shay 2026-10-15: the tail window must close with the process. Sessions are opened as `powershell -NoExit -Command "claude ..."`,
+            # so the -NoExit shell host (the window/tab) outlives a killed claude. Remember that host BEFORE the kill; it is closed after
+            # claude is gone, but only if it is a powershell/pwsh with -NoExit and 'claude' in its command line, owns no other claude process
+            # and is neither this worker nor one of its ancestors (so a coordinator window is never touched).
+            $hostPid = 0
+            try {
+                $cp = Get-CimInstance Win32_Process -Filter "ProcessId=$($c2.Pid)" -ErrorAction Stop
+                $hp = Get-CimInstance Win32_Process -Filter "ProcessId=$($cp.ParentProcessId)" -ErrorAction Stop
+                if ($hp -and $hp.Name -match '^(powershell|pwsh)\.exe$' -and $hp.CommandLine -match '(?i)-NoExit' -and $hp.CommandLine -match '(?i)claude') {
+                    $others = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($hp.ProcessId)" -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $c2.Pid -and $_.Name -match '(?i)claude|node' })
+                    $anc = @(); $q = $PID; for ($k = 0; $k -lt 12 -and $q; $k++) { $anc += $q; $pp = Get-CimInstance Win32_Process -Filter "ProcessId=$q" -ErrorAction SilentlyContinue; $q = if ($pp) { $pp.ParentProcessId } else { 0 } }
+                    if ($others.Count -eq 0 -and ($anc -notcontains $hp.ProcessId)) { $hostPid = [int]$hp.ProcessId }
+                }
+            } catch { Write-CloseLog 'HOST-LOOKUP-FAILED' $_.Exception.Message }
             & taskkill.exe /PID $c2.Pid /T /F 2>&1 | Out-Null
             $ErrorActionPreference = 'Stop'
             $gone = $false
             for ($i = 0; $i -lt 25; $i++) { if (-not (Get-Process -Id $c2.Pid -ErrorAction SilentlyContinue)) { $gone = $true; break }; Start-Sleep -Milliseconds 200 }
+            if ($gone -and $hostPid -gt 0) {
+                $ErrorActionPreference = 'Continue'
+                & taskkill.exe /PID $hostPid /T /F 2>&1 | Out-Null
+                $ErrorActionPreference = 'Stop'
+                Write-CloseLog 'HOST-CLOSED' "shell host pid $hostPid (window/tab) closed after claude pid $($c2.Pid)"
+            } elseif ($gone) { Write-CloseLog 'HOST-KEPT' 'no safe -NoExit shell host found for this claude process (window stays open)' }
             if ($gone) {
                 Remove-Item -LiteralPath (Get-TailFlagPath $runs $sid) -Force -ErrorAction SilentlyContinue
                 Remove-Item -LiteralPath $mk -Force -ErrorAction SilentlyContinue
