@@ -154,7 +154,11 @@ echo "CHARS \$(stobe-auto chars 120 </dev/null 2>&1 | head -c 700 | tr '\n' ' ')
 EOT
 }
 rd_20a() {  # ACCEPTED trip; change request must not move the row; two confirm turns; calm, sheathed Shay every turn
-  tr_prep || return $?; ub20_calm pre; tr_trip_setup || return $?
+  tr_prep || return $?
+  printf 'stobe-auto protect Shay on </dev/null | head -1
+stobe-auto protect %s on </dev/null | head -1
+' "$(rl_q "$RL_NPC_FULL")" | lt_h >> "$EV/place.txt" 2>&1   # op12: Hub outlaws KO'd Shay mid-row (20-a run 1)
+  ub20_calm pre; tr_trip_setup || return $?
   echo "$TR_ALT" > "$EV/alt.txt"
   local core="${TR_ALT#the }"
   ub20_calm s3; rl_say 3 "Actually, go to $TR_ALT instead." || return $?
