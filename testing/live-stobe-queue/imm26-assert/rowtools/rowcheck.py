@@ -178,17 +178,181 @@ def c_14a(v, ev):
     v.note = f'R~ alternative named? reply: {first_reply(ev, "s1")[:160]!r}'
 
 
+def agr_dump(ev, name):
+    """[(rowid:int, json)] of a `rowid|type|data` travel_agreement dump (rd19_dump), oldest first"""
+    out = []
+    for ln in (rd(ev, name) or '').splitlines():
+        p = ln.split('|', 2)
+        if len(p) == 3 and p[0].strip().isdigit() and p[1] == 'travel_agreement':
+            m = re.search(r'\{.*\}', p[2])
+            try:
+                js = json.loads(m.group(0)) if m else {}
+            except ValueError:
+                js = {}
+            out.append((int(p[0]), js))
+    return out
+
+
+def ex_of(js):
+    return js.get('execution') if isinstance(js.get('execution'), dict) else {}
+
+
+def world_of(ex):
+    return ex.get('world_id') or ex.get('dispatch_world_id') or ''
+
+
+def dest_xyz(js):
+    p = js.get('destination_point') or {}
+    try:
+        return tuple(float(p[k]) for k in ('x', 'y', 'z'))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def accepted_row(ev):
+    """agreement json of the last ACCEPTED travel_agreement row of s2/s3 (the accept leg)"""
+    rows = [r for st in ('s2', 's3') for r in full_rows(ev, st, {'travel_agreement'}) if r[2].get('status') == 'ACCEPTED']
+    return rows[-1][2] if rows else None
+
+
+def state_ai(ev, name):
+    """(first_order, destination [x,y,z] | None) from a stobe_state dump"""
+    t = rd(ev, name) or ''
+    i = t.find('"ai"')
+    t = t[i:] if i >= 0 else t
+    fo = re.search(r'"first_order"\s*:\s*"([^"]*)"', t)
+    d = re.search(r'"destination"\s*:\s*\[\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)', t)
+    return (fo.group(1) if fo else None), ([float(x) for x in d.groups()] if d else None)
+
+
+def owned_travel_lines(ev, *steps):
+    return [ln for st in steps for ln in (rd(ev, st, 'reply.txt') or '').splitlines() if 'OWNED_TRAVEL' in ln and 'accepted=1' in ln]
+
+
+def post_rows(ev):
+    """travel_agreement rows written after the load (rowid > load_rowid.txt) from agr_all.txt"""
+    try:
+        mark = int((rd(ev, 'load_rowid.txt') or '0').strip() or 0)
+    except ValueError:
+        mark = 0
+    return [r for r in agr_dump(ev, 'agr_all.txt') if r[0] > mark]
+
+
+def resume_chain(v, rows, aid, pre, orig):
+    """interrupted_by_load -> requested (NEW request_id, generation > pre, same plan_hash/destination) -> running, all the same agreement_id"""
+    phases = [ex_of(js).get('phase', '') for _, js in rows]
+    v.ck('post_load_rows_present', bool(rows), f'n={len(rows)}')
+    v.ck('post_load_same_agreement_id_only', bool(rows) and all(js.get('agreement_id') == aid for _, js in rows),
+         sorted({js.get('agreement_id', '?') for _, js in rows}))
+    bad = [js.get('status') for _, js in rows if js.get('status') in ('PROPOSED', 'FAILED', 'ENDED')]
+    v.ck('post_load_no_PROPOSED_FAILED_ENDED', not bad, bad)
+    ii = phases.index('interrupted_by_load') if 'interrupted_by_load' in phases else -1
+    v.ck('phase_interrupted_by_load', ii >= 0, phases)
+    req = [i for i, p in enumerate(phases) if p == 'requested' and i > ii] if ii >= 0 else []
+    v.ck('phase_requested_after_interrupt', bool(req), phases)
+    if req:
+        js = rows[req[0]][1]
+        ex = ex_of(js)
+        v.ck('requested_new_request_id', bool(ex.get('request_id')) and ex.get('request_id') != pre.get('request_id'), f"{pre.get('request_id')}->{ex.get('request_id')}")
+        try:
+            gen_ok = int(ex.get('session_generation', 0)) > int(pre.get('session_generation', 0))
+        except (TypeError, ValueError):
+            gen_ok = False
+        v.ck('requested_session_generation_up', gen_ok, f"{pre.get('session_generation')}->{ex.get('session_generation')}")
+        v.ck('requested_world_changed', bool(world_of(ex)) and world_of(ex) != world_of(pre), f'{world_of(pre)}->{world_of(ex)}')
+        v.ck('requested_same_plan_hash', bool(js.get('plan_hash')) and js.get('plan_hash') == orig.get('plan_hash'), str(js.get('plan_hash'))[:12])
+        v.ck('requested_same_destination', js.get('destination') == orig.get('destination') and dest_xyz(js) is not None and dest_xyz(js) == dest_xyz(orig),
+             f"{js.get('destination')} {dest_xyz(js)}")
+        run = [i for i, p in enumerate(phases) if p == 'running' and i > req[0]]
+        v.ck('phase_running_after_requested', bool(run), phases)
+        if run:
+            v.ck('running_keeps_request_id', ex_of(rows[run[0]][1]).get('request_id') == ex.get('request_id'), ex_of(rows[run[0]][1]).get('request_id'))
+
+
 def c_19a(v, ev):
-    if not need(v, ev, 's2/ev_full.txt'):
+    """trip-resume (option B): accept leg as before, then a save/load CONTINUES the same agreement (rd_19a evidence files, see rowdefs.sh)"""
+    if not need(v, ev, 's2/ev_full.txt', 's4/reply.txt', 's5/reply.txt', 'agr_pre.txt', 'agr_all.txt', 'load_rowid.txt', 'post_s5.txt'):
         return
     rows = [r for r in full_rows(ev, 's2', {'travel_agreement'}) if r[2].get('status') == 'ACCEPTED']
     v.ck('agreement_ACCEPTED', bool(rows), f'n={len(rows)}')
-    if rows:
-        js = rows[-1][2]; raw = rows[-1][3]
-        for k in ('plan_hash', 'expires_gamets', 'accepted_by', 'leader'):
-            v.ck(k, bool(js.get(k)) or bool(re.search(r'"%s": ?"?[^,"\]\s]' % k, raw)), str(js.get(k))[:40])
-    if not v.bad:
-        v.gated('reload leg (save/reload keeps agreement_id, "Where were we going?" recalls destination) is NOT automated: accept leg PASSED, run the reload leg by hand')
+    if not rows:
+        return
+    js = rows[-1][2]
+    raw = rows[-1][3]
+    for k in ('plan_hash', 'expires_gamets', 'accepted_by', 'leader'):
+        v.ck(k, bool(js.get(k)) or bool(re.search(r'"%s": ?"?[^,"\]\s]' % k, raw)), str(js.get(k))[:40])
+    orig = accepted_row(ev) or js
+    aid = orig.get('agreement_id', '')
+    if not owned_travel_lines(ev, 's2', 's3'):
+        return v.setup_fail('no pre-load OWNED_TRAVEL accepted=1 in s2/s3 (the native trip never started; nothing to resume)')
+    pre_rows = [j for _, j in agr_dump(ev, 'agr_pre.txt') if j.get('agreement_id') == aid]
+    pre = ex_of(pre_rows[-1]) if pre_rows else {}
+    v.ck('pre_load_execution_known', bool(pre.get('request_id')), f"request_id={pre.get('request_id')} world={world_of(pre)} gen={pre.get('session_generation')}")
+    resume_chain(v, post_rows(ev), aid, pre, orig)
+    ot = owned_travel_lines(ev, 's4', 's5')
+    v.ck('exactly_one_post_load_OWNED_TRAVEL_accepted', len(ot) == 1, f'n={len(ot)}')
+    v.ck('post_load_start_reason', len(ot) == 1 and 'reason=native_owned_order_assigned' in ot[0], (ot[0][:120] if ot else 'none'))
+    xyz = dest_xyz(orig)
+    fo, dst = state_ai(ev, 'post_s5.txt')
+    v.ck('post_s5_first_order_MOVE_CUS_ORDERED', fo == 'MOVE_CUS_ORDERED', fo)
+    v.ck('post_s5_destination_within_0.5', bool(xyz and dst) and max(abs(a - b) for a, b in zip(xyz, dst)) <= 0.5, f'stored={xyz} state={dst}')
+    fo4, _ = state_ai(ev, 'post_s4.txt')
+    r4 = first_reply(ev, 's4')
+    dn = (orig.get('destination') or '').lower()
+    v.note = f"R~ s4 names {orig.get('destination')!r}: {'yes' if dn and dn in r4.lower() else 'no'}; reply {r4[:140]!r} (post_s4 first_order={fo4})"
+    if os.path.isdir(os.path.join(ev, 's6')):                      # NC: older save from before the trip
+        if need(v, ev, 's6/ev_full.txt', 's6/prompt.txt', 's6/reply.txt'):
+            p6 = rd(ev, 's6', 'prompt.txt') or ''
+            v.ck('NC_no_travel_agreement_row', not full_rows(ev, 's6', {'travel_agreement'}), len(full_rows(ev, 's6', {'travel_agreement'})))
+            v.ck('NC_no_agreement_id_in_prompt', 'agreement_id' not in p6 and not (aid and aid in p6))
+            v.ck('NC_no_OWNED_TRAVEL', not owned_travel_lines(ev, 's6'), len(owned_travel_lines(ev, 's6')))
+    else:
+        v.note += ' | NC leg not run (ROW_19A_NC=0)'
+
+
+def c_19anc2(v, ev):
+    """NC2: NPC 120 u away after the load -> the trip is NOT resumed (no requested/running row, no OWNED_TRAVEL), no new agreement id"""
+    if not need(v, ev, 's2/ev_full.txt', 's4/reply.txt', 'agr_pre.txt', 'agr_all.txt', 'load_rowid.txt', 'post_s4.txt'):
+        return
+    orig = accepted_row(ev)
+    v.ck('agreement_ACCEPTED', bool(orig), 'none' if not orig else orig.get('agreement_id'))
+    if not orig:
+        return
+    if not owned_travel_lines(ev, 's2', 's3'):
+        return v.setup_fail('no pre-load OWNED_TRAVEL accepted=1 in s2/s3 (the native trip never started)')
+    aid = orig.get('agreement_id', '')
+    rows = post_rows(ev)
+    phases = [ex_of(js).get('phase', '') for _, js in rows]
+    v.ck('no_resume_rows(requested/running)', not [p for p in phases if p in ('requested', 'running')], phases)
+    v.ck('no_new_agreement_id', all(js.get('agreement_id') == aid for _, js in rows), sorted({js.get('agreement_id', '?') for _, js in rows}))
+    v.ck('no_PROPOSED_FAILED_ENDED', not [js.get('status') for _, js in rows if js.get('status') in ('PROPOSED', 'FAILED', 'ENDED')],
+         [js.get('status') for _, js in rows])
+    v.ck('no_OWNED_TRAVEL_accepted', not owned_travel_lines(ev, 's4'), len(owned_travel_lines(ev, 's4')))
+    v.note = f"phases after load={phases or 'no new rows (no transition while the NPC is out of range)'}; R~ reply {first_reply(ev, 's4')[:120]!r}"
+
+
+def c_19d(v, ev):
+    """19-d: resumed trip, NPC teleported to the destination gate (23-a recipe) -> COMPLETED + owned_work_released true"""
+    if not need(v, ev, 's2/ev_full.txt', 's4/reply.txt', 's5/reply.txt', 'agr_pre.txt', 'agr_all.txt', 'load_rowid.txt', 'agr_final.txt'):
+        return
+    orig = accepted_row(ev)
+    v.ck('agreement_ACCEPTED', bool(orig), 'none' if not orig else orig.get('agreement_id'))
+    if not orig:
+        return
+    if not owned_travel_lines(ev, 's2', 's3'):
+        return v.setup_fail('no pre-load OWNED_TRAVEL accepted=1 in s2/s3 (the native trip never started)')
+    aid = orig.get('agreement_id', '')
+    phases = [ex_of(js).get('phase', '') for _, js in post_rows(ev) if js.get('agreement_id') == aid]
+    v.ck('trip_was_resumed_first', 'interrupted_by_load' in phases and ('requested' in phases or 'running' in phases), phases)
+    fin = None
+    for ln in (rd(ev, 'agr_final.txt') or '').splitlines():       # newest first: rowid|status|phase|reason|owned_work_released|agreement_id|destination
+        p = ln.strip().split('|')
+        if len(p) >= 7 and p[0].isdigit() and p[5] == aid:
+            fin = p
+            break
+    v.ck('agreement_COMPLETED', bool(fin) and fin[1] == 'COMPLETED', fin[1] if fin else 'row not found')
+    v.ck('owned_work_released_true', bool(fin) and fin[4].lower() == 'true', fin[4] if fin else '?')
+    v.note = f"R~ ack: {first_reply(ev, 's5')[:140]!r}"
 
 
 def c_23b(v, ev):
@@ -241,7 +405,7 @@ def c_06c(v, ev):
     v.note = f'R~ later replies must not say Boss/Jax: {first_reply(ev, "s4")[:120]!r}'
 
 
-CHECKS = {'12-a': c_12a, '12-b': c_12b, '12-d': c_12d, '08-a': c_08a, '24-b': c_24b, '14-a': c_14a, '19-a': c_19a, '23-b': c_23b,
+CHECKS = {'12-a': c_12a, '12-b': c_12b, '12-d': c_12d, '08-a': c_08a, '24-b': c_24b, '14-a': c_14a, '19-a': c_19a, '19-a-nc2': c_19anc2, '19-d': c_19d, '23-b': c_23b,
           '04-c': c_04c, '06-c': c_06c}
 
 

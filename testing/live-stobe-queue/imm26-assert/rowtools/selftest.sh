@@ -71,12 +71,26 @@ pf=$(pf_run 5090-i3); case "$pf" in "PREFLIGHT-OK 5090-i3 dist=9.0 player_name=S
 grep -q "INSERT INTO general_settings (id,value) VALUES ('PLAYER_NAME','Shay')" "$KAH_ROW_FAKE_LOG" && grep -q "stobe_social_contract SET status='EXPIRED'" "$KAH_ROW_FAKE_LOG" \
   && grep -q "type='travel_agreement'" "$KAH_ROW_FAKE_LOG" && grep -q "imm26_anchor" "$KAH_ROW_FAKE_LOG" && chk preflight-clean-statements ok || chk preflight-clean-statements bad
 
-# 7 19-a accept leg PASS -> GATED (reload leg manual); 06-c missing tombstone FAIL; 23-b no follow order SETUP-FAIL; 04-c PASS
+# 7 19-a (see below); 06-c missing tombstone FAIL; 23-b no follow order SETUP-FAIL; 04-c PASS
 acc='travel-v1:a:b:{"status":"ACCEPTED","plan_hash":"0dfde8c0","expires_gamets":374858,"accepted_by":["Cind","Shay"],"leader":"npc","destination":"Stumble Inn"}'
-scen <<EOF
-{"steps":[{"reply":"Stumble Inn."},{"reply":"Lead on.","full":[["travel_agreement","$(jq "$acc")"]]}]}
-EOF
-r=$(run 19-a 5090-i4); case "$r" in "RESULT 19-a GATED reload leg"*) chk 19-a-accept-then-gated ok;; *) chk 19-a-accept-then-gated bad "$r";; esac
+# 7 19-a trip resume (option B): the SAME agreement continues after save+load; defect variants; 19-a-nc2; 19-d (needs tripdefs.sh)
+rs() { "$PY" "$ST_HERE/resume_scen.py" "$1" | scen; }
+rexp() {  # rexp <name> <scenario> <row> <RESULT prefix> [must-contain]
+  local r; rs "$2"; r=$(gr_main --allow-retry "selftest" "$3" 5090-i4 2>/dev/null)
+  case "$r" in "$4"*) if [ -z "${5:-}" ] || echo "$r" | grep -q -- "$5"; then chk "$1" ok; else chk "$1" bad "missing '$5' in: $r"; fi;; *) chk "$1" bad "$r";; esac
+}
+rexp 19-a-resume-pass 19a-pass 19-a "RESULT 19-a PASS" "post_s5_first_order_MOVE_CUS_ORDERED"
+rexp 19-a-failed-and-reproposed 19a-failed 19-a "RESULT 19-a FAIL" "phase_interrupted_by_load"
+rexp 19-a-no-pre-start-setup-fail 19a-nostart 19-a "RESULT 19-a SETUP-FAIL no pre-load OWNED_TRAVEL"
+rexp 19-a-two-starts 19a-dup-start 19-a "RESULT 19-a FAIL" "exactly_one_post_load_OWNED_TRAVEL_accepted"
+rexp 19-a-nc-starts-a-trip 19a-nc-bad 19-a "RESULT 19-a FAIL" "NC_no_OWNED_TRAVEL"
+rexp 19-a-wrong-destination 19a-wrong-order 19-a "RESULT 19-a FAIL" "post_s5_destination_within_0.5"
+rexp 19-a-nc2-pass nc2-pass 19-a-nc2 "RESULT 19-a-nc2 PASS" "no_resume_rows"
+rexp 19-a-nc2-resumed-despite-range nc2-resumed 19-a-nc2 "RESULT 19-a-nc2 FAIL" "no_OWNED_TRAVEL_accepted"
+if declare -F tr_arrive >/dev/null; then
+  rexp 19-d-completed 19d-pass 19-d "RESULT 19-d PASS" "owned_work_released_true=true"
+  rexp 19-d-not-completed 19d-notdone 19-d "RESULT 19-d FAIL" "agreement_COMPLETED"
+fi
 jax='social-pref-v1:z:{"entries":{"personal:address":{"value":"Jax","status":"active"}}}'
 scen <<EOF
 {"steps":[{"reply":"Boss it is.","full":[["social_preferences","social-pref-v1:z:{\"entries\":{\"personal:address\":{\"value\":\"Boss\",\"status\":\"active\"}}}"]]},{"reply":"Jax.","full":[["social_preferences","$(jq "$jax")"]]},{"reply":"Not sure."},{"reply":"Fine."}]}

@@ -10,6 +10,9 @@
   assert_claims.py 19-ax --accept A1 A2 --recall R1 R2 R3 --ctl O1 O2 O3 [--dest "Stumble Inn"]
       accept = proposal accepted on two FRESH saves (agreement.txt = full `travel_agreement` eventlog data, newest 3 rows),
       recall = 3 different recall questions after save+reload+new session, ctl = older save from before the trip (no agreement).
+      ONE RELOAD PER RECALL SAMPLE (trip-resume, Shay 2026-10-15): the resume sends Cind walking, so recall samples m1/m2/m3 cannot share a
+      session. Each recall dir = a fresh load of the saved trip + the first post-load turn. Its travel_agreement rows (ev_full.txt) may only
+      carry the accept dirs' agreement_id and never status PROPOSED; its reply.txt shows exactly ONE `OWNED_TRAVEL ... accepted=1` start.
 """
 import json
 import os
@@ -95,6 +98,24 @@ def agreement(b, res):
     return None
 
 
+def agr_rows(b):
+    """[(agreement_id, status)] of the bundle's travel_agreement rows: ev_full.txt (full data), else events.txt (data cut at 500 chars)"""
+    out = []
+    src = b.read('ev_full.txt')
+    lines = (src or '').splitlines() if src is not None else [f'{e[0]}|{e[1]}|{e[2]}' for e in b.event_types('travel_agreement')]
+    for ln in lines:
+        p = ln.split('|', 2)
+        if len(p) == 3 and p[1] == 'travel_agreement':
+            ai = re.search(r'"agreement_id"\s*:\s*"([^"]*)"', p[2])
+            st = re.search(r'"status"\s*:\s*"([^"]*)"', p[2])
+            out.append((ai.group(1) if ai else '', st.group(1) if st else ''))
+    return out
+
+
+def resume_starts(b):
+    return [ln for ln in (b.read('reply.txt') or '').splitlines() if 'OWNED_TRAVEL' in ln and 'accepted=1' in ln]
+
+
 def row_19ax(a, res):
     Ac, Rc, Cc = [Bundle(d) for d in a['--accept']], [Bundle(d) for d in a['--recall']], [Bundle(d) for d in a['--ctl']]
     res.check('accept_runs>=2(fresh saves)', len(Ac) >= 2, len(Ac))
@@ -117,7 +138,11 @@ def row_19ax(a, res):
     distinct_inputs(Rc, 3, res)
     hit = 0
     for b in Rc:
-        res.check(f'{b.name}:no_new_agreement_row', not b.event_types('travel_agreement'), '')
+        rows = agr_rows(b)
+        foreign = sorted({i for i, _ in rows if (ids and i not in ids) or (not ids and i != rows[0][0])})
+        res.check(f'{b.name}:no_other_agreement_or_proposed', not foreign and not [s for _, s in rows if s == 'PROPOSED'],
+                  f'other_ids={foreign} statuses={sorted({s for _, s in rows})}')
+        res.check(f'{b.name}:single_resume_start_in_first_turn', len(resume_starts(b)) == 1, f'n={len(resume_starts(b))}')
         res.check(f'{b.name}:same_agreement_id_in_prompt', (not ids and res.lenient) or any(i in b.prompt for i in ids), '')
         hit += bool(dest) and dest.lower() in reply_of(b).lower()
         res.check(f'{b.name}:no_foreign_action', not b.foreign_actions(), b.foreign_actions())

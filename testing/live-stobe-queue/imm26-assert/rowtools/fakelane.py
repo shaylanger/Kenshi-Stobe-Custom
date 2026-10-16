@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """fakelane.py <kind h|w|sql> <body>   OFFLINE lane simulator for rowtools/selftest.sh (lt_fake). Never touches a game, ssh or DB.
-Scenario JSON (env FAKE_SCEN) + state (env FAKE_STATE, json file). Scenario keys: dist, backend_down, ctxpush, npc_missing, follow (list of
+Scenario JSON (env FAKE_SCEN) + state (env FAKE_STATE, json file). Scenario keys: agr_dumps (trip-resume dumps), agr (tr_agr lines), dist, backend_down, ctxpush, npc_missing, follow (list of
 state strings, one per stobe_state call), inv0 {"SHAY": {item: n}, "CIND": {...}}, steps [one per stobe_say, in order:
 {reply, prompt, server, events [[type,data]], full [[type,data]], give [items moved NPC->Shay]}]."""
 import json
@@ -92,6 +92,10 @@ elif kind == 'sql':
         out.append('100')
     elif 'count(*) from social_effect' in body:
         out.append('5')
+    elif "rowid,type,data from eventlog where type='travel_agreement' order by rowid asc" in body:   # rd19_dump: scenario agr_dumps = [lines per call]
+        seq = scen.get('agr_dumps', [[]]); out.extend(seq[min(st.get('agr_dump_calls', 0), len(seq) - 1)]); st['agr_dump_calls'] = st.get('agr_dump_calls', 0) + 1
+    elif body.startswith('select rowid||'):   # tr_agr: scenario agr = [lines per call]
+        seq = scen.get('agr', [[]]); out.extend(seq[min(st.get('agr_calls', 0), len(seq) - 1)]); st['agr_calls'] = st.get('agr_calls', 0) + 1
     elif 'from eventlog where rowid>' in body:
         key = 'full' if 'in (' in body else 'events'
         for i, (t, d) in enumerate(cur.get(key, [])):
