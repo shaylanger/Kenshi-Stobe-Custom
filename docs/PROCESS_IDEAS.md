@@ -39,6 +39,33 @@ Rules:
 - added: 2026-10-15 20:04
 - log: 2026-10-15 20:05 Shay answered yes
 
+### PI-22 | open
+- idea: An operator may not mark itself DONE while its lane still has non-PASS rows: only STOPPED-CONTEXT (with a successor started first) or DONE with an explicit 'lane complete' note; lane-idle/agent-status refuse otherwise.
+- evidence: 2026-10-15 20:28 imm26-4080-i4op7b set DONE with 19-ax, 10-a, 10-b, 08-d still open and marked nothing; the 4080-i4 lane had no operator until I noticed the DONE event and respawned imm26-4080-i4op7c (about 10 min of lane time).
+- saving: ~10 idle lane-minutes per early DONE
+- risk: a legitimately finished lane needs a way to say so (the lane complete note)
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:31
+
+### PI-23 | open
+- idea: A GATED / 'needs a native build' claim must cite a search for the NATIVE names (event types, fields in the DLL sources), not the server's words; the setupfail ticket for it carries the search command.
+- evidence: 2026-10-15 row 10-d sat GATED as 'no native exact-transfer event' because earlier agents grepped the DLL for the server words restitution/exact_transfer; imm26-inv-10d found SocialExactTransferEvidence already shipped in NC6/9/10 (main.cpp:7048) and the real blocker was an unstaged caught theft. It cost three operators' attempts and a planned native build (NC11, ~150k tokens).
+- saving: avoids an unneeded native build plan (~150k tokens) and several operator attempts
+- risk: none
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:31
+
+### PI-24 | open
+- idea: Rerun rows get a row script (go-row.sh row definition) before the SECOND manual run; the first operator to hand-run a row writes the rd_<row> from its steps.
+- evidence: 2026-10-15 imm26-5090-i4-hard2b ran 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax by hand (no row scripts) and hit its context limit before starting any rerun; its report names this as the next speed-up. 19-d took 6 attempts across scripts.
+- saving: ~60k tokens per hand-run row and fewer lost reruns
+- risk: row scripts must keep the exact assertions (never weaken)
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:31
+
 ## Retired
 
 ### PI-01 | done
