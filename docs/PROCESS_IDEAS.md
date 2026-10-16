@@ -161,7 +161,7 @@ Rules:
 - added: 2026-10-16 14:57
 - log: 2026-10-16 14:57 review 'coordinator-18': added
 
-### PI-54 | open
+### PI-54 | confirmed
 - idea: pilot-audit.py/cost-audit.py must be run with Windows python and resolve agent names to ids by default, and the audit must FAIL LOUDLY (not print an empty COST section) when the cost tool finds no transcripts.
 - evidence: 2026-10-16 15:10-15:50: the Haiku pilot audit had an empty COST section ('NO MATCH', files to scan 0) and I told Shay no cost data existed; Shay: 'that was a required part of this'. The data existed in the transcripts (Haiku $0.15 vs Sonnet $0.23-0.53 per row marked) and needed agent ids and Windows python.
 - saving: about 30 minutes and one wrong claim to Shay per pilot report
@@ -169,7 +169,10 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 14:57
+- moment: 15:55 Shay: why does SUMMARY-final.md not have any data for the Sonnet run
+- last_review: coordinator-18-tail
 - log: 2026-10-16 14:57 review 'coordinator-18': added
+- log: 2026-10-16 15:40 review 'coordinator-18-tail': open -> confirmed (applies: 2026-10-16 16:00 Shay saw SUMMARY-final.md with every Sonnet column 'no RESULT found'; cause was pilot-audit.py line 607 default sonnet_roots missing the imm26-4080 lanes, found only after Shay com...)
 
 ### PI-55 | open
 - idea: Row runners must refuse to start under WSL bash (check for the /mnt/c mount or uname) and the lane operators' briefs must say 'row scripts run in Git Bash, only wsl.exe tools get MSYS_NO_PATHCONV', because a row script run under WSL silently creates a stray /c/KenshiTestRuns tree inside WSL that then shadows the real path for tools that probe /c first.
@@ -180,6 +183,16 @@ Rules:
 - weakens: no
 - added: 2026-10-16 14:57
 - log: 2026-10-16 14:57 review 'coordinator-18': added
+
+### PI-56 | open
+- idea: tail-autorelay should relay a RESUMED agent's second DONE (agent re-finishes after a SendMessage) as a new result, keyed on the status-file mtime/agentId run counter, instead of treating the name as already relayed.
+- evidence: 2026-10-16 15:08: huntA2 was resumed by SendMessage for the expiresAt 43200 order and finished again, but autorelay.log showed no second relay for imm26-huntA2 (state already marked it relayed at 14:56), so the tail had to send the result to coordinator 19 by hand.
+- saving: one hand relay (about 2 tool calls) per resumed agent and no risk of a lost result
+- risk: low: relays only, no monitoring catch is changed
+- hooks: no
+- weakens: no
+- added: 2026-10-16 15:40
+- log: 2026-10-16 15:40 review 'coordinator-18-tail': added
 
 ## In progress
 
