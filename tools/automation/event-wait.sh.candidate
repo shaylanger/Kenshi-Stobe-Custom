@@ -250,6 +250,17 @@ while :; do
     li=$(timeout 60 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\lane-idle.ps1' 2>&1 < /dev/null | tr -d '\r')
     case "$li" in *"LANE IDLE"*|*"LANE NO-OPERATOR"*) wake "EVENT LANE $(printf '%s\n' "$li" | grep -E 'LANE (IDLE|NO-OPERATOR)' | head -5 | tr '\n' ' ')";; esac
   fi
+  # STATUS COUNTS (Shay 2026-10-16, pilot 2; read-only): numeric claims ("2 PASS", "13 rows", "1 escalated") in recent agent status files vs the agent's ledger
+  # (status-count-check.py --scan: pilot verdicts.csv, or the agent's `imm26 <agent>: <row> <STATUS>` TESTS commits). A NEW mismatch wakes once (seen-keyed 180 min).
+  if [ "${EW_COUNTCHECK:-1}" = 1 ] && [ $(( now - ${last_cnt:-0} )) -ge "${EW_COUNT_EVERY:-300}" ]; then
+    last_cnt=$now
+    sc=$(timeout 90 python3 -I "$HERE/status-count-check.py" --scan --quiet --hours "${EW_COUNT_HOURS:-3}" --runs "$R" 2>/dev/null < /dev/null | grep '^MISMATCH' | head -3)
+    if [ -n "$sc" ]; then
+      ck="COUNTCHECK:$(printf '%s' "$sc" | md5sum | cut -c1-12)"
+      if ! seen_has "$ck"; then seen_add "$ck"; wake "EVENT STATUS-COUNT $(printf '%s' "$sc" | tr '
+' ' ' | cut -c1-700) (status claims a count the ledger does not have: tell the agent / check before trusting its status)"; fi
+    fi
+  fi
   # OPERATOR WARN (handover overlap): operator-warn.sh prints one line per NEW warn (successor spawn text); urgent
   ow=$(KAH_RUNS="$R" bash "$HERE/operator-warn.sh" 2>/dev/null)
   if [ -n "$ow" ]; then wake "EVENT $(printf '%s\n' "$ow" | head -3 | tr '\n' ' ')"; fi
