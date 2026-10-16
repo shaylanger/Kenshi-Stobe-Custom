@@ -141,6 +141,11 @@ def notify(t, runs=None, why="needs unblock plan"):
     name = "%s-setupfail-%s.msg" % (time.strftime("%Y%m%d-%H%M%S"), t["row"])
     txt = "SETUP-FAIL %s %s: %s\nlane=%s reason: %s\nlist: powershell -File tools/automation/setupfail.ps1 list | assign: setupfail.ps1 assign %s <agent> [plan_path]\n" % (
         t["row"], why, t["needs"], t.get("lane", "-"), one(t.get("reason", ""), 300), t["row"])
+    prev = t.get("_prev")
+    if prev:
+        # PI-43: show the newest recipe/ready note so a stale mark (lane on an OLD runner) is recognised at once
+        txt += "PREVIOUS ticket: state=%s owner=%s plan=%s last-note=%s\nIf it was ready/closed with a runner, this lane probably still runs the OLD runner: route the recipe, do not re-investigate.\n" % (
+            prev.get("state", "-"), prev.get("owner", "-"), prev.get("plan_path", "") or "-", one(prev.get("note", ""), 200) or "-")
     with io.open(os.path.join(d, name), "w", encoding="utf-8", newline="\n") as f:
         f.write(txt)
     return name
@@ -154,6 +159,11 @@ def open_ticket(row, lane, reason, runs=None, send=True):
     t = load(row, runs)
     explicit = needs_of(reason)
     new = t is None or t.get("state") == "closed"
+    prev = None
+    if t is not None and t.get("state") in ("closed", "ready"):
+        notes = t.get("notes") or []
+        prev = {"state": t.get("state"), "owner": t.get("owner", "-"), "plan_path": t.get("plan_path", ""),
+                "note": (notes[-1] if notes else "") or t.get("closed_by", "")}
     if t is None:
         t = {"row": row, "lane": lane or "-", "marked_at": now(), "reason": one(reason), "needs": explicit or infer_needs(reason), "owner": "-",
              "state": "open", "plan_path": "", "last_update": now(), "notes": [], "reopened": 0}
@@ -175,9 +185,11 @@ def open_ticket(row, lane, reason, runs=None, send=True):
         t["reason"] = one(reason)
         t["last_update"] = now()
     save(t, runs)
-    if new and send:
+    if (new or prev) and send:
         try:
-            notify(t, runs)
+            if prev:
+                t = dict(t, _prev=prev)
+            notify(t, runs, "needs unblock plan" if new else "ready ticket SETUP-FAILed again")
         except Exception:
             pass
     return t

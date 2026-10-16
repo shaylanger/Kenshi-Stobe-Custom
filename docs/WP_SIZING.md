@@ -69,7 +69,7 @@ The status "latest" line must be enough for a fresh agent to continue without as
 GOAL: <1-3 items or one phase; acceptance in one sentence each>.
 FILES: work dir /root/imm26/<wpName>/ (private copy: mkwp.sh <wpName>); touch only: <paths>. Base (read-only): /root/imm26/base.
 CODEMAP: /root/imm26/codemap/ (INDEX.txt). Read ONLY: <file>: <func1>, <func2> (grep -n name <map>; sed -n a,bp <file>). Files > 60 KB never read whole.
-BUDGET: <= 120k tokens. CHECKPOINT every milestone or ~40k tokens: patch regenerated, php -l, agent-status "latest", commit/push, handoff file.
+BUDGET: <= 120k tokens. READ-ONLY investigators/classifiers: at most 3 rows (or ~120k tokens) per agent (PI-42: 4 of 4 classifiers hit 200k before the final table) and write the result table row by row into the report file as each row is finished, never at the end. CHECKPOINT every milestone or ~40k tokens: patch regenerated, php -l, agent-status "latest", commit/push, handoff file.
 At the meter WARN: finish the edit, checkpoint, continue only if < 150k work remains, else hand off (status STOPPED-CONTEXT).
 STATUS: powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-status.ps1 <wpName> RUNNING|DONE|FAILED|STOPPED-CONTEXT "<task>" "<latest>" "<outputs>" "<next>"
 HANDOFF: C:\KenshiTestRuns\agents\<wpName>.handoff.md ; successor name <wpName>2.
