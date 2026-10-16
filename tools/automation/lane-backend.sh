@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lane-backend.sh <provision|start|stop|status|selftest> <lane>     (run in WSL DwemerAI4Skyrim3 as root; 5090 imm26 isolated lanes)
+# lane-backend.sh <provision|start|restart-web|stop|status|selftest> <lane>     (run in WSL DwemerAI4Skyrim3 as root; 5090 imm26 isolated lanes)
 # Generalises C:\KenshiTestRuns\imm26-5090\{provision,start}.sh (lane i3) for any lane in the rig registry
 # C:\KenshiTestRuns\lanes\lanes-5090.json (ports, DB, private root per lane). One lane = its own
 #   /tmp/stobe-imm26-5090[-iN] root: copy of /root/imm26/base site, own Postgres cluster (socket only, own port), own DB,
@@ -17,7 +17,9 @@ reg=json.load(open(sys.argv[1],encoding='utf-8-sig'))
 l=[x for x in reg['lanes'] if x['id']==sys.argv[2]]
 if not l: print('echo "no such lane in registry" >&2; exit 2'); sys.exit()
 l=l[0]
-for k,v in dict(BP=l['backend_port'],BR=l['bridge_port'],PG=l['pg_port'],DB=l['db'],ROOT=l['wsl_root'],INST=l['instance']).items(): print(f'{k}={shlex.quote(str(v))}')
+def w(p): p=p.replace(chr(92),'/'); return '/mnt/'+p[0].lower()+p[2:]
+sl=w(l['stobe_log'])
+for k,v in dict(BP=l['backend_port'],BR=l['bridge_port'],PG=l['pg_port'],DB=l['db'],ROOT=l['wsl_root'],INST=l['instance'],SLOG=sl,KLOG=w(l['kfp_log']),AREQ=sl.rsplit('/',1)[0]+'/stobe_action.request').items(): print(f'{k}={shlex.quote(str(v))}')
 PY
 )"
 b=$ROOT; PGBIN=/usr/lib/postgresql/15/bin
@@ -51,6 +53,7 @@ export PGPORT=$PG STOBE_DB_PORT=$PG STOBE_DB_HOST=$b/socket STOBE_DB_NAME=$DB ST
 export STOBE_ACTIVITY_TRANSPORT_SECRET="\$(cat $b/activity-transport.key)"
 export LANE_ROOT=$b LANE_DB=$DB
 EOT
+  bash "$TOOLS/lane-neg-env.sh" "$b/env.sh" "$SLOG" "$KLOG" "$AREQ"
   cat > "$b/manager.sh" <<EOT
 #!/bin/bash
 set -eu
@@ -69,6 +72,7 @@ start)
   [ -d "$b" ] || { echo "lane root $b missing: provision first"; exit 1; }
   if ss -ltn | grep -qE "127.0.0.1:$BP\b"; then echo "php already listening on $BP"; else
     pg_up || pgrun $PGBIN/pg_ctl -D "$b/pgdata" -l "$b/pgdata/server.log" -o "-c listen_addresses='' -c unix_socket_directories='$b/socket' -p $PG" -w start
+    bash "$TOOLS/lane-neg-env.sh" "$b/env.sh" "$SLOG" "$KLOG" "$AREQ" >/dev/null
     source "$b/env.sh"
     PHP_CLI_SERVER_WORKERS=4 setsid nohup php -S 127.0.0.1:$BP -t "$b/site" > "$b/php.log" 2>&1 < /dev/null &
     echo $! > "$b/php.pid"
@@ -78,6 +82,19 @@ start)
     setsid nohup python3 "$TOOLS/lane-bridge.py" $BR 18098 "$b/bridge.pid" "$b/bridge-current.log" > "$b/bridge.log" 2>&1 < /dev/null &
   fi
   sleep 3; echo "STARTED lane=$lane backend=$BP bridge=$BR pg=$PG"; exit 0;;
+restart-web)
+  # re-reads env.sh: rewrites the lane's STOBE_NEG_* lines, then restarts ONLY this lane's php -S and manager loop (pg/bridge/game untouched)
+  [ -d "$b" ] || { echo "lane root $b missing"; exit 1; }
+  bash "$TOOLS/lane-neg-env.sh" "$b/env.sh" "$SLOG" "$KLOG" "$AREQ"
+  pkill -f "$b/manager.sh" || true; pkill -f "$b/site/service/manager.php" || true
+  pkill -f "^php -S 127.0.0.1:$BP -t $b/site" || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do ss -ltn | grep -qE "127.0.0.1:$BP\b" || break; sleep 1; done
+  source "$b/env.sh"
+  PHP_CLI_SERVER_WORKERS=4 setsid nohup php -S 127.0.0.1:$BP -t "$b/site" > "$b/php.log" 2>&1 < /dev/null &
+  echo $! > "$b/php.pid"
+  setsid nohup "$b/manager.sh" >/dev/null 2>&1 < /dev/null &
+  for i in 1 2 3 4 5 6 7 8 9 10; do c=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$BP/health.php" || true); [ "$c" = 200 ] && break; sleep 1; done
+  echo "RESTARTED-WEB lane=$lane backend=$BP health.php http=$c"; [ "$c" = 200 ]; exit $?;;
 stop)
   [ "$lane" != i3 ] || [ "${LANE_I3_STOP:-}" = yes ] || { echo 'refusing to stop i3 (set LANE_I3_STOP=yes)'; exit 1; }
   pkill -f "$b/manager.sh" || true; pkill -f "$b/site/service/manager.php" || true
@@ -91,5 +108,5 @@ status)
   echo "pg=$(pg_up && echo up || echo down) port=$PG db=$DB"
   curl -s -m 5 -o /dev/null -w "health.php http=%{http_code}\n" "http://127.0.0.1:$BP/health.php" || true
   exit 0;;
-*) echo 'usage: lane-backend.sh provision|start|stop|status|selftest <lane>'; exit 2;;
+*) echo 'usage: lane-backend.sh provision|start|restart-web|stop|status|selftest <lane>'; exit 2;;
 esac

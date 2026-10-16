@@ -32,12 +32,12 @@ $wk = "/tmp/lane-config-selftest-$PID.key"; $key = -join ((1..64) | ForEach-Obje
 & wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash -c "printf %s $key > $wk"
 $reg = @{ lanes = @(@{ id = 'x1'; dir = $dir; backend_port = 18086; key_file = $wk }) } | ConvertTo-Json -Depth 4
 Set-Content "$t\reg.json" $reg -Encoding UTF8
-$r1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'lane-config-check.ps1') 5090 -Defs "$t\reg.json"; $e1 = $LASTEXITCODE
+$r1 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'lane-config-check.ps1') 5090 -Defs "$t\reg.json" -NoNeg; $e1 = $LASTEXITCODE
 Case 'check flags ini and key (2 WARN, exit 1)' (@($r1 | Where-Object { $_ -match ' WARN ' }).Count -eq 2 -and $e1 -eq 1)
-$r2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'lane-config-check.ps1') 5090 -Defs "$t\reg.json" -Fix; $e2 = $LASTEXITCODE
+$r2 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'lane-config-check.ps1') 5090 -Defs "$t\reg.json" -NoNeg -Fix; $e2 = $LASTEXITCODE
 Case '-Fix repairs ini and key (2 FIXED, exit 0)' (@($r2 | Where-Object { $_ -match ' FIXED ' }).Count -eq 2 -and $e2 -eq 0)
 Case 'key file equals the server key and is never printed' (([IO.File]::ReadAllText("$dir\mods\Stobe\activity-transport.key") -eq $key) -and -not (($r1 + $r2) -join "`n").Contains($key))
-$r3 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'lane-config-check.ps1') 5090 -Defs "$t\reg.json"; $e3 = $LASTEXITCODE
+$r3 = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'lane-config-check.ps1') 5090 -Defs "$t\reg.json" -NoNeg; $e3 = $LASTEXITCODE
 Case 'after fix: PASS, exit 0' (@($r3 | Where-Object { $_ -match ' WARN ' }).Count -eq 0 -and $e3 -eq 0)
 & wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- rm -f $wk
 Remove-Item -Recurse -Force $t

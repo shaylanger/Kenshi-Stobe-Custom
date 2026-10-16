@@ -22,6 +22,8 @@ import json,sys,shlex
 d=json.load(open(sys.argv[1])); L=d['lanes'][sys.argv[2]]; S=d['lanes'][sys.argv[3]]
 v={'ROOT':L['backend_root'],'PHPP':L['php_port'],'BRP':L['bridge_port'],'PGP':L['pg_port'],'DB':L['db'],'TASK':L['task'],
    'NOTE':L.get('owner_note',''),'SRC':S['backend_root']}
+def w(p): p=p.replace(chr(92),'/'); return '/mnt/'+p[0].lower()+p[2:]
+d=w(L['dir']); v['SLOG']=d+'/RE_Kenshi/mods/Stobe/stobe.log'; v['KLOG']=d+'/KenshiFP.log'; v['AREQ']=d+'/RE_Kenshi/mods/Stobe/stobe_action.request'
 for k,x in v.items(): print('%s=%s'%(k,shlex.quote(str(x))))
 PY
 )"
@@ -33,6 +35,7 @@ pgup() { runuser -u postgres -- $PGBIN/pg_ctl -D "$ROOT/pgdata" status >/dev/nul
 do_start() {
   [ -d "$ROOT/site" ] || { echo "lane $lane not provisioned ($ROOT)"; exit 1; }
   pgup || runuser -u postgres -- $PGBIN/pg_ctl -D "$ROOT/pgdata" -l "$ROOT/pgdata/server.log" -o "-c listen_addresses='' -c unix_socket_directories='$ROOT/socket' -p $PGP" start >/dev/null
+  bash "$here/lane-neg-env.sh" "$ROOT/env.sh" "$SLOG" "$KLOG" "$AREQ" >/dev/null
   # shellcheck disable=SC1091
   ( set +x; . "$ROOT/env.sh"
     alive "$ROOT/bridge.pid" || { nohup python3 "$here/stobe-lane-bridge.py" "$BRP" "${LANE_MODEL_PORT:-18095}" "$ROOT" > "$ROOT/bridge.log" 2>&1 < /dev/null & }
@@ -73,6 +76,19 @@ do_stop() {
   echo "lane $lane backend stopped"
 }
 
+do_restart_web() {
+  # re-reads env.sh (rewrites the lane's STOBE_NEG_* lines first); restarts ONLY this lane's php -S and manager loop (pg/bridge/game untouched)
+  [ -d "$ROOT/site" ] || { echo "lane $lane not provisioned ($ROOT)"; exit 1; }
+  bash "$here/lane-neg-env.sh" "$ROOT/env.sh" "$SLOG" "$KLOG" "$AREQ"
+  if [ -f "$ROOT/manager.pid" ] && alive "$ROOT/manager.pid"; then p=$(cat "$ROOT/manager.pid"); for k in $(pgrep -P "$p" || true); do pkill -TERM -P "$k" || true; kill -TERM "$k" || true; done; kill -TERM "$p" || true; fi
+  pkill -TERM -f "^php -S 127.0.0.1:$PHPP -t $ROOT/site\$" || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do ss -ltn | grep -qE "127.0.0.1:$PHPP\b" || break; sleep 1; done
+  rm -f "$ROOT/php.pid" "$ROOT/manager.pid"
+  do_start
+  for i in 1 2 3 4 5 6 7 8 9 10; do c=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PHPP/health.php" || true); [ "$c" = 200 ] && break; sleep 1; done
+  echo "RESTARTED-WEB lane=$lane php=$PHPP health.php http=$c"; [ "$c" = 200 ]
+}
+
 do_status() {
   s() { alive "$ROOT/$1.pid" && echo "$1=up($(cat "$ROOT/$1.pid"))" || echo "$1=DOWN"; }
   echo "lane $lane root=$ROOT db=$DB pg=$(pgup && echo up || echo DOWN):$PGP $(s php):$PHPP $(s bridge):$BRP $(s manager)"
@@ -101,6 +117,7 @@ set +x # Never trace private secrets
 export PGPORT=$PGP STOBE_DB_PORT=$PGP STOBE_DB_HOST=$ROOT/socket STOBE_DB_NAME=$DB STOBE_DB_USER=dwemer STOBE_NO_BACKGROUND_PROCESSOR=1 STOBE_ACTIVITY_ENABLED=1
 export STOBE_ACTIVITY_TRANSPORT_SECRET="\$(cat $ROOT/activity-transport.key)"
 EOF
+  bash "$here/lane-neg-env.sh" "$ROOT/env.sh" "$SLOG" "$KLOG" "$AREQ"
   umask 022
   ( . "$ROOT/env.sh"
     export STOBE_NO_BACKGROUND_PROCESSOR=1
@@ -134,6 +151,7 @@ case "$cmd" in
   start) do_start;;
   stop) do_stop;;
   status) do_status;;
+  restart-web) do_restart_web;;
   supervise) do_start; do_status; exec sleep infinity;;
   *) sed -n 2,19p "$0"; exit 2;;
 esac

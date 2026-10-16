@@ -1,5 +1,5 @@
 <#
-lane-config-check.ps1 <5090|4080> [-Lane i3] [-Fix] [-Defs <registry json>]
+lane-config-check.ps1 <5090|4080> [-Lane i3] [-Fix] [-Defs <registry json>] [-NoNeg: skip the live backend-env item, selftests only]
 Lane CONFIG preflight (imm26): the per-lane files the game reads AT LAUNCH. Prints one line per lane and item:
   `RESULT lane-config <rig>-<lane> <item> PASS|WARN|FIXED <evidence>`   (exit 1 if any WARN, 0 otherwise; read-only unless -Fix)
 Items:
@@ -8,13 +8,15 @@ Items:
   key   activity-transport.key sits beside EVERY Stobe.dll of the lane (native Secret() reads it next to the loaded DLL; the env var is forbidden on
         lane runs): mods\Stobe\ and, if a Stobe.dll is there too, RE_Kenshi\mods\Stobe\; it must equal the lane's own SERVER key (presence + equality
         by hash only, the key is never printed)
+  neg   the lane BACKEND process (php -S on the lane port) has STOBE_NEG_STOBE_LOG / STOBE_NEG_KFP_LOG / STOBE_NEG_ACTION_REQUEST in its environment and each points
+        inside THIS lane's own instance dir (else contract legs read Shay's live stobe.log and action requests land in his install); fix: restart-web
   boot  info only: the last `CONFIG ... EnableBoredEvents=` value in the lane's stobe.log (a running game keeps what it read at launch)
 -Fix rewrites the ini (lane-ini-lib.ps1) and copies the lane's server key beside the DLL(s); it never starts/stops a game (relaunch to apply).
 Rig 4080 from the 5090: copies itself + lib + defs to the 4080 (C:\KenshiTestRuns\lane-i4) and runs there over ssh.
 Callable from shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\lane-config-check.ps1 5090
 Registries: C:\KenshiTestRuns\lanes\lanes-5090.json, tools\automation\lane-defs.4080.json.   Selftest: lane-config-selftest.ps1
 #>
-param([Parameter(Position = 0, Mandatory = $true)][ValidateSet('5090', '4080')][string]$Rig, [string]$Lane = '', [switch]$Fix, [string]$Defs = '')
+param([Parameter(Position = 0, Mandatory = $true)][ValidateSet('5090', '4080')][string]$Rig, [string]$Lane = '', [switch]$Fix, [string]$Defs = '', [switch]$NoNeg)
 $ErrorActionPreference = 'Continue'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here 'lane-ini-lib.ps1')
@@ -67,6 +69,22 @@ foreach ($l in $lanes) {
     if ($probs.Count) { Emit $id key WARN ($probs -join '; ') }
     elseif ($fixed.Count) { Emit $id key FIXED "wrote lane server key (sha256 $($sh.Substring(0,8))) beside Stobe.dll in $($fixed -join ', ') (relaunch to apply)" }
     else { Emit $id key PASS "key beside $okc Stobe.dll dir(s) equals the lane server key (sha256 $($sh.Substring(0,8)))" }
+  }
+  # ---- neg: the lane BACKEND process must carry its OWN negotiation paths (a lane without them verifies contract legs against Shay's live stobe.log and writes stobe_action.request into his install) ----
+  if (-not $NoNeg) {
+  $wd = ($l.dir -replace '\\', '/'); $wd = '/mnt/' + $wd.Substring(0, 1).ToLower() + $wd.Substring(2)
+  $want = @{ STOBE_NEG_STOBE_LOG = "$wd/RE_Kenshi/mods/Stobe/stobe.log"; STOBE_NEG_KFP_LOG = "$wd/KenshiFP.log"; STOBE_NEG_ACTION_REQUEST = "$wd/RE_Kenshi/mods/Stobe/stobe_action.request" }
+  $sc = 'p=$(pgrep -f ''^php -S 127.0.0.1:' + $l.port + ' '' | head -1); if [ -z $p ]; then echo NOPROC; else tr ''\0'' ''\n'' < /proc/$p/environ | grep ''^STOBE_NEG_''; fi'
+  $envOut = @(); try { $envOut = @(($sc + ' #') | & wsl.exe -d $l.distro -u root --cd / -- bash -s 2>$null) } catch { }  # script via stdin: wsl.exe would expand $vars of a -c string itself
+  if ($envOut -contains 'NOPROC') { Emit $id neg WARN "no php -S backend process on port $($l.port) (start the lane backend)" }
+  else {
+    $have = @{}; foreach ($ln in $envOut) { $k, $v = "$ln".Trim() -split '=', 2; if ($k) { $have[$k] = $v } }
+    $np = @(); foreach ($k in $want.Keys) {
+      if (-not $have.ContainsKey($k)) { $np += "$k missing" } elseif ($have[$k] -ne $want[$k]) { $np += "$k=$($have[$k]) (want $($want[$k]))" }
+    }
+    if ($np.Count) { Emit $id neg WARN ("backend env on :$($l.port): " + ($np -join '; ') + " -> run lane-backend.sh|stobe-lane-backend.sh restart-web <lane>") }
+    else { Emit $id neg PASS "backend :$($l.port) STOBE_NEG_STOBE_LOG/KFP_LOG/ACTION_REQUEST all inside $wd" }
+  }
   }
   # ---- boot (info) ----
   $log = Join-Path $l.dir 'RE_Kenshi\mods\Stobe\stobe.log'
