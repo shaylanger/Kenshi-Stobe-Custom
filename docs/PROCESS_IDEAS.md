@@ -33,6 +33,15 @@ Rules:
 - weakens: no
 - added: 2026-10-15 20:55
 
+### PI-29 | open
+- idea: At the tail hard limit the context meter should call tail-close.ps1 (sends 'tail done', then closes the session and window ~20 s later) once all owned agents are checkpointed/relayed, instead of telling the tail to run tail-mode.ps1 leave -Force (which only removes the flag, leaving the session and window open). tail-close's window-kill must first be tested on a real throwaway window.
+- evidence: 2026-10-15 ~21:07 old tail session 6d1f3011 followed the meter message, ran tail-mode.ps1 leave -Force at its hard limit: the flag went away but the session process and window stayed open (tail-close.ps1 then refuses with 'no tail flag'); the window-closing path of tail-close was never exercised on a real window.
+- saving: no orphan idle tail windows per overlap handoff; the tail context stops being resumable by accident
+- risk: kills a session: only after every owned agent is DONE and acked; the meter is a global hook (~/.claude/hooks/context-meter.ps1), so Shay decides
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 21:07
+
 ## Retired
 
 ### PI-01 | done
