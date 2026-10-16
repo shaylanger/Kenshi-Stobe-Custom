@@ -32,7 +32,7 @@
 27-a | unblockrun_b.sh | --save <ready> | needs harness DLL eeed8c93
 03-b | unblockrun_d2.sh | --save <ready> | Hub-proof (sfD2)
 10-b | unblockdefs_e.sh | --save <ready> | run the defs file itself (sfD2)
-15-bx | unblockdefs_c.sh | --save <ready> | run the defs file itself (u-rowsC)
+15-bx | unblockdefs_c_v4.sh | --save <ready> | run the defs file itself (v4 = v3c + F1 pin, imm26-fix15bxv5; v1 unblockdefs_c.sh left X in the fight scene: imm26-investigate-15bx-witness)
 20-a | unblockdefs_c.sh | --save <ready> | run the defs file itself (u-rowsC)
 # save+load resume sets
 26-d | reload-run-sfi.sh | --save <ready> | hunt26a-scene ground (sfI)
