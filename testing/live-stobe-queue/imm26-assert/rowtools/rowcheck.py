@@ -222,7 +222,11 @@ def state_ai(ev, name):
     t = t[i:] if i >= 0 else t
     fo = re.search(r'"first_order"\s*:\s*"([^"]*)"', t)
     d = re.search(r'"destination"\s*:\s*\[\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)', t)
-    return (fo.group(1) if fo else None), ([float(x) for x in d.groups()] if d else None)
+    cg = re.search(r'"current_goal"\s*:\s*"([^"]*)"', t)
+    first = fo.group(1) if fo else None
+    if first == 'present' and cg:   # newer harness stobe_state: first_order is a presence flag, the order name is current_goal
+        first = cg.group(1)
+    return first, ([float(x) for x in d.groups()] if d else None)
 
 
 def owned_travel_lines(ev, *steps):
@@ -251,7 +255,8 @@ def resume_chain(v, rows, aid, pre, orig):
     req = [i for i, p in enumerate(phases) if p == 'requested' and i > ii] if ii >= 0 else []
     v.ck('phase_requested_after_interrupt', bool(req), phases)
     if req:
-        js = rows[req[0]][1]
+        # the session_generation / world_id of the new dispatch land in a LATER 'requested' update (the first requested row only has the new request_id)
+        js = rows[req[-1]][1]
         ex = ex_of(js)
         v.ck('requested_new_request_id', bool(ex.get('request_id')) and ex.get('request_id') != pre.get('request_id'), f"{pre.get('request_id')}->{ex.get('request_id')}")
         try:
