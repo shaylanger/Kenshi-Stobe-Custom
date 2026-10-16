@@ -95,7 +95,7 @@ Rules:
 - added: 2026-10-16 11:11
 - log: 2026-10-16 11:11 review 'coordinator-14-tail': added
 
-### PI-40 | open
+### PI-40 | confirmed
 - idea: Waker/event-wait should not wake the coordinator for 'EVENT STATUS <agent> DONE' of an in-session subagent: those agents always deliver a hand-back message plus a task notification, so the waker event is a third, duplicate wake. Wake only for what has no other channel (inbox, lane/rig alerts, stalls, orphaned or dead agents).
 - evidence: 2026-10-16 10:00-10:50 (coordinator 14, 250-300k context): about 35 waker restarts; for sfA, sfB2, sfD2, sfE3, sfF, sfG, sfG2, sfH, hxB, inv-14e each completion arrived three times (waker EVENT STATUS DONE, SubagentHandback message, task-notification) and each wake was a model turn.
 - saving: about 10 duplicate turns per 10 agent completions (about 10 x 280k tokens), and fewer waker restarts
@@ -103,7 +103,10 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 11:11
+- moment: 11:38 sfK2 DONE and 12:05 bundle DONE wakes right after I had committed/routed their results
+- last_review: coordinator-15
 - log: 2026-10-16 11:11 review 'coordinator-14-tail': added
+- log: 2026-10-16 11:52 review 'coordinator-15': open -> confirmed (applies: 2026-10-16 10:51-12:20: the waker ended ~25 times; at least 12 of those wakes were only 'EVENT STATUS <agent> DONE' or a duplicate TAIL-RELAY for an agent I had already handled (op9m DONE after I s...)
 
 ### PI-41 | open
 - idea: The tail hard limit (400k) forces a TaskStop of live lane operators mid-row. Prevent it: autoCompactWindow=330000 now set in the user settings so a tail compacts itself soon after the handoff (new sessions), and keep the tail lean (PI-38/39/40). Longer term run lane operators as independent sessions so a coordinator's context never limits a lane.
@@ -114,6 +117,26 @@ Rules:
 - weakens: no
 - added: 2026-10-16 11:18
 - log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': added
+
+### PI-42 | open
+- idea: Cap read-only investigator/classifier agents at 3 rows (or ~120k tokens) in the brief and give them a hard 'checkpoint the table row-by-row into the report file' rule; four of four classifiers this session (fxB 4/5 rows, fxC 2/5, sfK, sfK2) hit the 200k limit before delivering the final table and needed a respawn.
+- evidence: 2026-10-16 11:48 fxB and 11:49 fxC STOPPED-CONTEXT with 4/5 and 2/5 rows done, 11:10 sfK and 11:27 sfK2 stopped; each respawn re-reads its predecessor handoff (~15-25k tokens).
+- saving: ~4 respawns per session, ~80k tokens plus ~10 min each
+- risk: low: only splits briefs; more agents run in parallel
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:52
+- log: 2026-10-16 11:52 review 'coordinator-15': added
+
+### PI-43 | open
+- idea: setupfail.ps1 mark should print the newest recipe/ready note for that row (state ready, owner, runner command) and warn when the marking lane still runs the OLD runner; a stale SETUP-FAIL for 20-d arrived at 11:47 although sfJ had published reload-run-sfj.sh at 11:22.
+- evidence: 11:47 setupfail-20-d.msg from 5090-i3 (old recipe text) re-woke the coordinator after the sfJ recipe was already routed; same shape for 26-e at 11:43.
+- saving: ~3 wakes per session, avoids re-spawning an investigator for a solved row
+- risk: low: output-only change
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:52
+- log: 2026-10-16 11:52 review 'coordinator-15': added
 
 ## Retired
 
