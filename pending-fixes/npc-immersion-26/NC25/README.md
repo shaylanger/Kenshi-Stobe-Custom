@@ -24,3 +24,5 @@ Unproven offline: that the pushed snapshot makes the server emit `situated_event
 - **23-b**: "Follow me." then +1 game day (or ini `FollowExpiryGameHours=2`); expect `FOLLOW_DIAG` lines, then `FOLLOW_EXPIRED ... loaded=0|1`, no FOLLOW_TICK afterwards.
 
 Scratch build status: FIX A alone compiled+linked OK (SHA256 66086B89726339069135EC44C1B5D1B1D8CF3C8058BA8EF92A95112D86DCE47D, objects=69). Full A+B build was still running at hand-back: result in C:\KenshiTestRuns\imm26-nc25-bF\build.out (not yet checked).
+
+UPDATE: full A+B scratch build BUILD OK (objects=69), Stobe.dll sha256=CD455D583F662347B8251424F1B97B03D5110DFDEA83C0320AB8411C49F103F3 (C:\KenshiTestRuns\imm26-nc25-bF\bo\out\Stobe.dll, guards travel_terminal and FOLLOW_DIAG present). Not installed.
