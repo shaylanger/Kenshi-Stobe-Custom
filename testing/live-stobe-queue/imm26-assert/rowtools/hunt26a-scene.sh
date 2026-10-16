@@ -14,6 +14,7 @@ stobe-auto pin "$CIND" off </dev/null | head -1; stobe-auto pin "$SHAY" off </de
 stobe-auto teleport "$SHAY" -49400 1660 3625 </dev/null | head -2
 stobe-auto teleport "$CIND" -49422 1661 3643 </dev/null | head -2
 stobe-auto select Shay </dev/null | head -1
+stobe-auto relation "$CIND" 50 </dev/null | head -2
 EOT
 cat "$OUT/scene.txt" | tee -a "$OUT/log.txt"
 sleep 10
@@ -22,15 +23,26 @@ i3w <<<"php /mnt/c/KenshiTestRuns/imm26-5090-i5/haff-i5.php \"$CINDFULL\" Shay 6
 i3 <<EOT >> "$OUT/log.txt" 2>&1
 stobe-auto stobe_ctxpush "$CINDFULL" </dev/null | head -2
 EOT
+# quarrel memory ("blade in my face"): one apology clears it for a few turns (recipe step e); skip with APOLOGY=0
+if [ "${APOLOGY:-1}" = 1 ]; then
+  i3_say "$CIND" "It was a mistake, I'm sorry." 40 2>&1 | grep -E "\(NPC\)" | cut -c1-300 | tee -a "$OUT/log.txt"
+  i3 <<EOT >> "$OUT/log.txt" 2>&1
+stobe-auto stobe_ctxpush "$CINDFULL" </dev/null | head -2
+EOT
+fi
 # spawn goats, t+2 chars check, senses gate
 i3 <<EOT > "$OUT/spawn.txt" 2>&1
-stobe-auto spawn "wild goats" Herbivore at -49405 1664 3645 count 3 size 0.2 </dev/null | head -3
+stobe-auto spawn "wild goats" Herbivore at -49405 1664 3645 count ${COUNT:-8} size 0.2 </dev/null | head -3
 sleep 2
 stobe-auto chars 80 "[Herbivore]|!dead" </dev/null | head -6
 EOT
 cat "$OUT/spawn.txt" | cut -c1-300 | tee -a "$OUT/log.txt"
 GOATS=$(grep -oE '#[0-9]+/[0-9]+' "$OUT/spawn.txt" | grep -v "^$CIND$" | sort -u | head -5)
 [ -n "$GOATS" ] || { say "SCENE-BAD no goats found"; exit 3; }
+# hold the goats (they flee at 10-25 u/s and the offer takes ~10-15 s): pin each in place; PIN=0 to skip
+if [ "${PIN:-1}" = 1 ]; then for g in $GOATS; do i3 <<<"stobe-auto pin \"$g\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; done; fi
+# turn Cind toward the first goat (sees=0/fov=0 while she faces away), then the go/no-go below
+G1=$(echo $GOATS | awk '{print $1}'); i3 <<<"stobe-auto face \"$CIND\" \"$G1\" </dev/null | head -1; sleep 1" >> "$OUT/log.txt" 2>&1
 SEES=0
 for g in $GOATS; do
   s=$(i3 <<<"stobe-auto senses \"$CIND\" \"$g\" </dev/null | head -2"); echo "senses $g: $s" >> "$OUT/log.txt"
