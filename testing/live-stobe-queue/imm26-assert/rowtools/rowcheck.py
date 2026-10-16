@@ -61,7 +61,7 @@ def full_rows(ev, step, types):
 
 def first_reply(ev, step):
     t = ''.join((rd(ev, step, 'reply.txt') or '').splitlines(True))
-    m = re.findall(r'ACTION_EXEC: SAY \[[^\]]*\]: (.*?) \(NPC\)', t)
+    m = re.findall(r'ACTION_EXEC: SAY \[.+?\]: (.*?) \(NPC\)', t)
     return m[0].strip() if m else ''
 
 
