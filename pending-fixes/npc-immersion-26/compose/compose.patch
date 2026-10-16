@@ -2409,7 +2409,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/chat_
          $blockedProtectedGive = stobeProtectedGiveWouldBeBlocked($rawActionText, $actionConfig);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commitment_lifecycle.php b/lib/commitment_lifecycle.php
 --- a/lib/commitment_lifecycle.php	2026-10-14 15:57:13.112533978 -0500
-+++ b/lib/commitment_lifecycle.php	2026-10-15 19:56:29.715432295 -0500
++++ b/lib/commitment_lifecycle.php	2026-10-16 04:45:36.608523267 -0500
 @@ -59,7 +59,8 @@
      }
      if (empty($state['agreement_id'])) $state['agreement_id'] = 'trip-' . bin2hex(random_bytes(16));
@@ -2420,7 +2420,23 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
          $state['proposed_gamets'] = $gamets;
      }
      $state['end_condition'] = 'Complete this agreed travel leg, either participant withdraws, or one game day passes after acceptance.';
-@@ -171,7 +172,15 @@
+@@ -91,11 +92,14 @@
+     if (!$matches) return;
+     $execution = $state['execution'] ?? [];
+     if (in_array($execution['phase'] ?? '', ['requested','running','completed','cancelled','failed'],true)) return;
++    // imm26-fix-19f: a resume request after a load (injected OR model-emitted) is counted here, once, so the cap cannot be bypassed.
++    $resumed = ($execution['phase'] ?? '') === 'interrupted_by_load'
++        ? ['resume_count'=>intval($execution['resume_count'] ?? 0) + 1, 'resume_gamets'=>$gamets] : [];
+     $state['execution'] = array_replace($execution,[
+         'phase'=>'requested', 'changed_gamets'=>$gamets,
+         'request_id'=>hash('sha256',strval($state['agreement_id'] ?? '').'|'.$gamets.'|'.$action),
+         'requested_action'=>$action,
+-    ]);
++    ] + $resumed);
+     stobeTravelWrite($actor,$speaker,$gamets,$state);
+ }
+ 
+@@ -171,7 +175,15 @@
      ]);
      if (in_array($phase,['completed','cancelled','failed'],true)) $state['status'] = strtoupper($phase);
      require_once __DIR__ . '/relationship_participation.php';
@@ -2437,7 +2453,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
  }
  
  function stobeCommitmentEndTravel(string $actor, string $speaker, int $gamets, array $state): array {
-@@ -242,12 +251,14 @@
+@@ -242,12 +254,14 @@
      if (is_array($state)) {
          $view = array_intersect_key($state,array_flip(['agreement_id','status','actor','speaker','kind',
              'leader','destination','proposed_by','proposed_gamets','accepted_by','accepted_gamets',
@@ -2456,7 +2472,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
          . "Respect another person's withdrawal. End only this arrangement; do not cancel unrelated jobs or native escorts. Cleanup requested or ownership_not_verified is NOT proof that movement stopped. Never promise that a generic stop action safely ends only your agreement.\n"
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commitment_native_bridge.php b/lib/commitment_native_bridge.php
 --- a/lib/commitment_native_bridge.php	2026-10-14 15:57:13.119080878 -0500
-+++ b/lib/commitment_native_bridge.php	2026-10-15 21:56:44.502531079 -0500
++++ b/lib/commitment_native_bridge.php	2026-10-16 04:45:36.609762167 -0500
 @@ -7,7 +7,7 @@
      if ($receipt === '' || in_array($receipt,['legacy','blocked'],true)
          || !hash_equals($receipt,strval($meta['travel_lifecycle_context_receipt'] ?? ''))) return null;
@@ -2562,7 +2578,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
      $speakerId = stobeResolveLiveParticipantSerial($speaker);
      if ($speakerId <= 0) return;
      $expectedWorld = strval($state['execution']['dispatch_world_id'] ?? $state['execution']['world_id'] ?? '');
-@@ -33,14 +113,16 @@
+@@ -33,14 +113,22 @@
          || ($expectedGeneration > 0 && $expectedGeneration !== intval($snapshot['session_generation'])))) {
          // A load reset is NOT evidence that a persisted engine order disappeared.
          $absenceId = strval($snapshot['absence_evidence_id'] ?? '');
@@ -2577,15 +2593,21 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
              // Retire ownership uncertainty; this is NOT proof the old trip completed.
 +            // Trip-resume (imm26 19-a option B): a still-valid accepted visited-town trip pauses as
 +            // interrupted_by_load (same agreement_id) so the agreed walk can restart; anything else fails as before.
-+            if (stobeCommitmentResumeEntryReason($actor,$speaker,$state,$gamets) === '') {
++            $entryReason = stobeCommitmentResumeEntryReason($actor,$speaker,$state,$gamets);
++            if ($entryReason === '') {
 +                $state['execution'] = stobeCommitmentInterruptExecution($state['execution'],$gamets,$absenceId);
 +                stobeTravelWrite($actor,$speaker,$gamets,$state);
++                return;
++            }
++            // imm26-fix-19f: the resume cap ends the trip with the honest resume_failure, not the generic post-load row.
++            if ($entryReason === 'resume_count') {
++                stobeCommitmentResumeFail($actor,$speaker,$gamets,$state,"I could not get our interrupted journey moving again, so we'll need a fresh plan.",'resume_count');
 +                return;
 +            }
              $state['status'] = 'FAILED';
              $state['execution'] = array_replace($state['execution'],[
                  'phase'=>'failed','changed_gamets'=>$gamets,'load_changed'=>true,
-@@ -102,6 +184,8 @@
+@@ -102,6 +190,8 @@
          : (in_array($command,['MOVE_TO','TRAVEL_LOCATION'],true) && strcasecmp($target,strval($state['destination'] ?? '')) === 0);
      if (!$matches) return $dispatch;
      $snapshot = stobeCommitmentNativeSnapshot($actor,$npc,$gamets);
@@ -2594,7 +2616,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
      if (!$snapshot || empty($state['agreement_id']) || empty($state['execution']['request_id'])
          || ($state['execution']['load_changed'] ?? false) === true) {
          $reason = "Our plan still stands, but I can't confirm a safe start for that journey yet.";
-@@ -120,7 +204,7 @@
+@@ -120,7 +210,7 @@
          $reason = "That agreed travel period has ended. Let's make a fresh plan."; return false;
      }
      $speakerId = stobeResolveLiveParticipantSerial($speaker);
@@ -2603,7 +2625,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
      $planHash = strval($state['plan_hash'] ?? '');
      $sessionGeneration = intval($snapshot['session_generation'] ?? 0);
      if ($speakerId <= 0 || $actorId <= 0 || $sessionGeneration < 1
-@@ -154,9 +238,11 @@
+@@ -154,9 +244,11 @@
          'request_id'=>$state['execution']['request_id'],'world_id'=>$snapshot['world_id'],
          'session_generation'=>$sessionGeneration,'plan_hash'=>$planHash,
          'expires_gamets'=>$expiry,'kind'=>$follow ? 'follow' : 'route',
@@ -2616,7 +2638,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
      return 'OWNED_TRAVEL@'.json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT);
  }
  
-@@ -187,7 +273,7 @@
+@@ -187,7 +279,7 @@
          || !preg_match('/^[0-9a-f]{64}$/D', $planHash) || $planHash !== strval($execution['plan_hash'] ?? '')
          || !preg_match('/^[A-Za-z0-9_:-]{1,96}$/D', $requestId)
          || empty($execution['task_id']) || empty($state['agreement_id'])) return false;
@@ -2625,7 +2647,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
      $speakerId = stobeResolveLiveParticipantSerial($speaker);
      if ($actorId <= 0 || $speakerId <= 0 || $actorId !== intval($execution['actor_serial'] ?? 0)
          || $speakerId !== intval($execution['speaker_serial'] ?? 0)) return false;
-@@ -206,4 +292,114 @@
+@@ -206,4 +298,112 @@
      return $queue;
  }
  
@@ -2719,11 +2741,9 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/commi
 +            if (in_array($command,['FOLLOW','STOP_FOLLOW','MOVE_TO','TRAVEL_LOCATION','MOVE_TO_TARGET','HOLD_POSITION','PATROL','BODYGUARD','GUARD_TARGET','ATTACK','IDLE'],true)) return '';
 +        }
 +        $action = ($state['leader'] ?? '') === 'player' ? 'FOLLOW@'.$speaker : 'TRAVEL_LOCATION@'.strval($state['destination']);
-+        $state['execution']['resume_count'] = intval($state['execution']['resume_count'] ?? 0) + 1;
-+        $state['execution']['resume_gamets'] = $gamets;
-+        if (!stobeTravelWrite($actor,$speaker,$gamets,$state)) return '';
++        // imm26-fix-19f: resume_count/resume_gamets are written by stobeCommitmentNoteTravelRequest when this action is processed.
 +        $GLOBALS['STOBE_TRIP_RESUME_DONE'][$actor] = $gamets;
-+        stobeLogInfo('Trip resume injected',['npc'=>$actor,'action'=>$action,'resume_count'=>$state['execution']['resume_count']]);
++        stobeLogInfo('Trip resume injected',['npc'=>$actor,'action'=>$action,'resume_count'=>intval($state['execution']['resume_count'] ?? 0) + 1]);
 +        return $action;
 +    } catch (Throwable $error) {
 +        stobeLogWarn('Trip resume failed safely',['npc'=>$actor,'error'=>$error->getMessage()]);
@@ -17211,8 +17231,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +exit($fail === 0 ? 0 : 1);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpL2_model_emitted_resume_regression.php b/tests/imm26_wpL2_model_emitted_resume_regression.php
 --- a/tests/imm26_wpL2_model_emitted_resume_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpL2_model_emitted_resume_regression.php	2026-10-15 21:56:44.509507879 -0500
-@@ -0,0 +1,223 @@
++++ b/tests/imm26_wpL2_model_emitted_resume_regression.php	2026-10-16 04:45:28.516586618 -0500
+@@ -0,0 +1,246 @@
 +<?php
 +// imm26-wpL2: after a save+load the MODEL itself emits TRAVEL_LOCATION@<landmark> (the resume prompt tells it the walk resumes). The server resume
 +// injection then stands down (a response that already carries movement is left alone) so execution.resume_count stays 0; wpL keyed
@@ -17390,6 +17410,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +check('model-emitted post-load start: NEW request_id/world/generation', ($w['request_id'] ?? '') !== '' && ($w['request_id'] ?? '') !== $seedA['execution']['request_id']
 +    && ($w['world_id'] ?? '') === 'world-new-bbbbbbbb' && intval($w['session_generation'] ?? 0) === 2, $w);
 +check('model-emitted post-load start: state requested, ACCEPTED, not FAILED', tr_phase($s) === 'requested' && ($s['status'] ?? '') === 'ACCEPTED', [$s['status'] ?? null, tr_phase($s)]);
++check('model-emitted post-load start: resume_count is 1 with resume_gamets (imm26-fix-19f)', intval($s['execution']['resume_count'] ?? 0) === 1 && intval($s['execution']['resume_gamets'] ?? 0) === 1200, $s['execution'] ?? null);
 +$ev = tr_receipt($s, $A, $As, 'world-new-bbbbbbbb', 2, 'running', 'wl2-ev-running');
 +$r3 = tr_turn($A, $As, 1220, ['live'=>true, 'receipts'=>[$ev]]);
 +$done = tr_receipt($s, $A, $As, 'world-new-bbbbbbbb', 2, 'completed', 'wl2-ev-done', ['end_condition_verified'=>true, 'owned_work_released'=>true]);
@@ -17433,6 +17454,28 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +$w = $r['wires'][0] ?? [];
 +check('visited_location post-load model-emitted: one wire, empty candidate_id, stored x/y/z', count($r['wires']) === 1 && ($w['candidate_id'] ?? 'x') === ''
 +    && tr_same_xyz($w) && ($w['plan_hash'] ?? '') === $seedE['plan_hash'], $r['wires']);
++
++// imm26-fix-19f: resume_count is counted where the resume REQUEST is noted, so an injected and a model-emitted resume count the same,
++// and the default cap (3) bites on the 4th load with the honest resume_failure=resume_count (not the generic post-load FAILED row).
++[$F, $Fs] = tr_actor(); $seedF = tr_seed($F, $Fs);
++$rcSeen = []; $lastState = null;
++for ($load = 1; $load <= 3; $load++) {
++    $world = 'world-f' . $load . '-ffffffff'; $gen = $load + 1; $g0 = 1000 + $load * 400;
++    tr_turn($F, $Fs, $g0, ['world'=>$world, 'gen'=>$gen, 'live'=>false]);
++    $r = tr_turn($F, $Fs, $g0 + 50, ['world'=>$world, 'gen'=>$gen, 'live'=>true, 'actions'=>['TRAVEL_LOCATION@Squin']]);
++    $lastState = $r['state'];
++    $rcSeen[] = intval($lastState['execution']['resume_count'] ?? 0);
++    $evF = tr_receipt($lastState, $F, $Fs, $world, $gen, 'running', 'f19-ev-run-' . $load);
++    $r = tr_turn($F, $Fs, $g0 + 60, ['world'=>$world, 'gen'=>$gen, 'live'=>true, 'receipts'=>[$evF]]);
++}
++check('model-emitted resumes count 1,2,3 (one per load)', $rcSeen === [1, 2, 3], $rcSeen);
++check('model-emitted loop keeps one agreement id', ($r['state']['agreement_id'] ?? '') === $seedF['agreement_id'], $r['state']['agreement_id'] ?? null);
++$r = tr_turn($F, $Fs, 2800, ['world'=>'world-f4-ffffffff', 'gen'=>5, 'live'=>false]);
++$s = $r['state'];
++check('4th load with default cap 3: FAILED with resume_failure=resume_count (honest)', ($s['status'] ?? '') === 'FAILED' && tr_phase($s) === 'failed'
++    && ($s['execution']['resume_failure'] ?? '') === 'resume_count' && trim(strval($s['execution']['reason'] ?? '')) !== '', [$s['status'] ?? null, tr_phase($s), $s['execution']['resume_failure'] ?? null]);
++$r = tr_turn($F, $Fs, 2850, ['world'=>'world-f4-ffffffff', 'gen'=>5, 'live'=>true, 'actions'=>['TRAVEL_LOCATION@Squin']]);
++check('4th load: no OWNED_TRAVEL wire', $r['wires'] === [], $r['wires']);
 +
 +echo "imm26_wpL2_model_emitted_resume: $pass passed, $fail failed\n";
 +exit($fail === 0 ? 0 : 1);
