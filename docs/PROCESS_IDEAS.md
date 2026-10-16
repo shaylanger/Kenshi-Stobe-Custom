@@ -95,7 +95,7 @@ Rules:
 - added: 2026-10-16 13:56
 - log: 2026-10-16 13:56 review 'coordinator-17': added
 
-### PI-51 | Open
+### PI-51 | confirmed
 - idea: Replace the 'wake, read output file, restart waker' loop by one persistent waker that appends actionable events to a file watched by the Monitor tool (or the background task notification), so the coordinator does not spend 2 tool calls per wake restarting it and never creates duplicate wakers.
 - evidence: 13:00-13:55: about 30 waker restarts, each 2 tool calls; twice a second waker was started while one was still running (exit code 15 kills, duplicate EVENT lines) and the Stop hook blocked once because no waker was running in the gap.
 - saving: about 60 tool calls and 3 hook-block turns per hour
@@ -103,7 +103,10 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-16 13:56
+- moment: tail turn after fix26f2 hand-back, 16:1x
+- last_review: efc58758-86f8-4786-a138-4e53f075016d-tail
 - log: 2026-10-16 13:56 review 'coordinator-17': added
+- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': Open -> confirmed (applies: tail-wait.ps1 had to be re-armed after each early exit; the tail spent several turns only restarting the waker while 3 agents ran (fix26f2, 3 op25s).)
 
 ### PI-52 | Open
 - idea: Put known tooling snags (e.g. hxdefs.sh:30 /c/ path in bundle_dir.txt giving a false 'bundle dirs missing' SETUP-FAIL, use HX_OUT=C:/KenshiTestRuns/imm26-4080-hx) in the generated lane brief from testing/KNOWN_BLOCKERS.md, and make mark-row.py refuse SETUP-FAIL 'bundle dirs missing' when run.log is empty and the dirs exist.
@@ -145,7 +148,7 @@ Rules:
 - added: 2026-10-16 15:40
 - log: 2026-10-16 15:40 review 'coordinator-18-tail': added
 
-### PI-57 | Open
+### PI-57 | confirmed
 - idea: A subagent that waits on its own background job (selftest) must not re-send its full final report each time it wakes: dedupe hand-backs by content hash in the harness/tail relay, or have the agent hand back once and stay silent until its job finishes.
 - evidence: 15:09-15:25: imm26-regionR4 sent the same 'WP-R4 DONE' report 7 times (each waking this coordinator, 6 full-context turns of about 5-8k tokens) while its two slow selftests ran.
 - saving: about 40k tokens and 6 turns per such agent
@@ -153,7 +156,30 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 15:42
+- moment: tail turns after the 4080-i3op25 and 5090-i3op25 hand-backs
+- last_review: efc58758-86f8-4786-a138-4e53f075016d-tail
 - log: 2026-10-16 15:42 review 'coordinator-19': added
+- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': Open -> confirmed (applies: 2026-10-16 tail period: each of the 5 owned agents (i5-op10, fix26f2, 4080-i3op25, 5090-i3op25, replayexec) woke the tail twice, once by the hand-back message and once by the task-notification, eac...)
+
+### PI-58 | open
+- idea: Let tail-relay.ps1 accept the hand-back text and auto-send it to coordinator.current in one call (and mark the agent relayed in the ledger), so the tail does not need a model turn to re-summarise and SendMessage each result.
+- evidence: This tail period: 5 results were each re-typed into a SendMessage of 1.5-3k tokens by a model at 100k+ context, although the content was already in the agent's out file.
+- saving: about 5 turns and 15k output tokens per tail period
+- risk: low: relays are results not orders; the coordinator still acks
+- hooks: no
+- weakens: no
+- added: 2026-10-16 16:14
+- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
+
+### PI-59 | open
+- idea: Let tail-relay.ps1 accept the hand-back text and auto-send it to coordinator.current in one call (and mark the agent relayed in the ledger), so the tail does not need a model turn to re-summarise and SendMessage each result.
+- evidence: This tail period: 5 results were each re-typed into a SendMessage of 1.5-3k tokens by a model at 100k+ context, although the content was already in the agent's out file.
+- saving: about 5 turns and 15k output tokens per tail period
+- risk: low: relays are results not orders; the coordinator still acks
+- hooks: no
+- weakens: no
+- added: 2026-10-16 16:14
+- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
 
 ## In progress
 
