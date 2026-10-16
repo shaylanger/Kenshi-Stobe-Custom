@@ -15,6 +15,8 @@
 #   Agent statuses (agent-guard-lib.ps1, 2026-10-15): the Stop hook also BLOCKS while an agents\*.status is STOPPED-CONTEXT/FAILED
 #   (updated < 18 h ago) with no successor and not abandoned (it prints the exact respawn text); every RUNNING status updated < 45 min
 #   ago counts as in-flight work (so a running event wait is required). Fails open: any error in this part is ignored.
+#   Rule (e) (PI-11): a STOPPED-CONTEXT/FAILED agent whose ledger wp / lane has a fresh RUNNING agent under another name is not blocked;
+#   the accepted pair is printed ("accepted successor S for X via ledger wp W") on stderr and appended to a block message.
 #   Test switches: KAH_RUNS_DIR (root), KAH_GUARD_TEST_ONLY_AGENTS=1 (run only the agent checks, print INFLIGHT:/exit); see agent-guard-selftest.ps1.
 # Markers: scripts/agents `touch C:\KenshiTestRuns\inflight\<name>` when they start a batch, subagent or rig job,
 # delete it when done. Idle reason: `kenshi-ctl.ps1 idle "<reason>"` or write the text into rig5090.idle.
@@ -108,16 +110,20 @@ try {
 
 # --- agent statuses (agent-guard-lib.ps1; fails open) ---
 $agentFly = @()
+$agentAccepted = @()
 try {
     . (Join-Path $PSScriptRoot '..\agent-guard-lib.ps1')
     $ar = Get-AgentReport
     $agentFly = @($ar.InFlight | ForEach-Object Name)
+    $agentAccepted = @($ar.Accepted)      # rule (e), PI-11: successors accepted via the program ledger / lane table (one line each: which and why)
+    if ($agentAccepted.Count) { [Console]::Error.WriteLine('kenshi-waker-guard: ' + ($agentAccepted -join '; ')) }
     if ($ar.OpenRecent.Count) {
         $lines = @($ar.OpenRecent | Select-Object -First 8 | ForEach-Object { Get-AgentRespawn $_ })
-        Block-Stop ('kenshi-waker-guard: ' + $ar.OpenRecent.Count + ' agent(s) stopped or failed with no successor, so their work would be lost: ' + ($lines -join ' || ') + ' -- Spawn each as a FRESH agent (Agent tool) from its handoff/status file now (never SendMessage the old agent); the new agent writes its own status and the old one stops being reported. If one was dropped on purpose: powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-abandon.ps1 <name> "<why>".')
+        $accTxt = if ($agentAccepted.Count) { ' (' + ($agentAccepted -join '; ') + ')' } else { '' }
+        Block-Stop ('kenshi-waker-guard: ' + $ar.OpenRecent.Count + ' agent(s) stopped or failed with no successor, so their work would be lost: ' + ($lines -join ' || ') + $accTxt + ' -- Spawn each as a FRESH agent (Agent tool) from its handoff/status file now (never SendMessage the old agent); the new agent writes its own status and the old one stops being reported. If one was dropped on purpose: powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-abandon.ps1 <name> "<why>".')
     }
 } catch { }
-if ($env:KAH_GUARD_TEST_ONLY_AGENTS) { 'INFLIGHT: ' + ($agentFly -join ','); exit 0 }
+if ($env:KAH_GUARD_TEST_ONLY_AGENTS) { 'INFLIGHT: ' + ($agentFly -join ','); foreach ($l in $agentAccepted) { $l }; exit 0 }
 
 # --- what is in flight ---
 $kenshi = $null -ne (Get-Process -Name 'kenshi_x64' -ErrorAction SilentlyContinue)

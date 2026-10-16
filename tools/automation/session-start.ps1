@@ -145,6 +145,7 @@ try {
     $ah = @($ah | Where-Object { $l = $_; -not ($tailOwned.Keys | Where-Object { $l -match ('(?<![\w.-])' + [regex]::Escape($_) + '(?![\w.-])') }) })   # agents owned by a LIVE tail are not respawned
     if ($Brief) { $ah = @($ah | ForEach-Object { if ($_.Length -gt 400) { $_.Substring(0,400) + '...' } else { $_ } }) }
     if ($ah.Count) { $ah | ForEach-Object { $_ } } else { 'every agent is DONE, RUNNING (fresh) or has a successor: nothing to respawn' }
+    foreach ($al in @(Get-AgentAcceptedLines)) { $al }   # PI-11 rule (e): successors accepted via the ledger / lane table, with the reason
     $rt = @(Get-ChildItem -LiteralPath (Join-Path $runs 'respawn') -Filter '*.todo' -File -ErrorAction SilentlyContinue | ForEach-Object BaseName)
     $rt = @($rt | Where-Object { -not $tailOwned.ContainsKey($_) })
     if ($rt.Count) { "respawn todos (C:\KenshiTestRuns\respawn\): $($rt -join ', ')" }

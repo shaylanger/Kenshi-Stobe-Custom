@@ -16,6 +16,11 @@
 #   (b) same name stem, bigger trailing number (op1 -> op2) and the tasks match: equal / one contains the other, or X's task was
 #       rewritten to "orphaned: ..." (then the task is unknown, the name decides)
 #   (c) S is DONE and its task equals / contains X's task
+#   (e) ledger tie (PI-11, Shay 2026-10-15): X is STOPPED-CONTEXT/FAILED, S is RUNNING with a status updated < 45 min ago and S.Mtime >= X.Mtime, and
+#       the program ledger (programs\*.json) ties them to the same work package (X and S both among a wp's agent / successors / agent_records)
+#       or to the same lane (lane-idle.ps1 lane table + lane-owners.json ops). If X sits in a lane and S sits in a DIFFERENT lane, the shared wp
+#       does not count. Any read/parse error => rule (e) does not apply. Get-AgentReport.Accepted / Get-AgentAcceptedLines say which
+#       successor was accepted and why ("accepted successor S for X via ledger wp W"). `agent-successor.ps1 <old> <new>` registers a pair.
 # Abandoned on purpose: a file agents\<name>.abandoned (agent-abandon.ps1) makes the record never reported.
 # Test switches: KAH_RUNS_DIR (root, default C:\KenshiTestRuns).
 
@@ -54,7 +59,7 @@ function Test-TaskMatch([string]$a, [string]$b) {
     $false
 }
 
-function Test-AgentSuccessor($x, $s) {
+function Test-AgentSuccessorBasic($x, $s) {
     if ($s.Name -ceq $x.Name -or $s.Mtime -lt $x.Mtime) { return $false }
     $xn = [string]$x.Name; $sn = [string]$s.Name
     # (a) same name + one suffix character
@@ -76,6 +81,73 @@ function Test-AgentSuccessor($x, $s) {
     $false
 }
 
+# ---- rule (e): ledger / lane tie to a live successor (fails closed: any error => no groups => rule never applies) ----
+$script:AgentGroups = $null    # cached by Initialize-AgentGroups (Get-AgentReport / Remove-SupersededTodos)
+$script:AgentNow = $null
+
+function Get-AgentLedgerGroups {
+    try {
+        $groups = New-Object System.Collections.ArrayList
+        $pd = if ($env:KPL_DIR) { $env:KPL_DIR } else { Join-Path (Get-AgentRunsDir) 'programs' }
+        if (Test-Path -LiteralPath $pd) {
+            foreach ($f in Get-ChildItem -LiteralPath $pd -Filter '*.json' -File -ErrorAction Stop) {
+                $j = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                foreach ($w in @($j.wps)) {
+                    $n = @()
+                    if ("$($w.agent)") { $n += "$($w.agent)" }
+                    $n += @($w.successors | Where-Object { $_ } | ForEach-Object { "$_" })
+                    if ($w.PSObject.Properties['agent_records'] -and $w.agent_records) { $n += @($w.agent_records.PSObject.Properties | ForEach-Object { $_.Name }) }
+                    [void]$groups.Add([pscustomobject]@{ Kind = 'wp'; Label = "ledger wp $($w.id)"; Names = @($n | Select-Object -Unique) })
+                }
+            }
+        }
+        # lanes: the table in lane-idle.ps1 (ops lists) + the optional override <runs>\lane-owners.json (same precedence as lane-idle.ps1)
+        $lanes = [ordered]@{}
+        $li = Join-Path $PSScriptRoot 'lane-idle.ps1'
+        if (Test-Path -LiteralPath $li) {
+            $txt = Get-Content -LiteralPath $li -Raw -ErrorAction Stop
+            foreach ($m in [regex]::Matches($txt, "'([^']+)'\s*=\s*@\{\s*ops\s*=\s*@\(([^)]*)\)")) {
+                $lanes[$m.Groups[1].Value] = @([regex]::Matches($m.Groups[2].Value, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+            }
+        }
+        $ov = Join-Path (Get-AgentRunsDir) 'lane-owners.json'
+        if (Test-Path -LiteralPath $ov) {
+            $j = Get-Content -LiteralPath $ov -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            foreach ($p in $j.psobject.Properties) { $lanes[$p.Name] = @($p.Value.ops | Where-Object { $_ } | ForEach-Object { "$_" }) }
+        }
+        foreach ($l in $lanes.Keys) { [void]$groups.Add([pscustomobject]@{ Kind = 'lane'; Label = "lane $l"; Names = @($lanes[$l]) }) }
+        $groups.ToArray()
+    } catch { @() }
+}
+
+function Initialize-AgentGroups([datetime]$Now = (Get-Date)) {
+    $script:AgentNow = $Now
+    $script:AgentGroups = @(Get-AgentLedgerGroups)
+}
+
+# returns the reason text ("ledger wp live-rows" / "lane 5090-i3") when rule (e) accepts S as successor of X, else $null
+function Get-AgentSuccessorVia($x, $s, [int]$RunningMin = 45) {
+    try {
+        if ($null -eq $script:AgentGroups -or -not $script:AgentGroups.Count) { return $null }
+        if (($x.State -notin 'STOPPED-CONTEXT', 'FAILED') -or $s.State -ne 'RUNNING') { return $null }
+        if ($s.Name -ceq $x.Name -or $s.Mtime -lt $x.Mtime) { return $null }
+        $now = if ($script:AgentNow) { $script:AgentNow } else { Get-Date }
+        if (($now - $s.Mtime).TotalMinutes -ge $RunningMin) { return $null }
+        $has = { param($g, $n) @($g.Names | Where-Object { $_ -ieq $n }).Count -gt 0 }
+        $lx = @($script:AgentGroups | Where-Object { $_.Kind -eq 'lane' -and (& $has $_ $x.Name) })
+        $ls = @($script:AgentGroups | Where-Object { $_.Kind -eq 'lane' -and (& $has $_ $s.Name) })
+        foreach ($g in $lx) { if (& $has $g $s.Name) { return $g.Label } }      # same lane
+        if ($lx.Count -and $ls.Count) { return $null }                           # two different lanes: a shared wp proves nothing
+        foreach ($g in ($script:AgentGroups | Where-Object { $_.Kind -eq 'wp' })) { if ((& $has $g $x.Name) -and (& $has $g $s.Name)) { return $g.Label } }
+        $null
+    } catch { $null }
+}
+
+function Test-AgentSuccessor($x, $s) {
+    if (Test-AgentSuccessorBasic $x $s) { return $true }
+    $null -ne (Get-AgentSuccessorVia $x $s)
+}
+
 function Get-NextAgentName([string]$n) {
     if ($n -cmatch '^(.*[0-9A-Za-z])([-_])(\d)$' -and [int]$Matches[3] -lt 9) { return $Matches[1] + $Matches[2] + ([int]$Matches[3] + 1) }
     if ($n -cmatch '^(.*[^a-z])([b-y])$' -or $n -cmatch '^(.*[0-9])([b-y])$') { return $Matches[1] + [char]([int][char]$Matches[2] + 1) }
@@ -92,13 +164,14 @@ function Get-AgentRespawn($r) {
 
 function Get-AgentReport {
     param([string]$AgentsDir = '', [datetime]$Now = (Get-Date), [int]$RunningMin = 45, [int]$OrphanMin = 30, [int]$HorizonH = 18)
-    $rep = [pscustomobject]@{ InFlight = @(); Orphaned = @(); Open = @(); OpenRecent = @(); Todos = @(); Count = 0 }
+    $rep = [pscustomobject]@{ InFlight = @(); Orphaned = @(); Open = @(); OpenRecent = @(); Todos = @(); Count = 0; Accepted = @() }
     try {
         if (-not $AgentsDir) { $AgentsDir = Join-Path (Get-AgentRunsDir) 'agents' }
         if (-not (Test-Path -LiteralPath $AgentsDir)) { return $rep }
         $recs = @(Get-ChildItem -LiteralPath $AgentsDir -Filter '*.status' -File -ErrorAction SilentlyContinue | Select-Object -First 400 | ForEach-Object { Read-AgentRecord $_ } | Where-Object { $_ })
         $rep.Count = $recs.Count
-        $open = @(); $orph = @(); $fly = @()
+        $open = @(); $orph = @(); $fly = @(); $acc = @()
+        try { Initialize-AgentGroups $Now } catch { $script:AgentGroups = @() }
         foreach ($r in $recs) {
             $age = ($Now - $r.Mtime).TotalMinutes
             if ($r.State -eq 'RUNNING' -and $age -lt $RunningMin) { $fly += $r }
@@ -106,11 +179,17 @@ function Get-AgentReport {
             if ($r.State -notin 'RUNNING', 'STOPPED-CONTEXT', 'FAILED') { continue }
             if ($r.State -eq 'RUNNING' -and $age -lt $OrphanMin) { continue }
             $sup = $false
-            foreach ($s in $recs) { if (Test-AgentSuccessor $r $s) { $sup = $true; break } }
+            foreach ($s in $recs) { if (Test-AgentSuccessorBasic $r $s) { $sup = $true; break } }
+            if (-not $sup) {      # rule (e): ledger/lane tie to a live successor under another name (report which one and why)
+                foreach ($s in $recs) {
+                    $via = Get-AgentSuccessorVia $r $s $RunningMin
+                    if ($via) { $sup = $true; if (($Now - $r.Mtime).TotalHours -lt $HorizonH) { $acc += "accepted successor $($s.Name) for $($r.Name) via $via" }; break }
+                }
+            }
             if ($sup) { continue }
             if ($r.State -eq 'RUNNING') { $orph += $r } else { $open += $r }
         }
-        $rep.InFlight = $fly; $rep.Orphaned = $orph; $rep.Open = $open
+        $rep.InFlight = $fly; $rep.Orphaned = $orph; $rep.Open = $open; $rep.Accepted = $acc
         $rep.OpenRecent = @($open | Where-Object { ($Now - $_.Mtime).TotalHours -lt $HorizonH })
         # respawn todos (agent-status.ps1 writes respawn\<name>.todo on STOPPED-CONTEXT): the ones still open (not superseded/abandoned)
         $td = Join-Path (Split-Path -Parent $AgentsDir) 'respawn'
@@ -121,6 +200,8 @@ function Get-AgentReport {
     } catch { }
     $rep
 }
+
+function Get-AgentAcceptedLines([string]$AgentsDir = '', [datetime]$Now = (Get-Date)) { @((Get-AgentReport -AgentsDir $AgentsDir -Now $Now).Accepted) }
 
 function Get-AgentHealthLines([string]$AgentsDir = '', [datetime]$Now = (Get-Date)) {
     $rep = Get-AgentReport -AgentsDir $AgentsDir -Now $Now
@@ -140,6 +221,7 @@ function Remove-SupersededTodos([string]$AgentsDir = '') {
         $td = Join-Path (Split-Path -Parent $AgentsDir) 'respawn'
         if (-not (Test-Path -LiteralPath $td)) { return }
         $recs = @(Get-ChildItem -LiteralPath $AgentsDir -Filter '*.status' -File -ErrorAction SilentlyContinue | ForEach-Object { Read-AgentRecord $_ } | Where-Object { $_ })
+        try { Initialize-AgentGroups } catch { $script:AgentGroups = @() }
         foreach ($t in Get-ChildItem -LiteralPath $td -Filter '*.todo' -File -ErrorAction SilentlyContinue) {
             $rec = $recs | Where-Object { $_.Name -ceq $t.BaseName } | Select-Object -First 1
             $drop = (-not $rec) -or $rec.Abandoned -or ($rec.State -ne 'STOPPED-CONTEXT')
