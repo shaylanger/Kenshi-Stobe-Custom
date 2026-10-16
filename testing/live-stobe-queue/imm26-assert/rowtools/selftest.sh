@@ -83,12 +83,12 @@ scen <<EOF
 EOF
 r=$(run 06-c 5090-i5); case "$r" in "RESULT 06-c FAIL"*forget_wrote_tombstone*) echo "$r" | grep -q 'call_me_Jax_replaced_row=' && chk 06-c-fail-no-tombstone ok || chk 06-c-fail-no-tombstone bad "$r";; *) chk 06-c-fail-no-tombstone bad "$r";; esac
 scen <<EOF
-{"follow":["{\"first_order\":\"none\"}"],"steps":[{"reply":"I'll walk with you."}]}
+{"follow_log":[[]],"steps":[{"reply":"I'll walk with you."}]}
 EOF
 r=$(run 23-b 5090-i3); case "$r" in "RESULT 23-b SETUP-FAIL no follow order"*) chk 23-b-setup-fail ok;; *) chk 23-b-setup-fail bad "$r";; esac
 "$PY" "$ST_HERE/attempts.py" reset "$KAH_ROWS_BASE/row-attempts" 5090-i3 23-b "selftest: deliberate setup-fail then pass" >/dev/null
 scen <<EOF
-{"follow":["{\"first_order\":\"follow\"}","{\"first_order\":\"none\"}"],"steps":[{"reply":"I'll walk with you."}]}
+{"follow_log":[["HOOK_MSG_PROC: FOLLOW target resolved arg='Shay'","FOLLOW_TICK: follower=Cind"],["HOOK_MSG_PROC: FOLLOW target resolved arg='Shay'","FOLLOW_TICK: follower=Cind","FOLLOW_EXPIRED: follower=2529907200 started_gamets=1"]],"steps":[{"reply":"I'll walk with you."}]}
 EOF
 r=$(run 23-b 5090-i3); case "$r" in "RESULT 23-b PASS"*follow_ended_by_expiry*) chk 23-b-pass ok;; *) chk 23-b-pass bad "$r";; esac
 scen <<EOF

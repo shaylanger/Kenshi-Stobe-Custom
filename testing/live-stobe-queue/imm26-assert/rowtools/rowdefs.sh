@@ -41,13 +41,17 @@ rd_19a() {  # accept leg only (reload leg is manual -> check reports GATED with 
   rl_say 1 "Anywhere you want to go?" || return $?
   rl_say 2 "Yes, let's go." || return $?
 }
-rd_23b() {  # H-AFF 60; follow order must exist (else SETUP-FAIL), then game time advances and the order must end by expiry
-  rd_need_npc || return 3; rd_aff 60
+rd_23b() {  # H-AFF 60; native follow must start (stobe.log FOLLOW lines; else SETUP-FAIL), then game time advances and the follow must end by expiry
+  # The legacy native follow is NOT a Kenshi order (stobe_state shows first_order none / current_goal OTHER): the evidence is the DLL log
+  # (HOOK_MSG_PROC: FOLLOW target resolved, FOLLOW_TICK, FOLLOW_EXPIRED), imm26-inv-23b item 8. Needs the NC DLL (ROW_NATIVE -> stobe_ctxpush).
+  ROW_NATIVE=1; rd_need_npc || return 3; rd_aff 60
   rl_say 1 "Follow me." || return $?
-  echo "stobe-auto stobe_state $(rl_q "$RL_NPC_FULL") </dev/null | head -c 1500" | lt_h > "$EV/follow_state.txt"
-  grep -qiE '"(first_order|current_goal|order)"\s*:\s*"[^"]*follow' "$EV/follow_state.txt" || return 0   # rowcheck -> SETUP-FAIL
+  local l; l=$(sed -nE 's/^mark=[0-9]+ [0-9]+ ([0-9]+) .*/\1/p' "$EV/s1/meta.txt" | head -1); l=${l:-0}
+  echo "$RL_NPC_ID" > "$EV/follow_npc.txt"
+  echo "tail -n +$((l+1)) $LT_STOBELOG | grep -a -E 'FOLLOW' | cut -c1-300 | head -60" | lt_h > "$EV/follow_log.txt"
+  grep -q 'FOLLOW target resolved' "$EV/follow_log.txt" || return 0   # rowcheck -> SETUP-FAIL
   rl_gametime > "$EV/time0.txt"; rl_advance_gametime || return 3; echo "$RL_T1" > "$EV/time1.txt"
-  echo "stobe-auto stobe_state $(rl_q "$RL_NPC_FULL") </dev/null | head -c 1500" | lt_h > "$EV/follow_state_after.txt"
+  echo "tail -n +$((l+1)) $LT_STOBELOG | grep -a -E 'FOLLOW' | cut -c1-300 | head -120" | lt_h > "$EV/follow_log_after.txt"
 }
 rd_04c() {  # familial tie Cind -> B, say "<B> owes me, tell them to pay."; B = first non-squad NPC within 600 (ROW_B overrides)
   rd_need_npc || return 3

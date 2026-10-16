@@ -192,19 +192,21 @@ def c_19a(v, ev):
 
 
 def c_23b(v, ev):
-    if not need(v, ev, 'follow_state.txt'):
+    # the native follow is a controller, not a Kenshi order: evidence is the DLL's stobe.log FOLLOW lines (imm26-inv-23b item 8)
+    if not need(v, ev, 'follow_log.txt'):
         return
-    st = rd(ev, 'follow_state.txt')
-    has = bool(re.search(r'"(first_order|current_goal|order)"\s*:\s*"[^"]*follow', st, re.I))
-    if not has:
-        return v.setup_fail('no follow order after "Follow me." (legacy follow gives no order; tasks 0): expiry untestable')
-    after = rd(ev, 'follow_state_after.txt')
+    st = rd(ev, 'follow_log.txt')
+    if 'FOLLOW target resolved' not in st:
+        return v.setup_fail('no follow order after "Follow me." (no "FOLLOW target resolved" in the stobe.log slice): expiry untestable')
+    after = rd(ev, 'follow_log_after.txt')
     if after is None:
-        return v.ck('file:follow_state_after.txt', False, 'missing')
+        return v.ck('file:follow_log_after.txt', False, 'missing')
+    ser = (re.search(r'#(\d+)', rd(ev, 'follow_npc.txt') or '') or [None, ''])[1]
+    v.ck('follow_ticking', bool(re.search(r'FOLLOW_TICK: follower=', st + after)), 'no FOLLOW_TICK line')
     t0, t1 = rd(ev, 'time0.txt') or '', rd(ev, 'time1.txt') or ''
     n0 = re.findall(r'[0-9]+(?:\.[0-9]+)?', t0); n1 = re.findall(r'[0-9]+(?:\.[0-9]+)?', t1)
     v.ck('game_time_advanced', bool(n0 and n1) and float(n1[0]) > float(n0[0]), f'{n0[:1]}->{n1[:1]}')
-    v.ck('follow_ended_by_expiry', not re.search(r'"(first_order|current_goal|order)"\s*:\s*"[^"]*follow', after, re.I))
+    v.ck('follow_ended_by_expiry', bool(re.search(r'FOLLOW_EXPIRED: follower=' + (re.escape(ser) if ser else r'\d+'), after)), 'no FOLLOW_EXPIRED line for ' + (ser or 'any follower'))
 
 
 def c_04c(v, ev):

@@ -58,6 +58,8 @@ if kind == 'h':
         out.append(f"time {100 + 24 * st['time_calls']}.0 day"); st['time_calls'] += 1 if 'speed' not in body else 0
     elif 'stobe-auto chars' in body:
         out.append("3 within 600.0: Shay #1/1 [Nameless] pos=0,0,0 dist=0.0 | Cind [Hungry Bandit] #2529907200/2 [Traders Guild] pos=1,1,1 dist=9.0 | Rethar Dax #5/1 [Outlaw Watch] pos=2,2,2 dist=30.0 race=x")
+    elif "grep -a -E 'FOLLOW'" in body:   # 23-b native follow evidence: scenario key follow_log = [lines before expiry, lines after]
+        fl = scen.get('follow_log', [[]]); out.extend(fl[min(st.get('follow_log_calls', 0), len(fl) - 1)]); st['follow_log_calls'] = st.get('follow_log_calls', 0) + 1
     elif 'ACTION_EXEC' in body and 'tail -n +' in body:
         if cur:
             out.append('resolved_speaker=Shay')
