@@ -71,6 +71,7 @@ foreach ($k in 'Blocker alpha','Blocker beta','EPSILON-OWN-LANE','ZETA-ROWMATCH'
 Chk 'blockers: 5090 i3 line with a picked row (03-a) is kept, 4080 i3 line with no picked row is dropped' ($txt -match 'GAMMA-I3' -and $txt -notmatch 'DELTA-4080I3')
 Chk 'rules block: debug budget, handbacks, PI-06, never live install, status, checkpoints' ($txt -match 'ONE attempt per row' -and $txt -match '<= 8 lines' -and $txt -match '--allow-retry' -and $txt -match 'Never touch the live install' -and $txt -match 'Status discipline' -and $txt -match 'Checkpoints' -and $txt -match 'do NOT need to read')
 $rulesN = @(($txt -split "`n") | Where-Object { $_ -match '^- (Scope|Test only|Debug budget|PI-06|A PASS|Batching|Mark each|If a failure|Status discipline|Checkpoints|Handbacks)' }).Count
+Chk 'rules block: LLM health rule (PI-15)' ($txt -match 'llm-health\.sh' -and $txt -match 'Never mark LLM rows during LLM-HEALTH FAIL')
 Chk "rules block <= 40 lines ($rulesN rule lines)" ($rulesN -ge 10 -and $rulesN -le 40)
 Chk 'helper list: existing files listed with usage, missing ones dropped' ($txt -match '## Helper scripts' -and $txt -match '- go-row.sh: bash go-row.sh' -and $txt -match '- save-report.ps1: ' -and $txt -notmatch '- go-batch.sh:')
 Chk 'status/handoff/report commands carry the name' ($txt -match 'agent-status.ps1 imm26-test-op RUNNING' -and $txt -match 'imm26-test-op.handoff.md' -and $txt -match 'save-report.ps1 imm26-test-op')

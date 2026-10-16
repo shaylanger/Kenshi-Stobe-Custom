@@ -63,6 +63,10 @@ scen <<EOF
 EOF
 pf=$(pf_run 4080-i3; echo "rc=$?"); case "$pf" in *"PREFLIGHT-FAIL game down"*"rc=2") chk preflight-game-down ok;; *) chk preflight-game-down bad "$pf";; esac
 pf=$(pf_run 9999-i9; echo "rc=$?"); case "$pf" in *"PREFLIGHT-FAIL unknown lane"*"rc=2") chk preflight-unknown-lane ok;; *) chk preflight-unknown-lane bad "$pf";; esac
+# PI-15: dead chat LLM provider (connection refused on a fake local base_url) -> PREFLIGHT-FAIL llm provider down before any lane/DB step; KAH_PF_LLM=0 skips the check
+printf '{"base_url":"http://127.0.0.1:1/v1","model":"m"}' > "$T/llm-dead.json"
+pf=$(unset KAH_ROW_FAKE; KAH_LLM_ALLOW_LOCAL=1 KAH_LLM_CONFIG="$T/llm-dead.json" KAH_LLM_CACHE_DIR="$T" KAH_LLM_TIMEOUT=3 pf_run 5090-i3; echo "rc=$?"); case "$pf" in "PREFLIGHT-FAIL llm provider down: LLM-HEALTH FAIL http=000"*"rc=2") chk preflight-llm-down ok;; *) chk preflight-llm-down bad "$pf";; esac
+case "$pf" in *"down"*) chk preflight-llm-batch-stops-on-down ok;; *) chk preflight-llm-batch-stops-on-down bad "$pf";; esac
 # preflight DB statements were issued (PLAYER_NAME, deals, agreements, anchor) and the OK line is printed
 scen <<EOF
 {"steps":[]}

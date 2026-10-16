@@ -8,6 +8,7 @@
 #   3 private DB: general_settings PLAYER_NAME='Shay'; stobe_social_contract PROPOSED/ACCEPTED -> EXPIRED (leftover deals e.g. the Metal Junk loan);
 #     eventlog travel_agreement rows PROPOSED/ACCEPTED -> ENDED; core_npc.metadata imm26_anchor removed; verify nothing is left
 #   4 distance: `where <npc>` (default Cind) dist >= 80 -> FAIL (the native people list drops NPCs beyond 80 units; social scope null)
+#   0 chat LLM provider answers (tools/automation/llm-health.sh, PI-15; KAH_PF_LLM=0 skips) -> `PREFLIGHT-FAIL llm provider down: LLM-HEALTH FAIL http=402 ...`
 # Env: KAH_PF_MAXDIST (80), KAH_PF_NOWRITE=1 (checks only, no DB writes), KAH_ROW_FAKE/DRY (see lane.sh).
 PF_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$PF_HERE/rowtools/lane.sh"
@@ -26,6 +27,10 @@ pf_isolation() {
 pf_run() {
   local lane="$1" npc="${2:-Cind}" st dist ev=""
   lt_load "$lane" || return 2
+  # 0 chat LLM provider (PI-15): one 1-token completion (OK cached 60 s); a dead provider (402 no balance, 401, timeout) = no row may run or be marked
+  if [ -z "${KAH_ROW_FAKE:-}" ] && [ "${KAH_PF_LLM:-1}" != 0 ]; then
+    local lh; lh=$(bash "$PF_HERE/../../../tools/automation/llm-health.sh" 2>&1 | head -1); case "$lh" in "LLM-HEALTH OK"*|"LLM-HEALTH SKIP"*) ;; *) pf_fail "llm provider down: ${lh:-LLM-HEALTH FAIL no output} (fix the balance/key, then rerun; do not mark LLM rows)"; return 2;; esac
+  fi
   # 1 game + backend
   st=$(printf 'stobe-auto status </dev/null 2>&1 | head -3\n' | lt_h 2>&1)
   case "$st" in *STOP*|*ROUTE-FAIL*|*"inbox pending"*) pf_fail "lane harness busy/route: $(echo "$st" | head -1 | cut -c1-160)"; return 2;; esac
