@@ -1,0 +1,74 @@
+
+
+function fresh_pg(bool $failRead=false): void { fresh_world(); $GLOBALS['db']->failTravelRead=$failRead; }
+$CANT = "I understand the area, but I can't verify our current trip or route yet.";
+function travel_rows(): array { return array_values(array_filter($GLOBALS['db']->events,static fn($e)=>$e['type']==='travel_agreement')); }
+$scope=['campaign_id'=>'campaign-1','actor_id'=>'5969','speaker_id'=>'2'];   // production-shaped social ids (not the live serials)
+
+// ---- 1. ROW ABSENT (the normal first offer): the read SUCCEEDS with an empty trip (state null) and seeds the cache with null
+fresh_pg();
+$read=stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
+ac(($read['read_succeeded']??false)===true && array_key_exists('state',$read) && $read['state']===null,'1: no travel_agreement row is a successful EMPTY read (driver returns no-row as false/NULL data)');
+ac(array_key_exists($key,$GLOBALS['STOBE_TRAVEL_STATE']) && $GLOBALS['STOBE_TRAVEL_STATE'][$key]===null,'1: the cache is seeded with the empty trip for the normal capture path');
+ac(intval($read['actor_serial'])===2543823360 && intval($read['speaker_serial'])===3454101504,'1: the proof still carries the live serials');
+
+// ---- 2. ROW ABSENT through the whole consider turn: the region route offer, not the "can't verify" reply
+fresh_pg();
+$t='Fine.';$a=['TRAVEL_LOCATION@model-invented'];
+$h=rr_turn($consider,$none,1000,$scope,$npc,$t,$a);
+ac($h && $t!==$CANT && !str_contains($t,"can't verify") && !bad_text($t),'2: first consider turn with no prior trip row is NOT the fixed can\'t-verify reply (reply: '.substr($t,0,120).')');
+$rd=plan_rows('route_ready');
+ac(count($rd)===1 && ($rd[0]['endpoint_label']??'')==='Hive Village CE','2: route_ready names the nearest Vain town');
+$trip=$GLOBALS['STOBE_TRAVEL_STATE'][$key]??null;
+ac(is_array($trip) && $trip['status']==='PROPOSED' && $trip['destination']==='Hive Village CE' && $a===[] && str_contains($t,'Shall we set out'),'2: PROPOSED agreement + server-written offer, zero actions');
+
+// ---- 3. REAL DB ERROR on the trip read: still FAILS CLOSED (fixed reply, nothing stored, no movement)
+fresh_pg(true);
+$read=stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
+ac(($read['read_succeeded']??true)===false && array_key_exists('state',$read) && $read['state']===null,'3: a failed trip query is a read failure');
+ac(!array_key_exists($key,$GLOBALS['STOBE_TRAVEL_STATE']),'3: a failed read does not seed the cache');
+$t='Fine.';$a=['TRAVEL_LOCATION@model-invented'];
+$before=count(travel_rows());
+$h=rr_turn($consider,$none,1000,$scope,$npc,$t,$a);
+ac($h && $t===$CANT && $a===[] && count(travel_rows())===$before && plan_rows('route_ready')===[],'3: DB error -> exact can\'t-verify reply, zero actions, no agreement row, no route_ready');
+
+// ---- 4. error does not stick: after a failed read the next healthy no-row read succeeds
+$GLOBALS['db']->failTravelRead=false;$GLOBALS['STOBE_TRAVEL_STATE']=[];
+$read=stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
+ac(($read['read_succeeded']??false)===true && $read['state']===null,'4: a later healthy read after an error is an empty-trip success (no sticky failure)');
+
+// ---- 5. ROW PRESENT: an active trip is read back and still blocks the region plan
+fresh_pg();
+$propose=['region_plan_decision'=>'NONE','proposed_region'=>'','travel_decision'=>'PROPOSE','travel_kind'=>'same_route','travel_leader'=>'npc',
+    'travel_destination'=>'local:world:2543823360:77','travel_reason'=>'','travel_player_quote'=>''];
+$t='Sure.';$a=[];rr_turn("Take me to Stumble Inn.",$propose,900,$scope,$npc,$t,$a);
+$GLOBALS['STOBE_TRAVEL_STATE']=[];
+$read=stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
+ac(($read['read_succeeded']??false)===true && is_array($read['state']) && $read['state']['status']==='PROPOSED','5: a stored PROPOSED trip is read back from the row');
+$GLOBALS['STOBE_TRAVEL_STATE']=[];
+$t='Fine.';$a=[];$h=rr_turn($consider,$none,1000,$scope,$npc,$t,$a);
+ac($h && str_contains($t,'current trip is still in place') && $t!==$CANT && $a===[],'5: an active trip still blocks the region plan');
+
+// ---- 6. another pair's row and a row from the FUTURE (gamets > read time) are not this pair's trip
+fresh_pg();
+$other='travel-v1:2543823360:7654321:';
+$GLOBALS['db']->events[]=['type'=>'travel_agreement','time'=>0,'gamets'=>500,'data'=>$other.'{"status":"PROPOSED"}','status'=>'pending','seq'=>1];
+$GLOBALS['db']->events[]=['type'=>'travel_agreement','time'=>0,'gamets'=>2000,'data'=>$key.'{"status":"PROPOSED"}','status'=>'pending','seq'=>2];
+$read=stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
+ac(($read['read_succeeded']??false)===true && $read['state']===null,'6: another pair\'s row and a future row are not this pair\'s trip (empty, success)');
+
+// ---- 7. a PRESENT but corrupt / incoherent row still fails closed (the no-row fix must not loosen validation)
+foreach ([['{not json','7a: malformed JSON'],['{"status":"BOGUS"}','7b: unknown status'],['','7c: empty payload']] as [$payload,$label]) {
+    fresh_pg();
+    $GLOBALS['db']->events[]=['type'=>'travel_agreement','time'=>0,'gamets'=>900,'data'=>$key.$payload,'status'=>'pending','seq'=>1];
+    $read=stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
+    ac(($read['read_succeeded']??true)===false,$label.' row fails closed');
+}
+
+// ---- 8. the query shape that makes this decidable: exactly one row on success, so false can only be a failure
+fresh_pg();
+stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
+$qs=array_values(array_filter($GLOBALS['db']->queries,static fn($q)=>str_contains($q,"type='travel_agreement'")));
+ac(count($qs)>=1 && preg_match('/^\s*SELECT\s*\(\s*SELECT\s+data\s+FROM\s+eventlog/i',$qs[0])===1,'8: the trip read uses the always-one-row scalar-subquery shape');
+
+echo "RESULT IMM26-FIX24BFETCH PASS assertions=$n\n";
