@@ -205,6 +205,9 @@ rd_15bx() {
   # --- OUT phase
   ub15_scene "$HX_SAVE" away || return $?; m0=$(hxd_rowid)
   ub_spawn "${HX15_SLEEPER_FACTION:-Drifters}" 40 || return $?; s1id="$UB_ID"
+  # v4b (5090-i3 op28 15-bx SETUP-FAIL S1 229 u): a KO'd character cannot be teleported (moved=0 method=none), so S1 goes next to Shay (= the spot the pair spawns at) BEFORE the ko order
+  printf 'stobe-auto teleport %s Shay dist 25 </dev/null | head -1
+' "$(rl_q "$s1id")" | lt_h >> "$EV/place.txt" 2>&1
   printf 'stobe-auto ko %s %s </dev/null 2>&1 | head -2\n' "$(rl_q "$s1id")" "${HX15_KO_S:-900}" | lt_h >> "$EV/sleeper.txt" 2>&1
   mkdir -p "$HXD/S1"; : > "$HXD/S1/sleep_state.txt"
   ub15_sleep_state ordered "$s1id"
