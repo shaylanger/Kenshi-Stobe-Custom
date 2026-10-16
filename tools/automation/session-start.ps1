@@ -95,7 +95,7 @@ try {
         $tailLive = $tn -and $tails.ContainsKey($tn) -and $tails[$tn].alive
         $unacked = $tn -and -not $r.acked_by_new_coordinator
         if ($tailLive -and ($wst -ne 'done' -or $unacked)) {
-            $own += "OWNED-BY-LIVE-TAIL $($r.agent) ($($r.program)/$($r.wp), wp $wst, status $(if ($stat) { "$($stat.state) $($stat.age) min ago" } else { 'none' })) tail $tn, acked=$(if ($r.acked_by_new_coordinator) { 'yes' } else { 'NO' })$(if ($r.result_file) { ', result ' + $r.result_file }); leave it running, wait for its relay.$(if ($r.routing_note) { ' routing note: ' + $r.routing_note })"
+            $own += "OWNED-BY-LIVE-TAIL $($r.agent) ($($r.program)/$($r.wp), wp $wst, status $(if ($stat) { "$($stat.state) $($stat.age) min ago" } else { 'none' })) tail $tn, acked=$(if ($r.acked_by_new_coordinator) { 'yes' } else { 'NO' })$(if ($r.result_file) { ', result ' + $r.result_file }); leave it running, wait for its relay.$(if ($r.routing_note) { ' routing note: ' + $(if ($Brief -and "$($r.routing_note)".Length -gt 60) { "$($r.routing_note)".Substring(0, 60) + '...' } else { $r.routing_note }) })"
             continue
         }
         if ($wst -notin 'running', 'stopped') { continue }
@@ -104,7 +104,7 @@ try {
         $why = if ($tn -and -not $tailLive) { "owner tail $tn is gone" } elseif ($stat) { "status $($stat.state) $($stat.age) min ago (not alive)" } else { 'no status file' }
         $nx = Get-NextAgentName "$($r.agent)"
         $ck = if ($stat -or (Test-Path -LiteralPath (Join-Path $agDir "$($r.agent).handoff.md"))) { "agents\$($r.agent).status / agents\$($r.agent).handoff.md" } else { 'ledger outputs/handoff' }
-        $dead += "DEAD $($r.agent) ($($r.program)/$($r.wp), wp $wst): $why -> respawn a FRESH agent $nx (Agent tool, same work dir) from its checkpoint $ck$(if ($r.routing_note) { ". Routing note: $($r.routing_note)" } else { '. (no routing note in the ledger)' })"
+        $dead += "DEAD $($r.agent) ($($r.program)/$($r.wp), wp $wst): $why -> respawn a FRESH agent $nx (Agent tool, same work dir) from its checkpoint $ck$(if ($r.routing_note) { ". Routing note: $($(if ($Brief -and "$($r.routing_note)".Length -gt 60) { "$($r.routing_note)".Substring(0, 60) + '...' } else { $r.routing_note }))" } else { '. (no routing note in the ledger)' })"
     }
     if ($own.Count -or $dead.Count) {
         '=== ledger agents: owned by a live tail / DEAD (cold start: respawn from checkpoints; fresh names agent -> agent2) ==='
