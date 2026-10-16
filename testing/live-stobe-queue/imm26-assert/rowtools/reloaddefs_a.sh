@@ -273,14 +273,14 @@ rd_20d() {
   TR_ALT="${RW_ALT:-${TRIP_ALT:-the Stumble Inn}}"; echo "$TR_ALT" > "$EV/alt.txt"
   tr_trip_setup || return $?
   rl_say 3 "Actually, go to $TR_ALT instead." || return $?
-  lt_sql "select rowid||'|'||type||'|'||left(data,700) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/alt_pre.txt" 2>&1
+  lt_sql "select rowid||'|'||type||'|'||left(data,2500) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/alt_pre.txt" 2>&1
   rd19_dump agr_pre.txt
   grep -q 'pending_change' "$EV/alt_pre.txt" || return 0                                          # checker: SETUP-FAIL (change never offered)
   rw_save_load plan || return $?
-  lt_sql "select rowid||'|'||type||'|'||left(data,700) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/alt_post.txt" 2>&1
+  lt_sql "select rowid||'|'||type||'|'||left(data,2500) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/alt_post.txt" 2>&1
   if [ -n "${RW_20D_RESUME_FIRST:-}" ]; then rl_say 4a "Where were we going?" || return $?; rw_sleep 6; fi
   rl_say 4 "Yes." || return $?
   rw_sleep 6
-  lt_sql "select rowid||'|'||type||'|'||left(data,700) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/alt_after_yes.txt" 2>&1
+  lt_sql "select rowid||'|'||type||'|'||left(data,2500) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/alt_after_yes.txt" 2>&1
   tr_agr agr_final.txt 8; rd19_dump agr_all.txt
 }

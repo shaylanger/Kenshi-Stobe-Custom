@@ -25,7 +25,7 @@ stobe-auto protect $n on </dev/null 2>&1 | head -1
 EOT
 }
 sj_alt() {   # sj_alt <file>: newest 4 travel_alternatives rows
-  lt_sql "select rowid||'|'||type||'|'||left(data,700) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/$1" 2>&1
+  lt_sql "select rowid||'|'||type||'|'||left(data,2500) from eventlog where type='travel_alternatives' order by rowid desc limit 4" > "$EV/$1" 2>&1
 }
 rw_chase_sfj() {   # rw_chase_sfj <tag>: Shay teleported RW_AWAY_F (120) u away and held; speed 3 for RW_CHASE_S (45) s, distance sampled every 5 s; chase_<tag>.txt = "dist_before|dist_after", chase_<tag>.series
   local tag="$1" pos n d0 d1 k steps dd x y z away="${RW_AWAY_F:-120}" ser
