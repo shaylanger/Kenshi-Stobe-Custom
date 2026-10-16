@@ -105,7 +105,8 @@ resent=0; rec=""; step="${RW_FOLLOW_STEP:-1}"; amax="${RW_ACCEPT_WAIT:-40}"; hma
 while :; do
   seps=$(pa_follow | grep -oE '[0-9.]+' | paste -sd, -); ht=$((ht + ${RW_FOLLOW_N:-5} * (${step%%.*} + 1)))   # estimated real seconds (sleep + ~0.5 s of harness round trips per jump)
   rec=$(pa_rec)
-  [ $moved = 0 ] && [ -n "$rec" ] && pa_move_goat
+  # only AFTER the accept: the accept re-validates the agreed animal (visible/reachable); moving it earlier left the record at proposed (op14 runs b-e); run a landed only because the accept won the race by 1 s
+  [ $moved = 0 ] && [ "$(echo "$rec" | cut -d'|' -f3)" = accepted ] && pa_move_goat
   far=$(echo "$seps" | tr ',' '\n' | awk '$1+0 > 35 {c++} END {print c+0}')
   echo "$(date +%T) t~${ht}s $rec sep_before=[$seps]$([ "$far" -gt 0 ] && echo " SEP>35 x$far")" >> "$OUT/follow.log"
   st=$(echo "$rec" | cut -d'|' -f3)
