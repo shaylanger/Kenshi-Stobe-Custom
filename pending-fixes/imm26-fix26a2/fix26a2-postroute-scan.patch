@@ -1,0 +1,104 @@
+--- a/src/ActivityGoals.h
++++ b/src/ActivityGoals.h
+@@ -135,6 +135,8 @@
+   float lastHealth_; unsigned int healthSerial_; bool healthKnown_; Clock lastDamageLogAt_;
+   std::vector<unsigned int> completed_, attempted_, confirmedDead_;
+   Command pendingCommand_;
++  // fix26a2 (row 26-a): empty candidate scans still tolerated right after the route arrival (see Goal::Tick, Searching).
++  unsigned int postRouteScansLeft_;
+   bool Suitable(const Target&) const;
+   bool Issue(Command, Host&);
+   bool IssueRoute(Host&);
+--- a/src/ActivityGoals.cpp
++++ b/src/ActivityGoals.cpp
+@@ -24,6 +24,9 @@
+   if(ActivityEndLogSink) ActivityEndLogSink(o.str());
+  } catch(...) {}
+ }
++// fix26a2 (row 26-a): the first candidate scan after the route arrival is a one-instant snapshot (sight, navmesh path, instance identity)
++// taken ~0.5 s after the NPC stopped; an empty result is retried for this many scans (decision cadence 500 ms = about 8 s real, any game speed).
++const unsigned int kPostRouteScanTries=16;
+ }
+ Agreement::Agreement() : discoveryTargetSerial(0),routeX(0),routeY(0),routeZ(0),actor(0), requester(0),routeActor(0),
+  scopeVersion(1),campQualified(false),handBack(false),
+@@ -36,7 +39,7 @@
+  pathFailed(false), delivered(0) {}
+ Receipt::Receipt() : status(Pending) {}
+ Goal::Goal() : phase_(Dormant), stopPhase_(Dormant), stopPending_(false), replanPending_(false), lastProgress_(0), lastNow_(0), delivered_(0),
+- replans_(0), sequence_(0), lastHealth_(0.0f), healthSerial_(0), healthKnown_(false), lastDamageLogAt_(0), pendingCommand_(Travel) {}
++ replans_(0), sequence_(0), lastHealth_(0.0f), healthSerial_(0), healthKnown_(false), lastDamageLogAt_(0), pendingCommand_(Travel), postRouteScansLeft_(0) {}
+ 
+ void Goal::Snapshot(GoalStatusSnapshot& out) const {
+   out.phase=phase_; out.reason=reason_; out.delivered=delivered_;
+@@ -184,7 +187,7 @@
+     if(route.status==Receipt::Pending) return;
+     if(route.status!=Receipt::Succeeded) { Stop(Failed,host,route.reason.empty()?"route_travel_failed":route.reason); return; }
+     if(!Release(host)) { reason_="route_order_cleanup_pending"; return; }
+-    target_=Target(); phase_=Searching; lastProgress_=now;
++    target_=Target(); phase_=Searching; lastProgress_=now; postRouteScansLeft_=kPostRouteScanTries;
+     reason_="arrived_rescanning_activity_purpose"; return;
+   }
+   if (terms_.kind != ClearGroup && delivered_ >= terms_.quantity) {
+@@ -236,7 +239,7 @@
+   if (phase_ == Searching) {
+     const std::vector<Target> candidates = host.Candidates(terms_);
+     for (size_t i = 0; i < candidates.size(); ++i) {
+-      if (Suitable(candidates[i])) { target_ = candidates[i];
++      if (Suitable(candidates[i])) { target_ = candidates[i]; postRouteScansLeft_ = 0;
+         // A later search with no candidates must not erase the actionable
+         // reason that caused this replan. Clear it only after a replacement
+         // target has actually passed the policy gate.
+@@ -246,6 +249,20 @@
+         return;
+       }
+     }
++    // fix26a2 (row 26-a): right after the route arrival do not fail the Hunt on the first empty scan; retry a bounded number of ticks.
++    // Replan searches are not covered (postRouteScansLeft_ is 0 once a target was selected), so 26-c (target died/left) still fails at once.
++    if (postRouteScansLeft_ > 0) {
++      --postRouteScansLeft_;
++      const unsigned int scan = kPostRouteScanTries - postRouteScansLeft_;
++      if (ActivityEndLogSink && (scan == 1 || scan % 4 == 0)) {
++        std::ostringstream o; o<<"ACTIVITY_SCAN_DIAG id="<<terms_.id<<" scan="<<scan<<"/"<<kPostRouteScanTries<<" candidates="<<candidates.size();
++        for (size_t i = 0; i < candidates.size() && i < 3; ++i)
++          o<<" [serial="<<candidates[i].serial<<" vis="<<candidates[i].visible<<" reach="<<candidates[i].reachable<<" legal="<<candidates[i].legalHunt
++           <<" dead="<<candidates[i].dead<<" harv="<<candidates[i].harvestable<<" item="<<candidates[i].hasRequestedItem<<"]";
++        try { ActivityEndLogSink(o.str()); } catch(...) {}
++      }
++      return; // stays Searching; reason_ stays "arrived_rescanning_activity_purpose"
++    }
+     const std::string noTargetReason = replanReason_.empty()
+       ? "no_observed_suitable_reachable_target"
+       : replanReason_ + "; no_observed_suitable_reachable_target";
+--- a/src/ActivityRuntimeBindings.cpp
++++ b/src/ActivityRuntimeBindings.cpp
+@@ -389,8 +389,29 @@
+  NativeDestination agreed; std::map<std::string,Candidate>::const_iterator source=candidates_.find(a.discoveryCandidateId);
+  if(source==candidates_.end() || source->second.agreement!=a.id ||
+     source->second.point.facts.serial!=a.discoveryTargetSerial ||
+-    !Resolve(a,a.discoveryTargetSerial,a.discoveryCandidateId,agreed,reason) || !agreed.facts.visible || !agreed.facts.reachable)
++    !Resolve(a,a.discoveryTargetSerial,a.discoveryCandidateId,agreed,reason) || !agreed.facts.visible || !agreed.facts.reachable) {
++  // fix26a2 (row 26-a): name the clause that dropped the agreed source; `reason` used to be discarded here and Candidates() dropped silently.
++  try {
++   Character* actor=KenshiAi::ResolveCharacter(world_,a.actor); Character* animal=KenshiAi::ResolveCharacter(world_,a.discoveryTargetSerial);
++   CharMovement* mv=actor?actor->getMovement():NULL; HavokCharacter* av=mv?mv->havokCharacter:NULL;
++   const bool onMesh=av && av->isOnNavmesh();
++   int rawPath=99; float d2=-1.0f; std::string prot="na"; int sees=-1;
++   if(actor && animal) {
++    const Ogre::Vector3 ap=animal->getPosition(); d2=actor->getPosition().squaredDistance(ap);
++    sees=(actor->getSensoryData() && actor->getSensoryData()->canISeeThisGuy(animal))?1:0;
++    if(onMesh && world_->navmesh) rawPath=world_->navmesh->pathExists(av,ap);
++    std::string pr; prot=IsProtectedActivityTarget(actor,animal,pr)?("1:"+pr):std::string("0");
++   }
++   std::ostringstream d; d<<"ACTIVITY_SCAN_DIAG id="<<a.id<<" stage=discover candRegistered="<<(source!=candidates_.end()?1:0)
++    <<" agreementBound="<<((source!=candidates_.end() && source->second.agreement==a.id)?1:0)
++    <<" serialMatch="<<((source!=candidates_.end() && source->second.point.facts.serial==a.discoveryTargetSerial)?1:0)
++    <<" resolved="<<(animal?1:0)<<" sameInstance="<<((source!=candidates_.end() && animal && animal==source->second.identity)?1:0)
++    <<" sees="<<sees<<" onMesh="<<(onMesh?1:0)<<" rawPath="<<rawPath<<" d2="<<d2<<" protected="<<prot
++    <<" vis="<<(agreed.facts.visible?1:0)<<" reach="<<(agreed.facts.reachable?1:0)<<" why="<<reason;
++   Log(d.str());
++  } catch(...) { /* Diagnostics never change the scan outcome. */ }
+   return result;
++ }
+  result.push_back(agreed); return result;
+ }
+ bool ConcreteRuntimeBindings::Resolve(const Agreement& a,unsigned serial,const std::string& token,NativeDestination& out,std::string& reason) {
