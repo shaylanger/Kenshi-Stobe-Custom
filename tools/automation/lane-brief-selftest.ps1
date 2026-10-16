@@ -1,9 +1,12 @@
 # lane-brief-selftest.ps1: builds a fake runs dir + fake repo in a temp dir and checks lane-brief.ps1 output.
+# Covers: lane facts, dynamic DLL SHA, handoff TODO order, embedded row definitions + row script, KNOWN_BLOCKERS filtering by lane/row/DLL,
+# condensed rules block, helper list, size <= 25 KB (printed on stderr), PREDECESSOR HANDOVER only with -Predecessor.
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $t = Join-Path ([IO.Path]::GetTempPath()) ("lane-brief-st-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $runs = Join-Path $t 'runs'; $repo = Join-Path $t 'repo'; $inst = Join-Path $t 'inst\4'
-New-Item -ItemType Directory -Force -Path "$runs\lanes", "$runs\agents", "$repo\testing", "$repo\tools\automation", "$repo\pending-fixes\npc-immersion-26\NC7", "$repo\pending-fixes\npc-immersion-26\NC2", "$inst\RE_Kenshi\mods\Stobe" | Out-Null
+$rt = "$repo\testing\live-stobe-queue\imm26-assert\rowtools"
+New-Item -ItemType Directory -Force -Path "$runs\lanes", "$runs\agents", "$repo\testing", "$repo\tools\automation", "$repo\pending-fixes\npc-immersion-26\NC7", "$repo\pending-fixes\npc-immersion-26\NC2", "$inst\RE_Kenshi\mods\Stobe", $rt | Out-Null
 [IO.File]::WriteAllBytes("$inst\RE_Kenshi\mods\Stobe\Stobe.dll", [byte[]](1, 2, 3, 4))
 [IO.File]::WriteAllBytes("$repo\pending-fixes\npc-immersion-26\NC7\Stobe.dll", [byte[]](1, 2, 3, 4))
 [IO.File]::WriteAllBytes("$repo\pending-fixes\npc-immersion-26\NC2\Stobe.dll", [byte[]](9, 9, 9))
@@ -13,36 +16,82 @@ $lj = @{ rig = '5090'; lanes = @(@{ id = 'i4'; instance = 4; dir = $inst; save_n
 $lj | ConvertTo-Json -Depth 6 | Set-Content "$runs\lanes\lanes-5090.json"
 '{"5090-i4":{"ops":["imm26-5090-i4opX"],"dirs":["d"]}}' | Set-Content "$runs\lane-owners.json"
 "# fake handoff`nHelpers: h4.sh`nTODO (not run): 02-a, 02-c/d, 03-a`nLESSONS: be careful`n" + ("filler " * 3000) | Set-Content "$runs\agents\imm26-5090-i4opX.handoff.md"
+"# fake predecessor handoff`nHelpers: pred.sh`nTODO: 02-b`n" | Set-Content "$runs\agents\imm26-pred-op.handoff.md"
 @"
-| ID | Setup | Utterance / action | Expected | Neg | Build | Status | Evidence | Date |
+| ID | Setup | Utterance / action | Expected evidence | Negative control | Build | Status | Evidence | Date |
 |---|---|---|---|---|---|---|---|---|
 | IMM-01-a | s1 | say: "hi" | e | n | BASE | PASS | ev | d |
-| IMM-02-a | s2 | say: "a" | e | n | BASE | UNRUN | | |
+| IMM-02-a | s2 SETUPTEXT-A | say: "a" | EXPECTED-A prompt lists the tie | NEG-A control | BASE | UNRUN | | |
 | IMM-02-b | s2b | say: "b" | e | n | BASE | UNRUN | | |
 | IMM-02-c | s2c | say: "c" | e | n | BASE | SETUP-FAIL | x | |
 | IMM-02-d | s2d | say: "d" | e | n | BASE | PASS | x | |
 | IMM-03-a | s3 | say: "e" | e | n | BASE | GATED | | |
 "@ | Set-Content "$repo\testing\NPC_IMMERSION_26_TESTS.md"
-"# Known blockers`n- Blocker alpha is real`n- Blocker beta" | Set-Content "$repo\testing\KNOWN_BLOCKERS.md"
+@"
+#!/usr/bin/env bash
+rd_02a() {  # FX: aff 70, ROWSCRIPT-NOTE-A, two says
+  :
+}
+rd_99z() {  # unrelated row script
+  :
+}
+"@ | Set-Content "$rt\rowdefs.sh"
+@"
+# Known blockers
+- Blocker alpha is real and global for ALL lanes (5090 i3, 5090 i5, 4080 i4)
+- Blocker beta has no lane or row at all
+- 5090 i3 only blocker GAMMA-I3 for 03-a
+- 4080 i3 only blocker DELTA-4080I3 (rows 09-x)
+- 5090 i4 blocker EPSILON-OWN-LANE
+- Row blocker ZETA-ROWMATCH touches 02-a/b on 5090 i5
+- Wildcard blocker ETA-WILD rows 03-* on 5090 i5
+- DLL blocker THETA-DLL: DLL $want is broken on 4080 i3
+"@ | Set-Content "$repo\testing\KNOWN_BLOCKERS.md"
+New-Item -ItemType Directory -Force -Path "$repo\testing\live-stobe-queue\imm26-assert" | Out-Null
+'' | Set-Content "$repo\testing\live-stobe-queue\imm26-assert\go-row.sh"; '' | Set-Content "$repo\tools\automation\save-report.ps1"
 $fail = 0
 function Chk($n, $c) { if ($c) { "ok   $n" } else { "FAIL $n"; $script:fail++ } }
+$ErrorActionPreference = 'Continue'
 $out = Join-Path $t 'o\brief.md'
-$txt = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Out $out -Runs $runs -Repo $repo -Name imm26-test-op) -join "`n"
+$errf = Join-Path $t 'err.txt'
+$txt = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Out $out -Runs $runs -Repo $repo -Name imm26-test-op 2>$errf) -join "`n"
+$errt = Get-Content $errf -Raw
+$sz = [Text.Encoding]::UTF8.GetByteCount($txt)
 Chk 'out file written' (Test-Path $out)
 Chk "lane DLL sha read dynamically ($want)" ($txt -match "lane Stobe.dll: $want")
 Chk 'newest NC DLL = NC7 and match note' ($txt -match 'newest NC DLL: \w{8} NC7' -and $txt -match 'lane runs the newest NC DLL')
 Chk 'lane facts (port 18087, DISPLAY2, kah-fake)' ($txt -match '18087' -and $txt -match 'DISPLAY2 at 1,2' -and $txt -match 'kah-fake')
 Chk 'handoff from lane-owners override' ($txt -match 'imm26-5090-i4opX.handoff.md')
-Chk 'handoff TODO order 02-a then 02-c, PASS 02-d skipped' ($txt -match '(?s)- 02-a \[UNRUN\].*- 02-c \[SETUP-FAIL\].*- 03-a \[GATED\]' -and $txt -notmatch '02-d \[')
-Chk 'fallback row 02-b fills to the list' ($txt -match '02-b \[UNRUN\].*unowned fallback')
-Chk 'blockers listed' ($txt -match 'Blocker alpha')
-Chk 'debug budget ONE attempt rule' ($txt -match 'ONE attempt per row' -and $txt -match '<= 8 lines')
+Chk 'handoff TODO order 02-a then 02-c, PASS 02-d skipped' ($txt -match '(?s)### IMM-02-a \[UNRUN\].*### IMM-02-c \[SETUP-FAIL\].*### IMM-03-a \[GATED\]' -and $txt -notmatch 'IMM-02-d \[')
+Chk 'fallback row 02-b fills to the list' ($txt -match '### IMM-02-b \[UNRUN\].*unowned fallback')
+Chk 'row definition embedded (setup, expected, negative)' ($txt -match 'setup: s2 SETUPTEXT-A' -and $txt -match 'expected evidence: EXPECTED-A prompt lists the tie' -and $txt -match 'negative control: NEG-A control')
+Chk 'row script helper for 02-a with its note; none for 02-b' ($txt -match 'go-row.sh 02-a 5090-i4' -and $txt -match 'ROWSCRIPT-NOTE-A' -and $txt -match '(?s)IMM-02-b.*no row script yet' -and $txt -match 'with a go-row.sh script \(2\): 02-a 99-z')
+Chk 'blockers: global (3 lanes) + no-lane + own lane + row match + wildcard + DLL' ($txt -match 'Blocker alpha' -and $txt -match 'Blocker beta' -and $txt -match 'EPSILON-OWN-LANE' -and $txt -match 'ZETA-ROWMATCH' -and $txt -match 'ETA-WILD' -and $txt -match 'THETA-DLL')
+foreach ($k in 'Blocker alpha','Blocker beta','EPSILON-OWN-LANE','ZETA-ROWMATCH','ETA-WILD','THETA-DLL') { if ($txt -notmatch $k) { "  missing $k" } }
+Chk 'blockers: 5090 i3 line with a picked row (03-a) is kept, 4080 i3 line with no picked row is dropped' ($txt -match 'GAMMA-I3' -and $txt -notmatch 'DELTA-4080I3')
+Chk 'rules block: debug budget, handbacks, PI-06, never live install, status, checkpoints' ($txt -match 'ONE attempt per row' -and $txt -match '<= 8 lines' -and $txt -match '--allow-retry' -and $txt -match 'Never touch the live install' -and $txt -match 'Status discipline' -and $txt -match 'Checkpoints' -and $txt -match 'do NOT need to read')
+$rulesN = @(($txt -split "`n") | Where-Object { $_ -match '^- (Scope|Test only|Debug budget|PI-06|A PASS|Batching|Mark each|If a failure|Status discipline|Checkpoints|Handbacks)' }).Count
+Chk "rules block <= 40 lines ($rulesN rule lines)" ($rulesN -ge 10 -and $rulesN -le 40)
+Chk 'helper list: existing files listed with usage, missing ones dropped' ($txt -match '## Helper scripts' -and $txt -match '- go-row.sh: bash go-row.sh' -and $txt -match '- save-report.ps1: ' -and $txt -notmatch '- go-batch.sh:')
 Chk 'status/handoff/report commands carry the name' ($txt -match 'agent-status.ps1 imm26-test-op RUNNING' -and $txt -match 'imm26-test-op.handoff.md' -and $txt -match 'save-report.ps1 imm26-test-op')
-Chk "size <= 6000 bytes ($([Text.Encoding]::UTF8.GetByteCount($txt)))" ([Text.Encoding]::UTF8.GetByteCount($txt) -le 6000)
+Chk 'WARN-120k command present' ($txt -match 'WARN-120k')
+Chk "size <= 25600 bytes ($sz)" ($sz -le 25600)
+$fsz = (Get-Item $out).Length; Chk "size printed on stderr equals file size ($fsz)" ($errt -match "brief size $fsz bytes")
+Chk 'no PREDECESSOR HANDOVER section without -Predecessor' ($txt -notmatch 'PREDECESSOR HANDOVER')
+# with -Predecessor
+$txtp = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -Name imm26-test-op2 -Predecessor imm26-pred-op 2>$null) -join "`n"
+Chk 'PREDECESSOR HANDOVER section present with -Predecessor' ($txtp -match '## PREDECESSOR HANDOVER')
+Chk 'handover: names predecessor files, no-game-commands rule, until-loop, lock' ($txtp -match 'imm26-pred-op.status' -and $txtp -match 'imm26-pred-op.handoff.md' -and $txtp -match 'imm26-pred-op.warn' -and $txtp -match 'NO game commands' -and $txtp -match 'kenshi-ctl launch/stop' -and $txtp -match 'lane lock' -and $txtp -match 'sleep 60' -and $txtp -match 'PREDECESSOR-READY' -and $txtp -match 'STOPPED-CONTEXT\|FAILED')
+Chk 'handover: predecessor handoff is the excerpt source (Helpers: pred.sh)' ($txtp -match 'Helpers: pred.sh')
+Chk 'handover: bash loop is syntactically valid (bash -n)' $(
+    $m = [regex]::Match($txtp, '(?m)^    (A=/c/KenshiTestRuns.*)$')
+    if (-not $m.Success) { $false } else { $f1 = Join-Path $t 'loop.sh'; [IO.File]::WriteAllText($f1, $m.Groups[1].Value + "`n"); $bash = Get-Command bash -ErrorAction SilentlyContinue; if (-not $bash) { $true } else { & bash -n ($f1 -replace '\\', '/') 2>$null; $LASTEXITCODE -eq 0 } }
+)
+Chk "size with -Predecessor <= 25600 ($([Text.Encoding]::UTF8.GetByteCount($txtp)))" ([Text.Encoding]::UTF8.GetByteCount($txtp) -le 25600)
 # changing the DLL changes the brief (nothing baked)
 [IO.File]::WriteAllBytes("$inst\RE_Kenshi\mods\Stobe\Stobe.dll", [byte[]](7, 7))
 $want2 = (Get-FileHash "$inst\RE_Kenshi\mods\Stobe\Stobe.dll").Hash.Substring(0, 8)
-$txt2 = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo) -join "`n"
+$txt2 = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo 2>$null) -join "`n"
 Chk 'new DLL sha shown, mismatch warned' ($txt2 -match "lane Stobe.dll: $want2" -and $txt2 -match 'differs from newest NC')
 $ErrorActionPreference = 'Continue'; $null = & powershell -NoProfile -File "$here\lane-brief.ps1" nope -Runs $runs -Repo $repo 2>$null; Chk 'bad lane exits 2' ($LASTEXITCODE -eq 2)
 Remove-Item -Recurse -Force $t
