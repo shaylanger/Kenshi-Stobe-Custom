@@ -118,9 +118,12 @@ EOF
 r=$(run 04-c 5090-i5); case "$r" in "RESULT 04-c PASS"*tie_line_names_B*) chk 04-c-pass ok;; *) chk 04-c-pass bad "$r";; esac
 
 # 8 heartbeat: status latest = RESULT line when KAH_AGENT_NAME is set and RUNNING; DONE status is never touched
-export KAH_RUNS_DIR=$(cygpath -w "$T/hbruns" 2>/dev/null || echo "$T/hbruns"); mkdir -p "$T/hbruns/agents"
-printf '\xef\xbb\xbfhbagent | RUNNING | 2026-10-15 17:00\ntask: my rows\nlatest: x\noutputs: \nnext: more\n' > "$T/hbruns/agents/hbagent.status"
-printf 'dagent | DONE | 2026-10-15 17:00\ntask: t\nlatest: final\noutputs: \nnext: \n' > "$T/hbruns/agents/dagent.status"
+# the status dir must be readable by BOTH this shell and powershell.exe: Git Bash $T via cygpath; WSL needs a /mnt/c dir (a \wsl$ path is slow, and an unreadable path made agent-status.ps1 fall back to the REAL C:\KenshiTestRuns and leave a fake RUNNING hbagent there)
+HB="$T/hbruns"; if command -v wslpath >/dev/null 2>&1 && [ -d /mnt/c/KenshiTestRuns ]; then HB="/mnt/c/KenshiTestRuns/selftest-hb-$$"; export KAH_RUNS_DIR=$(wslpath -w "$HB"); else export KAH_RUNS_DIR=$(cygpath -w "$HB" 2>/dev/null || echo "$HB"); fi
+export WSLENV="${WSLENV:+$WSLENV:}KAH_RUNS_DIR"   # WSL does not pass env vars to powershell.exe unless listed in WSLENV; without it agent-status.ps1 wrote to the REAL runs dir
+mkdir -p "$HB/agents" "$HB/inflight"; case "$KAH_RUNS_DIR" in [A-Za-z]:*) ;; *) echo "SELFTEST heartbeat-runs-dir FAIL KAH_RUNS_DIR=$KAH_RUNS_DIR is not a Windows path; skipping heartbeat checks"; HB_SKIP=1;; esac
+printf '\xef\xbb\xbfhbagent | RUNNING | 2026-10-15 17:00\ntask: my rows\nlatest: x\noutputs: \nnext: more\n' > "$HB/agents/hbagent.status"
+printf 'dagent | DONE | 2026-10-15 17:00\ntask: t\nlatest: final\noutputs: \nnext: \n' > "$HB/agents/dagent.status"
 export KAH_HB_DRY=1
 scen <<EOF
 {"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
@@ -132,14 +135,14 @@ EOF
 out=$(KAH_AGENT_NAME=dagent run 12-b 5090-i3 2>&1 | tr '\n' ' '); echo "$out" | grep -q 'HB dagent' && chk heartbeat-skips-DONE bad "$out" || chk heartbeat-skips-DONE ok
 unset KAH_HB_DRY
 # real agent-status.ps1 call against a temp runs dir (proves argv + latest line); needs powershell.exe
-if command -v powershell.exe >/dev/null 2>&1; then
+if command -v powershell.exe >/dev/null 2>&1 && [ -z "${HB_SKIP:-}" ]; then
   scen <<EOF
 {"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
 EOF
   KAH_AGENT_NAME=hbagent run 12-b 5090-i3 >/dev/null 2>&1
-  grep -q '^latest: RESULT 12-b' "$T/hbruns/agents/hbagent.status" && grep -q '^task: my rows' "$T/hbruns/agents/hbagent.status" && chk heartbeat-agent-status-ps1 ok || chk heartbeat-agent-status-ps1 bad "$(cat "$T/hbruns/agents/hbagent.status")"
+  grep -q '^latest: RESULT 12-b' "$HB/agents/hbagent.status" && grep -q '^task: my rows' "$HB/agents/hbagent.status" && chk heartbeat-agent-status-ps1 ok || chk heartbeat-agent-status-ps1 bad "$(cat "$HB/agents/hbagent.status")"
 fi
-unset KAH_RUNS_DIR
+unset KAH_RUNS_DIR; rm -rf "$HB"
 
 # 9 batch (foreground): one RESULT per row in results.txt, DONE + summary; lane-down skips the rest
 scen <<EOF
@@ -182,10 +185,10 @@ scen <<EOF
 {"dist":126.4,"steps":[]}
 EOF
 run 24-b $L >/dev/null; run 24-b $L >/dev/null; r=$(run 24-b $L); case "$r" in "RESULT 24-b SETUP-FAIL PREFLIGHT-FAIL"*) chk guard-preflight-fail-not-counted ok;; *) chk guard-preflight-fail-not-counted bad "$r";; esac
+[ ! -e "$KAH_ROWS_BASE/setupfail/24-b.json" ] && chk setupfail-preflight-fail-no-ticket ok || chk setupfail-preflight-fail-no-ticket bad
 # every attempt is logged (audit): VERDICT lines for the 12-b runs above, plus the BLOCK
 [ "$(grep -c "lane=$L row=12-b event=VERDICT" "$AD/attempts.log")" -ge 4 ] && grep -q 'row=12-b event=BLOCK' "$AD/attempts.log" && chk guard-audit-log ok || chk guard-audit-log bad
 # PI-09: row-timing.log has one line per go-row call incl. the blocked ones
-[ ! -e "$KAH_ROWS_BASE/setupfail/24-b.json" ] && chk setupfail-preflight-fail-no-ticket ok || chk setupfail-preflight-fail-no-ticket bad
 grep -E "^[0-9T:-]+ lane=$L row=12-b verdict=FAIL wall_s=[0-9]+ steps=[0-9]+ attempt=1 agent=-" "$TL" >/dev/null && grep -q 'row=12-b verdict=NEEDS-FIXER wall_s=0' "$TL" && grep -q 'row=12-b verdict=PASS wall_s=' "$TL" && chk timing-log-lines ok || chk timing-log-lines bad "$(tail -4 "$TL")"
 # batch: a blocked row shows as ROW-NEEDS-FIXER, others still run, summary counts it; --allow-retry passes through
 scen <<EOF

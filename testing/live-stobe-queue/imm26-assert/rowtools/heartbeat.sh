@@ -7,6 +7,7 @@ hb_update() {
   [ -n "${KAH_AGENT_NAME:-}" ] || return 0
   local winruns="${KAH_RUNS_DIR:-C:\\KenshiTestRuns}" runs f st task next res="$1" evd="${2:--}" nx="${3:-}"
   runs=$(echo "$winruns" | sed -E 's#\\#/#g; s#^([A-Za-z]):#/\L\1#')
+  [ -d /mnt/c ] && runs="/mnt$runs"   # WSL mounts drives at /mnt/<x>, Git Bash at /<x>; the old fixed /<x> missed the status file in WSL, so a DONE agent was overwritten with "row runs"
   f="$runs/agents/$KAH_AGENT_NAME.status"
   [ -f "$f" ] || { task="row runs"; next="next row"; st=RUNNING; }
   if [ -f "$f" ]; then
