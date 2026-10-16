@@ -63,18 +63,7 @@ Rules:
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
 - log: 2026-10-15 19:54 Shay answered yes
 
-### PI-17 | confirmed
-- idea: Orphan check should use evidence/log freshness for in-session agents, not agent-host sessions.
-- evidence: 19:20 AGENT ORPHANED imm26-4080-op2i (silent 31.9 min) while its poll log was written a minute earlier; I had to check the log by hand.
-- saving: ~2 min and a false alarm per busy poller
-- risk: could mask a truly dead agent if the evidence dir is touched by another process
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 19:43
-- log: 2026-10-15 19:43 review 'coordinator8-19:50': added
-- log: 2026-10-15 19:54 Shay answered yes
-
-### PI-18 | open
+### PI-18 | confirmed
 - idea: Tail Stop hook: let a tail end once every owned agent is DONE and its relay file was delivered (or after a 5 min ack grace), without requiring the explicit tail-ack.
 - evidence: 2026-10-15 19:52-20:10: coordinator #8 tail waited for the ack of imm26-5090-i5-op6; its Stop hook re-prompted ~50 times, each replaying ~400k context, until the tail hit its 400k limit and left with tail-mode leave -Force.
 - saving: ~50 wasted turns (tens of millions of cache-read tokens) per overlap handoff
@@ -82,8 +71,9 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-15 19:57
+- log: 2026-10-15 19:58 Shay answered yes
 
-### PI-19 | open
+### PI-19 | confirmed
 - idea: lane-brief.ps1 -Predecessor prints the exact status TASK text to use and registers the successor in lane-owners.json itself.
 - evidence: 2026-10-15: successor names hard2 -> hard2b with a different task text caused 2 false NO SUCCESSOR Stop-hook blocks, and every respawn needed a hand-run operator-warn.ps1 -Register (4 times at 19:50).
 - saving: 2 false Stop blocks and 4 manual commands per respawn round
@@ -91,8 +81,9 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-15 19:57
+- log: 2026-10-15 19:58 Shay answered yes
 
-### PI-20 | open
+### PI-20 | confirmed
 - idea: lane-brief standing rule: game speed above 5 only with tools/stobe-goal-watch.sh; never run speed 10 for minutes.
 - evidence: 2026-10-15 imm26-5090-i5-op6 ran speed 10 and Shay (the test character) starved and died, resetting the lane (its handoff lesson).
 - saving: avoids a lane reset (~10 min) per occurrence
@@ -100,6 +91,7 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-15 19:57
+- log: 2026-10-15 19:58 Shay answered yes
 
 ## Retired
 
@@ -257,3 +249,16 @@ Rules:
 - retired: 2026-10-15 built
 - log: 2026-10-15 18:04 asked Shay
 - log: 2026-10-15 18:04 Shay answered yes
+
+### PI-17 | done
+- idea: Orphan check should use evidence/log freshness for in-session agents, not agent-host sessions.
+- evidence: 19:20 AGENT ORPHANED imm26-4080-op2i (silent 31.9 min) while its poll log was written a minute earlier; I had to check the log by hand.
+- saving: ~2 min and a false alarm per busy poller
+- risk: could mask a truly dead agent if the evidence dir is touched by another process
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 19:43
+- measured: agent-guard-selftest 75/75 (13 new PI-17 cases: silent 31 min + fresh own log/dir/lane dir => not orphaned and in-flight; only foreign file / old own log / .status / session.json agent / no evidence => still orphaned), agent-host-monitor-selftest 26/26 (3 new INPROC cases), agent-successor-selftest 29/29, event-wait-filter-selftest 13/13; live roll call run OK
+- retired: 2026-10-15 built
+- log: 2026-10-15 19:43 review 'coordinator8-19:50': added
+- log: 2026-10-15 19:54 Shay answered yes
