@@ -30,16 +30,20 @@ SENT="${SENTINEL:-$(i3 <<<'stobe-auto chars 150 "Holy Sentinel|!dead" </dev/null
 # 4. affinity 60 (Fond) so she is willing
 i3w <<<"php /mnt/c/KenshiTestRuns/imm26-5090-i5/haff-i5.php \"$CINDFULL\" Shay 60 friend" | cut -c1-200 >> "$OUT/log.txt" 2>&1
 # 5. bandits 40 u SOUTH of Shay (op9h coordinates), hostile to the player faction, pinned AFTER they have settled on the ground
+if [ -n "${BANDITS_IN:-}" ]; then BANDITS="$BANDITS_IN"; : > "$OUT/spawn.txt"
+else
 i3 <<EOT > "$OUT/spawn.txt" 2>&1
 stobe-auto spawn "Dust Bandit" "Dust Bandits" at -47335 725 -55640 count ${COUNT:-4} </dev/null | head -3
 EOT
 cat "$OUT/spawn.txt" | cut -c1-300 | tee -a "$OUT/log.txt"
 BANDITS=$(grep -oE '#[0-9]+/[0-9]+' "$OUT/spawn.txt" | grep -v "^$CIND$" | sort -u | head -6)
+fi
 [ -n "$BANDITS" ] || { say "SCENE-BAD no bandits spawned"; exit 3; }
 B1=$(echo $BANDITS | awk '{print $1}')
 i3 <<<"stobe-auto relation \"$B1\" -100 </dev/null | head -2" | tee -a "$OUT/log.txt"   # Dust Bandits <-> player faction -100
-sleep 12   # let them land: while falling the candidate flickers (op9h: 2 then 3 of 4 members, token :6 -> :7, digest changed)
-for b in $BANDITS; do i3 <<<"stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; done
+# 14-c lesson (op9j): spawned bandits roam 190-390 u away within 12 s (the spawn pos is only a start). Do NOT wait: unpin, teleport each next to the spot and pin at once.
+k=0
+for b in $BANDITS; do i3 <<<"stobe-auto pin \"$b\" off </dev/null | head -1; stobe-auto teleport \"$b\" -47335 725 $((-55640+4*$k)) </dev/null | head -1; stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; k=$((k+1)); done
 i3 <<<"stobe-auto face \"$CIND\" \"$B1\" </dev/null | head -1; sleep 1" >> "$OUT/log.txt" 2>&1
 # 6. go/no-go: Cind must SEE >= 3 bandits on two polls 4 s apart (sightDrops otherwise: the candidate list stays [])
 ok=0
