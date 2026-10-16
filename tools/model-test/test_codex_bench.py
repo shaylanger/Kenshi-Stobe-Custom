@@ -187,11 +187,18 @@ See C:\\KenshiModding\\src\\module.py:42
             self.assertNotIn("secret-model", prompt)
             self.assertFalse(list((Path(tmp) / "local").rglob("auth.json")))
             private_config = next((Path(tmp) / "local").rglob("config.toml")).read_text()
-            self.assertIn("code_mode = false", private_config)
-            self.assertIn("code_mode_host = false", private_config)
+            self.assertIn("multi_agent_v2 = false", private_config)
+            self.assertIn("multi_agent_v2_dynamic_tools = false", private_config)
+            self.assertIn("code_mode = true", private_config)
+            self.assertIn("code_mode_host = true", private_config)
             self.assertIn("tool_search = false", private_config)
             self.assertIn("view_image = false", private_config)
             self.assertIn('enabled_tools = ["list", "read", "search", "sql"]', private_config)
+            self.assertIn("[[hooks.PreToolUse]]", private_config)
+            self.assertIn("[[hooks.SessionStart]]", private_config)
+            self.assertIn("[[hooks.SubagentStart]]", private_config)
+            self.assertIn("[[hooks.SessionEnd]]", private_config)
+            self.assertFalse(list((Path(tmp) / "local").rglob("hooks.json")))
             self.assertNotIn("[tools]", private_config)
 
     def test_private_profile_path_is_stable_for_relative_and_absolute_run_dir(self):
@@ -216,6 +223,34 @@ See C:\\KenshiModding\\src\\module.py:42
             with mock.patch.object(bench.subprocess, "run", return_value=bad):
                 with self.assertRaises(bench.BenchError):
                     bench._strict_exec_config_probe(Path("codex.exe"), {}, Path(tmp))
+
+    def test_exact_profile_probe_failure_leaves_attempt_prepared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "suite"
+            root.mkdir()
+            suite = {"cells": [{"slug": "opaque-high-standard", "model": "model-x", "effort": "high", "speed": "standard"}],
+                     "prompts": ["prompt2.txt"], "prompt_numbers": [2],
+                     "template": "task-frozen.tmpl", "concurrency": {"default": 1, "hard_cap": 1, "auto_start": False}}
+            (root / "suite.json").write_text(json.dumps(suite), encoding="utf-8")
+            (root / "prompt2.txt").write_text("Review the frozen source.", encoding="utf-8")
+            template = root / "task-frozen.tmpl"
+            template.write_text("Ticket {TICKET}\n{PROMPT}\n{FROZEN}\n{FROZEN_WSL}\n", encoding="utf-8")
+            local = Path(tmp) / "local"
+            with mock.patch.dict(bench.os.environ, {"LOCALAPPDATA": str(local)}):
+                self.assertEqual(bench.prepare(root), 0)
+                rid = "opaque-high-standard-p2"
+                receipt = bench._json(root / "runs" / rid / "launch.json")
+                proof = {"ready": True, "suite_sha256": bench._sha((root / "suite.json").read_bytes()),
+                         "materials": {str(p.resolve()): bench._sha(p.read_bytes())
+                                       for p in (root / "suite.json", template, root / "prompt2.txt")},
+                         "prepared_prompts": {rid: receipt["prompt_sha256"]}, "auth_available": True}
+                bench._write_json(root / "preflight.json", proof)
+                with mock.patch.object(bench, "_strict_exec_config_probe", side_effect=bench.BenchError("invalid exact profile")):
+                    with self.assertRaisesRegex(bench.BenchError, "invalid exact profile"):
+                        bench.launch_one(root, rid, execute=True, timeout=10)
+                self.assertEqual(bench._json(root / "runs" / rid / "launch.json")["status"], "PREPARED")
+                self.assertEqual(bench._json(root / "runs" / rid / "attempt-01" / "launch.json")["status"], "PREPARED")
+                self.assertFalse((Path(receipt["codex_home"]) / "auth.json").exists())
 
     def test_rollout_id_reads_session_meta_payload(self):
         with tempfile.TemporaryDirectory() as tmp:

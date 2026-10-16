@@ -390,6 +390,7 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
     python = str(Path(sys.executable))
     mcp_script = str(HERE / "codex_frozen_mcp.py")
     guard_script = str(HERE / "codex_guard.py")
+    hook_cmd = f'"{python}" -I "{guard_script}"'
     codex_tier = "priority" if cell["speed"] == "fast" else "default"
     toml = "\n".join([
         f"model = {json.dumps(cell['model'])}",
@@ -397,12 +398,21 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
         f"service_tier = {json.dumps(codex_tier)}",
         'approval_policy = "never"', 'sandbox_mode = "read-only"',
         "project_doc_max_bytes = 0", "web_search = 'disabled'", "",
-        "[features]", "multi_agent = false", "shell_tool = false", "apps = false", "plugins = false",
+        "[features]", "multi_agent = false", "multi_agent_v2 = false",
+        "multi_agent_v2_dynamic_tools = false", "shell_tool = false", "apps = false", "plugins = false",
         "remote_plugin = false", "goals = false", "computer_use = false",
         "browser_use = false", "in_app_browser = false", "hooks = true",
-        "code_mode = false", "code_mode_host = false", "code_mode_tool_search = false", "tool_search = false",
+        "code_mode = true", "code_mode_host = true", "code_mode_tool_search = false", "tool_search = false",
         "view_image = false", "",
         "[agents]", "enabled = false", "max_concurrent_threads_per_session = 1", "",
+        "[[hooks.PreToolUse]]", 'matcher = ".*"',
+        "[[hooks.PreToolUse.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
+        "[[hooks.SessionStart]]", 'matcher = ".*"',
+        "[[hooks.SessionStart.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
+        "[[hooks.SubagentStart]]", 'matcher = ".*"',
+        "[[hooks.SubagentStart.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
+        "[[hooks.SessionEnd]]", 'matcher = ".*"',
+        "[[hooks.SessionEnd.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
         "[mcp_servers.frozen]", f"command = {json.dumps(python)}",
         f"args = ['-I', {json.dumps(mcp_script)}]", "enabled = true", "required = true",
         'enabled_tools = ["list", "read", "search", "sql"]',
@@ -412,28 +422,24 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
         f"CODEX_FROZEN_RECEIPTS = {json.dumps(str(receipts))}", "",
     ])
     (codex_home / "config.toml").write_text(toml, encoding="utf-8")
-    hook_cmd = f'"{python}" -I "{guard_script}"'
-    hooks = {"hooks": {
-        "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": hook_cmd}]}],
-        **{event: [{"hooks": [{"type": "command", "command": hook_cmd}]}]
-           for event in ("SessionStart", "SubagentStart", "SessionEnd")},
-    }}
-    (codex_home / "hooks.json").write_text(json.dumps(hooks, indent=2) + "\n", encoding="utf-8")
     config = {
         "model": cell["model"], "reasoning_effort": cell["effort"], "service_tier": cell["speed"],
-        "multi_agent": False, "agents_enabled": False, "max_concurrent_threads_per_session": 1,
+        "multi_agent": False, "multi_agent_v2": False, "multi_agent_v2_dynamic_tools": False,
+        "agents_enabled": False, "max_concurrent_threads_per_session": 1,
+        "code_mode": True, "code_mode_host": True,
         "sandbox": "read-only", "network": "disabled", "shell_tool": False,
         "apps": False, "plugins": False, "remote_plugin": False, "goals": False,
         "view_image": False, "computer_use": False, "browser_use": False, "in_app_browser": False,
         "memories": False, "web_search": "disabled",
         "hooks_allowlist": ["mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"],
         "mcp_command": [python, "-I", mcp_script], "guard_command": [python, "-I", guard_script],
-        "guard_log": str(guard_log), "mcp_receipts": str(receipts), "hook_config": str(codex_home / "hooks.json"),
-        "hook_sha256": _sha((codex_home / "hooks.json").read_bytes()),
+        "guard_log": str(guard_log), "mcp_receipts": str(receipts),
         "private_config": str(codex_home / "config.toml"),
         "private_config_sha256": _sha((codex_home / "config.toml").read_bytes()),
         "prompt_id": rid,
     }
+    config["hook_config"] = config["private_config"]
+    config["hook_sha256"] = config["private_config_sha256"]
     return codex_home, config
 
 
@@ -523,6 +529,9 @@ def _refresh_prepared_profile(run_dir: Path, rid: str, cell: dict[str, Any]) -> 
     for attempt_dir in attempts:
         attempt_no = int(attempt_dir.name.split("-")[-1])
         codex_home, config = _make_config(run_dir, rid, cell, attempt_no)
+        legacy_hooks = codex_home / "hooks.json"
+        if legacy_hooks.exists():
+            legacy_hooks.unlink()
         config_path = attempt_dir / "requested-config.json"
         _write_json(config_path, config)
         receipt_path = attempt_dir / "launch.json"
@@ -680,9 +689,11 @@ def _preflight(root: Path) -> int:
         if (_sha(task.read_bytes()) != receipt.get("prompt_sha256") or
                 not (codex_home / "config.toml").is_file() or
                 _sha((codex_home / "config.toml").read_bytes()) != config.get("private_config_sha256") or
-                not (codex_home / "hooks.json").is_file() or
-                _sha((codex_home / "hooks.json").read_bytes()) != config.get("hook_sha256")):
+                config.get("hook_config") != config.get("private_config") or
+                config.get("hook_sha256") != config.get("private_config_sha256")):
             raise BenchError(f"prepared prompt or private isolation profile changed: {rid}")
+        if receipt.get("status") == "PREPARED" and (codex_home / "hooks.json").exists():
+            raise BenchError(f"duplicate external hooks source remains in prepared profile: {rid}")
         prepared_prompts[rid] = _sha(task.read_bytes())
     frozen = Path(os.environ.get("CODEX_BENCH_FROZEN_ROOT", str(cfg.get("frozen", DEFAULT_FROZEN))))
     _validate_frozen(frozen)
@@ -839,14 +850,16 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     elif not attempt.is_dir():
         raise BenchError(f"attempt-01 was not prepared: {rid}; run prepare first")
     attempt_receipt = attempt / "launch.json"
-    receipt = _stamp_launch_context(attempt_receipt, receipt_path, attempt, launch_mode, effective_cap, batch_id)
+    receipt = _json(attempt_receipt)
+    if receipt.get("status") != "PREPARED":
+        raise BenchError("attempt is not untouched PREPARED; refusing relaunch")
     codex_home = Path(receipt["codex_home"])
     config = _json(attempt / "requested-config.json")
     task = run_dir / "prompt.md"
     if (not task.is_file() or _sha(task.read_bytes()) != receipt.get("prompt_sha256") or
             proof.get("prepared_prompts", {}).get(rid) != receipt.get("prompt_sha256")):
         raise BenchError("prepared participant prompt changed; refusing launch")
-    for key, filename in (("private_config_sha256", "config.toml"), ("hook_sha256", "hooks.json")):
+    for key, filename in (("private_config_sha256", "config.toml"),):
         private_file = codex_home / filename
         if not private_file.is_file() or _sha(private_file.read_bytes()) != config.get(key):
             raise BenchError(f"isolated {filename} changed after preparation; refusing launch")
@@ -856,6 +869,10 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     env = _private_env(home, {"CODEX_HOME": str(codex_home), "CODEX_FROZEN_ROOT": receipt["frozen_root"],
                               "CODEX_FROZEN_RECEIPTS": str(attempt / "frozen-mcp-receipts.jsonl"),
                               "CODEX_BENCH_GUARD_LOG": str(attempt / "guard-receipts.jsonl")})
+    _strict_exec_config_probe(Path(receipt["cli_path"]), env=env, cwd=home / "neutral-cwd")
+    # Do not mark the attempt RUNNING until the exact prepared profile passes
+    # the installed CLI's strict parser. A setup rejection stays PREPARED.
+    receipt = _stamp_launch_context(attempt_receipt, receipt_path, attempt, launch_mode, effective_cap, batch_id)
     auth_source = Path(os.environ.get("CODEX_BENCH_AUTH", str(DEFAULT_USER_CODEX / "auth.json")))
     if not proof.get("auth_available") or not auth_source.is_file():
         raise BenchError("saved Codex authentication is unavailable; no credentials were copied")
