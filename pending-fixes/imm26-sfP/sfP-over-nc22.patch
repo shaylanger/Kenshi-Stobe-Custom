@@ -1,0 +1,26 @@
+--- a/src/ActivityRuntimeBindings.cpp	2026-10-16 12:55:53.849847850 -0500
++++ b/src/ActivityRuntimeBindings.cpp	2026-10-16 12:55:53.885697250 -0500
+@@ -153,10 +153,22 @@
+   }
+  } else {
+   Character* target=(Character*)discoveredObject;
+-  if(!target->getGameData() || !actor->getSensoryData() || !actor->getSensoryData()->canISeeThisGuy(target) ||
++  // imm26-sfP (row 26-d): a Hunt grant arrives 10-35 s after the offer, after the NPC turned to face the speaker, and the server (imm26-u4) accepts any
++  // currently observed same-source animal at ACCEPT. So the offer's exact animal need not be in her view cone at import; it stays bound by candidate id,
++  // serial and pointer identity above, and live sight is still required at dispatch (NativeHost::Candidates/Revalidate, Discover, Refresh). ClearGroup keeps it.
++  if(!target->getGameData() || !actor->getSensoryData() ||
++     (a.kind!=Hunt && !actor->getSensoryData()->canISeeThisGuy(target)) ||
+      (a.kind==Hunt && (target->getGameData()->stringID!=a.sourceId || !target->isAnimal())) ||
+      (a.kind==ClearGroup && (GroupSource(target)!=a.sourceId ||
+        std::find(a.agreedTargets.begin(),a.agreedTargets.end(),a.discoveryTargetSerial)==a.agreedTargets.end()))) {
++   try {
++    std::ostringstream d; d<<"ACTIVITY_GRANT_SOURCE_DIAG agreement="<<a.id<<" kind="<<(a.kind==Hunt?"Hunt":"ClearGroup")<<" target="<<a.discoveryTargetSerial
++     <<" gameData="<<(target->getGameData()!=NULL?1:0)<<" sensory="<<(actor->getSensoryData()!=NULL?1:0)
++     <<" sees="<<((actor->getSensoryData() && actor->getSensoryData()->canISeeThisGuy(target))?1:0)
++     <<" animal="<<(target->isAnimal()?1:0)
++     <<" sidMatch="<<((target->getGameData() && target->getGameData()->stringID==a.sourceId)?1:0);
++    Log(d.str());
++   } catch(...) { /* Diagnostics never change the grant outcome. */ }
+    reason="activity_discovery_reference_source_mismatch"; return false;
+   }
+  }
