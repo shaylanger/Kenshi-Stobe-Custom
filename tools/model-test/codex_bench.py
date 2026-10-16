@@ -12,6 +12,7 @@ import csv
 import hashlib
 import json
 import os
+import queue
 import re
 import signal
 import shutil
@@ -36,6 +37,26 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*-p[0-9]+$")
 LEDGER_MUTEX = threading.Lock()
 ACTIVE_LOCK = threading.Lock()
 ACTIVE_PROCESSES: set[subprocess.Popen] = set()
+PROFILE_VERSION = 5
+FROZEN_TOOLS = ["mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"]
+CODE_MODE_EXCLUDED_NAMESPACES = ["functions", "clock", "mcp__codex_apps", "mcp__plugins"]
+
+
+def _execution_contract() -> dict[str, Any]:
+    return {"code_mode": True, "code_mode_host": True,
+            "excluded_tool_namespaces": CODE_MODE_EXCLUDED_NAMESPACES,
+            "mcp_tools": FROZEN_TOOLS, "multi_agent": False,
+            "multi_agent_v2": False, "multi_agent_v2_dynamic_tools": False,
+            "agents_enabled": False, "shell_tool": False, "view_image": False,
+            "global_approval_policy": "never", "frozen_mcp_approval_mode": "approve",
+            "hooks_enabled": False,
+            "hook_enforcement": "unavailable_no_payload; independent_code_mode_boundary",
+            "profile_version": PROFILE_VERSION}
+
+
+def _execution_contract_sha256() -> str:
+    raw = json.dumps(_execution_contract(), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return _sha(raw)
 
 
 class BenchError(RuntimeError):
@@ -354,6 +375,267 @@ def _strict_exec_config_probe(cli: Path, env: dict[str, str], cwd: Path) -> None
         raise BenchError("strict Codex exec config probe did not stop at empty stdin: " + output[-1200:])
 
 
+def _appserver_hook_rows(cli: Path, env: dict[str, str], cwd: Path, timeout: float = 10.0) -> list[dict[str, Any]]:
+    """Read registered hooks through app-server without starting a thread or turn."""
+    proc = subprocess.Popen([str(cli), "app-server", "--stdio", "--strict-config"], cwd=str(cwd), env=env,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            text=True, encoding="utf-8", errors="replace", bufsize=1)
+    output: queue.Queue[str | None] = queue.Queue()
+
+    def read_output() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            output.put(line)
+        output.put(None)
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+
+    def send(payload: dict[str, Any]) -> None:
+        assert proc.stdin is not None
+        proc.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        proc.stdin.flush()
+
+    def response_for(request_id: int) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                line = output.get(timeout=max(0.05, deadline - time.monotonic()))
+            except queue.Empty:
+                break
+            if line is None:
+                break
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict) and value.get("id") == request_id:
+                return value
+        raise BenchError(f"app-server hooks/list request {request_id} timed out")
+
+    try:
+        send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+              "params": {"clientInfo": {"name": "codex-bench-preflight", "version": "1"},
+                         "capabilities": {"experimentalApi": True}}})
+        initialized = response_for(1)
+        if "error" in initialized:
+            raise BenchError("app-server initialize failed during hook trust check")
+        send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+        send({"jsonrpc": "2.0", "id": 2, "method": "hooks/list", "params": {"cwds": [str(cwd)]}})
+        reply = response_for(2)
+        if "error" in reply:
+            raise BenchError("app-server hooks/list failed during hook trust check")
+        rows: list[dict[str, Any]] = []
+        stack: list[Any] = [reply.get("result", {})]
+        while stack:
+            item = stack.pop()
+            if isinstance(item, dict):
+                if isinstance(item.get("key"), str) and isinstance(item.get("currentHash"), str):
+                    rows.append(item)
+                else:
+                    stack.extend(item.values())
+            elif isinstance(item, list):
+                stack.extend(item)
+        return rows
+    finally:
+        try:
+            if proc.stdin:
+                proc.stdin.close()
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
+            proc.kill()
+            proc.wait(timeout=2)
+        reader.join(timeout=1)
+
+
+def _establish_exact_hook_trust(cli: Path, codex_home: Path, frozen: Path,
+                                config_path: Path, config: dict[str, Any],
+                                attempt_config: Path, attempt_receipt: Path,
+                                run_receipt: Path) -> dict[str, Any]:
+    """Trust only the four current inline hook definitions and bind their hashes."""
+    home = codex_home.parent
+    env = _private_env(home, {"CODEX_HOME": str(codex_home), "CODEX_FROZEN_ROOT": str(frozen),
+                              "CODEX_BENCH_GUARD_LOG": str(config["guard_log"])})
+    rows = _appserver_hook_rows(cli, env, home / "neutral-cwd")
+    if len(rows) != 4:
+        raise BenchError(f"private app-server reported {len(rows)} hook handlers; expected four")
+    prefix = str(config_path.resolve()) + ":"
+    trusted = []
+    for row in rows:
+        key, digest = row.get("key"), row.get("currentHash")
+        if (not isinstance(key, str) or not key.startswith(prefix) or
+                not isinstance(digest, str) or not digest.startswith("sha256:") or
+                row.get("source") != "user" or row.get("enabled") is not True):
+            raise BenchError("private hook list contains an unexpected or inactive handler")
+        trusted.append({"key": key, "current_hash": digest})
+    expected = sorted(trusted, key=lambda x: x["key"])
+    existing = config.get("hook_trust")
+    if existing is None:
+        additions = []
+        for row in expected:
+            additions.extend([f"[hooks.state.{json.dumps(row['key'])}]",
+                              f"trusted_hash = {json.dumps(row['current_hash'])}"])
+        with config_path.open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write("\n" + "\n".join(additions) + "\n")
+    elif existing != expected:
+        raise BenchError("stored private hook trust metadata does not match registered hooks")
+    verified_rows = _appserver_hook_rows(cli, env, home / "neutral-cwd")
+    verified = sorted(({"key": row.get("key"), "current_hash": row.get("currentHash")} for row in verified_rows),
+                      key=lambda x: str(x["key"]))
+    if verified != expected or any(row.get("trustStatus") != "trusted" for row in verified_rows):
+        raise BenchError("private hook hashes did not become trusted in app-server")
+    config["hook_trust"] = expected
+    config["private_config_sha256"] = _sha(config_path.read_bytes())
+    config["hook_sha256"] = config["private_config_sha256"]
+    _write_json(attempt_config, config)
+    updated = _json(attempt_receipt)
+    updated["config_sha256"] = _sha(attempt_config.read_bytes())
+    _write_json(attempt_receipt, updated)
+    root = _json(run_receipt)
+    root.update({"config_sha256": _sha(attempt_config.read_bytes()), "codex_home": str(codex_home)})
+    _write_json(run_receipt, root)
+    return {"config_sha256": config["private_config_sha256"], "hook_count": len(expected), "trusted": True}
+
+
+def _run_offline_hostprobe(root: Path, cli: Path, catalog: Path, frozen: Path) -> dict[str, Any]:
+    """Prove the independent frozen-only Code Mode boundary with a loopback stub."""
+    helper = HERE / "codex_hostprobe.py"
+    if not helper.is_file():
+        raise BenchError("offline Code Mode hostprobe is missing")
+    runtime = root / "operator-runtime"
+    runtime.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    inventory_path = runtime / f"offline-hostprobe-{stamp}-inventory.json"
+    exec_path = runtime / f"offline-hostprobe-{stamp}-exec.json"
+    python = Path(sys.executable).resolve()
+    env = _private_env(runtime)
+    common = [str(python), "-I", str(helper), "--codex", str(cli), "--model-cache", str(catalog),
+              "--frozen-root", str(frozen), "--timeout", "45", "--private-parent", str(runtime)]
+    inventory = subprocess.run([*common, "--phase", "host_inventory", "--receipt", str(inventory_path)],
+                               env=env, cwd=str(REPO), capture_output=True, text=True, timeout=60, check=False)
+    if inventory.returncode:
+        raise BenchError("offline host inventory probe failed: " + (inventory.stderr or inventory.stdout)[-1000:])
+    execution = subprocess.run([*common, "--phase", "exec", "--exclude-native-host-tools",
+                                "--receipt", str(exec_path)], env=env, cwd=str(REPO),
+                               capture_output=True, text=True, timeout=60, check=False)
+    if execution.returncode:
+        raise BenchError("offline isolated execution probe failed: " + (execution.stderr or execution.stdout)[-1000:])
+    inventory_receipt = _json(inventory_path)
+    exec_receipt = _json(exec_path)
+    inventory_names = inventory_receipt.get("host", {}).get("tool_names", [])
+    if (inventory_receipt.get("phase") != "host_inventory" or
+            inventory_receipt.get("status") != "OBSERVED" or
+            inventory_receipt.get("provider", {}).get("external_hosts") != 0 or
+            not isinstance(inventory_names, list) or not inventory_names or
+            not set(FROZEN_TOOLS).issubset(inventory_names)):
+        raise BenchError("offline host inventory receipt is incomplete or non-loopback")
+    host = exec_receipt.get("host") if isinstance(exec_receipt.get("host"), dict) else {}
+    apis = host.get("agent_api_types") if isinstance(host.get("agent_api_types"), dict) else {}
+    mcp_calls = exec_receipt.get("mcp_calls")
+    hook_enforcement = exec_receipt.get("hook_enforcement") if isinstance(exec_receipt.get("hook_enforcement"), dict) else {}
+    namespaces = host.get("tool_namespace_keys")
+    direct = host.get("direct_callable_tool_names")
+    escape_types = host.get("constructor_escape_types") if isinstance(host.get("constructor_escape_types"), dict) else {}
+    import_status = host.get("dynamic_import_status") if isinstance(host.get("dynamic_import_status"), dict) else {}
+    def valid_hash(value: Any) -> bool:
+        return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+    if (exec_receipt.get("phase") != "exec" or exec_receipt.get("status") != "PASS" or
+            exec_receipt.get("cli_returncode") != 0 or
+            not valid_hash(exec_receipt.get("cli_sha256")) or not valid_hash(exec_receipt.get("host_sha256")) or
+            exec_receipt.get("provider", {}).get("bound_host") != "127.0.0.1" or
+            exec_receipt.get("provider", {}).get("external_hosts") != 0 or
+            exec_receipt.get("provider", {}).get("credential") != "dummy" or
+            exec_receipt.get("config", {}).get("code_mode") is not True or
+            exec_receipt.get("config", {}).get("code_mode_host") is not True or
+            exec_receipt.get("config", {}).get("excluded_tool_namespaces") != CODE_MODE_EXCLUDED_NAMESPACES or
+            exec_receipt.get("config", {}).get("hooks_enabled") is not False or
+            exec_receipt.get("config", {}).get("mcp_default_tools_approval_mode") != "approve" or
+            exec_receipt.get("config", {}).get("shell_tool") is not False or
+            exec_receipt.get("config", {}).get("multi_agent") is not False or
+            exec_receipt.get("config", {}).get("agents_enabled") is not False or
+            exec_receipt.get("config", {}).get("view_image") is not False or
+            host.get("tool_names") != FROZEN_TOOLS or
+            namespaces != FROZEN_TOOLS or
+            direct != FROZEN_TOOLS or host.get("forbidden_global_names") or
+            host.get("unlisted_callable_names") or host.get("frozen_list_call") != "ok" or
+            host.get("unknown_parameter_status") != "server_rejected" or
+            not apis or any(not isinstance(v, dict) or v.get("global") != "undefined" or
+                            v.get("tool") != "undefined" for v in apis.values()) or
+            not escape_types or any(v != "undefined" for v in escape_types.values()) or
+            set(import_status) != {"node:fs", "node:child_process", "node:https"} or
+            any(not str(v).startswith("rejected:") for v in import_status.values()) or
+            hook_enforcement.get("status") != "UNAVAILABLE" or
+            not isinstance(mcp_calls, list) or len(mcp_calls) != 2 or
+            mcp_calls[0].get("tool") != "mcp__frozen__list" or mcp_calls[0].get("isError") is not False or
+            mcp_calls[0].get("status") != "ok" or mcp_calls[0].get("result_class") != "ok" or
+            mcp_calls[1].get("tool") != "mcp__frozen__list" or mcp_calls[1].get("isError") is not True or
+            mcp_calls[1].get("status") != "error:FrozenAccessError" or
+            mcp_calls[1].get("result_class") != "error:FrozenAccessError"):
+        raise BenchError("offline hostprobe did not prove the frozen-only Code Mode boundary and MCP allow/deny canaries")
+    return {"inventory_path": str(inventory_path.resolve()), "inventory_sha256": _sha(inventory_path.read_bytes()),
+            "inventory_tool_names": inventory_names,
+            "execution_path": str(exec_path.resolve()), "execution_sha256": _sha(exec_path.read_bytes()),
+            "execution_status": "BOUNDARY_VERIFIED", "hook_enforcement_status": "UNAVAILABLE",
+            "effective_nested_tools": FROZEN_TOOLS,
+            "runner_contract_sha256": _execution_contract_sha256(),
+            "helper_sha256": _sha(helper.read_bytes())}
+
+
+def _verify_offline_hostprobe(proof: dict[str, Any]) -> None:
+    receipt = proof.get("offline_hostprobe")
+    if (not isinstance(receipt, dict) or receipt.get("execution_status") != "BOUNDARY_VERIFIED" or
+            receipt.get("hook_enforcement_status") != "UNAVAILABLE"):
+        raise BenchError("preflight does not contain a verified frozen-only host boundary proof")
+    if receipt.get("runner_contract_sha256") != _execution_contract_sha256():
+        raise BenchError("offline hostprobe proof was produced for a different execution contract")
+    for key in ("inventory_path", "execution_path"):
+        path = Path(str(receipt.get(key, "")))
+        digest_key = "inventory_sha256" if key == "inventory_path" else "execution_sha256"
+        if not path.is_file() or _sha(path.read_bytes()) != receipt.get(digest_key):
+            raise BenchError("offline hostprobe evidence changed after preflight")
+
+
+def _prepare_retry_attempt(root: Path, rid: str, attempt_no: int) -> None:
+    """Materialize an auth-free retry profile before preflight binds its hash."""
+    if attempt_no <= 1:
+        return
+    cfg = load_suite(root)
+    item = {x[0]: x[1:] for x in run_ids(root, cfg)}.get(rid)
+    if not item:
+        raise BenchError(f"unknown run id: {rid}")
+    cell, _num, _prompt = item
+    run_dir = root / "runs" / rid
+    if not _record_path(run_dir).is_file():
+        raise BenchError(f"run not prepared: {rid}; run prepare first")
+    attempts = sorted(run_dir.glob("attempt-[0-9][0-9]"))
+    attempt = run_dir / f"attempt-{attempt_no:02d}"
+    if not attempts or (attempt.exists() and attempt_no != len(attempts)) or (not attempt.exists() and attempt_no != len(attempts) + 1):
+        raise BenchError("explicit attempts must be created in order; no automatic retries are made")
+    prior = attempts[-2] if attempt.exists() and len(attempts) > 1 else attempts[-1]
+    previous_status = _json(prior / "launch.json").get("status")
+    terminal = {"FAILED", "TIMEOUT", "FAILED_IO", "FAILED_START", "FAILED_NO_ROOT_ROLLOUT",
+                "FAILED_NO_FINAL_REPORT", "COMPLETE_UNAUDITED"}
+    if previous_status not in terminal:
+        raise BenchError("previous attempt is not terminal")
+    if not attempt.exists():
+        _write_attempt(root, rid, cell, (run_dir / "prompt.md").read_text(encoding="utf-8"), attempt_no)
+        return
+    receipt = _json(attempt / "launch.json")
+    if receipt.get("status") != "PREPARED":
+        raise BenchError("explicit retry attempt already contains terminal evidence")
+    evidence = ("events.jsonl", "stderr.log", "report.md", "rollout.jsonl", "argv.json",
+                "guard-receipts.jsonl", "frozen-mcp-receipts.jsonl")
+    if any((attempt / name).exists() for name in evidence):
+        raise BenchError("retry attempt has evidence; refusing to replace or reuse it")
+    codex_home = Path(receipt.get("codex_home", ""))
+    if (codex_home / "auth.json").exists():
+        raise BenchError("retry profile contains authentication before explicit launch")
+    sessions = codex_home / "sessions"
+    if sessions.exists() and any(p.is_file() for p in sessions.rglob("*")):
+        raise BenchError("retry profile contains session data before explicit launch")
+
+
 def _record_path(run_dir: Path) -> Path:
     return run_dir / "launch.json"
 
@@ -386,11 +668,8 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
     (home / "neutral-cwd").mkdir(exist_ok=True)
     frozen_root = frozen_root_override or Path(os.environ.get("CODEX_BENCH_FROZEN_ROOT", str(DEFAULT_FROZEN)))
     receipts = run_dir / attempt_name / "frozen-mcp-receipts.jsonl"
-    guard_log = run_dir / attempt_name / "guard-receipts.jsonl"
     python = str(Path(sys.executable))
     mcp_script = str(HERE / "codex_frozen_mcp.py")
-    guard_script = str(HERE / "codex_guard.py")
-    hook_cmd = f'"{python}" -I "{guard_script}"'
     codex_tier = "priority" if cell["speed"] == "fast" else "default"
     toml = "\n".join([
         f"model = {json.dumps(cell['model'])}",
@@ -401,21 +680,16 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
         "[features]", "multi_agent = false", "multi_agent_v2 = false",
         "multi_agent_v2_dynamic_tools = false", "shell_tool = false", "apps = false", "plugins = false",
         "remote_plugin = false", "goals = false", "computer_use = false",
-        "browser_use = false", "in_app_browser = false", "hooks = true",
-        "code_mode = true", "code_mode_host = true", "code_mode_tool_search = false", "tool_search = false",
+        "browser_use = false", "in_app_browser = false", "hooks = false",
+        "code_mode_host = true", "code_mode_tool_search = false", "tool_search = false",
         "view_image = false", "",
+        "[features.code_mode]", "enabled = true",
+        "excluded_tool_namespaces = " + json.dumps(CODE_MODE_EXCLUDED_NAMESPACES), "",
         "[agents]", "enabled = false", "max_concurrent_threads_per_session = 1", "",
-        "[[hooks.PreToolUse]]", 'matcher = ".*"',
-        "[[hooks.PreToolUse.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
-        "[[hooks.SessionStart]]", 'matcher = ".*"',
-        "[[hooks.SessionStart.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
-        "[[hooks.SubagentStart]]", 'matcher = ".*"',
-        "[[hooks.SubagentStart.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
-        "[[hooks.SessionEnd]]", 'matcher = ".*"',
-        "[[hooks.SessionEnd.hooks]]", 'type = "command"', f"command = {json.dumps(hook_cmd)}", "timeout = 3", "",
         "[mcp_servers.frozen]", f"command = {json.dumps(python)}",
         f"args = ['-I', {json.dumps(mcp_script)}]", "enabled = true", "required = true",
         'enabled_tools = ["list", "read", "search", "sql"]',
+        'default_tools_approval_mode = "approve"',
         f"cwd = {json.dumps(str(home / 'neutral-cwd'))}",
         "startup_timeout_sec = 20", "tool_timeout_sec = 60", "",
         "[mcp_servers.frozen.env]", f"CODEX_FROZEN_ROOT = {json.dumps(str(frozen_root))}",
@@ -424,22 +698,26 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
     (codex_home / "config.toml").write_text(toml, encoding="utf-8")
     config = {
         "model": cell["model"], "reasoning_effort": cell["effort"], "service_tier": cell["speed"],
+        "profile_version": PROFILE_VERSION,
+        "execution_contract": _execution_contract(),
+        "execution_contract_sha256": _execution_contract_sha256(),
         "multi_agent": False, "multi_agent_v2": False, "multi_agent_v2_dynamic_tools": False,
         "agents_enabled": False, "max_concurrent_threads_per_session": 1,
+        "approval_policy": "never", "frozen_mcp_approval_mode": "approve",
+        "mcp_default_tools_approval_mode": "approve",
         "code_mode": True, "code_mode_host": True,
+        "code_mode_excluded_tool_namespaces": CODE_MODE_EXCLUDED_NAMESPACES,
         "sandbox": "read-only", "network": "disabled", "shell_tool": False,
         "apps": False, "plugins": False, "remote_plugin": False, "goals": False,
         "view_image": False, "computer_use": False, "browser_use": False, "in_app_browser": False,
         "memories": False, "web_search": "disabled",
-        "hooks_allowlist": ["mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"],
-        "mcp_command": [python, "-I", mcp_script], "guard_command": [python, "-I", guard_script],
-        "guard_log": str(guard_log), "mcp_receipts": str(receipts),
+        "hooks_enabled": False, "hook_enforcement": {"status": "UNAVAILABLE",
+            "reason": "pinned CLI hook stdin is a character device with no event payload"},
+        "mcp_command": [python, "-I", mcp_script], "mcp_receipts": str(receipts),
         "private_config": str(codex_home / "config.toml"),
         "private_config_sha256": _sha((codex_home / "config.toml").read_bytes()),
         "prompt_id": rid,
     }
-    config["hook_config"] = config["private_config"]
-    config["hook_sha256"] = config["private_config_sha256"]
     return codex_home, config
 
 
@@ -505,42 +783,42 @@ def _refresh_prepared_prompt(run_dir: Path, rendered: str) -> None:
 
 
 def _refresh_prepared_profile(run_dir: Path, rid: str, cell: dict[str, Any]) -> None:
-    """Regenerate only private profile config for untouched PREPARED attempts."""
+    """Regenerate only the latest untouched PREPARED profile, preserving history."""
     root_receipt = _record_path(run_dir)
     attempts = sorted(run_dir.glob("attempt-[0-9][0-9]"))
     if not root_receipt.is_file() or not attempts:
         raise BenchError("prepared receipt/profile is missing; cannot refresh private config")
     receipts = [root_receipt, *(p / "launch.json" for p in attempts)]
     loaded = [_json(p) for p in receipts]
-    if any(item.get("status") != "PREPARED" for item in loaded):
-        raise BenchError("private config refresh is allowed only for untouched PREPARED attempts")
+    if loaded[0].get("status") != "PREPARED" or loaded[-1].get("status") != "PREPARED":
+        raise BenchError("private config refresh is allowed only for the latest PREPARED attempt")
     evidence_names = {"events.jsonl", "stderr.log", "report.md", "rollout.jsonl", "argv.json",
                       "guard-receipts.jsonl", "frozen-mcp-receipts.jsonl"}
-    if (run_dir / "report.md").exists() or any((attempt / name).exists() for attempt in attempts for name in evidence_names):
+    if (run_dir / "report.md").exists() or any((attempts[-1] / name).exists() for name in evidence_names):
         raise BenchError("attempt evidence exists; refusing private config refresh")
-    for item in loaded:
-        codex_home = Path(item.get("codex_home", ""))
-        if (codex_home / "auth.json").exists():
-            raise BenchError("private profile contains authentication; refusing config refresh")
-        sessions = codex_home / "sessions"
-        if sessions.exists() and any(p.is_file() for p in sessions.rglob("*")):
-            raise BenchError("private profile contains session evidence; refusing config refresh")
+    item = loaded[-1]
+    codex_home = Path(item.get("codex_home", ""))
+    if (codex_home / "auth.json").exists():
+        raise BenchError("private profile contains authentication; refusing config refresh")
+    sessions = codex_home / "sessions"
+    if sessions.exists() and any(p.is_file() for p in sessions.rglob("*")):
+        raise BenchError("private profile contains session evidence; refusing config refresh")
     task_digest = _sha((run_dir / "prompt.md").read_bytes())
-    for attempt_dir in attempts:
-        attempt_no = int(attempt_dir.name.split("-")[-1])
-        codex_home, config = _make_config(run_dir, rid, cell, attempt_no)
-        legacy_hooks = codex_home / "hooks.json"
-        if legacy_hooks.exists():
-            legacy_hooks.unlink()
-        config_path = attempt_dir / "requested-config.json"
-        _write_json(config_path, config)
-        receipt_path = attempt_dir / "launch.json"
-        receipt = _json(receipt_path)
-        receipt.update({"codex_home": str(codex_home), "prompt_sha256": task_digest,
-                        "config_sha256": _sha(config_path.read_bytes())})
-        _write_json(receipt_path, receipt)
+    attempt_dir = attempts[-1]
+    attempt_no = int(attempt_dir.name.split("-")[-1])
+    codex_home, config = _make_config(run_dir, rid, cell, attempt_no)
+    legacy_hooks = codex_home / "hooks.json"
+    if legacy_hooks.exists():
+        legacy_hooks.unlink()
+    config_path = attempt_dir / "requested-config.json"
+    _write_json(config_path, config)
+    receipt_path = attempt_dir / "launch.json"
+    receipt = _json(receipt_path)
+    receipt.update({"codex_home": str(codex_home), "prompt_sha256": task_digest,
+                    "config_sha256": _sha(config_path.read_bytes())})
+    _write_json(receipt_path, receipt)
     root_item = _json(root_receipt)
-    attempt_item = _json(attempts[-1] / "launch.json")
+    attempt_item = _json(receipt_path)
     root_item.update({"prompt_sha256": task_digest,
                       "codex_home": attempt_item.get("codex_home"),
                       "config_sha256": _sha((attempts[-1] / "requested-config.json").read_bytes())})
@@ -672,6 +950,7 @@ def _preflight(root: Path) -> int:
     if not cli.is_file():
         raise BenchError(f"Codex CLI not found: {cli}")
     prepared_prompts: dict[str, str] = {}
+    private_profiles: dict[str, str] = {}
     for rid, _cell, _num, _prompt in entries:
         run_dir = root / "runs" / rid
         task = run_dir / "prompt.md"
@@ -684,17 +963,40 @@ def _preflight(root: Path) -> int:
         attempt_receipt = run_dir / f"attempt-{attempt_no:02d}" / "launch.json"
         if not attempt_config.is_file() or not attempt_receipt.is_file():
             raise BenchError(f"latest attempt profile is missing: {rid} attempt-{attempt_no:02d}")
-        config = _json(attempt_config)
-        codex_home = Path(receipt.get("codex_home", ""))
-        if (_sha(task.read_bytes()) != receipt.get("prompt_sha256") or
-                not (codex_home / "config.toml").is_file() or
-                _sha((codex_home / "config.toml").read_bytes()) != config.get("private_config_sha256") or
-                config.get("hook_config") != config.get("private_config") or
-                config.get("hook_sha256") != config.get("private_config_sha256")):
-            raise BenchError(f"prepared prompt or private isolation profile changed: {rid}")
-        if receipt.get("status") == "PREPARED" and (codex_home / "hooks.json").exists():
-            raise BenchError(f"duplicate external hooks source remains in prepared profile: {rid}")
+        if _sha(task.read_bytes()) != receipt.get("prompt_sha256"):
+            raise BenchError(f"prepared participant prompt changed: {rid}")
         prepared_prompts[rid] = _sha(task.read_bytes())
+        # Failed historical attempts are immutable and not refreshed. Only the
+        # current untouched PREPARED profile receives the active safe config.
+        if receipt.get("status") != "PREPARED":
+            continue
+        config = _json(attempt_config)
+        if config.get("profile_version") != PROFILE_VERSION:
+            _refresh_prepared_profile(run_dir, rid, {"model": receipt["model"],
+                                                    "effort": receipt["effort"],
+                                                    "speed": receipt["speed"]})
+            receipt = _json(launch)
+            attempt_no = int(receipt.get("attempt", 1))
+            attempt_config = run_dir / f"attempt-{attempt_no:02d}" / "requested-config.json"
+            attempt_receipt = run_dir / f"attempt-{attempt_no:02d}" / "launch.json"
+            config = _json(attempt_config)
+        codex_home = Path(receipt.get("codex_home", ""))
+        config_path = codex_home / "config.toml"
+        if (not config_path.is_file() or config.get("private_config") != str(config_path) or
+                _sha(config_path.read_bytes()) != config.get("private_config_sha256")):
+            raise BenchError(f"prepared private config is stale or changed: {rid}")
+        hook_env = _private_env(codex_home.parent, {"CODEX_HOME": str(codex_home)})
+        if _appserver_hook_rows(cli, hook_env, codex_home.parent / "neutral-cwd"):
+            raise BenchError(f"prepared profile unexpectedly registers native hooks: {rid}")
+        if config.get("hooks_enabled") is not False:
+            raise BenchError(f"prepared profile does not disable native hooks: {rid}")
+        if (config.get("execution_contract") != _execution_contract() or
+                config.get("execution_contract_sha256") != _execution_contract_sha256()):
+            raise BenchError(f"prepared profile does not enforce the current execution contract: {rid}")
+        if (codex_home / "hooks.json").exists():
+            raise BenchError(f"duplicate external hooks source remains in prepared profile: {rid}")
+        private_profiles[rid] = {"config_sha256": config["private_config_sha256"],
+                                 "execution_contract_sha256": config["execution_contract_sha256"]}
     frozen = Path(os.environ.get("CODEX_BENCH_FROZEN_ROOT", str(cfg.get("frozen", DEFAULT_FROZEN))))
     _validate_frozen(frozen)
     # The database role/manifest preflight is read-only and uses only stobe_frozen.
@@ -761,6 +1063,7 @@ def _preflight(root: Path) -> int:
         "CODEX_FROZEN_RECEIPTS": str(root / "mcp-preflight-receipts.jsonl"),
     })
     probe = _probe_mcp(mcp_env)
+    offline_hostprobe = _run_offline_hostprobe(root, cli, user_codex, frozen)
     materials = [root / "suite.json", template_path, *[root / p for p in cfg.get("prompts", ["prompt2.txt", "prompt3.txt"])]]
     material_hashes = {str(p.resolve()): _sha(p.read_bytes()) for p in materials}
     proof = {"ready": True, "suite_sha256": _sha((root / "suite.json").read_bytes()),
@@ -768,6 +1071,7 @@ def _preflight(root: Path) -> int:
              "catalog_sha256": _sha(user_codex.read_bytes()), "cells": len(entries),
              "auth_available": Path(os.environ.get("CODEX_BENCH_AUTH", str(DEFAULT_USER_CODEX / "auth.json"))).is_file(),
              "materials": material_hashes, "prepared_prompts": prepared_prompts,
+             "private_profiles": private_profiles, "offline_hostprobe": offline_hostprobe,
              "private_features_snapshot_sha256": _sha("\n".join(feature_outputs).encode("utf-8")),
              "cli_config_probe": "strict exec parser (empty stdin) for standard/fast; mcp list", "mcp_probe": probe,
              "checked_utc": datetime.now(timezone.utc).isoformat()}
@@ -827,6 +1131,7 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     for material, digest in proof.get("materials", {}).items():
         if not Path(material).is_file() or _sha(Path(material).read_bytes()) != digest:
             raise BenchError("preflight material changed; rerun prepare and preflight")
+    _verify_offline_hostprobe(proof)
     item = {x[0]: x[1:] for x in run_ids(root, cfg)}.get(rid)
     if not item:
         raise BenchError(f"unknown run id: {rid}")
@@ -840,13 +1145,19 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     attempt = run_dir / f"attempt-{attempt_no:02d}"
     if attempt_no > 1:
         old = sorted(run_dir.glob("attempt-[0-9][0-9]"))
-        if attempt.exists() or not old or attempt_no != len(old) + 1:
+        if (not old or attempt_no > len(old) + 1 or
+                (not attempt.exists() and attempt_no != len(old) + 1) or
+                (attempt.exists() and attempt_no != len(old))):
             raise BenchError("explicit attempts must be new, sequential numbers; no automatic retries are made")
-        previous = _json(old[-1] / "launch.json")
+        previous_attempt = old[-2] if attempt.exists() else old[-1]
+        previous = _json(previous_attempt / "launch.json")
         if previous.get("status") not in {"FAILED", "TIMEOUT", "FAILED_IO", "FAILED_START",
                                             "FAILED_NO_ROOT_ROLLOUT", "FAILED_NO_FINAL_REPORT", "COMPLETE_UNAUDITED"}:
             raise BenchError("previous attempt is not terminal")
-        _write_attempt(root, rid, cell, (run_dir / "prompt.md").read_text(encoding="utf-8"), attempt_no)
+        if not attempt.exists():
+            _write_attempt(root, rid, cell, (run_dir / "prompt.md").read_text(encoding="utf-8"), attempt_no)
+        elif _json(attempt / "launch.json").get("status") != "PREPARED":
+            raise BenchError("explicit retry attempt already contains terminal evidence")
     elif not attempt.is_dir():
         raise BenchError(f"attempt-01 was not prepared: {rid}; run prepare first")
     attempt_receipt = attempt / "launch.json"
@@ -863,16 +1174,30 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
         private_file = codex_home / filename
         if not private_file.is_file() or _sha(private_file.read_bytes()) != config.get(key):
             raise BenchError(f"isolated {filename} changed after preparation; refusing launch")
+    profile_binding = proof.get("private_profiles", {}).get(rid, {})
+    if (not isinstance(profile_binding, dict) or
+            profile_binding.get("config_sha256") != config.get("private_config_sha256") or
+            profile_binding.get("execution_contract_sha256") != config.get("execution_contract_sha256") or
+            config.get("execution_contract_sha256") != _execution_contract_sha256()):
+        raise BenchError("private config profile differs from passing preflight; refusing launch")
     home = codex_home.parent
     prompt = task.read_text(encoding="utf-8")
     # Each process receives a fresh profile and no parent-session prompt context.
     env = _private_env(home, {"CODEX_HOME": str(codex_home), "CODEX_FROZEN_ROOT": receipt["frozen_root"],
-                              "CODEX_FROZEN_RECEIPTS": str(attempt / "frozen-mcp-receipts.jsonl"),
-                              "CODEX_BENCH_GUARD_LOG": str(attempt / "guard-receipts.jsonl")})
+                              "CODEX_FROZEN_RECEIPTS": str(attempt / "frozen-mcp-receipts.jsonl")})
     _strict_exec_config_probe(Path(receipt["cli_path"]), env=env, cwd=home / "neutral-cwd")
     # Do not mark the attempt RUNNING until the exact prepared profile passes
     # the installed CLI's strict parser. A setup rejection stays PREPARED.
     receipt = _stamp_launch_context(attempt_receipt, receipt_path, attempt, launch_mode, effective_cap, batch_id)
+    receipt.update({"execution_boundary_status": "BOUNDARY_VERIFIED",
+                    "execution_boundary_contract_sha256": proof["offline_hostprobe"]["runner_contract_sha256"],
+                    "execution_boundary_receipt_sha256": proof["offline_hostprobe"]["execution_sha256"],
+                    "code_mode_host_proof": {"verified": True, "status": "BOUNDARY_VERIFIED",
+                        "path": proof["offline_hostprobe"]["execution_path"],
+                        "sha256": proof["offline_hostprobe"]["execution_sha256"],
+                        "contract_sha256": proof["offline_hostprobe"]["runner_contract_sha256"]},
+                    "hook_enforcement": config.get("hook_enforcement", {"status": "UNAVAILABLE"}),
+                    "hook_verified": False})
     auth_source = Path(os.environ.get("CODEX_BENCH_AUTH", str(DEFAULT_USER_CODEX / "auth.json")))
     if not proof.get("auth_available") or not auth_source.is_file():
         raise BenchError("saved Codex authentication is unavailable; no credentials were copied")
@@ -936,28 +1261,19 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
         for line in guard_file.read_text(encoding="utf-8", errors="replace").splitlines():
             try: guard_events.append(json.loads(line))
             except json.JSONDecodeError: pass
-    lifecycle = {e.get("event") for e in guard_events} >= {"SessionStart", "SessionEnd"}
-    guard_ok = all((e.get("event") != "PreToolUse" or
-                    (e.get("decision") == "allow" and e.get("tool") in config["hooks_allowlist"]))
-                   and e.get("event") != "SubagentStart" for e in guard_events)
     mcp_file = attempt / "frozen-mcp-receipts.jsonl"
     mcp_events = _jsonl(mcp_file) if mcp_file.is_file() else []
-    mcp_ok = all(e.get("outcome") == "ok" and e.get("method") in {"list", "read", "search", "sql"} for e in mcp_events)
-    hook_calls = [e for e in guard_events if e.get("event") == "PreToolUse"]
-    import collections
-    expected_calls = collections.Counter(("mcp__frozen__" + e.get("method", ""),
-                                           _sha(json.dumps(e.get("arguments", {}), sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")))
-                                          for e in mcp_events)
-    observed_calls = collections.Counter((e.get("tool"), e.get("input_sha256")) for e in hook_calls)
-    delegation_detected = any(e.get("event") == "SubagentStart" or
-                              (e.get("event") == "PreToolUse" and e.get("decision") == "deny" and
-                               any(tag in str(e.get("tool", "")).casefold() for tag in ("agent", "spawn", "delegate")))
-                              for e in guard_events)
+    mcp_ok = bool(mcp_events) and all(e.get("outcome") == "ok" and e.get("method") in {"list", "read", "search", "sql"} for e in mcp_events)
+    delegation_detected = False
     receipt.update({"guard_events": len(guard_events), "mcp_events": len(mcp_events),
-                    "hook_verified": bool(lifecycle and guard_ok and mcp_ok and observed_calls == expected_calls),
+                    "native_guard": {"status": "UNAVAILABLE", "events": len(guard_events)},
+                    "hook_enforcement": {"status": "UNAVAILABLE",
+                        "reason": "pinned CLI hook stdin is a character device with no event payload"},
+                    "policy_audit_basis": "offline_frozen_boundary+mcp_receipts+root_rollout_child_scan",
+                    "hook_verified": False,
                     "terminal_verified": False, "verified_receipt": False,
                     "delegation_detected": delegation_detected,
-                    "allowed_tools": config["hooks_allowlist"], "agents_enabled": False,
+                    "allowed_tools": FROZEN_TOOLS, "agents_enabled": False,
                     "multi_agent": False, "max_concurrent_threads_per_session": 1})
     if receipt.get("status") != "TIMEOUT" and rc == 0 and report_path.exists():
         receipt["status"] = "COMPLETE_UNAUDITED"
@@ -981,8 +1297,10 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
         shutil.copyfile(root_rollout, attempt / "rollout.jsonl")
         receipt["rollout_path"] = str(attempt / "rollout.jsonl")
         receipt["child_rollout_paths"] = child_paths
-        receipt["terminal_verified"] = bool(rc == 0 and report_path.is_file() and lifecycle and guard_ok)
-        receipt["verified_receipt"] = bool(receipt["hook_verified"] and receipt["terminal_verified"] and not child_paths)
+        receipt["terminal_verified"] = bool(rc == 0 and report_path.is_file() and mcp_ok)
+        receipt["verified_receipt"] = bool(receipt.get("execution_boundary_status") == "BOUNDARY_VERIFIED" and
+                                           receipt["terminal_verified"] and not child_paths and
+                                           not delegation_detected)
     else:
         receipt["rollout_path"] = None
         receipt["child_rollout_paths"] = child_paths
@@ -1028,6 +1346,8 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         "agents_enabled": receipt.get("agents_enabled"), "multi_agent": receipt.get("multi_agent"),
         "max_concurrent_threads_per_session": receipt.get("max_concurrent_threads_per_session"),
         "hook_verified": receipt.get("hook_verified") is True,
+        "hook_enforcement": receipt.get("hook_enforcement", {"status": "UNKNOWN"}),
+        "code_mode_host_proof": receipt.get("code_mode_host_proof"),
         "terminal_verified": receipt.get("terminal_verified") is True,
         "allowed_tools": receipt.get("allowed_tools", []),
         "model": receipt.get("model"), "effort": receipt.get("effort"),
@@ -1154,6 +1474,8 @@ def main(argv: list[str] | None = None) -> int:
                 _write_json(root / f"batch-{batch_id}-launch.json", {"batch_id": batch_id,
                             "launch_mode": mode, "effective_concurrency_cap": cap,
                             "started_utc": datetime.now(timezone.utc).isoformat()})
+                if not args.all:
+                    _prepare_retry_attempt(root, args.run_id, args.attempt)
                 _preflight(root)
                 if not args.all:
                     return launch_one(root, args.run_id, args.execute, args.timeout, args.attempt, mode, cap, batch_id)

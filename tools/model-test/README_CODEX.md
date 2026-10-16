@@ -34,6 +34,28 @@ unavailable and is excluded from sums; it is never treated as zero.
 
 ## Launcher and lifecycle
 
+### Isolated execution preflight
+
+The runner uses the bundled Code Mode host because these catalog entries require
+the `code_mode_only` execution transport. Its nested tool namespace excludes
+`functions`, `clock`, Codex Apps, and plugins; the nested host inventory must
+contain exactly the four frozen MCP tools (`list`, `read`, `search`, `sql`).
+The outer `exec` transport is recorded separately from those nested calls.
+The Code Mode host must expose no operating-system, network, or process globals,
+and its agent APIs must be undefined. Native hooks are disabled because the
+pinned CLI supplies hook stdin as a character device with no event payload;
+hook enforcement is recorded as `UNAVAILABLE`, never as a pass. The independent
+boundary is verified with an offline loopback-provider hostprobe: exact nested
+frozen-tool inventory and callables, a successful frozen MCP call, rejection of
+an unknown parameter, and no delegation APIs. Only the four enabled frozen MCP
+tools use the server-scoped `approve` mode; global approval remains `never` and
+the sandbox remains read-only. The probe uses a dummy
+credential, never starts a paid model request, and records receipt hashes under
+the ignored `operator-runtime/` directory. Each launch binds the proof hash to
+its private config and then audits the root rollout and child-session scan.
+Historical failed attempts remain unchanged; only untouched `PREPARED`
+profiles may be refreshed.
+
 The companion runner interface is:
 
 ```text

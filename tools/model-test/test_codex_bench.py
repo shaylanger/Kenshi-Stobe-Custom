@@ -189,16 +189,19 @@ See C:\\KenshiModding\\src\\module.py:42
             private_config = next((Path(tmp) / "local").rglob("config.toml")).read_text()
             self.assertIn("multi_agent_v2 = false", private_config)
             self.assertIn("multi_agent_v2_dynamic_tools = false", private_config)
-            self.assertIn("code_mode = true", private_config)
+            self.assertIn("[features.code_mode]", private_config)
+            self.assertIn("enabled = true", private_config)
+            self.assertIn('excluded_tool_namespaces = ["functions", "clock", "mcp__codex_apps", "mcp__plugins"]', private_config)
             self.assertIn("code_mode_host = true", private_config)
             self.assertIn("tool_search = false", private_config)
             self.assertIn("view_image = false", private_config)
             self.assertIn('enabled_tools = ["list", "read", "search", "sql"]', private_config)
-            self.assertIn("[[hooks.PreToolUse]]", private_config)
-            self.assertIn("[[hooks.SessionStart]]", private_config)
-            self.assertIn("[[hooks.SubagentStart]]", private_config)
-            self.assertIn("[[hooks.SessionEnd]]", private_config)
+            self.assertIn('default_tools_approval_mode = "approve"', private_config)
+            self.assertIn("hooks = false", private_config)
+            self.assertNotIn("[[hooks.", private_config)
             self.assertFalse(list((Path(tmp) / "local").rglob("hooks.json")))
+            prepared = next((root / "runs").glob("*/attempt-01/requested-config.json"))
+            self.assertFalse(bench._json(prepared).get("hooks_enabled"))
             self.assertNotIn("[tools]", private_config)
 
     def test_private_profile_path_is_stable_for_relative_and_absolute_run_dir(self):
@@ -243,14 +246,84 @@ See C:\\KenshiModding\\src\\module.py:42
                 proof = {"ready": True, "suite_sha256": bench._sha((root / "suite.json").read_bytes()),
                          "materials": {str(p.resolve()): bench._sha(p.read_bytes())
                                        for p in (root / "suite.json", template, root / "prompt2.txt")},
-                         "prepared_prompts": {rid: receipt["prompt_sha256"]}, "auth_available": True}
+                         "prepared_prompts": {rid: receipt["prompt_sha256"]},
+                         "private_profiles": {rid: {
+                             "config_sha256": bench._json(root / "runs" / rid / "attempt-01" / "requested-config.json")["private_config_sha256"],
+                             "execution_contract_sha256": bench._json(root / "runs" / rid / "attempt-01" / "requested-config.json")["execution_contract_sha256"]}},
+                         "auth_available": True}
                 bench._write_json(root / "preflight.json", proof)
-                with mock.patch.object(bench, "_strict_exec_config_probe", side_effect=bench.BenchError("invalid exact profile")):
+                with mock.patch.object(bench, "_verify_offline_hostprobe"), \
+                     mock.patch.object(bench, "_strict_exec_config_probe", side_effect=bench.BenchError("invalid exact profile")):
                     with self.assertRaisesRegex(bench.BenchError, "invalid exact profile"):
                         bench.launch_one(root, rid, execute=True, timeout=10)
                 self.assertEqual(bench._json(root / "runs" / rid / "launch.json")["status"], "PREPARED")
                 self.assertEqual(bench._json(root / "runs" / rid / "attempt-01" / "launch.json")["status"], "PREPARED")
                 self.assertFalse((Path(receipt["codex_home"]) / "auth.json").exists())
+
+    def test_hook_trust_is_bound_to_exact_registered_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            home = base / "home"
+            codex_home = home / ".codex"
+            neutral = home / "neutral-cwd"
+            codex_home.mkdir(parents=True)
+            neutral.mkdir()
+            config_path = codex_home / "config.toml"
+            config_path.write_text("[hooks]\nenabled = true\n", encoding="utf-8")
+            run_dir = base / "run"
+            run_dir.mkdir()
+            attempt_config = run_dir / "requested-config.json"
+            launch_receipt = run_dir / "attempt-launch.json"
+            run_receipt = run_dir / "launch.json"
+            config = {"private_config": str(config_path), "private_config_sha256": bench._sha(config_path.read_bytes()),
+                      "hook_sha256": bench._sha(config_path.read_bytes()), "guard_log": str(run_dir / "guard.jsonl")}
+            bench._write_json(attempt_config, config)
+            bench._write_json(launch_receipt, {"status": "PREPARED"})
+            bench._write_json(run_receipt, {"status": "PREPARED"})
+            keys = ["session_start", "pre_tool_use", "subagent_start", "session_end"]
+            rows = [{"key": f"{config_path}:event:0:0:{index}", "currentHash": f"sha256:{index:064x}",
+                     "source": "user", "enabled": True, "trustStatus": status}
+                    for index, status in enumerate(keys)]
+            with mock.patch.object(bench, "_appserver_hook_rows", side_effect=[rows, [dict(row, trustStatus="trusted") for row in rows]]):
+                result = bench._establish_exact_hook_trust(Path("codex.exe"), codex_home, Path("C:/frozen"),
+                                                            config_path, config, attempt_config, launch_receipt, run_receipt)
+            self.assertTrue(result["trusted"])
+            persisted = config_path.read_text(encoding="utf-8")
+            self.assertEqual(persisted.count("trusted_hash = "), 4)
+            self.assertEqual(bench._json(launch_receipt)["config_sha256"], bench._sha(attempt_config.read_bytes()))
+
+    def test_retry_profile_is_prepared_before_preflight_without_touching_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "suite"
+            root.mkdir()
+            suite = {"cells": [{"slug": "opaque-high-standard", "model": "model-x", "effort": "high", "speed": "standard"}],
+                     "prompts": ["prompt2.txt"], "prompt_numbers": [2],
+                     "template": "task-frozen.tmpl", "concurrency": {"default": 1, "hard_cap": 1, "auto_start": False}}
+            (root / "suite.json").write_text(json.dumps(suite), encoding="utf-8")
+            (root / "prompt2.txt").write_text("Review the frozen source.", encoding="utf-8")
+            (root / "task-frozen.tmpl").write_text("Ticket {TICKET}\n{PROMPT}\n{FROZEN}\n{FROZEN_WSL}\n", encoding="utf-8")
+            rid = "opaque-high-standard-p2"
+            with mock.patch.dict(bench.os.environ, {"LOCALAPPDATA": str(Path(tmp) / "local")}):
+                self.assertEqual(bench.prepare(root), 0)
+                run_dir = root / "runs" / rid
+                old_attempt = run_dir / "attempt-01" / "launch.json"
+                failed = bench._json(old_attempt)
+                failed["status"] = "FAILED_NO_ROOT_ROLLOUT"
+                bench._write_json(old_attempt, failed)
+                bench._write_json(run_dir / "launch.json", failed)
+                original_bytes = old_attempt.read_bytes()
+                bench._prepare_retry_attempt(root, rid, 2)
+                self.assertEqual(old_attempt.read_bytes(), original_bytes)
+                new = run_dir / "attempt-02"
+                self.assertEqual(bench._json(new / "launch.json")["status"], "PREPARED")
+                self.assertFalse((Path(bench._json(new / "launch.json")["codex_home"]) / "auth.json").exists())
+                failed_config = (run_dir / "attempt-01" / "requested-config.json").read_bytes()
+                bench._refresh_prepared_profile(run_dir, rid, {"model": "model-x", "effort": "high", "speed": "standard"})
+                self.assertEqual((run_dir / "attempt-01" / "launch.json").read_bytes(), original_bytes)
+                self.assertEqual((run_dir / "attempt-01" / "requested-config.json").read_bytes(), failed_config)
+                refreshed = bench._json(new / "requested-config.json")
+                self.assertEqual(refreshed["profile_version"], bench.PROFILE_VERSION)
+                self.assertFalse(refreshed["hooks_enabled"])
 
     def test_rollout_id_reads_session_meta_payload(self):
         with tempfile.TemporaryDirectory() as tmp:

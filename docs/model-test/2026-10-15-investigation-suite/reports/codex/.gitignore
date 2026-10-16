@@ -35,3 +35,4 @@ keys/
 grades/
 batch-*-launch.json
 operator-runtime/
+offline-hostprobe*.json
