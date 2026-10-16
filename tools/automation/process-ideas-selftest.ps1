@@ -144,7 +144,7 @@ try {
     # ---- the real file parses and has the seeds ----
     Remove-Item Env:\KAH_PROCESS_IDEAS
     $real = Run $pi @('list', '-All')
-    T ($real.code -eq 0 -and $real.out -match 'PI-01 \[done\]' -and $real.out -match '\[(open|asked|confirmed|done)\]') '8a the real docs/PROCESS_IDEAS.md parses (seeded done + open entries)'
+    T ($real.code -eq 0 -and $real.out -match '(?m)^PI-\d+ \[(open|asked|confirmed|done|rejected)') '8a the real docs/PROCESS_IDEAS.md parses (>= 1 entry; no assumption about which ideas are open: the live list changes every handoff)'
     $realOpen = @(($real.out -split "`n") | Where-Object { $_ -match '^PI-\d+ \[(open|asked|confirmed)\]' }).Count
     T ($realOpen -le 15) "8b the real file is within the 15-active cap ($realOpen)"
 }
