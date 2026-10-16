@@ -23,6 +23,9 @@ else { 'WAKER STATUS: NOT running (start: Bash run_in_background  MSYS_NO_PATHCO
 # Program ledgers (Shay 2026-10-15): unfinished work packages of every program (C:\KenshiTestRuns\programs\*.json, tools\automation\program-ledger.ps1); fail-open.
 try { & (Join-Path $ws 'tools\automation\program-ledger.ps1') brief } catch { }
 
+# SETUP-FAIL tickets (Shay 2026-10-15; tools/automation/setupfail.ps1): every row marked SETUP-FAIL ("could not run") has an unblock ticket; unowned first, oldest first, cap 12 lines in -Brief. Fail-open.
+try { $sfLines = @(& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'setupfail.ps1') brief $(if ($Brief) { 12 } else { 40 }) 2>&1 | ForEach-Object { "$_" }); $sfLines } catch { "setup-fail tickets check failed open: $($_.Exception.Message)" }
+
 # Process ideas (Shay 2026-10-15; docs/PROCESS_IDEAS.md, tools/automation/process-ideas.ps1): open entries, short, to ask Shay ONCE in the first summary. Never apply them. Fail-open.
 try {
     $piLines = @(& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'process-ideas.ps1') list 2>&1 | ForEach-Object { "$_" })

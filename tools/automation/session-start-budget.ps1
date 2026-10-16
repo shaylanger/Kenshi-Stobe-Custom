@@ -4,11 +4,12 @@
 # character cap; lines over the cap are dropped and replaced by "  (N more; run without -Brief)". If the whole output is still
 # over the budget the caps are scaled down in steps. MUST-KEEP lines are never dropped, never cut, never counted against a cap:
 # WAKER STATUS, ORPHANED, NO SUCCESSOR, DEAD, OWNED-BY-LIVE-TAIL, TAIL, PROCESS IDEAS FOR SHAY (+ its entries), WARNING/ALERT/HEALTH STALL,
-# respawn todos, the final Next: line. Empty sections (header only) are omitted.
-$script:BriefMustKeep = '^WAKER STATUS|\bORPHANED\b|\bNO SUCCESSOR\b|^DEAD |^\s*DEAD |OWNED-BY-LIVE-TAIL|^TAIL |^COORDINATOR POINTER|^\s+tail \S+: relays |^PROCESS IDEAS FOR SHAY|^\s+PI-\d+ |^\s+\(after asking|^WARNING|^ALERT|HEALTH STALL|LANE STUCK|^respawn todos|^Next:'
+# respawn todos, the final Next: line, SETUP-FAIL ticket lines (session-start caps them at 12). Empty sections (header only) are omitted.
+$script:BriefMustKeep = '^WAKER STATUS|\bORPHANED\b|\bNO SUCCESSOR\b|^DEAD |^\s*DEAD |OWNED-BY-LIVE-TAIL|^TAIL |^COORDINATOR POINTER|^\s+tail \S+: relays |^PROCESS IDEAS FOR SHAY|^\s+PI-\d+ |^\s+\(after asking|^WARNING|^ALERT|HEALTH STALL|LANE STUCK|^respawn todos|^Next:|^  \S+ age=\S+ needs=\S+ owner='
 # section-header substring -> @(max non-must-keep lines, max chars per line)
 $script:BriefCaps = [ordered]@{
     'PROGRAM LEDGER'  = @(10, 300)
+    'SETUP-FAIL TICKETS' = @(14, 160)
     'handoff.ready'   = @(6, 300)
     'HANDOFF.md'      = @(8, 450)
     'agents (C:'      = @(14, 190)

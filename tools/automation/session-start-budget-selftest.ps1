@@ -14,7 +14,8 @@ $must = @(
     'TAIL t1 LIVE (pid 1): owns agentD',
     'PROCESS IDEAS FOR SHAY (ask once, together, in your first summary; do not apply any):',
     '  PI-99 [confirmed] a test idea | evidence: x',
-    'Next: respawn every agent whose status is not DONE')
+    'Next: respawn every agent whose status is not DONE',
+    '  08-d age=3h02m needs=design owner=- state=open - unowned')
 $junk = { param($n, $p) 1..$n | ForEach-Object { "$p line $_ " + ('x' * 400) } }
 $lines = @()
 $lines += $must[0]
@@ -28,6 +29,7 @@ $lines += '=== agent health (x) ==='; $lines += (& $junk 40 'health'); $lines +=
 $lines += '=== agent roll call (x) ==='; $lines += (& $junk 100 'roll')
 $lines += '=== in flight ==='; $lines += (& $junk 100 'flight')
 $lines += '=== stale test leftovers ==='; $lines += (& $junk 50 'stale')
+$lines += '=== SETUP-FAIL TICKETS (1 open) ==='; $lines += $must[9]
 $lines += $must[8]
 $inBytes = [Text.Encoding]::UTF8.GetByteCount($lines -join "`n")
 $out = @(Limit-BriefOutput -Lines $lines -MaxBytes 12288)

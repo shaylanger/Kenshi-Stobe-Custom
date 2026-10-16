@@ -3,7 +3,7 @@
 Companion to `NPC_IMMERSION_26_HANDOFF.md`. STOBE only (no FP/animation). Tests run on the isolated 4080 instance 3 (`live-stobe-queue/4080-imm26-runbook.md`) on copied `kah-*` saves; never on Shay's saves; the 5090 is not used.
 
 ## How a row is marked
-- Status: `UNRUN` -> `PASS` | `FAIL` | `SETUP-FAIL` | `GATED` (needs a build/fixture not yet installed). Only the 4080 operator marks PASS, and only with game-state evidence (stobe.log line, DB row, status file, NPC reply text plus the state change it implies). An NPC saying the right words without the state change is not a PASS for rows that name a state change.
+- Status: `UNRUN` -> `PASS` | `FAIL` | `SETUP-FAIL` | `GATED` (needs a build/fixture not yet installed). A SETUP-FAIL mark must say `needs: recipe|server-fix|native|design|fixture` and what exactly (marks go through `tools/automation/mark-row.py`, a bare SETUP-FAIL is refused); each one has an unblock ticket (`tools/automation/setupfail.ps1 list`) that closes when the row next PASSes/FAILs. Only the 4080 operator marks PASS, and only with game-state evidence (stobe.log line, DB row, status file, NPC reply text plus the state change it implies). An NPC saying the right words without the state change is not a PASS for rows that name a state change.
 - Each row: ID | feature | setup/fixture | exact player utterance or action | expected observable evidence | negative control | status | evidence path | date.
 - A FAIL becomes a bug ticket (`bugs` section below) handed to a fix agent; the row is retested on the fixed build and the old FAIL text kept in the evidence column.
 - Output line per row: `RESULT <ID> PASS|FAIL <evidence>` (project convention).

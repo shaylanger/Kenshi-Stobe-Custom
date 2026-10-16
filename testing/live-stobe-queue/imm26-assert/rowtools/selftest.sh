@@ -104,11 +104,14 @@ scen <<EOF
 {"follow_log":[[]],"steps":[{"reply":"I'll walk with you."}]}
 EOF
 r=$(run 23-b 5090-i3); case "$r" in "RESULT 23-b SETUP-FAIL no follow order"*) chk 23-b-setup-fail ok;; *) chk 23-b-setup-fail bad "$r";; esac
+# SETUP-FAIL unblock tickets (tools/automation/setupfail.py via attempts.py): the SETUP-FAIL above opened <runs>/setupfail/23-b.json + an inbox note for the coordinator
+[ -f "$KAH_ROWS_BASE/setupfail/23-b.json" ] && grep -q '"state": "open"' "$KAH_ROWS_BASE/setupfail/23-b.json" && grep -q '"lane": "5090-i3"' "$KAH_ROWS_BASE/setupfail/23-b.json" && ls "$KAH_ROWS_BASE"/inbox/coordinator/*-setupfail-23-b.msg >/dev/null 2>&1 && chk setupfail-ticket-opened ok || chk setupfail-ticket-opened bad "$(ls "$KAH_ROWS_BASE/setupfail" 2>&1)"
 "$PY" "$ST_HERE/attempts.py" reset "$KAH_ROWS_BASE/row-attempts" 5090-i3 23-b "selftest: deliberate setup-fail then pass" >/dev/null
 scen <<EOF
 {"follow_log":[["HOOK_MSG_PROC: FOLLOW target resolved arg='Shay'","FOLLOW_TICK: follower=Cind"],["HOOK_MSG_PROC: FOLLOW target resolved arg='Shay'","FOLLOW_TICK: follower=Cind","FOLLOW_EXPIRED: follower=2529907200 started_gamets=1"]],"steps":[{"reply":"I'll walk with you."}]}
 EOF
 r=$(run 23-b 5090-i3); case "$r" in "RESULT 23-b PASS"*follow_ended_by_expiry*) chk 23-b-pass ok;; *) chk 23-b-pass bad "$r";; esac
+grep -q '"state": "closed"' "$KAH_ROWS_BASE/setupfail/23-b.json" && chk setupfail-ticket-closed-on-pass ok || chk setupfail-ticket-closed-on-pass bad
 scen <<EOF
 {"steps":[{"reply":"Dax? He owes you nothing.","prompt":"Your ties to people just named:\n- Rethar Dax: familial (you)"}]}
 EOF
@@ -182,6 +185,7 @@ run 24-b $L >/dev/null; run 24-b $L >/dev/null; r=$(run 24-b $L); case "$r" in "
 # every attempt is logged (audit): VERDICT lines for the 12-b runs above, plus the BLOCK
 [ "$(grep -c "lane=$L row=12-b event=VERDICT" "$AD/attempts.log")" -ge 4 ] && grep -q 'row=12-b event=BLOCK' "$AD/attempts.log" && chk guard-audit-log ok || chk guard-audit-log bad
 # PI-09: row-timing.log has one line per go-row call incl. the blocked ones
+[ ! -e "$KAH_ROWS_BASE/setupfail/24-b.json" ] && chk setupfail-preflight-fail-no-ticket ok || chk setupfail-preflight-fail-no-ticket bad
 grep -E "^[0-9T:-]+ lane=$L row=12-b verdict=FAIL wall_s=[0-9]+ steps=[0-9]+ attempt=1 agent=-" "$TL" >/dev/null && grep -q 'row=12-b verdict=NEEDS-FIXER wall_s=0' "$TL" && grep -q 'row=12-b verdict=PASS wall_s=' "$TL" && chk timing-log-lines ok || chk timing-log-lines bad "$(tail -4 "$TL")"
 # batch: a blocked row shows as ROW-NEEDS-FIXER, others still run, summary counts it; --allow-retry passes through
 scen <<EOF

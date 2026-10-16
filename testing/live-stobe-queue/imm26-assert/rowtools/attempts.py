@@ -31,6 +31,17 @@ def log(d, lane, row, event, **kv):
     line = "%s lane=%s row=%s event=%s %s" % (now(), lane, row, event, " ".join("%s=%s" % (k, one(v)) for k, v in kv.items()))
     with open(os.path.join(d, "attempts.log"), "a", encoding="utf-8") as f: f.write(line.rstrip() + "\n")
 
+def ticket_hook(d, lane, row, verdict, cause):
+    """SETUP-FAIL unblock tickets (tools/automation/setupfail.py): SETUP-FAIL opens/updates <runs>/setupfail/<row>.json, PASS/FAIL/GATED closes it,
+    PREFLIGHT-FAIL is exempt. <runs> = the parent of DIR (DIR = <runs>/row-attempts). Never breaks a record: any error is swallowed."""
+    try:
+        sp = os.environ.get("KAH_SETUPFAIL_PY") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "tools", "automation", "setupfail.py")
+        if not os.path.isfile(sp): return
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("setupfail", sp); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+        m.on_verdict(row, lane, verdict, cause, runs=os.path.dirname(os.path.abspath(d)))
+    except Exception: pass
+
 def main(a):
     if len(a) < 2: print(__doc__); return 2
     cmd, d = a[0], a[1]
@@ -71,7 +82,7 @@ def main(a):
             log(d, lane, row, "VERDICT", verdict=verdict, attempt=n + 1, cause=cause)
         else:  # PREFLIGHT-FAIL and anything else: the row did not run; not counted, block state unchanged
             log(d, lane, row, "VERDICT", verdict=verdict, attempt=n + 1, counted="no", cause=cause)
-        save(d, lane, st); return 0
+        save(d, lane, st); ticket_hook(d, lane, row, verdict, cause); return 0
     if cmd == "reset":
         reason = a[4] if len(a) > 4 else ""
         if not reason: print("reset needs a reason"); return 2
