@@ -39,6 +39,13 @@ New-Agent 'orphanev' 15 -1 'none' 1 $ev         # INPROC, evidence fresh -> no o
 $evOld = Join-Path $box 'evidence-old'; New-Item -ItemType Directory -Force -Path $evOld | Out-Null
 Set-Content (Join-Path $evOld 'x.txt') 'old' -Encoding ascii; (Get-Item (Join-Path $evOld 'x.txt')).LastWriteTime = (Get-Date).AddMinutes(-30)
 New-Agent 'stalloldev' 15 15 'live' 1 $evOld    # evidence also old -> real stall, wakes
+# PI-17: INPROC agents: own evidence = agents\out\<name>\ dir and the lane out dirs of lane-owners.json (ops list); foreign files do not count
+$ln = Join-Path $box 'lane-x'; New-Item -ItemType Directory -Force -Path $ln | Out-Null; Set-Content (Join-Path $ln 'r.json') 'fresh' -Encoding ascii
+$fo = Join-Path $box 'foreign-dir'; New-Item -ItemType Directory -Force -Path $fo | Out-Null; Set-Content (Join-Path $fo 'r.json') 'fresh' -Encoding ascii
+@{ 'lane-x' = @{ ops = @('orphanlane'); dirs = @('lane-x') } } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $box 'lane-owners.json') -Encoding utf8
+New-Agent 'orphanlane' 34 -1 'none'        # INPROC, only its lane out dir is fresh -> working, no orphan wake
+New-Agent 'orphanforeign' 34 -1 'none'     # INPROC, only a foreign dir is fresh -> still orphaned
+New-Agent 'orphanownout' 34 -1 'none'; New-Item -ItemType Directory -Force -Path (Join-Path $ad 'out\orphanownout') | Out-Null; Set-Content (Join-Path $ad 'out\orphanownout\p.txt') 'fresh' -Encoding ascii
 Run-Monitor
 $w = Wakes
 Check 'healthy: no wake, still RUNNING' ((State 'healthy') -eq 'RUNNING' -and -not ($w -match 'healthy'))
@@ -52,6 +59,9 @@ Check 'logfresh: log growing => no stall wake' (-not ($w -match 'logfresh'))
 Check 'stallev: fresh evidence dir => no stall wake' (-not ($w -match 'stallev'))
 Check 'orphanev: fresh evidence dir => no orphan wake' (-not ($w -match 'orphanev'))
 Check 'stalloldev: old evidence => stall wake still sent' ([bool]($w -match 'AGENT STALL stalloldev'))
+Check 'PI-17 orphanlane: fresh lane out dir => no orphan wake' (-not ($w -match 'orphanlane'))
+Check 'PI-17 orphanownout: fresh agents\out\<name> dir => no orphan wake' (-not ($w -match 'orphanownout'))
+Check 'PI-17 orphanforeign: only a foreign dir fresh => AGENT ORPHANED wake' ([bool]($w -match 'AGENT ORPHANED orphanforeign'))
 Check 'FAILED agents get a respawn todo' (Test-Path (Join-Path $box 'respawn\killme.todo'))
 $n1 = $w.Count
 Run-Monitor

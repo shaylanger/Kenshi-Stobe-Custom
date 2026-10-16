@@ -4,6 +4,9 @@
 param([switch]$Json)
 $script:RcRuns = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 
+# PI-17: own-evidence freshness for in-session agents (agent-guard-lib.ps1 Get-AgentEvidenceAgeMin); fails open (no lib = old behaviour)
+try { . (Join-Path $PSScriptRoot 'agent-guard-lib.ps1') } catch { }
+
 function Test-PidAlive([int]$ProcId) {
     if ($ProcId -le 0) { return $false }
     return [bool](Get-Process -Id $ProcId -ErrorAction SilentlyContinue)
@@ -40,6 +43,10 @@ function Get-AgentRoll {
                     }
                 }
             }
+        }
+        if (-not $sess -and (Get-Command Get-AgentEvidenceAgeMin -ErrorAction SilentlyContinue)) {   # in-session agent: its own out dir / lane out dirs count as a heartbeat too
+            $ea = Get-AgentEvidenceAgeMin $name $now $script:RcRuns
+            if ($null -ne $ea -and ($null -eq $logAge -or $ea -lt $logAge)) { $logAge = $ea }
         }
         $lp = 0; $cp = 0; $started = $null; $exited = $false
         if ($sess) {

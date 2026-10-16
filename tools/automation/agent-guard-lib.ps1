@@ -5,7 +5,8 @@
 #
 #   Get-AgentReport [-AgentsDir <dir>] [-Now <time>]   -> object with
 #       InFlight   RUNNING statuses updated < 45 min ago (work claimed: the waker rule applies)
-#       Orphaned   RUNNING statuses with no update for >= 30 min and no successor (parent session gone?)
+#       Orphaned   RUNNING statuses with no update for >= 30 min and no successor (parent session gone?), unless an in-session
+#                  agent (no <name>.session.json) wrote its OWN evidence < 10 min ago (PI-17, below)
 #       Open       STOPPED-CONTEXT / FAILED statuses with no successor and not abandoned
 #       OpenRecent same, updated within 18 h (the Stop hook blocks only on these; older ones are listed by session-start only)
 #   Test-AgentSuccessor $x $s    true when status record $s continues the work of $x (see below)
@@ -21,6 +22,11 @@
 #       or to the same lane (lane-idle.ps1 lane table + lane-owners.json ops). If X sits in a lane and S sits in a DIFFERENT lane, the shared wp
 #       does not count. Any read/parse error => rule (e) does not apply. Get-AgentReport.Accepted / Get-AgentAcceptedLines say which
 #       successor was accepted and why ("accepted successor S for X via ledger wp W"). `agent-successor.ps1 <old> <new>` registers a pair.
+# Own-evidence rule (PI-17, Shay 2026-10-15): a RUNNING in-session (INPROC: no <name>.session.json) agent whose status is silent >= 30 min is NOT orphaned
+#   (and counts as InFlight) when its own evidence was written < EvidenceMin (10) min ago. Own evidence = agents\out\<name>.log, files under agents\out\<name>\,
+#   and files under the lane out dirs of every lane-owners.json entry whose ops list contains the name. NEVER the .status file, never any other file in the tree,
+#   so another process touching a directory cannot hide a dead agent. No evidence / old evidence / any read error => the 30 min ORPHANED catch applies unchanged.
+#   Get-AgentEvidenceAgeMin <name> [-Now] returns the age in minutes of the newest own-evidence file, or $null. agent-rollcall.ps1 feeds it into LogAgeMin.
 # Abandoned on purpose: a file agents\<name>.abandoned (agent-abandon.ps1) makes the record never reported.
 # Test switches: KAH_RUNS_DIR (root, default C:\KenshiTestRuns).
 
@@ -162,8 +168,52 @@ function Get-AgentRespawn($r) {
     "Respawn fresh agent '$next' for $($r.Name) ($($r.State) $($r.Mtime.ToString('MM-dd HH:mm'))): Agent prompt `"Resume the task '$($r.Task)' as a FRESH agent named $next. Read $src first (status file $($r.Path)), continue from where $($r.Name) stopped, keep your own status current with tools\automation\agent-status.ps1 $next RUNNING|DONE|FAILED|STOPPED-CONTEXT and write C:\KenshiTestRuns\agents\$next.handoff.md. Never SendMessage the old agent.$nxt`""
 }
 
+# newest write time (minutes before $Now) of one file or of all files under one dir; $null when none. Never counts *.status. Capped at 20000 files.
+function Get-NewestAgeMin([string]$Path, [datetime]$Now) {
+    try {
+        $best = $null
+        if (Test-Path -LiteralPath $Path -PathType Leaf) { $files = @($Path) }
+        elseif (Test-Path -LiteralPath $Path -PathType Container) { $files = [System.IO.Directory]::EnumerateFiles($Path, '*', [System.IO.SearchOption]::AllDirectories) }
+        else { return $null }
+        $n = 0
+        foreach ($f in $files) {
+            if ($f -like '*.status') { continue }
+            if (++$n -gt 20000) { break }
+            try { $t = [System.IO.File]::GetLastWriteTime($f) } catch { continue }
+            if ($null -eq $best -or $t -gt $best) { $best = $t }
+        }
+        if ($null -eq $best) { return $null }
+        [math]::Round(($Now - $best).TotalMinutes, 1)
+    } catch { $null }
+}
+
+# PI-17: age (minutes) of the newest file in the agent's OWN evidence locations, or $null (see header). Fails open to $null.
+function Get-AgentEvidenceAgeMin([string]$Name, [datetime]$Now = (Get-Date), [string]$RunsDir = '') {
+    try {
+        if (-not $RunsDir) { $RunsDir = Get-AgentRunsDir }
+        if (-not $Name -or $Name -match '[\/:*?"<>|]' -or $Name -like '*..*') { return $null }
+        $paths = @((Join-Path $RunsDir "agents\out\$Name.log"), (Join-Path $RunsDir "agents\out\$Name"))
+        $ov = Join-Path $RunsDir 'lane-owners.json'
+        if (Test-Path -LiteralPath $ov) {
+            $j = Get-Content -LiteralPath $ov -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            foreach ($p in $j.psobject.Properties) {
+                if (@($p.Value.ops | Where-Object { $_ -and "$_" -ieq $Name }).Count) {
+                    foreach ($d in @($p.Value.dirs | Where-Object { $_ })) {
+                        $d = "$d"
+                        if ($d -match '[\/:*?"<>|]' -or $d -like '*..*') { continue }       # lane dirs are plain names under the runs dir
+                        $paths += (Join-Path $RunsDir $d)
+                    }
+                }
+            }
+        }
+        $best = $null
+        foreach ($p in $paths) { $a = Get-NewestAgeMin $p $Now; if ($null -ne $a -and ($null -eq $best -or $a -lt $best)) { $best = $a } }
+        $best
+    } catch { $null }
+}
+
 function Get-AgentReport {
-    param([string]$AgentsDir = '', [datetime]$Now = (Get-Date), [int]$RunningMin = 45, [int]$OrphanMin = 30, [int]$HorizonH = 18)
+    param([string]$AgentsDir = '', [datetime]$Now = (Get-Date), [int]$RunningMin = 45, [int]$OrphanMin = 30, [int]$HorizonH = 18, [int]$EvidenceMin = 10)
     $rep = [pscustomobject]@{ InFlight = @(); Orphaned = @(); Open = @(); OpenRecent = @(); Todos = @(); Count = 0; Accepted = @() }
     try {
         if (-not $AgentsDir) { $AgentsDir = Join-Path (Get-AgentRunsDir) 'agents' }
@@ -178,6 +228,10 @@ function Get-AgentReport {
             if ($r.Abandoned) { continue }
             if ($r.State -notin 'RUNNING', 'STOPPED-CONTEXT', 'FAILED') { continue }
             if ($r.State -eq 'RUNNING' -and $age -lt $OrphanMin) { continue }
+            if ($r.State -eq 'RUNNING' -and -not (Test-Path -LiteralPath (Join-Path $AgentsDir "$($r.Name).session.json"))) {   # PI-17: in-session agent writing its own evidence is working
+                $ev = Get-AgentEvidenceAgeMin $r.Name $Now (Split-Path -Parent $AgentsDir)
+                if ($null -ne $ev -and $ev -lt $EvidenceMin) { if ($age -ge $RunningMin) { $fly += $r }; continue }
+            }
             $sup = $false
             foreach ($s in $recs) { if (Test-AgentSuccessorBasic $r $s) { $sup = $true; break } }
             if (-not $sup) {      # rule (e): ledger/lane tie to a live successor under another name (report which one and why)

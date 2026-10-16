@@ -77,6 +77,46 @@ try {
     Ok (@($hl | Where-Object { $_ -like '*oldstop*older than 18 h*' }).Count -eq 1) 'old open agent listed with the 18 h note'
     Ok (-not ($hl -match 'wpA3|dropped')) 'running/abandoned agents not listed as open'
 
+    # ---- PI-17: own-evidence freshness keeps an in-session agent out of ORPHANED (separate sandbox runs dir) ----
+    $pi = Join-Path $tmp 'pi17'; $pa = Join-Path $pi 'agents'
+    New-Item -ItemType Directory -Force -Path (Join-Path $pa 'out'), (Join-Path $pi 'lane-a'), (Join-Path $pi 'lane-b'), (Join-Path $pi 'foreign') | Out-Null
+    function New-PSt([string]$name, [double]$ageMin) {
+        $f = Join-Path $pa "$name.status"
+        @("$name | RUNNING | 2026-10-15 12:00", 'task: pi17', 'latest: x', 'outputs: y', 'next: ') | Set-Content -LiteralPath $f -Encoding UTF8
+        (Get-Item -LiteralPath $f).LastWriteTime = (Get-Date).AddMinutes(-$ageMin)
+    }
+    function New-Ev([string]$path, [double]$ageMin) {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+        Set-Content -LiteralPath $path -Value 'x' -Encoding ascii
+        (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddMinutes(-$ageMin)
+    }
+    @{ 'lane-x' = @{ ops = @('pi-lane'); dirs = @('lane-a', '..\foreign', 'foreign') }; 'lane-y' = @{ ops = @('someone-else'); dirs = @('lane-b') } } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $pi 'lane-owners.json') -Encoding UTF8
+    New-PSt 'pi-log' 31;   New-Ev (Join-Path $pa 'out\pi-log.log') 2                  # own poll log fresh
+    New-PSt 'pi-dir' 45;   New-Ev (Join-Path $pa 'out\pi-dir\rows\r1.txt') 3           # own evidence dir fresh, status 45 min old
+    New-PSt 'pi-lane' 40;  New-Ev (Join-Path $pi 'lane-a\sub\res.json') 4              # its lane out dir (lane-owners.json ops) fresh
+    New-PSt 'pi-oldev' 31; New-Ev (Join-Path $pa 'out\pi-oldev.log') 20                # own log but older than 10 min
+    New-PSt 'pi-foreign' 31; New-Ev (Join-Path $pa 'out\somebody-else.log') 1; New-Ev (Join-Path $pi 'foreign\f.txt') 1; New-Ev (Join-Path $pi 'lane-b\f.txt') 1   # only foreign files fresh
+    New-PSt 'pi-none' 31                                                               # no evidence at all
+    New-PSt 'pi-stonly' 31; New-Ev (Join-Path $pa 'out\pi-stonly\x.status') 1          # a .status file never counts
+    New-PSt 'pi-sess' 31;  New-Ev (Join-Path $pa 'out\pi-sess.log') 1; Set-Content (Join-Path $pa 'pi-sess.session.json') '{}'   # INDEPENDENT: the host judges liveness, rule unchanged
+    New-PSt 'pi-trav' 31                                                               # lane dir '..\foreign' must be ignored (and 'foreign' is not its lane)
+    $pr = Get-AgentReport -AgentsDir $pa
+    $po = @($pr.Orphaned | ForEach-Object Name); $pf = @($pr.InFlight | ForEach-Object Name)
+    Ok ($po -notcontains 'pi-log') "PI-17: silent 31 min + fresh own log is not orphaned (orphaned=$($po -join ','))"
+    Ok ($po -notcontains 'pi-dir') 'PI-17: fresh own evidence dir is not orphaned'
+    Ok ($po -notcontains 'pi-lane') 'PI-17: fresh lane out dir (lane-owners.json) is not orphaned'
+    Ok ($pf -contains 'pi-dir' -and $pf -contains 'pi-lane' -and $pf -contains 'pi-log') "PI-17: working agent counts as in-flight even when its status is >= 45 min old ($($pf -join ','))"
+    Ok ($po -contains 'pi-oldev') 'PI-17: own log older than 10 min => still orphaned'
+    Ok ($po -contains 'pi-foreign') 'PI-17: silent 31 min + only a foreign file fresh => still orphaned'
+    Ok ($po -contains 'pi-none') 'PI-17: no evidence => still orphaned (30 min catch unchanged)'
+    Ok ($po -contains 'pi-stonly') 'PI-17: a fresh .status file in the evidence dir does not count'
+    Ok ($po -contains 'pi-sess') 'PI-17: agent with a session.json keeps the old rule'
+    Ok ($po -contains 'pi-trav') 'PI-17: no evidence for pi-trav even with a traversal lane dir'
+    Ok ($null -eq (Get-AgentEvidenceAgeMin 'pi-none' (Get-Date) $pi)) 'PI-17: Get-AgentEvidenceAgeMin returns $null without evidence'
+    $ea = Get-AgentEvidenceAgeMin 'pi-log' (Get-Date) $pi
+    Ok ($null -ne $ea -and $ea -lt 5) "PI-17: Get-AgentEvidenceAgeMin returns the log age ($ea)"
+    Ok ($null -eq (Get-AgentEvidenceAgeMin '..\foreign' (Get-Date) $pi)) 'PI-17: a path-like agent name is refused'
+
     # ---- the hook (agent checks only) ----
     function Run-Hook([string]$mode, [string]$json, [hashtable]$extraEnv = @{}) {
         $in = Join-Path $tmp 'hook.in'; $o = Join-Path $tmp 'hook.out'; $e = Join-Path $tmp 'hook.err'
