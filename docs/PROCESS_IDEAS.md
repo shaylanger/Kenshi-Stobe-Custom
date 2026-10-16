@@ -7,7 +7,7 @@ Tool: `tools/automation/process-ideas.ps1` (`list`, `add`, `review <decisions.js
 Entry fields: id, status (open | asked | confirmed | rejected x1 | rejected x2 | done), idea, evidence (what happened and what it cost, measured where possible), saving (expected speed or tokens), risk (to monitoring and the stall / idle / dead-agent catches), hooks (yes = touches hooks/settings), weakens (yes = would weaken a timeout/stall/idle/dead-agent catch; only allowed with hooks=yes and then FOR SHAY ONLY), log.
 
 Rules:
-- At most 10 active entries (open | asked | confirmed). Above that `add` and `review` refuse a new one until one is retired; a warning shows from 8.
+- At most 15 active entries (open | asked | confirmed). Above that `add` and `review` refuse a new one until one is retired; a warning shows from 12.
 - Handoff review, at most 3 new entries (the biggest of the session, each with a concrete example) and one step per existing entry, judged against what happened THIS session, never against silence: open + does not apply -> rejected x1; rejected x1 + does not apply -> rejected x2; rejected x2 + does not apply -> removed (moved to Retired with a log line); rejected x1 + applies -> open; rejected x2 + applies -> rejected x1; no decision -> unchanged. `confirmed` only when the decision names a specific moment where the idea would have helped.
 - Shay answers: `answer <id> no` removes the entry (logged in Retired); `yes`/`approve` marks it confirmed. If he has not answered by the next handoff the review runs again and asks again.
 - When an idea is built, record measured before/after numbers (`done <id> -Measured ...`).
@@ -47,17 +47,6 @@ Rules:
 - saving: ~30-40 min and 1 false FAIL per outage
 - risk: low: read-only health call, tiny token cost
 - hooks: no
-- weakens: no
-- added: 2026-10-15 19:43
-- log: 2026-10-15 19:43 review 'coordinator8-19:50': added
-- log: 2026-10-15 19:54 Shay answered yes
-
-### PI-16 | confirmed
-- idea: Stop hook IDLE-GAME check should read lane locks (game-N.lock) not only instance 1.
-- evidence: 19:19 Stop hook blocked the turn: default slot idle 19 min while 3 lane games (game-3/4/5.lock) ran under operators; I had to record kenshi-ctl idle with a reason.
-- saving: 1 blocked turn + manual idle record per outage
-- risk: touches hooks: could hide a real idle lane if wrong
-- hooks: yes
 - weakens: no
 - added: 2026-10-15 19:43
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
@@ -259,6 +248,19 @@ Rules:
 - weakens: no
 - added: 2026-10-15 19:43
 - measured: agent-guard-selftest 75/75 (13 new PI-17 cases: silent 31 min + fresh own log/dir/lane dir => not orphaned and in-flight; only foreign file / old own log / .status / session.json agent / no evidence => still orphaned), agent-host-monitor-selftest 26/26 (3 new INPROC cases), agent-successor-selftest 29/29, event-wait-filter-selftest 13/13; live roll call run OK
+- retired: 2026-10-15 built
+- log: 2026-10-15 19:43 review 'coordinator8-19:50': added
+- log: 2026-10-15 19:54 Shay answered yes
+
+### PI-16 | done
+- idea: Stop hook IDLE-GAME check should read lane locks (game-N.lock) not only instance 1.
+- evidence: 19:19 Stop hook blocked the turn: default slot idle 19 min while 3 lane games (game-3/4/5.lock) ran under operators; I had to record kenshi-ctl idle with a reason.
+- saving: 1 blocked turn + manual idle record per outage
+- risk: touches hooks: could hide a real idle lane if wrong
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 19:43
+- measured: waker-lanes-selftest 15/15 (3 lane games+game.lock free not blocked; idle/operator-less live lane and stale dead-process lock still block); tail-hooks, hook-command, agent-guard, agent-successor, tail-close selftests PASS; agent-session-hooks has 1 unrelated FAIL (meter-coordinator-text, context-meter hook)
 - retired: 2026-10-15 built
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
 - log: 2026-10-15 19:54 Shay answered yes
