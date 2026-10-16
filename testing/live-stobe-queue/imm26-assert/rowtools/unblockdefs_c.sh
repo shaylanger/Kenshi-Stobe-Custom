@@ -176,7 +176,7 @@ ub10_gift_pick() {  # ub10_gift_pick : first item of UB_GIFT (comma list) that `
     [ -n "$it" ] || continue
     printf 'stobe-auto give Shay %s 1 </dev/null 2>&1 | head -2\n' "$(rl_q "$it")" | lt_h >> "$EV/gift_give.txt" 2>&1
     : > "$inv"; hxd_inv "$inv" Shay
-    if grep -qiF "$it" "$inv" 2>/dev/null; then UB_GIFT_ITEM="$it"; break; fi
+    if grep -qiF "$it" "$inv" 2>/dev/null || tail -2 "$EV/gift_give.txt" 2>/dev/null | grep -qiE "^Shay got [0-9]+/[0-9]+ ${it}"; then UB_GIFT_ITEM="$it"; break; fi   # op12: also accept the give reply (inventory read can lag)
   done < <(printf '%s' "${UB_GIFT:-Bandages,Iron Plates,Copper Ore,Sabreclaw}" | tr ',' '\n')
   uc_dry && UB_GIFT_ITEM="${UB_GIFT_ITEM:-Bandages}"
   [ -n "$UB_GIFT_ITEM" ] || { RL_REASON="no gift item could be given to Shay (tried ${UB_GIFT:-Bandages,Iron Plates,Copper Ore,Sabreclaw}; gift_give.txt)"; return 3; }
@@ -198,6 +198,9 @@ rd_10b() {
   # --- serious harm: KO the victim (protect off), wake, back to normal speed, victim protected again
   lt_h <<EOT >> "$EV/harm.txt" 2>&1
 stobe-auto protect $n off </dev/null 2>&1 | head -1
+stobe-auto protect Shay on </dev/null 2>&1 | head -1
+stobe-auto hit Shay $n head 130 </dev/null 2>&1 | head -2
+sleep 2
 stobe-auto hit Shay $n head 130 </dev/null 2>&1 | head -2
 sleep 8
 grep -a "knockout:" $(rl_q "$LT_STOBELOG") | tail -1 | cut -c1-200
