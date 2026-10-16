@@ -171,16 +171,6 @@ Rules:
 - added: 2026-10-16 16:14
 - log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
 
-### PI-59 | open
-- idea: Let tail-relay.ps1 accept the hand-back text and auto-send it to coordinator.current in one call (and mark the agent relayed in the ledger), so the tail does not need a model turn to re-summarise and SendMessage each result.
-- evidence: This tail period: 5 results were each re-typed into a SendMessage of 1.5-3k tokens by a model at 100k+ context, although the content was already in the agent's out file.
-- saving: about 5 turns and 15k output tokens per tail period
-- risk: low: relays are results not orders; the coordinator still acks
-- hooks: no
-- weakens: no
-- added: 2026-10-16 16:14
-- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
-
 ## In progress
 
 ### PI-54 | in-progress
