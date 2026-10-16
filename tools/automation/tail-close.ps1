@@ -30,6 +30,15 @@ if ($cfg.Delay -lt 0) { $cfg.Delay = if ($env:KAH_TAIL_CLOSE_DELAY) { [int]$env:
     $runs = Get-TailRuns $cfg.Runs
     $sid = $cfg.Session
     $log = Join-Path (Get-TailDir $runs) 'closed.log'
+    # Tail closing review (Shay 2026-10-16): the tail must review the conversation since the handoff and update the PI list before it is closed.
+    # Needs <runs>\process-ideaseview-<session>-tail.json (same format as the handoff review, step 2b in testing/AGENT_PROMPTS.md). -DryRun and KAH_TAIL_CLOSE_NO_REVIEW=1 skip the check.
+    if (-not $cfg.DryRun -and $env:KAH_TAIL_CLOSE_NO_REVIEW -ne '1') {
+        $rv = Join-Path (Join-Path $runs 'process-ideas') ('review-' + $sid + '-tail.json')
+        if (-not (Test-Path -LiteralPath $rv)) {
+            "tail-close REFUSED: review the conversation since the handoff first and write $rv (<= 3 new BIG ideas, concrete examples; decisions for entries the tail period gives evidence about), run process-ideas.ps1 review <file>, commit + push docs/PROCESS_IDEAS.md, then close again (rule: testing/AGENT_PROMPTS.md 'Tail closing review')."
+            return
+        }
+    }
     function Write-CloseLog([string]$action, [string]$detail) {
         try {
             New-Item -ItemType Directory -Force -Path (Split-Path $log -Parent) | Out-Null
