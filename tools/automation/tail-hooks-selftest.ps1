@@ -15,6 +15,7 @@ $meter = Join-Path $env:USERPROFILE '.claude\hooks\context-meter.ps1'
 $d = Join-Path ([IO.Path]::GetTempPath()) ("tailself-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force -Path (Join-Path $d 'programs'), (Join-Path $d 'agents') | Out-Null
 $env:KAH_RUNS_DIR = $d; $env:KCS_RUNS = $d
+$env:KAH_TAIL_NO_CLOSE = '1'   # the Stop hook closes finished tails (tail-close.ps1); these flags use the selftest's own pid
 Remove-Item Env:KAH_AGENT_NAME -ErrorAction SilentlyContinue
 function RunPS([string[]]$a, [string]$stdin = '') {
     if ($stdin) { return @($stdin | & powershell -NoProfile -ExecutionPolicy Bypass @a 2>&1 | ForEach-Object { "$_" }) }
@@ -124,7 +125,7 @@ try {
     $o = (RunPS @('-File', (Join-Path $auto 'coord-supervisor.ps1'), '-Selftest')) -join "`n"
     T ($o -match 'SELFTEST OK' -and $o -match 'PASS 10a' -and $o -match 'PASS 10c') 'supervisor selftest incl. tail cases'
 } finally {
-    Remove-Item Env:KAH_RUNS_DIR, Env:KCS_RUNS -ErrorAction SilentlyContinue
+    Remove-Item Env:KAH_RUNS_DIR, Env:KCS_RUNS, Env:KAH_TAIL_NO_CLOSE -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue
 }
 if ($script:fails) { "RESULT tail-hooks FAIL ($($script:fails))"; exit 1 } else { 'RESULT tail-hooks PASS'; exit 0 }

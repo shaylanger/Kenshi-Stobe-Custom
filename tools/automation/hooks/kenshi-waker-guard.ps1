@@ -73,6 +73,12 @@ if (-not $env:KAH_AGENT_NAME -and [string]$in.session_id) {
         $tv = & { . (Join-Path $PSScriptRoot '..\tail-mode.ps1'); Get-TailStopVerdict $tr $ts }
         if ($tv.Tail) {
             if ($tv.Block) { Block-Stop ('kenshi-waker-guard: ' + $tv.Message + ' Keep the waker running: ' + $WAKER) }
+            # The tail may end = it is FINISHED (all agents done + acknowledged): close it (Shay 2026-10-15). tail-close.ps1 re-checks everything
+            # (flag, agents, claude pid name/start time, never the current coordinator), sends TAIL-DONE to the current coordinator, and a detached
+            # worker ends this session's process ~20 s later (log: <runs>\tail\closed.log). Fail closed + silent: any error = nothing is closed.
+            if (-not $env:KAH_TAIL_NO_CLOSE) {
+                try { & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\tail-close.ps1') -Session $ts -Source hook -Runs $tr *> $null } catch { }
+            }
             exit 0
         }
     } catch { }
