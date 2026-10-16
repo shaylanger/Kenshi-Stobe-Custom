@@ -1,10 +1,11 @@
 param(
-    [string]$RuntimeDirectory = (Join-Path $PSScriptRoot 'reports\codex\operator-runtime'),
+    [string]$RuntimeDirectory = (Join-Path $PSScriptRoot '..\..\docs\model-test\2026-10-15-investigation-suite\reports\codex\operator-runtime'),
     [int]$SampleIntervalSeconds = 30,
     [int]$MaxRuntimeHours = 24
 )
 
 $ErrorActionPreference = 'Stop'
+$RuntimeDirectory = [System.IO.Path]::GetFullPath($RuntimeDirectory)
 if ($SampleIntervalSeconds -lt 5 -or $SampleIntervalSeconds -gt 60) {
     throw 'SampleIntervalSeconds must be between 5 and 60.'
 }
