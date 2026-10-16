@@ -31,3 +31,6 @@ Env knobs (also read from the environment): `ROW_NPC HX_SAVE HX_SAVE2 HX_SPOT HX
 - 16-bx SQL columns: `core_npc_master` / `core_npc` `speechstyle occupation`, `lock_profile` (core_npc.lock_profile may not exist: the statement then errors in profile_set.txt, check it).
 - 02-ax blanking Thoke's profile in `core_npc_master`/`core_npc` and the server regenerating it at the first chat.
 - 15-bx: fighters.txt/starter.txt come from the IN phase (the X-phase starter is saved as starter_x.txt, not asserted). `hxd_trim` deletes eventlog rows after the phase mark between phases.
+
+## Family B rows (imm26-hxB)
+05-cx: `hxrun.sh 05-cx 5090-i3 [--dry]` (hxdefs_b.sh, hxcheck_b.py; E empty roster + H one sleeper on load 1, N 3+ visible on load 2; verdict assert_principle.py 05-cx). Selftest: `bash rowtools/hx-selftest_b.sh` -> `SELFTEST HXB ALL PASS 21/21`. 03-cx has no script: the TESTS row already holds a 4080 PASS.

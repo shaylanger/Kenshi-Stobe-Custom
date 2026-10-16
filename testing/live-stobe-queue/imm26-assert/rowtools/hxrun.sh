@@ -11,6 +11,8 @@
 HX_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HX_HERE/../go-row.sh"
 . "$HX_HERE/hxdefs.sh"
+[ -f "$HX_HERE/hxdefs_b.sh" ] && . "$HX_HERE/hxdefs_b.sh"   # family B rows (imm26-hxB: 05-cx) via HXB_ROWS
+[ -f "$HX_HERE/hxdefs_a.sh" ] && { . "$HX_HERE/hxdefs_a.sh"; HXB_ROWS="${HXB_ROWS:-} $HXA_ROWS"; }   # family A rows (imm26-hxA: 01-bx 01-cx 02-cx) share the HXB_ROWS gate
 PY="$HX_HERE/pywrap_hx.sh"
 hx_usage() { echo "usage: hxrun.sh <17-bx|18-cx|16-bx|15-bx|13-ax|02-ax> <lane: $(lt_lanes)> [--save S] [--save2 S] [--out DIR] [--no-reload] [--dry] [--allow-retry 'why'] [--native] [--item I] [--ctl NPC] [--faction F] [--spot 'x y z'] [--out-dist U] [--runs 'P1 N1'] [--saves 'a b c d e']" >&2; }
 ROW=""; LANE=""; RELOAD=1; ALLOW=()
@@ -26,7 +28,7 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 [ -n "$ROW" ] && [ -n "$LANE" ] || { hx_usage; exit 2; }
 norm="${ROW#IMM-}"
-case "$norm" in 17-bx|18-cx|16-bx|15-bx|13-ax|02-ax) ;; *) echo "RESULT $ROW SETUP-FAIL not a hardening row (17-bx 18-cx 16-bx 15-bx 13-ax 02-ax)"; exit 2;; esac
+case " ${HXB_ROWS:-} " in *" $norm "*) ;; *) case "$norm" in 17-bx|18-cx|16-bx|15-bx|13-ax|02-ax) ;; *) echo "RESULT $ROW SETUP-FAIL not a hardening row (17-bx 18-cx 16-bx 15-bx 13-ax 02-ax)"; exit 2;; esac;; esac
 lt_load "$LANE" >/dev/null || { echo "RESULT $ROW SETUP-FAIL PREFLIGHT-FAIL unknown lane '$LANE'"; exit 2; }
 ROW_NPC="${ROW_NPC:-$HX_NPC_DEF}"; export ROW_NPC
 if [ -n "${HX_KEEP:-}" ]; then   # partial 13-ax: keep the evidence dir (and the run dirs of the earlier calls)
