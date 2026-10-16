@@ -151,16 +151,63 @@ def c_08a(v, ev):
             v.ck(f'neg{i - 1}_no_followup', n == 0, f'n={n}: {(rd(ev, f"s{i}", "utterance.txt") or "").strip()[:50]}')
 
 
+BAD_24B_REPLY = re.compile(r"don'?t have a current offer|do not have a current offer|confirmed reachable point|do not have a confirmed|cannot route", re.I)
+_DEST_KEYS = ('endpoint_candidate_id', 'native_candidate_id', 'candidate_id', 'endpoint_label', 'destination_label', 'destination_name',
+              'endpoint_town', 'town', 'town_name', 'place')
+
+
+def _point_ok(p):
+    try:
+        return isinstance(p, dict) and all(float(p[k]) == float(p[k]) for k in ('x', 'y', 'z'))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def grounded_dest(js):
+    """(label|None, ok): a grounded destination = native candidate id or a named town (label) or a real x/y/z point, in the row or its regional_goal"""
+    for src in (js, js.get('regional_goal') if isinstance(js.get('regional_goal'), dict) else {}):
+        for k in _DEST_KEYS:
+            if isinstance(src.get(k), str) and src[k].strip():
+                return src[k].strip(), True
+        for k in ('endpoint_point', 'endpoint', 'destination_point', 'point'):
+            if _point_ok(src.get(k)):
+                return src.get('endpoint_label') or src.get('destination_label') or k, True
+    return None, False
+
+
 def c_24b(v, ev):
-    if not need(v, ev, 's1/ev_full.txt'):
+    """24-b (amended 2026-10-16): the NPC must OFFER A FIRST LEG with a grounded destination (native candidate id if in range, else the nearest
+    known town in the region): a route_ready region_plan row or a PROPOSED travel_agreement with regional_goal{Vain}; then the s2 'Yes' must start
+    a real trip (ACCEPTED agreement + OWNED_TRAVEL accepted=1). awaiting_route / cannot_route_yet / blocked_by_existing_trip alone, or the
+    'no current offer' fallback reply, can never pass."""
+    if not need(v, ev, 's1/ev_full.txt', 's1/reply.txt', 's2/ev_full.txt', 's2/reply.txt'):
         return
-    rows = full_rows(ev, 's1', {'region_plan'})
+    rows = [r for st in ('s1', 's2') for r in full_rows(ev, st, {'region_plan'})]
     v.ck('region_plan_row', bool(rows), f'n={len(rows)}')
     st = {m for _, _, _, raw in rows for m in re.findall(r'awaiting_route|route_ready|cannot_route_yet|blocked_by_existing_trip', raw)}
-    v.ck('stage_valid', bool(st & {'awaiting_route', 'route_ready', 'cannot_route_yet'}), ','.join(sorted(st)) or 'none')
     if 'blocked_by_existing_trip' in st:
         v.ck('not_blocked_by_trip', False, 'active trip blocks the region plan: preflight left a trip?')
-    v.note = f'R~ reply: {first_reply(ev, "s1")[:140]!r}'
+    r1 = first_reply(ev, 's1')
+    v.ck('reply_not_fallback', bool(r1) and not BAD_24B_REPLY.search(r1), r1[:80] if r1 else 'no NPC reply')
+    ready = [js for _, _, js, raw in rows if js.get('stage') == 'route_ready' or ('route_ready' in raw and not js)]
+    prop = [js for _, _, js, _ in full_rows(ev, 's1', {'travel_agreement'})
+            if js.get('status') == 'PROPOSED' and isinstance(js.get('regional_goal'), dict) and js['regional_goal']
+            and 'vain' in json.dumps(js['regional_goal']).lower()]
+    v.ck('first_leg_offered', bool(ready or prop), f'stages={",".join(sorted(st)) or "none"} proposed_with_regional_goal={len(prop)}')
+    label, ok = None, False
+    for js in ready + prop:
+        label, ok = grounded_dest(js)
+        if ok:
+            break
+    v.ck('grounded_destination', ok, label or 'no candidate id / town name / x,y,z point in the route_ready row or PROPOSED agreement')
+    if ok and label and label not in _DEST_KEYS and label not in ('endpoint', 'endpoint_point', 'destination_point', 'point'):
+        v.ck('reply_names_destination', label.lower() in r1.lower(), label)
+    acc = accepted_row(ev)
+    v.ck('yes_accepted_with_regional_goal', bool(acc) and isinstance(acc.get('regional_goal'), dict) and bool(acc.get('regional_goal')),
+         'no ACCEPTED travel_agreement with regional_goal after the Yes' if not acc else 'ok')
+    n = len(owned_travel_lines(ev, 's2', 's3'))
+    v.ck('trip_started_OWNED_TRAVEL', n >= 1, f'OWNED_TRAVEL accepted=1 lines={n}')
+    v.note = f'R~ reply1: {r1[:140]!r} reply2: {first_reply(ev, "s2")[:100]!r}'
 
 
 def c_14a(v, ev):

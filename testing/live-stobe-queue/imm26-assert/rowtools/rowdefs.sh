@@ -31,6 +31,7 @@ rd_08a() {  # FX-CIND; s1 positive, s2..s4 negatives (each must create no social
 rd_24b() {  # native-context row; preflight cleared open trips so blocked_by_existing_trip cannot come from leftovers
   ROW_NATIVE=1; rd_need_npc || return 3
   rl_say 1 "Let's consider Vain as a general area, not an exact spot." || return $?
+  rl_say 2 "Yes, let's go." || return $?   # amended 2026-10-16: the NPC offers a first leg, the Yes starts the walk (c_24b needs s2)
 }
 rd_14a() {  # native-context row; non-faction NPC affinity 20+; town is a far known place (ROW_TOWN, default Squin)
   ROW_NATIVE=1; rd_need_npc || return 3; rd_aff 40

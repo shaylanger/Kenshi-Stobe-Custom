@@ -43,6 +43,37 @@ scen <<EOF
 EOF
 r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b FAIL"*region_plan_row*) chk 24-b-fail ok;; *) chk 24-b-fail bad "$r";; esac
 
+# 4b-4g 24-b strict (amended 2026-10-16): first leg offered + grounded destination + the Yes starts a real trip; 'no current offer' can never pass
+rrj='{"stage":"route_ready","region":"Vain","proposed_region":"Vain","endpoint_label":"Hive Village E","endpoint_point":{"x":1,"y":2,"z":3}}'
+prj='{"status":"PROPOSED","regional_goal":{"region":"Vain","endpoint_label":"Hive Village E"}}'
+acj='{"status":"ACCEPTED","regional_goal":{"region":"Vain","endpoint_label":"Hive Village E"}}'
+offer="Sure, let's head toward Vain. I'd lead us to Hive Village E first. Shall we set out?"
+own='ACTION_EXEC: OWNED_TRAVEL accepted=1 agreement=a1'
+scen <<EOF
+{"steps":[{"reply":"$offer","full":[["region_plan","$(jq "$rrj")"],["travel_agreement","$(jq "$prj")"]]},{"reply":"Lead on, then.","full":[["travel_agreement","$(jq "$acj")"]],"log":["$own"]}]}
+EOF
+rm -rf "$KAH_ROWS_BASE/row-attempts"; r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b PASS"*first_leg_offered*trip_started_OWNED_TRAVEL*) chk 24-b-strict-pass ok;; *) chk 24-b-strict-pass bad "$r";; esac
+scen <<EOF
+{"steps":[{"reply":"I don't have a current offer for that area to act on yet.","full":[["region_plan","$(jq '{"stage":"awaiting_route","region":"Vain"}')"]]},{"reply":"ok"}]}
+EOF
+rm -rf "$KAH_ROWS_BASE/row-attempts"; r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b FAIL"*reply_not_fallback*first_leg_offered*) chk 24-b-no-current-offer-fails ok;; *) chk 24-b-no-current-offer-fails bad "$r";; esac
+scen <<EOF
+{"steps":[{"reply":"I understand the area you mean: Vain. I do not have a confirmed reachable point there yet.","full":[["region_plan","$(jq '{"stage":"cannot_route_yet","region":"Vain"}')"]]},{"reply":"ok"}]}
+EOF
+rm -rf "$KAH_ROWS_BASE/row-attempts"; r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b FAIL"*first_leg_offered*) chk 24-b-cannot-route-fails ok;; *) chk 24-b-cannot-route-fails bad "$r";; esac
+scen <<EOF
+{"steps":[{"reply":"Sure, let's head toward Vain.","full":[["region_plan","$(jq '{"stage":"route_ready","region":"Vain"}')"]]},{"reply":"Lead on, then.","full":[["travel_agreement","$(jq "$acj")"]],"log":["$own"]}]}
+EOF
+rm -rf "$KAH_ROWS_BASE/row-attempts"; r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b FAIL"*grounded_destination*) chk 24-b-ungrounded-fails ok;; *) chk 24-b-ungrounded-fails bad "$r";; esac
+scen <<EOF
+{"steps":[{"reply":"$offer","full":[["region_plan","$(jq "$rrj")"],["travel_agreement","$(jq "$prj")"]]},{"reply":"Hm, maybe later."}]}
+EOF
+rm -rf "$KAH_ROWS_BASE/row-attempts"; r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b FAIL"*yes_accepted_with_regional_goal*trip_started_OWNED_TRAVEL*) chk 24-b-no-started-trip-fails ok;; *) chk 24-b-no-started-trip-fails bad "$r";; esac
+scen <<EOF
+{"steps":[{"reply":"$offer","full":[["region_plan","$(jq "$rrj")"]]},{"reply":"ok"}]}
+EOF
+rm -rf "$KAH_ROWS_BASE/row-attempts"; r=$(run 24-b 5090-i5); case "$r" in "RESULT 24-b FAIL"*trip_started*) chk 24-b-offer-only-fails ok;; *) chk 24-b-offer-only-fails bad "$r";; esac
+
 # 5 14-a GATED on old DLL (ctxpush unsupported)
 scen <<EOF
 {"ctxpush":"ERROR unknown command stobe_ctxpush","steps":[{"reply":"x"}]}
