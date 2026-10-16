@@ -61,12 +61,12 @@ try {
     $ap = Get-Content -LiteralPath (Join-Path $ws 'testing\AGENT_PROMPTS.md') -Raw
     T ($ap -match '2b\. \*\*PROCESS IDEAS REVIEW') '3d AGENT_PROMPTS overlap-handoff section has the step'
     # ---- cap ----
-    Fixture @(1..10 | ForEach-Object { Entry ('PI-{0:00}' -f $_) 'open' "idea $_" })
-    $r = P @('add', '-Idea', 'eleventh', '-Evidence', $EV, '-Saving', '5k', '-Risk', 'none', '-Hooks', 'no')
-    T ($r.code -ne 0 -and $r.out -match 'REFUSED' -and $r.out -match 'cap 10') '4a add refused at the 10-entry cap'
-    Fixture @(1..7 | ForEach-Object { Entry ('PI-{0:00}' -f $_) 'open' "idea $_" })
-    $r = P @('add', '-Idea', 'eighth', '-Evidence', $EV, '-Saving', '5k', '-Risk', 'none', '-Hooks', 'no')
-    T ($r.code -eq 0 -and $r.out -match 'added PI-08' -and $r.out -match 'WARNING') '4b add at 8 active succeeds with a warning'
+    Fixture @(1..15 | ForEach-Object { Entry ('PI-{0:00}' -f $_) 'open' "idea $_" })
+    $r = P @('add', '-Idea', 'sixteenth', '-Evidence', $EV, '-Saving', '5k', '-Risk', 'none', '-Hooks', 'no')
+    T ($r.code -ne 0 -and $r.out -match 'REFUSED' -and $r.out -match 'cap 15') '4a add refused at the 15-entry cap'
+    Fixture @(1..11 | ForEach-Object { Entry ('PI-{0:00}' -f $_) 'open' "idea $_" })
+    $r = P @('add', '-Idea', 'twelfth', '-Evidence', $EV, '-Saving', '5k', '-Risk', 'none', '-Hooks', 'no')
+    T ($r.code -eq 0 -and $r.out -match 'added PI-12' -and $r.out -match 'WARNING') '4b add at 12 active succeeds with a warning'
     Fixture @(1..7 | ForEach-Object { Entry ('PI-{0:00}' -f $_) 'open' "idea $_" })
     $r = P @('add', '-Idea', 'no evidence', '-Evidence', 'short', '-Saving', '5k', '-Risk', 'none', '-Hooks', 'no')
     T ($r.code -ne 0 -and $r.out -match 'evidence') '4c add without a concrete evidence text refused'
@@ -76,10 +76,10 @@ try {
     $j = Join-Path $tmp 'dec.json'; (@{ review = 'rn'; decisions = @(); new = $nw } | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $j -Encoding UTF8
     $r = P @('review', $j)
     T ($r.out -match 'ADDED PI-06' -and $r.out -match 'ADDED PI-08' -and $r.out -notmatch 'ADDED PI-09' -and $r.out -match 'at most 3') '4d review adds at most 3 new entries'
-    Fixture @(1..9 | ForEach-Object { Entry ('PI-{0:00}' -f $_) 'open' "idea $_" })
+    Fixture @(1..14 | ForEach-Object { Entry ('PI-{0:00}' -f $_) 'open' "idea $_" })
     (@{ review = 'rc'; decisions = @(); new = $nw } | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $j -Encoding UTF8
     $r = P @('review', $j)
-    T (([regex]::Matches($r.out, 'ADDED')).Count -eq 1 -and $r.out -match 'REFUSED new entry') '4e review new entries respect the cap (9 active -> only 1 added)'
+    T (([regex]::Matches($r.out, 'ADDED')).Count -eq 1 -and $r.out -match 'REFUSED new entry') '4e review new entries respect the cap (14 active -> only 1 added)'
     # ---- transitions: one step per handoff ----
     Fixture @((Entry 'PI-01' 'open' 'a'), (Entry 'PI-02' 'rejected x1' 'b'), (Entry 'PI-03' 'rejected x2' 'c'), (Entry 'PI-04' 'asked' 'd'))
     Decide 'PI-01' $false | Out-Null
@@ -146,7 +146,7 @@ try {
     $real = Run $pi @('list', '-All')
     T ($real.code -eq 0 -and $real.out -match 'PI-01 \[done\]' -and $real.out -match '\[(open|asked|confirmed|done)\]') '8a the real docs/PROCESS_IDEAS.md parses (seeded done + open entries)'
     $realOpen = @(($real.out -split "`n") | Where-Object { $_ -match '^PI-\d+ \[(open|asked|confirmed)\]' }).Count
-    T ($realOpen -le 10) "8b the real file is within the 10-active cap ($realOpen)"
+    T ($realOpen -le 15) "8b the real file is within the 15-active cap ($realOpen)"
 }
 finally {
     foreach ($k in $old.Keys) { if ($null -ne $old[$k]) { Set-Item "Env:\$k" $old[$k] } else { Remove-Item "Env:\$k" -ErrorAction SilentlyContinue } }

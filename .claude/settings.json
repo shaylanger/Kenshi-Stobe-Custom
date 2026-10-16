@@ -3,7 +3,18 @@
     "allow": [
       "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\install-dll.ps1\" Stobe)",
       "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\install-dll.ps1\" KenshiFP)",
-      "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1\" *)"
+      "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\kenshi-ctl.ps1\" *)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 *)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 *)",
+      "PowerShell(powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\agent-status.ps1 *)",
+      "PowerShell(powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 *)",
+      "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\agent-status.ps1\" *)",
+      "PowerShell(powershell.exe -NoProfile -File C:\\KenshiModding\\tools\\automation\\save-report.ps1 *)",
+      "PowerShell(powershell.exe -NoProfile -File C:/KenshiModding/tools/automation/save-report.ps1 *)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File C:\\KenshiModding\\tools\\automation\\save-report.ps1 *)",
+      "PowerShell(& \"C:\\KenshiModding\\tools\\automation\\save-report.ps1\" *)",
+      "Bash(powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/agent-status.ps1 *)",
+      "Bash(powershell.exe -NoProfile -File C:/KenshiModding/tools/automation/save-report.ps1 *)"
     ],
     "deny": [
       "AskUserQuestion",

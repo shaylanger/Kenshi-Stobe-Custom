@@ -2,7 +2,7 @@
 # cheaper are RECORDED in docs/PROCESS_IDEAS.md, asked to Shay once in the new coordinator's first summary, never applied by this tool.
 #   process-ideas.ps1 list [-All]                       open/asked/confirmed entries, one short line each (id, idea, evidence, flag); -All adds rejected + Retired
 #   process-ideas.ps1 add -Idea .. -Evidence .. -Saving .. -Risk .. -Hooks yes|no [-Weakens yes|no]
-#                                                       refuses at 10 active (open|asked|confirmed) entries, warns from 8, needs a concrete evidence text
+#                                                       refuses at 15 active (open|asked|confirmed) entries, warns from 12, needs a concrete evidence text
 #   process-ideas.ps1 review <decisions.json>           the handoff review (see below); prints one line per transition
 #   process-ideas.ps1 asked <id> [<id>..]               open -> asked (the coordinator asked Shay in its first summary)
 #   process-ideas.ps1 answer <id> no|yes|approve        Shay's answer: no = removed (logged in Retired); yes/approve = confirmed
@@ -12,7 +12,7 @@
 # Transitions (ONE step per entry per handoff; silence, or a decision without evidence, = unchanged):
 #   open|asked + not apply -> rejected x1 | rejected x1 + not apply -> rejected x2 | rejected x2 + not apply -> removed (Retired)
 #   rejected x1 + applies -> open | rejected x2 + applies -> rejected x1 | open|asked + applies + moment -> confirmed (applies without moment: unchanged)
-# New entries: at most 3 per review, each with concrete evidence, never above the 10-active cap (resolve/retire one first).
+# New entries: at most 3 per review, each with concrete evidence, never above the 15-active cap (resolve/retire one first).
 # GUARD: an idea that would weaken a timeout, stall catch, idle catch or dead-agent catch is refused unless it carries hooks=yes
 # ("touches hooks/settings"); then it is recorded with weakens=yes and listed as FOR SHAY ONLY. Nothing here edits hooks or settings.
 # Test switch: env KAH_PROCESS_IDEAS (file), or -File. Selftest: process-ideas-selftest.ps1. Exit 0 ok, 2 refused/bad input.
@@ -27,7 +27,7 @@ param(
     [switch]$All
 )
 $ErrorActionPreference = 'Stop'
-$CAP = 10; $WARN_AT = 8; $MAX_NEW = 3
+$CAP = 15; $WARN_AT = 12; $MAX_NEW = 3
 if (-not $File) { $File = if ($env:KAH_PROCESS_IDEAS) { $env:KAH_PROCESS_IDEAS } else { 'C:\KenshiModding\docs\PROCESS_IDEAS.md' } }
 function Fail([string]$m) { [Console]::Error.WriteLine("process-ideas: $m"); exit 2 }
 function One([string]$s) { ("$s" -replace '[\r\n]+', ' ').Trim() }
