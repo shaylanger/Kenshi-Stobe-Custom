@@ -107,8 +107,11 @@ try {
         Check ($r.Out -match 'independent agent session' -and $r.Out -match 'agent-status\.ps1 selftest-agent STOPPED-CONTEXT' -and $r.Out -match 'inbox\\\\coordinator' -and $r.Out -match 'Do NOT open a new session') 'meter-agent-text' $r.Out
         Check ($r.Out -notmatch 'SendMessage' -and $r.Out -notmatch ' handoff \\"C:') 'meter-agent-no-handoff-command' $r.Out
         Remove-Item Env:KAH_AGENT_NAME
+        # coordinator handoff text appears at the overlap-handoff threshold (300k since the tail handoff, 2026-10-15), not at 200k
+        [IO.File]::WriteAllText($tr, ($line -replace '210000', '310000') + "`n")
         $r = Run-Hook $meter @() $mj
-        Check ($r.Out -match 'handoff-ready\.ps1' -and $r.Out -match 'Do NOT message, wait for or stop any agent' -and $r.Out -notmatch 'SendMessage') 'meter-coordinator-text' $r.Out
+        Check ($r.Out -match 'handoff-ready\.ps1' -and $r.Out -match 'OVERLAP HANDOFF' -and $r.Out -match 'tail-mode\.ps1' -and $r.Out -notmatch 'selftest-agent') 'meter-coordinator-text' $r.Out
+        [IO.File]::WriteAllText($tr, $line + "`n")
         # warn tier for an agent (175k)
         [IO.File]::WriteAllText($tr, ($line -replace '210000', '175000') + "`n")
         $env:KAH_AGENT_NAME = 'selftest-agent'
