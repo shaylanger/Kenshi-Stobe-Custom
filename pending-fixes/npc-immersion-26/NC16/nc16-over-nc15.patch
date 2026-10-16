@@ -1,0 +1,75 @@
+--- ../imm26-nc15/src/ActivityRuntimeBindings.cpp	2026-10-16 01:09:00.790953600 -0600
++++ src/ActivityRuntimeBindings.cpp	2026-10-16 02:51:53.409337400 -0600
+@@ -430,19 +430,20 @@
+  if(!actor || !LocalTravel::ValidateForDispatch(world_,actor,a.routeCandidateId,a.routeX,a.routeY,a.routeZ,a.routeLabel,reason))return false;
+  if(a.scopeDigest.size()!=64 || a.scopeDigest.find_first_not_of("0123456789abcdef")!=std::string::npos ||
+     a.dispatchEnvelope.empty()) { reason="authenticated_activity_v2_scope_missing"; return false; }
+- if(NativeTravelLifecycle::Start(world_,actor,a.requester,NULL,a.routeX,a.routeY,a.routeZ,a.id,r.id,a.worldId,
++ if(NativeTravelLifecycle::WorldId().empty()){reason="travel_lifecycle_world_unset";return false;}
++ if(NativeTravelLifecycle::Start(world_,actor,a.requester,NULL,a.routeX,a.routeY,a.routeZ,a.id,r.id,NativeTravelLifecycle::WorldId(),
+    a.scopeDigest,a.dispatchEnvelope,static_cast<long long>(a.expiresAt),static_cast<long long>(now_),reason))return true;
+  // Start may reject after addOrder partially mutated. A recorded exact request
+  // remains owned until PollRoute/CancelRoute confirms its native cleanup.
+  std::string phase,why,task;bool arrived=false,released=false;
+- if(NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,r.id,a.worldId,PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released)) {
++ if(NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,r.id,NativeTravelLifecycle::WorldId(),PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released)) {
+   reason="route_dispatch_recorded_cleanup_required";return true;
+  }
+  return false;
+ }
+ Receipt ConcreteRuntimeBindings::PollRoute(const Agreement& a,const std::string& id) {
+  Receipt out;std::string phase,why,task;bool arrived=false,released=false;
+- if(!NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,id,a.worldId,PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released)) {
++ if(!NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,id,NativeTravelLifecycle::WorldId(),PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released)) {
+   out.status=Receipt::Rejected;out.reason="route_request_missing_or_identity_changed";return out;
+  }
+  if(phase=="running" || phase=="dispatching" || !released) {
+@@ -455,11 +456,11 @@
+ bool ConcreteRuntimeBindings::CancelRoute(const Agreement& a,const std::string& id) {
+  if(a.campQualified) { std::string scopeReason; (void)CampScopeCurrentForCleanup(a,a.discoveryTargetSerial,scopeReason); }
+  std::string phase,why,task;bool arrived=false,released=false;
+- if(!NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,id,a.worldId,PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released))return false;
++ if(!NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,id,NativeTravelLifecycle::WorldId(),PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released))return false;
+  if(released)return true;
+  if(task.empty())return false;
+- return NativeTravelLifecycle::ReleaseOwned(world_,a.actor,a.requester,a.id,id,a.worldId,PlaythroughSession::Generation(),a.scopeDigest,task,why) ||
+-        NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,id,a.worldId,PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released) && released;
++ return NativeTravelLifecycle::ReleaseOwned(world_,a.actor,a.requester,a.id,id,NativeTravelLifecycle::WorldId(),PlaythroughSession::Generation(),a.scopeDigest,task,why) ||
++        NativeTravelLifecycle::InspectRequest(a.actor,a.requester,a.id,id,NativeTravelLifecycle::WorldId(),PlaythroughSession::Generation(),a.scopeDigest,phase,why,task,arrived,released) && released;
+ }
+ } }
+ 
+--- ../imm26-nc15/src/ActivityHandBack.cpp	2026-10-16 01:09:00.788954000 -0600
++++ src/ActivityHandBack.cpp	2026-10-16 02:51:53.403336300 -0600
+@@ -108,7 +108,7 @@
+  }
+  if (e.followIssued || e.machine.Active()) {
+   std::string phase, why, task; bool arrived = false, released = false;
+-  if (NativeTravelLifecycle::InspectRequest(a.actor, a.requester, a.id, e.requestId, a.worldId, PlaythroughSession::Generation(),
++  if (NativeTravelLifecycle::InspectRequest(a.actor, a.requester, a.id, e.requestId, NativeTravelLifecycle::WorldId(), PlaythroughSession::Generation(),
+         a.scopeDigest, phase, why, task, arrived, released)) {
+    in.followStarted = true; in.followReleased = released; e.task = task; e.followIssued = true;
+    in.followFailed = phase != "running" && phase != "dispatching";
+@@ -120,11 +120,11 @@
+    std::string why;
+    const Ogre::Vector3 p = requester->getPosition();
+    e.followIssued = true;
+-   const bool ok = NativeTravelLifecycle::Start(world_, actor, a.requester, requester, p.x, p.y, p.z, a.id, e.requestId, a.worldId,
++   const bool ok = NativeTravelLifecycle::Start(world_, actor, a.requester, requester, p.x, p.y, p.z, a.id, e.requestId, NativeTravelLifecycle::WorldId(),
+      a.scopeDigest, a.dispatchEnvelope.empty() ? std::string("handback:") + a.id : a.dispatchEnvelope,
+      static_cast<long long>(now_) + 900, static_cast<long long>(now_), why);
+    std::string phase, why2, task; bool arrived = false, released = false;
+-   if (NativeTravelLifecycle::InspectRequest(a.actor, a.requester, a.id, e.requestId, a.worldId, PlaythroughSession::Generation(),
++   if (NativeTravelLifecycle::InspectRequest(a.actor, a.requester, a.id, e.requestId, NativeTravelLifecycle::WorldId(), PlaythroughSession::Generation(),
+          a.scopeDigest, phase, why2, task, arrived, released)) { in.followStarted = true; e.task = task; }
+    e.machine.FollowStartResult(ok, why, in);
+   } else if (out.action == HandBack::ActTransfer && actor && requester) {
+@@ -133,7 +133,7 @@
+    e.machine.TransferResult(ok, moved, why, in);
+   } else if (out.action == HandBack::ActReleaseFollow && !e.task.empty()) {
+    std::string why;
+-   NativeTravelLifecycle::ReleaseOwned(world_, a.actor, a.requester, a.id, e.requestId, a.worldId, PlaythroughSession::Generation(),
++   NativeTravelLifecycle::ReleaseOwned(world_, a.actor, a.requester, a.id, e.requestId, NativeTravelLifecycle::WorldId(), PlaythroughSession::Generation(),
+      a.scopeDigest, e.task, why);
+   }
+  } catch (...) {

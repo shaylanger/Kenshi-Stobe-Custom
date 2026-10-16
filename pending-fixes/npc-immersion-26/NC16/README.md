@@ -1,0 +1,10 @@
+# NC16 = NC15 (9EABD486...) + Activity travel calls use the lifecycle world id (IMM-26-a, WP U5)
+
+Root cause (investigator `agents/out/imm26-inv-26a-world/latest.md`): Activity code passed the Activity epoch `a.worldId` (plain 32-hex) as `expectedWorld` to `NativeTravelLifecycle::Start/InspectRequest/ReleaseOwned`; `Prepare` only accepts the lifecycle's own `travel-<32hex>` id (Reset()), so every activity dispatch ended `travel_identity_or_ownership_rejected`.
+Fix (src\ActivityRuntimeBindings.cpp 6 calls, src\ActivityHandBack.cpp 4 calls): the world argument of those 10 calls is `NativeTravelLifecycle::WorldId()`. `a.worldId` is kept everywhere else (grant matching ActivityController.cpp:189, ActivityGoals.cpp:58, envelope/digest, route compare). `Prepare` is NOT loosened.
+Empty-id guard: `DispatchRoute` returns reason `travel_lifecycle_world_unset` (shows in ACTIVITY_END_DIAG) if `WorldId()` is empty before Start; Prepare already fails closed on an empty id, so Inspect/Release/HandBack calls with an empty id simply fail safe (no crash). Reset() mid-trip mints a new id, so the activity then fails safe (same hazard as chat travel).
+Expected next live gate: Start's later checks (existing_travel_controller / npc_has_existing_orders_or_unavailable).
+
+DLL: `NC16\Stobe.dll` SHA256 `96C6FDDF0E8B8E5D0174A4A834CEF9B551CA33472EA3766BAF8EF3FC66BBBE1A` (`RESULT NC-BUILD PASS objects=69`, build.out.txt). Gitignored. NOT installed on any lane.
+Tests (WSL, `bash offline-tests.sh`): `components/STOBE/tests/cpp/activity_travel_world_source_tests.py` NC15 tree `calls=10 failures=20` (FAIL), NC16 tree `calls=10 failures=0` (PASS); nc15_sidkey_tests PASS checks=20; tests-activity-adapter and ActivityCampNativeAdapterTests exit 0.
+Reproduce: copy `C:\KenshiTestRuns\imm26-nc15\{src,legacy-v1,tests}` to a new tree, `python3 nc16edit.py <tree>` (asserts the 6+4 call edits), build with `NC\build.ps1 -Out <tree>\build -SrcDir <tree>\src -LegacyDir <tree>\legacy-v1`. Work tree `C:\KenshiTestRuns\imm26-nc16`. Patch: `nc16-over-nc15.patch`.
