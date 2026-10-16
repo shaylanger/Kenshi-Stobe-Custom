@@ -293,6 +293,7 @@ tr_n2_move() {  # leaver armed next to the partner for ~8 s real, then teleporte
 stobe-auto teleport $ln $pn </dev/null | head -1 | cut -c1-100
 stobe-auto teleport Shay $pn </dev/null | head -1 | cut -c1-100
 stobe-auto order $ln HOLD_POSITION keep </dev/null | head -1 | cut -c1-80
+stobe-auto protect $ln on </dev/null | head -1   # op11: the Hub outlaws KO'd the leaver (Shay) 100 u out, a downed leaver is not free -> no N2
 sleep 6
 if [ "$ko" = 1 ]; then stobe-auto protect $pn off </dev/null | head -1; stobe-auto order $pn IDLE </dev/null | head -1; stobe-auto ko $pn 300 </dev/null | head -1; fi
 sleep 8
@@ -306,7 +307,7 @@ EOT
 }
 rd_13b() {
   unset ROW_NATIVE; tr_cfg
-  local pa="${TRIP_PARTNER:-Malzin}" le="${TRIP_LEAVER:-$TD_NPC}" pn ln n0 k c
+  local pa="${TRIP_PARTNER:-Malzin}" le="${TRIP_LEAVER:-Shay}" pn ln n0 k c
   tr_target "$pa" || return 3; pn=$(rl_q "$RL_NPC_FULL"); echo "$RL_NPC_FULL" > "$EV/partner.txt"
   tr_target "$le" || return 3; ln=$(rl_q "$RL_NPC_FULL"); echo "$RL_NPC_FULL" > "$EV/leaver.txt"; echo "$RL_NPC_FULL" > "$EV/npc.txt"
   [ "${TRIP_QUIET:-1}" = 0 ] || tr_quiet
@@ -314,11 +315,15 @@ rd_13b() {
   tr_se se_base.txt
   n0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); n0=${n0:-0}
   tr_n2_move "$pn" "$ln" poll "${TRIP_N2_WAIT:-90}" "$n0" 1
-  tr_n2_log n2_armed.txt "$n0"
+  # N5b: a KO'd partner holds the abandonment until the partner is conscious, so wake FIRST, then read the N2 lines (op11 2026-10-16)
   lt_h <<EOT >> "$EV/phase-poll.txt" 2>&1
 stobe-auto wake $pn </dev/null | head -1
 stobe-auto health $pn 100 </dev/null | head -1
+stobe-auto wake Shay </dev/null | head -1
+stobe-auto health Shay 100 </dev/null | head -1
+for t in 1 2 3 4 5 6 7 8; do sleep 3; tail -n +$((n0 + 1)) $LT_STOBELOG | grep -q N2_ABANDON && break; done
 EOT
+  tr_n2_log n2_armed.txt "$n0"
   for k in $(seq 1 "${TRIP_SE_TRIES:-15}"); do
     c=$(lt_sql "select count(*) from social_effect se where se::text like '%abandoned_in_danger%'" | head -1 | tr -dc 0-9)
     [ "${c:-0}" -gt "$(grep -c . "$EV/se_base.txt" 2>/dev/null)" ] && break
