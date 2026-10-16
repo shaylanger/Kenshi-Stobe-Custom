@@ -17,7 +17,9 @@ pf_isolation() {
   [ "${KAH_PF_ISOLATION:-1}" = 0 ] && { echo "isolation=skipped"; return 0; }
   local cache="$LT_BASE/preflight-isolation-$LT_RIG.txt" id="i$LT_N"
   if [ -n "${KAH_ROW_FAKE:-}" ]; then echo "isolation=fake"; return 0; fi
-  if [ ! -s "$cache" ] || [ -n "$(find "$cache" -mmin +10 2>/dev/null)" ]; then
+  # stale also when the window-slot logic or the lane registry changed after the cache was written (lane-window.ps1 computes slots from the live layout)
+  local lw="$PF_HERE/../../../tools/automation/lane-window.ps1" rg="$LT_BASE/lanes/lanes-$LT_RIG.json"
+  if [ ! -s "$cache" ] || [ -n "$(find "$cache" -mmin +10 2>/dev/null)" ] || [ "$lw" -nt "$cache" ] || [ "$rg" -nt "$cache" ]; then
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\lane-isolation-check.ps1' "$LT_RIG" > "$cache" 2>&1
   fi
   local bad; bad=$(grep -E '^RESULT lane-isolation .* FAIL' "$cache" | grep -E "(^|[^a-z0-9])$id([^0-9]|$)|lane $id|instance $LT_N")
