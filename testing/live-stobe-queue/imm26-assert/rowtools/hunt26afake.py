@@ -32,6 +32,8 @@ if kind == 'h':
         out(pick('goats'))
     if 'stobe-auto inv' in body:
         out(pick('inv'))
+    if 'for i in' in body and 'teleport Shay' in body:   # hunt26a-run.sh v2 follow call: one dist=N line per jump (scenario key seps, default 5 x dist=9.5)
+        out(pick('seps') or 'dist=9.5\ndist=9.5\ndist=9.5\ndist=9.5\ndist=9.5')
     if re.search(r'stobe-auto where ', body):
         out('Malzin #2740478464/2 [Nameless] pos=-49422.0,1661.0,3643.0 dist=0.9')
     out('ok')
