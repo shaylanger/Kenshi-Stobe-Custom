@@ -8,26 +8,31 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PY=$(command -v python3 || command -v python)
 R=/c/KenshiTestRuns; [ -d "$R" ] || R=/mnt/c/KenshiTestRuns
 S=$R/imm26-assert-selftest; rm -rf "$S"; mkdir -p "$S"
-run() { "$PY" "$HERE/$1" "${@:2}" 2>&1 | cut -c1-420; }
+NCHK=0; NBAD=0; OUT=""
+# run: print the helper output (cut) and remember it; part 1 (live evidence bundles, expected FAILs) only checks "ran, printed a RESULT line, no Traceback"
+run() { OUT=$("$PY" "$HERE/$1" "${@:2}" 2>&1 | cut -c1-420); echo "$OUT"; }
+# ex PASS|FAIL: the last run's first RESULT line must say that verdict (part 2 synthetic bundles, fixed inputs)
+ex() { NCHK=$((NCHK+1)); if echo "$OUT" | grep -aq "^RESULT [^ ]* $1 "; then :; else NBAD=$((NBAD+1)); echo "SELFTEST imm26-assert-check FAIL expected RESULT $1 from the run above"; fi; }
+ran() { NCHK=$((NCHK+1)); if echo "$OUT" | grep -aq "^RESULT " && ! echo "$OUT" | grep -aq Traceback; then :; else NBAD=$((NBAD+1)); echo "SELFTEST imm26-assert-check FAIL helper crashed or printed no RESULT line (part 1)"; fi; }
 x3() { echo "$1 $1 $1"; }
 
 echo "## part 1: existing bundles (lenient)"
 B=$R/imm26-4080; I=$R/imm26-4080-i4; J=$R/imm26-5090-i4/rows; K=$R/imm26-5090/rows; M=$R/imm26-5090-i5/rows3
-run assert_stance.py 01-bx --target $(x3 $B/01-b) --ctl-nohist $(x3 $B/01-a-neg80) --ctl-pos $(x3 $B/01-a-aff60) --seed "Sure, a walk sounds good.|Fine, lead the way.|Count me in." --lenient
-run assert_stance.py 01-cx --target $(x3 $M/IMM-01-c-hostile) --ctl $(x3 $M/IMM-01-c-ctl) --lenient
-run assert_stance.py 16-bx --target $K/IMM-16-b-1 $K/IMM-16-b-2 $K/IMM-16-b-3 --ctl $K/IMM-16-b-1 $K/IMM-16-b-2 $K/IMM-16-b-3 --trait reserved --lenient
-run assert_principle.py 02-ax --target $(x3 $B/02-a) --ctl $(x3 $M/IMM-01-c) --lenient
-run assert_principle.py 02-bx --target $(x3 $M/IMM-02-b) --ctl $(x3 $M/IMM-02-c) --lenient
-run assert_principle.py 02-cx --target $(x3 $M/IMM-02-c) --ctl $(x3 $M/IMM-01-c) --lenient
-run assert_principle.py 02-dx --target $(x3 $M/IMM-02-d) --ctl $(x3 $M/IMM-02-b) --lenient
-run assert_principle.py 05-cx --target $(x3 $B/05-c) --ctl $(x3 $B/01-a-neg80) --hidden $(x3 $B/05-c) --lenient
-run assert_witness.py 03-cx --run $I/03-c-composed $I/03-c-composed-2 --victim Malzin --friend "Rel Vik" --ko "Rel Dax" --stranger "Rel Cee" --lenient
-run assert_witness.py 04-ax --run $I/04-a-composed $I/04-a-composed-2 --victim "Rel Cee" --friend "Rel Vik" --stranger "Rel Fen" --lenient
-run assert_witness.py 13-ax --pos $B/13-a-pay2 $B/13-a-pay2 --neg $B/13-a-breach $B/13-a-breach --ctl $B/13-a-accept2 --price 353 --lenient
-run assert_witness.py 15-bx --out $(x3 $J/IMM-15-b) --inrange $(x3 $J/IMM-15-a) --fighters "Hungry Bandit,Habo" --starter Habo --lenient
-run assert_claims.py 17-bx --false $(x3 $J/IMM-17-b) --true $(x3 $J/IMM-17-b) --item Sabreclaw --lenient
-run assert_claims.py 18-cx --combat $(x3 $J/IMM-18-c) --calm $(x3 $J/IMM-18-a) --target Braddic --lenient
-run assert_claims.py 19-ax --accept $J/IMM-19-a $J/IMM-19-a2 --recall $(x3 $J/IMM-19-a2) --ctl $(x3 $J/IMM-18-a) --dest "Stumble Inn" --lenient
+run assert_stance.py 01-bx --target $(x3 $B/01-b) --ctl-nohist $(x3 $B/01-a-neg80) --ctl-pos $(x3 $B/01-a-aff60) --seed "Sure, a walk sounds good.|Fine, lead the way.|Count me in." --lenient; ran
+run assert_stance.py 01-cx --target $(x3 $M/IMM-01-c-hostile) --ctl $(x3 $M/IMM-01-c-ctl) --lenient; ran
+run assert_stance.py 16-bx --target $K/IMM-16-b-1 $K/IMM-16-b-2 $K/IMM-16-b-3 --ctl $K/IMM-16-b-1 $K/IMM-16-b-2 $K/IMM-16-b-3 --trait reserved --lenient; ran
+run assert_principle.py 02-ax --target $(x3 $B/02-a) --ctl $(x3 $M/IMM-01-c) --lenient; ran
+run assert_principle.py 02-bx --target $(x3 $M/IMM-02-b) --ctl $(x3 $M/IMM-02-c) --lenient; ran
+run assert_principle.py 02-cx --target $(x3 $M/IMM-02-c) --ctl $(x3 $M/IMM-01-c) --lenient; ran
+run assert_principle.py 02-dx --target $(x3 $M/IMM-02-d) --ctl $(x3 $M/IMM-02-b) --lenient; ran
+run assert_principle.py 05-cx --target $(x3 $B/05-c) --ctl $(x3 $B/01-a-neg80) --hidden $(x3 $B/05-c) --lenient; ran
+run assert_witness.py 03-cx --run $I/03-c-composed $I/03-c-composed-2 --victim Malzin --friend "Rel Vik" --ko "Rel Dax" --stranger "Rel Cee" --lenient; ran
+run assert_witness.py 04-ax --run $I/04-a-composed $I/04-a-composed-2 --victim "Rel Cee" --friend "Rel Vik" --stranger "Rel Fen" --lenient; ran
+run assert_witness.py 13-ax --pos $B/13-a-pay2 $B/13-a-pay2 --neg $B/13-a-breach $B/13-a-breach --ctl $B/13-a-accept2 --price 353 --lenient; ran
+run assert_witness.py 15-bx --out $(x3 $J/IMM-15-b) --inrange $(x3 $J/IMM-15-a) --fighters "Hungry Bandit,Habo" --starter Habo --lenient; ran
+run assert_claims.py 17-bx --false $(x3 $J/IMM-17-b) --true $(x3 $J/IMM-17-b) --item Sabreclaw --lenient; ran
+run assert_claims.py 18-cx --combat $(x3 $J/IMM-18-c) --calm $(x3 $J/IMM-18-a) --target Braddic --lenient; ran
+run assert_claims.py 19-ax --accept $J/IMM-19-a $J/IMM-19-a2 --recall $(x3 $J/IMM-19-a2) --ctl $(x3 $J/IMM-18-a) --dest "Stumble Inn" --lenient; ran
 
 echo "## part 2: synthetic bundles (PASS path + one expected FAIL)"
 "$PY" - "$S" "$I" <<'EOF'
@@ -76,11 +81,13 @@ for i, (lab, kind, d, status, cats) in enumerate((('pos1', 'kept_promise', 2, 'C
         'prompt.txt': '', 'events.txt': ''})
 mk('synth-13-ctl', **{'effects.txt': '0\n', 'haff_before.txt': 'aff=0\n', 'haff_after.txt': 'aff=0\n', 'prompt.txt': '', 'events.txt': ''})
 EOF
-run assert_witness.py 04-ax --run $S/synth-04a-1 $S/synth-04a-2 --victim "Rel Cee" --friend "Rel Vik" --samefaction "Rel Fen"
-run assert_witness.py 03-cx --run $S/synth-03c-1 $S/synth-03c-2 --victim Malzin --friend "Rel Vik"
+run assert_witness.py 04-ax --run $S/synth-04a-1 $S/synth-04a-2 --victim "Rel Cee" --friend "Rel Vik" --samefaction "Rel Fen"; ex PASS
+run assert_witness.py 03-cx --run $S/synth-03c-1 $S/synth-03c-2 --victim Malzin --friend "Rel Vik"; ex PASS
 echo "(expected FAIL below: 'Rel Fen' also got an aid row of equal size, so the stranger control is violated)"
-run assert_witness.py 03-cx --run $S/synth-03c-1 $S/synth-03c-2 --victim Malzin --friend "Rel Vik" --stranger "Rel Fen"
-run assert_witness.py 13-ax --pos $S/synth-13-pos1 $S/synth-13-pos2 --neg $S/synth-13-neg1 $S/synth-13-neg2 --ctl $S/synth-13-ctl --price 353
-run assert_claims.py 17-bx --false $S/synth-17-f0 $S/synth-17-f1 $S/synth-17-f2 --true $S/synth-17-t0 $S/synth-17-t1 $S/synth-17-t2 --item Sabreclaw
-run assert_claims.py 18-cx --combat $S/synth-18-c0 $S/synth-18-c1 $S/synth-18-c2 --calm $S/synth-18-k0 $S/synth-18-k1 $S/synth-18-k2 --target Braddic
+run assert_witness.py 03-cx --run $S/synth-03c-1 $S/synth-03c-2 --victim Malzin --friend "Rel Vik" --stranger "Rel Fen"; ex FAIL
+run assert_witness.py 13-ax --pos $S/synth-13-pos1 $S/synth-13-pos2 --neg $S/synth-13-neg1 $S/synth-13-neg2 --ctl $S/synth-13-ctl --price 353; ex PASS
+run assert_claims.py 17-bx --false $S/synth-17-f0 $S/synth-17-f1 $S/synth-17-f2 --true $S/synth-17-t0 $S/synth-17-t1 $S/synth-17-t2 --item Sabreclaw; ex PASS
+run assert_claims.py 18-cx --combat $S/synth-18-c0 $S/synth-18-c1 $S/synth-18-c2 --calm $S/synth-18-k0 $S/synth-18-k1 $S/synth-18-k2 --target Braddic; ex PASS
 rm -rf "$S"
+echo "SELFTEST imm26-assert $( [ $NBAD = 0 ] && echo PASS || echo FAIL ) $((NCHK-NBAD))/$NCHK"
+[ $NBAD = 0 ]
