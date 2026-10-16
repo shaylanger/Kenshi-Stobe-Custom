@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """unblockscen_b.py <name>   scenario JSON for unblockfake_b.py (unblock_b_selftest.sh). Bases come from tripscen.py (13-c), reloadscen_b.py (10-e), reloadscen.py (27-a).
-Names: 13c-pass 13c-neg-pass 13c-uid 13c-unqualified ub13c-failed ub13c-failed-neg | 10e-restart-pass 10e-restart-samesession 10e-restart-launchfail 10e-restart-scopechanged 10e-inproc-same
+Names: 13c-pass 13c-neg-pass 13c-uid 13c-unqualified ub13c-failed ub13c-failed-neg | 10e-restart-pass 10e-restart-samesession 10e-restart-launchfail 10e-restart-scopechanged 10e-restart-epochdown 10e-restart-epochdown-noseq 10e-inproc-same
        27a-pass 27a-formfallback 27a-allforms-fail 27a-lost 27a-nodll 27a-noorder"""
 import json
 import os
@@ -37,6 +37,12 @@ elif n.startswith('10e-restart') or n == '10e-inproc-same':
         S = base('reloadscen_b.py', '10e-samesession'); S = rearr(S, new_session=False)
     elif n == '10e-restart-launchfail':
         S = rearr(S); S['launch_fail'] = True
+    elif n in ('10e-restart-epochdown', '10e-restart-epochdown-noseq'):   # imm26 sfC: REAL restart, native epoch 17 -> 2; load_seq 4 -> 5 (server) or absent
+        S = rearr(S); pre, poll, ev = [json.loads(x) for x in S['probe']]
+        seq = n == '10e-restart-epochdown'
+        pre['scope'] = dict(pre['scope'], timeline_epoch='17', **({'load_seq': '4'} if seq else {}))
+        ev['live'] = dict(ev['live'], timeline_epoch='2', **({'load_seq': '5'} if seq else {}))
+        S['probe'] = [json.dumps(pre), json.dumps(dict(pre, scope=ev['live'])), json.dumps(ev)]
     elif n == '10e-restart-scopechanged':
         S = base('reloadscen_b.py', '10e-scopechanged'); S = rearr(S)
     # 10e-inproc-same: original order pre, eval, post with the same session

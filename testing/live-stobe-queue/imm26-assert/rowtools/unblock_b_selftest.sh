@@ -40,6 +40,8 @@ scen 10e-restart-pass; run 10-e $L >/dev/null
 grep -q 'rig_stop' "$KAH_ROW_FAKE_LOG" && grep -q 'rig_launch kah-imm26-10e-4080-i4' "$KAH_ROW_FAKE_LOG" && chk 10-e-stops-then-launches-the-save ok || chk 10-e-stops-then-launches-the-save bad
 grep -n -E 'rig_stop|rig_launch|repairprobe' "$KAH_ROW_FAKE_LOG" | head -4 | grep -q 'repairprobe' && chk 10-e-probe-before-restart ok || chk 10-e-probe-before-restart bad
 grep -a -E 'repairprobe.php' "$KAH_ROW_FAKE_LOG" | grep -q -E 'INSERT|UPDATE|DELETE' && chk 10-e-probe-no-write bad || chk 10-e-probe-no-write ok
+expect 10-e-restart-epoch-down-load-seq-up 10e-restart-epochdown 10-e PASS "load_seq 4->5"
+expect 10-e-restart-epoch-down-no-seq-setupfail 10e-restart-epochdown-noseq 10-e SETUP-FAIL "no later load of the same campaign observed"
 expect 10-e-session-never-changes 10e-restart-samesession 10-e SETUP-FAIL "no later load of the same campaign observed"
 expect 10-e-launch-failed 10e-restart-launchfail 10-e SETUP-FAIL "launch did not return"
 expect 10-e-scope-changed-still-fails 10e-restart-scopechanged 10-e FAIL "later_load_same_campaign_keeps_term_alive"

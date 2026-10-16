@@ -7611,8 +7611,16 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
                  if ($toVictim < $from) continue;
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_repair_agreements.php b/lib/social_repair_agreements.php
 --- a/lib/social_repair_agreements.php	2026-10-12 21:20:51.890711719 -0500
-+++ b/lib/social_repair_agreements.php	2026-10-15 21:36:39.302955465 -0500
-@@ -30,6 +30,37 @@
++++ b/lib/social_repair_agreements.php	2026-10-16 11:12:45.532639884 -0500
+@@ -13,6 +13,7 @@
+         $authenticated=stobeSocialPreferenceScope(strval($npcRow['name'] ?? ''),$profile,strval($playerRow['name'] ?? ''));
+         if (!$authenticated) return [];
+         $scope=stobeSocialScope($GLOBALS['db']);
++        $loadSeq=stobeSocialLoadSeq($scope);if ($loadSeq!==null) $scope['load_seq']=$loadSeq; // imm26 sfC (10-e): restart-proof load order
+         foreach (['recipient_storage_id'=>$npcRow,'giver_storage_id'=>$playerRow] as $key=>$row) {
+             $meta=is_array($row['metadata'] ?? null) ? $row['metadata'] : (json_decode(strval($row['metadata'] ?? '{}'),true) ?: []);
+             $sid=$meta['storage_id'] ?? null;
+@@ -30,6 +31,61 @@
      } catch (Throwable $e) { return []; }
  }
  
@@ -7620,6 +7628,23 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
 +    $v = getenv('STOBE_REPAIR_RESCOPE_ENABLED');
 +    if ($v !== false && $v !== '') return !in_array(strtolower(trim($v)), ['0','false','no','off'], true);
 +    try { return getSettingBool('STOBE_REPAIR_RESCOPE_ENABLED', true); } catch (Throwable $e) { return true; }
++}
++
++/**
++ * imm26 sfC (10-e): server-side monotone load sequence. Returns the sequence number of the load identified by the scope's
++ * (campaign, native session, epoch) triple; it advances by one the first time a NEW triple is seen (one atomic upsert, safe under
++ * concurrent requests) and never goes down, so it orders loads across game restarts where the native epoch counter restarts at 1.
++ * null = unknown (fail closed to the old epoch rule).
++ */
++function stobeSocialLoadSeq(array $scope): ?string {
++    try {
++        $triple=strval($scope['campaign_id'] ?? '').'|'.strval($scope['native_session_id'] ?? '').'|'.strval($scope['timeline_epoch'] ?? '');
++        if ($triple==='||') return null;
++        $row=$GLOBALS['db']->fetchOne("INSERT INTO stobe_meta.settings (key,value) VALUES ('SOCIAL_LOAD_SEQ',$1) ON CONFLICT (key) DO UPDATE SET value=CASE WHEN settings.value::jsonb->>'triple'=$2::text THEN settings.value ELSE jsonb_build_object('triple',$2::text,'seq',COALESCE((settings.value::jsonb->>'seq')::bigint,0)+1)::text END RETURNING (value::jsonb->>'seq') AS seq",
++            [json_encode(['triple'=>$triple,'seq'=>1]),$triple]);
++        $seq=is_array($row) ? strval($row['seq'] ?? '') : '';
++        return preg_match('/^[0-9]{1,18}$/D',$seq) ? $seq : null;
++    } catch (Throwable $e) { return null; }
 +}
 +
 +/**
@@ -7634,8 +7659,15 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
 +    if (!stobeSocialRepairRescopeEnabled()) return false;
 +    $campaign=$scope['campaign_id'] ?? null;
 +    if (!is_string($campaign) || $campaign==='' || $campaign!==($current['campaign_id'] ?? null)) return false;
++    $q0=$scope['load_seq'] ?? null;
++    if (is_string($q0) && preg_match('/^[0-9]{1,18}$/D',$q0)) {
++        // imm26 sfC (10-e): the native epoch restarts at 1 with every game start; loads are ordered by the server's own sequence.
++        $q1=$current['load_seq'] ?? stobeSocialLoadSeq($current);
++        if (!is_string($q1) || !preg_match('/^[0-9]{1,18}$/D',$q1) || intval($q1)<=intval($q0)) return false;
++    } else {
 +    $e0=$scope['timeline_epoch'] ?? null;$e1=$current['timeline_epoch'] ?? null;
 +    if (!is_string($e0) || !is_string($e1) || !preg_match('/^[0-9]{1,18}$/D',$e0) || !preg_match('/^[0-9]{1,18}$/D',$e1) || intval($e1)<=intval($e0)) return false;
++    }
 +    $session=$current['native_session_id'] ?? null;
 +    if (!is_string($session) || $session==='') return false;
 +    foreach (['giver_storage_id','recipient_storage_id'] as $k) if (!is_string($scope[$k] ?? null) || $scope[$k]==='') return false;
@@ -7650,7 +7682,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
  /** Pure exact allocation planner. Multiple same-type obligations/grievances/prototypes are ambiguous. */
  function stobeSocialRepairAgreementPlan(array $scope,array $terms,array $receipts,int $gamets,string $contractId='',array $nativeEvidence=[]): array {
      $requests=[];$seenTypes=[];
-@@ -88,7 +119,7 @@
+@@ -88,7 +144,7 @@
          $baseline=stobeNegDecode($deal['baseline'] ?? []);$scope=$baseline['repair_binding_scope'] ?? [];
          if (!$scope) return $terms;
          $current=stobeSocialScope($GLOBALS['db']);
@@ -7659,7 +7691,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
          $gamets=stobeSocialNowGameTs();
          $requests=stobeSocialRepairAgreementPlan($scope,$terms,stobeSocialRepairAgreementReceiptRows($scope),$gamets,strval($deal['contract_id']),stobeSocialRepairAgreementNativeEvidence($scope,$terms));
          $requests=array_values(array_filter($requests,static fn($r)=>($r['contract_id'] ?? '')===strval($deal['contract_id'])));
-@@ -216,27 +247,30 @@
+@@ -216,27 +272,30 @@
          $baseline=stobeNegDecode($deal['baseline'] ?? []);$scope=$baseline['repair_binding_scope'] ?? [];
          if (!$scope) return;
          $current=stobeSocialScope($GLOBALS['db']);
@@ -7697,7 +7729,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
      $GLOBALS['__stobe_repair_ticket_envelopes']=[];
  }
  
-@@ -259,7 +293,7 @@
+@@ -259,7 +318,7 @@
          $current=stobeSocialScope($GLOBALS['db']);
          foreach (['campaign_id','timeline_epoch','native_session_id'] as $k) if (($event[$k] ?? null)!==($current[$k] ?? null)) return null;
          foreach ($ticket['items'] as $expected) if ($expected['type_key']!==strtolower(trim(strval($accepted['item'] ?? '')))) return null;
@@ -7706,7 +7738,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
          $ts=$event['game_ts'] ?? 0;
          if (!is_int($ts) || $ts<$ticket['acceptance_gamets'] || $ts>$ticket['deadline_gamets']) return null;
          $sum=0;
-@@ -281,7 +315,8 @@
+@@ -281,7 +340,8 @@
      $prepaid=array_filter($scope['prepayment_logs'] ?? [],static fn($p)=>$p['term_index']===intval($term['i'] ?? -1));
      if (count($tickets)!==1 && !$prepaid) return null;
      $ticket=count($tickets)===1 ? $tickets[0] : null;$current=stobeSocialScope($GLOBALS['db']);
@@ -7716,7 +7748,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
          $term['status']='IMPOSSIBLE';$term['evidence'][]=['at'=>$now,'note'=>'exact_restitution_scope_changed'];return $term;
      }
      $profile=stobeSocialRepairAgreementProfile($deal);
-@@ -316,7 +351,9 @@
+@@ -316,7 +376,9 @@
          $term['status']='IMPOSSIBLE';$term['evidence'][]=['at'=>$now,'note'=>'canonical_exact_receipt_timeout'];return $term;
      }
      if (stobeSocialNowGameTs()>$scope['deadline_gamets']) {
@@ -7727,7 +7759,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
      }
      return $term;
  }
-@@ -473,8 +510,7 @@
+@@ -473,8 +535,7 @@
          $scope=stobeNegDecode($saved['baseline'] ?? [])['repair_binding_scope'] ?? [];
          if(!$scope)return $terms;
          try { $current=stobeSocialScope($GLOBALS['db']); } catch(Throwable $scopeError) { $current=[]; }
@@ -18279,8 +18311,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +exit($fail === 0 ? 0 : 1);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpR2_resume_regression.php b/tests/imm26_wpR2_resume_regression.php
 --- a/tests/imm26_wpR2_resume_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpR2_resume_regression.php	2026-10-15 21:36:39.309410165 -0500
-@@ -0,0 +1,163 @@
++++ b/tests/imm26_wpR2_resume_regression.php	2026-10-16 11:12:45.567693084 -0500
+@@ -0,0 +1,231 @@
 +<?php
 +// imm26 wpR2: deals and repair agreements resume after a save/load. Run ONLY against a test database:
 +//   STOBE_DB_NAME=stobe_test php tests/imm26_wpR2_resume_regression.php
@@ -18437,6 +18469,74 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +        if ($oldCampaign) $db->exec("UPDATE public.conf_opts SET value=$1 WHERE id='PLAYTHROUGH_CAMPAIGN_ID'", [$oldCampaign['value']]);
 +        else $db->exec("DELETE FROM public.conf_opts WHERE id='PLAYTHROUGH_CAMPAIGN_ID'");
 +        setSetting('SOCIAL_RELATIONSHIP_MODE', $oldMode);
++    }
++    // 9. imm26 sfC (10-e): a REAL game restart resets the native epoch (load id) to 1; the server's own load sequence still orders loads.
++    $oldSession9 = $db->fetchOne("SELECT value FROM stobe_meta.settings WHERE key='PLAYTHROUGH_SESSION'");
++    $oldCampaign9 = $db->fetchOne("SELECT value FROM public.conf_opts WHERE id='PLAYTHROUGH_CAMPAIGN_ID'");
++    $oldSeq9 = $db->fetchOne("SELECT value FROM stobe_meta.settings WHERE key='SOCIAL_LOAD_SEQ'");
++    $oldMode9 = getSetting('SOCIAL_RELATIONSHIP_MODE', 'off');
++    $char9 = str_repeat('ab', 16);
++    $set9 = function (int $load, string $client, string $char) use ($db): void {
++        $db->exec("INSERT INTO stobe_meta.settings (key,value) VALUES ('PLAYTHROUGH_SESSION',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
++            [json_encode(['status'=>'ready', 'auth_mode'=>'current_campaign', 'token'=>str_repeat('cd', 16), 'character_id'=>$char, 'load_id'=>$load, 'client_id'=>$client])]);
++        $db->exec("INSERT INTO public.conf_opts (id,value) VALUES ('PLAYTHROUGH_CAMPAIGN_ID',$1) ON CONFLICT (id) DO UPDATE SET value=EXCLUDED.value", [$char]);
++    };
++    try {
++        setSetting('SOCIAL_RELATIONSHIP_MODE', 'enabled');
++        $db->exec("DELETE FROM stobe_meta.settings WHERE key='SOCIAL_LOAD_SEQ'");
++        check('load seq helper exists', function_exists('stobeSocialLoadSeq'));
++        if (function_exists('stobeSocialLoadSeq')) {
++            $extra9 = ['giver_storage_id'=>'g1', 'recipient_storage_id'=>'r1', 'acceptance_gamets'=>0, 'deadline_gamets'=>PHP_INT_MAX >> 1];
++            $set9(17, 'clientA', $char9);
++            $pre = stobeSocialScope($db);
++            $seq0 = stobeSocialLoadSeq($pre);
++            check('load seq: first load gets a sequence number', is_string($seq0) && $seq0 !== '', strval($seq0));
++            check('load seq: same load again is idempotent', stobeSocialLoadSeq($pre) === $seq0 && stobeSocialLoadSeq(stobeSocialScope($db)) === $seq0);
++            $frozen = $pre + ['load_seq'=>$seq0] + $extra9;
++            $frozenOld = $pre + $extra9; // agreement frozen before this fix: no sequence
++            check('restart: same scope is current', stobeSocialRepairScopeCurrent($frozen, stobeSocialScope($db)));
++            $set9(2, 'clientB', $char9); // real restart: new client id, epoch back to 2 (< 17)
++            $post = stobeSocialScope($db);
++            check('restart: native epoch really went DOWN', intval($post['timeline_epoch']) < intval($pre['timeline_epoch']));
++            check('restart: frozen scope with load_seq stays current after the epoch decreased', stobeSocialRepairScopeCurrent($frozen, $post));
++            $seq1 = stobeSocialLoadSeq($post);
++            check('restart: new load gets a strictly higher sequence', intval($seq1) === intval($seq0) + 1, strval($seq1));
++            check('restart: legacy scope (no load_seq) keeps the old epoch rule (rejected)', !stobeSocialRepairScopeCurrent($frozenOld, $post));
++            check('restart: another save (campaign) is still rejected', !stobeSocialRepairScopeCurrent(array_merge($frozen, ['campaign_id'=>str_repeat('ef', 16)]), $post));
++            check('restart: a frozen sequence from the future is rejected (rollback/forged)', !stobeSocialRepairScopeCurrent(array_merge($frozen, ['load_seq'=>strval(intval($seq1) + 1000)]), $post));
++            check('restart: malformed load_seq falls back to the epoch rule (rejected, epoch down)', !stobeSocialRepairScopeCurrent(array_merge($frozen, ['load_seq'=>'x1']), $post));
++            check('restart: empty live session rejected', !stobeSocialRepairScopeCurrent($frozen, array_merge($post, ['native_session_id'=>''])));
++            check('restart: frozen scope without storage ids rejected', !stobeSocialRepairScopeCurrent(array_merge($frozen, ['giver_storage_id'=>'']), $post));
++            putenv('STOBE_REPAIR_RESCOPE_ENABLED=0');
++            check('restart: kill switch rejects again', !stobeSocialRepairScopeCurrent($frozen, $post));
++            putenv('STOBE_REPAIR_RESCOPE_ENABLED');
++            $set9(17, 'clientD', $char9); // a later restart whose epoch number coincides with the frozen one: still a later load
++            check('later restart with the same epoch number as the frozen one is current', stobeSocialRepairScopeCurrent($frozen, stobeSocialScope($db)));
++        }
++        // term gate with the live session (as the in-game probe does); before the fix this goes IMPOSSIBLE after a restart
++        {
++            $extra9 = ['giver_storage_id'=>'g1', 'recipient_storage_id'=>'r1', 'acceptance_gamets'=>0, 'deadline_gamets'=>PHP_INT_MAX >> 1];
++            $set9(17, 'clientA', $char9); $db->exec("DELETE FROM stobe_meta.settings WHERE key='SOCIAL_LOAD_SEQ'");
++            $s0 = stobeSocialScope($db); $q0 = function_exists('stobeSocialLoadSeq') ? stobeSocialLoadSeq($s0) : null;
++            $dealScope = $s0 + ($q0 !== null ? ['load_seq'=>$q0] : []) + $extra9;
++            $deal = ['contract_id'=>'sfc-10e', 'npc_name'=>$NPC, 'status'=>'AWAITING_PERFORMANCE', 'baseline'=>['repair_binding_scope'=>$dealScope, 'repair_action_tickets'=>[['term_index'=>0, 'action_id'=>str_repeat('a', 64)]]]];
++            $term = ['i'=>0, 'kind'=>'GIVE_ITEM', 'by'=>'player', 'item'=>'Dried Meat', 'quantity'=>1, 'status'=>'AWAITING_PLAYER', 'evidence'=>[]];
++            $note9 = static fn(?array $t): string => strval(($t['evidence'] ?? [[]])[count($t['evidence'] ?? [[]]) - 1]['note'] ?? '');
++            $set9(2, 'clientB', $char9);
++            $r = stobeSocialRepairEvaluateAgreementTicketTerm($term, $deal, time());
++            check('term gate after a real restart (epoch 17 -> 2): not IMPOSSIBLE scope_changed', $note9($r) !== 'exact_restitution_scope_changed', $note9($r));
++            $set9(2, 'clientB', str_repeat('ef', 16));
++            $r = stobeSocialRepairEvaluateAgreementTicketTerm($term, $deal, time());
++            check('term gate after a restart into ANOTHER save: IMPOSSIBLE scope_changed', ($r['status'] ?? '') === 'IMPOSSIBLE' && $note9($r) === 'exact_restitution_scope_changed', $note9($r));
++        }
++    } finally {
++        if ($oldSession9) $db->exec("UPDATE stobe_meta.settings SET value=$1 WHERE key='PLAYTHROUGH_SESSION'", [$oldSession9['value']]);
++        if ($oldCampaign9) $db->exec("UPDATE public.conf_opts SET value=$1 WHERE id='PLAYTHROUGH_CAMPAIGN_ID'", [$oldCampaign9['value']]);
++        else $db->exec("DELETE FROM public.conf_opts WHERE id='PLAYTHROUGH_CAMPAIGN_ID'");
++        if ($oldSeq9) $db->exec("INSERT INTO stobe_meta.settings (key,value) VALUES ('SOCIAL_LOAD_SEQ',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [$oldSeq9['value']]);
++        else $db->exec("DELETE FROM stobe_meta.settings WHERE key='SOCIAL_LOAD_SEQ'");
++        setSetting('SOCIAL_RELATIONSHIP_MODE', $oldMode9);
++        putenv('STOBE_REPAIR_RESCOPE_ENABLED');
 +    }
 +} finally {
 +    putenv('STOBE_DEAL_RESUME_ENABLED'); putenv('STOBE_REPAIR_RESCOPE_ENABLED');

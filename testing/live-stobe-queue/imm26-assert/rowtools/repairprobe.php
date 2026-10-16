@@ -2,7 +2,7 @@
 // repairprobe.php (imm26 reloadrows-B, row 10-e): read-only probe of the wpR2 restitution-scope gate against the REAL playthrough session of a lane.
 //   KAH_LANE_ROOT=/tmp/stobe-... KAH_LANE_DB=<db> php repairprobe.php scope [npc]            -> JSON {scope: live scope, ingest_mode, rescope_enabled}
 //   KAH_LANE_ROOT=... KAH_LANE_DB=... php repairprobe.php eval '<scope-json from "scope">' [npc]  -> JSON {live, cases:{name:{status,note,returned_null}}}
-// No DB write at all: the "agreements" are in-memory deals whose frozen repair_binding_scope is the pre-load scope (or a variant of it); the term evaluator
+// No agreement/deal/ledger write: the "agreements" are in-memory deals whose frozen repair_binding_scope is the pre-load scope (or a variant of it); the term evaluator
 // reads the CURRENT scope from stobe_meta.settings PLAYTHROUGH_SESSION, which the game's reload changed. Private lane DB only (refuses any other).
 $b = getenv('KAH_LANE_ROOT'); $expectDb = getenv('KAH_LANE_DB');
 if (!$b || !$expectDb) { fwrite(STDERR, "KAH_LANE_ROOT/KAH_LANE_DB not set\n"); exit(2); }
@@ -14,6 +14,9 @@ if (($GLOBALS['db']->fetchOne('select current_database() as d')['d'] ?? '') !== 
 $mode = $argv[1] ?? '';
 $db = $GLOBALS['db'];
 try { $live = stobeSocialScope($db); } catch (Throwable $e) { echo json_encode(['error' => 'scope: ' . $e->getMessage()]), "\n"; exit(0); }
+// imm26 sfC (10-e): the server's own monotone load sequence (survives a game restart, where the native epoch restarts at 1). Observing it
+// advances the counter once per new load (bookkeeping row SOCIAL_LOAD_SEQ in the PRIVATE lane DB only; no agreement/deal/ledger row is written).
+if (function_exists('stobeSocialLoadSeq')) { $seq = stobeSocialLoadSeq($live); if ($seq !== null) $live['load_seq'] = $seq; }
 $ingest = function_exists('stobeSocialIngestMode') ? stobeSocialIngestMode() : 'unknown';
 $rescope = function_exists('stobeSocialRepairRescopeEnabled') ? stobeSocialRepairRescopeEnabled() : null;
 if ($mode === 'scope') {
@@ -31,7 +34,8 @@ $other = strval($s0['campaign_id']) === str_repeat('ab', 16) ? str_repeat('cd', 
 $cases = [
     'same_campaign_later_load' => $s0 + $extra,
     'other_save' => array_merge($s0 + $extra, ['campaign_id' => $other]),
-    'older_epoch' => array_merge($s0 + $extra, ['timeline_epoch' => strval(intval($live['timeline_epoch']) + 1000)]),
+    // "older" = a frozen scope from a load AFTER the live one: epoch ahead, and (when the server tracks it) load_seq ahead too
+    'older_epoch' => array_merge($s0 + $extra, ['timeline_epoch' => strval(intval($live['timeline_epoch']) + 1000)], isset($live['load_seq']) ? ['load_seq' => strval(intval($live['load_seq']) + 1000)] : []),
     'unprovable_after_reload' => array_merge($s0 + $extra, ['deadline_gamets' => 0]),
     'same_load_deadline_control' => array_merge($live + $extra, ['deadline_gamets' => 0]),
 ];
