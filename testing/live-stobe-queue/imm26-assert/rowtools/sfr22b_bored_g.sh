@@ -6,7 +6,8 @@
 #   greatest(max(eventlog.gamets), the NPC's snapshot observed_gamets), i.e. what the DLL would send. Everything else is the original i4_bored (copied below with ONE changed query).
 i4_bored() {  # i4_bored <tag> [push=1]
   local tag="$1" push="${2:-1}" nm s0 rc res f="$EV/bored_$1.txt" pa pb ns ps
-  nm="${RL_NPC_FULL%% \[*}"; [ -n "$nm" ] || nm="${ROW_NPC%% \[*}"
+  nm="$RL_NPC_FULL"; [ -n "$nm" ] || nm="$ROW_NPC"   # imm26-inv22b2: the DLL names the speaker "Cind [Hungry Bandit]" (profile= and people=, ChatBox.cpp:5752-5754/5833-5844). The bare "Cind" resolved
+  # to a stale placeholder row (no travel_lifecycle) because getNpcData is an exact-name lookup, so bored.php:186's reconcile returned at stobeCommitmentNativeSnapshot and the COMPLETED receipt was never ingested (22-b run 3).
   pa="$nm"; pb="Shay"
   if [ "${U_BORED_SERIALS:-0}" = 1 ]; then   # u6-fix08d: the DLL sends people as "Name|serial" (ChatBox.cpp:5833-5835); a plain name resolves to serial 0 server-side (imm26_c2_followups.php:98)
     ns="${RL_NPC_ID#\#}"; ns="${ns%%/*}"
@@ -22,7 +23,7 @@ G=\$(runuser -u postgres -- psql -h $LT_ROOT/socket -p $LT_PG -d $LT_DB -At -c "
 D=\$(printf 'bored|%s|%s|%s: [BORED_EVENT_TRIGGER] (talking to: Shay)' "\$(date +%s)" "\$G" "$nm" | base64 -w0 | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read().strip(),safe=""))')
 P=\$(python3 -c 'import sys,urllib.parse,json;print(urllib.parse.quote(json.dumps([sys.argv[1],sys.argv[2]]),safe=""))' "$pa" "$pb")
 T=\$(runuser -u postgres -- psql -h $LT_ROOT/socket -p $LT_PG -d $LT_DB -At -c "select (value::json)->>'token' from stobe_meta.settings where key='PLAYTHROUGH_SESSION'")   # op11: pas_guard answers 409 to a request without the session token once the DLL registered a client_id
-curl -s -m 120 -H "X-Stobe-Playthrough: \$T" -w '\nHTTP=%{http_code}\n' "http://127.0.0.1:$LT_PORT/stream.php?DATA=\$D&profile=$(printf %s "$nm" | sed 's/ /%20/g')&optional=1&people=\$P&mode=autochat" | head -c 800
+curl -s -m 120 -H "X-Stobe-Playthrough: \$T" -w '\nHTTP=%{http_code}\n' "http://127.0.0.1:$LT_PORT/stream.php?DATA=\$D&profile=$(printf %s "$nm" | sed 's/ /%20/g; s/\[/%5B/g; s/\]/%5D/g')&optional=1&people=\$P&mode=autochat" | head -c 800
 EOT
   rw_sleep 3
   printf 'tail -n +%s %s 2>/dev/null | grep -a -E "Targeted optional request|nothing claimable|ocial attention|situated_remark|ollowup|BORED" | cut -c1-300 | tail -8 # u:tlog\n' "$(( s0 + 1 ))" "$LT_SRVLOG" | lt_w > "$EV/bored_${tag}_log.txt" 2>&1
