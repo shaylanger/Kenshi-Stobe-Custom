@@ -132,7 +132,8 @@ sl=($(grep -n 'stobe_say' "$F" | cut -d: -f1)); tp=($(grep -n "teleport Shay '" 
 okp=1; for want in 2 3; do   # a placement teleport between say#want and say#want+1 (say index 0-based: s1=0 s2=1 s3=2 s4=3)
   lo=${sl[$((want-1))]}; hi=${sl[$want]}; hit=0; for t in "${tp[@]}"; do [ "$t" -gt "$lo" ] && [ "$t" -lt "$hi" ] && hit=1; done; [ $hit = 1 ] || okp=0; done
 [ "${#sl[@]}" = 4 ] && [ $okp = 1 ] && chk 20-a-shay-teleported-onto-npc-before-s3-and-s4 ok || chk 20-a-shay-teleported-onto-npc-before-s3-and-s4 bad "says=${#sl[@]} teleports=${tp[*]} says@${sl[*]}"
-! grep -qE "teleport '[^']*' Shay" "$F" && ! grep -E 'stobe-auto order ' "$F" | grep -v 'order Shay' | grep -q . && chk 20-a-npc-never-moved-or-ordered ok || chk 20-a-npc-never-moved-or-ordered bad
+tail -n +"${sl[1]}" "$F" > "$T/after-accept.log"   # the common tr_quiet setup (before the trip) may put the NPC next to Shay; after the accept turn she must never be moved or ordered
+! grep -qE "teleport '[^']*' Shay" "$T/after-accept.log" && ! grep -E 'stobe-auto order ' "$T/after-accept.log" | grep -v 'order Shay' | grep -q . && chk 20-a-npc-never-moved-or-ordered-after-accept ok || chk 20-a-npc-never-moved-or-ordered-after-accept bad
 grep -q '^s3|8' "$EV20/place_dist.txt" && grep -q '^s4|8' "$EV20/place_dist.txt" && chk 20-a-place-dist-evidence ok || chk 20-a-place-dist-evidence bad "$(cat "$EV20/place_dist.txt" 2>/dev/null)"
 [ "$(grep -c 'stobe_drawn sheathe Shay' "$F")" -ge 4 ] && [ -f "$EV20/calm_s3.txt" ] && [ -f "$EV20/calm_s4.txt" ] && [ -f "$EV20/calm_pre.txt" ] && chk 20-a-sheathed-and-calm-evidence ok || chk 20-a-sheathed-and-calm-evidence bad
 grep -q 'dist_to_target=8' "$EV20/s3/reply.txt" && chk 20-a-dist-to-target-in-reply-evidence ok || chk 20-a-dist-to-target-in-reply-evidence bad
