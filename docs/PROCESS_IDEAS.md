@@ -50,21 +50,7 @@ Rules:
 - log: 2026-10-16 02:55 review 'coordinator-12': added
 - log: 2026-10-16 10:49 review 'coordinator-14': open -> rejected x1 (does not apply: not seen this session)
 
-### PI-36 | confirmed
-- idea: Give in-session lane operators a routable address (or have the coordinator tool write a per-lane inbox file AND a bump the operator sees): SendMessage to a live operator by name returns 'not reachable', so operator notes in inbox/operators only reach an operator if it happens to poll.
-- evidence: 2026-10-16 10:2x: SendMessage to imm26-5090-i5-op9l and imm26-4080-i4op12b failed with 'No agent named ... is reachable'; 6 inbox notes (nc17/nc18/nc20, 14d, lane plan, deploys) relied on the operators polling.
-- saving: avoids a lane running a stale plan for up to a row (~15 min) each time a fix lands
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 10:49
-- moment: 10:25 trying to send the lane plan to imm26-5090-i5-op9l and imm26-4080-i4op12b
-- last_review: coordinator-14-tail-closing
-- log: 2026-10-16 10:49 review 'coordinator-14': added
-- log: 2026-10-16 10:56 asked Shay
-- log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': asked -> confirmed (applies: 2026-10-16 tail period: SendMessage by NAME to live operators failed, but by agent id it worked (hxA, three operators at the hard limit); the tail/coordinator only knows ids from the spawn result.)
-
-### PI-37 | asked
+### PI-37 | open
 - idea: session-start / agent-status should auto-abandon the inflight marker of a dead predecessor as soon as a successor registered in lane-owners or with the same task text is RUNNING.
 - evidence: 2026-10-16 10:00-10:40: after the freeze 3 predecessor markers (op12, op9k, inv-14d) plus sfC/sfE2 caused false RIG STALL / work-in-flight wakes and 5 manual agent-abandon calls.
 - saving: ~5 manual calls and 4 spurious waker wakes per resume
@@ -94,19 +80,6 @@ Rules:
 - weakens: no
 - added: 2026-10-16 11:11
 - log: 2026-10-16 11:11 review 'coordinator-14-tail': added
-
-### PI-40 | confirmed
-- idea: Waker/event-wait should not wake the coordinator for 'EVENT STATUS <agent> DONE' of an in-session subagent: those agents always deliver a hand-back message plus a task notification, so the waker event is a third, duplicate wake. Wake only for what has no other channel (inbox, lane/rig alerts, stalls, orphaned or dead agents).
-- evidence: 2026-10-16 10:00-10:50 (coordinator 14, 250-300k context): about 35 waker restarts; for sfA, sfB2, sfD2, sfE3, sfF, sfG, sfG2, sfH, hxB, inv-14e each completion arrived three times (waker EVENT STATUS DONE, SubagentHandback message, task-notification) and each wake was a model turn.
-- saving: about 10 duplicate turns per 10 agent completions (about 10 x 280k tokens), and fewer waker restarts
-- risk: must keep waking for FAILED/STOPPED-CONTEXT, and for background-job (non-subagent) agents
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:11
-- moment: 11:38 sfK2 DONE and 12:05 bundle DONE wakes right after I had committed/routed their results
-- last_review: coordinator-15
-- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
-- log: 2026-10-16 11:52 review 'coordinator-15': open -> confirmed (applies: 2026-10-16 10:51-12:20: the waker ended ~25 times; at least 12 of those wakes were only 'EVENT STATUS <agent> DONE' or a duplicate TAIL-RELAY for an agent I had already handled (op9m DONE after I s...)
 
 ### PI-41 | open
 - idea: The tail hard limit (400k) forces a TaskStop of live lane operators mid-row. Prevent it: autoCompactWindow=330000 now set in the user settings so a tail compacts itself soon after the handoff (new sessions), and keep the tail lean (PI-38/39/40). Longer term run lane operators as independent sessions so a coordinator's context never limits a lane.
@@ -554,3 +527,34 @@ Rules:
 - retired: 2026-10-16 built
 - log: 2026-10-16 02:55 review 'coordinator-12': added
 - log: 2026-10-16 10:49 review 'coordinator-14': open -> confirmed (applies: 2026-10-16 10:27 I started the waker with a trailing & disown by mistake (the exact failure PI-34 describes) and had to pkill it and restart; also the waker had to be restarted ~25 times after each...)
+
+### PI-36 | done
+- idea: Give in-session lane operators a routable address (or have the coordinator tool write a per-lane inbox file AND a bump the operator sees): SendMessage to a live operator by name returns 'not reachable', so operator notes in inbox/operators only reach an operator if it happens to poll.
+- evidence: 2026-10-16 10:2x: SendMessage to imm26-5090-i5-op9l and imm26-4080-i4op12b failed with 'No agent named ... is reachable'; 6 inbox notes (nc17/nc18/nc20, 14d, lane plan, deploys) relied on the operators polling.
+- saving: avoids a lane running a stale plan for up to a row (~15 min) each time a fix lands
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 10:49
+- moment: 10:25 trying to send the lane plan to imm26-5090-i5-op9l and imm26-4080-i4op12b
+- last_review: coordinator-14-tail-closing
+- measured: agent-ids.ps1 registry built and tried (add/get/list); live effect not yet measured
+- retired: 2026-10-16 built
+- log: 2026-10-16 10:49 review 'coordinator-14': added
+- log: 2026-10-16 10:56 asked Shay
+- log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': asked -> confirmed (applies: 2026-10-16 tail period: SendMessage by NAME to live operators failed, but by agent id it worked (hxA, three operators at the hard limit); the tail/coordinator only knows ids from the spawn result.)
+
+### PI-40 | done
+- idea: Waker/event-wait should not wake the coordinator for 'EVENT STATUS <agent> DONE' of an in-session subagent: those agents always deliver a hand-back message plus a task notification, so the waker event is a third, duplicate wake. Wake only for what has no other channel (inbox, lane/rig alerts, stalls, orphaned or dead agents).
+- evidence: 2026-10-16 10:00-10:50 (coordinator 14, 250-300k context): about 35 waker restarts; for sfA, sfB2, sfD2, sfE3, sfF, sfG, sfG2, sfH, hxB, inv-14e each completion arrived three times (waker EVENT STATUS DONE, SubagentHandback message, task-notification) and each wake was a model turn.
+- saving: about 10 duplicate turns per 10 agent completions (about 10 x 280k tokens), and fewer waker restarts
+- risk: must keep waking for FAILED/STOPPED-CONTEXT, and for background-job (non-subagent) agents
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:11
+- moment: 11:38 sfK2 DONE and 12:05 bundle DONE wakes right after I had committed/routed their results
+- last_review: coordinator-15
+- measured: event-wait.sh EW_QUIET_DONE default 1, batch selftest 26/26 (7 new cases), filter selftest 13/13; live effect not yet measured
+- retired: 2026-10-16 built
+- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
+- log: 2026-10-16 11:52 review 'coordinator-15': open -> confirmed (applies: 2026-10-16 10:51-12:20: the waker ended ~25 times; at least 12 of those wakes were only 'EVENT STATUS <agent> DONE' or a duplicate TAIL-RELAY for an agent I had already handled (op9m DONE after I s...)

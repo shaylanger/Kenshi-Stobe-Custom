@@ -4,7 +4,7 @@
 HERE=$(cd "$(dirname "$0")" && pwd)
 EW="${1:-$HERE/event-wait.sh.candidate}"; [ -f "$EW" ] || EW="$HERE/event-wait.sh"
 BOX=$(mktemp -d); trap 'rm -rf "$BOX"' EXIT
-export KAH_RUNS="$BOX" EW_BATCH_SEC=6 EW_ROLLCALL_CMD="echo ROLLCALL x kind=INPROC proc=n/a status_age=15m log_age=- latest=x"
+export KAH_RUNS="$BOX" EW_BATCH_SEC=6 EW_QUIET_DONE=0 EW_ROLLCALL_CMD="echo ROLLCALL x kind=INPROC proc=n/a status_age=15m log_age=- latest=x"
 IN="$BOX/inbox/coordinator"; mkdir -p "$BOX/agents" "$IN"
 pass=0; fail=0
 ck() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok   $1"; else fail=$((fail+1)); echo "  FAIL $1 (got '$2', want '$3')"; fi; }
@@ -56,5 +56,18 @@ ck 'one DONE reported once' "$(grep -c 'EVENT STATUS r1 DONE' "$BOX/o6")" 1
 # 6. EW_BATCH_SEC=0 restores the old behaviour (DONE wakes at once)
 reset; EW_BATCH_SEC=0 run_bg "$BOX/o7"; T0=$(date +%s); status z1 DONE; wait $WP; t=$(secs)
 ck 'EW_BATCH_SEC=0: DONE wakes at once' "$([ "$t" -lt 4 ] && grep -q 'EVENT STATUS z1 DONE' "$BOX/o7" && echo now || echo "late:$t")" now
+
+# 7. PI-40 quiet DONE (EW_QUIET_DONE=1, the default): DONE status / 'x DONE' / TAIL-RELAY DONE never wake alone; they ride in front of the next wake
+reset; EW_QUIET_DONE=1 run_bg "$BOX/o8"; status q1 DONE; msg q2 'TAIL-RELAY imm26-q2 DONE 2026-10-16T12:00:00 report: x'; msg q3 'imm26-q3 DONE: report C:/a'; sleep 9
+ck 'quiet DONE: no wake after 9 s (> batch window)' "$(kill -0 $WP 2>/dev/null && echo waiting || echo woke)" waiting
+msg u9 'AGENT DEAD d9 : process gone'; wait $WP
+ck 'quiet DONE: urgent wake carries the 3 quiet lines' "$(grep -c 'EVENT DONE(quiet)' "$BOX/o8")" 3
+ck 'quiet DONE: urgent line present' "$(grep -c 'AGENT DEAD d9' "$BOX/o8")" 1
+reset; EW_QUIET_DONE=1 run_bg "$BOX/o9"; T0=$(date +%s); msg r1 'TAIL-RELAY imm26-r1 FAILED 2026-10-16T12:00:00 report: x'; wait $WP; t=$(secs)
+ck 'quiet mode: TAIL-RELAY FAILED still wakes at once' "$([ "$t" -lt 4 ] && grep -q 'FAILED' "$BOX/o9" && echo now || echo "late:$t")" now
+reset; EW_QUIET_DONE=1 run_bg "$BOX/o10"; T0=$(date +%s); status f2 STOPPED-CONTEXT; wait $WP; t=$(secs)
+ck 'quiet mode: STOPPED-CONTEXT still wakes at once' "$([ "$t" -lt 4 ] && grep -q 'STOPPED-CONTEXT' "$BOX/o10" && echo now || echo "late:$t")" now
+reset; EW_QUIET_DONE=1 bash "$EW" --no-health --poll 1 --backstop 6 > "$BOX/o11" 2>&1 & WP=$!; sleep 1.5; status b1 DONE; wait $WP
+ck 'quiet DONE: backstop flushes it' "$(grep -c 'EVENT DONE(quiet) STATUS b1 DONE' "$BOX/o11")" 1
 if [ "$fail" -gt 0 ]; then echo "SELFTEST FAIL $fail (pass $pass)"; exit 1; fi
 echo "SELFTEST PASS $pass/$pass"

@@ -55,6 +55,12 @@ stall_suppress() {
   awk -v s="$sa" -v l="${la:-$sa}" -v f="${EW_STALL_FRESH_MIN:-10}" 'BEGIN{m=(l+0<s+0)?l:s; exit !(m+0<f+0)}'
 }
 BATCH_SEC=${EW_BATCH_SEC:-90}; PEND=(); PEND_T0=0; declare -A SEEN
+# PI-40 (Shay 2026-10-16): in-session subagents already report DONE by hand-back + task notification, tail-owned ones by a TAIL-RELAY; a waker wake for the same
+# DONE is a third duplicate model turn. EW_QUIET_DONE=1 (default; 0 = old PI-10 batching) keeps DONE status events and 'x DONE' / 'TAIL-RELAY x DONE' inbox
+# messages OUT of the wake decision: they are buffered in QUIET and printed (as 'EVENT DONE ...' lines) in front of the NEXT wake of any kind or the backstop.
+# FAILED / STOPPED-CONTEXT / DEAD / KILLED / ORPHANED / STALL / lane / health / questions still wake at once.
+QUIET_DONE=${EW_QUIET_DONE:-1}; QUIET=()
+quiet_msg() { [ "$QUIET_DONE" = 1 ] && [[ $1 =~ ^(TAIL-RELAY[[:space:]]+)?[A-Za-z0-9._-]+[[:space:]]+DONE([[:space:]:]|$) ]]; }
 # urgent_msg <text>: exit 0 = must wake at once. Non-urgent only when the text is clearly an INFO/DONE report with no alarm word and no question mark.
 urgent_msg() {
   local t=$1
@@ -69,6 +75,7 @@ defer() { [ "${#PEND[@]}" -eq 0 ] && PEND_T0=$(date +%s); PEND+=("$1"); }
 # flush: print buffered events (called before any wake)
 flush() {
   local n=${#PEND[@]} l
+  if [ "${#QUIET[@]}" -gt 0 ]; then for l in "${QUIET[@]}"; do echo "EVENT DONE(quiet) ${l#EVENT }"; done; QUIET=(); fi
   [ "$n" -eq 0 ] && return 0
   for l in "${PEND[@]}"; do echo "$l"; done
   echo "EVENT BATCH $n events over $(( $(date +%s) - PEND_T0 ))s"
@@ -87,6 +94,7 @@ while :; do
   fi
   if [ -n "$m" ]; then
     txt=$(head -c 300 "$INBOX/$m" | tr -d '\r' | tr '\n' ' '); mkdir -p "$INBOX/delivered"; mv "$INBOX/$m" "$INBOX/delivered/"
+    if quiet_msg "$txt"; then QUIET+=("EVENT INBOX $m: $txt"); continue; fi
     if [ "$BATCH_SEC" -gt 0 ] && ! urgent_msg "$txt"; then defer "EVENT INBOX $m: $txt"; continue; fi
     wake "EVENT INBOX $m: $txt"
   fi
@@ -100,6 +108,10 @@ while :; do
         h="$R/agents/$n.handoff.md"; [ -f "$h" ] || h="$f"
         case "$h" in /mnt/c/*|/c/*) h="C:\$(printf '%s' "${h#/mnt}" | sed 's|^/c/||; s|/|\|g')";; esac
         rs=" | respawn fresh ${task#task: } from $h (unless a successor such as ${n}2 or ${n}b already runs)"
+      fi
+      if [ "$st" = DONE ] && [ "$QUIET_DONE" = 1 ]; then
+        sk="$f:$(stat -c %Y "$f")"; [ -n "${SEEN[$sk]:-}" ] && continue
+        SEEN[$sk]=1; QUIET+=("EVENT STATUS $n $st: $task"); continue
       fi
       if [ "$st" = DONE ] && [ "$BATCH_SEC" -gt 0 ]; then
         sk="$f:$(stat -c %Y "$f")"; [ -n "${SEEN[$sk]:-}" ] && continue
