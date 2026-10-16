@@ -1,4 +1,4 @@
-# NC15 = NC14 (65934AA0...) + camp town identity keyed on the GameData sid (row 14-c)
+# NC15 = NC14 (65953AA0...) + camp town identity keyed on the GameData sid (row 14-c)
 
 Root cause (NC12 diag, op9c): every TownList entry has `TownBase.handle.serial == 0` (`ACTIVITY_CAMP_TOWNS_DIAG raw=378 accepted=0 handle_serial_zero:378`), so `ValidFacts` and `ExplainFacts` rejected all towns and the camp catalog was empty.
 Fix (src\ActivityCampNativeAdapter.h, src\ActivityCampTownReader.cpp only):
