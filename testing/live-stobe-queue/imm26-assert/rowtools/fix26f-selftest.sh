@@ -13,9 +13,12 @@ mk() { local sees="$1" i=0; for b in 1 2 3 4; do i=$((i+1)); if [ $i -le "$sees"
 SQN="$EV/sq"
 lt_h() { local c; c=$(cat); case "$c" in
   *"stobe-auto spawn"*) echo "spawned #1/1 #2/1 #3/1 #4/1";;
+  *"protect Shay on"*) _cnt guard >/dev/null;;
   *) :;; esac; }
 rs_sh_stub() { local c="$1"; case "$c" in
   *"where Shay"*) n=$(_cnt wh); if [ "$n" -le "${WHERE_FAIL:-0}" ]; then echo "no answer within 20s"; else echo "Shay #971557632/1 pos=-47333,730,-55600"; fi;;
+  *"chars 150"*) n=$(_cnt ch); if [ "$n" -le "${SENT_AFTER:-0}" ]; then :; else echo "Veln [Holy Sentinel] #55/1 pos=1,2,3"; echo "Halna [Holy Sentinel] #66/2 pos=1,2,3"; fi;;
+  *"relation '#55/1' 100"*|*"relation '#66/2' 100"*) _cnt rel >/dev/null; echo "Holy Nation <-> Nameless: 0 -> 100";;
   *"senses"*) n=$(_cnt sn); poll=$(( (n-1)/4 + 1 )); k=$(( (n-1)%4 + 1 ))
       if [ "$poll" -le "${BLIND_POLLS:-0}" ]; then echo "senses #$k/1: Cind -> Dust Bandit sees=0 hears=0 aware=0 entry=0 last_seen_s=-1.0 fov=-1.0000 dist=32.3 observer_ko=0"
       else idx=$(( poll - ${BLIND_POLLS:-0} )); want=$(echo $SEQ | awk -v i=$idx '{print ($i==""?0:$i)}'); mk "$want" | sed -n "${k}p"; fi;;
@@ -25,11 +28,16 @@ rs_sh() { rs_sh_stub "$1"; }
 . "$EV/fn.sh"
 rs_sh() { rs_sh_stub "$1"; }   # re-assert the stub after sourcing the real helper
 RL_NPC_FULL="Cind [Hungry Bandit]"
-run() { rm -f "$EV"/wh "$EV"/sn "$EV"/tp; rs_scene_clear >/dev/null 2>&1; tail -1 "$EV/scene.txt"; }
+run() { rm -f "$EV"/wh "$EV"/sn "$EV"/tp "$EV"/ch "$EV"/rel "$EV"/guard; rs_scene_clear >/dev/null 2>&1; tail -1 "$EV/scene.txt"; }
 WHERE_FAIL=0 BLIND_POLLS=0 SEQ="3 3"; r=$(run); [ "$r" = SCENE-OK ] && chk immediate-pass ok || chk immediate-pass bad "$r"
 WHERE_FAIL=0 BLIND_POLLS=0 SEQ="4 0 3"; r=$(run); [ "$r" = SCENE-OK ] && chk flicker-then-pass ok || chk flicker-then-pass bad "$r"
 WHERE_FAIL=2 BLIND_POLLS=3 SEQ="3 3"; r=$(run); [ "$r" = SCENE-OK ] && grep -q 'ready-wait 2' "$EV/scene.txt" && chk op15-blind-then-pass ok || chk op15-blind-then-pass bad "$r"
 WHERE_FAIL=0 BLIND_POLLS=4 SEQ="3 3"; r=$(run); grep -q 'settle-kick at poll 4' "$EV/scene.txt" && [ "$r" = SCENE-OK ] && chk settle-kick ok || chk settle-kick bad "$r"
 WHERE_FAIL=0 BLIND_POLLS=0 SEQ="3 2 2 2 2 2 2 2 2 2 2 2 2 2"; r=$(run); case "$r" in SCENE-BAD*"ok=1 of 2"*) chk never-stable-bad ok;; *) chk never-stable-bad bad "$r";; esac
 WHERE_FAIL=0 BLIND_POLLS=14 SEQ=""; r=$(run); case "$r" in SCENE-BAD*) chk always-blind-bad ok;; *) chk always-blind-bad bad "$r";; esac
+# fix26f22b: sentinels listed only after 3 empty tries -> every sentinel made friendly AFTER the world answers, Shay/Cind guarded; never-listed -> scene still runs (no hang), 0 friendly
+WHERE_FAIL=0 BLIND_POLLS=0 SEQ="3 3" SENT_AFTER=3; r=$(run); [ "$r" = SCENE-OK ] && grep -q 'peace-wait 3' "$EV/scene.txt" && grep -q 'sentinels made friendly=2' "$EV/scene.txt" && [ "$(cat $EV/rel 2>/dev/null)" = 2 ] && [ "$(cat $EV/guard 2>/dev/null)" -ge 1 ] && chk sentinel-late-peace ok || chk sentinel-late-peace bad "$r"
+WHERE_FAIL=0 BLIND_POLLS=0 SEQ="3 3" SENT_AFTER=99; r=$(run); [ "$r" = SCENE-OK ] && grep -q 'sentinels made friendly=0' "$EV/scene.txt" && chk sentinel-never-listed ok || chk sentinel-never-listed bad "$r"
+# rd_26f wraps every say in rs_guard
+n=$(grep -c 'rs_guard; rl_say' "$F"); [ "$n" = 3 ] && chk say-guarded ok || chk say-guarded bad "guarded says=$n"
 rm -rf "$EV"; echo "fix26f-selftest: fails=$fails"; [ "$fails" = 0 ]
