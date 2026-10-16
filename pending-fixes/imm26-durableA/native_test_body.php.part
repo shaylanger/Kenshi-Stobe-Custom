@@ -1,0 +1,85 @@
+$T = 100000;
+const ID1 = 'sdi1-00112233aabbccdd'; const ID2 = 'sdi1-ffeeddcc99887766'; const ID3 = 'sdi1-1234567890abcdef';
+
+// 1. THE FIX: reload between theft and return, the item has a new load-local key (hand_777) and the SAME durable id -> credited to the ORIGINAL item,
+//    even though the type fingerprint would be ambiguous (two identical stolen stacks, only one carries the returned id).
+theft('campDurAX', ...A, ...['DurA Thief', 'DurA Owner', [['hand_601', 'Knife_proto', 'knife', 1, ID1], ['hand_602', 'Knife_proto', 'knife', 1, ID2]], $T]);
+giveBack('campDurAX', ...B, ...['DurA Thief', 'DurA Owner', [['hand_777', 'Knife_proto', 'knife', 1, ID2]], $T + 600]);
+$s = repairState('campDurAX');
+ok(credited('campDurAX') === 1, 'cross-load return with the same durable id is credited even when the type fingerprint is ambiguous (' . json_encode($s['returned_quantities'] ?? null) . ')');
+ok(isset($s['verified_items']['hand_602']) && !isset($s['verified_items']['hand_601']) && ($s['verified_items']['hand_602']['return_item_key'] ?? '') === 'hand_777',
+   'credit is recorded against the ORIGINAL item that carried that id (hand_602), not the other identical knife');
+
+// 2. A returned item with an id that matches NO original is a known different object: never credited, and never rescued by the fingerprint.
+theft('campDurAWrong', ...A, ...['DurA Thief2', 'DurA Owner2', [['hand_611', 'Knife_proto', 'knife', 1, ID1]], $T]);
+$r = giveBack('campDurAWrong', ...B, ...['DurA Thief2', 'DurA Owner2', [['hand_788', 'Knife_proto', 'knife', 1, ID3]], $T + 600]);
+ok(credited('campDurAWrong') === 0 && statusOf($r) === 'return_unattributed', 'returned item with a different durable id: NOT credited, not fingerprinted (' . statusOf($r) . ')');
+
+// 3. Fallback to option B: original carried an id but the returned item has none (id lost) -> unique fingerprint still credits.
+theft('campDurAFall', ...A, ...['DurA Thief3', 'DurA Owner3', [['hand_621', 'IronBar_proto', 'iron bar', 2, ID1]], $T]);
+giveBack('campDurAFall', ...B, ...['DurA Thief3', 'DurA Owner3', [['hand_789', 'IronBar_proto', 'iron bar', 2]], $T + 600]);
+ok(credited('campDurAFall') === 2, 'no id on the returned item: option B fingerprint fallback credits');
+// 3b. Neither side has an id (old DLL / ground item): option B unchanged.
+theft('campDurANone', ...A, ...['DurA Thief4', 'DurA Owner4', [['hand_631', 'IronBar_proto', 'iron bar', 2]], $T]);
+giveBack('campDurANone', ...B, ...['DurA Thief4', 'DurA Owner4', [['hand_790', 'IronBar_proto', 'iron bar', 2]], $T + 600]);
+ok(credited('campDurANone') === 2, 'neither side has an id: option B fingerprint unchanged');
+
+// 4. Identity is exact: a smaller whole stack (thief used some) with the same id is credited for what came back; a LARGER one is not.
+theft('campDurAQty', ...A, ...['DurA Thief5', 'DurA Owner5', [['hand_641', 'Bread_proto', 'bread', 5, ID1]], $T]);
+giveBack('campDurAQty', ...B, ...['DurA Thief5', 'DurA Owner5', [['hand_791', 'Bread_proto', 'bread', 3, ID1]], $T + 600]);
+ok(credited('campDurAQty') === 3, 'same id, smaller stack (3 of 5 came back): credited 3');
+theft('campDurAQty2', ...A, ...['DurA Thief6', 'DurA Owner6', [['hand_651', 'Bread_proto', 'bread', 2, ID1]], $T]);
+$r = giveBack('campDurAQty2', ...B, ...['DurA Thief6', 'DurA Owner6', [['hand_792', 'Bread_proto', 'bread', 4, ID1]], $T + 600]);
+ok(credited('campDurAQty2') === 0, 'same id but MORE than was stolen: NOT credited');
+
+// 5. Same id but a different prototype/type is not credited (corrupt or collided id).
+theft('campDurAProto', ...A, ...['DurA Thief7', 'DurA Owner7', [['hand_661', 'IronBar_proto', 'iron bar', 2, ID1]], $T]);
+$r = giveBack('campDurAProto', ...B, ...['DurA Thief7', 'DurA Owner7', [['hand_793', 'OtherBar_proto', 'iron bar', 2, ID1]], $T + 600]);
+ok(credited('campDurAProto') === 0, 'same id, different prototype: NOT credited');
+
+// 6. Duplicate id among the originals (never produced by the DLL) -> ambiguous, not id-matched (type fingerprint also ambiguous).
+theft('campDurADup', ...A, ...['DurA Thief', 'DurA Owner', [['hand_671', 'Knife_proto', 'knife', 1, ID1], ['hand_672', 'Knife_proto', 'knife', 1, ID1]], $T]);
+$r = giveBack('campDurADup', ...B, ...['DurA Thief', 'DurA Owner', [['hand_794', 'Knife_proto', 'knife', 1, ID1]], $T + 600]);
+ok(credited('campDurADup') === 0, 'duplicate durable id among the stolen items: NOT credited');
+
+// 7. Replay / second return of the same stack never exceeds the stolen quantity.
+$again = giveBack('campDurAX', ...C, ...['DurA Thief', 'DurA Owner', [['hand_888', 'Knife_proto', 'knife', 1, ID2]], $T + 1200]);
+ok(credited('campDurAX') === 1, 'second return of the same id after another reload does not exceed the stolen quantity');
+
+// 8. Same-load path is unchanged by ids (exact key).
+theft('campDurASame', ...A, ...['DurA Thief2', 'DurA Owner2', [['hand_501', 'IronBar_proto', 'iron bar', 2, ID1]], $T]);
+giveBack('campDurASame', ...A, ...['DurA Thief2', 'DurA Owner2', [['hand_501', 'IronBar_proto', 'iron bar', 2, ID1]], $T + 60]);
+ok(credited('campDurASame') === 2, 'same load, same key: credited (unchanged)');
+
+// 9. Kill switches: id off + fingerprint on -> the ambiguous fingerprint refuses; fingerprint off + id on -> the id match still credits; both unavailable -> nothing.
+setting('STOBE_REPAIR_DURABLE_ID_ENABLED', '0');
+theft('campDurAOff', ...A, ...['DurA Thief3', 'DurA Owner3', [['hand_681', 'Knife_proto', 'knife', 1, ID1], ['hand_682', 'Knife_proto', 'knife', 1, ID2]], $T]);
+$r = giveBack('campDurAOff', ...B, ...['DurA Thief3', 'DurA Owner3', [['hand_795', 'Knife_proto', 'knife', 1, ID2]], $T + 600]);
+ok(credited('campDurAOff') === 0, 'durable-id match disabled: the ambiguous fingerprint refuses');
+setting('STOBE_REPAIR_DURABLE_ID_ENABLED', null);
+setting('STOBE_REPAIR_FINGERPRINT_ENABLED', '0');
+theft('campDurAOff2', ...A, ...['DurA Thief4', 'DurA Owner4', [['hand_691', 'Knife_proto', 'knife', 1, ID1], ['hand_692', 'Knife_proto', 'knife', 1, ID2]], $T]);
+giveBack('campDurAOff2', ...B, ...['DurA Thief4', 'DurA Owner4', [['hand_796', 'Knife_proto', 'knife', 1, ID2]], $T + 600]);
+ok(credited('campDurAOff2') === 1, 'fingerprint disabled but ids on: the id match still credits');
+theft('campDurAOff3', ...A, ...['DurA Thief5', 'DurA Owner5', [['hand_701', 'IronBar_proto', 'iron bar', 2]], $T]);
+giveBack('campDurAOff3', ...B, ...['DurA Thief5', 'DurA Owner5', [['hand_797', 'IronBar_proto', 'iron bar', 2]], $T + 600]);
+ok(credited('campDurAOff3') === 0, 'fingerprint disabled, no ids: nothing credited');
+setting('STOBE_REPAIR_FINGERPRINT_ENABLED', null);
+
+// 10. Contract: a malformed durable_item_id rejects the event.
+$bad = false;
+try { theft('campDurABad', ...A, ...['DurA Thief6', 'DurA Owner6', [['hand_711', 'IronBar_proto', 'iron bar', 2, 'not-an-id']], $T]); } catch (Throwable $e) { $bad = true; }
+ok($bad, 'malformed durable_item_id is rejected');
+
+// 11. Matcher guards still apply to id matches (rollback / forged same epoch / swapped direction).
+$ev = ['campaign_id'=>'c', 'timeline_epoch'=>'5', 'native_session_id'=>'sB'];
+$row = ['timeline_epoch'=>'4']; $theftRow = ['native_session_id'=>'sA'];
+$orig = [['item_key'=>'k1', 'prototype_id'=>'p', 'type_key'=>'t', 'quantity'=>1, 'durable_item_id'=>ID1, 'from_storage_id'=>'own', 'to_storage_id'=>'thf']];
+$ret = [['item_key'=>'k9', 'prototype_id'=>'p', 'type_key'=>'t', 'quantity'=>1, 'durable_item_id'=>ID1, 'from_storage_id'=>'thf', 'to_storage_id'=>'own']];
+ok(stobeSocialRepairFingerprintKeyMap($ev, $row, $theftRow, $ret, $orig, 'thf', 'own') === ['k9'=>'k1'], 'matcher: same id maps the load-local key to the original');
+ok(stobeSocialRepairFingerprintKeyMap(['timeline_epoch'=>'3'] + $ev, $row, $theftRow, $ret, $orig, 'thf', 'own') === [], 'matcher: older epoch refused');
+ok(stobeSocialRepairFingerprintKeyMap(['timeline_epoch'=>'4'] + $ev, $row, $theftRow, $ret, $orig, 'thf', 'own') === [], 'matcher: same epoch other session refused');
+ok(stobeSocialRepairFingerprintKeyMap($ev, $row, $theftRow, $ret, $orig, 'own', 'thf') === [], 'matcher: swapped giver/recipient refused');
+
+cleanup(); setting('STOBE_REPAIR_DURABLE_ID_ENABLED', $savedId); setting('STOBE_REPAIR_FINGERPRINT_ENABLED', $savedFp); setting('SOCIAL_RELATIONSHIP_MODE', $savedMode);
+echo "OK imm26_durable_item_id_native_regression: $n checks passed\n";
