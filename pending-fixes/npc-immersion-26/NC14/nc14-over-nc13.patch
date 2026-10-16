@@ -1,0 +1,28 @@
+--- imm26-nc13/src/ActivityRuntimeBindings.cpp	2026-10-16 00:10:38.232935000 -0600
++++ imm26-nc14/src/ActivityRuntimeBindings.cpp	2026-10-16 00:19:35.760701400 -0600
+@@ -488,7 +488,8 @@
+  bool world,actorOk,requesterOk,player,distinct,dead,unconscious,movement,avatar,navmesh,onmesh;
+  unsigned charSphere,buildingSphere; const char* gate; std::string actorSid,requesterSid;
+  unsigned huntEmitted,animals; bool scanned; double hour; std::vector<std::string> animalLines; // NC13 ACTIVITY_SIGHT_DIAG
+- ProposalTrace(unsigned a,unsigned r,size_t n):actor(a),requester(r),registry(n),emitted(0),exceptions(0),objects(0),sightDrops(0),pathDrops(0),capacityDrops(0),reused(0),nullDrops(0),finiteDrops(0),typeDrops(0),serialDrops(0),pathZero(0),pathOne(0),pathOther(0),mineTypeDrops(0),world(false),actorOk(false),requesterOk(false),player(false),distinct(false),dead(false),unconscious(false),movement(false),avatar(false),navmesh(false),onmesh(false),charSphere(0),buildingSphere(0),gate("world"),huntEmitted(0),animals(0),scanned(false),hour(-1.0) {}
++ Character* diagActor; Character* diagRequester; // NC14: set once both resolve; used by the destructor call to SightDiag
++ ProposalTrace(unsigned a,unsigned r,size_t n):actor(a),requester(r),registry(n),emitted(0),exceptions(0),objects(0),sightDrops(0),pathDrops(0),capacityDrops(0),reused(0),nullDrops(0),finiteDrops(0),typeDrops(0),serialDrops(0),pathZero(0),pathOne(0),pathOther(0),mineTypeDrops(0),world(false),actorOk(false),requesterOk(false),player(false),distinct(false),dead(false),unconscious(false),movement(false),avatar(false),navmesh(false),onmesh(false),charSphere(0),buildingSphere(0),gate("world"),huntEmitted(0),animals(0),scanned(false),hour(-1.0),diagActor(NULL),diagRequester(NULL) {}
+  void Sids(Character* a,Character* r) { try { Character* chars[2]={a,r}; std::string* slots[2]={&actorSid,&requesterSid}; for(unsigned n=0;n<2;++n) { try { if(chars[n] && chars[n]->getGameData()) { *slots[n]=chars[n]->getGameData()->stringID.substr(0,256); for(size_t i=0;i<slots[n]->size();++i) if((*slots[n])[i]<32) (*slots[n])[i]='_'; } } catch(...) {} } } catch(...) {} }
+  // NC13: diagnostic only. Reads sensory state of one animal; never alters the proposal outcome.
+  void Animal(Character* a,Character* t,bool haveVisible,bool visible) {
+@@ -524,6 +525,7 @@
+   } catch(...) { }
+  }
+  ~ProposalTrace() {
++  try { SightDiag(diagActor,diagRequester); } catch(...) { } // NC14 call site
+   try {
+    if(emitted) return;
+    static std::map<unsigned,DWORD> last; const DWORD now=GetTickCount();
+@@ -593,6 +595,7 @@
+  Character* requester=KenshiAi::ResolveCharacter(world_,requesterSerial);
+  trace.gate="identity"; trace.actorOk=actor!=NULL; trace.requesterOk=requester!=NULL; trace.Sids(actor,requester);
+  if(!actor || !requester) return "{\"candidates\":[]}";
++ trace.diagActor=actor; trace.diagRequester=requester;
+  trace.player=requester->isPlayerCharacter(); trace.distinct=actor!=requester; trace.dead=actor->isDead(); trace.unconscious=actor->isUnconcious();
+  if(!trace.player || !trace.distinct || trace.dead || trace.unconscious) return "{\"candidates\":[]}";
+  const KenshiAi::CharacterSnapshot snapshot=KenshiAi::CaptureCharacter(world_,actorSerial);

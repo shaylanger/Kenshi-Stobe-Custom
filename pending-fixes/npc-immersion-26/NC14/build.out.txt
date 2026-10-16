@@ -1,0 +1,3 @@
+sources: main=63 legacy=6
+objects: 69
+RESULT NC-BUILD PASS compiler=10.00.30319.01 objects=69 dll=C:\KenshiTestRuns\imm26-nc14\build\out\Stobe.dll sha256=65953AA0745F7A43281D50EF1D1B6D79FF6E6F496927BCFE3B5128AC5FE5C95D
