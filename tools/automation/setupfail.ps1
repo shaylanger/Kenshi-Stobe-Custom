@@ -4,7 +4,7 @@
 #   setupfail.ps1 state <row> open|planned|building|ready|closed [note]
 #   setupfail.ps1 close <row> [note]
 #   setupfail.ps1 open <row> <lane> <reason>        (normally created by mark-row.py / go-row attempts.py)
-#   setupfail.ps1 sync [-Notify]                    tickets <-> NPC_IMMERSION_26_TESTS.md (create for SETUP-FAIL rows without a ticket, close PASS/FAIL/GATED)
+#   setupfail.ps1 sync [-Notify]                    tickets <-> NPC_IMMERSION_26_TESTS.md (create for SETUP-FAIL rows without a ticket, close PASS/FAIL; GATED leaves it open)
 #   setupfail.ps1 backfill [-Force]                 tickets for the CURRENT SETUP-FAIL rows (+ the 2026-10-15 owner/state seed)
 #   setupfail.ps1 brief [n]                         the SETUP-FAIL TICKETS section for session-start -Brief (cap n lines, default 12)
 # Tickets: <runs>\setupfail\<row>.json; env KAH_RUNS_DIR (default C:\KenshiTestRuns), KAH_TESTS_MD.

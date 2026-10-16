@@ -66,7 +66,11 @@ $o = Mark @('01-a', 'PASS', 'state changed, stobe.log line')
 Chk 'PASS mark closes the ticket' ((Tk '01-a').state -eq 'closed' -and (Tk '01-a').closed_by -eq 'PASS')
 $o = Mark @('01-a', 'SETUP-FAIL', 'needs: design - policy question open')
 $o = Mark @('01-a', 'GATED', 'GATED: waits for WP-E')
-Chk 'GATED mark closes the ticket (not a SETUP-FAIL)' ((Tk '01-a').state -eq 'closed' -and (Tk '01-a').closed_by -eq 'GATED')
+Chk 'GATED mark does NOT close the ticket (note only, stays open until the row runs)' ((Tk '01-a').state -ne 'closed')
+$o = Mark @('01-a', 'UNRUN', 'UNRUN (BASE): not run yet')
+Chk 'UNRUN mark does NOT close the ticket' ((Tk '01-a').state -ne 'closed')
+$o = Mark @('01-a', 'FAIL', 'ran, asserted fail')
+Chk 'FAIL after GATED closes it' ((Tk '01-a').state -eq 'closed' -and (Tk '01-a').closed_by -eq 'FAIL')
 # 5. backfill
 $o = SF @('backfill')
 Chk 'backfill creates tickets for the SETUP-FAIL rows, skips PREFLIGHT-FAIL / PASS / UNRUN rows' ((Test-Path "$t\runs\setupfail\08-d.json") -and (Test-Path "$t\runs\setupfail\10-b.json") -and (Test-Path "$t\runs\setupfail\22-a.json") -and -not (Test-Path "$t\runs\setupfail\30-a.json") -and -not (Test-Path "$t\runs\setupfail\31-a.json")) $o

@@ -5,7 +5,7 @@
     (400 chars); drop = old evidence discarded; keep / legacy `keepold` = appended as "; PRIOR RUN: ..." (600 chars).
   SETUP-FAIL (Shay 2026-10-15): the text MUST contain `needs: recipe|server-fix|native|design|fixture` and say what exactly; a bare SETUP-FAIL is
   REFUSED (exit 2, nothing written). PREFLIGHT-FAIL text (llm/lane down: the row never ran) is exempt. A SETUP-FAIL mark creates/updates the unblock
-  ticket (<runs>/setupfail/<row>.json, inbox note for the coordinator); PASS / FAIL / GATED closes it. See setupfail.py / setupfail.ps1.
+  ticket (<runs>/setupfail/<row>.json, inbox note for the coordinator); PASS / FAIL closes it (GATED is a note only, the ticket stays open). See setupfail.py / setupfail.ps1.
 Env: KAH_TESTS_MD (file), KAH_RUNS_DIR (ticket + inbox dir), KAH_LANE (default lane).
 """
 import sys, os, io, datetime

@@ -12,7 +12,7 @@ Rules
     ("SETUP-FAIL <row> needs unblock plan: <needs>") which the coordinator's waker reports.
   * the text of a SETUP-FAIL md mark must contain `needs: recipe|server-fix|native|design|fixture` and a few words saying what exactly
     (check_mark). PREFLIGHT-FAIL (llm/lane down: the row never ran) is exempt and never makes a ticket.
-  * a ticket closes when its row is next marked PASS, FAIL or GATED (it ran / is not a setup problem).
+  * a ticket closes when its row is next marked PASS or FAIL (it ran). A GATED mark is a note only: GATED tickets stay open until the row is run.
 Env: KAH_RUNS_DIR (default C:\\KenshiTestRuns, /mnt/c/KenshiTestRuns on posix), KAH_TESTS_MD (the imm26 tests file).
 CLI: setupfail.py list [--all] [--lane L] | brief [N] | assign ROW AGENT [PLAN] | state ROW STATE [NOTE] | close ROW [NOTE]
      | open ROW LANE REASON | sync [--notify] | backfill [--force] | check STATUS NOTE
@@ -202,9 +202,9 @@ def on_verdict(row, lane, verdict, cause, runs=None, send=True):
     v = str(verdict).strip().upper()
     if v == "SETUP-FAIL":
         return open_ticket(row, lane, cause, runs, send)
-    if v in ("PASS", "FAIL", "GATED"):
+    if v in ("PASS", "FAIL"):
         return close_ticket(row, runs, by=v)
-    return None
+    return None  # GATED / UNRUN: note only, an open ticket stays open
 
 
 def assign(row, agent, plan="", runs=None):
@@ -324,7 +324,7 @@ def lane_of(text):
 
 
 def sync(runs=None, send=False):
-    """tickets <-> md: SETUP-FAIL row without an open ticket -> create; open ticket whose md row is PASS/FAIL/GATED -> close."""
+    """tickets <-> md: SETUP-FAIL row without an open ticket -> create; open ticket whose md row is PASS/FAIL -> close (GATED/UNRUN leave it open)."""
     made, closed = [], []
     rows = md_rows()
     for row, (st, ev) in rows.items():
@@ -332,7 +332,7 @@ def sync(runs=None, send=False):
         if st == "SETUP-FAIL" and (t is None or t.get("state") == "closed"):
             if open_ticket(row, lane_of(ev), ev, runs, send):
                 made.append(row)
-        elif st in ("PASS", "FAIL", "GATED") and t and t.get("state") != "closed" and age_min(t.get("last_update", "")) >= 30:
+        elif st in ("PASS", "FAIL") and t and t.get("state") != "closed" and age_min(t.get("last_update", "")) >= 30:
             # (a ticket a machine verdict touched < 30 min ago is not closed by a stale md status; mark-row.py/attempts.py close on the real mark)
             close_ticket(row, runs, by="md:" + st)
             closed.append(row)
