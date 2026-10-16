@@ -22,6 +22,9 @@ Write the breakdown (in the program md / ledger, one table) before the first Age
 Estimate: bytes/3.5 = tokens for anything an agent must read in full; for big files count only the codemap entries it will `sed`
 (lines x ~12 tokens); edits ~2x the changed lines; tests/tool output ~15k per run; reserve 20k for brief + report. Total > 120k or > 2 big
 files = split. Record the table in the program ledger (`C:\KenshiTestRuns\programs\<name>.json`) and update it after EVERY agent report.
+**Row-builder / tooling packages (PI-30, Shay confirmed 2026-10-16): at most 4 rows (or one phase) per agent.** Split a 9-row build into 2-3 agents
+(defs+checker | selftest+fakes | TESTS rows + operator note), give each its own new files (no shared rowdefs), and commit after EACH phase, not at the end.
+Why: imm26-reloadrows-A (9 rows) and -B (6) each ran to ~215k tokens with nothing committed and the selftest never run; rowtools4 (7 items) and rowtools43 (six rows) stopped at ~203k.
 
 ## 3. Code maps: how agents read big files
 `bash /mnt/c/KenshiModding/tools/automation/codemap.sh` (WSL) writes `/root/imm26/codemap/<label>__<path with __>.txt` + `INDEX.txt`:

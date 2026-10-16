@@ -24,19 +24,6 @@ Rules:
 - weakens: no
 - added: 2026-10-15 21:07
 
-### PI-30 | confirmed
-- idea: Row-builder / tooling work packages must be sized to <= 4 rows (or one phase) per agent: split a 9-row build into 2-3 agents (defs+checker | selftest+fakes | TESTS rows+operator note) and commit after each phase, not at the end.
-- evidence: 2026-10-15 imm26-reloadrows-A (9 rows) and -B (6 rows) each ran to ~215k tokens (target 120k) and stopped with NOTHING committed and the selftest never run; two successors had to re-read ~40k of handoff each.
-- saving: ~80k tokens and one respawn per oversized builder
-- risk: more agents touching the same rowtools dir: keep new files per agent
-- hooks: no
-- weakens: no
-- added: 2026-10-15 21:10
-- moment: 21:39 when rowtools43 stopped: splitting item 4 into 2-3 rows per agent would have finished the selftest in the same agent and avoided the extra rowtools44 spawn
-- last_review: coordinator-11
-- log: 2026-10-15 21:10 review 'coordinator-10 handoff': added
-- log: 2026-10-15 23:16 review 'coordinator-11': open -> confirmed (applies: 2026-10-15: imm26-rowtools4 (7 items) stopped at ~203k with items 4-7 undone; its successor imm26-rowtools43 (item 4 alone, six rows) also hit ~204k in 10 minutes and finished only the code, not se...)
-
 ### PI-31 | open
 - idea: AGENT ORPHANED must not fire for in-session (Agent-tool) subagents of a live coordinator or live tail: check the agent against the session's own agent list / ledger owner before alerting
 - evidence: 2026-10-15 21:24 and 21:40: AGENT ORPHANED imm26-fix10a and imm26-fix03b were false alarms (both alive, only blocked on a test lock); each cost 2-3 turns of investigation, one almost led to a wrong respawn
@@ -413,3 +400,18 @@ Rules:
 - measured: docs part in AGENT_PROMPTS block B: tail arms ONE tail-wait.ps1 over its owned agents (exit on DONE|FAILED|STOPPED-CONTEXT/needs relay), block message says never reply per block; selftest PI-27/28 case PASS
 - retired: 2026-10-15 built
 - log: 2026-10-15 21:10 review 'coordinator-10 handoff': open -> confirmed (applies: 2026-10-15 the old tail received LANE IDLE/deploy events it could not act on and both its Monitor wakers died with exit 1; folded into imm26-pi28 (tail-wait.ps1 over own agents' status files))
+
+### PI-30 | done
+- idea: Row-builder / tooling work packages must be sized to <= 4 rows (or one phase) per agent: split a 9-row build into 2-3 agents (defs+checker | selftest+fakes | TESTS rows+operator note) and commit after each phase, not at the end.
+- evidence: 2026-10-15 imm26-reloadrows-A (9 rows) and -B (6 rows) each ran to ~215k tokens (target 120k) and stopped with NOTHING committed and the selftest never run; two successors had to re-read ~40k of handoff each.
+- saving: ~80k tokens and one respawn per oversized builder
+- risk: more agents touching the same rowtools dir: keep new files per agent
+- hooks: no
+- weakens: no
+- added: 2026-10-15 21:10
+- moment: 21:39 when rowtools43 stopped: splitting item 4 into 2-3 rows per agent would have finished the selftest in the same agent and avoided the extra rowtools44 spawn
+- last_review: coordinator-11
+- measured: rule added to docs/WP_SIZING.md section 2 (<=4 rows/agent); before: 9-row builders ran ~215k tokens with nothing committed; effect measured at the next row-tool package
+- retired: 2026-10-16 built
+- log: 2026-10-15 21:10 review 'coordinator-10 handoff': added
+- log: 2026-10-15 23:16 review 'coordinator-11': open -> confirmed (applies: 2026-10-15: imm26-rowtools4 (7 items) stopped at ~203k with items 4-7 undone; its successor imm26-rowtools43 (item 4 alone, six rows) also hit ~204k in 10 minutes and finished only the code, not se...)
