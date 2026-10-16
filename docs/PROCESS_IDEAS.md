@@ -38,19 +38,6 @@ Rules:
 - log: 2026-10-15 23:16 review 'coordinator-11': added
 - log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16 00:00-05:00: no AGENT ORPHANED alert fired this session; only legitimate STOPPED-CONTEXT events.)
 
-### PI-32 | confirmed
-- idea: lane-brief.ps1 (or the operator spawn) records the kenshi-ctl idle reason 'operator spawned, lane launching' automatically for 15 min so the Stop hook does not demand one by hand
-- evidence: 2026-10-15 22:40, 22:41 and 22:45: the Stop hook blocked three times right after spawning a 5090 operator because the 5090 was momentarily idle; each needed a manual kenshi-ctl idle
-- saving: 3 turns
-- risk: low if the reason expires in 15 min and is cleared when a game starts
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 23:16
-- moment: 00:31 when op9f stopped: the lane had no operator for ~10 min while imm26-26a-recipe investigated; an automatic idle reason from lane-brief/agent status would have saved the manual step each time
-- last_review: coordinator-12
-- log: 2026-10-15 23:16 review 'coordinator-11': added
-- log: 2026-10-16 02:55 review 'coordinator-12': open -> confirmed (applies: 2026-10-16 00:30, 01:00, 01:45: after each 5090 operator stopped I had to record kenshi-ctl.ps1 idle by hand to keep the Stop hook quiet while a fixer was building (op9f, op9g, op9h gaps).)
-
 ### PI-33 | open
 - idea: The Stop hook's successor check must accept ANY successor registered via lane-brief.ps1 -Name/-Predecessor (lane-owners.json), not only <name>2/<name>b suffix names; or lane-brief should register the successor so the hook stops asking for 'imm26-4080-i4op10b' when 'imm26-4080-i4op11' already runs.
 - evidence: 2026-10-16 00:21 (op9e->op9f), 01:28 (i4op10->op11), 00:50 (op9f->op9g): the Stop hook blocked three times asking to respawn a fresh <name>b although the real successor (different number) was already RUNNING; each cost a model turn and an agent-abandon.ps1 call.
@@ -452,3 +439,18 @@ Rules:
 - retired: 2026-10-16 built
 - log: 2026-10-15 21:10 review 'coordinator-10 handoff': added
 - log: 2026-10-15 23:16 review 'coordinator-11': open -> confirmed (applies: 2026-10-15: imm26-rowtools4 (7 items) stopped at ~203k with items 4-7 undone; its successor imm26-rowtools43 (item 4 alone, six rows) also hit ~204k in 10 minutes and finished only the code, not se...)
+
+### PI-32 | done
+- idea: lane-brief.ps1 (or the operator spawn) records the kenshi-ctl idle reason 'operator spawned, lane launching' automatically for 15 min so the Stop hook does not demand one by hand
+- evidence: 2026-10-15 22:40, 22:41 and 22:45: the Stop hook blocked three times right after spawning a 5090 operator because the 5090 was momentarily idle; each needed a manual kenshi-ctl idle
+- saving: 3 turns
+- risk: low if the reason expires in 15 min and is cleared when a game starts
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 23:16
+- moment: 00:31 when op9f stopped: the lane had no operator for ~10 min while imm26-26a-recipe investigated; an automatic idle reason from lane-brief/agent status would have saved the manual step each time
+- last_review: coordinator-12
+- measured: lane-brief.ps1 -Name now records a 15-min 'lane launching' rig idle reason (beebc6d); tested 2026-10-16 10:03 on 5090-i5: file written, mtime backdated 45 min so it lapses after 15 min; before: 3 manual idle reasons per session (00:30, 01:00, 01:45), after: 0
+- retired: 2026-10-16 built
+- log: 2026-10-15 23:16 review 'coordinator-11': added
+- log: 2026-10-16 02:55 review 'coordinator-12': open -> confirmed (applies: 2026-10-16 00:30, 01:00, 01:45: after each 5090 operator stopped I had to record kenshi-ctl.ps1 idle by hand to keep the Stop hook quiet while a fixer was building (op9f, op9g, op9h gaps).)
