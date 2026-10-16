@@ -99,8 +99,9 @@ if ($cfg.Delay -lt 0) { $cfg.Delay = if ($env:KAH_TAIL_CLOSE_DELAY) { [int]$env:
             $ErrorActionPreference = 'Stop'
         }
         # detached worker (WMI parent), so taskkill /T of the claude tree cannot take it down before it removes the flag
-        $wa = "-NoProfile -ExecutionPolicy Bypass -File `"$($cfg.Self)`" -Session `"$sid`" -Worker -DelaySec $($cfg.Delay) -Source $($cfg.Source) -Runs `"$runs`""
-        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "powershell.exe $wa" } -ErrorAction Stop
+        $wa = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$($cfg.Self)`" -Session `"$sid`" -Worker -DelaySec $($cfg.Delay) -Source $($cfg.Source) -Runs `"$runs`""
+        $si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }   # SW_HIDE: the worker must never open a visible window (Shay 2026-10-15)
+        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "powershell.exe $wa"; ProcessStartupInformation = $si } -ErrorAction Stop
         if ($r.ReturnValue -ne 0) { throw "worker start failed (WMI return $($r.ReturnValue))" }
         Write-CloseLog 'SCHEDULED' "pid $($chk.Pid) ($($chk.Name)) closes in $($cfg.Delay) s (worker pid $($r.ProcessId))"
         "tail-close: tail $sid closes in $($cfg.Delay) s (pid $($chk.Pid), $($chk.Name)); log $log"
