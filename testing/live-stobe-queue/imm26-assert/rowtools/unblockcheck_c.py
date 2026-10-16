@@ -61,8 +61,7 @@ def check_15bx(row, ev):
     if os.name == 'nt' and len(bd) > 2 and bd[0] == '/' and bd[2] == '/':
         bd = bd[1].upper() + ':' + bd[2:]
         try:
-            open(os.path.join(ev, 'bundle_dir.txt'), 'w').write(bd + '
-')   # hxcheck.py/assert_witness need the same Windows path
+            open(os.path.join(ev, 'bundle_dir.txt'), 'w').write(bd + chr(10))   # hxcheck.py/assert_witness need the same Windows path
         except OSError:
             pass
     labs = [f'X{i}' for i in (1, 2, 3)] + [f'P{i}' for i in (1, 2, 3)] + ['S1']
