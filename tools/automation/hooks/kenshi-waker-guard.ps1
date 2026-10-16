@@ -138,14 +138,23 @@ $lock = if (Test-Path -LiteralPath $lockFile) { (Get-Content -LiteralPath $lockF
 $markers = @()
 $inflightDir = Join-Path $runs 'inflight'
 if (Test-Path -LiteralPath $inflightDir) {
-    $markers = @(Get-ChildItem -LiteralPath $inflightDir -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) } | ForEach-Object { $_.Name })
+    $markerFiles = @(Get-ChildItem -LiteralPath $inflightDir -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) } | Sort-Object LastWriteTime -Descending)
+    $markers = @($markerFiles | ForEach-Object { $_.Name })
 }
+# Quiet block text (Shay order #5, 2026-10-15): a COUNT plus only the 2 newest markers (name + age), never the whole list. The
+# blocking conditions are unchanged; only the wording is shorter.
+function Format-Newest($items, [string]$what, [string]$tag = 'newest 2') {
+    $a = @($items)
+    if ($a.Count -le 2) { return "${what}: $($a.Count) ($($a -join ', '))" }
+    "${what}: $($a.Count) ($tag`: $(($a | Select-Object -First 2) -join ', '))"
+}
+function Format-MarkerAge($f) { $m = [int]((Get-Date) - $f.LastWriteTime).TotalMinutes; "$($f.Name) ($(if ($m -ge 120) { [string][int]($m / 60) + ' h' } else { "$m min" }) old)" }
 $inflight = @()
 if ($kenshi) { $inflight += 'Kenshi running' }
 if ($lock) { $inflight += "game.lock=$lock" }
-if ($markers.Count) { $inflight += "inflight markers: $($markers -join ', ')" }
+if ($markers.Count) { $inflight += (Format-Newest @($markerFiles | ForEach-Object { Format-MarkerAge $_ }) 'inflight markers') }
 $agentOnly = @($agentFly | Where-Object { $markers -notcontains $_ })
-if ($agentOnly.Count) { $inflight += "RUNNING agents (status < 45 min old): $($agentOnly -join ', ')" }
+if ($agentOnly.Count) { $inflight += (Format-Newest $agentOnly 'RUNNING agents (status < 45 min old)' 'first 2') }
 
 # --- is a waker running? (a background sleep/Start-Sleep or a health check chained after one) ---
 $me = $PID
@@ -170,7 +179,7 @@ function Under-Root([int]$pid0) {
     }
     return $false
 }
-$waker = $procs.Values | Where-Object {
+$wakerProc = $procs.Values | Where-Object {
     if ($_.ProcessId -eq $me -or $_.Name -notmatch '^(sleep|wsl|bash|sh|powershell|pwsh|timeout)\.exe$') { return $false }
     $cl = [string]$_.CommandLine
     $isWaker = $false
@@ -183,8 +192,9 @@ $waker = $procs.Values | Where-Object {
     $isWaker -and (Under-Root ([int]$_.ProcessId))
 } | Select-Object -First 1
 
-if ($inflight.Count -gt 0 -and -not $waker) {
-    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Before ending the turn start ' + $WAKER + ' (add --batch <out-dir> when a batch runs). If nothing is really in flight, release the lock / delete the stale marker in C:\KenshiTestRuns\inflight\ and say so.')
+if ($env:KAH_GUARD_TEST_NO_WAKER) { $wakerProc = $null }   # selftest switch: can only make the block fire, never skip it
+if ($inflight.Count -gt 0 -and -not $wakerProc) {
+    Block-Stop ('kenshi-waker-guard: work is in flight (' + ($inflight -join '; ') + ') but no waker is running, so this session would go quiet and miss peer messages and stalls. Next action: start ' + $WAKER + ' (add --batch <out-dir> when a batch runs). If nothing is really in flight, release the lock / delete the stale marker C:\KenshiTestRuns\inflight\<name> (agents: agent-abandon.ps1 <name> "<why>") and say so.')
 }
 
 # --- 5090 idle? ---

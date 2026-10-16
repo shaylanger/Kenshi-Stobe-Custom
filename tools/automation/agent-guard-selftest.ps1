@@ -132,6 +132,23 @@ try {
     Ok ((Get-Content -Raw (Join-Path $tmp 'inflight\zzm')).Trim() -eq '/mnt/c/some/outdir') 'an existing marker keeps its content on RUNNING'
     & powershell -NoProfile -File (Join-Path $here 'agent-abandon.ps1') 'zz1' 'selftest' | Out-Null
     Ok (Test-Path (Join-Path $ag 'zz1.abandoned')) 'agent-abandon.ps1 writes the .abandoned file'
+    Ok (-not (Test-Path (Join-Path $tmp 'inflight\zz1'))) 'agent-abandon.ps1 deletes the agent inflight marker'
+    Ok (Test-Path (Join-Path $tmp 'inflight\zzm')) 'agent-abandon.ps1 leaves other markers alone'
+
+    # ---- quiet Stop-hook block (Shay order #5): count + only the 2 newest markers + one next action ----
+    $q = Join-Path ([IO.Path]::GetTempPath()) ("agentguardq-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    New-Item -ItemType Directory -Force -Path (Join-Path $q 'inflight'), (Join-Path $q 'agents') | Out-Null
+    $ages = [ordered]@{ mkOld1 = 300; mkOld2 = 200; mkOld3 = 100; mkNew2 = 20; mkNew1 = 3 }
+    foreach ($k in $ages.Keys) { $f = Join-Path $q "inflight\$k"; Set-Content $f 'x'; (Get-Item $f).LastWriteTime = (Get-Date).AddMinutes(-$ages[$k]) }
+    $hookIn = (@{ cwd = 'C:\KenshiModding'; hook_event_name = 'Stop' } | ConvertTo-Json -Compress)
+    $env:KAH_RUNS_DIR = $q; $env:KAH_GUARD_TEST_NO_WAKER = '1'; Remove-Item Env:KAH_GUARD_TEST_ONLY_AGENTS -ErrorAction SilentlyContinue
+    $ho = ($hookIn | & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'hooks\kenshi-waker-guard.ps1') stop 2>$null) -join "`n"
+    $env:KAH_RUNS_DIR = $tmp; Remove-Item Env:KAH_GUARD_TEST_NO_WAKER -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $q -Recurse -Force -ErrorAction SilentlyContinue
+    Ok ($ho -match '"decision":"block"' -and $ho -match 'work is in flight') 'quiet block: still blocks while markers are in flight and no waker runs'
+    Ok ($ho -match 'inflight markers: 5 \(newest 2: mkNew1 \(3 min old\), mkNew2 \(20 min old\)\)') "quiet block: count 5 plus the 2 newest with ages: $ho"
+    Ok ($ho -notmatch 'mkOld1|mkOld2|mkOld3') 'quiet block: older markers are not listed'
+    Ok ($ho -match 'Next action: start the background command .*event-wait\.sh') 'quiet block: the next action names the waker command (not an empty string)'
 
     # ---- line endings + WSL syntax of every .sh this tooling touches (2026-10-15: a CRLF event-wait.sh killed the waker) ----
     $shs = 'event-wait.sh', 'event-sweep.sh', 'rig-health.sh', 'inflight-claims.sh'

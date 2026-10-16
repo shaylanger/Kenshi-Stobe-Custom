@@ -7,4 +7,6 @@ $dir = Join-Path $runs 'agents'
 if (-not (Test-Path -LiteralPath (Join-Path $dir "$Name.status"))) { "no such agent status: $Name"; exit 1 }
 Set-Content -LiteralPath (Join-Path $dir "$Name.abandoned") -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm') $Reason" -Encoding UTF8
 Remove-Item -LiteralPath (Join-Path $runs "respawn\$Name.todo") -Force -ErrorAction SilentlyContinue
+# also drop its inflight marker so an abandoned agent stops counting as in-flight work (Stop hook)
+Remove-Item -LiteralPath (Join-Path $runs "inflight\$Name") -Force -ErrorAction SilentlyContinue
 "abandoned $Name ($Reason)"
