@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,6 +31,24 @@ def _dt(value: Any) -> datetime | None:
         return parsed.astimezone(timezone.utc)
     except ValueError:
         return None
+
+
+def _elapsed_seconds(receipt: dict, now: datetime | None = None) -> float | None:
+    """Use recorded duration for terminal receipts; advance only active receipts."""
+    status = str(receipt.get("status", "")).lower()
+    started = _dt(receipt.get("started_utc"))
+    if status in ("running", "in_progress", "started"):
+        if started is None: return None
+        now = now or datetime.now(timezone.utc)
+        return max(0.0, (now - started).total_seconds())
+    recorded = receipt.get("elapsed_s")
+    if isinstance(recorded, (int, float)) and not isinstance(recorded, bool):
+        if math.isfinite(recorded) and recorded >= 0:
+            return float(recorded)
+    ended = _dt(receipt.get("ended_utc"))
+    if started is None or ended is None: return None
+    duration = (ended - started).total_seconds()
+    return duration if math.isfinite(duration) and duration >= 0 else None
 
 
 def _rollout_threads(path: str | Path) -> dict:
@@ -338,9 +357,7 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
     if not isinstance(receipt, dict):
         return {"status": "unknown", "audit": "UNKNOWN", "reason": "receipt missing"}
     historical = _historical_telemetry(receipt)
-    started = _dt(receipt.get("started_utc"))
-    now = datetime.now(timezone.utc)
-    elapsed = max(0.0, (now - started).total_seconds()) if started else None
+    elapsed = _elapsed_seconds(receipt)
     rollout = receipt.get("rollout_path")
     if not isinstance(rollout, str) or not rollout:
         return {"run": receipt.get("run"), "status": receipt.get("status", "unknown"),

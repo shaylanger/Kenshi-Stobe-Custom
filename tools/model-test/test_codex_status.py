@@ -103,6 +103,36 @@ class LiveMetricsTests(unittest.TestCase):
         self.assertEqual(metrics["audit"], "UNKNOWN")
         self.assertIsNone(metrics["observed_service_tier"])
 
+    def test_terminal_elapsed_is_stable_and_prefers_recorded_finite_duration(self):
+        self.receipt.update({"status": "COMPLETE_UNAUDITED", "elapsed_s": 267.453,
+                             "started_utc": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
+                             "ended_utc": (datetime.now(timezone.utc) - timedelta(minutes=55)).isoformat()})
+        self.write()
+        first = codex_status.live_metrics(self.receipt, None)["elapsed_s"]
+        second = codex_status.live_metrics(self.receipt, None)["elapsed_s"]
+        self.assertEqual(first, 267.453)
+        self.assertEqual(second, 267.453)
+
+    def test_terminal_elapsed_falls_back_to_valid_endpoints_or_unknown(self):
+        start = datetime(2026, 10, 16, tzinfo=timezone.utc)
+        self.receipt.update({"status": "failed", "started_utc": start.isoformat(),
+                             "ended_utc": (start + timedelta(seconds=12.5)).isoformat()})
+        self.assertEqual(codex_status._elapsed_seconds(self.receipt), 12.5)
+        for invalid in (-1, float("inf"), float("nan")):
+            self.receipt["elapsed_s"] = invalid
+            self.assertEqual(codex_status._elapsed_seconds(self.receipt), 12.5)
+        self.receipt.update({"elapsed_s": -1, "ended_utc": (start - timedelta(seconds=1)).isoformat()})
+        self.assertIsNone(codex_status._elapsed_seconds(self.receipt))
+        self.receipt.pop("ended_utc")
+        self.assertIsNone(codex_status._elapsed_seconds(self.receipt))
+
+    def test_running_elapsed_uses_current_time_not_terminal_duration(self):
+        start = datetime.now(timezone.utc) - timedelta(seconds=8)
+        duration = codex_status._elapsed_seconds({"status": "running", "started_utc": start.isoformat(),
+                                                   "elapsed_s": 9000})
+        self.assertGreaterEqual(duration, 8)
+        self.assertLess(duration, 10)
+
     def test_completed_validity_can_pass_while_overall_tier_is_unknown(self):
         self.records[1].pop("service_tier")
         self._write_hostprobe(None)
