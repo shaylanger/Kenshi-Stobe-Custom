@@ -1,0 +1,217 @@
+diff -ruN a/src/NativeTravelLifecycle.cpp b/src/NativeTravelLifecycle.cpp
+--- a/src/NativeTravelLifecycle.cpp	2026-10-16 14:41:23.054134789 -0500
++++ b/src/NativeTravelLifecycle.cpp	2026-10-16 14:41:23.950435688 -0500
+@@ -30,6 +30,7 @@
+ #include <float.h>
+ #include <sstream>
+ #include <vector>
++#include <algorithm>
+ #include <cmath>
+ #include <cstdlib>
+ #include <cerrno>
+@@ -66,6 +67,7 @@
+ };
+ struct Mutex { CRITICAL_SECTION cs; Mutex(){InitializeCriticalSection(&cs);} ~Mutex(){DeleteCriticalSection(&cs);} } mutex;
+ struct Lock { Mutex &m; Lock(Mutex &value):m(value){EnterCriticalSection(&m.cs);} ~Lock(){LeaveCriticalSection(&m.cs);} };
++std::vector<unsigned int> terminalActors; // NC25: guarded by mutex; drained by TakeTerminalActors()
+ template<typename T> std::string Number(T value) { std::ostringstream out; out << value; return out.str(); }
+ std::map<unsigned int, Controller> follows, routes;
+ std::map<unsigned int, std::vector<Receipt> > receipts;
+@@ -98,6 +100,9 @@
+   const bool changed = r.phase != phase || r.reason != reason || r.terminal != terminal;
+   r.phase = phase; r.reason = reason; r.terminal = terminal;
+   r.released = released; r.arrived = arrived; r.evidence = ++sequence;
++  if (changed && terminal && r.actor != 0 && terminalActors.size() < 32 &&
++      std::find(terminalActors.begin(), terminalActors.end(), r.actor) == terminalActors.end())
++    terminalActors.push_back(r.actor); // NC25: one immediate context push per terminal transition
+   if (changed) Log("NATIVE_TRAVEL: task=" + r.task + " actor=" + Number(r.actor) + " phase=" + phase + " reason=" + reason +
+                    " terminal=" + (terminal ? "1" : "0") + " released=" + (released ? "1" : "0") + " arrived=" + (arrived ? "1" : "0") +
+                    " participation_qualified=" + (r.partBegun && r.participation.frozen.find("\"qualified\":true") != std::string::npos ? "1" : "0") +
+@@ -285,6 +290,11 @@
+   if (!r || r->follow || !routes[actor].present || r->revision != routes[actor].revision) return;
+   Emit(*r, "completed", "measured_within_route_arrival_radius", true, false, true);
+ }
++std::vector<unsigned int> TakeTerminalActors() {
++  Lock lock(mutex);
++  std::vector<unsigned int> out; out.swap(terminalActors);
++  return out;
++}
+ void Failed(unsigned int actor, bool follow, const std::string &reason) {
+   if (!GameThread()) return;
+   Lock lock(mutex);
+diff -ruN a/src/NativeTravelLifecycle.h b/src/NativeTravelLifecycle.h
+--- a/src/NativeTravelLifecycle.h	2026-10-16 14:41:22.968596189 -0500
++++ b/src/NativeTravelLifecycle.h	2026-10-16 14:41:23.864117288 -0500
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include <string>
++#include <vector>
+ class GameWorld;
+ class Character;
+ 
+@@ -48,5 +49,8 @@
+ // branch. Arrival is a route end condition; it is never a hunting/work result.
+ void RouteReached(unsigned int actor, float x, float y, float z);
+ void Failed(unsigned int actor, bool follow, const std::string &reason);
++// NC25 (22-b): actors whose receipt entered a terminal phase since the last call (each at most once per
++// transition). The main loop pushes an immediate context snapshot for each ('travel_terminal').
++std::vector<unsigned int> TakeTerminalActors();
+ std::string SnapshotJson(unsigned int actor);
+ } }
+diff -ruN a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp	2026-10-16 14:41:23.442755489 -0500
++++ b/src/main.cpp	2026-10-16 14:41:24.334951188 -0500
+@@ -9914,6 +9914,21 @@
+ 
+ bool TryApplyJobsToggleSafe(Character *npc, bool enabled, const std::string &label);
+ 
++// NC25: undo the hard-follow lock after FOLLOW_EXPIRED (jobs, speed, goals).
++static void RestoreAfterFollowExpiry(Character *follower) {
++  TryApplyJobsToggleSafe(follower, true, "FOLLOW_EXPIRED_RESTORE_JOBS");
++  try {
++    CharMovement *movement = follower->getMovement();
++    if (movement && (uintptr_t)movement > 0x1000) movement->restoreDesiredSpeed();
++  } catch (...) {
++  }
++  try {
++    follower->clearAllAIGoals();
++    follower->reThinkCurrentAIAction();
++  } catch (...) {
++  }
++}
++
+ static void ApplyFollowTargets(GameWorld *world) {
+   if (!world) {
+     return;
+@@ -9926,6 +9941,22 @@
+   }
+   lastFollowTick = nowTick;
+ 
++  // NC25: expired while the follower was not loaded; restore once it is.
++  static std::set<unsigned int> s_followRestorePending;
++  static std::map<unsigned int, bool> s_followSquadCache;
++  static std::map<unsigned int, DWORD> s_followDiagTick;
++  for (std::set<unsigned int>::iterator pend = s_followRestorePending.begin();
++       pend != s_followRestorePending.end();) {
++    Character *late = FindCharacterBySerial(world, *pend);
++    if (late && (uintptr_t)late >= 0x1000) {
++      RestoreAfterFollowExpiry(late);
++      Log("FOLLOW_EXPIRED_RESTORED: follower=" + ToString(static_cast<int>(*pend)));
++      s_followRestorePending.erase(pend++);
++    } else {
++      ++pend;
++    }
++  }
++
+   std::map<unsigned int, hand> followSnapshot = SnapshotFollowTargets();
+   if (followSnapshot.empty()) {
+     return;
+@@ -9950,46 +9981,62 @@
+       target = nullptr;
+     }
+ 
+-    if (!follower || (uintptr_t)follower < 0x1000 || !target ||
+-        (uintptr_t)target < 0x1000) {
+-      continue;
+-    }
+-    if (follower == target) {
+-      ClearFollowTarget(followerSerial);
+-      continue;
+-    }
+-
+     // Safety net: a non-squad NPC must not follow forever (FollowExpiryGameHours, default 24).
++    // NC25 (23-b): runs BEFORE the loaded guard. FindCharacterBySerial only sees the world's update list, so a
++    // follower left far behind was skipped by `continue` and its follow never expired. Squad status is cached from
++    // the last time the follower was loaded (never seen = not squad).
++    const bool followerLoaded = follower && (uintptr_t)follower >= 0x1000;
+     {
+       bool squadMember = false;
+-      try {
+-        Faction *followerFaction = follower->getFaction();
+-        squadMember = followerFaction && followerFaction->isThePlayer();
+-      } catch (...) {
+-        squadMember = true; // unknown faction: never expire
++      if (followerLoaded) {
++        try {
++          Faction *followerFaction = follower->getFaction();
++          squadMember = followerFaction && followerFaction->isThePlayer();
++        } catch (...) {
++          squadMember = true; // unknown faction: never expire
++        }
++        s_followSquadCache[followerSerial] = squadMember;
++      } else {
++        std::map<unsigned int, bool>::const_iterator cached = s_followSquadCache.find(followerSerial);
++        squadMember = cached != s_followSquadCache.end() && cached->second;
+       }
+       long long followStart = 0;
+-      if (!squadMember && GetFollowStart(followerSerial, followStart) &&
+-          Stobe::FollowExpiry::ShouldExpire(followStart, CurrentGameTsSeconds(),
++      const bool haveStart = GetFollowStart(followerSerial, followStart);
++      const int nowGameTs = CurrentGameTsSeconds();
++      DWORD &lastDiagTick = s_followDiagTick[followerSerial];
++      if (nowTick - lastDiagTick >= 60000) {
++        lastDiagTick = nowTick;
++        Log("FOLLOW_DIAG: follower=" + ToString(static_cast<int>(followerSerial)) + " loaded=" +
++            std::string(followerLoaded ? "1" : "0") + " squad=" + std::string(squadMember ? "1" : "0") +
++            " start=" + (haveStart ? ToString(static_cast<int>(followStart)) : std::string("none")) +
++            " now=" + ToString(nowGameTs) + " limit_s=" + ToString(static_cast<int>(FollowExpiryLimitGameSeconds())));
++      }
++      if (!squadMember && haveStart &&
++          Stobe::FollowExpiry::ShouldExpire(followStart, nowGameTs,
+                                             FollowExpiryLimitGameSeconds(), false, false)) {
+         Log("FOLLOW_EXPIRED: follower=" + ToString(followerSerial) + " started_gamets=" +
+-            ToString(static_cast<int>(followStart)) + " now_gamets=" + ToString(CurrentGameTsSeconds()));
++            ToString(static_cast<int>(followStart)) + " now_gamets=" + ToString(nowGameTs) +
++            " loaded=" + (followerLoaded ? "1" : "0"));
+         ClearFollowTarget(followerSerial);
+-        TryApplyJobsToggleSafe(follower, true, "FOLLOW_EXPIRED_RESTORE_JOBS");
+-        try {
+-          CharMovement *movement = follower->getMovement();
+-          if (movement && (uintptr_t)movement > 0x1000) movement->restoreDesiredSpeed();
+-        } catch (...) {
+-        }
+-        try {
+-          follower->clearAllAIGoals();
+-          follower->reThinkCurrentAIAction();
+-        } catch (...) {
++        s_followSquadCache.erase(followerSerial);
++        s_followDiagTick.erase(followerSerial);
++        if (followerLoaded) {
++          RestoreAfterFollowExpiry(follower);
++        } else {
++          s_followRestorePending.insert(followerSerial);
+         }
+         continue;
+       }
+     }
+ 
++    if (!followerLoaded || !target || (uintptr_t)target < 0x1000) {
++      continue;
++    }
++    if (follower == target) {
++      ClearFollowTarget(followerSerial);
++      continue;
++    }
++
+     Ogre::Vector3 from = follower->getPosition();
+     Ogre::Vector3 to = target->getPosition();
+     float dx = from.x - to.x;
+@@ -16121,6 +16168,18 @@
+     ExecuteQueuedActions(world, invTimer);
+     UpdateMoveToActions(world);
+     Stobe::NativeTravelLifecycle::Tick(world, CurrentGameTsSeconds());
++    { // NC25 (22-b): terminal owned-travel phase -> one immediate context snapshot so the server ingests the
++      // receipt and detects the situated arrival event.
++      std::vector<unsigned int> terminalActors = Stobe::NativeTravelLifecycle::TakeTerminalActors();
++      for (size_t ti = 0; ti < terminalActors.size(); ++ti) {
++        try {
++          Character *terminalNpc = FindCharacterBySerial(world, terminalActors[ti]);
++          if (terminalNpc && (uintptr_t)terminalNpc > 0x1000)
++            PushImmediateContextSnapshot(terminalNpc, "travel_terminal", false);
++        } catch (...) {
++        }
++      }
++    }
+     ApplyFollowTargets(world);
+     ApplyTravelTargets(world);
+     StobeGoals_Tick(world); // work/task goals, goal panel, action/unequip requests (was KenshiFP)
