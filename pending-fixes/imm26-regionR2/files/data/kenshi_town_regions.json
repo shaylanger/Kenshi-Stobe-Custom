@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "purpose": "Static town -> region table behind stobeRegionRouteTownRegions() (lib/region_route.php). Region names are the canonical names of lib/destination_catalog.json. Only towns with a verifiable source are listed; a region with no listed town gets an honest cannot_route_yet.",
+  "how_to_extend": "Add \"<exact in-game town name>\": {\"region\": \"<catalog region name>\", \"source\": \"<where it was verified>\"}. Never guess a town. A native world_towns `region` field will replace this file later.",
+  "towns": {
+    "The Hub": {
+      "region": "Border Zone",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Squin": {
+      "region": "Stenn Desert",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Admag": {
+      "region": "Stenn Desert",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Stack": {
+      "region": "Okran's Pride",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Bad Teeth": {
+      "region": "Okran's Pride",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Blister Hill": {
+      "region": "Okran's Pride",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "World's End": {
+      "region": "Hidden Forest",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Mongrel": {
+      "region": "Fog Islands",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Shark": {
+      "region": "The Swamp",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Mud Town": {
+      "region": "The Swamp",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Rot": {
+      "region": "The Swamp",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Black Desert City": {
+      "region": "Deadlands",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Flats Lagoon": {
+      "region": "The Grid",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Clownsteady": {
+      "region": "The Hook",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Drifter's Last": {
+      "region": "The Hook",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Bark": {
+      "region": "The Hook",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Heft": {
+      "region": "The Great Desert",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Sho-Battai": {
+      "region": "The Great Desert",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Stoat": {
+      "region": "The Great Desert",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Heng": {
+      "region": "Heng",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Catun": {
+      "region": "The Pits East",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Mourn": {
+      "region": "Bonefields",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Black Scratch": {
+      "region": "Stormgap Coast",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Spring": {
+      "region": "Stobe's Gamble",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Tower of Abuse": {
+      "region": "Venge",
+      "source": "native table Context.cpp ResolveMappedRegionFromTownName (24 towns, vanilla Kenshi)"
+    },
+    "Hive Village NE": {
+      "region": "Vain",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of Vain' (44918-rebirth.mod) towns list"
+    },
+    "Hive Village CE": {
+      "region": "Vain",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of Vain' (44918-rebirth.mod) towns list"
+    },
+    "Hive Village CW": {
+      "region": "Vain",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of Vain' (44918-rebirth.mod) towns list"
+    },
+    "Hive Village S": {
+      "region": "Vain",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of Vain' (44918-rebirth.mod) towns list"
+    },
+    "Hive Village W": {
+      "region": "Vain",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of Vain, Extended' (2759478-Hiver Expansion.mod) towns list"
+    },
+    "Hive Village NW": {
+      "region": "Vain",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of Vain, Extended' (2759478-Hiver Expansion.mod) towns list"
+    },
+    "Hive Village SW": {
+      "region": "Vain",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of Vain, Extended' (2759478-Hiver Expansion.mod) towns list"
+    },
+    "Swamp Village": {
+      "region": "The Swamp",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of the Swamps' (51404-rebirth.mod) towns list"
+    },
+    "Wash": {
+      "region": "The Swamp",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of the Swamps' (51404-rebirth.mod) towns list"
+    },
+    "Cliff's Edge": {
+      "region": "Border Zone",
+      "source": "Universal Wasteland Expansion.mod item record 'Map of the Border Zone' (44919-rebirth.mod) towns list"
+    },
+    "Hive Village E": {
+      "region": "Vain",
+      "source": "Shay decision 2026-10-16"
+    }
+  }
+}
