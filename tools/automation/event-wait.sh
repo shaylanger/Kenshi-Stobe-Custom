@@ -131,6 +131,9 @@ while :; do
     li=$(timeout 60 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\lane-idle.ps1' 2>&1 < /dev/null | tr -d '\r')
     case "$li" in *"LANE IDLE"*|*"LANE NO-OPERATOR"*) wake "EVENT LANE $(printf '%s\n' "$li" | grep -E 'LANE (IDLE|NO-OPERATOR)' | head -5 | tr '\n' ' ')";; esac
   fi
+  # OPERATOR WARN (handover overlap): operator-warn.sh prints one line per NEW warn (successor spawn text); urgent
+  ow=$(KAH_RUNS="$R" bash "$HERE/operator-warn.sh" 2>/dev/null)
+  if [ -n "$ow" ]; then wake "EVENT $(printf '%s\n' "$ow" | head -3 | tr '\n' ' ')"; fi
   # BACKSTOP: nothing else happened for --backstop seconds; the sweep catches what no sender reported
   if [ $(( now - start )) -ge "$BACK" ]; then
     flush; echo "EVENT BACKSTOP after $(( now - start ))s"; bash "$HERE/event-sweep.sh" 2>&1; exit 0
