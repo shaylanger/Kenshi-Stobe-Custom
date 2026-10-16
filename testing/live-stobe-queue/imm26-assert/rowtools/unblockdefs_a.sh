@@ -167,6 +167,8 @@ rd_08d() {
     echo "tick $k res=$U_BORED_RES" >> "$EV/bored_08d_tries.txt"
     grep -q 'outcome_completed' "$EV/fu_after.txt" 2>/dev/null && break
     [ "$k" = "$tries" ] && break
+    # op12b: tick 1 answers with the trip ARRIVAL remark (a situated_remark_claim); the follow-up claim gate then refuses the same actor for 180 s REAL (social_followups.php, time()-localts); a game-time advance does not help
+    [ "$neg" = 1 ] || rw_sleep "${U08D_TICK_REAL_S:-185}"
     ADV_SECONDS="${U_BORED_GAP:-60}" rl_advance_gametime || { U_BORED_SERIALS=0; return $?; }
     u_heal
   done
