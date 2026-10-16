@@ -1,6 +1,6 @@
 # lane-brief-selftest.ps1: builds a fake runs dir + fake repo in a temp dir and checks lane-brief.ps1 output.
 # Covers: lane facts, dynamic DLL SHA, handoff TODO order, embedded row definitions + row script, KNOWN_BLOCKERS filtering by lane/row/DLL,
-# condensed rules block, helper list, size <= 25 KB (printed on stderr), PREDECESSOR HANDOVER only with -Predecessor.
+# condensed rules block, helper list, size <= 14.5 KB (printed on stderr), PREDECESSOR HANDOVER only with -Predecessor.
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $t = Join-Path ([IO.Path]::GetTempPath()) ("lane-brief-st-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -65,19 +65,22 @@ Chk 'handoff from lane-owners override' ($txt -match 'imm26-5090-i4opX.handoff.m
 Chk 'handoff TODO order 02-a then 02-c, PASS 02-d skipped' ($txt -match '(?s)### IMM-02-a \[UNRUN\].*### IMM-02-c \[SETUP-FAIL\].*### IMM-03-a \[GATED\]' -and $txt -notmatch 'IMM-02-d \[')
 Chk 'fallback row 02-b fills to the list' ($txt -match '### IMM-02-b \[UNRUN\].*unowned fallback')
 Chk 'row definition embedded (setup, expected, negative)' ($txt -match 'setup: s2 SETUPTEXT-A' -and $txt -match 'expected evidence: EXPECTED-A prompt lists the tie' -and $txt -match 'negative control: NEG-A control')
-Chk 'row script helper for 02-a with its note; none for 02-b' ($txt -match 'go-row.sh 02-a 5090-i4' -and $txt -match 'ROWSCRIPT-NOTE-A' -and $txt -match '(?s)IMM-02-b.*no row script yet' -and $txt -match 'with a go-row.sh script \(2\): 02-a 99-z')
+Chk 'row script helper for 02-a with its note; none for 02-b' ($txt -match 'go-row.sh 02-a 5090-i4' -and $txt -match 'ROWSCRIPT-NOTE-A' -and $txt -match '(?s)IMM-02-b.*no row script' -and $txt -match 'with a go-row.sh script \(2\): 02-a 99-z')
 Chk 'blockers: global (3 lanes) + no-lane + own lane + row match + wildcard + DLL' ($txt -match 'Blocker alpha' -and $txt -match 'Blocker beta' -and $txt -match 'EPSILON-OWN-LANE' -and $txt -match 'ZETA-ROWMATCH' -and $txt -match 'ETA-WILD' -and $txt -match 'THETA-DLL')
 foreach ($k in 'Blocker alpha','Blocker beta','EPSILON-OWN-LANE','ZETA-ROWMATCH','ETA-WILD','THETA-DLL') { if ($txt -notmatch $k) { "  missing $k" } }
 Chk 'blockers: 5090 i3 line with a picked row (03-a) is kept, 4080 i3 line with no picked row is dropped' ($txt -match 'GAMMA-I3' -and $txt -notmatch 'DELTA-4080I3')
-Chk 'rules block: debug budget, handbacks, PI-06, never live install, status, checkpoints' ($txt -match 'ONE attempt per row' -and $txt -match '<= 8 lines' -and $txt -match '--allow-retry' -and $txt -match 'Never touch the live install' -and $txt -match 'Status discipline' -and $txt -match 'Checkpoints' -and $txt -match 'do NOT need to read')
-$rulesN = @(($txt -split "`n") | Where-Object { $_ -match '^- (Scope|Test only|Debug budget|PI-06|A PASS|Batching|Mark each|If a failure|Status discipline|Checkpoints|Handbacks)' }).Count
-Chk 'rules block: SETUP-FAIL needs-keyword rule + setupfail.ps1 list' ($txt -match 'a SETUP-FAIL mark must say needs: recipe\|server-fix\|native\|design\|fixture' -and $txt -match 'never just retry; the coordinator opens a ticket owner' -and $txt -match 'setupfail\.ps1 list for your lane')
+Chk 'rules block: debug budget, handbacks, PI-06, never live install, status, checkpoints' ($txt -match 'ONE attempt per row' -and $txt -match '<= 8 lines' -and $txt -match '--allow-retry' -and $txt -match 'Never the live install' -and $txt -match 'Status discipline' -and $txt -match 'Checkpoint' -and $txt -match 'need NOT be read')
+$rulesN = @(($txt -split "`n") | Where-Object { $_ -match '^- (Scope|Debug budget|PI-06|SETUP-FAIL|LLM health|Alerts|Game speed|A PASS|Batching|Server/DLL|Ending|Status discipline|Handbacks)' }).Count
+Chk 'rules block: SETUP-FAIL needs-keyword rule + setupfail.ps1 list' ($txt -match 'must say needs: recipe\|server-fix\|native\|design\|fixture' -and $txt -match 'never just retry' -and $txt -match 'setupfail\.ps1 list')
 Chk 'rules block: LLM health rule (PI-15)' ($txt -match 'llm-health\.sh' -and $txt -match 'Never mark LLM rows during LLM-HEALTH FAIL')
 Chk "rules block <= 40 lines ($rulesN rule lines)" ($rulesN -ge 10 -and $rulesN -le 40)
-Chk 'helper list: existing files listed with usage, missing ones dropped' ($txt -match '## Helper scripts' -and $txt -match '- go-row.sh: bash go-row.sh' -and $txt -match '- save-report.ps1: ' -and $txt -notmatch '- go-batch.sh:')
+Chk 'helper list: existing files listed with usage, missing ones dropped' ($txt -match '## Helper scripts' -and $txt -match '- go-row.sh: bash go-row.sh' -and $txt -match 'go-row.sh: .*\[R\]' -and $txt -notmatch '- go-batch.sh:')
+Chk 'LANE STATE block: loaded save line, game pid/lock/inflight, launch recipe with instance/owner/env' ($txt -match '## LANE STATE' -and $txt -match "loaded save \(last harness 'load save='\)" -and $txt -match 'game pid none \(closed\); lock free; inflight clear' -and $txt -match 'launch: wsl lane-backend.sh start i4 ; env KAH_INSTANCE=4 KAH_OWNER=' -and $txt -match 'lane-window.ps1 -Lane i4 -Action place')
+Chk 'rows: first 3 in full, 4th (02-b) as one line with its row-card pointer' ($txt -match '(?m)^### IMM-02-b \[UNRUN\].*unowned fallback.*\| no row script \| full card: bash .*row-card\.sh 02-b' -and $txt -notmatch '(?m)^### IMM-02-b.*\r?\n- setup:' -and $txt -match '(?m)^- setup: s2 SETUPTEXT-A')
+Chk 'helper list names the ctxfix tools when they exist (next-row/row-card/logwin/usage/status-mark/wait-row only listed if on disk)' ($txt -notmatch '- next-row.sh:' -and $txt -notmatch '- go-batch.sh:')
 Chk 'status/handoff/report commands carry the name' ($txt -match 'agent-status.ps1 imm26-test-op RUNNING' -and $txt -match 'imm26-test-op.handoff.md' -and $txt -match 'save-report.ps1 imm26-test-op')
 Chk 'WARN-120k command present' ($txt -match 'WARN-120k')
-Chk "size <= 25600 bytes ($sz)" ($sz -le 25600)
+Chk "size <= 14500 bytes ($sz)" ($sz -le 14500)
 $fsz = (Get-Item $out).Length; Chk "size printed on stderr equals file size ($fsz)" ($errt -match "brief size $fsz bytes")
 Chk 'no PREDECESSOR HANDOVER section without -Predecessor' ($txt -notmatch 'PREDECESSOR HANDOVER')
 # with -Predecessor
@@ -89,7 +92,7 @@ Chk 'handover: bash loop is syntactically valid (bash -n)' $(
     $m = [regex]::Match($txtp, '(?m)^    (A=/c/KenshiTestRuns.*)$')
     if (-not $m.Success) { $false } else { $f1 = Join-Path $t 'loop.sh'; [IO.File]::WriteAllText($f1, $m.Groups[1].Value + "`n"); $bash = Get-Command bash -ErrorAction SilentlyContinue; if (-not $bash) { $true } else { & bash -n ($f1 -replace '\\', '/') 2>$null; $LASTEXITCODE -eq 0 } }
 )
-Chk "size with -Predecessor <= 25600 ($([Text.Encoding]::UTF8.GetByteCount($txtp)))" ([Text.Encoding]::UTF8.GetByteCount($txtp) -le 25600)
+Chk "size with -Predecessor <= 14500 ($([Text.Encoding]::UTF8.GetByteCount($txtp)))" ([Text.Encoding]::UTF8.GetByteCount($txtp) -le 14500)
 # PI-19: predecessor status TASK text + successor registration in lane-owners.json; PI-20: game speed rule
 "imm26-pred-op | RUNNING | 2026-10-15 20:00`ntask: 5090 i4 operator `"quoted`" row batch`nlatest: x`n" | Set-Content "$runs\agents\imm26-pred-op.status"
 $txtr = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -Name imm26-succ-a -Predecessor imm26-pred-op 2>$null) -join "`n"
@@ -108,8 +111,8 @@ $jr3 = Get-Content "$runs\lane-owners.json" -Raw | ConvertFrom-Json
 Chk 'PI-19 -NoRemote: registration skipped with a one-line note, file unchanged' ($txtn -match 'registration skipped \(-NoRemote' -and ((@($jr3.'5090-i4'.ops) -join ',') -eq $opsBefore))
 $txtm = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -NoRemote -Name imm26-succ-c -Predecessor imm26-nostatus 2>$null) -join "`n"
 Chk 'PI-19 predecessor status missing: says so, falls back to lane default task' ($txtm -match 'task line NOT found')
-Chk 'PI-20 speed rule in the brief (with and without -Predecessor)' ($txt -match 'Game speed \(PI-20\): above 5 ONLY under bash tools/stobe-goal-watch.sh' -and $txt -match 'never run speed 10 for minutes' -and $txt -match 'hunger about every 60 s' -and $txtr -match 'PI-20')
-Chk "size with PI-19/20 additions <= 25600 ($([Text.Encoding]::UTF8.GetByteCount($txtr)))" ([Text.Encoding]::UTF8.GetByteCount($txtr) -le 25600)
+Chk 'PI-20 speed rule in the brief (with and without -Predecessor)' ($txt -match 'Game speed \(PI-20\): above 5 ONLY under bash tools/stobe-goal-watch.sh' -and $txt -match 'never speed 10 for minutes' -and $txt -match 'hunger about every 60 s' -and $txtr -match 'PI-20')
+Chk "size with PI-19/20 additions <= 14500 ($([Text.Encoding]::UTF8.GetByteCount($txtr)))" ([Text.Encoding]::UTF8.GetByteCount($txtr) -le 14500)
 # changing the DLL changes the brief (nothing baked)
 [IO.File]::WriteAllBytes("$inst\RE_Kenshi\mods\Stobe\Stobe.dll", [byte[]](7, 7))
 $want2 = (Get-FileHash "$inst\RE_Kenshi\mods\Stobe\Stobe.dll").Hash.Substring(0, 8)

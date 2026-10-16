@@ -1,7 +1,7 @@
 # lane-brief.ps1 <lane> [-Out path] [-Name op] [-Predecessor op] [-Runs dir] [-Repo dir] [-NoRemote] [-MaxBytes 25600]
 # PI-12 (Shay approved 2026-10-15): generate a self-contained operator brief for an imm26 lane at call time, so a new operator
 # starts testing within ~2 minutes instead of reading the long briefs. Lanes: 5090-i3 5090-i4 5090-i5 4080-i3 4080-i4.
-# Shay orders #2/#3 (2026-10-15): the GENERATED brief is the only required reading (<= 25 KB). It embeds the KNOWN_BLOCKERS lines
+# Shay orders #2/#3 (2026-10-15): the GENERATED brief is the only required reading (<= 14.5 KB since imm26-ctxfix2). It embeds the KNOWN_BLOCKERS lines
 # relevant to the lane (by row id / lane / DLL), the full definitions of the next rows (TESTS file + the go-row.sh row script), the
 # helper-script list with one-line usage, and a condensed COMMON/OPERATOR_COMMON rules block. -Predecessor <op> adds the PREDECESSOR
 # HANDOVER section (successor started before the old operator died: no game commands until agents\<op>.handoff.md or a terminal
@@ -24,7 +24,7 @@ param(
     [string]$Runs = $(if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }),
     [string]$Repo = 'C:\KenshiModding',
     [switch]$NoRemote,
-    [int]$MaxBytes = 25600
+    [int]$MaxBytes = 14500
 )
 $ErrorActionPreference = 'Stop'
 # lane -> operator names / handoff globs / evidence dirs (same defaults as lane-idle.ps1; <Runs>\lane-owners.json overrides ops+dirs)
@@ -54,7 +54,7 @@ if ($rig -eq '5090') {
     $f['rig'] = "5090 (this PC), game dir $($l.dir)"
     $f['backend'] = "WSL php port $($l.backend_port), bridge $($l.bridge_port), pg $($l.pg_port), root $($l.wsl_root)"
     $f['db'] = $l.db
-    $f['save'] = "$($l.save_name) (save dir $($l.save_dir); the handoff may name a newer working save)"
+    $f['save'] = "$($l.save_name) (dir $($l.save_dir); handoff may name a newer one)"
     $w = $l.window; $f['window'] = "$($w.display) at $($w.x),$($w.y) $($w.w)x$($w.h), $($l.video_mode), gfx $($l.gfx), cap $($l.framecap)"
     $f['lock'] = "$($l.lock) owner $($l.lock_owner); inflight $($l.inflight)"
     $f['logs'] = "$($l.stobe_log) | $($l.harness_log)"
@@ -92,6 +92,58 @@ $ncLine = if ($nc) { "$((Sha8 $nc.FullName).Substring(0,8)) $($nc.Directory.Name
 $match = ''
 if ($nc -and ($dllLines -join ' ') -match (Sha8 $nc.FullName).Substring(0, 8)) { $match = 'lane runs the newest NC DLL' } elseif ($nc) { $match = 'lane DLL differs from newest NC DLL: confirm with the handoff/coordinator before gated rows' }
 
+# ---- LANE STATE (imm26-ctxfix2): what the operator would otherwise spend 20-25k tokens finding out -------------------------
+$stLines = @()
+$rc = Join-Path $PSScriptRoot 'rowcard.py'
+function RowCard([string[]]$a) {
+    try {
+        $oldR = $env:KAH_RUNS_DIR; $oldP = $env:KAH_REPO
+        $env:KAH_RUNS_DIR = $Runs; $env:KAH_REPO = $Repo
+        $o = @(& python -I $rc @a 2>$null | ForEach-Object { "$_" })
+        $env:KAH_RUNS_DIR = $oldR; $env:KAH_REPO = $oldP
+        if ($LASTEXITCODE -eq 0 -and $o.Count) { return $o }
+    } catch { }
+    return @()
+}
+$saveLoaded = ''; $gameLine = ''
+if ($rig -eq '5090') {
+    try {
+        if ($l.harness_log -and (Test-Path -LiteralPath $l.harness_log)) {
+            $ll = Select-String -LiteralPath $l.harness_log -Pattern 'KAH: load save=' -ErrorAction SilentlyContinue | Select-Object -Last 1
+            if ($ll) { $saveLoaded = (Clip $ll.Line 160) }
+        }
+        $gp = @(Get-Process -Name kenshi_x64 -ErrorAction SilentlyContinue | Where-Object { try { $_.Path -like "$($l.dir)*" } catch { $false } })
+        $gameLine = "game pid $(if ($gp.Count) { $gp[0].Id } else { 'none (closed)' }); lock $(if (Test-Path -LiteralPath $l.lock) { 'HELD' } else { 'free' }); inflight $(if (Test-Path -LiteralPath $l.inflight) { 'SET' } else { 'clear' })"
+    } catch { $gameLine = 'game state not read: ' + (Clip "$_" 80) }
+} elseif (-not $NoRemote) {
+    try {
+        $hl = "$($l.dir)\mods\AutomationHarness\harness.log"
+        $ps1 = "`$g=@(Get-Process kenshi_x64 -ErrorAction SilentlyContinue|?{`$_.Path -like '$($l.dir)*'}); 'PID='+`$(if(`$g.Count){`$g[0].Id}else{'none'}); 'LOCK='+(Test-Path '$($l.lock)'); 'MARK='+(Test-Path '$($l.marker)'); if(Test-Path '$hl'){(Select-String -LiteralPath '$hl' -Pattern 'KAH: load save=' | Select-Object -Last 1).Line}"
+        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ps1))
+        $r = @(& ssh -o ConnectTimeout=8 -o BatchMode=yes 4080 "powershell -NoProfile -EncodedCommand $enc" 2>$null | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        $pidv = ($r | Where-Object { $_ -like 'PID=*' } | Select-Object -First 1) -replace '^PID=', ''
+        $lk = ($r | Where-Object { $_ -like 'LOCK=*' } | Select-Object -First 1) -replace '^LOCK=', ''
+        $mk = ($r | Where-Object { $_ -like 'MARK=*' } | Select-Object -First 1) -replace '^MARK=', ''
+        $sv = $r | Where-Object { $_ -match 'KAH: load save=' } | Select-Object -First 1
+        if ($sv) { $saveLoaded = Clip $sv 160 }
+        if ($pidv) { $gameLine = "game pid $pidv; lock $(if ($lk -eq 'True') { 'HELD' } else { 'free' }); inflight $(if ($mk -eq 'True') { 'SET' } else { 'clear' })" }
+    } catch { $gameLine = 'game state not read (ssh failed)' }
+}
+if (-not $gameLine) { $gameLine = if ($NoRemote -and $rig -eq '4080') { 'not read (-NoRemote)' } else { 'not read' } }
+$stLines += "- loaded save (last harness 'load save='): $(if ($saveLoaded) { $saveLoaded } else { 'none found in harness.log (game not loaded since the log rolled)' })"
+$stLines += "- $gameLine"
+$stateRc = @(RowCard @('state', $Lane))
+if ($stateRc.Count) { $stLines += '- ' + (Clip $stateRc[0] 700) }
+$launch = if ($rig -eq '5090') {
+    "launch: wsl lane-backend.sh start $id ; env KAH_INSTANCE=$($l.instance) KAH_OWNER=$($l.lock_owner) KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KAH_FPS=60 KENSHI_MONITOR='\.\DISPLAY2' kenshi-ctl.ps1 launch -Save <save> -Gfx low ; lane-window.ps1 -Lane $id -Action place   (scripts in tools\automation; then stobe-auto wait-world)"
+} else {
+    "launch: ssh 4080 powershell -File C:\KAH\ctl.ps1 launch -Instance $($l.instance) -Save <save> ; backend: stobe-lane-backend.sh $id (tools\automation, WSL)"
+}
+$stLines += "- $launch"
+$inboxRc = @(RowCard @('inbox', $Lane, '--max-bytes', '1500'))
+$inboxRc2 = @(RowCard @('inbox', $Lane, '--max-bytes', '800'))
+$kbClip = 260; $fullRows = 3
+
 # ---- predecessor handoff ---------------------------------------------------------------------------------
 $ag = Join-Path $Runs 'agents'
 $cands = @()
@@ -127,7 +179,7 @@ if (Test-Path -LiteralPath $tf) {
         if (-not $st) { $st = '?' }
         $cell = { param($k) if ($c.Count -gt $k) { $c[$k] } else { '' } }
         $rows += [pscustomobject]@{ Id = $rid; Status = $st; Setup = (Clip $c[1] 70); Utter = (Clip ($c[2] -replace '^\s*say:\s*', '') 60)
-            FSetup = (Clip (& $cell 1) 320); FUtter = (Clip (& $cell 2) 240); Expect = (Clip (& $cell 3) 560); Neg = (Clip (& $cell 4) 240); Build = (Clip (& $cell 5) 80) }
+            FSetup = (Clip (& $cell 1) 260); FUtter = (Clip (& $cell 2) 160); Expect = (Clip (& $cell 3) 320); Neg = (Clip (& $cell 4) 140); Build = (Clip (& $cell 5) 80) }
     }
 }
 $open = @($rows | Where-Object { $_.Status -ne 'PASS' })
@@ -213,18 +265,16 @@ $ta = Join-Path $Repo 'tools\automation'
 
 # helper scripts: [path, one-line usage]; entries whose file is missing are dropped (so the list never lies)
 $helpers = @(
-    @("$ra\go-row.sh", "bash go-row.sh [--allow-retry `"<why>`"] <ROW> $Lane  = preflight + row steps + evidence + verdict; stdout is ONE `RESULT <ROW> PASS|FAIL|SETUP-FAIL|GATED <evidence> [excerpt=<file>]` line (exit 4 = ROW-NEEDS-FIXER); evidence in <lane dir>\rows\<ROW>\"),
-    @("$ra\go-batch.sh", "bash go-batch.sh <lane> ROW1 ROW2 ...  = whole row list as ONE detached job; prints results=<path>; DONE + summary.txt when finished; wait with event-wait.sh --batch <dir>"),
-    @("$ra\preflight.sh", "bash preflight.sh $Lane [npc]  = lane answers, isolation, PLAYER_NAME='Shay', leftover deals/trips cleared, dist < 80; PREFLIGHT-OK or PREFLIGHT-FAIL <reason>"),
-    @("$ta\lane-setup.sh", "bash lane-setup.sh <5090|4080> <instance> <save|-> [--with NAME] [--teleport x y z]  = one-command reset: load save, speed 0, squad healed, player at The Hub, outlaws cleared"),
-    @("$ta\setupfail.ps1", "powershell -NoProfile -File setupfail.ps1 list [-Lane <lane>]  = open SETUP-FAIL unblock tickets (row, age, needs, owner, state); mark rows with python mark-row.py <ROW> <STATUS> `"<evidence>`" --lane <lane>"),
-    @("$ta\row-attempts.ps1", "powershell -NoProfile -File row-attempts.ps1 show [lane] | reset <lane> <ROW> `"<why>`"  = per-row attempt counts (PI-06 guard)"),
-    @("$ta\lane-isolation-check.ps1", "powershell -NoProfile -File lane-isolation-check.ps1 <5090|4080>  = proves the lane touches no live install/server/DB (go-row runs it)"),
-    @("$ta\lane-idle.ps1", "powershell -NoProfile -File lane-idle.ps1 -NoMemory  = which lanes sit idle > 6 min"),
-    @("$ta\row-timing-report.ps1", "powershell -NoProfile -File row-timing-report.ps1  = wall time per row from row-timing.log"),
-    @("$ta\save-report.ps1", "powershell -NoProfile -File save-report.ps1 $Name <srcfile>  = store your full report under agents\out\$Name\"),
-    @("$ta\event-wait.sh", "bash event-wait.sh [--batch <dir>]  = background waker (<= 120 s); restart it each time it wakes you"),
-    @("$ta\kenshi-ctl.ps1", "powershell -NoProfile -File kenshi-ctl.ps1 launch|stop ...  = game start/stop on YOUR lane slot only (windowed, never focus the game)")
+    @("$ta\next-row.sh", "bash next-row.sh $Lane [--n N] [--ids] [--claim] [--cards]  = next unclaimed open row as one card with its runner command"),
+    @("$ta\row-card.sh", "bash row-card.sh <ROW> [$Lane]  = fixed card: status, claim, RUN command, setup, expect, evidence path (not the 200 KB TESTS file)"),
+    @("$ta\logwin.sh", "bash logwin.sh <log> <pattern|since:<regex>|at:HH:MM:SS[+SEC]> [maxchars=2500]  = capped, noise-filtered log window (RESULT lines never cut)"),
+    @("$ta\usage.sh", "bash usage.sh <script> | --list  = usage of a row/lane script (not opening it)"),
+    @("$ta\status-mark.sh", "bash status-mark.sh $Name <ROW> <STATUS> `"<evidence>`" [--lane $Lane] [--next `"<step>`"]  = mark-row.py + agent-status + quiet TESTS commit/push in ONE call"),
+    @("$ta\wait-row.sh", "bash wait-row.sh <out-file|batch-dir> [max_s=110]  = one-line poll of a backgrounded row/batch (experimental)"),
+    @("$ra\go-row.sh", "bash go-row.sh [--allow-retry `"<why>`"] <ROW> $Lane  = preflight + row + evidence; prints ONE `RESULT <ROW> PASS|FAIL|SETUP-FAIL|GATED <evidence> [excerpt=<file>]` line (exit 4 = ROW-NEEDS-FIXER)"),
+    @("$ra\go-batch.sh", "bash go-batch.sh <lane> ROW1 ROW2 ...  = whole row list as ONE detached job; wait with event-wait.sh --batch <dir>"),
+    @("$ta\lane-setup.sh", "bash lane-setup.sh <5090|4080> <instance> <save|-> [--with NAME] [--teleport x y z]  = one-command lane reset (load save, speed 0, heal, player at The Hub)"),
+    @("$ta\event-wait.sh", "bash event-wait.sh [--batch <dir>]  = background waker (<= 120 s); restart when it wakes you")
 ) | Where-Object { Test-Path -LiteralPath $_[0] }
 
 function Build([int]$exBudget) {
@@ -235,21 +285,23 @@ function Build([int]$exBudget) {
         $pw = Join-Path $ag "$Predecessor.warn"; $ps = Join-Path $ag "$Predecessor.status"
         $pl = "agents\${Predecessor}.handoff.md"
         $null = $sb.AppendLine('## PREDECESSOR HANDOVER (the old operator may still be running: do NOT touch the game yet)')
-        $null = $sb.AppendLine("- Predecessor: $Predecessor (status C:\KenshiTestRuns\agents\$Predecessor.status, handoff C:\KenshiTestRuns\$pl, warn marker C:\KenshiTestRuns\agents\$Predecessor.warn). You were started BEFORE it died.")
-        $null = $sb.AppendLine("- Until C:\KenshiTestRuns\$pl exists (and is newer than the .warn marker when one exists) OR the first line of $Predecessor.status says DONE, STOPPED-CONTEXT or FAILED: send NO game commands (no kenshi-ctl launch/stop, no stobe-auto, no go-row/go-batch/lane-setup, no lane lock acquire, no inflight marker). Reading files and this brief is fine.")
-        $null = $sb.AppendLine('- Wait cheaply with ONE bash call (an until-loop, about 60 s per check; never repeated tool calls); it prints PREDECESSOR-READY or PREDECESSOR-TIMEOUT after 90 min:')
+        $null = $sb.AppendLine("- Predecessor: $Predecessor (status C:\KenshiTestRuns\agents\$Predecessor.status, handoff C:\KenshiTestRuns\$pl, warn marker agents\$Predecessor.warn). You started BEFORE it died.")
+        $null = $sb.AppendLine("- Until the handoff exists (and is newer than the .warn marker if one exists) OR the first status line says DONE, STOPPED-CONTEXT or FAILED: NO game commands (no kenshi-ctl launch/stop, stobe-auto, go-row/go-batch, lane-setup, lock, inflight marker). Reading files is fine.")
+        $null = $sb.AppendLine('- Wait with ONE bash call (about 60 s per check); it prints PREDECESSOR-READY or PREDECESSOR-TIMEOUT after 90 min:')
         $null = $sb.AppendLine("    A=/c/KenshiTestRuns/agents; P=$Predecessor; for i in `$(seq 1 90); do if { [ -f `$A/`$P.handoff.md ] && { [ ! -f `$A/`$P.warn ] || [ `$A/`$P.handoff.md -nt `$A/`$P.warn ]; }; } || head -1 `$A/`$P.status 2>/dev/null | grep -qE '\| (DONE|STOPPED-CONTEXT|FAILED) \|'; then echo PREDECESSOR-READY; break; fi; sleep 60; done; [ `$i -ge 90 ] && echo PREDECESSOR-TIMEOUT")
-        $null = $sb.AppendLine('- Then: re-read the predecessor handoff whole, check the lane lock/inflight marker is free (lane facts below), take the lane lock, run lane-idle.ps1 -NoMemory, and CONTINUE from the handoff TODO list. If the lock is still held by the predecessor, wait one more loop; on PREDECESSOR-TIMEOUT tell the coordinator in <= 3 lines and stop.')
+        $null = $sb.AppendLine('- Then re-read the predecessor handoff whole, check the lane lock/inflight is free, take the lock, and CONTINUE from its TODO list. Lock still held: wait one more loop; on PREDECESSOR-TIMEOUT tell the coordinator in <= 3 lines and stop.')
         $null = $sb.AppendLine("- STATUS TASK (agent-guard: your task text must EQUAL the predecessor's; $taskNote): $taskTxt")
         $null = $sb.AppendLine("  first status call (paste): $as $Name RUNNING `"$taskQ`" `"started, reading brief`" `"<evidence dir>`" `"wait for $Predecessor handoff`"")
         if ($regNote) { $null = $sb.AppendLine("- Lane-owners registration: $regNote") }
-        $null = $sb.AppendLine("- Your own side of the contract: at about 120k context (when the meter warns) run: $as $Name RUNNING `"$taskQ`" `"WARN-120k <current row>`" `"<outputs>`" `"<next>`"  FIRST (that writes agents\$Name.warn and tells the coordinator to start your successor), then finish the current row, write $ho2 and end STOPPED-CONTEXT.")
     }
     $null = $sb.AppendLine('## Lane facts')
     foreach ($k in $f.Keys) { $null = $sb.AppendLine("- ${k}: $($f[$k])") }
     $null = $sb.AppendLine('## DLLs (read now)')
     foreach ($d in $dllLines) { $null = $sb.AppendLine("- lane Stobe.dll: $d") }
     $null = $sb.AppendLine("- newest NC DLL: $ncLine" + $(if ($match) { " -> $match" }))
+    $null = $sb.AppendLine('## LANE STATE (read now; no need to re-derive)')
+    foreach ($x in $stLines) { $null = $sb.AppendLine($x) }
+    if ($inboxRc.Count) { $null = $sb.AppendLine('## Inbox digest (operator notes for this lane, newest first; open one only if relevant)'); foreach ($x in $inboxRc) { $null = $sb.AppendLine($x) } }
     $null = $sb.AppendLine('## Predecessor handoff')
     if ($ho) {
         $null = $sb.AppendLine("- $($ho.FullName) (updated $($ho.LastWriteTime.ToString('MM-dd HH:mm'))): read it whole if the excerpt is cut; first lines:")
@@ -259,58 +311,61 @@ function Build([int]$exBudget) {
         while ($lo -lt $hi) { $mid = [int](($lo + $hi + 1) / 2); $tot = 0; for ($i = 0; $i -lt $hoLines.Count; $i++) { $tot += [math]::Min($hoLines[$i].Length, $mid * $w[$i]) }; if ($tot -le $exBudget) { $lo = $mid } else { $hi = $mid - 1 } }
         for ($i = 0; $i -lt $hoLines.Count; $i++) { $null = $sb.AppendLine('  ' + (Clip $hoLines[$i] ([math]::Max(60, $lo * $w[$i])))) }
     } else { $null = $sb.AppendLine('- none found for this lane: ask the coordinator for the lane state; start from lane-setup.sh and the TESTS file') }
-    $null = $sb.AppendLine("## Next rows: full definitions (testing/NPC_IMMERSION_26_TESTS.md; $passN rows PASS, $($open.Count) not PASS; grep the row id there only if you need the Evidence column)")
+    $null = $sb.AppendLine("## Next rows: first 3 in full, rest one line (any other row: bash $ta\row-card.sh <ROW>; $passN rows PASS, $($open.Count) not PASS; next unclaimed: bash $ta\next-row.sh $Lane)")
     if ($pick.Count -eq 0) { $null = $sb.AppendLine('- none open') }
+    $rn = 0
     foreach ($r in $pick) {
+        $rn++
+        if ($rn -gt $fullRows) {
+            $null = $sb.AppendLine("### IMM-$($r.Id) [$($r.Status)] <$($src[$r.Id])> $(Clip $r.FSetup 110) | $(if ($rdNote.ContainsKey($r.Id)) { 'script: go-row.sh' } else { 'no row script' }) | full card: bash $ta\row-card.sh $($r.Id)")
+            continue
+        }
         $null = $sb.AppendLine("### IMM-$($r.Id) [$($r.Status)] <$($src[$r.Id])>")
         $null = $sb.AppendLine("- setup: $($r.FSetup)")
         $null = $sb.AppendLine("- say/action: $($r.FUtter)")
         $null = $sb.AppendLine("- expected evidence: $($r.Expect)")
         if ($r.Neg) { $null = $sb.AppendLine("- negative control: $($r.Neg)") }
-        $null = $sb.AppendLine("- build: $($r.Build)")
+        if ($r.Build -and $r.Build -ne 'BASE') { $null = $sb.AppendLine("- build: $($r.Build)") }
         if ($rdNote.ContainsKey($r.Id)) { $null = $sb.AppendLine("- helper: bash $ra\go-row.sh $($r.Id) $Lane   (row script rd_$($r.Id -replace '-',''): $($rdNote[$r.Id]))") }
-        else { $null = $sb.AppendLine("- helper: no row script yet; run it by hand with the predecessor handoff Helpers + lane-setup.sh, keep the evidence in a bundle dir and mark the row")}
+        else { $null = $sb.AppendLine("- helper: no row script; run by hand (handoff Helpers + lane-setup.sh), bundle the evidence, mark the row")}
     }
     $ported = @($rdNote.Keys | Sort-Object)
     $null = $sb.AppendLine("- rows with a go-row.sh script ($($ported.Count)): $($ported -join ' ')  (everything else is manual)")
-    $null = $sb.AppendLine("## Known blockers relevant to $Lane (testing/KNOWN_BLOCKERS.md; $kbSkipped line(s) about other lanes/rows left out; the file need NOT be read)")
+    $null = $sb.AppendLine("## Known blockers relevant to $Lane (KNOWN_BLOCKERS.md, $kbSkipped other-lane line(s) left out; need not be read)")
     if ($kbl.Count -eq 0) { $null = $sb.AppendLine('- none listed') }
-    foreach ($b in $kbl) { $null = $sb.AppendLine('- ' + (Clip $b 900)) }
-    $null = $sb.AppendLine('## Essential rules (condensed from briefs\COMMON.md + briefs\OPERATOR_COMMON.md + docs\COORDINATOR_IMPROVEMENTS.md; those files exist at C:\KenshiTestRuns\agents\briefs\ but you do NOT need to read them)')
+    foreach ($b in $kbl) { $null = $sb.AppendLine('- ' + (Clip $b $kbClip)) }
+    $null = $sb.AppendLine('## Essential rules (condensed; the long briefs need NOT be read)')
     foreach ($ln in @(
-        '- Scope: you own ONE lane (above). Never touch the live install, live server tree or DB, Shay''s saves, or another lane. Run lane-isolation-check first (go-row does). Windowed launches on the lane slot, never focus the game.',
-        '- Test only on the lane''s kah-* save copy. PLAYER_NAME=''Shay''. Fail fast if dist_to_target >= 80 (native people list drops NPCs beyond 80 units). Clear leftover deals/trips before each row (preflight does).',
-        '- Debug budget: ONE attempt per row. After a FAIL/SETUP-FAIL record the cause (or best hypothesis + evidence file) in the row and your status `latest`, mark it, move on; the coordinator sends a fixer. Never hold the lane on one row.',
-        '- PI-06 attempt guard (ENFORCED): go-row.sh / go-batch.sh count attempts per row per lane; a row whose last attempt FAILED is NOT run again: it prints `ROW-NEEDS-FIXER <row> <lane> cause=...` (exit 4), record it and move on. Override only with a logged reason: `go-row.sh --allow-retry "<reason>" <ROW> <lane>` (also go-batch.sh) or `row-attempts.ps1 reset <lane> <ROW> "<reason>"`. PASS clears the count; GATED and PREFLIGHT-FAIL do not count.',
-        '- SETUP-FAIL marks (Shay 2026-10-15): a SETUP-FAIL mark must say needs: recipe|server-fix|native|design|fixture and what exactly; never just retry; the coordinator opens a ticket owner. Run setupfail.ps1 list for your lane''s tickets. Mark rows with tools/automation/mark-row.py (a bare SETUP-FAIL is refused; PREFLIGHT-FAIL llm/lane-down is exempt).',
-        '- LLM health (PI-15): when replies are empty/"..." run `bash tools/automation/llm-health.sh` (1-token chat check; preflight runs it too and prints PREFLIGHT-FAIL llm provider down). Never mark LLM rows during LLM-HEALTH FAIL (402 = no balance); stop and tell the coordinator.',
-        '- Alerts (PI-21): check C:\KenshiTestRuns\inbox\operators\<lane>-alert.txt now and then (it exists while the coordinator has an open alert for your lane, e.g. LANE IDLE); act on it, then close it with `powershell -NoProfile -File C:\KenshiModding\tools\automation\alert-ack.ps1 <id> "<action taken>"` (ack only closes; an active lane clears it by itself).',
-        '- Game speed (PI-20): above 5 ONLY under bash tools/stobe-goal-watch.sh; never run speed 10 for minutes (2026-10-15 an operator starved Shay, the test character, and the lane had to be reset). Above speed 3 check Shay/squad hunger about every 60 s.',
-        '- A PASS = real game/DB state changed (stobe.log line, DB row, inventory/status delta), never just NPC words. Never weaken an assertion; no unchanged retries.',
-        '- Batching: run your WHOLE open row list through go-batch.sh (one batch per lane); by hand only rows the scripts cannot do. Open evidence files only for a FAIL (its excerpt= file). KEEP THE LANE BUSY: a blocked row -> next row; never idle > 2 min (lane-idle.ps1 flags > 6 min).',
-        '- Mark each row in testing/NPC_IMMERSION_26_TESTS.md the moment it finishes; commit + push the TESTS file only, identity shaylanger <shaylanger2@gmail.com> (repo-local), one piece per commit. Never commit logs, DLLs or runtime state.',
-        '- If a failure points to a server/DLL bug: write cause (file+function+evidence) in the row and your status `latest`; do not fix it yourself. Agents never override Shay''s orders.',
-        '- Searching (Shay 2026-10-15): never run `find /` (or any whole-drive find/grep -r from /): Git Bash walks every mounted drive and several runaway finds ate the 5090 CPU for hours. Search a named directory (find <dir> -maxdepth N ...), use the codemaps, `git grep` or Grep/Glob with a path.',
-        '- Ending (PI-22): never set DONE while your lane still has runnable non-PASS rows. End with STOPPED-CONTEXT (successor named in the handoff) or DONE only with a `lane complete: <why no row can run>` line in your status `latest`. An early DONE leaves the lane without an operator (2026-10-15 a lane sat empty ~10 min).',
-        '- GATED / needs-native claims (PI-23): before you mark a row GATED or `needs: native`, grep the NATIVE sources (C:\KenshiTestRuns\imm26-nc10\src and components/STOBE) for the native names (event types, struct fields, log tags), not the server words, and paste the grep command + result in the row (2026-10-15 row 10-d sat GATED on a server-word grep; the event already existed in NC6/9/10).',
-        '- Reruns (PI-24): the FIRST time you hand-run a row that has no rd_<row> script, write down its steps in your handoff file as a runnable list (commands in order) so a second run is one command; before a SECOND manual run ask the coordinator for a row script (never weaken the assertions).',
-        '- Status discipline: update agent-status after EVERY row (the monitor counts status/log/evidence activity; silence > 20 min = killed). Keep your handoff file current after every row (what is up, helpers, DONE rows, TODO rows, lessons).',
-        '- Checkpoints: every ~40k tokens (and every milestone) refresh status `latest`, the handoff file and the TESTS marks. At ~120k run the WARN-120k status step (see Commands), at ~150k finish the row, write the handoff and end STOPPED-CONTEXT so a fresh successor (name + 1) continues. Budget <= 120k.',
-        '- Handbacks to the coordinator are <= 8 lines (verdict, PASS/FAIL counts, report file path, commit hashes, next action). The FULL report goes to a file with save-report.ps1 first (report file <= 30 lines), then end with SubagentHandback.'
+        '- Scope: ONE lane (above). Never the live install, live server tree or DB, Shay''s saves, or another lane. Test only on the lane''s kah-* save copy; PLAYER_NAME=''Shay''; dist_to_target < 80. Windowed launches, never focus the game (go-row runs isolation check + preflight).',
+        '- Debug budget: ONE attempt per row. After FAIL/SETUP-FAIL record the cause (or hypothesis + evidence file) in the row and status `latest`, mark it, move on; the coordinator sends a fixer.',
+        '- PI-06 guard (ENFORCED): a row whose last attempt FAILED is not rerun: go-row/go-batch print `ROW-NEEDS-FIXER <row> <lane> cause=...` (exit 4); record it and move on. Override only with a logged reason: `--allow-retry "<why>"` or `row-attempts.ps1 reset <lane> <ROW> "<why>"`.',
+        '- SETUP-FAIL (Shay 2026-10-15): the mark must say needs: recipe|server-fix|native|design|fixture + what exactly (mark-row.py refuses a bare one); never just retry; `setupfail.ps1 list` shows your lane''s tickets.',
+        '- LLM health (PI-15): empty/"..." replies -> `bash tools/automation/llm-health.sh`; never mark LLM rows during LLM-HEALTH FAIL (402 = no balance); tell the coordinator.',
+        '- Alerts (PI-21): inbox\operators\<lane>-alert.txt exists while the coordinator has an open alert for your lane; act, then `alert-ack.ps1 <id> "<action>"`.',
+        '- Game speed (PI-20): above 5 ONLY under bash tools/stobe-goal-watch.sh; never speed 10 for minutes; above speed 3 check Shay/squad hunger about every 60 s.',
+        '- A PASS = real game/DB state changed (stobe.log line, DB row, inventory delta), never just NPC words. Never weaken an assertion; no unchanged retries. Open evidence files only for a FAIL (its excerpt= file).',
+        '- Batching: whole open row list through go-batch.sh (one batch per lane); keep the lane busy (blocked row -> next row, never idle > 2 min). Mark each row in testing/NPC_IMMERSION_26_TESTS.md when it finishes; commit + push that file only (shaylanger <shaylanger2@gmail.com>); never logs, DLLs or runtime state.',
+        '- Server/DLL bug: write cause (file+function+evidence) in the row and status `latest`; do not fix it. GATED / needs-native (PI-23): grep the NATIVE sources (C:\KenshiTestRuns\imm26-nc10\src, components/STOBE) for native names, paste grep + result in the row. No `find /` (search a named directory).',
+        '- Ending (PI-22): never DONE while runnable non-PASS rows remain; end STOPPED-CONTEXT (successor in the handoff) or DONE with a `lane complete: <why>` line. PI-24: write the steps of a hand-run row without rd_ script into your handoff.',
+        '- Status discipline: agent-status after EVERY row (silence > 20 min = killed); keep the handoff file current. Checkpoint every ~40k tokens; ~120k run the WARN-120k step, ~150k finish the row, write the handoff, end STOPPED-CONTEXT (successor name + 1). Budget <= 120k.',
+        '- Handbacks <= 8 lines (verdict, PASS/FAIL counts, report path, commits, next); full report via save-report.ps1 (<= 30 lines), then SubagentHandback.'
     )) { $null = $sb.AppendLine($ln) }
-    $null = $sb.AppendLine('## Helper scripts (one line each; all exist now)')
-    foreach ($h in $helpers) { $null = $sb.AppendLine("- $(Split-Path -Leaf $h[0]): $($h[1])   [$($h[0])]") }
+    $null = $sb.AppendLine("## Helper scripts (all exist now; in $ta, those marked [R] in $ra)")
+    $hl = @($helpers); if ($hl.Count -gt 0 -and $hl[0] -is [string]) { $hl = @(, $hl) }
+    foreach ($h in $hl) { $null = $sb.AppendLine("- $(Split-Path -Leaf $h[0]): $($h[1])" + $(if ($h[0].StartsWith($ra)) { ' [R]' } else { '' })) }
     $null = $sb.AppendLine('## Commands')
     $null = $sb.AppendLine("- status: $as $Name RUNNING `"$taskQ`" `"<row/step>`" `"<evidence dir>`" `"<next row>`"   (DONE|FAILED|STOPPED-CONTEXT when ending)")
-    $null = $sb.AppendLine("- context warning (~120k): $as $Name RUNNING `"$taskQ`" `"WARN-120k <row/step>`" `"<evidence dir>`" `"<next row>`"   (writes agents\$Name.warn; then finish the row, write the handoff, STOPPED-CONTEXT)")
-    $null = $sb.AppendLine("- handoff file: $ho2 (what is up, helpers, DONE rows, TODO rows, lessons; successor: same name with the number incremented)")
+    $null = $sb.AppendLine("- context warning (~120k): $as $Name RUNNING `"$taskQ`" `"WARN-120k <row/step>`" `"<evidence dir>`" `"<next row>`"   (writes agents\$Name.warn)")
+    $null = $sb.AppendLine("- handoff file: $ho2 (successor: same name, number + 1)")
     $null = $sb.AppendLine("- report: powershell -NoProfile -File $ta\save-report.ps1 $Name <srcfile>   (final report <= 8 lines; then SubagentHandback)")
-    $null = $sb.AppendLine("- lane active check: powershell -NoProfile -File $ta\lane-idle.ps1 -NoMemory")
     $sb.ToString()
 }
-$budget = 5000
+$budget = 2200
 $text = Build $budget
-while ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes -and $budget -gt 300) { $budget -= 400; $text = Build $budget }
+while ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes -and $budget -gt 1000) { $budget -= 400; $text = Build $budget }
+if ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes) { $kbClip = 200; $inboxRc = $inboxRc2; $budget = 1000; $text = Build $budget }
+if ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes) { $fullRows = 2; $kbClip = 160; $budget = 800; $text = Build $budget }
+while ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes -and $budget -gt 300) { $budget -= 250; $text = Build $budget }
 $bytes = [System.Text.Encoding]::UTF8.GetByteCount($text)
 if ($Out) { $d = Split-Path -Parent $Out; if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }; [System.IO.File]::WriteAllText($Out, $text, (New-Object System.Text.UTF8Encoding($false))) }
 $text
