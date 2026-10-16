@@ -29,16 +29,6 @@ Rules:
 - log: 2026-10-15 18:52 asked Shay
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': asked -> confirmed (applies: imm26-hookq found agent-session-hooks-selftest meter-coordinator-text failing the same way on the untouched original hook: a drifted selftest nobody ran.)
 
-### PI-18 | confirmed
-- idea: Tail Stop hook: let a tail end once every owned agent is DONE and its relay file was delivered (or after a 5 min ack grace), without requiring the explicit tail-ack.
-- evidence: 2026-10-15 19:52-20:10: coordinator #8 tail waited for the ack of imm26-5090-i5-op6; its Stop hook re-prompted ~50 times, each replaying ~400k context, until the tail hit its 400k limit and left with tail-mode leave -Force.
-- saving: ~50 wasted turns (tens of millions of cache-read tokens) per overlap handoff
-- risk: a result could be dropped if delivery is marked without the new coordinator reading it; keep the ack for the ledger but do not hold the tail on it
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 19:57
-- log: 2026-10-15 19:58 Shay answered yes
-
 ### PI-21 | confirmed
 - idea: Open-alert ledger: every urgent waker event (LANE IDLE, LANE NO-OPERATOR, AGENT STALL/ORPHANED, DEAD, KILLED, FAILED, 402) is written to C:\KenshiTestRuns\alerts\open\<id>.json and stays open until alert-ack.ps1 <id> '<action taken>' is run or the condition clears by itself (lane-idle OK, agent DONE); a PostToolUse reminder prints 'OPEN ALERTS n: oldest <min>' after tool calls while any alert is older than 3 min; the Stop hook blocks the coordinator from ending a turn with an unacked alert older than 5 min; operators get their own lane alerts in their inbox with the same ack.
 - evidence: 2026-10-15 20:0x: waker event 'LANE IDLE 4080-i4 7m' arrived while I was mid-edit and I did not act on it; I only found the 5090-i4 lane idle 16.7 min after Shay asked 'are we running tests on all lanes'. The waker alerts once and nothing tracks whether anyone acted.
@@ -280,5 +270,17 @@ Rules:
 - weakens: no
 - added: 2026-10-15 19:57
 - measured: rule 'Game speed (PI-20)' present in every generated brief (selftest ok), brief 18575 B < 25600 cap
+- retired: 2026-10-15 built
+- log: 2026-10-15 19:58 Shay answered yes
+
+### PI-18 | done
+- idea: Tail Stop hook: let a tail end once every owned agent is DONE and its relay file was delivered (or after a 5 min ack grace), without requiring the explicit tail-ack.
+- evidence: 2026-10-15 19:52-20:10: coordinator #8 tail waited for the ack of imm26-5090-i5-op6; its Stop hook re-prompted ~50 times, each replaying ~400k context, until the tail hit its 400k limit and left with tail-mode leave -Force.
+- saving: ~50 wasted turns (tens of millions of cache-read tokens) per overlap handoff
+- risk: a result could be dropped if delivery is marked without the new coordinator reading it; keep the ack for the ledger but do not hold the tail on it
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 19:57
+- measured: tail-hooks selftest 16 new PI-18 cases PASS (A: relay delivered / 5 min grace / not-relayed / RUNNING / pre-DONE relay / FAILED / ledger ack; C: blocks 1-3 plain, 4-6 'ONE long background wait', 7th let through + cap-ends.log, change restarts count); tail-ledger 33/33, tail-close 73/73, waker-lanes 15/15, hook-command, agent-guard 75/75 all pass; settings.json Stop+PreToolUse guard entries intact
 - retired: 2026-10-15 built
 - log: 2026-10-15 19:58 Shay answered yes
