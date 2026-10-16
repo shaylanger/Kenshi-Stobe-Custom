@@ -1,0 +1,83 @@
+--- a/src/ActivityRuntimeBindings.cpp	2026-10-15 23:11:43.161851400 -0600
++++ b/src/ActivityRuntimeBindings.cpp	2026-10-16 00:10:38.232935000 -0600
+@@ -487,8 +487,42 @@
+  unsigned actor,requester; size_t registry; unsigned emitted,exceptions,objects,sightDrops,pathDrops,capacityDrops,reused,nullDrops,finiteDrops,typeDrops,serialDrops,pathZero,pathOne,pathOther,mineTypeDrops;
+  bool world,actorOk,requesterOk,player,distinct,dead,unconscious,movement,avatar,navmesh,onmesh;
+  unsigned charSphere,buildingSphere; const char* gate; std::string actorSid,requesterSid;
+- ProposalTrace(unsigned a,unsigned r,size_t n):actor(a),requester(r),registry(n),emitted(0),exceptions(0),objects(0),sightDrops(0),pathDrops(0),capacityDrops(0),reused(0),nullDrops(0),finiteDrops(0),typeDrops(0),serialDrops(0),pathZero(0),pathOne(0),pathOther(0),mineTypeDrops(0),world(false),actorOk(false),requesterOk(false),player(false),distinct(false),dead(false),unconscious(false),movement(false),avatar(false),navmesh(false),onmesh(false),charSphere(0),buildingSphere(0),gate("world") {}
++ unsigned huntEmitted,animals; bool scanned; double hour; std::vector<std::string> animalLines; // NC13 ACTIVITY_SIGHT_DIAG
++ ProposalTrace(unsigned a,unsigned r,size_t n):actor(a),requester(r),registry(n),emitted(0),exceptions(0),objects(0),sightDrops(0),pathDrops(0),capacityDrops(0),reused(0),nullDrops(0),finiteDrops(0),typeDrops(0),serialDrops(0),pathZero(0),pathOne(0),pathOther(0),mineTypeDrops(0),world(false),actorOk(false),requesterOk(false),player(false),distinct(false),dead(false),unconscious(false),movement(false),avatar(false),navmesh(false),onmesh(false),charSphere(0),buildingSphere(0),gate("world"),huntEmitted(0),animals(0),scanned(false),hour(-1.0) {}
+  void Sids(Character* a,Character* r) { try { Character* chars[2]={a,r}; std::string* slots[2]={&actorSid,&requesterSid}; for(unsigned n=0;n<2;++n) { try { if(chars[n] && chars[n]->getGameData()) { *slots[n]=chars[n]->getGameData()->stringID.substr(0,256); for(size_t i=0;i<slots[n]->size();++i) if((*slots[n])[i]<32) (*slots[n])[i]='_'; } } catch(...) {} } } catch(...) {} }
++ // NC13: diagnostic only. Reads sensory state of one animal; never alters the proposal outcome.
++ void Animal(Character* a,Character* t,bool haveVisible,bool visible) {
++  try {
++   ++animals; if(animalLines.size()>=8) return;
++   std::ostringstream s; s<<"serial="<<t->getHandle().serial;
++   try { const Ogre::Vector3 ap=a->getPosition(),tp=t->getPosition(); const double dx=ap.x-tp.x,dy=ap.y-tp.y,dz=ap.z-tp.z; s<<" dist="<<sqrt(dx*dx+dy*dy+dz*dz); } catch(...) { s<<" dist=err"; }
++   try { s<<" dead="<<t->isDead()<<" ko="<<t->isUnconcious(); } catch(...) { s<<" dead=err"; }
++   SensoryData* sd=a->getSensoryData();
++   if(!sd) { s<<" sd=null"; }
++   else {
++    if(haveVisible) s<<" canISee="<<visible; else s<<" canISee=n/a";
++    try { s<<" canIHear="<<sd->canIHearThisGuy(t); } catch(...) { s<<" canIHear=err"; }
++    try { SeenSomeone* d=sd->getDataFor(t); if(d) s<<" data=1 dCanSee="<<d->canSee<<" dCanHear="<<d->canHear<<" fov="<<d->FOVScore; else s<<" data=0"; } catch(...) { s<<" data=err"; }
++   }
++   animalLines.push_back(s.str());
++  } catch(...) { }
++ }
++ void SightDiag(Character* a,Character* r) {
++  try {
++   if(huntEmitted || !scanned) return;
++   static std::map<unsigned,DWORD> lastSight; const DWORD now=GetTickCount();
++   std::map<unsigned,DWORD>::iterator it=lastSight.find(actor);
++   if(it!=lastSight.end() && now-it->second<5000) return;
++   lastSight[actor]=now;
++   std::ostringstream s; s<<"ACTIVITY_SIGHT_DIAG actor="<<actor<<" requester="<<requester<<" hour="<<hour
++    <<" sphereCharacter="<<charSphere<<" animals="<<animals<<" logged="<<animalLines.size()<<" sightDrops="<<sightDrops<<" typeDrops="<<typeDrops
++    <<" emitted="<<emitted<<" huntEmitted="<<huntEmitted;
++   try { SensoryData* sd=a?a->getSensoryData():NULL; if(sd) s<<" actorSeen="<<sd->seen.size()<<" actorVision="<<sd->getVisionRange(false)<<" actorVisionTown="<<sd->getVisionRange(true); else s<<" actorSd=null"; } catch(...) { s<<" actorSd=err"; }
++   try { SensoryData* sd=r?r->getSensoryData():NULL; if(sd) s<<" requesterSeen="<<sd->seen.size()<<" requesterVision="<<sd->getVisionRange(false); else s<<" requesterSd=null"; } catch(...) { s<<" requesterSd=err"; }
++   Log(s.str());
++   for(size_t i=0;i<animalLines.size();++i) { std::ostringstream l; l<<"ACTIVITY_SIGHT_DIAG animal actor="<<actor<<" "<<animalLines[i]; Log(l.str()); }
++  } catch(...) { }
++ }
+  ~ProposalTrace() {
+   try {
+    if(emitted) return;
+@@ -548,6 +582,7 @@
+ }
+ std::string ConcreteRuntimeBindings::ProposalFacts(unsigned actorSerial,unsigned requesterSerial) {
+  ProposalTrace trace(actorSerial,requesterSerial,candidates_.size());
++ try { trace.hour=fmod(world_->getTimeStamp_inGameHours().getTotalHours(),24.0); } catch(...) {}
+  std::ostringstream out; out << "{\"candidates\":["; bool first=true;
+  for(std::map<std::string,Candidate>::iterator old=candidates_.begin();old!=candidates_.end();) {
+   if(old->second.agreement.empty() && (now_<old->second.observedAt || now_-old->second.observedAt>86400)) candidates_.erase(old++); else ++old;
+@@ -575,7 +610,7 @@
+  std::set<ActivePlatoon*> clearGroupsScanned;
+  for(unsigned pass=0;pass<2;++pass) {
+   lektor<RootObject*> objects; world_->getObjectsWithinSphere(objects,actor->getPosition(),600.0f,pass?BUILDING:CHARACTER,96,(RootObject*)actor);
+-  if(pass) trace.buildingSphere=objects.size(); else trace.charSphere=objects.size();
++  if(pass) trace.buildingSphere=objects.size(); else { trace.charSphere=objects.size(); trace.scanned=true; }
+   for(unsigned i=0;i<objects.size() && emitted<32;++i) {
+    ++trace.objects;
+    try {
+@@ -587,8 +622,9 @@
+     std::string why;
+     if(!pass) {
+      Character* target=(Character*)object;
+-     if(target==actor || target==requester || !actor->getSensoryData()) { ++trace.sightDrops; continue; }
++     if(target==actor || target==requester || !actor->getSensoryData()) { if(target!=actor && target!=requester && target->isAnimal()) trace.Animal(actor,target,false,false); ++trace.sightDrops; continue; }
+      const bool visible=actor->getSensoryData()->canISeeThisGuy(target);
++     if(target->isAnimal()) trace.Animal(actor,target,true,visible);
+      if(!visible) { ++trace.sightDrops; continue; }
+      hostile=actor->isEnemy(target,true);
+      if(!target->isAnimal() && !hostile) { ++trace.typeDrops; continue; }
+@@ -680,7 +716,7 @@
+     c.fixedTargets=groupTargets; c.point.facts.serial=serial;
+     c.point.facts.sourceId=proposalSource; c.point.facts.candidateId=token.str();
+     c.point.x=p.x;c.point.y=p.y;c.point.z=p.z; candidates_[token.str()]=c;
+-    if(!first) out<<','; first=false; ++emitted; trace.emitted=emitted; std::ostringstream fixedTargets; for(size_t member=0;member<groupTargets.size();++member) { if(member) fixedTargets<<','; fixedTargets<<groupTargets[member]; }
++    if(!first) out<<','; first=false; ++emitted; trace.emitted=emitted; if(kind[0]=='H') ++trace.huntEmitted; std::ostringstream fixedTargets; for(size_t member=0;member<groupTargets.size();++member) { if(member) fixedTargets<<','; fixedTargets<<groupTargets[member]; }
+     out << "{\"kind\":"<<ProposalQuote(kind)<<",\"sourceId\":"<<ProposalQuote(c.point.facts.sourceId)
+      <<",\"resourceId\":"<<ProposalQuote(resourceId)<<",\"targetSerial\":"<<serial<<",\"candidateId\":"<<ProposalQuote(token.str())
+      <<",\"pathReachable\":true,\"observedNow\":true,\"suitable\":"<<(permitted?"true":"false")
