@@ -29,29 +29,6 @@ Rules:
 - log: 2026-10-15 18:52 asked Shay
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': asked -> confirmed (applies: imm26-hookq found agent-session-hooks-selftest meter-coordinator-text failing the same way on the untouched original hook: a drifted selftest nobody ran.)
 
-### PI-14 | confirmed
-- idea: Allow-list the status/report helpers for subagents (agent-status.ps1, save-report.ps1) in the project permission settings so the auto-mode classifier never blocks an agent from marking itself DONE.
-- evidence: 2026-10-15 imm26-pi11 finished its work but the classifier denied agent-status.ps1 and a save-report.ps1 read as Self-Modification, so its status stayed RUNNING until the coordinator fixed it by hand (and the report only arrived as a chat hand-back); imm26-5090-i4op32 also reported save-report.ps1 rejected its arguments.
-- saving: no stale RUNNING agents and no hand-fix turn (~3k tokens each time)
-- risk: low, but it edits permission settings: Shay decides
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 18:51
-- log: 2026-10-15 18:51 review 'coordinator #7 handoff 2026-10-15': added
-- log: 2026-10-15 18:52 asked Shay
-- log: 2026-10-15 19:54 Shay answered yes
-
-### PI-15 | confirmed
-- idea: Preflight/health check for the chat LLM provider balance (1-token completion, print the 402 body): run in lane-idle/preflight and block row marking while it fails.
-- evidence: 19:33-19:40: DeepInfra HTTP 402 hit all lanes; 4 operators ran 19-a/12-d/03-b into empty "..." replies, one FAIL (12-d) was marked and had to be reset; 3 operators + me spent ~40 min before the cause was named.
-- saving: ~30-40 min and 1 false FAIL per outage
-- risk: low: read-only health call, tiny token cost
-- hooks: no
-- weakens: no
-- added: 2026-10-15 19:43
-- log: 2026-10-15 19:43 review 'coordinator8-19:50': added
-- log: 2026-10-15 19:54 Shay answered yes
-
 ### PI-18 | confirmed
 - idea: Tail Stop hook: let a tail end once every owned agent is DONE and its relay file was delivered (or after a 5 min ack grace), without requiring the explicit tail-ack.
 - evidence: 2026-10-15 19:52-20:10: coordinator #8 tail waited for the ack of imm26-5090-i5-op6; its Stop hook re-prompted ~50 times, each replaying ~400k context, until the tail hit its 400k limit and left with tail-mode leave -Force.
@@ -81,6 +58,16 @@ Rules:
 - weakens: no
 - added: 2026-10-15 19:57
 - log: 2026-10-15 19:58 Shay answered yes
+
+### PI-21 | confirmed
+- idea: Open-alert ledger: every urgent waker event (LANE IDLE, LANE NO-OPERATOR, AGENT STALL/ORPHANED, DEAD, KILLED, FAILED, 402) is written to C:\KenshiTestRuns\alerts\open\<id>.json and stays open until alert-ack.ps1 <id> '<action taken>' is run or the condition clears by itself (lane-idle OK, agent DONE); a PostToolUse reminder prints 'OPEN ALERTS n: oldest <min>' after tool calls while any alert is older than 3 min; the Stop hook blocks the coordinator from ending a turn with an unacked alert older than 5 min; operators get their own lane alerts in their inbox with the same ack.
+- evidence: 2026-10-15 20:0x: waker event 'LANE IDLE 4080-i4 7m' arrived while I was mid-edit and I did not act on it; I only found the 5090-i4 lane idle 16.7 min after Shay asked 'are we running tests on all lanes'. The waker alerts once and nothing tracks whether anyone acted.
+- saving: removes silent ignored alerts; catches a blocked lane within one alert cycle instead of when Shay asks (the 5090-i4 lane lost ~17 min)
+- risk: adds a Stop block, so a stale or false alert must clear itself or be ackable with a reason, otherwise it loops turns (see the PI-18 tail loop); it must never be able to hide an alert, ack only closes it
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 20:04
+- log: 2026-10-15 20:05 Shay answered yes
 
 ## Retired
 
@@ -261,6 +248,33 @@ Rules:
 - weakens: no
 - added: 2026-10-15 19:43
 - measured: waker-lanes-selftest 15/15 (3 lane games+game.lock free not blocked; idle/operator-less live lane and stale dead-process lock still block); tail-hooks, hook-command, agent-guard, agent-successor, tail-close selftests PASS; agent-session-hooks has 1 unrelated FAIL (meter-coordinator-text, context-meter hook)
+- retired: 2026-10-15 built
+- log: 2026-10-15 19:43 review 'coordinator8-19:50': added
+- log: 2026-10-15 19:54 Shay answered yes
+
+### PI-14 | done
+- idea: Allow-list the status/report helpers for subagents (agent-status.ps1, save-report.ps1) in the project permission settings so the auto-mode classifier never blocks an agent from marking itself DONE.
+- evidence: 2026-10-15 imm26-pi11 finished its work but the classifier denied agent-status.ps1 and a save-report.ps1 read as Self-Modification, so its status stayed RUNNING until the coordinator fixed it by hand (and the report only arrived as a chat hand-back); imm26-5090-i4op32 also reported save-report.ps1 rejected its arguments.
+- saving: no stale RUNNING agents and no hand-fix turn (~3k tokens each time)
+- risk: low, but it edits permission settings: Shay decides
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 18:51
+- measured: 11 narrow allow rules applied to .claude/settings.json (hooks untouched, JSON parses); effect to be seen when no agent is blocked from marking itself DONE
+- retired: 2026-10-15 built
+- log: 2026-10-15 18:51 review 'coordinator #7 handoff 2026-10-15': added
+- log: 2026-10-15 18:52 asked Shay
+- log: 2026-10-15 19:54 Shay answered yes
+
+### PI-15 | done
+- idea: Preflight/health check for the chat LLM provider balance (1-token completion, print the 402 body): run in lane-idle/preflight and block row marking while it fails.
+- evidence: 19:33-19:40: DeepInfra HTTP 402 hit all lanes; 4 operators ran 19-a/12-d/03-b into empty "..." replies, one FAIL (12-d) was marked and had to be reset; 3 operators + me spent ~40 min before the cause was named.
+- saving: ~30-40 min and 1 false FAIL per outage
+- risk: low: read-only health call, tiny token cost
+- hooks: no
+- weakens: no
+- added: 2026-10-15 19:43
+- measured: llm-health.sh live OK ~300-460 ms (real DeepInfra, key never printed); selftest 10/10 offline (fake 200/402/401/timeout/local-skip/no-key-leak, WSL+Git Bash); preflight selftest preflight-llm-down PASS; lane-brief selftest OK (rule added). Pre-existing unrelated rowtools selftest FAILs: 19-d, heartbeat-agent-status-ps1, trip-family (WSL env)
 - retired: 2026-10-15 built
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
 - log: 2026-10-15 19:54 Shay answered yes
