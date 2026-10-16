@@ -1,0 +1,210 @@
+diff -uN a/src/NativeTravelLifecycle.cpp b/src/NativeTravelLifecycle.cpp
+--- a/src/NativeTravelLifecycle.cpp	2026-10-16 11:25:54.357805600 -0600
++++ b/src/NativeTravelLifecycle.cpp	2026-10-16 11:25:54.372328900 -0600
+@@ -100,7 +100,8 @@
+   r.released = released; r.arrived = arrived; r.evidence = ++sequence;
+   if (changed) Log("NATIVE_TRAVEL: task=" + r.task + " actor=" + Number(r.actor) + " phase=" + phase + " reason=" + reason +
+                    " terminal=" + (terminal ? "1" : "0") + " released=" + (released ? "1" : "0") + " arrived=" + (arrived ? "1" : "0") +
+-                   " participation_qualified=" + (r.partBegun && r.participation.frozen.find("\"qualified\":true") != std::string::npos ? "1" : "0"));
++                   " participation_qualified=" + (r.partBegun && r.participation.frozen.find("\"qualified\":true") != std::string::npos ? "1" : "0") +
++                   " participation_diag=" + (r.partBegun ? r.participation.Diag() : std::string("-")));
+ }
+ Receipt *Active(unsigned int actor) {
+   auto i = receipts.find(actor);
+@@ -448,7 +449,7 @@
+       Lock lock(mutex);
+       absence[serial].verified = false;
+       r.task = "order:" + Number(serial) + ":" + Number(++sequence);
+-      r.participation.Begin(world, serial, speaker, expectedWorld, agreement, r.task, true, Ogre::Vector3(x,y,z));
++      r.participation.Begin(world, serial, speaker, expectedWorld, agreement, r.task, true, Ogre::Vector3(x,y,z), actor);
+       r.partBegun = true;
+       r.participation.Sample(world, expectedWorld, nowGameTs, 0);
+       r.phase = "dispatching"; r.reason = "native_dispatch_started_outcome_pending"; r.terminal = true;
+@@ -468,7 +469,9 @@
+           " terrain_y=" + F1(UtilityT::getTerrainHeight(x, z)) + " actor=" + F1(here.x) + "," + F1(here.y) + "," + F1(here.z) +
+           " planar_to_goal=" + F1(Stobe::NativeTravelRouteTarget::Planar(Stobe::NativeTravelRouteTarget::Pt(here.x, here.y, here.z),
+                                                                            Stobe::NativeTravelRouteTarget::Pt(x, y, z))) +
+-          " captured=" + (captured ? "1" : "0") + " participation_bound=" + (r.participation.bound ? "1" : "0"));
++          " captured=" + (captured ? "1" : "0") + " participation_bound=" + (r.participation.bound ? "1" : "0") +
++          " participation_why=" + r.participation.bindWhy +
++          " participation_ids=" + (r.participation.bound ? r.participation.actorStorage + "," + r.participation.partnerStorage : std::string("-")));
+     }
+     {
+       Lock lock(mutex);
+@@ -564,6 +567,9 @@
+             r.participation.Begin(world, r.actor, r.speaker, r.world, r.agreement, r.task, true,
+               Ogre::Vector3(routeTarget->second.x, routeTarget->second.y, routeTarget->second.z));
+             r.partBegun = true;
++            Log("NATIVE_TRAVEL_PART_BIND: task=" + r.task + " actor=" + Number(r.actor) + " participation_bound=" +
++                (r.participation.bound ? "1" : "0") + " participation_why=" + r.participation.bindWhy +
++                " participation_ids=" + (r.participation.bound ? r.participation.actorStorage + "," + r.participation.partnerStorage : std::string("-")));
+           }
+         }
+         if (r.partBegun) r.participation.Sample(world, r.world, nowGameTs, 0);
+diff -uN a/src/ParticipationEvidence.h b/src/ParticipationEvidence.h
+--- a/src/ParticipationEvidence.h	2026-10-16 11:25:54.356807400 -0600
++++ b/src/ParticipationEvidence.h	2026-10-16 11:25:54.370330300 -0600
+@@ -2,6 +2,7 @@
+ // Main-thread-only observer. No AI commands, timers, persistence or rewards.
+ #include "KenshiAiCompat.h"
+ #include "StobeText.h"
++#include "ParticipationIdentity.h"
+ #include <kenshi/Character.h>
+ #include <kenshi/InstanceID.h>
+ #include <cmath>
+@@ -10,56 +11,74 @@
+ 
+ namespace Stobe { namespace Participation {
+ struct Evidence {
+- std::string world, agreement, task, actorStorage, partnerStorage, actorName, partnerName, frozen;
++ std::string world, agreement, task, actorStorage, partnerStorage, actorName, partnerName, frozen, bindWhy;
+  hand actorHandle, partnerHandle;
+  unsigned actor, partner, samples, progressSamples, lastProgress;
+- long long first, last;
++ long long first, last, bestSpan;
++ unsigned brk[6];
+  double actorDistance, partnerDistance, endpointProgress, maxSeparation, firstEndpoint;
+  Ogre::Vector3 actorPos, partnerPos, endpoint;
+  bool travel, bound;
+- Evidence():actor(0),partner(0),samples(0),progressSamples(0),lastProgress(0),first(0),last(0),
+- actorDistance(0),partnerDistance(0),endpointProgress(0),maxSeparation(0),firstEndpoint(0),travel(false),bound(false) {}
++ Evidence():actor(0),partner(0),samples(0),progressSamples(0),lastProgress(0),first(0),last(0),bestSpan(0),
++ actorDistance(0),partnerDistance(0),endpointProgress(0),maxSeparation(0),firstEndpoint(0),travel(false),bound(false) {for(int i=0;i<6;++i)brk[i]=0;}
+  static bool Same(const hand&a,const hand&b) {return a.serial==b.serial&&a.index==b.index&&a.type==b.type&&a.container==b.container&&a.containerSerial==b.containerSerial;}
+  static bool Finite(const Ogre::Vector3&p) {return _finite(p.x)&&_finite(p.y)&&_finite(p.z);}
+  static double Distance(const Ogre::Vector3&a,const Ogre::Vector3&b) {double x=a.x-b.x,y=a.y-b.y,z=a.z-b.z;return std::sqrt(x*x+y*y+z*z);}
+- void Break() {samples=progressSamples=0;first=last=0;actorDistance=partnerDistance=endpointProgress=maxSeparation=0;}
+- void Begin(GameWorld*w,unsigned a,unsigned p,const std::string&wi,const std::string&ag,const std::string&ta,bool trip,const Ogre::Vector3&end) {
+-  *this=Evidence();actor=a;partner=p;world=wi;agreement=ag;task=ta;travel=trip;endpoint=end;
++ void Break(int why=0) {++brk[why];samples=progressSamples=0;first=last=0;actorDistance=partnerDistance=endpointProgress=maxSeparation=0;}
++ // NC21: Character::getInstanceID() is RootObject's and returns NULL for every Character (only Building overrides it), so a
++ // uid-only identity can never bind. Same id as Context.cpp GetStorageIDFor / the server's core_npc.storage_id: uid if the
++ // engine ever provides one, else hand_<serial>. Identity stays pinned by the exact hand compared in Sample.
++ static std::string StorageIdOf(Character*c) {
++  InstanceID*i=c->getInstanceID();
++  const std::string*uid=(i&&!i->uid.empty())?&i->uid:0;
++  return Identity::StorageId(uid,c->getHandle().serial);
++ }
++ // actorHint: the actor Character* the caller already holds (avoids depending on the handle cache for the actor).
++ void Begin(GameWorld*w,unsigned a,unsigned p,const std::string&wi,const std::string&ag,const std::string&ta,bool trip,const Ogre::Vector3&end,Character*actorHint=0) {
++  *this=Evidence();actor=a;partner=p;world=wi;agreement=ag;task=ta;travel=trip;endpoint=end;bindWhy="exception";
+   try {
+-   Character*ac=KenshiAi::ResolveCharacter(w,a);Character*pc=KenshiAi::ResolveCharacter(w,p);
+-   if(!ac||!pc||a==p||wi.empty()||ag.empty()||ta.empty())return;
+-   InstanceID*ai=ac->getInstanceID();InstanceID*pi=pc->getInstanceID();
+-   // Never use name or session-local hand_ fallback as durable identity.
+-   if(!ai||!pi||ai->uid.empty()||pi->uid.empty()||ai->uid==pi->uid)return;
+-   actorStorage=ai->uid;partnerStorage=pi->uid;actorName=ac->getName();partnerName=pc->getName();
++   Character*ac=(actorHint&&actorHint->getHandle().serial==a)?actorHint:KenshiAi::ResolveCharacter(w,a);
++   Character*pc=KenshiAi::ResolveCharacter(w,p);
++   const std::string aid=ac?StorageIdOf(ac):std::string(),pid=pc?StorageIdOf(pc):std::string();
++   const Identity::Verdict v=Identity::Decide(ac!=0,pc!=0,a,p,!wi.empty()&&!ag.empty()&&!ta.empty(),aid,pid);
++   bindWhy=Identity::VerdictName(v,aid);
++   if(v!=Identity::BIND_OK)return;
++   actorStorage=aid;partnerStorage=pid;actorName=ac->getName();partnerName=pc->getName();
+    actorHandle=ac->getHandle();partnerHandle=pc->getHandle();bound=true;
+-  }catch(...){bound=false;}
++  }catch(...){bound=false;bindWhy="exception";}
+  }
+  void Sample(GameWorld*w,const std::string&wi,long long now,unsigned progress) {
+   if(!frozen.empty())return;
+   try {
+-   if(!bound||wi!=world||now<0){Break();return;}
++   if(!bound||wi!=world||now<0){Break(5);return;}
+    Character*a=KenshiAi::ResolveCharacter(w,actor);Character*p=KenshiAi::ResolveCharacter(w,partner);
+    if(!a||!p||!Same(a->getHandle(),actorHandle)||!Same(p->getHandle(),partnerHandle)||
+-      a->isDead()||p->isDead()||a->isUnconcious()||p->isUnconcious()){Break();return;}
+-   InstanceID*ai=a->getInstanceID();InstanceID*pi=p->getInstanceID();
+-   if(!ai||!pi||ai->uid!=actorStorage||pi->uid!=partnerStorage){bound=false;Break();return;}
++      a->isDead()||p->isDead()||a->isUnconcious()||p->isUnconcious()){Break(3);return;}
++   if(StorageIdOf(a)!=actorStorage||StorageIdOf(p)!=partnerStorage){bound=false;Break(3);return;}
+    const Ogre::Vector3 ap=a->getPosition(),pp=p->getPosition();
+    if(!Finite(ap)||!Finite(pp)||!Finite(endpoint)){Break();return;}
+    const double separation=Distance(ap,pp),remaining=Distance(ap,endpoint);
+-   if(separation>35.0){Break();return;}
+-   if(samples && (now<last||now-last>10||progress<lastProgress))Break();
++   if(separation>35.0){Break(1);return;}
++   if(samples && (now<last||now-last>10||progress<lastProgress))Break(2);
+    if(samples&&now==last)return; // Frames while paused are not participation time.
+    if(samples) {
+     double ad=Distance(ap,actorPos),pd=Distance(pp,partnerPos);
+-    if(ad>20.0*(now-last)+5.0||pd>20.0*(now-last)+5.0)Break();
++    if(ad>20.0*(now-last)+5.0||pd>20.0*(now-last)+5.0)Break(4);
+     else {actorDistance+=ad;partnerDistance+=pd;if(progress>lastProgress)++progressSamples;}
+    }
+    if(!samples){first=now;firstEndpoint=remaining;lastProgress=progress;}
+    ++samples;last=now;actorPos=ap;partnerPos=pp;lastProgress=progress;
+    endpointProgress=firstEndpoint-remaining;if(separation>maxSeparation)maxSeparation=separation;
++   if(last-first>bestSpan)bestSpan=last-first;
+   }catch(...){Break();}
+  }
++ // One token (no spaces) for the NATIVE_TRAVEL log: why a proof did or did not qualify.
++ std::string Diag()const {
++  std::ostringstream o;o<<"samples:"<<samples<<",span:"<<(last-first)<<",best_span:"<<bestSpan<<",actor_d:"<<(long long)actorDistance
++   <<",partner_d:"<<(long long)partnerDistance<<",progress:"<<(long long)endpointProgress<<",max_sep:"<<(long long)maxSeparation
++   <<",brk_sep:"<<brk[1]<<",brk_jump:"<<brk[4]<<",brk_gap:"<<brk[2]<<",brk_state:"<<brk[3]<<",brk_scope:"<<brk[5]<<",brk_other:"<<brk[0];
++  return o.str();
++ }
+  static std::string Q(const std::string&s){return std::string("\"")+Text::EscapeJSON(s)+"\"";}
+  void Freeze(bool completed,long long now) {
+   if(!frozen.empty())return;
+diff -uN a/src/ParticipationIdentity.h b/src/ParticipationIdentity.h
+--- a/src/ParticipationIdentity.h	1969-12-31 18:00:00.000000000 -0600
++++ b/src/ParticipationIdentity.h	2026-10-16 11:25:54.373328000 -0600
+@@ -0,0 +1,56 @@
++#pragma once
++// NC21 (row 13-c, participation_bound=0): pure identity rules for the participation proof (no Kenshi types, g++-testable).
++//
++// Root cause: Character::getInstanceID() is RootObject::getInstanceID(), which returns NULL for every Character (only
++// Building overrides it; kenshi_x64.exe RVA 0xD1EE0 is "xor eax,eax; ret"). So the InstanceID uid never exists for an
++// NPC or the player, and the whole mod already identifies characters as hand_<serial> (Context.cpp GetStorageIDFor and the
++// snapshot "id"; the server's core_npc.storage_id and the relationship ledger use the same string). ParticipationEvidence
++// refused that fallback, so participation_bound was 0 for every trip. The proof now carries exactly the id the server
++// stores: the uid when the engine ever provides one, else hand_<serial>.
++#include <string>
++#include <sstream>
++
++namespace Stobe { namespace Participation { namespace Identity {
++
++// Same rule and format as Context.cpp GetStorageIDFor: uid if non-empty, else hand_<serial>, else empty (unusable).
++inline std::string StorageId(const std::string *uidOrNull, unsigned serial) {
++  if (uidOrNull && !uidOrNull->empty()) return *uidOrNull;
++  if (serial == 0) return std::string();
++  std::ostringstream o; o << "hand_" << serial; return o.str();
++}
++
++inline bool IsHandFallback(const std::string &id) { return id.compare(0, 5, "hand_") == 0; }
++
++enum Verdict {
++  BIND_OK = 0, BIND_ACTOR_UNRESOLVED, BIND_PARTNER_UNRESOLVED, BIND_SAME_SERIAL, BIND_SCOPE_EMPTY,
++  BIND_NO_ACTOR_IDENTITY, BIND_NO_PARTNER_IDENTITY, BIND_SAME_IDENTITY
++};
++
++// Order matters only for the reported reason; every non-OK verdict leaves the proof unbound (never qualified).
++inline Verdict Decide(bool actorResolved, bool partnerResolved, unsigned actor, unsigned partner, bool scopeNonEmpty,
++                      const std::string &actorId, const std::string &partnerId) {
++  if (!actorResolved) return BIND_ACTOR_UNRESOLVED;
++  if (!partnerResolved) return BIND_PARTNER_UNRESOLVED;
++  if (actor == partner) return BIND_SAME_SERIAL;
++  if (!scopeNonEmpty) return BIND_SCOPE_EMPTY;
++  if (actorId.empty()) return BIND_NO_ACTOR_IDENTITY;
++  if (partnerId.empty()) return BIND_NO_PARTNER_IDENTITY;
++  if (actorId == partnerId) return BIND_SAME_IDENTITY;
++  return BIND_OK;
++}
++
++inline const char *VerdictName(Verdict v, const std::string &actorId) {
++  switch (v) {
++    case BIND_OK: return IsHandFallback(actorId) ? "ok_hand_fallback" : "ok_uid";
++    case BIND_ACTOR_UNRESOLVED: return "actor_unresolved";
++    case BIND_PARTNER_UNRESOLVED: return "partner_unresolved";
++    case BIND_SAME_SERIAL: return "same_actor_partner";
++    case BIND_SCOPE_EMPTY: return "world_agreement_or_task_empty";
++    case BIND_NO_ACTOR_IDENTITY: return "actor_no_identity";
++    case BIND_NO_PARTNER_IDENTITY: return "partner_no_identity";
++    case BIND_SAME_IDENTITY: return "same_identity";
++  }
++  return "unknown";
++}
++
++} } }
