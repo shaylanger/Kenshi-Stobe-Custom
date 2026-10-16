@@ -15,30 +15,6 @@ Rules:
 
 ## Active
 
-### PI-27 | confirmed
-- idea: A tail runs only a FILTERED waker (its own agents' status changes), not the full event stream; or none if tail-autorelay exists.
-- evidence: 2026-10-15 the tail received LANE IDLE, wpR3-deploy, inv19d and other events it cannot act on (spawn/decide nothing) and each one cost a turn; both Monitor wakers also died with exit 1 at ~20:36 and had to be replaced by hand.
-- saving: a few turns per hour and no waker re-arming
-- risk: none
-- hooks: no
-- weakens: no
-- added: 2026-10-15 20:51
-- moment: 21:00 the tail's two wakers died while 5 agents ran
-- last_review: coordinator-10 handoff
-- log: 2026-10-15 21:10 review 'coordinator-10 handoff': open -> confirmed (applies: 2026-10-15 the old tail received LANE IDLE/deploy events it could not act on and both its Monitor wakers died with exit 1; folded into imm26-pi28 (tail-wait.ps1 over own agents' status files))
-
-### PI-28 | confirmed
-- idea: Tail Stop hook: while a tail's own background wait / waker process is alive and armed, let the turn END (the session idles and wakes on the background task's completion notification) instead of blocking; block only when the tail has NO armed wait. No per-block replies at all.
-- evidence: 2026-10-15 20:00-21:00 tail phase: with agents running the Stop hook blocked the tail every turn end even though an until-loop wait was armed; PI-18 only capped it at 6 unchanged blocks per cycle, so each of ~7 wait cycles still produced ~6 near-identical 'Stop hook feedback' messages (about 40 turns, each a model reply replaying the ~400k tail context); a restart of the wait re-armed the counter.
-- saving: ~40 spam turns per overlap handoff (the largest remaining tail cost) and no tail context growth while idle
-- risk: a tail with no armed wait or a dead waker must still be blocked; verify the wait process is alive (pid/heartbeat) rather than trusting a flag
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 20:55
-- moment: each of ~7 wait cycles produced ~6 near-identical block turns
-- last_review: coordinator-10 handoff
-- log: 2026-10-15 21:10 review 'coordinator-10 handoff': open -> confirmed (applies: 2026-10-15 20:00-21:00 tail phase: ~40 Stop-hook spam turns while a wait was armed; Shay told the coordinator to do the sensible PIs; imm26-pi28 building with fail-closed selftests)
-
 ### PI-29 | open
 - idea: At the tail hard limit the context meter should call tail-close.ps1 (sends 'tail done', then closes the session and window ~20 s later) once all owned agents are checkpointed/relayed, instead of telling the tail to run tail-mode.ps1 leave -Force (which only removes the flag, leaving the session and window open). tail-close's window-kill must first be tested on a real throwaway window.
 - evidence: 2026-10-15 ~21:07 old tail session 6d1f3011 followed the meter message, ran tail-mode.ps1 leave -Force at its hard limit: the flag went away but the session process and window stayed open (tail-close.ps1 then refuses with 'no tail flag'); the window-closing path of tail-close was never exercised on a real window.
@@ -48,7 +24,7 @@ Rules:
 - weakens: no
 - added: 2026-10-15 21:07
 
-### PI-30 | open
+### PI-30 | confirmed
 - idea: Row-builder / tooling work packages must be sized to <= 4 rows (or one phase) per agent: split a 9-row build into 2-3 agents (defs+checker | selftest+fakes | TESTS rows+operator note) and commit after each phase, not at the end.
 - evidence: 2026-10-15 imm26-reloadrows-A (9 rows) and -B (6 rows) each ran to ~215k tokens (target 120k) and stopped with NOTHING committed and the selftest never run; two successors had to re-read ~40k of handoff each.
 - saving: ~80k tokens and one respawn per oversized builder
@@ -56,7 +32,30 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-15 21:10
+- moment: 21:39 when rowtools43 stopped: splitting item 4 into 2-3 rows per agent would have finished the selftest in the same agent and avoided the extra rowtools44 spawn
+- last_review: coordinator-11
 - log: 2026-10-15 21:10 review 'coordinator-10 handoff': added
+- log: 2026-10-15 23:16 review 'coordinator-11': open -> confirmed (applies: 2026-10-15: imm26-rowtools4 (7 items) stopped at ~203k with items 4-7 undone; its successor imm26-rowtools43 (item 4 alone, six rows) also hit ~204k in 10 minutes and finished only the code, not se...)
+
+### PI-31 | open
+- idea: AGENT ORPHANED must not fire for in-session (Agent-tool) subagents of a live coordinator or live tail: check the agent against the session's own agent list / ledger owner before alerting
+- evidence: 2026-10-15 21:24 and 21:40: AGENT ORPHANED imm26-fix10a and imm26-fix03b were false alarms (both alive, only blocked on a test lock); each cost 2-3 turns of investigation, one almost led to a wrong respawn
+- saving: about 3 turns per false alarm, avoids a duplicate respawn
+- risk: must not hide a real dead agent: keep the alert when the owning session is gone
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 23:16
+- log: 2026-10-15 23:16 review 'coordinator-11': added
+
+### PI-32 | open
+- idea: lane-brief.ps1 (or the operator spawn) records the kenshi-ctl idle reason 'operator spawned, lane launching' automatically for 15 min so the Stop hook does not demand one by hand
+- evidence: 2026-10-15 22:40, 22:41 and 22:45: the Stop hook blocked three times right after spawning a 5090 operator because the 5090 was momentarily idle; each needed a manual kenshi-ctl idle
+- saving: 3 turns
+- risk: low if the reason expires in 15 min and is cleared when a game starts
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 23:16
+- log: 2026-10-15 23:16 review 'coordinator-11': added
 
 ## Retired
 
@@ -386,3 +385,31 @@ Rules:
 - added: 2026-10-15 20:51
 - measured: tail-autorelay-selftest 24/24 PASS; tail-close/hooks/ledger selftests green (selftest-all -Only tail-*: 4 pass / 0 fail)
 - retired: 2026-10-15 built
+
+### PI-28 | done
+- idea: Tail Stop hook: while a tail's own background wait / waker process is alive and armed, let the turn END (the session idles and wakes on the background task's completion notification) instead of blocking; block only when the tail has NO armed wait. No per-block replies at all.
+- evidence: 2026-10-15 20:00-21:00 tail phase: with agents running the Stop hook blocked the tail every turn end even though an until-loop wait was armed; PI-18 only capped it at 6 unchanged blocks per cycle, so each of ~7 wait cycles still produced ~6 near-identical 'Stop hook feedback' messages (about 40 turns, each a model reply replaying the ~400k tail context); a restart of the wait re-armed the counter.
+- saving: ~40 spam turns per overlap handoff (the largest remaining tail cost) and no tail context growth while idle
+- risk: a tail with no armed wait or a dead waker must still be blocked; verify the wait process is alive (pid/heartbeat) rather than trusting a flag
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 20:55
+- moment: each of ~7 wait cycles produced ~6 near-identical block turns
+- last_review: coordinator-10 handoff
+- measured: tail-hooks selftest 69 PASS (19 new PI-28 cases: armed->end, no wait/dead pid/stale hb/corrupt file/foreign wait/armed-before-flag/agent needs relay->block, coordinator unaffected); tail-ledger, tail-close, waker-lanes, agent-guard, agent-session-hooks, alert-ledger, hook-command, agent-router, tail-autorelay all PASS; settings.json untouched
+- retired: 2026-10-15 built
+- log: 2026-10-15 21:10 review 'coordinator-10 handoff': open -> confirmed (applies: 2026-10-15 20:00-21:00 tail phase: ~40 Stop-hook spam turns while a wait was armed; Shay told the coordinator to do the sensible PIs; imm26-pi28 building with fail-closed selftests)
+
+### PI-27 | done
+- idea: A tail runs only a FILTERED waker (its own agents' status changes), not the full event stream; or none if tail-autorelay exists.
+- evidence: 2026-10-15 the tail received LANE IDLE, wpR3-deploy, inv19d and other events it cannot act on (spawn/decide nothing) and each one cost a turn; both Monitor wakers also died with exit 1 at ~20:36 and had to be replaced by hand.
+- saving: a few turns per hour and no waker re-arming
+- risk: none
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:51
+- moment: 21:00 the tail's two wakers died while 5 agents ran
+- last_review: coordinator-10 handoff
+- measured: docs part in AGENT_PROMPTS block B: tail arms ONE tail-wait.ps1 over its owned agents (exit on DONE|FAILED|STOPPED-CONTEXT/needs relay), block message says never reply per block; selftest PI-27/28 case PASS
+- retired: 2026-10-15 built
+- log: 2026-10-15 21:10 review 'coordinator-10 handoff': open -> confirmed (applies: 2026-10-15 the old tail received LANE IDLE/deploy events it could not act on and both its Monitor wakers died with exit 1; folded into imm26-pi28 (tail-wait.ps1 over own agents' status files))
