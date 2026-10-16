@@ -5,14 +5,14 @@
 OUT="${1:-/c/KenshiTestRuns/imm26-5090-i5/26a/run-$(date +%H%M%S)}"; mkdir -p "$OUT"
 source /c/KenshiTestRuns/imm26-5090-i5/lib-i5.sh
 CIND="${NPC_ID:-#2529907200/2}"; SHAY='#971557632/1'; CINDFULL="${NPC_FULL:-Cind [Hungry Bandit]}"   # NPC_ID/NPC_FULL pick another NPC (then REFACTION=0; non-NPC speakers log as (PC))
-SAY1V="${SAY1:-Look at all these goats. Let's hunt for raw meat.}"; SAY2V="${SAY2:-Yes, let's do it.}"
+SAY1V=${SAY1:-"Look at all these goats. Let's hunt for raw meat."}; SAY2V=${SAY2:-"Yes, let's do it."}   # (quotes inside the default: a bare apostrophe inside "${v:-..}" breaks Git Bash 'bad substitution')
 say() { echo "[$(date +%T)] $*" | tee -a "$OUT/log.txt"; }
 L1=$(i3 <<<'wc -l < /mnt/d/KenshiInst/5/RE_Kenshi/mods/Stobe/stobe.log' | tail -1)
 say "stobe.log mark $L1"
 # personal enmity baked in Cind (ACTIVITY_HOSTILE_DIAG actorEnemyOfReq=1 even at relation 50 -> requester_now_hostile): faction re-serials her and clears it (op8 finding). REFACTION=0 to skip
 refaction() {
   [ -n "$nid_done" ] && return; nid_done=1
-  fo=$(i3 <<<"stobe-auto faction \"$CIND\" \"Traders Guild\" </dev/null | head -2"); echo "faction: $fo" >> "$OUT/log.txt"
+  fo=$(i3 <<<"stobe-auto faction \"$CIND\" \"${REFAC_FACTION:-Traders Guild}\" </dev/null | head -2"); echo "faction: $fo" >> "$OUT/log.txt"
   nid=$(echo "$fo" | grep -oE '#[0-9]+/[0-9]+' | head -1); [ -n "$nid" ] && CIND="$nid"
   say "Cind id now $CIND"; sleep 3
 }
@@ -81,9 +81,20 @@ done
 echo "OFFER_SEEN=\$got \$(date +%T.%N)"
 tail -n +\$((n0+1)) "\$L" | grep -E "ACTION_EXEC: SAY|REJECTED|ACTIVITY_SIGHT_DIAG|ACTIVITY_PROPOSAL" | cut -c1-300 | head -6
 if [ \$got = 1 ]; then
-  sleep ${ACCEPT_DELAY:-3}
+  # op9l (NC17 run): saying "Yes" while the offer speech is still being delivered cancels it ("RECHAT_TIMING: follow-up suppressed ... cancelled_or_interrupted"),
+  # so the offer is never bound as displayed and the accept fails with "Explicit scoped consent was not verified". Wait for the delivery confirmation first.
+  wend=\$((SECONDS+${DELIVERY_WAIT:-40}))
+  while [ \$SECONDS -lt \$wend ]; do tail -n +\$((n0+1)) "\$L" | grep -qE "RECHAT_TIMING: follow-up (dispatch scheduled|suppressed)" && break; sleep 0.5; done
+  echo "DELIVERY_CONFIRMED \$(tail -n +\$((n0+1)) "\$L" | grep -E "RECHAT_TIMING: follow-up" | head -1 | cut -c1-120)"
+  sleep ${ACCEPT_DELAY:-1}
   echo "SAY2 \$(date +%T.%N)"
   stobe-auto stobe_say "$CIND" "$SAY2V" </dev/null | head -2
+  # row 26-b: CANCEL_AFTER=<s> says "Cancel that." (CANCEL_TEXT) that many seconds after the Yes (the accept reply must have been delivered first, ~10-15 s)
+  if [ -n "${CANCEL_AFTER:-}" ]; then
+    sleep ${CANCEL_AFTER}
+    echo "CANCEL \$(date +%T.%N)"
+    stobe-auto stobe_say "$CIND" "${CANCEL_TEXT:-Cancel that.}" </dev/null | head -2
+  fi
 fi
 EOT
 cat "$OUT/offer.txt" | tee -a "$OUT/log.txt"
