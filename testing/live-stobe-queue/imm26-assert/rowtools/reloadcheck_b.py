@@ -172,13 +172,16 @@ def c_10e(v, ev):
         if not j or j.get('error'):
             return v.setup_fail(f"probe {n} unusable: {(j or {}).get('error') or rd(ev, f'probe_{n}.json')!r:.200}")
     s0, s1 = pre['scope'], evl['live']
-    try:
-        later = int(s1['timeline_epoch']) > int(s0['timeline_epoch'])
+    try:   # imm26 sfC (10-e): after a REAL restart the native epoch restarts at 1; the server's load_seq (when present in both) orders the loads
+        if s0.get('load_seq') is not None and s1.get('load_seq') is not None:
+            later = int(s1['load_seq']) > int(s0['load_seq'])
+        else:
+            later = int(s1['timeline_epoch']) > int(s0['timeline_epoch'])
     except (KeyError, TypeError, ValueError):
         later = False
     if not (later and s1.get('native_session_id') != s0.get('native_session_id') and s1.get('campaign_id') == s0.get('campaign_id')):
         return v.setup_fail(f"no later load of the same campaign observed (pre {s0}, live {s1}): the game did not reload or the lane has no playthrough session")
-    v.ck('real_later_load_same_campaign(epoch up, session changed)', True, f"epoch {s0['timeline_epoch']}->{s1['timeline_epoch']}")
+    v.ck('real_later_load_same_campaign(load order up, session changed)', True, f"epoch {s0['timeline_epoch']}->{s1['timeline_epoch']} load_seq {s0.get('load_seq')}->{s1.get('load_seq')}")
     if evl.get('ingest_mode') != 'enabled':
         return v.setup_fail(f"SOCIAL_RELATIONSHIP_MODE is {evl.get('ingest_mode')!r}, the term gate returns null (set it to enabled on the lane)")
     v.ck('rescope_kill_switch_on(STOBE_REPAIR_RESCOPE_ENABLED)', evl.get('rescope_enabled') is True, evl.get('rescope_enabled'))
@@ -260,7 +263,11 @@ def c_19f(v, ev):
         if capped:
             v.ck(f'reload{i}_FAILED_honestly_resume_count(terminal after the cap)', st == 'FAILED' and ex.get('resume_failure') == 'resume_count', f"{st}/{ph}/{ex.get('resume_failure')}")
             v.ck(f'reload{i}_no_new_OWNED_TRAVEL', not ot, len(ot))
-            v.ck(f'reload{i}_no_new_PROPOSED_row(no re-proposal loop)', not [j for _, j in rc.agr_dump(ev, f'agr_r{i}.txt') if j.get('status') == 'PROPOSED'], 'rows')
+            # only PROPOSED rows written AFTER the trip was accepted count (the original pre-accept PROPOSED row is in every agr_r dump)
+            dump = rc.agr_dump(ev, f'agr_r{i}.txt')
+            acc_ids = [r for r, j in dump if j.get('agreement_id') == aid and j.get('status') == 'ACCEPTED']
+            first_acc = min(acc_ids) if acc_ids else 0
+            v.ck(f'reload{i}_no_new_PROPOSED_row(no re-proposal loop)', not [r for r, j in dump if j.get('status') == 'PROPOSED' and r > first_acc], 'rows')
             break
         v.ck(f'reload{i}_still_ACCEPTED_and_resumed(requested|running)', st == 'ACCEPTED' and ph in ('requested', 'running'), f'{st}/{ph}/{ex.get("resume_failure")}')
         v.ck(f'reload{i}_exactly_one_OWNED_TRAVEL_accepted', len(ot) == 1, len(ot))
