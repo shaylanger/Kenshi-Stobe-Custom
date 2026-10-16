@@ -129,6 +129,19 @@ try {
     }
 } catch { }
 
+# --- open-alert ledger (PI-21, Shay 2026-10-15; alert-lib.ps1): the waker's urgent events (LANE IDLE / NO-OPERATOR, AGENT STALL / ORPHANED / DEAD /
+# KILLED, failed or stopped agents without a successor, LLM-HEALTH FAIL) stay OPEN until alert-ack.ps1 <id> "<action>" or the condition clears. Only the
+# live COORDINATOR reaches this point (tail sessions, agent sessions and retired coordinators exited above). An alert older than 5 min and unacked blocks the
+# stop; after 3 consecutive blocks with the same alert set the 4th stop is let through once and logged (alerts\cap-ends.log). Fails open on any error.
+# Test seam: KAH_ALERT_NO_SCAN=1 skips the fresh scan (the selftests plant alert files and check the verdict). ---
+try {
+    . (Join-Path $PSScriptRoot '..\alert-lib.ps1')
+    if (-not $env:KAH_ALERT_NO_SCAN) { [void](Invoke-AlertScan -Runs $runs -Force) }
+    $av = Get-AlertStopVerdict $runs
+    if ($av.Capped) { [Console]::Error.WriteLine('kenshi-waker-guard: open alerts unchanged after 3 blocks, letting this stop through once (logged): ' + ($av.Ids -join ', ')) }
+    if ($av.Block) { Block-Stop ('kenshi-waker-guard: ' + $av.Message) }
+} catch { }
+
 # --- agent statuses (agent-guard-lib.ps1; fails open) ---
 $agentFly = @()
 $agentAccepted = @()

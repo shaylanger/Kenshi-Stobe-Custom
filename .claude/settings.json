@@ -139,6 +139,11 @@
             "type": "command",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/coord-heartbeat.ps1",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/KenshiModding/tools/automation/alert-scan.ps1 -Hook",
+            "timeout": 25
           }
         ]
       },

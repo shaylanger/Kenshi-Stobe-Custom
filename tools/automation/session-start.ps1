@@ -20,6 +20,9 @@ $ew = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Obje
 if ($ew.Count) { "WAKER STATUS: running (event-wait.sh, pid $($ew[0].ProcessId))" }
 else { 'WAKER STATUS: NOT running (start: Bash run_in_background  MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/event-wait.sh [--batch /mnt/c/<out-dir>]; restart it every time it wakes you)' }
 
+# Open alerts (PI-21, Shay 2026-10-15; alert-lib.ps1): urgent waker events (LANE IDLE, AGENT STALL/ORPHANED/DEAD, failed agent, LLM-HEALTH FAIL) that nobody has acked and whose condition has not cleared; max 6 lines; fail-open.
+try { . (Join-Path $PSScriptRoot 'alert-lib.ps1'); [void](Invoke-AlertScan -Force); Get-AlertBriefLines '' 6 } catch { }
+
 # Program ledgers (Shay 2026-10-15): unfinished work packages of every program (C:\KenshiTestRuns\programs\*.json, tools\automation\program-ledger.ps1); fail-open.
 try { & (Join-Path $ws 'tools\automation\program-ledger.ps1') brief } catch { }
 

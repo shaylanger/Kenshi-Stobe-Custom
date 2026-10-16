@@ -8,6 +8,7 @@
 $script:BriefMustKeep = '^WAKER STATUS|\bORPHANED\b|\bNO SUCCESSOR\b|^DEAD |^\s*DEAD |OWNED-BY-LIVE-TAIL|^TAIL |^COORDINATOR POINTER|^\s+tail \S+: relays |^PROCESS IDEAS FOR SHAY|^\s+PI-\d+ |^\s+\(after asking|^WARNING|^ALERT|HEALTH STALL|LANE STUCK|^respawn todos|^Next:|^  \S+ age=\S+ needs=\S+ owner='
 # section-header substring -> @(max non-must-keep lines, max chars per line)
 $script:BriefCaps = [ordered]@{
+    'OPEN ALERTS'     = @(6, 300)
     'PROGRAM LEDGER'  = @(10, 300)
     'SETUP-FAIL TICKETS' = @(14, 160)
     'handoff.ready'   = @(6, 300)
