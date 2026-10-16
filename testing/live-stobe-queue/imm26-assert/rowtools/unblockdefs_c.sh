@@ -66,7 +66,7 @@ ub15_scene() {  # ub15_scene <save> : load, quiet spot, Malzin to the far spot, 
 ub15_pair() {  # fresh pair at the spot -> UB_ID1 UB_ID2 UB_FN (comma list: current + spawn names) UB_STARTER ; rc 3 + RL_REASON
   local fac="${HX15_FACTION:-Holy Nation Outlaws}" o1 o2 n1 n2 mk cand c w
   ub_spawn "$fac" 0 || return $?; UB_ID1="$UB_ID"; o1="$UB_SHORT"
-  ub_spawn "$fac" 6 || return $?; UB_ID2="$UB_ID"; o2="$UB_SHORT"
+  ub_spawn "${HX15_FACTION2:-Dust Bandits}" 6 || return $?; UB_ID2="$UB_ID"; o2="$UB_SHORT"
   mk=$(hxd_rowid)
   hxd_fight "$UB_ID1" "$UB_ID2"; hxd_sleep "${HX15_WAIT:-10}"
   n1=$(ub_name "$UB_ID1"); n2=$(ub_name "$UB_ID2")

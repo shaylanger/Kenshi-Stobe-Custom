@@ -58,6 +58,13 @@ def dist_entries(d):
 
 def check_15bx(row, ev):
     bd = rd(ev, 'bundle_dir.txt').strip() or ev
+    if os.name == 'nt' and len(bd) > 2 and bd[0] == '/' and bd[2] == '/':
+        bd = bd[1].upper() + ':' + bd[2:]
+        try:
+            open(os.path.join(ev, 'bundle_dir.txt'), 'w').write(bd + '
+')   # hxcheck.py/assert_witness need the same Windows path
+        except OSError:
+            pass
     labs = [f'X{i}' for i in (1, 2, 3)] + [f'P{i}' for i in (1, 2, 3)] + ['S1']
     missing = [d for d in labs if not os.path.isdir(os.path.join(bd, d))]
     if missing:
