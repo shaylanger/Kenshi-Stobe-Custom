@@ -133,7 +133,7 @@ Rules:
 - added: 2026-10-16 12:52
 - log: 2026-10-16 12:52 review 'coordinator-16': added
 
-### PI-45 | open
+### PI-45 | confirmed
 - idea: lane-brief.ps1 should not refuse to write the brief when it is a few bytes over the 14500 limit (4080-i3/i4 briefs came out 14548 B and 15996 B): shrink the optional blocks further or write the file and only warn, instead of exit 1/2 with no file, which forced -MaxBytes 16000 retries and a PowerShell-vs-Git-Bash path detour.
 - evidence: 2026-10-16 12:25-12:45: lane-brief.ps1 4080-i4 and 4080-i3 printed OVER LIMIT and wrote nothing at the default limit; each needed 2-3 extra tool calls (about 15k tokens of coordinator context each).
 - saving: about 15k tokens per operator respawn, fewer failed spawns
@@ -141,7 +141,10 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 12:52
+- moment: 13:02 hk2 spawn, 13:16 4080-i4op15, 13:22 5090-i3op22
+- last_review: coordinator-17
 - log: 2026-10-16 12:52 review 'coordinator-16': added
+- log: 2026-10-16 13:56 review 'coordinator-17': open -> confirmed (applies: 2026-10-16 13:00-13:50: lane-brief.ps1 printed OVER LIMIT and wrote nothing at the default 14500 limit for 5090-i4, 5090-i3, 5090-i5, 4080-i4 and 4080-i3; every spawn needed a second call with -Max...)
 
 ### PI-46 | open
 - idea: A tail session should need zero model turns: tail-autorelay must relay every finished agent (it relayed sfV/sfT early, then stopped relaying; I relayed sfP, sfR, ctxfix, fxC2, sfU, sfS, op13, op21, op9n by hand) and Get-TailRelayState must also search coordinator/done/.
@@ -182,6 +185,36 @@ Rules:
 - weakens: no
 - added: 2026-10-16 13:35
 - log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
+
+### PI-50 | open
+- idea: Deliberately parked lanes (operator finished, nothing claimable until fixer candidates land) should auto-enter lanes.held when the operator is abandoned with a 'parked' reason, and leave it when a new operator status appears; today the digest waker still wakes on LANE IDLE/NO-OPERATOR every ~6 min per parked lane.
+- evidence: 13:30-13:50: LANE IDLE 5090-i3 (twice), LANE NO-OPERATOR 4080-i3 (twice), LANE IDLE 4080-i4: five coordinator turns of about 270k tokens each, plus three manual alert-ack calls, until I hand-edited lanes.held.
+- saving: about 5 turns x 270k tokens per hour while lanes are parked
+- risk: a lane parked by mistake hides a real stall: the hold must carry the abandon reason and expire after 2 h
+- hooks: no
+- weakens: no
+- added: 2026-10-16 13:56
+- log: 2026-10-16 13:56 review 'coordinator-17': added
+
+### PI-51 | open
+- idea: Replace the 'wake, read output file, restart waker' loop by one persistent waker that appends actionable events to a file watched by the Monitor tool (or the background task notification), so the coordinator does not spend 2 tool calls per wake restarting it and never creates duplicate wakers.
+- evidence: 13:00-13:55: about 30 waker restarts, each 2 tool calls; twice a second waker was started while one was still running (exit code 15 kills, duplicate EVENT lines) and the Stop hook blocked once because no waker was running in the gap.
+- saving: about 60 tool calls and 3 hook-block turns per hour
+- risk: medium: waker semantics and the Stop-hook liveness check must move together
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 13:56
+- log: 2026-10-16 13:56 review 'coordinator-17': added
+
+### PI-52 | open
+- idea: Put known tooling snags (e.g. hxdefs.sh:30 /c/ path in bundle_dir.txt giving a false 'bundle dirs missing' SETUP-FAIL, use HX_OUT=C:/KenshiTestRuns/imm26-4080-hx) in the generated lane brief from testing/KNOWN_BLOCKERS.md, and make mark-row.py refuse SETUP-FAIL 'bundle dirs missing' when run.log is empty and the dirs exist.
+- evidence: 11:58-13:34: the same path bug produced false SETUP-FAILs on 01-cx, 16-bx (4080-i3, 5090-i5) and cost two investigator agents (inv01cx 190k tokens) plus two operator rediscoveries before it was named.
+- saving: about 200k tokens and 3 false tickets per occurrence
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 13:56
+- log: 2026-10-16 13:56 review 'coordinator-17': added
 
 ## Retired
 
