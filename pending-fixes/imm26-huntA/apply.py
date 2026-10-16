@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """imm26-huntA1 (Shay 2026-10-16): Hunt no-progress timeout + give-up line. SERVER side, anchored, CRLF-preserving, idempotent.
 Usage (WSL): python3 apply.py <tree-root>      tree = the imm26 compose tree (needs wpE: ActivityLifecycle.php, claim policy in situated_dialogue.php)
-  1. lib/activity/ActivityAgreementAdapter.php   noProgressTimeout 1800 -> 10000 game-s (5 min real at speed 1, ~10 min at speed 0.5)
+  1. lib/activity/ActivityAgreementAdapter.php   noProgressTimeout 1800 -> 10000 game-s (5 min real at speed 1, ~10 min at speed 0.5);
+                                                 agreement expiresAt now+21600 -> now+43200 (Shay 2026-10-16; applies to every activity kind)
   2. activity.php                                the terminal situated event of a FAILED report carries ending=failed
   3. lib/situated_dialogue.php                   ending=failed events are stored with the marker, rank as urgent (20 s / 40 s spacing,
                                                  priority 6, ttl 300 s) and the remark instruction tells the NPC to say it gives up and why
@@ -31,6 +32,10 @@ def edit(rel, marker, pairs):
 edit('lib/activity/ActivityAgreementAdapter.php', 'huntA1: no-progress', [(
 "'noProgressTimeout' => 1800, 'agreedTargets' => $targets,",
 "'noProgressTimeout' => 10000, /* huntA1: no-progress limit in GAME seconds: ~5 min real at speed 1, ~10 min at 0.5 (was 1800 = ~55 s) */ 'agreedTargets' => $targets,")])
+
+edit('lib/activity/ActivityAgreementAdapter.php', 'huntA2: expiry', [(
+"'expiresAt' => $context['now'] + 21600,",
+"'expiresAt' => $context['now'] + 43200, /* huntA2: expiry 43200 game-s (Shay 2026-10-16): a long walk plus the 5 min no-progress window fits */")])
 
 edit('activity.php', "'ending'=>", [(
 "'activity_id'=>$a['id'],'kind'=>$record['status']==='completed'?'completed':'plan_changed',",

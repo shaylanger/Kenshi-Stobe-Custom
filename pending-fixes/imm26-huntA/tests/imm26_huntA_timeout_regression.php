@@ -24,6 +24,7 @@ $a = $P['agreement'] ?? [];
 check('Hunt proposed', ($P['status'] ?? '') === 'proposed', $P['status'] ?? null);
 check('no-progress limit is 10000 game seconds', ($a['noProgressTimeout'] ?? 0) === 10000, $a['noProgressTimeout'] ?? null);
 check('limit is at least 9800 (5 real minutes at speed 1, ~32.8 game-s per real second)', ($a['noProgressTimeout'] ?? 0) >= 9800);
+check('agreement lifetime (expiresAt) is now+43200 game seconds', ($a['expiresAt'] ?? 0) === 1000 + 43200, $a['expiresAt'] ?? null);
 check('limit is shorter than the agreement lifetime (expiresAt still ends the job)', ($a['noProgressTimeout'] ?? 0) < ($a['expiresAt'] ?? 0) - 1000, [$a['noProgressTimeout'] ?? null, $a['expiresAt'] ?? null]);
 echo "pass=$pass fail=$fail\n";
 exit($fail ? 1 : 0);
