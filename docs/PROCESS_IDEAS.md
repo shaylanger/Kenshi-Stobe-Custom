@@ -15,7 +15,7 @@ Rules:
 
 ## Active
 
-### PI-29 | open
+### PI-29 | rejected x1
 - idea: At the tail hard limit the context meter should call tail-close.ps1 (sends 'tail done', then closes the session and window ~20 s later) once all owned agents are checkpointed/relayed, instead of telling the tail to run tail-mode.ps1 leave -Force (which only removes the flag, leaving the session and window open). tail-close's window-kill must first be tested on a real throwaway window.
 - evidence: 2026-10-15 ~21:07 old tail session 6d1f3011 followed the meter message, ran tail-mode.ps1 leave -Force at its hard limit: the flag went away but the session process and window stayed open (tail-close.ps1 then refuses with 'no tail flag'); the window-closing path of tail-close was never exercised on a real window.
 - saving: no orphan idle tail windows per overlap handoff; the tail context stops being resumable by accident
@@ -23,8 +23,10 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-15 21:07
+- last_review: coordinator-12
+- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16: tail 2a0cfe9b closed itself via tail-ack.ps1 (all agents done+acked -> tail-close in 20 s) without any hard-limit case; no tail reached its limit this session.)
 
-### PI-31 | open
+### PI-31 | rejected x1
 - idea: AGENT ORPHANED must not fire for in-session (Agent-tool) subagents of a live coordinator or live tail: check the agent against the session's own agent list / ledger owner before alerting
 - evidence: 2026-10-15 21:24 and 21:40: AGENT ORPHANED imm26-fix10a and imm26-fix03b were false alarms (both alive, only blocked on a test lock); each cost 2-3 turns of investigation, one almost led to a wrong respawn
 - saving: about 3 turns per false alarm, avoids a duplicate respawn
@@ -32,9 +34,11 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-15 23:16
+- last_review: coordinator-12
 - log: 2026-10-15 23:16 review 'coordinator-11': added
+- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16 00:00-05:00: no AGENT ORPHANED alert fired this session; only legitimate STOPPED-CONTEXT events.)
 
-### PI-32 | open
+### PI-32 | confirmed
 - idea: lane-brief.ps1 (or the operator spawn) records the kenshi-ctl idle reason 'operator spawned, lane launching' automatically for 15 min so the Stop hook does not demand one by hand
 - evidence: 2026-10-15 22:40, 22:41 and 22:45: the Stop hook blocked three times right after spawning a 5090 operator because the 5090 was momentarily idle; each needed a manual kenshi-ctl idle
 - saving: 3 turns
@@ -42,7 +46,40 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-15 23:16
+- moment: 00:31 when op9f stopped: the lane had no operator for ~10 min while imm26-26a-recipe investigated; an automatic idle reason from lane-brief/agent status would have saved the manual step each time
+- last_review: coordinator-12
 - log: 2026-10-15 23:16 review 'coordinator-11': added
+- log: 2026-10-16 02:55 review 'coordinator-12': open -> confirmed (applies: 2026-10-16 00:30, 01:00, 01:45: after each 5090 operator stopped I had to record kenshi-ctl.ps1 idle by hand to keep the Stop hook quiet while a fixer was building (op9f, op9g, op9h gaps).)
+
+### PI-33 | open
+- idea: The Stop hook's successor check must accept ANY successor registered via lane-brief.ps1 -Name/-Predecessor (lane-owners.json), not only <name>2/<name>b suffix names; or lane-brief should register the successor so the hook stops asking for 'imm26-4080-i4op10b' when 'imm26-4080-i4op11' already runs.
+- evidence: 2026-10-16 00:21 (op9e->op9f), 01:28 (i4op10->op11), 00:50 (op9f->op9g): the Stop hook blocked three times asking to respawn a fresh <name>b although the real successor (different number) was already RUNNING; each cost a model turn and an agent-abandon.ps1 call.
+- saving: ~3 blocked stops + 3 abandon calls per coordinator session (~6k tokens)
+- risk: must not hide a truly unowned stopped agent: only accept successors whose status task text equals the predecessor's
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 02:55
+- log: 2026-10-16 02:55 review 'coordinator-12': added
+
+### PI-34 | open
+- idea: Provide one wrapper `rearm-waker.ps1` (or fold into event-wait.sh) that kills any stale event-wait for this coordinator, then prints the exact run_in_background command; and make event-wait.sh refuse to start under a bare & / disown.
+- evidence: 2026-10-16: I started the waker with a trailing `&`/disown by mistake 5 times (01:13, 01:29, 02:09, 03:25, 04:35), each needed a pkill and a relaunch; the runbook says never.
+- saving: ~5 wasted tool calls and a wrongly-running waker the Stop hook does not recognise
+- risk: low: wrapper only starts/kills event-wait processes owned by this coordinator
+- hooks: no
+- weakens: no
+- added: 2026-10-16 02:55
+- log: 2026-10-16 02:55 review 'coordinator-12': added
+
+### PI-35 | open
+- idea: mark-row.py needs a note-only mode (append a note to the evidence column without changing status), so row-tooling agents can annotate rows without overwriting results.
+- evidence: 2026-10-16 imm26-u-rowsA2 report: mark-row.py has no note-only mode, it always overwrites status and evidence, and a SETUP-FAIL re-mark needs a needs: clause and updates the unblock ticket, so none of the three tooling agents (rowsA/B/C) could add the one-call command to the row.
+- saving: one operator lookup per row (inbox note instead of the row)
+- risk: low: new flag only
+- hooks: no
+- weakens: no
+- added: 2026-10-16 02:55
+- log: 2026-10-16 02:55 review 'coordinator-12': added
 
 ## Retired
 
