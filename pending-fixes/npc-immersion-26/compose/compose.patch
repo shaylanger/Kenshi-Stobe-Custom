@@ -7390,7 +7390,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
  
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_followups.php b/lib/social_followups.php
 --- a/lib/social_followups.php	2026-10-14 15:57:13.226177279 -0500
-+++ b/lib/social_followups.php	2026-10-15 17:35:57.314331490 -0500
++++ b/lib/social_followups.php	2026-10-16 03:54:04.755548009 -0500
 @@ -1,5 +1,6 @@
  <?php
  /** Bounded personal follow-up memory. No timers, LLM calls, or gameplay authority. */
@@ -7459,15 +7459,17 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
  }
  /** Only the existing ordinary eligible bored-turn branch can consume this; never a new scheduler. */
  function stobeSocialFollowupsClaim(string $actor,array $npc,string $listener,array $meta=[]): ?array {
-@@ -189,7 +202,7 @@
+@@ -189,8 +202,8 @@
      if (function_exists('stobeSocialCommunicationAllowsOptional') && !stobeSocialCommunicationAllowsOptional($actor,$npc,$listener,'followup',stobeFollowupTime($meta),$meta)) return null;
      $scope=stobeFollowupScope($actor,$npc,$listener,$meta);$now=stobeFollowupTime($meta);
      if (!$scope || $now<=0 || !function_exists('stobeResolveLiveParticipantSerial')) return null;
 -    $serial=stobeResolveLiveParticipantSerial($actor);if ($serial<=0) return null;
+-    $db=$GLOBALS['db'];$locked=false;$topicLocked=false;$tx=null;$lockKey=stobeFollowupPrefix($scope);
 +    $serial=stobeResolveLiveParticipantSerial($actor,true);if ($serial<=0) return null;
-     $db=$GLOBALS['db'];$locked=false;$topicLocked=false;$tx=null;$lockKey=stobeFollowupPrefix($scope);
++    $db=$GLOBALS['db'];$locked=false;$topicLocked=false;$tx=null;$lockKey=stobeFollowupPrefix($scope);$imm26Retired=0;
      try {
          $lock=$db->fetchOne('SELECT pg_try_advisory_lock(1937006964,1) AS acquired');
+         $locked=is_array($lock)&&in_array($lock['acquired']??false,[true,1,'1','t'],true);if (!$locked) return null;
 @@ -206,7 +219,13 @@
              $claim=json_decode(strval($row['data']??''),true);$elapsed=time()-intval($row['localts']??0);
              if ($elapsed<60 || (intval($claim['actor_serial']??0)===$serial&&$elapsed<180)) return null;
@@ -7476,13 +7478,22 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
 +        $imm26Records=stobeFollowupRead($scope,$now,true);
 +        if (function_exists('imm26C2ResolvedFollowupIds')) {
 +            $imm26Resolved=imm26C2ResolvedFollowupIds($actor,$listener,$imm26Records,$now);
-+            if ($imm26Resolved) imm26C2RetireResolved($scope,$now,$imm26Records,$imm26Resolved);
++            if ($imm26Resolved) $imm26Retired=imm26C2RetireResolved($scope,$now,$imm26Records,$imm26Resolved);
 +            $meta['resolved_followup_ids']=array_merge($meta['resolved_followup_ids']??[],$imm26Resolved);
 +        }
 +        foreach (array_reverse($imm26Records) as $record) {
              if (!in_array($record['status']??'',['open','snoozed'],true) || intval($record['expires_gamets']??0)<=$now || intval($record['not_before_gamets']??PHP_INT_MAX)>$now || intval($record['ask_count']??0)>=2) continue;
              // Integrator supplies veto IDs from known outcomes; absent evidence is not completion.
              if (in_array($record['topic_id'],$meta['resolved_followup_ids']??[],true)) continue;
+@@ -215,6 +234,8 @@
+             if (!is_array(storeEvent('situated_remark_claim',time(),$now,json_encode(['actor_serial'=>$serial,'event_id'=>'followup:'.$record['topic_id'].':'.$record['ask_count']]),'pending','','',false))) return null;
+             stobeFollowupFinish($tx,true);$tx=null;return $record;
+         }
++        if ($imm26Retired>0) { stobeFollowupFinish($tx,true);$tx=null; }
++        return null;
+     } catch (Throwable $e) { return null; }
+     finally {
+         if ($tx!==null) {try {stobeFollowupFinish($tx,false);} catch(Throwable $e) {}}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_interpreter.php b/lib/social_interpreter.php
 --- a/lib/social_interpreter.php	2026-10-12 21:20:51.858290219 -0500
 +++ b/lib/social_interpreter.php	2026-10-15 18:29:08.404340541 -0500
@@ -16145,8 +16156,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +echo "OK $checks checks\n";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpC2_followups_comm_regression.php b/tests/imm26_wpC2_followups_comm_regression.php
 --- a/tests/imm26_wpC2_followups_comm_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpC2_followups_comm_regression.php	2026-10-15 16:45:48.998722282 -0500
-@@ -0,0 +1,191 @@
++++ b/tests/imm26_wpC2_followups_comm_regression.php	2026-10-16 03:53:07.945290194 -0500
+@@ -0,0 +1,209 @@
 +<?php
 +// WP-C2 items 8 and 9: follow-up resumption + communication preferences with teeth.
 +// Run: STOBE_DB_NAME=stobe_test php tests/imm26_wpC2_followups_comm_regression.php   (use flock /tmp/stobe-tests.lock)
@@ -16335,6 +16346,24 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +check('player-requested stop is not blocked', json_decode(imm26C2PlanNoticeFilter($end, 'Cind', $npc, 'Shay', 'Please stop following me.', T0 + 600400, $t4, $a4, []), true)['travel_decision'] === 'END');
 +$GLOBALS['T_PREFS'] = [];
 +check('no preference, no gate', json_decode(imm26C2PlanNoticeFilter($end, 'Cind', $npc, 'Shay', 'Hmm.', T0 + 600500, $t4, $a4, []), true)['travel_decision'] === 'END');
++
++/* ---------- imm26 08-d: finished trip is the ONLY open topic (retire must commit, not roll back) ---------- */
++cleanup(); $GLOBALS['T_ATTN'] = []; $GLOBALS['T_COMM'] = ['amount' => 'normal', 'plan_notice' => 'normal']; $GLOBALS['T_PREFS'] = [];
++$npcM = ['name' => 'Marta', 'metadata' => []];
++$scopeM = stobeSocialPreferenceScope('Marta', $npcM, 'Shay');
++$readM = fn(int $now) => stobeFollowupRead($scopeM, $now, true);
++$TS = T0 + 800000;
++check('single plan created (Marta)', stobeSocialFollowupsCapture('Marta', $npcM, 'Shay', "I'm heading to the Hub to find my brother.",
++    ['followup_update' => ['decision' => 'NONE', 'topic_id' => '', 'kind' => 'personal_plan', 'source_quote' => '']],
++    $base + ['manual_turn_id' => 'turn-single', 'stream_gamets' => $TS]) === true);
++$onlyOpen = array_filter($readM($TS + 100), fn($r) => $r['status'] === 'open');
++check('exactly one open topic', count($onlyOpen) === 1);
++$solo = array_key_first($onlyOpen);
++storeEvent('travel_agreement', time(), $TS + 5000, 'travel-v1:102:1:' . json_encode(['status' => 'COMPLETED', 'destination' => 'The Hub', 'kind' => 'same_route']));
++$soloMeta = ['eligible_bored_turn' => true, 'social_optional_speech_allowed' => true, 'social_scope' => ['x' => 1], 'stream_gamets' => $TS + 6000, 'gamets' => $TS + 6000];
++check('single-topic claim returns null (nothing else to ask)', stobeSocialFollowupsClaim('Marta', $npcM, 'Shay', $soloMeta) === null);
++$afterSolo = $readM($TS + 6000);
++check('single finished-trip topic stays retired (not rolled back)', ($afterSolo[$solo]['status'] ?? '') === 'closed' && ($afterSolo[$solo]['closed_reason'] ?? '') === 'outcome_completed');
 +
 +cleanup();
 +echo "OK $checks checks\n";

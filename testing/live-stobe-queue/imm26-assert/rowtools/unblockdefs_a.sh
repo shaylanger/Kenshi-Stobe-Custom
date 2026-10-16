@@ -25,15 +25,22 @@ U_FAR="-53200 957 4893"
 
 # ------------------------------------------------------------------ shared helper 1: targeted autochat bored tick
 i4_bored() {  # i4_bored <tag> [push=1]
-  local tag="$1" push="${2:-1}" nm s0 rc res f="$EV/bored_$1.txt"
+  local tag="$1" push="${2:-1}" nm s0 rc res f="$EV/bored_$1.txt" pa pb ns ps
   nm="${RL_NPC_FULL%% \[*}"; [ -n "$nm" ] || nm="${ROW_NPC%% \[*}"
+  pa="$nm"; pb="Shay"
+  if [ "${U_BORED_SERIALS:-0}" = 1 ]; then   # u6-fix08d: the DLL sends people as "Name|serial" (ChatBox.cpp:5833-5835); a plain name resolves to serial 0 server-side (imm26_c2_followups.php:98)
+    ns="${RL_NPC_ID#\#}"; ns="${ns%%/*}"
+    ps=$(printf 'stobe-auto where Shay </dev/null 2>&1 | head -1\n' | lt_h 2>&1 | grep -oE '#[0-9]+/' | head -1 | tr -dc 0-9)
+    if [ -n "$ns" ] && [ -n "$ps" ]; then pa="$nm|$ns"; pb="Shay|$ps"; fi
+    echo "people=$pa,$pb" >> "$EV/bored_people.txt"
+  fi
   s0=$(printf 'wc -l < %s # u:srvn\n' "$LT_SRVLOG" | lt_w | tail -1 | tr -dc 0-9); s0=${s0:-0}
   if [ "$push" = 1 ]; then rl_push; rc=$?; [ $rc = 0 ] || return $rc; else echo "no ctxpush (stale/no native snapshot)" >> "$EV/ctxpush.txt"; fi
   lt_w <<EOT > "$f" 2>&1
 # u:stream
 G=\$(runuser -u postgres -- psql -h $LT_ROOT/socket -p $LT_PG -d $LT_DB -At -c "select coalesce(max(gamets),0) from eventlog")
 D=\$(printf 'bored|%s|%s|%s: [BORED_EVENT_TRIGGER] (talking to: Shay)' "\$(date +%s)" "\$G" "$nm" | base64 -w0 | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read().strip(),safe=""))')
-P=\$(python3 -c 'import sys,urllib.parse,json;print(urllib.parse.quote(json.dumps([sys.argv[1],"Shay"]),safe=""))' "$nm")
+P=\$(python3 -c 'import sys,urllib.parse,json;print(urllib.parse.quote(json.dumps([sys.argv[1],sys.argv[2]]),safe=""))' "$pa" "$pb")
 T=\$(runuser -u postgres -- psql -h $LT_ROOT/socket -p $LT_PG -d $LT_DB -At -c "select (value::json)->>'token' from stobe_meta.settings where key='PLAYTHROUGH_SESSION'")   # op11: pas_guard answers 409 to a request without the session token once the DLL registered a client_id
 curl -s -m 120 -H "X-Stobe-Playthrough: \$T" -w '\nHTTP=%{http_code}\n' "http://127.0.0.1:$LT_PORT/stream.php?DATA=\$D&profile=$(printf %s "$nm" | sed 's/ /%20/g')&optional=1&people=\$P&mode=autochat" | head -c 800
 EOT
@@ -147,8 +154,23 @@ rd_08d() {
   tr_state state_after.txt "$RL_NPC_FULL"; tr_agr agr_final.txt 8
   rd08d_dump fu_before.txt
   n0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); n0=${n0:-0}
-  i4_bored 08d 1 || return $?
-  rw_sleep 3
+  # u6-fix08d: the claim gate refuses for 30 s real after any manual chat (social_followups.php:215), so wait >= 31 s after "We're here" before the first tick;
+  # then the 08-e retry loop (a later tick after a game-time advance); people are sent as Name|serial like the DLL.
+  local tries="${U08D_TRIES:-3}" k
+  [ "$neg" = 1 ] && tries=1
+  U_BORED_SERIALS=1
+  rw_sleep "${U08D_POST_CHAT_S:-31}"
+  for k in $(seq 1 "$tries"); do
+    i4_bored 08d 1 || { U_BORED_SERIALS=0; return $?; }
+    rw_sleep 3
+    rd08d_dump fu_after.txt
+    echo "tick $k res=$U_BORED_RES" >> "$EV/bored_08d_tries.txt"
+    grep -q 'outcome_completed' "$EV/fu_after.txt" 2>/dev/null && break
+    [ "$k" = "$tries" ] && break
+    ADV_SECONDS="${U_BORED_GAP:-60}" rl_advance_gametime || { U_BORED_SERIALS=0; return $?; }
+    u_heal
+  done
+  U_BORED_SERIALS=0
   rd08d_dump fu_after.txt
   printf 'tail -n +%s %s | grep -E "BORED_EVENT|ACTION_EXEC: SAY|FOLLOWUP|followup" | cut -c1-300 | head -40\n' "$(( n0 + 1 ))" "$LT_STOBELOG" | lt_h > "$EV/bored_log.txt" 2>&1
 }
