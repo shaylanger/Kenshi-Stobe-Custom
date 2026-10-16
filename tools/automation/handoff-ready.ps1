@@ -12,6 +12,8 @@ if ($age.TotalMinutes -gt 30) {
     "REFUSED: testing\HANDOFF.md was last written $([int]$age.TotalMinutes) min ago. Update its 'Current state' / 'Right now' first, then rerun."
     exit 1
 }
+# PI-08 (Shay 2026-10-15): archive old "Right now" entries (older than the previous coordinator) to archive\HANDOFF_history_<date>.md. Idempotent; never blocks the handoff.
+$archLine = try { (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'handoff-archive.ps1') 2>&1 | Out-String).Trim() } catch { "handoff-archive failed open: $($_.Exception.Message)" }
 $agentDir = Join-Path $runs 'agents'
 $agents = @(Get-ChildItem -LiteralPath $agentDir -Filter '*.status' -File -ErrorAction SilentlyContinue)
 $inflight = @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue)
@@ -39,6 +41,7 @@ $piLine = if ($piAge -ge 0 -and $piAge -le 120) { "process ideas review: docs/PR
 $lines = @(
     "HANDOFF READY $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     "note: $($args -join ' ')"
+    "handoff archive: $archLine"
     "handoff: $hf (written $(Get-Date (Get-Item -LiteralPath $hf).LastWriteTime -Format 'HH:mm'))"
     "kenshi: $kenshi | game.lock: $lock | uncommitted files in $ws : $git"
     "agent status files: $(if ($agents.Count) { ($agents | ForEach-Object { $_.FullName }) -join ', ' } else { 'none' })"
