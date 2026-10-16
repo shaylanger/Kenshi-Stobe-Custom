@@ -46,6 +46,7 @@ foreach ($l in $lanes.Keys) {
         if (-not $newest -or $t -gt $newest) { $newest = $t; $what = 'status' }
     }
     if (-not $runOp) {
+        if ($held -contains $l) { continue }   # held / retired lanes (lanes.held) never raise LANE NO-OPERATOR
         $key = "noop:$l"
         if (-not $mem.ContainsKey($key) -or ($now - $mem[$key]).TotalMinutes -ge $Repeat) { $mem[$key] = $now; $out += "LANE NO-OPERATOR $l : no RUNNING operator among $($cfg.ops -join ',') -> spawn/respawn one from the handoff" }
         continue
@@ -58,7 +59,7 @@ foreach ($l in $lanes.Keys) {
         if ($f -and (-not $newest -or $f.LastWriteTime -gt $newest)) { $newest = $f.LastWriteTime; $what = "evidence $d\$($f.Name)" }
     }
     $age = [math]::Round(($now - $newest).TotalMinutes, 1)
-    if ($age -gt $Max) {
+    if ($age -gt $Max -and ($held -notcontains $l)) {   # held lanes (lanes.held) never raise LANE IDLE either
         $key = "idle:$l"
         if (-not $mem.ContainsKey($key) -or ($now - $mem[$key]).TotalMinutes -ge $Repeat) { $mem[$key] = $now; $out += "LANE IDLE $l ${age}m operator=$runOp (newest activity: $what) -> ask the operator what it is doing; if it is stuck, fix the root or respawn it" }
     } else { $mem.Remove("idle:$l"); $mem.Remove("noop:$l") }
