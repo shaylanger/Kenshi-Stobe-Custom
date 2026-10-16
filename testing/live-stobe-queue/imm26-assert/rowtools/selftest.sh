@@ -205,6 +205,8 @@ grep -q '^RESULT 12-b FAIL' "$res" && grep -q 'event=ALLOW .*reason=selftest-bat
 
 # 12 trip-family rows (13-b 20-a 20-b 23-a 23-c 23-d 24-a + wrapped 19-a/23-b/24-b): own temp dir, see README_TRIP.md
 ts=$(bash "$ST_HERE/trip-selftest.sh" 2>&1 | tail -1); case "$ts" in "SELFTEST TRIP ALL PASS"*) chk trip-family-selftest ok "$ts";; *) chk trip-family-selftest bad "$ts";; esac
+# 6 hardening rows (17-bx 18-cx 16-bx 15-bx 13-ax 02-ax): README_HX.md
+hs=$(bash "$ST_HERE/hx-selftest.sh" 2>&1 | tail -1); case "$hs" in "SELFTEST HX ALL PASS"*) chk hx-hardening-selftest ok "$hs";; *) chk hx-hardening-selftest bad "$hs";; esac
 
 rm -rf "$T"
 if [ $ok = $n ]; then echo "SELFTEST ALL PASS $ok/$n"; exit 0; else echo "SELFTEST ALL FAIL $ok/$n"; exit 1; fi
