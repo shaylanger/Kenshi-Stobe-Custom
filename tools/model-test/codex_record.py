@@ -47,9 +47,9 @@ def _tool_calls(obj: dict) -> list[dict]:
     # text, tool output, or arbitrary nested result data that may resemble a call.
     if str(obj.get("type", "")).lower() == "response_item":
         p = obj.get("payload") or obj.get("item") or {}
-        if isinstance(p, dict) and str(p.get("type", "")).lower() in ("function_call", "tool_use"):
+        if isinstance(p, dict) and str(p.get("type", "")).lower() in ("function_call", "tool_use", "custom_tool_call"):
             out.append(p)
-    elif str(obj.get("type", "")).lower() in ("function_call", "tool_use"):
+    elif str(obj.get("type", "")).lower() in ("function_call", "tool_use", "custom_tool_call"):
         out.append(obj)
     # Parent and nested item may identify the same call. De-duplicate by call id.
     result, seen = [], set()
@@ -61,6 +61,23 @@ def _tool_calls(obj: dict) -> list[dict]:
             seen.add(key)
         result.append(call)
     return result
+
+
+def _tool_output_stats(events: list[dict], calls: list[dict]) -> dict:
+    call_ids = {c.get("call_id") or c.get("id") for c in calls if c.get("call_id") or c.get("id")}
+    outputs, matched, unmatched = set(), set(), 0
+    for event in events:
+        if str(event.get("type", "")).lower() != "response_item": continue
+        item = event.get("payload") or event.get("item") or {}
+        if not isinstance(item, dict) or str(item.get("type", "")).lower() not in ("custom_tool_call_output", "function_call_output"):
+            continue
+        key = item.get("call_id") or item.get("id")
+        if key and key in outputs: continue
+        if key: outputs.add(key)
+        if key and key in call_ids: matched.add(key)
+        else: unmatched += 1
+    return {"tool_outputs": len(outputs), "matched_tool_outputs": len(matched),
+            "pending_tool_calls": len(call_ids - matched), "unmatched_tool_outputs": unmatched}
 
 
 def _count_vector(value: Any) -> dict | None:
@@ -192,6 +209,12 @@ def audit_rollout(events: list[dict], config: dict | None) -> dict:
                 flags.append("nested-model-or-api-command")
         if name not in allowed:
             flags.append("unallowlisted-tool:" + (name or "unknown"))
+        if name in ("exec", "functions.exec") and name in allowed:
+            # `exec` is the required public Code Mode transport, not proof that the
+            # restricted host actually supplied only the frozen read-only tools.
+            proof = config.get("code_mode_host_proof") if isinstance(config, dict) else None
+            if not isinstance(proof, dict) or proof.get("verified") is not True:
+                reasons.append("Code Mode exec host/guard proof missing")
     for e in events:
         # Inspect event metadata only; do not scan arbitrary tool results or prompt text.
         typ = str(e.get("type", "")).lower()
@@ -276,16 +299,16 @@ def _price_counts(usage: dict, prices: dict, tier: str | None = None, date: str 
               "output": usage.get("output_tokens")}
     if any(not isinstance(v, (int, float)) for k, v in needed.items() if k in ("input", "output")):
         return {"usd": None, "status": "unavailable", "reasons": ["required token fields missing"]}
-    missing = [k for k in needed if not isinstance(prices.get(k), (int, float))]
+    missing = [k for k in needed if needed[k] > 0 and not isinstance(prices.get(k), (int, float))]
     if missing:
         return {"usd": None, "status": "unavailable", "reasons": ["price fields missing: " + ",".join(missing)]}
-    parts = {k: needed[k] * prices[k] / 1_000_000 for k in needed}
+    parts = {k: needed[k] * (prices.get(k) if isinstance(prices.get(k), (int, float)) else 0) / 1_000_000 for k in needed}
     return {"usd": sum(parts.values()), "status": "priced", "tier": tier, "parts_usd": parts,
             "price_table_date": date}
 
 
 def parse_rollout(path: str | Path, config: dict | None = None,
-                  pricing: dict | None = None) -> dict:
+                  pricing: dict | None = None, include_report: bool = True) -> dict:
     events, times, models, efforts, tiers = [], [], set(), set(), set()
     malformed = 0
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -318,6 +341,7 @@ def parse_rollout(path: str | Path, config: dict | None = None,
         if key and key in seen: continue
         if key: seen.add(key)
         dedup.append(c)
+    output_stats = _tool_output_stats(events, dedup)
     model = next(iter(models)) if len(models) == 1 else None
     tier = next(iter(tiers)) if len(tiers) == 1 else None
     observed_tier = _normalize_tier(tier)
@@ -327,43 +351,72 @@ def parse_rollout(path: str | Path, config: dict | None = None,
     if audit_config is not None and (malformed or usage_errors):
         audit_config["terminal_verified"] = False
     audit = audit_rollout(events, audit_config)
+    policy_status = audit["status"]
+    runtime_status = "PASS"
+    tier_status = "PASS"
     if not models:
+        runtime_status = "UNKNOWN"
         audit["unknown_reasons"].append("runtime model metadata missing")
         if audit["status"] == "PASS": audit["status"] = "UNKNOWN"
     if len(models) > 1:
+        runtime_status = "FAIL"
         audit["flags"].append("multiple-runtime-models")
         audit["status"] = "FAIL"
     if not efforts:
+        runtime_status = "UNKNOWN" if runtime_status == "PASS" else runtime_status
         audit["unknown_reasons"].append("runtime effort metadata missing")
         if audit["status"] == "PASS": audit["status"] = "UNKNOWN"
     if len(efforts) > 1:
+        runtime_status = "FAIL"
         audit["flags"].append("multiple-runtime-efforts")
         audit["status"] = "FAIL"
     if isinstance(config, dict) and config.get("verified_receipt") is True:
         expected_model = config.get("model")
         expected_effort = config.get("effort")
         if not expected_model:
+            runtime_status = "UNKNOWN" if runtime_status == "PASS" else runtime_status
             audit["unknown_reasons"].append("requested model missing from verified receipt")
         if not expected_effort:
+            runtime_status = "UNKNOWN" if runtime_status == "PASS" else runtime_status
             audit["unknown_reasons"].append("requested effort missing from verified receipt")
         if audit["status"] == "PASS" and (not expected_model or not expected_effort): audit["status"] = "UNKNOWN"
         if expected_model and model and expected_model != model:
+            runtime_status = "FAIL"
             audit["flags"].append("requested-runtime-model-mismatch")
             audit["status"] = "FAIL"
         if expected_effort and next(iter(efforts), None) and expected_effort != next(iter(efforts)):
+            runtime_status = "FAIL"
             audit["flags"].append("requested-runtime-effort-mismatch")
             audit["status"] = "FAIL"
     if observed_tier is None:
-        audit["unknown_reasons"].append("delivered service tier metadata missing")
-        if audit["status"] == "PASS": audit["status"] = "UNKNOWN"
+        tier_status = "UNKNOWN"
     elif requested_tier and observed_tier != requested_tier:
+        tier_status = "FAIL"
         audit["flags"].append("requested-service-tier-mismatch")
         audit["status"] = "FAIL"
-    report = _final_text({"events": events})
+    report = _final_text({"events": events}) if include_report else None
     cost = price_usage(usage, model, tier, pricing)
+    reference_cost = price_usage(usage, model, requested_tier, pricing) if requested_tier and tier_status == "UNKNOWN" else None
+    if tier_status == "UNKNOWN":
+        cost = {"usd": None, "status": "unavailable", "invoice_status": "UNKNOWN",
+                "reasons": ["served service tier is unobserved"]}
+        if reference_cost and reference_cost.get("status") == "priced":
+            cost["requested_tier_reference_estimate"] = {
+                "usd": reference_cost["usd"], "status": "CONDITIONAL_REQUESTED_TIER_ESTIMATE",
+                "tier": requested_tier, "price_table_date": reference_cost.get("price_table_date")}
+    else:
+        cost = {**cost, "invoice_status": "UNKNOWN",
+                "rate_estimate_status": "OBSERVED_TIER_RATE_ESTIMATE" if cost.get("status") == "priced" else cost.get("status")}
+    if audit["status"] == "PASS" and policy_status != "PASS": policy_status = audit["status"]
+    audit["dimensions"] = {"policy": policy_status, "runtime_model_effort": runtime_status,
+                            "service_tier": tier_status, "cost": cost.get("status", "unavailable")}
+    audit["overall_status"] = ("FAIL" if audit["status"] == "FAIL" or runtime_status == "FAIL" or tier_status == "FAIL"
+                               else "UNKNOWN" if audit["status"] == "UNKNOWN" or runtime_status == "UNKNOWN" or tier_status == "UNKNOWN" or cost.get("status") != "priced"
+                               else "PASS")
     return {"path": str(path), "start_local": _local_timestamp(times[0]) if times else None,
             "end_local": _local_timestamp(times[-1]) if times else None, "wall_s": _wall_seconds(times),
             "tool_uses": len(dedup), "tools": [{"name": c.get("name", c.get("tool_name")), "input": _input(c)} for c in dedup],
+            **output_stats,
             "models": sorted(models), "model": model, "efforts": sorted(efforts),
             "effort": next(iter(efforts)) if len(efforts) == 1 else None,
             "service_tiers": sorted(tiers), "requested_service_tier": requested_tier,

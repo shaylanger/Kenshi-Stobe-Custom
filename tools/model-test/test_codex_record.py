@@ -158,6 +158,52 @@ class RecorderTests(unittest.TestCase):
         missing = cr.parse_rollout(self.fixture([]), proof)
         self.assertEqual(missing["audit"]["status"], "UNKNOWN")
 
+    def test_custom_tool_call_counts_once_and_exec_requires_host_guard_proof(self):
+        events = [
+            {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "x1",
+                                                       "id": "x1", "name": "exec", "input": "{}"}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "x1",
+                                                       "id": "x1", "output": "tool output is not a call"}},
+        ]
+        calls = [c for e in events for c in cr._tool_calls(e)]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(cr._tool_output_stats(events, calls), {"tool_outputs": 1,
+                         "matched_tool_outputs": 1, "pending_tool_calls": 0,
+                         "unmatched_tool_outputs": 0})
+        allowed = {"verified_receipt": True, "agents_enabled": False, "multi_agent": False,
+                   "hook_verified": True, "terminal_verified": True, "allowed_tools": ["exec"]}
+        audit = cr.audit_rollout(events, allowed)
+        self.assertEqual(audit["status"], "UNKNOWN")
+        self.assertTrue(any("Code Mode exec host/guard proof missing" in r for r in audit["unknown_reasons"]))
+        denied = dict(allowed, allowed_tools=[])
+        audit = cr.audit_rollout(events, denied)
+        self.assertEqual(audit["status"], "FAIL")
+        self.assertIn("unallowlisted-tool:exec", audit["flags"])
+
+    def test_unobserved_service_tier_is_separate_from_validity_and_cost_is_conditional(self):
+        p = self.fixture([
+            {"type": "thread.started", "thread_id": "root"},
+            {"type": "turn_context", "model": "m", "effort": "low"},
+            {"type": "event_msg", "payload": {"type": "token_count", "info": {
+                "total_token_usage": {"input_tokens": 30, "cached_input_tokens": 5,
+                                      "cache_write_input_tokens": 0, "output_tokens": 4,
+                                      "reasoning_output_tokens": 1, "total_tokens": 34}}}},
+        ])
+        proof = {"verified_receipt": True, "agents_enabled": False, "multi_agent": False,
+                 "hook_verified": True, "terminal_verified": True, "allowed_tools": [],
+                 "model": "m", "effort": "low", "service_tier": "standard"}
+        rates = {"input": 1, "cache_read": .5, "cache_create": None, "output": 2}
+        prices = {"date": "2026-10-16", "models": {"m": {"threshold_tokens": 100,
+                  "standard": {"short": rates, "long": rates}}}}
+        result = cr.parse_rollout(p, proof, prices)
+        self.assertEqual(result["audit"]["status"], "PASS")
+        self.assertEqual(result["audit"]["dimensions"]["service_tier"], "UNKNOWN")
+        self.assertEqual(result["audit"]["overall_status"], "UNKNOWN")
+        self.assertIsNone(result["pricing"]["usd"])
+        self.assertEqual(result["pricing"]["invoice_status"], "UNKNOWN")
+        self.assertEqual(result["pricing"]["requested_tier_reference_estimate"]["status"],
+                         "CONDITIONAL_REQUESTED_TIER_ESTIMATE")
+
     def test_pricing_fails_closed_on_missing_long_tier_and_rates(self):
         u = {"input_tokens": 1, "output_tokens": 2}
         self.assertEqual(cr.price_usage(u, "m", "long", {"models": {"m": {"standard": {}}}})["status"], "unavailable")
