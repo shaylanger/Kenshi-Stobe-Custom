@@ -1,0 +1,66 @@
+diff -ru imm26-nc14/src/ActivityCampNativeAdapter.h imm26-nc15/src/ActivityCampNativeAdapter.h
+--- imm26-nc14/src/ActivityCampNativeAdapter.h	2026-10-16 00:19:17.991516300 -0600
++++ imm26-nc15/src/ActivityCampNativeAdapter.h	2026-10-16 01:09:01.039002700 -0600
+@@ -53,9 +53,21 @@
+   return std::isfinite(static_cast<double>(v)) != 0;
+ #endif
+ }
++// NC15 (row 14-c): TownBase handle serial is 0 for every TownList entry (ACTIVITY_CAMP_TOWNS_DIAG
++// handle_serial_zero:378). Identity is then a nonzero FNV-1a 64 key over the GameData string id plus the
++// rounded position (two towns may share a sid). Handle fields stay informational.
++inline unsigned long long SidKey(const std::string& sid, float x, float z) {
++  std::ostringstream s;
++  s.imbue(std::locale::classic());
++  s << sid << '@' << static_cast<long long>(std::floor(x + 0.5f)) << ',' << static_cast<long long>(std::floor(z + 0.5f));
++  const std::string k = s.str();
++  unsigned long long h = 14695981039346656037ULL;
++  for (std::size_t i = 0; i < k.size(); ++i) { h ^= static_cast<unsigned char>(k[i]); h *= 1099511628211ULL; }
++  return h ? h : 1ULL;
++}
+ inline bool ValidFacts(const TownBaseFacts& f) {
+-  return f.runtimeSerial != 0 && f.handleSerial != 0 &&
+-    f.runtimeSerial == f.handleSerial && !f.gameDataSid.empty() &&
++  return f.runtimeSerial != 0 &&
++    (f.handleSerial == 0 || f.runtimeSerial == f.handleSerial) && !f.gameDataSid.empty() &&
+     f.gameDataSid.size() <= 256 && !f.knownName.empty() && f.knownName.size() <= 256 &&
+     IsFormalCampType(f.townType) && Finite(f.x) && Finite(f.y) && Finite(f.z) &&
+     Finite(f.radius) && f.radius >= 25.0f && f.radius <= 2000.0f;
+diff -ru imm26-nc14/src/ActivityCampTownReader.cpp imm26-nc15/src/ActivityCampTownReader.cpp
+--- imm26-nc14/src/ActivityCampTownReader.cpp	2026-10-16 00:19:18.026032000 -0600
++++ imm26-nc15/src/ActivityCampTownReader.cpp	2026-10-16 01:09:01.056522800 -0600
+@@ -38,13 +38,16 @@
+     facts->townType = static_cast<unsigned int>(town->townType);
+     facts->x = p.x; facts->y = p.y; facts->z = p.z;
+     facts->radius = town->_NV_getRadius();
+-    if (facts->runtimeSerial == 0) return "handle_serial_zero";
+     if (facts->gameDataSid.size() > 256) return "sid_too_long";
+     if (facts->knownName.empty()) return "known_name_empty";
+     if (facts->knownName.size() > 256) return "known_name_too_long";
+     if (!IsFormalCampType(facts->townType)) return "not_formal_type";
+     if (!Finite(facts->x) || !Finite(facts->y) || !Finite(facts->z) || !Finite(facts->radius)) return "non_finite";
+     if (facts->radius < 25.0f || facts->radius > 2000.0f) return "radius_out_of_range";
++    if (facts->runtimeSerial == 0) { // NC15: sid-keyed identity (handle serial is 0)
++      facts->runtimeSerial = SidKey(facts->gameDataSid, facts->x, facts->z);
++      return "ok_sid_keyed";
++    }
+     return "ok";
+   } catch (...) { return "exception"; }
+ }
+@@ -73,7 +76,7 @@
+                << " type=" << f.townType << " r=" << f.radius << " h=" << f.runtimeSerial;
+     }
+     std::ostringstream o;
+-    o << "ACTIVITY_CAMP_TOWNS_DIAG raw=" << entries.size() << " accepted=" << accepted << " types=";
++    o << "ACTIVITY_CAMP_TOWNS_DIAG raw=" << entries.size() << " accepted=" << accepted << " nc15=sid_key types=";
+     for (std::map<unsigned int, unsigned>::const_iterator t = typeTally.begin(); t != typeTally.end(); ++t)
+       o << t->first << ":" << t->second << ",";
+     o << " reasons=";
+@@ -113,6 +116,8 @@
+     facts.townType=static_cast<unsigned int>(town->townType);
+     facts.x=p.x; facts.y=p.y; facts.z=p.z;
+     facts.radius=town->_NV_getRadius();
++    if (facts.runtimeSerial==0 && Finite(facts.x) && Finite(facts.z)) // NC15 sid-keyed identity
++      facts.runtimeSerial=SidKey(facts.gameDataSid,facts.x,facts.z);
+     if (!ValidFacts(facts)) return false;
+     *out=facts;
+     return true;
