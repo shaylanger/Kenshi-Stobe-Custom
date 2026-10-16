@@ -1320,9 +1320,14 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
             except json.JSONDecodeError: pass
     mcp_file = attempt / "frozen-mcp-receipts.jsonl"
     mcp_events = _jsonl(mcp_file) if mcp_file.is_file() else []
-    mcp_ok = bool(mcp_events) and all(e.get("outcome") == "ok" and e.get("method") in {"list", "read", "search", "sql"} for e in mcp_events)
+    # Safe tool rejections (for example a frozen-fixture access denial) are
+    # valid observations. Keep integrity, allowlist, and infrastructure
+    # health separate so only known rejected calls avoid invalidating a run.
+    mcp_health = _mcp_receipt_health(mcp_file)
+    mcp_ok = mcp_health["status"] == "PASS"
     delegation_detected = False
     receipt.update({"guard_events": len(guard_events), "mcp_events": len(mcp_events),
+                    "mcp_health": mcp_health,
                     "native_guard": {"status": "UNAVAILABLE", "events": len(guard_events)},
                     "hook_enforcement": {"status": "UNAVAILABLE",
                         "reason": "pinned CLI hook stdin is a character device with no event payload"},
@@ -1368,6 +1373,63 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     return record(root, rid)
 
 
+def _classify_mcp_receipts(events: list[Any], present: bool) -> dict[str, Any]:
+    """Validate bounded MCP receipt metadata without inspecting call arguments."""
+    allowed = {"list", "read", "search", "sql"}
+    safe_rejections = {"error:FrozenAccessError"}
+    if not present or not events:
+        return {"status": "FAIL", "integrity": "FAIL", "infrastructure": "UNKNOWN",
+                "reason": "missing-or-empty-receipts", "count": len(events)}
+    malformed = unknown = infrastructure = rejected = 0
+    counts: dict[str, int] = {}
+    for event in events:
+        if (not isinstance(event, dict) or set(event) != {"method", "arguments", "outcome"} or
+                not isinstance(event.get("method"), str) or
+                not isinstance(event.get("arguments"), dict) or
+                not isinstance(event.get("outcome"), str)):
+            malformed += 1
+            continue
+        method, outcome = event["method"], event["outcome"]
+        if method not in allowed:
+            unknown += 1
+        elif outcome == "ok":
+            pass
+        elif outcome in safe_rejections:
+            rejected += 1
+        elif outcome.startswith("error:"):
+            infrastructure += 1
+        else:
+            unknown += 1
+        key = f"{method}:{outcome}"
+        counts[key] = counts.get(key, 0) + 1
+    integrity = "PASS" if malformed == 0 and unknown == 0 else "FAIL"
+    infra_status = "FAIL" if infrastructure else "PASS"
+    return {"status": "PASS" if integrity == "PASS" and infra_status == "PASS" else "FAIL",
+            "integrity": integrity, "infrastructure": infra_status,
+            "malformed_count": malformed, "unknown_count": unknown,
+            "infrastructure_error_count": infrastructure,
+            "safe_rejection_count": rejected, "method_outcome_counts": counts,
+            "count": len(events)}
+
+
+def _mcp_receipt_health(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return _classify_mcp_receipts([], False)
+    events, malformed_lines = [], 0
+    with path.open("r", encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                malformed_lines += 1
+    health = _classify_mcp_receipts(events, True)
+    if malformed_lines:
+        health["malformed_count"] += malformed_lines
+        health["integrity"] = health["status"] = "FAIL"
+    health["malformed_line_count"] = malformed_lines
+    return health
+
+
 _REQUIRED_HEADERS = ("Summary", "Root cause", "Evidence", "What you ruled out", "Proposed fix",
                      "How to confirm the fix worked", "What is not settled")
 _CITATION_RE = re.compile(r"(?im)(?:^|[\s(])(?:[A-Za-z]:\\|/)[^\r\n():]+\.[A-Za-z0-9]{1,8}:\d+(?::\d+)?")
@@ -1405,7 +1467,18 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
             host_proof.get("sha256", receipt.get("hostprobe_sha256")))
         requested_modes = codex_status._verify_requested_modes(receipt, rollout)
         requested_modes_verified = requested_modes.get("status") == "PASS"
-        receipt_verified = (receipt.get("verified_receipt") is True and
+        frozen_path = attempt_dir / "frozen-mcp-receipts.jsonl"
+        frozen_health = _mcp_receipt_health(frozen_path)
+        derived_terminal = bool(receipt.get("returncode") == 0 and
+                                receipt.get("report_path") and Path(receipt["report_path"]).is_file() and
+                                rollout.is_file() and frozen_health.get("status") == "PASS")
+        derived_verified = bool(receipt.get("execution_boundary_status") == "BOUNDARY_VERIFIED" and
+                                derived_terminal and not receipt.get("child_rollout_paths") and
+                                receipt.get("delegation_detected") is not True)
+        receipt["mcp_health"] = frozen_health
+        receipt["terminal_verified"] = derived_terminal
+        receipt["verified_receipt"] = derived_verified
+        receipt_verified = (derived_verified and
                             host_verification.get("status") == "PASS" and requested_modes_verified)
         result = codex_record.parse_rollout(rollout, config={
         "verified_receipt": receipt_verified,

@@ -18,6 +18,26 @@ SPEC.loader.exec_module(bench)
 
 
 class BenchTests(unittest.TestCase):
+    def test_mcp_receipt_health_accepts_safe_rejection_but_fails_closed(self):
+        safe = [{"method": "read", "arguments": {}, "outcome": "ok"},
+                {"method": "sql", "arguments": {}, "outcome": "error:FrozenAccessError"}]
+        health = bench._classify_mcp_receipts(safe, True)
+        self.assertEqual(health["status"], "PASS")
+        self.assertEqual(health["safe_rejection_count"], 1)
+        self.assertEqual(health["infrastructure_error_count"], 0)
+        self.assertEqual(bench._classify_mcp_receipts(
+            [{"method": "read", "arguments": {}, "outcome": "error:TimeoutError"}], True)["status"], "FAIL")
+        self.assertEqual(bench._classify_mcp_receipts(
+            [{"method": "mystery", "arguments": {}, "outcome": "ok"}], True)["integrity"], "FAIL")
+        self.assertEqual(bench._classify_mcp_receipts([{"method": "read"}], True)["integrity"], "FAIL")
+        self.assertEqual(bench._classify_mcp_receipts([], True)["status"], "FAIL")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "receipts.jsonl"
+            path.write_text('{"method":"read","arguments":{},"outcome":"ok"}\nnot-json\n', encoding="utf-8")
+            malformed = bench._mcp_receipt_health(path)
+            self.assertEqual(malformed["integrity"], "FAIL")
+            self.assertEqual(malformed["malformed_line_count"], 1)
+
     def test_record_quarantines_failed_attempt_then_promotes_valid_retry_once(self):
         import sys
         sys.path.insert(0, str(MODULE_PATH.parent))
@@ -39,11 +59,16 @@ class BenchTests(unittest.TestCase):
                 (attempt / "requested-config.json").write_text("{}")
                 receipt = {"run": run_id, "attempt": number, "status": "COMPLETE_UNAUDITED",
                            "model": "model", "effort": "low", "service_tier": "standard",
+                           "returncode": 0, "execution_boundary_status": "BOUNDARY_VERIFIED",
+                           "report_path": str(attempt / "report.md"),
                            "verified_receipt": True, "terminal_verified": True,
                            "code_mode_host_proof": {"path": "probe.json", "sha256": "digest"},
                            "requested_config": {}, "config_sha256": "config", "argv_sha256": "argv",
                            "attempt_dir": str(attempt)}
                 (attempt / "launch.json").write_text(json.dumps(receipt), encoding="utf-8")
+                (attempt / "frozen-mcp-receipts.jsonl").write_text(
+                    json.dumps({"method": "read", "arguments": {}, "outcome": "ok"}) + "\n", encoding="utf-8")
+                (attempt / "report.md").write_text("synthetic report", encoding="utf-8")
                 bench._write_json(run_dir / "launch.json", receipt)
                 return attempt
 
