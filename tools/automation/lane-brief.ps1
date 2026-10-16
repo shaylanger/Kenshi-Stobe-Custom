@@ -194,6 +194,19 @@ if ($Predecessor) {
         }
     }
 }
+# PI-32 (confirmed 2026-10-16): spawning an operator records the rig idle reason for the lane's rig so the Stop hook / rig-health do
+# not demand one by hand while the lane launches. Valid for 15 min only (file mtime backdated 45 min; every consumer accepts < 60 min)
+# and it is only read while the game is closed, so it lapses on its own once a game starts. A fresh manual reason is never overwritten.
+if ($PSBoundParameters.ContainsKey('Name') -and -not $NoRemote -and $Runs -eq 'C:\KenshiTestRuns') {
+    try {
+        $idleF = Join-Path $Runs $(if ($Lane -like '4080*') { 'rig4080.idle' } else { 'rig5090.idle' })
+        $freshIdle = (Test-Path -LiteralPath $idleF) -and ((Get-Item -LiteralPath $idleF).LastWriteTime -gt (Get-Date).AddMinutes(-15))
+        if (-not $freshIdle) {
+            Set-Content -LiteralPath $idleF -Value "lane-brief $(Get-Date -Format 'yyyy-MM-dd HH:mm') operator $Name spawned for $Lane, lane launching (auto, 15 min)" -Encoding utf8
+            (Get-Item -LiteralPath $idleF).LastWriteTime = (Get-Date).AddMinutes(-45)
+        }
+    } catch { [Console]::Error.WriteLine("lane-brief: idle-reason record failed: $_") }
+}
 $taskQ = $taskTxt -replace '([`"$])', '`$1'
 $ra = Join-Path $Repo 'testing\live-stobe-queue\imm26-assert'
 $ta = Join-Path $Repo 'tools\automation'
