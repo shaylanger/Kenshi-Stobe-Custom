@@ -10,6 +10,11 @@
 #   BATCH     batch-health.sh <out-dir> (--batch) is not HEALTH OK (HEALTH DONE or HEALTH STALL)
 #   RIG       rig-health.sh exits non-zero (stall, alert, idle with no reason)
 #   BACKSTOP  none of the above for --backstop s (default 600): runs event-sweep.sh and prints its lines after the header
+# BATCHING (PI-10, Shay 2026-10-15): non-urgent events (an agent status rewritten to DONE; an inbox message that starts with INFO / ROWTOOL(S) / LANE-INFO or is
+#   '<agent> DONE|INFO|interim...' and carries no urgent word or '?') do not end the wait. The first one opens a window of EW_BATCH_SEC (default 90 s, 0 = off = old behaviour);
+#   everything that happens meanwhile is printed in ONE wake (one 'EVENT ...' line per item, then 'EVENT BATCH n events over Ns'). Anything urgent
+#   (STATUS FAILED / STOPPED-CONTEXT, DEAD, KILLED, WALL-CLOCK, ORPHANED, STALL, questions, peer/unknown inbox messages, BATCH/RIG health, LANE IDLE/NO-OPERATOR, host stall)
+#   is never delayed: it wakes at once and flushes the buffered items in front of itself. The backstop flushes too. Unknown message formats are urgent (fail open).
 # Inbox and status are checked every --poll s (default 5); batch and rig health every 300 s (EW_HEALTH_EVERY), silently (no model turn).
 # Output: "EVENT <kind> <detail>" then exit 0. Test switches: KAH_RUNS (root, default /mnt/c/KenshiTestRuns), --no-health.
 # kenshi-waker-guard counts this script as a waker (its name is in the command line).
@@ -49,6 +54,28 @@ stall_suppress() {
   [ -z "$sa" ] && return 1
   awk -v s="$sa" -v l="${la:-$sa}" -v f="${EW_STALL_FRESH_MIN:-10}" 'BEGIN{m=(l+0<s+0)?l:s; exit !(m+0<f+0)}'
 }
+BATCH_SEC=${EW_BATCH_SEC:-90}; PEND=(); PEND_T0=0; declare -A SEEN
+# urgent_msg <text>: exit 0 = must wake at once. Non-urgent only when the text is clearly an INFO/DONE report with no alarm word and no question mark.
+urgent_msg() {
+  local t=$1
+  [[ $t == *'?'* ]] && return 0
+  [[ $t =~ (DEAD|KILLED|WALL-CLOCK|FAILED|STOPPED|ORPHANED|STALL|STUCK|IDLE|NO-OPERATOR|ALERT|HEALTH) ]] && return 0
+  [[ $t =~ ^(INFO|ROWTOOLS?|LANE-INFO)([[:space:]:]|$) ]] && return 1
+  [[ $t =~ ^[A-Za-z0-9._-]+[[:space:]]+(DONE|INFO|interim)([[:space:]:]|$) ]] && return 1
+  return 0
+}
+# defer <line>: buffer a non-urgent event (opens the window on the first one)
+defer() { [ "${#PEND[@]}" -eq 0 ] && PEND_T0=$(date +%s); PEND+=("$1"); }
+# flush: print buffered events (called before any wake)
+flush() {
+  local n=${#PEND[@]} l
+  [ "$n" -eq 0 ] && return 0
+  for l in "${PEND[@]}"; do echo "$l"; done
+  echo "EVENT BATCH $n events over $(( $(date +%s) - PEND_T0 ))s"
+  PEND=()
+}
+# wake <line...>: flush the buffer, print the urgent event, end the wait
+wake() { flush; echo "$*"; exit 0; }
 MARK=$(mktemp); trap 'rm -f "$MARK"' EXIT   # created now: status files rewritten after this point are "new"
 start=$(date +%s); last_health=0
 while :; do
@@ -58,7 +85,11 @@ while :; do
   if [ -n "$m" ] && stall_suppress "$(head -c 400 "$INBOX/$m" | tr -d '\r' | tr '\n' ' ')"; then
     mkdir -p "$INBOX/delivered/suppressed"; mv "$INBOX/$m" "$INBOX/delivered/suppressed/"; m=""   # quiet filter: working/gone agent, no wake
   fi
-  if [ -n "$m" ]; then echo "EVENT INBOX $m: $(head -c 300 "$INBOX/$m" | tr -d '\r' | tr '\n' ' ')"; mkdir -p "$INBOX/delivered"; mv "$INBOX/$m" "$INBOX/delivered/"; exit 0; fi
+  if [ -n "$m" ]; then
+    txt=$(head -c 300 "$INBOX/$m" | tr -d '\r' | tr '\n' ' '); mkdir -p "$INBOX/delivered"; mv "$INBOX/$m" "$INBOX/delivered/"
+    if [ "$BATCH_SEC" -gt 0 ] && ! urgent_msg "$txt"; then defer "EVENT INBOX $m: $txt"; continue; fi
+    wake "EVENT INBOX $m: $txt"
+  fi
   # STATUS: an agent status file rewritten since this wait started, now DONE / FAILED / STOPPED-CONTEXT
   while IFS= read -r f; do
     l=$(head -1 "$f" | tr -d '\r')
@@ -70,7 +101,11 @@ while :; do
         case "$h" in /mnt/c/*|/c/*) h="C:\$(printf '%s' "${h#/mnt}" | sed 's|^/c/||; s|/|\|g')";; esac
         rs=" | respawn fresh ${task#task: } from $h (unless a successor such as ${n}2 or ${n}b already runs)"
       fi
-      echo "EVENT STATUS $n $st: $task$rs"; exit 0
+      if [ "$st" = DONE ] && [ "$BATCH_SEC" -gt 0 ]; then
+        sk="$f:$(stat -c %Y "$f")"; [ -n "${SEEN[$sk]:-}" ] && continue
+        SEEN[$sk]=1; defer "EVENT STATUS $n $st: $task"; continue
+      fi
+      wake "EVENT STATUS $n $st: $task$rs"
     fi
   done < <(find "$R/agents" -maxdepth 1 -name '*.status' -newer "$MARK" 2>/dev/null)
   # AGENT-HOST: the hidden daemon that owns the independent agents writes agent-queue/host.state.json every ~2 s; stale > 120 s while it had agents/jobs = restart it hidden and wake
@@ -78,27 +113,29 @@ while :; do
   if [ -f "$hs" ] && [ $(( now - $(stat -c %Y "$hs") )) -gt "${EW_HOST_STALE:-120}" ] && grep -Eq '"(live|queued)": *[1-9]' "$hs"; then
     powershell.exe -NoProfile -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\KenshiModding\tools\automation\agent-host.ps1'" < /dev/null >/dev/null 2>&1
     touch "$hs"
-    echo "EVENT STALL agent-host: heartbeat was > ${EW_HOST_STALE:-120}s old with live/queued agents; restarted it hidden (check agent-rollcall.ps1 and the agents' pids)"; exit 0
+    wake "EVENT STALL agent-host: heartbeat was > ${EW_HOST_STALE:-120}s old with live/queued agents; restarted it hidden (check agent-rollcall.ps1 and the agents' pids)"
   fi
   # BATCH + RIG: silent health checks every 300 s (EW_HEALTH_EVERY); anything not healthy wakes the session
   if [ "$HEALTH" = 1 ] && [ $(( now - last_health )) -ge "${EW_HEALTH_EVERY:-300}" ]; then
     last_health=$now
     if [ -n "$BATCH" ]; then
       b=$(timeout 120 bash "$HERE/batch-health.sh" "$BATCH" 2>&1 | tail -1)
-      case "$b" in "HEALTH OK"*) ;; *) echo "EVENT BATCH ${b:-no output from batch-health}"; exit 0;; esac
+      case "$b" in "HEALTH OK"*) ;; *) wake "EVENT BATCH ${b:-no output from batch-health}";; esac
     fi
     rg=$(timeout 150 bash "$HERE/rig-health.sh" 2>&1); rc=$?
-    if [ "$rc" -ne 0 ]; then echo "EVENT RIG rc=$rc $(printf '%s\n' "$rg" | tail -1)"; exit 0; fi
+    if [ "$rc" -ne 0 ]; then wake "EVENT RIG rc=$rc $(printf '%s\n' "$rg" | tail -1)"; fi
   fi
   # LANES: per-lane activity check (lane-idle.ps1: operator RUNNING + status/evidence younger than 6 min); wakes on LANE IDLE / LANE NO-OPERATOR
   if [ "$HEALTH" = 1 ] && [ $(( now - ${last_lane:-0} )) -ge "${EW_LANE_EVERY:-90}" ]; then
     last_lane=$now
     li=$(timeout 60 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\KenshiModding\tools\automation\lane-idle.ps1' 2>&1 < /dev/null | tr -d '\r')
-    case "$li" in *"LANE IDLE"*|*"LANE NO-OPERATOR"*) echo "EVENT LANE $(printf '%s\n' "$li" | grep -E 'LANE (IDLE|NO-OPERATOR)' | head -5 | tr '\n' ' ')"; exit 0;; esac
+    case "$li" in *"LANE IDLE"*|*"LANE NO-OPERATOR"*) wake "EVENT LANE $(printf '%s\n' "$li" | grep -E 'LANE (IDLE|NO-OPERATOR)' | head -5 | tr '\n' ' ')";; esac
   fi
   # BACKSTOP: nothing else happened for --backstop seconds; the sweep catches what no sender reported
   if [ $(( now - start )) -ge "$BACK" ]; then
-    echo "EVENT BACKSTOP after $(( now - start ))s"; bash "$HERE/event-sweep.sh" 2>&1; exit 0
+    flush; echo "EVENT BACKSTOP after $(( now - start ))s"; bash "$HERE/event-sweep.sh" 2>&1; exit 0
   fi
+  # BATCH WINDOW: the first non-urgent event is old enough: one wake with everything collected
+  if [ "${#PEND[@]}" -gt 0 ] && [ $(( now - PEND_T0 )) -ge "$BATCH_SEC" ]; then flush; exit 0; fi
   sleep "$POLL"
 done
