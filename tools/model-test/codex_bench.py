@@ -291,7 +291,12 @@ def _thread_id(events: list[dict[str, Any]]) -> str | None:
 
 def _rollout_id(path: Path) -> str | None:
     for event in _jsonl(path):
-        for item in (event, event.get("payload", {}) if isinstance(event.get("payload"), dict) else {}):
+        payload = event.get("payload", {}) if isinstance(event.get("payload"), dict) else {}
+        if event.get("type") in {"session_meta", "session.started", "thread.started"}:
+            for item in (event, payload):
+                value = item.get("thread_id") or item.get("session_id") or item.get("id")
+                if isinstance(value, str): return value
+        for item in (event, payload):
             if item.get("type") in {"session_meta", "session.started", "thread.started"}:
                 value = item.get("thread_id") or item.get("session_id") or item.get("id")
                 if isinstance(value, str): return value

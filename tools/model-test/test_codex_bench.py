@@ -217,6 +217,15 @@ See C:\\KenshiModding\\src\\module.py:42
                 with self.assertRaises(bench.BenchError):
                     bench._strict_exec_config_probe(Path("codex.exe"), {}, Path(tmp))
 
+    def test_rollout_id_reads_session_meta_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rollout = Path(tmp) / "rollout.jsonl"
+            rollout.write_text(json.dumps({
+                "type": "session_meta",
+                "payload": {"id": "thread-123", "session_id": "thread-123"},
+            }) + "\n", encoding="utf-8")
+            self.assertEqual(bench._rollout_id(rollout), "thread-123")
+
     def test_prepare_refreshes_untouched_prompt_and_receipts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "suite"
