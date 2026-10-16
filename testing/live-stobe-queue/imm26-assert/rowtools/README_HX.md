@@ -34,3 +34,10 @@ Env knobs (also read from the environment): `ROW_NPC HX_SAVE HX_SAVE2 HX_SPOT HX
 
 ## Family B rows (imm26-hxB)
 05-cx: `hxrun.sh 05-cx 5090-i3 [--dry]` (hxdefs_b.sh, hxcheck_b.py; E empty roster + H one sleeper on load 1, N 3+ visible on load 2; verdict assert_principle.py 05-cx). Selftest: `bash rowtools/hx-selftest_b.sh` -> `SELFTEST HXB ALL PASS 21/21`. 03-cx has no script: the TESTS row already holds a 4080 PASS.
+
+## v3 fixes (imm26-fix15bx05cx, from imm26-inv15bx; NEW files, nothing existing edited)
+- 05-cx v3: `bash rowtools/hxrun_cx3.sh 05-cx <lane> [same options as hxrun_cx2.sh] --allow-retry "cx3 keep regex"` (hxdefs_cx3.sh). Fix: the keep regex now matches the first `chars` entry (`N within R: Cind`), so Cind is no longer exiled next to the pinned Malzin; new SETUP-FAIL "NPC under test not within 60 u of Shay" before every E sample; infonpc rows are deleted after Malzin is pinned. Selftest: `bash rowtools/hx-selftest_cx3.sh`.
+- 15-bx v3: `bash rowtools/unblockdefs_c_v3.sh 15-bx <lane> [same options as v2] --allow-retry "v3 scene: ko"`. S1 is KO'd (`ko <s1> 900`, gate on "unconscious":true, `ko <s1> 120` re-issued before the sample) instead of `sleep`; active social_rumor claims are retired in ub15_scene; ub15_pair waits <= 20 s for the server rename. Env HX15_KO_S (900). Selftest: `bash rowtools/unblock_c_v3_selftest.sh`. (v2 holds 15-bx only, there is no 16-bx entry in it.)
+
+## Row runners 02-bx / 02-dx
+See `README_02BD.md`: `hxrun_02bd.sh <02-bx|02-dx> <lane> --save A --save2 B` (imm26-rr02).
