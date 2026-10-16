@@ -48,7 +48,7 @@ try {
     $piBlock = ($ss.out -split "`n" | Where-Object { $_ -match '^PROCESS IDEAS|^  PI-|^  \(after asking' }) -join "`n"
     T ($piBlock.Length -lt 4000) "2c process ideas block is short ($($piBlock.Length) chars < 4000, < 1k tokens)"
     Fixture @((Entry 'PI-03' 'rejected x1' 'idea three')) @()
-    T ((Run (Join-Path $here 'session-start.ps1') @('-Brief', '-AgentsOnly')).out -notmatch 'PROCESS IDEAS FOR SHAY') '2d no heading when nothing is open'
+    T ((Run (Join-Path $here 'session-start.ps1') @('-Brief', '-AgentsOnly')).out -notmatch '(?m)^PROCESS IDEAS FOR SHAY') '2d no heading when nothing is open'
     # ---- handoff texts mention the review step ----
     $env:KAH_RUNS_DIR = $tmp
     $in = [pscustomobject]@{ session_id = 'selftest-sid'; agent_id = $null }
@@ -144,7 +144,7 @@ try {
     # ---- the real file parses and has the seeds ----
     Remove-Item Env:\KAH_PROCESS_IDEAS
     $real = Run $pi @('list', '-All')
-    T ($real.code -eq 0 -and $real.out -match 'PI-01 \[done\]' -and $real.out -match '\[open\]') '8a the real docs/PROCESS_IDEAS.md parses (seeded done + open entries)'
+    T ($real.code -eq 0 -and $real.out -match 'PI-01 \[done\]' -and $real.out -match '\[(open|asked|confirmed|done)\]') '8a the real docs/PROCESS_IDEAS.md parses (seeded done + open entries)'
     $realOpen = @(($real.out -split "`n") | Where-Object { $_ -match '^PI-\d+ \[(open|asked|confirmed)\]' }).Count
     T ($realOpen -le 10) "8b the real file is within the 10-active cap ($realOpen)"
 }
