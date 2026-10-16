@@ -482,8 +482,21 @@ def median(xs):
 
 
 # ---------------------------------------------------------------- cost
+def agent_ref(name):
+    """cost-audit matches transcripts by agent id, not by the imm26 name: map name -> id via agents/ids.json (agent-ids.ps1); unknown names pass through."""
+    try:
+        path = next((x for x in ("C:/KenshiTestRuns/agents/ids.json", "/mnt/c/KenshiTestRuns/agents/ids.json") if os.path.isfile(x)), None)
+        with open(path, encoding="utf-8-sig") as f:
+            rec = json.load(f).get(name)
+        if isinstance(rec, dict) and rec.get("id"):
+            return rec["id"]
+    except Exception:
+        pass
+    return name
+
+
 def run_cost(script, a, b, since, until):
-    cmd = [sys.executable, script, "--pilot-compare", a, b]
+    cmd = [sys.executable, script, "--pilot-compare", agent_ref(a), agent_ref(b)]
     if since:
         cmd += ["--since", since]
     if until:

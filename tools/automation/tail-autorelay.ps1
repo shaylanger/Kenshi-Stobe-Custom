@@ -9,6 +9,10 @@
 # Exits when every owned agent is relayed, when the tail flag is gone, or after -MaxMinutes (0 = no limit). -Once = one pass (selftest).
 # One log line per relay on stdout and in <runs>\tail\autorelay.log. Manual tail-relay.ps1 relays stay allowed (an agent relayed by hand
 # before this runs is still relayed once more only if it has no state entry: use -Skip <agent,...> to leave such agents out).
+# Cheap tail (Shay 2026-10-16): owned = flag agents + ledger owner tail:<id> + agents registered in agents\ids.json by the tail's session (agents that are in
+# no program ledger still get relayed); the state file is re-read under a cross-process mutex for every pass, so two instances (or tail-wait's -Once
+# retry) never relay the same agent+status twice; an agent whose relay file already exists (manual tail-relay.ps1, or moved to delivered\ / done\) is
+# recorded as relayed, not re-sent; a second long-running instance for the same tail exits at once. `tail-mode.ps1 enter` starts this script itself.
 # Env: KAH_RUNS_DIR (default C:\KenshiTestRuns), KPL_DIR. Selftest: tail-autorelay-selftest.ps1.
 param(
     [Parameter(Mandatory)][string]$TailSession,
@@ -26,7 +30,7 @@ $env:KAH_RUNS_DIR = $arRuns                       # children (tail-relay, progra
 if ($RunsDir -and -not $env:KPL_DIR) { $env:KPL_DIR = Join-Path $arRuns 'programs' }
 $arRelay = Join-Path $PSScriptRoot 'tail-relay.ps1'
 $arTail = Get-TailDir $arRuns
-$arSafe = ($TailSession -replace '[\\/:*?"<>|]', '_')
+$arSafe = ($TailSession -replace '[\/:*?"<>|]', '_')
 $arStateFile = Join-Path $arTail "$arSafe.autorelay.json"
 $arLog = Join-Path $arTail 'autorelay.log'
 $arSkipList = @($Skip | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
@@ -52,13 +56,12 @@ function Write-ArLog([string]$line) {
     try { New-Item -ItemType Directory -Force -Path $arTail | Out-Null; Add-Content -LiteralPath $arLog -Value $l } catch { }
 }
 
-# The agents this tail owns now (flag list + ledger owner), same rule as Get-TailAgentSet.
-function Get-OwnedNames($flag) {
-    $names = New-Object Collections.ArrayList
-    foreach ($a in $flag.Agents) { if ($a -and $names -notcontains $a) { [void]$names.Add($a) } }
-    foreach ($r in @(Get-LedgerAgentRecords $arRuns)) { if ($r.Owner -eq "tail:$($flag.Session)" -and $names -notcontains $r.Agent) { [void]$names.Add($r.Agent) } }
-    return @($names)
-}
+# The agents this tail owns now (flag list + ledger owner + ids.json, tail-mode.ps1 Get-TailOwnedNames).
+function Get-OwnedNames($flag) { return @(Get-TailOwnedNames $arRuns $flag) }
+
+# One pass at a time per tail, across processes (named mutex; abandoned = the previous owner died, still ours).
+$arPass = New-Object Threading.Mutex($false, "Global\tail-autorelay-pass-$arSafe")
+function Enter-ArPass { try { return $arPass.WaitOne(90000) } catch [Threading.AbandonedMutexException] { return $true } }
 
 # Summary: first 30 non-empty lines + every DECISION/QUESTION line (reserved room first, so the relay's 30-line cut cannot drop one).
 function Build-Summary([string]$agentName, [string]$state, [string]$reportPath, [string]$statusPath) {
@@ -97,29 +100,46 @@ function Invoke-OneRelay([string]$agentName, [string]$state) {
 }
 
 $deadline = if ($MaxMinutes -gt 0) { (Get-Date).AddMinutes($MaxMinutes) } else { $null }
-$state = Read-ArState
+if (-not $Once) {   # single long-running instance per tail
+    $arLife = New-Object Threading.Mutex($false, "Global\tail-autorelay-life-$arSafe")
+    $got = $false
+    try { $got = $arLife.WaitOne(0) } catch [Threading.AbandonedMutexException] { $got = $true }
+    if (-not $got) { Write-ArLog 'exit: another auto-relay instance already runs for this tail'; exit 0 }
+}
 Write-ArLog "start poll=${PollSec}s once=$([bool]$Once) state=$arStateFile"
 while ($true) {
     $fp = Get-TailFlagPath $arRuns $TailSession
     $flag = if (Test-Path -LiteralPath $fp) { Read-TailFlag $fp } else { $null }
     if (-not $flag) { Write-ArLog 'exit: tail flag gone (or unreadable)'; break }
-    $names = @(Get-OwnedNames $flag)
-    $allDone = ($names.Count -gt 0)
-    foreach ($n in $names) {
-        if ($arSkipList -contains $n) { continue }
-        $st = Get-AgentStatusState $arRuns $n
-        if ($TAIL_TERMINAL -notcontains $st.State) { $allDone = $false; continue }
-        $key = "$n|$($st.State)"
-        if ($state.ContainsKey($key)) { continue }
-        $r = Invoke-OneRelay $n $st.State
-        if ($r.Ok) {
-            $state[$key] = (Get-Date).ToString('o'); Save-ArState $state
-            Write-ArLog "relayed $n $($st.State) report=$(if ($r.Report) { $r.Report } else { '(none)' }) $($r.Info)"
-        } else {
-            $allDone = $false
-            Write-ArLog "RELAY-FAILED $n $($st.State): $($r.Info) (retry next poll)"
+    if (-not (Enter-ArPass)) { Write-ArLog 'WARNING: pass lock busy > 90 s, skipping this pass'; Start-Sleep -Seconds $PollSec; continue }
+    try {
+        $state = Read-ArState        # re-read under the lock: another instance may have relayed meanwhile
+        $names = @(Get-OwnedNames $flag)
+        $allDone = ($names.Count -gt 0)
+        foreach ($n in $names) {
+            if ($arSkipList -contains $n) { continue }
+            $st = Get-AgentStatusState $arRuns $n
+            if ($TAIL_TERMINAL -notcontains $st.State) { $allDone = $false; continue }
+            $key = "$n|$($st.State)"
+            if ($state.ContainsKey($key)) { continue }
+            # already relayed by hand / moved to delivered\ or done\ since this status was written: record it, do not send a duplicate
+            $doneAt = (Get-Date).AddMinutes(-$st.AgeMin)
+            $had = Get-TailRelayState $arRuns $flag $n $doneAt.AddMinutes(1)
+            if ($had.Relayed) {
+                $state[$key] = (Get-Date).ToString('o'); Save-ArState $state
+                Write-ArLog "already-relayed $n $($st.State) (relay file exists, not re-sent)"
+                continue
+            }
+            $r = Invoke-OneRelay $n $st.State
+            if ($r.Ok) {
+                $state[$key] = (Get-Date).ToString('o'); Save-ArState $state
+                Write-ArLog "relayed $n $($st.State) report=$(if ($r.Report) { $r.Report } else { '(none)' }) $($r.Info)"
+            } else {
+                $allDone = $false
+                Write-ArLog "RELAY-FAILED $n $($st.State): $($r.Info) (retry next poll)"
+            }
         }
-    }
+    } finally { try { $arPass.ReleaseMutex() } catch { } }
     if ($names.Count -eq 0) { Write-ArLog 'exit: the tail owns no agents'; break }
     if ($allDone) { Write-ArLog "exit: all $($names.Count) owned agent(s) relayed"; break }
     if ($Once) { Write-ArLog 'exit: -Once pass done'; break }

@@ -109,30 +109,75 @@ function Get-AgentStatusState([string]$runs, [string]$agent) {
 # (moved to <inbox>\delivered\ by the new coordinator's event-wait) or when TAIL_ACK_GRACE_MIN minutes passed since that relay file was written.
 # The ack stays in the ledger (tail-ack.ps1) but no longer gates the tail. No relay file written after the agent's DONE = still pending.
 $TAIL_ACK_GRACE_MIN = 5
+# Cheap tail (Shay 2026-10-16): a relay counts wherever it is under the inbox: top level = written (5 min grace), ANY subdirectory
+# (delivered\, done\, ...) = the new coordinator consumed it = delivered. The autorelay state file (tail\<session>.autorelay.json) is the last
+# resort when the relay file itself was deleted/archived away. Duplicate relay files of one agent are harmless (best = newest).
 function Get-TailRelayState([string]$runs, $flag, [string]$agent, [datetime]$doneAt) {
     $inboxes = @((Join-Path (Get-TailRuns $runs) 'inbox\coordinator'))
     if ($flag.Inbox -and ($inboxes -notcontains $flag.Inbox)) { $inboxes += $flag.Inbox }
     $best = $null; $delivered = $false
     foreach ($ib in $inboxes) {
-        foreach ($loc in @(@($ib, $false), @((Join-Path $ib 'delivered'), $true))) {
-            if (-not (Test-Path -LiteralPath $loc[0])) { continue }
-            foreach ($f in @(Get-ChildItem -LiteralPath $loc[0] -Filter "*-tail-$agent.msg" -File -ErrorAction SilentlyContinue)) {
-                if ($f.LastWriteTime -lt $doneAt.AddMinutes(-1)) { continue }   # relay of an earlier run of a same-named agent
-                if (-not $best -or $f.LastWriteTime -gt $best.LastWriteTime) { $best = $f }
-                if ($loc[1]) { $delivered = $true }
-            }
+        if (-not (Test-Path -LiteralPath $ib)) { continue }
+        $ibFull = [IO.Path]::GetFullPath($ib).TrimEnd('\')
+        foreach ($f in @(Get-ChildItem -LiteralPath $ib -Filter "*-tail-$agent.msg" -File -Recurse -ErrorAction SilentlyContinue)) {
+            if ($f.LastWriteTime -lt $doneAt.AddMinutes(-1)) { continue }   # relay of an earlier run of a same-named agent
+            if (-not $best -or $f.LastWriteTime -gt $best.LastWriteTime) { $best = $f }
+            if ([IO.Path]::GetFullPath($f.DirectoryName).TrimEnd('\') -ne $ibFull) { $delivered = $true }   # moved out of the inbox top level
         }
     }
-    if (-not $best) { return @{ Relayed = $false; Delivered = $false; AgeMin = 0 } }
-    return @{ Relayed = $true; Delivered = $delivered; AgeMin = ((Get-Date) - $best.LastWriteTime).TotalMinutes }
+    if ($best) { return @{ Relayed = $true; Delivered = $delivered; AgeMin = ((Get-Date) - $best.LastWriteTime).TotalMinutes } }
+    try {
+        $sf = Join-Path (Get-TailDir $runs) (([string]$flag.Session -replace '[\\/:*?"<>|]', '_') + '.autorelay.json')
+        if (Test-Path -LiteralPath $sf) {
+            $j = (Get-Content -LiteralPath $sf -Raw -ErrorAction Stop).TrimStart([char]0xFEFF) | ConvertFrom-Json -ErrorAction Stop
+            foreach ($p in $j.relayed.PSObject.Properties) {
+                if ($p.Name -notlike "$agent|*") { continue }
+                $t = [datetime]::Parse([string]$p.Value)
+                if ($t -ge $doneAt.AddMinutes(-1)) { return @{ Relayed = $true; Delivered = $false; AgeMin = ((Get-Date) - $t).TotalMinutes } }
+            }
+        }
+    } catch { }
+    return @{ Relayed = $false; Delivered = $false; AgeMin = 0 }
+}
+
+# Cheap tail (Shay 2026-10-16): in-session subagents are only known to the session that spawned them. The spawner registers every agent in
+# <runs>\agents\ids.json right after the Agent call (agent-ids.ps1 add <name> <id> [<session>]; the session defaults to coordinator.current).
+# A tail therefore also owns every registered agent whose session == the tail's session id, provided the agent is live (status RUNNING < 45 min)
+# or its status file changed since the tail started (a result nobody has seen). Older finished agents were already handled by the coordinator.
+function Get-TailIdsAgents([string]$runs, [string]$session, [string]$createdIso = '') {
+    $out = @()
+    try {
+        $f = Join-Path (Join-Path (Get-TailRuns $runs) 'agents') 'ids.json'
+        if (-not (Test-Path -LiteralPath $f)) { return @() }
+        $j = (Get-Content -LiteralPath $f -Raw -ErrorAction Stop).TrimStart([char]0xFEFF) | ConvertFrom-Json -ErrorAction Stop
+        $since = (Get-Date).AddHours(-6)
+        try { if ($createdIso) { $since = [datetimeoffset]::Parse($createdIso).LocalDateTime.AddMinutes(-1) } } catch { }
+        foreach ($p in $j.PSObject.Properties) {
+            if ([string]$p.Value.session -ne $session) { continue }
+            $st = Get-AgentStatusState $runs $p.Name
+            if (-not $st.State) { continue }
+            $changed = ((Get-Date).AddMinutes(-$st.AgeMin) -ge $since)
+            $live = ($TAIL_TERMINAL -notcontains $st.State) -and ($st.AgeMin -lt 45)
+            if ($changed -or $live) { $out += [string]$p.Name }
+        }
+    } catch { }
+    return @($out)
+}
+
+# Every agent a tail owns: flag list + ledger owner tail:<session> + ids.json agents spawned by that session (see above).
+function Get-TailOwnedNames([string]$runs, $flag, $recs = $null) {
+    if ($null -eq $recs) { $recs = @(Get-LedgerAgentRecords $runs) }
+    $names = New-Object Collections.ArrayList
+    foreach ($a in $flag.Agents) { if ($a -and $names -notcontains $a) { [void]$names.Add($a) } }
+    foreach ($r in $recs) { if ($r.Owner -eq "tail:$($flag.Session)" -and $names -notcontains $r.Agent) { [void]$names.Add($r.Agent) } }
+    foreach ($a in @(Get-TailIdsAgents $runs $flag.Session $flag.Created)) { if ($names -notcontains $a) { [void]$names.Add($a) } }
+    return @($names)
 }
 
 # The agents a tail flag owns, with their state. Pending = still running, or finished but neither acknowledged nor (relay delivered / ack grace over).
 function Get-TailAgentSet([string]$runs, $flag) {
     $recs = @(Get-LedgerAgentRecords $runs)
-    $names = New-Object Collections.ArrayList
-    foreach ($a in $flag.Agents) { if ($a -and $names -notcontains $a) { [void]$names.Add($a) } }
-    foreach ($r in $recs) { if ($r.Owner -eq "tail:$($flag.Session)" -and $names -notcontains $r.Agent) { [void]$names.Add($r.Agent) } }
+    $names = @(Get-TailOwnedNames $runs $flag $recs)
     $res = @()
     foreach ($n in $names) {
         $rec = $recs | Where-Object { $_.Agent -eq $n } | Select-Object -First 1
@@ -154,7 +199,7 @@ function Get-TailAgentSet([string]$runs, $flag) {
                elseif ($relayOk) { "$sn, $relayWhy" }
                elseif (-not $rec) { "$sn, no ledger record" }
                else { "$sn, not acknowledged" }
-        $res += [pscustomobject]@{ Agent = $n; Program = $(if ($rec) { $rec.Program } else { '' }); State = $st.State; Acked = $acked; Pending = $pending; Why = $why; Hint = $(if ($relayWhy -and -not $relayOk) { $relayWhy } else { '' }); Sig = "$n|$($st.State)|$acked|$running|$relayOk|$($relayWhy -replace '\d+ min','N min')" }
+        $res += [pscustomobject]@{ Agent = $n; AgeMin = $st.AgeMin; Program = $(if ($rec) { $rec.Program } else { '' }); State = $st.State; Acked = $acked; Pending = $pending; Why = $why; Hint = $(if ($relayWhy -and -not $relayOk) { $relayWhy } else { '' }); Sig = "$n|$($st.State)|$acked|$running|$relayOk|$($relayWhy -replace '\d+ min','N min')" }
     }
     return @($res)
 }
@@ -395,6 +440,7 @@ switch ($TailCmd.ToLowerInvariant()) {
         }
         foreach ($a in $Agents) { foreach ($x in ($a -split ',')) { $x = $x.Trim(); if ($x -and $names -notcontains $x) { [void]$names.Add($x) } } }
         foreach ($r in (Get-LedgerAgentRecords $runsDir)) { if ($r.Owner -eq "tail:$s" -and $names -notcontains $r.Agent) { [void]$names.Add($r.Agent) } }
+        foreach ($a in @(Get-TailIdsAgents $runsDir $s $created)) { if ($names -notcontains $a) { [void]$names.Add($a) } }   # registered in agents\ids.json by this session
         $idn = Get-ProcIdentity $cp
         $relayKeep = ''
         if ($old -and $old.RelayTo) { $relayKeep = $old.RelayTo }
@@ -402,6 +448,19 @@ switch ($TailCmd.ToLowerInvariant()) {
         "TAIL MODE ON: session $s pid $cp, flag $fp, agents: $(if ($names.Count) { $names -join ', ' } else { 'none' })"
         $ptrNow = Read-CoordPointer $runsDir
         if ($ptrNow -and $ptrNow.Session -eq $s) { 'NOTE: coordinator.current still names this session; the new coordinator''s session-start.ps1 replaces it (until then relays use the inbox file only).' }
+        # Cheap tail (Shay 2026-10-16): start the model-free auto-relay NOW (detached, hidden), so no model turn is needed to relay finished agents.
+        # Only for the real runs dir (or KAH_TAIL_AUTORELAY=1); never in selftest sandboxes; KAH_TAIL_NO_AUTORELAY=1 disables. The script holds a
+        # single-instance lock, so a second start (the old manual `tail-autorelay.sh`) just exits.
+        if ($env:KAH_TAIL_NO_AUTORELAY -ne '1' -and ($env:KAH_TAIL_AUTORELAY -eq '1' -or (Get-TailRuns $Runs) -eq 'C:\KenshiTestRuns')) {
+            try {
+                $arScript = Join-Path $PSScriptRoot 'tail-autorelay.ps1'
+                $wa = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$arScript`" -TailSession `"$s`" -RunsDir `"$runsDir`""
+                $si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
+                $rr = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "powershell.exe $wa"; ProcessStartupInformation = $si } -ErrorAction Stop
+                if ($rr.ReturnValue -eq 0) { "AUTO-RELAY started (pid $($rr.ProcessId), log $(Join-Path (Get-TailDir $runsDir) 'autorelay.log')): finished agents are relayed with NO model turn; arm tail-wait.ps1 next." }
+                else { "WARNING: auto-relay did not start (WMI return $($rr.ReturnValue)); run: bash C:/KenshiModding/tools/automation/tail-autorelay.sh $s (background)" }
+            } catch { "WARNING: auto-relay did not start ($($_.Exception.Message)); run: bash C:/KenshiModding/tools/automation/tail-autorelay.sh $s (background)" }
+        }
         'When ALL your agents are done and acknowledged, close yourself: tail-close.ps1 -Session ' + $s + ' (sends TAIL-DONE to the current coordinator, then ends this process after ~20 s; the Stop hook does it automatically when you may end).'
         'From now on: spawn nothing, edit nothing, decide nothing; keep your event-wait waker; relay each finished agent to the new coordinator; end only when all are done AND acknowledged.'
         exit 0

@@ -4,6 +4,8 @@
 # pid, process start time and a heartbeat every IntervalSec (<=15) so the Stop hook can prove the wait is alive; the hook then lets the turn END
 # instead of blocking, and the session is woken by this task's completion. Exits (prints one line, exit 0) as soon as the tail has something to do:
 #   an owned agent finished/stalled and needs its relay/ack, or every agent is released, or the flag is gone, or MaxHours passed.
+# Cheap tail: finished agents are relayed by tail-autorelay.ps1 (started by `tail-mode.ps1 enter`; this wait also re-runs it with -Once every 15 s while
+# one is unrelayed) and the wait does NOT end for them; it ends when a relay is still missing after 3 min, a stall/failure needs a decision, or all are released.
 # Re-arm it after handling the wake-up (relay, then run it again). Nothing else is read or written except the .wait file.
 param(
     [Parameter(Mandatory)][string]$Session,
@@ -22,6 +24,8 @@ $wf = Get-TailWaitPath $runsDir $Session
 $me = Get-Process -Id $PID
 $armed = (Get-Date).ToString('o')
 $deadline = (Get-Date).AddHours($MaxHours)
+$arScript = Join-Path $PSScriptRoot 'tail-autorelay.ps1'
+$lastRetry = (Get-Date).AddHours(-1)
 function Write-Wait {
     $o = [ordered]@{ session = $Session; pid = $PID; proc_start = $me.StartTime.ToString('o'); armed = $armed; hb = (Get-Date).ToString('o'); interval = $IntervalSec; script = 'tail-wait.ps1' }
     $tmp = "$wf.$PID.tmp"
@@ -36,6 +40,11 @@ try {
         if (-not (Test-Path -LiteralPath $flagPath)) { $reason = "tail flag $flagPath is gone (tail left or was closed)"; break }
         $flag = Read-TailFlag $flagPath
         if (-not $flag) { $reason = 'tail flag unreadable'; break }
+        # Cheap tail (Shay 2026-10-16): a finished agent nobody relayed yet is relayed HERE (autorelay -Once, no model) before the model is woken.
+        if ($env:KAH_TAILWAIT_NO_RETRY -ne '1' -and ((Get-Date) - $lastRetry).TotalSeconds -ge $TAILWAIT_RETRY_SEC -and @(Get-TailUnrelayedAgents $runsDir $flag).Count) {
+            $lastRetry = Get-Date
+            try { & powershell -NoProfile -ExecutionPolicy Bypass -File $arScript -TailSession $Session -RunsDir $runsDir -Once *> $null } catch { }
+        }
         $reason = Get-TailWaitAction $runsDir $flag
         if ($reason) { break }
         Write-Wait

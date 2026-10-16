@@ -12,14 +12,28 @@ $TAILWAIT_HB_MAX_SEC = 45     # heartbeat older than this = stale (the wait beat
 
 function Get-TailWaitPath([string]$runs, [string]$session) { Join-Path (Get-TailDir $runs) (($session -replace '[\\/:*?"<>|]', '_') + '.wait') }
 
-# What the tail still has to DO (empty = nothing: only running agents, or relays written and waiting for delivery/grace).
-# Non-empty = the reason the wait must end / the hook must keep blocking.
+# Cheap tail (Shay 2026-10-16): the wait must not wake the model for a finished agent that the auto-relay (tail-autorelay.ps1, 7 s poll) is
+# about to relay. A terminal agent without a relay file/state is "in retry" for TAILWAIT_RELAY_RETRY_MIN minutes (the wait itself re-runs
+# `tail-autorelay.ps1 -Once` every TAILWAIT_RETRY_SEC while any is unrelayed); only after that is the relay genuinely missing and the tail
+# is needed. A relay file ANYWHERE under inbox\coordinator (top level, delivered\, done\, ...) or the autorelay state counts as relayed
+# (Get-TailRelayState in tail-mode.ps1), and an acked agent is never pending.
+$TAILWAIT_RELAY_RETRY_MIN = 3
+$TAILWAIT_RETRY_SEC = 15
+
+# Terminal, unacked agents with no relay yet (the ones the autorelay still has to do).
+function Get-TailUnrelayedAgents([string]$runs, $flag) {
+    @(Get-TailAgentSet $runs $flag | Where-Object { $_.Pending -and $_.Why -ne 'running' -and $_.Hint -like 'not relayed yet*' })
+}
+
+# What the tail still has to DO (empty = nothing: only running agents, relays awaiting the autorelay's retry, or relays written and waiting for
+# delivery/grace). Non-empty = the reason the wait must end / the hook must keep blocking.
 function Get-TailWaitAction([string]$runs, $flag) {
     $set = @(Get-TailAgentSet $runs $flag | Where-Object { $_.Pending })
     if (-not $set.Count) { return 'all owned agents are released: nothing left to wait for (the tail may end and closes itself)' }
     foreach ($a in $set) {
         if ($a.Why -eq 'running') { continue }
         if ($a.Hint -like 'relay not delivered yet*') { continue }   # relay already written: only the new coordinator's delivery / the 5 min grace is pending
+        if ($a.Hint -like 'not relayed yet*' -and $a.AgeMin -lt $TAILWAIT_RELAY_RETRY_MIN) { continue }   # autorelay still within its retry window
         return "agent $($a.Agent) needs the tail: $($a.Why)$(if ($a.Hint) { ' (' + $a.Hint + ')' })"
     }
     return ''

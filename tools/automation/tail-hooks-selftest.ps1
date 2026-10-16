@@ -164,8 +164,12 @@ try {
     $outs = @(); for ($i = 0; $i -lt 8; $i++) { $outs += ((Guard 'SW') -join "`n").Trim() }
     T (@($outs | Where-Object { $_ -ne '' }).Count -eq 0 -and (Get-Content (Join-Path $d 'tail\SW.blocks') -Raw | ConvertFrom-Json).count -eq 2) 'PI-28: 8 more armed Stops all pass and do not touch the block counter'
     Status 'w1' 'DONE'
+    # cheap tail (2026-10-16): a JUST finished agent is inside the auto-relay window (the model is not needed); the wait relays it itself
     $o = (Guard 'SW') -join "`n"
-    T ($o -match '"decision":"block"' -and $o -match 'w1') 'PI-28: armed wait but an owned agent just finished (needs relay) -> still blocked'
+    T ($o.Trim() -eq '') 'cheap tail: armed wait, owned agent finished 0 min ago and not relayed yet (auto-relay window) -> turn may end'
+    Age (Join-Path $d 'agents\w1.status') 4   # still unrelayed after the 3 min retry window = genuinely missing
+    $o = (Guard 'SW') -join "`n"
+    T ($o -match '"decision":"block"' -and $o -match 'w1') 'PI-28: armed wait but an owned agent finished 4 min ago and is still not relayed (needs the tail) -> still blocked'
     Age (Join-Path $d 'agents\w1.status') 7
     $rf = RelayFile 'w1' 2 $false
     $o = (Guard 'SW') -join "`n"
@@ -211,9 +215,11 @@ try {
     T ($o -match '"decision":"block"') 'PI-28: corrupt wait file (error in the check) -> blocked (fail closed)'
     Remove-Item (Join-Path $d 'tail\SW.wait') -Force
     # the wait itself exits at once when the tail has something to do, and removes its file
-    Status 'w1' 'DONE'
+    Status 'w1' 'DONE'; Age (Join-Path $d 'agents\w1.status') 4
+    $env:KAH_TAILWAIT_NO_RETRY = '1'
     $out = @(RunPS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $tw, '-Session', 'SW', '-IntervalSec', '1'))
-    T (($out -join "`n") -match 'TAIL-WAIT SW EXIT agent w1 needs the tail' -and -not (Test-Path (Join-Path $d 'tail\SW.wait'))) 'PI-27/28: tail-wait exits at once when an owned agent is DONE and not relayed, and leaves no .wait file'
+    Remove-Item Env:KAH_TAILWAIT_NO_RETRY
+    T (($out -join "`n") -match 'TAIL-WAIT SW EXIT agent w1 needs the tail' -and -not (Test-Path (Join-Path $d 'tail\SW.wait'))) 'PI-27/28: tail-wait exits at once when an owned agent is DONE, unrelayed for > 3 min after the retry, and leaves no .wait file'
     Status 'w1' 'RUNNING'
     [void](RunPS @('-File', $tm, 'leave', '-Session', 'SW', '-Force')); [void](RunPS @('-File', $tm, 'leave', '-Session', 'SW2', '-Force'))
     # a non-tail session id with a .wait file lying around is unaffected (still the non-tail exit)
