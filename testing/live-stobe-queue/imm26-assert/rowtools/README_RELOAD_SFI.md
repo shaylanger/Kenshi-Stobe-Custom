@@ -36,3 +36,15 @@ The runner exports `ROW_SETTLE=1` (default 3) so the accept follows the delivere
 ## Known risks (live)
 - Cind's id changes with the faction re-serial; the runner takes the id from the `faction` answer and logs it (`npc id now ...` in scene.txt). A namesake sharing the handle (Cade) would make `stobe_say` hit the wrong NPC: check `resolved_speaker`/reply names in s1.
 - The saved game keeps the old goats; the post-load goats are fresh spawns (as in set A). Cind must see one of them for the resume to fire (resume fires on a chat turn while the target is observed).
+
+## Deterministic PROPOSE (imm26-sfO)
+Problem: the model sometimes does not propose the Hunt / ClearGroup (the offer says leave the record `none`), so the resume rows end SETUP-FAIL "no Hunt proposal". Fix: a gated server test seam
+(`pending-fixes/imm26-sfO/`, one guarded call in `stobeActivityChatFinish`) that, on the armed NPC's next chat turn, builds the intent from THAT turn's own native facts + route candidates, runs it through the
+real adapter `propose()` and the unchanged product path (record `proposed`, offer text). It only works on a private lane (site `/tmp/stobe-*/site`, DB host inside the lane root, valid one-shot unexpired marker).
+It never writes grants, consent or `accepted`: the player's own "Yes" accepts normally, and the row checker still verifies game state. The armed turn itself is never the PASS.
+- Deploy once per lane: `bash rowtools/inject-propose-deploy.sh --check <lane>` then `... <lane>` (backup `<lane>/bak-pre-sfO`, opcache ~1 min, no restart).
+- Arm by hand: `bash rowtools/inject-propose.sh <lane> <Cind|any> <Hunt|ClearGroup> [target] --row ID`; `--status` (marker, FIRED files, newest records); `--disarm`.
+- Rows through the runner: `bash rowtools/reload-run-sfo.sh <26-d|26-dx|26-e> <lane> --inject Hunt [--inject-target T]` = reload-run-sfi.sh + `reloaddefs_sfo.sh` (wraps `si_offer`: arms right before the s1 offer
+  say; evidence `inject_arm.txt`). Without `--inject` it behaves exactly like reload-run-sfi.sh. A refused arm is SETUP-FAIL (exit 2). The marker waits for a groundable candidate, so s1b is covered too.
+- Offline selftests: `bash rowtools/inject-propose-selftest.sh` (seam, 31 checks, WSL) and `bash rowtools/reload-sfo-selftest.sh` (wrapper, fake transport).
+- Rows covered: 26-a..26-f, 22-a, 26-b, 26-c, 14-d offer step (26-f / 26-a / others: arm by hand right before their offer say).
