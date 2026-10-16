@@ -84,6 +84,11 @@ EOT
 u_state_combat() {  # u_state_combat <file>: `in_combat=true|false|unknown` (stobe_state), ERROR text when the NPC is gone
   local js ic; js=$(printf 'stobe-auto stobe_state %s </dev/null 2>&1 | head -c 6000 # u:state\n' "$(rl_q "$RL_NPC_FULL")" | lt_h 2>&1)
   ic=$(echo "$js" | grep -oE '"in_combat": ?(true|false)' | head -1 | grep -oE 'true|false')
+  if [ -z "$ic" ] && ! echo "$js" | grep -qiE 'no character named|ERROR'; then   # op11: stobe_state has no in_combat key; the native snapshot does (core_npc_master.metadata.native_ai.combat.in_combat after a ctxpush)
+    printf 'stobe-auto stobe_ctxpush %s </dev/null 2>&1 | head -1 # u:cp\n' "$(rl_q "$RL_NPC_FULL")" | lt_h >/dev/null 2>&1; rw_sleep 2
+    ic=$(lt_sql "select coalesce(((metadata::json)->'native_ai'->'combat'->>'in_combat'),case when ((metadata::json)->'native_ai'->>'observed')='true' then 'false' end,'') from core_npc_master where name = '${RL_NPC_FULL//\'/\'\'}' limit 1" 2>/dev/null | head -1 | tr -dc 'a-z')
+    case "$ic" in true|false) ;; *) ic="";; esac
+  fi
   if echo "$js" | grep -qiE 'no character named|ERROR'; then echo "in_combat=gone $(echo "$js" | head -1 | cut -c1-120)" > "$EV/$1"
   else echo "in_combat=${ic:-unknown}" > "$EV/$1"; fi
 }
