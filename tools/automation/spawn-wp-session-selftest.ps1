@@ -42,7 +42,7 @@ try {
     $lt = Get-Content -Raw (Join-Path $tmp 'agents\wpZ-agent.launch.ps1')
     $perr = $null; [void][System.Management.Automation.Language.Parser]::ParseInput($lt, [ref]$null, [ref]$perr)
     T (-not $perr.Count -and $lt -match "KAH_AGENT_NAME = 'wpZ-agent'" -and $lt -match "WindowTitle = 'wpZ-agent'" -and $lt -match "--model', 'sonnet', '--effort', 'high'" -and $lt -match "--permission-mode', 'auto'" -and $lt -match "--add-dir', 'C:\\KenshiModding', '" -and $lt -match "-n', 'wpZ-agent'") '1e launcher parses; env KAH_AGENT_NAME, window title, --model/--effort/--permission-mode/-n/--add-dir'
-    T ($lt -match "^& claude 'You are the independent agent wpZ-agent" -or $lt -match "(?m)^& claude 'You are the independent agent wpZ-agent") '1f prompt is the first claude argument (--add-dir is variadic and must come last)'
+    T ($lt -match "(?m)^& claude '-p' 'You are the independent agent wpZ-agent" -and $lt.IndexOf("'--add-dir'") -gt $lt.IndexOf("'-p'")) '1f prompt is the first claude argument (headless -p) (--add-dir is variadic and must come last)'
     $lj = Get-Content -Raw (Join-Path $env:KPL_DIR 'progT.json') | ConvertFrom-Json
     $w = @($lj.wps)[0]
     T ($w.agent -eq 'wpZ-agent' -and @($w.sessions).Count -eq 1 -and @($w.sessions)[0] -like 'wpZ-agent|0||*') '1g ledger: sessions entry + wp agent set'
