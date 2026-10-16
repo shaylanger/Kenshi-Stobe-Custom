@@ -118,6 +118,22 @@ Chk "size with PI-19/20 additions <= 14500 ($([Text.Encoding]::UTF8.GetByteCount
 $want2 = (Get-FileHash "$inst\RE_Kenshi\mods\Stobe\Stobe.dll").Hash.Substring(0, 8)
 $txt2 = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo 2>$null) -join "`n"
 Chk 'new DLL sha shown, mismatch warned' ($txt2 -match "lane Stobe.dll: $want2" -and $txt2 -match 'differs from newest NC')
+# ---- PILOT variant (-Pilot haiku-i4): shadow brief, rows from pilot/rows-i4.txt, no claims/mark/status-mark/setupfail instructions ----
+New-Item -ItemType Directory -Force -Path "$runs\pilot" | Out-Null
+"# fake`n02-cx :: bash rowtools/hxrun_v2.sh 02-cx 5090-i4 --allow-retry `"pilot haiku-i4`" | tee C:/x/out/02-cx.out | tail -4`n23-b :: bash rowtools/sfrrun.sh 23-b 5090-i4 --save kah-imm26-i4`n" | Set-Content "$runs\pilot\rows-i4.txt"
+$txtp = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -NoRemote -Name imm26-hk-test -Pilot haiku-i4 2>$null) -join "`n"
+$txtn0 = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -NoRemote -Name imm26-hk-test 2>$null) -join "`n"
+Chk 'PILOT: pilot header + shadow mode + SETUP.md pointer' ($txtp -match 'PILOT haiku-i4 \(SHADOW MODE' -and $txtp -match 'SETUP\.md' -and $txtp -match 'SHADOW MODE \(hard\)')
+Chk 'PILOT: rows come from rows-i4.txt in order with the exact commands' ($txtp.IndexOf('- 02-cx :: bash rowtools/hxrun_v2.sh 02-cx 5090-i4') -gt 0 -and $txtp.IndexOf('- 23-b :: bash rowtools/sfrrun.sh') -gt $txtp.IndexOf('- 02-cx ::') -and $txtp.Contains('tee C:/x/out/02-cx.out'))
+Chk 'PILOT: pilot-mark.sh is the recording tool (START / verdict / ESCALATE / 00-ask) with the operator name' ($txtp.Contains('pilot-mark.sh imm26-hk-test <ROW> START') -and $txtp -match '00-ask ESCALATE' -and $txtp -match 'exit 3 = you disagreed with the checker')
+Chk 'PILOT: no claim/mark-row/status-mark/next-row/row-card/go-batch helper, no TESTS row definitions' ($txtp -notmatch '- status-mark\.sh:' -and $txtp -notmatch '- next-row\.sh:' -and $txtp -notmatch '- row-card\.sh:' -and $txtp -notmatch '- go-batch\.sh:' -and $txtp -notmatch '### IMM-' -and $txtp -notmatch 'SETUPTEXT-A' -and $txtp -notmatch 'Mark each row in testing')
+Chk 'PILOT: keeps agent-status commands, report command, lane-deploy-only rule, pilot task text' ($txtp -match 'agent-status\.ps1 imm26-hk-test RUNNING "5090-i4 pilot operator \(shadow, haiku-i4\)"' -and $txtp -match 'lane-deploy\.sh is the ONLY server deploy path' -and $txtp -match 'save-report\.ps1')
+Chk 'PILOT: asks the coordinator instead of improvising' ($txtp -match 'do NOT improvise')
+Chk "PILOT: size <= 14500 ($([Text.Encoding]::UTF8.GetByteCount($txtp)))" ([Text.Encoding]::UTF8.GetByteCount($txtp) -le 14500)
+Chk 'PILOT: the normal brief is unchanged (no PILOT text, still status-mark + TESTS rows + next-row)' ($txtn0 -notmatch 'PILOT haiku-i4' -and $txtn0 -match '### IMM-02-a' -and $txtn0 -match 'Next rows: first 3 in full' -and $txtn0 -notmatch 'SHADOW MODE')
+$ErrorActionPreference = 'Continue'
+$null = & powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -NoRemote -Pilot nope 2>$null; Chk 'PILOT: unknown pilot name exits 2' ($LASTEXITCODE -eq 2)
+$null = & powershell -NoProfile -File "$here\lane-brief.ps1" 4080-i4 -Runs $runs -Repo $repo -NoRemote -Pilot haiku-i4 2>$null; Chk 'PILOT: pilot on another lane exits 2' ($LASTEXITCODE -eq 2)
 $ErrorActionPreference = 'Continue'; $null = & powershell -NoProfile -File "$here\lane-brief.ps1" nope -Runs $runs -Repo $repo 2>$null; Chk 'bad lane exits 2' ($LASTEXITCODE -eq 2)
 Remove-Item -Recurse -Force $t
 if ($fail) { "SELFTEST FAIL $fail"; exit 1 }

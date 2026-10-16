@@ -35,6 +35,8 @@ def ticket_hook(d, lane, row, verdict, cause):
     """SETUP-FAIL unblock tickets (tools/automation/setupfail.py): SETUP-FAIL opens/updates <runs>/setupfail/<row>.json, PASS/FAIL/GATED closes it,
     PREFLIGHT-FAIL is exempt. <runs> = the parent of DIR (DIR = <runs>/row-attempts). Never breaks a record: any error is swallowed."""
     try:
+        # SHADOW PILOT (haiku-i4): while <runs>/pilot/haiku-i4/ACTIVE exists, verdicts of lane 5090-i4 never open/close real tickets.
+        if lane == "5090-i4" and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(d)), "pilot", "haiku-i4", "ACTIVE")): return
         sp = os.environ.get("KAH_SETUPFAIL_PY") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "tools", "automation", "setupfail.py")
         if not os.path.isfile(sp): return
         import importlib.util

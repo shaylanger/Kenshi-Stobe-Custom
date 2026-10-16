@@ -24,8 +24,12 @@ param(
     [string]$Runs = $(if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }),
     [string]$Repo = 'C:\KenshiModding',
     [switch]$NoRemote,
-    [int]$MaxBytes = 14500
+    [int]$MaxBytes = 14500,
+    [string]$Pilot     # 'haiku-i4' = SHADOW pilot brief variant (see below); empty = the normal brief, byte-identical in behaviour
 )
+# -Pilot haiku-i4 (Shay 2026-10-16, Haiku-vs-Sonnet pilot): same lane facts, rows and rules, but the operator never claims rows, never writes the TESTS file or
+# setupfail tickets and never commits: pilot-mark.sh (shadow ledger C:\KenshiTestRuns\pilot\haiku-i4\verdicts.csv) replaces mkdir claims / mark-row / status-mark /
+# setupfail. Rows come from <Runs>\pilot\rows-i4.txt (row :: one-call command). Anything outside one-call scripts goes to the coordinator, not improvised.
 $ErrorActionPreference = 'Stop'
 # lane -> operator names / handoff globs / evidence dirs (same defaults as lane-idle.ps1; <Runs>\lane-owners.json overrides ops+dirs)
 $lanes = [ordered]@{
@@ -36,6 +40,7 @@ $lanes = [ordered]@{
     '4080-i4' = @{ ops = @('imm26-4080-i4op5'); globs = @('imm26-4080-i4op*'); dirs = @('imm26-4080-i4') }
 }
 if (-not $Lane -or -not $lanes.Contains($Lane)) { [Console]::Error.WriteLine("usage: lane-brief.ps1 <$($lanes.Keys -join '|')> [-Out path] [-Name op] [-Predecessor op]"); exit 2 }
+if ($Pilot -and ($Pilot -ne 'haiku-i4' -or $Lane -ne '5090-i4')) { [Console]::Error.WriteLine("lane-brief: -Pilot supports only 'haiku-i4' on lane 5090-i4"); exit 2 }
 $ov = Join-Path $Runs 'lane-owners.json'
 if (Test-Path -LiteralPath $ov) {
     try { $j = Get-Content -LiteralPath $ov -Raw | ConvertFrom-Json; if ($j.PSObject.Properties.Name -contains $Lane) { $p = $j.$Lane; $lanes[$Lane].ops = @($p.ops); $lanes[$Lane].dirs = @($p.dirs) } } catch { }
@@ -133,7 +138,7 @@ if (-not $gameLine) { $gameLine = if ($NoRemote -and $rig -eq '4080') { 'not rea
 $stLines += "- loaded save (last harness 'load save='): $(if ($saveLoaded) { $saveLoaded } else { 'none found in harness.log (game not loaded since the log rolled)' })"
 $stLines += "- $gameLine"
 $stateRc = @(RowCard @('state', $Lane))
-if ($stateRc.Count) { $stLines += '- ' + (Clip $stateRc[0] 700) }
+if ($stateRc.Count -and -not $Pilot) { $stLines += '- ' + (Clip $stateRc[0] 700) }
 $launch = if ($rig -eq '5090') {
     "launch: wsl lane-backend.sh start $id ; env KAH_INSTANCE=$($l.instance) KAH_OWNER=$($l.lock_owner) KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KAH_FPS=60 KENSHI_MONITOR='\.\DISPLAY2' kenshi-ctl.ps1 launch -Save <save> -Gfx low ; lane-window.ps1 -Lane $id -Action place   (scripts in tools\automation; then stobe-auto wait-world)"
 } else {
@@ -190,6 +195,13 @@ if ($pick.Count -lt 5) {
     foreach ($r in ($open | Sort-Object { $pri[$_.Status] }, Id)) { if ($pick.Count -ge 5) { break } if ($pick.Id -notcontains $r.Id) { $pick += $r; $src[$r.Id] = 'unowned fallback (other lanes may take it: check the TESTS file first)' } }
 }
 $passN = @($rows | Where-Object { $_.Status -eq 'PASS' }).Count
+# PILOT: the row list is <Runs>\pilot\rows-i4.txt (`<row> :: <one-call command>`); no TESTS statuses (the shadow operator ignores the Sonnet lane's marks), no predecessor handoff, no inbox digest
+$pilotRows = @()
+if ($Pilot) {
+    $pf = Join-Path $Runs 'pilot\rows-i4.txt'
+    if (Test-Path -LiteralPath $pf) { foreach ($ln in (Get-Content -LiteralPath $pf -Encoding UTF8)) { if ($ln -match '^(\d{2}-[a-z]{1,3})\s*::\s*(.+)$') { $pilotRows += [pscustomobject]@{ Id = $Matches[1]; Cmd = $Matches[2].Trim() } } } }
+    $ho = $null; $hoLines = @(); $inboxRc = @(); $inboxRc2 = @()
+}
 
 # row scripts: rd_<id without dash> in rowtools/rowdefs.sh + tripdefs.sh (go-row.sh runs them); the comment after `{` is the usage note
 $rtDir = Join-Path $Repo 'testing\live-stobe-queue\imm26-assert\rowtools'
@@ -230,7 +242,7 @@ if (-not $Name) {
 $as = 'powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-status.ps1'
 $ho2 = "C:\KenshiTestRuns\agents\$Name.handoff.md"
 # PI-19: the predecessor's status TASK text (line 2 of its status file) and the successor registration
-$taskTxt = "$Lane operator"; $taskNote = ''; $regNote = ''
+$taskTxt = $(if ($Pilot) { "$Lane pilot operator (shadow, $Pilot)" } else { "$Lane operator" }); $taskNote = ''; $regNote = ''
 if ($Predecessor) {
     $pst = Join-Path $ag "$Predecessor.status"
     $ptask = $null
@@ -276,11 +288,36 @@ $helpers = @(
     @("$ta\lane-setup.sh", "bash lane-setup.sh <5090|4080> <instance> <save|-> [--with NAME] [--teleport x y z]  = one-command lane reset (load save, speed 0, heal, player at The Hub)"),
     @("$ta\event-wait.sh", "bash event-wait.sh [--batch <dir>]  = background waker (<= 120 s); restart when it wakes you")
 ) | Where-Object { Test-Path -LiteralPath $_[0] }
+if ($Pilot) {
+    $helpers = @(
+        @("$ta\pilot-mark.sh", "bash /c/KenshiModding/tools/automation/pilot-mark.sh $Name <ROW> START | <PASS|FAIL|SETUP-FAIL|GATED|ESCALATE> `"<one line>`" --evidence-file <file>  = the ONLY way to record a row (exit 0 ok, 3 your verdict disagrees with the checker line, 4 row closed/escalated)"),
+        @("$ta\logwin.sh", "bash logwin.sh <log> <pattern|since:<regex>|at:HH:MM:SS[+SEC]> [maxchars=2500]  = capped log window (RESULT lines never cut)"),
+        @("$ta\usage.sh", "bash usage.sh <script> | --list  = usage of a row/lane script"),
+        @("$ta\lane-setup.sh", "bash lane-setup.sh 5090 4 kah-imm26-i4 --with Cind  = lane reset (load save, speed 0, heal, player at The Hub); use when preflight says dist>=80"),
+        @("$ta\event-wait.sh", "bash event-wait.sh [--batch <dir>]  = background waker (<= 120 s)")
+    ) | Where-Object { Test-Path -LiteralPath $_[0] }
+}
+$pilotRules = @()
+if ($Pilot) {
+    $pm = "bash /c/KenshiModding/tools/automation/pilot-mark.sh $Name"
+    $pilotRules = @(
+        '- Scope: ONE lane (above). Never the live install, live server tree or DB, Shay''s saves, or another lane. PLAYER_NAME=''Shay''. Windowed launches, never focus the game.',
+        ('- SHADOW MODE (hard): you NEVER claim rows (no mkdir claims, no next-row.sh --claim), NEVER write testing/NPC_IMMERSION_26_TESTS.md or tickets (no mark-row.py, status-mark.sh, setupfail.ps1), NEVER git commit/push. The ONLY recording tool is ' + $pm + ' ... (it also updates your agent status).'),
+        '- Verdict = what the checker printed. PASS/FAIL are accepted only if the evidence file holds the matching `RESULT <row> PASS|FAIL` line (exit 3 = you disagreed with the checker: re-mark with the checker''s word or ESCALATE; a 2nd disagreement escalates). SETUP-FAIL, GATED, ROW-NEEDS-FIXER, a 2nd FAIL of one row, no RESULT line, odd logs = ESCALATE (exit 4) and go to the NEXT row. A closed row (exit 4) is never retried.',
+        '- One attempt per row, no debugging, no fixing. Do not open evidence files except to quote the checker line; do not read the TESTS file, the long briefs or old handoffs. The pilot measures you, not the fix.',
+        '- Deploy: tools/automation/lane-deploy.sh is the ONLY server deploy path (and you only run it if the coordinator tells you); never edit server or DLL files. The lane is already on the same Stobe.dll and server bundle as the Sonnet lane.',
+        ('- ANYTHING outside the one-call scripts above (lane or game down, launch problem, LLM health 402/empty replies, preflight errors you cannot fix with lane-setup.sh, unclear instruction): do NOT improvise. Record it with ' + $pm + ' 00-ask ESCALATE "<what you need>" (this only messages the coordinator, it does not close anything), then end your turn with a 2-line handback; the coordinator answers.'),
+        '- Game speed (PI-20): above 5 only under bash tools/stobe-goal-watch.sh; never speed 10 for minutes. Never sleeps > 120 s in one call (hook denies); poll in 30 s loops.',
+        '- Status: agent-status.ps1 at start and after every row (pilot-mark.sh does it for you after each call); silence > 20 min = killed. Keep your handoff file current. Checkpoint every ~40k tokens; at ~120k finish the row, write the handoff, end STOPPED-CONTEXT.',
+        '- Ending: after the last row of rows-i4.txt (or every remaining row escalated) end DONE with a line "pilot rows: <n> accepted, <n> escalated, <n> refused". Handbacks <= 8 lines; report via save-report.ps1 then SubagentHandback.'
+    )
+}
 
 function Build([int]$exBudget) {
     $sb = New-Object System.Text.StringBuilder
     $null = $sb.AppendLine("# OPERATOR BRIEF lane $Lane (generated $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) by lane-brief.ps1; this brief is the ONLY required reading: read it, then the predecessor handoff, then test)")
     $null = $sb.AppendLine("You are operator '$Name' for ISOLATED lane $Lane only (never the live install, live server tree or DB, other lanes, or Shay's saves).")
+    if ($Pilot) { $null = $sb.AppendLine("PILOT $Pilot (SHADOW MODE, Shay-approved head-to-head vs the Sonnet operator on 5090-i3; same build, same rows; only the model differs): you record rows ONLY with pilot-mark.sh. Setup + exact launch: C:\KenshiTestRuns\pilot\haiku-i4\SETUP.md. Row list: C:\KenshiTestRuns\pilot\rows-i4.txt.") }
     if ($Predecessor) {
         $pw = Join-Path $ag "$Predecessor.warn"; $ps = Join-Path $ag "$Predecessor.status"
         $pl = "agents\${Predecessor}.handoff.md"
@@ -310,7 +347,14 @@ function Build([int]$exBudget) {
         $lo = 40; $hi = 2000
         while ($lo -lt $hi) { $mid = [int](($lo + $hi + 1) / 2); $tot = 0; for ($i = 0; $i -lt $hoLines.Count; $i++) { $tot += [math]::Min($hoLines[$i].Length, $mid * $w[$i]) }; if ($tot -le $exBudget) { $lo = $mid } else { $hi = $mid - 1 } }
         for ($i = 0; $i -lt $hoLines.Count; $i++) { $null = $sb.AppendLine('  ' + (Clip $hoLines[$i] ([math]::Max(60, $lo * $w[$i])))) }
+    } elseif ($Pilot) { $null = $sb.AppendLine('- pilot: none (fresh start; the lane is launched from SETUP.md; write your own handoff file at the Commands section path when you stop)')
     } else { $null = $sb.AppendLine('- none found for this lane: ask the coordinator for the lane state; start from lane-setup.sh and the TESTS file') }
+    if ($Pilot) {
+        $null = $sb.AppendLine("## ROWS (in this order; cd /c/KenshiModding/testing/live-stobe-queue/imm26-assert in Git Bash; each line: row :: the exact one-call command; do not read the TESTS file)")
+        $null = $sb.AppendLine("Per row: (1) bash /c/KenshiModding/tools/automation/pilot-mark.sh $Name <ROW> START   (2) run the command exactly, it prints/tees ONE `RESULT <ROW> ...` line   (3) bash /c/KenshiModding/tools/automation/pilot-mark.sh $Name <ROW> <PASS|FAIL> `"<one line>`" --evidence-file C:/KenshiTestRuns/pilot/haiku-i4/out/<ROW>.out  with the SAME word the RESULT line has. Anything else (SETUP-FAIL, GATED, ROW-NEEDS-FIXER, no RESULT line, crash): ESCALATE the row, same call with ESCALATE, then the next row.")
+        if ($pilotRows.Count -eq 0) { $null = $sb.AppendLine('- ROW LIST MISSING (C:\KenshiTestRuns\pilot\rows-i4.txt): ask the coordinator, do not guess rows') }
+        foreach ($r in $pilotRows) { $null = $sb.AppendLine("- $($r.Id) :: $($r.Cmd)") }
+    } else {
     $null = $sb.AppendLine("## Next rows: first 3 in full, rest one line (any other row: bash $ta\row-card.sh <ROW>; $passN rows PASS, $($open.Count) not PASS; next unclaimed: bash $ta\next-row.sh $Lane)")
     if ($pick.Count -eq 0) { $null = $sb.AppendLine('- none open') }
     $rn = 0
@@ -331,11 +375,12 @@ function Build([int]$exBudget) {
     }
     $ported = @($rdNote.Keys | Sort-Object)
     $null = $sb.AppendLine("- rows with a go-row.sh script ($($ported.Count)): $($ported -join ' ')  (everything else is manual)")
+    }
     $null = $sb.AppendLine("## Known blockers relevant to $Lane (KNOWN_BLOCKERS.md, $kbSkipped other-lane line(s) left out; need not be read)")
     if ($kbl.Count -eq 0) { $null = $sb.AppendLine('- none listed') }
     foreach ($b in $kbl) { $null = $sb.AppendLine('- ' + (Clip $b $kbClip)) }
     $null = $sb.AppendLine('## Essential rules (condensed; the long briefs need NOT be read)')
-    foreach ($ln in @(
+    $ruleLines = @(
         '- Scope: ONE lane (above). Never the live install, live server tree or DB, Shay''s saves, or another lane. Test only on the lane''s kah-* save copy; PLAYER_NAME=''Shay''; dist_to_target < 80. Windowed launches, never focus the game (go-row runs isolation check + preflight).',
         '- Debug budget: ONE attempt per row. After FAIL/SETUP-FAIL record the cause (or hypothesis + evidence file) in the row and status `latest`, mark it, move on; the coordinator sends a fixer.',
         '- PI-06 guard (ENFORCED): a row whose last attempt FAILED is not rerun: go-row/go-batch print `ROW-NEEDS-FIXER <row> <lane> cause=...` (exit 4); record it and move on. Override only with a logged reason: `--allow-retry "<why>"` or `row-attempts.ps1 reset <lane> <ROW> "<why>"`.',
@@ -349,7 +394,9 @@ function Build([int]$exBudget) {
         '- Ending (PI-22): never DONE while runnable non-PASS rows remain; end STOPPED-CONTEXT (successor in the handoff) or DONE with a `lane complete: <why>` line. PI-24: write the steps of a hand-run row without rd_ script into your handoff.',
         '- Status discipline: agent-status after EVERY row (silence > 20 min = killed); keep the handoff file current. Checkpoint every ~40k tokens; ~120k run the WARN-120k step, ~150k finish the row, write the handoff, end STOPPED-CONTEXT (successor name + 1). Budget <= 120k.',
         '- Handbacks <= 8 lines (verdict, PASS/FAIL counts, report path, commits, next); full report via save-report.ps1 (<= 30 lines), then SubagentHandback.'
-    )) { $null = $sb.AppendLine($ln) }
+    )
+    if ($Pilot) { $ruleLines = $pilotRules }
+    foreach ($ln in $ruleLines) { $null = $sb.AppendLine($ln) }
     $null = $sb.AppendLine("## Helper scripts (all exist now; in $ta, those marked [R] in $ra)")
     $hl = @($helpers); if ($hl.Count -gt 0 -and $hl[0] -is [string]) { $hl = @(, $hl) }
     foreach ($h in $hl) { $null = $sb.AppendLine("- $(Split-Path -Leaf $h[0]): $($h[1])" + $(if ($h[0].StartsWith($ra)) { ' [R]' } else { '' })) }
