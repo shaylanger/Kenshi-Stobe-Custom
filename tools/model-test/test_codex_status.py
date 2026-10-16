@@ -133,6 +133,32 @@ class LiveMetricsTests(unittest.TestCase):
         self.assertEqual(codex_status._verify_hostprobe(str(path), digest)["status"], "PASS")
         self.assertEqual(codex_status._verify_hostprobe(str(path), "0" * 64)["status"], "FAIL")
 
+    def test_hostprobe_failure_and_incomplete_proof_never_pass(self):
+        path = Path(self.tmp.name) / "hostprobe.json"
+        probe = json.loads(path.read_text(encoding="utf-8"))
+        probe.update({"status": "FAIL", "phase": "exec"})
+        raw = json.dumps(probe).encode()
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        self.assertEqual(codex_status._verify_hostprobe(str(path), digest)["status"], "FAIL")
+
+        probe.pop("status")
+        probe.pop("cli_returncode")
+        raw = json.dumps(probe).encode()
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        result = codex_status._verify_hostprobe(str(path), digest)
+        self.assertEqual(result["status"], "UNKNOWN")
+
+    def test_hostprobe_forbidden_global_inventory_is_sufficient(self):
+        path = Path(self.tmp.name) / "hostprobe.json"
+        probe = json.loads(path.read_text(encoding="utf-8"))
+        probe["host"].pop("global_names")
+        raw = json.dumps(probe).encode()
+        path.write_bytes(raw)
+        result = codex_status._verify_hostprobe(str(path), hashlib.sha256(raw).hexdigest())
+        self.assertEqual(result["status"], "PASS")
+
 
 if __name__ == "__main__":
     unittest.main()

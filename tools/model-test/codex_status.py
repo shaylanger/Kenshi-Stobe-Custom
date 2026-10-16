@@ -76,40 +76,62 @@ def _verify_hostprobe(path: Any, expected_sha256: Any) -> dict:
         return {"status": "UNKNOWN", "reason": "hostprobe invalid JSON"}
     if not isinstance(probe, dict) or probe.get("kind") != "codex_hostprobe":
         return {"status": "UNKNOWN", "reason": "hostprobe schema missing"}
-    if probe.get("status") == "FAIL" or probe.get("cli_returncode") not in (0,):
+    if probe.get("status") == "FAIL":
         return {"status": "FAIL", "reason": "hostprobe reported failure"}
+    if probe.get("status") == "FAIL" or isinstance(probe.get("cli_returncode"), int) and probe["cli_returncode"] != 0:
+        return {"status": "FAIL", "reason": "hostprobe reported failure"}
+    if probe.get("status") is None or probe.get("cli_returncode") is None:
+        return {"status": "UNKNOWN", "reason": "hostprobe completion proof missing"}
     config = probe.get("config") if isinstance(probe.get("config"), dict) else {}
     provider = probe.get("provider") if isinstance(probe.get("provider"), dict) else {}
     host = probe.get("host") if isinstance(probe.get("host"), dict) else {}
     hooks = probe.get("hooks") if isinstance(probe.get("hooks"), dict) else {}
-    required_true = (config.get("code_mode") is True, config.get("code_mode_host") is True)
-    required_false = (config.get("shell_tool") is False, config.get("multi_agent") is False,
-                      config.get("agents_enabled") is False, config.get("view_image") is False)
-    enabled = set(config.get("enabled_tools", [])) if isinstance(config.get("enabled_tools"), list) else set()
-    requested = set(probe.get("request_tool_names", [])) if isinstance(probe.get("request_tool_names"), list) else set()
+    true_keys = ("code_mode", "code_mode_host")
+    false_keys = ("shell_tool", "multi_agent", "agents_enabled", "view_image")
+    if any(k in config and config[k] is not True for k in true_keys) or any(k in config and config[k] is not False for k in false_keys):
+        return {"status": "FAIL", "reason": "hostprobe contains unsafe configuration"}
+    required_true = all(config.get(k) is True for k in true_keys)
+    required_false = all(config.get(k) is False for k in false_keys)
+    configured_tools = config.get("enabled_tools", config.get("mcp_tools"))
+    request_tools = probe.get("request_tool_names")
+    if not isinstance(configured_tools, list) or not isinstance(request_tools, list) or not isinstance(host.get("tool_names"), list):
+        return {"status": "UNKNOWN", "reason": "hostprobe tool-list proof missing"}
+    enabled = set(configured_tools) | ({"exec"} if "exec" not in configured_tools else set())
+    requested = set(request_tools)
     hosttools = set(host.get("tool_names", [])) if isinstance(host.get("tool_names"), list) else set()
     globals_seen = {str(x).lower() for x in host.get("global_names", [])} if isinstance(host.get("global_names"), list) else None
-    forbidden = {str(x).lower() for x in host.get("global_forbidden_names", [])} if isinstance(host.get("global_forbidden_names"), list) else None
-    if not all(required_true + required_false):
+    forbidden_value = host.get("global_forbidden_names", host.get("forbidden_global_names"))
+    forbidden = {str(x).lower() for x in forbidden_value} if isinstance(forbidden_value, list) else None
+    if not required_true or not required_false:
         return {"status": "UNKNOWN", "reason": "hostprobe config proof incomplete"}
     if enabled != FROZEN_TOOLS | {"exec"} or requested != FROZEN_TOOLS | {"exec"} or hosttools != FROZEN_TOOLS:
         return {"status": "FAIL", "reason": "hostprobe tool allowlist mismatch"}
     if host.get("frozen_list_call") != "ok":
-        return {"status": "UNKNOWN", "reason": "frozen list call proof missing"}
-    if globals_seen is None or forbidden is None:
+        return {"status": "FAIL" if host.get("frozen_list_call") not in (None, "") else "UNKNOWN",
+                "reason": "frozen list call proof missing or failed"}
+    if forbidden is None:
         return {"status": "UNKNOWN", "reason": "host global isolation proof missing"}
-    if forbidden or globals_seen & FORBIDDEN_GLOBALS:
+    if forbidden or globals_seen is not None and globals_seen & FORBIDDEN_GLOBALS:
         return {"status": "FAIL", "reason": "host exposes forbidden globals"}
-    hook_counts = (hooks.get("session_start_receipts"), hooks.get("pretool_allowed_frozen"),
-                   hooks.get("pretool_denied_nonfrozen"))
+    hook_counts = (hooks.get("session_start_receipts"),
+                   hooks.get("pretool_allowed_frozen", hooks.get("pretool_allow_frozen")),
+                   hooks.get("pretool_denied_nonfrozen", hooks.get("pretool_deny_other")))
+    if any(isinstance(n, int) and n < 1 for n in hook_counts):
+        return {"status": "FAIL", "reason": "guard hook allow/deny receipt failed"}
     if not all(isinstance(n, int) and n >= 1 for n in hook_counts):
         return {"status": "UNKNOWN", "reason": "guard hook allow/deny receipts incomplete"}
+    external_hosts = provider.get("external_hosts_attempted", provider.get("external_hosts"))
+    auth_mode = provider.get("auth", provider.get("credential"))
+    if (("bound_host" in provider and provider.get("bound_host") != "127.0.0.1") or
+            (external_hosts is not None and external_hosts != 0) or
+            (auth_mode is not None and auth_mode not in ("dummy", "dummy_credentials"))):
+        return {"status": "FAIL", "reason": "isolated provider constraints violated"}
     if (provider.get("bound_host") != "127.0.0.1" or
             not isinstance(provider.get("port_ephemeral"), int) or provider.get("port_ephemeral") <= 0 or
             not isinstance(provider.get("requests_n"), int) or provider.get("requests_n") < 1 or
-            provider.get("external_hosts_attempted") != 0 or provider.get("auth") != "dummy"):
+            external_hosts != 0 or auth_mode not in ("dummy", "dummy_credentials")):
         return {"status": "UNKNOWN", "reason": "isolated provider proof incomplete"}
-    if not probe.get("cli_sha256") or not probe.get("code_mode_host_sha256"):
+    if not isinstance(probe.get("cli_sha256"), str) or not probe["cli_sha256"] or not isinstance(probe.get("code_mode_host_sha256"), str) or not probe["code_mode_host_sha256"]:
         return {"status": "UNKNOWN", "reason": "CLI/host binary identity missing"}
     if probe.get("status") != "PASS":
         return {"status": "UNKNOWN", "reason": "hostprobe did not pass"}
@@ -130,20 +152,26 @@ def _verify_requested_modes(receipt: dict, rollout_path: str | Path) -> dict:
         config_bytes = config_path.read_bytes()
     except OSError:
         return {"status": "UNKNOWN", "reason": "launch metadata unavailable"}
-    if hashlib.sha256(config_bytes).hexdigest().lower() != str(receipt.get("config_sha256", "")).lower():
+    config_digest = receipt.get("config_sha256")
+    argv_expected_digest = receipt.get("argv_sha256")
+    if not isinstance(config_digest, str) or not config_digest or not isinstance(argv_expected_digest, str) or not argv_expected_digest:
+        return {"status": "UNKNOWN", "reason": "launch metadata digest missing"}
+    if hashlib.sha256(config_bytes).hexdigest().lower() != config_digest.lower():
         return {"status": "FAIL", "reason": "requested config digest mismatch"}
     try:
         requested_config = json.loads(config_bytes.decode("utf-8"))
         argv_obj = json.loads(argv_bytes.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         return {"status": "UNKNOWN", "reason": "launch metadata invalid JSON"}
-    if isinstance(receipt.get("requested_config"), dict) and requested_config != receipt["requested_config"]:
+    if not isinstance(receipt.get("requested_config"), dict):
+        return {"status": "UNKNOWN", "reason": "requested config receipt copy missing"}
+    if requested_config != receipt["requested_config"]:
         return {"status": "FAIL", "reason": "requested config copy mismatch"}
     argv = argv_obj.get("argv") if isinstance(argv_obj, dict) else argv_obj
     if not isinstance(argv, list) or not all(isinstance(x, str) for x in argv):
         return {"status": "UNKNOWN", "reason": "argv array missing"}
     argv_digest = hashlib.sha256(json.dumps(argv).encode("utf-8")).hexdigest()
-    if argv_digest.lower() != str(receipt.get("argv_sha256", "")).lower():
+    if argv_digest.lower() != argv_expected_digest.lower():
         return {"status": "FAIL", "reason": "argv digest mismatch"}
     found = {"model": [], "effort": [], "service_tier": []}
     i = 0
