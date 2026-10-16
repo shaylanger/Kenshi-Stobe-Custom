@@ -195,7 +195,12 @@ rd_18cx() {
   printf 'stobe-auto chars 300 </dev/null 2>&1 | sed "s/ | /\\n/g" | grep -E "#[0-9]+/[0-9]+" | cut -c1-80\n' | lt_h > "$EV/roster.txt" 2>&1
   hxd_dry || [ "$(grep -c -E '#[0-9]+/[0-9]+' "$EV/roster.txt")" -le 3 ] || { RL_REASON="not a strict 1v1: $(grep -c -E '#[0-9]+/[0-9]+' "$EV/roster.txt") characters within 300 u (roster.txt)"; return 3; }
   i=0; for q in "${qs[@]}"; do i=$((i+1)); lab="C$i"
-    hxd_sample "$lab" "$q" || return $?; hxd_state "$lab" "$tshort"
+    hxd_sample "$lab" "$q" || return $?
+    if [ "$i" = 1 ]; then   # live fix (4080-i4 2026-10-16): the server renames a spawned bandit ("Hungry Bandit" -> "Vren [Hungry Bandit]"); use the name the prompt shows as Attack Target
+      pt=$(grep -m1 -oE 'Attack Target: [^[:space:]]+' "$HXD/$lab/prompt.txt" 2>/dev/null | sed 's/^Attack Target: //')
+      if [ -n "$pt" ] && [ "$pt" != "$tshort" ]; then echo "target renamed by the server: $tshort -> $pt" >> "$EV/phases.txt"; tshort="$pt"; echo "$tshort" > "$HXD/target.txt"; fi
+    fi
+    hxd_state "$lab" "$tshort"
   done
   hxd_trim "$m0"
   hx18_scene || return $?                     # CALM: fresh load of the same save (the spawned target is gone), combat rows deleted
