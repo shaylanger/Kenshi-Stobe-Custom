@@ -4,7 +4,7 @@
 HERE=$(cd "$(dirname "$0")" && pwd)
 EW="${1:-$HERE/event-wait.sh.candidate}"; [ -f "$EW" ] || EW="$HERE/event-wait.sh"
 BOX=$(mktemp -d); trap 'rm -rf "$BOX"' EXIT
-export KAH_RUNS="$BOX" EW_BATCH_SEC=6 EW_QUIET_DONE=0 EW_ROLLCALL_CMD="echo ROLLCALL x kind=INPROC proc=n/a status_age=15m log_age=- latest=x"
+export KAH_RUNS="$BOX" EW_BATCH_SEC=6 EW_QUIET_DONE=0 EW_DIGEST=0 EW_ROLLCALL_CMD="echo ROLLCALL x kind=INPROC proc=n/a status_age=15m log_age=- latest=x"
 IN="$BOX/inbox/coordinator"; mkdir -p "$BOX/agents" "$IN"
 pass=0; fail=0
 ck() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok   $1"; else fail=$((fail+1)); echo "  FAIL $1 (got '$2', want '$3')"; fi; }

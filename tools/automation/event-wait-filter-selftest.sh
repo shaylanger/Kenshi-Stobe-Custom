@@ -2,7 +2,7 @@
 # event-wait-filter-selftest.sh : selftest of the quiet-waker filter (AGENT STALL / ORPHANED suppression) in event-wait.sh(.new).
 # Uses a sandbox KAH_RUNS and a fake roll call (EW_ROLLCALL_CMD). Prints SELFTEST PASS n/n. WSL/bash.
 HERE=$(cd "$(dirname "$0")" && pwd)
-EW="$HERE/event-wait.sh.new"; [ -f "$EW" ] || EW="$HERE/event-wait.sh"
+EW="${1:-$HERE/event-wait.sh.candidate}"; [ -f "$EW" ] || EW="$HERE/event-wait.sh"
 [ -n "${EW_SCRIPT:-}" ] && EW="$EW_SCRIPT"
 BOX=$(mktemp -d); trap 'rm -rf "$BOX"' EXIT
 mkdir -p "$BOX/agents" "$BOX/inbox/coordinator"
