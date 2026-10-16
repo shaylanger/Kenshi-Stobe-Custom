@@ -2,12 +2,12 @@
 
 Purpose: the coordination process keeps getting cheaper and faster. At every handoff the OLD coordinator spends ~5 minutes on this file; the NEW coordinator asks Shay about the open entries ONCE, together, in its first summary (session-start.ps1 prints them under "PROCESS IDEAS FOR SHAY"). Ideas are recorded, never applied by the review.
 
-Tool: `tools/automation/process-ideas.ps1` (`list`, `add`, `review <decisions.json>`, `asked`, `answer <id> no|yes|approve`, `done <id> -Measured ".."`); selftest `process-ideas-selftest.ps1`. Do not hand-edit the status lines: use the tool.
+Tool: `tools/automation/process-ideas.ps1` (`list`, `add`, `review <decisions.json>`, `answer <id> no|yes|approve`, `done <id> -Measured ".."`); selftest `process-ideas-selftest.ps1`. Do not hand-edit the status lines: use the tool.
 
-Entry fields: id, status (open | asked | confirmed | rejected x1 | rejected x2 | done), idea, evidence (what happened and what it cost, measured where possible), saving (expected speed or tokens), risk (to monitoring and the stall / idle / dead-agent catches), hooks (yes = touches hooks/settings), weakens (yes = would weaken a timeout/stall/idle/dead-agent catch; only allowed with hooks=yes and then FOR SHAY ONLY), log.
+Entry fields: id, status (open | confirmed | rejected x1 | rejected x2 | done), idea, evidence (what happened and what it cost, measured where possible), saving (expected speed or tokens), risk (to monitoring and the stall / idle / dead-agent catches), hooks (yes = touches hooks/settings), weakens (yes = would weaken a timeout/stall/idle/dead-agent catch; only allowed with hooks=yes and then FOR SHAY ONLY), log.
 
 Rules:
-- At most 15 active entries (open | asked | confirmed). Entries being built (or built and waiting for their measured result) move to the `## In progress` section with `process-ideas.ps1 progress <id>` (status in-progress): they do NOT count toward the cap, so new ideas can keep being added while others are built (Shay 2026-10-16). Above that `add` and `review` refuse a new one until one is retired; a warning shows from 12.
+- At most 23 active entries (open | confirmed). Entries being built (or built and waiting for their measured result) move to the `## In progress` section with `process-ideas.ps1 progress <id>` (status in-progress): they do NOT count toward the cap, so new ideas can keep being added while others are built (Shay 2026-10-16). Above that `add` and `review` refuse a new one until one is retired; a warning shows from 12.
 - Handoff review, at most 3 new entries (the biggest of the session, each with a concrete example) and one step per existing entry, judged against what happened THIS session, never against silence: open + does not apply -> rejected x1; rejected x1 + does not apply -> rejected x2; rejected x2 + does not apply -> removed (moved to Retired with a log line); rejected x1 + applies -> open; rejected x2 + applies -> rejected x1; no decision -> unchanged. `confirmed` only when the decision names a specific moment where the idea would have helped.
 - Shay answers: `answer <id> no` removes the entry (logged in Retired); `yes`/`approve` marks it confirmed. If he has not answered by the next handoff the review runs again and asks again.
 - When an idea is built, record measured before/after numbers (`done <id> -Measured ...`).
@@ -15,42 +15,7 @@ Rules:
 
 ## Active
 
-### PI-29 | rejected x1
-- idea: At the tail hard limit the context meter should call tail-close.ps1 (sends 'tail done', then closes the session and window ~20 s later) once all owned agents are checkpointed/relayed, instead of telling the tail to run tail-mode.ps1 leave -Force (which only removes the flag, leaving the session and window open). tail-close's window-kill must first be tested on a real throwaway window.
-- evidence: 2026-10-15 ~21:07 old tail session 6d1f3011 followed the meter message, ran tail-mode.ps1 leave -Force at its hard limit: the flag went away but the session process and window stayed open (tail-close.ps1 then refuses with 'no tail flag'); the window-closing path of tail-close was never exercised on a real window.
-- saving: no orphan idle tail windows per overlap handoff; the tail context stops being resumable by accident
-- risk: kills a session: only after every owned agent is DONE and acked; the meter is a global hook (~/.claude/hooks/context-meter.ps1), so Shay decides
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 21:07
-- last_review: coordinator-12
-- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16: tail 2a0cfe9b closed itself via tail-ack.ps1 (all agents done+acked -> tail-close in 20 s) without any hard-limit case; no tail reached its limit this session.)
-
-### PI-31 | rejected x1
-- idea: AGENT ORPHANED must not fire for in-session (Agent-tool) subagents of a live coordinator or live tail: check the agent against the session's own agent list / ledger owner before alerting
-- evidence: 2026-10-15 21:24 and 21:40: AGENT ORPHANED imm26-fix10a and imm26-fix03b were false alarms (both alive, only blocked on a test lock); each cost 2-3 turns of investigation, one almost led to a wrong respawn
-- saving: about 3 turns per false alarm, avoids a duplicate respawn
-- risk: must not hide a real dead agent: keep the alert when the owning session is gone
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 23:16
-- last_review: coordinator-12
-- log: 2026-10-15 23:16 review 'coordinator-11': added
-- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16 00:00-05:00: no AGENT ORPHANED alert fired this session; only legitimate STOPPED-CONTEXT events.)
-
-### PI-35 | rejected x1
-- idea: mark-row.py needs a note-only mode (append a note to the evidence column without changing status), so row-tooling agents can annotate rows without overwriting results.
-- evidence: 2026-10-16 imm26-u-rowsA2 report: mark-row.py has no note-only mode, it always overwrites status and evidence, and a SETUP-FAIL re-mark needs a needs: clause and updates the unblock ticket, so none of the three tooling agents (rowsA/B/C) could add the one-call command to the row.
-- saving: one operator lookup per row (inbox note instead of the row)
-- risk: low: new flag only
-- hooks: no
-- weakens: no
-- added: 2026-10-16 02:55
-- last_review: coordinator-14
-- log: 2026-10-16 02:55 review 'coordinator-12': added
-- log: 2026-10-16 10:49 review 'coordinator-14': open -> rejected x1 (does not apply: not seen this session)
-
-### PI-37 | open
+### PI-37 | Oepn
 - idea: session-start / agent-status should auto-abandon the inflight marker of a dead predecessor as soon as a successor registered in lane-owners or with the same task text is RUNNING.
 - evidence: 2026-10-16 10:00-10:40: after the freeze 3 predecessor markers (op12, op9k, inv-14d) plus sfC/sfE2 caused false RIG STALL / work-in-flight wakes and 5 manual agent-abandon calls.
 - saving: ~5 manual calls and 4 spurious waker wakes per resume
@@ -59,9 +24,8 @@ Rules:
 - weakens: no
 - added: 2026-10-16 10:49
 - log: 2026-10-16 10:49 review 'coordinator-14': added
-- log: 2026-10-16 10:56 asked Shay
 
-### PI-41 | open
+### PI-41 | Open
 - idea: The tail hard limit (400k) forces a TaskStop of live lane operators mid-row. Prevent it: autoCompactWindow=330000 now set in the user settings so a tail compacts itself soon after the handoff (new sessions), and keep the tail lean (PI-38/39/40). Longer term run lane operators as independent sessions so a coordinator's context never limits a lane.
 - evidence: 2026-10-16 11:15-11:20: the tail reached 409k+ after about 40 post-handoff turns and had to order three lane operators to checkpoint; 5090-i3 left a 20-minute 19-ax job unowned, 4080-i4 stopped with 08-d/11-b open, 4080-i3 had to be stopped mid 08-e; three lanes lose about an hour of operator time each until respawned.
 - saving: about 1 lane-hour x 3 lanes per handoff, plus the tail turns
@@ -71,7 +35,7 @@ Rules:
 - added: 2026-10-16 11:18
 - log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': added
 
-### PI-44 | open
+### PI-44 | Open
 - idea: Never move inbox/coordinator/*.msg by hand (my blanket 'mv *.msg done/' habit hid a Haiku-pilot operator's 00-ask question for about 10 minutes); the waker already moves files to delivered/ and prints them. Add a rule line to AGENT_PROMPTS and make the waker print the full text of any PILOT-ESCALATE / 00-ask message (not the 300-char cut).
 - evidence: 2026-10-16 12:48: imm26-5090-i4-hk1 sent a 00-ask (window placement refused); I had archived the file with mv before reading it and only noticed via hk1's status line ~10 min later, so the pilot lane waited.
 - saving: avoids a lane waiting for an unseen question (about 10 min of rig time per occurrence)
@@ -81,7 +45,7 @@ Rules:
 - added: 2026-10-16 12:52
 - log: 2026-10-16 12:52 review 'coordinator-16': added
 
-### PI-46 | open
+### PI-46 | Open
 - idea: A tail session should need zero model turns: tail-autorelay must relay every finished agent (it relayed sfV/sfT early, then stopped relaying; I relayed sfP, sfR, ctxfix, fxC2, sfU, sfS, op13, op21, op9n by hand) and Get-TailRelayState must also search coordinator/done/.
 - evidence: 12:00-13:05: 9 hand relays at ~300k context each, plus ~8 tail-wait restarts.
 - saving: ~17 full-price turns at 300k per handoff (large share of the tail's cost)
@@ -91,7 +55,7 @@ Rules:
 - added: 2026-10-16 13:05
 - log: 2026-10-16 13:05 review 'coordinator-15-tail': added
 
-### PI-47 | open
+### PI-47 | Open
 - idea: Lane operators should auto-spawn their own successor ticket: when an operator writes STOPPED-CONTEXT, the lane sits idle until the coordinator turn notices; add an 'idle-lane' fast path that prints the exact lane-brief + Agent spawn text for the new coordinator in the wake event.
 - evidence: 4080-i4 and 4080-i3 lanes sat idle 5-10 min at 12:30-12:40 until I messaged the new coordinator; 5090-i3 ended with no rows left.
 - saving: ~5-10 lane-minutes per operator turnover (about 8 turnovers per session)
@@ -101,7 +65,7 @@ Rules:
 - added: 2026-10-16 13:05
 - log: 2026-10-16 13:05 review 'coordinator-15-tail': added
 
-### PI-48 | open
+### PI-48 | Open
 - idea: Lane operators must never run bare `stobe-auto` (it talks to the LIVE install): put one line in lane-brief and the lane-operator block saying 'use go-row / lane-setup, or first export RIG, KAH_INSTANCE and source rig-env.sh', and make bare stobe-auto refuse (exit 2) when a lane-lock is held and KAH_INSTANCE is unset.
 - evidence: 2026-10-16 12:55-13:05: Haiku pilot hk1 ran bare `stobe-auto wait-world` twice (120 s and 300 s), got 'no answer (loading?)', escalated three times and stopped; the lane sat idle ~15 min, and it took 2 peer messages + 2 tail resumes (about 6 model turns) to find the cause.
 - saving: about 15 min lane time and 6 coordinator/tail turns per occurrence, more with cheaper models that follow the brief literally
@@ -111,7 +75,7 @@ Rules:
 - added: 2026-10-16 13:35
 - log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
 
-### PI-49 | open
+### PI-49 | Open
 - idea: Tooling snags hit by two or more operators become a fixer ticket automatically: operators append `SNAG <script:line> <symptom> <workaround>` to one file and the waker counts repeats; at the second distinct operator it wakes the coordinator once with the proposed root fix.
 - evidence: 2026-10-16 12:30-13:35: hxdefs.sh:30 writing /c/... (false SETUP-FAIL, hit op9o, op22 and op14's hx runs, each diagnosed alone at about 10-20k tokens); lane-deploy.sh deleting the sfO inject seam (op14 and op9o each rediscovered it); the root fix is still not applied.
 - saving: about 2 x 15k operator tokens per rediscovery and false FAILs on rows; fewer wrong verdict lines
@@ -121,7 +85,7 @@ Rules:
 - added: 2026-10-16 13:35
 - log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
 
-### PI-50 | open
+### PI-50 | Open
 - idea: Deliberately parked lanes (operator finished, nothing claimable until fixer candidates land) should auto-enter lanes.held when the operator is abandoned with a 'parked' reason, and leave it when a new operator status appears; today the digest waker still wakes on LANE IDLE/NO-OPERATOR every ~6 min per parked lane.
 - evidence: 13:30-13:50: LANE IDLE 5090-i3 (twice), LANE NO-OPERATOR 4080-i3 (twice), LANE IDLE 4080-i4: five coordinator turns of about 270k tokens each, plus three manual alert-ack calls, until I hand-edited lanes.held.
 - saving: about 5 turns x 270k tokens per hour while lanes are parked
@@ -131,7 +95,7 @@ Rules:
 - added: 2026-10-16 13:56
 - log: 2026-10-16 13:56 review 'coordinator-17': added
 
-### PI-51 | open
+### PI-51 | Open
 - idea: Replace the 'wake, read output file, restart waker' loop by one persistent waker that appends actionable events to a file watched by the Monitor tool (or the background task notification), so the coordinator does not spend 2 tool calls per wake restarting it and never creates duplicate wakers.
 - evidence: 13:00-13:55: about 30 waker restarts, each 2 tool calls; twice a second waker was started while one was still running (exit code 15 kills, duplicate EVENT lines) and the Stop hook blocked once because no waker was running in the gap.
 - saving: about 60 tool calls and 3 hook-block turns per hour
@@ -141,7 +105,7 @@ Rules:
 - added: 2026-10-16 13:56
 - log: 2026-10-16 13:56 review 'coordinator-17': added
 
-### PI-52 | open
+### PI-52 | Open
 - idea: Put known tooling snags (e.g. hxdefs.sh:30 /c/ path in bundle_dir.txt giving a false 'bundle dirs missing' SETUP-FAIL, use HX_OUT=C:/KenshiTestRuns/imm26-4080-hx) in the generated lane brief from testing/KNOWN_BLOCKERS.md, and make mark-row.py refuse SETUP-FAIL 'bundle dirs missing' when run.log is empty and the dirs exist.
 - evidence: 11:58-13:34: the same path bug produced false SETUP-FAILs on 01-cx, 16-bx (4080-i3, 5090-i5) and cost two investigator agents (inv01cx 190k tokens) plus two operator rediscoveries before it was named.
 - saving: about 200k tokens and 3 false tickets per occurrence
@@ -151,7 +115,7 @@ Rules:
 - added: 2026-10-16 13:56
 - log: 2026-10-16 13:56 review 'coordinator-17': added
 
-### PI-53 | open
+### PI-53 | Open
 - idea: Guard path arguments against Git Bash backslash stripping: lane-brief.ps1 (and other -Out/-Path scripts) should reject or auto-fix an -Out value without a drive-letter colon+separator, and print the resolved absolute path it wrote.
 - evidence: 2026-10-16 14:00-14:35: three lane briefs (4080-i4op16, 5090-i3op23, 4080-i3op24) were written to C:\KenshiModding\KenshiTestRunsagents...brief.md because bash dropped the backslashes in -Out C:\\...; the operators started without their briefs and the same stray file name was already untracked in git status for op14.
 - saving: about 3 operators x 1 missing-brief start, plus a hunt through 3 tool calls
@@ -161,7 +125,39 @@ Rules:
 - added: 2026-10-16 14:57
 - log: 2026-10-16 14:57 review 'coordinator-18': added
 
-### PI-54 | confirmed
+### PI-55 | Open
+- idea: Row runners must refuse to start under WSL bash (check for the /mnt/c mount or uname) and the lane operators' briefs must say 'row scripts run in Git Bash, only wsl.exe tools get MSYS_NO_PATHCONV', because a row script run under WSL silently creates a stray /c/KenshiTestRuns tree inside WSL that then shadows the real path for tools that probe /c first.
+- evidence: 2026-10-16 15:26: stray empty /c/KenshiTestRuns/imm26-4080/rows appeared in WSL during 4080-i3op24's 22-b RELOAD-FAIL; it made pilot-audit.py pick /c/... over /mnt/c/... (pilot rows=0) until I passed --pilot-dir.
+- saving: about 20 minutes of misdiagnosis per occurrence, plus a false RELOAD-FAIL
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 14:57
+- log: 2026-10-16 14:57 review 'coordinator-18': added
+
+### PI-56 | Open
+- idea: tail-autorelay should relay a RESUMED agent's second DONE (agent re-finishes after a SendMessage) as a new result, keyed on the status-file mtime/agentId run counter, instead of treating the name as already relayed.
+- evidence: 2026-10-16 15:08: huntA2 was resumed by SendMessage for the expiresAt 43200 order and finished again, but autorelay.log showed no second relay for imm26-huntA2 (state already marked it relayed at 14:56), so the tail had to send the result to coordinator 19 by hand.
+- saving: one hand relay (about 2 tool calls) per resumed agent and no risk of a lost result
+- risk: low: relays only, no monitoring catch is changed
+- hooks: no
+- weakens: no
+- added: 2026-10-16 15:40
+- log: 2026-10-16 15:40 review 'coordinator-18-tail': added
+
+### PI-57 | Open
+- idea: A subagent that waits on its own background job (selftest) must not re-send its full final report each time it wakes: dedupe hand-backs by content hash in the harness/tail relay, or have the agent hand back once and stay silent until its job finishes.
+- evidence: 15:09-15:25: imm26-regionR4 sent the same 'WP-R4 DONE' report 7 times (each waking this coordinator, 6 full-context turns of about 5-8k tokens) while its two slow selftests ran.
+- saving: about 40k tokens and 6 turns per such agent
+- risk: none for monitoring: only identical repeated reports are dropped
+- hooks: no
+- weakens: no
+- added: 2026-10-16 15:42
+- log: 2026-10-16 15:42 review 'coordinator-19': added
+
+## In progress
+
+### PI-54 | in-progress
 - idea: pilot-audit.py/cost-audit.py must be run with Windows python and resolve agent names to ids by default, and the audit must FAIL LOUDLY (not print an empty COST section) when the cost tool finds no transcripts.
 - evidence: 2026-10-16 15:10-15:50: the Haiku pilot audit had an empty COST section ('NO MATCH', files to scan 0) and I told Shay no cost data existed; Shay: 'that was a required part of this'. The data existed in the transcripts (Haiku $0.15 vs Sonnet $0.23-0.53 per row marked) and needed agent ids and Windows python.
 - saving: about 30 minutes and one wrong claim to Shay per pilot report
@@ -173,38 +169,7 @@ Rules:
 - last_review: coordinator-18-tail
 - log: 2026-10-16 14:57 review 'coordinator-18': added
 - log: 2026-10-16 15:40 review 'coordinator-18-tail': open -> confirmed (applies: 2026-10-16 16:00 Shay saw SUMMARY-final.md with every Sonnet column 'no RESULT found'; cause was pilot-audit.py line 607 default sonnet_roots missing the imm26-4080 lanes, found only after Shay com...)
-
-### PI-55 | open
-- idea: Row runners must refuse to start under WSL bash (check for the /mnt/c mount or uname) and the lane operators' briefs must say 'row scripts run in Git Bash, only wsl.exe tools get MSYS_NO_PATHCONV', because a row script run under WSL silently creates a stray /c/KenshiTestRuns tree inside WSL that then shadows the real path for tools that probe /c first.
-- evidence: 2026-10-16 15:26: stray empty /c/KenshiTestRuns/imm26-4080/rows appeared in WSL during 4080-i3op24's 22-b RELOAD-FAIL; it made pilot-audit.py pick /c/... over /mnt/c/... (pilot rows=0) until I passed --pilot-dir.
-- saving: about 20 minutes of misdiagnosis per occurrence, plus a false RELOAD-FAIL
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 14:57
-- log: 2026-10-16 14:57 review 'coordinator-18': added
-
-### PI-56 | open
-- idea: tail-autorelay should relay a RESUMED agent's second DONE (agent re-finishes after a SendMessage) as a new result, keyed on the status-file mtime/agentId run counter, instead of treating the name as already relayed.
-- evidence: 2026-10-16 15:08: huntA2 was resumed by SendMessage for the expiresAt 43200 order and finished again, but autorelay.log showed no second relay for imm26-huntA2 (state already marked it relayed at 14:56), so the tail had to send the result to coordinator 19 by hand.
-- saving: one hand relay (about 2 tool calls) per resumed agent and no risk of a lost result
-- risk: low: relays only, no monitoring catch is changed
-- hooks: no
-- weakens: no
-- added: 2026-10-16 15:40
-- log: 2026-10-16 15:40 review 'coordinator-18-tail': added
-
-### PI-57 | open
-- idea: A subagent that waits on its own background job (selftest) must not re-send its full final report each time it wakes: dedupe hand-backs by content hash in the harness/tail relay, or have the agent hand back once and stay silent until its job finishes.
-- evidence: 15:09-15:25: imm26-regionR4 sent the same 'WP-R4 DONE' report 7 times (each waking this coordinator, 6 full-context turns of about 5-8k tokens) while its two slow selftests ran.
-- saving: about 40k tokens and 6 turns per such agent
-- risk: none for monitoring: only identical repeated reports are dropped
-- hooks: no
-- weakens: no
-- added: 2026-10-16 15:42
-- log: 2026-10-16 15:42 review 'coordinator-19': added
-
-## In progress
+- log: 2026-10-16 16:12 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
 
 ### PI-38 | in-progress
 - idea: tail-wait / Get-TailAgentSet must not count a still-working in-session agent as 'needs the tail' just because its status file is older than 45 min: use a liveness signal (the agent's tool-output file or its work dir changed in the last 10 min, or ListAgents says running) before it exits the wait and lets the Stop hook block.
@@ -723,3 +688,38 @@ Rules:
 - retired: 2026-10-16 built
 - log: 2026-10-16 11:11 review 'coordinator-14-tail': added
 - log: 2026-10-16 11:52 review 'coordinator-15': open -> confirmed (applies: 2026-10-16 10:51-12:20: the waker ended ~25 times; at least 12 of those wakes were only 'EVENT STATUS <agent> DONE' or a duplicate TAIL-RELAY for an agent I had already handled (op9m DONE after I s...)
+
+### PI-29 | rejected x2
+- idea: At the tail hard limit the context meter should call tail-close.ps1 (sends 'tail done', then closes the session and window ~20 s later) once all owned agents are checkpointed/relayed, instead of telling the tail to run tail-mode.ps1 leave -Force (which only removes the flag, leaving the session and window open). tail-close's window-kill must first be tested on a real throwaway window.
+- evidence: 2026-10-15 ~21:07 old tail session 6d1f3011 followed the meter message, ran tail-mode.ps1 leave -Force at its hard limit: the flag went away but the session process and window stayed open (tail-close.ps1 then refuses with 'no tail flag'); the window-closing path of tail-close was never exercised on a real window.
+- saving: no orphan idle tail windows per overlap handoff; the tail context stops being resumable by accident
+- risk: kills a session: only after every owned agent is DONE and acked; the meter is a global hook (~/.claude/hooks/context-meter.ps1), so Shay decides
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 21:07
+- last_review: coordinator-12
+- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16: tail 2a0cfe9b closed itself via tail-ack.ps1 (all agents done+acked -> tail-close in 20 s) without any hard-limit case; no tail reached its limit this session.)
+
+### PI-31 | rejected x2
+- idea: AGENT ORPHANED must not fire for in-session (Agent-tool) subagents of a live coordinator or live tail: check the agent against the session's own agent list / ledger owner before alerting
+- evidence: 2026-10-15 21:24 and 21:40: AGENT ORPHANED imm26-fix10a and imm26-fix03b were false alarms (both alive, only blocked on a test lock); each cost 2-3 turns of investigation, one almost led to a wrong respawn
+- saving: about 3 turns per false alarm, avoids a duplicate respawn
+- risk: must not hide a real dead agent: keep the alert when the owning session is gone
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 23:16
+- last_review: coordinator-12
+- log: 2026-10-15 23:16 review 'coordinator-11': added
+- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16 00:00-05:00: no AGENT ORPHANED alert fired this session; only legitimate STOPPED-CONTEXT events.)
+
+### PI-35 | rejected x2
+- idea: mark-row.py needs a note-only mode (append a note to the evidence column without changing status), so row-tooling agents can annotate rows without overwriting results.
+- evidence: 2026-10-16 imm26-u-rowsA2 report: mark-row.py has no note-only mode, it always overwrites status and evidence, and a SETUP-FAIL re-mark needs a needs: clause and updates the unblock ticket, so none of the three tooling agents (rowsA/B/C) could add the one-call command to the row.
+- saving: one operator lookup per row (inbox note instead of the row)
+- risk: low: new flag only
+- hooks: no
+- weakens: no
+- added: 2026-10-16 02:55
+- last_review: coordinator-14
+- log: 2026-10-16 02:55 review 'coordinator-12': added
+- log: 2026-10-16 10:49 review 'coordinator-14': open -> rejected x1 (does not apply: not seen this session)

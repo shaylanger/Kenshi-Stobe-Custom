@@ -482,17 +482,69 @@ def median(xs):
 
 
 # ---------------------------------------------------------------- cost
-def agent_ref(name):
-    """cost-audit matches transcripts by agent id, not by the imm26 name: map name -> id via agents/ids.json (agent-ids.ps1); unknown names pass through."""
-    try:
-        path = next((x for x in ("C:/KenshiTestRuns/agents/ids.json", "/mnt/c/KenshiTestRuns/agents/ids.json") if os.path.isfile(x)), None)
-        with open(path, encoding="utf-8-sig") as f:
-            rec = json.load(f).get(name)
-        if isinstance(rec, dict) and rec.get("id"):
-            return rec["id"]
-    except Exception:
-        pass
-    return name
+TRANSCRIPT_ROOT = r"C:\Users\Shay\.claude\projects\C--KenshiModding"
+
+
+def transcript_root():
+    return os.environ.get("KAH_TRANSCRIPT_ROOT") or TRANSCRIPT_ROOT
+
+
+def _ids_json_id(name):
+    for x in (os.path.join(runs_dir(), "agents", "ids.json"), "C:/KenshiTestRuns/agents/ids.json", "/mnt/c/KenshiTestRuns/agents/ids.json"):
+        if os.path.isfile(x):
+            try:
+                with open(x, encoding="utf-8-sig") as f:
+                    rec = json.load(f).get(name)
+                if isinstance(rec, dict) and rec.get("id"):
+                    return rec["id"]
+            except Exception:
+                pass
+    return None
+
+
+def _scan_transcripts_for_id(name, root):
+    """name -> agent id from the transcripts themselves: subagent meta.json description, else the spawn prompt (first 40 KB). Newest match wins."""
+    hits = []
+    for tp in glob.glob(os.path.join(root, "*", "subagents", "agent-*.jsonl")):
+        found = False
+        try:
+            mp = tp[:-6] + ".meta.json"
+            if os.path.isfile(mp):
+                with open(mp, encoding="utf-8") as f:
+                    found = name.lower() in (json.load(f).get("description") or "").lower()
+            if not found:
+                with open(tp, "rb") as f:
+                    found = re.search(rb"(?<![\w-])" + re.escape(name.encode()) + rb"(?![\w-])", f.read(40000)) is not None
+            if found:
+                hits.append((os.path.getmtime(tp), os.path.basename(tp)[6:-6]))
+        except Exception:
+            continue
+    return max(hits)[1] if hits else None
+
+
+def agent_ref(name, root=None):
+    """PI-54: resolve an imm26 agent NAME to its transcript id by default. Order: agents/ids.json (only if that id has a transcript), then the transcripts
+    (subagent meta.json description / spawn prompt), else the name unchanged (cost-audit then matches its own name keys and fails loudly on NO MATCH)."""
+    root = root or transcript_root()
+    have = lambda i: bool(glob.glob(os.path.join(root, "*", "subagents", "agent-%s.jsonl" % i)))
+    i = _ids_json_id(name)
+    if i and have(i):
+        return i
+    if re.match(r"^a[0-9a-f]{16}$", name):
+        return name
+    return _scan_transcripts_for_id(name, root) or i or name
+
+
+def default_sonnet_roots(runs, pilot_lane_roots=("imm26-5090-i4",)):
+    """PI-54: every imm26 lane root (4080 and 5090, from the lane dirs on disk: those with rows/ or an -hx dir), minus the pilot's own lane."""
+    out = []
+    for d in sorted(glob.glob(os.path.join(runs, "imm26-4080*")) + glob.glob(os.path.join(runs, "imm26-5090*"))):
+        b = os.path.basename(d)
+        if any(b == x or b.startswith(x + "-") for x in pilot_lane_roots) or not os.path.isdir(d):
+            continue
+        if os.path.isdir(os.path.join(d, "rows")) or b.endswith("-hx"):
+            out.append(d)
+    return out or [os.path.join(runs, "imm26-5090-i3"), os.path.join(runs, "imm26-5090-hx")]
 
 
 def run_cost(script, a, b, since, until):
@@ -513,6 +565,11 @@ def run_cost(script, a, b, since, until):
         if m and not set(m.group(1)) <= set("-"):
             metrics[m.group(1)] = (m.group(2), m.group(3))
     return {"metrics": metrics, "raw": r.stdout}, ""
+
+
+def cost_failures(costs):
+    """PI-54: names whose cost run failed or returned no metric rows (empty COST must never pass silently)."""
+    return ["%s (%s)" % (nm, (err or "no metric rows").replace("\n", " ")[:160]) for nm, (res, err) in costs.items() if not res or not res.get("metrics")]
 
 
 def num(s):
@@ -595,6 +652,9 @@ def main(argv):
             pilot = a; i += 1
         else:
             paired.append(a); i += 1
+    if os.name != "nt" and not os.environ.get("KAH_ALLOW_POSIX"):
+        print("pilot-audit FAIL: needs Windows python (os.name=%s); the cost tool reads C:\\Users\\Shay transcripts. Run: python -I C:\\KenshiModding\\tools\\automation\\pilot-audit.py ... (KAH_ALLOW_POSIX=1 overrides for tests)" % os.name, file=sys.stderr)
+        return 2
     pilot = pilot or "imm26-5090-i4-hk1"
     runs = runs_dir()
     pd = os.environ.get("KAH_PILOT_DIR") or os.path.join(runs, "pilot", "haiku-i4")
@@ -604,7 +664,7 @@ def main(argv):
     tests_file = tests_file or os.environ.get("KAH_TESTS_FILE") or os.path.join(repo, "testing", "NPC_IMMERSION_26_TESTS.md")
     rows_file = rows_file or os.path.join(runs, "pilot", "rows-i4.txt")
     cost_script = cost_script or os.path.join(here, "cost-audit.py")
-    sonnet_roots = sonnet_roots or [os.path.join(runs, "imm26-5090-i3"), os.path.join(runs, "imm26-5090-hx")]
+    sonnet_roots = sonnet_roots or default_sonnet_roots(runs)
     out_file = out_file or os.path.join(pd, "SUMMARY.md")
     paired = pick_paired(paired or ["imm26-5090-i3op21"], agents_dir)
     if not no_succ:
@@ -841,8 +901,8 @@ def main(argv):
         add(cost_note)
     for nm, (res, err) in costs.items():
         add("### %s\n" % nm)
-        if not res:
-            add("no cost data: %s\n" % cell(err, 400))
+        if not res or not res.get("metrics"):
+            add("**COST FAILED (PI-54): no cost data: %s**\n" % cell(err or "cost tool printed no metric rows", 400))
             continue
         m = res["metrics"]
         rows_c = [[k, v[0], v[1]] for k, v in m.items() if k != "metric"]
@@ -868,6 +928,10 @@ def main(argv):
 
     if fill:
         fill_csv(os.path.join(pd, "verdicts.csv"), per_row_false, cost_script, pilot, no_cost, now)
+    bad_cost = cost_failures(costs)
+    if bad_cost:
+        print("pilot-audit FAIL: COST section has no data (exit 3) for: %s. SUMMARY was written with a COST FAILED banner; fix the cost tool run, do not report 'no cost data exists'." % "; ".join(bad_cost), file=sys.stderr)
+        return 3
     return 0
 
 
@@ -979,7 +1043,9 @@ def selftest():
         stub = os.path.join(tmp, "cost-stub.py")
         w(stub, "import sys\nprint('| metric | %s | %s |' % (sys.argv[2], sys.argv[3]))\nprint('|---|---|---|')\nprint('| tokens total | 1,234 | 5,678 |')\nprint('| USD (actual, own model) | $0.12 | $0.34 |')\n")
         outmd = os.path.join(tmp, "SUMMARY.md")
-        env = dict(os.environ, KAH_RUNS_DIR=runs, KAH_PILOT_DIR=pd)
+        troot = os.path.join(tmp, "transcripts")
+        os.makedirs(troot, exist_ok=True)
+        env = dict(os.environ, KAH_RUNS_DIR=runs, KAH_PILOT_DIR=pd, KAH_TRANSCRIPT_ROOT=troot)
         base = [sys.executable, os.path.abspath(__file__), "hk", "--paired", "son1", "--tests", tests, "--sonnet-roots", os.path.join(runs, "i3tree"),
                 "--repo", tmp, "--out", outmd, "--cost-audit", stub]
         r = subprocess.run(base + ["--fill"], env=env, capture_output=True, text=True)
@@ -1042,6 +1108,50 @@ def selftest():
         w(os.path.join(pd2, "verdicts.csv"), ",".join(HEADER) + "\n")
         r4 = subprocess.run([sys.executable, os.path.abspath(__file__), "hk-none", "--paired", "nobody", "--out", out2, "--no-cost"], env=env2, capture_output=True, text=True)
         check("header-only csv ok", r4.returncode == 0, r4.stdout + r4.stderr)
+        # PI-54: cost failures are loud, names resolve by default, 4080 lane roots are default Sonnet roots
+        fail_stub = os.path.join(tmp, "cost-fail.py")
+        w(fail_stub, "import sys\nprint('cost-audit FAIL: NO MATCH for x', file=sys.stderr)\nsys.exit(2)\n")
+        outf = os.path.join(tmp, "SUMMARY-failcost.md")
+        rf = subprocess.run([sys.executable, os.path.abspath(__file__), "hk", "--paired", "son1", "--tests", tests, "--sonnet-roots", os.path.join(runs, "i3tree"),
+                             "--repo", tmp, "--out", outf, "--cost-audit", fail_stub], env=env, capture_output=True, text=True)
+        check("PI-54: failed cost -> non-zero exit", rf.returncode == 3 and "COST section has no data" in rf.stderr, "%s %s" % (rf.returncode, rf.stderr[-300:]))
+        check("PI-54: failed cost -> banner in SUMMARY", "COST FAILED" in read_text(outf))
+        empty_stub = os.path.join(tmp, "cost-empty.py")
+        w(empty_stub, "print('nothing')\n")
+        re_ = subprocess.run([sys.executable, os.path.abspath(__file__), "hk", "--paired", "son1", "--tests", tests, "--sonnet-roots", os.path.join(runs, "i3tree"),
+                              "--repo", tmp, "--out", outf, "--cost-audit", empty_stub], env=env, capture_output=True, text=True)
+        check("PI-54: empty COST (no metric rows) -> non-zero exit", re_.returncode == 3, "%s %s" % (re_.returncode, re_.stderr[-200:]))
+        rt = os.path.join(tmp, "lanes-runs")
+        for d in ("imm26-4080/rows", "imm26-4080-i4/rows", "imm26-5090-i3/rows", "imm26-5090-i4/rows", "imm26-5090-i4-hx", "imm26-4080-i3", "imm26-5090-hx"):
+            os.makedirs(os.path.join(rt, d), exist_ok=True)
+        roots = [os.path.basename(x) for x in default_sonnet_roots(rt)]
+        check("PI-54: 4080 lane roots in default sonnet roots", "imm26-4080" in roots and "imm26-4080-i4" in roots, roots)
+        check("PI-54: 5090 lane roots kept, pilot lane excluded", "imm26-5090-i3" in roots and "imm26-5090-hx" in roots and "imm26-5090-i4" not in roots and "imm26-5090-i4-hx" not in roots, roots)
+        check("PI-54: dirs without rows/ and not -hx skipped", "imm26-4080-i3" not in roots, roots)
+        sess = os.path.join(troot, "sess1", "subagents")
+        os.makedirs(sess, exist_ok=True)
+        w(os.path.join(sess, "agent-a0123456789abcdef.jsonl"), '{"type":"user","message":{"content":"You are imm26-test-opx. Do things."}}\n')
+        w(os.path.join(sess, "agent-a1111111111111111.jsonl"), '{"type":"user","message":{"content":"other"}}\n')
+        w(os.path.join(sess, "agent-a1111111111111111.meta.json"), '{"description":"[case:patch] imm26-test-metaonly job"}')
+        check("PI-54: name -> id by default (spawn prompt)", agent_ref("imm26-test-opx", troot) == "a0123456789abcdef", agent_ref("imm26-test-opx", troot))
+        check("PI-54: name -> id by default (meta.json description)", agent_ref("imm26-test-metaonly", troot) == "a1111111111111111", agent_ref("imm26-test-metaonly", troot))
+        check("PI-54: unknown name passes through (cost tool fails loudly)", agent_ref("imm26-no-such-agent", troot) == "imm26-no-such-agent")
+        cost = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cost-audit.py")
+        env3 = dict(os.environ, KAH_ALLOW_POSIX="1")
+        ed = os.path.join(tmp, "emptyroot")
+        os.makedirs(ed, exist_ok=True)
+        rc = subprocess.run([sys.executable, "-I", cost, "--root", ed, "--out", os.path.join(tmp, "co"), "--pilot-compare", "a", "b"], env=env3, capture_output=True, text=True)
+        check("PI-54: cost-audit files to scan 0 -> non-zero + message", rc.returncode == 3 and "files to scan 0" in rc.stderr, "%s %s" % (rc.returncode, rc.stderr[-200:]))
+        rc = subprocess.run([sys.executable, "-I", cost, "--root", os.path.join(tmp, "nonexistent"), "--out", os.path.join(tmp, "co"), "--pilot-compare", "a", "b"], env=env3, capture_output=True, text=True)
+        check("PI-54: cost-audit missing root -> exit 2 + message", rc.returncode == 2 and "root not found" in rc.stderr, "%s %s" % (rc.returncode, rc.stderr[-200:]))
+        w(os.path.join(ed, "s1.jsonl"), '{"type":"assistant","timestamp":"2026-10-16T10:00:00.000Z","message":{"id":"msg_1","model":"claude-sonnet-5-5","usage":{"input_tokens":1,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}\n')
+        rc = subprocess.run([sys.executable, "-I", cost, "--root", ed, "--out", os.path.join(tmp, "co"), "--pilot-compare", "zzz-none-a", "zzz-none-b"], env=env3, capture_output=True, text=True)
+        check("PI-54: cost-audit NO MATCH -> non-zero, no table on stdout", rc.returncode == 2 and "NO MATCH" in rc.stderr and "| metric" not in rc.stdout, "%s %s" % (rc.returncode, rc.stderr[-200:]))
+        rc = subprocess.run([sys.executable, "-I", cost, "--root", ed, "--out", os.path.join(tmp, "co"), "--agents", "zzz-none"], env=env3, capture_output=True, text=True)
+        check("PI-54: cost-audit --agents NO MATCH -> non-zero", rc.returncode == 3 and "NO MATCH" in rc.stderr, "%s %s" % (rc.returncode, rc.stderr[-200:]))
+        if os.name == "nt":
+            rp = subprocess.run([sys.executable, "-I", cost, "--root", ed, "--agents", "x"], env={k: v for k, v in os.environ.items() if k != "KAH_ALLOW_POSIX"}, capture_output=True, text=True)
+            check("PI-54: windows python accepted by guard", "needs Windows python" not in rp.stderr)
         # unit: path classes
         ck = Checker(tmp, set(), {}, {}, lambda r: [])
         check("wsl-only path unverifiable on Windows, checked on posix", ck.path_state("/tmp/foo/bar-none")[0] == ("unverifiable" if os.name == "nt" else "false"))

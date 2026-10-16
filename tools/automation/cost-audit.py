@@ -5,7 +5,7 @@ Reads C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\*.jsonl (main sessio
 <session>\\subagents\\agent-*.jsonl (subagents). Streams every file line by line, json.loads per
 line, and prints/writes aggregates only. Never prints transcript text.
 
-Usage (Windows python; WSL python3 works too):
+Usage (Windows python only, PI-54: posix python exits 2 with a clear message):
   python -I tools/automation/cost-audit.py [--since YYYY-MM-DD] [--out DIR] [--root DIR]
                                            [--selfcheck FILE] [--workers N] [--limit-files N]
   powershell -File tools/automation/cost-audit.ps1 [same options]
@@ -443,8 +443,7 @@ def pilot_compare(agents, ta, tb):
     for tok in (ta, tb):
         grp = resolve(agents, tok)
         if not grp:
-            print('NO MATCH for %r (try the agent id, the imm26 name, or part of the description)' % tok)
-            return 2
+            return fail('NO MATCH for %r (try the agent id, the imm26 name, or part of the description; or no messages in the window)' % tok, 2)
         cols.append((tok, group_stats(grp), grp))
     lines = ['| metric | %s | %s |' % (cols[0][0], cols[1][0]), '|---|---|---|']
 
@@ -471,6 +470,22 @@ def pilot_compare(agents, ta, tb):
     return 0
 
 
+def fail(msg, code=3):
+    """PI-54: fail loudly (stderr + non-zero exit) instead of printing an empty COST section."""
+    print('cost-audit FAIL: ' + msg, file=sys.stderr)
+    return code
+
+
+def check_python_and_root(root):
+    """PI-54: needs Windows python (transcripts live in the Windows user profile); returns an error string or empty."""
+    if os.name != 'nt' and not os.environ.get('KAH_ALLOW_POSIX'):
+        return ('needs Windows python (os.name=%s). WSL/posix python cannot see %s. Run: python -I tools/automation/cost-audit.py ... '
+                'from Git Bash/PowerShell (KAH_ALLOW_POSIX=1 overrides for tests).' % (os.name, DEFAULT_ROOT))
+    if not os.path.isdir(root):
+        return 'transcript root not found: %s (wrong python, or pass --root)' % root
+    return ''
+
+
 def main():
     ap = argparse.ArgumentParser(description='Cost/token audit of Claude Code transcripts (read-only).')
     ap.add_argument('--since', default=DEFAULT_SINCE, help='local YYYY-MM-DD[ HH:MM]; earlier messages are ignored (default %s; "all" = no lower bound)' % DEFAULT_SINCE)
@@ -488,6 +503,9 @@ def main():
     NO_LABELS = a.no_labels
     prices = load_prices()
     root = a.root
+    err = check_python_and_root(root)
+    if err:
+        return fail(err, 2)
     since_ts = parse_bound(a.since) or 0.0
     until_ts = parse_bound(a.until) or 4e9
     a.window = '%s to %s (local)' % (a.since if parse_bound(a.since) else 'the beginning',
@@ -504,6 +522,8 @@ def main():
         jobs = jobs[:a.limit_files]
     print('files to scan: %d (main %d, subagent %d); window %s' % (
         len(jobs), sum(1 for j in jobs if j[1] == 'main'), sum(1 for j in jobs if j[1] == 'sub'), a.window), file=sys.stderr)
+    if not jobs:
+        return fail('files to scan 0 under %s for window %s (no transcripts; wrong --root/--since or wrong python?)' % (root, a.window))
     work = [(p, k, s, prices, since_ts, until_ts) for p, k, s in jobs]
     with ProcessPoolExecutor(max_workers=max(1, a.workers)) as ex:
         results = list(ex.map(scan_file, work, chunksize=2))
@@ -610,6 +630,8 @@ def main():
             t[1] += s[1]
             t[2] = max(t[2], s[2])
 
+    if filter_on and not agents:
+        return fail('NO MATCH for --agents %r: 0 agents with messages in the window %s' % (a.agents, a.window))
     if a.pilot_compare:
         return pilot_compare(agents, a.pilot_compare[0], a.pilot_compare[1])
 
