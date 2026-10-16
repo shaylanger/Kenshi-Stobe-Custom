@@ -32,6 +32,23 @@ Method:
     recipe, native-build, server-fix), then [case:x] tag, then generic keywords; else other.
   - Tool outputs: size = characters of each tool_result text, grouped by tool name, and for Bash /
     PowerShell by the first word of the command.
+
+Lane operators (imm26-pilotC):
+  - Task type 'lane-operator' = an agent whose prompt says "You are [the independent agent] imm26-<rig>-
+    [<lane>]op<N>" / "-hk<N>" (4080 or 5090 rig), or whose description/prompt says "<rig> <lane> operator",
+    "lane operator", "lane <rig>-i<N>" or "lane-brief". An explicit "You are imm26-<other name>" that is not an
+    operator name is never a lane operator (so tooling/fixer agents that merely mention lanes stay out). Main
+    sessions that are hosted independent operators are lane-operators too (not 'coordinator').
+  - ledger.md section "Lane operators: Sonnet-high actual vs Haiku-high what-if": per-operator rows
+    (rows-marked = distinct rows named in mark-row.py / status-mark.sh calls with PASS|FAIL|SETUP-FAIL|GATED,
+    blank if none), per-lane totals, tokens/USD per hour of wall time (first to last message timestamp).
+    ledger.csv gets the extra columns name, lane, rows_marked, hours, ctx_cache_first, ctx_cache_last.
+  - --agents NAME[,NAME]: only matching agents are reported (all aggregate tables and the CSV are restricted;
+    dedupe still sees every file). A name matches an agent id, derived/explicit name or description by exact
+    match first, else by substring.
+  - --pilot-compare A B: prints two agents (or groups, when a name matches several; sums, and context growth
+    = sum of growth / sum of hours) side by side to stdout: tokens, USD, turns, hours, context growth per hour
+    = (cache_read tokens of the last assistant message - the first) / hours. Writes no files.
 """
 import argparse
 import collections
@@ -47,6 +64,7 @@ from concurrent.futures import ProcessPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = r'C:\Users\Shay\.claude\projects\C--KenshiModding'
 DEFAULT_OUT = r'C:\KenshiTestRuns\agents\out\imm26-costaudit'
+DEFAULT_SINCE = '2026-10-14 00:00'  # Shay 2026-10-16: only the current setup counts; earlier data is ignored
 BAND = 100000  # Haiku over-100k prompt band
 HAIKU_ELIGIBLE = ('reader', 'classifier', 'statistics', 'investigator')  # read/parse/check/classify/investigator/statistics
 
@@ -57,10 +75,10 @@ CASE_MAP = {'investigate': 'investigator', 'debug': 'investigator', 'escalate': 
 # Task-type rules on the subagent description (prompt text only when there is no description).
 # KEYWORD_RULES are checked first; then the [case:x] tag; then GENERIC_RULES; else "other".
 KEYWORD_RULES = [
-    ('lane-operator', r'(\boperator|\bop\d|\bi[345]\s?-?op|\blane|\brows?\b|kenshi-ctl|\b[45]090-i)'),
     ('recipe', r'\brecipe'),
     ('native-build', r'(\bnative\b|\bbuild\b|compile|msbuild|cmake|\bdll\b)'),
     ('server-fix', r'(\bserver|\bphp\b|stobe-server|\bsql\b|database)'),
+    ('fixer', r'(\bfix|rowfix|\bpatch)'),
     ('pg-agent', r'(\bpg\b|profession gear)'),
     ('harness', r'(\bharness|\bkah\b|automation)'),
 ]
@@ -74,6 +92,17 @@ GENERIC_RULES = [
     ('animation', r'(\banim|viewmodel|kenshifp|\bfp\b)'),
 ]
 CASE_RE = re.compile(r'\[case:([a-z]+)\]', re.I)
+# Lane operators. EXPLICIT_RE: the name the agent is told it is. OP_NAME_RE: operator-shaped names.
+EXPLICIT_RE = re.compile(r'You are (?:the independent agent |the )?(imm26-[A-Za-z0-9-]+?)(?=[\s,.:;]|$)')
+OP_NAME_RE = re.compile(r'^imm26-(4080|5090)-(?:(i\d+)-?)?(op\d[0-9a-z]*|hk[0-9a-z]*|ctxop\d[0-9a-z]*|hard[0-9a-z]*)$', re.I)
+OP_DESC_RE = re.compile(r'((4080|5090)[\w\s-]{0,24}?\b(operator|op\d)|\blane[\s-]operator|\boperator\s+op\d|\bi[345]\s?-?op\d|resume\s+\S+\s+operator)', re.I)
+OP_PROMPT_RE = re.compile(r'\blane\s+(4080|5090)-i\d', re.I)
+RIG_RE = re.compile(r'(?<![0-9])(4080|5090)(?![0-9])')
+LANE_RE = re.compile(r'(?<![a-z0-9])(i\d)(?![0-9])', re.I)
+OPN_RE = re.compile(r'(?:ctx)?op(\d[0-9a-z]*)|hk(\d[0-9a-z]*)', re.I)
+MARK_RE = re.compile(r'(?:mark-row\.py\s+|status-mark\.sh\s+\S+\s+)[\'"]?(\d+-[a-z0-9]+)[\'"]?\s+[\'"]?(PASS|FAIL|SETUP-FAIL|GATED)\b')
+RESULT_RE = re.compile(r'(?m)^\s*RESULT\s+(\d+-[a-z0-9]+)\s+(?:PASS|FAIL)\b')
+TS_RE = re.compile(rb'"timestamp":"([^"]+)"')
 WORD_RE = re.compile(r'^\s*(?:[A-Za-z_]+=\S+\s+)*([^\s;|&]+)')
 
 
@@ -99,9 +128,9 @@ def usd_at(r, i, o, cr, cw5, cw1):
 def local_day(ts):
     try:
         t = dt.datetime.strptime(ts[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=dt.timezone.utc).astimezone()
-        return t.strftime('%Y-%m-%d'), t.strftime('%Y-%m-%d %H:%M')
+        return t.strftime('%Y-%m-%d'), t.strftime('%Y-%m-%d %H:%M'), t.timestamp()
     except (ValueError, TypeError):
-        return '', ''
+        return '', '', 0.0
 
 
 def result_chars(c):
@@ -125,12 +154,13 @@ def tool_pattern(name, inp):
 
 def scan_file(job):
     """Worker: one transcript. Returns compact aggregates (no transcript text)."""
-    path, kind, session, prices = job
+    path, kind, session, prices, since_ts, until_ts = job
     stem = os.path.basename(path)[:-6]
     res = {'path': path, 'kind': kind, 'session': session,
            'agent': stem[6:] if kind == 'sub' else 'main', 'desc': '', 'agent_type': '',
            'first_user': '', 'msgs': {}, 'dupes': 0, 'dupe_diff': 0, 'lines_assistant': 0,
-           'tools': {}, 'unknown_model': 0, 'unknown_names': collections.Counter()}
+           'tools': {}, 'unknown_model': 0, 'unknown_names': collections.Counter(),
+           'rows': set(), 'rows_result': set(), 'ts_min': '', 'ts_max': ''}
     if kind == 'sub':
         mp = path[:-6] + '.meta.json'
         if os.path.exists(mp):
@@ -145,6 +175,13 @@ def scan_file(job):
     tools = res['tools']
     with open(path, 'rb') as f:
         for raw in f:
+            tm = TS_RE.search(raw)
+            if tm:
+                t = tm.group(1).decode('ascii', 'ignore')
+                if not res['ts_min'] or t < res['ts_min']:
+                    res['ts_min'] = t
+                if t > res['ts_max']:
+                    res['ts_max'] = t
             if b'"type":"assistant"' in raw:
                 d = json.loads(raw)
                 if d.get('type') != 'assistant':
@@ -155,6 +192,13 @@ def scan_file(job):
                     for c in content:
                         if isinstance(c, dict) and c.get('type') == 'tool_use':
                             tool_names[c.get('id')] = tool_pattern(c.get('name'), c.get('input'))
+                            if c.get('name') in ('Bash', 'PowerShell'):
+                                cmd = (c.get('input') or {}).get('command') or ''
+                                if 'mark-row' in cmd or 'status-mark' in cmd:
+                                    ep = local_day(d.get('timestamp') or '')[2]
+                                    if since_ts <= ep <= until_ts:
+                                        for mm in MARK_RE.finditer(cmd):
+                                            res['rows'].add(mm.group(1).lower())
                 u = m.get('usage')
                 mid = m.get('id') or d.get('requestId')
                 if not u or not mid:
@@ -187,8 +231,8 @@ def scan_file(job):
                     usd = usd_at(r, i, o, cr, cw5, cw1)
                     parts = (i * r['input'] / 1e6, o * r['output'] / 1e6, cr * r['cache_read'] / 1e6,
                              (cw5 * r['cache_write_5m'] + cw1 * r['cache_write_1h']) / 1e6)
-                day, tloc = local_day(d.get('timestamp') or '')
-                rec = (mid, day, tloc, model, fam, i, o, cw5, cw1, cr, usd, usd_h, usd_unpriced) + parts
+                day, tloc, epoch = local_day(d.get('timestamp') or '')
+                rec = (mid, day, tloc, model, fam, i, o, cw5, cw1, cr, usd, usd_h, usd_unpriced) + parts + (epoch,)
                 prev = res['msgs'].get(mid)
                 if prev is None:
                     res['msgs'][mid] = rec
@@ -215,6 +259,15 @@ def scan_file(job):
                             if t and not t.lstrip().startswith('<'):
                                 res['first_user'] = t[:400]
                         elif x.get('type') == 'tool_result':
+                            if b'RESULT ' in raw:
+                                ct = x.get('content')
+                                if isinstance(ct, list):
+                                    ct = ' '.join((y.get('text') or '') for y in ct if isinstance(y, dict))
+                                if isinstance(ct, str) and 'RESULT ' in ct:
+                                    ep = local_day(d.get('timestamp') or '')[2]
+                                    if since_ts <= ep <= until_ts:
+                                        for mm in RESULT_RE.finditer(ct):
+                                            res['rows_result'].add(mm.group(1).lower())
                             pat = tool_names.get(x.get('tool_use_id'), '?')
                             n = result_chars(x.get('content'))
                             s = tools.setdefault(pat, [0, 0, 0])
@@ -225,9 +278,49 @@ def scan_file(job):
     return res
 
 
+def explicit_name(first_user):
+    m = EXPLICIT_RE.search(first_user or '')
+    return m.group(1) if m else ''
+
+
+def operator_info(kind, desc, first_user):
+    """None, or dict(name, rig, lane, pilot) when the agent is a lane operator."""
+    ex = explicit_name(first_user)
+    m = OP_NAME_RE.match(ex) if ex else None
+    if ex and not m:
+        return None  # told it is some other named agent (tooling, fixer, ...): never an operator
+    if not m:
+        if kind == 'main':
+            return None
+        fu = (first_user or '')[:300]
+        if not (OP_DESC_RE.search(desc or '') or (OP_PROMPT_RE.search(fu) and re.search(r'operator|\bop\d', fu, re.I))):
+            return None
+    text = ((desc or '') + ' ' + (first_user or '')[:300])
+    rm = RIG_RE.search(text)
+    lm = LANE_RE.search(text)
+    rig = m.group(1) if m else (rm.group(1) if rm else '')
+    lane = (m.group(2) or '').lower() if m else (lm.group(1).lower() if lm else '')
+    if m and not lane:
+        lm2 = re.search(r'(?<![0-9])' + rig + r'[\s-]+(i\d)\b', text, re.I)
+        lane = lm2.group(1).lower() if lm2 else ''
+    if m:
+        name = ex
+    else:
+        on = OPN_RE.search(desc or '')
+        opn = ('hk' + on.group(2)) if on and on.group(2) else (('op' + on.group(1)) if on else '')
+        name = 'imm26-%s-%s%s' % (rig or '?', lane, opn)
+        if not (lane or opn):
+            name = 'imm26-%s-op' % (rig or '?')
+    return {'name': name, 'rig': rig or '?', 'lane': '%s-%s' % (rig or '?', lane or '?'),
+            'pilot': 'hk' in name.lower()}
+
+
 def task_type(kind, desc, first_user):
+    if operator_info(kind, desc, first_user):
+        return 'lane-operator'
     if kind == 'main':
-        return 'coordinator'  # main session = coordinator or a personal Claude Code session
+        # main session = coordinator or a personal session; a hosted independent agent (named by its prompt) is its own type
+        return 'hosted-agent' if explicit_name(first_user) else 'coordinator'
     text = (desc or first_user[:200]).lower()  # the description decides; prompt text only if none
     for name, pat in KEYWORD_RULES:
         if re.search(pat, text):
@@ -286,9 +379,104 @@ def read_selfcheck(path):
     return rows
 
 
+def parse_bound(s):
+    s = (s or '').strip().replace('T', ' ')
+    if not s or s.lower() == 'all':
+        return None
+    for f in ('%Y-%m-%d %H:%M', '%Y-%m-%d'):
+        try:
+            return dt.datetime.strptime(s, f).timestamp()
+        except ValueError:
+            pass
+    raise SystemExit('bad datetime (want YYYY-MM-DD or YYYY-MM-DD HH:MM, local): %s' % s)
+
+
+def iso_epoch(t):
+    try:
+        return dt.datetime.strptime(t[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=dt.timezone.utc).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def match_keys(r, info):
+    keys = {r['agent'].lower(), r['session'].lower() + '/' + r['agent'].lower()}
+    ex = explicit_name(r['first_user'])
+    if ex:
+        keys.add(ex.lower())
+    if info:
+        keys.add(info['name'].lower())
+    if r['desc']:
+        keys.add(r['desc'].lower())
+    return keys
+
+
+def resolve(agents, token):
+    """Agents matching a name token: exact on id / name / description first, else substring."""
+    t = token.strip().lower()
+    exact = [ag for ag in agents if t in ag['keys']]
+    if exact:
+        return exact
+    return [ag for ag in agents if any(t in k for k in ag['keys'])]
+
+
+def group_stats(group):
+    g = {'n_agents': len(group), 'tokens': 0, 'usd': 0.0, 'haiku_usd': 0.0, 'turns': 0, 'hours': 0.0,
+         'growth': 0, 'out': 0, 'cr': 0, 'cw': 0, 'inp': 0, 'rows': 0, 'models': collections.Counter()}
+    for ag in group:
+        g['tokens'] += ag['input'] + ag['output'] + ag['cache_write'] + ag['cache_read']
+        g['inp'] += ag['input']
+        g['out'] += ag['output']
+        g['cw'] += ag['cache_write']
+        g['cr'] += ag['cache_read']
+        g['usd'] += ag['usd']
+        g['haiku_usd'] += ag['haiku_usd']
+        g['turns'] += ag['n_messages']
+        g['hours'] += ag['hours']
+        g['growth'] += ag['ctx_last'] - ag['ctx_first']
+        g['rows'] += ag['rows_marked'] or 0
+        g['models'][ag['primary_model']] += 1
+    return g
+
+
+def pilot_compare(agents, ta, tb):
+    cols = []
+    for tok in (ta, tb):
+        grp = resolve(agents, tok)
+        if not grp:
+            print('NO MATCH for %r (try the agent id, the imm26 name, or part of the description)' % tok)
+            return 2
+        cols.append((tok, group_stats(grp), grp))
+    lines = ['| metric | %s | %s |' % (cols[0][0], cols[1][0]), '|---|---|---|']
+
+    def row(label, f):
+        lines.append('| %s | %s | %s |' % (label, f(cols[0][1]), f(cols[1][1])))
+    row('transcripts matched', lambda g: str(g['n_agents']))
+    row('model(s)', lambda g: '+'.join('%s:%d' % kv for kv in g['models'].most_common()))
+    row('turns (assistant messages)', lambda g: toks(g['turns']))
+    row('hours (first to last message)', lambda g: '%.2f' % g['hours'])
+    row('tokens total', lambda g: toks(g['tokens']))
+    row('  input / output', lambda g: '%s / %s' % (toks(g['inp']), toks(g['out'])))
+    row('  cache write / cache read', lambda g: '%s / %s' % (toks(g['cw']), toks(g['cr'])))
+    row('USD (actual, own model)', lambda g: money(g['usd']))
+    row('USD at Haiku rates (same tokens)', lambda g: money(g['haiku_usd']))
+    row('USD per hour', lambda g: money(g['usd'] / g['hours']) if g['hours'] else '-')
+    row('tokens per hour', lambda g: toks(g['tokens'] / g['hours']) if g['hours'] else '-')
+    row('turns per hour', lambda g: '%.1f' % (g['turns'] / g['hours']) if g['hours'] else '-')
+    row('rows marked', lambda g: str(g['rows']) if g['rows'] else '-')
+    row('USD per row', lambda g: money(g['usd'] / g['rows']) if g['rows'] else '-')
+    row('context growth, cache_read last - first', lambda g: toks(g['growth']))
+    row('context growth per hour (cache_read tokens)', lambda g: toks(g['growth'] / g['hours']) if g['hours'] else '-')
+    print('\n'.join(lines))
+    print('\nA group (several transcripts matched one name) sums tokens, USD, turns, hours; context growth = sum of (last - first) cache_read / sum of hours.')
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description='Cost/token audit of Claude Code transcripts (read-only).')
-    ap.add_argument('--since', default='', help='YYYY-MM-DD, local day; earlier messages are ignored')
+    ap.add_argument('--since', default=DEFAULT_SINCE, help='local YYYY-MM-DD[ HH:MM]; earlier messages are ignored (default %s; "all" = no lower bound)' % DEFAULT_SINCE)
+    ap.add_argument('--until', default='', help='local YYYY-MM-DD[ HH:MM]; later messages are ignored (default now)')
+    ap.add_argument('--agents', default='', help='NAME[,NAME]: report only agents matching an id / imm26 name / description (exact, else substring)')
+    ap.add_argument('--pilot-compare', nargs=2, metavar=('A', 'B'), help='print two agents side by side (no files written)')
     ap.add_argument('--out', default=DEFAULT_OUT)
     ap.add_argument('--root', default=DEFAULT_ROOT)
     ap.add_argument('--selfcheck', default='', help='TSV from an independent recount (default <out>\\selfcheck.tsv)')
@@ -300,25 +488,26 @@ def main():
     NO_LABELS = a.no_labels
     prices = load_prices()
     root = a.root
-    since = a.since
+    since_ts = parse_bound(a.since) or 0.0
+    until_ts = parse_bound(a.until) or 4e9
+    a.window = '%s to %s (local)' % (a.since if parse_bound(a.since) else 'the beginning',
+                                    a.until if parse_bound(a.until) else 'now (%s)' % dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
 
     jobs = []
     for p in sorted(glob.glob(os.path.join(root, '*.jsonl'))):
         jobs.append((p, 'main', os.path.basename(p)[:-6]))
     for p in sorted(glob.glob(os.path.join(root, '*', 'subagents', 'agent-*.jsonl'))):
         jobs.append((p, 'sub', os.path.basename(os.path.dirname(os.path.dirname(p)))))
-    if since:
-        cutoff = dt.datetime.strptime(since, '%Y-%m-%d').timestamp()
-        jobs = [j for j in jobs if os.path.getmtime(j[0]) >= cutoff - 86400]
+    if since_ts:
+        jobs = [j for j in jobs if os.path.getmtime(j[0]) >= since_ts]
     if a.limit_files:
         jobs = jobs[:a.limit_files]
-    print('files to scan: %d (main %d, subagent %d)' % (len(jobs), sum(1 for j in jobs if j[1] == 'main'),
-                                                        sum(1 for j in jobs if j[1] == 'sub')), file=sys.stderr)
-    work = [(p, k, s, prices) for p, k, s in jobs]
+    print('files to scan: %d (main %d, subagent %d); window %s' % (
+        len(jobs), sum(1 for j in jobs if j[1] == 'main'), sum(1 for j in jobs if j[1] == 'sub'), a.window), file=sys.stderr)
+    work = [(p, k, s, prices, since_ts, until_ts) for p, k, s in jobs]
     with ProcessPoolExecutor(max_workers=max(1, a.workers)) as ex:
         results = list(ex.map(scan_file, work, chunksize=2))
 
-    os.makedirs(a.out, exist_ok=True)
     seen = set()
     cross_dupes = 0
     total_msgs = 0
@@ -331,10 +520,12 @@ def main():
     agents = []
     per_day = collections.defaultdict(new_totals)
     per_model = collections.defaultdict(new_totals)
-    per_task = collections.defaultdict(new_totals)
     parts_all = [0.0, 0.0, 0.0, 0.0]
     tools_all = collections.defaultdict(lambda: [0, 0, 0])
+    unk_win = collections.defaultdict(lambda: {'n': 0, 'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0, 'opus': 0.0})
     first_day, last_day = '', ''
+    filt = [t.strip().lower() for t in a.agents.split(',') if t.strip()]
+    filter_on = bool(filt) and not a.pilot_compare
 
     for r in results:
         kept = []
@@ -344,38 +535,73 @@ def main():
                 cross_dupes += 1
                 continue
             seen.add(rec[0])
-            if since and rec[1] < since:
+            if rec[17] < since_ts or rec[17] > until_ts:
                 continue
             kept.append(rec)
         if not kept:
             continue
+        info = operator_info(r['kind'], r['desc'], r['first_user'])
+        keys = match_keys(r, info)
+        if filter_on:
+            ok = False
+            for t in filt:
+                if t in keys or any(t in k for k in keys):
+                    ok = True
+            if not ok:
+                continue
         for rec in kept:
             if rec[1]:
                 first_day = rec[1] if not first_day or rec[1] < first_day else first_day
                 last_day = rec[1] if not last_day or rec[1] > last_day else last_day
-        kept.sort(key=lambda x: x[2])
+        kept.sort(key=lambda x: (x[17], x[2]))
         tot = new_totals()
         tot['unpriced_opus'] = sum(rec[12] for rec in kept)
         fam_usd = collections.Counter()
         models = collections.Counter()
+        pa = [0.0, 0.0, 0.0, 0.0]  # input, output, cache read, cache write USD (priced models)
         for rec in kept:
             for k in range(4):
                 parts_all[k] += rec[13 + k]
+                pa[k] += rec[13 + k]
             add_totals(tot, rec)
             add_totals(per_day[rec[1]], rec)
             add_totals(per_model[rec[4]], rec)
             fam_usd[rec[4]] += rec[10]
             models[rec[3]] += 1
+            if rec[4] == 'unknown':
+                u = unk_win[rec[3] or '?']
+                u['n'] += 1
+                u['input'] += rec[5]
+                u['output'] += rec[6]
+                u['cache_write'] += rec[7] + rec[8]
+                u['cache_read'] += rec[9]
+                u['opus'] += rec[12]
         ttype = task_type(r['kind'], r['desc'], r['first_user'])
+        # wall time: first to last message timestamp of the transcript, clipped to the window
+        t0 = max(iso_epoch(r['ts_min']) or kept[0][17], since_ts)
+        t1 = min(iso_epoch(r['ts_max']), until_ts) if r['ts_max'] else kept[-1][17]
+        hours = max(0.0, (t1 - t0)) / 3600.0
+        rows = r['rows'] or r['rows_result']
+        ex = explicit_name(r['first_user'])
+        if fam_usd:
+            prim = fam_usd.most_common(1)[0][0]
+            if not tot['usd']:  # only unpriced models: name the family as unknown
+                prim = 'unknown'
+        else:
+            prim = ''
         agent_row = {
             'day': kept[0][1], 'session': r['session'], 'agent': r['agent'], 'kind': r['kind'],
-            'primary_model': (fam_usd.most_common(1)[0][0] if fam_usd else ''),
+            'primary_model': prim,
             'models': '+'.join('%s:%d' % (m, n) for m, n in models.most_common()),
             'input': tot['input'], 'output': tot['output'], 'cache_write': tot['cache_write'],
             'cache_read': tot['cache_read'], 'usd': tot['usd'], 'haiku_usd': tot['usd_haiku'],
             'task_type': ttype, 'haiku_eligible': ttype in HAIKU_ELIGIBLE, 'n_messages': tot['n'],
             'first_ts': kept[0][2], 'last_ts': kept[-1][2], 'label': label_of(r),
             'last_day': kept[-1][1], 'unpriced_opus_usd': tot['unpriced_opus'],
+            'name': (info['name'] if info else ex), 'lane': (info['lane'] if info else ''),
+            'pilot': bool(info and info['pilot']), 'rows_marked': len(rows), 'rows_src': ('mark' if r['rows'] else ('RESULT' if r['rows_result'] else '')),
+            'hours': hours, 'ctx_first': kept[0][9], 'ctx_last': kept[-1][9], 'keys': keys,
+            'p_in': pa[0], 'p_out': pa[1], 'p_cr': pa[2], 'p_cw': pa[3], 'fam_usd': dict(fam_usd),
         }
         agents.append(agent_row)
         for pat, s in r['tools'].items():
@@ -384,6 +610,10 @@ def main():
             t[1] += s[1]
             t[2] = max(t[2], s[2])
 
+    if a.pilot_compare:
+        return pilot_compare(agents, a.pilot_compare[0], a.pilot_compare[1])
+
+    os.makedirs(a.out, exist_ok=True)
     # per-task totals come from the agent rows (n = agents)
     per_task = collections.defaultdict(new_totals)
     for ag in agents:
@@ -400,7 +630,7 @@ def main():
     csv_path = os.path.join(a.out, 'ledger.csv')
     cols = ['day', 'session', 'agent', 'kind', 'primary_model', 'models', 'input', 'output', 'cache_write',
             'cache_read', 'usd', 'haiku_usd', 'task_type', 'haiku_eligible', 'n_messages', 'first_ts',
-            'last_ts', 'last_day', 'label']
+            'last_ts', 'last_day', 'label', 'name', 'lane', 'rows_marked', 'hours', 'ctx_cache_first', 'ctx_cache_last']
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         w = csv.writer(f)
         w.writerow(cols)
@@ -408,7 +638,8 @@ def main():
             w.writerow([ag['day'], ag['session'], ag['agent'], ag['kind'], ag['primary_model'], ag['models'],
                         ag['input'], ag['output'], ag['cache_write'], ag['cache_read'], '%.4f' % ag['usd'],
                         '%.4f' % ag['haiku_usd'], ag['task_type'], int(ag['haiku_eligible']), ag['n_messages'],
-                        ag['first_ts'], ag['last_ts'], ag['last_day'], ag['label']])
+                        ag['first_ts'], ag['last_ts'], ag['last_day'], ag['label'], ag['name'], ag['lane'],
+                        ag['rows_marked'] or '', '%.3f' % ag['hours'], ag['ctx_first'], ag['ctx_last']])
 
     grand = new_totals()
     grand['parts'] = parts_all
@@ -425,7 +656,7 @@ def main():
     md = build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, dict(
         files=len(jobs), total_msgs=total_msgs, unique=len(seen), cross_dupes=cross_dupes,
         dupes=total_dupes, dupe_diff=total_dupe_diff, unknown_model=unknown_model,
-        first_day=first_day, last_day=last_day, unknown_names=unknown_names))
+        first_day=first_day, last_day=last_day, unknown_names=unknown_names, unk_win=unk_win))
     md_path = os.path.join(a.out, 'ledger.md')
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(md)
@@ -433,6 +664,215 @@ def main():
     print('wrote %s' % md_path)
     print('TOTAL usd %s over %d agents; top: %s' % (money(grand['usd']), len(agents),
           '; '.join('%s %s' % (ag['agent'][:12], money(ag['usd'])) for ag in agents[:5])))
+    return 0
+
+
+CATEGORIES = [
+    ('lane-operator', 'Lane operators (all imm26-*op* agents, incl. -hk pilot)'),
+    ('coordinator', 'Coordinators (main sessions)'),
+    ('hosted-agent', 'Hosted independent agents (named main-session transcripts)'),
+    ('investigator', 'Investigators'), ('classifier', 'Classifiers'), ('fixer', 'Fixers'),
+    ('generator', 'Generators / patch agents'), ('recipe', 'Recipe agents'),
+    ('native-build', 'Native builders'), ('server-fix', 'Server fixers'), ('reader', 'Readers'),
+    ('statistics', 'Statistics'), ('grader', 'Graders'), ('pg-agent', 'PG agents'),
+    ('harness', 'Harness'), ('animation', 'Animation'), ('other', 'Other')]
+PILOT_RATIO = 0.27 / 0.66  # Shay's pilot: Haiku high about $0.27 per task vs Sonnet high about $0.66
+SENS = (1.0, 1.5, 2.0)
+
+
+def fam_split(group):
+    fs = collections.Counter()
+    for ag in group:
+        for k, v in ag['fam_usd'].items():
+            fs[k] += v
+    return fs
+
+
+def category_lines(agents, grand):
+    L = []
+    add = L.append
+    add('## Categories (each on its own line; actual USD at each message\'s own model)')
+    add('')
+    add('| category | agents | turns | tokens | USD | share | Sonnet USD | Opus USD | Haiku USD | Haiku-repriced USD |')
+    add('|---|---|---|---|---|---|---|---|---|---|')
+    done = set()
+    rows = list(CATEGORIES)
+    for k in sorted({ag['task_type'] for ag in agents} - {c[0] for c in CATEGORIES}):
+        rows.append((k, k))
+    for key, label in rows:
+        grp = [ag for ag in agents if ag['task_type'] == key]
+        if not grp:
+            continue
+        done.add(key)
+        fs = fam_split(grp)
+        usd = sum(ag['usd'] for ag in grp)
+        add('| %s | %d | %s | %s | %s | %.1f%% | %s | %s | %s | %s |' % (
+            label, len(grp), toks(sum(ag['n_messages'] for ag in grp)),
+            toks(sum(ag['input'] + ag['output'] + ag['cache_write'] + ag['cache_read'] for ag in grp)), money(usd),
+            (usd / grand['usd'] * 100) if grand['usd'] else 0, money(fs.get('sonnet', 0)), money(fs.get('opus', 0)),
+            money(fs.get('haiku', 0)),
+            money(sum(ag['haiku_usd'] for ag in grp))))
+        if key == 'lane-operator':
+            pg = [ag for ag in grp if ag['pilot']]
+            if pg:
+                fsp = fam_split(pg)
+                usdp = sum(ag['usd'] for ag in pg)
+                add('| &nbsp;&nbsp;of which -hk pilot operators | %d | %s | %s | %s | %.1f%% | %s | %s | %s | %s |' % (
+                    len(pg), toks(sum(ag['n_messages'] for ag in pg)),
+                    toks(sum(ag['input'] + ag['output'] + ag['cache_write'] + ag['cache_read'] for ag in pg)), money(usdp),
+                    (usdp / grand['usd'] * 100) if grand['usd'] else 0, money(fsp.get('sonnet', 0)), money(fsp.get('opus', 0)),
+                    money(fsp.get('haiku', 0)), money(sum(ag['haiku_usd'] for ag in pg))))
+    add('| **all agents** | %d | %s | %s | %s | 100%% | | | | %s |' % (
+        len(agents), toks(sum(ag['n_messages'] for ag in agents)),
+        toks(grand['input'] + grand['output'] + grand['cache_write'] + grand['cache_read']), money(grand['usd']),
+        money(grand['usd_haiku'])))
+    add('')
+    add('The Sonnet / Opus / Haiku columns split each category by the model of each message (an agent can mix models). The unknown-model (claude-fable) messages are $0 here; see the separate table below.')
+    add('')
+    return L
+
+
+def _opname(ag):
+    return ag['name'] or ('%s/%s' % (ag['session'][:8], ag['agent'][:8]))
+
+
+def operator_lines(agents, grand):
+    L = []
+    add = L.append
+    ops = sorted([ag for ag in agents if ag['task_type'] == 'lane-operator'], key=lambda x: (x['lane'], x['first_ts']))
+    add('## Lane operators: Sonnet-high actual vs Haiku-high what-if')
+    add('')
+    if not ops:
+        add('No lane-operator transcripts in the window.')
+        add('')
+        return L
+    son = [ag for ag in ops if ag['primary_model'] == 'sonnet']
+    oth = [ag for ag in ops if ag['primary_model'] != 'sonnet']
+    tot_usd = sum(ag['usd'] for ag in ops)
+    add('Operators in the window: %d transcripts, %s (%.1f%% of the window total %s). Sonnet-primary operators: %d (%s); other models: %d (%s; %s).' % (
+        len(ops), money(tot_usd), (tot_usd / grand['usd'] * 100) if grand['usd'] else 0, money(grand['usd']),
+        len(son), money(sum(ag['usd'] for ag in son)), len(oth), money(sum(ag['usd'] for ag in oth)),
+        ', '.join(sorted({ag['primary_model'] or '?' for ag in oth})) or 'none'))
+    add('')
+    add('How to read: *hours* = first to last message timestamp of the transcript (wall time, includes waiting on game batches), clipped to the window. *rows* = distinct test rows named in `mark-row.py` / `status-mark.sh` calls with PASS|FAIL|SETUP-FAIL|GATED in that transcript (or, when it has none, distinct `RESULT <row> PASS|FAIL` lines in tool output); blank = not derivable. Name = the imm26 name from the prompt, else built from the description (`?` = lane not stated). The model is the primary (most USD) model.')
+    add('')
+    add('### Per operator')
+    add('')
+    add('| # | operator | id | lane | model | turns | hours | rows | tokens | USD | USD/hour | USD/row | tokens/hour |')
+    add('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
+    for i, ag in enumerate(ops, 1):
+        tk = ag['input'] + ag['output'] + ag['cache_write'] + ag['cache_read']
+        h = ag['hours']
+        r = ag['rows_marked']
+        add('| %d | %s | %s | %s | %s | %d | %.2f | %s | %s | %s | %s | %s | %s |' % (
+            i, _opname(ag), ag['agent'][:8], ag['lane'], ag['primary_model'], ag['n_messages'], h, r or '', toks(tk),
+            money(ag['usd']), money(ag['usd'] / h) if h > 0.01 else '-', money(ag['usd'] / r) if r else '',
+            toks(tk / h) if h > 0.01 else '-'))
+    add('')
+    add('### Per lane (totals)')
+    add('')
+    add('| lane | operators | turns | hours | rows | tokens | USD | USD/hour | tokens/hour | USD/row |')
+    add('|---|---|---|---|---|---|---|---|---|---|')
+    lanes = collections.OrderedDict()
+    for ag in ops:
+        lanes.setdefault(ag['lane'], []).append(ag)
+    lanes['ALL OPERATORS'] = ops
+
+    def lane_row(name, grp):
+        tk = sum(ag['input'] + ag['output'] + ag['cache_write'] + ag['cache_read'] for ag in grp)
+        h = sum(ag['hours'] for ag in grp)
+        r = sum(ag['rows_marked'] or 0 for ag in grp)
+        u = sum(ag['usd'] for ag in grp)
+        add('| %s | %d | %s | %.1f | %s | %s | %s | %s | %s | %s |' % (
+            name, len(grp), toks(sum(ag['n_messages'] for ag in grp)), h, r or '', toks(tk), money(u),
+            money(u / h) if h > 0.01 else '-', toks(tk / h) if h > 0.01 else '-', money(u / r) if r else ''))
+    for name, grp in lanes.items():
+        lane_row(name if name != 'ALL OPERATORS' else '**ALL OPERATORS**', grp)
+    add('')
+    add('### Cost split by token type (priced models; Sonnet-high actual)')
+    add('')
+    add('| operator | input USD | output USD | cache read USD | cache write USD | cache read share |')
+    add('|---|---|---|---|---|---|')
+    for ag in ops:
+        t = ag['p_in'] + ag['p_out'] + ag['p_cr'] + ag['p_cw']
+        add('| %s | %s | %s | %s | %s | %.0f%% |' % (_opname(ag), money(ag['p_in']), money(ag['p_out']), money(ag['p_cr']),
+                                                    money(ag['p_cw']), (ag['p_cr'] / t * 100) if t else 0))
+    ti, to, tr, tw = (sum(ag[k] for ag in ops) for k in ('p_in', 'p_out', 'p_cr', 'p_cw'))
+    tt = ti + to + tr + tw
+    add('| **ALL OPERATORS** | %s | %s | %s | %s | %.0f%% |' % (money(ti), money(to), money(tr), money(tw), (tr / tt * 100) if tt else 0))
+    add('')
+    # --- Haiku what-if
+    su = sum(ag['usd'] for ag in son)
+    sh = sum(ag['haiku_usd'] for ag in son)
+    shr = sum(ag['hours'] for ag in son)
+    srow = sum(ag['rows_marked'] or 0 for ag in son)
+    add('### Haiku-high what-if for the Sonnet operators')
+    add('')
+    add('Two prices for the same work, each with Haiku needing 1.0x / 1.5x / 2x the turns:')
+    add('')
+    add('- **Token repricing (A):** the recorded Sonnet tokens repriced at Haiku 5.5 rates, each message on its own prompt band (over 100,000 prompt tokens = the over-100k rate for the whole prompt).')
+    add('- **Shay\'s pilot ratio (B):** Sonnet actual x %.3f (Haiku high $0.27 vs Sonnet high $0.66 per task, quoted from the pilot; task level, includes whatever extra output Haiku used in that pilot).' % PILOT_RATIO)
+    add('- **Turn assumption:** k x the turns means every token class scales by k: k x output, k x new input / cache writes, and k x cache reads (each turn re-reads the context; the per-turn context size is kept the same). Real context growth with extra turns is super-linear (later turns read a longer prompt), so the k columns are an optimistic bound for Haiku. Quality (the pilot: 19.0 vs 21.3 of 25) is not priced here.')
+    add('')
+    add('| operator | turns | Sonnet actual | A x1.0 | A x1.5 | A x2.0 | B x1.0 | B x1.5 | B x2.0 |')
+    add('|---|---|---|---|---|---|---|---|---|')
+    for ag in son:
+        add('| %s | %d | %s | %s | %s | %s | %s | %s | %s |' % (
+            _opname(ag), ag['n_messages'], money(ag['usd']), *(money(ag['haiku_usd'] * k) for k in SENS),
+            *(money(ag['usd'] * PILOT_RATIO * k) for k in SENS)))
+    add('| **Sonnet operators total** | %d | %s | %s | %s | %s | %s | %s | %s |' % (
+        sum(ag['n_messages'] for ag in son), money(su), *(money(sh * k) for k in SENS),
+        *(money(su * PILOT_RATIO * k) for k in SENS)))
+    add('')
+    add('| scenario | Haiku USD | saving USD | saving % | saving USD per operator-hour | saving USD per row |')
+    add('|---|---|---|---|---|---|')
+    for lab, base in (('A token repricing', sh), ('B pilot ratio %.2f' % PILOT_RATIO, su * PILOT_RATIO)):
+        for k in SENS:
+            hk = base * k
+            sv = su - hk
+            add('| %s, Haiku %.1fx turns | %s | %s | %.0f%% | %s | %s |' % (
+                lab, k, money(hk), money(sv), (sv / su * 100) if su else 0,
+                money(sv / shr) if shr > 0.01 else '-', money(sv / srow) if srow else '-'))
+    add('')
+    ya = su / sh if sh else 0
+    yb = 1 / PILOT_RATIO
+    add('Sonnet operators: %d transcripts, %s over %.1f operator-hours = **%s per operator-hour**%s. Break-even turn multiple (Haiku costs as much as Sonnet): **A %.1fx**, **B %.1fx**. Below that multiple Haiku saves money; above it Haiku costs more.' % (
+        len(son), money(su), shr, money(su / shr) if shr > 0.01 else '-',
+        (', %s per row (%d rows)' % (money(su / srow), srow)) if srow else '', ya, yb))
+    add('')
+    pil = [ag for ag in ops if ag['pilot']]
+    if pil:
+        add('Haiku pilot operators (-hk) already in the window, actual cost at their own model: ' + '; '.join(
+            '%s %s %s, %d turns, %.2f h, %s/h' % (_opname(ag), ag['primary_model'], money(ag['usd']), ag['n_messages'],
+                                                 ag['hours'], money(ag['usd'] / ag['hours']) if ag['hours'] > 0.01 else '-')
+            for ag in pil) + '.')
+        add('')
+    return L
+
+
+def fable_lines(meta, prices):
+    L = []
+    add = L.append
+    add('## Unpriced models in the window (no rate in prices.json or docs/MODEL_ROUTING.md)')
+    add('')
+    unk = meta.get('unk_win') or {}
+    if not unk:
+        add('None in this window: every message from the window start on has a known model rate. The claude-fable-5-1 messages seen in earlier audits are all dated before 2026-10-14 and are outside the window. Fable has no price in prices.json or docs/MODEL_ROUTING.md; if any message appears here later, this table lists it with token counts and an Opus-5.5-rate bound (not added to any total).')
+        add('')
+        return L
+    add('`prices.json` (read from the Anthropic platform pricing page 2026-10-14) lists only Haiku 5.5, Sonnet 5.5 and Opus 5.5, and `docs/MODEL_ROUTING.md` gives no Fable price (it only says Fable is never allowed for subagents). These messages are therefore counted at $0 in every total above; the bound below prices their tokens at Opus 5.5 rates and is **not** added to anything.')
+    add('')
+    add('| model | messages | input | output | cache write | cache read | Opus-rate bound USD |')
+    add('|---|---|---|---|---|---|---|')
+    tot = 0.0
+    for m, u in sorted(unk.items(), key=lambda kv: -kv[1]['opus']):
+        tot += u['opus']
+        add('| %s | %s | %s | %s | %s | %s | %s |' % (m, toks(u['n']), toks(u['input']), toks(u['output']),
+                                                     toks(u['cache_write']), toks(u['cache_read']), money(u['opus'])))
+    add('| **total** | %s | | | | | %s |' % (toks(sum(u['n'] for u in unk.values())), money(tot)))
+    add('')
+    return L
+
 
 
 def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, meta):
@@ -440,7 +880,9 @@ def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, 
     add = L.append
     add('# Cost / token audit ledger (imm26-costaudit)')
     add('')
-    add('Generated by `tools/automation/cost-audit.py`' + (' (since %s)' % a.since if a.since else '') +
+    add('**Window: %s.** Messages outside it are ignored (earlier data did not use the current setup, Shay 2026-10-16).' % a.window)
+    add('')
+    add('Generated by `tools/automation/cost-audit.py`' + (' (--agents %s)' % a.agents if a.agents else '') +
         '. Read-only over `C:\\Users\\Shay\\.claude\\projects\\C--KenshiModding\\` (%d transcript files: main sessions + subagents). '
         'Dollars are **API-price equivalents** computed from the token counts; they are not what Shay pays. '
         'This tool cannot read the subscription quota meter: `/usage` is the authority for quota use.' % meta['files'])
@@ -471,7 +913,7 @@ def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, 
         toks(meta['unknown_model']), '; '.join('%s %s' % (k, toks(v)) for k, v in meta['unknown_names'].most_common(6))))
     add('- Day = local date of each message timestamp. Agent row day = its first message day; per-day table counts each message on its own day.')
     add('- Haiku what-if: the same token counts repriced at Haiku rates (same band rule). It does not change output length, so it is a price-only comparison. Shay\'s pilot (below) measured task-level cost with Haiku at high effort.')
-    add('- Task type is a guess from the subagent description (`[case:x]` tag and keywords). Main sessions are "coordinator". Check the label column before acting on a row.')
+    add('- Task type is a guess from the subagent description (`[case:x]` tag and keywords) and the agent\'s first prompt. Main sessions are "coordinator" unless the prompt names an independent agent ("hosted-agent"; an operator-named one is a lane-operator). Check the label column before acting on a row.')
     add('')
     add('## Top 15 spenders (one agent transcript each)')
     add('')
@@ -521,6 +963,8 @@ def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, 
         add('| %s | %d | %s | %.1f%% | %s | %s |' % (k, t['n'], money(t['usd']), share, money(t['usd_haiku']),
                                                    'yes' if k in HAIKU_ELIGIBLE else 'no'))
     add('')
+    L.extend(category_lines(agents, grand))
+    L.extend(operator_lines(agents, grand))
     add('## What if the read / parse / check / classify / investigator / statistics agents ran on Haiku high')
     add('')
     add('Same token counts, Haiku rates (price-only; Haiku at high effort may use more output tokens, so treat the saving as an upper bound). Shay\'s pilot figures for one task at high effort, quoted, not re-derived: **Haiku high about $0.27 per task vs Sonnet high about $0.66**; quality 19.0 vs 21.3 of 25; false claims 1.0 vs 0.67 per report. The pilot shows the quality cost, so Haiku on investigator work is the riskiest row.')
@@ -549,6 +993,7 @@ def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, 
     add('Share of all audited spend: the eligible agents are %.1f%% of total USD.' % (
         (act_all / grand['usd'] * 100) if grand['usd'] else 0))
     add('')
+    L.extend(fable_lines(meta, prices))
     add('## Tool-output size, top 20 (tool_result characters; Bash/PowerShell split by first word)')
     add('')
     add('| pattern | calls | total chars | mean chars | max chars |')
@@ -566,19 +1011,20 @@ def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, 
     add('By tool name: ' + '; '.join('%s %s calls / %s chars' % (k, toks(v[0]), toks(v[1]))
                                      for k, v in sorted(by_name.items(), key=lambda kv: -kv[1][1])[:12]))
     add('')
-    add('## Self-check (independent recount, awk, same files)')
+    add('## Self-check (independent recount with tools/automation/cost-audit-selfcheck.py: regex over raw lines, own dedupe and pricing, same window)')
     add('')
     sc = read_selfcheck(a.selfcheck or os.path.join(a.out, 'selfcheck.tsv'))
     if not sc:
         add('No selfcheck.tsv found; run the independent recount and rerun this tool.')
     else:
-        add('| agent | tool USD | awk USD | diff % | tokens match | flag |')
+        add('| agent | tool USD | recount USD | diff % | tokens match | flag |')
         add('|---|---|---|---|---|---|')
         by_agent = {ag['session'] + '/' + ag['agent']: ag for ag in agents}
         for key, p in sc.items():
             ag = by_agent.get(key)
             if not ag:
-                add('| %s | - | %s | - | - | NOT FOUND in tool output |' % (key, p[5]))
+                if not a.agents:
+                    add('| %s | - | %s | - | - | NOT FOUND in tool output (no messages in the window?) |' % (key, p[5]))
                 continue
             awk_usd = float(p[5])  # columns: agent, input, output, cache_write, cache_read, usd, n_messages
             tool_usd = ag['usd']
@@ -589,7 +1035,7 @@ def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, 
             add('| %s | %s | %s | %.3f | %s | %s |' % (key, money(tool_usd), money(awk_usd), diff,
                                                      'yes' if tok_ok else 'NO', flag))
     add('')
-    add('Message counts are not compared: the awk recount skips the zero-token `<synthetic>` records (the tool counts them); tokens and USD match exactly. Mismatch flag = USD > 2% or any token total different.')
+    add('Message counts are not compared: the recount skips the zero-token `<synthetic>` records (the tool counts them); tokens and USD match exactly. Mismatch flag = USD > 2% or any token total different.')
     add('')
     add('Unpriced models (no rate in prices.json), bound at Opus 5.5 rates: %s. Not in the totals above; the true figure depends on the real rate.' % money(grand.get('unpriced_opus', 0.0)))
     add('')
@@ -599,4 +1045,4 @@ def build_md(a, prices, agents, per_day, per_model, per_task, tools_all, grand, 
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
