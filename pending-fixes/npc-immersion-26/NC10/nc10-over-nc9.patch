@@ -1,0 +1,54 @@
+diff -ru a/legacy-v1/ActivityPolicySupport.cpp b/legacy-v1/ActivityPolicySupport.cpp
+--- a/legacy-v1/ActivityPolicySupport.cpp	2026-10-15 19:56:02.705989400 -0600
++++ b/legacy-v1/ActivityPolicySupport.cpp	2026-10-15 19:56:02.721104400 -0600
+@@ -280,7 +280,8 @@
+      static_cast<int>(b->_NV_getSpecialFunction())!=27 || b->_NV_isDestroyed()) {
+    reason="natural_source_unavailable";return false;
+   }
+-  if(b->getFaction() && b->getFaction()!=actor->getFaction()) {
++  // NC10: a node in "No Faction" (non-null, not a real faction) is unowned.
++  if(b->getFaction() && b->getFaction()!=actor->getFaction() && !b->getFaction()->isNotARealFaction()) {
+    reason="resource_owned_by_other_faction";return false;
+   }
+   ProductionBuilding* production=b->_NV_getProductionBuilding();
+diff -ru a/legacy-v1/ActivityWildVerdict.h b/legacy-v1/ActivityWildVerdict.h
+--- a/legacy-v1/ActivityWildVerdict.h	2026-10-15 19:56:02.704989400 -0600
++++ b/legacy-v1/ActivityWildVerdict.h	2026-10-15 19:56:02.720105800 -0600
+@@ -37,7 +37,9 @@
+  if(!f.identity) return "animal_not_wild_identity_unavailable";
+  if(!f.factionNotReal || !f.fundamentalNone) return "animal_not_wild_real_faction";
+  if(!f.animalsOnly || f.trader || !f.roaming) return "animal_not_wild_squad_type";
+- if(f.baseTown || f.homeTown || f.homeBuilding || f.occupiedTown || f.slaves || f.stuff)
++ // NC10: homeBuilding is NOT ownership here: every roaming wild herd (natural and spawned) has it set.
++ // The faction clause above already proved the squad is in no real faction (Shay: wild animals pass).
++ if(f.baseTown || f.homeTown || f.occupiedTown || f.slaves || f.stuff)
+   return "animal_not_wild_ownership";
+  return "";
+ }
+diff -ru a/src/ActivityPolicySupport.cpp b/src/ActivityPolicySupport.cpp
+--- a/src/ActivityPolicySupport.cpp	2026-10-15 19:56:02.663726000 -0600
++++ b/src/ActivityPolicySupport.cpp	2026-10-15 19:56:02.677116900 -0600
+@@ -302,7 +302,8 @@
+      static_cast<int>(b->_NV_getSpecialFunction())!=27 || b->_NV_isDestroyed()) {
+    reason="natural_source_unavailable";return false;
+   }
+-  if(b->getFaction() && b->getFaction()!=actor->getFaction()) {
++  // NC10: a node in "No Faction" (non-null, not a real faction) is unowned.
++  if(b->getFaction() && b->getFaction()!=actor->getFaction() && !b->getFaction()->isNotARealFaction()) {
+    reason="resource_owned_by_other_faction";return false;
+   }
+   ProductionBuilding* production=b->_NV_getProductionBuilding();
+diff -ru a/src/ActivityWildVerdict.h b/src/ActivityWildVerdict.h
+--- a/src/ActivityWildVerdict.h	2026-10-15 19:56:02.662741400 -0600
++++ b/src/ActivityWildVerdict.h	2026-10-15 19:56:02.677116900 -0600
+@@ -37,7 +37,9 @@
+  if(!f.identity) return "animal_not_wild_identity_unavailable";
+  if(!f.factionNotReal || !f.fundamentalNone) return "animal_not_wild_real_faction";
+  if(!f.animalsOnly || f.trader || !f.roaming) return "animal_not_wild_squad_type";
+- if(f.baseTown || f.homeTown || f.homeBuilding || f.occupiedTown || f.slaves || f.stuff)
++ // NC10: homeBuilding is NOT ownership here: every roaming wild herd (natural and spawned) has it set.
++ // The faction clause above already proved the squad is in no real faction (Shay: wild animals pass).
++ if(f.baseTown || f.homeTown || f.occupiedTown || f.slaves || f.stuff)
+   return "animal_not_wild_ownership";
+  return "";
+ }
