@@ -157,6 +157,22 @@ class LiveMetricsTests(unittest.TestCase):
         self.assertEqual(codex_status._verify_hostprobe(str(path), digest)["status"], "PASS")
         self.assertEqual(codex_status._verify_hostprobe(str(path), "0" * 64)["status"], "FAIL")
 
+    def test_metrics_rechecks_nested_boundary_proof_receipt(self):
+        self.records.append({"type": "response_item", "payload": {"role": "assistant",
+                            "phase": "final_answer", "content": [{"type": "output_text", "text": "final"}]}})
+        path = self.receipt["hostprobe_path"]
+        digest = self.receipt["hostprobe_sha256"]
+        self.receipt.pop("hostprobe_path")
+        self.receipt.pop("hostprobe_sha256")
+        self.receipt["code_mode_host_proof"] = {
+            "verified": True, "status": "BOUNDARY_VERIFIED",
+            "path": path, "sha256": digest,
+        }
+        self.write()
+        metrics = codex_status.live_metrics(self.receipt, None)
+        self.assertEqual(metrics["audit"], "PASS")
+        self.assertEqual(metrics["code_mode_host"]["status"], "PASS")
+
     def test_hostprobe_failure_and_incomplete_proof_never_pass(self):
         path = Path(self.tmp.name) / "hostprobe.json"
         probe = json.loads(path.read_text(encoding="utf-8"))

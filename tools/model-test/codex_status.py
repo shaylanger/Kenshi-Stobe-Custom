@@ -277,7 +277,12 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
     config = dict(receipt)
     config["service_tier"] = receipt.get("service_tier", receipt.get("speed"))
     launch_modes = _verify_requested_modes(receipt, rollout)
-    hostprobe = _verify_hostprobe(receipt.get("hostprobe_path"), receipt.get("hostprobe_sha256"))
+    boundary_receipt = receipt.get("code_mode_host_proof") if isinstance(receipt.get("code_mode_host_proof"), dict) else {}
+    hostprobe_path = (receipt.get("hostprobe_path") or boundary_receipt.get("path") or
+                      receipt.get("execution_boundary_path"))
+    hostprobe_sha256 = (receipt.get("hostprobe_sha256") or boundary_receipt.get("sha256") or
+                        receipt.get("execution_boundary_sha256"))
+    hostprobe = _verify_hostprobe(hostprobe_path, hostprobe_sha256)
     config["code_mode_host_proof"] = {"verified": hostprobe["status"] == "PASS"}
     config["hook_enforcement"] = hostprobe.get("hook_enforcement", {"status": "UNKNOWN"})
     try:
