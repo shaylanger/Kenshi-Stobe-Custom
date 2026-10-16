@@ -65,6 +65,56 @@ class BenchTests(unittest.TestCase):
         self.assertEqual(peak_for("limited-concurrent", 2), 2)
         self.assertLessEqual(peak_for("limited-concurrent", 3), 3)
 
+    def test_sequential_scheduler_stops_after_first_failed_cell(self):
+        calls = []
+        def worker(rid):
+            calls.append(rid)
+            return 1 if rid == "first" else 0
+        self.assertEqual(bench.launch_many(["first", "second", "third"], "sequential", 1, worker), 1)
+        self.assertEqual(calls, ["first"])
+
+    def test_sequential_scheduler_pauses_after_current_cell(self):
+        calls = []
+        stop = False
+        boundaries = []
+        def worker(rid):
+            nonlocal stop
+            calls.append(rid)
+            stop = True
+            return 0
+        self.assertEqual(bench.launch_many(["first", "second"], "sequential", 1, worker,
+                                           stop_requested=lambda: stop,
+                                           paused_boundaries=boundaries), 0)
+        self.assertEqual(calls, ["first"])
+        self.assertEqual(boundaries, [{"after_run": "first", "next_run": "second"}])
+
+    def test_pending_run_ids_skips_only_audited_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            entries = []
+            (root / "runs.tsv").write_text("run\tviolation_flags\nfinished\tPASS\n")
+            for rid, status, audit in (("finished", "RECORDED", "PASS"), ("pending", "PREPARED", "")):
+                run_dir = root / "runs" / rid
+                run_dir.mkdir(parents=True)
+                entries.append((rid, {}, 2, "prompt2.txt"))
+                (run_dir / "launch.json").write_text(json.dumps({
+                    "run": rid, "status": status, "attempt": 1, "audit": {"status": audit},
+                }))
+                if status == "RECORDED":
+                    attempt = run_dir / "attempt-01"
+                    attempt.mkdir()
+                    (run_dir / "report.md").write_text("report")
+                    (attempt / "launch.json").write_text(json.dumps({
+                        "status": "RECORDED", "verified_receipt": True, "rollout_path": "rollout.jsonl",
+                        "audit": {"status": "PASS"},
+                    }))
+            self.assertEqual(bench.pending_run_ids(root, entries), ["pending"])
+            (root / "runs" / "finished" / "launch.json").write_text(json.dumps({
+                "run": "finished", "status": "RECORDED", "attempt": 1, "audit": {"status": "UNKNOWN"},
+            }))
+            with self.assertRaises(bench.BenchError):
+                bench.pending_run_ids(root, entries)
+
     def test_relaunch_context_cannot_mutate_completed_attempt_receipts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -140,6 +190,32 @@ See C:\\KenshiModding\\src\\module.py:42
             self.assertIn("code_mode = false", private_config)
             self.assertIn("code_mode_host = false", private_config)
             self.assertIn("tool_search = false", private_config)
+            self.assertIn("view_image = false", private_config)
+            self.assertIn('enabled_tools = ["list", "read", "search", "sql"]', private_config)
+            self.assertNotIn("[tools]", private_config)
+
+    def test_private_profile_path_is_stable_for_relative_and_absolute_run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run_dir = base / "suite" / "runs" / "opaque-p2"
+            relative = Path(__import__("os").path.relpath(run_dir, Path.cwd()))
+            cell = {"model": "secret-model", "effort": "high", "speed": "standard"}
+            with mock.patch.dict(bench.os.environ, {"LOCALAPPDATA": str(base / "local")}):
+                first, _ = bench._make_config(run_dir, "opaque-p2", cell)
+                second, _ = bench._make_config(relative, "opaque-p2", cell)
+            self.assertEqual(first, second)
+
+    def test_strict_exec_config_probe_stops_before_any_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = mock.Mock(returncode=1, stdout="Reading prompt from stdin...\nNo prompt provided via stdin.\n", stderr="")
+            with mock.patch.object(bench.subprocess, "run", return_value=result) as run:
+                bench._strict_exec_config_probe(Path("codex.exe"), {}, Path(tmp))
+            self.assertIn("--strict-config", run.call_args.args[0])
+            self.assertEqual(run.call_args.kwargs["input"], "")
+            bad = mock.Mock(returncode=2, stdout="Error loading config.toml: unknown configuration field `tools.view_image`", stderr="")
+            with mock.patch.object(bench.subprocess, "run", return_value=bad):
+                with self.assertRaises(bench.BenchError):
+                    bench._strict_exec_config_probe(Path("codex.exe"), {}, Path(tmp))
 
     def test_prepare_refreshes_untouched_prompt_and_receipts(self):
         with tempfile.TemporaryDirectory() as tmp:

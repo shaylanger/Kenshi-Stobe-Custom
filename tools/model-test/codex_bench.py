@@ -130,15 +130,42 @@ def concurrency(root: Path, cli_value: int | None) -> int:
     return n
 
 
-def launch_many(ids: list[str], mode: str, cap: int, worker) -> int:
+def launch_many(ids: list[str], mode: str, cap: int, worker, stop_requested=None,
+                paused_boundaries: list[dict[str, Any]] | None = None) -> int:
     """Run a batch in the selected scheduling mode; worker is injected for offline tests."""
     failures = 0
+    should_stop = stop_requested or (lambda: False)
     if mode == "sequential":
-        for rid in ids:
-            try: failures += bool(worker(rid))
+        completed: list[str] = []
+        for index, rid in enumerate(ids):
+            if should_stop():
+                if paused_boundaries is not None:
+                    paused_boundaries.append({"after_run": completed[-1] if completed else None,
+                                              "next_run": rid})
+                print(f"DISPATCH PAUSED before {rid}")
+                break
+            try:
+                failed = bool(worker(rid))
+                failures += failed
             except Exception as exc:
-                print(f"run failed: {exc}", file=sys.stderr); failures += 1
+                print(f"run failed: {exc}", file=sys.stderr)
+                failures += 1
+                failed = True
+            if failed:
+                break
+            completed.append(rid)
+            if should_stop():
+                next_run = ids[index + 1] if index + 1 < len(ids) else None
+                if paused_boundaries is not None:
+                    paused_boundaries.append({"after_run": rid, "next_run": next_run})
+                print(f"DISPATCH PAUSED after {rid}; next={next_run or 'none'}")
+                break
     else:
+        if should_stop():
+            if paused_boundaries is not None:
+                paused_boundaries.append({"after_run": None, "next_run": ids[0] if ids else None})
+            print(f"DISPATCH PAUSED before {ids[0] if ids else 'first run'}")
+            return 0
         from concurrent.futures import ThreadPoolExecutor, as_completed
         with ThreadPoolExecutor(max_workers=cap) as pool:
             futures = [pool.submit(worker, rid) for rid in ids]
@@ -147,6 +174,38 @@ def launch_many(ids: list[str], mode: str, cap: int, worker) -> int:
                 except Exception as exc:
                     print(f"run failed: {exc}", file=sys.stderr); failures += 1
     return int(failures > 0)
+
+
+def pending_run_ids(root: Path, entries: list[tuple[str, dict[str, Any], int, str]]) -> list[str]:
+    """Skip only audited PASS completions; stop before dispatch on any other terminal state."""
+    ledger = root / "runs.tsv"
+    recorded = set()
+    if ledger.is_file():
+        with ledger.open("r", encoding="utf-8", newline="") as stream:
+            recorded = {row.get("run", "") for row in csv.DictReader(stream, delimiter="\t")}
+    pending: list[str] = []
+    for rid, _cell, _number, _prompt in entries:
+        run_dir = root / "runs" / rid
+        receipt_path = _record_path(run_dir)
+        if not receipt_path.is_file():
+            raise BenchError(f"run receipt missing before dispatch: {rid}")
+        receipt = _json(receipt_path)
+        if receipt.get("status") == "PREPARED":
+            pending.append(rid)
+            continue
+        attempt_no = int(receipt.get("attempt", 1))
+        attempt = run_dir / f"attempt-{attempt_no:02d}"
+        attempt_receipt = _json(attempt / "launch.json")
+        completed = (receipt.get("status") in {"RECORDED", "RECHECKED"} and
+                     receipt.get("audit", {}).get("status") == "PASS" and
+                     attempt_receipt.get("audit", {}).get("status") == "PASS" and
+                     attempt_receipt.get("verified_receipt") is True and
+                     (run_dir / "report.md").is_file() and rid in recorded)
+        if completed:
+            continue
+        audit_status = receipt.get("audit", {}).get("status", "UNKNOWN")
+        raise BenchError(f"{rid} is not an audited PASS completion (status={receipt.get('status')}, audit={audit_status}); inspect or explicitly retry before continuing")
+    return pending
 
 
 def _sha(data: bytes) -> str:
@@ -278,6 +337,18 @@ def _private_env(home: Path, extra: dict[str, str] | None = None) -> dict[str, s
     return env
 
 
+def _strict_exec_config_probe(cli: Path, env: dict[str, str], cwd: Path) -> None:
+    """Ask the installed exec parser to validate config, then stop at empty stdin."""
+    result = subprocess.run([str(cli), "exec", "--strict-config", "--json", "--sandbox", "read-only",
+                             "--cd", str(cwd), "--skip-git-repo-check"],
+                            env=env, input="", capture_output=True, text=True, timeout=30, check=False)
+    output = (result.stdout or "") + (result.stderr or "")
+    if "Error loading config.toml" in output or "unknown configuration field" in output:
+        raise BenchError("strict Codex exec config validation failed: " + output[-1200:])
+    if "No prompt provided via stdin." not in output:
+        raise BenchError("strict Codex exec config probe did not stop at empty stdin: " + output[-1200:])
+
+
 def _record_path(run_dir: Path) -> Path:
     return run_dir / "launch.json"
 
@@ -297,16 +368,18 @@ def _stamp_launch_context(attempt_receipt: Path, run_receipt: Path, attempt_dir:
     return receipt
 
 
-def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int = 1) -> tuple[Path, dict[str, Any]]:
+def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int = 1,
+                 private_base: Path | None = None,
+                 frozen_root_override: Path | None = None) -> tuple[Path, dict[str, Any]]:
     # Active profiles/authentication stay outside the repository.
-    local_app = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
-    suite_key = hashlib.sha256(str(run_dir.parents[1]).encode()).hexdigest()[:12]
+    local_app = private_base or Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
+    suite_key = hashlib.sha256(str(run_dir.resolve().parents[1]).encode()).hexdigest()[:12]
     attempt_name = f"attempt-{attempt_no:02d}"
     home = local_app / "CodexBench" / suite_key / rid / attempt_name / "home"
     codex_home = home / ".codex"
     codex_home.mkdir(parents=True, exist_ok=True)
     (home / "neutral-cwd").mkdir(exist_ok=True)
-    frozen_root = Path(os.environ.get("CODEX_BENCH_FROZEN_ROOT", str(DEFAULT_FROZEN)))
+    frozen_root = frozen_root_override or Path(os.environ.get("CODEX_BENCH_FROZEN_ROOT", str(DEFAULT_FROZEN)))
     receipts = run_dir / attempt_name / "frozen-mcp-receipts.jsonl"
     guard_log = run_dir / attempt_name / "guard-receipts.jsonl"
     python = str(Path(sys.executable))
@@ -322,12 +395,12 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
         "[features]", "multi_agent = false", "shell_tool = false", "apps = false", "plugins = false",
         "remote_plugin = false", "goals = false", "computer_use = false",
         "browser_use = false", "in_app_browser = false", "hooks = true",
-        "code_mode = false", "code_mode_host = false", "code_mode_tool_search = false", "tool_search = false", "",
-        "[tools]", "view_image = false", "",
+        "code_mode = false", "code_mode_host = false", "code_mode_tool_search = false", "tool_search = false",
+        "view_image = false", "",
         "[agents]", "enabled = false", "max_concurrent_threads_per_session = 1", "",
         "[mcp_servers.frozen]", f"command = {json.dumps(python)}",
         f"args = ['-I', {json.dumps(mcp_script)}]", "enabled = true", "required = true",
-        'allowed_tools = ["list", "read", "search", "sql"]',
+        'enabled_tools = ["list", "read", "search", "sql"]',
         f"cwd = {json.dumps(str(home / 'neutral-cwd'))}",
         "startup_timeout_sec = 20", "tool_timeout_sec = 60", "",
         "[mcp_servers.frozen.env]", f"CODEX_FROZEN_ROOT = {json.dumps(str(frozen_root))}",
@@ -453,8 +526,10 @@ def _refresh_prepared_profile(run_dir: Path, rid: str, cell: dict[str, Any]) -> 
                         "config_sha256": _sha(config_path.read_bytes())})
         _write_json(receipt_path, receipt)
     root_item = _json(root_receipt)
+    attempt_item = _json(attempts[-1] / "launch.json")
     root_item.update({"prompt_sha256": task_digest,
-                      "config_sha256": _sha((attempts[0] / "requested-config.json").read_bytes())})
+                      "codex_home": attempt_item.get("codex_home"),
+                      "config_sha256": _sha((attempts[-1] / "requested-config.json").read_bytes())})
     _write_json(root_receipt, root_item)
 
 
@@ -587,10 +662,14 @@ def _preflight(root: Path) -> int:
         run_dir = root / "runs" / rid
         task = run_dir / "prompt.md"
         launch = _record_path(run_dir)
-        attempt_config = run_dir / "attempt-01" / "requested-config.json"
-        if not task.is_file() or not launch.is_file() or not attempt_config.is_file():
+        if not task.is_file() or not launch.is_file():
             raise BenchError(f"run is not prepared: {rid}; run prepare first")
         receipt = _json(launch)
+        attempt_no = int(receipt.get("attempt", 1))
+        attempt_config = run_dir / f"attempt-{attempt_no:02d}" / "requested-config.json"
+        attempt_receipt = run_dir / f"attempt-{attempt_no:02d}" / "launch.json"
+        if not attempt_config.is_file() or not attempt_receipt.is_file():
+            raise BenchError(f"latest attempt profile is missing: {rid} attempt-{attempt_no:02d}")
         config = _json(attempt_config)
         codex_home = Path(receipt.get("codex_home", ""))
         if (_sha(task.read_bytes()) != receipt.get("prompt_sha256") or
@@ -633,21 +712,35 @@ def _preflight(root: Path) -> int:
         raise BenchError("Codex CLI version probe failed: " + version.stderr[-500:])
     if "0.163.0-alpha.10.2" not in version.stdout:
         raise BenchError("installed Codex CLI version does not match the pinned benchmark CLI")
-    first_codex_home = Path(_json(_record_path(root / "runs" / entries[0][0]))["codex_home"])
-    feature_env = _private_env(first_codex_home.parent)
-    feature_env["CODEX_HOME"] = str(first_codex_home)
-    # `features list` and `mcp list` are setup-only CLI operations. The latter
-    # loads this private profile without starting a session or making a model request.
-    config_probe = subprocess.run([str(cli), "mcp", "list"], env=feature_env,
-                                  capture_output=True, text=True, timeout=30, check=False)
-    if config_probe.returncode:
-        raise BenchError("private config rejected by installed Codex CLI: " + (config_probe.stderr or config_probe.stdout)[-1500:])
-    features = subprocess.run([str(cli), "features", "list"], env=feature_env,
-                              capture_output=True, text=True, timeout=30, check=False)
-    if features.returncode:
-        raise BenchError("private Codex feature snapshot failed: " + (features.stderr or features.stdout)[-1000:])
+    # Validate the current source profile in a disposable auth-free home. A prior
+    # failed attempt's profile is immutable and may predate the installed schema.
+    probe_cells = {cell["speed"]: cell for _rid, cell, _num, _prompt in entries}
+    feature_outputs: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="codex-bench-profile-probe-") as tmp:
+        private_base = Path(tmp)
+        probe_run = private_base / "suite" / "runs" / "profile-probe"
+        probe_cwd = None
+        for speed, cell in probe_cells.items():
+            codex_home, _config = _make_config(probe_run, "profile-probe", cell, private_base=private_base,
+                                               frozen_root_override=frozen)
+            probe_cwd = codex_home.parent / "neutral-cwd"
+            feature_env = _private_env(codex_home.parent, {
+                "CODEX_HOME": str(codex_home), "CODEX_FROZEN_ROOT": str(frozen),
+                "CODEX_FROZEN_RECEIPTS": str(probe_run / "attempt-01" / "frozen-mcp-receipts.jsonl"),
+            })
+            config_probe = subprocess.run([str(cli), "mcp", "list"], env=feature_env,
+                                          capture_output=True, text=True, timeout=30, check=False)
+            if config_probe.returncode:
+                raise BenchError("private config rejected by installed Codex CLI: " + (config_probe.stderr or config_probe.stdout)[-1500:])
+            features = subprocess.run([str(cli), "features", "list"], env=feature_env,
+                                      capture_output=True, text=True, timeout=30, check=False)
+            if features.returncode:
+                raise BenchError("private Codex feature snapshot failed: " + (features.stderr or features.stdout)[-1000:])
+            feature_outputs.append(features.stdout)
+            _strict_exec_config_probe(cli, feature_env, probe_cwd)
     # No model turn: initialize the same stdio MCP server and verify only its advertised tool surface.
-    mcp_env = _private_env(first_codex_home.parent, {
+    # No model turn: initialize the same stdio MCP server and verify only its advertised tool surface.
+    mcp_env = _private_env(Path(tempfile.gettempdir()) / "codex-bench-mcp-home", {
         "CODEX_FROZEN_ROOT": str(frozen),
         "CODEX_FROZEN_RECEIPTS": str(root / "mcp-preflight-receipts.jsonl"),
     })
@@ -659,8 +752,8 @@ def _preflight(root: Path) -> int:
              "catalog_sha256": _sha(user_codex.read_bytes()), "cells": len(entries),
              "auth_available": Path(os.environ.get("CODEX_BENCH_AUTH", str(DEFAULT_USER_CODEX / "auth.json"))).is_file(),
              "materials": material_hashes, "prepared_prompts": prepared_prompts,
-             "private_features_snapshot_sha256": _sha(features.stdout.encode("utf-8")),
-             "cli_config_probe": "mcp list", "mcp_probe": probe,
+             "private_features_snapshot_sha256": _sha("\n".join(feature_outputs).encode("utf-8")),
+             "cli_config_probe": "strict exec parser (empty stdin) for standard/fast; mcp list", "mcp_probe": probe,
              "checked_utc": datetime.now(timezone.utc).isoformat()}
     _write_json(root / "preflight.json", proof)
     print(f"PREFLIGHT OK {len(entries)} cells; frozen fixture verified; no model call")
@@ -1042,9 +1135,24 @@ def main(argv: list[str] | None = None) -> int:
                 _preflight(root)
                 if not args.all:
                     return launch_one(root, args.run_id, args.execute, args.timeout, args.attempt, mode, cap, batch_id)
-                ids = [entry[0] for entry in run_ids(root, load_suite(root))]
-                return launch_many(ids, mode, cap, lambda rid: launch_one(
-                    root, rid, args.execute, args.timeout, 1, mode, cap, batch_id))
+                ids = pending_run_ids(root, run_ids(root, load_suite(root)))
+                if not ids:
+                    print("All cells are audited PASS completions; no model launch needed")
+                    return 0
+                pause_marker = root / "operator-runtime" / "PAUSE_DISPATCH"
+                paused_boundaries: list[dict[str, Any]] = []
+                result = launch_many(ids, mode, cap, lambda rid: launch_one(
+                    root, rid, args.execute, args.timeout, 1, mode, cap, batch_id),
+                    stop_requested=pause_marker.is_file, paused_boundaries=paused_boundaries)
+                if paused_boundaries:
+                    runtime = root / "operator-runtime"
+                    runtime.mkdir(parents=True, exist_ok=True)
+                    _write_json(runtime / f"batch-{batch_id}-paused.json", {
+                        "batch_id": batch_id, "status": "PAUSED_AT_BOUNDARY",
+                        "launch_mode": mode, "effective_concurrency_cap": cap,
+                        **paused_boundaries[-1], "paused_utc": datetime.now(timezone.utc).isoformat(),
+                    })
+                return result
             finally:
                 try:
                     _postflight(root)

@@ -15,6 +15,7 @@ setup-validation.json
 setup-readiness.json
 launch.json
 runs/*/launch.json
+runs/*/legacy-prepared-launch.json
 attempts.tsv
 runs/*/attempt-*/
 runs/*/attempt-*/events.jsonl
