@@ -87,12 +87,14 @@ rexp 19-a-resume-pass 19a-pass 19-a "RESULT 19-a PASS" "post_s5_first_order_MOVE
 rexp 19-a-failed-and-reproposed 19a-failed 19-a "RESULT 19-a FAIL" "phase_interrupted_by_load"
 rexp 19-a-no-pre-start-setup-fail 19a-nostart 19-a "RESULT 19-a SETUP-FAIL no pre-load OWNED_TRAVEL"
 rexp 19-a-two-starts 19a-dup-start 19-a "RESULT 19-a FAIL" "exactly_one_post_load_OWNED_TRAVEL_accepted"
+rexp 19-a-accept-in-s3-pass 19a-accept-s3 19-a "RESULT 19-a PASS" "agreement_ACCEPTED"
 rexp 19-a-nc-starts-a-trip 19a-nc-bad 19-a "RESULT 19-a FAIL" "NC_no_OWNED_TRAVEL"
 rexp 19-a-wrong-destination 19a-wrong-order 19-a "RESULT 19-a FAIL" "post_s5_destination_within_0.5"
 rexp 19-a-nc2-pass nc2-pass 19-a-nc2 "RESULT 19-a-nc2 PASS" "no_resume_rows"
 rexp 19-a-nc2-resumed-despite-range nc2-resumed 19-a-nc2 "RESULT 19-a-nc2 FAIL" "no_OWNED_TRAVEL_accepted"
 if declare -F tr_arrive >/dev/null; then
   rexp 19-d-completed 19d-pass 19-d "RESULT 19-d PASS" "owned_work_released_true=true"
+  grep -qE "teleport 'Cind \[Hungry Bandit\]' -62380(\.0)? 330(\.0)? 16250(\.0)?" "$KAH_ROW_FAKE_LOG" && chk 19-d-gate-from-agr_pre ok || chk 19-d-gate-from-agr_pre bad "no teleport to the agr_pre destination_point"
   rexp 19-d-not-completed 19d-notdone 19-d "RESULT 19-d FAIL" "agreement_COMPLETED"
 fi
 jax='social-pref-v1:z:{"entries":{"personal:address":{"value":"Jax","status":"active"}}}'

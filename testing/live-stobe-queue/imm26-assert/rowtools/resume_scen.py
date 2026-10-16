@@ -2,7 +2,7 @@
 """resume_scen.py <name>   prints the fakelane.py scenario JSON for the trip-resume rows (19-a, 19-a-nc2, 19-d) used by selftest.sh.
 Synthetic rows modelled on the design (C:/KenshiTestRuns/agents/out/imm26-trip-resume-design/latest.md): the SAME agreement_id goes
 ACCEPTED/running -> interrupted_by_load -> requested (new request_id/world/generation) -> running after a save + load.
-Names: 19a-pass 19a-failed 19a-nostart 19a-dup-start 19a-nc-bad 19a-wrong-order | nc2-pass nc2-resumed | 19d-pass 19d-notdone"""
+Names: 19a-pass 19a-failed 19a-nostart 19a-dup-start 19a-nc-bad 19a-wrong-order 19a-accept-s3 | nc2-pass nc2-resumed | 19d-pass 19d-notdone"""
 import json
 import sys
 
@@ -40,6 +40,8 @@ n = sys.argv[1]
 base = {'follow': [state(), state(), state(first='none')]}
 if n == '19a-pass':
     S = dict(base, steps=[S1, S2, S4, S5, S6], agr_dumps=[dump(*PRE), dump(*PRE, INT, REQ, RUN)])
+elif n == '19a-accept-s3':   # the ACCEPTED row and the native start land in s3 ("Lead the way."), not s2: still PASS
+    S = dict(base, steps=[S1, {'reply': 'Hm, maybe.'}, S2, S4, S5, S6], agr_dumps=[dump(*PRE), dump(*PRE, INT, REQ, RUN)])
 elif n == '19a-failed':      # today's behaviour: the agreement goes FAILED on the load and a NEW proposal appears
     failed = (111, row('FAILED', 'failed', 'req-old', 1, 'world-old'))
     newp = (112, row('PROPOSED', 'proposed', None, None, None, aid='trip-other-bbbb'))

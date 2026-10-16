@@ -278,7 +278,7 @@ def c_19a(v, ev):
     """trip-resume (option B): accept leg as before, then a save/load CONTINUES the same agreement (rd_19a evidence files, see rowdefs.sh)"""
     if not need(v, ev, 's2/ev_full.txt', 's4/reply.txt', 's5/reply.txt', 'agr_pre.txt', 'agr_all.txt', 'load_rowid.txt', 'post_s5.txt'):
         return
-    rows = [r for r in full_rows(ev, 's2', {'travel_agreement'}) if r[2].get('status') == 'ACCEPTED']
+    rows = [r for st in ('s2', 's3') for r in full_rows(ev, st, {'travel_agreement'}) if r[2].get('status') == 'ACCEPTED']   # the accept lands in s2, or in s3 ("Lead the way.")
     v.ck('agreement_ACCEPTED', bool(rows), f'n={len(rows)}')
     if not rows:
         return
