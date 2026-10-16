@@ -1,10 +1,12 @@
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +19,10 @@ spec.loader.exec_module(cf)
 GUARD_SPEC = importlib.util.spec_from_file_location("codex_guard", Path(__file__).with_name("codex_guard.py"))
 guard = importlib.util.module_from_spec(GUARD_SPEC)
 GUARD_SPEC.loader.exec_module(guard)
+
+MCP_SPEC = importlib.util.spec_from_file_location("codex_frozen_mcp", Path(__file__).with_name("codex_frozen_mcp.py"))
+mcp = importlib.util.module_from_spec(MCP_SPEC)
+MCP_SPEC.loader.exec_module(mcp)
 
 
 class FrozenRootTests(unittest.TestCase):
@@ -77,6 +83,69 @@ class FrozenRootTests(unittest.TestCase):
         partial = self.fs.search("absent", "large.log", byte_budget=1000)
         self.assertTrue(partial["truncated"])
         self.assertLessEqual(partial["bytes_scanned"], 1000)
+
+    def test_search_overlong_unterminated_line_terminates_and_reports_incomplete(self):
+        target = self.root / "unterminated.log"
+        target.write_bytes(b"x" * (cf.MAX_SEARCH_LINE_BYTES * 3))
+        started = time.monotonic()
+        result = self.fs.search("missing", "unterminated.log", byte_budget=100_000)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual(result["results"], [])
+        self.assertTrue(result["incomplete"])
+        self.assertGreaterEqual(result["long_lines_skipped"], 1)
+
+    def test_directory_search_has_incremental_tree_budget(self):
+        for i in range(20):
+            (self.root / f"entry-{i:02d}.txt").write_text("ordinary\n", encoding="utf-8")
+        with patch.object(cf, "MAX_SEARCH_TREE_ENTRIES", 4), patch.object(Path, "rglob", side_effect=AssertionError("eager recursive enumeration")):
+            result = self.fs.search("never-present", byte_budget=1000)
+        self.assertTrue(result["truncated"])
+        self.assertLessEqual(result["files_scanned"], 4)
+
+    def test_mcp_stdio_burst_completes_list_read_search_and_fake_sql(self):
+        original_root, original_receipts, original_diagnostics = mcp.ROOT, mcp.RECEIPTS, mcp.DIAGNOSTICS
+        receipts = self.root.parent / "calls.jsonl"
+        diagnostics = self.root.parent / "timings.jsonl"
+        mcp.ROOT, mcp.RECEIPTS, mcp.DIAGNOSTICS = self.root, receipts, diagnostics
+        requests = [
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list", "arguments": {"path": "."}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "read", "arguments": {"path": "nested/fixture.txt"}}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "search", "arguments": {"query": "never-present", "path": "nested/fixture.txt"}}},
+            {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "sql", "arguments": {"query": "SELECT 1"}}},
+        ]
+        try:
+            with patch.object(mcp.FrozenDB, "select", return_value={"columns": ["n"], "rows": [[1]]}):
+                output = io.StringIO()
+                with patch.object(mcp.sys, "stdout", output):
+                    mcp.serve(io.StringIO("".join(json.dumps(req) + "\n" for req in requests)))
+            responses = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertEqual({response["id"] for response in responses}, {1, 2, 3, 4})
+            self.assertTrue(all(response["result"]["isError"] is False for response in responses))
+            entries = [json.loads(line) for line in receipts.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(len(entries), 4)
+            self.assertEqual({entry["method"] for entry in entries}, {"list", "read", "search", "sql"})
+            events = [json.loads(line) for line in diagnostics.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(sum(event["event"] == "started" for event in events), 4)
+            self.assertEqual(sum(event["event"] == "completed" for event in events), 4)
+            self.assertTrue(all("elapsed_ms" not in event for event in events if event["event"] == "started"))
+            self.assertTrue(all("elapsed_ms" in event for event in events if event["event"] == "completed"))
+        finally:
+            mcp.ROOT, mcp.RECEIPTS, mcp.DIAGNOSTICS = original_root, original_receipts, original_diagnostics
+
+    def test_mcp_stdio_calls_do_not_head_of_line_block(self):
+        requests = [
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "search"}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "list"}},
+        ]
+        def handler(request):
+            if request["id"] == 1:
+                time.sleep(0.1)
+            return {"jsonrpc": "2.0", "id": request["id"], "result": {"isError": False}}
+        output = io.StringIO()
+        with patch.object(mcp.sys, "stdout", output):
+            mcp.serve(io.StringIO("".join(json.dumps(req) + "\n" for req in requests)), response_handler=handler)
+        responses = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual([response["id"] for response in responses], [2, 1])
 
     def test_symlink_escape_is_blocked_or_omitted(self):
         outside = Path(self.temp.name) / "secret.txt"

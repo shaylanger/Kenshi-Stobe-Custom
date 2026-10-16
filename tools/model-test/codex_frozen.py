@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import threading
 import time
 from typing import Any
 
@@ -23,12 +24,18 @@ MAX_READ_SKIP_BYTES = 200_000_000
 MAX_SEARCH_RESULTS = 200
 MAX_SEARCH_BYTES = 20_000_000
 MAX_SEARCH_LINE_BYTES = 64_000
+MAX_SEARCH_SECONDS = 20
+MAX_SEARCH_TREE_ENTRIES = 50_000
+MAX_SEARCH_FILES = 10_000
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 _LIVE_PATH = re.compile(r"(?i)(?:/var/www/html/StobeServer|/root/stobe-work|/root/STOBE-src|C:[\\/]StobeBuild|D:[\\/]Steam[\\/]steamapps[\\/]common[\\/]Kenshi|pending-fixes|\bstobe\b(?!_frozen))")
 
 
 class FrozenAccessError(ValueError):
     """A request is outside the frozen read-only surface."""
+
+
+_RECEIPT_LOCK = threading.Lock()
 
 
 class FrozenRoot:
@@ -129,24 +136,31 @@ class FrozenRoot:
     def search(self, query: str, relative: str = ".", max_results: int = 50,
                byte_budget: int = MAX_SEARCH_BYTES, byte_offset: int = 0,
                start_line: int = 1) -> dict[str, Any]:
+        deadline = time.monotonic() + MAX_SEARCH_SECONDS
         if (not query or len(query) > 500 or not 1 <= max_results <= MAX_SEARCH_RESULTS or
                 not 1 <= byte_budget <= MAX_SEARCH_BYTES or not isinstance(byte_offset, int) or
                 isinstance(byte_offset, bool) or byte_offset < 0 or not isinstance(start_line, int) or
                 isinstance(start_line, bool) or start_line < 1):
             raise FrozenAccessError("invalid query or max_results")
         start = self.root if relative == "." else self._resolve(relative)
+        if time.monotonic() >= deadline:
+            raise FrozenAccessError("search exceeded its time budget resolving the path")
         if (byte_offset or start_line != 1) and not start.is_file():
             raise FrozenAccessError("search cursors require a single file path")
         if start.is_file() and byte_offset > start.stat().st_size:
             raise FrozenAccessError("search cursor is beyond end of file")
-        files = [start] if start.is_file() else sorted(start.rglob("*"), key=lambda p: p.as_posix().casefold())
+        walk_state = {"truncated": False}
+        files = [start] if start.is_file() else self._iter_search_files(start, deadline, walk_state)
         result: list[dict[str, Any]] = []
         bytes_scanned = 0
         files_scanned = 0
         truncated = False
-        deadline = time.monotonic() + 30
+        long_lines_skipped = 0
         next_cursor: dict[str, int] | None = None
         for p in files:
+            if time.monotonic() >= deadline:
+                truncated = True
+                break
             try:
                 resolved = p.resolve(strict=True)
                 resolved.relative_to(self.root)
@@ -175,9 +189,17 @@ class FrozenRoot:
                             break
                         if len(raw) > MAX_SEARCH_LINE_BYTES:
                             line_no += 1
-                            # Drain the remainder of this overlong line within the same budget.
+                            # Long lines are deliberately omitted from matching, but drain
+                            # them with EOF and time checks so a final unterminated record
+                            # cannot pin the single-threaded MCP server forever.
+                            long_lines_skipped += 1
                             while not raw.endswith(b"\n") and bytes_scanned < byte_budget:
+                                if time.monotonic() >= deadline:
+                                    truncated = True
+                                    break
                                 raw = handle.readline(min(MAX_SEARCH_LINE_BYTES + 1, byte_budget - bytes_scanned))
+                                if not raw:
+                                    break
                                 bytes_scanned += len(raw)
                                 if bytes_scanned > byte_budget:
                                     truncated = True
@@ -201,6 +223,8 @@ class FrozenRoot:
                             if len(result) >= max_results:
                                 return {"results": result, "truncated": True,
                                         "bytes_scanned": bytes_scanned, "files_scanned": files_scanned,
+                                        "long_lines_skipped": long_lines_skipped,
+                                        "incomplete": long_lines_skipped > 0,
                                         "next_cursor": next_cursor if start.is_file() else None}
                     if bytes_scanned >= byte_budget:
                         truncated = True
@@ -208,9 +232,49 @@ class FrozenRoot:
                     break
             except (OSError, ValueError):
                 continue
+        if walk_state["truncated"]:
+            truncated = True
         return {"results": result, "truncated": truncated,
                 "bytes_scanned": bytes_scanned, "files_scanned": files_scanned,
+                "long_lines_skipped": long_lines_skipped,
+                "incomplete": long_lines_skipped > 0,
                 "next_cursor": next_cursor if truncated and start.is_file() else None}
+
+    def _iter_search_files(self, start: Path, deadline: float, state: dict[str, bool]):
+        """Yield in-root regular files without eager recursive enumeration."""
+        stack = [start]
+        entries_seen = 0
+        files_seen = 0
+        while stack:
+            if time.monotonic() >= deadline or entries_seen >= MAX_SEARCH_TREE_ENTRIES:
+                state["truncated"] = True
+                return
+            directory = stack.pop()
+            subdirectories: list[Path] = []
+            try:
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        if time.monotonic() >= deadline or entries_seen >= MAX_SEARCH_TREE_ENTRIES:
+                            state["truncated"] = True
+                            return
+                        entries_seen += 1
+                        try:
+                            if entry.is_symlink() or _is_reparse_point(entry):
+                                continue
+                            if entry.is_dir(follow_symlinks=False):
+                                subdirectories.append(Path(entry.path))
+                            elif entry.is_file(follow_symlinks=False):
+                                files_seen += 1
+                                if files_seen > MAX_SEARCH_FILES:
+                                    state["truncated"] = True
+                                    return
+                                yield Path(entry.path)
+                        except OSError:
+                            continue
+            except OSError:
+                continue
+            subdirectories.sort(key=lambda path: path.name.casefold())
+            stack.extend(reversed(subdirectories))
 
 
 def _parse_manifest(path: Path) -> list[tuple[str, str]]:
@@ -430,5 +494,19 @@ def record_call(path: Path | str, method: str, arguments: dict[str, Any], outcom
         raise FrozenAccessError("call recorder must be outside the frozen fixture")
     target.parent.mkdir(parents=True, exist_ok=True)
     record = {"method": method, "arguments": arguments, "outcome": outcome}
-    with target.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    with _RECEIPT_LOCK:
+        with target.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _is_reparse_point(entry: os.DirEntry) -> bool:
+    """Recognize symlinks, junctions, and other Windows reparse entries."""
+    try:
+        is_junction = getattr(entry, "is_junction", None)
+        if callable(is_junction) and is_junction():
+            return True
+        attributes = getattr(entry.stat(follow_symlinks=False), "st_file_attributes", 0)
+        # FILE_ATTRIBUTE_REPARSE_POINT; do not follow directory junctions.
+        return bool(attributes & 0x400)
+    except OSError:
+        return True

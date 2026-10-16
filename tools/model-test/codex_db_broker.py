@@ -61,8 +61,12 @@ def _psql(config: dict, select_sql: str) -> tuple[list[str], list[list[str]]]:
     except subprocess.TimeoutExpired as exc:
         raise FrozenAccessError("frozen database query exceeded 15 seconds") from exc
     if proc.returncode:
-        detail = proc.stderr.strip().splitlines()[-1:] or ["psql failed without a diagnostic"]
-        raise FrozenAccessError("frozen database query failed: " + detail[0][:500])
+        # Prefer the bounded PostgreSQL error header over a trailing caret or
+        # source-context line. Avoid returning SQL text or any row contents.
+        diagnostic = next((line.strip() for line in proc.stderr.splitlines()
+                           if line.lstrip().startswith(("ERROR:", "FATAL:", "psql:"))),
+                          "psql failed without a diagnostic")
+        raise FrozenAccessError("frozen database query failed: " + diagnostic[:300])
     if len(proc.stdout.encode("utf-8")) > MAX_OUTPUT_BYTES:
         raise FrozenAccessError("frozen database query output exceeds 4 MB")
     parsed = list(csv.reader(io.StringIO(proc.stdout)))

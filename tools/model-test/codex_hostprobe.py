@@ -275,6 +275,30 @@ const unlistedCallableNames = ["exec_command", "shell_command", "apply_patch", "
   .filter(name => typeof tools[name] === "function");
 text("__CODEX_HOSTPROBE__" + JSON.stringify({globalNames, forbiddenGlobalNames, agentApiTypes, toolNames, toolNamespaceKeys, directCallableToolNames, unlistedCallableNames, frozenListStatus:"not_called"}));'''
 
+_TRANSPORT_CODE = r'''const responseShape = value => {
+  let normalized = value;
+  if (typeof value === "string") { try { normalized = JSON.parse(value); } catch (_) {} }
+  return {isError:normalized && typeof normalized === "object" ? normalized.isError === true : null};
+};
+const cases = [
+    ["search_server_lib", tools.mcp__frozen__search, {query:"Emperor Tengu", path:"server/lib", max_results:30, byte_budget:20000000}],
+    ["search_output_log", tools.mcp__frozen__search, {query:"Tengu", path:"logs/output_from_llm.log", max_results:25, byte_budget:20000000}],
+    ["sql_select_readonly", tools.mcp__frozen__sql, {query:"SELECT count(*) FROM public.audit_request"}],
+  ["read_manifest", tools.mcp__frozen__read, {path:"MANIFEST-code.txt", byte_limit:512, line_count:2}],
+  ["list_root", tools.mcp__frozen__list, {path:"."}],
+];
+const calls = await Promise.all(cases.map(async ([label, fn, args]) => {
+  const started = Date.now();
+  try {
+    const value = await fn(args);
+    const shape = responseShape(value);
+    return {label, isError:shape.isError, result_class:shape.isError === true ? "error" : shape.isError === false ? "ok" : "unclassified", elapsed_ms:Date.now()-started};
+  } catch (error) {
+    return {label, isError:true, result_class:"transport_error:" + (error && error.name || "Error"), elapsed_ms:Date.now()-started};
+  }
+}));
+text("__CODEX_HOSTPROBE__" + JSON.stringify({transportCalls:calls}));'''
+
 
 def _sse_custom_call(response_id: str, code: str = _PROBE_CODE) -> bytes:
     item = {"id": "item-probe", "type": "custom_tool_call", "status": "completed",
@@ -561,11 +585,12 @@ class _Handler(BaseHTTPRequestHandler):
                 state.service_tier = request.get("service_tier") if isinstance(request.get("service_tier"), str) else None
                 state.root_keys = sorted(k for k in request if isinstance(k, str))
                 state.request_input_shape = _safe_shape(request.get("input"))
-            if state.phase in {"exec", "host_inventory", "appserver_exec"} and state.requests > 1:
+            if state.phase in {"exec", "host_inventory", "appserver_exec", "transport"} and state.requests > 1:
                 state.probe_result = _extract_probe_result(request.get("input"))
-        code = _INVENTORY_CODE if state.phase == "host_inventory" else _PROBE_CODE
+        code = (_INVENTORY_CODE if state.phase == "host_inventory" else
+                _TRANSPORT_CODE if state.phase == "transport" else _PROBE_CODE)
         payload = (_sse_custom_call(f"resp-offline-{state.requests}", code)
-                   if state.phase in {"exec", "host_inventory", "appserver_exec"} and state.requests == 1 and "functions__exec" in names
+                   if state.phase in {"exec", "host_inventory", "appserver_exec", "transport"} and state.requests == 1 and "functions__exec" in names
                    else _sse_final(f"resp-offline-{state.requests}"))
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -580,8 +605,8 @@ class _Handler(BaseHTTPRequestHandler):
 def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Path,
                   timeout: int = 30, phase: str = "inventory", private_parent: Path | None = None,
                   exclude_native_host_tools: bool = False) -> dict[str, Any]:
-    if phase not in {"inventory", "exec", "host_inventory", "appserver_exec"}:
-        raise ValueError("phase must be inventory, exec, host_inventory, or appserver_exec")
+    if phase not in {"inventory", "exec", "host_inventory", "appserver_exec", "transport"}:
+        raise ValueError("phase must be inventory, exec, host_inventory, appserver_exec, or transport")
     codex = codex.resolve(strict=True)
     model_cache = model_cache.resolve(strict=True)
     frozen_root = frozen_root.resolve(strict=True)
@@ -636,6 +661,7 @@ def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Pat
             neutral.mkdir()
             shutil.copyfile(model_cache, codex_home / "models_cache.json")
             mcp_receipts = codex_home / "mcp.jsonl"
+            mcp_diagnostics = codex_home / "mcp-diagnostics.jsonl"
             guard_log = codex_home / "guard.jsonl"
             mcp_script = Path(__file__).resolve().with_name("codex_frozen_mcp.py")
             python = Path(sys.executable).resolve()
@@ -665,6 +691,7 @@ def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Pat
                 "startup_timeout_sec = 10", "tool_timeout_sec = 20",
                 "[mcp_servers.frozen.env]", f"CODEX_FROZEN_ROOT = {json.dumps(str(frozen_root))}",
                 f"CODEX_FROZEN_RECEIPTS = {json.dumps(str(mcp_receipts))}",
+                f"CODEX_FROZEN_DIAGNOSTICS = {json.dumps(str(mcp_diagnostics))}",
             ]
             config_path = codex_home / "config.toml"
             config_path.write_text("\n".join(config_lines) + "\n", encoding="utf-8")
@@ -672,6 +699,7 @@ def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Pat
             env.update({"CODEX_HOME": str(codex_home), "HOME": str(home), "USERPROFILE": str(home),
                         "OPENAI_API_KEY": "offline-probe-only",
                         "CODEX_FROZEN_ROOT": str(frozen_root), "CODEX_FROZEN_RECEIPTS": str(mcp_receipts),
+                        "CODEX_FROZEN_DIAGNOSTICS": str(mcp_diagnostics),
                         "RUST_LOG": "codex_core=debug"})
             hooks_list_error = "native hooks disabled: Windows command-hook stdin is a character handle without payload"
             prompt = "Reply with the fixed offline probe completion message. Do not call tools."
@@ -740,6 +768,15 @@ def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Pat
                                            "isError": is_error, "result_class": result_class})
                     except json.JSONDecodeError:
                         continue
+            mcp_timing_events: list[dict[str, Any]] = []
+            if mcp_diagnostics.exists():
+                for line in mcp_diagnostics.read_text(encoding="utf-8").splitlines():
+                    try:
+                        item = json.loads(line)
+                        if isinstance(item, dict):
+                            mcp_timing_events.append({key: item[key] for key in ("tool", "stage", "event", "elapsed_ms", "status") if key in item})
+                    except json.JSONDecodeError:
+                        continue
             start_hooks = sum(e.get("event") == "SessionStart" and e.get("decision") == "baseline" for e in guard_events)
             tool_names = list(state.tool_names)
             expected_request = "functions__exec" in tool_names and set(tool_names) <= {
@@ -774,6 +811,19 @@ def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Pat
                         and tool_receipts_ok and exclude_native_host_tools
                     )
                     status = "PASS" if independent_boundary_ok else "FAIL"
+            elif phase == "transport":
+                transport_calls = state.probe_result.get("transportCalls", []) if state.probe_result else []
+                transport_labels = {call.get("label") for call in transport_calls if isinstance(call, dict)}
+                transport_ok = (
+                    len(transport_calls) == 5 and
+                    transport_labels == {"search_server_lib", "search_output_log", "sql_select_readonly", "read_manifest", "list_root"} and
+                    all(call.get("isError") is False and call.get("result_class") == "ok" and
+                        isinstance(call.get("elapsed_ms"), int) and 0 <= call["elapsed_ms"] < 55_000
+                        for call in transport_calls)
+                )
+                status = "PASS" if (cli_rc == 0 and state.requests >= 2 and state.bad_requests == 0 and
+                                     expected_request and transport_ok and len(mcp_events) == 5 and
+                                     all(event.get("status") == "ok" for event in mcp_events)) else "FAIL"
             else:
                 status = "PASS" if cli_rc == 0 and state.requests >= 1 and state.bad_requests == 0 and expected_request else "FAIL"
             receipt = {
@@ -809,6 +859,8 @@ def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Pat
                           "unknown_parameter_isError": (state.probe_result.get("unknownShape", {}).get("isError") is True),
                           "unknown_parameter_response_shape": state.probe_result.get("unknownShape")}
                          if phase in {"exec", "host_inventory", "appserver_exec"} and state.probe_result else None),
+                "transport_calls": (state.probe_result.get("transportCalls", [])
+                                    if phase == "transport" and state.probe_result else None),
                 "hooks": {"session_start_receipts": start_hooks,
                           "session_start_marker": marker_start,
                           "pretool_marker": marker_pretool,
@@ -835,7 +887,8 @@ def run_inventory(codex: Path, model_cache: Path, output: Path, frozen_root: Pat
                     "reason": "Hooks disabled in this profile; separate stdin diagnostic found FILE_TYPE_CHAR with zero payload bytes.",
                     "diagnostic_receipt": "offline-hostprobe-input-contract.json",
                 },
-                "mcp_calls": mcp_events, "cli_returncode": cli_rc,
+                "mcp_calls": mcp_events, "mcp_timing_events": mcp_timing_events,
+                "cli_returncode": cli_rc,
                 "cli_error_class": cli_err_class,
                 "cli_event_summary": cli_event_summary,
                 "cli_error_classes": cli_error_classes,
@@ -858,7 +911,7 @@ def main() -> int:
     parser.add_argument("--frozen-root", required=True, type=Path)
     parser.add_argument("--receipt", required=True, type=Path)
     parser.add_argument("--timeout", type=int, default=30)
-    parser.add_argument("--phase", choices=("inventory", "exec", "host_inventory", "appserver_exec"), default="inventory")
+    parser.add_argument("--phase", choices=("inventory", "exec", "host_inventory", "appserver_exec", "transport"), default="inventory")
     parser.add_argument("--private-parent", type=Path, help="existing private parent for fresh non-TEMP probe home")
     parser.add_argument("--exclude-native-host-tools", action="store_true", help="offline-only candidate excluding functions and clock from nested host")
     args = parser.parse_args()

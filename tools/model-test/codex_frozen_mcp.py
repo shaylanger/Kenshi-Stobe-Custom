@@ -9,6 +9,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # `python -I` removes the script directory from sys.path; restore only this
@@ -18,6 +21,11 @@ from codex_frozen import FrozenAccessError, FrozenDB, FrozenRoot, record_call
 
 ROOT = Path(os.environ.get("CODEX_FROZEN_ROOT", r"C:\KenshiTestRuns\invest\frozen-2026-10-14"))
 RECEIPTS = Path(os.environ.get("CODEX_FROZEN_RECEIPTS", r"C:\KenshiTestRuns\invest\codex-tool-calls.jsonl"))
+DIAGNOSTICS = Path(os.environ.get("CODEX_FROZEN_DIAGNOSTICS", str(RECEIPTS.with_name("codex-frozen-timings.jsonl"))))
+_STDOUT_LOCK = threading.Lock()
+_DIAGNOSTICS_LOCK = threading.Lock()
+MAX_CONCURRENT_CALLS = 4
+MAX_QUEUED_CALLS = 8
 
 TOOLS = [
     {"name": "list", "description": "List entries inside the frozen fixture.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string", "default": "."}}, "additionalProperties": False}},
@@ -85,21 +93,99 @@ def _response(request: dict) -> dict:
     return {"jsonrpc": "2.0", "id": rid, "result": result}
 
 
+def _write_diagnostic(tool: str, event: str, elapsed_ms: int | None = None,
+                      status: str | None = None) -> None:
+    """Append bounded call timing metadata without request args or results."""
+    try:
+        target = DIAGNOSTICS.resolve()
+        root = ROOT.resolve()
+        try:
+            target.relative_to(root)
+            return
+        except ValueError:
+            pass
+        target.parent.mkdir(parents=True, exist_ok=True)
+        entry = {"tool": tool, "stage": "mcp.tools.call." + tool, "event": event}
+        if elapsed_ms is not None:
+            entry["elapsed_ms"] = max(0, elapsed_ms)
+        if status is not None:
+            entry["status"] = status
+        with _DIAGNOSTICS_LOCK, target.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    except OSError:
+        # Diagnostics must not make a read-only tool unavailable.
+        return
+
+
+def _write_response(response: dict) -> None:
+    with _STDOUT_LOCK:
+        sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+
+def _complete_call(request: dict, tool: str, started: float, handler) -> None:
+    try:
+        response = handler(request)
+        result = response.get("result") if isinstance(response, dict) else None
+        status = "error" if isinstance(result, dict) and result.get("isError") is True else "ok"
+    except Exception as exc:
+        response = {"jsonrpc": "2.0", "id": request.get("id"),
+                    "error": {"code": -32603, "message": type(exc).__name__}}
+        status = "error"
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    _write_diagnostic(tool, "completed", elapsed_ms, status)
+    _write_response(response)
+
+
+def serve(stdin=None, worker_count: int = MAX_CONCURRENT_CALLS, response_handler=None) -> None:
+    """Serve MCP JSON-RPC, allowing bounded concurrent tool calls.
+
+    Responses may complete out of order as permitted by JSON-RPC IDs. Keeping
+    the stdin reader free means a long search/WSL query cannot block later
+    list/read calls behind it.
+    """
+    source = stdin if stdin is not None else sys.stdin
+    handler = response_handler or _response
+    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="frozen-mcp") as pool:
+        futures = []
+        for line in source:
+            try:
+                request = json.loads(line)
+                if not isinstance(request, dict):
+                    raise ValueError("request must be an object")
+            except Exception as exc:
+                _write_response({"jsonrpc": "2.0", "id": None,
+                                 "error": {"code": -32700, "message": type(exc).__name__}})
+                continue
+            if request.get("method") != "tools/call":
+                try:
+                    response = handler(request)
+                    if response:
+                        _write_response(response)
+                except Exception as exc:
+                    _write_response({"jsonrpc": "2.0", "id": request.get("id"),
+                                     "error": {"code": -32603, "message": type(exc).__name__}})
+                continue
+            futures = [future for future in futures if not future.done()]
+            if len(futures) >= MAX_QUEUED_CALLS:
+                _write_response({"jsonrpc": "2.0", "id": request.get("id"),
+                                 "error": {"code": -32000, "message": "frozen MCP server is busy"}})
+                continue
+            params = request.get("params") if isinstance(request.get("params"), dict) else {}
+            tool = params.get("name") if isinstance(params.get("name"), str) else "unknown"
+            started = time.monotonic()
+            _write_diagnostic(tool, "started")
+            future = pool.submit(_complete_call, request, tool, started, handler)
+            futures.append(future)
+        for future in futures:
+            future.result()
+
+
 def main() -> None:
     # MCP stdio uses newline-delimited JSON-RPC. Never write diagnostics to stdout.
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
-    for line in sys.stdin:
-        try:
-            req = json.loads(line)
-            response = _response(req)
-            if response:
-                sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
-                sys.stdout.flush()
-        except Exception as exc:
-            sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": None,
-                                         "error": {"code": -32700, "message": type(exc).__name__}}) + "\n")
-            sys.stdout.flush()
+    serve()
 
 
 if __name__ == "__main__":
