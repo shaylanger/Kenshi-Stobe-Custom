@@ -59,8 +59,13 @@ rb_deal_start() {   # common start of the deal rows: NPC resolved, deal clean, a
   rb_deal_clean; rb_inject_off; rd_aff 75 platonic haff
   rb_give_bread
 }
-rb_price() {   # the engine-priced Cats the player owes (GIVE_CATS amount in term_state) -> stdout
-  lt_sql "select coalesce(e->>'amount','') from stobe_social_contract c, jsonb_array_elements(c.term_state) e where c.contract_id='$1' and e->>'kind'='GIVE_CATS' limit 1 /* rb:price */" 2>&1 | tr -dc 0-9 | head -c 9
+rb_price() {   # the engine-priced Cats the player owes: GIVE_CATS amount from term_state, else (COUNTERED/PROPOSED, no term_state yet) from the `terms` column -> stdout
+  lt_sql "select coalesce((select e->>'amount' from jsonb_array_elements(case when jsonb_typeof(c.term_state)='array' then c.term_state else '[]'::jsonb end) e where e->>'kind'='GIVE_CATS' limit 1),(select e->>'amount' from jsonb_array_elements(case when jsonb_typeof(c.terms)='array' then c.terms else '[]'::jsonb end) e where e->>'kind'='GIVE_CATS' limit 1),'') from stobe_social_contract c where c.contract_id='$1' /* rb:price */" 2>&1 | tr -dc 0-9 | head -c 9
+}
+rb_reprice_inject() {   # rb_reprice_inject <contract_id>: the engine raised the Cats to her relationship price (e.g. 353) and turned the injected ACCEPT-at-20 into a COUNTER; re-inject the ACCEPT at the READ price (replaces the stale step)
+  local rbp; rbp=$(rb_price "$1"); echo "${rbp:-}" > "$EV/reprice.txt"
+  [ -n "$rbp" ] && [ "$rbp" -gt 0 ] 2>/dev/null || return 0   # no price readable: keep the old injection (the later price check reports it)
+  rb_inject "[{\"deal_decision\":\"ACCEPT\",\"deal_terms\":${RB_TERMS/\"amount\":20,/\"amount\":$rbp,},\"message\":\"Deal then.\"}]"
 }
 
 rd_14e() {   # counter-offer open, save + load within minutes, then accept: the deal windows were paused by the reload (wpR2)
@@ -72,6 +77,7 @@ rd_14e() {   # counter-offer open, save + load within minutes, then accept: the 
   rb_snap_deal s1
   local id st; id=$(rb_deal_field s1 1); st=$(rb_deal_field s1 2)
   case "$st" in PROPOSED|COUNTERED) ;; *) rb_inject_off; RL_REASON="no open counter-offer after s1 (contract='$id' status='$st'): see $EV/deal_s1.txt"; return 3;; esac
+  rb_reprice_inject "$id"
   rb_clock_snap pre
   lt_sqlx "update stobe_social_contract set updated_at=now()-make_interval(secs => ${ROW_BACKDATE_S:-540}::double precision) where contract_id='$id' and status in ('PROPOSED','COUNTERED')" >> "$EV/backdate.txt" 2>&1
   rb_snap_deal backdated "$id"; rb_now t_backdate.txt
@@ -91,7 +97,7 @@ rb_paylater_to_pending() {   # pay-later deal (NPC gives Bread now, player pays 
   rb_snap_deal s1
   local st; RB_ID=$(rb_deal_field s1 1); st=$(rb_deal_field s1 2)
   case "$st" in
-    PROPOSED|COUNTERED) rl_say 2 "Deal. I accept your terms." || { local rc=$?; rb_inject_off; return $rc; };;
+    PROPOSED|COUNTERED) rb_reprice_inject "$RB_ID"; rl_say 2 "Deal. I accept your terms." || { local rc=$?; rb_inject_off; return $rc; };;
     ACCEPTED|AWAITING_PERFORMANCE) ;;
     *) rb_inject_off; RL_REASON="no pay-later deal after s1 (contract='$RB_ID' status='$st'): see $EV/deal_s1.txt"; return 3;;
   esac

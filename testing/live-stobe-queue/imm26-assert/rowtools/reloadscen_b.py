@@ -4,7 +4,7 @@ Synthetic evidence shaped like the real rows (deal snapshot lines of reloaddefs_
 Every defect variant breaks exactly ONE assertion (named in reloadselftest_b.sh) so each check is shown to be able to fail alone.
 Names:
   14e-pass 14e-expired 14e-newid 14e-noshift 14e-bigshift 14e-noshifts 14e-weak 14e-notopen 14e-nobread 14e-notperformed 14e-fired1
-  13g-pass 13g-direct 13g-notcomplete 13g-nocatsleg 13g-nokept 13g-keptbig 13g-broken 13g-expired 13g-newid 13g-noshift 13g-sameclock 13g-notpending 13g-noprice
+  13g-pass 13g-direct 13g-notcomplete 13g-nocatsleg 13g-nokept 13g-keptbig 13g-broken 13g-expired 13g-newid 13g-noshift 13g-sameclock 13g-notpending 13g-noprice 13g-counter353
   13f-pass 13f-notbreached 13f-nobroken 13f-brokenbig 13f-keptpromise
   10e-pass 10e-samesession 10e-ingestoff 10e-norescope 10e-scopechanged 10e-othersave 10e-older 10e-unmet 10e-control
   19e-pass 19e-pass-noint 19e-early-start 19e-early-rows 19e-chat-no-resume 19e-no-start-on-chat 19e-dup 19e-wrongdest 19e-nostate 19e-nostart
@@ -191,6 +191,8 @@ elif n == '13g-sameclock':
     S = paylater('g', {'clocks': ['tokA|x|1700', 'tokA|x|1900']})
 elif n == '13g-notpending':
     S = paylater('g', {'prest': 'ACCEPTED', 'preterms': PEND})
+elif n == '13g-counter353':   # s1 COUNTERED at her relationship price 353 (the injected ACCEPT-at-20 was repriced); the row must re-inject the ACCEPT at 353
+    S = paylater('g', {'s1st': 'COUNTERED', 'price': 353})
 elif n == '13g-noprice':
     S = paylater('g', {'price': ''})
 elif n == '13f-pass':

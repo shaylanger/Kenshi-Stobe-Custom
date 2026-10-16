@@ -71,6 +71,7 @@ expect_alone 13-g-new-contract-id 13g-newid 13-g "same_contract_id_across_the_re
 expect_alone 13-g-no-pause-shift 13g-noshift 13-g "deal_pause_0<shift<=1200"
 expect_alone 13-g-clock-token-unchanged 13g-sameclock 13-g "negotiation_clock_saw_a_new_load_token"
 expect_has 13-g-not-pending-setup-fail 13g-notpending 13-g SETUP-FAIL "deal not pending before the save"
+expect_pass 13-g-countered-price-353-pass 13g-counter353 13-g
 expect_has 13-g-no-price-setup-fail 13g-noprice 13-g SETUP-FAIL "cannot read the GIVE_CATS price"
 
 # ---- 13-f
@@ -127,6 +128,14 @@ i=$(last_line "INSERT INTO general_settings (id,value) VALUES ('NEG_TEST_INJECT'
 grep -q "make_interval(secs => 540::double precision)" "$F" && chk 14-e-backdate-default-540 ok || chk 14-e-backdate-default-540 bad
 grep -q "stobe-auto save kah-imm26-14e-$L" "$F" && grep -q "stobe-auto load kah-imm26-14e-$L" "$F" && chk 14-e-save-and-load ok || chk 14-e-save-and-load bad
 scen 14e-pass; ROW_BACKDATE_S=300 run 14-e $L >/dev/null; grep -q "make_interval(secs => 300::double precision)" "$F" && chk 14-e-backdate-knob ok || chk 14-e-backdate-knob bad
+last_inj() { grep -a -F -- "INSERT INTO general_settings (id,value) VALUES ('NEG_TEST_INJECT'" "$F" | tail -1; }
+scen 13g-counter353; run 13-g $L >/dev/null
+last_inj | grep -q '"amount":353' && ! last_inj | grep -q '"amount":20' && chk 13-g-reinject-accept-at-read-price-353 ok || chk 13-g-reinject-accept-at-read-price-353 bad "$(last_inj | cut -c1-300)"
+grep -q "stobe-auto money Shay -353" "$F" && chk 13-g-counter353-pays-353 ok || chk 13-g-counter353-pays-353 bad
+scen 14e-pass; run 14-e $L >/dev/null
+last_inj | grep -q '"amount":353' && ! last_inj | grep -q '"amount":20' && chk 14-e-reinject-accept-at-read-price-353 ok || chk 14-e-reinject-accept-at-read-price-353 bad "$(last_inj | cut -c1-300)"
+scen 13f-pass; run 13-f $L >/dev/null
+last_inj | grep -q '"amount":' && chk 13-f-reinject-uses-read-price ok || chk 13-f-reinject-uses-read-price bad
 scen 13g-pass; run 13-g $L >/dev/null
 grep -q "stobe-auto money Shay -20" "$F" && grep -q "stobe-auto money '#2529907200/2' 20" "$F" && chk 13-g-pay-statements ok || chk 13-g-pay-statements bad "$(grep -a 'stobe-auto money' "$F" | head -3)"
 grep -q "STOBE_TRIP_RESUME_MAX_COUNT" "$F" && chk 13-g-never-touches-resume-cap bad || chk 13-g-never-touches-resume-cap ok

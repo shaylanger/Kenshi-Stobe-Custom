@@ -30,3 +30,6 @@ Deals are made deterministic with `NEG_TEST_INJECT` (replaces the model reply be
 
 ## Files
 `reloaddefs_b.sh` (rd_14e rd_13f rd_13g rd_10e rd_19e rd_19f + rb_* helpers) · `reloadcheck_b.py` (verdicts; `--has <ROW>`) · `reloadrun-b.sh` · `pywrap_b.sh` · `repairprobe.php` · `reloadfake_b.py` / `reloadscen_b.py` / `reloadselftest_b.sh` (offline).
+
+## Engine repricing (13-g / 13-f / 14-e, imm26-rowfix-reload 2026-10-15)
+A plain Cats-for-item buy is priced by the engine at her relationship price (e.g. 353 for 1 Bread at aff 75), and `negotiation_phase1.php` turns an injected ACCEPT at the wrong price (the 20 in `RB_TERMS`) into a COUNTER. So after s1 the rows read the price (`rb_price`: `term_state` first, else the `terms` column while the contract is still COUNTERED/PROPOSED) and re-inject the ACCEPT at that price (`rb_reprice_inject`, evidence `reprice.txt`); `price.txt` is then non-empty. Selftest scenario `13g-counter353` (s1 COUNTERED, price 353) asserts the second `NEG_TEST_INJECT` carries `"amount":353`. If no price is readable the old injection is kept and the later price check reports it.
