@@ -69,6 +69,27 @@ EOT
     k=$((k+1))
   done
 }
+rs_guard() {   # fix26f22b: Shay conscious, healed, protected and selected (and Cind protected) before every say; the 4080-i4 run lost Shay to a KO between say 1 and say 1b
+  local c="${RL_NPC_ID:-}"
+  lt_h <<EOT >> "$EV/guard.txt" 2>&1
+stobe-auto wake Shay </dev/null | head -1; stobe-auto health Shay 100 </dev/null | head -1; stobe-auto protect Shay on </dev/null | head -1
+[ -z "$c" ] || stobe-auto protect "$c" on </dev/null | head -1
+stobe-auto select Shay </dev/null | head -1
+EOT
+}
+rs_peace() {   # rs_peace <tries>: fix26f22b. The sentinel step in rs_scene_clear ran right after the 58 k-unit teleport, before Rebirth had streamed in (4080-i4: "WARN no Holy Sentinel id found"),
+  # so the Holy Nation / Rebirth sentinels stayed hostile to the player faction and joined the bandit fight (13:54 events: Druven/Halna/Vesk/Skoval attack Shay, knockout by Druven's Iron Club).
+  # Retry until sentinels are findable, make EVERY sentinel faction found friendly (relation sets that NPC's faction <-> player faction), then guard Shay/Cind.
+  local sc="$EV/scene.txt" t ids s n=0
+  for t in $(seq 1 "${1:-1}"); do
+    ids=$(rs_sh 'stobe-auto chars 150 "Holy Sentinel|!dead" </dev/null | head -10' | grep -oE '#[0-9]+/[0-9]+' | sort -u | head -6)
+    [ -n "$ids" ] && break
+    echo "peace-wait $t: no Holy Sentinel listed yet" >> "$sc"; rw_sleep 5
+  done
+  for s in $ids; do n=$((n+1)); echo "peace: $(rs_sh "stobe-auto relation $(rl_q "$s") 100 </dev/null | head -2" | tr '\n' ' ' | cut -c1-200)" >> "$sc"; done
+  echo "peace: sentinels made friendly=$n" >> "$sc"
+  rs_guard
+}
 rs_scene_clear() {   # port of cleargroup14c-scene.sh steps 1-6 (any lane); evidence scene.txt (last line SCENE-OK|SCENE-BAD <why>), bandits.txt (ids), spawn.txt
   local sc="$EV/scene.txt" w fo nid sent ids B1 b ok poll sees tot
   local at="${RW_REBIRTH:--47333 730 -55600}" fac="${RW_FACTION:-Nameless}"
@@ -100,16 +121,35 @@ EOT
   rs_sh "stobe-auto relation $(rl_q "$B1") -100 </dev/null | head -2" >> "$sc"
   rs_place_bandits $ids
   rs_sh "stobe-auto face $(rl_q "$c") $(rl_q "$B1") </dev/null | head -1; sleep 1" >> "$sc"
+  # fix26f11b (op15 4080-i4: 58 k-unit teleport, the game did not answer for 2 x 20 s; Cind had NO perception entries yet: entry=0 fov=-1 last_seen=-1 on both polls, which came ~6 s after the
+  # spawn; 5090-i5: 3 of 4 seen at poll 1, then all lost 4 s later because Cind's cone was not refreshed). So: (1) wait until the game answers again, (2) poll up to RW_SCENE_POLLS (14) x
+  # RW_SCENE_GAP (5 s), re-facing Cind to the first bandit before every poll, (3) a poll counts when >= 3 bandits have sees=1; SCENE-OK after RW_SCENE_NEED (2) counting polls,
+  # (4) when NO bandit has a perception entry (fov=-1) every 4th poll the bandits are re-placed and Cind re-seated at the camp spot (settle kick).
+  local i0 pl need="${RW_SCENE_NEED:-2}" npoll="${RW_SCENE_POLLS:-14}" gap="${RW_SCENE_GAP:-5}" blind
+  for i0 in $(seq 1 "${RW_SCENE_READY_TRIES:-12}"); do
+    fo=$(rs_sh "stobe-auto where Shay </dev/null | head -1"); echo "$fo" | grep -q 'pos=' && break
+    echo "ready-wait $i0: $(echo "$fo" | head -1 | cut -c1-100)" >> "$sc"; rw_sleep 5
+  done
+  rw_sleep "${RW_SCENE_SETTLE:-6}"
+  rs_peace "${RW_PEACE_TRIES:-6}"
   tot=$(echo $ids | wc -w); ok=0
-  for poll in 1 2; do
-    sees=0
+  for pl in $(seq 1 "$npoll"); do
+    rs_sh "stobe-auto face $(rl_q "$c") $(rl_q "$B1") </dev/null | head -1; sleep 1" >> "$sc"
+    sees=0; blind=0
     for b in $ids; do
       fo=$(rs_sh "stobe-auto senses $(rl_q "$c") $(rl_q "$b") </dev/null | head -2"); echo "senses $b: $fo" >> "$sc"
       echo "$fo" | grep -qE 'sees=1' && sees=$((sees+1))
+      echo "$fo" | grep -qE 'fov=-1\.0|entry=0 ' && blind=$((blind+1))
     done
-    echo "poll $poll senses sees=1 count=$sees of $tot" >> "$sc"; [ "$sees" -ge 3 ] && ok=$((ok+1)); rw_sleep 4
+    echo "poll $pl senses sees=1 count=$sees of $tot blind=$blind" >> "$sc"
+    if [ "$sees" -ge 3 ]; then ok=$((ok+1)); [ "$ok" -ge "$need" ] && break; fi
+    if [ "$blind" -ge "$tot" ] && [ $((pl % 4)) -eq 0 ]; then
+      echo "settle-kick at poll $pl (no perception entries)" >> "$sc"; set -- $at
+      rs_sh "stobe-auto teleport $(rl_q "$c") $1 $2 $(( $3 + 6 )) </dev/null | head -1" >> "$sc"; rs_place_bandits $ids
+    fi
+    rw_sleep "$gap"
   done
-  if [ "$ok" -ge 2 ]; then echo "SCENE-OK" >> "$sc"; else echo "SCENE-BAD cind does not stably see >= 3 bandits (polls ok=$ok of 2; see senses lines above)" >> "$sc"; fi
+  if [ "$ok" -ge "$need" ]; then echo "SCENE-OK" >> "$sc"; else echo "SCENE-BAD cind does not stably see >= 3 bandits (counting polls ok=$ok of $need needed in $pl polls; see senses lines above)" >> "$sc"; fi
   return 0
 }
 rs_reseat26f() {   # after the load: Shay + Cind back at the camp spot, the SAME bandits (by serial) re-teleported + pinned
@@ -144,20 +184,20 @@ rd_26f() {
            "Those Dust Bandits are raiding Rebirth and you can see them. Let's clear out that group together." \
            "Cind, I want you to help me kill the Dust Bandits standing in Rebirth. Just those ones."; do
     case $k in 0) step=1;; 1) step=1b;; 2) step=1c;; *) step=1d;; esac
-    rl_say "$step" "$P" || return $?
+    rs_guard; rl_say "$step" "$P" || return $?
     rw_sleep 4; rw_act_dump act_s1.txt
     rs_proposed_clear act_s1.txt && break
     k=$((k+1)); rw_sleep 8
   done
   rs_proposed_clear act_s1.txt || { rw_log act_log_pre.txt "${n0:-0}"; return 0; }              # checker: SETUP-FAIL (no ClearGroup offer)
-  rl_say 2 "$accept" || return $?
+  rs_guard; rl_say 2 "$accept" || return $?
   rw_sleep "${RW_26F_ACCEPT_WAIT:-2}"
   rw_act_dump act_pre.txt; rw_out_dump out_pre.txt; rw_log act_log_pre.txt "${n0:-0}"
   rw_has_status act_pre.txt accepted || return 0                                                 # checker: SETUP-FAIL (accept did not land: NC17 missing / 26-a)
   tr_state state_pre.txt "$RL_NPC_FULL"
   rw_save_load job || return $?
   n1=$(rw_logn); rs_reseat26f
-  rl_say 3 "$rsay" || return $?
+  rs_guard; rl_say 3 "$rsay" || return $?
   rw_sleep "${RW_SAY_WAIT:-8}"
   rw_act_dump act_post.txt; rw_out_dump out_post.txt; rw_log act_log_post.txt "${n1:-0}"
   tr_state state_post.txt "$RL_NPC_FULL"

@@ -24,10 +24,15 @@ HX_FAR_DEF="-53200 957 4893"
 hxd_dry() { [ -n "${KAH_ROW_DRY:-}" ]; }   # --dry plans the steps against gr_default_fake: data-dependent checks are skipped
 hxd_sleep() { [ -n "${KAH_ROW_FAKE:-}" ] || sleep "$1"; }
 hxd_lane_save() { case "${LT_LANE:-}" in 5090-i3) echo kah-imm26-5090-hxA;; 5090-i4) echo kah-imm26-i4-hx0;; esac; }   # other lanes: --save / HX_SAVE
+hxd_winpath() {  # path in the form the (Windows) verdict python can open: C:/.. (Git Bash: cygpath -m); bash keeps using its own /c/.. form. Without cygpath (WSL) the path is unchanged.
+  # imm26-inv01cx: bundle_dir.txt held /c/.. -> hxcheck "bundle dirs missing" false SETUP-FAIL
+  cygpath -m "$1" 2>/dev/null || printf '%s
+' "$1"
+}
 hxd_cfg() {  # lane-dependent settings; HXD = bundle dir; call after rl_begin (EV set)
   ROW_NPC="${ROW_NPC:-$HX_NPC_DEF}"; export ROW_NPC
   HX_SAVE="${HX_SAVE:-$(hxd_lane_save)}"; HX_SAVE2="${HX_SAVE2:-$HX_SAVE}"; HX_SPOT="${HX_SPOT:-$HX_SPOT_DEF}"; HX_FAR="${HX_FAR:-$HX_FAR_DEF}"
-  HXD="${HX_OUT:+$HX_OUT/$RL_ROW}"; HXD="${HXD:-$EV}"; mkdir -p "$HXD"; echo "$HXD" > "$EV/bundle_dir.txt"
+  HXD="${HX_OUT:+$HX_OUT/$RL_ROW}"; HXD="${HXD:-$EV}"; mkdir -p "$HXD"; hxd_winpath "$HXD" > "$EV/bundle_dir.txt"
 }
 hxd_begin() { hxd_cfg; unset ROW_NATIVE; }
 

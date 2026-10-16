@@ -40,11 +40,38 @@ for nm in Shay $n Malzin; do stobe-auto health "\$nm" 100 </dev/null >/dev/null 
 stobe-auto where $n </dev/null | head -1 | cut -c1-140
 EOT
 }
+tr_faction_guard() {  # imm26-fix20a19e (19-e/08-d/26-dx on 4080-i4): 26-d/26-dx/14-c scenes run `stobe-auto faction Cind Nameless`; the lane server keeps that after a reload while the game says Traders Guild
+  # -> the s1 prompt says "already in the player faction" and has NO travel-consent section (no PROPOSE). If the lane DB lists the NPC in the player faction (Nameless), restore it with the lane's OWN stobe-auto faction
+  # command (never a SQL write). Evidence faction.txt. TRIP_REFACTION=0 skips; TRIP_FACTION overrides the target (default Traders Guild).
+  [ "${TRIP_REFACTION:-1}" = 0 ] && return 0
+  local f nm; nm=$(printf %s "$RL_NPC_FULL" | tr -d "'")
+  f=$(lt_sql "select faction from core_npc where name='$nm' limit 1" 2>/dev/null | head -1)
+  echo "db_faction_before=$f" >> "$EV/faction.txt"
+  case "$f" in Nameless*) ;; *) return 0;; esac
+  lt_h <<EOT >> "$EV/faction.txt" 2>&1
+stobe-auto faction $(rl_q "$RL_NPC_FULL") "${TRIP_FACTION:-Traders Guild}" </dev/null | head -2
+EOT
+  [ -n "${KAH_ROW_FAKE:-}" ] || sleep 3
+  rl_resolve "$ROW_NPC" >/dev/null 2>&1
+  echo "db_faction_after=$(lt_sql "select faction from core_npc where name='$nm' limit 1" 2>/dev/null | head -1) npc_id=$RL_NPC_ID" >> "$EV/faction.txt"
+  return 0
+}
+tr_prompt_guard() {  # tr_prompt_guard <step>: the step's prompt must carry the travel-consent section and must not call the NPC a player-faction member (else the model is never told it may PROPOSE a trip) -> rc 3 SETUP-FAIL
+  local p="$EV/s$1/prompt.txt"
+  [ -n "${KAH_ROW_FAKE:-}" ] && return 0
+  [ -s "$p" ] || return 0
+  if grep -qE 'already in the player faction|Faction status: player faction/squad member|"in_player_faction":true' "$p"; then
+    RL_REASON="s$1 prompt says ${RL_NPC_FULL} is in the player faction (no travel-consent/PROPOSE section): stale server-side faction from an earlier faction-Nameless row; needs: recipe (stobe-auto faction restore, see $EV/faction.txt)"; return 3
+  fi
+  grep -q 'Live willingness and travel consent' "$p" || { RL_REASON="s$1 prompt has no 'Live willingness and travel consent' section (the NPC was never told it may propose a trip); needs: recipe/server (see $p)"; return 3; }
+  return 0
+}
 tr_prep() {  # common start of every trip row: resolve, db clean, haff 60 platonic, quiet scene; sets RL_NPC_FULL/RL_NPC_ID, writes npc.txt
   unset ROW_NATIVE; tr_cfg
   rd_need_npc || return 3
   echo "$RL_NPC_FULL" > "$EV/npc.txt"
   tr_clean_db; rd_aff 60 platonic haff
+  tr_faction_guard
   [ "${TRIP_QUIET:-1}" = 0 ] || tr_quiet
   unset TR_SCENE; rl_resolve "$ROW_NPC" >/dev/null 2>&1
   return 0
@@ -58,7 +85,10 @@ tr_agr() {  # tr_agr <file> [n] : newest-first rows "rowid|status|phase|reason|o
 tr_trip_setup() {  # s1 propose (+s1b fallback wording), s2 accept (+s2b "Lead the way." when no native start is logged); native context pushed per say
   ROW_NATIVE=1
   rl_say 1 "Take me to $TR_DEST." || return $?
+  tr_prompt_guard 1 || return $?
   tr_has s1 PROPOSED || { rl_say 1b "Would you lead me to $TR_DEST?" || return $?; }
+  tr_has s1 PROPOSED || tr_has s1b PROPOSED || { rl_say 1c "Walk with me to $TR_DEST." || return $?; }   # third opener (the 20-c PASS wording)
+  tr_has s1 PROPOSED || tr_has s1b PROPOSED || tr_has s1c PROPOSED || { RL_REASON="no PROPOSED travel_agreement row after three asks (s1/s1b/s1c): an accept would be refused ('requires an existing concrete offer'); needs: recipe (see s1b/reply.txt)"; return 3; }
   rl_say 2 "${TRIP_ACCEPT:-I'm fine. Yes, let's go.}" || return $?
   if tr_has s2 ACCEPTED && ! grep -qE 'OWNED_TRAVEL.*accepted=1' "$EV/s2/reply.txt" 2>/dev/null; then
     rl_say 2b "Lead the way." || return $?

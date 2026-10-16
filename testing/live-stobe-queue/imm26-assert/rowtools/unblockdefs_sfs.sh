@@ -16,6 +16,7 @@
 # Evidence added: bored_attn.txt (attn sent per tick), bored_after1_mark.txt, bored_log_after1.txt.  Env: U_BORED_ATTN ({"in_combat":false})  U08D_SAYWAIT (25)  plus all of unblockdefs_a.sh (U08D_TRIES U08D_POST_CHAT_S U08D_TICK_REAL_S U_BORED_GAP U08D_NEG).
 USFS_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 declare -F i4_bored >/dev/null || . "$USFS_HERE/unblockdefs_a.sh"
+declare -F sfk_gate >/dev/null || . "$USFS_HERE/tripdefs_sfk.sh"   # imm26-fix20a19e: sfK2 walk helpers (sfk_gate, uf_walk_stage, sfk_shay_guard)
 [ -n "${U_BORED_ATTN+x}" ] || U_BORED_ATTN='{"in_combat":false}'
 
 # ------------------------------------------------------------------ i4_bored v2: same request as v1 + attn=
@@ -63,6 +64,28 @@ sfs_wait_say() {  # sfs_wait_say <n0> : poll (real s, U08D_SAYWAIT) until the St
   done
   return 0
 }
+sfs_walk_v2() {   # the sfK2 23-a body (tripdefs_sfk.sh rd_23a lines 55-75): gate = newest agreement destination_point, staged SFK_23A_BACK u short, speed 1, no harness order; walk_done.txt = completed=<0|1>
+  local n g
+  n=$(rl_q "$RL_NPC_FULL"); g=$(sfk_gate)
+  [ -n "$g" ] || { RL_REASON="no gate coordinates for '$TR_DEST' (set TRIP_GATE='x y z')"; return 3; }
+  echo "$g" > "$EV/gate.txt"
+  UF_N0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); UF_N0=${UF_N0:-0}
+  uf_walk_stage "$n" "$g" "${SFK_23A_BACK:-400}" 0 150 "${SFK_23A_SPEED:-1}" "${SFK_23A_TRIES:-30}"
+  uf_native_dump native_travel.txt
+  printf 'end=%s gate=%s last_progress=%s
+' "$UB_WALK_END" "$g" "$(tail -1 "$EV/walk_progress.txt" 2>/dev/null)" > "$EV/arrival.txt"
+  if [ "$UB_WALK_END" = TIMEOUT ]; then
+    echo "completed=0 end=TIMEOUT" > "$EV/walk_done.txt"
+    RL_REASON="no native arrival within ${SFK_23A_TRIES:-30} walk cycles (walk_progress.txt: $(tail -1 "$EV/walk_progress.txt" 2>/dev/null | cut -c1-120)); needs: recipe (raise SFK_23A_TRIES / lower SFK_23A_BACK) or native (no NATIVE_TRAVEL line = old DLL)"
+    return 3
+  fi
+  echo "completed=1 end=$UB_WALK_END" > "$EV/walk_done.txt"
+  lt_h <<EOT >> "$EV/walk.txt" 2>&1
+stobe-auto teleport Shay $n </dev/null | head -1 | cut -c1-120
+EOT
+  sfk_shay_guard || return 3
+  return 0
+}
 rd_08d() {
   tr_prep || return $?
   local dest="$TR_DEST" neg="${U08D_NEG:-0}" n0 m1=""
@@ -73,7 +96,7 @@ rd_08d() {
   tr_trip_setup || return $?
   if [ "$neg" = 1 ]; then echo "completed=0 (negative control: no walk)" > "$EV/walk_done.txt"
   else
-    tr_walk_stage || return $?
+    sfs_walk_v2 || return $?   # sfK2 23-a v2 walk (stage at the agreement's own destination_point), imm26-fix20a19e
     tr_state state_shay.txt Shay
     rl_say 3 "We're here. Thanks for guiding me." || return $?
   fi

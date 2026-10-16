@@ -88,16 +88,30 @@ stobe-auto health Shay 100 </dev/null | head -1
 stobe-auto health $(rl_q "$RL_NPC_FULL") 100 </dev/null | head -1
 EOT
 }
-u_state_combat() {  # u_state_combat <file>: `in_combat=true|false|unknown` (stobe_state), ERROR text when the NPC is gone
-  local js ic; js=$(printf 'stobe-auto stobe_state %s </dev/null 2>&1 | head -c 6000 # u:state\n' "$(rl_q "$RL_NPC_FULL")" | lt_h 2>&1)
-  ic=$(echo "$js" | grep -oE '"in_combat": ?(true|false)' | head -1 | grep -oE 'true|false')
-  if [ -z "$ic" ] && ! echo "$js" | grep -qiE 'no character named|ERROR'; then   # op11: stobe_state has no in_combat key; the native snapshot does (core_npc_master.metadata.native_ai.combat.in_combat after a ctxpush)
-    printf 'stobe-auto stobe_ctxpush %s </dev/null 2>&1 | head -1 # u:cp\n' "$(rl_q "$RL_NPC_FULL")" | lt_h >/dev/null 2>&1; rw_sleep 2
-    ic=$(lt_sql "select coalesce(((metadata::json)->'native_ai'->'combat'->>'in_combat'),case when ((metadata::json)->'native_ai'->>'observed')='true' then 'false' end,'') from core_npc_master where name = '${RL_NPC_FULL//\'/\'\'}' limit 1" 2>/dev/null | head -1 | tr -dc 'a-z')
-    case "$ic" in true|false) ;; *) ic="";; esac
+u_state_combat() {  # u_state_combat <file>: `in_combat=true|false|unknown [(source=...)]`; `in_combat=gone ...` when the NPC is gone.
+  # fix26f11b: op15 got unknown on all 16 polls. stobe_state has no in_combat key, and the single native-snapshot read (2 s after one ctxpush) can
+  # miss: the next ordinary NPC snapshot upsert rewrites core_npc_master.metadata WITHOUT native_ai (data_functions upsert: metadata = $8). So: (1) stobe_state key,
+  # (2) up to U_SNAP_TRIES (3) x [ctxpush, 1.5 s, read native_ai.combat.in_combat], (3) newest eventlog 'combat' row naming the NPC (combat ended => false).
+  # Every raw reply is appended to $EV/combat_probe.txt so a remaining unknown shows why. The checker only looks for the substrings in_combat=true|false.
+  local js ic src="" k nm sq row; nm="$RL_NPC_FULL"; sq="${nm//\'/\'\'}"
+  js=$(printf 'stobe-auto stobe_state %s </dev/null 2>&1 | head -c 6000 # u:state\n' "$(rl_q "$nm")" | lt_h 2>&1)
+  ic=$(echo "$js" | grep -oE '"in_combat": ?(true|false)' | head -1 | grep -oE 'true|false'); [ -n "$ic" ] && src=stobe_state
+  if [ -z "$ic" ] && ! echo "$js" | grep -qiE 'no character named|ERROR'; then
+    for k in $(seq 1 "${U_SNAP_TRIES:-3}"); do
+      printf 'stobe-auto stobe_ctxpush %s </dev/null 2>&1 | head -1 # u:cp\n' "$(rl_q "$nm")" | lt_h >/dev/null 2>&1; rw_sleep 1.5
+      row=$(lt_sql "select coalesce(((metadata::jsonb)->'native_ai'->'combat'->>'in_combat'),case when ((metadata::jsonb)->'native_ai'->>'observed')='true' then 'false' end,'none') from core_npc_master where lower(name) = lower('$sq') order by updated_at desc limit 1 /* u:snap */" 2>&1 | head -2 | tr -d '\r')
+      echo "snap$k $1 [$row]" >> "$EV/combat_probe.txt"
+      ic=$(echo "$row" | head -1 | tr -dc 'a-z'); case "$ic" in true|false) src=native_snapshot; break;; *) ic="";; esac
+    done
   fi
+  if [ -z "$ic" ] && ! echo "$js" | grep -qiE 'no character named|ERROR'; then
+    row=$(lt_sql "select data from eventlog where type='combat' and data like '%$sq%' order by rowid desc limit 1 /* u:evt */" 2>&1 | head -1 | tr -d '\r' | cut -c1-160)
+    echo "evt $1 [$row]" >> "$EV/combat_probe.txt"
+    case "$row" in '') ;; *[Ee]nded*) ic=false; src=eventlog;; *) ic=true; src=eventlog;; esac
+  fi
+  echo "state $1 [$(echo "$js" | head -c 160 | tr '\n' ' ')]" >> "$EV/combat_probe.txt"
   if echo "$js" | grep -qiE 'no character named|ERROR'; then echo "in_combat=gone $(echo "$js" | head -1 | cut -c1-120)" > "$EV/$1"
-  else echo "in_combat=${ic:-unknown}" > "$EV/$1"; fi
+  else echo "in_combat=${ic:-unknown}${src:+ (source=$src)}" > "$EV/$1"; fi
 }
 u_claim_dump() {  # u_claim_dump <file> <rowid mark>: follow-up claims written after the mark
   lt_sql "select rowid||'|'||type||'|'||left(data,400) from eventlog where type='situated_remark_claim' and data like '%followup:%' and rowid>${2:-0} order by rowid" > "$EV/$1" 2>&1

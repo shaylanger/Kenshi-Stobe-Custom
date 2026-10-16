@@ -219,9 +219,12 @@ EOT
   return 3
 }
 rd_20a() {   # ACCEPTED trip; change request must not move the row; two confirm turns; Shay placed on the NPC and sheathed before EVERY turn
+  TR_SCENE="${TR_SCENE:-${HX_SPOT_DEF:--48000 1500 2960}}"   # imm26-fix20a19e: the quiet spot (tr_prep -> tr_quiet teleports Shay there first; the Hub outlaws attacked Shay before s1 in the i3 run)
   tr_prep || return $?
   sr_calm
   sr_calm_ev pre; tr_trip_setup || return $?
+  # guard: the change request only means something on an ACCEPTED Squin trip; without one s3/s4 create an unrelated Stumble Inn trip
+  tr_has s2 ACCEPTED || tr_has s2b ACCEPTED || [ -n "${KAH_ROW_FAKE:-}" ] || { RL_REASON="no ACCEPTED $TR_DEST trip before the change request (s2/s2b ev_full has no ACCEPTED travel_agreement row; see s1/s1b/s2 reply.txt); needs: recipe"; return 3; }
   echo "$TR_ALT" > "$EV/alt.txt"
   local core="${TR_ALT#the }"
   sr_turn_ready s3 || return $?; sr_calm_ev s3; rl_say 3 "Actually, go to $TR_ALT instead." || return $?

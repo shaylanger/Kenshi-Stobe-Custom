@@ -29,7 +29,7 @@ expect() {
 expect 23-a-pass 23a-pass 23-a $L "RESULT 23-a PASS" "one_completion_acknowledgement=n=1"
 expect 23-a-fail 23a-fail 23-a $L "RESULT 23-a FAIL" "agreement_COMPLETED=FAILED"
 expect 23-a-controller-left 23a-fail 23-a $L "RESULT 23-a FAIL" "no_follow_or_travel_controller"
-expect 23-a-setup-fail-no-accept 23a-noaccept 23-a $L "RESULT 23-a SETUP-FAIL no ACCEPTED travel_agreement"
+expect 23-a-setup-fail-no-accept 23a-noaccept 23-a $L "RESULT 23-a SETUP-FAIL no PROPOSED travel_agreement row after three asks"   # imm26-fix20a19e: the accept is no longer sent without a PROPOSED row
 expect 23-a-lead-the-way-leg 23a-lead 23-a $L "RESULT 23-a PASS"
 grep -q 'Lead the way\.' "$KAH_ROWS_BASE/imm26-5090-i3/rows/23-a/s2b/utterance.txt" 2>/dev/null && chk 23-a-s2b-said-lead-the-way ok || chk 23-a-s2b-said-lead-the-way bad
 expect 23-a-fallback-wording 23a-fallback 23-a $L "RESULT 23-a PASS"
