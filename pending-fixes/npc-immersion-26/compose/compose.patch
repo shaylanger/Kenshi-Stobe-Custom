@@ -896,7 +896,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/debug/db_
  }
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activity/ActivityAgreementAdapter.php b/lib/activity/ActivityAgreementAdapter.php
 --- a/lib/activity/ActivityAgreementAdapter.php	2026-10-14 15:57:13.041938778 -0500
-+++ b/lib/activity/ActivityAgreementAdapter.php	2026-10-16 03:18:07.213802019 -0500
++++ b/lib/activity/ActivityAgreementAdapter.php	2026-10-16 03:33:38.542550042 -0500
 @@ -3,6 +3,9 @@
  
  namespace Stobe\Activity;
@@ -966,15 +966,18 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activ
          $this->ground($context, $agreement, $reference);
          $this->resolveRoute($context, $routeRef['candidateId'], $routeRef);
          $this->authorize('propose', $context, $agreement);
-@@ -90,7 +113,7 @@
+@@ -90,9 +113,9 @@
              throw new \RuntimeException('Offer expired; propose again before agreeing');
          }
          $this->authorize('accept', $context, $proposal['agreement']);
 -        $this->ground($context, $proposal['agreement'], $proposal['discoveryRef']);
 +        $this->ground($context, $proposal['agreement'], $proposal['discoveryRef'], 'accept');
          if ($proposal['protocol'] === 'stobe.activity.v2') {
-             $this->resolveRoute($context, $proposal['routeRef']['candidateId'], $proposal['routeRef']);
+-            $this->resolveRoute($context, $proposal['routeRef']['candidateId'], $proposal['routeRef']);
++            $this->resolveRoute($context, $proposal['routeRef']['candidateId'], $proposal['routeRef'], $proposal['agreement']);
          }
+         $this->consent('accept', $context, $proposal, $evidence);
+         $accepted = $proposal;
 @@ -104,9 +127,66 @@
                       'agreement' => $accepted['agreement'], 'discoveryRef' => $accepted['discoveryRef'],
                       'scopeDigest' => $accepted['scopeDigest'], 'revision' => $accepted['revision']];
@@ -1061,7 +1064,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activ
          foreach (['worldId', 'actor', 'requester'] as $field) {
              if (($record['agreement'][$field] ?? null) !== $context[$field]) {
                  throw new \RuntimeException('Agreement identity mismatch');
-@@ -182,11 +274,11 @@
+@@ -182,21 +274,21 @@
          }
      }
  
@@ -1075,6 +1078,18 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activ
              throw new \RuntimeException('No currently grounded suitable activity target');
          }
      }
+ 
+     /** Resolve the model's ID through the authenticated native snapshot, then
+      * re-check every persisted route field against a fresh snapshot at accept. */
+-    private function resolveRoute(array $context, string $candidateId, ?array $expected): array
++    private function resolveRoute(array $context, string $candidateId, ?array $expected, ?array $acceptAgreement = null): array
+     {
+         if (!is_callable($this->resolveRoute)) { throw new \RuntimeException('No native route resolver is available'); }
+-        $resolved = call_user_func($this->resolveRoute, $context, $candidateId, $expected);
++        $resolved = call_user_func($this->resolveRoute, $context, $candidateId, $expected, $acceptAgreement);
+         if (!is_array($resolved)) { throw new \RuntimeException('No currently grounded route candidate'); }
+         $this->keys($resolved, ['candidateId','actorSerial','worldId','kind','label','x','y','z']);
+         $route = [
 @@ -270,6 +362,22 @@
          }
          return $value;
@@ -1718,8 +1733,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activ
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activity/ActivityService.php b/lib/activity/ActivityService.php
 --- a/lib/activity/ActivityService.php	2026-10-14 15:57:13.059080878 -0500
-+++ b/lib/activity/ActivityService.php	2026-10-16 03:18:07.213452819 -0500
-@@ -1,117 +1,145 @@
++++ b/lib/activity/ActivityService.php	2026-10-16 03:33:38.542369642 -0500
+@@ -1,117 +1,171 @@
 -<?php
 -declare(strict_types=1);
 -function stobeActivityAdapter(array $request): \Stobe\Activity\ActivityAgreementAdapter {
@@ -1843,22 +1858,23 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activ
 +function stobeActivityAdapter(array $request): \Stobe\Activity\ActivityAgreementAdapter {
 +    $facts = stobeActivityEnrichFacts($request['nativeFacts'] ?? []);
 +    $routeCandidates = is_array($request['routeCandidates'] ?? null) ? $request['routeCandidates'] : [];
++    $scopeOk = static function(array $c, array $a, array $f): bool {
++        return ($f['worldId'] ?? null) === $c['worldId'] && ($f['actor'] ?? null) === $c['actor']
++            && ($f['sourceId'] ?? null) === $a['sourceId'] && ($f['resourceId'] ?? '') === $a['resourceId']
++            && ($f['kind'] ?? '') === $a['kind'] && ($f['pathReachable'] ?? false) === true
++            && ($f['observedNow'] ?? false) === true && ($f['suitable'] ?? false) === true
++            && ($f['activityPermitted'] ?? false) === true && ($f['protectedTarget'] ?? true) === false
++            && ($f['conflictingOrder'] ?? true) === false
++            && ($a['kind'] !== 'ClearGroup' || ($f['agreedTargets'] ?? []) === $a['agreedTargets'])
++            && (!isset($a['campZone']) || (($f['campZone'] ?? null) === $a['campZone']));
++    };
 +    // imm26-u4 (rows 26-a/22-a/26-b/26-c): a Hunt target is an animal that wanders, flees or dies between the offer and the answer,
 +    // and the native side only keeps a candidate id while that exact animal is still emitted. At ACCEPT (phase 'accept', Hunt only) the
 +    // stored discoveryRef may therefore be satisfied by ANY currently observed candidate of the same kind/source/resource that passes every
 +    // other check (suitable, permitted, reachable, observedNow, not protected, no conflicting order). The stored record and its digest are
 +    // NOT rebound (the native consent/report path matches that digest). Propose, resume, Mine and ClearGroup keep the exact-ref rule.
-+    $resolve = static function(array $c, array $a, array $ref, string $phase='propose') use ($facts): bool {
-+        $scope = static function(array $f) use ($c, $a): bool {
-+            return ($f['worldId'] ?? null) === $c['worldId'] && ($f['actor'] ?? null) === $c['actor']
-+                && ($f['sourceId'] ?? null) === $a['sourceId'] && ($f['resourceId'] ?? '') === $a['resourceId']
-+                && ($f['kind'] ?? '') === $a['kind'] && ($f['pathReachable'] ?? false) === true
-+                && ($f['observedNow'] ?? false) === true && ($f['suitable'] ?? false) === true
-+                && ($f['activityPermitted'] ?? false) === true && ($f['protectedTarget'] ?? true) === false
-+                && ($f['conflictingOrder'] ?? true) === false
-+                && ($a['kind'] !== 'ClearGroup' || ($f['agreedTargets'] ?? []) === $a['agreedTargets'])
-+                && (!isset($a['campZone']) || (($f['campZone'] ?? null) === $a['campZone']));
-+        };
++    $resolve = static function(array $c, array $a, array $ref, string $phase='propose') use ($facts, $scopeOk): bool {
++        $scope = static function(array $f) use ($c, $a, $scopeOk): bool { return $scopeOk($c, $a, $f); };
 +        $exact = stobeActivitySelectFacts($facts,$a,$ref);
 +        if (($exact['candidateId'] ?? null) === $ref['candidateId'] && ($exact['targetSerial'] ?? null) === $ref['targetSerial'] && $scope($exact)) return true;
 +        if ($phase !== 'accept' || !stobeActivityKindTargetMoves((string)$a['kind'])) return false;
@@ -1881,7 +1897,13 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activ
 +        if ($op==='accept') return stobeActivityNaturalAcceptance($text,$record);
 +        return in_array($text,['cancel','stop','cancel that','i changed my mind','never mind','nevermind'],true);
 +    };
-+    $resolveRoute = static function(array $c, string $candidateId, ?array $expected) use ($routeCandidates): ?array {
++    // imm26-u4b (rows 26-a/22-a/26-b/26-c): native re-emits every local route row with a new counter id each snapshot, so at ACCEPT the exact
++    // stored route (id/label/coords) is gone. For a Hunt only ($accept = the agreement, set by accept()), the stored route stays valid while a
++    // CURRENT native_local row of the same actor and kind lies within the resume route radius of the stored point AND of a currently grounded
++    // target (same scope checks as ground()). The stored routeRef/digest are NOT rewritten. Propose, Mine, ClearGroup keep the exact rule.
++    $resolveRoute = static function(array $c, string $candidateId, ?array $expected, ?array $accept = null) use ($routeCandidates, $facts, $scopeOk): ?array {
++        if ($expected !== null && is_array($accept) && stobeActivityKindTargetMoves((string)($accept['kind'] ?? ''))
++            && stobeActivityHuntRouteStillGrounded($c, $accept, $expected, $routeCandidates, $facts, $scopeOk)) return $expected;
 +        foreach ($routeCandidates as $point) {
 +            if (!is_array($point) || ($point['id'] ?? null) !== $candidateId || ($point['source'] ?? '') !== 'native_local'
 +                || ($point['actor_serial'] ?? null) !== $c['actor']) continue;
@@ -1981,6 +2003,25 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activ
 +        $out[] = array_merge($candidate,array_intersect_key($facts,array_flip(['worldId','actor','requester','npcWilling'])));
 +    }
 +    return $out;
++}
++
++/** True when a current native_local route row of the actor/kind is within the route radius of both the stored route point and a grounded target (imm26-u4b). */
++function stobeActivityHuntRouteStillGrounded(array $c, array $agreement, array $stored, array $routeCandidates, array $facts, callable $scopeOk): bool {
++    $near = static function(array $p, array $q, float $radius): bool {
++        $d = 0.0;
++        foreach (['x','y','z'] as $axis) { if (!is_numeric($p[$axis] ?? null) || !is_numeric($q[$axis] ?? null)) return false; $d += (floatval($p[$axis]) - floatval($q[$axis])) ** 2; }
++        return sqrt($d) <= $radius;
++    };
++    $radius = function_exists('stobeActivityResumeSettings') ? floatval(stobeActivityResumeSettings()['route_radius'] ?? 1500) : 1500.0;
++    $anchors = [];
++    foreach (stobeActivitySameKindFacts($facts, $agreement) as $alt) if ($scopeOk($c, $agreement, $alt)) $anchors[] = $alt;
++    if ($anchors === []) return false;
++    foreach ($routeCandidates as $p) {
++        if (!is_array($p) || ($p['source'] ?? '') !== 'native_local' || ($p['actor_serial'] ?? null) !== $c['actor']
++            || ($p['kind'] ?? null) !== ($stored['kind'] ?? '') || !$near($p, $stored, $radius)) continue;
++        foreach ($anchors as $anchor) if ($near($p, $anchor, $radius)) return true;
++    }
++    return false;
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/activity/ActivityStore.php b/lib/activity/ActivityStore.php
 --- a/lib/activity/ActivityStore.php	2026-10-12 21:20:51.507886917 -0500
@@ -15237,6 +15278,103 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +check('E2: Mine at accept with another mine under another id -> still rejected (relaxation is Hunt only)',
 +    accept($PM, req([cand('Mine', MINE_SRC, MINE_RES, 4002, 'activity-proposal:2232299776:6')])) === NOGROUND);
 +echo "imm26_u4_ground_hunt_accept: $pass passed, $fail failed\n";
++exit($fail ? 1 : 0);
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_u4b_route_hunt_accept.php b/tests/imm26_u4b_route_hunt_accept.php
+--- a/tests/imm26_u4b_route_hunt_accept.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_u4b_route_hunt_accept.php	2026-10-16 03:33:34.750285657 -0500
+@@ -0,0 +1,93 @@
++<?php
++// imm26-u4b (rows 26-a/22-a/26-b/26-c): after u4a the Hunt ACCEPT grounds the target, but accept also re-resolves the persisted ROUTE
++// candidate by exact id/label/coords, and native re-emits every local route row with a NEW counter id (label/coords shift) each snapshot.
++// Pure: real adapter + real stobeActivityAdapter, no database. Fails before the patch (case A), passes after.
++//   php tests/imm26_u4b_route_hunt_accept.php
++declare(strict_types=1);
++set_exception_handler(function (Throwable $e) { echo get_class($e), ': ', $e->getMessage(), ' @', basename($e->getFile()), ':', $e->getLine(), "\n"; exit(1); });
++$pass = 0; $fail = 0;
++function check(string $name, bool $ok, $detail = null): void {
++    global $pass, $fail;
++    if ($ok) { $pass++; echo "PASS $name\n"; } else { $fail++; echo "FAIL $name" . ($detail !== null ? ' :: ' . substr(json_encode($detail), 0, 500) : '') . "\n"; }
++}
++require_once __DIR__ . '/../lib/activity/ActivityAgreementAdapter.php';
++require_once __DIR__ . '/../lib/activity/ActivityService.php';
++const HUNT_SRC = '1531903-Swamp Animal Traders.mod'; const HUNT_RES = '42241-rebirth.mod';
++const MINE_SRC = '1509-gamedata.base'; const MINE_RES = '1515-gamedata.base';
++const PLAYER = 9001; const ACTOR = 2232299776; const W = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1';
++const NOROUTE = 'No currently grounded route candidate';
++const NOGROUND = 'No currently grounded suitable activity target';
++function cand(string $kind, string $src, string $res, int $serial, string $id, array $over = []): array {
++    return $over + ['kind'=>$kind, 'sourceId'=>$src, 'resourceId'=>$res, 'targetSerial'=>$serial, 'candidateId'=>$id, 'pathReachable'=>true, 'observedNow'=>true,
++        'suitable'=>true, 'activityPermitted'=>true, 'protectedTarget'=>false, 'hostile'=>false, 'conflictingOrder'=>false,
++        'x'=>1000.0, 'y'=>10.0, 'z'=>2000.0, 'agreedTargets'=>[]];
++}
++function route(string $id, string $label, float $x, float $y, float $z, array $over = []): array {
++    return $over + ['id'=>$id, 'label'=>$label, 'actor_serial'=>ACTOR, 'kind'=>'landmark', 'source'=>'native_local', 'x'=>$x, 'y'=>$y, 'z'=>$z];
++}
++function req(array $cands, array $routes, array $over = [], bool $willing = true): array {
++    return ['context'=>['worldId'=>W, 'actor'=>ACTOR, 'requester'=>PLAYER, 'now'=>1000],
++        'nativeFacts'=>$over + ['worldId'=>W, 'actor'=>ACTOR, 'requester'=>PLAYER, 'npcWilling'=>$willing, 'candidates'=>$cands], 'routeCandidates'=>$routes];
++}
++function propose(array $cands, array $routes, array $ref, string $kind = 'Hunt'): array {
++    $src = $kind === 'Mine' ? MINE_SRC : HUNT_SRC; $res = $kind === 'Mine' ? MINE_RES : HUNT_RES;
++    $r = req($cands, $routes);
++    return stobeActivityAdapter($r)->propose($r['context'], ['kind'=>$kind, 'sourceId'=>$src, 'resourceId'=>$res, 'quantity'=>1,
++        'discoveryRef'=>$ref, 'agreedTargets'=>[], 'routeRef'=>['candidateId'=>'local:s1:1']]);
++}
++function accept(array $proposal, array $request, int $now = 1005) {
++    $text = "Yes, let's do it.";
++    $e = ['origin'=>'native_player_chat', 'worldId'=>W, 'actor'=>ACTOR, 'requester'=>PLAYER, 'proposalId'=>$proposal['agreement']['id'],
++        'revision'=>$proposal['revision'], 'scopeDigest'=>$proposal['scopeDigest'], 'proposalWasDisplayed'=>true, 'playerText'=>$text, 'quotedText'=>$text];
++    $c = $request['context']; $c['now'] = $now;
++    try { return stobeActivityAdapter($request)->accept($c, $proposal, $e); } catch (Throwable $t) { return $t->getMessage(); }
++}
++$goatA = cand('Hunt', HUNT_SRC, HUNT_RES, 396362304, 'activity-proposal:2232299776:76');
++$R1 = route('local:s1:1', 'near Goat to the west', 1200.0, 10.0, 2100.0);
++$P = propose([$goatA], [$R1], ['candidateId'=>$goatA['candidateId'], 'targetSerial'=>$goatA['targetSerial']]);
++check('seed: Hunt proposed with route R1', $P['status'] === 'proposed' && $P['routeRef']['label'] === 'near Goat to the west', $P['status'] ?? null);
++
++// Goat A wandered off; goat B is observed 100 units away. Native re-emitted the route rows with NEW ids and labels.
++$goatB = cand('Hunt', HUNT_SRC, HUNT_RES, 396362999, 'activity-proposal:2232299776:81', ['x'=>1100.0, 'z'=>2050.0]);
++$fresh = [route('local:s1:20103', 'near Goat to the south', 1150.0, 10.0, 2120.0),
++          route('local:s1:20104', 'near Camp to the east', 9000.0, 10.0, 9000.0)];
++
++// A. the bug
++$t = accept($P, req([$goatB], $fresh));
++check('A1: accept re-binds the route to the fresh row near the (re-grounded) goat and is accepted', is_array($t) && $t['record']['status'] === 'accepted', $t);
++if (is_array($t)) {
++    check('A2: stored record/digest/routeRef not rewritten (native consent matches the digest)',
++        $t['record']['routeRef'] === $P['routeRef'] && $t['record']['scopeDigest'] === $P['scopeDigest'] && $t['envelope']['routeRef'] === $P['routeRef']);
++}
++// B. regression: exact same route still emitted -> accepted (exact path unchanged)
++check('B1: same route row still emitted, other goat -> accepted', is_array(accept($P, req([$goatB], [$R1]))));
++check('B2: same goat and same route -> accepted', is_array(accept($P, req([$goatA], [$R1]))));
++// C. negatives
++check('C1: no route candidates at all -> rejected', accept($P, req([$goatB], [])) === NOROUTE);
++check('C2: only a route far from the stored one (other target area) -> rejected',
++    accept($P, req([$goatB], [route('local:s1:9', 'near Goat to the north', 9000.0, 10.0, 9000.0)])) === NOROUTE);
++check('C3: route near the stored one but far from every grounded goat -> rejected',
++    accept($P, req([cand('Hunt', HUNT_SRC, HUNT_RES, 396362999, 'activity-proposal:2232299776:81', ['x'=>20000.0, 'z'=>20000.0])], $fresh)) === NOROUTE);
++check('C4: fresh route of another kind -> rejected', accept($P, req([$goatB], [route('local:s1:5', 'near Goat to the south', 1150.0, 10.0, 2120.0, ['kind'=>'town'])])) === NOROUTE);
++check('C5: fresh route owned by another actor -> rejected', accept($P, req([$goatB], [route('local:s1:5', 'near Goat to the south', 1150.0, 10.0, 2120.0, ['actor_serial'=>ACTOR + 1])])) === NOROUTE);
++check('C6: fresh route not native_local -> rejected', accept($P, req([$goatB], [route('local:s1:5', 'near Goat to the south', 1150.0, 10.0, 2120.0, ['source'=>'catalog'])])) === NOROUTE);
++check('C7: fresh route without coordinates -> rejected', accept($P, req([$goatB], [['id'=>'local:s1:5','label'=>'near Goat to the south','actor_serial'=>ACTOR,'kind'=>'landmark','source'=>'native_local']])) === NOROUTE);
++check('C8: goat candidate without coordinates cannot anchor a re-bind -> rejected',
++    accept($P, req([cand('Hunt', HUNT_SRC, HUNT_RES, 77, 'x:1', ['x'=>null, 'y'=>null, 'z'=>null])], $fresh)) === NOROUTE);
++foreach ([['suitable',false],['protectedTarget',true],['conflictingOrder',true],['pathReachable',false],['observedNow',false]] as [$k,$v]) {
++    check("C9: only goat with $k=" . json_encode($v) . ' -> rejected (target check still applies)',
++        accept($P, req([cand('Hunt', HUNT_SRC, HUNT_RES, 77, 'x:2', [$k=>$v, 'x'=>1100.0])], $fresh)) === NOGROUND);
++}
++check('C10: other requester -> rejected', !is_array(accept($P, req([$goatB], $fresh, ['requester'=>PLAYER + 1]))));
++check('C11: NPC unwilling -> rejected', !is_array(accept($P, req([$goatB], $fresh, [], false))));
++check('C12: expired offer -> rejected even with a good route', !is_array(accept($P, req([$goatB], $fresh), 1000 + 1801)));
++// D. propose keeps the exact route rule (a model-chosen id not in the current rows is never re-bound)
++try { propose([$goatA], $fresh, ['candidateId'=>$goatA['candidateId'], 'targetSerial'=>$goatA['targetSerial']]); check('D1: propose with a route id not in the rows -> rejected', false); }
++catch (Throwable $e) { check('D1: propose with a route id not in the rows -> rejected', $e->getMessage() === NOROUTE, $e->getMessage()); }
++// E. Mine keeps the exact route rule at accept
++$mineA = cand('Mine', MINE_SRC, MINE_RES, 4001, 'activity-proposal:2232299776:5');
++$PM = propose([$mineA], [$R1], ['candidateId'=>$mineA['candidateId'], 'targetSerial'=>4001], 'Mine');
++check('E1: Mine accept with the same route -> accepted', is_array(accept($PM, req([$mineA], [$R1]))));
++check('E2: Mine accept with only a re-id route -> still rejected (relaxation is Hunt only)', accept($PM, req([$mineA], $fresh)) === NOROUTE);
++echo "imm26_u4b_route_hunt_accept: $pass passed, $fail failed\n";
 +exit($fail ? 1 : 0);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wp13c_participation_identity_regression.php b/tests/imm26_wp13c_participation_identity_regression.php
 --- a/tests/imm26_wp13c_participation_identity_regression.php	1969-12-31 18:00:00.000000000 -0600
