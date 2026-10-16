@@ -39,26 +39,6 @@ Rules:
 - added: 2026-10-15 19:57
 - log: 2026-10-15 19:58 Shay answered yes
 
-### PI-19 | confirmed
-- idea: lane-brief.ps1 -Predecessor prints the exact status TASK text to use and registers the successor in lane-owners.json itself.
-- evidence: 2026-10-15: successor names hard2 -> hard2b with a different task text caused 2 false NO SUCCESSOR Stop-hook blocks, and every respawn needed a hand-run operator-warn.ps1 -Register (4 times at 19:50).
-- saving: 2 false Stop blocks and 4 manual commands per respawn round
-- risk: low: registration is only a map write; the successor still must be RUNNING
-- hooks: no
-- weakens: no
-- added: 2026-10-15 19:57
-- log: 2026-10-15 19:58 Shay answered yes
-
-### PI-20 | confirmed
-- idea: lane-brief standing rule: game speed above 5 only with tools/stobe-goal-watch.sh; never run speed 10 for minutes.
-- evidence: 2026-10-15 imm26-5090-i5-op6 ran speed 10 and Shay (the test character) starved and died, resetting the lane (its handoff lesson).
-- saving: avoids a lane reset (~10 min) per occurrence
-- risk: none
-- hooks: no
-- weakens: no
-- added: 2026-10-15 19:57
-- log: 2026-10-15 19:58 Shay answered yes
-
 ### PI-21 | confirmed
 - idea: Open-alert ledger: every urgent waker event (LANE IDLE, LANE NO-OPERATOR, AGENT STALL/ORPHANED, DEAD, KILLED, FAILED, 402) is written to C:\KenshiTestRuns\alerts\open\<id>.json and stays open until alert-ack.ps1 <id> '<action taken>' is run or the condition clears by itself (lane-idle OK, agent DONE); a PostToolUse reminder prints 'OPEN ALERTS n: oldest <min>' after tool calls while any alert is older than 3 min; the Stop hook blocks the coordinator from ending a turn with an unacked alert older than 5 min; operators get their own lane alerts in their inbox with the same ack.
 - evidence: 2026-10-15 20:0x: waker event 'LANE IDLE 4080-i4 7m' arrived while I was mid-edit and I did not act on it; I only found the 5090-i4 lane idle 16.7 min after Shay asked 'are we running tests on all lanes'. The waker alerts once and nothing tracks whether anyone acted.
@@ -278,3 +258,27 @@ Rules:
 - retired: 2026-10-15 built
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
 - log: 2026-10-15 19:54 Shay answered yes
+
+### PI-19 | done
+- idea: lane-brief.ps1 -Predecessor prints the exact status TASK text to use and registers the successor in lane-owners.json itself.
+- evidence: 2026-10-15: successor names hard2 -> hard2b with a different task text caused 2 false NO SUCCESSOR Stop-hook blocks, and every respawn needed a hand-run operator-warn.ps1 -Register (4 times at 19:50).
+- saving: 2 false Stop blocks and 4 manual commands per respawn round
+- risk: low: registration is only a map write; the successor still must be RUNNING
+- hooks: no
+- weakens: no
+- added: 2026-10-15 19:57
+- measured: lane-brief selftest 8 PI-19 cases ok (task text printed exactly, paste cmd, registration first+idempotent, -NoRemote skipped); operator-warn selftest ok incl -InLane; real brief 18575 B < 25600
+- retired: 2026-10-15 built
+- log: 2026-10-15 19:58 Shay answered yes
+
+### PI-20 | done
+- idea: lane-brief standing rule: game speed above 5 only with tools/stobe-goal-watch.sh; never run speed 10 for minutes.
+- evidence: 2026-10-15 imm26-5090-i5-op6 ran speed 10 and Shay (the test character) starved and died, resetting the lane (its handoff lesson).
+- saving: avoids a lane reset (~10 min) per occurrence
+- risk: none
+- hooks: no
+- weakens: no
+- added: 2026-10-15 19:57
+- measured: rule 'Game speed (PI-20)' present in every generated brief (selftest ok), brief 18575 B < 25600 cap
+- retired: 2026-10-15 built
+- log: 2026-10-15 19:58 Shay answered yes
