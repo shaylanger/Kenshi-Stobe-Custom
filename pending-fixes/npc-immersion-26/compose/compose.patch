@@ -5660,8 +5660,27 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/nativ
  }
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negotiation_engine.php b/lib/negotiation_engine.php
 --- a/lib/negotiation_engine.php	2026-10-12 21:20:51.617338718 -0500
-+++ b/lib/negotiation_engine.php	2026-10-15 18:11:00.655755996 -0500
-@@ -865,6 +865,20 @@
++++ b/lib/negotiation_engine.php	2026-10-15 21:36:39.297388365 -0500
+@@ -28,6 +28,8 @@
+ const STOBE_NEG_INITIATIVE_GLOBAL_COOLDOWN = 120;
+ const STOBE_NEG_INITIATIVE_NPC_COOLDOWN = 1800;   // "once per NPC per fight" (a long fight outlasted 600 s, bug 91)
+ const STOBE_NEG_BETRAYAL_MAX_CHANCE = 0.15;
++const STOBE_DEAL_RESUME_MAX_GAP_SECONDS = 1200;   // imm26 wpR2: one reload pauses a deal clock by at most 20 min
++const STOBE_DEAL_RESUME_MAX_TOTAL_SECONDS = 3600; // imm26 wpR2: hard cap on the total pause per deal
+ 
+ // ------------------------------------------------------------------ toggles
+ 
+@@ -74,6 +76,9 @@
+         "ALTER TABLE stobe_social_contract ADD COLUMN IF NOT EXISTS deadline_unix BIGINT NOT NULL DEFAULT 0",
+         "ALTER TABLE stobe_social_contract ADD COLUMN IF NOT EXISTS deadline_gamets BIGINT NOT NULL DEFAULT 0",
+         "ALTER TABLE stobe_social_contract ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
++        "ALTER TABLE stobe_social_contract ADD COLUMN IF NOT EXISTS resume_shifts JSONB NOT NULL DEFAULT '[]'::jsonb",
++        "ALTER TABLE stobe_social_contract ADD COLUMN IF NOT EXISTS resume_shift_total INT NOT NULL DEFAULT 0",
++        "CREATE TABLE IF NOT EXISTS stobe_deal_clock (id SMALLINT PRIMARY KEY, load_token TEXT NOT NULL DEFAULT '', last_tick_unix BIGINT NOT NULL DEFAULT 0)",
+         "ALTER TABLE stobe_social_contract ADD COLUMN IF NOT EXISTS consequences_applied BOOLEAN NOT NULL DEFAULT FALSE",
+         "CREATE INDEX IF NOT EXISTS idx_social_contract_status ON stobe_social_contract (status)",
+         "CREATE TABLE IF NOT EXISTS stobe_negotiation_directive (
+@@ -865,6 +870,20 @@
      return $term;
  }
  
@@ -5682,7 +5701,24 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negot
  function stobeNegEvaluateTerm(array $term, array $deal, string $player, int $now): array {
      $status = strval($term['status'] ?? '');
      if (in_array($status, ['VERIFIED','IMPOSSIBLE','UNMET','RECORDED','WAITING_FOR_PLAYER','BETRAYED'], true)) return $term;
-@@ -1012,6 +1026,9 @@
+@@ -894,7 +913,7 @@
+                 }
+             }
+         }
+-        $age = $now - intval($term['dispatched_unix']);
++        $age = $now - intval($term['dispatched_unix']) - stobeNegResumeShiftSince($deal, intval($term['dispatched_unix'])); // imm26 wpR2
+         if (in_array($kind, ['STOP_ATTACK','SAFE_PASSAGE'], true)) {
+             $record = stobeNegStopAttackRecord($npc, $since);
+             $fight = $serial > 0 ? stobeNegBridgeResult('STOP_FIGHT', $serial, $since) : '';
+@@ -986,6 +1005,7 @@
+     $start = intval($term['dispatched_unix'] ?? 0);
+     $deadline = intval($term['deadline_unix'] ?? 0);
+     $gametsDeadline = intval($deal['deadline_gamets'] ?? 0);
++    $resumeShift = stobeNegResumeShiftSince($deal, $start); // imm26 wpR2: reload pause since this term started
+     if ($kind === 'GIVE_CATS') {
+         $need = intval($term['amount'] ?? 0);
+         $before = max(0, intval($term['cats_before'] ?? 0)); // earlier installments take the first Cats
+@@ -1012,6 +1032,9 @@
          $row = stobeNegNpcRow($npc, $serial);
          $nowCount = stobeNegItemCount(stobeNegInventoryCounts(strval($row['inventory'] ?? '') . ', ' . strval($row['equipment'] ?? '')), $item);
          $baseCount = stobeNegItemCount(is_array($baseline['npc_inventory'] ?? null) ? $baseline['npc_inventory'] : [], $item);
@@ -5692,7 +5728,154 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negot
          if ($exec['transferred'] >= $qty || ($nowCount - $baseCount) >= $qty) {
              $term['status'] = 'VERIFIED';
              $note($term, 'player_delivered_item', ['executed'=>$exec['transferred'], 'npc_count_delta'=>$nowCount - $baseCount]);
-@@ -2184,8 +2201,8 @@
+@@ -1043,7 +1066,7 @@
+                 return $term;
+             }
+         }
+-        if ($now - $start >= STOBE_NEG_TRUCE_OBSERVE_SECONDS) {
++        if ($now - $start - $resumeShift >= STOBE_NEG_TRUCE_OBSERVE_SECONDS) {
+             $term['status'] = 'VERIFIED';
+             $note($term, 'no_player_attacks_observed');
+         }
+@@ -1055,18 +1078,18 @@
+             return $term;
+         }
+         $recent = stobeNegCombatEvents($now - STOBE_NEG_PROTECT_QUIET_SECONDS, $npc);
+-        if ($now - $start >= STOBE_NEG_PROTECT_QUIET_SECONDS && count($recent) === 0) {
++        if ($now - $start - $resumeShift >= STOBE_NEG_PROTECT_QUIET_SECONDS && count($recent) === 0) {
+             $term['status'] = 'VERIFIED';
+             $note($term, 'fight_over_npc_alive');
+             return $term;
+         }
+     }
+-    $expired = ($deadline > 0 && $now > $deadline);
++    $expired = ($deadline > 0 && $now - $resumeShift > $deadline);
+     if ($gametsDeadline > 0 && stobeNegDealKindIsHostile($deal)) {
+         // Bug 41: both clocks must run out (real time AND game time); a paused game stops the window.
+         if ($expired) {
+             $latest = stobeNegLatestGamets();
+-            $expired = $latest > 0 ? $latest > $gametsDeadline : ($now > $deadline + STOBE_NEG_PAY_WINDOW_REAL_CAP);
++            $expired = $latest > 0 ? $latest > $gametsDeadline : ($now - $resumeShift > $deadline + STOBE_NEG_PAY_WINDOW_REAL_CAP);
+         }
+     } elseif (!$expired && $gametsDeadline > 0) {
+         $latest = stobeNegLatestGamets();
+@@ -1151,7 +1174,7 @@
+         foreach ($state as $idx => $term) {
+             if (($term['status'] ?? '') === 'WAITING_FOR_PLAYER') $waiting[] = $idx;
+         }
+-        $sinceStart = $now - intval($deal['performance_started_unix'] ?? 0);
++        $sinceStart = $now - intval($deal['performance_started_unix'] ?? 0) - stobeNegResumeShiftSince($deal, intval($deal['performance_started_unix'] ?? 0)); // imm26 wpR2
+         if (!empty($betrayal['planned']) && empty($betrayal['executed']) && $sinceStart < 20) {
+             // Wait: KenshiFP keeps the NPC disengaged for ~15 s after STOP_FIGHT.
+         } elseif (!empty($betrayal['planned']) && empty($betrayal['executed'])) {
+@@ -1332,11 +1355,106 @@
+     return ($mode === 'equip' ? 'EQUIP_ITEM@' : 'UNEQUIP_ITEM@') . $item;
+ }
+ 
++// ------------------------------------------------------------------ imm26 wpR2: deals survive a save/load
++function stobeDealResumeEnabled(): bool {
++    $v = getenv('STOBE_DEAL_RESUME_ENABLED');
++    if ($v !== false && $v !== '') return !in_array(strtolower(trim($v)), ['0','false','no','off'], true);
++    try { return getSettingBool('STOBE_DEAL_RESUME_ENABLED', true); } catch (Throwable $e) { return true; }
++}
++
++/** Identity of the running native load (campaign|epoch|session). Empty when there is no connected campaign. */
++function stobeNegDealLoadToken(): string {
++    if (isset($GLOBALS['STOBE_DEAL_LOAD_TOKEN_OVERRIDE'])) return strval($GLOBALS['STOBE_DEAL_LOAD_TOKEN_OVERRIDE']); // tests
++    try {
++        if (!function_exists('stobeSocialScope')) require_once __DIR__ . '/social_runtime.php';
++        $scope = stobeSocialScope($GLOBALS['db']);
++        return strval($scope['campaign_id'] ?? '') . '|' . strval($scope['timeline_epoch'] ?? '') . '|' . strval($scope['native_session_id'] ?? '');
++    } catch (Throwable $e) { return ''; }
++}
++
++/** Seconds of reload pause that happened after $sinceUnix (the moment a term was dispatched / the deal started). */
++function stobeNegResumeShiftSince(array $deal, int $sinceUnix): int {
++    $shifts = stobeNegDecode($deal['resume_shifts'] ?? []);
++    $sum = 0;
++    foreach ($shifts as $s) {
++        if (is_array($s) && intval($s['at_unix'] ?? 0) > $sinceUnix) $sum += max(0, intval($s['seconds'] ?? 0));
++    }
++    return min($sum, STOBE_DEAL_RESUME_MAX_TOTAL_SECONDS);
++}
++
++/**
++ * Called at the top of every negotiation tick. The first tick of a NEW load pauses the wall-clock windows of the open deals
++ * for the time the server saw no tick (the reload), capped. Returns the pause (seconds) of the largest shift applied.
++ */
++function stobeNegDealResumeOnLoad(int $now, ?string $token = null): int {
++    try {
++        $token = $token ?? stobeNegDealLoadToken();
++        if ($token === '') return 0;
++        $db = $GLOBALS['db'];
++        $row = $db->fetchOne("SELECT load_token, last_tick_unix FROM stobe_deal_clock WHERE id=1");
++        if (!is_array($row)) {
++            $db->exec("INSERT INTO stobe_deal_clock (id, load_token, last_tick_unix) VALUES (1, $1, $2) ON CONFLICT (id) DO NOTHING", [$token, $now]);
++            return 0;
++        }
++        if (strval($row['load_token']) === $token) {
++            $db->exec("UPDATE stobe_deal_clock SET last_tick_unix=$1 WHERE id=1 AND load_token=$2 AND last_tick_unix < $1", [$now, $token]);
++            return 0;
++        }
++        // Atomic claim: only the request that flips the token applies the pause.
++        $claim = $db->fetchAll(
++            "WITH old AS (SELECT last_tick_unix FROM stobe_deal_clock WHERE id=1 FOR UPDATE)
++             UPDATE stobe_deal_clock c SET load_token=$1, last_tick_unix=$2 FROM old WHERE c.id=1 AND c.load_token<>$1
++             RETURNING old.last_tick_unix AS prev", [$token, $now]);
++        if (!is_array($claim) || count($claim) !== 1) return 0;
++        $prev = intval($claim[0]['prev'] ?? 0);
++        if ($prev <= 0 || $now <= $prev || !stobeDealResumeEnabled()) return 0;
++        return stobeNegDealResumeApply($now, $now - $prev, $token);
++    } catch (Throwable $e) {
++        stobeLogWarn('Deal resume failed (imm26 wpR2)', ['error'=>$e->getMessage()]);
++        return 0;
++    }
++}
++
++function stobeNegDealResumeApply(int $now, int $gap, string $token): int {
++    $db = $GLOBALS['db'];
++    // A window that had already run out when the last tick happened is not revived by the reload.
++    $db->exec("UPDATE stobe_social_contract SET status='EXPIRED', resolved_at=NOW(), updated_at=NOW()
++                WHERE status IN ('PROPOSED','COUNTERED') AND updated_at < NOW() - make_interval(secs => $1::double precision) - INTERVAL '10 minutes'", [$gap]);
++    $db->exec("UPDATE stobe_social_contract SET status='IMPOSSIBLE', resolved_at=NOW(), updated_at=NOW(),
++                evidence = (CASE WHEN jsonb_typeof(evidence)='object' THEN evidence ELSE '{}'::jsonb END) || '{\"note\":\"accepted_but_never_dispatched\"}'::jsonb
++                WHERE status='ACCEPTED' AND updated_at < NOW() - make_interval(secs => $1::double precision) - INTERVAL '2 minutes'", [$gap]);
++    $perLoad = min($gap, STOBE_DEAL_RESUME_MAX_GAP_SECONDS);
++    $rows = $db->fetchAll("SELECT contract_id, status, resume_shifts, resume_shift_total FROM stobe_social_contract
++                            WHERE status IN ('PROPOSED','COUNTERED','ACCEPTED','AWAITING_PERFORMANCE') LIMIT 200");
++    $applied = 0;
++    foreach (is_array($rows) ? $rows : [] as $deal) {
++        $total = max(0, intval($deal['resume_shift_total'] ?? 0));
++        $shift = min($perLoad, max(0, STOBE_DEAL_RESUME_MAX_TOTAL_SECONDS - $total));
++        if ($shift <= 0) continue;
++        $shifts = stobeNegDecode($deal['resume_shifts'] ?? []);
++        $shifts[] = ['at_unix'=>$now, 'seconds'=>$shift, 'load'=>$token];
++        $shifts = array_slice($shifts, -16);
++        $id = strval($deal['contract_id']);
++        $ok = $db->exec(
++            "UPDATE stobe_social_contract SET resume_shifts=$2::jsonb, resume_shift_total=resume_shift_total+$3,
++                    updated_at=(CASE WHEN status IN ('PROPOSED','COUNTERED','ACCEPTED') THEN LEAST(updated_at + make_interval(secs => $3::double precision), NOW()) ELSE updated_at END)
++              WHERE contract_id=$1 AND status=$4",
++            [$id, json_encode($shifts), $shift, strval($deal['status'])]);
++        if ($ok === false) continue;
++        // A directive that was queued before the reload must still be deliverable after it.
++        $db->exec("UPDATE stobe_negotiation_directive SET created_unix=LEAST(created_unix + $2::bigint, $3::bigint) WHERE contract_id=$1 AND consumed_unix=0", [$id, $shift, $now]);
++        $applied = max($applied, $shift);
++    }
++    if ($applied > 0) stobeLogInfo('Deal clocks paused across a load (imm26 wpR2)', ['gap'=>$gap, 'shift'=>$applied]);
++    return $applied;
++}
++
+ /** Run verification for open deals. Cheap when nothing is open; throttled by caller. */
+ function stobeNegTick(string $onlyNpc = ''): void {
+     stobeNegEnsureSchema();
+     $player = normalizeParticipantNameToken(getSetting('PLAYER_NAME', 'Drifter'));
+     $now = time();
++    stobeNegDealResumeOnLoad($now); // imm26 wpR2: a reload pauses the deal windows
+     $params = [];
+     $where = "status='AWAITING_PERFORMANCE'";
+     if ($onlyNpc !== '') {
+@@ -2184,8 +2302,8 @@
          $kept = intval($row['player_kept'] ?? 0);
          $broken = intval($row['player_broken'] ?? 0);
          if ($kept + $broken === 0) return '';
@@ -5703,7 +5886,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/negot
          return '';
      } catch (Throwable $e) {
          return '';
-@@ -2215,7 +2232,7 @@
+@@ -2215,7 +2333,7 @@
      if (!($broken >= 2 && $broken > $kept)) return '';
      $who = function_exists('stobePromptXmlEscape') ? stobePromptXmlEscape($player) : $player;
      return "<reply_reputation>\n"
@@ -6690,8 +6873,82 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
                  if ($toVictim < $from) continue;
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_repair_agreements.php b/lib/social_repair_agreements.php
 --- a/lib/social_repair_agreements.php	2026-10-12 21:20:51.890711719 -0500
-+++ b/lib/social_repair_agreements.php	2026-10-15 19:04:05.650599915 -0500
-@@ -236,7 +236,9 @@
++++ b/lib/social_repair_agreements.php	2026-10-15 21:36:39.302955465 -0500
+@@ -30,6 +30,37 @@
+     } catch (Throwable $e) { return []; }
+ }
+ 
++function stobeSocialRepairRescopeEnabled(): bool {
++    $v = getenv('STOBE_REPAIR_RESCOPE_ENABLED');
++    if ($v !== false && $v !== '') return !in_array(strtolower(trim($v)), ['0','false','no','off'], true);
++    try { return getSettingBool('STOBE_REPAIR_RESCOPE_ENABLED', true); } catch (Throwable $e) { return true; }
++}
++
++/**
++ * imm26 wpR2: is $current (the server-authenticated live scope) the frozen $scope, or a LATER load of the SAME campaign?
++ * The frozen scope is never rewritten; evidence is still matched against it. Different campaign, an older/equal epoch,
++ * a missing session, a missing frozen storage id, or game time rolled back before acceptance all fail closed.
++ */
++function stobeSocialRepairScopeCurrent(array $scope,array $current): bool {
++    $keys=['campaign_id','timeline_epoch','native_session_id'];$same=true;
++    foreach ($keys as $k) if (($scope[$k] ?? null)!==($current[$k] ?? null)) $same=false;
++    if ($same) return true;
++    if (!stobeSocialRepairRescopeEnabled()) return false;
++    $campaign=$scope['campaign_id'] ?? null;
++    if (!is_string($campaign) || $campaign==='' || $campaign!==($current['campaign_id'] ?? null)) return false;
++    $e0=$scope['timeline_epoch'] ?? null;$e1=$current['timeline_epoch'] ?? null;
++    if (!is_string($e0) || !is_string($e1) || !preg_match('/^[0-9]{1,18}$/D',$e0) || !preg_match('/^[0-9]{1,18}$/D',$e1) || intval($e1)<=intval($e0)) return false;
++    $session=$current['native_session_id'] ?? null;
++    if (!is_string($session) || $session==='') return false;
++    foreach (['giver_storage_id','recipient_storage_id'] as $k) if (!is_string($scope[$k] ?? null) || $scope[$k]==='') return false;
++    $accepted=intval($scope['acceptance_gamets'] ?? 0);
++    if ($accepted>0) {
++        try { $game=stobeSocialNowGameTs(); } catch (Throwable $e) { $game=0; }
++        if ($game>0 && $game<$accepted) return false;
++    }
++    return true;
++}
++
+ /** Pure exact allocation planner. Multiple same-type obligations/grievances/prototypes are ambiguous. */
+ function stobeSocialRepairAgreementPlan(array $scope,array $terms,array $receipts,int $gamets,string $contractId='',array $nativeEvidence=[]): array {
+     $requests=[];$seenTypes=[];
+@@ -88,7 +119,7 @@
+         $baseline=stobeNegDecode($deal['baseline'] ?? []);$scope=$baseline['repair_binding_scope'] ?? [];
+         if (!$scope) return $terms;
+         $current=stobeSocialScope($GLOBALS['db']);
+-        foreach (['campaign_id','timeline_epoch','native_session_id'] as $key) if (($scope[$key] ?? null)!==($current[$key] ?? null)) return $terms;
++        if (!stobeSocialRepairScopeCurrent($scope,$current)) return $terms; // imm26 wpR2: same campaign, later load
+         $gamets=stobeSocialNowGameTs();
+         $requests=stobeSocialRepairAgreementPlan($scope,$terms,stobeSocialRepairAgreementReceiptRows($scope),$gamets,strval($deal['contract_id']),stobeSocialRepairAgreementNativeEvidence($scope,$terms));
+         $requests=array_values(array_filter($requests,static fn($r)=>($r['contract_id'] ?? '')===strval($deal['contract_id'])));
+@@ -216,27 +247,30 @@
+         $baseline=stobeNegDecode($deal['baseline'] ?? []);$scope=$baseline['repair_binding_scope'] ?? [];
+         if (!$scope) return;
+         $current=stobeSocialScope($GLOBALS['db']);
+-        foreach (['campaign_id','timeline_epoch','native_session_id'] as $k) if (($scope[$k] ?? null)!==($current[$k] ?? null)) return;
+-        $all=$GLOBALS['db']->fetchAll("SELECT baseline,term_state FROM stobe_social_contract WHERE status='AWAITING_PERFORMANCE' AND baseline->'repair_binding_scope'->>'campaign_id'=$1 AND baseline->'repair_binding_scope'->>'timeline_epoch'=$2 AND baseline->'repair_binding_scope'->>'native_session_id'=$3 AND baseline->'repair_binding_scope'->>'giver_storage_id'=$4 AND baseline->'repair_binding_scope'->>'recipient_storage_id'=$5",
+-            [$scope['campaign_id'],$scope['timeline_epoch'],$scope['native_session_id'],$scope['giver_storage_id'],$scope['recipient_storage_id']]);
++        if (!stobeSocialRepairScopeCurrent($scope,$current)) return; // imm26 wpR2
++        $all=$GLOBALS['db']->fetchAll("SELECT baseline,term_state FROM stobe_social_contract WHERE status='AWAITING_PERFORMANCE' AND baseline->'repair_binding_scope'->>'campaign_id'=$1 AND baseline->'repair_binding_scope'->>'giver_storage_id'=$2 AND baseline->'repair_binding_scope'->>'recipient_storage_id'=$3",
++            [$scope['campaign_id'],$scope['giver_storage_id'],$scope['recipient_storage_id']]); // imm26 wpR2: epoch/session filtered below by stobeSocialRepairScopeCurrent
+         $tickets=[];
+         if (stobeSocialRepairAgreementEnabled(stobeSocialRepairAgreementProfile($deal))) foreach ($all ?: [] as $row) {
+             $base=stobeNegDecode($row['baseline']);$state=stobeNegDecode($row['term_state']);
++            if (!stobeSocialRepairScopeCurrent(is_array($base['repair_binding_scope'] ?? null) ? $base['repair_binding_scope'] : [],$current)) continue;
+             foreach ($base['repair_action_tickets'] ?? [] as $ticket) {
+                 $term=$state[$ticket['term_index']] ?? [];
+-                if (($term['status'] ?? '')==='AWAITING_PLAYER' && $ticket['deadline_gamets']>=stobeSocialNowGameTs()) $tickets[]=$ticket;
++                if (($term['status'] ?? '')==='AWAITING_PLAYER' && $ticket['deadline_gamets']>=stobeSocialNowGameTs()) $tickets[]=['timeline_epoch'=>$current['timeline_epoch'],'native_session_id'=>$current['native_session_id']]+$ticket;
+             }
+         }
+         if (count($tickets)>16) $tickets=[]; // ambiguity/cap fails closed, never silently drops eligible contracts
+-        $envelope=['schema_version'=>1,'campaign_id'=>$scope['campaign_id'],'timeline_epoch'=>$scope['timeline_epoch'],
+-            'native_session_id'=>$scope['native_session_id'],'giver_storage_id'=>$scope['giver_storage_id'],'recipient_storage_id'=>$scope['recipient_storage_id'],'tickets'=>$tickets];
++        $envelope=['schema_version'=>1,'campaign_id'=>$scope['campaign_id'],'timeline_epoch'=>$current['timeline_epoch'],
++            'native_session_id'=>$current['native_session_id'],'giver_storage_id'=>$scope['giver_storage_id'],'recipient_storage_id'=>$scope['recipient_storage_id'],'tickets'=>$tickets];
+         $line='REPAIR_ACTION_TICKETS:'.json_encode($envelope,JSON_THROW_ON_ERROR);
+         if (strlen($line)>16384) return;
+         $GLOBALS['__stobe_repair_ticket_envelopes'][$scope['giver_storage_id'].'|'.$scope['recipient_storage_id']]=$line;
      } catch (Throwable $e) { /* transport refresh failure cannot fabricate execution or reward */ }
  }
  function stobeSocialRepairFlushAgreementTickets(): void {
@@ -6702,6 +6959,46 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
      $GLOBALS['__stobe_repair_ticket_envelopes']=[];
  }
  
+@@ -259,7 +293,7 @@
+         $current=stobeSocialScope($GLOBALS['db']);
+         foreach (['campaign_id','timeline_epoch','native_session_id'] as $k) if (($event[$k] ?? null)!==($current[$k] ?? null)) return null;
+         foreach ($ticket['items'] as $expected) if ($expected['type_key']!==strtolower(trim(strval($accepted['item'] ?? '')))) return null;
+-        foreach (['campaign_id','timeline_epoch','native_session_id'] as $k) if (($event[$k] ?? null)!==$ticket[$k]) return null;
++        if (!stobeSocialRepairScopeCurrent($ticket,$current)) return null; // imm26 wpR2: event==current was checked above
+         $ts=$event['game_ts'] ?? 0;
+         if (!is_int($ts) || $ts<$ticket['acceptance_gamets'] || $ts>$ticket['deadline_gamets']) return null;
+         $sum=0;
+@@ -281,7 +315,8 @@
+     $prepaid=array_filter($scope['prepayment_logs'] ?? [],static fn($p)=>$p['term_index']===intval($term['i'] ?? -1));
+     if (count($tickets)!==1 && !$prepaid) return null;
+     $ticket=count($tickets)===1 ? $tickets[0] : null;$current=stobeSocialScope($GLOBALS['db']);
+-foreach (['campaign_id','timeline_epoch','native_session_id'] as $k) if ($current[$k]!==$scope[$k]) {
++$rescoped=false;foreach (['campaign_id','timeline_epoch','native_session_id'] as $k) if (($current[$k] ?? null)!==($scope[$k] ?? null)) $rescoped=true;
++    if ($rescoped && !stobeSocialRepairScopeCurrent($scope,$current)) {
+         $term['status']='IMPOSSIBLE';$term['evidence'][]=['at'=>$now,'note'=>'exact_restitution_scope_changed'];return $term;
+     }
+     $profile=stobeSocialRepairAgreementProfile($deal);
+@@ -316,7 +351,9 @@
+         $term['status']='IMPOSSIBLE';$term['evidence'][]=['at'=>$now,'note'=>'canonical_exact_receipt_timeout'];return $term;
+     }
+     if (stobeSocialNowGameTs()>$scope['deadline_gamets']) {
+-        $term['status']='UNMET';$term['evidence'][]=['at'=>$now,'note'=>'exact_receipt_deadline_passed'];
++        // imm26 wpR2: after a reload the item identity cannot be proven (load-local keys); that is not a broken promise.
++        if ($rescoped) {$term['status']='IMPOSSIBLE';$term['evidence'][]=['at'=>$now,'note'=>'exact_restitution_unprovable_after_reload'];}
++        else {$term['status']='UNMET';$term['evidence'][]=['at'=>$now,'note'=>'exact_receipt_deadline_passed'];}
+     }
+     return $term;
+ }
+@@ -473,8 +510,7 @@
+         $scope=stobeNegDecode($saved['baseline'] ?? [])['repair_binding_scope'] ?? [];
+         if(!$scope)return $terms;
+         try { $current=stobeSocialScope($GLOBALS['db']); } catch(Throwable $scopeError) { $current=[]; }
+-        $same=true;
+-        foreach(['campaign_id','timeline_epoch','native_session_id'] as $k)if(($scope[$k] ?? null)!==($current[$k] ?? null))$same=false;
++        $same=stobeSocialRepairScopeCurrent($scope,$current); // imm26 wpR2: banked proof survives a later load of the same campaign
+         foreach($terms as &$term) {
+             if(($term['status'] ?? '')!=='VERIFIED' || !stobeSocialRepairAgreementRefundWithheld($saved,$term))continue;
+             if($same && stobeSocialRepairAgreementTermBound($saved,$term))continue;
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_repair_dialogue.php b/lib/social_repair_dialogue.php
 --- a/lib/social_repair_dialogue.php	2026-10-12 21:20:51.901128319 -0500
 +++ b/lib/social_repair_dialogue.php	2026-10-15 20:13:03.244014212 -0500
@@ -15899,6 +16196,173 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +
 +echo "imm26_wpL_landmark_resume: $pass passed, $fail failed\n";
 +exit($fail === 0 ? 0 : 1);
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpR2_resume_regression.php b/tests/imm26_wpR2_resume_regression.php
+--- a/tests/imm26_wpR2_resume_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_wpR2_resume_regression.php	2026-10-15 21:36:39.309410165 -0500
+@@ -0,0 +1,163 @@
++<?php
++// imm26 wpR2: deals and repair agreements resume after a save/load. Run ONLY against a test database:
++//   STOBE_DB_NAME=stobe_test php tests/imm26_wpR2_resume_regression.php
++// Fails before the patch (deal windows expire across a reload, repair terms go IMPOSSIBLE on any load) and passes after.
++require __DIR__ . '/../lib/bootstrap.php';
++require_once __DIR__ . '/../lib/negotiation_engine.php';
++require_once __DIR__ . '/../lib/social_repair_agreements.php';
++foreach (['STOBE_NEG_STOBE_LOG','STOBE_NEG_KFP_LOG'] as $v) {
++    if (getenv($v) === false || getenv($v) === '') { $f = sys_get_temp_dir() . '/wpr2_' . strtolower($v) . '.log'; file_put_contents($f, ''); putenv("$v=$f"); }
++}
++$db = $GLOBALS['db'];
++$pass = 0; $fail = 0;
++function check(string $name, bool $ok, $detail = null): void {
++    global $pass, $fail;
++    if ($ok) { $pass++; echo "PASS $name\n"; }
++    else { $fail++; echo "FAIL $name" . ($detail !== null ? ' :: ' . json_encode($detail) : '') . "\n"; }
++}
++stobeNegEnsureSchema();
++$NPC = 'WprTestNpc';
++$made = [];
++function mk(string $status, int $ageSeconds, string $kind = 'social'): string {
++    global $db, $NPC, $made;
++    $id = 'wpr2-' . bin2hex(random_bytes(6));
++    $db->exec("INSERT INTO stobe_social_contract (contract_id,npc_name,player_name,status,terms,kind,updated_at)
++               VALUES ($1,$2,'WprPlayer',$3,'[]'::jsonb,$4, NOW() - make_interval(secs => $5::double precision))", [$id, $NPC, $status, $kind, $ageSeconds]);
++    $made[] = $id;
++    return $id;
++}
++function st(string $id): string { global $db; $r = $db->fetchOne("SELECT status FROM stobe_social_contract WHERE contract_id=$1", [$id]); return strval($r['status'] ?? ''); }
++function ageOf(string $id): int { global $db; $r = $db->fetchOne("SELECT EXTRACT(EPOCH FROM (NOW()-updated_at))::int AS a FROM stobe_social_contract WHERE contract_id=$1", [$id]); return intval($r['a'] ?? -1); }
++function setAge(string $id, int $age): void { global $db; $db->exec("UPDATE stobe_social_contract SET updated_at=NOW() - make_interval(secs => $2::double precision) WHERE contract_id=$1", [$id, $age]); }
++function clockAt(string $token, int $lastTick): void {
++    global $db;
++    try { $db->exec("DELETE FROM stobe_deal_clock"); $db->exec("INSERT INTO stobe_deal_clock (id,load_token,last_tick_unix) VALUES (1,$1,$2)", [$token, $lastTick]); } catch (Throwable $e) {}
++}
++function reloadTick(string $newToken): void { $GLOBALS['STOBE_DEAL_LOAD_TOKEN_OVERRIDE'] = $newToken; stobeNegTick(); }
++function cleanup(): void { global $db, $made; foreach ($made as $id) { $db->exec("DELETE FROM stobe_negotiation_directive WHERE contract_id=$1", [$id]); $db->exec("DELETE FROM stobe_social_contract WHERE contract_id=$1", [$id]); } try { $db->exec("DELETE FROM stobe_deal_clock"); } catch (Throwable $e) {} }
++
++try {
++    putenv('STOBE_DEAL_RESUME_ENABLED'); // default on
++    $GLOBALS['STOBE_DEAL_LOAD_TOKEN_OVERRIDE'] = 'c|1|s1';
++
++    // 1. PROPOSED deal 9 min old at the last tick; the game was closed 5 min (reload). It must survive, then really expire.
++    $p = mk('PROPOSED', 840);                 // wall age now 14 min = 9 min at the last tick + 5 min closed
++    $a = mk('ACCEPTED', 400);                 // 100 s at the last tick (< 2 min window)
++    $pOld = mk('PROPOSED', 960);              // 11 min at the last tick: already expired then
++    clockAt('c|1|s1', time() - 300);
++    reloadTick('c|2|s2');
++    check('PROPOSED survives a reload inside its 10 min window', st($p) === 'PROPOSED', st($p));
++    check('PROPOSED age is frozen across the reload (about 540 s)', abs(ageOf($p) - 540) <= 5, ageOf($p));
++    check('ACCEPTED survives a reload inside its 2 min window', st($a) === 'ACCEPTED', st($a));
++    check('a window that had already run out at the last tick is not revived', st($pOld) === 'EXPIRED', st($pOld));
++    setAge($p, 640);                           // 100 s later it is really past 10 min
++    setAge($a, 130);
++    reloadTick('c|2|s2');                      // same load: no new pause
++    check('PROPOSED really expires after the extended time', st($p) === 'EXPIRED', st($p));
++    check('ACCEPTED really goes IMPOSSIBLE after the extended time', st($a) === 'IMPOSSIBLE', st($a));
++
++    // 2. No reload (same load token): the wall-clock windows are unchanged.
++    $q = mk('PROPOSED', 700);
++    clockAt('c|2|s2', time() - 300);
++    reloadTick('c|2|s2');
++    check('same load: an expired offer still expires', st($q) === 'EXPIRED', st($q));
++
++    // 3. Hard caps: one reload pauses at most 1200 s, one deal at most 3600 s in total.
++    $c = mk('PROPOSED', 0);
++    for ($n = 3; $n <= 7; $n++) { clockAt('c|' . ($n - 1) . '|s', time() - 5000); reloadTick('c|' . $n . '|s'); }
++    $row = $db->fetchOne("SELECT resume_shift_total AS t, resume_shifts AS s FROM stobe_social_contract WHERE contract_id=$1", [$c]);
++    check('total pause per deal is capped at 3600 s', intval($row['t'] ?? -1) === 3600, $row);
++    check('a single reload pauses at most 1200 s', max(array_map(fn($x) => intval($x['seconds']), json_decode(strval($row['s'] ?? '[]'), true) ?: [[ 'seconds'=>99999 ]])) === 1200, $row);
++
++    // 4. Kill switch.
++    putenv('STOBE_DEAL_RESUME_ENABLED=0');
++    $k = mk('PROPOSED', 840);
++    clockAt('c|7|s', time() - 300);
++    reloadTick('c|8|s');
++    check('kill switch STOBE_DEAL_RESUME_ENABLED=0: no pause, offer expires as before', st($k) === 'EXPIRED', st($k));
++    $kRow = $db->fetchOne("SELECT resume_shift_total AS t FROM stobe_social_contract WHERE contract_id=$1", [$k]);
++    check('kill switch: nothing recorded', intval($kRow['t'] ?? -1) === 0, $kRow);
++    putenv('STOBE_DEAL_RESUME_ENABLED');
++
++    // 5. A pending NPC directive queued before the reload stays deliverable.
++    $d = mk('AWAITING_PERFORMANCE', 0);
++    $db->exec("INSERT INTO stobe_negotiation_directive (npc_name,kind,contract_id,payload,created_unix) VALUES ($1,'resume_deal',$2,'{}'::jsonb,$3)", [$NPC, $d, time() - 200]);
++    clockAt('c|8|s', time() - 150);
++    reloadTick('c|9|s');
++    $dir = $db->fetchOne("SELECT created_unix FROM stobe_negotiation_directive WHERE contract_id=$1", [$d]);
++    check('pending directive is shifted with the pause', abs(intval($dir['created_unix'] ?? 0) - (time() - 50)) <= 5, $dir);
++
++    // 6. NPC-side 45 s dispatch window and the player-side pay window honour the pause (only pauses after the dispatch).
++    $now = time();
++    $deal = ['contract_id'=>'wpr2-x', 'npc_name'=>$NPC, 'npc_serial'=>0, 'player_name'=>'WprPlayer', 'status'=>'AWAITING_PERFORMANCE', 'kind'=>'social', 'baseline'=>[], 'term_state'=>[], 'deadline_gamets'=>0];
++    $npcTerm = ['i'=>0, 'kind'=>'FIRST_AID', 'by'=>'npc', 'status'=>'DISPATCHED', 'dispatched_unix'=>$now - 100, 'evidence'=>[]];
++    $paused = $deal + ['resume_shifts'=>[['at_unix'=>$now - 5, 'seconds'=>300]], 'resume_shift_total'=>300];
++    $early = $deal + ['resume_shifts'=>[['at_unix'=>$now - 200, 'seconds'=>300]], 'resume_shift_total'=>300];
++    check('NPC dispatch 45 s window is paused by a reload after the dispatch', stobeNegEvaluateTerm($npcTerm, $paused, 'WprPlayer', $now)['status'] === 'DISPATCHED');
++    check('NPC dispatch window still times out with no pause', stobeNegEvaluateTerm($npcTerm, $deal, 'WprPlayer', $now)['status'] === 'IMPOSSIBLE');
++    check('a pause from before the dispatch does not extend it', stobeNegEvaluateTerm($npcTerm, $early, 'WprPlayer', $now)['status'] === 'IMPOSSIBLE');
++    $payTerm = ['i'=>0, 'kind'=>'GIVE_CATS', 'by'=>'player', 'status'=>'AWAITING_PLAYER', 'amount'=>100, 'dispatched_unix'=>$now - 100, 'deadline_unix'=>$now - 30, 'evidence'=>[]];
++    check('player pay window is paused by a reload after it started', stobeNegEvaluateTerm($payTerm, $paused, 'WprPlayer', $now)['status'] === 'AWAITING_PLAYER');
++    check('player pay window still expires with no pause', stobeNegEvaluateTerm($payTerm, $deal, 'WprPlayer', $now)['status'] === 'UNMET');
++
++    if (!function_exists('stobeSocialRepairScopeCurrent')) { check('scope helper stobeSocialRepairScopeCurrent exists', false); function stobeSocialRepairScopeCurrent(array $s, array $c): bool { return ($s['timeline_epoch'] ?? null) === ($c['timeline_epoch'] ?? null) && ($s['campaign_id'] ?? null) === ($c['campaign_id'] ?? null) && ($s['native_session_id'] ?? null) === ($c['native_session_id'] ?? null); } } // before the patch: only exact scopes match
++    // 7. Repair agreement scope: same campaign + later load continues; everything else is rejected.
++    $scope = ['campaign_id'=>'camp1', 'timeline_epoch'=>'5', 'native_session_id'=>'sessA', 'giver_storage_id'=>'g1', 'recipient_storage_id'=>'r1', 'acceptance_gamets'=>0];
++    $cur = fn(array $o) => $o + ['campaign_id'=>'camp1', 'timeline_epoch'=>'6', 'native_session_id'=>'sessB'];
++    check('scope: identical scope is current', stobeSocialRepairScopeCurrent($scope, ['campaign_id'=>'camp1', 'timeline_epoch'=>'5', 'native_session_id'=>'sessA']));
++    check('scope: same campaign, later load continues', stobeSocialRepairScopeCurrent($scope, $cur([])));
++    check('scope: different campaign (another save) is rejected', !stobeSocialRepairScopeCurrent($scope, $cur(['campaign_id'=>'camp2'])));
++    check('scope: older epoch (rollback) is rejected', !stobeSocialRepairScopeCurrent($scope, $cur(['timeline_epoch'=>'4'])));
++    check('scope: same epoch other session (forged) is rejected', !stobeSocialRepairScopeCurrent($scope, $cur(['timeline_epoch'=>'5'])));
++    check('scope: non-numeric epoch is rejected', !stobeSocialRepairScopeCurrent($scope, $cur(['timeline_epoch'=>'7x'])));
++    check('scope: empty session is rejected', !stobeSocialRepairScopeCurrent($scope, $cur(['native_session_id'=>''])));
++    check('scope: frozen scope without storage ids is rejected', !stobeSocialRepairScopeCurrent(['giver_storage_id'=>''] + $scope, $cur([])));
++    putenv('STOBE_REPAIR_RESCOPE_ENABLED=0');
++    check('kill switch STOBE_REPAIR_RESCOPE_ENABLED=0: later load is rejected again', !stobeSocialRepairScopeCurrent($scope, $cur([])));
++    check('kill switch: identical scope still current', stobeSocialRepairScopeCurrent($scope, ['campaign_id'=>'camp1', 'timeline_epoch'=>'5', 'native_session_id'=>'sessA']));
++    putenv('STOBE_REPAIR_RESCOPE_ENABLED');
++
++    // 8. The term evaluator: scope gate (live session is authenticated server-side).
++    $oldSession = $db->fetchOne("SELECT value FROM stobe_meta.settings WHERE key='PLAYTHROUGH_SESSION'");
++    $oldCampaign = $db->fetchOne("SELECT value FROM public.conf_opts WHERE id='PLAYTHROUGH_CAMPAIGN_ID'");
++    $oldMode = getSetting('SOCIAL_RELATIONSHIP_MODE', 'off');
++    $character = str_repeat('ab', 16);
++    $setSession = function (int $load, string $client, string $char) use ($db): void {
++        $db->exec("INSERT INTO stobe_meta.settings (key,value) VALUES ('PLAYTHROUGH_SESSION',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
++            [json_encode(['status'=>'ready', 'auth_mode'=>'current_campaign', 'token'=>str_repeat('cd', 16), 'character_id'=>$char, 'load_id'=>$load, 'client_id'=>$client])]);
++        $db->exec("INSERT INTO public.conf_opts (id,value) VALUES ('PLAYTHROUGH_CAMPAIGN_ID',$1) ON CONFLICT (id) DO UPDATE SET value=EXCLUDED.value", [$char]);
++    };
++    try {
++        setSetting('SOCIAL_RELATIONSHIP_MODE', 'enabled');
++        $setSession(5, 'clientA', $character);
++        $s0 = stobeSocialScope($db);
++        $evalScope = $s0 + ['giver_storage_id'=>'g1', 'recipient_storage_id'=>'r1', 'acceptance_gamets'=>0, 'deadline_gamets'=>PHP_INT_MAX >> 1];
++        $evalDeal = ['contract_id'=>'wpr2-e', 'npc_name'=>$NPC, 'status'=>'AWAITING_PERFORMANCE', 'baseline'=>['repair_binding_scope'=>$evalScope, 'repair_action_tickets'=>[['term_index'=>0, 'action_id'=>str_repeat('a', 64)]]]];
++        $evalTerm = ['i'=>0, 'kind'=>'GIVE_ITEM', 'by'=>'player', 'item'=>'Dried Meat', 'quantity'=>1, 'status'=>'AWAITING_PLAYER', 'evidence'=>[]];
++        $notes = static fn(?array $t): string => strval(($t['evidence'] ?? [[]])[count($t['evidence'] ?? [[]]) - 1]['note'] ?? '');
++        $setSession(5, 'clientA', $character);
++        $r = stobeSocialRepairEvaluateAgreementTicketTerm($evalTerm, $evalDeal, time());
++        check('term gate: same load passes the scope gate', $notes($r) !== 'exact_restitution_scope_changed', $notes($r));
++        $setSession(9, 'clientB', $character);
++        $r = stobeSocialRepairEvaluateAgreementTicketTerm($evalTerm, $evalDeal, time());
++        check('term gate: later load of the same campaign no longer goes IMPOSSIBLE scope_changed', $notes($r) !== 'exact_restitution_scope_changed', $notes($r));
++        $setSession(9, 'clientB', str_repeat('ef', 16));
++        $r = stobeSocialRepairEvaluateAgreementTicketTerm($evalTerm, $evalDeal, time());
++        check('term gate: another save (campaign) is still IMPOSSIBLE scope_changed', ($r['status'] ?? '') === 'IMPOSSIBLE' && $notes($r) === 'exact_restitution_scope_changed', $notes($r));
++        $setSession(9, 'clientB', $character);
++        putenv('STOBE_REPAIR_RESCOPE_ENABLED=0');
++        $r = stobeSocialRepairEvaluateAgreementTicketTerm($evalTerm, $evalDeal, time());
++        check('term gate: kill switch restores the old behaviour', ($r['status'] ?? '') === 'IMPOSSIBLE' && $notes($r) === 'exact_restitution_scope_changed', $notes($r));
++        putenv('STOBE_REPAIR_RESCOPE_ENABLED');
++    } finally {
++        if ($oldSession) $db->exec("UPDATE stobe_meta.settings SET value=$1 WHERE key='PLAYTHROUGH_SESSION'", [$oldSession['value']]);
++        if ($oldCampaign) $db->exec("UPDATE public.conf_opts SET value=$1 WHERE id='PLAYTHROUGH_CAMPAIGN_ID'", [$oldCampaign['value']]);
++        else $db->exec("DELETE FROM public.conf_opts WHERE id='PLAYTHROUGH_CAMPAIGN_ID'");
++        setSetting('SOCIAL_RELATIONSHIP_MODE', $oldMode);
++    }
++} finally {
++    putenv('STOBE_DEAL_RESUME_ENABLED'); putenv('STOBE_REPAIR_RESCOPE_ENABLED');
++    cleanup();
++}
++echo "\nwpR2 resume: $pass passed, $fail failed\n";
++exit($fail > 0 ? 1 : 0);
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpR3_social_window_resume_regression.php b/tests/imm26_wpR3_social_window_resume_regression.php
 --- a/tests/imm26_wpR3_social_window_resume_regression.php	1969-12-31 18:00:00.000000000 -0600
 +++ b/tests/imm26_wpR3_social_window_resume_regression.php	2026-10-15 21:34:40.950990664 -0500
