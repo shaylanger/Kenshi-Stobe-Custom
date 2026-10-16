@@ -34,7 +34,8 @@ i4_bored() {  # i4_bored <tag> [push=1]
 G=\$(runuser -u postgres -- psql -h $LT_ROOT/socket -p $LT_PG -d $LT_DB -At -c "select coalesce(max(gamets),0) from eventlog")
 D=\$(printf 'bored|%s|%s|%s: [BORED_EVENT_TRIGGER] (talking to: Shay)' "\$(date +%s)" "\$G" "$nm" | base64 -w0 | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read().strip(),safe=""))')
 P=\$(python3 -c 'import sys,urllib.parse,json;print(urllib.parse.quote(json.dumps([sys.argv[1],"Shay"]),safe=""))' "$nm")
-curl -s -m 120 -w '\nHTTP=%{http_code}\n' "http://127.0.0.1:$LT_PORT/stream.php?DATA=\$D&profile=$(printf %s "$nm" | sed 's/ /%20/g')&optional=1&people=\$P&mode=autochat" | head -c 800
+T=\$(runuser -u postgres -- psql -h $LT_ROOT/socket -p $LT_PG -d $LT_DB -At -c "select (value::json)->>'token' from stobe_meta.settings where key='PLAYTHROUGH_SESSION'")   # op11: pas_guard answers 409 to a request without the session token once the DLL registered a client_id
+curl -s -m 120 -H "X-Stobe-Playthrough: \$T" -w '\nHTTP=%{http_code}\n' "http://127.0.0.1:$LT_PORT/stream.php?DATA=\$D&profile=$(printf %s "$nm" | sed 's/ /%20/g')&optional=1&people=\$P&mode=autochat" | head -c 800
 EOT
   rw_sleep 3
   printf 'tail -n +%s %s 2>/dev/null | grep -a -E "Targeted optional request|nothing claimable|ocial attention|situated_remark|ollowup|BORED" | cut -c1-300 | tail -8 # u:tlog\n' "$(( s0 + 1 ))" "$LT_SRVLOG" | lt_w > "$EV/bored_${tag}_log.txt" 2>&1
