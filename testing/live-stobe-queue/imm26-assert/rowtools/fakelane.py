@@ -64,6 +64,7 @@ if kind == 'h':
         if cur:
             out.append('resolved_speaker=Shay')
             out.append(f"ACTION_EXEC: SAY [Cind]: {cur.get('reply', '')} (NPC)")
+            out.extend(cur.get('log', []))   # extra stobe.log lines of the step (e.g. OWNED_TRAVEL ... accepted=1)
     elif 'wc -l' in body:
         out.append(str(100 + st['cur']))
     elif 'stobe-auto speed' in body:

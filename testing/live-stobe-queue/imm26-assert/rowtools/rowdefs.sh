@@ -70,3 +70,6 @@ rd_06c() {  # preference row replace + forget: s1 sets Boss (06-a), s2 Jax repla
   rl_say 3 "Please forget my preferred name." || return $?
   rl_say 4 "How are you today?" || return $?
 }
+
+# trip-family rows (13-b 20-a 20-b 23-a 23-c 23-d 24-a new; 19-a 23-b 24-b wrapped with a clean scene): see tripdefs.sh / README_TRIP.md
+[ -f "$(dirname "${BASH_SOURCE[0]}")/tripdefs.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/tripdefs.sh"

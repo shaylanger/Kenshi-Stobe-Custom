@@ -245,6 +245,13 @@ CHECKS = {'12-a': c_12a, '12-b': c_12b, '12-d': c_12d, '08-a': c_08a, '24-b': c_
           '04-c': c_04c, '06-c': c_06c}
 
 
+try:  # trip-family rows (13-b 20-a 20-b 23-a 23-c 23-d 24-a): rowtools/rowcheck_trip.py registers into CHECKS
+    import rowcheck_trip
+    rowcheck_trip.register(sys.modules[__name__], CHECKS)
+except ImportError:
+    pass
+
+
 def norm(row):
     return re.sub(r'^IMM-', '', row)
 

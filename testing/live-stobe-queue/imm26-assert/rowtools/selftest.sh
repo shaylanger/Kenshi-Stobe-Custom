@@ -176,5 +176,8 @@ grep -q '^ROW-NEEDS-FIXER 12-b' "$res" && grep -q '^RESULT zz-9 SETUP-FAIL' "$re
 o=$(bo --allow-retry "selftest-batch-override" $L 12-b); res=$(echo "$o" | sed -nE 's/.*results=(.*)/\1/p')
 grep -q '^RESULT 12-b FAIL' "$res" && grep -q 'event=ALLOW .*reason=selftest-batch-override' "$AD/attempts.log" && chk batch-allow-retry ok || chk batch-allow-retry bad "$(cat "$res" 2>/dev/null)"
 
+# 12 trip-family rows (13-b 20-a 20-b 23-a 23-c 23-d 24-a + wrapped 19-a/23-b/24-b): own temp dir, see README_TRIP.md
+ts=$(bash "$ST_HERE/trip-selftest.sh" 2>&1 | tail -1); case "$ts" in "SELFTEST TRIP ALL PASS"*) chk trip-family-selftest ok "$ts";; *) chk trip-family-selftest bad "$ts";; esac
+
 rm -rf "$T"
 if [ $ok = $n ]; then echo "SELFTEST ALL PASS $ok/$n"; exit 0; else echo "SELFTEST ALL FAIL $ok/$n"; exit 1; fi
