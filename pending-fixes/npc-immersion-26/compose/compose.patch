@@ -6213,6 +6213,20 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/socia
              $weight = 0.0;
              foreach ($bands as [$from, $lo, $hi]) {
                  if ($toVictim < $from) continue;
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_repair_agreements.php b/lib/social_repair_agreements.php
+--- a/lib/social_repair_agreements.php	2026-10-12 21:20:51.890711719 -0500
++++ b/lib/social_repair_agreements.php	2026-10-15 19:04:05.650599915 -0500
+@@ -236,7 +236,9 @@
+     } catch (Throwable $e) { /* transport refresh failure cannot fabricate execution or reward */ }
+ }
+ function stobeSocialRepairFlushAgreementTickets(): void {
+-    foreach ($GLOBALS['__stobe_repair_ticket_envelopes'] ?? [] as $line) echo $line."\r\n";
++    // imm26 batch3: the raw control line is not a speech line. A native client that does not parse it speaks it as an
++    // NPC SAY after every item transfer, so it is written only when the request explicitly opts in (repair_tickets=1).
++    if ((string)($_GET['repair_tickets'] ?? '')==='1') foreach ($GLOBALS['__stobe_repair_ticket_envelopes'] ?? [] as $line) echo $line."\r\n";
+     $GLOBALS['__stobe_repair_ticket_envelopes']=[];
+ }
+ 
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/social_repair_ledger.php b/lib/social_repair_ledger.php
 --- a/lib/social_repair_ledger.php	2026-10-12 21:20:51.908215019 -0500
 +++ b/lib/social_repair_ledger.php	2026-10-15 15:39:34.501987182 -0500
@@ -6912,7 +6926,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/trave
          // Only a refused travel plan answers in the refusal's words. Any other refused order is
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/processor/bored.php b/processor/bored.php
 --- a/processor/bored.php	2026-10-12 21:20:51.952215020 -0500
-+++ b/processor/bored.php	2026-10-15 16:37:58.908295275 -0500
++++ b/processor/bored.php	2026-10-15 19:04:13.335790380 -0500
 @@ -84,6 +84,9 @@
  
  // Negotiation directives (surrender offers, help requests, settlements, truce
@@ -6946,7 +6960,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/processor
  if (!$forceDirectorMode && !$forceDirectiveTurn && $roll >= $boredChance) {
      stobeLogInfo('Bored event skipped: chance gate', [
          'speaker' => $speakerNpc,
-@@ -160,6 +168,10 @@
+@@ -160,10 +168,41 @@
  $optionalBoredTurn = !$forceDirectorMode && !$forceDirectiveTurn && !is_array($negDirective) && !is_array($reactTurn);
  $optionalMeta = ['gamets'=>intval($gamets),'stream_gamets'=>intval($gamets),
      'eligible_bored_turn'=>$optionalBoredTurn,'social_optional_speech_allowed'=>$optionalBoredTurn];
@@ -6957,7 +6971,38 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/processor
  $situatedRemark = null;
  $followupRemark = null;
  $followupClaimedUnix = 0;
-@@ -181,6 +193,11 @@
++// imm26 batch3 (row 08-b): the native DLL sends natural bored events as mode=director. A request-level director
++// turn may still claim an open social follow-up (DB-only, no LLM call when nothing is claimable); a claim turns
++// the turn into a normal speech turn, otherwise the director scene runs unchanged.
++$directorFollowupClaim = $forceDirectorMode && !$forceDirectiveTurn && !is_array($negDirective) && !is_array($reactTurn)
++    && $requestMode === 'director' && $playerName !== '' && function_exists('stobeSocialFollowupsClaim');
++if ($directorFollowupClaim) {
++    foreach ($participants as $directorParticipant) {
++        if (strcasecmp(strval($directorParticipant), $playerName) !== 0) continue;
++        $optionalMeta['eligible_bored_turn'] = true;
++        $optionalMeta['social_optional_speech_allowed'] = true;
++        if (function_exists('stobeSocialPreferenceScope')) {
++            $optionalMeta['social_scope'] = stobeSocialPreferenceScope($speakerNpc,$speakerData,$playerName,$optionalMeta);
++        }
++        $followupRemark = stobeSocialFollowupsClaim($speakerNpc,$speakerData,$playerName,$optionalMeta);
++        if (is_array($followupRemark)) {
++            $followupClaimedUnix = time();
++            $forceDirectorMode = false;
++            stobeLogInfo('Director bored turn claimed a social follow-up', ['speaker'=>$speakerNpc,'topic'=>$followupRemark['topic_id']??'']);
++        } else {
++            $optionalMeta['eligible_bored_turn'] = false;
++            $optionalMeta['social_optional_speech_allowed'] = false;
++            unset($optionalMeta['social_scope']);
++        }
++        break;
++    }
++}
+ if (!$forceDirectorMode && !$forceDirectiveTurn && !is_array($negDirective) && !is_array($reactTurn)
++    && !is_array($followupRemark)
+     && $playerName !== '' && function_exists('stobeSituatedClaimRemark')) {
+     // The player must be in this native request's eligible nearby participant set.
+     foreach ($participants as $situatedParticipant) {
+@@ -181,6 +220,11 @@
          }
      }
  }
@@ -6969,7 +7014,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/processor
  $listener = (is_array($situatedRemark) || is_array($followupRemark)) ? $playerName : '';
  $dialogueData = parseDialogueEventData($eventData);
  $suggestedTarget = normalizeParticipantNameToken(strval($dialogueData['target'] ?? ''));
-@@ -233,6 +250,11 @@
+@@ -233,6 +277,11 @@
          echo "ok";
          return;
      }
@@ -6981,7 +7026,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/processor
  }
  
  if ($forceDirectorMode) {
-@@ -492,6 +514,12 @@
+@@ -492,6 +541,12 @@
  }
  
  storeActionEvents($speakerNpc, $responseActions, $gamets, $listener, 'bored');
@@ -11733,6 +11778,120 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +
 +echo "imm26_batch2b_regression passed=$pass failed=$fail\n";
 +exit($fail === 0 ? 0 : 1);
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_batch3_regression.php b/tests/imm26_batch3_regression.php
+--- a/tests/imm26_batch3_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_batch3_regression.php	2026-10-15 19:03:39.603067045 -0500
+@@ -0,0 +1,77 @@
++<?php
++// imm26 batch3: (A) row 08-b director bored turn may claim a social follow-up; (B is in imm26_batch3_repair_line_regression.php).
++// Run: STOBE_DB_NAME=stobe_test php tests/imm26_batch3_regression.php   (use flock /tmp/stobe-tests.lock)
++require_once __DIR__ . '/../lib/postgresql.class.php';
++$GLOBALS['db'] = new sql();
++$db = $GLOBALS['db'];
++$checks = 0;
++function check(string $name, bool $ok): void { global $checks; $checks++; if (!$ok) { echo "FAIL $name\n"; cleanup(); exit(1); } }
++
++const T0 = 4000000000; // far above anything real tests write
++$RUN = bin2hex(random_bytes(4));
++function cleanup(): void {
++    // compose: earlier suites (chat_flow) leave recent inputtext/claim rows that block the optional-claim gate (30 s manual-input check, global spacing).
++    $GLOBALS['db']->exec("DELETE FROM eventlog WHERE type IN ('inputtext','inputtext_s','situated_remark_claim') AND localts >= " . (time() - 300));
++    global $db;
++    $db->exec("DELETE FROM eventlog WHERE gamets >= " . T0 . " AND type IN ('social_followup','situated_event','situated_remark_claim','travel_agreement','imm26_squad_comm','imm26_plan_notice','inputtext')");
++}
++cleanup();
++
++/* ---- stubs for the heavy runtime ---- */
++$GLOBALS['T_ATTN'] = []; $GLOBALS['T_COMM'] = ['amount' => 'normal', 'plan_notice' => 'normal']; $GLOBALS['T_PREFS'] = [];
++function storeEvent(string $type, int $ts, int $gamets, string $data, string $sess = 'pending', string $u = '', string $d = '', bool $t = true): ?array {
++    global $db;
++    $ok = $db->exec('INSERT INTO eventlog(type,data,sess,gamets,localts,ts) VALUES ($1,$2,$3,$4,$5,$6)', [$type, $data, $sess, $gamets, time(), $ts]);
++    return $ok === false ? null : ['ok' => true];
++}
++function stobeSocialPreferenceScope(string $actor, array $npc, string $listener, array $meta = []): ?array {
++    global $RUN; return ['key' => "scope-$RUN|$actor|$listener", 'campaign_id' => "camp-$RUN"];
++}
++function stobeSocialScope(object $db, ?array $e = null): array { global $RUN; return ['campaign_id' => "camp-$RUN", 'timeline_epoch' => '1', 'native_session_id' => 's']; }
++function stobeResolveLiveParticipantSerial(string $name, bool $x = false): int { return ['Cind' => 101, 'Shay' => 1, 'Marta' => 102, 'Raider Bob' => 900][$name] ?? 0; }
++function stobeSocialPreferenceRead(string $actor, array $npc, string $listener, int $gamets, array $meta = []): array { return $GLOBALS['T_PREFS'][$actor] ?? []; }
++function stobeSocialAttentionOptionalSpeechAllowed(string $actor, array $npc, array $meta = []): bool { return empty(imm26C2LimitingFlags($GLOBALS['T_ATTN'])) && ($GLOBALS['T_ATTN']['in_combat'] ?? null) !== true; }
++function stobeSocialAttentionState(string $actor, array $npc, array $meta = []): array { return $GLOBALS['T_ATTN']; }
++function extractParticipantNames(array $a): array { return array_values(array_filter(array_map('trim', explode(',', strval($a['people'] ?? ''))))); }
++function stobeTravelKey(string $actor, string $speaker): string { return 'travel-v1:' . stobeResolveLiveParticipantSerial($actor) . ':' . stobeResolveLiveParticipantSerial($speaker) . ':'; }
++function stobeTravelRead(string $actor, string $speaker, int $gamets): ?array { return $GLOBALS['T_TRAVEL'] ?? null; }
++function stobeLogInfo(...$a): void {}
++function stobeLogWarn(...$a): void {}
++
++require_once __DIR__ . '/../lib/social_communication.php';   // also pulls imm26_c2.php
++require_once __DIR__ . '/../lib/social_followups.php';
++require_once __DIR__ . '/../lib/situated_dialogue.php';
++
++$npc = ['name' => 'Cind', 'metadata' => []];
++$base = ['manual_turn_verified' => true, 'response_success' => true, 'social_scope' => ['x' => 1], 'followup_creation_allowed' => true];
++$turnN = 0;
++$npc = ['name' => 'Cind', 'metadata' => []];
++
++$npc = ['name' => 'Cind', 'metadata' => []];
++$scope = stobeSocialPreferenceScope('Cind', $npc, 'Shay');
++$none = ['followup_update' => ['decision' => 'NONE', 'topic_id' => '', 'kind' => 'unanswered_question', 'source_quote' => '']];
++$hubQ = "I'm heading to the Hub to find my brother.";
++$mk = fn(int $now) => ['gamets' => $now, 'stream_gamets' => $now, 'eligible_bored_turn' => true, 'social_optional_speech_allowed' => true, 'social_scope' => ['x' => 1]];
++
++/* ---- A: behaviour of the claim with the meta a request-level director turn now builds ---- */
++check('A0: nothing to claim -> null (no follow-up, so the director scene runs unchanged)', stobeSocialFollowupsClaim('Cind', $npc, 'Shay', $mk(T0 + 100)) === null);
++check('A1: follow-up created', stobeSocialFollowupsCapture('Cind', $npc, 'Shay', $hubQ, $none, ['manual_turn_verified' => true, 'response_success' => true, 'social_scope' => ['x' => 1], 'followup_creation_allowed' => true, 'followup_travel_proposed' => true, 'manual_turn_id' => 'b3-turn', 'stream_gamets' => T0 + 200]) === true);
++check('A2: not yet due (not_before +3600) -> null', stobeSocialFollowupsClaim('Cind', $npc, 'Shay', $mk(T0 + 300)) === null);
++$db->exec("DELETE FROM eventlog WHERE type IN ('inputtext','inputtext_s','situated_remark_claim') AND localts >= " . (time() - 300));
++$rec = stobeSocialFollowupsClaim('Cind', $npc, 'Shay', $mk(T0 + 4000));
++check('A3: due follow-up is claimed with meta eligible_bored_turn=true', is_array($rec) && str_contains(strval($rec['source_quote'] ?? ''), 'Hub'));
++$meta = $mk(T0 + 4100); $meta['eligible_bored_turn'] = false; $meta['social_optional_speech_allowed'] = false;
++check('A4: a plain director meta (eligible=false) still never claims', stobeSocialFollowupsClaim('Cind', $npc, 'Shay', $meta) === null);
++
++/* ---- A: bored.php wiring (source order) ---- */
++$src = file_get_contents(__DIR__ . '/../processor/bored.php');
++$iClaim = strpos($src, '$directorFollowupClaim = ');
++$iDirector = strpos($src, 'stobeGenerateDirectorScene(');
++check('A5: director claim block exists and runs before the director scene', $iClaim !== false && $iDirector !== false && $iClaim < $iDirector);
++$block = substr($src, $iClaim, strpos($src, 'if ($imm26Targeted && !is_array($situatedRemark)') - $iClaim);
++check('A6: only request-level director (not negotiation/goal/react)', str_contains($block, "\$requestMode === 'director'") && str_contains($block, '!is_array($negDirective)') && str_contains($block, '!$forceDirectiveTurn') && str_contains($block, '!is_array($reactTurn)'));
++check('A7: a claim switches to a normal turn; no claim keeps the director', str_contains($block, '$forceDirectorMode = false;') && substr_count($block, '$forceDirectorMode = false;') === 1);
++check('A8: claim block is DB-only (no LLM / director / HTTP call)', !preg_match('/stobeGenerateDirectorScene|callLLM|curl_|streamResponse|chatCompletion|LlmClient|file_get_contents/i', $block));
++
++cleanup();
++echo "imm26_batch3 checks=$checks OK\n";
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_batch3_repair_line_regression.php b/tests/imm26_batch3_repair_line_regression.php
+--- a/tests/imm26_batch3_repair_line_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_batch3_repair_line_regression.php	2026-10-15 19:03:39.603177645 -0500
+@@ -0,0 +1,29 @@
++<?php
++// imm26 batch3 item B: the REPAIR_ACTION_TICKETS control line must never reach the speech stream (the native client spoke it as an NPC SAY).
++// Run: STOBE_DB_NAME=stobe_test php tests/imm26_batch3_repair_line_regression.php
++require_once __DIR__ . '/../lib/postgresql.class.php';
++$GLOBALS['db'] = new sql();
++$checks = 0;
++function check(string $name, bool $ok): void { global $checks; $checks++; if (!$ok) { echo "FAIL $name
++"; exit(1); } }
++/* ---- B: REPAIR_ACTION_TICKETS control line is never emitted into the speech stream ---- */
++require_once __DIR__ . '/../lib/social_repair_agreements.php';
++$line = 'REPAIR_ACTION_TICKETS:' . json_encode(['schema_version' => 1, 'tickets' => []]);
++$GLOBALS['__stobe_repair_ticket_envelopes'] = ['a|b' => $line];
++unset($_GET['repair_tickets']);
++ob_start(); stobeSocialRepairFlushAgreementTickets(); $out = ob_get_clean();
++check('B1: default (no native opt-in) -> nothing written to the stream', $out === '');
++check('B2: queue cleared after flush', ($GLOBALS['__stobe_repair_ticket_envelopes'] ?? []) === []);
++$GLOBALS['__stobe_repair_ticket_envelopes'] = ['a|b' => $line];
++$_GET['repair_tickets'] = '1';
++ob_start(); stobeSocialRepairFlushAgreementTickets(); $out = ob_get_clean();
++check('B3: explicit native opt-in -> control line delivered', $out === $line . "\r\n");
++unset($_GET['repair_tickets']);
++$GLOBALS['__stobe_repair_ticket_envelopes'] = ['a|b' => 'REPAIR_ACTION_TICKETS:{"tickets":[]}'];
++$_GET['repair_tickets'] = '0';
++ob_start(); stobeSocialRepairFlushAgreementTickets(); $out = ob_get_clean();
++check('B4: repair_tickets=0 -> nothing', $out === '');
++unset($_GET['repair_tickets']);
++
++echo "imm26_batch3_repair_line checks=$checks OK
++";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_c1_db_regression.php b/tests/imm26_c1_db_regression.php
 --- a/tests/imm26_c1_db_regression.php	1969-12-31 18:00:00.000000000 -0600
 +++ b/tests/imm26_c1_db_regression.php	2026-10-15 13:39:19.889773210 -0500
