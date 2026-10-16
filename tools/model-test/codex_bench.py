@@ -96,17 +96,57 @@ def run_ids(root: Path, cfg: dict[str, Any]) -> list[tuple[str, dict[str, Any], 
     return out
 
 
-def concurrency(root: Path, cli_value: int | None) -> int:
+def resolve_launch_mode(root: Path, mode: str | None, cli_value: int | None) -> tuple[str, int]:
     cfg = _json(root / "suite.json")
     policy = cfg.get("concurrency", {})
     configured = policy.get("default", 1) if isinstance(policy, dict) else policy
     hard_cap = policy.get("hard_cap", MAX_CONCURRENCY) if isinstance(policy, dict) else MAX_CONCURRENCY
     if type(hard_cap) is not int or not 1 <= hard_cap <= MAX_CONCURRENCY:
         raise BenchError(f"concurrency hard_cap must be 1..{MAX_CONCURRENCY}")
+    if mode not in (None, "sequential", "limited-concurrent"):
+        raise BenchError("mode must be sequential or limited-concurrent")
+    if mode is None:
+        mode = "limited-concurrent" if cli_value is not None and cli_value > 1 else "sequential"
+    if mode == "sequential":
+        if cli_value is not None and cli_value != 1:
+            raise BenchError("sequential mode cannot be combined with --concurrency greater than 1")
+        return mode, 1
+    default_cap = policy.get("limited_concurrency", 2) if isinstance(policy, dict) else 2
+    cap = cli_value if cli_value is not None else default_cap
+    if type(cap) is not int or not 1 <= cap <= hard_cap:
+        raise BenchError(f"limited-concurrent concurrency must be 1..{hard_cap}")
+    return mode, cap
+
+
+def concurrency(root: Path, cli_value: int | None) -> int:
+    """Legacy concurrency resolver retained for prepare/preflight validation."""
+    cfg = _json(root / "suite.json")
+    policy = cfg.get("concurrency", {})
+    configured = policy.get("default", 1) if isinstance(policy, dict) else policy
+    hard_cap = policy.get("hard_cap", MAX_CONCURRENCY) if isinstance(policy, dict) else MAX_CONCURRENCY
     n = cli_value if cli_value is not None else configured
-    if type(n) is not int or not 1 <= n <= hard_cap:
+    if type(hard_cap) is not int or not 1 <= hard_cap <= MAX_CONCURRENCY or type(n) is not int or not 1 <= n <= hard_cap:
         raise BenchError(f"concurrency must be 1..{hard_cap}")
     return n
+
+
+def launch_many(ids: list[str], mode: str, cap: int, worker) -> int:
+    """Run a batch in the selected scheduling mode; worker is injected for offline tests."""
+    failures = 0
+    if mode == "sequential":
+        for rid in ids:
+            try: failures += bool(worker(rid))
+            except Exception as exc:
+                print(f"run failed: {exc}", file=sys.stderr); failures += 1
+    else:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=cap) as pool:
+            futures = [pool.submit(worker, rid) for rid in ids]
+            for future in as_completed(futures):
+                try: failures += bool(future.result())
+                except Exception as exc:
+                    print(f"run failed: {exc}", file=sys.stderr); failures += 1
+    return int(failures > 0)
 
 
 def _sha(data: bytes) -> str:
@@ -240,6 +280,21 @@ def _private_env(home: Path, extra: dict[str, str] | None = None) -> dict[str, s
 
 def _record_path(run_dir: Path) -> Path:
     return run_dir / "launch.json"
+
+
+def _stamp_launch_context(attempt_receipt: Path, run_receipt: Path, attempt_dir: Path,
+                         launch_mode: str, effective_cap: int, batch_id: str) -> dict[str, Any]:
+    receipt = _json(attempt_receipt)
+    if receipt.get("status") != "PREPARED":
+        raise BenchError("attempt is not untouched PREPARED; refusing relaunch")
+    evidence = ("events.jsonl", "stderr.log", "report.md", "rollout.jsonl", "argv.json")
+    if any((attempt_dir / name).exists() for name in evidence):
+        raise BenchError("attempt evidence already exists; refusing overwrite")
+    receipt.update({"launch_mode": launch_mode, "effective_concurrency_cap": effective_cap,
+                    "batch_id": batch_id})
+    _write_json(attempt_receipt, receipt)
+    _write_json(run_receipt, receipt)
+    return receipt
 
 
 def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int = 1) -> tuple[Path, dict[str, Any]]:
@@ -613,7 +668,8 @@ def preflight(root: Path) -> int:
     finally: lock.close()
 
 
-def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: int = 1) -> int:
+def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: int = 1,
+               launch_mode: str = "sequential", effective_cap: int = 1, batch_id: str = "") -> int:
     if not execute:
         raise BenchError("model launch is disabled without the explicit --execute flag")
     cfg = load_suite(root)
@@ -649,7 +705,7 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     elif not attempt.is_dir():
         raise BenchError(f"attempt-01 was not prepared: {rid}; run prepare first")
     attempt_receipt = attempt / "launch.json"
-    receipt = _json(attempt_receipt)
+    receipt = _stamp_launch_context(attempt_receipt, receipt_path, attempt, launch_mode, effective_cap, batch_id)
     codex_home = Path(receipt["codex_home"])
     config = _json(attempt / "requested-config.json")
     task = run_dir / "prompt.md"
@@ -903,7 +959,7 @@ def status(root: Path, metrics: bool = False) -> int:
         path = _record_path(root / "runs" / rid)
         if path.exists():
             item = _json(path)
-            line = f"{rid}\t{item.get('status','UNKNOWN')}\t{item.get('returncode','')}\t{item.get('audit',{}).get('status','')}"
+            line = f"{rid}\t{item.get('status','UNKNOWN')}\t{item.get('returncode','')}\t{item.get('audit',{}).get('status','')}\t{item.get('launch_mode','')}\t{item.get('effective_concurrency_cap','')}"
             if metrics:
                 line += "\t" + json.dumps(live_metrics(item, prices), sort_keys=True)
             print(line)
@@ -918,7 +974,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("prepare", "preflight"):
         p = sub.add_parser(name); p.add_argument("suite_dir")
     p = sub.add_parser("status"); p.add_argument("suite_dir"); p.add_argument("--metrics", action="store_true")
-    p = sub.add_parser("run"); p.add_argument("suite_dir"); p.add_argument("run_id", nargs="?"); p.add_argument("--all", action="store_true"); p.add_argument("--execute", action="store_true", help="explicitly authorize these paid model launches"); p.add_argument("--concurrency", type=int); p.add_argument("--attempt", type=int, default=1); p.add_argument("--timeout", type=int, default=1800)
+    p = sub.add_parser("run"); p.add_argument("suite_dir"); p.add_argument("run_id", nargs="?"); p.add_argument("--all", action="store_true"); p.add_argument("--execute", action="store_true", help="explicitly authorize these paid model launches"); p.add_argument("--mode", choices=("sequential", "limited-concurrent")); p.add_argument("--concurrency", type=int); p.add_argument("--attempt", type=int, default=1); p.add_argument("--timeout", type=int, default=1800)
     for name in ("record", "recheck"):
         p = sub.add_parser(name); p.add_argument("suite_dir"); p.add_argument("run_id")
     args = parser.parse_args(argv)
@@ -940,22 +996,19 @@ def main(argv: list[str] | None = None) -> int:
                 raise BenchError("refusing any model launch without the explicit --execute action")
             if args.all and args.attempt != 1:
                 raise BenchError("--attempt is supported only with a single run_id")
-            cap = concurrency(root, args.concurrency)
+            mode, cap = resolve_launch_mode(root, args.mode, args.concurrency)
             lock = _lock(root)
             try:
+                batch_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+                _write_json(root / f"batch-{batch_id}-launch.json", {"batch_id": batch_id,
+                            "launch_mode": mode, "effective_concurrency_cap": cap,
+                            "started_utc": datetime.now(timezone.utc).isoformat()})
                 _preflight(root)
                 if not args.all:
-                    return launch_one(root, args.run_id, args.execute, args.timeout, args.attempt)
-                from concurrent.futures import ThreadPoolExecutor, as_completed
+                    return launch_one(root, args.run_id, args.execute, args.timeout, args.attempt, mode, cap, batch_id)
                 ids = [entry[0] for entry in run_ids(root, load_suite(root))]
-                failures = 0
-                with ThreadPoolExecutor(max_workers=cap) as pool:
-                    futures = [pool.submit(launch_one, root, rid, args.execute, args.timeout, 1) for rid in ids]
-                    for future in as_completed(futures):
-                        try: failures += bool(future.result())
-                        except Exception as exc:
-                            print(f"run failed: {exc}", file=sys.stderr); failures += 1
-                return int(failures > 0)
+                return launch_many(ids, mode, cap, lambda rid: launch_one(
+                    root, rid, args.execute, args.timeout, 1, mode, cap, batch_id))
             finally:
                 try:
                     _postflight(root)

@@ -2,8 +2,9 @@
 
 This adapter prepares and records Codex-only investigations from an existing
 frozen-world `suite.json`. It does not launch work by default. Keep the
-Codex-model suite's `concurrency.default` at 1, `auto_start` false, and
-`concurrency.hard_cap` at 4 unless the operator intentionally changes them.
+Codex-model suite's `concurrency.default` at 1, `limited_concurrency` at 2,
+`auto_start` false, and `concurrency.hard_cap` at 4 unless the operator
+intentionally changes them.
 
 ## Suite schema
 
@@ -38,18 +39,29 @@ The companion runner interface is:
 ```text
 python tools/model-test/codex_bench.py prepare <suite-dir>
 python tools/model-test/codex_bench.py preflight <suite-dir>
-python tools/model-test/codex_bench.py run <suite-dir> <run-id> --execute [--concurrency 1..4] [--attempt N] [--timeout SECONDS]
-python tools/model-test/codex_bench.py run <suite-dir> --all --execute [--concurrency 1..4] [--timeout SECONDS]
+python tools/model-test/codex_bench.py run <suite-dir> <run-id> --execute [--mode sequential|limited-concurrent] [--concurrency 1..4] [--attempt N] [--timeout SECONDS]
+python tools/model-test/codex_bench.py run <suite-dir> --all --execute [--mode sequential|limited-concurrent] [--concurrency 1..4] [--timeout SECONDS]
 python tools/model-test/codex_bench.py status <suite-dir> [--metrics]
 python tools/model-test/codex_bench.py record <suite-dir> <run-id>
 python tools/model-test/codex_bench.py recheck <suite-dir> <run-id>
 ```
 
 Only the explicit `run ... --execute` action launches a paid model task.
-Preparation, preflight, and status are non-execution steps. Concurrency defaults
-to 1, can be set from 1 to 4, and `auto_start` must remain false. The `--all`
-form submits IDs in `order.txt` order; with concurrency above 1, completion
-order can differ. `--attempt` applies to a single run ID only; retries must use
+Preparation, preflight, and status are non-execution steps. `--mode sequential`
+forces one active launch and rejects `--concurrency` above 1.
+`--mode limited-concurrent` uses `limited_concurrency` (default 2), or an explicit
+`--concurrency`, bounded by the suite hard cap (maximum 4). With no `--mode`,
+the runner remains sequential unless a legacy `--concurrency` above 1 is given;
+the legacy flag still opts into bounded concurrency. `auto_start` must remain
+false. The `--all` form submits IDs in `order.txt` order; concurrent completion
+order can differ. Each invocation writes a uniquely named batch launch-context
+sidecar, and each run/attempt receipt records the selected mode, effective cap,
+and batch ID, including failed attempts. `status` displays mode and cap. These
+fields stay outside participant prompts and the 23-column report TSV. Sequential
+runs reduce interference from this suite, but other host processes can still
+affect wall times; speed comparisons are most useful while the host is quiet.
+The runner does not automatically stop unrelated processes or gate on CPU load.
+`--attempt` applies to a single run ID only; retries must use
 the next sequential attempt number. The default attempt is 1. The default
 timeout is 1800 seconds. Preserve each
 attempt under `runs/<run-id>/attempt-NN/`; a retry or recheck must not overwrite

@@ -26,6 +26,60 @@ class BenchTests(unittest.TestCase):
             with self.assertRaises(bench.BenchError):
                 bench.concurrency(root, 4)
 
+    def test_named_launch_modes_resolve_defaults_and_reject_contradictions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = root / "suite.json"
+            suite.write_text(json.dumps({"concurrency": {"default": 1, "limited_concurrency": 2, "hard_cap": 4}}))
+            self.assertEqual(bench.resolve_launch_mode(root, None, None), ("sequential", 1))
+            self.assertEqual(bench.resolve_launch_mode(root, "sequential", 1), ("sequential", 1))
+            self.assertEqual(bench.resolve_launch_mode(root, "limited-concurrent", None), ("limited-concurrent", 2))
+            self.assertEqual(bench.resolve_launch_mode(root, "limited-concurrent", 3), ("limited-concurrent", 3))
+            self.assertEqual(bench.resolve_launch_mode(root, None, 3), ("limited-concurrent", 3))
+            with self.assertRaises(bench.BenchError):
+                bench.resolve_launch_mode(root, "sequential", 2)
+            with self.assertRaises(bench.BenchError):
+                bench.resolve_launch_mode(root, "limited-concurrent", 5)
+
+    def test_synthetic_scheduler_respects_sequential_and_concurrent_caps(self):
+        import threading
+        import time
+
+        def peak_for(mode, cap):
+            guard = threading.Lock()
+            active = peak = 0
+            def worker(_rid):
+                nonlocal active, peak
+                with guard:
+                    active += 1
+                    peak = max(peak, active)
+                time.sleep(0.02)
+                with guard:
+                    active -= 1
+                return 0
+            self.assertEqual(bench.launch_many([str(n) for n in range(8)], mode, cap, worker), 0)
+            return peak
+
+        self.assertEqual(peak_for("sequential", 1), 1)
+        self.assertEqual(peak_for("limited-concurrent", 2), 2)
+        self.assertLessEqual(peak_for("limited-concurrent", 3), 3)
+
+    def test_relaunch_context_cannot_mutate_completed_attempt_receipts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            attempt = root / "attempt-01"
+            attempt.mkdir()
+            original = {"status": "RECORDED", "launch_mode": "sequential",
+                        "effective_concurrency_cap": 1, "batch_id": "old"}
+            (attempt / "launch.json").write_text(json.dumps(original))
+            run_receipt = root / "launch.json"
+            run_receipt.write_text(json.dumps(original))
+            with self.assertRaises(bench.BenchError):
+                bench._stamp_launch_context(attempt / "launch.json", run_receipt, attempt,
+                                            "limited-concurrent", 2, "new")
+            self.assertEqual(json.loads((attempt / "launch.json").read_text()), original)
+            self.assertEqual(json.loads(run_receipt.read_text()), original)
+
     def test_catalog_fast_tier_object_schema_is_supported_and_fail_closed(self):
         self.assertTrue(bench._fast_tier_supported({"service_tiers": [{"id": "priority", "name": "Fast"}]}))
         self.assertTrue(bench._fast_tier_supported({"service_tiers": {"priority": {}}}))
@@ -134,6 +188,13 @@ See C:\\KenshiModding\\src\\module.py:42
             (root / "suite.json").write_text(json.dumps({"cells": [{"slug": "x-high-standard", "model": "x", "effort": "high", "speed": "standard"}]}))
             with mock.patch.object(bench, "_preflight", side_effect=AssertionError("preflight must not run")):
                 self.assertEqual(bench.main(["run", str(root), "x-high-standard-p2"]), 2)
+
+    def test_missing_execute_with_named_mode_still_refuses_before_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "suite.json").write_text(json.dumps({"cells": [{"slug": "x-high-standard", "model": "x", "effort": "high", "speed": "standard"}]}))
+            with mock.patch.object(bench, "_preflight", side_effect=AssertionError("preflight must not run")):
+                self.assertEqual(bench.main(["run", str(root), "x-high-standard-p2", "--mode", "limited-concurrent"]), 2)
 
 
 if __name__ == "__main__":

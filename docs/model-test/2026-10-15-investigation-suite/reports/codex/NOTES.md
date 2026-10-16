@@ -27,9 +27,17 @@ either `<run-id>` or `--all`, requires `--execute`, and supports
 `--attempt N`; `--all` does not accept a retry attempt. The default attempt is
 1 and the default timeout is 1800 seconds. `status --metrics` adds current
 usage metrics.
-Concurrency defaults to 1, has a hard cap of 4, and `auto_start` is false. The
-`--all` command submits runs in `order.txt` order, though concurrency above 1
-can change completion order. Retries use the next explicit attempt number and
+The suite's default launch mode is sequential (one active launch); the named
+`limited-concurrent` mode defaults to cap 2 and is bounded by the hard cap of 4.
+An explicit `--concurrency 1..4` works with either mode, while sequential mode
+rejects values above 1. With `--mode` omitted, no override stays sequential;
+legacy `--concurrency` values above 1 infer limited-concurrent mode. The `--all`
+command submits runs in `order.txt` order, though concurrency above 1 can change
+completion order. Batch sidecars and run/attempt receipts record mode and cap;
+status displays both, outside the unchanged participant prompt and report TSV.
+Other host processes can still affect sequential wall times, so speed comparisons
+are most useful while the host is quiet. There is no automatic CPU-load gate or
+unrelated-process shutdown. Retries use the next explicit attempt number and
 never overwrite previous attempt evidence. Each run is one independent task
 with no delegation, including at ultra effort.
 

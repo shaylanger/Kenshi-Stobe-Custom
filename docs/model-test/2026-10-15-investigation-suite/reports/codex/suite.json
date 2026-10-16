@@ -290,7 +290,8 @@
   "concurrency": {
     "auto_start": false,
     "hard_cap": 4,
-    "default": 1
+    "default": 1,
+    "limited_concurrency": 2
   },
   "prices": "C:\\KenshiModding\\tools\\model-test\\codex_prices.json",
   "extra_reports": {
