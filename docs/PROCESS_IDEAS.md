@@ -38,7 +38,7 @@ Rules:
 - log: 2026-10-15 23:16 review 'coordinator-11': added
 - log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16 00:00-05:00: no AGENT ORPHANED alert fired this session; only legitimate STOPPED-CONTEXT events.)
 
-### PI-33 | open
+### PI-33 | confirmed
 - idea: The Stop hook's successor check must accept ANY successor registered via lane-brief.ps1 -Name/-Predecessor (lane-owners.json), not only <name>2/<name>b suffix names; or lane-brief should register the successor so the hook stops asking for 'imm26-4080-i4op10b' when 'imm26-4080-i4op11' already runs.
 - evidence: 2026-10-16 00:21 (op9e->op9f), 01:28 (i4op10->op11), 00:50 (op9f->op9g): the Stop hook blocked three times asking to respawn a fresh <name>b although the real successor (different number) was already RUNNING; each cost a model turn and an agent-abandon.ps1 call.
 - saving: ~3 blocked stops + 3 abandon calls per coordinator session (~6k tokens)
@@ -46,9 +46,12 @@ Rules:
 - hooks: yes
 - weakens: no
 - added: 2026-10-16 02:55
+- moment: 10:38 when sfE2 stopped and sfE3 was already running (hook demanded sfE2b)
+- last_review: coordinator-14
 - log: 2026-10-16 02:55 review 'coordinator-12': added
+- log: 2026-10-16 10:49 review 'coordinator-14': open -> confirmed (applies: 2026-10-16 10:3x: the Stop hook asked to respawn imm26-sfE2b / imm26-sfB2 style names although the real successor imm26-sfE3 (different suffix) already ran with the same task text; cost one agent-a...)
 
-### PI-34 | open
+### PI-34 | confirmed
 - idea: Provide one wrapper `rearm-waker.ps1` (or fold into event-wait.sh) that kills any stale event-wait for this coordinator, then prints the exact run_in_background command; and make event-wait.sh refuse to start under a bare & / disown.
 - evidence: 2026-10-16: I started the waker with a trailing `&`/disown by mistake 5 times (01:13, 01:29, 02:09, 03:25, 04:35), each needed a pkill and a relaunch; the runbook says never.
 - saving: ~5 wasted tool calls and a wrongly-running waker the Stop hook does not recognise
@@ -56,9 +59,12 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 02:55
+- moment: 10:27 when I ran event-wait.sh with & disown right after registering the i3 operators
+- last_review: coordinator-14
 - log: 2026-10-16 02:55 review 'coordinator-12': added
+- log: 2026-10-16 10:49 review 'coordinator-14': open -> confirmed (applies: 2026-10-16 10:27 I started the waker with a trailing & disown by mistake (the exact failure PI-34 describes) and had to pkill it and restart; also the waker had to be restarted ~25 times after each...)
 
-### PI-35 | open
+### PI-35 | rejected x1
 - idea: mark-row.py needs a note-only mode (append a note to the evidence column without changing status), so row-tooling agents can annotate rows without overwriting results.
 - evidence: 2026-10-16 imm26-u-rowsA2 report: mark-row.py has no note-only mode, it always overwrites status and evidence, and a SETUP-FAIL re-mark needs a needs: clause and updates the unblock ticket, so none of the three tooling agents (rowsA/B/C) could add the one-call command to the row.
 - saving: one operator lookup per row (inbox note instead of the row)
@@ -66,7 +72,29 @@ Rules:
 - hooks: no
 - weakens: no
 - added: 2026-10-16 02:55
+- last_review: coordinator-14
 - log: 2026-10-16 02:55 review 'coordinator-12': added
+- log: 2026-10-16 10:49 review 'coordinator-14': open -> rejected x1 (does not apply: not seen this session)
+
+### PI-36 | open
+- idea: Give in-session lane operators a routable address (or have the coordinator tool write a per-lane inbox file AND a bump the operator sees): SendMessage to a live operator by name returns 'not reachable', so operator notes in inbox/operators only reach an operator if it happens to poll.
+- evidence: 2026-10-16 10:2x: SendMessage to imm26-5090-i5-op9l and imm26-4080-i4op12b failed with 'No agent named ... is reachable'; 6 inbox notes (nc17/nc18/nc20, 14d, lane plan, deploys) relied on the operators polling.
+- saving: avoids a lane running a stale plan for up to a row (~15 min) each time a fix lands
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 10:49
+- log: 2026-10-16 10:49 review 'coordinator-14': added
+
+### PI-37 | open
+- idea: session-start / agent-status should auto-abandon the inflight marker of a dead predecessor as soon as a successor registered in lane-owners or with the same task text is RUNNING.
+- evidence: 2026-10-16 10:00-10:40: after the freeze 3 predecessor markers (op12, op9k, inv-14d) plus sfC/sfE2 caused false RIG STALL / work-in-flight wakes and 5 manual agent-abandon calls.
+- saving: ~5 manual calls and 4 spurious waker wakes per resume
+- risk: must not hide a truly unowned stopped agent: only when the successor task text matches
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 10:49
+- log: 2026-10-16 10:49 review 'coordinator-14': added
 
 ## Retired
 
