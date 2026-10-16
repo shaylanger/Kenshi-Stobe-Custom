@@ -1,0 +1,229 @@
+{
+  "date": "2026-10-16",
+  "source": {
+    "title": "ChatGPT Rate Card (Enterprise token-based pricing)",
+    "url": "https://help.openai.com/en/articles/20001415-chatgpt-rate-card-enterprise-token-based-pricing",
+    "checked": "2026-10-16",
+    "scope": "Codex and ChatGPT Work prices, USD per 1 million tokens. Applies to eligible token-based Enterprise agreements; consult the workspace agreement. Fast is 2x Standard USD rates where available."
+  },
+  "cache_create_status": "The published Codex/Work rate card does not list a separate cache-write rate; cost is unavailable for cache_create tokens.",
+  "models": {
+    "gpt-6-astra": {
+      "standard": {
+        "long": {
+          "cache_read": 1.0,
+          "cache_create": null,
+          "output": 50.0,
+          "input": 10.0
+        },
+        "short": {
+          "cache_read": 1.0,
+          "cache_create": null,
+          "output": 50.0,
+          "input": 10.0
+        }
+      },
+      "fast": {
+        "long": {
+          "cache_read": 2.0,
+          "cache_create": null,
+          "output": 100.0,
+          "input": 20.0
+        },
+        "short": {
+          "cache_read": 2.0,
+          "cache_create": null,
+          "output": 100.0,
+          "input": 20.0
+        }
+      },
+      "threshold_tokens": 272000
+    },
+    "gpt-6.1-sol": {
+      "standard": {
+        "long": {
+          "cache_read": 0.2,
+          "cache_create": null,
+          "output": 15.0,
+          "input": 4.0
+        },
+        "short": {
+          "cache_read": 0.1,
+          "cache_create": null,
+          "output": 10.0,
+          "input": 2.0
+        }
+      },
+      "fast": {
+        "long": {
+          "cache_read": 0.4,
+          "cache_create": null,
+          "output": 30.0,
+          "input": 8.0
+        },
+        "short": {
+          "cache_read": 0.2,
+          "cache_create": null,
+          "output": 20.0,
+          "input": 4.0
+        }
+      },
+      "threshold_tokens": 272000
+    },
+    "gpt-6-sol": {
+      "standard": {
+        "long": {
+          "cache_read": 0.4,
+          "cache_create": null,
+          "output": 15.0,
+          "input": 4.0
+        },
+        "short": {
+          "cache_read": 0.2,
+          "cache_create": null,
+          "output": 10.0,
+          "input": 2.0
+        }
+      },
+      "fast": {
+        "long": {
+          "cache_read": 0.8,
+          "cache_create": null,
+          "output": 30.0,
+          "input": 8.0
+        },
+        "short": {
+          "cache_read": 0.4,
+          "cache_create": null,
+          "output": 20.0,
+          "input": 4.0
+        }
+      },
+      "threshold_tokens": 272000
+    },
+    "gpt-6-luna": {
+      "standard": {
+        "long": {
+          "cache_read": 0.02,
+          "cache_create": null,
+          "output": 0.75,
+          "input": 0.2
+        },
+        "short": {
+          "cache_read": 0.01,
+          "cache_create": null,
+          "output": 0.5,
+          "input": 0.1
+        }
+      },
+      "fast": {
+        "long": {
+          "cache_read": 0.04,
+          "cache_create": null,
+          "output": 1.5,
+          "input": 0.4
+        },
+        "short": {
+          "cache_read": 0.02,
+          "cache_create": null,
+          "output": 1.0,
+          "input": 0.2
+        }
+      },
+      "threshold_tokens": 272000
+    },
+    "gpt-5.6-sol": {
+      "standard": {
+        "long": {
+          "cache_read": 0.8,
+          "cache_create": null,
+          "output": 30.0,
+          "input": 8.0
+        },
+        "short": {
+          "cache_read": 0.4,
+          "cache_create": null,
+          "output": 20.0,
+          "input": 4.0
+        }
+      },
+      "fast": {
+        "long": {
+          "cache_read": 1.6,
+          "cache_create": null,
+          "output": 60.0,
+          "input": 16.0
+        },
+        "short": {
+          "cache_read": 0.8,
+          "cache_create": null,
+          "output": 40.0,
+          "input": 8.0
+        }
+      },
+      "threshold_tokens": 272000
+    },
+    "gpt-5.6-terra": {
+      "standard": {
+        "long": {
+          "cache_read": 0.4,
+          "cache_create": null,
+          "output": 18.0,
+          "input": 4.0
+        },
+        "short": {
+          "cache_read": 0.2,
+          "cache_create": null,
+          "output": 12.0,
+          "input": 2.0
+        }
+      },
+      "fast": {
+        "long": {
+          "cache_read": 0.8,
+          "cache_create": null,
+          "output": 36.0,
+          "input": 8.0
+        },
+        "short": {
+          "cache_read": 0.4,
+          "cache_create": null,
+          "output": 24.0,
+          "input": 4.0
+        }
+      },
+      "threshold_tokens": 272000
+    },
+    "gpt-5.6-luna": {
+      "standard": {
+        "long": {
+          "cache_read": 0.04,
+          "cache_create": null,
+          "output": 1.7999999999999998,
+          "input": 0.4
+        },
+        "short": {
+          "cache_read": 0.02,
+          "cache_create": null,
+          "output": 1.2,
+          "input": 0.2
+        }
+      },
+      "fast": {
+        "long": {
+          "cache_read": 0.08,
+          "cache_create": null,
+          "output": 3.5999999999999996,
+          "input": 0.8
+        },
+        "short": {
+          "cache_read": 0.04,
+          "cache_create": null,
+          "output": 2.4,
+          "input": 0.4
+        }
+      },
+      "threshold_tokens": 272000
+    }
+  }
+}

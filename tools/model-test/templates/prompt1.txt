@@ -1,0 +1,1 @@
+Replace this file with the request, exactly as you would type it to an agent. One file per prompt (prompt1.txt, prompt2.txt, ...), listed in suite.json "prompts".

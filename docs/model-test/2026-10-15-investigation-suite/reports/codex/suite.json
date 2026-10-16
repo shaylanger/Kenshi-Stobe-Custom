@@ -1,0 +1,312 @@
+{
+  "name": "Codex frozen investigation comparison",
+  "frozen": "C:\\KenshiTestRuns\\invest\\frozen-2026-10-14",
+  "cells": [
+    {
+      "model": "gpt-6-astra",
+      "effort": "low",
+      "speed": "standard",
+      "slug": "gpt6astra-low-standard"
+    },
+    {
+      "model": "gpt-6-astra",
+      "effort": "medium",
+      "speed": "standard",
+      "slug": "gpt6astra-medium-standard"
+    },
+    {
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "speed": "standard",
+      "slug": "gpt6astra-high-standard"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "low",
+      "speed": "standard",
+      "slug": "gpt61sol-low-standard"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "speed": "standard",
+      "slug": "gpt61sol-medium-standard"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "speed": "standard",
+      "slug": "gpt61sol-high-standard"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "speed": "standard",
+      "slug": "gpt61sol-xhigh-standard"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "ultra",
+      "speed": "standard",
+      "slug": "gpt61sol-ultra-standard"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "low",
+      "speed": "standard",
+      "slug": "gpt6sol-low-standard"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "medium",
+      "speed": "standard",
+      "slug": "gpt6sol-medium-standard"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "speed": "standard",
+      "slug": "gpt6sol-high-standard"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "xhigh",
+      "speed": "standard",
+      "slug": "gpt6sol-xhigh-standard"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "ultra",
+      "speed": "standard",
+      "slug": "gpt6sol-ultra-standard"
+    },
+    {
+      "model": "gpt-6-luna",
+      "effort": "low",
+      "speed": "standard",
+      "slug": "gpt6luna-low-standard"
+    },
+    {
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "speed": "standard",
+      "slug": "gpt6luna-medium-standard"
+    },
+    {
+      "model": "gpt-6-luna",
+      "effort": "high",
+      "speed": "standard",
+      "slug": "gpt6luna-high-standard"
+    },
+    {
+      "model": "gpt-6-luna",
+      "effort": "xhigh",
+      "speed": "standard",
+      "slug": "gpt6luna-xhigh-standard"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "low",
+      "speed": "standard",
+      "slug": "gpt56sol-low-standard"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "medium",
+      "speed": "standard",
+      "slug": "gpt56sol-medium-standard"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "high",
+      "speed": "standard",
+      "slug": "gpt56sol-high-standard"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "xhigh",
+      "speed": "standard",
+      "slug": "gpt56sol-xhigh-standard"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "ultra",
+      "speed": "standard",
+      "slug": "gpt56sol-ultra-standard"
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "effort": "low",
+      "speed": "standard",
+      "slug": "gpt56terra-low-standard"
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "effort": "medium",
+      "speed": "standard",
+      "slug": "gpt56terra-medium-standard"
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "effort": "high",
+      "speed": "standard",
+      "slug": "gpt56terra-high-standard"
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "effort": "xhigh",
+      "speed": "standard",
+      "slug": "gpt56terra-xhigh-standard"
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "effort": "ultra",
+      "speed": "standard",
+      "slug": "gpt56terra-ultra-standard"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "speed": "standard",
+      "slug": "gpt56luna-low-standard"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "effort": "medium",
+      "speed": "standard",
+      "slug": "gpt56luna-medium-standard"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "speed": "standard",
+      "slug": "gpt56luna-high-standard"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "effort": "xhigh",
+      "speed": "standard",
+      "slug": "gpt56luna-xhigh-standard"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "speed": "fast",
+      "slug": "gpt61sol-high-fast"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "speed": "fast",
+      "slug": "gpt61sol-xhigh-fast"
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "effort": "ultra",
+      "speed": "fast",
+      "slug": "gpt61sol-ultra-fast"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "speed": "fast",
+      "slug": "gpt6sol-high-fast"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "xhigh",
+      "speed": "fast",
+      "slug": "gpt6sol-xhigh-fast"
+    },
+    {
+      "model": "gpt-6-sol",
+      "effort": "ultra",
+      "speed": "fast",
+      "slug": "gpt6sol-ultra-fast"
+    },
+    {
+      "model": "gpt-6-luna",
+      "effort": "high",
+      "speed": "fast",
+      "slug": "gpt6luna-high-fast"
+    },
+    {
+      "model": "gpt-6-luna",
+      "effort": "xhigh",
+      "speed": "fast",
+      "slug": "gpt6luna-xhigh-fast"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "high",
+      "speed": "fast",
+      "slug": "gpt56sol-high-fast"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "xhigh",
+      "speed": "fast",
+      "slug": "gpt56sol-xhigh-fast"
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "effort": "ultra",
+      "speed": "fast",
+      "slug": "gpt56sol-ultra-fast"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "speed": "fast",
+      "slug": "gpt56luna-high-fast"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "effort": "xhigh",
+      "speed": "fast",
+      "slug": "gpt56luna-xhigh-fast"
+    }
+  ],
+  "prompts": [
+    "prompt2.txt",
+    "prompt3.txt"
+  ],
+  "prompt_numbers": [
+    2,
+    3
+  ],
+  "rubric": "rubric.md",
+  "template": "task-frozen.tmpl",
+  "judges": [
+    {
+      "model": "sonnet",
+      "effort": "high"
+    },
+    {
+      "model": "opus",
+      "effort": "high"
+    }
+  ],
+  "concurrency": {
+    "auto_start": false,
+    "hard_cap": 4,
+    "default": 1
+  },
+  "prices": "C:\\KenshiModding\\tools\\model-test\\codex_prices.json",
+  "extra_reports": {
+    "old-haiku-low": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/haiku-low-p{n}.md",
+    "old-haiku-medium": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/haiku-medium-p{n}.md",
+    "old-haiku-high": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/haiku-high-p{n}.md",
+    "old-haiku-xhigh": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/haiku-xhigh-p{n}.md",
+    "old-sonnet-low": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/sonnet-low-p{n}.md",
+    "old-sonnet-medium": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/sonnet-medium-p{n}.md",
+    "old-sonnet-high": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/sonnet-high-p{n}.md",
+    "old-sonnet-xhigh": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/sonnet-xhigh-p{n}.md",
+    "old-opus-low": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/opus-low-p{n}.md",
+    "old-opus-medium": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/opus-medium-p{n}.md",
+    "old-opus-high": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/opus-high-p{n}.md",
+    "old-opus-xhigh": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/opus-xhigh-p{n}.md",
+    "old-suite1-A": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/suite1-A-p{n}.md",
+    "old-suite1-B": "/mnt/c/KenshiModding/docs/model-test/2026-10-15-investigation-suite/reports/suite1-B-p{n}.md"
+  }
+}

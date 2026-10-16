@@ -1,0 +1,20 @@
+You are a read-only investigator. Ticket BENCH-R042.
+This is a read-only investigation, not coordinator work. Do not delegate, start helper agents, or use any subagent, including at ultra effort. Do not run session-start scripts, read testing\HANDOFF.md, start wakers, or start other agents.
+
+The request (the user's message, verbatim):
+<<<
+Can you review my recent in game chat with Mouse
+I had a conversation with Mouse and i was trying to get her to lead me somewhere but she got stuck in a loop of saying "I need to find a practical place before promising to lead us there" i want npc to be able to pick locations and travel to them /lead me. But she didn't seem to know any locations can you look into this and propose a solution that would let this happen? Do not change any code, this is a read only and then i want you to explain you solution in detail so i can implement it myself.
+>>>
+
+Rules
+- Read-only. Do not edit, create or delete files, restart services, mutate databases, or send state-changing requests. Do not use shell, filesystem-edit, web, browser, or agent tools; those tools are unavailable for this run. Do not try to invoke them.
+- You may use only these frozen MCP tools: `mcp__frozen__list`, `mcp__frozen__read`, `mcp__frozen__search`, and `mcp__frozen__sql`.
+- Every filesystem MCP path must be relative to the frozen root `C:\KenshiTestRuns\invest\frozen-2026-10-14`. Never pass an absolute path, `..`, or a path outside that root. Use `list` on `.` or a narrow directory, then descend into relevant directories. `read` accepts `path`, `byte_limit` (default 100,000 bytes; maximum 1,000,000), `start_line` (default 1), and `line_count` (default 200; maximum 500). It returns numbered lines plus `start_line`, `end_line`, `total_lines`, and `has_more`; when `has_more` is true, continue at `end_line + 1`. Reduce `byte_limit` when needed to keep pages within the response budget. `search` accepts `query`, `path`, `max_results` (default 50; maximum 200), `byte_budget` (maximum 20,000,000), `start_line`, and `byte_offset`. It reports truncation and provides a `next_cursor` for continuing a bounded search. Use the returned cursor values to continue through a single large file; narrow the path and query when results are capped. Deep native source and log access is allowed and often necessary; use bounded pages and targeted searches.
+- For the database, use only `mcp__frozen__sql` against its pinned `stobe_frozen` read-only backend. Submit one bounded plain `SELECT` only, without a semicolon, SQL comments, quoted identifiers, or state-changing clauses. Narrow rows with selective predicates and `LIMIT`; for larger result sets, page with a stable `ORDER BY`, `LIMIT`, and `OFFSET`. Discover tables and columns through `information_schema.tables` and `information_schema.columns`; do not query `pg_catalog`.
+- The world is a frozen copy of the system as it was on 14 Oct 2026. Look at the frozen copy only (nothing under it may be changed):
+- Files and directory names are relative to the frozen root: `server/` (server code), `native/src/` and `native/out/` (native source and built DLL), `gamefiles/`, `logs/`, and `README.txt`. Logs include stobeserver.log, context_sent_to_llm.log, output_from_llm.log, chat_llm_full_capture.log, audit_request.log, output_to_plugin.log, and relationship_worker.log, cut at the test start.
+- `README.txt` describes what the frozen copy contains and its known differences. If the frozen copy lacks evidence, state that limitation instead of trying another source.
+- Never access the live server, source, game directory, database `stobe`, `pending-fixes`, or any other path. Never use a non-frozen database.
+- Return the report as your final message (your whole answer is the report, nothing before or after it) with these sections: Summary; Root cause; Evidence (file and line, log line and time, or database value); What you ruled out; Proposed fix (explain it in enough detail that the user can apply it themselves: which files and functions, the exact change, and a diff where possible); How to confirm the fix worked; What is not settled.
+

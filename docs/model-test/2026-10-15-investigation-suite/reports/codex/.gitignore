@@ -1,0 +1,34 @@
+# Private auth/cache artifacts (the runner normally keeps these outside repo).
+**/auth.json
+**/auth.jsonl
+**/cache/
+.codex/
+.codex-home/
+
+# Generated runner state and receipts.
+.codex-bench.lock
+preflight.json
+runs/*/preflight.json
+postflight.json
+postflight-*.json
+setup-validation.json
+setup-readiness.json
+launch.json
+runs/*/launch.json
+attempts.tsv
+runs/*/attempt-*/
+runs/*/attempt-*/events.jsonl
+runs/*/attempt-*/rollouts/
+runs/*/attempt-*/report.md
+runs/*/attempt-*/launch.json
+runs/*/attempt-*/guard-receipts.jsonl
+runs/*/attempt-*/frozen-mcp-receipts.jsonl
+*.jsonl
+
+# Runtime reports, metrics, blind assignments, and grades.
+runs/*/report.md
+runs.tsv
+reports/
+blind/
+keys/
+grades/
