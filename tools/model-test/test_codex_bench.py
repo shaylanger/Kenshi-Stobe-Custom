@@ -77,6 +77,23 @@ class BenchTests(unittest.TestCase):
             self.assertEqual([row["attempt"] for row in attempts], ["1", "2"])
             self.assertTrue((valid_attempt / "launch.json").is_file())
 
+            # Simulate a crash after canonical row/report promotion but before final receipts.
+            stale = json.loads((valid_attempt / "launch.json").read_text(encoding="utf-8"))
+            stale["status"] = "COMPLETE_UNAUDITED"
+            stale.pop("audit", None)
+            (valid_attempt / "launch.json").write_text(json.dumps(stale), encoding="utf-8")
+            bench._write_json(run_dir / "launch.json", stale)
+            with mock.patch.object(codex_status, "_verify_hostprobe", return_value={"status": "PASS"}), \
+                 mock.patch.object(codex_status, "_verify_requested_modes", return_value={"status": "PASS"}), \
+                 mock.patch.object(codex_record, "parse_rollout", return_value=valid_result):
+                self.assertEqual(bench.record(root, run_id), 0)
+            with (root / "runs.tsv").open("r", encoding="utf-8", newline="") as stream:
+                self.assertEqual(len(list(csv.DictReader(stream, delimiter="\t"))), 1)
+            with (root / "attempts.tsv").open("r", encoding="utf-8", newline="") as stream:
+                self.assertEqual(len(list(csv.DictReader(stream, delimiter="\t"))), 2)
+            finalized = json.loads((valid_attempt / "launch.json").read_text(encoding="utf-8"))
+            self.assertEqual((finalized.get("status"), finalized.get("audit", {}).get("status")), ("RECORDED", "PASS"))
+
     def test_concurrency_obeys_configured_hard_cap(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

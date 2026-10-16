@@ -1427,6 +1427,20 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
     canonical_pass = bool(report and result and audit.get("status") == "PASS" and setup_pass and
                           receipt.get("verified_receipt") is True and
                           requested_modes_verified and host_verification.get("status") == "PASS")
+    ledger = root / "runs.tsv"
+    canonical_rows = []
+    if ledger.is_file():
+        with ledger.open("r", encoding="utf-8", newline="") as stream:
+            canonical_rows = [item for item in csv.DictReader(stream, delimiter="\t")
+                              if item.get("run") == rid]
+    current_agent = f"{rid}/attempt-{receipt.get('attempt', 1):02d}"
+    if canonical_pass and len(canonical_rows) > 1:
+        raise BenchError(f"multiple canonical results already exist for {rid}")
+    if canonical_pass and canonical_rows and any(item.get("agent") != current_agent for item in canonical_rows):
+        raise BenchError(f"canonical result for {rid} belongs to a different attempt")
+    report_bytes = report.encode("utf-8") if report else None
+    if canonical_pass and report_path.exists() and report_path.read_bytes() != report_bytes:
+        raise BenchError("saved report differs from rollout; refusing overwrite")
     row = {
         "run": rid, "model": receipt.get("model", ""), "effort": receipt.get("effort", ""),
         "prompt": rid.rsplit("-p", 1)[-1], "start_local": (result or {}).get("start_local", ""),
@@ -1443,18 +1457,10 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         "agent": f"{rid}/attempt-{receipt.get('attempt', 1):02d}",
     }
     _append_attempt_row(root, rid, receipt, result or {"audit": audit, "wall_s": receipt.get("elapsed_s", "")})
-    if canonical_pass and not recheck:
-        ledger = root / "runs.tsv"
+    if canonical_pass and not recheck and not canonical_rows:
         with LEDGER_MUTEX:
-            if ledger.exists():
-                with ledger.open("r", encoding="utf-8", newline="") as f:
-                    if any(item.get("run") == rid for item in csv.DictReader(f, delimiter="\t")):
-                        raise BenchError(f"run already recorded: {rid}")
             codex_record.append_tsv(ledger, row)
     if canonical_pass:
-        report_bytes = report.encode("utf-8")
-        if report_path.exists() and report_path.read_bytes() != report_bytes:
-            raise BenchError("saved report differs from rollout; refusing overwrite")
         if not report_path.exists(): report_path.write_bytes(report_bytes)
     elif report_path.exists() and report:
         # Older runner versions promoted unaudited reports before recording. Preserve
