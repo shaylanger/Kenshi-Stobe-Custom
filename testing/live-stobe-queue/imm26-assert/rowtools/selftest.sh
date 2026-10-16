@@ -86,6 +86,7 @@ scen <<EOF
 {"follow":["{\"first_order\":\"none\"}"],"steps":[{"reply":"I'll walk with you."}]}
 EOF
 r=$(run 23-b 5090-i3); case "$r" in "RESULT 23-b SETUP-FAIL no follow order"*) chk 23-b-setup-fail ok;; *) chk 23-b-setup-fail bad "$r";; esac
+"$PY" "$ST_HERE/attempts.py" reset "$KAH_ROWS_BASE/row-attempts" 5090-i3 23-b "selftest: deliberate setup-fail then pass" >/dev/null
 scen <<EOF
 {"follow":["{\"first_order\":\"follow\"}","{\"first_order\":\"none\"}"],"steps":[{"reply":"I'll walk with you."}]}
 EOF
@@ -101,15 +102,18 @@ printf '\xef\xbb\xbfhbagent | RUNNING | 2026-10-15 17:00\ntask: my rows\nlatest:
 printf 'dagent | DONE | 2026-10-15 17:00\ntask: t\nlatest: final\noutputs: \nnext: \n' > "$T/hbruns/agents/dagent.status"
 export KAH_HB_DRY=1
 scen <<EOF
-{"steps":[{"reply":"x","prompt":"$dom"},{"reply":"y"}]}
+{"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
 EOF
 out=$(KAH_AGENT_NAME=hbagent run 12-b 5090-i3 2>&1 | tr '\n' ' '); echo "$out" | grep -q 'HB hbagent RUNNING latest=RESULT 12-b ' && chk heartbeat-latest-is-RESULT ok || chk heartbeat-latest-is-RESULT bad "$out"
+scen <<EOF
+{"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
+EOF
 out=$(KAH_AGENT_NAME=dagent run 12-b 5090-i3 2>&1 | tr '\n' ' '); echo "$out" | grep -q 'HB dagent' && chk heartbeat-skips-DONE bad "$out" || chk heartbeat-skips-DONE ok
 unset KAH_HB_DRY
 # real agent-status.ps1 call against a temp runs dir (proves argv + latest line); needs powershell.exe
 if command -v powershell.exe >/dev/null 2>&1; then
   scen <<EOF
-{"steps":[{"reply":"x","prompt":"$dom"},{"reply":"y"}]}
+{"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
 EOF
   KAH_AGENT_NAME=hbagent run 12-b 5090-i3 >/dev/null 2>&1
   grep -q '^latest: RESULT 12-b' "$T/hbruns/agents/hbagent.status" && grep -q '^task: my rows' "$T/hbruns/agents/hbagent.status" && chk heartbeat-agent-status-ps1 ok || chk heartbeat-agent-status-ps1 bad "$(cat "$T/hbruns/agents/hbagent.status")"
@@ -126,6 +130,49 @@ res=$(echo "$o" | sed -nE 's/.*results=(.*)/\1/p'); d=$(dirname "$res")
 # 10 DRY-RUN prints DRY-RUN and the planned steps (default simulator)
 unset FAKE_SCEN; unset -f lt_fake
 r=$(KAH_ROW_DRY=1 run 12-d 4080-i4); case "$r" in "RESULT 12-d DRY-RUN planned lane=4080-i4 steps=2"*) chk dry-run ok;; *) chk dry-run bad "$r";; esac
+
+# 11 PI-06 attempt guard + PI-09 timing: first attempt runs, second after FAIL blocks, override permits, PASS clears
+lt_fake() { "$PY" "$ST_HERE/fakelane.py" "$@"; }
+AD="$KAH_ROWS_BASE/row-attempts"; L=4080-i3
+scen <<EOF
+{"steps":[{"reply":"x","prompt":"no domains here"},{"reply":"x"}]}
+EOF
+r=$(run 12-b $L); rc=$?; case "$r" in "RESULT 12-b FAIL"*) [ $rc = 1 ] && chk guard-first-attempt-runs ok || chk guard-first-attempt-runs bad "rc=$rc";; *) chk guard-first-attempt-runs bad "$r";; esac
+n0=$(wc -l < "$KAH_ROW_FAKE_LOG")
+r=$(run 12-b $L); rc=$?; n1=$(wc -l < "$KAH_ROW_FAKE_LOG")
+case "$r" in "ROW-NEEDS-FIXER 12-b $L cause="*) [ $rc = 4 ] && [ "$n0" = "$n1" ] && [ "$(echo "$r" | wc -l)" = 1 ] && chk guard-second-attempt-blocked ok || chk guard-second-attempt-blocked bad "rc=$rc fake_lines=$n0/$n1";; *) chk guard-second-attempt-blocked bad "$r";; esac
+r=$(run 12-b $L); case "$r" in ROW-NEEDS-FIXER*) chk guard-stays-blocked ok;; *) chk guard-stays-blocked bad "$r";; esac
+r=$(run --allow-retry "selftest: operator override" 12-b $L); rc=$?; case "$r" in "RESULT 12-b FAIL"*) [ $rc = 1 ] && chk guard-allow-retry-runs ok || chk guard-allow-retry-runs bad "rc=$rc";; *) chk guard-allow-retry-runs bad "$r";; esac
+grep -q 'row=12-b event=ALLOW attempt=2 reason=selftest: operator override' "$AD/attempts.log" && chk guard-allow-logged ok || chk guard-allow-logged bad "$(tail -3 "$AD/attempts.log")"
+r=$(run 12-b $L); case "$r" in ROW-NEEDS-FIXER*) chk guard-override-is-one-shot ok;; *) chk guard-override-is-one-shot bad "$r";; esac
+"$PY" "$ST_HERE/attempts.py" reset "$AD" $L 12-b "selftest: reset" | grep -q '^RESET' && grep -q 'event=RESET .*reason=selftest: reset' "$AD/attempts.log" && chk guard-reset-logged ok || chk guard-reset-logged bad
+"$PY" "$ST_HERE/attempts.py" reset "$AD" $L 12-b "" >/dev/null; [ $? = 2 ] && chk guard-reset-needs-reason ok || chk guard-reset-needs-reason bad
+scen <<EOF
+{"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
+EOF
+r=$(run 12-b $L); case "$r" in "RESULT 12-b PASS"*) chk guard-after-reset-runs-and-passes ok;; *) chk guard-after-reset-runs-and-passes bad "$r";; esac
+"$PY" -c 'import json,sys;sys.exit(0 if "12-b" not in json.load(open(sys.argv[1]))["rows"] else 1)' "$AD/$L.json" && chk guard-pass-clears-state ok || chk guard-pass-clears-state bad
+scen <<EOF
+{"steps":[{"reply":"You've got my attention.","prompt":"$dom"},{"reply":"A raid? Sounds fun... maybe."}]}
+EOF
+r=$(run 12-b $L); case "$r" in "RESULT 12-b PASS"*) chk guard-rerun-after-pass-allowed ok;; *) chk guard-rerun-after-pass-allowed bad "$r";; esac
+# a PREFLIGHT-FAIL (row never ran) does not count as an attempt
+scen <<EOF
+{"dist":126.4,"steps":[]}
+EOF
+run 24-b $L >/dev/null; run 24-b $L >/dev/null; r=$(run 24-b $L); case "$r" in "RESULT 24-b SETUP-FAIL PREFLIGHT-FAIL"*) chk guard-preflight-fail-not-counted ok;; *) chk guard-preflight-fail-not-counted bad "$r";; esac
+# every attempt is logged (audit): VERDICT lines for the 12-b runs above, plus the BLOCK
+[ "$(grep -c "lane=$L row=12-b event=VERDICT" "$AD/attempts.log")" -ge 4 ] && grep -q 'row=12-b event=BLOCK' "$AD/attempts.log" && chk guard-audit-log ok || chk guard-audit-log bad
+# batch: a blocked row shows as ROW-NEEDS-FIXER, others still run, summary counts it; --allow-retry passes through
+scen <<EOF
+{"steps":[{"reply":"x","prompt":"no domains here"},{"reply":"x"}]}
+EOF
+run 12-b $L >/dev/null; run 12-b $L >/dev/null   # FAIL (attempt 1), then blocked
+bo() { bash -c ". '$ST_HERE/lane.sh'; lt_fake() { '$PY' '$ST_HERE/fakelane.py' \"\$@\"; }; export -f lt_fake; export PY; exec bash '$A/go-batch.sh' --fg $*" 2>&1; }
+o=$(bo $L 12-b zz-9); res=$(echo "$o" | sed -nE 's/.*results=(.*)/\1/p'); d=$(dirname "$res")
+grep -q '^ROW-NEEDS-FIXER 12-b' "$res" && grep -q '^RESULT zz-9 SETUP-FAIL' "$res" && grep -q '^NEEDS-FIXER=1' "$d/summary.txt" && chk batch-needs-fixer ok || chk batch-needs-fixer bad "$(cat "$res" 2>/dev/null)"
+o=$(bo --allow-retry "selftest-batch-override" $L 12-b); res=$(echo "$o" | sed -nE 's/.*results=(.*)/\1/p')
+grep -q '^RESULT 12-b FAIL' "$res" && grep -q 'event=ALLOW .*reason=selftest-batch-override' "$AD/attempts.log" && chk batch-allow-retry ok || chk batch-allow-retry bad "$(cat "$res" 2>/dev/null)"
 
 rm -rf "$T"
 if [ $ok = $n ]; then echo "SELFTEST ALL PASS $ok/$n"; exit 0; else echo "SELFTEST ALL FAIL $ok/$n"; exit 1; fi

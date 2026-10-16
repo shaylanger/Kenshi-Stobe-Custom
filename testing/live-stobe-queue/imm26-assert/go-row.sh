@@ -8,6 +8,11 @@
 # s<N>/ bundles, social_effect.txt (select * ...), haff-*.txt, inv_*.txt, distance.txt, deals.txt, agreements.txt, result.txt.
 # Heartbeat: when env KAH_AGENT_NAME is set, the agent's status `latest` is set to the RESULT line after every row (agent-status.ps1).
 # Open an evidence file only for a FAIL. Never run on a lane an operator is using unless you are that operator.
+# Attempt guard (PI-06): attempts per row per lane are counted in <KenshiTestRuns>/row-attempts/<lane>.json (+ attempts.log audit trail).
+#   A row whose last attempt was FAIL or SETUP-FAIL is NOT run again: stdout `ROW-NEEDS-FIXER <ROW> <lane> cause=<RESULT text> evidence=<dir> ...`, exit 4.
+#   Override (coordinator/operator, logged with the reason): `go-row.sh --allow-retry "<reason>" <ROW> <lane>` runs it once more;
+#   or `powershell tools/automation/row-attempts.ps1 reset <lane> <ROW> "<reason>"` forgets the failed state. PASS clears the count; GATED and
+#   PREFLIGHT-FAIL (row never ran: lane down, dist >= 80) are logged but never block a retry. Show: `row-attempts.ps1 show [lane]`.
 # Test switches: KAH_ROW_FAKE=1 (+ lt_fake) / KAH_ROW_DRY=1 (prints `RESULT <ROW> DRY-RUN ...`), KAH_ROWS_BASE, KAH_RUNS_DIR (see lane.sh, heartbeat.sh).
 GR_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$GR_HERE/rowtools/rowlib.sh"; . "$GR_HERE/rowtools/rowdefs.sh"; . "$GR_HERE/rowtools/heartbeat.sh"; . "$GR_HERE/preflight.sh"
@@ -30,7 +35,7 @@ gr_result() {  # gr_result <ROW> <KIND> <text>  -> the one stdout line, result.t
   hb_update "$line" "${EV:-$LT_OUT}"
   return $rc
 }
-gr_main() {
+gr_run() {  # the original go-row body (flags other than --no-preflight are handled by gr_main)
   local nopf="" row lane norm fn rc out
   [ "${1:-}" = "--no-preflight" ] && { nopf=1; shift; }
   row="${1:-}"; lane="${2:-}"
@@ -61,5 +66,36 @@ gr_main() {
   echo "$out" | tee "$EV/result.txt" | cut -c1-1900
   hb_update "$out" "$EV"
   case "$out" in "RESULT $row PASS"*) return 0;; "RESULT $row SETUP-FAIL"*) return 2;; "RESULT $row GATED"*) return 3;; *) return 1;; esac
+}
+gr_main() {  # gr_main [--no-preflight] [--allow-retry "<reason>"] <ROW> <lane>
+  local nopf="" allow="" row lane norm fn rc out t0 kind cause ad ev nsteps att
+  while :; do case "${1:-}" in
+    --no-preflight) nopf="--no-preflight"; shift;;
+    --allow-retry) allow="${2:-}"; [ -n "$allow" ] || { echo "usage: --allow-retry needs a reason string" >&2; return 2; }; shift 2;;
+    *) break;; esac; done
+  row="${1:-}"; lane="${2:-}"
+  if [ -z "$row" ] || [ -z "$lane" ]; then gr_run "$@"; return $?; fi
+  lt_load "$lane" >/dev/null || { gr_run "$@"; return $?; }     # unknown lane: gr_run prints the SETUP-FAIL line
+  norm="${row#IMM-}"; fn="rd_${norm//-/}"
+  declare -F "$fn" >/dev/null || { gr_run $nopf "$@"; return $?; }  # unported row: not an attempt
+  ad="$LT_BASE/row-attempts"; ev="$LT_OUT/$row"; t0=$(date +%s)
+  att=$("$PY" -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d["rows"].get(sys.argv[2],{}).get("attempts",0)+1)' "$ad/$lane.json" "$norm" 2>/dev/null || echo 1)
+  if [ -z "${KAH_ROW_DRY:-}" ]; then
+    out=$("$PY" "$GR_HERE/rowtools/attempts.py" check "$ad" "$lane" "$norm" "$allow"); rc=$?
+    if [ $rc = 4 ]; then
+      echo "$out" | head -1 | cut -c1-1900; hb_update "$(echo "$out" | head -1)" "$ev"
+      return 4
+    fi
+  fi
+  out=$(gr_run $nopf "$row" "$lane"); rc=$?
+  [ -n "$out" ] && echo "$out"
+  kind=$(echo "$out" | head -1 | awk '{print $3}'); [ -n "$kind" ] || kind=NOLINE
+  cause=$(echo "$out" | head -1 | cut -d' ' -f4-)
+  nsteps=$(ls -d "$ev"/s[0-9]* 2>/dev/null | wc -l)
+  if [ -z "${KAH_ROW_DRY:-}" ]; then
+    case "$kind" in SETUP-FAIL) case "$cause" in PREFLIGHT-FAIL*) kind=PREFLIGHT-FAIL;; esac;; esac
+    "$PY" "$GR_HERE/rowtools/attempts.py" record "$ad" "$lane" "$norm" "$kind" "$cause" "$ev" >/dev/null 2>&1
+  else att=dry; fi
+  return $rc
 }
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then gr_main "$@"; exit $?; fi
