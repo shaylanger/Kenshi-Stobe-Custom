@@ -15,42 +15,32 @@ Rules:
 
 ## Active
 
-### PI-21 | confirmed
-- idea: Open-alert ledger: every urgent waker event (LANE IDLE, LANE NO-OPERATOR, AGENT STALL/ORPHANED, DEAD, KILLED, FAILED, 402) is written to C:\KenshiTestRuns\alerts\open\<id>.json and stays open until alert-ack.ps1 <id> '<action taken>' is run or the condition clears by itself (lane-idle OK, agent DONE); a PostToolUse reminder prints 'OPEN ALERTS n: oldest <min>' after tool calls while any alert is older than 3 min; the Stop hook blocks the coordinator from ending a turn with an unacked alert older than 5 min; operators get their own lane alerts in their inbox with the same ack.
-- evidence: 2026-10-15 20:0x: waker event 'LANE IDLE 4080-i4 7m' arrived while I was mid-edit and I did not act on it; I only found the 5090-i4 lane idle 16.7 min after Shay asked 'are we running tests on all lanes'. The waker alerts once and nothing tracks whether anyone acted.
-- saving: removes silent ignored alerts; catches a blocked lane within one alert cycle instead of when Shay asks (the 5090-i4 lane lost ~17 min)
-- risk: adds a Stop block, so a stale or false alert must clear itself or be ackable with a reason, otherwise it loops turns (see the PI-18 tail loop); it must never be able to hide an alert, ack only closes it
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 20:04
-- log: 2026-10-15 20:05 Shay answered yes
-
-### PI-22 | open
-- idea: An operator may not mark itself DONE while its lane still has non-PASS rows: only STOPPED-CONTEXT (with a successor started first) or DONE with an explicit 'lane complete' note; lane-idle/agent-status refuse otherwise.
-- evidence: 2026-10-15 20:28 imm26-4080-i4op7b set DONE with 19-ax, 10-a, 10-b, 08-d still open and marked nothing; the 4080-i4 lane had no operator until I noticed the DONE event and respawned imm26-4080-i4op7c (about 10 min of lane time).
-- saving: ~10 idle lane-minutes per early DONE
-- risk: a legitimately finished lane needs a way to say so (the lane complete note)
+### PI-25 | open
+- idea: Automatic tail relay: a script (tail-autorelay) waits on the tail's owned agents and, when one reaches DONE/FAILED/STOPPED-CONTEXT, writes the TAIL-RELAY inbox file from the agent's agents/out/<name>/latest.md or handoff itself (no LLM turn); the tail then has nothing to do and its Stop hook passes 5 min after the relay file (PI-18).
+- evidence: 2026-10-15 20:00-21:00 (tail phase): the tail needed ~7 wait cycles and ~40 Stop-hook blocks (each a model turn replaying the tail context) plus 8 hand-written relays of ~2.5k tokens each (wpR3, pi13, wpR2, wpR1, i5-op7, pi21, i3-hard2b, fix19) to move results the coordinator's waker could already see as inbox files.
+- saving: ~40 wasted turns and ~20k tokens of manual relays per overlap handoff; the tail context stops growing
+- risk: a relay without a model summary may miss a decision for Shay: keep the first 30 lines of latest.md plus any line starting DECISION/QUESTION
 - hooks: no
 - weakens: no
-- added: 2026-10-15 20:31
+- added: 2026-10-15 20:51
 
-### PI-23 | open
-- idea: A GATED / 'needs a native build' claim must cite a search for the NATIVE names (event types, fields in the DLL sources), not the server's words; the setupfail ticket for it carries the search command.
-- evidence: 2026-10-15 row 10-d sat GATED as 'no native exact-transfer event' because earlier agents grepped the DLL for the server words restitution/exact_transfer; imm26-inv-10d found SocialExactTransferEvidence already shipped in NC6/9/10 (main.cpp:7048) and the real blocker was an unstaged caught theft. It cost three operators' attempts and a planned native build (NC11, ~150k tokens).
-- saving: avoids an unneeded native build plan (~150k tokens) and several operator attempts
+### PI-27 | open
+- idea: A tail runs only a FILTERED waker (its own agents' status changes), not the full event stream; or none if tail-autorelay exists.
+- evidence: 2026-10-15 the tail received LANE IDLE, wpR3-deploy, inv19d and other events it cannot act on (spawn/decide nothing) and each one cost a turn; both Monitor wakers also died with exit 1 at ~20:36 and had to be replaced by hand.
+- saving: a few turns per hour and no waker re-arming
 - risk: none
 - hooks: no
 - weakens: no
-- added: 2026-10-15 20:31
+- added: 2026-10-15 20:51
 
-### PI-24 | open
-- idea: Rerun rows get a row script (go-row.sh row definition) before the SECOND manual run; the first operator to hand-run a row writes the rd_<row> from its steps.
-- evidence: 2026-10-15 imm26-5090-i4-hard2b ran 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax by hand (no row scripts) and hit its context limit before starting any rerun; its report names this as the next speed-up. 19-d took 6 attempts across scripts.
-- saving: ~60k tokens per hand-run row and fewer lost reruns
-- risk: row scripts must keep the exact assertions (never weaken)
-- hooks: no
+### PI-28 | open
+- idea: Tail Stop hook: while a tail's own background wait / waker process is alive and armed, let the turn END (the session idles and wakes on the background task's completion notification) instead of blocking; block only when the tail has NO armed wait. No per-block replies at all.
+- evidence: 2026-10-15 20:00-21:00 tail phase: with agents running the Stop hook blocked the tail every turn end even though an until-loop wait was armed; PI-18 only capped it at 6 unchanged blocks per cycle, so each of ~7 wait cycles still produced ~6 near-identical 'Stop hook feedback' messages (about 40 turns, each a model reply replaying the ~400k tail context); a restart of the wait re-armed the counter.
+- saving: ~40 spam turns per overlap handoff (the largest remaining tail cost) and no tail context growth while idle
+- risk: a tail with no armed wait or a dead waker must still be blocked; verify the wait process is alive (pid/heartbeat) rather than trusting a flag
+- hooks: yes
 - weakens: no
-- added: 2026-10-15 20:31
+- added: 2026-10-15 20:55
 
 ## Retired
 
@@ -313,3 +303,59 @@ Rules:
 - log: 2026-10-15 18:51 review 'coordinator #7 handoff 2026-10-15': added
 - log: 2026-10-15 18:52 asked Shay
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': asked -> confirmed (applies: imm26-hookq found agent-session-hooks-selftest meter-coordinator-text failing the same way on the untouched original hook: a drifted selftest nobody ran.)
+
+### PI-21 | done
+- idea: Open-alert ledger: every urgent waker event (LANE IDLE, LANE NO-OPERATOR, AGENT STALL/ORPHANED, DEAD, KILLED, FAILED, 402) is written to C:\KenshiTestRuns\alerts\open\<id>.json and stays open until alert-ack.ps1 <id> '<action taken>' is run or the condition clears by itself (lane-idle OK, agent DONE); a PostToolUse reminder prints 'OPEN ALERTS n: oldest <min>' after tool calls while any alert is older than 3 min; the Stop hook blocks the coordinator from ending a turn with an unacked alert older than 5 min; operators get their own lane alerts in their inbox with the same ack.
+- evidence: 2026-10-15 20:0x: waker event 'LANE IDLE 4080-i4 7m' arrived while I was mid-edit and I did not act on it; I only found the 5090-i4 lane idle 16.7 min after Shay asked 'are we running tests on all lanes'. The waker alerts once and nothing tracks whether anyone acted.
+- saving: removes silent ignored alerts; catches a blocked lane within one alert cycle instead of when Shay asks (the 5090-i4 lane lost ~17 min)
+- risk: adds a Stop block, so a stale or false alert must clear itself or be ackable with a reason, otherwise it loops turns (see the PI-18 tail loop); it must never be able to hide an alert, ack only closes it
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 20:04
+- measured: alert-ledger-selftest 40 cases PASS (open, rate limit, ack, auto-clear, stop block 5 min, loop cap, tail/subagent exempt, one-line reminder); selftest-all 32 pass/1 pre-existing fail (session-start-budget live size); live scan opened real alerts lane-idle-5090-i4 and lane-no-operator-5090-i5; hook command verified through Git Bash
+- retired: 2026-10-15 built
+- log: 2026-10-15 20:05 Shay answered yes
+
+### PI-22 | done
+- idea: An operator may not mark itself DONE while its lane still has non-PASS rows: only STOPPED-CONTEXT (with a successor started first) or DONE with an explicit 'lane complete' note; lane-idle/agent-status refuse otherwise.
+- evidence: 2026-10-15 20:28 imm26-4080-i4op7b set DONE with 19-ax, 10-a, 10-b, 08-d still open and marked nothing; the 4080-i4 lane had no operator until I noticed the DONE event and respawned imm26-4080-i4op7c (about 10 min of lane time).
+- saving: ~10 idle lane-minutes per early DONE
+- risk: a legitimately finished lane needs a way to say so (the lane complete note)
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:31
+- measured: rule added to lane-brief.ps1 standing rules (commit this session); detection already by PI-21 lane-no-operator alert; lane-brief selftest OK
+- retired: 2026-10-15 built
+
+### PI-23 | done
+- idea: A GATED / 'needs a native build' claim must cite a search for the NATIVE names (event types, fields in the DLL sources), not the server's words; the setupfail ticket for it carries the search command.
+- evidence: 2026-10-15 row 10-d sat GATED as 'no native exact-transfer event' because earlier agents grepped the DLL for the server words restitution/exact_transfer; imm26-inv-10d found SocialExactTransferEvidence already shipped in NC6/9/10 (main.cpp:7048) and the real blocker was an unstaged caught theft. It cost three operators' attempts and a planned native build (NC11, ~150k tokens).
+- saving: avoids an unneeded native build plan (~150k tokens) and several operator attempts
+- risk: none
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:31
+- measured: rule added to lane-brief.ps1 (grep native names before GATED); lane-brief selftest OK
+- retired: 2026-10-15 built
+
+### PI-24 | done
+- idea: Rerun rows get a row script (go-row.sh row definition) before the SECOND manual run; the first operator to hand-run a row writes the rd_<row> from its steps.
+- evidence: 2026-10-15 imm26-5090-i4-hard2b ran 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax by hand (no row scripts) and hit its context limit before starting any rerun; its report names this as the next speed-up. 19-d took 6 attempts across scripts.
+- saving: ~60k tokens per hand-run row and fewer lost reruns
+- risk: row scripts must keep the exact assertions (never weaken)
+- hooks: no
+- weakens: no
+- added: 2026-10-15 20:31
+- measured: rule added to lane-brief.ps1; rowtools4 agent building one-call row scripts for 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax
+- retired: 2026-10-15 built
+
+### PI-26 | done
+- idea: Every Agent-tool spawn gets a RUNNING status file immediately (the agent-router hook writes agents/<name>.status with the task text from the prompt) so a young agent is never 'no status'.
+- evidence: 2026-10-15 imm26-fix19 had no status file for ~45 min; the new coordinator took it for never-started and spawned a duplicate imm26-fix19b (two agents on rowcheck.py/rowdefs.sh) until the tail answered; imm26-pi13 was flagged ORPHANED at 30 min because its status still said 'start'.
+- saving: avoids duplicate agents and false orphans (~1 duplicate and 1 false alarm this session)
+- risk: the router must use the same task text a successor will copy (agent-guard rule b)
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 20:51
+- measured: hook version NOT built (a pre-written RUNNING status could mask a never-started agent); replaced by the coordinator rule in AGENT_PROMPTS block C: check ListAgents/ledger owner before duplicating
+- retired: 2026-10-15 built
