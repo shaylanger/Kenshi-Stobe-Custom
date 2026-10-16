@@ -163,6 +163,26 @@ Rules:
 - added: 2026-10-16 13:05
 - log: 2026-10-16 13:05 review 'coordinator-15-tail': added
 
+### PI-48 | open
+- idea: Lane operators must never run bare `stobe-auto` (it talks to the LIVE install): put one line in lane-brief and the lane-operator block saying 'use go-row / lane-setup, or first export RIG, KAH_INSTANCE and source rig-env.sh', and make bare stobe-auto refuse (exit 2) when a lane-lock is held and KAH_INSTANCE is unset.
+- evidence: 2026-10-16 12:55-13:05: Haiku pilot hk1 ran bare `stobe-auto wait-world` twice (120 s and 300 s), got 'no answer (loading?)', escalated three times and stopped; the lane sat idle ~15 min, and it took 2 peer messages + 2 tail resumes (about 6 model turns) to find the cause.
+- saving: about 15 min lane time and 6 coordinator/tail turns per occurrence, more with cheaper models that follow the brief literally
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 13:35
+- log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
+
+### PI-49 | open
+- idea: Tooling snags hit by two or more operators become a fixer ticket automatically: operators append `SNAG <script:line> <symptom> <workaround>` to one file and the waker counts repeats; at the second distinct operator it wakes the coordinator once with the proposed root fix.
+- evidence: 2026-10-16 12:30-13:35: hxdefs.sh:30 writing /c/... (false SETUP-FAIL, hit op9o, op22 and op14's hx runs, each diagnosed alone at about 10-20k tokens); lane-deploy.sh deleting the sfO inject seam (op14 and op9o each rediscovered it); the root fix is still not applied.
+- saving: about 2 x 15k operator tokens per rediscovery and false FAILs on rows; fewer wrong verdict lines
+- risk: low (read-only counting; a wake only for repeats)
+- hooks: no
+- weakens: no
+- added: 2026-10-16 13:35
+- log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
+
 ## Retired
 
 ### PI-01 | done
