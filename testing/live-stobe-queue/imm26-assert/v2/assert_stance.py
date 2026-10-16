@@ -21,6 +21,29 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from imm26_lib import *
 
 
+def opening_sentence(text):
+    """imm26-sfY: the opening of a reply = the first FULL sentence (>= 3 words).  A leading 1-2 word fragment ('Slave Hunter.', 'Hnh.', 'Together.', 'No.')
+    is kept AND merged with the sentence(s) that follow until >= 3 words are collected, so a fragment can no longer be the whole 'first sentence'."""
+    t = (text or '').strip()
+    if not t:
+        return ''
+    out, words = [], 0
+    for s in re.split(r'(?<=[.!?])\s+', t):
+        out.append(s)
+        words += len(s.split())
+        if words >= 3:
+            break
+    return ' '.join(out)
+
+
+def _first_sentence(self, text=None):
+    t = text if text is not None else ' '.join(self.replies()[:1])
+    return opening_sentence(t)
+
+
+Bundle.first_sentence = _first_sentence   # stance rows only (assert_principle.py keeps the library behaviour)
+
+
 def aff_from_haff(b, res, want):
     t = res.need(os.path.join(b.dir, 'haff.txt'), f'{b.name}/haff.txt')
     if t is None:
