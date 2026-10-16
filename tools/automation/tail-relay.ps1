@@ -15,8 +15,13 @@ param(
     [string]$Report = '',
     [string]$Summary = '',
     [string]$ToSession = '',
-    [ValidateSet('DONE', 'FAILED', 'STALL', 'QUESTION', 'PEER')][string]$Kind = 'DONE'
+    [ValidateSet('DONE', 'FAILED', 'STALL', 'QUESTION', 'PEER', 'TAILDONE')][string]$Kind = 'DONE'
 )
+# Target (2026-10-15, "relay follows the current coordinator"): without -ToSession the message goes to the CURRENT coordinator
+# (C:\KenshiTestRuns\coordinator.current, written by session-start.ps1 / the heartbeat claim; tail-mode.ps1 current); a -ToSession that is
+# itself a tail session or a dead coordinator is replaced by the current coordinator. Pointer missing/unreadable = old behaviour
+# (inbox file only, plus -ToSession when given). The inbox file is ALWAYS written. The chosen target is printed on the last line;
+# SendMessage the printed text to it. -Kind TAILDONE = the tail announces it has finished all agents and is closing (tail-close.ps1).
 $ErrorActionPreference = 'Stop'
 $runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
 $ledger = Join-Path $PSScriptRoot 'program-ledger.ps1'
@@ -41,6 +46,13 @@ foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $runs 'tail') -Filter '*.
         if (@($j.agents) -contains $Agent -and $j.new_coordinator_inbox) { $inbox = [string]$j.new_coordinator_inbox; break }
     } catch { }
 }
+
+# where does it go? (fail-open: any error keeps the requested -ToSession / inbox only)
+$tgt = @{ Target = $ToSession; Reason = 'as requested'; Redirected = $false }
+try {
+    $tgt = & { param($tm, $r, $a, $t) . $tm; Resolve-RelayTarget $r $a $t } (Join-Path $PSScriptRoot 'tail-mode.ps1') $runs $Agent $ToSession
+} catch { $tgt = @{ Target = $ToSession; Reason = "target resolution failed ($($_.Exception.Message))"; Redirected = $false } }
+$ToSession = [string]$tgt.Target
 
 $now = Get-Date
 $head = @(
@@ -77,4 +89,4 @@ if ($rec -and $Report -and $Kind -in 'DONE', 'FAILED') {
     try { & powershell -NoProfile -ExecutionPolicy Bypass -File $ledger route $rec.program $Agent -Owner $rec.owner_session -Result $Report -Note $rec.routing_note | Out-Null } catch { }
 }
 $msg.TrimEnd()
-"(inbox file: $file)" | Write-Host
+"(inbox file: $file; relay target: $(if ($ToSession) { $ToSession } else { 'none, inbox file only' }) -- $($tgt.Reason))" | Write-Host

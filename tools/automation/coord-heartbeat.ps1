@@ -115,6 +115,10 @@ try {
         }
     }
     if (Test-TailSid $sid) { exit 0 }   # a tail session never beats or claims
-    [void](Invoke-Beat $runs $sid $claim $false $now)
+    $res = Invoke-Beat $runs $sid $claim $false $now
+    # The claiming session is the live coordinator: record it as the relay target of tail sessions (coordinator.current, tail-mode.ps1 current).
+    if ($res -eq 'claimed' -and $sid -and $sid -ne 'unknown') {
+        try { & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'tail-mode.ps1') current set -Session $sid -Runs $runs *> $null } catch { }
+    }
 } catch {}
 exit 0

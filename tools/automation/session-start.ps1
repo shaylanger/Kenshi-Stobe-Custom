@@ -37,6 +37,18 @@ try {
 # (flag C:\KenshiTestRuns\tail\<session>.flag) so its in-session subagents keep running: those agents are OWNED by it, never respawn them.
 # A tail whose process is gone = its agents are DEAD. Every other ledger agent that is not alive is DEAD too (PC shutdown): respawn from its checkpoint.
 $tailOwned = @{}   # agent -> tail session id (LIVE tails only; used to drop respawn lines for them below)
+# Current-coordinator pointer (C:\KenshiTestRuns\coordinator.current) + adopt (2026-10-15, "relay follows the current coordinator"): this session is the
+# live coordinator, so tail relays go HERE (tail-relay.ps1 reads the pointer). The id is the newest transcript until the heartbeat claim hook (coord-heartbeat.ps1)
+# overwrites it with the exact session id right after this command. `adopt` points every live tail's relay_to at this coordinator (older tails included).
+try {
+    if (-not $env:KAH_AGENT_NAME) {
+        $tmx = Join-Path $PSScriptRoot 'tail-mode.ps1'
+        $cl = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $tmx current set -Auto -Runs $runs 2>&1 | ForEach-Object { "$_" })
+        $al = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $tmx adopt -Runs $runs 2>&1 | ForEach-Object { "$_" })
+        "COORDINATOR POINTER: $($cl -join ' ') | $($al | Where-Object { $_ -like 'ADOPT:*' })"
+        $al | Where-Object { $_ -like '  tail *' } | ForEach-Object { "  $_" }
+    }
+} catch { "coordinator pointer / adopt failed open: $($_.Exception.Message)" }
 try {
     $recs = @()
     try { $recs = @((& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ws 'tools\automation\program-ledger.ps1') records | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
@@ -47,14 +59,14 @@ try {
         $tp = $null; $tpid = 0; if ($tj.pid) { $tpid = [int]$tj.pid; $tp = Get-Process -Id $tpid -ErrorAction SilentlyContinue }
         $alive = [bool]$tp
         if ($tp -and $tj.created) { try { if ($tp.StartTime.ToUniversalTime() -gt ([datetime]$tj.created).ToUniversalTime().AddMinutes(1)) { $alive = $false } } catch { } }   # pid recycled by a newer process
-        $tails[$tf.BaseName] = [pscustomobject]@{ alive = $alive; pid = $tpid; agents = @($tj.agents); created = "$($tj.created)"; why = $(if ($alive) { '' } else { "process $tpid gone" }) }
+        $tails[$tf.BaseName] = [pscustomobject]@{ alive = $alive; pid = $tpid; agents = @($tj.agents); created = "$($tj.created)"; relay = "$($tj.relay_to)"; why = $(if ($alive) { '' } else { "process $tpid gone" }) }
     }
     if ($tails.Count) {
         '=== tail sessions (C:\KenshiTestRuns\tail\*.flag: old coordinators kept alive for their in-session agents; they relay results to this session) ==='
         foreach ($tn in ($tails.Keys | Sort-Object)) {
             $t = $tails[$tn]
             $names = @($t.agents | Where-Object { $_ })
-            if ($t.alive) { "TAIL $tn LIVE (pid $($t.pid), since $($t.created)): owns $(if ($names.Count) { $names -join ', ' } else { '(no agents listed)' }) -- leave them running; ack each relayed result with tail-ack.ps1 -Agent <name>" }
+            if ($t.alive) { "TAIL $tn LIVE (pid $($t.pid), since $($t.created)): owns $(if ($names.Count) { $names -join ', ' } else { '(no agents listed)' }) -- leave them running; ack each relayed result with tail-ack.ps1 -Agent <name> (the ack of a tail's LAST agent also closes that finished tail session; preview: tail-close.ps1 -Session $tn -DryRun)$(if ($t.relay) { "; relays go to $($t.relay)" })" }
             else { "TAIL $tn DEAD ($($t.why)): its agents are DEAD with it: $(if ($names.Count) { $names -join ', ' } else { '(none listed)' }) -- continue them from their checkpoints (lines below)" }
         }
     }
