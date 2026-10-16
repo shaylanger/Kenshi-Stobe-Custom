@@ -7,6 +7,9 @@
 #   RUNNING          creates/touches the inflight marker C:\KenshiTestRuns\inflight\<name> (an existing marker keeps its content, e.g. a
 #                    batch out dir) and deletes the respawn todos of the agents this one continues (agent-guard-lib.ps1 successor rules).
 #   DONE             deletes the marker (and this agent's respawn todo).
+#   WARN-120k        a RUNNING call whose step starts with 'WARN-120k' (lane operator at ~120k context, Shay 2026-10-15 handover overlap)
+#                    also writes the marker agents\<name>.warn; operator-warn.ps1 turns it into ONE urgent waker event carrying the
+#                    successor spawn text. DONE / FAILED / STOPPED-CONTEXT delete the marker (and agents\<name>.warn.spawn.md).
 #   STOPPED-CONTEXT  keeps the marker and writes C:\KenshiTestRuns\respawn\<name>.todo (task, handoff path, status path, next) so a
 #                    fresh agent is spawned from it; FAILED keeps the marker too. Coordinators never delete the marker of a
 #                    STOPPED-CONTEXT/FAILED agent until a successor exists.
@@ -43,6 +46,7 @@ try {
             if (Test-Path -LiteralPath $mk) { (Get-Item -LiteralPath $mk).LastWriteTime = Get-Date }
             else { Set-Content -LiteralPath $mk -Value $f -Encoding ascii }
             Remove-Item -LiteralPath $todo -Force -ErrorAction SilentlyContinue
+            if ($Step -match '^\s*WARN-120k') { Set-Content -LiteralPath (Join-Path $dir "$Name.warn") -Value @("$Name", (Get-Date -Format s), $Step) -Encoding ascii }
             . (Join-Path $PSScriptRoot 'agent-guard-lib.ps1')
             Remove-SupersededTodos -AgentsDir $dir
         }
@@ -65,6 +69,8 @@ try {
         }
     }
 } catch { }
+# --- WARN-120k marker: any terminal state clears it (fail-open) ---
+try { if ($State -ne 'RUNNING') { Remove-Item -LiteralPath (Join-Path $dir "$Name.warn"), (Join-Path $dir "$Name.warn.spawn.md") -Force -ErrorAction SilentlyContinue } } catch { }
 # --- program ledger: move the work package this agent owns (programs\*.json, program-ledger.ps1 sync); fail-open ---
 try {
     $pl = Join-Path $PSScriptRoot 'program-ledger.ps1'
