@@ -4875,8 +4875,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_knowledge.php b/lib/imm26_knowledge.php
 --- a/lib/imm26_knowledge.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_knowledge.php	2026-10-15 22:42:29.326533161 -0500
-@@ -0,0 +1,466 @@
++++ b/lib/imm26_knowledge.php	2026-10-16 04:15:14.590065530 -0500
+@@ -0,0 +1,482 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -5144,7 +5144,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +        if (!is_array($listenerRow) || (int)($listenerRow['id'] ?? 0) < 1 || $speakerId < 1 || (int)$listenerRow['id'] === $speakerId) return [];
 +        $listenerKey = 'npc:' . (int)$listenerRow['id'];
 +        $rows = $GLOBALS['db']->fetchAll("SELECT * FROM social_rumor WHERE campaign_id=$1 AND holder_key=$2 AND status='active' AND hops=0
-+            AND basis IN ('experienced','saw','heard') AND learned_ts<=$3 AND ttl_ts>$3 ORDER BY severity DESC, game_ts DESC LIMIT 8",
++            AND basis IN ('experienced','saw','heard') AND learned_ts<=$3 AND ttl_ts>$3 ORDER BY severity DESC, game_ts DESC LIMIT 40",
 +            [$scope['campaign_id'], 'npc:' . $speakerId, $gamets]) ?: [];
 +        $out = [];
 +        foreach ($rows as $row) {
@@ -5250,6 +5250,15 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +        [$scope['campaign_id'], $holderKey, $gamets]) ?: [];
 +}
 +
++/** @return list<array> the holder's newest active hearsay rows (same time guards as stobeKnowledgeClaimsFor). */
++function stobeKnowledgeHearsayFor(array $scope, string $holderKey, int $gamets, int $limit = 2): array
++{
++    if (!stobeKnowledgeEnsureSchema()) return [];
++    return $GLOBALS['db']->fetchAll("SELECT * FROM social_rumor WHERE campaign_id=$1 AND holder_key=$2 AND status='active' AND basis='heard_from'
++        AND learned_ts<=$3 AND game_ts<=$3 AND ttl_ts>$3 ORDER BY learned_ts DESC, game_ts DESC LIMIT " . max(1, min(8, $limit)),
++        [$scope['campaign_id'], $holderKey, $gamets]) ?: [];
++}
++
 +function stobeKnowledgeLine(array $c, int $gamets): string
 +{
 +    $age = stobeKnowledgeAgeText($gamets, (int)$c['game_ts']);
@@ -5287,6 +5296,9 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +        if ($gamets <= 0 || !$scope || $id < 1) return '';
 +        $holderKey = 'npc:' . $id;
 +        $claims = stobeKnowledgeClaimsFor($scope, $holderKey, $gamets);
++        // A holder with many first-hand rows never ranks a heard_from row into the top 12: always add the newest 2 (row 03-b).
++        $have = array_flip(array_map(fn($c) => (int)$c['id'], $claims));
++        foreach (stobeKnowledgeHearsayFor($scope, $holderKey, $gamets, 2) as $hr) if (!isset($have[(int)$hr['id']])) $claims[] = $hr;
 +        $suspicions = stobeKnowledgeSuspicions($scope, $actor, $gamets);
 +        $asks = stobeKnowledgeAsksAboutEvents($message);
 +        $listenerIsPlayer = strcasecmp(stobeKnowledgePlayerName(), $listener) === 0;
@@ -5308,6 +5320,10 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +            if (strcasecmp($c['subject_name'], $listener) === 0 || strcasecmp($c['victim_name'], $listener) === 0) $about[] = $c; else $other[] = $c;
 +        }
 +        $pick = array_slice($about, 0, 3);
++        if (!array_filter($pick, fn($c) => $c['basis'] === 'heard_from')) {
++            $hearAbout = array_values(array_filter($about, fn($c) => $c['basis'] === 'heard_from'));
++            if ($hearAbout) $pick = array_merge(array_slice(array_values(array_filter($about, fn($c) => $c['basis'] !== 'heard_from')), 0, 2), [$hearAbout[0]]);
++        }
 +        // Something to bring up with another NPC: only first-hand knowledge, one item.
 +        if (!$listenerIsPlayer && $listener !== '') {
 +            foreach ($other as $c) { if ($c['hops'] == 0) { $pick[] = $c; break; } }
@@ -15805,8 +15821,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +echo "imm26_wpA_trust_regression: $n checks passed\n";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_wpB_knowledge_regression.php b/tests/imm26_wpB_knowledge_regression.php
 --- a/tests/imm26_wpB_knowledge_regression.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/tests/imm26_wpB_knowledge_regression.php	2026-10-15 17:15:36.957946345 -0500
-@@ -0,0 +1,142 @@
++++ b/tests/imm26_wpB_knowledge_regression.php	2026-10-16 04:15:14.590182430 -0500
+@@ -0,0 +1,157 @@
 +<?php
 +// NPC-immersion WP-B regression: items 3/15 (provenance ledger, hearsay, imperfect knowledge) and 4 (ties).
 +// Fails on the baseline server (no social_rumor ledger, no ties, no hooks). Runs on stobe_test or the social phase-1 DB.
@@ -15830,7 +15846,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +const P = ['WpB Victim'=>[7101,'Blue',false], 'WpB Attacker'=>[7102,'Red',false], 'WpB Zero'=>[7110,'Grey',false], 'WpB Friend'=>[7111,'Grey',false],
 +    'WpB Sleeper'=>[7115,'Grey',false], 'WpB Blind'=>[7116,'Grey',false], 'WpB Hearer'=>[7117,'Grey',false],
 +    'WpB Bee'=>[7120,'Hub',false], 'WpB Cee'=>[7121,'Hub',false], 'WpB SquadVic'=>[7130,'Blue',true], 'WpB SquadWit'=>[7131,'Blue',true],
-+    'WpB Pal'=>[7140,'Hub',false], 'WpB DocFriend'=>[7141,'Hub',false], 'WpB DocRival'=>[7142,'Hub',false], 'WpB Seeker'=>[7143,'Hub',false]];
++    'WpB Pal'=>[7140,'Hub',false], 'WpB Guard'=>[7150,'Hub',false], 'WpB DocFriend'=>[7141,'Hub',false], 'WpB DocRival'=>[7142,'Hub',false], 'WpB Seeker'=>[7143,'Hub',false]];
 +foreach (['social_event_inbox','social_incident','social_belief','social_effect','social_evidence','social_checkpoint','social_rumor','npc_ties'] as $t) {
 +    if ($t === 'social_rumor' || $t === 'npc_ties') { stobeKnowledgeEnsureSchema(); }
 +    sql("DELETE FROM $t WHERE campaign_id=\$1", [CAMP]);
@@ -15925,6 +15941,21 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +sql("UPDATE social_rumor SET subject_key='name:someone else' WHERE holder_name='WpB Cee' AND campaign_id=$1", [CAMP]);
 +$inc = (string)one("SELECT incident_id FROM social_rumor WHERE holder_name='WpB Zero' AND campaign_id=$1", [CAMP]);
 +ok(stobeKnowledgeContradict(['campaign_id'=>CAMP], $inc, 'npc:' . (int)$npc('WpB Attacker')['id'], $T0 + 3 * $DAY) === 1 && rumor('WpB Cee')['status'] === 'corrected', 'misattributed hearsay is corrected by a first-hand account');
++
++// ---- row 03-b: a holder with many first-hand rows still shows one hearsay line, and a busy witness can still pass on an older subject ----
++$TG = $T0 + 3 * $DAY; $guard = $npc('WpB Guard'); $gk = 'npc:' . (int)$guard['id'];
++$sc = ['campaign_id'=>CAMP, 'timeline_epoch'=>'3'];
++$rec = fn(string $inc, string $subj, string $basis, int $sev, int $gts, array $x = []) => stobeKnowledgeRecord($sc, $x + ['holder_key'=>$gk, 'holder_name'=>'WpB Guard',
++    'subject_key'=>"name:$subj", 'subject_name'=>$subj, 'victim_key'=>'name:WpB Victim', 'victim_name'=>'WpB Victim', 'incident_id'=>$inc, 'component'=>'attack',
++    'claim_kind'=>'attack', 'claim_text'=>"$subj attacked WpB Victim ($inc)", 'severity'=>$sev, 'basis'=>$basis, 'game_ts'=>$gts, 'learned_ts'=>$gts + 10, 'ttl_ts'=>$TG + 30 * $DAY]);
++$rec('hs-old', 'WpB Attacker', 'heard_from', 1, $T0 + 100, ['source_name'=>'WpB Zero', 'hops'=>1, 'confidence'=>'hearsay', 'claim_text'=>'WpB Attacker hurt WpB Victim (hearsay row)']);
++for ($i = 1; $i <= 15; ++$i) $rec("hs-fh$i", 'WpB Attacker', 'saw', 2, $T0 + $DAY + $i * 60);
++$rec('hs-pal', 'WpB Pal', 'saw', 1, $T0 + 200);
++$ctx = stobeKnowledgeConversationContext('WpB Guard', $guard, 'WpB Attacker', [], ['gamets'=>$TG, 'player_message'=>'Have you heard anything about me?']);
++ok(str_contains($ctx, 'hearsay from WpB Zero'), 'holder with 15 newer first-hand rows still shows one attributed hearsay line');
++ok(substr_count($ctx, "\n- [") <= 4 && substr_count($ctx, 'you saw it yourself') === 2, 'hearsay slot replaces the third first-hand line only (2 first-hand + 1 hearsay)');
++$sh = stobeKnowledgeShareFromSpeech('WpB Guard', $guard, 'WpB Friend', 'I saw WpB Pal hit someone.', $TG);
++ok(count($sh) === 1 && $sh[0]['about'] === 'WpB Pal', 'busy witness (16 higher-ranked rows) can still pass on an older row whose subject was spoken');
 +
 +// ---- item 4: ties ----
 +send('attack', ent('WpB Attacker'), ent('WpB SquadVic'), ['victim_targeting_actor'=>false], $T0 + 5 * $DAY, [wit('WpB SquadWit')]);
