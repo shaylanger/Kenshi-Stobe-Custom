@@ -60,5 +60,23 @@ int main() {
   Check("cleanup cannot cross reload epoch", !MatchesRelease(receipt, 41, 9, "agreement-A", "request-1", "load-epoch-8", 8, receipt.planHash, "order:41:12", true));
   Check("cleanup cannot cross session generation", !MatchesRelease(receipt, 41, 9, "agreement-A", "request-1", "load-epoch-7", 8, receipt.planHash, "order:41:12", true));
 
+  // NC17: player-faction companion as an activity partner (player is the requester).
+  // args: dead, unconscious, actorIsPlayerChar, actorInPlayerFaction, requesterIsPlayer, actorIsRequester, hasOrders, hasPlayerOrders, listEmpty
+  Check("NC17 ordinary NPC idle is allowed", ClassifyStartActor(false, false, false, false, true, false, true, false, true) == START_ACTOR_OK);
+  Check("NC17 squad companion idle with player requester is allowed", ClassifyStartActor(false, false, false, true, true, false, true, false, true) == START_ACTOR_OK);
+  Check("NC17 squad companion flagged player character with player requester is allowed", ClassifyStartActor(false, false, true, true, true, false, true, false, true) == START_ACTOR_OK);
+  Check("NC17 squad companion without player requester is refused", ClassifyStartActor(false, false, false, true, false, false, true, false, true) == START_ACTOR_PLAYER_FACTION_NO_PLAYER_REQUESTER);
+  Check("NC17 non-squad player character actor is still refused", ClassifyStartActor(false, false, true, false, true, false, true, false, true) == START_ACTOR_PLAYER_CHARACTER);
+  Check("NC17 actor equal to requester is refused", ClassifyStartActor(false, false, true, true, true, true, true, false, true) == START_ACTOR_IS_REQUESTER);
+  Check("NC17 dead squad companion is refused", ClassifyStartActor(true, false, false, true, true, false, true, false, true) == START_ACTOR_DOWN);
+  Check("NC17 unconscious squad companion is refused", ClassifyStartActor(false, true, false, true, true, false, true, false, true) == START_ACTOR_DOWN);
+  Check("NC17 squad companion with player orders is refused", ClassifyStartActor(false, false, false, true, true, false, true, true, true) == START_ACTOR_HAS_PLAYER_ORDERS);
+  Check("NC17 squad companion with an order list is refused", ClassifyStartActor(false, false, false, true, true, false, true, false, false) == START_ACTOR_HAS_ORDERS);
+  Check("NC17 missing orders receiver is refused", ClassifyStartActor(false, false, false, true, true, false, false, false, true) == START_ACTOR_NO_ORDERS_RECEIVER);
+  Check("NC17 non-squad NPC with player orders is refused", ClassifyStartActor(false, false, false, false, true, false, true, true, true) == START_ACTOR_HAS_PLAYER_ORDERS);
+  Check("NC17 non-squad NPC with an order list is refused", ClassifyStartActor(false, false, false, false, true, false, true, false, false) == START_ACTOR_HAS_ORDERS);
+  Check("NC17 suffixes are distinct and stable", std::string(StartActorSuffix(START_ACTOR_HAS_PLAYER_ORDERS)) == "has_player_orders" &&
+        std::string(StartActorSuffix(START_ACTOR_PLAYER_CHARACTER)) == "player_character" && std::string(StartActorSuffix(START_ACTOR_OK)) == "ok");
+
   return failures ? 1 : 0;
 }
