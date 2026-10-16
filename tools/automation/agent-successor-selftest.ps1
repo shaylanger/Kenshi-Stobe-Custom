@@ -61,7 +61,7 @@ try {
     Ok ($open -contains 'ua') 'a successor older than X does not count'
     Ok ($open -notcontains 'la' -and $acc -contains 'accepted successor la-new for la via lane lane-q') "same lane via lane-owners.json is accepted (acc=$($acc -join ' | '))"
     Ok ($open -contains 'ma') 'X and S in two different lanes: the shared wp does not count'
-    Ok ($open -notcontains 'na' -and $acc -contains 'accepted successor na-fresh for na via ledger wp wpFive') 'X in a lane, S in no lane, same wp: accepted via wp'
+    Ok ($open -contains 'na' -and -not ($acc -match 'na-fresh')) 'X in a lane, S in no lane, same wp: NOT accepted (Shay PI-11 caveat: only a same-lane successor hides a lane operator)'
     Ok ($orph -contains 'oa') 'a stale RUNNING orphan is still reported (rule (e) is for STOPPED-CONTEXT/FAILED only)'
     Ok (-not ($acc -match 'accepted successor \S+ for (qa|ra|sa|ta|ua|ma|oa) ')) 'no accepted line for the rejected ones'
     Ok (@(Get-AgentAcceptedLines) -contains 'accepted successor pa-next for pa via ledger wp wpOne') 'session-start source Get-AgentAcceptedLines carries the line'
@@ -100,7 +100,7 @@ try {
     $h = Run-Hook $sj
     Ok ($h.Code -eq 0 -and $h.Out -match '"decision":"block"' -and $h.Out -match 'accepted successor pa-next for pa via ledger wp wpOne' -and $h.Out -match 'qa' ) "hook block names the accepted pair and still blocks the real orphans: $($h.Out.Substring(0, [Math]::Min(120, $h.Out.Length)))"
     Ok ($h.Err -match 'accepted successor pa-next for pa via ledger wp wpOne') 'hook writes the accepted line to stderr'
-    foreach ($n in 'qa', 'ra', 'sa', 'ta', 'ta-two', 'ua', 'ma', 'basic') { Set-Content (Join-Path $ag "$n.abandoned") 'test' }
+    foreach ($n in 'qa', 'ra', 'sa', 'ta', 'ta-two', 'ua', 'ma', 'na', 'basic') { Set-Content (Join-Path $ag "$n.abandoned") 'test' }
     $h = Run-Hook $sj
     Ok ($h.Code -eq 0 -and $h.Out -match 'INFLIGHT: ' -and $h.Out -match 'accepted successor pa-next for pa via ledger wp wpOne' -and $h.Out -notmatch '"decision"') "all other agents handled: hook allows and still prints the accepted line ($($h.Out.Trim() -replace '\s+', ' '))"
 

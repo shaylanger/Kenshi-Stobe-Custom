@@ -137,7 +137,7 @@ function Get-AgentSuccessorVia($x, $s, [int]$RunningMin = 45) {
         $lx = @($script:AgentGroups | Where-Object { $_.Kind -eq 'lane' -and (& $has $_ $x.Name) })
         $ls = @($script:AgentGroups | Where-Object { $_.Kind -eq 'lane' -and (& $has $_ $s.Name) })
         foreach ($g in $lx) { if (& $has $g $s.Name) { return $g.Label } }      # same lane
-        if ($lx.Count -and $ls.Count) { return $null }                           # two different lanes: a shared wp proves nothing
+        if ($lx.Count) { return $null }                                          # X is a lane operator: only a successor in the SAME lane counts (a shared wp proves nothing; Shay's PI-11 caveat)
         foreach ($g in ($script:AgentGroups | Where-Object { $_.Kind -eq 'wp' })) { if ((& $has $g $x.Name) -and (& $has $g $s.Name)) { return $g.Label } }
         $null
     } catch { $null }
