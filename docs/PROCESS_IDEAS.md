@@ -29,7 +29,7 @@ Rules:
 - log: 2026-10-15 18:52 asked Shay
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': asked -> confirmed (applies: imm26-hookq found agent-session-hooks-selftest meter-coordinator-text failing the same way on the untouched original hook: a drifted selftest nobody ran.)
 
-### PI-14 | open
+### PI-14 | confirmed
 - idea: Allow-list the status/report helpers for subagents (agent-status.ps1, save-report.ps1) in the project permission settings so the auto-mode classifier never blocks an agent from marking itself DONE.
 - evidence: 2026-10-15 imm26-pi11 finished its work but the classifier denied agent-status.ps1 and a save-report.ps1 read as Self-Modification, so its status stayed RUNNING until the coordinator fixed it by hand (and the report only arrived as a chat hand-back); imm26-5090-i4op32 also reported save-report.ps1 rejected its arguments.
 - saving: no stale RUNNING agents and no hand-fix turn (~3k tokens each time)
@@ -39,8 +39,9 @@ Rules:
 - added: 2026-10-15 18:51
 - log: 2026-10-15 18:51 review 'coordinator #7 handoff 2026-10-15': added
 - log: 2026-10-15 18:52 asked Shay
+- log: 2026-10-15 19:54 Shay answered yes
 
-### PI-15 | open
+### PI-15 | confirmed
 - idea: Preflight/health check for the chat LLM provider balance (1-token completion, print the 402 body): run in lane-idle/preflight and block row marking while it fails.
 - evidence: 19:33-19:40: DeepInfra HTTP 402 hit all lanes; 4 operators ran 19-a/12-d/03-b into empty "..." replies, one FAIL (12-d) was marked and had to be reset; 3 operators + me spent ~40 min before the cause was named.
 - saving: ~30-40 min and 1 false FAIL per outage
@@ -49,8 +50,9 @@ Rules:
 - weakens: no
 - added: 2026-10-15 19:43
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
+- log: 2026-10-15 19:54 Shay answered yes
 
-### PI-16 | open
+### PI-16 | confirmed
 - idea: Stop hook IDLE-GAME check should read lane locks (game-N.lock) not only instance 1.
 - evidence: 19:19 Stop hook blocked the turn: default slot idle 19 min while 3 lane games (game-3/4/5.lock) ran under operators; I had to record kenshi-ctl idle with a reason.
 - saving: 1 blocked turn + manual idle record per outage
@@ -59,8 +61,9 @@ Rules:
 - weakens: no
 - added: 2026-10-15 19:43
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
+- log: 2026-10-15 19:54 Shay answered yes
 
-### PI-17 | open
+### PI-17 | confirmed
 - idea: Orphan check should use evidence/log freshness for in-session agents, not agent-host sessions.
 - evidence: 19:20 AGENT ORPHANED imm26-4080-op2i (silent 31.9 min) while its poll log was written a minute earlier; I had to check the log by hand.
 - saving: ~2 min and a false alarm per busy poller
@@ -69,6 +72,34 @@ Rules:
 - weakens: no
 - added: 2026-10-15 19:43
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': added
+- log: 2026-10-15 19:54 Shay answered yes
+
+### PI-18 | open
+- idea: Tail Stop hook: let a tail end once every owned agent is DONE and its relay file was delivered (or after a 5 min ack grace), without requiring the explicit tail-ack.
+- evidence: 2026-10-15 19:52-20:10: coordinator #8 tail waited for the ack of imm26-5090-i5-op6; its Stop hook re-prompted ~50 times, each replaying ~400k context, until the tail hit its 400k limit and left with tail-mode leave -Force.
+- saving: ~50 wasted turns (tens of millions of cache-read tokens) per overlap handoff
+- risk: a result could be dropped if delivery is marked without the new coordinator reading it; keep the ack for the ledger but do not hold the tail on it
+- hooks: yes
+- weakens: no
+- added: 2026-10-15 19:57
+
+### PI-19 | open
+- idea: lane-brief.ps1 -Predecessor prints the exact status TASK text to use and registers the successor in lane-owners.json itself.
+- evidence: 2026-10-15: successor names hard2 -> hard2b with a different task text caused 2 false NO SUCCESSOR Stop-hook blocks, and every respawn needed a hand-run operator-warn.ps1 -Register (4 times at 19:50).
+- saving: 2 false Stop blocks and 4 manual commands per respawn round
+- risk: low: registration is only a map write; the successor still must be RUNNING
+- hooks: no
+- weakens: no
+- added: 2026-10-15 19:57
+
+### PI-20 | open
+- idea: lane-brief standing rule: game speed above 5 only with tools/stobe-goal-watch.sh; never run speed 10 for minutes.
+- evidence: 2026-10-15 imm26-5090-i5-op6 ran speed 10 and Shay (the test character) starved and died, resetting the lane (its handoff lesson).
+- saving: avoids a lane reset (~10 min) per occurrence
+- risk: none
+- hooks: no
+- weakens: no
+- added: 2026-10-15 19:57
 
 ## Retired
 
