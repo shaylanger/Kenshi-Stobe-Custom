@@ -33,18 +33,24 @@ i3w <<<"php /mnt/c/KenshiTestRuns/imm26-5090-i5/haff-i5.php \"$CINDFULL\" Shay 6
 if [ -n "${BANDITS_IN:-}" ]; then BANDITS="$BANDITS_IN"; : > "$OUT/spawn.txt"
 else
 i3 <<EOT > "$OUT/spawn.txt" 2>&1
-stobe-auto spawn "Dust Bandit" "Dust Bandits" at -47335 725 -55640 count ${COUNT:-4} </dev/null | head -3
+stobe-auto spawn "${SPAWNT:-Dust Bandit}" "Dust Bandits" at -47335 725 -55640 count $(( ${COUNT:-4} + ${DISTANT:-0} )) </dev/null | head -3
 EOT
+# SPAWNT="<squad template>" (14-d: one platoon so the native group has all members; plain 'Dust Bandit' characters land in separate platoons, groupTargets=2 of 6): ids come from chars
+if [ -n "${SPAWNT:-}" ]; then sleep 2; i3 <<<'stobe-auto chars 300 "Dust Bandit|!dead" </dev/null | head -3' >> "$OUT/spawn.txt" 2>&1; fi
 cat "$OUT/spawn.txt" | cut -c1-300 | tee -a "$OUT/log.txt"
-BANDITS=$(grep -oE '#[0-9]+/[0-9]+' "$OUT/spawn.txt" | grep -v "^$CIND$" | sort -u | head -6)
+BANDITS=$(grep -oE '#[0-9]+/[0-9]+' "$OUT/spawn.txt" | grep -v "^$CIND$" | sort -u | head -8)
 fi
+FAR=""; if [ "${DISTANT:-0}" -gt 0 ]; then FAR=$(echo $BANDITS | tr " " "\n" | tail -n ${DISTANT}); BANDITS=$(echo $BANDITS | tr " " "\n" | head -n ${COUNT:-4}); fi
 [ -n "$BANDITS" ] || { say "SCENE-BAD no bandits spawned"; exit 3; }
 B1=$(echo $BANDITS | awk '{print $1}')
 i3 <<<"stobe-auto relation \"$B1\" -100 </dev/null | head -2" | tee -a "$OUT/log.txt"   # Dust Bandits <-> player faction -100
 # 14-c lesson (op9j): spawned bandits roam 190-390 u away within 12 s (the spawn pos is only a start). Do NOT wait: unpin, teleport each next to the spot and pin at once.
 k=0
-for b in $BANDITS; do i3 <<<"stobe-auto pin \"$b\" off </dev/null | head -1; stobe-auto teleport \"$b\" -47335 725 $((-55640+4*$k)) </dev/null | head -1; stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; k=$((k+1)); done
+for b in $BANDITS; do i3 <<<"stobe-auto pin \"$b\" off </dev/null | head -1; stobe-auto teleport \"$b\" $((-47335+6*($k-2))) 725 $((-55640+2*$k)) </dev/null | head -1; stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; k=$((k+1)); done
 i3 <<<"stobe-auto face \"$CIND\" \"$B1\" </dev/null | head -1; sleep 1" >> "$OUT/log.txt" 2>&1
+# DISTANT=n (row 14-d): the last n spawned bandits go 170 u north (outside the group), hostile, pinned
+[ -n "${FAR_IN:-}" ] && FAR="$FAR_IN"
+for b in $FAR; do i3 <<<"stobe-auto pin \"$b\" off </dev/null | head -1; stobe-auto teleport \"$b\" -47335 725 -55430 </dev/null | head -1; stobe-auto pin \"$b\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; done
 # 6. go/no-go: Cind must SEE >= 3 bandits on two polls 4 s apart (sightDrops otherwise: the candidate list stays [])
 ok=0
 for poll in 1 2; do
@@ -60,6 +66,7 @@ P1="Look at those Dust Bandits here in Rebirth. Cind, I want you to clear them o
 P2="Cind, will you help me clear out the bandits you can see in front of us here in Rebirth?"
 P3="Those Dust Bandits are raiding Rebirth and you can see them. Let's clear out that group together."
 P4="Cind, I want you to help me kill the Dust Bandits standing in Rebirth. Just those ones."
+if [ -n "${ASK:-}" ]; then P1="$ASK"; TRIES=1; fi   # ASK="..." = one custom phrase (row 14-d: "Hunt the 5 bandits.")
 PROPOSED=0; n=0
 for P in "$P1" "$P2" "$P3" "$P4"; do
   n=$((n+1)); [ $n -gt "${TRIES:-4}" ] && break
