@@ -6,6 +6,7 @@
 #   process-ideas.ps1 review <decisions.json>           the handoff review (see below); prints one line per transition
 #   process-ideas.ps1 asked <id> [<id>..]               open -> asked (the coordinator asked Shay in its first summary)
 #   process-ideas.ps1 answer <id> no|yes|approve        Shay's answer: no = removed (logged in Retired); yes/approve = confirmed
+#   process-ideas.ps1 progress [<id>..]                 confirmed -> in-progress (own section '## In progress', NOT counted in the 15 cap); no id = list them; done/answer still work on them
 #   process-ideas.ps1 done <id> -Measured "<before/after>"   idea built: moves to Retired as done with the measured numbers
 # decisions.json: { "review": "<label, optional>", "decisions": [ { "id": "PI-06", "applies": true|false, "evidence": "<what happened THIS session>",
 #                   "moment": "<specific moment it would have helped; required for confirmed>" } ], "new": [ { idea, evidence, saving, risk, hooks, weakens } ] }
@@ -40,7 +41,7 @@ function Read-Ideas([string]$path) {
     $pre = New-Object System.Collections.ArrayList; $act = New-Object System.Collections.ArrayList; $ret = New-Object System.Collections.ArrayList
     $sec = 'pre'; $cur = $null
     foreach ($l in (Get-Content -LiteralPath $path -Encoding UTF8)) {
-        if ($l -match '^## Active\s*$') { $sec = 'act'; $cur = $null; continue }
+        if ($l -match '^## (Active|In progress)\s*$') { $sec = 'act'; $cur = $null; continue }
         if ($l -match '^## Retired\s*$') { $sec = 'ret'; $cur = $null; continue }
         if ($sec -eq 'pre') { [void]$pre.Add($l); continue }
         if ($l -match '^### (PI-\d+)\s*\|\s*(.+?)\s*$') {
@@ -66,7 +67,9 @@ function Write-Ideas([string]$path, $db) {
     $out = New-Object System.Collections.ArrayList
     foreach ($l in $db.pre) { [void]$out.Add($l) }
     [void]$out.Add('## Active'); [void]$out.Add('')
-    foreach ($e in $db.act) { foreach ($l in (Entry-Lines $e)) { [void]$out.Add($l) } }
+    foreach ($e in @($db.act | Where-Object { $_.status -ne 'in-progress' })) { foreach ($l in (Entry-Lines $e)) { [void]$out.Add($l) } }
+    [void]$out.Add('## In progress'); [void]$out.Add('')
+    foreach ($e in @($db.act | Where-Object { $_.status -eq 'in-progress' })) { foreach ($l in (Entry-Lines $e)) { [void]$out.Add($l) } }
     [void]$out.Add('## Retired'); [void]$out.Add('')
     foreach ($e in $db.ret) { foreach ($l in (Entry-Lines $e)) { [void]$out.Add($l) } }
     $tmp = "$path.tmp"
@@ -185,6 +188,17 @@ switch ($Command.ToLower()) {
         $c = Active-Count $db
         "review done: $c active of $CAP$(if ($c -ge $WARN_AT) { ' (WARNING: near the cap)' })"
     }
+    'progress' {
+        # progress <id> [<id>..]: confirmed -> in-progress (being built / built and waiting for its measured result); leaves the 15-entry cap so new ideas can be added. 'progress' with no id lists them.
+        $ids = @($Arg1, $Arg2) + @($More) | Where-Object { $_ }
+        if (-not $ids) { $rows = @($db.act | Where-Object { $_.status -eq 'in-progress' }); if (-not $rows.Count) { 'none'; break }; foreach ($e in $rows) { "$($e.id) [in-progress] $(Cut $e.idea 100)" }; break }
+        foreach ($id in $ids) {
+            $e = Find-Entry $db $id
+            if (-not $e) { "SKIP $id : not an active entry"; continue }
+            if ($e.status -in 'open', 'asked', 'confirmed') { $from = $e.status; $e.status = 'in-progress'; [void]$e.log.Add("$(Stamp) $from -> in-progress (Shay: keep adding new ideas while these are built)"); "$id : $from -> in-progress" } else { "UNCHANGED $id [$($e.status)]" }
+        }
+        Write-Ideas $File $db
+    }
     'asked' {
         $ids = @($Arg1, $Arg2) + @($More) | Where-Object { $_ }
         if (-not $ids) { Fail 'usage: asked <id> [<id>..]' }
@@ -213,5 +227,5 @@ switch ($Command.ToLower()) {
         Retire $db $e 'done' 'built'
         Write-Ideas $File $db; "$($e.id) -> done (Retired)"
     }
-    default { Fail "unknown command '$Command' (list|add|review|asked|answer|done)" }
+    default { Fail "unknown command '$Command' (list|add|review|progress|asked|answer|done)" }
 }

@@ -7,7 +7,7 @@ Tool: `tools/automation/process-ideas.ps1` (`list`, `add`, `review <decisions.js
 Entry fields: id, status (open | asked | confirmed | rejected x1 | rejected x2 | done), idea, evidence (what happened and what it cost, measured where possible), saving (expected speed or tokens), risk (to monitoring and the stall / idle / dead-agent catches), hooks (yes = touches hooks/settings), weakens (yes = would weaken a timeout/stall/idle/dead-agent catch; only allowed with hooks=yes and then FOR SHAY ONLY), log.
 
 Rules:
-- At most 15 active entries (open | asked | confirmed). Above that `add` and `review` refuse a new one until one is retired; a warning shows from 12.
+- At most 15 active entries (open | asked | confirmed). Entries being built (or built and waiting for their measured result) move to the `## In progress` section with `process-ideas.ps1 progress <id>` (status in-progress): they do NOT count toward the cap, so new ideas can keep being added while others are built (Shay 2026-10-16). Above that `add` and `review` refuse a new one until one is retired; a warning shows from 12.
 - Handoff review, at most 3 new entries (the biggest of the session, each with a concrete example) and one step per existing entry, judged against what happened THIS session, never against silence: open + does not apply -> rejected x1; rejected x1 + does not apply -> rejected x2; rejected x2 + does not apply -> removed (moved to Retired with a log line); rejected x1 + applies -> open; rejected x2 + applies -> rejected x1; no decision -> unchanged. `confirmed` only when the decision names a specific moment where the idea would have helped.
 - Shay answers: `answer <id> no` removes the entry (logged in Retired); `yes`/`approve` marks it confirmed. If he has not answered by the next handoff the review runs again and asks again.
 - When an idea is built, record measured before/after numbers (`done <id> -Measured ...`).
@@ -61,32 +61,6 @@ Rules:
 - log: 2026-10-16 10:49 review 'coordinator-14': added
 - log: 2026-10-16 10:56 asked Shay
 
-### PI-38 | confirmed
-- idea: tail-wait / Get-TailAgentSet must not count a still-working in-session agent as 'needs the tail' just because its status file is older than 45 min: use a liveness signal (the agent's tool-output file or its work dir changed in the last 10 min, or ListAgents says running) before it exits the wait and lets the Stop hook block.
-- evidence: 2026-10-16 10:57-11:08 (tail ded82aa7): imm26-hxA kept working (script files changed 10:54) but its status said 'designing' since 10:18, so tail-wait exited at once 5 times and the Stop hook blocked 13 times; every block was a full model turn re-reading a 300k+ context.
-- saving: about 13 turns x a 300k-token re-read per stalled-status agent (several hundred thousand tokens)
-- risk: must still catch a really dead agent: keep the 20-minute no-activity TaskStop rule
-- hooks: yes
-- weakens: no
-- added: 2026-10-16 11:11
-- moment: 12:20 tail wait exited immediately in a loop after I archived relays into done/
-- last_review: coordinator-16
-- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
-- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:00-12:50: the previous tail's tail-wait kept exiting in a loop (relays moved to inbox/coordinator/done/ were not seen by Get-TailRelayState); tail #15 copied relays into delivered/ by...)
-
-### PI-39 | confirmed
-- idea: The tail session should not be the 300k+ coordinator context: at handoff either /compact the old window (script it into handoff: tail-mode enter prints 'run /compact now') or let tail-autorelay be the ONLY relay path and tell the tail to do nothing on hand-back messages, because every event re-reads the whole context.
-- evidence: 2026-10-16 10:50-11:10: after the overlap handoff this tail handled about 25 turns (hand-backs from sfC, sfC2, op9l, hxA, hook blocks, a user question) at 300-330k tokens each, and manually re-relayed 4 agents that tail-autorelay had already relayed (duplicate relay files for sfC, sfC2, op9l, hxA).
-- saving: roughly 25 x 300k tokens per handoff plus 4 duplicate relays; the tail hard limit (400k) is reached sooner
-- risk: low if /compact keeps the tail routing notes (they are in the ledger)
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:11
-- moment: 12:30 tail #15 asked me to respawn op14/op22 from relays it had to read itself
-- last_review: coordinator-16
-- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
-- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:00-12:50: the old tail at about 300k context relayed 9 finished agents (sfP, sfR, sfU, sfS, ctxfix, fxC2, op13, op21, op9n) by hand because tail-autorelay did not fire; imm26-wk2 now ...)
-
 ### PI-41 | open
 - idea: The tail hard limit (400k) forces a TaskStop of live lane operators mid-row. Prevent it: autoCompactWindow=330000 now set in the user settings so a tail compacts itself soon after the handoff (new sessions), and keep the tail lean (PI-38/39/40). Longer term run lane operators as independent sessions so a coordinator's context never limits a lane.
 - evidence: 2026-10-16 11:15-11:20: the tail reached 409k+ after about 40 post-handoff turns and had to order three lane operators to checkpoint; 5090-i3 left a 20-minute 19-ax job unowned, 4080-i4 stopped with 08-d/11-b open, 4080-i3 had to be stopped mid 08-e; three lanes lose about an hour of operator time each until respawned.
@@ -97,32 +71,6 @@ Rules:
 - added: 2026-10-16 11:18
 - log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': added
 
-### PI-42 | confirmed
-- idea: Cap read-only investigator/classifier agents at 3 rows (or ~120k tokens) in the brief and give them a hard 'checkpoint the table row-by-row into the report file' rule; four of four classifiers this session (fxB 4/5 rows, fxC 2/5, sfK, sfK2) hit the 200k limit before delivering the final table and needed a respawn.
-- evidence: 2026-10-16 11:48 fxB and 11:49 fxC STOPPED-CONTEXT with 4/5 and 2/5 rows done, 11:10 sfK and 11:27 sfK2 stopped; each respawn re-reads its predecessor handoff (~15-25k tokens).
-- saving: ~4 respawns per session, ~80k tokens plus ~10 min each
-- risk: low: only splits briefs; more agents run in parallel
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:52
-- moment: 12:46 pilotA stopped before pilot-audit.py; 11:59 sfR stopped with nothing committed
-- last_review: coordinator-16
-- log: 2026-10-16 11:52 review 'coordinator-15': added
-- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 11:59-12:46: sfP, sfR, sfU, ctxfix and pilotA all stopped at about 205k with unfinished work packages; each needed a respawn that re-read the predecessor handoff (5 respawns, about 5 x 4...)
-
-### PI-43 | confirmed
-- idea: setupfail.ps1 mark should print the newest recipe/ready note for that row (state ready, owner, runner command) and warn when the marking lane still runs the OLD runner; a stale SETUP-FAIL for 20-d arrived at 11:47 although sfJ had published reload-run-sfj.sh at 11:22.
-- evidence: 11:47 setupfail-20-d.msg from 5090-i3 (old recipe text) re-woke the coordinator after the sfJ recipe was already routed; same shape for 26-e at 11:43.
-- saving: ~3 wakes per session, avoids re-spawning an investigator for a solved row
-- risk: low: output-only change
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:52
-- moment: 12:10 setupfail-08-d.msg for a row whose recipe sfS had just delivered
-- last_review: coordinator-16
-- log: 2026-10-16 11:52 review 'coordinator-15': added
-- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:10 and 12:14: SETUP-FAIL 08-d and 15-bx notices woke me while the 08-d v2 recipe (sfS+sfT) and the 15-bx v2 scene (sfU2) were already built; each wake cost one model turn plus a ticke...)
-
 ### PI-44 | open
 - idea: Never move inbox/coordinator/*.msg by hand (my blanket 'mv *.msg done/' habit hid a Haiku-pilot operator's 00-ask question for about 10 minutes); the waker already moves files to delivered/ and prints them. Add a rule line to AGENT_PROMPTS and make the waker print the full text of any PILOT-ESCALATE / 00-ask message (not the 300-char cut).
 - evidence: 2026-10-16 12:48: imm26-5090-i4-hk1 sent a 00-ask (window placement refused); I had archived the file with mv before reading it and only noticed via hk1's status line ~10 min later, so the pilot lane waited.
@@ -132,19 +80,6 @@ Rules:
 - weakens: no
 - added: 2026-10-16 12:52
 - log: 2026-10-16 12:52 review 'coordinator-16': added
-
-### PI-45 | confirmed
-- idea: lane-brief.ps1 should not refuse to write the brief when it is a few bytes over the 14500 limit (4080-i3/i4 briefs came out 14548 B and 15996 B): shrink the optional blocks further or write the file and only warn, instead of exit 1/2 with no file, which forced -MaxBytes 16000 retries and a PowerShell-vs-Git-Bash path detour.
-- evidence: 2026-10-16 12:25-12:45: lane-brief.ps1 4080-i4 and 4080-i3 printed OVER LIMIT and wrote nothing at the default limit; each needed 2-3 extra tool calls (about 15k tokens of coordinator context each).
-- saving: about 15k tokens per operator respawn, fewer failed spawns
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 12:52
-- moment: 13:02 hk2 spawn, 13:16 4080-i4op15, 13:22 5090-i3op22
-- last_review: coordinator-17
-- log: 2026-10-16 12:52 review 'coordinator-16': added
-- log: 2026-10-16 13:56 review 'coordinator-17': open -> confirmed (applies: 2026-10-16 13:00-13:50: lane-brief.ps1 printed OVER LIMIT and wrote nothing at the default 14500 limit for 5090-i4, 5090-i3, 5090-i5, 4080-i4 and 4080-i3; every spawn needed a second call with -Max...)
 
 ### PI-46 | open
 - idea: A tail session should need zero model turns: tail-autorelay must relay every finished agent (it relayed sfV/sfT early, then stopped relaying; I relayed sfP, sfR, ctxfix, fxC2, sfU, sfS, op13, op21, op9n by hand) and Get-TailRelayState must also search coordinator/done/.
@@ -215,6 +150,108 @@ Rules:
 - weakens: no
 - added: 2026-10-16 13:56
 - log: 2026-10-16 13:56 review 'coordinator-17': added
+
+### PI-53 | open
+- idea: Guard path arguments against Git Bash backslash stripping: lane-brief.ps1 (and other -Out/-Path scripts) should reject or auto-fix an -Out value without a drive-letter colon+separator, and print the resolved absolute path it wrote.
+- evidence: 2026-10-16 14:00-14:35: three lane briefs (4080-i4op16, 5090-i3op23, 4080-i3op24) were written to C:\KenshiModding\KenshiTestRunsagents...brief.md because bash dropped the backslashes in -Out C:\\...; the operators started without their briefs and the same stray file name was already untracked in git status for op14.
+- saving: about 3 operators x 1 missing-brief start, plus a hunt through 3 tool calls
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 14:57
+- log: 2026-10-16 14:57 review 'coordinator-18': added
+
+### PI-54 | open
+- idea: pilot-audit.py/cost-audit.py must be run with Windows python and resolve agent names to ids by default, and the audit must FAIL LOUDLY (not print an empty COST section) when the cost tool finds no transcripts.
+- evidence: 2026-10-16 15:10-15:50: the Haiku pilot audit had an empty COST section ('NO MATCH', files to scan 0) and I told Shay no cost data existed; Shay: 'that was a required part of this'. The data existed in the transcripts (Haiku $0.15 vs Sonnet $0.23-0.53 per row marked) and needed agent ids and Windows python.
+- saving: about 30 minutes and one wrong claim to Shay per pilot report
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 14:57
+- log: 2026-10-16 14:57 review 'coordinator-18': added
+
+### PI-55 | open
+- idea: Row runners must refuse to start under WSL bash (check for the /mnt/c mount or uname) and the lane operators' briefs must say 'row scripts run in Git Bash, only wsl.exe tools get MSYS_NO_PATHCONV', because a row script run under WSL silently creates a stray /c/KenshiTestRuns tree inside WSL that then shadows the real path for tools that probe /c first.
+- evidence: 2026-10-16 15:26: stray empty /c/KenshiTestRuns/imm26-4080/rows appeared in WSL during 4080-i3op24's 22-b RELOAD-FAIL; it made pilot-audit.py pick /c/... over /mnt/c/... (pilot rows=0) until I passed --pilot-dir.
+- saving: about 20 minutes of misdiagnosis per occurrence, plus a false RELOAD-FAIL
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 14:57
+- log: 2026-10-16 14:57 review 'coordinator-18': added
+
+## In progress
+
+### PI-38 | in-progress
+- idea: tail-wait / Get-TailAgentSet must not count a still-working in-session agent as 'needs the tail' just because its status file is older than 45 min: use a liveness signal (the agent's tool-output file or its work dir changed in the last 10 min, or ListAgents says running) before it exits the wait and lets the Stop hook block.
+- evidence: 2026-10-16 10:57-11:08 (tail ded82aa7): imm26-hxA kept working (script files changed 10:54) but its status said 'designing' since 10:18, so tail-wait exited at once 5 times and the Stop hook blocked 13 times; every block was a full model turn re-reading a 300k+ context.
+- saving: about 13 turns x a 300k-token re-read per stalled-status agent (several hundred thousand tokens)
+- risk: must still catch a really dead agent: keep the 20-minute no-activity TaskStop rule
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 11:11
+- moment: 12:20 tail wait exited immediately in a loop after I archived relays into done/
+- last_review: coordinator-16
+- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
+- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:00-12:50: the previous tail's tail-wait kept exiting in a loop (relays moved to inbox/coordinator/done/ were not seen by Get-TailRelayState); tail #15 copied relays into delivered/ by...)
+- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
+
+### PI-39 | in-progress
+- idea: The tail session should not be the 300k+ coordinator context: at handoff either /compact the old window (script it into handoff: tail-mode enter prints 'run /compact now') or let tail-autorelay be the ONLY relay path and tell the tail to do nothing on hand-back messages, because every event re-reads the whole context.
+- evidence: 2026-10-16 10:50-11:10: after the overlap handoff this tail handled about 25 turns (hand-backs from sfC, sfC2, op9l, hxA, hook blocks, a user question) at 300-330k tokens each, and manually re-relayed 4 agents that tail-autorelay had already relayed (duplicate relay files for sfC, sfC2, op9l, hxA).
+- saving: roughly 25 x 300k tokens per handoff plus 4 duplicate relays; the tail hard limit (400k) is reached sooner
+- risk: low if /compact keeps the tail routing notes (they are in the ledger)
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:11
+- moment: 12:30 tail #15 asked me to respawn op14/op22 from relays it had to read itself
+- last_review: coordinator-16
+- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
+- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:00-12:50: the old tail at about 300k context relayed 9 finished agents (sfP, sfR, sfU, sfS, ctxfix, fxC2, op13, op21, op9n) by hand because tail-autorelay did not fire; imm26-wk2 now ...)
+- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
+
+### PI-42 | in-progress
+- idea: Cap read-only investigator/classifier agents at 3 rows (or ~120k tokens) in the brief and give them a hard 'checkpoint the table row-by-row into the report file' rule; four of four classifiers this session (fxB 4/5 rows, fxC 2/5, sfK, sfK2) hit the 200k limit before delivering the final table and needed a respawn.
+- evidence: 2026-10-16 11:48 fxB and 11:49 fxC STOPPED-CONTEXT with 4/5 and 2/5 rows done, 11:10 sfK and 11:27 sfK2 stopped; each respawn re-reads its predecessor handoff (~15-25k tokens).
+- saving: ~4 respawns per session, ~80k tokens plus ~10 min each
+- risk: low: only splits briefs; more agents run in parallel
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:52
+- moment: 12:46 pilotA stopped before pilot-audit.py; 11:59 sfR stopped with nothing committed
+- last_review: coordinator-16
+- log: 2026-10-16 11:52 review 'coordinator-15': added
+- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 11:59-12:46: sfP, sfR, sfU, ctxfix and pilotA all stopped at about 205k with unfinished work packages; each needed a respawn that re-read the predecessor handoff (5 respawns, about 5 x 4...)
+- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
+
+### PI-43 | in-progress
+- idea: setupfail.ps1 mark should print the newest recipe/ready note for that row (state ready, owner, runner command) and warn when the marking lane still runs the OLD runner; a stale SETUP-FAIL for 20-d arrived at 11:47 although sfJ had published reload-run-sfj.sh at 11:22.
+- evidence: 11:47 setupfail-20-d.msg from 5090-i3 (old recipe text) re-woke the coordinator after the sfJ recipe was already routed; same shape for 26-e at 11:43.
+- saving: ~3 wakes per session, avoids re-spawning an investigator for a solved row
+- risk: low: output-only change
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:52
+- moment: 12:10 setupfail-08-d.msg for a row whose recipe sfS had just delivered
+- last_review: coordinator-16
+- log: 2026-10-16 11:52 review 'coordinator-15': added
+- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:10 and 12:14: SETUP-FAIL 08-d and 15-bx notices woke me while the 08-d v2 recipe (sfS+sfT) and the 15-bx v2 scene (sfU2) were already built; each wake cost one model turn plus a ticke...)
+- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
+
+### PI-45 | in-progress
+- idea: lane-brief.ps1 should not refuse to write the brief when it is a few bytes over the 14500 limit (4080-i3/i4 briefs came out 14548 B and 15996 B): shrink the optional blocks further or write the file and only warn, instead of exit 1/2 with no file, which forced -MaxBytes 16000 retries and a PowerShell-vs-Git-Bash path detour.
+- evidence: 2026-10-16 12:25-12:45: lane-brief.ps1 4080-i4 and 4080-i3 printed OVER LIMIT and wrote nothing at the default limit; each needed 2-3 extra tool calls (about 15k tokens of coordinator context each).
+- saving: about 15k tokens per operator respawn, fewer failed spawns
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 12:52
+- moment: 13:02 hk2 spawn, 13:16 4080-i4op15, 13:22 5090-i3op22
+- last_review: coordinator-17
+- log: 2026-10-16 12:52 review 'coordinator-16': added
+- log: 2026-10-16 13:56 review 'coordinator-17': open -> confirmed (applies: 2026-10-16 13:00-13:50: lane-brief.ps1 printed OVER LIMIT and wrote nothing at the default 14500 limit for 5090-i4, 5090-i3, 5090-i5, 4080-i4 and 4080-i3; every spawn needed a second call with -Max...)
+- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
 
 ## Retired
 
