@@ -55,20 +55,28 @@ class LiveMetricsTests(unittest.TestCase):
             "config": {"code_mode": True, "code_mode_host": True, "shell_tool": False,
                        "multi_agent": False, "agents_enabled": False, "view_image": False,
                        "hooks_enabled": False, "mcp_tools": frozen,
+                       "mcp_default_tools_approval_mode": "approve",
                        "excluded_tool_namespaces": list(codex_status.EXCLUDED_NAMESPACES)},
             "request_tool_names": outer_tools, "request_service_tier": request_tier,
             "provider": {"bound_host": "127.0.0.1", "port_ephemeral": True,
                          "requests": 1, "external_hosts": 0, "credential": "dummy"},
             "host": {"global_names": ["Object", "JSON"], "forbidden_global_names": [],
-                     "tool_names": frozen, "tool_namespace_keys": frozen, "callable_names": frozen,
+                     "tool_names": frozen, "tool_namespace_keys": frozen, "direct_callable_tool_names": frozen,
                      "unlisted_callable_names": [], "frozen_list_call": {"isError": False},
-                     "unknown_parameter_status": "server_rejected", "unknown_parameter_isError": True,
+                     "list_response_shape": {"isError": False},
+                     "unknown_parameter_status": "server_rejected",
+                     "unknown_parameter_response_shape": {"isError": True},
                      "agent_api_types": {name: {"global": "undefined", "tool": "undefined"}
-                                         for name in codex_status.AGENT_APIS}},
-            "mcp_calls": [{"tool": "mcp__frozen__list", "isError": False, "result_class": "ok"},
-                          {"tool": "mcp__frozen__list", "isError": True, "result_class": "error:invalid_params"}],
-            "hook_enforcement": {"status": "UNAVAILABLE", "stdin_type": 2,
-                                 "bytes_received": 0, "errno": 1},
+                                         for name in codex_status.AGENT_APIS},
+                     "constructor_escape_types": {"process": "undefined", "require": "undefined",
+                                                  "globalProcess": "undefined"},
+                     "dynamic_import_status": {"node:fs": "rejected:Error",
+                                               "node:child_process": "rejected:Error",
+                                               "node:https": "rejected:Error"}},
+            "mcp_calls": [{"tool": "list", "status": "ok", "isError": False, "result_class": "ok"},
+                          {"tool": "list", "status": "error:FrozenAccessError", "isError": True,
+                           "result_class": "error:FrozenAccessError"}],
+            "hook_enforcement": {"status": "UNAVAILABLE", "reason": "hooks disabled"},
         }
         raw = json.dumps(probe).encode()
         path = Path(self.tmp.name) / "hostprobe.json"
@@ -173,6 +181,37 @@ class LiveMetricsTests(unittest.TestCase):
         self.assertEqual(metrics["audit"], "PASS")
         self.assertEqual(metrics["code_mode_host"]["status"], "PASS")
 
+    def test_historical_telemetry_is_projected_separately_and_never_aggregated(self):
+        telemetry_path = Path(self.tmp.name) / "pilot-attempt02.telemetry.json"
+        telemetry = {
+            "run_id": "gpt-x-high-p2", "attempt": 2, "classification": "FAIL_SETUP_INVALID_ISOLATION_EVIDENCE",
+            "thread_id": "thread-1", "rollout_candidate": "attempt-02/rollout.jsonl",
+            "usage": {"input_tokens": 22850, "cached_input_tokens": 11264,
+                      "output_tokens": 902, "reasoning_output_tokens": 37},
+            "invoice_amount": "UNKNOWN", "served_service_tier": "UNKNOWN",
+            "requested_service_tier": "default", "pricing_reference_date": "2026-10-16",
+            "conditional_reference_estimate_usd_if_default_was_served": 0.172224,
+            "cache_create_rate": "unavailable in published reference table",
+            "report": "must not be copied into metrics",
+        }
+        telemetry_path.write_text(json.dumps(telemetry), encoding="utf-8")
+        self.receipt["historical_telemetry_path"] = telemetry_path.name
+        self.receipt["suite_dir"] = self.tmp.name
+        self.records.append({"type": "event_msg", "payload": {"type": "token_count", "info": {
+            "total_token_usage": {"input_tokens": 100, "cached_input_tokens": 5,
+                                  "cache_write_input_tokens": 0, "output_tokens": 10,
+                                  "reasoning_output_tokens": 2, "total_tokens": 110}}}})
+        self.write()
+        metrics = codex_status.live_metrics(self.receipt, None)
+        historical = metrics["historical_attempt_telemetry"]
+        self.assertEqual(historical["status"], "AVAILABLE")
+        self.assertEqual(historical["attempt"], 2)
+        self.assertEqual(historical["usage"]["input_tokens"], 22850)
+        self.assertEqual(historical["reference_cost"]["usd"], 0.172224)
+        self.assertEqual(historical["reference_cost"]["status"], "CONDITIONAL_REQUESTED_TIER_ESTIMATE")
+        self.assertEqual(metrics["usage"]["input_tokens"], 100)
+        self.assertNotIn("must not be copied", repr(metrics))
+
     def test_hostprobe_failure_and_incomplete_proof_never_pass(self):
         path = Path(self.tmp.name) / "hostprobe.json"
         probe = json.loads(path.read_text(encoding="utf-8"))
@@ -202,7 +241,7 @@ class LiveMetricsTests(unittest.TestCase):
     def test_hostprobe_rejects_nonfrozen_callable_and_missing_strict_mcp_error(self):
         path = Path(self.tmp.name) / "hostprobe.json"
         probe = json.loads(path.read_text(encoding="utf-8"))
-        probe["host"]["callable_names"].append("apply_patch")
+        probe["host"]["direct_callable_tool_names"].append("apply_patch")
         raw = json.dumps(probe).encode()
         path.write_bytes(raw)
         self.assertEqual(codex_status._verify_hostprobe(str(path), hashlib.sha256(raw).hexdigest())["status"], "FAIL")

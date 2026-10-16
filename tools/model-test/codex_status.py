@@ -11,6 +11,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_record
 
+TOKENS = codex_record.TOKENS
 FROZEN_TOOLS = {"mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"}
 EXCLUDED_NAMESPACES = ["functions", "clock", "mcp__codex_apps", "mcp__plugins"]
 OUTER_TOOL_NAMES = {"functions__exec", "functions__wait", "functions__request_user_input",
@@ -111,10 +112,13 @@ def _verify_hostprobe(path: Any, expected_sha256: Any) -> dict:
     normalized_request.discard("exec")
     if not normalized_request or not normalized_request <= OUTER_TOOL_NAMES or "functions__exec" not in normalized_request:
         return {"status": "FAIL", "reason": "outer transport tool allowlist mismatch"}
-    tool_fields = ("tool_names", "tool_namespace_keys", "callable_names")
-    if any(not isinstance(host.get(k), list) for k in tool_fields):
+    callable_names = host.get("direct_callable_tool_names", host.get("callable_names"))
+    namespace_keys = host.get("tool_namespace_keys")
+    tool_names = host.get("tool_names")
+    if not all(isinstance(v, list) for v in (tool_names, namespace_keys, callable_names)):
         return {"status": "UNKNOWN", "reason": "nested callable inventory incomplete"}
-    if any(set(host[k]) != FROZEN_TOOLS or len(host[k]) != len(FROZEN_TOOLS) for k in tool_fields):
+    if any(set(v) != FROZEN_TOOLS or len(v) != len(FROZEN_TOOLS)
+           for v in (tool_names, namespace_keys, callable_names)):
         return {"status": "FAIL", "reason": "nested callable inventory contains unlisted tools"}
     if not isinstance(host.get("unlisted_callable_names"), list):
         return {"status": "UNKNOWN", "reason": "unlisted callable proof missing"}
@@ -138,22 +142,37 @@ def _verify_hostprobe(path: Any, expected_sha256: Any) -> dict:
         elif values not in ("undefined", False):
             return {"status": "FAIL", "reason": "agent API is exposed"}
     list_result = host.get("frozen_list_call")
+    list_shape = host.get("list_response_shape")
     if isinstance(list_result, dict): list_ok = list_result.get("isError") is False
     else: list_ok = list_result == "ok"
+    if isinstance(list_shape, dict): list_ok = list_ok and list_shape.get("isError") is False
     unknown_status = host.get("unknown_parameter_status")
     unknown_error = host.get("unknown_parameter_isError")
+    unknown_shape = host.get("unknown_parameter_response_shape")
+    if isinstance(unknown_shape, dict): unknown_error = unknown_shape.get("isError")
     strict_reject = unknown_status == "server_rejected" and unknown_error is True
     mcp_calls = probe.get("mcp_calls")
     if not isinstance(mcp_calls, list):
         return {"status": "UNKNOWN", "reason": "MCP call receipts missing"}
-    list_receipt = any(isinstance(c, dict) and c.get("tool") == "mcp__frozen__list" and
+    list_receipt = any(isinstance(c, dict) and c.get("tool") in ("list", "mcp__frozen__list") and
                        c.get("isError") is False and c.get("result_class") == "ok" for c in mcp_calls)
-    error_receipt = any(isinstance(c, dict) and c.get("tool") == "mcp__frozen__list" and
+    error_receipt = any(isinstance(c, dict) and c.get("tool") in ("list", "mcp__frozen__list") and
                         c.get("isError") is True and isinstance(c.get("result_class"), str) and
                         c["result_class"].startswith("error:") for c in mcp_calls)
     if not list_ok or not list_receipt or not strict_reject or not error_receipt:
         return {"status": "FAIL" if mcp_calls else "UNKNOWN",
                 "reason": "strict MCP success/error proof missing"}
+    if config.get("mcp_default_tools_approval_mode") != "approve":
+        return {"status": "FAIL", "reason": "MCP tool approval mode is not frozen allowlist mode"}
+    constructor_escape = host.get("constructor_escape_types")
+    if not isinstance(constructor_escape, dict) or any(
+            constructor_escape.get(k) not in ("undefined", False) for k in ("process", "require", "globalProcess")):
+        return {"status": "UNKNOWN", "reason": "constructor escape isolation proof incomplete"}
+    dynamic_import = host.get("dynamic_import_status")
+    if not isinstance(dynamic_import, dict) or any(
+            not isinstance(dynamic_import.get(k), str) or not dynamic_import[k].startswith("rejected")
+            for k in ("node:fs", "node:child_process", "node:https")):
+        return {"status": "UNKNOWN", "reason": "dynamic import isolation proof incomplete"}
     external_hosts = provider.get("external_hosts_attempted", provider.get("external_hosts"))
     auth_mode = provider.get("auth", provider.get("credential"))
     if (("bound_host" in provider and provider.get("bound_host") != "127.0.0.1") or
@@ -172,9 +191,6 @@ def _verify_hostprobe(path: Any, expected_sha256: Any) -> dict:
         return {"status": "UNKNOWN", "reason": "CLI/host binary identity missing"}
     hook_enforcement = probe.get("hook_enforcement") if isinstance(probe.get("hook_enforcement"), dict) else {}
     hook_status = hook_enforcement.get("status", "UNKNOWN")
-    if hook_status == "UNAVAILABLE" and (hook_enforcement.get("stdin_type") != 2 or
-            hook_enforcement.get("bytes_received") != 0 or hook_enforcement.get("errno") in (None, 0)):
-        hook_status = "UNKNOWN"
     if hook_status not in ("UNAVAILABLE", "PASS", "UNKNOWN"):
         return {"status": "FAIL", "reason": "hook evidence reports failure"}
     if probe.get("status") != "PASS":
@@ -259,6 +275,60 @@ def _verify_requested_modes(receipt: dict, rollout_path: str | Path) -> dict:
             "service_tier": expected["service_tier"]}
 
 
+def _historical_telemetry(receipt: dict) -> dict | None:
+    """Project one explicitly named, bounded attempt sidecar; never aggregate it."""
+    raw_path = receipt.get("historical_telemetry_path")
+    if not isinstance(raw_path, str) or not raw_path:
+        return None
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        base = receipt.get("suite_dir") or receipt.get("suite_root")
+        path = (Path(base).expanduser() if isinstance(base, str) and base else Path.cwd()) / path
+    try:
+        if path.stat().st_size > 65536:
+            return {"status": "UNKNOWN", "reason": "historical telemetry exceeds metadata size limit"}
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return {"status": "UNKNOWN", "reason": "historical telemetry unavailable"}
+    except (UnicodeDecodeError, ValueError):
+        return {"status": "UNKNOWN", "reason": "historical telemetry invalid JSON"}
+    if not isinstance(data, dict):
+        return {"status": "UNKNOWN", "reason": "historical telemetry schema missing"}
+    run_id = data.get("run_id")
+    expected_run = receipt.get("run_id", receipt.get("run"))
+    if not isinstance(run_id, str) or not isinstance(expected_run, str) or run_id != expected_run:
+        return {"status": "FAIL", "reason": "historical telemetry run id mismatch"}
+    attempt = data.get("attempt")
+    if not isinstance(attempt, int) or attempt < 1:
+        return {"status": "UNKNOWN", "reason": "historical telemetry attempt id missing"}
+    raw_usage = data.get("usage")
+    usage = None
+    if isinstance(raw_usage, dict):
+        usage = {key: raw_usage[key] for key in TOKENS
+                 if isinstance(raw_usage.get(key), int) and raw_usage[key] >= 0}
+    estimate = data.get("conditional_reference_cost")
+    if not isinstance(estimate, dict): estimate = data.get("requested_tier_reference_estimate")
+    if not isinstance(estimate, dict): estimate = {}
+    estimate_usd = estimate.get("usd", data.get("conditional_reference_usd",
+                              data.get("conditional_reference_estimate_usd_if_default_was_served")))
+    reference_cost = None
+    if isinstance(estimate_usd, (int, float)) and estimate_usd >= 0:
+        reference_cost = {"usd": estimate_usd, "status": "CONDITIONAL_REQUESTED_TIER_ESTIMATE",
+                          "tier": estimate.get("tier", data.get("requested_service_tier")),
+                          "price_table_date": estimate.get("price_table_date", data.get("pricing_reference_date")),
+                          "cache_create_unpriced": data.get("cache_create_rate") in ("unavailable", "unavailable in published reference table")}
+    invoice_status = data.get("invoice_status", data.get("invoice_amount", data.get("invoice", "UNKNOWN")))
+    if not isinstance(invoice_status, str): invoice_status = "UNKNOWN"
+    return {"status": "AVAILABLE", "run_id": run_id, "attempt": attempt,
+            "classification": data.get("classification") if isinstance(data.get("classification"), str) else None,
+            "thread_id": data.get("thread_id") if isinstance(data.get("thread_id"), str) else None,
+            "rollout_candidate": data.get("rollout_candidate") if isinstance(data.get("rollout_candidate"), str) else None,
+            "requested_service_tier": data.get("requested_service_tier") if isinstance(data.get("requested_service_tier"), str) else None,
+            "observed_service_tier": data.get("served_service_tier") if isinstance(data.get("served_service_tier"), str) else "UNKNOWN",
+            "usage_status": "AVAILABLE" if usage else "UNAVAILABLE", "usage": usage,
+            "invoice_status": invoice_status, "reference_cost": reference_cost}
+
+
 def live_metrics(receipt: dict, prices: dict | None) -> dict:
     """Return bounded live metrics without exposing prompt or report text.
 
@@ -267,13 +337,15 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
     """
     if not isinstance(receipt, dict):
         return {"status": "unknown", "audit": "UNKNOWN", "reason": "receipt missing"}
+    historical = _historical_telemetry(receipt)
     started = _dt(receipt.get("started_utc"))
     now = datetime.now(timezone.utc)
     elapsed = max(0.0, (now - started).total_seconds()) if started else None
     rollout = receipt.get("rollout_path")
     if not isinstance(rollout, str) or not rollout:
         return {"run": receipt.get("run"), "status": receipt.get("status", "unknown"),
-                "elapsed_s": elapsed, "audit": "UNKNOWN", "reason": "rollout path missing"}
+                "elapsed_s": elapsed, "audit": "UNKNOWN", "reason": "rollout path missing",
+                "historical_attempt_telemetry": historical}
     config = dict(receipt)
     config["service_tier"] = receipt.get("service_tier", receipt.get("speed"))
     launch_modes = _verify_requested_modes(receipt, rollout)
@@ -331,6 +403,7 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
         overall_status = "UNKNOWN"
     return {
         "run": receipt.get("run"), "status": receipt.get("status", "unknown"),
+        "attempt": receipt.get("attempt", receipt.get("attempt_id")),
         "elapsed_s": elapsed, "model": parsed.get("model"), "effort": parsed.get("effort"),
         "requested_model": receipt.get("model"), "requested_effort": receipt.get("effort"),
         "requested_service_tier": config.get("service_tier"),
@@ -339,6 +412,7 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
         "hostprobe_tier_request_proof": hostprobe_tier_status,
         "launch_mode_proof": launch_modes,
         "observed_service_tier": parsed.get("observed_service_tier"),
+        "usage_status": "AVAILABLE" if parsed.get("usage") is not None else "UNAVAILABLE",
         "usage": {k: usage.get(k) for k in codex_record.TOKENS},
         "tool_uses": parsed.get("tool_uses", 0),
         "transport_calls": transport_calls,
@@ -357,4 +431,5 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
                              "requested_service_tier": requested_tier_status,
                              "hostprobe_service_tier_request": hostprobe_tier_status},
         "thread": threads, "code_mode_host": hostprobe,
+        "historical_attempt_telemetry": historical,
     }
