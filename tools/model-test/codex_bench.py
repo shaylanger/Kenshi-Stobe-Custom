@@ -39,6 +39,9 @@ ACTIVE_LOCK = threading.Lock()
 ACTIVE_PROCESSES: set[subprocess.Popen] = set()
 PROFILE_VERSION = 5
 FROZEN_TOOLS = ["mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"]
+RETRYABLE_TERMINAL_STATUSES = frozenset({"FAILED", "FAILED_SETUP", "TIMEOUT", "FAILED_IO", "FAILED_START",
+                                        "FAILED_NO_ROOT_ROLLOUT", "FAILED_NO_FINAL_REPORT", "COMPLETE_UNAUDITED"})
+TRANSPORT_SOURCE_NAMES = ("codex_frozen.py", "codex_frozen_mcp.py", "codex_db_broker.py", "codex_hostprobe.py")
 CODE_MODE_EXCLUDED_NAMESPACES = ["functions", "clock", "mcp__codex_apps", "mcp__plugins"]
 
 
@@ -231,6 +234,14 @@ def pending_run_ids(root: Path, entries: list[tuple[str, dict[str, Any], int, st
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _transport_source_paths() -> list[Path]:
+    paths = [(HERE / name).resolve() for name in TRANSPORT_SOURCE_NAMES]
+    missing = [path.name for path in paths if not path.is_file()]
+    if missing:
+        raise BenchError("frozen transport source missing: " + ",".join(missing))
+    return paths
 
 
 def _fast_tier_supported(model: dict[str, Any]) -> bool:
@@ -619,9 +630,7 @@ def _prepare_retry_attempt(root: Path, rid: str, attempt_no: int) -> None:
         raise BenchError("explicit attempts must be created in order; no automatic retries are made")
     prior = attempts[-2] if attempt.exists() and len(attempts) > 1 else attempts[-1]
     previous_status = _json(prior / "launch.json").get("status")
-    terminal = {"FAILED", "TIMEOUT", "FAILED_IO", "FAILED_START", "FAILED_NO_ROOT_ROLLOUT",
-                "FAILED_NO_FINAL_REPORT", "COMPLETE_UNAUDITED"}
-    if previous_status not in terminal:
+    if previous_status not in RETRYABLE_TERMINAL_STATUSES:
         raise BenchError("previous attempt is not terminal")
     if not attempt.exists():
         _write_attempt(root, rid, cell, (run_dir / "prompt.md").read_text(encoding="utf-8"), attempt_no)
@@ -1102,7 +1111,9 @@ def _preflight(root: Path) -> int:
     })
     probe = _probe_mcp(mcp_env)
     offline_hostprobe = _run_offline_hostprobe(root, cli, user_codex, frozen)
-    materials = [root / "suite.json", template_path, *[root / p for p in cfg.get("prompts", ["prompt2.txt", "prompt3.txt"])]]
+    materials = [root / "suite.json", template_path,
+                 *[root / p for p in cfg.get("prompts", ["prompt2.txt", "prompt3.txt"])],
+                 *_transport_source_paths()]
     material_hashes = {str(p.resolve()): _sha(p.read_bytes()) for p in materials}
     proof = {"ready": True, "suite_sha256": _sha((root / "suite.json").read_bytes()),
              "frozen": frozen_result, "cli_version": version.stdout.strip(),
@@ -1166,7 +1177,11 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     proof = _json(proof_path)
     if not proof.get("ready") or proof.get("suite_sha256") != _sha((root / "suite.json").read_bytes()):
         raise BenchError("preflight proof is stale or incomplete")
-    for material, digest in proof.get("materials", {}).items():
+    material_map = proof.get("materials") if isinstance(proof.get("materials"), dict) else {}
+    missing_transport = [str(path) for path in _transport_source_paths() if str(path) not in material_map]
+    if missing_transport:
+        raise BenchError("preflight transport source hashes missing; rerun preflight")
+    for material, digest in material_map.items():
         if not Path(material).is_file() or _sha(Path(material).read_bytes()) != digest:
             raise BenchError("preflight material changed; rerun prepare and preflight")
     _verify_offline_hostprobe(proof)
@@ -1189,8 +1204,7 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
             raise BenchError("explicit attempts must be new, sequential numbers; no automatic retries are made")
         previous_attempt = old[-2] if attempt.exists() else old[-1]
         previous = _json(previous_attempt / "launch.json")
-        if previous.get("status") not in {"FAILED", "TIMEOUT", "FAILED_IO", "FAILED_START",
-                                            "FAILED_NO_ROOT_ROLLOUT", "FAILED_NO_FINAL_REPORT", "COMPLETE_UNAUDITED"}:
+        if previous.get("status") not in RETRYABLE_TERMINAL_STATUSES:
             raise BenchError("previous attempt is not terminal")
         if not attempt.exists():
             _write_attempt(root, rid, cell, (run_dir / "prompt.md").read_text(encoding="utf-8"), attempt_no)

@@ -321,12 +321,21 @@ See C:\\KenshiModding\\src\\module.py:42
                 receipt = bench._json(root / "runs" / rid / "launch.json")
                 proof = {"ready": True, "suite_sha256": bench._sha((root / "suite.json").read_bytes()),
                          "materials": {str(p.resolve()): bench._sha(p.read_bytes())
-                                       for p in (root / "suite.json", template, root / "prompt2.txt")},
+                                       for p in (root / "suite.json", template, root / "prompt2.txt",
+                                                 *bench._transport_source_paths())},
                          "prepared_prompts": {rid: receipt["prompt_sha256"]},
                          "private_profiles": {rid: {
                              "config_sha256": bench._json(root / "runs" / rid / "attempt-01" / "requested-config.json")["private_config_sha256"],
                              "execution_contract_sha256": bench._json(root / "runs" / rid / "attempt-01" / "requested-config.json")["execution_contract_sha256"]}},
                          "auth_available": True}
+                bench._write_json(root / "preflight.json", proof)
+                mcp_source = next(p for p in bench._transport_source_paths() if p.name == "codex_frozen_mcp.py")
+                proof["materials"][str(mcp_source)] = "0" * 64
+                bench._write_json(root / "preflight.json", proof)
+                with mock.patch.object(bench, "_verify_offline_hostprobe"):
+                    with self.assertRaisesRegex(bench.BenchError, "preflight material changed"):
+                        bench.launch_one(root, rid, execute=True, timeout=10)
+                proof["materials"][str(mcp_source)] = bench._sha(mcp_source.read_bytes())
                 bench._write_json(root / "preflight.json", proof)
                 with mock.patch.object(bench, "_verify_offline_hostprobe"), \
                      mock.patch.object(bench, "_strict_exec_config_probe", side_effect=bench.BenchError("invalid exact profile")):
@@ -384,10 +393,11 @@ See C:\\KenshiModding\\src\\module.py:42
                 run_dir = root / "runs" / rid
                 old_attempt = run_dir / "attempt-01" / "launch.json"
                 failed = bench._json(old_attempt)
-                failed["status"] = "FAILED_NO_ROOT_ROLLOUT"
+                failed["status"] = "FAILED_SETUP"
                 bench._write_json(old_attempt, failed)
                 bench._write_json(run_dir / "launch.json", failed)
                 original_bytes = old_attempt.read_bytes()
+                self.assertIn("FAILED_SETUP", bench.RETRYABLE_TERMINAL_STATUSES)
                 bench._prepare_retry_attempt(root, rid, 2)
                 self.assertEqual(old_attempt.read_bytes(), original_bytes)
                 new = run_dir / "attempt-02"
