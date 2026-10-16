@@ -220,6 +220,61 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(cr.price_usage(u, "m", "long", {"models": {"m": {"standard": {}}}})["status"], "unavailable")
         self.assertEqual(cr.price_usage(u, "m", "standard", {"models": {"m": {"standard": {"input": 1}}}})["status"], "unavailable")
 
+    def test_structured_cli_transport_failure_is_setup_failure_without_leaking_message(self):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        rollout = Path(td.name) / "rollout.jsonl"
+        rollout.write_text(json.dumps({"type": "turn_context", "model": "m", "effort": "low"}) + "\n", encoding="utf-8")
+        events = Path(td.name) / "events.jsonl"
+        events.write_text(json.dumps({"type": "item.completed", "item": {"type": "mcp_tool_call",
+            "tool": "search", "status": "failed", "error": {"message": "timed out awaiting tools/call after 60s"}}}) + "\n", encoding="utf-8")
+        receipt = {"verified_receipt": True, "agents_enabled": False, "multi_agent": False,
+                   "hook_verified": True, "terminal_verified": True, "allowed_tools": [],
+                   "events_path": str(events), "model": "m", "effort": "low"}
+        result = cr.parse_rollout(rollout, receipt)
+        self.assertEqual(result["setup_health"]["status"], "FAIL")
+        self.assertEqual(result["audit"]["status"], "FAIL")
+        self.assertIn("setup-infrastructure:transport_failure", result["audit"]["flags"])
+        self.assertNotIn("timed out awaiting", json.dumps(result))
+
+    def test_structured_noninfrastructure_rejection_is_not_setup_failure(self):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        rollout = Path(td.name) / "rollout.jsonl"
+        rollout.write_text(json.dumps({"type": "turn_context", "model": "m", "effort": "low"}) + "\n", encoding="utf-8")
+        events = Path(td.name) / "events.jsonl"
+        events.write_text(json.dumps({"type": "item.completed", "item": {"type": "mcp_tool_call",
+            "tool": "sql", "status": "failed", "error": {"message": "safe SQL rejected: invalid query syntax"}}}) + "\n", encoding="utf-8")
+        receipt = {"verified_receipt": True, "agents_enabled": False, "multi_agent": False,
+                   "hook_verified": True, "terminal_verified": True, "allowed_tools": [],
+                   "events_path": str(events), "model": "m", "effort": "low"}
+        result = cr.parse_rollout(rollout, receipt)
+        self.assertEqual(result["setup_health"]["status"], "PASS")
+        self.assertEqual(result["audit"]["status"], "PASS")
+
+    def test_config_proof_summary_breaks_receipt_cycles(self):
+        config = {"verified_receipt": True, "agents_enabled": False, "multi_agent": False,
+                  "hook_verified": True, "terminal_verified": True, "allowed_tools": []}
+        config["receipt"] = config
+        result = cr.audit_rollout([], config)
+        self.assertEqual(result["status"], "PASS")
+        self.assertNotIn("receipt", result["config_proof"])
+        json.dumps(result)
+
+    def test_public_code_mode_transport_uses_separate_hard_boundary_proof(self):
+        events = [{"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "x",
+                   "name": "exec", "input": "{}"}},
+                  {"type": "response_item", "payload": {"type": "function_call", "call_id": "w",
+                   "name": "wait", "arguments": "{}"}}]
+        proof = {"verified_receipt": True, "agents_enabled": False, "multi_agent": False,
+                 "hook_verified": False, "hook_enforcement": {"status": "UNAVAILABLE"},
+                 "code_mode_host_proof": {"verified": True}, "terminal_verified": True,
+                 "allowed_tools": ["mcp__frozen__list", "mcp__frozen__read",
+                                   "mcp__frozen__search", "mcp__frozen__sql"]}
+        self.assertEqual(cr.audit_rollout(events, proof)["status"], "PASS")
+        proof["code_mode_host_proof"] = {"verified": False}
+        self.assertIn("unallowlisted-tool:exec", cr.audit_rollout(events, proof)["flags"])
+
 
 if __name__ == "__main__":
     unittest.main()

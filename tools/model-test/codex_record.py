@@ -29,6 +29,12 @@ MUT_RE = re.compile(r"(?:^|[;&|\s])(?:rm|mv|cp|chmod|chown|tee|git\s+(?:commit|c
                     r"(?:set-content|out-file|add-content|remove-item|move-item|copy-item|new-item|rename-item|clear-content)\b|"
                     r"[^\n]+(?:>|>>)[^=])", re.I)
 NESTED_RE = re.compile(r"\b(codex|claude|openai\s+api|anthropic\s+api|responses\.create|chat\.completions\.create)\b", re.I)
+INFRA_TOOL_ERROR_RE = re.compile(
+    r"\b(?:timeout|timed out|deadline exceeded|etimedout|connection (?:refused|reset|closed|aborted)|"
+    r"(?:service|server|transport) unavailable|transport (?:error|closed|failed)|"
+    r"(?:failed|unable) to start|code[- ]mode host is disabled|"
+    r"(?:approval|authorization) (?:handler )?(?:unavailable|not available|failed)|"
+    r"no approval (?:handler|provider)|(?:authentication|credentials?) (?:failed|unavailable|missing))\b", re.I)
 
 
 def _walk(obj: Any) -> Iterable[dict]:
@@ -78,6 +84,104 @@ def _tool_output_stats(events: list[dict], calls: list[dict]) -> dict:
         else: unmatched += 1
     return {"tool_outputs": len(outputs), "matched_tool_outputs": len(matched),
             "pending_tool_calls": len(call_ids - matched), "unmatched_tool_outputs": unmatched}
+
+
+def _tool_health(events: list[dict], calls: list[dict]) -> dict:
+    """Classify only explicit tool-result metadata; never search returned content."""
+    calls_by_id = {c.get("call_id") or c.get("id"): c for c in calls
+                   if c.get("call_id") or c.get("id")}
+    errors, infrastructure = [], []
+    for event in events:
+        if str(event.get("type", "")).lower() != "response_item": continue
+        item = event.get("payload") or event.get("item") or {}
+        if not isinstance(item, dict) or str(item.get("type", "")).lower() not in (
+                "custom_tool_call_output", "function_call_output"):
+            continue
+        call_id = item.get("call_id") or item.get("id")
+        call = calls_by_id.get(call_id, {})
+        name = str(call.get("name") or call.get("tool_name") or "unknown")
+        metadata = [item.get(k) for k in ("error_class", "error_code", "code", "status", "result_class")
+                    if isinstance(item.get(k), str)]
+        metadata_error = any(v.lower().startswith("error") or
+                             v.lower() in ("timeout", "timed_out", "failed", "unavailable")
+                             for v in metadata)
+        infra_match = next((INFRA_TOOL_ERROR_RE.search(v) for v in metadata
+                            if INFRA_TOOL_ERROR_RE.search(v)), None)
+        is_error = item.get("isError") is True or metadata_error or infra_match is not None
+        if is_error or infra_match:
+            classification = "infrastructure" if infra_match else "tool_error"
+            summary = {"tool": name, "call_id": call_id if isinstance(call_id, str) else None,
+                       "classification": classification}
+            errors.append(summary)
+            if classification == "infrastructure":
+                infrastructure.append({**summary, "error_class": next(
+                    (v for v in metadata if INFRA_TOOL_ERROR_RE.search(v)), "transport_failure")})
+    return {"status": "FAIL" if infrastructure else "PASS",
+            "infrastructure_failures": infrastructure, "tool_error_count": len(errors),
+            "noninfrastructure_error_count": len(errors) - len(infrastructure),
+            "tool_errors": errors}
+
+
+def _cli_event_health(path: str | Path | None) -> dict:
+    """Inspect only structured MCP failure events, never successful result payloads."""
+    if not path:
+        return {"status": "UNKNOWN", "infrastructure_failures": [], "source": None}
+    failures, malformed = [], 0
+    try:
+        with open(path, encoding="utf-8", errors="replace") as stream:
+            for line in stream:
+                try: event = json.loads(line)
+                except ValueError:
+                    malformed += 1
+                    continue
+                if not isinstance(event, dict): continue
+                item = event.get("item")
+                if not isinstance(item, dict) or item.get("type") != "mcp_tool_call" or item.get("status") != "failed":
+                    continue
+                err = item.get("error")
+                message = err.get("message") if isinstance(err, dict) else None
+                if not isinstance(message, str): continue
+                match = INFRA_TOOL_ERROR_RE.search(message)
+                if match:
+                    failures.append({"tool": item.get("tool") if isinstance(item.get("tool"), str) else "unknown",
+                                     "call_id": item.get("id") if isinstance(item.get("id"), str) else None,
+                                     "classification": "infrastructure", "error_class": "transport_failure"})
+    except OSError:
+        return {"status": "UNKNOWN", "infrastructure_failures": [], "source": str(path)}
+    return {"status": "FAIL" if failures else "PASS", "infrastructure_failures": failures,
+            "malformed_lines": malformed, "source": str(path)}
+
+
+def _merge_setup_health(rollout_health: dict, cli_health: dict) -> dict:
+    failures = rollout_health.get("infrastructure_failures", []) + cli_health.get("infrastructure_failures", [])
+    status = "FAIL" if failures else ("UNKNOWN" if cli_health.get("status") == "UNKNOWN" else "PASS")
+    return {"status": status, "infrastructure_failures": failures,
+            "tool_error_count": rollout_health.get("tool_error_count", 0),
+            "noninfrastructure_error_count": rollout_health.get("noninfrastructure_error_count", 0),
+            "cli_events": {"status": cli_health.get("status"), "source": cli_health.get("source"),
+                           "malformed_lines": cli_health.get("malformed_lines", 0)}}
+
+
+def _config_proof_summary(config: dict | None) -> dict | None:
+    """Keep audit receipts acyclic and omit unrelated paths, prompts, and data."""
+    if not isinstance(config, dict): return None
+    summary = {}
+    for key in ("verified_receipt", "model", "effort", "service_tier", "agents_enabled",
+                "multi_agent", "hook_verified", "terminal_verified"):
+        value = config.get(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            if key in config: summary[key] = value
+    tools = config.get("allowed_tools")
+    if isinstance(tools, list) and all(isinstance(x, str) for x in tools):
+        summary["allowed_tools"] = list(tools)
+    boundary = config.get("code_mode_host_proof")
+    if isinstance(boundary, dict):
+        summary["code_mode_host_proof"] = {"verified": boundary.get("verified") is True,
+                                           "status": boundary.get("status") if isinstance(boundary.get("status"), str) else None}
+    hook_state = config.get("hook_enforcement")
+    if isinstance(hook_state, dict):
+        summary["hook_enforcement"] = {"status": hook_state.get("status") if isinstance(hook_state.get("status"), str) else "UNKNOWN"}
+    return summary
 
 
 def _count_vector(value: Any) -> dict | None:
@@ -173,6 +277,9 @@ def _input(call: dict) -> dict:
 def audit_rollout(events: list[dict], config: dict | None) -> dict:
     calls = [c for e in events for c in _tool_calls(e)]
     flags, reasons, delegation = [], [], []
+    setup_health = _tool_health(events, calls)
+    flags.extend("setup-infrastructure:" + str(e.get("error_class", "transport_failure"))
+                 for e in setup_health["infrastructure_failures"])
     if (not isinstance(config, dict) or config.get("verified_receipt") is not True or
             config.get("agents_enabled") is not False or config.get("multi_agent") is not False):
         reasons.append("verified launch receipt must prove agents.enabled=false and multi_agent=false")
@@ -181,6 +288,11 @@ def audit_rollout(events: list[dict], config: dict | None) -> dict:
     # Only explicitly approved read-only tools are permitted. Names are canonical
     # tool names as recorded in function_call payloads.
     allowed = {str(x).lower() for x in config.get("allowed_tools", [])} if isinstance(config, dict) and isinstance(config.get("allowed_tools"), list) else set()
+    host_proof = config.get("code_mode_host_proof") if isinstance(config, dict) else None
+    verified_transport_boundary = isinstance(host_proof, dict) and host_proof.get("verified") is True
+    # The frozen MCP allowlist describes nested data tools. The public Code Mode
+    # transport (exec/wait) is separately authorized by the verified host proof.
+    transport_allowed = {"exec", "functions.exec", "wait"} if verified_transport_boundary else set()
     if not isinstance(config, dict) or not isinstance(config.get("allowed_tools"), list):
         reasons.append("verified read-only tool allowlist missing")
     for c in calls:
@@ -207,13 +319,12 @@ def audit_rollout(events: list[dict], config: dict | None) -> dict:
                 delegation.append("code-mode delegation invocation")
             if NESTED_RE.search(source):
                 flags.append("nested-model-or-api-command")
-        if name not in allowed:
+        if name not in allowed and name not in transport_allowed:
             flags.append("unallowlisted-tool:" + (name or "unknown"))
         if name in ("exec", "functions.exec") and name in allowed:
             # `exec` is the required public Code Mode transport, not proof that the
             # restricted host actually supplied only the frozen read-only tools.
-            proof = config.get("code_mode_host_proof") if isinstance(config, dict) else None
-            if not isinstance(proof, dict) or proof.get("verified") is not True:
+            if not verified_transport_boundary:
                 reasons.append("Code Mode exec host/guard proof missing")
     for e in events:
         # Inspect event metadata only; do not scan arbitrary tool results or prompt text.
@@ -240,7 +351,8 @@ def audit_rollout(events: list[dict], config: dict | None) -> dict:
         flags.extend("delegation:" + d for d in delegation)
     status = "FAIL" if flags else ("UNKNOWN" if reasons else "PASS")
     return {"status": status, "flags": sorted(set(flags)), "unknown_reasons": reasons,
-            "delegation_evidence": delegation, "config_proof": config if isinstance(config, dict) else None}
+            "delegation_evidence": delegation, "setup_health": setup_health,
+            "config_proof": _config_proof_summary(config)}
 
 
 def price_usage(usage: dict | None, model: str | None, tier: str | None,
@@ -356,6 +468,17 @@ def parse_rollout(path: str | Path, config: dict | None = None,
     if audit_config is not None and (malformed or usage_errors):
         audit_config["terminal_verified"] = False
     audit = audit_rollout(events, audit_config)
+    cli_event_path = audit_config.get("events_path") if isinstance(audit_config, dict) else None
+    if not cli_event_path and isinstance(audit_config, dict):
+        cli_event_path = audit_config.get("receipt", {}).get("events_path") if isinstance(audit_config.get("receipt"), dict) else None
+    if not cli_event_path:
+        sibling = Path(path).with_name("events.jsonl")
+        if sibling.is_file(): cli_event_path = str(sibling)
+    cli_health = _cli_event_health(cli_event_path)
+    audit["setup_health"] = _merge_setup_health(audit.get("setup_health", {}), cli_health)
+    if audit["setup_health"]["status"] == "FAIL":
+        audit["flags"].append("setup-infrastructure:transport_failure")
+        audit["status"] = "FAIL"
     policy_status = audit["status"]
     runtime_status = "PASS"
     tier_status = "PASS"
@@ -415,12 +538,14 @@ def parse_rollout(path: str | Path, config: dict | None = None,
     if audit["status"] == "PASS" and policy_status != "PASS": policy_status = audit["status"]
     audit["dimensions"] = {"policy": policy_status, "runtime_model_effort": runtime_status,
                             "service_tier": tier_status, "cost": cost.get("status", "unavailable")}
+    audit["dimensions"]["setup_health"] = audit["setup_health"]["status"]
     audit["overall_status"] = ("FAIL" if audit["status"] == "FAIL" or runtime_status == "FAIL" or tier_status == "FAIL"
                                else "UNKNOWN" if audit["status"] == "UNKNOWN" or runtime_status == "UNKNOWN" or tier_status == "UNKNOWN" or cost.get("status") != "priced"
                                else "PASS")
     return {"path": str(path), "start_local": _local_timestamp(times[0]) if times else None,
             "end_local": _local_timestamp(times[-1]) if times else None, "wall_s": _wall_seconds(times),
             "tool_uses": len(dedup), "tools": [{"name": c.get("name", c.get("tool_name")), "input": _input(c)} for c in dedup],
+            "setup_health": audit.get("setup_health"),
             **output_stats,
             "models": sorted(models), "model": model, "efforts": sorted(efforts),
             "effort": next(iter(efforts)) if len(efforts) == 1 else None,

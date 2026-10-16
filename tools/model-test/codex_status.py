@@ -372,7 +372,7 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
     if threads["provenance"] in ("child", "ambiguous"):
         audit_status = "FAIL"
         overall_status = "FAIL"
-    elif threads["provenance"] == "unknown" and not in_progress:
+    elif threads["provenance"] == "unknown" and not in_progress and overall_status != "FAIL":
         overall_status = "UNKNOWN"
     uses_code_mode = any(str(t.get("name", "")).lower() in ("exec", "functions.exec")
                          for t in parsed.get("tools", []))
@@ -380,6 +380,7 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
         if hostprobe["status"] == "FAIL": audit_status, overall_status = "FAIL", "FAIL"
         elif audit_status != "FAIL": audit_status, overall_status = "UNKNOWN", "UNKNOWN"
     usage = parsed.get("usage") or {}
+    setup_health = parsed.get("setup_health") or {"status": "UNKNOWN", "infrastructure_failures": []}
     transport_calls = sum(str(t.get("name", "")).lower() in ("exec", "functions.exec", "wait")
                           for t in parsed.get("tools", []))
     direct_tool_calls = parsed.get("tool_uses", 0) - transport_calls
@@ -423,13 +424,15 @@ def live_metrics(receipt: dict, prices: dict | None) -> dict:
         "matched_tool_outputs": parsed.get("matched_tool_outputs", 0),
         "pending_tool_calls": parsed.get("pending_tool_calls", 0),
         "unmatched_tool_outputs": parsed.get("unmatched_tool_outputs", 0),
+        "setup_health": setup_health,
         "cost": parsed.get("pricing"), "audit": audit_status, "overall_status": overall_status,
         "audit_flags": parsed["audit"].get("flags", []),
         "audit_unknown_reasons": parsed["audit"].get("unknown_reasons", []),
         "audit_dimensions": {**parsed["audit"].get("dimensions", {}),
                              "launch_mode": launch_modes["status"],
                              "requested_service_tier": requested_tier_status,
-                             "hostprobe_service_tier_request": hostprobe_tier_status},
+                             "hostprobe_service_tier_request": hostprobe_tier_status,
+                             "setup_health": setup_health.get("status", "UNKNOWN")},
         "thread": threads, "code_mode_host": hostprobe,
         "historical_attempt_telemetry": historical,
     }
