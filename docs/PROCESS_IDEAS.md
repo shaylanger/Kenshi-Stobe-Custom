@@ -194,6 +194,16 @@ Rules:
 - added: 2026-10-16 15:40
 - log: 2026-10-16 15:40 review 'coordinator-18-tail': added
 
+### PI-57 | open
+- idea: A subagent that waits on its own background job (selftest) must not re-send its full final report each time it wakes: dedupe hand-backs by content hash in the harness/tail relay, or have the agent hand back once and stay silent until its job finishes.
+- evidence: 15:09-15:25: imm26-regionR4 sent the same 'WP-R4 DONE' report 7 times (each waking this coordinator, 6 full-context turns of about 5-8k tokens) while its two slow selftests ran.
+- saving: about 40k tokens and 6 turns per such agent
+- risk: none for monitoring: only identical repeated reports are dropped
+- hooks: no
+- weakens: no
+- added: 2026-10-16 15:42
+- log: 2026-10-16 15:42 review 'coordinator-19': added
+
 ## In progress
 
 ### PI-38 | in-progress
