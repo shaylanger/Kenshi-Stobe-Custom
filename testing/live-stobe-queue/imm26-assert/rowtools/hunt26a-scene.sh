@@ -9,11 +9,13 @@ say() { echo "[$(date +%T)] $*" | tee -a "$OUT/log.txt"; }
 L1=$(i3 <<<'wc -l < /mnt/d/KenshiInst/5/RE_Kenshi/mods/Stobe/stobe.log' | tail -1)
 say "stobe.log mark $L1"
 # personal enmity baked in Cind (ACTIVITY_HOSTILE_DIAG actorEnemyOfReq=1 even at relation 50 -> requester_now_hostile): faction re-serials her and clears it (op8 finding). REFACTION=0 to skip
-if [ "${REFACTION:-1}" = 1 ]; then
+refaction() {
+  [ -n "$nid_done" ] && return; nid_done=1
   fo=$(i3 <<<"stobe-auto faction \"$CIND\" \"Traders Guild\" </dev/null | head -2"); echo "faction: $fo" >> "$OUT/log.txt"
   nid=$(echo "$fo" | grep -oE '#[0-9]+/[0-9]+' | head -1); [ -n "$nid" ] && CIND="$nid"
   say "Cind id now $CIND"; sleep 3
-fi
+}
+[ "${REFACTION:-late}" = early ] && refaction
 # scene: pins off, teleports, onmesh wait, clean travel rows, aff 60, ctxpush
 i3 <<EOT > "$OUT/scene.txt" 2>&1
 stobe-auto pin "$CIND" off </dev/null | head -1; stobe-auto pin "$SHAY" off </dev/null | head -1
@@ -34,6 +36,7 @@ EOT
 if [ "${APOLOGY:-1}" = 1 ]; then
   i3_say "$CIND" "It was a mistake, I'm sorry." 40 2>&1 | grep -E "\(NPC\)" | cut -c1-300 | tee -a "$OUT/log.txt"
   i3 <<EOT >> "$OUT/log.txt" 2>&1
+sleep ${APOLOGY_WAIT:-8}
 stobe-auto stobe_ctxpush "$CINDFULL" </dev/null | head -2
 EOT
 fi
@@ -48,6 +51,10 @@ GOATS=$(grep -oE '#[0-9]+/[0-9]+' "$OUT/spawn.txt" | grep -v "^$CIND$" | sort -u
 [ -n "$GOATS" ] || { say "SCENE-BAD no goats found"; exit 3; }
 # hold the goats (they flee at 10-25 u/s and the offer takes ~10-15 s): pin each in place; PIN=0 to skip
 if [ "${PIN:-1}" = 1 ]; then for g in $GOATS; do i3 <<<"stobe-auto pin \"$g\" </dev/null | head -1" >> "$OUT/log.txt" 2>&1; done; fi
+if [ "${REFACTION:-late}" = late ]; then refaction; i3 <<EOT >> "$OUT/log.txt" 2>&1
+stobe-auto stobe_ctxpush "$CINDFULL" </dev/null | head -2
+EOT
+fi
 # turn Cind toward the first goat (sees=0/fov=0 while she faces away), then the go/no-go below
 G1=$(echo $GOATS | awk '{print $1}'); i3 <<<"stobe-auto face \"$CIND\" \"$G1\" </dev/null | head -1; sleep 1" >> "$OUT/log.txt" 2>&1
 SEES=0
@@ -66,12 +73,13 @@ echo "SAY1 \$(date +%T.%N)"
 stobe-auto stobe_say "$CIND" "Look at all these goats. Let's hunt for raw meat." </dev/null | head -2
 end=\$((SECONDS+45)); got=0
 while [ \$SECONDS -lt \$end ]; do
-  if tail -n +\$((n0+1)) "\$L" | grep -qE "ACTION_EXEC: SAY \[[^]]*\](.*)\(NPC\)"; then got=1; break; fi
+  if tail -n +\$((n0+1)) "\$L" | sed -n '/SAY \[Shay\]: Look at all/,\$p' | grep -qE "ACTION_EXEC: SAY \[[^]]*\](.*)\(NPC\)"; then got=1; break; fi
   sleep 0.5
 done
 echo "OFFER_SEEN=\$got \$(date +%T.%N)"
 tail -n +\$((n0+1)) "\$L" | grep -E "ACTION_EXEC: SAY|REJECTED|ACTIVITY_SIGHT_DIAG|ACTIVITY_PROPOSAL" | cut -c1-300 | head -6
 if [ \$got = 1 ]; then
+  sleep ${ACCEPT_DELAY:-3}
   echo "SAY2 \$(date +%T.%N)"
   stobe-auto stobe_say "$CIND" "Yes, let's do it." </dev/null | head -2
 fi
