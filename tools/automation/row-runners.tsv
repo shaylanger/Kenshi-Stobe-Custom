@@ -1,0 +1,59 @@
+# row-runners.tsv: which one-call runner script runs which imm26 row (read by rowcard.py -> row-card.sh / next-row.sh / lane-brief.ps1).
+# Format: row | script (under testing/live-stobe-queue/imm26-assert/rowtools/ unless it starts with testing/ or ../) | extra args (<ready> = the lane's ready save) | note
+# Newest recipe wins (a later runner overrides an older one for the same row). A row listed in rowdefs.sh/tripdefs.sh but not here falls back to go-row.sh.
+# Add a row = one line here (no script is edited). Runners print ONE `RESULT <row> PASS|FAIL|SETUP-FAIL|GATED <evidence>` line; exit 0/1/2/3, 4 = ROW-NEEDS-FIXER.
+# go-row.sh family (rowdefs.sh)
+12-a | ../go-row.sh | |
+12-b | ../go-row.sh | |
+12-d | ../go-row.sh | |
+08-a | ../go-row.sh | |
+14-a | ../go-row.sh | |
+19-d | ../go-row.sh | |
+04-c | ../go-row.sh | |
+06-c | ../go-row.sh | |
+# trip family (README_TRIP.md): reloads the ready save first (i3/i4 default; other lanes need --save)
+13-b | trip-run.sh | [--save <ready>] |
+19-a | trip-run.sh | [--save <ready>] |
+20-b | trip-run.sh | [--save <ready>] |
+23-b | trip-run.sh | [--save <ready>] |
+23-c | trip-run.sh | [--save <ready>] |
+23-d | trip-run.sh | [--save <ready>] |
+24-a | trip-run.sh | [--save <ready>] |
+24-b | trip-run.sh | [--save <ready>] |
+# unblock sets (newest recipes)
+23-a | unblockrun_sfk.sh | --save <ready> | recipe v2 (sfK)
+11-b | unblockrun_sfk.sh | --save <ready> | recipe v2 (sfK)
+08-d | unblockrun_a.sh | --save <ready> | add --neg for the negative leg
+08-e | reload-run-a2.sh | --save <ready> | recipe v2 (sfG2)
+13-c | unblockrun_f.sh | --save <ready> | needs NC18+ DLL (arrival turn)
+13-c-neg | unblockrun_f.sh | --save <ready> | needs NC18+ DLL
+10-e | unblockrun_b.sh | --save <ready> | real game restart
+10-e-inproc | unblockrun_b.sh | --save <ready> | record-only
+27-a | unblockrun_b.sh | --save <ready> | needs harness DLL eeed8c93
+03-b | unblockrun_d2.sh | --save <ready> | Hub-proof (sfD2)
+10-b | unblockdefs_e.sh | --save <ready> | run the defs file itself (sfD2)
+15-bx | unblockdefs_c.sh | --save <ready> | run the defs file itself (u-rowsC)
+20-a | unblockdefs_c.sh | --save <ready> | run the defs file itself (u-rowsC)
+# save+load resume sets
+26-d | reload-run-sfi.sh | --save <ready> | hunt26a-scene ground (sfI)
+26-dx | reload-run-sfi.sh | --save <ready> | hunt26a-scene ground (sfI)
+26-e | reload-run-sfi.sh | --save <ready> | hunt26a-scene ground (sfI)
+24-c | reload-run-sfe.sh | --save <ready> | SEEDED resume leg (sfE2)
+26-f | reload-run-sfe.sh | --save <ready> | ClearGroup one-call, needs NC17+
+23-e | reload-run-sfj.sh | --save <ready> | control chase (sfJ)
+20-d | reload-run-sfj.sh | --save <ready> | insistence turn (sfJ)
+14-e | reloadrun-b.sh | --save <ready> |
+13-f | reloadrun-b.sh | --save <ready> |
+13-g | reloadrun-b.sh | --save <ready> |
+19-e | reloadrun-b.sh | --save <ready> |
+19-f | reloadrun-b.sh | --save <ready> | --n 4 --cap 10 / --mode cap --cap 3
+# hardening rows (README_HX.md): the base save is the lane's hx save (i3 kah-imm26-5090-hxA, i4 kah-imm26-i4-hx0)
+17-bx | hxrun.sh | --save <hx save> --item Sabreclaw |
+18-cx | hxrun.sh | --save <hx save> |
+16-bx | hxrun.sh | --save <hx save> |
+13-ax | hxrun.sh | --save <hx save> --saves "s1 s2 s3 s4 s5" |
+02-ax | hxrun.sh | --save <hx save> |
+01-bx | hxrun.sh | --save <hx save> | hxA
+01-cx | hxrun.sh | --save <hx save> | hxA
+02-cx | hxrun.sh | --save <hx save> | hxA
+05-cx | hxrun.sh | --save <hx save> | hxB
