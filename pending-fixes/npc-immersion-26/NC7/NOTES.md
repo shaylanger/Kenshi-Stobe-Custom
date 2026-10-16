@@ -1,0 +1,15 @@
+# NC7 = NC6 (3ADDE488) + ACTIVITY_PROPOSAL_DIAG on every zero-candidate proposal attempt
+
+DLL: `NC7\Stobe.dll` SHA256 `EBA2200D49B35BB23DCC58D326F1655A72B54C06FA2E1EE93B844E6659D3F536` (VS2010 x64, `RESULT NC-BUILD PASS objects=69`, build.out.txt). Gitignored; also `C:\KenshiTestRuns\imm26-nc7\build\out\Stobe.dll`. NOT installed anywhere.
+Patch: `nc7-over-nc6.patch` (`patch -p1 --binary` over the NC6 src; one file: `src/ActivityRuntimeBindings.cpp`). `nc7edit.py` = the anchored edit script (WSL python3). Work tree `C:\KenshiTestRuns\imm26-nc7\{src,legacy-v1}`; build: `NC\build.ps1 -Out ...\imm26-nc7\build -SrcDir ...\imm26-nc7\src -LegacyDir ...\imm26-nc7\legacy-v1` (run from PowerShell, not Git Bash, or the path args are mangled).
+
+## Why NC6 has no ACTIVITY_PROPOSAL_DIAG
+NC notes ("IMPORTANT: the base is NOT components/STOBE/src alone"): the NC base is the N1/E607 Activity tree; the components-only `ProposalTrace` / `ACTIVITY_PROPOSAL_DIAG` / HUNT4080 diagnostic (components commit d541519) lives in a different, older-line copy of `ActivityRuntimeBindings.cpp` and was deliberately dropped from NC ("isolated diagnostic, dropped"). So it was never in NC2..NC6 (not compiled out, not setting-gated). NC `src/ActivityRuntimeBindings.cpp` ProposalFacts returns bare `{"candidates":[]}` at every gate with no log.
+
+## What NC7 adds
+`ProposalTrace` struct (destructor logs `ACTIVITY_PROPOSAL_DIAG`), unconditional (no setting), emitted only when the attempt produced zero candidates (`emitted==0`), rate-limited to once per 5 s real per actor serial. Counters/fields: gate (`world|identity|navigation|enumeration|complete`: where the function stopped), world/actorOk/requesterOk/player/distinct/dead/unconscious + actorSID/requesterSID, movement/avatar/navmesh/onmesh, sphereCharacter/sphereBuilding (objects returned by getObjectsWithinSphere, cap 96), objects, sightDrops (canISeeThisGuy false or no sensory), typeDrops (character neither animal nor hostile), mineTypeDrops (building not BF_MINE_NATURAL / broken / destroyed), pathDrops with pathZero/pathOne/pathOther (raw navmesh pathExists), serialDrops, nullDrops, finiteDrops, capacityDrops, reused, exceptions, registryBefore. Diagnostic only: no behaviour change. Log lines appear in the Stobe log (same `Log()` as HUNT4080 lines).
+How to read: gate=identity/navigation => actor/requester/navmesh failure; gate=complete with sphereCharacter=0 => enumeration empty; high sightDrops => canISeeThisGuy; pathZero>0 => navmesh path; mineTypeDrops => iron node special function.
+
+## Root cause of candidates=[]
+Not evident from code reading: every gate in ProposalFacts is a plausible live-state condition (sight, navmesh path, mine special function), no static type filter excludes Herbivore animals or iron nodes (`isAnimal()` accepts all animals; `BF_MINE_NATURAL` for nodes). Behaviour left unchanged; the DIAG line will show which counter eats the objects.
+Note: components/STOBE snapshot not touched: its `ActivityRuntimeBindings.cpp` is the older line (already holds this DIAG); copying the NC file over it would regress components.

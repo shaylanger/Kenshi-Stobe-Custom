@@ -1,0 +1,153 @@
+--- a/src/ActivityRuntimeBindings.cpp	2026-10-15 18:00:09.089769100 -0600
++++ b/src/ActivityRuntimeBindings.cpp	2026-10-15 18:56:18.546299300 -0600
+@@ -21,6 +21,8 @@
+ #include <set>
+ #include <sstream>
+ #include <float.h>
++#include <windows.h>
++void Log(const std::string&);
+ namespace Stobe { namespace Activity {
+ namespace {
+ std::string ProposalQuote(const std::string&);
+@@ -381,21 +383,56 @@
+  out << '"'; return out.str();
+ }
+ }
++namespace {
++// NC7: ACTIVITY_PROPOSAL_DIAG, emitted (rate-limited per actor) whenever a proposal attempt yields zero candidates.
++// Diagnostic only: counts and logs, never changes the proposal outcome.
++struct ProposalTrace {
++ unsigned actor,requester; size_t registry; unsigned emitted,exceptions,objects,sightDrops,pathDrops,capacityDrops,reused,nullDrops,finiteDrops,typeDrops,serialDrops,pathZero,pathOne,pathOther,mineTypeDrops;
++ bool world,actorOk,requesterOk,player,distinct,dead,unconscious,movement,avatar,navmesh,onmesh;
++ unsigned charSphere,buildingSphere; const char* gate; std::string actorSid,requesterSid;
++ ProposalTrace(unsigned a,unsigned r,size_t n):actor(a),requester(r),registry(n),emitted(0),exceptions(0),objects(0),sightDrops(0),pathDrops(0),capacityDrops(0),reused(0),nullDrops(0),finiteDrops(0),typeDrops(0),serialDrops(0),pathZero(0),pathOne(0),pathOther(0),mineTypeDrops(0),world(false),actorOk(false),requesterOk(false),player(false),distinct(false),dead(false),unconscious(false),movement(false),avatar(false),navmesh(false),onmesh(false),charSphere(0),buildingSphere(0),gate("world") {}
++ void Sids(Character* a,Character* r) { try { Character* chars[2]={a,r}; std::string* slots[2]={&actorSid,&requesterSid}; for(unsigned n=0;n<2;++n) { try { if(chars[n] && chars[n]->getGameData()) { *slots[n]=chars[n]->getGameData()->stringID.substr(0,256); for(size_t i=0;i<slots[n]->size();++i) if((*slots[n])[i]<32) (*slots[n])[i]='_'; } } catch(...) {} } } catch(...) {} }
++ ~ProposalTrace() {
++  try {
++   if(emitted) return;
++   static std::map<unsigned,DWORD> last; const DWORD now=GetTickCount();
++   std::map<unsigned,DWORD>::iterator it=last.find(actor);
++   if(it!=last.end() && now-it->second<5000) return;
++   last[actor]=now;
++   std::ostringstream s; s<<"ACTIVITY_PROPOSAL_DIAG actor="<<actor<<" requester="<<requester<<" gate="<<gate
++   <<" world="<<world<<" actorOk="<<actorOk<<" requesterOk="<<requesterOk<<" player="<<player<<" distinct="<<distinct
++   <<" dead="<<dead<<" unconscious="<<unconscious<<" actorSID="<<actorSid<<" requesterSID="<<requesterSid
++   <<" movement="<<movement<<" avatar="<<avatar<<" navmesh="<<navmesh<<" onmesh="<<onmesh
++   <<" sphereCharacter="<<charSphere<<" sphereBuilding="<<buildingSphere<<" sphereCap=96 objects="<<objects
++   <<" sightDrops="<<sightDrops<<" typeDrops="<<typeDrops<<" mineTypeDrops="<<mineTypeDrops<<" pathDrops="<<pathDrops
++   <<" registryBefore="<<registry<<" capacityDrops="<<capacityDrops<<" reused="<<reused<<" nullDrops="<<nullDrops
++   <<" finiteDrops="<<finiteDrops<<" serialDrops="<<serialDrops<<" pathZero="<<pathZero<<" pathOne="<<pathOne<<" pathOther="<<pathOther
++   <<" exceptions="<<exceptions<<" emitted="<<emitted;
++   Log(s.str()); } catch(...) { /* Diagnostics never change proposal outcome. */ }
++ }
++};
++}
+ std::string ConcreteRuntimeBindings::ProposalFacts(unsigned actorSerial,unsigned requesterSerial) {
++ ProposalTrace trace(actorSerial,requesterSerial,candidates_.size());
+  std::ostringstream out; out << "{\"candidates\":["; bool first=true;
+  for(std::map<std::string,Candidate>::iterator old=candidates_.begin();old!=candidates_.end();) {
+   if(old->second.agreement.empty() && (now_<old->second.observedAt || now_-old->second.observedAt>86400)) candidates_.erase(old++); else ++old;
+  }
+- if(!world_ || worldId_.empty()) return "{\"candidates\":[]}";
++ trace.world=world_!=NULL && !worldId_.empty();
++ if(!trace.world) return "{\"candidates\":[]}";
+  Character* actor=KenshiAi::ResolveCharacter(world_,actorSerial);
+  Character* requester=KenshiAi::ResolveCharacter(world_,requesterSerial);
++ trace.gate="identity"; trace.actorOk=actor!=NULL; trace.requesterOk=requester!=NULL; trace.Sids(actor,requester);
+  if(!actor || !requester) return "{\"candidates\":[]}";
+- if(!requester->isPlayerCharacter() || actor==requester || actor->isDead() || actor->isUnconcious()) return "{\"candidates\":[]}";
++ trace.player=requester->isPlayerCharacter(); trace.distinct=actor!=requester; trace.dead=actor->isDead(); trace.unconscious=actor->isUnconcious();
++ if(!trace.player || !trace.distinct || trace.dead || trace.unconscious) return "{\"candidates\":[]}";
+  const KenshiAi::CharacterSnapshot snapshot=KenshiAi::CaptureCharacter(world_,actorSerial);
+  const bool conflict=snapshot.order.orderCount>0;
+  CharMovement* movement=actor->getMovement(); HavokCharacter* avatar=movement?movement->havokCharacter:NULL;
++ trace.gate="navigation"; trace.movement=movement!=NULL; trace.avatar=avatar!=NULL; trace.navmesh=world_->navmesh!=NULL;
+  if(!world_->navmesh || !avatar) return "{\"candidates\":[]}";
+- if(!avatar->isOnNavmesh()) return "{\"candidates\":[]}";
++ trace.onmesh=avatar->isOnNavmesh(); if(!trace.onmesh) return "{\"candidates\":[]}";
++ trace.gate="enumeration";
+  std::vector<ActivityCampNative::ZoneCandidate> zones;
+  (void)campCatalog_.Discover(now_,zones);
+  unsigned emitted=0;
+@@ -403,21 +440,23 @@
+  std::set<ActivePlatoon*> clearGroupsScanned;
+  for(unsigned pass=0;pass<2;++pass) {
+   lektor<RootObject*> objects; world_->getObjectsWithinSphere(objects,actor->getPosition(),600.0f,pass?BUILDING:CHARACTER,96,(RootObject*)actor);
++  if(pass) trace.buildingSphere=objects.size(); else trace.charSphere=objects.size();
+   for(unsigned i=0;i<objects.size() && emitted<32;++i) {
++   ++trace.objects;
+    try {
+-    RootObject* object=objects.stuff[i]; if(!object || !object->getGameData()) continue;
++    RootObject* object=objects.stuff[i]; if(!object || !object->getGameData()) { ++trace.nullDrops; continue; }
+     const Ogre::Vector3 p=object->getPosition();
+-    if(!_finite(p.x)||!_finite(p.y)||!_finite(p.z)) continue;
++    if(!_finite(p.x)||!_finite(p.y)||!_finite(p.z)) { ++trace.finiteDrops; continue; }
+     bool hostile=false,protectedTarget=false,permitted=false; const char* kind=""; std::string resourceId; std::string proposalSource=object->getGameData()->stringID; std::vector<unsigned> groupTargets;
+     ActivityCampNative::ZoneCandidate proposedCamp; bool proposedCampQualified=false;
+     std::string why;
+     if(!pass) {
+      Character* target=(Character*)object;
+-     if(target==actor || target==requester || !actor->getSensoryData()) continue;
++     if(target==actor || target==requester || !actor->getSensoryData()) { ++trace.sightDrops; continue; }
+      const bool visible=actor->getSensoryData()->canISeeThisGuy(target);
+-     if(!visible) continue;
++     if(!visible) { ++trace.sightDrops; continue; }
+      hostile=actor->isEnemy(target,true);
+-     if(!target->isAnimal() && !hostile) continue;
++     if(!target->isAnimal() && !hostile) { ++trace.typeDrops; continue; }
+      kind=target->isAnimal()?"Hunt":"ClearGroup";
+      protectedTarget=IsProtectedActivityTarget(actor,target,why);
+      permitted=!protectedTarget && !target->isDead() && !target->isUnconcious();
+@@ -474,15 +513,16 @@
+      }
+     } else {
+      Building* b=(Building*)object;
+-     if(b->_NV_getSpecialFunction()!=BF_MINE_NATURAL || b->_NV_isBroken() || b->_NV_isDestroyed()) continue;
++     if(b->_NV_getSpecialFunction()!=BF_MINE_NATURAL || b->_NV_isBroken() || b->_NV_isDestroyed()) { ++trace.mineTypeDrops; continue; }
+      kind="Mine";
+      // Read-only exact production/ownership check. Attribution lease begins only at dispatch.
+      permitted=MineSourcePermitted(b,actor,resourceId,why); protectedTarget=!permitted;
+     }
+     const int rawPath=world_->navmesh->pathExists(avatar,p);
+-    if(rawPath!=1) continue;
++    if(rawPath==0) ++trace.pathZero; else if(rawPath==1) ++trace.pathOne; else ++trace.pathOther;
++    if(rawPath!=1) { ++trace.pathDrops; continue; }
+     const unsigned serial=object->getHandle().serial;
+-    if(!serial) continue;
++    if(!serial) { ++trace.serialDrops; continue; }
+     std::string stableToken;
+     for(std::map<std::string,Candidate>::iterator prior=candidates_.begin();prior!=candidates_.end();++prior) {
+      const Candidate& old=prior->second;
+@@ -492,8 +532,8 @@
+         (old.fixedTargets==groupTargets && old.campZone.zoneCandidateId==proposedCamp.zoneCandidateId))) { stableToken=prior->first; break; }
+     }
+     std::ostringstream token;
+-    if(!stableToken.empty()) token<<stableToken;
+-    else { if(candidates_.size()>=2048) continue; token<<"activity-proposal:"<<actorSerial<<":"<<++sequence_; }
++    if(!stableToken.empty()) { token<<stableToken; ++trace.reused; }
++    else { if(candidates_.size()>=2048) { ++trace.capacityDrops; continue; } token<<"activity-proposal:"<<actorSerial<<":"<<++sequence_; }
+     Candidate c; c.agreement=""; c.identity=object; c.actorIdentity=actor; c.requesterIdentity=requester; c.observedAt=now_;
+     c.campQualified=proposedCampQualified; if(proposedCampQualified) {
+      c.campZone=proposedCamp; std::vector<unsigned long long> fixed;
+@@ -503,7 +543,7 @@
+     c.fixedTargets=groupTargets; c.point.facts.serial=serial;
+     c.point.facts.sourceId=proposalSource; c.point.facts.candidateId=token.str();
+     c.point.x=p.x;c.point.y=p.y;c.point.z=p.z; candidates_[token.str()]=c;
+-    if(!first) out<<','; first=false; ++emitted; std::ostringstream fixedTargets; for(size_t member=0;member<groupTargets.size();++member) { if(member) fixedTargets<<','; fixedTargets<<groupTargets[member]; }
++    if(!first) out<<','; first=false; ++emitted; trace.emitted=emitted; std::ostringstream fixedTargets; for(size_t member=0;member<groupTargets.size();++member) { if(member) fixedTargets<<','; fixedTargets<<groupTargets[member]; }
+     out << "{\"kind\":"<<ProposalQuote(kind)<<",\"sourceId\":"<<ProposalQuote(c.point.facts.sourceId)
+      <<",\"resourceId\":"<<ProposalQuote(resourceId)<<",\"targetSerial\":"<<serial<<",\"candidateId\":"<<ProposalQuote(token.str())
+      <<",\"pathReachable\":true,\"observedNow\":true,\"suitable\":"<<(permitted?"true":"false")
+@@ -513,10 +553,10 @@
+     if(c.campQualified) out<<",\"campZone\":{\"candidateId\":"<<ProposalQuote(c.campZone.zoneCandidateId)<<",\"scopeDigest\":"<<ProposalQuote(c.campZoneDigest)<<"},\"campZoneLabel\":"<<ProposalQuote(c.campZone.town.knownName);
+     out<<",\"agreedTargets\":["<<fixedTargets.str()<<"]"
+      <<",\"scopeLabel\":"<<ProposalQuote(std::string(kind)=="ClearGroup"?(c.campQualified?"only the currently observed hostile targets inside this named formal zone":"currently observed hostile members of this native group"):"observed exact source")<<",\"policyReason\":"<<ProposalQuote(why)<<"}";
+-   } catch(...) { /* One unloaded entity never turns into assumed permission. */ }
++   } catch(...) { ++trace.exceptions; /* One unloaded entity never turns into assumed permission. */ }
+   }
+  }
+- out << "]}"; return out.str();
++ trace.gate="complete"; out << "]}"; return out.str();
+ }
+ } }
+ 
