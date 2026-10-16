@@ -15,7 +15,7 @@ everything incl. mod commands; agent guide `Kenshi-Automation-Harness/AGENTS.md`
   reaction state toward the drawer. The drawer needs a weapon (`give`), and the reacting NPC must NOT be in the drawer's squad (own squad is never tracked): use a non-squad NPC like Cind.
   Wrapper: STOBE-DRAWN.sh (docs/STOBE_TESTING_GUIDE.md section 6).
 - orders: `order <npc> <task> [target|building]` (291 tasks, `tasks`), `attack`, `fight <a> <b>` (NPC vs NPC),
-  `job <npc> <building> [task <t>] [radius <m>]`, `jobs`, `clearjobs`;
+  `job <npc> <building> [task <t>] [radius <m>]`, `jobs`, `clearjobs`, `contract-bodyguard <npc> [<hirer>] [hours n] [own] [replace]|status|end` (native hired-bodyguard contract, imm26 row 18-a);
 - items/money: `give`, `money`, `buy`, `trade` (real purchase), `shopstock`, `stash`, `transfer`, `packput`/`packweight`,
   `iteminfo`/`equip`/`unequip`, `weight`, `find`;
 - buildings: `buildings [radius] [filter] [near <npc>]` (`pos=x,y,z`), `building <name> [radius]`, `power`/`fill …
