@@ -7,7 +7,7 @@ Animation lab: `Kenshi-Automation-Harness/docs/animlab/STATUS.md`, KenshiFP adap
 
 ## Right now — canonical resumable checkpoint (2026-10-14)
 
-**#8 order #3 DONE (808add1): lane-brief ~16 KB self-contained + -Predecessor section. **#8 order #2 DONE (a6a5880): operator-warn.sh/ps1 + agent-status WARN-120k marker; event hook for event-wait.sh NOT yet applied (apply to event-stream.sh instead once imm26-stream is DONE; use in ONE waker only). Lane-lock gap: KAH_OWNER is per-lane not per-operator; brief text covers the overlap (read-only until predecessor DONE). Spawned imm26-fix-pq (10-a quote suffix), imm26-n3 (NC7 DIAG).**
+**#8 imm26-fix-pq DONE (e7e70c4): 10-a quote-suffix fix = pending-fixes/imm26-fix-pq/apply.py <tree-root> (+test); apply to compose in WP-C together with trip resume (after tripresume-a DONE), deploy, then rerun 10-a (--allow-retry). **#8 order #3 DONE (808add1): lane-brief ~16 KB self-contained + -Predecessor section. **#8 order #2 DONE (a6a5880): operator-warn.sh/ps1 + agent-status WARN-120k marker; event hook for event-wait.sh NOT yet applied (apply to event-stream.sh instead once imm26-stream is DONE; use in ONE waker only). Lane-lock gap: KAH_OWNER is per-lane not per-operator; brief text covers the overlap (read-only until predecessor DONE). Spawned imm26-fix-pq (10-a quote suffix), imm26-n3 (NC7 DIAG).**
 
 **COORDINATOR #8 (started 19:0x): spawned imm26-stream (order #1), imm26-succ (#2), imm26-brief3 (#3) as in-session agents; #5 waits for tailfix DONE. Own waker started. Tail 2b1a8eca still owns 9 agents; ack relays with tail-ack.ps1.**
 

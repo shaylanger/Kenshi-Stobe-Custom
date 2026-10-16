@@ -1,0 +1,4 @@
+# imm26-tripresume-a handoff (checkpoint)
+Edits done in /root/imm26/compose (backups /root/imm26/tripresume-a-bak): lib/commitment_native_bridge.php (entry branch, settings, ResumeCheck/Action/Fail/Note), commitment_lifecycle.php (context line), travel_companionship.php (prompt line), area_goal_integration.php (2 allowlists), npc_player_view.php (phase text), chat_helper_functions.php (CRLF hook before the action loop in streamResponse).
+Tests: tests/imm26_trip_resume_regression.php 64/65 (the 1 FAIL = test lacks require_once lib/area_goal_integration.php; validator is OK when loaded). npc_player_view_regression 2 fails are pre-existing. Full stobe-tests running -> /tmp/imm26_tripresume_a_full.txt (WSL).
+Left: read full result, final report via save-report.ps1. Do NOT deploy / regenerate compose.patch (WP-C).
