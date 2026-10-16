@@ -111,7 +111,7 @@ COMBAT = re.compile(r'"?in_?combat"?\s*[:=]\s*(true|1)\b', re.I)
 
 def check_20a(row, ev):
     py = sys.executable
-    p = subprocess.run([py, '-u', os.path.join(HERE, 'rowcheck.py'), '20-a', ev], capture_output=True, text=True)
+    p = subprocess.run([py, '-u', os.environ.get('UB_ROWCHECK') or os.path.join(HERE, 'rowcheck.py'), '20-a', ev], capture_output=True, text=True)   # UB_ROWCHECK: selftest stub
     line = last_result(p.stdout)
     if not line:
         return out(row, 'FAIL', f'rowcheck.py produced no RESULT line (rc={p.returncode}): {((p.stderr or "").strip().splitlines() or ["no output"])[-1][:200]}', ev)
