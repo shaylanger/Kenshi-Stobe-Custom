@@ -635,6 +635,11 @@ def _prepare_retry_attempt(root: Path, rid: str, attempt_no: int) -> None:
     if not attempt.exists():
         _write_attempt(root, rid, cell, (run_dir / "prompt.md").read_text(encoding="utf-8"), attempt_no)
         return
+    if attempt.is_dir() and not any(attempt.iterdir()):
+        # Recover only the empty directory left by a failed profile-creation call.
+        attempt.rmdir()
+        _write_attempt(root, rid, cell, (run_dir / "prompt.md").read_text(encoding="utf-8"), attempt_no)
+        return
     receipt = _json(attempt / "launch.json")
     if receipt.get("status") != "PREPARED":
         raise BenchError("explicit retry attempt already contains terminal evidence")

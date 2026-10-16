@@ -398,6 +398,7 @@ See C:\\KenshiModding\\src\\module.py:42
                 bench._write_json(run_dir / "launch.json", failed)
                 original_bytes = old_attempt.read_bytes()
                 self.assertIn("FAILED_SETUP", bench.RETRYABLE_TERMINAL_STATUSES)
+                (run_dir / "attempt-02").mkdir()
                 bench._prepare_retry_attempt(root, rid, 2)
                 self.assertEqual(old_attempt.read_bytes(), original_bytes)
                 new = run_dir / "attempt-02"
