@@ -2,9 +2,18 @@
 # Prints, compactly: the handoff marker (then archives it), testing/HANDOFF.md "Right now", each agent status
 # file (C:\KenshiTestRuns\agents\<name>.status), inflight markers (+ the batch out dir a marker names: DONE/SUMMARY),
 # game lock and Kenshi state.
-param([switch]$Brief, [switch]$AgentsOnly)  # -AgentsOnly: stop after the agent roll call (selftest). -Brief (Shay 2026-10-15): ~10x smaller output; agents not DONE and < 6 h old only, long lines cut, no rig-runner/stale sections
+param([switch]$Brief, [switch]$AgentsOnly, [switch]$Inner)  # -AgentsOnly: stop after the agent roll call (selftest). -Brief (Shay 2026-10-15): ~10x smaller output; agents not DONE and < 6 h old only, long lines cut, no rig-runner/stale sections
 $ws = 'C:\KenshiModding'
 $runs = if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }
+
+# PI-07 (Shay 2026-10-15): -Brief has a hard output budget (~12 KB). Run the real body as -Inner, then cap per section (session-start-budget.ps1).
+# Never capped: WAKER STATUS, ORPHANED, NO SUCCESSOR, DEAD, OWNED-BY-LIVE-TAIL, TAIL, PROCESS IDEAS FOR SHAY, Next:. Lines over a cap -> "(N more; run without -Brief)".
+if ($Brief -and -not $Inner) {
+    . (Join-Path $PSScriptRoot 'session-start-budget.ps1')
+    $raw = @(& $PSCommandPath -Brief -Inner @(if ($AgentsOnly) { '-AgentsOnly' }) *>&1 | ForEach-Object { "$_" })
+    Limit-BriefOutput -Lines $raw -MaxBytes $(if ($env:SS_BRIEF_MAX_BYTES) { [int]$env:SS_BRIEF_MAX_BYTES } else { 12288 })
+    return
+}
 
 # First line (Shay 2026-10-15): is a background event wait running? A session without one is unreachable for peer messages and stalls.
 $ew = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $PID -and [string]$_.CommandLine -match 'event-wait\.sh' -and [string]$_.CommandLine -notmatch '\b(grep|rg|git|sed|python3?|cat|head|tail)\b|bash -n' -and $_.Name -match '^(wsl|bash|sh)\.exe$' } | Select-Object -First 2)
@@ -112,9 +121,20 @@ if ($i -ge 0) {
 $ag = @(Get-ChildItem -LiteralPath (Join-Path $runs 'agents') -Filter '*.status' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
 if (-not $ag.Count) { 'none' }
 if ($Brief) { $ag = @($ag | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) -and ((Get-Content -LiteralPath $_.FullName -TotalCount 2) -join ' ') -notmatch '\| DONE \|' }) }
+if ($Brief) {   # one line per agent: live RUNNING first, then the rest (orphans/no-successor are listed in full under agent health)
+    $ag = @($ag | Sort-Object @{ Expression = { $st = ((Get-Content -LiteralPath $_.FullName -TotalCount 1) -split '\|')[1]; if ("$st".Trim() -eq 'RUNNING' -and $_.LastWriteTime -gt (Get-Date).AddMinutes(-45)) { 0 } else { 1 } } }, @{ Expression = { $_.LastWriteTime }; Descending = $true })
+    foreach ($a in $ag) {
+        $c = @(Get-Content -LiteralPath $a.FullName -TotalCount 5)
+        $f = ("$($c[0])" -split '\|' | ForEach-Object { $_.Trim() })
+        $t = (($c | Where-Object { $_ -like 'task:*' } | Select-Object -First 1) -replace '^task:\s*', '')
+        $lt = (($c | Where-Object { $_ -like 'latest:*' } | Select-Object -First 1) -replace '^latest:\s*', '')
+        "$($a.BaseName) $(if ($f.Count -ge 2) { $f[1] }) $([int]((Get-Date) - $a.LastWriteTime).TotalMinutes)m: $t | $lt"
+    }
+} else {
 foreach ($a in $ag) {
     "--- $($a.BaseName) (updated $(Get-Date $a.LastWriteTime -Format 'MM-dd HH:mm'))"
-    Get-Content -LiteralPath $a.FullName | Select-Object -First $(if ($Brief) { 5 } else { 12 }) | ForEach-Object { if ($Brief -and $_.Length -gt 220) { $_.Substring(0,220) + '...' } else { $_ } }
+    Get-Content -LiteralPath $a.FullName | Select-Object -First 12
+}
 }
 
 '=== agent health (agent-guard-lib.ps1: RUNNING > 30 min = orphaned; stopped/failed agents without a successor; respawn todos) ==='
