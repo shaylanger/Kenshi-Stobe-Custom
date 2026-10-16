@@ -13,7 +13,9 @@
 # id = <kind>-<subject> lower-case (lane-idle-5090-i4, agent-orphaned-imm26-x, agent-failed-x, llm-health-fail-llm).
 #
 # Sources (read only; the same ones the waker uses, event-wait.sh / event-stream.sh are NOT touched):
-#   lane-idle.ps1 -NoMemory                      LANE IDLE / LANE NO-OPERATOR            cleared when the lane is reported active
+#   lane-idle.ps1 -NoMemory                      LANE IDLE / LANE NO-OPERATOR / LANE STALLED   cleared when the lane is reported active (STALLED: when status or evidence is fresh again)
+#                                                LANE STALLED = HARD alert kind lane-stalled (operator status AND evidence silent > 12 min): alert-ack.ps1 refuses a plain
+#                                                ack (needs 'stopped'/'respawned' or an evidence path newer than 5 min, Test-StalledAckProof); the Stop hook blocks the coordinator after 3 min
 #   agent-guard-lib Get-AgentReport              ORPHANED, FAILED / STOPPED-CONTEXT with no successor   cleared on DONE / successor / abandoned / fresh status
 #   inbox\coordinator\*.msg + delivered\*.msg    AGENT STALL|ORPHANED|DEAD|KILLED|WALL-CLOCK <name>, LLM-HEALTH FAIL / PREFLIGHT-FAIL llm
 #                                                (messages < 90 min old, each handled once); cleared by the agent state (see Test-MsgAgentBad) / llm-health OK
@@ -25,6 +27,8 @@ try { . (Join-Path $PSScriptRoot 'agent-guard-lib.ps1') } catch { }
 $script:AlertScanSec = 60
 $script:AlertAckHoldMin = 30
 $script:AlertMsgWindowMin = 90
+$script:AlertHardKinds = @('lane-stalled')          # hard alerts: Stop block after 3 min (others 5), ack needs proof
+$script:AlertHardMinAge = 3
 
 function Get-AlertRuns { if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' } }
 function Get-AlertDir([string]$runs) { $d = Join-Path $runs 'alerts'; if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }; $d }
@@ -93,6 +97,20 @@ function Update-OperatorAlertFiles([string]$Runs) {
     } catch { }
 }
 
+# Ack proof for a hard alert (lane-stalled): the action text must say the operator was 'stopped' or 'respawned', or name an existing file path
+# (after the word 'evidence') whose LastWriteTime is < 5 min old. Returns $true / $false.
+function Test-StalledAckProof([string]$Action, [datetime]$Now = (Get-Date)) {
+    try {
+        if ($Action -match '(?i)\b(stopped|respawned)\b') { return $true }
+        if ($Action -match '(?i)\bevidence\b') {
+            foreach ($m in [regex]::Matches($Action, '[A-Za-z]:\\[^\s"'',;|]+')) {
+                if ((Test-Path -LiteralPath $m.Value) -and (($Now - (Get-Item -LiteralPath $m.Value).LastWriteTime).TotalMinutes -lt 5)) { return $true }
+            }
+        }
+    } catch { }
+    $false
+}
+
 # does the agent named in a STALL / ORPHANED / DEAD / KILLED / WALL-CLOCK message still need attention? ($ar = Get-AgentReport result)
 function Test-MsgAgentBad([string]$Runs, [string]$Kind, [string]$Name, [datetime]$OpenedAt, $ar, [datetime]$Now) {
     try {
@@ -140,9 +158,9 @@ function Invoke-AlertScan {
             $li = @(& (Join-Path $script:AlertLibDir 'lane-idle.ps1') -NoMemory -Runs $Runs 2>&1 | ForEach-Object { "$_" })
             $seenLine = $false
             foreach ($l in $li) {
-                if ($l -match '^LANE (IDLE|NO-OPERATOR) (\S+)') {
+                if ($l -match '^LANE (IDLE|NO-OPERATOR|STALLED) (\S+)') {
                     $k = 'lane-' + $Matches[1].ToLowerInvariant(); $sub = $Matches[2]; $seenLine = $true
-                    $conds[(ConvertTo-AlertId $k $sub)] = @{ Kind = $k; Subject = $sub; Text = ($l.Substring(0, [Math]::Min(300, $l.Length))); Source = 'lane'; OpenedAt = $null }
+                    $conds[(ConvertTo-AlertId $k $sub)] = @{ Kind = $k; Subject = $sub; Text = ($l.Substring(0, [Math]::Min($(if ($k -in $script:AlertHardKinds) { 900 } else { 300 }), $l.Length))); Source = 'lane'; OpenedAt = $null }
                 } elseif ($l -match '^LANES ACTIVE') { $seenLine = $true }
             }
             $laneOk = $seenLine
@@ -275,7 +293,7 @@ function Get-AlertStopVerdict([string]$Runs = '', [datetime]$Now = (Get-Date), [
     try {
         if (-not $Runs) { $Runs = Get-AlertRuns }
         $sf = Join-Path (Get-AlertDir $Runs) 'stop-block.json'
-        $old = @(Get-OpenAlerts $Runs $Now | Where-Object { $_.AgeMin -ge $MinAge })
+        $old = @(Get-OpenAlerts $Runs $Now | Where-Object { $_.AgeMin -ge $(if ($_.Kind -in $script:AlertHardKinds) { [Math]::Min($MinAge, $script:AlertHardMinAge) } else { $MinAge }) })
         if (-not $old.Count) { Remove-Item -LiteralPath $sf -Force -ErrorAction SilentlyContinue; return $v }
         $ids = @($old | ForEach-Object Id | Sort-Object)
         $sig = $ids -join '|'
@@ -291,7 +309,7 @@ function Get-AlertStopVerdict([string]$Runs = '', [datetime]$Now = (Get-Date), [
         $parts = @($old | Select-Object -First 5 | ForEach-Object { "$($_.Id) ($([int]$_.AgeMin) min: $($_.Text.Substring(0, [Math]::Min(110, $_.Text.Length))))" })
         $more = if ($old.Count -gt 5) { " (+$($old.Count - 5) more)" } else { '' }
         $v.Block = $true; $v.Ids = $ids
-        $v.Message = "$($old.Count) open alert(s) older than $MinAge min and not acked: " + ($parts -join ' || ') + $more + ". The waker raised them and nothing recorded an action. Act on each (or confirm it is a false alarm), then close it with: powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\alert-ack.ps1 <id> `"<action taken>`" (an ack always closes it; an alert whose condition clears closes itself). Block $($prev + 1) of $Cap for this alert set; after $Cap unchanged blocks the hook lets one stop through and logs it."
+        $v.Message = "$($old.Count) open alert(s) older than $MinAge min and not acked: " + ($parts -join ' || ') + $more + ". The waker raised them and nothing recorded an action. Act on each (or confirm it is a false alarm), then close it with: powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\alert-ack.ps1 <id> `"<action taken>`" (an ack closes it; an alert whose condition clears closes itself; a lane-stalled alert is a HARD alert, its ack is refused unless the action says 'stopped' or 'respawned' or names an 'evidence' file path newer than 5 min). Block $($prev + 1) of $Cap for this alert set; after $Cap unchanged blocks the hook lets one stop through and logs it."
     } catch { }
     $v
 }
