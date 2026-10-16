@@ -57,3 +57,5 @@
 01-cx | hxrun.sh | --save <hx save> | hxA
 02-cx | hxrun.sh | --save <hx save> | hxA
 05-cx | hxrun.sh | --save <hx save> | hxB
+# imm26-fix22b: 22-b participation-qualified walk (sfr22b_keep.sh keeps Shay within 35 u for the whole native walk); selftest sfr22b_v4_selftest.sh 14/14
+22-b | sfrrun_v4.sh | --save <ready> | fix22b v4: needs plan_report fix deployed (lib md5 40f933f7/92a3b8cc) + sftrav inject on lane
