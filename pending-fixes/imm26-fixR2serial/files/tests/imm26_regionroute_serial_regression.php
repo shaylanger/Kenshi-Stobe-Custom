@@ -119,7 +119,7 @@ ac($scope['actor_id']!==strval($GLOBALS['areaSerials']['Laru']) && $scope['speak
 // ---- 1. the live-found defect: the trip read must succeed with production-shaped ids, and its proof carries the LIVE serials
 fresh_world();
 $read=stobeAreaGoalReadCurrentTrip('Laru','Shay',1000,$scope);
-ac(($read['read_succeeded']??false)===true && ($read['state']??1)===null,'1: the current-trip read succeeds (empty trip) although scope ids != live serials');
+ac(($read['read_succeeded']??false)===true && array_key_exists('state',$read) && $read['state']===null,'1: the current-trip read succeeds (empty trip) although scope ids != live serials');
 ac(intval($read['actor_serial'])===2543823360 && intval($read['speaker_serial'])===3454101504,'1: the read proof carries the LIVE serials');
 ac(($read['scope']??null)===$scope,'1: the read proof keeps the social scope (region_plan key only)');
 $bad=stobeAreaGoalReadCurrentTrip('Ghost','Shay',1000,$scope);
