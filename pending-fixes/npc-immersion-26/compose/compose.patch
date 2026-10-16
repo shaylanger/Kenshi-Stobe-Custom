@@ -2364,6 +2364,20 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/dynam
      if (count($updates) === 0) {
          return ['ok' => false, 'reason' => 'no_usable_updates'];
      }
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/dynamic_profile_scheduler.php b/lib/dynamic_profile_scheduler.php
+--- a/lib/dynamic_profile_scheduler.php	2026-09-29 11:13:36.152441948 -0500
++++ b/lib/dynamic_profile_scheduler.php	2026-10-15 20:39:40.129390733 -0500
+@@ -366,7 +366,9 @@
+         $data = $npc['id'] ? getNpcData($npc['name']) : stobeBuildNarratorNpcData();
+         $data['metadata'] = array_replace(dps_json($data['metadata'] ?? ''),['DYNAMIC_PROFILE_FIELDS'=>$npc['fields']]);
+         $generated = stobeDynamicProfileGenerateUpdates($npc['name'],$data,$history);
+-        return !empty($generated['ok']) && count($generated['updates'] ?? [])===count($npc['fields']) ? $generated['updates'] : [];
++        // The generator may add fields that are not enabled (backstory for sparse profiles): count only the enabled ones.
++        $enabled = array_intersect_key((array)($generated['updates'] ?? []), array_flip($npc['fields']));
++        return !empty($generated['ok']) && count($enabled)===count($npc['fields']) ? $enabled : [];
+     }
+     $updates = [];
+     foreach ($npc['fields'] as $field) {
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_c1_context.php b/lib/imm26_c1_context.php
 --- a/lib/imm26_c1_context.php	1969-12-31 18:00:00.000000000 -0600
 +++ b/lib/imm26_c1_context.php	2026-10-15 13:28:58.489777154 -0500
@@ -2752,7 +2766,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_c1_principles.php b/lib/imm26_c1_principles.php
 --- a/lib/imm26_c1_principles.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_c1_principles.php	2026-10-15 15:22:47.010781553 -0500
++++ b/lib/imm26_c1_principles.php	2026-10-15 20:39:40.131110833 -0500
 @@ -0,0 +1,454 @@
 +<?php
 +declare(strict_types=1);
@@ -2807,7 +2821,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +    return [
 +        'slavery' => ['label' => 'slavery',
 +            'profile' => '/\b(?:slav(?:e|es|ery|er|ers)|enslav\w*|shackl\w*|bondage)\b/iu',
-+            'request' => '/\b(?:enslav\w*|slaves?|slavery|shackl\w*|kidnap\w*|in chains)\b/iu',
++            'request' => '/\b(?:enslav\w*|slaves?|slavery|shackl\w*|kidnap\w*|in chains|chain\w*\s+(?:up|him|her|them|this|that|the)|imprison\w*|captur\w*\s+(?:him|her|them)|(?:take|make|hold|keep)\s+\w+(?:\s+\w+)?\s+(?:prisoner|captive)s?)\b/iu',
 +            'commands' => ['PICKUP_NPC', 'IMPRISON'],
 +            'seed_support' => '/\b(?:slaver|slave\s*trader|slave\s*master|slave\s*owner)s?\b/iu',
 +            'seed_oppose' => '/\b(?:anti[- ]?slaver|abolitionist|freedom\s*fighter)s?\b/iu',
@@ -3983,7 +3997,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_claims.php b/lib/imm26_claims.php
 --- a/lib/imm26_claims.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_claims.php	2026-10-15 13:29:56.585938308 -0500
++++ b/lib/imm26_claims.php	2026-10-15 20:39:40.131503433 -0500
 @@ -0,0 +1,108 @@
 +<?php
 +declare(strict_types=1);
@@ -4050,7 +4064,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +
 +function imm26IsChallenge(string $playerMessage): bool
 +{
-+    return preg_match("/\\b(?:that'?s (?:not true|wrong|a lie)|you(?:'re| are) (?:wrong|lying|mistaken)|you never|you didn'?t|i never|i didn'?t|no,? i (?:did|have|was)|wrong|liar|mistaken|you said|that is not what)\\b/iu", $playerMessage) === 1;
++    return preg_match("/\\b(?:that'?s (?:not true|wrong|a lie)|you(?:'re| are) (?:wrong|lying|mistaken)|you never|you didn'?t|i never|i didn'?t|no,? i (?:did|have|was)|wrong|liar|mistaken|you said|that is not what|i (?:haven'?t|have not|hadn'?t)|i don'?t have (?:it|that|one)|check your (?:pack|bag|inventory))\\b/iu", $playerMessage) === 1;
 +}
 +
 +function imm26IsWhyQuestion(string $playerMessage): bool
@@ -4592,8 +4606,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +}
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26_personality.php b/lib/imm26_personality.php
 --- a/lib/imm26_personality.php	1969-12-31 18:00:00.000000000 -0600
-+++ b/lib/imm26_personality.php	2026-10-15 17:37:39.586162600 -0500
-@@ -0,0 +1,186 @@
++++ b/lib/imm26_personality.php	2026-10-15 20:39:40.130369733 -0500
+@@ -0,0 +1,189 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -4605,7 +4619,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 + * Deterministic and cheap: no LLM call.
 + */
 +
-+function imm26PhraseSplit(string $text, int $max, int $maxLen = 60): array
++function imm26PhraseSplit(string $text, int $max, int $maxLen = 60, bool $skipBoilerplate = false): array
 +{
 +    $text = trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
 +    if ($text === '') return [];
@@ -4614,6 +4628,8 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +    foreach ($parts as $part) {
 +        $part = trim($part, " \t\"'()-");
 +        if (mb_strlen($part) < 4) continue;
++        // imm26-batch5: generated profiles open with "this character ..."; a cut-off fragment of that never survives a rewrite.
++        if ($skipBoilerplate && preg_match('/\b(?:this character|this person)\b/iu', $part) === 1) continue;
 +        $part = mb_substr($part, 0, $maxLen);
 +        if (!in_array(mb_strtolower($part), array_map('mb_strtolower', $out), true)) $out[] = $part;
 +        if (count($out) >= $max) break;
@@ -4625,14 +4641,14 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +function imm26AnchorDerive(array $npc): array
 +{
 +    $personality = trim(strval($npc['personality'] ?? ''));
-+    $traits = imm26PhraseSplit($personality, 3);
++    $traits = imm26PhraseSplit($personality, 3, 60, true) ?: imm26PhraseSplit($personality, 3);
 +    if (!$traits) return [];
 +    $ext = function_exists('normalizeCoreNpcExtendedData') ? normalizeCoreNpcExtendedData($npc['extended_data'] ?? []) : (is_array($npc['extended_data'] ?? null) ? $npc['extended_data'] : []);
 +    $quirks = $ext['deep_identity']['habits_and_quirks'] ?? '';
 +    if (is_array($quirks)) $quirks = implode('. ', array_map('strval', array_filter($quirks, 'is_scalar')));
 +    $tics = imm26PhraseSplit(strval($quirks), 2, 70);
 +    if (!$tics) $tics = imm26PhraseSplit(strval($npc['speechstyle'] ?? ''), 2, 70);
-+    return ['v'=>1, 'traits'=>$traits, 'tics'=>$tics, 'src'=>sha1($personality)];
++    return ['v'=>2, 'traits'=>$traits, 'tics'=>$tics, 'src'=>sha1($personality)];
 +}
 +
 +/** Does a text still carry a trait? Significant words (>= 4 letters), 5-letter stems, at least half must remain. */
@@ -4656,6 +4672,7 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/lib/imm26
 +    $personality = trim(strval($npc['personality'] ?? ''));
 +    if ($personality === '') return $stored;
 +    $hash = sha1($personality);
++    if ($stored && (int)($stored['v'] ?? 1) < 2) $stored = []; // v1 traits were boilerplate fragments: derive again
 +    if ($stored && ($stored['src'] ?? '') === $hash) return $stored;
 +    if ($stored) {
 +        // The text changed. A refresh that kept every core trait only moves the hash; anything else is a deliberate edit.
@@ -12552,6 +12569,74 @@ diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm
 +$db->exec('ROLLBACK');
 +echo "imm26_batch4_travel: $pass passed, $fail failed\n";
 +exit($fail === 0 ? 0 : 1);
+diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_batch5_regression.php b/tests/imm26_batch5_regression.php
+--- a/tests/imm26_batch5_regression.php	1969-12-31 18:00:00.000000000 -0600
++++ b/tests/imm26_batch5_regression.php	2026-10-15 20:39:40.137932233 -0500
+@@ -0,0 +1,64 @@
++<?php
++// imm26 batch5 regression (offline, no DB). Fails on the old code, passes on the patched tree.
++//  FIX1 (row 16-c): dps_generate must count only the ENABLED fields (the generator adds `backstory` for sparse profiles);
++//        anchor traits must skip boilerplate "this character ..." fragments (v=2) and a v1 anchor is re-derived.
++//  FIX2 (row 02-bx): slavery request regex catches "chain up / prisoner / captive" requests, no false hit on "free the prisoner".
++//  FIX3 (row 17-bx): imm26IsChallenge catches "I haven't ..." / "check your pack" denial-of-possession challenges.
++// Run: php tests/imm26_batch5_regression.php
++declare(strict_types=1);
++$root = __DIR__ . '/..';
++$n = 0;
++function ok(bool $c, string $what, $detail = null): void { global $n; if (!$c) { echo 'FAIL: ' . $what . ($detail !== null ? ' :: ' . json_encode($detail) : '') . "\n"; exit(1); } ++$n; }
++
++// ---- FIX1a: dps_generate with a generator that returns 5 updates for 4 enabled fields
++function getNpcData($name) { return ['metadata' => '{}']; }
++function stobeBuildNarratorNpcData() { return ['metadata' => '{}']; }
++function stobeDynamicProfileGenerateUpdates($name, $data, $history) {
++    return ['ok' => true, 'updates' => ['personality' => 'P', 'occupation' => 'O', 'speechstyle' => 'S', 'goals' => 'G', 'backstory' => 'B']];
++}
++require_once $root . '/lib/dynamic_profile_scheduler.php';
++$fields = ['personality', 'occupation', 'speechstyle', 'goals'];
++$u = dps_generate(['id' => 1, 'name' => 'Cind', 'fields' => $fields], 'history');
++ok(count($u) === 4 && !isset($u['backstory']) && ($u['personality'] ?? '') === 'P', 'FIX1a: extra backstory dropped, 4 enabled fields returned', $u);
++
++// ---- FIX1b: anchor traits
++require_once $root . '/lib/imm26_personality.php';
++$npc = ['personality' => 'This character stays balanced by keeping supplies in strict order, Reserved and deliberate, quietly watchful', 'speechstyle' => 'Low, even voice'];
++$a = imm26AnchorDerive($npc);
++ok(($a['v'] ?? 0) === 2, 'FIX1b: anchor carries v=2', $a);
++$joined = mb_strtolower(implode('|', $a['traits'] ?? []));
++ok($joined !== '' && !str_contains($joined, 'this character'), 'FIX1b: no "this character" boilerplate trait', $a['traits'] ?? null);
++ok(str_contains($joined, 'reserved') || str_contains($joined, 'deliberate'), 'FIX1b: real traits kept', $a['traits'] ?? null);
++// all-boilerplate personality still yields an anchor (fallback)
++$b = imm26AnchorDerive(['personality' => 'This character keeps to himself']);
++ok(!empty($b['traits']), 'FIX1b: fallback when every part is boilerplate', $b);
++// a v1 anchor with a boilerplate trait and a changed text is re-derived (not kept) so a faithful rewrite is no longer judged against it
++$stale = ['v' => 1, 'traits' => ['this character stays balanced by keeping supplies in strict '], 'tics' => ['x'], 'src' => 'old'];
++$meta = ['imm26_anchor' => $stale];
++if (!function_exists('normalizeCoreNpcMetadata')) { function normalizeCoreNpcMetadata($m) { return is_array($m) ? $m : []; } }
++$out = imm26PersonalityAnchor('Nobody', $npc + ['metadata' => $meta], false);
++ok(($out['v'] ?? 0) === 2 && !str_contains(mb_strtolower(implode('|', $out['traits'] ?? [])), 'this character'), 'FIX1b: v1 anchor re-derived to v2', $out);
++// same text, v1 anchor: also upgraded
++$stale['src'] = sha1(trim($npc['personality']));
++$out2 = imm26PersonalityAnchor('Nobody', $npc + ['metadata' => ['imm26_anchor' => $stale]], false);
++ok(($out2['v'] ?? 0) === 2, 'FIX1b: v1 anchor with the same text upgraded', $out2);
++// a v2 anchor is kept when the text only moves
++$v2 = imm26AnchorDerive($npc);
++$out3 = imm26PersonalityAnchor('Nobody', ['personality' => $npc['personality'] . ' and curious', 'metadata' => ['imm26_anchor' => $v2]], false);
++ok(($out3['traits'] ?? null) === $v2['traits'], 'FIX1b: v2 anchor kept over a faithful refresh', $out3);
++
++// ---- FIX2: slavery request regex
++require_once $root . '/lib/imm26_c1_principles.php';
++$f = 'stobeImm26PrincipleRequestTopics';
++foreach (['Chain up this prisoner for me, I will pay you.', 'Take him prisoner and chain him up.', 'Keep them captive for a week.', 'Imprison that man.', 'Capture him alive.', 'Put them in shackles.', 'I want a slave.'] as $t)
++    ok(in_array('slavery', $f($t), true), 'FIX2: slavery request matched: ' . $t, $f($t));
++foreach (['Free the prisoner.', 'Let the captive go.', 'Capture the flag.', 'Where is the prisoner camp?', 'Hello there.'] as $t)
++    ok(!in_array('slavery', $f($t), true), 'FIX2: no false hit: ' . $t, $f($t));
++
++// ---- FIX3: possession-denial challenges
++require_once $root . '/lib/imm26_claims.php';
++foreach (["Check your pack, I haven't had it.", "I haven't taken anything.", "I have not seen your sword.", "Check your bag.", "Check your inventory.", "I don't have it."] as $t)
++    ok(imm26IsChallenge($t), 'FIX3: challenge: ' . $t);
++foreach (['Hello there friend.', 'I have a sword to sell.', 'Do you want some bread?'] as $t)
++    ok(!imm26IsChallenge($t), 'FIX3: not a challenge: ' . $t);
++echo "imm26_batch5 checks=$n OK\n";
 diff -ruN -x log -x __pycache__ -x soundcache -x '*.orig' -x '*.rej' a/tests/imm26_c1_db_regression.php b/tests/imm26_c1_db_regression.php
 --- a/tests/imm26_c1_db_regression.php	1969-12-31 18:00:00.000000000 -0600
 +++ b/tests/imm26_c1_db_regression.php	2026-10-15 13:39:19.889773210 -0500
