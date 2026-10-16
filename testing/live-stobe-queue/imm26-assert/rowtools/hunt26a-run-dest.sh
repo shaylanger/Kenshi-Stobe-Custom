@@ -96,8 +96,7 @@ pa_move_goat() {    # moves the agreed goat to $RW_DEST + pin; sets moved=1 only
   [ -n "$id" ] || { echo "$(date +%T) targetSerial=$ser not found in $T/spawn.txt or chars 400" >> "$OUT/goat_move.txt"; return 1; }
   out=$(pa_h "stobe-auto teleport \"$id\" $RW_DEST </dev/null | head -2
 stobe-auto pin \"$id\" </dev/null | head -1")
-  echo "$(date +%T) targetSerial=$ser agreed goat $id -> $RW_DEST: $(echo "$out" | tr '
-' ' ' | cut -c1-300)" >> "$OUT/goat_move.txt"
+  echo "$(date +%T) targetSerial=$ser agreed goat $id -> $RW_DEST: $(echo "$out" | tr '\n' ' ' | cut -c1-300)" >> "$OUT/goat_move.txt"
   moved=1
 }
 # the accept must land first (newest NEW record leaves 'proposed'); then Shay follows until the record is terminal
