@@ -94,8 +94,8 @@ pa_move_goat() {    # moves the agreed goat to $RW_DEST + pin; sets moved=1 only
   id=$(grep -ahoE "#${ser}/[0-9]+" "$T/spawn.txt" 2>/dev/null | head -1)
   [ -n "$id" ] || id=$(pa_h 'stobe-auto chars 400 "[Herbivore]|!dead" </dev/null | head -60' | grep -ahoE "#${ser}/[0-9]+" | head -1)
   [ -n "$id" ] || { echo "$(date +%T) targetSerial=$ser not found in $T/spawn.txt or chars 400" >> "$OUT/goat_move.txt"; return 1; }
-  out=$(pa_h "stobe-auto teleport \"$id\" $RW_DEST </dev/null | head -2
-stobe-auto pin \"$id\" </dev/null | head -1")
+  # the scene already pinned this goat: a bare teleport is put back by PinTick and a following bare pin re-pins the OLD spot (op14 run 1: "pinned Goat at -49454"), so re-pin AT the goal (replaces the old pin)
+  out=$(pa_h "stobe-auto pin \"$id\" at $RW_DEST </dev/null | head -2")
   echo "$(date +%T) targetSerial=$ser agreed goat $id -> $RW_DEST: $(echo "$out" | tr '\n' ' ' | cut -c1-300)" >> "$OUT/goat_move.txt"
   moved=1
 }
