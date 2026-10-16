@@ -72,6 +72,36 @@ Rules:
 - log: 2026-10-16 10:49 review 'coordinator-14': added
 - log: 2026-10-16 10:56 asked Shay
 
+### PI-38 | open
+- idea: tail-wait / Get-TailAgentSet must not count a still-working in-session agent as 'needs the tail' just because its status file is older than 45 min: use a liveness signal (the agent's tool-output file or its work dir changed in the last 10 min, or ListAgents says running) before it exits the wait and lets the Stop hook block.
+- evidence: 2026-10-16 10:57-11:08 (tail ded82aa7): imm26-hxA kept working (script files changed 10:54) but its status said 'designing' since 10:18, so tail-wait exited at once 5 times and the Stop hook blocked 13 times; every block was a full model turn re-reading a 300k+ context.
+- saving: about 13 turns x a 300k-token re-read per stalled-status agent (several hundred thousand tokens)
+- risk: must still catch a really dead agent: keep the 20-minute no-activity TaskStop rule
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 11:11
+- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
+
+### PI-39 | open
+- idea: The tail session should not be the 300k+ coordinator context: at handoff either /compact the old window (script it into handoff: tail-mode enter prints 'run /compact now') or let tail-autorelay be the ONLY relay path and tell the tail to do nothing on hand-back messages, because every event re-reads the whole context.
+- evidence: 2026-10-16 10:50-11:10: after the overlap handoff this tail handled about 25 turns (hand-backs from sfC, sfC2, op9l, hxA, hook blocks, a user question) at 300-330k tokens each, and manually re-relayed 4 agents that tail-autorelay had already relayed (duplicate relay files for sfC, sfC2, op9l, hxA).
+- saving: roughly 25 x 300k tokens per handoff plus 4 duplicate relays; the tail hard limit (400k) is reached sooner
+- risk: low if /compact keeps the tail routing notes (they are in the ledger)
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:11
+- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
+
+### PI-40 | open
+- idea: Waker/event-wait should not wake the coordinator for 'EVENT STATUS <agent> DONE' of an in-session subagent: those agents always deliver a hand-back message plus a task notification, so the waker event is a third, duplicate wake. Wake only for what has no other channel (inbox, lane/rig alerts, stalls, orphaned or dead agents).
+- evidence: 2026-10-16 10:00-10:50 (coordinator 14, 250-300k context): about 35 waker restarts; for sfA, sfB2, sfD2, sfE3, sfF, sfG, sfG2, sfH, hxB, inv-14e each completion arrived three times (waker EVENT STATUS DONE, SubagentHandback message, task-notification) and each wake was a model turn.
+- saving: about 10 duplicate turns per 10 agent completions (about 10 x 280k tokens), and fewer waker restarts
+- risk: must keep waking for FAILED/STOPPED-CONTEXT, and for background-job (non-subagent) agents
+- hooks: no
+- weakens: no
+- added: 2026-10-16 11:11
+- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
+
 ## Retired
 
 ### PI-01 | done
