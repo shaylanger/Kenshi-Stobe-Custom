@@ -1,0 +1,53 @@
+--- a/src/ActivityNativeExecutor.cpp
++++ b/src/ActivityNativeExecutor.cpp
+@@ -43,7 +43,7 @@
+ }
+ }
+ NativeDestination::NativeDestination():x(0),y(0),z(0) {}
+-NativeExecutor::Operation::Operation():cleanupRequired(false),mineLease(false),orderCaptured(false),orderRemoved(false),orderStartTime(0),outputBaseline(0),transferRecovery(false),detached(NULL),transferSource(NULL),transferAmount(0),sourceBefore(0),recipientBefore(0) {}
++NativeExecutor::Operation::Operation():cleanupRequired(false),mineLease(false),orderCaptured(false),orderRemoved(false),arrived(false),orderStartTime(0),outputBaseline(0),transferRecovery(false),detached(NULL),transferSource(NULL),transferAmount(0),sourceBefore(0),recipientBefore(0) {}
+ NativeExecutor::NativeExecutor(NativePolicy& policy):policy_(policy),world_(NULL),now_(0) {}
+ bool NativeExecutor::CaptureOwned(Character* actor,Operation& op,bool initial) {
+  if(!actor || !SameHand(actor->getHandle(),op.actorIdentity) || op.orderRemoved)return false;
+@@ -105,7 +105,8 @@
+    else if (actor.order.orderCount>0) facts.conflictingOrder=true;
+    if (op.request.command==Travel) {
+     const double dx=actor.x-op.destination.x,dy=actor.y-op.destination.y,dz=actor.z-op.destination.z;
+-    facts.arrived=dx*dx+dy*dy+dz*dz<=64.0;
++    // 26-a: Poll latches the Succeeded arrival; re-measuring alone loses it once the NPC walks on during cleanup retries.
++    facts.arrived=op.arrived || dx*dx+dy*dy+dz*dz<=64.0;
+    }
+   }
+   if (actor.order.orderCount>0 && !owns) facts.conflictingOrder=true;
+@@ -278,8 +279,10 @@
+   // Natural task completion can remove the order before this frame's poll.
+   if(op.request.command==Travel) {
+    Ogre::Vector3 end(static_cast<float>(op.destination.x),static_cast<float>(op.destination.y),static_cast<float>(op.destination.z));
+-   if(actor->getPosition().squaredDistance(end)<=64.0f)
++   if(actor->getPosition().squaredDistance(end)<=64.0f) {
++    op.arrived=true;
+     return op.receipt=Result(Receipt::Succeeded,"arrived_at_scoped_point");
++   }
+   }
+   if(op.request.command==Attack) {
+    Character* target=KenshiAi::ResolveCharacter(world_,op.request.target);
+@@ -289,7 +292,7 @@
+   if(!CaptureOwned(actor,op,false)) return op.receipt=Result(Receipt::Interrupted,"owned_order_changed_or_ended");
+   if(op.request.command==Travel) {
+    Ogre::Vector3 p(static_cast<float>(op.destination.x),static_cast<float>(op.destination.y),static_cast<float>(op.destination.z));
+-   if(actor->getPosition().squaredDistance(p)<=64.0f) return op.receipt=Result(Receipt::Succeeded,"arrived_at_scoped_point");
++   if(actor->getPosition().squaredDistance(p)<=64.0f) { op.arrived=true; return op.receipt=Result(Receipt::Succeeded,"arrived_at_scoped_point"); }
+    if(KenshiAi::CaptureCharacter(world_,op.request.actor).pathFailed) return op.receipt=Result(Receipt::Interrupted,"path_failed");
+   } else if(op.request.command==Attack) {
+    Character* target=KenshiAi::ResolveCharacter(world_,op.request.target);
+--- a/src/ActivityNativeExecutor.h
++++ b/src/ActivityNativeExecutor.h
+@@ -38,7 +38,7 @@
+  struct Operation {
+    Agreement agreement; Request request; NativeDestination destination;
+    Autonomy::OrderFingerprint owned; Receipt receipt;
+-   bool cleanupRequired, mineLease, orderCaptured, orderRemoved; int orderStartTime;
++   bool cleanupRequired, mineLease, orderCaptured, orderRemoved, arrived; int orderStartTime;
+    hand actorIdentity, subjectIdentity, targetIdentity;
+    unsigned int outputBaseline;
+    bool transferRecovery; Item* detached; Inventory* transferSource;
