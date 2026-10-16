@@ -52,7 +52,7 @@ a=$(grep -n 'stobe-auto attack Shay' "$L" | head -1 | cut -d: -f1); h=$(grep -n 
 grep -q 'order Shay NULL_TASK' "$L" && grep -q 'relation .* 0 ' "$L" && grep -q 'protect .* on' "$L" && chk fight-end-commands ok || chk fight-end-commands bad
 q=$(grep -n 'teleport Shay -48000 1500 2960' "$L" | head -1 | cut -d: -f1)
 [ -n "$q" ] && [ "$q" -lt "$a" ] && chk scene-at-quiet-spot-before-attack ok || chk scene-at-quiet-spot-before-attack bad "quiet@$q attack@$a"
-grep -q 'set resolved_at=updated_at where resolved_at is null' "$L" && grep -q "'CANCELLED'" "$L" && chk deal-resolved-at-workaround ok || chk deal-resolved-at-workaround bad
+grep -q 'set resolved_at=updated_at where resolved_at is null' "$L" && grep -q "status not in ('PROPOSED'" "$L" && chk deal-resolved-at-workaround ok || chk deal-resolved-at-workaround bad
 d=$(grep -n 'set resolved_at=updated_at' "$L" | head -1 | cut -d: -f1)
 [ -n "$d" ] && [ "$d" -lt "$a" ] && chk workaround-before-gift-leg ok || chk workaround-before-gift-leg bad
 grep -q 'SOCIAL_INTERPRET kind=(item_transfer)' "$L" && grep -q 'kind=(harm|attack)' "$L" && chk worker-evidence-queries ok || chk worker-evidence-queries bad

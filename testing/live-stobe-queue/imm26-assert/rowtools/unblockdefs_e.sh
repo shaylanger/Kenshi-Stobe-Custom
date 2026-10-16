@@ -8,7 +8,7 @@
 #    ended (`order Shay NULL_TASK`, `order <v> NULL_TASK`, `relation <v> 0`, health 100, protect on both).
 #  B scene: the whole row runs at the quiet spot HX_SPOT (TR_SCENE) - the Hub outlaws attacked Shay and cancelled the replies; strays within 400 u go to the far spot.
 #  C gift: lib/social_property.php inDeal() treats a CANCELLED deal with resolved_at NULL as an open deal forever (judged `deal_payment`). Lane workaround (private lane DB only):
-#    terminal-status contracts get resolved_at=updated_at, and the victim's stale open contracts are expired with resolved_at one hour ago. Permanent fix:
+#    finished (non-open status, incl. COMPLETE) contracts get resolved_at=updated_at, and the victim's stale open contracts are expired with resolved_at one hour ago. Permanent fix:
 #    pending-fixes/imm26-sfD/inDeal-terminal.py (report only; not deployed). Evidence: deal_before.txt deal_fix.txt deal_after.txt.
 # Extra evidence: attack.txt (attack order reply), interp.txt (worker SOCIAL_INTERPRET harm/attack lines), judged.txt (item_transfer judgement), harm.txt.
 # Library use: `. unblockdefs_e.sh` AFTER go-row.sh / hxdefs.sh. Shim mode: `unblockdefs_e.sh <...>rowcheck.py <ROW> <ev>` (used as $PY) sends 10-b to unblockcheck_e.py.
@@ -31,12 +31,12 @@ UC_HERE="$UE_HERE"; UC_SELF="$UE_SELF"     # the c runner re-sources UC_SELF aft
 
 ue_spot() { printf '%s' "${HX_SPOT:-${HX_SPOT_DEF:--48000 1500 2960}}"; }
 ue_deals() {  # ue_deals <victim short> <file> : the victim's contracts and every terminal contract still resolved_at NULL
-  lt_sql "select contract_id||'|'||npc_name||'|'||status||'|'||coalesce(performance_started_unix,0)||'|'||coalesce(resolved_at::text,'NULL')||'|'||coalesce(updated_at::text,'') from stobe_social_contract where lower(npc_name) like lower('$1')||'%' or (resolved_at is null and status in ('CANCELLED','EXPIRED','IMPOSSIBLE','REJECTED')) order by updated_at desc limit 20" > "$EV/$2" 2>&1
+  lt_sql "select contract_id||'|'||npc_name||'|'||status||'|'||coalesce(performance_started_unix,0)||'|'||coalesce(resolved_at::text,'NULL')||'|'||coalesce(updated_at::text,'') from stobe_social_contract where lower(npc_name) like lower('$1')||'%' or (resolved_at is null and status not in ('PROPOSED','NEGOTIATING','ACCEPTED','AWAITING_PERFORMANCE')) order by updated_at desc limit 20" > "$EV/$2" 2>&1
 }
 ue_deal_fix() {  # lane workaround for the inDeal() defect (private lane DB only)
   local s="$1"; s="${s//\'/\'\'}"
   ue_deals "$s" deal_before.txt
-  lt_sqlx "update stobe_social_contract set resolved_at=updated_at where resolved_at is null and status in ('CANCELLED','EXPIRED','IMPOSSIBLE','REJECTED'); update stobe_social_contract set status='EXPIRED', resolved_at=now() - interval '1 hour' where lower(npc_name) like lower('$s')||'%' and status in ('PROPOSED','NEGOTIATING','ACCEPTED','AWAITING_PERFORMANCE')" > "$EV/deal_fix.txt" 2>&1
+  lt_sqlx "update stobe_social_contract set resolved_at=updated_at where resolved_at is null and status not in ('PROPOSED','NEGOTIATING','ACCEPTED','AWAITING_PERFORMANCE'); update stobe_social_contract set status='EXPIRED', resolved_at=now() - interval '1 hour' where lower(npc_name) like lower('$s')||'%' and status in ('PROPOSED','NEGOTIATING','ACCEPTED','AWAITING_PERFORMANCE')" > "$EV/deal_fix.txt" 2>&1
   ue_deals "$s" deal_after.txt
 }
 ue_worker_lines() {  # ue_worker_lines <file> <kind regex> [n] : newest SOCIAL_INTERPRET lines of the lane's relationship worker
