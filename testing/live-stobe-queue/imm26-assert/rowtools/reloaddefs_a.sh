@@ -75,6 +75,7 @@ rw_chase() {  # rw_chase <tag>: Shay teleported RW_AWAY (80) u from the NPC and 
   [ -n "$pos" ] || { RL_REASON="cannot read Shay's position (stobe-auto where Shay)"; return 3; }
   set -- $pos; x=$(awk -v v="$1" -v d="${RW_AWAY:-80}" 'BEGIN{printf "%.0f", v+d}')
   lt_h <<EOT >> "$EV/chase.txt" 2>&1
+stobe-auto protect Shay on </dev/null | head -1   # op11: Hub outlaws KO'd + dragged Shay 80 u out within the 30 s chase (27-a pre leg dist 49->195)
 stobe-auto teleport Shay $x $2 $3 </dev/null | head -1 | cut -c1-100
 stobe-auto order Shay HOLD_POSITION keep </dev/null | head -1 | cut -c1-80
 EOT
