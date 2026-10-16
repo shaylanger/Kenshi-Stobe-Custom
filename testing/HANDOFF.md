@@ -7,6 +7,8 @@ Animation lab: `Kenshi-Automation-Harness/docs/animlab/STATUS.md`, KenshiFP adap
 
 ## Right now — canonical resumable checkpoint (2026-10-14)
 
+**#13 04:15:** op9j STOPPED (14-c PASS 6df6a2a; 14-d FAIL c303294: spawned bandits land in separate platoons, ClearGroup set = platoon). imm26-5090-i5-op9k RUNNING (19-f live proofs --n 4 --cap 10 and --mode cap --cap 3; 19-e only after inbox\operators9e-ready.txt = after I apply pending-fixes9e-recipe/apply.sh). imm26-inv-14d investigating a 5-member single-platoon fixture. 4080 op12: 08-d, 08-d --neg, 11-b left.
+
 **#13 04:00:** 19-f server fix 55074c1 (resume_count counted in NoteTravelRequest; capped load writes resume_failure) deployed compose + 3 5090 lane trees (4080 trees pending: add to after-op12 step 1; copy fix-19f/ to the 4080 first, then patch.py <tree>). 19-e = row defect (needs a 2nd post-load line): imm26-fix-19e stages pending-fixes\19e-recipe. Live proof: reloadrun-b.sh 19-f <lane> --n 4 --cap 10 (expect 1,2,3,4) and --mode cap --cap 3. OPEN FOR SHAY: resume cap 3 vs "everything resumes" (keep / raise / reset on running receipt); may a Hunt partner be player-faction? (26-a family).
 
 **#13 03:50:** 03-b one-call script committed (62edcdf, unblockdefs_d.sh, never run live); after op12 DONE: see inboxoperatorsfter-op12-4080.txt (deploy hearsay+acceptpropose to 4080 trees, apply 27a patch, spawn op13).
