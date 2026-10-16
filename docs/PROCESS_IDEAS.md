@@ -15,17 +15,6 @@ Rules:
 
 ## Active
 
-### PI-09 | confirmed
-- idea: Measure the first live use of go-row.sh / go-batch.sh / preflight.sh (rowtools3) against the hand-run baseline and record per-row time and tokens, then fix or keep the tools on that evidence.
-- evidence: HANDOFF #6 (2026-10-15): rowtools3 selftest is 23/23 but "NOT yet run on a live lane"; the baseline is the hand-run row 07-a that took ctxop3 a whole 200k-token context. Until a live row is timed the saving is a claim, and the first live row may need rowcheck/ini fixes.
-- saving: unknown until measured; target: one RESULT line per row at < 5k tokens per row instead of the ~200k spent on 07-a.
-- risk: none to monitoring (measurement only); rows must keep running on isolated lanes only.
-- hooks: no
-- weakens: no
-- added: 2026-10-15 17:40
-- log: 2026-10-15 18:04 asked Shay
-- log: 2026-10-15 18:04 Shay answered yes
-
 ### PI-13 | confirmed
 - idea: Run every selftest at each handoff (selftest-all.ps1: agent-guard, tail-*, process-ideas, event-wait, rowtools, session-start-budget) and make selftests use fixtures, never live state.
 - evidence: 2026-10-15 two selftests drifted silently: process-ideas-selftest 2d/8a failed once the live idea list changed, and agent-guard 'event-sweep.sh LF only' had failed unnoticed since be37f58 because event-sweep.sh line 39 had a mangled rollcall path (backslash-t and backslash-a became control characters) so the waker roll call returned nothing and every stall check failed open for hours.
@@ -40,7 +29,7 @@ Rules:
 - log: 2026-10-15 18:52 asked Shay
 - log: 2026-10-15 19:43 review 'coordinator8-19:50': asked -> confirmed (applies: imm26-hookq found agent-session-hooks-selftest meter-coordinator-text failing the same way on the untouched original hook: a drifted selftest nobody ran.)
 
-### PI-14 | asked
+### PI-14 | open
 - idea: Allow-list the status/report helpers for subagents (agent-status.ps1, save-report.ps1) in the project permission settings so the auto-mode classifier never blocks an agent from marking itself DONE.
 - evidence: 2026-10-15 imm26-pi11 finished its work but the classifier denied agent-status.ps1 and a save-report.ps1 read as Self-Modification, so its status stayed RUNNING until the coordinator fixed it by hand (and the report only arrived as a chat hand-back); imm26-5090-i4op32 also reported save-report.ps1 rejected its arguments.
 - saving: no stale RUNNING agents and no hand-fix turn (~3k tokens each time)
@@ -223,4 +212,17 @@ Rules:
 - measured: go-row/go-batch attempt guard: 2nd attempt after FAIL blocked with ROW-NEEDS-FIXER, override --allow-retry reason (logged); offline selftest 38/38 then 39/39; baseline one row (07-a) consumed a 200k operator context
 - retired: 2026-10-15 built
 - log: 2026-10-15 17:57 review 'coordinator #6 handoff 2026-10-15': open -> confirmed (applies: 2026-10-15 ~17:15 operator imm26-5090-ctxop3 hit its context limit after 5 rows, mostly debugging row 07-a (stobeNativeAiSnapshot EMPTY); the new one-attempt rule was only a text rule in briefs.)
+- log: 2026-10-15 18:04 Shay answered yes
+
+### PI-09 | done
+- idea: Measure the first live use of go-row.sh / go-batch.sh / preflight.sh (rowtools3) against the hand-run baseline and record per-row time and tokens, then fix or keep the tools on that evidence.
+- evidence: HANDOFF #6 (2026-10-15): rowtools3 selftest is 23/23 but "NOT yet run on a live lane"; the baseline is the hand-run row 07-a that took ctxop3 a whole 200k-token context. Until a live row is timed the saving is a claim, and the first live row may need rowcheck/ini fixes.
+- saving: unknown until measured; target: one RESULT line per row at < 5k tokens per row instead of the ~200k spent on 07-a.
+- risk: none to monitoring (measurement only); rows must keep running on isolated lanes only.
+- hooks: no
+- weakens: no
+- added: 2026-10-15 17:40
+- measured: row-timing-report 2026-10-15 18:37-19:53: 15 executed rows, avg 119 s/row (24 s PASS 24-b .. 254 s FAIL 19-a), 3 PASS 11 FAIL 1 GATED, attempt guard blocked 1 repeat. Baseline hand-run 07-a = one 200k-token operator context, wall unrecorded; 07-a not ported so no like-for-like. Tokens/row are NOT recorded (known gap); most FAILs are 19-a/12-d (402 outage + real trip bug), not tool faults.
+- retired: 2026-10-15 built
+- log: 2026-10-15 18:04 asked Shay
 - log: 2026-10-15 18:04 Shay answered yes
