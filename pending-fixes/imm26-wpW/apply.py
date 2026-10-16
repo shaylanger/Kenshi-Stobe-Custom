@@ -8,7 +8,9 @@ import sys, os, shutil
 root = sys.argv[1]
 here = os.path.dirname(os.path.abspath(__file__))
 p = os.path.join(root, 'lib', 'chat_helper_functions.php')
-s = open(p, encoding='utf-8').read()
+s = open(p, encoding='utf-8', newline='').read()
+CRLF = '\r\n' in s
+if CRLF: s = s.replace('\r\n', '\n')   # edit in LF, write back in the file's own EOL (lane/base files are CRLF)
 if 'stobeProtectedGiveRequiredAffinity' in s:
     print('already applied'); sys.exit(0)
 A1 = "function stobeProtectedGiveWouldBeBlocked(string $rawTag, array $config): bool {\n"
@@ -33,6 +35,6 @@ function stobeProtectedGiveRequiredAffinity(string $argument, array $config): in
 s = s.replace(A1, helper + A1)
 s = s.replace(A2, "    $threshold = stobeProtectedGiveRequiredAffinity($argument, $config);\n    $barter = boolval($config['explicit_barter_offer'] ?? false);\n")
 s = s.replace(A3, "            'required_affinity' => stobeProtectedGiveRequiredAffinity($argument, $config),\n")
-open(p, 'w', encoding='utf-8').write(s)
+open(p, 'w', encoding='utf-8', newline='').write(s.replace('\n', '\r\n') if CRLF else s)
 shutil.copy(os.path.join(here, 'imm26_wpW_weapon_guard_regression.php'), os.path.join(root, 'tests', 'imm26_wpW_weapon_guard_regression.php'))
 print('applied')
