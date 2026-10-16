@@ -2,6 +2,7 @@
 """tripfake.py <kind h|w|sql> <body>   OFFLINE lane simulator for the trip-family rows (trip-selftest.sh); delegates everything it does not
 know to fakelane.py. Extra scenario keys (env FAKE_SCEN json; counters in FAKE_STATE + '.trip'):
   state {name-substring: [stobe_state JSON per call]}   agr [[agreement dump lines per tr_agr call]]   n2 [[N2 log lines per tr_n2_log call]]
+  fu [[social_followup dump lines per rd08d_dump call]]   fu_closed (closed-topic count)   bored [stobe.log bored lines]
   se [[social_effect text rows per tr_se call]]   se_count (count(*) answer)   malzin (False -> `where Malzin` fails)
 Never touches a game, ssh or DB."""
 import json
@@ -34,6 +35,8 @@ if kind == 'h':
                 st['state'][name] = st['state'].get(name, 0) + 1
                 out([seq[min(st['state'][name] - 1, len(seq) - 1)]])
         out(['{}'])
+    if 'BORED_EVENT|ACTION_EXEC' in body:
+        out(scen.get('bored', []))
     if 'N2_ABANDON|N2_PROXIMITY' in body and 'cut -c1-300 | tail -40' in body:
         st['n2'] += 1
         seq = scen.get('n2', [[]])
@@ -49,6 +52,12 @@ elif kind == 'sql':
         out(seq[min(st['se'] - 1, len(seq) - 1)])
     if 'select count(*) from social_effect se' in body:
         out([str(scen.get('se_count', 0))])
+    if body.startswith('select type||'):
+        st['fu'] = st.get('fu', 0) + 1
+        seq = scen.get('fu', [[]])
+        out(seq[min(st['fu'] - 1, len(seq) - 1)])
+    if 'outcome_completed' in body and 'count(*)' in body:
+        out([str(scen.get('fu_closed', 0))])
     if body.startswith('delete from eventlog'):
         out(['DELETE 0'])
 save()

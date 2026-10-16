@@ -164,6 +164,51 @@ rd_24a() {  # mood question gets a grounded named place and NO trip row; control
   rl_say 2 "What is Vain like?" || return $?
 }
 
+# 08-d: a plain plan sentence creates the topic FIRST (s0; s0b "I want ..." when no open personal_plan row appears), then the 23-a trip body
+# (propose, accept, teleport to the gate, arrival line -> COMPLETED), then the claim trigger: natural bored ticks at speed 3 (TRIP_08D_WAIT s,
+# default 240) or, with TRIP_08D_STREAM=1, one targeted stream.php bored request (profile=<NPC> optional=1 mode=autochat; agents/out/imm26-setupfail-scope2b item (i)).
+# Evidence: s0/s0b (topic), fu_before.txt/fu_after.txt (`type|rowid|json` of social_followup + situated_remark_claim), bored_log.txt, stream.txt, agr_final.txt.
+rd08d_dump() {  # rd08d_dump <file>
+  lt_sql "select type||'|'||rowid||'|'||substring(data from position('{' in data)) from eventlog where type in ('social_followup','situated_remark_claim') order by rowid" > "$EV/$1" 2>&1
+}
+rd08d_stream() {  # one targeted optional bored request for the NPC (DATA must be the FIRST query parameter; gamets = newest eventlog gamets)
+  local nm="${RL_NPC_FULL%% \[*}"
+  lt_w <<EOT > "$EV/stream.txt" 2>&1
+G=\$(runuser -u postgres -- psql -h $LT_ROOT/socket -p $LT_PG -d $LT_DB -At -c "select coalesce(max(gamets),0) from eventlog")
+D=\$(printf 'bored|%s|%s|%s: [BORED_EVENT_TRIGGER] (talking to: Shay)' "\$(date +%s)" "\$G" "$nm" | base64 -w0 | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read().strip(),safe=""))')
+P=\$(python3 -c 'import sys,urllib.parse,json;print(urllib.parse.quote(json.dumps([sys.argv[1],"Shay"]),safe=""))' "$nm")
+curl -s -m 120 "http://127.0.0.1:$LT_PORT/stream.php?DATA=\$D&profile=$(printf %s "$nm" | sed 's/ /%20/g')&optional=1&people=\$P&mode=autochat" | head -c 600
+EOT
+}
+rd_08d() {
+  tr_prep || return $?
+  local dest="$TR_DEST" n0 k c
+  lt_sqlx "delete from eventlog where type='social_followup' and data like '%sell my furs%'" >> "$EV/clean.txt" 2>&1
+  rl_say 0 "I need to sell my furs in $dest before winter." || return $?
+  grep -q '"kind":"personal_plan"' "$EV/s0/ev_full.txt" 2>/dev/null || { rl_say 0b "I want to sell my furs in $dest before winter." || return $?; }
+  tr_trip_setup || return $?
+  tr_arrive || return $?
+  tr_state state_shay.txt Shay
+  rl_say 3 "We're here. Thanks for guiding me." || return $?
+  tr_state state_after.txt "$RL_NPC_FULL"; tr_agr agr_final.txt 8
+  rd08d_dump fu_before.txt
+  n0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); n0=${n0:-0}
+  [ "${TRIP_08D_STREAM:-0}" = 1 ] && rd08d_stream
+  lt_h <<EOT >> "$EV/claim.txt" 2>&1
+stobe-auto speed 3 </dev/null | head -1
+EOT
+  for k in $(seq 1 "${TRIP_08D_TRIES:-40}"); do
+    c=$(lt_sql "select count(*) from eventlog where type='social_followup' and data like '%outcome_completed%'" | head -1 | tr -dc 0-9)
+    [ "${c:-0}" -gt 0 ] && break
+    [ -n "${KAH_ROW_FAKE:-}" ] || sleep "${TRIP_08D_STEP:-6}"
+  done
+  lt_h <<EOT >> "$EV/claim.txt" 2>&1
+stobe-auto speed 0.5 </dev/null | head -1
+EOT
+  rd08d_dump fu_after.txt
+  printf 'tail -n +%s %s | grep -E "BORED_EVENT|ACTION_EXEC: SAY|FOLLOWUP|followup" | cut -c1-300 | head -40\n' "$(( n0 + 1 ))" "$LT_STOBELOG" | lt_h > "$EV/bored_log.txt" 2>&1
+}
+
 # 13-b abandon: partner (Malzin) KO'd within 25 u for >= one 2 s real scan BEFORE the leaver (Cind) is moved away (NC6 observation-gap fix);
 # phase 1 armed + KO, phase 2 control with a healthy partner. Evidence: n2_armed/n2_control (N2_* log lines), se_* (abandoned_in_danger rows).
 tr_n2_log() {  # tr_n2_log <file> <n0> : N2 lines of stobe.log after line n0

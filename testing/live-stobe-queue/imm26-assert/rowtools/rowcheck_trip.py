@@ -201,4 +201,51 @@ def register(rc, CHECKS):
         v.ck('control_healthy_partner_no_new_effect_row', ctl == arm, f'armed={arm} control={ctl}')
         v.note = f'R~ phases: {(rd(ev, "phases.txt") or "").strip()[:200]!r}'
 
-    CHECKS.update({'13-b': c_13b, '20-a': c_20a, '20-b': c_20b, '23-a': c_23a, '23-c': c_23c, '23-d': c_23d, '24-a': c_24a})
+    # ---------------------------------------------------------------- 08-d
+    def fu_rows(ev, name):
+        """[(type, rowid, dict)] from `type|rowid|json` lines"""
+        import json
+        out = []
+        for ln in (rd(ev, name) or '').splitlines():
+            p = ln.split('|', 2)
+            if len(p) == 3 and p[1].strip().isdigit():
+                try:
+                    js = json.loads(p[2])
+                except ValueError:
+                    js = {}
+                out.append((p[0], int(p[1]), js))
+        return out
+
+    def c_08d(v, ev):
+        if not need(v, ev, 'agr_final.txt', 'fu_before.txt', 'fu_after.txt', 'bored_log.txt'):
+            return
+        topic = None
+        for st in ('s0', 's0b'):
+            for r in full_rows(ev, st, {'social_followup'}):
+                js = r[2]
+                if js.get('kind') == 'personal_plan' and js.get('status') == 'open' and 'furs' in str(js.get('source_quote', '')).lower():
+                    topic = js
+        if not topic:
+            return v.setup_fail('no open personal_plan social_followup topic was created from the plain sentence in s0/s0b (model emitted ACCEPT/END or the sentence '
+                                'failed the explicit-source rule): seed it with a stobeFollowupWrite helper and record the row as a server-path proof')
+        if not pre_ok(v, ev):
+            return
+        o = orig(ev)
+        fin = latest(agr(ev, 'agr_final.txt')).get(o['aid'])
+        if not fin or fin['status'] != 'COMPLETED':
+            return v.setup_fail(f"the trip did not reach COMPLETED ({(fin or {}).get('status', 'row not found')}, reason {(fin or {}).get('reason', '')}): no completed travel_agreement to retire the topic (same defect as 23-a)")
+        tid = topic.get('topic_id', '')
+        after = [r for r in fu_rows(ev, 'fu_after.txt') if r[0] == 'social_followup' and r[2].get('topic_id') == tid]
+        last = max(after, key=lambda r: r[1])[2] if after else {}
+        closed = last.get('status') == 'closed' and last.get('closed_reason') == 'outcome_completed'
+        ticks = len(re.findall(r'BORED_EVENT', rd(ev, 'bored_log.txt') or '')) + (1 if (rd(ev, 'stream.txt') or '').strip() else 0)
+        if not closed and not ticks:
+            return v.setup_fail('trip COMPLETED and topic open, but no claim turn ran (no BORED_EVENT line in bored_log.txt, no stream.txt): the claim path never fired, retry with TRIP_08D_STREAM=1 or a longer TRIP_08D_TRIES')
+        v.ck('topic_closed_outcome_completed', closed, f"status={last.get('status')} closed_reason={last.get('closed_reason')}")
+        claims = [r for r in fu_rows(ev, 'fu_after.txt') if r[0] == 'situated_remark_claim' and f'followup:{tid}' in str(r[2].get('event_id', ''))]
+        v.ck('no_situated_remark_claim_for_closed_topic', not claims, f'n={len(claims)}')
+        ask = [ln for ln in (rd(ev, 'bored_log.txt') or '').splitlines() if 'ACTION_EXEC: SAY' in ln and re.search(r'fur|squin', ln, re.I)]
+        v.ck('no_npc_ask_about_the_topic', not ask, f'n={len(ask)}')
+        v.note = f"R~ quote={topic.get('source_quote', '')[:60]!r} ticks={ticks}"
+
+    CHECKS.update({'13-b': c_13b, '20-a': c_20a, '20-b': c_20b, '23-a': c_23a, '23-c': c_23c, '23-d': c_23d, '24-a': c_24a, '08-d': c_08d})

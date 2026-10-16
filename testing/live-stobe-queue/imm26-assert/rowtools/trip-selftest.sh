@@ -50,6 +50,21 @@ expect 13-b-fail-not-fired 13b-nofire 13-b $L "RESULT 13-b FAIL" "armed_N2_ABAND
 expect 13-b-fail-control-fired 13b-ctlfire 13-b $L "RESULT 13-b FAIL" "control_healthy_partner_no_N2_ABANDON"
 expect 13-b-setup-fail-no-n2-watch 13b-noN2 13-b $L "RESULT 13-b SETUP-FAIL no N2_PROXIMITY"
 
+# --- 08-d: topic first, trip, claim trigger
+expect 08-d-pass 08d-pass 08-d $L "RESULT 08-d PASS" "topic_closed_outcome_completed"
+expect 08-d-s0b-fallback 08d-s0b 08-d $L "RESULT 08-d PASS" "topic_closed_outcome_completed"
+grep -q 'I want to sell my furs in Squin before winter\.' "$KAH_ROWS_BASE/imm26-5090-i3/rows/08-d/s0b/utterance.txt" 2>/dev/null && chk 08-d-s0b-wording ok || chk 08-d-s0b-wording bad
+expect 08-d-fail-topic-still-open 08d-open 08-d $L "RESULT 08-d FAIL" "topic_closed_outcome_completed"
+expect 08-d-fail-claim-row 08d-claim 08-d $L "RESULT 08-d FAIL" "no_situated_remark_claim_for_closed_topic"
+expect 08-d-setup-fail-no-topic 08d-notopic 08-d $L "RESULT 08-d SETUP-FAIL no open personal_plan"
+expect 08-d-setup-fail-no-claim-turn 08d-noticks 08-d $L "RESULT 08-d SETUP-FAIL trip COMPLETED and topic open, but no claim turn"
+expect 08-d-setup-fail-trip-not-completed 08d-notrip 08-d $L "RESULT 08-d SETUP-FAIL the trip did not reach COMPLETED"
+scen 08d-pass; run 08-d $L >/dev/null; F="$KAH_ROW_FAKE_LOG"
+n_s0=$(grep -n "stobe_say .* 'I need to sell my furs in Squin before winter\.'" "$F" | head -1 | cut -d: -f1); n_s1=$(grep -n "stobe_say .* 'Take me to Squin\.'" "$F" | head -1 | cut -d: -f1)
+[ -n "$n_s0" ] && [ -n "$n_s1" ] && [ "$n_s0" -lt "$n_s1" ] && chk 08-d-topic-sentence-before-trip ok || chk 08-d-topic-sentence-before-trip bad "s0=$n_s0 s1=$n_s1"
+grep -q 'stream.php' "$F" && chk 08-d-no-stream-by-default bad || chk 08-d-no-stream-by-default ok
+scen 08d-pass; TRIP_08D_STREAM=1 run 08-d $L >/dev/null; grep -q 'stream.php?DATA=' "$KAH_ROW_FAKE_LOG" && grep -q 'optional=1' "$KAH_ROW_FAKE_LOG" && chk 08-d-stream-trigger-option ok || chk 08-d-stream-trigger-option bad
+
 # --- recipe statements: db clean, haff 60, quiet scene, KO sequence, never an IDLE order on the NPC outside 20-b
 IDLE_CIND="order 'Cind \[Hungry Bandit\]' IDLE"
 scen 23a-pass; run 23-a $L >/dev/null

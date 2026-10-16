@@ -75,6 +75,36 @@ elif n in ('13b-pass', '13b-nofire', '13b-ctlfire', '13b-noN2'):
         S['n2'] = [[prox, ab], [prox, ab]]
     if n == '13b-noN2':
         S['n2'] = [[], []]; S['se'] = [[], [], []]; S['se_count'] = 0
+elif n.startswith('08d-'):
+    TID = 'd32f118d423bf225010baac3ef4dedfc'
+
+    def fu(status='open', reason=None, kind='personal_plan'):
+        d = {'topic_id': TID, 'kind': kind, 'status': status, 'source_quote': 'I need to sell my furs in Squin before winter.', 'created_gamets': 100}
+        if reason:
+            d['closed_reason'] = reason
+        return 'followup-v1:aa:' + TID + ':' + json.dumps(d, separators=(',', ':'))
+    TOP = {'reply': 'Furs, in this cold?', 'full': [['social_followup', fu()]]}
+    NOTOP = {'reply': 'Hm.', 'full': []}
+    S3 = {'reply': 'Walk is done, then.'}
+    open_row = 'social_followup|1|' + fu().split(':', 3)[3]
+    closed_row = 'social_followup|2|' + fu('closed', 'outcome_completed').split(':', 3)[3]
+    claim_row = 'situated_remark_claim|3|' + json.dumps({'actor_serial': 1, 'event_id': 'followup:' + TID + ':1'})
+    bored = ['BORED_EVENT dispatched Cind->Shay mode=director']
+    S = {'steps': [TOP, S1, S2, S3], 'agr': [ACC, [agr(7009, 'COMPLETED', 'completed', '', 'true')] + ACC], 'state': {'Shay': [SHAY], 'Cind': [CIND]},
+         'fu': [[open_row], [open_row, closed_row]], 'fu_closed': 1, 'bored': bored}
+    if n == '08d-s0b':      # first wording creates no topic -> s0b "I want ..." does
+        S['steps'] = [NOTOP, TOP, S1, S2, S3]
+    elif n == '08d-notopic':
+        S['steps'] = [NOTOP, NOTOP, S1, S2, S3]
+    elif n == '08d-open':    # claim ticks happened but the topic is still open
+        S['fu'] = [[open_row], [open_row]]; S['fu_closed'] = 0
+    elif n == '08d-noticks':
+        S['fu'] = [[open_row], [open_row]]; S['fu_closed'] = 0; S['bored'] = []
+    elif n == '08d-claim':   # closed, but a situated_remark_claim row for the topic was still written
+        S['fu'] = [[open_row], [open_row, closed_row, claim_row]]
+    elif n == '08d-notrip':  # trip failed instead of completing
+        S['agr'] = [ACC, [agr(7009, 'FAILED', 'failed', 'native_order_ended_before_goal', 'false')] + ACC]
+        S['fu'] = [[open_row], [open_row]]; S['fu_closed'] = 0
 else:
     sys.exit('unknown scenario ' + n)
 print(json.dumps(S))
