@@ -11,6 +11,10 @@
 # predecessor handoff (newest of the lane's operator names + handoff globs), next 5 non-PASS rows of the lane
 # (handoff TODO ids first, else UNRUN/SETUP-FAIL/GATED/FAIL rows) from testing/NPC_IMMERSION_26_TESTS.md,
 # testing/KNOWN_BLOCKERS.md, rowtools row scripts, exact status/handoff/report command lines.
+# PI-19 (Shay approved 2026-10-15): with -Name AND -Predecessor the brief prints the predecessor's exact status TASK text (agent-guard rule b:
+# the successor's task must equal it) with a ready-to-paste agent-status.ps1 command, and the script registers the successor in
+# <Runs>\lane-owners.json itself (operator-warn.ps1 -Register <pred> <name> -InLane <lane>; idempotent; skipped under -NoRemote).
+# PI-20: standing rule in the brief: game speed above 5 only under tools/stobe-goal-watch.sh.
 # Output: stdout, and -Out file when given. Exit 0 ok, 2 bad lane.
 param(
     [Parameter(Position = 0)][string]$Lane,
@@ -173,6 +177,24 @@ if (-not $Name) {
 }
 $as = 'powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-status.ps1'
 $ho2 = "C:\KenshiTestRuns\agents\$Name.handoff.md"
+# PI-19: the predecessor's status TASK text (line 2 of its status file) and the successor registration
+$taskTxt = "$Lane operator"; $taskNote = ''; $regNote = ''
+if ($Predecessor) {
+    $pst = Join-Path $ag "$Predecessor.status"
+    $ptask = $null
+    if (Test-Path -LiteralPath $pst) { try { $t2 = Get-Content -LiteralPath $pst -Encoding UTF8 -TotalCount 2 | Select-Object -Skip 1 -First 1; if ($t2 -match '^task:\s?(.*)$' -and $Matches[1].Trim()) { $ptask = $Matches[1].Trim() } } catch { } }
+    if ($ptask) { $taskTxt = $ptask; $taskNote = 'from the predecessor status file' } else { $taskNote = "predecessor status file or its task line NOT found: read line 2 of C:\KenshiTestRuns\agents\$Predecessor.status and use that text" }
+    if ($PSBoundParameters.ContainsKey('Name')) {
+        if ($NoRemote) { $regNote = "registration skipped (-NoRemote/test mode): run: powershell -NoProfile -File $PSScriptRoot\operator-warn.ps1 -Register $Predecessor $Name -InLane $Lane" }
+        else {
+            try {
+                $rg = @(& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'operator-warn.ps1') -Register $Predecessor $Name -InLane $Lane -Runs $Runs 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ })
+                $regNote = if ($LASTEXITCODE -eq 0) { ($rg -join ' ') + ' (done by lane-brief.ps1, idempotent: no need to run operator-warn.ps1 -Register)' } else { 'registration FAILED (' + ($rg -join ' ') + '): run operator-warn.ps1 -Register by hand' }
+            } catch { $regNote = "registration FAILED ($_): run operator-warn.ps1 -Register $Predecessor $Name -InLane $Lane by hand" }
+        }
+    }
+}
+$taskQ = $taskTxt -replace '([`"$])', '`$1'
 $ra = Join-Path $Repo 'testing\live-stobe-queue\imm26-assert'
 $ta = Join-Path $Repo 'tools\automation'
 
@@ -204,7 +226,10 @@ function Build([int]$exBudget) {
         $null = $sb.AppendLine('- Wait cheaply with ONE bash call (an until-loop, about 60 s per check; never repeated tool calls); it prints PREDECESSOR-READY or PREDECESSOR-TIMEOUT after 90 min:')
         $null = $sb.AppendLine("    A=/c/KenshiTestRuns/agents; P=$Predecessor; for i in `$(seq 1 90); do if { [ -f `$A/`$P.handoff.md ] && { [ ! -f `$A/`$P.warn ] || [ `$A/`$P.handoff.md -nt `$A/`$P.warn ]; }; } || head -1 `$A/`$P.status 2>/dev/null | grep -qE '\| (DONE|STOPPED-CONTEXT|FAILED) \|'; then echo PREDECESSOR-READY; break; fi; sleep 60; done; [ `$i -ge 90 ] && echo PREDECESSOR-TIMEOUT")
         $null = $sb.AppendLine('- Then: re-read the predecessor handoff whole, check the lane lock/inflight marker is free (lane facts below), take the lane lock, run lane-idle.ps1 -NoMemory, and CONTINUE from the handoff TODO list. If the lock is still held by the predecessor, wait one more loop; on PREDECESSOR-TIMEOUT tell the coordinator in <= 3 lines and stop.')
-        $null = $sb.AppendLine("- Your own side of the contract: at about 120k context (when the meter warns) run: $as $Name RUNNING `"<task>`" `"WARN-120k <current row>`" `"<outputs>`" `"<next>`"  FIRST (that writes agents\$Name.warn and tells the coordinator to start your successor), then finish the current row, write $ho2 and end STOPPED-CONTEXT.")
+        $null = $sb.AppendLine("- STATUS TASK (agent-guard: your task text must EQUAL the predecessor's; $taskNote): $taskTxt")
+        $null = $sb.AppendLine("  first status call (paste): $as $Name RUNNING `"$taskQ`" `"started, reading brief`" `"<evidence dir>`" `"wait for $Predecessor handoff`"")
+        if ($regNote) { $null = $sb.AppendLine("- Lane-owners registration: $regNote") }
+        $null = $sb.AppendLine("- Your own side of the contract: at about 120k context (when the meter warns) run: $as $Name RUNNING `"$taskQ`" `"WARN-120k <current row>`" `"<outputs>`" `"<next>`"  FIRST (that writes agents\$Name.warn and tells the coordinator to start your successor), then finish the current row, write $ho2 and end STOPPED-CONTEXT.")
     }
     $null = $sb.AppendLine('## Lane facts')
     foreach ($k in $f.Keys) { $null = $sb.AppendLine("- ${k}: $($f[$k])") }
@@ -244,6 +269,7 @@ function Build([int]$exBudget) {
         '- Debug budget: ONE attempt per row. After a FAIL/SETUP-FAIL record the cause (or best hypothesis + evidence file) in the row and your status `latest`, mark it, move on; the coordinator sends a fixer. Never hold the lane on one row.',
         '- PI-06 attempt guard (ENFORCED): go-row.sh / go-batch.sh count attempts per row per lane; a row whose last attempt FAILED is NOT run again: it prints `ROW-NEEDS-FIXER <row> <lane> cause=...` (exit 4), record it and move on. Override only with a logged reason: `go-row.sh --allow-retry "<reason>" <ROW> <lane>` (also go-batch.sh) or `row-attempts.ps1 reset <lane> <ROW> "<reason>"`. PASS clears the count; GATED and PREFLIGHT-FAIL do not count.',
         '- LLM health (PI-15): when replies are empty/"..." run `bash tools/automation/llm-health.sh` (1-token chat check; preflight runs it too and prints PREFLIGHT-FAIL llm provider down). Never mark LLM rows during LLM-HEALTH FAIL (402 = no balance); stop and tell the coordinator.',
+        '- Game speed (PI-20): above 5 ONLY under bash tools/stobe-goal-watch.sh; never run speed 10 for minutes (2026-10-15 an operator starved Shay, the test character, and the lane had to be reset). Above speed 3 check Shay/squad hunger about every 60 s.',
         '- A PASS = real game/DB state changed (stobe.log line, DB row, inventory/status delta), never just NPC words. Never weaken an assertion; no unchanged retries.',
         '- Batching: run your WHOLE open row list through go-batch.sh (one batch per lane); by hand only rows the scripts cannot do. Open evidence files only for a FAIL (its excerpt= file). KEEP THE LANE BUSY: a blocked row -> next row; never idle > 2 min (lane-idle.ps1 flags > 6 min).',
         '- Mark each row in testing/NPC_IMMERSION_26_TESTS.md the moment it finishes; commit + push the TESTS file only, identity shaylanger <shaylanger2@gmail.com> (repo-local), one piece per commit. Never commit logs, DLLs or runtime state.',
@@ -255,8 +281,8 @@ function Build([int]$exBudget) {
     $null = $sb.AppendLine('## Helper scripts (one line each; all exist now)')
     foreach ($h in $helpers) { $null = $sb.AppendLine("- $(Split-Path -Leaf $h[0]): $($h[1])   [$($h[0])]") }
     $null = $sb.AppendLine('## Commands')
-    $null = $sb.AppendLine("- status: $as $Name RUNNING `"$Lane operator`" `"<row/step>`" `"<evidence dir>`" `"<next row>`"   (DONE|FAILED|STOPPED-CONTEXT when ending)")
-    $null = $sb.AppendLine("- context warning (~120k): $as $Name RUNNING `"$Lane operator`" `"WARN-120k <row/step>`" `"<evidence dir>`" `"<next row>`"   (writes agents\$Name.warn; then finish the row, write the handoff, STOPPED-CONTEXT)")
+    $null = $sb.AppendLine("- status: $as $Name RUNNING `"$taskQ`" `"<row/step>`" `"<evidence dir>`" `"<next row>`"   (DONE|FAILED|STOPPED-CONTEXT when ending)")
+    $null = $sb.AppendLine("- context warning (~120k): $as $Name RUNNING `"$taskQ`" `"WARN-120k <row/step>`" `"<evidence dir>`" `"<next row>`"   (writes agents\$Name.warn; then finish the row, write the handoff, STOPPED-CONTEXT)")
     $null = $sb.AppendLine("- handoff file: $ho2 (what is up, helpers, DONE rows, TODO rows, lessons; successor: same name with the number incremented)")
     $null = $sb.AppendLine("- report: powershell -NoProfile -File $ta\save-report.ps1 $Name <srcfile>   (final report <= 8 lines; then SubagentHandback)")
     $null = $sb.AppendLine("- lane active check: powershell -NoProfile -File $ta\lane-idle.ps1 -NoMemory")

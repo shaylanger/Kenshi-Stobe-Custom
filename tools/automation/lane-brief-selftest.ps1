@@ -89,6 +89,26 @@ Chk 'handover: bash loop is syntactically valid (bash -n)' $(
     if (-not $m.Success) { $false } else { $f1 = Join-Path $t 'loop.sh'; [IO.File]::WriteAllText($f1, $m.Groups[1].Value + "`n"); $bash = Get-Command bash -ErrorAction SilentlyContinue; if (-not $bash) { $true } else { & bash -n ($f1 -replace '\\', '/') 2>$null; $LASTEXITCODE -eq 0 } }
 )
 Chk "size with -Predecessor <= 25600 ($([Text.Encoding]::UTF8.GetByteCount($txtp)))" ([Text.Encoding]::UTF8.GetByteCount($txtp) -le 25600)
+# PI-19: predecessor status TASK text + successor registration in lane-owners.json; PI-20: game speed rule
+"imm26-pred-op | RUNNING | 2026-10-15 20:00`ntask: 5090 i4 operator `"quoted`" row batch`nlatest: x`n" | Set-Content "$runs\agents\imm26-pred-op.status"
+$txtr = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -Name imm26-succ-a -Predecessor imm26-pred-op 2>$null) -join "`n"
+Chk 'PI-19 brief prints the predecessor task text exactly' ($txtr.Contains('STATUS TASK') -and $txtr.Contains('): 5090 i4 operator "quoted" row batch'))
+Chk 'PI-19 ready-to-paste agent-status command carries the escaped task and the successor name' ($txtr.Contains('agent-status.ps1 imm26-succ-a RUNNING "5090 i4 operator `"quoted`" row batch" "started, reading brief"'))
+Chk 'PI-19 status/WARN commands use the predecessor task text, not a made-up one' ($txtr.Contains('imm26-succ-a RUNNING "5090 i4 operator `"quoted`" row batch" "<row/step>"') -and $txtr.Contains('imm26-succ-a RUNNING "5090 i4 operator `"quoted`" row batch" "WARN-120k'))
+$jr = Get-Content "$runs\lane-owners.json" -Raw | ConvertFrom-Json
+Chk 'PI-19 successor registered first in lane-owners.json (predecessor not listed: -InLane fallback)' ((@($jr.'5090-i4'.ops) -join ',') -eq 'imm26-succ-a,imm26-test-op2,imm26-5090-i4opX' -or (@($jr.'5090-i4'.ops)[0] -eq 'imm26-succ-a')) ((@($jr.'5090-i4'.ops) -join ','))
+Chk 'PI-19 brief says REGISTERED' ($txtr -match 'Lane-owners registration: REGISTERED lane 5090-i4')
+$null = & powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -Name imm26-succ-a -Predecessor imm26-pred-op 2>$null
+$jr2 = Get-Content "$runs\lane-owners.json" -Raw | ConvertFrom-Json
+Chk 'PI-19 registration idempotent (second run, no duplicate)' (@(@($jr2.'5090-i4'.ops) | Where-Object { $_ -eq 'imm26-succ-a' }).Count -eq 1)
+$opsBefore = @($jr2.'5090-i4'.ops) -join ','
+$txtn = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -NoRemote -Name imm26-succ-b -Predecessor imm26-pred-op 2>$null) -join "`n"
+$jr3 = Get-Content "$runs\lane-owners.json" -Raw | ConvertFrom-Json
+Chk 'PI-19 -NoRemote: registration skipped with a one-line note, file unchanged' ($txtn -match 'registration skipped \(-NoRemote' -and ((@($jr3.'5090-i4'.ops) -join ',') -eq $opsBefore))
+$txtm = (& powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -NoRemote -Name imm26-succ-c -Predecessor imm26-nostatus 2>$null) -join "`n"
+Chk 'PI-19 predecessor status missing: says so, falls back to lane default task' ($txtm -match 'task line NOT found')
+Chk 'PI-20 speed rule in the brief (with and without -Predecessor)' ($txt -match 'Game speed \(PI-20\): above 5 ONLY under bash tools/stobe-goal-watch.sh' -and $txt -match 'never run speed 10 for minutes' -and $txt -match 'hunger about every 60 s' -and $txtr -match 'PI-20')
+Chk "size with PI-19/20 additions <= 25600 ($([Text.Encoding]::UTF8.GetByteCount($txtr)))" ([Text.Encoding]::UTF8.GetByteCount($txtr) -le 25600)
 # changing the DLL changes the brief (nothing baked)
 [IO.File]::WriteAllBytes("$inst\RE_Kenshi\mods\Stobe\Stobe.dll", [byte[]](7, 7))
 $want2 = (Get-FileHash "$inst\RE_Kenshi\mods\Stobe\Stobe.dll").Hash.Substring(0, 8)

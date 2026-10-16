@@ -10,6 +10,7 @@
 #   operator-warn.ps1 [-Runs dir] [-Peek]                 detect (Peek = do not mark as seen)
 #   operator-warn.ps1 -Register <old> <new> [-Runs dir]   put <new> at the front of the lane's ops in lane-owners.json (atomic); prints
 #                                                         "REGISTERED lane <lane>: <new>,<old>,..." ; lane-idle.ps1 / lane-brief.ps1 / agent-guard rule (e) read it
+#   operator-warn.ps1 -Register <old> <new> -InLane <lane>   (PI-19) same, but when <old> is in no lane, <new> is put first in <lane>'s ops instead (lane must exist in lane-owners.json)
 #   operator-warn.ps1 -Selftest                           see operator-warn-selftest.ps1
 # Lane <-> operator: lane-idle.ps1 table + <runs>\lane-owners.json (same precedence as lane-idle.ps1). A warn from an agent that is
 # not a lane operator is still reported: "lane -" and a respawn-from-handoff hint (no lane-brief command).
@@ -20,6 +21,7 @@ param(
     [string]$Runs = $(if ($env:KAH_RUNS_DIR) { $env:KAH_RUNS_DIR } else { 'C:\KenshiTestRuns' }),
     [switch]$Peek,
     [string]$Register,
+    [string]$InLane,
     [Parameter(Position = 0)][string]$New
 )
 $ErrorActionPreference = 'Stop'
@@ -72,6 +74,11 @@ if ($Register) {
             if ($ops -notcontains $New) { $p.Value.ops = @(@($New) + $ops) }
             "REGISTERED lane $($p.Name): $(@($p.Value.ops) -join ',')"; $done = $true; break
         }
+    }
+    if (-not $done -and $InLane -and ($j.psobject.Properties.Name -contains $InLane)) {   # PI-19: predecessor not listed (e.g. only in the lane-idle default table): add to the named lane
+        $p = $j.$InLane; $ops = @($p.ops | ForEach-Object { "$_" })
+        if ($ops -notcontains $New) { $p.ops = @(@($New) + $ops) }
+        "REGISTERED lane ${InLane}: $(@($p.ops) -join ',')"; $done = $true
     }
     if (-not $done) { [Console]::Error.WriteLine("operator '$Register' is in no lane of $ov"); exit 2 }
     $tmp = "$ov.tmp$PID"

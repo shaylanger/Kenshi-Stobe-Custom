@@ -68,7 +68,15 @@ Check 'register-idempotent' (($r2 -join ' ') -eq 'REGISTERED lane 9090-i3: opx4,
 St 'opx4' RUNNING 'lane 9090-i3 operator' 'WARN-120k'
 $e3 = @(Ow)
 Check 'next-successor-opx5' ($e3.Count -eq 1 -and "$($e3[0])" -like '*successor=opx5 *') "$e3"
-Remove-Item -LiteralPath $runs -Recurse -Force -ErrorAction SilentlyContinue
+# 10 PI-19: -InLane puts the successor first when the predecessor is in no lane; idempotent; unknown lane still fails
+$r3 = @(Ow @('-Register', 'unlisted-op', 'newop1', '-InLane', '9090-i3'))
+Check 'register-inlane-output' (($r3 -join ' ') -eq 'REGISTERED lane 9090-i3: newop1,opx4,opx3,opx2') ($r3 -join ' ')
+$r4 = @(Ow @('-Register', 'unlisted-op', 'newop1', '-InLane', '9090-i3'))
+Check 'register-inlane-idempotent' (($r4 -join ' ') -eq 'REGISTERED lane 9090-i3: newop1,opx4,opx3,opx2') ($r4 -join ' ')
+$j2 = Get-Content (Join-Path $runs 'lane-owners.json') -Raw | ConvertFrom-Json
+Check 'register-inlane-json' ((@($j2.'9090-i3'.ops) -join ',') -eq 'newop1,opx4,opx3,opx2' -and (@($j2.'9090-i3'.dirs) -join ',') -eq 'd1')
+$ErrorActionPreference = 'Continue'; $null = & powershell -NoProfile -ExecutionPolicy Bypass -File $ow -Runs $runs -Register unlisted-op newop2 -InLane nolane 2>$null; $ec = $LASTEXITCODE; $ErrorActionPreference = 'Stop'
+Check 'register-inlane-unknown-lane-exit2' ($ec -eq 2)Remove-Item -LiteralPath $runs -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item Env:KAH_RUNS_DIR -ErrorAction SilentlyContinue
 if ($fail) { "operator-warn-selftest FAILED ($fail)"; exit 1 }
 'operator-warn-selftest OK'; exit 0
