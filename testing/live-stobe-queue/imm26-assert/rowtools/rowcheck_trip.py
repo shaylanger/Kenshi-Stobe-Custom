@@ -100,11 +100,11 @@ def register(rc, CHECKS):
         v.ck('destination_unchanged_until_confirmed', not moved and not ended, f'moved={len(moved)} ended={len(ended)}')
         r3 = first_reply(ev, 's3')
         v.ck('npc_replied_to_change', bool(r3))
-        s4 = full_rows(ev, 's4', {'travel_agreement'})
+        s4 = full_rows(ev, 's4', {'travel_agreement'}) + full_rows(ev, 's4b', {'travel_agreement'})   # s4b = second confirm when s4 changed nothing
         done = [r for r in s4 if r[2].get('agreement_id') == o['aid'] and r[2].get('status') in ('ENDED', 'CANCELLED')] \
             or [r for r in s4 if core and core in str(r[2].get('destination', '')).lower() and r[2].get('status') in ('PROPOSED', 'ACCEPTED')]
         v.ck('after_confirm_old_row_ended_or_replaced', bool(done), 'rows=' + ','.join(f"{r[0]}:{r[2].get('status')}" for r in s4)[:120])
-        v.note = f'R~ original referenced? {r3[:150]!r} | confirm: {first_reply(ev, "s4")[:100]!r}'
+        v.note = f'R~ original referenced? {r3[:150]!r} | confirm: {first_reply(ev, "s4")[:100]!r}' + (f' | confirm2: {first_reply(ev, "s4b")[:100]!r}' if rd(ev, 's4b', 'reply.txt') is not None else '')
 
     # ---------------------------------------------------------------- 20-b
     def c_20b(v, ev):

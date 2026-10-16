@@ -36,6 +36,10 @@ expect 23-a-fallback-wording 23a-fallback 23-a $L "RESULT 23-a PASS"
 grep -q 'Would you lead me to Squin' "$KAH_ROWS_BASE/imm26-5090-i3/rows/23-a/s1b/utterance.txt" 2>/dev/null && chk 23-a-s1b-fallback-wording ok || chk 23-a-s1b-fallback-wording bad
 expect 20-a-pass 20a-pass 20-a $L "RESULT 20-a PASS" "after_confirm_old_row_ended_or_replaced"
 expect 20-a-fail 20a-fail 20-a $L "RESULT 20-a FAIL" "after_confirm_old_row_ended_or_replaced"
+expect 20-a-s4b-second-confirm-pass 20a-s4b-pass 20-a $L "RESULT 20-a PASS" "after_confirm_old_row_ended_or_replaced"
+grep -q 'Take me to the Stumble Inn' "$KAH_ROWS_BASE/imm26-5090-i3/rows/20-a/s4b/utterance.txt" 2>/dev/null && chk 20-a-s4b-said-second-confirm ok || chk 20-a-s4b-said-second-confirm bad
+scen 20a-pass; run 20-a $L >/dev/null; [ -d "$KAH_ROWS_BASE/imm26-5090-i3/rows/20-a/s4b" ] && chk 20-a-no-s4b-when-s4-ended bad || chk 20-a-no-s4b-when-s4-ended ok
+grep -q 'stobe_drawn sheathe Shay' "$KAH_ROW_FAKE_LOG" && chk quiet-sheathes-shay ok || chk quiet-sheathes-shay bad
 expect 20-b-gated-order-replace 20b-gated 20-b $L "RESULT 20-b GATED" "native_order_identity_changed"
 expect 20-b-pass-real-path-failure 20b-pass 20-b $L "RESULT 20-b PASS" "row_FAILED_after_forced_failure=FAILED"
 expect 20-b-fail-no-failed-row 20b-nofail 20-b $L "RESULT 20-b FAIL" "row_FAILED_after_forced_failure"

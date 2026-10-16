@@ -31,6 +31,7 @@ tr_quiet() {  # squad to Shay, every non-squad character within 400 moved away, 
 [ -n "${TR_SCENE:-}" ] && stobe-auto teleport Shay ${TR_SCENE:-0 0 0} </dev/null | head -1
 stobe-auto teleport $n Shay </dev/null | head -1
 stobe-auto teleport Malzin Shay </dev/null | head -1
+stobe-auto stobe_drawn sheathe Shay </dev/null | head -1   # a drawn weapon makes the NPC answer with the drawn-weapon reaction (20-a i5 ctxop3)
 for pass in 1 2; do
   stobe-auto chars 400 </dev/null 2>&1 | sed 's/ | /\n/g' | grep -v -E "Shay #|${RL_NPC_FULL%% *} \[|Malzin #" | grep -E "#[0-9]+/[0-9]+" | sed -E 's/.*#([0-9]+\/[0-9]+).*/\1/' | sort -u > /tmp/tr-ids.txt
   while read id; do stobe-auto teleport "#\$id" -53200 957 4893 </dev/null >/dev/null 2>&1; done < /tmp/tr-ids.txt
@@ -103,6 +104,9 @@ rd_20a() {  # ACCEPTED trip; change request must not move the row; confirm must 
   echo "$TR_ALT" > "$EV/alt.txt"
   rl_say 3 "Actually, go to $TR_ALT instead." || return $?
   rl_say 4 "Yes, I mean it. I am sure, change it to $TR_ALT." || return $?
+  # the change is parked until a travel_decision ACCEPT names the pending destination (deferred confirm, Shay 2026-10-15): one confirm turn is not always enough
+  local core="${TR_ALT#the }"
+  grep -qE '"status":"(ENDED|CANCELLED)"' "$EV/s4/ev_full.txt" 2>/dev/null || grep -qiE "\"destination\":\"[^\"]*$core" "$EV/s4/ev_full.txt" 2>/dev/null     || { rl_say 4b "Yes. Take me to $TR_ALT." || return $?; }
   tr_agr agr_final.txt 8
 }
 rd_20b() {  # force a failure mid-trip (TRIP_TRAP unreachable spot = real path failure; default = replace the native order), ask why

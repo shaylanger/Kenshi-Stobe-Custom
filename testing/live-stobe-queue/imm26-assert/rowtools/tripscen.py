@@ -46,6 +46,9 @@ elif n == '23a-fallback':  # first wording gets no PROPOSED row -> s1b
 elif n in ('20a-pass', '20a-fail'):
     s4 = [['travel_agreement', row('ENDED')]] if n == '20a-pass' else []
     S = {'steps': [S1, S2, {'reply': 'We already agreed on Squin.'}, {'reply': 'Fine, changed.', 'full': s4}], 'agr': [ACC, [agr(7010, 'ENDED')] + ACC]}
+elif n == '20a-s4b-pass':   # first confirm only parked the change; the second confirm ends the old row
+    S = {'steps': [S1, S2, {'reply': 'We already agreed on Squin.'}, {'reply': 'Hm, are you sure?'}, {'reply': 'Fine, changed.', 'full': [['travel_agreement', row('ENDED')]]}],
+         'agr': [ACC, [agr(7010, 'ENDED')] + ACC]}
 elif n in ('20b-gated', '20b-pass', '20b-nofail'):
     reason = 'native_path_or_actor_failure' if n == '20b-pass' else 'native_order_identity_changed'
     fin = [] if n == '20b-nofail' else [agr(7011, 'FAILED', 'failed', reason, 'false')]
