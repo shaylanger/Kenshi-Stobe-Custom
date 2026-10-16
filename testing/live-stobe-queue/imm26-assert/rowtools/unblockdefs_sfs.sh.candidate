@@ -9,7 +9,7 @@
 #      director_bored_unknown_attention_ok; the autochat harness tick does not.   v2: every tick carries `attn={"in_combat":false}` (processor/bored.php:171-173 puts it into
 #      $optionalMeta['request_attention']; lib/imm26_c2_attention.php imm26C2ParseRequestAttention + imm26C2AttentionFacts apply it last, so it wins over a missing snapshot).
 #      It is a true statement: the scene is calm (Cind walked to the gate, no fight).  Override with U_BORED_ATTN='<json>' ('' = no attn, the v1 behaviour).
-#   2  the check `no_npc_ask_about_the_topic` greps SAY lines for `fur|squin` over the whole bored_log.txt, which includes tick 1 = the trip ARRIVAL remark ("I'll be around Squin a while ...").
+#   2  (v3 fix08d3: mark taken before tick 2 after a quiet wait, see sfs_quiet_wait) the check `no_npc_ask_about_the_topic` greps SAY lines for `fur|squin` over the whole bored_log.txt, which includes tick 1 = the trip ARRIVAL remark ("I'll be around Squin a while ...").
 #      v2: after tick 1 has spoken (polled up to U08D_SAYWAIT=25 s real) the stobelog line count is recorded (bored_after1_mark.txt) and bored_log_after1.txt holds the same grep of ONLY the
 #      lines after it; unblockcheck_sfs.py runs the unchanged c_08d on a view whose bored_log.txt is that file.  A follow-up ASK on tick 1 would still be caught by
 #      no_situated_remark_claim_for_closed_topic (the claim row followup:<topic>:<n> is written to the eventlog for every ask).  Nothing else is weakened.
@@ -64,6 +64,25 @@ sfs_wait_say() {  # sfs_wait_say <n0> : poll (real s, U08D_SAYWAIT) until the St
   done
   return 0
 }
+# op25/fix08d3: the ask window must start AFTER tick 1's NPC speech has finished.  Live evidence (4080-i3 08-d, stobe.log lines 31811..32004): the mark taken 25 s after the request
+# preceded tick 1's own speech by ~3.5 min: the arrival remark ("Well. Squin. We made it ...") and Krev's bystander line ("Squin's walls are ...") arrived later as a 40 s Cind/Krev
+# autochat and both matched the `fur|squin` regex of no_npc_ask_about_the_topic (a false FAIL; neither is an ask about the furs or the destination).  So the mark is now taken just
+# before tick 2 (k>=2) after sfs_quiet_wait: first SAY after n0 seen (up to U08D_SAYWAIT s, only if tick 1 was `sent`), then no new SAY for U08D_QUIET s (default 20), capped at U08D_QUIETMAX s (150).
+# The regex and the checker are unchanged: any SAY about fur|squin after the mark, i.e. by tick 2 or later, still FAILs.  Single-tick runs: quiet wait + mark at loop end + U08D_OBS s (15) observation.
+sfs_say_count() { printf 'tail -n +%s %s | grep -a -c "ACTION_EXEC: SAY"\n' "$(( $1 + 1 ))" "$LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9; }
+sfs_quiet_wait() {  # sfs_quiet_wait <n0> <expect_say 0|1> : return when tick 1's speech is over (see above); real seconds, poll every U08D_POLL (3)
+  local n0="$1" exp="${2:-1}" step="${U08D_POLL:-3}" first="${U08D_SAYWAIT:-60}" quiet="${U08D_QUIET:-20}" max="${U08D_QUIETMAX:-150}" t=0 last=-1 c lastchg=0 seen=0
+  [ -n "${KAH_ROW_FAKE:-}" ] && return 0
+  while [ "$t" -lt "$max" ]; do
+    c=$(sfs_say_count "$n0"); c=${c:-0}
+    if [ "$c" != "$last" ]; then last="$c"; lastchg="$t"; [ "$c" -gt 0 ] && seen=1; fi
+    if [ "$seen" = 1 ]; then [ $(( t - lastchg )) -ge "$quiet" ] && return 0
+    else { [ "$exp" = 1 ] && [ "$t" -lt "$first" ]; } || return 0   # no speech expected (nothing claimable) or none within U08D_SAYWAIT
+    fi
+    sleep "$step"; t=$(( t + step ))
+  done
+  return 0
+}
 sfs_walk_v2() {   # the sfK2 23-a body (tripdefs_sfk.sh rd_23a lines 55-75): gate = newest agreement destination_point, staged SFK_23A_BACK u short, speed 1, no harness order; walk_done.txt = completed=<0|1>
   local n g
   n=$(rl_q "$RL_NPC_FULL"); g=$(sfk_gate)
@@ -107,13 +126,16 @@ rd_08d() {
   [ "$neg" = 1 ] && tries=1
   U_BORED_SERIALS=1
   rw_sleep "${U08D_POST_CHAT_S:-31}"   # the claim gate refuses for 30 s real after any manual chat (social_followups.php:215)
+  local res1="" mwin=""
   for k in $(seq 1 "$tries"); do
+    if [ "$k" -ge 2 ]; then   # fix08d3: tick 1's speech (arrival remark + bystander chat) is over now: the ask window starts here, right before tick $k
+      sfs_quiet_wait "$n0" "$([ "$res1" = sent ] && echo 1 || echo 0)"
+      m1=$(sfs_stobelog_lines); m1=${m1:-$n0}; mwin="before-tick-$k"
+      echo "m1=$m1 n0=$n0 tick1_res=$res1 window=$mwin" > "$EV/bored_after1_mark.txt"
+    fi
     i4_bored 08d 1 || { U_BORED_SERIALS=0; return $?; }
     rw_sleep 3
-    if [ "$k" = 1 ]; then   # tick 1 = the arrival remark: mark where the log stands once it has spoken, the ask check looks only after this line
-      [ "$U_BORED_RES" = sent ] && sfs_wait_say "$n0"
-      m1=$(sfs_stobelog_lines); m1=${m1:-$n0}; echo "m1=$m1 n0=$n0 tick1_res=$U_BORED_RES" > "$EV/bored_after1_mark.txt"
-    fi
+    [ "$k" = 1 ] && res1="$U_BORED_RES"
     rd08d_dump fu_after.txt
     echo "tick $k res=$U_BORED_RES" >> "$EV/bored_08d_tries.txt"
     grep -q 'outcome_completed' "$EV/fu_after.txt" 2>/dev/null && break
@@ -123,6 +145,12 @@ rd_08d() {
     u_heal
   done
   U_BORED_SERIALS=0
+  if [ -z "$mwin" ]; then   # the topic closed on tick 1: no later tick; quiet wait, then mark and observe U08D_OBS s so the window is not empty by construction
+    sfs_quiet_wait "$n0" "$([ "$res1" = sent ] && echo 1 || echo 0)"
+    m1=$(sfs_stobelog_lines); m1=${m1:-$n0}; mwin="post-tick1-quiet"
+    echo "m1=$m1 n0=$n0 tick1_res=$res1 window=$mwin" > "$EV/bored_after1_mark.txt"
+    rw_sleep "${U08D_OBS:-15}"
+  fi
   rd08d_dump fu_after.txt
   printf 'tail -n +%s %s | grep -E "BORED_EVENT|ACTION_EXEC: SAY|FOLLOWUP|followup" | cut -c1-300 | head -40\n' "$(( n0 + 1 ))" "$LT_STOBELOG" | lt_h > "$EV/bored_log.txt" 2>&1
   printf 'tail -n +%s %s | grep -E "BORED_EVENT|ACTION_EXEC: SAY|FOLLOWUP|followup" | cut -c1-300 | head -40 # after tick 1\n' "$(( ${m1:-$n0} + 1 ))" "$LT_STOBELOG" | lt_h > "$EV/bored_log_after1.txt" 2>&1

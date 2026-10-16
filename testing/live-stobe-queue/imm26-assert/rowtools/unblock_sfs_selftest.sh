@@ -11,7 +11,7 @@ unset KAH_AGENT_NAME KAH_ROW_DRY TRIP_TRAP TRIP_GATE TRIP_SAVE TRIP_DEST TRIP_AC
 mkdir -p "$KAH_ROWS_BASE"
 n=0; ok=0
 chk() { n=$((n+1)); if [ "$2" = ok ]; then ok=$((ok+1)); echo "SELFTEST sfs-$1 PASS ${3:-}"; else echo "SELFTEST sfs-$1 FAIL ${3:-}"; fi; }
-. "$A/go-row.sh"; . "$ST_HERE/reloaddefs_a.sh"; . "$ST_HERE/unblockdefs_a.sh"; . "$ST_HERE/unblockdefs_sfs.sh"
+. "$A/go-row.sh"; . "$ST_HERE/reloaddefs_a.sh"; . "$ST_HERE/unblockdefs_a.sh"; . "${SFS_DEFS:-$ST_HERE/unblockdefs_sfs.sh}"   # SFS_DEFS = a candidate defs file (unblock_sfs_ask_selftest.sh sets it)
 PY="$ST_HERE/unblockpy_sfs.sh"
 lt_fake() { "$REAL_PY" "$ST_HERE/unblockfake_sfs.py" "$@"; }
 scen() { rm -f "$FAKE_STATE" "$FAKE_STATE.trip" "$FAKE_STATE.rw" "$FAKE_STATE.ub"; export FAKE_SCEN="$T/scen.json"; "$REAL_PY" "$ST_HERE/unblockscen_sfs.py" "$1" > "$FAKE_SCEN"; : > "$KAH_ROW_FAKE_LOG"; }
