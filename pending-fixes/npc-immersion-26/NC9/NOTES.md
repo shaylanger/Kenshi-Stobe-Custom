@@ -1,0 +1,26 @@
+# NC9 = NC8 (140C2D46) + wild-flag diagnostics + Mine approach-point path (from i5 op5 diag.md)
+
+DLL: `NC9\Stobe.dll` SHA256 `B171683EB7D0E0CDE3D93B4106F91C4A1D34A680204A8075DD8074165FCF7CD8` (VS2010 x64, `RESULT NC-BUILD PASS objects=69`, build.out.txt). Gitignored; also `C:\KenshiTestRuns\imm26-nc9\build\out\Stobe.dll`. NOT installed anywhere.
+Patch `nc9-over-nc8.patch` (`patch -p1 --binary` inside a dir holding NC8 `src` + `legacy-v1`; verified to reproduce the NC9 tree byte for byte). `nc9edit.py <root>` = the anchored edit script (WSL python3; the new header `ActivityApproachRing.h` is added separately, a copy sits next to it). Work tree `C:\KenshiTestRuns\imm26-nc9\{src,legacy-v1}`. Edited in both `src` and `legacy-v1`: `ActivityWildVerdict.h`, `ActivityPolicySupport.cpp`, `ActivityRuntimeBindings.cpp`; new `ActivityApproachRing.h`.
+Build (PowerShell): `NC\build.ps1 -Out ...\imm26-nc9\build -SrcDir ...\imm26-nc9\src -LegacyDir ...\imm26-nc9\legacy-v1`.
+
+## 1. ACTIVITY_WILD_REFUSED logs the ownership flags (diagnostic only; verdict unchanged)
+Log line now reads `ACTIVITY_WILD_REFUSED reason=... serial=.. species=.. faction=.. baseTown=0|1 homeTown=0|1 homeBuilding=0|1 occupiedTown=0|1 slaves=0|1 stuff=0|1 squadType=<int> slaveCount=<n> stuffCount=<n> <template note>`. The flags come from `ActivityWild::Flags()` (pure header, unit-tested). Read them from the next refusal on a harness-spawned or natural Herbivore squad to see which one fires.
+
+Code assessment (no flag changed): the verdict still treats all six as ownership. From the SDK headers alone none of them can be proven to be a spawn artifact:
+- `squad->myBaseHomeTownData` (Platoon+0xE0, a GameData*): a squad-template "base/home town" reference; createRandomSquad(faction, pos, homeTown, maxnum, home, squadTemplate, ...) takes homeTown/home/template parameters, so a spawn path that passes a town or a template that names one would set this or `ownerships._homeTown` / `_homeBuilding` (via setHomeTown/setHomeBuilding). Whether the harness spawn or the natural biome spawner passes a town is behaviour in the exe, not visible here.
+- `occupiedTown` is set only by declareOccupiedTown (conquest); `slaves` by capture; `stuff` by addOwnedObject: unlikely on a fresh animal squad but not provable.
+So no flag was ignored (Shay's ruling "animals in no real faction pass for sure" is already honoured by the faction clause; ignoring an unidentified flag blind would only guess). Decision rule for NC10 once the log names the culprit: if it is baseTown or homeTown (spawn-assigned region/home data), drop ONLY that flag from the `Verdict()` ownership clause for animals-only roaming squads in a not-real faction (one line in `ActivityWildVerdict.h` plus a test row).
+
+## 2. Mine proposal: path to an approach point (ActivityRuntimeBindings.cpp, proposal loop)
+- Before: `pathExists(avatar, nodeCentre)` for every candidate; the node centre is inside the building footprint hole, so Mine was always dropped (pathZero=1).
+- Now (Mine only, only when the centre path is not 1): `MineApproachPath()` samples `ActivityApproach::Sample` points on rings of 14/24/36 u (8 angles each, 24 total, starting in the node-to-actor direction so the actor-side points go first), sets y from `UtilityT::getTerrainHeight`, projects each with `NavMesh::getClosestPoint(want, 20, 1, false, out)` (must return 1, finite, within 20 u of the sample), and accepts the first `pathExists(avatar, out)==1`. The candidate point/target stay the building (unchanged `p`), only the reachability test changed. Failures are cached per node for 3 s (budget: at most 24 pathExists per node per 3 s). Logs `ACTIVITY_MINE_APPROACH node=<serial> sample=<i> tried=<n> projected=<n> approach=x,y,z` on success (once per 5 s per node) and `... none tried= projected=` on failure. Hunt/ClearGroup/everything else untouched.
+- NOT done (API cannot support it): when the actor itself is off the navmesh (`isOnNavmesh()` false within ~20 u of the node or just after a teleport) the proposal still returns early (gate=navigation). `NavMesh::pathExists(HavokCharacter*, target)` starts from the avatar's own face; the overload taking start/goal face keys (`pathExists(unsigned,unsigned)`, with `getFaceKey`) is PRIVATE in the SDK header, so a start point projected to the mesh cannot be tested. `HavokCharacter::getClosestPoint` is a building-approach helper, not a navmesh projection. Remaining options: leave it (the actor reaches the mesh by walking; tests should place the actor 30-50 u from the node, as the diag shows works), or add a vtable/RVA call to the private overload (risky, not done).
+
+## Tests (offline, WSL `g++ -std=c++03`, run from `tests/` with the headers in `../src`)
+- `activity_wild_verdict_tests.cpp`: `RESULT NC9-WILD-TESTS PASS` (NC8's 14 verdict rows unchanged + 2 Flags rows).
+- `activity_approach_ring_tests.cpp`: `RESULT NC9-RING-TESTS PASS 6/6` (24 distinct samples on their ring radii, base-angle orientation, wrap).
+The Kenshi glue (navmesh projection, Log lines) is only proven by the DLL compile plus a live Mine/Hunt proposal: expect `ACTIVITY_MINE_APPROACH ... approach=` and a Mine candidate for the iron node from 38 u, and flags in the next ACTIVITY_WILD_REFUSED.
+
+## components/STOBE
+Not touched (older lineage; same reason as NC8).
