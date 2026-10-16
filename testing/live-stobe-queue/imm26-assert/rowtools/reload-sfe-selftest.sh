@@ -91,6 +91,20 @@ grep -q 'stobe-auto relation .*-100' "$F" && grep -q 'stobe-auto relation .* 100
 grep -q "clear out the bandits you can see" "$EVB/26-f/s1/utterance.txt" && ! grep -rqi "Hunt the 5 bandits\|Clear the bandit camp" "$EVB/26-f"/s*/utterance.txt && chk 26-f-offer-wording ok || chk 26-f-offer-wording bad
 [ "$(grep -n 'stobe-auto save' "$F" | head -1 | cut -d: -f1)" -lt "$(grep -n 'stobe-auto load' "$F" | head -1 | cut -d: -f1)" ] && chk 26-f-save-before-load ok || chk 26-f-save-before-load bad
 scen f26-pass; RW_REFACTION=0 RW_BANDITS=3 run 26-f $L >/dev/null; ! grep -q 'stobe-auto faction' "$KAH_ROW_FAKE_LOG" && grep -q 'count 3 ' "$KAH_ROW_FAKE_LOG" && chk 26-f-env-overrides ok || chk 26-f-env-overrides bad
+# fix26f2 inject seam (sfO ClearGroup arm before the first offer say; disarm after the offer loop; opt-out; arm failure = SETUP-FAIL)
+scen f26-pass; run 26-f $L >/dev/null; F="$KAH_ROW_FAKE_LOG"
+[ "$(grep -c 'printf .*STOBE_TEST_ACTIVITY_INJECT_V1' "$F")" = 1 ] && grep 'printf .*STOBE_TEST_ACTIVITY_INJECT_V1' "$F" | grep -q "'ClearGroup'" && chk 26-f-inject-armed-once-cleargroup ok || chk 26-f-inject-armed-once-cleargroup bad "arms=$(grep -c 'printf .*STOBE_TEST_ACTIVITY_INJECT_V1' "$F")"
+la=$(grep -n 'printf .*STOBE_TEST_ACTIVITY_INJECT_V1' "$F" | head -1 | cut -d: -f1); ls1=$(grep -n 'stobe_say' "$F" | head -1 | cut -d: -f1)
+lsn=$(grep -n "stobe-auto senses" "$F" | awk -F: -v a="${la:-0}" '$1<a{x=$1} END{print x+0}'); lyes=$(grep -n "stobe_say .*Yes" "$F" | head -1 | cut -d: -f1); ldis=$(grep -n 'rm -f ".*test-inject-activity.json"' "$F" | head -1 | cut -d: -f1)
+[ -n "$la" ] && [ -n "$ls1" ] && [ "$la" -lt "$ls1" ] && [ "$lsn" -gt 0 ] && [ "$lsn" -lt "$la" ] && chk 26-f-inject-armed-after-scene-before-first-say ok || chk 26-f-inject-armed-after-scene-before-first-say bad "scene=$lsn arm=$la say=$ls1"
+[ -n "$ldis" ] && [ -n "$ls1" ] && [ "$ldis" -gt "$ls1" ] && [ "$ldis" -lt "${lyes:-0}" ] && chk 26-f-inject-disarmed-after-offer-before-accept ok || chk 26-f-inject-disarmed-after-offer-before-accept bad "disarm=$ldis say=$ls1 yes=$lyes"
+[ "$(grep -c 'rm -f ".*test-inject-activity.json"' "$F")" = 1 ] && chk 26-f-inject-disarmed-once ok || chk 26-f-inject-disarmed-once bad
+[ -s "$EVB/26-f/inject_arm.txt" ] && [ -f "$EVB/26-f/inject_status.txt" ] && chk 26-f-inject-evidence-files ok || chk 26-f-inject-evidence-files bad
+[ -s "$EVB/26-f/delivery_1.txt" ] && [ -s "$EVB/26-f/resume_poll.txt" ] && grep -q RESUMED "$EVB/26-f/resume_poll.txt" && chk 26-f-delivery-and-resume-poll-evidence ok || chk 26-f-delivery-and-resume-poll-evidence bad
+scen f26-pass; RW_INJECT_PROPOSE=0 run 26-f $L >/dev/null; F="$KAH_ROW_FAKE_LOG"
+! grep -q 'STOBE_TEST_ACTIVITY_INJECT_V1\|inject-activity' "$F" && grep -q 'RW_INJECT_PROPOSE=0' "$EVB/26-f/inject_arm.txt" && chk 26-f-inject-optout-arms-nothing ok || chk 26-f-inject-optout-arms-nothing bad
+scen f26-pass; mkdir -p "$T/stubrt" && cp -r "$ST_HERE"/. "$T/stubrt/" && echo 'echo "SEAM-MISSING stub"; exit 4' > "$T/stubrt/inject-propose.sh"
+r=$( RS_HERE="$T/stubrt"; run 26-f $L ); echo "$r" | grep -q '^RESULT 26-f SETUP-FAIL' && echo "$r" | grep -q 'inject-propose arm failed rc=4' && ! grep -q 'stobe_say' "$KAH_ROW_FAKE_LOG" && chk 26-f-inject-arm-refused-setup-fail-no-say ok || chk 26-f-inject-arm-refused-setup-fail-no-say bad "$(echo "$r" | cut -c1-300)"
 
 # --- CLI: reload-run-sfe.sh as a separate process
 cli() {

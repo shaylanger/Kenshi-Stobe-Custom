@@ -39,5 +39,8 @@ WHERE_FAIL=0 BLIND_POLLS=14 SEQ=""; r=$(run); case "$r" in SCENE-BAD*) chk alway
 WHERE_FAIL=0 BLIND_POLLS=0 SEQ="3 3" SENT_AFTER=3; r=$(run); [ "$r" = SCENE-OK ] && grep -q 'peace-wait 3' "$EV/scene.txt" && grep -q 'sentinels made friendly=2' "$EV/scene.txt" && [ "$(cat $EV/rel 2>/dev/null)" = 2 ] && [ "$(cat $EV/guard 2>/dev/null)" -ge 1 ] && chk sentinel-late-peace ok || chk sentinel-late-peace bad "$r"
 WHERE_FAIL=0 BLIND_POLLS=0 SEQ="3 3" SENT_AFTER=99; r=$(run); [ "$r" = SCENE-OK ] && grep -q 'sentinels made friendly=0' "$EV/scene.txt" && chk sentinel-never-listed ok || chk sentinel-never-listed bad "$r"
 # rd_26f wraps every say in rs_guard
-n=$(grep -c 'rs_guard; rl_say' "$F"); [ "$n" = 3 ] && chk say-guarded ok || chk say-guarded bad "guarded says=$n"
+n=$(grep -c 'rs_guard;.*rl_say' "$F"); [ "$n" = 3 ] && chk say-guarded ok || chk say-guarded bad "guarded says=$n"
+# fix26f2: the sfO seam is armed once (first wording only), disarmed/evidenced after the offer loop, opt-out RW_INJECT_PROPOSE=0; accept waits for delivery; resume is polled
+grep -q 'rs_inject_arm || return' "$F" && grep -q 'rs_inject_done' "$F" && [ "$(grep -c 'inject-propose.sh' "$F")" -ge 3 ] && grep -q 'RW_INJECT_PROPOSE:-ClearGroup}" = 0' "$F" && chk inject-arm-wired ok || chk inject-arm-wired bad
+grep -q 'rs_wait_delivery "$RS_OFFER_STEP"' "$F" && grep -q 'rs_poll_resume$' "$F" && grep -q 'reloaddefs_sfp.sh' "$F" && chk delivery-poll-sfp-wired ok || chk delivery-poll-sfp-wired bad
 rm -rf "$EV"; echo "fix26f-selftest: fails=$fails"; [ "$fails" = 0 ]

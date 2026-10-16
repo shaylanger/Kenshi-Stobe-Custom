@@ -170,36 +170,97 @@ EOT
 rs_proposed_clear() {   # act_s*.txt holds a proposed ClearGroup record
   awk -F'|' '$6=="proposed" && $7=="ClearGroup"{f=1} END{exit !f}' "$EV/$1" 2>/dev/null
 }
+rs_inject_arm() {   # fix26f2: arm the sfO one-shot ClearGroup PROPOSE seam (inject-propose.sh) right before the offer say; RW_INJECT_PROPOSE=0 = model-only offer (old behaviour)
+  # Why (4080-i4 op16 evidence rows/26-f s1..s1d): the native candidate IS there (s1 prompt: kind ClearGroup, campZone Rebirth, agreedTargets 4, activityPermitted true) but Cind is already in
+  # melee with Gannor (prompt: combat.in_combat=true, "Attack Target: Gannor") and the MODEL answers "Busy - Gannor's on me" with activity_decision NONE in s1/s1b/s1c. The seam replaces ONLY that
+  # model choice with a PROPOSE built from the same turn's native candidate and runs it through the unchanged product path; accept ("Yes"), the native scope check, save+load and resume stay real.
+  [ "${RW_INJECT_PROPOSE:-ClearGroup}" = 0 ] && { echo "inject disabled (RW_INJECT_PROPOSE=0)" > "$EV/inject_arm.txt"; return 0; }
+  local o rc
+  o=$(bash "$RS_HERE/inject-propose.sh" "$LT_LANE" "${ROW_NPC:-any}" ClearGroup ${RW_INJECT_TARGET:+"$RW_INJECT_TARGET"} --row "${ROW:-26-f}" --ttl "${RW_INJECT_TTL:-900}" 2>&1); rc=$?
+  echo "$o" > "$EV/inject_arm.txt"
+  if [ $rc != 0 ]; then
+    RL_REASON="inject-propose arm failed rc=$rc: $(echo "$o" | head -1 | cut -c1-160)$([ $rc = 4 ] && echo ' (deploy the seam: bash rowtools/inject-propose-deploy.sh '"$LT_LANE"')')"; return 3
+  fi
+  return 0
+}
+rs_inject_done() {   # fix26f2: after the offer loop: keep the seam evidence (marker/FIRED files/newest records), then remove an unused one-shot marker so it cannot fire on the accept/resume turns
+  [ "${RW_INJECT_PROPOSE:-ClearGroup}" = 0 ] && return 0
+  bash "$RS_HERE/inject-propose.sh" "$LT_LANE" --status > "$EV/inject_status.txt" 2>&1
+  bash "$RS_HERE/inject-propose.sh" "$LT_LANE" --disarm >> "$EV/inject_status.txt" 2>&1
+  return 0
+}
+rs_wait_delivery() {   # rs_wait_delivery <step>: fix26f2. copy of reloaddefs_sfi.sh si_wait_delivery (the proven Hunt-row accept timing): wait for the offer speech of say step s<step> to be delivered (RECHAT_TIMING follow-up), then the accept delay. Evidence delivery_<step>.txt
+  local l; l=$(sed -nE 's/^mark=[0-9]+ [0-9]+ ([0-9]+) .*/\1/p' "$EV/s$1/meta.txt" 2>/dev/null | head -1); l=${l:-0}
+  lt_h <<EOT > "$EV/delivery_$1.txt" 2>&1
+L=$(rl_q "$LT_STOBELOG"); end=\$((SECONDS+${RW_DELIVERY_WAIT:-40}))
+while [ \$SECONDS -lt \$end ]; do tail -n +$((l+1)) "\$L" | grep -qE "RECHAT_TIMING: follow-up (dispatch scheduled|suppressed)" && break; sleep 0.5; done
+echo "DELIVERY_CONFIRMED \$(tail -n +$((l+1)) "\$L" | grep -E "RECHAT_TIMING: follow-up" | head -1 | cut -c1-120)"
+EOT
+  rw_sleep "${RW_ACCEPT_DELAY:-1}"
+}
+rs_resumed_ok() {   # rs_resumed_ok <actdump> <old id>: old record superseded AND a continuation (resume.of = old) accepted|completed with resume.state resumed (copy of sa_resumed_ok, fix26ad)
+  awk -F'|' -v o="$2" '$1==o && $6=="superseded"{s=1} $11==o && $1!=o && ($6=="accepted"||$6=="completed") && $10=="resumed"{c=1} END{exit !(s&&c)}' "$EV/$1" 2>/dev/null
+}
+rs_poll_resume() {   # fix26f2: copy of sa_poll_resume (fix26ad): the continuation appears LATER than a dump right after the s3 say; poll act_post.txt (final dump) until resumed or RW_RESUME_POLL s; the checker still judges the final dump (never-resumes = FAIL)
+  local old t=0 max="${RW_RESUME_POLL:-150}" step="${RW_RESUME_POLL_STEP:-10}" ok=0
+  old=$(awk -F'|' '$6=="accepted"{id=$1} END{print id}' "$EV/act_pre.txt" 2>/dev/null)
+  : > "$EV/resume_poll.txt"; echo "old=$old max=${max}s step=${step}s" >> "$EV/resume_poll.txt"
+  while :; do
+    rw_act_dump act_post.txt
+    if [ -n "$old" ] && rs_resumed_ok act_post.txt "$old"; then ok=1; echo "t=${t}s RESUMED" >> "$EV/resume_poll.txt"; break; fi
+    echo "t=${t}s waiting: $(awk -F'|' '{printf "%s:%s/%s ", substr($1,1,17), $6, $10}' "$EV/act_post.txt" 2>/dev/null)" >> "$EV/resume_poll.txt"
+    [ "$t" -ge "$max" ] && break
+    rw_sleep "$step"; t=$((t+step))
+  done
+  [ $ok = 1 ] || echo "t=${t}s NOT RESUMED inside the window: the checker judges this final dump (a FAIL)" >> "$EV/resume_poll.txt"
+  return 0
+}
+rs_offer_loop() {   # fix26f2: the four offer wordings; the seam is armed once, right before the first say (after rs_guard). Sets RS_OFFER_STEP to the say step whose dump holds a proposed ClearGroup (empty = none); rc != 0 only for harness failures
+  local k=0 step P q
+  RS_OFFER_STEP=""
+  for P in "Cind, will you help me clear out the bandits you can see in front of us here in Rebirth?"            "Look at those Dust Bandits here in Rebirth. Cind, I want you to clear them out with me."            "Those Dust Bandits are raiding Rebirth and you can see them. Let's clear out that group together."            "Cind, I want you to help me kill the Dust Bandits standing in Rebirth. Just those ones."; do
+    case $k in 0) step=1;; 1) step=1b;; 2) step=1c;; *) step=1d;; esac
+    rs_guard; [ "$k" = 0 ] && { rs_inject_arm || return $?; }; rl_say "$step" "$P" || return $?
+    for q in $(seq 1 "${RW_26F_OFFER_POLLS:-5}"); do rw_sleep 2; rw_act_dump act_s1.txt; rs_proposed_clear act_s1.txt && break; done
+    rs_proposed_clear act_s1.txt && { RS_OFFER_STEP=$step; return 0; }
+    k=$((k+1)); rw_sleep 8
+  done
+  return 0
+}
 rd_26f() {
-  local accept rsay n0 n1 k step P
+  local accept rsay n0 n1 a st rc
+  # fix26f2: (1) rl_say that returns on Cind's own "(PC)" line (player-faction speaker; the rowlib one only matched "(NPC)" and blocked the full ROW_WAIT=150 s per say, the Hunt proposal TTL ~117 s ran out: sfP),
+  # (2) offer through the sfO seam (rs_inject_arm), (3) delivery wait before the accept (as the Hunt rows), (4) accept retried once while the offer is still open, (5) bounded resume poll (fix26ad).
+  [ -f "$RS_HERE/reloaddefs_sfp.sh" ] && . "$RS_HERE/reloaddefs_sfp.sh"
+  export ROW_SETTLE="${ROW_SETTLE:-1}"
   TRIP_QUIET=0 rw_prep || return $?
   echo ClearGroup > "$EV/kind.txt"; echo run > "$EV/mode.txt"
   accept="${RW_ACCEPT:-$RW_ACCEPT_DEF}"; rsay="${RW_RESUME_SAY:-Are we still on that job?}"
   rs_scene_clear
   tail -1 "$EV/scene.txt" | grep -q '^SCENE-OK' || return 0                                     # checker: SETUP-FAIL (scene not ready, reason in scene.txt)
   n0=$(rw_logn)
-  k=0
-  for P in "Cind, will you help me clear out the bandits you can see in front of us here in Rebirth?" \
-           "Look at those Dust Bandits here in Rebirth. Cind, I want you to clear them out with me." \
-           "Those Dust Bandits are raiding Rebirth and you can see them. Let's clear out that group together." \
-           "Cind, I want you to help me kill the Dust Bandits standing in Rebirth. Just those ones."; do
-    case $k in 0) step=1;; 1) step=1b;; 2) step=1c;; *) step=1d;; esac
-    rs_guard; rl_say "$step" "$P" || return $?
-    rw_sleep 4; rw_act_dump act_s1.txt
-    rs_proposed_clear act_s1.txt && break
-    k=$((k+1)); rw_sleep 8
-  done
+  rs_offer_loop; rc=$?
+  rs_inject_done                                                                                # always: seam evidence + remove an unused one-shot marker
+  [ $rc = 0 ] || return $rc
   rs_proposed_clear act_s1.txt || { rw_log act_log_pre.txt "${n0:-0}"; return 0; }              # checker: SETUP-FAIL (no ClearGroup offer)
-  rs_guard; rl_say 2 "$accept" || return $?
-  rw_sleep "${RW_26F_ACCEPT_WAIT:-2}"
-  rw_act_dump act_pre.txt; rw_out_dump out_pre.txt; rw_log act_log_pre.txt "${n0:-0}"
+  rs_wait_delivery "$RS_OFFER_STEP"
+  for a in $(seq 1 "${RW_26F_ACCEPT_TRIES:-2}"); do
+    st=2; [ "$a" -gt 1 ] && st=2b
+    rs_guard; rl_say "$st" "$accept" || return $?
+    rw_sleep "${RW_26F_ACCEPT_WAIT:-2}"
+    rw_act_dump act_pre.txt
+    rw_has_status act_pre.txt accepted && break
+    rs_proposed_clear act_pre.txt || break                                                      # the offer is gone: another "Yes" cannot help
+  done
+  rw_out_dump out_pre.txt; rw_log act_log_pre.txt "${n0:-0}"
   rw_has_status act_pre.txt accepted || return 0                                                 # checker: SETUP-FAIL (accept did not land: NC17 missing / 26-a)
   tr_state state_pre.txt "$RL_NPC_FULL"
   rw_save_load job || return $?
   n1=$(rw_logn); rs_reseat26f
   rs_guard; rl_say 3 "$rsay" || return $?
   rw_sleep "${RW_SAY_WAIT:-8}"
-  rw_act_dump act_post.txt; rw_out_dump out_post.txt; rw_log act_log_post.txt "${n1:-0}"
+  rs_poll_resume
+  rw_out_dump out_post.txt; rw_log act_log_post.txt "${n1:-0}"
   tr_state state_post.txt "$RL_NPC_FULL"
   return 0
 }
