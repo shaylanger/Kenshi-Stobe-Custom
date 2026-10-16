@@ -316,7 +316,7 @@ hx13_run() {  # hx13_run <label> <save> <pos|neg|ctl>   (port of hx13.sh hx13_ru
     for i in $(seq 1 18); do [ "$(lt_sql "select count(*) from social_effect where incident_id='deal:$cid'" | head -1 | tr -dc 0-9)" -ge 1 ] 2>/dev/null && break; hxd_sleep 5; done
   fi
   c1=$(lt_sql "select count(*) from social_effect" | head -1)
-  { echo "count_before=$c0 count_after=$c1"; lt_sql "select * from social_effect order by 1 desc limit 12"; } > "$d/effects.txt"
+  { echo "count_before=$c0 count_after=$c1"; lt_sql "select * from social_effect where incident_id like 'deal:%' order by game_ts desc limit 12"; } > "$d/effects.txt"
   hxd_haff "$d" after_json "$RL_NPC_FULL" "" read; echo "aff=$(hxd_affnum "$d/haff-after_json.txt")" > "$d/haff_after.txt"
   cat "$d/deal.txt" "$d/cats.txt" "$d/haff_before.txt" "$d/haff_after.txt" 2>/dev/null | tr '\n' ' ' >> "$EV/runs.txt"; echo >> "$EV/runs.txt"
 }
