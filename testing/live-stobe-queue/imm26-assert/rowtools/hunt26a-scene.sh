@@ -4,7 +4,8 @@
 # Needs: lane i5 up (lib-i5.sh), game at speed 0.5, Cind+Shay in squad. Private lane only.
 OUT="${1:-/c/KenshiTestRuns/imm26-5090-i5/26a/run-$(date +%H%M%S)}"; mkdir -p "$OUT"
 source /c/KenshiTestRuns/imm26-5090-i5/lib-i5.sh
-CIND='#2529907200/2'; SHAY='#971557632/1'; CINDFULL='Cind [Hungry Bandit]'
+CIND="${NPC_ID:-#2529907200/2}"; SHAY='#971557632/1'; CINDFULL="${NPC_FULL:-Cind [Hungry Bandit]}"   # NPC_ID/NPC_FULL pick another NPC (then REFACTION=0; non-NPC speakers log as (PC))
+SAY1V="${SAY1:-Look at all these goats. Let's hunt for raw meat.}"; SAY2V="${SAY2:-Yes, let's do it.}"
 say() { echo "[$(date +%T)] $*" | tee -a "$OUT/log.txt"; }
 L1=$(i3 <<<'wc -l < /mnt/d/KenshiInst/5/RE_Kenshi/mods/Stobe/stobe.log' | tail -1)
 say "stobe.log mark $L1"
@@ -18,12 +19,13 @@ refaction() {
 [ "${REFACTION:-late}" = early ] && refaction
 # scene: pins off, teleports, onmesh wait, clean travel rows, aff 60, ctxpush
 i3 <<EOT > "$OUT/scene.txt" 2>&1
+stobe-auto wake "$CIND" </dev/null | head -1; stobe-auto health "$CIND" 100 </dev/null | head -1; sleep 3
 stobe-auto pin "$CIND" off </dev/null | head -1; stobe-auto pin "$SHAY" off </dev/null | head -1
 stobe-auto teleport "$SHAY" -49400 1660 3625 </dev/null | head -2
 stobe-auto teleport "$CIND" -49422 1661 3643 </dev/null | head -2
 stobe-auto select Shay </dev/null | head -1
 stobe-auto relation "$CIND" 50 </dev/null | head -2
-for w in Shay Malzin; do stobe-auto stobe_drawn sheathe $w </dev/null | head -1; done
+for w in Shay Malzin; do stobe-auto stobe_drawn sheathe \$w </dev/null | head -1; done
 EOT
 cat "$OUT/scene.txt" | tee -a "$OUT/log.txt"
 sleep 10
@@ -34,7 +36,7 @@ stobe-auto stobe_ctxpush "$CINDFULL" </dev/null | head -2
 EOT
 # quarrel memory ("blade in my face"): one apology clears it for a few turns (recipe step e); skip with APOLOGY=0
 if [ "${APOLOGY:-1}" = 1 ]; then
-  i3_say "$CIND" "It was a mistake, I'm sorry." 40 2>&1 | grep -E "\(NPC\)" | cut -c1-300 | tee -a "$OUT/log.txt"
+  i3_say "$CIND" "It was a mistake, I'm sorry." 40 2>&1 | grep -E "\((NPC|PC)\)" | cut -c1-300 | tee -a "$OUT/log.txt"
   i3 <<EOT >> "$OUT/log.txt" 2>&1
 sleep ${APOLOGY_WAIT:-8}
 stobe-auto stobe_ctxpush "$CINDFULL" </dev/null | head -2
@@ -70,10 +72,10 @@ i3 <<EOT > "$OUT/offer.txt" 2>&1
 L="/mnt/d/KenshiInst/5/RE_Kenshi/mods/Stobe/stobe.log"; n0=\$(wc -l < "\$L")
 sleep 1
 echo "SAY1 \$(date +%T.%N)"
-stobe-auto stobe_say "$CIND" "Look at all these goats. Let's hunt for raw meat." </dev/null | head -2
+stobe-auto stobe_say "$CIND" "$SAY1V" </dev/null | head -2
 end=\$((SECONDS+45)); got=0
 while [ \$SECONDS -lt \$end ]; do
-  if tail -n +\$((n0+1)) "\$L" | sed -n '/SAY \[Shay\]: Look at all/,\$p' | grep -qE "ACTION_EXEC: SAY \[[^]]*\](.*)\(NPC\)"; then got=1; break; fi
+  if tail -n +\$((n0+1)) "\$L" | sed -n '/SAY \[Shay\]: Look at all/,\$p' | tail -n +2 | grep -qE "ACTION_EXEC: SAY \[[^]]*\](.*)\((NPC|PC)\)"; then got=1; break; fi
   sleep 0.5
 done
 echo "OFFER_SEEN=\$got \$(date +%T.%N)"
@@ -81,7 +83,7 @@ tail -n +\$((n0+1)) "\$L" | grep -E "ACTION_EXEC: SAY|REJECTED|ACTIVITY_SIGHT_DI
 if [ \$got = 1 ]; then
   sleep ${ACCEPT_DELAY:-3}
   echo "SAY2 \$(date +%T.%N)"
-  stobe-auto stobe_say "$CIND" "Yes, let's do it." </dev/null | head -2
+  stobe-auto stobe_say "$CIND" "$SAY2V" </dev/null | head -2
 fi
 EOT
 cat "$OUT/offer.txt" | tee -a "$OUT/log.txt"
