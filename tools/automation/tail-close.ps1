@@ -31,7 +31,7 @@ if ($cfg.Delay -lt 0) { $cfg.Delay = if ($env:KAH_TAIL_CLOSE_DELAY) { [int]$env:
     $sid = $cfg.Session
     $log = Join-Path (Get-TailDir $runs) 'closed.log'
     # Tail closing review (Shay 2026-10-16): the tail must review the conversation since the handoff and update the PI list before it is closed.
-    # Needs <runs>\process-ideaseview-<session>-tail.json (same format as the handoff review, step 2b in testing/AGENT_PROMPTS.md). -DryRun and KAH_TAIL_CLOSE_NO_REVIEW=1 skip the check.
+    # Needs <runs>\process-ideas\review-<session>-tail.json (same format as the handoff review, step 2b in testing/AGENT_PROMPTS.md). -DryRun and KAH_TAIL_CLOSE_NO_REVIEW=1 skip the check.
     if (-not $cfg.DryRun -and $env:KAH_TAIL_CLOSE_NO_REVIEW -ne '1') {
         $rv = Join-Path (Join-Path $runs 'process-ideas') ('review-' + $sid + '-tail.json')
         if (-not (Test-Path -LiteralPath $rv)) {
