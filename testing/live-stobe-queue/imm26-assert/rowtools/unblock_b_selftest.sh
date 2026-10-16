@@ -51,6 +51,13 @@ scen 10e-restart-pass; r=$(gr_main --no-preflight --allow-retry selftest 10-e 50
 
 # ---- 27-a
 expect 27-a-pass 27a-pass 27-a PASS "order_present_after_load"
+# 27A-FIX: control chase before the hire, 200 u away, stand-off 50-67 u passes
+expect 27-a-control-approaches 27a-ctrl-approaches 27-a SETUP-FAIL "without a contract"
+expect 27-a-standoff-edge 27a-post-standoff-edge 27-a PASS "order_present_after_load"
+scen 27a-pass; run 27-a $L >/dev/null
+[ "$(grep -c 'teleport Shay -50770 ' "$KAH_ROW_FAKE_LOG")" -ge 3 ] && chk 27-a-three-chases-200u-away ok || chk 27-a-three-chases-200u-away bad
+[ "$(grep -n 'teleport Shay -' "$KAH_ROW_FAKE_LOG" | head -1 | cut -d: -f1)" -lt "$(grep -n 'contract-bodyguard .* Shay hours' "$KAH_ROW_FAKE_LOG" | head -1 | cut -d: -f1)" ] && chk 27-a-control-chase-before-hire ok || chk 27-a-control-chase-before-hire bad
+[ -s "$KAH_ROWS_BASE/imm26-4080-i4/rows/27-a/chase_ctrl.txt" ] && chk 27-a-chase-ctrl-written ok || chk 27-a-chase-ctrl-written bad
 expect 27-a-status-form-fallback 27a-formfallback 27-a PASS "first form"
 expect 27-a-all-status-forms-fail-chase-proves 27a-allforms-fail 27-a PASS "order_present_after_load"
 expect 27-a-order-lost 27a-lost 27-a FAIL "order_present_after_load"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """unblockscen_b.py <name>   scenario JSON for unblockfake_b.py (unblock_b_selftest.sh). Bases come from tripscen.py (13-c), reloadscen_b.py (10-e), reloadscen.py (27-a).
 Names: 13c-pass 13c-neg-pass 13c-uid 13c-unqualified ub13c-failed ub13c-failed-neg | 10e-restart-pass 10e-restart-samesession 10e-restart-launchfail 10e-restart-scopechanged 10e-restart-epochdown 10e-restart-epochdown-noseq 10e-inproc-same
-       27a-pass 27a-formfallback 27a-allforms-fail 27a-lost 27a-nodll 27a-noorder"""
+       27a-pass 27a-formfallback 27a-allforms-fail 27a-lost 27a-nodll 27a-noorder 27a-ctrl-approaches 27a-post-standoff-edge"""
 import json
 import os
 import subprocess
@@ -59,6 +59,8 @@ elif n.startswith('27a-'):
             S['bgforms'] = [[HAS1 % '24.0'], ['Cind [Hungry Bandit] has_contract=0']]
         else:
             S['bgforms'] = [[HAS1 % '24.0'], [HAS1 % '23.0']]
+    elif n in ('27a-ctrl-approaches', '27a-post-standoff-edge'):   # 27A-FIX
+        S = base('reloadscen.py', n); S['bgforms'] = [[HAS1 % '24.0'], [HAS1 % '23.0']]
     elif n == '27a-allforms-fail':
         S = base('reloadscen.py', '27a-statuserr'); S['bgforms'] = [['ERROR: no character named: status']]
     elif n == '27a-nodll':

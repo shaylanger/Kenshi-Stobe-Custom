@@ -194,7 +194,12 @@ stobe-auto contract-bodyguard $2 @player status </dev/null 2>&1 | head -6 | cut 
 EOT
 }
 rd_27a() {
-  local nq; rw_prep || return $?
+  local nq RW_AWAY="${RW_AWAY_BG:-200}"   # 27A-FIX: 200 u (not the 80 u default): a follower ends <= ~70 u, a non-follower stays >= ~200 u; rw_chase reads RW_AWAY (dynamic scope)
+  rw_prep || return $?
+  nq=$(rl_q "$RL_NPC_FULL")
+  # 27A-FIX negative control: the same chase BEFORE the hire (no contract) -> chase_ctrl.txt; the checker needs it to NOT approach. Then the NPC is put back next to Shay.
+  rw_chase ctrl || return $?
+  rd19_place near || return $?
   nq=$(rl_q "$RL_NPC_FULL")
   lt_h <<EOT > "$EV/bg_set.txt" 2>&1
 stobe-auto contract-bodyguard $nq Shay ${RW_BG_ARGS:-hours 24 own} </dev/null 2>&1 | head -3 | cut -c1-300

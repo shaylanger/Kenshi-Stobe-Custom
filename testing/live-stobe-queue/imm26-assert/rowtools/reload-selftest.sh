@@ -77,6 +77,16 @@ expect 27-a-order-lost 27a-lost 27-a "RESULT 27-a FAIL" "order_present_after_loa
 expect 27-a-no-order-setup-fail 27a-noorder 27-a "RESULT 27-a SETUP-FAIL" "no BODYGUARD"
 expect 27-a-status-error-hire-proof-passes 27a-statuserr 27-a "RESULT 27-a PASS" "order_present_after_load"
 expect 27-a-status-error-and-no-chase-fails 27a-statuserr-lost 27-a "RESULT 27-a FAIL" "order_present_after_load,post_load_bodyguard_closes_distance"
+# 27A-FIX: bodyguard stand-off 50-67 u passes (<= RW_BG_NEAR 100), control chase + 200 u away
+expect 27-a-control-approaches-setup-fail 27a-ctrl-approaches 27-a "RESULT 27-a SETUP-FAIL" "without a contract"
+expect 27-a-pre-leg-never-closes 27a-pre-wander 27-a "RESULT 27-a FAIL" "pre_load_bodyguard_follows"
+expect 27-a-standoff-edge-passes 27a-post-standoff-edge 27-a "RESULT 27-a PASS" "order_present_after_load"
+scen 27a-pass; r=$(RW_BG_NEAR=35 run 27-a $L); case "$r" in "RESULT 27-a FAIL"*) chk 27-a-old-limit-35-fails-the-stand-off ok;; *) chk 27-a-old-limit-35-fails-the-stand-off bad "$r";; esac
+scen 27a-pass; run 27-a $L >/dev/null
+[ "$(grep -c 'teleport Shay -50770 ' "$KAH_ROW_FAKE_LOG")" -ge 3 ] && chk 27-a-three-chases-200u-away ok || chk 27-a-three-chases-200u-away bad "$(grep -c 'teleport Shay' "$KAH_ROW_FAKE_LOG")"
+[ "$(grep -n 'teleport Shay -' "$KAH_ROW_FAKE_LOG" | head -1 | cut -d: -f1)" -lt "$(grep -n 'contract-bodyguard .* Shay hours' "$KAH_ROW_FAKE_LOG" | head -1 | cut -d: -f1)" ] && chk 27-a-control-chase-before-hire ok || chk 27-a-control-chase-before-hire bad
+[ -s "$EVB/27-a/chase_ctrl.txt" ] && chk 27-a-chase-ctrl-written ok || chk 27-a-chase-ctrl-written bad
+scen 27a-pass; r=$(RW_AWAY_BG=150 run 27-a $L >/dev/null; grep -c 'teleport Shay -50820 ' "$KAH_ROW_FAKE_LOG"); [ "$r" -ge 3 ] && chk 27-a-away-env-override ok || chk 27-a-away-env-override bad "$r"
 # --- 08-e follow-up topic
 expect 08-e-pass 08e-pass 08-e "RESULT 08-e PASS" "claimed_once_after_reload"
 expect 08-e-topic-lost 08e-lost 08-e "RESULT 08-e FAIL" "topic_survives_load"

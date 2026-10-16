@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """reloadscen.py <name>   prints the reloadfake.py scenario JSON for reload-selftest.sh (synthetic rows modelled on the wpR1/wpR3 deploy notes).
 Names: 24c-goalgone 26d-pass 26d-old 26d-reject 26d-nooffer 26d-samewid 26d-complete 26d-nocomplete 26dx-pass 26dx-bad 26e-pass 26e-notrebound 26e-reject 26f-pass
-       24c-pass 24c-noregion 24c-lost 23e-pass 23e-lost 23e-nopre 27a-pass 27a-lost 27a-noorder 27a-statuserr 27a-statuserr-lost 08e-pass 08e-lost 08e-noclaim 08e-noclaim-noticks 08e-double 20d-pass 20d-nopending 20d-lost"""
+       24c-pass 24c-noregion 24c-lost 23e-pass 23e-lost 23e-nopre 27a-pass 27a-lost 27a-noorder 27a-statuserr 27a-statuserr-lost 27a-ctrl-approaches 27a-pre-wander 27a-post-standoff-edge 08e-pass 08e-lost 08e-noclaim 08e-noclaim-noticks 08e-double 20d-pass 20d-nopending 20d-lost"""
 import json
 import sys
 
@@ -111,16 +111,23 @@ elif n in ('23e-pass', '23e-lost', '23e-nopre'):
     pre = ['HOOK_MSG_PROC: FOLLOW target resolved Cind', tick] if n != '23e-nopre' else []
     post = [tick] if n == '23e-pass' else []
     S = {'steps': [step('Alright, I will follow you.')], 'follow_log': [pre, post], 'closes': [True, n == '23e-pass']}
-elif n in ('27a-pass', '27a-lost', '27a-noorder'):
+elif n in ('27a-pass', '27a-lost', '27a-noorder', '27a-ctrl-approaches', '27a-pre-wander', '27a-post-standoff-edge'):
+    # 27A-FIX: chase_d = [start, end] u per chase in order control (no contract) / pre / post. A bodyguard ends at its 50-67 u stand-off (<= RW_BG_NEAR 100), a non-follower stays ~200 u.
     bg_state = state(first='present', goal='BODYGUARD')
+    keep = n not in ('27a-lost', '27a-noorder')
+    cd = {'27a-pass': [[200, 200], [200, 60], [200, 66]], '27a-lost': [[200, 200], [200, 60], [200, 195]], '27a-noorder': [[200, 200], [200, 60], [200, 195]],
+          '27a-ctrl-approaches': [[200, 60], [200, 60], [200, 66]],        # the unhired NPC walks to Shay anyway: the chase proves nothing -> SETUP-FAIL
+          '27a-pre-wander': [[200, 200], [200, 190], [200, 66]],           # the pre leg never closes
+          '27a-post-standoff-edge': [[200, 200], [200, 67.3], [200, 100]]}[n]   # real stand-off 67.3 pre; post exactly at the limit still passes
     S = {'steps': [], 'bg': [['Cind bodyguard Shay hours=24'] if n != '27a-noorder' else ['no contract'],
-                             ['Cind bodyguard Shay hours=23'] if n == '27a-pass' else ['no contract']],
-         'follow': [bg_state if n != '27a-noorder' else state('none', goal='NONE'), bg_state if n == '27a-pass' else state('none', goal='NONE'), bg_state],
-         'closes': [True, n == '27a-pass']}
+                             ['Cind bodyguard Shay hours=23'] if keep else ['no contract']],
+         'follow': [bg_state if n != '27a-noorder' else state('none', goal='NONE'), bg_state if keep else state('none', goal='NONE'), bg_state],
+         'closes': [True, True, keep], 'chase_d': cd}
 elif n in ('27a-statuserr', '27a-statuserr-lost'):   # the real 27-a result: hire answered has_contract=1, the status query answered a harness ERROR, state_* has no BODYGUARD
     err = ['ERROR: no character named: status']
     S = {'steps': [], 'bgset': ['Cind [Hungry Bandit] has_contract=1 package=Bodyguard (5090-gamedata.base) hirer=Shay hours_left=24.0'], 'bg': [err, err],
-         'follow': [state('none', goal='OTHER')] * 3, 'closes': [True, n == '27a-statuserr']}
+         'follow': [state('none', goal='OTHER')] * 3, 'closes': [True, True, n == '27a-statuserr'],
+         'chase_d': [[200, 200], [200, 60], [200, 66 if n == '27a-statuserr' else 195]]}
 elif n in ('08e-pass', '08e-lost', '08e-noclaim', '08e-noclaim-noticks', '08e-double'):
     fu = {'topic_id': 't1', 'kind': 'personal_plan', 'status': 'open', 'ask_count': 0, 'not_before_gamets': 3600, 'expires_gamets': 600000}
     fu1 = dict(fu, ask_count=1, not_before_gamets=90000)

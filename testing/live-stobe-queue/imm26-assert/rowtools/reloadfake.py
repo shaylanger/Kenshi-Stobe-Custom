@@ -42,14 +42,23 @@ if kind == 'w' and 'rw:ticks' in body:
 if kind == 'h':
     if re.search(r'teleport Shay -?\d', body):
         st['away'] = True
+        st['phase'], st['ci'] = 'start', st['speed3']   # 27A-FIX: scenario key chase_d = [[start, end] per chase: control, pre, post]
         out([])
     if 'stobe-auto speed 3' in body:
         closes = scen.get('closes', [True])
         c = closes[min(st['speed3'], len(closes) - 1)]
         st['speed3'] += 1
+        st['phase'] = 'end'
         if c:
             st['away'] = False
         out([])
+    if re.search(r"teleport '[^']*' Shay", body):
+        st['phase'] = None   # the NPC was put next to Shay again
+        out([])
+    if 'stobe-auto where' in body and not scen.get('npc_missing') and scen.get('chase_d') and st.get('phase'):
+        cd = scen['chase_d']
+        d = cd[min(st['ci'], len(cd) - 1)][0 if st['phase'] == 'start' else 1]
+        out([f"Cind [Hungry Bandit] #2529907200/2 [Traders Guild] pos=-50970.0,1533.0,2965.0 dist={d}"])
     if 'stobe-auto where' in body and not scen.get('npc_missing'):
         out([f"Cind [Hungry Bandit] #2529907200/2 [Traders Guild] pos=-50970.0,1533.0,2965.0 dist={80.0 if st['away'] else 8.0}"])
     if 'stobe_state' in body and scen.get('follow'):

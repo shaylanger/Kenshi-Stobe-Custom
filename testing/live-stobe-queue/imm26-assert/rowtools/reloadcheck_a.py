@@ -15,6 +15,7 @@ import rowcheck as rc  # noqa: E402
 
 V, rd, full_rows, first_reply, need = rc.V, rc.rd, rc.full_rows, rc.first_reply, rc.need
 ACTIVE = ('proposed', 'accepted')
+BG_NEAR = float(os.environ.get('RW_BG_NEAR', '100'))   # 27A-FIX: bodyguard end-of-chase limit (u). The native Bodyguard package keeps a stand-off of ~50-67 u, so the legacy-FOLLOW 35 u never fits; a non-follower stays ~RW_AWAY_BG (200) u away
 
 
 def recs(ev, name):
@@ -245,12 +246,16 @@ def c_27a(v, ev):
         errs = ' | '.join(' '.join(l.split())[:100] for l in pre_raw.splitlines() if re.search(r'ERROR|unknown command|no character named', l, re.I))[:240]
         return v.setup_fail('no BODYGUARD order/contract visible after contract-bodyguard (no has_contract=1 in bg_set.txt, no BODYGUARD in state_pre.txt / bg_pre.txt)'
                             + (f'; harness answered: {errs}' if errs else '') + ' (needs: recipe; try RW_BG_ARGS)')
-    if not need(v, ev, 'bg_post.txt', 'state_post.txt', 'chase_pre.txt', 'chase_post.txt', 'state_after_chase.txt'):
+    if not need(v, ev, 'bg_post.txt', 'state_post.txt', 'chase_ctrl.txt', 'chase_pre.txt', 'chase_post.txt', 'state_after_chase.txt'):
         return
+    # 27A-FIX negative control: the SAME chase before the hire (no contract). If that NPC approaches Shay anyway, 'closes the distance' proves nothing.
+    c0, c1 = chase(ev, 'chase_ctrl.txt')
+    if c0 is None or c1 is None or c0 < 60 or c1 < 0.8 * c0:
+        return v.setup_fail(f'NPC approaches Shay without a contract (control chase {c0} -> {c1}; needs end >= 0.8 x start and start >= 60) - the bodyguard chase cannot discriminate (needs: recipe)')
     a0, a1 = chase(ev, 'chase_pre.txt')
-    v.ck('pre_load_bodyguard_follows', a0 is not None and a1 is not None and a1 <= 35, f'{a0} -> {a1}')
+    v.ck('pre_load_bodyguard_follows', a0 is not None and a1 is not None and a1 <= BG_NEAR, f'{a0} -> {a1} (limit {BG_NEAR:g}; control {c0} -> {c1})')
     b0, b1 = chase(ev, 'chase_post.txt')
-    closes = b1 is not None and b0 is not None and b1 <= 35 and b1 < b0
+    closes = b1 is not None and b0 is not None and b1 <= BG_NEAR and b1 < b0
     post_raw = (rd(ev, 'state_post.txt') or '') + (rd(ev, 'bg_post.txt') or '')
     present, how = _bg_has(post_raw), 'present'
     if not present and _bg_status_err(rd(ev, 'bg_post.txt') or '') and not re.search(r'has_contract=0', post_raw):
