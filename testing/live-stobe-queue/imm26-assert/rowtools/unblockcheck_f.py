@@ -6,7 +6,7 @@ row with delta > 0; negative = no new sharedexp row). This file adds only the na
   * end=TIMEOUT and no NATIVE_TRAVEL line at all -> SETUP-FAIL: the lane does not run the NC18 Stobe.dll (D54D0268).
   * end=TIMEOUT otherwise -> SETUP-FAIL: no native arrival within the walk tries (no 'We're here' turn was sent).
   * 13-c-neg only: the trip did NOT reach COMPLETED (Shay held behind: native FAILED / expired) -> the agreement is terminal and there is NO new sharedexp row = PASS
-    (`no_sharedexp_row_when_trip_not_completed`); a new row is FAIL; still not terminal after the arrival turn -> SETUP-FAIL (the server never reconciled: nothing was
+    (`no_sharedexp_row_when_trip_not_completed`)  [CHANGED by coordinator 2026-10-16: terminal-not-completed with NO row is now SETUP-FAIL, only a new row is FAIL; PASS needs COMPLETED with Shay away]; a new row is FAIL; still not terminal after the arrival turn -> SETUP-FAIL (the server never reconciled: nothing was
     disproven); FAILED with native_order_ended_before_goal -> SETUP-FAIL (arrival defect, not a disproof)."""
 import os
 import re
@@ -79,8 +79,12 @@ def c_neg(v, ev):
     def sx(name):
         return {ln.split('|')[0] for ln in (rd(ev, name) or '').splitlines() if ln.startswith('sharedexp:')}
     new = sx('se_after.txt') - sx('se_before.txt')
-    v.ck('no_sharedexp_row_when_trip_not_completed', not new, f'agreement={st["status"]}/{st["reason"] or "-"} new_rows={len(new)}')
-    v.note = 'R~ negative leg (Shay held behind): trip not completed; ' + native_note(ev)
+    if new:   # an award for a trip that did not complete is always a FAIL
+        v.ck('no_sharedexp_row_when_trip_not_completed', False, f'agreement={st["status"]}/{st["reason"] or "-"} new_rows={len(new)}')
+        v.note = 'R~ negative leg: sharedexp row awarded although the trip did not complete; ' + native_note(ev)
+        return
+    # coordinator 2026-10-16: row 13-c-neg means 'NPC travels alone / idle player -> no row' for a trip that ARRIVES; a trip that merely failed or expired disproves nothing
+    return v.setup_fail(f'trip ended {st["status"]}/{st["reason"] or "-"} without arrival: no award, but the negative award path was not exercised (needs COMPLETED with Shay away); ' + native_note(ev))
 
 
 CHECKS = {'13-c': c_pos, '13-c-neg': c_neg}

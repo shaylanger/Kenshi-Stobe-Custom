@@ -38,7 +38,7 @@ expect 13-c-arrival-defect f13c-failed-defect 13-c SETUP-FAIL "arrival defect"
 
 # ---- 13-c-neg
 expect 13-c-neg-completed-no-row f13cneg-completed-pass 13-c-neg PASS "no_sharedexp_row_when_shay_far"
-expect 13-c-neg-failed-no-row f13cneg-failed-pass 13-c-neg PASS "no_sharedexp_row_when_trip_not_completed"
+expect 13-c-neg-failed-no-row-is-setupfail f13cneg-failed-pass 13-c-neg SETUP-FAIL "negative award path was not exercised"
 expect 13-c-neg-failed-but-row-is-FAIL f13cneg-failed-row 13-c-neg FAIL "no_sharedexp_row_when_trip_not_completed"
 expect 13-c-neg-never-reconciled f13cneg-notreconciled 13-c-neg SETUP-FAIL "still ACCEPTED"
 expect 13-c-neg-arrival-defect-not-a-disproof f13cneg-failed-defect 13-c-neg SETUP-FAIL "arrival defect"
