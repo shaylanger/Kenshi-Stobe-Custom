@@ -142,7 +142,13 @@ class FrozenRoot:
                 isinstance(byte_offset, bool) or byte_offset < 0 or not isinstance(start_line, int) or
                 isinstance(start_line, bool) or start_line < 1):
             raise FrozenAccessError("invalid query or max_results")
-        start = self.root if relative == "." else self._resolve(relative)
+        try:
+            start = self.root if relative == "." else self._resolve(relative)
+        except FileNotFoundError as exc:
+            # Keep root loss fail-closed even if it happens after __init__.
+            if not self.root.is_dir():
+                raise
+            raise FrozenAccessError("search target does not exist") from exc
         if time.monotonic() >= deadline:
             raise FrozenAccessError("search exceeded its time budget resolving the path")
         if (byte_offset or start_line != 1) and not start.is_file():

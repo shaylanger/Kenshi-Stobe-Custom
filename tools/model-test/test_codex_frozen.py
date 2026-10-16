@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import time
@@ -43,6 +44,15 @@ class FrozenRootTests(unittest.TestCase):
         self.assertEqual(page["text"].replace("\r\n", "\n"), "000001\talpha\n000002\tBeta needle\n")
         self.assertEqual(self.fs.search("needle")["results"][0]["line"], 2)
         self.assertEqual(self.fs.list("nested")[0]["name"], "fixture.txt")
+
+    def test_missing_search_target_is_typed_rejection_but_missing_root_is_raw_infrastructure_error(self):
+        with self.assertRaises(cf.FrozenAccessError):
+            self.fs.search("needle", "missing.txt")
+        with self.assertRaises(FileNotFoundError):
+            cf.FrozenRoot(self.root / "missing-root")
+        shutil.rmtree(self.root)
+        with self.assertRaises(FileNotFoundError):
+            self.fs.search("needle", "missing.txt")
 
     def test_rejects_traversal_binary_and_oversize(self):
         with self.assertRaises(cf.FrozenAccessError):

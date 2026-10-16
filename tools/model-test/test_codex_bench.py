@@ -26,6 +26,10 @@ class BenchTests(unittest.TestCase):
         self.assertEqual(health["safe_rejection_count"], 1)
         self.assertEqual(health["infrastructure_error_count"], 0)
         self.assertEqual(bench._classify_mcp_receipts(
+            [{"method": "search", "arguments": {}, "outcome": "error:FileNotFoundError"}], True)["status"], "FAIL")
+        self.assertEqual(bench._classify_mcp_receipts(
+            [{"method": "search", "arguments": {}, "outcome": "error:TimeoutError"}], True)["status"], "FAIL")
+        self.assertEqual(bench._classify_mcp_receipts(
             [{"method": "read", "arguments": {}, "outcome": "error:TimeoutError"}], True)["status"], "FAIL")
         self.assertEqual(bench._classify_mcp_receipts(
             [{"method": "mystery", "arguments": {}, "outcome": "ok"}], True)["integrity"], "FAIL")
