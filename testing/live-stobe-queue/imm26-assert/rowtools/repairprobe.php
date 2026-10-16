@@ -28,7 +28,10 @@ $in = json_decode($argv[2] ?? '', true);
 $s0 = is_array($in) ? ($in['scope'] ?? null) : null;
 if (!is_array($s0) || !isset($s0['campaign_id'], $s0['timeline_epoch'], $s0['native_session_id'])) { echo json_encode(['error' => 'bad pre-load scope argument']), "\n"; exit(0); }
 $npc = trim(strval($argv[3] ?? 'Cind')) ?: 'Cind';
-$extra = ['giver_storage_id' => 'g1', 'recipient_storage_id' => 'r1', 'acceptance_gamets' => 0, 'deadline_gamets' => PHP_INT_MAX >> 1];
+// recipient identity must resolve (core_npc.metadata.storage_id, exactly one row) or every case ends IMPOSSIBLE exact_restitution_identity_unresolved before the deadline gate (5090-i3 live run 2026-10-16): use the real NPC's id, 'r1' only when none
+$rsid = 'r1';
+try { $rr = $db->fetchAll("SELECT metadata->>'storage_id' AS s FROM core_npc WHERE name ILIKE $1 AND coalesce(metadata->>'storage_id','')<>''", [str_replace(['%', '_'], ['\\%', '\\_'], $npc) . ' [%']); if (is_array($rr) && count($rr) === 1) $rsid = strval($rr[0]['s']); } catch (Throwable $e) {}
+$extra = ['giver_storage_id' => 'g1', 'recipient_storage_id' => $rsid, 'acceptance_gamets' => 0, 'deadline_gamets' => PHP_INT_MAX >> 1];
 $term = ['i' => 0, 'kind' => 'RETURN_ITEM', 'by' => 'player', 'item' => 'Bread', 'quantity' => 1, 'status' => 'AWAITING_PLAYER', 'evidence' => []];
 $other = strval($s0['campaign_id']) === str_repeat('ab', 16) ? str_repeat('cd', 16) : str_repeat('ab', 16);
 $cases = [
