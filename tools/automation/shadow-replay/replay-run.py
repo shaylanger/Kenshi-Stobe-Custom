@@ -242,6 +242,21 @@ def cmd_collect(a):
     print('bad:', [r['rid'] for r in have.values() if not str(r['status']).startswith('ok') or 'MODEL?' in str(r['status'])][:30])
 
 
+def cmd_retry(a):
+    """Delete outputs of invalid runs (runs.tsv status not ok* or schema problems) then re-plan only the missing runs."""
+    tsv = os.path.join(REPLAY, 'runs.tsv'); bad = []
+    if os.path.exists(tsv):
+        for r in csv.DictReader(open(tsv, encoding='utf-8'), delimiter='	'):
+            if not str(r['status']).startswith('ok') or r['schema_problems'] or 'MODEL?' in r['status']:
+                op = out_path(r['point'], r['arm'])
+                if os.path.exists(op):
+                    os.remove(op)
+                bad.append(r['rid'])
+    print('invalid runs cleared:', bad)
+    a.ids = None; a.first = None; a.arms = 'H,S'; a.redo = False
+    cmd_plan(a)
+
+
 def cmd_status(a):
     ids = point_ids()
     miss = [rid_of(p, arm) for p in ids for arm in a.arms.split(',') if not os.path.exists(out_path(p, arm))]
@@ -255,6 +270,7 @@ def main():
     p = sp.add_parser('plan'); p.add_argument('--arms', default='H,S'); p.add_argument('--ids'); p.add_argument('--first', type=int)
     p.add_argument('--batch', type=int, default=20); p.add_argument('--redo', action='store_true'); p.set_defaults(f=cmd_plan)
     p = sp.add_parser('collect'); p.add_argument('--hours', type=float, default=24); p.add_argument('--redo', action='store_true'); p.set_defaults(f=cmd_collect)
+    p = sp.add_parser('retry'); p.add_argument('--batch', type=int, default=20); p.set_defaults(f=cmd_retry)
     p = sp.add_parser('status'); p.add_argument('--arms', default='H,S'); p.set_defaults(f=cmd_status)
     a = ap.parse_args(); a.f(a)
 
