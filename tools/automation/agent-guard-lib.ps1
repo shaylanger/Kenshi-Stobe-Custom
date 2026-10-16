@@ -17,6 +17,8 @@
 #   (b) same name stem, bigger trailing number (op1 -> op2) and the tasks match: equal / one contains the other, or X's task was
 #       rewritten to "orphaned: ..." (then the task is unknown, the name decides)
 #   (c) S is DONE and its task equals / contains X's task
+#   (f) PI-33 (2026-10-16): S (RUNNING or DONE) names X as a whole word in its task/latest/next/outputs, or S has X's stem with a bigger trailing
+#       number and shares a row id (NN-x) with X's task/latest/next text
 #   (e) ledger tie (PI-11, Shay 2026-10-15): X is STOPPED-CONTEXT/FAILED, S is RUNNING with a status updated < 45 min ago and S.Mtime >= X.Mtime, and
 #       the program ledger (programs\*.json) ties them to the same work package (X and S both among a wp's agent / successors / agent_records)
 #       or to the same lane (lane-idle.ps1 lane table + lane-owners.json ops). If X sits in a lane and S sits in a DIFFERENT lane, the shared wp
@@ -80,6 +82,21 @@ function Test-AgentSuccessorBasic($x, $s) {
         $stem = $Matches[1]; $xi = [int]$Matches[2]
         if ($sn -match '^(.*?)(\d+)$' -and $Matches[1] -ceq $stem -and [int]$Matches[2] -gt $xi) {
             if ((Test-OrphanTask $x.Task) -or (Test-TaskMatch $x.Task $s.Task)) { return $true }
+        }
+    }
+    # (f) PI-33 (Shay 2026-10-16): the successor names the predecessor in its own status text (task/latest/next/outputs) as a whole word,
+    #     or has the same stem + bigger trailing number and shares a row id (NN-x) with X's task text (sfE2 -> sfE3, i4op10 -> i4op11)
+    if ($s.State -in 'RUNNING', 'DONE' -and -not (Test-OrphanTask $s.Task)) {
+        $st = "$($s.Task) $($s.Latest) $($s.Next) $($s.Outputs)"
+        if ($st -cmatch ('(?<![A-Za-z0-9_.-])' + [regex]::Escape($xn) + '(?![A-Za-z0-9_.-])')) { return $true }
+        if ($xn -match '^(.*?)(\d+)$') {
+            $stemF = $Matches[1]; $xiF = [int]$Matches[2]
+            if ($stemF.Length -ge 3 -and $sn -match '^(.*?)(\d+)$' -and $Matches[1] -ceq $stemF -and [int]$Matches[2] -gt $xiF) {
+                $rx = '\b\d{2}-[a-z]{1,2}\b'
+                $xr = @([regex]::Matches(("$($x.Task) $($x.Latest) $($x.Next)").ToLowerInvariant(), $rx) | ForEach-Object { $_.Value })
+                $sr = @([regex]::Matches($st.ToLowerInvariant(), $rx) | ForEach-Object { $_.Value })
+                if (@($xr | Where-Object { $sr -contains $_ }).Count) { return $true }
+            }
         }
     }
     # (c) a DONE status for the same task

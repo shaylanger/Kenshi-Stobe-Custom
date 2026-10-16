@@ -225,6 +225,15 @@ try {
         Ok ($eo -match 'EVENT STATUS ew1 STOPPED-CONTEXT' -and $eo -match 'respawn fresh event wait task from' -and $eo -match 'ew1\.status') "event-wait.sh STATUS line carries the respawn text: $($eo.Trim())"
         if (-not $p.HasExited) { $p.Kill() }
     }
+    # ---- PI-33 rule (f): explicit reference / same stem + shared row id ----
+    $t0 = Get-Date
+    function New-R($n, $st, $task, $lat, $min) { [pscustomobject]@{ Name = $n; State = $st; Task = $task; Latest = $lat; Outputs = ''; Next = ''; Mtime = $t0.AddMinutes($min) } }
+    $xr = New-R 'sfE2' 'STOPPED-CONTEXT' '24-c server fix' 'x' -30
+    Ok (Test-AgentSuccessorBasic $xr (New-R 'sfE3' 'DONE' 'setup recipes 24-c / 26-f' 'x' -3)) 'PI-33: same stem + bigger number + shared row id 24-c is a successor'
+    Ok (-not (Test-AgentSuccessorBasic $xr (New-R 'sfE3' 'RUNNING' 'unrelated recipes 10-b' 'x' -3))) 'PI-33: same stem + bigger number but no shared row id is NOT a successor'
+    Ok (Test-AgentSuccessorBasic $xr (New-R 'other-agent' 'RUNNING' 'continues sfE2 work' 'x' -3)) 'PI-33: successor naming predecessor as a whole word is accepted'
+    Ok (-not (Test-AgentSuccessorBasic $xr (New-R 'other-agent' 'RUNNING' 'continues sfE22 work' 'x' -3))) 'PI-33: partial name (sfE22) is NOT a reference'
+    Ok (-not (Test-AgentSuccessorBasic $xr (New-R 'sfE9' 'STOPPED-CONTEXT' 'also 24-c' 'x' -3))) 'PI-33: a stopped record is not a successor via rule f'
 } finally {
     Remove-Item Env:KAH_RUNS_DIR, Env:KAH_RUNS, Env:KAH_GUARD_TEST_ONLY_AGENTS, Env:MSYS_NO_PATHCONV -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
