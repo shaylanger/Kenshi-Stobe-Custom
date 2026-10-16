@@ -173,7 +173,11 @@ ub15_place_p() {  # ub15_place_p <label> : F1 pinned (HOLD_POSITION), then P wit
 ub15_place_s() {  # ub15_place_s <sleeper handle> : S1 asleep, next to the fight (dist 60 / 40 / 25) , distance S1 label <= 100
   local sid="$1" d
   for d in 60 40 25; do
-    printf 'stobe-auto teleport %s %s dist %s </dev/null | head -1\nstobe-auto teleport Shay %s </dev/null | head -1\n' "$(rl_q "$sid")" "$(rl_q "$UB_ID1")" "$d" "$(rl_q "$sid")" | lt_h >> "$EV/place.txt" 2>&1
+    # v4c (5090-i3 op29: fighters drift during X1-X3, a KO'd S1 cannot be teleported, S1 567 u away): the AWAKE fighter F1 is pinned and moved next to S1 instead; Shay goes to S1
+    ub4_pin "$UB_ID1"
+    printf 'stobe-auto teleport %s %s dist %s </dev/null | head -1
+stobe-auto teleport Shay %s </dev/null | head -1
+' "$(rl_q "$UB_ID1")" "$(rl_q "$sid")" "$d" "$(rl_q "$sid")" | lt_h >> "$EV/place.txt" 2>&1
     mkdir -p "$HXD/S1"; hxd_dist S1 "$UB_ID1" "$sid" || return $?
     uc_dry && return 0
     awk -F'|' '{ if ($2+0 > 100) bad=1 } END{exit bad}' "$HXD/S1/distance.txt" && return 0
