@@ -246,6 +246,9 @@ EOT
     [ -n "${KAH_ROW_FAKE:-}" ] || sleep 5
   done
   echo "$o" | grep -q 'phase=world' || { echo "reload: not in world after loading $TR_SAVE ($o)"; return 3; }
+  if [ -z "${KAH_ROW_FAKE:-}" ]; then   # phase=world arrives before the squad/NPC exist (Cind missing 20 s after a load): wait for her to resolve
+    for k in $(seq 1 14); do echo "stobe-auto where $n </dev/null | head -1" | lt_h 2>&1 | grep -q 'pos=' && break; sleep 5; done
+  fi
   lt_h <<EOT | head -5
 stobe-auto order Shay HOLD_POSITION keep </dev/null | head -1
 stobe-auto speed 0.5 </dev/null | head -1

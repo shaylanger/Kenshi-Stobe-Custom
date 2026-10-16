@@ -83,7 +83,12 @@ rd19_trip() {  # propose, accept, (lead), save, load, wait for the world; leaves
   ROW_NATIVE=1; rd_need_npc || return 3
   local sv="kah-imm26-19a-$LT_LANE" pre="kah-imm26-19a-pre-$LT_LANE"
   if [ "${ROW_19A_NC:-1}" = 1 ]; then printf 'stobe-auto save %s </dev/null | head -1\n' "$pre" | lt_h > "$EV/save_pre.txt" 2>&1; fi
-  rl_say 1 "Anywhere you want to go?" || return $?
+  if [ -n "${ROW_19_DEST:-}" ]; then rl_say 1 "Take me to ${ROW_19_DEST}." || return $?   # forced visited town (19-d needs a resumable destination with a known gate)
+  else rl_say 1 "Anywhere you want to go?" || return $?; fi
+  if ! grep -q '"status":"PROPOSED"' "$EV/s1/ev_full.txt" 2>/dev/null; then   # the NPC answered 'nowhere in particular' (LLM-soft): ask once more for a concrete trip
+    rl_say 1b "${ROW_19_DEST:+Would you lead me to $ROW_19_DEST?}${ROW_19_DEST:-Is there a town you need to get to? Lead me there.}" || return $?
+    grep -q '"status":"PROPOSED"' "$EV/s1b/ev_full.txt" 2>/dev/null || { RL_REASON="no trip proposed after two asks (s1/s1b): nothing to accept"; return 3; }
+  fi
   rl_say 2 "Yes, let's go." || return $?
   if ! grep -qE 'OWNED_TRAVEL.*accepted=1' "$EV/s2/reply.txt" 2>/dev/null; then rl_say 3 "Lead the way." || return $?; fi
   [ -n "${KAH_ROW_FAKE:-}" ] || sleep 6
@@ -125,11 +130,14 @@ rd_19anc2() {  # row 19-a-nc2: after the load the NPC is 120 u away: the trip st
 rd_19d() {  # row 19-d: after the resume the NPC reaches the destination (23-a recipe) -> COMPLETED, owned_work_released true
   declare -F tr_arrive >/dev/null || { RL_REASON="19-d needs tripdefs.sh (tr_arrive/tr_agr)"; return 3; }
   rd19_prep || return $?
+  local ROW_19_DEST="${TR_DEST:-Squin}"
   ROW_19A_NC=0 rd19_trip || return $?
   rd19_place near || return $?
   rl_say 4 "Where were we going?" || return $?
   [ -n "${KAH_ROW_FAKE:-}" ] || sleep "${ROW_RESUME_WAIT:-8}"
   rd19_state post_s4.txt
+  local og="${TR_GATE:-}" dg; TR_GATE=""; dg=$(tr_gate); TR_GATE="${TRIP_GATE:-${dg:-$og}}"   # gate = the agreement's destination_point, else the Squin default
+  if [ -n "${TRIP_SHORT:-}" ]; then set -- ${TR_GATE}; TR_GATE="$(awk -v x="$1" -v s="$TRIP_SHORT" 'BEGIN{printf "%.1f", x+s}') $2 $3"; fi   # TRIP_SHORT=N: arrive N u short of the gate and let her walk the last leg (a teleport onto the goal ends the native order = FAILED native_order_ended_before_goal)
   tr_arrive || return $?
   rl_say 5 "We're here. Thanks for guiding me." || return $?
   rd19_state state_after.txt
