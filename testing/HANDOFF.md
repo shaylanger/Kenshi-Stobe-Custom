@@ -9,6 +9,8 @@ Animation lab: `Kenshi-Automation-Harness/docs/animlab/STATUS.md`, KenshiFP adap
 
 ## Right now â€” canonical resumable checkpoint (2026-10-14)
 
+**LIVING STATE: read `testing/COORDINATOR_LIVE.md` FIRST (resume checklist, Shay's orders, deliverables, agent roster with ids, lanes, open issues, gotchas); this section is the older log. Rule: docs/HANDOFF_STANDARD.md.**
+
 **fix14dtool2 DONE (00b89ce6):** F2 reply-by-speaker (all rows) + 14-d v2 recipe (unblockrun_14d_v2.sh); op21 told to run 14-d v2 (2 phrasings) and 19-e after 26-a. Unverified: second FAR spawn may land in the near platoon -> SCENE-BAD, fallback --far-spawnt.
 
 **fix23arecipe DONE (b67b4b10, 20:38):** recipe v3 (unblockrun_23a2.sh); op37 told to run 23-a (msg sent). Offline selftest 55/56, the 1 FAIL was its own over-broad check, fixed; full rerun running in WSL -> /tmp/unblock23a2-rerun.txt (check tail; expect 56/56). Open checker question (default in use: report SETUP-FAIL, not n/a): c_23a items one_completion_acknowledgement/following_turn_no_reacknowledgement pass even when the agreement FAILED (only s3/s4 chat read); overall verdict still FAIL so no false PASS. Risk: stage landing check reads `where` 2 s after teleport; A2_STAGE_DY=0 disables it.
