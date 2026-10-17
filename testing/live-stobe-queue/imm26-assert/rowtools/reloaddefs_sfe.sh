@@ -152,6 +152,25 @@ EOT
   if [ "$ok" -ge "$need" ]; then echo "SCENE-OK" >> "$sc"; else echo "SCENE-BAD cind does not stably see >= 3 bandits (counting polls ok=$ok of $need needed in $pl polls; see senses lines above)" >> "$sc"; fi
   return 0
 }
+rs_probe26f() {   # fix26fcamp: after the load + reseat, record whether the bandit scene survived (4080-i4 18:50: 3 of 4 serials gone and the hostility not logged). Evidence appended to reseat.txt;
+  # the LAST line is RESEAT-OK or SCENE-LOST (checker reloadcheck_sfe.py: SETUP-FAIL, never a product FAIL). Re-applying relation -100 also logs the before-value:
+  # "-100.0 -> -100.0 enemy=1->1" = the game kept the hostility, "-10.0 -> -100.0 enemy=0->1" = the load dropped it (now restored, as a real camp would be).
+  local s id want=0 alive=0 chars first=""
+  chars=$(rs_sh 'stobe-auto chars 600 "Dust Bandit|!dead" </dev/null | head -3')
+  echo "probe chars600: $(echo "$chars" | tr '\n' ' ' | cut -c1-500)" >> "$EV/reseat.txt"
+  for s in $(sed -E 's/^#([0-9]+)\/[0-9]+$/\1/' "$EV/bandits.txt" 2>/dev/null); do
+    want=$((want+1)); id=$(echo "$chars" | grep -oE "#$s/[0-9]+" | head -1)
+    if [ -n "$id" ]; then
+      alive=$((alive+1)); [ -n "$first" ] || first="$id"
+      echo "probe where $id: $(rs_sh "stobe-auto where $(rl_q "$id") </dev/null | head -1" | tr '\n' ' ' | cut -c1-200)" >> "$EV/reseat.txt"
+    else
+      echo "probe where #$s: not alive within 600 u after the load" >> "$EV/reseat.txt"
+    fi
+  done
+  [ -z "$first" ] || echo "probe relation $first -100: $(rs_sh "stobe-auto relation $(rl_q "$first") -100 </dev/null | head -2" | tr '\n' ' ' | cut -c1-200)" >> "$EV/reseat.txt"
+  if [ "$want" -gt 0 ] && [ "$alive" -ge "$want" ]; then echo "RESEAT-OK $alive of $want agreed bandits alive within 600 u after the load" >> "$EV/reseat.txt"
+  else echo "SCENE-LOST only $alive of $want agreed bandits are alive within 600 u after the load (the exact agreedTargets cannot match: scene, not product)" >> "$EV/reseat.txt"; fi
+}
 rs_reseat26f() {   # after the load: Shay + Cind back at the camp spot, the SAME bandits (by serial) re-teleported + pinned
   local at="${RW_REBIRTH:--47333 730 -55600}" c chars ids s id
   rl_resolve "$ROW_NPC" >/dev/null 2>&1; c="$RL_NPC_ID"; set -- $at
@@ -166,6 +185,7 @@ EOT
   done
   echo "reseat bandits:$ids" >> "$EV/reseat.txt"
   [ -z "$ids" ] || { rs_place_bandits $ids; rs_sh "stobe-auto face $(rl_q "$c") $(rl_q "$(echo $ids | awk '{print $1}')") </dev/null | head -1; sleep 1" >> "$EV/reseat.txt"; }
+  rs_probe26f
 }
 rs_proposed_clear() {   # act_s*.txt holds a proposed ClearGroup record
   awk -F'|' '$6=="proposed" && $7=="ClearGroup"{f=1} END{exit !f}' "$EV/$1" 2>/dev/null
@@ -174,9 +194,12 @@ rs_inject_arm() {   # fix26f2: arm the sfO one-shot ClearGroup PROPOSE seam (inj
   # Why (4080-i4 op16 evidence rows/26-f s1..s1d): the native candidate IS there (s1 prompt: kind ClearGroup, campZone Rebirth, agreedTargets 4, activityPermitted true) but Cind is already in
   # melee with Gannor (prompt: combat.in_combat=true, "Attack Target: Gannor") and the MODEL answers "Busy - Gannor's on me" with activity_decision NONE in s1/s1b/s1c. The seam replaces ONLY that
   # model choice with a PROPOSE built from the same turn's native candidate and runs it through the unchanged product path; accept ("Yes"), the native scope check, save+load and resume stay real.
+  # fix26f4 (4080-i4 op17, stobeserver.log 22:27:20): with the seam the PROPOSE reached ActivityChat.php:104 and was rejected 'Activity availability rejected' (npc_availability.php reason in_combat: Cind is fighting the
+  # very group she is asked to clear; the same gate re-checks at ACCEPT). --bypass-availability opens ONLY that gate for the armed NPC on this isolated lane (PROPOSE turn + the player's Yes, phase-2 marker); the
+  # consent evidence, grounding and native scope check stay real. Opt out: RW_INJECT_BYPASS=0. Evidence: inject_arm.txt (bypass_availability=1), inject_status.txt, inject_end.txt, server log 'availability bypassed'.
   [ "${RW_INJECT_PROPOSE:-ClearGroup}" = 0 ] && { echo "inject disabled (RW_INJECT_PROPOSE=0)" > "$EV/inject_arm.txt"; return 0; }
   local o rc
-  o=$(bash "$RS_HERE/inject-propose.sh" "$LT_LANE" "${ROW_NPC:-any}" ClearGroup ${RW_INJECT_TARGET:+"$RW_INJECT_TARGET"} --row "${ROW:-26-f}" --ttl "${RW_INJECT_TTL:-900}" 2>&1); rc=$?
+  o=$(bash "$RS_HERE/inject-propose.sh" "$LT_LANE" "${ROW_NPC:-any}" ClearGroup ${RW_INJECT_TARGET:+"$RW_INJECT_TARGET"} --row "${ROW:-26-f}" --ttl "${RW_INJECT_TTL:-900}" $([ "${RW_INJECT_BYPASS:-1}" = 0 ] || echo --bypass-availability) 2>&1); rc=$?
   echo "$o" > "$EV/inject_arm.txt"
   if [ $rc != 0 ]; then
     RL_REASON="inject-propose arm failed rc=$rc: $(echo "$o" | head -1 | cut -c1-160)$([ $rc = 4 ] && echo ' (deploy the seam: bash rowtools/inject-propose-deploy.sh '"$LT_LANE"')')"; return 3
@@ -187,6 +210,12 @@ rs_inject_done() {   # fix26f2: after the offer loop: keep the seam evidence (ma
   [ "${RW_INJECT_PROPOSE:-ClearGroup}" = 0 ] && return 0
   bash "$RS_HERE/inject-propose.sh" "$LT_LANE" --status > "$EV/inject_status.txt" 2>&1
   bash "$RS_HERE/inject-propose.sh" "$LT_LANE" --disarm >> "$EV/inject_status.txt" 2>&1
+  return 0
+}
+rs_inject_end() {   # fix26f4: after the whole row (every exit path of rd_26f): remove the phase-2 accept marker too; evidence inject_end.txt (marker/fired/done files + the seam's own log lines)
+  [ "${RW_INJECT_PROPOSE:-ClearGroup}" = 0 ] && return 0
+  bash "$RS_HERE/inject-propose.sh" "$LT_LANE" --status > "$EV/inject_end.txt" 2>&1
+  bash "$RS_HERE/inject-propose.sh" "$LT_LANE" --disarm-all >> "$EV/inject_end.txt" 2>&1
   return 0
 }
 rs_wait_delivery() {   # rs_wait_delivery <step>: fix26f2. copy of reloaddefs_sfi.sh si_wait_delivery (the proven Hunt-row accept timing): wait for the offer speech of say step s<step> to be delivered (RECHAT_TIMING follow-up), then the accept delay. Evidence delivery_<step>.txt
@@ -227,7 +256,10 @@ rs_offer_loop() {   # fix26f2: the four offer wordings; the seam is armed once, 
   done
   return 0
 }
-rd_26f() {
+rd_26f() {   # fix26f4: wrapper, so the phase-2 marker is removed on EVERY exit path
+  local rc; rd_26f_body "$@"; rc=$?; rs_inject_end; return $rc
+}
+rd_26f_body() {
   local accept rsay n0 n1 a st rc
   # fix26f2: (1) rl_say that returns on Cind's own "(PC)" line (player-faction speaker; the rowlib one only matched "(NPC)" and blocked the full ROW_WAIT=150 s per say, the Hunt proposal TTL ~117 s ran out: sfP),
   # (2) offer through the sfO seam (rs_inject_arm), (3) delivery wait before the accept (as the Hunt rows), (4) accept retried once while the offer is still open, (5) bounded resume poll (fix26ad).
