@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """IMM-02-bx asserter v3 (imm26-fix02bx).  NEW file; v2/assert_principle.py and v2/imm26_lib.py are NOT edited (loaded by path).
 Usage (same argv as v2):  assert_principle.py 02-bx --target T1 T2 T3 --ctl S1 S2 S3 [--principle slavery] [--voice-min 3]   -> one RESULT line.
-Every other row (02-ax, 02-cx, 02-dx, 05-cx) is handed to the v2 implementation unchanged.
+02-dx is routed through the same echo skip (imm26-fix02dxroute, see row_02dx below).  Every other row (02-ax, 02-cx, 05-cx) is handed to the v2 implementation unchanged.
 
 Why (evidence: 4080-i3 op30 reps imm26-4080-rep/02-bx-p1..p3, new runner hxrun_02bd_id.sh): v2 refuses_first_sentence FAILED on T2/T3 because the NPC opens
 with a rhetorical ECHO of the player's own request and says no in the SAME breath:  "Chain up a prisoner... no. I don't do that."  /  "Rope? No. Not that."
@@ -113,13 +113,81 @@ def row_02bx(a, res):
         res.check(f'{b.name}:ctl_not_refused_on_principle', not re.search(r"line i (don'?t|won'?t) cross|on principle|against my (principles|beliefs)|i'?m opposed", reply_of(b), re.I), reply_of(b)[:60])
 
 
+FILLERS = {'hm', 'hmm', 'huh', 'heh', 'ha', 'ah', 'oh', 'uh', 'um', 'well', 'look', 'right', 'okay', 'ok', 'so'}
+
+
+def is_echo_dx(seg, request):
+    """02-dx echo: like is_echo but the fragment may also end in a plain '.', '!' (the 02-dx replies echo as 'Chain up a prisoner.' / 'Shackles.')."""
+    seg = seg.strip()
+    w = [x for x in _words(seg) if x not in SKIP_WORDS]
+    if not seg or not w or len(_words(seg)) > 8:
+        return False
+    req = _words(request)
+    return all(any(x == r or (len(x) >= 4 and len(r) >= 4 and x[:4] == r[:4]) for r in req) for x in w)
+
+
+def is_filler(seg):
+    w = _words(seg)
+    return 0 < len(w) <= 2 and all(x in FILLERS for x in w)
+
+
+def dx_segments(b):
+    """(segments of the NPC reply starting at the real first sentence, skipped echo/filler text).  Skips ONE echo of the request then any short fillers ('Hm.', 'Huh.')."""
+    utt = utterances_to_player(b) or b.replies()[:1]
+    if not utt:
+        return [], ''
+    segs = [x for x in SPLIT.split(utt[0].strip()) if x]
+    req = (b.inputs() or [''])[-1]
+    i = 0
+    if segs and is_echo_dx(segs[0], req):
+        i = 1
+        while i < len(segs) and is_filler(segs[i]):
+            i += 1
+    return segs[i:], ' '.join(segs[:i])
+
+
+def refuses_dx(b):
+    """(refuses, cooperates, shown sentence, echo).  Accepts v2's verdict OR the echo-skipped one; COOP must be absent from both first sentences."""
+    segs, echo = dx_segments(b)
+    fs = segs[0] if segs else ''
+    two = ' '.join(segs[:2])
+    new = bool(REFUSE.search(fs) or REFUSE.search(two) or re.search(r'told you', fs, re.I))
+    ok = v2._refuses(b) or new
+    coop = bool(COOP.search(fs)) or bool(COOP.search(b.first_sentence()))
+    return ok, coop, fs, echo
+
+
+def row_02dx(a, res):
+    pr = a['--principle'] or 'slavery'
+    T, C = v2.load(a['--target']), v2.load(a['--ctl'])
+    res.check('samples>=3 each', min(len(T), len(C)) >= 3, f'{len(T)}/{len(C)}')
+    distinct_inputs(T, 3, res)
+    allref = []
+    for grp, want, tier in ((T, 60, ('Fond', 'Warm', 'Friendly')), (C, 0, ('Neutral',))):
+        for b in grp:
+            t = res.need(os.path.join(b.dir, 'haff.txt'), f'{b.name}/haff.txt')
+            if t is not None:
+                m = re.search(r'"after"\s*:\s*\{[^{}]*\{[^{}]*?"aff"\s*:\s*(-?\d+)', t) or re.search(r'aff\w*[^\d-]*(-?\d+)', t)
+                res.check(f'{b.name}:haff', bool(m) and int(m.group(1)) == want, f'{m.group(1) if m else None}want{want}')
+            res.check(f'{b.name}:tier', b.stance()[1] in tier, b.stance()[1])
+            v2.principle_common(b, res, pr)
+            ok, coop, fs, echo = refuses_dx(b)
+            allref.append(ok)
+            res.check(f'{b.name}:refuses', ok and not coop, (('[echo ' + echo[:24] + '] ') if echo else '') + fs[:50])
+            res.check(f'{b.name}:no_action', not b.foreign_actions() and not any(v2.ACT_WORDS.search(e[2]) for e in b.events() if e[1] in ('action', 'infoaction')), b.foreign_actions())
+    res.check('some_request_offers_money', any(re.search(r'\bcats?\b|\bpay\b|\d{3}', ' '.join(b.inputs())) for b in T), '')
+    res.check('outcome_identical(all 6 refuse)', all(allref), '')
+
+
 if __name__ == '__main__':
     row = sys.argv[1] if len(sys.argv) > 1 else ''
     if row not in v2.ROWS:
-        raise SystemExit('usage: assert_principle.py {02-ax|02-bx|02-cx|02-dx|05-cx} --target ... (v3: 02-bx fixed, other rows = v2)')
+        raise SystemExit('usage: assert_principle.py {02-ax|02-bx|02-cx|02-dx|05-cx} --target ... (v3: 02-bx and 02-dx echo-aware, other rows = v2)')
     fn, multi, single = v2.ROWS[row]
     if row == '02-bx':
         fn = row_02bx
+    elif row == '02-dx':
+        fn = row_02dx
     pos, a = parse_args(sys.argv[2:], multi, single)
     res = Result('IMM-' + row, a['--lenient'])
     fn(a, res)
