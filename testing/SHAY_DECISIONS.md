@@ -56,6 +56,7 @@ RULE (Shay 2026-10-16): every item that needs a Shay decision is recorded HERE w
 - Recommendation: a (keeps NPCs believable); I will adjust the recipe unless you say otherwise.
 
 ## Decided
+- 2026-10-16 ab2 pilot: RESUME LATER, and FIRST when Shay says to start working again (rows 13-20 + voided 05-cx/17-bx Sonnet). See HANDOFF top line and COORDINATOR_LIVE.
 - PI-62 (auto-sweep) and its extra delete patterns (selftest-all*, scratch-*, coordinator.heartbeat.*.tmp, dur_run*.sh): YES, Shay 2026-10-16.
 - PI-66 / PI-51 confirmed by Shay 2026-10-16 (PI-51 applied).
 
