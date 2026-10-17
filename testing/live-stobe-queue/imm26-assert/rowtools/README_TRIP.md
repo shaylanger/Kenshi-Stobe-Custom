@@ -36,3 +36,13 @@ Env knobs: `TRIP_DEST TRIP_ALT TRIP_SAVE TRIP_GATE TRIP_ACCEPT TRIP_FOLLOW(60) T
 
 ## imm26-fix20a19e candidates (NOT swapped yet)
 `tripdefs.sh.candidate` (tr_faction_guard restores a Nameless server-side faction via `stobe-auto faction`, tr_prompt_guard on s1, 3 openers + no accept without PROPOSED), `sfrdefs.sh.candidate` (rd_20a at the quiet spot + ACCEPTED guard), `hxdefs.sh.candidate` (bundle_dir.txt as C:/ via cygpath), `unblockdefs_sfs.sh.candidate` (08-d uses the sfK2 walk), `trip-selftest.sh.candidate` (new SETUP-FAIL text). Tests: `fix20a19e_selftest.sh`, `hxd_winpath_selftest.sh`. Swap: `for f in tripdefs sfrdefs hxdefs unblockdefs_sfs trip-selftest; do cp $f.sh.candidate $f.sh; done` when no queued/running row uses them.
+
+## imm26-sfFixC: 20-a / 19-e one-call runners (tickets 20-a SETUP-FAIL 4080-i3, 19-e SETUP-FAIL 4080-i4)
+The fix20a19e candidates are live (swapped 14:55; faction guard proven live on 4080-i4 20-d.prev: DB `Nameless` -> `Traders Guild`). New, nothing queued edited: `tripdefs_sffc.sh` (sourced last; redefines `tr_trip_setup` and `rd19_trip` in-process), `sfrrun_fc.sh` (= `sfrrun.sh` + that one source line), `reloadrun-b_fc.sh` (= `reloadrun-b.sh` + that one source line), `sffc_selftest.sh` (29 checks; `SFFC_DRY=1` also runs both dry-runs).
+Adds: (1) s2 retry in the `s2b` slot when the accept turn stored no ACCEPTED row (5090-i4 20-a: LLM HTTP 12002 -> empty stream); checker STEPS unchanged. (2) deterministic fallback: no PROPOSED after s1/s1b/s1c -> arm the sfTrav seam (`inject-travel.sh`) and say the first opener once more (`s1d`); `SFFC_INJECT=0` off; needs `inject-travel-deploy.sh <lane>` on the lane (missing = SETUP-FAIL naming it). (3) `rd19_trip` (19-a/19-e/19-f/19-anc2) gets the prompt guard + third opener + fallback (rowdefs.sh has none).
+```
+cd /c/KenshiModding/testing/live-stobe-queue/imm26-assert
+KAH_PF_ISOLATION=0 bash rowtools/sfrrun_fc.sh 20-a 4080-i3 --allow-retry "sfFixC: quiet spot + ACCEPTED guard + s2 retry + travel fallback"
+KAH_PF_ISOLATION=0 bash rowtools/reloadrun-b_fc.sh 19-e 4080-i4 --allow-retry "sfFixC: faction restore + prompt guard + travel fallback"
+```
+Evidence to read after a SETUP-FAIL: `faction.txt` (db_faction_before/after), `inject_arm.txt` (fallback), `s1*/prompt.txt` (consent section), `place_dist.txt` (20-a). Dry runs: add `--dry` and `KAH_ROWS_BASE=/tmp/x` (without it a dry run rotates the lane's real `rows/<row>` to `.prev`).
