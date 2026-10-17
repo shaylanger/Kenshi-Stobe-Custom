@@ -17,6 +17,8 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 
 - 22:20 backlog slots used: inv13cneg (a60bb3a6a90bba76f), inv15bx17bx (aa73686fef0612a27), inv26a (a0dd841baa6268293) started. fix19erecipe DONE 2da454da (op22 runs 19-e next). op22: 14-d post-fix run FAILED differently: no field rejection now, NPC Selika declined in dialogue ("Five against two is a p...") -> wait op22 report. 5090-i3 idle alert is expected (waiting fix23agate selftest).
 
+- 22:30 CHECKPOINT (121k): /cost reconciliation done (compact real cost ~$0.8 at 290k, summarizer billed uncached; docs/COMPACT_AUDIT.md). Shay must paste /cost before AND after the next compact (meter text now says so). PI cap is 15/15: two new ideas queued in AGENT_BACKLOG PI queue (compact-audit honesty/reconcile; explicit-pathspec commits). Running: op25 (4080-i4 01-cx/02-dx, a... afd2c7df286186938), op22 (5090-i5, 19-e next, a1211dab5b1bd93e3), op32, fix23agate, fix26fcamp, inv13cneg, inv15bx17bx, inv26a, ab2exec3. Owed: ab2 COMPARISON.md when ab2exec3 finishes; 5090-i3 operator (imm26-5090-i3op38) after fix23agate lands; next compact: tell Shay the /cost result.
+
 ## 1. Resume checklist (do these first)
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1 -Brief`; `agent-rollcall.ps1` (one line per agent).
 2. Waker: Monitor tool, command `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch`, timeout_ms 3600000 (expires after 30 min; re-arming is harmless; heartbeat `C:\KenshiTestRuns\waker\coordinator.hb`).
