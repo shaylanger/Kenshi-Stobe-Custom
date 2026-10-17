@@ -130,4 +130,4 @@ Reason key: CAP = held because of the 20-concurrent-subagent cap (only the i4 op
 - Sweep: the Stop-hook old24 block was a stale 30-min 4080 cache; `testruns-sweep.ps1 refresh4080` cleared it (old24=0).
 - Waker re-armed (Monitor b0wppcm1u, waker-persist.sh watch).
 - PROCESS_IDEAS.md is 15/15: new ideas live in AGENT_BACKLOG 'PI queue' (5 entries) until Shay retires the tail-moot PI-46/56/58/63/71.
-
+- 22:3x i5 lane idle: spawned imm26-5090-i5-op23 (a5733bd99585b5b0f) for 01-cx x2 (second-rig variance sample vs op25 on 4080-i4). i3 still waits for fix23agate. Alerts acked.
