@@ -86,7 +86,7 @@ pa_h "stobe-auto speed ${RW_HUNT_SPEED} </dev/null | head -1" >/dev/null
 # op14 (2026-10-16, diagnosis imm26-investigate-26a-leg): the Hunt is bound to the EXACT agreed animal (ActivityRuntimeBindings.cpp:384-394), never to a spawned substitute, and the route goal is ~1280 u
 # from the scene goats, so Malzin walks back to the scene goat while Shay (teleported onto her every ~1 s) leaves the scene empty: a race. Fix: no dest-goat spawn; after the Yes MOVE the agreed goat
 # (record.discoveryRef.targetSerial -> #serial/idx from this try's spawn.txt) to the route goal and pin it, so Malzin sees it on arrival. Done inside the follow loop (pa_move_goat) as soon as the serial is in the record.
-RW_DEST="${RW_DEST:--50691 1566 3559}"; moved=0   # = the Hunt route goal at ground height (y 1580 left the goat unseen: op14f attempted=0; 1566: target selected, attempted=1); : > "$OUT/goat_move.txt"
+RW_DEST="${RW_DEST:--50676 1570 3559}"; moved=0   # inv26a 2026-10-16: moved 15 u east to the approach slope (dy<=12 even if lifted); was the Hunt route goal at ground height (y 1580 left the goat unseen: op14f attempted=0; 1566: target selected, attempted=1); : > "$OUT/goat_move.txt"
 pa_move_goat() {    # moves the agreed goat to $RW_DEST + pin; sets moved=1 only when the teleport answered; logs to goat_move.txt
   local ser id out
   ser=$(lt_sql "select record->'discoveryRef'->>'targetSerial' from stobe_activity_record where actor=$ACTOR and coalesce(record->'agreement'->>'kind','')='Hunt' and id not in ($OLDIDS) order by (record->>'createdAt')::numeric desc, revision desc limit 1" | head -1 | tr -dc 0-9)
