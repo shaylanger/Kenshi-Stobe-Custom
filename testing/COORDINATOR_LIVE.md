@@ -167,3 +167,4 @@ Reason key: CAP = held because of the 20-concurrent-subagent cap (only the i4 op
 - 2026-10-16 Shay: enough compact-cost baselines; do NOT ask him to run /cost before/after a compact any more (memory no-more-cost-before-after-compact).
 - 2026-10-16 Shay: fleet idea is wanted - demand-driven lanes (operators only for ready queues, end after launching a detached batch, model-free waker wakes a fresh operator on result). Filed AGENT_BACKLOG PI queue (h).
 - 2026-10-16 choresbot SWITCHED ON (Monitor b9xphfwqn = waker-persist-chores.sh watch; chores.hb live). Rollback: stop it, start waker-persist.sh watch. Digest: C:\KenshiTestRuns\coordinator-digest\.
+- 2026-10-16 cut3 verified on modeltestpack (hook stamps status, keepalive denied one long wait); lane-brief + AGENT_PROMPTS swapped to automatic-status text (selftest 36/0); cut1 lane-brief evidence line applied; choresbot on.
