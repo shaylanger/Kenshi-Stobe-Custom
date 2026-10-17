@@ -14,7 +14,8 @@ Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-9
 2. Waker: Monitor tool, command `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist.sh watch`, timeout_ms 3600000 (expires after 30 min; re-arming is harmless; heartbeat `C:\KenshiTestRuns\waker\coordinator.hb`).
 3. Open alerts: `ls C:\KenshiTestRuns\alerts\open`; act, then `alert-ack.ps1 <id> "<action>"`.
 4. Read `testing/SHAY_DECISIONS.md` (open questions for Shay, defaults in use).
-5. Agents run in THIS session unless noted: never respawn a RUNNING one; the task-notification "completed" for an agent that "is waiting on its own background work" is NOT a finish (check its .status).
+5. BACKLOG: `testing/AGENT_BACKLOG.md` is the list of work to start without Shay; at every waker event / agent result check the slot test in it and spawn the top READY item. Replay2 (Shay's ordered test) has priority for slots.
+6. Agents run in THIS session unless noted: never respawn a RUNNING one; the task-notification "completed" for an agent that "is waiting on its own background work" is NOT a finish (check its .status).
 
 ## 2. Shay's standing orders (verbatim sense, this session)
 - No lane idle ever; never `KAH_PF_ISOLATION=0`; both rigs allowed (isolated lanes only); never Shay's live install/server/DB.
