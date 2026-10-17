@@ -4,7 +4,7 @@ RULE (Shay 2026-10-16): every item that needs a Shay decision is recorded HERE w
 
 ## Open
 
-### BLOCKER (needs Shay, 2026-10-16 22:15): LLM provider balance is empty (HTTP 402)
+### RESOLVED 2026-10-16 22:08 (Shay topped up; llm-health OK) - was BLOCKER (2026-10-16 22:15): LLM provider balance is empty (HTTP 402)
 - `bash tools/automation/llm-health.sh` -> `LLM-HEALTH FAIL http=402 {"error":{"message":"You need positive balance to do inference. Please add balance manually or setup top-up"`. Reported by imm26-4080-i4op24 (preflight + llm-health both FAIL), so EVERY in-game row that needs the chat LLM is blocked on every lane until the balance is topped up (the provider is the one in the lane's server config; CLAUDE.md says chat = DeepInfra, relationship eval = OpenRouter: top up whichever the health check reads).
 - In game: NPCs cannot answer (no replies), so no row can pass; nothing is wrong with the mod. In code: nothing to change.
 - What waits: 01-cx x3 and 02-dx x3 (4080-i4, `hxrun_v3cx.sh 01-cx 4080-i4 --save kah-imm26-4080-i4 ...`, `hxrun_02bd3.sh 02-dx 4080-i4 --save kah-imm26-4080-i4 ...`), 02-bx and 16-bx on 4080-i3 (op32), the 23-a/14-d/19-e reruns after their fixers, 26-a. The replay2 experiment uses the Anthropic API via `claude -p` and is NOT affected.

@@ -23,10 +23,10 @@ eplay2-headless.py); must coexist with hpairexec11 (claim files); when verified:
 | 14 | tail-close-selftest 25 pre-existing failures | fixer | PARKED | only matters if tail handoffs continue (auto-compact replaces them) |
 | 15 | ab2 pilot cleanup + COMPARISON.md explanation | coordinator | WAIT imm26-ab2exec3 finishing (seq ~8/20) | README cleanup list in COORDINATOR_LIVE section 5 |
 | 16 | replay2 FINAL FULL REPORT to Shay | coordinator | WAIT r2, r3, graders | section 3 of COORDINATOR_LIVE |
-| 17 | 14-d server fix (ActivityAgreementAdapter keys) | fixer `imm26-fix14dserver` | STARTED 22:13 (a55d7511d72a47aca) | then i5 operator reruns 14-d v2 |
+| 17 | 14-d server fix | fixer `imm26-fix14dserver` | DONE def07676 | i5 operator op22 (a1211dab5b1bd93e3) running 14-d v2 |
 | 18 | 19-e recipe (Cind within ~30 u before s4) | fixer `imm26-fix19erecipe` | STARTED 22:13 (aa28c7638749868c1) | then op reruns 19-e |
 | 19 | 26-a native fix: ACTIVITY_OFFMESH_REACH actorOnMesh=0 targetOnMesh=1 dy=-14.6 reachable=0 -> hunt fails no_observed_suitable_reachable_target; NC34 fallback only covers actorOnMesh=1 | investigate then native fixer `imm26-inv26a` / NC35 | READY | evidence agents\out\imm26-5090-i5-op21a-run2; stobe.log lines ACTIVITY_OFFMESH_REACH |
-| 20 | operator for lane 5090-i5 | operator `imm26-5090-i5-op22` | WAIT items 17-19 | lane up, game running; i5 has no claimable row now |
+| 20 | operator for lane 5090-i5 | operator `imm26-5090-i5-op22` | STARTED 22:08 (a1211dab5b1bd93e3); 19-e after item 18 | lane up, game running; i5 has no claimable row now |
 
 ## PI queue (ideas waiting for a free slot in the 15-entry cap of docs/PROCESS_IDEAS.md; add them with process-ideas.ps1 add when a slot frees)
 - Slot-test script: one command printing live subagent count + replay runs in flight (agent-rollcall counts) so the backlog slot rule is mechanical. Evidence: 2026-10-16 21:00 Shay asked 'how many subagents do you have' and I needed ListAgents + rollcall + reasoning; the 4080-i4 lane sat idle 27 min because nobody checked the slots.

@@ -16,4 +16,9 @@ Caveat: the summarizer call is not in the transcript, so its cost is an ESTIMATE
 ## Reading
 Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus the tail's relay turns and the risk of lost relays. Per-turn cost halves after either. My earlier estimate ("a handoff costs about the same") was wrong because the tail kept taking turns at high context and compacted itself anyway.
 
-## Compact #2 (first at the new ~150k threshold): TO BE FILLED by `compact-audit.py compacts` (auto 15 min after the compaction when the PreCompact hook is installed).
+## Compact #2 (auto, 2026-10-17 02:34 UTC; fired at 299k, NOT the 150k threshold: the setting had not applied to the running session yet)
+- 299,005 -> 13,860 tokens, summarizer 67 s. Cache was warm.
+- One-off cost $0.23 = summarizer ESTIMATE $0.076 (input $0.030 at cache-read + ~4.6k output tokens $0.046) + first turn after MEASURED $0.156.
+- Mean turn cost MEASURED: before $0.0438 (n=15) -> after $0.0288 (n=15); break-even ~15.5 turns.
+- Vs the old overlap handoff ($1.84, compact #1/handoff data above): about 8x cheaper.
+- Clean 150k measurement: still to come (next compaction after Shay runs /autocompact 183000).

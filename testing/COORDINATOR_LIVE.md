@@ -9,7 +9,7 @@ ZERO-CONTEXT TEST before every compact: "could a new session do the next 10 thin
 
 Last updated: 2026-10-16 ~20:55 by coordinator #24 (session 7b068528-9019-4ad1-913a-ead9d4167d45). Tail of coordinator #23 (5161648d) CLOSED 20:47: it owns nothing; no tail exists now.
 
-## 0. BLOCKER: LLM provider balance empty (402) since ~22:10 -> all lane rows blocked; see SHAY_DECISIONS.md top. Re-check `bash tools/automation/llm-health.sh` before respawning operators; imm26-4080-i4op24 abandoned for this reason (rows 01-cx x3, 02-dx x3 on 4080-i4 first after top-up; `--save kah-imm26-4080-i4`).
+## 0. (cleared 22:08) LLM balance topped up by Shay; llm-health OK. Operators respawned: imm26-4080-i4op25 (afd2c7df286186938: 01-cx x3, 02-dx x3) and imm26-5090-i5-op22 (a1211dab5b1bd93e3: 14-d v2 rerun now, 19-e after fix19erecipe). fix14dserver DONE def07676. Compact #2 measured ($0.23, in docs/COMPACT_AUDIT.md); tell Shay.
 
 ## 1. Resume checklist (do these first)
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding\tools\automation\session-start.ps1 -Brief`; `agent-rollcall.ps1` (one line per agent).
