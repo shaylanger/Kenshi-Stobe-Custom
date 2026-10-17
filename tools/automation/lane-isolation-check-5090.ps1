@@ -257,7 +257,7 @@ $bad = @(); $ev = @()
 foreach ($l in $SEL) {
   $f = Join-Path $l.harness_dir 'input_isolation.on'
   if (-not (Test-Path $f)) { $bad += "$($l.id): input_isolation.on missing" } else { $ev += "$($l.id)=on" }
-  if (Running $l) { $hl = Get-Content $l.harness_log -Tail 4000 -ErrorAction SilentlyContinue | Where-Object { $_ -match 'input isolation: DirectInput' }; if (-not $hl) { $bad += "$($l.id): no 'input isolation: DirectInput' line in harness.log (hook not active)" } }
+  if (Running $l) { $hl = Select-String -Path $l.harness_log -Pattern 'input isolation: DirectInput' -SimpleMatch -List -ErrorAction SilentlyContinue; if (-not $hl) { $bad += "$($l.id): no 'input isolation: DirectInput' line in harness.log (hook not active)" } }
 }
 Res 'input-isolation' $bad "per-lane input isolation flag on, DirectInput hooked in running games: $($ev -join ' ')"
 
