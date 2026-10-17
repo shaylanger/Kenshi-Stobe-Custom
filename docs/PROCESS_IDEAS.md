@@ -15,36 +15,6 @@ Rules:
 
 ## Active
 
-### PI-37 | Oepn
-- idea: session-start / agent-status should auto-abandon the inflight marker of a dead predecessor as soon as a successor registered in lane-owners or with the same task text is RUNNING.
-- evidence: 2026-10-16 10:00-10:40: after the freeze 3 predecessor markers (op12, op9k, inv-14d) plus sfC/sfE2 caused false RIG STALL / work-in-flight wakes and 5 manual agent-abandon calls.
-- saving: ~5 manual calls and 4 spurious waker wakes per resume
-- risk: must not hide a truly unowned stopped agent: only when the successor task text matches
-- hooks: yes
-- weakens: no
-- added: 2026-10-16 10:49
-- log: 2026-10-16 10:49 review 'coordinator-14': added
-
-### PI-44 | Open
-- idea: Never move inbox/coordinator/*.msg by hand (my blanket 'mv *.msg done/' habit hid a Haiku-pilot operator's 00-ask question for about 10 minutes); the waker already moves files to delivered/ and prints them. Add a rule line to AGENT_PROMPTS and make the waker print the full text of any PILOT-ESCALATE / 00-ask message (not the 300-char cut).
-- evidence: 2026-10-16 12:48: imm26-5090-i4-hk1 sent a 00-ask (window placement refused); I had archived the file with mv before reading it and only noticed via hk1's status line ~10 min later, so the pilot lane waited.
-- saving: avoids a lane waiting for an unseen question (about 10 min of rig time per occurrence)
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 12:52
-- log: 2026-10-16 12:52 review 'coordinator-16': added
-
-### PI-46 | Open
-- idea: A tail session should need zero model turns: tail-autorelay must relay every finished agent (it relayed sfV/sfT early, then stopped relaying; I relayed sfP, sfR, ctxfix, fxC2, sfU, sfS, op13, op21, op9n by hand) and Get-TailRelayState must also search coordinator/done/.
-- evidence: 12:00-13:05: 9 hand relays at ~300k context each, plus ~8 tail-wait restarts.
-- saving: ~17 full-price turns at 300k per handoff (large share of the tail's cost)
-- risk: low: tooling bug fix with a selftest
-- hooks: no
-- weakens: no
-- added: 2026-10-16 13:05
-- log: 2026-10-16 13:05 review 'coordinator-15-tail': added
-
 ### PI-48 | Open
 - idea: Lane operators must never run bare `stobe-auto` (it talks to the LIVE install): put one line in lane-brief and the lane-operator block saying 'use go-row / lane-setup, or first export RIG, KAH_INSTANCE and source rig-env.sh', and make bare stobe-auto refuse (exit 2) when a lane-lock is held and KAH_INSTANCE is unset.
 - evidence: 2026-10-16 12:55-13:05: Haiku pilot hk1 ran bare `stobe-auto wait-world` twice (120 s and 300 s), got 'no answer (loading?)', escalated three times and stopped; the lane sat idle ~15 min, and it took 2 peer messages + 2 tail resumes (about 6 model turns) to find the cause.
@@ -81,49 +51,6 @@ Rules:
 - log: 2026-10-16 13:56 review 'coordinator-17': added
 - log: 2026-10-16 21:01 review 'coordinator-24d (pre-compact checkpoint 22:05)': Open -> confirmed (applies: 2026-10-16 21:55 the same four snags cost op21 a contaminated first 26-a run (hunt26a launched twice) and about 25 minutes; they were not in the lane brief)
 
-### PI-56 | Open
-- idea: tail-autorelay should relay a RESUMED agent's second DONE (agent re-finishes after a SendMessage) as a new result, keyed on the status-file mtime/agentId run counter, instead of treating the name as already relayed.
-- evidence: 2026-10-16 15:08: huntA2 was resumed by SendMessage for the expiresAt 43200 order and finished again, but autorelay.log showed no second relay for imm26-huntA2 (state already marked it relayed at 14:56), so the tail had to send the result to coordinator 19 by hand.
-- saving: one hand relay (about 2 tool calls) per resumed agent and no risk of a lost result
-- risk: low: relays only, no monitoring catch is changed
-- hooks: no
-- weakens: no
-- added: 2026-10-16 15:40
-- log: 2026-10-16 15:40 review 'coordinator-18-tail': added
-
-### PI-58 | open
-- idea: Let tail-relay.ps1 accept the hand-back text and auto-send it to coordinator.current in one call (and mark the agent relayed in the ledger), so the tail does not need a model turn to re-summarise and SendMessage each result.
-- evidence: This tail period: 5 results were each re-typed into a SendMessage of 1.5-3k tokens by a model at 100k+ context, although the content was already in the agent's out file.
-- saving: about 5 turns and 15k output tokens per tail period
-- risk: low: relays are results not orders; the coordinator still acks
-- hooks: no
-- weakens: no
-- added: 2026-10-16 16:14
-- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': added
-
-### PI-63 | open
-- idea: tail-mode.ps1 enter should refuse (or warn loudly) on an agent name that has no status file, ledger record or live in-session task, and tail-wait.ps1 should print which name is unknown instead of exiting with 'needs the tail'.
-- evidence: 2026-10-16 18:46-19:00: the tail flag listed imm26-fix23acheck but the real agent was imm26-fix23a-checker; tail-wait exited at once 4 times with 'no status, no ledger record', and the Stop hook kept blocking until I edited the flag by hand and asked the agent to write a status.
-- saving: about 6 tool calls and 10 min per misnamed agent
-- risk: low: only validates names, never hides a stall
-- hooks: no
-- weakens: no
-- added: 2026-10-16 19:32
-- log: 2026-10-16 19:32 review '38ce4c9d-074d-4b00-9557-275240adb80c-tail': added
-
-### PI-64 | confirmed
-- idea: agent-status.ps1 DONE should be written by the harness hand-back (SubagentHandback or task-notification completed) when the agent never wrote it, or tail-mode status should treat a completed task-notification as DONE.
-- evidence: 2026-10-16 19:35: imm26-5090-i5-op18 and imm26-4080-i3op30 had handed back their final reports and finished, but their status files still said RUNNING, so the tail could not close until I wrote DONE by hand.
-- saving: about 2 tool calls per operator and avoids a false RUNNING count in the Stop hook
-- risk: medium: must not mark an agent DONE that merely paused for background work (the 'waiting on its own background work' notification), so only on a final completed notification
-- hooks: yes
-- weakens: no
-- added: 2026-10-16 19:32
-- moment: 20:28 alert 'agent-orphaned-imm26-invcind' after its DONE hand-back
-- last_review: coordinator-24
-- log: 2026-10-16 19:32 review '38ce4c9d-074d-4b00-9557-275240adb80c-tail': added
-- log: 2026-10-16 20:32 review 'coordinator-24': open -> confirmed (applies: 2026-10-16 20:2x: imm26-invcind handed back (DONE relayed by tail) but its status file stayed RUNNING, raising an 'agent-orphaned' alert I had to ack and fix by hand; same for 4080-i4op22/op23 and ...)
-
 ### PI-65 | confirmed
 - idea: Make the Agent router tagging ([model:..] [effort:..]) also apply to Agent calls issued from inside a subagent, or put a mandatory 'pass model= and effort= as Agent parameters' line in every executor prompt template (EXECUTOR2_PROMPT, ab2 EXECUTOR_PROMPT, WP briefs).
 - evidence: 2026-10-16 19:15: imm26-hpairexec2's first 25 Haiku-pair runs ran on Sonnet because the router hook does not fire for subagent spawns (ledger agent-calls.tsv empty after 19:08); found only at collect (MODEL? flags), rerun cost about 2.5 USD and one executor generation.
@@ -137,30 +64,10 @@ Rules:
 - log: 2026-10-16 19:43 review 'coordinator-23': added
 - log: 2026-10-16 20:32 review 'coordinator-24': open -> confirmed (applies: 2026-10-16 20:0x-21:2x: the router tag does not apply to subagent spawns, so every ab2 arm, hpairexec and replay2 spawn needed explicit model=/effort= params in the prompt; 25 replay2 R1 runs (P026...)
 
-### PI-67 | open
-- idea: Auto-close stale STOPPED-CONTEXT/FAILED agent markers when the agent's row/ticket is already PASS/closed or another agent owns it (kenshi-waker-guard 'stopped or failed with no successor' check), instead of demanding a respawn text.
-- evidence: 2026-10-16 20:1x-21:2x: five Stop-hook blocks for agents stopped 9-11 h earlier (imm26-sfK, sfFixA, sfFixA2, sfFixB, sfE) whose rows had passed or were reassigned; each cost a coordinator turn plus a lookup (about 6 turns, ~40k tokens).
-- saving: about 6 turns and 40k tokens per handoff period
-- risk: medium: must not hide a genuinely lost WP; only close when the program ledger shows its wp finished/reassigned or the row PASS is committed
-- hooks: yes
-- weakens: no
-- added: 2026-10-16 20:32
-- log: 2026-10-16 20:32 review 'coordinator-24': added
-
 ### PI-68 | open
 - idea: An agent waiting on its own background work must not re-deliver the same SubagentHandback repeatedly: the harness/coordinator should treat identical hand-back text from a DONE agent as a duplicate and the agent should stop itself (or the coordinator TaskStop it on the second duplicate).
 - evidence: 2026-10-16 20:2x-21:3x: imm26-replay2-interim (status DONE) re-sent the identical 3 KB hand-back 8 times and woke itself 7 times, burning about 190k subagent tokens and 8 coordinator turns until I TaskStopped it.
 - saving: about 190k tokens and 8 turns per occurrence
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 20:32
-- log: 2026-10-16 20:32 review 'coordinator-24': added
-
-### PI-69 | open
-- idea: Every pending hook/settings swap README must ship a ready swap.ps1 and show the Git-Bash-safe invocation (`cd <dir> && powershell -NoProfile -ExecutionPolicy Bypass -File swap.ps1`), never an inline -Command with $ variables or backslash paths.
-- evidence: 2026-10-16 20:1x-20:3x: PI-51 swap took 4 attempts by Shay because Git Bash expanded $h in the inline command and stripped the backslashes of the -File path (PI-53), about 25 minutes and 5 round trips.
-- saving: about 20 min and 4 round trips per hook swap
 - risk: low
 - hooks: no
 - weakens: no
@@ -178,29 +85,7 @@ Rules:
 - added: 2026-10-16 20:47
 - log: 2026-10-16 20:47 review 'coordinator-24c (pre-compact, after Shay ordered autoCompact 150k + living handoff)': added
 
-### PI-71 | open
-- idea: tail-wait.ps1 should treat an in-session agent registered in agents/ids.json that has no status file as alive and write the placeholder RUNNING status itself (only matters while tail handoffs exist; moot if compaction replaces them)
-- evidence: 2026-10-16 tail 23: tail-wait exited twice with 'needs the tail: no status' for imm26-5090-i5-op21 and invcind; about 6 turns / 30k tokens per handoff to work around
-- saving: ~30k tokens per overlap handoff
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 20:47
-- log: 2026-10-16 20:47 review 'coordinator-24c (pre-compact, after Shay ordered autoCompact 150k + living handoff)': added
-
 ## In progress
-
-### PI-41 | in-progress
-- idea: The tail hard limit (400k) forces a TaskStop of live lane operators mid-row. Prevent it: autoCompactWindow=330000 now set in the user settings so a tail compacts itself soon after the handoff (new sessions), and keep the tail lean (PI-38/39/40). Longer term run lane operators as independent sessions so a coordinator's context never limits a lane.
-- evidence: 2026-10-16 11:15-11:20: the tail reached 409k+ after about 40 post-handoff turns and had to order three lane operators to checkpoint; 5090-i3 left a 20-minute 19-ax job unowned, 4080-i4 stopped with 08-d/11-b open, 4080-i3 had to be stopped mid 08-e; three lanes lose about an hour of operator time each until respawned.
-- saving: about 1 lane-hour x 3 lanes per handoff, plus the tail turns
-- risk: autoCompactWindow also applies to coordinators/subagents; coordinators hand off at 300k, subagents at 200k, so 330k only affects tails
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:18
-- log: 2026-10-16 11:18 review 'coordinator-14-tail-closing': added
-- log: 2026-10-16 20:47 Shay answered yes
-- log: 2026-10-16 20:47 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
 
 ### PI-66 | in-progress
 - idea: Raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (or add a non-agent runner such as claude -p for the replay2 arms) so offline replay executors can fan out 20+ runs per message.
@@ -228,34 +113,6 @@ Rules:
 - log: 2026-10-16 15:40 review 'coordinator-18-tail': open -> confirmed (applies: 2026-10-16 16:00 Shay saw SUMMARY-final.md with every Sonnet column 'no RESULT found'; cause was pilot-audit.py line 607 default sonnet_roots missing the imm26-4080 lanes, found only after Shay com...)
 - log: 2026-10-16 16:12 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
 
-### PI-38 | in-progress
-- idea: tail-wait / Get-TailAgentSet must not count a still-working in-session agent as 'needs the tail' just because its status file is older than 45 min: use a liveness signal (the agent's tool-output file or its work dir changed in the last 10 min, or ListAgents says running) before it exits the wait and lets the Stop hook block.
-- evidence: 2026-10-16 10:57-11:08 (tail ded82aa7): imm26-hxA kept working (script files changed 10:54) but its status said 'designing' since 10:18, so tail-wait exited at once 5 times and the Stop hook blocked 13 times; every block was a full model turn re-reading a 300k+ context.
-- saving: about 13 turns x a 300k-token re-read per stalled-status agent (several hundred thousand tokens)
-- risk: must still catch a really dead agent: keep the 20-minute no-activity TaskStop rule
-- hooks: yes
-- weakens: no
-- added: 2026-10-16 11:11
-- moment: 12:20 tail wait exited immediately in a loop after I archived relays into done/
-- last_review: coordinator-16
-- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
-- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:00-12:50: the previous tail's tail-wait kept exiting in a loop (relays moved to inbox/coordinator/done/ were not seen by Get-TailRelayState); tail #15 copied relays into delivered/ by...)
-- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
-
-### PI-39 | in-progress
-- idea: The tail session should not be the 300k+ coordinator context: at handoff either /compact the old window (script it into handoff: tail-mode enter prints 'run /compact now') or let tail-autorelay be the ONLY relay path and tell the tail to do nothing on hand-back messages, because every event re-reads the whole context.
-- evidence: 2026-10-16 10:50-11:10: after the overlap handoff this tail handled about 25 turns (hand-backs from sfC, sfC2, op9l, hxA, hook blocks, a user question) at 300-330k tokens each, and manually re-relayed 4 agents that tail-autorelay had already relayed (duplicate relay files for sfC, sfC2, op9l, hxA).
-- saving: roughly 25 x 300k tokens per handoff plus 4 duplicate relays; the tail hard limit (400k) is reached sooner
-- risk: low if /compact keeps the tail routing notes (they are in the ledger)
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:11
-- moment: 12:30 tail #15 asked me to respawn op14/op22 from relays it had to read itself
-- last_review: coordinator-16
-- log: 2026-10-16 11:11 review 'coordinator-14-tail': added
-- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:00-12:50: the old tail at about 300k context relayed 9 finished agents (sfP, sfR, sfU, sfS, ctxfix, fxC2, op13, op21, op9n) by hand because tail-autorelay did not fire; imm26-wk2 now ...)
-- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
-
 ### PI-42 | in-progress
 - idea: Cap read-only investigator/classifier agents at 3 rows (or ~120k tokens) in the brief and give them a hard 'checkpoint the table row-by-row into the report file' rule; four of four classifiers this session (fxB 4/5 rows, fxC 2/5, sfK, sfK2) hit the 200k limit before delivering the final table and needed a respawn.
 - evidence: 2026-10-16 11:48 fxB and 11:49 fxC STOPPED-CONTEXT with 4/5 and 2/5 rows done, 11:10 sfK and 11:27 sfK2 stopped; each respawn re-reads its predecessor handoff (~15-25k tokens).
@@ -268,34 +125,6 @@ Rules:
 - last_review: coordinator-16
 - log: 2026-10-16 11:52 review 'coordinator-15': added
 - log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 11:59-12:46: sfP, sfR, sfU, ctxfix and pilotA all stopped at about 205k with unfinished work packages; each needed a respawn that re-read the predecessor handoff (5 respawns, about 5 x 4...)
-- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
-
-### PI-43 | in-progress
-- idea: setupfail.ps1 mark should print the newest recipe/ready note for that row (state ready, owner, runner command) and warn when the marking lane still runs the OLD runner; a stale SETUP-FAIL for 20-d arrived at 11:47 although sfJ had published reload-run-sfj.sh at 11:22.
-- evidence: 11:47 setupfail-20-d.msg from 5090-i3 (old recipe text) re-woke the coordinator after the sfJ recipe was already routed; same shape for 26-e at 11:43.
-- saving: ~3 wakes per session, avoids re-spawning an investigator for a solved row
-- risk: low: output-only change
-- hooks: no
-- weakens: no
-- added: 2026-10-16 11:52
-- moment: 12:10 setupfail-08-d.msg for a row whose recipe sfS had just delivered
-- last_review: coordinator-16
-- log: 2026-10-16 11:52 review 'coordinator-15': added
-- log: 2026-10-16 12:52 review 'coordinator-16': open -> confirmed (applies: 2026-10-16 12:10 and 12:14: SETUP-FAIL 08-d and 15-bx notices woke me while the 08-d v2 recipe (sfS+sfT) and the 15-bx v2 scene (sfU2) were already built; each wake cost one model turn plus a ticke...)
-- log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
-
-### PI-45 | in-progress
-- idea: lane-brief.ps1 should not refuse to write the brief when it is a few bytes over the 14500 limit (4080-i3/i4 briefs came out 14548 B and 15996 B): shrink the optional blocks further or write the file and only warn, instead of exit 1/2 with no file, which forced -MaxBytes 16000 retries and a PowerShell-vs-Git-Bash path detour.
-- evidence: 2026-10-16 12:25-12:45: lane-brief.ps1 4080-i4 and 4080-i3 printed OVER LIMIT and wrote nothing at the default limit; each needed 2-3 extra tool calls (about 15k tokens of coordinator context each).
-- saving: about 15k tokens per operator respawn, fewer failed spawns
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 12:52
-- moment: 13:02 hk2 spawn, 13:16 4080-i4op15, 13:22 5090-i3op22
-- last_review: coordinator-17
-- log: 2026-10-16 12:52 review 'coordinator-16': added
-- log: 2026-10-16 13:56 review 'coordinator-17': open -> confirmed (applies: 2026-10-16 13:00-13:50: lane-brief.ps1 printed OVER LIMIT and wrote nothing at the default 14500 limit for 5090-i4, 5090-i3, 5090-i5, 4080-i4 and 4080-i3; every spawn needed a second call with -Max...)
 - log: 2026-10-16 14:57 confirmed -> in-progress (Shay: keep adding new ideas while these are built)
 
 ## Retired
@@ -746,53 +575,6 @@ Rules:
 - log: 2026-10-16 11:11 review 'coordinator-14-tail': added
 - log: 2026-10-16 11:52 review 'coordinator-15': open -> confirmed (applies: 2026-10-16 10:51-12:20: the waker ended ~25 times; at least 12 of those wakes were only 'EVENT STATUS <agent> DONE' or a duplicate TAIL-RELAY for an agent I had already handled (op9m DONE after I s...)
 
-### PI-29 | rejected x2
-- idea: At the tail hard limit the context meter should call tail-close.ps1 (sends 'tail done', then closes the session and window ~20 s later) once all owned agents are checkpointed/relayed, instead of telling the tail to run tail-mode.ps1 leave -Force (which only removes the flag, leaving the session and window open). tail-close's window-kill must first be tested on a real throwaway window.
-- evidence: 2026-10-15 ~21:07 old tail session 6d1f3011 followed the meter message, ran tail-mode.ps1 leave -Force at its hard limit: the flag went away but the session process and window stayed open (tail-close.ps1 then refuses with 'no tail flag'); the window-closing path of tail-close was never exercised on a real window.
-- saving: no orphan idle tail windows per overlap handoff; the tail context stops being resumable by accident
-- risk: kills a session: only after every owned agent is DONE and acked; the meter is a global hook (~/.claude/hooks/context-meter.ps1), so Shay decides
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 21:07
-- last_review: coordinator-12
-- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16: tail 2a0cfe9b closed itself via tail-ack.ps1 (all agents done+acked -> tail-close in 20 s) without any hard-limit case; no tail reached its limit this session.)
-
-### PI-31 | rejected x2
-- idea: AGENT ORPHANED must not fire for in-session (Agent-tool) subagents of a live coordinator or live tail: check the agent against the session's own agent list / ledger owner before alerting
-- evidence: 2026-10-15 21:24 and 21:40: AGENT ORPHANED imm26-fix10a and imm26-fix03b were false alarms (both alive, only blocked on a test lock); each cost 2-3 turns of investigation, one almost led to a wrong respawn
-- saving: about 3 turns per false alarm, avoids a duplicate respawn
-- risk: must not hide a real dead agent: keep the alert when the owning session is gone
-- hooks: yes
-- weakens: no
-- added: 2026-10-15 23:16
-- last_review: coordinator-12
-- log: 2026-10-15 23:16 review 'coordinator-11': added
-- log: 2026-10-16 02:55 review 'coordinator-12': open -> rejected x1 (does not apply: 2026-10-16 00:00-05:00: no AGENT ORPHANED alert fired this session; only legitimate STOPPED-CONTEXT events.)
-
-### PI-35 | rejected x2
-- idea: mark-row.py needs a note-only mode (append a note to the evidence column without changing status), so row-tooling agents can annotate rows without overwriting results.
-- evidence: 2026-10-16 imm26-u-rowsA2 report: mark-row.py has no note-only mode, it always overwrites status and evidence, and a SETUP-FAIL re-mark needs a needs: clause and updates the unblock ticket, so none of the three tooling agents (rowsA/B/C) could add the one-call command to the row.
-- saving: one operator lookup per row (inbox note instead of the row)
-- risk: low: new flag only
-- hooks: no
-- weakens: no
-- added: 2026-10-16 02:55
-- last_review: coordinator-14
-- log: 2026-10-16 02:55 review 'coordinator-12': added
-- log: 2026-10-16 10:49 review 'coordinator-14': open -> rejected x1 (does not apply: not seen this session)
-
-### PI-55 | rejected x2
-- idea: Row runners must refuse to start under WSL bash (check for the /mnt/c mount or uname) and the lane operators' briefs must say 'row scripts run in Git Bash, only wsl.exe tools get MSYS_NO_PATHCONV', because a row script run under WSL silently creates a stray /c/KenshiTestRuns tree inside WSL that then shadows the real path for tools that probe /c first.
-- evidence: 2026-10-16 15:26: stray empty /c/KenshiTestRuns/imm26-4080/rows appeared in WSL during 4080-i3op24's 22-b RELOAD-FAIL; it made pilot-audit.py pick /c/... over /mnt/c/... (pilot rows=0) until I passed --pilot-dir.
-- saving: about 20 minutes of misdiagnosis per occurrence, plus a false RELOAD-FAIL
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 14:57
-- last_review: coordinator-21
-- log: 2026-10-16 14:57 review 'coordinator-18': added
-- log: 2026-10-16 18:01 review 'coordinator-21': Open -> rejected x1 (does not apply: no stray WSL rows dir this session)
-
 ### PI-47 | done
 - idea: Lane operators should auto-spawn their own successor ticket: when an operator writes STOPPED-CONTEXT, the lane sits idle until the coordinator turn notices; add an 'idle-lane' fast path that prints the exact lane-brief + Agent spawn text for the new coordinator in the wake event.
 - evidence: 4080-i4 and 4080-i3 lanes sat idle 5-10 min at 12:30-12:40 until I messaged the new coordinator; 5090-i3 ended with no rows left.
@@ -929,3 +711,15 @@ Rules:
 - retired: 2026-10-16 built
 - log: 2026-10-16 18:45 review 'coordinator-22': added
 - log: 2026-10-16 19:43 review 'coordinator-23': open -> confirmed (applies: 2026-10-16 19:00-20:20: the Stop-hook sweep block fired 5 times for finished-owner leftovers (4080 logs, imm26-nc7, tail-close.ps1.bak-hidden, tripresume-a, agents$2.brief.md), each a full-context ...)
+
+### PI-46 | rejected (Shay said no)
+- idea: A tail session should need zero model turns: tail-autorelay must relay every finished agent (it relayed sfV/sfT early, then stopped relaying; I relayed sfP, sfR, ctxfix, fxC2, sfU, sfS, op13, op21, op9n by hand) and Get-TailRelayState must also search coordinator/done/.
+- evidence: 12:00-13:05: 9 hand relays at ~300k context each, plus ~8 tail-wait restarts.
+- saving: ~17 full-price turns at 300k per handoff (large share of the tail's cost)
+- risk: low: tooling bug fix with a selftest
+- hooks: no
+- weakens: no
+- added: 2026-10-16 13:05
+- retired: 2026-10-16 Shay said No
+- log: 2026-10-16 13:05 review 'coordinator-15-tail': added
+- log: 2026-10-16 22:30 Shay answered no
