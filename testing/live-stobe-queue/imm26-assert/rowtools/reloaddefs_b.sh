@@ -165,6 +165,11 @@ rd_19e() {   # visited-town trip, LAZY resume (Shay 2026-10-15): after the reloa
   rl_say 4 "Where were we going?" || return $?
   [ -n "${KAH_ROW_FAKE:-}" ] || sleep "${ROW_RESUME_WAIT:-8}"
   rd19_state post_s4.txt
+  # 19E-FIX: the server writes phase `running` only when it ingests the native receipt, and that rides on the NEXT request after the resume turn -> second post-load line (as rd_19a)
+  rd19_place near || return $?
+  rl_say 5 "I'm right behind you." || return $?
+  [ -n "${KAH_ROW_FAKE:-}" ] || sleep "${ROW_RESUME_WAIT:-8}"
+  rd19_state post_s5.txt
   rd19_dump agr_all.txt
 }
 

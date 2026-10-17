@@ -8,6 +8,7 @@ Names:
   13f-pass 13f-notbreached 13f-nobroken 13f-brokenbig 13f-keptpromise
   10e-pass 10e-samesession 10e-ingestoff 10e-norescope 10e-scopechanged 10e-othersave 10e-older 10e-unmet 10e-control
   19e-pass 19e-pass-noint 19e-early-start 19e-early-rows 19e-chat-no-resume 19e-no-start-on-chat 19e-dup 19e-wrongdest 19e-nostate 19e-nostart
+  19e-requested-never-running 19e-s5-second-start   (19E-FIX)
   19f-pass 19f-cap-default-fails 19f-capmode-pass 19f-dup-start 19f-wrongcount 19f-newagr 19f-cap-notterminal 19f-cap-newtravel 19f-cap-loop"""
 import json
 import sys
@@ -110,10 +111,11 @@ TURNS = ['resolved_speaker=Cind', 'ACTION_EXEC: SAY [Cind]: We are still on our 
 
 
 S4 = {'reply': 'We were heading to Squin.', 'log': [START % 'req-new']}
+S5 = {'reply': 'Good, keep up.'}   # 19E-FIX: second post-load line, carries the native running receipt (no new start)
 
 
-def e19(o):   # lazy resume: steps s1 s2 [s3] then the ONE post-load chat line s4; dumps = [agr_pre, agr_ctl (quiet window), agr_all]
-    return {'steps': o.get('steps', [S1, S2, S4]), 'follow': [o.get('state', state())], 'silent': o.get('silent', [0]),
+def e19(o):   # lazy resume: steps s1 s2 [s3] then the resume turn s4 and the receipt turn s5 (19E-FIX); dumps = [agr_pre, agr_ctl (quiet window), agr_all]
+    return {'steps': o.get('steps', [S1, S2, S4, S5]), 'follow': [o.get('state', state())], 'silent': o.get('silent', [0]),
             'agr_dumps': [dump(*PRE), o.get('ctl', dump(*PRE, INT)), o.get('all', dump(*PRE, INT, REQ, RUN))]}
 
 
@@ -232,17 +234,21 @@ elif n == '19e-early-start':     # the NPC ran off during the quiet window (imme
 elif n == '19e-early-rows':      # no native start logged, but the agreement already moved to requested/running before any chat
     S = e19({'ctl': dump(*PRE, INT, REQ, RUN)})
 elif n == '19e-chat-no-resume':  # the chat turn does not resume anything (today's gap): several assertions fail
-    S = e19({'steps': [S1, S2, {'reply': 'I am not sure.'}], 'all': dump(*PRE, INT)})
+    S = e19({'steps': [S1, S2, {'reply': 'I am not sure.'}, S5], 'all': dump(*PRE, INT)})
 elif n == '19e-no-start-on-chat':   # isolated: the chat turn logs no start, the rest of the evidence is the resumed chain
-    S = e19({'steps': [S1, S2, {'reply': 'We were heading to Squin.'}]})
+    S = e19({'steps': [S1, S2, {'reply': 'We were heading to Squin.'}, S5]})
 elif n == '19e-dup':
-    S = e19({'steps': [S1, S2, dict(S4, log=[START % 'req-new', START % 'req-new2'])]})
+    S = e19({'steps': [S1, S2, dict(S4, log=[START % 'req-new', START % 'req-new2']), S5]})
 elif n == '19e-wrongdest':
     S = e19({'state': state(dest=(1, 2, 3))})
 elif n == '19e-nostate':
     S = e19({'state': state('none')})
 elif n == '19e-nostart':
-    S = e19({'steps': [S1, dict(S2, log=[]), {'reply': 'Fine.'}, S4]})
+    S = e19({'steps': [S1, dict(S2, log=[]), {'reply': 'Fine.'}, S4, S5]})
+elif n == '19e-requested-never-running':   # 19E-FIX: today's failure shape (no running row after requested even though s5 ran): must FAIL phase_running_after_requested alone
+    S = e19({'all': dump(*PRE, INT, REQ)})
+elif n == '19e-s5-second-start':    # 19E-FIX: the receipt turn starts the trip a second time: wrong
+    S = e19({'steps': [S1, S2, S4, dict(S5, log=[START % 'req-new2'])]})
 elif n == '19f-pass':
     S = f19({'cap': 99})
 elif n == '19f-cap-default-fails':   # today's build: the 4th reload ends the trip FAILED resume_count, target mode wants all 4 to resume

@@ -200,8 +200,9 @@ def c_10e(v, ev):
 # ---------------------------------------------------------------- 19-e
 def c_19e(v, ev):
     """visited-town trip, LAZY resume (Shay 2026-10-15): nothing resumes before a chat turn (control: no OWNED_TRAVEL, no requested/running row in the quiet window),
-    then ONE chat line resumes the SAME agreement (OWNED_TRAVEL accepted=1 on that turn, resume chain, native order to the stored destination)"""
-    if not need(v, ev, 's2/ev_full.txt', 'agr_pre.txt', 'agr_ctl.txt', 'agr_all.txt', 'load_rowid.txt', 'quiet.txt', 's4/reply.txt', 'post_s4.txt'):
+    then ONE chat line resumes the SAME agreement (OWNED_TRAVEL accepted=1 on that turn, resume chain, native order to the stored destination);
+    19E-FIX: a SECOND post-load line (s5) carries the native running receipt to the server (no second OWNED_TRAVEL there), then phase running + final order come from post_s5"""
+    if not need(v, ev, 's2/ev_full.txt', 'agr_pre.txt', 'agr_ctl.txt', 'agr_all.txt', 'load_rowid.txt', 'quiet.txt', 's4/reply.txt', 'post_s4.txt', 's5/reply.txt', 'post_s5.txt'):
         return
     orig = rc.accepted_row(ev)
     v.ck('agreement_ACCEPTED', bool(orig), 'none' if not orig else orig.get('agreement_id'))
@@ -223,8 +224,10 @@ def c_19e(v, ev):
     v.ck('control_agreement_not_moved_before_any_chat(no requested/running row after the load)', not moved, moved)
     ot = rc.owned_travel_lines(ev, 's4')
     v.ck('chat_turn_resumes_exactly_one_OWNED_TRAVEL_accepted', len(ot) == 1, f'n={len(ot)}')
+    n5 = len(rc.owned_travel_lines(ev, 's5'))
+    v.ck('second_post_load_line_starts_no_second_OWNED_TRAVEL', n5 == 0, f'n={n5}')
     rc.resume_chain(v, rc.post_rows(ev), aid, pre, orig)
-    fo, dst = rc.state_ai(ev, 'post_s4.txt')
+    fo, dst = rc.state_ai(ev, 'post_s5.txt')
     xyz = rc.dest_xyz(orig)
     v.ck('final_first_order_MOVE_CUS_ORDERED', fo == 'MOVE_CUS_ORDERED', fo)
     v.ck('final_destination_within_0.5', bool(xyz and dst) and max(abs(a - b) for a, b in zip(xyz, dst)) <= 0.5, f'stored={xyz} state={dst}')
