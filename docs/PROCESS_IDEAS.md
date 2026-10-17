@@ -712,14 +712,3 @@ Rules:
 - log: 2026-10-16 18:45 review 'coordinator-22': added
 - log: 2026-10-16 19:43 review 'coordinator-23': open -> confirmed (applies: 2026-10-16 19:00-20:20: the Stop-hook sweep block fired 5 times for finished-owner leftovers (4080 logs, imm26-nc7, tail-close.ps1.bak-hidden, tripresume-a, agents$2.brief.md), each a full-context ...)
 
-### PI-46 | rejected (Shay said no)
-- idea: A tail session should need zero model turns: tail-autorelay must relay every finished agent (it relayed sfV/sfT early, then stopped relaying; I relayed sfP, sfR, ctxfix, fxC2, sfU, sfS, op13, op21, op9n by hand) and Get-TailRelayState must also search coordinator/done/.
-- evidence: 12:00-13:05: 9 hand relays at ~300k context each, plus ~8 tail-wait restarts.
-- saving: ~17 full-price turns at 300k per handoff (large share of the tail's cost)
-- risk: low: tooling bug fix with a selftest
-- hooks: no
-- weakens: no
-- added: 2026-10-16 13:05
-- retired: 2026-10-16 Shay said No
-- log: 2026-10-16 13:05 review 'coordinator-15-tail': added
-- log: 2026-10-16 22:30 Shay answered no
