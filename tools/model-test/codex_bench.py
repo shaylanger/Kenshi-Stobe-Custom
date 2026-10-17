@@ -23,6 +23,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ DEFAULT_CODEX = Path(r"C:\Users\Shay\AppData\Local\OpenAI\Codex\bin\e78bad9887fa
 DEFAULT_USER_CODEX = Path(r"C:\Users\Shay\.codex")
 DEFAULT_FROZEN = Path(r"C:\KenshiTestRuns\invest\frozen-2026-10-14")
 MAX_CONCURRENCY = 4
+LIVE_COST_INTERVAL_S = 3.0
 SAFE_ENV = ("PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA",
             "APPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)")
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*-p[0-9]+$")
@@ -214,13 +216,40 @@ def launch_many(ids: list[str], mode: str, cap: int, worker, stop_requested=None
                 paused_boundaries.append({"after_run": None, "next_run": ids[0] if ids else None})
             print(f"DISPATCH PAUSED before {ids[0] if ids else 'first run'}")
             return 0
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+        completed: list[str] = []
+        next_index = 0
+        stop_after_active = False
         with ThreadPoolExecutor(max_workers=cap) as pool:
-            futures = [pool.submit(worker, rid) for rid in ids]
-            for future in as_completed(futures):
-                try: failures += bool(future.result())
-                except Exception as exc:
-                    print(f"run failed: {exc}", file=sys.stderr); failures += 1
+            active = {}
+            while next_index < len(ids) or active:
+                while next_index < len(ids) and len(active) < cap and not stop_after_active:
+                    if should_stop():
+                        stop_after_active = True
+                        break
+                    rid = ids[next_index]
+                    active[pool.submit(worker, rid)] = rid
+                    next_index += 1
+                if not active:
+                    break
+                done, _pending = wait(active, return_when=FIRST_COMPLETED)
+                for future in done:
+                    rid = active.pop(future)
+                    completed.append(rid)
+                    try:
+                        failed = bool(future.result())
+                    except Exception as exc:
+                        print(f"run failed: {exc}", file=sys.stderr)
+                        failed = True
+                    if failed:
+                        failures += 1
+                        stop_after_active = True
+                if should_stop():
+                    stop_after_active = True
+            if stop_after_active and next_index < len(ids) and paused_boundaries is not None:
+                paused_boundaries.append({"after_run": completed[-1] if completed else None,
+                                          "next_run": ids[next_index]})
+                print(f"DISPATCH PAUSED after {completed[-1] if completed else 'none'}; next={ids[next_index]}")
     return int(failures > 0)
 
 
@@ -315,11 +344,168 @@ def _write_json(path: Path, value: Any) -> None:
     os.replace(temp, path)
 
 
+def _validate_price_profile(prices: dict[str, Any], model: str, tier: str) -> None:
+    """Reject a paid launch unless its dated model/tier reference rates exist."""
+    try: datetime.strptime(str(prices.get("date")), "%Y-%m-%d")
+    except ValueError as exc: raise BenchError("dated reference price card is invalid") from exc
+    models = prices.get("models") if isinstance(prices.get("models"), dict) else {}
+    entry = models.get(model)
+    rates = entry.get(tier) if isinstance(entry, dict) else None
+    if not isinstance(entry, dict) or not isinstance(rates, dict) or not isinstance(entry.get("threshold_tokens"), (int, float)):
+        raise BenchError(f"dated reference prices unavailable for {model}/{tier}")
+    for band in ("short", "long"):
+        values = rates.get(band)
+        if not isinstance(values, dict) or any(
+                not isinstance(values.get(key), (int, float)) or values[key] < 0
+                for key in ("input", "output", "cache_read")):
+            raise BenchError(f"dated reference price profile incomplete for {model}/{tier}/{band}")
+
+
+class _BatchQuotaObserver:
+    """One account-wide quota sampler shared by every attempt in this batch."""
+    def __init__(self, runtime_dir: Path, interval: int = 30):
+        self.runtime_dir = runtime_dir
+        self.interval = interval
+        self.sampler = None
+        self.latest: dict[str, Any] | None = None
+        self.samples: list[dict[str, Any]] = []
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.thread: threading.Thread | None = None
+        self.telemetry_errors: list[str] = []
+
+    def start(self) -> "_BatchQuotaObserver":
+        self.runtime_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            sys.path.insert(0, str(HERE))
+            import codex_quota
+            self.sampler = codex_quota.QuotaSampler(
+                codex_quota.DEFAULT_CODEX, self.runtime_dir, interval=self.interval)
+            self.sampler.start()
+            self._sample()
+            self.thread = threading.Thread(target=self._run, name="codex-account-quota", daemon=True)
+            self.thread.start()
+        except Exception as exc:
+            diagnostics = None
+            if self.sampler is not None:
+                try:
+                    raw = self.sampler._diagnostics()
+                    if isinstance(raw, dict):
+                        diagnostics = {key: raw.get(key) for key in (
+                            "phase", "childExitCode", "stderrByteCount", "stderrSha256",
+                            "stderrCategories", "unknownConfigFieldNames")}
+                except Exception:
+                    diagnostics = None
+            self._sample_error(type(exc).__name__, diagnostics)
+            if self.sampler is not None:
+                try: self.sampler.stop()
+                except Exception: pass
+                self.sampler = None
+        return self
+
+    def _sample_error(self, reason: str, diagnostics: dict[str, Any] | None = None) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self._store({"sample_id": uuid.uuid4().hex, "sampled_at_utc": now,
+                     "status": "unknown", "reason": reason, "scope": "account-wide",
+                     "perRunAttribution": "unavailable", "windows": [], "buckets": [],
+                     "weekly": None, "credits": None, "plan": None,
+                     **({"diagnostics": diagnostics} if diagnostics else {})})
+
+    def _store(self, sample: dict[str, Any]) -> None:
+        value = dict(sample)
+        with self.lock:
+            self.latest = value
+            if not self.samples or self.samples[-1].get("sample_id") != value.get("sample_id"):
+                self.samples.append(value)
+            try:
+                _write_json(self.runtime_dir / "quota-snapshot.json", value)
+                history = self.runtime_dir / "quota-snapshots.jsonl"
+                with history.open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n")
+            except OSError:
+                if "quota_snapshot_write_failed" not in self.telemetry_errors:
+                    self.telemetry_errors.append("quota_snapshot_write_failed")
+
+    def _sample(self) -> None:
+        try:
+            if self.sampler is None:
+                self._sample_error("sampler_unavailable")
+            else:
+                self._store(self.sampler.snapshot())
+        except Exception as exc:
+            self._sample_error(type(exc).__name__)
+
+    def _run(self) -> None:
+        while not self.stop_event.wait(self.interval):
+            self._sample()
+
+    def sample_ref(self) -> dict[str, Any] | None:
+        with self.lock:
+            return dict(self.latest) if self.latest else None
+
+    def sample_ids_between(self, start: dict[str, Any] | None,
+                           end: dict[str, Any] | None) -> list[str]:
+        with self.lock:
+            ids = [str(sample.get("sample_id")) for sample in self.samples]
+        start_id = start.get("sample_id") if start else None
+        end_id = end.get("sample_id") if end else None
+        try:
+            first = ids.index(start_id) if start_id in ids else max(0, len(ids) - 1)
+            last = ids.index(end_id) if end_id in ids else len(ids) - 1
+            return ids[first:last + 1]
+        except ValueError:
+            return []
+
+    @staticmethod
+    def weekly_sample_ready(sample: dict[str, Any] | None) -> bool:
+        if not isinstance(sample, dict) or sample.get("status") != "ok": return False
+        weekly = sample.get("weekly")
+        if not isinstance(weekly, dict) or weekly.get("windowDurationMins") != 10080: return False
+        used, resets = weekly.get("usedPercent"), weekly.get("resetsAt")
+        if not isinstance(used, (int, float)) or not 0 <= used <= 100: return False
+        if not isinstance(resets, (int, float)) or resets <= time.time(): return False
+        stamp = sample.get("sampled_at_utc")
+        try:
+            sampled = datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+        except (TypeError, ValueError):
+            return False
+        return 0 <= time.time() - sampled <= 90
+
+    def require_weekly_ready(self) -> None:
+        if self.health().get("status") != "PASS":
+            raise BenchError("required fresh account-wide weekly quota sample is unavailable")
+
+    def mark_failure(self, reason: str) -> None:
+        with self.lock:
+            if reason not in self.telemetry_errors:
+                self.telemetry_errors.append(reason)
+
+    def health(self) -> dict[str, Any]:
+        sample = self.sample_ref()
+        with self.lock: reasons = list(self.telemetry_errors)
+        if not self.weekly_sample_ready(sample):
+            reasons.append("weekly_quota_sample_unavailable_or_stale")
+        return {"status": "PASS" if not reasons else "FAIL",
+                "reasons": sorted(set(reasons)),
+                "quota_sample_id": sample.get("sample_id") if sample else None,
+                "scope": "account-wide", "per_run_attribution": "unavailable"}
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        if self.thread is not None:
+            self.thread.join(timeout=20)
+        if self.sampler is not None:
+            self._sample()
+            self.sampler.stop()
+            self.sampler = None
+
+
 ATTEMPT_COLUMNS = ["run", "attempt", "status", "model", "effort", "service_tier", "start_local", "end_local",
                    "wall_s", "tool_uses", "input", "output", "cache_read", "cache_create", "token_usd",
                    "report_bytes", "violation_flags", "thread_id", "rollout_path", "events_path", "stderr_path",
                    "cost_status", "cost_basis", "requested_tier", "served_tier", "invoice_status",
-                   "price_table_date", "currency", "cost_reason"]
+                   "price_table_date", "currency", "cost_reason", "quota_scope",
+                   "quota_sample_ids", "quota_windows", "quota_per_run_attribution"]
 
 
 def _append_attempt_row(root: Path, rid: str, receipt: dict[str, Any], result: dict[str, Any] | None) -> None:
@@ -348,6 +534,15 @@ def _append_attempt_row(root: Path, rid: str, receipt: dict[str, Any], result: d
         **{key: calculated[key] for key in ("token_usd", "cost_status", "cost_basis", "requested_tier",
                                             "served_tier", "invoice_status", "price_table_date",
                                             "currency", "cost_reason")},
+        "quota_scope": (receipt.get("account_quota") or {}).get("scope", ""),
+        "quota_sample_ids": json.dumps({key: (receipt.get("account_quota") or {}).get(key)
+                                         for key in ("start_sample_id", "end_sample_id", "overlap_sample_ids")},
+                                        separators=(",", ":")),
+        "quota_windows": json.dumps({key: (receipt.get("account_quota") or {}).get(key)
+                                      for key in ("start_sampled_at_utc", "start_weekly",
+                                                  "end_sampled_at_utc", "end_weekly")},
+                                     separators=(",", ":")),
+        "quota_per_run_attribution": (receipt.get("account_quota") or {}).get("per_run_attribution", ""),
     }
     with LEDGER_MUTEX:
         exists = path.exists() and path.stat().st_size > 0
@@ -653,18 +848,101 @@ def _terminate_process(proc: subprocess.Popen) -> None:
         except ProcessLookupError: pass
 
 
+class _ParticipantThreadMetadata:
+    """Incrementally capture only the CLI's thread.started identity event."""
+    def __init__(self):
+        self.offset = 0
+        self.pending = b""
+        self.discarding_oversized_line = False
+        self.thread_id: str | None = None
+        self.rollout_path: Path | None = None
+        self.next_session_scan = 0.0
+
+    def poll(self, event_path: Path) -> str | None:
+        try:
+            with event_path.open("rb") as stream:
+                stream.seek(self.offset)
+                chunk = stream.read(65536)
+                self.offset = stream.tell()
+        except OSError:
+            return self.thread_id
+        if chunk:
+            data = self.pending + chunk
+            self.pending = b""
+            while True:
+                boundary = data.find(b"\n")
+                if boundary < 0:
+                    if not self.discarding_oversized_line:
+                        if len(data) <= 65536: self.pending = data
+                        else: self.discarding_oversized_line = True
+                    break
+                raw, data = data[:boundary], data[boundary + 1:]
+                if not self.discarding_oversized_line and len(raw) <= 65536:
+                    try: event = json.loads(raw)
+                    except (UnicodeDecodeError, json.JSONDecodeError): event = None
+                    if isinstance(event, dict):
+                        for item in (event, event.get("payload") if isinstance(event.get("payload"), dict) else {}):
+                            if item.get("type") in {"thread.started", "thread_started"}:
+                                value = item.get("thread_id") or item.get("id")
+                                if isinstance(value, str) and value:
+                                    self.thread_id = value
+                                    return value
+                self.discarding_oversized_line = False
+        return self.thread_id
+
+
+def _rollout_first_thread_id(path: Path) -> str | None:
+    """Read only the bounded lifecycle header from a session candidate."""
+    try:
+        with path.open("rb") as stream:
+            for _ in range(8):
+                raw = stream.readline(65537)
+                if not raw or len(raw) > 65536:
+                    return None
+                try: event = json.loads(raw)
+                except (UnicodeDecodeError, json.JSONDecodeError): continue
+                if not isinstance(event, dict): continue
+                payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+                for item in (event, payload):
+                    if item.get("type") in {"session_meta", "session.started", "thread.started"}:
+                        value = item.get("thread_id") or item.get("session_id") or item.get("id")
+                        if isinstance(value, str): return value
+    except OSError:
+        return None
+    return None
+
+
 def _refresh_live_receipt(receipt: dict[str, Any], root_path: Path, attempt_path: Path,
-                          event_path: Path, codex_home: Path) -> None:
-    try: events = _jsonl(event_path)
-    except OSError: return
-    tid = _thread_id(events)
+                          event_path: Path, codex_home: Path,
+                          metadata: _ParticipantThreadMetadata,
+                          force_scan: bool = False) -> None:
+    tid = metadata.poll(event_path)
     if not tid: return
+    if metadata.rollout_path is not None:
+        if receipt.get("thread_id") != tid or receipt.get("rollout_path") != str(metadata.rollout_path):
+            receipt["thread_id"] = tid
+            receipt["rollout_path"] = str(metadata.rollout_path)
+            _write_json(root_path, receipt)
+            _write_json(attempt_path, receipt)
+        return
+    if not force_scan and time.monotonic() < metadata.next_session_scan:
+        return
+    metadata.next_session_scan = time.monotonic() + LIVE_COST_INTERVAL_S
     sessions = codex_home / "sessions"
     if not sessions.is_dir(): return
-    matches = [p for p in sessions.rglob("*.jsonl") if p.is_file() and _rollout_id(p) == tid]
+    session_root = sessions.resolve()
+    matches = []
+    for path in sessions.rglob("*.jsonl"):
+        if not path.is_file(): continue
+        resolved = path.resolve()
+        try: resolved.relative_to(session_root)
+        except ValueError: continue
+        if _rollout_first_thread_id(resolved) == tid:
+            matches.append(resolved)
     if len(matches) == 1:
+        metadata.rollout_path = matches[0].resolve()
         receipt["thread_id"] = tid
-        receipt["rollout_path"] = str(matches[0])
+        receipt["rollout_path"] = str(metadata.rollout_path)
         _write_json(root_path, receipt)
         _write_json(attempt_path, receipt)
 
@@ -1505,7 +1783,8 @@ def preflight(root: Path) -> int:
 
 
 def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: int = 1,
-               launch_mode: str = "sequential", effective_cap: int = 1, batch_id: str = "") -> int:
+               launch_mode: str = "sequential", effective_cap: int = 1, batch_id: str = "",
+               quota_observer=None) -> int:
     root = suite_root(root)
     if not execute:
         raise BenchError("model launch is disabled without the explicit --execute flag")
@@ -1528,6 +1807,12 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     if not item:
         raise BenchError(f"unknown run id: {rid}")
     cell, _num, _prompt_name = item
+    if quota_observer is None:
+        raise BenchError("required account quota telemetry observer is missing")
+    quota_observer.require_weekly_ready()
+    prices = _json(HERE / "codex_prices.json")
+    _validate_price_profile(prices, cell["model"], cell["speed"])
+    live_price_table_sha256 = _sha((HERE / "codex_prices.json").read_bytes())
     run_dir = root / "runs" / rid
     receipt_path = _record_path(run_dir)
     if not receipt_path.is_file():
@@ -1627,9 +1912,27 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
                    "mcp_startup_config_sha256": config.get("private_config_sha256"),
                    "mcp_startup_source_sha256": _sha(Path(HERE / "codex_frozen_mcp.py").read_bytes()),
                    "mcp_startup_receipts_path": config.get("mcp_startup_receipts"),
-                   "requested_config": config, "argv_sha256": _sha(json.dumps(argv).encode())})
+                   "requested_config": config, "argv_sha256": _sha(json.dumps(argv).encode()),
+                   "live_cost_rate_card_sha256": live_price_table_sha256,
+                   "live_cost_rate_card_date": prices.get("date", "UNKNOWN"),
+                   "live_cost_path": str(attempt / "live-cost.json")})
+    quota_start = quota_observer.sample_ref() if quota_observer else None
+    if quota_observer:
+        receipt["account_quota"] = {"batch_id": batch_id, "scope": "account-wide", "per_run_attribution": "unavailable",
+                                    "start_sample_id": quota_start.get("sample_id") if quota_start else None,
+                                    "start_sampled_at_utc": quota_start.get("sampled_at_utc") if quota_start else None,
+                                    "start_weekly": quota_start.get("weekly") if quota_start else None,
+                                    "status": quota_start.get("status", "unknown") if quota_start else "unknown"}
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     started = time.monotonic()
+    sys.path.insert(0, str(HERE))
+    import codex_live_cost
+    live_cost = codex_live_cost.LiveCostProjector(
+        attempt / "live-cost.json", run_id=rid, attempt=attempt_no,
+        batch_id=batch_id, model=cell["model"],
+        requested_tier="priority" if cell["speed"] == "fast" else "default",
+        prices=prices, price_table_sha256=live_price_table_sha256,
+        started_monotonic=started)
     with log_path.open("xb") as out, stderr_path.open("xb") as err:
         popen_args = {"cwd": home / "neutral-cwd", "env": env, "stdin": subprocess.PIPE,
                       "stdout": out, "stderr": err,
@@ -1640,19 +1943,57 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
         except OSError as exc:
             receipt.update({"status": "FAILED_START", "error_type": type(exc).__name__,
                             "ended_utc": datetime.now(timezone.utc).isoformat()})
+            if quota_observer:
+                quota_end = quota_observer.sample_ref()
+                receipt["account_quota"].update({
+                    "end_sample_id": quota_end.get("sample_id") if quota_end else None,
+                    "end_sampled_at_utc": quota_end.get("sampled_at_utc") if quota_end else None,
+                    "end_weekly": quota_end.get("weekly") if quota_end else None,
+                    "overlap_sample_ids": quota_observer.sample_ids_between(quota_start, quota_end),
+                    "status": quota_end.get("status", "unknown") if quota_end else "unknown",
+                })
+            live_cost.write_snapshot(force=True)
             _write_json(attempt_receipt, receipt)
             _write_json(receipt_path, receipt)
             print(f"FAILED_START {rid} ({type(exc).__name__})", file=sys.stderr)
-            return record(root, rid)
+            result_code = record(root, rid)
+            _finalize_live_cost(root, rid, attempt, live_cost, quota_observer)
+            return result_code
+        participant_metadata = _ParticipantThreadMetadata()
         receipt["participant_cli_pid"] = proc.pid
         receipt["participant_cli_identity"] = _process_identity(proc.pid)
         receipt["participant_cli_started_utc"] = datetime.now(timezone.utc).isoformat()
         receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
         with ACTIVE_LOCK: ACTIVE_PROCESSES.add(proc)
+        live_cost.set_cli_identity(receipt.get("participant_cli_identity"))
+        next_live_cost_poll = started
         try:
             proc.stdin.write(prompt.encode("utf-8")); proc.stdin.flush(); proc.stdin.close()
             while proc.poll() is None:
-                _refresh_live_receipt(receipt, receipt_path, attempt_receipt, log_path, codex_home)
+                try:
+                    _refresh_live_receipt(receipt, receipt_path, attempt_receipt, log_path,
+                                          codex_home, participant_metadata)
+                    live_cost.set_thread_id(receipt.get("thread_id"))
+                    live_cost.set_cli_identity(receipt.get("participant_cli_identity"))
+                    if time.monotonic() >= next_live_cost_poll:
+                        rollout_path = receipt.get("rollout_path")
+                        if rollout_path:
+                            rollout = Path(rollout_path).resolve()
+                            session_root = (codex_home / "sessions").resolve()
+                            try:
+                                rollout.relative_to(session_root)
+                            except ValueError:
+                                live_cost.errors.append("owned rollout path escaped participant session root")
+                            else:
+                                live_cost.poll(rollout)
+                        else:
+                            live_cost.write_snapshot()
+                        next_live_cost_poll = time.monotonic() + LIVE_COST_INTERVAL_S
+                    if live_cost.errors:
+                        quota_observer.mark_failure("live_cost_metadata_error")
+                except Exception:
+                    live_cost.errors.append("live_cost_monitor_error")
+                    quota_observer.mark_failure("live_cost_monitor_error")
                 if time.monotonic() - started >= timeout:
                     _terminate_process(proc)
                     receipt["status"] = "TIMEOUT"
@@ -1664,11 +2005,48 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
             rc = proc.wait()
             receipt.update({"status": "FAILED_IO", "error_type": type(exc).__name__})
         finally:
+            try:
+                _refresh_live_receipt(receipt, receipt_path, attempt_receipt, log_path,
+                                      codex_home, participant_metadata, force_scan=True)
+            except Exception:
+                live_cost.errors.append("live_cost_monitor_error")
+                quota_observer.mark_failure("live_cost_monitor_error")
+            live_cost.set_thread_id(receipt.get("thread_id"))
+            live_cost.set_cli_identity(receipt.get("participant_cli_identity"))
+            rollout_path = receipt.get("rollout_path")
+            if rollout_path:
+                try:
+                    rollout = Path(rollout_path).resolve()
+                    session_root = (codex_home / "sessions").resolve()
+                    rollout.relative_to(session_root)
+                    live_cost.poll(rollout, force=True)
+                except ValueError:
+                    live_cost.errors.append("owned rollout path escaped participant session root")
+                    quota_observer.mark_failure("live_cost_monitor_error")
+                except Exception:
+                    live_cost.errors.append("live_cost_monitor_error")
+                    quota_observer.mark_failure("live_cost_monitor_error")
+            else:
+                try: live_cost.write_snapshot(force=True)
+                except Exception:
+                    live_cost.errors.append("live_cost_monitor_error")
+                    quota_observer.mark_failure("live_cost_monitor_error")
+            if live_cost.errors:
+                quota_observer.mark_failure("live_cost_metadata_error")
             with ACTIVE_LOCK: ACTIVE_PROCESSES.discard(proc)
     receipt.update({"returncode": rc, "elapsed_s": round(time.monotonic() - started, 3),
                     "ended_utc": datetime.now(timezone.utc).isoformat(),
                     "events_path": str(log_path), "stderr_path": str(stderr_path),
                     "report_path": str(report_path) if report_path.exists() else None})
+    if quota_observer:
+        quota_end = quota_observer.sample_ref()
+        receipt["account_quota"].update({
+            "end_sample_id": quota_end.get("sample_id") if quota_end else None,
+            "end_sampled_at_utc": quota_end.get("sampled_at_utc") if quota_end else None,
+            "end_weekly": quota_end.get("weekly") if quota_end else None,
+            "overlap_sample_ids": quota_observer.sample_ids_between(quota_start, quota_end),
+            "status": quota_end.get("status", "unknown") if quota_end else "unknown",
+        })
     guard_file = attempt / "guard-receipts.jsonl"
     guard_events = []
     if guard_file.is_file():
@@ -1735,7 +2113,9 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     _write_json(attempt_receipt, receipt)
     _write_json(receipt_path, receipt)
     print(f"{receipt['status']} {rid} rc={rc} elapsed_s={receipt['elapsed_s']}")
-    return record(root, rid)
+    result_code = record(root, rid)
+    _finalize_live_cost(root, rid, attempt, live_cost, quota_observer)
+    return result_code
 
 
 def _classify_mcp_receipts(events: list[Any], present: bool, *, zero_call_ready: bool = False,
@@ -1891,6 +2271,7 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
     calculated = codex_record.calculated_cost(
         usage, receipt.get("model"), receipt.get("service_tier"),
         (result or {}).get("observed_service_tier"), prices)
+    calculated["rate_card_sha256"] = _sha((HERE / "codex_prices.json").read_bytes())
     if not report:
         missing_flag = "no-final-report" if rollout.exists() else "no-rollout"
         audit["flags"] = sorted(set(audit.get("flags", []) + [missing_flag]))
@@ -1966,6 +2347,7 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         "invoice_status": calculated["invoice_status"], "status": calculated["status"],
         "basis": calculated["basis"], "currency": calculated["currency"],
         "price_table_date": calculated["price_table_date"], "price_table_source": calculated["price_table_source"],
+        "rate_card_sha256": calculated["rate_card_sha256"],
         "token_usd": calculated["usd"], "reason": calculated["cost_reason"],
     })
     if not report:
@@ -1975,21 +2357,134 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
     return 0 if canonical_pass else 1
 
 
+def _finalize_live_cost(root: Path, rid: str, attempt_dir: Path, projector,
+                        quota_observer: _BatchQuotaObserver) -> None:
+    """Attach only numeric terminal reconciliation metadata to the live snapshot."""
+    finalized = False
+    try:
+        projector.write_snapshot(force=True)
+        live_path = attempt_dir / "live-cost.json"
+        live = _json(live_path)
+        run_dir = root / "runs" / rid
+        root_path = _record_path(run_dir)
+        root_receipt = _json(root_path)
+        attempt_path = attempt_dir / "launch.json"
+        attempt_receipt = _json(attempt_path)
+        final_cost = root_receipt.get("calculated_cost")
+        final_usage = root_receipt.get("runtime", {}).get("usage") if isinstance(root_receipt.get("runtime"), dict) else None
+        live_usage = live.get("usage")
+        reconciliation = "UNAVAILABLE"
+        current_rate_hash = _sha((HERE / "codex_prices.json").read_bytes())
+        if live.get("rate_card_sha256") != current_rate_hash:
+            reconciliation = "MISMATCH"
+        elif isinstance(final_usage, dict) and isinstance(live_usage, dict):
+            token_keys = ("input_tokens", "cached_input_tokens", "cache_write_input_tokens",
+                          "output_tokens", "reasoning_output_tokens", "total_tokens")
+            live_vector = {key: live_usage[key] for key in token_keys if key in live_usage}
+            final_vector = {key: final_usage[key] for key in token_keys if key in final_usage}
+            if live_vector != final_vector:
+                reconciliation = "MISMATCH"
+            elif isinstance(final_cost, dict):
+                a, b = live.get("cost", {}).get("token_usd"), final_cost.get("token_usd")
+                if (live.get("cost", {}).get("cost_status") == "UNAVAILABLE" or
+                        final_cost.get("cost_status") == "UNAVAILABLE"):
+                    reconciliation = "UNAVAILABLE"
+                elif isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                    reconciliation = "MATCH" if math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12) else "MISMATCH"
+        live.update({"status": "FINALIZED", "final_calculated_cost": final_cost,
+                     "reconciliation": reconciliation,
+                     "terminal_status": root_receipt.get("status")})
+        _write_json(live_path, live)
+        health = quota_observer.health()
+        health["live_cost_reconciliation"] = reconciliation
+        health["live_cost_status"] = live.get("cost", {}).get("cost_status", "UNAVAILABLE")
+        if projector.errors:
+            quota_observer.mark_failure("live_cost_metadata_error")
+        if health["live_cost_status"] == "UNAVAILABLE":
+            quota_observer.mark_failure("final_cost_unavailable")
+        if reconciliation == "MISMATCH":
+            quota_observer.mark_failure("live_cost_reconciliation_mismatch")
+        elif reconciliation == "UNAVAILABLE":
+            quota_observer.mark_failure("live_cost_reconciliation_unavailable")
+        health = quota_observer.health()
+        health["live_cost_reconciliation"] = reconciliation
+        health["live_cost_status"] = live.get("cost", {}).get("cost_status", "UNAVAILABLE")
+        root_receipt["telemetry_health"] = health
+        attempt_receipt["telemetry_health"] = health
+        _write_json(root_path, root_receipt)
+        _write_json(attempt_path, attempt_receipt)
+        finalized = True
+    except OSError:
+        quota_observer.mark_failure("live_cost_snapshot_write_failed")
+    except (BenchError, ValueError, TypeError, KeyError, AttributeError):
+        quota_observer.mark_failure("live_cost_reconciliation_unavailable")
+    if finalized:
+        return
+    try:
+        run_dir = root / "runs" / rid
+        root_path = _record_path(run_dir)
+        attempt_path = attempt_dir / "launch.json"
+        root_receipt = _json(root_path)
+        attempt_receipt = _json(attempt_path)
+        health = quota_observer.health()
+        health["live_cost_reconciliation"] = "UNAVAILABLE"
+        health["live_cost_status"] = "UNAVAILABLE"
+        root_receipt["telemetry_health"] = health
+        attempt_receipt["telemetry_health"] = health
+        _write_json(root_path, root_receipt)
+        _write_json(attempt_path, attempt_receipt)
+    except (OSError, BenchError):
+        pass
+
+
 def status(root: Path, metrics: bool = False) -> int:
     cfg = load_suite(root)
-    prices = _json(HERE / "codex_prices.json") if metrics else None
-    live_metrics = None
     if metrics:
         sys.path.insert(0, str(HERE))
-        import codex_status
-        live_metrics = codex_status.live_metrics
+        import codex_live_cost
+    quota_snapshot = None
+    if metrics:
+        batch_files = sorted(root.glob("batch-*-launch.json"))
+        if batch_files:
+            batch_receipt = _json(batch_files[-1])
+            quota_dir = batch_receipt.get("quota_runtime_dir")
+            if isinstance(quota_dir, str):
+                try: quota_snapshot = _json(Path(quota_dir) / "quota-snapshot.json")
+                except (OSError, BenchError): quota_snapshot = None
+        if quota_snapshot is not None:
+            quota_snapshot["freshness"] = ("FRESH" if _BatchQuotaObserver.weekly_sample_ready(quota_snapshot)
+                                            else "STALE_OR_UNKNOWN")
+        print("ACCOUNT_QUOTA_CURRENT\t" + json.dumps({
+            "scope": "account-wide", "per_run_attribution": "unavailable",
+            "sample": quota_snapshot,
+        }, sort_keys=True))
     for rid, _cell, _num, _prompt in run_ids(root, cfg):
         path = _record_path(root / "runs" / rid)
         if path.exists():
             item = _json(path)
             line = f"{rid}\t{item.get('status','UNKNOWN')}\t{item.get('returncode','')}\t{item.get('audit',{}).get('status','')}\t{item.get('launch_mode','')}\t{item.get('effective_concurrency_cap','')}"
             if metrics:
-                line += "\t" + json.dumps(live_metrics(item, prices), sort_keys=True)
+                attempt_id = item.get("attempt", 1)
+                try: attempt_id = int(attempt_id)
+                except (TypeError, ValueError): attempt_id = 1
+                attempt_dir = root / "runs" / rid / f"attempt-{attempt_id:02d}"
+                live_cost = codex_live_cost.read_snapshot(attempt_dir / "live-cost.json")
+                runtime = item.get("runtime") if isinstance(item.get("runtime"), dict) else {}
+                usage = runtime.get("usage") if isinstance(runtime.get("usage"), dict) else None
+                audit = item.get("audit") if isinstance(item.get("audit"), dict) else {}
+                usage_metrics = {
+                    "source": "saved-receipt-metadata",
+                    "usage": usage,
+                    "audit_status": audit.get("status", "UNKNOWN"),
+                    "attempt": attempt_id,
+                    "elapsed_s": item.get("elapsed_s"),
+                }
+                final_cost = item.get("calculated_cost")
+                line += "\t" + json.dumps({
+                    "usage_metrics": usage_metrics,
+                    "live_cost": live_cost,
+                    "final_calculated_cost": final_cost,
+                }, sort_keys=True)
             print(line)
         else:
             print(f"{rid}\tUNPREPARED")
@@ -2028,32 +2523,68 @@ def main(argv: list[str] | None = None) -> int:
             lock = _lock(root)
             try:
                 batch_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-                _write_json(root / f"batch-{batch_id}-launch.json", {"batch_id": batch_id,
-                            "launch_mode": mode, "effective_concurrency_cap": cap,
-                            "started_utc": datetime.now(timezone.utc).isoformat()})
+                batch_path = root / f"batch-{batch_id}-launch.json"
+                quota_runtime = root / "operator-runtime" / "quota" / batch_id
+                batch_receipt = {"batch_id": batch_id,
+                                 "launch_mode": mode, "effective_concurrency_cap": cap,
+                                 "started_utc": datetime.now(timezone.utc).isoformat(),
+                                 "quota_runtime_dir": str(quota_runtime),
+                                 "quota_scope": "account-wide",
+                                 "quota_per_run_attribution": "unavailable"}
+                _write_json(batch_path, batch_receipt)
                 if not args.all:
                     _prepare_retry_attempt(root, args.run_id, args.attempt)
                 _preflight(root)
-                if not args.all:
-                    return launch_one(root, args.run_id, args.execute, args.timeout, args.attempt, mode, cap, batch_id)
-                ids = pending_run_ids(root, run_ids(root, load_suite(root)))
-                if not ids:
+                ids = [args.run_id] if not args.all else pending_run_ids(root, run_ids(root, load_suite(root)))
+                if args.all and not ids:
                     print("All cells are audited PASS completions; no model launch needed")
                     return 0
-                pause_marker = root / "operator-runtime" / "PAUSE_DISPATCH"
-                paused_boundaries: list[dict[str, Any]] = []
-                result = launch_many(ids, mode, cap, lambda rid: launch_one(
-                    root, rid, args.execute, args.timeout, 1, mode, cap, batch_id),
-                    stop_requested=pause_marker.is_file, paused_boundaries=paused_boundaries)
-                if paused_boundaries:
-                    runtime = root / "operator-runtime"
-                    runtime.mkdir(parents=True, exist_ok=True)
-                    _write_json(runtime / f"batch-{batch_id}-paused.json", {
-                        "batch_id": batch_id, "status": "PAUSED_AT_BOUNDARY",
-                        "launch_mode": mode, "effective_concurrency_cap": cap,
-                        **paused_boundaries[-1], "paused_utc": datetime.now(timezone.utc).isoformat(),
-                    })
-                return result
+                prices = _json(HERE / "codex_prices.json")
+                cells_by_id = {entry[0]: entry[1] for entry in run_ids(root, load_suite(root))}
+                for pending_id in ids:
+                    pending_cell = cells_by_id.get(pending_id)
+                    if not pending_cell:
+                        raise BenchError(f"missing model metadata for pending run {pending_id}")
+                    _validate_price_profile(prices, pending_cell["model"], pending_cell["speed"])
+                quota_observer = _BatchQuotaObserver(quota_runtime).start()
+                try:
+                    batch_receipt["quota_start_sample_id"] = (quota_observer.sample_ref() or {}).get("sample_id")
+                    _write_json(batch_path, batch_receipt)
+                    try:
+                        quota_observer.require_weekly_ready()
+                    except BenchError:
+                        quota_observer.mark_failure("required_weekly_quota_gate_failed")
+                        raise
+                    if not args.all:
+                        code = launch_one(root, args.run_id, args.execute, args.timeout, args.attempt,
+                                          mode, cap, batch_id, quota_observer)
+                        return int(bool(code or quota_observer.health().get("status") != "PASS"))
+                    pause_marker = root / "operator-runtime" / "PAUSE_DISPATCH"
+                    paused_boundaries: list[dict[str, Any]] = []
+                    def launch_batch_item(run_id: str) -> bool:
+                        code = launch_one(root, run_id, args.execute, args.timeout, 1,
+                                          mode, cap, batch_id, quota_observer)
+                        return bool(code or quota_observer.health().get("status") != "PASS")
+                    result = launch_many(ids, mode, cap, launch_batch_item,
+                        stop_requested=lambda: pause_marker.is_file() or quota_observer.health().get("status") != "PASS",
+                        paused_boundaries=paused_boundaries)
+                    if paused_boundaries:
+                        runtime = root / "operator-runtime"
+                        runtime.mkdir(parents=True, exist_ok=True)
+                        _write_json(runtime / f"batch-{batch_id}-paused.json", {
+                            "batch_id": batch_id, "status": "PAUSED_AT_BOUNDARY",
+                            "launch_mode": mode, "effective_concurrency_cap": cap,
+                            **paused_boundaries[-1], "paused_utc": datetime.now(timezone.utc).isoformat(),
+                        })
+                    return result
+                finally:
+                    quota_observer.stop()
+                    quota_end = quota_observer.sample_ref()
+                    batch_receipt.update({"quota_end_sample_id": quota_end.get("sample_id") if quota_end else None,
+                                          "quota_status": quota_end.get("status", "unknown") if quota_end else "unknown",
+                                          "telemetry_health": quota_observer.health(),
+                                          "ended_utc": datetime.now(timezone.utc).isoformat()})
+                    _write_json(batch_path, batch_receipt)
             finally:
                 try:
                     _postflight(root)

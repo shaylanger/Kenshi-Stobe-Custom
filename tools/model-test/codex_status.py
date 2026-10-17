@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import hashlib
 import math
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -320,6 +321,19 @@ def _historical_telemetry(receipt: dict) -> dict | None:
     attempt = data.get("attempt")
     if not isinstance(attempt, int) or attempt < 1:
         return {"status": "UNKNOWN", "reason": "historical telemetry attempt id missing"}
+    expected_attempt = receipt.get("attempt", receipt.get("attempt_id"))
+    if isinstance(expected_attempt, str):
+        match = re.fullmatch(r"(?:.*/)?attempt-(\d+)", expected_attempt)
+        if match:
+            expected_attempt = int(match.group(1))
+        elif expected_attempt.isdecimal():
+            expected_attempt = int(expected_attempt)
+        else:
+            return {"status": "UNKNOWN", "reason": "receipt attempt id is ambiguous"}
+    if not isinstance(expected_attempt, int) or expected_attempt < 1:
+        return {"status": "UNKNOWN", "reason": "receipt attempt id missing"}
+    if attempt != expected_attempt:
+        return {"status": "FAIL", "reason": "historical telemetry attempt id mismatch"}
     raw_usage = data.get("usage")
     usage = None
     if isinstance(raw_usage, dict):

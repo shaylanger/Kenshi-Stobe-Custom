@@ -92,6 +92,47 @@ plain `status` only reports saved run state. Before grading, confirm each
 completed run has a canonical report and an appended ledger row; then use
 `mt.py blind <suite-dir> --prompts 2,3` and `mt.py report <suite-dir> --prompts 2,3`.
 
+### Live calculated cost and account quota
+
+Every future explicit `run ... --execute` launch writes an attempt-local
+`live-cost.json` while its owned participant process is running. The projection
+updates every three seconds from incremental `token_count` metadata in the
+exact thread rollout bound to that attempt. It contains token/cache counts,
+request-deduplicated calculated USD, elapsed/freshness data, the requested and
+observed tier when available, and the dated rate-card hash. It does not contain
+answers, report text, prompts, or tool payloads. `status --metrics` shows the
+latest live snapshot alongside the final calculated cost saved after audit.
+The three-second cadence polls for published usage; counts and costs can lag
+while a request is still running, and the runner does not estimate mid-request.
+Run it with `python tools/model-test/codex_bench.py status <suite-dir> --metrics`;
+the snapshot is at `<suite-dir>/runs/<run-id>/attempt-NN/live-cost.json`.
+Live values are reference calculations from observed usage and the dated rate
+card; they are not invoice charges. Served tier, account invoice, and long-term
+account allocation remain unknown unless separately exposed by authoritative
+metadata.
+
+One account quota sampler runs per runner invocation, samples before dispatch,
+then refreshes every 30 seconds and at shutdown. The integrated interval is
+fixed at 30 seconds. It records account-wide
+five-hour and weekly windows. Attempt receipts and new attempt-ledger rows
+reference the start, end, and overlapping sample IDs. Those samples can cover
+multiple parallel attempts; account-wide quota changes are not allocated to
+individual runs because other account activity may overlap them. Missing,
+stale, or unreadable quota metadata is shown as unknown.
+For a standalone one-time read, run
+`python tools/model-test/codex_quota.py snapshot`. For a standalone watcher,
+run `python tools/model-test/codex_quota.py watch --out <output-dir> --interval 30`;
+it writes `quota-snapshot.json` and appends `quota-snapshots.jsonl` in that
+directory. These samples remain account-wide and are not per-test charges.
+
+Telemetry is required for explicit paid launches. Before dispatch, every
+pending model/tier must have a valid dated price entry and a fresh account-wide
+weekly quota window (`10080` minutes). A failed quota or cost telemetry check
+stops new dispatch at the next boundary while already-running attempts finish.
+The runner does not offer an optional telemetry bypass. A terminal cost that
+cannot be calculated or reconciled is recorded as unavailable and blocks later
+dispatch in that batch.
+
 ## Prices
 
 `codex_prices.json` records the published Codex/Work Enterprise token rates,
