@@ -146,5 +146,28 @@ if ($MyInvocation.InvocationName -ne '.') {
   Assert-Guard ($launcherGuard.Contains('[KenshiWin32]::PostMessage($fresh[0].Handle, [KenshiWin32]::WM_COMMAND') -and
     $launcherGuard.Contains('[IntPtr]([uint32]$freshDecision.Button.Id), $freshDecision.Button.Handle)') -and -not $launcherGuard.Contains('[KenshiWin32]::BM_CLICK') -and
     $launcherGuard -notmatch 'SetForegroundWindow|ForceForeground|PressDialogButton|keybd_event|mouse_event|SendInput') 'warning action posts exact parent WM_COMMAND without focus or physical input'
+  # Behavioural cases for Get-Launcher with a mocked process list (no game, no windows touched). A process whose
+  # ExecutablePath is not readable yet (just started / RE_Kenshi restart) or a process of another install must give
+  # $null (Wait-Until polls again), never a throw that aborts the launch; nothing is ever clicked in these cases.
+  # KAH_CTL_UNDER_TEST points the checks at another copy of kenshi-ctl.ps1 (used to prove the case fails on the old one).
+  $ctlUnderTest = if ($env:KAH_CTL_UNDER_TEST) { $env:KAH_CTL_UNDER_TEST } else { $launcherPath }
+  $ctlSource = Get-Content -LiteralPath $ctlUnderTest -Raw
+  $glStart = $ctlSource.IndexOf('function Get-Launcher {', [StringComparison]::Ordinal)
+  $glEnd = $ctlSource.IndexOf('function Get-GameWindow {', $glStart, [StringComparison]::Ordinal)
+  . ([scriptblock]::Create($ctlSource.Substring($glStart, $glEnd - $glStart)))
+  $AutoAcceptModOrderWarning = $true
+  $KenshiRoot = 'C:\KenshiLaneA\'
+  function Get-KenshiProcs { , @($script:mockProcs) }
+  $script:mockProcs = @()
+  Assert-Guard ($null -eq (Get-Launcher)) 'Get-Launcher: no Kenshi process returns null'
+  $script:mockProcs = @([pscustomobject]@{ ProcessId=[uint32]777; ExecutablePath=$null })
+  $glThrew = $false; $glResult = 'unset'
+  try { $glResult = Get-Launcher } catch { $glThrew = $true }
+  Assert-Guard (-not $glThrew -and $null -eq $glResult) 'Get-Launcher: only a process with an unreadable path returns null instead of throwing'
+  $script:mockProcs = @([pscustomobject]@{ ProcessId=[uint32]778; ExecutablePath='C:\KenshiLaneB\kenshi_x64.exe' })
+  $glThrew = $false; $glResult = 'unset'
+  try { $glResult = Get-Launcher } catch { $glThrew = $true }
+  Assert-Guard (-not $glThrew -and $null -eq $glResult) 'Get-Launcher: only another install process returns null instead of throwing'
+  Remove-Item Function:\Get-KenshiProcs
   'RESULT MOD_ORDER_WARNING_GUARD PASS cases={0}' -f $script:cases
 }
