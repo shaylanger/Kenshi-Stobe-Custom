@@ -23,7 +23,7 @@ HX_FAR_DEF="-53200 957 4893"
 
 hxd_dry() { [ -n "${KAH_ROW_DRY:-}" ]; }   # --dry plans the steps against gr_default_fake: data-dependent checks are skipped
 hxd_sleep() { [ -n "${KAH_ROW_FAKE:-}" ] || sleep "$1"; }
-hxd_lane_save() { case "${LT_LANE:-}" in 5090-i3) echo kah-imm26-5090-hxA;; 5090-i4) echo kah-imm26-i4-hx0;; esac; }   # other lanes: --save / HX_SAVE
+hxd_lane_save() { case "${LT_LANE:-}" in 5090-i3) echo kah-imm26-5090;; 5090-i4) echo kah-imm26-i4-hx0;; esac; }   # other lanes: --save / HX_SAVE
 hxd_winpath() {  # path in the form the (Windows) verdict python can open: C:/.. (Git Bash: cygpath -m); bash keeps using its own /c/.. form. Without cygpath (WSL) the path is unchanged.
   # imm26-inv01cx: bundle_dir.txt held /c/.. -> hxcheck "bundle dirs missing" false SETUP-FAIL
   cygpath -m "$1" 2>/dev/null || printf '%s
