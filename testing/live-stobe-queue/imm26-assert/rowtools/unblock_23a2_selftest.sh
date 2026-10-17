@@ -9,7 +9,7 @@ REAL_PY=$(command -v python3 || command -v python)
 T=$(mktemp -d); export KAH_ROWS_BASE="$T/runs" KAH_ROW_FAKE=1 KAH_ROW_FAKE_LOG="$T/fake.log" KAH_PF_ISOLATION=0 FAKE_STATE="$T/state.json"
 export ROW_SETTLE=0 ROW_WAIT=1 TRIP_SE_TRIES=2 RW_SAY_WAIT=0 SFK_23A_TRIES=3 SFK_KO_WAIT=1 SFK_23A_WAIT=10 TRIP_23A_SETTLE=0
 unset KAH_AGENT_NAME KAH_ROW_DRY TRIP_TRAP TRIP_GATE TRIP_SAVE TRIP_DEST TRIP_ACCEPT TRIP_ALT SFK_23A_BACK SFK_23A_SPEED SFK_SQUIN_GATE TRIP_HUB TRIP_A2_ACCEPT_TRIES A2_ANCHOR A2_NATIVE_TRIES A2_STAGE_DY A2_HUB_DY A2_STAGE_MOVED_SKIP A2_NO_STAGE_MAX
-export A2_STAGE_MOVED_SKIP=0   # legacy scenarios keep the unconditional landing check (a2-air); the op37 skip is tested explicitly below
+export A2_STAGE_MOVED_SKIP=999999   # legacy scenarios keep the unconditional landing check (a2-air); the op37 skip is tested explicitly below
 mkdir -p "$KAH_ROWS_BASE"
 n=0; ok=0
 chk() { n=$((n+1)); if [ "$2" = ok ]; then ok=$((ok+1)); echo "SELFTEST a2-$1 PASS ${3:-}"; else echo "SELFTEST a2-$1 FAIL ${3:-}"; fi; }
@@ -69,7 +69,7 @@ expect local-gate-no-stage a2-local-gate "RESULT 23-a PASS"
 unset A2_STAGE_MOVED_SKIP
 expect stale-y-after-far-stage-is-not-a-setup-fail a2-stale-y "RESULT 23-a PASS"
 grep -q 'landing check skipped' "$EVB/23-a/a2_setup.txt" && [ "$(staged)" = 1 ] && chk stale-y-skip-logged-and-staged ok || chk stale-y-skip-logged-and-staged bad
-export A2_STAGE_MOVED_SKIP=0
+export A2_STAGE_MOVED_SKIP=999999
 expect agreement-failed-is-still-a-real-fail a2-failed "RESULT 23-a FAIL" "agreement_COMPLETED=FAILED"
 scen a2-pass; TRIP_HUB="-1 970 2" run 23-a $L >/dev/null
 grep -q 'teleport Shay -1 970 2' "$F" && chk hub-env-override ok || chk hub-env-override bad

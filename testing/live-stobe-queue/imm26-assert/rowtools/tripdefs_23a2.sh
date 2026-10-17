@@ -13,7 +13,7 @@
 #   lane-setup.sh --with Cind --teleport does not move 'Cind [Hungry Bandit]': a2_anchor teleports Shay, then Cind/Malzin onto Shay by full name (the pattern tr_quiet uses).
 # Every guard is one line tagged `# a2:guard-<name>`; unblock_23a2_selftest.sh deletes each in turn (mutation test) and requires the scenario that needs it to change.
 # Env: TRIP_HUB ("-53200 960 4860") A2_HUB_DY (120: allowed |y - hub y|) TRIP_A2_ACCEPT_TRIES (3, max 3) A2_NATIVE_TRIES (8 probes x 2.5 s) A2_STAGE_DY (200: allowed Cind y above the gate
-#      y after the stage teleport; 0 disables) A2_STAGE_MOVED_SKIP (1000: skip that landing check when the stage teleport moved x/z more than this, the y read is stale, op37; 0 = always check)
+#      y after the stage teleport; 0 disables) A2_STAGE_MOVED_SKIP (1000: skip that landing check when the stage teleport moved x/z more than this, the y read is stale, op37; a huge value = always check)
 #      A2_NO_STAGE_MAX (1500: no stage teleport when the gate is within this many units of Cind, the live order walks the mesh route, inv23a/fix23agate; only the 14.7 km Squin gate stages) A2_ANCHOR=0 (skip the Hub anchor) plus the sfK2 knobs (SFK_23A_BACK/SPEED/TRIES/WAIT, TRIP_GATE). Evidence: a2_setup.txt, a2_native_*.txt.
 declare -F rd_23a_sfk >/dev/null || { echo "tripdefs_23a2.sh: source tripdefs_sfk.sh and tripdefs_23acheck.sh first" >&2; return 1 2>/dev/null || exit 1; }
 declare -F uf_walk_stage >/dev/null || . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/unblockdefs_f.sh"
