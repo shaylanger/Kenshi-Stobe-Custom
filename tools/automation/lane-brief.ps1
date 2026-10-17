@@ -144,7 +144,7 @@ $stLines += "- $gameLine"
 $stateRc = @(RowCard @('state', $Lane))
 if ($stateRc.Count -and -not $Pilot) { $stLines += '- ' + (Clip $stateRc[0] 700) }
 $launch = if ($rig -eq '5090') {
-    "launch: wsl lane-backend.sh start $id ; env KAH_INSTANCE=$($l.instance) KAH_OWNER=$($l.lock_owner) KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KAH_FPS=60 KENSHI_MONITOR='\.\DISPLAY2' kenshi-ctl.ps1 launch -Save <save> -Gfx low ; lane-window.ps1 -Lane $id -Action place   (scripts in tools\automation; then lane-setup.sh waits for the world)"
+    "launch: wsl lane-backend.sh start $id ; env KAH_INSTANCE=$($l.instance) KAH_OWNER=$($l.lock_owner) KAH_GFX=low KAH_VIDEO_MODE='1024 x 768' KAH_FPS=30 KENSHI_MONITOR='\.\DISPLAY2' kenshi-ctl.ps1 launch -Save <save> -Gfx low ; lane-window.ps1 -Lane $id -Action place   (scripts in tools\automation; then lane-setup.sh waits for the world)"
 } else {
     "launch: ssh 4080 powershell -File C:\KAH\ctl.ps1 launch -Instance $($l.instance) -Save <save> ; backend: stobe-lane-backend.sh $id (tools\automation, WSL)"
 }
