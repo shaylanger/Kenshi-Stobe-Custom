@@ -36,12 +36,150 @@ class BenchTests(unittest.TestCase):
             [{"method": "mystery", "arguments": {}, "outcome": "ok"}], True)["integrity"], "FAIL")
         self.assertEqual(bench._classify_mcp_receipts([{"method": "read"}], True)["integrity"], "FAIL")
         self.assertEqual(bench._classify_mcp_receipts([], True)["status"], "FAIL")
+        not_used = bench._classify_mcp_receipts([], True, zero_call_ready=True, observed_calls=0)
+        self.assertEqual((not_used["status"], not_used["usage"]), ("PASS", "NOT_USED"))
+        self.assertEqual(bench._classify_mcp_receipts([], True, zero_call_ready=True,
+                                                      observed_calls=1)["status"], "FAIL")
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "receipts.jsonl"
             path.write_text('{"method":"read","arguments":{},"outcome":"ok"}\nnot-json\n', encoding="utf-8")
             malformed = bench._mcp_receipt_health(path)
             self.assertEqual(malformed["integrity"], "FAIL")
             self.assertEqual(malformed["malformed_line_count"], 1)
+
+    def test_startup_receipt_is_bound_to_real_execution_and_empty_call_sink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt = Path(tmp) / "attempt-01"
+            attempt.mkdir()
+            calls = attempt / "frozen-mcp-receipts.jsonl"
+            calls.touch()  # explicit prelaunch empty sink
+            event_path = attempt / "events.jsonl"
+            event_path.write_text("\n".join(json.dumps(row) for row in [
+                {"type": "thread.started", "thread_id": "thread-1"},
+                {"type": "turn.started", "thread_id": "thread-1"},
+                {"type": "turn.completed", "thread_id": "thread-1"}]) + "\n", encoding="utf-8")
+            event_audit = bench._inspect_cli_event_stream(event_path)
+            self.assertEqual(event_audit["status"], "PASS")
+            startup_path = attempt / "frozen-mcp-startup.jsonl"
+            config = {"private_config_sha256": "c" * 64,
+                      "mcp_startup_receipts": str(attempt / "frozen-mcp-startup.jsonl")}
+            identity = {"pid": 42, "image": "codex.exe", "image_sha256": "e" * 64,
+                        "created_utc": "2026-10-17T00:00:00Z"}
+            start = "2026-10-17T00:00:01+00:00"
+            end = "2026-10-17T00:00:03+00:00"
+            launch = {"run": "model-low-standard-p2", "attempt": 1,
+                      "participant_cli_pid": 42, "participant_cli_identity": identity,
+                      "mcp_call_sink_primed": True,
+                      "mcp_startup_nonce_sha256": "a" * 64,
+                      "mcp_startup_config_sha256": "c" * 64,
+                      "mcp_startup_source_sha256": "d" * 64,
+                      "requested_config": config,
+                      "started_utc": start, "ended_utc": end}
+            def row(method, stamp, tools):
+                return {"method": method, "utc": stamp, "nonce_sha256": "a" * 64,
+                        "attempt_id": "model-low-standard-p2/attempt-01",
+                        "config_sha256": "c" * 64, "source_sha256": "d" * 64,
+                        "server_pid": 73, "parent_pid": 42, "parent_identity": identity, "tools": tools}
+            startup_path.write_text("\n".join(json.dumps(x) for x in [
+                row("initialize", 1792195202.0, []),
+                row("tools/list", 1792195202.2, ["list", "read", "search", "sql"])]) + "\n", encoding="utf-8")
+            startup, health = bench._audit_mcp_receipts(attempt, launch, 0, event_audit, "thread-1")
+            self.assertEqual(startup["status"], "PASS")
+            self.assertEqual((health["status"], health["usage"]), ("PASS", "NOT_USED"))
+            _startup, failed_health = bench._audit_mcp_receipts(attempt, launch, 1, event_audit, "thread-1")
+            self.assertEqual(failed_health["status"], "FAIL")
+            self.assertNotIn("usage", failed_health)
+            _startup, mismatched_thread = bench._audit_mcp_receipts(attempt, launch, 0, event_audit, "other-thread")
+            self.assertEqual(mismatched_thread["status"], "FAIL")
+            startup_path.write_text(startup_path.read_text(encoding="utf-8") + "not-json\n", encoding="utf-8")
+            startup, health = bench._audit_mcp_receipts(attempt, launch, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            self.assertEqual(health["status"], "FAIL")
+            startup_path.write_text("\n".join(json.dumps(x) for x in [
+                row("initialize", 1792195202.0, []),
+                row("tools/list", 1792195202.2, ["list", "read", "search", "sql"])]) + "\n", encoding="utf-8")
+            bad = json.loads(startup_path.read_text(encoding="utf-8").splitlines()[1])
+            bad["parent_identity"] = {"pid": 42, "image_sha256": "other"}
+            startup_path.write_text("\n".join(json.dumps(x) for x in [
+                row("initialize", 1792195202.0, []), bad]) + "\n", encoding="utf-8")
+            startup, health = bench._audit_mcp_receipts(attempt, launch, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            self.assertEqual(health["status"], "FAIL")
+            tampered_tools = row("tools/list", 1792195202.2, ["list", "read", "search"])
+            startup_path.write_text(json.dumps(row("initialize", 1792195202.0, [])) + "\n" +
+                                    json.dumps(tampered_tools) + "\n", encoding="utf-8")
+            startup, health = bench._audit_mcp_receipts(attempt, launch, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            self.assertEqual(health["status"], "FAIL")
+            wrong_nonce = row("initialize", 1792195202.0, [])
+            wrong_nonce["nonce_sha256"] = "stale-preflight-nonce"
+            startup_path.write_text(json.dumps(wrong_nonce) + "\n" + json.dumps(
+                row("tools/list", 1792195202.2, ["list", "read", "search", "sql"])) + "\n", encoding="utf-8")
+            startup, health = bench._audit_mcp_receipts(attempt, launch, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            self.assertEqual(health["status"], "FAIL")
+            for key in ("mcp_startup_nonce_sha256", "mcp_startup_source_sha256"):
+                incomplete = dict(launch)
+                incomplete.pop(key)
+                startup, _health = bench._audit_mcp_receipts(attempt, incomplete, 0)
+                self.assertEqual(startup["status"], "FAIL")
+            incomplete = dict(launch)
+            incomplete["requested_config"] = {"mcp_startup_receipts": str(startup_path)}
+            startup, _health = bench._audit_mcp_receipts(attempt, incomplete, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            incomplete = dict(launch)
+            incomplete["participant_cli_identity"] = {"pid": 42, "query": "unavailable"}
+            startup, _health = bench._audit_mcp_receipts(attempt, incomplete, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            incomplete = dict(launch)
+            incomplete["participant_cli_identity"] = {"pid": 42, "image": "codex.exe",
+                                                      "created_utc": "2026-10-17T00:00:00Z"}
+            startup, _health = bench._audit_mcp_receipts(attempt, incomplete, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            incomplete = dict(launch)
+            incomplete["participant_cli_identity"] = {**identity, "pid": 41}
+            startup, _health = bench._audit_mcp_receipts(attempt, incomplete, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            incomplete = dict(launch)
+            incomplete["participant_cli_identity"] = {**identity, "created_utc": ""}
+            startup, _health = bench._audit_mcp_receipts(attempt, incomplete, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            startup_path.write_text("{malformed\n", encoding="utf-8")
+            startup, health = bench._audit_mcp_receipts(attempt, launch, 0)
+            self.assertEqual(startup["status"], "FAIL")
+            self.assertEqual(health["status"], "FAIL")
+
+    def test_structural_frozen_call_without_receipt_fails_empty_sink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt = Path(tmp) / "attempt-01"
+            attempt.mkdir()
+            (attempt / "frozen-mcp-receipts.jsonl").touch()
+            calls = [{"type": "item.completed", "item": {"type": "mcp_tool_call",
+                      "server": "frozen", "name": "read"}}]
+            self.assertEqual(bench._count_frozen_tool_calls(calls), 1)
+            _startup, health = bench._audit_mcp_receipts(attempt, {}, 1)
+            self.assertEqual(health["status"], "FAIL")
+
+    def test_zero_call_event_stream_must_be_complete_well_formed_and_root_bound(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "events.jsonl"
+            complete = [{"type": "thread.started", "thread_id": "thread-a"},
+                        {"type": "turn.started", "thread_id": "thread-a"},
+                        {"type": "turn.completed", "thread_id": "thread-a"}]
+            path.write_text("\n".join(json.dumps(row) for row in complete) + "\n", encoding="utf-8")
+            audit = bench._inspect_cli_event_stream(path)
+            self.assertEqual((audit["status"], audit["tool_call_count"], audit["thread_id"]),
+                             ("PASS", 0, "thread-a"))
+            path.write_text("\n".join(json.dumps(row) for row in complete[:2]) + "\n", encoding="utf-8")
+            self.assertEqual(bench._inspect_cli_event_stream(path)["status"], "FAIL")
+            mismatched = [dict(row) for row in complete]
+            mismatched[1]["thread_id"] = "thread-b"
+            path.write_text("\n".join(json.dumps(row) for row in mismatched) + "\n", encoding="utf-8")
+            self.assertEqual(bench._inspect_cli_event_stream(path)["status"], "FAIL")
+            path.write_text("\n".join(json.dumps(row) for row in complete) + "\nnot-json\n", encoding="utf-8")
+            self.assertEqual(bench._inspect_cli_event_stream(path)["status"], "FAIL")
+            path.unlink()
+            self.assertEqual(bench._inspect_cli_event_stream(path)["status"], "FAIL")
 
     def test_record_quarantines_failed_attempt_then_promotes_valid_retry_once(self):
         import sys

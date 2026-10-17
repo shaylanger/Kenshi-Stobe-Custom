@@ -7,6 +7,7 @@ name an output path outside the frozen fixture.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sys
 import threading
@@ -33,6 +34,58 @@ TOOLS = [
     {"name": "search", "description": "Search frozen UTF-8 text with a bounded 30-second scan budget, truncation status, and file cursor for resuming deep logs.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "path": {"type": "string", "default": "."}, "max_results": {"type": "integer", "default": 50}, "byte_budget": {"type": "integer", "minimum": 1, "maximum": 20000000, "default": 20000000}, "byte_offset": {"type": "integer", "minimum": 0, "default": 0}, "start_line": {"type": "integer", "minimum": 1, "default": 1}}, "required": ["query"], "additionalProperties": False}},
     {"name": "sql", "description": "Run a bounded plain SELECT against stobe_frozen using the configured read-only DB role.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"], "additionalProperties": False}},
 ]
+
+STARTUP_RECEIPTS = os.environ.get("CODEX_BENCH_STARTUP_RECEIPTS")
+
+
+def _process_identity(pid: int) -> dict:
+    if os.name != "nt":
+        return {"pid": pid, "query": "unsupported-platform"}
+    import ctypes
+    from ctypes import wintypes
+    handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return {"pid": pid, "query": "unavailable"}
+    try:
+        image = ctypes.create_unicode_buffer(32768)
+        size = wintypes.DWORD(len(image))
+        if not ctypes.windll.kernel32.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(size)):
+            return {"pid": pid, "query": "image-unavailable"}
+        created = wintypes.FILETIME(); exited = wintypes.FILETIME()
+        kernel = wintypes.FILETIME(); user = wintypes.FILETIME()
+        if not ctypes.windll.kernel32.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exited),
+                                                      ctypes.byref(kernel), ctypes.byref(user)):
+            return {"pid": pid, "query": "creation-unavailable"}
+        ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime
+        created_utc = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ticks / 10_000_000 - 11_644_473_600)) + "Z"
+        image_path = Path(image.value)
+        return {"pid": pid, "image": str(image_path), "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
+                "created_utc": created_utc}
+    finally:
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
+def _record_startup(method: str) -> None:
+    """Record only the real participant CLI's MCP readiness handshake."""
+    if not STARTUP_RECEIPTS or not os.environ.get("CODEX_BENCH_EXEC_NONCE"):
+        return
+    config_path = Path(os.environ.get("CODEX_BENCH_CONFIG_PATH", ""))
+    try:
+        config_sha = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        source_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        row = {"method": method, "utc": time.time(),
+               "nonce_sha256": hashlib.sha256(os.environ["CODEX_BENCH_EXEC_NONCE"].encode()).hexdigest(),
+               "attempt_id": os.environ.get("CODEX_BENCH_ATTEMPT_ID"),
+               "config_sha256": config_sha, "source_sha256": source_sha,
+               "server_pid": os.getpid(), "parent_pid": os.getppid(),
+               "parent_identity": _process_identity(os.getppid()),
+               "tools": [tool["name"] for tool in TOOLS] if method == "tools/list" else []}
+        target = Path(STARTUP_RECEIPTS)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(row, sort_keys=True) + "\n")
+    except OSError:
+        return
 
 
 def _call(name: str, args: dict) -> object:
@@ -61,9 +114,11 @@ def _call(name: str, args: dict) -> object:
 
 def _response(request: dict) -> dict:
     method = request.get("method")
+    readiness_method = None
     params = request.get("params") or {}
     rid = request.get("id")
     if method == "initialize":
+        readiness_method = "initialize"
         result = {"protocolVersion": params.get("protocolVersion", "2024-11-05"),
                   "capabilities": {"tools": {}}, "serverInfo": {"name": "codex-frozen-readonly", "version": "1.0.0"}}
     elif method == "notifications/initialized":
@@ -71,6 +126,7 @@ def _response(request: dict) -> dict:
     elif method == "ping":
         result = {}
     elif method == "tools/list":
+        readiness_method = "tools/list"
         result = {"tools": TOOLS}
     elif method == "tools/call":
         name = params.get("name", "")
@@ -90,6 +146,8 @@ def _response(request: dict) -> dict:
         return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "Method not found"}}
     if rid is None:
         return {}
+    if readiness_method:
+        _record_startup(readiness_method)
     return {"jsonrpc": "2.0", "id": rid, "result": result}
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import hashlib
 import json
 import os
@@ -16,6 +17,7 @@ import queue
 import re
 import signal
 import shutil
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -37,7 +39,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*-p[0-9]+$")
 LEDGER_MUTEX = threading.Lock()
 ACTIVE_LOCK = threading.Lock()
 ACTIVE_PROCESSES: set[subprocess.Popen] = set()
-PROFILE_VERSION = 6
+PROFILE_VERSION = 7
 FROZEN_TOOLS = ["mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"]
 RETRYABLE_TERMINAL_STATUSES = frozenset({"FAILED", "FAILED_SETUP", "TIMEOUT", "FAILED_IO", "FAILED_START",
                                         "FAILED_NO_ROOT_ROLLOUT", "FAILED_NO_FINAL_REPORT", "COMPLETE_UNAUDITED"})
@@ -258,6 +260,34 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _process_identity(pid: int) -> dict[str, Any]:
+    """Return bounded Windows process lineage metadata, never a command line."""
+    if os.name != "nt":
+        return {"pid": pid, "query": "unsupported-platform"}
+    import ctypes
+    from ctypes import wintypes
+    handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return {"pid": pid, "query": "unavailable"}
+    try:
+        image = ctypes.create_unicode_buffer(32768)
+        size = wintypes.DWORD(len(image))
+        if not ctypes.windll.kernel32.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(size)):
+            return {"pid": pid, "query": "image-unavailable"}
+        created = wintypes.FILETIME(); exited = wintypes.FILETIME()
+        kernel = wintypes.FILETIME(); user = wintypes.FILETIME()
+        if not ctypes.windll.kernel32.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exited),
+                                                      ctypes.byref(kernel), ctypes.byref(user)):
+            return {"pid": pid, "query": "creation-unavailable"}
+        ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime
+        created_utc = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ticks / 10_000_000 - 11_644_473_600)) + "Z"
+        image_path = Path(image.value)
+        return {"pid": pid, "image": str(image_path), "image_sha256": _sha(image_path.read_bytes()),
+                "created_utc": created_utc}
+    finally:
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
 def _transport_source_paths() -> list[Path]:
     paths = [(HERE / name).resolve() for name in TRANSPORT_SOURCE_NAMES]
     missing = [path.name for path in paths if not path.is_file()]
@@ -346,6 +376,213 @@ def _thread_id(events: list[dict[str, Any]]) -> str | None:
                 value = item.get("thread_id") or item.get("id")
                 if isinstance(value, str): return value
     return None
+
+
+def _count_frozen_tool_calls(events: list[dict[str, Any]]) -> int:
+    """Count only structural MCP call metadata; never inspect arguments or output."""
+    count = 0
+    for event in events:
+        containers = [event]
+        payload = event.get("payload")
+        if isinstance(payload, dict):
+            containers.append(payload)
+        for container in containers:
+            candidates = [container.get("item")]
+            if isinstance(container.get("params"), dict):
+                candidates.append(container["params"])
+            for item in candidates:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                server = item.get("server") or item.get("server_name")
+                name = item.get("name") or item.get("tool_name")
+                if item_type in {"mcp_tool_call", "mcp_call"} and (server == "frozen" or name in {"list", "read", "search", "sql"}):
+                    count += 1
+                    break
+            else:
+                continue
+            break
+    return count
+
+
+def _strict_metadata_jsonl(path: Path) -> tuple[list[dict[str, Any]], int]:
+    rows: list[dict[str, Any]] = []
+    malformed = 0
+    try:
+        with path.open("r", encoding="utf-8", errors="strict") as stream:
+            for line in stream:
+                try:
+                    value = json.loads(line)
+                    if isinstance(value, dict):
+                        rows.append(value)
+                    else:
+                        malformed += 1
+                except (json.JSONDecodeError, UnicodeError):
+                    malformed += 1
+    except (OSError, UnicodeError):
+        return [], 1
+    return rows, malformed
+
+
+def _inspect_cli_event_stream(path: Path) -> dict[str, Any]:
+    """Project a CLI JSON stream onto event/thread/tool structure only."""
+    if not path.is_file():
+        return {"status": "FAIL", "reason": "event-stream-missing", "tool_call_count": None}
+    malformed = 0
+    types: set[str] = set()
+    thread_ids: set[str] = set()
+    structural: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8", errors="strict") as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except (json.JSONDecodeError, UnicodeError):
+                    malformed += 1
+                    continue
+                if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+                    malformed += 1
+                    continue
+                containers = [event]
+                payload = event.get("payload")
+                if isinstance(payload, dict):
+                    containers.append(payload)
+                elif payload is not None:
+                    malformed += 1
+                types.add(event["type"])
+                seen_items: set[tuple[Any, ...]] = set()
+                for container in containers:
+                    if isinstance(container.get("type"), str):
+                        types.add(container["type"])
+                    event_thread_id = container.get("thread_id")
+                    if isinstance(event_thread_id, str) and event_thread_id:
+                        thread_ids.add(event_thread_id)
+                    if container.get("type") in {"thread.started", "thread_started"}:
+                        thread_id = container.get("thread_id") or container.get("id")
+                        if isinstance(thread_id, str) and thread_id:
+                            thread_ids.add(thread_id)
+                    item = container.get("item")
+                    if isinstance(item, dict):
+                        projected = {key: item.get(key) for key in
+                                     ("type", "server", "server_name", "name", "tool_name") if key in item}
+                        fingerprint = tuple(sorted(projected.items()))
+                        if fingerprint not in seen_items:
+                            structural.append({"item": projected})
+                            seen_items.add(fingerprint)
+    except (OSError, UnicodeError):
+        return {"status": "FAIL", "reason": "event-stream-unreadable", "tool_call_count": None}
+    call_count = _count_frozen_tool_calls(structural)
+    aliases = {"thread.started": {"thread.started", "thread_started"},
+               "turn.started": {"turn.started", "turn_started"},
+               "turn.completed": {"turn.completed", "turn_completed"}}
+    complete = (malformed == 0 and len(thread_ids) == 1 and
+                all(types.intersection(aliases[name]) for name in aliases) and
+                not types.intersection({"turn.failed", "turn_failed"}))
+    return {"status": "PASS" if complete else "FAIL",
+            "reason": "complete-root-turn" if complete else "event-stream-incomplete-or-ambiguous",
+            "thread_id": next(iter(thread_ids)) if len(thread_ids) == 1 else None,
+            "event_types": sorted(types),
+            "malformed_line_count": malformed, "tool_call_count": call_count}
+
+
+def _verify_mcp_startup(path: Path, launch: dict[str, Any], config: dict[str, Any],
+                        observed_calls: int) -> dict[str, Any]:
+    """Validate the participant execution's initialize/tools/list evidence."""
+    fail = {"status": "FAIL", "reason": "startup-readiness-unproven"}
+    if not path.is_file() or not launch.get("participant_cli_pid"):
+        return fail
+    rows, malformed = _strict_metadata_jsonl(path)
+    if malformed or len(rows) != 2 or [row.get("method") for row in rows] != ["initialize", "tools/list"]:
+        return fail | {"reason": "startup-handshake-incomplete"}
+    expected_nonce = launch.get("mcp_startup_nonce_sha256")
+    expected_config = config.get("private_config_sha256")
+    expected_source = launch.get("mcp_startup_source_sha256")
+    expected_identity = launch.get("participant_cli_identity")
+    expected_tools = ["list", "read", "search", "sql"]
+    digest_pattern = re.compile(r"^[0-9a-f]{64}$")
+    cli_pid = launch.get("participant_cli_pid")
+    attempt_no = launch.get("attempt")
+    run_id = launch.get("run")
+    if (type(cli_pid) is not int or cli_pid <= 0 or type(attempt_no) is not int or attempt_no <= 0 or
+            not isinstance(run_id, str) or not run_id or
+            not all(isinstance(value, str) and digest_pattern.fullmatch(value)
+                for value in (expected_nonce, expected_config, expected_source)) or
+            launch.get("mcp_startup_config_sha256") != expected_config or
+            launch.get("mcp_startup_source_sha256") != expected_source or
+            not isinstance(expected_identity, dict) or
+            type(expected_identity.get("pid")) is not int or expected_identity.get("pid") <= 0 or
+            expected_identity.get("pid") != cli_pid or
+            not isinstance(expected_identity.get("image"), str) or
+            not expected_identity.get("image") or
+            not isinstance(expected_identity.get("image_sha256"), str) or
+            not digest_pattern.fullmatch(expected_identity["image_sha256"]) or
+            not isinstance(expected_identity.get("created_utc"), str) or
+            not expected_identity.get("created_utc") or
+            expected_identity.get("query")):
+        return fail | {"reason": "participant-identity-or-digest-missing"}
+    try:
+        started = datetime.fromisoformat(launch["started_utc"]).timestamp()
+        ended = datetime.fromisoformat(launch["ended_utc"]).timestamp()
+        identity_created = datetime.fromisoformat(expected_identity["created_utc"].replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError):
+        return fail | {"reason": "execution-window-missing"}
+    except Exception:
+        return fail | {"reason": "execution-window-missing"}
+    if started > ended or identity_created.timestamp() > started:
+        return fail | {"reason": "execution-window-invalid"}
+    expected_row_keys = {"method", "utc", "nonce_sha256", "attempt_id", "config_sha256",
+                         "source_sha256", "server_pid", "parent_pid", "parent_identity", "tools"}
+    timestamps = []
+    for row in rows:
+        stamp = row.get("utc")
+        if (set(row) != expected_row_keys or isinstance(stamp, bool) or
+                not isinstance(stamp, (int, float)) or not math.isfinite(stamp) or
+                type(row.get("parent_pid")) is not int or row["parent_pid"] <= 0 or
+                type(row.get("server_pid")) is not int or row["server_pid"] <= 0):
+            return fail | {"reason": "startup-row-malformed"}
+        timestamps.append(float(stamp))
+    valid = all(row.get("nonce_sha256") == expected_nonce and
+                row.get("attempt_id") == f"{run_id}/attempt-{attempt_no:02d}" and
+                row.get("config_sha256") == expected_config and row.get("source_sha256") == expected_source and
+                row.get("parent_pid") == cli_pid and row.get("parent_identity") == expected_identity and
+                started <= stamp <= ended for row, stamp in zip(rows, timestamps))
+    valid = valid and timestamps[0] <= timestamps[1]
+    valid = valid and rows[0].get("tools") == [] and rows[1].get("tools") == expected_tools
+    valid = valid and launch.get("mcp_call_sink_primed") is True and \
+            Path(config.get("mcp_startup_receipts", "")).resolve() == path.resolve()
+    if observed_calls < 0:
+        valid = False
+    return {"status": "PASS" if valid else "FAIL",
+            "reason": "participant-handshake-verified" if valid else "startup-binding-mismatch",
+            "methods": [row.get("method") for row in rows], "tool_names": rows[1].get("tools", []),
+            "parent_pid": rows[1].get("parent_pid"), "participant_cli_pid": launch.get("participant_cli_pid"),
+            "config_sha256": rows[1].get("config_sha256"), "observed_tool_calls": observed_calls}
+
+
+def _audit_mcp_receipts(attempt_dir: Path, launch: dict[str, Any],
+                        structural_calls: int, event_audit: dict[str, Any] | None = None,
+                        expected_thread_id: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    call_path = attempt_dir / "frozen-mcp-receipts.jsonl"
+    startup = _verify_mcp_startup(attempt_dir / "frozen-mcp-startup.jsonl", launch,
+                                  launch.get("requested_config", {}), structural_calls)
+    health = _mcp_receipt_health(call_path)
+    event_ready = (isinstance(event_audit, dict) and event_audit.get("status") == "PASS" and
+                   event_audit.get("tool_call_count") == 0 and
+                   isinstance(event_audit.get("thread_id"), str) and expected_thread_id and
+                   event_audit.get("thread_id") == expected_thread_id and structural_calls == 0)
+    if (call_path.is_file() and launch.get("mcp_call_sink_primed") is True and
+            not health.get("count") and not health.get("malformed_line_count") and
+            startup.get("status") == "PASS" and event_ready):
+        health = _classify_mcp_receipts([], True, zero_call_ready=True,
+                                        observed_calls=structural_calls)
+        if health.get("status") == "PASS":
+            health["usage"] = "NOT_USED"
+    elif not health.get("count"):
+        health.update(status="FAIL", integrity="FAIL", reason="startup-or-event-readiness-unproven")
+    elif not health.get("count") and structural_calls:
+        health.update(status="FAIL", integrity="FAIL", reason="call-event-receipt-count-mismatch")
+    health["event_stream"] = event_audit or {"status": "UNKNOWN", "reason": "event-audit-not-supplied"}
+    return startup, health
 
 
 def _rollout_id(path: Path) -> str | None:
@@ -746,6 +983,7 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
     (home / "neutral-cwd").mkdir(exist_ok=True)
     frozen_root = frozen_root_override or Path(os.environ.get("CODEX_BENCH_FROZEN_ROOT", str(DEFAULT_FROZEN)))
     receipts = _mcp_receipt_path(run_dir / attempt_name)
+    startup_receipts = run_dir / attempt_name / "frozen-mcp-startup.jsonl"
     python = str(Path(sys.executable))
     mcp_script = str(HERE / "codex_frozen_mcp.py")
     codex_tier = "priority" if cell["speed"] == "fast" else "default"
@@ -768,10 +1006,13 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
         f"args = ['-I', {json.dumps(mcp_script)}]", "enabled = true", "required = true",
         'enabled_tools = ["list", "read", "search", "sql"]',
         'default_tools_approval_mode = "approve"',
+        'env_vars = ["CODEX_BENCH_EXEC_NONCE", "CODEX_BENCH_ATTEMPT_ID", "CODEX_BENCH_CONFIG_PATH"]',
         f"cwd = {json.dumps(str(home / 'neutral-cwd'))}",
         "startup_timeout_sec = 20", "tool_timeout_sec = 60", "",
         "[mcp_servers.frozen.env]", f"CODEX_FROZEN_ROOT = {json.dumps(str(frozen_root))}",
         f"CODEX_FROZEN_RECEIPTS = {json.dumps(str(receipts))}", "",
+        f"CODEX_BENCH_STARTUP_RECEIPTS = {json.dumps(str(startup_receipts))}", "",
+        f"CODEX_BENCH_SOURCE_SHA256 = {json.dumps(_sha(Path(mcp_script).read_bytes()))}", "",
     ])
     (codex_home / "config.toml").write_text(toml, encoding="utf-8")
     config = {
@@ -792,6 +1033,7 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
         "hooks_enabled": False, "hook_enforcement": {"status": "UNAVAILABLE",
             "reason": "pinned CLI hook stdin is a character device with no event payload"},
         "mcp_command": [python, "-I", mcp_script], "mcp_receipts": str(receipts),
+        "mcp_startup_receipts": str(startup_receipts),
         "private_config": str(codex_home / "config.toml"),
         "private_config_sha256": _sha((codex_home / "config.toml").read_bytes()),
         "prompt_id": rid,
@@ -1284,6 +1526,18 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     env = _private_env(home, {"CODEX_HOME": str(codex_home), "CODEX_FROZEN_ROOT": receipt["frozen_root"],
                               "CODEX_FROZEN_RECEIPTS": str(attempt / "frozen-mcp-receipts.jsonl")})
     _strict_exec_config_probe(Path(receipt["cli_path"]), env=env, cwd=home / "neutral-cwd")
+    # Only the actual participant process gets the nonce. Config probes and
+    # preflight MCP listings therefore cannot create execution readiness proof.
+    execution_nonce = secrets.token_urlsafe(32)
+    env.update({"CODEX_BENCH_EXEC_NONCE": execution_nonce,
+                "CODEX_BENCH_ATTEMPT_ID": f"{rid}/attempt-{attempt_no:02d}",
+                "CODEX_BENCH_CONFIG_PATH": str(codex_home / "config.toml")})
+    for evidence_name in ("frozen-mcp-receipts.jsonl", "frozen-mcp-startup.jsonl"):
+        evidence_path = attempt / evidence_name
+        if evidence_path.exists():
+            raise BenchError(f"stale {evidence_name}; refusing launch")
+        evidence_path.touch(exist_ok=False)
+    receipt["mcp_call_sink_primed"] = True
     # Do not mark the attempt RUNNING until the exact prepared profile passes
     # the installed CLI's strict parser. A setup rejection stays PREPARED.
     receipt = _stamp_launch_context(attempt_receipt, receipt_path, attempt, launch_mode, effective_cap, batch_id)
@@ -1315,6 +1569,10 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
             "--config", f"service_tier={'priority' if cell['speed'] == 'fast' else 'default'}", "-"]
     (attempt / "argv.json").write_text(json.dumps(argv, indent=2) + "\n", encoding="utf-8")
     receipt.update({"status": "RUNNING", "started_utc": datetime.now(timezone.utc).isoformat(),
+                   "mcp_startup_nonce_sha256": _sha(execution_nonce.encode()),
+                   "mcp_startup_config_sha256": config.get("private_config_sha256"),
+                   "mcp_startup_source_sha256": _sha(Path(HERE / "codex_frozen_mcp.py").read_bytes()),
+                   "mcp_startup_receipts_path": config.get("mcp_startup_receipts"),
                    "requested_config": config, "argv_sha256": _sha(json.dumps(argv).encode())})
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     started = time.monotonic()
@@ -1332,6 +1590,10 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
             _write_json(receipt_path, receipt)
             print(f"FAILED_START {rid} ({type(exc).__name__})", file=sys.stderr)
             return record(root, rid)
+        receipt["participant_cli_pid"] = proc.pid
+        receipt["participant_cli_identity"] = _process_identity(proc.pid)
+        receipt["participant_cli_started_utc"] = datetime.now(timezone.utc).isoformat()
+        receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
         with ACTIVE_LOCK: ACTIVE_PROCESSES.add(proc)
         try:
             proc.stdin.write(prompt.encode("utf-8")); proc.stdin.flush(); proc.stdin.close()
@@ -1384,12 +1646,20 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
         receipt["status"] = "FAILED"
     sessions = codex_home / "sessions"
     candidates = [p for p in sessions.rglob("*.jsonl") if p.is_file()] if sessions.is_dir() else []
-    events = _jsonl(log_path)
-    requested_thread = _thread_id(events)
+    event_audit = _inspect_cli_event_stream(log_path)
+    frozen_structural_calls = event_audit.get("tool_call_count") if event_audit.get("status") == "PASS" else -1
+    requested_thread = event_audit.get("thread_id")
     candidate_by_id = {tid: p for p in candidates if (tid := _rollout_id(p))}
+    root_rollout = candidate_by_id.get(requested_thread) if requested_thread else None
+    root_thread = _rollout_id(root_rollout) if root_rollout else None
+    startup_health, mcp_health = _audit_mcp_receipts(attempt, receipt, frozen_structural_calls,
+                                                      event_audit, root_thread)
+    mcp_ok = mcp_health["status"] == "PASS"
+    receipt.update({"mcp_startup": startup_health,
+                    "frozen_structural_call_count": frozen_structural_calls,
+                    "mcp_health": mcp_health})
     rollouts_dir = attempt / "rollouts"
     child_paths = []
-    root_rollout = candidate_by_id.get(requested_thread) if requested_thread else None
     if candidates:
         rollouts_dir.mkdir(exist_ok=True)
         for source in candidates:
@@ -1414,13 +1684,17 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
     return record(root, rid)
 
 
-def _classify_mcp_receipts(events: list[Any], present: bool) -> dict[str, Any]:
+def _classify_mcp_receipts(events: list[Any], present: bool, *, zero_call_ready: bool = False,
+                           observed_calls: int | None = None) -> dict[str, Any]:
     """Validate bounded MCP receipt metadata without inspecting call arguments."""
     allowed = {"list", "read", "search", "sql"}
     safe_rejections = {"error:FrozenAccessError"}
-    if not present or not events:
+    if not present or (not events and not (zero_call_ready and observed_calls == 0)):
         return {"status": "FAIL", "integrity": "FAIL", "infrastructure": "UNKNOWN",
                 "reason": "missing-or-empty-receipts", "count": len(events)}
+    if not events:
+        return {"status": "PASS", "integrity": "PASS", "infrastructure": "PASS",
+                "reason": "zero-tool-calls-ready", "count": 0, "usage": "NOT_USED"}
     malformed = unknown = infrastructure = rejected = 0
     counts: dict[str, int] = {}
     for event in events:
@@ -1508,8 +1782,12 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
             host_proof.get("sha256", receipt.get("hostprobe_sha256")))
         requested_modes = codex_status._verify_requested_modes(receipt, rollout)
         requested_modes_verified = requested_modes.get("status") == "PASS"
-        frozen_path = attempt_dir / "frozen-mcp-receipts.jsonl"
-        frozen_health = _mcp_receipt_health(frozen_path)
+        event_path = attempt_dir / "events.jsonl"
+        event_audit = _inspect_cli_event_stream(event_path)
+        structural_calls = event_audit.get("tool_call_count") if event_audit.get("status") == "PASS" else -1
+        expected_thread = _rollout_id(rollout)
+        startup_health, frozen_health = _audit_mcp_receipts(attempt_dir, receipt, structural_calls,
+                                                             event_audit, expected_thread)
         derived_terminal = bool(receipt.get("returncode") == 0 and
                                 receipt.get("report_path") and Path(receipt["report_path"]).is_file() and
                                 rollout.is_file() and frozen_health.get("status") == "PASS")
@@ -1517,6 +1795,8 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
                                 derived_terminal and not receipt.get("child_rollout_paths") and
                                 receipt.get("delegation_detected") is not True)
         receipt["mcp_health"] = frozen_health
+        receipt["mcp_startup"] = startup_health
+        receipt["frozen_structural_call_count"] = structural_calls
         receipt["terminal_verified"] = derived_terminal
         receipt["verified_receipt"] = derived_verified
         receipt_verified = (derived_verified and
