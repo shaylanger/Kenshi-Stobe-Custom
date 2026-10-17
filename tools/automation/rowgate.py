@@ -310,7 +310,7 @@ def do_guard(raw):
                 st = pts(a.get("started", ""))
                 if st and st + timedelta(minutes=DEDUPE_MIN) >= now():
                     same = a
-        if role == "operator":
+        if role in ("operator", "reader"):
             probs, n = [], 0
         else:
             probs, n = check_row(led, case, role, prompt, same)
