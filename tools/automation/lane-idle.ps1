@@ -22,6 +22,25 @@ $lanes = [ordered]@{
 $ov = Join-Path $Runs 'lane-owners.json'
 if (Test-Path -LiteralPath $ov) { try { $j = Get-Content -LiteralPath $ov -Raw | ConvertFrom-Json; foreach ($p in $j.psobject.Properties) { $lanes[$p.Name] = @{ ops = @($p.Value.ops); dirs = @($p.Value.dirs) } } } catch { } }
 $now = Get-Date
+# PI-47 (Shay 2026-10-16): the LANE NO-OPERATOR line carries the exact, ready-to-run successor spawn text (one line, so the unchanged waker grep keeps it):
+# next operator name (trailing number + 1, or +2 after a letter suffix; never an existing status name), predecessor = newest-status operator of the lane + its state.
+function Get-SuccessorText([string]$lane, $cfg) {
+    $pred = $null; $predT = $null; $predState = 'none'
+    foreach ($op in $cfg.ops) {
+        $sf = Join-Path $Runs "agents\$op.status"
+        if (-not (Test-Path -LiteralPath $sf)) { continue }
+        $t = (Get-Item -LiteralPath $sf).LastWriteTime
+        if (-not $predT -or $t -gt $predT) { $predT = $t; $pred = $op; $first = ((Get-Content -LiteralPath $sf -TotalCount 1) -as [string]) -replace '^\uFEFF', ''; $predState = if ($first -match '\|\s*([A-Z-]+)\s*\|') { $Matches[1] } else { '?' } }
+    }
+    $base = if ($pred) { $pred } else { $cfg.ops[0] }
+    $next = if ($base -match '^(.*?)(\d+)$') { $Matches[1] + ([int]$Matches[2] + 1) } else { $base + '2' }
+    while (Test-Path -LiteralPath (Join-Path $Runs "agents\$next.status")) { $next = if ($next -match '^(.*?)(\d+)$') { $Matches[1] + ([int]$Matches[2] + 1) } else { $next + '2' } }
+    $br = "C:\KenshiTestRuns\agents\$next.brief.md"
+    $pa = if ($pred) { " -Predecessor $pred" } else { '' }
+    $ps = if ($pred) { "predecessor $pred=$predState" } else { 'no predecessor status' }
+    $rest = if ($pred) { " (if the lane should rest instead: agent-abandon.ps1 $pred `"parked: <why>`" holds it 2 h)" } else { '' }
+    "SUCCESSOR ($ps): 1) powershell -NoProfile -File C:\KenshiModding\tools\automation\lane-brief.ps1 $lane -Out $br -Name $next$pa  2) Agent prompt: `"[case:generate] You are $next, lane $lane. Read $br, then the handoff it names, and start the next row. Hand back AT MOST 8 lines (verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay); full report via save-report.ps1.`"$rest"
+}
 # held lanes: <runs>\lanes.held, one lane per line, '#' comments (e.g. lanes Shay holds); no LANE STALLED for them
 $held = @(); $heldF = Join-Path $Runs 'lanes.held'
 if (Test-Path -LiteralPath $heldF) { $held = @(Get-Content -LiteralPath $heldF -ErrorAction SilentlyContinue | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ }) }
@@ -48,7 +67,7 @@ foreach ($l in $lanes.Keys) {
     if (-not $runOp) {
         if ($held -contains $l) { continue }   # held / retired lanes (lanes.held) never raise LANE NO-OPERATOR
         $key = "noop:$l"
-        if (-not $mem.ContainsKey($key) -or ($now - $mem[$key]).TotalMinutes -ge $Repeat) { $mem[$key] = $now; $out += "LANE NO-OPERATOR $l : no RUNNING operator among $($cfg.ops -join ',') -> spawn/respawn one from the handoff" }
+        if (-not $mem.ContainsKey($key) -or ($now - $mem[$key]).TotalMinutes -ge $Repeat) { $mem[$key] = $now; $out += "LANE NO-OPERATOR $l : no RUNNING operator among $($cfg.ops -join ',') -> spawn/respawn one from the handoff. $(Get-SuccessorText $l $cfg)" }
         continue
     }
     foreach ($d in $cfg.dirs) {

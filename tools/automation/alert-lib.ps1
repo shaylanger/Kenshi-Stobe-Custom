@@ -160,7 +160,7 @@ function Invoke-AlertScan {
             foreach ($l in $li) {
                 if ($l -match '^LANE (IDLE|NO-OPERATOR|STALLED) (\S+)') {
                     $k = 'lane-' + $Matches[1].ToLowerInvariant(); $sub = $Matches[2]; $seenLine = $true
-                    $conds[(ConvertTo-AlertId $k $sub)] = @{ Kind = $k; Subject = $sub; Text = ($l.Substring(0, [Math]::Min($(if ($k -in $script:AlertHardKinds) { 900 } else { 300 }), $l.Length))); Source = 'lane'; OpenedAt = $null }
+                    $conds[(ConvertTo-AlertId $k $sub)] = @{ Kind = $k; Subject = $sub; Text = ($l.Substring(0, [Math]::Min($(if ($k -in $script:AlertHardKinds) { 900 } elseif ($k -eq 'lane-no-operator') { 1200 } else { 300 }), $l.Length))); Source = 'lane'; OpenedAt = $null }
                 } elseif ($l -match '^LANES ACTIVE') { $seenLine = $true }
             }
             $laneOk = $seenLine

@@ -40,6 +40,8 @@ $lanes = [ordered]@{
     '4080-i4' = @{ ops = @('imm26-4080-i4op5'); globs = @('imm26-4080-i4op*'); dirs = @('imm26-4080-i4') }
 }
 if (-not $Lane -or -not $lanes.Contains($Lane)) { [Console]::Error.WriteLine("usage: lane-brief.ps1 <$($lanes.Keys -join '|')> [-Out path] [-Name op] [-Predecessor op]"); exit 2 }
+. "$PSScriptRoot\path-guard-lib.ps1"
+if ($Out) { try { $Out = Resolve-GuardedPath $Out 'lane-brief -Out' } catch { [Console]::Error.WriteLine("lane-brief: $($_.Exception.Message)"); exit 2 } }
 if ($Pilot -and ($Pilot -ne 'haiku-i4' -or $Lane -ne '5090-i4')) { [Console]::Error.WriteLine("lane-brief: -Pilot supports only 'haiku-i4' on lane 5090-i4"); exit 2 }
 $ov = Join-Path $Runs 'lane-owners.json'
 if (Test-Path -LiteralPath $ov) {
@@ -47,6 +49,8 @@ if (Test-Path -LiteralPath $ov) {
 }
 $cfg = $lanes[$Lane]
 $rig, $id = $Lane -split '-', 2
+# PI-50: registering a successor (-Name) releases the lane's auto-hold (lanes.held line written by agent-abandon.ps1 "parked: ...")
+if ($Name) { try { . (Join-Path $PSScriptRoot 'lane-hold-lib.ps1'); if (Remove-LaneHold $Runs $Lane) { [Console]::Error.WriteLine("lane-brief: released auto-hold of lane $Lane (successor $Name)") } } catch { } }
 function Clip([string]$s, [int]$n) { $s = ($s -replace '\s+', ' ').Trim(); if ($s.Length -gt $n) { $s.Substring(0, $n - 3) + '...' } else { $s } }
 function Sha8([string]$p) { try { if (Test-Path -LiteralPath $p) { (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash } else { $null } } catch { $null } }
 
@@ -418,6 +422,6 @@ if ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes) { $kbClip = 
 if ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes) { $fullRows = 2; $kbClip = 160; $budget = 800; $text = Build $budget }
 while ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes -and $budget -gt 300) { $budget -= 250; $text = Build $budget }
 $bytes = [System.Text.Encoding]::UTF8.GetByteCount($text)
-if ($Out) { $d = Split-Path -Parent $Out; if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }; [System.IO.File]::WriteAllText($Out, $text, (New-Object System.Text.UTF8Encoding($false))) }
+if ($Out) { $d = Split-Path -Parent $Out; if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }; [System.IO.File]::WriteAllText($Out, $text, (New-Object System.Text.UTF8Encoding($false))); [Console]::Error.WriteLine("lane-brief: wrote $([IO.Path]::GetFullPath($Out)) ($([Text.Encoding]::UTF8.GetByteCount($text)) bytes)") }
 $text
 [Console]::Error.WriteLine("lane-brief: $Lane brief size $bytes bytes (limit $MaxBytes)" + $(if ($bytes -gt $MaxBytes) { ' OVER LIMIT' } else { '' }))

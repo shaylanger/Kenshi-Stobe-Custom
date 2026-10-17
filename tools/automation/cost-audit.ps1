@@ -9,6 +9,8 @@ param(
     [string]$Out = 'C:\KenshiTestRuns\agents\out\imm26-costaudit',
     [switch]$NoLabels
 )
+. "$PSScriptRoot\path-guard-lib.ps1"
+try { $Out = Resolve-GuardedPath $Out 'cost-audit -Out' } catch { [Console]::Error.WriteLine("cost-audit: $($_.Exception.Message)"); exit 2 }
 $py = $null
 foreach ($c in @('python', 'python3', 'py')) {
     $cmd = Get-Command $c -ErrorAction SilentlyContinue

@@ -140,6 +140,24 @@ $ErrorActionPreference = 'Continue'
 $null = & powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Runs $runs -Repo $repo -NoRemote -Pilot nope 2>$null; Chk 'PILOT: unknown pilot name exits 2' ($LASTEXITCODE -eq 2)
 $null = & powershell -NoProfile -File "$here\lane-brief.ps1" 4080-i4 -Runs $runs -Repo $repo -NoRemote -Pilot haiku-i4 2>$null; Chk 'PILOT: pilot on another lane exits 2' ($LASTEXITCODE -eq 2)
 $ErrorActionPreference = 'Continue'; $null = & powershell -NoProfile -File "$here\lane-brief.ps1" nope -Runs $runs -Repo $repo 2>$null; Chk 'bad lane exits 2' ($LASTEXITCODE -eq 2)
+# ---- PI-53: path-argument guard (Git Bash strips backslashes) ----
+$ErrorActionPreference = 'Continue'
+$badOut = 'C:KenshiTestRunsagentsimm26-pi53-selftest.brief.md'
+$e53 = Join-Path $t 'e53.txt'
+Push-Location $t
+$null = & powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Out 'relative-brief.md' -Runs $runs -Repo $repo -NoRemote 2>$e53
+Chk 'PI-53: relative -Out refused (exit 2, nothing written)' ($LASTEXITCODE -eq 2 -and -not (Test-Path (Join-Path $t 'relative-brief.md')) -and (Get-Content $e53 -Raw) -match 'drive-letter\s+colon')
+$null = & powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Out 'D:foo.md' -Runs $runs -Repo $repo -NoRemote 2>$e53
+Chk 'PI-53: drive-colon without separator refused (exit 2)' ($LASTEXITCODE -eq 2 -and -not (Test-Path (Join-Path $t 'D:foo.md')))
+Pop-Location
+. "$here\path-guard-lib.ps1"
+$fx = Resolve-GuardedPath $badOut 'x' 2>$null
+Chk 'PI-53: known stripped C:KenshiTestRunsagents.. form auto-fixed to C:\KenshiTestRuns\agents\..' ($fx -eq 'C:\KenshiTestRuns\agents\imm26-pi53-selftest.brief.md')
+Chk 'PI-53: C:\ , C:/ , /mnt/c/ and /c/ forms accepted' ((Resolve-GuardedPath 'C:\a\b.md') -eq 'C:\a\b.md' -and (Resolve-GuardedPath 'C:/a/b.md') -eq 'C:/a/b.md' -and (Resolve-GuardedPath '/mnt/c/a/b.md') -eq 'C:\a\b.md' -and (Resolve-GuardedPath '/c/a/b.md') -eq 'C:\a\b.md')
+$thr = $false; try { $null = Resolve-GuardedPath 'foo\bar.md' 'x' } catch { $thr = $true }; Chk 'PI-53: relative path throws in the lib' $thr
+$out2 = ($t -replace '\\', '/') + '/o2/brief2.md'
+$null = & powershell -NoProfile -File "$here\lane-brief.ps1" 5090-i4 -Out $out2 -Runs $runs -Repo $repo -NoRemote 2>$e53
+Chk 'PI-53: forward-slash -Out works and the resolved absolute path is printed' ($LASTEXITCODE -eq 0 -and (Test-Path (Join-Path $t 'o2\brief2.md')) -and (Get-Content $e53 -Raw) -match '(?s)lane-brief: wrote [A-Za-z]:\\.*brief2')
 Remove-Item -Recurse -Force $t
 if ($fail) { "SELFTEST FAIL $fail"; exit 1 }
 'SELFTEST OK'; exit 0
