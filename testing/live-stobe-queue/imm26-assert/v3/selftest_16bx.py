@@ -103,6 +103,24 @@ def main():
     d = mut('noreply')
     edit_events(d, 'R2', lambda ls: [x for x in ls if not re.search(r'\(talking to: Shay\)\|(spoken|pending)', x)])
     l = run(d); chk('mut-no-reply-to-player', verdict(l) == 'FAIL' and 'R2:words 3..40!' in l)
+    # --- imm26-fix16bxengage: widened ENGAGE ---
+    pos = {'how-about-you': 'Alive enough. How about you, traveler.', 'you-tell-me': 'Same as ever, hauling packs. You tell me.',
+           'your-turn': 'Still upright. Your turn.', 'whats-the-story': "Still breathing, though you look worse than me - what's the story?",
+           'you-look-like': "Fed and dry. You look like you've had a rougher night than me, though.", 'what-happened': 'Not much here. What happened to your arm?'}
+    for k, t in pos.items():
+        d = mut('p-' + k); replace_reply(d, 'O2', [t], npc='Malzin'); l = run(d); chk('mut-engage-' + k, verdict(l) == 'PASS', l[:90])
+    neg = {'curt-no-question': 'Alive, fed, and not bleeding.', 'hostile-with-marker': 'How about you leave. State your business, stay back.',
+           'hostile-you-look': 'You look like trouble, so back off and go away.', 'empty': ''}
+    for k, t in neg.items():
+        d = mut('n-' + k); replace_reply(d, 'O2', [t] if t else [], npc='Malzin'); l = run(d); chk('mut-engage-neg-' + k, verdict(l) == 'FAIL' and 'O2:ctl_friendly_words!' in l, l[:90])
+    d = mut('n-longtarget'); replace_reply(d, 'R2', ['I am doing well and I thought a great deal about where we last parted and what the road has been like since then, with all the weather and the bandits and the long dull marches between towns, so there is a lot to say about it all. How about you?'])
+    l = run(d); chk('mut-engage-neg-long-target-still-fails', verdict(l) == 'FAIL' and 'R2:words 3..40!' in l)
+    # real op21 reps (if present): rep1 fails only on length, rep2/3 pass
+    o1 = os.path.join(ROOT, '16-bx-op21rep1')
+    if os.path.isdir(o1):
+        l1 = run(o1); chk('real-op21rep1-fails-on-length-only', verdict(l1) == 'FAIL' and 'ctl_friendly' not in l1.split('samples')[0] and 'R1:words 3..40!' in l1, l1[:90])
+        for r in (2, 3):
+            lr = run(os.path.join(ROOT, f'16-bx-op21rep{r}')); chk(f'real-op21rep{r}-passes', verdict(lr) == 'PASS', lr[:90])
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'SELFTEST FIX16BX ALL {"PASS" if ok == n else "FAIL"} {ok}/{n}')
     return 0 if ok == n else 1
