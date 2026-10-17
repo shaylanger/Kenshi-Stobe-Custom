@@ -35,3 +35,10 @@ Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus th
 ## Compact #3 (first at the 150k threshold) - /cost BEFORE reading
 - Shay pasted at ~03:29Z (wall 1h33m, context ~135k): total $69.42 = Sonnet $66.17 (uncached input 609.8k, output 1.5M, cache read 204.5M, cache write 11.3M) + Haiku $3.25 (unchanged).
 - Next: Shay pastes /cost right after the compact. Real cost = (after - before) minus the normal turns/subagent spend in between (read from transcripts with the same re-pricing); the uncached-input delta should be ~ the pre-compact context (~150k) if the summarizer is billed uncached again.
+
+## Compact #3 RESULT (Shay's /cost, 150k threshold; "before" pasted at context ~1% below the trigger, wall 1h39m56, "after" wall 1h41m26 = 90 s later)
+- Session total: $73.64 -> $74.04 = **+$0.40** (Sonnet $70.39 -> $70.78; Haiku $3.26 unchanged). This is an UPPER BOUND for the compact: it also contains everything else billed in those 90 s (my turns, and running subagents bill into the same total).
+- Token deltas, Sonnet: uncached input 675.5k -> 689.2k (+13.7k), cache read 216.5M -> 218.0M (+1.5M), cache write 12.0M -> 12.0M (no visible change), output 1.6M -> 1.7M (rounded).
+- Reading: the summarizer was NOT billed as ~150k uncached input this time (the uncached delta is only 13.7k, compacts #1/#2 showed ~290k each). It was almost certainly served from the warm cache (cache-read delta 1.5M, about $0.45 at $0.30/M, which is roughly the whole +$0.40 together with other work). The cache was warm: /cost showed "warm (1h TTL)" and "2 expected rebuilds".
+- So a 150k compact costs at most about $0.4, and likely less. Compacts #1/#2 (299k/284k) were billed ~$0.8 each; the difference is the cache state at the moment of the summarizer call, not just the size. Cannot separate the exact summarizer share from the 90-s window; do not quote below $0.40 as measured.
+- Break-even (rough): turns after the compact cost about $0.03-0.05 each at ~30k context vs ~$0.15 at 150k, so the compact repays within roughly 4-8 turns.
