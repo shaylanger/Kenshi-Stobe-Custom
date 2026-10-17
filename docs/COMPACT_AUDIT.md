@@ -23,3 +23,11 @@ Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus th
 - CORRECTION 21:09: an earlier message to Shay quoted $0.23, which was compact #1 (the auto one at 02:34Z), not this one.
 - Comparison caveat: the "$1.84 handoff vs $0.23 compact" ratio is not like-for-like (handoff figure = 25 turns of the new session incl. real work + the tail's 69 turns; compact figure = one-off only). Fair view: after a compact you still pay ~$0.03/turn; the real extra cost of the handoff is the tail's $1.40.
 - Clean 150k measurement: still to come (after /autocompact 183000).
+
+## /cost reconciliation (Shay pasted /cost at ~03:15Z; session total $67.60 = Sonnet $64.34 + Haiku $3.25)
+- Transcripts (main + 347 subagent files, since 01:44Z) re-priced with prices.json: $53.74. Gap $13.86.
+- Token categories, Sonnet: uncached input /cost 596k vs transcript 4.3k -> gap 592k = 299k (compact 1) + 284k (compact 2) + ~9k. So the two summarizer calls were billed as UNCACHED input ($2/M): ~$0.60 and ~$0.57, NOT cache-read ($0.03). Inferred from the totals matching within 1.5%, not read directly.
+- So a compact at ~290k costs about $0.6 (summarizer input) + ~$0.05 output + first turn $0.17 = ~$0.8, not $0.23-0.26. Earlier break-even (15 turns) is ~3x too optimistic: about 50 turns. Cost scales with the pre-compact size, so a 150k compact is about half of that.
+- Transcript output tokens are UNDERCOUNTED: /cost Sonnet output 1.5M vs 0.69M in transcripts (~$8 of the gap). All MEASURED per-turn costs here are ~20-25% low (the handoff and compact figures are affected alike).
+- Unexplained: Haiku uncached input 1.6M in /cost vs 2k in transcripts.
+- Procedure from now on: Shay runs /cost before and after each compact (meter warn text says so).
