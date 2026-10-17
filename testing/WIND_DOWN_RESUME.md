@@ -1,3 +1,30 @@
+# START HERE (Shay's one file for a new session) - state 2026-10-17 00:15, coordinator #24
+Read this file first, then run `powershell -NoProfile -ExecutionPolicy Bypass -File C:\KenshiModding	oolsutomation\session-start.ps1 -Brief`. Where this top section and the older text below disagree, THIS top section wins.
+
+## Mode
+- WIND-DOWN is in force (`C:\KenshiTestRuns\WIND_DOWN.flag`): no lane work, no relaunch, no new 5090 sessions. Offline tooling work is allowed when Shay orders it.
+- When Shay says "start working again": step 0 below (ab2 pilot first), delete the flag, `kenshi-ctl.ps1 idle clear`, release lanes.held lines (5090-i4, 5090-i5).
+- Context: autoCompactWindow is 183000 for all models (set 2026-10-16). Never ask Shay for /cost around compacts. Ask him only in final text; never block.
+- Push is blocked for agents/the coordinator by the permission checker: 9 commits are local only (993ca1e7 .. 1bd48da3). Shay runs `git -C C:\KenshiModding push origin HEAD` himself. Commit 4323750b (docs/model-test, 1117 files, unreviewed agent-session text) may already be on origin/main (github.com/shaylanger/Kenshi-Stobe-Custom); repo visibility unchecked; do not rewrite history without Shay.
+
+## Done this session (all committed locally, live)
+- PI-48 bare `stobe-auto` guard (ac3be002; opt-out STOBE_AUTO_LIVE=1; 4080 copy NOT changed; stale game-N.lock files trigger it).
+- PI-52 known-snags block in lane brief + mark-row.py refusal (42739691). PI-49 snag helper/counter (d7a133a3). PI-68 duplicate hand-back guard (22643053). PI-68+PI-49 merged into the live chores waker (77201850; backup coord-chores.ps1.pre-swap68-49).
+- agent-status-hook: empty final message + a saved report in agents/out = DONE not FAILED (162ef5e6).
+- Cost cuts 1, 3, 4, 5 applied (see section 2 below); cut 2 (Haiku operators) HELD for the ab2 result; cuts 6/7/8 not approved.
+- PROCESS_IDEAS pruned to 10 (active: PI-48, 49, 52, 65, 68, 70, 71; in progress 42, 54, 66). PI queue removed from AGENT_BACKLOG.
+
+## Not done / open (act on these)
+1. Waker flood: identical `RIG STALL`/event lines repeat every 2 s with no dedupe (coord-chores.ps1 / event-wait.sh). Candidate fix: throttle identical event lines to 1 per 10 min. Cause of the 00:03 flood = stale inflight markers (moved to C:\KenshiTestRunsackup\inflight-removed-0017).
+2. KAH_FPS conflict: lane-brief launch line says 60, the KNOWN_BLOCKERS snag block says 30. Find which is right and make both agree.
+3. lane-brief-selftest.ps1 has 5 pre-existing FAILs (rules block, status commands, PI-19 x2, PILOT): not caused by recent edits; look when convenient.
+4. `ctxfix-selftest.sh` fails 1/53 (xargs quote error), unchecked.
+5. HANDOFF.md "Right now" not updated (file holds other agents' uncommitted edits); this file + COORDINATOR_LIVE.md are the record.
+6. PI-71 demand-driven lanes (est. $15-30/day, unmeasured): wait for "start working again", design pass + trial on one lane first. Shay's overnight idea: ONE lane per rig (2 total) with a skip-ahead queue (READY rows only; rows waiting for a fix are skipped, rework-capped rows are NOT ready; a lane with no READY row ends cleanly with an alert). Design not started; Shay said "just asking".
+7. Shay's PI-70 (-WaitUntil) weakens the stall catch: Shay's call only.
+8. Reminders at the next real work: STOBE server on only for a STOBE batch (`stobe-server.sh off` after); `gfx-mods.sh on` before Shay plays (was on); `testruns-sweep.ps1` after each batch (5090 run folders imm26-nc* ~260 MB each go stale after 24 h: delete them, they are judged); the chores waker Monitor dies with the session: start `MSYS_NO_PATHCONV=1 wsl.exe -d DwemerAI4Skyrim3 -u root --cd / -- bash /mnt/c/KenshiModding/tools/automation/waker-persist-chores.sh watch` as a Monitor (30 min cap, re-arm) whenever anything is in flight.
+9. Shay should check `/hooks` once: the context-meter hook was removed from his global settings by him (2026-10-16); the scripts remain on disk, uncalled.
+
 # WIND-DOWN RESUME LIST (coordinator #24, 2026-10-16 ~22:30)
 
 Shay ordered a wind-down (no new lane work). This is the ONE list of everything stopped, parked or not started, so a new
