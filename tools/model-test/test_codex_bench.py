@@ -181,6 +181,37 @@ class BenchTests(unittest.TestCase):
             path.unlink()
             self.assertEqual(bench._inspect_cli_event_stream(path)["status"], "FAIL")
 
+    def test_zero_call_event_stream_rejects_unrecognized_tool_invocation_shapes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "events.jsonl"
+            base = [{"type": "thread.started", "thread_id": "thread-a"},
+                    {"type": "turn.started", "thread_id": "thread-a"},
+                    {"type": "turn.completed", "thread_id": "thread-a"}]
+            for item in ({"type": "function_call", "name": "functions.exec"},
+                         {"type": "custom_tool_call", "name": "unknown"},
+                         {"type": "code_mode"},
+                         {"type": "code_mode_execute"},
+                         {"type": "mcp_tool_call", "server": "other", "name": "list"}):
+                rows = [*base, {"type": "item.started", "item": item}]
+                path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+                audit = bench._inspect_cli_event_stream(path)
+                self.assertEqual(audit["status"], "FAIL")
+                self.assertEqual(audit["reason"], "tool-invocation-shape-unrecognized")
+                self.assertIsNone(audit["tool_call_count"])
+                self.assertGreater(audit["ambiguous_invocation_count"], 0)
+                (path.parent / "frozen-mcp-receipts.jsonl").touch()
+                _startup, health = bench._audit_mcp_receipts(
+                    path.parent, {"mcp_call_sink_primed": True}, -1, audit, "thread-a")
+                self.assertEqual(health["status"], "FAIL")
+                self.assertNotIn("usage", health)
+
+            frozen = [*base, {"type": "item.started", "item": {
+                "type": "mcp_tool_call", "server": "frozen", "name": "list"}}]
+            path.write_text("\n".join(json.dumps(row) for row in frozen) + "\n", encoding="utf-8")
+            audit = bench._inspect_cli_event_stream(path)
+            self.assertEqual((audit["status"], audit["tool_call_count"], audit["ambiguous_invocation_count"]),
+                             ("PASS", 1, 0))
+
     def test_record_quarantines_failed_attempt_then_promotes_valid_retry_once(self):
         import sys
         sys.path.insert(0, str(MODULE_PATH.parent))

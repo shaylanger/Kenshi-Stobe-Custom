@@ -405,6 +405,26 @@ def _count_frozen_tool_calls(events: list[dict[str, Any]]) -> int:
     return count
 
 
+def _is_ambiguous_tool_invocation(item: dict[str, Any]) -> bool:
+    """Recognize invocation-shaped metadata that is not a proven frozen MCP call."""
+    item_type = item.get("type")
+    server = item.get("server") or item.get("server_name")
+    name = item.get("name") or item.get("tool_name")
+    if item_type in {"mcp_tool_call", "mcp_call"}:
+        return server != "frozen"
+    invocation_types = {
+        "function_call", "function_call_output", "custom_tool_call",
+        "custom_tool_call_output", "tool_call", "code_mode_call",
+        "code_mode_tool_call", "code_mode", "functions.exec",
+    }
+    if isinstance(item_type, str) and (item_type in invocation_types or
+                                       item_type.startswith(("function_", "custom_tool_", "code_mode_"))):
+        return True
+    if isinstance(server, str) and server:
+        return True
+    return isinstance(name, str) and (name == "functions.exec" or name.startswith("functions."))
+
+
 def _strict_metadata_jsonl(path: Path) -> tuple[list[dict[str, Any]], int]:
     rows: list[dict[str, Any]] = []
     malformed = 0
@@ -432,6 +452,7 @@ def _inspect_cli_event_stream(path: Path) -> dict[str, Any]:
     types: set[str] = set()
     thread_ids: set[str] = set()
     structural: list[dict[str, Any]] = []
+    ambiguous_invocations = 0
     try:
         with path.open("r", encoding="utf-8", errors="strict") as stream:
             for line in stream:
@@ -468,6 +489,8 @@ def _inspect_cli_event_stream(path: Path) -> dict[str, Any]:
                         fingerprint = tuple(sorted(projected.items()))
                         if fingerprint not in seen_items:
                             structural.append({"item": projected})
+                            if _is_ambiguous_tool_invocation(projected):
+                                ambiguous_invocations += 1
                             seen_items.add(fingerprint)
     except (OSError, UnicodeError):
         return {"status": "FAIL", "reason": "event-stream-unreadable", "tool_call_count": None}
@@ -478,11 +501,15 @@ def _inspect_cli_event_stream(path: Path) -> dict[str, Any]:
     complete = (malformed == 0 and len(thread_ids) == 1 and
                 all(types.intersection(aliases[name]) for name in aliases) and
                 not types.intersection({"turn.failed", "turn_failed"}))
-    return {"status": "PASS" if complete else "FAIL",
-            "reason": "complete-root-turn" if complete else "event-stream-incomplete-or-ambiguous",
+    proven = complete and ambiguous_invocations == 0
+    return {"status": "PASS" if proven else "FAIL",
+            "reason": ("complete-root-turn" if proven else
+                       "tool-invocation-shape-unrecognized" if complete else
+                       "event-stream-incomplete-or-ambiguous"),
             "thread_id": next(iter(thread_ids)) if len(thread_ids) == 1 else None,
             "event_types": sorted(types),
-            "malformed_line_count": malformed, "tool_call_count": call_count}
+            "malformed_line_count": malformed, "tool_call_count": call_count if not ambiguous_invocations else None,
+            "ambiguous_invocation_count": ambiguous_invocations}
 
 
 def _verify_mcp_startup(path: Path, launch: dict[str, Any], config: dict[str, Any],
