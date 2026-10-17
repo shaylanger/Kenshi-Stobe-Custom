@@ -1,0 +1,7 @@
+52579|inputtext|Shay: Take me to Squin. (talking to: Cind [Hungry Bandit])|
+52580|chat|Shay: Take me to Squin. (talking to: Cind [Hungry Bandit])|
+52581|destination_candidate_counts|{"npc":"Cind [Hungry Bandit]","places":0,"sources":0,"history":0,"regional":0,"known_regions":0,"native_kinds":[]}|
+52582|travel_agreement|travel-v1:2529907200:971557632:{"status":"PROPOSED","kind":"guide","leader":"npc","destination":"Squin","reason":"Shay asked to be taken to Squin; I have heard of the place but never walked it, so I offer a guide-only leg there.","actor":"Cind [Hungry Bandit]","speaker":"Shay","created_gamets":277882,"destination_point":{"x":-62461,"y":324.745,"z":16346.8,"label":"Squin","source":"visited_location"},"plan_hash":"a0f96f92ddb3bc321ba749c8d89a2b9ffd16a38f6e80c5076c37f80399c78383","origin":"player",|
+52583|chat|Cind [Hungry Bandit]: Squin. I've heard the name, never walked it. (talking to: Shay)|spoken
+52584|chat|Cind [Hungry Bandit]: If you're set on going, I'll head that way with you - but understand it's a guess on my part, not a road I know. (talking to: Shay)|spoken
+52585|chat|Cind [Hungry Bandit]: One leg, and we part when we get there or when either of us says so. (talking to: Shay)|pending

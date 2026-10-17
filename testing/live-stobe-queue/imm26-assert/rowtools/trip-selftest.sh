@@ -39,6 +39,10 @@ expect 20-a-fail 20a-fail 20-a $L "RESULT 20-a FAIL" "after_confirm_old_row_ende
 expect 20-a-s4b-second-confirm-pass 20a-s4b-pass 20-a $L "RESULT 20-a PASS" "after_confirm_old_row_ended_or_replaced"
 grep -q 'Take me to the Stumble Inn' "$KAH_ROWS_BASE/imm26-5090-i3/rows/20-a/s4b/utterance.txt" 2>/dev/null && chk 20-a-s4b-said-second-confirm ok || chk 20-a-s4b-said-second-confirm bad
 scen 20a-pass; run 20-a $L >/dev/null; [ -d "$KAH_ROWS_BASE/imm26-5090-i3/rows/20-a/s4b" ] && chk 20-a-no-s4b-when-s4-ended bad || chk 20-a-no-s4b-when-s4-ended ok
+# imm26-fix19e20a: REAL evidence of 20-a (fix19e20a_fixtures): the 5090-i5 run whose Squin MOVE order died 0.86 s after issue (NATIVE_TRAVEL_ORDER_ENDED in s2) is invalid = SETUP-FAIL;
+# the 4080 control (healthy trip) must stay PASS
+r=$("$PY" "$ST_HERE/rowcheck.py" 20-a "$ST_HERE/fix19e20a_fixtures/i5/20-a" 2>/dev/null | tail -1); case "$r" in "RESULT 20-a SETUP-FAIL native leg died before the change turn"*) chk 20-a-native-leg-died-5090-i5-setup-fail ok;; *) chk 20-a-native-leg-died-5090-i5-setup-fail bad "$r";; esac
+r=$("$PY" "$ST_HERE/rowcheck.py" 20-a "$ST_HERE/fix19e20a_fixtures/4080/20-a" 2>/dev/null | tail -1); case "$r" in "RESULT 20-a PASS"*) chk 20-a-healthy-trip-4080-stays-pass ok;; *) chk 20-a-healthy-trip-4080-stays-pass bad "$r";; esac
 grep -q 'stobe_drawn sheathe Shay' "$KAH_ROW_FAKE_LOG" && chk quiet-sheathes-shay ok || chk quiet-sheathes-shay bad
 expect 20-b-gated-order-replace 20b-gated 20-b $L "RESULT 20-b GATED" "native_order_identity_changed"
 expect 20-b-pass-real-path-failure 20b-pass 20-b $L "RESULT 20-b PASS" "row_FAILED_after_forced_failure=FAILED"

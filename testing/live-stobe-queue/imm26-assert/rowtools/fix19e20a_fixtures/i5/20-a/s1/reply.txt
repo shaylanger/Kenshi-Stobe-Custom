@@ -1,0 +1,11 @@
+[2026-10-16 18:48:32.762] [Stobe] CHAT_SEND_STAGE: begin mode=chat request_mode=talk autochat=0 manual_action=none target_name=Cind [Hungry Bandit] target_handle=2529907200 text_len=17
+[2026-10-16 18:48:32.762] [Stobe] CHAT_SEND_STAGE: resolving_target
+[2026-10-16 18:48:32.763] [Stobe] CHAT_SEND_STAGE: resolved_target ptr=2133900928 has_target=1
+[2026-10-16 18:48:32.763] [Stobe] CHAT_SEND_STAGE: resolved_speaker=Shay dist_to_target=13.6127
+[2026-10-16 18:48:32.764] [Stobe] CHAT_SEND_STAGE: validate_target
+[2026-10-16 18:48:32.765] [Stobe] CHAT_SEND_STAGE: building_people_json
+[2026-10-16 18:48:32.765] [Stobe] CHAT_SEND_STAGE: built_people_json len=72
+[2026-10-16 18:48:32.768] [Stobe] ACTIVITY_PROPOSAL_DIAG actor=2529907200 requester=971557632 gate=navigation world=1 actorOk=1 requesterOk=1 player=1 distinct=1 dead=0 unconscious=0 actorSID=1304-gamedata.base requesterSID=2061-gamedata.base movement=1 avatar=1 navmesh=1 onmesh=0 sphereCharacter=0 sphereBuilding=0 sphereCap=96 objects=0 sightDrops=0 typeDrops=0 mineTypeDrops=0 pathDrops=0 registr
+[2026-10-16 18:48:32.775] [Stobe] ACTION_EXEC: SAY [Shay]: Take me to Squin. (PC)
+[2026-10-16 18:48:37.997] [Stobe] ACTION_EXEC: SAY [Cind [Hungry Bandit]]: Squin. I've heard the name, never walked it. (NPC)
+[2026-10-16 18:48:43.580] [Stobe] ACTION_EXEC: SAY [Cind [Hungry Bandit]]: If you're set on going, I'll head that way with you - but understand it's a guess on my part, not a road I know. (NPC)

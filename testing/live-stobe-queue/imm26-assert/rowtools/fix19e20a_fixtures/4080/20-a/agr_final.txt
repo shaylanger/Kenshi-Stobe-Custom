@@ -1,0 +1,8 @@
+56161|ENDED|running|native_owned_order_assigned|false|trip-c48b78241ab7da06cb26938f99c1b5ce|Squin
+56160|ENDED|running|native_owned_order_assigned|false|trip-c48b78241ab7da06cb26938f99c1b5ce|Squin
+56150|ACCEPTED|running|native_owned_order_assigned|false|trip-c48b78241ab7da06cb26938f99c1b5ce|Squin
+56149|ACCEPTED|requested|||trip-c48b78241ab7da06cb26938f99c1b5ce|Squin
+56141|ACCEPTED|requested|||trip-c48b78241ab7da06cb26938f99c1b5ce|Squin
+56139|ACCEPTED|requested|||trip-c48b78241ab7da06cb26938f99c1b5ce|Squin
+56137|ACCEPTED|accepted|||trip-c48b78241ab7da06cb26938f99c1b5ce|Squin
+56130|PROPOSED|proposed|||trip-c48b78241ab7da06cb26938f99c1b5ce|Squin

@@ -1,0 +1,2 @@
+{"npc":"Cind [Hungry Bandit]","counterpart":"Shay","before":[],"after":{"Shay":{"aff":60,"note":"","tier":"Fond","type":"platonic","updated_at":1792197313}}}
+

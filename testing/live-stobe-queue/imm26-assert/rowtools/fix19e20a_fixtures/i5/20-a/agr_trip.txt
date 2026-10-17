@@ -1,0 +1,4 @@
+52598|ACCEPTED|requested|||trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin
+52596|ACCEPTED|requested|||trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin
+52594|ACCEPTED|accepted|||trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin
+52582|PROPOSED|proposed|||trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin

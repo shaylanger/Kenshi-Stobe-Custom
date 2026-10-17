@@ -1,0 +1,4 @@
+Shay drawn=0 weapon=none hold=0
+Shay drawn=0 weapon=none hold=0
+Shay protect=on protected=1
+Cind [Hungry Bandit] protect=on protected=2

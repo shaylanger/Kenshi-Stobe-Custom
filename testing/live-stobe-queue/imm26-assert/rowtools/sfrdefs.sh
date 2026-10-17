@@ -225,6 +225,8 @@ rd_20a() {   # ACCEPTED trip; change request must not move the row; two confirm 
   sr_calm_ev pre; tr_trip_setup || return $?
   # guard: the change request only means something on an ACCEPTED Squin trip; without one s3/s4 create an unrelated Stumble Inn trip
   tr_has s2 ACCEPTED || tr_has s2b ACCEPTED || [ -n "${KAH_ROW_FAKE:-}" ] || { RL_REASON="no ACCEPTED $TR_DEST trip before the change request (s2/s2b ev_full has no ACCEPTED travel_agreement row; see s1/s1b/s2 reply.txt); needs: recipe"; return 3; }
+  # imm26-fix19e20a: the native leg died before the change turn (Squin MOVE order removed by the engine right after issue) = no active trip = SETUP-FAIL, rerun with --allow-retry
+  ! grep -qE 'NATIVE_TRAVEL_ORDER_ENDED|NATIVE_TRAVEL: .*phase=failed' "$EV/s2/reply.txt" "$EV/s2b/reply.txt" 2>/dev/null     || { RL_REASON="the native travel leg died before the change turn (NATIVE_TRAVEL_ORDER_ENDED / phase=failed in s2|s2b reply.txt): no active trip at s3; rerun with --allow-retry"; return 3; }
   echo "$TR_ALT" > "$EV/alt.txt"
   local core="${TR_ALT#the }"
   sr_turn_ready s3 || return $?; sr_calm_ev s3; rl_say 3 "Actually, go to $TR_ALT instead." || return $?

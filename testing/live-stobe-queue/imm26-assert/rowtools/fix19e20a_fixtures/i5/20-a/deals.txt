@@ -1,0 +1,4 @@
+deal-268c21ef1fb1825d78986d15|Steady|assist|EXPIRED|[{"by": "player", "kind": "PROTECT", "target": "npc"}, {"by": "npc", "to": "player", "kind": "GIVE_CATS", "when": "after_player", "purse": "exact", "amount": 30
+deal-c56148c02647cd01fa9f2a30|Jalken [Slaver Boss Emica]|assist|EXPIRED|[{"by": "player", "kind": "PROTECT", "target": "npc"}, {"by": "npc", "to": "player", "kind": "GIVE_CATS", "when": "after_player", "purse": "exact", "amount": 30
+deal-e131e889634f117af0c8f520|Lenna [Slaver Boss Shino]|assist|EXPIRED|[{"by": "player", "kind": "PROTECT", "target": "npc"}, {"by": "npc", "to": "player", "kind": "GIVE_CATS", "when": "after_player", "purse": "exact", "amount": 30
+deal-6839114cb227557198b8aa96|Liplom|surrender|EXPIRED|[{"by": "npc", "kind": "STOP_ATTACK", "target": "player"}, {"by": "npc", "to": "player", "kind": "GIVE_CATS", "purse": "exact", "amount": 300}, {"by": "player",

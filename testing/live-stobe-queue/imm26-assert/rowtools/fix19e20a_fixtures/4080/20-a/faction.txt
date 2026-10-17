@@ -1,0 +1,1 @@
+db_faction_before=Traders Guild [1088-gamedata.base]

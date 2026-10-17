@@ -1,0 +1,7 @@
+56126|inputtext|Shay: Take me to Squin. (talking to: Cind [Hungry Bandit])|
+56127|chat|Shay: Take me to Squin. (talking to: Cind [Hungry Bandit])|
+56128|destination_candidate_counts|{"npc":"Cind [Hungry Bandit]","places":1,"sources":1,"history":3,"regional":0,"known_regions":1,"native_kinds":["landmark"]}|
+56130|travel_agreement|travel-v1:2529907200:971557632:{"status":"PROPOSED","kind":"guide","leader":"npc","destination":"Squin","reason":"Shay asked to be taken to Squin; I have no other business and will walk the route with him, though I've only heard of the place.","actor":"Cind [Hungry Bandit]","speaker":"Shay","created_gamets":276790,"destination_point":{"x":-62461,"y":324.745,"z":16346.8,"label":"Squin","source":"visited_location"},"plan_hash":"a0f96f92ddb3bc321ba749c8d89a2b9ffd16a38f6e80c5076c37f80399c78383","ori|
+56131|chat|Cind [Hungry Bandit]: Squin, huh. I've only heard of it - never laid eyes on the place myself, so I'd be guessing at the road same as you. (talking to: Shay)|spoken
+56132|chat|Cind [Hungry Bandit]: I've got no pressing business here, though, so if you want the company, I'll walk it with you. (talking to: Shay)|pending
+56133|chat|Cind [Hungry Bandit]: Just know I'm no guide; we'd be finding it as we go. (talking to: Shay)|pending

@@ -1,0 +1,4 @@
+name=Cind [Hungry Bandit] serial=2529907200 type=npc len=15123 native_ai=1 referral_people=1 travel_destinations=1
+name=Cind [Hungry Bandit] serial=2529907200 type=npc len=15015 native_ai=1 referral_people=1 travel_destinations=1
+name=Cind [Hungry Bandit] serial=2529907200 type=npc len=25905 native_ai=1 referral_people=1 travel_destinations=1
+name=Cind [Hungry Bandit] serial=2529907200 type=npc len=25910 native_ai=1 referral_people=1 travel_destinations=1

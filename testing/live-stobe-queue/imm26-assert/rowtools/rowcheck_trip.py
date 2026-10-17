@@ -205,6 +205,11 @@ def register(rc, CHECKS):
             return
         if not need(v, ev, 's3/ev_full.txt', 's3/reply.txt', 's4/ev_full.txt'):
             return
+        # imm26-fix19e20a: the native leg died before the change turn (NATIVE_TRAVEL_ORDER_ENDED / phase=failed in the trip-setup turns, 5090-i5 20-a:
+        # the Squin MOVE order was removed 0.86 s after issue) -> there was never an active trip at s3, the row is invalid (SETUP-FAIL, not FAIL)
+        dead = [s for s in ('s2', 's2b') if re.search(r'NATIVE_TRAVEL_ORDER_ENDED|NATIVE_TRAVEL: .*phase=failed', rd(ev, s, 'reply.txt') or '')]
+        if dead:
+            return v.setup_fail(f"native leg died before the change turn ({'/'.join(dead)}/reply.txt has NATIVE_TRAVEL_ORDER_ENDED or phase=failed): no active trip at s3, rerun with --allow-retry")
         o = orig(ev)
         alt = (rd(ev, 'alt.txt') or '').strip()
         core = re.sub(r'^the\s+', '', alt, flags=re.I).lower()

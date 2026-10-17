@@ -1,0 +1,8 @@
+Shay protect=on protected=2
+Cind [Hungry Bandit] protect=on protected=2
+teleported: Shay #971557632/1 [Nameless] pos=-47997.9,1694.8,2958.3 dist=16.4 moved=1 off_target=0.0 method=teleport
+s3 try=1 dist=8.4
+Shay protect=on protected=2
+Cind [Hungry Bandit] protect=on protected=2
+teleported: Shay #971557632/1 [Nameless] pos=-47995.0,1696.7,2956.7 dist=8.4 moved=1 off_target=0.0 method=teleport
+s4 try=1 dist=8.0

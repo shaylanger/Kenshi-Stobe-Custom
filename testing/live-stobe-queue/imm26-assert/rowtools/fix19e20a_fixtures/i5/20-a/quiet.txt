@@ -1,0 +1,5 @@
+teleported: Shay #971557632/1 [Nameless] pos=-48000.0,1500.0,2960.0 dist=5569.1 moved=1 off_target=0.0 method=teleport
+teleported: Cind [Hungry Bandit] #2529907200/2 [Traders Guild] pos=-48000.0,1694.8,2960.0 dist=0.0 moved=1 off_target=0.0 method=teleport
+teleported: Malzin #2740478464/2 [Nameless] pos=-48005.1,1692.4,2966.1 dist=0.0 moved=1 off_target=0.0 method=teleport
+Shay drawn=0 weapon=none hold=0
+Cind [Hungry Bandit] #2529907200/2 [Traders Guild] pos=-48000.0,1693.9,2960.0 dist=13.6

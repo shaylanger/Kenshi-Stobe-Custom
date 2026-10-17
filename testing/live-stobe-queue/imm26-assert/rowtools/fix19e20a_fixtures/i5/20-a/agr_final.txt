@@ -1,0 +1,8 @@
+52621|ACCEPTED|requested|||trip-d7bc4ec50b4417709ac8f21fed68c7a8|Stumble Inn
+52619|ACCEPTED|requested|||trip-d7bc4ec50b4417709ac8f21fed68c7a8|Stumble Inn
+52617|ACCEPTED|accepted|||trip-d7bc4ec50b4417709ac8f21fed68c7a8|Stumble Inn
+52611|PROPOSED|proposed|||trip-d7bc4ec50b4417709ac8f21fed68c7a8|Stumble Inn
+52608|FAILED|failed|native_order_ended_before_goal|true|trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin
+52607|ACCEPTED|requested|||trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin
+52598|ACCEPTED|requested|||trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin
+52596|ACCEPTED|requested|||trip-99c76297d9d8c8f9fc6b1c6a63cf7c83|Squin
