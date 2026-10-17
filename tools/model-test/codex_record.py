@@ -15,7 +15,9 @@ from typing import Any, Iterable
 CORE_COLUMNS = ["run", "model", "effort", "prompt", "start_local", "end_local", "wall_s",
                 "tool_uses", "input", "output", "cache_read", "cache_create", "token_usd",
                 "q5h_before", "q5h_after", "qweek_before", "qweek_after", "report_bytes",
-                "headers", "citations", "diff_markers", "violation_flags", "agent"]
+                "headers", "citations", "diff_markers", "violation_flags", "agent",
+                "cost_status", "cost_basis", "requested_tier", "served_tier", "invoice_status",
+                "price_table_date", "currency", "cost_reason"]
 TOKENS = ("input_tokens", "cached_input_tokens", "cache_write_input_tokens",
           "output_tokens", "reasoning_output_tokens", "total_tokens")
 MUTATING_NAMES = {"write", "edit", "notebookedit", "apply_patch", "create_file", "delete_file",
@@ -395,6 +397,52 @@ def price_usage(usage: dict | None, model: str | None, tier: str | None,
     return _price_counts(usage, prices, tier=tier, date=table.get("date"))
 
 
+def calculated_cost(usage: dict | None, model: str | None, requested_tier: str | None,
+                    served_tier: str | None, table: dict | None) -> dict:
+    """Return a labeled dated-rate estimate suitable for exported cost columns.
+
+    The estimate is not an invoice amount. When the served tier is unknown, use
+    the explicitly requested tier and retain that assumption in the result.
+    """
+    requested = _normalize_tier(requested_tier)
+    served = _normalize_tier(served_tier)
+    used_tier = served or requested
+    priced = price_usage(usage, model, used_tier, table) if used_tier else {
+        "usd": None, "status": "unavailable", "reasons": ["requested service tier missing"]}
+    is_observed = bool(served)
+    if priced.get("status") == "priced":
+        basis = ("recorded per-request token counts × dated reference rates at observed served tier"
+                 if is_observed else
+                 "recorded per-request token counts × dated reference rates at requested tier; served tier unknown")
+        status = ("CALCULATED_OBSERVED_TIER_REFERENCE" if is_observed else
+                  "CALCULATED_REQUESTED_TIER_REFERENCE")
+        reason = ""
+        value: str | float = priced["usd"]
+    else:
+        basis = "unavailable: required usage, requested tier, or dated rate evidence is missing"
+        status = "UNAVAILABLE"
+        reason = "; ".join(priced.get("reasons", [])) or "price calculation unavailable"
+        value = "N/A"
+    return {
+        "token_usd": value,
+        "cost_status": status,
+        "cost_basis": basis,
+        "requested_tier": requested or "UNKNOWN",
+        "served_tier": served or "UNKNOWN",
+        "invoice_status": "UNKNOWN",
+        "price_table_date": table.get("date", "UNKNOWN") if isinstance(table, dict) else "UNKNOWN",
+        "currency": "USD",
+        "cost_reason": reason,
+        "status": status,
+        "usd": priced.get("usd") if priced.get("status") == "priced" else None,
+        "basis": basis,
+        "requested_service_tier": requested or "UNKNOWN",
+        "served_service_tier": served or "UNKNOWN",
+        "price_table_source": (table.get("source", {}).get("title")
+                               if isinstance(table, dict) and isinstance(table.get("source"), dict) else None),
+    }
+
+
 def _normalize_tier(value: str | None) -> str | None:
     if value in ("fast", "priority"): return "fast"
     if value in ("standard", "default"): return "standard"
@@ -578,7 +626,25 @@ def append_tsv(path: str | Path, row: dict) -> None:
     """Append one brief-compatible row; creates the exact core header when empty."""
     p = Path(path)
     exists = p.exists() and p.stat().st_size > 0
+    if exists:
+        with p.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            fields = reader.fieldnames or []
+            rows = list(reader)
+        upgraded = fields + [key for key in CORE_COLUMNS if key not in fields]
+        if upgraded != fields:
+            temp = p.with_name(p.name + ".schema.tmp")
+            with temp.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=upgraded, delimiter="\t", extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(rows)
+            temp.replace(p)
+            fields = upgraded
+        else:
+            fields = fields or CORE_COLUMNS
+    else:
+        fields = CORE_COLUMNS
     with p.open("a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CORE_COLUMNS, delimiter="\t", extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=fields, delimiter="\t", extrasaction="ignore")
         if not exists: writer.writeheader()
-        writer.writerow({k: row.get(k, "") for k in CORE_COLUMNS})
+        writer.writerow({k: row.get(k, "") for k in fields})

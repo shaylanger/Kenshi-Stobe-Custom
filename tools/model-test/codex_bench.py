@@ -317,20 +317,21 @@ def _write_json(path: Path, value: Any) -> None:
 
 ATTEMPT_COLUMNS = ["run", "attempt", "status", "model", "effort", "service_tier", "start_local", "end_local",
                    "wall_s", "tool_uses", "input", "output", "cache_read", "cache_create", "token_usd",
-                   "report_bytes", "violation_flags", "thread_id", "rollout_path", "events_path", "stderr_path"]
+                   "report_bytes", "violation_flags", "thread_id", "rollout_path", "events_path", "stderr_path",
+                   "cost_status", "cost_basis", "requested_tier", "served_tier", "invoice_status",
+                   "price_table_date", "currency", "cost_reason"]
 
 
 def _append_attempt_row(root: Path, rid: str, receipt: dict[str, Any], result: dict[str, Any] | None) -> None:
     path = root / "attempts.tsv"
     attempt_id = int(receipt.get("attempt", 1))
-    if path.is_file():
-        with path.open("r", encoding="utf-8", newline="") as stream:
-            if any(row.get("run") == rid and row.get("attempt") == str(attempt_id)
-                   for row in csv.DictReader(stream, delimiter="\t")):
-                return
     usage = (result or {}).get("usage") or {}
-    pricing = (result or {}).get("pricing") or {}
     audit = (result or {}).get("audit") or {}
+    sys.path.insert(0, str(HERE))
+    import codex_record
+    calculated = codex_record.calculated_cost(
+        usage, receipt.get("model"), receipt.get("service_tier"),
+        (result or {}).get("observed_service_tier"), _json(HERE / "codex_prices.json"))
     row = {
         "run": rid, "attempt": attempt_id, "status": receipt.get("status", "UNKNOWN"),
         "model": receipt.get("model", ""), "effort": receipt.get("effort", ""),
@@ -339,20 +340,35 @@ def _append_attempt_row(root: Path, rid: str, receipt: dict[str, Any], result: d
         "wall_s": (result or {}).get("wall_s", receipt.get("elapsed_s", "")),
         "tool_uses": (result or {}).get("tool_uses", ""), "input": usage.get("input_tokens", ""),
         "output": usage.get("output_tokens", ""), "cache_read": usage.get("cached_input_tokens", ""),
-        "cache_create": usage.get("cache_write_input_tokens", ""), "token_usd": pricing.get("usd", ""),
+        "cache_create": usage.get("cache_write_input_tokens", ""), "token_usd": calculated["token_usd"],
         "report_bytes": len(((result or {}).get("report") or "").encode()),
         "violation_flags": ",".join(audit.get("flags", [])) or audit.get("status", "UNKNOWN"),
         "thread_id": receipt.get("thread_id", ""), "rollout_path": receipt.get("rollout_path", ""),
         "events_path": receipt.get("events_path", ""), "stderr_path": receipt.get("stderr_path", ""),
+        **{key: calculated[key] for key in ("token_usd", "cost_status", "cost_basis", "requested_tier",
+                                            "served_tier", "invoice_status", "price_table_date",
+                                            "currency", "cost_reason")},
     }
     with LEDGER_MUTEX:
         exists = path.exists() and path.stat().st_size > 0
         if exists:
             with path.open("r", encoding="utf-8", newline="") as f:
-                rows = list(csv.DictReader(f, delimiter="\t"))
+                reader = csv.DictReader(f, delimiter="\t")
+                fields = reader.fieldnames or ATTEMPT_COLUMNS
+                rows = list(reader)
             if any(r.get("run") == rid and r.get("attempt") == str(attempt_id) for r in rows): return
+            upgraded = fields + [key for key in ATTEMPT_COLUMNS if key not in fields]
+            if upgraded != fields:
+                temp = path.with_name(path.name + f".{os.getpid()}.schema.tmp")
+                with temp.open("w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=upgraded, delimiter="\t", extrasaction="ignore")
+                    writer.writeheader(); writer.writerows(rows)
+                os.replace(temp, path)
+                fields = upgraded
+        else:
+            fields = ATTEMPT_COLUMNS
         with path.open("a", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=ATTEMPT_COLUMNS, delimiter="\t", extrasaction="ignore")
+            writer = csv.DictWriter(f, fieldnames=fields, delimiter="\t", extrasaction="ignore")
             if not exists: writer.writeheader()
             writer.writerow(row)
 
@@ -1867,8 +1883,14 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
     report = (result or {}).get("report")
     report_path = run_dir / "report.md"
     usage = (result or {}).get("usage") or {}
-    pricing = (result or {}).get("pricing") or {}
     audit = (result or {}).get("audit") or {"status": "UNKNOWN", "flags": ["no-final-report" if rollout.exists() else "no-rollout"]}
+    if codex_record is None:
+        sys.path.insert(0, str(HERE))
+        import codex_record
+    prices = prices if result is not None else _json(HERE / "codex_prices.json")
+    calculated = codex_record.calculated_cost(
+        usage, receipt.get("model"), receipt.get("service_tier"),
+        (result or {}).get("observed_service_tier"), prices)
     if not report:
         missing_flag = "no-final-report" if rollout.exists() else "no-rollout"
         audit["flags"] = sorted(set(audit.get("flags", []) + [missing_flag]))
@@ -1898,7 +1920,7 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         "end_local": (result or {}).get("end_local", ""), "wall_s": (result or {}).get("wall_s", receipt.get("elapsed_s", "")),
         "tool_uses": (result or {}).get("tool_uses", ""), "input": usage.get("input_tokens", ""),
         "output": usage.get("output_tokens", ""), "cache_read": usage.get("cached_input_tokens", ""),
-        "cache_create": usage.get("cache_write_input_tokens", ""), "token_usd": pricing.get("usd", ""),
+        "cache_create": usage.get("cache_write_input_tokens", ""), "token_usd": calculated["token_usd"],
         "q5h_before": "n/a", "q5h_after": "n/a", "qweek_before": "n/a", "qweek_after": "n/a",
         "report_bytes": len(report.encode("utf-8")) if report else 0,
         "headers": _required_headers(report) if report else 0,
@@ -1906,6 +1928,7 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
         "diff_markers": sum(1 for line in report.splitlines() if line.startswith(("+++", "---", "@@"))) if report else 0,
         "violation_flags": ",".join(audit.get("flags", [])) or audit.get("status", "UNKNOWN"),
         "agent": f"{rid}/attempt-{receipt.get('attempt', 1):02d}",
+        **{key: calculated[key] for key in codex_record.CORE_COLUMNS if key in calculated},
     }
     _append_attempt_row(root, rid, receipt, result or {"audit": audit, "wall_s": receipt.get("elapsed_s", "")})
     if canonical_pass and not recheck and not canonical_rows:
@@ -1933,8 +1956,18 @@ def record(root: Path, rid: str, recheck: bool = False) -> int:
     if canonical_pass: receipt["status"] = "RECORDED" if not recheck else "RECHECKED"
     elif report and result:
         receipt["status"] = "FAILED_SETUP" if setup_health.get("status") == "FAIL" else "COMPLETE_UNAUDITED"
-    _write_json(_record_path(run_dir), receipt)
+    root_receipt = dict(receipt)
+    root_receipt["calculated_cost"] = calculated
+    _write_json(_record_path(run_dir), root_receipt)
     _write_json(attempt_dirs[-1] / "launch.json", receipt)
+    _write_json(run_dir / "calculated-cost.json", {
+        "schema_version": 1, "run": rid, "model": receipt.get("model"),
+        "requested_tier": calculated["requested_tier"], "served_tier": calculated["served_tier"],
+        "invoice_status": calculated["invoice_status"], "status": calculated["status"],
+        "basis": calculated["basis"], "currency": calculated["currency"],
+        "price_table_date": calculated["price_table_date"], "price_table_source": calculated["price_table_source"],
+        "token_usd": calculated["usd"], "reason": calculated["cost_reason"],
+    })
     if not report:
         print(f"{receipt.get('status', 'UNKNOWN')} {rid} attempt={receipt.get('attempt', 1)} metadata-only")
         return 1
