@@ -55,16 +55,6 @@ Rules:
 - added: 2026-10-16 13:05
 - log: 2026-10-16 13:05 review 'coordinator-15-tail': added
 
-### PI-47 | Open
-- idea: Lane operators should auto-spawn their own successor ticket: when an operator writes STOPPED-CONTEXT, the lane sits idle until the coordinator turn notices; add an 'idle-lane' fast path that prints the exact lane-brief + Agent spawn text for the new coordinator in the wake event.
-- evidence: 4080-i4 and 4080-i3 lanes sat idle 5-10 min at 12:30-12:40 until I messaged the new coordinator; 5090-i3 ended with no rows left.
-- saving: ~5-10 lane-minutes per operator turnover (about 8 turnovers per session)
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 13:05
-- log: 2026-10-16 13:05 review 'coordinator-15-tail': added
-
 ### PI-48 | Open
 - idea: Lane operators must never run bare `stobe-auto` (it talks to the LIVE install): put one line in lane-brief and the lane-operator block saying 'use go-row / lane-setup, or first export RIG, KAH_INSTANCE and source rig-env.sh', and make bare stobe-auto refuse (exit 2) when a lane-lock is held and KAH_INSTANCE is unset.
 - evidence: 2026-10-16 12:55-13:05: Haiku pilot hk1 ran bare `stobe-auto wait-world` twice (120 s and 300 s), got 'no answer (loading?)', escalated three times and stopped; the lane sat idle ~15 min, and it took 2 peer messages + 2 tail resumes (about 6 model turns) to find the cause.
@@ -84,16 +74,6 @@ Rules:
 - weakens: no
 - added: 2026-10-16 13:35
 - log: 2026-10-16 13:35 review 'coordinator-16-tail-closing': added
-
-### PI-50 | Open
-- idea: Deliberately parked lanes (operator finished, nothing claimable until fixer candidates land) should auto-enter lanes.held when the operator is abandoned with a 'parked' reason, and leave it when a new operator status appears; today the digest waker still wakes on LANE IDLE/NO-OPERATOR every ~6 min per parked lane.
-- evidence: 13:30-13:50: LANE IDLE 5090-i3 (twice), LANE NO-OPERATOR 4080-i3 (twice), LANE IDLE 4080-i4: five coordinator turns of about 270k tokens each, plus three manual alert-ack calls, until I hand-edited lanes.held.
-- saving: about 5 turns x 270k tokens per hour while lanes are parked
-- risk: a lane parked by mistake hides a real stall: the hold must carry the abandon reason and expire after 2 h
-- hooks: no
-- weakens: no
-- added: 2026-10-16 13:56
-- log: 2026-10-16 13:56 review 'coordinator-17': added
 
 ### PI-51 | confirmed
 - idea: Replace the 'wake, read output file, restart waker' loop by one persistent waker that appends actionable events to a file watched by the Monitor tool (or the background task notification), so the coordinator does not spend 2 tool calls per wake restarting it and never creates duplicate wakers.
@@ -118,26 +98,6 @@ Rules:
 - added: 2026-10-16 13:56
 - log: 2026-10-16 13:56 review 'coordinator-17': added
 
-### PI-53 | Open
-- idea: Guard path arguments against Git Bash backslash stripping: lane-brief.ps1 (and other -Out/-Path scripts) should reject or auto-fix an -Out value without a drive-letter colon+separator, and print the resolved absolute path it wrote.
-- evidence: 2026-10-16 14:00-14:35: three lane briefs (4080-i4op16, 5090-i3op23, 4080-i3op24) were written to C:\KenshiModding\KenshiTestRunsagents...brief.md because bash dropped the backslashes in -Out C:\\...; the operators started without their briefs and the same stray file name was already untracked in git status for op14.
-- saving: about 3 operators x 1 missing-brief start, plus a hunt through 3 tool calls
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 14:57
-- log: 2026-10-16 14:57 review 'coordinator-18': added
-
-### PI-55 | Open
-- idea: Row runners must refuse to start under WSL bash (check for the /mnt/c mount or uname) and the lane operators' briefs must say 'row scripts run in Git Bash, only wsl.exe tools get MSYS_NO_PATHCONV', because a row script run under WSL silently creates a stray /c/KenshiTestRuns tree inside WSL that then shadows the real path for tools that probe /c first.
-- evidence: 2026-10-16 15:26: stray empty /c/KenshiTestRuns/imm26-4080/rows appeared in WSL during 4080-i3op24's 22-b RELOAD-FAIL; it made pilot-audit.py pick /c/... over /mnt/c/... (pilot rows=0) until I passed --pilot-dir.
-- saving: about 20 minutes of misdiagnosis per occurrence, plus a false RELOAD-FAIL
-- risk: low
-- hooks: no
-- weakens: no
-- added: 2026-10-16 14:57
-- log: 2026-10-16 14:57 review 'coordinator-18': added
-
 ### PI-56 | Open
 - idea: tail-autorelay should relay a RESUMED agent's second DONE (agent re-finishes after a SendMessage) as a new result, keyed on the status-file mtime/agentId run counter, instead of treating the name as already relayed.
 - evidence: 2026-10-16 15:08: huntA2 was resumed by SendMessage for the expiresAt 43200 order and finished again, but autorelay.log showed no second relay for imm26-huntA2 (state already marked it relayed at 14:56), so the tail had to send the result to coordinator 19 by hand.
@@ -147,19 +107,6 @@ Rules:
 - weakens: no
 - added: 2026-10-16 15:40
 - log: 2026-10-16 15:40 review 'coordinator-18-tail': added
-
-### PI-57 | confirmed
-- idea: A subagent that waits on its own background job (selftest) must not re-send its full final report each time it wakes: dedupe hand-backs by content hash in the harness/tail relay, or have the agent hand back once and stay silent until its job finishes.
-- evidence: 15:09-15:25: imm26-regionR4 sent the same 'WP-R4 DONE' report 7 times (each waking this coordinator, 6 full-context turns of about 5-8k tokens) while its two slow selftests ran.
-- saving: about 40k tokens and 6 turns per such agent
-- risk: none for monitoring: only identical repeated reports are dropped
-- hooks: no
-- weakens: no
-- added: 2026-10-16 15:42
-- moment: tail turns after the 4080-i3op25 and 5090-i3op25 hand-backs
-- last_review: efc58758-86f8-4786-a138-4e53f075016d-tail
-- log: 2026-10-16 15:42 review 'coordinator-19': added
-- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': Open -> confirmed (applies: 2026-10-16 tail period: each of the 5 owned agents (i5-op10, fix26f2, 4080-i3op25, 5090-i3op25, replayexec) woke the tail twice, once by the hand-back message and once by the task-notification, eac...)
 
 ### PI-58 | open
 - idea: Let tail-relay.ps1 accept the hand-back text and auto-send it to coordinator.current in one call (and mark the agent relayed in the ledger), so the tail does not need a model turn to re-summarise and SendMessage each result.
@@ -180,6 +127,16 @@ Rules:
 - weakens: no
 - added: 2026-10-16 17:12
 - log: 2026-10-16 17:12 review '05c6207d-b5b1-49c2-904b-6c32d15536f1-tail': added
+
+### PI-60 | open
+- idea: Row cards (row-card.sh, e.g. 26-f) still print RUN lines with KAH_PF_ISOLATION=0; the classifier denies that bypass, so every operator that copies the card wastes a step or stops (op27 20-d and op18 26-f both did). Print the safe form: run from the lane's CONFIGURED save (--save <lane save>) and state that rw-* start saves fail the npc-world isolation check.
+- evidence: 2026-10-16 17:15 (op27 20-d, blocked for a false 'isolation' reason) and 17:50 (op18 26-f, preflight fail on stale game/marker); 20-d and 22-b PASSED at 17:55/18:00 as soon as they ran from the configured save with no bypass.
+- saving: every operator that copies a row card with the bypass loses 1 spawn (about 60k tokens) before the safe form is tried
+- risk: none (no timeout/stall/idle/dead-agent catch is weakened; text/format change only)
+- hooks: no
+- weakens: no
+- added: 2026-10-16 18:02
+- log: 2026-10-16 18:02 review 'coordinator-21': added
 
 ## In progress
 
@@ -749,3 +706,75 @@ Rules:
 - last_review: coordinator-14
 - log: 2026-10-16 02:55 review 'coordinator-12': added
 - log: 2026-10-16 10:49 review 'coordinator-14': open -> rejected x1 (does not apply: not seen this session)
+
+### PI-55 | rejected x2
+- idea: Row runners must refuse to start under WSL bash (check for the /mnt/c mount or uname) and the lane operators' briefs must say 'row scripts run in Git Bash, only wsl.exe tools get MSYS_NO_PATHCONV', because a row script run under WSL silently creates a stray /c/KenshiTestRuns tree inside WSL that then shadows the real path for tools that probe /c first.
+- evidence: 2026-10-16 15:26: stray empty /c/KenshiTestRuns/imm26-4080/rows appeared in WSL during 4080-i3op24's 22-b RELOAD-FAIL; it made pilot-audit.py pick /c/... over /mnt/c/... (pilot rows=0) until I passed --pilot-dir.
+- saving: about 20 minutes of misdiagnosis per occurrence, plus a false RELOAD-FAIL
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 14:57
+- last_review: coordinator-21
+- log: 2026-10-16 14:57 review 'coordinator-18': added
+- log: 2026-10-16 18:01 review 'coordinator-21': Open -> rejected x1 (does not apply: no stray WSL rows dir this session)
+
+### PI-47 | done
+- idea: Lane operators should auto-spawn their own successor ticket: when an operator writes STOPPED-CONTEXT, the lane sits idle until the coordinator turn notices; add an 'idle-lane' fast path that prints the exact lane-brief + Agent spawn text for the new coordinator in the wake event.
+- evidence: 4080-i4 and 4080-i3 lanes sat idle 5-10 min at 12:30-12:40 until I messaged the new coordinator; 5090-i3 ended with no rows left.
+- saving: ~5-10 lane-minutes per operator turnover (about 8 turnovers per session)
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 13:05
+- moment: 17:50: after op18 26-f SETUP-FAIL I generated brief op19 and spawned it by hand, a 3-call routine.
+- last_review: coordinator-21
+- measured: built 5af59550 (swept into PI-53 commit): LANE NO-OPERATOR line now carries lane-brief command + Agent spawn prompt (selftest lane-successor-selftest 13/13); measured saving pending next turnovers (was 3 calls / 5-10 lane-min)
+- retired: 2026-10-16 built
+- log: 2026-10-16 13:05 review 'coordinator-15-tail': added
+- log: 2026-10-16 18:02 review 'coordinator-21': Open -> confirmed (applies: 2026-10-16 16:55-17:55: 8 lane briefs generated and 8 successor operators spawned by hand (5090-i3 op28-op31, 5090-i5 op15-op17, 4080-i3 op27-op29, 4080-i4 op18-op19), each after reading a hand-back.)
+
+### PI-50 | done
+- idea: Deliberately parked lanes (operator finished, nothing claimable until fixer candidates land) should auto-enter lanes.held when the operator is abandoned with a 'parked' reason, and leave it when a new operator status appears; today the digest waker still wakes on LANE IDLE/NO-OPERATOR every ~6 min per parked lane.
+- evidence: 13:30-13:50: LANE IDLE 5090-i3 (twice), LANE NO-OPERATOR 4080-i3 (twice), LANE IDLE 4080-i4: five coordinator turns of about 270k tokens each, plus three manual alert-ack calls, until I hand-edited lanes.held.
+- saving: about 5 turns x 270k tokens per hour while lanes are parked
+- risk: a lane parked by mistake hides a real stall: the hold must carry the abandon reason and expire after 2 h
+- hooks: no
+- weakens: no
+- added: 2026-10-16 13:56
+- moment: 17:12: lane-idle-5090-i5 re-fired 7 min after I had acked it and woke the waker again.
+- last_review: coordinator-21
+- measured: built 6750c86a: agent-abandon 'parked:' -> lanes.held 2 h hold with reason, released by new RUNNING operator / lane-brief -Name (selftest lane-hold-selftest 16/16); measured saving pending (was ~5 coordinator turns/h while parked)
+- retired: 2026-10-16 built
+- log: 2026-10-16 13:56 review 'coordinator-17': added
+- log: 2026-10-16 18:02 review 'coordinator-21': Open -> confirmed (applies: 2026-10-16 17:00-18:00: seven LANE IDLE / NO-OPERATOR alerts for lanes parked on purpose (5090-i3, 5090-i5, 4080-i3, 4080-i4) each needing a manual alert-ack, and each re-woke the waker.)
+
+### PI-53 | done
+- idea: Guard path arguments against Git Bash backslash stripping: lane-brief.ps1 (and other -Out/-Path scripts) should reject or auto-fix an -Out value without a drive-letter colon+separator, and print the resolved absolute path it wrote.
+- evidence: 2026-10-16 14:00-14:35: three lane briefs (4080-i4op16, 5090-i3op23, 4080-i3op24) were written to C:\KenshiModding\KenshiTestRunsagents...brief.md because bash dropped the backslashes in -Out C:\\...; the operators started without their briefs and the same stray file name was already untracked in git status for op14.
+- saving: about 3 operators x 1 missing-brief start, plus a hunt through 3 tool calls
+- risk: low
+- hooks: no
+- weakens: no
+- added: 2026-10-16 14:57
+- moment: 17:58: the ssh delete loop with unquoted read removed nothing for 3 attempts.
+- last_review: coordinator-21
+- measured: Before: 3 lane briefs written to stray C:\KenshiModding\KenshiTestRunsagents*.brief.md by Git Bash backslash stripping (operators started without brief). After: lane-brief/cost-audit -Out guard (path-guard-lib.ps1) refuses relative/separator-less paths (exit 2), auto-fixes the known stripped form, prints the resolved absolute path; 5 selftest cases PASS (commit 5af59550).
+- retired: 2026-10-16 built
+- log: 2026-10-16 14:57 review 'coordinator-18': added
+- log: 2026-10-16 18:02 review 'coordinator-21': Open -> confirmed (applies: 2026-10-16 17:45-18:05: tail-ack.ps1 and Git Bash ssh/read loops lost backslashes: 'read p' without -r produced C:KenshiTestRunslogs... paths (ssh deletes failed), `ssh` in a while-read loop swallo...)
+
+### PI-57 | done
+- idea: A subagent that waits on its own background job (selftest) must not re-send its full final report each time it wakes: dedupe hand-backs by content hash in the harness/tail relay, or have the agent hand back once and stay silent until its job finishes.
+- evidence: 15:09-15:25: imm26-regionR4 sent the same 'WP-R4 DONE' report 7 times (each waking this coordinator, 6 full-context turns of about 5-8k tokens) while its two slow selftests ran.
+- saving: about 40k tokens and 6 turns per such agent
+- risk: none for monitoring: only identical repeated reports are dropped
+- hooks: no
+- weakens: no
+- added: 2026-10-16 15:42
+- moment: tail turns after the 4080-i3op25 and 5090-i3op25 hand-backs
+- last_review: efc58758-86f8-4786-a138-4e53f075016d-tail
+- measured: Before: one agent re-sent the same DONE report 7 times (~6 turns, ~40k tokens). After: tail-relay.ps1 drops an identical DONE/FAILED/QUESTION/PEER relay (content hash, same agent, 2 h) and logs it; AGENT_PROMPTS says hand back once; tail-relay-dedupe-selftest 10/10 PASS plus tail-ledger 33/33, tail-cheap 28/28, tail-autorelay 24/24 PASS.
+- retired: 2026-10-16 built
+- log: 2026-10-16 15:42 review 'coordinator-19': added
+- log: 2026-10-16 16:14 review 'efc58758-86f8-4786-a138-4e53f075016d-tail': Open -> confirmed (applies: 2026-10-16 tail period: each of the 5 owned agents (i5-op10, fix26f2, 4080-i3op25, 5090-i3op25, replayexec) woke the tail twice, once by the hand-back message and once by the task-notification, eac...)
