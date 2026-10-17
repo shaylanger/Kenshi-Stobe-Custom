@@ -80,9 +80,9 @@ EOT
 rs_peace() {   # rs_peace <tries>: fix26f22b. The sentinel step in rs_scene_clear ran right after the 58 k-unit teleport, before Rebirth had streamed in (4080-i4: "WARN no Holy Sentinel id found"),
   # so the Holy Nation / Rebirth sentinels stayed hostile to the player faction and joined the bandit fight (13:54 events: Druven/Halna/Vesk/Skoval attack Shay, knockout by Druven's Iron Club).
   # Retry until sentinels are findable, make EVERY sentinel faction found friendly (relation sets that NPC's faction <-> player faction), then guard Shay/Cind.
-  local sc="$EV/scene.txt" t ids s n=0
+  local sc="${RS_PEACE_FILE:-$EV/scene.txt}" t ids s n=0
   for t in $(seq 1 "${1:-1}"); do
-    ids=$(rs_sh 'stobe-auto chars 150 "Holy Sentinel|!dead" </dev/null | head -10' | grep -oE '#[0-9]+/[0-9]+' | sort -u | head -6)
+    ids=$(rs_sh "stobe-auto chars ${RW_SENTINEL_RADIUS:-1500} \"Holy Sentinel|!dead\" </dev/null | head -10" | grep -oE '#[0-9]+/[0-9]+' | sort -u | head -6)
     [ -n "$ids" ] && break
     echo "peace-wait $t: no Holy Sentinel listed yet" >> "$sc"; rw_sleep 5
   done
@@ -110,7 +110,7 @@ stobe-auto teleport "$c" $1 $2 $(( $3 + 6 )) </dev/null | head -2
 stobe-auto select Shay </dev/null | head -1
 for w in Shay Malzin; do stobe-auto stobe_drawn sheathe \$w </dev/null | head -1; done
 EOT
-  sent="${RW_SENTINEL:-$(rs_sh 'stobe-auto chars 150 "Holy Sentinel|!dead" </dev/null | head -3' | grep -oE '#[0-9]+/[0-9]+' | head -1)}"
+  sent="${RW_SENTINEL:-$(rs_sh "stobe-auto chars ${RW_SENTINEL_RADIUS:-1500} \"Holy Sentinel|!dead\" </dev/null | head -3" | grep -oE '#[0-9]+/[0-9]+' | head -1)}"
   if [ -n "$sent" ]; then rs_sh "stobe-auto relation $(rl_q "$sent") 100 </dev/null | head -2" >> "$sc"; else echo "WARN no Holy Sentinel id found (set RW_SENTINEL)" >> "$sc"; fi
   lt_h <<EOT > "$EV/spawn.txt" 2>&1
 stobe-auto spawn "Dust Bandit" "Dust Bandits" at -47335 725 -55640 count ${RW_BANDITS:-4} </dev/null | head -3
@@ -186,6 +186,30 @@ EOT
   echo "reseat bandits:$ids" >> "$EV/reseat.txt"
   [ -z "$ids" ] || { rs_place_bandits $ids; rs_sh "stobe-auto face $(rl_q "$c") $(rl_q "$(echo $ids | awk '{print $1}')") </dev/null | head -1; sleep 1" >> "$EV/reseat.txt"; }
   rs_probe26f
+  # fix26fix: re-make every Rebirth sentinel friendly after the load too (4080-i4 23:46: the sentinels attacked the bandits, Shay and Cind within seconds of the load, Cind chased one 600 u away
+  # and was no longer in the camp with the bandits in view when "Are we still on that job?" was sent, so no camp candidate was built); evidence reseat.txt / scene.txt
+  RS_PEACE_FILE="$EV/reseat.txt" rs_peace "${RW_PEACE_TRIES_POST:-3}"
+}
+rs_seat_cind26f() {   # fix26fix: LAST step before the resume say. The accepted ClearGroup order walks Cind to the offered staging point ("higher ground to the northeast", 700-750 u) within seconds of the load
+  # (4080-i4 00:05 run2: reseat put her at the camp, 40 s later actorPos -47419,-54881, distance_to_player 749, town sight radius 250 => she no longer sees the bandits, so no camp-qualified group exists at
+  # the say; the earlier "nearest zone Crab Village" reading of the group_targets_rejected lines was wrong: zone4 Rebirth actorInside=1 membersInside=4/4 pre-save). Put Cind back beside Shay at the camp spot,
+  # face the first bandit, and require >= 3 bandits with sees=1 (up to RW_SEAT_POLLS x 2 s, re-seating on a miss). Evidence reseat.txt ("seat poll n: sees=k of N", last "SEAT-OK|SEAT-WEAK").
+  local at="${RW_REBIRTH:--47333 730 -55600}" c b1 b sees tot ids pl fo ok=0 chars cur=""
+  rl_resolve "$ROW_NPC" >/dev/null 2>&1; c="$RL_NPC_ID"
+  ids=$(sed -E 's/^#([0-9]+)\/[0-9]+$/\1/' "$EV/bandits.txt" 2>/dev/null); tot=$(echo $ids | wc -w)
+  chars=$(rs_sh 'stobe-auto chars 600 "Dust Bandit|!dead" </dev/null | head -3')
+  for b in $ids; do cur="$cur $(echo "$chars" | grep -oE "#$b/[0-9]+" | head -1)"; done
+  b1=$(echo $cur | awk '{print $1}'); set -- $at
+  for pl in $(seq 1 "${RW_SEAT_POLLS:-4}"); do
+    rs_sh "stobe-auto teleport $(rl_q "$c") $1 $2 $(( $3 + 6 )) </dev/null | head -1; stobe-auto face $(rl_q "$c") $(rl_q "$b1") </dev/null | head -1; sleep 1" >> "$EV/reseat.txt"
+    sees=0
+    for b in $cur; do fo=$(rs_sh "stobe-auto senses $(rl_q "$c") $(rl_q "$b") </dev/null | head -2"); echo "$fo" | grep -qE 'sees=1' && sees=$((sees+1)); done
+    echo "seat poll $pl: sees=$sees of $tot" >> "$EV/reseat.txt"
+    [ "$sees" -ge 3 ] && { ok=1; break; }
+    rw_sleep 2
+  done
+  if [ $ok = 1 ]; then echo "SEAT-OK Cind re-seated at the camp and sees $sees of $tot bandits right before the resume say" >> "$EV/reseat.txt"
+  else echo "SEAT-WEAK Cind sees only $sees of $tot bandits right before the resume say" >> "$EV/reseat.txt"; fi
 }
 rs_proposed_clear() {   # act_s*.txt holds a proposed ClearGroup record
   awk -F'|' '$6=="proposed" && $7=="ClearGroup"{f=1} END{exit !f}' "$EV/$1" 2>/dev/null
@@ -289,7 +313,7 @@ rd_26f_body() {
   tr_state state_pre.txt "$RL_NPC_FULL"
   rw_save_load job || return $?
   n1=$(rw_logn); rs_reseat26f
-  rs_guard; rl_say 3 "$rsay" || return $?
+  rs_guard; rs_seat_cind26f; rl_say 3 "$rsay" || return $?
   rw_sleep "${RW_SAY_WAIT:-8}"
   rs_poll_resume
   rw_out_dump out_post.txt; rw_log act_log_post.txt "${n1:-0}"
