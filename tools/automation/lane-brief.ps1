@@ -244,6 +244,7 @@ if (-not $Name) {
     $Name = if ($base -match '^(.*?)(\d+)$') { $Matches[1] + ([int]$Matches[2] + 1) } else { $base + '2' }
 }
 $as = 'powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-status.ps1'
+$as_note = 'powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-note.ps1'
 $ho2 = "C:\KenshiTestRuns\agents\$Name.handoff.md"
 # PI-19: the predecessor's status TASK text (line 2 of its status file) and the successor registration
 $taskTxt = $(if ($Pilot) { "$Lane pilot operator (shadow, $Pilot)" } else { "$Lane operator" }); $taskNote = ''; $regNote = ''
@@ -315,7 +316,7 @@ if ($Pilot) {
         '- Deploy: tools/automation/lane-deploy.sh is the ONLY server deploy path (and you only run it if the coordinator tells you); never edit server or DLL files. The lane is already on the same Stobe.dll and server bundle as the Sonnet lane.',
         ('- ANYTHING outside the one-call scripts above (lane or game down, launch problem, LLM health 402/empty replies, preflight errors you cannot fix with lane-setup.sh, unclear instruction): do NOT improvise. Record it with ' + $pm + ' 00-ask ESCALATE "<what you need>" (this only messages the coordinator, it does not close anything), then end your turn with a 2-line handback; the coordinator answers.'),
         '- Game speed (PI-20): above 5 only under bash tools/stobe-goal-watch.sh; never speed 10 for minutes. Never sleeps > 120 s in one call (hook denies); poll in 30 s loops.',
-        '- Status: agent-status.ps1 at start and after every row (pilot-mark.sh does it for you after each call); silence > 20 min = killed. Keep your handoff file current. Checkpoint every ~40k tokens; at ~120k finish the row, write the handoff, end STOPPED-CONTEXT.',
+        '- Status is AUTOMATIC (cut3): no status-call turns; hooks write RUNNING, progress and the end state. Note a successor must read: agent-note.ps1 <name> "<step>" ; <next real command>. Silence > 20 min = killed. Keep your handoff file current. Checkpoint every ~40k tokens; at ~120k finish the row, write the handoff, end STOPPED-CONTEXT.',
         '- Ending: after the last row of rows-i4.txt (or every remaining row escalated) end DONE with a line "pilot rows: <n> accepted, <n> escalated, <n> refused". Hand-back (SubagentHandback) = AT MOST 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay; full report first via save-report.ps1.'
     )
 }
@@ -335,7 +336,7 @@ function Build([int]$exBudget) {
         $null = $sb.AppendLine("    A=/c/KenshiTestRuns/agents; P=$Predecessor; for i in `$(seq 1 90); do if { [ -f `$A/`$P.handoff.md ] && { [ ! -f `$A/`$P.warn ] || [ `$A/`$P.handoff.md -nt `$A/`$P.warn ]; }; } || head -1 `$A/`$P.status 2>/dev/null | grep -qE '\| (DONE|STOPPED-CONTEXT|FAILED) \|'; then echo PREDECESSOR-READY; break; fi; sleep 60; done; [ `$i -ge 90 ] && echo PREDECESSOR-TIMEOUT")
         $null = $sb.AppendLine('- Then re-read the predecessor handoff whole, check the lane lock/inflight is free, take the lock, and CONTINUE from its TODO list. Lock still held: wait one more loop; on PREDECESSOR-TIMEOUT tell the coordinator in <= 3 lines and stop.')
         $null = $sb.AppendLine("- STATUS TASK (agent-guard: your task text must EQUAL the predecessor's; $taskNote): $taskTxt")
-        $null = $sb.AppendLine("  first status call (paste): $as $Name RUNNING `"$taskQ`" `"started, reading brief`" `"<evidence dir>`" `"wait for $Predecessor handoff`"")
+        $null = $sb.AppendLine("  first status call: none (SubagentStart hook writes RUNNING from agents\$Name.task). Hooks off: $as $Name RUNNING `"$taskQ`" `"started`" `"<ev>`" `"wait for $Predecessor`"")
         if ($regNote) { $null = $sb.AppendLine("- Lane-owners registration: $regNote") }
     }
     $null = $sb.AppendLine('## Lane facts')
@@ -399,7 +400,7 @@ function Build([int]$exBudget) {
         '- Batching: whole open row list through go-batch.sh (one batch per lane); keep the lane busy (blocked row -> next row, never idle > 2 min). Mark each row in testing/NPC_IMMERSION_26_TESTS.md when it finishes; commit + push that file only (shaylanger <shaylanger2@gmail.com>); never logs, DLLs or runtime state.',
         '- Server/DLL bug: write cause (file+function+evidence) in the row and status `latest`; do not fix it. GATED / needs-native (PI-23): grep the NATIVE sources (C:\KenshiTestRuns\imm26-nc10\src, components/STOBE) for native names, paste grep + result in the row. No `find /` (search a named directory).',
         '- Ending (PI-22): never DONE while runnable non-PASS rows remain; end STOPPED-CONTEXT (successor in the handoff) or DONE with a `lane complete: <why>` line. PI-24: write the steps of a hand-run row without rd_ script into your handoff.',
-        '- Status discipline: agent-status after EVERY row (silence > 20 min = killed); keep the handoff file current. Checkpoint every ~40k tokens; ~120k run the WARN-120k step, ~150k finish the row, write the handoff, end STOPPED-CONTEXT (successor name + 1). Budget <= 120k.',
+        '- Status (cut3): NO status calls; hooks write RUNNING, progress (5 min) and DONE/FAILED/STOPPED-CONTEXT from your final message; status-mark.sh logs rows. Successor-visible note: agent-note.ps1 <name> "<step>" "<out>" "<next>" ; <real command>. Silence > 20 min = killed; keep the handoff current. Checkpoint every ~40k tokens; ~120k run the WARN-120k step, ~150k finish the row, write the handoff, end STOPPED-CONTEXT (successor name + 1). Budget <= 120k.',
         '- Hand-back (SubagentHandback) = AT MOST 8 lines: verdict (+PASS/FAIL counts), files/commits, SHA/paths (report path), one next action, any DECISION/QUESTION for Shay. Save the full report first (save-report.ps1, <= 30 lines); every hand-back line lands in the coordinator context.'
     )
     $ruleLines = @($ruleLines[0], $banRule) + @($ruleLines | Select-Object -Skip 1)
@@ -409,8 +410,8 @@ function Build([int]$exBudget) {
     $hl = @($helpers); if ($hl.Count -gt 0 -and $hl[0] -is [string]) { $hl = @(, $hl) }
     foreach ($h in $hl) { $null = $sb.AppendLine("- $(Split-Path -Leaf $h[0]): $($h[1])" + $(if ($h[0].StartsWith($ra)) { ' [R]' } else { '' })) }
     $null = $sb.AppendLine('## Commands')
-    $null = $sb.AppendLine("- status: $as $Name RUNNING `"$taskQ`" `"<row/step>`" `"<evidence dir>`" `"<next row>`"   (DONE|FAILED|STOPPED-CONTEXT when ending)")
-    $null = $sb.AppendLine("- context warning (~120k): $as $Name RUNNING `"$taskQ`" `"WARN-120k <row/step>`" `"<evidence dir>`" `"<next row>`"   (writes agents\$Name.warn)")
+    $null = $sb.AppendLine("- status: AUTOMATIC. Merged note: $as_note $Name `"<step>`" `"<ev dir>`" `"<next>`" ; <command>  (-State STOPPED-CONTEXT|FAILED|DONE to end)")
+    $null = $sb.AppendLine("- context warning (~120k): $as_note $Name `"WARN-120k <step>`" `"<ev dir>`" `"<next>`" ; <command>  (writes agents\$Name.warn)")
     $null = $sb.AppendLine("- handoff file: $ho2 (successor: same name, number + 1)")
     $null = $sb.AppendLine("- report: powershell -NoProfile -File $ta\save-report.ps1 $Name <srcfile>   (save the full report first; then SubagentHandback with AT MOST 8 lines: verdict, files/commits, SHA/paths, one next action, any DECISION/QUESTION for Shay)")
     $sb.ToString()
@@ -423,5 +424,7 @@ if ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes) { $fullRows 
 while ([System.Text.Encoding]::UTF8.GetByteCount($text) -gt $MaxBytes -and $budget -gt 300) { $budget -= 250; $text = Build $budget }
 $bytes = [System.Text.Encoding]::UTF8.GetByteCount($text)
 if ($Out) { $d = Split-Path -Parent $Out; if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }; [System.IO.File]::WriteAllText($Out, $text, (New-Object System.Text.UTF8Encoding($false))); [Console]::Error.WriteLine("lane-brief: wrote $([IO.Path]::GetFullPath($Out)) ($([Text.Encoding]::UTF8.GetByteCount($text)) bytes)") }
+# cut3: the SubagentStart hook (hooks\agent-status-hook.py) writes RUNNING with the exact task text the agent-guard successor rule needs
+if ($Out -and $PSBoundParameters.ContainsKey('Name') -and $Name) { try { [System.IO.File]::WriteAllText((Join-Path $ag "$Name.task"), $taskTxt, (New-Object System.Text.UTF8Encoding($false))) } catch { } }
 $text
 [Console]::Error.WriteLine("lane-brief: $Lane brief size $bytes bytes (limit $MaxBytes)" + $(if ($bytes -gt $MaxBytes) { ' OVER LIMIT' } else { '' }))
