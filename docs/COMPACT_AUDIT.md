@@ -42,3 +42,8 @@ Compaction one-off ~$0.23 vs handoff ~$1.84 for the following hour, ~8x, plus th
 - Reading: the summarizer was NOT billed as ~150k uncached input this time (the uncached delta is only 13.7k, compacts #1/#2 showed ~290k each). It was almost certainly served from the warm cache (cache-read delta 1.5M, about $0.45 at $0.30/M, which is roughly the whole +$0.40 together with other work). The cache was warm: /cost showed "warm (1h TTL)" and "2 expected rebuilds".
 - So a 150k compact costs at most about $0.4, and likely less. Compacts #1/#2 (299k/284k) were billed ~$0.8 each; the difference is the cache state at the moment of the summarizer call, not just the size. Cannot separate the exact summarizer share from the 90-s window; do not quote below $0.40 as measured.
 - Break-even (rough): turns after the compact cost about $0.03-0.05 each at ~30k context vs ~$0.15 at 150k, so the compact repays within roughly 4-8 turns.
+
+## Compact #4 - /cost BEFORE reading (Shay, context ~147k, 1% before the trigger)
+- Total $85.32 (Sonnet $82.05: uncached input 841.9k, output 2.0M, cache read 251.5M, cache write 13.8M; Haiku $3.27 unchanged), wall 1h55m53s, API 6h20m11s, 422 requests, 3 expected rebuilds.
+- Since the compact #3 "after" paste ($74.04 at wall 1h41m26): +$11.28 in 14m27s of wall = ~$0.78/min = ~$47/h, while ~10 subagents ran (lane operators, fixers, investigators, Haiku deep dive). Cache write +1.8M, uncached input +153k, cache read +33.5M. This is the number to look at for the credit-use review: the compact is ~$0.4, the agent fleet is ~$47/h.
+- Next: Shay pastes /cost right after this compact; record the delta here.
