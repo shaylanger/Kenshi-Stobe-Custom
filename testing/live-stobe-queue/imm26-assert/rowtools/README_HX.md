@@ -6,7 +6,7 @@ Rows 17-bx 18-cx 16-bx 15-bx 13-ax 02-ax. Offline-tested only (`bash rowtools/hx
 bash testing/live-stobe-queue/imm26-assert/rowtools/hxrun.sh <ROW> <lane> [--save S] [--save2 S] [--out DIR] [--no-reload] [--dry] [--allow-retry "why"] [--native]
      [--item I] [--ctl NPC] [--faction F] [--spot "x y z"] [--out-dist U] [--runs "P1 N1"] [--saves "a b c d e"]
 ```
-Flow: reload the base save (tr_reload) -> preflight -> go-row attempt guard -> `rd_<row>` (hxdefs.sh) -> `hxcheck.py` runs the assert -> up to 6 `EVIDENCE` lines + ONE `RESULT <ROW> PASS|FAIL|SETUP-FAIL|GATED ...` line. Exit 0/1/2/3 (4 = attempt guard needs a fixer). Use `KAH_PF_ISOLATION=0` as the operators did.
+Flow: reload the base save (tr_reload) -> preflight -> go-row attempt guard -> `rd_<row>` (hxdefs.sh) -> `hxcheck.py` runs the assert -> up to 6 `EVIDENCE` lines + ONE `RESULT <ROW> PASS|FAIL|SETUP-FAIL|GATED ...` line. Exit 0/1/2/3 (4 = attempt guard needs a fixer). Never set `KAH_PF_ISOLATION=0` (forbidden): run from the lane configured save (--save <lane save>), no isolation bypass (rw-* start saves fail the npc-world isolation check).
 
 | Row | Bundles (flat dirs under `--out/<ROW>` or the evidence dir) | Assert run by hxcheck.py | Extra |
 |---|---|---|---|

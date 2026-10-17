@@ -57,7 +57,8 @@ chk "card has status, lane, RUN via go-row fallback, RESULT shape, evidence path
 chk "card RUN line uses go-row.sh for rd_02a" $(has "$C" 'RUN: cd /c/KenshiModding && bash testing/live-stobe-queue/imm26-assert/go-row.sh 02-a 5090-i4')
 chk "card keeps RESULT shape + evidence dir" $(has "$C" 'RESULT 02-a PASS\|FAIL\|SETUP-FAIL\|GATED <evidence>; evidence .*/imm26-5090-i4/rows/02-a/')
 C2="$(bash "$HERE/row-card.sh" 02-b 4080-i4)"
-chk "runner table row: script + --save ready save + KAH_PF_ISOLATION on 4080-i4" $(has "$C2" 'KAH_PF_ISOLATION=0 bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfi.sh 02-b 4080-i4 --save kah-imm26-4080-i4h')
+chk "runner table row: script + --save ready save, NO KAH_PF_ISOLATION bypass on 4080-i4 (PI-60)" $(has "$C2" 'RUN: cd /c/KenshiModding && bash testing/live-stobe-queue/imm26-assert/rowtools/reload-run-sfi.sh 02-b 4080-i4 --save kah-imm26-4080-i4h')
+chk "no card prints KAH_PF_ISOLATION=0 and the RUN-NOTE is there (PI-60)" $(lacks "$C2" "KAH_PF_ISOLATION=0") $(has "$C2" "RUN-NOTE: no isolation bypass")
 C3="$(bash "$HERE/row-card.sh" 03-a 5090-i3)"
 chk "manual row says manual" $(has "$C3" 'RUN: manual')
 chk "unknown row reported" $(has "$(bash "$HERE/row-card.sh" 99-z 5090-i4)" 'not found')

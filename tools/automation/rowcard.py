@@ -31,7 +31,7 @@ LANES = {  # ops/globs/dirs = same defaults as lane-brief.ps1 (lane-owners.json 
     "5090-i4": dict(ops=["imm26-5090-i4op3"], globs=["imm26-5090-i4op*"], ev="imm26-5090-i4", ready="kah-imm26-i4-trip2", env=""),
     "5090-i5": dict(ops=["imm26-5090-ctxop322"], globs=["imm26-5090-i5op*", "imm26-5090-i5-op*", "imm26-5090-ctxop*"], ev="imm26-5090-i5", ready="kah-imm26-i5", env=""),
     "4080-i3": dict(ops=["imm26-4080-op2g"], globs=["imm26-4080-op*", "imm26-4080-i3op*"], ev="imm26-4080", ready="kah-imm26-4080", env=""),
-    "4080-i4": dict(ops=["imm26-4080-i4op5"], globs=["imm26-4080-i4op*"], ev="imm26-4080-i4", ready="kah-imm26-4080-i4h", env="KAH_PF_ISOLATION=0 "),
+    "4080-i4": dict(ops=["imm26-4080-i4op5"], globs=["imm26-4080-i4op*"], ev="imm26-4080-i4", ready="kah-imm26-4080-i4h", env=""),  # PI-60: no KAH_PF_ISOLATION bypass (forbidden); run from the lane save
 }
 STATUSES = ("PASS", "FAIL", "SETUP-FAIL", "GATED", "UNRUN")
 
@@ -286,6 +286,7 @@ def card(rid, lane=None):
     parts = [
         ("hdr", hdr, 130),
         ("run", ("RUN: cd /c/KenshiModding && " + cmd) if cmd else ("RUN: " + note), 235),
+        ("runnote", ("RUN-NOTE: no isolation bypass; use lane save %s (rw-* saves fail the isolation check)" % LANES[lane]["ready"]) if lane in LANES else "", 110),
         ("setup", "SETUP: " + r["setup"], 90),
         ("expect", "EXPECT: " + r["expect"], 120),
         ("res", "OUT: RESULT %s PASS|FAIL|SETUP-FAIL|GATED <evidence>; evidence %s" % (rid, evdir), 150),
