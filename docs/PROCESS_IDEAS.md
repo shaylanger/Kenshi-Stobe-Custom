@@ -164,6 +164,26 @@ Rules:
 - added: 2026-10-16 18:45
 - log: 2026-10-16 18:45 review 'coordinator-22': added
 
+### PI-63 | open
+- idea: tail-mode.ps1 enter should refuse (or warn loudly) on an agent name that has no status file, ledger record or live in-session task, and tail-wait.ps1 should print which name is unknown instead of exiting with 'needs the tail'.
+- evidence: 2026-10-16 18:46-19:00: the tail flag listed imm26-fix23acheck but the real agent was imm26-fix23a-checker; tail-wait exited at once 4 times with 'no status, no ledger record', and the Stop hook kept blocking until I edited the flag by hand and asked the agent to write a status.
+- saving: about 6 tool calls and 10 min per misnamed agent
+- risk: low: only validates names, never hides a stall
+- hooks: no
+- weakens: no
+- added: 2026-10-16 19:32
+- log: 2026-10-16 19:32 review '38ce4c9d-074d-4b00-9557-275240adb80c-tail': added
+
+### PI-64 | open
+- idea: agent-status.ps1 DONE should be written by the harness hand-back (SubagentHandback or task-notification completed) when the agent never wrote it, or tail-mode status should treat a completed task-notification as DONE.
+- evidence: 2026-10-16 19:35: imm26-5090-i5-op18 and imm26-4080-i3op30 had handed back their final reports and finished, but their status files still said RUNNING, so the tail could not close until I wrote DONE by hand.
+- saving: about 2 tool calls per operator and avoids a false RUNNING count in the Stop hook
+- risk: medium: must not mark an agent DONE that merely paused for background work (the 'waiting on its own background work' notification), so only on a final completed notification
+- hooks: yes
+- weakens: no
+- added: 2026-10-16 19:32
+- log: 2026-10-16 19:32 review '38ce4c9d-074d-4b00-9557-275240adb80c-tail': added
+
 ## In progress
 
 ### PI-54 | in-progress
