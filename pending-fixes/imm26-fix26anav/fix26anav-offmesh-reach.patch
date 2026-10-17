@@ -1,0 +1,53 @@
+diff -urN a/src/ActivityOffMeshReach.h b/src/ActivityOffMeshReach.h
+--- a/src/ActivityOffMeshReach.h	1969-12-31 18:00:00.000000000 -0600
++++ b/src/ActivityOffMeshReach.h	2026-10-16 18:42:09.294511200 -0600
+@@ -0,0 +1,20 @@
++#pragma once
++// imm26-fix26anav (row 26-a NC31): reachability for a visible Hunt target when the actor itself reports off-navmesh.
++// NC31 required avatar->isOnNavmesh() before pathExists(); right after the route arrival Malzin stood 6.7 u from the (mesh-projected) route point
++// with isOnNavmesh()==0 for the whole 16-scan grace (ACTIVITY_SCAN_DIAG onMesh=0 rawPath=99 reach=0), so pathExists was never asked and
++// the agreed goat 31 u away was "current_native_path_unconfirmed" -> no_observed_suitable_reachable_target. pathExists can only start from the
++// avatar, so an off-mesh avatar cannot be probed; accept a short-range, visible, mesh-adjacent target instead (the native order paths itself;
++// the Goal no-progress timeout still ends an order that cannot get there). Pure (no game types), testable offline.
++namespace Stobe { namespace ActivityReach {
++const double kOffMeshShortRange = 35.0; // planar (x,z) actor-to-target limit
++const double kOffMeshMaxDy = 12.0;      // vertical limit (roof / ledge is not "near")
++const float  kTargetSnapRadius = 20.0f; // getClosestPoint radius used by the caller to prove the TARGET stands on/next to walkable mesh
++// dx,dz,dy = target minus actor. onMesh = avatar->isOnNavmesh(). Only the off-mesh case is decided here; an on-mesh avatar keeps the pathExists verdict.
++inline bool OffMeshShortRange(bool huntKind, bool onMesh, bool visible, bool targetOnMesh, double dx, double dz, double dy) {
++ if(!huntKind || onMesh || !visible || !targetOnMesh) return false;
++ if(!(dx==dx) || !(dz==dz) || !(dy==dy)) return false; // NaN
++ const double adx = dy<0 ? -dy : dy;
++ if(adx>kOffMeshMaxDy) return false;
++ return dx*dx+dz*dz<=kOffMeshShortRange*kOffMeshShortRange;
++}
++} }
+diff -urN a/src/ActivityRuntimeBindings.cpp b/src/ActivityRuntimeBindings.cpp
+--- a/src/ActivityRuntimeBindings.cpp	2026-10-16 18:42:18.263589300 -0600
++++ b/src/ActivityRuntimeBindings.cpp	2026-10-16 18:42:09.395078700 -0600
+@@ -16,6 +16,7 @@
+ #include <kenshi/NavMesh.h>
+ #include <kenshi/util/UtilityT.h>
+ #include "ActivityApproachRing.h"
++#include "ActivityOffMeshReach.h"
+ #include <cmath>
+ #include <map>
+ #include <kenshi/SensoryData.h>
+@@ -378,6 +379,17 @@
+  }
+  CharMovement* movement=actor->getMovement(); HavokCharacter* avatar=movement?movement->havokCharacter:NULL;
+  t.reachable=_finite(p.x)&&_finite(p.y)&&_finite(p.z)&& world_->navmesh && avatar && avatar->isOnNavmesh() && world_->navmesh->pathExists(avatar,p)==1;
++ // fix26anav (row 26-a NC31): the actor reported isOnNavmesh()==0 right after the route arrival, so pathExists was never asked. For a Hunt target that is
++ // visible, close (<= 35 u planar) and on/next to walkable mesh, an off-mesh actor is not evidence of an unreachable animal; the native order paths itself.
++ if(!t.reachable && a.kind==Hunt && actor && avatar && world_->navmesh && t.visible && _finite(p.x)&&_finite(p.y)&&_finite(p.z) && !avatar->isOnNavmesh()) {
++  Ogre::Vector3 snap; bool targetOnMesh=false;
++  try { targetOnMesh=world_->navmesh->getClosestPoint(p,Stobe::ActivityReach::kTargetSnapRadius,1.0f,false,snap)==1 && _finite(snap.x)&&_finite(snap.y)&&_finite(snap.z); } catch(...) {}
++  const Ogre::Vector3 ap=actor->getPosition();
++  t.reachable=Stobe::ActivityReach::OffMeshShortRange(true,false,t.visible,targetOnMesh,p.x-ap.x,p.z-ap.z,p.y-ap.y);
++  try { static DWORD lastOffMeshLog=0; const DWORD nowTick=GetTickCount();
++   if(nowTick-lastOffMeshLog>2000) { lastOffMeshLog=nowTick; std::ostringstream o; o<<"ACTIVITY_OFFMESH_REACH id="<<a.id<<" serial="<<t.serial<<" targetOnMesh="<<(targetOnMesh?1:0)
++    <<" dx="<<(p.x-ap.x)<<" dz="<<(p.z-ap.z)<<" dy="<<(p.y-ap.y)<<" reachable="<<(t.reachable?1:0); Log(o.str()); } } catch(...) {}
++ }
+  if(!t.reachable) reason="current_native_path_unconfirmed"; // Observation survives; dispatch still requires reachable.
+  d.facts=t; d.x=p.x; d.y=p.y; d.z=p.z; return true;
+ }
