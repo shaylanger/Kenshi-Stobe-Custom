@@ -133,3 +133,4 @@ Reason key: CAP = held because of the 20-concurrent-subagent cap (only the i4 op
 - 22:3x i5 lane idle: spawned imm26-5090-i5-op23 (a5733bd99585b5b0f) for 01-cx x2 (second-rig variance sample vs op25 on 4080-i4). i3 still waits for fix23agate. Alerts acked.
 - 22:4x inv26a DONE: 26-a cause = scene (goat on gully floor, dy 14-15 > 12; no DLL bug). One-line recipe fix committed (hunt26a-run-dest.sh RW_DEST); op23 runs 26-a after 01-cx. If it fails: NC35 (don't blacklist the sole agreed target on a not-visible tick).
 - 22:5x fix17bxcheck DONE 8b00a308 (GONE regex, 18/18 replay, RETR violators still FAIL). hxdefs.sh.candidate swap pending (between batches); 17-bx rerun by the next free operator.
+- 22:5x fix23agate DONE d05509da -> spawned imm26-5090-i3op38 (a1d2af9f5798af782): 23-a rerun then 17-bx on 5090-i3. All 4 lanes now have an operator (4080-i3 op32, 4080-i4 op25, 5090-i5 op23, 5090-i3 op38); 5090-i4 is the parked ab2 lane.
