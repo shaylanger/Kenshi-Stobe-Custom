@@ -328,6 +328,47 @@ function Do-Action($c) {
     }
 }
 
+# ===================================================================== PI-68 BEGIN: duplicate hand-back guard
+# A finished agent (status DONE) that keeps re-delivering the same hand-back shows up here as repeated identical DONE events
+# (EVENT STATUS <n> DONE / DONE(quiet) / INBOX '<n> DONE' / TAIL-RELAY '<n> DONE'). The bot cannot see the SubagentHandback text itself;
+# the hash covers the normalised event text PLUS the agent's status file (latest/outputs/next = the hand-back text the hook stored).
+# State: <digest>\handback-seen\<agent>.txt = "<hash> <count> <emitted 0|1>". 1st event passes, 1st duplicate is swallowed (counted),
+# the 2nd duplicate emits ONE line (the bot cannot TaskStop), further ones are swallowed. Differing text resets; non-DONE agents are never touched.
+function Get-Pi68Agent([string]$item) {
+    if ($item -match '^(?:(?:DONE|INFO): )?STATUS (?<n>\S+) DONE\b') { return $Matches['n'] }
+    if ($item -match '^(?:(?:DONE|INFO): )?INBOX \S+: (?:TAIL-RELAY )?(?<n>[A-Za-z0-9][A-Za-z0-9._-]*) (?:DONE|TAILDONE)(?:[\s:]|$)') { return $Matches['n'] }
+    return ''
+}
+function Test-Pi68Handback([string]$item) {
+    $res = @{ Action = 'pass'; Agent = ''; N = 0; Line = '' }
+    if ($script:NoActions) { return $res }
+    try {
+        $name = Get-Pi68Agent $item
+        if (-not $name) { return $res }
+        $st = Read-StatusFile $name
+        if (-not $st -or $st.State -ne 'DONE') { return $res }
+        $norm = ($item -replace '\d{4}-\d\d-\d\dT[\d:.\-]+(?:[+\-]\d\d:\d\d)?', '' -replace '^((?:DONE|INFO): )?INBOX \S+:', '$1INBOX:' -replace '\s+', ' ').Trim()
+        $h = Get-LineKey ($norm + '|' + $st.Latest + '|' + $st.Outputs + '|' + $st.Next)
+        $dir = Join-Path $script:DigestDir 'handback-seen'
+        Ensure-Dir $dir
+        $f = Join-Path $dir (($name -replace '[^A-Za-z0-9._-]', '_') + '.txt')
+        $cnt = 0; $emitted = 0
+        if (Test-Path -LiteralPath $f) {
+            $p = ([IO.File]::ReadAllText($f, $script:Utf8).Trim() -split '\s+')
+            if ($p.Count -ge 3 -and $p[0] -eq $h) { $cnt = [int]$p[1]; $emitted = [int]$p[2] }
+        }
+        $cnt++
+        if ($cnt -eq 1) { $res.Action = 'pass' }
+        elseif ($cnt -eq 2) { $res.Action = 'swallow' }
+        elseif ($emitted -eq 0) { $res.Action = 'emit'; $emitted = 1; $res.Line = "DUPLICATE HANDBACK $name x${cnt}: TaskStop it" }
+        else { $res.Action = 'swallow' }
+        $res.Agent = $name; $res.N = $cnt
+        [IO.File]::WriteAllText($f, "$h $cnt $emitted`n", $script:Utf8)
+    } catch { Write-ChoreLog ("pi68 error: " + $_.Exception.Message); $res.Action = 'pass' }
+    $res
+}
+# ===================================================================== PI-68 END
+
 # ---------------------------------------------------------------- process one waker line
 # returns @{ Auto = @(label...); Attention = @(line...) }
 function Process-Line([string]$line) {
@@ -338,6 +379,9 @@ function Process-Line([string]$line) {
     $sp = Split-WakerLine $line
     $judg = @()
     foreach ($it in $sp.Items) {
+        $d68 = Test-Pi68Handback $it   # PI-68 duplicate hand-back guard
+        if ($d68.Action -eq 'swallow') { $auto += 'dup handback swallowed'; continue }
+        if ($d68.Action -eq 'emit') { $att += ($sp.Prefix + $d68.Line); continue }
         $c = $null
         try { $c = Classify-Item $it } catch { $c = @{ Class = 'JUDGMENT'; Rule = 'error'; Text = $it } }
         if ($c.Class -eq 'AUTO') {
@@ -598,6 +642,20 @@ function Invoke-Stream {
                 $lastReg = $now
                 try { $o = @(Invoke-RegisterNew | Where-Object { $_ -like 'registered *' }); if ($o.Count) { $lbl = 'agent id registered'; if ($counts.ContainsKey($lbl)) { $counts[$lbl] += $o.Count } else { $counts[$lbl] = $o.Count } } } catch { Write-ChoreLog ("register-new error: " + $_.Exception.Message) }
             }
+            # ==== PI-49 SNAG-SCAN BEGIN (self-contained; merge as one block; needs snag-scan.ps1 next to this script) ====
+            # Every 60 s: read-only count of C:\KenshiTestRuns\snags\snags.log; a 'SNAG REPEAT ...' line (2nd distinct operator on one
+            # script:line, again only for a 3rd) is queued as an ATTENTION line = one wake. Nothing else is printed. Errors never leak.
+            if (-not $lastSnag) { $lastSnag = [datetime]::MinValue }
+            if (($now - $lastSnag).TotalSeconds -ge 60) {
+                $lastSnag = $now
+                try {
+                    foreach ($sl in @(& (Join-Path $PSScriptRoot 'snag-scan.ps1') -Runs $script:Runs | Where-Object { $_ -like 'SNAG REPEAT *' })) {
+                        $att.Add([string]$sl); if (-not $st.firstAtt) { $st.firstAtt = Get-Date }; $st.lastAtt = Get-Date
+                        Write-ChoreLog ([string]$sl)
+                    }
+                } catch { Write-ChoreLog ("snag-scan error: " + $_.Exception.Message) }
+            }
+            # ==== PI-49 SNAG-SCAN END ====
         }
         & $flush $false
     }
