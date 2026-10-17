@@ -14,6 +14,7 @@ What changed against v2, and why (evidence: 3 replicates on 4080-i4, rows/16-bx-
      -> real i4 op21 reps 2/3 control replies ("...what's the story?", "You look like you've had a rougher night than me") were false negatives. Hostile wording still vetoes.
   4. (imm26-fix16bx2) 'walk away' veto no longer fires on the concern question "did you walk away clean?" (still on "walk away now", "just walk away", "or walk away");
      ENGAGE gained "what was/'s that about", "what's going on", "you ok/alright", "are you all right/fine/well", "did you (get|walk|manage|see|...) ...?".
+  5. (imm26-fix16bxctl) ctl_friendly_words also passes a full-sentence (>= 10 words) reply with no hostile/refusal wording (HOSTILE_V3 gained refusal words); R-arm checks untouched.
 Everything else (trait, tier, gush, exclamation, parrot, 3..40 words, pairwise similarity, foreign action, tier of control, give/gift, inventory) is the v2 logic unchanged."""
 import os
 import re
@@ -34,7 +35,9 @@ ENGAGE = re.compile(r"(what about you|and you\b|\byou\?|how('?s| is| are) (the |
                     r"\bdid you (get|walk|manage|see|hurt|make|find|escape|survive|come|win|lose|take)\b[^.!?]*\?)", re.I)
 HOSTILE_V3 = re.compile(r"(state your (business|name)|what do you want|stay back|keep (back|away|your)|back off|get lost|move along|"
                         r"i don'?t know you|who are you|your kind|enem(y|ies)|not (a )?friend of|no friend of|leave me|piss off|"
-                        r"i'?ll (kill|cut|gut)|or else|walk away|go away|don'?t (talk|speak) to me)", re.I)
+                        r"i'?ll (kill|cut|gut)|or else|walk away|go away|don'?t (talk|speak) to me|"
+                        # fix16bxctl: refusal / dismissal wording (needed because plain conversational replies now pass; see CONVERSATIONAL_MIN_WORDS)
+                        r"rather not|none of your|mind your own|not your concern|not interested|whatever|no time for|nothing to say|leave it)", re.I)
 # fix16bx2: "did you walk away clean?" is a concern question, not a dismissal; "walk away now", "just walk away", "or walk away" still veto.
 CONCERN_WALK = re.compile(r"\bdid you (?:just |manage to |get to |still )?walk away\b(?! (?:now|or)\b)", re.I)
 
@@ -57,10 +60,18 @@ def reply_to_player(b):
     return ' '.join(out)
 
 
+# fix16bxctl: op32 rep3 control reply "Still breathing, still working - that's about the best anyone can claim out here." (14 words) is a plain,
+# volunteered, non-hostile answer but has no OPEN word / "!" / return question.  The control arm only asserts the NPC stayed friendly-neutral in
+# tone, so a full-sentence conversational reply with no hostile/refusal wording now counts.  One-word or curt replies ("Alive.", "Whatever.",
+# "Alive, fed, and not bleeding.") stay below the threshold and still fail.
+CONVERSATIONAL_MIN_WORDS = 10
+
+
 def friendly_v3(rep):
     if HOSTILE_V3.search(CONCERN_WALK.sub('', rep)):
         return False
-    return bool(OPEN.search(rep)) or rep.count('!') >= 1 or bool(ENGAGE.search(rep))
+    return (bool(OPEN.search(rep)) or rep.count('!') >= 1 or bool(ENGAGE.search(rep))
+            or len(re.findall(r"[A-Za-z']+", rep)) >= CONVERSATIONAL_MIN_WORDS)
 
 
 def row_16bx(a, res):

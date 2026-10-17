@@ -133,6 +133,20 @@ def main():
         d = mut('n2-' + k); replace_reply(d, 'O2', [t] if t else [], npc='Malzin'); l = run(d); chk('mut-fix2-neg-' + k, verdict(l) == 'FAIL' and 'O2:ctl_friendly_words!' in l, l[:90])
     d = mut('n2-longtarget'); replace_reply(d, 'R2', ['I am doing well and I thought a great deal about where we last parted and what the road has been like since then, with all the weather and the bandits and the long dull marches between towns, so there is a lot to say about it all. What was that about? You ok?'])
     l = run(d); chk('mut-fix2-neg-long-target-still-fails', verdict(l) == 'FAIL' and 'R2:words 3..40!' in l)
+    # --- imm26-fix16bxctl: plain conversational control reply passes; refusal/hostile/curt still fail ---
+    posc = {'op32-still-breathing': "Still breathing, still working - that's about the best anyone can claim out here.",
+            'plain-sentence': 'Getting by, same as everyone out on this road, and the dust is not as bad as last week.'}
+    for k, t in posc.items():
+        d = mut('pc-' + k); replace_reply(d, 'O2', [t], npc='Malzin'); l = run(d); chk('mut-ctl-' + k, verdict(l) == 'PASS', l[:90])
+    negc = {'long-refusal': 'I would rather not discuss it with someone I have only just met on this road.',
+            'long-none-of-your': 'What I do out here is none of your business, and that is all I plan to say about it.',
+            'long-hostile': 'Keep your hands where I can see them and state your business before I lose my patience here.',
+            'curt-still-fails': 'Alive, fed, and not bleeding.', 'short-whatever': 'Whatever, I am busy.'}
+    for k, t in negc.items():
+        d = mut('nc-' + k); replace_reply(d, 'O2', [t], npc='Malzin'); l = run(d); chk('mut-ctl-neg-' + k, verdict(l) == 'FAIL' and 'O2:ctl_friendly_words!' in l, l[:90])
+    o32 = 'C:/KenshiTestRuns/agents/out/imm26-4080-i3op32/16bx-rep3'
+    if os.path.isdir(o32):
+        lo = run(o32); chk('real-op32rep3-passes', verdict(lo) == 'PASS' and 'ctl_friendly_words!' not in lo, lo[:90])
     # real op22 reps (copies of the failing i4 dirs): control must now pass ctl_friendly_words (whole row PASS)
     for r in (1, 2):
         o = os.path.join(ROOT, f'16-bx-op22rep{r}')
