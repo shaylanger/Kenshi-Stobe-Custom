@@ -411,6 +411,8 @@ def cmd_aggregate(a):
             tot[arm].update(c); lat[arm] += lats
     L.append('')
     L.append('## Totals per arm')
+    cp = os.path.join(LIVE, 'cost.json')
+    cj = load(cp) if os.path.exists(cp) else {}
     th = '| arm | answered | graded | agree | harmful | worse | better-than-truth | missed | extra | invalid cmds final/all lines (of checked) | validator errors | revised batches | spawn>3 | median latency s | tokens | USD |'
     L.append(th); L.append('|' + '---|' * (th.count('|') - 1))
     for arm in 'HS':
@@ -418,7 +420,22 @@ def cmd_aggregate(a):
         agree = c['equivalent'] + c['acceptable-different']
         L.append('| %s | %d | %d | %s | %d | %d | %d | %d | %d | %d/%d of %d | %d | %d | %d | %s | %s | %s |' % (
             arm, c['answered'], c['graded'], pct(agree, c['graded']), c['harmful'], c['worse'], c['better'], c['missed'], c['extra'], c['invalid'], c['rawinv'], c['checked'],
-            c['verr'], c['revised'], c['over3'], med(lat[arm]), ('%d' % c['tokens']) if c['tokens'] else '- (not in ledger)', ('%.3f' % c['usd']) if c['usd'] else '-'))
+            c['verr'], c['revised'], c['over3'], med(lat[arm]), ('%d' % cj[arm]['totals']['total_tokens_output_est']) if arm in cj else (('%d' % c['tokens']) if c['tokens'] else '- (no cost.json)'),
+            ('%.3f' % cj[arm]['totals']['usd_output_est']) if arm in cj else (('%.3f' % c['usd']) if c['usd'] else '-')))
+    if cj:
+        L.append('')
+        L.append('## Tokens and API-equivalent cost per arm (cost.json from shadow-cost.py; tokens = input + output estimate + cache write + cache read; USD at prices.json, Haiku prompts over 100k billed whole at the over-100k rate; output tokens estimated from content because the transcript logs only a ~15-token stream placeholder per message)')
+        ch = '| arm | model | msgs | input | cache write | cache read | output logged | output est | total tokens | USD (logged out) | USD (est out) | USD/decision | tokens/decision | USD/active hour | USD per agreeing decision | last context |'
+        L.append(ch); L.append('|' + '---|' * (ch.count('|') - 1))
+        for arm in 'HS':
+            if arm not in cj:
+                continue
+            x = cj[arm]; tt = x['totals']; c = tot[arm]
+            agree = c['equivalent'] + c['acceptable-different']
+            L.append('| %s | %s | %d | %d | %d | %d | %d | %d | %d | %.3f | %.3f | %.4f | %d | %.3f | %s | %d |' % (
+                arm, x['model'], tt['msgs'], tt['input'], tt['cache_write'], tt['cache_read'], tt['output'], tt['output_est'], tt['total_tokens_output_est'],
+                tt['usd'], tt['usd_output_est'], x['usd_per_decision_output_est'], x['tokens_per_decision'], x['usd_per_active_hour_output_est'],
+                ('%.4f' % (tt['usd_output_est'] / agree)) if agree else '-', x['context']['last_prompt']))
     L.append('')
     L.append('## Agreement by truth outcome label (heuristic: possibly-corrected = correction wording in the real coordinator text turns inside this batch window; unknown = not determined)')
     L.append('| outcome | arm | graded | agree | harmful | worse |'); L.append('|---|---|---|---|---|---|')
