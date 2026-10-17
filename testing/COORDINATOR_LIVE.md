@@ -65,6 +65,24 @@ DONE this session (reports in `C:\KenshiTestRuns\agents\out\<name>\`): fix23arec
 1. 26-f post-load ClearGroup resume: no investigator. 2. 15-bx/17-bx variance; 15-bx split (SHAY_DECISIONS). 3. 12-d design gate. 4. 13-c-neg (native, i3 op). 5. `preflight.sh`: treat isolation cache stale when `lane-isolation-check*.ps1` is newer (NOT done; edit only between lane runs; stale cache `C:\KenshiTestRuns\preflight-isolation-5090.txt` caused false FAILs). 6. tail-close-selftest 25 pre-existing failures. 7. selftest-all output unread: `C:\KenshiTestRuns\selftest-all-h24.txt`. 8. Checker: c_23a option-A items read only s3/s4 chat so can show PASS on a FAILED agreement (verdict still FAIL).
 - PI list (docs/PROCESS_IDEAS.md, 15/15 active): open 37,41,44,46,48,49,52,56,58,63; confirmed 64,65,66(awaiting Shay),67,68,69; PI-41 = autoCompact instead of tail hard limit (now being done).
 
+## 7b. NOT STARTED / DEFERRED (honest list, 2026-10-16 ~21:00; reason per item; keep current)
+| item | state | reason |
+|---|---|---|
+| imm26-4080-i4op24 (4080-i4 operator: reruns 01-cx and 02-dx now that fix01cxguard/fix02dxroute landed) | brief generated (agents\imm26-4080-i4op24.brief.md), agent NOT spawned | I held it while the 20-agent cap was tight; lane 4080-i4 has been idle ~27 min (alert open). Spawn now; split rows with op32 (op32 keeps 02-bx; tell it to drop 01-cx/02-dx) |
+| 5090-i3 operator | none (op37 DONE, no claimable row) | waits for inv23a -> native fixer for the 23-a arrival tolerance |
+| native fixer for 23-a arrival (ORDER_ENDED planar/dy) | not spawned | needs inv23a result first |
+| 26-f post-load ClearGroup resume | no investigator ever spawned | not capped; never ticketed. Spawn [case:investigate] |
+| 15-bx / 17-bx variance | no agent | not ticketed (also needs Shay's 15-bx split decision) |
+| 12-d design gate | none | waits for a Shay design decision |
+| 13-c-neg (native) | assigned to an i3 operator, none exists | needs a native fixer + operator |
+| recipe nit: skip 23-a stage-landing check when Cind x/z moved >1000 | not done | small follow-up for the 23-a fixer |
+| 16-bx brevity (prompt trait line) | waits | Shay decision in SHAY_DECISIONS (default a) |
+| 14-d scene (SCENE-BAD, 3 extra serials) | op21 reported SETUP-FAIL | needs --far-spawnt fallback / fix14dtool3 |
+| headless claude -p replay runner | proposed to Shay, not built | waits for his yes |
+| PI-67/68/69/70/71 builds | confirmed/open, not built | not capped; low priority behind lane work |
+| preflight.sh stale isolation cache fix | not done | edit only between lane runs |
+Reason key: CAP = held because of the 20-concurrent-subagent cap (only the i4 operator and the replay waves were truly capped); the rest were never ticketed or wait on a result/decision.
+
 ## 8. Gotchas learned (not in the repo elsewhere)
 - Permission classifier denies the coordinator editing hooks/settings.json/CLAUDE.md ("self-modification"): prepare candidate + swap.ps1 and give Shay a copy-paste command. Git Bash `!` commands strip backslashes and expand `$vars`: use `cd <dir> && powershell -NoProfile -ExecutionPolicy Bypass -File swap.ps1`.
 - Agent "completed" notifications can be interim ("waiting on its own background work"); a stale RUNNING status after DONE raises orphaned alerts (PI-64): mark DONE + ack.
