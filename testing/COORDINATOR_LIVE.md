@@ -50,7 +50,7 @@ DONE this session (reports in `C:\KenshiTestRuns\agents\out\<name>\`): fix23arec
 ## 6. Rigs and lanes
 - 5090-i3: op37 (23-a). 5090-i5: op21. 5090-i4: PARKED/held for ab2 (lane 5090-i4 must not be touched except by ab2 arms; site frozen, deploys skip -i4). 4080-i3: op31 (tail). 4080-i4: NO runnable row (alert lane-idle-4080-i4 acked): spawn `imm26-4080-i4op24` (brief via `lane-brief.ps1`, register in `lane-owners.json`) when 14-d/19-e style work exists.
 - Operator notes: `C:\KenshiTestRuns\inbox\operators\*.txt` (fix23arecipe, fix14dtool, fix19ewait, fix11b-defects).
-- Offline check running: `unblock_23a2_selftest.sh` rerun in WSL (output /tmp/unblock23a2-rerun.txt; expect 56/56).
+- Offline check running: `unblock_23a2_selftest.sh` rerun in WSL (output C:KenshiTestRunsNblock23a2-rerun.txt (started 20:42, ~12 min); expect 56/56).
 
 ## 7. Open issues (ranked)
 1. 26-f post-load ClearGroup resume: no investigator. 2. 15-bx/17-bx variance; 15-bx split (SHAY_DECISIONS). 3. 12-d design gate. 4. 13-c-neg (native, i3 op). 5. `preflight.sh`: treat isolation cache stale when `lane-isolation-check*.ps1` is newer (NOT done; edit only between lane runs; stale cache `C:\KenshiTestRuns\preflight-isolation-5090.txt` caused false FAILs). 6. tail-close-selftest 25 pre-existing failures. 7. selftest-all output unread: `C:\KenshiTestRuns\selftest-all-h24.txt`. 8. Checker: c_23a option-A items read only s3/s4 chat so can show PASS on a FAILED agreement (verdict still FAIL).
