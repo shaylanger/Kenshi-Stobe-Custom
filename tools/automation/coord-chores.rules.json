@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "_doc": "Rule table for coord-chores.ps1. Items are classified first-match-wins; a rule whose condition ('if') is false is SKIPPED (the next rule is tried). No match = JUDGMENT (printed in full). 'guard' = which part of the item text is checked against settings.guardRegex before the rule may fire: 'full' (default), 'head' (first 90 chars) or 'none'. A guard hit always forces JUDGMENT. Actions: log-done | log-line | count | lane-ack | backstop | note. Conditions: windDown | held | doneNoRows | ticketOwned | successorExists | rollcallFresh | setupfailAny. The hard-never list (stall/orphaned/dead/killed/llm-health/lane-stalled) is ALSO enforced in code, not only here.",
+  "settings": {
+    "quietSec": 15,
+    "attentionCoalesceSec": 3,
+    "attentionMaxHoldSec": 20,
+    "autoOnlyLineEveryMin": 60,
+    "windDownFlag": "WIND_DOWN.flag",
+    "maxIdleAckMin": 60,
+    "ackableKinds": ["lane-idle", "lane-no-operator"],
+    "neverAckKinds": ["lane-stalled", "agent-stall", "agent-orphaned", "agent-dead", "agent-killed", "llm-health-fail"],
+    "guardRegex": "\\b(STALL|STALLED|ORPHANED|DEAD|KILLED|LLM-HEALTH|WALL-CLOCK|FAILED|STOPPED-CONTEXT|HEALTH|RIG|ALERT|BATCH|STATUS-COUNT)\\b",
+    "rollcallFreshMin": 30,
+    "sweepRefresh": { "enabled": true, "everyMin": 25 },
+    "registerNew": { "enabled": true, "everySec": 60, "maxAgeHours": 12 },
+    "ackSweepEverySec": 60,
+    "seenKeep": 3000
+  },
+  "rules": [
+    { "id": "done-status", "match": "^DONE: STATUS (?<name>\\S+) DONE:", "class": "AUTO", "action": "log-done", "guard": "none", "label": "DONE logged" },
+    { "id": "done-relay", "match": "^DONE: INBOX \\S+: TAIL-RELAY \\S+ DONE", "class": "AUTO", "action": "log-line", "guard": "none", "label": "DONE logged" },
+    { "id": "done-inbox", "match": "^DONE: INBOX \\S+: \\S+ DONE([\\s:]|$)", "class": "AUTO", "action": "log-line", "guard": "none", "label": "DONE logged" },
+    { "id": "dup", "match": "^DUP: ", "class": "AUTO", "action": "count", "guard": "none", "label": "dup dropped" },
+    { "id": "has-successor", "match": "^HAS-SUCCESSOR: STATUS (?<name>\\S+) (FAILED|STOPPED-CONTEXT)", "class": "AUTO", "if": "successorExists", "action": "log-line", "guard": "none", "label": "stop with successor" },
+    { "id": "setupfail-ready", "match": "^SETUP-FAIL-READY: ", "class": "AUTO", "action": "log-line", "guard": "none", "label": "setupfail ready" },
+    { "id": "info-done", "match": "^INFO: (STATUS \\S+ DONE|INBOX \\S+: \\S+ (DONE|INFO|interim)([\\s:]|$)|INBOX \\S+: (INFO|ROWTOOLS?|LANE-INFO)([\\s:]|$))", "class": "AUTO", "action": "log-line", "label": "info logged" },
+    { "id": "tail-relay-done", "match": "^INBOX \\S+: TAIL-RELAY \\S+ (DONE|TAILDONE)([\\s:]|$)", "class": "AUTO", "action": "log-line", "guard": "head", "label": "relay logged" },
+    { "id": "setupfail-winddown", "match": "^INBOX \\S+: SETUP-FAIL (?<row>\\S+) needs", "class": "AUTO", "if": "windDown", "action": "log-line", "guard": "head", "label": "setupfail logged (wind-down)" },
+    { "id": "setupfail-owned", "match": "^INBOX \\S+: SETUP-FAIL (?<row>\\S+) needs", "class": "AUTO", "if": "ticketOwned", "action": "log-line", "guard": "head", "label": "setupfail logged (ticket owned)" },
+    { "id": "pilot-escalate-winddown", "match": "^INBOX \\S+: PILOT-ESCALATE ", "class": "AUTO", "if": "windDown", "action": "log-line", "guard": "head", "label": "pilot-escalate logged (wind-down)" },
+    { "id": "pilot-other", "match": "^INBOX \\S+: PILOT-(?!ESCALATE)", "class": "AUTO", "action": "log-line", "guard": "head", "label": "pilot msg logged" },
+    { "id": "lane-ack-winddown", "match": "^LANE (?<kind>IDLE|NO-OPERATOR) (?<lane>\\S+)", "class": "AUTO", "if": "windDown", "action": "lane-ack", "guard": "head", "label": "alert acked" },
+    { "id": "lane-ack-held", "match": "^LANE (?<kind>IDLE|NO-OPERATOR) (?<lane>\\S+)", "class": "AUTO", "if": "held", "action": "lane-ack", "guard": "head", "label": "alert acked" },
+    { "id": "lane-ack-done-norows", "match": "^LANE (?<kind>NO-OPERATOR) (?<lane>\\S+)", "class": "AUTO", "if": "doneNoRows", "action": "lane-ack", "guard": "head", "label": "alert acked" },
+    { "id": "backstop", "match": "^BACKSTOP after ", "class": "AUTO", "action": "backstop", "guard": "none", "label": "backstop" },
+    { "id": "sweep-clean", "match": "^SWEEP CLEAN", "class": "AUTO", "action": "count", "guard": "none", "label": "sweep clean" },
+    { "id": "sweep-marker-noout", "match": "^SWEEP MARKER \\S+ no out dir in marker\\s*$", "class": "AUTO", "action": "count", "guard": "none", "label": "marker w/o out dir" },
+    { "id": "sweep-queue-winddown", "match": "^SWEEP QUEUE \\S+ empty", "class": "AUTO", "if": "windDown", "action": "count", "guard": "head", "label": "queue empty (wind-down)" },
+    { "id": "sweep-rollcall-fresh", "match": "^SWEEP ROLLCALL \\S+ ", "class": "AUTO", "if": "rollcallFresh", "action": "count", "guard": "head", "label": "rollcall fresh" },
+    { "id": "waker-started", "match": "^WAKER started ", "class": "AUTO", "action": "log-line", "guard": "none", "label": "waker started" }
+  ]
+}

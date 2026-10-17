@@ -1,0 +1,18 @@
+2026-10-16T23:50:01 EVENT LANE LANE STALLED 5090-i5 40m (escalated from LANE IDLE) operator=imm26-5090-i5-op9k status silent 40m, last evidence: none -> 1) SendMessage/ping the operator
+2026-10-16T23:50:02 EVENT STALL agent-host: heartbeat was > 120s old with live/queued agents; restarted it hidden
+2026-10-16T23:50:03 EVENT AGENT STALL imm26-5090-i5-op9k: RUNNING, silent 31 min (proc alive, status_age=31m)
+2026-10-16T23:50:04 EVENT AGENT ORPHANED imm26-fixabc: status RUNNING, silent 35 min
+2026-10-16T23:50:05 EVENT AGENT DEAD imm26-fixdef: process gone, status RUNNING
+2026-10-16T23:50:06 EVENT AGENT KILLED imm26-fixghi: killed by the host
+2026-10-16T23:50:07 EVENT LLM-HEALTH FAIL openrouter: HTTP 402
+2026-10-16T23:50:08 EVENT STATUS imm26-nosucc FAILED: task: no successor agent | respawn fresh no successor agent from C:\KenshiTestRuns\agents\imm26-nosucc.status
+2026-10-16T23:50:09 EVENT DIGEST 1 items ;; HAS-SUCCESSOR: STATUS imm26-nosucc STOPPED-CONTEXT: task: x (successor imm26-nosucc-nobody)
+2026-10-16T23:50:10 EVENT RIG rc=1 4080 ssh unreachable
+2026-10-16T23:50:11 EVENT BATCH HEALTH FAIL batch xyz stalled
+2026-10-16T23:50:12 EVENT STATUS-COUNT MISMATCH imm26-x claims 3 PASS, ledger 2
+2026-10-16T23:50:13 EVENT LANE LANE IDLE 5090-i3 75m operator=imm26-5090-i3-op (newest activity: status) -> ask the operator what it is doing
+2026-10-16T23:50:14 SWEEP ALERT ALERT-rig-5090.txt rig runner stopped
+2026-10-16T23:50:15 SWEEP INBOX 2 undelivered in inbox/coordinator
+2026-10-16T23:50:16 WAKER max-hours reached, ended (restart: waker-persist.sh watch)
+2026-10-16T23:50:17 EVENT SOMETHING-NEW-NEVER-SEEN with a surprising shape
+2026-10-16T23:50:18 totally unknown line without prefix
