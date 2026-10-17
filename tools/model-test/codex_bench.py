@@ -994,6 +994,15 @@ def _stamp_launch_context(attempt_receipt: Path, run_receipt: Path, attempt_dir:
     return receipt
 
 
+def _persist_mcp_call_sink_primed(receipt: dict[str, Any], attempt_receipt: Path,
+                                  run_receipt: Path) -> dict[str, Any]:
+    """Persist that the execution-owned call sink exists and was primed."""
+    receipt["mcp_call_sink_primed"] = True
+    _write_json(attempt_receipt, receipt)
+    _write_json(run_receipt, receipt)
+    return receipt
+
+
 def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int = 1,
                  private_base: Path | None = None,
                  frozen_root_override: Path | None = None) -> tuple[Path, dict[str, Any]]:
@@ -1564,10 +1573,12 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
         if evidence_path.exists():
             raise BenchError(f"stale {evidence_name}; refusing launch")
         evidence_path.touch(exist_ok=False)
-    receipt["mcp_call_sink_primed"] = True
     # Do not mark the attempt RUNNING until the exact prepared profile passes
     # the installed CLI's strict parser. A setup rejection stays PREPARED.
     receipt = _stamp_launch_context(attempt_receipt, receipt_path, attempt, launch_mode, effective_cap, batch_id)
+    # _stamp_launch_context reloads the prepared receipt from disk. Persist the
+    # sink marker after that reload so both canonical receipts retain it.
+    receipt = _persist_mcp_call_sink_primed(receipt, attempt_receipt, receipt_path)
     receipt.update({"execution_boundary_status": "BOUNDARY_VERIFIED",
                     "execution_boundary_contract_sha256": proof["offline_hostprobe"]["runner_contract_sha256"],
                     "execution_boundary_receipt_sha256": proof["offline_hostprobe"]["execution_sha256"],

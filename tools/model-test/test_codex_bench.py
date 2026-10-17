@@ -406,6 +406,56 @@ class BenchTests(unittest.TestCase):
             self.assertEqual(json.loads((attempt / "launch.json").read_text()), original)
             self.assertEqual(json.loads(run_receipt.read_text()), original)
 
+    def test_launch_stamp_preserves_primed_call_sink_in_both_receipts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            attempt = root / "attempt-01"
+            attempt.mkdir()
+            attempt_receipt = attempt / "launch.json"
+            run_receipt = root / "launch.json"
+            prepared = {"status": "PREPARED", "run": "model-low-standard-p2", "attempt": 1}
+            bench._write_json(attempt_receipt, prepared)
+            bench._write_json(run_receipt, prepared)
+            # launch_one creates the sink before stamping execution metadata.
+            (attempt / "frozen-mcp-receipts.jsonl").touch()
+
+            stamped = bench._stamp_launch_context(attempt_receipt, run_receipt, attempt,
+                                                   "sequential", 1, "batch-test")
+            self.assertNotIn("mcp_call_sink_primed", stamped)
+            persisted = bench._persist_mcp_call_sink_primed(stamped, attempt_receipt, run_receipt)
+
+            self.assertTrue(persisted["mcp_call_sink_primed"])
+            self.assertTrue(bench._json(attempt_receipt)["mcp_call_sink_primed"])
+            self.assertTrue(bench._json(run_receipt)["mcp_call_sink_primed"])
+
+            config_sha, source_sha, nonce_sha = "c" * 64, "d" * 64, "a" * 64
+            startup_path = attempt / "frozen-mcp-startup.jsonl"
+            config = {"private_config_sha256": config_sha,
+                      "mcp_startup_receipts": str(startup_path)}
+            identity = {"pid": 42, "image": "codex.exe", "image_sha256": "e" * 64,
+                        "created_utc": "2026-10-17T00:00:00Z"}
+            persisted.update({"participant_cli_pid": 42, "participant_cli_identity": identity,
+                              "mcp_startup_nonce_sha256": nonce_sha,
+                              "mcp_startup_config_sha256": config_sha,
+                              "mcp_startup_source_sha256": source_sha,
+                              "requested_config": config,
+                              "started_utc": "2026-10-17T00:00:01Z",
+                              "ended_utc": "2026-10-17T00:00:04Z"})
+            def startup_row(method, stamp, tools):
+                return {"method": method, "utc": stamp, "nonce_sha256": nonce_sha,
+                        "attempt_id": "model-low-standard-p2/attempt-01",
+                        "config_sha256": config_sha, "source_sha256": source_sha,
+                        "server_pid": 73, "parent_pid": 42, "parent_identity": identity,
+                        "tools": tools}
+            startup_path.write_text("\n".join(json.dumps(row) for row in [
+                startup_row("initialize", 1792195202.0, []),
+                startup_row("tools/list", 1792195202.2, ["list", "read", "search", "sql"]),
+            ]) + "\n", encoding="utf-8")
+            event_audit = {"status": "PASS", "tool_call_count": 0, "thread_id": "thread-test"}
+            startup, health = bench._audit_mcp_receipts(attempt, persisted, 0, event_audit, "thread-test")
+            self.assertEqual(startup["status"], "PASS")
+            self.assertEqual((health["status"], health["usage"]), ("PASS", "NOT_USED"))
+
     def test_catalog_fast_tier_object_schema_is_supported_and_fail_closed(self):
         self.assertTrue(bench._fast_tier_supported({"service_tiers": [{"id": "priority", "name": "Fast"}]}))
         self.assertTrue(bench._fast_tier_supported({"service_tiers": {"priority": {}}}))

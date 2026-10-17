@@ -78,6 +78,14 @@ def run() -> dict:
         startup_path = attempt / "frozen-mcp-startup.jsonl"
         call_path.touch(exist_ok=False)
         startup_path.touch(exist_ok=False)
+        attempt_receipt = attempt / "launch.json"
+        run_receipt = run_dir / "launch.json"
+        prepared = {"run": "offline-probe", "attempt": 1, "status": "PREPARED"}
+        bench._write_json(attempt_receipt, prepared)
+        bench._write_json(run_receipt, prepared)
+        stamped = bench._stamp_launch_context(attempt_receipt, run_receipt, attempt,
+                                               "sequential", 1, "integrated-zero-probe")
+        bench._persist_mcp_call_sink_primed(stamped, attempt_receipt, run_receipt)
         nonce = os.urandom(32).hex()
         home = codex_home.parent
         env = bench._private_env(home, {
@@ -146,12 +154,12 @@ def run() -> dict:
             ("not found", "resource-not-found"), ("connection refused", "loopback-connection-refused"),
             ("failed", "cli-failed")) if needle in error_text]
         ended_utc = datetime.now(timezone.utc).isoformat()
-        launch = {"run": "offline-probe", "attempt": 1, "participant_cli_pid": proc.pid,
-                  "participant_cli_identity": identity, "mcp_call_sink_primed": True,
+        launch = bench._json(attempt_receipt)
+        launch.update({"participant_cli_pid": proc.pid, "participant_cli_identity": identity,
                   "mcp_startup_nonce_sha256": bench._sha(nonce.encode()),
                   "mcp_startup_config_sha256": config["private_config_sha256"],
                   "mcp_startup_source_sha256": bench._sha((HERE / "codex_frozen_mcp.py").read_bytes()),
-                  "requested_config": config, "started_utc": started_utc, "ended_utc": ended_utc}
+                  "requested_config": config, "started_utc": started_utc, "ended_utc": ended_utc})
         event_audit = bench._inspect_cli_event_stream(event_path)
         calls = event_audit.get("tool_call_count") if event_audit.get("status") == "PASS" else -1
         session_files = list((codex_home / "sessions").rglob("*.jsonl")) if (codex_home / "sessions").is_dir() else []
