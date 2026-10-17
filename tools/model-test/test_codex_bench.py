@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -316,9 +317,113 @@ See C:\\KenshiModding\\src\\module.py:42
             relative = Path(__import__("os").path.relpath(run_dir, Path.cwd()))
             cell = {"model": "secret-model", "effort": "high", "speed": "standard"}
             with mock.patch.dict(bench.os.environ, {"LOCALAPPDATA": str(base / "local")}):
-                first, _ = bench._make_config(run_dir, "opaque-p2", cell)
-                second, _ = bench._make_config(relative, "opaque-p2", cell)
+                first, first_config = bench._make_config(run_dir, "opaque-p2", cell)
+                second, second_config = bench._make_config(relative, "opaque-p2", cell)
             self.assertEqual(first, second)
+            expected = str((run_dir / "attempt-01" / "frozen-mcp-receipts.jsonl").resolve())
+            self.assertEqual(first_config["mcp_receipts"], expected)
+            self.assertEqual(second_config["mcp_receipts"], expected)
+            self.assertTrue(Path(second_config["mcp_receipts"]).is_absolute())
+
+    def test_preparation_and_retry_bind_absolute_mcp_receipts_outside_neutral_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "suite"
+            root.mkdir()
+            (root / "suite.json").write_text(json.dumps({
+                "cells": [{"slug": "x-high-standard", "model": "x", "effort": "high", "speed": "standard"}],
+                "prompts": ["prompt2.txt"], "prompt_numbers": [2], "template": "task-frozen.tmpl",
+            }))
+            (root / "prompt2.txt").write_text("p2")
+            (root / "task-frozen.tmpl").write_text("{TICKET} {PROMPT} {FROZEN} {FROZEN_WSL}")
+            relative_root = Path(os.path.relpath(root, Path.cwd()))
+            with mock.patch.dict(bench.os.environ, {"LOCALAPPDATA": str(base / "local")}):
+                bench.prepare(relative_root)
+                run_dir = root / "runs" / "x-high-standard-p2"
+                attempt = run_dir / "attempt-01"
+                launch = bench._json(attempt / "launch.json")
+                config = bench._json(attempt / "requested-config.json")
+                expected = str((attempt / "frozen-mcp-receipts.jsonl").resolve())
+                self.assertEqual(config["mcp_receipts"], expected)
+                self.assertEqual(launch["mcp_receipts_path"], expected)
+                bench._validate_mcp_receipt_binding(config, attempt, launch)
+                neutral = Path(launch["codex_home"]).parent / "neutral-cwd"
+                self.assertNotEqual((neutral / "docs" / "model-test" / "frozen-mcp-receipts.jsonl").resolve(),
+                                    Path(config["mcp_receipts"]))
+                launch["status"] = "FAILED_SETUP"
+                bench._write_json(attempt / "launch.json", launch)
+                bench._write_json(run_dir / "launch.json", launch)
+                bench._prepare_retry_attempt(relative_root, "x-high-standard-p2", 2)
+                retry = run_dir / "attempt-02"
+                retry_launch = bench._json(retry / "launch.json")
+                retry_config = bench._json(retry / "requested-config.json")
+                retry_expected = str((retry / "frozen-mcp-receipts.jsonl").resolve())
+                self.assertEqual(retry_config["mcp_receipts"], retry_expected)
+                self.assertEqual(retry_launch["mcp_receipts_path"], retry_expected)
+                bench._validate_mcp_receipt_binding(retry_config, retry, retry_launch)
+
+    def test_mcp_receipt_binding_rejects_relative_or_mismatched_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt = Path(tmp) / "suite" / "runs" / "opaque-p2" / "attempt-01"
+            attempt.mkdir(parents=True)
+            _, config = bench._make_config(attempt.parent, "opaque-p2",
+                                           {"model": "x", "effort": "high", "speed": "standard"},
+                                           private_base=Path(tmp) / "private")
+            launch = {"mcp_receipts_path": config["mcp_receipts"]}
+            self.assertEqual(bench._validate_mcp_receipt_binding(config, attempt, launch),
+                             attempt.resolve() / "frozen-mcp-receipts.jsonl")
+            bad = dict(config, mcp_receipts="relative\\frozen-mcp-receipts.jsonl")
+            with self.assertRaisesRegex(bench.BenchError, "absolute canonical"):
+                bench._validate_mcp_receipt_binding(bad, attempt, launch)
+            with self.assertRaisesRegex(bench.BenchError, "does not claim"):
+                bench._validate_mcp_receipt_binding(config, attempt, {"mcp_receipts_path": "wrong"})
+
+    def test_cli_relative_suite_path_retry_keeps_receipt_out_of_neutral_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "suite"
+            root.mkdir()
+            (root / "suite.json").write_text(json.dumps({
+                "cells": [{"slug": "x-high-standard", "model": "x", "effort": "high", "speed": "standard"}],
+                "prompts": ["prompt2.txt"], "prompt_numbers": [2], "template": "task-frozen.tmpl",
+                "concurrency": {"default": 1, "hard_cap": 1, "auto_start": False},
+            }))
+            (root / "prompt2.txt").write_text("p2")
+            (root / "task-frozen.tmpl").write_text("{TICKET} {PROMPT} {FROZEN} {FROZEN_WSL}")
+            relative_root = Path(os.path.relpath(root, Path.cwd()))
+            env = {"LOCALAPPDATA": str(base / "local")}
+            with mock.patch.dict(bench.os.environ, env):
+                self.assertEqual(bench.main(["prepare", str(relative_root)]), 0)
+                run_dir = root / "runs" / "x-high-standard-p2"
+                attempt01 = run_dir / "attempt-01" / "launch.json"
+                failed = bench._json(attempt01)
+                failed["status"] = "FAILED_SETUP"
+                bench._write_json(attempt01, failed)
+                bench._write_json(run_dir / "launch.json", failed)
+
+                def intercepted_launcher(suite_root, run_id, execute, timeout, attempt_no,
+                                         launch_mode, effective_cap, batch_id):
+                    self.assertTrue(execute)
+                    self.assertEqual(run_id, "x-high-standard-p2")
+                    self.assertEqual(attempt_no, 2)
+                    attempt02 = run_dir / "attempt-02"
+                    launch = bench._json(attempt02 / "launch.json")
+                    config = bench._json(attempt02 / "requested-config.json")
+                    expected = str((attempt02 / "frozen-mcp-receipts.jsonl").resolve())
+                    self.assertEqual(config["mcp_receipts"], expected)
+                    self.assertEqual(launch["mcp_receipts_path"], expected)
+                    bench._validate_mcp_receipt_binding(config, attempt02, launch)
+                    neutral = Path(launch["codex_home"]).parent / "neutral-cwd"
+                    self.assertFalse((neutral / config["mcp_receipts"]).exists())
+                    return 0
+
+                with mock.patch.object(bench, "_preflight", return_value=0), \
+                     mock.patch.object(bench, "_postflight", return_value={"ready": True}), \
+                     mock.patch.object(bench, "launch_one", side_effect=intercepted_launcher) as launch_mock:
+                    self.assertEqual(bench.main(["run", str(relative_root), "x-high-standard-p2",
+                                                 "--execute", "--attempt", "2"]), 0)
+                launch_mock.assert_called_once()
+                self.assertTrue((run_dir / "attempt-02" / "launch.json").is_file())
 
     def test_strict_exec_config_probe_stops_before_any_prompt(self):
         with tempfile.TemporaryDirectory() as tmp:

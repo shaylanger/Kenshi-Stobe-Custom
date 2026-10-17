@@ -83,6 +83,28 @@ def suite_root(value: str | Path) -> Path:
     return root
 
 
+def _mcp_receipt_path(attempt_dir: Path) -> Path:
+    """Return the absolute canonical frozen-MCP receipt path for an attempt."""
+    return attempt_dir.resolve() / "frozen-mcp-receipts.jsonl"
+
+
+def _validate_mcp_receipt_binding(config: dict[str, Any], attempt_dir: Path,
+                                  launch_receipt: dict[str, Any] | None = None) -> Path:
+    expected = _mcp_receipt_path(attempt_dir)
+    configured = config.get("mcp_receipts")
+    if not isinstance(configured, str) or not Path(configured).is_absolute() or Path(configured) != expected:
+        raise BenchError("frozen MCP receipt path is not the absolute canonical attempt path")
+    if launch_receipt is not None and launch_receipt.get("mcp_receipts_path") != str(expected):
+        raise BenchError("launch receipt does not claim the configured frozen MCP receipt path")
+    private_config = config.get("private_config")
+    if not isinstance(private_config, str) or not Path(private_config).is_file():
+        raise BenchError("prepared private config is missing for frozen MCP receipt validation")
+    expected_line = "CODEX_FROZEN_RECEIPTS = " + json.dumps(str(expected))
+    if expected_line not in Path(private_config).read_text(encoding="utf-8").splitlines():
+        raise BenchError("private MCP config does not use the canonical frozen MCP receipt path")
+    return expected
+
+
 def load_suite(root: Path) -> dict[str, Any]:
     cfg = _json(root / "suite.json")
     cells = cfg.get("cells")
@@ -614,6 +636,7 @@ def _verify_offline_hostprobe(proof: dict[str, Any]) -> None:
 
 def _prepare_retry_attempt(root: Path, rid: str, attempt_no: int) -> None:
     """Materialize an auth-free retry profile before preflight binds its hash."""
+    root = suite_root(root)
     if attempt_no <= 1:
         return
     cfg = load_suite(root)
@@ -710,6 +733,9 @@ def _stamp_launch_context(attempt_receipt: Path, run_receipt: Path, attempt_dir:
 def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int = 1,
                  private_base: Path | None = None,
                  frozen_root_override: Path | None = None) -> tuple[Path, dict[str, Any]]:
+    # Normalize before deriving suite/profile paths. The MCP server's cwd is
+    # neutral-cwd, so a relative receipt path would silently escape the attempt.
+    run_dir = run_dir.resolve()
     # Active profiles/authentication stay outside the repository.
     local_app = private_base or Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
     suite_key = hashlib.sha256(str(run_dir.resolve().parents[1]).encode()).hexdigest()[:12]
@@ -719,7 +745,7 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
     codex_home.mkdir(parents=True, exist_ok=True)
     (home / "neutral-cwd").mkdir(exist_ok=True)
     frozen_root = frozen_root_override or Path(os.environ.get("CODEX_BENCH_FROZEN_ROOT", str(DEFAULT_FROZEN)))
-    receipts = run_dir / attempt_name / "frozen-mcp-receipts.jsonl"
+    receipts = _mcp_receipt_path(run_dir / attempt_name)
     python = str(Path(sys.executable))
     mcp_script = str(HERE / "codex_frozen_mcp.py")
     codex_tier = "priority" if cell["speed"] == "fast" else "default"
@@ -774,6 +800,7 @@ def _make_config(run_dir: Path, rid: str, cell: dict[str, Any], attempt_no: int 
 
 
 def _write_attempt(root: Path, rid: str, cell: dict[str, Any], rendered_prompt: str, attempt_no: int = 1) -> Path:
+    root = suite_root(root)
     run_dir = root / "runs" / rid
     attempt = run_dir / f"attempt-{attempt_no:02d}"
     if attempt.exists():
@@ -796,8 +823,10 @@ def _write_attempt(root: Path, rid: str, cell: dict[str, Any], rendered_prompt: 
         "frozen_root": str(frozen_root), "private_home": str(private_home), "codex_home": str(codex_home),
         "created_utc": datetime.now(timezone.utc).isoformat(), "status": "PREPARED",
         "attempt": attempt_no, "multi_agent": False, "agents_enabled": False,
+        "mcp_receipts_path": run_config["mcp_receipts"],
         "max_concurrent_threads_per_session": 1,
     }
+    _validate_mcp_receipt_binding(run_config, attempt, receipt)
     _write_json(attempt / "launch.json", receipt)
     _write_json(_record_path(run_dir), receipt)
     return run_dir
@@ -836,6 +865,7 @@ def _refresh_prepared_prompt(run_dir: Path, rendered: str) -> None:
 
 def _refresh_prepared_profile(run_dir: Path, rid: str, cell: dict[str, Any]) -> None:
     """Regenerate only the latest untouched PREPARED profile, preserving history."""
+    run_dir = run_dir.resolve()
     root_receipt = _record_path(run_dir)
     attempts = sorted(run_dir.glob("attempt-[0-9][0-9]"))
     if not root_receipt.is_file() or not attempts:
@@ -867,12 +897,14 @@ def _refresh_prepared_profile(run_dir: Path, rid: str, cell: dict[str, Any]) -> 
     receipt_path = attempt_dir / "launch.json"
     receipt = _json(receipt_path)
     receipt.update({"codex_home": str(codex_home), "prompt_sha256": task_digest,
-                    "config_sha256": _sha(config_path.read_bytes())})
+                    "config_sha256": _sha(config_path.read_bytes()),
+                    "mcp_receipts_path": config["mcp_receipts"]})
     _write_json(receipt_path, receipt)
     root_item = _json(root_receipt)
     attempt_item = _json(receipt_path)
     root_item.update({"prompt_sha256": task_digest,
                       "codex_home": attempt_item.get("codex_home"),
+                      "mcp_receipts_path": attempt_item.get("mcp_receipts_path"),
                       "config_sha256": _sha((attempts[-1] / "requested-config.json").read_bytes())})
     _write_json(root_receipt, root_item)
 
@@ -951,6 +983,7 @@ def _probe_mcp(env: dict[str, str]) -> dict[str, Any]:
 
 
 def prepare(root: Path) -> int:
+    root = suite_root(root)
     cfg = load_suite(root)
     concurrency(root, None)
     if isinstance(cfg.get("concurrency"), dict) and cfg["concurrency"].get("auto_start", False):
@@ -990,6 +1023,7 @@ def prepare(root: Path) -> int:
 
 
 def _preflight(root: Path) -> int:
+    root = suite_root(root)
     cfg = load_suite(root)
     entries = run_ids(root, cfg)
     template_path = (root / cfg.get("template", "task-frozen.tmpl")).resolve()
@@ -1023,6 +1057,7 @@ def _preflight(root: Path) -> int:
         if receipt.get("status") != "PREPARED":
             continue
         config = _json(attempt_config)
+        attempt_dir = run_dir / f"attempt-{attempt_no:02d}"
         if config.get("profile_version") != PROFILE_VERSION:
             _refresh_prepared_profile(run_dir, rid, {"model": receipt["model"],
                                                     "effort": receipt["effort"],
@@ -1032,6 +1067,9 @@ def _preflight(root: Path) -> int:
             attempt_config = run_dir / f"attempt-{attempt_no:02d}" / "requested-config.json"
             attempt_receipt = run_dir / f"attempt-{attempt_no:02d}" / "launch.json"
             config = _json(attempt_config)
+            attempt_dir = run_dir / f"attempt-{attempt_no:02d}"
+        attempt_meta = _json(attempt_receipt)
+        _validate_mcp_receipt_binding(config, attempt_dir, attempt_meta)
         codex_home = Path(receipt.get("codex_home", ""))
         config_path = codex_home / "config.toml"
         if (not config_path.is_file() or config.get("private_config") != str(config_path) or
@@ -1166,6 +1204,7 @@ def _postflight(root: Path) -> dict[str, Any]:
 
 
 def preflight(root: Path) -> int:
+    root = suite_root(root)
     lock = _lock(root)
     try: return _preflight(root)
     finally: lock.close()
@@ -1173,6 +1212,7 @@ def preflight(root: Path) -> int:
 
 def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: int = 1,
                launch_mode: str = "sequential", effective_cap: int = 1, batch_id: str = "") -> int:
+    root = suite_root(root)
     if not execute:
         raise BenchError("model launch is disabled without the explicit --execute flag")
     cfg = load_suite(root)
@@ -1223,6 +1263,7 @@ def launch_one(root: Path, rid: str, execute: bool, timeout: int, attempt_no: in
         raise BenchError("attempt is not untouched PREPARED; refusing relaunch")
     codex_home = Path(receipt["codex_home"])
     config = _json(attempt / "requested-config.json")
+    _validate_mcp_receipt_binding(config, attempt, receipt)
     task = run_dir / "prompt.md"
     if (not task.is_file() or _sha(task.read_bytes()) != receipt.get("prompt_sha256") or
             proof.get("prepared_prompts", {}).get(rid) != receipt.get("prompt_sha256")):
