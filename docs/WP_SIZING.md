@@ -1,12 +1,12 @@
 # Work-package (WP) sizing, code maps, checkpoints (2026-10-15)
 
 Why: the imm26 program lost agents that read whole 60 KB+ files (chat_helper_functions.php is 694 KB / 16.6k lines, main.cpp 634 KB)
-and hit the 200k-token meter before their tests ran, and a coordinator stop orphaned healthy agents. Rules below keep every package
+and hit the context limit before their tests ran, and a coordinator stop orphaned healthy agents. Rules below keep every package
 small, resumable and cheap. Tool: `tools/automation/codemap.sh`. Standard block copy: `testing/AGENT_PROMPTS.md` ("Work packages").
 
 ## 1. What a work package is
 - One WP = **1-3 related items, or ONE phase** of an item: `code` | `tests` | `patch/compose` | `native build` | `live validation`.
-- Target **<= 120k tokens** of agent work (reads + edits + tool output + the final report). Hard stop for any agent is 200k.
+- Target **<= 120k tokens** of agent work (reads + edits + tool output + the final report). Agents auto-compact at ~150k (window 183000); never hand off just because of size.
 - A WP touching **more than 2 big files** (> 60 KB) is split before spawning (by file or by phase).
 - Phases are separate WPs even for one item: code (edit + `php -l`/build), tests (write + run offline tests), patch/compose (regenerate
   patch, compose onto the live tree), native build (STOBE.dll build, install), live validation (game rows). Never code + tests + live in one agent.
@@ -46,7 +46,7 @@ Why: imm26-reloadrows-A (9 rows) and -B (6) each ran to ~215k tokens with nothin
 3. The brief names the codemap entries to read (function names), not whole files. Briefs say "read only these", agents add reads sparingly.
 4. Patches: `diff -ruN` into a file, read only `diffstat` + the hunks being checked.
 
-## 5. CHECKPOINT rule (a stop at 200k must lose nothing)
+## 5. CHECKPOINT rule (a compaction at ~150k must lose nothing)
 At every milestone **or every ~40k tokens** (whichever first), do all four, in order, in one go:
 1. regenerate the patch (`/root/imm26/mkpatch.sh`-style `diff -ruN -x log base <name> > <name>.patch`) and copy it with new tests into `pending-fixes/<program>/<name>/`;
 2. `php -l` / compile-check what changed (a checkpoint is never a broken tree);
@@ -55,13 +55,13 @@ At every milestone **or every ~40k tokens** (whichever first), do all four, in o
 The status "latest" line must be enough for a fresh agent to continue without asking.
 
 ## 6. Meter levels, handoff, successors
-- **Warn level** (the subagent meter's WARN message, before 200k): finish the current edit, CHECKPOINT, then continue only if < 150k of work
+- **Warn level** (the subagent meter's ~120k WARN message; auto-compact follows at ~150k): finish the current edit, CHECKPOINT, then continue (never hand off just for size) while < 150k of work
   remains in the WP **and** the remaining steps are small; otherwise hand off now.
-- **200k stop:** nothing may be lost: patch, status `latest` and handoff file are always current (section 5), so the stop costs one respawn.
+- **Compaction (~150k; 200k only on non-Sonnet-5.5 models):** nothing may be lost: patch, status `latest` and handoff file are always current (section 5), so the stop costs one respawn.
 - **Handoff:** status `STOPPED-CONTEXT`, handoff file with exact next step, final report begins `CONTEXT LIMIT: handoff at <path>`.
 - **Successor naming:** `wpA` -> `wpA2` -> `wpA3`; the successor continues the SAME work dir and patch name suffix-free (patch stays `wpA.patch`), is a
   fresh agent (never SendMessage a stopped one), pointed at the predecessor's status + handoff files. The ledger records the chain. More than 3 successors = the WP was mis-sized: split it.
-- **Coordinator** at its own limit (300k) hands off WITHOUT telling healthy running agents to stop: it stays alive as a TAIL session and relays their results (section 9, overlap handoff).
+- **(SUPERSEDED 2026-10-16: auto-compact ~150k, no tail)** Coordinator at its own limit (300k) hands off WITHOUT telling healthy running agents to stop: it stays alive as a TAIL session and relays their results (section 9, overlap handoff).
 
 ## 7. Agent BRIEF TEMPLATE (copy into every Agent prompt)
 ```
@@ -70,7 +70,7 @@ GOAL: <1-3 items or one phase; acceptance in one sentence each>.
 FILES: work dir /root/imm26/<wpName>/ (private copy: mkwp.sh <wpName>); touch only: <paths>. Base (read-only): /root/imm26/base.
 CODEMAP: /root/imm26/codemap/ (INDEX.txt). Read ONLY: <file>: <func1>, <func2> (grep -n name <map>; sed -n a,bp <file>). Files > 60 KB never read whole.
 BUDGET: <= 120k tokens. READ-ONLY investigators/classifiers: at most 3 rows (or ~120k tokens) per agent (PI-42: 4 of 4 classifiers hit 200k before the final table) and write the result table row by row into the report file as each row is finished, never at the end. CHECKPOINT every milestone or ~40k tokens: patch regenerated, php -l, agent-status "latest", commit/push, handoff file.
-At the meter WARN: finish the edit, checkpoint, continue only if < 150k work remains, else hand off (status STOPPED-CONTEXT).
+At the meter WARN (~120k): finish the edit, checkpoint, continue; auto-compact ~150k loses nothing if status+handoff are current; STOPPED-CONTEXT only after a failed compaction.
 STATUS: powershell -NoProfile -File C:\KenshiModding\tools\automation\agent-status.ps1 <wpName> RUNNING|DONE|FAILED|STOPPED-CONTEXT "<task>" "<latest>" "<outputs>" "<next>"
 HANDOFF: C:\KenshiTestRuns\agents\<wpName>.handoff.md ; successor name <wpName>2.
 CHECKS: <exact commands, e.g. php -l, tests path, RESULT lines to paste>; 3 failed attempts = FAILED with last error.
@@ -91,7 +91,7 @@ only: code maps, warn level, successor names, tool pointers.)
 ```
 - **Size work packages before spawning:** write a breakdown with token estimates first (`docs/WP_SIZING.md` section 2); one package = 1-3 related items or one phase (code | tests | patch/compose | native build | live validation), target <= 120k tokens, split anything touching more than 2 big files (> 60 KB). Never code + tests + live validation in one agent.
 - **Big files are read through code maps:** `bash tools/automation/codemap.sh` (WSL) keeps `/root/imm26/codemap/<label>__<file>.txt` (name start end lines kind) for the large server PHP and STOBE C++ files; agents `grep -n funcname <map>` then `sed -n a,bp <file>`, never read a file > 60 KB whole; briefs name the functions to read. Regenerate a map after editing its file (`codemap.sh <file>`; `--check` lists stale maps).
-- **Checkpoints and handoffs:** every milestone or ~40k tokens an agent regenerates its patch, compile-checks, updates its status `latest`, commits and updates its handoff, so a stop at 200k loses nothing. At the meter's warn level (before 200k): finish the edit, checkpoint, continue only if < 150k of work remains, else hand off (STOPPED-CONTEXT). Successors are fresh agents named wpA -> wpA2 -> wpA3 (the same work dir). Brief template: `docs/WP_SIZING.md` section 7.
+- **Checkpoints and handoffs:** every milestone or ~40k tokens an agent regenerates its patch, compile-checks, updates its status `latest`, commits and updates its handoff, so a compaction (auto at ~150k) loses nothing. At the meter's ~120k warning: finish the edit, checkpoint, continue; never hand off just because of size (STOPPED-CONTEXT only after a failed compaction or on a model without the 183000 window). Successors are fresh agents named wpA -> wpA2 -> wpA3 (the same work dir). Brief template: `docs/WP_SIZING.md` section 7.
 ```
 
 ## 9. CONTEXT-METER HANDOFF TEXT (RESOLVED 2026-10-15: the proposal below was REJECTED by the resume test; REPLACED the same day by the OVERLAP HANDOFF)
