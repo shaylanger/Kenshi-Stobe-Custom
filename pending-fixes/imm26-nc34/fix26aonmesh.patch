@@ -1,0 +1,21 @@
+--- a/src/ActivityRuntimeBindings.cpp
++++ b/src/ActivityRuntimeBindings.cpp
+@@ -381,13 +381,16 @@
+  t.reachable=_finite(p.x)&&_finite(p.y)&&_finite(p.z)&& world_->navmesh && avatar && avatar->isOnNavmesh() && world_->navmesh->pathExists(avatar,p)==1;
+  // fix26anav (row 26-a NC31): the actor reported isOnNavmesh()==0 right after the route arrival, so pathExists was never asked. For a Hunt target that is
+  // visible, close (<= 35 u planar) and on/next to walkable mesh, an off-mesh actor is not evidence of an unreachable animal; the native order paths itself.
+- if(!t.reachable && a.kind==Hunt && actor && avatar && world_->navmesh && t.visible && _finite(p.x)&&_finite(p.y)&&_finite(p.z) && !avatar->isOnNavmesh()) {
++ // fix26aonmesh (row 26-a NC33): the same fallback now also covers an ON-mesh actor whose pathExists verdict is unconfirmed (ACTIVITY_SCAN_DIAG onMesh=1 rawPath=0
++ // reach=0 for a KO'd goat 9 u away -> TakeItem rejected with current_native_path_unconfirmed). Only reached when the native rule above already said "not reachable";
++ // the same Hunt-only, visible, target-on-mesh, 35 u planar / 12 u vertical bounds apply (OffMeshShortRange), so far targets are never broadened.
++ if(!t.reachable && a.kind==Hunt && actor && avatar && world_->navmesh && t.visible && _finite(p.x)&&_finite(p.y)&&_finite(p.z)) {
+   Ogre::Vector3 snap; bool targetOnMesh=false;
+   try { targetOnMesh=world_->navmesh->getClosestPoint(p,Stobe::ActivityReach::kTargetSnapRadius,1.0f,false,snap)==1 && _finite(snap.x)&&_finite(snap.y)&&_finite(snap.z); } catch(...) {}
+   const Ogre::Vector3 ap=actor->getPosition();
+   t.reachable=Stobe::ActivityReach::OffMeshShortRange(true,false,t.visible,targetOnMesh,p.x-ap.x,p.z-ap.z,p.y-ap.y);
+   try { static DWORD lastOffMeshLog=0; const DWORD nowTick=GetTickCount();
+-   if(nowTick-lastOffMeshLog>2000) { lastOffMeshLog=nowTick; std::ostringstream o; o<<"ACTIVITY_OFFMESH_REACH id="<<a.id<<" serial="<<t.serial<<" targetOnMesh="<<(targetOnMesh?1:0)
++   if(nowTick-lastOffMeshLog>2000) { lastOffMeshLog=nowTick; std::ostringstream o; o<<"ACTIVITY_OFFMESH_REACH id="<<a.id<<" serial="<<t.serial<<" actorOnMesh="<<(avatar->isOnNavmesh()?1:0)<<" targetOnMesh="<<(targetOnMesh?1:0)
+     <<" dx="<<(p.x-ap.x)<<" dz="<<(p.z-ap.z)<<" dy="<<(p.y-ap.y)<<" reachable="<<(t.reachable?1:0); Log(o.str()); } } catch(...) {}
+  }
+  if(!t.reachable) reason="current_native_path_unconfirmed"; // Observation survives; dispatch still requires reachable.
