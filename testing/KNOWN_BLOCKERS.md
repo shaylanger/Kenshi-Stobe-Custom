@@ -4,7 +4,7 @@
 - Native people list drops NPCs > 80 units: keep the addressed NPC and bystanders within 80 (check dist_to_target).
 - Lane general_settings PLAYER_NAME defaults to 'Drifter' (speaker is 'Shay'): set it before gate/trust/deal rows.
 - Leftover deals / PROPOSED or ACCEPTED travel agreements contaminate follow-up and travel rows: clear before each row.
-- lane-setup.sh --with Cind fails while the world is paused; harness `fight` refuses same-faction NPCs; `faction` re-serials the NPC; stobe_ctxpush needs the full "Name [Faction]".
+- lane-setup.sh --with Cind failed intermittently ('no character named Cind', ~20% of loads): not the pause itself but a race. Cind (Traders Guild, 2.5 km from Shay in the base saves) enters the harness character list 22-29 s after a load while STEP 3 paused at ~21 s. Fixed 2026-10-16 (imm26-fixcindwait): lane-setup.sh polls `where NAME` (up to 40 x 1 s) for each --with NAME before the pause (see agents/out/imm26-invcind/latest.md). Harness `fight` refuses same-faction NPCs; `faction` re-serials the NPC; stobe_ctxpush needs the full "Name [Faction]".
 - 16-c: sparse-profile NPC makes dynamic profile refresh fail (backstory count); use a non-sparse NPC; clear metadata.imm26_anchor.
 - 15-a: KO must come from real combat events (ko: incident, target.conscious=false); harness transfer on a conscious NPC records a 'gift'.
 - Server fixes pending in compose tree: see agents\imm26-compose-fix-batch2.status.

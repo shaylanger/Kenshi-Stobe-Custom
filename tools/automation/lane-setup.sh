@@ -59,6 +59,10 @@ if [ "$NOLOAD" != 1 ]; then
   W=$(A wait-world 180); echo "$W" | tail -1
   echo "$W" | grep -qiE 'error|timeout|timed out' && fail "wait-world: $W"
   sleep 5
+  # --with NPCs (e.g. Cind, Traders Guild, 2.5 km from Shay) enter the character list ~22-29 s after a load: wait for them BEFORE the pause (imm26-fixcindwait)
+  while IFS= read -r w; do [ -n "$w" ] || continue
+    for i in $(seq 1 40); do A where "$w" | grep -q '^ERROR' || break; sleep 1; done
+  done <<< "$WITH"
 fi
 step "3 speed 0 hold"; A speed 0 hold | head -1
 ST=$(A status); echo "$ST"
@@ -224,6 +228,7 @@ ls_selftest() {
   for r in "5090 3" "5090 5" "4080 3" "4080 4"; do
     t "body syntax $r" "( ls_parse_args ${r% *} ${r#* } kah-x --with Cind >/dev/null 2>&1; ls_route 2>/dev/null; ls_body \"\$LS_RIGENV\" | bash -n )"
   done
+  t "waits for --with before the pause" '( ls_parse_args 5090 4 kah-x --with Cind >/dev/null 2>&1; ls_route 2>/dev/null; b=$(ls_body "$LS_RIGENV"); a=$(echo "$b" | grep -n "BEFORE the pause" | head -1 | cut -d: -f1); p=$(echo "$b" | grep -n "step \"3 speed 0 hold\"" | head -1 | cut -d: -f1); [ -n "$a" ] && [ -n "$p" ] && [ "$a" -lt "$p" ] )'
   # chars parser on a canned real reply (5090 i3, 2026-10-15) incl. a bracketed title and a PosX prefix
   local sample='4 within 120.0: Fenn [Captain Grolf] #1091918976/1 [Holy Nation Outlaws] pos=-53200.0,957.0,4893.0 dist=2.0 race=Greenlander | Kint #1295043968/1 [Nameless] pos=-62010.3,328.8,16285.5 dist=0.0 race=Greenlander | Pack Beast #1490966784/14 [Traders Guild] pos=-62110.3,326.0,16271.1 dist=101.1 race=Garru (darker) | Cind [Hungry Bandit] #2529907200/2 [Traders Guild] pos=-50970.0,1533.0,2965.0 dist=9.0 race=Greenlander'
   local out; out=$( { ls_prelude; echo 'printf "%s\n" "$SAMPLE" | ls_parse'; } | SAMPLE="$sample" bash )
