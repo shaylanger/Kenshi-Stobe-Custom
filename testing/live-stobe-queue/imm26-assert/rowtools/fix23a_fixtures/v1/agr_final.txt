@@ -1,0 +1,6 @@
+34127|COMPLETED|completed|measured_route_arrival_order_ended|true|trip-abf84fea52a16db14c6289c709eb05b4|Squin
+34126|ACCEPTED|requested|||trip-abf84fea52a16db14c6289c709eb05b4|Squin
+34094|ACCEPTED|requested|||trip-abf84fea52a16db14c6289c709eb05b4|Squin
+34092|ACCEPTED|requested|||trip-abf84fea52a16db14c6289c709eb05b4|Squin
+34090|ACCEPTED|accepted|||trip-abf84fea52a16db14c6289c709eb05b4|Squin
+34084|PROPOSED|proposed|||trip-abf84fea52a16db14c6289c709eb05b4|Squin

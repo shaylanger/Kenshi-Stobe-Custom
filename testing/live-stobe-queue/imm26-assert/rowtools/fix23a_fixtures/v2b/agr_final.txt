@@ -1,0 +1,6 @@
+34211|COMPLETED|completed|measured_route_arrival_order_ended|true|trip-083a4246db17183b9fbb6caa16476fd0|Squin
+34210|ACCEPTED|requested|||trip-083a4246db17183b9fbb6caa16476fd0|Squin
+34181|ACCEPTED|requested|||trip-083a4246db17183b9fbb6caa16476fd0|Squin
+34179|ACCEPTED|requested|||trip-083a4246db17183b9fbb6caa16476fd0|Squin
+34177|ACCEPTED|accepted|||trip-083a4246db17183b9fbb6caa16476fd0|Squin
+34167|PROPOSED|proposed|||trip-083a4246db17183b9fbb6caa16476fd0|Squin
