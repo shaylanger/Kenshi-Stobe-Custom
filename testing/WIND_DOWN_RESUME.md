@@ -14,7 +14,7 @@ session can resume cold. Read with `COORDINATOR_LIVE.md` (last 40 lines), `SHAY_
 ## 1. Rows stopped mid-way (need a rerun / live proof)
 | Row | State | What is needed |
 |---|---|---|
-| 23-a | fix23agate2 was finishing its selftest (nearby-ask recipe `tripdefs_23a2.sh`, `unblock_23a2_selftest.sh`) | confirm selftest, then rerun 23-a on a lane (op41 was stopped by Shay before launching) |
+| 23-a | fix23agate2 DONE (367387fa): cause = recipe asked for Squin (14.5 km, Shay attacked there); now 3 nearby asks + a2_gate_local guard, selftest 71/71, no swap needed | rerun: `bash rowtools/unblockrun_23a2.sh 23-a 5090-i3 --save kah-imm26-5090 --allow-retry "fix23agate2: nearby ask, local gate"`; expect RESULT 23-a PASS; a rare SETUP-FAIL "FAR destination" = LLM variance, rerun once; if the LLM never offers a local place, deploy the inject-travel seam on 5090-i3. Notes: inbox\operatorsix23agate2.txt |
 | 15-bx | ordering fix works; real native defect: KO'd NPC still gets `[combat]` lines (Utils.cpp `CollectEventPeopleFromAnchor` has no sleep/KO filter); X2 hedge check may be too strict; 15-bx SETUP-FAIL (P not placed within 15 u) | native fixer for S1; Shay decision on X2 (relax or reword) |
 | 13-c-neg | recipe defect patched (9b180623, `unblockdefs_f3.sh`), live proof parked | live proof on 5090-i5 (free); setupfail ticket owner imm26-5090-i3op36, needs=native |
 | 26-a | root cause: DLL `owned_target` on fresh goats; fix proposed, NOT applied | apply fix, build + install DLL, rerun |
