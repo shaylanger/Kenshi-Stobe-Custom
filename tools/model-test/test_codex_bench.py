@@ -425,6 +425,73 @@ See C:\\KenshiModding\\src\\module.py:42
                 launch_mock.assert_called_once()
                 self.assertTrue((run_dir / "attempt-02" / "launch.json").is_file())
 
+    def test_preflight_refreshes_stale_prepared_profile_but_preserves_terminal_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "suite"
+            root.mkdir()
+            (root / "suite.json").write_text(json.dumps({
+                "cells": [
+                    {"slug": "stale-high-standard", "model": "x", "effort": "high", "speed": "standard"},
+                    {"slug": "done-high-standard", "model": "x", "effort": "high", "speed": "standard"},
+                ],
+                "prompts": ["prompt2.txt"], "prompt_numbers": [2], "template": "task-frozen.tmpl",
+            }))
+            (root / "prompt2.txt").write_text("p2")
+            (root / "task-frozen.tmpl").write_text("{TICKET} {PROMPT} {FROZEN} {FROZEN_WSL}")
+            cli = base / "codex.exe"
+            cli.write_bytes(b"fixture")
+            with mock.patch.dict(bench.os.environ, {
+                "LOCALAPPDATA": str(base / "local"), "CODEX_BENCH_CLI": str(cli),
+            }):
+                bench.prepare(root)
+                stale_dir = root / "runs" / "stale-high-standard-p2"
+                stale_config_path = stale_dir / "attempt-01" / "requested-config.json"
+                stale_config = bench._json(stale_config_path)
+                stale_config["profile_version"] = 5
+                stale_config_path.write_text(json.dumps(stale_config), encoding="utf-8")
+
+                done_dir = root / "runs" / "done-high-standard-p2"
+                done_attempt = done_dir / "attempt-01"
+                done_launch_path = done_attempt / "launch.json"
+                done_launch = bench._json(done_launch_path)
+                done_launch["status"] = "RECORDED"
+                done_launch.pop("mcp_receipts_path", None)
+                bench._write_json(done_launch_path, done_launch)
+                bench._write_json(done_dir / "launch.json", done_launch)
+                done_config_path = done_attempt / "requested-config.json"
+                done_config = bench._json(done_config_path)
+                done_config["profile_version"] = 5
+                done_config["mcp_receipts"] = "relative\\legacy-receipts.jsonl"
+                done_config_path.write_text(json.dumps(done_config), encoding="utf-8")
+                private_path = Path(done_config["private_config"])
+                private_lines = private_path.read_text(encoding="utf-8").splitlines()
+                for index, line in enumerate(private_lines):
+                    if line.startswith("CODEX_FROZEN_RECEIPTS = "):
+                        private_lines[index] = 'CODEX_FROZEN_RECEIPTS = "relative\\\\legacy-receipts.jsonl"'
+                        break
+                private_path.write_text("\n".join(private_lines) + "\n", encoding="utf-8")
+                terminal_preimages = (done_launch_path.read_bytes(), done_config_path.read_bytes(),
+                                      private_path.read_bytes())
+
+                class StopBeforeExternalPreflight(Exception):
+                    pass
+
+                with mock.patch.object(bench, "_appserver_hook_rows", return_value=[]), \
+                     mock.patch.object(bench, "_validate_frozen", side_effect=StopBeforeExternalPreflight):
+                    with self.assertRaises(StopBeforeExternalPreflight):
+                        bench._preflight(root)
+
+                stale_launch = bench._json(stale_dir / "attempt-01" / "launch.json")
+                refreshed = bench._json(stale_config_path)
+                expected = str((stale_dir / "attempt-01" / "frozen-mcp-receipts.jsonl").resolve())
+                self.assertEqual(refreshed["profile_version"], bench.PROFILE_VERSION)
+                self.assertEqual(refreshed["mcp_receipts"], expected)
+                self.assertEqual(stale_launch["mcp_receipts_path"], expected)
+                bench._validate_mcp_receipt_binding(refreshed, stale_dir / "attempt-01", stale_launch)
+                self.assertEqual((done_launch_path.read_bytes(), done_config_path.read_bytes(),
+                                  private_path.read_bytes()), terminal_preimages)
+
     def test_strict_exec_config_probe_stops_before_any_prompt(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = mock.Mock(returncode=1, stdout="Reading prompt from stdin...\nNo prompt provided via stdin.\n", stderr="")

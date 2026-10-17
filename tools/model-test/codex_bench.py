@@ -37,7 +37,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*-p[0-9]+$")
 LEDGER_MUTEX = threading.Lock()
 ACTIVE_LOCK = threading.Lock()
 ACTIVE_PROCESSES: set[subprocess.Popen] = set()
-PROFILE_VERSION = 5
+PROFILE_VERSION = 6
 FROZEN_TOOLS = ["mcp__frozen__list", "mcp__frozen__read", "mcp__frozen__search", "mcp__frozen__sql"]
 RETRYABLE_TERMINAL_STATUSES = frozenset({"FAILED", "FAILED_SETUP", "TIMEOUT", "FAILED_IO", "FAILED_START",
                                         "FAILED_NO_ROOT_ROLLOUT", "FAILED_NO_FINAL_REPORT", "COMPLETE_UNAUDITED"})
