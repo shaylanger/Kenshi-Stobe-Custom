@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """unblockscen_23a2.py <name>   scenario JSON for unblockfake_23a2.py (unblock_23a2_selftest.sh). Base = unblockscen_sfk.py sfk23-pass / sfk23-failed (tripscen 23a-pass steps).
-Names: a2-pass a2-hub-pass a2-reaccept a2-reaccept3 a2-lead a2-proposed-forever a2-notanchored a2-ypre a2-cleared a2-nostart a2-obs0 a2-late-drop a2-air a2-failed a2-local-gate a2-stale-y"""
+Names: a2-pass a2-hub-pass a2-reaccept a2-reaccept3 a2-lead a2-proposed-forever a2-notanchored a2-ypre a2-cleared a2-nostart a2-obs0 a2-late-drop a2-air a2-failed a2-local-gate a2-stale-y a2-local-ask a2-far-then-local a2-far-forever"""
 import json
 import os
 import subprocess
@@ -48,6 +48,14 @@ elif n == 'a2-stale-y':       # op37: after the 14.7 km stage the y read is stal
     S['stage_air'] = True
 elif n == 'a2-local-gate':    # inv23a / fix23agate: the gate is 390 u from Cind at the Hub (a raw +400 x stage landed on an unmeshed hilltop): no stage teleport at all
     S['start'] = 'hub'; S['destpoint'] = '-52810.9 1369.8 4884.3'
+elif n == 'a2-local-ask':     # fix23agate2: local-ask mode, the LLM proposes a landmark 410 u from Cind at the Hub: accepted, no stage
+    S['start'] = 'hub'; S['destpoints'] = ['-52810.9 1369.8 4884.3']
+elif n == 'a2-far-then-local':   # first ask answered with the Squin gate (the op38 21:34 data), second ask with a local landmark
+    S['start'] = 'hub'; S['steps'] = [st[0], st[0], st[1]] + st[2:]; S['accepted_after_say'] = 3
+    S['destpoints'] = ['-62461 328.8 16346.8', '-52810.9 1369.8 4884.3']
+elif n == 'a2-far-forever':      # all three asks propose the real op38 gate (-62461,328.8,16346.8), 14.5 km from the Hub: SETUP-FAIL before accept/stage
+    S['start'] = 'hub'; S['steps'] = [st[0], st[0], st[0]]; S['accepted_after_say'] = 0
+    S['destpoints'] = ['-62461 328.8 16346.8']
 else:
     raise SystemExit('unknown scenario ' + n)
 print(json.dumps(S))

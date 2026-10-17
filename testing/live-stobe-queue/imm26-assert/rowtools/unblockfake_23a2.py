@@ -6,6 +6,7 @@ rest to unblockfake_sfk.py (-> 23-a chain 'f' fakes). Scenario keys (env FAKE_SC
   wcall_pos {"<n>": "x,y,z"}     override the n-th a2:where answer (1-based)
   stage_air (bool)               after the stage teleport (`... dist <back>`) `where` answers y=1570.8 (op35 a2)
   accepted_after_say N           the newest travel_agreement is ACCEPTED once N stobe_say calls were made (before: PROPOSED); 0/absent = never
+  destpoints ["x y z", ...]    the newest agreement's destination_point after the n-th stobe_say (last repeats); needs the local-ask mode (A2_LOCAL=1)
   native 'ok'|'cleared'|'none'|'obs0'|'drops_late'|'lead'   what the stobe.log NATIVE_TRAVEL probes see (lead: START only after a say containing 'Lead the way')
 Never touches a game, ssh or DB."""
 import json
@@ -75,6 +76,9 @@ if kind == 'h':
             out(['START: 1', 'ENDED: ', 'OBS: ' + OBS % 0])
         out(['START: 0', 'ENDED: ', 'OBS: '])
 elif kind == 'sql':
+    if body.startswith("select data from eventlog where type='travel_agreement' order by rowid desc limit 1") and scen.get('destpoints'):   # fix23agate2: the newest agreement's destination_point follows the ask just made
+        dps = scen['destpoints']; x, y, z = dps[min(max(st['says'], 1), len(dps)) - 1].split()
+        out(['{"agreement_id":"trip-aaa","destination_point":{"x":%s,"y":%s,"z":%s},"status":"PROPOSED"}' % (x, y, z)])
     if 'a2:agr' in body:
         n = scen.get('accepted_after_say', 0)
         out(['ACCEPTED|requested' if n and st['says'] >= n else 'PROPOSED|proposed'])

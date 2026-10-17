@@ -8,7 +8,8 @@ ST_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; A="$ST_HERE/.."
 REAL_PY=$(command -v python3 || command -v python)
 T=$(mktemp -d); export KAH_ROWS_BASE="$T/runs" KAH_ROW_FAKE=1 KAH_ROW_FAKE_LOG="$T/fake.log" KAH_PF_ISOLATION=0 FAKE_STATE="$T/state.json"
 export ROW_SETTLE=0 ROW_WAIT=1 TRIP_SE_TRIES=2 RW_SAY_WAIT=0 SFK_23A_TRIES=3 SFK_KO_WAIT=1 SFK_23A_WAIT=10 TRIP_23A_SETTLE=0
-unset KAH_AGENT_NAME KAH_ROW_DRY TRIP_TRAP TRIP_GATE TRIP_SAVE TRIP_DEST TRIP_ACCEPT TRIP_ALT SFK_23A_BACK SFK_23A_SPEED SFK_SQUIN_GATE TRIP_HUB TRIP_A2_ACCEPT_TRIES A2_ANCHOR A2_NATIVE_TRIES A2_STAGE_DY A2_HUB_DY A2_STAGE_MOVED_SKIP A2_NO_STAGE_MAX
+unset KAH_AGENT_NAME KAH_ROW_DRY TRIP_TRAP TRIP_GATE TRIP_SAVE TRIP_DEST TRIP_ACCEPT TRIP_ALT SFK_23A_BACK SFK_23A_SPEED SFK_SQUIN_GATE TRIP_HUB TRIP_A2_ACCEPT_TRIES A2_ANCHOR A2_NATIVE_TRIES A2_STAGE_DY A2_HUB_DY A2_STAGE_MOVED_SKIP A2_NO_STAGE_MAX A2_LOCAL
+export A2_LOCAL=0   # legacy scenarios ask for Squin as before; the nearby-ask mode (fix23agate2) is tested below
 export A2_STAGE_MOVED_SKIP=999999   # legacy scenarios keep the unconditional landing check (a2-air); the op37 skip is tested explicitly below
 mkdir -p "$KAH_ROWS_BASE"
 n=0; ok=0
@@ -66,6 +67,17 @@ expect a2-stage-in-the-air-setup-fail a2-air "RESULT 23-a SETUP-FAIL" "left Cind
 expect local-gate-no-stage a2-local-gate "RESULT 23-a PASS"
 [ "$(staged)" = 0 ] && grep -q 'no-stage gate_dist=' "$EVB/23-a/stage.txt" && grep -q 'no stage: gate is' "$EVB/23-a/a2_setup.txt" && chk local-gate-not-staged ok || chk local-gate-not-staged bad "stage=$(staged) $(cut -c1-120 "$EVB/23-a/stage.txt" 2>/dev/null)"
 [ "$(walked)" -ge 1 ] && chk local-gate-still-walks ok || chk local-gate-still-walks bad "walk=$(walked)"
+# fix23agate2: nearby-ask mode (default in real runs): the gate must be local; a far proposal (op38 21:34: the Squin gate) is re-asked and then SETUP-FAILs before any accept/stage
+export A2_LOCAL=1
+expect local-ask-pass a2-local-ask "RESULT 23-a PASS"
+[ "$(staged)" = 0 ] && ! grep -q 'Take me to Squin' "$F" && grep -q 'close by' "$F" && grep -q 'local=1' "$EVB/23-a/a2_setup.txt" && grep -q 'no-stage gate_dist=' "$EVB/23-a/stage.txt" && chk local-ask-no-squin-wording-no-stage ok || chk local-ask-no-squin-wording-no-stage bad "stage=$(staged) $(cut -c1-120 "$EVB/23-a/stage.txt" 2>/dev/null)"
+expect far-then-local-reasks a2-far-then-local "RESULT 23-a PASS"
+[ "$(staged)" = 0 ] && grep -q 'PROPOSED but the destination is far' "$EVB/23-a/a2_setup.txt" && grep -q 'nearest landmark' "$F" && grep -q 'no-stage gate_dist=3' "$EVB/23-a/stage.txt" && chk far-then-local-asked-twice-no-stage ok || chk far-then-local-asked-twice-no-stage bad "stage=$(staged) $(cut -c1-120 "$EVB/23-a/stage.txt" 2>/dev/null)"
+expect far-forever-setup-fail-before-accept a2-far-forever "RESULT 23-a SETUP-FAIL" "FAR destination"
+[ "$(staged)" = 0 ] && [ "$(walked)" = 0 ] && [ "$(says)" = 3 ] && ! grep -q 'I.m fine. Yes' "$F" && grep -q -- '-62461' "$EVB/23-a/a2_setup.txt" && chk far-forever-3-asks-no-accept-no-stage-no-walk ok || chk far-forever-3-asks-no-accept-no-stage-no-walk bad "says=$(says) stage=$(staged) walk=$(walked)"
+scen a2-far-forever; TRIP_DEST=Squin run 23-a $L >/dev/null; grep -q 'Take me to Squin' "$F" && chk explicit-dest-keeps-squin-wording ok || chk explicit-dest-keeps-squin-wording bad
+scen a2-local-ask; A2_LOCAL=0 run 23-a $L >/dev/null; grep -q 'Take me to Squin' "$F" && chk a2-local-0-keeps-squin-wording ok || chk a2-local-0-keeps-squin-wording bad
+export A2_LOCAL=0
 unset A2_STAGE_MOVED_SKIP
 expect stale-y-after-far-stage-is-not-a-setup-fail a2-stale-y "RESULT 23-a PASS"
 grep -q 'landing check skipped' "$EVB/23-a/a2_setup.txt" && [ "$(staged)" = 1 ] && chk stale-y-skip-logged-and-staged ok || chk stale-y-skip-logged-and-staged bad
@@ -98,6 +110,7 @@ mutant air-check-removed a2-air '/# a2:guard-air$/s/ if .*; then   #/  if false;
 mutant resay-no-break-on-accepted a2-pass '/# a2:guard-resay$/s/.*/    :/'
 mutant accepted-assert-removed a2-proposed-forever '/# a2:guard-accepted$/s/.*/    *) ;;/'
 mutant near-gate-guard-removed a2-local-gate '/# a2:guard-near-gate$/s/.*/  if false; then/'
+A2_LOCAL=1 mutant local-dest-guard-removed a2-far-forever '/# a2:guard-local-dest$/s/.*/    :/'
 mutant accept-tries-1 a2-reaccept 's/TRIP_A2_ACCEPT_TRIES:-3/TRIP_A2_ACCEPT_TRIES:-1/'
 
 # ------------------------------------------------------------------ CLI: unblockrun_23a2.sh as a separate process

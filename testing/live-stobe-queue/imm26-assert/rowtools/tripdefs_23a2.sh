@@ -12,6 +12,9 @@
 #       travel_agreement status, then SETUP-FAIL early (no staging, no walk) naming the reason.
 #   lane-setup.sh --with Cind --teleport does not move 'Cind [Hungry Bandit]': a2_anchor teleports Shay, then Cind/Malzin onto Shay by full name (the pattern tr_quiet uses).
 # Every guard is one line tagged `# a2:guard-<name>`; unblock_23a2_selftest.sh deletes each in turn (mutation test) and requires the scenario that needs it to change.
+# fix23agate2 (op38 21:34): 'Take me to Squin.' made the agreement's gate the Squin gate (-62461,328.8,16346.8), 14.5 km away, so the 400 u stage still teleported Cind AND Shay there and Shay was attacked/KO'd (shay_guard).
+#   The recipe now ASKS FOR A NEARBY PLACE (A2_LOCAL=1 default; off when --dest/TRIP_DEST or --gate/TRIP_GATE is given, or A2_LOCAL=0), judges every PROPOSED reply with a2_gate_local (gate within A2_NO_STAGE_MAX of Cind,
+#   `# a2:guard-local-dest`), asks again (s1b, s1c) when the LLM named a far place, and SETUP-FAILs BEFORE the accept/stage when all three asks proposed a far place. A local gate takes the no-stage path (gate_dist ~200-500).
 # Env: TRIP_HUB ("-53200 960 4860") A2_HUB_DY (120: allowed |y - hub y|) TRIP_A2_ACCEPT_TRIES (3, max 3) A2_NATIVE_TRIES (8 probes x 2.5 s) A2_STAGE_DY (200: allowed Cind y above the gate
 #      y after the stage teleport; 0 disables) A2_STAGE_MOVED_SKIP (1000: skip that landing check when the stage teleport moved x/z more than this, the y read is stale, op37; a huge value = always check)
 #      A2_NO_STAGE_MAX (1500: no stage teleport when the gate is within this many units of Cind, the live order walks the mesh route, inv23a/fix23agate; only the 14.7 km Squin gate stages) A2_ANCHOR=0 (skip the Hub anchor) plus the sfK2 knobs (SFK_23A_BACK/SPEED/TRIES/WAIT, TRIP_GATE). Evidence: a2_setup.txt, a2_native_*.txt.
@@ -83,16 +86,36 @@ EOT
   fi
   return 3
 }
+a2_gate_local() {   # rc 0 when the newest agreement's destination_point is within A2_NO_STAGE_MAX (1500) planar units of Cind; sets A2_GATE_MSG. An unreadable gate/position counts as far (fix23agate2: the LLM named Squin, 14.5 km away)
+  local g p d
+  g=$(sfk_gate); p=$(a2_pos "$(rl_q "$RL_NPC_FULL")")
+  d=$(echo "$p $g" | awk 'NF>=6{dx=$1-$4; dz=$3-$6; printf "%.0f", sqrt(dx*dx+dz*dz)}')
+  A2_GATE_MSG="gate [${g:-?}] is ${d:-?} u from Cind [${p:-?}]"
+  [ -n "$d" ] && [ "$d" -le "${A2_NO_STAGE_MAX:-1500}" ]
+}
 a2_trip_setup() {   # s1 propose (three openers), s2 accept with bounded re-say while the DB agreement is still PROPOSED, then native-live assert. Sets A2_N0 (log line before s1)
   local lines steps i tries st s2b=0
   A2_N0=$(echo "wc -l < $LT_STOBELOG" | lt_h | tail -1 | tr -dc 0-9); A2_N0=${A2_N0:-0}
   ROW_NATIVE=1
-  rl_say 1 "Take me to $TR_DEST." || return $?
-  tr_prompt_guard 1 || return $?
-  tr_has s1 PROPOSED || { rl_say 1b "Would you lead me to $TR_DEST?" || return $?; }
-  tr_has s1 PROPOSED || tr_has s1b PROPOSED || { rl_say 1c "Walk with me to $TR_DEST." || return $?; }
-  tr_has s1 PROPOSED || tr_has s1b PROPOSED || tr_has s1c PROPOSED || { RL_REASON="no PROPOSED travel_agreement row after three asks (s1/s1b/s1c): an accept would be refused ('requires an existing concrete offer'); needs: recipe (see s1b/reply.txt)"; return 3; }
+  local ask1 ask2 ask3 want_local=0 step txt good=0 far=0 farmsg=""
+  ask1="Take me to $TR_DEST."; ask2="Would you lead me to $TR_DEST?"; ask3="Walk with me to $TR_DEST."
   lines=("${TRIP_ACCEPT:-I'm fine. Yes, let's go.}" "Yes, I accept. Please lead the way to $TR_DEST now." "I accept your offer. Let's go to $TR_DEST."); steps=(2 2b 2c)
+  if [ "${A2_LOCAL:-1}" != 0 ] && [ -z "${TRIP_DEST:-}" ] && [ -z "${TRIP_GATE:-}" ]; then   # fix23agate2: ask for a NEARBY place so the gate is local (no 14 km stage into a town that attacks Shay)
+    want_local=1
+    ask1="Cind, take me somewhere close by, just a short walk from here."; ask2="Lead me to the nearest landmark you can see from here."; ask3="Walk with me to a spot right outside, nearby."
+    lines[1]="Yes, I accept. Please lead the way there now."; lines[2]="I accept your offer. Let's go there."
+  fi
+  a2_log "openers: local=$want_local (A2_LOCAL=${A2_LOCAL:-1} TRIP_DEST='${TRIP_DEST:-}' TRIP_GATE='${TRIP_GATE:-}')"
+  for step in 1 1b 1c; do
+    case "$step" in 1) txt="$ask1";; 1b) txt="$ask2";; *) txt="$ask3";; esac
+    rl_say "$step" "$txt" || return $?
+    [ "$step" = 1 ] && { tr_prompt_guard 1 || return $?; }
+    tr_has "s$step" PROPOSED || continue
+    if [ "$want_local" = 1 ] && ! a2_gate_local; then far=1; farmsg="$A2_GATE_MSG"; a2_log "ask $step: PROPOSED but the destination is far ($A2_GATE_MSG)"; continue; fi   # a2:guard-local-dest
+    good=1; break
+  done
+  if [ "$good" != 1 ] && [ "$far" = 1 ]; then RL_REASON="the LLM proposed a FAR destination in every local ask (s1/s1b/s1c; last: $farmsg, limit ${A2_NO_STAGE_MAX:-1500} u): accepting would stage a 14 km teleport into a town that attacks Shay (fix23agate2); not a product verdict; needs: recipe/LLM (rerun, or --gate 'x y z' of a landmark near the Hub; see $EV/s1b/reply.txt)"; return 3; fi
+  [ "$good" = 1 ] || { RL_REASON="no PROPOSED travel_agreement row after three asks (s1/s1b/s1c): an accept would be refused ('requires an existing concrete offer'); needs: recipe (see s1b/reply.txt)"; return 3; }
   tries="${TRIP_A2_ACCEPT_TRIES:-3}"; [ "$tries" -gt 3 ] && tries=3; [ "$tries" -lt 1 ] && tries=1
   for (( i = 0; i < tries; i++ )); do
     rl_say "${steps[i]}" "${lines[i]}" || return $?
