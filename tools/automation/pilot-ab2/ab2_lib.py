@@ -105,6 +105,17 @@ def make_plan(rows, seed):
     return {"seed": seed, "created": now_iso(), "rows": rows, "first_arm_of_row_1": a0, "runs": runs}
 
 
+def build_plan(seed):
+    """Full plan dict from queue.txt + the CURRENT lane (baseline, script manifest). Used by ab2-plan.py and ab2-rebaseline.py."""
+    q = parse_queue()
+    plan = make_plan([r for r, _ in q], seed)
+    plan["lane"] = LANE
+    plan["baseline"] = baseline()
+    plan["manifest"] = {r: manifest(t) for r, t in q}
+    plan["queue"] = {r: t for r, t in q}
+    return plan
+
+
 def load_plan():
     p = read_json(ab2_dir() + "/plan.json")
     if not p:

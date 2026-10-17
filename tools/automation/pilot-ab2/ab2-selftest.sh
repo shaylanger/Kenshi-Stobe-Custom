@@ -79,5 +79,47 @@ S void 4 "skip" >/dev/null; "$PY" -I "$HERE/ab2-next.py" >/dev/null 2>&1; chk pl
 # compare (no transcripts: cost off)
 CMP="$("$PY" -I "$HERE/pilot-ab2-compare.py" --no-cost 2>&1)"; chk compare-table "echo \"\$CMP\" | grep -q '| $R1 |' && echo \"\$CMP\" | grep -q '## Totals'"
 chk compare-selftest "$PY -I '$HERE/pilot-ab2-compare.py' --selftest | grep -q 'SELFTEST OK'"
+
+# ---- rebaseline (ab2-rebaseline.py): archive + regenerate on the new lane state, refusals. Own data dir R (the main one above has runs).
+RB() { "$PY" -I "$HERE/ab2-rebaseline.py" "$@"; }
+GOODLANE='{"pid":4242,"lock_owner":"rig5090-imm26-i4","inflight":true,"held":true,"backend":"ok"}'
+NEWBASE='{"dll_mods":"3FE805BF","dll_re":"3FE805BF","bundle":"b2","saves":{"kah-imm26-i4":"1:bb","kah-imm26-i4-hx0":"1:cc"}}'
+export AB2_FAKE_LANE="$GOODLANE"
+OUT="$(AB2_DIR="$TW/ab2" RB --check 2>&1)"; RC=$?; chk rebase-refuses-after-runs "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'state.json has runs'"
+R="$TW/rb"; mkdir -p "$R"; cp "$T/ab2/queue.txt" "$T/ab2/brief.md" "$R/"
+export AB2_DIR="$R"
+"$PY" -I "$HERE/ab2-plan.py" --seed 7 >/dev/null 2>&1; chk rb-plan0 "[ -f '$R/plan.json' ]"
+P0="$(cat "$R/plan.json")"
+export AB2_FAKE_BASELINE="$NEWBASE" FAKE_WORD=DRY-RUN
+OUT="$(RB --check 2>&1)"; RC=$?; chk rebase-check "[ $RC = 0 ] && echo \"\$OUT\" | grep -q 'nothing written' && echo \"\$OUT\" | grep -q 'dll_mods' && [ \"\$(cat '$R/plan.json')\" = \"\$P0\" ] && [ -z \"\$(ls '$R' | grep plan.json.)\" ]"
+# refusals (each leaves plan.json untouched and no archive)
+OUT="$(AB2_FAKE_LANE='{"pid":null,"lock_owner":"rig5090-imm26-i4","inflight":true,"held":true,"backend":"ok"}' RB 2>&1)"; RC=$?; chk rebase-refuse-no-game "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'lane not up'"
+OUT="$(AB2_FAKE_LANE='{"pid":4242,"lock_owner":"someone","inflight":true,"held":true,"backend":"ok"}' RB 2>&1)"; RC=$?; chk rebase-refuse-lock "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'game-4.lock'"
+OUT="$(AB2_FAKE_LANE='{"pid":4242,"lock_owner":"rig5090-imm26-i4","inflight":false,"held":true,"backend":"ok"}' RB 2>&1)"; RC=$?; chk rebase-refuse-inflight "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'inflight'"
+OUT="$(AB2_FAKE_LANE='{"pid":4242,"lock_owner":"rig5090-imm26-i4","inflight":true,"held":false,"backend":"ok"}' RB 2>&1)"; RC=$?; chk rebase-refuse-held "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'lanes.held'"
+OUT="$(AB2_FAKE_LANE='{"pid":4242,"lock_owner":"rig5090-imm26-i4","inflight":true,"held":true,"backend":"pg down"}' RB 2>&1)"; RC=$?; chk rebase-refuse-backend "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'backend not healthy'"
+OUT="$(AB2_FAKE_BASELINE='{"dll_mods":"3FE805BF","dll_re":"7A5AF9EA","bundle":"b2","saves":{"kah-imm26-i4":"1:bb","kah-imm26-i4-hx0":"1:cc"}}' RB 2>&1)"; RC=$?; chk rebase-refuse-dll-copies "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'two Stobe.dll copies differ'"
+OUT="$(RB --expect-dll DEADBEEF 2>&1)"; RC=$?; chk rebase-refuse-expect "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'expected prefix'"
+OUT="$(AB2_FAKE_BASELINE='{"dll_mods":"3FE805BF","dll_re":"3FE805BF","bundle":null,"saves":{"kah-imm26-i4":"1:bb","kah-imm26-i4-hx0":"1:cc"}}' RB 2>&1)"; RC=$?; chk rebase-refuse-unreadable "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'baseline unreadable'"
+OUT="$(FAKE_WORD=SETUP-FAIL RB 2>&1)"; RC=$?; chk rebase-refuse-dry "[ $RC = 5 ] && echo \"\$OUT\" | grep -q -- '--dry failed for 2 row'"
+mkdir "$R/RUNNING"; OUT="$(RB 2>&1)"; RC=$?; chk rebase-refuse-lock-dir "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'RUNNING lock'"; rmdir "$R/RUNNING"
+chk rebase-refusals-wrote-nothing "[ \"\$(cat '$R/plan.json')\" = \"\$P0\" ] && [ -z \"\$(ls '$R' | grep plan.json.)\" ]"
+# the real thing
+OUT="$(RB --tag nc20 --expect-dll 3FE805BF 2>&1)"; RC=$?; chk rebase-ok "[ $RC = 0 ] && echo \"\$OUT\" | grep -q 'IDENTICAL to the archived plan'"
+chk rebase-archive "[ \$(ls '$R' | grep -c '^plan.json.nc20-') = 1 ] && [ \"\$(cat '$R'/plan.json.nc20-*)\" = \"\$P0\" ]"
+chk rebase-new-plan "$PY -I -c \"
+import json;o=json.loads(open('$R/plan.json.'+[f for f in __import__('os').listdir('$R') if f.startswith('plan.json.nc20-')][0].split('plan.json.')[1]).read());n=json.load(open('$R/plan.json'))
+assert n['baseline']['dll_mods']=='3FE805BF' and n['baseline']['bundle']=='b2' and n['seed']==o['seed']==7 and n['rows']==o['rows']
+assert [(r['seq'],r['arm'],r['row']) for r in n['runs']]==[(r['seq'],r['arm'],r['row']) for r in o['runs']]
+assert n['rebaseline']['game_pid']==4242 and n['rebaseline']['archived_as'].startswith('plan.json.nc20-') and n['manifest'] and n['queue']\""
+chk rebase-log "grep -q 'order_identical=True' '$R/rebaseline.log'"
+# the new plan is usable: first run
+set -- $("$PY" -I -c "import json;r=json.load(open('$TW/rb/plan.json'))['runs'][0];print(r['arm'],r['row'])"); A1=$1; R1=$2
+# a run is refused for an old baseline, accepted for the new one
+OUT="$(AB2_FAKE_BASELINE='{"dll_mods":"AAAAAAAA","dll_re":"AAAAAAAA","bundle":"b1","saves":{}}' "$PY" -I "$HERE/ab2-state.py" begin $A1 $R1 2>&1)"; chk rebase-old-baseline-refused "echo \"\$OUT\" | grep -q 'dll_mods'"
+OUT="$("$PY" -I "$HERE/ab2-state.py" begin $A1 $R1 2>&1)"; chk rebase-new-baseline-accepted "echo \"\$OUT\" | grep -q '^CMD '"
+"$PY" -I "$HERE/ab2-state.py" abort $A1 $R1 "selftest" >/dev/null 2>&1
+# once state.json has runs the rebaseline refuses (begin wrote a run record)
+OUT="$(RB --check 2>&1)"; RC=$?; chk rebase-refuses-after-begin "[ $RC = 5 ] && echo \"\$OUT\" | grep -q 'state.json has runs'"
 rm -rf "$HERE/__pycache__"
 if [ $FAILS = 0 ]; then echo "SELFTEST OK ($N checks)"; else echo "SELFTEST FAILED ($FAILS of $N)"; exit 1; fi
