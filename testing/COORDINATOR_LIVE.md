@@ -50,6 +50,7 @@ Registered in `C:\KenshiTestRuns\agents\ids.json` (`agent-ids.ps1 add <name> <id
 | imm26-5090-i3op37 | a9501959811f482a6 | DONE 20:48: 23-a = REAL FAIL with recipe v3 (c5b46874): game ended the order 19 u short (planar=18.9 dy=14.9, native_order_ended_before_goal). Lane 5090-i3 now has NO claimable row; investigator inv23a running; recipe nit: skip stage-landing check when Cind x/z moved >1000 (stale y) |
 | imm26-inv23a | a80058b9dd5461884 | investigates the 23-a arrival tolerance (native C++); result -> native fixer -> op for 5090-i3 rerun |
 | imm26-4080-i3op32 | abd6bf21590043dbe | lane 4080-i3 operator (brief agents\imm26-4080-i3op32.brief.md, 15.7 KB over limit but fine): applies fix02bxsrv apply.py to /tmp/stobe-standalone4080/site then 02-bx n=3, then rows from fix01cxguard/fix02dxroute |
+| imm26-4080-i4op24 | a7cf3b4960324f5ab | lane 4080-i4 operator (spawned ~21:00): 01-cx n=3 (hxrun_v3cx.sh) and 02-dx n=3 (hxrun_02bd3.sh); op32 keeps 02-bx only |
 | imm26-fix01cxguard | ad41638d336c5e23e | DONE 4a88ed78 (v3cx GUARD markers widened, selftest 35/35); op32 told to rerun 01-cx n=3 on 4080-i3 after 02-bx |
 | imm26-fix02dxroute | ab2e97d14c298a4d9 | DONE db092857: v3 row_02dx echo skip + new wrapper rowtools/hxrun_02bd3.sh (old hxrun_02bd.sh defaults to v2); op32 told to rerun 02-dx n=3 with hxrun_02bd3.sh after 02-bx and 01-cx |
 | imm26-5090-i5-op21 | a4d054cf11835817a | lane 5090-i5 operator: NC34 DLL (6E14E686) installed on both i5 Stobe dirs; running 26-a; then 14-d v2 (`unblockrun_14d_v2.sh 14-d i5 --allow-retry "fix14dtool v2" --ask "Hunt 5 bandits."` and again "Hunt the 5 bandits."), then 19-e (`reloadrun-b.sh 19-e 5090-i5 --no-reload ...`, grep "Trip resume wait" in /tmp/stobe-imm26-5090-i5/site/log/stobeserver.log) |
@@ -68,7 +69,7 @@ DONE this session (reports in `C:\KenshiTestRuns\agents\out\<name>\`): fix23arec
 ## 7b. NOT STARTED / DEFERRED (honest list, 2026-10-16 ~21:00; reason per item; keep current)
 | item | state | reason |
 |---|---|---|
-| imm26-4080-i4op24 (4080-i4 operator: reruns 01-cx and 02-dx now that fix01cxguard/fix02dxroute landed) | brief generated (agents\imm26-4080-i4op24.brief.md), agent NOT spawned | I held it while the 20-agent cap was tight; lane 4080-i4 has been idle ~27 min (alert open). Spawn now; split rows with op32 (op32 keeps 02-bx; tell it to drop 01-cx/02-dx) |
+| imm26-4080-i4op24 | SPAWNED ~21:00 (see roster) | I held it while the 20-agent cap was tight; lane 4080-i4 has been idle ~27 min (alert open). Spawn now; split rows with op32 (op32 keeps 02-bx; tell it to drop 01-cx/02-dx) |
 | 5090-i3 operator | none (op37 DONE, no claimable row) | waits for inv23a -> native fixer for the 23-a arrival tolerance |
 | native fixer for 23-a arrival (ORDER_ENDED planar/dy) | not spawned | needs inv23a result first |
 | 26-f post-load ClearGroup resume | no investigator ever spawned | not capped; never ticketed. Spawn [case:investigate] |
