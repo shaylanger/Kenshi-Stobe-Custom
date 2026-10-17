@@ -195,7 +195,7 @@ if (-not $env:KAH_AGENT_NAME -and -not $env:KAH_GUARD_NO_WORKLEFT) {
                 $handled = $false
                 if (-not $env:KAH_GUARD_TEST_WORKLEFT_TICKETS -and (Get-Process -Name kenshi_x64 -ErrorAction SilentlyContinue)) { $handled = $true }
                 foreach ($m in @(Get-ChildItem -LiteralPath (Join-Path $runs 'inflight') -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-6) })) { $handled = $true }
-                foreach ($sf2 in @(Get-ChildItem -LiteralPath (Join-Path $runs 'agents') -Filter '*.status' -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-45) })) {
+                foreach ($sf2 in @(Get-ChildItem -LiteralPath (Join-Path $runs 'agents') -Filter '*.status' -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-45) -and -not (Test-Path -LiteralPath ($_.FullName -replace '\.status$', '.abandoned')) })) {
                     $l1 = ((Get-Content -LiteralPath $sf2.FullName -TotalCount 1 -ErrorAction SilentlyContinue) -as [string]).TrimStart([char]0xFEFF)
                     if ($l1 -match '\|\s*RUNNING\s*\|') { $handled = $true }
                 }
